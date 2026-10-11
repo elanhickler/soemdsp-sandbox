@@ -1139,7 +1139,19 @@ extern "C" int soemdsp_exponential_mix_create();
 extern "C" void soemdsp_exponential_mix_destroy(int handle);
 extern "C" int soemdsp_exponential_mix_is_idle(int handle);
 extern "C" double soemdsp_exponential_mix_sample(
-  int handle, double trigger, double decayTime, double mixP, double fastRate,
+  int handle,
+  double trigger,
+  double duration,
+  double mixP,
+  double rate,
+  double amplitude,
+  double sampleRate
+);
+extern "C" int soemdsp_ellipsoid_decay_create();
+extern "C" void soemdsp_ellipsoid_decay_destroy(int handle);
+extern "C" int soemdsp_ellipsoid_decay_is_idle(int handle);
+extern "C" double soemdsp_ellipsoid_decay_sample(
+  int handle, double trigger, double duration, double morph,
   double amplitude, double sampleRate
 );
 
@@ -1950,6 +1962,7 @@ static const int kTypeAdditiveNoisyAmp = 124;
 static const int kTypeAdditivePhaseEntry = 125;
 static const int kTypeAdditiveBlaster = 126;
 static const int kTypeAdditiveDiffusor = 127;
+static const int kTypeAdditiveSync = 213; // Hard-sync resample + formant slide
 static const int kTypeHarmonicSeries = 128;
 static const int kTypePhoneTone = 129;
 // Chromeless patch portals (all lane variants share one process).
@@ -2009,6 +2022,7 @@ static const int kTypeSoftpopOscillator = 207; // Softpop: sine / constant-peak 
 static const int kTypeExponentialSkew = 208; // Exp Skew: Marvinh exp(w·x) linear decay
 static const int kTypeHyperbolicDecay = 209; // Hyperbolic: start·end/((start−end)·u+end)
 static const int kTypeExponentialMix = 210; // Exponential Mix: (1−p)e^{−x}+p e^{−rate·x}
+static const int kTypeEllipsoidDecay = 212; // EllipsoidDecay: RoundShape sine→square bottom-left Bi Y
 static const int kTypeFbmField = 211; // Fractal Brownian Field — X/Y/Z probes + 📺 picture
 static const int kTypeWavetableAdsr = 168; // cheap poly ADSR (Analog/Linear/Smoothstep)
 static const int kTypeFm = 169; // Freq Manager: ƒ(+inc) mix × pitch scale + Add; outs ƒ + inc
@@ -2688,6 +2702,8 @@ static void destroy_native_kind_handle(int kind, int handle) {
     soemdsp_hyperbolic_decay_destroy(handle);
   } else if (kind == kTypeExponentialMix) {
     soemdsp_exponential_mix_destroy(handle);
+  } else if (kind == kTypeEllipsoidDecay) {
+    soemdsp_ellipsoid_decay_destroy(handle);
   } else if (kind == kTypeRobinSinepulse) {
     soemdsp_robin_sinepulse_destroy(handle);
   } else if (kind == kTypeRobinSinepulseAllpass) {
@@ -3063,6 +3079,7 @@ static void init_node_defaults(Node& n, int typeId) {
           || typeId == kTypeDsfOscillator
           || typeId == kTypeHypersaw2 || typeId == kTypeSinc
           || typeId == kTypeAdditiveOut || typeId == kTypeWavetable2d) ? 100.0
+      : (typeId == kTypeAdditiveSync) ? 1.0 // sync ratio (1 = bypass)
       : (typeId == kTypeAdditiveBubble) ? 1.0 // cutoff 0..1 (settled default)
       : (typeId == kTypeAdditiveLinearFilter || typeId == kTypeAdditiveAnalogFilter
           || typeId == kTypeAdditiveLadderFilter) ? 2000.0 // cutoff Hz
@@ -3164,6 +3181,7 @@ static void init_node_defaults(Node& n, int typeId) {
       || typeId == kTypeAdditiveBubble || typeId == kTypeAdditiveGenerator
       || typeId == kTypeAdditiveFrequencySkew)
       ? 0.0 // chaos/damping/pwm/bubble/freqSkew off
+      : (typeId == kTypeAdditiveSync) ? 1.0 // formant (1 = bypass)
       : (typeId == kTypeAdditiveBlaster) ? 179.0 // quantization (PoC default)
       : (typeId == kTypeAdditiveDiffusor) ? 0.0 // skew (rational)
       : (typeId == kTypeAdditiveLinearFilter) ? 0.25 // slope −1…+1 (width + reverse)
@@ -3184,6 +3202,7 @@ static void init_node_defaults(Node& n, int typeId) {
       : (typeId == kTypePluckEnvelopeFb) ? -0.07 // attackShape (breadboard)
       : (typeId == kTypePowerDecay) ? 2.0 // power
       : (typeId == kTypeExponentialSkew || typeId == kTypeHyperbolicDecay) ? 0.0 // Shape w
+      : (typeId == kTypeEllipsoidDecay) ? 0.0 // Morph
       : (typeId == kTypeRobinSinepulse) ? 0.0 // chirp
       : (typeId == kTypeRobinSinepulseAllpass) ? 0.0 // freqShape
       : (typeId == kTypeAttackDecay) ? 1.0 // curve Î³
@@ -3239,6 +3258,8 @@ static void init_node_defaults(Node& n, int typeId) {
       : (typeId == kTypeLorenzAttractor) ? 28.0 // rho
       : (typeId == kTypeAdditiveBubble) ? 481.53 // unskew (settled default)
       : (typeId == kTypeAdditiveLadderFilter) ? 0.0 // resonance
+      : (typeId == kTypeAdditiveSync) ? 0.0 // pinch
+      : (typeId == kTypeAdditiveOut) ? 1.0 // slope skew
       : (typeId == kTypeWavetable2d) ? 0.0 // warp
       : 0.2,
     false
@@ -3303,6 +3324,7 @@ static void init_node_defaults(Node& n, int typeId) {
       : (typeId == kTypeAudioPlayer) ? 4.0 // Play
       : (typeId == kTypeSamplePlayer) ? 0.0 // One-shot
       : (typeId == kTypeAdditiveOut) ? 0.0 // optimize Inaudible off
+      : (typeId == kTypeAdditiveSync) ? 0.0 // Sync mode
       : (typeId == kTypeAdditiveGenerator) ? 1.0 // HarmonicFade Smoothed
       : (typeId == kTypePll) ? 4.0 // Range octaves
       : (typeId == kTypeSoftpopOscillator) ? 0.0 // Stereo
@@ -3389,7 +3411,7 @@ static void init_node_defaults(Node& n, int typeId) {
       : (typeId == kTypePulseExplosion) ? 0.5 // centerTime
       : (typeId == kTypeHarmonicSeries) ? 0.0 // offset
       : (typeId == kTypeAdditiveBlaster) ? 0.44 // bias (PoC)
-      : (typeId == kTypeAdditiveGenerator) ? 1.0 // slope
+      : (typeId == kTypeAdditiveGenerator || typeId == kTypeAdditiveOut) ? 1.0 // slope height
       : (typeId == kTypeStepGraph) ? 0.0 // curveOffset
       : (typeId == kTypeAdditivePan) ? 0.35 // AutoPan shimmer amount
       : (typeId == kTypeRobinSupersaw || typeId == kTypeHyperpluck) ? 2.0 // detuneAlgorithm Emotional
@@ -3439,6 +3461,7 @@ static void init_node_defaults(Node& n, int typeId) {
       : (typeId == kTypeAdditiveQuantizeFreq) ? 0.0 // random
       : (typeId == kTypeChorus || typeId == kTypeEnsemble) ? 0.5 // Spread
       : (typeId == kTypeAdditivePan) ? 0.75 // AutoPan Width (odd/even fan)
+      : (typeId == kTypeAdditiveSync) ? 0.0 // formant shift (harmonics)
       : (typeId == kTypeAdditiveBlaster) ? 0.58 // offset (PoC)
       : (typeId == kTypeBradley2a) ? 0.0 // freqOffset
       : (typeId == kTypeEllipsoidOsc) ? 1.0 // scale C
@@ -3662,7 +3685,7 @@ static void init_node_defaults(Node& n, int typeId) {
       : (typeId == kTypePingEnvelope) ? 0.0 // attack s
       : (typeId == kTypePowerDecay) ? 1.0 // decayTime s
       : (typeId == kTypeExponentialSkew || typeId == kTypeHyperbolicDecay
-          || typeId == kTypeExponentialMix) ? 2.0 // Duration / Decay Time s
+          || typeId == kTypeExponentialMix || typeId == kTypeEllipsoidDecay) ? 2.0 // Duration / Decay Time s
       : (typeId == kTypeRobinSinepulse) ? 0.5 // decay s (T60)
       : (typeId == kTypeFlowerChildEnvelopeFollower) ? 0.001 // hold
       : (typeId == kTypeVactrol) ? 0.1 // release
@@ -3771,7 +3794,7 @@ static void init_node_defaults(Node& n, int typeId) {
     (typeId == kTypeHypersaw2) ? 0.0 // jitterFilterTilt
       : (typeId == kTypePulseExplosion) ? 0.3 // lowAmplitude
       : (typeId == kTypeAdditiveFrequencySkew) ? 1.0 // lowStretch
-      : (typeId == kTypeAdditiveGenerator) ? 1.0 // slopeStart
+      : (typeId == kTypeAdditiveGenerator || typeId == kTypeAdditiveOut) ? 1.0 // slopeStart
       : (typeId == kTypeDegreePhrase) ? 0.0 // rest1
       : (typeId == kTypeArp) ? 0.0 // sequenceOffset
       : (typeId == kTypeRange) ? -1.0 // bipolar In default; wire unipolar spawn uses 0…1
@@ -3782,7 +3805,7 @@ static void init_node_defaults(Node& n, int typeId) {
     n.inHigh,
     (typeId == kTypePulseExplosion) ? 1.0 // highAmplitude
       : (typeId == kTypeAdditiveFrequencySkew) ? 1.0 // highStretch
-      : (typeId == kTypeAdditiveGenerator) ? 32.0 // slopeEnd
+      : (typeId == kTypeAdditiveGenerator || typeId == kTypeAdditiveOut) ? 32.0 // slopeEnd
       : (typeId == kTypeDegreePhrase) ? 0.0 // rest2
       : (typeId == kTypeRange) ? 1.0 : 1.0,
     (typeId == kTypeDegreePhrase)
@@ -3890,6 +3913,7 @@ static void init_node_defaults(Node& n, int typeId) {
     || typeId == kTypeAdditivePhaseEntry
     || typeId == kTypeAdditiveBlaster
     || typeId == kTypeAdditiveDiffusor
+    || typeId == kTypeAdditiveSync
   ) {
     soemdsp_yellow_graph::graph_clear(n.yellowGraph);
     for (int i = 0; i < soemdsp_yellow_graph::kMaxHarmonics; i += 1) {
@@ -4647,6 +4671,7 @@ static int create_native_for_type(int typeId, float sampleRate) {
   if (typeId == kTypeExponentialSkew) return soemdsp_exponential_skew_create();
   if (typeId == kTypeHyperbolicDecay) return soemdsp_hyperbolic_decay_create();
   if (typeId == kTypeExponentialMix) return soemdsp_exponential_mix_create();
+  if (typeId == kTypeEllipsoidDecay) return soemdsp_ellipsoid_decay_create();
   if (typeId == kTypeRobinSinepulse) return soemdsp_robin_sinepulse_create();
   if (typeId == kTypeRobinSinepulseAllpass) return soemdsp_robin_sinepulse_allpass_create();
   if (typeId == kTypeFlowerChildEnvelopeFollower) {
@@ -6419,21 +6444,47 @@ static void additive_generator_apply_mask(
       end = (double)soemdsp_yellow_graph::kMaxHarmonics;
     }
     if (end < start + 1.0e-6) end = start + 1.0e-6;
+    // Tail gain at Slope End. Height 1 → 0, so every partial at or past the end is gone.
+    const float tailGain = soemdsp_yellow_graph::slope_gain(
+      (float)end, (float)slope, (float)start, (float)end, skew, curve
+    );
+    const bool killTail = !(tailGain >= kAdditiveMaskFloor);
+    int active = 0;
     for (int i = 0; i < H; i += 1) {
       float r = gr.ratio[i];
       if (!(r * 0.0f == 0.0f)) r = 0.0f;
-      float gain = soemdsp_yellow_graph::slope_gain(
-        r, (float)slope, (float)start, (float)end, skew, curve
-      );
-      if (!(gain >= kAdditiveMaskFloor)) gain = 0.0f;
+      if (r < 0.0f) r = 0.0f;
+      float gain = 0.0f;
+      if (!(killTail && r >= (float)end)) {
+        gain = soemdsp_yellow_graph::slope_gain(
+          r, (float)slope, (float)start, (float)end, skew, curve
+        );
+        if (!(gain >= kAdditiveMaskFloor)) gain = 0.0f;
+      }
+      if (!(gain > 0.0f)) {
+        // Hard stop. Do not keep the slot alive via ampFrom from the unmasked spectrum.
+        gr.amplitude[i] = 0.0f;
+        gr.ampFrom[i] = 0.0f;
+        gr.ampTo[i] = 0.0f;
+        continue;
+      }
       gr.amplitude[i] *= gain;
-      if (gr.hasAmpLerp) gr.ampTo[i] *= gain;
+      if (gr.hasAmpLerp) {
+        gr.ampFrom[i] *= gain;
+        gr.ampTo[i] *= gain;
+      }
+      active = i + 1;
     }
+    if (active < 1) active = 1;
+    gr.harmonics = active;
   }
   // Smooth mask changes over one quantum (Out lerps ampFrom→ampTo per sample).
+  // Only the slots that survived the hard stop. A dead tail must not fade in from
+  // the previous full-height spectrum — that kept all 1024 partials in the sum.
   if ((masking || node.yellowMaskActive != 0) && !gr.hasAmpLerp) {
     bool changed = false;
-    for (int i = 0; i < H; i += 1) {
+    const int liveH = gr.harmonics < H ? gr.harmonics : H;
+    for (int i = 0; i < liveH; i += 1) {
       const float from = (prevAmp && i < prevLen) ? prevAmp[i] : 0.0f;
       gr.ampFrom[i] = from;
       gr.ampTo[i] = gr.amplitude[i];
@@ -6441,22 +6492,12 @@ static void additive_generator_apply_mask(
     }
     if (changed) gr.hasAmpLerp = 1;
   }
-  const bool wasMasking = node.yellowMaskActive != 0;
   node.yellowMaskActive = masking ? 1 : 0;
-  if (!masking && !wasMasking) return;
-  // Drop trailing slots that are silent for the whole quantum.
-  int active = H;
-  while (active > 0) {
-    const int i = active - 1;
-    const bool live = gr.hasAmpLerp
-      ? (gr.ampFrom[i] > 0.0f || gr.ampTo[i] > 0.0f)
-      : (gr.amplitude[i] > 0.0f);
-    if (live) break;
-    active -= 1;
-  }
-  if (active < 1) active = 1;
-  gr.harmonics = active;
 }
+
+static int yellow_slope_keep_count(
+  Circuit& g, unsigned int fromHash, const soemdsp_yellow_graph::GraphPayload& graph
+);
 
 // A1 Additive Generator: builds GraphPayload (no audio outs).
 // HarmonicFade (mode): 0 Instant / 1 Smoothed (1-quantum ampLerp) / 2 Decimal.
@@ -6510,9 +6551,71 @@ static void process_additive_generator(Circuit& g, Node& node, int frames) {
       );
     }
   }
-  additive_generator_apply_mask(node, saveH > 0 ? prevAmp : nullptr, saveH);
-  // Remember target slot count (not the temporary lerp width or masked count).
+    // Slope Height ~1 on a downstream Additive Out silences every partial at or
+  // past Slope End. Drop them here so Sync, the sum, and the face never see
+  // the dead tail. yellowLastHarmonics stays the built count so the H-change
+  // lerp does not refire every block.
+  const int keep = yellow_slope_keep_count(g, node.idHash, node.yellowGraph);
+  if (keep > 0 && keep < node.yellowGraph.harmonics) {
+    node.yellowGraph.harmonics = keep;
+  }
   node.yellowLastHarmonics = newH;
+}
+
+// Strictest downstream Additive Out whose slope tail is silent.
+// Returns the number of leading slots with ratio < Slope End, or -1 if any
+// reached Out still wants partials past the end (height below 1).
+static int yellow_slope_keep_count(
+  Circuit& g, unsigned int fromHash, const soemdsp_yellow_graph::GraphPayload& graph
+) {
+  const int H = graph.harmonics < soemdsp_yellow_graph::kMaxHarmonics
+    ? graph.harmonics
+    : soemdsp_yellow_graph::kMaxHarmonics;
+  if (H <= 0) return -1;
+  unsigned int queue[64];
+  int qn = 0;
+  unsigned char seen[kMaxNodes];
+  for (int i = 0; i < kMaxNodes; i += 1) seen[i] = 0;
+  queue[qn++] = fromHash;
+  bool foundOut = false;
+  float keepBelow = 1.0e9f;
+  while (qn > 0) {
+    const unsigned int id = queue[--qn];
+    const int ni = find_node(g, id);
+    if (ni < 0) continue;
+    if (seen[ni]) continue;
+    seen[ni] = 1;
+    if (g.nodes[ni].typeId == kTypeAdditiveOut && id != fromHash) {
+      const float slope = (float)control_effective(g.nodes[ni].center);
+      const float start = (float)control_effective(g.nodes[ni].inLow);
+      float end = (float)control_effective(g.nodes[ni].inHigh);
+      const float skew = (float)control_effective(g.nodes[ni].resonance);
+      const double cmV = control_effective(g.nodes[ni].lfoStyle);
+      const int curve = (int)(cmV + (cmV >= 0.0 ? 0.5 : -0.5)) == 1 ? 1 : 0;
+      if (!(end > start)) end = start + 1.0e-4f;
+      const float tail = soemdsp_yellow_graph::slope_gain(end, slope, start, end, skew, curve);
+      // This Out still sounds past Slope End. Do not starve it.
+      if (!(slope > 0.0f) || tail >= 1.5848932e-5f) return -1;
+      foundOut = true;
+      if (end < keepBelow) keepBelow = end;
+    }
+    for (int c = 0; c < g.connCount; c += 1) {
+      const Conn& conn = g.conns[c];
+      if (!conn.used) continue;
+      if (conn.srcHash != id) continue;
+      if (conn.dstPort != kPortGraph) continue;
+      if (qn < 64) queue[qn++] = conn.dstHash;
+    }
+  }
+  if (!foundOut) return -1;
+  int active = 0;
+  for (int i = 0; i < H; i += 1) {
+    float r = graph.ratio[i];
+    if (!(r * 0.0f == 0.0f)) r = 0.0f;
+    if (r < keepBelow) active = i + 1;
+  }
+  if (active < 1) active = 1;
+  return active;
 }
 
 // A1 Additive Bubble: Graph in → skew/cutoff/unskew → Graph out.
@@ -6693,6 +6796,22 @@ static void process_additive_frequency_skew(Circuit& g, Node& node, int frames) 
     (float)control_effective(node.inHigh),
     (float)control_effective(node.shape),
     (float)control_effective(node.mode)
+  );
+}
+
+// frequency→sync ratio, shape→formant, width→shift (harmonics)
+static void process_additive_sync(Circuit& g, Node& node, int frames) {
+  (void)frames;
+  if (!yellow_graph_copy_in(g, node)) return;
+  if (node.bypassed) return;
+  soemdsp_yellow_graph::apply_sync(
+    node.yellowGraph,
+    (float)control_effective(node.frequency),
+    (float)control_effective(node.shape),
+    (float)control_effective(node.width),
+    (float)control_effective(node.mode),
+    (float)control_effective(node.phaseParam),
+    (float)control_effective(node.resonance)
   );
 }
 
@@ -6985,6 +7104,7 @@ static void process_additive_out(Circuit& g, Node& node, int frames) {
   const int srcIdx = find_graph_src_index(g, node.idHash);
   if (srcIdx < 0 || node.bypassed) {
     soemdsp_yellow_graph::graph_clear(node.yellowGraph);
+    node.yellowLastHarmonics = -1;
     return; // audio bufs already zeroed by process_block
   }
   soemdsp_yellow_graph::GraphPayload& local = node.yellowGraph;
@@ -6992,10 +7112,14 @@ static void process_additive_out(Circuit& g, Node& node, int frames) {
     ? local.harmonics
     : soemdsp_yellow_graph::kMaxHarmonics;
   unsigned char wasLive[soemdsp_yellow_graph::kMaxHarmonics];
+  float prevMaskedAmp[soemdsp_yellow_graph::kMaxHarmonics];
   for (int i = 0; i < prevH; i += 1) {
     wasLive[i] = soemdsp_yellow_graph::slot_sounds(local, i) ? 1 : 0;
+    prevMaskedAmp[i] = local.amplitude[i];
   }
   soemdsp_yellow_graph::graph_copy(node.yellowGraph, g.nodes[srcIdx].yellowGraph);
+  // Final frequency-tracked slope: ratio units, so the knee follows pitch.
+  additive_generator_apply_mask(node, prevH > 0 ? prevMaskedAmp : nullptr, prevH);
   const int H = local.harmonics < soemdsp_yellow_graph::kMaxHarmonics
     ? local.harmonics
     : soemdsp_yellow_graph::kMaxHarmonics;
@@ -7067,7 +7191,9 @@ static void process_additive_out(Circuit& g, Node& node, int frames) {
       &left,
       &right,
       f,
-      frames
+      frames,
+      &node.yellowLastHarmonics,
+      &node.yellowWalkSeed
     );
     node.buf[kPortMono][f] = (double)mono;
     node.buf[kPortLeft][f] = (double)left;
@@ -9468,6 +9594,30 @@ static void process_exponential_mix(Circuit& g, Node& node, int frames) {
     node.buf[kPortLeft][f] = out;
     node.buf[kPortRight][f] = out;
     node.buf[kPortIsIdle][f] = soemdsp_exponential_mix_is_idle(node.nativeHandle) ? 1.0 : 0.0;
+  }
+}
+
+static void process_ellipsoid_decay(Circuit& g, Node& node, int frames) {
+  if (node.nativeHandle <= 0) return;
+  mix_node_inputs(g, node, frames);
+  const bool hasTrig = mix_live_port(g, node, kPortTrigger, frames, g.mixTrigger);
+  const double sr = g.sampleRate < 1.0f ? 44100.0 : (double)g.sampleRate;
+  for (int f = 0; f < frames; f++) {
+    control_frame(g, node, f);
+    const double trig = hasTrig ? g.mixTrigger[f] : 0.0;
+    const double input = trig + g.mixMono[f] + g.mixLeft[f] + g.mixRight[f];
+    const double out = soemdsp_ellipsoid_decay_sample(
+      node.nativeHandle,
+      input,
+      control_audio(g, node.timeDenominator, f),
+      control_audio(g, node.shape, f),
+      control_audio(g, node.amplitude, f),
+      sr
+    );
+    node.buf[kPortMono][f] = out;
+    node.buf[kPortLeft][f] = out;
+    node.buf[kPortRight][f] = out;
+    node.buf[kPortIsIdle][f] = soemdsp_ellipsoid_decay_is_idle(node.nativeHandle) ? 1.0 : 0.0;
   }
 }
 
@@ -13192,6 +13342,7 @@ extern "C" int soemdsp_graph_add_node(int handle, unsigned int nodeIdHash, int t
     || typeId == kTypeExponentialSkew
     || typeId == kTypeHyperbolicDecay
     || typeId == kTypeExponentialMix
+    || typeId == kTypeEllipsoidDecay
     || typeId == kTypeRobinSinepulse
     || typeId == kTypeRobinSinepulseAllpass
     || typeId == kTypeFlowerChildEnvelopeFollower
@@ -14072,6 +14223,10 @@ static void dispatch_process_node(Circuit& g, Node& node, int frames) {
       process_additive_frequency_skew(g, node, frames);
       return;
     }
+    if (node.typeId == kTypeAdditiveSync) {
+      process_additive_sync(g, node, frames);
+      return;
+    }
     if (node.typeId == kTypeAdditiveQuantizeFreq) {
       process_additive_quantize_freq(g, node, frames);
       return;
@@ -14593,6 +14748,10 @@ static void dispatch_process_node(Circuit& g, Node& node, int frames) {
     }
     if (node.typeId == kTypeExponentialMix) {
       process_exponential_mix(g, node, frames);
+      return;
+    }
+    if (node.typeId == kTypeEllipsoidDecay) {
+      process_ellipsoid_decay(g, node, frames);
       return;
     }
     if (node.typeId == kTypeRobinSinepulse) {
@@ -15117,6 +15276,7 @@ static int yellow_node_index(Circuit* g, unsigned int nodeHash) {
     || t == kTypeAdditiveQuantizeFreq || t == kTypeAdditiveQuantizePhase
     || t == kTypeAdditivePan || t == kTypeAdditivePhaseEntry || t == kTypeAdditiveBlaster
     || t == kTypeAdditiveDiffusor
+    || t == kTypeAdditiveSync
     || t == kTypeAdditiveNoisyFreq || t == kTypeAdditiveNoisyPhase
     || t == kTypeAdditiveNoisyPan || t == kTypeAdditiveNoisyAmp
   ) {

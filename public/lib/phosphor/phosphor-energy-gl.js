@@ -622,23 +622,12 @@
       return sharedDevice;
     }
     sharedDevice = null;
-    const canvas = document.createElement("canvas");
-    canvas.width = 1;
-    canvas.height = 1;
-    const gl = canvas.getContext("webgl", {
-      alpha: true,
-      antialias: false,
-      depth: false,
-      stencil: false,
-      premultipliedAlpha: true,
-      preserveDrawingBuffer: true,
-    }) || canvas.getContext("experimental-webgl", {
-      alpha: true,
-      antialias: false,
-      premultipliedAlpha: true,
-      preserveDrawingBuffer: true,
-    });
-    if (!gl) {
+    const pic = typeof nodeGraphSharedGlDevice === "function"
+      ? nodeGraphSharedGlDevice()
+      : (typeof nodeGraphPictureDevice === "function" ? nodeGraphPictureDevice() : null);
+    const gl = pic?.gl || null;
+    const canvas = pic?.canvas || null;
+    if (!gl || !canvas) {
       return null;
     }
 
@@ -1720,18 +1709,17 @@
     if (lineBurnOpaque && !renderer.presentLineBurn) {
       return false;
     }
-    const { gl, canvas } = renderer;
+    const { gl } = renderer;
     const w = renderer.width;
     const h = renderer.height;
-    // Shared canvas is the present target — resize only when needed.
-    if (canvas.width !== w) {
-      canvas.width = w;
+    if (typeof nodeGraphSharedGlBindPresent === "function") {
+      nodeGraphSharedGlBindPresent(gl, w, h);
+    } else {
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+      gl.enable(gl.SCISSOR_TEST);
+      gl.scissor(0, 0, w, h);
+      gl.viewport(0, 0, w, h);
     }
-    if (canvas.height !== h) {
-      canvas.height = h;
-    }
-    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-    gl.viewport(0, 0, w, h);
     gl.clearColor(0, 0, 0, 0);
     gl.clear(gl.COLOR_BUFFER_BIT);
     gl.disable(gl.BLEND);
@@ -1767,6 +1755,11 @@
     }
     drawFullScreen(renderer, presentProg);
     gl.bindTexture(gl.TEXTURE_2D, null);
+    if (typeof nodeGraphSharedGlEndPresent === "function") {
+      nodeGraphSharedGlEndPresent(gl);
+    } else {
+      gl.disable(gl.SCISSOR_TEST);
+    }
     return true;
   }
 

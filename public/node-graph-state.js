@@ -330,6 +330,7 @@ var nodeGraphMvp = {
     exponentialSkew: 0,
     hyperbolicDecay: 0,
     exponentialMix: 0,
+    ellipsoidDecay: 0,
     logisticMap: 0,
     lorenzAttractor: 0,
     lowpass: 0,

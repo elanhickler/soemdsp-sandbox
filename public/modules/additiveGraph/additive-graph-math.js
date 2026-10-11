@@ -80,11 +80,39 @@ function additiveGraphApplySlope(graph, slope, slopeStart, slopeEnd, skew, curve
     graph.harmonicsExact ?? graph.harmonics, slopeStart, slopeEnd,
   );
   const to = graph.ampLerp?.to || null;
+  const from = graph.ampLerp?.from || null;
   const H = graph.ratio.length | 0;
+  const floor = 1.5848932e-5; // −96 dB, same as the native mask
+  const tailGain = additiveGraphSlopeGain(range.end, s, range.start, range.end, skew, curveMode);
+  const killTail = !(tailGain >= floor);
+  let active = 0;
   for (let i = 0; i < H; i += 1) {
-    const gain = additiveGraphSlopeGain(graph.ratio[i], s, range.start, range.end, skew, curveMode);
+    const ratio = Math.max(0, Number(graph.ratio[i]) || 0);
+    let gain = 0;
+    if (!(killTail && ratio >= range.end)) {
+      gain = additiveGraphSlopeGain(ratio, s, range.start, range.end, skew, curveMode);
+      if (!(gain >= floor)) gain = 0;
+    }
+    if (!(gain > 0)) {
+      graph.amplitude[i] = 0;
+      if (to && i < to.length) to[i] = 0;
+      if (from && i < from.length) from[i] = 0;
+      continue;
+    }
     graph.amplitude[i] *= gain;
     if (to && i < to.length) to[i] *= gain;
+    if (from && i < from.length) from[i] *= gain;
+    active = i + 1;
+  }
+  if (active < 1) active = 1;
+  if (active < H) {
+    graph.harmonics = active;
+    graph.ratio = graph.ratio.slice(0, active);
+    graph.phase = graph.phase.slice(0, active);
+    graph.amplitude = graph.amplitude.slice(0, active);
+    if (graph.pan) graph.pan = graph.pan.slice(0, active);
+    if (to) graph.ampLerp.to = to.slice(0, active);
+    if (from) graph.ampLerp.from = from.slice(0, active);
   }
   return graph;
 }
@@ -512,6 +540,275 @@ function additiveGraphApplyFrequencySkew(
   graph.ratio.set(to);
   graph.ratioNoise = null;
   return { graph, lerpFrom: new Float32Array(to) };
+}
+
+/** sinc(x) = sin(πx)/(πx), sinc(0) = 1. */
+function additiveGraphSinc(x) {
+  const a = Number(x);
+  if (!Number.isFinite(a)) return 0;
+  if (Math.abs(a) < 1e-8) return 1;
+  const p = Math.PI * a;
+  return Math.sin(p) / p;
+}
+
+/**
+ * One linear piece of a sine partial, Fourier-projected onto output bins.
+ * w(θ) = alpha + beta·θ on θ ∈ [t0, t1). Same 1/(2j) sine split as hard sync.
+ */
+function additiveGraphAddSineSegment(re, im, panNum, panDen, H, A, omega, ph, pan, alpha, beta, t0, t1) {
+  const dur = t1 - t0;
+  if (!(dur > 1e-6) || !(Math.abs(A) > 1e-8) || !(Math.abs(omega) > 1e-8)) return;
+  const windowBins = 64;
+  const inst = Math.abs(omega * beta);
+  const nStart = Math.abs(beta) < 1e-6 ? 1 : Math.max(1, Math.floor(inst - windowBins));
+  const nEnd = Math.abs(beta) < 1e-6
+    ? Math.min(H, windowBins)
+    : Math.min(H, Math.ceil(inst + windowBins));
+  const twoPi = Math.PI * 2;
+  for (let n = nStart; n <= nEnd; n += 1) {
+    const piece = (sign) => {
+      const w = sign * omega;
+      const f = w * beta - n;
+      let jr;
+      let ji;
+      if (Math.abs(f) < 1e-8) {
+        jr = dur;
+        ji = 0;
+      } else {
+        const p1 = twoPi * f * t1;
+        const p0 = twoPi * f * t0;
+        const denom = twoPi * f;
+        jr = (Math.sin(p1) - Math.sin(p0)) / denom;
+        ji = -(Math.cos(p1) - Math.cos(p0)) / denom;
+      }
+      const ang = sign * ph + twoPi * w * alpha;
+      const pr = Math.cos(ang);
+      const pi = Math.sin(ang);
+      return { r: pr * jr - pi * ji, i: pr * ji + pi * jr };
+    };
+    const Ip = piece(1);
+    const Im = piece(-1);
+    const dr = Ip.r - Im.r;
+    const di = Ip.i - Im.i;
+    const cr = (A * 0.5) * di;
+    const ci = (A * 0.5) * (-dr);
+    const i = n - 1;
+    re[i] += cr;
+    im[i] += ci;
+    const mag = Math.hypot(cr, ci);
+    panNum[i] += pan * mag;
+    panDen[i] += mag;
+  }
+}
+
+/** Write projected bins back as integer harmonics. Clears plane lerps. */
+function additiveGraphCommitProjectedBins(graph, re, im, panNum, panDen) {
+  const H = graph.ratio.length | 0;
+  const twoPi = Math.PI * 2;
+  for (let i = 0; i < H; i += 1) {
+    const cr = re[i];
+    const ci = im[i];
+    const mag = Math.hypot(cr, ci);
+    graph.ratio[i] = i + 1;
+    graph.amplitude[i] = mag * 2;
+    let phase01 = 0;
+    if (mag > 1e-12) {
+      phase01 = (Math.atan2(ci, cr) + Math.PI * 0.5) / twoPi;
+      phase01 -= Math.floor(phase01);
+    }
+    graph.phase[i] = phase01;
+    if (graph.pan) graph.pan[i] = panDen[i] > 1e-12 ? panNum[i] / panDen[i] : 0;
+  }
+  graph.ratioLerp = null;
+  graph.phaseLerp = null;
+  graph.ampLerp = null;
+  graph.panLerp = null;
+  graph.ratioNoise = null;
+  graph.phaseNoise = null;
+  graph.ampNoise = null;
+  graph.panNoise = null;
+}
+
+/**
+ * Cramp: pack source [0,0.5) into [0, duty) and [0.5,1) into [duty, 1).
+ * duty 0.5 is identity. Pinch: squeeze both flanks into the two edges and
+ * hold the midpoint across the middle (symmetric PWM).
+ */
+function additiveGraphApplyCycleWarp(graph, kind, amount) {
+  if (!graph || !graph.ratio) return false;
+  const H = graph.ratio.length | 0;
+  if (H < 1) return false;
+  let duty = 0.5;
+  let edge = 0.5;
+  if (kind === 1) {
+    const c = Math.max(-1, Math.min(1, Number(amount) || 0));
+    if (!(Math.abs(c) > 1e-4)) return false;
+    duty = Math.max(0.02, Math.min(0.98, 0.5 + c * 0.48));
+  } else if (kind === 2) {
+    const p = Math.max(0, Math.min(1, Number(amount) || 0));
+    if (!(p > 1e-4)) return false;
+    edge = Math.max(0.02, 0.5 * (1 - p * 0.96));
+  } else {
+    return false;
+  }
+  const re = new Float32Array(H);
+  const im = new Float32Array(H);
+  const panNum = new Float32Array(H);
+  const panDen = new Float32Array(H);
+  const twoPi = Math.PI * 2;
+  const segments = kind === 1
+    ? [
+      { t0: 0, t1: duty, alpha: 0, beta: 0.5 / duty },
+      { t0: duty, t1: 1, alpha: 0.5 - duty * (0.5 / (1 - duty)), beta: 0.5 / (1 - duty) },
+    ]
+    : [
+      { t0: 0, t1: edge, alpha: 0, beta: 0.5 / edge },
+      { t0: edge, t1: 1 - edge, alpha: 0.5, beta: 0 },
+      { t0: 1 - edge, t1: 1, alpha: 0.5 - (1 - edge) * (0.5 / edge), beta: 0.5 / edge },
+    ];
+  for (let k = 0; k < H; k += 1) {
+    const A = Number(graph.amplitude[k]) || 0;
+    const omega = Math.max(0, Number(graph.ratio[k]) || 0);
+    if (!(Math.abs(A) > 1e-8) || !(omega > 1e-8)) continue;
+    const ph = (Number(graph.phase[k]) || 0) * twoPi;
+    const pan = Number(graph.pan?.[k]) || 0;
+    for (let s = 0; s < segments.length; s += 1) {
+      const seg = segments[s];
+      additiveGraphAddSineSegment(
+        re, im, panNum, panDen, H, A, omega, ph, pan,
+        seg.alpha, seg.beta, seg.t0, seg.t1,
+      );
+    }
+  }
+  additiveGraphCommitProjectedBins(graph, re, im, panNum, panDen);
+  return true;
+}
+
+/**
+ * Sync / Cramp / Pinch, then formant envelope move.
+ * Mode 0 Sync: Ratio P = follower/leader. P=1 skips the resample.
+ * Mode 1 Cramp: bipolar duty. 0 = unchanged. + packs the first half of the
+ * cycle toward the start, − packs the second half toward the end (PWM on any spectrum).
+ * Mode 2 Pinch: 0 = unchanged. >0 squeezes both flanks toward the edges and
+ * holds the midpoint through the middle.
+ * Formant / Shift run in every mode. In-place.
+ */
+function additiveGraphApplySync(graph, syncRatio = 1, formant = 1, shift = 0, mode = 0, cramp = 0, pinch = 0) {
+  if (!graph || !graph.ratio) return graph;
+  const H = graph.ratio.length | 0;
+  if (H < 1) return graph;
+  let P = Number(syncRatio);
+  if (!Number.isFinite(P) || !(P > 0)) P = 1;
+  let F = Number(formant);
+  if (!Number.isFinite(F) || !(F > 1e-4)) F = 1;
+  let S = Number(shift);
+  if (!Number.isFinite(S)) S = 0;
+  const morph = Math.round(Number(mode)) || 0;
+  const doSync = morph === 0 && Math.abs(P - 1) > 1e-5;
+  const doCramp = morph === 1;
+  const doPinch = morph === 2;
+  const doFormant = Math.abs(F - 1) > 1e-5 || Math.abs(S) > 1e-5;
+  if (!doSync && !doCramp && !doPinch && !doFormant) return graph;
+
+  const windowBins = 48;
+  if (doSync) {
+    const re = new Float32Array(H);
+    const im = new Float32Array(H);
+    const panNum = new Float32Array(H);
+    const panDen = new Float32Array(H);
+    const twoPi = Math.PI * 2;
+    for (let k = 0; k < H; k += 1) {
+      const A = Number(graph.amplitude[k]) || 0;
+      if (!(Math.abs(A) > 1e-8)) continue;
+      const r = Math.max(0, Number(graph.ratio[k]) || 0);
+      const omega = P * r;
+      if (!(omega > 1e-8)) continue;
+      const ph = (Number(graph.phase[k]) || 0) * twoPi;
+      const pan = Number(graph.pan?.[k]) || 0;
+      const n0 = Math.max(1, Math.floor(omega - windowBins));
+      const n1 = Math.min(H, Math.ceil(omega + windowBins));
+      for (let n = n0; n <= n1; n += 1) {
+        const d = omega - n;
+        const s = additiveGraphSinc(d);
+        const ang = Math.PI * d + ph;
+        let tr = Math.cos(ang) * s;
+        let ti = Math.sin(ang) * s;
+        const dNeg = omega + n;
+        if (dNeg < windowBins) {
+          const s2 = additiveGraphSinc(dNeg);
+          const ang2 = -ph - Math.PI * dNeg;
+          tr -= Math.cos(ang2) * s2;
+          ti -= Math.sin(ang2) * s2;
+        }
+        // c = A/(2j) · T, 1/(2j) = −j/2 → c = (A/2)·(ti − j·tr)
+        const cr = (A * 0.5) * ti;
+        const ci = (A * 0.5) * (-tr);
+        const i = n - 1;
+        re[i] += cr;
+        im[i] += ci;
+        const mag = Math.hypot(cr, ci);
+        panNum[i] += pan * mag;
+        panDen[i] += mag;
+      }
+    }
+    for (let i = 0; i < H; i += 1) {
+      const cr = re[i];
+      const ci = im[i];
+      const mag = Math.hypot(cr, ci);
+      graph.ratio[i] = i + 1;
+      graph.amplitude[i] = mag * 2;
+      let phase01 = 0;
+      if (mag > 1e-12) {
+        phase01 = (Math.atan2(ci, cr) + Math.PI * 0.5) / twoPi;
+        phase01 -= Math.floor(phase01);
+      }
+      graph.phase[i] = phase01;
+      if (graph.pan) graph.pan[i] = panDen[i] > 1e-12 ? panNum[i] / panDen[i] : 0;
+    }
+    graph.ratioLerp = null;
+    graph.phaseLerp = null;
+    graph.ampLerp = null;
+    graph.panLerp = null;
+    graph.ratioNoise = null;
+    graph.phaseNoise = null;
+    graph.ampNoise = null;
+    graph.panNoise = null;
+  } else if (doCramp || doPinch) {
+    additiveGraphApplyCycleWarp(graph, doCramp ? 1 : 2, doCramp ? cramp : pinch);
+  }
+
+  if (doFormant) {
+    const amp = new Float32Array(H);
+    const pan = graph.pan ? new Float32Array(H) : null;
+    for (let i = 0; i < H; i += 1) {
+      const h = i + 1;
+      const hSrc = 1 + (h - 1) / F - S;
+      if (!(hSrc >= 1) || hSrc > H) {
+        amp[i] = 0;
+        if (pan) pan[i] = 0;
+        continue;
+      }
+      const x = hSrc - 1;
+      const i0 = Math.floor(x);
+      const i1 = Math.min(H - 1, i0 + 1);
+      const t = x - i0;
+      const a0 = Number(graph.amplitude[i0]) || 0;
+      const a1 = Number(graph.amplitude[i1]) || 0;
+      amp[i] = a0 + (a1 - a0) * t;
+      if (pan) {
+        const p0 = Number(graph.pan[i0]) || 0;
+        const p1 = Number(graph.pan[i1]) || 0;
+        pan[i] = p0 + (p1 - p0) * t;
+      }
+    }
+    graph.amplitude.set(amp);
+    if (pan && graph.pan) graph.pan.set(pan);
+    graph.ampLerp = null;
+    graph.panLerp = null;
+    graph.ampNoise = null;
+    graph.panNoise = null;
+  }
+  return graph;
 }
 
 /** @deprecated use additiveGraphApplyFrequencySkew */
@@ -2323,6 +2620,52 @@ function additiveGraphSumSample(
   let mono = 0;
   let left = 0;
   let right = 0;
+  const noiseKeepsAll = hasAmpNoise || hasRatioNoise;
+  let live = noiseKeepsAll ? H : 0;
+  if (!noiseKeepsAll) {
+    for (let i = H - 1; i >= 0; i -= 1) {
+      const aFrom = hasAmpLerp && i < ampLerp.from.length
+        ? nodeGraphFiniteNumber(ampLerp.from[i])
+        : nodeGraphFiniteNumber(ampArr?.[i]);
+      const aTo = hasAmpLerp && i < ampLerp.to.length
+        ? nodeGraphFiniteNumber(ampLerp.to[i])
+        : aFrom;
+      let partialAmp = hasAmpLerp ? aFrom + (aTo - aFrom) * lerpT : aFrom;
+      partialAmp = additiveGraphClamp(partialAmp, 0, 1);
+      if (!(partialAmp > 0)) continue;
+      const baseRatio = hasRatioLerp && i < ratioLerp.from.length && i < ratioLerp.to.length
+        ? ratioLerp.from[i] + (ratioLerp.to[i] - ratioLerp.from[i]) * lerpT
+        : nodeGraphFiniteNumber(ratioArr?.[i]);
+      const hz = Math.max(0, baseRatio) * f0;
+      const nyq = additiveGraphNyquistAmpGain(hz, sr);
+      if (!(nyq > 0)) continue;
+      if (partialAmp * ma * nyq >= ADDITIVE_GRAPH_INAUDIBLE_AMP) {
+        live = i + 1;
+        break;
+      }
+    }
+  }
+  const prevLive = Number.isFinite(graph._liveHarmonics) ? graph._liveHarmonics : -1;
+  if (prevLive >= 0 && live > prevLive) {
+    const fund = prevLive > 0 ? phaseAcc[0] : 0;
+    const mode = Number(graph.phaseEntryMode) | 0;
+    const r0 = nodeGraphFiniteNumber(graph.ratio?.[0], 1);
+    let rng = (Number(graph._phaseEntryRng) >>> 0) || 0xA5A5A5A5;
+    const seedFrom = prevLive > 0 ? prevLive : 0;
+    for (let i = seedFrom; i < live; i += 1) {
+      if (mode === 1) {
+        phaseAcc[i] = 0;
+      } else if (mode === 2) {
+        rng = (Math.imul(rng, 1664525) + 1013904223) >>> 0;
+        phaseAcc[i] = ((rng >>> 8) & 0xffffff) / 16777216;
+      } else {
+        const ri = nodeGraphFiniteNumber(graph.ratio?.[i], (i + 1));
+        phaseAcc[i] = r0 > 1e-12 ? additiveGraphWrap01(fund * (ri / r0)) : fund;
+      }
+    }
+    graph._phaseEntryRng = rng;
+  }
+  graph._liveHarmonics = live;
   let displayPhase = null;
   if (graph._wantDisplayPhase) {
     displayPhase = graph.displayPhase && graph.displayPhase.length === H
@@ -2331,7 +2674,7 @@ function additiveGraphSumSample(
     graph.displayPhase = displayPhase;
   }
 
-  for (let i = 0; i < H; i += 1) {
+  for (let i = 0; i < live; i += 1) {
     const aFrom = hasAmpLerp && i < ampLerp.from.length
       ? nodeGraphFiniteNumber(ampLerp.from[i])
       : nodeGraphFiniteNumber(ampArr?.[i]);
@@ -2356,7 +2699,7 @@ function additiveGraphSumSample(
     }
     const hz = baseRatio * f0;
 
-    // Always tick phaseAcc so silent / ampLerp-from-0 / Odd zeros stay on the n×ƒ series.
+    // Phase ticks only inside the live count. Past the last audible partial, nothing runs.
     const inc = hz / sr;
     phaseAcc[i] = additiveGraphWrap01(phaseAcc[i] + inc);
 

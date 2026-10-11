@@ -547,50 +547,6 @@ function compositeNodeGraphScope2dBurn(renderer, settings, options = {}) {
 }
 
 
-/** Live phosphor stamp (Bright). Residual hang is a separate energy-FBO deposit. */
-function paintNodeGraphPhosphorLiveStampOverlay(context, points, radius, blur, bright, rgbBytes, maxDots) {
-  if (!context || !(bright > 0.001) || !Array.isArray(points) || !points.length) {
-    return false;
-  }
-  const rPx = Math.max(1, nodeGraphFiniteNumber(radius));
-  const blur01 = Math.max(0, Math.min(1, nodeGraphFiniteNumber(blur)));
-  const rgb = Array.isArray(rgbBytes) && rgbBytes.length >= 3 ? rgbBytes : [0.46, 0.92, 1];
-  let r;
-  let g;
-  let b;
-  if (typeof nodeGraphScopeRgbFloatsToCanvasRgb === "function" && !(Number(rgb[0]) > 1)) {
-    const bytes = nodeGraphScopeRgbFloatsToCanvasRgb(rgb);
-    r = bytes[0];
-    g = bytes[1];
-    b = bytes[2];
-  } else {
-    r = Math.max(0, Math.min(255, Math.round(Number(rgb[0]) > 1 ? rgb[0] : rgb[0] * 255)));
-    g = Math.max(0, Math.min(255, Math.round(Number(rgb[1]) > 1 ? rgb[1] : rgb[1] * 255)));
-    b = Math.max(0, Math.min(255, Math.round(Number(rgb[2]) > 1 ? rgb[2] : rgb[2] * 255)));
-  }
-  const cap = Math.max(1, Math.min(8192, Math.floor(nodeGraphFiniteNumber(maxDots, 1024))));
-  let drawn = 0;
-  context.save();
-  context.setTransform(1, 0, 0, 1, 0, 0);
-  context.globalCompositeOperation = "source-over";
-  context.globalAlpha = Math.max(0, Math.min(1, bright));
-  context.fillStyle = `rgb(${r},${g},${b})`;
-  context.shadowColor = `rgba(${r},${g},${b},${Math.min(1, bright)})`;
-  context.shadowBlur = rPx * blur01 * 6;
-  for (let i = 0; i < points.length && drawn < cap; i += 1) {
-    const p = points[i];
-    if (!p || !Number.isFinite(p.x) || !Number.isFinite(p.y)) {
-      continue;
-    }
-    context.beginPath();
-    context.arc(p.x, p.y, rPx, 0, Math.PI * 2);
-    context.fill();
-    drawn += 1;
-  }
-  context.restore();
-  return drawn > 0;
-}
-
 function nodeGraphPhosphorLiveScratchCanvas(canvas, width, height) {
   if (!canvas || !(width > 0) || !(height > 0)) {
     return null;
@@ -803,7 +759,11 @@ function drawNodeGraphScope2dEnergyBurnPath(item, pixelRatio, pathPoints, settin
     if ("imageSmoothingQuality" in context) {
       context.imageSmoothingQuality = "high";
     }
-    context.drawImage(energyGl.canvas, 0, 0, width, height);
+    if (typeof nodeGraphSharedGlBlitTo2D === "function") {
+      nodeGraphSharedGlBlitTo2D(context, width, height);
+    } else {
+      context.drawImage(energyGl.canvas, 0, 0, width, height);
+    }
     context.restore();
   }
   return true;

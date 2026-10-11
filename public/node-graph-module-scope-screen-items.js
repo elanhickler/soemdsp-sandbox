@@ -647,10 +647,7 @@ function nodeGraphScope2dEnergyBurnExposure(bright01) {
 // nodeGraphPhosphorBuildGradientStops → node-graph-module-scope-phosphor.js
 // nodeGraphPhosphorSampleGradient → node-graph-module-scope-phosphor.js
 /**
- * Map grayscale energy canvas → colored RGBA into colorCanvas (same size).
- * Energy luma is max(R,G,B)/255. Output is premultiplied for source-over blit.
  */
-// nodeGraphPhosphorMapEnergyToColorCanvas → node-graph-module-scope-phosphor.js
 // ─────────────────────────────────────────────────────────────────────────────
 // Number Readout — energy phosphor + hard LCD plate / live digits
 // DSEG7 Classic: https://github.com/keshikan/DSEG (SIL OFL 1.1)

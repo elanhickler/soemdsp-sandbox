@@ -264,25 +264,10 @@ void main (void) {
     if (device?.gl && !device.gl.isContextLost()) {
       return device;
     }
-    const canvas = document.createElement("canvas");
-    canvas.width = 2;
-    canvas.height = 2;
-    const gl = canvas.getContext("webgl", {
-      alpha: true,
-      antialias: false,
-      depth: false,
-      stencil: false,
-      premultipliedAlpha: false,
-      preserveDrawingBuffer: true,
-    }) || canvas.getContext("experimental-webgl", {
-      alpha: true,
-      antialias: false,
-      depth: false,
-      stencil: false,
-      premultipliedAlpha: false,
-      preserveDrawingBuffer: true,
-    });
-    if (!gl) {
+    const pic = typeof nodeGraphSharedGlDevice === "function" ? nodeGraphSharedGlDevice() : null;
+    const gl = pic?.gl || null;
+    const canvas = pic?.canvas || null;
+    if (!gl || !canvas) {
       device = null;
       return null;
     }
@@ -606,8 +591,13 @@ void main() {
     }
     const gl = glDevice.gl;
     const canvas = glDevice.canvas;
-    if (canvas.width !== width) canvas.width = width;
-    if (canvas.height !== height) canvas.height = height;
+    if (typeof nodeGraphSharedGlBindPresent === "function") {
+      nodeGraphSharedGlBindPresent(gl, width, height);
+    } else {
+      gl.enable(gl.SCISSOR_TEST);
+      gl.scissor(0, 0, width, height);
+      gl.viewport(0, 0, width, height);
+    }
     let uSize = Math.max(0.05, diameter * 0.5);
     const solidCore = options.solidCore === true;
     uSize = Math.max(uSize, 2.0);
@@ -768,7 +758,14 @@ void main() {
       context.globalAlpha = 1;
       context.imageSmoothingEnabled = false;
       context.globalCompositeOperation = options.presentComposite || "copy";
-      context.drawImage(canvas, 0, 0, width, height);
+      if (typeof nodeGraphSharedGlEndPresent === "function") {
+        nodeGraphSharedGlEndPresent(gl);
+      }
+      if (typeof nodeGraphSharedGlBlitTo2D === "function") {
+        nodeGraphSharedGlBlitTo2D(context, width, height);
+      } else {
+        context.drawImage(canvas, 0, 0, width, height);
+      }
       context.restore();
     } else {
       gl.blendEquation(gl.FUNC_ADD);
@@ -931,7 +928,14 @@ void main() {
     context.setTransform(1, 0, 0, 1, 0, 0);
     context.imageSmoothingEnabled = false;
     context.globalCompositeOperation = "lighter";
-    context.drawImage(canvas, 0, 0, width, height);
+    if (typeof nodeGraphSharedGlEndPresent === "function") {
+      nodeGraphSharedGlEndPresent(gl);
+    }
+    if (typeof nodeGraphSharedGlBlitTo2D === "function") {
+      nodeGraphSharedGlBlitTo2D(context, width, height);
+    } else {
+      context.drawImage(canvas, 0, 0, width, height);
+    }
     context.restore();
     return segCount;
   }

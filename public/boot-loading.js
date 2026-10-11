@@ -223,6 +223,8 @@ async function populateNodeBootSysinfo() {
         gpuName = gpuName.replace(/\s*(Direct3D\S*|vs_\S+|ps_\S+|OpenGL\S*|Metal\s*\S*)/gi, "").trim();
       }
       vramMB = probeWebGLVRAM(gl);
+      const lose = gl.getExtension("WEBGL_lose_context");
+      if (lose) lose.loseContext();
     }
   } catch (_) {}
 

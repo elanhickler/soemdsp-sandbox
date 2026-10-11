@@ -776,6 +776,24 @@
       "noticeUrl": "https://github.com/soundemote/soemdsp-sandbox/blob/master/docs/THIRD_PARTY.md"
     },
     {
+      "name": "ellipsoid_decay",
+      "label": "EllipsoidDecay",
+      "targetType": "ellipsoidDecay",
+      "kind": "envelope",
+      "source": "native_modules/ellipsoid_decay/ellipsoid_decay.cpp",
+      "sourceUrl": "https://github.com/soundemote/soemdsp-sandbox/blob/master/native_modules/ellipsoid_decay/ellipsoid_decay.cpp",
+      "localSourceUrl": "/native_modules/ellipsoid_decay/ellipsoid_decay.cpp",
+      "libUrl": "",
+      "wasm": "native_modules/ellipsoid_decay/ellipsoid_decay.wasm",
+      "wasmUrl": "native_modules/ellipsoid_decay/ellipsoid_decay.wasm",
+      "wasmAvailable": true,
+      "license": "Soundemote Noncommercial",
+      "licenseUrl": "https://github.com/soundemote/soemdsp-sandbox/blob/master/LICENSE",
+      "upstreamLicense": "",
+      "upstreamLicenseUrl": "",
+      "noticeUrl": "https://github.com/soundemote/soemdsp-sandbox/blob/master/docs/THIRD_PARTY.md"
+    },
+    {
       "name": "elliptic",
       "label": "Elliptic Filter",
       "targetType": "elliptic",

@@ -108,6 +108,7 @@ NodeLiveAudioProcessor.NATIVE_GRAPH_TYPE_IDS = Object.freeze({
   additiveAnalogFilter: 115,
   additiveLadderFilter: 116,
   additiveFrequencySkew: 117,
+  additiveSync: 213,
   additiveQuantizeFreq: 118,
   additiveQuantizePhase: 119,
   additivePan: 120,
@@ -156,6 +157,7 @@ NodeLiveAudioProcessor.NATIVE_GRAPH_TYPE_IDS = Object.freeze({
   exponentialSkew: 208,
   hyperbolicDecay: 209,
   exponentialMix: 210,
+  ellipsoidDecay: 212,
   robinSinepulse: 205,
   robinSinepulseAllpass: 206,
   curveAttackRelease: 166,
@@ -1169,6 +1171,7 @@ NodeLiveAudioProcessor.prototype.mapNativeGraphDstPortId = function mapNativeGra
         || tGateEnv === "exponentialSkew"
         || tGateEnv === "hyperbolicDecay"
         || tGateEnv === "exponentialMix"
+        || tGateEnv === "ellipsoidDecay"
         || tGateEnv === "pluckEnvelope"
         || tGateEnv === "samplePlayer"
         || tGateEnv === "vibratoGenerator"
@@ -3639,6 +3642,7 @@ NodeLiveAudioProcessor.prototype.syncNativeVoiceIdleCleanup = function syncNativ
     exponentialSkew: 1,
     hyperbolicDecay: 1,
     exponentialMix: 1,
+    ellipsoidDecay: 1,
     expAdsr: 1,
     linearEnvelope: 1,
     wavetableAdsr: 1,
@@ -5465,6 +5469,12 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
       push("amplitude", P.NATIVE_GRAPH_PARAM_AMPLITUDE, cont("amplitude", 1));
       continue;
     }
+    if (type === "ellipsoidDecay") {
+      push("decayTime", P.NATIVE_GRAPH_PARAM_TIME_DENOMINATOR, cont("decayTime", 2));
+      push("morph", P.NATIVE_GRAPH_PARAM_SHAPE, cont("morph", 0));
+      push("amplitude", P.NATIVE_GRAPH_PARAM_AMPLITUDE, cont("amplitude", 1));
+      continue;
+    }
     if (type === "exponentialMix") {
       push("decayTime", P.NATIVE_GRAPH_PARAM_TIME_DENOMINATOR, cont("decayTime", 2));
       push("mix", P.NATIVE_GRAPH_PARAM_MIX, cont("mix", 0.75));
@@ -6232,12 +6242,6 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
       push("harmonics", P.NATIVE_GRAPH_PARAM_STAGES, cont("harmonics", 32));
       push("harmonicFade", P.NATIVE_GRAPH_PARAM_MODE, disc("harmonicFade", 1));
       push("phaseRotation", P.NATIVE_GRAPH_PARAM_PHASE, cont("phaseRotation", 0));
-      // Slope
-      push("slope", P.NATIVE_GRAPH_PARAM_CENTER, cont("slope", 1));
-      push("slopeStart", P.NATIVE_GRAPH_PARAM_IN_LOW, cont("slopeStart", 1));
-      push("slopeEnd", P.NATIVE_GRAPH_PARAM_IN_HIGH, cont("slopeEnd", 32));
-      push("skew", P.NATIVE_GRAPH_PARAM_RESONANCE, cont("skew", 1));
-      push("curve", P.NATIVE_GRAPH_PARAM_LFO_STYLE, disc("curve", 0));
       continue;
     }
     if (type === "additiveBubble") {
@@ -6266,6 +6270,12 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
       push("frequency", P.NATIVE_GRAPH_PARAM_FREQUENCY, cont("frequency", 100));
       push("amplitude", P.NATIVE_GRAPH_PARAM_AMPLITUDE, cont("amplitude", 0.35));
       push("seed", P.NATIVE_GRAPH_PARAM_SEED, disc("seed", 0));
+      // Final slope (after Sync). Same slots the Generator used to own.
+      push("slope", P.NATIVE_GRAPH_PARAM_CENTER, cont("slope", 1));
+      push("slopeStart", P.NATIVE_GRAPH_PARAM_IN_LOW, cont("slopeStart", 1));
+      push("slopeEnd", P.NATIVE_GRAPH_PARAM_IN_HIGH, cont("slopeEnd", 32));
+      push("skew", P.NATIVE_GRAPH_PARAM_RESONANCE, cont("skew", 1));
+      push("curve", P.NATIVE_GRAPH_PARAM_LFO_STYLE, disc("curve", 0));
       continue;
     }
     if (type === "additiveLinearFilter" || type === "additiveAnalogFilter") {
@@ -6290,6 +6300,15 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
       push("lowStretch", P.NATIVE_GRAPH_PARAM_IN_LOW, cont("lowStretch", 1));
       push("highStretch", P.NATIVE_GRAPH_PARAM_IN_HIGH, cont("highStretch", 1));
       push("skew", P.NATIVE_GRAPH_PARAM_SHAPE, cont("skew", 0));
+      continue;
+    }
+    if (type === "additiveSync") {
+      push("mode", P.NATIVE_GRAPH_PARAM_MODE, disc("mode", 0));
+      push("ratio", P.NATIVE_GRAPH_PARAM_FREQUENCY, cont("ratio", 1));
+      push("cramp", P.NATIVE_GRAPH_PARAM_PHASE, cont("cramp", 0));
+      push("pinch", P.NATIVE_GRAPH_PARAM_RESONANCE, cont("pinch", 0));
+      push("formant", P.NATIVE_GRAPH_PARAM_SHAPE, cont("formant", 1));
+      push("shift", P.NATIVE_GRAPH_PARAM_WIDTH, cont("shift", 0));
       continue;
     }
     if (type === "additiveQuantizeFreq") {
@@ -6912,6 +6931,7 @@ NodeLiveAudioProcessor.prototype.syncNativeYellowGraphPublish =
       "additiveAnalogFilter",
       "additiveLadderFilter",
       "additiveFrequencySkew",
+      "additiveSync",
       "additiveQuantizeFreq",
       "additiveQuantizePhase",
       "additivePan",
@@ -7000,6 +7020,7 @@ NodeLiveAudioProcessor.prototype.nativeYellowGraphFullyNative =
       "additiveAnalogFilter",
       "additiveLadderFilter",
       "additiveFrequencySkew",
+      "additiveSync",
       "additiveQuantizeFreq",
       "additiveQuantizePhase",
       "additivePan",
@@ -8151,6 +8172,7 @@ NodeLiveAudioProcessor.prototype.compileNativeGraphFromPlan = function compileNa
       "additiveDiffusor",
       "additiveBubble",
       "additiveFrequencySkew",
+      "additiveSync",
       "additiveNoisyFreq",
       "additiveNoisyPhase",
       "additiveNoisyPan",
@@ -8801,6 +8823,7 @@ NodeLiveAudioProcessor.prototype.publishNativeGraphScopeTaps = function publishN
         || type === "exponentialSkew"
         || type === "hyperbolicDecay"
         || type === "exponentialMix"
+        || type === "ellipsoidDecay"
         || type === "curveAttackRelease"
         || type === "linearAttackRelease"
       )) {

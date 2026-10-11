@@ -572,7 +572,8 @@ function compileNodeGraphExecutionPlan(patch = nodeGraphMvp.patch) {
         issues.push(`missing ${nodeGraphNodeDisplayName(nodeId)} gate`);
       }
     } else if (type === "pluckEnvelope" || type === "pingEnvelope" || type === "powerDecay"
-      || type === "exponentialSkew" || type === "hyperbolicDecay" || type === "exponentialMix") {
+      || type === "exponentialSkew" || type === "hyperbolicDecay" || type === "exponentialMix"
+      || type === "ellipsoidDecay") {
       const triggerCount = (graph.inputConnections.get(nodeGraphInputKey(nodeId, "Trigger")) || []).length;
       if (!triggerCount && nodeGraphNodeSignalOutputRequired(graph, nodeId)) {
         issues.push(`missing ${nodeGraphNodeDisplayName(nodeId)} trigger`);

@@ -630,11 +630,87 @@ function nodeGraphPatchMigratePhaseRotationOutToGenerator(patch) {
   return changed ? { ...patch, nodes } : patch;
 }
 
+/**
+ * Slope knobs moved from Additive Generator to Additive Out (final mask).
+ * Copies slope / slopeStart / slopeEnd / skew / curve onto each downstream Out
+ * that does not already have slopeEnd, then strips them from the Generator.
+ */
+function nodeGraphPatchMigrateSlopeGeneratorToOut(patch) {
+  if (!patch || !Array.isArray(patch.nodes)) return patch;
+  const keys = ["slope", "slopeStart", "slopeEnd", "skew", "curve"];
+  const nodes = patch.nodes.slice();
+  const byId = new Map();
+  for (let i = 0; i < nodes.length; i += 1) {
+    const n = nodes[i];
+    if (n && n.id != null) byId.set(String(n.id), i);
+  }
+  const conns = Array.isArray(patch.connections) ? patch.connections : [];
+  const isBag = (obj) => Boolean(obj) && typeof obj === "object";
+  const withoutKeys = (obj, drop) => {
+    const out = { ...obj };
+    for (const k of drop) delete out[k];
+    return out;
+  };
+  const downstreamOutIndexes = (genId) => {
+    const found = [];
+    const stack = [String(genId)];
+    const seen = new Set();
+    while (stack.length) {
+      const id = stack.pop();
+      if (!id || seen.has(id)) continue;
+      seen.add(id);
+      for (let i = 0; i < conns.length; i += 1) {
+        const c = conns[i];
+        if (!c || String(c.sourceNode || "") !== id) continue;
+        if (String(c.sourcePort || "") !== "Graph") continue;
+        const dst = String(c.destinationNode || "");
+        const index = byId.get(dst);
+        if (index == null) continue;
+        const type = String(nodes[index]?.type || "").trim();
+        if (type === "additiveOut") found.push(index);
+        else stack.push(dst);
+      }
+    }
+    return found;
+  };
+  let changed = false;
+  for (let i = 0; i < nodes.length; i += 1) {
+    const node = nodes[i];
+    if (!node || String(node.type || "").trim() !== "additiveGenerator") continue;
+    const gp = isBag(node.params) ? node.params : {};
+    if (!Object.hasOwn(gp, "slopeEnd") && !Object.hasOwn(gp, "slope")) continue;
+    const outs = downstreamOutIndexes(node.id);
+    if (!outs.length) continue;
+    const moved = {};
+    for (const k of keys) {
+      if (Object.hasOwn(gp, k)) moved[k] = gp[k];
+    }
+    for (let o = 0; o < outs.length; o += 1) {
+      const oi = outs[o];
+      const outNode = nodes[oi];
+      const op = isBag(outNode.params) ? outNode.params : {};
+      if (Object.hasOwn(op, "slopeEnd")) continue;
+      nodes[oi] = { ...outNode, params: { ...op, ...moved } };
+    }
+    nodes[i] = {
+      ...node,
+      params: withoutKeys(gp, keys.concat("_slopeModel")),
+      ...(isBag(node.parameters) ? { parameters: withoutKeys(node.parameters, keys) } : {}),
+      ...(isBag(node.paramMeta) ? { paramMeta: withoutKeys(node.paramMeta, keys) } : {}),
+    };
+    changed = true;
+  }
+  return changed ? { ...patch, nodes } : patch;
+}
+
 // Slope
 function nodeGraphPatchMigrateAdditiveSlopeModel(patch) {
   if (!patch || !Array.isArray(patch.nodes)) return patch;
   const legacyKeys = ["filter", "harmonic", "slope", "skew", "curve"];
-  const outKeys = legacyKeys.concat("optimize");
+  // Slope / Skew / Curve now belong on Additive Out. Strip only the pre-model
+  // Out keys. slopeStart / slopeEnd were never in this list, which is why
+  // those two survived a reload and Height / Skew / Curve did not.
+  const outKeys = ["filter", "harmonic", "optimize"];
   const nodes = patch.nodes.slice();
   const byId = new Map();
   for (let i = 0; i < nodes.length; i += 1) {
@@ -1338,6 +1414,7 @@ function migrateNodeGraphPatchToCurrent(patch) {
     next = nodeGraphPatchMigrateAdditiveGeneratorWaveformsPwm(next);
     next = nodeGraphPatchMigratePhaseRotationOutToGenerator(next);
     next = nodeGraphPatchMigrateAdditiveSlopeModel(next);
+    next = nodeGraphPatchMigrateSlopeGeneratorToOut(next);
     next = nodeGraphPatchMigrateGrowlHarmonicReduceToCutoff(next);
     next = nodeGraphPatchMigrateGrowlToBubble(next);
     next = nodeGraphPatchMigrateBubbleBrickwallToDampen(next);

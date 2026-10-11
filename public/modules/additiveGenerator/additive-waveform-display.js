@@ -26,12 +26,39 @@ function createNodeGraphAdditiveWaveformDisplay(nodeId, type = "additiveGenerato
   return section;
 }
 
+/** First Additive Out reached by walking Graph outputs. */
+function nodeGraphAdditiveWaveformDownstreamOutId(nodeId) {
+  const connections = Array.isArray(nodeGraphMvp?.patch?.connections)
+    ? nodeGraphMvp.patch.connections
+    : [];
+  const start = String(nodeId || "");
+  const stack = [start];
+  const seen = new Set();
+  while (stack.length) {
+    const id = stack.pop();
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    if (id !== start) {
+      const node = typeof nodeGraphPatchNode === "function" ? nodeGraphPatchNode(id) : null;
+      if (String(node?.type || "") === "additiveOut") return id;
+    }
+    for (let i = 0; i < connections.length; i += 1) {
+      const c = connections[i];
+      if (!c || String(c.sourceNode || "") !== id) continue;
+      if (String(c.sourcePort || "") !== "Graph") continue;
+      stack.push(String(c.destinationNode || ""));
+    }
+  }
+  return "";
+}
+
 function nodeGraphAdditiveWaveformReadGraph(nodeId) {
+  const outId = nodeGraphAdditiveWaveformDownstreamOutId(nodeId) || String(nodeId || "");
   if (typeof nodeGraphDataBus !== "undefined") {
-    const pub = nodeGraphDataBus.get?.(`${nodeId}.Graph`);
+    const pub = nodeGraphDataBus.get?.(`${outId}.Graph`);
     if (pub?.ratio) return pub;
   }
-  if (typeof readNodeGraphDataInput === "function") {
+  if (outId === String(nodeId || "") && typeof readNodeGraphDataInput === "function") {
     const g = readNodeGraphDataInput(nodeId, "Graph");
     if (g?.ratio) return g;
   }

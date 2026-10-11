@@ -57,13 +57,8 @@ void main() {
       return device;
     }
     devices.delete(canvas);
-    const gl = canvas.getContext("webgl", {
-      alpha: true,
-      antialias: false,
-      depth: false,
-      premultipliedAlpha: true,
-      preserveDrawingBuffer: true,
-    });
+    const pic = typeof nodeGraphSharedGlDevice === "function" ? nodeGraphSharedGlDevice() : null;
+    const gl = pic?.gl || null;
     if (!gl) {
       return null;
     }
@@ -109,21 +104,16 @@ void main() {
     if (!dest || !packed || n <= 0) {
       return false;
     }
-    let off = dest._traceRgbPointsOffscreen;
-    if (!off || off.width !== dest.width || off.height !== dest.height) {
-      if (off) devices.delete(off);
-      off = document.createElement("canvas");
-      off.width = dest.width;
-      off.height = dest.height;
-      dest._traceRgbPointsOffscreen = off;
-    }
-    const d = ensure(off);
+    const d = ensure(dest);
     if (!d) {
       return false;
     }
     const gl = d.gl;
-    const w = off.width;
-    const h = off.height;
+    const w = dest.width;
+    const h = dest.height;
+    if (typeof nodeGraphSharedGlBindPresent === "function") {
+      nodeGraphSharedGlBindPresent(gl, w, h);
+    }
     const sizePx = Math.max(1, nodeGraphFiniteNumber(opts.sizePx, 2));
     gl.viewport(0, 0, w, h);
     gl.clearColor(0, 0, 0, 0);
@@ -152,10 +142,15 @@ void main() {
     gl.disableVertexAttribArray(d.loc.aPos);
     gl.disableVertexAttribArray(d.loc.aRgb);
     gl.bindBuffer(gl.ARRAY_BUFFER, null);
+    if (typeof nodeGraphSharedGlEndPresent === "function") {
+      nodeGraphSharedGlEndPresent(gl);
+    }
     ctx.save();
     ctx.globalCompositeOperation = "lighter";
     ctx.globalAlpha = 1;
-    ctx.drawImage(off, 0, 0);
+    if (typeof nodeGraphSharedGlBlitTo2D === "function") {
+      nodeGraphSharedGlBlitTo2D(ctx, w, h);
+    }
     ctx.restore();
     return true;
   }

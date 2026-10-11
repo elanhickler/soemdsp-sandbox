@@ -92,15 +92,17 @@ function createNodeGraphHarmonicLinesDisplay(nodeId, type = "additiveOut") {
 }
 
 function nodeGraphHarmonicLinesReadGraph(nodeId) {
-  if (typeof readNodeGraphDataInput === "function") {
-    const g = readNodeGraphDataInput(nodeId, "Graph");
-    if (g?.ratio) return g;
-  }
+  // Own publish is post-slope (Additive Out masks after the inlet).
+  // The Graph inlet is the unmasked upstream spectrum.
   if (typeof nodeGraphDataBus !== "undefined") {
     const view = nodeGraphDataBus.get?.(`${nodeId}.GraphView`);
     if (view?.ratio) return view;
-    const out = nodeGraphDataBus.get?.(`${nodeId}.Graph`);
-    if (out?.ratio) return out;
+    const own = nodeGraphDataBus.get?.(`${nodeId}.Graph`);
+    if (own?.ratio) return own;
+  }
+  if (typeof readNodeGraphDataInput === "function") {
+    const g = readNodeGraphDataInput(nodeId, "Graph");
+    if (g?.ratio) return g;
   }
   return null;
 }
@@ -246,13 +248,15 @@ function drawNodeGraphHarmonicLinesDisplay(section) {
   const ampFloorDb = -60;
   let maxAmp = 1e-6;
   // Slope
-  const maskParams = maskGen.params || {};
+  const maskParams = (typeof nodeGraphPatchNode === "function"
+    ? nodeGraphPatchNode(nodeId)?.params
+    : null) || {};
   const maskSlopeRaw = Number(maskParams.slope);
   const maskSlope = Number.isFinite(maskSlopeRaw) ? maskSlopeRaw : 1;
   const maskSkewRaw = Number(maskParams.skew);
   const maskSkew = Number.isFinite(maskSkewRaw) ? maskSkewRaw : 1;
   const maskCurve = typeof nodeGraphChoiceIdForKey === "function"
-    ? Number(nodeGraphChoiceIdForKey("additiveGenerator", "curve", maskParams.curve)) || 0
+    ? Number(nodeGraphChoiceIdForKey("additiveOut", "curve", maskParams.curve)) || 0
     : 0;
   const trackFilter = maskSlope > 0
     && freqHz > 0

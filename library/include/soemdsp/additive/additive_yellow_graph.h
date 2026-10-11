@@ -33,6 +33,7 @@ static const int kTypeAdditiveNoisyAmp = 124;
 static const int kTypeAdditivePhaseEntry = 125; // Lock / Free / Random new-slot phase
 static const int kTypeAdditiveBlaster = 126; // Frequency-bin shared phase
 static const int kTypeAdditiveDiffusor = 127; // Diffuse → quantize flex-grid
+static const int kTypeAdditiveSync = 213; // Hard-sync resample + formant slide
 
 static const int kMaxHarmonics = 1024;
 static const int kDefaultHarmonics = 32;
@@ -1136,6 +1137,318 @@ inline void apply_frequency_skew(
   noise_recipe_clear(g.ratioNoise);
 }
 
+// Sync: hard-sync spectral resample (P = follower/leader), then formant slide.
+// P≈1 skips the resample. Formant=1 and shift=0 skip the envelope move.
+// Main lobe kept within ±48 bins. Output ratios are 1..H when sync runs.
+inline float yellow_sinc(float x) {
+  if (!(x * 0.0f == 0.0f)) return 0.0f;
+  if (soemdsp_maths::dsp_fabs((double)x) < 1e-8) return 1.0f;
+  const double p = soemdsp_maths::kPi * (double)x;
+  return (float)(soemdsp_maths::dsp_sin(p) / p);
+}
+
+// Freestanding atan2. Phase of synced bins; identity at axis crossings.
+inline double yellow_atan2(double y, double x) {
+  if (x == 0.0 && y == 0.0) return 0.0;
+  const double ax = soemdsp_maths::dsp_fabs(x);
+  const double ay = soemdsp_maths::dsp_fabs(y);
+  const bool steep = ay > ax;
+  const double z = steep ? (ay > 0.0 ? ax / ay : 0.0) : (ax > 0.0 ? ay / ax : 0.0);
+  const double z2 = z * z;
+  double a = z * (0.99997726 + z2 * (-0.33262347 + z2 * (0.19354346
+    + z2 * (-0.11643287 + z2 * (0.05265332 + z2 * -0.01172120)))));
+  if (steep) a = soemdsp_maths::kPi * 0.5 - a;
+  if (x < 0.0) a = soemdsp_maths::kPi - a;
+  if (y < 0.0) a = -a;
+  return a;
+}
+
+// One linear piece w=alpha+beta*θ of a sine partial, onto output bins.
+static inline void yellow_add_sine_segment(
+  float* re, float* im, float* panNum, float* panDen, int H,
+  float A, float omega, double ph, float pan,
+  double alpha, double beta, double t0, double t1
+) {
+  const double dur = t1 - t0;
+  if (!(dur > 1e-6) || !(soemdsp_maths::dsp_fabs((double)A) > 1e-8) || !(soemdsp_maths::dsp_fabs((double)omega) > 1e-8)) return;
+  const double windowBins = 64.0;
+  const double inst = soemdsp_maths::dsp_fabs(omega * beta);
+  const bool hold = soemdsp_maths::dsp_fabs(beta) < 1e-6;
+  int nStart = 1;
+  int nEnd = H;
+  if (hold) {
+    nEnd = H < 64 ? H : 64;
+  } else {
+    nStart = (int)(inst - windowBins);
+    if (nStart < 1) nStart = 1;
+    nEnd = (int)(inst + windowBins + 0.999);
+    if (nEnd > H) nEnd = H;
+  }
+  const double twoPi = soemdsp_maths::kPi * 2.0;
+  for (int n = nStart; n <= nEnd; n += 1) {
+    double dr = 0.0;
+    double di = 0.0;
+    for (int sign = 1; sign >= -1; sign -= 2) {
+      const double w = (double)sign * (double)omega;
+      const double f = w * beta - (double)n;
+      double jr;
+      double ji;
+      if (soemdsp_maths::dsp_fabs(f) < 1e-8) {
+        jr = dur;
+        ji = 0.0;
+      } else {
+        const double p1 = twoPi * f * t1;
+        const double p0 = twoPi * f * t0;
+        const double denom = twoPi * f;
+        jr = (soemdsp_maths::dsp_sin(p1) - soemdsp_maths::dsp_sin(p0)) / denom;
+        ji = -(soemdsp_maths::dsp_cos(p1) - soemdsp_maths::dsp_cos(p0)) / denom;
+      }
+      const double ang = (double)sign * ph + twoPi * w * alpha;
+      const double pr = soemdsp_maths::dsp_cos(ang);
+      const double pi = soemdsp_maths::dsp_sin(ang);
+      const double rr = pr * jr - pi * ji;
+      const double ii = pr * ji + pi * jr;
+      if (sign > 0) {
+        dr += rr;
+        di += ii;
+      } else {
+        dr -= rr;
+        di -= ii;
+      }
+    }
+    const float cr = (A * 0.5f) * (float)di;
+    const float ci = (A * 0.5f) * (float)(-dr);
+    const int i = n - 1;
+    re[i] += cr;
+    im[i] += ci;
+    const float mag = (float)soemdsp_maths::sqrt_newton((double)cr * cr + (double)ci * ci);
+    panNum[i] += pan * mag;
+    panDen[i] += mag;
+  }
+}
+
+// kind 1 Cramp (bipolar duty), kind 2 Pinch (both flanks). Projects onto 1..H.
+inline void apply_cycle_warp(GraphPayload& g, int kind, float amount) {
+  const int H = g.harmonics;
+  if (H < 1 || H > kMaxHarmonics) return;
+  double duty = 0.5;
+  double edge = 0.5;
+  if (kind == 1) {
+    float c = (amount * 0.0f == 0.0f) ? amount : 0.0f;
+    if (c > 1.0f) c = 1.0f;
+    if (c < -1.0f) c = -1.0f;
+    if (!(soemdsp_maths::dsp_fabs((double)c) > 1e-4)) return;
+    duty = 0.5 + (double)c * 0.48;
+    if (duty < 0.02) duty = 0.02;
+    if (duty > 0.98) duty = 0.98;
+  } else if (kind == 2) {
+    float p = (amount * 0.0f == 0.0f) ? amount : 0.0f;
+    if (p < 0.0f) p = 0.0f;
+    if (p > 1.0f) p = 1.0f;
+    if (!(p > 1e-4f)) return;
+    edge = 0.5 * (1.0 - (double)p * 0.96);
+    if (edge < 0.02) edge = 0.02;
+  } else {
+    return;
+  }
+  float re[kMaxHarmonics];
+  float im[kMaxHarmonics];
+  float panNum[kMaxHarmonics];
+  float panDen[kMaxHarmonics];
+  for (int i = 0; i < H; i += 1) {
+    re[i] = 0.0f;
+    im[i] = 0.0f;
+    panNum[i] = 0.0f;
+    panDen[i] = 0.0f;
+  }
+  const double b1 = kind == 1 ? (0.5 / duty) : (0.5 / edge);
+  const double b2 = kind == 1 ? (0.5 / (1.0 - duty)) : b1;
+  for (int k = 0; k < H; k += 1) {
+    float A = g.amplitude[k];
+    if (!(A * 0.0f == 0.0f)) A = 0.0f;
+    float omega = g.ratio[k];
+    if (!(omega * 0.0f == 0.0f)) omega = 0.0f;
+    if (omega < 0.0f) omega = 0.0f;
+    if (!(soemdsp_maths::dsp_fabs((double)A) > 1e-8) || !(omega > 1e-8f)) continue;
+    float ph01 = g.phase[k];
+    if (!(ph01 * 0.0f == 0.0f)) ph01 = 0.0f;
+    const double ph = (double)ph01 * soemdsp_maths::kPi * 2.0;
+    float pan = g.pan[k];
+    if (!(pan * 0.0f == 0.0f)) pan = 0.0f;
+    if (kind == 1) {
+      yellow_add_sine_segment(re, im, panNum, panDen, H, A, omega, ph, pan, 0.0, b1, 0.0, duty);
+      const double alpha2 = 0.5 - duty * b2;
+      yellow_add_sine_segment(re, im, panNum, panDen, H, A, omega, ph, pan, alpha2, b2, duty, 1.0);
+    } else {
+      yellow_add_sine_segment(re, im, panNum, panDen, H, A, omega, ph, pan, 0.0, b1, 0.0, edge);
+      yellow_add_sine_segment(re, im, panNum, panDen, H, A, omega, ph, pan, 0.5, 0.0, edge, 1.0 - edge);
+      const double alpha3 = 0.5 - (1.0 - edge) * b2;
+      yellow_add_sine_segment(re, im, panNum, panDen, H, A, omega, ph, pan, alpha3, b2, 1.0 - edge, 1.0);
+    }
+  }
+  const double twoPi = soemdsp_maths::kPi * 2.0;
+  for (int i = 0; i < H; i += 1) {
+    const float cr = re[i];
+    const float ci = im[i];
+    const float mag = (float)soemdsp_maths::sqrt_newton((double)cr * cr + (double)ci * ci);
+    g.ratio[i] = (float)(i + 1);
+    g.amplitude[i] = mag * 2.0f;
+    float phase01 = 0.0f;
+    if (mag > 1e-12f) {
+      const double arg = yellow_atan2((double)ci, (double)cr);
+      phase01 = (float)((arg + soemdsp_maths::kPi * 0.5) / twoPi);
+      phase01 = phase01 - (float)soemdsp_maths::dsp_floor((double)phase01);
+      if (phase01 < 0.0f) phase01 += 1.0f;
+    }
+    g.phase[i] = phase01;
+    g.pan[i] = panDen[i] > 1e-12f ? panNum[i] / panDen[i] : 0.0f;
+  }
+  g.hasRatioLerp = 0;
+  g.hasPhaseLerp = 0;
+  g.hasAmpLerp = 0;
+  g.hasPanLerp = 0;
+  noise_recipe_clear(g.ratioNoise);
+  noise_recipe_clear(g.phaseNoise);
+  noise_recipe_clear(g.ampNoise);
+  noise_recipe_clear(g.panNoise);
+}
+
+inline void apply_sync(GraphPayload& g, float syncRatio, float formant, float shift, float mode, float cramp, float pinch) {
+  const int H = g.harmonics;
+  if (H < 1 || H > kMaxHarmonics) return;
+  float P = (syncRatio * 0.0f == 0.0f) ? syncRatio : 1.0f;
+  if (!(P > 0.0f)) P = 1.0f;
+  float F = (formant * 0.0f == 0.0f) ? formant : 1.0f;
+  if (!(F > 1e-4f)) F = 1.0f;
+  float S = (shift * 0.0f == 0.0f) ? shift : 0.0f;
+  int morph = (int)(mode + (mode >= 0.0f ? 0.5f : -0.5f));
+  if (morph < 0) morph = 0;
+  if (morph > 2) morph = 2;
+  const bool doSync = morph == 0 && soemdsp_maths::dsp_fabs((double)(P - 1.0f)) > 1e-5;
+  const bool doCramp = morph == 1;
+  const bool doPinch = morph == 2;
+  const bool doFormant = soemdsp_maths::dsp_fabs((double)(F - 1.0f)) > 1e-5
+    || soemdsp_maths::dsp_fabs((double)S) > 1e-5;
+  if (!doSync && !doCramp && !doPinch && !doFormant) return;
+
+  const float windowBins = 48.0f;
+  const double twoPi = soemdsp_maths::kPi * 2.0;
+  if (doSync) {
+    float re[kMaxHarmonics];
+    float im[kMaxHarmonics];
+    float panNum[kMaxHarmonics];
+    float panDen[kMaxHarmonics];
+    for (int i = 0; i < H; i += 1) {
+      re[i] = 0.0f;
+      im[i] = 0.0f;
+      panNum[i] = 0.0f;
+      panDen[i] = 0.0f;
+    }
+    for (int k = 0; k < H; k += 1) {
+      float A = g.amplitude[k];
+      if (!(A * 0.0f == 0.0f)) A = 0.0f;
+      if (!(soemdsp_maths::dsp_fabs((double)A) > 1e-8)) continue;
+      float r = g.ratio[k];
+      if (!(r * 0.0f == 0.0f)) r = 0.0f;
+      if (r < 0.0f) r = 0.0f;
+      const float omega = P * r;
+      if (!(omega > 1e-8f)) continue;
+      float ph01 = g.phase[k];
+      if (!(ph01 * 0.0f == 0.0f)) ph01 = 0.0f;
+      const double ph = (double)ph01 * twoPi;
+      float pan = g.pan[k];
+      if (!(pan * 0.0f == 0.0f)) pan = 0.0f;
+      int n0 = (int)(omega - windowBins);
+      if (n0 < 1) n0 = 1;
+      int n1 = (int)(omega + windowBins + 0.999f);
+      if (n1 > H) n1 = H;
+      for (int n = n0; n <= n1; n += 1) {
+        const float d = omega - (float)n;
+        const float s = yellow_sinc(d);
+        const double ang = soemdsp_maths::kPi * (double)d + ph;
+        double tr = soemdsp_maths::dsp_cos(ang) * (double)s;
+        double ti = soemdsp_maths::dsp_sin(ang) * (double)s;
+        const float dNeg = omega + (float)n;
+        if (dNeg < windowBins) {
+          const float s2 = yellow_sinc(dNeg);
+          const double ang2 = -ph - soemdsp_maths::kPi * (double)dNeg;
+          tr -= soemdsp_maths::dsp_cos(ang2) * (double)s2;
+          ti -= soemdsp_maths::dsp_sin(ang2) * (double)s2;
+        }
+        const float cr = (A * 0.5f) * (float)ti;
+        const float ci = (A * 0.5f) * (float)(-tr);
+        const int i = n - 1;
+        re[i] += cr;
+        im[i] += ci;
+        const float mag = (float)soemdsp_maths::sqrt_newton((double)cr * cr + (double)ci * ci);
+        panNum[i] += pan * mag;
+        panDen[i] += mag;
+      }
+    }
+    for (int i = 0; i < H; i += 1) {
+      const float cr = re[i];
+      const float ci = im[i];
+      const float mag = (float)soemdsp_maths::sqrt_newton((double)cr * cr + (double)ci * ci);
+      g.ratio[i] = (float)(i + 1);
+      g.amplitude[i] = mag * 2.0f;
+      float phase01 = 0.0f;
+      if (mag > 1e-12f) {
+        const double arg = yellow_atan2((double)ci, (double)cr);
+        phase01 = (float)((arg + soemdsp_maths::kPi * 0.5) / twoPi);
+        phase01 = phase01 - (float)soemdsp_maths::dsp_floor((double)phase01);
+        if (phase01 < 0.0f) phase01 += 1.0f;
+      }
+      g.phase[i] = phase01;
+      g.pan[i] = panDen[i] > 1e-12f ? panNum[i] / panDen[i] : 0.0f;
+    }
+    g.hasRatioLerp = 0;
+    g.hasPhaseLerp = 0;
+    g.hasAmpLerp = 0;
+    g.hasPanLerp = 0;
+    noise_recipe_clear(g.ratioNoise);
+    noise_recipe_clear(g.phaseNoise);
+    noise_recipe_clear(g.ampNoise);
+    noise_recipe_clear(g.panNoise);
+  } else if (doCramp || doPinch) {
+    apply_cycle_warp(g, doCramp ? 1 : 2, doCramp ? cramp : pinch);
+  }
+
+  if (doFormant) {
+    float amp[kMaxHarmonics];
+    float pan[kMaxHarmonics];
+    for (int i = 0; i < H; i += 1) {
+      const float h = (float)(i + 1);
+      const float hSrc = 1.0f + (h - 1.0f) / F - S;
+      if (!(hSrc >= 1.0f) || hSrc > (float)H) {
+        amp[i] = 0.0f;
+        pan[i] = 0.0f;
+        continue;
+      }
+      const float x = hSrc - 1.0f;
+      int i0 = (int)x;
+      if (i0 < 0) i0 = 0;
+      if (i0 >= H) i0 = H - 1;
+      int i1 = i0 + 1;
+      if (i1 >= H) i1 = H - 1;
+      const float t = x - (float)i0;
+      const float a0 = g.amplitude[i0];
+      const float a1 = g.amplitude[i1];
+      amp[i] = a0 + (a1 - a0) * t;
+      const float p0 = g.pan[i0];
+      const float p1 = g.pan[i1];
+      pan[i] = p0 + (p1 - p0) * t;
+    }
+    for (int i = 0; i < H; i += 1) {
+      g.amplitude[i] = amp[i];
+      g.pan[i] = pan[i];
+    }
+    g.hasAmpLerp = 0;
+    g.hasPanLerp = 0;
+    noise_recipe_clear(g.ampNoise);
+    noise_recipe_clear(g.panNoise);
+  }
+}
+
 // Random (bipolar) first, then optional snap. qFund reference is always the
 // pre-random fundamental. affectFundamental: Off = lock ratio[0]; On = random
 // may move ratio[0] but overtones still snap to the original fund reference.
@@ -1574,6 +1887,48 @@ inline void apply_noisy_amp(
 // Sum one sample. phaseAcc length ≥ g.harmonics (caller-owned).
 // GraphPayload is non-const so WhiteNoise recipe LCGs advance each sample.
 // blockFrame/blockFrames: quantum lerp progress within the block.
+// Last slot (exclusive) that can still be heard at this fundamental.
+// Reverse scan: holes inside the range (square evens) stay in the count.
+// Amp/ratio noise can wake any slot, so the cap stays H.
+static inline int last_heard_count(
+  const GraphPayload& g,
+  int H,
+  float f0,
+  float masterAmp,
+  float sampleRate,
+  float lerpTc,
+  bool sampleCutoff,
+  float cutoffEdge
+) {
+  if (H <= 0) return 0;
+  if ((g.ampNoise.active && g.ampNoise.amount > 0.0f)
+      || (g.ratioNoise.active && g.ratioNoise.amount > 0.0f)) {
+    return H;
+  }
+  const float sr = sampleRate > 1.0f ? sampleRate : 1.0f;
+  const float ma = clamp_f(masterAmp, 0.0f, 1.0f);
+  for (int i = H - 1; i >= 0; --i) {
+    float aFrom = g.hasAmpLerp ? g.ampFrom[i] : g.amplitude[i];
+    float aTo = g.hasAmpLerp ? g.ampTo[i] : g.amplitude[i];
+    if (!(aFrom * 0.0f == 0.0f)) aFrom = 0.0f;
+    if (!(aTo * 0.0f == 0.0f)) aTo = 0.0f;
+    float partialAmp = g.hasAmpLerp ? (aFrom + (aTo - aFrom) * lerpTc) : aFrom;
+    if (sampleCutoff) partialAmp *= harmonic_count_gain(i, cutoffEdge);
+    if (!(partialAmp > 0.0f)) continue;
+    partialAmp = clamp_f(partialAmp, 0.0f, 1.0f);
+    float ratio = g.hasRatioLerp
+      ? (g.ratioFrom[i] + (g.ratioTo[i] - g.ratioFrom[i]) * lerpTc)
+      : g.ratio[i];
+    if (!(ratio * 0.0f == 0.0f)) ratio = 0.0f;
+    if (ratio < 0.0f) ratio = 0.0f;
+    const float hz = ratio * f0;
+    const float nyq = nyquist_amp_gain(hz, sr);
+    if (!(nyq > 0.0f)) continue;
+    if (partialAmp * ma * nyq >= kInaudibleAmp) return i + 1;
+  }
+  return 0;
+}
+
 inline void sum_sample(
   GraphPayload& g,
   double* phaseAcc,
@@ -1585,7 +1940,11 @@ inline void sum_sample(
   float* left,
   float* right,
   int blockFrame = 0,
-  int blockFrames = 1
+  int blockFrames = 1,
+  // Previous exclusive live count. <0 = first sample, adopt without reseed.
+  // Grown slots are seeded (Phase Entry); they were not phase-ticked while silent.
+  int* ioLiveCount = nullptr,
+  unsigned int* ioPhaseRng = nullptr
 ) {
   float mOut = 0.0f;
   float lOut = 0.0f;
@@ -1623,7 +1982,23 @@ inline void sum_sample(
     cutoffEdge = cut01 * (float)H;
   }
 
-  for (int i = 0; i < H; i += 1) {
+  int prevLive = (ioLiveCount && *ioLiveCount >= 0) ? *ioLiveCount : -1;
+  int live = last_heard_count(
+    g, H, f0, ma, sr, lerpTc, sampleCutoff, cutoffEdge
+  );
+  if (live > H) live = H;
+  if (prevLive >= 0 && live > prevLive && phaseAcc) {
+    const double fundPhase = prevLive > 0 ? phaseAcc[0] : 0.0;
+    unsigned int rng = ioPhaseRng ? *ioPhaseRng : 1u;
+    const int seedFrom = prevLive > 0 ? prevLive : 0;
+    for (int i = seedFrom; i < live; i += 1) {
+      phaseAcc[i] = seed_new_phase_acc(g, i, fundPhase, g.phaseEntryMode, rng);
+    }
+    if (ioPhaseRng) *ioPhaseRng = rng;
+  }
+  if (ioLiveCount) *ioLiveCount = live;
+
+  for (int i = 0; i < live; i += 1) {
     float aFrom = g.hasAmpLerp ? g.ampFrom[i] : g.amplitude[i];
     float aTo = g.hasAmpLerp ? g.ampTo[i] : g.amplitude[i];
     if (!(aFrom * 0.0f == 0.0f)) aFrom = 0.0f;
@@ -1649,8 +2024,9 @@ inline void sum_sample(
     }
     const float hz = baseRatio * f0;
 
-    // Always tick phaseAcc so silent / ampLerp-from-0 / Odd zeros stay on the n×ƒ series.
-    // Skipping the tick here caused a permanent 1-sample lag (slope vs 4-partial smoke).
+    // Phase ticks only inside the live count. Slots past the last audible partial
+    // are absent; Phase Entry reseeds them if the slope or pitch opens them again.
+    // Odd/even holes inside the count still tick so PWM does not pop.
     const double incIn = (incrementCycles == incrementCycles) ? incrementCycles : 0.0;
     const double inc = (double)baseRatio * ((double)f0 / (double)sr + incIn);
     phaseAcc[i] = soemdsp_maths::wrap01(phaseAcc[i] + inc);

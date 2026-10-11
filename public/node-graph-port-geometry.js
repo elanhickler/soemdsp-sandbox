@@ -800,6 +800,7 @@ function nodeGraphModuleUsesCmykParameterChrome(type) {
     || key === "additivePan"
     || key === "additivePhaseEntry"
     || key === "additiveFrequencySkew"
+    || key === "additiveSync"
     || key === "additiveQuantizeFreq"
     || key === "additiveQuantizePhase"
     || key === "additiveNoisyFreq"

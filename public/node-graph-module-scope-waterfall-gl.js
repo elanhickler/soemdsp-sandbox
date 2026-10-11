@@ -165,26 +165,9 @@ function nodeGraphWaterfallGlEnsure(canvas, plateCss) {
     nodeGraphWaterfallGlResizeHistory(s, w, h);
     return s;
   }
-  let gl = canvas._wfGl;
-  if (!gl || gl.isContextLost()) {
-    gl = canvas.getContext("webgl", {
-      alpha: false,
-      antialias: true,
-      depth: false,
-      stencil: false,
-      preserveDrawingBuffer: true,
-      premultipliedAlpha: false,
-    }) || canvas.getContext("experimental-webgl", {
-      alpha: false,
-      antialias: true,
-      depth: false,
-      stencil: false,
-      preserveDrawingBuffer: true,
-      premultipliedAlpha: false,
-    });
-    canvas._wfGl = gl;
-  }
-  if (!gl) return null;
+  const pic = typeof nodeGraphSharedGlDevice === "function" ? nodeGraphSharedGlDevice() : null;
+  const gl = pic?.gl || null;
+  if (!gl || gl.isContextLost()) return null;
   const scrollProg = nodeGraphWaterfallGlProgram(gl, NODE_GRAPH_WF_GL_VERT, NODE_GRAPH_WF_GL_SCROLL);
   const presentProg = nodeGraphWaterfallGlProgram(gl, NODE_GRAPH_WF_GL_VERT, NODE_GRAPH_WF_GL_PRESENT);
   const barProg = nodeGraphWaterfallGlProgram(gl, NODE_GRAPH_WF_GL_VERT, NODE_GRAPH_WF_GL_BAR);
@@ -811,10 +794,13 @@ function nodeGraphWaterfallGlPresent(canvas, plateCss) {
   const gl = s.gl;
   const sub = Number(canvas._wfSubPx) || 0;
   const tex = s.read.tex;
-  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-  gl.viewport(0, 0, s.w, s.h);
+  if (typeof nodeGraphSharedGlBindPresent === "function") {
+    nodeGraphSharedGlBindPresent(gl, s.w, s.h);
+  } else {
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    gl.viewport(0, 0, s.w, s.h);
+  }
   gl.disable(gl.BLEND);
-  gl.disable(gl.SCISSOR_TEST);
   nodeGraphWaterfallGlFilter(gl, tex, Math.abs(sub) > 0.001);
   nodeGraphWaterfallGlBindQuad(gl, s, s.presentProg);
   gl.activeTexture(gl.TEXTURE0);
@@ -823,6 +809,13 @@ function nodeGraphWaterfallGlPresent(canvas, plateCss) {
   gl.uniform2f(gl.getUniformLocation(s.presentProg, "uSize"), s.w, s.h);
   gl.uniform1f(gl.getUniformLocation(s.presentProg, "uSub"), sub);
   nodeGraphWaterfallGlDrawQuad(s);
+  if (typeof nodeGraphSharedGlEndPresent === "function") {
+    nodeGraphSharedGlEndPresent(gl);
+  }
+  const ctx = canvas.getContext("2d");
+  if (ctx && typeof nodeGraphSharedGlBlitTo2D === "function") {
+    nodeGraphSharedGlBlitTo2D(ctx, s.w, s.h);
+  }
   if (canvas.style.imageRendering === "pixelated" || canvas.style.imageRendering === "auto") {
     canvas.style.imageRendering = "";
   }

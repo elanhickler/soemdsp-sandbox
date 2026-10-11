@@ -128,20 +128,8 @@ function nodeGraphCycleLineGlContext(canvas) {
   if (canvas.__cycleLineGl && canvas.__cycleLineGl.gl && !canvas.__cycleLineGl.gl.isContextLost()) {
     return canvas.__cycleLineGl;
   }
-  const gl = canvas.getContext("webgl", {
-    alpha: false,
-    antialias: true,
-    depth: false,
-    stencil: false,
-    premultipliedAlpha: false,
-    preserveDrawingBuffer: false,
-  }) || canvas.getContext("experimental-webgl", {
-    alpha: false,
-    antialias: true,
-    depth: false,
-    stencil: false,
-    premultipliedAlpha: false,
-  });
+  const pic = typeof nodeGraphSharedGlDevice === "function" ? nodeGraphSharedGlDevice() : null;
+  const gl = pic?.gl || null;
   if (!gl) return null;
   let lineProgram;
   let dotProgram;
@@ -341,8 +329,14 @@ function nodeGraphCycleLineGlBuildDots(dots) {
 
 function nodeGraphCycleLineGlDraw(canvas, state, cssWidth, cssHeight, background, dots) {
   const gl = state.gl;
+  const w = Math.max(1, canvas.width | 0);
+  const h = Math.max(1, canvas.height | 0);
+  if (typeof nodeGraphSharedGlBindPresent === "function") {
+    nodeGraphSharedGlBindPresent(gl, w, h);
+  } else {
+    gl.viewport(0, 0, w, h);
+  }
   const bg = nodeGraphCycleLineGlParseColor(background || "#020609");
-  gl.viewport(0, 0, canvas.width, canvas.height);
   gl.disable(gl.DEPTH_TEST);
   gl.enable(gl.BLEND);
   gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
@@ -382,6 +376,13 @@ function nodeGraphCycleLineGlDraw(canvas, state, cssWidth, cssHeight, background
     gl.enableVertexAttribArray(loc.color);
     gl.vertexAttribPointer(loc.color, 4, gl.FLOAT, false, stride, 20);
     gl.drawArrays(gl.TRIANGLES, 0, builtDots.count);
+  }
+  if (typeof nodeGraphSharedGlEndPresent === "function") {
+    nodeGraphSharedGlEndPresent(gl);
+  }
+  const ctx = canvas.getContext("2d");
+  if (ctx && typeof nodeGraphSharedGlBlitTo2D === "function") {
+    nodeGraphSharedGlBlitTo2D(ctx, w, h);
   }
 }
 

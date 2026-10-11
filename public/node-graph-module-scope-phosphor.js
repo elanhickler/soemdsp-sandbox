@@ -185,52 +185,5 @@ function nodeGraphPhosphorSampleGradient(energy01, stops) {
 }
 
 
-function nodeGraphPhosphorMapEnergyToColorCanvas(energyCanvas, colorCanvas, stops) {
-  if (!energyCanvas || !colorCanvas) {
-    return false;
-  }
-  const w = energyCanvas.width;
-  const h = energyCanvas.height;
-  if (colorCanvas.width !== w || colorCanvas.height !== h) {
-    colorCanvas.width = w;
-    colorCanvas.height = h;
-  }
-  const ectx = energyCanvas.getContext("2d", { willReadFrequently: true });
-  const cctx = colorCanvas.getContext("2d");
-  if (!ectx || !cctx) {
-    return false;
-  }
-  const src = ectx.getImageData(0, 0, w, h);
-  let out = colorCanvas._phosphorMappedImageData;
-  if (!out || out.width !== w || out.height !== h) {
-    out = cctx.createImageData(w, h);
-    colorCanvas._phosphorMappedImageData = out;
-  }
-  const s = src.data;
-  const d = out.data;
-  const gradient = stops || nodeGraphPhosphorBuildGradientStops([120, 255, 170]);
-  for (let i = 0; i < s.length; i += 4) {
-    // Mild gamma so mid-energy soft edges stay soft instead of posterizing hot.
-    // energy is the gradient coordinate; color may be dark or light at the peak.
-    const raw = Math.max(s[i], s[i + 1], s[i + 2]) / 255;
-    const energy = Math.pow(raw, 1.15);
-    if (energy < 0.006) {
-      d[i] = 0;
-      d[i + 1] = 0;
-      d[i + 2] = 0;
-      d[i + 3] = 0;
-      continue;
-    }
-    const c = nodeGraphPhosphorSampleGradient(energy, gradient);
-    // Premultiplied for source-over blit (not additive "lighter").
-    const a = Math.min(255, Math.round(energy * 230));
-    const af = a / 255;
-    d[i] = Math.round(c.r * af);
-    d[i + 1] = Math.round(c.g * af);
-    d[i + 2] = Math.round(c.b * af);
-    d[i + 3] = a;
-  }
-  cctx.putImageData(out, 0, 0);
-  return true;
-}
+
 

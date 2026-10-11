@@ -60,6 +60,7 @@ NodeLiveAudioProcessor.prototype.processAdditiveYellowGraphSidecar = function pr
     "additiveDiffusor",
     "additivePhaseEntry",
     "additiveFrequencySkew",
+    "additiveSync",
     "additiveQuantizeFreq",
     "additiveQuantizePhase",
     "additiveNoisyFreq",
@@ -168,14 +169,6 @@ NodeLiveAudioProcessor.prototype.processAdditiveYellowGraphSidecar = function pr
         );
       }
     }
-    additiveGraphApplySlope(
-      graph,
-      eff(node, "slope", 1),
-      eff(node, "slopeStart", 1),
-      eff(node, "slopeEnd", 32),
-      eff(node, "skew", 1),
-      p.curve,
-    );
     genState.lastH = newH;
     const storeH = Math.max(0, newH);
     genState.prevAmp = new Float32Array(storeH);
@@ -376,6 +369,18 @@ NodeLiveAudioProcessor.prototype.processAdditiveYellowGraphSidecar = function pr
         this.additiveFrequencySkewStates.set(eid, {
           lerpFrom: appliedSkew?.lerpFrom || null,
         });
+      } else if (type === "additiveSync") {
+        if (typeof additiveGraphApplySync === "function") {
+          additiveGraphApplySync(
+            out,
+            eff(node, "ratio", 1),
+            eff(node, "formant", 1),
+            eff(node, "shift", 0),
+            num(p.mode, 0),
+            eff(node, "cramp", 0),
+            eff(node, "pinch", 0),
+          );
+        }
       } else if (type === "additiveQuantizeFreq") {
         let freqState = this.additiveQuantizeFreqStates.get(eid) || {};
         const appliedFreq = additiveGraphApplyQuantizeFreq(
@@ -455,10 +460,10 @@ NodeLiveAudioProcessor.prototype.processAdditiveYellowGraphSidecar = function pr
     const srcId = graphSrc(outId, "Graph");
     // Require a Graph published THIS quantum — stale bus entries after upstream
     // delete (Generator removed, Effect not republished) must not keep sounding.
-    const graph = srcId && busQ.get(srcId) === quantum
+    const incoming = srcId && busQ.get(srcId) === quantum
       ? this.additiveGraphBus.get(srcId)
       : null;
-    if (!graph || !graph.ratio || !graph.harmonics) {
+    if (!incoming || !incoming.ratio || !incoming.harmonics) {
       this.additiveGraphPublish.set(outId, null);
       if (this.nodeOutputs) this.nodeOutputs.delete(outId);
       continue;
@@ -470,6 +475,20 @@ NodeLiveAudioProcessor.prototype.processAdditiveYellowGraphSidecar = function pr
     if (!(masterAmp === masterAmp)) masterAmp = 0.35;
     // Phase Rotation lives on Additive Generator (baked into Graph phases).
     const masterPhase = 0;
+    // Final slope: clone so the upstream bus graph stays unmasked.
+    const graph = typeof additiveGraphClonePayload === "function"
+      ? additiveGraphClonePayload(incoming)
+      : incoming;
+    if (graph && typeof additiveGraphApplySlope === "function") {
+      additiveGraphApplySlope(
+        graph,
+        eff(node, "slope", 1),
+        eff(node, "slopeStart", 1),
+        eff(node, "slopeEnd", 32),
+        eff(node, "skew", 1),
+        num((node.params || {}).curve, 0),
+      );
+    }
 
     // Speaker routes: which Additive Out port → which Output channel.
     // { src: "mono"|"left"|"right", dst: "mono"|"left"|"right" }
@@ -493,11 +512,15 @@ NodeLiveAudioProcessor.prototype.processAdditiveYellowGraphSidecar = function pr
 
     let state = this.additiveOutStates.get(outId);
     if (!state) {
-      state = { phaseAcc: null };
+      state = { phaseAcc: null, liveHarmonics: -1 };
       this.additiveOutStates.set(outId, state);
     }
     // Generator Harmonics slot-count change → wipe free-running phases.
-    if (graph.phaseReset) state.phaseAcc = null;
+    if (graph.phaseReset) {
+      state.phaseAcc = null;
+      state.liveHarmonics = -1;
+    }
+    graph._liveHarmonics = Number.isFinite(state.liveHarmonics) ? state.liveHarmonics : -1;
 
     let lastMono = 0;
     let lastLeft = 0;
@@ -514,6 +537,7 @@ NodeLiveAudioProcessor.prototype.processAdditiveYellowGraphSidecar = function pr
         nFrames,
       );
       state.phaseAcc = summed.phaseAcc;
+      state.liveHarmonics = Number.isFinite(graph._liveHarmonics) ? graph._liveHarmonics : -1;
       if (f === nFrames - 1) {
         // Publish Graph for harmonicLines (phase = Graph offsets, not free-running).
         this.additiveGraphPublish.set(outId, {

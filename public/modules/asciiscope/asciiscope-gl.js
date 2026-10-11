@@ -267,23 +267,8 @@ function matrixGlEnsure(canvas) {
   // when this returns null.
   let gl = null;
   try {
-    gl = canvas.getContext("webgl", {
-      alpha: false,
-      antialias: true,
-      depth: false,
-      stencil: false,
-      premultipliedAlpha: false,
-      preserveDrawingBuffer: false,
-      powerPreference: "high-performance",
-    });
-    if (!gl) {
-      gl = canvas.getContext("experimental-webgl", {
-        alpha: false,
-        antialias: true,
-        depth: false,
-        preserveDrawingBuffer: false,
-      });
-    }
+    const pic = typeof nodeGraphSharedGlDevice === "function" ? nodeGraphSharedGlDevice() : null;
+    gl = pic?.gl || null;
   } catch (_) {
     gl = null;
   }
@@ -630,7 +615,11 @@ function matrixGlDrawFace(canvas, state, params, mode) {
     const data = matrixGlPackCells(state, glState);
     const floor = matrixGlSyncLut(glState, params?.gradientStops);
 
-    gl.viewport(0, 0, w, h);
+    if (typeof nodeGraphSharedGlBindPresent === "function") {
+      nodeGraphSharedGlBindPresent(gl, w, h);
+    } else {
+      gl.viewport(0, 0, w, h);
+    }
     gl.disable(gl.DEPTH_TEST);
     gl.disable(gl.BLEND);
     // Explicit black clear — never leave undefined/white backbuffer.
@@ -690,6 +679,13 @@ function matrixGlDrawFace(canvas, state, params, mode) {
     );
 
     gl.drawArrays(gl.TRIANGLES, 0, 3);
+    if (typeof nodeGraphSharedGlEndPresent === "function") {
+      nodeGraphSharedGlEndPresent(gl);
+    }
+    const ctx = canvas.getContext("2d");
+    if (ctx && typeof nodeGraphSharedGlBlitTo2D === "function") {
+      nodeGraphSharedGlBlitTo2D(ctx, w, h);
+    }
     return true;
   } catch (error) {
     console.warn?.("[Matrix Display] WebGL draw failed", error);

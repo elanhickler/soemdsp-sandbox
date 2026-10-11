@@ -459,7 +459,7 @@ const nodeGraphModuleStoreCatalog = Object.freeze({
   // additiveOsc / gpuAdditiveOsc retired — Yellow Graph chain replaces them.
   additiveGenerator: {
     category: "additive",
-    description: "Harmonics + Waveform (Saw / Square / Pulse* / Triangle / RectSine / Even / Odd) + PWM + Rotation + Slope Curve / Slope Start / Slope End / Slope Skew / Slope Height + HarmonicFade (Instant/Smoothed/Decimal) → Yellow Graph.",
+    description: "Harmonics + Waveform (Saw / Square / Pulse* / Triangle / RectSine / Even / Odd) + PWM + Rotation + HarmonicFade (Instant/Smoothed/Decimal) → Yellow Graph. Face shows the Additive Out waveform.",
     label: "Additive Generator",
     notes: ["additive", "yellow graph", "harmonics", "morph", "decimal"],
   },
@@ -498,6 +498,12 @@ const nodeGraphModuleStoreCatalog = Object.freeze({
     description: "Low/High Stretch expand the ratio span; Skew+Curve compress middles toward fund or last (endpoints fixed).",
     label: "FrequencySkew",
     notes: ["additive", "yellow graph", "ratio", "frequency", "skew", "stretch"],
+  },
+  additiveSync: {
+    category: "additive",
+    description: "Sync, Cramp, or Pinch any Yellow Graph spectrum, then stretch or slide the amplitude envelope. Cramp is one-sided PWM. Pinch squeezes both flanks.",
+    label: "Sync",
+    notes: ["additive", "yellow graph", "hard sync", "formant", "wavetable", "spectral"],
   },
   additiveQuantizeFreq: {
     category: "additive",
@@ -567,7 +573,7 @@ const nodeGraphModuleStoreCatalog = Object.freeze({
   },
   additiveOut: {
     category: "additive",
-    description: "Renders Yellow Graph to Mono / Left / Right (pan[]). Frequency, Amplitude + harmonic lines face.",
+    description: "Renders Yellow Graph to Mono / Left / Right (pan[]). Frequency, Amplitude, and the final pitch-tracked slope. Harmonic-lines face.",
     label: "Additive Out",
     notes: ["additive", "yellow graph", "harmonic lines", "stereo", "pan"],
   },
@@ -1771,7 +1777,7 @@ const nodeGraphModuleStoreCatalog = Object.freeze({
   },
   vcvrackSuperloveFilter: {
     category: "object",
-    description: "VCV Rack Super Love DSP in the sandbox: phase-feedback wavetable filter, LP18/LP24/HP/BP, Drive and Noise.",
+    description: "VCV Rack Super Love DSP in the sandbox: phase-feedback wavetable filter, LP18/LP24/BP/HP, Drive and Noise.",
     label: "VCVRack Superlove Filter",
     notes: ["vcvrack", "superlove", "filter", "native", "trace"],
   },
@@ -2303,6 +2309,12 @@ const nodeGraphModuleStoreCatalog = Object.freeze({
     description: "Exponential Mix: Trigger restarts (1−p)·e^{−x}+p·e^{−rate·x}. Decay Time is when the slow exp hits −60 dB.",
     label: "Exponential Mix",
     notes: ["Trigger", "Decay Time", "Mix p", "Fast Rate", "decay", "parallel exponential", "native"],
+  },
+  ellipsoidDecay: {
+    category: "envelope",
+    description: "EllipsoidDecay: Trigger restarts RoundShape sine→square bottom-left Bi Y from height to 0.001. Morph 0 = circle, 1 = square.",
+    label: "EllipsoidDecay",
+    notes: ["Trigger", "Duration", "Morph", "decay", "ellipsoid", "roundshape", "sine to square", "native"],
   },
   vactrol: {
     category: "envelope",
@@ -2944,6 +2956,10 @@ const nodeGraphJsSourceEntriesByType = Object.freeze({
     source: "public/modules/additiveGraph/additive-graph-math.js",
     sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/public/modules/additiveGraph/additive-graph-math.js",
   },
+  additiveSync: {
+    source: "public/modules/additiveGraph/additive-graph-math.js",
+    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/public/modules/additiveGraph/additive-graph-math.js",
+  },
   additiveQuantizeFreq: {
     source: "public/modules/additiveGraph/additive-graph-math.js",
     sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/public/modules/additiveGraph/additive-graph-math.js",
@@ -3556,6 +3572,10 @@ const nodeGraphJsSourceEntriesByType = Object.freeze({
   exponentialMix: {
     source: "native_modules/exponential_mix/exponential_mix.cpp",
     sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/native_modules/exponential_mix/exponential_mix.cpp",
+  },
+  ellipsoidDecay: {
+    source: "native_modules/ellipsoid_decay/ellipsoid_decay.cpp",
+    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/native_modules/ellipsoid_decay/ellipsoid_decay.cpp",
   },
   robinSinepulse: {
     source: "native_modules/robin_sinepulse/robin_sinepulse.cpp",

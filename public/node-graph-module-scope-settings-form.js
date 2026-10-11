@@ -2025,6 +2025,9 @@ function buildNodeGraphDisplaySettingsBodyHtml(formType, node = null) {
     if (type === "lcdDot" && section === "dot1") {
       continue;
     }
+    if ((type === "vectorDot" || type === "pulseDot") && section === "dot1") {
+      continue;
+    }
     if ((type === "roundShapeFace" || type === "basicShapeFace" || type === "softwaveOscFace") && section === "dot1") {
       continue;
     }
@@ -2088,6 +2091,17 @@ function buildNodeGraphDisplaySettingsBodyHtml(formType, node = null) {
       } else {
         fieldKeys.push("shapeParam");
       }
+    }
+    if ((type === "vectorDot" || type === "pulseDot") && section === "waterfall") {
+      fieldKeys = [
+        "dot1Size",
+        "lineThickness",
+        "shapeParam",
+        "backgroundBrightness",
+        "dot1Brightness",
+      ].filter((key) => activeFields.has(key) && allowKey("fields", key));
+      colorKeys = [];
+      choiceKeys = ["shape", "stereoBlend"].filter((key) => activeChoices.has(key) && allowKey("choices", key));
     }
     if (type === "lcdDot" && section === "waterfall") {
       const lcdDotModule = node?.type === "lcdDot";
@@ -2191,6 +2205,7 @@ function buildNodeGraphDisplaySettingsBodyHtml(formType, node = null) {
     const skipSectionTitle =
       (type === "numberReadout" && section === "waterfall")
       || (type === "lcdDot" && section === "waterfall")
+      || ((type === "vectorDot" || type === "pulseDot") && section === "waterfall")
       || (isPhosphorForm && (section === "waterfall" || section === "dot1"))
       || (isVectorTraceForm && section === "dot1" && !(isStereoWaterfallNode && type === "waterfall"));
     if (skipSectionTitle) {

@@ -2,7 +2,7 @@
 
 // Super Love — DSP from VCV Rack SuperLoveFilter.hpp (soemdsp-vcvrack).
 // Chaos is fixed at 0 (no Chaos control on the VCV panel).
-// Modes: LP18 / LP24 / HP6 / BP6. Panel left→right: LP18, LP24, HP, BP.
+// Modes: LP18 / LP24 / HP6 / BP6. Panel left→right: LP18, LP24, BP, HP.
 // Sandbox host uses ±1 audio (no Rack 5V scale, no clip LED).
 
 #include <soemdsp/soemdsp.hpp>
@@ -17,13 +17,15 @@ enum Mode {
 	MODE_BP = 3,
 };
 
-// Panel slider left→right: LP18, LP24, HP, BP.
+// Panel slider left→right: LP18, LP24, BP, HP.
+// Enum values stay MODE_HP=2, MODE_BP=3. The slider index is swapped here,
+// same as VCV Rack SuperLove::process → modeFromPanel.
 inline Mode modeFromPanel(int panel) {
 	switch (panel) {
 		case 0: return MODE_LP18;
 		case 1: return MODE_LP24;
-		case 2: return MODE_HP;
-		case 3: return MODE_BP;
+		case 2: return MODE_BP;
+		case 3: return MODE_HP;
 		default: return MODE_LP24;
 	}
 }
@@ -99,17 +101,35 @@ static double hpBpResonanceMod(double reso) {
 	return g.getValue(reso);
 }
 
-// SuperLove.cpp: Rev2 breadboard Softwave Tri with the phasor stopped.
-// Morph is the knob 0…1 (no m^4). Peak-normalized so Morph 0.75 is a real tri.
+// VCV Rack SuperLoveFilter.hpp Softwave Tri (morph^4 + pitch softness).
+// processSample passes frequencyHz 0, so the tanh rail saturates to 1.
+static double morph_factor(double morph) {
+	const double m = clamp(morph, 0.0, 1.0);
+	const double m2 = m * m;
+	const double m4 = m2 * m2;
+	return m4 * 0.999 + 0.001;
+}
+
+static double soft_tanh(double v) {
+	if (v > 5.0) return 1.0;
+	if (v < -5.0) return -1.0;
+	const double e2 = dsp_exp(2.0 * v);
+	return (e2 - 1.0) / (e2 + 1.0);
+}
+
+static double freq_to_pitch(double frequencyHz) {
+	const double f = frequencyHz > 1.0e-12 ? frequencyHz : 1.0e-12;
+	return 69.0 + 12.0 * (dsp_ln(f / 440.0) / 0.6931471805599453);
+}
+
 static double softwaveTri(double phaseCycles, double morph, double frequencyHz) {
-	(void) frequencyHz;
 	const double p = wrap01(phaseCycles);
-	const double t = clamp(morph, 0.0, 1.0);
-	const double s = dsp_sin(p * kTwoPi);
-	if (t <= 1.0e-12) return -s;
-	const double raw = soft_acos(clamp11(s * t)) / kPi * 2.0 - 1.0;
-	const double peak = soft_acos(clamp11(-t)) / kPi * 2.0 - 1.0;
-	return peak > 1.0e-12 ? raw / peak : -s;
+	const double mf = morph_factor(morph);
+	const double t = clamp(mf, 0.0, 1.0);
+	const double adjusted = 0.15 + (1.0 - 0.15) * t;
+	const double scaling = soft_tanh((1.0 - (freq_to_pitch(frequencyHz) / 127.0)) * 9.0);
+	return soft_acos(clamp(dsp_sin(p * kTwoPi) * adjusted * scaling, -1.0, 1.0))
+		/ kPi * 2.0 - 1.0;
 }
 
 static double waveTrisaw(double phaseCycles, double morph) {

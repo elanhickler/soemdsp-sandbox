@@ -96,6 +96,7 @@ const NODE_GRAPH_BYPASS_TYPE_OVERRIDES = Object.freeze({
   exponentialSkew: "silence",
   hyperbolicDecay: "silence",
   exponentialMix: "silence",
+  ellipsoidDecay: "silence",
   flowerChildEnvelopeFollower: "silence",
   vactrol: "silence",
   // Generators / sequencers → mute
@@ -114,6 +115,7 @@ const NODE_GRAPH_BYPASS_TYPE_OVERRIDES = Object.freeze({
   // Pre-rename aliases (migrate rewrites type; keep until old sessions die).
   additiveCurveEnvelope: "silence",
   additiveFrequencySkew: "pass",
+  additiveSync: "pass",
   additiveQuantizeFreq: "pass",
   additiveQuantizePhase: "pass",
   additiveNoisyFreq: "pass",

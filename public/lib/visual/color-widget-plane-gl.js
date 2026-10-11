@@ -2,14 +2,12 @@
 // shared picture device. Canvas2D putImageData kept as fallback.
 
 (function initColorWidgetPlaneGl(global) {
-  const REV = 1;
+  const REV = 2;
   let shared = null;
 
   const VERT = `
 attribute vec2 aPos;
-varying vec2 vUv;
 void main() {
-  vUv = aPos * 0.5 + 0.5;
   gl_Position = vec4(aPos, 0.0, 1.0);
 }
 `;
@@ -21,7 +19,7 @@ precision highp float;
 #else
 precision mediump float;
 #endif
-varying vec2 vUv;
+uniform vec2 uResolution;
 uniform float uHue;
 uniform float uMode;
 
@@ -84,9 +82,11 @@ vec3 hueBrightness(float hueDeg, float bright, float sat) {
 }
 
 void main() {
-  // vUv: x = u (left→right), y = bottom→top in GL. Plane wants v up from bottom.
-  float u = vUv.x;
-  float v = vUv.y;
+  // Pixel centres in the current viewport (left→right, bottom→top).
+  // Match Canvas2D: u = x/(w-1), v = 1 - y_top/(h-1).
+  vec2 den = max(uResolution - 1.0, vec2(1.0));
+  float u = clamp(gl_FragCoord.x - 0.5, 0.0, den.x) / den.x;
+  float v = clamp(gl_FragCoord.y - 0.5, 0.0, den.y) / den.y;
   float mode = floor(uMode + 0.5);
   vec3 rgb;
   if (mode < 0.5) {
@@ -146,6 +146,7 @@ void main() {
       aPos: gl.getAttribLocation(program, "aPos"),
       uHue: gl.getUniformLocation(program, "uHue"),
       uMode: gl.getUniformLocation(program, "uMode"),
+      uResolution: gl.getUniformLocation(program, "uResolution"),
     };
     return shared;
   }
@@ -180,6 +181,7 @@ void main() {
     gl.vertexAttribPointer(device.aPos, 2, gl.FLOAT, false, 0, 0);
     gl.uniform1f(device.uHue, Number(hueDeg) || 0);
     gl.uniform1f(device.uMode, mode);
+    gl.uniform2f(device.uResolution, w, h);
     gl.drawArrays(gl.TRIANGLES, 0, 6);
     gl.disable(gl.SCISSOR_TEST);
 
@@ -188,13 +190,21 @@ void main() {
     const ctx = destCanvas.getContext("2d");
     if (!ctx) return false;
     try {
-      const srcY = Math.max(0, device.canvas.height - h);
+      const pixels = new Uint8Array(w * h * 4);
+      gl.readPixels(0, 0, w, h, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+      const img = ctx.createImageData(w, h);
+      const dst = img.data;
+      for (let y = 0; y < h; y += 1) {
+        const src = (h - 1 - y) * w * 4;
+        dst.set(pixels.subarray(src, src + w * 4), y * w * 4);
+      }
       ctx.setTransform(1, 0, 0, 1, 0, 0);
-      // GL y-up scissor → drawImage bottom strip: flip so plane v=1 is top.
-      ctx.drawImage(device.canvas, 0, srcY, w, h, 0, 0, w, h);
+      ctx.putImageData(img, 0, 0);
     } catch (_e) {
+      gl.viewport(0, 0, device.canvas.width, device.canvas.height);
       return false;
     }
+    gl.viewport(0, 0, device.canvas.width, device.canvas.height);
     return true;
   }
 

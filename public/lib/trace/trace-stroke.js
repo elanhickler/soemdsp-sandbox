@@ -281,16 +281,10 @@
     if (fadeGl?.gl && !fadeGl.gl.isContextLost()) {
       return fadeGl;
     }
-    const canvas = document.createElement("canvas");
-    canvas.width = 2;
-    canvas.height = 2;
-    const gl = canvas.getContext("webgl", {
-      alpha: true,
-      antialias: false,
-      premultipliedAlpha: true,
-      preserveDrawingBuffer: true,
-    });
-    if (!gl) {
+    const pic = typeof nodeGraphSharedGlDevice === "function" ? nodeGraphSharedGlDevice() : null;
+    const gl = pic?.gl || null;
+    const canvas = pic?.canvas || null;
+    if (!gl || !canvas) {
       fadeGl = null;
       return null;
     }
@@ -379,11 +373,13 @@
     }
     const gl = device.gl;
     const canvas = device.canvas;
-    if (canvas.width !== width || canvas.height !== height) {
-      canvas.width = width;
-      canvas.height = height;
+    if (typeof nodeGraphSharedGlBindPresent === "function") {
+      nodeGraphSharedGlBindPresent(gl, width, height);
+    } else {
+      gl.enable(gl.SCISSOR_TEST);
+      gl.scissor(0, 0, width, height);
+      gl.viewport(0, 0, width, height);
     }
-    gl.viewport(0, 0, width, height);
     gl.clearColor(0, 0, 0, 0);
     gl.clear(gl.COLOR_BUFFER_BIT);
     gl.enable(gl.BLEND);
@@ -413,7 +409,16 @@
     gl.uniform3f(device.uColor, r / 255, g / 255, b / 255);
     gl.drawArrays(gl.TRIANGLES, 0, floats.length / 7);
     gl.disable(gl.BLEND);
-    context.drawImage(canvas, 0, 0, width, height);
+    if (typeof nodeGraphSharedGlEndPresent === "function") {
+      nodeGraphSharedGlEndPresent(gl);
+    } else {
+      gl.disable(gl.SCISSOR_TEST);
+    }
+    if (typeof nodeGraphSharedGlBlitTo2D === "function") {
+      nodeGraphSharedGlBlitTo2D(context, width, height);
+    } else {
+      context.drawImage(canvas, 0, 0, width, height);
+    }
     return true;
   }
 

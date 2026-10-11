@@ -26,6 +26,7 @@ function createNodeGraphHarmonicCountDisplay(nodeId, type = "additiveGenerator")
 
 const ADDITIVE_NAMED_FACE = Object.freeze({
   additiveFrequencySkew: "FreqSkew",
+  additiveSync: "Sync",
   additiveQuantizeFreq: "QFreq",
   additiveQuantizePhase: "QPhase",
   additiveNoisyFreq: "NoisyFreq",

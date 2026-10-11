@@ -235,8 +235,43 @@
     return true;
   }
 
+  /** Shared WebGL for every display (P0a). Never resize this canvas (P0c). */
+  function nodeGraphSharedGlDevice() {
+    return nodeGraphPictureDevice();
+  }
+
+  function nodeGraphSharedGlBindPresent(gl, width, height) {
+    if (!gl) return null;
+    const w = Math.max(1, width | 0);
+    const h = Math.max(1, height | 0);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    gl.enable(gl.SCISSOR_TEST);
+    gl.scissor(0, 0, w, h);
+    gl.viewport(0, 0, w, h);
+    return { w, h };
+  }
+
+  function nodeGraphSharedGlEndPresent(gl) {
+    if (!gl) return;
+    gl.disable(gl.SCISSOR_TEST);
+  }
+
+  function nodeGraphSharedGlBlitTo2D(destCtx, width, height) {
+    const pic = nodeGraphPictureDevice();
+    if (!pic?.canvas || !destCtx) return false;
+    const w = Math.max(1, width | 0);
+    const h = Math.max(1, height | 0);
+    const srcY = Math.max(0, pic.canvas.height - h);
+    destCtx.drawImage(pic.canvas, 0, srcY, w, h, 0, 0, w, h);
+    return true;
+  }
+
   global.nodeGraphPictureDevice = nodeGraphPictureDevice;
   global.nodeGraphPicturePublish = nodeGraphPicturePublish;
+  global.nodeGraphSharedGlDevice = nodeGraphSharedGlDevice;
+  global.nodeGraphSharedGlBindPresent = nodeGraphSharedGlBindPresent;
+  global.nodeGraphSharedGlEndPresent = nodeGraphSharedGlEndPresent;
+  global.nodeGraphSharedGlBlitTo2D = nodeGraphSharedGlBlitTo2D;
   global.nodeGraphPictureGet = nodeGraphPictureGet;
   global.nodeGraphPictureRead = nodeGraphPictureRead;
   global.nodeGraphPicturePresent = nodeGraphPicturePresent;

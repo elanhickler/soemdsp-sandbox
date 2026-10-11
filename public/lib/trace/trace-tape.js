@@ -227,16 +227,10 @@
     if (device?.gl && !device.gl.isContextLost()) {
       return device;
     }
-    const canvas = document.createElement("canvas");
-    canvas.width = 2;
-    canvas.height = 2;
-    const gl = canvas.getContext("webgl", {
-      alpha: true,
-      antialias: false,
-      premultipliedAlpha: true,
-      preserveDrawingBuffer: true,
-    });
-    if (!gl) {
+    const pic = typeof nodeGraphSharedGlDevice === "function" ? nodeGraphSharedGlDevice() : null;
+    const gl = pic?.gl || null;
+    const canvas = pic?.canvas || null;
+    if (!gl || !canvas) {
       return null;
     }
     const copyProgram = link(gl, VERT, COPY_FRAG);
@@ -421,30 +415,27 @@
     return { vertices: out, stamps, carry, continuing: Boolean(prev), spacing };
   }
 
-  /** Grow the shared GL canvas; never shrink (resize was ~frame-budget each present). */
+  /** Shared 4096 canvas (P0c): never resize. Present via scissor. */
   function ensurePresentSize(dev, width, height) {
     const w = Math.max(1, Math.min(MAX_DIM, Math.round(width) || 1));
     const h = Math.max(1, Math.min(MAX_DIM, Math.round(height) || 1));
-    const cw = Math.max(dev.canvas.width || 1, w);
-    const ch = Math.max(dev.canvas.height || 1, h);
-    if (dev.canvas.width !== cw || dev.canvas.height !== ch) {
-      dev.canvas.width = cw;
-      dev.canvas.height = ch;
-    }
+    const cw = Math.max(1, dev.canvas.width || 4096);
+    const ch = Math.max(1, dev.canvas.height || 4096);
     return { w, h, cw, ch };
   }
 
   function bindPresentViewport(gl, cw, ch, w, h) {
-    // 2D canvas origin is top-left; WebGL viewport y is from the bottom.
-    const y = Math.max(0, ch - h);
-    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-    gl.viewport(0, y, w, h);
-    gl.enable(gl.SCISSOR_TEST);
-    gl.scissor(0, y, w, h);
+    if (typeof nodeGraphSharedGlBindPresent === "function") {
+      nodeGraphSharedGlBindPresent(gl, w, h);
+    } else {
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+      gl.viewport(0, 0, w, h);
+      gl.enable(gl.SCISSOR_TEST);
+      gl.scissor(0, 0, w, h);
+    }
     gl.disable(gl.BLEND);
     gl.clearColor(0, 0, 0, 0);
     gl.clear(gl.COLOR_BUFFER_BIT);
-    gl.disable(gl.SCISSOR_TEST);
   }
 
   function ensure(host, width, height, key = "_traceTapeRgb") {
@@ -636,7 +627,11 @@
     destCtx.save();
     destCtx.globalCompositeOperation = options.composite || "source-over";
     destCtx.imageSmoothingEnabled = options.smooth === true;
-    destCtx.drawImage(dev.canvas, 0, 0, size.w, size.h, 0, 0, size.w, size.h);
+    if (typeof nodeGraphSharedGlBlitTo2D === "function") {
+      nodeGraphSharedGlBlitTo2D(destCtx, size.w, size.h);
+    } else {
+      destCtx.drawImage(dev.canvas, 0, 0, size.w, size.h, 0, 0, size.w, size.h);
+    }
     destCtx.restore();
     return true;
   }
@@ -688,7 +683,11 @@
     destCtx.save();
     destCtx.globalCompositeOperation = "source-over";
     destCtx.imageSmoothingEnabled = options.smooth === true;
-    destCtx.drawImage(dev.canvas, 0, 0, size.w, size.h, 0, 0, size.w, size.h);
+    if (typeof nodeGraphSharedGlBlitTo2D === "function") {
+      nodeGraphSharedGlBlitTo2D(destCtx, size.w, size.h);
+    } else {
+      destCtx.drawImage(dev.canvas, 0, 0, size.w, size.h, 0, 0, size.w, size.h);
+    }
     destCtx.restore();
     return true;
   }
@@ -755,7 +754,11 @@
     destCtx.save();
     destCtx.globalCompositeOperation = "source-over";
     destCtx.imageSmoothingEnabled = options.smooth === true;
-    destCtx.drawImage(dev.canvas, 0, 0, size.w, size.h, 0, 0, size.w, size.h);
+    if (typeof nodeGraphSharedGlBlitTo2D === "function") {
+      nodeGraphSharedGlBlitTo2D(destCtx, size.w, size.h);
+    } else {
+      destCtx.drawImage(dev.canvas, 0, 0, size.w, size.h, 0, 0, size.w, size.h);
+    }
     destCtx.restore();
     return true;
   }
