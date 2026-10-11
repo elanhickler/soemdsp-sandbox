@@ -6540,7 +6540,7 @@ static void process_additive_generator(Circuit& g, Node& node, int frames) {
   }
   int waveform = (int)(control_effective(node.waveform) + (control_effective(node.waveform) >= 0.0 ? 0.5 : -0.5));
   if (waveform < 0) waveform = 0;
-  if (waveform > 8) waveform = 8;
+  if (waveform > 9) waveform = 9;
   const float pwm = (float)control_effective(node.shape);
   const float harmonics = (float)control_effective(node.stages);
   const float phaseRotation = (float)control_effective(node.phaseParam);

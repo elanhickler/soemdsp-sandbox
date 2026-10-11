@@ -250,55 +250,67 @@ static inline float bubble_effective_phase_skew(float phaseSkew, float unskew, f
   return skew + (unskew - skew) * cut;
 }
 
-// Waveforms 0–8: Saw / Square / PulseCenter / PulseLeft / PulseRight / Tri / RectSine / Even / Odd.
+// Waveforms 0–9: Trisaw / Saw / Square / PulseCenter / PulseLeft / PulseRight / Tri / RectSine / Even / Odd.
 static inline void waveform_partial(
   int waveform, int harmonic, float pwm, float* ampOut, float* phaseOut, float* ratioOut
 ) {
   const int h = harmonic < 1 ? 1 : harmonic;
   const bool odd = (h % 2) == 1;
-  const float m = (float)soemdsp_maths::clamp11(pwm);
+  float m = pwm;
+  if (!(m * 0.0f == 0.0f)) m = 0.5f;
+  if (m < 0.0f) m = 0.0f;
+  if (m > 1.0f) m = 1.0f;
   float amplitude = 0.0f;
   float phase = 0.0f;
   const int wf = waveform;
 
-  const float pulseDuty = 0.5f + m * 0.48f;
+  float pulseDuty = m;
+  if (pulseDuty < 0.001f) pulseDuty = 0.001f;
+  if (pulseDuty > 0.999f) pulseDuty = 0.999f;
   const float pulseAmp =
     (float)(soemdsp_maths::dsp_sin(soemdsp_maths::kPi * (double)h * (double)pulseDuty) / (double)h);
 
   switch (wf) {
-    case 0: // Saw — 1/n all harmonics, jump at cycle wrap (face shows a ramp)
+    case 0: { // Trisaw — sin(π n p) / (p (1-p) n²) × 0.2
+      const double p = (double)pulseDuty;
+      amplitude = (float)(soemdsp_maths::dsp_sin(soemdsp_maths::kPi * (double)h * p)
+        / (p * (1.0 - p) * (double)(h * h)) * 0.2);
+      phase = 0.0f;
+      break;
+    }
+    case 1: // Saw — 1/n all harmonics, jump at cycle wrap (face shows a ramp)
       amplitude = 1.0f / (float)h;
       phase = 0.0f;
       break;
-    case 1: // Square — odds only 1/n; 0.5 puts the edges in the middle of the cycle
+    case 2: // Square — odds only 1/n; 0.5 puts the edges in the middle of the cycle
       amplitude = odd ? (1.0f / (float)h) : 0.0f;
       phase = 0.5f;
       break;
-    case 2: // PulseCenter — PWM width, cosine-aligned (peak at cycle center)
+    case 3: // PulseCenter — PWM width, cosine-aligned (peak at cycle center)
       amplitude = pulseAmp;
       phase = 0.25f;
       break;
-    case 3: // PulseLeft — same width as Center, rising edge at cycle start
+    case 4: // PulseLeft — same width as Center, rising edge at cycle start
       amplitude = pulseAmp;
       phase = (float)h * pulseDuty * 0.5f + 0.25f;
       break;
-    case 4: // PulseRight — same width as Center, falling edge at cycle end
+    case 5: // PulseRight — same width as Center, falling edge at cycle end
       amplitude = pulseAmp;
       phase = (float)h * (-pulseDuty * 0.5f) + 0.25f;
       break;
-    case 5: // Tri
+    case 6: // Tri
       amplitude = odd ? (1.0f / (float)(h * h)) : 0.0f;
       phase = (h % 4 == 1) ? 0.0f : 0.5f;
       break;
-    case 6: // RectSine
+    case 7: // RectSine
       amplitude = 1.0f / (float)(h * h);
       phase = odd ? 0.25f : 0.75f;
       break;
-    case 7: // Even
+    case 8: // Even
       amplitude = (h == 1 || !odd) ? 1.0f : 0.0f;
       phase = 0.0f;
       break;
-    case 8: // Odd
+    case 9: // Odd
       amplitude = odd ? 1.0f : 0.0f;
       phase = 0.0f;
       break;
@@ -382,11 +394,10 @@ inline void build_from_waveform(
   out.hasPhaseLerp = 0;
   out.hasRatioLerp = 0;
   out.hasPanLerp = 0;
-  const float m = (float)soemdsp_maths::clamp11(pwm);
   const float rot = (phaseRotation * 0.0f == 0.0f) ? phaseRotation : 0.0f;
   for (int i = 0; i < H; i += 1) {
     float amp = 0.0f, ph = 0.0f, ratio = 0.0f;
-    waveform_partial(waveform, i + 1, m, &amp, &ph, &ratio);
+    waveform_partial(waveform, i + 1, pwm, &amp, &ph, &ratio);
     out.ratio[i] = ratio;
     out.phase[i] = wrap01f(ph + rot);
     if (lastFrac > 0.0f && i == H - 1) amp *= lastFrac;

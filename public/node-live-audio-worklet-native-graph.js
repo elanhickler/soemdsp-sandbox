@@ -6239,7 +6239,7 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
     if (type === "additiveGenerator") {
       // stages=harmonics (continuous for Decimal), mode=harmonicFade.
       push("waveform", P.NATIVE_GRAPH_PARAM_WAVEFORM, disc("waveform", 0));
-      push("pwm", P.NATIVE_GRAPH_PARAM_SHAPE, cont("pwm", 0));
+      push("morph", P.NATIVE_GRAPH_PARAM_SHAPE, cont("morph", 0.5));
       push("harmonics", P.NATIVE_GRAPH_PARAM_STAGES, cont("harmonics", 32));
       push("harmonicFade", P.NATIVE_GRAPH_PARAM_MODE, disc("harmonicFade", 1));
       push("phaseRotation", P.NATIVE_GRAPH_PARAM_PHASE, cont("phaseRotation", 0));

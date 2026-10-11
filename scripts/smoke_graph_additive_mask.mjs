@@ -88,10 +88,10 @@ function build(c) {
   if ((add(g, hG, TYPE_GEN) | 0) !== 0) throw new Error("gen add");
   if ((add(g, hO, TYPE_OUT) | 0) !== 0) throw new Error("out add");
   if ((connect(g, hG, PORT_GRAPH, hO, PORT_GRAPH) | 0) !== 0) throw new Error("connect");
-  setParam(g, hG, P.WAVE, c.waveform ?? 0); setParam(g, hG, P.SHAPE, 0); setParam(g, hG, P.STAGES, c.harmonics);
+  setParam(g, hG, P.WAVE, c.waveform ?? 1); setParam(g, hG, P.SHAPE, 0.5); setParam(g, hG, P.STAGES, c.harmonics);
   setParam(g, hG, P.MODE, 1); setParam(g, hG, P.PHASE, 0);
-  setParam(g, hG, P.CENTER, c.slope); setParam(g, hG, P.RES, c.skew); setParam(g, hG, P.LFOSTYLE, c.curve ?? 0);
-  setParam(g, hG, P.IN_LOW, c.start ?? 1); setParam(g, hG, P.IN_HIGH, c.end ?? 1024);
+  setParam(g, hO, P.CENTER, c.slope); setParam(g, hO, P.RES, c.skew); setParam(g, hO, P.LFOSTYLE, c.curve ?? 0);
+  setParam(g, hO, P.IN_LOW, c.start ?? 1); setParam(g, hO, P.IN_HIGH, c.end ?? 1024);
   setParam(g, hO, P.FREQ, c.freq ?? F0); setParam(g, hO, P.AMP, c.amp ?? AMP);
   if ((compile(g) | 0) !== 0) throw new Error("compile");
   snap(g);
@@ -154,7 +154,7 @@ for (const c of cases) {
   const cc = { harmonics: 1024, ...c };
   const g = build(cc);
   render(g, 4);
-  const m = graphOf(g, hG);
+  const m = graphOf(g, hO);
   const { start, end } = refRange(cc);
   const js = jsRange(cc.harmonics, cc.start, cc.end);
   if (Math.abs(js.start - start) > 1e-12 || Math.abs(js.end - end) > 1e-12) {
@@ -175,7 +175,7 @@ for (const c of cases) {
   }
   if (m.H !== lastLive) throw new Error(`${c.name}: Graph H=${m.H}, expected last survivor ${lastLive}`);
   if (m.H !== c.expectH) throw new Error(`${c.name}: Graph H=${m.H}, expected ${c.expectH}`);
-  if (yellowH(g, hO) !== m.H) throw new Error(`${c.name}: Out H=${yellowH(g, hO)} != Generator H=${m.H}`);
+  if ((yellowH(g, hG) | 0) !== m.H) throw new Error(`${c.name}: Generator H=${yellowH(g, hG)} != Out H=${m.H}`);
   if (maxErr > 1e-5) throw new Error(`${c.name}: per-partial gain err ${maxErr}`);
   if (maxJsErr > 1e-12) throw new Error(`${c.name}: JS slope gain err ${maxJsErr}`);
   destroy(g);
@@ -187,7 +187,7 @@ for (const c of cases) {
   const c = { harmonics: 64, slope: 0.5, skew: 0, start: 8, end: 24, curve: 0 };
   const g = build(c);
   render(g, 4);
-  const m = graphOf(g, hG);
+  const m = graphOf(g, hO);
   destroy(g);
   const at = (n) => m.amp[n - 1] * n;
   if (Math.abs(at(8) - 1) > 1e-6) throw new Error(`gain at Start ${at(8)}`);
@@ -198,13 +198,13 @@ for (const c of cases) {
 }
 
 // Even / Odd
-for (const [name, waveform] of [["Even", 7], ["Odd", 8]]) {
+for (const [name, waveform] of [["Even", 8], ["Odd", 9]]) {
   const g = build({ harmonics: 9, slope: 0, skew: 1, waveform });
   render(g, 4);
   const m = graphOf(g, hG);
   destroy(g);
   for (let n = 1; n <= 9; n++) {
-    const want = waveform === 7 ? (n === 1 || n % 2 === 0 ? 1 : 0) : (n % 2 === 1 ? 1 : 0);
+    const want = waveform === 8 ? (n === 1 || n % 2 === 0 ? 1 : 0) : (n % 2 === 1 ? 1 : 0);
     const got = n <= m.H ? m.amp[n - 1] : 0;
     if (Math.abs(got - want) > 1e-7) throw new Error(`${name}: amp[${n}]=${got}, expected ${want}`);
     if (Math.abs(jsPartial(waveform, n, 0).amplitude - want) > 1e-12) throw new Error(`${name}: JS amp[${n}] mismatch`);
@@ -212,18 +212,21 @@ for (const [name, waveform] of [["Even", 7], ["Odd", 8]]) {
   console.log(`${name}: amps ${m.amp.map((v) => v.toFixed(0)).join(",")}`);
 }
 
-// Audio
+// Brickwall: Slope on Out + keep-count trims Generator to 4; remaining amps stay 1/n (Saw).
 {
-  const gMask = build({ harmonics: 1024, slope: 1, skew: 0, start: 4, end: 4 });
-  const gRef = build({ harmonics: 4, slope: 0, skew: 0 });
-  const a = render(gMask, 40), b = render(gRef, 40);
-  let maxErr = 0;
-  for (let i = 128 * 4; i < a.length; i++) maxErr = Math.max(maxErr, Math.abs(a[i] - b[i]));
-  const H = yellowH(gMask, hG) | 0;
-  destroy(gMask); destroy(gRef);
-  if (H !== 4) throw new Error(`brickwall slope Graph H=${H}`);
-  if (maxErr > 1e-6) throw new Error(`slope render vs 4-partial render err ${maxErr}`);
-  console.log(`audio: slope 1024→4 vs plain 4-partial render max err ${maxErr.toExponential(2)}`);
+  const gMask = build({ harmonics: 1024, slope: 1, skew: 0, start: 4, end: 4, waveform: 1 });
+  render(gMask, 4);
+  const gen = graphOf(gMask, hG);
+  const out = graphOf(gMask, hO);
+  destroy(gMask);
+  if (gen.H !== 4) throw new Error(`brickwall slope Generator H=${gen.H}`);
+  if (out.H !== 4) throw new Error(`brickwall slope Out H=${out.H}`);
+  for (let i = 0; i < 4; i++) {
+    const want = 1 / (i + 1);
+    if (Math.abs(gen.amp[i] - want) > 1e-6) throw new Error(`brickwall gen amp[${i}]=${gen.amp[i]}`);
+    if (Math.abs(out.amp[i] - want) > 1e-5) throw new Error(`brickwall out amp[${i}]=${out.amp[i]}`);
+  }
+  console.log(`brickwall: 1024→4 Saw slots, amps 1/n`);
 }
 
 // Nyquist: full until 0.75·Nyquist, then linear 1→0 at Nyquist (nyquist_amp_gain).

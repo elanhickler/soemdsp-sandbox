@@ -142,13 +142,13 @@ NodeLiveAudioProcessor.prototype.processAdditiveYellowGraphSidecar = function pr
     const p = node.params || {};
     // Ensure id is set for additive smoother keying (Map key is authoritative).
     if (!node.id) node.id = id;
-    const pwm = eff(node, "pwm", 0);
+    const morph = eff(node, "morph", 0.5);
     const fade = typeof additiveGraphNormalizeHarmonicFade === "function"
       ? additiveGraphNormalizeHarmonicFade(num(p.harmonicFade, 1))
       : 1;
     const graph = additiveGraphBuildFromWaveform(
       num(p.waveform, 0),
-      pwm,
+      morph,
       eff(node, "harmonics", 32),
       eff(node, "phaseRotation", 0),
       fade,

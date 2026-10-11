@@ -459,7 +459,7 @@ const nodeGraphModuleStoreCatalog = Object.freeze({
   // additiveOsc / gpuAdditiveOsc retired — Yellow Graph chain replaces them.
   additiveGenerator: {
     category: "additive",
-    description: "Harmonics + Waveform (Saw / Square / Pulse* / Triangle / RectSine / Even / Odd) + PWM + Rotation + HarmonicFade (Instant/Smoothed/Decimal) → Yellow Graph. Face shows the Additive Out waveform.",
+    description: "Harmonics + Waveform (Trisaw / Saw / Square / Pulse* / Triangle / RectSine / Even / Odd) + PWM + Rotation + HarmonicFade (Instant/Smoothed/Decimal) → Yellow Graph. Face shows the Additive Out waveform.",
     label: "Additive Generator",
     notes: ["additive", "yellow graph", "harmonics", "morph", "decimal"],
   },

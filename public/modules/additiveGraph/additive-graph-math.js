@@ -225,59 +225,64 @@ function additiveGraphSkewMap(t, curve, mode) {
 
 /**
  * Basic harmonic waveforms for Additive Generator (Yellow Graph).
- * Indices: 0 Saw, 1 Square, 2 PulseCenter, 3 PulseLeft, 4 PulseRight,
- *          5 Tri, 6 RectSine, 7 Even, 8 Odd.
- * PWM (−1…+1) applies only to Pulse*: 0 = 50% duty, ±1 → ~2%…~98%.
- * Saw / Square / Tri / RectSine ignore PWM.
+ * Indices: 0 Trisaw, 1 Saw, 2 Square, 3 PulseCenter, 4 PulseLeft, 5 PulseRight,
+ *          6 Tri, 7 RectSine, 8 Even, 9 Odd.
+ * Morph (0…1): Pulse* duty, Trisaw peak (0.5 = triangle, 0/1 → saw).
+ * Saw / Square / Tri / RectSine / Even / Odd ignore Morph.
  * Phase Rotation is on Additive Generator (baked into Graph phases).
  */
-function additiveGraphWaveformPartial(waveform, harmonic, pwm = 0) {
+function additiveGraphWaveformPartial(waveform, harmonic, morph = 0.5) {
   const n = Math.max(1, Math.floor(nodeGraphFiniteNumber(harmonic, 1)));
   const h = n;
   const odd = n % 2 === 1;
-  const m = additiveGraphClamp(nodeGraphFiniteNumber(pwm), -1, 1);
+  const m = additiveGraphClamp(nodeGraphFiniteNumber(morph, 0.5), 0, 1);
   let amplitude = 0;
   let phase = 0;
   const wf = Math.round(nodeGraphFiniteNumber(waveform));
 
-  // Classic PWM: amp_n ∝ sin(π·n·duty) / n. Duty kept off 0/1 so partials stay alive.
-  const pulseDuty = 0.5 + m * 0.48;
+  const pulseDuty = Math.min(0.999, Math.max(0.001, m));
   const pulseAmp = Math.sin(Math.PI * h * pulseDuty) / h;
 
   switch (wf) {
-    case 0: // Saw — 1/n all harmonics, jump at cycle wrap (face shows a ramp)
+    case 0: { // Trisaw — sin(π n p) / (p (1-p) n²) × 0.2
+      const p = pulseDuty;
+      amplitude = Math.sin(Math.PI * h * p) / (p * (1 - p) * h * h) * 0.2;
+      phase = 0;
+      break;
+    }
+    case 1: // Saw — 1/n all harmonics, jump at cycle wrap (face shows a ramp)
       amplitude = 1 / h;
       phase = 0;
       break;
-    case 1: // Square — odds only 1/n; 0.5 puts the edges in the middle of the cycle
+    case 2: // Square — odds only 1/n; 0.5 puts the edges in the middle of the cycle
       amplitude = odd ? 1 / h : 0;
       phase = 0.5;
       break;
-    case 2: // PulseCenter — PWM width, cosine-aligned (peak at cycle center)
+    case 3: // PulseCenter — PWM width, cosine-aligned (peak at cycle center)
       amplitude = pulseAmp;
       phase = 0.25;
       break;
-    case 3: // PulseLeft — same width as Center, rising edge at cycle start
+    case 4: // PulseLeft — same width as Center, rising edge at cycle start
       amplitude = pulseAmp;
       phase = h * pulseDuty * 0.5 + 0.25;
       break;
-    case 4: // PulseRight — same width as Center, falling edge at cycle end
+    case 5: // PulseRight — same width as Center, falling edge at cycle end
       amplitude = pulseAmp;
       phase = h * (-pulseDuty * 0.5) + 0.25;
       break;
-    case 5: // Tri — odds / n²
+    case 6: // Tri — odds / n²
       amplitude = odd ? 1 / (h * h) : 0;
       phase = n % 4 === 1 ? 0 : 0.5;
       break;
-    case 6: // RectSine — 1/n², odds @0.25 / evens @0.75
+    case 7: // RectSine — 1/n², odds @0.25 / evens @0.75
       amplitude = 1 / (h * h);
       phase = odd ? 0.25 : 0.75;
       break;
-    case 7: // Even
+    case 8: // Even
       amplitude = n === 1 || !odd ? 1 : 0;
       phase = 0;
       break;
-    case 8: // Odd
+    case 9: // Odd
       amplitude = odd ? 1 : 0;
       phase = 0;
       break;
@@ -401,13 +406,13 @@ function additiveGraphResolveHarmonicSlots(harmonics, harmonicFade = 1) {
  * Bubble Cutoff may still apply its own harmonic_count_gain skirt.
  */
 function additiveGraphBuildFromWaveform(
-  waveform, pwm, harmonics, phaseRotation = 0, harmonicFade = 1,
+  waveform, morph, harmonics, phaseRotation = 0, harmonicFade = 1,
 ) {
   const slots = additiveGraphResolveHarmonicSlots(harmonics, harmonicFade);
   const H = slots.H;
   const graph = additiveGraphCreatePayload(H);
   const wf = nodeGraphFiniteNumber(waveform);
-  const m = additiveGraphClamp(nodeGraphFiniteNumber(pwm), -1, 1);
+  const m = additiveGraphClamp(nodeGraphFiniteNumber(morph, 0.5), 0, 1);
   const rot = nodeGraphFiniteNumber(phaseRotation);
   for (let i = 0; i < H; i += 1) {
     const partial = additiveGraphWaveformPartial(wf, i + 1, m);
