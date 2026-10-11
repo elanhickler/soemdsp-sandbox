@@ -3333,7 +3333,7 @@ static void init_node_defaults(Node& n, int typeId) {
       : (typeId == kTypePll) ? 4.0 // Range octaves
       : (typeId == kTypeSoftpopOscillator) ? 0.0 // Stereo
       : (typeId == kTypeLogisticMap) ? 0.0 // Antialias Off
-      : (typeId == kTypeSoftClipper) ? 0.0 // AA Off
+      : (typeId == kTypeSoftClipper) ? 1.0 // AA ADAA1
       : 1.0,
     // Freq Manager octave lives on mode and stays continuous (step is the snap).
     typeId != kTypePll && typeId != kTypeFm

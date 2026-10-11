@@ -8002,6 +8002,21 @@ const nodeGraphModuleDefinitions = (
     outputs: ["Out", "Left", "Right"],
     parameters: [
       {
+        choices: ["Off", "ADAA1", "ADAA2"],
+        defaultValue: "1",
+        displayChoices: true,
+        divideChoicesVisibly: true,
+        key: "aa",
+        label: "AA",
+        linearSmoothing: false,
+        max: "2",
+        mid: "1",
+        min: "0",
+        nonlinearSlider: false,
+        step: "1",
+        tooltip: "Antialiasing. Off is the raw clip. ADAA1 uses the previous sample. ADAA2 uses two previous samples and falls back when the input is flat."
+      },
+      {
         defaultValue: "0.5",
         hidden: true,
         key: "drive",
@@ -8048,21 +8063,6 @@ const nodeGraphModuleDefinitions = (
         nonlinearSlider: false,
         step: "any",
         tooltip: "Output scale after shaping."
-      },
-      {
-        choices: ["Off", "ADAA1", "ADAA2"],
-        defaultValue: "0",
-        displayChoices: true,
-        divideChoicesVisibly: true,
-        key: "aa",
-        label: "AA",
-        linearSmoothing: false,
-        max: "2",
-        mid: "1",
-        min: "0",
-        nonlinearSlider: false,
-        step: "1",
-        tooltip: "Antialiasing. Off is the raw clip. ADAA1 uses the previous sample. ADAA2 uses two previous samples and falls back when the input is flat."
       },
     ]
   },
