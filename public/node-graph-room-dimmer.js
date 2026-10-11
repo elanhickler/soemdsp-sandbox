@@ -302,7 +302,7 @@ void main() {
 
     const gl = state.gl && !state.gl.isContextLost()
       ? state.gl
-      : canvas.getContext("webgl", {
+      : canvas.getContext("webgl2", {
         alpha: true,
         antialias: false,
         depth: false,

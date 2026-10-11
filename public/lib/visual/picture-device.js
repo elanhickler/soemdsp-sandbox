@@ -1,7 +1,8 @@
-// One hidden WebGL context for picture modules (Image Ghost, Soft Fractal,
-// Fractal Brownian Field). Faces are ordinary canvases. A 📺 cable publishes
-// a texture id on this device — no byte copy between modules.
+// One hidden WebGL2 context (4096²) for every display that shares GPU work.
+// Faces are ordinary 2D canvases; present scissors then blits. A 📺 cable
+// publishes a texture id on this device — no byte copy between modules.
 // Never resize the canvas: a resize wipes every texture on the context.
+// WebGL1 is not requested (P0d).
 
 (function initNodeGraphPictureDevice(global) {
   const MAX_DIM = 4096;
@@ -68,8 +69,7 @@
       premultipliedAlpha: false,
       preserveDrawingBuffer: true,
     };
-    const gl = canvas.getContext("webgl", attrs)
-      || canvas.getContext("experimental-webgl", attrs);
+    const gl = canvas.getContext("webgl2", attrs);
     if (!gl) return null;
     const program = link(gl, COPY_VS, COPY_FS);
     if (!program) return null;

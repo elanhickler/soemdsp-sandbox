@@ -39,7 +39,7 @@ Size key: **S** = small, **M** = medium, **L** = large (combinations like S-M me
 
 ## What uses shaders today
 
-15 WebGL1 programs. No WebGL2 anywhere.
+Shared picture device is **WebGL2** (P0d). Face shaders are still GLSL ES 1.00 (`attribute` / `gl_FragColor`) compiled on that context. Room dimmer and the scope overlay request WebGL2 on their own canvases. No WebGL1 fallback.
 
 | Display | File | Context |
 |---------|------|---------|
@@ -164,7 +164,7 @@ Full paths: `public/lib/phosphor/phosphor-energy-gl.js`, `public/lib/trace/{trac
 | P0a | One shared WebGL context for every display | `phosphor-energy-gl.js`, `trace-woscope.js`, `trace-stroke.js`, `trace-tape.js`, `trace-rgb-points.js`, `cycle-line-gl.js`, `picture-device.js`, `asciiscope-gl.js`, `node-graph-module-scope-waterfall-gl.js` | TBD | Done | Grok Bot | 2026-10-11 Grok: `nodeGraphSharedGlDevice` is the picture-device 4096 canvas. Phosphor, woscope, stroke, tape, cycle-line, waterfall, matrix, rgb-points compile/present on it and blit to 2D faces. Room dimmer keeps its own full-viewport veil canvas. Hard-refresh required (faces that were WebGL are now 2D). |
 | P0b | Vector RGB: stop recompiling shaders every frame with 2+ faces | `trace-rgb-points.js` | TBD | Done, needs visual check | Librarian | 2026-10-06 Librarian: WeakMap keyed by face canvas keeps one GL program per canvas; switching faces no longer nulls a global device and recompiles. Files: `public/lib/trace/trace-rgb-points.js` |
 | P0c | Shared canvas: grow-only or scissor instead of resize per present | `phosphor-energy-gl.js:1727`, `trace-woscope.js:609`, `trace-stroke.js:382` | TBD | Done | Grok Bot | 2026-10-11 Grok: picture canvas stays 4096; present uses scissor+viewport then `nodeGraphSharedGlBlitTo2D`. No per-present resize (resize would wipe shared textures). |
-| P0d | Decide: merge shared devices into one WebGL2 context | all shared GL devices | TBD | Not started | — | Decision item for Argi |
+| P0d | Decide: merge shared devices into one WebGL2 context | all shared GL devices | TBD | Done | Grok Bot | 2026-10-11 Argi: modern GPUs only. Picture device is `getContext("webgl2")` with no WebGL1 fallback. Dimmer + scope overlay also WebGL2. GLSL ES 1.00 shaders stay until a later ES 3.00 pass (MRT / integer textures). |
 | P0e-1 | Remove retired WebGPU oscillator script and its JS DSP fallback | `public/node-graph-gpu-additive-backend.js` (+ JS fallback) | TBD | Done | Grok Bot | 2026-10-11 Grok: deleted `node-graph-gpu-additive-backend.js`; dropped script tags. Additive sample stays WASM in `node-graph-oscillator-runtime.js`. |
 | P0e-2 | Free the boot GPU probe context | `boot-loading.js:219` | TBD | Done | Grok Bot | 2026-10-11 Grok: `WEBGL_lose_context` after UNMASKED_RENDERER / VRAM probe. |
 | P0e-3 | Delete stray `_fs_aug2.glsl` | `_fs_aug2.glsl` (repo root) | TBD | Done | Grok Bot | 2026-10-11 Grok: file removed. |

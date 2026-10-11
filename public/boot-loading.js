@@ -215,7 +215,7 @@ async function populateNodeBootSysinfo() {
   let vramMB = null;
   try {
     const canvas = document.createElement("canvas");
-    const gl = canvas.getContext("webgl") || canvas.getContext("experimental-webgl");
+    const gl = canvas.getContext("webgl2");
     if (gl) {
       const ext = gl.getExtension("WEBGL_debug_renderer_info");
       if (ext) {
