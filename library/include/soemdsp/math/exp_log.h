@@ -44,7 +44,12 @@ static inline double dsp_ln(double x) {
   double m = bits.d;
   double y = (m - 1.0) / (m + 1.0);
   double y2 = y * y;
-  double series = y * (1.0 + y2*(1.0/3.0 + y2*(1.0/5.0 + y2*(1.0/7.0 + y2*(1.0/9.0 + y2/11.0)))));
+  // Through y^35. Stopping at y^11 leaves a step at every power of two
+  // (mantissa approaching 2), which ADAA2 turns into a low-frequency click.
+  double series = y * (1.0 + y2*(1.0/3.0 + y2*(1.0/5.0 + y2*(1.0/7.0 + y2*(1.0/9.0
+      + y2*(1.0/11.0 + y2*(1.0/13.0 + y2*(1.0/15.0 + y2*(1.0/17.0 + y2*(1.0/19.0
+      + y2*(1.0/21.0 + y2*(1.0/23.0 + y2*(1.0/25.0 + y2*(1.0/27.0 + y2*(1.0/29.0
+      + y2*(1.0/31.0 + y2*(1.0/33.0 + y2/35.0)))))))))))))))));
   const double LN2 = 0.6931471805599453;
   return 2.0*series + (double)e*LN2;
 }
