@@ -5,8 +5,11 @@
 //
 // Worklet oversampling downsample: 6-section Rapt elliptic quarter-band SOS.
 // Same coeffs and DF2 transpose as the retired JS
-// processRaptEllipticDecimatorSample. factor 2 or 4: run factor samples per
-// host frame, keep the last. factor 1: copy.
+// processRaptEllipticDecimatorSample. Factor 2 runs that filter and keeps
+// every 2nd sample. Factor 4 is two of those stages: quarter-band at the
+// 4x rate, then quarter-band again at the 2x rate, so the cutoff lands on
+// the host Nyquist. One quarter-band pass at 4x cuts at the full host rate
+// and folds the octave above Nyquist back in.
 
 #include <stdint.h>
 
@@ -33,15 +36,17 @@ static const double kSos[kSosCount][6] = {
 
 struct State {
   bool active;
-  double z1[kSosCount];
-  double z2[kSosCount];
+  // Stage 0 is the high-rate filter. Stage 1 is the half-rate filter used
+  // only by factor 4.
+  double z1[2][kSosCount];
+  double z2[2][kSosCount];
   float src[kMaxEngineFrames];
   float dest[kMaxHostFrames];
 };
 
 static State gPool[kMaxInstances];
 
-static double sos_sample(State& s, double x) {
+static double sos_sample(double* z1, double* z2, double x) {
   double y = (x * 0.0 == 0.0) ? x : 0.0;
   for (int i = 0; i < kSosCount; i++) {
     const double b0 = kSos[i][0];
@@ -49,11 +54,11 @@ static double sos_sample(State& s, double x) {
     const double b2 = kSos[i][2];
     const double a1 = kSos[i][4];
     const double a2 = kSos[i][5];
-    const double z1 = s.z1[i];
-    const double z2 = s.z2[i];
-    const double out = b0 * y + z1;
-    s.z1[i] = b1 * y - a1 * out + z2;
-    s.z2[i] = b2 * y - a2 * out;
+    const double z1s = z1[i];
+    const double z2s = z2[i];
+    const double out = b0 * y + z1s;
+    z1[i] = b1 * y - a1 * out + z2s;
+    z2[i] = b2 * y - a2 * out;
     y = out;
   }
   return (y * 0.0 == 0.0) ? y : 0.0;
@@ -65,9 +70,11 @@ extern "C" int soemdsp_rapt_elliptic_decimator_create() {
   for (int i = 0; i < kMaxInstances; i++) {
     if (!gPool[i].active) {
       State& s = gPool[i];
-      for (int k = 0; k < kSosCount; k++) {
-        s.z1[k] = 0.0;
-        s.z2[k] = 0.0;
+      for (int stage = 0; stage < 2; stage++) {
+        for (int k = 0; k < kSosCount; k++) {
+          s.z1[stage][k] = 0.0;
+          s.z2[stage][k] = 0.0;
+        }
       }
       s.active = true;
       return i + 1;
@@ -85,9 +92,11 @@ extern "C" void soemdsp_rapt_elliptic_decimator_reset(int handle) {
   if (handle < 1 || handle > kMaxInstances) return;
   State& s = gPool[handle - 1];
   if (!s.active) return;
-  for (int k = 0; k < kSosCount; k++) {
-    s.z1[k] = 0.0;
-    s.z2[k] = 0.0;
+  for (int stage = 0; stage < 2; stage++) {
+    for (int k = 0; k < kSosCount; k++) {
+      s.z1[stage][k] = 0.0;
+      s.z2[stage][k] = 0.0;
+    }
   }
 }
 
@@ -132,17 +141,33 @@ extern "C" void soemdsp_rapt_elliptic_decimator_process(
     for (int i = n; i < destN; i++) s.dest[i] = 0.0f;
     return;
   }
+  if (ratio == 4) {
+    for (int frame = 0; frame < destN; frame++) {
+      double stage2 = 0.0;
+      for (int half = 0; half < 2; half++) {
+        double stage1 = 0.0;
+        for (int sub = 0; sub < 2; sub++) {
+          const int idx = frame * 4 + half * 2 + sub;
+          const double in = idx < srcN ? (double)s.src[idx] : 0.0;
+          stage1 = sos_sample(s.z1[0], s.z2[0], in);
+        }
+        stage2 = sos_sample(s.z1[1], s.z2[1], stage1);
+      }
+      s.dest[frame] = (float)stage2;
+    }
+    return;
+  }
   for (int frame = 0; frame < destN; frame++) {
     double last = 0.0;
     for (int sub = 0; sub < ratio; sub++) {
       const int idx = frame * ratio + sub;
       const double in = idx < srcN ? (double)s.src[idx] : 0.0;
-      last = sos_sample(s, in);
+      last = sos_sample(s.z1[0], s.z2[0], in);
     }
     s.dest[frame] = (float)last;
   }
 }
 
 extern "C" int soemdsp_rapt_elliptic_decimator_version() {
-  return 1;
+  return 2;
 }

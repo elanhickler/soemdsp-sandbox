@@ -1560,6 +1560,30 @@ function applyNodeGraphPatchDefaultsFromCurrentSelection() {
   return changed;
 }
 
+function soundemoteModuleSettingsJson(type, params) {
+  return `${JSON.stringify({
+    soundemote: "module-settings",
+    type,
+    version: 1,
+    params: { ...(params || {}) },
+  }, null, 2)}\n`;
+}
+
+function parseSoundemoteModuleSettings(text) {
+  try {
+    const obj = JSON.parse(String(text || ""));
+    if (!obj || obj.soundemote !== "module-settings" || typeof obj.type !== "string") {
+      return null;
+    }
+    if (!obj.params || typeof obj.params !== "object" || Array.isArray(obj.params)) {
+      return null;
+    }
+    return obj;
+  } catch {
+    return null;
+  }
+}
+
 function copyNodeGraphModuleSettingsFromContext() {
   const sourceNode = nodeGraphPatchNode(nodeGraphModuleActionTargetNodeId());
   if (!sourceNode) {
@@ -1569,23 +1593,48 @@ function copyNodeGraphModuleSettingsFromContext() {
     type: sourceNode.type,
     settings: nodeGraphModuleSettingsSnapshot(sourceNode),
   };
+  const json = soundemoteModuleSettingsJson(sourceNode.type, sourceNode.params);
+  if (navigator.clipboard?.writeText) {
+    navigator.clipboard.writeText(json).catch(() => {});
+  }
   setNodeInteractionHelp(`${nodeGraphNodeDisplayName(sourceNode.id)} settings copied.`);
   configureNodeSceneContextMenu("module");
 }
 
-function pasteNodeGraphModuleSettingsFromContext() {
-  const clipboard = nodeGraphMvp.moduleSettingsClipboard;
+async function pasteNodeGraphModuleSettingsFromContext() {
   const sourceNode = nodeGraphPatchNode(nodeGraphModuleActionTargetNodeId());
-  if (!clipboard || !sourceNode) {
+  if (!sourceNode) {
     return;
   }
-  if (clipboard.type !== sourceNode.type) {
-    setNodeInteractionHelp(`Can't paste: clipboard holds ${clipboard.type} settings, not ${sourceNode.type}.`);
-    return;
+  let portable = null;
+  try {
+    const text = await navigator.clipboard?.readText?.();
+    portable = parseSoundemoteModuleSettings(text);
+  } catch {
+    portable = null;
   }
   const patch = cloneNodeGraphPatch(nodeGraphMvp.patch);
   const targetNode = patch.nodes.find((node) => node.id === sourceNode.id);
   if (!targetNode) {
+    return;
+  }
+  if (portable) {
+    if (portable.type !== sourceNode.type) {
+      setNodeInteractionHelp(`Can't paste: clipboard holds ${portable.type} settings, not ${sourceNode.type}.`);
+      return;
+    }
+    targetNode.params = { ...(targetNode.params || {}), ...portable.params };
+    commitNodeGraphPatch(patch, { status: "module settings pasted" });
+    configureNodeSceneContextMenu("module");
+    return;
+  }
+  const clipboard = nodeGraphMvp.moduleSettingsClipboard;
+  if (!clipboard) {
+    setNodeInteractionHelp("Copy a module's settings first.");
+    return;
+  }
+  if (clipboard.type !== sourceNode.type) {
+    setNodeInteractionHelp(`Can't paste: clipboard holds ${clipboard.type} settings, not ${sourceNode.type}.`);
     return;
   }
   applyNodeGraphModuleSettingsSnapshot(targetNode, clipboard.settings);

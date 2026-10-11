@@ -1164,6 +1164,9 @@ inline double yellow_atan2(double y, double x) {
 }
 
 // One linear piece w=alpha+beta*θ of a sine partial, onto output bins.
+// Pinch's middle segment is a hold (beta = 0): one sinc per bin, not a chirp.
+// Moving pieces keep a narrow lobe. The negative-frequency image is dropped
+// once the partial is high enough that it cannot reach these bins.
 static inline void yellow_add_sine_segment(
   float* re, float* im, float* panNum, float* panDen, int H,
   float A, float omega, double ph, float pan,
@@ -1171,24 +1174,27 @@ static inline void yellow_add_sine_segment(
 ) {
   const double dur = t1 - t0;
   if (!(dur > 1e-6) || !(soemdsp_maths::dsp_fabs((double)A) > 1e-8) || !(soemdsp_maths::dsp_fabs((double)omega) > 1e-8)) return;
-  const double windowBins = 64.0;
-  const double inst = soemdsp_maths::dsp_fabs(omega * beta);
+  const double twoPi = soemdsp_maths::kPi * 2.0;
   const bool hold = soemdsp_maths::dsp_fabs(beta) < 1e-6;
   int nStart = 1;
   int nEnd = H;
   if (hold) {
-    nEnd = H < 64 ? H : 64;
+    nEnd = H;
   } else {
+    const double inst = soemdsp_maths::dsp_fabs((double)omega * beta);
+    const double windowBins = 12.0;
     nStart = (int)(inst - windowBins);
     if (nStart < 1) nStart = 1;
     nEnd = (int)(inst + windowBins + 0.999);
     if (nEnd > H) nEnd = H;
+    if (nStart > nEnd) return;
   }
-  const double twoPi = soemdsp_maths::kPi * 2.0;
+  const bool bothImages = !((double)omega > 12.0);
   for (int n = nStart; n <= nEnd; n += 1) {
     double dr = 0.0;
     double di = 0.0;
-    for (int sign = 1; sign >= -1; sign -= 2) {
+    const int signStop = bothImages ? -1 : 1;
+    for (int sign = 1; sign >= signStop; sign -= 2) {
       const double w = (double)sign * (double)omega;
       const double f = w * beta - (double)n;
       double jr;
@@ -1227,42 +1233,60 @@ static inline void yellow_add_sine_segment(
   }
 }
 
-// kind 1 Cramp (bipolar duty), kind 2 Pinch (both flanks). Projects onto 1..H.
-inline void apply_cycle_warp(GraphPayload& g, int kind, float amount) {
+// Flat-window warp. The whole cycle plays in [play0, play1). Outside that,
+// both sides hold the cycle-join sample (a flat line).
+inline void apply_flat_window(GraphPayload& g, double play0, double play1) {
   const int H = g.harmonics;
   if (H < 1 || H > kMaxHarmonics) return;
-  double duty = 0.5;
-  double edge = 0.5;
-  if (kind == 1) {
-    float c = (amount * 0.0f == 0.0f) ? amount : 0.0f;
-    if (c > 1.0f) c = 1.0f;
-    if (c < -1.0f) c = -1.0f;
-    if (!(soemdsp_maths::dsp_fabs((double)c) > 1e-4)) return;
-    duty = 0.5 + (double)c * 0.48;
-    if (duty < 0.02) duty = 0.02;
-    if (duty > 0.98) duty = 0.98;
-  } else if (kind == 2) {
-    float p = (amount * 0.0f == 0.0f) ? amount : 0.0f;
-    if (p < 0.0f) p = 0.0f;
-    if (p > 1.0f) p = 1.0f;
-    if (!(p > 1e-4f)) return;
-    edge = 0.5 * (1.0 - (double)p * 0.96);
-    if (edge < 0.02) edge = 0.02;
-  } else {
-    return;
-  }
+  double width = play1 - play0;
+  if (!(width > 0.02)) return;
+  if (play0 < 0.0) play0 = 0.0;
+  if (play1 > 1.0) play1 = 1.0;
+  width = play1 - play0;
+  const double beta = 1.0 / width;
+  const double alpha = -play0 * beta;
   float re[kMaxHarmonics];
   float im[kMaxHarmonics];
   float panNum[kMaxHarmonics];
   float panDen[kMaxHarmonics];
+  float holdRe[kMaxHarmonics];
+  float holdIm[kMaxHarmonics];
   for (int i = 0; i < H; i += 1) {
     re[i] = 0.0f;
     im[i] = 0.0f;
     panNum[i] = 0.0f;
     panDen[i] = 0.0f;
   }
-  const double b1 = kind == 1 ? (0.5 / duty) : (0.5 / edge);
-  const double b2 = kind == 1 ? (0.5 / (1.0 - duty)) : b1;
+  const double flats[2][2] = { { 0.0, play0 }, { play1, 1.0 } };
+  double flatDur = 1.0;
+  for (int s = 0; s < 2; s += 1) {
+    const double d = flats[s][1] - flats[s][0];
+    if (d > 1e-4 && d < flatDur) flatDur = d;
+  }
+  int nHold = H;
+  if (flatDur < 1.0) {
+    const int lobe = (int)(24.0 / flatDur + 1.0);
+    if (lobe < nHold) nHold = lobe;
+  }
+  if (nHold < 1) nHold = 1;
+  const double twoPiH = soemdsp_maths::kPi * 2.0;
+  for (int i = 0; i < nHold; i += 1) {
+    holdRe[i] = 0.0f;
+    holdIm[i] = 0.0f;
+  }
+  for (int s = 0; s < 2; s += 1) {
+    const double a = flats[s][0];
+    const double b = flats[s][1];
+    if (!(b - a > 1e-6)) continue;
+    for (int n = 1; n <= nHold; n += 1) {
+      const double f = -(double)n;
+      const double p1 = twoPiH * f * b;
+      const double p0 = twoPiH * f * a;
+      const double denom = twoPiH * f;
+      holdRe[n - 1] += (float)((soemdsp_maths::dsp_sin(p1) - soemdsp_maths::dsp_sin(p0)) / denom);
+      holdIm[n - 1] += (float)(-(soemdsp_maths::dsp_cos(p1) - soemdsp_maths::dsp_cos(p0)) / denom);
+    }
+  }
   for (int k = 0; k < H; k += 1) {
     float A = g.amplitude[k];
     if (!(A * 0.0f == 0.0f)) A = 0.0f;
@@ -1275,18 +1299,23 @@ inline void apply_cycle_warp(GraphPayload& g, int kind, float amount) {
     const double ph = (double)ph01 * soemdsp_maths::kPi * 2.0;
     float pan = g.pan[k];
     if (!(pan * 0.0f == 0.0f)) pan = 0.0f;
-    if (kind == 1) {
-      yellow_add_sine_segment(re, im, panNum, panDen, H, A, omega, ph, pan, 0.0, b1, 0.0, duty);
-      const double alpha2 = 0.5 - duty * b2;
-      yellow_add_sine_segment(re, im, panNum, panDen, H, A, omega, ph, pan, alpha2, b2, duty, 1.0);
-    } else {
-      yellow_add_sine_segment(re, im, panNum, panDen, H, A, omega, ph, pan, 0.0, b1, 0.0, edge);
-      yellow_add_sine_segment(re, im, panNum, panDen, H, A, omega, ph, pan, 0.5, 0.0, edge, 1.0 - edge);
-      const double alpha3 = 0.5 - (1.0 - edge) * b2;
-      yellow_add_sine_segment(re, im, panNum, panDen, H, A, omega, ph, pan, alpha3, b2, 1.0 - edge, 1.0);
+    yellow_add_sine_segment(re, im, panNum, panDen, H, A, omega, ph, pan, alpha, beta, play0, play1);
+    const double sHold = (double)A * soemdsp_maths::dsp_sin(ph);
+    if (soemdsp_maths::dsp_fabs(sHold) > 1e-10) {
+      const float sAbs = (float)soemdsp_maths::dsp_fabs(sHold);
+      for (int i = 0; i < nHold; i += 1) {
+        re[i] += (float)(sHold * (double)holdRe[i]);
+        im[i] += (float)(sHold * (double)holdIm[i]);
+        const float mag = sAbs * (float)soemdsp_maths::sqrt_newton(
+          (double)holdRe[i] * holdRe[i] + (double)holdIm[i] * holdIm[i]
+        );
+        panNum[i] += pan * mag;
+        panDen[i] += mag;
+      }
     }
   }
   const double twoPi = soemdsp_maths::kPi * 2.0;
+  int active = 1;
   for (int i = 0; i < H; i += 1) {
     const float cr = re[i];
     const float ci = im[i];
@@ -1302,7 +1331,9 @@ inline void apply_cycle_warp(GraphPayload& g, int kind, float amount) {
     }
     g.phase[i] = phase01;
     g.pan[i] = panDen[i] > 1e-12f ? panNum[i] / panDen[i] : 0.0f;
+    if (g.amplitude[i] > 1.0e-5f) active = i + 1;
   }
+  if (active < H) g.harmonics = active;
   g.hasRatioLerp = 0;
   g.hasPhaseLerp = 0;
   g.hasAmpLerp = 0;
@@ -1311,6 +1342,31 @@ inline void apply_cycle_warp(GraphPayload& g, int kind, float amount) {
   noise_recipe_clear(g.phaseNoise);
   noise_recipe_clear(g.ampNoise);
   noise_recipe_clear(g.panNoise);
+}
+
+// Cramp: |amount| is the flat fraction. + parks the cycle on the left, − on the right.
+inline void apply_cycle_warp(GraphPayload& g, float amount) {
+  float c = (amount * 0.0f == 0.0f) ? amount : 0.0f;
+  if (c > 1.0f) c = 1.0f;
+  if (c < -1.0f) c = -1.0f;
+  if (!(soemdsp_maths::dsp_fabs((double)c) > 1e-4)) return;
+  double width = 1.0 - soemdsp_maths::dsp_fabs((double)c);
+  if (width < 0.02) width = 0.02;
+  if (c > 0.0f) apply_flat_window(g, 0.0, width);
+  else apply_flat_window(g, 1.0 - width, 1.0);
+}
+
+// Pinch: amount is the flat fraction, split evenly on both sides.
+// 0.5 keeps the whole cycle in the middle half.
+inline void apply_cycle_pinch(GraphPayload& g, float amount) {
+  float p = (amount * 0.0f == 0.0f) ? amount : 0.0f;
+  if (p < 0.0f) p = 0.0f;
+  if (p > 1.0f) p = 1.0f;
+  if (!(p > 1e-4f)) return;
+  double width = 1.0 - (double)p;
+  if (width < 0.02) width = 0.02;
+  const double margin = (1.0 - width) * 0.5;
+  apply_flat_window(g, margin, margin + width);
 }
 
 inline void apply_sync(GraphPayload& g, float syncRatio, float formant, float shift, float mode, float cramp, float pinch) {
@@ -1409,8 +1465,10 @@ inline void apply_sync(GraphPayload& g, float syncRatio, float formant, float sh
     noise_recipe_clear(g.phaseNoise);
     noise_recipe_clear(g.ampNoise);
     noise_recipe_clear(g.panNoise);
-  } else if (doCramp || doPinch) {
-    apply_cycle_warp(g, doCramp ? 1 : 2, doCramp ? cramp : pinch);
+  } else if (doCramp) {
+    apply_cycle_warp(g, cramp);
+  } else if (doPinch) {
+    apply_cycle_pinch(g, pinch);
   }
 
   if (doFormant) {

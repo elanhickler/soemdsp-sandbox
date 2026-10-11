@@ -68,6 +68,10 @@ extern "C" int soemdsp_soft_clipper_block_output_ptr(int handle, int channel);
 extern "C" double soemdsp_soft_clipper_sample(
   double input, double drive, double threshold, double knee, double amplitude
 );
+extern "C" double soemdsp_soft_clipper_sample_aa(
+  int handle, int channel, double input, double drive, double threshold,
+  double knee, double amplitude, int mode
+);
 extern "C" double soemdsp_tube_saturation_sample(
   double input, double drive, double bias, double load, double gainCompensation,
   double mix, double amplitude
@@ -3329,6 +3333,7 @@ static void init_node_defaults(Node& n, int typeId) {
       : (typeId == kTypePll) ? 4.0 // Range octaves
       : (typeId == kTypeSoftpopOscillator) ? 0.0 // Stereo
       : (typeId == kTypeLogisticMap) ? 0.0 // Antialias Off
+      : (typeId == kTypeSoftClipper) ? 0.0 // AA Off
       : 1.0,
     // Freq Manager octave lives on mode and stays continuous (step is the snap).
     typeId != kTypePll && typeId != kTypeFm
@@ -5278,25 +5283,34 @@ static void process_soft_clipper(Circuit& g, Node& node, int frames) {
     const double threshold = control_audio(g, node.center, f);
     const double knee = control_audio(g, node.width, f);
     const double amplitude = control_audio(g, node.amplitude, f);
+    const double aaV = control_audio(g, node.mode, f);
+    int aa = (int)(aaV + (aaV >= 0.0 ? 0.5 : -0.5));
+    if (aa < 0) aa = 0;
+    if (aa > 2) aa = 2;
+    const int clipH = node.nativeHandle;
     double inM = g.mixMono[f];
     if (!hasLeftIn && !hasRightIn) {
       inM += g.mixLeft[f] + g.mixRight[f];
     }
-    const double yM = soemdsp_soft_clipper_sample(inM, drive, threshold, knee, amplitude);
+    const double yM = (clipH > 0)
+      ? soemdsp_soft_clipper_sample_aa(clipH, 0, inM, drive, threshold, knee, amplitude, aa)
+      : soemdsp_soft_clipper_sample(inM, drive, threshold, knee, amplitude);
     if (needMono) {
       node.buf[kPortMono][f] = yM;
       if (!hasLeftIn) node.buf[kPortLeft][f] = yM;
       if (!hasRightIn) node.buf[kPortRight][f] = yM;
     }
     if (hasLeftIn) {
-      node.buf[kPortLeft][f] = soemdsp_soft_clipper_sample(
-        g.mixLeft[f] + g.mixMono[f], drive, threshold, knee, amplitude
-      );
+      const double inL = g.mixLeft[f] + g.mixMono[f];
+      node.buf[kPortLeft][f] = (clipH > 0)
+        ? soemdsp_soft_clipper_sample_aa(clipH, 1, inL, drive, threshold, knee, amplitude, aa)
+        : soemdsp_soft_clipper_sample(inL, drive, threshold, knee, amplitude);
     }
     if (hasRightIn) {
-      node.buf[kPortRight][f] = soemdsp_soft_clipper_sample(
-        g.mixRight[f] + g.mixMono[f], drive, threshold, knee, amplitude
-      );
+      const double inR = g.mixRight[f] + g.mixMono[f];
+      node.buf[kPortRight][f] = (clipH > 0)
+        ? soemdsp_soft_clipper_sample_aa(clipH, 2, inR, drive, threshold, knee, amplitude, aa)
+        : soemdsp_soft_clipper_sample(inR, drive, threshold, knee, amplitude);
     }
   }
 }
@@ -6802,6 +6816,20 @@ static void process_additive_frequency_skew(Circuit& g, Node& node, int frames) 
 // frequency→sync ratio, shape→formant, width→shift (harmonics)
 static void process_additive_sync(Circuit& g, Node& node, int frames) {
   (void)frames;
+  // Keep the previous spectrum so this block can glide into the new one.
+  // The warp itself runs once per block; without the lerp the shape snaps.
+  soemdsp_yellow_graph::GraphPayload& local = node.yellowGraph;
+  const int prevH = local.harmonics < soemdsp_yellow_graph::kMaxHarmonics
+    ? local.harmonics
+    : soemdsp_yellow_graph::kMaxHarmonics;
+  float prevAmp[soemdsp_yellow_graph::kMaxHarmonics];
+  float prevPhase[soemdsp_yellow_graph::kMaxHarmonics];
+  float prevRatio[soemdsp_yellow_graph::kMaxHarmonics];
+  for (int i = 0; i < prevH; i += 1) {
+    prevAmp[i] = local.amplitude[i];
+    prevPhase[i] = local.phase[i];
+    prevRatio[i] = local.ratio[i];
+  }
   if (!yellow_graph_copy_in(g, node)) return;
   if (node.bypassed) return;
   soemdsp_yellow_graph::apply_sync(
@@ -6813,6 +6841,27 @@ static void process_additive_sync(Circuit& g, Node& node, int frames) {
     (float)control_effective(node.phaseParam),
     (float)control_effective(node.resonance)
   );
+  const int H = local.harmonics < soemdsp_yellow_graph::kMaxHarmonics
+    ? local.harmonics
+    : soemdsp_yellow_graph::kMaxHarmonics;
+  bool changed = false;
+  for (int i = 0; i < H; i += 1) {
+    const float fa = i < prevH ? prevAmp[i] : 0.0f;
+    const float fp = i < prevH ? prevPhase[i] : local.phase[i];
+    const float fr = i < prevH ? prevRatio[i] : local.ratio[i];
+    if (fa != local.amplitude[i] || fp != local.phase[i] || fr != local.ratio[i]) changed = true;
+    local.ampFrom[i] = fa;
+    local.ampTo[i] = local.amplitude[i];
+    local.phaseFrom[i] = fp;
+    local.phaseTo[i] = local.phase[i];
+    local.ratioFrom[i] = fr;
+    local.ratioTo[i] = local.ratio[i];
+  }
+  if (changed && prevH > 0) {
+    local.hasAmpLerp = 1;
+    local.hasPhaseLerp = 1;
+    local.hasRatioLerp = 1;
+  }
 }
 
 // quantizeFreq→mode, randomFreqAmount→width, seed→seed,

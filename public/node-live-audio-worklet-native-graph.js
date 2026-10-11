@@ -4472,6 +4472,7 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
       push("threshold", P.NATIVE_GRAPH_PARAM_CENTER, cont("threshold", 1));
       push("knee", P.NATIVE_GRAPH_PARAM_WIDTH, cont("knee", 0.5));
       push("amplitude", P.NATIVE_GRAPH_PARAM_AMPLITUDE, cont("amplitude", 1));
+      push("aa", P.NATIVE_GRAPH_PARAM_MODE, disc("aa", 0));
       continue;
     }
     if (type === "reverbEffect") {

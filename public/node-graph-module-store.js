@@ -501,7 +501,7 @@ const nodeGraphModuleStoreCatalog = Object.freeze({
   },
   additiveSync: {
     category: "additive",
-    description: "Sync, Cramp, or Pinch any Yellow Graph spectrum, then stretch or slide the amplitude envelope. Cramp is one-sided PWM. Pinch squeezes both flanks.",
+    description: "Sync, Cramp, or Pinch a Yellow Graph spectrum, then stretch or slide the amplitude envelope. Cramp parks the cycle on one side. Pinch parks it in the middle with flats on both sides.",
     label: "Sync",
     notes: ["additive", "yellow graph", "hard sync", "formant", "wavetable", "spectral"],
   },

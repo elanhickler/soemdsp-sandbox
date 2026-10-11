@@ -558,10 +558,11 @@ function additiveGraphSinc(x) {
 function additiveGraphAddSineSegment(re, im, panNum, panDen, H, A, omega, ph, pan, alpha, beta, t0, t1) {
   const dur = t1 - t0;
   if (!(dur > 1e-6) || !(Math.abs(A) > 1e-8) || !(Math.abs(omega) > 1e-8)) return;
-  const windowBins = 64;
+  const hold = Math.abs(beta) < 1e-6;
+  const windowBins = hold ? 16 : 12;
   const inst = Math.abs(omega * beta);
-  const nStart = Math.abs(beta) < 1e-6 ? 1 : Math.max(1, Math.floor(inst - windowBins));
-  const nEnd = Math.abs(beta) < 1e-6
+  const nStart = hold ? 1 : Math.max(1, Math.floor(inst - windowBins));
+  const nEnd = hold
     ? Math.min(H, windowBins)
     : Math.min(H, Math.ceil(inst + windowBins));
   const twoPi = Math.PI * 2;
@@ -630,67 +631,92 @@ function additiveGraphCommitProjectedBins(graph, re, im, panNum, panDen) {
 }
 
 /**
- * Cramp: pack source [0,0.5) into [0, duty) and [0.5,1) into [duty, 1).
- * duty 0.5 is identity. Pinch: squeeze both flanks into the two edges and
- * hold the midpoint across the middle (symmetric PWM).
+ * Play the whole cycle in [play0, play1). Outside that, hold the join sample.
  */
-function additiveGraphApplyCycleWarp(graph, kind, amount) {
+function additiveGraphApplyFlatWindow(graph, play0, play1) {
   if (!graph || !graph.ratio) return false;
   const H = graph.ratio.length | 0;
   if (H < 1) return false;
-  let duty = 0.5;
-  let edge = 0.5;
-  if (kind === 1) {
-    const c = Math.max(-1, Math.min(1, Number(amount) || 0));
-    if (!(Math.abs(c) > 1e-4)) return false;
-    duty = Math.max(0.02, Math.min(0.98, 0.5 + c * 0.48));
-  } else if (kind === 2) {
-    const p = Math.max(0, Math.min(1, Number(amount) || 0));
-    if (!(p > 1e-4)) return false;
-    edge = Math.max(0.02, 0.5 * (1 - p * 0.96));
-  } else {
-    return false;
-  }
+  let a0 = Math.max(0, Math.min(1, Number(play0) || 0));
+  let a1 = Math.max(0, Math.min(1, Number(play1) || 0));
+  if (!(a1 - a0 > 0.02)) return false;
+  const width = a1 - a0;
+  const beta = 1 / width;
+  const alpha = -a0 * beta;
   const re = new Float32Array(H);
   const im = new Float32Array(H);
   const panNum = new Float32Array(H);
   const panDen = new Float32Array(H);
   const twoPi = Math.PI * 2;
-  const segments = kind === 1
-    ? [
-      { t0: 0, t1: duty, alpha: 0, beta: 0.5 / duty },
-      { t0: duty, t1: 1, alpha: 0.5 - duty * (0.5 / (1 - duty)), beta: 0.5 / (1 - duty) },
-    ]
-    : [
-      { t0: 0, t1: edge, alpha: 0, beta: 0.5 / edge },
-      { t0: edge, t1: 1 - edge, alpha: 0.5, beta: 0 },
-      { t0: 1 - edge, t1: 1, alpha: 0.5 - (1 - edge) * (0.5 / edge), beta: 0.5 / edge },
-    ];
+  const flats = [[0, a0], [a1, 1]];
+  let flatDur = 1;
+  for (let s = 0; s < flats.length; s += 1) {
+    const d = flats[s][1] - flats[s][0];
+    if (d > 1e-4 && d < flatDur) flatDur = d;
+  }
+  let nHold = H;
+  if (flatDur < 1) nHold = Math.min(H, Math.ceil(24 / flatDur));
+  if (nHold < 1) nHold = 1;
+  const holdRe = new Float32Array(nHold);
+  const holdIm = new Float32Array(nHold);
+  for (let s = 0; s < flats.length; s += 1) {
+    const a = flats[s][0];
+    const b = flats[s][1];
+    if (!(b - a > 1e-6)) continue;
+    for (let n = 1; n <= nHold; n += 1) {
+      const f = -n;
+      const p1 = twoPi * f * b;
+      const p0 = twoPi * f * a;
+      const denom = twoPi * f;
+      holdRe[n - 1] += (Math.sin(p1) - Math.sin(p0)) / denom;
+      holdIm[n - 1] += -(Math.cos(p1) - Math.cos(p0)) / denom;
+    }
+  }
   for (let k = 0; k < H; k += 1) {
     const A = Number(graph.amplitude[k]) || 0;
     const omega = Math.max(0, Number(graph.ratio[k]) || 0);
     if (!(Math.abs(A) > 1e-8) || !(omega > 1e-8)) continue;
     const ph = (Number(graph.phase[k]) || 0) * twoPi;
     const pan = Number(graph.pan?.[k]) || 0;
-    for (let s = 0; s < segments.length; s += 1) {
-      const seg = segments[s];
-      additiveGraphAddSineSegment(
-        re, im, panNum, panDen, H, A, omega, ph, pan,
-        seg.alpha, seg.beta, seg.t0, seg.t1,
-      );
+    additiveGraphAddSineSegment(
+      re, im, panNum, panDen, H, A, omega, ph, pan,
+      alpha, beta, a0, a1,
+    );
+    const sHold = A * Math.sin(ph);
+    if (Math.abs(sHold) > 1e-10) {
+      for (let i = 0; i < nHold; i += 1) {
+        re[i] += sHold * holdRe[i];
+        im[i] += sHold * holdIm[i];
+      }
     }
   }
   additiveGraphCommitProjectedBins(graph, re, im, panNum, panDen);
   return true;
 }
 
+/** Cramp. |amount| is the flat fraction. + left, − right. */
+function additiveGraphApplyCycleWarp(graph, amount) {
+  const c = Math.max(-1, Math.min(1, Number(amount) || 0));
+  if (!(Math.abs(c) > 1e-4)) return false;
+  const width = Math.max(0.02, 1 - Math.abs(c));
+  if (c > 0) return additiveGraphApplyFlatWindow(graph, 0, width);
+  return additiveGraphApplyFlatWindow(graph, 1 - width, 1);
+}
+
+/** Pinch. amount is the flat fraction, split on both sides. 0.5 = middle half. */
+function additiveGraphApplyCyclePinch(graph, amount) {
+  const p = Math.max(0, Math.min(1, Number(amount) || 0));
+  if (!(p > 1e-4)) return false;
+  const width = Math.max(0.02, 1 - p);
+  const margin = (1 - width) * 0.5;
+  return additiveGraphApplyFlatWindow(graph, margin, margin + width);
+}
+
 /**
- * Sync / Cramp / Pinch, then formant envelope move.
+ * Sync, Cramp, or Pinch, then formant envelope move.
  * Mode 0 Sync: Ratio P = follower/leader. P=1 skips the resample.
- * Mode 1 Cramp: bipolar duty. 0 = unchanged. + packs the first half of the
- * cycle toward the start, − packs the second half toward the end (PWM on any spectrum).
- * Mode 2 Pinch: 0 = unchanged. >0 squeezes both flanks toward the edges and
- * holds the midpoint through the middle.
+ * Mode 1 Cramp: + parks the cycle on the left, − on the right.
+ * Mode 2 Pinch: flats on both sides, whole cycle in the middle.
  * Formant / Shift run in every mode. In-place.
  */
 function additiveGraphApplySync(graph, syncRatio = 1, formant = 1, shift = 0, mode = 0, cramp = 0, pinch = 0) {
@@ -773,8 +799,10 @@ function additiveGraphApplySync(graph, syncRatio = 1, formant = 1, shift = 0, mo
     graph.phaseNoise = null;
     graph.ampNoise = null;
     graph.panNoise = null;
-  } else if (doCramp || doPinch) {
-    additiveGraphApplyCycleWarp(graph, doCramp ? 1 : 2, doCramp ? cramp : pinch);
+  } else if (doCramp) {
+    additiveGraphApplyCycleWarp(graph, cramp);
+  } else if (doPinch) {
+    additiveGraphApplyCyclePinch(graph, pinch);
   }
 
   if (doFormant) {

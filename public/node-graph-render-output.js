@@ -83,13 +83,30 @@ function nodeGraphRaptEllipticRenderSample(input, states) {
 function nodeGraphRaptEllipticDecimateRenderedChannel(samples, factor, outputFrames) {
   const frames = Math.max(1, Math.floor(Number(outputFrames)));
   const out = new Float32Array(frames);
-  const states = nodeGraphCreateRaptEllipticRenderState();
-  let last = 0;
+  const stageA = nodeGraphCreateRaptEllipticRenderState();
+  // Factor 4 needs a second quarter-band stage at the 2x rate. One pass at
+  // the 4x rate cuts at the host sample rate and folds the next octave in.
+  const stageB = factor === 4 ? nodeGraphCreateRaptEllipticRenderState() : null;
   for (let frame = 0; frame < frames; frame += 1) {
+    if (stageB) {
+      let stage2 = 0;
+      for (let half = 0; half < 2; half += 1) {
+        let stage1 = 0;
+        for (let sub = 0; sub < 2; sub += 1) {
+          const sampleIndex = frame * 4 + half * 2 + sub;
+          const input = sampleIndex < samples.length ? samples[sampleIndex] : 0;
+          stage1 = nodeGraphRaptEllipticRenderSample(input, stageA);
+        }
+        stage2 = nodeGraphRaptEllipticRenderSample(stage1, stageB);
+      }
+      out[frame] = stage2;
+      continue;
+    }
+    let last = 0;
     for (let subframe = 0; subframe < factor; subframe += 1) {
       const sampleIndex = frame * factor + subframe;
       const input = sampleIndex < samples.length ? samples[sampleIndex] : 0;
-      last = nodeGraphRaptEllipticRenderSample(input, states);
+      last = nodeGraphRaptEllipticRenderSample(input, stageA);
     }
     out[frame] = last;
   }

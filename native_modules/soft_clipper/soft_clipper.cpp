@@ -1,7 +1,7 @@
 // soemdsp-native-module: soft_clipper
 // soemdsp-native-label: Soft Clipper
 // soemdsp-native-target: softClipper
-// soemdsp-native-kind: dynamics
+// soemdsp-native-kind: dynamics
 // soemdsp-native-lib: https://github.com/soundemote/soemdsp/blob/main/include/soemdsp/dynamics/SoftClipper.hpp
 //
 // Memoryless saturating soft-knee. Params (linear, no dB):
@@ -10,7 +10,7 @@
 //   Knee - 0...1 how gradual the thr->ceiling transition is
 //   Amplitude - 0...1 output scale after shaping
 // Shape uses soemdsp::math::soft_clip_coeffs / soft_clip_apply / tanh_approx.
-// No ADAA, dither, oversample, or Gain-dB paths.
+// AA switch: Off, ADAA1, ADAA2. ADAA state is per channel on the instance.
 
 #include <soemdsp/soemdsp.hpp>
 
@@ -39,6 +39,8 @@ struct State {
   double liveAmplitude;
   double blockIn[kChannels][kMaxBlockFrames];
   double blockOut[kChannels][kMaxBlockFrames];
+  double aaX1[kChannels];
+  double aaX2[kChannels];
 };
 
 static State gPool[kMaxInstances];
@@ -108,6 +110,136 @@ static double shape_stateless(double input, double drive, double threshold, doub
   return shape_one(tmp, input);
 }
 
+// Antiderivatives of the odd shaper s(v), v = drive * input, before Amplitude.
+// S is even and S(0) = 0. P is odd and P(0) = 0.
+static void shaper_integrals(double v, double thr, double knee, double span,
+                              double* sOut, double* SOut, double* POut) {
+  const double av = dsp_fabs(v);
+  const double sign = v < 0.0 ? -1.0 : 1.0;
+  double sPos, SPos, PPos;
+  const double w = span * knee;
+  if (av <= thr) {
+    sPos = av;
+    SPos = 0.5 * av * av;
+    PPos = av * av * av / 6.0;
+  } else if (knee <= kKneeEps || w < 1.0e-8) {
+    sPos = thr;
+    SPos = thr * av - 0.5 * thr * thr;
+    PPos = 0.5 * thr * av * av - 0.5 * thr * thr * av + thr * thr * thr / 6.0;
+  } else {
+    const double d = av - thr;
+    const double z = d / w;
+    const double h = soemdsp::math::hypot1(z);
+    const double G = 0.5 * (z * h + dsp_ln(z + h));
+    sPos = thr + span * (z / h);
+    SPos = thr * d + 0.5 * thr * thr + span * w * (h - 1.0);
+    PPos = 0.5 * thr * d * d
+         + 0.5 * thr * thr * av
+         + span * w * w * G
+         - span * w * d
+         - thr * thr * thr / 3.0;
+  }
+  *sOut = sign * sPos;
+  *SOut = SPos;
+  *POut = sign * PPos;
+}
+
+static void clip_levels(const State& s, double* drive, double* thr, double* knee, double* amp) {
+  double d = s.liveDrive;
+  if (!(d * 0.0 == 0.0) || d < 0.0) d = 0.0;
+  double t = s.liveThreshold;
+  if (!(t * 0.0 == 0.0) || t < 0.0) t = 0.0;
+  if (t > 1.0) t = 1.0;
+  double k = s.liveKnee;
+  if (!(k * 0.0 == 0.0) || k < 0.0) k = 0.0;
+  if (k > 1.0) k = 1.0;
+  double a = s.liveAmplitude;
+  if (!(a * 0.0 == 0.0) || a < 0.0) a = 0.0;
+  if (a > 1.0) a = 1.0;
+  *drive = d;
+  *thr = t;
+  *knee = k;
+  *amp = a;
+}
+
+// g, first antiderivative, second antiderivative, in the raw-input coordinate.
+static void clip_antideriv(State& s, double u, double* g, double* G1, double* G2) {
+  double drive, thr, knee, amp;
+  clip_levels(s, &drive, &thr, &knee, &amp);
+  const double headroom = 1.0 - thr;
+  const double span = headroom > 1.0e-6 ? headroom : 1.0e-6;
+  double sv, Sv, Pv;
+  shaper_integrals(drive * u, thr, knee, span, &sv, &Sv, &Pv);
+  *g = amp * sv;
+  if (drive < 1.0e-8) {
+    *G1 = 0.0;
+    *G2 = 0.0;
+    return;
+  }
+  *G1 = (amp / drive) * Sv;
+  *G2 = (amp / (drive * drive)) * Pv;
+}
+
+static const double kAaTol = 1.0e-5;
+
+static double adaa1_from(State& s, double x, double x1) {
+  double g, G1, G2, g1, G11, G21;
+  clip_antideriv(s, x, &g, &G1, &G2);
+  const double d = x - x1;
+  if (dsp_fabs(d) < kAaTol) return g;
+  clip_antideriv(s, x1, &g1, &G11, &G21);
+  return (G1 - G11) / d;
+}
+
+// (F2(a) - F2(b)) / (a - b). Midpoint F1 when a and b sit together.
+static double adaa2_span(State& s, double a, double b) {
+  const double d = a - b;
+  double ga, G1a, G2a, gb, G1b, G2b;
+  if (dsp_fabs(d) < kAaTol) {
+    clip_antideriv(s, 0.5 * (a + b), &ga, &G1a, &G2a);
+    return G1a;
+  }
+  clip_antideriv(s, a, &ga, &G1a, &G2a);
+  clip_antideriv(s, b, &gb, &G1b, &G2b);
+  return (G2a - G2b) / d;
+}
+
+// Current sample sits on the previous one. Compare it with the sample before that.
+static double adaa2_fallback(State& s, double x, double x2) {
+  const double xBar = 0.5 * (x + x2);
+  const double delta = xBar - x;
+  double g, G1, G2, gBar, G1Bar, G2Bar;
+  if (dsp_fabs(delta) < kAaTol) {
+    clip_antideriv(s, 0.5 * (xBar + x), &g, &G1, &G2);
+    return g;
+  }
+  clip_antideriv(s, x, &g, &G1, &G2);
+  clip_antideriv(s, xBar, &gBar, &G1Bar, &G2Bar);
+  return (2.0 / delta) * (G1Bar + (G2 - G2Bar) / delta);
+}
+
+static double adaa2_from(State& s, double x, double x1, double x2) {
+  const double d1 = x - x1;
+  if (dsp_fabs(d1) < kAaTol) return adaa2_fallback(s, x, x2);
+  const double dSpan = x - x2;
+  if (dsp_fabs(dSpan) < kAaTol) return adaa1_from(s, x, x1);
+  return (2.0 / dSpan) * (adaa2_span(s, x, x1) - adaa2_span(s, x1, x2));
+}
+
+static double shape_aa(State& s, int channel, double input, int mode) {
+  int ch = channel;
+  if (ch < 0) ch = 0;
+  if (ch > 2) ch = 2;
+  const double x = safe(input);
+  double y;
+  if (mode <= 0) y = shape_one(s, x);
+  else if (mode == 1) y = adaa1_from(s, x, s.aaX1[ch]);
+  else y = adaa2_from(s, x, s.aaX1[ch], s.aaX2[ch]);
+  s.aaX2[ch] = s.aaX1[ch];
+  s.aaX1[ch] = x;
+  return y;
+}
+
 static const char kMetadataJson[] =
   "{"
     "\"module\":\"soft_clipper\","
@@ -160,6 +292,28 @@ extern "C" double soemdsp_soft_clipper_sample(
   return shape_stateless(input, drive, threshold, knee, amplitude);
 }
 
+// mode: 0 Off, 1 ADAA1, 2 ADAA2. channel: 0 mono, 1 left, 2 right.
+extern "C" double soemdsp_soft_clipper_sample_aa(
+  int handle,
+  int channel,
+  double input,
+  double drive,
+  double threshold,
+  double knee,
+  double amplitude,
+  int mode
+) {
+  if (handle < 1 || handle > kMaxInstances) {
+    return shape_stateless(input, drive, threshold, knee, amplitude);
+  }
+  State& s = gPool[handle - 1];
+  s.liveDrive = drive;
+  s.liveThreshold = threshold;
+  s.liveKnee = knee;
+  s.liveAmplitude = amplitude;
+  return shape_aa(s, channel, input, mode);
+}
+
 extern "C" int soemdsp_soft_clipper_create() {
   for (int i = 0; i < kMaxInstances; i++) {
     if (!gPool[i].active) {
@@ -176,6 +330,10 @@ extern "C" int soemdsp_soft_clipper_create() {
       s.shiftX = 0.0;
       s.scaleY = 1.0;
       s.shiftY = 0.0;
+      for (int c = 0; c < kChannels; c++) {
+        s.aaX1[c] = 0.0;
+        s.aaX2[c] = 0.0;
+      }
       s.active = true;
       return i + 1;
     }
