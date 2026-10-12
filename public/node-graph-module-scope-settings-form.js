@@ -610,6 +610,9 @@ function nodeGraphDisplaySettingsColorRowMeta(key, formType = null, options = {}
   } else if (formType === "textBoxFace" && key === "backgroundColor") {
     aria = "Text Box background color";
     base = { ...base, defaultValue: "#020407" };
+  } else if (formType === "videoFeedbackFace" && key === "dot1Color") {
+    aria = "Spectrum color";
+    base = { ...base, caption: "Spectrum", defaultValue: "#8cd1ff" };
   } else if (formType === "rasterRgbFace" && key === "backgroundColor") {
     aria = "Scan Grid background color";
     base = { ...base, defaultValue: "#000000" };
@@ -1912,6 +1915,9 @@ function buildNodeGraphDisplaySettingsBodyHtml(formType, node = null) {
   }
   if (type === "imageBurnFace" && typeof buildNodeGraphImageBurnDisplaySettingsBodyHtml === "function") {
     return buildNodeGraphImageBurnDisplaySettingsBodyHtml();
+  }
+  if (type === "videoFeedbackFace" && typeof buildNodeGraphVideoFeedbackDisplaySettingsBodyHtml === "function") {
+    return buildNodeGraphVideoFeedbackDisplaySettingsBodyHtml();
   }
   // Matrix Waterfall / Matrix Display custom bodies.
   if (

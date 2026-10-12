@@ -103,6 +103,8 @@
 }
 
 .node-pitch-quantizer-key-white {
+  position: relative;
+  z-index: 0;
   display: flex;
   align-items: flex-end;
   justify-content: center;
@@ -169,6 +171,8 @@
 .node-pitch-quantizer-key:focus-visible {
   outline: 2px solid rgba(127, 199, 217, 0.85);
   outline-offset: -2px;
+}
+.node-pitch-quantizer-key-black:focus-visible {
   z-index: 3;
 }
 

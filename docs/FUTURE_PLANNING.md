@@ -120,7 +120,7 @@ LayoutB (ports beside the face) and InletOutletLayout (title + I/O, no face) are
 
 ## AcidSequencer
 
-**Status:** implemented locally, not tested by Argi, and not complete. Do **not** mark complete until Argi has tested a build.
+**Status:** shop-shipped. Native type 199; efficient allowlist `acidSequencer`. Not under construction.
 
 Primary note:
 
@@ -139,7 +139,7 @@ docs/ACID_SEQUENCER_PLAN.md
 - **Left/right** rotate all 32 stored steps (wrap), not a viewport.
 - Base grid **C2-C3** (MIDI 36-48). Outs **Gate, Trigger, pitch, f, inc**. No Clock/Reset jacks. One step = one 16th, transport start/stop. Accent = 1 ms trigger when Gate is on or tie. Slide = linear glide to the next step. Gate off holds pitch and kills Accent.
 
-**Still open:** Argi has not tested the build. Do not mark this item complete.
+**Still open:** none for shop parking. Face/transport polish if something fails in use.
 
 ## VU meter
 

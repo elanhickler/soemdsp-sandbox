@@ -37,6 +37,13 @@ $siteRootResolved = Resolve-Path -LiteralPath $SiteRoot -ErrorAction SilentlyCon
 if (!$siteRootResolved) {
   throw "soundemote-io not found at $SiteRoot -- pass -SiteRoot <path> if it lives somewhere else."
 }
+$siteGit = Join-Path $siteRootResolved.Path ".git"
+if (Test-Path -LiteralPath $siteGit) {
+  $originUrl = (git -C $siteRootResolved.Path remote get-url origin 2>$null)
+  if ($originUrl -notmatch "elanhickler/soundemote-io") {
+    throw "soundemote-io origin is '$originUrl' -- expected https://github.com/elanhickler/soundemote-io.git"
+  }
+}
 $dst = Join-Path $siteRootResolved.Path "public\soemdsp-sandbox"
 
 # Wipe the entire vendored copy and recreate it empty before syncing anything
@@ -302,4 +309,5 @@ $manifest = @{
 Write-Host "  RELEASE_MANIFEST.json (wasm sha256=$sha)"
 
 Write-Host "Release sync OK (BUILD_MODE=release, START gate present, personal prefs omitted)."
-Write-Host "Review with: git -C `"$($siteRootResolved.Path)`" status, then commit + push from soundemote-io."
+Write-Host "Site repo: $($siteRootResolved.Path)  origin=https://github.com/elanhickler/soundemote-io.git"
+Write-Host "Review with: git -C `"$($siteRootResolved.Path)`" status, then commit + push origin main."

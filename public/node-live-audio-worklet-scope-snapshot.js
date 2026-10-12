@@ -157,6 +157,16 @@ NodeLiveAudioProcessor.prototype.postModuleScopeSnapshot = function postModuleSc
     }
     if (this.ensemblePublish) {
       for (const [nodeId, snap] of this.ensemblePublish) {
+        if (Array.isArray(snap?.phases)) {
+          dataPorts.push([nodeId, "Phases", snap.phases]);
+          if (Array.isArray(snap?.amplitudes) && snap.amplitudes.length) {
+            dataPorts.push([nodeId, "Amplitudes", snap.amplitudes]);
+          }
+          if (Array.isArray(snap?.pans) && snap.pans.length) {
+            dataPorts.push([nodeId, "Pans", snap.pans]);
+          }
+          continue;
+        }
         if (Array.isArray(snap?.delays)) {
           dataPorts.push([nodeId, "Delays", snap.delays]);
         }

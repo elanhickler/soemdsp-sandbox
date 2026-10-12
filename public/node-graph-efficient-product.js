@@ -79,6 +79,7 @@ const NODE_GRAPH_EFFICIENT_PRODUCT_AUDIO_TYPES = Object.freeze([
   "samplePlayer",
   "wavetable2d",
   "sequencer",
+  "acidSequencer",
   "transport",
   "hostBpm",
   "aliasSine",
@@ -287,6 +288,8 @@ const NODE_GRAPH_EFFICIENT_PRODUCT_OBSERVER_TYPES = Object.freeze([
   "vectorDot",
   "lcdDot",
   "vectorRgb",
+  "videoDelay",
+  "videoFeedback",
   "videoscope",
   "visualOscilloscope",
 ]);

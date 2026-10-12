@@ -4,7 +4,7 @@
 // soemdsp-native-kind: effect
 //
 // Chorus topology (multi-voice interpolating delay, wet HP→LP, Mix) with
-// SoEm Reverb delay modulators: Random Walk or FBM. No vibrato generator.
+// FBM delay-time modulation. No vibrato generator.
 
 #include <soemdsp/soemdsp.hpp>
 
@@ -16,14 +16,9 @@ static const int kMaxInstances = 16;
 static const int kMaxVoices = 16;
 static const int kMaxDelaySamples = 16384;
 
-enum ModStyle { ModRandomWalk = 0, ModFbm = 1 };
-
 struct Voice {
   float buffer[kMaxDelaySamples];
   int writeIndex;
-  unsigned int walkRng;
-  double walkOut;
-  double walkLpf;
   unsigned int fbmSeed;
   double fbmTime;
 };
@@ -40,6 +35,7 @@ struct EnsembleState {
   int lastN;
   double lastDelay01[kMaxVoices];
   double lastPan[kMaxVoices];
+  double lastAmp;
 };
 
 static EnsembleState gPool[kMaxInstances];
@@ -60,41 +56,11 @@ static double onepole_coeff(double hz, double sr) {
   return one_pole_coeff_hz(f, sr);
 }
 
-static double nextWalkNoise(Voice& v) {
-  v.walkRng = v.walkRng * 1664525u + 1013904223u;
-  return (double)v.walkRng / 4294967295.0 * 2.0 - 1.0;
-}
-
-static double runRandomWalk(Voice& v, double freqHz, double jitterHz, double sr) {
-  const double rate = maxd(1.0, sr);
-  const double noise = nextWalkNoise(v);
-  const double increment = clamp(freqHz / rate, 0.0, 1.0);
-  const double jitterInc = clamp(jitterHz / rate, 0.0, 1.0);
-  const double stepSize = clamp(increment + rational_curve01(jitterInc, 0.99), 0.0, 1.0);
-  const double averageIncrement = (jitterInc + increment) * 0.5;
-  const double whiteNoiseMix = averageIncrement >= 0.9
-    ? rational_curve01((averageIncrement - 0.9) / 0.1, -0.7)
-    : 0.0;
-  const double randomMix = 1.0 - whiteNoiseMix;
-  const double step = noise > 0.0 ? stepSize : -stepSize;
-  v.walkOut = clamp11(v.walkOut + step);
-  const double mixed = v.walkOut * randomMix + noise * whiteNoiseMix;
-  const double w = mind(kTwoPi / rate, kTauOver44100) * maxd(0.0, freqHz);
-  const double a1 = dsp_exp(-w);
-  v.walkLpf = (1.0 - a1) * mixed + a1 * v.walkLpf;
-  return v.walkLpf;
-}
-
 // Fixed Seed part ids (append only; never renumber). Voice n uses index n.
-static const unsigned int kSeedWalk = 1u;  // Random Walk LCG
 static const unsigned int kSeedFbm = 2u;   // FBM noise seed
 
 // seedU: Seed param as uint32; 0 is a real, distinct seed.
 static void seed_voice(Voice& v, unsigned int seedU, int voice) {
-  v.walkRng = soemdsp::math::seed_to_rng_state(
-    soemdsp::math::seed_mix(seedU, kSeedWalk, (unsigned int)voice));
-  v.walkOut = 0.0;
-  v.walkLpf = 0.0;
   v.fbmSeed = soemdsp::math::seed_mix(seedU, kSeedFbm, (unsigned int)voice);
   v.fbmTime = 0.0;
 }
@@ -130,6 +96,7 @@ extern "C" int soemdsp_ensemble_create() {
       s.lastSeed = -1.0;
       s.seedU = 0u;
       s.lastN = 0;
+      s.lastAmp = 0.0;
       for (int v = 0; v < kMaxVoices; v += 1) {
         clear_voice(s.voices[v], 0u, v);
         s.lastDelay01[v] = 0.5;
@@ -154,6 +121,30 @@ extern "C" void soemdsp_ensemble_reset(int handle) {
   for (int v = 0; v < kMaxVoices; v += 1) {
     seed_voice(s.voices[v], s.seedU, v);
   }
+}
+
+extern "C" void soemdsp_ensemble_clear_delays(int handle) {
+  if (handle < 1 || handle > kMaxInstances) return;
+  EnsembleState& s = gPool[handle - 1];
+  if (!s.active) return;
+  for (int v = 0; v < kMaxVoices; v += 1) {
+    for (int i = 0; i < kMaxDelaySamples; i += 1) s.voices[v].buffer[i] = 0.0f;
+    s.voices[v].writeIndex = 0;
+  }
+}
+
+extern "C" void soemdsp_ensemble_amp_edge(int handle, double amp) {
+  if (handle < 1 || handle > kMaxInstances) return;
+  EnsembleState& s = gPool[handle - 1];
+  if (!s.active) return;
+  const double a = safe(amp);
+  if (a > 1.0e-4 && s.lastAmp <= 1.0e-4) {
+    for (int v = 0; v < kMaxVoices; v += 1) {
+      for (int i = 0; i < kMaxDelaySamples; i += 1) s.voices[v].buffer[i] = 0.0f;
+      s.voices[v].writeIndex = 0;
+    }
+  }
+  s.lastAmp = a;
 }
 
 extern "C" void soemdsp_ensemble_sample(
@@ -204,7 +195,7 @@ extern "C" void soemdsp_ensemble_sample(
   const double xL = safe(inL);
   const double xR = safe(inR);
   const double xM = 0.5 * (xL + xR);
-  const int style = (int)(safe(mode) + 0.5) > 0 ? ModFbm : ModRandomWalk;
+  (void)mode;
   const double hpC = onepole_coeff(hpHz, sr);
   const double lpC = onepole_coeff(lpHz, sr);
   const double mx = safe(mix);
@@ -212,24 +203,14 @@ extern "C" void soemdsp_ensemble_sample(
   const double dep = safe(depthMs);
   const double spr = clamp(safe(spread), 0.0, 1.0);
   const double spd = maxd(0.0, safe(speedHz));
-  const double jitter = spd * 0.25;
 
   double wetL = 0.0;
   double wetR = 0.0;
   for (int v = 0; v < n; v += 1) {
     Voice& voice = st.voices[v];
     const double voiceOff = (n <= 1) ? 0.0 : ((double)v / (double)n);
-    double y = 0.0;
-    if (style == ModFbm) {
-      voice.fbmTime += spd / sr;
-      // Full +/-1 pre-depth (same as tooltip: Walk/FBM is +/-1 x Depth).
-      y = fbm1d(voice.fbmTime + voiceOff * 8.0, 4, 0.5, 1.0, voice.fbmSeed) * 2.0 - 1.0;
-    } else {
-      // At default Speed, walk LPF peak is ~0.3 over a few seconds while FBM
-      // already reaches ~0.75. x2 aligns RW face/audio throw with FBM without
-      // attenuating FBM; clamp keeps Depth mapping inside +/-1.
-      y = clamp11(2.0 * runRandomWalk(voice, spd * (1.0 + voiceOff), jitter, sr));
-    }
+    voice.fbmTime += spd / sr;
+    const double y = fbm1d(voice.fbmTime + voiceOff * 8.0, 4, 0.5, 1.0, voice.fbmSeed) * 2.0 - 1.0;
     // Audio applies Depth to the bipolar modulator; the cloud publishes the
     // pre-Depth signal so face width is invariant to Depth (even at zero).
     const double visualY = clamp11(y);
@@ -296,7 +277,7 @@ extern "C" double soemdsp_ensemble_voice_pan(int handle, int index) {
 }
 
 extern "C" int soemdsp_ensemble_version() {
-  return 12;
+  return 19;
 }
 
 extern "C" const char* soemdsp_ensemble_metadata_json() {

@@ -898,6 +898,7 @@ extern "C" void soemdsp_chorus_reset(int handle);
 extern "C" int soemdsp_ensemble_create();
 extern "C" void soemdsp_ensemble_destroy(int handle);
 extern "C" void soemdsp_ensemble_reset(int handle);
+extern "C" void soemdsp_ensemble_amp_edge(int handle, double amp);
 extern "C" void soemdsp_ensemble_sample(
   int handle,
   double inL,
@@ -2043,6 +2044,7 @@ static const int kTypePhaser = 178; // Parallel ZDF bandpass bank (1–8 × 12�
 static const int kTypeFlanger = 179; // Short interpolating delay comb + LFO
 static const int kTypeChorus = 188; // Multi-voice delay + shared vibrato + filtered FB
 static const int kTypeEnsemble = 189; // Chorus topology + SoEm Reverb RW/FBM delay mod
+static const int kTypeCrossfade = 196; // Stereo pair crossfade (2/3/4 via stages)
 
 static const int kPortMono = 0;
 static const int kPortLeft = 1;
@@ -3357,6 +3359,7 @@ static void init_node_defaults(Node& n, int typeId) {
       : (typeId == kTypeCookbookFilter) ? 2.0 // RS-MET default stages
       : (typeId == kTypePhaser) ? 4.0 // bands
       : (typeId == kTypeChorus || typeId == kTypeEnsemble) ? 7.0 // voices
+      : (typeId == kTypeCrossfade) ? 1.0 // last pair index (crossfade2)
       : (typeId == kTypeBandpass || typeId == kTypeAllpass
           || typeId == kTypeLowpass || typeId == kTypeHighpass) ? 0.0 // slope 12 dB
       : (typeId == kTypeArp) ? 8.0 // steps
@@ -3415,6 +3418,7 @@ static void init_node_defaults(Node& n, int typeId) {
       : (typeId == kTypePiSpigotNoise) ? 0.0 // start
       : (typeId == kTypePulseExplosion) ? 0.5 // centerTime
       : (typeId == kTypeHarmonicSeries) ? 0.0 // offset
+      : (typeId == kTypePitchQuantizer) ? 0.0 // semitoneOffset
       : (typeId == kTypeAdditiveBlaster) ? 0.44 // bias (PoC)
       : (typeId == kTypeAdditiveGenerator || typeId == kTypeAdditiveOut) ? 1.0 // slope height
       : (typeId == kTypeStepGraph) ? 0.0 // curveOffset
@@ -3436,6 +3440,7 @@ static void init_node_defaults(Node& n, int typeId) {
     || typeId == kTypeRobinSupersaw || typeId == kTypeHyperpluck
     || typeId == kTypeEllipsoid || typeId == kTypeEllipsoidOsc
     || typeId == kTypeAcidSequencer // semitone offset
+    || typeId == kTypePitchQuantizer // semitoneOffset
   );
   // Soft-clipper knee default 0.5; noise = deviation; supersaw = detune;
   // triggerCounter = increment; archimedes = dither bits;
@@ -3511,7 +3516,8 @@ static void init_node_defaults(Node& n, int typeId) {
   );
   init_control(
     n.mix,
-    (typeId == kTypeSampleHold) ? 0.0 // Smoothing (clock-period factor; <=0 instant)
+    (typeId == kTypeAcidSequencer) ? 1.0 // gateLength (1 = full step)
+      : (typeId == kTypeSampleHold) ? 0.0 // Smoothing (clock-period factor; <=0 instant)
       : (typeId == kTypeXyPad) ? 0.5 // pad Y unit
       : (typeId == kTypeTubeSaturation) ? 1.0 // Mix
       : (typeId == kTypeVcvrackSuperloveFilter) ? 0.0 // noise
@@ -8423,15 +8429,6 @@ static void process_chorus(Circuit& g, Node& node, int frames) {
   const double sr = g.sampleRate < 1.0f ? 44100.0 : (double)g.sampleRate;
   bool hasLeftIn = false, hasRightIn = false, hasMonoIn = false, monoOutWired = false;
   probe_mlr_cables(g, node, &hasMonoIn, &hasLeftIn, &hasRightIn, &monoOutWired);
-  bool leftOutWired = false, rightOutWired = false;
-  for (int ci = 0; ci < g.connCount; ci++) {
-    if (!g.conns[ci].used) continue;
-    if (g.conns[ci].srcHash != node.idHash) continue;
-    const int sp = clamp_src_port(g.conns[ci].srcPort);
-    if (sp == kPortLeft) leftOutWired = true;
-    else if (sp == kPortRight) rightOutWired = true;
-  }
-  const bool stereoOut = leftOutWired || rightOutWired;
   const bool liveReset = mix_live_port(g, node, kPortReset, frames, g.mixReset);
   if (!liveReset) node.lastReset = 0.0;
   for (int f = 0; f < frames; f++) {
@@ -8474,11 +8471,8 @@ static void process_chorus(Circuit& g, Node& node, int frames) {
     const double amp = control_audio(g, node.amplitude, f);
     outL *= amp;
     outR *= amp;
-    if (leftOutWired) node.buf[kPortLeft][f] = outL;
-    if (rightOutWired) node.buf[kPortRight][f] = outR;
-    if (monoOutWired || !stereoOut) {
-      node.buf[kPortMono][f] = 0.5 * (outL + outR);
-    }
+    node.buf[kPortLeft][f] = outL;
+    node.buf[kPortRight][f] = outR;
   }
 }
 
@@ -8488,15 +8482,6 @@ static void process_ensemble(Circuit& g, Node& node, int frames) {
   const double sr = g.sampleRate < 1.0f ? 44100.0 : (double)g.sampleRate;
   bool hasLeftIn = false, hasRightIn = false, hasMonoIn = false, monoOutWired = false;
   probe_mlr_cables(g, node, &hasMonoIn, &hasLeftIn, &hasRightIn, &monoOutWired);
-  bool leftOutWired = false, rightOutWired = false;
-  for (int ci = 0; ci < g.connCount; ci++) {
-    if (!g.conns[ci].used) continue;
-    if (g.conns[ci].srcHash != node.idHash) continue;
-    const int sp = clamp_src_port(g.conns[ci].srcPort);
-    if (sp == kPortLeft) leftOutWired = true;
-    else if (sp == kPortRight) rightOutWired = true;
-  }
-  const bool stereoOut = leftOutWired || rightOutWired;
   const bool liveReset = mix_live_port(g, node, kPortReset, frames, g.mixReset);
   if (!liveReset) node.lastReset = 0.0;
   for (int f = 0; f < frames; f++) {
@@ -8508,10 +8493,14 @@ static void process_ensemble(Circuit& g, Node& node, int frames) {
       }
       node.lastReset = rv;
     }
+    const double amp = control_audio(g, node.amplitude, f);
+    soemdsp_ensemble_amp_edge(node.nativeHandle, amp);
     const double inM = g.mixMono[f]
       + ((!hasLeftIn && !hasRightIn) ? (g.mixLeft[f] + g.mixRight[f]) : 0.0);
-    const double inL = hasLeftIn ? (g.mixLeft[f] + g.mixMono[f]) : inM;
-    const double inR = hasRightIn ? (g.mixRight[f] + g.mixMono[f]) : inM;
+    double inL = hasLeftIn ? (g.mixLeft[f] + g.mixMono[f]) : inM;
+    double inR = hasRightIn ? (g.mixRight[f] + g.mixMono[f]) : inM;
+    inL *= amp;
+    inR *= amp;
     double outL = 0.0;
     double outR = 0.0;
     soemdsp_ensemble_sample(
@@ -8532,14 +8521,10 @@ static void process_ensemble(Circuit& g, Node& node, int frames) {
       &outL,
       &outR
     );
-    const double amp = control_audio(g, node.amplitude, f);
     outL *= amp;
     outR *= amp;
-    if (leftOutWired) node.buf[kPortLeft][f] = outL;
-    if (rightOutWired) node.buf[kPortRight][f] = outR;
-    if (monoOutWired || !stereoOut) {
-      node.buf[kPortMono][f] = 0.5 * (outL + outR);
-    }
+    node.buf[kPortLeft][f] = outL;
+    node.buf[kPortRight][f] = outR;
   }
 }
 
@@ -10353,25 +10338,29 @@ static void process_chord_sequencer(Circuit& g, Node& node, int frames) {
 }
 
 // Pitch quantizer: PitchCV + optional Scale on Mono. seed=scaleMask (12-bit).
+// Octave Offset + Semitone Offset transpose pitch and ƒ after quantize.
 static void process_pitch_quantizer(Circuit& g, Node& node, int frames) {
   if (node.nativeHandle <= 0) return;
   const bool hasPitch = mix_live_port(g, node, kPortPitchCv, frames, g.mixPitch);
   const bool hasScale = mix_live_port(g, node, kPortMono, frames, g.mixMono);
-  const bool takeSamplePath = node_has_active_chase(node);
   for (int f = 0; f < frames; f++) {
     control_frame(g, node, f);
     const double pitch = hasPitch ? g.mixPitch[f] : 0.0;
-    // Keyboard mask lives in seed (scaleMask). Scale in overrides while patched.
-    // Unplug Scale → seed again. Jack 0 (silent cable) does not replace seed.
     const int keyboardMask = (int)(control_effective(node.seed) + 0.5) & 0xFFF;
     int mask = keyboardMask;
     if (hasScale) {
       mask = (int)(g.mixMono[f] + (g.mixMono[f] >= 0.0 ? 0.5 : -0.5)) & 0xFFF;
     }
-    const double out = soemdsp_pitch_quantizer_sample(node.nativeHandle, pitch, mask);
-    node.buf[kPortMono][f] = out;
+    const double q = soemdsp_pitch_quantizer_sample(node.nativeHandle, pitch, mask);
+    const double octOff = control_effective(node.offset);
+    const double semi = control_effective(node.center);
+    double midi = q + 12.0 * octOff + semi;
+    if (!(midi == midi)) midi = q;
+    const double hz = soemdsp::math::midi_to_hz(midi);
+    node.buf[kPortMono][f] = midi;
     node.buf[kPortLeft][f] = (double)mask;
-    node.buf[kPortRight][f] = out;
+    node.buf[kPortRight][f] = midi;
+    node.buf[kPortSaw][f] = (hz == hz) ? hz : 0.0;
   }
 }
 
@@ -12178,6 +12167,38 @@ static void process_mix_stereo(Circuit& g, Node& node, int frames) {
   }
 }
 
+// Crossfade2/3/4: address 0…lastIndex across stereo pairs. stages = lastIndex.
+static void process_crossfade(Circuit& g, Node& node, int frames) {
+  double l[4][kMaxBlockFrames];
+  double r[4][kMaxBlockFrames];
+  mix_live_port(g, node, kPortLeft, frames, l[0]);
+  mix_live_port(g, node, kPortRight, frames, r[0]);
+  mix_live_port(g, node, kPortSaw, frames, l[1]);
+  mix_live_port(g, node, kPortRamp, frames, r[1]);
+  mix_live_port(g, node, kPortSquare, frames, l[2]);
+  mix_live_port(g, node, kPortTri, frames, r[2]);
+  mix_live_port(g, node, kPortSine, frames, l[3]);
+  mix_live_port(g, node, kPortMixStereoR4, frames, r[3]);
+  for (int f = 0; f < frames; f++) {
+    control_frame(g, node, f);
+    int lastIndex = (int)(control_effective(node.stages) + (control_effective(node.stages) >= 0.0 ? 0.5 : -0.5));
+    if (lastIndex < 1) lastIndex = 1;
+    if (lastIndex > 3) lastIndex = 3;
+    double addr = control_audio(g, node.shape, f);
+    if (!(addr == addr)) addr = 0.0;
+    if (addr < 0.0) addr = 0.0;
+    if (addr > (double)lastIndex) addr = (double)lastIndex;
+    int i0 = (int)addr;
+    if (i0 < 0) i0 = 0;
+    if (i0 > lastIndex) i0 = lastIndex;
+    int i1 = i0 + 1;
+    if (i1 > lastIndex) i1 = lastIndex;
+    const double frac = addr - (double)i0;
+    node.buf[kPortLeft][f] = l[i0][f] * (1.0 - frac) + l[i1][f] * frac;
+    node.buf[kPortRight][f] = r[i0][f] * (1.0 - frac) + r[i1][f] * frac;
+  }
+}
+
 // Sample & Hold: Ext (Mono) + independent Left/Right noise lanes.
 // Ext In->Ext Out (hasIn always; unwired Ext holds 0). L/R = internal noise.
 // Clock on Trigger bus; Sample Freq shared; phaseParam offsets Right only.
@@ -13126,7 +13147,12 @@ static void process_acid_sequencer(Circuit& g, Node& node, int frames) {
     int len = (int)(control_audio(g, node.stages, f) + 0.5);
     len = acid_clamp_int(len, 1, kAcidSteps);
     double gateH = acid_clamp_double(control_audio(g, node.amplitude, f), 0.0, 1.0);
-    double accentH = acid_clamp_double(control_audio(g, node.level, f), 0.0, 1.0);
+    double gateLenRaw = control_audio(g, node.mix, f);
+    if (!(gateLenRaw == gateLenRaw) || gateLenRaw < 0.0) gateLenRaw = 0.0;
+    double gateLen = (gateLenRaw > 1.0) ? gateLenRaw / 100.0 : gateLenRaw;
+    gateLen = acid_clamp_double(gateLen, 0.0, 1.0);
+    double accentLow = acid_clamp_double(control_audio(g, node.width, f), 0.0, 1.0);
+    double accentHigh = acid_clamp_double(control_audio(g, node.level, f), 0.0, 1.0);
     double slideSec = control_audio(g, node.timeNumerator, f);
     if (!(slideSec == slideSec) || slideSec < 0.0) slideSec = 0.0;
     const double semiRaw = control_audio(g, node.center, f);
@@ -13145,42 +13171,37 @@ static void process_acid_sequencer(Circuit& g, Node& node, int frames) {
       const unsigned int pack = node.acidPack[idx];
       const int gateMode = acid_clamp_int((int)((pack >> 4) & 3u), 0, 2);
       const bool sounding = gateMode == 1 || gateMode == 2;
-      const bool accent = ((pack >> 6) & 1u) != 0;
       const bool slide = ((pack >> 7) & 1u) != 0;
-      if (!sounding) {
-        node.acidTrigLeft = 0;
-        node.acidSlideLeft = 0;
-      } else {
+      const double selfMidi = acid_step_midi(node, idx);
+      if (sounding && slide) {
         const int next = (idx + 1) % len;
-        const double selfMidi = acid_step_midi(node, idx);
         const double nextMidi = acid_step_midi(node, next);
-        if (slide) {
-          node.acidSlideFrom = node.acidHasPitch ? node.acidPitch : selfMidi;
-          node.acidSlideTo = nextMidi;
-          if (!(slideSec > 0.0)) {
-            node.acidPitch = nextMidi;
-            node.acidSlideLeft = 0;
-            node.acidSlideTotal = 0;
-          } else {
-            int total = (int)(slideSec * sr + 0.5);
-            if (total < 1) total = 1;
-            node.acidSlideTotal = total;
-            node.acidSlideLeft = total;
-            node.acidPitch = node.acidSlideFrom;
-          }
-        } else {
-          node.acidPitch = selfMidi;
+        node.acidSlideFrom = node.acidHasPitch ? node.acidPitch : selfMidi;
+        node.acidSlideTo = nextMidi;
+        if (!(slideSec > 0.0)) {
+          node.acidPitch = nextMidi;
           node.acidSlideLeft = 0;
           node.acidSlideTotal = 0;
-        }
-        node.acidHasPitch = 1;
-        if (accent) {
-          int pulse = (int)(kAcidAccentSeconds * sr + 0.5);
-          if (pulse < 1) pulse = 1;
-          node.acidTrigLeft = pulse;
         } else {
-          node.acidTrigLeft = 0;
+          int total = (int)(slideSec * sr + 0.5);
+          if (total < 1) total = 1;
+          node.acidSlideTotal = total;
+          node.acidSlideLeft = total;
+          node.acidPitch = node.acidSlideFrom;
         }
+      } else {
+        node.acidPitch = selfMidi;
+        node.acidSlideLeft = 0;
+        node.acidSlideTotal = 0;
+      }
+      node.acidHasPitch = 1;
+      const bool retrigger = sounding && (gateMode == 1 || prev < 0);
+      if (retrigger) {
+        int pulse = (int)(kAcidAccentSeconds * sr + 0.5);
+        if (pulse < 1) pulse = 1;
+        node.acidTrigLeft = pulse;
+      } else {
+        node.acidTrigLeft = 0;
       }
       prev = idx;
     }
@@ -13198,21 +13219,39 @@ static void process_acid_sequencer(Circuit& g, Node& node, int frames) {
     const unsigned int nowPack = node.acidPack[idx];
     const int nowGate = acid_clamp_int((int)((nowPack >> 4) & 3u), 0, 2);
     const bool nowSounding = nowGate == 1 || nowGate == 2;
-    const double gate = nowSounding ? gateH : 0.0;
+    const bool nowAccent = ((nowPack >> 6) & 1u) != 0;
+    double stepFrac = pos / stepSamples - (double)stepAbs;
+    if (stepFrac < 0.0) stepFrac = 0.0;
+    if (stepFrac > 1.0) stepFrac = 1.0;
+    bool gateHigh = false;
+    if (nowGate == 2) {
+      gateHigh = true;
+    } else if (nowGate == 1) {
+      if (gateLen <= 0.0) gateHigh = (stepFrac * stepSamples) < 1.0;
+      else gateHigh = stepFrac < gateLen;
+    }
+    const double gate = gateHigh ? gateH : 0.0;
     double trig = 0.0;
     if (node.acidTrigLeft > 0 && nowSounding) {
-      trig = accentH;
+      trig = gateH;
       node.acidTrigLeft -= 1;
     } else if (!nowSounding) {
       node.acidTrigLeft = 0;
     }
     const double midi = node.acidPitch + (double)semi;
     const double hz = soemdsp::math::midi_to_hz(midi);
+    double cv = 0.0;
+    if (gateHigh) {
+      cv = nowAccent ? accentHigh : accentLow;
+      if (cv < 0.0) cv = 0.0;
+      if (cv > 1.0) cv = 1.0;
+    }
     node.buf[kPortMono][f] = gate;
     node.buf[kPortLeft][f] = trig;
     node.buf[kPortRight][f] = midi;
     node.buf[kPortSaw][f] = hz;
-    node.buf[kPortRamp][f] = hz;
+    node.buf[kPortRamp][f] = 0.0;
+    node.buf[kPortSquare][f] = cv;
     node.buf[kPortPhase01][f] = (double)idx;
   }
   node.acidLastStep = prev;
@@ -14384,6 +14423,10 @@ static void dispatch_process_node(Circuit& g, Node& node, int frames) {
     }
     if (node.typeId == kTypeMixStereo) {
       process_mix_stereo(g, node, frames);
+      return;
+    }
+    if (node.typeId == kTypeCrossfade) {
+      process_crossfade(g, node, frames);
       return;
     }
     if (node.typeId == kTypeLadderFilter) {

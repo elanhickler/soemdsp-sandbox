@@ -208,7 +208,8 @@ function noteMaskScaleOutFromNode(node, bits) {
   let oct = Math.round(Number(params.octaves));
   if (!Number.isFinite(oct) || oct < 1) oct = 3;
   if (oct > 8) oct = 8;
-  let off = Math.round(Number(params.octaveOffset));
+  let off = Math.round(Number(params.octave));
+  if (!Number.isFinite(off)) off = Math.round(Number(params.octaveOffset));
   if (!Number.isFinite(off)) off = 0;
   if (off < -4) off = -4;
   if (off > 4) off = 4;

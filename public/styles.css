@@ -6650,6 +6650,40 @@ body.keyboard-debug-hidden .node-midi-keyboard-signal-bar {
   font: inherit;
 }
 
+/* Image Ghost / keypad asset row: keep Image + Load/Save/Clear readable.
+   Inspector grid buttons use padding:0 and flex min-width:0, which clipped
+   "Image" to "IM" and "no image" to "n...". */
+.node-image-asset-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.node-image-asset-row > span:first-child {
+  flex: 0 0 auto;
+  min-width: min-content;
+  overflow: visible;
+  white-space: nowrap;
+}
+
+.node-trace-display-settings-popover .metadata-popover-grid .node-image-asset-row > button,
+.node-image-asset-row > button {
+  flex: 0 0 auto;
+  min-width: min-content;
+  padding: 3px 8px;
+}
+
+.node-image-asset-row small {
+  flex: 1 1 6rem;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  opacity: 0.72;
+}
+
 .node-sample-waveform-settings-row button.active,
 .node-led-settings-row button.active {
   border-color: rgba(90, 255, 150, 0.62);
@@ -17997,7 +18031,8 @@ body.node-screen-solo-active .node-screen-solo-face.node-text-box-body > .node-t
 .node-slider-readout {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-rows: auto auto;
+  align-content: center;
   align-items: center;
   column-gap: 7px;
   row-gap: 0;
@@ -18224,10 +18259,12 @@ body.node-slider-dragging * {
   color: var(--node-slider-label-color, rgba(207, 221, 229, 0.92));
   font-family: "Cascadia Mono", "Cascadia Code", Consolas, "Courier New", monospace;
   font-size: 0.79rem;
-  line-height: 1;
+  line-height: 0.9;
   text-align: left;
   text-overflow: clip;
   white-space: nowrap;
+  align-self: end;
+  padding-block: 0;
 }
 
 /* B-073: do not pad labels for the value sign column. Values already reserve
@@ -18245,6 +18282,9 @@ body.node-slider-dragging * {
   text-align: left;
   text-overflow: ellipsis;
   white-space: nowrap;
+  line-height: 0.9;
+  align-self: start;
+  padding-block: 0;
 }
 
 .node-slider-readout-unit {
@@ -18253,9 +18293,10 @@ body.node-slider-dragging * {
   grid-column: 2;
   min-width: var(--node-slider-unit-width);
   color: color-mix(in srgb, var(--node-slider-unit-color, #7fc7d9) 58%, rgba(160, 167, 176, 0.5));
-  font-size: 0.8rem;
-  line-height: 1;
+  font-size: calc(var(--node-slider-readout-height) * 0.5);
+  line-height: 0.9;
   text-align: right;
+  align-self: center;
 }
 
 .node-slider-readout:focus-within .node-slider-readout-unit {

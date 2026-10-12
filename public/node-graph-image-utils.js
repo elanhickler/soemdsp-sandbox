@@ -1,7 +1,7 @@
 const nodeGraphImageLayoutKind = "image";
 const nodeGraphImageAcceptedTypes = Object.freeze(["image/png", "image/jpeg", "image/webp", "image/gif", "image/svg+xml"]);
 const nodeGraphImageAssetAccept = "image/png,image/jpeg,image/webp,image/gif,image/svg+xml,.png,.jpg,.jpeg,.webp,.gif,.svg";
-const nodeGraphImageAssetMaxBytes = 6_000_000;
+const nodeGraphImageAssetMaxBytes = 16_000_000;
 const nodeGraphRgbaImageCache = new Map();
 
 function normalizeNodeGraphImageDataUrl(value) {
@@ -42,12 +42,93 @@ function nodeGraphImageAssetLabel(asset, empty = "—") {
   return next.fileName || "image";
 }
 
-function nodeGraphReadImageFile(file) {
-  return new Promise((resolve, reject) => {
-    if (!nodeGraphImageFileLooksSupported(file)) {
-      reject(new Error("unsupported image type"));
-      return;
+function nodeGraphFileIsSvg(file) {
+  if (!file) return false;
+  const type = String(file.type || "").toLowerCase();
+  if (type === "image/svg+xml" || type === "image/svg") return true;
+  return /\.svg$/i.test(String(file.name || ""));
+}
+
+function nodeGraphFixSvgForRaster(svgText) {
+  let text = String(svgText || "");
+  let w = 1024;
+  let h = 1024;
+  const vb = text.match(/viewBox\s*=\s*["']\s*([0-9eE.+-]+)\s+([0-9eE.+-]+)\s+([0-9eE.+-]+)\s+([0-9eE.+-]+)\s*["']/i);
+  if (vb) {
+    const vw = Math.abs(Number(vb[3]));
+    const vh = Math.abs(Number(vb[4]));
+    if (vw > 0 && vh > 0) {
+      w = vw;
+      h = vh;
     }
+  }
+  const cap = 2048;
+  const scale = Math.min(1, cap / Math.max(w, h, 1));
+  const outW = Math.max(1, Math.round(w * scale));
+  const outH = Math.max(1, Math.round(h * scale));
+  text = text.replace(/<svg\b([^>]*)>/i, (full, attrs) => {
+    let a = String(attrs || "");
+    a = a.replace(/\swidth\s*=\s*("[^"]*"|'[^']*')/i, "");
+    a = a.replace(/\sheight\s*=\s*("[^"]*"|'[^']*')/i, "");
+    return `<svg width="${outW}" height="${outH}"${a}>`;
+  });
+  return { text, width: outW, height: outH };
+}
+
+function nodeGraphRasterizeSvgFile(file) {
+  return file.text().then((raw) => {
+    const { text, width, height } = nodeGraphFixSvgForRaster(raw);
+    const blob = new Blob([text], { type: "image/svg+xml;charset=utf-8" });
+    const objectUrl = URL.createObjectURL(blob);
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => {
+        try {
+          const canvas = document.createElement("canvas");
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext("2d");
+          if (!ctx) {
+            throw new Error("image read failed");
+          }
+          ctx.clearRect(0, 0, width, height);
+          ctx.drawImage(img, 0, 0, width, height);
+          const dataUrl = canvas.toDataURL("image/png");
+          URL.revokeObjectURL(objectUrl);
+          if (!normalizeNodeGraphImageDataUrl(dataUrl)) {
+            reject(new Error("image too large or invalid"));
+            return;
+          }
+          resolve({
+            dataUrl,
+            fileName: String(file.name || "image").slice(0, 180),
+          });
+        } catch (_e) {
+          URL.revokeObjectURL(objectUrl);
+          reject(new Error("image read failed"));
+        }
+      };
+      img.onerror = () => {
+        URL.revokeObjectURL(objectUrl);
+        reject(new Error("image read failed"));
+      };
+      img.src = objectUrl;
+    });
+  });
+}
+
+function nodeGraphReadImageFile(file) {
+  if (!nodeGraphImageFileLooksSupported(file)) {
+    return Promise.reject(new Error("unsupported image type"));
+  }
+  const bytes = Number(file.size) || 0;
+  if (bytes > 12_000_000) {
+    return Promise.reject(new Error("image too large or invalid"));
+  }
+  if (nodeGraphFileIsSvg(file)) {
+    return nodeGraphRasterizeSvgFile(file);
+  }
+  return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onerror = () => reject(new Error("image read failed"));
     reader.onload = () => {
@@ -65,28 +146,43 @@ function nodeGraphReadImageFile(file) {
   });
 }
 
+function nodeGraphImagePickerHelp(error) {
+  const msg = error?.message === "unsupported image type"
+    ? "Image type not supported (use PNG, JPEG, WebP, GIF, or SVG)."
+    : error?.message === "image too large or invalid"
+      ? "Image is too large (about 12 MB file max) or invalid."
+      : "Could not load that image.";
+  if (typeof setNodeInteractionHelp === "function") {
+    setNodeInteractionHelp(msg);
+  }
+}
+
 function nodeGraphPickImageFile(onPick) {
-  const input = document.createElement("input");
-  input.type = "file";
-  input.accept = nodeGraphImageAssetAccept;
-  input.hidden = true;
-  input.addEventListener("change", () => {
+  let input = document.getElementById("nodeGraphImageFilePicker");
+  if (!input) {
+    input = document.createElement("input");
+    input.id = "nodeGraphImageFilePicker";
+    input.type = "file";
+    input.accept = nodeGraphImageAssetAccept;
+    input.tabIndex = -1;
+    input.setAttribute("aria-hidden", "true");
+    input.style.cssText = "position:fixed;left:0;top:0;width:1px;height:1px;opacity:0;border:0;padding:0;margin:0;";
+    document.body.append(input);
+  }
+  input.value = "";
+  input.onchange = () => {
     const file = input.files?.[0];
-    input.remove();
+    input.onchange = null;
+    input.value = "";
     if (!file) {
       return;
     }
     nodeGraphReadImageFile(file).then((asset) => {
       onPick?.(asset);
     }).catch((error) => {
-      if (typeof setNodeInteractionHelp === "function") {
-        setNodeInteractionHelp(error?.message === "unsupported image type"
-          ? "Image type not supported (use PNG, JPEG, WebP, GIF, or SVG)."
-          : "Image is too large or invalid.");
-      }
+      nodeGraphImagePickerHelp(error);
     });
-  });
-  document.body.append(input);
+  };
   input.click();
 }
 
@@ -148,6 +244,7 @@ function nodeGraphBindImageAssetClicks(host, onAction) {
       return;
     }
     event.preventDefault();
+    event.stopPropagation();
     onAction(String(button.getAttribute("data-image-asset") || ""), button.getAttribute("data-image-asset-action"));
   });
 }

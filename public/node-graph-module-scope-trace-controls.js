@@ -623,6 +623,12 @@ const nodeGraphTraceDisplayActiveControlsByType = Object.freeze({
     toggles: Object.freeze([]),
     choices: Object.freeze([]),
   }),
+  videoFeedbackFace: Object.freeze({
+    fields: Object.freeze([]),
+    colors: Object.freeze(["dot1Color"]),
+    toggles: Object.freeze([]),
+    choices: Object.freeze([]),
+  }),
   // RGB Soft Fractal: outer plate mode + gradient (field is module params + rAF).
   rgbFractalFace: Object.freeze({
     fields: Object.freeze([]),
@@ -2528,6 +2534,7 @@ const nodeGraphDisplaySettingsFormTypeTitles = Object.freeze({
   rgbShapeFace: "Shape",
   rgbPictureFace: "Picture",
   imageBurnFace: "Image Ghost",
+  videoFeedbackFace: "Feedback",
   rgbFractalFace: "Soft Fractal",
   evolveFieldFace: "Evolve Field",
   fbmFieldFace: "Fractal Brownian Field",

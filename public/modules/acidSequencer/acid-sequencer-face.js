@@ -51,7 +51,11 @@ function acidSequencerCommit(nodeId, pattern, status) {
   patchNode.acidSequencer = next;
   const live = typeof nodeGraphPatchNode === "function" ? nodeGraphPatchNode(nodeId) : null;
   if (live) live.acidSequencer = next;
-  commitNodeGraphPatch(patch, { status: status || "acid sequencer", faceEdit: true, livePlan: true });
+  commitNodeGraphPatch(patch, {
+    status: status || "acid sequencer",
+    faceEdit: true,
+    liveParamsOnly: true,
+  });
   return true;
 }
 
@@ -100,10 +104,13 @@ function acidSequencerPlayhead(nodeId, bpm, length) {
 function createNodeGraphAcidSequencerFace(nodeId) {
   const id = String(nodeId || "");
   const face = document.createElement("div");
-  face.className = "acid-seq-face node-light-source";
+  face.className = "acid-seq-face node-module-face node-light-source";
   face.dataset.node = id;
   face.dataset.nodeType = "acidSequencer";
   face.setAttribute("aria-label", "Acid sequencer");
+  if (typeof tagNodeGraphModuleBand === "function") {
+    tagNodeGraphModuleBand(face, "face");
+  }
 
   const bar = document.createElement("div");
   bar.className = "acid-seq-rotate";

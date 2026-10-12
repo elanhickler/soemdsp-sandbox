@@ -250,6 +250,8 @@ function nodeGraphModuleDisplayTypeHasLocalSettings(displayType) {
     // Picture load + Image Burn phosphor stamp.
     "rgbPictureFace",
     "imageBurnFace",
+    "videoFeedbackFace",
+    "videoDelayFace",
     "keyboardControllerFace",
     // Knob module: macro dial colors, image layers, centered span, readout.
     "knobFace",

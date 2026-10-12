@@ -1134,7 +1134,9 @@ function drawNodeGraphHypersawBurnItem(renderer, item, pixelRatio) {
   const screenPx = clampNodeSliderValue(nodeGraphFiniteNumber(faceSettings?.lineThickness, 2), 0, 64);
   const widthPx = canvas.width;
   const heightPx = canvas.height;
-  const thicknessPx = screenPx * nodeGraphModuleFacePixelScale(canvas);
+  const pixelScale = nodeGraphModuleFacePixelScale(canvas);
+  const thicknessPx = screenPx * pixelScale;
+  const sabrinaStems = String(patchNode?.type || "") === "reverbEffect";
 
   const count = phases.length;
   for (let i = 0; i < count; i += 1) {
@@ -1142,31 +1144,51 @@ function drawNodeGraphHypersawBurnItem(renderer, item, pixelRatio) {
     if (!Number.isFinite(p)) continue;
     const phase01 = clampNodeSliderValue(p, 0, 1);
     if (!(screenPx > 0)) continue;
-    // Core never thinner than one canvas pixel. A one-pixel ramp on each
-    // side holds the fractional position. The brighter edge is scaled up
-    // to full so a half-pixel phase does not dim the stem.
-    const coreW = Math.max(thicknessPx, 1);
     const xCenter = phase01 * widthPx;
-    const left = xCenter - coreW * 0.5;
-    const right = left + coreW;
     const pan = Array.isArray(pans) && i < pans.length ? Number(pans[i]) : 0;
     const ampRaw = Array.isArray(amps) && i < amps.length ? Number(amps[i]) : 1;
     const alpha = clampNodeSliderValue(Math.abs(Number.isFinite(ampRaw) ? ampRaw : 0), 0, 1);
     if (!(alpha > 0)) continue;
-    // The pixel under the center stays full. Spill on either side keeps its
-    // coverage, so a half-pixel phase shows a dim neighbor instead of two
-    // full pixels or a fading core.
-    const coreIx = Math.max(0, Math.min(widthPx - 1, Math.floor(xCenter)));
-    const i0 = Math.floor(left);
-    const i1 = Math.ceil(right) - 1;
     const cols = [];
-    for (let ix = i0; ix <= i1; ix += 1) {
-      const coverage = Math.min(right, ix + 1) - Math.max(left, ix);
-      if (!(coverage > 0)) continue;
-      cols.push({ ix, gain: ix === coreIx ? 1 : Math.min(1, coverage) });
-    }
-    if (!cols.some((col) => col.ix === coreIx)) {
-      cols.push({ ix: coreIx, gain: 1 });
+    if (sabrinaStems) {
+      // 2 CSS px solid core, then 1 CSS px AA ramps outside that core.
+      const solidW = Math.max(thicknessPx, 2 * pixelScale);
+      const aaW = pixelScale;
+      const left = xCenter - solidW * 0.5;
+      const right = left + solidW;
+      const i0 = Math.floor(left - aaW);
+      const i1 = Math.ceil(right + aaW) - 1;
+      for (let ix = i0; ix <= i1; ix += 1) {
+        if (ix < 0 || ix >= widthPx) continue;
+        const c = ix + 0.5;
+        let gain = 0;
+        if (c >= left && c <= right) {
+          gain = 1;
+        } else if (aaW > 0 && c < left) {
+          gain = Math.max(0, 1 - (left - c) / aaW);
+        } else if (aaW > 0) {
+          gain = Math.max(0, 1 - (c - right) / aaW);
+        }
+        if (gain > 0) cols.push({ ix, gain: Math.min(1, gain) });
+      }
+    } else {
+      // Core never thinner than one canvas pixel. A one-pixel ramp on each
+      // side holds the fractional position. The brighter edge is scaled up
+      // to full so a half-pixel phase does not dim the stem.
+      const coreW = Math.max(thicknessPx, 1);
+      const left = xCenter - coreW * 0.5;
+      const right = left + coreW;
+      const coreIx = Math.max(0, Math.min(widthPx - 1, Math.floor(xCenter)));
+      const i0 = Math.floor(left);
+      const i1 = Math.ceil(right) - 1;
+      for (let ix = i0; ix <= i1; ix += 1) {
+        const coverage = Math.min(right, ix + 1) - Math.max(left, ix);
+        if (!(coverage > 0)) continue;
+        cols.push({ ix, gain: ix === coreIx ? 1 : Math.min(1, coverage) });
+      }
+      if (!cols.some((col) => col.ix === coreIx)) {
+        cols.push({ ix: coreIx, gain: 1 });
+      }
     }
     const paint = (rgbaPrefix) => {
       for (let c = 0; c < cols.length; c += 1) {

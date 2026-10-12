@@ -408,6 +408,9 @@ function handleNodeGraphKeydown(event) {
         || active.id === "nodeLiveOutputButton"
         || active.classList?.contains("node-live-toggle")
         || active.closest?.(".node-live-toggle-palette")
+        || active.classList?.contains("node-pitch-quantizer-key")
+        || active.classList?.contains("node-pitch-quantizer-tool")
+        || active.closest?.(".node-pitch-quantizer-face")
       )
     ) {
       active.blur();

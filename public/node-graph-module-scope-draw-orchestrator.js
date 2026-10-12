@@ -514,7 +514,13 @@ function drawNodeGraphModuleScopes(options = {}) {
   const allowTraceSkip = typeof scopePaintShouldSkipUnchangedTrace === "function"
     ? scopePaintShouldSkipUnchangedTrace()
     : scopePaused;
-  if (!force && allowTraceSkip && nodeGraphModuleScopeTraceDisplayFrameUnchanged(visibleItems)) {
+  const feedbackLive = (visibleItems || []).some((it) =>
+    nodeGraphModuleDisplayRendererForSlot(it?.slot) === "videoFeedbackFace"
+    || it?.slot?.type === "videoFeedback"
+    || nodeGraphModuleDisplayRendererForSlot(it?.slot) === "videoDelayFace"
+    || it?.slot?.type === "videoDelay",
+  );
+  if (!force && allowTraceSkip && !feedbackLive && nodeGraphModuleScopeTraceDisplayFrameUnchanged(visibleItems)) {
     setNodeGraphModuleScopeDebugPhase("trace-unchanged");
     commitNodeGraphModuleScopeRenderMetricsFrame(animationTime);
     nodeGraphModuleScopeKeepDrawLoopAlive(scopePaused);

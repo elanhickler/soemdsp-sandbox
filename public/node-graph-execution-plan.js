@@ -885,6 +885,8 @@ displayType === "scope1dTrace" ||
     // Scan Grid: one engine sample = one pixel (not Simulation-FPS latest).
     displayType === "rasterRgbFace" ||
     displayType === "vectorRgbFace" ||
+    displayType === "videoFeedbackFace" ||
+    displayType === "videoDelayFace" ||
     displayType === "gradientVectorscopeFace" ||
     displayType === "waterfallRgb" ||
     displayType === "waterfallXyz"

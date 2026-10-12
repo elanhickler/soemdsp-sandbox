@@ -426,6 +426,28 @@ function nodeGraphModuleScopeScreenItems(workspace, canvas, pixelRatio) {
             }, pixelRatio);
           }
         } else if (
+          nodeGraphModuleDisplayRendererForSlot(slot) === "videoDelayFace"
+          || slot?.type === "videoDelay"
+        ) {
+          if (typeof drawNodeGraphVideoDelayFaceItem === "function") {
+            drawNodeGraphVideoDelayFaceItem(null, {
+              buffer: null,
+              screenElement: slot.scopeElement,
+              slot,
+            }, pixelRatio);
+          }
+        } else if (
+          nodeGraphModuleDisplayRendererForSlot(slot) === "videoFeedbackFace"
+          || slot?.type === "videoFeedback"
+        ) {
+          if (typeof drawNodeGraphVideoFeedbackFaceItem === "function") {
+            drawNodeGraphVideoFeedbackFaceItem(null, {
+              buffer: null,
+              screenElement: slot.scopeElement,
+              slot,
+            }, pixelRatio);
+          }
+        } else if (
           nodeGraphModuleDisplayRendererForSlot(slot) === "imageBurnFace"
           || slot?.type === "imageBurn"
         ) {

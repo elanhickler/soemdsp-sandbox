@@ -102,6 +102,11 @@ function nodeGraphPatchNodePortDisplayLabel(node, type, port, io) {
     return nodeGraphStereoJackDisplayLabel(alias, type, port);
   }
   const resolvedType = type || patchNode?.type;
+  if (resolvedType === "videoFeedback" && (port === "A" || port === "B")) {
+    if (typeof nodeGraphVideoFeedbackPortLabel === "function") {
+      return nodeGraphVideoFeedbackPortLabel(patchNode, port);
+    }
+  }
   // Named portals: jack/IO label = effective Display (follows Title until override).
   // Bus identity stays on Title/alias (SyncBusAlias / wirelessRole unchanged).
   // Empty alias falls back to defaultAlias ("A"), not the catalog type label.

@@ -243,6 +243,12 @@ function assignNodeGraphTypedDisplaySettingsToNode(node, displayType, settings) 
     };
     return node.traceDisplaySettings;
   }
+  if (displayType === "videoFeedbackFace") {
+    node.traceDisplaySettings = typeof normalizeNodeGraphVideoFeedbackSettings === "function"
+      ? normalizeNodeGraphVideoFeedbackSettings(settings)
+      : (settings || {});
+    return node.traceDisplaySettings;
+  }
   if (displayType === "imageBurnFace") {
     // Keep previously loaded dataUrl unless the form explicitly cleared it.
     const prevUrl = String(node.imageBurn?.dataUrl || node.traceDisplaySettings?.dataUrl || "");

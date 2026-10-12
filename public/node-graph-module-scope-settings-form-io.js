@@ -572,6 +572,11 @@ if (type === "portalFace") {
       ? normalizeNodeGraphImageBurnSettings()
       : { background: "#000000", dataUrl: "", fileName: "" };
   }
+  if (type === "videoFeedbackFace") {
+    return typeof normalizeNodeGraphVideoFeedbackSettings === "function"
+      ? normalizeNodeGraphVideoFeedbackSettings()
+      : { dot1Color: "#8cd1ff", spectrumColor: "#8cd1ff", color: "#8cd1ff" };
+  }
   if (type === "rgbFractalFace") {
     return typeof normalizeNodeGraphRgbFractalSettings === "function"
       ? normalizeNodeGraphRgbFractalSettings()
@@ -809,6 +814,11 @@ if (type === "portalFace") {
       ? normalizeNodeGraphImageBurnSettings(settings)
       : (settings || {});
   }
+  if (type === "videoFeedbackFace") {
+    return typeof normalizeNodeGraphVideoFeedbackSettings === "function"
+      ? normalizeNodeGraphVideoFeedbackSettings(settings)
+      : (settings || {});
+  }
   if (type === "rgbFractalFace") {
     return typeof normalizeNodeGraphRgbFractalSettings === "function"
       ? normalizeNodeGraphRgbFractalSettings(settings)
@@ -1023,6 +1033,11 @@ if (settingsSchema === "portalFace") {
     return typeof nodeGraphImageBurnSettingsForNode === "function"
       ? nodeGraphImageBurnSettingsForNode(node)
       : normalizeNodeGraphImageBurnSettings?.(node?.imageBurn || node?.traceDisplaySettings);
+  }
+  if (settingsSchema === "videoFeedbackFace") {
+    return typeof nodeGraphVideoFeedbackSettingsForNode === "function"
+      ? nodeGraphVideoFeedbackSettingsForNode(node)
+      : normalizeNodeGraphVideoFeedbackSettings?.(node?.traceDisplaySettings);
   }
   if (settingsSchema === "rgbFractalFace") {
     return typeof nodeGraphRgbFractalSettingsForNode === "function"

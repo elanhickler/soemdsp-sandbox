@@ -191,6 +191,13 @@ double sabrinaModUni(SabrinaDelay& delay) {
   return parabol(delay.modInc) * 0.5 + 0.5;
 }
 
+double sabrinaPeekModUni(const SabrinaDelay& delay) {
+  if (delay.lfoStyle == 1) {
+    return fbm1d(delay.modInc, 4, 0.5, 1.0, delay.fbmSeed);
+  }
+  return parabol(delay.modInc) * 0.5 + 0.5;
+}
+
 double delaySample(SabrinaDelay& delay, double input) {
   const double safeInput = finite(input) ? input : 0.0;
   const double lfo = sabrinaModUni(delay);
@@ -809,5 +816,53 @@ extern "C" int soemdsp_sabrina_reverb_is_idle(int handle) {
 }
 
 extern "C" int soemdsp_sabrina_reverb_version() {
-  return 5;
+  return 8;
+}
+
+void sabrinaFillDelay01(const SabrinaState& state, double times[kDelayCount]) {
+  // Display only: 14 equal lanes. LFO 0..1 swings around the lane center;
+  // Mod Amp (lfopercent = amp*0.1) scales travel. Amp 1 fills the lane.
+  const double invN = 1.0 / kDelayCount;
+  for (int i = 0; i < kDelayCount; ++i) {
+    const SabrinaDelay& d = state.delays[i];
+    double lfo = sabrinaPeekModUni(d);
+    if (lfo < 0.0) lfo = 0.0;
+    if (lfo > 1.0) lfo = 1.0;
+    double amp01 = d.lfopercent / 0.1;
+    if (amp01 < 0.0) amp01 = 0.0;
+    if (amp01 > 1.0) amp01 = 1.0;
+    times[i] = (static_cast<double>(i) + 0.5 + (lfo - 0.5) * amp01) * invN;
+  }
+}
+
+extern "C" int soemdsp_sabrina_reverb_voice_count(int handle) {
+  SabrinaState* state = stateForHandle(handle);
+  return state ? kDelayCount : 0;
+}
+
+extern "C" double soemdsp_sabrina_reverb_voice_delay(int handle, int index) {
+  SabrinaState* state = stateForHandle(handle);
+  if (!state || index < 0 || index >= kDelayCount) return 0.5;
+  double times[kDelayCount];
+  sabrinaFillDelay01(*state, times);
+  return times[index];
+}
+
+extern "C" double soemdsp_sabrina_reverb_voice_pan(int handle, int index) {
+  if (index < 0 || index >= kDelayCount) return 0.5;
+  return (index & 1) ? 1.0 : 0.0;
+}
+
+extern "C" void soemdsp_sabrina_reverb_delay_times(int handle, float* out14) {
+  if (!out14) return;
+  SabrinaState* state = stateForHandle(handle);
+  if (!state) {
+    for (int i = 0; i < kDelayCount; ++i) out14[i] = 0.f;
+    return;
+  }
+  double times[kDelayCount];
+  sabrinaFillDelay01(*state, times);
+  for (int i = 0; i < kDelayCount; ++i) {
+    out14[i] = static_cast<float>(times[i]);
+  }
 }

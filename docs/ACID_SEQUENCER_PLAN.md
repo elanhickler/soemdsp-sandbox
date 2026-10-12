@@ -1,6 +1,6 @@
 ﻿# AcidSequencer — implementation plan
 
-**Status:** implemented locally, not tested by Argi. Under construction; do **not** mark complete in `docs/FUTURE_PLANNING.md` until Argi has tested a build.
+**Status:** shop-shipped (out of under construction). Native type 199, efficient allowlist `acidSequencer`.
 
 **Parent seed:** `docs/FUTURE_PLANNING.md` §AcidSequencer.
 
@@ -29,7 +29,7 @@ Ship a new **AcidSequencer** module: a TB-303-style step sequencer with a fixed 
 | Params | **bpm** 1–320 default 120, **step length** 1–32 default 16, **Gate height** 0–1 default 1, **Accent height** 0–1 default 1, **Slide time** 0–2 s default 0.06, **semitone offset** integer −48…+48 default 0 (replaces a global octave offset). Per-step Octave row stays |
 | Gate / Accent heights | **0…1** levels on Gate / Trigger outs |
 | Rotate | Face **← / →** arrows **rotate stored step data** (wrap). Not a viewport/pan over a longer pattern |
-| Outputs | **Gate**, **Trigger** (Accent), **pitch**, **f**, **inc**. Jack labels: pitch ♯/♭, f ƒ, inc `inc`. No Clock/Reset jacks. No dual-key aliases |
+| Outputs | **Gate**, **Trigger**, **pitch**, **f**, **CV**. Gate Height = Gate and Trigger level. Accent Low/High = CV (0 on rest). No `inc`. |
 | DSP | Own module `acidSequencer`, type id **199**. Native C++/WASM in `graph_engine`. JS face only. **No** JS DSP twin. **No** shims. Hz via `soemdsp::math::midi_to_hz` (A440). `inc = hz / sr`. Global semitone is added at the output, not stored in the step |
 | Status gate | FUTURE_PLANNING stays **seed / not done** until Argi tests |
 
@@ -208,7 +208,7 @@ Host sync: step table + params must reach the native instance every edit (same p
 - Shop / Add Module menu (`public/index.html` or current registry)
 - `NATIVE_GRAPH_TYPE_IDS` / native param sync / port maps (`public/node-live-audio-worklet-native-graph.js` and peers)
 - `scripts/build_native_modules.ps1` / combined wasm / catalog as required
-- `docs/APP_POLICY.md` allowlist table — add `acidSequencer` when shipped
+- `docs/APP_POLICY.md` allowlist table — `acidSequencer` is on the efficient live-audio list
 - Smoke: small script asserting Gate/Tie/Accent/Slide/rotate + pitch-family outs
 - `docs/FUTURE_PLANNING.md` — status remains seed until Argi tests; then Architect marks done
 

@@ -260,6 +260,8 @@ function nodeGraphModuleScopeHasModelDisplay() {
       slot.type === "transport" ||
       // Hypersaw face paints from data-bus Phases (no sample buffer).
       renderer === "hypersawBurn" ||
+      renderer === "videoFeedbackFace" ||
+      renderer === "videoDelayFace" ||
       nodeGraphModuleScopeIsOscillatorType(slot.type) ||
       (["waterfall", "dotOscilloscope", "valueOscilloscope", "lineBurnOscilloscope", "scope1dTrace", "led"].includes(slot.type) &&
         nodeGraphModuleScopeConnectionsTo(slot.nodeId, "In").length > 0) ||

@@ -8,6 +8,7 @@
   padding: 6px;
   box-sizing: border-box;
   overflow: hidden;
+  pointer-events: auto;
   border: 1px solid rgba(243, 241, 236, 0.12);
   border-radius: 6px;
   background:

@@ -3931,13 +3931,15 @@ const nodeGraphModuleDefinitions = (
       "Arp Keys": "Scale" },
     inputLabels: { "pitch": "♯/♭" },
     layout: "pitchQuantizer",
-    outputs: ["pitch", "Scale"],
+    outputs: ["pitch", "Scale", "f"],
     outputAliases: {
       "0.1V/Oct": "pitch",
       "0.1v/Oct": "pitch",
       Pitch: "pitch",
-      "Arp Keys": "Scale" },
-    outputLabels: { "pitch": "♯/♭" },
+      "Arp Keys": "Scale",
+      Frequency: "f",
+      Freq: "f" },
+    outputLabels: { "pitch": "♯/♭", f: "\u0192" },
     parameters: [
       {
         defaultValue: "2741",
@@ -3960,10 +3962,10 @@ const nodeGraphModuleDefinitions = (
         max: "8",
         nonlinearSlider: false,
         step: "1",
-        tooltip: "How many octaves Scale out sends, from C3 + Octave Offset." },
+        tooltip: "How many octaves Scale out sends, from C3 + Octave." },
       {
-        key: "octaveOffset",
-        label: "Octave Offset",
+        key: "octave",
+        label: "Octave",
         defaultValue: "0",
         min: "-4",
         mid: "0",
@@ -3971,7 +3973,19 @@ const nodeGraphModuleDefinitions = (
         nonlinearSlider: false,
         step: "1",
         unit: "oct",
-        tooltip: "0 = C3 (MIDI 60). Lowest C of the Scale out mask." },
+        tooltip: "Transpose quantized pitch and ƒ by whole octaves. Also shifts Scale out (0 = C3)." },
+      {
+        key: "semitones",
+        label: "Semitones",
+        defaultValue: "0",
+        min: "-48",
+        mid: "0",
+        max: "48",
+        nonlinearSlider: false,
+        showSign: true,
+        step: "1",
+        unit: "st",
+        tooltip: "Transpose quantized pitch and ƒ by integer semitones." },
     ]
   },
   // Degree Turing / Gravity Walker / Degree Phrase: musical shelf (pitch CV generators).
@@ -6583,17 +6597,20 @@ const nodeGraphModuleDefinitions = (
     layout: "acidSequencer",
     defaultWidthGu: 24,
     displayHeightGu: 14,
-    digitalOutputs: ["Gate", "Trigger", "pitch", "f"],
+    digitalOutputs: ["Gate", "Trigger", "pitch"],
     inputs: [],
-    outputs: ["Gate", "Trigger", "pitch", "f"],
+    outputs: ["Gate", "Trigger", "pitch", "f", "CV"],
     outputLabels: {
       pitch: "\u266f/\u266d",
-      f: "\u0192" },
+      f: "\u0192",
+      CV: "CV" },
     parameters: [
       { defaultValue: "120", key: "bpm", label: "BPM", max: "320", maxDigits: 3, mid: "120", min: "1", nonlinearSlider: false, step: "1", tooltip: "Local tempo. Each step is a 16th note. Clocked to transport start/stop." },
       { defaultValue: "16", key: "stepLength", label: "Steps", linearSmoothing: false, max: "32", mid: "16", min: "1", nonlinearSlider: false, step: "1", tooltip: "Active step count (1-32). Stored steps outside this length are kept." },
-      { defaultValue: "1", key: "gateHeight", label: "Gate Height", max: "1", mid: "0.5", min: "0", nonlinearSlider: false, step: "any", tooltip: "Gate level while a step is on or tied." },
-      { defaultValue: "1", key: "accentHeight", label: "Accent Height", max: "1", mid: "0.5", min: "0", nonlinearSlider: false, step: "any", tooltip: "Trigger level for a 1 ms accent pulse." },
+      { defaultValue: "1", key: "gateHeight", label: "Gate Height", max: "1", mid: "0.5", min: "0", nonlinearSlider: false, step: "any", tooltip: "Gate hold and Trigger pulse height." },
+      { defaultValue: "100", key: "gateLength", label: "Gate Length", max: "100", maxDigits: 4, mid: "50", min: "0", nonlinearSlider: false, step: "any", unit: "%", tooltip: "How long Gate stays high inside an On step (percent of the 16th). Tie stays high for the whole step." },
+      { defaultValue: "0", key: "accentLow", label: "Low Accent", max: "1", mid: "0.5", min: "0", nonlinearSlider: false, step: "any", tooltip: "CV when the current step is on and Accent is off." },
+      { defaultValue: "1", key: "accentHigh", label: "High Accent", max: "1", mid: "0.5", min: "0", nonlinearSlider: false, step: "any", tooltip: "CV when the current step is on and Accent is on." },
       { defaultValue: "0.06", key: "slideTime", kind: "time", label: "Slide Time", max: "2", maxDigits: 4, mid: "0.06", min: "0", step: "any", unit: "s", tooltip: "Linear glide toward the next step pitch when that step's Slide is on. 0 = instant." },
       { defaultValue: "0", key: "semitoneOffset", label: "Semitone Offset", linearSmoothing: false, max: "48", mid: "0", min: "-48", nonlinearSlider: false, showSign: true, step: "1", unit: "st", tooltip: "Integer semitone shift of every pitch out. Use this to pick another root or jump octaves." },
     ] },
@@ -11864,7 +11881,7 @@ const nodeGraphModuleDefinitions = (
     defaultDisplayMode: "ensembleCloud",
     digitalInputs: ["Reset"],
     inputs: ["Mono", "Left", "Right", "Reset"],
-    outputs: ["Mono", "Left", "Right"],
+    outputs: ["Left", "Right"],
     parameters: [
       {
         constraint: "cpu",
@@ -12029,7 +12046,7 @@ const nodeGraphModuleDefinitions = (
     defaultDisplayMode: "ensembleCloud",
     digitalInputs: ["Reset"],
     inputs: ["Mono", "Left", "Right", "Reset"],
-    outputs: ["Mono", "Left", "Right"],
+    outputs: ["Left", "Right"],
     parameters: [
       {
         defaultValue: "0.5",
@@ -12059,20 +12076,7 @@ const nodeGraphModuleDefinitions = (
         mid: "7",
         min: "1",
         step: "1",
-        tooltip: "Parallel delay lines. Each has its own Random Walk / FBM (Seed + voice index)." },
-      {
-        choices: ["Random Walk", "FBM"],
-        defaultValue: "0",
-        displayChoices: true,
-        divideChoicesVisibly: true,
-        key: "mode",
-        label: "Mod",
-        linearSmoothing: false,
-        max: "1",
-        mid: "0",
-        min: "0",
-        step: "1",
-        tooltip: "Delay-time modulator from SoEm Reverb. Random Walk = filtered stepped drift. FBM = fractal Brownian flutter." },
+        tooltip: "Parallel delay lines. Each has its own FBM (Seed + voice index)." },
       {
         defaultValue: "18",
         key: "delay",
@@ -12092,7 +12096,7 @@ const nodeGraphModuleDefinitions = (
         min: "0",
         step: "any",
         unit: "ms",
-        tooltip: "Modulator throw in milliseconds. Walk/FBM is ±1 × Depth. Face shows the full ±1 swing about center (Pre-delay not plotted)." },
+        tooltip: "FBM throw in milliseconds. Modulator is ±1 × Depth. Face shows the full ±1 swing about center (Pre-delay not plotted)." },
       {
         defaultValue: "0.4",
         key: "frequency",
@@ -12105,7 +12109,7 @@ const nodeGraphModuleDefinitions = (
         unit: "Hz",
         nonlinearSlider: true,
         sliderCurve: "skew",
-        tooltip: "Random Walk step rate, or FBM time rate." },
+        tooltip: "FBM time rate." },
       {
         defaultValue: "200",
         key: "hpfFrequency",
@@ -13009,19 +13013,13 @@ const nodeGraphModuleDefinitions = (
   reverbEffect: {
     planRole: "processor",
     planFreeRun: true,
-    // Instant Waterfall (Blur only; full-face waveform, no amplitude law) — stereo Mix Out.
-    displayType: "waterfall",
+    displayType: "hypersawBurn",
     spectrumCompanion: false,
     displayModes: [
-      { key: "waterfall", label: "Waterfall", renderer: "waterfall", settingsSchema: "waterfall" },
+      { key: "hypersawBurn", label: "Hypersaw", renderer: "hypersawBurn", settingsSchema: "hypersawBurn" },
     ],
-    defaultDisplayMode: "waterfall",
+    defaultDisplayMode: "hypersawBurn",
     // Dry = pure input; Mix = dry/wet blend (no wet-only jacks).
-    stereoWaterfallPorts: { left: "Mix L", right: "Mix R" },
-    displaySignals: [
-      { key: "Mix L", kind: "scalar" },
-      { key: "Mix R", kind: "scalar" },
-    ],
     inputAliases: { In: "Mono" },
     inputs: ["Mono", "Left", "Right"],
     inputLabels: { Mono: "Mono", Left: "Left", Right: "Right" },

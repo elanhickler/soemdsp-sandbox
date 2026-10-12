@@ -127,7 +127,6 @@ const nodeGraphModuleCatalogUnderConstructionSort = Object.freeze([
   "osc",
   "additiveImage",
   "animatedTextBox",
-  "acidSequencer",
   "theremin",
   "waterfallRgb",
   "waterfallXyz",
@@ -190,6 +189,7 @@ const nodeGraphModuleCatalogRetiredFromUnderConstruction = Object.freeze([
   "vcvrackSuperloveFilter",
   "ellipsoidOsc",
   "softpopOscillator",
+  "acidSequencer",
 ]);
 
 /** Short shop-card reminder for under-construction modules (title tooltip). */
@@ -233,7 +233,6 @@ const nodeGraphModuleConstructionPlans = Object.freeze({
   osc: "Open Sound Control (UDP ↔ CV). Parked on Controller until network send/receive lands.",
   metallicRatio: "Metallic-mean Ratio CV (golden/silver/…). Useful for detune, delay ratios, and spacing — parked until the modulator shelf polish pass.",
   additiveImage: "Image → Yellow Graph harmonics. Parked until the Additive image analysis pass.",
-  acidSequencer: "Implemented locally, but under construction and untested. Parked until Argi tests the native face and transport behavior.",
   theremin: "Parked. Pad X/Y snap into pitch and volume with no per-sample glide.",
 });
 
@@ -808,7 +807,7 @@ const nodeGraphModuleStoreCatalog = Object.freeze({
   },
   acidSequencer: {
     category: "musical",
-    description: "TB-303-style step sequencer. Gate, Accent, Slide, Octave, and a C-C piano. Local BPM, transport start/stop.",
+    description: "TB-303-style step sequencer. Gate Height is Gate and Trigger. Accent Low/High is CV. Outs: Gate, Trigger, pitch, ƒ, CV.",
     label: "Acid Sequencer",
     notes: ["acid", "303", "slide", "accent", "gate", "tie"],
   },
@@ -858,7 +857,7 @@ const nodeGraphModuleStoreCatalog = Object.freeze({
   },
   pitchQuantizer: {
     category: "musical",
-    description: "Snap free pitch CV to a scale so walkers and LFOs land on musical notes.",
+    description: "Snap pitch CV to a scale. Octave and Semitones transpose pitch and ƒ. Scale out is the 12-class mask.",
     label: "Pitch Quantizer",
     notes: ["quantizer", "scale keyboard", "0.1v/oct", "pitch class mask", "melody from chaos"],
   },
@@ -1866,9 +1865,9 @@ const nodeGraphModuleStoreCatalog = Object.freeze({
   },
   ensemble: {
     category: "space",
-    description: "Chorus delay bank with SoEm Reverb Random Walk or FBM instead of vibrato. Wet through 6 dB HP→LP, then Mix.",
+    description: "Chorus delay bank with FBM delay-time modulation. Wet through 6 dB HP→LP, then Mix.",
     label: "Ensemble",
-    notes: ["ensemble", "chorus", "delay", "random walk", "fbm", "modulation", "space", "native"],
+    notes: ["ensemble", "chorus", "delay", "fbm", "modulation", "space", "native"],
   },
   bode: {
     category: "space",

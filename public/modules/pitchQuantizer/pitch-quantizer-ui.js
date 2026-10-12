@@ -20,6 +20,7 @@ function createNodeGraphPitchQuantizerFace(node) {
   const allBtn = document.createElement("button");
   allBtn.type = "button";
   allBtn.className = "node-pitch-quantizer-tool";
+  allBtn.tabIndex = -1;
   allBtn.textContent = "All";
   allBtn.setAttribute("aria-label", "Enable all pitch classes (chromatic)");
   allBtn.addEventListener("click", (event) => {
@@ -34,6 +35,7 @@ function createNodeGraphPitchQuantizerFace(node) {
   const noneBtn = document.createElement("button");
   noneBtn.type = "button";
   noneBtn.className = "node-pitch-quantizer-tool";
+  noneBtn.tabIndex = -1;
   noneBtn.textContent = "None";
   noneBtn.setAttribute("aria-label", "Clear all pitch classes");
   noneBtn.addEventListener("click", (event) => {
@@ -123,7 +125,11 @@ function createNodeGraphPitchQuantizerKeyButton(nodeId, pitchClass, label, mask,
     `${label} ${on ? "on" : "off"} — quantize to this pitch class in every octave`,
   );
   btn.classList.toggle("active", on);
+  btn.tabIndex = -1;
   btn.textContent = label;
+  btn.addEventListener("pointerup", () => {
+    btn.blur();
+  });
   btn.addEventListener("click", (event) => {
     if (typeof nodeGraphPitchQuantizerScaleJackConnected === "function"
       && nodeGraphPitchQuantizerScaleJackConnected(nodeId)) {
@@ -132,6 +138,7 @@ function createNodeGraphPitchQuantizerKeyButton(nodeId, pitchClass, label, mask,
       return;
     }
     toggleNodeGraphPitchQuantizerKey(nodeId, pitchClass, event);
+    btn.blur();
   });
   return btn;
 }

@@ -661,6 +661,15 @@ function validateNodeGraphPatch(patch) {
         ? sequencerCloneClip(node.sequencer)
         : (node.sequencer && typeof node.sequencer === "object" ? node.sequencer : undefined);
     }
+    if (type === "acidSequencer") {
+      normalizedNode.acidSequencer = typeof acidSequencerNormalize === "function"
+        ? acidSequencerNormalize(node.acidSequencer)
+        : {
+          steps: Array.isArray(node.acidSequencer && node.acidSequencer.steps)
+            ? node.acidSequencer.steps.map((step) => (step && typeof step === "object" ? { ...step } : step))
+            : [],
+        };
+    }
     if (type === "bugButton") {
       normalizedNode.bugButton = {
         glyph: normalizeNodeGraphBugButtonGlyph(node.bugButton?.glyph),
