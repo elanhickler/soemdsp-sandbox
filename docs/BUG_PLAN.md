@@ -148,6 +148,7 @@ When fixing: mark `fixed`, one-line what changed, run `python scripts\smoke_test
 | B-095 | hear | open | Slew: S curve looks like a double S instead of one smooth S |
 | B-096 | see | fixed | Spectrogram: scroll is uneven (jittery tempo) after GPU shader port |
 | B-097 | see | open | Instant Waterfall: blank after WebGL context lost and restored |
+| B-098 | see | open | Write defaults does not write defaults for choice sliders |
 ---
 
 ## Inbox (unnumbered user reports)
@@ -1135,6 +1136,16 @@ ative_modules/polyblep/polyblep.cpp; library/include/soemdsp/math/analog_filter_
 - Likely cause (unconfirmed): stamp paths return false on lost context, but nothing recreates the session on restore. Meet stamp same as bar stamps while lost. Related to DISPLAY_SHADER_PLAN P0a (too many per-face contexts).
 - Expected: On restore, recreate the GL session and draw again.
 - Fix shape: Not started. Logged only; Argi said do not fix now. Docs-only; no code fix in this report.
+
+### B-098 — Write defaults does not write defaults for choice sliders
+- Status: open
+- Severity: see
+- Source: user 2026-10-13 (ArchIV)
+- Files: Write defaults / broom (command center) page; choice sliders on selected modules (not pinned).
+- What: Write defaults does not write defaults for choice sliders. Ensure the Write defaults button works properly on selected modules (broom emoji page in command center).
+- Repro: Select module(s) with choice sliders, open the broom page in command center, click Write defaults; choice slider defaults are not written.
+- Expected: Write defaults writes defaults for choice sliders (and all other params) on the selected modules.
+- Fix shape: Not started. Logged only; not investigated. Docs-only; no code fix in this report.
 
 ---
 

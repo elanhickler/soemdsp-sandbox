@@ -180,8 +180,6 @@ function bindNodeGraphRenderLiveControlEvents() {
     document.getElementById("nodeExportLivePlanButton")?.addEventListener("click", downloadNodeGraphLivePlanJson);
   }
   document.getElementById("nodeBadValueMonitorButton")?.addEventListener("click", toggleNodeGraphBadValueMonitor);
-  document.getElementById("nodeTripEarProtectionButton")
-    ?.addEventListener("click", () => nodeGraphTripEarProtection({ source: "manual", protectionMuteCount: 1 }));
   document.getElementById("nodeLiveInputButton")?.addEventListener("click", toggleNodeGraphLiveInput);
   if (typeof startNodeGraphMockInputDebug === "function") {
     document

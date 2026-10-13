@@ -329,10 +329,7 @@ function installNodeGraphDebugApi() {
         toggleNodeGraphBadValueMonitor();
       }
       return { enabled: nodeGraphBadValueMonitorEnabled(), events: nodeGraphBadValueMonitorEvents().slice() };
-    },
-    tripEarProtection() {
-      return nodeGraphTripEarProtection({ source: "manual", protectionMuteCount: 1 });
-    },
+    }
   });
   window.soemdspDebug = window.soemdspSandboxDebug;
 }

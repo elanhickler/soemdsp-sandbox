@@ -482,10 +482,17 @@ bool sabrinaSilenceDetectorRun(SabrinaState& state, double level) {
 }
 
 bool sabrinaIdleFromPorts(SabrinaState& state, double inL, double inR) {
-  return sabrinaSilenceDetectorRun(
-    state,
-    inL + inR + state.ch0 + state.ch1 + state.lastLeft + state.lastRight + state.lastWet
-  );
+  // Level, not a signed sum. Anti-phase channels cancel in a sum and the
+  // tail latches idle while both sides are still loud.
+  double level = 0.0;
+  const double terms[] = {
+    inL, inR, state.ch0, state.ch1, state.lastLeft, state.lastRight, state.lastWet
+  };
+  for (double term : terms) {
+    const double mag = __builtin_fabs(term);
+    if (mag > level) level = mag;
+  }
+  return sabrinaSilenceDetectorRun(state, level);
 }
 
 void advanceSabrinaSmoothing(SabrinaState& state) {

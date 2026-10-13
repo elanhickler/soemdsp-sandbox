@@ -4543,7 +4543,7 @@ body.keyboard-debug-hidden .node-midi-keyboard-signal-bar {
   display: inline-grid;
   grid-template-rows: minmax(0, 1fr);
   align-items: stretch;
-  flex: 1 1 300px;
+  flex: 1 1 140px;
   min-width: 0;
   max-width: none;
   overflow: hidden;
@@ -23922,7 +23922,11 @@ body.node-slider-dragging .node-param-port {
 .node-live-toggle-palette {
   display: inline-grid;
   /* The input/output level lanes sit between their two route buttons. */
-  grid-template-columns: 2.55rem repeat(2, 1.35rem) repeat(2, 2.55rem);
+  /* Button columns fit their labels (min 2.55rem) so Output / Ear Protect are not clipped. */
+  grid-template-columns: minmax(2.55rem, max-content) repeat(2, 1.35rem) repeat(2, minmax(2.55rem, max-content));
+  /* Extra buttons (MIDI, Trip) add columns instead of wrapping to a second row. */
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(2.55rem, max-content);
   grid-template-rows: minmax(0, 1fr);
   align-items: stretch;
   gap: 0;
@@ -23930,6 +23934,7 @@ body.node-slider-dragging .node-param-port {
   min-width: 0;
   /* Flush to transport (no gap after MIDI Off). */
   padding-right: 0;
+  flex: 0 0 auto;
 }
 
 .node-transport-group {
@@ -24304,12 +24309,12 @@ button[data-transport-action="stop"]:disabled {
   align-items: stretch;
   justify-items: stretch;
   min-width: 0;
-  width: 2.55rem;
+  width: auto;
   min-width: 2.55rem;
   height: 100%;
   min-height: 0;
   gap: 0;
-  padding: 0;
+  padding: 0 6px;
   line-height: 1;
   text-transform: none;
   overflow: hidden;
