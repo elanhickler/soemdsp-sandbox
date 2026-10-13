@@ -31,15 +31,6 @@
       "folder": "Alarm"
     },
     {
-      "slug": "Alarm/callnow",
-      "label": "callnow",
-      "name": "",
-      "url": "/soemdsp-sandbox/patches/Alarm/callnow.json",
-      "author": "",
-      "emoji": "",
-      "folder": "Alarm"
-    },
-    {
       "slug": "demo_patches/analogdream",
       "label": "analogdream",
       "name": "",
@@ -58,10 +49,28 @@
       "folder": "demo_patches"
     },
     {
+      "slug": "demo_patches/crossover",
+      "label": "crossover",
+      "name": "",
+      "url": "/soemdsp-sandbox/patches/demo_patches/crossover.json",
+      "author": "",
+      "emoji": "",
+      "folder": "demo_patches"
+    },
+    {
       "slug": "demo_patches/deathwhistle",
       "label": "deathwhistle",
       "name": "",
       "url": "/soemdsp-sandbox/patches/demo_patches/deathwhistle.json",
+      "author": "",
+      "emoji": "",
+      "folder": "demo_patches"
+    },
+    {
+      "slug": "demo_patches/decay_envelope_shootout",
+      "label": "decay_envelope_shootout",
+      "name": "",
+      "url": "/soemdsp-sandbox/patches/demo_patches/decay_envelope_shootout.json",
       "author": "",
       "emoji": "",
       "folder": "demo_patches"
@@ -94,6 +103,15 @@
       "folder": "demo_patches"
     },
     {
+      "slug": "demo_patches/triangle_comparison",
+      "label": "triangle_comparison",
+      "name": "",
+      "url": "/soemdsp-sandbox/patches/demo_patches/triangle_comparison.json",
+      "author": "",
+      "emoji": "",
+      "folder": "demo_patches"
+    },
+    {
       "slug": "demo_patches/tubesaturation",
       "label": "tubesaturation",
       "name": "",
@@ -101,6 +119,15 @@
       "author": "",
       "emoji": "",
       "folder": "demo_patches"
+    },
+    {
+      "slug": "demonstration/karplus-strong-like-envelope",
+      "label": "karplus-strong-like-envelope",
+      "name": "",
+      "url": "/soemdsp-sandbox/patches/demonstration/karplus-strong-like-envelope.json",
+      "author": "",
+      "emoji": "",
+      "folder": "demonstration"
     },
     {
       "slug": "foley/CALLNOW",
@@ -175,6 +202,24 @@
       "folder": "hyperpluck"
     },
     {
+      "slug": "livedemos/sabrinareverb",
+      "label": "sabrinareverb",
+      "name": "",
+      "url": "/soemdsp-sandbox/patches/livedemos/sabrinareverb.json",
+      "author": "",
+      "emoji": "",
+      "folder": "livedemos"
+    },
+    {
+      "slug": "livedemos/soemreverb",
+      "label": "soemreverb",
+      "name": "",
+      "url": "/soemdsp-sandbox/patches/livedemos/soemreverb.json",
+      "author": "",
+      "emoji": "",
+      "folder": "livedemos"
+    },
+    {
       "slug": "modulator_breadboards/ping_envelope",
       "label": "ping_envelope",
       "name": "",
@@ -220,6 +265,15 @@
       "folder": "Soundemote_Softwave_prototypes"
     },
     {
+      "slug": "visuals/nice_LCD_and_LED",
+      "label": "nice_LCD_and_LED",
+      "name": "",
+      "url": "/soemdsp-sandbox/patches/visuals/nice_LCD_and_LED.json",
+      "author": "",
+      "emoji": "",
+      "folder": "visuals"
+    },
+    {
       "slug": "voice_breadboards/hyperpluck_acoustic_diffusion",
       "label": "hyperpluck_acoustic_diffusion",
       "name": "",
@@ -236,14 +290,6 @@
       "author": "",
       "emoji": "",
       "folder": "voice_breadboards"
-    },
-    {
-      "slug": "callnow",
-      "label": "callnow",
-      "name": "",
-      "url": "/soemdsp-sandbox/patches/Alarm/callnow.json",
-      "author": "",
-      "emoji": ""
     },
     {
       "slug": "chaosfly_high_freq",
@@ -266,14 +312,6 @@
       "label": "chaosfly_lowfreq2",
       "name": "",
       "url": "/soemdsp-sandbox/patches/chaosfly_lowfreq2.json",
-      "author": "",
-      "emoji": ""
-    },
-    {
-      "slug": "crossover",
-      "label": "crossover",
-      "name": "",
-      "url": "/soemdsp-sandbox/patches/crossover.json",
       "author": "",
       "emoji": ""
     },
@@ -606,6 +644,14 @@
       "emoji": ""
     },
     {
+      "slug": "sabrinareverb",
+      "label": "sabrinareverb",
+      "name": "",
+      "url": "/soemdsp-sandbox/patches/livedemos/sabrinareverb.json",
+      "author": "",
+      "emoji": ""
+    },
+    {
       "slug": "sawtoothalarm",
       "label": "sawtoothalarm",
       "name": "",
@@ -658,6 +704,14 @@
       "label": "sinusoidalarm",
       "name": "",
       "url": "/soemdsp-sandbox/patches/sinusoidalarm.json",
+      "author": "",
+      "emoji": ""
+    },
+    {
+      "slug": "SoEmEnsemble",
+      "label": "SoEmEnsemble",
+      "name": "",
+      "url": "/soemdsp-sandbox/patches/SoEmEnsemble.json",
       "author": "",
       "emoji": ""
     },

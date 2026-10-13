@@ -15,6 +15,7 @@ BASE = "/soemdsp-sandbox/patches"
 # slug -> path relative to patches/ (POSIX-style for URL building).
 PAGE_PATCH_ALIASES: list[tuple[str, str]] = [
     ("callnow", "Alarm/callnow.json"),
+    ("sabrinareverb", "livedemos/sabrinareverb.json"),
 ]
 
 
@@ -96,7 +97,10 @@ def main() -> None:
     for slug, rel in PAGE_PATCH_ALIASES:
         if any(e.get("slug") == slug for e in entries):
             continue
-        entries.append(alias_entry(slug, rel))
+        try:
+            entries.append(alias_entry(slug, rel))
+        except FileNotFoundError as err:
+            print(f"skip alias {slug}: {err}")
 
     def sort_key(e: dict) -> tuple:
         folder = e.get("folder") or ""
