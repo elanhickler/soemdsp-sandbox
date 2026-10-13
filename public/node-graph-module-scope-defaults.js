@@ -466,7 +466,7 @@ const nodeGraphKnobFaceDisplaySettingsDefaults = Object.freeze({
   labelPosition: "top",
   valuePosition: "midknob",
   // Face name — independent of module alias / header title.
-  labelText: "Knob",
+  labelText: "",
   // Hole size 0…1 (0 = solid disk, ~0.7 default, 1 = thin outer ring).
   innerRadius: 0.7,
 });

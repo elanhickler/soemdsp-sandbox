@@ -28,6 +28,7 @@ NodeLiveAudioProcessor.prototype.clearPlan = function clearPlan() {
     this.midiKeyboardPlayMask = typeof noteMaskCreate === "function" ? noteMaskCreate() : new Uint8Array(128);
     this.midiKeyboardHeldKeysPhase = 0;
     this.keyboardSignalByNode = new Map();
+    this._keyboardEventState = new Map();
     this.keyboardArpByNode = new Map();
     this.modulationConnections = new Map();
     this.nodeOutputs = new Map();

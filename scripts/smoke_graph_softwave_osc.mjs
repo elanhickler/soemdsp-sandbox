@@ -70,7 +70,8 @@ console.log(`softwave version ${swVer}`);
   const h = softwaveCreate() | 0;
   if (!h) throw new Error("softwave create");
   // Advance phase for a while at 1 Hz / 100 Hz sr → increment 0.01/sample.
-  for (let i = 0; i < 50; i++) softwaveSample(h, 1, 100, 0, 0.5, 0, 1, 0, 0);
+  // 25 samples -> phase 0.25 (quarter cycle), far from the phase-0 value.
+  for (let i = 0; i < 25; i++) softwaveSample(h, 1, 100, 0, 0.5, 0, 1, 0, 0);
   const before = softwaveSample(h, 0, 100, 0, 0.5, 0, 1, 0, 0);
   softwaveReset(h);
   const after = softwaveSample(h, 0, 100, 0, 0.5, 0, 1, 0, 0);

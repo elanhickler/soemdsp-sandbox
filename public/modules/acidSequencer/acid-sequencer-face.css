@@ -41,6 +41,14 @@
   cursor: pointer;
 }
 
+.acid-seq-rnd {
+  width: auto;
+  min-width: 2.2rem;
+  padding: 0 0.35rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
 .acid-seq-grid {
   display: grid;
   gap: 2px;

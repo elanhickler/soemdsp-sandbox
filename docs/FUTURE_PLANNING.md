@@ -1,4 +1,4 @@
-﻿# Future Planning Notes
+# Future Planning Notes
 
 This file collects project-shaping ideas that should survive day-to-day implementation without becoming immediate scope.
 
@@ -176,6 +176,10 @@ docs/ACID_SEQUENCER_PLAN.md
 ## Display shaders
 
 **Status:** plan + progress tracker in `docs/DISPLAY_SHADER_PLAN.md` (2026-10-06; GLSL-on-disk 2026-10-09; face wipe 2026-10-09): move per-pixel display math into GLSL on one shared WebGL context; audio stays native C++/WASM. Shipped present shaders that belong to a native module live as `.vert.glsl` / `.frag.glsl` next to that module’s wasm (`DISPLAY_SHADER_PLAN.md` §GLSL files next to WASM). Stop / power-off must use one face-wipe registry (`DISPLAY_SHADER_PLAN.md` §Face wipe registry, W1/W2). Do not start a G-row or W-row until Argi says go.
+
+## Scope video out
+
+**Status:** plan only, not started (2026-10-13, Argi via Thoughts). Plan + tracker: `docs/SCOPE_VIDEO_OUT_PLAN.md`. Every scope / videoscope / display gets a 📺 `rgba` out that re-publishes its GPU face picture through the existing `nodeGraphPicturePublish` (picture-device.js), so scopes can feed Video Delay and video feedback loops. Observers only (APP_POLICY §5 Live chaos and video), no per-type special cases, bypass/Stop follow face wipe W1. Do not start a VO-row until Argi says go.
 
 ## Electro Snare
 

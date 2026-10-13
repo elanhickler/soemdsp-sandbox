@@ -173,6 +173,15 @@ async function initNodeGraphMvp() {
       status: "script synced",
     });
   }
+  // ?pagePatch= startup: record this tab's overwrite baseline now so the first
+  // Overwrite original is not refused. Session restore deliberately records
+  // none: a restored tab must Save / Save as new once before overwriting.
+  if (pagePatchLoaded && nodeGraphMvp.currentSavedPatchFilename
+    && typeof nodeGraphRefreshServerPatchFileBaseline === "function") {
+    void nodeGraphRefreshServerPatchFileBaseline(nodeGraphMvp.currentSavedPatchFilename);
+  } else if (!pagePatchLoaded && nodeGraphMvp.currentSavedPatchFilename) {
+    nodeGraphMvp.patchRestoredFromSession = true;
+  }
   resetNodeGraphStartupView();
   // Page-patch embeds often restore a stale pan from session storage; force
   // fit-to-patch after the page graph is committed so / and /init are not a

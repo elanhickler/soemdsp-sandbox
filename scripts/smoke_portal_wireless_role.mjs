@@ -191,7 +191,8 @@ const splicePatch = {
 };
 sandbox.__patch = splicePatch;
 const alias = nodeGraphNamedPortalAliasFromSourceOutlet(splicePatch, "keyboard-1", "Play Keys");
-assert(alias === "Keyboard Play Keys", `splice alias ${JSON.stringify(alias)}`);
+// Portal names are C++ identifiers (normalizeNodeGraphNamedPortalAlias): spaces -> _.
+assert(alias === "Keyboard_Play_Keys", `splice alias ${JSON.stringify(alias)}`);
 const points = nodeGraphNamedPortalInsertGridPoints(splicePatch, "keyboard-1", "voices-1", 0);
 splicePatch.connections = [];
 const seed = "__portal_splice_1";

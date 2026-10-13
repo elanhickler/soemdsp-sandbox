@@ -1570,7 +1570,7 @@ function normalizeNodeGraphKnobFaceDisplaySettings(settings = {}) {
     ),
     labelText: typeof nodeGraphKnobFaceNormalizeLabelText === "function"
       ? nodeGraphKnobFaceNormalizeLabelText(source.labelText ?? source.knobText ?? source.text)
-      : String(source.labelText ?? source.knobText ?? source.text ?? defaults.labelText ?? "Knob")
+      : String(source.labelText ?? source.knobText ?? source.text ?? defaults.labelText ?? "")
         .replace(/\s+/g, " ")
         .trim()
         .slice(0, 48),
@@ -1716,7 +1716,7 @@ function normalizeNodeGraphSliderFaceDisplaySettings(settings = {}, defaultsOver
     sliderRounding: normalizeNodeGraphTraceDisplayNumber(source.sliderRounding ?? source.cornerRadius, defaults.sliderRounding ?? 0.5, 0, 1),
     labelText: typeof nodeGraphKnobFaceNormalizeLabelText === "function"
       ? nodeGraphKnobFaceNormalizeLabelText(source.labelText ?? source.knobText ?? source.text)
-      : String(source.labelText ?? defaults.labelText ?? "Slider").replace(/\s+/g, " ").trim().slice(0, 48),
+      : String(source.labelText ?? defaults.labelText ?? "").replace(/\s+/g, " ").trim().slice(0, 48),
   };
 }
 
@@ -1925,12 +1925,10 @@ function normalizeNodeGraphScope1dTraceSettings(settings = {}) {
   const secHueHex = typeof nodeGraphHueUnitHex === "function"
     ? nodeGraphHueUnitHex(secHue)
     : secHex;
-  const secBright = source.secondaryBrightness != null
-    ? normalizeNodeGraphTraceDisplayBrightness(
-      source.secondaryBrightness,
-      defaults.secondaryBrightness,
-    )
-    : (defaults.secondaryBrightness ?? mappedSec.brightness);
+  // 1D Trace Display Settings expose one Size and one Brightness. The
+  // second (Right) beam follows them; a stored secondary* from an earlier
+  // normalize must not pin the Right beam at its first-save value.
+  const secBright = inkBright;
   const sweepDefaults = typeof nodeGraphLineBurnSettingsDefaults !== "undefined"
     ? nodeGraphLineBurnSettingsDefaults
     : { sweepHz: 4, sweepCycles: 4 };
@@ -1959,10 +1957,7 @@ function normalizeNodeGraphScope1dTraceSettings(settings = {}) {
     secondaryBrightness: secBright,
     secondaryColor: secHueHex,
     secondaryEnabled: source.secondaryEnabled !== false,
-    secondarySize: nodeGraphTraceDisplayNormalizeInkPx(
-      source.secondarySize ?? source.dot1Size,
-      defaults.secondarySize ?? defaults.dot1Size,
-    ),
+    secondarySize: nodeGraphTraceDisplayNormalizeInkPx(source.dot1Size, defaults.dot1Size),
     ghost: typeof PhosphorResidual !== "undefined" && PhosphorResidual.migrateGhost
       ? PhosphorResidual.migrateGhost(source, defaults.ghost)
       : normalizeNodeGraphTraceDisplayNumber(source.ghost, defaults.ghost, 0, 1),

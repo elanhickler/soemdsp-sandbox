@@ -3049,12 +3049,7 @@ function nodeGraphMakeControllerForOpenParameter(kind) {
     domainOffset: 0,
   };
   dest.params[paramKey] = 0;
-  newNode.traceDisplaySettings = {
-    ...(newNode.traceDisplaySettings && typeof newNode.traceDisplaySettings === "object"
-      ? newNode.traceDisplaySettings
-      : {}),
-    labelText: displayName,
-  };
+  // Display stays empty: the face follows the module title until the user types one.
   if (typeof nodeGraphMetamoduleClaimPlacedNode === "function") {
     nodeGraphMetamoduleClaimPlacedNode(newNode, live);
   }

@@ -661,6 +661,14 @@ function normalizeNodeGraphPatchParameterMetadata(type, key, metadata = {}) {
   if (!Number.isFinite(max)) {
     max = fallback.max;
   }
+  // Sabrina Diffusion and Rec used to stop at the old 0.98 clamp.
+  if (
+    type === "reverbEffect"
+    && (key === "diffusionAmount" || key === "recycle")
+    && Math.abs(max - 0.98) < 1e-6
+  ) {
+    max = 1;
+  }
   // Backwards typed range means "knob left is the first number". Store min<=max
   // and turn Reverse on so the mapping math can keep assuming a positive span.
   let reverse = Object.hasOwn(source, "reverse")

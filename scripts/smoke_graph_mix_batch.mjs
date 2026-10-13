@@ -103,7 +103,7 @@ function view(ptr, frames) {
   console.log(`mix ok peak=${peak.toFixed(3)}`);
 }
 
-// --- mixStereo: mono in + amplitude 0 → unity to L/R ---
+// --- mixStereo: L1/R1 in (no Mono jack) + amplitude 0 → unity to L/R ---
 {
   const g = create() | 0;
   setSr(g, 48000);
@@ -113,7 +113,9 @@ function view(ptr, frames) {
   if ((add(g, hOsc, TYPE_POLY) | 0) !== 0) throw new Error("ms add osc");
   if ((add(g, hMs, TYPE_MIXSTEREO) | 0) !== 0) throw new Error("ms add");
   if ((add(g, hOut, TYPE_OUT) | 0) !== 0) throw new Error("ms add out");
-  if ((connect(g, hOsc, PORT_MONO, hMs, PORT_MONO) | 0) !== 0) throw new Error("ms conn");
+  // mixStereo inputs are L1..R4 only (L1 = port 1, R1 = port 2).
+  if ((connect(g, hOsc, PORT_MONO, hMs, PORT_LEFT) | 0) !== 0) throw new Error("ms conn L1");
+  if ((connect(g, hOsc, PORT_MONO, hMs, PORT_RIGHT) | 0) !== 0) throw new Error("ms conn R1");
   if ((connect(g, hMs, PORT_LEFT, hOut, PORT_LEFT) | 0) !== 0) throw new Error("ms L");
   if ((connect(g, hMs, PORT_RIGHT, hOut, PORT_RIGHT) | 0) !== 0) throw new Error("ms R");
   setParam(g, hOsc, 10, 220);

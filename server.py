@@ -541,6 +541,13 @@ class SandboxServer(BaseHTTPRequestHandler):
             self.serve_demo_patches()
             return
 
+        if parsed.path == "/api/patches/meta":
+            if not send_body:
+                self.send_error(405, "Method not allowed")
+                return
+            self.serve_patch_file_meta(parsed.query)
+            return
+
         if parsed.path == "/api/patches/file":
             if not send_body:
                 self.send_error(405, "Method not allowed")
@@ -854,6 +861,31 @@ class SandboxServer(BaseHTTPRequestHandler):
                 "bytes": path.stat().st_size,
             },
         )
+
+    def serve_patch_file_meta(self, query: str) -> None:
+        """mtime/size of the file /api/patches/overwrite would target (overwrite baseline)."""
+        params = parse_qs(query)
+        raw_name = str(params.get("filename", [""])[0] or "").strip()
+        filename = Path(unquote(raw_name)).name
+        if not filename.lower().endswith(".json") or filename in {".", ".."}:
+            self.send_json({"ok": False, "error": "filename must be a .json basename"}, status=400)
+            return
+        for root in (PAGE_PATCHES, SAVED_PATCHES):
+            if not root.exists():
+                continue
+            path = (root / filename).resolve()
+            if path.is_file() and path.is_relative_to(root.resolve()):
+                stat = path.stat()
+                self.send_json(
+                    {
+                        "ok": True,
+                        "filename": filename,
+                        "mtimeMs": int(round(stat.st_mtime * 1000.0)),
+                        "bytes": int(stat.st_size),
+                    }
+                )
+                return
+        self.send_json({"ok": False, "error": "patch file not found"}, status=404)
 
     def overwrite_patch_file(self) -> None:
         parsed = urlparse(self.path)

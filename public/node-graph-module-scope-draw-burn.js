@@ -1105,6 +1105,14 @@ function drawNodeGraphHypersawBurnItem(renderer, item, pixelRatio) {
     return;
   }
 
+  const patchNodeEarly = typeof nodeGraphPatchNode === "function" ? nodeGraphPatchNode(nodeId) : null;
+  if (String(patchNodeEarly?.type || "") === "reverbEffect" && typeof nodeGraphSabrinaReverbGlPresent === "function") {
+    const cssW = Math.max(1, canvas.clientWidth || screenElement?.clientWidth || 1);
+    if (nodeGraphSabrinaReverbGlPresent(canvas, phases, cssW)) {
+      return;
+    }
+  }
+
   const keep = Math.max(0, Math.min(0.995, trail * 0.97 + ghost * 0.02));
   const fade = 1 - keep;
   context.save();
@@ -1151,9 +1159,11 @@ function drawNodeGraphHypersawBurnItem(renderer, item, pixelRatio) {
     if (!(alpha > 0)) continue;
     const cols = [];
     if (sabrinaStems) {
-      // 2 CSS px solid core, then 1 CSS px AA ramps outside that core.
-      const solidW = Math.max(thicknessPx, 2 * pixelScale);
-      const aaW = pixelScale;
+      // 1 CSS px core, 2 CSS px feather. Same coverage as the line shader.
+      const cssW = Math.max(1, canvas.clientWidth || screenElement?.clientWidth || 1);
+      const coreCss = Math.max(1, cssW / 222);
+      const solidW = coreCss * pixelScale;
+      const aaW = 2 * pixelScale;
       const left = xCenter - solidW * 0.5;
       const right = left + solidW;
       const i0 = Math.floor(left - aaW);
@@ -1200,7 +1210,12 @@ function drawNodeGraphHypersawBurnItem(renderer, item, pixelRatio) {
       }
     };
     // Additive off-red / off-blue so left+right combine toward white.
-    if (pan < -0.25) {
+    // Sabrina recycle taps (12 and 13) are both green, at their own times.
+    if (sabrinaStems) {
+      if (i >= 12) paint("rgba(86,206,118,");
+      else if (i & 1) paint("rgba(110,130,255,");
+      else paint("rgba(255,130,110,");
+    } else if (pan < -0.25) {
       paint("rgba(255,130,110,");
     } else if (pan > 0.25) {
       paint("rgba(110,130,255,");

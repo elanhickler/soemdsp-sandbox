@@ -201,7 +201,7 @@ function nodeGraphModuleScopeConnectedSourceBuffer(nodeId, port = "In") {
     null;
 }
 
-/** Instant Waterfall Sync source: dry In, or average of wired Left+Right inputs. */
+/** Trace Sync source: dry In, or average of wired Left+Right inputs; firstWired = first of Mono/Left/Right. */
 function nodeGraphModuleTraceInputSyncBuffer(nodeId, type) {
   const id = String(nodeId || "");
   const spec = (typeof nodeGraphModuleDefinitions === "object"
@@ -217,6 +217,9 @@ function nodeGraphModuleTraceInputSyncBuffer(nodeId, type) {
   const left = spec.left ? nodeGraphModuleScopeConnectedSourceBuffer(id, spec.left) : null;
   const right = spec.right ? nodeGraphModuleScopeConnectedSourceBuffer(id, spec.right) : null;
   const mono = spec.mono ? nodeGraphModuleScopeConnectedSourceBuffer(id, spec.mono) : null;
+  if (spec.firstWired) {
+    return [mono, left, right].find((buffer) => buffer?.length) || null;
+  }
   if (left?.length && right?.length && typeof nodeGraphTraceDisplayMonoSyncBuffer === "function") {
     return nodeGraphTraceDisplayMonoSyncBuffer(left, right) || left;
   }

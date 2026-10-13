@@ -433,6 +433,15 @@ Chaos XYZ is RGB **by name**, not by slot: **X red, Y blue, Z green**. Unlabeled
 - Full write-up: [MODULE_LAYOUT_PLAN.md](./MODULE_LAYOUT_PLAN.md) Â§11.
 - SSOT: `public/node-graph-jack-chrome.js` (`nodeGraphJackStereoChannel` / `nodeGraphJackChannel`).
 
+### Stereo I/O routing (Argi, 2026-10-13)
+
+**Single truth: `library/include/soemdsp/routing/stereo_route.h`** (`soemdsp::routing::stereo_route`). Inputs only decide what feeds the filters; wired outputs decide which filters run; a filter whose output isn't needed doesn't run.
+
+- **Single source** (Mono In alone, a lone Left or Right in, or nothing): `m = M + L + R`. Left out runs the L core on `m`, Right out runs the R core on `m` (per-lane seeds / Spread make them differ). With neither Left nor Right out, only the Mono core runs.
+- **Stereo source** (Left and Right both in): L core gets `L + M`, R core gets `R + M`. Left out or Mono out runs L; Right out or Mono out runs R. No third core.
+- **Mono out** = the Mono core when it runs, else `0.5 * (L + R)` of the running sides (one side alone if only one runs). Unwired Left/Right taps mirror Mono out. No output wired counts as Mono out.
+- Uses it today: Flower Child Filter, Superlove, Superlove Rev2, VCV Super Love (sandbox port). Other M/L/R filters still use `process_norm_chaos_filter` / `probe_mlr_cables` and are unchanged. Table test: `scripts/test_stereo_route_table.cpp` (all 64 wirings); engine smoke: `scripts/smoke_stereo_route_filters.mjs`.
+
 ### CMYK non-realtime plane (additive proving ground)
 
 Additive modules use a **CMYK** jack story for **non-realtime** ports (once per audio quantum). Product name **â€œYellow Graphâ€** matches live chrome (**Yellow** Graph + **Cyan** Parameter). CMYK **M** and **K** stay reserved unused.

@@ -1,0 +1,17 @@
+{
+  "ladder/mono": "1c871d53",
+  "ladder/stereo": "50baa162",
+  "ladder/leftonly": "ab578f7",
+  "tb303/mono": "c82b628d",
+  "tb303/stereo": "6e4159f6",
+  "tb303/leftonly": "ec49a929",
+  "yellowjacket/mono": "e5f4d676",
+  "yellowjacket/stereo": "bc71af85",
+  "yellowjacket/leftonly": "4634c7aa",
+  "human/mono": "1813c747",
+  "human/stereo": "18cf8e4e",
+  "human/leftonly": "d20ccf5f",
+  "resonator/mono": "7e1a4c3c",
+  "resonator/stereo": "6ad84be9",
+  "resonator/leftonly": "5b56e7f4"
+}

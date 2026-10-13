@@ -11337,10 +11337,41 @@ const nodeGraphModuleDefinitions = (
   },
   vcvrackSuperloveFilter: {
     planRole: "processor",
-    displayType: "waterfall",
+    // 1D Stereo Trace face (TraceWoscope beam, same as tubeSaturation).
+    // L/R beams come from this node's own Left/Right displaySignals taps
+    // via stereoWaterfallPorts; mono patches fall back to the Out tap.
+    displayHeightGu: 2,
+    displayType: "scope1dTrace",
+    spectrumCompanion: false,
     displayModes: [
-      { key: "waterfall", renderer: "waterfall", source: { value: "Out" } },
+      {
+        key: "scope1dTrace",
+        label: "1D Trace",
+        renderer: "scope1dTrace",
+        settingsSchema: "scope1dTrace",
+        source: { value: "Out" } },
     ],
+    defaultDisplayMode: "scope1dTrace",
+    stereoWaterfallPorts: { left: "Left", right: "Right" },
+    // Sync locks to the first wired input (Mono, then Left, then Right); the
+    // trace itself stays the output. No input wired: Sync stays on the output.
+    syncTraceFromInputs: { mono: "In", left: "Left", right: "Right", firstWired: true },
+    // Shared gradient preset "matrix" (digital-rain: black ? green ? white tip).
+    defaultDisplaySettings: {
+      background: "#000000",
+      backgroundBrightness: 0,
+      sourceSync: true,
+      skipDiscontinuities: true,
+      dot1Color: "#1ecf55",
+      dot1Brightness: 1,
+      gradientStops: [
+        { t: 0, color: "#000000" },
+        { t: 0.12, color: "#001a08" },
+        { t: 0.35, color: "#0a5c20" },
+        { t: 0.62, color: "#1ecf55" },
+        { t: 0.85, color: "#7dff9a" },
+        { t: 1, color: "#ffffff" },
+      ] },
     displaySignals: [
       { key: "Out", kind: "scalar" },
       { key: "Left", kind: "scalar" },
@@ -13051,9 +13082,9 @@ const nodeGraphModuleDefinitions = (
     parameters: [
       { defaultValue: "0.43", key: "mix", label: "Mix", max: "1", mid: "0.43", min: "0", nonlinearSlider: false, step: "any", tooltip: "Dry/wet balance on the Mix outputs (not a wet-only path)." },
       { defaultValue: "0.35", key: "diffusionSize", label: "Size", max: "1", mid: "0.35", min: "0", nonlinearSlider: false, smoothingSeconds: 0.05, step: "any", tooltip: "Size of the diffusion network." },
-      { defaultValue: "0.70", key: "diffusionAmount", label: "Diffusion", max: "0.98", mid: "0.70", min: "0", nonlinearSlider: false, step: "any", tooltip: "Strength of early diffusion." },
+      { defaultValue: "0.70", key: "diffusionAmount", label: "Diffusion", max: "1", mid: "0.70", min: "0", nonlinearSlider: false, step: "any", tooltip: "Strength of early diffusion." },
       { defaultValue: "0.02", key: "delaySize", label: "Tape Memory", max: "1", mid: "0.02", min: "0", nonlinearSlider: false, smoothingSeconds: 0.05, step: "any", tooltip: "Main reverb delay length." },
-      { defaultValue: "0.70", key: "recycle", label: "Rec", max: "0.98", mid: "0.70", min: "0", nonlinearSlider: false, step: "any", tooltip: "Feedback amount for the reverb tail." },
+      { defaultValue: "0.70", key: "recycle", label: "Rec", max: "1", mid: "0.70", min: "0", nonlinearSlider: false, step: "any", tooltip: "Feedback amount for the reverb tail." },
       { defaultValue: "0.07", key: "lfoAmplitude", label: "Mod()Amp", max: "1", mid: "0.07", min: "0", nonlinearSlider: false, step: "any", tooltip: "Amount of delay modulation." },
       { defaultValue: "0.83", key: "lfoBaseSpeed", label: "Mod()Speed", max: "1", mid: "0.83", min: "0", nonlinearSlider: false, step: "any", tooltip: "Base speed of delay modulation." },
       { defaultValue: "0.001", key: "lfoVariation", label: "Mod()Vary", max: "1", mid: "0.001", min: "0", nonlinearSlider: false, step: "any", tooltip: "Randomized variation in delay modulation." },

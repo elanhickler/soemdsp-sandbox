@@ -10,24 +10,7 @@ const html = fs.readFileSync(path.join(root, "index.html"), "utf8");
 
 const omit = [
   "node-graph-execution-debug-api.js",
-  "node-graph-execution-debug-view.js",
   "node-graph-debug-copy.js",
-  "legacy-evidence-checklist-view.js",
-  "legacy-evidence-proof-view.js",
-  "legacy-evidence-views.js",
-  "hands-on-readiness-waveform-labels.js",
-  "hands-on-readiness-primary-labels.js",
-  "hands-on-readiness-artifact-labels.js",
-  "hands-on-readiness-signal-inspection-labels.js",
-  "hands-on-readiness-phase-parameter-labels.js",
-  "hands-on-readiness-probe-labels.js",
-  "hands-on-readiness.js",
-  "artifact-report-utils.js",
-  "artifact-report-reports.js",
-  "artifact-list-view.js",
-  "artifact-coverage-view.js",
-  "manifest-source-view.js",
-  "legacy-evidence",
 ];
 
 const tags = [...html.matchAll(/<script\b[^>]*>\s*<\/script>/g)]
@@ -53,19 +36,13 @@ for (const tag of tags) {
 }
 
 const needed = [
+  "renderNodeGraphExecutionPlanDebug",
   "renderNodeGraphExecutionSummarySelection",
-  "validateConsumerChecklist",
-  "renderArtifactCoverage",
-  "renderHandsOnReadiness",
-  "renderSource",
   "installNodeGraphDebugApi",
   "copyNodeGraphRuntimeSketch",
   "downloadNodeGraphLivePlanJson",
   "startNodeGraphMockInputDebug",
   "toggleDebugSections",
-  "renderReports",
-  "renderProducerProof",
-  "renderChecklist",
 ];
 
 console.log({ keptTags: tags.length, defs: defs.size, stubKept });

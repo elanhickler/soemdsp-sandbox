@@ -1,6 +1,6 @@
 // Feedback plate: ping-pong on the shared picture device (Sim FPS, not audio rate).
 
-const NODE_GRAPH_VIDEO_FEEDBACK_GL_REV = 8;
+const NODE_GRAPH_VIDEO_FEEDBACK_GL_REV = 9;
 const NODE_GRAPH_VIDEO_FEEDBACK_MAX = 512;
 const NODE_GRAPH_VIDEO_FEEDBACK_WAVE = 512;
 
@@ -57,14 +57,9 @@ const NODE_GRAPH_VIDEO_FEEDBACK_WAVE = 512;
     void main() {
       vec2 uv = vUv;
       vec2 c = vfCenter(uv);
-      vec2 pc = vfRot(c, 0.012 * uTwist);
-      pc *= 1.0 + 0.008 + 0.01 * uA;
+      vec2 pc = vfRot(c, uTwist * 0.15);
       vec2 p = clamp(vfUncenter(pc), 0.003, 0.997);
       vec3 col = texture2D(uPrev, p).rgb * uDecay;
-      if (uHasPic > 0.5) {
-        vec4 pic = texture2D(uPic, p);
-        col = min(col + pic.rgb * clamp(uMix, 0.0, 1.0) * pic.a, vec3(1.0));
-      }
       vec2 sc = vfRot(c, uTwist * 1.2 + uB * 1.4);
       float rad = length(sc);
       float t = clamp(atan(sc.y, abs(sc.x)) / 3.14159265 + 0.5, 0.0, 1.0);
@@ -74,7 +69,7 @@ const NODE_GRAPH_VIDEO_FEEDBACK_WAVE = 512;
         + texture2D(uWave, vec2(t, 0.5)).r * 2.0
         + texture2D(uWave, vec2(clamp(t + dt, 0.0, 1.0), 0.5)).r
       ) * 0.25;
-      float inner = 0.14 + 0.1 * uZoom + 0.08 * uA;
+      float inner = 0.12 + 0.28 * uZoom;
       float thick = 0.035 + mag * (0.2 + 0.28 * uBright);
       float d = abs(rad - inner);
       float edge = thick + 0.02 + 0.04 * uSmooth;

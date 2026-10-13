@@ -88,11 +88,7 @@ async function nodeSandboxStartupTask(label, task, timeoutMs = 8000) {
 
 async function initSandboxApp() {
   setNodeSandboxStartupProgress(4, "starting up");
-  loadSignalPlotSettings();
-  await Promise.all([
-    nodeSandboxStartupTask("manifest", loadManifest),
-    nodeSandboxStartupTask("node graph", initNodeGraphMvp),
-  ]);
+  await nodeSandboxStartupTask("node graph", initNodeGraphMvp);
   await markNodeSandboxInterfaceReady();
 }
 

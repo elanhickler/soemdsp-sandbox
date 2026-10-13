@@ -179,12 +179,6 @@ function nodeInteractionMouseHint(element) {
   if (element.id === "nodeRenderButton") {
     return nodeGraphTooltipText("audio.render");
   }
-  if (element.id === "nodeCopyRuntimeSketchButton") {
-    return nodeGraphTooltipText("actions.copyRuntimeSketch");
-  }
-  if (element.id === "nodeCopyExecutionJsonButton") {
-    return nodeGraphTooltipText("actions.copyExecutionJson");
-  }
   if (element.id === "nodeDeleteButton" || element.id === "nodeSceneHistoryDeleteButton") {
     return nodeGraphTooltipText("actions.deleteSelection");
   }

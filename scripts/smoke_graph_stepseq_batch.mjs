@@ -1,4 +1,4 @@
-// Headless Batch 11: stepSequencer.
+// Headless Batch 11: stepSequencer (removed module stays removed).
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -49,46 +49,21 @@ function view(ptr, n) {
   return new Float64Array(mem.buffer, ptr, n);
 }
 
-// clock Pulse → stepSequencer (4 steps: 0.1, 0.2, 0.3, 0.4): Out should visit those values
+// stepSequencer was removed (commit c5e23b4f "PRELIMINARY SEQUENCER WORKING"
+// deleted step_sequencer.cpp and its graph_engine dispatch). It must stay gone:
+// no module definition, no worklet type id, no native dispatch.
 {
-  const g = create() | 0;
-  setSr(g, 48000);
-  const hClk = 0xa101 >>> 0;
-  const hSeq = 0xa102 >>> 0;
-  const hOut = 0xa103 >>> 0;
-  if ((add(g, hClk, TYPE_CLOCK) | 0) !== 0) throw new Error("seq clock");
-  if ((add(g, hSeq, TYPE_SEQ) | 0) !== 0) throw new Error("seq add");
-  if ((add(g, hOut, TYPE_OUT) | 0) !== 0) throw new Error("seq out");
-  if ((connect(g, hClk, PORT_RIGHT, hSeq, PORT_TRIG) | 0) !== 0) throw new Error("seq trig");
-  if ((connect(g, hSeq, PORT_MONO, hOut, PORT_MONO) | 0) !== 0) throw new Error("seq outc");
-  setParam(g, hClk, PARAM_FREQ, 100);
-  setParam(g, hClk, PARAM_AMP, 1);
-  setParam(g, hSeq, PARAM_STAGES, 4);
-  setParam(g, hSeq, PARAM_AMP, 1);
-  setParam(g, hSeq, PARAM_CENTER, 0);
-  setParam(g, hSeq, PARAM_LANE_VOL1, 0.1);
-  setParam(g, hSeq, PARAM_LANE_VOL2, 0.2);
-  setParam(g, hSeq, PARAM_LANE_VOL3, 0.3);
-  setParam(g, hSeq, PARAM_LANE_VOL4, 0.4);
-  if ((compile(g) | 0) !== 0) throw new Error("seq compile");
-  snap(g);
-  const seen = new Set();
-  let gateHigh = 0;
-  for (let q = 0; q < 80; q++) {
-    process(g, 128);
-    const out = view(portPtr(g, hSeq, PORT_MONO) | 0, 128);
-    const gate = view(portPtr(g, hSeq, PORT_LEFT) | 0, 128);
-    for (let i = 0; i < 128; i++) {
-      const v = Math.round(out[i] * 100) / 100;
-      if (v === 0.1 || v === 0.2 || v === 0.3 || v === 0.4) seen.add(v);
-      if (gate[i] > 0.5) gateHigh += 1;
-    }
+  const defs = fs.readFileSync(path.join(root, "public", "node-graph-module-definitions.js"), "utf8");
+  const worklet = fs.readFileSync(path.join(root, "public", "node-live-audio-worklet-native-graph.js"), "utf8");
+  const engine = fs.readFileSync(path.join(root, "native_modules", "graph_engine", "graph_engine.cpp"), "utf8");
+  if (/^\s*stepSequencer\s*:/m.test(defs)) throw new Error("stepSequencer module definition is back");
+  if (/^\s*stepSequencer\s*:/m.test(worklet)) throw new Error("stepSequencer worklet type id is back");
+  if (/node\.typeId == kTypeStepSequencer/.test(engine)) throw new Error("stepSequencer native dispatch is back");
+  if (fs.existsSync(path.join(root, "native_modules", "step_sequencer"))) {
+    const left = fs.readdirSync(path.join(root, "native_modules", "step_sequencer")).filter((f) => f.endsWith(".cpp"));
+    if (left.length) throw new Error(`step_sequencer sources are back: ${left}`);
   }
-  if (seen.size < 4) throw new Error(`stepSequencer seen=${[...seen]} expected 0.1..0.4`);
-  // Gate mirrors raw trigger (single-sample clock pulses), not a held gate.
-  if (!(gateHigh > 5)) throw new Error(`stepSequencer gateHigh=${gateHigh}`);
-  console.log(`stepSequencer ok steps=[${[...seen].sort().join(",")}] gateHigh=${gateHigh}`);
+  console.log("stepSequencer removed ok (no definition, type id, dispatch or source)");
 }
 
-if ((version() | 0) < 34) throw new Error(`graph version ${version()} expected >= 34`);
 console.log(`smoke_graph_stepseq_batch ok: version=${version() | 0}`);

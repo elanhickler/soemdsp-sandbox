@@ -38,9 +38,10 @@ function run(h, opts = {}) {
     reset = 0,
     phaseAlgo = 0,
     phaseMul = 0,
+    morph = 0.5, // definition default
     frames = 128,
   } = opts;
-  process(h, freq, 44100, detune, voices, 1, stereo, algo, wave, 20000, reset, phaseAlgo, phaseMul, frames);
+  process(h, freq, 44100, detune, voices, 1, stereo, algo, wave, 20000, reset, phaseAlgo, phaseMul, morph, frames);
 }
 
 const h = create() | 0;

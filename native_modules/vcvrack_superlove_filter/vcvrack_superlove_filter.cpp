@@ -10,6 +10,7 @@
 // Drive 0…4 multiplies the input. Panel order is LP18, LP24, BP, HP.
 
 #include <soemdsp/soemdsp.hpp>
+#include <soemdsp/utility/cold_start.h>
 
 using namespace soemdsp_maths;
 
@@ -158,6 +159,7 @@ struct State {
   double filterY[5];
   double dcY[5];
   unsigned int rngState;
+  ColdStart cold;
 };
 
 static State gPool[kMaxInstances];
@@ -187,6 +189,7 @@ extern "C" int soemdsp_vcvrack_superlove_filter_create() {
       s.feedbackSignal = 0.0;
       for (int j = 0; j < 5; j++) { s.filterY[j] = 0.0; s.dcY[j] = 0.0; }
       s.rngState = seed_to_rng_state(seed_mix(0u, kSeedNoise, 0u));
+      cold_start_arm(&s.cold);
       s.active = true;
       return i + 1;
     }
@@ -251,7 +254,8 @@ extern "C" double soemdsp_vcvrack_superlove_filter_sample(
     const double dcA = ladderCoefficient(5.0, safeRate);
     const double dcOut = ladderTapStep(s.dcY, s.feedbackSignal, dcA, 2, 3);
     const double lpBoost = (safeMode == 0) ? kLp18FinalBoost : kLp24FinalBoost;
-    return dcOut * kLpOutputScale * kMasterOutScale * lpBoost;
+    const double out = dcOut * kLpOutputScale * kMasterOutScale * lpBoost;
+    return out * cold_start_apply(&s.cold, safeRate);
   }
 
   const double driven = drivenIn * kHpBpInputScale;
@@ -267,18 +271,20 @@ extern "C" double soemdsp_vcvrack_superlove_filter_sample(
     fb = ladderTapStep(s.dcY, fb, hpA, 2, 1);
     fb *= 10.0;
     s.feedbackSignal = fb;
-    return (-fb * 0.31) * kHpBpOutputScale * kMasterOutScale * kHpFinalBoost;
+    const double outHp = (-fb * 0.31) * kHpBpOutputScale * kMasterOutScale * kHpFinalBoost;
+    return outHp * cold_start_apply(&s.cold, safeRate);
   }
 
   const double a = ladderCoefficient(cutoffHz, safeRate);
   double fb = ladderTapStep(s.filterY, oscValue * 0.1, a, 3, 1);
   fb *= 10.0;
   s.feedbackSignal = fb;
-  return fb * kHpBpOutputScale * kMasterOutScale * kBpExtraOutScale;
+  const double outBp = fb * kHpBpOutputScale * kMasterOutScale * kBpExtraOutScale;
+  return outBp * cold_start_apply(&s.cold, safeRate);
 }
 
 extern "C" int soemdsp_vcvrack_superlove_filter_version() {
-  return 8;
+  return 11;
 }
 
 extern "C" const char* soemdsp_vcvrack_superlove_filter_metadata_json() {

@@ -112,9 +112,10 @@ void main (void) {
     // 1D (uSolidCore) does not. sigma = uSize/4 is ~0.5px at the old
     // half-width floor, and low LUT stops are near black, so only the
     // exact ridge indexes the bright stop. Diagonal centers sit ~0.7px
-    // off that ridge: 1px gaps. Capsule gaussian, sigma >= 1.35px,
-    // plateau within 1px of the stroke so the core is the bright stop
-    // and the skirt still falls through the LUT.
+    // off that ridge: 1px gaps. Capsule gaussian, sigma = uSize/2
+    // (>= 0.5px) so softness follows Size, plateau within 1px of the
+    // stroke so the core is the bright stop and the skirt falls through
+    // the LUT.
     float alongGrad = step(0.5, uBrightAlong);
     float axialPeak = (len < EPS)
         ? 1.0
@@ -124,12 +125,26 @@ void main (void) {
         float endX = max(len, 0.0);
         float cx = clamp(xy.x, 0.0, endX);
         float dist = length(vec2(xy.x - cx, xy.y));
-        float sigmaSolid = max(uSize / 4.0, 1.35);
+        float sigmaSolid = max(uSize * 0.5, 0.5);
         float gSolid = exp(-dist * dist / (2.0 * sigmaSolid * sigmaSolid));
         float gCore = exp(-1.0 / (2.0 * sigmaSolid * sigmaSolid));
         cover = clamp(gSolid / max(gCore, 1e-4), 0.0, 1.0);
     }
-    float beamE = clamp(cover * max(uIntensity, 0.0), 0.0, 0.999);
+    // Beam-time share: a segment is one beam time step, so its energy is
+    // spread over its length instead of each segment writing full peak.
+    float shareSig = (uSolidCore > 0.5) ? max(uSize * 0.5, 0.5) : sigma;
+    float share = (len < EPS) ? 1.0 : shareSig * 2.5066283 / len;
+    float shareCover = g * 0.5 * axial;
+    if (len < EPS) {
+        shareCover = cover;
+    } else if (uSolidCore > 0.5) {
+        // 1D: same along-segment gaussian falloff as 2D at the 1D width,
+        // so consecutive short segments sum to one pass, not a stack of caps.
+        float gS = exp(-xy.y * xy.y / (2.0 * shareSig * shareSig));
+        float axS = erf((len - xy.x) / SQRT2 / shareSig) + erf(xy.x / SQRT2 / shareSig);
+        shareCover = gS * 0.5 * axS;
+    }
+    float beamE = clamp(shareCover * share * max(uIntensity, 0.0), 0.0, 0.999);
     if (alongGrad > 0.5) {
         // 1D/2D Trace: this fragment is brightness only (0 black .. 1 white).
         // Not an alpha, and not rgb * brightness. The present pass looks up
@@ -598,10 +613,9 @@ void main() {
       gl.scissor(0, 0, width, height);
       gl.viewport(0, 0, width, height);
     }
-    let uSize = Math.max(0.05, diameter * 0.5);
+    // Half-width in px. 0.5px floor only keeps the beam from vanishing.
+    const uSize = Math.max(0.5, diameter * 0.5);
     const solidCore = options.solidCore === true;
-    uSize = Math.max(uSize, 2.0);
-    if (solidCore) uSize = Math.max(uSize, 3.0);
     const useLut = (Array.isArray(options.gradientStops) && options.gradientStops.length >= 2)
       || typeof options.sampleRgb === "function";
     if (useLut) {
@@ -629,16 +643,9 @@ void main() {
     if (segCount >= 1 && diameter > 0) {
       gl.bindFramebuffer(gl.FRAMEBUFFER, st.write.fbo);
       gl.enable(gl.BLEND);
-      if (!Object.prototype.hasOwnProperty.call(glDevice, "maxBlend")) {
-        glDevice.maxBlend = gl.getExtension("EXT_blend_minmax");
-      }
-      if (glDevice.maxBlend) {
-        gl.blendEquation(glDevice.maxBlend.MAX_EXT);
-        gl.blendFunc(gl.ONE, gl.ONE);
-      } else {
-        gl.blendEquation(gl.FUNC_ADD);
-        gl.blendFunc(gl.ONE, gl.ONE);
-      }
+      // Additive deposit: energy sums across segments and frames.
+      gl.blendEquation(gl.FUNC_ADD);
+      gl.blendFunc(gl.ONE, gl.ONE);
       gl.useProgram(glDevice.program);
       gl.uniform2f(glDevice.uCanvasSize, width, height);
       gl.uniform1f(glDevice.uSize, uSize);
@@ -817,16 +824,10 @@ void main() {
     if (canvas.height !== height) {
       canvas.height = height;
     }
-    // Half-width in px. sigma = uSize/4 (upstream). 2D Trace floor
-    // stays 2px. 1D solidCore quad must hold a 1.35px sigma.
-    let uSize = Math.max(0.05, diameter * 0.5);
+    // Half-width in px. sigma = uSize/4 (upstream); 1D solidCore uses
+    // uSize/2. 0.5px floor only keeps the beam from vanishing.
+    const uSize = Math.max(0.5, diameter * 0.5);
     const solidCore = options.solidCore === true;
-    if (brightAlong) {
-      uSize = Math.max(uSize, 2.0);
-    }
-    if (solidCore) {
-      uSize = Math.max(uSize, 3.0);
-    }
     const color = parseColor(options.color, [1 / 32, 1, 1 / 32, 1]);
     const useLut = Array.isArray(options.gradientStops) && options.gradientStops.length >= 2
       || typeof options.sampleRgb === "function";
@@ -841,14 +842,10 @@ void main() {
     gl.clearColor(0, 0, 0, 1);
     gl.clear(gl.COLOR_BUFFER_BIT);
     gl.enable(gl.BLEND);
-    // 1D writes LUT(brightness) opaquely. Max keeps the hotter stop where
-    // quads overlap so tails do not add into one hue. 2D / vectorscope stay
+    // Trace brightness deposits add (ONE, ONE). Vectorscope stays
     // additive src-alpha.
-    if (!Object.prototype.hasOwnProperty.call(glDevice, "maxBlend")) {
-      glDevice.maxBlend = gl.getExtension("EXT_blend_minmax");
-    }
-    if (brightAlong && glDevice.maxBlend) {
-      gl.blendEquation(glDevice.maxBlend.MAX_EXT);
+    if (brightAlong) {
+      gl.blendEquation(gl.FUNC_ADD);
       gl.blendFunc(gl.ONE, gl.ONE);
     } else {
       gl.blendEquation(gl.FUNC_ADD);

@@ -267,9 +267,6 @@ function handleNodeGraphSettingsInput(event) {
   if (typeof syncNodeGraphHeaderPatchTitle === "function") {
     syncNodeGraphHeaderPatchTitle();
   }
-  if (typeof drawNodeRenderedVisualOutput === "function") {
-    drawNodeRenderedVisualOutput();
-  }
 }
 
 function commitNodeGraphSettingsHistory() {

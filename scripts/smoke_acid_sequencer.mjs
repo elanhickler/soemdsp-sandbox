@@ -35,7 +35,8 @@ const PORT_GATE = 0;
 const PORT_TRIG = 1;
 const PORT_PITCH = 2;
 const PORT_F = 3;
-const PORT_INC = 4;
+const PORT_RAMP = 4; // inc removed: always 0
+const PORT_CV = 5;   // accent CV (Low / High Accent while Gate is high)
 const PORT_STEP = 10;
 const PARAM_AMP = 12;
 const PARAM_STAGES = 22;
@@ -97,7 +98,8 @@ function at(abs) {
     trig: read(PORT_TRIG),
     pitch: read(PORT_PITCH),
     f: read(PORT_F),
-    inc: read(PORT_INC),
+    ramp: read(PORT_RAMP),
+    cv: read(PORT_CV),
     step: read(PORT_STEP),
   };
 }
@@ -109,15 +111,18 @@ function near(a, b, eps, label) {
 const s0 = at(0);
 near(s0.step, 0, 0, "step0");
 near(s0.gate, 1, 1e-9, "gate0");
+// ACID_SEQUENCER_PLAN.md:27/140: Trigger only on Accent steps (step 0 has no Accent).
 near(s0.trig, 0, 1e-9, "trig0");
 near(s0.pitch, 36, 1e-6, "pitch0");
-near(s0.inc, s0.f / sr, 1e-9, "inc0");
+near(s0.ramp, 0, 0, "ramp0 (inc removed)");
+near(s0.cv, 0, 1e-9, "cv0 low accent");
 
 const s1 = at(step);
 near(s1.step, 1, 0, "step1");
 near(s1.gate, 1, 1e-9, "gate1");
 near(s1.trig, 1, 1e-6, "trig1");
 near(s1.pitch, 38, 1e-6, "pitch1");
+near(s1.cv, 1, 1e-9, "cv1 high accent");
 const s1end = at(step + 48);
 near(s1end.trig, 0, 1e-9, "trig1 end");
 
@@ -125,6 +130,7 @@ const rest = at(step * 2);
 near(rest.step, 2, 0, "step2");
 near(rest.gate, 0, 1e-9, "gate rest");
 near(rest.trig, 0, 1e-9, "trig rest");
+near(rest.cv, 0, 1e-9, "cv rest");
 near(rest.pitch, 38, 1e-6, "pitch hold");
 
 const beforeTie = at(step * 3 - 1);
@@ -132,7 +138,7 @@ const tie = at(step * 3);
 near(beforeTie.gate, 0, 1e-9, "pre tie low after rest");
 near(tie.gate, 1, 1e-9, "tie gate");
 near(tie.pitch, 40, 1e-6, "tie pitch");
-near(tie.trig, 0, 1e-9, "tie no accent");
+near(tie.trig, 0, 1e-9, "tie does not retrigger");
 const tieHold = at(step * 3 + 10);
 near(tieHold.gate, 1, 1e-9, "tie stays high");
 

@@ -15,7 +15,6 @@ body.node-perform-mode.node-boot-ready .node-boot-loading-screen {
   display: none !important;
 }
 
-body.node-perform-mode .status-strip,
 body.node-perform-mode .node-command-center-dock,
 body.node-perform-mode #nodeModuleShopView,
 body.node-perform-mode .node-module-shop-view,

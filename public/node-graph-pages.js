@@ -383,6 +383,12 @@ async function handleNodeGraphPagePatchClick(event, entry) {
         if (typeof setNodeGraphCurrentSavedPatch === "function") {
           setNodeGraphCurrentSavedPatch(`${entry.slug}.json`);
         }
+        if (typeof nodeGraphClearPatchFileTabState === "function") {
+          nodeGraphClearPatchFileTabState();
+        }
+        if (typeof nodeGraphRefreshServerPatchFileBaseline === "function") {
+          void nodeGraphRefreshServerPatchFileBaseline(`${entry.slug}.json`);
+        }
         if (typeof syncNodeGraphHeaderPatchTitle === "function") {
           syncNodeGraphHeaderPatchTitle();
         }

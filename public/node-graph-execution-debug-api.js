@@ -299,7 +299,42 @@ function installNodeGraphDebugApi() {
     soemdspRuntimeSketch(patch = nodeGraphMvp.patch) {
       return nodeGraphSoemdspRuntimeSketch(compileValidatedNodeGraphExecutionPlan(patch));
     },
+    // Former bottom debug panel, now on demand:
+    executionPlanJson() {
+      return nodeGraphExecutionPlanJsonText();
+    },
+    runtimeSketch() {
+      return nodeGraphRuntimeSketchText();
+    },
+    livePlan() {
+      return nodeGraphBuildLivePlan();
+    },
+    downloadLivePlan() {
+      return downloadNodeGraphLivePlanJson();
+    },
+    copyExecutionJson() {
+      return copyNodeGraphExecutionJson();
+    },
+    copyRuntimeSketch() {
+      return copyNodeGraphRuntimeSketch();
+    },
+    lastRenderStats() {
+      return nodeGraphMvp.lastRenderStats ? { ...nodeGraphMvp.lastRenderStats } : null;
+    },
+    renderStatus() {
+      return nodeGraphRenderStatusPill().textContent;
+    },
+    badValueMonitor(enabled) {
+      if (enabled !== undefined && Boolean(enabled) !== nodeGraphBadValueMonitorEnabled()) {
+        toggleNodeGraphBadValueMonitor();
+      }
+      return { enabled: nodeGraphBadValueMonitorEnabled(), events: nodeGraphBadValueMonitorEvents().slice() };
+    },
+    tripEarProtection() {
+      return nodeGraphTripEarProtection({ source: "manual", protectionMuteCount: 1 });
+    },
   });
+  window.soemdspDebug = window.soemdspSandboxDebug;
 }
 
 async function startNodeGraphMockInputDebug(options = {}) {

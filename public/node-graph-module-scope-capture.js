@@ -709,7 +709,9 @@ function captureNodeGraphLiveModuleScopeInputSync(runtime, nodeId) {
   const right = spec.right ? captureNodeGraphLiveModuleScopeInputMix(runtime, id, spec.right) : null;
   const mono = spec.mono ? captureNodeGraphLiveModuleScopeInputMix(runtime, id, spec.mono) : null;
   let sample = null;
-  if (left != null || right != null) {
+  if (spec.firstWired) {
+    sample = mono ?? left ?? right;
+  } else if (left != null || right != null) {
     const a = left == null ? 0 : left;
     const b = right == null ? 0 : right;
     sample = (left != null && right != null) ? (a + b) * 0.5 : (a + b);

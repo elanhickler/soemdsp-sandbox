@@ -641,8 +641,12 @@ NodeLiveAudioProcessor.prototype.processControllerEfficientSidecar = function pr
     // Gate/Trigger carry strike velocity while active (envelopes read Gate level as velocity).
     const gateOn = num(signal.gate, 0) > 0;
     const gateAmp = gateOn ? velocity01 : 0;
-    const pulseOn = num(signal.gatePulse, 0) > 0;
-    const triggerAmp = pulseOn ? velocity01 : 0;
+    // Strikes come from the timed event queue for this quantum only, never a held flag.
+    const evState = typeof this.keyboardEventStateFor === "function" ? this.keyboardEventStateFor(holdKey) : null;
+    const strikes = evState?.plan?.pulses;
+    const triggerAmp = Array.isArray(strikes) && strikes.length
+      ? (strikes[0].vel > 0 ? strikes[0].vel : 1)
+      : 0;
     const sourceFreq = Number(signal.frequency);
     const frequency = Math.max(0,
       Number.isFinite(sourceFreq) && sourceFreq > 0

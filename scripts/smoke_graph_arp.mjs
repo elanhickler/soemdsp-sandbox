@@ -244,12 +244,9 @@ function tickExternal(h, mask, rising) {
   if (!(fPeak > 20 && fPeak < 80)) {
     throw new Error(`arp graph fPeak=${fPeak}`);
   }
-  // Ramp = inc (cycles/sample) = f/sr.
-  if (!(incPeak > 20 / SR && incPeak < 0.05)) {
-    throw new Error(`arp graph incPeak=${incPeak}`);
-  }
-  if (Math.abs(incPeak - fPeak / SR) > 1e-9) {
-    throw new Error(`arp graph inc!=f/sr inc=${incPeak} f=${fPeak}`);
+  // inc was dropped ("INC EXPERIMENT FAILED, GOING WITH ƒ"): Ramp mirrors f (Hz).
+  if (incPeak !== fPeak) {
+    throw new Error(`arp graph Ramp should mirror f: ramp=${incPeak} f=${fPeak}`);
   }
   console.log(
     `ok arp type=${TYPE_ARP} version=${ver} pitch=${pitchPeak.toFixed(4)} gate=${gatePeak.toFixed(4)} trig=${trigPeak.toFixed(4)} f=${fPeak.toFixed(4)} inc=${incPeak.toExponential(3)}`,

@@ -2685,6 +2685,10 @@ NodeLiveAudioProcessor.prototype.mixNativeShellPortCv = function mixNativeShellP
  *   edge: first sample high on the down edge, then zeros.
  */
 NodeLiveAudioProcessor.HOST_INLET_MIX = Object.freeze({
+  keyboardController: Object.freeze({
+    level: Object.freeze(["Gate"]),
+    edge: Object.freeze(["Trigger"]),
+  }),
   keyboard: Object.freeze({
     level: Object.freeze(["Gate"]),
     edge: Object.freeze(["Trigger"]),
@@ -2964,19 +2968,36 @@ NodeLiveAudioProcessor.prototype.readEfficientModSourceBlock = function readEffi
   if (!this.efficientModSourceIsSampleBlock(srcId, srcPort) || !view?.length) return false;
   const type = String(this.nodes?.get?.(String(srcId))?.type || "");
   const kind = NodeLiveAudioProcessor.hostInletMixKind(type, srcPort);
-  const signal = this.keyboardSignalByNode?.get?.(String(srcId));
-  const vel = Math.max(0, Math.min(1, Number(signal?.velocity) || 0));
-  const gateOn = Number(signal?.gate) > 0;
-  const frames = view.length;
+  // This quantum's plan (prepareKeyboardEventBlock), written for the current
+  // process_block window [base, base + len).
+  const st = typeof this.keyboardEventStateFor === "function" ? this.keyboardEventStateFor(srcId) : null;
+  const plan = st?.plan || null;
+  const base = Math.max(0, Number(this._keyboardChunkStart) || 0);
+  const chunkFrames = Number(this._keyboardChunkFrames);
+  const len = chunkFrames > 0 ? Math.min(view.length, chunkFrames) : view.length;
+  for (let j = len; j < view.length; j += 1) view[j] = 0;
   if (kind === "level") {
-    const level = gateOn ? vel : 0;
-    for (let i = 0; i < frames; i += 1) view[i] = level;
+    const edges = plan ? plan.edges : [];
+    let level = plan
+      ? (plan.startGate ? plan.startVel : 0)
+      : (st?.gate ? st.vel : 0);
+    let e = 0;
+    for (let j = 0; j < len; j += 1) {
+      const at = base + j;
+      while (e < edges.length && edges[e].off <= at) {
+        level = edges[e].gate ? edges[e].vel : 0;
+        e += 1;
+      }
+      view[j] = level;
+    }
   } else {
-    for (let i = 0; i < frames; i += 1) view[i] = 0;
-    const pulse = this._keyboardDownPulseByNode?.get?.(String(srcId));
-    if (this._keyboardPulseCommit && pulse > 0) {
-      view[0] = vel > 0 ? vel : 1;
-      this._keyboardDownPulseByNode.set(String(srcId), 0);
+    for (let j = 0; j < len; j += 1) view[j] = 0;
+    // Trigger: exactly one sample per strike, at its offset in this window.
+    const pulses = plan ? plan.pulses : [];
+    for (let p = 0; p < pulses.length; p += 1) {
+      const at = pulses[p].off - base;
+      if (at < 0 || at >= len) continue;
+      view[at] = pulses[p].vel > 0 ? pulses[p].vel : 1;
     }
   }
   return true;
@@ -3016,7 +3037,7 @@ NodeLiveAudioProcessor.prototype.nativeHostCvSampleBlockView = function nativeHo
   return view;
 };
 
-/** Write this quantum's per-sample block (Trigger: 1 at [0] on the edge, else 0). */
+/** Write this window's per-sample block (Keyboard Gate edges + 1-sample Triggers at their offsets). */
 NodeLiveAudioProcessor.prototype.writeNativeHostCvSampleBlock = function writeNativeHostCvSampleBlock(feed) {
   const view = this.nativeHostCvSampleBlockView(feed);
   if (!view) return;
@@ -3027,6 +3048,17 @@ NodeLiveAudioProcessor.prototype.writeNativeHostCvSampleBlock = function writeNa
     return;
   }
   view.fill(0);
+};
+
+/** Later process_block chunks of one quantum (oversampling): rewrite sample-block feeders for that window. */
+NodeLiveAudioProcessor.prototype.writeNativeHostCvSampleBlocksChunk = function writeNativeHostCvSampleBlocksChunk() {
+  const feeders = this._nativeHostCvFeeders;
+  if (!Array.isArray(feeders) || !feeders.length) return;
+  for (let i = 0; i < feeders.length; i += 1) {
+    const feed = feeders[i];
+    if (!feed?.sampleBlock) continue;
+    this.writeNativeHostCvSampleBlock(feed);
+  }
 };
 
 /**
@@ -9263,17 +9295,31 @@ NodeLiveAudioProcessor.prototype.processNativeGraphQuantum = function processNat
   }
 
   // Controllers + MIDI Keyboard are not native — publish Bias/Out / Frequency.
+  // Keyboard Gate/Trigger events due this quantum -> sample offsets.
+  {
+    const rawOs = Math.round(Number(this.oversamplingRatio || this.oversamplingFactor || 1));
+    const osRatio = (rawOs === 2 || rawOs === 4) ? rawOs : 1;
+    const hostFrames = Math.max(1, Math.round(frames / osRatio));
+    const start = typeof currentFrame === "number"
+      ? currentFrame
+      : (Number(this._keyboardEventFallbackFrame) || 0);
+    this._keyboardEventFallbackFrame = start + hostFrames;
+    try {
+      this.prepareKeyboardEventBlock?.(start, hostFrames, osRatio);
+    } catch (_e) { /* keep audio */ }
+    const maxBlockFrames = Math.max(1, nodeGraphFiniteNumber(this.nativeGraph?.soemdsp_graph_max_block_frames?.(), 128));
+    this._keyboardChunkStart = 0;
+    this._keyboardChunkFrames = Math.min(frames, maxBlockFrames);
+  }
   if (typeof this.processControllerEfficientSidecar === "function") {
     try {
       this.processControllerEfficientSidecar(frames);
     } catch (_e) { /* keep audio */ }
   }
   // MIDI Frequency → Slew In (host→native Bias feeders) before process_block.
-  this._keyboardPulseCommit = true;
   try {
     this.syncNativeHostCvFeeders?.();
   } catch (_e) { /* keep audio */ }
-  this._keyboardPulseCommit = false;
   try {
     this.syncNativeArpNoteMasks?.();
     this.syncNativeGravityWalkerNoteMasks?.();
@@ -9320,6 +9366,12 @@ NodeLiveAudioProcessor.prototype.processNativeGraphQuantum = function processNat
   while (written < frames) {
     const chunk = Math.min(maxBlock, frames - written);
     let processed = 0;
+    if (written > 0) {
+      // Oversampled quanta run several chunks: Keyboard Gate/Trigger for this window.
+      this._keyboardChunkStart = written;
+      this._keyboardChunkFrames = chunk;
+      this.writeNativeHostCvSampleBlocksChunk?.();
+    }
     try {
       processed = native.soemdsp_graph_process_block(this.nativeGraphHandle, chunk) | 0;
     } catch (_e) {

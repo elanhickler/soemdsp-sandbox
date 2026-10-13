@@ -3667,6 +3667,45 @@ function updateNodeGraphMidiKeyboardSignal(event) {
     return;
   }
 
+  // ——— Right-click sweep on the keys (arp-style) ———
+  // Right press on a key = one Trigger with Gate low. Right drag = one Trigger
+  // per new key; the same key does nothing. Off the keys, right-click stays the
+  // display-settings menu (keyboard-layout-settings.js). Per-module rt state.
+  if (
+    event.type === "pointerdown"
+    && event.button === 2
+    && !event.ctrlKey && !event.shiftKey && !altDown
+  ) {
+    const key = event.target?.closest?.("[data-key-index]");
+    if (key && surface.contains(key)) {
+      rt.rightSweepPointerId = pointerId;
+      try { surface.setPointerCapture?.(pointerId); } catch (_e) { /* ignore */ }
+      const next = nodeGraphMidiKeyboardSignalFromPointer(event, surface, { refreshVelocity: true });
+      rt.rightSweepMidi = nodeGraphMidiKeyboardRawMidiFromSignal(next);
+      renderNodeGraphMidiKeyboardSignal(nodeId, { ...next, gate: 0, gatePulse: 1 });
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
+  }
+  if (rt.rightSweepPointerId != null && rt.rightSweepPointerId === pointerId) {
+    if (event.type === "pointermove") {
+      const next = nodeGraphMidiKeyboardSignalFromPointer(event, surface, { refreshVelocity: true });
+      const midi = nodeGraphMidiKeyboardRawMidiFromSignal(next);
+      if (Number.isFinite(midi) && midi !== rt.rightSweepMidi) {
+        rt.rightSweepMidi = midi;
+        renderNodeGraphMidiKeyboardSignal(nodeId, { ...next, gate: 0, gatePulse: 1 });
+      }
+    } else if (event.type === "pointerup" || event.type === "pointercancel" || event.type === "lostpointercapture") {
+      try { surface.releasePointerCapture?.(pointerId); } catch (_e) { /* ignore */ }
+      rt.rightSweepPointerId = null;
+      rt.rightSweepMidi = NaN;
+      renderNodeGraphMidiKeyboardActiveKeys(nodeId);
+    }
+    event.preventDefault();
+    return;
+  }
+
   // ——— Play gesture (blue) ———
   // Plain click clears blue mono hold on the same key; gold Arp bits stay.
   if (event.type === "pointerdown" && !event.ctrlKey && !event.shiftKey && !event.altKey) {
@@ -3954,12 +3993,15 @@ function renderNodeGraphMidiKeyboardActiveKeys(nodeId = null) {
     const signalMidi = activeSignal
       ? nodeGraphMidiKeyboardRawMidiFromSignal(activeSignal)
       : NaN;
+    // Right-click sweep (Gate low): the swept key stays blue while held, like the arp.
+    const sweepMidi = rt.rightSweepPointerId != null ? Number(rt.rightSweepMidi) : NaN;
     const playMask = nodeGraphHeldKeysDemux(rt.facePlayTransmit, rt.playRegs);
     for (const face of nodeGraphKeyboardFaces(id)) {
       if (!face.classList.contains("node-midi-keyboard-module")) continue;
       face.querySelectorAll("[data-midi]").forEach((key) => {
         const midi = Number(key.dataset.midi);
-        const fromSignal = Number.isFinite(signalMidi) && midi === signalMidi;
+        const fromSignal = (Number.isFinite(signalMidi) && midi === signalMidi)
+          || (Number.isFinite(sweepMidi) && midi === sweepMidi);
         const fromPlay = playMask instanceof Uint8Array && typeof noteMaskGet === "function"
           ? noteMaskGet(playMask, midi)
           : false;

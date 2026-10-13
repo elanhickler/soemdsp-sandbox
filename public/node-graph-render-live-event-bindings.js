@@ -175,12 +175,7 @@ function bindNodeGraphRenderLiveControlEvents() {
   }
   bindNodeGraphRenderedSampleDownloadDrag();
   // Debug-only copy/export/mock controls — optional in release (stubs or omitted).
-  if (typeof copyNodeGraphRuntimeSketch === "function") {
-    document.getElementById("nodeCopyRuntimeSketchButton")?.addEventListener("click", copyNodeGraphRuntimeSketch);
-  }
-  if (typeof copyNodeGraphExecutionJson === "function") {
-    document.getElementById("nodeCopyExecutionJsonButton")?.addEventListener("click", copyNodeGraphExecutionJson);
-  }
+  // Visibility menu (Debug-only items) + live audio controls row.
   if (typeof downloadNodeGraphLivePlanJson === "function") {
     document.getElementById("nodeExportLivePlanButton")?.addEventListener("click", downloadNodeGraphLivePlanJson);
   }

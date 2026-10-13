@@ -526,7 +526,7 @@ async function sendNodeGraphLiveNativeModule(liveNode, entry) {
 // Chrome caps wasm memories per process (~100); many standalone instances
 // hit that cap. Slim is for small used-sets when per-module files exist;
 // huge patches / site deploys should use combined.
-const nodeGraphLiveCombinedNativeModuleUrl = "native_modules/combined/soemdsp_combined.wasm?v=ens-fbm-1";
+const nodeGraphLiveCombinedNativeModuleUrl = "native_modules/combined/soemdsp_combined.wasm?v=smoke-fix-2";
 
 /** @type {null|"slim"|"combined"} */
 let nodeGraphLiveNativeWasmLoadModeResolved = null;
@@ -2691,6 +2691,29 @@ function sendNodeGraphLiveParameterUpdate() {
   }
 }
 
+/**
+ * Audio-clock sample frame for a keyboard Gate/Trigger event: the frame being
+ * rendered now plus one render quantum, so it lands at its offset in the next
+ * block. -1 when there is no context (the worklet then plays it at sample 0).
+ */
+function nodeGraphLiveKeyboardEventFrame() {
+  const ctx = nodeGraphMvp.live.context;
+  const sr = Number(ctx?.sampleRate);
+  if (!ctx || !(sr > 0)) return -1;
+  let t = Number(ctx.currentTime);
+  if (typeof ctx.getOutputTimestamp === "function" && typeof performance !== "undefined") {
+    const ts = ctx.getOutputTimestamp();
+    const ct = Number(ts?.contextTime);
+    const pt = Number(ts?.performanceTime);
+    if (Number.isFinite(ct) && Number.isFinite(pt) && pt > 0) {
+      t = ct + (performance.now() - pt) / 1000
+        + (Number(ctx.baseLatency) || 0) + (Number(ctx.outputLatency) || 0);
+    }
+  }
+  if (!Number.isFinite(t)) return -1;
+  return Math.round(t * sr) + 128;
+}
+
 function sendNodeGraphLiveMidiKeyboardSignal(signal = nodeGraphMvp.midiKeyboardSignal) {
   const payload = signal && typeof signal === "object" ? { ...signal } : null;
   if (nodeGraphMvp.live.runtime) {
@@ -2698,6 +2721,7 @@ function sendNodeGraphLiveMidiKeyboardSignal(signal = nodeGraphMvp.midiKeyboardS
   }
   if (nodeGraphMvp.live.usesWorklet && nodeGraphMvp.live.node?.port) {
     nodeGraphMvp.live.node.port.postMessage({
+      atFrame: nodeGraphLiveKeyboardEventFrame(),
       signal: payload,
       type: "setMidiKeyboardSignal",
     });
@@ -2709,6 +2733,7 @@ function sendNodeGraphLiveKeyboardModuleSignal(nodeId, signal) {
   const payload = signal && typeof signal === "object" ? { ...signal } : null;
   if (nodeGraphMvp.live.usesWorklet && nodeGraphMvp.live.node?.port) {
     nodeGraphMvp.live.node.port.postMessage({
+      atFrame: nodeGraphLiveKeyboardEventFrame(),
       nodeId: String(nodeId || ""),
       signal: payload,
       type: "setKeyboardModuleSignal",
@@ -3209,16 +3234,16 @@ const nodeGraphLiveWorkletSourceFilesEfficient = [
   "./public/lib/note-mask-128.js?v=pq-oct-st-1",
   "./public/node-graph-keyboard-chord-memory.js?v=kbd-own-1",
   "./public/modules/sequencer/sequencer-math.js?v=seq-23",
-  "./public/node-live-audio-worklet-events.js?v=acid-cv-3",
+  "./public/node-live-audio-worklet-events.js?v=rclick-sweep-2",
   "./public/node-live-audio-worklet-visual.js?v=planck-eps-1",
   "./public/node-live-audio-worklet-scope-io.js?v=output-face-postvol-1",
   "./public/node-live-audio-worklet-native-load.js?v=plan-d-split-7",
   "./public/node-live-audio-worklet-native-exports.js?v=hyperpluck-1",
-  "./public/node-live-audio-worklet-native-graph.js?v=ens-fbm-1",
+  "./public/node-live-audio-worklet-native-graph.js?v=kbd-trig-1samp-20261013",
   "./public/node-live-audio-worklet-meta-view.js?v=voice-preview-1",
   "./public/node-live-audio-worklet-set-plan.js?v=softpop-ship-1",
-  "./public/node-live-audio-worklet-clear-plan.js?v=softpop-ship-1",
-  "./public/node-live-audio-worklet-handle-message.js?v=kbd-own-1",
+  "./public/node-live-audio-worklet-clear-plan.js?v=kbd-trig-1samp-20261013",
+  "./public/node-live-audio-worklet-handle-message.js?v=kbd-trig-1samp-20261013",
   "./public/node-live-audio-worklet-scope-snapshot.js?v=sabrina-stems-1",
   "./public/modules/spectrogram/spectrogram-worklet-evaluator.js?v=spectro-stride-1-s1d",
   "./public/modules/_shared/output-amplitude.js?v=output-amp-1",
@@ -3228,7 +3253,7 @@ const nodeGraphLiveWorkletSourceFilesEfficient = [
   // Envelope *Mod strips: native opcodes 70/72 (no JS ADSR / BakeStrip).
   // Keypad slot math (host CV controller — used by sidecar publish + setKeypadInteraction).
   "./public/modules/keypad/keypad-math.js?v=keypad-hostcv-1",
-  "./public/modules/_shared/controller-efficient-sidecar.js?v=kbd-own-1",
+  "./public/modules/_shared/controller-efficient-sidecar.js?v=kbd-trig-1samp-20261013",
   "./public/node-live-audio-worklet-process.js?v=scope-ack-1",
 ];
 

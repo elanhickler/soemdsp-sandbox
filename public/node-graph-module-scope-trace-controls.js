@@ -2534,7 +2534,7 @@ const nodeGraphDisplaySettingsFormTypeTitles = Object.freeze({
   rgbShapeFace: "Shape",
   rgbPictureFace: "Picture",
   imageBurnFace: "Image Ghost",
-  videoFeedbackFace: "Feedback",
+  videoFeedbackFace: "Spectrum Circle",
   rgbFractalFace: "Soft Fractal",
   evolveFieldFace: "Evolve Field",
   fbmFieldFace: "Fractal Brownian Field",

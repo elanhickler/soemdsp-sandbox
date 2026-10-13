@@ -87,7 +87,9 @@ function nodeGraphKeyboardBuildCvFromSignal(signal, sampleRate, previous = null)
   // Digital presence alone would ignore velocity once Velocity out is removed.
   const gateOn = Number(signal?.gate) > 0;
   const gateAmp = gateOn ? velocity01 : 0;
-  const triggerAmp = Number(signal?.gatePulse) > 0 ? velocity01 : 0;
+  // gatePulse stays set on the face signal: one evaluation per strike, not held.
+  const pulseSet = Number(signal?.gatePulse) > 0;
+  const triggerAmp = pulseSet && !prev?.pulseSet ? velocity01 : 0;
   const sourceFreq = Number(signal?.frequency);
   const prevFreq = Number(prev?.frequency);
   const frequency = Math.max(0,
@@ -110,6 +112,7 @@ function nodeGraphKeyboardBuildCvFromSignal(signal, sampleRate, previous = null)
     velocity01,
     gateAmp,
     triggerAmp,
+    pulseSet,
     frequency,
     x,
     y,

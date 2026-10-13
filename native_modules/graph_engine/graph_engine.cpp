@@ -15,6 +15,7 @@
 #include <soemdsp/math/exp_log.h>
 #include <soemdsp/math/analog_filter_trig.h>
 #include <soemdsp/math/scalar_helpers.h>
+#include <soemdsp/routing/stereo_route.h>
 
 using soemdsp::math::gate_hit;
 using soemdsp::math::planck_divisor;
@@ -1869,7 +1870,6 @@ static const int kTypeTriggerCounter = 32;
 static const int kTypeMetallicRatio = 33;
 static const int kTypeLutCell = 34;
 static const int kTypeLookaheadLimiter = 35;
-static const int kTypeStepSequencer = 36;
 static const int kTypeTransport = 37;
 static const int kTypeAliasSine = 38;
 static const int kTypeBlit = 39;
@@ -3341,7 +3341,7 @@ static void init_node_defaults(Node& n, int typeId) {
     typeId != kTypePll && typeId != kTypeFm
   );
   // Ladder stages default 4; robinSupersaw = voices; triggerDivider = division;
-  // triggerCounter/stepSequencer = counts;
+  // triggerCounter = counts;
   // antisaw = reflections; archimedes = profile dtShift;
   // additiveOsc = harmonics; hypersaw2 = voices; sinc = lobes;
   // snowflake = iterations.
@@ -3349,7 +3349,7 @@ static void init_node_defaults(Node& n, int typeId) {
     n.stages,
     (typeId == kTypeRobinSupersaw || typeId == kTypeHyperpluck) ? 7.0
       : (typeId == kTypeTriggerDivider) ? 2.0
-      : (typeId == kTypeTriggerCounter || typeId == kTypeStepSequencer
+      : (typeId == kTypeTriggerCounter
           || typeId == kTypeTuringMachine || typeId == kTypeDegreeTuring
           || typeId == kTypeDegreePhrase) ? 8.0
       : (typeId == kTypeChordPad || typeId == kTypeNoteTranspose) ? 0.0 // degree / semis
@@ -3449,6 +3449,7 @@ static void init_node_defaults(Node& n, int typeId) {
   init_control(
     n.width,
     (typeId == kTypeVcvrackSuperloveFilter) ? 0.0 // spread
+      : (typeId == kTypeAcidSequencer) ? 0.0 // accentLow (definition default 0)
       : (typeId == kTypeExponentialDelay) ? 0.0 // random offset seconds
       : (typeId == kTypePhaser) ? 0.5 // spread octaves
       : (typeId == kTypeNoiseGenerator) ? 0.5
@@ -3797,6 +3798,7 @@ static void init_node_defaults(Node& n, int typeId) {
       : (typeId == kTypeChaosfly) ? 0.0 // Pitch oct transpose
       : (typeId == kTypeChordPad) ? 0.0
       : (typeId == kTypeAttenuMax) ? 1.0
+      : (typeId == kTypeBoing) ? 1.0 // volume (definition default 1)
       : 0.0,
     (typeId == kTypeArp) // snap whole-octave steps
   ); // degreePhrase rest8 / robin portamentoStyle / arp octaveOffset / chaosfly pitch
@@ -3851,19 +3853,14 @@ static void init_node_defaults(Node& n, int typeId) {
   // rasterRgb: laneVol[0]=contrast (1), laneBias[0]=brightness (1)
   // lookaheadLimiter: laneBias[0]=release ms, laneBias[1]=dipGain
   // pumpLimiter: laneBias[0]=release ms, laneBias[1]=threshold dB
-  // stepSequencer: laneVol[0..3]=step1..4, laneBias[0..3]=step5..8
-  // degreePhrase: same lanes for Deg 1..8; rests on in*/out*/bleed*/offset
+  // degreePhrase: laneVol[0..3]=Deg 1..4, laneBias[0..3]=Deg 5..8; rests on in*/out*/bleed*/offset
   const double laneVolDefault = (typeId == kTypeMix || typeId == kTypeMix2 || typeId == kTypeRasterRgb || typeId == kTypeFbmField) ? 1.0 : 0.0;
-  static const double kStepDefaults[8] = {
-    0.0, 0.25, 0.5, 0.75, 1.0, 0.75, 0.5, 0.25
-  };
   static const double kDegreePhraseSteps[8] = {
     0.0, 0.25, 0.5, 0.15, 0.75, 0.4, 0.6, 0.0
   };
   for (int i = 0; i < 4; i++) {
     double volDef = laneVolDefault;
-    if (typeId == kTypeStepSequencer) volDef = kStepDefaults[i];
-    else if (typeId == kTypeDegreePhrase) volDef = kDegreePhraseSteps[i];
+    if (typeId == kTypeDegreePhrase) volDef = kDegreePhraseSteps[i];
     else if (typeId == kTypeRasterRgb && i > 0) volDef = 0.0;
     init_control(n.laneVol[i], volDef, false);
     double biasDef = 0.0;
@@ -3873,8 +3870,6 @@ static void init_node_defaults(Node& n, int typeId) {
     } else if (typeId == kTypePumpLimiter) {
       if (i == 0) biasDef = 250.0; // release ms
       else if (i == 1) biasDef = -18.0; // threshold dB
-    } else if (typeId == kTypeStepSequencer) {
-      biasDef = kStepDefaults[i + 4];
     } else if (typeId == kTypeDegreePhrase) {
       biasDef = kDegreePhraseSteps[i + 4];
     } else if (typeId == kTypeRasterRgb && i == 0) {
@@ -8969,6 +8964,55 @@ static inline double norm_pitch_freq_from_control(double freq) {
 }
 
 // Character filters with 0..1 normalized frequency; shape=chaos.
+// Stereo-route filters (Flower Child, Superlove, Superlove Rev2, VCV Super Love).
+// The routing rule lives only in soemdsp/routing/stereo_route.h; this probes
+// which M/L/R jacks are cabled and runs exactly the filters the route asks for.
+static soemdsp::routing::StereoRouteWiring probe_stereo_route_wiring(Circuit& g, const Node& node) {
+  soemdsp::routing::StereoRouteWiring w;
+  for (int ci = 0; ci < g.connCount; ci++) {
+    if (!g.conns[ci].used) continue;
+    if (g.conns[ci].dstHash == node.idHash) {
+      const int dp = clamp_dst_port(g.conns[ci].dstPort);
+      if (is_live_dst_port(dp)) continue;
+      if (is_graph_port(dp)) continue;
+      if (dp == kPortLeft) w.inLeft = true;
+      else if (dp == kPortRight) w.inRight = true;
+      else w.inMono = true;
+    }
+    if (g.conns[ci].srcHash == node.idHash) {
+      const int sp = clamp_src_port(g.conns[ci].srcPort);
+      if (sp == kPortLeft) w.outLeft = true;
+      else if (sp == kPortRight) w.outRight = true;
+      else if (sp == kPortMono) w.outMono = true;
+    }
+  }
+  return w;
+}
+
+// prep(f, bothSides) reads this frame's controls; sample(handle, in, lane)
+// runs one core (lane 0 Mono / 1 Left / 2 Right). Caller mixes inputs first.
+template <typename Prep, typename Sample>
+static void process_stereo_route_filter(Circuit& g, Node& node, int frames, Prep prep, Sample sample) {
+  using namespace soemdsp::routing;
+  const StereoRoute route = stereo_route(probe_stereo_route_wiring(g, node));
+  for (int f = 0; f < frames; f++) {
+    control_frame(g, node, f);
+    prep(f, route.bothSides);
+    const double m = g.mixMono[f];
+    const double l = g.mixLeft[f];
+    const double r = g.mixRight[f];
+    const double yM = route.runMono
+      ? sample(node.nativeHandle, stereo_route_feed(route.feedMono, m, l, r), 0) : 0.0;
+    const double yL = route.runL
+      ? sample(node.nativeHandleL, stereo_route_feed(route.feedL, m, l, r), 1) : 0.0;
+    const double yR = route.runR
+      ? sample(node.nativeHandleR, stereo_route_feed(route.feedR, m, l, r), 2) : 0.0;
+    node.buf[kPortMono][f] = stereo_route_out(route.outMono, yM, yL, yR);
+    node.buf[kPortLeft][f] = stereo_route_out(route.outLeft, yM, yL, yR);
+    node.buf[kPortRight][f] = stereo_route_out(route.outRight, yM, yL, yR);
+  }
+}
+
 static void process_norm_chaos_filter(
   Circuit& g, Node& node, int frames, bool hasMode,
   double (*sample4)(int, double, double, double, double, double),
@@ -9034,9 +9078,7 @@ static void process_norm_chaos_filter(
   }
 }
 
-// Cable-based: one core unless Left and Right ins are both wired.
-// Stereo: independent L/R handles; Mono In still sums into both.
-// Same cutoff Hz on both cores; no L/R constant mismatch.
+// Routing: soemdsp/routing/stereo_route.h. Same cutoff Hz on every core.
 static void process_flower_child_filter(Circuit& g, Node& node, int frames) {
   if (node.nativeHandle <= 0) return;
   {
@@ -9050,38 +9092,19 @@ static void process_flower_child_filter(Circuit& g, Node& node, int frames) {
   mix_node_inputs(g, node, frames);
   const double sr = g.sampleRate < 1.0f ? 44100.0 : (double)g.sampleRate;
   const double modeV = control_effective(node.mode);
-  int mode = (int)(modeV + (modeV >= 0.0 ? 0.5 : -0.5));
-  bool hasLeftIn = false, hasRightIn = false, hasMonoIn = false, monoOutWired = false;
-  probe_mlr_cables(g, node, &hasMonoIn, &hasLeftIn, &hasRightIn, &monoOutWired);
-  const bool needMono = hasMonoIn || monoOutWired || (!hasLeftIn && !hasRightIn);
-  for (int f = 0; f < frames; f++) {
-    control_frame(g, node, f);
-    const double freq = norm_pitch_freq_from_control(control_audio(g, node.frequency, f));
-    const double reso = control_audio(g, node.resonance, f);
-    const double chaos = control_audio(g, node.shape, f);
-    double amp = control_audio(g, node.amplitude, f);
-    if (!(amp == amp)) amp = 1.0;
-    if (needMono) {
-      double in = g.mixMono[f];
-      if (!hasLeftIn && !hasRightIn) in += g.mixLeft[f] + g.mixRight[f];
-      const double out = soemdsp_flower_child_filter_sample(
-        node.nativeHandle, in, freq, reso, chaos, mode, sr
-      ) * amp;
-      node.buf[kPortMono][f] = out;
-      if (!hasLeftIn) node.buf[kPortLeft][f] = out;
-      if (!hasRightIn) node.buf[kPortRight][f] = out;
-    }
-    if (hasLeftIn && node.nativeHandleL > 0) {
-      node.buf[kPortLeft][f] = soemdsp_flower_child_filter_sample(
-        node.nativeHandleL, g.mixLeft[f] + g.mixMono[f], freq, reso, chaos, mode, sr
-      ) * amp;
-    }
-    if (hasRightIn && node.nativeHandleR > 0) {
-      node.buf[kPortRight][f] = soemdsp_flower_child_filter_sample(
-        node.nativeHandleR, g.mixRight[f] + g.mixMono[f], freq, reso, chaos, mode, sr
-      ) * amp;
-    }
-  }
+  const int mode = (int)(modeV + (modeV >= 0.0 ? 0.5 : -0.5));
+  double freq = 0.0, reso = 0.0, chaos = 0.0, amp = 1.0;
+  process_stereo_route_filter(g, node, frames,
+    [&](int f, bool) {
+      freq = norm_pitch_freq_from_control(control_audio(g, node.frequency, f));
+      reso = control_audio(g, node.resonance, f);
+      chaos = control_audio(g, node.shape, f);
+      amp = control_audio(g, node.amplitude, f);
+      if (!(amp == amp)) amp = 1.0;
+    },
+    [&](int h, double in, int) {
+      return soemdsp_flower_child_filter_sample(h, in, freq, reso, chaos, mode, sr) * amp;
+    });
 }
 
 static void process_yellowjacket_filter(Circuit& g, Node& node, int frames) {
@@ -9091,15 +9114,29 @@ static void process_yellowjacket_filter(Circuit& g, Node& node, int frames) {
 }
 
 static void process_superlove_filter(Circuit& g, Node& node, int frames) {
+  if (node.nativeHandle <= 0) return;
   unsigned int seedU = 0u;
-  if (node.nativeHandle > 0 && node_take_seed(node, &seedU)) {
+  if (node_take_seed(node, &seedU)) {
     soemdsp_superlove_filter_set_seed(node.nativeHandle, (double)seedU, 0);
     if (node.nativeHandleL > 0) soemdsp_superlove_filter_set_seed(node.nativeHandleL, (double)seedU, 1);
     if (node.nativeHandleR > 0) soemdsp_superlove_filter_set_seed(node.nativeHandleR, (double)seedU, 2);
   }
-  process_norm_chaos_filter(
-    g, node, frames, true, nullptr, soemdsp_superlove_filter_sample
-  );
+  mix_node_inputs(g, node, frames);
+  const double sr = g.sampleRate < 1.0f ? 44100.0 : (double)g.sampleRate;
+  const double modeV = control_effective(node.mode);
+  const int mode = (int)(modeV + (modeV >= 0.0 ? 0.5 : -0.5));
+  double freq = 0.0, reso = 0.0, chaos = 0.0, amp = 1.0;
+  process_stereo_route_filter(g, node, frames,
+    [&](int f, bool) {
+      freq = norm_pitch_freq_from_control(control_audio(g, node.frequency, f));
+      reso = control_audio(g, node.resonance, f);
+      chaos = control_audio(g, node.shape, f);
+      amp = control_audio(g, node.amplitude, f);
+      if (!(amp == amp)) amp = 1.0;
+    },
+    [&](int h, double in, int) {
+      return soemdsp_superlove_filter_sample(h, in, freq, reso, chaos, mode, sr) * amp;
+    });
 }
 
 // Superlove Rev2: mix Control = noise inject amount (host: noise×noiseAmount meta).
@@ -9119,49 +9156,25 @@ static void process_vcvrack_superlove_filter(Circuit& g, Node& node, int frames)
   int mode = (int)(modeV + (modeV >= 0.0 ? 0.5 : -0.5));
   if (mode < 0) mode = 0;
   if (mode > 3) mode = 3;
-  bool hasLeftIn = false, hasRightIn = false, hasMonoIn = false, monoOutWired = false;
-  probe_mlr_cables(g, node, &hasMonoIn, &hasLeftIn, &hasRightIn, &monoOutWired);
-  const bool stereo = hasLeftIn && hasRightIn;
-  const bool needMono = hasMonoIn || monoOutWired || !stereo;
-  for (int f = 0; f < frames; f++) {
-    control_frame(g, node, f);
-    const double freq = norm_pitch_freq_from_control(control_audio(g, node.frequency, f));
-    const double reso = control_audio(g, node.resonance, f);
-    const double noiseAmt = control_audio(g, node.mix, f);
-    const double drive = control_audio(g, node.gainDb, f);
-    const double spread = stereo ? control_audio(g, node.width, f) : 0.0;
-    const double spreadAmt = spread < -1.0 ? -0.15 : (spread > 1.0 ? 0.15 : spread * 0.15);
-    double amp = control_audio(g, node.amplitude, f);
-    if (!(amp == amp)) amp = 1.0;
-    if (needMono) {
-      double in = g.mixMono[f];
-      if (!hasLeftIn && !hasRightIn) in += g.mixLeft[f] + g.mixRight[f];
-      const double out = soemdsp_vcvrack_superlove_filter_sample(
-        node.nativeHandle, in, freq, reso, noiseAmt, drive, mode, sr
-      ) * amp;
-      node.buf[kPortMono][f] = out;
-      if (!hasLeftIn) node.buf[kPortLeft][f] = out;
-      if (!hasRightIn) node.buf[kPortRight][f] = out;
-    }
-    if (hasLeftIn && node.nativeHandleL > 0) {
-      double freqL = freq - spreadAmt;
-      if (freqL < 0.0) freqL = 0.0;
-      if (freqL > 1.0) freqL = 1.0;
-      node.buf[kPortLeft][f] = soemdsp_vcvrack_superlove_filter_sample(
-        node.nativeHandleL, g.mixLeft[f] + g.mixMono[f],
-        freqL, reso, noiseAmt, drive, mode, sr
-      ) * amp;
-    }
-    if (hasRightIn && node.nativeHandleR > 0) {
-      double freqR = freq + spreadAmt;
-      if (freqR < 0.0) freqR = 0.0;
-      if (freqR > 1.0) freqR = 1.0;
-      node.buf[kPortRight][f] = soemdsp_vcvrack_superlove_filter_sample(
-        node.nativeHandleR, g.mixRight[f] + g.mixMono[f],
-        freqR, reso, noiseAmt, drive, mode, sr
-      ) * amp;
-    }
-  }
+  double freq = 0.0, reso = 0.0, noiseAmt = 0.0, drive = 0.0, spreadAmt = 0.0, amp = 1.0;
+  process_stereo_route_filter(g, node, frames,
+    [&](int f, bool bothSides) {
+      freq = norm_pitch_freq_from_control(control_audio(g, node.frequency, f));
+      reso = control_audio(g, node.resonance, f);
+      noiseAmt = control_audio(g, node.mix, f);
+      drive = control_audio(g, node.gainDb, f);
+      // Spread applies whenever the L and R cores both run (also from a single source).
+      const double spread = bothSides ? control_audio(g, node.width, f) : 0.0;
+      spreadAmt = spread < -1.0 ? -0.15 : (spread > 1.0 ? 0.15 : spread * 0.15);
+      amp = control_audio(g, node.amplitude, f);
+      if (!(amp == amp)) amp = 1.0;
+    },
+    [&](int h, double in, int lane) {
+      double fq = lane == 1 ? freq - spreadAmt : (lane == 2 ? freq + spreadAmt : freq);
+      if (fq < 0.0) fq = 0.0;
+      if (fq > 1.0) fq = 1.0;
+      return soemdsp_vcvrack_superlove_filter_sample(h, in, fq, reso, noiseAmt, drive, mode, sr) * amp;
+    });
 }
 
 static void process_superlove_rev2(Circuit& g, Node& node, int frames) {
@@ -9180,41 +9193,20 @@ static void process_superlove_rev2(Circuit& g, Node& node, int frames) {
   int mode = (int)(modeV + (modeV >= 0.0 ? 0.5 : -0.5));
   if (mode < 0) mode = 0;
   if (mode > 3) mode = 3;
-  bool hasLeftIn = false, hasRightIn = false, hasMonoIn = false, monoOutWired = false;
-  probe_mlr_cables(g, node, &hasMonoIn, &hasLeftIn, &hasRightIn, &monoOutWired);
-  const bool needMono = hasMonoIn || monoOutWired || (!hasLeftIn && !hasRightIn);
-  for (int f = 0; f < frames; f++) {
-    control_frame(g, node, f);
-    const double freq = norm_pitch_freq_from_control(control_audio(g, node.frequency, f));
-    const double reso = control_audio(g, node.resonance, f);
-    const double morph = control_audio(g, node.shape, f);
-    const double noiseAmt = control_audio(g, node.mix, f);
-    const double phase = control_audio(g, node.phaseParam, f);
-    double amp = control_audio(g, node.amplitude, f);
-    if (!(amp == amp)) amp = 1.0;
-    if (needMono) {
-      double in = g.mixMono[f];
-      if (!hasLeftIn && !hasRightIn) in += g.mixLeft[f] + g.mixRight[f];
-      const double out = soemdsp_superlove_rev2_sample(
-        node.nativeHandle, in, freq, reso, morph, noiseAmt, phase, mode, sr
-      ) * amp;
-      node.buf[kPortMono][f] = out;
-      if (!hasLeftIn) node.buf[kPortLeft][f] = out;
-      if (!hasRightIn) node.buf[kPortRight][f] = out;
-    }
-    if (hasLeftIn && node.nativeHandleL > 0) {
-      node.buf[kPortLeft][f] = soemdsp_superlove_rev2_sample(
-        node.nativeHandleL, g.mixLeft[f] + g.mixMono[f],
-        freq, reso, morph, noiseAmt, phase, mode, sr
-      ) * amp;
-    }
-    if (hasRightIn && node.nativeHandleR > 0) {
-      node.buf[kPortRight][f] = soemdsp_superlove_rev2_sample(
-        node.nativeHandleR, g.mixRight[f] + g.mixMono[f],
-        freq, reso, morph, noiseAmt, phase, mode, sr
-      ) * amp;
-    }
-  }
+  double freq = 0.0, reso = 0.0, morph = 0.0, noiseAmt = 0.0, phase = 0.0, amp = 1.0;
+  process_stereo_route_filter(g, node, frames,
+    [&](int f, bool) {
+      freq = norm_pitch_freq_from_control(control_audio(g, node.frequency, f));
+      reso = control_audio(g, node.resonance, f);
+      morph = control_audio(g, node.shape, f);
+      noiseAmt = control_audio(g, node.mix, f);
+      phase = control_audio(g, node.phaseParam, f);
+      amp = control_audio(g, node.amplitude, f);
+      if (!(amp == amp)) amp = 1.0;
+    },
+    [&](int h, double in, int) {
+      return soemdsp_superlove_rev2_sample(h, in, freq, reso, morph, noiseAmt, phase, mode, sr) * amp;
+    });
 }
 
 static void process_human_filter(Circuit& g, Node& node, int frames) {

@@ -7,7 +7,7 @@ function createNodeGraphVideoFeedbackBody(node, type) {
   face.dataset.nodeType = type;
   face.dataset.lightSource = "screen";
   face.dataset.lightStrength = "1";
-  face.setAttribute("aria-label", `${nodeGraphNodeDisplayName(node)} feedback`);
+  face.setAttribute("aria-label", `${nodeGraphNodeDisplayName(node)} spectrum circle`);
   face.style.cssText = "position:relative;width:100%;height:100%;overflow:hidden;background:#000000;";
 
   const canvas = document.createElement("canvas");

@@ -684,6 +684,7 @@ function nodeGraphSetPatchFileBaselineFromMeta({ name = "", lastModified = 0, si
     size: Math.max(0, Math.round(Number(size) || 0)),
   };
   nodeGraphMvp.patchFileBaseline = baseline.name ? baseline : null;
+  if (nodeGraphMvp.patchFileBaseline) nodeGraphMvp.patchRestoredFromSession = false;
   return nodeGraphMvp.patchFileBaseline;
 }
 
@@ -702,6 +703,34 @@ async function nodeGraphCapturePatchFileBaseline(handle, fallbackName = "") {
       nodeGraphMvp.patchFileHandle = handle;
     }
     return baseline;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Server-backed load: record this tab's overwrite baseline from the server's
+ * current mtime/size of the file /api/patches/overwrite would target.
+ * No-op when the tab holds a File System Access handle.
+ */
+async function nodeGraphRefreshServerPatchFileBaseline(filename = "") {
+  if (!nodeGraphMvp || nodeGraphMvp.patchFileHandle?.kind === "file") return null;
+  let name = String(filename || "").trim();
+  if (!name) return null;
+  if (!name.toLowerCase().endsWith(".json")) name = `${name}.json`;
+  name = name.split("/").pop();
+  try {
+    const response = await fetch(`/api/patches/meta?filename=${encodeURIComponent(name)}`, { cache: "no-store" });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok || result.ok !== true) return null;
+    if (nodeGraphMvp.patchFileHandle?.kind === "file") return null;
+    const current = String(nodeGraphMvp.currentSavedPatchFilename || "").trim().split("/").pop().toLowerCase();
+    if (current && current !== name.toLowerCase()) return null;
+    return nodeGraphSetPatchFileBaselineFromMeta({
+      name: result.filename || name,
+      lastModified: result.mtimeMs,
+      size: result.bytes,
+    });
   } catch {
     return null;
   }
@@ -1097,6 +1126,15 @@ async function overwriteNodeGraphOriginalPatch() {
     const baseline = nodeGraphMvp?.patchFileBaseline;
     const expectedMtime = Math.max(0, Math.round(Number(baseline?.lastModified) || 0));
     if (!baseline || !expectedMtime) {
+      if (!baseline && nodeGraphMvp?.patchRestoredFromSession === true) {
+        if (typeof setNodeGraphScriptStatus === "function") {
+          setNodeGraphScriptStatus(
+            "This tab was restored from a previous session — Save or Save as new once before overwriting",
+            false,
+          );
+        }
+        return false;
+      }
       return refuseStale("no freshness baseline for server overwrite");
     }
     if (baseline.name && filename && baseline.name.toLowerCase() !== filename.toLowerCase()) {
@@ -1161,14 +1199,18 @@ function openNodeGraphPatchSaveMenu() {
   menu.className = "node-patch-save-menu";
   menu.setAttribute("role", "menu");
   const hasOriginal = nodeGraphHasOriginalPatchFile();
+  // Read fresh on every menu open: restored tabs grey out until a baseline is recorded.
+  const restoredFromSession = nodeGraphMvp?.patchRestoredFromSession === true;
   menu.innerHTML = `
-    <button type="button" role="menuitem" data-save-overwrite ${hasOriginal ? "" : "disabled"}>
+    <button type="button" role="menuitem" data-save-overwrite ${hasOriginal && !restoredFromSession ? "" : "disabled"}>
       Overwrite original
     </button>
     <button type="button" role="menuitem" data-save-as-new>Save as new</button>`;
   const overwriteBtn = menu.querySelector("[data-save-overwrite]");
   if (overwriteBtn && !hasOriginal) {
     overwriteBtn.title = "Load or save a file first";
+  } else if (overwriteBtn && restoredFromSession) {
+    overwriteBtn.title = "This tab was restored from a previous session \u2014 Save or Save as new once before overwriting";
   }
   overwriteBtn?.addEventListener("click", async (event) => {
     if (!hasOriginal) return;
@@ -1642,6 +1684,7 @@ async function loadNodeGraphDemoPatch(filename) {
       status: `patch loaded: ${safeFilename}`,
     });
     setNodeGraphCurrentSavedPatch(safeFilename);
+    await nodeGraphRefreshServerPatchFileBaseline(safeFilename);
   } catch (error) {
     const message = String(error?.message || error || "failed to load patch");
     if (typeof nodeGraphShowPatchLoadFault === "function") {

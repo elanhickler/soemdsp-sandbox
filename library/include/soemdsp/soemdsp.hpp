@@ -13,6 +13,7 @@
 // Domain layout under library/include/soemdsp/:
 //   constant/  debug/  math/  nonlinearity/  dynamics/  trigger/
 //   musical/  utility/  filter/  additive/  modulator/
+// cold_start.h is opt-in (include it yourself). Not pulled in here.
 #pragma once
 
 #include <soemdsp/constant/constant.h>

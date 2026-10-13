@@ -48,9 +48,6 @@ function resetNodeGraphRenderedPlaybackCursor(redraw = true) {
     startPerformanceTime: 0,
     timer: 0,
   };
-  if (redraw) {
-    drawNodeRenderedVisualOutput();
-  }
 }
 
 function nodeGraphRenderedPlaybackFrame(maxFrames = 0) {

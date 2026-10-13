@@ -110,7 +110,7 @@ assert(html.includes("scene-context-module-bypass-button"), "settings disable is
 assert(html.includes('id="nodeSceneToggleModuleEnabled"'), "settings disable control id");
 assert(ctx.includes("syncNodeGraphBypassButtonElement"), "settings syncs shared bypass button");
 assert(ctx.includes("showInletOutletVisibilityChrome"), "InletOutlet still gates disable");
-assert(html.includes("b048-bypass-ssot-1"), "cache token");
+assert(/node-graph-module-bypass\.js\?v=[^"]+"/.test(html), "bypass SSOT script loaded with a cache token");
 
 // B-048: bypass chrome SSOT on wiring panel (settings + face share vars).
 const styles = fs.readFileSync(path.join(root, "public", "styles.css"), "utf8");

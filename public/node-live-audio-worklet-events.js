@@ -457,7 +457,6 @@ NodeLiveAudioProcessor.prototype._normalizeKeyboardSignalPayload = function _nor
     );
     return {
       gate: Number(source.gate) > 0 ? 1 : 0,
-      gatePulse: Number(source.gatePulse) > 0 ? 1 : 0,
       x: this.clampValue(
         Number.isFinite(Number(source.x)) ? Number(source.x) : (nodeGraphFiniteNumber(prev.x, keyQuantized)),
         0,
@@ -493,28 +492,104 @@ NodeLiveAudioProcessor.prototype._normalizeKeyboardSignalPayload = function _nor
     };
 };
 
-NodeLiveAudioProcessor.prototype.setMidiKeyboardSignal = function setMidiKeyboardSignal(signal) {
+/** Event-queue key for the hardware MIDI keyboard (one per patch). */
+NodeLiveAudioProcessor.KEYBOARD_MIDI_EVENT_ID = "\u0000midiKeyboard";
+
+NodeLiveAudioProcessor.prototype.setMidiKeyboardSignal = function setMidiKeyboardSignal(signal, atFrame) {
     // Hardware MIDI device signal (MIDI module only).
+    const previous = this.midiKeyboardSignal;
     this.midiKeyboardSignal = this._normalizeKeyboardSignalPayload(signal, {
       pulse: true,
-      previous: this.midiKeyboardSignal,
+      previous,
     });
+    this.queueKeyboardEvent(
+      NodeLiveAudioProcessor.KEYBOARD_MIDI_EVENT_ID,
+      previous,
+      this.midiKeyboardSignal,
+      signal,
+      atFrame,
+    );
 };
 
-NodeLiveAudioProcessor.prototype.armKeyboardDownPulse = function armKeyboardDownPulse(nodeId, previous, next) {
+/**
+ * Keyboard Gate/Trigger events. Main stamps each one with the audio clock
+ * (atFrame, host-rate sample frame). The worklet queues them per keyboard and
+ * writes them into the Gate/Trigger sample blocks at their exact offset.
+ * A late event lands on sample 0 of the next block. Nothing is dropped, and
+ * a Trigger is one sample per strike: there is no held pulse flag.
+ */
+NodeLiveAudioProcessor.prototype.queueKeyboardEvent = function queueKeyboardEvent(id, previous, next, raw, atFrame) {
+  const key = String(id || "");
+  if (!key) return;
+  if (!this._keyboardEventState) this._keyboardEventState = new Map();
+  let st = this._keyboardEventState.get(key);
+  if (!st) {
+    st = { gate: 0, vel: 0, queue: [], plan: null };
+    this._keyboardEventState.set(key, st);
+  }
   const wasDown = Number(previous?.gate) > 0;
-  const isDown = Number(next?.gate) > 0;
-  if (wasDown || !isDown) return;
-  if (!this._keyboardDownPulseByNode) this._keyboardDownPulseByNode = new Map();
-  this._keyboardDownPulseByNode.set(String(nodeId || ""), 1);
+  const gate = Number(next?.gate) > 0 ? 1 : 0;
+  const vel = Number(next?.velocity) || 0;
+  // A new key while one is held (MIDI legato, Grid Keyboard slide) strikes again.
+  const restrike = wasDown && gate === 1
+    && Number(raw?.gatePulse) > 0
+    && Number(previous?.rawMidi) !== Number(next?.rawMidi);
+  // Trigger-only strike (Keyboard right-click sweep): Gate stays low, one Trigger.
+  const triggerOnly = gate === 0 && !wasDown && Number(raw?.gatePulse) > 0;
+  const pulse = (gate === 1 && (!wasDown || restrike)) || triggerOnly ? 1 : 0;
+  if (gate === (wasDown ? 1 : 0) && !pulse) return;
+  const f = Number(atFrame);
+  st.queue.push({ frame: Number.isFinite(f) && f >= 0 ? Math.round(f) : -1, gate, pulse, vel });
 };
 
-NodeLiveAudioProcessor.prototype.setKeyboardModuleSignal = function setKeyboardModuleSignal(nodeId, signal) {
+/** Event state for a Keyboard / Grid Keyboard / MIDI keyboard node, or null. */
+NodeLiveAudioProcessor.prototype.keyboardEventStateFor = function keyboardEventStateFor(srcId) {
+  const id = String(srcId || "");
+  const type = String(this.nodes?.get?.(id)?.type || "");
+  const key = type === "keyboardController" ? NodeLiveAudioProcessor.KEYBOARD_MIDI_EVENT_ID : id;
+  return this._keyboardEventState?.get?.(key) || null;
+};
+
+/**
+ * Turn queued events due in [startFrame, startFrame + hostFrames) into this
+ * quantum's plan: gate edges and trigger strikes at engine-rate offsets
+ * (host offset * ratio when oversampling). Later events stay queued.
+ */
+NodeLiveAudioProcessor.prototype.prepareKeyboardEventBlock = function prepareKeyboardEventBlock(startFrame, hostFrames, ratio) {
+  const states = this._keyboardEventState;
+  if (!states || !states.size) return;
+  const end = startFrame + hostFrames;
+  // A stamp more than a second ahead is a clock mismatch: play it now.
+  const rate = typeof sampleRate === "number" && sampleRate > 0 ? sampleRate : 48000;
+  const farFuture = end + rate;
+  states.forEach((st) => {
+    const plan = { startGate: st.gate, startVel: st.vel, edges: [], pulses: [] };
+    let last = 0;
+    let n = 0;
+    while (n < st.queue.length) {
+      const ev = st.queue[n];
+      if (ev.frame >= end && ev.frame < farFuture) break;
+      const hostOff = ev.frame >= startFrame && ev.frame < end ? ev.frame - startFrame : 0;
+      const off = Math.max(last, hostOff * ratio);
+      last = off;
+      plan.edges.push({ off, gate: ev.gate, vel: ev.vel });
+      if (ev.pulse) plan.pulses.push({ off, vel: ev.vel });
+      st.gate = ev.gate;
+      st.vel = ev.vel;
+      n += 1;
+    }
+    if (n) st.queue.splice(0, n);
+    st.plan = plan;
+  });
+};
+
+NodeLiveAudioProcessor.prototype.setKeyboardModuleSignal = function setKeyboardModuleSignal(nodeId, signal, atFrame) {
   // One Keyboard / Grid Keyboard face pointer signal. null = that keyboard is gone.
   const id = String(nodeId || "");
   if (!id) return;
   if (!signal || typeof signal !== "object") {
     this.keyboardSignalByNode.delete(id);
+    this._keyboardEventState?.delete?.(id);
     return;
   }
   const previous = this.keyboardSignalByNode.get(id);
@@ -523,7 +598,7 @@ NodeLiveAudioProcessor.prototype.setKeyboardModuleSignal = function setKeyboardM
     previous,
   });
   this.keyboardSignalByNode.set(id, next);
-  this.armKeyboardDownPulse(id, previous, next);
+  this.queueKeyboardEvent(id, previous, next, signal, atFrame);
 };
 
 NodeLiveAudioProcessor.prototype.setMidiKeyboardPlayKeysBitmask = function setMidiKeyboardPlayKeysBitmask(mask) {

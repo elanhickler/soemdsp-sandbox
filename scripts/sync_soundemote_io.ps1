@@ -94,24 +94,7 @@ $indexHtml = $indexRaw.Replace("{{SANDBOX_VERSION}}", $sandboxVersion).Replace("
 # boot (selection / manifest / live bindings) never ReferenceErrors.
 $releaseOmitScriptSubstrings = @(
   "node-graph-execution-debug-api.js",
-  "node-graph-execution-debug-view.js",
-  "node-graph-debug-copy.js",
-  "legacy-evidence-checklist-view.js",
-  "legacy-evidence-proof-view.js",
-  "legacy-evidence-views.js",
-  "hands-on-readiness-waveform-labels.js",
-  "hands-on-readiness-primary-labels.js",
-  "hands-on-readiness-artifact-labels.js",
-  "hands-on-readiness-signal-inspection-labels.js",
-  "hands-on-readiness-phase-parameter-labels.js",
-  "hands-on-readiness-probe-labels.js",
-  "hands-on-readiness.js",
-  "artifact-report-utils.js",
-  "artifact-report-reports.js",
-  "artifact-list-view.js",
-  "artifact-coverage-view.js",
-  "manifest-source-view.js",
-  "legacy-evidence"
+  "node-graph-debug-copy.js"
 )
 $omitCount = 0
 $indexHtml = [regex]::Replace($indexHtml, '<script\b[^>]*>\s*</script>\s*', {

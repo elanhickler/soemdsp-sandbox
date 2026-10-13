@@ -70,6 +70,45 @@ function acidSequencerRotate(steps, direction) {
   return out;
 }
 
+function acidSequencerRand() {
+  return Math.random();
+}
+
+// 303 pattern fields only (not on original hardware — clones added Generate).
+// Time = off / on / tie. Pitch = C…C. Accent, Slide, Octave on sounding steps.
+function acidSequencerRandomize(steps, length) {
+  const out = steps.slice();
+  const n = Math.max(1, Math.min(ACID_SEQUENCER_STEP_COUNT, length | 0));
+  let prevSounding = false;
+  for (let i = 0; i < ACID_SEQUENCER_STEP_COUNT; i += 1) {
+    if (i >= n) {
+      out[i] = { pitchIndex: 0, gate: 0, accent: false, slide: false, octave: 0 };
+      continue;
+    }
+    const rGate = acidSequencerRand();
+    let gate = 0;
+    if (rGate < 0.55) gate = 1;
+    else if (rGate < 0.68 && prevSounding) gate = 2;
+    const sounding = gate === 1 || gate === 2;
+    const pitchIndex = Math.floor(acidSequencerRand() * 13);
+    let octave = 0;
+    const rOct = acidSequencerRand();
+    if (sounding) {
+      if (rOct < 0.12) octave = -1;
+      else if (rOct < 0.24) octave = 1;
+    }
+    out[i] = {
+      pitchIndex,
+      gate,
+      accent: sounding && acidSequencerRand() < 0.28,
+      slide: sounding && acidSequencerRand() < 0.18,
+      octave,
+    };
+    prevSounding = sounding;
+  }
+  return out;
+}
+
 function acidSequencerStepLength(nodeId) {
   const patchNode = typeof nodeGraphPatchNode === "function" ? nodeGraphPatchNode(nodeId) : null;
   let n = Math.round(Number(patchNode?.params?.stepLength));
@@ -127,7 +166,13 @@ function createNodeGraphAcidSequencerFace(nodeId) {
   const title = document.createElement("span");
   title.className = "acid-seq-rotate-label";
   title.textContent = "Pattern";
-  bar.append(left, title, right);
+  const rnd = document.createElement("button");
+  rnd.type = "button";
+  rnd.className = "acid-seq-arrow acid-seq-rnd";
+  rnd.textContent = "Rnd";
+  rnd.setAttribute("aria-label", "Randomize pattern");
+  rnd.title = "Generate a 303-style pattern (pitch, time, accent, slide, octave)";
+  bar.append(left, title, rnd, right);
 
   const grid = document.createElement("div");
   grid.className = "acid-seq-grid";
@@ -148,6 +193,7 @@ function createNodeGraphAcidSequencerFace(nodeId) {
 
   left.addEventListener("pointerdown", stop);
   right.addEventListener("pointerdown", stop);
+  rnd.addEventListener("pointerdown", stop);
   left.addEventListener("click", (event) => {
     stop(event);
     commitSteps(acidSequencerRotate(pattern.steps, -1), "acid rotate left");
@@ -155,6 +201,11 @@ function createNodeGraphAcidSequencerFace(nodeId) {
   right.addEventListener("click", (event) => {
     stop(event);
     commitSteps(acidSequencerRotate(pattern.steps, 1), "acid rotate right");
+  });
+  rnd.addEventListener("click", (event) => {
+    stop(event);
+    const len = acidSequencerStepLength(id);
+    commitSteps(acidSequencerRandomize(pattern.steps, len), "acid randomize");
   });
 
   const cell = (text, className, onClick, label) => {

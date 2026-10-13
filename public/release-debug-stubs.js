@@ -1,17 +1,22 @@
-// Release-safe no-ops for APIs that live only in debug/evidence scripts.
-// sync_soundemote_io.ps1 omits those scripts from the live shell; debug builds
-// load the real files after this one and overwrite these globals.
+// No-op definitions for debug-only APIs.
+// - renderNodeGraphExecutionPlanDebug & co.: the bottom debug panel they drew
+//   was removed (Oct 2026); live-runtime / slider / render code still calls
+//   them, so these no-ops are now the only definitions in every build.
+// - Execution debug API / plan export: sync_soundemote_io.ps1 omits
+//   node-graph-execution-debug-api.js and node-graph-debug-copy.js from the
+//   live shell; the sandbox loads the real files after this one, which
+//   overwrite these globals.
 // Keep this file in release (do not add its name to $releaseOmitScriptSubstrings).
 
 function renderNodeGraphExecutionPlanDebug() {}
-function renderNodeGraphExecutionOrderBadges() {}
-function renderNodeGraphExecutionPlanSummary() {}
 function renderNodeGraphExecutionSummarySelection() {}
 function toggleDebugSections() {}
 
 function installNodeGraphDebugApi() {}
 function stopNodeGraphMockInputDebug() {}
-function downloadNodeGraphLivePlanJson() {}
+function downloadNodeGraphLivePlanJson() {
+  return { ok: false, error: "live plan export is not included in this build" };
+}
 function serializeNodeGraphExecutionPlanDebug() {
   return "{}";
 }
@@ -42,36 +47,3 @@ function fallbackCopyTextToClipboard() {
 async function copyNodeGraphRuntimeSketch() {}
 async function copyNodeGraphExecutionJson() {}
 async function startNodeGraphMockInputDebug() {}
-
-function validateConsumerChecklist() {
-  return { accepted: true, checks: [] };
-}
-function renderCheckRows() {}
-function renderChecklist() {}
-function renderUnavailableChecklist() {}
-
-function renderSource() {}
-function renderHandsOnReadiness() {}
-function renderUnavailableHandsOnReadiness() {}
-
-function renderProducerProof() {}
-function renderUnavailableProducerProof() {}
-function renderCircuitChain() {}
-function renderUnavailableCircuitChain() {}
-function renderSandboxContract() {}
-function renderUnavailableSandboxContract() {}
-function renderUnavailableBoundaryFlags() {}
-
-function renderPhaseCoverage() {}
-function renderUnavailablePhaseCoverage() {}
-
-function renderArtifactCoverage() {}
-function renderUnavailableArtifactCoverage() {}
-function renderArtifacts() {}
-function renderUnavailableArtifacts() {}
-function renderArtifactPacketStatus() {}
-
-function setActiveReport() {}
-function renderReportControls() {}
-function renderActiveReport() {}
-async function renderReports() {}

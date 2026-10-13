@@ -1,12 +1,12 @@
 function setNodeGraphScriptStatus(message, ok = true) {
-  const status = document.getElementById("nodeScriptStatus");
-  if (status) {
-    status.textContent = message;
-    status.className = `pill ${ok ? "good" : "warn"}`;
-  }
   // View Script page removed — surface status on the interaction help strip.
   if (typeof setNodeInteractionHelp === "function" && message) {
     setNodeInteractionHelp(String(message));
+  }
+  // Every status also lands in the debug button log.
+  if (message && window.SE) {
+    if (ok) window.SE.VM(`[status] ${message}`);
+    else window.SE.ERROR(`[status] ${message}`, "status");
   }
 }
 
@@ -81,7 +81,7 @@ function nodeGraphScriptReadyForGraphAction(action = "graph action") {
 }
 
 function markNodeGraphRenderScriptBlocked() {
-  const renderStatus = document.getElementById("nodeGraphRenderStatus");
+  const renderStatus = nodeGraphRenderStatusPill();
   renderStatus.textContent = "render blocked";
   renderStatus.className = "pill warn";
   clearNodeGraphRenderedAudioElement();
@@ -103,7 +103,7 @@ function markNodeGraphLiveScriptBlocked() {
 }
 
 function clearNodeGraphRenderScriptBlock() {
-  const renderStatus = document.getElementById("nodeGraphRenderStatus");
+  const renderStatus = nodeGraphRenderStatusPill();
   if (renderStatus?.textContent === "render blocked") {
     markNodeGraphRenderPending();
   }

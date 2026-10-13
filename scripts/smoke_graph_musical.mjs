@@ -140,7 +140,8 @@ function peakOf(ptr, n) {
     rootPeak = Math.max(rootPeak, peakOf(portPtr(g, hSeq, PORT_LEFT) | 0, 128));
     scalePeak = Math.max(scalePeak, peakOf(portPtr(g, hSeq, PORT_MONO) | 0, 128));
   }
-  if (!(rootPeak > 0.4 && rootPeak < 1.1)) {
+  // Root is MIDI: 60 (middle C) + chord root pitch class (chord_sequencer.cpp).
+  if (!(rootPeak >= 60 && rootPeak <= 71)) {
     throw new Error(`chordSequencer rootPeak=${rootPeak}`);
   }
   if (!(scalePeak > 1)) throw new Error(`chordSequencer scalePeak=${scalePeak}`);
@@ -175,7 +176,11 @@ function peakOf(ptr, n) {
     process(g, 128);
     peak = Math.max(peak, peakOf(portPtr(g, hQ, PORT_MONO) | 0, 128));
   }
-  if (!(peak > 0.01 && peak < 2)) throw new Error(`pitchQuantizer peak=${peak}`);
+  // Pitch is MIDI (APP_POLICY pitch convention): metallic ratio ~1.618 snaps to
+  // the nearest note of mask 2741 (C major) -> D (2).
+  if (!(Number.isInteger(peak) && peak >= 1 && peak <= 3 && ((2741 >> (peak % 12)) & 1))) {
+    throw new Error(`pitchQuantizer peak=${peak} (expected in-scale MIDI near 1.618)`);
+  }
   console.log(`pitchQuantizer ok peak=${peak.toFixed(4)}`);
   destroy(g);
 }
@@ -237,7 +242,8 @@ function peakOf(ptr, n) {
   const gate = view(portPtr(g, hPad, PORT_RIGHT) | 0, 128)[0];
   // C major triad mask 0x91, Root MIDI 60 → 0.5, Gate 1
   if ((scale | 0) !== 0x91) throw new Error(`chordPad scale=${scale}`);
-  if (!(Math.abs(root - 0.5) < 1e-9)) throw new Error(`chordPad root=${root}`);
+  // Root is MIDI (60 = middle C in key C).
+  if (root !== 60) throw new Error(`chordPad root=${root}`);
   if (!(Math.abs(gate - 1) < 1e-9)) throw new Error(`chordPad gate=${gate}`);
   console.log(`chordPad ok scale=${scale | 0} root=${root.toFixed(4)} gate=${gate}`);
   destroy(g);
@@ -267,7 +273,7 @@ function peakOf(ptr, n) {
   process(g, 128);
   const src = view(portPtr(g, hSrc, PORT_MONO) | 0, 128)[0];
   const out = view(portPtr(g, hT, PORT_MONO) | 0, 128)[0];
-  const expected = src + 12 / 120;
+  const expected = src + 12; // pitch is MIDI: +12 semitones = +12
   if (!(Math.abs(out - expected) < 1e-9)) {
     throw new Error(`noteTranspose out=${out} expected=${expected}`);
   }
@@ -340,7 +346,8 @@ function peakOf(ptr, n) {
     peak = Math.max(peak, peakOf(portPtr(g, hD, PORT_MONO) | 0, 128));
     trigPeak = Math.max(trigPeak, peakOf(portPtr(g, hD, PORT_RIGHT) | 0, 128));
   }
-  if (!(peak > 0.2 && peak < 2)) throw new Error(`degreeTuring peak=${peak}`);
+  // Pitch out is MIDI (APP_POLICY pitch convention).
+  if (!(peak >= 12 && peak <= 127)) throw new Error(`degreeTuring peak=${peak} (expected MIDI)`);
   if (!(trigPeak > 0.5)) throw new Error(`degreeTuring trigPeak=${trigPeak}`);
   console.log(`degreeTuring ok peak=${peak.toFixed(4)} trig=${trigPeak.toFixed(4)}`);
   destroy(g);
@@ -378,7 +385,8 @@ function peakOf(ptr, n) {
     peak = Math.max(peak, peakOf(portPtr(g, hP, PORT_MONO) | 0, 128));
     gatePeak = Math.max(gatePeak, peakOf(portPtr(g, hP, PORT_LEFT) | 0, 128));
   }
-  if (!(peak > 0.2 && peak < 2)) throw new Error(`degreePhrase peak=${peak}`);
+  // Pitch out is MIDI (APP_POLICY pitch convention).
+  if (!(peak >= 12 && peak <= 127)) throw new Error(`degreePhrase peak=${peak} (expected MIDI)`);
   if (!(gatePeak > 0.5)) throw new Error(`degreePhrase gatePeak=${gatePeak}`);
   console.log(`degreePhrase ok peak=${peak.toFixed(4)} gate=${gatePeak.toFixed(4)}`);
   destroy(g);
@@ -394,6 +402,11 @@ function peakOf(ptr, n) {
   if ((add(g, hW, TYPE_GRAVITY_WALKER) | 0) !== 0) throw new Error("gravityWalker add");
   if ((add(g, hClk, TYPE_CLOCK) | 0) !== 0) throw new Error("gravityWalker clock");
   if ((add(g, hOut, TYPE_OUT) | 0) !== 0) throw new Error("gravityWalker out");
+  // Walker only walks held keys (empty pool = silent, no Trigger): hold C/E/G.
+  const hKeys = 0x9104;
+  if ((add(g, hKeys, 12 /* bias */) | 0) !== 0) throw new Error("gravityWalker keys");
+  setParam(g, hKeys, 71 /* bias offset */, 2 ** 24 + 2 ** 28 + 2 ** 31);
+  if ((connect(g, hKeys, PORT_MONO, hW, PORT_MONO) | 0) !== 0) throw new Error("gravityWalker keys conn");
   setParam(g, hClk, PARAM_FREQUENCY, 28);
   setParam(g, hClk, PARAM_AMPLITUDE, 1);
   setParam(g, hW, PARAM_SHAPE, 0.7);
@@ -416,7 +429,8 @@ function peakOf(ptr, n) {
     peak = Math.max(peak, peakOf(portPtr(g, hW, PORT_MONO) | 0, 128));
     trigPeak = Math.max(trigPeak, peakOf(portPtr(g, hW, PORT_RIGHT) | 0, 128));
   }
-  if (!(peak > 0.2 && peak < 2)) throw new Error(`gravityWalker peak=${peak}`);
+  // Pitch out is MIDI (APP_POLICY pitch convention).
+  if (!(peak >= 12 && peak <= 127)) throw new Error(`gravityWalker peak=${peak} (expected MIDI)`);
   if (!(trigPeak > 0.5)) throw new Error(`gravityWalker trigPeak=${trigPeak}`);
   console.log(`gravityWalker ok peak=${peak.toFixed(4)} trig=${trigPeak.toFixed(4)}`);
   destroy(g);

@@ -678,8 +678,8 @@ extern "C" void soemdsp_sabrina_reverb_set_params(
 
   // LIVE — assign only (read in process / drywet).
   assignIf(state->mix, clamp(mix, 0.0, 1.0));
-  assignIf(state->recycle, clamp(recycle, 0.0, 0.98));
-  assignIf(state->diffusionAmount, clamp(diffusionAmount, 0.0, 0.98));
+  assignIf(state->recycle, clamp(recycle, 0.0, 1.0));
+  assignIf(state->diffusionAmount, clamp(diffusionAmount, 0.0, 1.0));
 
   // CONTROL — targets for smoothed geometry (*Changed ownership).
   assignIf(state->diffusionSize, clamp(diffusionSize, 0.0, 1.0));
@@ -816,22 +816,22 @@ extern "C" int soemdsp_sabrina_reverb_is_idle(int handle) {
 }
 
 extern "C" int soemdsp_sabrina_reverb_version() {
-  return 8;
+  return 9;
 }
 
 void sabrinaFillDelay01(const SabrinaState& state, double times[kDelayCount]) {
-  // Display only: 14 equal lanes. LFO 0..1 swings around the lane center;
-  // Mod Amp (lfopercent = amp*0.1) scales travel. Amp 1 fills the lane.
-  const double invN = 1.0 / kDelayCount;
+  // Linear time. Left is 0. Right is the longest tap this reverb can make, 0.44 s.
+  constexpr double kTimeMax = 4.0 * 0.1 * 1.1;
+  const double sr = state.sampleRate > 1.0 ? state.sampleRate : 1.0;
   for (int i = 0; i < kDelayCount; ++i) {
     const SabrinaDelay& d = state.delays[i];
     double lfo = sabrinaPeekModUni(d);
     if (lfo < 0.0) lfo = 0.0;
     if (lfo > 1.0) lfo = 1.0;
-    double amp01 = d.lfopercent / 0.1;
-    if (amp01 < 0.0) amp01 = 0.0;
-    if (amp01 > 1.0) amp01 = 1.0;
-    times[i] = (static_cast<double>(i) + 0.5 + (lfo - 0.5) * amp01) * invN;
+    double t = d.offset * (1.0 + lfo * d.lfopercent) / sr / kTimeMax;
+    if (t < 0.0) t = 0.0;
+    if (t > 1.0) t = 1.0;
+    times[i] = t;
   }
 }
 

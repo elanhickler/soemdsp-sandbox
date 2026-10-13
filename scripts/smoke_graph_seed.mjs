@@ -211,7 +211,7 @@ contract("chorus", TYPE_CHORUS, withInput((g, h) => {
   setParam(g, h, PARAM_HPF_FREQUENCY, 20);
   setParam(g, h, PARAM_LPF_FREQUENCY, 20000);
   setParam(g, h, PARAM_AMPLITUDE, 1);
-}));
+}), { port: PORT_LEFT });  // outputs are Left / Right only
 contract("ensemble", TYPE_ENSEMBLE, withInput((g, h) => {
   setParam(g, h, PARAM_STAGES, 4);
   setParam(g, h, PARAM_TIME_NUMERATOR, 10);
@@ -223,7 +223,7 @@ contract("ensemble", TYPE_ENSEMBLE, withInput((g, h) => {
   setParam(g, h, PARAM_HPF_FREQUENCY, 20);
   setParam(g, h, PARAM_LPF_FREQUENCY, 20000);
   setParam(g, h, PARAM_AMPLITUDE, 1);
-}));
+}), { port: PORT_LEFT });  // outputs are Left / Right only
 
 // Random Walk Seed 0: Left / Right lanes independent (used to share 0x12345678).
 {

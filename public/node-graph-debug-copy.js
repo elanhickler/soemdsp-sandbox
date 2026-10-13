@@ -1,3 +1,6 @@
+// Plan export / copy helpers. The on-page Runtime Sketch / Execution JSON
+// panels were removed; these compute their text on demand instead.
+// Callable via window.soemdspSandboxDebug (alias window.soemdspDebug).
 function fallbackCopyTextToClipboard(text) {
   const fallback = document.createElement("textarea");
   fallback.value = text;
@@ -27,35 +30,28 @@ async function copyTextToClipboard(text) {
   }
 }
 
+/** Full compiled execution plan as pretty JSON text (was the Execution JSON panel). */
+function nodeGraphExecutionPlanJsonText(plan = compileNodeGraphExecutionPlan()) {
+  return serializeNodeGraphExecutionPlanDebug(plan);
+}
+
+/** Caller-owned C++ runtime mapping sketch text (was the Runtime Sketch panel). */
+function nodeGraphRuntimeSketchText(plan = compileNodeGraphExecutionPlan()) {
+  return plan.valid
+    ? nodeGraphSoemdspRuntimeSketch(plan)
+    : `runtime sketch blocked: ${plan.issues.join(", ")}`;
+}
+
 async function copyNodeGraphRuntimeSketch() {
-  const sketch = document.getElementById("nodeRuntimeSketch");
-  const sketchStatus = document.getElementById("nodeRuntimeSketchStatus");
-  const text = sketch?.textContent || "";
-  if (!text || text === "waiting for graph") {
-    if (sketchStatus) {
-      sketchStatus.textContent = "nothing to copy";
-      sketchStatus.className = "pill warn";
-    }
-    return;
-  }
-  try {
-    await copyTextToClipboard(text);
-    if (sketchStatus) {
-      sketchStatus.textContent = "copied";
-      sketchStatus.className = "pill good";
-    }
-  } catch (error) {
-    const selection = window.getSelection();
-    const range = document.createRange();
-    range.selectNodeContents(sketch);
-    selection.removeAllRanges();
-    selection.addRange(range);
-    if (sketchStatus) {
-      sketchStatus.textContent = "selected";
-      sketchStatus.title = error.message;
-      sketchStatus.className = "pill good";
-    }
-  }
+  const text = nodeGraphRuntimeSketchText();
+  await copyTextToClipboard(text);
+  return text;
+}
+
+async function copyNodeGraphExecutionJson() {
+  const text = nodeGraphExecutionPlanJsonText();
+  await copyTextToClipboard(text);
+  return text;
 }
 
 // nodeGraphBuildLivePlan() (node-graph-live-plan-runtime.js) is the exact
@@ -64,18 +60,15 @@ async function copyNodeGraphRuntimeSketch() {
 // same shape a native C++ graph interpreter (soemdsp-sandbox-native's
 // native graph-engine) is meant to consume, so it can be tested
 // against a real exported patch instead of only synthetic fixtures.
+// Returns { ok, filename, nodes, order } or { ok: false, error }.
 function downloadNodeGraphLivePlanJson() {
-  const status = document.getElementById("nodeLivePlanExportStatus");
   let plan;
   try {
     plan = nodeGraphBuildLivePlan();
   } catch (error) {
-    if (status) {
-      status.textContent = "blocked";
-      status.title = String(error?.issues?.join(", ") || error?.message || error);
-      status.className = "pill warn";
-    }
-    return;
+    const message = String(error?.issues?.join(", ") || error?.message || error);
+    console.warn("[live plan] export blocked:", message);
+    return { ok: false, error: message };
   }
   const json = JSON.stringify(plan, null, 2);
   const blob = new Blob([json], { type: "application/json" });
@@ -94,40 +87,5 @@ function downloadNodeGraphLivePlanJson() {
   anchor.click();
   anchor.remove();
   URL.revokeObjectURL(url);
-  if (status) {
-    status.textContent = "downloaded";
-    status.title = `${plan.nodes.length} nodes, ${plan.order.length} in execution order`;
-    status.className = "pill good";
-  }
-}
-
-async function copyNodeGraphExecutionJson() {
-  const debug = document.getElementById("nodeExecutionPlanDebug");
-  const jsonStatus = document.getElementById("nodeExecutionJsonStatus");
-  const text = debug?.textContent || "";
-  if (!text || text === "waiting for graph") {
-    if (jsonStatus) {
-      jsonStatus.textContent = "nothing to copy";
-      jsonStatus.className = "pill warn";
-    }
-    return;
-  }
-  try {
-    await copyTextToClipboard(text);
-    if (jsonStatus) {
-      jsonStatus.textContent = "copied";
-      jsonStatus.className = "pill good";
-    }
-  } catch (error) {
-    const selection = window.getSelection();
-    const range = document.createRange();
-    range.selectNodeContents(debug);
-    selection.removeAllRanges();
-    selection.addRange(range);
-    if (jsonStatus) {
-      jsonStatus.textContent = "selected";
-      jsonStatus.title = error.message;
-      jsonStatus.className = "pill good";
-    }
-  }
+  return { ok: true, filename: anchor.download, nodes: plan.nodes.length, order: plan.order.length };
 }

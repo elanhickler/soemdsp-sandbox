@@ -3,7 +3,7 @@ const NODE_GRAPH_VIDEO_FEEDBACK_FFT = 256;
 function nodeGraphVideoFeedbackPortLabel(_node, port) {
   const key = String(port || "");
   if (key === "rgba" || key === "📺") return "📺";
-  if (key === "A") return "Spec";
+  if (key === "A") return "In";
   if (key === "B") return "Spin";
   return key;
 }
@@ -220,20 +220,15 @@ function drawNodeGraphVideoFeedbackFaceItem(_renderer, item, pixelRatio) {
     ? nodeGraphModuleScopeNodeForSlot(slot)
     : (typeof nodeGraphPatchNode === "function" ? nodeGraphPatchNode(nodeId) : null);
   const decay = Math.max(0, Math.min(0.98, nodeGraphVideoFeedbackReadParam(nodeId, "decay", 0.33)));
-  const mix = Math.max(0, Math.min(1, nodeGraphVideoFeedbackReadParam(nodeId, "mix", 0.48)));
-  const zoom = Math.max(0, Math.min(1, nodeGraphVideoFeedbackReadParam(nodeId, "zoom", 0)));
+  const zoom = Math.max(0, Math.min(1, nodeGraphVideoFeedbackReadParam(nodeId, "zoom", 0.22)));
   const twist = Math.max(-1, Math.min(1, nodeGraphVideoFeedbackReadParam(nodeId, "twist", 0)));
   const bright = Math.max(0, Math.min(1, nodeGraphVideoFeedbackReadParam(nodeId, "bright", 0.75)));
   const smooth = Math.max(0, Math.min(1, nodeGraphVideoFeedbackReadParam(nodeId, "smooth", 0.64)));
   const ringA = nodeGraphVideoFeedbackBufferFromKey(nodeId, "A");
   const ringB = nodeGraphVideoFeedbackBufferFromKey(nodeId, "B");
-  const aAbs = Math.min(1, Math.abs(nodeGraphVideoFeedbackLatest(ringA)));
   const bSigned = Math.max(-1, Math.min(1, nodeGraphVideoFeedbackLatest(ringB)));
   const ink = nodeGraphVideoFeedbackHexRgb01(nodeGraphVideoFeedbackSettingsForNode(node).dot1Color);
-  const wave = nodeGraphVideoFeedbackSpectrumWindow(canvas, ringA || ringB, smooth);
-  const picture = typeof nodeGraphPictureRead === "function"
-    ? (nodeGraphPictureRead(nodeId, "rgba") || nodeGraphPictureRead(nodeId, "📺"))
-    : null;
+  const wave = nodeGraphVideoFeedbackSpectrumWindow(canvas, ringA, smooth);
   const host = canvas;
   if (face._videoFeedbackOwnsClock && item?.fromFaceLoop !== true && item?.force !== true) {
     return;
@@ -254,15 +249,15 @@ function drawNodeGraphVideoFeedbackFaceItem(_renderer, item, pixelRatio) {
     nodeGraphVideoFeedbackGlStep(host, {
       nodeId,
       decay,
-      mix,
+      mix: 0,
       mode: 1,
-      a: aAbs,
+      a: 0,
       b: bSigned,
       zoom,
       twist,
       bright,
-      time: (typeof performance !== "undefined" ? performance.now() : Date.now()) * 0.001,
-      picture,
+      time: 0,
+      picture: null,
       waveSamples: wave,
       waveIsMagnitude: true,
       smooth,

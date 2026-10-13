@@ -274,7 +274,6 @@
         "wireDisconnect",
         "vocoder",
         "animatedTextBox",
-        "acidSequencer",
         "doppler",
         "waterfallRgb",
         "waterfallXyz",

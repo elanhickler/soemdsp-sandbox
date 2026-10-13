@@ -64,11 +64,11 @@ NodeLiveAudioProcessor.prototype.handleMessage = function handleMessage(message)
       return;
     }
     if (message.type === "setMidiKeyboardSignal") {
-      this.setMidiKeyboardSignal(message.signal);
+      this.setMidiKeyboardSignal(message.signal, message.atFrame);
       return;
     }
     if (message.type === "setKeyboardModuleSignal") {
-      this.setKeyboardModuleSignal(message.nodeId, message.signal);
+      this.setKeyboardModuleSignal(message.nodeId, message.signal, message.atFrame);
       return;
     }
     if (message.type === "setKeyboardArpLatch") {

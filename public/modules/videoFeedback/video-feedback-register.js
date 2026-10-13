@@ -1,6 +1,6 @@
-// Video Feedback — mirrored spectrum circle + two audio ins + 📺.
+// Spectrum Circle — mirrored spectrum ring. Type stays videoFeedback for patches.
 registerNodeGraphChromelessModule("videoFeedback", {
-  label: "Video Feedback",
+  label: "Spectrum Circle",
   solidModule: false,
   customDisplayArea: true,
   definition: {
@@ -25,17 +25,16 @@ registerNodeGraphChromelessModule("videoFeedback", {
       },
     ],
     defaultDisplayMode: "face",
-    inputs: ["A", "B", "rgba"],
-    inputLabels: { A: "Spec", B: "Spin", rgba: "📺" },
+    inputs: ["A", "B"],
+    inputLabels: { A: "In", B: "Spin" },
     inputTooltips: {
-      A: "Spectrum audio. Drives the mirrored circle.",
+      A: "Audio in. FFT drives the mirrored circle.",
       B: "Spin. Adds to Twist.",
-      rgba: "Picture in. Mixed onto the plate (Mix).",
     },
     outputs: ["rgba"],
     outputLabels: { rgba: "📺" },
     outputTooltips: {
-      rgba: "Spectrum plate out.",
+      rgba: "Circle plate out. Cable into Video Delay 📺 to recapture it.",
     },
     parameters: [
       {
@@ -47,29 +46,18 @@ registerNodeGraphChromelessModule("videoFeedback", {
         min: "0",
         nonlinearSlider: false,
         step: "any",
-        tooltip: "How much of last frame stays. 0 wipes; 0.98 is slow drain. Capped so the plate cannot run away to white.",
+        tooltip: "Trail of the circle. 0 is a hard wipe each frame; 0.98 is a long phosphor.",
       },
       {
-        defaultValue: "0.48",
-        key: "mix",
-        label: "Mix",
-        max: "1",
-        mid: "0.5",
-        min: "0",
-        nonlinearSlider: false,
-        step: "any",
-        tooltip: "How much 📺 in stamps onto the spectrum plate.",
-      },
-      {
-        defaultValue: "0",
+        defaultValue: "0.22",
         key: "zoom",
-        label: "Zoom",
+        label: "Radius",
         max: "1",
         mid: "0.5",
         min: "0",
         nonlinearSlider: false,
         step: "any",
-        tooltip: "Inner radius of the spectrum circle. Audio Spec (A) adds.",
+        tooltip: "Inner radius of the circle.",
       },
       {
         defaultValue: "0",
@@ -81,7 +69,7 @@ registerNodeGraphChromelessModule("videoFeedback", {
         min: "-1",
         nonlinearSlider: false,
         step: "any",
-        tooltip: "Rotation of the circle. Audio Spin (B) adds.",
+        tooltip: "Rotation of the circle. Spin in adds.",
       },
       {
         defaultValue: "0.75",
@@ -92,7 +80,7 @@ registerNodeGraphChromelessModule("videoFeedback", {
         min: "0",
         nonlinearSlider: false,
         step: "any",
-        tooltip: "Spectrum stamp level.",
+        tooltip: "How bright the ring draws.",
       },
       {
         defaultValue: "0.64",
@@ -111,15 +99,12 @@ registerNodeGraphChromelessModule("videoFeedback", {
   catalog: {
     category: "rgba",
     description:
-      "Mirrored spectrum circle at Simulation FPS. Spec and Spin audio; 📺 in/out. "
-      + "For camera-style recapture use Video Delay.",
+      "Mirrored spectrum circle. Audio In is FFT'd; Spin turns the ring. 📺 out for Video Delay.",
     notes: [
-      "feedback",
       "spectrum",
       "circle",
-      "video",
-      "picture",
-      "shader",
+      "fft",
+      "analyzer",
       "LayoutA",
     ],
   },

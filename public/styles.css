@@ -361,6 +361,19 @@ body:not(.node-boot-waiting) .node-boot-menu-links {
   transform: translateY(1px);
 }
 
+.node-boot-logo-button {
+  cursor: pointer;
+  overflow: hidden;
+}
+
+.node-boot-logo-icon {
+  display: block;
+  width: 2.7rem;
+  height: 2.7rem;
+  object-fit: contain;
+  pointer-events: none;
+}
+
 .node-boot-email-emoji {
   font-size: 1.6rem;
   line-height: 1;
@@ -1108,7 +1121,6 @@ body.node-sample-load-lock-open .node-sample-load-lock {
   border-bottom: 1px solid var(--line);
 }
 
-.status-strip span,
 .audio-panel p,
 .summary-card > span:first-child {
   margin: 0;
@@ -1285,39 +1297,14 @@ button:disabled {
   transform: translate(-50%, -50%) rotate(-45deg);
 }
 
-.status-strip {
-  display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 1px;
-  margin: 20px 0;
-  background: var(--line);
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  overflow: hidden;
-}
 
-.status-strip > div,
 .panel,
 .audio-panel {
   background: var(--panel);
 }
 
-.status-strip > div {
-  min-width: 0;
-  padding: 14px;
-}
 
-.status-strip strong {
-  display: block;
-  margin-top: 4px;
-  overflow-wrap: anywhere;
-  color: var(--good);
-  font-size: 0.95rem;
-}
 
-.status-strip strong.warn {
-  color: var(--warn);
-}
 
 
 .audio-panel {
@@ -2689,9 +2676,6 @@ html.soemdsp-hide-ui .node-boot-sysinfo {
   display: none;
 }
 
-html.soemdsp-hide-ui .status-strip {
-  display: none;
-}
 
 /* Embed: never show Command Center / floating chrome even if UI settings restore them. */
 html.soemdsp-hide-ui #nodeSceneContextMenu,
@@ -5094,7 +5078,7 @@ body.keyboard-debug-hidden .node-midi-keyboard-signal-bar {
 }
 
 #nodeDownloadAppButton {
-  flex: 0.55 1 0;
+  flex: 0 0 auto; /* natural size: never crushed by the patch title */
   min-inline-size: 0;
   padding: 6px;
   border-color: rgba(226, 168, 109, 0.28);
@@ -5209,7 +5193,7 @@ body.keyboard-debug-hidden .node-midi-keyboard-signal-bar {
 }
 
 #nodeDownloadAppButton {
-  flex: 0.55 1 0;
+  flex: 0 0 auto; /* natural size: never crushed by the patch title */
   flex-direction: column;
   gap: 1px;
   white-space: nowrap;
@@ -7458,9 +7442,6 @@ body.keyboard-debug-hidden .node-midi-keyboard-signal-bar {
   }
 }
 
-.compact-heading {
-  margin-bottom: 10px;
-}
 
 .node-graph-workspace {
   --node-graph-zoom: 1;
@@ -16526,7 +16507,7 @@ body.node-screen-solo-active .node-screen-solo-face.node-text-box-body > .node-t
     minmax(0, var(--node-header-timing-compact))
     minmax(0, var(--node-header-timing-compact))
     minmax(0, var(--node-header-timing-compact))
-    minmax(10rem, 1fr)
+    minmax(7rem, 1fr)
     minmax(0, var(--node-header-timing-compact))
     minmax(0, var(--node-header-timing-compact));
   grid-auto-flow: row;
@@ -24852,165 +24833,28 @@ button[data-transport-action="stop"]:disabled {
   color: var(--good);
 }
 
-.node-graph-output {
-  display: grid;
-  grid-template-columns: minmax(0, 1.45fr) minmax(260px, 0.7fr);
-  gap: 18px;
-  margin-top: 16px;
-}
 
-.node-preview-panel {
-  min-width: 0;
-}
 
-.node-connection-list {
-  display: grid;
-  gap: 8px;
-  min-height: 96px;
-  margin: 0;
-  padding: 0 0 0 22px;
-}
 
-.node-connection-list li {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  padding: 10px;
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  background: var(--panel-2);
-  color: var(--text);
-  font-family: Consolas, "Courier New", monospace;
-  font-size: 0.82rem;
-}
 
-.node-connection-list li.selected {
-  border-color: rgba(247, 183, 88, 0.62);
-  box-shadow: 0 0 0 1px rgba(247, 183, 88, 0.24);
-}
 
-.node-connection-list li span {
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
 
-.node-connection-list li.warn-row {
-  background: var(--bad-bg);
-}
 
-.node-connection-list li.state-read {
-  border-color: rgba(177, 132, 255, 0.52);
-  background: rgba(177, 132, 255, 0.1);
-}
 
-.node-connection-list li.inactive-wire {
-  border-color: rgba(243, 241, 236, 0.16);
-  background: rgba(243, 241, 236, 0.05);
-  color: var(--muted);
-}
 
-.node-connection-list li.inactive-wire.selected {
-  border-color: rgba(247, 183, 88, 0.58);
-  color: var(--text);
-}
 
-.node-execution-plan-heading {
-  margin-top: 14px;
-}
 
-.node-execution-plan-debug {
-  min-height: 150px;
-  max-height: 260px;
-  margin: 10px 0 0;
-  padding: 12px;
-  overflow: auto;
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  background: #101214;
-  color: rgba(243, 241, 236, 0.86);
-  font-family: Consolas, "Courier New", monospace;
-  font-size: 0.78rem;
-  line-height: 1.45;
-  white-space: pre-wrap;
-}
 
-.node-execution-plan-summary {
-  display: grid;
-  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.2fr);
-  gap: 10px;
-  margin-top: 10px;
-}
 
-.node-execution-plan-summary > div {
-  min-width: 0;
-  padding: 9px;
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  background: rgba(12, 14, 16, 0.44);
-}
 
-.node-execution-summary-label {
-  display: block;
-  margin-bottom: 7px;
-  color: var(--muted);
-  font-size: 0.68rem;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
 
-.node-execution-policy {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 8px;
-  color: var(--muted);
-  font-family: Consolas, "Courier New", monospace;
-  font-size: 0.68rem;
-}
 
-.node-execution-policy span {
-  padding: 4px 6px;
-  border: 1px solid rgba(243, 241, 236, 0.11);
-  border-radius: 5px;
-  background: rgba(243, 241, 236, 0.035);
-}
 
-.node-execution-policy strong {
-  color: var(--text);
-  font-weight: 700;
-}
 
-.node-bad-value-monitor-evidence {
-  display: grid;
-  gap: 4px;
-  margin: 6px 0 8px;
-  padding: 0;
-  list-style: none;
-  user-select: text;
-  -webkit-user-select: text;
-}
 
-.node-bad-value-monitor-evidence li {
-  border: 1px solid rgba(243, 183, 88, 0.24);
-  border-radius: 4px;
-  background: rgba(51, 42, 29, 0.42);
-  color: var(--muted);
-  font-family: Consolas, "Courier New", monospace;
-  font-size: 0.68rem;
-  line-height: 1.25;
-  padding: 5px 7px;
-  user-select: text;
-  -webkit-user-select: text;
-}
 
-.node-bad-value-monitor-evidence li[data-bad-value-reason] {
-  color: var(--warn);
-}
 
-.node-execution-order,
-.node-execution-wire-modes {
+.node-execution-order {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
@@ -25019,8 +24863,7 @@ button[data-transport-action="stop"]:disabled {
   list-style: none;
 }
 
-.node-execution-order li,
-.node-execution-wire-modes li {
+.node-execution-order li {
   min-width: 0;
   padding: 5px 7px;
   overflow: hidden;
@@ -25034,30 +24877,15 @@ button[data-transport-action="stop"]:disabled {
   white-space: nowrap;
 }
 
-.node-execution-order li.selected,
-.node-execution-wire-modes li.selected {
+.node-execution-order li.selected {
   border-color: rgba(247, 183, 88, 0.62);
   box-shadow: 0 0 0 1px rgba(247, 183, 88, 0.24);
 }
 
-.node-execution-wire-modes li.same-pass {
-  border-color: rgba(113, 212, 155, 0.32);
-  color: var(--good);
-}
 
-.node-execution-wire-modes li.state-read {
-  border-color: rgba(226, 168, 109, 0.42);
-  color: var(--accent-2);
-}
 
-.node-execution-wire-modes li.bypassed,
-.node-execution-wire-modes li.inactive {
-  color: var(--muted);
-  opacity: 0.72;
-}
 
-.node-execution-order li.empty,
-.node-execution-wire-modes li.empty {
+.node-execution-order li.empty {
   color: var(--muted);
 }
 
@@ -25070,58 +24898,15 @@ button[data-transport-action="stop"]:disabled {
   font-size: 0.72rem;
 }
 
-.node-waveform,
-.node-signal-plot,
-.node-visual-output {
-  display: block;
-  width: 100%;
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  background: #101214;
-}
 
-.node-signal-plot {
-  margin-top: 10px;
-}
 
-.node-visual-output-heading {
-  align-items: center;
-  gap: 8px;
-  margin-top: 12px;
-}
 
-.node-visual-output {
-  border-color: rgba(127, 199, 217, 0.24);
-  background: #0b0d0e;
-  box-shadow: inset 0 0 28px rgba(127, 199, 217, 0.06);
-}
 
-.node-visual-output-meta {
-  margin-top: 8px;
-}
 
-.node-runtime-sketch-heading {
-  margin-top: 12px;
-}
 
-.node-execution-json-heading {
-  margin-top: 12px;
-}
 
-.node-runtime-sketch {
-  max-height: 260px;
-  margin-top: 8px;
-  white-space: pre-wrap;
-}
 
-body.debug-collapsed .node-wiring-panel ~ .panel,
-body.debug-collapsed .node-wiring-panel ~ .grid {
-  display: none;
-}
 
-body.debug-collapsed .status-strip {
-  display: none;
-}
 
 /* "Hide Debug" (nodeKeyboardDebugToggleButton, body.keyboard-debug-hidden)
    is the master switch -- when it's off, the "Show Evidence" button and
@@ -25177,11 +24962,6 @@ body.keyboard-debug-hidden
   margin-top: 0;
 }
 
-body.keyboard-debug-hidden .node-wiring-panel ~ .panel,
-body.keyboard-debug-hidden .node-wiring-panel ~ .grid,
-body.keyboard-debug-hidden .status-strip {
-  display: none;
-}
 
 .grid {
   display: grid;
@@ -25213,35 +24993,10 @@ body.keyboard-debug-hidden .status-strip {
   gap: 14px;
 }
 
-.panel-heading-actions {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 8px;
-}
 
-.node-graph-debug-pills {
-  justify-content: flex-end;
-  min-width: min(100%, 420px);
-}
 
-.view-toggle {
-  min-height: 28px;
-  padding: 0 10px;
-  border-radius: 999px;
-  color: var(--muted);
-  font-size: 0.78rem;
-}
 
-.view-toggle.active {
-  border-color: rgba(120, 209, 255, 0.48);
-  background: rgba(127, 199, 217, 0.14);
-  color: var(--good);
-}
 
-.view-toggle:disabled {
-  opacity: 0.52;
-}
 
 .pill {
   display: inline-flex;
@@ -25409,32 +25164,8 @@ body.keyboard-debug-hidden .status-strip {
   user-select: none;
 }
 
-.level-envelope {
-  display: block;
-  width: 100%;
-  height: 140px;
-  margin-top: 16px;
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  background: #111418;
-}
 
-.signal-plot {
-  display: block;
-  width: 100%;
-  height: 360px;
-  margin-top: 16px;
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  background: #111418;
-}
 
-.parameter-summary {
-  display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
-  gap: 10px;
-  margin-top: 16px;
-}
 
 .summary-card {
   min-width: 0;
@@ -25461,17 +25192,6 @@ body.keyboard-debug-hidden .status-strip {
   background: #182129;
 }
 
-.parameter-timeline {
-  position: relative;
-  display: grid;
-  gap: 10px;
-  margin-top: 16px;
-  padding: 12px;
-  overflow: hidden;
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  background: #111418;
-}
 
 .parameter-track {
   display: grid;
@@ -25548,12 +25268,6 @@ body.keyboard-debug-hidden .status-strip {
   box-shadow: 0 0 0 1px rgba(17, 20, 24, 0.72), 0 0 12px rgba(246, 201, 109, 0.25);
 }
 
-.report-controls {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 16px;
-}
 
 .report-button {
   min-height: 32px;
@@ -25565,35 +25279,8 @@ body.keyboard-debug-hidden .status-strip {
   background: rgba(127, 199, 217, 0.16);
 }
 
-.report-viewer {
-  min-height: 210px;
-  max-height: 360px;
-  margin: 14px 0 0;
-  padding: 14px;
-  overflow: auto;
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  background: #101214;
-  color: var(--text);
-  font-family: Consolas, "Courier New", monospace;
-  font-size: 0.86rem;
-  line-height: 1.45;
-  white-space: pre-wrap;
-}
 
-.waveform-scrubber {
-  display: block;
-  width: 100%;
-  margin-top: 12px;
-  accent-color: var(--accent);
-}
 
-.phase-controls {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 12px;
-}
 
 .control-group {
   display: inline-flex;
@@ -25654,12 +25341,6 @@ dd.warn {
   color: var(--warn);
 }
 
-.phase-list {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 14px;
-  margin-top: 16px;
-}
 
 .phase {
   padding: 14px;
@@ -25674,12 +25355,6 @@ dd.warn {
   background: rgba(255, 211, 119, 0.1);
 }
 
-.phase-stat-list {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 14px;
-  margin-top: 16px;
-}
 
 .phase-stat {
   padding: 14px;
@@ -25693,11 +25368,6 @@ dd.warn {
   background: rgba(127, 199, 217, 0.12);
 }
 
-.artifact-list {
-  display: grid;
-  gap: 10px;
-  margin-top: 16px;
-}
 
 .checklist {
   display: grid;
@@ -25706,12 +25376,6 @@ dd.warn {
   margin-top: 16px;
 }
 
-.readiness-list {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px;
-  margin-top: 16px;
-}
 
 .check-row {
   display: flex;
@@ -25736,12 +25400,6 @@ dd.warn {
   color: var(--muted);
 }
 
-.contract-list {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px;
-  margin-top: 16px;
-}
 
 .contract-row {
   display: grid;
@@ -25770,11 +25428,6 @@ dd.warn {
   color: var(--warn);
 }
 
-.chain-list {
-  display: grid;
-  gap: 10px;
-  margin-top: 16px;
-}
 
 .chain-row {
   display: grid;
@@ -25916,13 +25569,8 @@ code {
     display: grid;
   }
 
-  .status-strip,
   .grid,
-  .phase-list,
   .checklist,
-  .readiness-list,
-  .parameter-summary,
-  .node-graph-output,
   .chain-row,
   .artifact-row {
     grid-template-columns: 1fr;

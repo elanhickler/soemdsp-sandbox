@@ -644,6 +644,13 @@ function bindNodeGraphKeyboardControllerDisplayContextMenu() {
     if (!panel) {
       return;
     }
+    // Keys own right-click (arp-style Trigger sweep in view-controls); no menu there.
+    const key = event.target?.closest?.(".node-midi-keyboard-surface [data-key-index]");
+    if (key) {
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
     openNodeGraphKeyboardControllerDisplaySettings(event);
   }, true);
 }

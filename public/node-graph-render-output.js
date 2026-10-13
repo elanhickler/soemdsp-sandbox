@@ -147,40 +147,35 @@ function nodeGraphResampleRenderedChannel(samples, sourceRate, outputRate, outpu
 }
 
 function setNodeGraphAudioStats(peak = 0, rms = 0, details = {}) {
-  const audioStats = document.getElementById("nodeAudioStats");
-  if (!audioStats) {
-    return;
-  }
+  // The "Rendered Output" debug pill was removed; keep the last render's
+  // stats on the model (window.soemdspSandboxDebug.lastRenderStats()).
   const frames = nodeGraphFiniteNumber(details.frames);
   const sampleRate = nodeGraphFiniteNumber(details.sampleRate, nodeGraphMvp.sampleRate);
-  const engineSampleRate = nodeGraphFiniteNumber(details.engineSampleRate, sampleRate);
-  const oversamplingRatio = nodeGraphFiniteNumber(details.oversamplingRatio, 1);
-  const stateReadCount = nodeGraphFiniteNumber(details.stateReadCount);
-  const clipCount = nodeGraphFiniteNumber(details.clipCount);
-  const protectionMuteCount = nodeGraphFiniteNumber(details.protectionMuteCount);
-  const badNumberCount = nodeGraphFiniteNumber(details.badNumberCount);
-  const durationSeconds = frames > 0 && sampleRate > 0 ? frames / sampleRate : 0;
-  const clipText = clipCount ? ` / ${nodeGraphOutputClipCountText(clipCount)}` : "";
-  const protectionText = protectionMuteCount ? ` / protected ${protectionMuteCount}` : "";
-  const badNumberText = badNumberCount ? ` / bad ${badNumberCount}` : "";
-  audioStats.textContent = `peak ${peak.toFixed(3)} / rms ${rms.toFixed(3)}${clipText}${protectionText}${badNumberText}`;
-  audioStats.className = `pill ${clipCount || protectionMuteCount || badNumberCount ? "warn" : ""}`.trim();
-  audioStats.dataset.renderClips = String(clipCount);
-  audioStats.dataset.renderProtectionMutes = String(protectionMuteCount);
-  audioStats.dataset.renderBadNumbers = String(badNumberCount);
-  audioStats.dataset.renderFrames = String(frames);
-  audioStats.dataset.renderSampleRate = String(sampleRate);
-  audioStats.dataset.renderEngineSampleRate = String(engineSampleRate);
-  audioStats.dataset.renderOversamplingRatio = String(oversamplingRatio);
-  audioStats.dataset.renderDuration = durationSeconds.toFixed(3);
-  audioStats.dataset.renderStateReads = String(stateReadCount);
-  const stateReadText = stateReadCount ? ` / ${nodeGraphStateReadText(stateReadCount)}` : "";
-  const clipTitle = clipCount ? ` / ${nodeGraphOutputClipCountText(clipCount)}` : "";
-  const protectionTitle = protectionMuteCount ? ` / ear protection muted ${protectionMuteCount} frames` : "";
-  const badNumberTitle = badNumberCount ? ` / bad numbers recovered ${badNumberCount}` : "";
-  audioStats.title = frames > 0
-    ? `Rendered sample: ${frames} frames / ${durationSeconds.toFixed(3)}s / ${sampleRate} Hz output / ${nodeGraphFormatSampleRate(engineSampleRate)} engine / ${nodeGraphFormatOversamplingRatio(oversamplingRatio)}${stateReadText}${clipTitle}${protectionTitle}${badNumberTitle}`
-    : "Rendered sample unavailable";
+  nodeGraphMvp.lastRenderStats = {
+    peak,
+    rms,
+    frames,
+    sampleRate,
+    engineSampleRate: nodeGraphFiniteNumber(details.engineSampleRate, sampleRate),
+    oversamplingRatio: nodeGraphFiniteNumber(details.oversamplingRatio, 1),
+    stateReadCount: nodeGraphFiniteNumber(details.stateReadCount),
+    clipCount: nodeGraphFiniteNumber(details.clipCount),
+    protectionMuteCount: nodeGraphFiniteNumber(details.protectionMuteCount),
+    badNumberCount: nodeGraphFiniteNumber(details.badNumberCount),
+    durationSeconds: frames > 0 && sampleRate > 0 ? frames / sampleRate : 0,
+  };
+}
+
+/** Render status (pending / blocked / ready). Was a debug pill; now a detached
+ *  element so existing text/className writes and reads keep working. */
+function nodeGraphRenderStatusPill() {
+  if (!nodeGraphMvp.renderStatusPill) {
+    const pill = document.createElement("span");
+    pill.className = "pill";
+    pill.textContent = "render pending";
+    nodeGraphMvp.renderStatusPill = pill;
+  }
+  return nodeGraphMvp.renderStatusPill;
 }
 
 function markNodeGraphRenderPending(summary = "") {
@@ -189,15 +184,14 @@ function markNodeGraphRenderPending(summary = "") {
   clearNodeGraphRenderedModuleScopeBuffers();
   clearNodeGraphRenderedAudioElement();
   labelPrimaryAudioTitle("Render Sample creates preview audio here", false);
-  document.getElementById("nodeGraphRenderStatus").textContent = "render pending";
-  document.getElementById("nodeGraphRenderStatus").className = "pill warn";
+  nodeGraphRenderStatusPill().textContent = "render pending";
+  nodeGraphRenderStatusPill().className = "pill warn";
   setNodeGraphAudioStats();
   const outputSummary = document.getElementById("nodeOutputSummary");
   if (outputSummary) {
     outputSummary.textContent = summary || nodeGraphRenderPendingSummary();
   }
   renderNodeGraphExecutionPlanDebug();
-  drawNodeRenderedAudio();
 }
 
 async function renderNodeGraphAudio() {
@@ -207,7 +201,7 @@ async function renderNodeGraphAudio() {
   }
   stopNodeGraphRenderedPlayback();
   const validation = nodeGraphValidate();
-  const renderStatus = document.getElementById("nodeGraphRenderStatus");
+  const renderStatus = nodeGraphRenderStatusPill();
   if (!validation.valid) {
     nodeGraphMvp.rendered = null;
     clearNodeGraphModuleScopeBuffers();
@@ -221,7 +215,6 @@ async function renderNodeGraphAudio() {
       outputSummary.textContent = validation.scheduleText;
     }
     renderNodeGraphExecutionPlanDebug();
-    drawNodeRenderedAudio();
     return;
   }
 
@@ -377,7 +370,6 @@ async function renderNodeGraphAudio() {
     renderStatus.textContent = "native render failed";
     renderStatus.className = "pill warn";
     setNodeGraphAudioStats();
-    drawNodeRenderedAudio();
     return;
   }
 
@@ -462,5 +454,4 @@ async function renderNodeGraphAudio() {
   if (outputSummary) {
     outputSummary.textContent = validation.scheduleText;
   }
-  drawNodeRenderedAudio();
 }

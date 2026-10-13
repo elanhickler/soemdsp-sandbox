@@ -42,7 +42,7 @@ const PARAM_FREQUENCY = 10;
 const PARAM_AMPLITUDE = 12;
 const PARAM_RESONANCE = 20;
 const PARAM_MODE = 21;
-const PARAM_SHAPE = 23;
+const PARAM_SHAPE = 13; // Chaos: worklet push("chaos", NATIVE_GRAPH_PARAM_SHAPE) -> node.shape
 
 function view(ptr, n) {
   return new Float64Array(mem.buffer, ptr, n);
@@ -154,6 +154,58 @@ if (ver < 150) throw new Error(`graph version ${ver} expected >= 150`);
     `stereo flower ok peakL=${peakL.toFixed(4)} peakR=${peakR.toFixed(4)} maxDiff=${maxDiff.toFixed(5)}`
   );
   destroy(g);
+}
+
+// --- Chaos is exercised: mono source -> In, outs Left+Right ---
+// Chaos > 0 must change the output vs Chaos = 0, and per-lane chaos noise
+// must split L/R (stereo_route single source); Chaos = 0 keeps L === R.
+function chaosRun(chaos) {
+  const g = create() | 0;
+  setSr(g, 48000);
+  const hOsc = 0x6301 >>> 0;
+  const hFilt = 0x6302 >>> 0;
+  const hOut = 0x6303 >>> 0;
+  if ((add(g, hOsc, TYPE_POLY) | 0) !== 0) throw new Error("chaos add osc");
+  if ((add(g, hFilt, TYPE_FLOWER) | 0) !== 0) throw new Error("chaos add flower");
+  if ((add(g, hOut, TYPE_OUT) | 0) !== 0) throw new Error("chaos add out");
+  if ((connect(g, hOsc, PORT_MONO, hFilt, PORT_MONO) | 0) !== 0) throw new Error("chaos in");
+  if ((connect(g, hFilt, PORT_LEFT, hOut, PORT_LEFT) | 0) !== 0) throw new Error("chaos outL");
+  if ((connect(g, hFilt, PORT_RIGHT, hOut, PORT_RIGHT) | 0) !== 0) throw new Error("chaos outR");
+  setParam(g, hOsc, PARAM_FREQUENCY, 220);
+  setParam(g, hOsc, PARAM_AMPLITUDE, 0.35);
+  setParam(g, hFilt, PARAM_FREQUENCY, 0.5);
+  setParam(g, hFilt, PARAM_RESONANCE, 0.35);
+  setParam(g, hFilt, PARAM_MODE, 0);
+  setParam(g, hFilt, PARAM_SHAPE, chaos);
+  if ((compile(g) | 0) !== 0) throw new Error("chaos compile");
+  snap(g);
+  const L = [];
+  const R = [];
+  for (let q = 0; q < 40; q++) {
+    process(g, 128);
+    L.push(...view(portPtr(g, hFilt, PORT_LEFT) | 0, 128));
+    R.push(...view(portPtr(g, hFilt, PORT_RIGHT) | 0, 128));
+  }
+  destroy(g);
+  return { L, R };
+}
+{
+  const off = chaosRun(0);
+  const on = chaosRun(0.6);
+  let onVsOff = 0;
+  let lrOn = 0;
+  let lrOff = 0;
+  for (let i = 0; i < off.L.length; i++) {
+    onVsOff = Math.max(onVsOff, Math.abs(on.L[i] - off.L[i]));
+    lrOn = Math.max(lrOn, Math.abs(on.L[i] - on.R[i]));
+    lrOff = Math.max(lrOff, Math.abs(off.L[i] - off.R[i]));
+  }
+  if (!(onVsOff > 1e-3)) throw new Error(`chaos not exercised: Chaos 0.6 vs 0 maxDiff=${onVsOff}`);
+  if (!(lrOn > 1e-3)) throw new Error(`chaos on: mono source L/R should split, maxDiff=${lrOn}`);
+  if (lrOff !== 0) throw new Error(`chaos off: mono source L/R should be identical, maxDiff=${lrOff}`);
+  console.log(
+    `chaos flower ok on-vs-off=${onVsOff.toFixed(5)} L/R chaos on=${lrOn.toFixed(5)} off=${lrOff}`
+  );
 }
 
 console.log(`smoke_flower_child_mono ok: version=${ver}`);

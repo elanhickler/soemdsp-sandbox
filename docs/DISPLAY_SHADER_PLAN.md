@@ -4,7 +4,7 @@
 
 **Date:** 2026-10-06. Source: Argi via LibraryCode. GLSL-on-disk: 2026-10-09 Argi. Face wipe registry: 2026-10-09 Argi.
 
-**Related:** `docs/APP_POLICY.md` (no JS DSP, no GPU audio, no worklet / JS special cases); `docs/BUG_PLAN.md` → **Cleanup** → **C-001** (JS DSP removal; overlaps P0e-1); `docs/SCOPE_PAINT_SIMPLIFICATION_PLAN.md`; `docs/FUTURE_PLANNING.md` §Display shaders.
+**Related:** `docs/APP_POLICY.md` (no JS DSP, no GPU audio, no worklet / JS special cases); `docs/BUG_PLAN.md` → **Cleanup** → **C-001** (JS DSP removal; overlaps P0e-1); `docs/SCOPE_PAINT_SIMPLIFICATION_PLAN.md`; `docs/SCOPE_VIDEO_OUT_PLAN.md` (📺 `rgba` out for every scope, builds on P0a/P0c/P0d and W1); `docs/FUTURE_PLANNING.md` §Display shaders.
 
 ---
 

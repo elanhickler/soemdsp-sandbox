@@ -1990,9 +1990,6 @@ function commitNodeGraphPatch(patch, options = {}) {
       }
     } else if (!isLayoutEdit) {
       renderNodePalette();
-      if (typeof renderNodeGraphConnectionList === "function") {
-        renderNodeGraphConnectionList();
-      }
       syncNodeGraphGhostSliders();
       syncNodeGraphFilterCurveDisplays();
       renderNodeGraphVisualSettings();
