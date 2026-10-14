@@ -71,6 +71,7 @@ def read_bundled_default_ui_settings_script_payload() -> dict:
 
 
 PUBLIC_SCRIPT_PATHS = (
+    "./public/embed-params.js",
     "./public/boot-loading.js",
     "./public/perform-boot.js",
     "./public/app-state.js",
@@ -248,6 +249,7 @@ PUBLIC_SCRIPT_PATHS = (
     "./public/node-graph-module-scope-1d-trace.js",
     "./public/node-graph-module-scope-draw-orchestrator.js",
     "./public/modules/lookaheadLimiter/lookahead-limiter-display.js",
+    "./public/modules/softpopOscillator/softpop-display.js",
     "./public/modules/phosphorLight/phosphor-light-display.js",
     "./public/modules/oscilloscopeBank/oscilloscope-bank-display.js",
     "./public/modules/ensemble/ensemble-cloud-display.js",
@@ -273,6 +275,7 @@ PUBLIC_SCRIPT_PATHS = (
     "./public/modules/rgbPicture/rgb-picture-display.js",
     "./public/modules/imageBurn/image-burn-ui.js",
     "./public/lib/visual/picture-device.js",
+    "./public/lib/visual/gl-line-renderer.js",
     "./public/modules/reverbEffect/sabrina-reverb-gl.js",
     "./public/modules/numberReadout/number-readout-gl.js",
     "./public/lib/visual/color-widget-plane-gl.js",
@@ -368,6 +371,7 @@ PUBLIC_SCRIPT_PATHS = (
     "./public/node-graph-keyboard-chord-memory.js",
     "./public/node-graph-state.js",
     "./public/node-graph-external-ui-events.js",
+    "./public/modules/audioPlayer/audio-player-embed.js",
     "./public/node-graph-patch-migrations.js",
     "./public/node-graph-circuit-patches.js",
     "./public/node-graph-patch-core.js",
@@ -488,6 +492,7 @@ PUBLIC_SCRIPT_PATHS = (
     "./public/node-graph-wire-controller-bootstrap.js",
     "./public/node-graph-screen-solo.js",
     "./public/node-graph-layout-canvas.js",
+    "./public/embed-module.js",
     "./public/node-graph-workspace-event-bindings.js",
     "./public/node-graph-render-live-event-bindings.js",
     "./public/node-graph-header-event-bindings.js",
@@ -17323,6 +17328,17 @@ def require_native_module_contract(base_url: str) -> None:
             "soemdsp_softpop_oscillator_version",
             "soemdsp_softpop_oscillator_metadata_json",
             "soemdsp_softpop_oscillator_metadata_json_size",
+        ],
+        "softpop_filter": [
+            "soemdsp_softpop_filter_create",
+            "soemdsp_softpop_filter_destroy",
+            "soemdsp_softpop_filter_reset",
+            "soemdsp_softpop_filter_sample",
+            "soemdsp_softpop_filter_left",
+            "soemdsp_softpop_filter_right",
+            "soemdsp_softpop_filter_version",
+            "soemdsp_softpop_filter_metadata_json",
+            "soemdsp_softpop_filter_metadata_json_size",
         ],
         "helmholtz": [
             "soemdsp_helmholtz_create",

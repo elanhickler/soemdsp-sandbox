@@ -524,6 +524,12 @@ function cloneNodeGraphTypedDisplaySettings(node) {
           ? normalizeNodeGraphPatchFaceDisplaySettings(bag)
           : (bag || {}),
       };
+    case "softpopFace":
+      return {
+        traceDisplaySettings: typeof normalizeNodeGraphSoftpopFaceSettings === "function"
+          ? normalizeNodeGraphSoftpopFaceSettings(bag)
+          : (bag || {}),
+      };
     case "limiterGainFace":
       return {
         traceDisplaySettings: typeof normalizeNodeGraphLimiterGainFaceSettings === "function"

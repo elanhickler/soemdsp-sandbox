@@ -145,6 +145,7 @@ const NODE_GRAPH_BYPASS_TYPE_OVERRIDES = Object.freeze({
   vibratoGenerator: "silence",
   wowAndFlutter: "silence",
   softpopOscillator: "silence",
+  softpopFilter: "silence",
   wavetable2d: "silence",
   wavetable3d: "silence",
   flexGrid: "silence",

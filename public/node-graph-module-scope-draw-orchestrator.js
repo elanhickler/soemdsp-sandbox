@@ -100,6 +100,8 @@ const nodeGraphModuleScopeCustomRenderers = {
   // public/modules/oscilloscopeBank/oscilloscope-bank-display.js
   // videoscopeBurn self-registers from
   // public/modules/videoscope/videoscope-display.js
+  // softpopFace self-registers from
+  // public/modules/softpopOscillator/softpop-display.js
   // limiterGainFace self-registers from
   // public/modules/lookaheadLimiter/lookahead-limiter-display.js
   // transportBpm self-registers from transport-display.js (kept listed for discoverability)

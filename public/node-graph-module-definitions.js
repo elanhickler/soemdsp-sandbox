@@ -209,6 +209,7 @@ const nodeGraphNodeLabels = Object.freeze({
   crossover5: "5-Crossover",
   crossover6: "6-Crossover",
   softpopOscillator: "Softpop Oscillator",
+  softpopFilter: "Softpop Filter",
   robinSinepulse: "Robin Sinepulse",
   robinSinepulseAllpass: "Robin Sinepulse Allpass",
   electroHat: "ElectroHat",
@@ -6671,15 +6672,31 @@ const nodeGraphModuleDefinitions = (
   },
   earlyReflections: {
     planRole: "processor",
-    // N parallel taps on one ring. Times use supersaw Exponential k=3
-    // on (1…N)/N so the last tap is Time and the first tap is not 0 ms.
-    // Random Offset: seeded [0,1] per tap × Offset seconds added (static).
-    // Wet mix 1/N. Write = In + Feedback×wet. Out = dry×(1−Mix)+wet×Mix.
-    // Drift: per-tap FBM ±Amount on tap time (0.25 Hz). Thru = dry In.
+    // Stereo from one mono In. Tap times: supersaw Exponential k=3 on u in (0,1].
+    // Stereo Mode Dual (default): two rings, N taps each, no feedback.
+    //   Left u=i/N (last tap = Time); Right u=(i-0.5)/N (between Left taps), with
+    //   its own seeded Random Offset + FBM seeds. Wet per side = side sum / N.
+    // Stereo Mode Split: one ring, N taps alternate (1st L, 2nd R, ...). Wet per
+    //   side = side sum / side tap count (N=1 feeds both). Write = In.
+    // Mix L/R = dry*(1-Mix) + wet side*Mix. Drift: per-tap FBM +-Drift Amp at Drift Speed Hz.
     inputs: ["In"],
-    outputs: ["Thru", "Out"],
-    outputAliases: { Mono: "Out" },
+    outputs: ["Mix L", "Mix R"],
     parameters: [
+      {
+        choices: ["Dual", "Split"],
+        defaultValue: "0",
+        displayChoices: true,
+        divideChoicesVisibly: true,
+        key: "stereoMode",
+        label: "Stereo Mode",
+        linearSmoothing: false,
+        max: "1",
+        mid: "0",
+        min: "0",
+        nonlinearSlider: false,
+        step: "1",
+        tooltip: "Dual: a full set of taps for each side. Right taps sit between the Left taps and get their own random offsets and drift. Split: one set of taps, every other tap goes Left or Right."
+      },
       {
         defaultValue: "7",
         key: "delays",
@@ -6705,6 +6722,17 @@ const nodeGraphModuleDefinitions = (
         tooltip: "Farthest tap of the exponential layout. Shorter taps pack toward 0 (k=3)."
       },
       {
+        defaultValue: "1",
+        key: "mix",
+        label: "Mix",
+        max: "1",
+        mid: "0.5",
+        min: "0",
+        nonlinearSlider: false,
+        step: "any",
+        tooltip: "Dry/wet on Mix L and Mix R. 0 = dry In, 1 = mixed taps."
+      },
+      {
         defaultValue: "0",
         key: "randomOffset",
         kind: "time",
@@ -6718,6 +6746,28 @@ const nodeGraphModuleDefinitions = (
         tooltip: "Multiplies each tap's seeded random [0,1] extra delay. 0 = exponential times only. 0.05 s = each tap adds 0…50 ms from Seed."
       },
       {
+        defaultValue: "0.25",
+        key: "driftSpeed",
+        label: "Drift Speed",
+        max: "1000",
+        mid: "1",
+        min: "0",
+        step: "any",
+        unit: "Hz",
+        tooltip: "How fast each tap's FBM drift wanders. 0 = frozen. 0.25 Hz = slow wander."
+      },
+      {
+        defaultValue: "0",
+        key: "driftAmp",
+        label: "Drift Amp",
+        max: "1",
+        mid: "0.1",
+        min: "0",
+        nonlinearSlider: false,
+        step: "any",
+        tooltip: "Depth of the per-tap drift as a fraction of that tap's delay. 0.1 = up to +-10% time. 0 = no drift."
+      },
+      {
         defaultValue: "1",
         key: "seed", kind: "seed",
         label: "Seed",
@@ -6729,39 +6779,6 @@ const nodeGraphModuleDefinitions = (
         nonlinearSlider: false,
         step: "1",
         tooltip: "Chooses the random extra delay for each tap. Random Offset scales those values."
-      },
-      {
-        defaultValue: "0",
-        key: "feedback",
-        label: "Feedback",
-        max: "2",
-        mid: "0.5",
-        min: "0",
-        nonlinearSlider: false,
-        step: "any",
-        tooltip: "Regen of the mixed taps into the delay write. 0 = one-shot. 1 = sustain. Above 1 grows."
-      },
-      {
-        defaultValue: "1",
-        key: "mix",
-        label: "Mix",
-        max: "1",
-        mid: "0.5",
-        min: "0",
-        nonlinearSlider: false,
-        step: "any",
-        tooltip: "Dry/wet on Out. 0 = dry In, 1 = mixed taps. Thru stays dry."
-      },
-      {
-        defaultValue: "0",
-        key: "drift",
-        label: "Drift",
-        max: "1",
-        mid: "0.1",
-        min: "0",
-        nonlinearSlider: false,
-        step: "any",
-        tooltip: "Subtle per-tap FBM wander as a fraction of that tap's delay (±). 0.1 = ±10% time. Walks at 0.25 Hz."
       },
       nodeGraphOutputAmplitudeParam,
     ]
@@ -9142,7 +9159,6 @@ const nodeGraphModuleDefinitions = (
       nodeGraphOutputAmplitudeParam,
     ]
   },
-  // Softpop: Gaussian white / pink / brown → resonant Peak BP. Oscillator-dept noise voice.
   crossover2: {
     planRole: "processor",
     layout: "filterCurve",
@@ -9804,34 +9820,175 @@ const nodeGraphModuleDefinitions = (
   softpopOscillator: {
     planRole: "source",
     planFreeRun: true,
+    displayType: "softpopFace",
+    displayModes: [
+      { key: "softpopFace", label: "Softpop", renderer: "softpopFace", settingsSchema: "softpopFace" },
+    ],
+    defaultDisplayMode: "softpopFace",
     inputs: ["Reset", "f"],
     inputLabels: { f: "ƒ" },
     inputAliases: { "ƒ": "f" },
     inputTooltips: {
-      Reset: "Rising edge reseeds every generator from Seed and clears phase, smoothers, and the SVF.",
+      Reset: "Rising edge reseeds every generator (noise and dither) from Seed and zeroes the phase.",
       f: "Hz cable. When wired it replaces Frequency, same as PolyBLEP.",
     },
-    outputs: ["Out", "Left", "Right"],
-    outputLabels: { Out: "Mono" },
+    outputs: ["Mono", "Left", "Right", "Left Noise", "Right Noise", "Left CV", "Right CV"],
+    outputTooltips: {
+      Mono: "The Left channel render on its own: one complete voice, same level as Left or Right.",
+      Left: "Left channel (its own noise generators).",
+      Right: "Right channel (its own noise generators).",
+      "Left Noise": "Left audio noise stream (Color-shaped, unit RMS).",
+      "Right Noise": "Right audio noise stream (Color-shaped, unit RMS).",
+      "Left CV": "Left pitch-mod signal in octaves: log2(instantaneous Hz / Frequency). 0 when Pitch Mod is 0.",
+      "Right CV": "Right pitch-mod signal in octaves: log2(instantaneous Hz / Frequency). 0 when Pitch Mod is 0.",
+    },
     parameters: [
       {
-        choices: ["Filter", "Sine"],
-        choiceKeys: ["filter", "sine"],
-        choiceIds: [0, 1],
-        defaultValue: "filter",
+        choices: ["Sine", "Dithered Sine", "Trisaw", "Soft Square", "Soft Tri"],
+        choiceKeys: ["sine", "ditheredSine", "trisaw", "softSquare", "softTri"],
+        choiceIds: [0, 1, 2, 3, 4],
+        defaultValue: "sine",
         displayChoices: true,
         divideChoicesVisibly: true,
-        key: "model",
-        label: "Model",
+        key: "source",
+        label: "Oscillator Source",
         linearSmoothing: false,
-        max: "1",
+        max: "4",
         mid: "0",
         min: "0",
         nonlinearSlider: false,
         step: "1",
-        tooltip: "Filter = constant-peak bandpass on noise. Sine = phase oscillator. Pitch Mod and Amp Mod stay active in both."
+        tooltip: "Sine. Dithered Sine = Robin Schmidt cycle-length dither. Trisaw = dithered naive trisaw. Soft Square / Soft Tri = the soundemote.dev Diroxe shapes."
       },
       {
+        defaultValue: "440",
+        key: "frequency",
+        kind: "frequency",
+        label: "Frequency",
+        max: "20000",
+        maxDigits: 5,
+        mid: "440",
+        min: "0",
+        smoothingMode: "internal",
+        smoothingSeconds: 0.0333,
+        smoothingType: "onePole",
+        step: "any",
+        unit: "Hz",
+        tooltip:
+          "Default slider 0…20 kHz. Pitch MOD can run down through 0. Thru-zero: enable Bipolar on Frequency (domain-add MOD). Domain min/max are slider guides. Wired ƒ replaces this knob."
+      },
+      {
+        defaultValue: "0.5",
+        key: "morph",
+        label: "Morph",
+        max: "1",
+        maxDigits: 4,
+        mid: "0.5",
+        min: "0",
+        nonlinearSlider: false,
+        step: "any",
+        tooltip: "Shape per source. Sine: none. Dithered Sine: dither amount (0 = plain sine). Trisaw: peak position (0.5 = triangle, edges = saw). Soft Square: 0 = hard square, 1 = near triangle. Soft Tri: 0 = sharp triangle, 1 = rounded."
+      },
+      {
+        defaultValue: "0",
+        key: "pitchMod",
+        label: "Pitch Mod",
+        max: "4800",
+        maxDigits: 4,
+        mid: "300",
+        min: "0",
+        nonlinearSlider: false,
+        step: "any",
+        unit: "cents",
+        tooltip: "Slider 0..4800 cents (4 octaves), 300 c at the middle for fine vibrato-to-noise control. 1σ exponential pitch wobble in cents around the effective frequency. 0 = none."
+      },
+      {
+        defaultValue: "0",
+        hidden: true,
+        key: "ampMod",
+        label: "Amp Mod",
+        max: "1",
+        maxDigits: 4,
+        mid: "0.5",
+        min: "0",
+        nonlinearSlider: false,
+        step: "any",
+        tooltip: "Level-preserving full-band noise AM. 1 = full ring mod (no carrier)."
+      },
+      {
+        choices: ["White", "Pink", "Brown"],
+        choiceKeys: ["white", "pink", "brown"],
+        choiceIds: [0, 1, 2],
+        defaultValue: "white",
+        displayChoices: true,
+        divideChoicesVisibly: true,
+        key: "color",
+        label: "Color",
+        linearSmoothing: false,
+        max: "2",
+        mid: "1",
+        min: "0",
+        nonlinearSlider: false,
+        step: "1",
+        tooltip: "White = Gaussian. Pink / Brown spectral colors for audio noise and mod noise."
+      },
+      {
+        defaultValue: "1",
+        key: "seed",
+        kind: "seed",
+        label: "Seed",
+        linearSmoothing: false,
+        max: "16777215",
+        maxDigits: 0,
+        mid: "1",
+        min: "0",
+        nonlinearSlider: false,
+        step: "1",
+        tooltip: "Master seed. Reset jack reseeds every generator from this value."
+      },
+      {
+        defaultValue: "1",
+        key: "amplitude",
+        label: "Amplitude",
+        max: "1",
+        mid: "0.5",
+        min: "0",
+        nonlinearSlider: false,
+        step: "any",
+        modClamp: false
+      },
+    ]
+  },
+  softpopFilter: {
+    planRole: "source",
+    planFreeRun: true,
+    displayType: "softpopFace",
+    displayModes: [
+      { key: "softpopFace", label: "Softpop", renderer: "softpopFace", settingsSchema: "softpopFace" },
+    ],
+    defaultDisplayMode: "softpopFace",
+    inputs: ["Reset", "f", "In", "Left", "Right"],
+    inputLabels: { f: "ƒ", In: "Mono" },
+    inputAliases: { "ƒ": "f", Mono: "In" },
+    inputTooltips: {
+      Reset: "Rising edge reseeds every generator from Seed and clears the filters.",
+      f: "Hz cable. When wired it replaces Frequency, same as PolyBLEP.",
+      In: "Mono audio in. Any wired audio input replaces the internal noise. Mono feeds both channels.",
+      Left: "Left audio in. Alone it counts as mono (both channels); with Right wired, Left channel = Left + Mono.",
+      Right: "Right audio in. Alone it counts as mono (both channels); with Left wired, Right channel = Right + Mono.",
+    },
+    outputs: ["Mono", "Left", "Right", "Left Noise", "Right Noise", "Left CV", "Right CV"],
+    outputTooltips: {
+      Mono: "The Left channel render on its own: one complete voice, same level as Left or Right.",
+      Left: "Left channel (its own noise generators).",
+      Right: "Right channel (its own noise generators).",
+      "Left Noise": "Left internal noise (Color-shaped, unit RMS), before the filter.",
+      "Right Noise": "Right internal noise (Color-shaped, unit RMS), before the filter.",
+      "Left CV": "Left pitch-mod signal in octaves: log2(instantaneous Hz / Frequency). 0 when Pitch Mod is 0.",
+      "Right CV": "Right pitch-mod signal in octaves: log2(instantaneous Hz / Frequency). 0 when Pitch Mod is 0.",
+    },
+    parameters: [
+  {
         defaultValue: "440",
         key: "frequency",
         kind: "frequency",
@@ -9858,7 +10015,7 @@ const nodeGraphModuleDefinitions = (
         min: "0",
         nonlinearSlider: false,
         step: "any",
-        tooltip: "Filter model only: 0 = tight ring (Q 2000), 1 = broad noise (Q 0.5). No effect in Sine."
+        tooltip: "Bandwidth: 0 = tight ring (Q 2000), 1 = broad noise (Q 0.5)."
       },
       {
         defaultValue: "0",
@@ -9871,7 +10028,7 @@ const nodeGraphModuleDefinitions = (
         nonlinearSlider: false,
         step: "any",
         unit: "cents",
-        tooltip: "1σ exponential pitch wobble in cents around the effective frequency. 0 = none."
+        tooltip: "1σ exponential wobble of the filter centre in cents around the effective frequency. 0 = none."
       },
       {
         defaultValue: "0",
@@ -9885,17 +10042,6 @@ const nodeGraphModuleDefinitions = (
         nonlinearSlider: false,
         step: "any",
         tooltip: "Level-preserving full-band noise AM. 1 = full ring mod (no carrier)."
-      },
-      {
-        defaultValue: "1",
-        key: "amplitude",
-        label: "Amplitude",
-        max: "1",
-        mid: "0.5",
-        min: "0",
-        nonlinearSlider: false,
-        step: "any",
-        modClamp: false
       },
       {
         choices: ["White", "Pink", "Brown"],
@@ -9915,23 +10061,6 @@ const nodeGraphModuleDefinitions = (
         tooltip: "White = Gaussian. Pink / Brown spectral colors for audio noise and mod noise."
       },
       {
-        choices: ["Stereo", "Mono"],
-        choiceKeys: ["stereo", "mono"],
-        choiceIds: [0, 1],
-        defaultValue: "stereo",
-        displayChoices: true,
-        divideChoicesVisibly: true,
-        key: "stereoMode",
-        label: "Stereo",
-        linearSmoothing: false,
-        max: "1",
-        mid: "0",
-        min: "0",
-        nonlinearSlider: false,
-        step: "1",
-        tooltip: "Stereo = independent L/R generators. Mono = one path copied to both channels."
-      },
-      {
         defaultValue: "1",
         key: "seed",
         kind: "seed",
@@ -9944,6 +10073,17 @@ const nodeGraphModuleDefinitions = (
         nonlinearSlider: false,
         step: "1",
         tooltip: "Master seed. Reset jack reseeds every generator from this value."
+      },
+      {
+        defaultValue: "1",
+        key: "amplitude",
+        label: "Amplitude",
+        max: "1",
+        mid: "0.5",
+        min: "0",
+        nonlinearSlider: false,
+        step: "any",
+        modClamp: false
       },
     ]
   },
@@ -13107,6 +13247,24 @@ const nodeGraphModuleDefinitions = (
         nonlinearSlider: false,
         step: "1",
         tooltip: "Delay-time modulator. Parabol = original Sabrina cyclic wow. FBM = fractal Brownian flutter (same family as SoEm Reverb / Delay). Hidden — enable from the parameter visibility menu.",
+      },
+      {
+        choices: ["Off", "On"],
+        choiceKeys: ["off", "on"],
+        choiceIds: [0, 1],
+        defaultValue: "on",
+        displayChoices: true,
+        divideChoicesVisibly: true,
+        key: "delayTapMod",
+        kind: "choice",
+        label: "Tap Mod",
+        linearSmoothing: false,
+        max: "1",
+        mid: "1",
+        min: "0",
+        nonlinearSlider: false,
+        step: "1",
+        tooltip: "Tap modulation on the 2 main (non-diffuse) delay taps. On = original Sabrina. Off = those taps hold a fixed length while the diffusion allpasses keep modulating.",
       },
       { control: "number", defaultValue: "0", key: "seed", kind: "seed", label: "Seed", linearSmoothing: false, max: "16777215", maxDigits: 0, mid: "1", min: "0", nonlinearSlider: false, step: "1", tooltip: "Randomizes the delay line pattern. Same seed always reproduces the same reverb character." },
       nodeGraphOutputAmplitudeParam,

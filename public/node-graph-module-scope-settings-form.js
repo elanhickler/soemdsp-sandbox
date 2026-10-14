@@ -1898,6 +1898,9 @@ function buildNodeGraphDisplaySettingsBodyHtml(formType, node = null) {
       nodeGraphDisplaySettingsBuildStepperRowHtml("cloudSpeed", "ensembleCloud")
     }</div>`;
   }
+  if (type === "softpopFace" && typeof buildNodeGraphSoftpopDisplaySettingsBodyHtml === "function") {
+    return buildNodeGraphSoftpopDisplaySettingsBodyHtml();
+  }
   if (type === "limiterGainFace" && typeof buildNodeGraphLimiterGainDisplaySettingsBodyHtml === "function") {
     return buildNodeGraphLimiterGainDisplaySettingsBodyHtml();
   }

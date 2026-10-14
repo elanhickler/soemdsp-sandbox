@@ -956,6 +956,14 @@ const nodeGraphTraceDisplayActiveControlsByType = Object.freeze({
     toggles: Object.freeze([]),
     choices: Object.freeze([]),
   }),
+  softpopFace: Object.freeze({
+    fields: Object.freeze([
+      "brightness", "decaySeconds", "backgroundBrightness",
+    ]),
+    colors: Object.freeze([]),
+    toggles: Object.freeze([]),
+    choices: Object.freeze([]),
+  }),
   limiterGainFace: Object.freeze({
     fields: Object.freeze(["historySeconds", "lineThickness", "hue", "lineBrightness"]),
     colors: Object.freeze(["backgroundColor"]),
@@ -2546,6 +2554,7 @@ const nodeGraphDisplaySettingsFormTypeTitles = Object.freeze({
   videoscopeBurn: "Videoscope",
   oscilloscopeBankBurn: "Bank",
   hypersawBurn: "Hypersaw",
+  softpopFace: "Softpop",
   arpKeysFace: "Arp",
   knobFace: "Knob",
   pluginSliderFace: "Slider",

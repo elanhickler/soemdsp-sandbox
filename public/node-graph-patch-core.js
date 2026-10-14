@@ -1636,7 +1636,8 @@ function applyNodeGraphModuleElementFromPatch(patchNode, options = {}) {
   } else if (element) {
     reusedUnchanged = true;
     // B-055: move Text Box between annotation / module hosts if type host changed.
-    if (element.parentElement !== container) {
+    // A whole-module canvas tile (embed-module.js) owns the element while shown; leave it there.
+    if (element.parentElement !== container && !element.closest(".node-layout-canvas-tile")) {
       container.append(element);
     }
   }

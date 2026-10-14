@@ -49,7 +49,7 @@ const TYPE = {
   chaosfly: 161,
   output: 6,
 };
-const PARAM = { frequency: 10, amplitude: 12, volumeDb: 1, pan: 2, mode: 21, attOffset: 71 };
+const PARAM = { frequency: 10, amplitude: 12, volumeDb: 0, pan: 1, mode: 21, attOffset: 71 };
 const PORT = { mono: 0, left: 1, right: 2 };
 
 function peakAt(ptr, n) {
@@ -76,11 +76,11 @@ console.log("graph version", e.soemdsp_graph_version());
   if (connect(g, hChaos, PORT.left, hOut, PORT.right)) throw new Error("connect R");
   if (compile(g)) throw new Error("compile A");
   snap(g);
-  process(g, 256);
-  const pL = peakAt(outL(g) | 0, 256);
-  const pR = peakAt(outR(g) | 0, 256);
-  const pX = peakAt(portPtr(g, hChaos, PORT.mono) | 0, 256);
-  const pY = peakAt(portPtr(g, hChaos, PORT.left) | 0, 256);
+  process(g, 128);
+  const pL = peakAt(outL(g) | 0, 128);
+  const pR = peakAt(outR(g) | 0, 128);
+  const pX = peakAt(portPtr(g, hChaos, PORT.mono) | 0, 128);
+  const pY = peakAt(portPtr(g, hChaos, PORT.left) | 0, 128);
   console.log("A chaos→out", { pX, pY, pL, pR });
   if (!(pX > 1e-4 && pY > 1e-4)) throw new Error("chaos node silent");
   if (!(pL > 1e-5 && pR > 1e-5)) throw new Error("output silent despite chaos");
@@ -111,9 +111,9 @@ console.log("graph version", e.soemdsp_graph_version());
   if (addMod(g, hAmp, PORT.mono, hOsc, PARAM.amplitude)) throw new Error("mod");
   if (compile(g)) throw new Error("compile B");
   snap(g);
-  process(g, 256);
-  const pOsc = peakAt(portPtr(g, hOsc, PORT.mono) | 0, 256);
-  const pL = peakAt(outL(g) | 0, 256);
+  process(g, 128);
+  const pOsc = peakAt(portPtr(g, hOsc, PORT.mono) | 0, 128);
+  const pL = peakAt(outL(g) | 0, 128);
   console.log("B amp0 VCA→out", { pOsc, pL });
   if (!(pOsc > 0.1)) throw new Error("osc silent amp0 VCA");
   if (!(pL > 1e-5)) throw new Error("output silent B");

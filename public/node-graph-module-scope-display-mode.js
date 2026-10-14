@@ -279,6 +279,7 @@ function nodeGraphModuleDisplayTypeHasLocalSettings(displayType) {
     "harmonicLines",
     "additiveWaveform",
     "limiterGainFace",
+    "softpopFace",
     // Patch identity plate — not Trace.
     "patchFace",
     "vectorRgbFace",

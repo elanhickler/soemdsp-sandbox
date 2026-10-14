@@ -461,7 +461,10 @@ function beginNodeGraphLayoutCanvasStage(nodeIds, mode = "perform") {
       entry.face.dataset.node = entry.id;
     }
     entry.host?.classList.add("node-screen-solo-host");
-    entry.face.classList.add("node-screen-solo-face", "node-layout-canvas-face");
+    // Whole-module faces keep their own zoom-1 layout: no solo-face stretch rules.
+    if (!entry.face.classList.contains("node-whole-module-face")) {
+      entry.face.classList.add("node-screen-solo-face", "node-layout-canvas-face");
+    }
     // B-071: plate metrics before reparent — tile stretch must not redefine source-min.
     if (typeof nodeGraphTextBoxCaptureCanvasScaleSource === "function") {
       nodeGraphTextBoxCaptureCanvasScaleSource(entry.face);
@@ -536,6 +539,7 @@ function beginNodeGraphLayoutCanvasStage(nodeIds, mode = "perform") {
   for (const item of items) {
     stage.append(item.tile);
     nodeGraphLayoutCanvasApplyTileRect(item.tile, item.rect, stage);
+    if (typeof nodeGraphScreenSoloWholeModuleFit === "function") nodeGraphScreenSoloWholeModuleFit(item.tile);
   }
 
   // Knob/slider text uses CSS cqmin on the face/dial. Only clear any stale
@@ -559,6 +563,7 @@ function beginNodeGraphLayoutCanvasStage(nodeIds, mode = "perform") {
   const relayoutKeyboardFaces = () => {
     for (const item of items) {
       nodeGraphLayoutCanvasApplyTileRect(item.tile, item.rect, stage);
+    if (typeof nodeGraphScreenSoloWholeModuleFit === "function") nodeGraphScreenSoloWholeModuleFit(item.tile);
     }
     syncKnobFaceCells();
     if (typeof installNodeGraphMidiKeyboardLayoutResizeObserver === "function") {

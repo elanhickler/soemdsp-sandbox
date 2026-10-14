@@ -111,6 +111,7 @@ const NODE_GRAPH_EFFICIENT_PRODUCT_AUDIO_TYPES = Object.freeze([
   "softwaveOsc",
   "filterMorphOscillator",
   "softpopOscillator",
+  "softpopFilter",
   "dsfOscillator",
   "hypersaw2",
   "vibratoGenerator",

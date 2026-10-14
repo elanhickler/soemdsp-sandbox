@@ -27,6 +27,7 @@ NodeLiveAudioProcessor.NATIVE_GRAPH_TYPE_IDS = Object.freeze({
   hyperpluck: 200,
   filterMorphOscillator: 201,
   softpopOscillator: 207,
+  softpopFilter: 214,
   slewLimiter: 17,
   comparator: 18,
   sampleDelay: 19,
@@ -643,6 +644,14 @@ NodeLiveAudioProcessor.prototype.mapNativeGraphSrcPortId = function mapNativeGra
     if (p === "cv") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_SQUARE;
     if (p === "__acidstep") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_PHASE01;
   }
+  // Softpop Oscillator / Filter: Mono (L render), Left, Right, Left/Right Noise, Left/Right CV.
+  if (t === "softpopOscillator" || t === "softpopFilter") {
+    if (p === "mono") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_MONO;
+    if (p === "left noise") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_SAW;
+    if (p === "right noise") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_RAMP;
+    if (p === "left cv") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_SQUARE;
+    if (p === "right cv") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_TRI;
+  }
   // XY Pad outs: X/Y bipolar, Gate hold, Spike pulse.
   if (t === "xyPad") {
     if (p === "x") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_MONO;
@@ -812,7 +821,7 @@ NodeLiveAudioProcessor.prototype.mapNativeGraphSrcPortId = function mapNativeGra
   if (p === "delayed") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_MONO;
   if (p === "thru") {
     // comparator Thru → Mono; sampleDelay Thru → Dry L.
-    return t === "sampleDelay" || t === "earlyReflections"
+    return t === "sampleDelay"
       ? NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_DRY_L
       : NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_MONO;
   }
@@ -4553,6 +4562,7 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
       push("lfoBaseSpeed", P.NATIVE_GRAPH_PARAM_LFO_BASE_SPEED, cont("lfoBaseSpeed", 0.83));
       push("lfoVariation", P.NATIVE_GRAPH_PARAM_LFO_VARIATION, cont("lfoVariation", 0.001));
       push("lfoStyle", P.NATIVE_GRAPH_PARAM_LFO_STYLE, disc("lfoStyle", 0));
+      push("delayTapMod", P.NATIVE_GRAPH_PARAM_MODE, disc("delayTapMod", 1));
       push("seed", P.NATIVE_GRAPH_PARAM_SEED, disc("seed", 0));
       push("amplitude", P.NATIVE_GRAPH_PARAM_AMPLITUDE, cont("amplitude", 1));
       continue;
@@ -4774,14 +4784,23 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
       continue;
     }
     if (type === "softpopOscillator") {
-      push("model", P.NATIVE_GRAPH_PARAM_WAVEFORM, disc("model", 0));
+      push("source", P.NATIVE_GRAPH_PARAM_WAVEFORM, disc("source", 0));
+      push("frequency", P.NATIVE_GRAPH_PARAM_FREQUENCY, cont("frequency", 440));
+      push("morph", P.NATIVE_GRAPH_PARAM_SHAPE, cont("morph", 0.5));
+      push("pitchMod", P.NATIVE_GRAPH_PARAM_LFO_AMPLITUDE, cont("pitchMod", 0));
+      push("ampMod", P.NATIVE_GRAPH_PARAM_MIX, cont("ampMod", 0));
+      push("amplitude", P.NATIVE_GRAPH_PARAM_AMPLITUDE, cont("amplitude", 1));
+      push("color", P.NATIVE_GRAPH_PARAM_STAGES, disc("color", 0));
+      push("seed", P.NATIVE_GRAPH_PARAM_SEED, disc("seed", 1));
+      continue;
+    }
+    if (type === "softpopFilter") {
       push("frequency", P.NATIVE_GRAPH_PARAM_FREQUENCY, cont("frequency", 440));
       push("width", P.NATIVE_GRAPH_PARAM_WIDTH, cont("width", 0.3));
       push("pitchMod", P.NATIVE_GRAPH_PARAM_LFO_AMPLITUDE, cont("pitchMod", 0));
       push("ampMod", P.NATIVE_GRAPH_PARAM_MIX, cont("ampMod", 0));
       push("amplitude", P.NATIVE_GRAPH_PARAM_AMPLITUDE, cont("amplitude", 1));
       push("color", P.NATIVE_GRAPH_PARAM_STAGES, disc("color", 0));
-      push("stereoMode", P.NATIVE_GRAPH_PARAM_MODE, disc("stereoMode", 0));
       push("seed", P.NATIVE_GRAPH_PARAM_SEED, disc("seed", 1));
       continue;
     }
@@ -6062,13 +6081,14 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
       continue;
     }
     if (type === "earlyReflections") {
+      push("stereoMode", P.NATIVE_GRAPH_PARAM_MODE, disc("stereoMode", 0));
       push("time", P.NATIVE_GRAPH_PARAM_TIME_NUMERATOR, cont("time", 0.1));
       push("delays", P.NATIVE_GRAPH_PARAM_STAGES, disc("delays", 7));
       push("randomOffset", P.NATIVE_GRAPH_PARAM_WIDTH, cont("randomOffset", 0));
       push("seed", P.NATIVE_GRAPH_PARAM_SEED, disc("seed", 1));
-      push("feedback", P.NATIVE_GRAPH_PARAM_FEEDBACK, cont("feedback", 0));
       push("mix", P.NATIVE_GRAPH_PARAM_MIX, cont("mix", 1));
-      push("drift", P.NATIVE_GRAPH_PARAM_LFO_AMPLITUDE, cont("drift", 0));
+      push("driftSpeed", P.NATIVE_GRAPH_PARAM_LFO_RATE, cont("driftSpeed", 0.25));
+      push("driftAmp", P.NATIVE_GRAPH_PARAM_LFO_AMPLITUDE, cont("driftAmp", 0));
       push("amplitude", P.NATIVE_GRAPH_PARAM_AMPLITUDE, cont("amplitude", 1));
       continue;
     }
@@ -6685,6 +6705,74 @@ NodeLiveAudioProcessor.prototype.syncNativeEnsemblePublish =
     for (const id of [...this.ensemblePublish.keys()]) {
       if (!live.has(id)) {
         this.ensemblePublish.delete(id);
+      }
+    }
+  };
+
+/**
+ * Softpop face: read + clear the native per-sample |fInst| histogram (log
+ * 20 Hz..20 kHz) and the model / centre / Q into softpopPublish for the
+ * data-bus relay (SoftpopBins, SoftpopInfo). No audio math here.
+ */
+NodeLiveAudioProcessor.prototype.syncNativeSoftpopPublish =
+  function syncNativeSoftpopPublish() {
+    if (!this.efficientProduct || !this.nativeGraphCompiled || !this.nativeGraphHandle) {
+      return;
+    }
+    const native = this.nativeGraph;
+    const handleFn = native?.soemdsp_graph_node_native_handle;
+    if (!handleFn) {
+      return;
+    }
+    // Softpop Oscillator and Softpop Filter export the same display API.
+    const apis = new Map();
+    for (const [type, prefix] of [["softpopOscillator", "soemdsp_softpop_oscillator"], ["softpopFilter", "soemdsp_softpop_filter"]]) {
+      const api = {
+        count: native?.[`${prefix}_display_bin_count`],
+        bin: native?.[`${prefix}_display_bin`],
+        take: native?.[`${prefix}_display_take`],
+        info: native?.[`${prefix}_display_info`],
+      };
+      if (api.count && api.bin && api.take && api.info) apis.set(type, api);
+    }
+    if (!apis.size) {
+      return;
+    }
+    if (!this.softpopPublish) {
+      this.softpopPublish = new Map();
+    }
+    const live = new Set();
+    for (const [id, node] of this.nodes || []) {
+      const api = apis.get(String(node?.type || ""));
+      if (!api) {
+        continue;
+      }
+      const nBins = api.count() | 0;
+      let handle = 0;
+      try {
+        handle = handleFn(this.nativeGraphHandle, this.fnv1aHash32(id)) | 0;
+      } catch (_e) {
+        handle = 0;
+      }
+      if (!(handle > 0) || !(nBins > 0)) {
+        continue;
+      }
+      live.add(id);
+      const bins = new Float32Array(nBins);
+      for (let i = 0; i < nBins; i += 1) {
+        bins[i] = api.bin(handle, i);
+      }
+      const count = api.take(handle);
+      const info = [];
+      for (let k = 0; k < 7; k += 1) {
+        info.push(Number(api.info(handle, k)));
+      }
+      info.push(Number(count));
+      this.softpopPublish.set(id, { bins, info });
+    }
+    for (const id of [...this.softpopPublish.keys()]) {
+      if (!live.has(id)) {
+        this.softpopPublish.delete(id);
       }
     }
   };
@@ -8469,13 +8557,13 @@ NodeLiveAudioProcessor.prototype.nativeGraphPortNames = function nativeGraphPort
     if (type === "archimedes") return ["Sine", "Out"];
     if (type === "comparator") return ["Thru"];
     if (type === "sampleDelay") return ["Delayed", "Out", "Mono"];
-    if (type === "earlyReflections") return ["Out", "Mono"];
+    if (type === "earlyReflections") return ["Mix L", "Mix R"];
     // Face jack is Ext Out (Out/Mono are aliases). MOD/scope must publish that name.
     if (type === "sampleHold") return ["Ext Out", "Out", "Mono"];
     if (/^([2-9]|1[01])t$/.test(type)) return ["Out", "Mono"];
     if (type === "wavetable2d" || type === "sineWarp") return ["Out", "Mono"];
     if (type === "filterMorphOscillator") return ["Wave", "Out", "Mono"];
-    if (type === "softpopOscillator") return ["Out", "Mono"];
+    if (type === "softpopOscillator" || type === "softpopFilter") return ["Mono"];
     if (type === "minMax") return ["Max"];
     if (type === "mix4" || type === "mix" || type === "gainBiasMix") return ["Out1"];
     if (type === "mix2") return ["Mix"];

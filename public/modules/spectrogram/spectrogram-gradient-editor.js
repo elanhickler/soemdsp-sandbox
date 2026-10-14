@@ -1,10 +1,10 @@
 /**
- * ═══════════════════════════════════════════════════════════════════════════
- * NodeGraphGradientSelector — SINGLE SOURCE OF TRUTH
- * ═══════════════════════════════════════════════════════════════════════════
+ * Ã¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢Â
+ * NodeGraphGradientSelector Ã¢â‚¬â€ SINGLE SOURCE OF TRUTH
+ * Ã¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢Â
  *
  * This file owns gradient UI/UX for the whole app:
- *   layout · control scheme · stop model · presets · color widget modes ·
+ *   layout Ã‚Â· control scheme Ã‚Â· stop model Ã‚Â· presets Ã‚Â· color widget modes Ã‚Â·
  *   display-settings profiles (which faces use the selector + B/W vs color)
  *
  * Call ONLY through `NodeGraphGradientSelector` (or thin wrappers that
@@ -20,11 +20,11 @@
  *   NodeGraphGradientSelector.setActive(editor) / clearActive() / getActive()
  *
  * Stop model: { t: 0..1, color: "#rrggbb" }
- * Channels:   "color" (full H/S/L) | "bw" (luma / black–white only)
+ * Channels:   "color" (full H/S/L) | "bw" (luma / blackÃ¢â‚¬â€œwhite only)
  *
- * Legacy aliases (deprecated — keep for old call sites):
+ * Legacy aliases (deprecated Ã¢â‚¬â€ keep for old call sites):
  *   mountSharedGradientEditor / mountSpectrogramGradientEditor /
- *   mountPhosphorGradientEditor / normalizeSharedGradientStops / …
+ *   mountPhosphorGradientEditor / normalizeSharedGradientStops / Ã¢â‚¬Â¦
  */
 (function nodeGraphGradientSelectorModule(global) {
   const STYLE_ID = "node-gradient-selector-styles";
@@ -37,7 +37,7 @@
     { t: 1, color: "#ffffff" },
   ]);
 
-  // Default CRT-style phosphor ramp (black floor → cyan peak). Used when a
+  // Default CRT-style phosphor ramp (black floor Ã¢â€ â€™ cyan peak). Used when a
   // phosphor face has no saved gradientStops yet.
   const DEFAULT_PHOSPHOR_STOPS = Object.freeze([
     { t: 0, color: "#000000" },
@@ -46,7 +46,7 @@
     { t: 1, color: "#75ebff" },
   ]);
 
-  // Digital-rain matrix: black floor → deep green → bright green → white tip.
+  // Digital-rain matrix: black floor Ã¢â€ â€™ deep green Ã¢â€ â€™ bright green Ã¢â€ â€™ white tip.
   // Shared preset + default for Matrix Waterfall / Matrix Display faces.
   const DEFAULT_MATRIX_STOPS = Object.freeze([
     { t: 0, color: "#000000" },
@@ -57,7 +57,7 @@
     { t: 1, color: "#ffffff" },
   ]);
 
-  // Soft Fractal default: deep indigo floor → blue/magenta/orange psychedelic ramp → white.
+  // Soft Fractal default: deep indigo floor Ã¢â€ â€™ blue/magenta/orange psychedelic ramp Ã¢â€ â€™ white.
   // Same stops as nodeGraphRgbFractalSettingsDefaults.gradientStops.
   const DEFAULT_SOFT_FRACTAL_STOPS = Object.freeze([
     { t: 0, color: "#050018" },
@@ -108,7 +108,7 @@
     },
   ]);
 
-  // From prettyscope-revival/ColorMaps/*.xml (ARGB → #rrggbb, keep stop t).
+  // From prettyscope-revival/ColorMaps/*.xml (ARGB Ã¢â€ â€™ #rrggbb, keep stop t).
   const PRESETS_PRETTYSCOPE = Object.freeze([
     {
       id: "ps-analog-green",
@@ -314,13 +314,13 @@
       colors: ["#000000", "#0a2810", "#2a8840", "#80ff90"],
     },
     {
-      // App-wide digital-rain ramp (not Matrix-only) — black → green → white tip.
+      // App-wide digital-rain ramp (not Matrix-only) Ã¢â‚¬â€ black Ã¢â€ â€™ green Ã¢â€ â€™ white tip.
       id: "matrix",
       label: "matrix",
       colors: ["#000000", "#001a08", "#0a5c20", "#1ecf55", "#7dff9a", "#ffffff"],
     },
     {
-      // Soft Fractal module default (uneven stop positions — use `stops` not even colors).
+      // Soft Fractal module default (uneven stop positions Ã¢â‚¬â€ use `stops` not even colors).
       id: "softFractal",
       label: "soft fractal",
       colors: [
@@ -460,7 +460,7 @@
         white-space: nowrap;
       }
 
-      /* Presets — flush 2-col tiles, black title on gradient */
+      /* Presets Ã¢â‚¬â€ flush 2-col tiles, black title on gradient */
       .sge-presets {
         display: grid;
         grid-template-columns: 1fr 1fr;
@@ -502,7 +502,7 @@
         text-shadow: 0 0 2px rgba(255, 255, 255, 0.55);
       }
 
-      /* Stop color widget (title · plane · hue) — fixed stack height */
+      /* Stop color widget (title Ã‚Â· plane Ã‚Â· hue) Ã¢â‚¬â€ fixed stack height */
       .sge-color-widget-host {
         width: 100%;
         min-width: 0;
@@ -659,10 +659,10 @@
   }
 
   /**
-   * Export stops for copy/paste into art tools (Photoshop Location 0–100%).
+   * Export stops for copy/paste into art tools (Photoshop Location 0Ã¢â‚¬â€œ100%).
    * Always includes position so uneven gradients round-trip:
    *   #0a0a0a 0%, #00ff88 42%, #ffffff 100%
-   * (Legacy color-only lists still parse — see parseHexList.)
+   * (Legacy color-only lists still parse Ã¢â‚¬â€ see parseHexList.)
    */
   function stopsToHexList(stops) {
     return normalizeStops(stops)
@@ -678,10 +678,10 @@
 
   /**
    * Parse gradient list. Accepts:
-   *   #rrggbb, #rrggbb, …                 → even spacing (legacy)
-   *   #rrggbb 0%, #rrggbb 42%, …          → explicit % (Photoshop-style Location)
-   *   #rrggbb 0, #rrggbb 0.42, #rrggbb 1  → 0–1 floats
-   *   #rrggbb@0.42  /  #rrggbb:42%        → compact forms
+   *   #rrggbb, #rrggbb, Ã¢â‚¬Â¦                 Ã¢â€ â€™ even spacing (legacy)
+   *   #rrggbb 0%, #rrggbb 42%, Ã¢â‚¬Â¦          Ã¢â€ â€™ explicit % (Photoshop-style Location)
+   *   #rrggbb 0, #rrggbb 0.42, #rrggbb 1  Ã¢â€ â€™ 0Ã¢â‚¬â€œ1 floats
+   *   #rrggbb@0.42  /  #rrggbb:42%        Ã¢â€ â€™ compact forms
    */
   function parseHexList(text) {
     const raw = String(text || "").trim();
@@ -715,7 +715,7 @@
         if (!Number.isFinite(v)) {
           t = null;
         } else if (posMatch[2] || v > 1) {
-          // Percent (or bare 0–100 when >1): Location-style.
+          // Percent (or bare 0Ã¢â‚¬â€œ100 when >1): Location-style.
           t = clamp01(v / 100);
         } else {
           t = clamp01(v);
@@ -731,7 +731,7 @@
       return normalizeStops(parsed.map((p) => ({ t: p.t, color: p.color })));
     }
 
-    // No positions (or partial) → even spacing on colors only (legacy).
+    // No positions (or partial) Ã¢â€ â€™ even spacing on colors only (legacy).
     return colorsToStops(parsed.map((p) => p.color));
   }
 
@@ -800,7 +800,7 @@
     const r = parseInt(h.slice(1, 3), 16);
     const g = parseInt(h.slice(3, 5), 16);
     const b = parseInt(h.slice(5, 7), 16);
-    // Rec. 709 luma → equal RGB channels (black / white only).
+    // Rec. 709 luma Ã¢â€ â€™ equal RGB channels (black / white only).
     const y = Math.max(0, Math.min(255, Math.round(0.2126 * r + 0.7152 * g + 0.0722 * b)));
     const xx = y.toString(16).padStart(2, "0");
     return `#${xx}${xx}${xx}`;
@@ -819,7 +819,7 @@
     host.replaceChildren();
     host.classList.add("sge-host");
 
-    // mono / channels:"bw" → black/white stops only (optional; LCD uses color×luma now).
+    // mono / channels:"bw" Ã¢â€ â€™ black/white stops only (optional; LCD uses colorÃƒâ€”luma now).
     const mono = options.mono === true || options.channels === "bw";
     host.dataset.channels = mono ? "bw" : "full";
     let stops = mono ? forceStopsGrayscale(options.stops) : normalizeStops(options.stops);
@@ -836,21 +836,21 @@
       </div>
       <div class="sge-stops" data-sge-stops aria-label="Gradient stops"></div>
       <div class="sge-color-widget-host" data-sge-color-widget></div>
-      <div class="title-stepper" data-sge-pos-row title="Stop position 0–1 along the gradient">
+      <div class="title-stepper" data-sge-pos-row title="Stop position 0Ã¢â‚¬â€œ1 along the gradient">
         <span class="title-stepper-title">Pos</span>
         <span class="metadata-stepper-control">
           <button type="button" data-sge-pos-step="-1" aria-label="Decrease stop position">-</button>
-          <input type="text" inputmode="decimal" data-sge-pos data-unit-stepper-drag data-unit-min="0" data-unit-max="1" readonly value="0" aria-label="Stop position 0–1" title="Stop position 0–1. Drag or −/+. Double-click to type.">
+          <input type="text" inputmode="decimal" data-sge-pos data-unit-stepper-drag data-unit-min="0" data-unit-max="1" readonly value="0" aria-label="Stop position 0Ã¢â‚¬â€œ1" title="Stop position 0Ã¢â‚¬â€œ1. Drag or Ã¢Ë†â€™/+. Double-click to type.">
           <button type="button" data-sge-pos-step="1" aria-label="Increase stop position">+</button>
         </span>
       </div>
       <div class="sge-actions">
         <button type="button" data-sge-add aria-label="Add stop">+ Stop</button>
-        <button type="button" data-sge-remove aria-label="Remove stop">− Stop</button>
+        <button type="button" data-sge-remove aria-label="Remove stop">Ã¢Ë†â€™ Stop</button>
       </div>
       <textarea class="sge-hex" data-sge-list rows="2" spellcheck="false"
         aria-label="Gradient stops as hex and position percent"
-        title="Copy for art tools (Photoshop Location 0–100%). Format: #hex 0%, #hex 42%, #hex 100%. Color-only lists still import with even spacing."
+        title="Copy for art tools (Photoshop Location 0Ã¢â‚¬â€œ100%). Format: #hex 0%, #hex 42%, #hex 100%. Color-only lists still import with even spacing."
         placeholder="#000000 0%, #00ff88 42%, #ffffff 100%"></textarea>
       <div class="sge-presets" data-sge-presets aria-label="Gradient presets"></div>
     `;
@@ -933,7 +933,7 @@
         ? global.mountColorWidget
         : (typeof window !== "undefined" ? window.mountColorWidget : null);
       if (typeof mount !== "function") {
-        // Fallback until SoundColorWidget boots — keep a visible control, then remount.
+        // Fallback until SoundColorWidget boots Ã¢â‚¬â€ keep a visible control, then remount.
         const input = document.createElement("input");
         input.type = "color";
         input.value = stop.color;
@@ -1078,7 +1078,7 @@
       emit();
     });
 
-    // −/+ step (app-wide 0…1 unit quantum 0.1).
+    // Ã¢Ë†â€™/+ step (app-wide 0Ã¢â‚¬Â¦1 unit quantum 0.1).
     root.addEventListener("click", (event) => {
       const btn = event.target?.closest?.("[data-sge-pos-step]");
       if (!btn || btn.disabled || !posInput || posInput.disabled) {
@@ -1104,7 +1104,7 @@
 
     /*
      * Drag is handled app-wide (capture on display-settings popover):
-     *   beginNodeGraphUnitStepperDrag → data-unit-stepper-drag / data-sge-pos
+     *   beginNodeGraphUnitStepperDrag Ã¢â€ â€™ data-unit-stepper-drag / data-sge-pos
      * Local pointerdown on the input never fires (text-protection stopPropagation).
      * We only consume the value via input/change.
      */
@@ -1183,7 +1183,7 @@
       const idx = Math.max(0, Math.min(stops.length - 1, activeIndex));
       if (idx === stops.length - 1) {
         // Remove end (t=1): leftward neighbor takes the 1.0 place and adopts
-        // the removed stop's color (e.g. white at 1.0 → previous becomes white @ 1).
+        // the removed stop's color (e.g. white at 1.0 Ã¢â€ â€™ previous becomes white @ 1).
         const removed = stops[idx];
         stops.splice(idx, 1);
         const nextLast = stops[stops.length - 1];
@@ -1275,7 +1275,7 @@
     ];
   }
 
-  /** 256×RGB bytes for energy present LUT (or spectrogram). */
+  /** 256Ãƒâ€”RGB bytes for energy present LUT (or spectrogram). */
   function buildLutRgbBytes(stops) {
     const lut = buildLutFromStops(stops);
     const rgb = new Uint8Array(256 * 3);
@@ -1311,108 +1311,114 @@
     spectrogramBurn: Object.freeze({
       channels: "color",
       defaultStops: "spectrogram",
-      hint: "Select a stop · presets · live audition on the spectrogram",
+      hint: "Select a stop Ã‚Â· presets Ã‚Â· live audition on the spectrogram",
     }),
     scope2d: Object.freeze({
       channels: "color",
       defaultStops: "phosphor",
-      hint: "Select a stop · presets · live audition on the phosphor face",
+      hint: "Select a stop Ã‚Â· presets Ã‚Â· live audition on the phosphor face",
     }),
     phosphorLight: Object.freeze({
       channels: "color",
       defaultStops: "phosphor",
-      hint: "Select a stop · presets · live audition on the phosphor face",
+      hint: "Select a stop Ã‚Â· presets Ã‚Â· live audition on the phosphor face",
     }),
     xyPad: Object.freeze({
       channels: "color",
       defaultStops: "phosphor",
-      hint: "Select a stop · presets · live audition on the XY pad trail",
+      hint: "Select a stop Ã‚Â· presets Ã‚Â· live audition on the XY pad trail",
     }),
     dot: Object.freeze({
       channels: "color",
       defaultStops: "phosphor",
-      hint: "Select a stop · presets · live audition on the phosphor face",
+      hint: "Select a stop Ã‚Â· presets Ã‚Â· live audition on the phosphor face",
     }),
     lineBurn: Object.freeze({
       channels: "color",
       defaultStops: "phosphor",
-      hint: "Select a stop · presets · live audition on the burn trail",
+      hint: "Select a stop Ã‚Â· presets Ã‚Â· live audition on the burn trail",
     }),
     // 1D Trace / TraceWoscope: same shared colormap LUT path as phosphor.
     scope1dTrace: Object.freeze({
       channels: "color",
       defaultStops: "phosphor",
-      hint: "Select a stop · presets · live audition on the 1D Trace beam",
+      hint: "Select a stop Ã‚Â· presets Ã‚Â· live audition on the 1D Trace beam",
     }),
     scope2dTrace: Object.freeze({
       channels: "color",
       defaultStops: "phosphor",
-      hint: "Select a stop · presets · live audition on the 2D Trace beam",
+      hint: "Select a stop Ã‚Â· presets Ã‚Â· live audition on the 2D Trace beam",
     }),
     // Videoscope / bank / hypersaw: mono energy phosphor (same LUT as scope2d).
     // Required so usesDisplayGradient(formType) is true and the host mounts.
     videoscopeBurn: Object.freeze({
       channels: "color",
       defaultStops: "phosphor",
-      hint: "Select a stop · presets · live audition on the videoscope face",
+      hint: "Select a stop Ã‚Â· presets Ã‚Â· live audition on the videoscope face",
     }),
     oscilloscopeBankBurn: Object.freeze({
       channels: "color",
       defaultStops: "phosphor",
-      hint: "Select a stop · presets · live audition on the bank face",
+      hint: "Select a stop Ã‚Â· presets Ã‚Â· live audition on the bank face",
     }),
-    // Same color×luma scheme as 2D phosphor: multi-stop color LUT maps
-    // underlying light amount (energy / segment intensity) → color.
+    // Same colorÃƒâ€”luma scheme as 2D phosphor: multi-stop color LUT maps
+    // underlying light amount (energy / segment intensity) Ã¢â€ â€™ color.
     numberReadout: Object.freeze({
       channels: "color",
       defaultStops: "phosphor",
-      hint: "Select a stop · presets · live audition on the LCD (energy → color)",
+      hint: "Select a stop Ã‚Â· presets Ã‚Â· live audition on the LCD (energy Ã¢â€ â€™ color)",
     }),
     // RGB Shape: Position param samples this LUT for fill color.
     rgbShapeFace: Object.freeze({
       channels: "color",
       defaultStops: "phosphor",
-      hint: "Shape fill · Position param samples along the gradient",
+      hint: "Shape fill Ã‚Â· Position param samples along the gradient",
     }),
-    // RGB Soft Fractal: Julia smooth-iter → psychedelic gradient.
+    // RGB Soft Fractal: Julia smooth-iter Ã¢â€ â€™ psychedelic gradient.
     rgbFractalFace: Object.freeze({
       channels: "color",
       defaultStops: "softFractal",
-      hint: "Julia escape → color · Soft Fractal preset · live evolving",
+      hint: "Julia escape Ã¢â€ â€™ color Ã‚Â· Soft Fractal preset Ã‚Â· live evolving",
     }),
-    // Evolve Field: full-square domain energy → multi-stop gradient.
+    // Evolve Field: full-square domain energy Ã¢â€ â€™ multi-stop gradient.
     evolveFieldFace: Object.freeze({
       channels: "color",
       defaultStops: "phosphor",
-      hint: "Full-plate fractal energy → color · Speed/Color/Seed on the module",
+      hint: "Full-plate fractal energy Ã¢â€ â€™ color Ã‚Â· Speed/Color/Seed on the module",
     }),
-    // Fractal Brownian Field: mono field energy → multi-stop gradient.
+    // Fractal Brownian Field: mono field energy Ã¢â€ â€™ multi-stop gradient.
     gradientVectorscopeFace: Object.freeze({
       channels: "color",
       defaultStops: "phosphor",
-      hint: "Color along path length — oldest at the first stop, newest at the last",
+      hint: "Color along path length Ã¢â‚¬â€ oldest at the first stop, newest at the last",
     }),
     fbmFieldFace: Object.freeze({
       channels: "color",
       defaultStops: "fbmField",
-      hint: "Field energy → color · late black-to-white ramp (face default)",
+      hint: "Field energy Ã¢â€ â€™ color Ã‚Â· late black-to-white ramp (face default)",
     }),
-    // Matrix faces: cell energy (black→white underlying) → multi-stop LUT.
+    // Softpop face: per-pitch glow brightness (Sine) / |H| (Filter) -> LUT.
+    softpopFace: Object.freeze({
+      channels: "color",
+      defaultStops: "bone",
+      hint: "Glow brightness -> color Ã‚Â· Background brightness raises the plate's LUT position",
+    }),
+    // Matrix faces: cell energy (blackÃ¢â€ â€™white underlying) Ã¢â€ â€™ multi-stop LUT.
     // defaultStops "matrix" = digital-rain ramp (green body, white tip).
     matrixFace: Object.freeze({
       channels: "color",
       defaultStops: "matrix",
-      hint: "Energy → color · mono cell brightness mapped through the gradient",
+      hint: "Energy Ã¢â€ â€™ color Ã‚Â· mono cell brightness mapped through the gradient",
     }),
     matrixWaterfallFace: Object.freeze({
       channels: "color",
       defaultStops: "matrix",
-      hint: "Energy → color · rain mono brightness mapped through the gradient",
+      hint: "Energy Ã¢â€ â€™ color Ã‚Â· rain mono brightness mapped through the gradient",
     }),
     matrixDisplayFace: Object.freeze({
       channels: "color",
       defaultStops: "matrix",
-      hint: "Energy → color · plate mono brightness mapped through the gradient",
+      hint: "Energy Ã¢â€ â€™ color Ã‚Â· plate mono brightness mapped through the gradient",
     }),
   });
 
@@ -1447,6 +1453,16 @@
     }
     if (kind === "crtAmber" || kind === "crt-amber") {
       return DEFAULT_CRT_AMBER_STOPS.map((s) => ({ t: s.t, color: s.color }));
+    }
+    if (kind === "bone") {
+      // Softpop face default: reuse the shared "bone" preset colors (no second copy).
+      const bone = PRESETS.find((p) => p && p.id === "bone");
+      if (bone && Array.isArray(bone.stops) && bone.stops.length >= 2) {
+        return bone.stops.map((s) => ({ t: s.t, color: s.color }));
+      }
+      if (bone && Array.isArray(bone.colors) && bone.colors.length >= 2) {
+        return colorsToStops(bone.colors);
+      }
     }
     // phosphor / color energy faces (including numberReadout LCD)
     return DEFAULT_PHOSPHOR_STOPS.map((s) => ({ t: s.t, color: s.color }));
@@ -1602,7 +1618,7 @@
     CHANNELS_BW: "bw",
     HOST_SELECTOR: "[data-gradient-selector-host], [data-shared-gradient-host], [data-spectrogram-gradient-host]",
     HOST_ATTR: "data-gradient-selector-host",
-    /** @readonly formType → profile (channels, hint, defaultStops) */
+    /** @readonly formType Ã¢â€ â€™ profile (channels, hint, defaultStops) */
     displayProfiles: DISPLAY_PROFILES,
     usesDisplayGradient(formType) {
       return Boolean(DISPLAY_PROFILES[formType]);
@@ -1640,10 +1656,10 @@
     clearActive: clearActiveEditor,
   });
 
-  // ── Canonical export ─────────────────────────────────────────────────────
+  // Ã¢â€â‚¬Ã¢â€â‚¬ Canonical export Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   global.NodeGraphGradientSelector = NodeGraphGradientSelector;
 
-  // ── Legacy aliases (deprecated — all point at the same implementation) ───
+  // Ã¢â€â‚¬Ã¢â€â‚¬ Legacy aliases (deprecated Ã¢â‚¬â€ all point at the same implementation) Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   global.mountSharedGradientEditor = (host, options) => NodeGraphGradientSelector.mount(host, options);
   global.mountPhosphorGradientEditor = global.mountSharedGradientEditor;
   global.mountSpectrogramGradientEditor = global.mountSharedGradientEditor;

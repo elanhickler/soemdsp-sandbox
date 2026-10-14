@@ -26,7 +26,7 @@ $modules = @(
   ) }
   @{ Name = "comparator"; Simd = $false; Exports = @("soemdsp_comparator_create", "soemdsp_comparator_destroy", "soemdsp_comparator_sample", "soemdsp_comparator_up", "soemdsp_comparator_down", "soemdsp_comparator_change", "soemdsp_comparator_steady", "soemdsp_comparator_sign", "soemdsp_comparator_thru", "soemdsp_comparator_version") },
   @{ Name = "sample_delay"; Simd = $false; Exports = @("soemdsp_sample_delay_create", "soemdsp_sample_delay_destroy", "soemdsp_sample_delay_sample", "soemdsp_sample_delay_max_samples", "soemdsp_sample_delay_max_seconds", "soemdsp_sample_delay_version") },
-  @{ Name = "exponential_delay"; Simd = $false; Exports = @("soemdsp_exponential_delay_create", "soemdsp_exponential_delay_destroy", "soemdsp_exponential_delay_sample", "soemdsp_exponential_delay_max_samples", "soemdsp_exponential_delay_max_seconds", "soemdsp_exponential_delay_version") },
+  @{ Name = "exponential_delay"; Simd = $false; Exports = @("soemdsp_exponential_delay_create", "soemdsp_exponential_delay_destroy", "soemdsp_exponential_delay_sample", "soemdsp_exponential_delay_right", "soemdsp_exponential_delay_max_samples", "soemdsp_exponential_delay_max_seconds", "soemdsp_exponential_delay_version") },
   @{ Name = "min_max"; Simd = $false; Exports = @("soemdsp_min_max_create", "soemdsp_min_max_destroy", "soemdsp_min_max_sample", "soemdsp_min_max_min", "soemdsp_min_max_version") }
   @{ Name = "alias_sine"; Simd = $false; Exports = @("soemdsp_alias_sine_create", "soemdsp_alias_sine_destroy", "soemdsp_alias_sine_sample", "soemdsp_alias_sine_version", "soemdsp_alias_sine_metadata_json", "soemdsp_alias_sine_metadata_json_size") }
   @{ Name = "phone_tone"; Simd = $false; Exports = @("soemdsp_phone_tone_create", "soemdsp_phone_tone_destroy", "soemdsp_phone_tone_sample", "soemdsp_phone_tone_tone", "soemdsp_phone_tone_tone_l", "soemdsp_phone_tone_tone_r", "soemdsp_phone_tone_f1", "soemdsp_phone_tone_f2", "soemdsp_phone_tone_analog_thru", "soemdsp_phone_tone_digital_thru", "soemdsp_phone_tone_version", "soemdsp_phone_tone_metadata_json", "soemdsp_phone_tone_metadata_json_size") }
@@ -207,9 +207,32 @@ $modules = @(
     "soemdsp_softpop_oscillator_sample",
     "soemdsp_softpop_oscillator_left",
     "soemdsp_softpop_oscillator_right",
+    "soemdsp_softpop_oscillator_noise",
+    "soemdsp_softpop_oscillator_cv",
+    "soemdsp_softpop_oscillator_display_bin_count",
+    "soemdsp_softpop_oscillator_display_bin",
+    "soemdsp_softpop_oscillator_display_take",
+    "soemdsp_softpop_oscillator_display_info",
     "soemdsp_softpop_oscillator_version",
     "soemdsp_softpop_oscillator_metadata_json",
     "soemdsp_softpop_oscillator_metadata_json_size"
+  ) }
+  @{ Name = "softpop_filter"; Simd = $false; Exports = @(
+    "soemdsp_softpop_filter_create",
+    "soemdsp_softpop_filter_destroy",
+    "soemdsp_softpop_filter_reset",
+    "soemdsp_softpop_filter_sample",
+    "soemdsp_softpop_filter_left",
+    "soemdsp_softpop_filter_right",
+    "soemdsp_softpop_filter_noise",
+    "soemdsp_softpop_filter_cv",
+    "soemdsp_softpop_filter_display_bin_count",
+    "soemdsp_softpop_filter_display_bin",
+    "soemdsp_softpop_filter_display_take",
+    "soemdsp_softpop_filter_display_info",
+    "soemdsp_softpop_filter_version",
+    "soemdsp_softpop_filter_metadata_json",
+    "soemdsp_softpop_filter_metadata_json_size"
   ) }
   @{ Name = "soem_reverb"; Simd = $false; Exports = @(
     "soemdsp_soem_reverb_create", "soemdsp_soem_reverb_destroy", "soemdsp_soem_reverb_reset",
@@ -512,8 +535,8 @@ foreach ($module in $modules) {
   } else {
     $clangArgs += "-Wl,--max-memory=50331648"
   }
-  # graph_engine / pluck_envelope_fb call other natives (resolved in combined link).
-  if ($module.Name -eq "graph_engine" -or $module.Name -eq "pluck_envelope_fb") {
+  # graph_engine / pluck_envelope_fb / softpop_oscillator (Robin dither from ellipsoid) call other natives (resolved in combined link).
+  if ($module.Name -in @("graph_engine", "pluck_envelope_fb", "softpop_oscillator")) {
     $clangArgs += "-Wl,--allow-undefined"
   }
   $clangArgs += "-o"
@@ -642,6 +665,10 @@ if ($node) {
   & $node.Source "$root\scripts\smoke_sabrina_diffusion_live.mjs"
   if ($LASTEXITCODE -ne 0) {
     throw "Combined build: sabrina diffusionAmount live smoke FAILED"
+  }
+  & $node.Source "$root\scripts\smoke_sabrina_tap_mod.mjs"
+  if ($LASTEXITCODE -ne 0) {
+    throw "Combined build: sabrina Tap Mod switch smoke FAILED"
   }
   & $node.Source "$root\scripts\smoke_named_portal_bus.mjs"
   if ($LASTEXITCODE -ne 0) {

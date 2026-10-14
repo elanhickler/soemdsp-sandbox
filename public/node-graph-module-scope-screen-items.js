@@ -414,6 +414,15 @@ function nodeGraphModuleScopeScreenItems(workspace, canvas, pixelRatio) {
               slot,
             }, pixelRatio);
           }
+        } else if (nodeGraphModuleDisplayRendererForSlot(slot) === "softpopFace") {
+          // Softpop paints from data-bus SoftpopBins / SoftpopInfo (no capture ring).
+          if (typeof drawNodeGraphSoftpopFaceItem === "function") {
+            drawNodeGraphSoftpopFaceItem(null, {
+              buffer: null,
+              screenElement: slot.scopeElement,
+              slot,
+            }, pixelRatio);
+          }
         } else if (nodeGraphModuleDisplayRendererForSlot(slot) === "hypersawBurn") {
           // Stems are data-bus Phases — no sample monitor buffer required.
           // Oscillator sources often have no capture ring; without this the

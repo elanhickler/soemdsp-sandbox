@@ -189,6 +189,7 @@ const nodeGraphModuleCatalogRetiredFromUnderConstruction = Object.freeze([
   "vcvrackSuperloveFilter",
   "ellipsoidOsc",
   "softpopOscillator",
+  "softpopFilter",
   "acidSequencer",
 ]);
 
@@ -669,9 +670,9 @@ const nodeGraphModuleStoreCatalog = Object.freeze({
   },
   earlyReflections: {
     category: "space",
-    description: "Exponential early-reflection taps with seeded random offset, feedback, mix, and FBM drift.",
+    description: "Exponential early-reflection taps with seeded random offset, mix, and FBM drift (speed + amp).",
     label: "Early Reflections",
-    notes: ["delay", "early reflections", "exponential", "taps", "seed", "random offset", "feedback", "mix", "fbm", "drift", "native", "experimental"],
+    notes: ["delay", "early reflections", "exponential", "taps", "seed", "random offset", "mix", "fbm", "drift", "drift speed", "drift amp", "native", "experimental"],
   },
   bitConverter: {
     category: "digital",
@@ -1625,16 +1626,25 @@ const nodeGraphModuleStoreCatalog = Object.freeze({
     label: "6-Crossover",
     notes: ["crossover", "linkwitz-riley", "6-way", "stereo", "scientific", "RS-MET"],
   },
+  softpopFilter: {
+    category: "filter",
+    description: "Noise (or your audio) through a resonant constant-peak bandpass. Pitch Mod wobbles the centre; Width sets the bandwidth. Wire Mono / Left / Right to filter external audio instead of the noise.",
+    label: "Softpop Filter",
+    notes: ["softpop", "band noise", "filter", "bandpass", "resonant", "gaussian", "pink", "brown", "pitch mod", "seed", "reset", "stereo", "mono", "native"],
+  },
   softpopOscillator: {
     category: "oscillator",
-    description: "Sine or resonant-filter noise voice. Pitch Mod stays live in both models; Width sets the Filter bandwidth.",
+    description: "Sine, Dithered Sine, Trisaw, Soft Square or Soft Tri with noise Pitch Mod. Morph shapes the source; Width makes far pitch excursions quieter like a bandpass.",
     label: "Softpop Oscillator",
     notes: [
       "softpop",
       "noise oscillator",
       "band noise",
       "sine",
-      "filter",
+      "trisaw",
+      "soft square",
+      "soft triangle",
+      "dither",
       "gaussian",
       "pink",
       "brown",

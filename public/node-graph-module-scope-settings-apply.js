@@ -136,6 +136,10 @@ function assignNodeGraphTypedDisplaySettingsToNode(node, displayType, settings) 
       : (settings || { gateBlink: false });
     return node.transportSettings;
   }
+  if (displayType === "softpopFace" && typeof normalizeNodeGraphSoftpopFaceSettings === "function") {
+    node.traceDisplaySettings = normalizeNodeGraphSoftpopFaceSettings(settings);
+    return node.traceDisplaySettings;
+  }
   if (displayType === "limiterGainFace") {
     node.traceDisplaySettings = typeof normalizeNodeGraphLimiterGainFaceSettings === "function"
       ? normalizeNodeGraphLimiterGainFaceSettings(settings)
@@ -1311,6 +1315,7 @@ function nodeGraphTraceDisplaySettingsNamedKeyFromTarget(target) {
     "data-plugin-btn-text",
     "data-transport-field",
     "data-limiter-gain-field",
+    "data-softpop-face-field",
     "data-portal-field",
     "data-matrix-face-field",
     "data-matrix-face-range",

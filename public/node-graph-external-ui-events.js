@@ -517,6 +517,13 @@ function setNodeGraphBugButtonInteraction(nodeId, update = {}) {
   return true;
 }
 
+// Editing messages (patch push, file-grid rows, button events) change the
+// graph, so they are accepted only from this page's own origin. Unlike
+// nodeGraphExternalMessageOriginAllowed, a missing/opaque origin is rejected.
+function nodeGraphExternalMessageSameOriginStrict(event) {
+  return Boolean(event && event.origin && event.origin === window.location.origin);
+}
+
 function nodeGraphExternalMessageOriginAllowed(event) {
   if (!event || !event.origin) {
     return true;
@@ -742,12 +749,18 @@ window.addEventListener("message", (event) => {
     return;
   }
   if (message.type === "soemdsp-sandbox-button-event") {
+    if (!nodeGraphExternalMessageSameOriginStrict(event)) {
+      return;
+    }
     triggerNodeGraphExternalButtonEvent(message.name || message.event, {
       buttonId: message.buttonId || "",
       label: message.label || "",
       source: message.source || "external-page",
     });
   } else if (message.type === "soemdsp-sandbox-file-grid-selection") {
+    if (!nodeGraphExternalMessageSameOriginStrict(event)) {
+      return;
+    }
     nodeGraphAcceptFileGridSelection(message.rows || message.resources || message.resource || message.row, {
       audioPlayerNodeId: message.audioPlayerNodeId || "",
       nodeId: message.nodeId || "",
@@ -780,6 +793,9 @@ window.addEventListener("message", (event) => {
     }
     triggerNodeGraphGameEvent(eventName, message.payload || {});
   } else if (message.type === "soundemote:sandbox-project-data") {
+    if (!nodeGraphExternalMessageSameOriginStrict(event)) {
+      return;
+    }
     if (nodeGraphExternalProjectDataWouldClobberEditedPagePatch()) {
       if (typeof setNodeGraphScriptStatus === "function") {
         setNodeGraphScriptStatus("kept edited page patch (ignored embed patch push)", true);

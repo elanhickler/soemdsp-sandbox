@@ -673,7 +673,17 @@ function nodeGraphScreenSoloRestoreItem(item) {
   if (!face) {
     return;
   }
+  if (face._wholeModuleStale) {
+    // Replaced by a rebuilt element; drop the stale one instead of restoring it.
+    face.remove();
+    if (item.placeholder?.isConnected) {
+      item.placeholder.remove();
+    }
+    return;
+  }
   nodeGraphScreenSoloRestoreSubtree(item.savedFaceDom);
+  face.classList.remove("node-whole-module-face");
+  delete face.dataset.wholeModuleScale;
   if (typeof nodeGraphTextBoxClearCanvasScaleSource === "function") {
     nodeGraphTextBoxClearCanvasScaleSource(face);
   }
@@ -764,6 +774,167 @@ function nodeGraphScreenSoloInvalidateFaceMeasure(face) {
   face._sinCos4ForceDraw = true;
 }
 
+/**
+ * Whole-module tiles: the module's own .dsp-node becomes the face instead of
+ * its best display element. Per module via node.ui.canvasWholeModule, or for
+ * the ?module= embed (nodeGraphMvp.embedWholeModuleId, see embed-module.js).
+ */
+function nodeGraphScreenSoloWantsWholeModule(nodeId) {
+  const id = String(nodeId || "");
+  if (!id) {
+    return false;
+  }
+  if (String(nodeGraphMvp?.embedWholeModuleId || "") === id) {
+    return true;
+  }
+  const node = typeof nodeGraphPatchNode === "function" ? nodeGraphPatchNode(id) : null;
+  return Boolean(node?.ui?.canvasWholeModule);
+}
+
+function nodeGraphScreenSoloWholeModuleFor(nodeId) {
+  if (!nodeGraphScreenSoloWantsWholeModule(nodeId)) {
+    return null;
+  }
+  const id = String(nodeId);
+  const escaped = typeof CSS !== "undefined" && CSS.escape ? CSS.escape(id) : id.replace(/"/g, "");
+  const host = document.querySelector(`.dsp-node[data-node="${escaped}"]`);
+  if (!host) {
+    return null;
+  }
+  host.classList.add("node-whole-module-face");
+  nodeGraphScreenSoloWholeModuleCapture(host);
+  nodeGraphScreenSoloWholeModuleWatch(host.parentElement, id);
+  return { id, host, face: host };
+}
+
+/**
+ * Workspace zoom 1.0 is the source of truth for module size. Measure the
+ * module's layout box (offset size ignores the workspace zoom transform) and
+ * the inherited custom properties / type it gets inside the workspace, so the
+ * tile can lay it out at exactly that size and only apply one uniform scale.
+ */
+function nodeGraphScreenSoloWholeModuleCapture(host) {
+  if (!(host instanceof Element) || host.closest(".node-layout-canvas-tile")) {
+    return host?._wholeModuleNatural || null;
+  }
+  const w = host.offsetWidth;
+  const h = host.offsetHeight;
+  if (!(w > 0 && h > 0) && host._wholeModuleNatural) {
+    return host._wholeModuleNatural;
+  }
+  const cs = window.getComputedStyle(host);
+  const vars = {};
+  for (let i = 0; i < cs.length; i += 1) {
+    const name = cs[i];
+    if (name.startsWith("--")) {
+      vars[name] = cs.getPropertyValue(name);
+    }
+  }
+  for (const name of ["font-family", "font-size", "font-weight", "line-height", "letter-spacing", "color"]) {
+    vars[name] = cs.getPropertyValue(name);
+  }
+  host._wholeModuleNatural = { w: Math.max(1, w), h: Math.max(1, h), vars };
+  return host._wholeModuleNatural;
+}
+
+/** Lay the module out at its zoom-1 size and fit it into the tile with ONE uniform scale (contain, centered). */
+function nodeGraphScreenSoloWholeModuleFit(tile) {
+  const face = tile?.querySelector?.(":scope > .dsp-node.node-whole-module-face");
+  const nat = face?._wholeModuleNatural;
+  if (!nat) {
+    return;
+  }
+  if (!tile._wholeModuleResize && typeof ResizeObserver === "function") {
+    tile._wholeModuleResize = new ResizeObserver(() => nodeGraphScreenSoloWholeModuleFit(tile));
+    tile._wholeModuleResize.observe(tile);
+  }
+  const tw = tile.clientWidth;
+  const th = tile.clientHeight;
+  if (!(tw > 0 && th > 0)) {
+    return;
+  }
+  const s = Math.min(tw / nat.w, th / nat.h);
+  const ox = (tw - nat.w * s) / 2;
+  const oy = (th - nat.h * s) / 2;
+  const st = face.style;
+  for (const [name, value] of Object.entries(nat.vars)) {
+    st.setProperty(name, value);
+  }
+  const set = (name, value) => st.setProperty(name, value, "important");
+  set("position", "absolute");
+  set("left", "0px");
+  set("top", "0px");
+  set("right", "auto");
+  set("bottom", "auto");
+  set("margin", "0px");
+  set("width", `${nat.w}px`);
+  set("height", `${nat.h}px`);
+  set("min-width", `${nat.w}px`);
+  set("min-height", `${nat.h}px`);
+  set("max-width", `${nat.w}px`);
+  set("max-height", `${nat.h}px`);
+  set("box-shadow", "none");
+  set("filter", "none");
+  set("transform-origin", "0 0");
+  set("transform", `translate(${ox}px, ${oy}px) scale(${s})`);
+  face.dataset.wholeModuleScale = s.toFixed(4);
+}
+
+/**
+ * A structural rebuild (port / UI signature change) replaces the module's
+ * element in its graph container. Watch those containers and re-capture the
+ * new element into its tile.
+ */
+function nodeGraphScreenSoloWholeModuleWatch(container, nodeId) {
+  if (!(container instanceof Element) || container.closest(".node-layout-canvas-tile")) {
+    return;
+  }
+  const watched = (nodeGraphMvp.wholeModuleWatched = nodeGraphMvp.wholeModuleWatched || new WeakSet());
+  if (watched.has(container) || typeof MutationObserver !== "function") {
+    return;
+  }
+  watched.add(container);
+  new MutationObserver((records) => {
+    for (const record of records) {
+      for (const added of record.addedNodes) {
+        if (!(added instanceof Element) || !added.classList.contains("dsp-node")) {
+          continue;
+        }
+        const id = String(added.dataset.node || "");
+        if (id && nodeGraphScreenSoloWantsWholeModule(id) && nodeGraphMvp.layoutCanvasActive) {
+          nodeGraphScreenSoloWholeModuleScheduleRecapture(id);
+        }
+      }
+    }
+  }).observe(container, { childList: true });
+}
+
+function nodeGraphScreenSoloWholeModuleScheduleRecapture(nodeId) {
+  const pending = (nodeGraphMvp.wholeModuleRecapture = nodeGraphMvp.wholeModuleRecapture || new Set());
+  if (pending.has(nodeId)) {
+    return;
+  }
+  pending.add(nodeId);
+  window.requestAnimationFrame(() => {
+    pending.delete(nodeId);
+    const session = nodeGraphMvp.screenSolo;
+    const items = [...(session?.items || []), ...(session?.layoutCanvasTiles || [])];
+    const current = document.querySelector(`.dsp-node[data-node="${CSS.escape(nodeId)}"]:not(.node-layout-canvas-tile *)`);
+    if (!current) {
+      return;
+    }
+    for (const item of items) {
+      if (String(item?.nodeId) === nodeId && item.face && item.face !== current) {
+        item.face._wholeModuleStale = true;
+      }
+    }
+    if (typeof nodeGraphLayoutCanvasRefreshOpenStage === "function") {
+      nodeGraphLayoutCanvasRefreshOpenStage();
+    }
+    window.dispatchEvent(new CustomEvent("soemdspWholeModuleRecaptured", { detail: { nodeId } }));
+  });
+}
+
 function nodeGraphScreenSoloCollectFaces(nodeIds) {
   const seen = new Set();
   const collected = [];
@@ -771,7 +942,7 @@ function nodeGraphScreenSoloCollectFaces(nodeIds) {
     if (typeof nodeGraphViewportCullWakePresentedFace === "function") {
       nodeGraphViewportCullWakePresentedFace(rawId);
     }
-    const found = nodeGraphScreenSoloFindFace(rawId);
+    const found = nodeGraphScreenSoloWholeModuleFor(rawId) || nodeGraphScreenSoloFindFace(rawId);
     if (!found || seen.has(found.id)) {
       continue;
     }

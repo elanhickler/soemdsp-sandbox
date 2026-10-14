@@ -85,7 +85,7 @@ extern "C" void soemdsp_sabrina_reverb_set_params(
   int handle,
   double mix, double diffusionSize, double diffusionAmount, double delaySize,
   double recycle, double lfoAmplitude, double lfoBaseSpeed, double lfoVariation,
-  double seed, double lfoStyle
+  double seed, double lfoStyle, double delayTapMod
 );
 extern "C" void soemdsp_sabrina_reverb_process_block(int handle, int frameCount, int useSimd);
 extern "C" intptr_t soemdsp_sabrina_reverb_block_input_left_ptr(int handle);
@@ -293,9 +293,10 @@ extern "C" int soemdsp_exponential_delay_create();
 extern "C" void soemdsp_exponential_delay_destroy(int handle);
 extern "C" double soemdsp_exponential_delay_sample(
   int handle, double input, double timeSeconds, double delayCount,
-  double feedback, double mix, double drift, double seed, double randomOffset,
-  double sampleRate
+  double mix, double driftSpeed, double driftAmp, double seed, double randomOffset,
+  double stereoMode, double sampleRate
 );
+extern "C" double soemdsp_exponential_delay_right(int handle);
 
 extern "C" int soemdsp_sample_hold_create();
 extern "C" void soemdsp_sample_hold_destroy(int handle);
@@ -641,18 +642,41 @@ extern "C" void soemdsp_softpop_oscillator_reset(int handle);
 extern "C" double soemdsp_softpop_oscillator_sample(
   int handle,
   double freqHz,
-  double model,
-  double width,
+  double source,
+  double morph,
   double pitchModCents,
   double ampMod,
   double amplitude,
   double color,
-  double stereoMode,
   double seedValue,
   double sampleRate
 );
 extern "C" double soemdsp_softpop_oscillator_left(int handle);
 extern "C" double soemdsp_softpop_oscillator_right(int handle);
+extern "C" double soemdsp_softpop_oscillator_noise(int handle, int ch);
+extern "C" double soemdsp_softpop_oscillator_cv(int handle, int ch);
+
+extern "C" int soemdsp_softpop_filter_create();
+extern "C" void soemdsp_softpop_filter_destroy(int handle);
+extern "C" void soemdsp_softpop_filter_reset(int handle);
+extern "C" double soemdsp_softpop_filter_sample(
+  int handle,
+  double freqHz,
+  double inL,
+  double inR,
+  double useInput,
+  double width,
+  double pitchModCents,
+  double ampMod,
+  double amplitude,
+  double color,
+  double seedValue,
+  double sampleRate
+);
+extern "C" double soemdsp_softpop_filter_left(int handle);
+extern "C" double soemdsp_softpop_filter_right(int handle);
+extern "C" double soemdsp_softpop_filter_noise(int handle, int ch);
+extern "C" double soemdsp_softpop_filter_cv(int handle, int ch);
 
 extern "C" int soemdsp_dsf_oscillator_create();
 extern "C" void soemdsp_dsf_oscillator_destroy(int handle);
@@ -2023,7 +2047,8 @@ static const int kTypePluckEnvelopeFb = 198;
 static const int kTypeAcidSequencer = 199; // TB-303-style step sequencer
 static const int kTypeHyperpluck = 200; // PolyBLEP unison pluck (Supersaw detune)
 static const int kTypeFilterMorphOscillator = 201; // FilterMorph: Robin-dithered naive shapes + pitch-tracking one-pole
-static const int kTypeSoftpopOscillator = 207; // Softpop: sine / constant-peak BP noise voice
+static const int kTypeSoftpopOscillator = 207; // Softpop Oscillator: Sine / Dithered Sine / Trisaw / Soft Square / Soft Tri + noise Pitch Mod
+static const int kTypeSoftpopFilter = 214; // Softpop Filter: noise or input through a constant-peak BP
 static const int kTypeExponentialSkew = 208; // Exp Skew: Marvinh exp(w·x) linear decay
 static const int kTypeHyperbolicDecay = 209; // Hyperbolic: start·end/((start−end)·u+end)
 static const int kTypeExponentialMix = 210; // Exponential Mix: (1−p)e^{−x}+p e^{−rate·x}
@@ -2587,6 +2612,8 @@ static void destroy_native_kind_handle(int kind, int handle) {
     soemdsp_filter_morph_oscillator_destroy(handle);
   } else if (kind == kTypeSoftpopOscillator) {
     soemdsp_softpop_oscillator_destroy(handle);
+  } else if (kind == kTypeSoftpopFilter) {
+    soemdsp_softpop_filter_destroy(handle);
   } else if (kind == kTypeDsfOscillator) {
     soemdsp_dsf_oscillator_destroy(handle);
   } else if (kind == kTypeHypersaw2) {
@@ -3070,7 +3097,7 @@ static void init_node_defaults(Node& n, int typeId) {
       : (typeId == kTypeRobinSinepulse) ? 10000.0 // highFreq Hz
       : (typeId == kTypeRobinSinepulseAllpass) ? 8000.0 // highFreq Hz
       : (typeId == kTypeRobinSupersaw || typeId == kTypeHyperpluck) ? 100.0
-      : (typeId == kTypeRobinSinusoid || typeId == kTypeSoftpopOscillator) ? 440.0
+      : (typeId == kTypeRobinSinusoid || typeId == kTypeSoftpopOscillator || typeId == kTypeSoftpopFilter) ? 440.0
       : (typeId == kTypeRobinOscillator) ? 100.0
       : (typeId == kTypeSampleHold) ? 0.0
       : (typeId == kTypeClock || typeId == kTypeBinaryClock) ? 2.0
@@ -3175,6 +3202,7 @@ static void init_node_defaults(Node& n, int typeId) {
   init_control(
     n.shape,
     (typeId == kTypeXyPad) ? 0.35 // Smoothing (Papoulis amount)
+      : (typeId == kTypeSoftpopOscillator) ? 0.5 // Morph
       : (typeId == kTypeAdditivePan) ? 1.0 // AutoPan spread (turns across bank)
       : (typeId == kTypeRobinSupersaw) ? 1.0 // Random Phase (live offset scale)
       : (typeId == kTypeHyperpluck) ? 0.0 // phaseAlgorithm Linear
@@ -3333,7 +3361,6 @@ static void init_node_defaults(Node& n, int typeId) {
       : (typeId == kTypeAdditiveSync) ? 0.0 // Sync mode
       : (typeId == kTypeAdditiveGenerator) ? 1.0 // HarmonicFade Smoothed
       : (typeId == kTypePll) ? 4.0 // Range octaves
-      : (typeId == kTypeSoftpopOscillator) ? 0.0 // Stereo
       : (typeId == kTypeLogisticMap) ? 0.0 // Antialias Off
       : (typeId == kTypeSoftClipper) ? 1.0 // AA ADAA1
       : 1.0,
@@ -3390,7 +3417,7 @@ static void init_node_defaults(Node& n, int typeId) {
       : (typeId == kTypeAcidSequencer) ? 16.0 // step length
       : (typeId == kTypeExponentialDelay) ? 7.0 // delay count
       : (typeId == kTypeFilterMorphOscillator) ? 1.0 // Poles
-      : (typeId == kTypeSoftpopOscillator) ? 0.0 // Color White
+      : (typeId == kTypeSoftpopOscillator || typeId == kTypeSoftpopFilter) ? 0.0 // Color White
       : 4.0,
     // Generator Harmonics + Hypersaw2/RobinSupersaw voices stay continuous for Decimal trailing amp.
     // Freq Manager semitones live on stages and stay continuous, same as Pitch Manager octave.
@@ -3501,7 +3528,7 @@ static void init_node_defaults(Node& n, int typeId) {
       : (typeId == kTypeRobinOscillator) ? 0.5 // morph (WIDTH slot)
       : (typeId == kTypeRobinSinepulse) ? 0.0 // chirpShape
       : (typeId == kTypeRobinSinepulseAllpass) ? 1.0 // highQ
-      : (typeId == kTypeSoftpopOscillator) ? 0.3 // Width
+      : (typeId == kTypeSoftpopFilter) ? 0.3 // Width
       : (typeId == kTypeExponentialMix) ? 15.0 // Fast Rate
       : 2.0,
     false
@@ -3533,7 +3560,7 @@ static void init_node_defaults(Node& n, int typeId) {
       : (typeId == kTypeVactrol) ? 0.0 // darkCurrent
       : (typeId == kTypeRobinSinepulse) ? 0.0 // waveShape
       : (typeId == kTypeRobinSinepulseAllpass) ? 1.0 // mix (wet)
-      : (typeId == kTypeSoftpopOscillator) ? 0.0 // Amp Mod
+      : (typeId == kTypeSoftpopOscillator || typeId == kTypeSoftpopFilter) ? 0.0 // Amp Mod
       : (typeId == kTypeFbmField) ? 0.55 // smoothness
       : (typeId == kTypeExponentialMix) ? 0.75 // Mix p
       : (typeId == kTypeLorenzAttractor) ? 0.4 // zDepth
@@ -3580,10 +3607,10 @@ static void init_node_defaults(Node& n, int typeId) {
       : (typeId == kTypeRobinSupersaw) ? 0.0 // jitterDepth cents
       : (typeId == kTypeBradley2a) ? 0.0 // ampDepth
       : (typeId == kTypeDelayEffect) ? 0.02 // modAmount
-      : (typeId == kTypeExponentialDelay) ? 0.0 // FBM drift amount
+      : (typeId == kTypeExponentialDelay) ? 0.0 // Drift Amp
       : (typeId == kTypeSoemReverb) ? 0.002 // lfoAmp
       : (typeId == kTypePingPongDelay) ? 25.0 // lfoAmp ms (audible like Delay modAmount)
-      : (typeId == kTypeSoftpopOscillator) ? 0.0 // Pitch Mod cents
+      : (typeId == kTypeSoftpopOscillator || typeId == kTypeSoftpopFilter) ? 0.0 // Pitch Mod cents
       : (typeId == kTypeFbmField) ? 0.0 // panY
       : 0.07,
     false
@@ -3619,7 +3646,7 @@ static void init_node_defaults(Node& n, int typeId) {
           || typeId == kTypeVibratoGenerator || typeId == kTypeWowAndFlutter
           || typeId == kTypeChorus || typeId == kTypeEnsemble
           || typeId == kTypeExponentialDelay
-          || typeId == kTypeSoftpopOscillator) ? 1.0
+          || typeId == kTypeSoftpopOscillator || typeId == kTypeSoftpopFilter) ? 1.0
       : (typeId == kTypeAdditiveQuantizeFreq || typeId == kTypeAdditiveQuantizePhase
           || typeId == kTypeAdditiveNoisyFreq || typeId == kTypeAdditiveNoisyPhase
           || typeId == kTypeAdditiveNoisyPan || typeId == kTypeAdditiveNoisyAmp) ? 1.0
@@ -3640,7 +3667,6 @@ static void init_node_defaults(Node& n, int typeId) {
       : (typeId == kTypeFlowerChildEnvelopeFollower) ? 0.001 // decay
       : (typeId == kTypePluckEnvelopeFb) ? 1.64 // synth vs acoustic (attenuverter Offset def)
       : (typeId == kTypeDelayEffect) ? 0.25
-      : (typeId == kTypeExponentialDelay) ? 0.0
       : (typeId == kTypeSoemReverb) ? 1.0 // duckLimit
       : (typeId == kTypeHypersaw2) ? 0.5 // morph/PWM center
       : 0.35,
@@ -3748,6 +3774,7 @@ static void init_node_defaults(Node& n, int typeId) {
       : (typeId == kTypeFlanger) ? 0.2
       : (typeId == kTypeBradley2a) ? 60.0 // jitterRate
       : (typeId == kTypeDelayEffect) ? 0.1 // modRate
+      : (typeId == kTypeExponentialDelay) ? 0.25 // Drift Speed Hz
       : (typeId == kTypeHypersaw2) ? 3.6 // jitterSpeed Hz
       : (typeId == kTypeRobinSupersaw) ? 3.6 // jitterSpeed Hz
       : (typeId == kTypeVibratoGenerator) ? 0.0 // endDelay seconds
@@ -4610,6 +4637,7 @@ static int create_native_for_type(int typeId, float sampleRate) {
   if (typeId == kTypeSineWarp) return soemdsp_sine_warp_create();
   if (typeId == kTypeFilterMorphOscillator) return soemdsp_filter_morph_oscillator_create();
   if (typeId == kTypeSoftpopOscillator) return soemdsp_softpop_oscillator_create();
+  if (typeId == kTypeSoftpopFilter) return soemdsp_softpop_filter_create();
   if (typeId == kTypeDsfOscillator) return soemdsp_dsf_oscillator_create();
   if (typeId == kTypeHypersaw2) return soemdsp_hypersaw2_create();
   if (typeId == kTypeSinc) return soemdsp_sinc_create();
@@ -5368,7 +5396,8 @@ static void process_reverb(Circuit& g, Node& node, int frames) {
     control_effective(node.lfoBaseSpeed),
     control_effective(node.lfoVariation),
     control_effective(node.seed),
-    control_effective(node.lfoStyle)
+    control_effective(node.lfoStyle),
+    control_effective(node.mode) // delayTapMod (kParamMode slot)
   );
 
   double* inL = ptr_from_export(soemdsp_sabrina_reverb_block_input_left_ptr(node.nativeHandle));
@@ -7398,8 +7427,40 @@ static void process_filter_morph_oscillator(Circuit& g, Node& node, int frames) 
   }
 }
 
-// Softpop: sine or constant-peak BP noise. Wired ƒ replaces Frequency (polyBlep).
-// Reset reseeds. Left/Right from the last sample(); Mono is (L+R)/2.
+// Softpop Oscillator / Softpop Filter shared controls (Frequency via
+// resolve_osc_hz, wired f replaces it as for polyBlep; Reset reseeds).
+struct SoftpopControls {
+  double freq, width, pitchMod, ampMod, level;
+};
+
+static SoftpopControls softpop_controls(Circuit& g, Node& node, int f, bool liveF, double referenceVoltage, double sr) {
+  SoftpopControls c;
+  c.freq = resolve_osc_hz(g, f, liveF, false, node.frequency, referenceVoltage, sr);
+  c.width = control_audio(g, node.width, f);
+  if (!(c.width == c.width)) c.width = 0.3;
+  if (c.width < 0.0) c.width = 0.0;
+  if (c.width > 1.0) c.width = 1.0;
+  c.pitchMod = control_audio(g, node.lfoAmplitude, f);
+  if (!(c.pitchMod == c.pitchMod) || c.pitchMod < 0.0) c.pitchMod = 0.0;
+  c.ampMod = control_audio(g, node.mix, f);
+  if (!(c.ampMod == c.ampMod)) c.ampMod = 0.0;
+  if (c.ampMod < 0.0) c.ampMod = 0.0;
+  if (c.ampMod > 1.0) c.ampMod = 1.0;
+  c.level = control_audio(g, node.amplitude, f);
+  if (!(c.level == c.level)) c.level = 1.0;
+  if (c.level < 0.0) c.level = 0.0;
+  return c;
+}
+
+static bool softpop_reset_edge(Circuit& g, Node& node, bool liveReset, int f) {
+  if (!liveReset) return false;
+  const double reset = g.mixReset[f];
+  const bool hit = gate_hit(reset, &node.lastReset);
+  node.lastReset = reset;
+  return hit;
+}
+
+// Softpop Oscillator: source = waveform, Morph = shape.
 static void process_softpop_oscillator(Circuit& g, Node& node, int frames) {
   if (node.nativeHandle <= 0) return;
   const double sr = g.sampleRate < 1.0f ? 44100.0 : (double)g.sampleRate;
@@ -7410,49 +7471,22 @@ static void process_softpop_oscillator(Circuit& g, Node& node, int frames) {
 
   for (int f = 0; f < frames; f++) {
     control_frame(g, node, f);
-    double freq = resolve_osc_hz(
-      g, f, liveF, false, node.frequency, referenceVoltage, sr
-    );
-    const double model = control_effective(node.waveform);
-    double width = control_audio(g, node.width, f);
-    if (!(width == width)) width = 0.3;
-    if (width < 0.0) width = 0.0;
-    if (width > 1.0) width = 1.0;
-    double pitchMod = control_audio(g, node.lfoAmplitude, f);
-    if (!(pitchMod == pitchMod) || pitchMod < 0.0) pitchMod = 0.0;
-    double ampMod = control_audio(g, node.mix, f);
-    if (!(ampMod == ampMod)) ampMod = 0.0;
-    if (ampMod < 0.0) ampMod = 0.0;
-    if (ampMod > 1.0) ampMod = 1.0;
-    double level = control_audio(g, node.amplitude, f);
-    if (!(level == level)) level = 1.0;
-    if (level < 0.0) level = 0.0;
-    const double color = control_effective(node.stages);
-    const double stereoMode = control_effective(node.mode);
-    const double seedValue = control_effective(node.seed);
-    const double reset = liveReset ? g.mixReset[f] : 0.0;
-    if (liveReset) {
-      if (gate_hit(reset, &node.lastReset)) {
-        soemdsp_softpop_oscillator_reset(node.nativeHandle);
-      }
-      node.lastReset = reset;
-    }
+    const SoftpopControls c = softpop_controls(g, node, f, liveF, referenceVoltage, sr);
+    double morph = control_audio(g, node.shape, f);
+    if (!(morph == morph)) morph = 0.5;
+    if (softpop_reset_edge(g, node, liveReset, f)) soemdsp_softpop_oscillator_reset(node.nativeHandle);
     const double y = soemdsp_softpop_oscillator_sample(
-      node.nativeHandle,
-      freq,
-      model,
-      width,
-      pitchMod,
-      ampMod,
-      level,
-      color,
-      stereoMode,
-      seedValue,
-      sr
+      node.nativeHandle, c.freq, control_effective(node.waveform), morph, c.pitchMod,
+      c.ampMod, c.level, control_effective(node.stages), control_effective(node.seed), sr
     );
+    // Mono (= L render), Left, Right, Left/Right Noise, Left/Right CV (octaves).
     node.buf[kPortMono][f] = y;
     node.buf[kPortLeft][f] = soemdsp_softpop_oscillator_left(node.nativeHandle);
     node.buf[kPortRight][f] = soemdsp_softpop_oscillator_right(node.nativeHandle);
+    node.buf[kPortSaw][f] = soemdsp_softpop_oscillator_noise(node.nativeHandle, 0);
+    node.buf[kPortRamp][f] = soemdsp_softpop_oscillator_noise(node.nativeHandle, 1);
+    node.buf[kPortSquare][f] = soemdsp_softpop_oscillator_cv(node.nativeHandle, 0);
+    node.buf[kPortTri][f] = soemdsp_softpop_oscillator_cv(node.nativeHandle, 1);
   }
 }
 
@@ -9075,6 +9109,47 @@ static void process_norm_chaos_filter(
         ) * amp;
       }
     }
+  }
+}
+
+// Softpop Filter: internal noise, or (when any Mono / Left / Right input is
+// cabled) the external input through the same bandpass. Input resolution is
+// soemdsp/routing/stereo_route.h (single source -> M + L + R into both
+// channels; Left + Right wired -> L + M and R + M). Both channels always run
+// (Softpop is a stereo voice), so only the feed half of the route is used.
+static void process_softpop_filter(Circuit& g, Node& node, int frames) {
+  if (node.nativeHandle <= 0) return;
+  using namespace soemdsp::routing;
+  const double sr = g.sampleRate < 1.0f ? 44100.0 : (double)g.sampleRate;
+  const StereoRouteWiring wiring = probe_stereo_route_wiring(g, node);
+  const StereoRoute route = stereo_route(wiring);
+  const bool useInput = wiring.inMono || wiring.inLeft || wiring.inRight;
+  mix_node_inputs(g, node, frames);
+  const bool liveF = mix_live_port(g, node, kPortF, frames, g.mixF);
+  const bool liveReset = mix_live_port(g, node, kPortReset, frames, g.mixReset);
+  const double referenceVoltage = circuit_pitch_ref_v(g);
+  if (!liveReset) node.lastReset = 0.0;
+
+  for (int f = 0; f < frames; f++) {
+    control_frame(g, node, f);
+    const SoftpopControls c = softpop_controls(g, node, f, liveF, referenceVoltage, sr);
+    if (softpop_reset_edge(g, node, liveReset, f)) soemdsp_softpop_filter_reset(node.nativeHandle);
+    const double m = g.mixMono[f];
+    const double l = g.mixLeft[f];
+    const double r = g.mixRight[f];
+    const double y = soemdsp_softpop_filter_sample(
+      node.nativeHandle, c.freq,
+      stereo_route_feed(route.feedL, m, l, r), stereo_route_feed(route.feedR, m, l, r),
+      useInput ? 1.0 : 0.0, c.width, c.pitchMod, c.ampMod, c.level,
+      control_effective(node.stages), control_effective(node.seed), sr
+    );
+    node.buf[kPortMono][f] = y;
+    node.buf[kPortLeft][f] = soemdsp_softpop_filter_left(node.nativeHandle);
+    node.buf[kPortRight][f] = soemdsp_softpop_filter_right(node.nativeHandle);
+    node.buf[kPortSaw][f] = soemdsp_softpop_filter_noise(node.nativeHandle, 0);
+    node.buf[kPortRamp][f] = soemdsp_softpop_filter_noise(node.nativeHandle, 1);
+    node.buf[kPortSquare][f] = soemdsp_softpop_filter_cv(node.nativeHandle, 0);
+    node.buf[kPortTri][f] = soemdsp_softpop_filter_cv(node.nativeHandle, 1);
   }
 }
 
@@ -12326,17 +12401,17 @@ static void process_exponential_delay(Circuit& g, Node& node, int frames) {
     const double in = g.mixMono[f] + g.mixLeft[f] + g.mixRight[f];
     const double delayed = soemdsp_exponential_delay_sample(
       node.nativeHandle, in, timeSec, delayCount,
-      control_audio(g, node.feedback, f),
       control_audio(g, node.mix, f),
+      control_audio(g, node.lfoRate, f),
       control_audio(g, node.lfoAmplitude, f),
       control_audio(g, node.seed, f),
       control_audio(g, node.width, f),
+      control_effective(node.mode), // Stereo Mode: 0 Dual, 1 Split
       sr
     ) * amp;
-    node.buf[kPortDelayDelayed][f] = delayed;
+    // Mix L / Mix R only (no Thru, no mono out).
     node.buf[kPortLeft][f] = delayed;
-    node.buf[kPortRight][f] = delayed;
-    node.buf[kPortDelayThru][f] = in;
+    node.buf[kPortRight][f] = soemdsp_exponential_delay_right(node.nativeHandle) * amp;
   }
 }
 
@@ -12924,6 +12999,7 @@ static void process_bypass(Circuit& g, Node& node, int frames) {
     || node.typeId == kTypeSineWarp
     || node.typeId == kTypeFilterMorphOscillator
     || node.typeId == kTypeSoftpopOscillator
+    || node.typeId == kTypeSoftpopFilter
     || node.typeId == kTypeTheremin
     || node.typeId == kTypeDsfOscillator
     || node.typeId == kTypeHypersaw2
@@ -13356,6 +13432,7 @@ extern "C" int soemdsp_graph_add_node(int handle, unsigned int nodeIdHash, int t
     || typeId == kTypeSineWarp
     || typeId == kTypeFilterMorphOscillator
     || typeId == kTypeSoftpopOscillator
+    || typeId == kTypeSoftpopFilter
     || typeId == kTypeTheremin
     || typeId == kTypeDsfOscillator
     || typeId == kTypeHypersaw2
@@ -13535,6 +13612,8 @@ extern "C" int soemdsp_graph_add_node(int handle, unsigned int nodeIdHash, int t
       soemdsp_filter_morph_oscillator_reset(n.nativeHandle, 0.0);
     } else if (typeId == kTypeSoftpopOscillator) {
       soemdsp_softpop_oscillator_reset(n.nativeHandle);
+    } else if (typeId == kTypeSoftpopFilter) {
+      soemdsp_softpop_filter_reset(n.nativeHandle);
     } else if (typeId == kTypeTheremin || typeId == kTypeSoftwaveOsc) {
       soemdsp_softwave_reset(n.nativeHandle);
     } else if (typeId == kTypePhosphillator) {
@@ -14564,6 +14643,10 @@ static void dispatch_process_node(Circuit& g, Node& node, int frames) {
     }
     if (node.typeId == kTypeSoftpopOscillator) {
       process_softpop_oscillator(g, node, frames);
+      return;
+    }
+    if (node.typeId == kTypeSoftpopFilter) {
+      process_softpop_filter(g, node, frames);
       return;
     }
     if (node.typeId == kTypeDsfOscillator) {

@@ -2576,6 +2576,24 @@
       "noticeUrl": "https://github.com/elanhickler/soemdsp-sandbox/blob/master/docs/THIRD_PARTY.md"
     },
     {
+      "name": "softpop_filter",
+      "label": "Softpop Filter",
+      "targetType": "softpopFilter",
+      "kind": "filter",
+      "source": "native_modules/softpop_filter/softpop_filter.cpp",
+      "sourceUrl": "https://github.com/elanhickler/soemdsp-sandbox/blob/master/native_modules/softpop_filter/softpop_filter.cpp",
+      "localSourceUrl": "/native_modules/softpop_filter/softpop_filter.cpp",
+      "libUrl": "https://github.com/elanhickler/soemdsp-sandbox/blob/master/docs/SOFTPOP_PLAN.md",
+      "wasm": "native_modules/softpop_filter/softpop_filter.wasm",
+      "wasmUrl": "native_modules/softpop_filter/softpop_filter.wasm",
+      "wasmAvailable": true,
+      "license": "Soundemote Noncommercial",
+      "licenseUrl": "https://github.com/elanhickler/soemdsp-sandbox/blob/master/LICENSE",
+      "upstreamLicense": "",
+      "upstreamLicenseUrl": "",
+      "noticeUrl": "https://github.com/elanhickler/soemdsp-sandbox/blob/master/docs/THIRD_PARTY.md"
+    },
+    {
       "name": "softwave",
       "label": "Softwave Oscillator",
       "targetType": "softwaveOsc",

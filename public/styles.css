@@ -15490,6 +15490,11 @@ body.node-screen-solo-active .node-screen-solo-face.node-sample-waveform-display
 .node-graph-workspace.pixelated-canvas-zoom .node-module-scope-canvas,
 .node-graph-workspace.pixelated-canvas-zoom .node-matrix-display-canvas,
 .node-graph-workspace.pixelated-canvas-zoom .node-additive-waveform-canvas,
+.node-graph-workspace.pixelated-canvas-zoom .node-additive-filter-curve-canvas,
+.node-graph-workspace.pixelated-canvas-zoom .node-additive-blaster-canvas,
+.node-graph-workspace.pixelated-canvas-zoom .node-additive-bubble-canvas,
+.node-graph-workspace.pixelated-canvas-zoom .node-harmonic-count-canvas,
+.node-graph-workspace.pixelated-canvas-zoom .node-softwave-osc-canvas,
 .node-graph-workspace.pixelated-canvas-zoom .node-harmonic-lines-canvas {
   image-rendering: pixelated;
 }
@@ -25941,4 +25946,31 @@ code {
 }
 .dsp-node[data-node-type="metamodule"] .node-io-row.input[data-port="Poly"] .node-port.input {
   border-radius: 2px;
+}
+
+/* Whole-module canvas tiles (node.ui.canvasWholeModule or ?module=). The
+   module keeps its workspace zoom-1.0 layout; nodeGraphScreenSoloWholeModuleFit
+   applies one uniform scale to fit the tile. Graph-only affordances (jacks,
+   drag handle, wire hit-areas) are hidden with visibility so nothing reflows.
+   The header is a label only (no drag-to-move). Parameters stay adjustable. */
+.node-layout-canvas-tile:has(> .dsp-node.node-whole-module-face) {
+  overflow: hidden;
+}
+
+.node-layout-canvas-tile > .dsp-node.node-whole-module-face .node-drag-handle,
+.node-layout-canvas-tile > .dsp-node.node-whole-module-face .node-port,
+.node-layout-canvas-tile > .dsp-node.node-whole-module-face .node-param-port,
+.node-layout-canvas-tile > .dsp-node.node-whole-module-face > .dsp-node-io-section {
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+
+.node-layout-canvas-tile > .dsp-node.node-whole-module-face .dsp-node-header {
+  pointer-events: none !important;
+}
+
+/* Embed: no tile frame / arrange grips around the single module. */
+html.soemdsp-whole-module .node-layout-canvas-frame,
+html.soemdsp-whole-module .node-layout-canvas-grip {
+  display: none !important;
 }

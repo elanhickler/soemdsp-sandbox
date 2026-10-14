@@ -109,6 +109,17 @@ function mountNodeGraphDisplaySettingsBody(popover, formType, node = null) {
       );
     }
   }
+  if (type === "softpopFace") {
+    if (typeof bindNodeGraphSoftpopDisplaySettingsBody === "function") {
+      bindNodeGraphSoftpopDisplaySettingsBody(host);
+    }
+    if (typeof syncNodeGraphSoftpopDisplaySettingsControls === "function") {
+      syncNodeGraphSoftpopDisplaySettingsControls(
+        host,
+        normalizeNodeGraphSoftpopFaceSettings(node?.traceDisplaySettings),
+      );
+    }
+  }
   if (type === "limiterGainFace") {
     if (typeof bindNodeGraphLimiterGainDisplaySettingsBody === "function") {
       bindNodeGraphLimiterGainDisplaySettingsBody(host);
@@ -496,6 +507,9 @@ if (type === "portalFace") {
       ? normalizeNodeGraphHarmonicLinesSettings()
       : { lineWidth: 2 };
   }
+  if (type === "softpopFace" && typeof normalizeNodeGraphSoftpopFaceSettings === "function") {
+    return normalizeNodeGraphSoftpopFaceSettings();
+  }
   if (type === "limiterGainFace") {
     return typeof normalizeNodeGraphLimiterGainFaceSettings === "function"
       ? normalizeNodeGraphLimiterGainFaceSettings()
@@ -751,6 +765,9 @@ if (type === "portalFace") {
       ? normalizeNodeGraphHarmonicLinesSettings(settings)
       : (settings || { lineWidth: 2 });
   }
+  if (type === "softpopFace" && typeof normalizeNodeGraphSoftpopFaceSettings === "function") {
+    return normalizeNodeGraphSoftpopFaceSettings(settings);
+  }
   if (type === "limiterGainFace") {
     return typeof normalizeNodeGraphLimiterGainFaceSettings === "function"
       ? normalizeNodeGraphLimiterGainFaceSettings(settings)
@@ -988,6 +1005,9 @@ if (settingsSchema === "portalFace") {
         ? normalizeNodeGraphHarmonicLinesSettings(node?.harmonicLinesSettings)
         : (node?.harmonicLinesSettings || { lineWidth: 2 }));
   }
+  if (settingsSchema === "softpopFace" && typeof nodeGraphSoftpopFaceSettingsForNode === "function") {
+    return nodeGraphSoftpopFaceSettingsForNode(node);
+  }
   if (settingsSchema === "limiterGainFace") {
     return typeof nodeGraphLimiterGainFaceSettingsForNode === "function"
       ? nodeGraphLimiterGainFaceSettingsForNode(node)
@@ -1209,6 +1229,9 @@ function readNodeGraphTraceDisplaySettingsForm() {
     const input = panel?.querySelector?.(`[data-harmonic-lines-field="lineWidth"]`);
     if (input) next.lineWidth = Number(input.value);
     return normalizeNodeGraphDisplaySettingsForFormType(next, formType);
+  }
+  if (formType === "softpopFace" && typeof readNodeGraphSoftpopDisplaySettingsForm === "function") {
+    return readNodeGraphSoftpopDisplaySettingsForm(root, current);
   }
   if (formType === "limiterGainFace") {
     const panel = root?.querySelector?.("[data-limiter-gain-display-settings-panel]") || root;
@@ -1640,6 +1663,13 @@ function nodeGraphWriteTraceDisplaySettingsFormInner(settings) {
     const panel = root?.querySelector?.("[data-harmonic-lines-display-settings-panel]") || root;
     if (typeof syncNodeGraphHarmonicLinesDisplaySettingsControls === "function") {
       syncNodeGraphHarmonicLinesDisplaySettingsControls(panel, normalized);
+    }
+    return;
+  }
+  if (formType === "softpopFace") {
+    const panel = root?.querySelector?.("[data-softpop-face-display-settings-panel]") || root;
+    if (typeof syncNodeGraphSoftpopDisplaySettingsControls === "function") {
+      syncNodeGraphSoftpopDisplaySettingsControls(panel, normalized);
     }
     return;
   }
