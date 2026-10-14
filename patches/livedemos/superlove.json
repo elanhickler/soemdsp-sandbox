@@ -905,19 +905,19 @@
           "source": "pointer",
           "gate": 0,
           "gatePulse": 0,
-          "x": 0.9921240454533824,
-          "y": 0.8668220344061023,
-          "velocity": 0.9925414911783345,
-          "keyIndex": 64,
-          "keyQuantized": 1,
-          "rawMidi": 81,
+          "x": 0.5102056490305295,
+          "y": 0.7736009147207428,
+          "velocity": 0.9674229778740709,
+          "keyIndex": 33,
+          "keyQuantized": 0.515625,
+          "rawMidi": 50,
           "octave": 0,
-          "midi": 81,
-          "pitch": "A4",
-          "pitchValue": 81,
-          "midiNormalized": 0.6377952755905512,
-          "tenthVoltPerOctave": 0.675,
-          "frequency": 880
+          "midi": 50,
+          "pitch": "D2",
+          "pitchValue": 50,
+          "midiNormalized": 0.3937007874015748,
+          "tenthVoltPerOctave": 0.4166666666666667,
+          "frequency": 146.8323839587038
         },
         "hideKeyboardInfo": false
       },
@@ -1324,60 +1324,6 @@
         "titleHidden": true,
         "displayHeightGu": 4
       }
-    },
-    {
-      "gx": -44,
-      "gy": 0,
-      "id": "keyboard-2",
-      "paramMeta": {},
-      "params": {},
-      "type": "keyboard",
-      "widthGu": 36,
-      "traceDisplaySettings": {
-        "keyCount": 64,
-        "lowMidi": 18,
-        "mode": "slide",
-        "velMin": 100,
-        "lastSignal": {
-          "source": "pointer",
-          "gate": 0,
-          "gatePulse": 0,
-          "x": 0.7162819903194854,
-          "y": 0.06916610741271144,
-          "velocity": 0.7874015748031497,
-          "keyIndex": 46,
-          "keyQuantized": 0.7301587301587301,
-          "rawMidi": 64,
-          "octave": 0,
-          "midi": 64,
-          "pitch": "E3",
-          "pitchValue": 64,
-          "midiNormalized": 0.5039370078740157,
-          "tenthVoltPerOctave": 0.5333333333333333,
-          "frequency": 329.6275569128699
-        },
-        "hideKeyboardInfo": false
-      },
-      "ui": {
-        "buttonsHidden": true,
-        "buttonsForceShow": false,
-        "displayHeightOffsetGu": 0,
-        "displayModeKey": "",
-        "ioHidden": false,
-        "hideUnused": true,
-        "interfaceControlsHidden": false,
-        "interfaceControlsForceShow": false,
-        "movementLocked": false,
-        "oscilloscopeHidden": false,
-        "oscilloscopeForceShow": false,
-        "slidersHidden": false,
-        "slidersForceShow": false,
-        "titleHidden": false,
-        "displayHeightGu": 7
-      },
-      "chordMemory": {
-        "slots": {}
-      }
     }
   ],
   "requiredAssets": [],
@@ -1391,7 +1337,7 @@
   "view": {
     "heightGu": 24,
     "widthGu": 48,
-    "zoom": 1.1200000000000003,
+    "zoom": 0.8092399945175439,
     "gridVisible": true,
     "gridLightVisible": true,
     "wireLengthsVisible": true,

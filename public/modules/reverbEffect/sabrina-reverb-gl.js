@@ -2,7 +2,7 @@
 // Source lives next to the wasm:
 //   native_modules/sabrina_reverb/sabrina_reverb.vert.glsl
 //   native_modules/sabrina_reverb/sabrina_reverb.frag.glsl
-// Positions come from soemdsp_sabrina_reverb_voice_delay (linear seconds / 0.44).
+// Positions come from soemdsp_sabrina_reverb_voice_delay (linear seconds / 0.45; > 1 = off-axis, not drawn).
 
 const NODE_GRAPH_SABRINA_REVERB_GL_REV = 1;
 const NODE_GRAPH_SABRINA_REVERB_GLSL_REV = "1";
@@ -182,8 +182,8 @@ function nodeGraphSabrinaReverbGlPresent(canvas, phases, cssWidth) {
   const count = Math.min(14, phases.length);
   for (let i = 0; i < count; i += 1) {
     const t = Number(phases[i]);
-    if (!Number.isFinite(t)) continue;
-    const x01 = Math.max(0, Math.min(1, t));
+    if (!Number.isFinite(t) || t > 1) continue;
+    const x01 = Math.max(0, t);
     const xPx = x01 * cssW;
     const x0 = ndc(xPx - reach);
     const x1 = ndc(xPx + reach);
