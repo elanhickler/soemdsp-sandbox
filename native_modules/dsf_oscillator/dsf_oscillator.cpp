@@ -2,7 +2,7 @@
 // soemdsp-native-label: DSF Oscillator
 // soemdsp-native-target: dsfOscillator
 // soemdsp-native-kind: oscillator
-// soemdsp-native-lib: https://github.com/soundemote/soemdsp/blob/main/include/soemdsp/oscillator/DSFOscillator.hpp
+// soemdsp-native-lib: https://github.com/elanhickler/soemdsp/blob/main/include/soemdsp/oscillator/DSFOscillator.hpp
 
 // The "DSF starter kit" -- a Discrete Summation Formula oscillator, the
 // other alias-free technique studied for the aliasing-wars mission (see

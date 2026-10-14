@@ -2,7 +2,7 @@
 // soemdsp-native-label: Fractal Brownian Motion
 // soemdsp-native-target: fractalBrownianNoise
 // soemdsp-native-kind: noise
-// soemdsp-native-lib: https://github.com/soundemote/soemdsp/blob/main/include/soemdsp/random/FractalBrownianMotion.hpp
+// soemdsp-native-lib: https://github.com/elanhickler/soemdsp/blob/main/include/soemdsp/random/FractalBrownianMotion.hpp
 
 #include <wasm_simd128.h>
 

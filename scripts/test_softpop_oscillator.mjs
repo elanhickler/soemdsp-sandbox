@@ -234,7 +234,6 @@ async function main() {
   }
 
   const Qof = (w) => 2000 * Math.pow(0.5 / 2000, w);
-  const Bmodof = (w) => 0.1 * Math.pow(2000 / 0.1, w);
 
   // ---------- level cases (Filter RMS vs the Sine RMS 1/sqrt 2) ----------
   // Noise bandwidth B = pi fc / (2Q); stereo L+R doubles the samples.
@@ -320,7 +319,7 @@ async function main() {
       }
       console.log(`     decorrelation seed=${seed} (60 s, W=1, white): ${parts.join(", ")}`);
     }
-    gate(worst < 0.01, `1 decorrelation: max |r| = ${worst.toFixed(4)} (${worstName}) < 0.01 over 4 seeds x 10 pairs`);
+    gate(worst < 0.01, `1 decorrelation: max |r| = ${worst.toFixed(4)} (${worstName}) < 0.01 over 4 seeds x ${pairs.length} pairs`);
   }
 
   // ---------- 2. Mono / Seed / Reset / Model switch ----------
@@ -478,41 +477,32 @@ async function main() {
     gate(finite && maxHz <= SR / 2, `5 near Nyquist (fEff 23 kHz, 2400 c, W 1): finite, max |fInst| ${maxHz.toFixed(1)} Hz <= fs/2`);
   }
 
-  // ---------- 6. Amp Mod spectrum (Sine, AmpMod 1) ----------
+  // ---------- 6. Sine: Width has no effect ----------
   {
-    const w = 0.6, fc = 4000, bm = Bmodof(w);
+    // Width does nothing in Sine: output bit-identical at W 0 and W 1.
+    let widthFree = true;
+    for (const color of [0, 1, 2]) {
+      const o = { freq: 700, model: P.SINE, pitch: 600, ampMod: 0.5, color };
+      const [a0] = withInstance({ ...o, width: 0 }, (h) => renderAll(h, SR, [CH.L, CH.R]));
+      const [a1] = withInstance({ ...o, width: 1 }, (h) => renderAll(h, SR, [CH.L, CH.R]));
+      if (!bitEqual(a0, a1)) widthFree = false;
+    }
+    gate(widthFree, "6 Sine: Width has no effect (W 0 == W 1 bit-identical, Pitch Mod + Amp Mod on, 3 colors)");
+    // Amp Mod 1 in Sine: full ring mod, no carrier line left at fEff.
+    const fc = 4000;
     const spec = (ampMod) => {
-      const [y] = withInstance({ freq: fc, width: w, model: P.SINE, ampMod, color: P.WHITE }, (h) => renderAll(h, 120 * SR, [CH.L]));
+      const [y] = withInstance({ freq: fc, width: 0.6, model: P.SINE, ampMod, color: P.WHITE }, (h) => renderAll(h, 120 * SR, [CH.L]));
       return welch(y, 65536);
     };
-    const { psd, df } = spec(1);
-    const kc = Math.round(fc / df);
-    let side = 0;
-    for (let d = 3; d <= 10; d++) side += psd[kc - d] + psd[kc + d];
-    side /= 16;
-    const line = dB(psd[kc] / side);
-    const ref = spec(0.5);
-    let sideRef = 0;
-    for (let d = 3; d <= 10; d++) sideRef += ref.psd[kc - d] + ref.psd[kc + d];
-    const lineRef = dB(ref.psd[kc] / (sideRef / 16));
+    const lineDb = ({ psd, df }) => {
+      const kc = Math.round(fc / df);
+      let side = 0;
+      for (let d = 3; d <= 10; d++) side += psd[kc - d] + psd[kc + d];
+      return dB(psd[kc] / (side / 16));
+    };
+    const line = lineDb(spec(1));
+    const lineRef = lineDb(spec(0.5));
     gate(line < 2 && lineRef > 10, `6 Sine AmpMod 1: no carrier line (bin/sides ${line.toFixed(2)} dB; AmpMod 0.5 shows ${lineRef.toFixed(1)} dB)`);
-    let worstSym = 0;
-    const bands = [[1, bm], [bm, 2 * bm], [2 * bm, 4 * bm], [4 * bm, 8 * bm]];
-    const symRows = [];
-    for (const [a, b] of bands) {
-      let up = 0, dn = 0;
-      for (let k = Math.round(a / df); k <= Math.round(b / df); k++) { up += psd[kc + k]; dn += psd[kc - k]; }
-      const d = dB(up / dn);
-      symRows.push(`${a.toFixed(0)}-${b.toFixed(0)} Hz ${d.toFixed(2)} dB`);
-      worstSym = Math.max(worstSym, Math.abs(d));
-    }
-    gate(worstSym < 0.5, `6 Sine AmpMod 1: spectrum symmetric about fEff (${symRows.join(", ")})`);
-    const sp = smooth(psd, 3);
-    const peak = sp[kc];
-    let ku = kc; while (sp[ku] > peak / 2) ku++;
-    let kd = kc; while (sp[kd] > peak / 2) kd--;
-    const hw = 0.5 * ((ku - kc) + (kc - kd)) * df;
-    gate(Math.abs(hw / bm - 1) < 0.2, `6 Sine AmpMod 1: half-width ${hw.toFixed(2)} Hz vs Bmod ${bm.toFixed(2)} Hz (${((hw / bm - 1) * 100).toFixed(1)} %)`);
   }
 
   // ---------- 10. Modulation stress ----------

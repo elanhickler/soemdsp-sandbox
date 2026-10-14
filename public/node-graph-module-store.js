@@ -1030,7 +1030,7 @@ const nodeGraphModuleStoreCatalog = Object.freeze({
     label: "Chaosfly",
     notes: ["chaos", "fm", "dual oscillator", "passive filter", "phosphor", "X/Y"],
     source: "native_modules/chaosfly/chaosfly.cpp",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/native_modules/chaosfly/chaosfly.cpp",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/native_modules/chaosfly/chaosfly.cpp",
   },
   gravity: {
     category: "chaos",
@@ -1627,7 +1627,7 @@ const nodeGraphModuleStoreCatalog = Object.freeze({
   },
   softpopOscillator: {
     category: "oscillator",
-    description: "Sine or resonant-filter noise voice. Width, Pitch Mod, and Amp Mod stay live in both models.",
+    description: "Sine or resonant-filter noise voice. Pitch Mod stays live in both models; Width sets the Filter bandwidth.",
     label: "Softpop Oscillator",
     notes: [
       "softpop",
@@ -1640,7 +1640,6 @@ const nodeGraphModuleStoreCatalog = Object.freeze({
       "brown",
       "bandpass",
       "pitch mod",
-      "amp mod",
       "seed",
       "reset",
       "stereo",
@@ -2816,9 +2815,9 @@ function normalizeNodeGraphNativeModuleEntry(entry = {}) {
     || (source.startsWith("native_modules/") ? `/${source.replace(/\\/g, "/")}` : "");
   const sandboxLicense = "Soundemote Noncommercial";
   const sandboxLicenseUrl =
-    "https://github.com/soundemote/soemdsp-sandbox/blob/master/LICENSE";
+    "https://github.com/elanhickler/soemdsp-sandbox/blob/master/LICENSE";
   const noticeUrlDefault =
-    "https://github.com/soundemote/soemdsp-sandbox/blob/master/docs/THIRD_PARTY.md";
+    "https://github.com/elanhickler/soemdsp-sandbox/blob/master/docs/THIRD_PARTY.md";
   return Object.freeze({
     kind: String(entry.kind || ""),
     label: String(entry.label || name),
@@ -2846,9 +2845,9 @@ function nodeGraphLicenseInfoForEntry(entry) {
   }
   const sandboxLicense = "Soundemote Noncommercial";
   const sandboxLicenseUrl =
-    "https://github.com/soundemote/soemdsp-sandbox/blob/master/LICENSE";
+    "https://github.com/elanhickler/soemdsp-sandbox/blob/master/LICENSE";
   const noticeUrlDefault =
-    "https://github.com/soundemote/soemdsp-sandbox/blob/master/docs/THIRD_PARTY.md";
+    "https://github.com/elanhickler/soemdsp-sandbox/blob/master/docs/THIRD_PARTY.md";
   return {
     license: String(entry.license || sandboxLicense),
     licenseUrl: String(entry.licenseUrl || sandboxLicenseUrl),
@@ -2933,900 +2932,900 @@ function nodeGraphNativeModulesForType(type) {
 const nodeGraphJsSourceEntriesByType = Object.freeze({
   activeFilter: {
     source: "public/modules/activeFilter/active-filter-math.js",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/public/modules/activeFilter/active-filter-math.js",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/activeFilter/active-filter-math.js",
   },
   additiveGenerator: {
     source: "public/modules/additiveGenerator/additive-generator-worklet-evaluator.js",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/public/modules/additiveGenerator/additive-generator-worklet-evaluator.js",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/additiveGenerator/additive-generator-worklet-evaluator.js",
   },
   additiveLinearFilter: {
     source: "public/modules/additiveGraph/additive-graph-math.js",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/public/modules/additiveGraph/additive-graph-math.js",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/additiveGraph/additive-graph-math.js",
   },
   additiveAnalogFilter: {
     source: "public/modules/additiveGraph/additive-graph-math.js",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/public/modules/additiveGraph/additive-graph-math.js",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/additiveGraph/additive-graph-math.js",
   },
   additiveBubble: {
     source: "public/modules/additiveGraph/additive-graph-math.js",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/public/modules/additiveGraph/additive-graph-math.js",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/additiveGraph/additive-graph-math.js",
   },
   additiveFrequencySkew: {
     source: "public/modules/additiveGraph/additive-graph-math.js",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/public/modules/additiveGraph/additive-graph-math.js",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/additiveGraph/additive-graph-math.js",
   },
   additiveSync: {
     source: "public/modules/additiveGraph/additive-graph-math.js",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/public/modules/additiveGraph/additive-graph-math.js",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/additiveGraph/additive-graph-math.js",
   },
   additiveQuantizeFreq: {
     source: "public/modules/additiveGraph/additive-graph-math.js",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/public/modules/additiveGraph/additive-graph-math.js",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/additiveGraph/additive-graph-math.js",
   },
   additiveQuantizePhase: {
     source: "public/modules/additiveGraph/additive-graph-math.js",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/public/modules/additiveGraph/additive-graph-math.js",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/additiveGraph/additive-graph-math.js",
   },
   additiveNoisyFreq: {
     source: "public/modules/additiveGraph/additive-graph-math.js",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/public/modules/additiveGraph/additive-graph-math.js",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/additiveGraph/additive-graph-math.js",
   },
   additiveNoisyPhase: {
     source: "public/modules/additiveGraph/additive-graph-math.js",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/public/modules/additiveGraph/additive-graph-math.js",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/additiveGraph/additive-graph-math.js",
   },
   additivePan: {
     source: "public/modules/additivePan/additive-pan-live-evaluator.js",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/public/modules/additivePan/additive-pan-live-evaluator.js",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/additivePan/additive-pan-live-evaluator.js",
   },
   additiveNoisyPan: {
     source: "public/modules/additiveGraph/additive-graph-math.js",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/public/modules/additiveGraph/additive-graph-math.js",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/additiveGraph/additive-graph-math.js",
   },
   additiveNoisyAmp: {
     source: "public/modules/additiveGraph/additive-graph-math.js",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/public/modules/additiveGraph/additive-graph-math.js",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/additiveGraph/additive-graph-math.js",
   },
   additiveImage: {
     source: "public/modules/additiveImage/additive-image-live-evaluator.js",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/public/modules/additiveImage/additive-image-live-evaluator.js",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/additiveImage/additive-image-live-evaluator.js",
   },
   additiveOut: {
     source: "public/modules/additiveOut/additive-out-worklet-evaluator.js",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/public/modules/additiveOut/additive-out-worklet-evaluator.js",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/additiveOut/additive-out-worklet-evaluator.js",
   },
   aliasSine: {
     source: "public/modules/aliasSine/alias-sine-worklet-evaluator.js",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/public/modules/aliasSine/alias-sine-worklet-evaluator.js",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/aliasSine/alias-sine-worklet-evaluator.js",
   },
   robinSinusoid: {
     source: "native_modules/robin_sinusoid/robin_sinusoid.cpp",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/native_modules/robin_sinusoid/robin_sinusoid.cpp",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/native_modules/robin_sinusoid/robin_sinusoid.cpp",
   },
   robinOscillator: {
     source: "native_modules/robin_oscillator/robin_oscillator.cpp",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/native_modules/robin_oscillator/robin_oscillator.cpp",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/native_modules/robin_oscillator/robin_oscillator.cpp",
   },
   allpass: {
     source: "native_modules/eq_filter/eq_filter.cpp",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/native_modules/eq_filter/eq_filter.cpp",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/native_modules/eq_filter/eq_filter.cpp",
   },
   phaser: {
     source: "native_modules/phaser/phaser.cpp",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/native_modules/phaser/phaser.cpp",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/native_modules/phaser/phaser.cpp",
   },
   flanger: {
     source: "native_modules/flanger/flanger.cpp",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/native_modules/flanger/flanger.cpp",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/native_modules/flanger/flanger.cpp",
   },
   antisaw: {
     source: "public/modules/antisaw/antisaw-worklet-evaluator.js",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/public/modules/antisaw/antisaw-worklet-evaluator.js",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/antisaw/antisaw-worklet-evaluator.js",
   },
   asciiscope: {
     source: "public/modules/asciiscope/asciiscope-live-evaluator.js",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/public/modules/asciiscope/asciiscope-live-evaluator.js",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/asciiscope/asciiscope-live-evaluator.js",
   },
   attackDecay: {
     source: "public/modules/attackDecay/attack-decay-math.js",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/public/modules/attackDecay/attack-decay-math.js",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/attackDecay/attack-decay-math.js",
   },
   audioInput: {
     source: "public/modules/audioInput/audio-input-live-evaluator.js",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/public/modules/audioInput/audio-input-live-evaluator.js",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/audioInput/audio-input-live-evaluator.js",
   },
   audioPlayer: {
     source: "public/modules/audioPlayer/audio-player-worklet-evaluator.js",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/public/modules/audioPlayer/audio-player-worklet-evaluator.js",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/audioPlayer/audio-player-worklet-evaluator.js",
   },
   badvalMonitor: {
     source: "public/modules/badvalMonitor/badval-monitor-worklet-evaluator.js",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/public/modules/badvalMonitor/badval-monitor-worklet-evaluator.js",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/badvalMonitor/badval-monitor-worklet-evaluator.js",
   },
   bandpass: {
     source: "native_modules/eq_filter/eq_filter.cpp",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/native_modules/eq_filter/eq_filter.cpp",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/native_modules/eq_filter/eq_filter.cpp",
   },
   lowpass: {
     source: "native_modules/eq_filter/eq_filter.cpp",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/native_modules/eq_filter/eq_filter.cpp",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/native_modules/eq_filter/eq_filter.cpp",
   },
   highpass: {
     source: "native_modules/eq_filter/eq_filter.cpp",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/native_modules/eq_filter/eq_filter.cpp",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/native_modules/eq_filter/eq_filter.cpp",
   },
   bessel: {
     source: "public/modules/scientificIir/scientific-iir-math.js",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/public/modules/scientificIir/scientific-iir-math.js",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/scientificIir/scientific-iir-math.js",
   },
   bias: {
     source: "native_modules/bias/bias.cpp",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/native_modules/bias/bias.cpp",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/native_modules/bias/bias.cpp",
   },
   attenuverter: {
     source: "native_modules/attenuverter/attenuverter.cpp",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/native_modules/attenuverter/attenuverter.cpp",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/native_modules/attenuverter/attenuverter.cpp",
   },
   attenumax: {
     source: "native_modules/attenumax/attenumax.cpp",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/native_modules/attenumax/attenumax.cpp",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/native_modules/attenumax/attenumax.cpp",
   },
   ampCurve: {
     source: "native_modules/amp_curve/amp_curve.cpp",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/native_modules/amp_curve/amp_curve.cpp",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/native_modules/amp_curve/amp_curve.cpp",
   },
   range: {
     source: "native_modules/range/range.cpp",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/native_modules/range/range.cpp",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/native_modules/range/range.cpp",
   },
 
   pitchManager: {
     source: "native_modules/graph_engine/graph_engine.cpp",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/native_modules/graph_engine/graph_engine.cpp",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/native_modules/graph_engine/graph_engine.cpp",
   },
   pitchHz: {
     source: "native_modules/graph_engine/graph_engine.cpp",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/native_modules/graph_engine/graph_engine.cpp",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/native_modules/graph_engine/graph_engine.cpp",
   },
   ampDb: {
     source: "native_modules/amp_db/amp_db.cpp",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/native_modules/amp_db/amp_db.cpp",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/native_modules/amp_db/amp_db.cpp",
   },
 
   u2b: {
     source: "native_modules/u2b/u2b.cpp",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/native_modules/u2b/u2b.cpp",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/native_modules/u2b/u2b.cpp",
   },
   b2u: {
     source: "native_modules/b2u/b2u.cpp",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/native_modules/b2u/b2u.cpp",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/native_modules/b2u/b2u.cpp",
   },
   inv: {
     source: "native_modules/inv/inv.cpp",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/native_modules/inv/inv.cpp",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/native_modules/inv/inv.cpp",
   },
   divide: {
     source: "native_modules/graph_engine/graph_engine.cpp",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/native_modules/graph_engine/graph_engine.cpp",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/native_modules/graph_engine/graph_engine.cpp",
   },
   ringMod: {
     source: "native_modules/ring_mod/ring_mod.cpp",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/native_modules/ring_mod/ring_mod.cpp",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/native_modules/ring_mod/ring_mod.cpp",
   },
   bloomGlow: {
     source: "public/modules/bloomGlow/bloom-glow-live-evaluator.js",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/public/modules/bloomGlow/bloom-glow-live-evaluator.js",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/bloomGlow/bloom-glow-live-evaluator.js",
   },
   blubb: {
     source: "public/modules/blubb/blubb-worklet-evaluator.js",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/public/modules/blubb/blubb-worklet-evaluator.js",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/blubb/blubb-worklet-evaluator.js",
   },
   boing: {
     source: "public/modules/boing/boing-worklet-evaluator.js",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/public/modules/boing/boing-worklet-evaluator.js",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/boing/boing-worklet-evaluator.js",
   },
   bradley2a: {
     source: "public/modules/bradley2a/bradley-2a-worklet-evaluator.js",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/public/modules/bradley2a/bradley-2a-worklet-evaluator.js",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/bradley2a/bradley-2a-worklet-evaluator.js",
   },
   bugButton: {
     source: "public/modules/bugButton/bug-button-worklet-evaluator.js",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/public/modules/bugButton/bug-button-worklet-evaluator.js",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/bugButton/bug-button-worklet-evaluator.js",
   },
   butterworth: {
     source: "public/modules/scientificIir/scientific-iir-math.js",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/public/modules/scientificIir/scientific-iir-math.js",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/scientificIir/scientific-iir-math.js",
   },
   buttonEvents: {
     source: "public/modules/buttonEvents/button-events-live-evaluator.js",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/public/modules/buttonEvents/button-events-live-evaluator.js",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/buttonEvents/button-events-live-evaluator.js",
   },
   chaoticPhaseLockingFilter: {
     source: "public/modules/chaoticPhaseLockingFilter/chaotic-phase-locking-filter-worklet-evaluator.js",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/public/modules/chaoticPhaseLockingFilter/chaotic-phase-locking-filter-worklet-evaluator.js",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/chaoticPhaseLockingFilter/chaotic-phase-locking-filter-worklet-evaluator.js",
   },
   chebyshev: {
     source: "public/modules/scientificIir/scientific-iir-math.js",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/public/modules/scientificIir/scientific-iir-math.js",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/scientificIir/scientific-iir-math.js",
   },
   chordPad: {
     source: "public/modules/chordPad/chord-pad-worklet-evaluator.js",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/public/modules/chordPad/chord-pad-worklet-evaluator.js",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/chordPad/chord-pad-worklet-evaluator.js",
   },
   chromaColor: {
     source: "public/modules/chromaColor/chroma-color-live-evaluator.js",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/public/modules/chromaColor/chroma-color-live-evaluator.js",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/chromaColor/chroma-color-live-evaluator.js",
   },
   chuaAttractor: {
     source: "native_modules/chua_attractor/chua_attractor.cpp",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/native_modules/chua_attractor/chua_attractor.cpp",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/native_modules/chua_attractor/chua_attractor.cpp",
   },
   classicFxStubs: {
     source: "public/modules/classicFxStubs/classic-fx-stubs-worklet-evaluator.js",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/public/modules/classicFxStubs/classic-fx-stubs-worklet-evaluator.js",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/classicFxStubs/classic-fx-stubs-worklet-evaluator.js",
   },
   clock: {
     source: "native_modules/clock/clock.cpp",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/native_modules/clock/clock.cpp",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/native_modules/clock/clock.cpp",
   },
   clockDivider: {
     source: "public/modules/clockDivider/clock-divider-live-evaluator.js",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/public/modules/clockDivider/clock-divider-live-evaluator.js",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/clockDivider/clock-divider-live-evaluator.js",
   },
   combResonator: {
     source: "native_modules/comb_resonator/comb_resonator.cpp",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/native_modules/comb_resonator/comb_resonator.cpp",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/native_modules/comb_resonator/comb_resonator.cpp",
   },
   comparator: {
     source: "native_modules/comparator/comparator.cpp",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/native_modules/comparator/comparator.cpp",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/native_modules/comparator/comparator.cpp",
   },
   cookbookFilter: {
     source: "native_modules/cookbook_filter/cookbook_filter.cpp",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/native_modules/cookbook_filter/cookbook_filter.cpp",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/native_modules/cookbook_filter/cookbook_filter.cpp",
   },
   crossover: {
     source: "native_modules/crossover/crossover.cpp",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/native_modules/crossover/crossover.cpp",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/native_modules/crossover/crossover.cpp",
   },
   crossover2: {
     source: "native_modules/crossover/crossover.cpp",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/native_modules/crossover/crossover.cpp",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/native_modules/crossover/crossover.cpp",
   },
   crossover3: {
     source: "native_modules/crossover/crossover.cpp",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/native_modules/crossover/crossover.cpp",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/native_modules/crossover/crossover.cpp",
   },
   crossover4: {
     source: "native_modules/crossover/crossover.cpp",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/native_modules/crossover/crossover.cpp",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/native_modules/crossover/crossover.cpp",
   },
   crossover5: {
     source: "native_modules/crossover/crossover.cpp",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/native_modules/crossover/crossover.cpp",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/native_modules/crossover/crossover.cpp",
   },
   crossover6: {
     source: "native_modules/crossover/crossover.cpp",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/native_modules/crossover/crossover.cpp",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/native_modules/crossover/crossover.cpp",
   },
   earlyReflections: {
     source: "native_modules/exponential_delay/exponential_delay.cpp",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/native_modules/exponential_delay/exponential_delay.cpp",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/native_modules/exponential_delay/exponential_delay.cpp",
   },
   delayEffect: {
     source: "public/modules/delayEffect/delay-effect-worklet-evaluator.js",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/public/modules/delayEffect/delay-effect-worklet-evaluator.js",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/delayEffect/delay-effect-worklet-evaluator.js",
   },
   delayedTrigger: {
     source: "native_modules/delayed_trigger/delayed_trigger.cpp",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/native_modules/delayed_trigger/delayed_trigger.cpp",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/native_modules/delayed_trigger/delayed_trigger.cpp",
   },
   dsfOscillator: {
     source: "public/modules/dsfOscillator/dsf-oscillator-worklet-evaluator.js",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/public/modules/dsfOscillator/dsf-oscillator-worklet-evaluator.js",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/dsfOscillator/dsf-oscillator-worklet-evaluator.js",
   },
   ellipsoid: {
     source: "public/modules/ellipsoid/ellipsoid-worklet-evaluator.js",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/public/modules/ellipsoid/ellipsoid-worklet-evaluator.js",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/ellipsoid/ellipsoid-worklet-evaluator.js",
   },
   ellipsoidOsc: {
     source: "public/modules/ellipsoid/ellipsoid-worklet-evaluator.js",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/public/modules/ellipsoid/ellipsoid-worklet-evaluator.js",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/ellipsoid/ellipsoid-worklet-evaluator.js",
   },
   basicShape: {
     source: "public/modules/basicShape/basic-shape-live-evaluator.js",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/public/modules/basicShape/basic-shape-live-evaluator.js",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/basicShape/basic-shape-live-evaluator.js",
   },
   elliptic: {
     source: "public/modules/scientificIir/scientific-iir-math.js",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/public/modules/scientificIir/scientific-iir-math.js",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/scientificIir/scientific-iir-math.js",
   },
   eqFilter: {
     source: "public/modules/eqFilter/eq-filter-math.js",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/public/modules/eqFilter/eq-filter-math.js",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/eqFilter/eq-filter-math.js",
   },
   evolveField: {
     source: "public/modules/evolveField/evolve-field-live-evaluator.js",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/public/modules/evolveField/evolve-field-live-evaluator.js",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/evolveField/evolve-field-live-evaluator.js",
   },
   expAdsr: {
     source: "public/modules/expAdsr/exp-adsr-math.js",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/public/modules/expAdsr/exp-adsr-math.js",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/expAdsr/exp-adsr-math.js",
   },
   fbmField: {
     source: "public/modules/fbmField/fbm-field-worklet-evaluator.js",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/public/modules/fbmField/fbm-field-worklet-evaluator.js",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/fbmField/fbm-field-worklet-evaluator.js",
   },
   flowerChildEnvelopeFollower: {
     source: "public/modules/flowerChildEnvelopeFollower/flower-child-envelope-follower-worklet-evaluator.js",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/public/modules/flowerChildEnvelopeFollower/flower-child-envelope-follower-worklet-evaluator.js",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/flowerChildEnvelopeFollower/flower-child-envelope-follower-worklet-evaluator.js",
   },
   flowerChildFilter: {
     source: "public/modules/flowerChildFilter/flower-child-filter-worklet-evaluator.js",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/public/modules/flowerChildFilter/flower-child-filter-worklet-evaluator.js",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/flowerChildFilter/flower-child-filter-worklet-evaluator.js",
   },
   fractalBrownianNoise: {
     source: "public/modules/fractalBrownianNoise/fractal-brownian-noise-worklet-evaluator.js",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/public/modules/fractalBrownianNoise/fractal-brownian-noise-worklet-evaluator.js",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/fractalBrownianNoise/fractal-brownian-noise-worklet-evaluator.js",
   },
   fractalSpiral: {
     source: "public/modules/fractalSpiral/fractal-spiral-worklet-evaluator.js",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/public/modules/fractalSpiral/fractal-spiral-worklet-evaluator.js",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/fractalSpiral/fractal-spiral-worklet-evaluator.js",
   },
   gain: {
     source: "public/modules/gain/gain-math.js",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/public/modules/gain/gain-math.js",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/gain/gain-math.js",
   },
   mix4: {
     source: "public/modules/gainBiasMix/gain-bias-mix-worklet-evaluator.js",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/public/modules/gainBiasMix/gain-bias-mix-worklet-evaluator.js",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/gainBiasMix/gain-bias-mix-worklet-evaluator.js",
   },
   mix: {
     source: "public/modules/gainBiasMix/gain-bias-mix-worklet-evaluator.js",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/public/modules/gainBiasMix/gain-bias-mix-worklet-evaluator.js",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/gainBiasMix/gain-bias-mix-worklet-evaluator.js",
   },
   gainBiasMix: {
     source: "public/modules/gainBiasMix/gain-bias-mix-worklet-evaluator.js",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/public/modules/gainBiasMix/gain-bias-mix-worklet-evaluator.js",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/gainBiasMix/gain-bias-mix-worklet-evaluator.js",
   },
   mixStereo4: {
     source: "native_modules/mix_stereo/mix_stereo.cpp",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/native_modules/mix_stereo/mix_stereo.cpp",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/native_modules/mix_stereo/mix_stereo.cpp",
   },
   mixStereo2: {
     source: "native_modules/mix_stereo/mix_stereo.cpp",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/native_modules/mix_stereo/mix_stereo.cpp",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/native_modules/mix_stereo/mix_stereo.cpp",
   },
   crossfade2: {
     source: "native_modules/crossfade/crossfade.cpp",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/native_modules/crossfade/crossfade.cpp",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/native_modules/crossfade/crossfade.cpp",
   },
   crossfade3: {
     source: "native_modules/crossfade/crossfade.cpp",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/native_modules/crossfade/crossfade.cpp",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/native_modules/crossfade/crossfade.cpp",
   },
   crossfade4: {
     source: "native_modules/crossfade/crossfade.cpp",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/native_modules/crossfade/crossfade.cpp",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/native_modules/crossfade/crossfade.cpp",
   },
   mixStereo: {
     source: "native_modules/mix_stereo/mix_stereo.cpp",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/native_modules/mix_stereo/mix_stereo.cpp",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/native_modules/mix_stereo/mix_stereo.cpp",
   },
   graph: {
     source: "public/modules/graph/graph-live-evaluator.js",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/public/modules/graph/graph-live-evaluator.js",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/graph/graph-live-evaluator.js",
   },
   ...(typeof nodeGraphPortalAllTypes === "function"
     ? Object.fromEntries(nodeGraphPortalAllTypes().map((type) => [type, {
       source: "public/modules/portal/portal-live-evaluator.js",
-      sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/public/modules/portal/portal-live-evaluator.js",
+      sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/portal/portal-live-evaluator.js",
     }]))
     : {
       portalInlet: {
         source: "public/modules/portal/portal-live-evaluator.js",
-        sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/public/modules/portal/portal-live-evaluator.js",
+        sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/portal/portal-live-evaluator.js",
       },
       portalOutlet: {
         source: "public/modules/portal/portal-live-evaluator.js",
-        sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/public/modules/portal/portal-live-evaluator.js",
+        sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/portal/portal-live-evaluator.js",
       },
     }),
   namedPortalIn: {
     source: "public/modules/portal/portal-live-evaluator.js",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/public/modules/portal/portal-live-evaluator.js",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/portal/portal-live-evaluator.js",
   },
   namedPortalOut: {
     source: "public/modules/portal/portal-live-evaluator.js",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/public/modules/portal/portal-live-evaluator.js",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/portal/portal-live-evaluator.js",
   },
   helmholtzPitch: {
     source: "public/modules/helmholtzPitch/helmholtz-pitch-worklet-evaluator.js",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/public/modules/helmholtzPitch/helmholtz-pitch-worklet-evaluator.js",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/helmholtzPitch/helmholtz-pitch-worklet-evaluator.js",
   },
   henonMap: {
     source: "native_modules/henon_map/henon_map.cpp",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/native_modules/henon_map/henon_map.cpp",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/native_modules/henon_map/henon_map.cpp",
   },
   humanFilter: {
     source: "public/modules/humanFilter/human-filter-worklet-evaluator.js",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/public/modules/humanFilter/human-filter-worklet-evaluator.js",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/humanFilter/human-filter-worklet-evaluator.js",
   },
   hypersaw2: {
     source: "public/modules/hypersaw2/hypersaw2-live-evaluator.js",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/public/modules/hypersaw2/hypersaw2-live-evaluator.js",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/hypersaw2/hypersaw2-live-evaluator.js",
   },
   vibratoGenerator: {
     source: "public/modules/vibratoGenerator/vibrato-generator-worklet-evaluator.js",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/public/modules/vibratoGenerator/vibrato-generator-worklet-evaluator.js",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/vibratoGenerator/vibrato-generator-worklet-evaluator.js",
   },
   wowAndFlutter: {
     source: "public/modules/wowAndFlutter/wow-and-flutter-worklet-evaluator.js",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/public/modules/wowAndFlutter/wow-and-flutter-worklet-evaluator.js",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/wowAndFlutter/wow-and-flutter-worklet-evaluator.js",
   },
   inertialFilter: {
     source: "native_modules/inertial_filter/inertial_filter.cpp",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/native_modules/inertial_filter/inertial_filter.cpp",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/native_modules/inertial_filter/inertial_filter.cpp",
   },
   keplerBouwkamp: {
     source: "public/modules/keplerBouwkamp/kepler-bouwkamp-worklet-evaluator.js",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/public/modules/keplerBouwkamp/kepler-bouwkamp-worklet-evaluator.js",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/keplerBouwkamp/kepler-bouwkamp-worklet-evaluator.js",
   },
   keyboardController: {
     source: "public/modules/keyboardController/keyboard-controller-live-evaluator.js",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/public/modules/keyboardController/keyboard-controller-live-evaluator.js",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/keyboardController/keyboard-controller-live-evaluator.js",
   },
   keyboard: {
     source: "public/modules/keyboardController/keyboard-controller-live-evaluator.js",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/public/modules/keyboardController/keyboard-controller-live-evaluator.js",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/keyboardController/keyboard-controller-live-evaluator.js",
   },
   gridKeyboard: {
     source: "public/modules/keyboardController/keyboard-controller-live-evaluator.js",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/public/modules/keyboardController/keyboard-controller-live-evaluator.js",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/keyboardController/keyboard-controller-live-evaluator.js",
   },
   knob: {
     source: "public/modules/knob/knob-live-evaluator.js",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/public/modules/knob/knob-live-evaluator.js",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/knob/knob-live-evaluator.js",
   },
   ladderFilter: {
     source: "public/modules/ladderFilter/ladder-filter-worklet-evaluator.js",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/public/modules/ladderFilter/ladder-filter-worklet-evaluator.js",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/ladderFilter/ladder-filter-worklet-evaluator.js",
   },
   led: {
     source: "public/modules/led/led-live-evaluator.js",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/public/modules/led/led-live-evaluator.js",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/led/led-live-evaluator.js",
   },
   linearEnvelope: {
     source: "public/modules/linearEnvelope/linear-envelope-math.js",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/public/modules/linearEnvelope/linear-envelope-math.js",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/linearEnvelope/linear-envelope-math.js",
   },
   linearAttackRelease: {
     source: "public/modules/linearAttackRelease/linear-attack-release-math.js",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/public/modules/linearAttackRelease/linear-attack-release-math.js",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/linearAttackRelease/linear-attack-release-math.js",
   },
   curveAttackRelease: {
     source: "public/modules/curveAttackRelease/curve-attack-release-math.js",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/public/modules/curveAttackRelease/curve-attack-release-math.js",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/curveAttackRelease/curve-attack-release-math.js",
   },
   pluckEnvelope: {
     source: "public/modules/pluckEnvelope/pluck-envelope-circuit-math.js",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/public/modules/pluckEnvelope/pluck-envelope-circuit-math.js",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/pluckEnvelope/pluck-envelope-circuit-math.js",
   },
   linkwitzRiley: {
     source: "public/modules/scientificIir/scientific-iir-math.js",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/public/modules/scientificIir/scientific-iir-math.js",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/scientificIir/scientific-iir-math.js",
   },
   lookaheadLimiter: {
     source: "native_modules/lookahead_limiter/lookahead_limiter.cpp",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/native_modules/lookahead_limiter/lookahead_limiter.cpp",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/native_modules/lookahead_limiter/lookahead_limiter.cpp",
   },
   limiter: {
     source: "native_modules/pumping_limiter/pumping_limiter.cpp",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/native_modules/pumping_limiter/pumping_limiter.cpp",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/native_modules/pumping_limiter/pumping_limiter.cpp",
   },
   logSpiral: {
     source: "public/modules/logSpiral/log-spiral-worklet-evaluator.js",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/public/modules/logSpiral/log-spiral-worklet-evaluator.js",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/logSpiral/log-spiral-worklet-evaluator.js",
   },
   logisticMap: {
     source: "native_modules/logistic_map/logistic_map.cpp",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/native_modules/logistic_map/logistic_map.cpp",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/native_modules/logistic_map/logistic_map.cpp",
   },
   lorenzAttractor: {
     source: "native_modules/lorenz_attractor/lorenz_attractor.cpp",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/native_modules/lorenz_attractor/lorenz_attractor.cpp",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/native_modules/lorenz_attractor/lorenz_attractor.cpp",
   },
   lutCell: {
     source: "public/modules/lutCell/lut-cell-worklet-evaluator.js",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/public/modules/lutCell/lut-cell-worklet-evaluator.js",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/lutCell/lut-cell-worklet-evaluator.js",
   },
   matrixDisplay: {
     source: "public/modules/matrixDisplay/matrix-display-live-evaluator.js",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/public/modules/matrixDisplay/matrix-display-live-evaluator.js",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/matrixDisplay/matrix-display-live-evaluator.js",
   },
   metallicRatio: {
     source: "native_modules/metallic_ratio/metallic_ratio.cpp",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/native_modules/metallic_ratio/metallic_ratio.cpp",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/native_modules/metallic_ratio/metallic_ratio.cpp",
   },
   harmonicSeries: {
     source: "public/modules/harmonicSeries/harmonic-series-math.js",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/public/modules/harmonicSeries/harmonic-series-math.js",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/harmonicSeries/harmonic-series-math.js",
   },
   minMax: {
     source: "native_modules/min_max/min_max.cpp",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/native_modules/min_max/min_max.cpp",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/native_modules/min_max/min_max.cpp",
   },
   modeResonator: {
     source: "native_modules/mode_resonator/mode_resonator.cpp",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/native_modules/mode_resonator/mode_resonator.cpp",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/native_modules/mode_resonator/mode_resonator.cpp",
   },
   mushroom: {
     source: "public/modules/mushroom/mushroom-worklet-evaluator.js",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/public/modules/mushroom/mushroom-worklet-evaluator.js",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/mushroom/mushroom-worklet-evaluator.js",
   },
   musicalEngines: {
     source: "public/modules/musicalEngines/musical-engines-worklet-evaluator.js",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/public/modules/musicalEngines/musical-engines-worklet-evaluator.js",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/musicalEngines/musical-engines-worklet-evaluator.js",
   },
   nextPatch: {
     source: "public/modules/nextPatch/next-patch-worklet-evaluator.js",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/public/modules/nextPatch/next-patch-worklet-evaluator.js",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/nextPatch/next-patch-worklet-evaluator.js",
   },
   rms: {
     source: "public/modules/rms/rms-math.js",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/public/modules/rms/rms-math.js",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/rms/rms-math.js",
   },
   rmsStereo: {
     source: "public/modules/rms/rms-math.js",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/public/modules/rms/rms-math.js",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/rms/rms-math.js",
   },
   noiseGenerator: {
     source: "native_modules/noise_generator/noise_generator.cpp",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/native_modules/noise_generator/noise_generator.cpp",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/native_modules/noise_generator/noise_generator.cpp",
   },
   numberReadout: {
     source: "public/modules/numberReadout/number-readout-register.js",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/public/modules/numberReadout/number-readout-register.js",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/numberReadout/number-readout-register.js",
   },
   valueLcd: {
     source: "public/modules/valueLcd/value-lcd-register.js",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/public/modules/valueLcd/value-lcd-register.js",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/valueLcd/value-lcd-register.js",
   },
   nyquistShannon: {
     source: "public/modules/nyquistShannon/nyquist-shannon-worklet-evaluator.js",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/public/modules/nyquistShannon/nyquist-shannon-worklet-evaluator.js",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/nyquistShannon/nyquist-shannon-worklet-evaluator.js",
   },
   osc: {
     source: "public/modules/scientificIir/scientific-iir-live-evaluator.js",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/public/modules/scientificIir/scientific-iir-live-evaluator.js",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/scientificIir/scientific-iir-live-evaluator.js",
   },
   oscilloscopeBank: {
     source: "public/modules/oscilloscopeBank/oscilloscope-bank-display.js",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/public/modules/oscilloscopeBank/oscilloscope-bank-display.js",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/oscilloscopeBank/oscilloscope-bank-display.js",
   },
   output: {
     source: "public/modules/output/output-live-evaluator.js",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/public/modules/output/output-live-evaluator.js",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/output/output-live-evaluator.js",
   },
   papoulisFilter: {
     source: "public/modules/papoulisFilter/papoulis-filter-worklet-evaluator.js",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/public/modules/papoulisFilter/papoulis-filter-worklet-evaluator.js",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/papoulisFilter/papoulis-filter-worklet-evaluator.js",
   },
   passiveFilter: {
     source: "public/modules/passiveFilter/passive-filter-worklet-evaluator.js",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/public/modules/passiveFilter/passive-filter-worklet-evaluator.js",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/passiveFilter/passive-filter-worklet-evaluator.js",
   },
   patchCommand: {
     source: "public/modules/patchCommand/patch-command-live-evaluator.js",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/public/modules/patchCommand/patch-command-live-evaluator.js",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/patchCommand/patch-command-live-evaluator.js",
   },
   phaseDisperse: {
     source: "public/modules/phaseDisperse/phase-disperse-math.js",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/public/modules/phaseDisperse/phase-disperse-math.js",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/phaseDisperse/phase-disperse-math.js",
   },
   phosphillator: {
     source: "public/modules/phosphillator/phosphillator-worklet-evaluator.js",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/public/modules/phosphillator/phosphillator-worklet-evaluator.js",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/phosphillator/phosphillator-worklet-evaluator.js",
   },
   phosphorLight: {
     source: "public/modules/phosphorLight/phosphor-light-display.js",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/public/modules/phosphorLight/phosphor-light-display.js",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/phosphorLight/phosphor-light-display.js",
   },
   piSpigotNoise: {
     source: "public/modules/piSpigotNoise/pi-spigot-noise-worklet-evaluator.js",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/public/modules/piSpigotNoise/pi-spigot-noise-worklet-evaluator.js",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/piSpigotNoise/pi-spigot-noise-worklet-evaluator.js",
   },
   pingPongDelay: {
     source: "native_modules/ping_pong_delay/ping_pong_delay.cpp",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/native_modules/ping_pong_delay/ping_pong_delay.cpp",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/native_modules/ping_pong_delay/ping_pong_delay.cpp",
   },
   pitchModWheel: {
     source: "public/modules/pitchModWheel/pitch-mod-wheel-live-evaluator.js",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/public/modules/pitchModWheel/pitch-mod-wheel-live-evaluator.js",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/pitchModWheel/pitch-mod-wheel-live-evaluator.js",
   },
   pitchQuantizer: {
     source: "public/modules/pitchQuantizer/pitch-quantizer-worklet-evaluator.js",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/public/modules/pitchQuantizer/pitch-quantizer-worklet-evaluator.js",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/pitchQuantizer/pitch-quantizer-worklet-evaluator.js",
   },
   pll: {
     source: "public/modules/pll/pll-worklet-evaluator.js",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/public/modules/pll/pll-worklet-evaluator.js",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/pll/pll-worklet-evaluator.js",
   },
   pingEnvelope: {
     source: "public/modules/pingEnvelope/ping-envelope-math.js",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/public/modules/pingEnvelope/ping-envelope-math.js",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/pingEnvelope/ping-envelope-math.js",
   },
   powerDecay: {
     source: "native_modules/power_decay/power_decay.cpp",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/native_modules/power_decay/power_decay.cpp",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/native_modules/power_decay/power_decay.cpp",
   },
   exponentialSkew: {
     source: "native_modules/exponential_skew/exponential_skew.cpp",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/native_modules/exponential_skew/exponential_skew.cpp",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/native_modules/exponential_skew/exponential_skew.cpp",
   },
   hyperbolicDecay: {
     source: "native_modules/hyperbolic_decay/hyperbolic_decay.cpp",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/native_modules/hyperbolic_decay/hyperbolic_decay.cpp",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/native_modules/hyperbolic_decay/hyperbolic_decay.cpp",
   },
   exponentialMix: {
     source: "native_modules/exponential_mix/exponential_mix.cpp",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/native_modules/exponential_mix/exponential_mix.cpp",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/native_modules/exponential_mix/exponential_mix.cpp",
   },
   ellipsoidDecay: {
     source: "native_modules/ellipsoid_decay/ellipsoid_decay.cpp",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/native_modules/ellipsoid_decay/ellipsoid_decay.cpp",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/native_modules/ellipsoid_decay/ellipsoid_decay.cpp",
   },
   robinSinepulse: {
     source: "native_modules/robin_sinepulse/robin_sinepulse.cpp",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/native_modules/robin_sinepulse/robin_sinepulse.cpp",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/native_modules/robin_sinepulse/robin_sinepulse.cpp",
   },
   robinSinepulseAllpass: {
     source: "native_modules/robin_sinepulse_allpass/robin_sinepulse_allpass.cpp",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/native_modules/robin_sinepulse_allpass/robin_sinepulse_allpass.cpp",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/native_modules/robin_sinepulse_allpass/robin_sinepulse_allpass.cpp",
   },
   vactrol: {
     source: "native_modules/vactrol_envelope/vactrol_envelope.cpp",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/native_modules/vactrol_envelope/vactrol_envelope.cpp",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/native_modules/vactrol_envelope/vactrol_envelope.cpp",
   },
   plugin: {
     source: "public/modules/plugin/plugin-controls-live-evaluator.js",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/public/modules/plugin/plugin-controls-live-evaluator.js",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/plugin/plugin-controls-live-evaluator.js",
   },
   polyBlep: {
     source: "public/modules/polyBlep/poly-blep-worklet-evaluator.js",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/public/modules/polyBlep/poly-blep-worklet-evaluator.js",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/polyBlep/poly-blep-worklet-evaluator.js",
   },
   pulseExplosion: {
     source: "public/modules/pulseExplosion/pulse-explosion-worklet-evaluator.js",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/public/modules/pulseExplosion/pulse-explosion-worklet-evaluator.js",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/pulseExplosion/pulse-explosion-worklet-evaluator.js",
   },
   radar: {
     source: "public/modules/radar/radar-worklet-evaluator.js",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/public/modules/radar/radar-worklet-evaluator.js",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/radar/radar-worklet-evaluator.js",
   },
   randomClock: {
     source: "native_modules/random_clock/random_clock.cpp",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/native_modules/random_clock/random_clock.cpp",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/native_modules/random_clock/random_clock.cpp",
   },
   randomWalk: {
     source: "native_modules/random_walk/random_walk.cpp",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/native_modules/random_walk/random_walk.cpp",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/native_modules/random_walk/random_walk.cpp",
   },
   cheapWalk: {
     source: "native_modules/cheap_walk/cheap_walk.cpp",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/native_modules/cheap_walk/cheap_walk.cpp",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/native_modules/cheap_walk/cheap_walk.cpp",
   },
   rayBouncer: {
     source: "public/modules/rayBouncer/ray-bouncer-worklet-evaluator.js",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/public/modules/rayBouncer/ray-bouncer-worklet-evaluator.js",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/rayBouncer/ray-bouncer-worklet-evaluator.js",
   },
   resonatorFilter: {
     source: "public/modules/resonatorFilter/resonator-filter-worklet-evaluator.js",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/public/modules/resonatorFilter/resonator-filter-worklet-evaluator.js",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/resonatorFilter/resonator-filter-worklet-evaluator.js",
   },
   reverbEffect: {
     source: "public/modules/reverbEffect/reverb-effect-worklet-evaluator.js",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/public/modules/reverbEffect/reverb-effect-worklet-evaluator.js",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/reverbEffect/reverb-effect-worklet-evaluator.js",
   },
   rgbFractal: {
     source: "public/modules/rgbFractal/rgb-fractal-math.js",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/public/modules/rgbFractal/rgb-fractal-math.js",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/rgbFractal/rgb-fractal-math.js",
   },
   rgbPicture: {
     source: "public/modules/rgbPicture/rgb-picture-live-evaluator.js",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/public/modules/rgbPicture/rgb-picture-live-evaluator.js",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/rgbPicture/rgb-picture-live-evaluator.js",
   },
   rgbShape: {
     source: "public/modules/rgbShape/rgb-shape-live-evaluator.js",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/public/modules/rgbShape/rgb-shape-live-evaluator.js",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/rgbShape/rgb-shape-live-evaluator.js",
   },
   rgbaHsla: {
     source: "public/modules/rgbaHsla/rgba-hsla-worklet-evaluator.js",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/public/modules/rgbaHsla/rgba-hsla-worklet-evaluator.js",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/rgbaHsla/rgba-hsla-worklet-evaluator.js",
   },
   robinSupersaw: {
     source: "public/modules/robinSupersaw/robin-supersaw-worklet-evaluator.js",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/public/modules/robinSupersaw/robin-supersaw-worklet-evaluator.js",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/robinSupersaw/robin-supersaw-worklet-evaluator.js",
   },
   hyperpluck: {
     source: "native_modules/hyperpluck/hyperpluck.cpp",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/native_modules/hyperpluck/hyperpluck.cpp",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/native_modules/hyperpluck/hyperpluck.cpp",
   },
   rotate3dTo2d: {
     source: "native_modules/rotate_3d_to_2d/rotate_3d_to_2d.cpp",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/native_modules/rotate_3d_to_2d/rotate_3d_to_2d.cpp",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/native_modules/rotate_3d_to_2d/rotate_3d_to_2d.cpp",
   },
   sampleDelay: {
     source: "native_modules/sample_delay/sample_delay.cpp",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/native_modules/sample_delay/sample_delay.cpp",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/native_modules/sample_delay/sample_delay.cpp",
   },
   sampleHold: {
     source: "native_modules/sample_hold/sample_hold.cpp",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/native_modules/sample_hold/sample_hold.cpp",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/native_modules/sample_hold/sample_hold.cpp",
   },
   sandboxVisuals: {
     source: "public/modules/sandboxVisuals/sandbox-visuals-live-evaluator.js",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/public/modules/sandboxVisuals/sandbox-visuals-live-evaluator.js",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/sandboxVisuals/sandbox-visuals-live-evaluator.js",
   },
   scientificIir: {
     source: "public/modules/scientificIir/scientific-iir-math.js",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/public/modules/scientificIir/scientific-iir-math.js",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/scientificIir/scientific-iir-math.js",
   },
   screenSpaceShader: {
     source: "public/modules/screenSpaceShader/screen-space-shader-worklet-evaluator.js",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/public/modules/screenSpaceShader/screen-space-shader-worklet-evaluator.js",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/screenSpaceShader/screen-space-shader-worklet-evaluator.js",
   },
   shootingStarExplosion: {
     source: "public/modules/shootingStarExplosion/shooting-star-explosion-live-evaluator.js",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/public/modules/shootingStarExplosion/shooting-star-explosion-live-evaluator.js",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/shootingStarExplosion/shooting-star-explosion-live-evaluator.js",
   },
   sinc: {
     source: "public/modules/sinc/sinc-worklet-evaluator.js",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/public/modules/sinc/sinc-worklet-evaluator.js",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/sinc/sinc-worklet-evaluator.js",
   },
   sineWavetable: {
     source: "public/node-graph-oscillator-runtime.js",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/public/node-graph-oscillator-runtime.js",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/node-graph-oscillator-runtime.js",
   },
   sinCos: {
     source: "public/node-graph-oscillator-runtime.js",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/public/node-graph-oscillator-runtime.js",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/node-graph-oscillator-runtime.js",
   },
   slewLimiter: {
     source: "native_modules/slew_limiter/slew_limiter.cpp",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/native_modules/slew_limiter/slew_limiter.cpp",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/native_modules/slew_limiter/slew_limiter.cpp",
   },
   snowflake: {
     source: "native_modules/snowflake/snowflake.cpp",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/native_modules/snowflake/snowflake.cpp",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/native_modules/snowflake/snowflake.cpp",
   },
   soemReverb: {
     source: "public/modules/soemReverb/soem-reverb-worklet-evaluator.js",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/public/modules/soemReverb/soem-reverb-worklet-evaluator.js",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/soemReverb/soem-reverb-worklet-evaluator.js",
   },
   tubeSaturation: {
     source: "native_modules/tube_saturation/tube_saturation.cpp",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/native_modules/tube_saturation/tube_saturation.cpp",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/native_modules/tube_saturation/tube_saturation.cpp",
   },
   softClipper: {
     source: "native_modules/soft_clipper/soft_clipper.cpp",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/native_modules/soft_clipper/soft_clipper.cpp",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/native_modules/soft_clipper/soft_clipper.cpp",
   },
   softwaveOsc: {
     source: "public/modules/softwaveOsc/softwave-osc-math.js",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/public/modules/softwaveOsc/softwave-osc-math.js",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/softwaveOsc/softwave-osc-math.js",
   },
   sineWarp: {
     source: "native_modules/sine_warp/sine_warp.cpp",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/native_modules/sine_warp/sine_warp.cpp",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/native_modules/sine_warp/sine_warp.cpp",
   },
   speakerProtection: {
     source: "public/modules/speakerProtection/speaker-protection-worklet-evaluator.js",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/public/modules/speakerProtection/speaker-protection-worklet-evaluator.js",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/speakerProtection/speaker-protection-worklet-evaluator.js",
   },
   speakerProtector2: {
     source: "native_modules/speaker_protector2/speaker_protector2.cpp",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/native_modules/speaker_protector2/speaker_protector2.cpp",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/native_modules/speaker_protector2/speaker_protector2.cpp",
   },
   spectrum1d: {
     source: "public/modules/spectrum1d/spectrum1d-display.js",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/public/modules/spectrum1d/spectrum1d-display.js",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/spectrum1d/spectrum1d-display.js",
   },
   spectrogram: {
     source: "public/modules/spectrogram/spectrogram-worklet-evaluator.js",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/public/modules/spectrogram/spectrogram-worklet-evaluator.js",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/spectrogram/spectrogram-worklet-evaluator.js",
   },
   speedColorInertia: {
     source: "public/modules/speedColorInertia/speed-color-inertia-math.js",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/public/modules/speedColorInertia/speed-color-inertia-math.js",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/speedColorInertia/speed-color-inertia-math.js",
   },
   spiral: {
     source: "public/modules/spiral/spiral-worklet-evaluator.js",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/public/modules/spiral/spiral-worklet-evaluator.js",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/spiral/spiral-worklet-evaluator.js",
   },
   stepGrid: {
     source: "public/modules/stepGrid/step-grid-worklet-evaluator.js",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/public/modules/stepGrid/step-grid-worklet-evaluator.js",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/stepGrid/step-grid-worklet-evaluator.js",
   },
   sequencer: {
     source: "public/modules/sequencer/sequencer-math.js",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/public/modules/sequencer/sequencer-math.js",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/sequencer/sequencer-math.js",
   },
   superloveFilter: {
     source: "public/modules/superloveFilter/superlove-filter-worklet-evaluator.js",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/public/modules/superloveFilter/superlove-filter-worklet-evaluator.js",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/superloveFilter/superlove-filter-worklet-evaluator.js",
   },
   vcvrackSuperloveFilter: {
     source: "native_modules/vcvrack_superlove_filter/vcvrack_superlove_filter.cpp",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/native_modules/vcvrack_superlove_filter/vcvrack_superlove_filter.cpp",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/native_modules/vcvrack_superlove_filter/vcvrack_superlove_filter.cpp",
   },
   surgeOscillator: {
     source: "public/modules/surgeOscillator/surge-oscillator-worklet-evaluator.js",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/public/modules/surgeOscillator/surge-oscillator-worklet-evaluator.js",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/surgeOscillator/surge-oscillator-worklet-evaluator.js",
   },
   tb303Filter: {
     source: "public/modules/tb303Filter/tb303-filter-worklet-evaluator.js",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/public/modules/tb303Filter/tb303-filter-worklet-evaluator.js",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/tb303Filter/tb303-filter-worklet-evaluator.js",
   },
   textStream: {
     source: "public/modules/textStream/text-stream-worklet-evaluator.js",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/public/modules/textStream/text-stream-worklet-evaluator.js",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/textStream/text-stream-worklet-evaluator.js",
   },
   torus: {
     source: "public/modules/torus/torus-worklet-evaluator.js",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/public/modules/torus/torus-worklet-evaluator.js",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/torus/torus-worklet-evaluator.js",
   },
   hostBpm: {
     source: "native_modules/graph_engine/graph_engine.cpp",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/native_modules/graph_engine/graph_engine.cpp",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/native_modules/graph_engine/graph_engine.cpp",
   },
   transport: {
     source: "public/modules/transport/transport-math.js",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/public/modules/transport/transport-math.js",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/transport/transport-math.js",
   },
   triggerCounter: {
     source: "native_modules/trigger_counter/trigger_counter.cpp",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/native_modules/trigger_counter/trigger_counter.cpp",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/native_modules/trigger_counter/trigger_counter.cpp",
   },
   triggerDivider: {
     source: "native_modules/trigger_divider/trigger_divider.cpp",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/native_modules/trigger_divider/trigger_divider.cpp",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/native_modules/trigger_divider/trigger_divider.cpp",
   },
   turingMachine: {
     source: "public/modules/turingMachine/turing-machine-worklet-evaluator.js",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/public/modules/turingMachine/turing-machine-worklet-evaluator.js",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/turingMachine/turing-machine-worklet-evaluator.js",
   },
   vectorscopeTransform: {
     source: "public/modules/vectorscopeTransform/vectorscope-transform-math.js",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/public/modules/vectorscopeTransform/vectorscope-transform-math.js",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/vectorscopeTransform/vectorscope-transform-math.js",
   },
   videoscope: {
     source: "public/modules/videoscope/videoscope-worklet-evaluator.js",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/public/modules/videoscope/videoscope-worklet-evaluator.js",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/videoscope/videoscope-worklet-evaluator.js",
   },
   wallDelay: {
     source: "public/modules/wallDelay/wall-delay-worklet-evaluator.js",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/public/modules/wallDelay/wall-delay-worklet-evaluator.js",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/wallDelay/wall-delay-worklet-evaluator.js",
   },
   wirdoSpiral: {
     source: "public/modules/wirdoSpiral/wirdo-spiral-worklet-evaluator.js",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/public/modules/wirdoSpiral/wirdo-spiral-worklet-evaluator.js",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/wirdoSpiral/wirdo-spiral-worklet-evaluator.js",
   },
   wireEvents: {
     source: "public/modules/wireEvents/wire-events-live-evaluator.js",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/public/modules/wireEvents/wire-events-live-evaluator.js",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/wireEvents/wire-events-live-evaluator.js",
   },
   xyPad: {
     source: "public/modules/xyPad/xy-pad-dsp.js",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/public/modules/xyPad/xy-pad-dsp.js",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/xyPad/xy-pad-dsp.js",
   },
   theremin: {
     source: "public/modules/theremin/theremin-register.js",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/public/modules/theremin/theremin-register.js",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/theremin/theremin-register.js",
   },
   yellowjacketFilter: {
     source: "public/modules/yellowjacketFilter/yellowjacket-filter-worklet-evaluator.js",
-    sourceUrl: "https://github.com/soundemote/soemdsp-sandbox/blob/master/public/modules/yellowjacketFilter/yellowjacket-filter-worklet-evaluator.js",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/yellowjacketFilter/yellowjacket-filter-worklet-evaluator.js",
   },
 });
 

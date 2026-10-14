@@ -18,7 +18,7 @@ requires a separate written commercial license from Soundemote. See
 # No package install is required for the sandbox server.
 
 # Download:
-git clone https://github.com/soundemote/soemdsp-sandbox.git
+git clone https://github.com/elanhickler/soemdsp-sandbox.git
 cd soemdsp-sandbox
 
 # Run:
@@ -43,8 +43,7 @@ python server.py
 ```
 
 
-CLAP *host* experiments (third-party plugins) live in a separate fork — not in this tree:
-https://github.com/soundemote/soemdsp-sandbox-claphost
+CLAP *host* experiments (third-party plugins) live in a separate fork (soemdsp-sandbox-claphost), not in this tree.
 
 Guides:
 

@@ -6,7 +6,7 @@ Sandbox native ports ship under the [Soundemote Noncommercial Source License 1.0
 
 ## Soundemote soemdsp (MIT)
 
-Many modules port or wrap headers from [soundemote/soemdsp](https://github.com/soundemote/soemdsp) (`include/soemdsp/...`). That library is MIT; see its [LICENSE](https://github.com/soundemote/soemdsp/blob/main/LICENSE).
+Many modules port or wrap headers from [soundemote/soemdsp](https://github.com/elanhickler/soemdsp) (`include/soemdsp/...`). That library is MIT; see its [LICENSE](https://github.com/elanhickler/soemdsp/blob/main/LICENSE).
 
 Examples: PolyBLEP, Hyperpluck, Softwave, Ellipsoid, Pluck Envelope, Additive, SuperLove, Noise Generator, and other catalog entries whose LIB URL points at `soundemote/soemdsp`.
 

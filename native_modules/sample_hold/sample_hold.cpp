@@ -2,7 +2,7 @@
 // soemdsp-native-label: Sample & Hold
 // soemdsp-native-target: sampleHold
 // soemdsp-native-kind: utility
-// soemdsp-native-lib: https://github.com/soundemote/soemdsp/blob/main/include/soemdsp/timer/SampleAndHold.hpp
+// soemdsp-native-lib: https://github.com/elanhickler/soemdsp/blob/main/include/soemdsp/timer/SampleAndHold.hpp
 //
 // Latches its input whenever the Clock input crosses above threshold
 // (rising edge), or on every internal-clock tick if sampleFrequency > 0.

@@ -1,17 +1,18 @@
 # Softpop Oscillator Plan: variable pure tone ↔ noise
 
-**Status: READY TO BUILD** (2026-10-07). Argi answered the major questions. The minor ones in §11 have proposed defaults that Sandy builds with unless Argi overrides them.
+**Status: IN IMPLEMENTATION, SandyModules** (updated 2026-10-14). Ready-to-build since 2026-10-07. The minor questions in §11 use their proposed defaults unless Argi overrides them.
 **Owner:** SandyModules (library extraction + DSP); WebUI (face).
 **Module type:** `softpopOscillator`. Keep the existing type and label "Softpop Oscillator" and redefine it in place. No alias, no shim.
 
 ## 0. Decisions log
 | Date | Who | Decision |
 |---|---|---|
-| 2026-10-07 | Argi | Model choice Sine / Filter. No Purity. Width, Pitch Mod and Amp Mod are always active in both models. |
+| 2026-10-07 | Argi | Model choice Sine / Filter. No Purity. Width, Pitch Mod and Amp Mod are always active in both models (Width narrowed to Filter only on 2026-10-14). |
 | 2026-10-07 | Argi | Independent noise generators per target (pitch / amp / audio) and per channel, from `seed_mix` offsets. |
 | 2026-10-07 | Argi | **APP_POLICY §19 approval: extract the TPT SVF (EQ Filter) and the white/pink/brown noise generators (Noise Generator) into shared `library/include/soemdsp/` headers** in `sandbox_native_maths`. Refactor EQ Filter and Noise Generator to use them, with a bit-identical regression test. Softpop uses the shared code. |
 | 2026-10-07 | Argi | Filter model gets a Frequency-tied white-noise tilt correction (flat across the keyboard). |
-| 2026-10-07 | Argi | Mod speed stays tied to Width. **No Mod Rate knob.** |
+| 2026-10-07 | Argi | Mod speed stays tied to Width. **No Mod Rate knob.** (Superseded 2026-10-14.) |
+| 2026-10-14 | Argi | **Pitch Mod and Amp Mod are driven by full-spectrum noise, with no smoothing filter at all**, in both models. Each is still Color-shaped and its own independent generator; the Nyquist clamp stays. **Width only sets the Filter model's bandwidth** and does nothing in Sine mode. |
 | 2026-10-07 | Argi | **No pitch parameter and no pitch input** (final call). Softpop is frequency-only like every sandbox oscillator: a Frequency knob, and a wired `f` (Hz) replaces it exactly as on `polyBlep`. **No Trigger input.** |
 | 2026-10-07 | Argi | Default model: **Filter**. |
 
@@ -78,7 +79,7 @@ double   noise_color_sample(NoiseColorChannel&, int mode, double mean, double de
 
 | Jack | Key | Label | Meaning |
 |---|---|---|---|
-| In | `Reset` | Reset | Rising edge: reseed all generators from Seed, clear phase, smoother and SVF state |
+| In | `Reset` | Reset | Rising edge: reseed all generators from Seed, clear phase and SVF state |
 | In | `f` | ƒ (`inputLabels: { f: "ƒ" }`, as on `polyBlep`) | Hz cable. When wired it **replaces** Frequency (below) |
 | Out | `Out` | Mono | (L+R)/2 |
 | Out | `Left`, `Right` | Left, Right | |
@@ -99,7 +100,7 @@ double   noise_color_sample(NoiseColorChannel&, int mode, double mean, double de
 |---|---|---|---|---|
 | `model` | Model | stable names `filter` (Filter), `sine` (Sine). **Default `filter`** | Sine oscillator | TPT SVF constant-peak BP on noise |
 | `frequency` | Frequency | 0–20000 Hz, default 440 (param fields as `polyBlep`); wired `f` replaces it | Sine frequency (`fEff`) | Filter centre (`fEff`) |
-| `width` | Width | 0–1, default 0.3, log-mapped | Mod-noise cutoff `Bmod` | Q = 2000·(0.5/2000)^W (W=0 near-pure ring, W=1 broad noise) **and** mod-noise cutoff `Bmod` |
+| `width` | Width | 0–1, default 0.3, log-mapped | **No effect** (see §11 Q-W) | Bandwidth: Q = 2000·(0.5/2000)^W (W=0 near-pure ring, W=1 broad noise) |
 | `pitchMod` | Pitch Mod | 0–2400 cents, default 0 | Exponential pitch wobble, 1σ in cents | Same, on the centre |
 | `ampMod` | Amp Mod | 0–1, default 0 | Level-preserving noise AM | Same |
 | `amplitude` | Amplitude | 0–1, default 1 | Output level | Output level |
@@ -107,7 +108,7 @@ double   noise_color_sample(NoiseColorChannel&, int mode, double mean, double de
 | `stereoMode` | Stereo | `stereo` / `mono`, default stereo | Independent or shared L/R | Same |
 | `seed` | Seed | 0–16777215, default 1 | Master seed | Master seed |
 
-- `Bmod = 0.1·(2000/0.1)^W` Hz, tied to Width in both models (Argi: no Mod Rate knob).
+- No modulation smoothing and no mod-rate control (Argi, 2026-10-14): the Pitch Mod and Amp Mod noises are full-spectrum (Color-shaped) every sample.
 - **Both mods at 0:** Sine = pure sine, Filter = band noise.
 
 ## 5. Noise generators
@@ -130,7 +131,7 @@ Each generator is a `NoiseColorChannel` from `noise_colors.h`, seeded with `seed
 
 ## 6. Signal flow (per channel, per sample)
 ```
-ñ_pitch, ñ_amp  = onePole_LP(N_x · cal_color, Bmod) · √((2−a)/a)            (unit RMS; clamp ±4σ first)
+ñ_pitch, ñ_amp  = clamp(N_x · cal_color, ±4)                                 (full-spectrum, Color-shaped, unit RMS; no smoothing)
 fEff            = f wired ? f : Frequency (+MOD)                             (exactly polyBlep, §3)
 fInst           = fEff · 2^(ñ_pitch · PitchMod / 1200)                      (clamp |fInst| ≤ 0.49·fs)
 
@@ -172,10 +173,10 @@ Use a soft safety limit only; never use it for tone. Per-sample `g = tan(ω/2)` 
   - Replace the old params with §4. No patch uses the module.
 - Choices persist by stable name, not index.
 - Library changes are limited to the approved extraction in §2. Any other library / shared-maths change needs Argi's approval.
-- Philosophy: simple maths in feedback loops (phase accumulator, one-pole, TPT SVF).
+- Philosophy: simple maths in feedback loops (phase accumulator, TPT SVF).
 
 ## 8. Cost
-Per channel: a few LCG steps (CLT-12 Gaussian = 12 LCG steps per generator), two one-poles, one `2^x`, one tilt `pow`, and either a sine or `tan` plus the SVF. That's tens of nanoseconds per sample.
+Per channel: a few LCG steps (CLT-12 Gaussian = 12 LCG steps per generator), one `2^x`, one tilt `pow`, and either a sine or `tan` plus the SVF. That's tens of nanoseconds per sample.
 
 ## 9. Tests
 
@@ -197,7 +198,8 @@ Per channel: a few LCG steps (CLT-12 Gaussian = 12 LCG steps per generator), two
 5. **Pitch Mod symmetric in cents** (both models): 1200·log2(fInst/fEff) has mean ≈ 0, skew ≈ 0, σ ≈ PitchMod (±5 %). No NaN near Nyquist.
 6. **Amp Mod level-preserving.**
    - RMS is flat across 0→1 (±0.5 dB) in both models.
-   - Sine at 1 has no carrier line, a spectrum symmetric about fEff (±0.5 dB), and a half-width ≈ Bmod (±20 %).
+   - Sine at 1 has no carrier line and a spectrum symmetric about fEff (±0.5 dB): the Color spectrum mirrored around fEff (white → flat broadband).
+   - Amp Mod and Pitch Mod noise are full-spectrum: their PSD matches the selected Color's generator (no lowpass), checked per Color.
 7. **Filter level across Width.** ±1 dB from W=0 to W=1 at 1 kHz, for each Color.
 8. **Filter level across the keyboard (tilt).** For **each Color**, RMS within **±1 dB** over fEff = 50 Hz … 10 kHz (octave steps) at the default Width 0.3 and at W = 0. Broad widths (W > 0.8, Q < ~1) are reported, not gated, because the band leaves the narrowband approximation there.
 9. **Between models.** Sine vs Filter RMS within ±1 dB at 1 kHz, and within ±1.5 dB across 50 Hz–10 kHz, for each Color.
@@ -208,7 +210,8 @@ Per channel: a few LCG steps (CLT-12 Gaussian = 12 LCG steps per generator), two
 - ~~Ship which algorithms / which bandpass / Purity curve~~ Superseded by the Sine / Filter + always-active mods design (Argi, 2026-10-07).
 - ~~SVF and noise reuse~~ **Resolved:** library extraction approved (Argi, 2026-10-07, APP_POLICY §19). See §2.
 - ~~Filter loudness vs pitch~~ **Resolved:** tilt correction `T_color`. See §6.
-- ~~Mod Rate knob~~ **Resolved:** tied to Width, no knob.
+- ~~Mod Rate knob~~ **Resolved:** no knob.
+- ~~Mod-noise smoothing / Width in Sine~~ **Resolved (Argi, 2026-10-14):** Pitch Mod and Amp Mod use full-spectrum Color-shaped noise with no smoothing in both models (Nyquist clamp kept). Width only sets the Filter bandwidth.
 - ~~Pitch input~~ **Resolved (Argi final, 2026-10-07):** no pitch parameter and no pitch input. Frequency-only, like `polyBlep`. No Trigger.
 - ~~Q-f: f multiply vs replace~~ **Resolved (Argi, 2026-10-07):** a wired `f` **replaces** Frequency, exactly like the other oscillators (§3).
 - ~~Default model~~ **Resolved:** Filter.
@@ -217,11 +220,11 @@ Per channel: a few LCG steps (CLT-12 Gaussian = 12 LCG steps per generator), two
 
 | # | Question | Proposed default |
 |---|---|---|
-| 1 | Smoothing stages for the mod noise | **One one-pole** (Lorentzian band, simplest). Two stages is an easy later switch. |
 | 2 | Pitch Mod cents scaling | **1σ RMS spread in cents**, range 0–2400 (peaks reach about ±3σ, clamped at ±4σ). |
 | 3 | Amp Mod at full depth | **Full ring mod, no carrier at 1** (the formula as written). |
 | 4 | Color on mod noise | **Yes**, Color shapes the mod noises too, unit-RMS calibrated, so Color is active in Sine as well. |
 | 5 | Stereo spread knob | **None in v1.** Stereo = independent L/R; Mono = shared. |
 | 6 | Names | Keep **"Softpop Oscillator"**; labels **Width** (noise bandwidth) and **Stereo** (key `stereoMode`). |
-| 7 | Width mapping / units | 0–1 log knob; Q 2000→0.5; Bmod 0.1→2000 Hz; the tooltip shows the current Q and Bmod. |
+| 7 | Width mapping / units | 0–1 log knob; Q 2000→0.5; the tooltip shows the current Q. |
+| W | **Q-W: Width in Sine mode:** hide it, or grey it out? (Fixed param set: the param stays either way, only the face differs.) | **Grey out** (keeps the layout stable when switching Model). |
 | 8 | C-001 D5 | Mark Softpop **"port planned → `docs/SOFTPOP_PLAN.md`"** in BUG_PLAN. |

@@ -2,7 +2,7 @@
 // soemdsp-native-label: Additive Osc
 // soemdsp-native-target: additiveOsc
 // soemdsp-native-kind: oscillator
-// soemdsp-native-lib: https://github.com/soundemote/soemdsp/blob/main/include/soemdsp/additive/additive.hpp
+// soemdsp-native-lib: https://github.com/elanhickler/soemdsp/blob/main/include/soemdsp/additive/additive.hpp
 //
 // Stateless (no create/destroy -- see ellipsoid.cpp for the same pattern):
 // the JS original is a pure function of (phase, params, rate) with no

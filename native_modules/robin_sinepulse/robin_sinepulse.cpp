@@ -4,7 +4,7 @@
 // soemdsp-native-kind: drum
 // soemdsp-native-lib: https://github.com/RobinSchmidt/RS-MET/blob/work/Libraries/RobsJuceModules/rosic/unfinished/rosic_MiscUnfinished.h
 // soemdsp-native-upstream-license: RS-MET (permission)
-// soemdsp-native-upstream-license-url: https://github.com/soundemote/soemdsp-sandbox/blob/master/docs/THIRD_PARTY.md#rs-met
+// soemdsp-native-upstream-license-url: https://github.com/elanhickler/soemdsp-sandbox/blob/master/docs/THIRD_PARTY.md#rs-met
 //
 // Robin Sinepulse: port of rosic::rsSweepKicker / rsFreqSweeper (Robin Schmidt,
 // RS-MET), used with Robin's permission (2026-10-06, see docs/KICK_PLAN.md).

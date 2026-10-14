@@ -2,7 +2,7 @@
 // soemdsp-native-label: Random Walk
 // soemdsp-native-target: randomWalk
 // soemdsp-native-kind: noise
-// soemdsp-native-lib: https://github.com/soundemote/soemdsp/blob/main/include/soemdsp/random/FlexibleRandomWalk.hpp
+// soemdsp-native-lib: https://github.com/elanhickler/soemdsp/blob/main/include/soemdsp/random/FlexibleRandomWalk.hpp
 
 // Seeding: the graph engine derives each lane's LCG state from the module's
 // Seed param only -- seed_mix(Seed, kSeedLeft / kSeedRight) -- and hands it

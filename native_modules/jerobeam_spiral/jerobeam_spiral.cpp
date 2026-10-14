@@ -2,7 +2,7 @@
 // soemdsp-native-label: Jerobeam Spiral
 // soemdsp-native-target: spiral
 // soemdsp-native-kind: jerobeam
-// soemdsp-native-lib: https://github.com/soundemote/soemdsp/blob/main/include/soemdsp/oscillator/JerobeamSpiral.h
+// soemdsp-native-lib: https://github.com/elanhickler/soemdsp/blob/main/include/soemdsp/oscillator/JerobeamSpiral.h
 //
 // Direct port of public/node-graph-jerobeam-spiral.js -- Jerobeam
 // Fenderson's original Spiral patch (the module every other native

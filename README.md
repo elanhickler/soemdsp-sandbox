@@ -13,7 +13,7 @@ Browser-based modular audio synthesis — patch native C++/WASM DSP modules, wat
 - **Scopes** — phosphor / 2D faces for patch visualization
 - **Render Sample** — bounce a patch to audio and inspect the waveform
 
-Plugin **hosting** experiments live elsewhere ([soemdsp-sandbox-claphost](https://github.com/soundemote/soemdsp-sandbox-claphost)). This repo is modular authoring only.
+Plugin **hosting** experiments live elsewhere (soemdsp-sandbox-claphost). This repo is modular authoring only.
 
 ---
 
@@ -22,7 +22,7 @@ Plugin **hosting** experiments live elsewhere ([soemdsp-sandbox-claphost](https:
 ```powershell
 # Requirements: Python 3, a modern browser
 
-git clone https://github.com/soundemote/soemdsp-sandbox.git
+git clone https://github.com/elanhickler/soemdsp-sandbox.git
 cd soemdsp-sandbox
 python server.py
 # open http://127.0.0.1:8765

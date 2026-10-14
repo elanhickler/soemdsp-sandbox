@@ -2,7 +2,7 @@
 // soemdsp-native-label: RoundShape / Ellipsoid
 // soemdsp-native-target: ellipsoid
 // soemdsp-native-kind: modulator
-// soemdsp-native-lib: https://github.com/soundemote/soemdsp/blob/main/include/soemdsp/oscillator/Ellipsoid.hpp
+// soemdsp-native-lib: https://github.com/elanhickler/soemdsp/blob/main/include/soemdsp/oscillator/Ellipsoid.hpp
 //
 // soemdsp Ellipsoid::getSineToSquare — AA Off | Limit:
 //   Limit floors C by ω=2πf/sr (edge slope ≲ 1 sample). Off honors shape as-is.

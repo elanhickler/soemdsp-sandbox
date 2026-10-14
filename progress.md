@@ -185,7 +185,7 @@ graphify update . --force   # no LLM; AST re-extract
 
 
 
-- [x] **CLAP host extracted** ÃƒÂƒÃ‚Â¢ÃƒÂ¢Ã¢Â€ÂšÃ‚Â¬ÃƒÂ¢Ã¢Â‚Â¬Ã‚Â https://github.com/soundemote/soemdsp-sandbox-claphost
+- [x] **CLAP host extracted** (soemdsp-sandbox-claphost)
 - [x] **Code cleanup pass plan** ÃƒÂƒÃ‚Â¢ÃƒÂ¢Ã¢Â€ÂšÃ‚Â¬ÃƒÂ¢Ã¢Â‚Â¬Ã‚Â `docs/CODE_CLEANUP_PASS_PLAN.md`
 - [x] **Core reduction** Phase A/B (floating window registry, Code Screen satellite)
 - [x] **Soft Fractal** WebGL face, blur, pan, params, resource-agnostic pixelated app zoom

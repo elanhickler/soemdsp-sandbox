@@ -612,7 +612,7 @@ class SandboxServer(BaseHTTPRequestHandler):
             "targetType": target_type,
             "kind": headers.get("kind") or "",
             "source": relative_source,
-            "sourceUrl": f"https://github.com/soundemote/soemdsp-sandbox/blob/master/{relative_source}",
+            "sourceUrl": f"https://github.com/elanhickler/soemdsp-sandbox/blob/master/{relative_source}",
             "localSourceUrl": local_source,
             "libUrl": lib_url,
             "wasm": relative_wasm,
@@ -628,13 +628,13 @@ class SandboxServer(BaseHTTPRequestHandler):
         """Short Module Settings labels + links. Mirrors generate_native_modules_catalog.py."""
         sandbox_license = "Soundemote Noncommercial"
         sandbox_license_url = (
-            "https://github.com/soundemote/soemdsp-sandbox/blob/master/LICENSE"
+            "https://github.com/elanhickler/soemdsp-sandbox/blob/master/LICENSE"
         )
         notice_url = (
-            "https://github.com/soundemote/soemdsp-sandbox/blob/master/docs/THIRD_PARTY.md"
+            "https://github.com/elanhickler/soemdsp-sandbox/blob/master/docs/THIRD_PARTY.md"
         )
         soemdsp_license_url = (
-            "https://github.com/soundemote/soemdsp/blob/main/LICENSE"
+            "https://github.com/elanhickler/soemdsp/blob/main/LICENSE"
         )
         license_label = headers.get("license") or sandbox_license
         license_url = headers.get("license-url") or sandbox_license_url

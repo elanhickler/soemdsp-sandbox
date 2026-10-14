@@ -6,15 +6,6 @@ function nodeGraphRenderPendingSummary() {
   }
 }
 
-const nodeGraphRaptEllipticQuarterbandSos = Object.freeze([
-  Object.freeze([1.3515101236634053e-04, 1.8481719657676747e-04, 1.3515101236634053e-04, 1, -1.5863119326809123, 0.6428204816292211]),
-  Object.freeze([1, -0.3714014551732318, 0.9999999999999998, 1, -1.5620959364626055, 0.7161571320953768]),
-  Object.freeze([1, -1.0298229723362611, 1, 1, -1.5310702081483014, 0.8130950789236201]),
-  Object.freeze([1, -1.2676395426322578, 1.0000000000000002, 1, -1.50809401930334, 0.8931580864862605]),
-  Object.freeze([1, -1.3628788519102755, 1.0000000000000002, 1, -1.4983265140498274, 0.9475287279522546]),
-  Object.freeze([1, -1.3980241837651683, 1, 1, -1.5032624176850438, 0.9843747059042128]),
-]);
-
 function renderedNodeGraphWavBlob(rendered) {
   return nodeGraphRenderedWavBlob(rendered, nodeGraphMvp.sampleRate);
 }
@@ -40,110 +31,6 @@ function nodeGraphOutputSampleClipped(value) {
     value < -nodeGraphOutputClipLimit ||
     value > nodeGraphOutputClipLimit
   );
-}
-
-function nodeGraphTemporaryPrefilterForResample(samples, sourceRate, outputRate) {
-  if (!samples?.length || !Number.isFinite(sourceRate) || !Number.isFinite(outputRate) || sourceRate <= outputRate) {
-    return samples;
-  }
-  const radius = Math.max(1, Math.min(12, Math.ceil(sourceRate / outputRate)));
-  const filtered = new Float32Array(samples.length);
-  for (let index = 0; index < samples.length; index += 1) {
-    let sum = 0;
-    let weightSum = 0;
-    for (let offset = -radius; offset <= radius; offset += 1) {
-      const sampleIndex = Math.max(0, Math.min(samples.length - 1, index + offset));
-      const weight = radius + 1 - Math.abs(offset);
-      sum += samples[sampleIndex] * weight;
-      weightSum += weight;
-    }
-    filtered[index] = weightSum > 0 ? sum / weightSum : samples[index];
-  }
-  return filtered;
-}
-
-function nodeGraphCreateRaptEllipticRenderState() {
-  return nodeGraphRaptEllipticQuarterbandSos.map(() => [0, 0]);
-}
-
-function nodeGraphRaptEllipticRenderSample(input, states) {
-  let y = nodeGraphFiniteNumber(input);
-  for (let section = 0; section < nodeGraphRaptEllipticQuarterbandSos.length; section += 1) {
-    const [b0, b1, b2, , a1, a2] = nodeGraphRaptEllipticQuarterbandSos[section];
-    const z1 = states[section][0];
-    const z2 = states[section][1];
-    const sectionOut = b0 * y + z1;
-    states[section][0] = b1 * y - a1 * sectionOut + z2;
-    states[section][1] = b2 * y - a2 * sectionOut;
-    y = sectionOut;
-  }
-  return y;
-}
-
-function nodeGraphRaptEllipticDecimateRenderedChannel(samples, factor, outputFrames) {
-  const frames = Math.max(1, Math.floor(Number(outputFrames)));
-  const out = new Float32Array(frames);
-  const stageA = nodeGraphCreateRaptEllipticRenderState();
-  // Factor 4 needs a second quarter-band stage at the 2x rate. One pass at
-  // the 4x rate cuts at the host sample rate and folds the next octave in.
-  const stageB = factor === 4 ? nodeGraphCreateRaptEllipticRenderState() : null;
-  for (let frame = 0; frame < frames; frame += 1) {
-    if (stageB) {
-      let stage2 = 0;
-      for (let half = 0; half < 2; half += 1) {
-        let stage1 = 0;
-        for (let sub = 0; sub < 2; sub += 1) {
-          const sampleIndex = frame * 4 + half * 2 + sub;
-          const input = sampleIndex < samples.length ? samples[sampleIndex] : 0;
-          stage1 = nodeGraphRaptEllipticRenderSample(input, stageA);
-        }
-        stage2 = nodeGraphRaptEllipticRenderSample(stage1, stageB);
-      }
-      out[frame] = stage2;
-      continue;
-    }
-    let last = 0;
-    for (let subframe = 0; subframe < factor; subframe += 1) {
-      const sampleIndex = frame * factor + subframe;
-      const input = sampleIndex < samples.length ? samples[sampleIndex] : 0;
-      last = nodeGraphRaptEllipticRenderSample(input, stageA);
-    }
-    out[frame] = last;
-  }
-  return out;
-}
-
-function nodeGraphResampleLinear(samples, outputFrames) {
-  const frames = Math.max(1, Math.floor(Number(outputFrames)));
-  if (!samples?.length) {
-    return new Float32Array(frames);
-  }
-  if (samples.length === frames) {
-    return new Float32Array(samples);
-  }
-  if (frames === 1) {
-    return new Float32Array([samples[0]]);
-  }
-  const resampled = new Float32Array(frames);
-  const scale = (samples.length - 1) / (frames - 1);
-  for (let frame = 0; frame < frames; frame += 1) {
-    const position = frame * scale;
-    const leftIndex = Math.floor(position);
-    const rightIndex = Math.min(samples.length - 1, leftIndex + 1);
-    const blend = position - leftIndex;
-    resampled[frame] = samples[leftIndex] * (1 - blend) + samples[rightIndex] * blend;
-  }
-  return resampled;
-}
-
-function nodeGraphResampleRenderedChannel(samples, sourceRate, outputRate, outputFrames) {
-  const ratio = sourceRate / outputRate;
-  const roundedRatio = Math.round(ratio);
-  if ((roundedRatio === 2 || roundedRatio === 4) && Math.abs(ratio - roundedRatio) < 1e-6) {
-    return nodeGraphRaptEllipticDecimateRenderedChannel(samples, roundedRatio, outputFrames);
-  }
-  const filtered = nodeGraphTemporaryPrefilterForResample(samples, sourceRate, outputRate);
-  return nodeGraphResampleLinear(filtered, outputFrames);
 }
 
 function setNodeGraphAudioStats(peak = 0, rms = 0, details = {}) {
@@ -373,18 +260,10 @@ async function renderNodeGraphAudio() {
     return;
   }
 
-  const leftSamples = nodeGraphResampleRenderedChannel(
-    engineLeftSamples,
-    outputSampleRate,
-    outputSampleRate,
-    outputFrames,
-  );
-  const rightSamples = nodeGraphResampleRenderedChannel(
-    engineRightSamples,
-    outputSampleRate,
-    outputSampleRate,
-    outputFrames,
-  );
+  // The worklet already decimated natively (rapt_elliptic_decimator wasm),
+  // so the bounce is at the output rate; no JS resampling here.
+  const leftSamples = engineLeftSamples;
+  const rightSamples = engineRightSamples;
   const samples = new Float32Array(outputFrames);
   let peak = 0;
   let squareSum = 0;

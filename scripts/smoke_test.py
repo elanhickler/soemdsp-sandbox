@@ -7224,9 +7224,6 @@ def require_node_graph_mvp_contract() -> None:
         "clampedEngineSampleRate",
         "outputSampleRate",
         "oversamplingRatio",
-        "function nodeGraphTemporaryPrefilterForResample(samples, sourceRate, outputRate)",
-        "function nodeGraphResampleLinear(samples, outputFrames)",
-        "function nodeGraphResampleRenderedChannel(samples, sourceRate, outputRate, outputFrames)",
         "function normalizeNodeGraphPatchVisual(visual = {})",
         "function normalizeNodeGraphPatchWindows(windows = {})",
         "function normalizeNodeGraphWindowPosition(position = {})",
@@ -16476,8 +16473,7 @@ def require_readme_scheduler_contract() -> None:
     readme_text = " ".join(readme_source.split())
     # Keep this list aligned with the current lean README (not the old essay).
     for snippet in [
-        "git clone https://github.com/soundemote/soemdsp-sandbox.git",
-        "https://github.com/soundemote/soemdsp-sandbox-claphost",
+        "git clone https://github.com/elanhickler/soemdsp-sandbox.git",
         "cd soemdsp-sandbox",
         "python server.py",
         "http://127.0.0.1:8765",

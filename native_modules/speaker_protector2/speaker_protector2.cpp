@@ -2,7 +2,7 @@
 // soemdsp-native-label: Speaker Protector 2.0
 // soemdsp-native-target: speakerProtector2
 // soemdsp-native-kind: dynamics
-// soemdsp-native-lib: https://github.com/soundemote/soemdsp/blob/main/include/soemdsp/dynamics/EarProtector.hpp
+// soemdsp-native-lib: https://github.com/elanhickler/soemdsp/blob/main/include/soemdsp/dynamics/EarProtector.hpp
 //
 // Stereo-linked slew VCA + 1 kHz HP trip. Never clips or knees.
 // The only Speaker Protector 2.0 implementation: the patch module (opcode 135),

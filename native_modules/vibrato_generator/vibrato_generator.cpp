@@ -2,7 +2,7 @@
 // soemdsp-native-label: Vibrato Generator
 // soemdsp-native-target: vibratoGenerator
 // soemdsp-native-kind: modulator
-// soemdsp-native-lib: https://github.com/soundemote/soemdsp/blob/main/include/soemdsp/modulator/VibratoGenerator.hpp
+// soemdsp-native-lib: https://github.com/elanhickler/soemdsp/blob/main/include/soemdsp/modulator/VibratoGenerator.hpp
 //
 // Waveform: wavetable sine (dsp_sin_turns_lut) with AM Index on frequency
 // (Top Morph) and sine→phase (Side Morph).

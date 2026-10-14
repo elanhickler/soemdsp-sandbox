@@ -2,7 +2,7 @@
 // soemdsp-native-label: Soft Clipper
 // soemdsp-native-target: softClipper
 // soemdsp-native-kind: dynamics
-// soemdsp-native-lib: https://github.com/soundemote/soemdsp/blob/main/include/soemdsp/dynamics/SoftClipper.hpp
+// soemdsp-native-lib: https://github.com/elanhickler/soemdsp/blob/main/include/soemdsp/dynamics/SoftClipper.hpp
 //
 // Memoryless saturating soft-knee. Params (linear, no dB):
 //   Drive - input push into the curve

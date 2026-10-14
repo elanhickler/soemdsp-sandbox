@@ -2,7 +2,7 @@
 // soemdsp-native-label: Jerobeam Kepler-Bouwkamp
 // soemdsp-native-target: keplerBouwkamp
 // soemdsp-native-kind: jerobeam
-// soemdsp-native-lib: https://github.com/soundemote/soemdsp/blob/main/include/soemdsp/oscillator/JerobeamKeplerBouwkamp.h
+// soemdsp-native-lib: https://github.com/elanhickler/soemdsp/blob/main/include/soemdsp/oscillator/JerobeamKeplerBouwkamp.h
 //
 // Ported from soemdsp/include/soemdsp/oscillator/JerobeamKeplerBouwkamp.{h,cpp}
 // (Jerobeam Fenderson's "Kepler-Bouwkamp" Gen~ patch): a nested-polygon

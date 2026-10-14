@@ -3,7 +3,7 @@
 **Status:** Active  
 **Constraint:** **No intentional behavior change.** Refactors, dead-code removal, docs hygiene, and structure only. If a change could alter audio, UI, or patch I/O, skip it or gate it behind an explicit product task.
 
-**Context:** CLAP *host* code was extracted to [soemdsp-sandbox-claphost](https://github.com/soundemote/soemdsp-sandbox-claphost). Mainline still has feature WIP (Asciiscope, pitch quantizer face, keyboard layout, etc.) uncommitted. This pass cleans **around** that work; it does not redesign features.
+**Context:** CLAP *host* code was extracted to soemdsp-sandbox-claphost. Mainline still has feature WIP (Asciiscope, pitch quantizer face, keyboard layout, etc.) uncommitted. This pass cleans **around** that work; it does not redesign features.
 
 Related: `docs/CORE_REDUCTION_PLAN.md` (core shell reduction). This doc is a **hygiene pass**, not a second core rewrite.
 

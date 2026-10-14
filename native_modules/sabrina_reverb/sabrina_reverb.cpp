@@ -2,7 +2,7 @@
 // soemdsp-native-label: Sabrina Reverb
 // soemdsp-native-target: reverbEffect
 // soemdsp-native-kind: effect
-// soemdsp-native-lib: https://github.com/soundemote/soemdsp-sandbox/tree/master/native_modules/sabrina_reverb/originalcode
+// soemdsp-native-lib: https://github.com/elanhickler/soemdsp-sandbox/tree/master/native_modules/sabrina_reverb/originalcode
 // Reference VST sources: native_modules/sabrina_reverb/originalcode/{Sabrina.cpp,Sabrina.h}
 
 #include <stdint.h>
@@ -535,12 +535,12 @@ void sabrinaRunChains(SabrinaState& state, double dryLeft, double dryRight) {
   for (int index = 0; index < 6; index += 1) {
     left = diffuseSample(state.delays[index * 2], left);
   }
-  state.ch0 = finite(left) ? clamp(left, -16.0, 16.0) : 0.0;
+  state.ch0 = clamp(left, -16.0, 16.0);
   double right = dryRight + delaySample(state.delays[13], state.ch0) * state.recycle;
   for (int index = 0; index < 6; index += 1) {
     right = diffuseSample(state.delays[index * 2 + 1], right);
   }
-  state.ch1 = finite(right) ? clamp(right, -16.0, 16.0) : 0.0;
+  state.ch1 = clamp(right, -16.0, 16.0);
 }
 
 // Block-processing boundary: params/state are read once per sample inside
@@ -599,7 +599,7 @@ void sabrinaProcessBlockSimd(SabrinaState& state, const double* leftIn, const do
 
 void resetState(SabrinaState& state, double sampleRate) {
   state.active = true;
-  state.sampleRate = clamp(sampleRate, 1.0, 192000.0);
+  state.sampleRate = sampleRate;
   state.ch0 = 0.0;
   state.ch1 = 0.0;
   state.lastLeft = 0.0;
@@ -693,16 +693,16 @@ extern "C" void soemdsp_sabrina_reverb_set_params(
   };
 
   // LIVE — assign only (read in process / drywet).
-  assignIf(state->mix, clamp(mix, 0.0, 1.0));
-  assignIf(state->recycle, clamp(recycle, 0.0, 1.0));
-  assignIf(state->diffusionAmount, clamp(diffusionAmount, 0.0, 1.0));
+  assignIf(state->mix, mix);
+  assignIf(state->recycle, recycle);
+  assignIf(state->diffusionAmount, diffusionAmount);
 
   // CONTROL — targets for smoothed geometry (*Changed ownership).
-  assignIf(state->diffusionSize, clamp(diffusionSize, 0.0, 1.0));
-  assignIf(state->delaySize, clamp(delaySize, 0.0, 1.0));
-  assignIf(state->lfoAmplitude, clamp(lfoAmplitude, 0.0, 1.0));
-  assignIf(state->lfoBaseSpeed, clamp(lfoBaseSpeed, 0.0, 1.0));
-  assignIf(state->lfoVariation, clamp(lfoVariation, 0.0, 1.0));
+  assignIf(state->diffusionSize, diffusionSize);
+  assignIf(state->delaySize, delaySize);
+  assignIf(state->lfoAmplitude, lfoAmplitude);
+  assignIf(state->lfoBaseSpeed, lfoBaseSpeed);
+  assignIf(state->lfoVariation, lfoVariation);
   const int nextStyle = lfoStyle >= 0.5 ? 1 : 0;
   if (nextStyle != state->lfoStyle) {
     state->lfoStyle = nextStyle;

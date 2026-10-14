@@ -2,7 +2,7 @@
 // soemdsp-native-label: Softpop Oscillator
 // soemdsp-native-target: softpopOscillator
 // soemdsp-native-kind: oscillator
-// soemdsp-native-lib: https://github.com/soundemote/soemdsp-sandbox/blob/master/docs/SOFTPOP_PLAN.md
+// soemdsp-native-lib: https://github.com/elanhickler/soemdsp-sandbox/blob/master/docs/SOFTPOP_PLAN.md
 //
 // Softpop Oscillator: variable pure tone <-> noise (docs/SOFTPOP_PLAN.md).
 //
@@ -10,10 +10,10 @@
 // Model Filter: x = TPT SVF constant-peak bandpass (centre |fInst|, Q(Width))
 //               of N_audio, level-trimmed by sqrt(Q) and the Color tilt.
 // Both models, per channel, per sample:
-//   n_pitch, n_amp = clamp(onePole_LP(N_x * cal_color, Bmod) * norm, +-4)  (unit RMS)
+//   n_pitch, n_amp = clamp(N_x * cal_color, +-4)  (unit RMS, full band, unsmoothed)
 //   fInst = fEff * 2^(n_pitch * PitchMod / 1200)
 //   y     = x * (sqrt(1 - AmpMod) + sqrt(AmpMod) * n_amp) * Amplitude
-// Width W (0..1): Q = 2000 * (0.5/2000)^W, Bmod = 0.1 * (2000/0.1)^W Hz.
+// Width W (0..1): Q = 2000 * (0.5/2000)^W (Filter model only; no effect in Sine).
 // fEff (Hz, from the Frequency knob or the f cable) is resolved by graph_engine
 // exactly as for polyBlep (resolve_osc_hz).
 //
@@ -51,20 +51,8 @@ enum { kStereo = 0, kMono = 1 };
 static const double kLn2 = 0.6931471805599453;
 static const double kQMax = 2000.0;    // Width 0
 static const double kQMin = 0.5;       // Width 1
-static const double kBmodMin = 0.1;    // Hz, Width 0
-static const double kBmodMax = 2000.0; // Hz, Width 1
 static const double kModClamp = 4.0;   // n_pitch / n_amp clamp (sigma)
 static const double kRefSampleRate = 48000.0;
-
-// Kellet pink filter (noise_color_sample mode 3) poles and input gains.
-static const double kPinkPole[6] = {0.99886, 0.99332, 0.969, 0.8665, 0.55, -0.7616};
-static const double kPinkGain[6] = {0.0555179, 0.0750759, 0.153852, 0.3104856, 0.5329522, -0.016898};
-
-// Clamped brown walk (mode 2, step 0.05 * U(-1,1), clamped to +-1) as a
-// diffusion on [-1, 1]: D = (0.05^2 / 3) / 2 per sample, slowest mode
-// lambda1 = D (pi/2)^2 carries ~98.6% of the variance, so it is modelled
-// as AR(1) with pole exp(-lambda1).
-static const double kBrownPole = 0.9989724445053012;
 
 // Unit-RMS calibration per Color. White: CLT-12 Gaussian, already unit.
 // Pink: 1 / sqrt(sum of squares of the Kellet impulse response * 1/3)
@@ -88,8 +76,6 @@ struct Chan {
   NoiseColorChannel nPitch;
   NoiseColorChannel nAmp;
   NoiseColorChannel nAudio;
-  double lpPitch;
-  double lpAmp;
   TptSvfState svf;
   double phase;
   double outPitch;  // last n_pitch (probe)
@@ -107,7 +93,7 @@ struct State {
   // Width-derived (recomputed when Width / Color / fs change).
   double lastWidth, lastSr;
   int lastColor;
-  double q, sqrtQ, modCoeff, modNorm;
+  double q, sqrtQ;
   double widthGain;  // Pink broad-Q correction (1 for white / brown)
   double warpRef;    // sin(w1k) / w1k at lastSr
   double tiltSr;     // lastSr / 48 kHz
@@ -149,56 +135,6 @@ static double pink_width_gain(double q) {
   return sqrt_pos(kPI * sqrt_pos(1.0 - x * x) / (2.0 * acosx));
 }
 
-// Impulse response of (Color source -> one-pole LP y += a (x - y)) written as
-// h[n] = sum_i c_i r_i^n (n >= 0; r = 0 gives a delta). Returns sum h^2 times
-// the source innovation variance, i.e. the LP output variance.
-struct Geo { double c, r; };
-
-static double geo_energy(const Geo* t, int n) {
-  double e = 0.0;
-  for (int i = 0; i < n; i += 1) {
-    for (int j = 0; j < n; j += 1) {
-      e += t[i].c * t[j].c / (1.0 - t[i].r * t[j].r);
-    }
-  }
-  return e;
-}
-
-// AR(1) b p^n convolved with a q^n: a b (p^(n+1) - q^(n+1)) / (p - q).
-static int conv_ar1_lp(Geo* t, double b, double p, double a, double q) {
-  double pp = p;
-  if (dsp_fabs(pp - q) < 1.0e-6) pp = q - 1.0e-6;
-  const double k = a * b / (pp - q);
-  t[0].c = k * pp; t[0].r = pp;
-  t[1].c = -k * q; t[1].r = q;
-  return 2;
-}
-
-// Variance of onePole_LP(cal_color * N_color) for LP coefficient a.
-static double mod_lp_variance(int color, double a) {
-  const double q = 1.0 - a;
-  Geo t[16];
-  int n = 0;
-  if (color == kColorPink) {
-    // Kellet: x = 0.11 (sum_k b_k p_k^n + 0.5362 d[n] + 0.115926 d[n-1]) on U(-1,1).
-    const double g = 0.11 * kCalColor[kColorPink];
-    for (int k = 0; k < 6; k += 1) n += conv_ar1_lp(t + n, g * kPinkGain[k], kPinkPole[k], a, q);
-    // d[n] -> a q^n ; d[n-1] -> a q^(n-1) u[n-1] = (a/q) q^n - (a/q) d[n].
-    const double dly = g * 0.115926;
-    t[n].c = g * 0.5362 * a + dly * a / q; t[n].r = q; n += 1;
-    t[n].c = -dly * a / q; t[n].r = 0.0; n += 1;
-    return geo_energy(t, n) * (1.0 / 3.0);
-  }
-  if (color == kColorBrown) {
-    // Unit-variance AR(1): sqrt(1 - p^2) p^n on unit white.
-    n += conv_ar1_lp(t, sqrt_pos(1.0 - kBrownPole * kBrownPole), kBrownPole, a, q);
-    return geo_energy(t, n);
-  }
-  // White Gaussian (unit variance): a q^n -> a / (2 - a).
-  t[0].c = a; t[0].r = q;
-  return geo_energy(t, 1);
-}
-
 static void update_width(State& s, double width, int color, double sr) {
   if (width == s.lastWidth && color == s.lastColor && sr == s.lastSr) return;
   s.lastWidth = width;
@@ -207,10 +143,6 @@ static void update_width(State& s, double width, int color, double sr) {
   const double w = clamp(width, 0.0, 1.0);
   s.q = kQMax * pow_pos_d(kQMin / kQMax, w);
   s.sqrtQ = sqrt_pos(s.q);
-  const double bmod = kBmodMin * pow_pos_d(kBmodMax / kBmodMin, w);
-  s.modCoeff = one_pole_coeff_hz(bmod, sr);
-  const double v = mod_lp_variance(color, s.modCoeff);
-  s.modNorm = v > 0.0 ? 1.0 / sqrt_pos(v) : 0.0;
   s.widthGain = color == kColorPink ? pink_width_gain(s.q) : 1.0;
   const double w1k = kTwoPi * 1000.0 / sr;
   s.warpRef = dsp_sin(w1k) / w1k;
@@ -223,8 +155,6 @@ static void reseed(State& s) {
     noise_color_reset(ch.nPitch, seed_to_rng_state(seed_mix(s.seed, kSoftpopPitch, (unsigned int)c)));
     noise_color_reset(ch.nAmp, seed_to_rng_state(seed_mix(s.seed, kSoftpopAmp, (unsigned int)c)));
     noise_color_reset(ch.nAudio, seed_to_rng_state(seed_mix(s.seed, kSoftpopAudio, (unsigned int)c)));
-    ch.lpPitch = 0.0;
-    ch.lpAmp = 0.0;
     tpt_svf_reset(ch.svf);
     ch.phase = 0.0;
     ch.outPitch = 0.0;
@@ -272,10 +202,9 @@ static double render_chan(State& s, Chan& ch, int model, int color, double fEff,
   const double xp = color_sample(ch.nPitch, color);
   const double xa = color_sample(ch.nAmp, color);
   const double xn = color_sample(ch.nAudio, color);
-  ch.lpPitch = ch.lpPitch + s.modCoeff * (xp - ch.lpPitch);
-  ch.lpAmp = ch.lpAmp + s.modCoeff * (xa - ch.lpAmp);
-  const double np = clamp(ch.lpPitch * s.modNorm, -kModClamp, kModClamp);
-  const double na = clamp(ch.lpAmp * s.modNorm, -kModClamp, kModClamp);
+  // Pitch / Amp Mod: raw Color noise, full band (already unit RMS: 1 sigma = knob).
+  const double np = clamp(xp, -kModClamp, kModClamp);
+  const double na = clamp(xa, -kModClamp, kModClamp);
   ch.outPitch = np;
   ch.outAmp = na;
   ch.outAudio = xn;
@@ -335,7 +264,7 @@ extern "C" void soemdsp_softpop_oscillator_destroy(int handle) {
   gPool[handle - 1].active = false;
 }
 
-// Reset edge: reseed every generator from Seed, clear phase, smoothers and SVF.
+// Reset edge: reseed every generator from Seed, clear phase and SVF.
 extern "C" void soemdsp_softpop_oscillator_reset(int handle) {
   if (handle < 1 || handle > kMaxInstances || !gPool[handle - 1].active) return;
   reseed(gPool[handle - 1]);
@@ -403,7 +332,7 @@ extern "C" double soemdsp_softpop_oscillator_right(int handle) {
 
 // Test probe (scripts/test_softpop_oscillator.*): last-frame internals.
 // which: 0/1 n_pitch L/R, 2/3 n_amp L/R, 4/5 N_audio L/R (unit RMS),
-// 6/7 fInst L/R (Hz), 8 Q, 9 Bmod coefficient a, 10 mod-noise norm.
+// 6/7 fInst L/R (Hz), 8 Q.
 extern "C" double soemdsp_softpop_oscillator_probe(int handle, int which) {
   if (handle < 1 || handle > kMaxInstances) return 0.0;
   const State& s = gPool[handle - 1];
@@ -414,8 +343,6 @@ extern "C" double soemdsp_softpop_oscillator_probe(int handle, int which) {
     case 4: case 5: return s.ch[c].outAudio;
     case 6: case 7: return s.ch[c].instHz;
     case 8: return s.q;
-    case 9: return s.modCoeff;
-    case 10: return s.modNorm;
     default: return 0.0;
   }
 }

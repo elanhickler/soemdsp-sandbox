@@ -9829,7 +9829,7 @@ const nodeGraphModuleDefinitions = (
         min: "0",
         nonlinearSlider: false,
         step: "1",
-        tooltip: "Filter = constant-peak bandpass on noise. Sine = phase oscillator. Width, Pitch Mod, and Amp Mod stay active in both."
+        tooltip: "Filter = constant-peak bandpass on noise. Sine = phase oscillator. Pitch Mod and Amp Mod stay active in both."
       },
       {
         defaultValue: "440",
@@ -9858,7 +9858,7 @@ const nodeGraphModuleDefinitions = (
         min: "0",
         nonlinearSlider: false,
         step: "any",
-        tooltip: "0 = tight ring (Q 2000), 1 = broad noise (Q 0.5). Also sets mod-noise cutoff in both models."
+        tooltip: "Filter model only: 0 = tight ring (Q 2000), 1 = broad noise (Q 0.5). No effect in Sine."
       },
       {
         defaultValue: "0",
@@ -9875,6 +9875,7 @@ const nodeGraphModuleDefinitions = (
       },
       {
         defaultValue: "0",
+        hidden: true,
         key: "ampMod",
         label: "Amp Mod",
         max: "1",
@@ -9883,7 +9884,7 @@ const nodeGraphModuleDefinitions = (
         min: "0",
         nonlinearSlider: false,
         step: "any",
-        tooltip: "Level-preserving noise AM. 1 = full ring mod (no carrier)."
+        tooltip: "Level-preserving full-band noise AM. 1 = full ring mod (no carrier)."
       },
       {
         defaultValue: "1",

@@ -643,8 +643,9 @@ void main() {
       }
     }
 
-    // Punch the dimmer + magnifier pair so both stay usable at full black.
-    const punch = document.querySelector(".node-room-tool-pair") || buttonEl();
+    // Punch only the room-light button so you can drag back from full black;
+    // the magnify / mouse-smoothing sliders get dimmed like the rest of the UI.
+    const punch = buttonEl();
     if (punch && rects.length < MAX_RECTS) {
       const prev = punch.dataset?.lightStrength;
       if (punch.dataset) {

@@ -2,7 +2,7 @@
 // soemdsp-native-label: Hyperpluck
 // soemdsp-native-target: hyperpluck
 // soemdsp-native-kind: oscillator
-// soemdsp-native-lib: https://github.com/soundemote/soemdsp/blob/main/include/soemdsp/oscillator/PolyBLEP.hpp
+// soemdsp-native-lib: https://github.com/elanhickler/soemdsp/blob/main/include/soemdsp/oscillator/PolyBLEP.hpp
 //
 // PolyBLEP unison bank. Detune is Hz offset (ƒ + Δf), not cents. Algorithm
 // layouts map into ±Detune/2 Hz. Circular phase layout (Linear / Exponential /

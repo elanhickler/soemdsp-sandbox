@@ -2,7 +2,7 @@
 // soemdsp-native-label: VCVRack Superlove Filter
 // soemdsp-native-target: vcvrackSuperloveFilter
 // soemdsp-native-kind: filter
-// soemdsp-native-lib: https://github.com/soundemote/soemdsp/blob/main/include/soemdsp/filter/Superlove.hpp
+// soemdsp-native-lib: https://github.com/elanhickler/soemdsp/blob/main/include/soemdsp/filter/Superlove.hpp
 //
 // Superlove Rev2 (native_modules/superlove_rev2) with the VCV Rack panel's
 // limits. No Morph or Phase knobs. LP18/LP24 use the breadboard constants.

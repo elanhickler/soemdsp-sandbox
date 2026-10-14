@@ -2,7 +2,7 @@
 // soemdsp-native-label: Jerobeam Torus
 // soemdsp-native-target: torus
 // soemdsp-native-kind: jerobeam
-// soemdsp-native-lib: https://github.com/soundemote/soemdsp/blob/main/include/soemdsp/oscillator/JerobeamTorus.h
+// soemdsp-native-lib: https://github.com/elanhickler/soemdsp/blob/main/include/soemdsp/oscillator/JerobeamTorus.h
 //
 // Ported from soemdsp/include/soemdsp/oscillator/JerobeamTorus.{h,cpp}
 // (Jerobeam Fenderson's "Torus" Gen~ patch). Six independent phasors (main,
