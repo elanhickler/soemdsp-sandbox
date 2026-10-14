@@ -4,84 +4,60 @@
 // soemdsp-native-kind: oscillator
 // soemdsp-native-lib: https://github.com/elanhickler/soemdsp-sandbox/blob/master/docs/SOFTPOP_PLAN.md
 //
-// Softpop Oscillator: variable pure tone <-> noise (docs/SOFTPOP_PLAN.md).
+// Softpop Oscillator: a phase oscillator with full-band Color-noise Pitch Mod.
+// Shared Softpop parts (noise, Pitch Mod, display):
+// softpop_core.h. The noise-driven bandpass voice is Softpop Filter
+// (native_modules/softpop_filter).
 //
-// Model Sine:   phi += fInst/fs, x = sin(2 pi phi) (phi runs in both models).
-// Model Filter: x = TPT SVF constant-peak bandpass (centre |fInst|, Q(Width))
-//               of N_audio, level-trimmed by sqrt(Q) and the Color tilt.
-// Both models, per channel, per sample:
-//   n_pitch, n_amp = clamp(N_x * cal_color, +-4)  (unit RMS, full band, unsmoothed)
-//   fInst = fEff * 2^(n_pitch * PitchMod / 1200)
-//   y     = x * (sqrt(1 - AmpMod) + sqrt(AmpMod) * n_amp) * Amplitude
-// Width W (0..1): Q = 2000 * (0.5/2000)^W (Filter model only; no effect in Sine).
-// fEff (Hz, from the Frequency knob or the f cable) is resolved by graph_engine
-// exactly as for polyBlep (resolve_osc_hz).
+// Per channel, per sample:
+//   fInst = fEff * exp(e)            (softpop_core.h noise_step at Pitch Mod, mean-corrected)
+//   phi  += clamp(fInst, +-fs/2) / fs   (polyBlep increment)
+//   x     = source(phi, Morph)
+//   y     = x * (sqrt(1 - AmpMod) + sqrt(AmpMod) n_amp) * Amplitude   (constant level)
 //
-// Noise: one NoiseColorChannel (soemdsp/math/noise_colors.h) per target
-// (pitch / amp / audio) and channel, seeded seed_to_rng_state(seed_mix(Seed,
-// target, ch)). Stereo: six generators. Mono: the three L generators, R = L.
-// All active generators advance every sample in both models.
-// Color: White = Gaussian (CLT-12, mode 1), Pink = Kellet (mode 3), Brown =
-// clamped walk (mode 2, step 0.05).
-//
-// Level (Filter): constant-peak BP band power on a source of PSD S(f) is
-// S(fc) * sin(w)/(2Q), w = 2 pi fc / fs (the bilinear-warped noise bandwidth;
-// = pi fc/(Q fs) at low fc). sqrt(Q) cancels Width; T_color(fc) =
-// (1000/fc)^(alpha/2) * sqrt(w1k/sin w1k) / sqrt(w/sin w) flattens the keyboard
-// (alpha = +1 white, 0 pink, -0.95 brown (measured); fc clamped to 20 Hz .. 0.45 fs);
-// k_color sets the 1 kHz Filter RMS to the Sine RMS (1/sqrt 2).
+// Oscillator Source (choiceIds):
+//   0 Sine          sin(2 pi phi). Morph unused.
+//   1 Dithered Sine sin(2 pi (phi + Morph * d)), d = Robin Schmidt +-1-sample
+//                   cycle-length dither (soemdsp_ellipsoid_robin_dither_cycles,
+//                   picked once per cycle; no stuck-oscillation FM tricks).
+//                   Morph = dither amount (0 = plain sine, 1 = full Robin).
+//   2 Trisaw        naive_trisaw(phi + d, Morph) (soemdsp library), full dither.
+//                   Morph = peak position (0.5 triangle, 0 / 1 saw-like).
+//   3 Soft Square   soundemote.dev /softsquare "Diroxe square" (hyperbolic
+//                   soft-sign of a naive triangle, one sqrt per sample):
+//                   T = -tri(phi), y = T sqrt(1+k) / sqrt(T^2 + k), k = 4 Morph^2
+//                   (Morph 0 = hard square, 0.5 = site default k 1, 1 = k 4, near triangle).
+//   4 Soft Tri      soundemote.dev /softtriangle "Diroxe tri" (KVR p=9310541,
+//                   one sqrt per sample): per half cycle x in [0,1), b = x - 0.5,
+//                   y = +-g (rr - sqrt(b^2 + k)), rr = sqrt(0.25 + k),
+//                   g = 4 (rr + sqrt k), k = 0.16 Morph^4
+//                   (Morph 0 = sharp triangle, 0.5 = site default k 0.01, 1 = k 0.16, rounded).
+// Outputs: Mono = the L channel render, Left, Right, Left/Right Noise = the
+// audio noise stream N_audio (Color-shaped, unit RMS), Left/Right CV =
+// log2(fInst / fEff) in octaves.
 
-#include <soemdsp/soemdsp.hpp>
+#include "softpop_core.h"
+
+// Robin cycle-length dither pick: one copy, in native_modules/ellipsoid
+// (resolved in the combined link; standalone builds allow it undefined).
+extern "C" double soemdsp_ellipsoid_robin_dither_cycles(unsigned int* rng, double cycleSamples);
 
 namespace {
 
 using namespace soemdsp_maths;
+using namespace softpop;
 
 static const int kMaxInstances = 64;
 
-// seed_mix component ids (fixed, never reordered).
-static const unsigned int kSoftpopPitch = 0x5F01u;
-static const unsigned int kSoftpopAmp = 0x5F02u;
-static const unsigned int kSoftpopAudio = 0x5F03u;
-
-enum { kModelFilter = 0, kModelSine = 1 };
-enum { kColorWhite = 0, kColorPink = 1, kColorBrown = 2 };
-enum { kStereo = 0, kMono = 1 };
-
-static const double kLn2 = 0.6931471805599453;
-static const double kQMax = 2000.0;    // Width 0
-static const double kQMin = 0.5;       // Width 1
-static const double kModClamp = 4.0;   // n_pitch / n_amp clamp (sigma)
-static const double kRefSampleRate = 48000.0;
-
-// Unit-RMS calibration per Color. White: CLT-12 Gaussian, already unit.
-// Pink: 1 / sqrt(sum of squares of the Kellet impulse response * 1/3)
-// (analytic, var 0.0375777). Brown: clamped walk measured variance 0.343276
-// (4000 chains x 1.2 M steps; uniform would be 1/3).
-static const double kCalColor[3] = {1.0, 5.15863561638852, 1.7067830316927417};
-// k_color: 1 kHz Filter RMS = 1/sqrt 2 (the Sine RMS) at 48 kHz, W = 0.3.
-// White and pink: exact digital band power of the BP on the source PSD (flat;
-// Kellet taps), confirmed by simulation to 0.013 / 0.004 dB. Brown: measured
-// (node scripts/test_softpop_oscillator.mjs --calibrate, 3000 s); the clamped
-// walk sits 0.2 dB under the pure-integrator estimate 7.3484.
-static const double kFilterGain[3] = {2.7684485757734305, 1.721692744960082, 7.51834};
-// Tilt exponent alpha (T = (1000/fc)^(alpha/2)). Brown is measured: the
-// clamped walk's spectrum sits under 1/f^2 at low fc (its higher diffusion
-// modes) and the digital integrator over it at high fc; the least-squares
-// residual slope over 50 Hz..10 kHz (W 0 and 0.3) was +0.143 dB/oct, i.e.
-// alpha -1 + 0.048 (plan §6: a small measured per-Color alpha).
-static const double kTiltAlpha[3] = {1.0, 0.0, -0.95};
+enum { kSrcSine = 0, kSrcDitherSine = 1, kSrcTrisaw = 2, kSrcSoftSquare = 3, kSrcSoftTri = 4 };
 
 struct Chan {
-  NoiseColorChannel nPitch;
-  NoiseColorChannel nAmp;
-  NoiseColorChannel nAudio;
-  TptSvfState svf;
+  Noise noise;
   double phase;
-  double outPitch;  // last n_pitch (probe)
-  double outAmp;    // last n_amp (probe)
-  double outAudio;  // last N_audio * cal (probe)
-  double instHz;    // last fInst (probe)
+  unsigned int ditherRng;
+  double ditherOffset;
+  bool ditherOn;
+  double instHz;  // last phase-increment Hz
   double out;
 };
 
@@ -90,13 +66,11 @@ struct State {
   Chan ch[2];
   unsigned int seed;
   bool seeded;
-  // Width-derived (recomputed when Width / Color / fs change).
-  double lastWidth, lastSr;
-  int lastColor;
-  double q, sqrtQ;
-  double widthGain;  // Pink broad-Q correction (1 for white / brown)
-  double warpRef;    // sin(w1k) / w1k at lastSr
-  double tiltSr;     // lastSr / 48 kHz
+  // Morph-derived shape constants (recomputed when Morph changes).
+  double lastMorph;
+  double sqK, sqNorm;       // Soft Square k, sqrt(1 + k)
+  double triK, triR, triG;  // Soft Tri k, rr, g
+  Display disp;
 };
 
 static State gPool[kMaxInstances];
@@ -109,135 +83,96 @@ static const char kMetadataJson[] =
     "\"kind\":\"oscillator\""
   "}";
 
-static double sqrt_pos(double x) { return x > 0.0 ? __builtin_sqrt(x) : 0.0; }
-
-static double pow_pos_d(double base, double e) { return dsp_exp(e * dsp_ln(base)); }
-
-// atan(t) for t >= 0: three half-angle reductions (t <= tan(pi/16)), then the
-// odd series to t^15 (error < 1e-13). Only used on Width changes.
-static double atan_pos(double t) {
-  for (int i = 0; i < 3; i += 1) t = t / (1.0 + __builtin_sqrt(1.0 + t * t));
-  const double t2 = t * t;
-  double sum = 0.0;
-  for (int k = 15; k >= 1; k -= 2) sum = sum * t2 + ((((k - 1) / 2) & 1) ? -1.0 : 1.0) / (double)k;
-  return 8.0 * t * sum;
-}
-
-// Pink Width correction. Constant-peak BP band power on a 1/f source is
-// I(Q) = 2 x acos(x) / sqrt(1 - x^2) (x = 1/(2Q), per unit S(fc) fc), not the
-// narrowband pi x the sqrt(Q) trim assumes (-2 dB at Q = 0.5). White and brown
-// (1/f^2) are exact for every Q, so only pink gets sqrt(pi x / I(Q)).
-static double pink_width_gain(double q) {
-  double x = 0.5 / q;
-  if (x > 1.0) x = 1.0;
-  const double acosx = 2.0 * atan_pos(sqrt_pos((1.0 - x) / (1.0 + x)));
-  if (acosx < 1.0e-9) return __builtin_sqrt(0.5 * kPI);
-  return sqrt_pos(kPI * sqrt_pos(1.0 - x * x) / (2.0 * acosx));
-}
-
-static void update_width(State& s, double width, int color, double sr) {
-  if (width == s.lastWidth && color == s.lastColor && sr == s.lastSr) return;
-  s.lastWidth = width;
-  s.lastColor = color;
-  s.lastSr = sr;
-  const double w = clamp(width, 0.0, 1.0);
-  s.q = kQMax * pow_pos_d(kQMin / kQMax, w);
-  s.sqrtQ = sqrt_pos(s.q);
-  s.widthGain = color == kColorPink ? pink_width_gain(s.q) : 1.0;
-  const double w1k = kTwoPi * 1000.0 / sr;
-  s.warpRef = dsp_sin(w1k) / w1k;
-  s.tiltSr = sr / kRefSampleRate;
-}
-
 static void reseed(State& s) {
   for (int c = 0; c < 2; c += 1) {
     Chan& ch = s.ch[c];
-    noise_color_reset(ch.nPitch, seed_to_rng_state(seed_mix(s.seed, kSoftpopPitch, (unsigned int)c)));
-    noise_color_reset(ch.nAmp, seed_to_rng_state(seed_mix(s.seed, kSoftpopAmp, (unsigned int)c)));
-    noise_color_reset(ch.nAudio, seed_to_rng_state(seed_mix(s.seed, kSoftpopAudio, (unsigned int)c)));
-    tpt_svf_reset(ch.svf);
+    noise_reset(ch.noise, s.seed, (unsigned int)c);
     ch.phase = 0.0;
-    ch.outPitch = 0.0;
-    ch.outAmp = 0.0;
-    ch.outAudio = 0.0;
+    ch.ditherRng = seed_to_rng_state(seed_mix(s.seed, kSeedDither, (unsigned int)c));
+    ch.ditherOffset = 0.0;
+    ch.ditherOn = false;
     ch.instHz = 0.0;
     ch.out = 0.0;
   }
   s.seeded = true;
 }
 
-static double color_sample(NoiseColorChannel& n, int color) {
-  if (color == kColorPink) return noise_color_sample(n, 3, 0.0, 1.0, 0.0) * kCalColor[kColorPink];
-  if (color == kColorBrown) return noise_color_sample(n, 2, 0.0, 1.0, 0.0) * kCalColor[kColorBrown];
-  return noise_color_sample(n, 1, 0.0, 1.0, 0.0);
+static void update_morph(State& s, double morph) {
+  if (morph == s.lastMorph) return;
+  s.lastMorph = morph;
+  const double m = morph;
+  s.sqK = 4.0 * m * m;
+  s.sqNorm = __builtin_sqrt(1.0 + s.sqK);
+  s.triK = 0.16 * m * m * m * m;
+  s.triR = __builtin_sqrt(0.25 + s.triK);
+  s.triG = 4.0 * (s.triR + __builtin_sqrt(s.triK));
 }
 
-// Identity up to |y| = 4 (> 5.6 sigma of the 1/sqrt 2 RMS output), then a
-// smooth rational knee to 8. Safety only; never shapes normal output.
-static double safety_limit(double y) {
-  const double ay = y < 0.0 ? -y : y;
-  if (ay <= 4.0) return y;
-  const double u = (ay - 4.0) * 0.25;
-  const double lim = 4.0 + 4.0 * u / (1.0 + u);
-  return y < 0.0 ? -lim : lim;
+// soundemote.dev ssNaiveTriY: +1/4 cycle, peak 1 at phi = 0.25.
+static inline double naive_tri_quarter(double t) {
+  const double x = wrap01(t + 0.25);
+  return x < 0.5 ? 4.0 * x - 1.0 : 3.0 - 4.0 * x;
 }
 
-// T_color(fc) times the bilinear-warp term, normalised at 1 kHz.
-static double tilt_warp(const State& s, double fc, int color, double sr) {
-  const double lo = 20.0;
-  const double hi = 0.45 * sr;
-  const double f = fc < lo ? lo : (fc > hi ? hi : fc);
-  const double w = kTwoPi * f / sr;
-  // sqrt((w / sin w) / (w1k / sin w1k)): exact bilinear noise bandwidth.
-  const double warp = sqrt_pos((w / dsp_sin(w)) * s.warpRef);
-  const double alpha = kTiltAlpha[color];
-  if (alpha == 0.0) return warp;
-  // (1000 / f)^(alpha/2) * (fs / 48k)^(alpha/2): flat across the keyboard and fs.
-  return warp * pow_pos_d((1000.0 / f) * s.tiltSr, 0.5 * alpha);
+static inline double soft_square(const State& s, double t) {
+  const double T = -naive_tri_quarter(t);
+  const double d = __builtin_sqrt(T * T + s.sqK);
+  return d > 1.0e-18 ? T * s.sqNorm / d : 0.0;
 }
 
-static double render_chan(State& s, Chan& ch, int model, int color, double fEff,
+static inline double soft_tri(const State& s, double t) {
+  const double u = wrap01(t);
+  const bool first = u < 0.5;
+  const double b = (first ? u * 2.0 : u * 2.0 - 1.0) - 0.5;
+  const double y = s.triG * (s.triR - __builtin_sqrt(b * b + s.triK));
+  return first ? y : -y;
+}
+
+static double render_chan(State& s, Chan& ch, int src, double morph, int color, double fEff,
                           double pitchCents, double ampMod, double amp, double sr) {
-  // Generators advance every sample in both models (Model switch never shifts streams).
-  const double xp = color_sample(ch.nPitch, color);
-  const double xa = color_sample(ch.nAmp, color);
-  const double xn = color_sample(ch.nAudio, color);
-  // Pitch / Amp Mod: raw Color noise, full band (already unit RMS: 1 sigma = knob).
-  const double np = clamp(xp, -kModClamp, kModClamp);
-  const double na = clamp(xa, -kModClamp, kModClamp);
-  ch.outPitch = np;
-  ch.outAmp = na;
-  ch.outAudio = xn;
-
-  double fInst = fEff;
-  if (pitchCents != 0.0) fInst = fEff * dsp_exp(np * pitchCents * (kLn2 / 1200.0));
-  // Sine Hz: clamped to +-Nyquist exactly like polyBlep (phaseInc = f/fs in
-  // [-0.5, 0.5]). The phase runs in both models, so a Model switch lands on
-  // the same phase as if Sine had been playing all along.
+  const double fInst = noise_step(ch.noise, color, fEff, pitchCents);
   const double nyq = 0.5 * sr;
-  double fSine = fInst;
-  if (fSine > nyq) fSine = nyq;
-  if (fSine < -nyq) fSine = -nyq;
-  const double sinePhase = ch.phase;
-  ch.phase += fSine / sr;
-  ch.phase -= dsp_floor(ch.phase);
-  double x = 0.0;
-  if (model == kModelSine) {
-    x = dsp_sin_turns(sinePhase);
-    ch.instHz = fSine;
+  double f = fInst;
+  if (f > nyq) f = nyq;
+  if (f < -nyq) f = -nyq;
+  const double ph = ch.phase;
+  const double inc = f / sr;
+  const double next = ph + inc;
+  const double wrapped = next - dsp_floor(next);
+  const bool wrap = wrapped != next;
+  ch.phase = wrapped;
+  ch.instHz = f;
+
+  const bool dither = src == kSrcDitherSine || src == kSrcTrisaw;
+  if (dither) {
+    const double absInc = inc < 0.0 ? -inc : inc;
+    if (!(absInc > 1.0e-15)) {
+      ch.ditherOffset = 0.0;
+      ch.ditherOn = false;
+    } else if (!ch.ditherOn || wrap) {
+      ch.ditherOffset = soemdsp_ellipsoid_robin_dither_cycles(&ch.ditherRng, 1.0 / absInc);
+      ch.ditherOn = true;
+    }
   } else {
-    // Filter centre |fInst|, clamped to 0.49 fs (the SVF needs w < pi).
-    double fc = fInst < 0.0 ? -fInst : fInst;
-    const double fcMax = 0.49 * sr;
-    if (fc > fcMax) fc = fcMax;
-    TptSvfCoeffs k;
-    tpt_svf_setup_bandpass_const_peak(k, kTwoPi * fc / sr, s.q);
-    x = tpt_svf_tick(ch.svf, k, xn) * kFilterGain[color] * s.sqrtQ * s.widthGain * tilt_warp(s, fc, color, sr);
-    ch.instHz = fInst < 0.0 ? -fc : fc;
+    ch.ditherOn = false;
+    ch.ditherOffset = 0.0;
   }
-  const double am = sqrt_pos(1.0 - ampMod) + sqrt_pos(ampMod) * na;
-  ch.out = safety_limit(x * am * amp);
+
+  double x;
+  switch (src) {
+    case kSrcDitherSine: x = dsp_sin_turns(wrap01(ph + morph * ch.ditherOffset)); break;
+    case kSrcTrisaw: x = naive_trisaw(ph + ch.ditherOffset, morph); break;
+    case kSrcSoftSquare: x = soft_square(s, ph); break;
+    case kSrcSoftTri: x = soft_tri(s, ph); break;
+    default: x = dsp_sin_turns(ph); break;
+  }
+  ch.out = safety_limit(x * amp_mod_gain(ampMod, ch.noise.na) * amp);
   return ch.out;
+}
+
+static State* live(int handle) {
+  if (handle < 1 || handle > kMaxInstances || !gPool[handle - 1].active) return nullptr;
+  return &gPool[handle - 1];
 }
 
 }  // namespace
@@ -247,11 +182,7 @@ extern "C" int soemdsp_softpop_oscillator_create() {
     if (!gPool[i].active) {
       State& s = gPool[i];
       s = State{};
-      s.seed = 0u;
-      s.seeded = false;
-      s.lastWidth = 0.0 / 0.0;
-      s.lastSr = 0.0 / 0.0;
-      s.lastColor = -1;
+      s.lastMorph = 0.0 / 0.0;
       s.active = true;
       return i + 1;
     }
@@ -264,60 +195,48 @@ extern "C" void soemdsp_softpop_oscillator_destroy(int handle) {
   gPool[handle - 1].active = false;
 }
 
-// Reset edge: reseed every generator from Seed, clear phase and SVF.
+// Reset edge: reseed every generator (noise + dither) from Seed, zero phase.
 extern "C" void soemdsp_softpop_oscillator_reset(int handle) {
-  if (handle < 1 || handle > kMaxInstances || !gPool[handle - 1].active) return;
-  reseed(gPool[handle - 1]);
+  if (State* s = live(handle)) reseed(*s);
 }
 
-// One frame. freqHz = fEff (graph_engine resolve_osc_hz: knob + MOD, or the
-// f cable; already clamped to +-Nyquist). Choice values are choiceIds:
-// model 0 filter / 1 sine, color 0 white / 1 pink / 2 brown, stereoMode
-// 0 stereo / 1 mono. Returns Mono = (L + R) / 2.
+// One frame. freqHz = fEff (graph_engine resolve_osc_hz). source: choiceId
+// 0 Sine / 1 Dithered Sine / 2 Trisaw / 3 Soft Square / 4 Soft Tri.
+// color: 0 white / 1 pink / 2 brown. Returns Mono (= the L channel render).
 extern "C" double soemdsp_softpop_oscillator_sample(
   int handle,
   double freqHz,
-  double model,
-  double width,
+  double source,
+  double morph,
   double pitchModCents,
   double ampMod,
   double amplitude,
   double color,
-  double stereoMode,
   double seedValue,
   double sampleRate
 ) {
-  if (handle < 1 || handle > kMaxInstances || !gPool[handle - 1].active) return 0.0;
-  State& s = gPool[handle - 1];
+  State* sp = live(handle);
+  if (!sp) return 0.0;
+  State& s = *sp;
   const double sr = sampleRate > 1.0 ? sampleRate : 44100.0;
   const unsigned int seed = seed_param_u32(seedValue);
   if (!s.seeded || seed != s.seed) {
     s.seed = seed;
     reseed(s);
   }
-  const int m = (int)(safe(model) + 0.5) == kModelSine ? kModelSine : kModelFilter;
-  int c = (int)(safe(color) + 0.5);
-  if (c < kColorWhite) c = kColorWhite;
-  if (c > kColorBrown) c = kColorBrown;
-  const bool mono = (int)(safe(stereoMode) + 0.5) == kMono;
-  update_width(s, safe(width), c, sr);
+  int src = (int)(safe(source) + 0.5);
+  if (src < kSrcSine || src > kSrcSoftTri) src = kSrcSine;
+  const double m = safe(morph);
+  update_morph(s, m);
+  const int c = color_index(color);
   const double fEff = safe(freqHz);
   double cents = safe(pitchModCents);
-  if (cents < 0.0) cents = 0.0;
-  const double am = clamp(safe(ampMod), 0.0, 1.0);
+  const double am = safe(ampMod);
   const double amp = safe(amplitude);
-  const double l = render_chan(s, s.ch[0], m, c, fEff, cents, am, amp, sr);
-  if (mono) {
-    Chan& r = s.ch[1];
-    r.out = l;
-    r.outPitch = s.ch[0].outPitch;
-    r.outAmp = s.ch[0].outAmp;
-    r.outAudio = s.ch[0].outAudio;
-    r.instHz = s.ch[0].instHz;
-    return l;
-  }
-  const double r = render_chan(s, s.ch[1], m, c, fEff, cents, am, amp, sr);
-  return 0.5 * (l + r);
+  const double l = render_chan(s, s.ch[0], src, m, c, fEff, cents, am, amp, sr);
+  display_note(s.disp, 1, fEff, 0.0, cents, sr, s.ch[0].instHz);
+  render_chan(s, s.ch[1], src, m, c, fEff, cents, am, amp, sr);
+  return l;
 }
 
 extern "C" double soemdsp_softpop_oscillator_left(int handle) {
@@ -330,23 +249,50 @@ extern "C" double soemdsp_softpop_oscillator_right(int handle) {
   return gPool[handle - 1].ch[1].out;
 }
 
-// Test probe (scripts/test_softpop_oscillator.*): last-frame internals.
-// which: 0/1 n_pitch L/R, 2/3 n_amp L/R, 4/5 N_audio L/R (unit RMS),
-// 6/7 fInst L/R (Hz), 8 Q.
+extern "C" double soemdsp_softpop_oscillator_noise(int handle, int ch) {
+  if (handle < 1 || handle > kMaxInstances) return 0.0;
+  return gPool[handle - 1].ch[ch & 1].noise.audio;
+}
+
+extern "C" double soemdsp_softpop_oscillator_cv(int handle, int ch) {
+  if (handle < 1 || handle > kMaxInstances) return 0.0;
+  return gPool[handle - 1].ch[ch & 1].noise.cv;
+}
+
+// Test probe: 0/1 n_pitch L/R, 2/3 n_amp L/R, 4/5 N_audio L/R, 6/7 phase-
+// increment Hz L/R, 9/10 CV L/R.
 extern "C" double soemdsp_softpop_oscillator_probe(int handle, int which) {
   if (handle < 1 || handle > kMaxInstances) return 0.0;
   const State& s = gPool[handle - 1];
-  const int c = which & 1;
+  const Chan& ch = s.ch[which & 1];
   switch (which) {
-    case 0: case 1: return s.ch[c].outPitch;
-    case 2: case 3: return s.ch[c].outAmp;
-    case 4: case 5: return s.ch[c].outAudio;
-    case 6: case 7: return s.ch[c].instHz;
-    case 8: return s.q;
+    case 0: case 1: return ch.noise.np;
+    case 2: case 3: return ch.noise.na;
+    case 4: case 5: return ch.noise.audio;
+    case 6: case 7: return ch.instHz;
+    case 9: return s.ch[0].noise.cv;
+    case 10: return s.ch[1].noise.cv;
     default: return 0.0;
   }
 }
 
-extern "C" int soemdsp_softpop_oscillator_version() { return 1; }
+extern "C" int soemdsp_softpop_oscillator_display_bin_count() { return kDisplayBins; }
+
+extern "C" double soemdsp_softpop_oscillator_display_bin(int handle, int index) {
+  if (handle < 1 || handle > kMaxInstances || index < 0 || index >= kDisplayBins) return 0.0;
+  return gPool[handle - 1].disp.bins[index];
+}
+
+extern "C" double soemdsp_softpop_oscillator_display_take(int handle) {
+  State* s = live(handle);
+  return s ? display_take(s->disp) : 0.0;
+}
+
+extern "C" double soemdsp_softpop_oscillator_display_info(int handle, int which) {
+  if (handle < 1 || handle > kMaxInstances) return 0.0;
+  return display_info(gPool[handle - 1].disp, which);
+}
+
+extern "C" int soemdsp_softpop_oscillator_version() { return 3; }
 extern "C" const char* soemdsp_softpop_oscillator_metadata_json() { return kMetadataJson; }
 extern "C" int soemdsp_softpop_oscillator_metadata_json_size() { return sizeof(kMetadataJson) - 1; }
