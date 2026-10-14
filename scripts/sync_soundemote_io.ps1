@@ -184,6 +184,11 @@ Sync-Dir -SrcDir $srcPublic -DstDir $dstPublic -ExcludeNames $excludeTop
 # Page patches live at repo-root patches/ and ship next to the embed so URLs
 # are /soemdsp-sandbox/patches/{slug}.json (same path locally and on soundemote.io).
 $srcPatches = Join-Path $root "patches"
+# Always regenerate the Pages catalog from the files on disk before shipping.
+# A stale hand-kept index.json is how new patches (e.g. livedemos/superlove)
+# went live as files but 404'd as routes.
+& python (Join-Path $root "scripts\rebuild_page_patches_index.py")
+if ($LASTEXITCODE -ne 0) { throw "rebuild_page_patches_index.py failed -- refusing to ship a stale patches/index.json" }
 $dstPatches = Join-Path $dst "patches"
 if (!(Test-Path -LiteralPath $srcPatches)) {
   throw "Missing patches/ at $srcPatches -- page routes need static JSON here."

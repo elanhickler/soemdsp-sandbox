@@ -94,7 +94,15 @@ def main() -> None:
                 )
             )
 
-    for slug, rel in PAGE_PATCH_ALIASES:
+    # Every live demo gets a bare route (/superlove -> livedemos/superlove.json)
+    # automatically, so adding a file to patches/livedemos/ is all it takes.
+    auto_aliases: list[tuple[str, str]] = []
+    livedemos = PATCHES / "livedemos"
+    if livedemos.is_dir():
+        for path in sorted(livedemos.glob("*.json"), key=lambda p: p.name.lower()):
+            auto_aliases.append((path.stem, f"livedemos/{path.name}"))
+
+    for slug, rel in PAGE_PATCH_ALIASES + auto_aliases:
         if any(e.get("slug") == slug for e in entries):
             continue
         try:

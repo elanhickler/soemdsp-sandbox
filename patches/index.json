@@ -220,6 +220,15 @@
       "folder": "livedemos"
     },
     {
+      "slug": "livedemos/superlove",
+      "label": "superlove",
+      "name": "",
+      "url": "/soemdsp-sandbox/patches/livedemos/superlove.json",
+      "author": "",
+      "emoji": "",
+      "folder": "livedemos"
+    },
+    {
       "slug": "modulator_breadboards/ping_envelope",
       "label": "ping_envelope",
       "name": "",
@@ -716,6 +725,14 @@
       "emoji": ""
     },
     {
+      "slug": "soemreverb",
+      "label": "soemreverb",
+      "name": "",
+      "url": "/soemdsp-sandbox/patches/livedemos/soemreverb.json",
+      "author": "",
+      "emoji": ""
+    },
+    {
       "slug": "starwarsalarm",
       "label": "starwarsalarm",
       "name": "",
@@ -736,6 +753,14 @@
       "label": "starwarsalarm3",
       "name": "",
       "url": "/soemdsp-sandbox/patches/starwarsalarm3.json",
+      "author": "",
+      "emoji": ""
+    },
+    {
+      "slug": "superlove",
+      "label": "superlove",
+      "name": "",
+      "url": "/soemdsp-sandbox/patches/livedemos/superlove.json",
       "author": "",
       "emoji": ""
     },

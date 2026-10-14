@@ -18135,6 +18135,27 @@ def run_smoke(port: int, manifest: Path) -> None:
     )
 
 
+def check_page_patch_index_covers_all_patches() -> None:
+    """Every patches/**/*.json must be in patches/index.json, and every live
+    demo must have its bare /<name> route, or the site 404s it."""
+    patches_dir = ROOT / "patches"
+    catalog = json.loads((patches_dir / "index.json").read_text(encoding="utf-8"))
+    entries = catalog.get("patches", [])
+    urls = {e.get("url") for e in entries}
+    slugs = {e.get("slug") for e in entries}
+    from urllib.parse import quote as _q
+    for path in patches_dir.rglob("*.json"):
+        if path.name.lower() == "index.json":
+            continue
+        rel = path.relative_to(patches_dir).parts
+        if len(rel) > 2:
+            continue
+        url = "/soemdsp-sandbox/patches/" + "/".join(_q(p, safe="") for p in rel)
+        require(url in urls, f"patches/index.json missing {url} -- run scripts/rebuild_page_patches_index.py")
+        if len(rel) == 2 and rel[0] == "livedemos":
+            require(path.stem in slugs, f"patches/index.json missing bare live demo route /{path.stem}")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -18146,6 +18167,7 @@ def main() -> None:
     parser.add_argument("--manifest", default=str(DEFAULT_MANIFEST))
     args = parser.parse_args()
 
+    check_page_patch_index_covers_all_patches()
     run_smoke(args.port, Path(args.manifest).resolve())
     print("soemdsp-sandbox smoke test passed")
 
