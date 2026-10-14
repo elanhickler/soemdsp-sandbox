@@ -1,3 +1,12 @@
+## 2026-10-14 - WebGL display policy + Softpop split docs (docs only)
+
+- New `docs/WEBGL_DISPLAY_PLAN.md`: WebGL2 + shaders only for module displays, one interface (`gl-line-renderer.js` on `picture-device.js`'s shared context), no 2D fallback, explicit exceptions, migration table of 39 modules, shared display-canvas helper + shrink-only smoke allowlist. APP_POLICY 3 rewritten to match; FUTURE_PLANNING pointer.
+- `docs/SOFTPOP_PLAN.md` updated for the split: Softpop Oscillator (Source / Morph / Width swing limit) and new Softpop Filter (old Filter model + Mono/Left/Right inputs replacing the noise). No commit.
+
+## 2026-10-14 — Product catalog plan for soundemote.com (docs only)
+
+- Filed `soundemote-com/docs/PRODUCT_CATALOG_PLAN.md`: data-driven products (`src/content/products/<slug>.json` + `.md`, zod checks, `$slug` root route, shared install paths, checkout-ready schema) and a shared "sandbox module plugin ports" repo based on `soemdsp-sandbox-audioplugin`. Seed added to `docs/FUTURE_PLANNING.md`. Git remotes moved off the soundemote org (sabrina-reverb-clap, jerobeam-modules, soemdsp, soemdsp-sandbox-native). No commit.
+
 ## 2026-10-06 — C-002: old kick / snare cards removed (local, uncommitted)
 
 - Argi ("start"): remove Sinepulse, Sine Kick, Kick Envelope, the `electroKick` placeholder and the `electroSnare` placeholder (Electro Snare, `docs/SNARE_PLAN.md`, takes the key back). Kept: `electroHat`, `drummer`, `percussion`.
@@ -209,7 +218,8 @@ graphify update . --force   # no LLM; AST re-extract
 - Electro Kick — seed, discussion with Argi, not final (`docs/FUTURE_PLANNING.md`). Shared params + Algorithm: 808 / 909 / Simmons SDS-V (SweepKicker stays its own Kick module, Argi 2026-10-06).
 - Electro Hat — seed, discussion with Argi, not final (`docs/FUTURE_PLANNING.md`). 808 / 606 six-oscillator metal, FM / ring-mod, filtered noise; 909 hats are 6-bit samples (not synthesizable); Closed / Open triggers with choke proposed.
 - Electro Tom — seed, discussion with Argi, not final (`docs/FUTURE_PLANNING.md`). Trigger / Reset in, Tom / Env out; 808 / 909 / Simmons SDS-V; Tune, Tone, Body Decay, Bend, Noise, Amplitude (Tune and Bend primary).
-- Softpop Oscillator — ready to build (2026-10-07), owner Sandy: Model Filter (default; TPT SVF const-peak BP + √Q trim + per-Color tilt correction) / Sine; Width, Pitch Mod (cents), Amp Mod always active; Reset / f in (f replaces Frequency, as on polyBlep), no pitch input, no Trigger; independent seeded noise per target and channel. Argi approved library extraction (APP_POLICY §19): `soemdsp/filter/tpt_svf.h` + `soemdsp/math/noise_colors.h`, EQ Filter + Noise Generator refactored with bit-identical regression. Plan: `docs/SOFTPOP_PLAN.md`.
+- Softpop Oscillator — built locally, uncommitted, awaiting Argi's ear check (SandyModules, 2026-10-14). Model Filter (default; TPT SVF const-peak BP + √Q trim + per-Color tilt) / Sine. Pitch Mod (1σ = knob cents) and Amp Mod use raw full-band, Color-shaped noise from their own generators; smoothing deleted. Width only affects Filter (Sine bit-identical across Width, tested). Amp Mod kept but hidden by default (Argi). Latest build: always stereo (Stereo param removed); outs Mono (= Left) / Left / Right / Left Noise / Right Noise / Left CV / Right CV (octaves); log-axis face (glow line / filter curve, HSB + Brightness / Decay); pitch-mod mean correction + sin(w)/w Q decramp. Reset / f in (f replaces Frequency, as on polyBlep). Library extraction approved: `soemdsp/filter/tpt_svf.h` + `soemdsp/math/noise_colors.h`. Plan: `docs/SOFTPOP_PLAN.md`.
+- Sidechain — seed / draft plan (2026-10-14), awaiting Argi: ducking helper on the Pump Limiter maths (+ new Hold). In: Left/Right Dry, Left/Right Wet, Sidechain, Envelope; Out: Left, Right; Threshold, Ratio, Attack, Hold, Release. Shared `soemdsp/dynamics/pump_gain.h` proposed (needs §19 approval). Plan: `docs/SIDECHAIN_PLAN.md`.
 - Scope video out - plan only, not started (2026-10-13, Argi via Thoughts): 📺 `rgba` out on every scope / videoscope / display via the existing `nodeGraphPicturePublish`; V1 Spectrogram + Videoscope, V2 GPU scopes, V3 Canvas2D faces. Plan + tracker (VO-0..VO-8, all Not started): `docs/SCOPE_VIDEO_OUT_PLAN.md`.
 - [x] Remove old kick / snare cards (Sinepulse, Sine Kick, Kick Envelope, `electroSnare` placeholder, `electroKick`) — done 2026-10-06, local, uncommitted (`docs/BUG_PLAN.md` C-002, file list in `docs/KICK_PLAN.md` → Removal).
 - Unipolar switch on every 1D display — plan only, not implemented (docs/FUTURE_PLANNING.md).

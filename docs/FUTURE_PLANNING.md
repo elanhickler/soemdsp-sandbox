@@ -1,6 +1,9 @@
-# Future Planning Notes
+﻿# Future Planning Notes
 
 This file collects project-shaping ideas that should survive day-to-day implementation without becoming immediate scope.
+
+## WebGL2 displays everywhere (2026-10-14)
+All module displays move to WebGL2 + shaders via `gl-line-renderer.js` on the shared picture device; no 2D fallback (black on GL failure). 39 modules to migrate, enforced by a shrink-only smoke allowlist. Plan: `docs/WEBGL_DISPLAY_PLAN.md`.
 
 ## Slider buffered modulation (destination = real effective-param history)
 
@@ -295,3 +298,27 @@ Primary note:
 ```text
 docs/OHMICIDE_SLEW_PLAN.md
 ```
+
+## Soundemote product catalog + sandbox module plugin ports
+
+Turn sandbox modules into products on soundemote.com: one shared plugin repo (`soemdsp-sandbox-plugins`, Sabrina shell; see `docs/PLUGIN_REPO_PLAN.md`) builds many CLAP/VST3/AU products, and the site gets each product from one data file + article (`/<slug>` root pages, auto-listed on `/plugins`). Sabrina Reverb is product #1. Planning only.
+
+Primary note (in the site repo):
+
+```text
+soundemote-com/docs/PRODUCT_CATALOG_PLAN.md
+```
+
+## Plugin repo: soemdsp-sandbox-plugins (Sabrina shell, many products)
+
+One shared plugin repo (`elanhickler/soemdsp-sandbox-plugins`, private) built from the Sabrina Reverb CLAP shell. Products differ only in DSP + params (`products/<slug>/product.json` + native kernel from `native_modules`). Sabrina is product #1. Planning only.
+
+Primary note:
+
+```text
+docs/PLUGIN_REPO_PLAN.md
+```
+
+## Sidechain
+
+**Status:** seed, draft plan for Argi's review (2026-10-14). New module **Sidechain**, a ducking helper reusing the Pump Limiter (`limiter` / `native_modules/pumping_limiter`) detector, hard-knee gain computer and gain smoother. Hold is new; Pump Limiter has none. Inputs: Left Dry, Right Dry, Left Wet, Right Wet, Sidechain, Envelope. Outputs: Left, Right. Params: Threshold, Ratio, Attack Time, Hold Time, Release Time. Proposed: the detector keys from Sidechain (else Dry); a wired Envelope (0..1) bypasses the detector as the duck amount; Wet is ducked; Out = Dry + g·Wet (crossfade is an alternative). Reuse via a shared `soemdsp/dynamics/pump_gain.h` needs Argi's APP_POLICY §19 approval. Native only, owner SandyModules once approved. Plan: `docs/SIDECHAIN_PLAN.md`.

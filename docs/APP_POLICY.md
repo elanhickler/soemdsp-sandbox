@@ -311,11 +311,12 @@ This app is a **C++ DSP engine with a JS interface** (Â§0). JS authors and obs
 
 ---
 
-## 3. Prefer GPU for module display graphics
+## 3. Module displays: WebGL2 + shaders only
 
-- Module faces, scopes, fields, phosphor-style displays: **prefer GPU** (WebGL / existing scope GPU paths).
-- Avoid CPU pixel loops / 2D canvas full-frame paint for live module displays when a GPU path exists or can be added.
-- CPU is OK for: one-shot layout, debug overlays, tiny markers, metadata â€” not the main live image.
+- **Every module display draws with WebGL2 + shaders** through the one interface `public/lib/visual/gl-line-renderer.js` (begin / rect / segment / polyline / end) on the shared WebGL2 context of `picture-device.js`. Preferred primitive: shader-expanded quads with smoothstep edges (`halfPx` / `feather`).
+- **No canvas 2D fallback.** If GL fails the display is black. Modules never create their own canvas context; they use the shared display-canvas helper (marker class, automatic >2.5x zoom pixelation).
+- Exceptions only where a shader truly is not worth it, listed explicitly in `docs/WEBGL_DISPLAY_PLAN.md` section 5. Migration table and smoke-test allowlist (shrink-only) live there too.
+- CPU is still fine for one-shot layout and debug overlays, not for the displayed picture.
 
 ---
 
