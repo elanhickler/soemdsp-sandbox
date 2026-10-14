@@ -202,16 +202,20 @@ function nodeGraphAudioPlayerLibraryNormalizeCard(raw, index = 0) {
   const source = raw && typeof raw === "object" ? raw : {};
   const path = String(source.path || source.sourcePath || "").trim();
   const fileKey = String(source.fileKey || "").trim();
-  const name = String(source.name || source.rel || path.split(/[\\/]/).pop() || fileKey || `track-${index + 1}`)
+  // Web-addressed entry (docs/EMBED.md): http(s) URL fetched on play.
+  const url = /^https?:\/\//i.test(String(source.url || "").trim()) ? String(source.url).trim() : "";
+  const urlName = url ? decodeURIComponent(url.split(/[?#]/)[0].split("/").pop() || "") : "";
+  const name = String(source.name || source.rel || path.split(/[\\/]/).pop() || urlName || fileKey || `track-${index + 1}`)
     .trim()
     .slice(0, 220);
   const rel = String(source.rel || "").trim().replace(/\\/g, "/");
   const label = (rel && rel.includes("/") ? rel : name).slice(0, 220) || name;
   const sampleId = String(source.sampleId || "").trim();
-  if (!path && !fileKey && !sampleId) {
+  if (!path && !fileKey && !sampleId && !url) {
     return null;
   }
   return {
+    ...(url ? { url } : {}),
     bytes: Math.max(0, Math.round(nodeGraphFiniteNumber(source.bytes))),
     channels: Math.max(0, Math.round(nodeGraphFiniteNumber(source.channels))),
     fileKey,
@@ -1069,6 +1073,35 @@ async function nodeGraphAudioPlayerLibraryEnsureItemLoaded(nodeId, item) {
     });
     const node = typeof nodeGraphPatchNode === "function" ? nodeGraphPatchNode(nodeId) : null;
     return node?.sample?.id || "";
+  }
+  const url = String(item.url || "").trim();
+  if (url && typeof loadNodeGraphSampleForNode === "function") {
+    nodeGraphAudioPlayerLog("INFO", "decode via URL", { nodeId, url });
+    let res;
+    try {
+      res = await fetch(url, { mode: "cors" });
+    } catch (error) {
+      throw new Error(`could not fetch ${item.name || url} (CORS or network)`);
+    }
+    if (!res.ok) {
+      throw new Error(`could not fetch ${item.name || url} (${res.status})`);
+    }
+    const blob = await res.blob();
+    const fileName = decodeURIComponent(url.split(/[?#]/)[0].split("/").pop() || "") || item.name || "track";
+    const fetched = new File([blob], fileName, { type: blob.type || "", lastModified: 0 });
+    const key = nodeGraphAudioPlayerLibraryFileKey(fetched);
+    nodeGraphAudioPlayerLibraryFiles().set(key, fetched);
+    item.fileKey = key;
+    item.bytes = fetched.size;
+    const sample = await loadNodeGraphSampleForNode(nodeId, fetched, {
+      commit: true,
+      livePlan: true,
+      persist: false,
+      record: false,
+      sourcePath: url,
+      syncDisplay: true,
+    });
+    return sample?.id || "";
   }
   throw new Error(`no local file for ${item.name || item.path || "track"} — paste a full folder path and Load`);
 }
