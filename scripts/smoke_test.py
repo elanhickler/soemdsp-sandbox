@@ -18152,8 +18152,8 @@ def check_page_patch_index_covers_all_patches() -> None:
             continue
         url = "/soemdsp-sandbox/patches/" + "/".join(_q(p, safe="") for p in rel)
         require(url in urls, f"patches/index.json missing {url} -- run scripts/rebuild_page_patches_index.py")
-        if len(rel) == 2 and rel[0] == "livedemos":
-            require(path.stem in slugs, f"patches/index.json missing bare live demo route /{path.stem}")
+        if len(rel) == 2:
+            require(path.stem in slugs, f"patches/index.json missing bare patch route /{path.stem}")
 
 
 def main() -> None:

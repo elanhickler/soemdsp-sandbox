@@ -301,6 +301,46 @@
       "folder": "voice_breadboards"
     },
     {
+      "slug": "acoustic_dispersion",
+      "label": "acoustic_dispersion",
+      "name": "",
+      "url": "/soemdsp-sandbox/patches/hyperpluck/acoustic_dispersion.json",
+      "author": "",
+      "emoji": ""
+    },
+    {
+      "slug": "Analog_Computer",
+      "label": "Analog_Computer",
+      "name": "",
+      "url": "/soemdsp-sandbox/patches/Alarm/Analog_Computer.json",
+      "author": "Soundemote",
+      "emoji": "📺"
+    },
+    {
+      "slug": "analogdream",
+      "label": "analogdream",
+      "name": "",
+      "url": "/soemdsp-sandbox/patches/demo_patches/analogdream.json",
+      "author": "",
+      "emoji": ""
+    },
+    {
+      "slug": "analoghorror",
+      "label": "analoghorror",
+      "name": "",
+      "url": "/soemdsp-sandbox/patches/demo_patches/analoghorror.json",
+      "author": "",
+      "emoji": ""
+    },
+    {
+      "slug": "CALLNOW",
+      "label": "CALLNOW",
+      "name": "",
+      "url": "/soemdsp-sandbox/patches/foley/CALLNOW.json",
+      "author": "",
+      "emoji": ""
+    },
+    {
       "slug": "chaosfly_high_freq",
       "label": "chaosfly_high_freq",
       "name": "",
@@ -325,6 +365,62 @@
       "emoji": ""
     },
     {
+      "slug": "chorus_vs_ensemble",
+      "label": "chorus_vs_ensemble",
+      "name": "",
+      "url": "/soemdsp-sandbox/patches/guitar_pedals/chorus_vs_ensemble.json",
+      "author": "",
+      "emoji": ""
+    },
+    {
+      "slug": "clean",
+      "label": "clean",
+      "name": "",
+      "url": "/soemdsp-sandbox/patches/guitar_pedals/clean.json",
+      "author": "",
+      "emoji": ""
+    },
+    {
+      "slug": "clean_chorus",
+      "label": "clean_chorus",
+      "name": "",
+      "url": "/soemdsp-sandbox/patches/guitar_pedals/clean_chorus.json",
+      "author": "",
+      "emoji": ""
+    },
+    {
+      "slug": "crossover",
+      "label": "crossover",
+      "name": "",
+      "url": "/soemdsp-sandbox/patches/demo_patches/crossover.json",
+      "author": "",
+      "emoji": ""
+    },
+    {
+      "slug": "damaged_chorus",
+      "label": "damaged_chorus",
+      "name": "",
+      "url": "/soemdsp-sandbox/patches/guitar_pedals/damaged_chorus.json",
+      "author": "",
+      "emoji": ""
+    },
+    {
+      "slug": "deathwhistle",
+      "label": "deathwhistle",
+      "name": "",
+      "url": "/soemdsp-sandbox/patches/demo_patches/deathwhistle.json",
+      "author": "",
+      "emoji": ""
+    },
+    {
+      "slug": "decay_envelope_shootout",
+      "label": "decay_envelope_shootout",
+      "name": "",
+      "url": "/soemdsp-sandbox/patches/demo_patches/decay_envelope_shootout.json",
+      "author": "",
+      "emoji": ""
+    },
+    {
       "slug": "default",
       "label": "default",
       "name": "",
@@ -337,6 +433,14 @@
       "label": "ditheredoscillator",
       "name": "",
       "url": "/soemdsp-sandbox/patches/ditheredoscillator.json",
+      "author": "",
+      "emoji": ""
+    },
+    {
+      "slug": "dreamy_delay",
+      "label": "dreamy_delay",
+      "name": "",
+      "url": "/soemdsp-sandbox/patches/guitar_pedals/dreamy_delay.json",
       "author": "",
       "emoji": ""
     },
@@ -389,6 +493,30 @@
       "emoji": ""
     },
     {
+      "slug": "guitar_controlled_synth",
+      "label": "guitar_controlled_synth",
+      "name": "",
+      "url": "/soemdsp-sandbox/patches/guitar_pedals/guitar_controlled_synth.json",
+      "author": "",
+      "emoji": ""
+    },
+    {
+      "slug": "hyperpluck_acoustic_diffusion",
+      "label": "hyperpluck_acoustic_diffusion",
+      "name": "",
+      "url": "/soemdsp-sandbox/patches/voice_breadboards/hyperpluck_acoustic_diffusion.json",
+      "author": "",
+      "emoji": ""
+    },
+    {
+      "slug": "hyperpluck_breadboard",
+      "label": "hyperpluck_breadboard",
+      "name": "",
+      "url": "/soemdsp-sandbox/patches/voice_breadboards/hyperpluck_breadboard.json",
+      "author": "",
+      "emoji": ""
+    },
+    {
       "slug": "init",
       "label": "init",
       "name": "",
@@ -405,10 +533,26 @@
       "emoji": ""
     },
     {
+      "slug": "journey_to_the_hypersaw",
+      "label": "journey_to_the_hypersaw",
+      "name": "",
+      "url": "/soemdsp-sandbox/patches/demo_patches/journey_to_the_hypersaw.json",
+      "author": "",
+      "emoji": ""
+    },
+    {
       "slug": "journeytothehypersaw",
       "label": "journeytothehypersaw",
       "name": "",
       "url": "/soemdsp-sandbox/patches/journeytothehypersaw.json",
+      "author": "",
+      "emoji": ""
+    },
+    {
+      "slug": "karplus-strong-like-envelope",
+      "label": "karplus-strong-like-envelope",
+      "name": "",
+      "url": "/soemdsp-sandbox/patches/demonstration/karplus-strong-like-envelope.json",
       "author": "",
       "emoji": ""
     },
@@ -517,6 +661,14 @@
       "emoji": ""
     },
     {
+      "slug": "nice_LCD_and_LED",
+      "label": "nice_LCD_and_LED",
+      "name": "",
+      "url": "/soemdsp-sandbox/patches/visuals/nice_LCD_and_LED.json",
+      "author": "",
+      "emoji": ""
+    },
+    {
       "slug": "noisealarm",
       "label": "noisealarm",
       "name": "",
@@ -549,10 +701,42 @@
       "emoji": ""
     },
     {
+      "slug": "ping_envelope",
+      "label": "ping_envelope",
+      "name": "",
+      "url": "/soemdsp-sandbox/patches/modulator_breadboards/ping_envelope.json",
+      "author": "",
+      "emoji": ""
+    },
+    {
+      "slug": "ping_vs_pluck",
+      "label": "ping_vs_pluck",
+      "name": "",
+      "url": "/soemdsp-sandbox/patches/demo_patches/ping_vs_pluck.json",
+      "author": "",
+      "emoji": ""
+    },
+    {
+      "slug": "ping_vs_power_vs_expo",
+      "label": "ping_vs_power_vs_expo",
+      "name": "",
+      "url": "/soemdsp-sandbox/patches/demo_patches/ping_vs_power_vs_expo.json",
+      "author": "",
+      "emoji": ""
+    },
+    {
       "slug": "pixelgrid",
       "label": "pixelgrid",
       "name": "",
       "url": "/soemdsp-sandbox/patches/pixelgrid.json",
+      "author": "",
+      "emoji": ""
+    },
+    {
+      "slug": "pluck_envelope",
+      "label": "pluck_envelope",
+      "name": "",
+      "url": "/soemdsp-sandbox/patches/modulator_breadboards/pluck_envelope.json",
       "author": "",
       "emoji": ""
     },
@@ -733,6 +917,22 @@
       "emoji": ""
     },
     {
+      "slug": "Soft_Asymmetrical_Sine",
+      "label": "Soft_Asymmetrical_Sine",
+      "name": "",
+      "url": "/soemdsp-sandbox/patches/Soundemote_Softwave_prototypes/Soft_Asymmetrical_Sine.json",
+      "author": "",
+      "emoji": ""
+    },
+    {
+      "slug": "Soft_Triangle",
+      "label": "Soft_Triangle",
+      "name": "",
+      "url": "/soemdsp-sandbox/patches/Soundemote_Softwave_prototypes/Soft_Triangle.json",
+      "author": "",
+      "emoji": ""
+    },
+    {
       "slug": "starwarsalarm",
       "label": "starwarsalarm",
       "name": "",
@@ -781,6 +981,14 @@
       "emoji": ""
     },
     {
+      "slug": "superlove_lp24_breadboard",
+      "label": "superlove_lp24_breadboard",
+      "name": "",
+      "url": "/soemdsp-sandbox/patches/filter_breadboards/superlove_lp24_breadboard.json",
+      "author": "Sandbox",
+      "emoji": ""
+    },
+    {
       "slug": "synthlead",
       "label": "synthlead",
       "name": "",
@@ -797,11 +1005,27 @@
       "emoji": ""
     },
     {
+      "slug": "triangle_comparison",
+      "label": "triangle_comparison",
+      "name": "",
+      "url": "/soemdsp-sandbox/patches/demo_patches/triangle_comparison.json",
+      "author": "",
+      "emoji": ""
+    },
+    {
       "slug": "tubesaturation",
       "label": "tubesaturation",
       "name": "",
       "url": "/soemdsp-sandbox/patches/tubesaturation.json",
       "author": "",
+      "emoji": ""
+    },
+    {
+      "slug": "vibrato_generator",
+      "label": "vibrato_generator",
+      "name": "",
+      "url": "/soemdsp-sandbox/patches/modulator_breadboards/vibrato_generator.json",
+      "author": "Sandbox",
       "emoji": ""
     },
     {

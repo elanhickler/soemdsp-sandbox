@@ -97,10 +97,14 @@ def main() -> None:
     # Every live demo gets a bare route (/superlove -> livedemos/superlove.json)
     # automatically, so adding a file to patches/livedemos/ is all it takes.
     auto_aliases: list[tuple[str, str]] = []
-    livedemos = PATCHES / "livedemos"
-    if livedemos.is_dir():
-        for path in sorted(livedemos.glob("*.json"), key=lambda p: p.name.lower()):
-            auto_aliases.append((path.stem, f"livedemos/{path.name}"))
+    # EVERY folder patch gets a bare /<name> route, generated from disk.
+    # livedemos/ wins name clashes, then folders alphabetically; root patches
+    # already own their bare slug.
+    folders = sorted([p for p in PATCHES.iterdir() if p.is_dir()],
+                     key=lambda p: (p.name.lower() != "livedemos", p.name.lower()))
+    for folder in folders:
+        for path in sorted(folder.glob("*.json"), key=lambda p: p.name.lower()):
+            auto_aliases.append((path.stem, f"{folder.name}/{path.name}"))
 
     for slug, rel in PAGE_PATCH_ALIASES + auto_aliases:
         if any(e.get("slug") == slug for e in entries):
