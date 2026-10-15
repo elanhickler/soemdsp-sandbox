@@ -1964,7 +1964,7 @@ const nodeGraphDisplaySettingsToggleMeta = Object.freeze({
   autoZoomLines: Object.freeze({
     label: "auto-zoom lines",
     id: "nodeTraceDisplayAutoZoomLines",
-    title: "Sabrina Reverb: diffusion lines zoom to their own extents; the green tap-delay lines sit centered and show only their modulation swing. Off = absolute 0..0.45 s axis.",
+    title: "Sabrina / Cinematic Reverb: diffusion lines zoom to their own extents; the green tap-delay lines sit centered and show only their modulation swing. Off = absolute 0..0.45 s axis.",
   }),
   showPlus: Object.freeze({
     label: "Show +",

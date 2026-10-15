@@ -1859,8 +1859,8 @@ static const int kTypePolyBlep = 1;
 static const int kTypeLadderFilter = 2;
 static const int kTypeSoftClipper = 3;
 static const int kTypeTubeSaturation = 197; // Tube Saturation (Koren load-line)
-static const int kTypeReverbEffect = 4; // dev Sabrina (wide exponential Mod(~)Speed)
-static const int kTypeSabrinaReverbOriginal = 215; // frozen Sabrina Reverb Original (Walter Speed map), same DSP
+static const int kTypeReverbEffect = 4; // "Cinematic Reverb", dev (wide exponential Mod(~)Speed)
+static const int kTypeSabrinaReverbOriginal = 215; // frozen "Sabrina Reverb" (Walter Speed map), same DSP
 static inline bool is_sabrina_type(int t) { return t == kTypeReverbEffect || t == kTypeSabrinaReverbOriginal; }
 static const int kTypePingPongDelay = 5;
 static const int kTypeOutput = 6;

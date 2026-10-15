@@ -1,6 +1,6 @@
-// Temporary display name for the development Sabrina (key reverbEffect); Argi will rename it.
+// Display name for the development reverb (key reverbEffect, grew out of Sabrina).
 // Change it here only -- labels and the module store read this constant.
-const nodeGraphSabrinaDevDisplayName = "Sabrina Dev (name TBD)";
+const nodeGraphCinematicReverbDisplayName = "Cinematic Reverb";
 
 const nodeGraphNodeLabels = Object.freeze({
   audioInput: "Input",
@@ -236,8 +236,8 @@ const nodeGraphNodeLabels = Object.freeze({
   pingPongDelay: "Ping Pong Delay",
   wallDelay: "Wall Delay",
   doppler: "Doppler",
-  reverbEffect: nodeGraphSabrinaDevDisplayName,
-  sabrinaReverbOriginal: "Sabrina Reverb Original",
+  reverbEffect: nodeGraphCinematicReverbDisplayName,
+  sabrinaReverbOriginal: "Sabrina Reverb",
   soemReverb: "SoEmReverb",
   pll: "PLL",
   helmholtzPitch: "Pitch Detector",
@@ -13275,7 +13275,7 @@ const nodeGraphModuleDefinitions = (
       nodeGraphOutputAmplitudeParam,
     ]
   },
-  // FROZEN: Sabrina Reverb Original == Sabrina Reverb plugin 0.1.7 sound. Bug fixes only,
+  // FROZEN: Sabrina Reverb (key sabrinaReverbOriginal) == plugin 0.1.7 sound. Bug fixes only,
   // no sound changes; new work goes on reverbEffect. Same native DSP, Walter Speed variant.
   sabrinaReverbOriginal: {
     planRole: "processor",
@@ -13318,7 +13318,7 @@ const nodeGraphModuleDefinitions = (
       "Mix L": "Mix L",
       "Mix R": "Mix R" },
     parameters: [
-      { defaultValue: "0.43", key: "mix", label: "Mix", max: "1", mid: "0.43", min: "0", nonlinearSlider: false, step: "any", tooltip: "Dry/wet balance on the Mix outputs (not a wet-only path). Sabrina Reverb Original is frozen to the plugin 0.1.7 sound: bug fixes only." },
+      { defaultValue: "0.43", key: "mix", label: "Mix", max: "1", mid: "0.43", min: "0", nonlinearSlider: false, step: "any", tooltip: "Dry/wet balance on the Mix outputs (not a wet-only path). Sabrina Reverb is frozen to the plugin 0.1.7 sound: bug fixes only." },
       { defaultValue: "0.35", key: "diffusionSize", label: "Diffusion Size", max: "1", mid: "0.35", min: "0", nonlinearSlider: false, smoothingSeconds: 0.05, step: "any", tooltip: "Size of the diffusion network." },
       { defaultValue: "0.70", key: "diffusionAmount", label: "Diffusion Amount", max: "1", mid: "0.70", min: "0", nonlinearSlider: false, step: "any", tooltip: "Strength of early diffusion." },
       { defaultValue: "0.02", key: "delaySize", label: "Delay Time", max: "1", mid: "0.02", min: "0", nonlinearSlider: false, smoothingSeconds: 0.05, step: "any", tooltip: "Main reverb delay length." },

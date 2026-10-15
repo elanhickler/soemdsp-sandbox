@@ -105,8 +105,8 @@ struct SabrinaState {
   double lfoBaseSpeed;
   double lfoVariation;
   int lfoStyle; // 0 Parabol (original), 1 FBM
-  // Speed-mapping variant: 0 = dev 'Sabrina Reverb' (exponential 2 s .. 0.05 s),
-  // 1 = 'Sabrina Reverb Original' (Walter's ((1 - v) * 1.95 + 0.5) * 0.5 = 1.225 s .. 0.25 s).
+  // Speed-mapping variant: 0 = dev 'Cinematic Reverb' (exponential 2 s .. 0.05 s),
+  // 1 = frozen 'Sabrina Reverb' (key sabrinaReverbOriginal, Walter's ((1 - v) * 1.95 + 0.5) * 0.5 = 1.225 s .. 0.25 s).
   // FROZEN: variant 1 must keep matching plugin 0.1.7 -- bug fixes only, no sound changes.
   int speedVariant;
   double delayTapMod; // depth multiplier on the 2 main (non-diffuse) taps: 0 = fixed length, 1 = Walter original, 2 = double

@@ -1,4 +1,4 @@
-﻿// Sabrina Reverb Original (graph type sabrinaReverbOriginal = native speed variant 1)
+﻿// Frozen Sabrina Reverb (graph type sabrinaReverbOriginal = native speed variant 1)
 // must reproduce Walter's mapping exactly: at Walter defaults it is compared to the
 // frozen reference build at commit 8854809a (Walter Speed map, old inverted Vary;
 // old Vary 0.001 == new Vary 0.999). Also checks the variant defaults (no set_params)
