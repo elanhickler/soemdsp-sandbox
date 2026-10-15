@@ -1,11 +1,11 @@
 // Display GL policy: no silent fallbacks. GL failure -> black + one console.error
 // per face/reason via nodeGraphDisplayGlFailed (display-canvas.js).
 // Skipped (BugsFix-owned, still to port): gradient-vectorscope, trace-woscope,
-// trace-dot-sprite; number-readout-gl.js is unused legacy.
+// trace-dot-sprite.
 import fs from "node:fs";
 import path from "node:path";
 const root = path.resolve(path.dirname(new URL(import.meta.url).pathname.replace(/^\/(\w:)/, "$1")), "..");
-const skip = /gradientVectorscope|trace-woscope|trace-dot-sprite|number-readout-gl\.js/;
+const skip = /gradientVectorscope|trace-woscope|trace-dot-sprite/;
 const files = [];
 function walk(d) {
   for (const e of fs.readdirSync(d, { withFileTypes: true })) {

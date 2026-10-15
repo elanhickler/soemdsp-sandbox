@@ -57,7 +57,7 @@ Method: per module folder, any `.js` with `getContext("2d")`, `createElement("ca
 | 17 | `knob` | `knob-face.js` | 2D | knob face; proposed exception |
 | 18 | `lookaheadLimiter` | `lookahead-limiter-display.js` | 2D | meter -> rect |
 | 19 | `matrixDisplay` | `matrix-display-display.js`, `matrix-display-ui.js` | 2D | LCD cells -> rect |
-| 20 | `numberReadout` | `number-readout-gl.js` | Partial (shared GL + 2D) | digit atlas bake |
+| 20 | `numberReadout` | (`number-readout-gl.js` deleted 2026-10-15: unused) | Done | digit bake in `lib/visual/glyph-sdf-atlas.js` |
 | 21 | `phoneTone` | `phone-tone-display.js` | 2D |  |
 | 22 | `rasterRgb` | `raster-rgb-display.js` | Partial (shared GL + 2D) |  |
 | 23 | `rgbFractal` | `rgb-fractal-display.js`, `rgb-fractal-gl.js`, `rgb-fractal-ui.js` | Partial (shared GL + 2D) |  |

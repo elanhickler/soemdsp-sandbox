@@ -1,6 +1,6 @@
 // Shared SDF glyph atlas baker (Felzenszwalb EDT). The 2D canvas here is a
 // one-time bake source for a GL texture, never a display surface.
-// Used by number-readout-gl.js (DSEG / mono LCD digits).
+// Shared SDF glyph bake (DSEG / mono LCD digits) for GL text.
 
 (function initGlyphSdfAtlas(global) {
   /** 1D squared EDT on a row/col (Felzenszwalb & Huttenlocher). */

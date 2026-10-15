@@ -282,7 +282,6 @@ PUBLIC_SCRIPT_PATHS = (
     "./public/lib/visual/gl-line-renderer.js",
     "./public/modules/reverbEffect/sabrina-reverb-gl.js",
     "./public/lib/visual/glyph-sdf-atlas.js",
-    "./public/modules/numberReadout/number-readout-gl.js",
     "./public/lib/visual/color-widget-plane-gl.js",
     "./public/modules/imageBurn/image-burn-gl.js",
     "./public/modules/imageBurn/image-burn-display.js",
