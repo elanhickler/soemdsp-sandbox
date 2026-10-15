@@ -11,7 +11,6 @@
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
-import { createRequire } from "module";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const wasm = fs.readFileSync(path.join(root, "native_modules", "combined", "soemdsp_combined.wasm"));
@@ -151,15 +150,26 @@ const flat = (n, v) => new Float64Array(n).fill(v);
   const o = render({ wires: [["dry", IN.DRY_L], ["wet", IN.WET_L], ["key", IN.SC]], amps: { dry: 0.3, wet: 0.5, key: 1 }, bypass: true });
   gate(close(o.l, o.src.dry) && close(o.r, o.src.dry) && o.g.every((v) => v === 0), "bypass: Left / Right = Dry, Envelope 0");
 }
-// 9. Shared GL gain face (Pump Limiter Gain / Sidechain Envelope): geometry only.
+// 9. Display data path (Argi 2026-10-14: face showed nothing). The worklet
+// must publish Sidechain's Saw tap under the "Envelope" name the display
+// source asks for, and ring it for faces; both modules use Instant Waterfall.
 {
-  const req = createRequire(import.meta.url);
-  const face = req(path.join(root, "public", "modules", "lookaheadLimiter", "lookahead-limiter-display.js"));
-  const gainPts = face.nodeGraphLimiterGainFacePoints([1, 1, 0.5, 0.5], 4, 4, 11, false);
-  const duckPts = face.nodeGraphLimiterGainFacePoints([0, 0, 0.5, 0.5], 4, 4, 11, true);
-  gate(gainPts.join() === duckPts.join() && gainPts[1] === 0.5 && gainPts[7] === 5.5, "GL face: Gain 0.5 and Envelope 0.5 both dip to mid-height; rest sits at the top");
-  const src = fs.readFileSync(path.join(root, "public", "modules", "lookaheadLimiter", "lookahead-limiter-display.js"), "utf8");
-  gate(!/getContext\(|ctx\.stroke|drawNodeGraphTraceDisplay/.test(src) && /nodeGraphGlLinesBegin/.test(src) && /nodeGraphGlLinesFillBlack/.test(src), "GL face: gl-line-renderer only, no 2D drawing, black on GL failure");
+  const vm = await import("vm");
+  const ctx = { console, NodeLiveAudioProcessor: function NodeLiveAudioProcessor() {}, nodeGraphFiniteNumber: (v, f = 0) => (Number.isFinite(Number(v)) ? Number(v) : f) };
+  vm.createContext(ctx);
+  const wk = fs.readFileSync(path.join(root, "public", "node-live-audio-worklet-native-graph.js"), "utf8");
+  vm.runInContext(wk, ctx);
+  const NP = ctx.NodeLiveAudioProcessor;
+  const names = NP.prototype.nativeGraphPortNames.call({}, "sidechain", NP.NATIVE_GRAPH_PORT_SAW);
+  gate(Array.isArray(names) && names.includes("Envelope"), `worklet publishes Sidechain Saw tap as Envelope (${JSON.stringify(names)})`);
+  gate(NP.prototype.mapNativeGraphSrcPortId.call({}, "Envelope", "sidechain") === NP.NATIVE_GRAPH_PORT_SAW, "Envelope output wires from the Saw tap");
+  gate(/type === "lookaheadLimiter" \|\| type === "sidechain"\) \{\s*ports = facePorts\.concat\(P\.NATIVE_GRAPH_PORT_SAW\)/.test(wk), "face ring includes Sidechain's Saw tap");
+  const defs = fs.readFileSync(path.join(root, "public", "node-graph-module-definitions.js"), "utf8");
+  const block = (key) => defs.slice(defs.indexOf(`\n  ${key}: {`), defs.indexOf("parameters:", defs.indexOf(`\n  ${key}: {`)));
+  gate(/renderer: "waterfall"[\s\S]*source: \{ value: "Envelope" \}/.test(block("sidechain")), "Sidechain face: Instant Waterfall on Envelope");
+  gate(/renderer: "waterfall"[\s\S]*source: \{ value: "Gain" \}/.test(block("limiter")), "Pump Limiter face: Instant Waterfall on Gain (unchanged)");
+  const wf = fs.readFileSync(path.join(root, "public", "node-graph-module-scope-waterfall.js"), "utf8");
+  gate(/slot\?\.type === "sidechain"\) \{\s*return \{ gain: 2, offset: -1 \}/.test(wf), "waterfall maps Sidechain Envelope 0..1 onto the full face");
 }
 console.log(failures ? `FAILED ${failures}` : "smoke_graph_sidechain ok");
 if (failures) process.exit(1);

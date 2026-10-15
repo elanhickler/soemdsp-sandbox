@@ -431,8 +431,8 @@ function nodeGraphWaterfallAmp(buffer, slot) {
   }
   // Trace buffer view folds Display Scale into gain. Waterfall applies Scale
   // once in nodeGraphWaterfallY, so this stays a unit map. Limiter Gain is
-  // 0..1; Scale 1 puts that on +/-1 as 2*raw-1.
-  if (slot?.type === "lookaheadLimiter" || slot?.type === "limiter") {
+  // 0..1; Scale 1 puts that on +/-1 as 2*raw-1. Sidechain Envelope is 0..1 too.
+  if (slot?.type === "lookaheadLimiter" || slot?.type === "limiter" || slot?.type === "sidechain") {
     return { gain: 2, offset: -1 };
   }
   return { gain: 1, offset: 0 };

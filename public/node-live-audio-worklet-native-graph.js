@@ -8811,6 +8811,8 @@ NodeLiveAudioProcessor.prototype.nativeGraphPortNames = function nativeGraphPort
     if (type === "mix4" || type === "mix" || type === "gainBiasMix") return ["Out4"];
     if (type === "mixStereo4" || type === "mixStereo2" || type === "mixStereo" || type === "crossfade2" || type === "crossfade3" || type === "crossfade4") return ["L2"];
     if (type === "lookaheadLimiter" || type === "limiter") return ["Gain"];
+    // Sidechain Envelope out (duck amount) rides the Saw tap.
+    if (type === "sidechain") return ["Envelope", "Env"];
     if (type === "transport") return ["f"];
     if (type === "audioPlayer" || type === "samplePlayer" || type === "wavetable2d") {
       return ["Phase"];
@@ -9173,7 +9175,7 @@ NodeLiveAudioProcessor.prototype.publishNativeGraphScopeTaps = function publishN
         );
       } else if (type === "limiter") {
         ports = facePorts.concat(P.NATIVE_GRAPH_PORT_SAW, P.NATIVE_GRAPH_PORT_RAMP);
-      } else if (type === "lookaheadLimiter") {
+      } else if (type === "lookaheadLimiter" || type === "sidechain") {
         ports = facePorts.concat(P.NATIVE_GRAPH_PORT_SAW);
       } else if (type === "t" || /^t([2-9]|1[01])$/.test(type)) {
         // t-series: Saw bus = Open (gate openness for Value Line).

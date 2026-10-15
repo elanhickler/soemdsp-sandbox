@@ -27,7 +27,7 @@
 | `softpopOscillator` / `softpopFilter` (Softpop) | `public/modules/softpopOscillator/softpop-display.js` | gl-line-renderer; both Softpop modules share the `softpopFace` renderer |
 
 ## 3. Migration inventory (grep of `public/modules`, 2026-10-14)
-Method: per module folder, any `.js` with `getContext("2d")`, `createElement("canvas")`, or use of the shared GL device. Two folders (Sabrina, Softpop) are already done, which leaves **39 modules** to migrate. 2026-10-14: `lookaheadLimiter` (the shared `limiterGainFace`, now on Pump Limiter and Sidechain) moved to gl-line-renderer and left the table, so **38** remain (numbering kept).
+Method: per module folder, any `.js` with `getContext("2d")`, `createElement("canvas")`, or use of the shared GL device. Two folders (Sabrina, Softpop) are already done, which leaves **39 modules** to migrate.
 - **2D:** draws the face with canvas 2D. Port to gl-line-renderer.
 - **Partial:** already renders on the shared GL device but still has 2D code (atlas bakes, overlays, fallbacks). Remove the 2D path.
 - **GL via cycle-line-gl:** already GL on the shared device but through its own renderer (`public/lib/visual/cycle-line-gl.js`). Fold into gl-line-renderer so there is one interface.
@@ -52,6 +52,7 @@ Method: per module folder, any `.js` with `getContext("2d")`, `createElement("ca
 | 15 | `harmonicSeries` | `harmonic-series-display.js` | 2D | bars -> rect |
 | 16 | `imageBurn` | `image-burn-display.js`, `image-burn-gl.js`, `image-burn-ui.js` | Partial (shared GL + 2D, 12 2D contexts) | largest 2D user |
 | 17 | `knob` | `knob-face.js` | 2D | knob face; proposed exception |
+| 18 | `lookaheadLimiter` | `lookahead-limiter-display.js` | 2D | meter -> rect |
 | 19 | `matrixDisplay` | `matrix-display-display.js`, `matrix-display-ui.js` | 2D | LCD cells -> rect |
 | 20 | `numberReadout` | `number-readout-gl.js` | Partial (shared GL + 2D) | digit atlas bake |
 | 21 | `phoneTone` | `phone-tone-display.js` | 2D |  |
@@ -74,10 +75,10 @@ Method: per module folder, any `.js` with `getContext("2d")`, `createElement("ca
 | 38 | `wallDelay` | `wall-delay-room-display.js` | 2D | room drawing -> segment/rect |
 | 39 | `xyPad` | `xy-pad-ui.js` | 2D | pad + dot -> rect/quad |
 
-Counts: 24 x 2D, 9 x Partial, 3 x GL via cycle-line-gl, 2 x own canvas / filter-curve path.
+Counts: 25 x 2D, 9 x Partial, 3 x GL via cycle-line-gl, 2 x own canvas / filter-curve path.
 Shared code outside `public/modules` that also needs moving: `public/lib/visual/cycle-line-gl.js` (merge), `public/lib/visual/filter-curve-face.js` (2D path), `public/node-graph-module-scope-canvas.js` (light canvas 2D). Scope/waterfall/trace faces in `public/node-graph-module-scope-*` are a separate later pass (not counted above).
 
-**Suggested order:** (1) the 3 cycle-line-gl modules (already GL, proves the merge); (2) simple curve/bar faces (additive*, harmonic*, spectrum1d, softClipper, attackDecay); (3) the 9 Partial modules; (4) the rest; (5) decide exceptions.
+**Suggested order:** (1) the 3 cycle-line-gl modules (already GL, proves the merge); (2) simple curve/bar faces (additive*, harmonic*, spectrum1d, lookaheadLimiter, softClipper, attackDecay); (3) the 9 Partial modules; (4) the rest; (5) decide exceptions.
 
 ## 4. Enforcement
 1. **One shared display-canvas helper** (new, in `public/lib/visual/`, e.g. `display-canvas.js`): creates the face canvas, applies the shared sizing path (backing = layout CSS box x devicePixelRatio, never x workspace zoom; APP_POLICY 15) and adds one **marker class** (e.g. `node-display-canvas`). `styles.css` adds that class to the `.node-graph-workspace.pixelated-canvas-zoom ...` rule so **>2.5x zoom pixelation applies automatically** (`node-graph-viewport-perf.js` toggles the workspace class at zoom > 2.5). The per-module canvas classes in that rule shrink away as modules move over.

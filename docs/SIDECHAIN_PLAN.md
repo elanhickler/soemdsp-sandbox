@@ -171,7 +171,7 @@ Face (WebUI, proposed): a Gain waterfall like Pump Limiter's, fed by an internal
 | S2 | `native_modules/sidechain/sidechain.cpp` + graph-engine wiring | Grok Bot | Done (type 216) |
 | S3 | Definition, store card, tooltips | Grok Bot | Done |
 | S4 | Tests §8 | Grok Bot | Done: `scripts/smoke_graph_sidechain.mjs` (in combined build) + smoke_test exports; full smoke passes |
-| S5 | Face | Grok Bot | Done: shared GL `limiterGainFace` (gl-line-renderer), source Envelope |
+| S5 | Face | Grok Bot | Done: Instant Waterfall (WebGL scroll strip, same as Pump Limiter) on Envelope |
 | S6 | Argi's ear check | Argi | Waiting (committed locally, not pushed) |
 
 ## 11. As built (2026-10-14)
@@ -187,9 +187,10 @@ Every default below is a named constant or one small function at the top of `sid
 - **Bypass:** Dry only, Envelope 0 (Argi accepted).
 - **Ports:** Wet L/R → Left/Right, Dry L/R → Dry L/Dry R, Sidechain → Morph bus, Envelope → Square; outputs Left/Right, Mono = Left, Envelope on Saw.
 - **Params:** Threshold −48…0 dB (−18), Ratio 1…20 (8), Attack Time 0…100 ms (5), Hold Time 0…2000 ms (0), Release Time 20…2000 ms (250), Mix 0…1 (0.35), Ducked Mix 0…1 (0).
-- **Face:** shared `limiterGainFace` (`public/modules/lookaheadLimiter/lookahead-limiter-display.js`), also Pump Limiter's face now. Pump Limiter used the generic Instant Waterfall scope face (Canvas 2D) on its Gain output; `limiterGainFace` existed but was unused and just forwarded to that waterfall. It is now WebGL2 via gl-line-renderer (capsule quads, smoothstep edge, black if GL fails, no 2D path). It plots reduction from the display source: Gain (Pump Limiter) or Envelope (Sidechain), dipping from the top. No worklet face case.
+- **Face:** Instant Waterfall, the same face Pump Limiter always used (`node-graph-module-scope-waterfall.js` + `-waterfall-gl.js`: WebGL history texture on the shared device, scrolls left, stamps only the new columns). Source = Envelope output; 0..1 maps onto the full face (0 bottom, rising while ducking). Mono line colour widget is labelled Line, next to Background.
 
 ## 12. Decisions log
 - 2026-10-14: v1 built with Dry + ducked Wet (O1).
 - 2026-10-14 (Argi): mix law changed to the Mix → Ducked Mix crossfade, Envelope output added, Pump Limiter's face moved to the shared GL face and reused here.
 - 2026-10-14 (Argi): only the Sidechain input keys ducking; Dry fallback removed (unwired key = env 0, output at Mix). Bypass = Dry only accepted.
+- 2026-10-14 (Argi): face must waterfall like Pump Limiter's (no full redraw); the limiterGainFace rewrite was dropped and both modules use Instant Waterfall. Fix for the blank face: the worklet published Sidechain's Saw tap as "Saw", not "Envelope", and did not ring it for faces.

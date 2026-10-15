@@ -14137,16 +14137,16 @@ const nodeGraphModuleDefinitions = (
   limiter: {
     planRole: "processor",
     displayHeightGu: 3,
-    displayType: "limiterGainFace",
-    // Sole face: shared GL gain face (lookahead-limiter-display.js, also on
-    // Sidechain). Gain is 1 at rest (top) and dips while limiting.
+    displayType: "waterfall",
+    // Sole face: Gain is 1 at rest (top of the bipolar trace) and falls
+    // toward 0 while limiting, so the line dips from the top.
     defaultDisplayMode: "gain",
     displayModes: [
       {
         key: "gain",
         label: "Gain",
-        renderer: "limiterGainFace",
-        settingsSchema: "limiterGainFace",
+        renderer: "waterfall",
+        settingsSchema: "waterfall",
         source: { value: "Gain" } },
     ],
     inputAliases: { Mono: "In", SC: "Sidechain", Key: "Sidechain" },
@@ -14273,16 +14273,16 @@ const nodeGraphModuleDefinitions = (
   sidechain: {
     planRole: "processor",
     displayHeightGu: 3,
-    displayType: "limiterGainFace",
-    // Shared GL ducking face (lookahead-limiter-display.js), same as Pump
-    // Limiter. Reads the Envelope output (duck amount, dips from the top).
+    displayType: "waterfall",
+    // Same face as Pump Limiter: Instant Waterfall (WebGL scroll strip) on the
+    // Envelope output. Envelope 0 sits at the bottom and rises while ducking.
     defaultDisplayMode: "gain",
     displayModes: [
       {
         key: "gain",
-        label: "Ducking",
-        renderer: "limiterGainFace",
-        settingsSchema: "limiterGainFace",
+        label: "Envelope",
+        renderer: "waterfall",
+        settingsSchema: "waterfall",
         source: { value: "Envelope" } },
     ],
     inputs: ["Dry L", "Dry R", "Wet L", "Wet R", "Sidechain", "Envelope"],

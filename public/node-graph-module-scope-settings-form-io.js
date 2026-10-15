@@ -2458,7 +2458,8 @@ function nodeGraphTraceDisplayColorWidgetLabel(field) {
       const stereoHere = typeof nodeGraphModuleUsesStereoWaterfall === "function"
         && nodeGraphModuleUsesStereoWaterfall(nodeTypeInner);
       if (!stereoHere) {
-        return "In";
+        // Gain / Envelope strip faces: the swatch is the line colour.
+        return (nodeTypeInner === "limiter" || nodeTypeInner === "sidechain") ? "Line" : "In";
       }
     }
     const isStereo = typeof nodeGraphModuleUsesStereoWaterfall === "function"

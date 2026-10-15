@@ -1,3 +1,9 @@
+## 2026-10-14 - Sidechain display fix: Envelope on Instant Waterfall (local commit)
+
+- Root cause: the worklet named Sidechain's Saw tap "Saw", so the display source "Envelope" never got data, and the Saw tap was not in the face ring list. Fixed in the existing port-name / ring tables. Stale cache-bust strings (combined wasm, worklet, definitions, waterfall, form) bumped.
+- Argi rejected the full-redraw limiterGainFace: Pump Limiter is back on, and Sidechain now uses, Instant Waterfall (already WebGL: history texture scroll + new-column stamps). limiterGainFace file and WebGL plan row 18 restored. Mono waterfall line colour labelled Line for these two; Background already labelled Background.
+- Smoke: worklet port-name / ring / definitions / waterfall-map checks. Not pushed.
+
 ## 2026-10-14 - Sidechain: Mix / Ducked Mix crossfade, Envelope out, shared GL gain face (local commit)
 
 - Argi: mix law is now an equal-gain crossfade `out = Dry(1-m) + Wet m`, `m = lerp(Mix, Ducked Mix, env)`; new params Mix (0.35) and Ducked Mix (0) after Release Time; old Dry + g*Wet path removed. New Envelope output (duck amount, or the Envelope input when wired). Bypass = Dry.
