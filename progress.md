@@ -1,3 +1,9 @@
+## 2026-10-14 - Sidechain module (type 216, local commit)
+
+- Argi: implement `docs/SIDECHAIN_PLAN.md`. New native `native_modules/sidechain/sidechain.cpp` (module-local copy of the Pump Limiter detector/gain plus Hold), graph-engine type 216, worklet params/ports, definition with tooltips, store card, efficient-product, build entry. Inputs Dry L/R, Wet L/R, Sidechain, Envelope; outputs Left/Right.
+- Defaults (isolated constants): key = Sidechain else Dry; out = Dry + g·Wet; Envelope gives g = 1 − e and bypasses the dynamics; bypass = Dry + Wet. No face yet.
+- New `scripts/smoke_graph_sidechain.mjs` (in the combined build) and smoke_test export list. Full smoke passes. Local commit only, not pushed.
+
 ## 2026-10-14 - WebGL display policy + Softpop split docs (docs only)
 
 - New `docs/WEBGL_DISPLAY_PLAN.md`: WebGL2 + shaders only for module displays, one interface (`gl-line-renderer.js` on `picture-device.js`'s shared context), no 2D fallback, explicit exceptions, migration table of 39 modules, shared display-canvas helper + shrink-only smoke allowlist. APP_POLICY 3 rewritten to match; FUTURE_PLANNING pointer.

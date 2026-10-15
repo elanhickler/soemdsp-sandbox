@@ -100,6 +100,7 @@ NodeLiveAudioProcessor.NATIVE_GRAPH_TYPE_IDS = Object.freeze({
   lutCell: 34,
   lookaheadLimiter: 35,
   limiter: 109, // Pump Limiter
+  sidechain: 216, // Sidechain (Pump Limiter detector + Hold, ducks Wet)
   audioPlayer: 110, // Music Player (PCM upload)
   samplePlayer: 174, // Gate-driven sample player (PCM upload)
   wavetable2d: 180, // PCM wavetable oscillator
@@ -1139,6 +1140,16 @@ NodeLiveAudioProcessor.prototype.mapNativeGraphDstPortId = function mapNativeGra
   const raw = String(port || "").trim();
   const p = raw.toLowerCase();
   const tDst = String(type || "").trim();
+  // Sidechain: Wet L/R on Left/Right, Dry L/R on the reverb Dry slots, Envelope
+  // on Square, Sidechain key on the Morph live bus (as Pump Limiter).
+  if (tDst === "sidechain") {
+    if (p === "wet l") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_LEFT;
+    if (p === "wet r") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_RIGHT;
+    if (p === "dry l") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_DRY_L;
+    if (p === "dry r") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_DRY_R;
+    if (p === "envelope" || p === "env") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_SQUARE;
+    if (p === "sidechain" || p === "sc" || p === "key") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_MORPH;
+  }
   // Metronome BPM In: absolute BPM on the ƒ live bus (slider ignored when wired).
   if (tDst === "transport" && p === "bpm") {
     return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_F;
@@ -6298,6 +6309,15 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
       push("release", P.NATIVE_GRAPH_PARAM_LANE_BIAS1, cont("release", 100));
       push("gainCompensation", P.NATIVE_GRAPH_PARAM_TIMING_MODE, disc("gainCompensation", 0));
       push("dipGain", P.NATIVE_GRAPH_PARAM_LANE_BIAS2, cont("dipGain", 1));
+      continue;
+    }
+    if (type === "sidechain") {
+      // Same Control slots as Pump Limiter (process_sidechain); Hold on timeNumerator.
+      push("threshold", P.NATIVE_GRAPH_PARAM_LANE_BIAS2, cont("threshold", -18));
+      push("ratio", P.NATIVE_GRAPH_PARAM_WIDTH, cont("ratio", 8));
+      push("attack", P.NATIVE_GRAPH_PARAM_OFFSET_MS, cont("attack", 5));
+      push("hold", P.NATIVE_GRAPH_PARAM_TIME_NUMERATOR, cont("hold", 0));
+      push("release", P.NATIVE_GRAPH_PARAM_LANE_BIAS1, cont("release", 250));
       continue;
     }
     if (type === "limiter") {

@@ -2017,6 +2017,23 @@ const nodeGraphModuleStoreCatalog = Object.freeze({
       "native",
     ],
   },
+  sidechain: {
+    category: "dynamics",
+    description:
+      "Sidechain ducking: Wet L/R duck under a Sidechain key (or the Dry signal) with Threshold / Ratio / Attack / Hold / Release, or under an Envelope input. Dry passes at unity. Built on Pump Limiter's detector.",
+    label: "Sidechain",
+    notes: [
+      "sidechain",
+      "ducking",
+      "duck",
+      "pump",
+      "reverb duck",
+      "send return",
+      "hold",
+      "dynamics",
+      "native",
+    ],
+  },
   inertialFilter: {
     category: "envelope",
     description: "Exponential attack/release approach in Hz—smooth catch-up without hard slew corners.",
@@ -3438,6 +3455,10 @@ const nodeGraphJsSourceEntriesByType = Object.freeze({
   limiter: {
     source: "native_modules/pumping_limiter/pumping_limiter.cpp",
     sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/native_modules/pumping_limiter/pumping_limiter.cpp",
+  },
+  sidechain: {
+    source: "native_modules/sidechain/sidechain.cpp",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/native_modules/sidechain/sidechain.cpp",
   },
   logSpiral: {
     source: "public/modules/logSpiral/log-spiral-worklet-evaluator.js",

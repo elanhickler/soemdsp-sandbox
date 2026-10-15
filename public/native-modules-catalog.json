@@ -2414,6 +2414,24 @@
       "noticeUrl": "https://github.com/elanhickler/soemdsp-sandbox/blob/master/docs/THIRD_PARTY.md"
     },
     {
+      "name": "sidechain",
+      "label": "Sidechain",
+      "targetType": "sidechain",
+      "kind": "dynamics",
+      "source": "native_modules/sidechain/sidechain.cpp",
+      "sourceUrl": "https://github.com/elanhickler/soemdsp-sandbox/blob/master/native_modules/sidechain/sidechain.cpp",
+      "localSourceUrl": "/native_modules/sidechain/sidechain.cpp",
+      "libUrl": "https://github.com/elanhickler/soemdsp-sandbox/blob/master/docs/SIDECHAIN_PLAN.md",
+      "wasm": "native_modules/sidechain/sidechain.wasm",
+      "wasmUrl": "native_modules/sidechain/sidechain.wasm",
+      "wasmAvailable": true,
+      "license": "Soundemote Noncommercial",
+      "licenseUrl": "https://github.com/elanhickler/soemdsp-sandbox/blob/master/LICENSE",
+      "upstreamLicense": "",
+      "upstreamLicenseUrl": "",
+      "noticeUrl": "https://github.com/elanhickler/soemdsp-sandbox/blob/master/docs/THIRD_PARTY.md"
+    },
+    {
       "name": "sinc",
       "label": "Sinc",
       "targetType": "sinc",

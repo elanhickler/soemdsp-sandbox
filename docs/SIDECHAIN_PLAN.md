@@ -1,6 +1,6 @@
 # Sidechain Plan: sidechain ducking helper built on the Pump Limiter
 
-**Status:** draft for Argi's review (PlanningDocs, 2026-10-14). Nothing is built yet.
+**Status:** built 2026-10-14 (type id 216, local commit, not pushed). Awaiting Argi's ear check (S6). Defaults chosen are in §11.
 **Owner once approved:** SandyModules (DSP), WebUI (face).
 **Module type (proposed):** `sidechain`, label "Sidechain", category `dynamics`.
 
@@ -8,7 +8,7 @@
 
 | | |
 |---|---|
-| Inputs | Left Dry, Right Dry, Left Wet, Right Wet, Sidechain, Envelope |
+| Inputs | Dry L, Dry R, Wet L, Wet R, Sidechain, Envelope |
 | Outputs | Left, Right |
 | Params | Threshold, Ratio, Attack Time, Hold Time, Release Time |
 
@@ -118,10 +118,10 @@ There are no choice params in the spec. If Q1 or Q2 become user choices, they'd 
 
 | Dir | Key | Label | Notes |
 |---|---|---|---|
-| In | `LeftDry` | Left Dry | |
-| In | `RightDry` | Right Dry | |
-| In | `LeftWet` | Left Wet | |
-| In | `RightWet` | Right Wet | |
+| In | `Dry L` | Dry L | |
+| In | `Dry R` | Dry R | |
+| In | `Wet L` | Wet L | |
+| In | `Wet R` | Wet R | |
 | In | `Sidechain` | Sidechain | Aliases `SC`, `Key` (as on Pump Limiter) |
 | In | `Envelope` | Envelope | 0..1 duck amount; alias `Env` |
 | Out | `Left` | Left | |
@@ -166,10 +166,23 @@ Face (WebUI, proposed): a Gain waterfall like Pump Limiter's, fed by an internal
 
 | # | Item | Owner | Status |
 |---|---|---|---|
-| S0 | Argi answers §9 (esp. Q1–Q6) | Argi | Waiting |
-| S1 | Option B only: golden capture of Pump Limiter, `pump_gain.h` extraction, regression | SandyModules | Not started (needs §19) |
-| S2 | `native_modules/sidechain/sidechain.cpp` + graph-engine wiring | SandyModules | Not started |
-| S3 | Definition, store card, tooltips, under-construction entry | SandyModules | Not started |
-| S4 | Tests §8 | SandyModules | Not started |
-| S5 | Face (Gain waterfall) | WebUI | Not started |
-| S6 | Argi's ear check, then commit with OK | Argi | Not started |
+| S0 | Argi answers §9 (esp. Q1–Q6) | Argi | Defaults picked per Argi's build brief (§11); open to change |
+| S1 | Option B only: golden capture of Pump Limiter, `pump_gain.h` extraction, regression | SandyModules | Skipped: Option C (module-local copy) used; B still needs §19 |
+| S2 | `native_modules/sidechain/sidechain.cpp` + graph-engine wiring | Grok Bot | Done (type 216) |
+| S3 | Definition, store card, tooltips | Grok Bot | Done |
+| S4 | Tests §8 | Grok Bot | Done: `scripts/smoke_graph_sidechain.mjs` (in combined build) + smoke_test exports; full smoke passes |
+| S5 | Face (Gain waterfall) | WebUI | Skipped for now; gain is on internal port 3 (Saw) for a future WebGL2 meter |
+| S6 | Argi's ear check | Argi | Waiting (committed locally, not pushed) |
+
+## 11. As built (2026-10-14)
+
+Every default below is a named constant or one small function at the top of `sidechain.cpp`, so each is a one-line change.
+
+- **Detector key (Q1):** Sidechain when wired, else Dry (`kDetectFromDryWhenNoSidechain`). With neither wired there is no ducking.
+- **Output (Q2):** O1, `out = dry + g·wet` (`kOutputMode = 0`; 1 = crossfade).
+- **Envelope (Q3):** wired Envelope replaces the gain: `g = 1 − clamp(e, 0, 1)`, raw per sample (`envelope_to_gain`). Threshold, Ratio, Attack, Hold and Release are ignored.
+- **Maths:** module-local copy of Pump Limiter's mean-square detector, hard-knee gain `(T/env)^((R−1)/R)` and gain smoother, plus Hold (gain held after the last attack for Hold ms, then Release). No library edit.
+- **Stereo:** one linked gain for both sides; a lone L or R input in a pair feeds both sides.
+- **Bypass:** Dry + Wet.
+- **Ports:** Wet L/R → Left/Right, Dry L/R → Dry L/Dry R, Sidechain → Morph bus, Envelope → Square; outputs Left/Right, Mono = Left, gain on Saw.
+- **Params:** Threshold −48…0 dB (−18), Ratio 1…20 (8), Attack Time 0…100 ms (5), Hold Time 0…2000 ms (0), Release Time 20…2000 ms (250).

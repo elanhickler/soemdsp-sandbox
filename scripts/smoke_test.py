@@ -17481,6 +17481,17 @@ def require_native_module_contract(base_url: str) -> None:
             "soemdsp_graph_process_block",
             "soemdsp_graph_version",
         ],
+        "sidechain": [
+            "soemdsp_sidechain_create",
+            "soemdsp_sidechain_destroy",
+            "soemdsp_sidechain_reset",
+            "soemdsp_sidechain_sample",
+            "soemdsp_sidechain_right",
+            "soemdsp_sidechain_gain",
+            "soemdsp_sidechain_version",
+            "soemdsp_sidechain_metadata_json",
+            "soemdsp_sidechain_metadata_json_size",
+        ],
         "pumping_limiter": [
             "soemdsp_pumping_limiter_create",
             "soemdsp_pumping_limiter_destroy",

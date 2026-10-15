@@ -423,6 +423,15 @@ extern "C" double soemdsp_pumping_limiter_left(int handle);
 extern "C" double soemdsp_pumping_limiter_right(int handle);
 extern "C" double soemdsp_pumping_limiter_gain(int handle);
 extern "C" double soemdsp_pumping_limiter_env(int handle);
+// Sidechain (native_modules/sidechain): Pump Limiter detector/gain + Hold, ducks Wet under a key.
+extern "C" int soemdsp_sidechain_create();
+extern "C" void soemdsp_sidechain_destroy(int handle);
+extern "C" double soemdsp_sidechain_sample(
+  int handle, double dryLeft, double dryRight, double wetLeft, double wetRight,
+  double sidechain, double envelope, int wiredMask, double thresholdDb, double ratio,
+  double attackMs, double holdMs, double releaseMs, double sampleRate);
+extern "C" double soemdsp_sidechain_right(int handle);
+extern "C" double soemdsp_sidechain_gain(int handle);
 
 extern "C" int soemdsp_audio_player_create();
 extern "C" void soemdsp_audio_player_destroy(int handle);
@@ -2053,6 +2062,7 @@ static const int kTypeHyperpluck = 200; // PolyBLEP unison pluck (Supersaw detun
 static const int kTypeFilterMorphOscillator = 201; // FilterMorph: Robin-dithered naive shapes + pitch-tracking one-pole
 static const int kTypeSoftpopOscillator = 207; // Softpop Oscillator: Sine / Dithered Sine / Trisaw / Soft Square / Soft Tri + noise Pitch Mod
 static const int kTypeSoftpopFilter = 214; // Softpop Filter: noise or input through a constant-peak BP
+static const int kTypeSidechain = 216; // Sidechain: duck Wet L/R under Sidechain (or Dry) / Envelope
 static const int kTypeExponentialSkew = 208; // Exp Skew: Marvinh exp(w·x) linear decay
 static const int kTypeHyperbolicDecay = 209; // Hyperbolic: start·end/((start−end)·u+end)
 static const int kTypeExponentialMix = 210; // Exponential Mix: (1−p)e^{−x}+p e^{−rate·x}
@@ -2584,6 +2594,8 @@ static void destroy_native_kind_handle(int kind, int handle) {
     soemdsp_lookahead_limiter_destroy(handle);
   } else if (kind == kTypePumpLimiter) {
     soemdsp_pumping_limiter_destroy(handle);
+  } else if (kind == kTypeSidechain) {
+    soemdsp_sidechain_destroy(handle);
   } else if (kind == kTypeAudioPlayer) {
     soemdsp_audio_player_destroy(handle);
   } else if (kind == kTypeSamplePlayer) {
@@ -3490,7 +3502,7 @@ static void init_node_defaults(Node& n, int typeId) {
       : (typeId == kTypeRobinSupersaw) ? 30.0 // detuneCents
       : (typeId == kTypeHyperpluck) ? 5.0 // detuneHz
       : (typeId == kTypeTriggerCounter) ? 1.0
-      : (typeId == kTypePumpLimiter) ? 8.0 // ratio
+      : (typeId == kTypePumpLimiter || typeId == kTypeSidechain) ? 8.0 // ratio
       : (typeId == kTypeMetallicRatio) ? 1.0 // index n
       : (typeId == kTypeHarmonicSeries) ? 0.0 // harmonic
       : (typeId == kTypeChordPad) ? 3.0 // octaves of chord tones on Scale
@@ -3695,6 +3707,7 @@ static void init_node_defaults(Node& n, int typeId) {
       : (typeId == kTypeTriggerDivider || typeId == kTypeTriggerCounter) ? 0.01
       : (typeId == kTypeDelayedTrigger) ? 0.1
       : (typeId == kTypeRandomClock) ? 0.25
+      : (typeId == kTypeSidechain) ? 0.0 // hold ms
       : (typeId == kTypeLookaheadLimiter || typeId == kTypePumpLimiter) ? 5.0 // look-ahead ms
       : (typeId == kTypeBradley2a) ? 0.005 // hitDuration
       : (typeId == kTypeModeResonator || typeId == kTypeCombResonator) ? 1.0 // decay s
@@ -3754,7 +3767,7 @@ static void init_node_defaults(Node& n, int typeId) {
     n.offsetMs,
     (typeId == kTypeRandomClock) ? 0.01
       : (typeId == kTypeLookaheadLimiter) ? 0.2 // attack ms
-      : (typeId == kTypePumpLimiter) ? 5.0 // attack ms
+      : (typeId == kTypePumpLimiter || typeId == kTypeSidechain) ? 5.0 // attack ms
       : (typeId == kTypeExpAdsr || typeId == kTypeLinearEnvelope || typeId == kTypeWavetableAdsr) ? 0.45 // release s
       : (typeId == kTypeCurveAttackRelease) ? 0.25 // release s
       : (typeId == kTypePluckEnvelopeFb) ? 0.11715292599242004 // release s (breadboard)
@@ -3898,7 +3911,7 @@ static void init_node_defaults(Node& n, int typeId) {
     if (typeId == kTypeLookaheadLimiter) {
       if (i == 0) biasDef = 100.0;
       else if (i == 1) biasDef = 1.0;
-    } else if (typeId == kTypePumpLimiter) {
+    } else if (typeId == kTypePumpLimiter || typeId == kTypeSidechain) {
       if (i == 0) biasDef = 250.0; // release ms
       else if (i == 1) biasDef = -18.0; // threshold dB
     } else if (typeId == kTypeDegreePhrase) {
@@ -4624,6 +4637,7 @@ static int create_native_for_type(int typeId, float sampleRate) {
   if (typeId == kTypeLutCell) return soemdsp_lut_cell_create();
   if (typeId == kTypeLookaheadLimiter) return soemdsp_lookahead_limiter_create();
   if (typeId == kTypePumpLimiter) return soemdsp_pumping_limiter_create();
+  if (typeId == kTypeSidechain) return soemdsp_sidechain_create();
   if (typeId == kTypeAudioPlayer) return soemdsp_audio_player_create();
   if (typeId == kTypeSamplePlayer) return soemdsp_sample_player_create();
   if (typeId == kTypeWavetable2d) return soemdsp_wavetable_2d_create();
@@ -11753,6 +11767,45 @@ static void process_pump_limiter(Circuit& g, Node& node, int frames) {
   }
 }
 
+// Sidechain (sidechain): Pump Limiter detector + gain smoother with Hold
+// (module-local copy in native_modules/sidechain). Ports: Wet L = Left (1),
+// Wet R = Right (2), Dry L = 3, Dry R = 4, Envelope = 5, Sidechain = Morph
+// live bus (22, read per sample, as Pump Limiter's key). Outs: Left, Right;
+// stereo-linked gain on Saw (3) for a future meter. Params share Pump
+// Limiter's slots: threshold laneBias[1], ratio width, attack offsetMs,
+// release laneBias[0]; hold timeNumerator.
+static void process_sidechain(Circuit& g, Node& node, int frames) {
+  if (node.nativeHandle <= 0) return;
+  static double bufWetL[kMaxBlockFrames], bufWetR[kMaxBlockFrames];
+  static double bufDryL[kMaxBlockFrames], bufDryR[kMaxBlockFrames];
+  static double bufEnv[kMaxBlockFrames], bufSc[kMaxBlockFrames];
+  int mask = 0;
+  if (mix_live_port(g, node, kPortDryL, frames, bufDryL)) mask |= 1;
+  if (mix_live_port(g, node, kPortDryR, frames, bufDryR)) mask |= 2;
+  if (mix_live_port(g, node, kPortLeft, frames, bufWetL)) mask |= 4;
+  if (mix_live_port(g, node, kPortRight, frames, bufWetR)) mask |= 8;
+  if (mix_live_port(g, node, kPortMorph, frames, bufSc)) mask |= 16;
+  if (mix_live_port(g, node, kPortSquare, frames, bufEnv)) mask |= 32;
+  const double sr = g.sampleRate < 1.0f ? 44100.0 : (double)g.sampleRate;
+  for (int f = 0; f < frames; f++) {
+    control_frame(g, node, f);
+    const double left = soemdsp_sidechain_sample(
+      node.nativeHandle,
+      bufDryL[f], bufDryR[f], bufWetL[f], bufWetR[f], bufSc[f], bufEnv[f], mask,
+      control_effective(node.laneBias[1]),
+      control_effective(node.width),
+      control_effective(node.offsetMs),
+      control_effective(node.timeNumerator),
+      control_effective(node.laneBias[0]),
+      sr
+    );
+    node.buf[kPortLeft][f] = left;
+    node.buf[kPortRight][f] = soemdsp_sidechain_right(node.nativeHandle);
+    node.buf[kPortMono][f] = left;
+    node.buf[kPortSaw][f] = soemdsp_sidechain_gain(node.nativeHandle);
+  }
+}
+
 // Wavetable 2D. Params: morph(shape), frequency, phaseParam, amplitude, warp(resonance).
 // Warp is a baked Morph×Warp axis (13 knots). Playback is mipmapped table lookup
 // (Hmax picks the mip). Reset → kPortReset. ƒ → kPortF (Hz, replaces Frequency).
@@ -13046,6 +13099,27 @@ static void process_bypass(Circuit& g, Node& node, int frames) {
     }
     return;
   }
+  if (node.typeId == kTypeSidechain) {
+    // Bypassed Sidechain = no ducking: Dry + Wet per side (gain 1, same
+    // mono fallback per pair as live).
+    static double bDryL[kMaxBlockFrames], bDryR[kMaxBlockFrames];
+    static double bWetL[kMaxBlockFrames], bWetR[kMaxBlockFrames];
+    const bool hDL = mix_live_port(g, node, kPortDryL, frames, bDryL);
+    const bool hDR = mix_live_port(g, node, kPortDryR, frames, bDryR);
+    const bool hWL = mix_live_port(g, node, kPortLeft, frames, bWetL);
+    const bool hWR = mix_live_port(g, node, kPortRight, frames, bWetR);
+    for (int f = 0; f < frames; f++) {
+      const double dL = hDL ? bDryL[f] : (hDR ? bDryR[f] : 0.0);
+      const double dR = hDR ? bDryR[f] : (hDL ? bDryL[f] : 0.0);
+      const double wL = hWL ? bWetL[f] : (hWR ? bWetR[f] : 0.0);
+      const double wR = hWR ? bWetR[f] : (hWL ? bWetL[f] : 0.0);
+      node.buf[kPortLeft][f] = dL + wL;
+      node.buf[kPortRight][f] = dR + wR;
+      node.buf[kPortMono][f] = dL + wL;
+      node.buf[kPortSaw][f] = 1.0;
+    }
+    return;
+  }
   mix_node_inputs(g, node, frames);
   for (int f = 0; f < frames; f++) {
     control_frame(g, node, f);
@@ -13448,6 +13522,7 @@ extern "C" int soemdsp_graph_add_node(int handle, unsigned int nodeIdHash, int t
     || typeId == kTypeLutCell
     || typeId == kTypeLookaheadLimiter
     || typeId == kTypePumpLimiter
+    || typeId == kTypeSidechain
     || typeId == kTypeAudioPlayer
     || typeId == kTypeSamplePlayer
     || typeId == kTypeWavetable2d
@@ -14599,6 +14674,10 @@ static void dispatch_process_node(Circuit& g, Node& node, int frames) {
     }
     if (node.typeId == kTypePumpLimiter) {
       process_pump_limiter(g, node, frames);
+      return;
+    }
+    if (node.typeId == kTypeSidechain) {
+      process_sidechain(g, node, frames);
       return;
     }
     if (node.typeId == kTypeAudioPlayer) {
