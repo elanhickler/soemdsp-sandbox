@@ -32,7 +32,7 @@ const setBypassed = must("soemdsp_graph_set_bypassed");
 const TYPE_OSC = 207, TYPE_SC = 216, TYPE_OUT = 6;
 const P = { FREQUENCY: 10, AMPLITUDE: 12, PITCH: 45, THRESHOLD: 105, RATIO: 31, ATTACK: 55, HOLD: 52, RELEASE: 104, MIX: 40, DUCKED_MIX: 42 };
 const IN = { WET_L: 1, WET_R: 2, DRY_L: 3, DRY_R: 4, ENV: 5, SC: 22 };
-const OUT_L = 1, OUT_R = 2, ENV_OUT = 3;
+const OUT_L = 1, OUT_R = 2, ENV_OUT = 3, DRY_GAIN = 4, WET_GAIN = 6;
 const SR = 48000, FRAMES = 128;
 const SCN = 0x5c0c0001 >>> 0, OUTN = 0x5c0c00ff >>> 0;
 const SRC = { dry: [0x5c0c0a01 >>> 0, 300], wet: [0x5c0c0b01 >>> 0, 700], wet2: [0x5c0c0b02 >>> 0, 900], key: [0x5c0c0c01 >>> 0, 60], env: [0x5c0c0d01 >>> 0, 5] };
@@ -62,7 +62,7 @@ function render(opts) {
   if (opts.bypass) setBypassed(g, SCN, 1);
   snap(g);
   const n = blocks * FRAMES;
-  const out = { l: new Float64Array(n), r: new Float64Array(n), g: new Float64Array(n), src: {} };
+  const out = { l: new Float64Array(n), r: new Float64Array(n), g: new Float64Array(n), dg: new Float64Array(n), wg: new Float64Array(n), src: {} };
   for (const k of keys) out.src[k] = new Float64Array(n);
   for (let b = 0; b < blocks; b++) {
     if (opts.at && b === opts.at.block) setParam(g, SRC[opts.at.src][0], P.AMPLITUDE, opts.at.amp);
@@ -71,6 +71,8 @@ function render(opts) {
     out.l.set(rd(SCN, OUT_L), b * FRAMES);
     out.r.set(rd(SCN, OUT_R), b * FRAMES);
     out.g.set(rd(SCN, ENV_OUT), b * FRAMES);
+    out.dg.set(rd(SCN, DRY_GAIN), b * FRAMES);
+    out.wg.set(rd(SCN, WET_GAIN), b * FRAMES);
     for (const k of keys) out.src[k].set(rd(SRC[k][0], 0), b * FRAMES);
   }
   destroy(g);
@@ -163,15 +165,36 @@ const flat = (n, v) => new Float64Array(n).fill(v);
   const names = NP.prototype.nativeGraphPortNames.call({}, "sidechain", NP.NATIVE_GRAPH_PORT_SAW);
   gate(Array.isArray(names) && names.includes("Envelope"), `worklet publishes Sidechain Saw tap as Envelope (${JSON.stringify(names)})`);
   gate(NP.prototype.mapNativeGraphSrcPortId.call({}, "Envelope", "sidechain") === NP.NATIVE_GRAPH_PORT_SAW, "Envelope output wires from the Saw tap");
-  gate(/type === "lookaheadLimiter" \|\| type === "sidechain"\) \{\s*ports = facePorts\.concat\(P\.NATIVE_GRAPH_PORT_SAW\)/.test(wk), "face ring includes Sidechain's Saw tap");
+  gate(/type === "sidechain"\) \{[\s\S]{0,120}ports = facePorts\.concat\(\s*P\.NATIVE_GRAPH_PORT_SAW,\s*P\.NATIVE_GRAPH_PORT_RAMP,\s*P\.NATIVE_GRAPH_PORT_TRI,/.test(wk), "face ring includes Sidechain's Saw / Ramp / Tri taps");
+  const dn = NP.prototype.nativeGraphPortNames.call({}, "sidechain", NP.NATIVE_GRAPH_PORT_RAMP);
+  const wn = NP.prototype.nativeGraphPortNames.call({}, "sidechain", NP.NATIVE_GRAPH_PORT_TRI);
+  gate(JSON.stringify(dn) === '["Dry Gain"]' && JSON.stringify(wn) === '["Wet Gain"]', `worklet publishes Ramp / Tri taps as Dry Gain / Wet Gain (${JSON.stringify(dn)} ${JSON.stringify(wn)})`);
   const defs = fs.readFileSync(path.join(root, "public", "node-graph-module-definitions.js"), "utf8");
   const block = (key) => defs.slice(defs.indexOf(`\n  ${key}: {`), defs.indexOf("parameters:", defs.indexOf(`\n  ${key}: {`)));
-  gate(/renderer: "waterfall"[\s\S]*source: \{ value: "Envelope" \}/.test(block("sidechain")), "Sidechain face: Instant Waterfall on Envelope");
+  gate(/renderer: "waterfall"[\s\S]*source: \{ value: "Envelope" \}/.test(block("sidechain")), "Sidechain keeps the Envelope waterfall mode");
+  gate(/defaultDisplayMode: "gains"/.test(block("sidechain")) && /stereoWaterfallPorts: \{ left: "Dry Gain", right: "Wet Gain" \}/.test(block("sidechain")) && /stereoWaterfallInternal: true/.test(block("sidechain")), "Sidechain face: two-line Dry / Wet Gain waterfall (internal taps)");
   gate(/renderer: "waterfall"[\s\S]*source: \{ value: "Gain" \}/.test(block("limiter")), "Pump Limiter face: Instant Waterfall on Gain (unchanged)");
   const wf = fs.readFileSync(path.join(root, "public", "node-graph-module-scope-waterfall.js"), "utf8");
-  const amp = /slot\?\.type === "sidechain"\) \{\s*return \{ gain: (-?[0-9.]+), offset: (-?[0-9.]+) \}/.exec(wf);
-  const face = (v) => (amp ? Number(amp[1]) * v + Number(amp[2]) : NaN); // +1 = top, -1 = bottom
-  gate(Boolean(amp) && face(0) === 1 && face(1) === -1 && face(0.5) === 0, "Sidechain waterfall dips from the top: Envelope 0 at the top, 1 at the bottom (APP_POLICY 3)");
+  const ampFn = new Function("nodeGraphModuleDefinitions", "nodeGraphModuleSelectedDisplayMode",
+    wf.slice(wf.indexOf("function nodeGraphWaterfallAmp("), wf.indexOf("function nodeGraphWaterfallAbsEnd(")) + "; return nodeGraphWaterfallAmp;");
+  const face = (modeKey, v) => { const a = ampFn({}, () => ({ key: modeKey }))(null, { type: "sidechain" }); return a.gain * v + a.offset; };
+  gate(face("gain", 0) === 1 && face("gain", 1) === -1 && face("gain", 0.5) === 0, "Sidechain Envelope mode dips from the top: 0 at the top, 1 at the bottom (APP_POLICY 3)");
+  gate(face("gains", 1) === 0 && face("gains", 2) === 1 && face("gains", 0) === -1, "Sidechain Dry / Wet mode: rest gain (1) at the middle, 2x rest at the top, silent at the bottom");
+}
+// Dry / Wet Gain face taps: gain relative to rest (Mix, env 0).
+{
+  const mix = 0.35, ducked = 0;
+  const idle = render({ wires: [["dry", IN.DRY_L], ["wet", IN.WET_L]], params: { [P.MIX]: mix, [P.DUCKED_MIX]: ducked }, blocks: 20 });
+  gate(idle.dg.every((v) => v === 1) && idle.wg.every((v) => v === 1), "no ducking: Dry Gain and Wet Gain rest at 1 (middle)");
+  const env = render({ wires: [["dry", IN.DRY_L], ["wet", IN.WET_L], ["env", IN.ENV]], amps: { env: 1 }, params: { [P.MIX]: mix, [P.DUCKED_MIX]: ducked }, blocks: 100 });
+  let ok = true, maxDry = 0, minWet = 2;
+  for (let i = 0; i < env.g.length; i++) {
+    const m = mix + (ducked - mix) * env.g[i];
+    if (Math.abs(env.dg[i] - (1 - m) / (1 - mix)) > 1e-9 || Math.abs(env.wg[i] - m / mix) > 1e-9) ok = false;
+    maxDry = Math.max(maxDry, env.dg[i]); minWet = Math.min(minWet, env.wg[i]);
+  }
+  gate(ok, "Dry Gain = (1 - m) / (1 - Mix), Wet Gain = m / Mix per sample");
+  gate(maxDry > 1.5 && minWet < 0.01, `full duck at Mix 0.35: dry rises above rest (max ${maxDry.toFixed(3)}), wet dips to 0 (min ${minWet.toFixed(3)})`);
 }
 console.log(failures ? `FAILED ${failures}` : "smoke_graph_sidechain ok");
 if (failures) process.exit(1);

@@ -47,7 +47,7 @@ Examples that already load/call native on **main thread** for offline (and workl
 | `lorenzAttractor` | `node-graph-lorenz-attractor.js` |
 | `rayBouncer` | `node-graph-ray-bouncer.js` |
 | `fbmField` | `node-graph-fbm-field.js` |
-| `pll`, `helmholtzPitch`, `piSpigotNoise`, `reverbEffect` | respective live/native glue |
+| `pll`, `helmholtzPitch`, `formulaNoise`, `reverbEffect` | respective live/native glue |
 | `wallDelay` | live path has native hooks (worklet is separate issue — see C) |
 
 ---

@@ -1067,6 +1067,8 @@ const NODE_GRAPH_DISPLAY_SETTINGS_PRESERVE_LOOK_KEYS = Object.freeze([
   "buttonColor",
   "textColor",
   "strokeColor",
+  "strokeLeftColor",
+  "strokeRightColor",
 ]);
 
 function cloneNodeGraphDisplaySettingsClipboardBag(settings) {

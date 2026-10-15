@@ -127,7 +127,8 @@ const nodeGraphNodeLabels = Object.freeze({
   noiseGenerator: "Noise Generator",
   randomWalk: "Random Walk",
   cheapWalk: "Cheap Walk",
-  piSpigotNoise: "Pi Spigot Noise",
+  formulaNoise: "Formula Noise",
+  fibonacciNoise: "Fibonacci Noise",
   fractalBrownianNoise: "Fractal Brownian Motion",
   gain: "Gain",
   // Legacy id — patches migrate to "gain" on load.
@@ -6039,39 +6040,68 @@ const nodeGraphModuleDefinitions = (
       },
     ]
   },
-  piSpigotNoise: {
+  formulaNoise: {
     planRole: "source",
     planFreeRun: true,
-    displayType: "scope2d",
-    defaultDisplayMode: "xyBurn",
+    displayType: "waterfall",
+    defaultDisplayMode: "waterfall",
     displaySignals: [
-      { key: "Left", label: "Left", kind: "scalar" },
-      { key: "Right", label: "Right", kind: "scalar" },
-      { key: "Hex", kind: "scalar" },
-      { key: "N", kind: "scalar" },
+      { key: "Bipolar", kind: "scalar" },
     ],
     displayModes: [
-      { key: "xyBurn", label: "Left/Right", renderer: "scope2d", settingsSchema: "scope2d", source: { x: "Left", y: "Right" } },
-      { key: "waterfall", label: "Waterfall", renderer: "waterfall", settingsSchema: "waterfall" },
+      { key: "waterfall", label: "Waterfall", renderer: "waterfall", settingsSchema: "waterfall", source: { value: "Bipolar" } },
     ],
-    stereoWaterfallPorts: { left: "Left", right: "Right" },
-    outputs: ["Left", "Right", "Hex", "N", "T", "B3", "B2", "B1", "B0"],
-    outputAliases: { "Left Out": "Left", "Right Out": "Right" },
-    outputLabels: {
-      Left: "Left",
-      Right: "Right" },
+    inputs: ["Reset"],
+    outputs: ["Bipolar", "Unipolar", "Trigger", "Index"],
     outputTooltips: {
-      Left: "Stored pi digits, 3 per sample (314, 159, 265, ...) as bipolar audio, from Start.",
-      Right: "Same digit table read half a table later (independent stereo side).",
-      Hex: "First decimal digit of the current Left group (0 to 9 as 0 to 1).",
-      N: "Read position through the 2,097,152-digit table (0 to 1).",
-      T: "Pulse when playback loops back to Start.",
-      B3: "BCD bit 8 of the current digit.",
-      B2: "BCD bit 4 of the current digit.",
-      B1: "BCD bit 2 of the current digit.",
-      B0: "BCD bit 1 of the current digit." },
-    digitalOutputs: ["T", "B3", "B2", "B1", "B0"],
+      Bipolar: "Current step value v (0 to 9) as v/9*2-1 (-1 to +1), smoothed as chosen.",
+      Unipolar: "Current step value v (0 to 9) as v/9 (0 to 1), smoothed as chosen.",
+      Trigger: "1-sample pulse whenever a new step starts (several steps in one sample still give one pulse; stays high at Speed >= sample rate).",
+      Index: "Position of the playing step in the 2,097,152-step period (0 to 1)." },
+    digitalOutputs: ["Trigger"],
     parameters: [
+      {
+        choices: ["Pi", "e", "Sqrt 2", "Phi", "Ln 2", "Random Digits", "White", "Gaussian", "Random Walk", "Logistic Map", "Fibonacci"],
+        defaultValue: "0",
+        displayChoices: true,
+        divideChoicesVisibly: true,
+        key: "source",
+        label: "Source",
+        linearSmoothing: false,
+        max: "10",
+        mid: "5",
+        min: "0",
+        nonlinearSlider: false,
+        step: "1",
+        tooltip: "What makes the steps. Pi / e / Sqrt 2 / Phi / Ln 2 = stored decimal digits (2,097,152 each). Random Digits = seeded 0-9. White = seeded continuous. Gaussian = seeded bell curve around the middle. Random Walk = moves one level up or down each step, bouncing off the ends. Logistic Map = chaotic r = 3.99. Fibonacci = Fibonacci numbers mod 10 (repeats every 60 steps; Seed shifts where it starts). Seed only affects the seeded sources and Fibonacci."
+      },
+      {
+        defaultValue: "44100",
+        key: "speed",
+        label: "Speed",
+        max: "96000",
+        mid: "20",
+        min: "0.01",
+        step: "any",
+        unit: "steps/s",
+        maxDigits: 6,
+        tooltip: "Steps per second. 44100 at 44.1 kHz = one step per sample; above the sample rate steps are skipped. 0 freezes."
+      },
+      {
+        choices: ["Hold", "Linear", "1-Pole", "2-Pole", "Cosine", "Smoothstep", "Cubic", "B-Spline", "Quintic B-Spline", "Gaussian"],
+        defaultValue: "0",
+        displayChoices: true,
+        divideChoicesVisibly: true,
+        key: "interpolation",
+        label: "Smoothing",
+        linearSmoothing: false,
+        max: "9",
+        mid: "4",
+        min: "0",
+        nonlinearSlider: false,
+        step: "1",
+        tooltip: "Hold = steps. Linear = ramp. 1-Pole / 2-Pole = lowpass chasing each step, cutoff Speed/2. Cosine = S-curve. Smoothstep = polynomial S-curve, a touch steeper in the middle. Cubic = Catmull-Rom through the steps. B-Spline = smooth, rounds the peaks. Quintic B-Spline = 6-point, even smoother, never overshoots. Gaussian = soft blur over ~16 steps, smoothest."
+      },
       {
         defaultValue: "0",
         key: "start",
@@ -6082,43 +6112,49 @@ const nodeGraphModuleDefinitions = (
         min: "0",
         nonlinearSlider: false,
         step: "any",
-        tooltip: "Where in the stored digits playback starts (0 = the leading 314159..., 1 = the end of the table)."
+        tooltip: "Where in the 2,097,152-step period playback starts and Reset returns to (0 = first step, e.g. the leading 3 of pi; 1 = the last step)."
       },
       {
-        defaultValue: "1",
-        key: "stride",
-        label: "Stride",
-        linearSmoothing: false,
-        max: "16",
-        mid: "4",
-        min: "1",
-        nonlinearSlider: false,
-        step: "1",
-        tooltip: "Samples (3-digit groups) advanced per output sample. 1 = the original playback rate."
-      },
-      {
-        choices: ["White", "Pink", "Brown", "Blue", "Violet"],
+        choices: ["Wrap", "Ping-Pong"],
         defaultValue: "0",
         displayChoices: true,
         divideChoicesVisibly: true,
-        key: "color",
-        label: "Color",
+        key: "loop",
+        label: "Loop",
         linearSmoothing: false,
-        max: "4",
-        mid: "2",
+        max: "1",
+        mid: "0",
         min: "0",
         nonlinearSlider: false,
-        step: "1"
+        step: "1",
+        tooltip: "At the end of the period: Wrap jumps back to step 0; Ping-Pong plays backwards, then forwards again."
       },
       {
+        choices: ["Off", "On"],
         defaultValue: "0",
-        key: "smoothing",
-        label: "Smoothing",
+        displayChoices: true,
+        divideChoicesVisibly: true,
+        key: "quantize",
+        label: "Quantize",
+        linearSmoothing: false,
         max: "1",
-        mid: "0.5",
+        mid: "0",
         min: "0",
         nonlinearSlider: false,
-        step: "any"
+        step: "1",
+        tooltip: "On snaps the smoothed output to the nearest of 10 levels (smoothing still sets when it changes)."
+      },
+      {
+        defaultValue: "1",
+        key: "seed", kind: "seed",
+        maxDigits: 0,
+        label: "Seed",
+        max: "16777215",
+        mid: "1",
+        min: "0",
+        step: "1",
+        linearSmoothing: false,
+        tooltip: "Seed for Random Digits, White, Gaussian, Random Walk and Logistic Map (and the Fibonacci start). The stored constants ignore it."
       },
       {
         defaultValue: "1",
@@ -6127,9 +6163,129 @@ const nodeGraphModuleDefinitions = (
         max: "1",
         mid: "1",
         min: "0",
-        nonlinearSlider: false,
         step: "any",
-        modClamp: false
+        modClamp: false,
+        tooltip: "Output gain on Bipolar and Unipolar, applied per sample (Trigger and Index are not scaled)."
+      },
+    ]
+  },
+  fibonacciNoise: {
+    planRole: "source",
+    planFreeRun: true,
+    displayType: "waterfall",
+    defaultDisplayMode: "waterfall",
+    displaySignals: [
+      { key: "Bipolar", kind: "scalar" },
+    ],
+    displayModes: [
+      { key: "waterfall", label: "Waterfall", renderer: "waterfall", settingsSchema: "waterfall", source: { value: "Bipolar" } },
+    ],
+    inputs: ["Reset"],
+    outputs: ["Bipolar", "Unipolar", "Trigger"],
+    outputTooltips: {
+      Bipolar: "Current step value v (0 to 9) as v/9*2-1 (-1 to +1), smoothed as chosen.",
+      Unipolar: "Current step value v (0 to 9) as v/9 (0 to 1), smoothed as chosen.",
+      Trigger: "1-sample pulse whenever a new step starts (several steps in one sample still give one pulse; stays high at Speed >= sample rate)." },
+    digitalOutputs: ["Trigger"],
+    parameters: [
+      {
+        choices: ["24 / 55", "5 / 17", "31 / 63", "97 / 127", "273 / 607", "418 / 1279"],
+        defaultValue: "0",
+        displayChoices: true,
+        divideChoicesVisibly: true,
+        key: "lags",
+        label: "Lags",
+        linearSmoothing: false,
+        max: "5",
+        mid: "2",
+        min: "0",
+        nonlinearSlider: false,
+        step: "1",
+        tooltip: "Lag J / Lag K of x[n] = x[n-J] op x[n-K]. All pairs are full-period (primitive trinomials). Longer K = longer period and more seed words. Changing restarts the sequence."
+      },
+      {
+        choices: ["Add", "Subtract", "Multiply", "XOR"],
+        defaultValue: "0",
+        displayChoices: true,
+        divideChoicesVisibly: true,
+        key: "operation",
+        label: "Operation",
+        linearSmoothing: false,
+        max: "3",
+        mid: "1",
+        min: "0",
+        nonlinearSlider: false,
+        step: "1",
+        tooltip: "How the two lagged values combine (mod 2^32). Add / Subtract = classic additive LFG. Multiply = multiplicative LFG (odd words). XOR = bitwise, period 2^K - 1. Changing restarts the sequence."
+      },
+      {
+        choices: ["Digits", "Continuous"],
+        defaultValue: "0",
+        displayChoices: true,
+        divideChoicesVisibly: true,
+        key: "output",
+        label: "Output",
+        linearSmoothing: false,
+        max: "1",
+        mid: "0",
+        min: "0",
+        nonlinearSlider: false,
+        step: "1",
+        tooltip: "Digits = each value becomes one of 10 levels (0-9). Continuous = full-resolution value scaled to the same range."
+      },
+      {
+        defaultValue: "44100",
+        key: "speed",
+        label: "Speed",
+        max: "96000",
+        mid: "20",
+        min: "0.01",
+        step: "any",
+        unit: "steps/s",
+        maxDigits: 6,
+        tooltip: "Steps per second. 44100 at 44.1 kHz = one step per sample; above the sample rate steps are skipped. 0 freezes."
+      },
+      {
+        choices: ["Hold", "Linear", "1-Pole", "2-Pole", "Cosine", "Smoothstep", "Cubic", "B-Spline", "Quintic B-Spline", "Gaussian"],
+        defaultValue: "0",
+        displayChoices: true,
+        divideChoicesVisibly: true,
+        key: "interpolation",
+        label: "Smoothing",
+        linearSmoothing: false,
+        max: "9",
+        mid: "4",
+        min: "0",
+        nonlinearSlider: false,
+        step: "1",
+        tooltip: "Hold = steps. Linear = ramp. 1-Pole / 2-Pole = lowpass chasing each step, cutoff Speed/2. Cosine = S-curve. Smoothstep = polynomial S-curve. Cubic = Catmull-Rom through the steps. B-Spline = smooth, rounds the peaks. Quintic B-Spline = 6-point, even smoother. Gaussian = soft blur over ~16 steps, smoothest. Upcoming steps are generated ahead, so there is no delay."
+      },
+      {
+        choices: ["Off", "On"],
+        defaultValue: "0",
+        displayChoices: true,
+        divideChoicesVisibly: true,
+        key: "quantize",
+        label: "Quantize",
+        linearSmoothing: false,
+        max: "1",
+        mid: "0",
+        min: "0",
+        nonlinearSlider: false,
+        step: "1",
+        tooltip: "On snaps the smoothed output to the nearest of 10 levels (smoothing still sets when it changes)."
+      },
+      {
+        defaultValue: "1",
+        key: "seed", kind: "seed",
+        maxDigits: 0,
+        label: "Seed",
+        max: "16777215",
+        mid: "1",
+        min: "0",
+        step: "1",
+        linearSmoothing: false,
+        tooltip: "Fills the generator's K starting words. Changing restarts the sequence; Reset restarts the same sequence."
       },
     ]
   },
@@ -14282,10 +14438,21 @@ const nodeGraphModuleDefinitions = (
     planRole: "processor",
     displayHeightGu: 3,
     displayType: "waterfall",
-    // Same face as Pump Limiter: Instant Waterfall (WebGL scroll strip) on the
-    // Envelope output. Envelope 0 sits at the top and ducking pulls it down.
-    defaultDisplayMode: "gain",
+    // Instant Waterfall (WebGL scroll strip), two lines: Dry Gain and Wet
+    // Gain, each relative to its rest value (Mix with no ducking). Middle =
+    // rest, top = 2x rest (+6 dB), bottom = silent. Internal face taps, so
+    // no jack wiring is needed. The Envelope mode is kept below.
+    defaultDisplayMode: "gains",
+    stereoWaterfallPorts: { left: "Dry Gain", right: "Wet Gain" },
+    stereoWaterfallLabels: { left: "Dry", right: "Wet" },
+    stereoWaterfallInternal: true,
     displayModes: [
+      {
+        key: "gains",
+        label: "Dry / Wet",
+        renderer: "waterfall",
+        settingsSchema: "waterfall",
+        source: { value: "Dry Gain" } },
       {
         key: "gain",
         label: "Envelope",

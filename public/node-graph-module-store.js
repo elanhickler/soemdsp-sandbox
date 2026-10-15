@@ -1056,11 +1056,17 @@ const nodeGraphModuleStoreCatalog = Object.freeze({
     label: "Fractal Brownian Motion",
     notes: ["fbm", "out x/y/z", "seeded value noise", "slow terrain motion"],
   },
-  piSpigotNoise: {
+  formulaNoise: {
     category: "noise",
-    description: "Live BBP four-phase π walk: Sum/Term audio, latched hex bits for rhythm. No digit file.",
-    label: "Pi Spigot Noise",
-    notes: ["bbp", "pi", "hex", "bits", "sum", "term", "spigot", "native"],
+    description: "Stepped noise, one value per step at Speed from a chosen Source: stored digits of pi / e / sqrt 2 / phi / ln 2, or seeded Random Digits / White / Gaussian / Random Walk / Logistic Map / Fibonacci. Bipolar/Unipolar out with Hold/Linear/1-Pole/2-Pole/Cosine/Smoothstep/Cubic/B-Spline/Quintic B-Spline/Gaussian smoothing, Trigger per step, Index ramp.",
+    label: "Formula Noise",
+    notes: ["pi", "e", "digits", "seeded", "random walk", "logistic", "stepped", "smoothing", "trigger", "native"],
+  },
+  fibonacciNoise: {
+    category: "noise",
+    description: "Stepped noise from a lagged Fibonacci generator x[n] = x[n-J] op x[n-K] (Add/Subtract/Multiply/XOR, full-period lag pairs 5/17 to 418/1279), seeded, one value per step at Speed as Digits or Continuous. Bipolar/Unipolar out with the 10 smoothing modes, Trigger per step.",
+    label: "Fibonacci Noise",
+    notes: ["lagged fibonacci", "lfg", "seeded", "stepped", "smoothing", "trigger", "native"],
   },
   codeBox: {
     category: "text",
@@ -3568,9 +3574,13 @@ const nodeGraphJsSourceEntriesByType = Object.freeze({
     source: "public/modules/phosphorLight/phosphor-light-display.js",
     sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/phosphorLight/phosphor-light-display.js",
   },
-  piSpigotNoise: {
-    source: "public/modules/piSpigotNoise/pi-spigot-noise-worklet-evaluator.js",
-    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/piSpigotNoise/pi-spigot-noise-worklet-evaluator.js",
+  formulaNoise: {
+    source: "native_modules/formula_noise/formula_noise.cpp",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/native_modules/formula_noise/formula_noise.cpp",
+  },
+  fibonacciNoise: {
+    source: "native_modules/fibonacci_noise/fibonacci_noise.cpp",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/native_modules/fibonacci_noise/fibonacci_noise.cpp",
   },
   pingPongDelay: {
     source: "native_modules/ping_pong_delay/ping_pong_delay.cpp",

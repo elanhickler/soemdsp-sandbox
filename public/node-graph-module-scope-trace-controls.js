@@ -216,7 +216,7 @@ const nodeGraphTraceDisplaySettingControlKeys = Object.freeze({
     "pill",
     "squircle",
   ],
-  colors: ["dot1Color", "secondaryColor", "tertiaryColor", "backgroundColor", "ghostColor", "buttonColor", "hoverColor", "downColor", "textColor", "strokeColor", "dotColor", "arcFill", "arcTrack", "sliderColor", "sliderNumberColor", "sliderTextColor", "sliderUnitColor", "inactiveColor", "activeColor", "fontColor", "inactiveFillColor", "activeFillColor", "inactiveTextColor", "activeTextColor", "previousColor"],
+  colors: ["dot1Color", "secondaryColor", "tertiaryColor", "backgroundColor", "ghostColor", "buttonColor", "hoverColor", "downColor", "textColor", "strokeColor", "strokeLeftColor", "strokeRightColor", "dotColor", "arcFill", "arcTrack", "sliderColor", "sliderNumberColor", "sliderTextColor", "sliderUnitColor", "inactiveColor", "activeColor", "fontColor", "inactiveFillColor", "activeFillColor", "inactiveTextColor", "activeTextColor", "previousColor"],
   // Every control key that exists in the shared popover MUST be listed here.
   // setNodeGraphTraceDisplaySettingsFormType only show/hides keys from these
   // lists — anything missing leaks onto every module (e.g. Output saw
@@ -300,7 +300,7 @@ const nodeGraphTraceDisplayActiveControlsByType = Object.freeze({
       "barThickness",
       "strokeThickness",
     ]),
-    colors: Object.freeze(["dot1Color", "secondaryColor", "tertiaryColor", "backgroundColor", "strokeColor"]),
+    colors: Object.freeze(["dot1Color", "secondaryColor", "tertiaryColor", "backgroundColor", "strokeColor", "strokeLeftColor", "strokeRightColor"]),
     toggles: Object.freeze(["skipDiscontinuities", "pauseOnSilence"]),
     choices: Object.freeze(["barInk", "facePolarity", "stereoBlend"]),
   }),
@@ -1993,6 +1993,19 @@ const nodeGraphDisplaySettingsColorMeta = Object.freeze({
     aria: "Stroke color",
     defaultValue: "#ffffff",
     id: "nodeTraceDisplayStrokeColor",
+  }),
+  // Two-channel Instant Waterfall: per-channel stroke (Left / Dry, Right / Wet).
+  strokeLeftColor: Object.freeze({
+    label: "Left stroke",
+    aria: "Left stroke color",
+    defaultValue: "#ffffff",
+    id: "nodeTraceDisplayStrokeLeftColor",
+  }),
+  strokeRightColor: Object.freeze({
+    label: "Right stroke",
+    aria: "Right stroke color",
+    defaultValue: "#ffffff",
+    id: "nodeTraceDisplayStrokeRightColor",
   }),
   dot1Color: Object.freeze({
     label: "",

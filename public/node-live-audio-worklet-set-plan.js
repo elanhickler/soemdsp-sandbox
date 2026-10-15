@@ -866,10 +866,10 @@ NodeLiveAudioProcessor.prototype._setPlanImpl = function _setPlanImpl(plan, mess
         }
       }
     }
-    for (const id of [...this.piSpigotNoiseStates.keys()]) {
+    for (const id of [...this.formulaNoiseStates.keys()]) {
       if (!ids.has(id)) {
-        this.destroyPiSpigotNoiseNativeState(this.piSpigotNoiseStates.get(id));
-        this.piSpigotNoiseStates.delete(id);
+        this.destroyFormulaNoiseNativeState(this.formulaNoiseStates.get(id));
+        this.formulaNoiseStates.delete(id);
       }
     }
     for (const id of [...this.bradley2AStates.keys()]) {

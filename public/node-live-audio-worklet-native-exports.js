@@ -1388,19 +1388,19 @@ NodeLiveAudioProcessor.prototype.applyNativeModuleExports = function applyNative
         });
         return;
       }
-      if (name === "pi_spigot_noise" || targetType === "piSpigotNoise") {
-        for (const state of this.piSpigotNoiseStates.values()) {
-          this.destroyPiSpigotNoiseNativeState(state);
+      if (name === "formula_noise" || targetType === "formulaNoise") {
+        for (const state of this.formulaNoiseStates.values()) {
+          this.destroyFormulaNoiseNativeState(state);
         }
-        this.nativePiSpigotNoise = exports;
-        this.nativePiSpigotNoiseReady = Boolean(
-          this.nativePiSpigotNoise?.soemdsp_pi_spigot_noise_create &&
-          this.nativePiSpigotNoise?.soemdsp_pi_spigot_noise_sample,
+        this.nativeFormulaNoise = exports;
+        this.nativeFormulaNoiseReady = Boolean(
+          this.nativeFormulaNoise?.soemdsp_formula_noise_create &&
+          this.nativeFormulaNoise?.soemdsp_formula_noise_sample,
         );
         this.port.postMessage({
           type: "nativeModuleStatus",
-          name: "pi_spigot_noise",
-          status: this.nativePiSpigotNoiseReady ? "ready" : "missing exports",
+          name: "formula_noise",
+          status: this.nativeFormulaNoiseReady ? "ready" : "missing exports",
         });
         return;
       }

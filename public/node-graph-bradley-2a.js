@@ -10,7 +10,7 @@
 // instantiates bradley_2a.wasm itself (this runs on the main thread --
 // offline render -- which has fetch, unlike the audio worklet's
 // restricted scope; see node-graph-live-frame-evaluator.js's
-// nodeGraphPiSpigotNoiseLoadWasm for the same pattern) and calls straight
+// nodeGraphFormulaNoiseLoadWasm for the same pattern) and calls straight
 // into it. Silent (0) output until the wasm finishes loading.
 //
 // Gotcha: unlike lorenz_attractor (JS applies "level" on top), this

@@ -643,6 +643,11 @@ function nodeGraphDisplaySettingsColorRowMeta(key, formType = null, options = {}
   } else if ((formType === "waterfall" || formType === "waterfallRgb" || formType === "waterfallXyz") && key === "secondaryColor") {
     aria = "Right";
     base = { ...base, defaultValue: "#0000ff" };
+  } else if (formType === "waterfall" && (key === "strokeLeftColor" || key === "strokeRightColor")) {
+    aria = typeof nodeGraphTraceDisplayColorWidgetLabel === "function"
+      ? `${nodeGraphTraceDisplayColorWidgetLabel(key)} color`
+      : (key === "strokeLeftColor" ? "Left stroke color" : "Right stroke color");
+    base = { ...base, defaultValue: "#ffffff" };
   } else if (key === "strokeColor" && (formType === "waterfall" || formType === "waterfallRgb" || formType === "waterfallXyz")) {
     aria = "Stroke color";
     base = { ...base, defaultValue: "#ffffff" };
@@ -1683,7 +1688,8 @@ function buildNodeGraphInstantTraceDisplaySettingsBodyHtml(type, node, allowKey)
       nodeGraphDisplaySettingsBuildColorRowHtml("backgroundColor", type),
       nodeGraphDisplaySettingsBuildColorRowHtml("dot1Color", type),
       nodeGraphDisplaySettingsBuildColorRowHtml("secondaryColor", type),
-      nodeGraphDisplaySettingsBuildColorRowHtml("strokeColor", type),
+      nodeGraphDisplaySettingsBuildColorRowHtml("strokeLeftColor", type),
+      nodeGraphDisplaySettingsBuildColorRowHtml("strokeRightColor", type),
     ]));
   } else if (monoInk) {
     rows.push(nodeGraphDisplaySettingsHbsRow([
@@ -1705,7 +1711,7 @@ function buildNodeGraphInstantTraceDisplaySettingsBodyHtml(type, node, allowKey)
   }
   const leftoverColors = [];
   for (const key of inkColors) {
-    if ((quadInk || monoInk) && (key === "backgroundColor" || key === "dot1Color" || key === "secondaryColor" || key === "strokeColor")) {
+    if ((quadInk || monoInk) && (key === "backgroundColor" || key === "dot1Color" || key === "secondaryColor" || key === "strokeColor" || key === "strokeLeftColor" || key === "strokeRightColor")) {
       continue;
     }
     if (xyzColorTriple && (key === "dot1Color" || key === "secondaryColor" || key === "tertiaryColor")) {
@@ -1975,6 +1981,8 @@ function buildNodeGraphDisplaySettingsBodyHtml(formType, node = null) {
         key === "secondaryEnabled" ||
         key === "secondaryColor" ||
         key === "tertiaryColor" ||
+        key === "strokeLeftColor" ||
+        key === "strokeRightColor" ||
         key === "syncChannel" ||
         key === "stereoBlend"
       ) {

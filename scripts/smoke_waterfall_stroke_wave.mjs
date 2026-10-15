@@ -37,5 +37,204 @@ gate(drawn[2].length === 2 && drawn[2][0][0] === 0.5, "seam starts a new line (n
 // Absolute polarity folds a zero crossing between the peaks.
 const absRaw = ctx.nodeGraphWaterfallWaveRaw(acc, { polarity: "absolute" });
 gate(absRaw.length === 4 && absRaw[1] === 0, "absolute polarity: line passes through 0 between opposite-sign peaks");
+// Per-channel stroke colors (two-channel faces: Left/Right, Sidechain Dry/Wet).
+{
+  const rgbOf = (hex) => JSON.stringify(ctx.nodeGraphWaterfallParseInkRgb(hex));
+  const colors = [];
+  ctx.nodeGraphOnsetGlStrokePolyline = (_c, _pts, _px, rgb) => { colors.push(JSON.stringify(rgb)); return true; };
+  const b2 = {};
+  ctx.nodeGraphWaterfallStrokeWaveColumn({}, b2, "L", 1, [40, 60], { strokeColor: "#ffffff" }, false, "#ff8000");
+  ctx.nodeGraphWaterfallStrokeWaveColumn({}, b2, "R", 1, [40, 60], { strokeColor: "#ffffff" }, false, null);
+  gate(colors[0] === rgbOf("#ff8000") && colors[1] === rgbOf("#ffffff"), "channel stroke color wins; missing falls back to the shared Stroke");
+  const stereo = { stereoBuffers: { left: new Float32Array(4), right: new Float32Array(4) } };
+  const both = ctx.nodeGraphWaterfallChannelList(stereo, { strokeColor: "#aaaaaa", strokeLeftColor: "#ff0000", strokeRightColor: "#00ff00" });
+  gate(both.length === 2 && both[0].strokeColor === "#ff0000" && both[1].strokeColor === "#00ff00", "stereo channels carry Left / Right stroke colors");
+  const old = ctx.nodeGraphWaterfallChannelList(stereo, { strokeColor: "#aaaaaa" });
+  gate(old[0].strokeColor === "#aaaaaa" && old[1].strokeColor === "#aaaaaa", "old patch (no per-channel strokes): both use the shared Stroke");
+  const mono = ctx.nodeGraphWaterfallChannelList({ buffer: new Float32Array(4) }, { strokeColor: "#aaaaaa", strokeLeftColor: "#ff0000" });
+  gate(mono.length === 1 && !mono[0].strokeColor, "single-channel waterfall keeps its one Stroke color");
+  const src = (f) => fs.readFileSync(path.join(root, "public", f), "utf8");
+  const norm = src("node-graph-module-scope-normalize.js");
+  gate(/strokeLeftColor: normalizeNodeGraphTraceDisplayColor\(\s*source\.strokeLeftColor,\s*normalizeNodeGraphTraceDisplayColor\(source\.strokeColor/.test(norm)
+    && /strokeRightColor: normalizeNodeGraphTraceDisplayColor\(\s*source\.strokeRightColor,\s*normalizeNodeGraphTraceDisplayColor\(source\.strokeColor/.test(norm),
+    "normalize: missing per-channel strokes default to the saved Stroke color");
+  const io = src("node-graph-module-scope-settings-form-io.js");
+  gate(/field === "strokeLeftColor" \|\| field === "strokeRightColor"[\s\S]{0,600}stereoWaterfallLabels\?\.\[side\][\s\S]{0,120}\} stroke`/.test(io), "labels: Left stroke / Right stroke, Dry stroke / Wet stroke via stereoWaterfallLabels");
+  const form = src("node-graph-module-scope-settings-form.js");
+  gate(/BuildColorRowHtml\("strokeLeftColor", type\),\s*nodeGraphDisplaySettingsBuildColorRowHtml\("strokeRightColor", type\)/.test(form), "stereo waterfall form: two stroke HBS widgets");
+}
+// Sidechain Dry / Wet Gain strokes: realistic duck sequences (relative gains,
+// 1 = rest = middle). Regression: a raw-0 column (Wet fully ducked) counted
+// as silent, so no fill AND no stroke; values past 2x rest left the canvas.
+{
+  ctx.nodeGraphModuleSelectedDisplayMode = () => ({ key: "gains" });
+  const H = 64, strokeW = 2, inset = strokeW / 2;
+  ctx.nodeGraphOnsetStrokeCanvasPx = () => strokeW;
+  const lines = { D: [], W: [] };
+  let cur = null;
+  ctx.nodeGraphOnsetGlStrokePolyline = (_c, pts) => { lines[cur].push(pts.map((q) => ({ x: q.x, y: q.y }))); return true; };
+  const slot = { type: "sidechain" };
+  const canvas = { height: H };
+  const run = (mix, ducked, label) => {
+    lines.D = []; lines.W = [];
+    const bag = {};
+    // env: 0 idle, sudden onset to 1, hold, slow release back to 0.
+    const env = [];
+    for (let i = 0; i < 40; i++) env.push(0);
+    for (let i = 0; i < 40; i++) env.push(1);
+    for (let i = 0; i < 400; i++) env.push(Math.exp(-i / 80));
+    const rel = (g, rest) => (rest < 1e-6 ? (g > 1e-6 ? 2 : 1) : g / rest);
+    const dry = [], wet = [];
+    for (const e of env) { const m = mix + (ducked - mix) * e; dry.push(rel(1 - m, 1 - mix)); wet.push(rel(m, mix)); }
+    const per = 4, cols = env.length / per;
+    for (let c = 0; c < cols; c++) {
+      for (const [key, sig] of [["D", dry], ["W", wet]]) {
+        const acc = ctx.nodeGraphWaterfallAccMake();
+        ctx.nodeGraphWaterfallAccPush(acc, Float32Array.from(sig), c * per, (c + 1) * per, {}, slot);
+        const ys = ctx.nodeGraphWaterfallWaveYs(acc, null, slot, {}, H);
+        cur = key;
+        ctx.nodeGraphWaterfallStrokeWaveColumn(canvas, bag, key, c, ys, {}, false, null);
+      }
+    }
+    const ok = (arr) => arr.length === cols
+      && arr.every((pl) => pl.every((q) => q.y >= inset - 1e-9 && q.y <= H - inset + 1e-9))
+      && arr.every((pl, i) => i === 0 || (pl[0].x === arr[i - 1][arr[i - 1].length - 1].x && pl[0].y === arr[i - 1][arr[i - 1].length - 1].y));
+    gate(ok(lines.D) && ok(lines.W), `${label}: Dry and Wet stroke every column, inside the panel, continuous per channel`);
+    return { cols, lines: { D: lines.D.slice(), W: lines.W.slice() } };
+  };
+  const a = run(0.35, 0, "Mix 0.35 / Ducked 0");
+  const ys = (pl) => pl.map((q) => q.y);
+  gate(ys(a.lines.W[0]).every((y) => Math.abs(y - H / 2) < 1e-9) && ys(a.lines.D[0]).every((y) => Math.abs(y - H / 2) < 1e-9), "idle: both lines rest at the middle");
+  gate(ys(a.lines.W[12]).every((y) => Math.abs(y - (H - inset)) < 1e-9), "full duck: Wet (raw 0) still stroked, on the bottom edge");
+  gate(a.lines.W[10].some((y) => true) && Math.max(...ys(a.lines.W[10])) - Math.min(...ys(a.lines.W[10])) > H * 0.4, "sudden onset: vertical jump drawn inside one segment");
+  gate(Math.min(...ys(a.lines.D[12])) < H / 2 && Math.min(...ys(a.lines.D[12])) >= inset, "full duck: Dry rises above the middle (1.54x rest)");
+  const m0 = run(0, 0.5, "Mix 0 / Ducked 0.5 (wet rest 0 -> top)");
+  gate(ys(m0.lines.W[12]).every((y) => Math.abs(y - inset) < 1e-9), "rest-0 'top' case rides the top edge, visible");
+  const m1 = run(1, 0, "Mix 1 / Ducked 0 (dry rest 0 -> top, wet -> bottom)");
+  gate(ys(m1.lines.D[12]).every((y) => Math.abs(y - inset) < 1e-9) && ys(m1.lines.W[12]).every((y) => Math.abs(y - (H - inset)) < 1e-9), "Mix 1 full duck: Dry at the top edge, Wet at the bottom edge");
+  const wfSrc = fs.readFileSync(path.join(root, "public", "node-graph-module-scope-waterfall.js"), "utf8");
+  const strokeFirst = wfSrc.match(/if \(useStroke\) \{[\s\S]{0,300}?nodeGraphWaterfallStrokeWaveColumn\([\s\S]{0,200}?\}\s*const ys = span\.ys;\s*if \(!ys\) continue;/g) || [];
+  gate(strokeFirst.length === 2, `both column paths stroke before the fill's silent-column skip (${strokeFirst.length}/2)`);
+}
+// Sub-pixel frames (advance < 1 px, e.g. long History at 60 fps): their
+// samples must reach the next column. Regression: SmoothAdvance reset the
+// carried accumulator, so short Dry Gain rises inside those frames vanished
+// and the stroke top was skipped intermittently.
+{
+  const W = 120, H = 60, N = 8192;
+  let grid = Array.from({ length: W }, () => new Array(H).fill(0));
+  ctx.nodeGraphWaterfallEnsureHold = () => ({ getContext: () => ({}) });
+  ctx.nodeGraphWaterfallPresentHold = () => {};
+  ctx.nodeGraphWaterfallStampColumnFills = () => {};
+  ctx.nodeGraphWaterfallGlScroll = (_c, px) => { grid = grid.map((_, x) => (x + px < W ? grid[x + px] : new Array(H).fill(0))); };
+  ctx.nodeGraphWaterfallGlClearColumn = (_c, x) => { grid[x] = new Array(H).fill(0); };
+  ctx.nodeGraphOnsetStrokeCanvasPx = () => 1;
+  ctx.nodeGraphOnsetGlStrokePolyline = (_c, pts, _w, rgb) => {
+    const bit = rgb[0] > rgb[2] ? 1 : 2;
+    for (let i = 1; i < pts.length; i++) {
+      const a = pts[i - 1], q = pts[i], n = Math.ceil(Math.hypot(q.x - a.x, q.y - a.y) * 4) + 1;
+      for (let k = 0; k <= n; k++) { const x = Math.floor(a.x + (q.x - a.x) * k / n), y = Math.floor(a.y + (q.y - a.y) * k / n); if (x >= 0 && x < W && y >= 0 && y < H) grid[x][y] |= bit; }
+    }
+  };
+  ctx.nodeGraphModuleSelectedDisplayMode = () => ({ key: "gains" });
+  const settings = { barInk: "stroke", strokeLeftColor: "#ff0000", strokeRightColor: "#0000ff" };
+  const total = 300000, dry = new Float32Array(total), wet = new Float32Array(total);
+  // Short duck bursts (200 samples) every 3000 (< one 3333-sample column): Dry jumps to 1.5x rest, Wet to 0.
+  for (let i = 0; i < total; i++) { const on = (i % 3000) < 200; dry[i] = on ? 1.5 : 1; wet[i] = on ? 0 : 1; }
+  const faceSamples = 400000;  // ~0.25 px per 800-sample frame -> mostly sub-pixel frames
+  const canvas = { width: W, height: H, _waterfall: {} };
+  let pos = N, carryPx = 0, carrySamples = 0, colPx = 0; const barAcc = Object.create(null);
+  while (pos + 800 < total) {
+    const k = 800; pos += k;
+    carryPx += k / faceSamples * W; const move = Math.floor(carryPx + 1e-6); carryPx -= move;
+    if (move < 1) { carrySamples += k; continue; }
+    const L = dry.slice(pos - N, pos), R = wet.slice(pos - N, pos);
+    colPx = ctx.nodeGraphWaterfallSmoothAdvance(null, canvas, { slot: { type: "sidechain" }, settings, buffer: L, stereoBuffers: { left: L, right: R } },
+      { advancePx: move, barPx: 1, sampleStart: N - k - carrySamples, sampleEnd: N, colPx, barAcc });
+    carrySamples = 0;
+  }
+  const yTop = Math.floor(H / 2 - 0.5 * H / 2);
+  let dryCols = 0, wetCols = 0, drawn = 0;
+  for (let x = 0; x < W; x++) { if (grid[x].some((v) => v)) drawn++; if (grid[x][yTop] & 1) dryCols++; if (grid[x][H - 1] & 2) wetCols++; }
+  gate(drawn > 10 && dryCols === drawn && wetCols === drawn, `carried sub-pixel samples: every drawn column shows the Dry top and Wet bottom (${dryCols}/${wetCols}/${drawn})`);
+  const wfSrc = fs.readFileSync(path.join(root, "public", "node-graph-module-scope-waterfall.js"), "utf8");
+  gate(/st\.carrySamples = nodeGraphFiniteNumber\(st\.carrySamples\) \+/.test(wfSrc) && /sampleStart = Math\.max\(0, sampleStart - Math\.floor\(st\.carrySamples\)\)/.test(wfSrc),
+    "Paint carries sub-pixel frame samples into the next column's window");
+}
+// Held steps (Formula Noise, smoothing Hold) on a stereo face: every column that
+// sits inside a hold must show the held level (flat tops included), for both
+// channels, fill on and off, frames advancing 1..4 px. Regression: after the
+// plate scrolled, the last stroke point kept its old x, so the next column's
+// connector (the held flat) started paintPx too far right and later column
+// clears erased it: flat tops vanished at frame boundaries.
+{
+  const W = 160, H = 64, N = 16384;
+  let grid;
+  ctx.nodeGraphWaterfallGlScroll = (_c, px) => { grid = grid.map((_, x) => (x + px < W ? grid[x + px] : new Array(H).fill(0))); };
+  ctx.nodeGraphWaterfallGlClearColumn = (_c, x) => { grid[x] = new Array(H).fill(0); };
+  ctx.nodeGraphWaterfallGlStampBar = (_c, x, _w, ys, _p, _cn, _rgb, blend) => {
+    for (let y = Math.max(0, Math.floor(Math.min(ys.y0, ys.y1))); y < Math.min(H, Math.ceil(Math.max(ys.y0, ys.y1))); y++) grid[x][y] = blend === "source-over" ? 4 : (grid[x][y] | 8);
+    return true;
+  };
+  ctx.nodeGraphOnsetGlStrokePolyline = (_c, pts, _w, rgb) => {
+    const bit = rgb[0] > rgb[2] ? 1 : 2;
+    // The held flat between columns is the connector from the previous
+    // column's last point, exactly one column to the left.
+    if (pts.length >= 2 && Math.abs(pts[0].x - pts[1].x) > 0.01 && Math.abs(pts[0].x - (pts[1].x - 1)) > 0.01) badConnectors++;
+    connectors++;
+    for (let i = 1; i < pts.length; i++) {
+      const a = pts[i - 1], q = pts[i], n = Math.ceil(Math.hypot(q.x - a.x, q.y - a.y) * 4) + 1;
+      for (let k = 0; k <= n; k++) { const x = Math.floor(a.x + (q.x - a.x) * k / n), y = Math.floor(a.y + (q.y - a.y) * k / n); if (x >= 0 && x < W && y >= 0 && y < H) grid[x][y] |= bit; }
+    }
+  };
+  let connectors = 0, badConnectors = 0;
+  delete ctx.nodeGraphWaterfallStampColumnFills;
+  vm.runInContext("nodeGraphWaterfallStampColumnFills = nodeGraphWaterfallStampColumnFills;", ctx);
+  ctx.nodeGraphModuleSelectedDisplayMode = () => ({ key: "gains" });
+  let seed = 7; const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+  const total = 600000, left = new Float32Array(total), right = new Float32Array(total);
+  for (const sig of [left, right]) { let i = 0; while (i < total) { const v = rnd() * 1.6 - 0.8, len = 3000 + Math.floor(rnd() * 9000); for (let j = 0; j < len && i < total; j++, i++) sig[i] = v; } }
+  const yOf = (v) => H / 2 - v * H / 2;
+  for (const barInk of ["stroke", "both"]) {
+    for (const faceSamples of [160000, 480000]) {
+      for (const frame of [700, 2500]) {
+        grid = Array.from({ length: W }, () => new Array(H).fill(0));
+        const settings = { barInk, blendMode: "lighter", strokeLeftColor: "#ff0000", strokeRightColor: "#0000ff" };
+        const canvas = { width: W, height: H, _waterfall: {} };
+        let pos = N, carryPx = 0, carry = 0, colPx = 0, lastPos = pos; const barAcc = Object.create(null);
+        const colEnds = [];
+        while (pos + frame < total) {
+          pos += frame;
+          carryPx += frame / faceSamples * W; const move = Math.floor(carryPx + 1e-6); carryPx -= move;
+          if (move < 1) { carry += frame; continue; }
+          const L = left.slice(pos - N, pos), R = right.slice(pos - N, pos);
+          colPx = ctx.nodeGraphWaterfallSmoothAdvance(null, canvas, { slot: { type: "output" }, settings, buffer: L, stereoBuffers: { left: L, right: R } },
+            { advancePx: move, barPx: 1, sampleStart: N - frame - carry, sampleEnd: N, colPx, barAcc });
+          const span = frame + carry; carry = 0;
+          for (let c = 0; c < move; c++) colEnds.push(pos - span + Math.round(span * (c + 1) / move));
+          lastPos = pos;
+        }
+        // Map the last W column sample windows to screen x and check held levels.
+        let checked = 0, missing = 0;
+        const ends = colEnds.slice(-W);
+        for (let x = 1; x < W - 1; x++) {
+          const e0 = ends[x - 1], e1 = ends[x];
+          for (const [sig, bit] of [[left, 1], [right, 2]]) {
+            const v = sig[e0];
+            let flat = true; for (let s = e0; s < e1 && flat; s++) if (sig[s] !== v) flat = false;
+            if (!flat || sig[e0 - 1] !== v) continue;
+            checked++;
+            if (!(grid[x][Math.min(H - 1, Math.floor(yOf(v)))] & bit)) missing++;
+          }
+        }
+        gate(connectors > 100 && badConnectors === 0, `held steps (${barInk}, history ${faceSamples}, frame ${frame}): every flat connector starts one column left, also after a multi-px scroll (${badConnectors} misplaced of ${connectors})`);
+        connectors = 0; badConnectors = 0;
+        gate(checked > 50 && missing === 0, `held steps (${barInk}, history ${faceSamples}, frame ${frame}): flat tops drawn in every held column (${missing} missing of ${checked})`);
+      }
+    }
+  }
+  const wfSrc2 = fs.readFileSync(path.join(root, "public", "node-graph-module-scope-waterfall.js"), "utf8");
+  gate(/strokeBag\.strokePts\[k\] = pts\.map\(\(q\) => \(\{ x: q\.x - paintPx, y: q\.y \}\)\)/.test(wfSrc2), "scroll moves the stored stroke points with the plate");
+}
 console.log(failures ? `FAILED ${failures}` : "smoke_waterfall_stroke_wave ok");
 if (failures) process.exit(1);

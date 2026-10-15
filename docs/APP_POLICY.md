@@ -166,7 +166,8 @@ Only these live-audio types exist in the efficient build:
 | `pitchQuantizer` | 12-bit scale pitch quantizer |
 | `turingMachine` | Shift-register CV / scale / gate |
 | `fractalBrownianNoise` | fBm noise CV (X/Y/Z) |
-| `piSpigotNoise` | Ï€-spigot BBP noise (sum/term/hex) |
+| `formulaNoise` | Stepped noise from a Source (stored 1 MiB digit tables of pi / e / sqrt 2 / phi / ln 2, or seeded live Random Digits / White / Gaussian / Random Walk / Logistic Map / Fibonacci), one value per step at Speed: Bipolar/Unipolar with 10 smoothing modes, Trigger, Index; Start/Reset/Loop/Quantize/Seed |
+| `fibonacciNoise` | Lagged Fibonacci stepped noise x[n] = x[n-J] op x[n-K] mod 2^32 (6 full-period lag pairs, Add/Subtract/Multiply/XOR, Digits/Continuous), seeded, one value per step at Speed: Bipolar/Unipolar with 10 smoothing modes (look-ahead generated, no delay), Trigger; Reset/Quantize/Seed |
 | `randomWalk` | Seeded random-walk CV |
 | `pulseExplosion` | Triggered pulse burst + density curve |
 | `spiral` | Jerobeam spiral XY(Z) oscillator |
@@ -221,7 +222,7 @@ polyBlep â†’ ladderFilter â†’ softClipper â†’ reverbEffect â†�
    delayEffect / soemReverb / pll /
    lorenzAttractor / logisticMap / henonMap / chuaAttractor / rayBouncer /
    chordMemory / chordSequencer / pitchQuantizer / turingMachine /
-   fractalBrownianNoise / piSpigotNoise / randomWalk / pulseExplosion /
+   fractalBrownianNoise / formulaNoise / fibonacciNoise / randomWalk / pulseExplosion /
    spiral / fractalSpiral / logSpiral / blubb / boing / keplerBouwkamp /
    mushroom / nyquistShannon / radar / torus / wirdoSpiral / phosphillator /
    crossover2 / crossover3 / crossover4 / crossover5 / crossover6

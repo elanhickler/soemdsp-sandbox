@@ -474,9 +474,9 @@ NodeLiveAudioProcessor.prototype.destroyCheapWalkNativeState = function destroyC
     }
 };
 
-NodeLiveAudioProcessor.prototype.destroyPiSpigotNoiseNativeState = function destroyPiSpigotNoiseNativeState(state) {
-    if (state?.nativeHandle && this.nativePiSpigotNoise?.soemdsp_pi_spigot_noise_destroy) {
-      this.nativePiSpigotNoise.soemdsp_pi_spigot_noise_destroy(state.nativeHandle);
+NodeLiveAudioProcessor.prototype.destroyFormulaNoiseNativeState = function destroyFormulaNoiseNativeState(state) {
+    if (state?.nativeHandle && this.nativeFormulaNoise?.soemdsp_formula_noise_destroy) {
+      this.nativeFormulaNoise.soemdsp_formula_noise_destroy(state.nativeHandle);
       state.nativeHandle = 0;
     }
 };

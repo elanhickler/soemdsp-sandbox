@@ -1651,6 +1651,18 @@ function nodeGraphStereoWaterfallBuffers(nodeId, type) {
   if (!id || !ports) {
     return null;
   }
+  // Internal face taps (Sidechain Dry / Wet Gain) have no jacks.
+  const def = typeof nodeGraphModuleDefinitions === "object"
+    ? nodeGraphModuleDefinitions[String(type || "").trim()]
+    : null;
+  if (def?.stereoWaterfallInternal) {
+    const left = nodeGraphModuleScopeState.buffers.get(`${id}:${ports.left}`);
+    const right = nodeGraphModuleScopeState.buffers.get(`${id}:${ports.right}`);
+    if (!left?.length && !right?.length) {
+      return null;
+    }
+    return { left, right };
+  }
   // Mono-only graphs (SinCos → Output Mono) must not use empty L/R rings.
   if (!nodeGraphStereoTraceLrWired(id, type)) {
     return null;

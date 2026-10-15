@@ -984,6 +984,16 @@ function normalizeNodeGraphWaterfallSettings(settings = {}) {
       source.strokeColor,
       defaults.strokeColor || "#ffffff",
     ),
+    // Per-channel strokes (two-channel waterfall). Missing = the shared
+    // strokeColor, so older patches look identical.
+    strokeLeftColor: normalizeNodeGraphTraceDisplayColor(
+      source.strokeLeftColor,
+      normalizeNodeGraphTraceDisplayColor(source.strokeColor, defaults.strokeColor || "#ffffff"),
+    ),
+    strokeRightColor: normalizeNodeGraphTraceDisplayColor(
+      source.strokeRightColor,
+      normalizeNodeGraphTraceDisplayColor(source.strokeColor, defaults.strokeColor || "#ffffff"),
+    ),
     scale: normalizeNodeGraphTraceDisplayNumber(source.scale, defaults.scale ?? 1, 0.01, 100),
     strokeThickness: normalizeNodeGraphTraceDisplayNumber(
       source.strokeThickness,

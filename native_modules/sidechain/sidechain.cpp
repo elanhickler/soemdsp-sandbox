@@ -25,6 +25,9 @@
 //   mix       m = Mix + (Ducked Mix - Mix) * env   (stereo-linked)
 //   out       Dry * (1 - m) + Wet * m              (equal-gain linear crossfade)
 //   Envelope output = env.
+//   Face taps (display only): dry / wet gain relative to rest (env 0):
+//     dryRel = (1 - m) / (1 - Mix), wetRel = m / Mix   (1 = rest, 0 = silent;
+//     rest 0 reads 1 when the gain is 0, else 2).
 
 #include <soemdsp/soemdsp.hpp>
 
@@ -45,6 +48,11 @@ static inline double mix_amount(double mix, double duckedMix, double env) {
   const double d = clamp01((duckedMix * 0.0 == 0.0) ? duckedMix : 0.0);
   return a + (d - a) * env;
 }
+// Face tap: gain relative to its rest value (1 = rest).
+static inline double rel_gain(double g, double rest) {
+  if (rest < 1e-6) return g > 1e-6 ? 2.0 : 1.0;
+  return g / rest;
+}
 static inline double mix_out(double dry, double wet, double m) {
   return dry * (1.0 - m) + wet * m;
 }
@@ -60,6 +68,8 @@ struct State {
   double lastLeft;
   double lastRight;
   double lastEnv;
+  double lastDryRel;
+  double lastWetRel;
 };
 
 static State gPool[kMaxInstances];
@@ -97,6 +107,8 @@ extern "C" int soemdsp_sidechain_create() {
       s.lastLeft = 0.0;
       s.lastRight = 0.0;
       s.lastEnv = 0.0;
+      s.lastDryRel = 1.0;
+      s.lastWetRel = 1.0;
       s.active = true;
       return i + 1;
     }
@@ -197,6 +209,9 @@ extern "C" double soemdsp_sidechain_sample(
   st.lastLeft = outL;
   st.lastRight = outR;
   st.lastEnv = env;
+  const double rest = mix_amount(mix, duckedMix, 0.0);
+  st.lastDryRel = rel_gain(1.0 - m, 1.0 - rest);
+  st.lastWetRel = rel_gain(m, rest);
   return outL;
 }
 
@@ -210,6 +225,16 @@ extern "C" double soemdsp_sidechain_envelope(int handle) {
   return gPool[handle - 1].lastEnv;
 }
 
-extern "C" int soemdsp_sidechain_version() { return 2; }
+extern "C" double soemdsp_sidechain_dry_gain(int handle) {
+  if (handle < 1 || handle > kMaxInstances || !gPool[handle - 1].active) return 1.0;
+  return gPool[handle - 1].lastDryRel;
+}
+
+extern "C" double soemdsp_sidechain_wet_gain(int handle) {
+  if (handle < 1 || handle > kMaxInstances || !gPool[handle - 1].active) return 1.0;
+  return gPool[handle - 1].lastWetRel;
+}
+
+extern "C" int soemdsp_sidechain_version() { return 3; }
 extern "C" const char* soemdsp_sidechain_metadata_json() { return kMetadataJson; }
 extern "C" int soemdsp_sidechain_metadata_json_size() { return sizeof(kMetadataJson) - 1; }

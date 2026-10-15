@@ -258,7 +258,7 @@ NodeLiveAudioProcessor.prototype.clearPlan = function clearPlan() {
       }
     }
     this.cheapWalkStates = new Map();
-    this.piSpigotNoiseStates = new Map();
+    this.formulaNoiseStates = new Map();
     this.bradley2AStates = new Map();
     this.antisawStates = new Map();
     for (const bundle of this.sampleHoldStates.values()) {

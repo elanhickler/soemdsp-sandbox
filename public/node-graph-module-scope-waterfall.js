@@ -227,6 +227,7 @@ function nodeGraphOnsetPaint(spec, live) {
           ? nodeGraphWaterfallWaveYs({ has: true, min: minV, max: maxV, minAt, maxAt, last: lastV }, buf, spec.slot, settings, height)
           : null,
         prevEdge: !seam && onset.edge ? onset.edge[ch.lastYKey] : null,
+        strokeColor: ch.strokeColor,
         rgb: nodeGraphWaterfallScaleRgb(
           nodeGraphWaterfallParseInkRgb(ch.color),
           nodeGraphWaterfallClamp01(ch.bright ?? 1, 1),
@@ -236,14 +237,16 @@ function nodeGraphOnsetPaint(spec, live) {
     nodeGraphWaterfallStampColumnFills(canvas, screenX, columnSpans, blendMode, stampComposite, useFill);
     for (let i = 0; i < columnSpans.length; i += 1) {
       const span = columnSpans[i];
+      // Stroke does not depend on the fill: a raw-0 column (Sidechain Wet
+      // Gain fully ducked = bottom) has no bar but still has a line.
+      if (useStroke) {
+        // Draw the waveform (both peaks + last sample), not the bar midline.
+        nodeGraphWaterfallStrokeWaveColumn(canvas, onset, span.key, screenX, span.waveYs, settings, seam, span.strokeColor);
+      }
       const ys = span.ys;
       if (!ys) continue;
       if (!onset.edge) onset.edge = Object.create(null);
       onset.edge[span.key] = { y0: ys.y0, y1: ys.y1 };
-      if (useStroke) {
-        // Draw the waveform (both peaks + last sample), not the bar midline.
-        nodeGraphWaterfallStrokeWaveColumn(canvas, onset, span.key, screenX, span.waveYs, settings, seam);
-      }
     }
     p += 1;
   }
@@ -430,8 +433,16 @@ function nodeGraphWaterfallAmp(buffer, slot) {
   }
   // Sidechain Envelope is a duck amount 0..1. Reduction dips from the top
   // (APP_POLICY 3): 0 at the top, 1 at the bottom, as 1 - 2*raw.
+  // Dry / Wet Gain face taps are gain / rest (1 = rest): middle = rest,
+  // top = 2x rest (+6 dB), bottom = silent, as raw - 1.
   if (slot?.type === "sidechain") {
-    return { gain: -2, offset: 1 };
+    const modeKey = typeof nodeGraphModuleSelectedDisplayMode === "function"
+      ? nodeGraphModuleSelectedDisplayMode({ type: "sidechain" })?.key
+      : "gains";
+    if (modeKey === "gain") {
+      return { gain: -2, offset: 1 };
+    }
+    return { gain: 1, offset: -1 };
   }
   return { gain: 1, offset: 0 };
 }
@@ -820,7 +831,7 @@ function nodeGraphWaterfallWaveYs(acc, buffer, slot, settings, height) {
  * column's last sample through this column's peaks (time order) to its last
  * sample. bag.strokePts[key] keeps that last point for the next column.
  */
-function nodeGraphWaterfallStrokeWaveColumn(canvas, bag, key, x, ys, settings, seam = false) {
+function nodeGraphWaterfallStrokeWaveColumn(canvas, bag, key, x, ys, settings, seam = false, strokeColor = null) {
   if (!bag.strokePts) bag.strokePts = Object.create(null);
   const prev = !seam && Array.isArray(bag.strokePts[key]) ? bag.strokePts[key][bag.strokePts[key].length - 1] : null;
   if (!ys || !ys.length) {
@@ -828,17 +839,26 @@ function nodeGraphWaterfallStrokeWaveColumn(canvas, bag, key, x, ys, settings, s
     return;
   }
   const cx = x + 0.5;
+  const strokePx = typeof nodeGraphOnsetStrokeCanvasPx === "function"
+    ? nodeGraphOnsetStrokeCanvasPx(canvas, settings)
+    : nodeGraphWaterfallStrokePx(settings);
+  // Clamp to the panel so values past the top / bottom (Sidechain gain > 2x
+  // rest) ride the edge, fully visible, instead of leaving the canvas.
+  const faceH = Number(canvas?.height);
+  const clampY = (y) => {
+    if (!(faceH > 0)) return y;
+    const inset = Math.min(faceH * 0.5, Math.max(0, strokePx) * 0.5);
+    return Math.max(inset, Math.min(faceH - inset, y));
+  };
   const pts = prev ? [prev] : [];
-  for (let i = 0; i < ys.length; i += 1) pts.push({ x: cx, y: ys[i] });
-  if (pts.length === 1) pts.push({ x: cx + 1e-3, y: ys[0] });
+  for (let i = 0; i < ys.length; i += 1) pts.push({ x: cx, y: clampY(ys[i]) });
+  if (pts.length === 1) pts.push({ x: cx + 1e-3, y: pts[0].y });
   if (typeof nodeGraphOnsetGlStrokePolyline === "function") {
     nodeGraphOnsetGlStrokePolyline(
       canvas,
       pts,
-      typeof nodeGraphOnsetStrokeCanvasPx === "function"
-        ? nodeGraphOnsetStrokeCanvasPx(canvas, settings)
-        : nodeGraphWaterfallStrokePx(settings),
-      nodeGraphWaterfallStrokeRgb(settings),
+      strokePx,
+      nodeGraphWaterfallStrokeRgb(settings, strokeColor),
     );
   }
   bag.strokePts[key] = [pts[pts.length - 1]];
@@ -1299,6 +1319,7 @@ function nodeGraphWaterfallChannelList(spec, settings) {
         blur,
         bright,
         lastYKey: "_waterfallLastLeftY",
+        strokeColor: settings.strokeLeftColor || settings.strokeColor,
       },
       {
         buffer: spec.stereoBuffers.right,
@@ -1308,6 +1329,7 @@ function nodeGraphWaterfallChannelList(spec, settings) {
         blur,
         bright: secondaryBright,
         lastYKey: "_waterfallLastRightY",
+        strokeColor: settings.strokeRightColor || settings.strokeColor,
       },
     ];
   }
@@ -1580,8 +1602,9 @@ function nodeGraphOnsetStrokeCanvasPx(canvas, settings) {
   return Math.max(0.5, screenPx * scale);
 }
 
-function nodeGraphWaterfallStrokeRgb(settings) {
-  return nodeGraphWaterfallParseInkRgb(settings?.strokeColor || "#ffffff");
+// Per-channel stroke (two-channel faces) wins over the shared strokeColor.
+function nodeGraphWaterfallStrokeRgb(settings, channelColor = null) {
+  return nodeGraphWaterfallParseInkRgb(channelColor || settings?.strokeColor || "#ffffff");
 }
 
 function nodeGraphWaterfallStampConnectedRun(ctx, bars, i0, i1, ox, pitch, prevEdge) {
@@ -2162,6 +2185,18 @@ function nodeGraphWaterfallSmoothAdvance(destCtx, destCanvas, spec, options) {
     } else {
       nodeGraphWaterfallScrollHold(hold, paintPx, plateBg);
     }
+    // The plate moved left by paintPx; move each channel's last stroke point
+    // with it. Left stale, the next column's connector (the vertical jump of
+    // a held step at a frame boundary) started paintPx too far right and the
+    // following column clears erased it, so the jump was skipped.
+    const strokeBag = destCanvas._waterfall;
+    if (strokeBag?.strokePts) {
+      for (const k of Object.keys(strokeBag.strokePts)) {
+        const pts = strokeBag.strokePts[k];
+        if (!Array.isArray(pts)) continue;
+        strokeBag.strokePts[k] = pts.map((q) => ({ x: q.x - paintPx, y: q.y }));
+      }
+    }
   }
   const channels = nodeGraphWaterfallChannelList(spec, settings).filter((ch) => ch.enabled !== false);
   if (!channels.length || paintPx < 1) {
@@ -2218,6 +2253,7 @@ function nodeGraphWaterfallSmoothAdvance(destCtx, destCanvas, spec, options) {
         ys,
         waveYs: useStroke && mapped ? nodeGraphWaterfallWaveYs(acc, ch.buffer, spec.slot, settings, height) : null,
         prevEdge: connectEdge && edgeMap ? edgeMap[key] : null,
+        strokeColor: ch.strokeColor,
         rgb: nodeGraphWaterfallScaleRgb(
           nodeGraphWaterfallParseInkRgb(ch.color),
           nodeGraphWaterfallClamp01(ch.bright ?? 1, 1),
@@ -2229,14 +2265,15 @@ function nodeGraphWaterfallSmoothAdvance(destCtx, destCanvas, spec, options) {
     );
     for (let i = 0; i < columnSpans.length; i += 1) {
       const span = columnSpans[i];
-      const ys = span.ys;
-      if (!ys) continue;
-      if (edgeMap) edgeMap[span.key] = { y0: ys.y0, y1: ys.y1 };
+      // Stroke does not depend on the fill (see the onset path).
       if (useStroke) {
         // Draw the waveform (both peaks + last sample), not a one-sided edge.
         const bag = destCanvas._waterfall || (destCanvas._waterfall = {});
-        nodeGraphWaterfallStrokeWaveColumn(destCanvas, bag, span.key, x, span.waveYs, settings, false);
+        nodeGraphWaterfallStrokeWaveColumn(destCanvas, bag, span.key, x, span.waveYs, settings, false, span.strokeColor);
       }
+      const ys = span.ys;
+      if (!ys) continue;
+      if (edgeMap) edgeMap[span.key] = { y0: ys.y0, y1: ys.y1 };
     }
   }
   nodeGraphWaterfallPresentHold(destCtx, destCanvas, plateBg);
@@ -2364,6 +2401,7 @@ function nodeGraphWaterfallPaint(spec) {
     st.pxCarry = 0;
     st.colPx = 0;
     st.frac = 0;
+    st.carrySamples = 0;
     if (st.strokePts) st.strokePts = Object.create(null);
     const blend = nodeGraphWaterfallBlendMode(settings, { rgbGuns: Boolean(spec?.rgbBuffers) });
     const plateBg = blend === "multiply" ? "#ffffff" : (spec.bg || "#000000");
@@ -2388,6 +2426,7 @@ function nodeGraphWaterfallPaint(spec) {
   if (advancePx >= width - 1e-3) {
     st.colPx = 0;
     st.pxCarry = 0;
+    st.carrySamples = 0;
     st.barAcc = Object.create(null);
     st.edge = Object.create(null);
   }
@@ -2421,6 +2460,11 @@ function nodeGraphWaterfallPaint(spec) {
       }
     }
     st.frac = 0;
+    // Sub-pixel frame: no column yet. Remember how many samples it held so
+    // the next column covers them too (SmoothAdvance resets the per-column
+    // accumulator, so without this their peaks were dropped and the stroke
+    // skipped tops / bottoms intermittently).
+    st.carrySamples = nodeGraphFiniteNumber(st.carrySamples) + Math.max(0, sampleEnd - sampleStart);
     if (Number.isFinite(window.absEnd) && window.count > 0) {
       st.lastAbs = window.absEnd;
     }
@@ -2430,6 +2474,11 @@ function nodeGraphWaterfallPaint(spec) {
     return true;
   }
 
+  // Columns span this frame plus any sub-pixel frames since the last column.
+  if (nodeGraphFiniteNumber(st.carrySamples) > 0) {
+    sampleStart = Math.max(0, sampleStart - Math.floor(st.carrySamples));
+  }
+  st.carrySamples = 0;
   st.frac = 0;
   if (Number.isFinite(window.absEnd) && window.count > 0) {
     st.lastAbs = window.absEnd;

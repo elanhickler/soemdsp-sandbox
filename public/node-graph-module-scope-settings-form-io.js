@@ -2392,7 +2392,11 @@ function nodeGraphTraceDisplayColorWidgetLabel(field) {
     return "Z";
   }
   if (field === "secondaryColor") {
-    return isXyz ? "Y" : "Right";
+    if (isXyz) return "Y";
+    const lbl = typeof nodeGraphModuleDefinitions === "object"
+      ? nodeGraphModuleDefinitions[nodeType]?.stereoWaterfallLabels?.right
+      : null;
+    return lbl || "Right";
   }
   if (field === "backgroundColor") {
     const backgroundForm = nodeGraphTraceDisplaySettingsFormType();
@@ -2421,6 +2425,18 @@ function nodeGraphTraceDisplayColorWidgetLabel(field) {
   }
   if (field === "strokeColor") {
     return "Stroke";
+  }
+  if (field === "strokeLeftColor" || field === "strokeRightColor") {
+    // Left / Right stroke; modules with stereoWaterfallLabels (Sidechain) use
+    // those names, e.g. Dry stroke / Wet stroke.
+    const strokeType = typeof nodeGraphPatchNode === "function"
+      ? nodeGraphPatchNode(nodeGraphTraceDisplaySettingsTargetNodeId())?.type
+      : null;
+    const side = field === "strokeLeftColor" ? "left" : "right";
+    const named = typeof nodeGraphModuleDefinitions === "object"
+      ? nodeGraphModuleDefinitions[strokeType]?.stereoWaterfallLabels?.[side]
+      : null;
+    return `${named || (side === "left" ? "Left" : "Right")} stroke`;
   }
   if (field === "arcFill") {
     return "Fill";
@@ -2465,7 +2481,10 @@ function nodeGraphTraceDisplayColorWidgetLabel(field) {
     const isStereo = typeof nodeGraphModuleUsesStereoWaterfall === "function"
       ? nodeGraphModuleUsesStereoWaterfall(nodeTypeInner)
       : nodeTypeInner === "output";
-    return isStereo ? "Left" : "";
+    const lbl = isStereo && typeof nodeGraphModuleDefinitions === "object"
+      ? nodeGraphModuleDefinitions[nodeTypeInner]?.stereoWaterfallLabels?.left
+      : null;
+    return isStereo ? (lbl || "Left") : "";
   }
   return "";
 }
