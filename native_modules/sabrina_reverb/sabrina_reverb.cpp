@@ -105,6 +105,10 @@ struct SabrinaState {
   double lfoBaseSpeed;
   double lfoVariation;
   int lfoStyle; // 0 Parabol (original), 1 FBM
+  // Speed-mapping variant: 0 = dev 'Sabrina Reverb' (exponential 2 s .. 0.05 s),
+  // 1 = 'Sabrina Reverb Original' (Walter's ((1 - v) * 1.95 + 0.5) * 0.5 = 1.225 s .. 0.25 s).
+  // FROZEN: variant 1 must keep matching plugin 0.1.7 -- bug fixes only, no sound changes.
+  int speedVariant;
   double delayTapMod; // depth multiplier on the 2 main (non-diffuse) taps: 0 = fixed length, 1 = Walter original, 2 = double
   int seed;
   // Ramped copies of the params that feed delay-line offsets/LFO speed --
@@ -123,6 +127,9 @@ struct SabrinaState {
   double blockInRight[kMaxBlockFrames];
   double blockOutLeft[kMaxBlockFrames];
   double blockOutRight[kMaxBlockFrames];
+  // Reset jack (rising edge > 0.5) per block frame; lastReset carries the edge across blocks.
+  double blockReset[kMaxBlockFrames];
+  double lastReset;
 };
 
 SabrinaState states[kMaxInstances];
@@ -414,9 +421,14 @@ void applyDiffusionGeometryPairSimd(
 // length changes glide instead of snapping.
 void applyDelayGeometry(SabrinaState& state) {
   const double maxDelaySize = state.sampleRate * kDelayRangeSeconds;
-  const double lfoSpeed = ((1.0 - state.smoothedLfoBaseSpeed) * 1.95 + 0.5) * 0.5;
+  // Mod(~)Speed -> LFO period, exponential 2.0 s (knob 0) .. 0.05 s (knob 1), knob up = faster.
+  // (Walter's comment said 0.05-2.0 s but his ((1 - v) * 1.95 + 0.5) * 0.5 only spans 0.25-1.225 s.)
+  const double lfoSpeed = state.speedVariant == 1
+    ? ((1.0 - state.smoothedLfoBaseSpeed) * 1.95 + 0.5) * 0.5 // Original (Walter, frozen)
+    : 2.0 * dsp_exp(-3.6888794541139363 * state.smoothedLfoBaseSpeed); // ln(0.025)
   // Same for both styles: depth amp * kLfoDepthScale, period spread (1 - vary) * 0.25 s (Walter).
-  const double lfoVariation = (1.0 - state.smoothedLfoVariation) * 0.25;
+  // Mod(~)Vary: higher = more per-line LFO period spread (flipped from Walter's (1 - v) * 0.25).
+  const double lfoVariation = state.smoothedLfoVariation * 0.25;
   const double diffusionSizeFactor = state.smoothedDiffusionSize * kSizeScale + kSizeFloor;
   const double sharedFeedback = state.diffusionAmount;
   const double sharedLfopercent = state.smoothedLfoAmplitude * kLfoDepthScale;
@@ -436,6 +448,31 @@ void applyDelayGeometry(SabrinaState& state) {
     delay.lfopercent = state.smoothedLfoAmplitude * kLfoDepthScale * state.delayTapMod;
     initializeMod(delay, lfoSpeed, lfoVariation, state.sampleRate);
   }
+}
+
+// Reset jack: put the modulation back exactly where a fresh instance with the
+// current params/seed sits once its smoothing has settled. LFO phase (modInc)
+// to 0 on all 14 lines (Parabol and FBM both read modInc; fbmSeed and the
+// rndOffset/rndMod draws are fixed per seed and untouched), smoothed geometry
+// snapped to its targets, then offsets/periods/depths re-derived. Delay
+// buffers, write heads (driver) and ch0/ch1 tails are NOT touched.
+void sabrinaResetModulation(SabrinaState& state) {
+  state.smoothedDiffusionSize = state.diffusionSize;
+  state.smoothedDelaySize = state.delaySize;
+  state.smoothedLfoAmplitude = state.lfoAmplitude;
+  state.smoothedLfoBaseSpeed = state.lfoBaseSpeed;
+  state.smoothedLfoVariation = state.lfoVariation;
+  for (int index = 0; index < kDelayCount; index += 1) {
+    state.delays[index].modInc = 0.0;
+  }
+  applyDelayGeometry(state);
+}
+
+bool sabrinaResetEdge(SabrinaState& state, double value) {
+  const double v = finite(value) ? value : 0.0;
+  const bool edge = v > 0.5 && state.lastReset <= 0.5;
+  state.lastReset = v;
+  return edge;
 }
 
 // LIVE diffusionAmount is delay-line allpass feedback (not a tap-length
@@ -558,6 +595,7 @@ void sabrinaProcessBlockScalar(SabrinaState& state, const double* leftIn, const 
   for (int frame = 0; frame < frameCount; frame += 1) {
     const double dryLeft = finite(leftIn[frame]) ? leftIn[frame] : 0.0;
     const double dryRight = finite(rightIn[frame]) ? rightIn[frame] : dryLeft;
+    if (sabrinaResetEdge(state, state.blockReset[frame])) sabrinaResetModulation(state);
     if (sabrinaIdleFromPorts(state, dryLeft, dryRight)) {
       leftOut[frame] = state.lastLeft;
       rightOut[frame] = state.lastRight;
@@ -581,6 +619,7 @@ void sabrinaProcessBlockSimd(SabrinaState& state, const double* leftIn, const do
   for (int frame = 0; frame < frameCount; frame += 1) {
     const double dryLeft = finite(leftIn[frame]) ? leftIn[frame] : 0.0;
     const double dryRight = finite(rightIn[frame]) ? rightIn[frame] : dryLeft;
+    if (sabrinaResetEdge(state, state.blockReset[frame])) sabrinaResetModulation(state);
     if (sabrinaIdleFromPorts(state, dryLeft, dryRight)) {
       leftOut[frame] = state.lastLeft;
       rightOut[frame] = state.lastRight;
@@ -615,8 +654,9 @@ void resetState(SabrinaState& state, double sampleRate) {
   state.delaySize = 0.02;
   state.recycle = 0.70;
   state.lfoAmplitude = 0.07;
-  state.lfoBaseSpeed = 0.83;
-  state.lfoVariation = 0.001;
+  // Original keeps Walter's 0.83 (0.41575 s); dev 0.426 (~0.4158 s) is the same sound on the wider map.
+  state.lfoBaseSpeed = state.speedVariant == 1 ? 0.83 : 0.426;
+  state.lfoVariation = 0.999; // == old 0.001 before the Vary flip
   state.lfoStyle = 0;
   state.delayTapMod = 1.0;
   state.smoothedDiffusionSize = state.diffusionSize;
@@ -624,6 +664,8 @@ void resetState(SabrinaState& state, double sampleRate) {
   state.smoothedLfoAmplitude = state.lfoAmplitude;
   state.smoothedLfoBaseSpeed = state.lfoBaseSpeed;
   state.smoothedLfoVariation = state.lfoVariation;
+  state.lastReset = 0.0;
+  for (int index = 0; index < kMaxBlockFrames; index += 1) state.blockReset[index] = 0.0;
   state.paramSmoothAlpha = 1.0 - expApprox(-1.0 / (kParamSmoothSeconds * state.sampleRate));
   reseedDelays(state, 0);
   applyDelayGeometry(state);
@@ -641,6 +683,7 @@ SabrinaState* stateForHandle(int handle) {
 extern "C" int soemdsp_sabrina_reverb_create(double sampleRate) {
   for (int index = 0; index < kMaxInstances; index += 1) {
     if (!states[index].active) {
+      states[index].speedVariant = 0;
       resetState(states[index], sampleRate);
       return index + 1;
     }
@@ -654,6 +697,16 @@ extern "C" void soemdsp_sabrina_reverb_destroy(int handle) {
     return;
   }
   state->active = false;
+}
+
+// Select the Speed mapping (0 dev, 1 Original) and re-init to that variant's defaults.
+extern "C" void soemdsp_sabrina_reverb_set_variant(int handle, int variant) {
+  SabrinaState* state = stateForHandle(handle);
+  if (!state) {
+    return;
+  }
+  state->speedVariant = variant == 1 ? 1 : 0;
+  resetState(*state, state->sampleRate);
 }
 
 extern "C" void soemdsp_sabrina_reverb_reset(int handle, double sampleRate) {
@@ -791,6 +844,23 @@ extern "C" intptr_t soemdsp_sabrina_reverb_block_output_right_ptr(int handle) {
   return state ? reinterpret_cast<intptr_t>(state->blockOutRight) : 0;
 }
 
+// Reset jack values for the next process_block (caller zero-fills when unwired).
+extern "C" intptr_t soemdsp_sabrina_reverb_block_reset_ptr(int handle) {
+  SabrinaState* state = stateForHandle(handle);
+  return state ? reinterpret_cast<intptr_t>(state->blockReset) : 0;
+}
+
+// Test/inspection: one delay line's LFO phase (modInc) and current offset/period/depth.
+extern "C" double soemdsp_sabrina_reverb_debug_mod(int handle, int index, int field) {
+  SabrinaState* state = stateForHandle(handle);
+  if (!state || index < 0 || index >= kDelayCount) return 0.0;
+  const SabrinaDelay& d = state->delays[index];
+  if (field == 0) return d.modInc;
+  if (field == 1) return d.offset;
+  if (field == 2) return d.modSpeed;
+  return d.lfopercent;
+}
+
 extern "C" int soemdsp_sabrina_reverb_max_block_frames() {
   return kMaxBlockFrames;
 }
@@ -826,7 +896,7 @@ extern "C" int soemdsp_sabrina_reverb_is_idle(int handle) {
 }
 
 extern "C" int soemdsp_sabrina_reverb_version() {
-  return 9;
+  return 10;
 }
 
 void sabrinaFillDelay01(const SabrinaState& state, double times[kDelayCount]) {

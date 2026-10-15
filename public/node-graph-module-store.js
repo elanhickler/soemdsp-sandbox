@@ -2073,9 +2073,15 @@ const nodeGraphModuleStoreCatalog = Object.freeze({
   },
   reverbEffect: {
     category: "space",
-    description: "Sabrina reverb wash—diffusion, recycle, and mix for space.",
-    label: "Sabrina Reverb",
+    description: "Development Sabrina (wide Mod(~)Speed range; future changes land here). Sabrina reverb wash—diffusion, recycle, and mix for space.",
+    label: nodeGraphSabrinaDevDisplayName,
     notes: ["Sabrina", "serial diffusion", "cross feedback", "seed", "Dry L", "Dry R", "Wet L", "Wet R"],
+  },
+  sabrinaReverbOriginal: {
+    category: "space",
+    description: "FROZEN Sabrina Reverb (plugin 0.1.7 sound: Walter's Mod(~)Speed map, fixed Vary direction). Bug fixes only, no sound changes.",
+    label: "Sabrina Reverb Original",
+    notes: ["Sabrina", "frozen", "original", "0.1.7", "serial diffusion", "cross feedback", "seed", "Dry L", "Dry R"],
   },
   soemReverb: {
     category: "space",
@@ -3636,6 +3642,10 @@ const nodeGraphJsSourceEntriesByType = Object.freeze({
   reverbEffect: {
     source: "public/modules/reverbEffect/reverb-effect-worklet-evaluator.js",
     sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/reverbEffect/reverb-effect-worklet-evaluator.js",
+  },
+  sabrinaReverbOriginal: {
+    source: "native_modules/sabrina_reverb/sabrina_reverb.cpp",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/native_modules/sabrina_reverb/sabrina_reverb.cpp",
   },
   rgbFractal: {
     source: "public/modules/rgbFractal/rgb-fractal-math.js",

@@ -8,6 +8,7 @@ const NODE_GRAPH_EFFICIENT_PRODUCT_AUDIO_TYPES = Object.freeze([
   "softClipper",
   "tubeSaturation",
   "reverbEffect",
+  "sabrinaReverbOriginal",
   "pingPongDelay",
   "attenuverter",
   "attenumax",

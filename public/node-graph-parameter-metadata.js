@@ -663,7 +663,7 @@ function normalizeNodeGraphPatchParameterMetadata(type, key, metadata = {}) {
   }
   // Sabrina Diffusion and Rec used to stop at the old 0.98 clamp.
   if (
-    type === "reverbEffect"
+    (type === "reverbEffect" || type === "sabrinaReverbOriginal")
     && (key === "diffusionAmount" || key === "recycle")
     && Math.abs(max - 0.98) < 1e-6
   ) {

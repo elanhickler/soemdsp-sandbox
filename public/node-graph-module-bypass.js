@@ -214,6 +214,7 @@ const NODE_GRAPH_BYPASS_TYPE_OVERRIDES = Object.freeze({
   crossover6: "crossover-avg",
   // Reverb: dry → dry and wet/mix
   reverbEffect: "reverb",
+  sabrinaReverbOriginal: "reverb",
   soemReverb: "reverb",
   // minMax: In 1 → Max, In 2 → Min
   minMax: "minmax",

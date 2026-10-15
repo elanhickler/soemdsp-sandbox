@@ -88,10 +88,12 @@ extern "C" void soemdsp_sabrina_reverb_set_params(
   double seed, double lfoStyle, double delayTapMod
 );
 extern "C" void soemdsp_sabrina_reverb_process_block(int handle, int frameCount, int useSimd);
+extern "C" void soemdsp_sabrina_reverb_set_variant(int handle, int variant);
 extern "C" intptr_t soemdsp_sabrina_reverb_block_input_left_ptr(int handle);
 extern "C" intptr_t soemdsp_sabrina_reverb_block_input_right_ptr(int handle);
 extern "C" intptr_t soemdsp_sabrina_reverb_block_output_left_ptr(int handle);
 extern "C" intptr_t soemdsp_sabrina_reverb_block_output_right_ptr(int handle);
+extern "C" intptr_t soemdsp_sabrina_reverb_block_reset_ptr(int handle);
 
 extern "C" int soemdsp_ping_pong_delay_create();
 extern "C" void soemdsp_ping_pong_delay_destroy(int handle);
@@ -1857,7 +1859,9 @@ static const int kTypePolyBlep = 1;
 static const int kTypeLadderFilter = 2;
 static const int kTypeSoftClipper = 3;
 static const int kTypeTubeSaturation = 197; // Tube Saturation (Koren load-line)
-static const int kTypeReverbEffect = 4;
+static const int kTypeReverbEffect = 4; // dev Sabrina (wide exponential Mod(~)Speed)
+static const int kTypeSabrinaReverbOriginal = 215; // frozen Sabrina Reverb Original (Walter Speed map), same DSP
+static inline bool is_sabrina_type(int t) { return t == kTypeReverbEffect || t == kTypeSabrinaReverbOriginal; }
 static const int kTypePingPongDelay = 5;
 static const int kTypeOutput = 6;
 static const int kTypeAttenuverter = 7;
@@ -2530,7 +2534,7 @@ static void destroy_native_kind_handle(int kind, int handle) {
     soemdsp_ladder_filter_destroy(handle);
   } else if (kind == kTypeSoftClipper) {
     soemdsp_soft_clipper_destroy(handle);
-  } else if (kind == kTypeReverbEffect) {
+  } else if (is_sabrina_type(kind)) {
     soemdsp_sabrina_reverb_destroy(handle);
   } else if (kind == kTypePingPongDelay) {
     soemdsp_ping_pong_delay_destroy(handle);
@@ -4590,9 +4594,11 @@ static int create_native_for_type(int typeId, float sampleRate) {
   if (typeId == kTypePolyBlep) return soemdsp_polyblep_create();
   if (typeId == kTypeLadderFilter) return soemdsp_ladder_filter_create();
   if (typeId == kTypeSoftClipper) return soemdsp_soft_clipper_create();
-  if (typeId == kTypeReverbEffect) {
+  if (is_sabrina_type(typeId)) {
     const double sr = sampleRate < 1.0f ? 44100.0 : (double)sampleRate;
-    return soemdsp_sabrina_reverb_create(sr);
+    const int h = soemdsp_sabrina_reverb_create(sr);
+    if (h > 0 && typeId == kTypeSabrinaReverbOriginal) soemdsp_sabrina_reverb_set_variant(h, 1);
+    return h;
   }
   if (typeId == kTypePingPongDelay) return soemdsp_ping_pong_delay_create();
   if (typeId == kTypeAttenuverter) return soemdsp_attenuverter_create();
@@ -5404,7 +5410,10 @@ static void process_reverb(Circuit& g, Node& node, int frames) {
   double* inR = ptr_from_export(soemdsp_sabrina_reverb_block_input_right_ptr(node.nativeHandle));
   double* outL = ptr_from_export(soemdsp_sabrina_reverb_block_output_left_ptr(node.nativeHandle));
   double* outR = ptr_from_export(soemdsp_sabrina_reverb_block_output_right_ptr(node.nativeHandle));
-  if (!inL || !inR || !outL || !outR) return;
+  double* resetBuf = ptr_from_export(soemdsp_sabrina_reverb_block_reset_ptr(node.nativeHandle));
+  if (!inL || !inR || !outL || !outR || !resetBuf) return;
+  // Reset jack: rising edge (> 0.5) re-syncs taps/LFOs natively; buffers keep their tails.
+  const bool liveReset = mix_live_port(g, node, kPortReset, frames, g.mixReset);
 
   // Mono In folds into both sides; dedicated L/R add on top (JS mixInput).
   for (int f = 0; f < frames; f++) {
@@ -5412,6 +5421,7 @@ static void process_reverb(Circuit& g, Node& node, int frames) {
     const double mono = g.mixMono[f];
     inL[f] = mono + g.mixLeft[f];
     inR[f] = mono + g.mixRight[f];
+    resetBuf[f] = liveReset ? g.mixReset[f] : 0.0;
   }
   soemdsp_sabrina_reverb_process_block(node.nativeHandle, frames, 1);
 
@@ -13045,7 +13055,7 @@ static void process_bypass(Circuit& g, Node& node, int frames) {
     node.buf[kPortMono][f] = mono + g.mixLeft[f] + g.mixRight[f];
     node.buf[kPortLeft][f] = left;
     node.buf[kPortRight][f] = right;
-    if (node.typeId == kTypeReverbEffect) {
+    if (is_sabrina_type(node.typeId)) {
       // Dry + Mix both carry dry while bypassed (JS reverb bypass policy).
       node.buf[kPortDryL][f] = left;
       node.buf[kPortDryR][f] = right;
@@ -13376,8 +13386,9 @@ extern "C" void soemdsp_graph_set_sample_rate(int handle, float sampleRate) {
   for (int i = 0; i < g->nodeCount; i++) {
     Node& n = g->nodes[i];
     if (!n.used || n.nativeHandle <= 0) continue;
-    if (n.nativeKind == kTypeReverbEffect) {
+    if (is_sabrina_type(n.nativeKind)) {
       soemdsp_sabrina_reverb_reset(n.nativeHandle, (double)sampleRate);
+      if (n.nativeKind == kTypeSabrinaReverbOriginal) soemdsp_sabrina_reverb_set_variant(n.nativeHandle, 1);
     } else if (n.nativeKind == kTypePingPongDelay) {
       soemdsp_ping_pong_delay_reset(n.nativeHandle);
     } else if (n.nativeKind == kTypeSoemReverb) {
@@ -13412,7 +13423,7 @@ extern "C" int soemdsp_graph_add_node(int handle, unsigned int nodeIdHash, int t
     typeId == kTypePolyBlep
     || typeId == kTypeLadderFilter
     || typeId == kTypeSoftClipper
-    || typeId == kTypeReverbEffect
+    || is_sabrina_type(typeId)
     || typeId == kTypePingPongDelay
     || typeId == kTypeAttenuverter
     || typeId == kTypeAmpCurve
@@ -15098,7 +15109,7 @@ static void dispatch_process_node(Circuit& g, Node& node, int frames) {
       process_crossover(g, node, frames);
       return;
     }
-    if (node.typeId == kTypeReverbEffect) {
+    if (is_sabrina_type(node.typeId)) {
       process_reverb(g, node, frames);
       return;
     }

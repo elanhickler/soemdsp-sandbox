@@ -1106,7 +1106,7 @@ function drawNodeGraphHypersawBurnItem(renderer, item, pixelRatio) {
   }
 
   const patchNodeEarly = typeof nodeGraphPatchNode === "function" ? nodeGraphPatchNode(nodeId) : null;
-  if (String(patchNodeEarly?.type || "") === "reverbEffect" && typeof nodeGraphSabrinaReverbGlPresent === "function") {
+  if (["reverbEffect", "sabrinaReverbOriginal"].includes(String(patchNodeEarly?.type || "")) && typeof nodeGraphSabrinaReverbGlPresent === "function") {
     const cssW = Math.max(1, canvas.clientWidth || screenElement?.clientWidth || 1);
     const sabrinaSettings = typeof nodeGraphHypersawBurnSettingsForNode === "function"
       ? nodeGraphHypersawBurnSettingsForNode(patchNodeEarly)
@@ -1147,7 +1147,7 @@ function drawNodeGraphHypersawBurnItem(renderer, item, pixelRatio) {
   const heightPx = canvas.height;
   const pixelScale = nodeGraphModuleFacePixelScale(canvas);
   const thicknessPx = screenPx * pixelScale;
-  const sabrinaStems = String(patchNode?.type || "") === "reverbEffect";
+  const sabrinaStems = ["reverbEffect", "sabrinaReverbOriginal"].includes(String(patchNode?.type || ""));
 
   const count = phases.length;
   for (let i = 0; i < count; i += 1) {

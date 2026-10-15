@@ -343,8 +343,8 @@
         "recycle": 0.967995560576628,
         "delaySize": 0.014148484329845393,
         "lfoAmplitude": 0.09085594230033825,
-        "lfoBaseSpeed": 0.05095372399679288,
-        "lfoVariation": 0,
+        "lfoBaseSpeed": 0.144110599137793,
+        "lfoVariation": 1,
         "diffusionSize": 0.00048787876999466874,
         "diffusionAmount": 0
       },
@@ -500,9 +500,9 @@
           "divideChoicesVisibly": false
         },
         "lfoBaseSpeed": {
-          "def": 0.83,
+          "def": 0.426,
           "max": 1,
-          "mid": 0.83,
+          "mid": 0.426,
           "min": 0,
           "kind": "decimal",
           "step": 0,
@@ -530,9 +530,9 @@
           "divideChoicesVisibly": false
         },
         "lfoVariation": {
-          "def": 0.001,
+          "def": 0.999,
           "max": 1,
-          "mid": 0.001,
+          "mid": 0.999,
           "min": 0,
           "kind": "decimal",
           "step": 0,

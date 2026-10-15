@@ -1,3 +1,7 @@
+// Temporary display name for the development Sabrina (key reverbEffect); Argi will rename it.
+// Change it here only -- labels and the module store read this constant.
+const nodeGraphSabrinaDevDisplayName = "Sabrina Dev (name TBD)";
+
 const nodeGraphNodeLabels = Object.freeze({
   audioInput: "Input",
   // smoothGraph: one global curve through free dots (Curve + Tension).
@@ -232,7 +236,8 @@ const nodeGraphNodeLabels = Object.freeze({
   pingPongDelay: "Ping Pong Delay",
   wallDelay: "Wall Delay",
   doppler: "Doppler",
-  reverbEffect: "Sabrina Reverb",
+  reverbEffect: nodeGraphSabrinaDevDisplayName,
+  sabrinaReverbOriginal: "Sabrina Reverb Original",
   soemReverb: "SoEmReverb",
   pll: "PLL",
   helmholtzPitch: "Pitch Detector",
@@ -13197,9 +13202,11 @@ const nodeGraphModuleDefinitions = (
     ],
     defaultDisplayMode: "hypersawBurn",
     // Dry = pure input; Mix = dry/wet blend (no wet-only jacks).
+    // Reset: rising edge snaps taps/LFOs back to their seed's start (tails kept).
+    digitalInputs: ["Reset"],
     inputAliases: { In: "Mono" },
-    inputs: ["Mono", "Left", "Right"],
-    inputLabels: { Mono: "Mono", Left: "Left", Right: "Right" },
+    inputs: ["Mono", "Left", "Right", "Reset"],
+    inputLabels: { Mono: "Mono", Left: "Left", Right: "Right", Reset: "Reset" },
     // Legacy long names → short Mix L/R / Dry L/R.
     outputAliases: {
       "Mix Left": "Mix L",
@@ -13232,8 +13239,93 @@ const nodeGraphModuleDefinitions = (
       { defaultValue: "0.02", key: "delaySize", label: "Delay Time", max: "1", mid: "0.02", min: "0", nonlinearSlider: false, smoothingSeconds: 0.05, step: "any", tooltip: "Main reverb delay length." },
       { defaultValue: "0.70", key: "recycle", label: "Recycle", max: "1", mid: "0.70", min: "0", nonlinearSlider: false, step: "any", tooltip: "Feedback amount for the reverb tail." },
       { defaultValue: "0.07", key: "lfoAmplitude", label: "Mod(~)Amp", max: "1", mid: "0.07", min: "0", nonlinearSlider: false, step: "any", tooltip: "Amount of delay modulation." },
-      { defaultValue: "0.83", key: "lfoBaseSpeed", label: "Mod(~)Speed", max: "1", mid: "0.83", min: "0", nonlinearSlider: false, step: "any", tooltip: "Base speed of delay modulation." },
-      { defaultValue: "0.001", key: "lfoVariation", label: "Mod(~)Vary", max: "1", mid: "0.001", min: "0", nonlinearSlider: false, step: "any", tooltip: "Randomized variation in delay modulation." },
+      { defaultValue: "0.426", key: "lfoBaseSpeed", label: "Mod(~)Speed", max: "1", mid: "0.426", min: "0", nonlinearSlider: false, step: "any", tooltip: "Speed of delay modulation. LFO period 2 s (0) to 0.05 s (1), exponential; higher = faster." },
+      { defaultValue: "0.999", key: "lfoVariation", label: "Mod(~)Vary", max: "1", mid: "0.999", min: "0", nonlinearSlider: false, step: "any", tooltip: "Spread of modulation speed between delay lines. 0 = all lines modulate at the same speed; higher = more spread." },
+      {
+        choices: ["Parabol", "FBM"],
+        choiceKeys: ["parabol", "fbm"],
+        choiceIds: [0, 1],
+        defaultValue: "parabol",
+        displayChoices: true,
+        divideChoicesVisibly: true,
+        key: "lfoStyle",
+        kind: "choice",
+        label: "Mod(~)Style",
+        linearSmoothing: false,
+        max: "1",
+        mid: "0",
+        min: "0",
+        nonlinearSlider: false,
+        step: "1",
+        tooltip: "Delay-time modulator. Parabol = original Sabrina cyclic wow. FBM = fractal Brownian flutter (same family as SoEm Reverb / Delay).",
+      },
+      {
+        defaultValue: "1",
+        key: "delayTapMod",
+        label: "Tap(-/+)Mod",
+        linearSmoothing: false,
+        max: "2",
+        mid: "1",
+        min: "0",
+        nonlinearSlider: false,
+        step: "any",
+        tooltip: "Modulation depth multiplier on the 2 main (non-diffuse) delay taps. 1 = original Sabrina, 0 = those taps hold a fixed length (diffusion keeps modulating), 2 = double depth.",
+      },
+      { control: "number", defaultValue: "0", key: "seed", kind: "seed", label: "Seed", linearSmoothing: false, max: "16777215", maxDigits: 0, mid: "1", min: "0", nonlinearSlider: false, step: "1", tooltip: "Randomizes the delay line pattern. Same seed always reproduces the same reverb character." },
+      nodeGraphOutputAmplitudeParam,
+    ]
+  },
+  // FROZEN: Sabrina Reverb Original == Sabrina Reverb plugin 0.1.7 sound. Bug fixes only,
+  // no sound changes; new work goes on reverbEffect. Same native DSP, Walter Speed variant.
+  sabrinaReverbOriginal: {
+    planRole: "processor",
+    planFreeRun: true,
+    displayType: "hypersawBurn",
+    spectrumCompanion: false,
+    displayModes: [
+      { key: "hypersawBurn", label: "Hypersaw", renderer: "hypersawBurn", settingsSchema: "hypersawBurn" },
+    ],
+    defaultDisplayMode: "hypersawBurn",
+    // Dry = pure input; Mix = dry/wet blend (no wet-only jacks).
+    // Reset: rising edge snaps taps/LFOs back to their seed's start (tails kept).
+    digitalInputs: ["Reset"],
+    inputAliases: { In: "Mono" },
+    inputs: ["Mono", "Left", "Right", "Reset"],
+    inputLabels: { Mono: "Mono", Left: "Left", Right: "Right", Reset: "Reset" },
+    // Legacy long names → short Mix L/R / Dry L/R.
+    outputAliases: {
+      "Mix Left": "Mix L",
+      "Mix Right": "Mix R",
+      "Dry Left": "Dry L",
+      "Dry Right": "Dry R",
+      "Wet L": "Mix L",
+      "Wet R": "Mix R",
+      "Wet Left": "Mix L",
+      "Wet Right": "Mix R",
+      "Left Mix": "Mix L",
+      "Right Mix": "Mix R",
+      "Mono Mix": "Mix L",
+      "Left Dry": "Dry L",
+      "Right Dry": "Dry R",
+      "Mono Dry": "Dry L",
+      Left: "Mix L",
+      Right: "Mix R" },
+    // Dry before Mix (space FX outlet order).
+    outputs: ["Dry L", "Dry R", "Mix L", "Mix R"],
+    outputLabels: {
+      "Dry L": "Dry L",
+      "Dry R": "Dry R",
+      "Mix L": "Mix L",
+      "Mix R": "Mix R" },
+    parameters: [
+      { defaultValue: "0.43", key: "mix", label: "Mix", max: "1", mid: "0.43", min: "0", nonlinearSlider: false, step: "any", tooltip: "Dry/wet balance on the Mix outputs (not a wet-only path). Sabrina Reverb Original is frozen to the plugin 0.1.7 sound: bug fixes only." },
+      { defaultValue: "0.35", key: "diffusionSize", label: "Diffusion Size", max: "1", mid: "0.35", min: "0", nonlinearSlider: false, smoothingSeconds: 0.05, step: "any", tooltip: "Size of the diffusion network." },
+      { defaultValue: "0.70", key: "diffusionAmount", label: "Diffusion Amount", max: "1", mid: "0.70", min: "0", nonlinearSlider: false, step: "any", tooltip: "Strength of early diffusion." },
+      { defaultValue: "0.02", key: "delaySize", label: "Delay Time", max: "1", mid: "0.02", min: "0", nonlinearSlider: false, smoothingSeconds: 0.05, step: "any", tooltip: "Main reverb delay length." },
+      { defaultValue: "0.70", key: "recycle", label: "Recycle", max: "1", mid: "0.70", min: "0", nonlinearSlider: false, step: "any", tooltip: "Feedback amount for the reverb tail." },
+      { defaultValue: "0.07", key: "lfoAmplitude", label: "Mod(~)Amp", max: "1", mid: "0.07", min: "0", nonlinearSlider: false, step: "any", tooltip: "Amount of delay modulation." },
+      { defaultValue: "0.83", key: "lfoBaseSpeed", label: "Mod(~)Speed", max: "1", mid: "0.83", min: "0", nonlinearSlider: false, step: "any", tooltip: "Speed of delay modulation (Walter's original map): LFO period 1.225 s (0) to 0.25 s (1); higher = faster. Frozen module: bug fixes only, no sound changes." },
+      { defaultValue: "0.999", key: "lfoVariation", label: "Mod(~)Vary", max: "1", mid: "0.999", min: "0", nonlinearSlider: false, step: "any", tooltip: "Spread of modulation speed between delay lines. 0 = all lines modulate at the same speed; higher = more spread." },
       {
         choices: ["Parabol", "FBM"],
         choiceKeys: ["parabol", "fbm"],

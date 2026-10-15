@@ -9,6 +9,7 @@ NodeLiveAudioProcessor.NATIVE_GRAPH_TYPE_IDS = Object.freeze({
   ladderFilter: 2,
   softClipper: 3,
   reverbEffect: 4,
+  sabrinaReverbOriginal: 215,
   pingPongDelay: 5,
   output: 6,
   attenuverter: 7,
@@ -4571,15 +4572,16 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
       push("aa", P.NATIVE_GRAPH_PARAM_MODE, disc("aa", 1));
       continue;
     }
-    if (type === "reverbEffect") {
+    if (type === "reverbEffect" || type === "sabrinaReverbOriginal") {
+      const sabOrig = type === "sabrinaReverbOriginal";
       push("mix", P.NATIVE_GRAPH_PARAM_MIX, cont("mix", 0.43));
       push("diffusionSize", P.NATIVE_GRAPH_PARAM_DIFFUSION_SIZE, cont("diffusionSize", 0.35));
       push("diffusionAmount", P.NATIVE_GRAPH_PARAM_DIFFUSION_AMOUNT, cont("diffusionAmount", 0.7));
       push("delaySize", P.NATIVE_GRAPH_PARAM_DELAY_SIZE, cont("delaySize", 0.02));
       push("recycle", P.NATIVE_GRAPH_PARAM_RECYCLE, cont("recycle", 0.7));
       push("lfoAmplitude", P.NATIVE_GRAPH_PARAM_LFO_AMPLITUDE, cont("lfoAmplitude", 0.07));
-      push("lfoBaseSpeed", P.NATIVE_GRAPH_PARAM_LFO_BASE_SPEED, cont("lfoBaseSpeed", 0.83));
-      push("lfoVariation", P.NATIVE_GRAPH_PARAM_LFO_VARIATION, cont("lfoVariation", 0.001));
+      push("lfoBaseSpeed", P.NATIVE_GRAPH_PARAM_LFO_BASE_SPEED, cont("lfoBaseSpeed", sabOrig ? 0.83 : 0.426));
+      push("lfoVariation", P.NATIVE_GRAPH_PARAM_LFO_VARIATION, cont("lfoVariation", 0.999));
       push("lfoStyle", P.NATIVE_GRAPH_PARAM_LFO_STYLE, disc("lfoStyle", 0));
       push("delayTapMod", P.NATIVE_GRAPH_PARAM_MODE, cont("delayTapMod", 1));
       push("seed", P.NATIVE_GRAPH_PARAM_SEED, disc("seed", 0));
@@ -6659,7 +6661,7 @@ NodeLiveAudioProcessor.prototype.syncNativeEnsemblePublish =
       const kind = String(node?.type || "");
       const ens = kind === "ensemble";
       const cho = kind === "chorus";
-      const sab = kind === "reverbEffect";
+      const sab = kind === "reverbEffect" || kind === "sabrinaReverbOriginal";
       if (!ens && !cho && !sab) {
         continue;
       }
@@ -8686,7 +8688,7 @@ NodeLiveAudioProcessor.prototype.nativeGraphPortNames = function nativeGraphPort
     if (type === "lutCell") return ["Q"];
 
     // transport Gate 0-1 is on Mono (legacy Left name retired)
-    if (type === "reverbEffect" || type === "soemReverb" || type === "delayEffect") {
+    if (type === "reverbEffect" || type === "sabrinaReverbOriginal" || type === "soemReverb" || type === "delayEffect") {
       return ["Left", "Mix Left", "Mix L", "Wet L", "Wet Left"];
     }
     if (type === "pingPongDelay") {
@@ -8746,7 +8748,7 @@ NodeLiveAudioProcessor.prototype.nativeGraphPortNames = function nativeGraphPort
     if (type === "transport") {
       return ["Trigger", "Trigger Sample", "Trig Sample"];
     }
-    if (type === "reverbEffect" || type === "soemReverb" || type === "delayEffect") {
+    if (type === "reverbEffect" || type === "sabrinaReverbOriginal" || type === "soemReverb" || type === "delayEffect") {
       return ["Right", "Mix Right", "Mix R", "Wet R", "Wet Right"];
     }
     if (type === "pingPongDelay") {
@@ -8793,7 +8795,7 @@ NodeLiveAudioProcessor.prototype.nativeGraphPortNames = function nativeGraphPort
     if (type === "binaryClock") return ["Bit2", "Saw"];
     if (type === "degreeTuring" || type === "gravityWalker") return ["Degree", "Saw"];
     if (type === "degreePhrase") return ["Phase", "Saw"];
-    if (type === "reverbEffect" || type === "soemReverb") {
+    if (type === "reverbEffect" || type === "sabrinaReverbOriginal" || type === "soemReverb") {
       return ["Dry L", "Dry Left"];
     }
     if (type === "pingPongDelay") return ["LFO L", "Mod L", "Mod Left", "Saw"];
@@ -8817,7 +8819,7 @@ NodeLiveAudioProcessor.prototype.nativeGraphPortNames = function nativeGraphPort
     if (type === "binaryClock") return ["Bit3", "Ramp"];
     if (type === "arp") return ["f", "ƒ", "Ramp"];
     if (type === "gravityWalker") return ["f", "Frequency", "Freq", "Ramp"];
-    if (type === "reverbEffect" || type === "soemReverb") {
+    if (type === "reverbEffect" || type === "sabrinaReverbOriginal" || type === "soemReverb") {
       return ["Dry R", "Dry Right"];
     }
     if (type === "pingPongDelay") return ["LFO R", "Mod R", "Mod Right", "Ramp"];

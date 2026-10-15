@@ -31,7 +31,7 @@ $modules = @(
   @{ Name = "alias_sine"; Simd = $false; Exports = @("soemdsp_alias_sine_create", "soemdsp_alias_sine_destroy", "soemdsp_alias_sine_sample", "soemdsp_alias_sine_version", "soemdsp_alias_sine_metadata_json", "soemdsp_alias_sine_metadata_json_size") }
   @{ Name = "phone_tone"; Simd = $false; Exports = @("soemdsp_phone_tone_create", "soemdsp_phone_tone_destroy", "soemdsp_phone_tone_sample", "soemdsp_phone_tone_tone", "soemdsp_phone_tone_tone_l", "soemdsp_phone_tone_tone_r", "soemdsp_phone_tone_f1", "soemdsp_phone_tone_f2", "soemdsp_phone_tone_analog_thru", "soemdsp_phone_tone_digital_thru", "soemdsp_phone_tone_version", "soemdsp_phone_tone_metadata_json", "soemdsp_phone_tone_metadata_json_size") }
   @{ Name = "ellipsoid"; Simd = $false; Exports = @("soemdsp_ellipsoid_sine_to_square", "soemdsp_ellipsoid_sine_to_square_aa", "soemdsp_ellipsoid_sine_to_square_mode", "soemdsp_ellipsoid_sample", "soemdsp_ellipsoid_sample_aa", "soemdsp_ellipsoid_sample_pair", "soemdsp_ellipsoid_robin_dither_cycles", "soemdsp_ellipsoid_robin_phasor", "soemdsp_ellipsoid_version") }
-  @{ Name = "sabrina_reverb"; Simd = $true; Exports = @("soemdsp_sabrina_reverb_create", "soemdsp_sabrina_reverb_destroy", "soemdsp_sabrina_reverb_reset", "soemdsp_sabrina_reverb_set_params", "soemdsp_sabrina_reverb_process", "soemdsp_sabrina_reverb_left", "soemdsp_sabrina_reverb_right", "soemdsp_sabrina_reverb_wet", "soemdsp_sabrina_reverb_wet_left", "soemdsp_sabrina_reverb_wet_right", "soemdsp_sabrina_reverb_is_idle", "soemdsp_sabrina_reverb_version", "soemdsp_sabrina_reverb_process_block", "soemdsp_sabrina_reverb_block_input_left_ptr", "soemdsp_sabrina_reverb_block_input_right_ptr", "soemdsp_sabrina_reverb_block_output_left_ptr", "soemdsp_sabrina_reverb_block_output_right_ptr", "soemdsp_sabrina_reverb_max_block_frames", "soemdsp_sabrina_reverb_voice_count", "soemdsp_sabrina_reverb_voice_delay", "soemdsp_sabrina_reverb_voice_pan", "soemdsp_sabrina_reverb_delay_times") }
+  @{ Name = "sabrina_reverb"; Simd = $true; Exports = @("soemdsp_sabrina_reverb_create", "soemdsp_sabrina_reverb_destroy", "soemdsp_sabrina_reverb_reset", "soemdsp_sabrina_reverb_set_variant", "soemdsp_sabrina_reverb_set_params", "soemdsp_sabrina_reverb_process", "soemdsp_sabrina_reverb_left", "soemdsp_sabrina_reverb_right", "soemdsp_sabrina_reverb_wet", "soemdsp_sabrina_reverb_wet_left", "soemdsp_sabrina_reverb_wet_right", "soemdsp_sabrina_reverb_is_idle", "soemdsp_sabrina_reverb_version", "soemdsp_sabrina_reverb_process_block", "soemdsp_sabrina_reverb_block_input_left_ptr", "soemdsp_sabrina_reverb_block_input_right_ptr", "soemdsp_sabrina_reverb_block_output_left_ptr", "soemdsp_sabrina_reverb_block_output_right_ptr", "soemdsp_sabrina_reverb_block_reset_ptr", "soemdsp_sabrina_reverb_debug_mod", "soemdsp_sabrina_reverb_max_block_frames", "soemdsp_sabrina_reverb_voice_count", "soemdsp_sabrina_reverb_voice_delay", "soemdsp_sabrina_reverb_voice_pan", "soemdsp_sabrina_reverb_delay_times") }
   @{ Name = "pll"; Simd = $false; Exports = @("soemdsp_pll_version", "soemdsp_pll_create", "soemdsp_pll_destroy", "soemdsp_pll_reset", "soemdsp_pll_set_params", "soemdsp_pll_process", "soemdsp_pll_vco_out", "soemdsp_pll_pc_out", "soemdsp_pll_lpf_out", "soemdsp_pll_locked") }
   @{ Name = "helmholtz"; Simd = $false; Exports = @("soemdsp_helmholtz_version", "soemdsp_helmholtz_create", "soemdsp_helmholtz_destroy", "soemdsp_helmholtz_set_params", "soemdsp_helmholtz_process", "soemdsp_helmholtz_frequency", "soemdsp_helmholtz_fidelity") }
   @{ Name = "noise_generator"; Simd = $true; Exports = @("soemdsp_noise_generator_create", "soemdsp_noise_generator_destroy", "soemdsp_noise_generator_sample", "soemdsp_noise_generator_left", "soemdsp_noise_generator_right", "soemdsp_noise_generator_version", "soemdsp_noise_generator_process_block", "soemdsp_noise_generator_block_output_left_ptr", "soemdsp_noise_generator_block_output_right_ptr", "soemdsp_noise_generator_max_block_frames") }
@@ -669,6 +669,14 @@ if ($node) {
   & $node.Source "$root\scripts\smoke_sabrina_tap_mod.mjs"
   if ($LASTEXITCODE -ne 0) {
     throw "Combined build: sabrina Tap Mod slider smoke FAILED"
+  }
+  & $node.Source "$root\scripts\smoke_sabrina_reset.mjs"
+  if ($LASTEXITCODE -ne 0) {
+    throw "Combined build: sabrina Reset jack smoke FAILED"
+  }
+  & $node.Source "$root\scripts\smoke_sabrina_original.mjs"
+  if ($LASTEXITCODE -ne 0) {
+    throw "Combined build: sabrina Original variant smoke FAILED"
   }
   & $node.Source "$root\scripts\smoke_named_portal_bus.mjs"
   if ($LASTEXITCODE -ne 0) {
