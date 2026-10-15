@@ -14137,16 +14137,16 @@ const nodeGraphModuleDefinitions = (
   limiter: {
     planRole: "processor",
     displayHeightGu: 3,
-    displayType: "waterfall",
-    // Sole face: Gain is 1 at rest (top of the bipolar trace) and falls
-    // toward 0 while limiting, so the line dips from the top.
+    displayType: "limiterGainFace",
+    // Sole face: shared GL gain face (lookahead-limiter-display.js, also on
+    // Sidechain). Gain is 1 at rest (top) and dips while limiting.
     defaultDisplayMode: "gain",
     displayModes: [
       {
         key: "gain",
         label: "Gain",
-        renderer: "waterfall",
-        settingsSchema: "waterfall",
+        renderer: "limiterGainFace",
+        settingsSchema: "limiterGainFace",
         source: { value: "Gain" } },
     ],
     inputAliases: { Mono: "In", SC: "Sidechain", Key: "Sidechain" },
@@ -14267,25 +14267,40 @@ const nodeGraphModuleDefinitions = (
         tooltip: "Final output trim after GR. 0…1. Lower if the bus is too hot; no autogain." },
     ]
   },
-  // Sidechain: ducks a Wet stereo pair under a key with Pump Limiter's
-  // detector + gain smoother, plus Hold. Native: native_modules/sidechain.
-  // Plan: docs/SIDECHAIN_PLAN.md.
+  // Sidechain: Dry/Wet crossfade that moves from Mix to Ducked Mix under a
+  // key, with Pump Limiter's detector + gain smoother plus Hold.
+  // Native: native_modules/sidechain. Plan: docs/SIDECHAIN_PLAN.md.
   sidechain: {
     planRole: "processor",
+    displayHeightGu: 3,
+    displayType: "limiterGainFace",
+    // Shared GL ducking face (lookahead-limiter-display.js), same as Pump
+    // Limiter. Reads the Envelope output (duck amount, dips from the top).
+    defaultDisplayMode: "gain",
+    displayModes: [
+      {
+        key: "gain",
+        label: "Ducking",
+        renderer: "limiterGainFace",
+        settingsSchema: "limiterGainFace",
+        source: { value: "Envelope" } },
+    ],
     inputs: ["Dry L", "Dry R", "Wet L", "Wet R", "Sidechain", "Envelope"],
     inputAliases: { SC: "Sidechain", Key: "Sidechain", Env: "Envelope" },
     inputTooltips: {
-      "Dry L": "Dry signal, left. Always passes at unity. Alone it feeds both sides. Keys the ducking when Sidechain is unwired.",
-      "Dry R": "Dry signal, right. Always passes at unity. Alone it feeds both sides.",
-      "Wet L": "Wet signal, left (e.g. a reverb or delay return). This is what gets ducked. Alone it feeds both sides.",
-      "Wet R": "Wet signal, right. This is what gets ducked. Alone it feeds both sides.",
+      "Dry L": "Dry signal, left. Alone it feeds both sides. Keys the ducking when Sidechain is unwired.",
+      "Dry R": "Dry signal, right. Alone it feeds both sides.",
+      "Wet L": "Wet signal, left (e.g. a reverb or delay return). Alone it feeds both sides.",
+      "Wet R": "Wet signal, right. Alone it feeds both sides.",
       Sidechain: "Key signal (e.g. a kick). When wired, its level drives the ducking instead of the Dry signal.",
-      Envelope: "Duck amount 0..1 (1 = Wet fully ducked). When wired it replaces the detector: Threshold, Ratio, Attack, Hold and Release are ignored.",
+      Envelope: "Duck amount 0..1 (0 = Mix, 1 = Ducked Mix). When wired it replaces the detector: Threshold, Ratio, Attack, Hold and Release are ignored.",
     },
-    outputs: ["Left", "Right"],
+    outputs: ["Left", "Right", "Envelope"],
+    outputAliases: { Env: "Envelope" },
     outputTooltips: {
-      Left: "Dry L + ducked Wet L.",
-      Right: "Dry R + ducked Wet R. Both sides share one gain (stereo-linked).",
+      Left: "Dry L / Wet L crossfade: Dry x (1 - m) + Wet x m, where m moves from Mix to Ducked Mix with the Envelope.",
+      Right: "Dry R / Wet R crossfade. Both sides share one Envelope (stereo-linked).",
+      Envelope: "Duck amount 0..1 at audio rate (0 = no ducking, 1 = full). Follows the Envelope input when that is wired.",
     },
     parameters: [
       {
@@ -14298,7 +14313,7 @@ const nodeGraphModuleDefinitions = (
         nonlinearSlider: false,
         step: "any",
         unit: "dB",
-        tooltip: "Key level where ducking starts. Lower = the Wet ducks on quieter hits." },
+        tooltip: "Key level where ducking starts. Lower = ducks on quieter hits." },
       {
         defaultValue: "8",
         key: "ratio",
@@ -14309,7 +14324,7 @@ const nodeGraphModuleDefinitions = (
         nonlinearSlider: false,
         step: "any",
         unit: ":1",
-        tooltip: "How hard the Wet ducks above Threshold. 1 = no ducking; 8 = firm; 20 = near full duck." },
+        tooltip: "How hard it ducks above Threshold. 1 = no ducking; 8 = firm; 20 = near full duck." },
       {
         defaultValue: "5",
         key: "attack",
@@ -14321,7 +14336,7 @@ const nodeGraphModuleDefinitions = (
         min: "0",
         step: "any",
         unit: "ms",
-        tooltip: "How fast the Wet ducks when the key hits. 0 = instant." },
+        tooltip: "How fast the mix moves toward Ducked Mix when the key hits. 0 = instant." },
       {
         defaultValue: "0",
         key: "hold",
@@ -14333,7 +14348,7 @@ const nodeGraphModuleDefinitions = (
         min: "0",
         step: "any",
         unit: "ms",
-        tooltip: "How long the Wet stays ducked after the key drops, before Release starts. 0 = release right away." },
+        tooltip: "How long the mix stays ducked after the key drops, before Release starts. 0 = release right away." },
       {
         defaultValue: "250",
         key: "release",
@@ -14345,7 +14360,27 @@ const nodeGraphModuleDefinitions = (
         min: "20",
         step: "any",
         unit: "ms",
-        tooltip: "How fast the Wet comes back after Hold. Longer = slower swell." },
+        tooltip: "How fast the mix returns to Mix after Hold. Longer = slower swell." },
+      {
+        defaultValue: "0.35",
+        key: "mix",
+        label: "Mix",
+        max: "1",
+        mid: "0.5",
+        min: "0",
+        nonlinearSlider: false,
+        step: "any",
+        tooltip: "Dry/Wet crossfade at rest (no ducking). 0 = all Dry, 1 = all Wet." },
+      {
+        defaultValue: "0",
+        key: "duckedMix",
+        label: "Ducked Mix",
+        max: "1",
+        mid: "0.5",
+        min: "0",
+        nonlinearSlider: false,
+        step: "any",
+        tooltip: "Dry/Wet crossfade at full ducking. Below Mix = the Wet ducks on hits; above Mix = the Wet swells on hits." },
     ]
   },
   // Exponential approach: out += (in − out) * k with separate rise/fall k (0…1).

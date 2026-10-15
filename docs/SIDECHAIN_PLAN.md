@@ -171,7 +171,7 @@ Face (WebUI, proposed): a Gain waterfall like Pump Limiter's, fed by an internal
 | S2 | `native_modules/sidechain/sidechain.cpp` + graph-engine wiring | Grok Bot | Done (type 216) |
 | S3 | Definition, store card, tooltips | Grok Bot | Done |
 | S4 | Tests §8 | Grok Bot | Done: `scripts/smoke_graph_sidechain.mjs` (in combined build) + smoke_test exports; full smoke passes |
-| S5 | Face (Gain waterfall) | WebUI | Skipped for now; gain is on internal port 3 (Saw) for a future WebGL2 meter |
+| S5 | Face | Grok Bot | Done: shared GL `limiterGainFace` (gl-line-renderer), source Envelope |
 | S6 | Argi's ear check | Argi | Waiting (committed locally, not pushed) |
 
 ## 11. As built (2026-10-14)
@@ -179,10 +179,16 @@ Face (WebUI, proposed): a Gain waterfall like Pump Limiter's, fed by an internal
 Every default below is a named constant or one small function at the top of `sidechain.cpp`, so each is a one-line change.
 
 - **Detector key (Q1):** Sidechain when wired, else Dry (`kDetectFromDryWhenNoSidechain`). With neither wired there is no ducking.
-- **Output (Q2):** O1, `out = dry + g·wet` (`kOutputMode = 0`; 1 = crossfade).
-- **Envelope (Q3):** wired Envelope replaces the gain: `g = 1 − clamp(e, 0, 1)`, raw per sample (`envelope_to_gain`). Threshold, Ratio, Attack, Hold and Release are ignored.
+- **Mix law (Q2, Argi 2026-10-14, replaces O1):** equal-gain linear crossfade. `env` = duck amount 0..1 (`1 − gain` from the detector). `m = Mix + (Ducked Mix − Mix)·env`, `out = Dry·(1 − m) + Wet·m` (`mix_amount`, `mix_out`). Mix 0..1 default 0.35, Ducked Mix 0..1 default 0. Ducked Mix > Mix makes the Wet swell on hits. The old Dry + g·Wet path and the crossfade switch are removed.
+- **Envelope (Q3):** a wired Envelope input is `env` directly: `clamp(e, 0, 1)`, raw per sample. Threshold, Ratio, Attack, Hold and Release are ignored.
+- **Envelope output:** `env` at audio rate (0 = no ducking).
 - **Maths:** module-local copy of Pump Limiter's mean-square detector, hard-knee gain `(T/env)^((R−1)/R)` and gain smoother, plus Hold (gain held after the last attack for Hold ms, then Release). No library edit.
 - **Stereo:** one linked gain for both sides; a lone L or R input in a pair feeds both sides.
-- **Bypass:** Dry + Wet.
-- **Ports:** Wet L/R → Left/Right, Dry L/R → Dry L/Dry R, Sidechain → Morph bus, Envelope → Square; outputs Left/Right, Mono = Left, gain on Saw.
-- **Params:** Threshold −48…0 dB (−18), Ratio 1…20 (8), Attack Time 0…100 ms (5), Hold Time 0…2000 ms (0), Release Time 20…2000 ms (250).
+- **Bypass:** Dry only, Envelope 0.
+- **Ports:** Wet L/R → Left/Right, Dry L/R → Dry L/Dry R, Sidechain → Morph bus, Envelope → Square; outputs Left/Right, Mono = Left, Envelope on Saw.
+- **Params:** Threshold −48…0 dB (−18), Ratio 1…20 (8), Attack Time 0…100 ms (5), Hold Time 0…2000 ms (0), Release Time 20…2000 ms (250), Mix 0…1 (0.35), Ducked Mix 0…1 (0).
+- **Face:** shared `limiterGainFace` (`public/modules/lookaheadLimiter/lookahead-limiter-display.js`), also Pump Limiter's face now. Pump Limiter used the generic Instant Waterfall scope face (Canvas 2D) on its Gain output; `limiterGainFace` existed but was unused and just forwarded to that waterfall. It is now WebGL2 via gl-line-renderer (capsule quads, smoothstep edge, black if GL fails, no 2D path). It plots reduction from the display source: Gain (Pump Limiter) or Envelope (Sidechain), dipping from the top. No worklet face case.
+
+## 12. Decisions log
+- 2026-10-14: v1 built with Dry + ducked Wet (O1).
+- 2026-10-14 (Argi): mix law changed to the Mix → Ducked Mix crossfade, Envelope output added, Pump Limiter's face moved to the shared GL face and reused here.

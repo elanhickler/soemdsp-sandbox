@@ -1,3 +1,9 @@
+## 2026-10-14 - Sidechain: Mix / Ducked Mix crossfade, Envelope out, shared GL gain face (local commit)
+
+- Argi: mix law is now an equal-gain crossfade `out = Dry(1-m) + Wet m`, `m = lerp(Mix, Ducked Mix, env)`; new params Mix (0.35) and Ducked Mix (0) after Release Time; old Dry + g*Wet path removed. New Envelope output (duck amount, or the Envelope input when wired). Bypass = Dry.
+- Pump Limiter's face was the Canvas 2D Instant Waterfall on Gain. The unused `limiterGainFace` is now WebGL2 via gl-line-renderer and is the face of both Pump Limiter (Gain) and Sidechain (Envelope). Removed from the WebGL migration table.
+- Sidechain smoke rewritten for the new law plus face geometry; full smoke passes. Not pushed.
+
 ## 2026-10-14 - Sidechain module (type 216, local commit)
 
 - Argi: implement `docs/SIDECHAIN_PLAN.md`. New native `native_modules/sidechain/sidechain.cpp` (module-local copy of the Pump Limiter detector/gain plus Hold), graph-engine type 216, worklet params/ports, definition with tooltips, store card, efficient-product, build entry. Inputs Dry L/R, Wet L/R, Sidechain, Envelope; outputs Left/Right.

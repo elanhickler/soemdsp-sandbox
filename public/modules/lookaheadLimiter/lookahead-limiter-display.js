@@ -1,5 +1,14 @@
-// Limiter face: Gain (volume adjustment) as a simple history line.
-// Reads the existing Gain output — does not change DSP.
+// Gain / ducking face, shared by Pump Limiter (limiter) and Sidechain
+// (sidechain): a history line of the selected display source, dipping from the
+// top as the module reduces. Source "Gain" (1 = no reduction) or "Envelope" /
+// "Env" (duck amount, 0 = none); both plot reduction = depth below the top.
+// Reads existing outputs through the normal display source (no worklet case);
+// does not change DSP.
+//
+// Drawing: WebGL2 via the shared line renderer (public/lib/visual/gl-line-renderer.js
+// on picture-device.js): shader-expanded capsule quads with a smoothstep edge,
+// blitted into the face's 2D canvas (shared sizing). No 2D drawing fallback: if
+// GL can't run the face is a plain black square.
 
 const nodeGraphLimiterGainFaceSettingsDefaults = Object.freeze({
   historySeconds: 2,
@@ -136,28 +145,60 @@ function bindNodeGraphLimiterGainDisplaySettingsBody(host) {
   }
 }
 
-function nodeGraphLimiterGainFaceLineCss(settings) {
-  const hue = Number(settings?.hue);
-  const brightness = Number(settings?.lineBrightness);
-  if (typeof nodeGraphHueBrightnessCss === "function") {
-    return nodeGraphHueBrightnessCss(
-      Number.isFinite(hue) ? hue : nodeGraphLimiterGainFaceSettingsDefaults.hue,
-      Number.isFinite(brightness) ? brightness : nodeGraphLimiterGainFaceSettingsDefaults.lineBrightness,
-    );
+function nodeGraphLimiterGainFaceHexRgba(hex) {
+  const m = /^#([0-9a-f]{6})$/i.exec(String(hex || ""));
+  const v = m ? parseInt(m[1], 16) : 0x020407;
+  return [((v >> 16) & 255) / 255, ((v >> 8) & 255) / 255, (v & 255) / 255, 1];
+}
+
+/** Line colour from hue (deg) + brightness 0..1 (HSL, 90% saturation). */
+function nodeGraphLimiterGainFaceLineRgba(settings) {
+  const d = nodeGraphLimiterGainFaceSettingsDefaults;
+  const hue = Number.isFinite(Number(settings?.hue)) ? Number(settings.hue) : d.hue;
+  const lRaw = Number(settings?.lineBrightness);
+  const l = Math.max(0, Math.min(1, Number.isFinite(lRaw) ? lRaw : d.lineBrightness)) * 0.9 + 0.05;
+  const s = 0.9;
+  const c = (1 - Math.abs(2 * l - 1)) * s;
+  const hp = (((hue % 360) + 360) % 360) / 60;
+  const x = c * (1 - Math.abs((hp % 2) - 1));
+  const rgb = hp < 1 ? [c, x, 0] : hp < 2 ? [x, c, 0] : hp < 3 ? [0, c, x]
+    : hp < 4 ? [0, x, c] : hp < 5 ? [x, 0, c] : [c, 0, x];
+  const m = l - c / 2;
+  return [rgb[0] + m, rgb[1] + m, rgb[2] + m, 1];
+}
+
+/** Display source is a duck amount (0 = none) rather than a gain (1 = none). */
+function nodeGraphLimiterGainFaceSourceIsDuck(slot) {
+  const source = typeof nodeGraphModuleDisplaySourceForSlot === "function"
+    ? nodeGraphModuleDisplaySourceForSlot(slot)
+    : null;
+  const v = String(source?.value || "").trim().toLowerCase();
+  return v === "envelope" || v === "env";
+}
+
+/**
+ * Pure geometry: polyline points (device px) for `columns` columns of the
+ * newest `count` samples. Each sample -> reduction r in 0..1, y = r * (h - 1).
+ */
+function nodeGraphLimiterGainFacePoints(buffer, count, w, h, duck) {
+  const columns = Math.max(2, w | 0);
+  const pts = new Array(columns * 2);
+  const start = Math.max(0, (buffer?.length || 0) - count);
+  for (let x = 0; x < columns; x += 1) {
+    let r = 0;
+    if (buffer?.length && count >= 2) {
+      const t = x / (columns - 1);
+      const raw = Number(buffer[start + Math.min(count - 1, Math.floor(t * (count - 1)))]);
+      const v = Number.isFinite(raw) ? Math.max(0, Math.min(1, raw)) : (duck ? 0 : 1);
+      r = duck ? v : 1 - v;
+    }
+    pts[x * 2] = x + 0.5;
+    pts[x * 2 + 1] = r * (h - 1) + 0.5;
   }
-  return `hsl(${Number.isFinite(hue) ? hue : 42} 90% 55%)`;
+  return pts;
 }
 
 function drawNodeGraphLimiterGainFaceItem(renderer, item, pixelRatio) {
-  // Instant Waterfall owns the Limiter Gain face (scroll strip, not remesh).
-  if (typeof drawNodeGraphTraceDisplayItem === "function") {
-    drawNodeGraphTraceDisplayItem(renderer, item, pixelRatio);
-    return;
-  }
-  if (typeof drawNodeGraphTraceDisplayCanvasItem === "function") {
-    drawNodeGraphTraceDisplayCanvasItem(item, pixelRatio);
-    return;
-  }
   const slot = item?.slot;
   const screenElement = item?.screenElement || slot?.scopeElement;
   if (!slot || !screenElement) {
@@ -179,24 +220,13 @@ function drawNodeGraphLimiterGainFaceItem(renderer, item, pixelRatio) {
   ) {
     return;
   }
-  const ctx = canvas.getContext("2d");
-  if (!ctx) {
-    return;
-  }
-
   const node = typeof nodeGraphModuleScopeNodeForSlot === "function"
     ? nodeGraphModuleScopeNodeForSlot(slot)
     : (typeof nodeGraphPatchNode === "function" ? nodeGraphPatchNode(slot.nodeId) : null);
   const settings = nodeGraphLimiterGainFaceSettingsForNode(node);
-  const bg = settings.backgroundColor || nodeGraphLimiterGainFaceSettingsDefaults.backgroundColor;
+  const duck = nodeGraphLimiterGainFaceSourceIsDuck(slot);
   const w = canvas.width;
   const h = canvas.height;
-  ctx.save();
-  ctx.setTransform(1, 0, 0, 1, 0, 0);
-  ctx.globalCompositeOperation = "source-over";
-  ctx.fillStyle = bg;
-  ctx.fillRect(0, 0, w, h);
-
   const buffer = item?.buffer;
   const available = typeof nodeGraphScopeAvailableSampleCount === "function"
     ? nodeGraphScopeAvailableSampleCount(buffer)
@@ -206,39 +236,29 @@ function drawNodeGraphLimiterGainFaceItem(renderer, item, pixelRatio) {
     : 12000;
   const want = Math.max(2, Math.ceil(Math.max(0.05, settings.historySeconds) * Math.max(1, rate)));
   const count = Math.min(available, want);
-  const start = Math.max(0, (buffer?.length || 0) - count);
-  const columns = Math.max(2, w);
-  ctx.beginPath();
-  if (!buffer?.length || count < 2) {
-    const y = 0.5;
-    ctx.moveTo(0.5, y);
-    ctx.lineTo(w - 0.5, y);
-  } else {
-    for (let x = 0; x < columns; x += 1) {
-      const t = columns <= 1 ? 0 : x / (columns - 1);
-      const index = start + Math.min(count - 1, Math.floor(t * (count - 1)));
-      const gain = Math.max(0, Math.min(1, nodeGraphFiniteNumber(buffer[index])));
-      const y = (1 - gain) * (h - 1) + 0.5;
-      if (x === 0) {
-        ctx.moveTo(x + 0.5, y);
-      } else {
-        ctx.lineTo(x + 0.5, y);
-      }
-    }
-  }
-  const dpr = Math.max(1, nodeGraphFiniteNumber(pixelRatio, 1));
-  ctx.strokeStyle = nodeGraphLimiterGainFaceLineCss(settings);
-  ctx.lineWidth = Math.max(1, settings.lineThickness * dpr);
-  ctx.lineJoin = "round";
-  ctx.lineCap = "round";
-  ctx.stroke();
-  ctx.restore();
 
-  let latest = 1;
-  if (buffer?.length) {
-    latest = Math.max(0, Math.min(1, nodeGraphFiniteNumber(buffer[buffer.length - 1])));
+  const batch = typeof nodeGraphGlLinesBegin === "function"
+    ? nodeGraphGlLinesBegin(canvas, nodeGraphLimiterGainFaceHexRgba(settings.backgroundColor))
+    : null;
+  const dpr = Math.max(1, Number(pixelRatio) || 1);
+  if (batch) {
+    nodeGraphGlLinesPolyline(
+      batch,
+      nodeGraphLimiterGainFacePoints(buffer, count, w, h, duck),
+      Math.max(0.5, settings.lineThickness * dpr * 0.5),
+      1,
+      nodeGraphLimiterGainFaceLineRgba(settings),
+    );
   }
-  const reduction = 1 - latest;
+  if (!batch || !nodeGraphGlLinesEnd(batch, "alpha")) {
+    if (typeof nodeGraphGlLinesFillBlack === "function") nodeGraphGlLinesFillBlack(canvas);
+  }
+
+  let reduction = 0;
+  if (buffer?.length) {
+    const v = Math.max(0, Math.min(1, Number(buffer[buffer.length - 1]) || 0));
+    reduction = duck ? v : 1 - v;
+  }
   if (typeof nodeGraphModuleScopeMarkScreenLit === "function") {
     nodeGraphModuleScopeMarkScreenLit(screenElement, Math.max(0.12, 0.18 + reduction * 0.75));
   }
@@ -246,4 +266,12 @@ function drawNodeGraphLimiterGainFaceItem(renderer, item, pixelRatio) {
 
 if (typeof nodeGraphModuleScopeCustomRenderers === "object" && nodeGraphModuleScopeCustomRenderers) {
   nodeGraphModuleScopeCustomRenderers.limiterGainFace = drawNodeGraphLimiterGainFaceItem;
+}
+if (typeof module !== "undefined" && module.exports) {
+  module.exports = {
+    normalizeNodeGraphLimiterGainFaceSettings,
+    nodeGraphLimiterGainFacePoints,
+    nodeGraphLimiterGainFaceLineRgba,
+    nodeGraphLimiterGainFaceHexRgba,
+  };
 }

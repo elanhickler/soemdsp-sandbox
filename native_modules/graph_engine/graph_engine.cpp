@@ -423,15 +423,16 @@ extern "C" double soemdsp_pumping_limiter_left(int handle);
 extern "C" double soemdsp_pumping_limiter_right(int handle);
 extern "C" double soemdsp_pumping_limiter_gain(int handle);
 extern "C" double soemdsp_pumping_limiter_env(int handle);
-// Sidechain (native_modules/sidechain): Pump Limiter detector/gain + Hold, ducks Wet under a key.
+// Sidechain (native_modules/sidechain): Pump Limiter detector/gain + Hold moves a Dry/Wet crossfade.
 extern "C" int soemdsp_sidechain_create();
 extern "C" void soemdsp_sidechain_destroy(int handle);
 extern "C" double soemdsp_sidechain_sample(
   int handle, double dryLeft, double dryRight, double wetLeft, double wetRight,
   double sidechain, double envelope, int wiredMask, double thresholdDb, double ratio,
-  double attackMs, double holdMs, double releaseMs, double sampleRate);
+  double attackMs, double holdMs, double releaseMs, double mix, double duckedMix,
+  double sampleRate);
 extern "C" double soemdsp_sidechain_right(int handle);
-extern "C" double soemdsp_sidechain_gain(int handle);
+extern "C" double soemdsp_sidechain_envelope(int handle);
 
 extern "C" int soemdsp_audio_player_create();
 extern "C" void soemdsp_audio_player_destroy(int handle);
@@ -2062,7 +2063,7 @@ static const int kTypeHyperpluck = 200; // PolyBLEP unison pluck (Supersaw detun
 static const int kTypeFilterMorphOscillator = 201; // FilterMorph: Robin-dithered naive shapes + pitch-tracking one-pole
 static const int kTypeSoftpopOscillator = 207; // Softpop Oscillator: Sine / Dithered Sine / Trisaw / Soft Square / Soft Tri + noise Pitch Mod
 static const int kTypeSoftpopFilter = 214; // Softpop Filter: noise or input through a constant-peak BP
-static const int kTypeSidechain = 216; // Sidechain: duck Wet L/R under Sidechain (or Dry) / Envelope
+static const int kTypeSidechain = 216; // Sidechain: Dry/Wet crossfade moved by Sidechain (or Dry) / Envelope
 static const int kTypeExponentialSkew = 208; // Exp Skew: Marvinh exp(w·x) linear decay
 static const int kTypeHyperbolicDecay = 209; // Hyperbolic: start·end/((start−end)·u+end)
 static const int kTypeExponentialMix = 210; // Exponential Mix: (1−p)e^{−x}+p e^{−rate·x}
@@ -3579,6 +3580,7 @@ static void init_node_defaults(Node& n, int typeId) {
       : (typeId == kTypeSoftpopOscillator || typeId == kTypeSoftpopFilter) ? 0.0 // Amp Mod
       : (typeId == kTypeFbmField) ? 0.55 // smoothness
       : (typeId == kTypeExponentialMix) ? 0.75 // Mix p
+      : (typeId == kTypeSidechain) ? 0.35 // Mix (env 0)
       : (typeId == kTypeLorenzAttractor) ? 0.4 // zDepth
       : (typeId == kTypeHenonMap) ? 0.1 // seedY
       : (typeId == kTypeChuaAttractor) ? -0.714 // m1
@@ -3598,6 +3600,7 @@ static void init_node_defaults(Node& n, int typeId) {
   init_control(
     n.diffusionAmount,
     (typeId == kTypeBradley2a) ? 0.0 // harm3
+      : (typeId == kTypeSidechain) ? 0.0 // Ducked Mix (env 1)
       : 0.70,
     false
   );
@@ -11770,10 +11773,10 @@ static void process_pump_limiter(Circuit& g, Node& node, int frames) {
 // Sidechain (sidechain): Pump Limiter detector + gain smoother with Hold
 // (module-local copy in native_modules/sidechain). Ports: Wet L = Left (1),
 // Wet R = Right (2), Dry L = 3, Dry R = 4, Envelope = 5, Sidechain = Morph
-// live bus (22, read per sample, as Pump Limiter's key). Outs: Left, Right;
-// stereo-linked gain on Saw (3) for a future meter. Params share Pump
-// Limiter's slots: threshold laneBias[1], ratio width, attack offsetMs,
-// release laneBias[0]; hold timeNumerator.
+// live bus (22, read per sample, as Pump Limiter's key). Outs: Left, Right,
+// Envelope (duck amount 0..1) on Saw (3). Params share Pump Limiter's slots:
+// threshold laneBias[1], ratio width, attack offsetMs, release laneBias[0];
+// hold timeNumerator; Mix mix, Ducked Mix diffusionAmount.
 static void process_sidechain(Circuit& g, Node& node, int frames) {
   if (node.nativeHandle <= 0) return;
   static double bufWetL[kMaxBlockFrames], bufWetR[kMaxBlockFrames];
@@ -11797,12 +11800,14 @@ static void process_sidechain(Circuit& g, Node& node, int frames) {
       control_effective(node.offsetMs),
       control_effective(node.timeNumerator),
       control_effective(node.laneBias[0]),
+      control_effective(node.mix),
+      control_effective(node.diffusionAmount),
       sr
     );
     node.buf[kPortLeft][f] = left;
     node.buf[kPortRight][f] = soemdsp_sidechain_right(node.nativeHandle);
     node.buf[kPortMono][f] = left;
-    node.buf[kPortSaw][f] = soemdsp_sidechain_gain(node.nativeHandle);
+    node.buf[kPortSaw][f] = soemdsp_sidechain_envelope(node.nativeHandle);
   }
 }
 
@@ -13100,23 +13105,18 @@ static void process_bypass(Circuit& g, Node& node, int frames) {
     return;
   }
   if (node.typeId == kTypeSidechain) {
-    // Bypassed Sidechain = no ducking: Dry + Wet per side (gain 1, same
-    // mono fallback per pair as live).
+    // Bypassed Sidechain = Dry only, per side (same mono fallback per pair
+    // as live); Envelope 0.
     static double bDryL[kMaxBlockFrames], bDryR[kMaxBlockFrames];
-    static double bWetL[kMaxBlockFrames], bWetR[kMaxBlockFrames];
     const bool hDL = mix_live_port(g, node, kPortDryL, frames, bDryL);
     const bool hDR = mix_live_port(g, node, kPortDryR, frames, bDryR);
-    const bool hWL = mix_live_port(g, node, kPortLeft, frames, bWetL);
-    const bool hWR = mix_live_port(g, node, kPortRight, frames, bWetR);
     for (int f = 0; f < frames; f++) {
       const double dL = hDL ? bDryL[f] : (hDR ? bDryR[f] : 0.0);
       const double dR = hDR ? bDryR[f] : (hDL ? bDryL[f] : 0.0);
-      const double wL = hWL ? bWetL[f] : (hWR ? bWetR[f] : 0.0);
-      const double wR = hWR ? bWetR[f] : (hWL ? bWetL[f] : 0.0);
-      node.buf[kPortLeft][f] = dL + wL;
-      node.buf[kPortRight][f] = dR + wR;
-      node.buf[kPortMono][f] = dL + wL;
-      node.buf[kPortSaw][f] = 1.0;
+      node.buf[kPortLeft][f] = dL;
+      node.buf[kPortRight][f] = dR;
+      node.buf[kPortMono][f] = dL;
+      node.buf[kPortSaw][f] = 0.0;
     }
     return;
   }

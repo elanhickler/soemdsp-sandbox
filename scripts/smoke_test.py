@@ -17487,7 +17487,7 @@ def require_native_module_contract(base_url: str) -> None:
             "soemdsp_sidechain_reset",
             "soemdsp_sidechain_sample",
             "soemdsp_sidechain_right",
-            "soemdsp_sidechain_gain",
+            "soemdsp_sidechain_envelope",
             "soemdsp_sidechain_version",
             "soemdsp_sidechain_metadata_json",
             "soemdsp_sidechain_metadata_json_size",

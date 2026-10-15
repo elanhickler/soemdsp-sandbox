@@ -4,7 +4,7 @@
 // soemdsp-native-kind: dynamics
 // soemdsp-native-lib: https://github.com/elanhickler/soemdsp-sandbox/blob/master/docs/SIDECHAIN_PLAN.md
 //
-// Sidechain: ducks a Wet stereo pair under a key, using Pump Limiter's
+// Sidechain: moves a Dry/Wet crossfade under a key, using Pump Limiter's
 // detector + hard-knee gain computer + gain smoother
 // (native_modules/pumping_limiter/pumping_limiter.cpp), plus a Hold countdown.
 // MODULE-LOCAL COPY of the Pump Limiter maths: there is no shared dynamics
@@ -19,9 +19,12 @@
 //   target    env > T ? (T/env)^((R-1)/R) : 1   (hard knee, 0..1)
 //   gain      toward target: attack coeff when falling; when rising it waits
 //             Hold ms after the last fall (or steady), then release coeff.
-//   Envelope  when wired: gain = 1 - clamp(Envelope, 0, 1), raw, per sample;
-//             Threshold / Ratio / Attack / Hold / Release are bypassed.
-//   out       mix rule below (default Dry + gain * Wet), stereo-linked gain.
+//   env       duck amount = 1 - gain; when the Envelope input is wired:
+//             clamp(Envelope, 0, 1), raw, per sample (Threshold / Ratio /
+//             Attack / Hold / Release are bypassed).
+//   mix       m = Mix + (Ducked Mix - Mix) * env   (stereo-linked)
+//   out       Dry * (1 - m) + Wet * m              (equal-gain linear crossfade)
+//   Envelope output = env.
 
 #include <soemdsp/soemdsp.hpp>
 
@@ -34,19 +37,22 @@ using namespace soemdsp_maths;
 // v1; each is one switch here so Argi can change it without touching the DSP.
 // Q1 detector source when Sidechain is unwired: true = Dry, false = Wet.
 static const bool kDetectFromDryWhenNoSidechain = true;
-// Q2 output: 0 = Dry + gain * Wet (send/return ducking), 1 = linear crossfade
-// gain * Wet + (1 - gain) * Dry.
-static const int kOutputMode = 0;
-// Q3/Q4 Envelope input: duck amount 0..1, gain = 1 - e, bypasses the detector
-// and Threshold / Ratio / Attack / Hold / Release (no smoothing).
-static inline double envelope_to_gain(double e) {
+// Q3/Q4 Envelope input: duck amount 0..1 used as-is (clamped, no smoothing);
+// bypasses the detector and Threshold / Ratio / Attack / Hold / Release.
+static inline double clamp_unit(double e) {
   if (!(e * 0.0 == 0.0)) e = 0.0;
   if (e < 0.0) e = 0.0;
   if (e > 1.0) e = 1.0;
-  return 1.0 - e;
+  return e;
 }
-static inline double mix_out(double dry, double wet, double g) {
-  return kOutputMode == 1 ? g * wet + (1.0 - g) * dry : dry + g * wet;
+// Mix law (Argi 2026-10-14): equal-gain linear crossfade whose position moves
+// from Mix (env 0) to Ducked Mix (env 1).
+static inline double mix_amount(double mix, double duckedMix, double env) {
+  const double a = clamp_unit(mix);
+  return a + (clamp_unit(duckedMix) - a) * env;
+}
+static inline double mix_out(double dry, double wet, double m) {
+  return dry * (1.0 - m) + wet * m;
 }
 // ---------------------------------------------------------------------------
 
@@ -59,7 +65,7 @@ struct State {
   double holdLeft;  // samples left before release may start
   double lastLeft;
   double lastRight;
-  double lastGain;
+  double lastEnv;
 };
 
 static State gPool[kMaxInstances];
@@ -96,7 +102,7 @@ extern "C" int soemdsp_sidechain_create() {
       s.holdLeft = 0.0;
       s.lastLeft = 0.0;
       s.lastRight = 0.0;
-      s.lastGain = 1.0;
+      s.lastEnv = 0.0;
       s.active = true;
       return i + 1;
     }
@@ -118,7 +124,7 @@ extern "C" void soemdsp_sidechain_reset(int handle) {
 }
 
 // wiredMask bits: 1 Dry L, 2 Dry R, 4 Wet L, 8 Wet R, 16 Sidechain, 32 Envelope.
-// Returns Left; soemdsp_sidechain_right / _gain read this sample's Right / gain.
+// Returns Left; soemdsp_sidechain_right / _envelope read this sample's Right / env.
 extern "C" double soemdsp_sidechain_sample(
   int handle,
   double dryLeft,
@@ -133,20 +139,22 @@ extern "C" double soemdsp_sidechain_sample(
   double attackMs,
   double holdMs,
   double releaseMs,
+  double mix,
+  double duckedMix,
   double sampleRate
 ) {
   double dL, dR, wL, wR;
   pair(wiredMask & 1, wiredMask & 2, dryLeft, dryRight, dL, dR);
   pair(wiredMask & 4, wiredMask & 8, wetLeft, wetRight, wL, wR);
   if (handle < 1 || handle > kMaxInstances || !gPool[handle - 1].active) {
-    return mix_out(dL, wL, 1.0);
+    return mix_out(dL, wL, mix_amount(mix, duckedMix, 0.0));
   }
   State& st = gPool[handle - 1];
   const double rate = sampleRate > 1.0 ? sampleRate : 44100.0;
 
-  double g;
+  double env;
   if (wiredMask & 32) {
-    g = envelope_to_gain(envelope);
+    env = clamp_unit(envelope);
   } else {
     // Pump Limiter detector (module-local copy, see header).
     const bool hasSc = (wiredMask & 16) != 0;
@@ -167,7 +175,7 @@ extern "C" double soemdsp_sidechain_sample(
       st.meanSquare += relCoeff * (instantPower - st.meanSquare);
     }
     if (st.meanSquare < 1e-30) st.meanSquare = 0.0;
-    const double env = st.meanSquare > 0.0 ? dsp_exp(0.5 * dsp_ln(st.meanSquare)) : 0.0;
+    const double level = st.meanSquare > 0.0 ? dsp_exp(0.5 * dsp_ln(st.meanSquare)) : 0.0;
 
     double thresh = db_to_amp(finite_or(thresholdDb, -18.0));
     if (thresh < 1e-6) thresh = 1e-6;
@@ -176,9 +184,9 @@ extern "C" double soemdsp_sidechain_sample(
     if (r > 100.0) r = 100.0;
 
     double targetGain = 1.0;
-    if (env > thresh) {
+    if (level > thresh) {
       const double grExp = (r - 1.0) / r;
-      const double ratioLin = thresh / env;
+      const double ratioLin = thresh / level;
       targetGain = ratioLin > 0.0 ? dsp_exp(grExp * dsp_ln(ratioLin)) : 0.0;
     }
     if (!(targetGain * 0.0 == 0.0) || targetGain < 0.0) targetGain = 0.0;
@@ -197,16 +205,17 @@ extern "C" double soemdsp_sidechain_sample(
     }
     if (!(st.gain * 0.0 == 0.0) || st.gain < 0.0) st.gain = 0.0;
     if (st.gain > 1.0) st.gain = 1.0;
-    g = st.gain;
+    env = 1.0 - st.gain;
   }
+  const double m = mix_amount(mix, duckedMix, env);
 
-  double outL = mix_out(dL, wL, g);
-  double outR = mix_out(dR, wR, g);
+  double outL = mix_out(dL, wL, m);
+  double outR = mix_out(dR, wR, m);
   if (!(outL * 0.0 == 0.0)) outL = 0.0;
   if (!(outR * 0.0 == 0.0)) outR = 0.0;
   st.lastLeft = outL;
   st.lastRight = outR;
-  st.lastGain = g;
+  st.lastEnv = env;
   return outL;
 }
 
@@ -215,11 +224,11 @@ extern "C" double soemdsp_sidechain_right(int handle) {
   return gPool[handle - 1].lastRight;
 }
 
-extern "C" double soemdsp_sidechain_gain(int handle) {
-  if (handle < 1 || handle > kMaxInstances || !gPool[handle - 1].active) return 1.0;
-  return gPool[handle - 1].lastGain;
+extern "C" double soemdsp_sidechain_envelope(int handle) {
+  if (handle < 1 || handle > kMaxInstances || !gPool[handle - 1].active) return 0.0;
+  return gPool[handle - 1].lastEnv;
 }
 
-extern "C" int soemdsp_sidechain_version() { return 1; }
+extern "C" int soemdsp_sidechain_version() { return 2; }
 extern "C" const char* soemdsp_sidechain_metadata_json() { return kMetadataJson; }
 extern "C" int soemdsp_sidechain_metadata_json_size() { return sizeof(kMetadataJson) - 1; }

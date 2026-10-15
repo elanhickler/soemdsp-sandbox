@@ -100,7 +100,7 @@ NodeLiveAudioProcessor.NATIVE_GRAPH_TYPE_IDS = Object.freeze({
   lutCell: 34,
   lookaheadLimiter: 35,
   limiter: 109, // Pump Limiter
-  sidechain: 216, // Sidechain (Pump Limiter detector + Hold, ducks Wet)
+  sidechain: 216, // Sidechain (Pump Limiter detector + Hold, moves a Dry/Wet crossfade)
   audioPlayer: 110, // Music Player (PCM upload)
   samplePlayer: 174, // Gate-driven sample player (PCM upload)
   wavetable2d: 180, // PCM wavetable oscillator
@@ -855,6 +855,10 @@ NodeLiveAudioProcessor.prototype.mapNativeGraphSrcPortId = function mapNativeGra
   }
   if (p === "env" && t === "limiter") {
     return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_RAMP;
+  }
+  // Sidechain Envelope out (duck amount 0..1) on the Saw tap.
+  if ((p === "envelope" || p === "env") && t === "sidechain") {
+    return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_SAW;
   }
   // Music Player outs: Phase on Saw tap, Trigger on Ramp tap.
   if (t === "audioPlayer") {
@@ -6318,6 +6322,8 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
       push("attack", P.NATIVE_GRAPH_PARAM_OFFSET_MS, cont("attack", 5));
       push("hold", P.NATIVE_GRAPH_PARAM_TIME_NUMERATOR, cont("hold", 0));
       push("release", P.NATIVE_GRAPH_PARAM_LANE_BIAS1, cont("release", 250));
+      push("mix", P.NATIVE_GRAPH_PARAM_MIX, cont("mix", 0.35));
+      push("duckedMix", P.NATIVE_GRAPH_PARAM_DIFFUSION_AMOUNT, cont("duckedMix", 0));
       continue;
     }
     if (type === "limiter") {
