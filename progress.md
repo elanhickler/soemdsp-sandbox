@@ -1,3 +1,7 @@
+## 2026-10-14 - Sidechain waterfall dips from the top (local commit)
+
+- Argi: reduction displays dip from the top. Sidechain Envelope maps 0 = top, 1 = bottom (waterfall amp gain -2, offset 1); APP_POLICY 3 line added; smoke checks the orientation. Not pushed.
+
 ## 2026-10-14 - Sidechain display fix: Envelope on Instant Waterfall (local commit)
 
 - Root cause: the worklet named Sidechain's Saw tap "Saw", so the display source "Envelope" never got data, and the Saw tap was not in the face ring list. Fixed in the existing port-name / ring tables. Stale cache-bust strings (combined wasm, worklet, definitions, waterfall, form) bumped.

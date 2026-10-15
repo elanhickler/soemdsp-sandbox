@@ -169,7 +169,9 @@ const flat = (n, v) => new Float64Array(n).fill(v);
   gate(/renderer: "waterfall"[\s\S]*source: \{ value: "Envelope" \}/.test(block("sidechain")), "Sidechain face: Instant Waterfall on Envelope");
   gate(/renderer: "waterfall"[\s\S]*source: \{ value: "Gain" \}/.test(block("limiter")), "Pump Limiter face: Instant Waterfall on Gain (unchanged)");
   const wf = fs.readFileSync(path.join(root, "public", "node-graph-module-scope-waterfall.js"), "utf8");
-  gate(/slot\?\.type === "sidechain"\) \{\s*return \{ gain: 2, offset: -1 \}/.test(wf), "waterfall maps Sidechain Envelope 0..1 onto the full face");
+  const amp = /slot\?\.type === "sidechain"\) \{\s*return \{ gain: (-?[0-9.]+), offset: (-?[0-9.]+) \}/.exec(wf);
+  const face = (v) => (amp ? Number(amp[1]) * v + Number(amp[2]) : NaN); // +1 = top, -1 = bottom
+  gate(Boolean(amp) && face(0) === 1 && face(1) === -1 && face(0.5) === 0, "Sidechain waterfall dips from the top: Envelope 0 at the top, 1 at the bottom (APP_POLICY 3)");
 }
 console.log(failures ? `FAILED ${failures}` : "smoke_graph_sidechain ok");
 if (failures) process.exit(1);

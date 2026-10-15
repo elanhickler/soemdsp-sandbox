@@ -14275,7 +14275,7 @@ const nodeGraphModuleDefinitions = (
     displayHeightGu: 3,
     displayType: "waterfall",
     // Same face as Pump Limiter: Instant Waterfall (WebGL scroll strip) on the
-    // Envelope output. Envelope 0 sits at the bottom and rises while ducking.
+    // Envelope output. Envelope 0 sits at the top and ducking pulls it down.
     defaultDisplayMode: "gain",
     displayModes: [
       {

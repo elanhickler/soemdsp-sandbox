@@ -187,7 +187,7 @@ Every default below is a named constant or one small function at the top of `sid
 - **Bypass:** Dry only, Envelope 0 (Argi accepted).
 - **Ports:** Wet L/R → Left/Right, Dry L/R → Dry L/Dry R, Sidechain → Morph bus, Envelope → Square; outputs Left/Right, Mono = Left, Envelope on Saw.
 - **Params:** Threshold −48…0 dB (−18), Ratio 1…20 (8), Attack Time 0…100 ms (5), Hold Time 0…2000 ms (0), Release Time 20…2000 ms (250), Mix 0…1 (0.35), Ducked Mix 0…1 (0).
-- **Face:** Instant Waterfall, the same face Pump Limiter always used (`node-graph-module-scope-waterfall.js` + `-waterfall-gl.js`: WebGL history texture on the shared device, scrolls left, stamps only the new columns). Source = Envelope output; 0..1 maps onto the full face (0 bottom, rising while ducking). Mono line colour widget is labelled Line, next to Background.
+- **Face:** Instant Waterfall, the same face Pump Limiter always used (`node-graph-module-scope-waterfall.js` + `-waterfall-gl.js`: WebGL history texture on the shared device, scrolls left, stamps only the new columns). Source = Envelope output; 0..1 maps onto the full face (0 at the top, ducking pulls the line down, APP_POLICY 3). Mono line colour widget is labelled Line, next to Background.
 
 ## 12. Decisions log
 - 2026-10-14: v1 built with Dry + ducked Wet (O1).

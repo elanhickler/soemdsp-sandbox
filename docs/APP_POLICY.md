@@ -318,6 +318,7 @@ This app is a **C++ DSP engine with a JS interface** (Â§0). JS authors and obs
 - **No canvas 2D fallback.** If GL fails the display is black. Modules never create their own canvas context; they use the shared display-canvas helper (marker class, automatic >2.5x zoom pixelation).
 - Exceptions only where a shader truly is not worth it, listed explicitly in `docs/WEBGL_DISPLAY_PLAN.md` section 5. Migration table and smoke-test allowlist (shrink-only) live there too.
 - CPU is still fine for one-shot layout and debug overlays, not for the displayed picture.
+- **Gain-reduction / ducking displays dip from the top** (Argi, 2026-10-14): at rest the line sits at the top and it moves down as reduction or ducking increases. Never draw reduction rising from the bottom.
 
 ---
 
