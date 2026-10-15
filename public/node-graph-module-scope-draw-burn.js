@@ -1108,7 +1108,10 @@ function drawNodeGraphHypersawBurnItem(renderer, item, pixelRatio) {
   const patchNodeEarly = typeof nodeGraphPatchNode === "function" ? nodeGraphPatchNode(nodeId) : null;
   if (String(patchNodeEarly?.type || "") === "reverbEffect" && typeof nodeGraphSabrinaReverbGlPresent === "function") {
     const cssW = Math.max(1, canvas.clientWidth || screenElement?.clientWidth || 1);
-    if (nodeGraphSabrinaReverbGlPresent(canvas, phases, cssW)) {
+    const sabrinaSettings = typeof nodeGraphHypersawBurnSettingsForNode === "function"
+      ? nodeGraphHypersawBurnSettingsForNode(patchNodeEarly)
+      : null;
+    if (nodeGraphSabrinaReverbGlPresent(canvas, phases, cssW, sabrinaSettings)) {
       return;
     }
   }

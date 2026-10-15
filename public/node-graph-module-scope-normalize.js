@@ -2418,6 +2418,7 @@ function nodeGraphScope2dSettingsForNode(node) {
  */
 const nodeGraphHypersawBurnSettingsDefaults = Object.freeze({
   lineThickness: 2,
+  autoZoomLines: false,
 });
 
 function normalizeNodeGraphHypersawBurnSettings(settings = {}, defaultsOverride = null) {
@@ -2435,6 +2436,7 @@ function normalizeNodeGraphHypersawBurnSettings(settings = {}, defaultsOverride 
   thickness = clampNodeSliderValue(thickness, 0, 64);
   return {
     lineThickness: thickness,
+    autoZoomLines: source.autoZoomLines === true,
   };
 }
 

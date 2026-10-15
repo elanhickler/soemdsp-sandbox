@@ -222,6 +222,7 @@ const nodeGraphTraceDisplaySettingControlKeys = Object.freeze({
   // lists — anything missing leaks onto every module (e.g. Output saw
   // Window / Overlap / Freq scale because those choices were unregistered).
   toggles: [
+    "autoZoomLines",
     "sourceSync",
     "skipDiscontinuities",
     "bipolarBrightness",
@@ -780,7 +781,7 @@ const nodeGraphTraceDisplayActiveControlsByType = Object.freeze({
   hypersawBurn: Object.freeze({
     fields: Object.freeze(["lineThickness"]),
     colors: Object.freeze([]),
-    toggles: Object.freeze([]),
+    toggles: Object.freeze(["autoZoomLines"]),
     choices: Object.freeze([]),
   }),
   // Knob face: independent knob / label / value (toggle-style pins).
@@ -1959,6 +1960,11 @@ const nodeGraphDisplaySettingsToggleMeta = Object.freeze({
     label: "Show −",
     id: "nodeTraceDisplayShowMinus",
     title: "Show a minus for negative values. With Show + or alone, reserves a sign column so digits do not jump.",
+  }),
+  autoZoomLines: Object.freeze({
+    label: "auto-zoom lines",
+    id: "nodeTraceDisplayAutoZoomLines",
+    title: "Sabrina Reverb: diffusion lines zoom to their own extents; the green tap-delay lines sit centered and show only their modulation swing. Off = absolute 0..0.45 s axis.",
   }),
   showPlus: Object.freeze({
     label: "Show +",
