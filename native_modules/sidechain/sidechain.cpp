@@ -38,17 +38,13 @@ using namespace soemdsp_maths;
 // v1; each is one switch here so Argi can change it without touching the DSP.
 // Q3/Q4 Envelope input: duck amount 0..1 used as-is (clamped, no smoothing);
 // bypasses the detector and Threshold / Ratio / Attack / Hold / Release.
-static inline double clamp_unit(double e) {
-  if (!(e * 0.0 == 0.0)) e = 0.0;
-  if (e < 0.0) e = 0.0;
-  if (e > 1.0) e = 1.0;
-  return e;
-}
+// Clamping uses the shared library clamp01 (soemdsp_maths); NaN reads as 0.
 // Mix law (Argi 2026-10-14): equal-gain linear crossfade whose position moves
 // from Mix (env 0) to Ducked Mix (env 1).
 static inline double mix_amount(double mix, double duckedMix, double env) {
-  const double a = clamp_unit(mix);
-  return a + (clamp_unit(duckedMix) - a) * env;
+  const double a = clamp01((mix * 0.0 == 0.0) ? mix : 0.0);
+  const double d = clamp01((duckedMix * 0.0 == 0.0) ? duckedMix : 0.0);
+  return a + (d - a) * env;
 }
 static inline double mix_out(double dry, double wet, double m) {
   return dry * (1.0 - m) + wet * m;
@@ -153,7 +149,7 @@ extern "C" double soemdsp_sidechain_sample(
 
   double env;
   if (wiredMask & 32) {
-    env = clamp_unit(envelope);
+    env = clamp01(finite_or(envelope, 0.0));
   } else if (!(wiredMask & 16)) {
     // Argi 2026-10-14: only the Sidechain input keys the ducking.
     st.gain = 1.0;
