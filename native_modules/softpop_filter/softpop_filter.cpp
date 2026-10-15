@@ -16,8 +16,8 @@
 // both channels; Left and Right both wired -> L + M and R + M.
 // Level: noise is trimmed so the Filter RMS matches the Oscillator's sine
 // (below); external input gets the plain constant-peak BP (0 dB at the centre).
-// Outputs: Mono = the L channel render, Left, Right, Left/Right Noise =
-// N_audio (Color-shaped, unit RMS, always the internal noise), Left/Right CV =
+// Outputs: Mono = the L channel render, Left, Right, Noise L/R =
+// N_audio (Color-shaped, unit RMS, always the internal noise), CV L/R =
 // log2(fInst / fEff) in octaves.
 //
 // Noise level: constant-peak BP band power on a source of PSD S(f) is
@@ -42,10 +42,11 @@ static const double kRefSampleRate = 48000.0;
 // Kellet taps), confirmed by simulation to 0.013 / 0.004 dB. Brown: measured
 // (node scripts/test_softpop_filter.mjs --calibrate, 3000 s); the clamped
 // walk sits 0.2 dB under the pure-integrator estimate 7.3484.
-static const double kFilterGain[3] = {2.7684485757734305, 1.721692744960082, 7.51834};
+// White / Gaussian / Average share the flat-spectrum k (unit-RMS white audio).
+static const double kFilterGain[kColorCount] = {2.7684485757734305, 2.7684485757734305, 2.7684485757734305, 1.721692744960082, 7.51834};
 // Tilt exponent alpha (T = (1000/fc)^(alpha/2)). Brown is measured (residual
 // slope +0.143 dB/oct over 50 Hz..10 kHz, i.e. alpha -1 + 0.048).
-static const double kTiltAlpha[3] = {1.0, 0.0, -0.95};
+static const double kTiltAlpha[kColorCount] = {1.0, 1.0, 1.0, 0.0, -0.95};
 
 struct Chan {
   Noise noise;
@@ -190,7 +191,7 @@ extern "C" void soemdsp_softpop_filter_reset(int handle) {
 
 // One frame. freqHz = fEff (graph_engine resolve_osc_hz). inL / inR = the
 // routed external input per channel (stereo_route.h); useInput != 0 filters
-// them instead of the internal noise. color: choiceId 0 white / 1 pink / 2 brown.
+// them instead of the internal noise. color: choiceId 0 White / 1 Gaussian / 2 Average / 3 Pink / 4 Brown.
 // Returns Mono (= the L channel render).
 extern "C" double soemdsp_softpop_filter_sample(
   int handle,
@@ -224,7 +225,7 @@ extern "C" double soemdsp_softpop_filter_sample(
   const double amp = safe(amplitude);
   const bool use = safe(useInput) > 0.5;
   const double l = render_chan(s, s.ch[0], c, fEff, cents, am, amp, sr, use, safe(inL));
-  display_note(s.disp, 0, fEff, s.q, cents, sr, s.ch[0].instHz);
+  display_note(s.disp, 0, fEff, s.q, cents, sr, s.ch[0].instHz, 1.0);
   render_chan(s, s.ch[1], c, fEff, cents, am, amp, sr, use, safe(inR));
   return l;
 }

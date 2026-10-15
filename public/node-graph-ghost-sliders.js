@@ -36,7 +36,7 @@ function nodeGraphGhostSliderScopeSample(nodeId, port) {
 
 /**
  * Cheap MOD sample for a ghost: last scope frame if we already have it,
- * else a parameter port's current slider (unit-mapped like the engine).
+ * else (for parameter ports) the THRU of that param's MOD input.
  * Does not request new capture — no extra buffers.
  */
 function nodeGraphGhostSliderControllerOutSample(nodeId, port) {
@@ -223,21 +223,22 @@ function nodeGraphGhostSliderModSample(sourceNode, sourcePort, depth = 0) {
     // Raw face probe when Left/Right rings are briefly empty).
     return null;
   }
-  const sourceSlider = nodeGraphSliderForParameter(nodeId, port);
-  const domain = sourceSlider
-    ? nodeGraphReadNodeNumber(nodeId, port)
-    : nodeGraphReadPatchParameterValue(nodeId, port);
-  if (!Number.isFinite(Number(domain))) {
+  // Parameter out = THRU of this param's MOD input. Nothing wired = no signal.
+  if (depth >= 6) {
     return null;
   }
-  const sourceMeta = nodeGraphReadPatchParameterMetadata(nodeId, port);
-  if (typeof nodeGraphParamDomainToModOutput === "function") {
-    return nodeGraphParamDomainToModOutput(domain, sourceMeta);
+  let thruSum = 0;
+  let thruAny = false;
+  for (const m of nodeGraphMvp?.patch?.modulations || []) {
+    if (String(m?.destinationNode || "") !== nodeId) continue;
+    if (String(m?.destinationParam || "") !== port) continue;
+    const up = nodeGraphGhostSliderModSample(m.sourceNode, m.sourcePort, depth + 1);
+    if (up != null && Number.isFinite(Number(up))) {
+      thruSum += Number(up);
+      thruAny = true;
+    }
   }
-  if (typeof normalizeNodeGraphParameterOutputValue === "function") {
-    return normalizeNodeGraphParameterOutputValue(domain, sourceMeta);
-  }
-  return nodeGraphParameterValueToNormalizedSignal(domain, sourceMeta);
+  return thruAny ? thruSum : null;
 }
 
 function nodeGraphParameterGhostModulationMatches(modulation, patchNode, key) {
@@ -299,17 +300,12 @@ function nodeGraphParameterGhostSignal(node, key) {
       const n = Number(sample);
       normalized = Number.isFinite(n) ? n : 0;
     }
-    const srcNode = nodeGraphPatchNode(modulation.sourceNode);
-    const srcPort = String(modulation.sourcePort || "");
-    const srcParamMeta = (typeof nodeGraphReadPatchParameterMetadata === "function"
-      ? nodeGraphReadPatchParameterMetadata(srcNode, srcPort)
-      : null) || {};
     // Range Out is unit CV. Native ParamModEdge maps it across the
     // destination param min/max. Tagging every Range as domain made a
     // 1-to-0 map read as 1 Hz to 0 Hz on Attack (0 to 20000 Hz).
-    // outputDomain on the source param or the destination still means real units.
-    const taggedDomain = srcParamMeta.outputDomain === true
-      || metadata.outputDomain === true;
+    // A parameter-out is a thru with no units of its own; destination
+    // outputDomain still means real units.
+    const taggedDomain = metadata.outputDomain === true;
     sources.push(taggedDomain ? { value: Number(normalized), domain: true } : normalized);
   }
   if (!sources.length) {

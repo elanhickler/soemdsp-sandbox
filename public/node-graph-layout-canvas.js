@@ -426,6 +426,10 @@ function beginNodeGraphLayoutCanvasStage(nodeIds, mode = "perform") {
   if (typeof endNodeGraphScreenSolo === "function") {
     endNodeGraphScreenSolo({ silent: true });
   }
+  // Hide whole-module tiles' In/Out (same state as the In/Out toggle) before the
+  // tiles capture their zoom-1 size, so the IO band is not part of the tile.
+  // (After endNodeGraphScreenSolo, which clears it on every exit / re-open.)
+  nodeGraphLayoutCanvasSetIoHidden(true);
   const collected = nodeGraphScreenSoloCollectFaces(ids);
   if (!collected.length) {
     return false;
@@ -619,6 +623,7 @@ function nodeGraphLayoutCanvasOpen(mode = "perform", options = {}) {
   }
   const started = beginNodeGraphLayoutCanvasStage(ids, next);
   if (!started) {
+    nodeGraphLayoutCanvasSetIoHidden(false);
     nodeGraphMvp.layoutCanvasMode = "off";
     nodeGraphMvp.layoutCanvasActive = false;
     if (options.silent !== true && typeof setNodeInteractionHelp === "function") {
@@ -661,6 +666,25 @@ function nodeGraphLayoutCanvasOpen(mode = "perform", options = {}) {
     renderNodeGraphModularViewModeButtons();
   }
   return true;
+}
+
+/**
+ * Canvas In/Out: flip the transient flag read by nodeGraphEffectivePatchNodeUi
+ * and re-apply the affected modules through the same chrome path the In/Out
+ * button uses (applyNodeGraphChromeNodesToDom). Saved ui.ioHidden never changes.
+ */
+function nodeGraphLayoutCanvasSetIoHidden(on) {
+  const want = on === true;
+  if (Boolean(nodeGraphMvp.canvasIoHidden) === want) {
+    return;
+  }
+  nodeGraphMvp.canvasIoHidden = want;
+  const ids = (nodeGraphMvp.patch?.nodes || [])
+    .filter((node) => node?.ui?.canvasWholeModule)
+    .map((node) => node.id);
+  if (ids.length && typeof applyNodeGraphChromeNodesToDom === "function") {
+    applyNodeGraphChromeNodesToDom(ids);
+  }
 }
 
 function nodeGraphLayoutCanvasClose(options = {}) {

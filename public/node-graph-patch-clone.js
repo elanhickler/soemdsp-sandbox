@@ -89,6 +89,9 @@ function normalizeNodeGraphPatchNodeUi(ui = {}, type = "") {
       : Boolean(source.slidersForceShow || source.slidersShown),
     titleHidden,
   };
+  // Layout canvas pin and whole-module tile (node-graph-screen-solo.js) survive load/save.
+  if (source.showInCanvas) normalized.showInCanvas = true;
+  if (source.canvasWholeModule) normalized.canvasWholeModule = true;
   // Absolute face height (spawn/resize). Preferred over offset-from-type-default.
   // 0 is Off (omit the face track). A stored 0 must not fall through to the
   // type default — that brought the face back and let it share a row with I/O.
@@ -163,7 +166,17 @@ function nodeGraphEffectivePatchNodeUi(ui = {}, type = "") {
     oscilloscopeForceShow: Boolean(normalizedUi.oscilloscopeForceShow) && !oscilloscopeHidden,
     interfaceControlsForceShow: Boolean(normalizedUi.interfaceControlsForceShow) && !interfaceControlsHidden,
     slidersForceShow: Boolean(normalizedUi.slidersForceShow) && !slidersHidden && !alwaysHideSliders,
+    // Canvas mode turns on the same In/Out-hidden state for whole-module tiles
+    // (transient: the saved ui.ioHidden is untouched).
+    ioHidden: Boolean(normalizedUi.ioHidden) || nodeGraphCanvasForcesIoHidden(normalizedUi),
   };
+}
+
+/** True while the layout canvas is open and this module is a whole-module tile. */
+function nodeGraphCanvasForcesIoHidden(ui) {
+  return typeof nodeGraphMvp !== "undefined"
+    && nodeGraphMvp.canvasIoHidden === true
+    && Boolean(ui?.canvasWholeModule);
 }
 
 /** @deprecated use nodeGraphPatchNodeSectionEffectivelyHidden */
@@ -821,7 +834,7 @@ function cloneNodeGraphPatch(patch) {
               },
           }
           : {}),
-        ...(ui.buttonsHidden || ui.buttonsForceShow || ui.ioHidden || ui.hideUnused || ui.interfaceControlsHidden || ui.interfaceControlsForceShow || ui.movementLocked || ui.titleHidden || ui.oscilloscopeHidden || ui.oscilloscopeForceShow || ui.slidersHidden || ui.slidersForceShow || ui.displayHeightOffsetGu || ui.displayHeightGu ? { ui } : {}),
+        ...(ui.buttonsHidden || ui.buttonsForceShow || ui.ioHidden || ui.hideUnused || ui.interfaceControlsHidden || ui.interfaceControlsForceShow || ui.movementLocked || ui.titleHidden || ui.oscilloscopeHidden || ui.oscilloscopeForceShow || ui.slidersHidden || ui.slidersForceShow || ui.displayHeightOffsetGu || ui.displayHeightGu || ui.showInCanvas || ui.canvasWholeModule ? { ui } : {}),
       };
     }),
     requiredAssets: typeof nodeGraphRequiredAssetsForPatch === "function"

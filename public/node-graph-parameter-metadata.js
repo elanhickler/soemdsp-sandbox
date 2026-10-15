@@ -524,7 +524,7 @@ function nodeGraphParameterDefinitionMetadata(parameter) {
       : (parameter.constraint ? String(parameter.constraint) : ""),
     unit: parameter.unit ?? "",
     wraparound: Boolean(parameter.wraparound),
-    // Yellow Graph / explicit: param-out jack emits DOMAIN, not unit 0…1.
+    // Yellow Graph / explicit: MOD into this param is read in DOMAIN units.
     outputDomain: Boolean(parameter.outputDomain),
     visible: nodeGraphParameterDefaultVisible(parameter),
   };

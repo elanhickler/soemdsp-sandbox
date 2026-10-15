@@ -493,6 +493,7 @@ PUBLIC_SCRIPT_PATHS = (
     "./public/node-graph-screen-solo.js",
     "./public/node-graph-layout-canvas.js",
     "./public/embed-module.js",
+    "./public/modules/audioPlayer/audio-player-api.js",
     "./public/node-graph-workspace-event-bindings.js",
     "./public/node-graph-render-live-event-bindings.js",
     "./public/node-graph-header-event-bindings.js",

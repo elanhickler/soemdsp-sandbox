@@ -14,7 +14,7 @@ const H = makeHarness(buildProbe("filter"));
 const { x, gate, render, renderAll, withInstance, setParams, noiseLevel } = H;
 
 if (process.argv.includes("--calibrate")) {
-  for (const color of [0, 1, 2]) {
+  for (const color of [0, 1, 2, 3, 4]) {
     const r = await noiseLevel({ freq: 1000, width: 0.3, color }, 3000);
     console.log(`calibrate ${COLORS[color]}: 1 kHz W=0.3 Filter level ${r.rmsDb.toFixed(4)} dB re 1/sqrt2 (${r.seconds.toFixed(0)} s) -> k *= ${Math.pow(10, -r.rmsDb / 20).toFixed(6)}`);
   }
@@ -26,7 +26,7 @@ if (process.argv.includes("--calibrate")) {
 const levelSeconds = (fc, w) => Math.max(20, 500 / (Math.PI * Math.min(fc, 0.45 * SR) / (2 * Qof(w))));
 const fcs = [50, 100, 200, 400, 800, 1600, 3200, 6400, 10000];
 const levelPromises = [];
-for (const color of [0, 1, 2]) {
+for (const color of [0, 1, 2, 3, 4]) {
   for (const w of [0, 0.2, 0.3, 0.4, 0.6, 0.8, 1]) {
     levelPromises.push(noiseLevel({ freq: 1000, width: w, color }, levelSeconds(1000, w)).then((r) => ({ kind: "width", color, w, ...r })));
   }
@@ -68,8 +68,8 @@ for (const color of [0, 1, 2]) {
 // ---------- 2. Mono / Noise / CV / Seed / Reset ----------
 {
   const base = { freq: 700, width: 0.5, pitch: 600, ampMod: 0.5 };
-  let monoIsL = true, lrDiffer = true, noiseOk = true, cvErr = 0;
-  for (const color of [0, 1, 2]) {
+  let monoIsL = true, lrDiffer = true, noiseOk = true, cvErr = 0, cvErrW = 0;
+  for (const color of [0, 1, 2, 3, 4]) {
     const [m, l, r, nl, nr, npl, npr, cl, cr] = withInstance({ ...base, color },
       (h) => renderAll(h, SR, [CH.MONO, CH.L, CH.R, CH.NAUD_L, CH.NAUD_R, CH.NP_L, CH.NP_R, CH.CV_L, CH.CV_R]));
     if (!bitEqual(m, l)) monoIsL = false;
@@ -77,18 +77,20 @@ for (const color of [0, 1, 2]) {
     let pn = 0;
     for (let i = 0; i < nl.length; i++) pn += nl[i] * nl[i];
     if (Math.abs(dB(pn / nl.length)) > 0.5 || bitEqual(nl, nr)) noiseOk = false;
-    const s = base.pitch * Math.LN2 / 1200;
+    const s = base.pitch * Math.LN2 / 1200, a = Math.sqrt(3) * s;
+    const corr = color === 0 ? Math.log(Math.sinh(a) / a) : 0.5 * s * s;  // White: uniform +-sqrt3
     for (let i = 0; i < cl.length; i++) {
-      cvErr = Math.max(cvErr, Math.abs(cl[i] - (npl[i] * s - 0.5 * s * s) / Math.LN2), Math.abs(cr[i] - (npr[i] * s - 0.5 * s * s) / Math.LN2));
+      const err = Math.max(Math.abs(cl[i] - (npl[i] * s - corr) / Math.LN2), Math.abs(cr[i] - (npr[i] * s - corr) / Math.LN2));
+      if (color === 0) cvErrW = Math.max(cvErrW, err); else cvErr = Math.max(cvErr, err);
     }
   }
-  gate(monoIsL, "2 Mono output: bit-identical to Left (3 colors, 1 s)");
+  gate(monoIsL, "2 Mono output: bit-identical to Left (5 colors, 1 s)");
   gate(lrDiffer, "2 Left and Right are independent renders");
-  gate(noiseOk, "2 Left/Right Noise: unit RMS (+-0.5 dB), L != R");
-  gate(cvErr < 1e-9, `2 Left/Right CV: log2(fInst/fEff) per channel (max err ${cvErr.toExponential(1)} oct)`);
+  gate(noiseOk, "2 Noise L/R: unit RMS (+-0.5 dB), L != R");
+  gate(cvErr < 1e-9 && cvErrW < 2e-6, `2 CV L/R: log2(fInst/fEff) per channel (max err ${cvErr.toExponential(1)} oct; White ${cvErrW.toExponential(1)} oct, dsp_ln/dsp_exp mean correction)`);
   const [c0] = withInstance({ ...base, pitch: 0 }, (h) => renderAll(h, SR / 10, [CH.CV_L]));
   gate(c0.every((v) => v === 0), "2 CV is exactly 0 with Pitch Mod 0");
-  const o = { ...base, color: 1, seed: 4242 };
+  const o = { ...base, color: 3, seed: 4242 };
   const [a] = withInstance(o, (h) => renderAll(h, SR, [CH.MONO]));
   const [b] = withInstance(o, (h) => renderAll(h, SR, [CH.MONO]));
   gate(bitEqual(a, b), "2 Seed: same Seed -> bit-identical output");
@@ -136,7 +138,7 @@ for (const color of [0, 1, 2]) {
 // ---------- 5. Pitch Mod (centre) symmetric in cents; near Nyquist ----------
 {
   let worst = { mean: 0, skew: 0, sd: 1 };
-  for (const color of [0, 1, 2]) for (const cents of [100, 1200]) {
+  for (const color of [0, 1, 2, 3, 4]) for (const cents of [100, 1200]) {
     let n = 0, s1 = 0, s2 = 0, s3 = 0;
     for (const seed of [1, 2, 3, 4]) {
       withInstance({ freq: 1000, width: 0.6, pitch: cents, color, seed }, (h) => {
@@ -157,7 +159,7 @@ for (const color of [0, 1, 2]) {
   gate(Math.abs(worst.mean) < 0.1 && Math.abs(worst.skew) < 0.15 && Math.abs(worst.sd - 1) < 0.05,
     `5 Pitch Mod: worst mean ${worst.mean.toFixed(3)}σ (<0.1), skew ${worst.skew.toFixed(3)} (<0.15), sd ${worst.sd.toFixed(3)} (1 ± 5 %)`);
   let finite = true, maxHz = 0;
-  for (const color of [0, 1, 2]) {
+  for (const color of [0, 1, 2, 3, 4]) {
     withInstance({ freq: 23000, width: 1, pitch: 2400, ampMod: 1, color }, (h) => {
       render(h, 4 * SR, [CH.L, CH.R, CH.FI_L], (a) => {
         for (let i = 0; i < a[0].length; i++) {
@@ -174,7 +176,7 @@ for (const color of [0, 1, 2]) {
 {
   let finite = true, mx = 0;
   const sweep = (i) => { const t = (i / SR) % 2; const u = t < 1 ? t : 2 - t; return 20 * Math.pow(18000 / 20, u); };
-  for (const color of [0, 1, 2]) for (const w of [1, 0]) {
+  for (const color of [0, 1, 2, 3, 4]) for (const w of [1, 0]) {
     withInstance({ width: w, pitch: 2400, ampMod: 1, color }, (h) => {
       render(h, 10 * SR, [CH.L, CH.R], (a) => {
         for (let i = 0; i < a[0].length; i++) {
@@ -186,7 +188,7 @@ for (const color of [0, 1, 2]) {
   }
   gate(finite && mx <= 8, `10 stress (Pitch Mod 2400, W 1 and 0, Amp Mod 1, f 20 Hz<->18 kHz sweep, 10 s): finite, max |y| ${mx.toFixed(3)} (limit 8)`);
   let fin = true, zeroOk = true, cases = 0;
-  for (const freq of [0, 20000]) for (const width of [0, 1]) for (const color of [0, 1, 2]) for (const amp of [1, 0]) {
+  for (const freq of [0, 20000]) for (const width of [0, 1]) for (const color of [0, 1, 2, 3, 4]) for (const amp of [1, 0]) {
     withInstance({ freq, width, color, amp, pitch: 300, ampMod: 0.5 }, (h) => {
       render(h, 2 * SR, [CH.MONO, CH.L, CH.R], (a) => {
         for (const arr of a) for (let i = 0; i < arr.length; i++) {
@@ -197,7 +199,7 @@ for (const color of [0, 1, 2]) {
     });
     cases++;
   }
-  gate(fin && zeroOk, `11 edges: Frequency 0 / 20 kHz x Width 0 / 1 x 3 colors x Amplitude 1 / 0 (${cases} cases): finite, Amplitude 0 is exact silence`);
+  gate(fin && zeroOk, `11 edges: Frequency 0 / 20 kHz x Width 0 / 1 x 5 colors x Amplitude 1 / 0 (${cases} cases): finite, Amplitude 0 is exact silence`);
 }
 
 // ---------- 12. Pitch Mod mean centre (lognormal mean correction) ----------
@@ -257,7 +259,7 @@ for (const color of [0, 1, 2]) {
 // ---------- 6 / 7 / 8 / 9 level results ----------
 const levels = await Promise.all(levelPromises);
 gate(levels.reduce((s, r) => s + r.bad, 0) === 0, `level runs: no non-finite samples (${levels.reduce((s, r) => s + r.seconds, 0).toFixed(0)} s rendered)`);
-for (const color of [0, 1, 2]) {
+for (const color of [0, 1, 2, 3, 4]) {
   const width = levels.filter((r) => r.kind === "width" && r.color === color);
   const ws = width.map((r) => `W${r.w}:${r.rmsDb >= 0 ? "+" : ""}${r.rmsDb.toFixed(2)}`).join(" ");
   gate(Math.max(...width.map((r) => Math.abs(r.rmsDb))) < 1, `7 ${COLORS[color]} level vs Width @1 kHz (dB re Sine RMS): ${ws}`);

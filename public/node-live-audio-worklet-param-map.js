@@ -5,11 +5,33 @@ NodeLiveAudioProcessor.prototype.parameterOutputExists = function parameterOutpu
   return Boolean(node?.params && Object.hasOwn(node.params, port));
 };
 
-NodeLiveAudioProcessor.prototype.normalizeParameterOutputValue = function normalizeParameterOutputValue(value, metadata = {}) {
-  if (typeof nodeGraphParamDomainToModOutput === "function") {
-    return nodeGraphParamDomainToModOutput(value, metadata);
+/**
+ * Parameter-row out jack is a THRU of whatever is wired into that parameter's
+ * MOD input (same signal, same rate). Nothing wired = nothing sent (0).
+ * Returns the MOD connections feeding nodeId.port.
+ */
+NodeLiveAudioProcessor.prototype.parameterThruModulations = function parameterThruModulations(nodeId, port) {
+  const list = this.modulationConnections?.get?.(this.parameterKey(String(nodeId || ""), String(port || "")));
+  return Array.isArray(list) ? list : [];
+};
+
+/** Real upstream sources behind a (possibly chained) parameter-out thru. */
+NodeLiveAudioProcessor.prototype.parameterThruLeaves = function parameterThruLeaves(nodeId, port, depth = 0) {
+  const id = String(nodeId || "");
+  const p = String(port || "");
+  if (!this.parameterOutputExists(this.nodes?.get?.(id), p)) {
+    return [{ sourceNode: id, sourcePort: p }];
   }
-  return this.parameterValueToNormalizedSignal(value, metadata);
+  if (depth > 8) return [];
+  const out = [];
+  const mods = this.parameterThruModulations(id, p);
+  for (let i = 0; i < mods.length; i += 1) {
+    const m = mods[i];
+    if (!m) continue;
+    const leaves = this.parameterThruLeaves(m.sourceNode, m.sourcePort, depth + 1);
+    for (let j = 0; j < leaves.length; j += 1) out.push(leaves[j]);
+  }
+  return out;
 };
 
 /** MOD surface: raw domain sample (Hz, level, …) — no unit clamp. */

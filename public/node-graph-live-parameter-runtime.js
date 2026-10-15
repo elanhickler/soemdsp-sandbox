@@ -61,14 +61,6 @@ function readNodeGraphRuntimeOutput(runtime, frameValues, nodeId, port = "Out") 
   return output === undefined || output === null ? 0 : Number(output);
 }
 
-/** DOMAIN → unit (parameter port used as a bus source). */
-function normalizeNodeGraphParameterOutputValue(value, metadata = {}) {
-  if (typeof nodeGraphParamDomainToModOutput === "function") {
-    return nodeGraphParamDomainToModOutput(value, metadata);
-  }
-  return nodeGraphParameterValueToNormalizedSignal(value, metadata);
-}
-
 /** MOD surface: raw sample in domain units (no unit clamp). */
 function normalizeNodeGraphParameterModulationInput(value, metadata = {}) {
   if (typeof nodeGraphParamNormalizeModInput === "function") {
@@ -179,22 +171,32 @@ function nodeGraphApplyParameterModulation(base, modulationSignal, metadata = {}
   return result;
 }
 
-function readNodeGraphRuntimePortOutput(runtime, frameValues, nodeId, port = "Out", frame = 0, frames = 1) {
+function readNodeGraphRuntimePortOutput(runtime, frameValues, nodeId, port = "Out", frame = 0, frames = 1, depth = 0) {
   const node = runtime.nodes?.get(nodeId);
   const parameter = nodeGraphParameterOutputPort(node, port);
   if (!parameter) {
     return readNodeGraphRuntimeOutput(runtime, frameValues, nodeId, port);
   }
-  const metadata = node?.paramMeta?.[port] || {};
-  const value = readNodeGraphLiveSmoothedParam(
-    runtime,
-    node,
-    port,
-    nodeGraphParameterFallback(node?.type, port),
-    frame,
-    frames,
-  );
-  return normalizeNodeGraphParameterOutputValue(value, metadata);
+  // Parameter out = THRU of this param's MOD input. Nothing wired = 0.
+  if (depth > 8) {
+    return 0;
+  }
+  const mods = runtime.modulationConnections?.get(nodeGraphParameterKey(nodeId, port)) || [];
+  let sum = 0;
+  for (let i = 0; i < mods.length; i += 1) {
+    const m = mods[i];
+    if (!m) continue;
+    sum += nodeGraphFiniteNumber(readNodeGraphRuntimePortOutput(
+      runtime,
+      frameValues,
+      m.sourceNode,
+      m.sourcePort,
+      frame,
+      frames,
+      depth + 1,
+    ));
+  }
+  return sum;
 }
 
 function readNodeGraphLiveEffectiveParam(
@@ -234,13 +236,9 @@ function readNodeGraphLiveEffectiveParam(
       frame,
       frames,
     ), metadata);
-    const srcNode = runtime.nodes?.get(modulation.sourceNode);
-    const srcPort = modulation.sourcePort;
-    const srcParamMeta = srcNode?.paramMeta?.[srcPort] || {};
-    // Same rule as ghost: module type does not retag the cable.
-    // outputDomain on the source param or the destination means real units.
-    const taggedDomain = srcParamMeta.outputDomain === true
-      || metadata.outputDomain === true;
+    // Same rule as ghost: module type does not retag the cable; a parameter-out
+    // is a thru with no units of its own. Destination outputDomain = real units.
+    const taggedDomain = metadata.outputDomain === true;
     return taggedDomain ? { value: Number(sample), domain: true } : sample;
   });
   if (typeof nodeGraphParamFoldOrBase === "function") {

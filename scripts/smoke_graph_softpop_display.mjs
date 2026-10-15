@@ -3,7 +3,7 @@
 // Combined wasm graph -> soemdsp_softpop_{oscillator,filter}_display_* (what the
 // worklet's syncNativeSoftpopPublish reads) -> the face's glow accumulator
 // (public/modules/softpopOscillator/softpop-display.js, loaded in a vm).
-// Also checks the Mono / Left Noise / Right Noise / Left CV / Right CV ports.
+// Also checks the Mono / Noise L / Noise R / pitch L / pitch R (♯/♭) ports.
 import fs from "fs";
 import path from "path";
 import vm from "vm";
@@ -38,7 +38,7 @@ const fInfo = must("soemdsp_softpop_filter_display_info");
 
 const TYPE_SOFTPOP = 207, TYPE_SOFTPOP_FILTER = 214, TYPE_OUT = 6;
 const PARAM = { FREQUENCY: 10, SOURCE: 11, AMPLITUDE: 12, MORPH: 13, WIDTH: 31, PITCH: 45, SEED: 48 };
-const PORT = { MONO: 0, LEFT: 1, RIGHT: 2, NOISE_L: 3, NOISE_R: 4, CV_L: 5, CV_R: 6 };
+const PORT = { MONO: 0, LEFT: 1, RIGHT: 2, NOISE_L: 3, NOISE_R: 4, PITCH_L: 5, PITCH_R: 6 };
 const SR = 48000, FRAMES = 128, HASH = 0x50f7a001 >>> 0, OUT_HASH = 0x50f7a0ff >>> 0;
 
 let failures = 0;
@@ -125,6 +125,36 @@ let curve;
   gate(wide.used > mid.used && mid.used > narrow.used && narrow.used <= 5,
     `Pitch Mod sets the spread: bins hit 1200 c ${wide.used}, 100 c ${mid.used}, 20 c ${narrow.used}`);
 }
+// --- Display is in pitch: centred on the note, symmetric at large Pitch Mod ---
+{
+  const { g, h } = build({ SOURCE: 0, FREQUENCY: 440, PITCH: 2400, SEED: 5 });
+  readBins(h);
+  run(g, 375 * 8);  // 8 s
+  const d = readBins(h);
+  destroy(g);
+  const c = binOf(440), centreLn = Math.log(440 / 20) / Math.log(1000) * d.bins.length;  // fractional note bin
+  let total = 0, sum = 0, below = 0, above = 0;
+  for (let i = 0; i < d.bins.length; i++) { total += d.bins[i]; sum += d.bins[i] * (i + 0.5); if (i < c) below += d.bins[i]; else if (i > c) above += d.bins[i]; }
+  let acc = 0, med = 0;
+  for (let i = 0; i < d.bins.length; i++) { acc += d.bins[i]; if (acc >= total / 2) { med = i; break; } }
+  const centroidC = (sum / total - centreLn) * 1200 * Math.log2(1000) / d.bins.length;  // cents
+  gate(Math.abs(med - c) <= 1 && Math.abs(centroidC) < 100 && above / below > 0.85 && above / below < 1.18,
+    `Pitch Mod 2400: display centred on the note in pitch (median bin ${med} vs ${c}, centroid ${centroidC.toFixed(0)} c, above/below ${(above / below).toFixed(3)})`);
+}
+// --- Amplitude drives line brightness: bins sum |Amplitude * Amp Mod gain| (<= 1) ---
+{
+  const sumAt = (amp) => {
+    const { g, h } = build({ SOURCE: 0, FREQUENCY: 440, PITCH: 0, AMPLITUDE: amp, SEED: 1 });
+    readBins(h);
+    run(g, 20);
+    const d = readBins(h);
+    destroy(g);
+    return d.bins.reduce((s, v) => s + v, 0) / d.info[7];
+  };
+  const b1 = sumAt(1), bh = sumAt(0.5), b0 = sumAt(0);
+  gate(Math.abs(b1 - 1) < 1e-9 && Math.abs(bh / b1 - 0.5) < 0.02 && b0 === 0,
+    `Amplitude -> line brightness weight per sample: 1 -> ${b1.toFixed(3)}, 0.5 -> ${bh.toFixed(3)}, 0 -> ${b0}`);
+}
 // --- Every Oscillator Source draws the glow line ---
 {
   let allGlow = true;
@@ -151,23 +181,24 @@ let curve;
 // --- new outputs ---
 {
   const { g, h } = build({ SOURCE: 0, FREQUENCY: 440, PITCH: 600, SEED: 5 });
-  let monoIsL = true, lrDiffer = false, noiseDiffer = false, cvOk = true, n2 = 0, n = 0;
+  let monoIsL = true, lrDiffer = false, noiseDiffer = false, cvOk = true, cvLR = false, n2 = 0, n = 0;
   run(g, 50, () => {
     const m = port(g, PORT.MONO), l = port(g, PORT.LEFT), r = port(g, PORT.RIGHT);
     const nl = port(g, PORT.NOISE_L), nr = port(g, PORT.NOISE_R);
-    const cl = port(g, PORT.CV_L), cr = port(g, PORT.CV_R);
+    const cl = port(g, PORT.PITCH_L), cr = port(g, PORT.PITCH_R);
     for (let i = 0; i < FRAMES; i++) {
       if (m[i] !== l[i]) monoIsL = false;
       if (l[i] !== r[i]) lrDiffer = true;
       if (nl[i] !== nr[i]) noiseDiffer = true;
-      if (!Number.isFinite(cl[i]) || !Number.isFinite(cr[i]) || Math.abs(cl[i]) > 3) cvOk = false;
+      if (!Number.isFinite(cl[i]) || !Number.isFinite(cr[i]) || Math.abs(cl[i] - 69) > 36 || Math.abs(cr[i] - 69) > 36) cvOk = false;
+      if (cl[i] !== cr[i]) cvLR = true;
       n2 += nl[i] * nl[i]; n++;
     }
   });
   const sd = Math.sqrt(n2 / n);
   gate(monoIsL && lrDiffer, "ports: Mono == Left render, Left != Right");
-  gate(noiseDiffer && sd > 0.85 && sd < 1.15, `ports: Left/Right Noise independent, RMS ${sd.toFixed(3)}`);
-  gate(cvOk, "ports: Left/Right CV finite, within +-3 octaves at Pitch Mod 600");
+  gate(noiseDiffer && sd > 0.85 && sd < 1.15, `ports: Left/Noise R independent, RMS ${sd.toFixed(3)}`);
+  gate(cvOk && cvLR, "ports: pitch L/R finite MIDI within 69 +-36 st (440 Hz, Pitch Mod 600), L != R");
 }
 // --- face accumulator (softpop-display.js) ---
 {
@@ -253,20 +284,14 @@ let curve;
   ctx.__present(mkCanvas(256, 4), spread.bins, spread.info, sS, 256);
   gate(glLog.clear === at(128), `Sine (GL): empty pitch = LUT(Background brightness 0.5) = red (${glLog.clear})`);
   const sineCols = colours();
-  // Height: Pitch Mod 100 publish -> pitch density: the note column
-  // reaches the top, columns ~2 sigma away stop lower.
+  // Full-height lines: every drawn quad spans the whole face.
   {
     reset();
     const cH = 100;
     ctx.__present(mkCanvas(256, cH), curve.bins, curve.info, sS, 256);
-    const tops = new Map();
-    for (let i = 0; i < glLog.verts.length; i += 11) {
-      const x = Math.floor((glLog.verts[i] + 1) * 128 + 1e-6), y = (1 - glLog.verts[i + 1]) * cH / 2;  // clip space -> px
-      tops.set(x, Math.min(tops.get(x) ?? Infinity, y));
-    }
-    const at = (px) => { let best = Infinity; for (const [x, y] of tops) if (x === px) best = Math.min(best, y); return best; };
-    const c = binOf(440), cHi = c + 4;  // ~190 c up (~2 sigma at Pitch Mod 100)
-    gate(at(c) <= 10 && at(cHi) > 20 && at(cHi) < cH, `Sine (GL): line height follows pitch density (top y ${at(c).toFixed(1)} at the note, ${at(cHi).toFixed(1)} ~190 c up, face ${cH})`);
+    let full = glLog.verts.length > 0;
+    for (let i = 0; i < glLog.verts.length; i += 11) { const y = glLog.verts[i + 1]; if (Math.abs(Math.abs(y) - 1) > 1e-6) full = false; }
+    gate(full, `Sine (GL): every printed line is full face height (${glLog.verts.length / 11} verts)`);
   }
   gate(sineCols.some((c) => { const v = c.split(",").map(Number); return v[0] === 255 && v[1] > 100; }) && glLog.draws === 1,
     `Sine (GL): glow at the note climbs the gradient toward white, one draw (${glLog.draws})`);

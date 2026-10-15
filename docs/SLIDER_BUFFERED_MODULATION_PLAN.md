@@ -25,7 +25,7 @@ No software we know of ships that as the destination control itself. Keep the cl
 | Layer | What it actually is |
 |--------|---------------------|
 | Slider UI | Hidden `input[type=range]` + `.node-slider-readout` (CSS amount, DOM label/value/unit). Drag / type-in / keyboard / metadata hang off the readout. |
-| Ghost sliders | CSS tick from **static source knob values** added to the destination base. Only fires when the modulator is itself a parameter output. LFO, audio, and any real buffer never appear. |
+| Ghost sliders | CSS tick from the last scope sample of each MOD source added to the destination base. A parameter output is a thru, so the ghost follows it back to whatever is wired into that parameter's MOD input (nothing wired = no ghost). LFO, audio, and any real buffer never appear. |
 | DSP truth | `readEffectiveParameter` every sample: smoothed DOMAIN base + folded MOD sources (`nodeGraphParamFoldModSources` / `applyParameterModulation`). That number is used by evaluators and discarded. UI never sees the stream. |
 | Scopes | Separate visual sinks. Worklet hops capture at ~12 kHz because full-rate visual writes starved the audio thread. Browsers hard-cap ~16 WebGL contexts. Scope compositor is already the scarce GPU budget. |
 

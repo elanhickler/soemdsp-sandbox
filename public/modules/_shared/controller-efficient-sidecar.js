@@ -999,13 +999,13 @@ NodeLiveAudioProcessor.prototype.processControllerEfficientSidecar = function pr
 
 /**
  * Sample a modulation source (efficient path).
- * Cyan parameter-outs: read the source slider DOMAIN (smoothed chase if any),
- * same as full-path readRuntimePortOutput — do NOT require nodeOutputs publish.
+ * Parameter-outs: THRU of that param's MOD input (0 when nothing is wired).
  * Controllers (Knob/Bias/…): fall back to published nodeOutputs Bias/Out.
  */
 NodeLiveAudioProcessor.prototype.readEfficientModSourceSample = function readEfficientModSourceSample(
   sourceNode,
   sourcePort,
+  depth = 0,
 ) {
   const id = String(sourceNode);
   const sp = String(sourcePort || "");
@@ -1032,33 +1032,18 @@ NodeLiveAudioProcessor.prototype.readEfficientModSourceSample = function readEff
       }
     }
   }
-  // Parameter-row outlet (cyan or gold slider out) → DOMAIN→mod sample.
-  // Match full path: smoothed/base slider only (no folding this param's own mods).
-  if (
-    node
-    && sp
-    && typeof this.parameterOutputExists === "function"
-    && this.parameterOutputExists(node, sp)
-  ) {
-    let value;
-    const smootherKey = typeof this.parameterKey === "function"
-      ? this.parameterKey(id, sp)
-      : `${id}.${sp}`;
-    const addState = this.additiveParamSmoothers?.get?.(smootherKey);
-    if (addState && Number.isFinite(Number(addState.value))) {
-      value = Number(addState.value);
-    } else {
-      const raw = Number(node.params?.[sp] ?? node.parameters?.[sp]);
-      value = Number.isFinite(raw) ? raw : 0;
+  // Parameter-row outlet = THRU of that param's MOD input. Nothing wired = 0.
+  if (node && sp && this.parameterOutputExists(node, sp)) {
+    if (depth > 8) return 0;
+    const mods = this.parameterThruModulations(id, sp);
+    let sum = 0;
+    for (let i = 0; i < mods.length; i += 1) {
+      const m = mods[i];
+      if (!m) continue;
+      const sample = this.readEfficientModSourceSample(m.sourceNode, m.sourcePort, depth + 1);
+      if (Number.isFinite(sample)) sum += sample;
     }
-    const meta = node.paramMeta?.[sp] || {};
-    if (typeof this.normalizeParameterOutputValue === "function") {
-      return this.normalizeParameterOutputValue(value, meta);
-    }
-    if (typeof nodeGraphParamDomainToModOutput === "function") {
-      return nodeGraphParamDomainToModOutput(value, meta);
-    }
-    return value;
+    return sum;
   }
   // 1D Phosphor Thru / Vector RGB / other observer outs are dry passthrough —
   // they are not native nodes and never publish nodeOutputs. Walk to upstream.
@@ -1107,8 +1092,19 @@ NodeLiveAudioProcessor.prototype.readEfficientParamModSources = function readEff
   node,
   key,
 ) {
-  const mods = this.modulationConnections?.get?.(this.parameterKey(node?.id, key));
-  if (!mods || !mods.length) return [];
+  const wired = this.modulationConnections?.get?.(this.parameterKey(node?.id, key));
+  if (!wired || !wired.length) return [];
+  // Parameter-out thru: tag/route by the real upstream source, not the thru jack.
+  const mods = [];
+  for (let i = 0; i < wired.length; i += 1) {
+    const w = wired[i];
+    if (!w) continue;
+    const leaves = this.parameterThruLeaves(w.sourceNode, w.sourcePort);
+    for (let j = 0; j < leaves.length; j += 1) {
+      mods.push({ ...w, sourceNode: leaves[j].sourceNode, sourcePort: leaves[j].sourcePort });
+    }
+  }
+  if (!mods.length) return [];
   const metadata = node?.paramMeta?.[key] || {};
   const sources = [];
   const dstId = String(node?.id || "");

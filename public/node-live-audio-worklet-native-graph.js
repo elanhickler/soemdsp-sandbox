@@ -644,13 +644,16 @@ NodeLiveAudioProcessor.prototype.mapNativeGraphSrcPortId = function mapNativeGra
     if (p === "cv") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_SQUARE;
     if (p === "__acidstep") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_PHASE01;
   }
-  // Softpop Oscillator / Filter: Mono (L render), Left, Right, Left/Right Noise, Left/Right CV.
+  // Softpop Oscillator / Filter: Mono (L render), Left, Right, Noise L/R,
+  // Oscillator pitch L/R (♯/♭ MIDI), Filter CV L/R (octaves), same slots.
   if (t === "softpopOscillator" || t === "softpopFilter") {
     if (p === "mono") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_MONO;
-    if (p === "left noise") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_SAW;
-    if (p === "right noise") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_RAMP;
-    if (p === "left cv") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_SQUARE;
-    if (p === "right cv") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_TRI;
+    if (p === "noise l") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_SAW;
+    if (p === "noise r") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_RAMP;
+    if (t === "softpopOscillator" && p === "pitch l") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_SQUARE;
+    if (t === "softpopOscillator" && p === "pitch r") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_TRI;
+    if (p === "cv l") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_SQUARE;
+    if (p === "cv r") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_TRI;
   }
   // XY Pad outs: X/Y bipolar, Gate hold, Spike pulse.
   if (t === "xyPad") {
@@ -1792,6 +1795,25 @@ NodeLiveAudioProcessor.prototype.resolveNativeGraphThruSources = function resolv
   const port = String(sourcePort || "");
   if (!src) return [];
   if (depth > 8) return [];
+  // Parameter out = THRU of that param's MOD input; nothing wired = no source.
+  if (this.parameterOutputExists(this.nodes.get(src), port)) {
+    const mods = this.parameterThruModulations(src, port);
+    const thru = [];
+    const seenThru = new Set();
+    for (let i = 0; i < mods.length; i += 1) {
+      const m = mods[i];
+      if (!m) continue;
+      const resolved = this.resolveNativeGraphThruSources(m.sourceNode, m.sourcePort, nativeIdSet, depth + 1);
+      for (let r = 0; r < resolved.length; r += 1) {
+        const item = resolved[r];
+        const key = `${item.sourceNode}\0${item.sourcePort}`;
+        if (seenThru.has(key)) continue;
+        seenThru.add(key);
+        thru.push(item);
+      }
+    }
+    return thru;
+  }
   if (nativeIdSet && nativeIdSet.has(src)) {
     return [{ sourceNode: src, sourcePort: port }];
   }
@@ -2202,9 +2224,7 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphFromPlanSurgical =
         const dstPort = String(c?.destinationPort || "");
         // Same as full compile: walk 1D Phosphor Thru / observer outs to upstream.
         // Without this, surgical rewire Bias-feeds the monitor (silence).
-        const resolved = idSet.has(src)
-          ? [{ sourceNode: src, sourcePort: srcPort }]
-          : this.resolveNativeGraphThruSources(src, srcPort, idSet, 0);
+        const resolved = this.resolveNativeGraphThruSources(src, srcPort, idSet, 0);
         if (!resolved.length) continue;
         const srcBusType = String(this.nodes.get(src)?.type || "");
         if (
@@ -2285,10 +2305,9 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphFromPlanSurgical =
             const rawSrcId = String(m.sourceNode || "");
             const rawSrcPort = String(m.sourcePort || "");
             if (!rawSrcId) continue;
-            const resolved = idSet.has(rawSrcId)
-              ? [{ sourceNode: rawSrcId, sourcePort: rawSrcPort }]
-              : this.resolveNativeGraphThruSources(rawSrcId, rawSrcPort, idSet, 0);
-            const hops = resolved.length
+            const resolved = this.resolveNativeGraphThruSources(rawSrcId, rawSrcPort, idSet, 0);
+            const rawIsParamOut = this.parameterOutputExists(this.nodes.get(rawSrcId), rawSrcPort);
+            const hops = resolved.length || rawIsParamOut
               ? resolved
               : [{ sourceNode: rawSrcId, sourcePort: rawSrcPort, hostCv: true }];
             for (let hi = 0; hi < hops.length; hi += 1) {
@@ -4562,7 +4581,7 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
       push("lfoBaseSpeed", P.NATIVE_GRAPH_PARAM_LFO_BASE_SPEED, cont("lfoBaseSpeed", 0.83));
       push("lfoVariation", P.NATIVE_GRAPH_PARAM_LFO_VARIATION, cont("lfoVariation", 0.001));
       push("lfoStyle", P.NATIVE_GRAPH_PARAM_LFO_STYLE, disc("lfoStyle", 0));
-      push("delayTapMod", P.NATIVE_GRAPH_PARAM_MODE, disc("delayTapMod", 1));
+      push("delayTapMod", P.NATIVE_GRAPH_PARAM_MODE, cont("delayTapMod", 1));
       push("seed", P.NATIVE_GRAPH_PARAM_SEED, disc("seed", 0));
       push("amplitude", P.NATIVE_GRAPH_PARAM_AMPLITUDE, cont("amplitude", 1));
       continue;
@@ -8231,9 +8250,7 @@ NodeLiveAudioProcessor.prototype.compileNativeGraphFromPlan = function compileNa
         || dstType === "imageBurn" || dstType === "rgbFractal" || dstType === "fbmField";
       const tvPort = srcPort === "rgba" || srcPort === "📺" || dstPort === "rgba" || dstPort === "📺";
       if (pictureType && tvPort) continue;
-      const resolved = idSet.has(src)
-        ? [{ sourceNode: src, sourcePort: srcPort }]
-        : this.resolveNativeGraphThruSources(src, srcPort, idSet, 0);
+      const resolved = this.resolveNativeGraphThruSources(src, srcPort, idSet, 0);
       if (!resolved.length) {
         // Thru with nothing upstream — leave destination unwired (silence).
         continue;
@@ -8382,10 +8399,9 @@ NodeLiveAudioProcessor.prototype.compileNativeGraphFromPlan = function compileNa
           const rawSrcId = String(m.sourceNode || "");
           const rawSrcPort = String(m.sourcePort || "");
           if (!rawSrcId) continue;
-          const resolved = idSet.has(rawSrcId)
-            ? [{ sourceNode: rawSrcId, sourcePort: rawSrcPort }]
-            : this.resolveNativeGraphThruSources(rawSrcId, rawSrcPort, idSet, 0);
-          const hops = resolved.length
+          const resolved = this.resolveNativeGraphThruSources(rawSrcId, rawSrcPort, idSet, 0);
+          const rawIsParamOut = this.parameterOutputExists(this.nodes.get(rawSrcId), rawSrcPort);
+          const hops = resolved.length || rawIsParamOut
             ? resolved
             : [{ sourceNode: rawSrcId, sourcePort: rawSrcPort }];
           for (let hi = 0; hi < hops.length; hi += 1) {
@@ -9217,6 +9233,15 @@ NodeLiveAudioProcessor.prototype.publishNativeGraphScopeTaps = function publishN
   };
   // Vector RGB / other observers: outs are dry thru — walk past them to DSP.
   const readSrcSample = (sourceNode, sourcePort, frame) => {
+    // Parameter out = THRU of its MOD input (never the node's Mono bus).
+    if (this.parameterOutputExists(this.nodes.get(sourceNode), sourcePort)) {
+      const thru = this.resolveNativeGraphThruSources(sourceNode, sourcePort, null, 0);
+      let thruSum = 0;
+      for (let i = 0; i < thru.length; i += 1) {
+        thruSum += readSrcSample(thru[i].sourceNode, thru[i].sourcePort, frame);
+      }
+      return thruSum;
+    }
     const srcType = String(this.nodes.get(sourceNode)?.type || "");
     const isObserver = typeof nodeGraphModuleIsEfficientProductObserverType === "function"
       && nodeGraphModuleIsEfficientProductObserverType(srcType);

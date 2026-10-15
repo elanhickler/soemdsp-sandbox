@@ -705,9 +705,8 @@ function nodeGraphAudioPlayerPlaylistStop(nodeId) {
   if (typeof rememberNodeGraphAudioPlayerSamplePhase === "function") {
     rememberNodeGraphAudioPlayerSamplePhase(nodeId, 0);
   }
-  if (typeof nodeGraphAudioPlayerPlaylistApplyScrub === "function") {
-    nodeGraphAudioPlayerPlaylistApplyScrub(nodeId, 0, { record: false, commit: true });
-  }
+  nodeGraphAudioPlayerPlaylistSeekBase.delete(nodeId);
+  nodeGraphAudioPlayerPlaylistSeekAbsolute(nodeId, 0, { record: false });
   if (typeof scheduleNodeGraphLiveParameterSync === "function") {
     scheduleNodeGraphLiveParameterSync();
   }
@@ -1378,6 +1377,8 @@ function nodeGraphAudioPlayerPlaylistEnsureLayout(section, nodeId) {
     }
   }
   nodeGraphAudioPlayerPlaylistEnsureFaceBar(section, nodeId);
+  // Watch labels from build time so a later-revealed bar/page still gets fitted.
+  nodeGraphAudioPlayerFitSectionLabels(section);
   if (typeof nodeGraphSampleWaveformEnsureZoomControl === "function") {
     nodeGraphSampleWaveformEnsureZoomControl(section);
   }
@@ -1405,6 +1406,7 @@ function nodeGraphAudioPlayerPlaylistApplyFace(nodeId) {
     btn.setAttribute("aria-pressed", on ? "true" : "false");
   }
   nodeGraphAudioPlayerPlaylistSyncNowSong(nodeId);
+  nodeGraphAudioPlayerFitSectionLabels(section);
   if (nodeGraphAudioPlayerFaceShowsPlaylist(face)) {
     nodeGraphAudioPlayerPlaylistRefreshUi(nodeId);
     nodeGraphAudioPlayerPlaylistStopScrubLoop(nodeId);
@@ -1474,39 +1476,74 @@ function nodeGraphAudioPlayerPlaylistSeekAbsolute(nodeId, phase01, { record = fa
 }
 
 /**
- * Playlist time scrubber → Phase Offset parameter (same live path as the knob).
- * Computes the relative offset that places the playhead at desired 0…1, so the
- * scrub runs through the real param system (modulation / automation friendly).
- * Value readout uses engine Phase (actual position), like Knob face Bias.
+ * Playlist seeks go through the playlist phase-offset param (playlistScrub).
+ * The native engine applies it live, the same param path as the knob's Bias.
+ * The engine plays a free-running phase ("base"), and the playhead is
+ * base + offset. Setting the offset to (desired - base) puts the playhead at
+ * the desired 0..1 position. It keeps playing from there.
+ * The engine reports phase a few frames late and glides the offset, so base is
+ * measured once and then advanced by elapsed play time. Re-reading it mid-glide
+ * (e.g. between pointerdown and pointerup of one click) would land the
+ * playhead in the wrong place.
+ * Do not "fold" a seek into samplePhase/samplePhaseSeek: the engine only reads
+ * those on a plan rebuild (track change), so a fold snapped the playhead back
+ * on release. Track change and Stop use nodeGraphAudioPlayerPlaylistSeekAbsolute.
  */
-function nodeGraphAudioPlayerPlaylistApplyScrub(nodeId, raw, { record = false, commit = false } = {}) {
+const nodeGraphAudioPlayerPlaylistSeekBase = new Map();
+
+function nodeGraphAudioPlayerPlaylistPlaybackRate(nodeId) {
+  const node = typeof nodeGraphPatchNode === "function" ? nodeGraphPatchNode(nodeId) : null;
+  const transport = Math.round(nodeGraphFiniteNumber(node?.params?.transport, 0));
+  if (![3, 4, 5].includes(transport)) {
+    return 0;
+  }
+  const entry = nodeGraphMvp?.sampleBuffers?.get?.(node?.sample?.id);
+  const seconds = entry?.frames > 0 ? entry.frames / Math.max(1, entry.sampleRate || 44100) : 0;
+  return seconds > 0 ? nodeGraphFiniteNumber(node?.params?.speed, 1) / seconds : 0;
+}
+
+function nodeGraphAudioPlayerPlaylistSeekViaOffset(nodeId, desired01) {
   const node = typeof nodeGraphPatchNode === "function" ? nodeGraphPatchNode(nodeId) : null;
   if (!node || node.type !== "audioPlayer") {
     return;
   }
-  const desired = Math.max(0, Math.min(1, nodeGraphFiniteNumber(raw)));
-  if (commit) {
-    // On release: fold into free-running phase so Phase Offset stays clean.
-    nodeGraphAudioPlayerPlaylistSeekAbsolute(nodeId, desired, { record });
-    return;
+  const desired = Math.max(0, Math.min(1, nodeGraphFiniteNumber(desired01)));
+  const wrap01 = (v) => ((v % 1) + 1) % 1;
+  const now = performance.now();
+  const transport = node.params?.transport;
+  const memo = nodeGraphAudioPlayerPlaylistSeekBase.get(nodeId);
+  let base;
+  if (memo && now - memo.t < 500 && memo.transport === transport && memo.sampleId === node.sample?.id) {
+    base = wrap01(memo.base + ((now - memo.t) / 1000) * nodeGraphAudioPlayerPlaylistPlaybackRate(nodeId));
+  } else {
+    const actual = typeof nodeGraphSamplePhaseForNode === "function"
+      ? nodeGraphSamplePhaseForNode(nodeId)
+      : nodeGraphFiniteNumber(node.samplePhase);
+    base = wrap01(actual - nodeGraphFiniteNumber(node.params?.playlistScrub));
   }
-  const actual = typeof nodeGraphSamplePhaseForNode === "function"
-    ? nodeGraphSamplePhaseForNode(nodeId)
-    : nodeGraphFiniteNumber(node.samplePhase);
-  const currentOffset = nodeGraphFiniteNumber(node.params?.playlistScrub);
-  const offset01 = ((currentOffset % 1) + 1) % 1;
-  const base = ((actual - offset01) % 1 + 1) % 1;
-  let newOffset = desired - base;
-  // Prefer shortest wrap in −1…+1.
-  if (newOffset > 0.5) {
-    newOffset -= 1;
-  } else if (newOffset <= -0.5) {
-    newOffset += 1;
+  nodeGraphAudioPlayerPlaylistSeekBase.set(nodeId, { base, t: now, transport, sampleId: node.sample?.id });
+  let offset = desired - base;
+  // Shortest wrap in -1..+1.
+  if (offset > 0.5) {
+    offset -= 1;
+  } else if (offset <= -0.5) {
+    offset += 1;
   }
-  nodeGraphAudioPlayerPlaylistWritePhaseOffset(nodeId, newOffset, { record: false });
-  // Remember intended absolute position for refresh / display.
+  nodeGraphAudioPlayerPlaylistWritePhaseOffset(nodeId, offset, { record: false });
   if (typeof rememberNodeGraphAudioPlayerSamplePhase === "function") {
     rememberNodeGraphAudioPlayerSamplePhase(nodeId, desired);
+  }
+}
+
+/**
+ * Scrubber / wave-seek entry point: move the playhead to raw (0..1). While
+ * dragging, call with commit: false. On release, commit: true writes the
+ * final position once (and saves the working patch when record is set).
+ */
+function nodeGraphAudioPlayerPlaylistApplyScrub(nodeId, raw, { record = false, commit = false } = {}) {
+  nodeGraphAudioPlayerPlaylistSeekViaOffset(nodeId, raw);
+  if (commit && record && typeof saveNodeGraphWorkingPatchToUserSettings === "function") {
+    saveNodeGraphWorkingPatchToUserSettings();
   }
 }
 
@@ -2718,6 +2755,7 @@ function nodeGraphAudioPlayerPlaylistEnhanceDisplay(section, nodeId) {
   section.replaceChildren(wavePage, waveplayPage, plPage, playinfoPage, vsxyPage, vslrPage);
   nodeGraphAudioPlayerPlaylistEnsureLayout(section, nodeId);
 
+  nodeGraphAudioPlayerPlaylistBindWaveSeek(section, nodeId);
   nodeGraphAudioPlayerPlaylistApplyFace(nodeId);
 
   window.requestAnimationFrame(() => {
@@ -2962,5 +3000,230 @@ if (typeof document !== "undefined") {
     document.addEventListener("DOMContentLoaded", nodeGraphAudioPlayerPlaylistMigrateOpenDisplays, { once: true });
   } else {
     window.requestAnimationFrame(nodeGraphAudioPlayerPlaylistMigrateOpenDisplays);
+  }
+}
+
+/**
+ * Click / drag on the waveform display moves the playhead. This follows the
+ * Knob face → Bias pattern (attachNodeGraphKnobFaceDrag + beginNodeSliderDrag):
+ * - a pointerdown on the face surface starts a drag;
+ * - it is ignored while another slider drag is active, for non-primary
+ *   buttons, and for the second press of a double-click (which goes to the
+ *   face's own dblclick action);
+ * - the drag captures the pointer and stops the event so the module/graph
+ *   drag never starts;
+ * - every move writes the live value with no history entry;
+ * - release commits once.
+ * The value is the absolute pointer x ratio across the display (from
+ * getBoundingClientRect), so it works at any workspace zoom and under the
+ * whole-module embed scale. Writes go through
+ * nodeGraphAudioPlayerPlaylistApplyScrub (the phase-offset param). Seeks are
+ * not undo steps, the same as the transport.
+ * Plain drag on the wave page used to pan the view. Pan is now Alt-drag;
+ * Shift-drag (relative nudge) and the region handles are unchanged.
+ */
+function nodeGraphAudioPlayerPlaylistBindWaveSeek(section, nodeId) {
+  if (!section || section.dataset.musicPlayerWaveSeekBound === "1") {
+    return;
+  }
+  section.dataset.musicPlayerWaveSeekBound = "1";
+  const surfaceFor = (target) => target?.closest?.(".node-music-player-page-wave, .node-music-player-waveplay-wave");
+  const ratioAt = (surface, event) => {
+    const rect = surface.getBoundingClientRect();
+    return rect.width > 0 ? Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width)) : 0;
+  };
+  const idFor = () => String(nodeId || section.closest?.("[data-node]")?.dataset?.node || "");
+  let drag = null;
+
+  const move = (event) => {
+    if (!drag || (drag.pointerId !== null && event.pointerId !== drag.pointerId)) {
+      return;
+    }
+    drag.value = ratioAt(drag.surface, event);
+    nodeGraphAudioPlayerPlaylistApplyScrub(drag.nodeId, drag.value, { record: false, commit: false });
+    event.preventDefault();
+    event.stopPropagation();
+  };
+  const end = (event) => {
+    if (!drag || (drag.pointerId !== null && event.pointerId !== undefined && event.pointerId !== drag.pointerId)) {
+      return;
+    }
+    const done = drag;
+    drag = null;
+    nodeGraphMvp.musicPlayerWaveSeekDragging = false;
+    done.surface.classList.remove("value-dragging");
+    document.body.classList.remove("node-slider-dragging");
+    try {
+      if (done.pointerId !== null && done.surface.hasPointerCapture?.(done.pointerId)) {
+        done.surface.releasePointerCapture(done.pointerId);
+      }
+    } catch (_error) {
+      // ignore
+    }
+    if (event.type !== "pointercancel") {
+      nodeGraphAudioPlayerPlaylistApplyScrub(done.nodeId, done.value, { record: true, commit: true });
+    }
+  };
+
+  section.addEventListener("pointerdown", (event) => {
+    const surface = surfaceFor(event.target);
+    if (!surface || event.button > 0 || event.detail > 1 || drag) {
+      return;
+    }
+    if (event.target.closest?.("button, input, select, textarea, a, [contenteditable]")) {
+      return;
+    }
+    // Shift-drag (relative phase nudge), Alt-drag (view pan) and the start/end
+    // region handles keep the waveform canvas's own gestures.
+    if (event.shiftKey || event.altKey) {
+      return;
+    }
+    const waveCanvas = surface.querySelector("canvas.node-sample-waveform-canvas");
+    if (waveCanvas && typeof nodeGraphSampleWaveformRegionHandleHit === "function"
+      && nodeGraphSampleWaveformRegionHandleHit(section, waveCanvas, event.clientX)) {
+      return;
+    }
+    if (nodeGraphMvp.sliderDragging || nodeGraphMvp.musicPlayerWaveSeekDragging) {
+      return;
+    }
+    if (typeof nodeGraphPatchIsLocked === "function" && nodeGraphPatchIsLocked()) {
+      return;
+    }
+    const id = idFor();
+    if (!id) {
+      return;
+    }
+    drag = { nodeId: id, surface, pointerId: event.pointerId ?? null, value: ratioAt(surface, event) };
+    nodeGraphMvp.musicPlayerWaveSeekDragging = true;
+    surface.classList.add("value-dragging");
+    document.body.classList.add("node-slider-dragging");
+    nodeGraphAudioPlayerPlaylistApplyScrub(id, drag.value, { record: false, commit: false });
+    if (event.pointerId !== undefined) {
+      try {
+        surface.setPointerCapture(event.pointerId);
+      } catch (_error) {
+        // ignore
+      }
+    }
+    event.preventDefault();
+    event.stopPropagation();
+  }, true);
+  // Capture phase: runs before the canvas's own handlers, which would pan.
+  section.addEventListener("pointermove", move, true);
+  section.addEventListener("pointerup", end, true);
+  section.addEventListener("pointercancel", end, true);
+  section.addEventListener("lostpointercapture", end, true);
+}
+
+/**
+ * Music Player button labels (transport glyphs, page tabs) fill their own button:
+ * the largest font whose text fits the button box with a ~9% inner margin, per
+ * button. Sizes come from offsetWidth/offsetHeight, i.e. zoom-1 layout px, so the
+ * workspace zoom and the canvas whole-module scale only scale them uniformly.
+ * Re-fit when a button's layout box or its label changes.
+ */
+const NODE_GRAPH_AUDIO_PLAYER_LABEL_SELECTOR = ".node-music-player-pl-transport-btn, .node-music-player-page-btn";
+const NODE_GRAPH_AUDIO_PLAYER_LABEL_FILL = 0.82; // 1 - 2 x 9% margin
+// Page-button row (wave/waveplay/playlist/playinfo/XY/LR): ONE fixed zoom-1 size for
+// every label; a label too wide for its box tightens letter-spacing (never the size).
+const NODE_GRAPH_AUDIO_PLAYER_PAGE_LABEL_PX = 11.5;
+const NODE_GRAPH_AUDIO_PLAYER_PAGE_LABEL_FILL = 0.94;
+let nodeGraphAudioPlayerLabelCtx = null;
+let nodeGraphAudioPlayerLabelResize = null;
+let nodeGraphAudioPlayerLabelMutate = null;
+
+function nodeGraphAudioPlayerFitLabel(btn) {
+  if (!(btn instanceof HTMLElement)) {
+    return;
+  }
+  const w = btn.clientWidth;
+  const h = btn.clientHeight;
+  const text = String(btn.textContent || "").trim();
+  if (!(w > 0 && h > 0) || !text) {
+    return;
+  }
+  const cs = window.getComputedStyle(btn);
+  if (!nodeGraphAudioPlayerLabelCtx) {
+    nodeGraphAudioPlayerLabelCtx = document.createElement("canvas").getContext("2d");
+  }
+  // Same ink-box approach as the canvas labels (paint-helpers / number readout):
+  // size and center on measureText actualBoundingBox*, not on line metrics, so
+  // glyphs like ▶ ⏹ ⏸ 🔁 🔀 sit in the middle of their button.
+  const ctx = nodeGraphAudioPlayerLabelCtx;
+  const U = 100;
+  ctx.font = `${cs.fontStyle} ${cs.fontWeight} ${U}px ${cs.fontFamily}`;
+  const m = ctx.measureText(text);
+  const num = (v, fb) => (Number.isFinite(Number(v)) ? Number(v) : fb);
+  const inkL = num(m.actualBoundingBoxLeft, 0);
+  const inkR = num(m.actualBoundingBoxRight, m.width);
+  const inkA = num(m.actualBoundingBoxAscent, U * 0.8);
+  const inkD = num(m.actualBoundingBoxDescent, U * 0.2);
+  const fontA = num(m.fontBoundingBoxAscent, inkA);
+  const fontD = num(m.fontBoundingBoxDescent, inkD);
+  const inkW = Math.max(1, inkL + inkR);
+  const inkH = Math.max(1, inkA + inkD);
+  const byWidth = (w * NODE_GRAPH_AUDIO_PLAYER_LABEL_FILL * U) / Math.max(inkW, m.width * 0.98);
+  const byInkH = (h * NODE_GRAPH_AUDIO_PLAYER_LABEL_FILL * U) / inkH;
+  const isPage = btn.classList.contains("node-music-player-page-btn");
+  const px = isPage
+    ? NODE_GRAPH_AUDIO_PLAYER_PAGE_LABEL_PX
+    : Math.max(4, Math.floor(Math.min(byWidth, byInkH) * 10) / 10);
+  const k = px / U;
+  let ls = 0; // px letter-spacing (page row only)
+  if (isPage) {
+    const gaps = Math.max(1, Array.from(text).length);
+    const over = Math.max(inkW, m.width) * k - w * NODE_GRAPH_AUDIO_PLAYER_PAGE_LABEL_FILL;
+    if (over > 0) ls = -Math.min(over / gaps, px * 0.12);
+  }
+  // line-height = the button height, so the content area is centered in it. Shift
+  // by the gap between the content-area center and the ink center (and same in x).
+  const dy = ((fontA - fontD) - (inkA - inkD)) / 2 * k; // + = ink sits low
+  // trailing letter-spacing after the last glyph shifts the ink left by ls/2
+  const dx = ((inkR - inkL) / 2 - m.width / 2) * k + ls / 2; // + = ink sits right
+  const key = `${px}|${ls.toFixed(2)}|${dx.toFixed(2)}|${dy.toFixed(2)}|${h}`;
+  // A canvas re-open restores the face's saved inline styles, so trust the style too.
+  if (btn.dataset.labelFit === key && btn.style.fontSize === `${px}px`) {
+    return;
+  }
+  btn.dataset.labelFit = key;
+  const st = btn.style;
+  st.setProperty("font-size", `${px}px`, "important");
+  st.setProperty("letter-spacing", `${ls.toFixed(2)}px`, "important");
+  st.setProperty("line-height", `${Math.max(1, h - Math.abs(dy) * 2).toFixed(2)}px`, "important");
+  st.setProperty("padding-top", `${Math.max(0, -dy * 2).toFixed(2)}px`, "important");
+  st.setProperty("padding-bottom", `${Math.max(0, dy * 2).toFixed(2)}px`, "important");
+  st.setProperty("padding-left", `${Math.max(0, -dx * 2).toFixed(2)}px`, "important");
+  st.setProperty("padding-right", `${Math.max(0, dx * 2).toFixed(2)}px`, "important");
+}
+
+function nodeGraphAudioPlayerFitSectionLabels(section) {
+  if (!(section instanceof Element)) {
+    return;
+  }
+  if (!nodeGraphAudioPlayerLabelResize && typeof ResizeObserver === "function") {
+    nodeGraphAudioPlayerLabelResize = new ResizeObserver((entries) => {
+      for (const entry of entries) nodeGraphAudioPlayerFitLabel(entry.target);
+    });
+  }
+  if (!nodeGraphAudioPlayerLabelMutate && typeof MutationObserver === "function") {
+    nodeGraphAudioPlayerLabelMutate = new MutationObserver((records) => {
+      const seen = new Set();
+      for (const record of records) {
+        const btn = (record.target.nodeType === 1 ? record.target : record.target.parentElement)
+          ?.closest?.(NODE_GRAPH_AUDIO_PLAYER_LABEL_SELECTOR);
+        if (btn && !seen.has(btn)) {
+          seen.add(btn);
+          nodeGraphAudioPlayerFitLabel(btn);
+        }
+      }
+    });
+  }
+  for (const btn of section.querySelectorAll(NODE_GRAPH_AUDIO_PLAYER_LABEL_SELECTOR)) {
+    if (!btn._labelFitWatched) {
+      btn._labelFitWatched = true;
+      nodeGraphAudioPlayerLabelResize?.observe(btn);
+      nodeGraphAudioPlayerLabelMutate?.observe(btn, { childList: true, characterData: true, subtree: true });
+    }
+    nodeGraphAudioPlayerFitLabel(btn);
   }
 }

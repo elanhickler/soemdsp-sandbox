@@ -145,7 +145,6 @@ const NODE_GRAPH_BYPASS_TYPE_OVERRIDES = Object.freeze({
   vibratoGenerator: "silence",
   wowAndFlutter: "silence",
   softpopOscillator: "silence",
-  softpopFilter: "silence",
   wavetable2d: "silence",
   wavetable3d: "silence",
   flexGrid: "silence",
@@ -268,6 +267,7 @@ function nodeGraphModuleBypassInputsOutputs(type) {
     inputs,
     outputs,
     declared: def?.bypass || null,
+    declaredMap: Array.isArray(def?.bypassMap) ? def.bypassMap : null,
   };
 }
 
@@ -304,9 +304,13 @@ function nodeGraphModuleBypassPolicy(type) {
  * @returns {Array<{ out: string, in: string }>}
  */
 function nodeGraphModuleBypassPortMap(type) {
-  const { inputs, outputs } = nodeGraphModuleBypassInputsOutputs(type);
+  const { inputs, outputs, declaredMap } = nodeGraphModuleBypassInputsOutputs(type);
   if (!outputs.length) {
     return [];
+  }
+  // Module-declared map (definition bypassMap): exact rows, unlisted outputs silent.
+  if (declaredMap) {
+    return declaredMap.map((row) => ({ out: String(row.out), in: String(row.in) }));
   }
   const inputSet = new Set(inputs);
   const map = [];

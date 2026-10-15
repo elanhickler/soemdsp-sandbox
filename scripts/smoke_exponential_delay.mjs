@@ -125,8 +125,31 @@ function near(cs, pos) {
 }
 
 {
+  // Mono: original single ring. L == R, taps at u = i/N, sum / N.
+  const { L, R } = impulseResponse(2);
+  for (let i = 0; i < L.length; i++) if (L[i] !== R[i]) throw new Error(`Mono L != R at ${i}`);
+  // Old v3 formula: impulse through linear-interp taps at expTap(i/N), each 1/N.
+  const ref = new Float64Array(L.length);
+  for (let i = 1; i <= N; i++) {
+    const d = Math.max(1, expTap(i / N));
+    const k = Math.floor(d);
+    const frac = d - k;
+    ref[k] += (1 - frac) / N;
+    if (k + 1 < ref.length) ref[k + 1] += frac / N;
+  }
+  let err = 0;
+  for (let i = 0; i < L.length; i++) err = Math.max(err, Math.abs(L[i] - ref[i]));
+  // dsp_exp vs Math.exp shifts tap fractions slightly (~1e-4).
+  if (err > 1e-3) throw new Error(`Mono vs old formula max err ${err}`);
+  // Mono Left equals Dual Left (same ring, slots, seeds).
+  const dual = impulseResponse(0);
+  for (let i = 0; i < L.length; i++) if (L[i] !== dual.L[i]) throw new Error("Mono L != Dual L");
+  console.log(`mono ok: taps ${clusters(L).map((c) => c.at).join(",")} err ${err.toExponential(2)}`);
+}
+
+{
   // No feedback: an impulse must leave nothing after the farthest tap.
-  for (const mode of [0, 1]) {
+  for (const mode of [0, 1, 2]) {
     const len = Math.ceil(TIME * SR) * 4;
     const { L, R } = impulseResponse(mode, 0, len);
     const tail = Math.ceil(TIME * SR) + 4;
@@ -243,6 +266,14 @@ function runGraph(mode) {
 }
 runGraph(0);
 runGraph(1);
+{
+  const l = capturePort(2, PORT_LEFT);
+  const r = capturePort(2, PORT_RIGHT);
+  let pk = 0;
+  for (let k = 0; k < l.length; k++) { if (l[k] !== r[k]) throw new Error("graph Mono L != R"); pk = Math.max(pk, Math.abs(l[k])); }
+  if (!(pk > 0.01)) throw new Error("graph Mono silent");
+  console.log(`graph mono ok peak=${pk.toFixed(4)}`);
+}
 {
   const a = capturePort(0, PORT_LEFT, 0.25, 0);
   const b = capturePort(0, PORT_LEFT, 0.25, 0.2);

@@ -476,9 +476,9 @@ List cyan Parameter ports on the definition as `blockRateInputs` / `blockRateOut
 
 **Yellow Graph parameters â€” real units (DOMAIN)**
 
-- Storage, slider readouts, effect math, and **parameter-out jacks** use **DOMAIN** (Hz, cycles, harmonic count, â€¦) â€” **never** normalize to 0â€¦1 for display or Graph-module communication.
-- Example: Growl **Phase Skew** is cycles **0â€¦1000** (Hydrus); the value sent into DSP and out the cyan param jack is that number, not `skew/1000`.
-- Ordinary params may still emit unit 0â€¦1 on param-out for Uni/Bi CV chaining (`nodeGraphParamDomainToModOutput`). Continuous Additive rows that need real-unit MOD/param-out set `outputDomain: true` **on that parameter** (PWM, Phase Rotation, Hz, â€¦). Choice rows never do â€” they are 0â€¦N like every other choice slider.
+- Storage, slider readouts, and effect math use **DOMAIN** (Hz, cycles, harmonic count, â€¦) â€” **never** normalize to 0â€¦1 for display or Graph-module communication.
+- Example: Growl **Phase Skew** is cycles **0â€¦1000** (Hydrus); the value sent into DSP is that number, not `skew/1000`.
+- **Parameter-out jacks are a pure THRU** of whatever is wired into that parameter's MOD input (same signal, same rate, summed if several). Nothing wired = nothing sent (0; native leaves the far end unwired). They never emit the slider value. Continuous Additive rows that need real-unit MOD set `outputDomain: true` **on that parameter** (PWM, Phase Rotation, Hz, â€¦). Choice rows never do â€” they are 0â€¦N like every other choice slider.
 - **Smoothing:** same surfaces as every module (mouse travel unit 0â€¦1 â†’ DOMAIN target â†’ existing L/1P/â€¦ kernels). Native Yellow path uses graph_engine Controls.
 
 ---

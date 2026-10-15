@@ -524,12 +524,62 @@ function nodeGraphExternalMessageSameOriginStrict(event) {
   return Boolean(event && event.origin && event.origin === window.location.origin);
 }
 
+/**
+ * Origin rules (docs/EMBED.md, "Message origins"):
+ * - Everything that edits, inspects or drives the sandbox UI (project data,
+ *   file grid, button events, autoframe, set-view, live output/speed, state
+ *   and patch requests, render) is accepted only from the sandbox's own
+ *   origin.
+ * - Player-control messages (soemdsp:player:*) are also accepted from the
+ *   direct parent window (event.source === window.parent), from any origin
+ *   unless ?origins=a.com,b.com narrows that to an allowlist.
+ * A message without an origin is never accepted.
+ */
 function nodeGraphExternalMessageOriginAllowed(event) {
-  if (!event || !event.origin) {
+  return nodeGraphExternalMessageSameOriginStrict(event);
+}
+
+function nodeGraphExternalAllowedParentOrigins() {
+  if (nodeGraphExternalAllowedParentOrigins.cache !== undefined) {
+    return nodeGraphExternalAllowedParentOrigins.cache;
+  }
+  let list = null;
+  try {
+    const raw = String(new URLSearchParams(window.location.search || "").get("origins") || "").trim();
+    if (raw) {
+      list = raw.split(",").map((entry) => {
+        const value = entry.trim();
+        if (!value) return "";
+        try {
+          return new URL(value.includes("://") ? value : `https://${value}`).origin;
+        } catch (_error) {
+          return "";
+        }
+      }).filter(Boolean);
+    }
+  } catch (_error) {
+    list = null;
+  }
+  nodeGraphExternalAllowedParentOrigins.cache = list;
+  return list;
+}
+
+function nodeGraphExternalPlayerMessageAllowed(event) {
+  if (nodeGraphExternalMessageSameOriginStrict(event)) {
     return true;
   }
-  return event.origin === window.location.origin;
+  if (!event || !event.origin || event.origin === "null") {
+    return false;
+  }
+  const parentWindow = window.parent;
+  if (!parentWindow || parentWindow === window || event.source !== parentWindow) {
+    return false;
+  }
+  const allow = nodeGraphExternalAllowedParentOrigins();
+  return !allow || allow.includes(event.origin);
 }
+window.nodeGraphExternalPlayerMessageAllowed = nodeGraphExternalPlayerMessageAllowed;
+window.nodeGraphExternalAllowedParentOrigins = nodeGraphExternalAllowedParentOrigins;
 
 function nodeGraphWindowReopenGateSamples(sampleRate = nodeGraphMvp?.sampleRate || 44100) {
   return Math.max(1, Math.round(Math.max(1, nodeGraphFiniteNumber(sampleRate, 44100)) * nodeGraphWindowReopenGateSeconds));
@@ -828,6 +878,9 @@ window.addEventListener("message", (event) => {
       }
     }
   } else if (message.type === "soundemote:autoframe") {
+    if (!nodeGraphExternalMessageOriginAllowed(event)) {
+      return;
+    }
     nodeGraphExternalScheduleAutoFrame(
       message.padding != null ? { padding: message.padding, force: true } : { force: true },
     );
@@ -853,6 +906,9 @@ window.addEventListener("message", (event) => {
       setNodeGraphLiveSpeed(message.speed);
     }
   } else if (message.type === "soundemote:request-live-state") {
+    if (!nodeGraphExternalMessageOriginAllowed(event)) {
+      return;
+    }
     const enabled = soemdspSandboxLiveOutputEnabled();
     const rawSpeed = nodeGraphMvp?.live?.speedMultiplier;
     const speed = rawSpeed != null ? Number(rawSpeed) : 1;
@@ -863,9 +919,12 @@ window.addEventListener("message", (event) => {
         enabled,
         speed,
       },
-      "*",
+      event.origin,
     );
   } else if (message.type === "soundemote:request-current-patch") {
+    if (!nodeGraphExternalMessageOriginAllowed(event)) {
+      return;
+    }
     let projectData = null;
     try {
       if (typeof nodeGraphShareProjectData === "function") {
@@ -880,7 +939,7 @@ window.addEventListener("message", (event) => {
         requestId: message.requestId || null,
         projectData,
       },
-      "*",
+      event.origin,
     );
   } else if (message.type === "soundemote:render-sample") {
     if (!nodeGraphExternalMessageOriginAllowed(event)) {
@@ -892,12 +951,12 @@ window.addEventListener("message", (event) => {
         const url = nodeGraphMvp?.renderedAudioUrl || "";
         event.source?.postMessage(
           { type: "soundemote:rendered-sample", url },
-          "*",
+          event.origin,
         );
       }).catch(() => {
         event.source?.postMessage(
           { type: "soundemote:rendered-sample", url: "" },
-          "*",
+          event.origin,
         );
       });
     }

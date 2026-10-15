@@ -516,19 +516,6 @@ function nodeGraphParamFoldModSources(base, sources, metadata = {}) {
 }
 
 
-/**
- * Parameter port as MOD/bus source.
- * Default: linear unit 0…1 of its domain (no skew) for Uni/Bi CV chaining.
- * `outputDomain: true` (per-param opt-in): emit raw DOMAIN (Hz, cycles, …)
- * — never normalize. Choice sliders are never tagged.
- */
-function nodeGraphParamDomainToModOutput(value, metadata = {}) {
-  if (metadata && metadata.outputDomain === true) {
-    const n = Number(value);
-    return Number.isFinite(n) ? n : 0;
-  }
-  return nodeGraphParamDomainToUnitLinear(value, metadata);
-}
 
 /**
  * SIGNAL IN — additive domain (Knob-style): result = domain + inSample.

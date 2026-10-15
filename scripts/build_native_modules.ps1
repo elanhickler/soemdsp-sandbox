@@ -208,7 +208,7 @@ $modules = @(
     "soemdsp_softpop_oscillator_left",
     "soemdsp_softpop_oscillator_right",
     "soemdsp_softpop_oscillator_noise",
-    "soemdsp_softpop_oscillator_cv",
+    "soemdsp_softpop_oscillator_pitch",
     "soemdsp_softpop_oscillator_display_bin_count",
     "soemdsp_softpop_oscillator_display_bin",
     "soemdsp_softpop_oscillator_display_take",
@@ -668,7 +668,7 @@ if ($node) {
   }
   & $node.Source "$root\scripts\smoke_sabrina_tap_mod.mjs"
   if ($LASTEXITCODE -ne 0) {
-    throw "Combined build: sabrina Tap Mod switch smoke FAILED"
+    throw "Combined build: sabrina Tap Mod slider smoke FAILED"
   }
   & $node.Source "$root\scripts\smoke_named_portal_bus.mjs"
   if ($LASTEXITCODE -ne 0) {

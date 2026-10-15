@@ -10,7 +10,8 @@
 // (native_modules/softpop_filter).
 //
 // Per channel, per sample:
-//   fInst = fEff * exp(e)            (softpop_core.h noise_step at Pitch Mod, mean-corrected)
+//   fInst = fEff * exp(e)            (softpop_core.h noise_step at Pitch Mod, mean-corrected;
+//                                     Color Average 2-tap averages the pitch noise)
 //   phi  += clamp(fInst, +-fs/2) / fs   (polyBlep increment)
 //   x     = source(phi, Morph)
 //   y     = x * (sqrt(1 - AmpMod) + sqrt(AmpMod) n_amp) * Amplitude   (constant level)
@@ -23,18 +24,18 @@
 //                   Morph = dither amount (0 = plain sine, 1 = full Robin).
 //   2 Trisaw        naive_trisaw(phi + d, Morph) (soemdsp library), full dither.
 //                   Morph = peak position (0.5 triangle, 0 / 1 saw-like).
-//   3 Soft Square   soundemote.dev /softsquare "Diroxe square" (hyperbolic
-//                   soft-sign of a naive triangle, one sqrt per sample):
-//                   T = -tri(phi), y = T sqrt(1+k) / sqrt(T^2 + k), k = 4 Morph^2
-//                   (Morph 0 = hard square, 0.5 = site default k 1, 1 = k 4, near triangle).
+//   3 Soft Square   soundemote.dev /softsquare SquareToSine (hyperbolic soft clip
+//                   of a sine): S = sin(2 pi phi), y = S sqrt(1+k) / sqrt(S^2 + k),
+//                   k = 10^(4 - 8 Morph) (Morph 0 = k 1e4, sine within ~1e-4;
+//                   0.5 = site default k 1; 1 = k 1e-4, near-hard square). sin + sqrt per sample.
 //   4 Soft Tri      soundemote.dev /softtriangle "Diroxe tri" (KVR p=9310541,
 //                   one sqrt per sample): per half cycle x in [0,1), b = x - 0.5,
 //                   y = +-g (rr - sqrt(b^2 + k)), rr = sqrt(0.25 + k),
 //                   g = 4 (rr + sqrt k), k = 0.16 Morph^4
 //                   (Morph 0 = sharp triangle, 0.5 = site default k 0.01, 1 = k 0.16, rounded).
-// Outputs: Mono = the L channel render, Left, Right, Left/Right Noise = the
-// audio noise stream N_audio (Color-shaped, unit RMS), Left/Right CV =
-// log2(fInst / fEff) in octaves.
+// Outputs: Mono = the L channel render, Left, Right, Noise L/R = the
+// audio noise stream N_audio (Color-shaped, unit RMS), ♯/♭ L/R = the
+// pitch the oscillator actually steps with, as a MIDI note (A4 = 440).
 
 #include "softpop_core.h"
 
@@ -58,6 +59,8 @@ struct Chan {
   double ditherOffset;
   bool ditherOn;
   double instHz;  // last phase-increment Hz
+  double pitch;   // last ♯/♭ pitch of instHz: MIDI note, 69 + 12 log2(|instHz| / 440)
+  double env;     // last |Amplitude * Amp Mod gain| (display line brightness)
   double out;
 };
 
@@ -68,7 +71,7 @@ struct State {
   bool seeded;
   // Morph-derived shape constants (recomputed when Morph changes).
   double lastMorph;
-  double sqK, sqNorm;       // Soft Square k, sqrt(1 + k)
+  double sqK, sqNorm;       // Soft Square (SquareToSine) k, sqrt(1 + k)
   double triK, triR, triG;  // Soft Tri k, rr, g
   Display disp;
 };
@@ -92,7 +95,9 @@ static void reseed(State& s) {
     ch.ditherOffset = 0.0;
     ch.ditherOn = false;
     ch.instHz = 0.0;
+    ch.pitch = 0.0;
     ch.out = 0.0;
+    ch.env = 0.0;
   }
   s.seeded = true;
 }
@@ -101,23 +106,11 @@ static void update_morph(State& s, double morph) {
   if (morph == s.lastMorph) return;
   s.lastMorph = morph;
   const double m = morph;
-  s.sqK = 4.0 * m * m;
+  s.sqK = pow_pos_d(10.0, 4.0 - 8.0 * m);
   s.sqNorm = __builtin_sqrt(1.0 + s.sqK);
   s.triK = 0.16 * m * m * m * m;
   s.triR = __builtin_sqrt(0.25 + s.triK);
   s.triG = 4.0 * (s.triR + __builtin_sqrt(s.triK));
-}
-
-// soundemote.dev ssNaiveTriY: +1/4 cycle, peak 1 at phi = 0.25.
-static inline double naive_tri_quarter(double t) {
-  const double x = wrap01(t + 0.25);
-  return x < 0.5 ? 4.0 * x - 1.0 : 3.0 - 4.0 * x;
-}
-
-static inline double soft_square(const State& s, double t) {
-  const double T = -naive_tri_quarter(t);
-  const double d = __builtin_sqrt(T * T + s.sqK);
-  return d > 1.0e-18 ? T * s.sqNorm / d : 0.0;
 }
 
 static inline double soft_tri(const State& s, double t) {
@@ -142,6 +135,13 @@ static double render_chan(State& s, Chan& ch, int src, double morph, int color, 
   const bool wrap = wrapped != next;
   ch.phase = wrapped;
   ch.instHz = f;
+  {
+    // ♯/♭ out: the exact Hz the oscillator steps with (after the Nyquist
+    // clamp), as a MIDI note at A4 = 440 (graph pitch cable law). Through-
+    // zero / negative Hz report |f|; |f| below 1e-9 Hz reports 1e-9 Hz.
+    const double af = f < 0.0 ? -f : f;
+    ch.pitch = 69.0 + 12.0 * (dsp_ln((af > 1.0e-9 ? af : 1.0e-9) / 440.0) * 1.4426950408889634);
+  }
 
   const bool dither = src == kSrcDitherSine || src == kSrcTrisaw;
   if (dither) {
@@ -162,11 +162,13 @@ static double render_chan(State& s, Chan& ch, int src, double morph, int color, 
   switch (src) {
     case kSrcDitherSine: x = dsp_sin_turns(wrap01(ph + morph * ch.ditherOffset)); break;
     case kSrcTrisaw: x = naive_trisaw(ph + ch.ditherOffset, morph); break;
-    case kSrcSoftSquare: x = soft_square(s, ph); break;
+    case kSrcSoftSquare: { const double sn = dsp_sin_turns(ph); x = sn * s.sqNorm / __builtin_sqrt(sn * sn + s.sqK); break; }
     case kSrcSoftTri: x = soft_tri(s, ph); break;
     default: x = dsp_sin_turns(ph); break;
   }
-  ch.out = safety_limit(x * amp_mod_gain(ampMod, ch.noise.na) * amp);
+  const double env = amp_mod_gain(ampMod, ch.noise.na) * amp;
+  ch.env = env < 0.0 ? -env : env;
+  ch.out = safety_limit(x * env);
   return ch.out;
 }
 
@@ -202,7 +204,7 @@ extern "C" void soemdsp_softpop_oscillator_reset(int handle) {
 
 // One frame. freqHz = fEff (graph_engine resolve_osc_hz). source: choiceId
 // 0 Sine / 1 Dithered Sine / 2 Trisaw / 3 Soft Square / 4 Soft Tri.
-// color: 0 white / 1 pink / 2 brown. Returns Mono (= the L channel render).
+// color: 0 White / 1 Gaussian / 2 Average / 3 Pink / 4 Brown. Returns Mono (= the L channel render).
 extern "C" double soemdsp_softpop_oscillator_sample(
   int handle,
   double freqHz,
@@ -234,7 +236,12 @@ extern "C" double soemdsp_softpop_oscillator_sample(
   const double am = safe(ampMod);
   const double amp = safe(amplitude);
   const double l = render_chan(s, s.ch[0], src, m, c, fEff, cents, am, amp, sr);
-  display_note(s.disp, 1, fEff, 0.0, cents, sr, s.ch[0].instHz);
+  // Display in pitch: fEff * exp(np s), the symmetric log-pitch offset around
+  // the note. Not the audio's mean-corrected Hz (its -s^2/2 would sit the
+  // pitch median below the note) and not Nyquist-clamped.
+  const double dispHz = s.disp.armed > 0.0 && cents != 0.0
+    ? fEff * dsp_exp(s.ch[0].noise.np * cents * (kLn2 / 1200.0)) : fEff;
+  display_note(s.disp, 1, fEff, 0.0, cents, sr, dispHz, s.ch[0].env < 1.0 ? s.ch[0].env : 1.0);
   render_chan(s, s.ch[1], src, m, c, fEff, cents, am, amp, sr);
   return l;
 }
@@ -254,13 +261,13 @@ extern "C" double soemdsp_softpop_oscillator_noise(int handle, int ch) {
   return gPool[handle - 1].ch[ch & 1].noise.audio;
 }
 
-extern "C" double soemdsp_softpop_oscillator_cv(int handle, int ch) {
+extern "C" double soemdsp_softpop_oscillator_pitch(int handle, int ch) {
   if (handle < 1 || handle > kMaxInstances) return 0.0;
-  return gPool[handle - 1].ch[ch & 1].noise.cv;
+  return gPool[handle - 1].ch[ch & 1].pitch;
 }
 
 // Test probe: 0/1 n_pitch L/R, 2/3 n_amp L/R, 4/5 N_audio L/R, 6/7 phase-
-// increment Hz L/R, 9/10 CV L/R.
+// increment Hz L/R, 9/10 CV L/R (octaves), 11/12 ♯/♭ pitch L/R (MIDI).
 extern "C" double soemdsp_softpop_oscillator_probe(int handle, int which) {
   if (handle < 1 || handle > kMaxInstances) return 0.0;
   const State& s = gPool[handle - 1];
@@ -272,6 +279,8 @@ extern "C" double soemdsp_softpop_oscillator_probe(int handle, int which) {
     case 6: case 7: return ch.instHz;
     case 9: return s.ch[0].noise.cv;
     case 10: return s.ch[1].noise.cv;
+    case 11: return s.ch[0].pitch;
+    case 12: return s.ch[1].pitch;
     default: return 0.0;
   }
 }

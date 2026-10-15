@@ -33,7 +33,7 @@ const src = fs.readFileSync(
   path.join(root, "node-live-audio-worklet-native-graph.js"),
   "utf8",
 );
-const start = src.indexOf("NodeLiveAudioProcessor.CONTROLLER_DIGITAL_THRU_TYPES");
+const start = src.indexOf("NodeLiveAudioProcessor.HOST_INLET_MIX = ");
 const end = src.indexOf(
   "NodeLiveAudioProcessor.prototype.syncNativeHostCvFeeders",
   start,

@@ -16,6 +16,8 @@
 //   Left, even taps to Right. Wet per side = side sum / that side's tap
 //   count. With N = 1 the single tap feeds both sides. Write = In (no
 //   feedback).
+// Stereo Mode 2 = Mono: the original single-ring layout. One ring, N taps
+//   at u = i/N, wet = sum / N, the same signal on Mix L and Mix R.
 // Random Offset: each tap gets a seeded random in [0,1] * Random Offset
 // seconds added (static). Drift: per-tap FBM, +-Drift Amp on that tap's
 // delay, walking at Drift Speed Hz. Mix L/R = dry * (1 - Mix) + wet side * Mix. Min read 1 sample.
@@ -154,7 +156,9 @@ extern "C" double soemdsp_exponential_delay_sample(
   if (!(offsetSec >= 0.0)) offsetSec = 0.0;
   if (offsetSec > kMaxDelaySeconds) offsetSec = kMaxDelaySeconds;
   const unsigned int seedU = (unsigned int)safe(seed);
-  const bool split = safe(stereoMode) >= 0.5;
+  const double modeValue = safe(stereoMode);
+  const bool mono = modeValue >= 1.5;
+  const bool split = !mono && modeValue >= 0.5;
 
   const int write = s.writeIndex;
   const double maxDelaySamples = timeSec * rate;
@@ -163,7 +167,20 @@ extern "C" double soemdsp_exponential_delay_sample(
   double wetL = 0.0;
   double wetR = 0.0;
 
-  if (split) {
+  if (mono) {
+    double sum = 0.0;
+    for (int i = 1; i <= n; i++) {
+      const int t = i - 1;
+      const double d = tap_delay(
+        s, 0, t, (double)i / (double)n, maxDelaySamples, offsetSamples,
+        amount, seedU, fbmInc
+      );
+      sum += read_tap(s.buffer[0], write, d);
+    }
+    wetL = sum / (double)n;
+    wetR = wetL;
+    s.buffer[0][write] = (float)raw;
+  } else if (split) {
     double sumL = 0.0;
     double sumR = 0.0;
     int countL = 0;
@@ -225,5 +242,5 @@ extern "C" double soemdsp_exponential_delay_max_seconds() {
 }
 
 extern "C" int soemdsp_exponential_delay_version() {
-  return 5;
+  return 6;
 }

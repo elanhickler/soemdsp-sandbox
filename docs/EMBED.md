@@ -71,3 +71,31 @@ Messages that edit the graph (`soundemote:sandbox-project-data`, `soemdsp-sandbo
   - The module appears exactly as in the workspace, so a tall module letterboxes in a wide frame.
   - Workspace-only styling that is scoped to `.node-graph-workspace` doesn't apply in the tile (box-shadow and filter are matched inline).
   - The input/output section's labels stay visible; only its jacks are hidden.
+
+## Player API (postMessage, version 1)
+
+Script: `public/modules/audioPlayer/audio-player-api.js`. Every message is `{ type: "soemdsp:player:<name>", version: 1, ...fields }`.
+
+Commands (host -> iframe):
+
+| type | fields | effect |
+|---|---|---|
+| `soemdsp:player:load` | `tracks: [{ title?, bytes: ArrayBuffer \| Blob \| File, mimeType? }]` or `tracks: [{ title?, url }]` | Replace the playlist. Bytes need no CORS; urls must be fetchable by the iframe. Do not mix bytes and urls. |
+| `soemdsp:player:play` | `index?` | Start (or resume) playback, optionally at a track. |
+| `soemdsp:player:pause` / `stop` / `next` / `prev` | - | Transport. |
+| `soemdsp:player:select` | `index`, `play?` | Select a track. |
+| `soemdsp:player:seek` | `seconds` or `position` (0..1) | Move the playhead. |
+| `soemdsp:player:volume` | `value` (0..1) | Player amplitude. |
+| `soemdsp:player:get-state` | - | Replies with a `state` event. |
+
+Events (iframe -> host): `ready { patch, nodeId }`, `state { playing, paused, index, count, title, position, duration, volume, needsGesture }` (4 Hz while changing, and on demand), `error { code, message }` with code `bad-request`, `autoplay-blocked`, `decode`, `no-player`, `unknown-type`, `internal`. Commands sent before boot are queued. When audio is blocked by autoplay policy the embed shows its own start overlay and `state.needsGesture` is true.
+
+## Message origins
+
+- Player messages (`soemdsp:player:*`) are accepted from the sandbox's own origin, or from the direct parent window (`event.source === window.parent`). Add `?origins=https://a.example,https://b.example` to restrict parents to an allowlist.
+- Every other message type (autoframe, set-view, set-live-output, request-live-state, request-current-patch, project data, ...) is accepted only from the sandbox's own origin.
+- Replies go to the requester's `event.origin`, never `"*"`.
+
+## Perform-canvas embed (`?mode=perform&embed=1`)
+
+A patch can set up its own full-frame embed: pin a module in `view.canvases.root.elements` (x 0, y 0, w 1, h 1), and set `node.ui.showInCanvas` and `node.ui.canvasWholeModule` on it. `?patch=<slug>&mode=perform&embed=1` then boots straight into the perform canvas (no start menu) with that module shown whole at its zoom-1 size, scaled uniformly to fit. A Music Player opens on its playlist page, and the start overlay appears when audio needs a click. Example: `patches/soundemotecommusicplayer.json` (used by soundemote.com/music).

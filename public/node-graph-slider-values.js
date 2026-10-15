@@ -936,7 +936,7 @@ function setNodeSliderMetadata(slider, metadata) {
     clampNodeSliderValue(absDef, absMin, absMax),
   );
   const destDomain = metadata.outputDomain === true;
-  // outputDomain tags MOD/param-out in real units. The slider always spans
+  // outputDomain tags MOD into this param in real units. The slider always spans
   // the parameter min…max (not a ±max offset thumb).
   const uiMin = absMin;
   const uiMax = absMax;

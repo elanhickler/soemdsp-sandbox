@@ -1558,16 +1558,7 @@ button.scw-label:hover,
   --sample-waveform-hud-font: 600 clamp(8px, 2.6cqi, 10px)/1 system-ui, sans-serif;
   --sample-waveform-hud-font-sm: 600 clamp(7px, 2.3cqi, 9px)/1 system-ui, sans-serif;
 }
-/* Playlist rows get a small additional reduction so file names and numbers
-   have breathing room in the fixed row slots. */
-.node-sample-waveform-display[data-node-type="audioPlayer"] .node-music-player-pl-list .node-music-player-pl-row {
-  font-size: 0.9em;
-  /* Keep the reduced row text's descenders inside the flex slot. */
-  line-height: 1.2;
-}
-.node-sample-waveform-display[data-node-type="audioPlayer"] .node-music-player-pl-list.is-single .node-music-player-pl-row {
-  font-size: 1.1em;
-}
+/* Playlist row text is sized from the row itself (see .node-music-player-pl-row). */
 /* Keep the now-playing label and face tabs clipped to their cells too. */
 .node-sample-waveform-display[data-node-type="audioPlayer"] .node-music-player-face-btn,
 .node-sample-waveform-display[data-node-type="audioPlayer"] .node-music-player-waveplay-song .node-music-player-pl-name,
@@ -1902,6 +1893,8 @@ button.scw-label:hover,
   background: transparent;
   color: var(--sample-waveform-hud-color);
   font: var(--sample-waveform-hud-font-sm);
+  /* font-size: per button, set by nodeGraphAudioPlayerFitLabel (fills the box). */
+  text-overflow: clip;
   /* A unit line-height clips the lowercase p descender at small sizes. */
   line-height: 1.2;
   outline: none;
@@ -1963,7 +1956,10 @@ button.scw-label:hover,
   background: transparent;
   color: var(--sample-waveform-hud-color);
   font: var(--sample-waveform-hud-font);
+  /* font-size: per button, set by nodeGraphAudioPlayerFitLabel (fills the box). */
   line-height: 1;
+  white-space: nowrap;
+  overflow: hidden;
   outline: none;
   cursor: var(--node-dot-cursor);
 }
@@ -2157,10 +2153,16 @@ button.scw-label:hover,
   padding: 10px 14px;
   font-size: 1.25em;
 }
+/* Each row is a size container so its text scales with the row height (the
+   row is a flex slot, so its height depends on how many slots fit). Number
+   and title are 0.7 of the row, with line-height equal to the row: one line,
+   ellipsis, descenders inside. Defined in layout px at workspace zoom 1;
+   zoom and whole-module embeds only scale it uniformly. */
 .node-music-player-pl-row {
   --node-music-player-pl-row-height: 1.35rem;
+  container-type: size;
   display: grid;
-  grid-template-columns: 1.4rem minmax(0, 1fr);
+  grid-template-columns: auto minmax(0, 1fr);
   grid-template-rows: auto;
   gap: 0 4px;
   align-items: center;
@@ -2223,7 +2225,9 @@ button.scw-label:hover,
   grid-row: 1;
   opacity: 0.7;
   font: inherit;
-  line-height: 1.2;
+  font-size: 70cqh;
+  line-height: 100cqh;
+  white-space: nowrap;
   font-variant-numeric: tabular-nums;
 }
 .node-music-player-pl-name {
@@ -2233,7 +2237,8 @@ button.scw-label:hover,
   text-overflow: ellipsis;
   white-space: nowrap;
   font: inherit;
-  line-height: 1.2;
+  font-size: 70cqh;
+  line-height: 100cqh;
 }
 .node-music-player-pl-now {
   --node-music-player-pl-wave-height: calc(var(--node-grid-height, 28px) * 2);

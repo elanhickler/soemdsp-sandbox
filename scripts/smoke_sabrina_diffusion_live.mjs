@@ -34,7 +34,7 @@ function setParams(h, diffusionAmount) {
     0.001,
     0,
     0, // lfoStyle Parabol
-    1, // delayTapMod on
+    1, // delayTapMod 1 (original depth)
   );
 }
 

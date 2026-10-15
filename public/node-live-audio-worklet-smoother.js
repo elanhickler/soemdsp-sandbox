@@ -427,13 +427,30 @@ NodeLiveAudioProcessor.prototype.applyParameterModulation = function applyParame
     return shouldClamp ? this.applyParameterBounds(result, metadata) : result;
 };
 
-NodeLiveAudioProcessor.prototype.readRuntimePortOutput = function readRuntimePortOutput(frameValues, nodeId, port = "Out", frame = 0, frames = 1) {
+NodeLiveAudioProcessor.prototype.readRuntimePortOutput = function readRuntimePortOutput(frameValues, nodeId, port = "Out", frame = 0, frames = 1, depth = 0) {
     const node = this.nodes.get(nodeId);
     if (!this.parameterOutputExists(node, port)) {
       return this.readRuntimeOutput(frameValues, nodeId, port);
     }
-    const value = this.readSmoothedParameter(node, port, 0, frame, frames);
-    return this.normalizeParameterOutputValue(value, node?.paramMeta?.[port] || {});
+    // Parameter out = THRU of this param's MOD input. Nothing wired = 0.
+    if (depth > 8) {
+      return 0;
+    }
+    const mods = this.parameterThruModulations(nodeId, port);
+    let sum = 0;
+    for (let i = 0; i < mods.length; i += 1) {
+      const m = mods[i];
+      if (!m) continue;
+      sum += nodeGraphFiniteNumber(this.readRuntimePortOutput(
+        frameValues,
+        m.sourceNode,
+        m.sourcePort,
+        frame,
+        frames,
+        depth + 1,
+      ));
+    }
+    return sum;
 };
 
 NodeLiveAudioProcessor.prototype.readEffectiveParameter = function readEffectiveParameter(node, key, fallback, frame, frames, frameValues) {
@@ -471,12 +488,9 @@ NodeLiveAudioProcessor.prototype.readEffectiveParameter = function readEffective
         frame,
         frames,
       ), metadata);
-      const srcNode = this.nodes?.get?.(modulation.sourceNode);
-      const srcPort = String(modulation.sourcePort || "");
-      const srcParamMeta = srcNode?.paramMeta?.[srcPort] || {};
-      // Module type does not retag the cable. outputDomain means real units.
-      const taggedDomain = srcParamMeta.outputDomain === true
-        || metadata.outputDomain === true;
+      // Module type does not retag the cable; a parameter-out is a thru with
+      // no units of its own. Destination outputDomain means real units.
+      const taggedDomain = metadata.outputDomain === true;
       return taggedDomain ? { value: Number(sample), domain: true } : sample;
     });
     if (typeof nodeGraphParamFoldOrBase === "function") {

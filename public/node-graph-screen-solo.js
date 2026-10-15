@@ -817,9 +817,30 @@ function nodeGraphScreenSoloWholeModuleCapture(host) {
   if (!(host instanceof Element) || host.closest(".node-layout-canvas-tile")) {
     return host?._wholeModuleNatural || null;
   }
-  const w = host.offsetWidth;
-  const h = host.offsetHeight;
+  let w = host.offsetWidth;
+  let h = host.offsetHeight;
+  // Perform mode (perform.css) hides the workspace before the canvas opens:
+  // briefly un-hide display:none ancestors (invisibly) to measure the zoom-1 box.
+  const unhidden = [];
+  if (!(w > 0 && h > 0)) {
+    for (let el = host; el && el !== document.documentElement; el = el.parentElement) {
+      if (window.getComputedStyle(el).display === "none") {
+        unhidden.push([el, el.getAttribute("style")]);
+        el.style.setProperty("display", "block", "important");
+        el.style.setProperty("visibility", "hidden", "important");
+      }
+    }
+    w = host.offsetWidth;
+    h = host.offsetHeight;
+  }
+  const restoreHidden = () => {
+    for (const [el, style] of unhidden.reverse()) {
+      if (style == null) el.removeAttribute("style");
+      else el.setAttribute("style", style);
+    }
+  };
   if (!(w > 0 && h > 0) && host._wholeModuleNatural) {
+    restoreHidden();
     return host._wholeModuleNatural;
   }
   const cs = window.getComputedStyle(host);
@@ -833,7 +854,12 @@ function nodeGraphScreenSoloWholeModuleCapture(host) {
   for (const name of ["font-family", "font-size", "font-weight", "line-height", "letter-spacing", "color"]) {
     vars[name] = cs.getPropertyValue(name);
   }
-  host._wholeModuleNatural = { w: Math.max(1, w), h: Math.max(1, h), vars };
+  restoreHidden();
+  if (!(w > 0 && h > 0)) {
+    // Still unmeasurable: keep any earlier capture, otherwise try again on the next fit.
+    return host._wholeModuleNatural || null;
+  }
+  host._wholeModuleNatural = { w, h, vars };
   return host._wholeModuleNatural;
 }
 
@@ -1167,6 +1193,10 @@ function endNodeGraphScreenSolo(options = {}) {
     if (typeof nodeGraphViewportCullApply === "function") {
       nodeGraphViewportCullApply(entry.host, true);
     }
+  }
+  // Leaving the canvas: drop the canvas In/Out-hidden state (every exit path ends here).
+  if (typeof nodeGraphLayoutCanvasSetIoHidden === "function") {
+    nodeGraphLayoutCanvasSetIoHidden(false);
   }
   window.requestAnimationFrame(() => {
     nodeGraphScreenSoloRefreshPaint();

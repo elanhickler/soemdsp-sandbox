@@ -21,11 +21,11 @@
 // nodeGraphSampleGradientStopsRgb). Gradient is edited with the shared
 // Display Settings gradient selector (profile "softpopFace", defaultStops "bone").
 //
-// Sine model: glow[x] += X per audio sample landing at x (X from Brightness),
+// Sine model: glow[x] += X * a per audio sample landing at x (X from Brightness,
+// the max; a = native |Amplitude * Amp Mod gain| clamped to 0..1, so quieter
+// output prints dimmer lines),
 // glow decays by half every Decay seconds of audio, so Pitch Mod draws a soft
-// glowing line around the note. Each column's height is the pitch density:
-// its glow / the brightest glow on the face, so the lines build the bell of
-// how often Pitch Mod visits each pitch (narrow Width = tall narrow bell).
+// glowing line around the note. Every printed line is full face height.
 // Filter model: the bandpass response at the
 // centre frequency with the current Q (Width), on the same pitch axis.
 
@@ -233,14 +233,8 @@ function nodeGraphSoftpopFacePresent(canvas, bins, info, settings, cssWidth) {
   if (model === 1) {
     const glow = nodeGraphSoftpopFaceAccumulate(canvas, bins, info, settings);
     const n = glow.length;
-    // Line height = pitch density (glow relative to the brightest bin).
-    let peak = 0;
-    for (let i = 0; i < n; i += 1) peak = Math.max(peak, glow[i]);
-    const height = new Float32Array(n);
-    if (peak > 0) for (let i = 0; i < n; i += 1) height[i] = glow[i] / peak;
     const lineGain = Math.max(0, Math.min(1, Number.isFinite(Number(settings.lineBrightness)) ? Number(settings.lineBrightness) : 1));
     const col = new Float32Array(w);
-    const colH = new Float32Array(w);
     for (let px = 0; px < w; px += 1) {
       const t = ((px + 0.5) / w) * n - 0.5;
       const i0 = Math.max(0, Math.min(n - 1, Math.floor(t)));
@@ -251,46 +245,37 @@ function nodeGraphSoftpopFacePresent(canvas, bins, info, settings, cssWidth) {
       const a = 0.25 * glow[im] + 0.5 * glow[i0] + 0.25 * glow[i1];
       const b = 0.25 * glow[i0] + 0.5 * glow[i1] + 0.25 * glow[ip];
       col[px] = lineGain * (1 - Math.exp(-(a + (b - a) * f)));
-      colH[px] = Math.max(0, Math.min(1, (0.25 * height[im] + 0.5 * height[i0] + 0.25 * height[i1]) * (1 - f) + (0.25 * height[i0] + 0.5 * height[i1] + 0.25 * height[ip]) * f));
     }
     // Line thickness: peak-preserving widening (max over a tapered window
     // of thickness device px). At ~1.5 css px on 1x screens this is a no-op.
     const r = Math.max(0, (thickCss * dpr - 1) / 2);
     const ri = Math.floor(r);
     const wide = ri > 0 ? new Float32Array(w) : col;
-    const wideH = ri > 0 ? new Float32Array(w) : colH;
     if (ri > 0) {
       for (let px = 0; px < w; px += 1) {
         let m = col[px];
-        let mh = colH[px];
         for (let d = 1; d <= ri; d += 1) {
           const k = 1 - d / (r + 1);
-          if (px - d >= 0 && col[px - d] * k > m) { m = col[px - d] * k; mh = colH[px - d]; }
-          if (px + d < w && col[px + d] * k > m) { m = col[px + d] * k; mh = colH[px + d]; }
+          if (px - d >= 0 && col[px - d] * k > m) m = col[px - d] * k;
+          if (px + d < w && col[px + d] * k > m) m = col[px + d] * k;
         }
         wide[px] = m;
-        wideH[px] = mh;
       }
     }
-    // WebGL (shared line renderer): one solid quad per run of equal colour
-    // and height, rising from the bottom to (pitch density) x face height.
+    // WebGL (shared line renderer): one full-height quad per run of equal colour.
     const plateIdxS = nodeGraphSoftpopFaceLutIndex(0, plate);
     const batch = typeof nodeGraphGlLinesBegin === "function"
       ? nodeGraphGlLinesBegin(canvas, nodeGraphSoftpopFaceRgb01(lut, plateIdxS))
       : null;
     if (batch) {
       let runStart = 0;
-      const yOf = (g) => Math.round(h * (1 - g));
       let runIdx = nodeGraphSoftpopFaceLutIndex(wide[0], plate);
-      let runY = yOf(wideH[0]);
       for (let px = 1; px <= w; px += 1) {
         const idx = px < w ? nodeGraphSoftpopFaceLutIndex(wide[px], plate) : -1;
-        const y = px < w ? yOf(wideH[px]) : -1;
-        if (idx === runIdx && y === runY) continue;
-        if (runIdx !== plateIdxS && runY < h) nodeGraphGlLinesRect(batch, runStart, runY, px - runStart, h - runY, nodeGraphSoftpopFaceRgb01(lut, runIdx));
+        if (idx === runIdx) continue;
+        if (runIdx !== plateIdxS) nodeGraphGlLinesRect(batch, runStart, 0, px - runStart, h, nodeGraphSoftpopFaceRgb01(lut, runIdx));
         runStart = px;
         runIdx = idx;
-        runY = y;
       }
       if (nodeGraphGlLinesEnd(batch, "alpha")) return true;
     }

@@ -7,7 +7,12 @@
 //
 // Pitch Mod (per channel, per sample):
 //   n_pitch = clamp(N_pitch * cal_color, +-4)   (unit RMS, full band)
-//   e = n_pitch * s - s^2 / 2,  s = cents * ln2 / 1200   (lognormal mean = 1)
+//   Average: n_pitch = (w[n] + w[n-1]) / sqrt(2) of the clamped Gaussian w
+//   (unit std, null at Nyquist; Pitch Mod only, Amp Mod / Noise stay Gaussian)
+//   e = n_pitch * s - c,  s = cents * ln2 / 1200, c = ln E[exp(n_pitch s)] so mean(fInst) = fEff:
+//   Gaussian / Average / Pink / Brown: c = s^2 / 2 (lognormal);
+//   White (uniform on +-sqrt3): c = ln(sinh(a) / a), a = sqrt3 s (a^2/6 = s^2/2 for tiny a).
+//   c is cached per (cents, Color), not computed per sample.
 //   fInst = fEff * exp(e), CV = e / ln2 (octaves)
 // Width W (0..1): Q = 2000 * (0.5/2000)^W.
 // Bandpass law (constant-peak BP, decramped so the analog curve is what plays):
@@ -28,18 +33,21 @@ static const unsigned int kSeedAmp = 0x5F02u;
 static const unsigned int kSeedAudio = 0x5F03u;
 static const unsigned int kSeedDither = 0x5F04u;  // Oscillator dither stream
 
-enum { kColorWhite = 0, kColorPink = 1, kColorBrown = 2 };
+// Color choices (choiceIds): White = flat U(-1,1) * sqrt 3, Gaussian = CLT-12,
+// Average = Gaussian streams + 2-tap averaged Pitch Mod noise, Pink, Brown.
+enum { kColorWhite = 0, kColorGaussian = 1, kColorAverage = 2, kColorPink = 3, kColorBrown = 4, kColorCount = 5 };
 
 static const double kLn2 = 0.6931471805599453;
 static const double kQMax = 2000.0;   // Width 0
 static const double kQMin = 0.5;      // Width 1
 static const double kModClamp = 4.0;  // n_pitch / n_amp clamp (sigma)
 
-// Unit-RMS calibration per Color. White: CLT-12 Gaussian, already unit.
+// Unit-RMS calibration per Color. White: U(-1,1) var 1/3 -> sqrt 3.
+// Gaussian / Average: CLT-12, already unit.
 // Pink: 1 / sqrt(sum of squares of the Kellet impulse response * 1/3)
 // (analytic, var 0.0375777). Brown: clamped walk measured variance 0.343276
 // (4000 chains x 1.2 M steps; uniform would be 1/3).
-static const double kCalColor[3] = {1.0, 5.15863561638852, 1.7067830316927417};
+static const double kCalColor[kColorCount] = {1.7320508075688772, 1.0, 1.0, 5.15863561638852, 1.7067830316927417};
 
 // Face display: log 20 Hz .. 20 kHz histogram of the L channel's |fInst|.
 static const int kDisplayBins = 256;
@@ -64,6 +72,7 @@ static inline double width_to_q(double width) {
 static inline double color_sample(NoiseColorChannel& n, int color) {
   if (color == kColorPink) return noise_color_sample(n, 3, 0.0, 1.0, 0.0) * kCalColor[kColorPink];
   if (color == kColorBrown) return noise_color_sample(n, 2, 0.0, 1.0, 0.0) * kCalColor[kColorBrown];
+  if (color == kColorWhite) return noise_color_sample(n, 0, 0.0, 1.0, 0.0) * kCalColor[kColorWhite];
   return noise_color_sample(n, 1, 0.0, 1.0, 0.0);
 }
 
@@ -90,13 +99,20 @@ struct Noise {
   double audio;  // last N_audio (unit RMS) = the Noise output
   double e;      // last ln(fInst / fEff)
   double cv;     // last e / ln2 (octaves)
+  double npPrev; // previous clamped pitch draw w[n-1] (Average; always tracked)
+  double cCents; // cached Pitch Mod cents / Color for s and c
+  int cColor;
+  double cS, cC; // s, mean correction c
 };
 
 static inline void noise_reset(Noise& n, unsigned int seed, unsigned int ch) {
   noise_color_reset(n.nPitch, seed_to_rng_state(seed_mix(seed, kSeedPitch, ch)));
   noise_color_reset(n.nAmp, seed_to_rng_state(seed_mix(seed, kSeedAmp, ch)));
   noise_color_reset(n.nAudio, seed_to_rng_state(seed_mix(seed, kSeedAudio, ch)));
-  n.np = n.na = n.audio = n.e = n.cv = 0.0;
+  n.np = n.na = n.audio = n.e = n.cv = n.npPrev = 0.0;
+  n.cCents = 0.0;
+  n.cColor = -1;
+  n.cS = n.cC = 0.0;
 }
 
 // One sample of all three streams + the mean-corrected pitch offset.
@@ -105,13 +121,28 @@ static inline double noise_step(Noise& n, int color, double fEff, double pitchCe
   const double xp = color_sample(n.nPitch, color);
   const double xa = color_sample(n.nAmp, color);
   n.audio = color_sample(n.nAudio, color);
-  n.np = clamp(xp, -kModClamp, kModClamp);
+  const double w = clamp(xp, -kModClamp, kModClamp);
+  n.np = color == kColorAverage ? (w + n.npPrev) * 0.7071067811865476 : w;
+  n.npPrev = w;
   n.na = clamp(xa, -kModClamp, kModClamp);
   n.e = 0.0;
   n.cv = 0.0;
   if (pitchCents == 0.0) return fEff;
-  const double s = pitchCents * (kLn2 / 1200.0);
-  n.e = n.np * s - 0.5 * s * s;
+  if (pitchCents != n.cCents || color != n.cColor) {
+    n.cCents = pitchCents;
+    n.cColor = color;
+    n.cS = pitchCents * (kLn2 / 1200.0);
+    n.cC = 0.5 * n.cS * n.cS;
+    if (color == kColorWhite) {
+      const double a = 1.7320508075688772 * (n.cS < 0.0 ? -n.cS : n.cS);
+      if (a > 1.0e-4) {
+        const double ea = dsp_exp(a);
+        n.cC = dsp_ln((ea - 1.0 / ea) / (2.0 * a));
+      }
+    }
+  }
+  const double s = n.cS;
+  n.e = n.np * s - n.cC;
   n.cv = n.e * (1.0 / kLn2);
   return fEff * dsp_exp(n.e);
 }
@@ -124,7 +155,9 @@ struct Display {
   int model;      // 0 = filter curve, 1 = glow line
 };
 
-static inline void display_note(Display& d, int model, double fEff, double q, double cents, double sr, double hz) {
+// weight: brightness of this sample's line, 0..1 (Oscillator: |Amplitude * Amp Mod
+// gain| clamped to 1; Filter: 1). Bins sum weights; count stays samples.
+static inline void display_note(Display& d, int model, double fEff, double q, double cents, double sr, double hz, double weight) {
   d.model = model;
   d.feff = fEff;
   d.q = q;
@@ -139,7 +172,7 @@ static inline void display_note(Display& d, int model, double fEff, double q, do
   int i = (int)(dsp_ln(a / kDisplayLoHz) * kInvSpan * (double)kDisplayBins);
   if (i < 0) i = 0;
   if (i >= kDisplayBins) i = kDisplayBins - 1;
-  d.bins[i] += 1.0;
+  d.bins[i] += weight;
 }
 
 static inline double display_take(Display& d) {

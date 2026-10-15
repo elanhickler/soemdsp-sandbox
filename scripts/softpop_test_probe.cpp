@@ -81,7 +81,7 @@ extern "C" void tp_set(double freq, double source, double morph, double width, d
 
 // Render n frames. mask bit c selects channel c: 0 Mono, 1 L, 2 R, 3.. probe(c-3)
 // (3/4 n_pitch L/R, 5/6 n_amp, 7/8 N_audio, 9/10 fInst, 11 Q, 12/13 CV,
-// Oscillator 14/15 Width gain). Planar: the k-th selected channel lands at
+// Oscillator 14/15 pitch L/R as MIDI note). Planar: the k-th selected channel lands at
 // gBuf[k*n + i]. useIn bit 0: per-sample Hz from gIn; bit 1 (Filter): external
 // input from gInL / gInR.
 extern "C" int tp_render(int h, int n, int mask, int useIn) {

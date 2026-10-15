@@ -1,0 +1,220 @@
+// soemdsp:player:* postMessage API, version 1. A host page (any origin, as
+// the direct parent; see ?origins=) loads tracks by URL or as bytes, drives
+// the transport, and receives ready/state/error events. Sending bytes
+// (ArrayBuffer / File / Blob) needs no CORS on the host's audio.
+// See docs/EMBED.md "Player API".
+(function soemdspPlayerApi() {
+  const VERSION = 1;
+  const PREFIX = "soemdsp:player:";
+  let replyOrigin = "";
+  let ready = false;
+  const queue = [];
+  let lastKey = "";
+
+  const parentWindow = () => (window.parent && window.parent !== window ? window.parent : null);
+  const nodeId = () => (Array.isArray(nodeGraphMvp?.patch?.nodes) ? nodeGraphMvp.patch.nodes : [])
+    .find((node) => node?.type === "audioPlayer")?.id || "";
+  const running = () => nodeGraphMvp?.live?.context?.state === "running";
+  const baseName = (url) => {
+    try {
+      return decodeURIComponent(new URL(url, window.location.href).pathname.split("/").pop() || "");
+    } catch (_error) {
+      return "";
+    }
+  };
+
+  function targetOrigin() {
+    if (replyOrigin) return replyOrigin;
+    let ref = "";
+    try {
+      ref = document.referrer ? new URL(document.referrer).origin : "";
+    } catch (_error) {
+      ref = "";
+    }
+    const allow = typeof nodeGraphExternalAllowedParentOrigins === "function" ? nodeGraphExternalAllowedParentOrigins() : null;
+    return ref && (ref === window.location.origin || !allow || allow.includes(ref)) ? ref : "";
+  }
+
+  function emit(type, payload = {}, origin = "") {
+    const parent = parentWindow();
+    const target = origin || targetOrigin();
+    if (!parent || !target) return;
+    try {
+      parent.postMessage({ type: PREFIX + type, version: VERSION, ...payload }, target);
+    } catch (_error) {
+      // Parent navigated away or origin mismatch.
+    }
+  }
+
+  const error = (code, message, extra = {}) => emit("error", { code, message, ...extra });
+
+  function state() {
+    const id = nodeId();
+    const node = id && typeof nodeGraphPatchNode === "function" ? nodeGraphPatchNode(id) : null;
+    const pl = id && typeof nodeGraphAudioPlayerPlaylistForNode === "function" ? nodeGraphAudioPlayerPlaylistForNode(id) : null;
+    const items = Array.isArray(pl?.items) ? pl.items : [];
+    const index = pl && typeof nodeGraphAudioPlayerPlaylistPlayingFrom === "function"
+      ? nodeGraphAudioPlayerPlaylistPlayingFrom(id, pl)
+      : Number(pl?.index ?? -1);
+    const entry = node?.sample?.id ? nodeGraphMvp?.sampleBuffers?.get?.(node.sample.id) : null;
+    const duration = entry?.frames > 0 ? entry.frames / Math.max(1, entry.sampleRate || 44100) : 0;
+    const phase = id && typeof nodeGraphSamplePhaseForNode === "function" ? nodeGraphSamplePhaseForNode(id) : 0;
+    const transport = Math.round(Number(node?.params?.transport));
+    const item = items[index] || null;
+    return {
+      nodeId: id,
+      playing: [3, 4, 5].includes(transport) && running() && Boolean(node?.sample?.id),
+      paused: transport === 2,
+      index: Number.isFinite(index) ? index : -1,
+      count: items.length,
+      title: String(item?.title || item?.name || node?.sample?.name || ""),
+      position: Math.round(phase * duration * 1000) / 1000,
+      duration: Math.round(duration * 1000) / 1000,
+      volume: Number(node?.params?.amplitude ?? 1),
+      needsGesture: !running(),
+    };
+  }
+
+  function tick() {
+    if (!ready || !targetOrigin()) return;
+    const s = state();
+    const key = JSON.stringify({ ...s, position: s.playing ? s.position : Math.round(s.position) });
+    if (key !== lastKey) {
+      lastKey = key;
+      emit("state", s);
+    }
+  }
+
+  async function startAudio() {
+    const live = nodeGraphMvp?.live;
+    // A start begun without a gesture hangs in context.resume(); clear it.
+    if (live?.outputEnabled && !live.context && typeof setNodeGraphLiveOutputEnabled === "function") {
+      await setNodeGraphLiveOutputEnabled(false);
+    }
+    if (typeof nodeGraphExternalStartLiveOutput === "function") nodeGraphExternalStartLiveOutput();
+    const until = Date.now() + 800;
+    while (!running() && Date.now() < until) await new Promise((r) => setTimeout(r, 50));
+    if (!running()) {
+      error("autoplay-blocked", "The browser needs a click in the player before audio can start.");
+      if (typeof window.soemdspEmbedShowStartOverlay === "function") window.soemdspEmbedShowStartOverlay(true);
+    }
+  }
+
+  function trackFile(track, i) {
+    const title = String(track.title || "").trim();
+    const name = String(track.name || "").trim() || baseName(track.url || "") || `track-${i + 1}.audio`;
+    const blob = track.file instanceof Blob ? track.file
+      : track.bytes instanceof ArrayBuffer || ArrayBuffer.isView(track.bytes) ? new Blob([track.bytes], { type: track.mime || "" })
+        : null;
+    if (!blob) return null;
+    return { file: new File([blob], name, { type: blob.type || track.mime || "", lastModified: Number(track.lastModified) || i }), title };
+  }
+
+  async function load(id, msg) {
+    const tracks = Array.isArray(msg.tracks) ? msg.tracks.filter((t) => t && typeof t === "object") : [];
+    if (!tracks.length) return error("bad-request", "load needs tracks: [{ url } | { bytes } | { file }]");
+    const asBytes = tracks.map(trackFile);
+    let cards;
+    if (asBytes.every(Boolean)) {
+      const picked = nodeGraphAudioPlayerLibraryRememberPickedFiles(id, asBytes.map((t) => t.file)) || [];
+      cards = picked.map((card, i) => (asBytes[i]?.title ? { ...card, name: asBytes[i].title, title: asBytes[i].title } : card));
+    } else if (asBytes.some(Boolean)) {
+      return error("bad-request", "load: send either all bytes/files or all urls, not a mix");
+    } else {
+      cards = tracks.map((t, i) => {
+        if (!t.url) return null;
+        const url = new URL(String(t.url), window.location.href).href;
+        return { url, name: String(t.title || baseName(url) || `track ${i + 1}`) };
+      }).filter(Boolean);
+    }
+    if (!cards.length) return error("bad-request", "load: no usable tracks");
+    nodeGraphAudioPlayerLibraryBindCards(id, cards, { folderDive: false, folderPath: "", persist: false });
+    document.documentElement.dataset.soemdspEmbedTracks = String(cards.length);
+    const start = Math.max(0, Math.min(cards.length - 1, Math.round(Number(msg.startIndex) || 0)));
+    if (msg.autoplay) await play(id, start);
+    else await nodeGraphAudioPlayerLibraryPlayIndex(id, start, { autoplay: false }).catch(() => {});
+    // Keep the visible page in sync with the stored face after the playlist changes.
+    if (typeof nodeGraphAudioPlayerPlaylistApplyFace === "function") nodeGraphAudioPlayerPlaylistApplyFace(id);
+  }
+
+  async function play(id, index) {
+    await startAudio();
+    const node = nodeGraphPatchNode(id);
+    const pl = nodeGraphAudioPlayerPlaylistForNode(id);
+    try {
+      if (Number.isFinite(index) || !node?.sample?.id) {
+        await nodeGraphAudioPlayerLibraryPlayIndex(id, Number.isFinite(index) ? index : Math.max(0, pl?.index || 0), { autoplay: true });
+      } else {
+        nodeGraphAudioPlayerWriteTransport(id, nodeGraphAudioPlayerPlaylistPlayModeForLoop(pl?.loopMode));
+      }
+    } catch (e) {
+      error("decode", String(e?.message || e), { index });
+    }
+  }
+
+  function setVolume(id, value) {
+    const v = Math.max(0, Math.min(1, Number(value)));
+    if (!Number.isFinite(v)) return error("bad-request", "volume needs value 0..1");
+    const slider = document.querySelector(`.dsp-node[data-node="${CSS.escape(id)}"] input[data-param="amplitude"]`);
+    if (slider && typeof setNodeSliderValue === "function") {
+      setNodeSliderValue(slider, v, { interaction: "program" });
+    } else {
+      const node = nodeGraphPatchNode(id);
+      node.params = { ...(node.params || {}), amplitude: String(v) };
+      if (typeof scheduleNodeGraphLiveParameterSync === "function") scheduleNodeGraphLiveParameterSync();
+    }
+  }
+
+  async function handle(msg, origin) {
+    const id = nodeId();
+    if (!id) return error("no-player", "this patch has no Music Player module");
+    const cmd = msg.type.slice(PREFIX.length);
+    switch (cmd) {
+      case "load": await load(id, msg); break;
+      case "play": await play(id, msg.index != null ? Math.round(Number(msg.index)) : undefined); break;
+      case "pause": nodeGraphAudioPlayerWriteTransport(id, 2); break;
+      case "stop": nodeGraphAudioPlayerPlaylistStop(id); break;
+      case "next": nodeGraphAudioPlayerPlaylistPlayNext(id); break;
+      case "prev": nodeGraphAudioPlayerPlaylistPlayPrev(id); break;
+      case "select": {
+        const i = Math.round(Number(msg.index));
+        if (!Number.isFinite(i)) return error("bad-request", "select needs index");
+        if (msg.play) await play(id, i);
+        else await nodeGraphAudioPlayerLibraryPlayIndex(id, i, { autoplay: false }).catch((e) => error("decode", String(e?.message || e), { index: i }));
+        break;
+      }
+      case "seek": {
+        const s = state();
+        const pos = msg.position != null ? Number(msg.position) : s.duration > 0 ? Number(msg.seconds) / s.duration : NaN;
+        if (!Number.isFinite(pos)) return error("bad-request", "seek needs seconds (track loaded) or position 0..1");
+        nodeGraphAudioPlayerPlaylistApplyScrub(id, Math.max(0, Math.min(1, pos)), { record: false, commit: true });
+        break;
+      }
+      case "volume": setVolume(id, msg.value); break;
+      case "get-state": emit("state", state(), origin); return;
+      default: return error("unknown-type", `unknown message ${msg.type}`);
+    }
+    window.setTimeout(tick, 50);
+  }
+
+  window.addEventListener("message", (event) => {
+    const msg = event.data && typeof event.data === "object" ? event.data : null;
+    if (!msg || typeof msg.type !== "string" || !msg.type.startsWith(PREFIX)) return;
+    if (typeof nodeGraphExternalPlayerMessageAllowed !== "function" || !nodeGraphExternalPlayerMessageAllowed(event)) return;
+    if (event.source === parentWindow()) replyOrigin = event.origin;
+    const run = () => handle(msg, event.origin).catch((e) => error("internal", String(e?.message || e)));
+    if (ready) run();
+    else queue.push(run);
+  });
+
+  function onReady() {
+    ready = true;
+    emit("ready", { patch: String(nodeGraphMvp?.loadedPatchSlug || ""), nodeId: nodeId() });
+    while (queue.length) queue.shift()();
+    window.setInterval(tick, 250);
+  }
+  if (document.documentElement.dataset.nodeSandboxInterfaceReady === "true") onReady();
+  else window.addEventListener("nodeSandboxInterfaceReady", onReady, { once: true });
+
+  window.soemdspPlayerApiState = state;
+})();

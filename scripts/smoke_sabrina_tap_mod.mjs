@@ -1,9 +1,10 @@
-// Sabrina Tap Mod switch (delayTapMod, graph slot kParamMode):
-//  Off: the 2 main (non-diffuse) delay taps hold a fixed length (LFO depth 0 on
-//       just those two); the LFO keeps running and the 12 diffusion allpasses
-//       keep modulating.
-//  On (default): bit-identical to Walter's original (the HEAD build), when
-//       that build is available via git.
+// Sabrina Tap Mod slider (delayTapMod 0..2, graph slot kParamMode): multiplies
+// the LFO depth on the 2 main (non-diffuse) delay taps.
+//  0: those taps hold a fixed length; the LFO keeps running and the 12
+//     diffusion allpasses keep modulating.
+//  1 (default): bit-identical to Walter's original (the HEAD build), when
+//     that build is available via git.
+//  2: double depth -- differs from 1, and 0.5 sits between 0 and 1.
 // Run: node scripts/smoke_sabrina_tap_mod.mjs
 import fs from "fs";
 import path from "path";
@@ -58,6 +59,13 @@ for (const [name, style] of [["parabol", 0], ["fbm", 1]]) {
   if (!(r.onVsOff > 1e-4)) fail(`${name}: On and Off sound the same`);
   if (!(r.offVsOffNoMod > 1e-4)) fail(`${name}: Off froze the diffusion modulation too`);
   if (!(r.flipVsOn > 1e-4)) fail(`${name}: switching Off mid-play did not take effect`);
+  const dbl = render(cur, { delayTapMod: 2, lfoStyle: style });
+  const half = render(cur, { delayTapMod: 0.5, lfoStyle: style });
+  const r2 = { dblVsOn: maxDiff(dbl, on), halfVsOn: maxDiff(half, on), halfVsOff: maxDiff(half, off) };
+  console.log(name, r2);
+  if (!(r2.dblVsOn > 1e-4)) fail(`${name}: Tap Mod 2 sounds the same as 1`);
+  if (!(r2.halfVsOn > 1e-4 && r2.halfVsOff > 1e-4)) fail(`${name}: Tap Mod 0.5 equals 0 or 1`);
+  for (const v of dbl) if (!Number.isFinite(v)) { fail(`${name}: non-finite output at Tap Mod 2`); break; }
   for (const v of off) if (!Number.isFinite(v)) { fail(`${name}: non-finite output`); break; }
 }
 
@@ -68,11 +76,11 @@ if (headBytes && headBytes.length) {
   for (const [name, style] of [["parabol", 0], ["fbm", 1]]) {
     const d = maxDiff(render(cur, { delayTapMod: 1, lfoStyle: style }), render(head, { lfoStyle: style }));
     console.log(name, { onVsHeadOriginal: d });
-    if (d !== 0) fail(`${name}: Tap Mod On differs from the original (HEAD) build`);
+    if (d !== 0) fail(`${name}: Tap Mod 1 differs from the original (HEAD) build`);
   }
 } else {
   console.log("skip: HEAD build not available, On-vs-original check skipped");
 }
 
 if (failed) process.exit(1);
-console.log("ok: sabrina Tap Mod switch -- Off holds the main taps, diffusion still modulates, On unchanged");
+console.log("ok: sabrina Tap Mod slider -- 0 holds the main taps, diffusion still modulates, 1 unchanged, 2 deeper");

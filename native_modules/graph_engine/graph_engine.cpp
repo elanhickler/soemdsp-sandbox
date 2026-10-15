@@ -654,7 +654,7 @@ extern "C" double soemdsp_softpop_oscillator_sample(
 extern "C" double soemdsp_softpop_oscillator_left(int handle);
 extern "C" double soemdsp_softpop_oscillator_right(int handle);
 extern "C" double soemdsp_softpop_oscillator_noise(int handle, int ch);
-extern "C" double soemdsp_softpop_oscillator_cv(int handle, int ch);
+extern "C" double soemdsp_softpop_oscillator_pitch(int handle, int ch);
 
 extern "C" int soemdsp_softpop_filter_create();
 extern "C" void soemdsp_softpop_filter_destroy(int handle);
@@ -3417,7 +3417,7 @@ static void init_node_defaults(Node& n, int typeId) {
       : (typeId == kTypeAcidSequencer) ? 16.0 // step length
       : (typeId == kTypeExponentialDelay) ? 7.0 // delay count
       : (typeId == kTypeFilterMorphOscillator) ? 1.0 // Poles
-      : (typeId == kTypeSoftpopOscillator || typeId == kTypeSoftpopFilter) ? 0.0 // Color White
+      : (typeId == kTypeSoftpopOscillator || typeId == kTypeSoftpopFilter) ? 1.0 // Color Gaussian
       : 4.0,
     // Generator Harmonics + Hypersaw2/RobinSupersaw voices stay continuous for Decimal trailing amp.
     // Freq Manager semitones live on stages and stay continuous, same as Pitch Manager octave.
@@ -7479,14 +7479,14 @@ static void process_softpop_oscillator(Circuit& g, Node& node, int frames) {
       node.nativeHandle, c.freq, control_effective(node.waveform), morph, c.pitchMod,
       c.ampMod, c.level, control_effective(node.stages), control_effective(node.seed), sr
     );
-    // Mono (= L render), Left, Right, Left/Right Noise, Left/Right CV (octaves).
+    // Mono (= L render), Left, Right, Noise L/R, CV L/R (octaves).
     node.buf[kPortMono][f] = y;
     node.buf[kPortLeft][f] = soemdsp_softpop_oscillator_left(node.nativeHandle);
     node.buf[kPortRight][f] = soemdsp_softpop_oscillator_right(node.nativeHandle);
     node.buf[kPortSaw][f] = soemdsp_softpop_oscillator_noise(node.nativeHandle, 0);
     node.buf[kPortRamp][f] = soemdsp_softpop_oscillator_noise(node.nativeHandle, 1);
-    node.buf[kPortSquare][f] = soemdsp_softpop_oscillator_cv(node.nativeHandle, 0);
-    node.buf[kPortTri][f] = soemdsp_softpop_oscillator_cv(node.nativeHandle, 1);
+    node.buf[kPortSquare][f] = soemdsp_softpop_oscillator_pitch(node.nativeHandle, 0);
+    node.buf[kPortTri][f] = soemdsp_softpop_oscillator_pitch(node.nativeHandle, 1);
   }
 }
 
@@ -12406,7 +12406,7 @@ static void process_exponential_delay(Circuit& g, Node& node, int frames) {
       control_audio(g, node.lfoAmplitude, f),
       control_audio(g, node.seed, f),
       control_audio(g, node.width, f),
-      control_effective(node.mode), // Stereo Mode: 0 Dual, 1 Split
+      control_effective(node.mode), // Stereo Mode: 0 Dual, 1 Split, 2 Mono
       sr
     ) * amp;
     // Mix L / Mix R only (no Thru, no mono out).
@@ -12999,7 +12999,6 @@ static void process_bypass(Circuit& g, Node& node, int frames) {
     || node.typeId == kTypeSineWarp
     || node.typeId == kTypeFilterMorphOscillator
     || node.typeId == kTypeSoftpopOscillator
-    || node.typeId == kTypeSoftpopFilter
     || node.typeId == kTypeTheremin
     || node.typeId == kTypeDsfOscillator
     || node.typeId == kTypeHypersaw2
@@ -13013,6 +13012,28 @@ static void process_bypass(Circuit& g, Node& node, int frames) {
   }
   if (node.typeId == kTypeOutput) {
     process_output(g, node, frames);
+    return;
+  }
+  if (node.typeId == kTypeSoftpopFilter) {
+    // Same input resolution as process_softpop_filter (stereo_route.h feeds):
+    // Left / Right thru, a lone source into both; Mono out = Left (as live).
+    // Nothing wired = silence (the noise voice is a source). Noise / CV silent.
+    using namespace soemdsp::routing;
+    const StereoRoute route = stereo_route(probe_stereo_route_wiring(g, node));
+    mix_node_inputs(g, node, frames);
+    for (int f = 0; f < frames; f++) {
+      const double m = g.mixMono[f];
+      const double l = g.mixLeft[f];
+      const double r = g.mixRight[f];
+      const double yL = stereo_route_feed(route.feedL, m, l, r);
+      node.buf[kPortMono][f] = yL;
+      node.buf[kPortLeft][f] = yL;
+      node.buf[kPortRight][f] = stereo_route_feed(route.feedR, m, l, r);
+      node.buf[kPortSaw][f] = 0.0;
+      node.buf[kPortRamp][f] = 0.0;
+      node.buf[kPortSquare][f] = 0.0;
+      node.buf[kPortTri][f] = 0.0;
+    }
     return;
   }
   mix_node_inputs(g, node, frames);

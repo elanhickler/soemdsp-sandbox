@@ -15,7 +15,7 @@ const { gate, render, renderAll, withInstance, setParams, noiseLevel, x } = H;
 
 // Amp Mod level-preserving (Sine), long runs in the pool.
 const amPromises = [];
-for (const color of [0, 1, 2]) for (const a of [0, 0.25, 0.5, 0.75, 1]) {
+for (const color of [0, 1, 2, 3, 4]) for (const a of [0, 0.25, 0.5, 0.75, 1]) {
   amPromises.push(noiseLevel({ freq: 1000, color, ampMod: a }, 240).then((r) => ({ color, a, ...r })));
 }
 
@@ -46,11 +46,40 @@ for (const color of [0, 1, 2]) for (const a of [0, 0.25, 0.5, 0.75, 1]) {
   gate(worst < 0.01, `1 decorrelation (noise streams): max |r| = ${worst.toFixed(4)} (${worstName}) < 0.01`);
 }
 
+// ---------- 1b. Pitch Mod noise per Color: std, kurtosis, Average null at Nyquist ----------
+{
+  const stds = [], kurts = [];
+  let nullDb = 0;
+  for (const color of [0, 1, 2, 3, 4]) {
+    const [np] = withInstance({ freq: 700, pitch: 600, color, seed: 77 }, (h) => renderAll(h, SR * 4, [CH.NP_L]));
+    let m = 0, v = 0, q = 0;
+    for (const t of np) m += t;
+    m /= np.length;
+    for (const t of np) { const d = (t - m) ** 2; v += d; q += d * d; }
+    v /= np.length; q /= np.length;
+    stds.push(Math.sqrt(v)); kurts.push(q / (v * v));
+    if (color === 2) {
+      // Nyquist bin: sum (-1)^n np[n] over blocks vs the mean full-band power.
+      const B = 1024; let pN = 0, pAll = 0;
+      for (let b = 0; b + B <= np.length; b += B) {
+        let a = 0; for (let i = 0; i < B; i++) { a += (i & 1 ? -1 : 1) * np[b + i]; pAll += np[b + i] ** 2; }
+        pN += a * a / B;
+      }
+      nullDb = dB(pN / pAll);
+    }
+  }
+  gate(stds.slice(0, 3).every((v) => Math.abs(v - 1) < 0.02) && stds.slice(3).every((v) => Math.abs(v - 1) < 0.05),
+    `1b Pitch Mod noise std ~1 (White/Gaussian/Average/Pink/Brown): ${stds.map((v) => v.toFixed(3)).join(" / ")}`);
+  gate(Math.abs(kurts[0] - 1.8) < 0.05 && Math.abs(kurts[1] - 3) < 0.15,
+    `1b kurtosis: White ${kurts[0].toFixed(3)} (flat 1.8), Gaussian ${kurts[1].toFixed(3)} (normal 3; CLT-12 2.9)`);
+  gate(nullDb < -60, `1b Average Pitch Mod noise null at Nyquist: ${nullDb.toFixed(1)} dB re mean bin`);
+}
+
 // ---------- 2. Mono / Noise / CV / Seed / Reset / Source switch ----------
 {
   const base = { freq: 700, pitch: 600, ampMod: 0.5 };
-  let monoIsL = true, lrDiffer = true, noiseOk = true, cvErr = 0, hzErr = 0;
-  for (const source of [0, 1, 2, 3, 4]) for (const color of [0, 1, 2]) {
+  let monoIsL = true, lrDiffer = true, noiseOk = true, cvErr = 0, cvErrW = 0, hzErr = 0;
+  for (const source of [0, 1, 2, 3, 4]) for (const color of [0, 1, 2, 3, 4]) {
     const [m, l, r, nl, nr, npl, npr, cl, cr, fl] = withInstance({ ...base, source, color },
       (h) => renderAll(h, SR, [CH.MONO, CH.L, CH.R, CH.NAUD_L, CH.NAUD_R, CH.NP_L, CH.NP_R, CH.CV_L, CH.CV_R, CH.FI_L]));
     if (!bitEqual(m, l)) monoIsL = false;
@@ -58,20 +87,42 @@ for (const color of [0, 1, 2]) for (const a of [0, 0.25, 0.5, 0.75, 1]) {
     let pn = 0;
     for (let i = 0; i < nl.length; i++) pn += nl[i] * nl[i];
     if (Math.abs(dB(pn / nl.length)) > 0.5 || bitEqual(nl, nr)) noiseOk = false;
-    const s = base.pitch * Math.LN2 / 1200;
+    const s = base.pitch * Math.LN2 / 1200, a = Math.sqrt(3) * s;
+    const corr = color === 0 ? Math.log(Math.sinh(a) / a) : 0.5 * s * s;  // White: uniform +-sqrt3
     for (let i = 0; i < cl.length; i++) {
-      cvErr = Math.max(cvErr, Math.abs(cl[i] - (npl[i] * s - 0.5 * s * s) / Math.LN2), Math.abs(cr[i] - (npr[i] * s - 0.5 * s * s) / Math.LN2));
+      const err = Math.max(Math.abs(cl[i] - (npl[i] * s - corr) / Math.LN2), Math.abs(cr[i] - (npr[i] * s - corr) / Math.LN2));
+      if (color === 0) cvErrW = Math.max(cvErrW, err); else cvErr = Math.max(cvErr, err);
       hzErr = Math.max(hzErr, Math.abs(fl[i] / (base.freq * Math.pow(2, cl[i])) - 1));
     }
   }
-  gate(monoIsL, "2 Mono output: bit-identical to Left (5 sources x 3 colors, 1 s)");
+  gate(monoIsL, "2 Mono output: bit-identical to Left (5 sources x 5 colors, 1 s)");
   gate(lrDiffer, "2 Left and Right are independent renders");
-  gate(noiseOk, "2 Left/Right Noise: unit RMS (+-0.5 dB), L != R");
-  gate(cvErr < 1e-9 && hzErr < 1e-6, `2 Left/Right CV: log2(fInst/fEff) (max err ${cvErr.toExponential(1)} oct), Hz = fEff * 2^CV (max rel err ${hzErr.toExponential(1)})`);
+  gate(noiseOk, "2 Noise L/R: unit RMS (+-0.5 dB), L != R");
+  gate(cvErr < 1e-9 && cvErrW < 2e-6 && hzErr < 1e-6, `2 CV L/R: log2(fInst/fEff) (max err ${cvErr.toExponential(1)} oct; White ${cvErrW.toExponential(1)} oct, dsp_ln/dsp_exp mean correction), Hz = fEff * 2^CV (max rel err ${hzErr.toExponential(1)})`);
   const [c0] = withInstance({ ...base, pitch: 0 }, (h) => renderAll(h, SR / 10, [CH.CV_L]));
   gate(c0.every((v) => v === 0), "2 CV is exactly 0 with Pitch Mod 0");
+  // pitch L/R outs (♯/♭ MIDI, A4 = 69 = 440 Hz) = the Hz the oscillator steps with.
+  {
+    let pErr = 0, pErrCv = 0, sinErr = 0, flat = 0;
+    for (const color of [0, 1, 2, 3, 4]) for (const pitch of [0, 600, 2400]) {
+      const [pl, pr, fl, fr, cl, l] = withInstance({ freq: 700, pitch, color, source: SRC.SINE, ampMod: 0, seed: 99 },
+        (h) => renderAll(h, SR / 2, [CH.PITCH_L, CH.PITCH_R, CH.FI_L, CH.FI_R, CH.CV_L, CH.L]));
+      let ph = 0;
+      for (let i = 0; i < pl.length; i++) {
+        pErr = Math.max(pErr, Math.abs(pl[i] - (69 + 12 * Math.log2(Math.abs(fl[i]) / 440))), Math.abs(pr[i] - (69 + 12 * Math.log2(Math.abs(fr[i]) / 440))));
+        // Away from the Nyquist clamp (2400 c reaches it), pitch = Frequency + CV.
+        if (Math.abs(fl[i]) < 0.999 * SR / 2) pErrCv = Math.max(pErrCv, Math.abs(pl[i] - (69 + 12 * Math.log2(700 / 440) + 12 * cl[i])));
+        // Rebuild the Left sine from the pitch out alone and compare with the Left audio.
+        sinErr = Math.max(sinErr, Math.abs(l[i] - Math.sin(2 * Math.PI * ph)));
+        ph += 440 * Math.pow(2, (pl[i] - 69) / 12) / SR; ph -= Math.floor(ph);
+        if (pitch === 0 && pl[i] !== pl[0]) flat++;
+      }
+    }
+    gate(pErr < 1e-6 && pErrCv < 2e-5, `2 pitch L/R: MIDI of the stepped Hz (max err ${pErr.toExponential(1)} st), = 69 + 12 log2(Frequency/440) + 12 CV below Nyquist (max err ${pErrCv.toExponential(1)} st)`);
+    gate(sinErr < 1e-4 && flat === 0, `2 pitch L drives the sine: Left rebuilt from pitch L alone (max err ${sinErr.toExponential(1)}), constant at Pitch Mod 0`);
+  }
   for (const source of [SRC.SINE, SRC.DSINE, SRC.TRISAW]) {
-    const o = { ...base, source, morph: 0.7, color: 1, seed: 4242 };
+    const o = { ...base, source, morph: 0.7, color: 3, seed: 4242 };
     const [a] = withInstance(o, (h) => renderAll(h, SR, [CH.MONO]));
     const [b] = withInstance(o, (h) => renderAll(h, SR, [CH.MONO]));
     const resetOk = withInstance(o, (h) => {
@@ -137,7 +188,7 @@ for (const color of [0, 1, 2]) for (const a of [0, 0.25, 0.5, 0.75, 1]) {
 // ---------- 5. Pitch Mod symmetric in cents; near Nyquist ----------
 {
   let worst = { mean: 0, skew: 0, sd: 1 };
-  for (const color of [0, 1, 2]) for (const cents of [100, 1200]) {
+  for (const color of [0, 1, 2, 3, 4]) for (const cents of [100, 1200]) {
     let n = 0, s1 = 0, s2 = 0, s3 = 0;
     for (const seed of [1, 2, 3, 4]) {
       withInstance({ freq: 1000, pitch: cents, color, seed }, (h) => {
@@ -158,7 +209,7 @@ for (const color of [0, 1, 2]) for (const a of [0, 0.25, 0.5, 0.75, 1]) {
   gate(Math.abs(worst.mean) < 0.1 && Math.abs(worst.skew) < 0.15 && Math.abs(worst.sd - 1) < 0.05,
     `5 Pitch Mod: worst mean ${worst.mean.toFixed(3)}σ (<0.1), skew ${worst.skew.toFixed(3)} (<0.15), sd ${worst.sd.toFixed(3)} (1 ± 5 %)`);
   let finite = true, maxHz = 0;
-  for (const source of [0, 1, 2, 3, 4]) for (const color of [0, 1, 2]) {
+  for (const source of [0, 1, 2, 3, 4]) for (const color of [0, 1, 2, 3, 4]) {
     withInstance({ freq: 23000, pitch: 4800, ampMod: 1, color, source }, (h) => {
       render(h, 2 * SR, [CH.L, CH.R, CH.FI_L], (a) => {
         for (let i = 0; i < a[0].length; i++) {
@@ -191,7 +242,8 @@ for (const color of [0, 1, 2]) for (const a of [0, 0.25, 0.5, 0.75, 1]) {
   const f = 437.3, n = SR;
   const ph = (i) => { const p = (f / SR) * i; return p - Math.floor(p); };  // reference phase (no dither)
   const naiveTri = (t) => { const v = (t + 0.25) - Math.floor(t + 0.25); return v < 0.5 ? 4 * v - 1 : 3 - 4 * v; };
-  const softSquare = (t, m) => { const k = 4 * m * m; const T = -naiveTri(t); const d = Math.sqrt(T * T + k); return d > 1e-18 ? T * Math.sqrt(1 + k) / d : 0; };
+  // soundemote.dev /softsquare SquareToSine: S sqrt(1+k) / sqrt(S^2+k), k = 10^(4 - 8 Morph).
+  const softSquare = (t, m) => { const k = Math.pow(10, 4 - 8 * m), sn = Math.sin(2 * Math.PI * t); return sn * Math.sqrt(1 + k) / Math.sqrt(sn * sn + k); };
   const softTri = (t, m) => {
     const k = 0.16 * m ** 4, rr = Math.sqrt(0.25 + k), g = 4 * (rr + Math.sqrt(k));
     const u = t - Math.floor(t), first = u < 0.5, b = (first ? 2 * u : 2 * u - 1) - 0.5;
@@ -205,7 +257,7 @@ for (const color of [0, 1, 2]) for (const a of [0, 0.25, 0.5, 0.75, 1]) {
     return e;
   });
   for (const m of [0, 0.5, 1]) {
-    gate(maxErr(SRC.SQUARE, m, softSquare) < 1e-9, `14 Soft Square Morph ${m}: == soundemote.dev Diroxe square T sqrt(1+k)/sqrt(T^2+k), k = 4 Morph^2`);
+    gate(maxErr(SRC.SQUARE, m, softSquare) < 1e-6, `14 Soft Square Morph ${m}: == soundemote.dev SquareToSine S sqrt(1+k)/sqrt(S^2+k), k = 10^(4 - 8 Morph)`);
     gate(maxErr(SRC.TRI, m, softTri) < 1e-9, `14 Soft Tri Morph ${m}: == soundemote.dev Diroxe tri g (rr - sqrt(b^2+k)), k = 0.16 Morph^4`);
   }
   // Dithered sources: the average period stays exact; the dither only moves the per-cycle length.
@@ -245,10 +297,10 @@ for (const color of [0, 1, 2]) for (const a of [0, 0.25, 0.5, 0.75, 1]) {
   // Trisaw: Morph 0.5 = triangle (odd harmonics only), 0.1 = saw-like (strong even harmonics).
   const tri = spectrum(SRC.TRISAW, 0.5), saw = spectrum(SRC.TRISAW, 0.1);
   gate(dB(tri.h2 / tri.h1) < -40 && dB(saw.h2 / saw.h1) > -15, `15 Trisaw Morph: 0.5 triangle (H2 ${dB(tri.h2 / tri.h1).toFixed(1)} dB), 0.1 saw-like (H2 ${dB(saw.h2 / saw.h1).toFixed(1)} dB)`);
-  // Soft Square: brighter toward Morph 0 (square H3 -9.5 dB), duller toward 1 (triangle-ish).
+  // Soft Square: Morph 0 = pure sine (no H3), Morph 1 = square (H3 -9.5 dB).
   const sq0 = spectrum(SRC.SQUARE, 0), sq1 = spectrum(SRC.SQUARE, 1);
-  gate(Math.abs(dB(sq0.h3 / sq0.h1) + 9.54) < 1.5 && dB(sq1.h3 / sq1.h1) < dB(sq0.h3 / sq0.h1) - 6,
-    `15 Soft Square Morph: 0 = square (H3 ${dB(sq0.h3 / sq0.h1).toFixed(1)} dB, ideal -9.5), 1 softer (H3 ${dB(sq1.h3 / sq1.h1).toFixed(1)} dB)`);
+  gate(dB(sq0.h3 / sq0.h1) < -80 && Math.abs(dB(sq1.h3 / sq1.h1) + 9.54) < 1.5,
+    `15 Soft Square Morph: 0 = sine (H3 ${dB(sq0.h3 / sq0.h1).toFixed(1)} dB), 1 = square (H3 ${dB(sq1.h3 / sq1.h1).toFixed(1)} dB, ideal -9.5)`);
   // Soft Tri: Morph 0 = triangle (H3 -19.1 dB), 1 rounder (less H3).
   const t0s = spectrum(SRC.TRI, 0), t1s = spectrum(SRC.TRI, 1);
   gate(Math.abs(dB(t0s.h3 / t0s.h1) + 19.08) < 1.5 && dB(t1s.h3 / t1s.h1) < dB(t0s.h3 / t0s.h1) - 3,
@@ -322,10 +374,24 @@ for (const color of [0, 1, 2]) for (const a of [0, 0.25, 0.5, 0.75, 1]) {
   const [m0] = mean(0), [m600, u600] = mean(600);
   const c = 1200 * Math.log2(m600 / m0), cu = 1200 * Math.log2(u600 / m0);
   gate(Math.abs(c) < 1, `12 mean Hz @440: PitchMod 0 ${m0.toFixed(3)} / 600 ${m600.toFixed(3)} (${c >= 0 ? "+" : ""}${c.toFixed(2)} cents, ±1; uncorrected would be +${cu.toFixed(1)} cents)`);
+  // White (uniform +-sqrt3): c = ln(sinh(sqrt3 s) / (sqrt3 s)).
+  for (const pitch of [600, 2400]) {
+    const sw = pitch * Math.LN2 / 1200;
+    const meanW = (p) => withInstance({ freq: f0, pitch: p, color: 0, seed: 7 }, (h) => {
+      let sf = 0, sg = 0;
+      render(h, n, [CH.FI_L, CH.NP_L], ([fi, np]) => {
+        for (let i = 0; i < fi.length; i++) { sf += Math.abs(fi[i]); sg += f0 * Math.exp(np[i] * sw - 0.5 * sw * sw); }
+      });
+      return [sf / n, sg / n];
+    });
+    const [w0] = meanW(0), [w, g] = meanW(pitch);
+    const cw = 1200 * Math.log2(w / w0), cg = 1200 * Math.log2(g / w0);
+    gate(Math.abs(cw) < (pitch > 1200 ? 3 : 1), `12 White mean Hz @440, Pitch Mod ${pitch}: ${w.toFixed(3)} (${cw >= 0 ? "+" : ""}${cw.toFixed(2)} cents, ±${pitch > 1200 ? 3 : 1} (60 s sampling); Gaussian s^2/2 would be ${cg >= 0 ? "+" : ""}${cg.toFixed(1)} cents)`);
+  }
 }
 
 const am = await Promise.all(amPromises);
-for (const color of [0, 1, 2]) {
+for (const color of [0, 1, 2, 3, 4]) {
   const rows = am.filter((r) => r.color === color).sort((p, q) => p.a - q.a);
   const base = rows[0].rmsDb;
   const row = rows.map((r) => `A${r.a}:${(r.rmsDb - base) >= 0 ? "+" : ""}${(r.rmsDb - base).toFixed(2)}`).join(" ");

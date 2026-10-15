@@ -12,10 +12,10 @@ import { fileURLToPath } from "url";
 import { Worker, isMainThread, parentPort, workerData } from "worker_threads";
 
 export const SR = 48000;
-export const COLORS = ["white", "pink", "brown"];
+export const COLORS = ["white", "gaussian", "average", "pink", "brown"];
 export const COLOR = { WHITE: 0, PINK: 1, BROWN: 2 };
 // Probe channels (tp_render mask bits).
-export const CH = { MONO: 0, L: 1, R: 2, NP_L: 3, NP_R: 4, NA_L: 5, NA_R: 6, NAUD_L: 7, NAUD_R: 8, FI_L: 9, FI_R: 10, Q: 11, CV_L: 12, CV_R: 13 };
+export const CH = { MONO: 0, L: 1, R: 2, NP_L: 3, NP_R: 4, NA_L: 5, NA_R: 6, NAUD_L: 7, NAUD_R: 8, FI_L: 9, FI_R: 10, Q: 11, CV_L: 12, CV_R: 13, PITCH_L: 14, PITCH_R: 15 };
 export const Qof = (w) => 2000 * Math.pow(0.5 / 2000, w);
 export const dB = (p) => 10 * Math.log10(p);
 
@@ -70,7 +70,7 @@ export function makeHarness(module, defaults = {}) {
   const gate = (ok, msg) => { console.log(`${ok ? "ok  " : "FAIL"} ${msg}`); if (!ok) failures.push(msg); };
   const params = (o0) => {
     const o = { ...defaults, ...o0 };
-    return [o.freq ?? 1000, o.source ?? 0, o.morph ?? 0.5, o.width ?? 0.3, o.pitch ?? 0, o.ampMod ?? 0, o.amp ?? 1, o.color ?? 0, o.seed ?? 1, o.sr ?? SR];
+    return [o.freq ?? 1000, o.source ?? 0, o.morph ?? 0.5, o.width ?? 0.3, o.pitch ?? 0, o.ampMod ?? 0, o.amp ?? 1, o.color ?? 1, o.seed ?? 1, o.sr ?? SR];
   };
 
   // ---- worker pool (long level loops) ----
