@@ -2020,7 +2020,7 @@ const nodeGraphModuleStoreCatalog = Object.freeze({
   sidechain: {
     category: "dynamics",
     description:
-      "Sidechain ducking: a Dry/Wet crossfade moves from Mix to Ducked Mix under a Sidechain key (or the Dry signal) with Threshold / Ratio / Attack / Hold / Release, or under an Envelope input. Envelope out. Built on Pump Limiter's detector.",
+      "Sidechain ducking: a Dry/Wet crossfade moves from Mix to Ducked Mix under a Sidechain key with Threshold / Ratio / Attack / Hold / Release, or under an Envelope input. Envelope out. Built on Pump Limiter's detector.",
     label: "Sidechain",
     notes: [
       "sidechain",

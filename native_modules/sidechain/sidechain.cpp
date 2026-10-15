@@ -14,7 +14,8 @@
 //
 // Per sample:
 //   pairs     Dry L/R and Wet L/R each fall back to mono: a lone side feeds both.
-//   key       Sidechain when wired, else the detector source picked below.
+//   key       Sidechain only. With neither Sidechain nor Envelope wired: env 0
+//             (output holds at Mix) and the detector state resets.
 //   env       one-pole mean-square follower (attack up / release down), sqrt.
 //   target    env > T ? (T/env)^((R-1)/R) : 1   (hard knee, 0..1)
 //   gain      toward target: attack coeff when falling; when rising it waits
@@ -35,8 +36,6 @@ using namespace soemdsp_maths;
 // ---------------------------------------------------------------------------
 // Open design choices (docs/SIDECHAIN_PLAN.md section 9). Defaults picked for
 // v1; each is one switch here so Argi can change it without touching the DSP.
-// Q1 detector source when Sidechain is unwired: true = Dry, false = Wet.
-static const bool kDetectFromDryWhenNoSidechain = true;
 // Q3/Q4 Envelope input: duck amount 0..1 used as-is (clamped, no smoothing);
 // bypasses the detector and Threshold / Ratio / Attack / Hold / Release.
 static inline double clamp_unit(double e) {
@@ -155,13 +154,15 @@ extern "C" double soemdsp_sidechain_sample(
   double env;
   if (wiredMask & 32) {
     env = clamp_unit(envelope);
+  } else if (!(wiredMask & 16)) {
+    // Argi 2026-10-14: only the Sidechain input keys the ducking.
+    st.gain = 1.0;
+    st.meanSquare = 0.0;
+    st.holdLeft = 0.0;
+    env = 0.0;
   } else {
     // Pump Limiter detector (module-local copy, see header).
-    const bool hasSc = (wiredMask & 16) != 0;
-    const double detectPeak = hasSc
-      ? dsp_fabs(finite_or(sidechain, 0.0))
-      : (kDetectFromDryWhenNoSidechain ? maxd(dsp_fabs(dL), dsp_fabs(dR))
-                                       : maxd(dsp_fabs(wL), dsp_fabs(wR)));
+    const double detectPeak = dsp_fabs(finite_or(sidechain, 0.0));
     const double instantPower = detectPeak * detectPeak;
     const double attMs = maxd(0.0, finite_or(attackMs, 5.0));
     double relMs = finite_or(releaseMs, 250.0);

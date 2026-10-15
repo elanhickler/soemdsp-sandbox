@@ -4,8 +4,8 @@
 // Sidechain = 22 (Morph live bus). Outs: Left = 1, Right = 2, Envelope = 3.
 // Mix law: m = Mix + (Ducked Mix - Mix) * env; out = Dry (1 - m) + Wet m.
 // Gates: env 0 (silent key) = Mix crossfade; env 1 (Envelope input 1) =
-// Ducked Mix crossfade; ducking from Sidechain and from Dry (Sidechain
-// unwired); Envelope override (env = clamp(e, 0, 1), ignores Threshold);
+// Ducked Mix crossfade; ducking from Sidechain only (unwired key = no
+// ducking, even with loud Dry); Envelope override (env = clamp(e, 0, 1), ignores Threshold);
 // Ducked Mix > Mix swells; Hold delays the release; mono fallback per pair;
 // bypass = Dry; Envelope output = env. Plus the shared GL gain face geometry.
 import fs from "fs";
@@ -115,12 +115,12 @@ const flat = (n, v) => new Float64Array(n).fill(v);
   const wetPart = rms(sw.l.map((v, i) => v - sw.src.dry[i] * (1 - (0.1 + 0.8 * sw.g[i]))), tail(sw.l)) / rms(sw.src.wet, tail(sw.l));
   gate(wetPart > 0.6, `Ducked Mix > Mix: Wet swells on hits (Wet share ${wetPart.toFixed(3)} vs Mix 0.1)`);
 }
-// 4. Sidechain unwired: Dry keys the ducking; below Threshold = env 0.
+// 4. Unwired key = no ducking: loud Dry / Wet never key the detector.
 {
-  const loud = render({ wires: [["dry", IN.DRY_L], ["wet", IN.WET_L]], amps: { dry: 1, wet: 0.5 } });
-  const quiet = render({ wires: [["dry", IN.DRY_L], ["wet", IN.WET_L]], amps: { dry: 0.05, wet: 0.5 } });
-  gate(Math.max(...loud.g.slice(tail(loud.g))) > 0.7, "no Sidechain: loud Dry ducks");
-  gate(quiet.g.every((v) => v === 0) && close(quiet.l, xf(quiet.src.dry, quiet.src.wet, flat(quiet.l.length, MIX))), "no Sidechain: Dry below Threshold = Mix crossfade");
+  const loud = render({ wires: [["dry", IN.DRY_L], ["wet", IN.WET_L]], amps: { dry: 1, wet: 1 } });
+  gate(loud.g.every((v) => v === 0) && close(loud.l, xf(loud.src.dry, loud.src.wet, flat(loud.l.length, MIX))), "unwired key: loud Dry + Wet, env 0, output holds at Mix");
+  const self = render({ wires: [["dry", IN.DRY_L], ["wet", IN.WET_L], ["dry", IN.SC]], amps: { dry: 1, wet: 0.5 } });
+  gate(Math.max(...self.g.slice(tail(self.g))) > 0.7, "Dry patched into Sidechain too: ducks on itself");
   const wetOnly = render({ wires: [["wet", IN.WET_L]], amps: { wet: 1 } });
   const want = wetOnly.src.wet.map((v) => v * MIX);
   gate(close(wetOnly.l, want) && close(wetOnly.r, want), "Wet only (no Dry, no key): Wet x Mix, lone Wet L feeds both sides");
