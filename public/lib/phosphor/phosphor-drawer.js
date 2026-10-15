@@ -20,14 +20,7 @@
   const DEPOSIT_SCALE = 0.1;
 
   function clamp01(value, fallback = 0) {
-    if (global.PhosphorResidual?.clamp01) {
-      return global.PhosphorResidual.clamp01(value, fallback);
-    }
-    const n = Number(value);
-    if (!Number.isFinite(n)) {
-      return Math.max(0, Math.min(1, nodeGraphFiniteNumber(fallback)));
-    }
-    return Math.max(0, Math.min(1, n));
+    return globalThis.SoemMath.clamp01(value, fallback);
   }
 
   function normalizeBlur(value, fallback = DEFAULT_BLUR) {

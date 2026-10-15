@@ -23,36 +23,18 @@ uniform vec2 uResolution;
 uniform float uHue;
 uniform float uMode;
 
+${SoemGl.GLSL_HSL}
 vec3 hueUnit(float hueDeg) {
-  float h = mod(mod(hueDeg, 360.0) + 360.0, 360.0);
-  float hp = h / 60.0;
-  float c = 1.0;
-  float x = c * (1.0 - abs(mod(hp, 2.0) - 1.0));
-  if (hp < 1.0) return vec3(c, x, 0.0);
-  if (hp < 2.0) return vec3(x, c, 0.0);
-  if (hp < 3.0) return vec3(0.0, c, x);
-  if (hp < 4.0) return vec3(0.0, x, c);
-  if (hp < 5.0) return vec3(x, 0.0, c);
-  return vec3(c, 0.0, x);
+  return soemHueUnit(hueDeg);
 }
 
-// Match planeRgb(h, u, v): HSV sat×value square.
+// Match planeRgb(h, u, v): HSV sat x value square (chroma * hue unit + m).
 vec3 planeRgb(float hueDeg, float u, float v) {
   float s = clamp(u, 0.0, 1.0);
   float value = clamp(v, 0.0, 1.0);
   float c = value * s;
-  float h = mod(mod(hueDeg, 360.0) + 360.0, 360.0);
-  float hp = h / 60.0;
-  float x = c * (1.0 - abs(mod(hp, 2.0) - 1.0));
-  vec3 rgb = vec3(0.0);
-  if (hp < 1.0) rgb = vec3(c, x, 0.0);
-  else if (hp < 2.0) rgb = vec3(x, c, 0.0);
-  else if (hp < 3.0) rgb = vec3(0.0, c, x);
-  else if (hp < 4.0) rgb = vec3(0.0, x, c);
-  else if (hp < 5.0) rgb = vec3(x, 0.0, c);
-  else rgb = vec3(c, 0.0, x);
   float m = value - c;
-  return rgb + vec3(m);
+  return c * soemHueUnit(hueDeg) + vec3(m);
 }
 
 float easeHermite(float t) {
@@ -101,32 +83,8 @@ void main() {
 }
 `;
 
-  function compile(gl, type, src) {
-    const sh = gl.createShader(type);
-    gl.shaderSource(sh, src);
-    gl.compileShader(sh);
-    if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) {
-      gl.deleteShader(sh);
-      return null;
-    }
-    return sh;
-  }
-
   function link(gl, vsSrc, fsSrc) {
-    const vs = compile(gl, gl.VERTEX_SHADER, vsSrc);
-    const fs = compile(gl, gl.FRAGMENT_SHADER, fsSrc);
-    if (!vs || !fs) return null;
-    const p = gl.createProgram();
-    gl.attachShader(p, vs);
-    gl.attachShader(p, fs);
-    gl.linkProgram(p);
-    gl.deleteShader(vs);
-    gl.deleteShader(fs);
-    if (!gl.getProgramParameter(p, gl.LINK_STATUS)) {
-      gl.deleteProgram(p);
-      return null;
-    }
-    return p;
+    return SoemGl.link(gl, vsSrc, fsSrc, "color-widget-plane-gl.js");
   }
 
   function getShared() {
@@ -179,7 +137,7 @@ void main() {
     gl.bindBuffer(gl.ARRAY_BUFFER, device.quad);
     gl.enableVertexAttribArray(device.aPos);
     gl.vertexAttribPointer(device.aPos, 2, gl.FLOAT, false, 0, 0);
-    gl.uniform1f(device.uHue, Number(hueDeg) || 0);
+    gl.uniform1f(device.uHue, SoemMath.finiteOr(hueDeg, 0));
     gl.uniform1f(device.uMode, mode);
     gl.uniform2f(device.uResolution, w, h);
     gl.drawArrays(gl.TRIANGLES, 0, 6);

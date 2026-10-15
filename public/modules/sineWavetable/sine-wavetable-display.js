@@ -73,10 +73,7 @@ function nodeGraphSinCos4FaceNorm(node) {
   const td = node?.traceDisplaySettings && typeof node.traceDisplaySettings === "object"
     ? node.traceDisplaySettings
     : {};
-  const clamp01 = (v, fb) => {
-    const n = Number(v);
-    return Number.isFinite(n) ? Math.max(0, Math.min(1, n)) : fb;
-  };
+  const clamp01 = (v, fb) => globalThis.SoemMath.clamp01(v, fb);
   // dot1Size 0…1 → tip radius in unit square (default ~2.2% of side).
   const tip = 0.01 + clamp01(td.dot1Size, 0.08) * 0.04;
   return {

@@ -189,28 +189,13 @@ void main (void) {
       }
       return [r, g, b, 1];
     }
-    const hex = String(color || "").trim();
-    if (/^#[0-9a-fA-F]{6}$/.test(hex)) {
-      return [
-        parseInt(hex.slice(1, 3), 16) / 255,
-        parseInt(hex.slice(3, 5), 16) / 255,
-        parseInt(hex.slice(5, 7), 16) / 255,
-        1,
-      ];
-    }
-    return fallback;
+    const c = globalThis.SoemColor.parse(color);
+    return c ? [c[0] / 255, c[1] / 255, c[2] / 255, 1] : fallback;
   }
 
   function hexRgb(hex, fallback = [255, 255, 255]) {
-    const text = String(hex || "").trim();
-    if (/^#[0-9a-fA-F]{6}$/.test(text)) {
-      return [
-        parseInt(text.slice(1, 3), 16),
-        parseInt(text.slice(3, 5), 16),
-        parseInt(text.slice(5, 7), 16),
-      ];
-    }
-    return fallback.slice();
+    const c = globalThis.SoemColor.parse(hex);
+    return c ? c.slice(0, 3) : fallback.slice();
   }
 
   function sampleStopsRgb(stops, t, fallbackHex = "#ffffff") {
@@ -460,22 +445,7 @@ void main() {
   const traceByDest = new WeakMap();
 
   function linkProgram(gl, vsSrc, fsSrc) {
-    const vs = compile(gl, gl.VERTEX_SHADER, vsSrc);
-    const fs = compile(gl, gl.FRAGMENT_SHADER, fsSrc);
-    if (!vs || !fs) {
-      return null;
-    }
-    const program = gl.createProgram();
-    gl.attachShader(program, vs);
-    gl.attachShader(program, fs);
-    gl.linkProgram(program);
-    gl.deleteShader(vs);
-    gl.deleteShader(fs);
-    if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
-      gl.deleteProgram(program);
-      return null;
-    }
-    return program;
+    return SoemGl.link(gl, vsSrc, fsSrc, "trace-woscope.js");
   }
 
   function ensureTracePresent(glDevice) {

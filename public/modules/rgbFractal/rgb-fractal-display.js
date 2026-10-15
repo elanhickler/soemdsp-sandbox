@@ -767,7 +767,7 @@ function paintNodeGraphRgbFractalFaceCpu(canvas, face, params) {
   ctx.drawImage(off, 0, 0, simW, simH, 0, 0, w, h);
 
   // Screen Blur (CPU): one H+V pair, continuous sub-pixel → light max (matches GPU).
-  const screenBlurAmt = Math.max(0, Math.min(8, nodeGraphFiniteNumber(params.screenBlur)));
+  const screenBlurAmt = SoemMath.clamp(params.screenBlur, 0, 8);
   if (screenBlurAmt > 0.02 && w > 2 && h > 2) {
     const t = screenBlurAmt / 8;
     const tEase = t * t;

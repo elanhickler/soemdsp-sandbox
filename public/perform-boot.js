@@ -242,10 +242,8 @@
   var readySent = false;
   var emptyNoteEl = null;
 
-  function clamp01(n, fallback) {
-    var x = Number(n);
-    if (!Number.isFinite(x)) return fallback == null ? 0 : fallback;
-    return Math.max(0, Math.min(1, x));
+  function clamp01(value, fallback = 0) {
+    return globalThis.SoemMath.clamp01(value, fallback);
   }
 
   function clampPluginId(raw) {

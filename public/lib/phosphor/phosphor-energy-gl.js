@@ -40,23 +40,7 @@
   }
 
   function linkProgram(gl, vsSource, fsSource) {
-    const vs = compileShader(gl, gl.VERTEX_SHADER, vsSource);
-    const fs = compileShader(gl, gl.FRAGMENT_SHADER, fsSource);
-    if (!vs || !fs) {
-      return null;
-    }
-    const program = gl.createProgram();
-    gl.attachShader(program, vs);
-    gl.attachShader(program, fs);
-    gl.linkProgram(program);
-    gl.deleteShader(vs);
-    gl.deleteShader(fs);
-    if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
-      console.warn("[phosphor-energy-gl] program link failed", gl.getProgramInfoLog(program));
-      gl.deleteProgram(program);
-      return null;
-    }
-    return program;
+    return SoemGl.link(gl, vsSource, fsSource, "phosphor-energy-gl.js");
   }
 
   const VERT = `

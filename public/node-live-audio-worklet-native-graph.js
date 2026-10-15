@@ -2743,6 +2743,25 @@ NodeLiveAudioProcessor.HOST_INLET_MIX = Object.freeze({
   }),
 });
 
+/**
+ * Keyboard F / Pitch: host-filled per-sample blocks from the same stamped
+ * events as Gate, so pitch steps on exactly the edge sample. Not inlet-mix
+ * (keyboards have no F / Pitch inputs), so thru expansion ignores them.
+ */
+NodeLiveAudioProcessor.HOST_PITCH_BLOCK = Object.freeze({
+  freq: Object.freeze(["f", "F", "Frequency", "\u0192"]),
+  pitch: Object.freeze(["pitch", "Pitch"]),
+});
+
+NodeLiveAudioProcessor.hostPitchBlockKind = function hostPitchBlockKind(type, port) {
+  if (!NodeLiveAudioProcessor.HOST_INLET_MIX[String(type || "")]) return "";
+  const name = String(port || "");
+  const spec = NodeLiveAudioProcessor.HOST_PITCH_BLOCK;
+  if (spec.freq.indexOf(name) >= 0) return "freq";
+  if (spec.pitch.indexOf(name) >= 0) return "pitch";
+  return "";
+};
+
 NodeLiveAudioProcessor.hostInletMixSpec = function hostInletMixSpec(type) {
   return NodeLiveAudioProcessor.HOST_INLET_MIX[String(type || "")] || null;
 };
@@ -3005,13 +3024,24 @@ NodeLiveAudioProcessor.prototype.nativeHostCvFeederKind = function nativeHostCvF
 
 NodeLiveAudioProcessor.prototype.efficientModSourceIsSampleBlock = function efficientModSourceIsSampleBlock(srcId, srcPort) {
   const type = String(this.nodes?.get?.(String(srcId))?.type || "");
-  return NodeLiveAudioProcessor.hostInletMixKind(type, srcPort) !== "";
+  return NodeLiveAudioProcessor.hostInletMixKind(type, srcPort) !== ""
+    || NodeLiveAudioProcessor.hostPitchBlockKind(type, srcPort) !== ""
+    // Toggle / Momentary Trigger: controller-efficient-sidecar.js.
+    || (typeof this.controllerButtonIsSampleBlock === "function"
+      && this.controllerButtonIsSampleBlock(srcId, srcPort));
 };
 
 NodeLiveAudioProcessor.prototype.readEfficientModSourceBlock = function readEfficientModSourceBlock(srcId, srcPort, view) {
   if (!this.efficientModSourceIsSampleBlock(srcId, srcPort) || !view?.length) return false;
+  if (
+    typeof this.controllerButtonIsSampleBlock === "function"
+    && this.controllerButtonIsSampleBlock(srcId, srcPort)
+  ) {
+    return this.readControllerButtonBlock(srcId, srcPort, view);
+  }
   const type = String(this.nodes?.get?.(String(srcId))?.type || "");
-  const kind = NodeLiveAudioProcessor.hostInletMixKind(type, srcPort);
+  const kind = NodeLiveAudioProcessor.hostInletMixKind(type, srcPort)
+    || NodeLiveAudioProcessor.hostPitchBlockKind(type, srcPort);
   // This quantum's plan (prepareKeyboardEventBlock), written for the current
   // process_block window [base, base + len).
   const st = typeof this.keyboardEventStateFor === "function" ? this.keyboardEventStateFor(srcId) : null;
@@ -3020,7 +3050,34 @@ NodeLiveAudioProcessor.prototype.readEfficientModSourceBlock = function readEffi
   const chunkFrames = Number(this._keyboardChunkFrames);
   const len = chunkFrames > 0 ? Math.min(view.length, chunkFrames) : view.length;
   for (let j = len; j < view.length; j += 1) view[j] = 0;
-  if (kind === "level") {
+  if (kind === "freq" || kind === "pitch") {
+    // Steps on the exact edge sample, held otherwise; no glide.
+    const isHz = kind === "freq";
+    const edges = plan ? plan.edges : [];
+    let v = isHz
+      ? (plan ? plan.startHz : st?.hz)
+      : (plan ? plan.startMidi : st?.midi);
+    if (!(Number.isFinite(v)) || (!st && !plan)) {
+      const types = String(this.nodes?.get?.(String(srcId))?.type || "");
+      const sig = types === "keyboardController"
+        ? this.midiKeyboardSignal
+        : this.keyboardSignalByNode?.get?.(String(srcId));
+      const m = Number(sig?.midi);
+      let hz = Number(sig?.frequency);
+      if (!(hz > 0) && Number.isFinite(m)) hz = 440 * (2 ** ((m - 69) / 12));
+      v = isHz ? (Number.isFinite(hz) && hz > 0 ? hz : 0) : (Number.isFinite(m) ? m : 0);
+    }
+    let e = 0;
+    for (let j = 0; j < len; j += 1) {
+      const at = base + j;
+      while (e < edges.length && edges[e].off <= at) {
+        const nv = isHz ? edges[e].hz : edges[e].midi;
+        if (Number.isFinite(nv)) v = nv;
+        e += 1;
+      }
+      view[j] = v;
+    }
+  } else if (kind === "level") {
     const edges = plan ? plan.edges : [];
     let level = plan
       ? (plan.startGate ? plan.startVel : 0)
@@ -4590,13 +4647,13 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
     if (type === "reverbEffect" || type === "sabrinaReverbOriginal") {
       const sabOrig = type === "sabrinaReverbOriginal";
       push("mix", P.NATIVE_GRAPH_PARAM_MIX, cont("mix", 0.43));
-      push("diffusionSize", P.NATIVE_GRAPH_PARAM_DIFFUSION_SIZE, cont("diffusionSize", 0.35));
+      push("diffusionSize", P.NATIVE_GRAPH_PARAM_DIFFUSION_SIZE, cont("diffusionSize", sabOrig ? 0.35 : 140));
       push("diffusionAmount", P.NATIVE_GRAPH_PARAM_DIFFUSION_AMOUNT, cont("diffusionAmount", 0.7));
-      push("delaySize", P.NATIVE_GRAPH_PARAM_DELAY_SIZE, cont("delaySize", 0.02));
+      push("delaySize", P.NATIVE_GRAPH_PARAM_DELAY_SIZE, cont("delaySize", sabOrig ? 0.02 : 8));
       push("recycle", P.NATIVE_GRAPH_PARAM_RECYCLE, cont("recycle", 0.7));
-      push("lfoAmplitude", P.NATIVE_GRAPH_PARAM_LFO_AMPLITUDE, cont("lfoAmplitude", 0.07));
-      push("lfoBaseSpeed", P.NATIVE_GRAPH_PARAM_LFO_BASE_SPEED, cont("lfoBaseSpeed", sabOrig ? 0.83 : 0.426));
-      push("lfoVariation", P.NATIVE_GRAPH_PARAM_LFO_VARIATION, cont("lfoVariation", 0.999));
+      push("lfoAmplitude", P.NATIVE_GRAPH_PARAM_LFO_AMPLITUDE, cont("lfoAmplitude", sabOrig ? 0.07 : 0.028));
+      push("lfoBaseSpeed", P.NATIVE_GRAPH_PARAM_LFO_BASE_SPEED, cont("lfoBaseSpeed", sabOrig ? 0.83 : 2.40684));
+      push("lfoVariation", P.NATIVE_GRAPH_PARAM_LFO_VARIATION, cont("lfoVariation", sabOrig ? 0.999 : 249.75));
       push("lfoStyle", P.NATIVE_GRAPH_PARAM_LFO_STYLE, disc("lfoStyle", 0));
       push("delayTapMod", P.NATIVE_GRAPH_PARAM_MODE, cont("delayTapMod", 1));
       push("seed", P.NATIVE_GRAPH_PARAM_SEED, disc("seed", 0));

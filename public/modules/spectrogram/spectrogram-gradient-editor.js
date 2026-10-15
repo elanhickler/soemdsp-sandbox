@@ -601,10 +601,8 @@
     `;
   }
 
-  function clamp01(v) {
-    const n = Number(v);
-    if (!Number.isFinite(n)) return 0;
-    return Math.max(0, Math.min(1, n));
+  function clamp01(value, fallback = 0) {
+    return globalThis.SoemMath.clamp01(value, fallback);
   }
 
   function normalizeHex(value, fallback = "#ffffff") {
@@ -1677,6 +1675,10 @@
   global.MATRIX_DEFAULT_GRADIENT_STOPS = DEFAULT_MATRIX_STOPS;
   global.CRT_AMBER_DEFAULT_GRADIENT_STOPS = DEFAULT_CRT_AMBER_STOPS;
   global.SHARED_GRADIENT_PRESETS = PRESETS;
+  // Number Readout LED ghost default: references the "p1 green" preset (no copied stops).
+  global.NUMBER_READOUT_LED_DEFAULT_GRADIENT_STOPS = colorsToStops(
+    (PRESETS.find((p) => p.id === "green") || {}).colors,
+  );
   global.SPECTROGRAM_GRADIENT_PRESETS = PRESETS;
   global.PHOSPHOR_GRADIENT_PRESETS = PRESETS;
   global.NODE_GRAPH_GRADIENT_BW_DEFAULT_STOPS = DEFAULT_BW_STOPS;

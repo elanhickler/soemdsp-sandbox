@@ -18,7 +18,7 @@ let burstSerial = 0;
 let lastTime = performance.now();
 
 function clamp(value, min, max) {
-  return Math.max(min, Math.min(max, nodeGraphFiniteNumber(value)));
+  return globalThis.SoemMath.clamp(value, min, max, 0);
 }
 
 function readSettings() {

@@ -105,7 +105,7 @@ struct SabrinaState {
   double lfoBaseSpeed;
   double lfoVariation;
   int lfoStyle; // 0 Parabol (original), 1 FBM
-  // Speed-mapping variant: 0 = dev 'Cinematic Reverb' (exponential 2 s .. 0.05 s),
+  // Variant: 0 = dev 'Cinematic Reverb' (params in real units: ms / Hz / depth fraction, see applyCinematicGeometry),
   // 1 = frozen 'Sabrina Reverb' (key sabrinaReverbOriginal, Walter's ((1 - v) * 1.95 + 0.5) * 0.5 = 1.225 s .. 0.25 s).
   // FROZEN: variant 1 must keep matching plugin 0.1.7 -- bug fixes only, no sound changes.
   int speedVariant;
@@ -419,13 +419,55 @@ void applyDiffusionGeometryPairSimd(
 // Derives delay-line offsets/LFO speed from the ramped (smoothed*) copies of
 // the params, never the raw target values -- called every sample so tap
 // length changes glide instead of snapping.
+// Cinematic Reverb (variant 0): params arrive in real units and set their own
+// ranges -- no param clamps here. Only buffer-safety caps on the read offsets.
+//   diffusionSize ms (longest diffusion line), delaySize ms (main taps),
+//   lfoAmplitude = depth as a fraction of each line's delay, lfoBaseSpeed Hz,
+//   lfoVariation ms (max extra LFO period per line).
+// Formulas equal the old normalized ones at v = ms/400, depth = 0.4 v,
+// Hz = 0.5 * 40^v, vary = 250 v ms (incl. Walter's +1 / -2 sample terms).
+constexpr double kCinematicDiffusionFloorSeconds = 4.0e-7; // == old kSizeFloor * kDelayRangeSeconds
+inline double cinematicSafeOffset(double offset, double depth) {
+  // Sanity cap: offset * (1 + |depth|) + interpolation must stay inside the buffer.
+  const double limit = (kMaxDelaySamples - 4.0) / (1.0 + (depth < 0.0 ? -depth : depth));
+  return offset > limit ? limit : offset;
+}
+void applyCinematicGeometry(SabrinaState& state) {
+  const double sr = state.sampleRate;
+  const double hz = state.smoothedLfoBaseSpeed;
+  const double lfoPeriod = hz != 0.0 ? 1.0 / hz : 1.0e12; // initializeMod guards tiny/negative periods
+  const double lfoVariation = state.smoothedLfoVariation * 0.001;
+  const double diffusionSeconds = state.smoothedDiffusionSize * 0.001 + kCinematicDiffusionFloorSeconds;
+  const double depth = state.smoothedLfoAmplitude;
+  const double sharedFeedback = state.diffusionAmount;
+  for (int index = 0; index < kDiffusionCount; index += 2) {
+    SabrinaDelay& delayA = state.delays[index];
+    SabrinaDelay& delayB = state.delays[index + 1];
+    applyDiffusionGeometryPairSimd(delayA, delayB, sr, diffusionSeconds, lfoPeriod, lfoVariation, sr);
+    delayA.offset = cinematicSafeOffset(delayA.offset, depth);
+    delayB.offset = cinematicSafeOffset(delayB.offset, depth);
+    delayA.feedback = sharedFeedback;
+    delayB.feedback = sharedFeedback;
+    delayA.lfopercent = depth;
+    delayB.lfopercent = depth;
+  }
+  for (int index = kDiffusionCount; index < kDelayCount; index += 1) {
+    SabrinaDelay& delay = state.delays[index];
+    const double tapDepth = depth * state.delayTapMod;
+    delay.offset = cinematicSafeOffset((sr - 0.5) * state.smoothedDelaySize * 0.001 + 1.0, tapDepth);
+    delay.lfopercent = tapDepth;
+    initializeMod(delay, lfoPeriod, lfoVariation, sr);
+  }
+}
+
 void applyDelayGeometry(SabrinaState& state) {
   const double maxDelaySize = state.sampleRate * kDelayRangeSeconds;
-  // Mod(~)Speed -> LFO period, exponential 2.0 s (knob 0) .. 0.05 s (knob 1), knob up = faster.
-  // (Walter's comment said 0.05-2.0 s but his ((1 - v) * 1.95 + 0.5) * 0.5 only spans 0.25-1.225 s.)
-  const double lfoSpeed = state.speedVariant == 1
-    ? ((1.0 - state.smoothedLfoBaseSpeed) * 1.95 + 0.5) * 0.5 // Original (Walter, frozen)
-    : 2.0 * dsp_exp(-3.6888794541139363 * state.smoothedLfoBaseSpeed); // ln(0.025)
+  if (state.speedVariant == 0) {
+    applyCinematicGeometry(state);
+    return;
+  }
+  // Frozen Sabrina Reverb (variant 1): Walter's normalized knobs, unchanged.
+  const double lfoSpeed = ((1.0 - state.smoothedLfoBaseSpeed) * 1.95 + 0.5) * 0.5;
   // Same for both styles: depth amp * kLfoDepthScale, period spread (1 - vary) * 0.25 s (Walter).
   // Mod(~)Vary: higher = more per-line LFO period spread (flipped from Walter's (1 - v) * 0.25).
   const double lfoVariation = state.smoothedLfoVariation * 0.25;
@@ -649,14 +691,15 @@ void resetState(SabrinaState& state, double sampleRate) {
   state.idleClock = 0.0;
   state.idleIncrement = 1.0 / state.sampleRate;
   state.mix = 0.43;
-  state.diffusionSize = 0.35;
+  const bool cine = state.speedVariant == 0; // Cinematic: real units (same sound as the old knobs)
+  state.diffusionSize = cine ? 140.0 : 0.35; // ms | knob
   state.diffusionAmount = 0.70;
-  state.delaySize = 0.02;
+  state.delaySize = cine ? 8.0 : 0.02; // ms | knob
   state.recycle = 0.70;
-  state.lfoAmplitude = 0.07;
+  state.lfoAmplitude = cine ? 0.028 : 0.07; // depth fraction | knob
   // Original keeps Walter's 0.83 (0.41575 s); dev 0.426 (~0.4158 s) is the same sound on the wider map.
-  state.lfoBaseSpeed = state.speedVariant == 1 ? 0.83 : 0.426;
-  state.lfoVariation = 0.999; // == old 0.001 before the Vary flip
+  state.lfoBaseSpeed = cine ? 2.40684 : 0.83; // Hz | Walter knob
+  state.lfoVariation = cine ? 249.75 : 0.999; // ms | knob (== old 0.001 before the Vary flip)
   state.lfoStyle = 0;
   state.delayTapMod = 1.0;
   state.smoothedDiffusionSize = state.diffusionSize;
@@ -750,6 +793,11 @@ extern "C" void soemdsp_sabrina_reverb_set_params(
 
   // LIVE — assign only (read in process / drywet).
   assignIf(state->mix, mix);
+  // Cinematic: feedback gains capped at 1 (stability); nothing else is clamped.
+  if (state->speedVariant == 0) {
+    if (recycle > 1.0) recycle = 1.0;
+    if (diffusionAmount > 1.0) diffusionAmount = 1.0;
+  }
   assignIf(state->recycle, recycle);
   assignIf(state->diffusionAmount, diffusionAmount);
 
@@ -768,7 +816,9 @@ extern "C" void soemdsp_sabrina_reverb_set_params(
   if (assignIf(state->delayTapMod, delayTapMod)) {
     // Geometry is skipped once smoothing settles, so stamp the 2 main taps now.
     for (int index = kDiffusionCount; index < kDelayCount; index += 1) {
-      state->delays[index].lfopercent = state->smoothedLfoAmplitude * kLfoDepthScale * state->delayTapMod;
+      state->delays[index].lfopercent = state->speedVariant == 0
+        ? state->smoothedLfoAmplitude * state->delayTapMod
+        : state->smoothedLfoAmplitude * kLfoDepthScale * state->delayTapMod;
     }
   }
 

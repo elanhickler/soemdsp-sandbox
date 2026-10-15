@@ -352,7 +352,12 @@ NodeLiveAudioProcessor.prototype.advanceControllerButtonTriggers = function adva
  * docs/GATES_TRIGGERS.md). Gate and Bias stay per-block scalars: mouse
  * down/up only changes at block rate anyway.
  */
-NodeLiveAudioProcessor.prototype.efficientModSourceIsSampleBlock = function efficientModSourceIsSampleBlock(
+// Named controllerButton* (not efficientModSource*): the native-graph host
+// owns efficientModSourceIsSampleBlock / readEfficientModSourceBlock (Keyboard
+// Gate/Trigger/F/Pitch per-sample blocks) and delegates button Triggers here.
+// Reusing those names here (this file loads later) silently replaced the
+// keyboard version and made Keyboard Gate a per-quantum Bias.
+NodeLiveAudioProcessor.prototype.controllerButtonIsSampleBlock = function controllerButtonIsSampleBlock(
   sourceNode,
   sourcePort,
 ) {
@@ -368,12 +373,12 @@ NodeLiveAudioProcessor.prototype.efficientModSourceIsSampleBlock = function effi
  * blocks. nodeOutputs keeps the scalar (1 for that quantum) for scopes, the
  * LCD and JS-side mixes. Returns false (out untouched) for any other port.
  */
-NodeLiveAudioProcessor.prototype.readEfficientModSourceBlock = function readEfficientModSourceBlock(
+NodeLiveAudioProcessor.prototype.readControllerButtonBlock = function readControllerButtonBlock(
   sourceNode,
   sourcePort,
   out,
 ) {
-  if (!out || !out.length || !this.efficientModSourceIsSampleBlock(sourceNode, sourcePort)) {
+  if (!out || !out.length || !this.controllerButtonIsSampleBlock(sourceNode, sourcePort)) {
     return false;
   }
   const raw = Number(this.nodeOutputs?.get?.(String(sourceNode))?.[String(sourcePort)]);

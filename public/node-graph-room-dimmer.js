@@ -139,10 +139,8 @@ void main() {
     persistTimer: 0,
   };
 
-  function clamp01(n) {
-    const x = Number(n);
-    if (!Number.isFinite(x)) return 0;
-    return x < 0 ? 0 : x > 1 ? 1 : x;
+  function clamp01(value, fallback = 0) {
+    return globalThis.SoemMath.clamp01(value, fallback);
   }
 
   /** Live dim is full range 0…1 (100% blacks out the UI; button stays punched). */
@@ -172,7 +170,7 @@ void main() {
       || getComputedStyle(ws).getPropertyValue("--node-module-light-spread")
       || "",
     );
-    return Number.isFinite(raw) ? Math.max(0.4, Math.min(2.2, raw)) : 0.78;
+    return Number.isFinite(raw) ? SoemMath.clamp(raw, 0.4, 2.2) : 0.78;
   }
 
   function punchCornerRadiusPx(el, boxW, boxH) {
@@ -457,10 +455,10 @@ void main() {
   function pushRectArrays(rects, strengths, softs, rounds, x, y, w, h, str, soft = 0, round = 0) {
     if (rects.length >= MAX_RECTS) return;
     rects.push([
-      Math.max(-1, Math.min(2, x)),
-      Math.max(-1, Math.min(2, y)),
-      Math.max(0, Math.min(2, w)),
-      Math.max(0, Math.min(2, h)),
+      SoemMath.clamp(x, -1, 2),
+      SoemMath.clamp(y, -1, 2),
+      SoemMath.clamp(w, 0, 2),
+      SoemMath.clamp(h, 0, 2),
     ]);
     strengths.push(str);
     softs.push(Math.max(0, nodeGraphFiniteNumber(soft)));
@@ -772,8 +770,8 @@ void main() {
       } else {
         // RGBA8 fallback: UV 0..1; soft/round CSS px as v/128.
         data.fill(0);
-        const enc01 = (v) => Math.max(0, Math.min(255, Math.round((Number(v) || 0) * 255)));
-        const encPx128 = (v) => Math.max(0, Math.min(255, Math.round((Number(v) || 0) / 128 * 255)));
+        const enc01 = (v) => SoemMath.clamp(Math.round(SoemMath.finiteOr(v, 0) * 255), 0, 255);
+        const encPx128 = (v) => SoemMath.clamp(Math.round(SoemMath.finiteOr(v, 0) / 128 * 255), 0, 255);
         for (let i = 0; i < MAX_RECTS; i += 1) {
           const r = rects[i] || [0, 0, 0, 0];
           const o0 = i * 4;
@@ -938,7 +936,7 @@ void main() {
     if (typeof nodeGraphMvp !== "undefined" && nodeGraphMvp) {
       const n = Number(nodeGraphMvp[key]);
       if (Number.isFinite(n)) {
-        return Math.max(min, Math.min(max, n));
+        return SoemMath.clamp(n, min, max);
       }
     }
     return fallback;
@@ -969,7 +967,7 @@ void main() {
     // Roundness: corner radius in UV (0 … half of min side = full circle).
     const halfMinUv = sizeUv * 0.5;
     // Ease mid toward squircle (~0.42 of half) then full circle at 1.
-    const t = Math.max(0, Math.min(1, shape01));
+    const t = SoemMath.clamp01(shape01);
     const roundUv = halfMinUv * (t < 0.5
       ? (t / 0.5) * 0.42
       : 0.42 + ((t - 0.5) / 0.5) * 0.58);
@@ -1012,24 +1010,24 @@ void main() {
       cutoutMouseEnabled = nodeGraphMvp.dimmerCutoutMouseEnabled;
     }
     const size = Number(nodeGraphMvp.dimmerMouseSize);
-    if (Number.isFinite(size)) mouseSizeCss = Math.max(8, Math.min(240, size));
+    if (Number.isFinite(size)) mouseSizeCss = SoemMath.clamp(size, 8, 240);
     const soft = Number(nodeGraphMvp.dimmerMouseSoftness);
-    if (Number.isFinite(soft)) mouseSoftness01 = Math.max(0, Math.min(100, soft)) / 100;
+    if (Number.isFinite(soft)) mouseSoftness01 = SoemMath.clamp(soft, 0, 100) / 100;
     const shape = Number(nodeGraphMvp.dimmerMouseShape);
-    if (Number.isFinite(shape)) mouseShape01 = Math.max(0, Math.min(100, shape)) / 100;
+    if (Number.isFinite(shape)) mouseShape01 = SoemMath.clamp(shape, 0, 100) / 100;
   }
 
   function setDimmerCutoutOptions(opts = {}) {
     if (opts && typeof opts === "object") {
       if (typeof opts.mouse === "boolean") cutoutMouseEnabled = opts.mouse;
       if (Number.isFinite(Number(opts.mouseSize))) {
-        mouseSizeCss = Math.max(8, Math.min(240, Number(opts.mouseSize)));
+        mouseSizeCss = SoemMath.clamp(opts.mouseSize, 8, 240);
       }
       if (Number.isFinite(Number(opts.mouseSoftness))) {
-        mouseSoftness01 = Math.max(0, Math.min(100, Number(opts.mouseSoftness))) / 100;
+        mouseSoftness01 = SoemMath.clamp(opts.mouseSoftness, 0, 100) / 100;
       }
       if (Number.isFinite(Number(opts.mouseShape))) {
-        mouseShape01 = Math.max(0, Math.min(100, Number(opts.mouseShape))) / 100;
+        mouseShape01 = SoemMath.clamp(opts.mouseShape, 0, 100) / 100;
       }
     }
     if (typeof nodeGraphMvp !== "undefined" && nodeGraphMvp) {
@@ -1110,8 +1108,8 @@ function bindNodeGraphToolbarFillSlider(button, options = {}) {
   const format = typeof options.format === "function"
     ? options.format
     : (value) => String(value);
-  const toUnit = (value) => Math.max(0, Math.min(1, (Number(value) - min) / span));
-  const fromUnit = (unit) => min + Math.max(0, Math.min(1, nodeGraphFiniteNumber(unit))) * span;
+  const toUnit = (value) => SoemMath.clamp01((Number(value) - min) / span);
+  const fromUnit = (unit) => min + SoemMath.clamp01(unit) * span;
 
   const sync = () => {
     const value = get();

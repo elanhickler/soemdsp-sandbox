@@ -20,12 +20,8 @@
   const IMAGE_BURN_GL_REV = 2;
   let sharedDevice = null;
 
-  function clamp01(v, fallback = 0) {
-    const n = Number(v);
-    if (!Number.isFinite(n)) {
-      return Math.max(0, Math.min(1, nodeGraphFiniteNumber(fallback)));
-    }
-    return Math.max(0, Math.min(1, n));
+  function clamp01(value, fallback = 0) {
+    return globalThis.SoemMath.clamp01(value, fallback);
   }
 
   function glSizeCap(gl) {
@@ -68,21 +64,7 @@
   }
 
   function linkProgram(gl, vsSource, fsSource) {
-    const vs = compileShader(gl, gl.VERTEX_SHADER, vsSource);
-    const fs = compileShader(gl, gl.FRAGMENT_SHADER, fsSource);
-    if (!vs || !fs) return null;
-    const program = gl.createProgram();
-    gl.attachShader(program, vs);
-    gl.attachShader(program, fs);
-    gl.linkProgram(program);
-    gl.deleteShader(vs);
-    gl.deleteShader(fs);
-    if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
-      console.warn("[image-burn-gl] program link failed", gl.getProgramInfoLog(program));
-      gl.deleteProgram(program);
-      return null;
-    }
-    return program;
+    return SoemGl.link(gl, vsSource, fsSource, "image-burn-gl.js");
   }
 
   const VERT = `
@@ -344,14 +326,7 @@
   }
 
   function createQuad(gl) {
-    const buffer = gl.createBuffer();
-    gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
-    gl.bufferData(
-      gl.ARRAY_BUFFER,
-      new Float32Array([-1, -1, 1, -1, -1, 1, -1, 1, 1, -1, 1, 1]),
-      gl.STATIC_DRAW,
-    );
-    return buffer;
+    return SoemGl.quad(gl);
   }
 
   function bindQuad(gl, loc, quad) {

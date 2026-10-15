@@ -111,8 +111,9 @@ function near(a, b, eps, label) {
 const s0 = at(0);
 near(s0.step, 0, 0, "step0");
 near(s0.gate, 1, 1e-9, "gate0");
-// ACID_SEQUENCER_PLAN.md:27/140: Trigger only on Accent steps (step 0 has no Accent).
-near(s0.trig, 0, 1e-9, "trig0");
+// Trigger is a note trigger: fires at Gate height on every non-tie sounding step
+// and on the first step after rewind, independent of Accent (Accent is on CV).
+near(s0.trig, 1, 1e-6, "trig0 note trigger without Accent");
 near(s0.pitch, 36, 1e-6, "pitch0");
 near(s0.ramp, 0, 0, "ramp0 (inc removed)");
 near(s0.cv, 0, 1e-9, "cv0 low accent");
@@ -140,10 +141,13 @@ near(tie.gate, 1, 1e-9, "tie gate");
 near(tie.pitch, 40, 1e-6, "tie pitch");
 near(tie.trig, 0, 1e-9, "tie does not retrigger");
 const tieHold = at(step * 3 + 10);
+near(tieHold.trig, 0, 1e-9, "tie no pulse later in step");
 near(tieHold.gate, 1, 1e-9, "tie stays high");
 
 const slide0 = at(step * 4);
 near(slide0.pitch, 40, 0.02, "slide start from tie E");
+near(slide0.trig, 1, 1e-6, "trig4 non-accent note after tie");
+near(slide0.cv, 0, 1e-9, "cv4 low accent");
 const slideMid = at(step * 4 + 2400);
 near(slideMid.pitch, 44, 0.05, "slide halfway 40->48");
 
@@ -155,12 +159,23 @@ const shifted = at(0);
 near(shifted.pitch, 37, 1e-6, "semitone +1");
 near(shifted.step, 0, 0, "rewind step");
 near(shifted.gate, 1, 1e-9, "rewind gate");
+near(shifted.trig, 1, 1e-6, "rewind retrigger without Accent");
 setParam(g, h, PARAM_STEP0, pack(0, 1, 1, 0, 0));
 rewind(g);
 done = 0;
 const retrig = at(0);
-near(retrig.trig, 1, 1e-6, "rewind retrigger accent");
+near(retrig.trig, 1, 1e-6, "rewind retrigger with Accent");
+near(retrig.cv, 1, 1e-9, "rewind accent cv high");
 near(retrig.step, 0, 0, "rewind still step 0");
+
+// Accented tie still does not retrigger (Accent only affects CV).
+setParam(g, h, PARAM_STEP0 + 3, pack(4, 2, 1, 0, 0));
+rewind(g);
+done = 0;
+const accTie = at(step * 3);
+near(accTie.gate, 1, 1e-9, "accent tie gate");
+near(accTie.trig, 0, 1e-9, "accent tie does not retrigger");
+near(accTie.cv, 1, 1e-9, "accent tie cv high");
 
 console.log("acid sequencer ok", JSON.stringify({
   s0, s1pitch: s1.pitch, rest: rest.pitch, tie: tie.pitch, slideMid: slideMid.pitch, shifted: shifted.pitch,

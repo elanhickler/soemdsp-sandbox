@@ -2076,7 +2076,9 @@ function buildNodeGraphDisplaySettingsBodyHtml(formType, node = null) {
       colorKeys = colorKeys.filter((key) => !NODE_GRAPH_TRACE_STEREO_COLOR_ORDER.includes(key));
     }
     const toggleKeys = (sectionControls.toggles || []).filter(
-      (key) => activeToggles.has(key) && allowKey("toggles", key),
+      (key) => activeToggles.has(key) && allowKey("toggles", key)
+        // auto-zoom lines only draws on the reverb line displays, not Hypersaw stems.
+        && (key !== "autoZoomLines" || ["reverbEffect", "sabrinaReverbOriginal"].includes(String(node?.type || ""))),
     );
     let choiceKeys = (sectionControls.choices || []).filter(
       (key) => activeChoices.has(key) && allowKey("choices", key),

@@ -1074,13 +1074,8 @@ function nodeGraphSampleGradientStopsRgb(stops, energyT, peakFallback = "#75ebff
     : nodeGraphPhosphorDefaultGradientStops(peakFallback);
   const t = Math.max(0, Math.min(1, nodeGraphFiniteNumber(energyT)));
   const hexToRgb = (hex, fb = "#808080") => {
-    const color = normalizeNodeGraphTraceDisplayColor(hex, fb);
-    const match = /^#?([0-9a-f]{6})$/i.exec(String(color).trim());
-    if (!match) {
-      return [128, 128, 128];
-    }
-    const n = Number.parseInt(match[1], 16);
-    return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+    const c = globalThis.SoemColor.parse(normalizeNodeGraphTraceDisplayColor(hex, fb));
+    return c ? c.slice(0, 3) : [128, 128, 128];
   };
   const first = list[0];
   const last = list[list.length - 1];
@@ -1139,7 +1134,10 @@ function normalizeNodeGraphNumberReadoutSettings(settings = {}, defaultsOverride
   const gradientStops = faceStyle === "lcd"
     ? []
     : nodeGraphPhosphorGradientStopsFromSettings(
-      source,
+      source.gradientStops == null && source.gradient == null
+        && Array.isArray(globalThis.NUMBER_READOUT_LED_DEFAULT_GRADIENT_STOPS)
+        ? { ...source, gradientStops: globalThis.NUMBER_READOUT_LED_DEFAULT_GRADIENT_STOPS }
+        : source,
       defaults.color,
       { ignoreLiveColor: true },
     );

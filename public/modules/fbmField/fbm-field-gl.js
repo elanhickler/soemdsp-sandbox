@@ -268,17 +268,23 @@ function nodeGraphFbmFieldGlPresentParams(canvas, params = {}) {
   gl.bindTexture(gl.TEXTURE_2D, state.paletteTex);
   gl.uniform1i(state.uniforms.uPalette, 0);
   gl.uniform2f(state.uniforms.uResolution, gridW, gridH);
-  gl.uniform1f(state.uniforms.uDomainTime, Number(params.domainTime) || 0);
-  gl.uniform1f(state.uniforms.uZoom, Math.max(0.05, Number(params.zoom) || 1));
-  gl.uniform1f(state.uniforms.uPanX, Number(params.panX) || 0);
-  gl.uniform1f(state.uniforms.uPanY, Number(params.panY) || 0);
-  gl.uniform1f(state.uniforms.uRotate, Number(params.rotate) || 0);
-  gl.uniform1f(state.uniforms.uSeed, Math.max(0, Math.min(99999, Math.round(Number(params.seed) || 1))));
-  gl.uniform1f(state.uniforms.uOctaves, Math.max(1, Math.min(8, Math.round(Number(params.octaves) || 4))));
-  gl.uniform1f(state.uniforms.uPersistence, Math.max(0, Math.min(0.99, Number(params.persistence) || 0.5)));
-  gl.uniform1f(state.uniforms.uLacunarity, Math.max(1, Math.min(4, Number(params.lacunarity) || 2)));
-  gl.uniform1f(state.uniforms.uScale, Math.max(1e-6, Number(params.scale) || 1));
-  gl.uniform1f(state.uniforms.uSmoothness, Math.max(0, Math.min(1, Number(params.smoothness) || 0.55)));
+  // Defaults apply only to missing/non-finite values; explicit 0 is kept.
+  // Engine-safe floors (documented): zoom >= 0.05 and scale >= 1e-6 avoid a
+  // divide-by-zero in the domain transform; octaves >= 1 so fBm has a term;
+  // lacunarity >= 1 so frequencies never shrink.
+  const M = globalThis.SoemMath;
+  gl.uniform1f(state.uniforms.uDomainTime, M.finiteOr(params.domainTime, 0));
+  gl.uniform1f(state.uniforms.uZoom, M.clamp(params.zoom, 0.05, Infinity, 1));
+  gl.uniform1f(state.uniforms.uPanX, M.finiteOr(params.panX, 0));
+  gl.uniform1f(state.uniforms.uPanY, M.finiteOr(params.panY, 0));
+  gl.uniform1f(state.uniforms.uRotate, M.finiteOr(params.rotate, 0));
+  // Seed 0 is a real seed; full Seed range 0..SEED_MAX (float32-exact).
+  gl.uniform1f(state.uniforms.uSeed, Math.round(M.clamp(params.seed, 0, M.SEED_MAX, 0)));
+  gl.uniform1f(state.uniforms.uOctaves, Math.round(M.clamp(params.octaves, 1, 8, 4)));
+  gl.uniform1f(state.uniforms.uPersistence, M.clamp(params.persistence, 0, 0.99, 0.5));
+  gl.uniform1f(state.uniforms.uLacunarity, M.clamp(params.lacunarity, 1, 4, 2));
+  gl.uniform1f(state.uniforms.uScale, M.clamp(params.scale, 1e-6, Infinity, 1));
+  gl.uniform1f(state.uniforms.uSmoothness, M.clamp01(params.smoothness, 0.55));
   // Explicit zero valid for contrast/brightness â€” never coerce with ||.
   const contrast = Number(params.contrast);
   gl.uniform1f(state.uniforms.uContrast, Number.isFinite(contrast) ? Math.max(0, contrast) : 1);

@@ -225,7 +225,10 @@
     </div>
   </div>
   <script src="./public/embed-params.js?v=embed-1"></script>
-  <script src="./public/boot-loading.js?v=webgl2-1"></script>
+  <script src="./public/lib/math/soem-math.js?v=clamp-1"></script>
+<script src="./public/lib/color/soem-color.js?v=color-1"></script>
+<script src="./public/lib/gl/soem-gl-util.js?v=gl-util-1"></script>
+<script src="./public/boot-loading.js?v=webgl2-1"></script>
   <script src="./public/perform-boot.js?v=kbd-own-1"></script>
   <main class="shell">
     <section id="nodeWiringPanel" class="panel node-wiring-panel" aria-label="Node wiring MVP">
@@ -3321,8 +3324,7 @@
   <script data-boot-defer type="text/plain" src="./public/modules/textBox/text-box-host.js?v=textbox-newline-height-1"></script>
   <script data-boot-defer type="text/plain" src="./public/modules/textBox/text-box-settings.js?v=textbox-newline-height-1"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-text-box-rendering.js?v=textbox-light-50-1"></script>
-  <script data-boot-defer type="text/plain" src="./public/lib/math/soem-math.js?v=seed-rework-1"></script>
-  <script data-boot-defer type="text/plain" src="./public/node-graph-patch-normalizers.js?v=canvas-tile-shared-1"></script>
+    <script data-boot-defer type="text/plain" src="./public/node-graph-patch-normalizers.js?v=canvas-tile-shared-1"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-audio-derivation.js?v=render-host-match-1"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-grid-utils.js?v=center-origin-view-1"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-patch-runtime.js?v=kbd-own-1"></script>
@@ -3649,6 +3651,7 @@
   <script data-boot-defer type="text/plain" src="./public/lib/sample-interpolate.js?v=mp-aa-1"></script>
   <script data-boot-defer type="text/plain" src="./public/modules/basicShape/basic-shape-display.js?v=disc-break-1"></script>
   <script data-boot-defer type="text/plain" src="./public/modules/sinCos/sin-cos-display.js?v=sincos-white-dots-1"></script>
+  <script data-boot-defer type="text/plain" src="./public/modules/slewLimiter/slew-shape-display.js?v=slew-shape-1"></script>
   <script data-boot-defer type="text/plain" src="./public/modules/sineWavetable/sine-wavetable-display.js?v=sincos4-solo-square-1"></script>
   <script data-boot-defer type="text/plain" src="./public/modules/ellipsoid/ellipsoid-settings.js?v=hsl-lamp-1"></script>
   <script data-boot-defer type="text/plain" src="./public/modules/ellipsoid/ellipsoid-display.js?v=ellipsoid-osc-3"></script>

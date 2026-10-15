@@ -21,7 +21,7 @@ let noiseSeed = 845;
 let state = createFlowerChildRev1State();
 
 function clamp(value, min, max) {
-  return Math.max(min, Math.min(max, nodeGraphFiniteNumber(value)));
+  return globalThis.SoemMath.clamp(value, min, max, 0);
 }
 
 function lerp(a, b, t) {

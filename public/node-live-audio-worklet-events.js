@@ -519,12 +519,29 @@ NodeLiveAudioProcessor.prototype.setMidiKeyboardSignal = function setMidiKeyboar
  * a Trigger is one sample per strike: there is no held pulse flag.
  */
 NodeLiveAudioProcessor.prototype.queueKeyboardEvent = function queueKeyboardEvent(id, previous, next, raw, atFrame) {
+  // F (Hz) / Pitch (MIDI) values for the per-sample blocks.
+  const toMidi = (sig) => {
+    const m = Number(sig?.midi);
+    return Number.isFinite(m) ? m : 0;
+  };
+  const toHz = (sig) => {
+    let hz = Number(sig?.frequency);
+    if (!(hz > 0) && Number.isFinite(Number(sig?.midi))) hz = 440 * (2 ** ((Number(sig.midi) - 69) / 12));
+    return Number.isFinite(hz) && hz > 0 ? hz : 0;
+  };
   const key = String(id || "");
   if (!key) return;
   if (!this._keyboardEventState) this._keyboardEventState = new Map();
   let st = this._keyboardEventState.get(key);
   if (!st) {
-    st = { gate: 0, vel: 0, queue: [], plan: null };
+    st = {
+      gate: 0,
+      vel: 0,
+      hz: toHz(previous),
+      midi: toMidi(previous),
+      queue: [],
+      plan: null,
+    };
     this._keyboardEventState.set(key, st);
   }
   const wasDown = Number(previous?.gate) > 0;
@@ -537,9 +554,20 @@ NodeLiveAudioProcessor.prototype.queueKeyboardEvent = function queueKeyboardEven
   // Trigger-only strike (Keyboard right-click sweep): Gate stays low, one Trigger.
   const triggerOnly = gate === 0 && !wasDown && Number(raw?.gatePulse) > 0;
   const pulse = (gate === 1 && (!wasDown || restrike)) || triggerOnly ? 1 : 0;
-  if (gate === (wasDown ? 1 : 0) && !pulse) return;
+  // Pitch rides the same stamped event as Gate, so the F / Pitch sample
+  // blocks step on exactly the edge's sample, never ahead of it.
+  const pitchMoved = Number(previous?.frequency) !== Number(next?.frequency)
+    || Number(previous?.midi) !== Number(next?.midi);
+  if (gate === (wasDown ? 1 : 0) && !pulse && !pitchMoved) return;
   const f = Number(atFrame);
-  st.queue.push({ frame: Number.isFinite(f) && f >= 0 ? Math.round(f) : -1, gate, pulse, vel });
+  st.queue.push({
+    frame: Number.isFinite(f) && f >= 0 ? Math.round(f) : -1,
+    gate,
+    pulse,
+    vel,
+    hz: toHz(next),
+    midi: toMidi(next),
+  });
 };
 
 /** Event state for a Keyboard / Grid Keyboard / MIDI keyboard node, or null. */
@@ -563,7 +591,14 @@ NodeLiveAudioProcessor.prototype.prepareKeyboardEventBlock = function prepareKey
   const rate = typeof sampleRate === "number" && sampleRate > 0 ? sampleRate : 48000;
   const farFuture = end + rate;
   states.forEach((st) => {
-    const plan = { startGate: st.gate, startVel: st.vel, edges: [], pulses: [] };
+    const plan = {
+      startGate: st.gate,
+      startVel: st.vel,
+      startHz: st.hz,
+      startMidi: st.midi,
+      edges: [],
+      pulses: [],
+    };
     let last = 0;
     let n = 0;
     while (n < st.queue.length) {
@@ -572,8 +607,10 @@ NodeLiveAudioProcessor.prototype.prepareKeyboardEventBlock = function prepareKey
       const hostOff = ev.frame >= startFrame && ev.frame < end ? ev.frame - startFrame : 0;
       const off = Math.max(last, hostOff * ratio);
       last = off;
-      plan.edges.push({ off, gate: ev.gate, vel: ev.vel });
+      plan.edges.push({ off, gate: ev.gate, vel: ev.vel, hz: ev.hz, midi: ev.midi });
       if (ev.pulse) plan.pulses.push({ off, vel: ev.vel });
+      st.hz = ev.hz;
+      st.midi = ev.midi;
       st.gate = ev.gate;
       st.vel = ev.vel;
       n += 1;

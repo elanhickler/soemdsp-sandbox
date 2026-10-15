@@ -7,41 +7,11 @@
   let device = null;
 
   function clamp01(value, fallback = 0) {
-    const n = Number(value);
-    if (!Number.isFinite(n)) {
-      return Math.max(0, Math.min(1, nodeGraphFiniteNumber(fallback)));
-    }
-    return Math.max(0, Math.min(1, n));
-  }
-
-  function compile(gl, type, src) {
-    const sh = gl.createShader(type);
-    gl.shaderSource(sh, src);
-    gl.compileShader(sh);
-    if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) {
-      gl.deleteShader(sh);
-      return null;
-    }
-    return sh;
+    return globalThis.SoemMath.clamp01(value, fallback);
   }
 
   function link(gl, vsSrc, fsSrc) {
-    const vs = compile(gl, gl.VERTEX_SHADER, vsSrc);
-    const fs = compile(gl, gl.FRAGMENT_SHADER, fsSrc);
-    if (!vs || !fs) {
-      return null;
-    }
-    const p = gl.createProgram();
-    gl.attachShader(p, vs);
-    gl.attachShader(p, fs);
-    gl.linkProgram(p);
-    gl.deleteShader(vs);
-    gl.deleteShader(fs);
-    if (!gl.getProgramParameter(p, gl.LINK_STATUS)) {
-      gl.deleteProgram(p);
-      return null;
-    }
-    return p;
+    return SoemGl.link(gl, vsSrc, fsSrc, "trace-tape.js");
   }
 
   const VERT = `

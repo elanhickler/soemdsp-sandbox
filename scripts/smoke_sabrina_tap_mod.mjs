@@ -20,12 +20,15 @@ const cur = await load(fs.readFileSync(path.join(root, rel)));
 // Same LFO settings as the old 0.83 / 0.001 knobs, in the current mappings
 // (Speed: period = 2 * 0.025^v; Vary: spread = v * 0.25).
 const CUR_SPEED = Math.log((((1 - 0.83) * 1.95 + 0.5) * 0.5) / 2) / Math.log(0.025);
+// Cinematic Reverb (variant 0) takes real units: ms / depth fraction / Hz / ms.
+const units = (ds, dl, amp, speed, vary) => [ds * 400, dl * 400, amp * 0.4, 0.5 * Math.pow(40, speed), vary * 250];
 const sr = 44100, frames = 128, blocks = Math.ceil((sr * 2) / frames);
 
-function render(e, { delayTapMod = 1, modAmp = 0.3, lfoStyle = 0, flipAt = -1, flipTo = 0, speed = CUR_SPEED, vary = 0.999 } = {}) {
+function render(e, { delayTapMod = 1, modAmp = 0.3, lfoStyle = 0, flipAt = -1, flipTo = 0, speed = CUR_SPEED, vary = 0.999, normalized = false } = {}) {
   const h = e.soemdsp_sabrina_reverb_create(sr);
   if (!h) throw new Error("create failed");
-  const set = (m) => e.soemdsp_sabrina_reverb_set_params(h, 1.0, 0.35, 0.7, 0.08, 0.85, modAmp, speed, vary, 0, lfoStyle, m);
+  const [ds, dl, amp, sp, va] = normalized ? [0.35, 0.08, modAmp, speed, vary] : units(0.35, 0.08, modAmp, speed, vary);
+  const set = (m) => e.soemdsp_sabrina_reverb_set_params(h, 1.0, ds, 0.7, dl, 0.85, amp, sp, va, 0, lfoStyle, m);
   set(delayTapMod);
   let seed = 12345;
   const rnd = () => ((seed = (seed * 1103515245 + 12345) >>> 0) / 4294967296) - 0.5;
@@ -79,13 +82,16 @@ if (headBytes && headBytes.length) {
   // HEAD may predate the Speed/Vary remap; if so feed it the old knob values.
   const headSrc = execFileSync("git", ["show", "HEAD:native_modules/sabrina_reverb/sabrina_reverb.cpp"], { cwd: root }).toString();
   const oldMap = headSrc.includes("(1.0 - state.smoothedLfoVariation)");
+  const headUnits = headSrc.includes("applyCinematicGeometry");
   const HEAD_SPEED = oldMap ? 0.83 : CUR_SPEED, HEAD_VARY = oldMap ? 0.001 : 0.999;
   for (const [name, style] of [["parabol", 0], ["fbm", 1]]) {
-    const d = maxDiff(render(cur, { delayTapMod: 1, lfoStyle: style }), render(head, { lfoStyle: style, speed: HEAD_SPEED, vary: HEAD_VARY }));
+    const d = maxDiff(render(cur, { delayTapMod: 1, lfoStyle: style }), render(head, { lfoStyle: style, speed: HEAD_SPEED, vary: HEAD_VARY, normalized: !headUnits }));
     console.log(name, { onVsHeadOriginal: d });
     // Same map as HEAD -> must be bit-exact (d === 0). Only a pre-remap HEAD is not bit-exact: the period goes through dsp_exp, and a tiny period error
     // drifts the LFO phase over 2 s, so allow a small diff (On vs Off is ~0.6).
-    if (!(oldMap ? d < 0.1 : d === 0)) fail(`${name}: Tap Mod 1 differs from the original (HEAD) build`);
+    // Same units as HEAD -> bit-exact. Normalized HEAD (pre real-units) -> rounding only
+    // (1/Hz vs 2*dsp_exp period, ms/400 vs knob), so a small LFO-phase drift is allowed.
+    if (!(oldMap ? d < 0.1 : headUnits ? d === 0 : d < 1e-3)) fail(`${name}: Tap Mod 1 differs from the original (HEAD) build`);
   }
 } else {
   console.log("skip: HEAD build not available, On-vs-original check skipped");

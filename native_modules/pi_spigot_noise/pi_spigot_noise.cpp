@@ -3,17 +3,29 @@
 // soemdsp-native-target: piSpigotNoise
 // soemdsp-native-kind: noise
 //
-// Honest BBP heart. No digit file, no API, no wavetable.
-// https://en.wikipedia.org/wiki/Bailey%E2%80%93Borwein%E2%80%93Plouffe_formula
+// Stored-digit playback, restored from the first Pi Spigot design
+// (git d7c1d310, 2026-07-10): real decimal digits of pi, grouped 3 digits
+// per sample starting at the leading "3" (314, 159, 265, ...), each group
+// mapped to bipolar audio exactly as the original int16 table did:
+//   sample = round((group / 999 * 2 - 1) * 32767) / 32767
+// No computation beyond an array index.
 //
-// One sample = one gear tooth of the four-series rotate:
-//   phase 0:  4 / (8k+1)
-//   phase 1: -2 / (8k+4)
-//   phase 2: -1 / (8k+5)
-//   phase 3: -1 / (8k+6)  then k++
-// Audio is the live state (Sum = {S}, Term = this sample's add).
-// Hex / bits / T latch only when k finishes this n (plus a short tail).
-// As n grows the verse lengthens: 4*(n+tail) samples per hex digit.
+// Digit table: pi_digits_bcd.bin, 1 MiB, two digits per byte (high nibble
+// first) = 2,097,152 digits including the leading 3 = 699,050 samples
+// (~15.85 s at 44.1 kHz) before the loop. Embedded in the wasm with #embed.
+// Generated deterministically (mpmath Chudnovsky, cross-checked against
+// MPFR const_pi and the original 1,000,000 pi.delivery digits);
+// sha256 ece07484297ede8f8d0be1d87eeee8df69d6b1a5a509bb9c7004508639d29a40.
+//
+// Outputs (port keys kept so saved patches load):
+//   Left   playback from Start
+//   Right  same table, read half a table later (independent stereo side)
+//   Hex    first decimal digit of the current Left group (0..9 as 0..1)
+//   N      read position through the table (0..1)
+//   T      pulse when the Left read position loops
+//   B3..B0 BCD bits of that digit (8, 4, 2, 1)
+// Color / Smoothing / Level post-process both sides (White + 0 = original).
+// soemdsp_pi_spigot_noise_compute_bipolar keeps the BBP hex-digit extractor.
 
 #include <soemdsp/soemdsp.hpp>
 
@@ -21,13 +33,23 @@ namespace {
 
 using namespace soemdsp_maths;
 
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wc23-extensions"
+static const unsigned char kPiBcd[] = {
+#embed "pi_digits_bcd.bin"
+};
+#pragma clang diagnostic pop
+
+static const int kDigitCount = (int)(sizeof(kPiBcd) * 2);
+static const int kGroupCount = kDigitCount / 3;  // samples before the loop
+
 static const char kMetadataJson[] =
   "{"
     "\"module\":\"pi_spigot_noise\","
     "\"label\":\"Pi Spigot Noise\","
     "\"targetType\":\"piSpigotNoise\","
     "\"kind\":\"noise\","
-    "\"outputs\":[\"Left Out\",\"Right Out\",\"Hex\",\"N\",\"T\",\"B3\",\"B2\",\"B1\",\"B0\"],"
+    "\"outputs\":[\"Left\",\"Right\",\"Hex\",\"N\",\"T\",\"B3\",\"B2\",\"B1\",\"B0\"],"
     "\"parameters\":["
       "{\"key\":\"start\",\"label\":\"Start\",\"defaultValue\":0,\"min\":0,\"mid\":0.5,\"max\":1,\"step\":\"any\"},"
       "{\"key\":\"stride\",\"label\":\"Stride\",\"defaultValue\":1,\"min\":1,\"mid\":4,\"max\":16,\"step\":1},"
@@ -38,10 +60,7 @@ static const char kMetadataJson[] =
   "}";
 
 static const int kMaxInstances = 16;
-static const int kMaxN = 2048;
 static const int kTail = 16;
-static const int kSeriesM[4] = {1, 4, 5, 6};
-static const double kSeriesC[4] = {4.0, -2.0, -1.0, -1.0};
 
 struct PiSpigotNoiseChannel {
   double pink[7];
@@ -54,22 +73,35 @@ struct PiSpigotNoiseChannel {
 
 struct PiSpigotNoiseState {
   bool active;
-  int startN;
-  int stride;
-  int n;
-  int k;
-  int phase;
-  double S;
-  double lastTerm;
-  int hex;
+  int start;      // first sample (group index)
+  int stride;     // samples advanced per output sample (1 = original)
+  int readIndex;  // offset from start
+  int digit;      // first digit of the current Left group
   int pulse;
-  PiSpigotNoiseChannel sumCh;
-  PiSpigotNoiseChannel termCh;
+  PiSpigotNoiseChannel leftCh;
+  PiSpigotNoiseChannel rightCh;
 };
 
 static PiSpigotNoiseState gPool[kMaxInstances];
 
 static inline int clampi(int x, int lo, int hi) { return x < lo ? lo : (x > hi ? hi : x); }
+
+static inline int pi_digit(int i) {
+  const unsigned char b = kPiBcd[i >> 1];
+  return (i & 1) ? (b & 15) : (b >> 4);
+}
+
+static inline int pi_group(int g) {
+  const int i = g * 3;
+  return pi_digit(i) * 100 + pi_digit(i + 1) * 10 + pi_digit(i + 2);
+}
+
+// Same value the original int16 table held: round((d/999*2-1)*32767)/32767.
+static inline double group_sample(int d) {
+  const double x = ((double)d / 999.0 * 2.0 - 1.0) * 32767.0;
+  const double r = x < 0.0 ? -dsp_floor(-x + 0.5) : dsp_floor(x + 0.5);
+  return r / 32767.0;
+}
 
 static double pow_mod(double a, double b, double m) {
   if (m <= 0.0) return 0.0;
@@ -160,49 +192,17 @@ static double applySmoothing(PiSpigotNoiseChannel& c, double x, double smoothing
   return y;
 }
 
-static void restartDigit(PiSpigotNoiseState& s) {
-  s.k = 0;
-  s.phase = 0;
-  s.S = 0.0;
-  s.lastTerm = 0.0;
-}
-
 static void applyStartStride(PiSpigotNoiseState& s, double start, double stride) {
-  const int startN = clampi((int)(clamp(start, 0.0, 1.0) * (double)kMaxN + 0.5), 0, kMaxN);
-  const int st = clampi((int)(safe(stride) + 0.5), 1, 16);
-  if (startN == s.startN && st == s.stride) return;
-  s.startN = startN;
-  s.stride = st;
-  s.n = startN;
-  s.hex = 0;
+  const int st = clampi((int)(clamp(start, 0.0, 1.0) * (double)(kGroupCount - 1) + 0.5), 0, kGroupCount - 1);
+  const int sd = clampi((int)(safe(stride) + 0.5), 1, 16);
+  if (st == s.start && sd == s.stride) return;
+  s.start = st;
+  s.stride = sd;
+  s.readIndex = 0;
+  s.digit = 0;
   s.pulse = 0;
-  restartDigit(s);
-  resetColor(s.sumCh);
-  resetColor(s.termCh);
-}
-
-static void stepEquation(PiSpigotNoiseState& s) {
-  const int m = kSeriesM[s.phase];
-  const double c = kSeriesC[s.phase];
-  const double term = c * series_term(m, s.k, s.n);
-  s.lastTerm = term;
-  s.S += term;
-  s.S = s.S - dsp_floor(s.S);
-  if (s.S < 0.0) s.S += 1.0;
-  s.pulse = 0;
-  s.phase += 1;
-  if (s.phase < 4) return;
-  s.phase = 0;
-  s.k += 1;
-  if (s.k <= s.n + kTail) return;
-  int hex = (int)(s.S * 16.0);
-  if (hex > 15) hex = 15;
-  if (hex < 0) hex = 0;
-  s.hex = hex;
-  s.pulse = 1;
-  s.n += s.stride;
-  if (s.n > kMaxN) s.n = s.startN;
-  restartDigit(s);
+  resetColor(s.leftCh);
+  resetColor(s.rightCh);
 }
 
 }  // namespace
@@ -211,14 +211,13 @@ extern "C" int soemdsp_pi_spigot_noise_create() {
   for (int i = 0; i < kMaxInstances; i += 1) {
     if (!gPool[i].active) {
       PiSpigotNoiseState& s = gPool[i];
-      s.startN = 0;
+      s.start = 0;
       s.stride = 1;
-      s.n = 0;
-      s.hex = 0;
+      s.readIndex = 0;
+      s.digit = 0;
       s.pulse = 0;
-      restartDigit(s);
-      resetColor(s.sumCh);
-      resetColor(s.termCh);
+      resetColor(s.leftCh);
+      resetColor(s.rightCh);
       s.active = true;
       return i + 1;
     }
@@ -240,33 +239,38 @@ extern "C" void soemdsp_pi_spigot_noise_sample(int handle, double color, double 
   if (handle < 1 || handle > kMaxInstances) return;
   PiSpigotNoiseState& s = gPool[handle - 1];
   if (!s.active) return;
-  stepEquation(s);
+  const int gl = (s.start + s.readIndex) % kGroupCount;
+  const int gr = (gl + kGroupCount / 2) % kGroupCount;
+  const int dl = pi_group(gl);
+  s.digit = dl / 100;
+  const int next = s.readIndex + s.stride;
+  s.pulse = next >= kGroupCount ? 1 : 0;
+  s.readIndex = next % kGroupCount;
   const int safeColor = clampi((int)(safe(color) + 0.5), 0, 4);
-  const double sum = s.S * 2.0 - 1.0;
-  const double term = clamp11(s.lastTerm * 0.25);
   const double amp = safe(level);
-  s.sumCh.lastOut = applySmoothing(s.sumCh, applyColor(s.sumCh, sum, safeColor), smoothing) * amp;
-  s.termCh.lastOut = applySmoothing(s.termCh, applyColor(s.termCh, term, safeColor), smoothing) * amp;
+  s.leftCh.lastOut = applySmoothing(s.leftCh, applyColor(s.leftCh, group_sample(dl), safeColor), smoothing) * amp;
+  s.rightCh.lastOut = applySmoothing(s.rightCh, applyColor(s.rightCh, group_sample(pi_group(gr)), safeColor), smoothing) * amp;
 }
 
 extern "C" double soemdsp_pi_spigot_noise_left(int handle) {
   if (handle < 1 || handle > kMaxInstances) return 0.0;
-  return gPool[handle - 1].sumCh.lastOut;
+  return gPool[handle - 1].leftCh.lastOut;
 }
 
 extern "C" double soemdsp_pi_spigot_noise_right(int handle) {
   if (handle < 1 || handle > kMaxInstances) return 0.0;
-  return gPool[handle - 1].termCh.lastOut;
+  return gPool[handle - 1].rightCh.lastOut;
 }
 
 extern "C" double soemdsp_pi_spigot_noise_hex(int handle) {
   if (handle < 1 || handle > kMaxInstances) return 0.0;
-  return (double)gPool[handle - 1].hex / 15.0;
+  return (double)gPool[handle - 1].digit / 9.0;
 }
 
 extern "C" double soemdsp_pi_spigot_noise_n(int handle) {
   if (handle < 1 || handle > kMaxInstances) return 0.0;
-  return (double)gPool[handle - 1].n / (double)kMaxN;
+  const PiSpigotNoiseState& s = gPool[handle - 1];
+  return (double)((s.start + s.readIndex) % kGroupCount) / (double)(kGroupCount - 1);
 }
 
 extern "C" double soemdsp_pi_spigot_noise_t(int handle) {
@@ -276,24 +280,25 @@ extern "C" double soemdsp_pi_spigot_noise_t(int handle) {
 
 extern "C" double soemdsp_pi_spigot_noise_b3(int handle) {
   if (handle < 1 || handle > kMaxInstances) return 0.0;
-  return (gPool[handle - 1].hex & 8) ? 1.0 : 0.0;
+  return (gPool[handle - 1].digit & 8) ? 1.0 : 0.0;
 }
 
 extern "C" double soemdsp_pi_spigot_noise_b2(int handle) {
   if (handle < 1 || handle > kMaxInstances) return 0.0;
-  return (gPool[handle - 1].hex & 4) ? 1.0 : 0.0;
+  return (gPool[handle - 1].digit & 4) ? 1.0 : 0.0;
 }
 
 extern "C" double soemdsp_pi_spigot_noise_b1(int handle) {
   if (handle < 1 || handle > kMaxInstances) return 0.0;
-  return (gPool[handle - 1].hex & 2) ? 1.0 : 0.0;
+  return (gPool[handle - 1].digit & 2) ? 1.0 : 0.0;
 }
 
 extern "C" double soemdsp_pi_spigot_noise_b0(int handle) {
   if (handle < 1 || handle > kMaxInstances) return 0.0;
-  return (gPool[handle - 1].hex & 1) ? 1.0 : 0.0;
+  return (gPool[handle - 1].digit & 1) ? 1.0 : 0.0;
 }
 
+// BBP hex-digit extractor at position n, bipolar. Not used by playback.
 extern "C" double soemdsp_pi_spigot_noise_compute_bipolar(int n) {
   int safeN = n < 0 ? 0 : n;
   double x = 0.0;
@@ -310,11 +315,11 @@ extern "C" double soemdsp_pi_spigot_noise_compute_bipolar(int n) {
 }
 
 extern "C" int soemdsp_pi_spigot_noise_sample_count() {
-  return kMaxN;
+  return kGroupCount;
 }
 
 extern "C" int soemdsp_pi_spigot_noise_version() {
-  return 6;
+  return 7;
 }
 
 extern "C" const char* soemdsp_pi_spigot_noise_metadata_json() {

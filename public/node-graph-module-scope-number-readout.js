@@ -92,7 +92,7 @@ function nodeGraphNumberReadoutRearmAllFacesAfterLiveStart(options = {}) {
     if (isLcd && typeof nodeGraphNumberReadoutApplyLcdLightCutout === "function") {
       nodeGraphNumberReadoutApplyLcdLightCutout(face, canvas);
     } else {
-      const s = "1";
+      const s = String(nodeGraphLedDisplayLightStrength);
       for (const el of [face, canvas].filter(Boolean)) {
         el.classList?.add?.("node-light-source");
         if (el.dataset) {
@@ -100,7 +100,7 @@ function nodeGraphNumberReadoutRearmAllFacesAfterLiveStart(options = {}) {
           el.dataset.lightStrength = s;
         }
         if (typeof setNodeGraphLightStrength === "function") {
-          setNodeGraphLightStrength(el, 1);
+          setNodeGraphLightStrength(el, nodeGraphLedDisplayLightStrength);
         }
       }
     }
@@ -203,7 +203,7 @@ function paintNodeGraphValueFacesNow(pixelRatio = window.devicePixelRatio || 1) 
           ) === "lcd";
         const s = isLcd && typeof nodeGraphLcdDisplayLightStrength === "number"
           ? nodeGraphLcdDisplayLightStrength
-          : 1;
+          : nodeGraphLedDisplayLightStrength;
         // Always re-open room-dimmer punches (face + canvas).
         if (typeof nodeGraphModuleScopeMarkScreenLit === "function") {
           nodeGraphModuleScopeMarkScreenLit(face, s);
@@ -392,10 +392,15 @@ function nodeGraphNumberReadoutFaceStyleForSlot(slot, node = null) {
  * “less dim” as crossover curve faces), not full-bright phosphor (1) and not
  * fully under the veil (0).
  */
-const nodeGraphLcdDisplayLightStrength =
+/** Room-dimmer light-source cutout per display type (0 = veiled, 1 = full hole). */
+// LCD shares the crossover faces' cutout (node-graph-cookbook-filter.js).
+const NODE_GRAPH_LCD_LIGHT_CUTOUT =
   typeof nodeGraphCrossoverDisplayLightStrength === "number"
     ? nodeGraphCrossoverDisplayLightStrength
     : 2 / 3;
+const NODE_GRAPH_LED_LIGHT_CUTOUT = 0.75;
+const nodeGraphLcdDisplayLightStrength = NODE_GRAPH_LCD_LIGHT_CUTOUT;
+const nodeGraphLedDisplayLightStrength = NODE_GRAPH_LED_LIGHT_CUTOUT;
 
 function nodeGraphNumberReadoutIsLcdFaceElement(el) {
   if (!el) {
@@ -417,7 +422,7 @@ function nodeGraphNumberReadoutIsLcdFaceElement(el) {
 /** Apply LCD less-dim punch to face (+ optional canvas). */
 function nodeGraphNumberReadoutApplyLcdLightCutout(face, canvas = null) {
   const s = nodeGraphLcdDisplayLightStrength;
-  const strength = Number.isFinite(s) ? Math.max(0, Math.min(1, s)) : 2 / 3;
+  const strength = Number.isFinite(s) ? Math.max(0, Math.min(1, s)) : NODE_GRAPH_LCD_LIGHT_CUTOUT;
   const text = strength.toFixed(6);
   const targets = [face, canvas].filter(Boolean);
   for (const el of targets) {
@@ -697,6 +702,93 @@ function nodeGraphNumberReadoutGhostLut256(stops, peakHex) {
   return lut;
 }
 
+// Burn-plate tint on the shared picture device: plate alpha (energy byte)
+// indexes the 256-entry ghost LUT per pixel; alpha passes through.
+const NODE_GRAPH_NUMBER_READOUT_TINT_FS = `
+  precision mediump float;
+  varying vec2 vUv;
+  uniform sampler2D uPlate;
+  uniform sampler2D uLut;
+  void main() {
+    vec4 p = texture2D(uPlate, vec2(vUv.x, 1.0 - vUv.y));
+    float e = floor(p.a * 255.0 + 0.5);
+    if (e < 0.5) {
+      gl_FragColor = vec4(0.0);
+      return;
+    }
+    vec3 c = texture2D(uLut, vec2((e + 0.5) / 256.0, 0.5)).rgb;
+    gl_FragColor = vec4(c, p.a);
+  }
+`;
+const nodeGraphNumberReadoutTintGl = { gl: null, plate: null, lut: null, lutKey: "" };
+
+function nodeGraphNumberReadoutPresentBurnPlateGl(destCtx, burnPlate, lut, lutKey) {
+  if (typeof nodeGraphSharedGlDevice !== "function" || typeof SoemGl === "undefined") {
+    return false;
+  }
+  const dev = nodeGraphSharedGlDevice();
+  const gl = dev?.gl;
+  const w = burnPlate.width | 0;
+  const h = burnPlate.height | 0;
+  if (!gl || gl.isContextLost() || w > dev.canvas.width || h > dev.canvas.height) {
+    return false;
+  }
+  const program = SoemGl.program(gl, "number-readout-burn-tint", SoemGl.GLSL_FULLSCREEN_VS, NODE_GRAPH_NUMBER_READOUT_TINT_FS);
+  if (!program) {
+    return false;
+  }
+  const st = nodeGraphNumberReadoutTintGl;
+  if (st.gl !== gl) {
+    st.gl = gl;
+    st.plate = null;
+    st.lut = null;
+    st.lutKey = "";
+  }
+  const makeTex = () => {
+    const t = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, t);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    return t;
+  };
+  if (!st.plate) st.plate = makeTex();
+  if (!st.lut) st.lut = makeTex();
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+  gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
+  gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+  gl.activeTexture(gl.TEXTURE1);
+  gl.bindTexture(gl.TEXTURE_2D, st.lut);
+  if (st.lutKey !== lutKey) {
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB, 256, 1, 0, gl.RGB, gl.UNSIGNED_BYTE, new Uint8Array(Uint8ClampedArray.from(lut).buffer));
+    st.lutKey = lutKey;
+  }
+  gl.activeTexture(gl.TEXTURE0);
+  gl.bindTexture(gl.TEXTURE_2D, st.plate);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, burnPlate);
+  gl.pixelStorei(gl.UNPACK_ALIGNMENT, 4);
+  nodeGraphSharedGlBindPresent(gl, w, h);
+  gl.disable(gl.BLEND);
+  gl.clearColor(0, 0, 0, 0);
+  gl.clear(gl.COLOR_BUFFER_BIT);
+  gl.useProgram(program);
+  gl.uniform1i(gl.getUniformLocation(program, "uPlate"), 0);
+  gl.uniform1i(gl.getUniformLocation(program, "uLut"), 1);
+  SoemGl.drawQuad(gl, gl.getAttribLocation(program, "aPos"));
+  nodeGraphSharedGlEndPresent(gl);
+  gl.activeTexture(gl.TEXTURE1);
+  gl.bindTexture(gl.TEXTURE_2D, null);
+  gl.activeTexture(gl.TEXTURE0);
+  gl.bindTexture(gl.TEXTURE_2D, null);
+  destCtx.save();
+  destCtx.globalAlpha = 1;
+  destCtx.globalCompositeOperation = "source-over";
+  destCtx.drawImage(dev.canvas, 0, dev.canvas.height - h, w, h, 0, 0, w, h);
+  destCtx.restore();
+  return true;
+}
+
 function nodeGraphNumberReadoutPresentBurnPlate(
   destCtx,
   burnPlate,
@@ -716,6 +808,10 @@ function nodeGraphNumberReadoutPresentBurnPlate(
     host._numberReadoutGhostLutKey = lutKey;
   }
   const lut = host._numberReadoutGhostLut;
+  // GPU path (shared picture device). Canvas2D below is the no-GL fallback.
+  if (nodeGraphNumberReadoutPresentBurnPlateGl(destCtx, burnPlate, lut, lutKey)) {
+    return;
+  }
   let tint = host?._numberReadoutBurnTint;
   if (!tint) {
     tint = document.createElement("canvas");
@@ -799,15 +895,15 @@ function paintNodeGraphNumberReadoutColdBoot(canvas, screenElement, node = null,
   if (isLcd) {
     nodeGraphNumberReadoutApplyLcdLightCutout(screenElement, canvas);
   } else {
-    // Value LED: full hole on face AND canvas (canvas is the dimmer punch target).
+    // Value LED: partial hole on face AND canvas (canvas is the dimmer punch target).
     for (const el of [screenElement, canvas].filter(Boolean)) {
       el.classList?.add?.("node-light-source");
       if (el.dataset) {
         el.dataset.lightSource = "screen";
-        el.dataset.lightStrength = "1";
+        el.dataset.lightStrength = String(nodeGraphLedDisplayLightStrength);
       }
       if (typeof setNodeGraphLightStrength === "function") {
-        setNodeGraphLightStrength(el, 1);
+        setNodeGraphLightStrength(el, nodeGraphLedDisplayLightStrength);
       }
     }
   }
@@ -2584,7 +2680,7 @@ function drawNodeGraphNumberReadoutItem(renderer, item, pixelRatio) {
   // dimmer before any early-out — pause→stop→play can leave canvas at strength 0
   // while the digit cache already matches; dataset-only writes never schedule a
   // veil redraw, so faces stayed dark under the room dimmer.
-  const punchN = Math.max(0.001, nodeGraphFiniteNumber(bright));
+  const punchN = Math.max(0.001, nodeGraphFiniteNumber(bright) * nodeGraphLedDisplayLightStrength);
   const punch = punchN.toFixed(3);
   const punchTargets = [canvas, canvas?.parentElement, screenElement].filter(Boolean);
   for (const el of punchTargets) {

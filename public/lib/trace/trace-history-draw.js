@@ -15,23 +15,12 @@
   ]);
 
   function clamp01(value, fallback = 0) {
-    const n = Number(value);
-    if (!Number.isFinite(n)) {
-      return Math.max(0, Math.min(1, nodeGraphFiniteNumber(fallback)));
-    }
-    return Math.max(0, Math.min(1, n));
+    return globalThis.SoemMath.clamp01(value, fallback);
   }
 
   function hexToRgb(hex, fallback = [255, 51, 51]) {
-    const text = String(hex || "").trim();
-    if (/^#[0-9a-fA-F]{6}$/.test(text)) {
-      return [
-        parseInt(text.slice(1, 3), 16),
-        parseInt(text.slice(3, 5), 16),
-        parseInt(text.slice(5, 7), 16),
-      ];
-    }
-    return fallback.slice();
+    const c = globalThis.SoemColor.parse(hex);
+    return c ? c.slice(0, 3) : fallback.slice();
   }
 
   function rgbCss(rgb, alpha = 1) {

@@ -39,7 +39,7 @@
   const SIGMA_DIRECT = 6; // px; above this, blur at a halved level
   const MAX_TAPS_RADIUS = 24; // ceil(3 · SIGMA_DIRECT) + margin; must match blur.frag loop
   const MAX_LEVELS = 8;
-  const GLSL_REV = "1";
+  const GLSL_REV = "2";
 
   const glsl = {
     vs: "",
@@ -88,7 +88,8 @@
     if (glsl.promise) return glsl.promise;
     glsl.promise = (async () => {
       const vs = await fetchGlsl("raster_rgb.vert.glsl");
-      const source = await fetchGlsl("raster_rgb.source.frag.glsl");
+      const source = (await fetchGlsl("raster_rgb.source.frag.glsl"))
+        .replace("// #include <soem-hsl>", SoemGl.GLSL_HSL);
       const blur = await fetchGlsl("raster_rgb.blur.frag.glsl");
       const down = await fetchGlsl("raster_rgb.down.frag.glsl");
       const composite = await fetchGlsl("raster_rgb.composite.frag.glsl");

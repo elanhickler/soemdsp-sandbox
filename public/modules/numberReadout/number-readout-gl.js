@@ -141,36 +141,8 @@ void main() {
 }
 `;
 
-  function compile(gl, type, src) {
-    const sh = gl.createShader(type);
-    gl.shaderSource(sh, src);
-    gl.compileShader(sh);
-    if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) {
-      const err = gl.getShaderInfoLog(sh) || 'compile failed';
-      console.warn('[number-readout-gl]', err);
-      gl.deleteShader(sh);
-      return null;
-    }
-    return sh;
-  }
-
   function link(gl, vsSrc, fsSrc) {
-    const vs = compile(gl, gl.VERTEX_SHADER, vsSrc);
-    const fs = compile(gl, gl.FRAGMENT_SHADER, fsSrc);
-    if (!vs || !fs) return null;
-    const p = gl.createProgram();
-    gl.attachShader(p, vs);
-    gl.attachShader(p, fs);
-    gl.linkProgram(p);
-    gl.deleteShader(vs);
-    gl.deleteShader(fs);
-    if (!gl.getProgramParameter(p, gl.LINK_STATUS)) {
-      const err = gl.getProgramInfoLog(p) || 'link failed';
-      console.warn('[number-readout-gl]', err);
-      gl.deleteProgram(p);
-      return null;
-    }
-    return p;
+    return SoemGl.link(gl, vsSrc, fsSrc, "number-readout-gl.js");
   }
 
   function isDsegFamily(fontFamily) {
@@ -438,7 +410,7 @@ void main() {
     const gl = device.gl;
     const ink = energy ? [255, 255, 255] : rgb;
     if (!ink || ink.length < 3) return false;
-    const a = Math.max(0, Math.min(1, Number(alpha)));
+    const a = SoemMath.clamp01(alpha);
     if (!(a > 0)) return true; // nothing to draw, but GL "handled" it
 
     // Probe cell width if missing — must not call fillText on hot path when we
@@ -565,11 +537,11 @@ void main() {
   function drawInnerShadow(context, left, top, width, height, distance01, sharpness01, offsetX01, offsetY01) {
     const device = getShared();
     if (!device || !context || !(width > 2) || !(height > 2)) return false;
-    const dist = Math.max(0, Math.min(1, Number(distance01) || 0));
+    const dist = SoemMath.clamp01(distance01);
     if (dist <= 0.001) return true;
-    const sharp = Math.max(0, Math.min(1, Number(sharpness01) || 0));
-    const ox01 = Math.max(-1, Math.min(1, Number(offsetX01) || 0));
-    const oy01 = Math.max(-1, Math.min(1, Number(offsetY01) || 0));
+    const sharp = SoemMath.clamp01(sharpness01);
+    const ox01 = SoemMath.clamp(offsetX01, -1, 1, 0);
+    const oy01 = SoemMath.clamp(offsetY01, -1, 1, 0);
     const minSide = Math.min(width, height);
     const reach = Math.max(1, dist * minSide * 0.42);
     const hardEase = (() => {

@@ -38,4 +38,5 @@
 #include <soemdsp/musical/musical_pitch.h>
 #include <soemdsp/musical/polyphony_voices.h>
 #include <soemdsp/dynamics/silence_detector.h>
+#include <soemdsp/dynamics/ms_gain_computer.h>
 #include <soemdsp/modulator/vibrato_generator.h>

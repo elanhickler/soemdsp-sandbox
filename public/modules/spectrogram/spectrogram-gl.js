@@ -384,7 +384,7 @@ void main() {
     // Missing / NaN only. Explicit 0 stays 0.
     const contrast = Number.isFinite(contrastRaw) ? contrastRaw : 1;
     const brightness = Number.isFinite(brightnessRaw) ? brightnessRaw : 0;
-    const scale = Math.max(0, Math.min(2, Math.round(nodeGraphFiniteNumber(p.freqScale))));
+    const scale = SoemMath.clamp(Math.round(nodeGraphFiniteNumber(p.freqScale)), 0, 2);
     const lo = nodeGraphFiniteNumber(p.minFreq, 20);
     const hi = nodeGraphFiniteNumber(p.maxFreq, 20000);
     const nyq = nodeGraphFiniteNumber(p.nyquist, 22050);

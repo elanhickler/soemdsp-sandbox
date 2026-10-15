@@ -214,16 +214,8 @@
     }
 
     function hexToRgb(color) {
-      const match = String(color || "").trim().match(/^#([0-9a-f]{6})$/i);
-      if (!match) {
-        return null;
-      }
-      const value = Number.parseInt(match[1], 16);
-      return {
-        b: value & 255,
-        g: (value >> 8) & 255,
-        r: (value >> 16) & 255,
-      };
+      const c = globalThis.SoemColor.parse(color);
+      return c ? { r: c[0], g: c[1], b: c[2] } : null;
     }
 
     function mixWireColor(fromColor, toColor) {

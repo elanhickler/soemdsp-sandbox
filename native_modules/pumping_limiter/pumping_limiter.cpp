@@ -112,21 +112,14 @@ extern "C" double soemdsp_pumping_limiter_sample(
   const double detectPeak = hasSidechain
     ? dsp_fabs(safe(sidechain))
     : maxd(dsp_fabs(lIn), dsp_fabs(rIn));
-  const double instantPower = detectPeak * detectPeak;
   const double attMs = maxd(0.0, safe(attackMs));
   double relMs = safe(releaseMs);
   if (!(relMs * 0.0 == 0.0)) relMs = 250.0;
   if (relMs < 1.0) relMs = 1.0;
-  const double attCoeff = attMs <= 0.0 ? 1.0 : 1.0 - dsp_exp(-1.0 / maxd(1.0, attMs * 0.001 * rate));
-  const double relCoeff = 1.0 - dsp_exp(-1.0 / maxd(1.0, relMs * 0.001 * rate));
+  const double attCoeff = ms_detector_attack_coeff(attMs, rate);
+  const double relCoeff = ms_detector_release_coeff(relMs, rate);
 
-  if (instantPower > st.meanSquare) {
-    st.meanSquare += attCoeff * (instantPower - st.meanSquare);
-  } else {
-    st.meanSquare += relCoeff * (instantPower - st.meanSquare);
-  }
-  if (st.meanSquare < 1e-30) st.meanSquare = 0.0;
-  const double env = st.meanSquare > 0.0 ? dsp_exp(0.5 * dsp_ln(st.meanSquare)) : 0.0;
+  const double env = ms_detector_step(st.meanSquare, detectPeak, attCoeff, relCoeff);
   st.env = env;
 
   double thresh = db_to_amp(safe(thresholdDb));
@@ -135,14 +128,7 @@ extern "C" double soemdsp_pumping_limiter_sample(
   if (!(r * 0.0 == 0.0) || r < 1.0) r = 8.0;
   if (r > 100.0) r = 100.0;
 
-  double targetGain = 1.0;
-  if (env > thresh) {
-    const double grExp = (r - 1.0) / r;
-    const double ratioLin = thresh / env;
-    targetGain = ratioLin > 0.0 ? dsp_exp(grExp * dsp_ln(ratioLin)) : 0.0;
-  }
-  if (!(targetGain * 0.0 == 0.0) || targetGain < 0.0) targetGain = 0.0;
-  if (targetGain > 1.0) targetGain = 1.0;
+  const double targetGain = hard_knee_target_gain(env, thresh, r);
 
   if (targetGain < st.gain) st.gain += attCoeff * (targetGain - st.gain);
   else st.gain += relCoeff * (targetGain - st.gain);

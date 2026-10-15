@@ -310,8 +310,8 @@ static double gBlockOutModR[kMaxInstances][kMaxBlockFrames];
 
 // Fixed seed components (never reorder; append new parts at the end).
 enum : unsigned int {
-  kSeedLfoLeft = 1u,   // Left LFO walk / FBM hash seed
-  kSeedLfoRight = 2u,  // Right LFO walk / FBM hash seed
+  kSeedLfoLeft = 1u,   // LFO L walk / FBM hash seed
+  kSeedLfoRight = 2u,  // LFO R walk / FBM hash seed
 };
 
 static void reset_delay_ring(PingPongDelayState& s, int size) {

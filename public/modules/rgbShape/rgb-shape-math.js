@@ -2,20 +2,12 @@
 // Unit box ≈ −1…+1. Phase 0…1 walks the perimeter (arc-length parameterized).
 
 (function initRgbShapeMath(global) {
-  function clamp01(n, fallback = 0) {
-    const v = Number(n);
-    if (!Number.isFinite(v)) {
-      return fallback;
-    }
-    return Math.max(0, Math.min(1, v));
+  function clamp01(value, fallback = 0) {
+    return globalThis.SoemMath.clamp01(value, fallback);
   }
 
   function clamp(n, lo, hi, fallback = 0) {
-    const v = Number(n);
-    if (!Number.isFinite(v)) {
-      return fallback;
-    }
-    return Math.max(lo, Math.min(hi, v));
+    return globalThis.SoemMath.clamp(n, lo, hi, fallback);
   }
 
   function shapeIdFromIndex(index) {

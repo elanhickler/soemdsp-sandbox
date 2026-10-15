@@ -3593,7 +3593,8 @@ static void init_node_defaults(Node& n, int typeId) {
   );
   init_control(
     n.diffusionSize,
-    (typeId == kTypeBradley2a) ? 0.0 // harm2
+    (typeId == kTypeReverbEffect) ? 140.0 // Cinematic ms
+      : (typeId == kTypeBradley2a) ? 0.0 // harm2
       : 0.35,
     false
   );
@@ -3607,6 +3608,7 @@ static void init_node_defaults(Node& n, int typeId) {
   init_control(
     n.delaySize,
       (typeId == kTypeSoemReverb) ? 0.35 // echoTime
+      : (typeId == kTypeReverbEffect) ? 8.0 // Cinematic ms
       : 0.02,
     false
   );
@@ -3631,6 +3633,7 @@ static void init_node_defaults(Node& n, int typeId) {
       : (typeId == kTypePingPongDelay) ? 25.0 // lfoAmp ms (audible like Delay modAmount)
       : (typeId == kTypeSoftpopOscillator || typeId == kTypeSoftpopFilter) ? 0.0 // Pitch Mod cents
       : (typeId == kTypeFbmField) ? 0.0 // panY
+      : (typeId == kTypeReverbEffect) ? 0.028 // Cinematic depth fraction
       : 0.07,
     false
   );
@@ -3639,6 +3642,7 @@ static void init_node_defaults(Node& n, int typeId) {
     (typeId == kTypeBradley2a) ? 40.0 // ampRate
       : (typeId == kTypeSoemReverb) ? 0.5 // lfoFrequency
       : (typeId == kTypeHypersaw2) ? 0.0 // vibratoSpeed Hz
+      : (typeId == kTypeReverbEffect) ? 2.40684 // Cinematic Hz
       : 0.83,
     false
   );
@@ -3649,6 +3653,8 @@ static void init_node_defaults(Node& n, int typeId) {
       : (typeId == kTypeSoemReverb) ? 1.0
       : (typeId == kTypeDelayEffect) ? 0.0
       : (typeId == kTypeHypersaw2) ? 0.0 // vibratoPhaseVary
+      : (typeId == kTypeReverbEffect) ? 249.75 // Cinematic ms
+      : (typeId == kTypeSabrinaReverbOriginal) ? 0.999
       : 0.001,
     false
   );
@@ -11142,11 +11148,11 @@ static void process_fbm_field(Circuit& g, Node& node, int frames) {
 }
 
 // Pi spigot: center=start, stages=stride, mode=color, shape=smoothing, amplitude.
-// Sum→Mono Term→Left Hex→Right N→Saw T→Ramp B3..B0→Square/Tri/Sine/DryR(Ramp+1?).
+// Sum→Mono Term→L Hex→R N→Saw T→Ramp B3..B0→Square/Tri/Sine/DryR(Ramp+1?).
 // Buses: Square=B3 Tri=B2 Sine=B1 — B0 folds onto Saw alongside N? Prefer:
 // Hex→Right N→Saw T→Ramp B3→Square B2→Tri B1→Sine; B0 unused on 8th → overwrite
 // DryR share of Ramp is taken; put B0 on leftover — actually 8 buses 0..7:
-// Mono Sum, Left Term, Right Hex, Saw N, Ramp T, Square B3, Tri B2, Sine B1.
+// Mono Sum, L Term, R Hex, Saw N, Ramp T, Square B3, Tri B2, Sine B1.
 // B0 omitted from graph taps (still computed in native).
 static void process_pi_spigot_noise(Circuit& g, Node& node, int frames) {
   if (node.nativeHandle <= 0) return;
@@ -13293,6 +13299,7 @@ static void acid_reset_transport_latch(Node& n) {
   n.acidLastStep = -1;
   n.acidTrigLeft = 0;
   n.acidSlideLeft = 0;
+  n.acidHasPitch = 0; // rewind: rests before the first note hold the first note's pitch
 }
 
 static int acid_octave_from_pack(unsigned int pack) {
@@ -13362,12 +13369,25 @@ static void process_acid_sequencer(Circuit& g, Node& node, int frames) {
           node.acidSlideLeft = total;
           node.acidPitch = node.acidSlideFrom;
         }
-      } else {
+      } else if (sounding) {
         node.acidPitch = selfMidi;
         node.acidSlideLeft = 0;
         node.acidSlideTotal = 0;
+      } else if (!node.acidHasPitch) {
+        // Rest before any note since rewind: hold the first sounding step's
+        // pitch so the note that follows starts without a jump. All rests: this step's grid.
+        double firstMidi = selfMidi;
+        for (int k = 1; k <= len; k++) {
+          const int j = (idx + k) % len;
+          const int gm = acid_clamp_int((int)((node.acidPack[j] >> 4) & 3u), 0, 2);
+          if (gm == 1 || gm == 2) { firstMidi = acid_step_midi(node, j); break; }
+        }
+        node.acidPitch = firstMidi;
+        node.acidSlideLeft = 0;
+        node.acidSlideTotal = 0;
       }
-      node.acidHasPitch = 1;
+      // Rest after a note: pitch (and any glide already running) holds the last sounding note.
+      if (sounding) node.acidHasPitch = 1;
       const bool retrigger = sounding && (gateMode == 1 || prev < 0);
       if (retrigger) {
         int pulse = (int)(kAcidAccentSeconds * sr + 0.5);

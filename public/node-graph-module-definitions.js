@@ -6045,31 +6045,31 @@ const nodeGraphModuleDefinitions = (
     displayType: "scope2d",
     defaultDisplayMode: "xyBurn",
     displaySignals: [
-      { key: "Left", label: "Sum", kind: "scalar" },
-      { key: "Right", label: "Term", kind: "scalar" },
+      { key: "Left", label: "Left", kind: "scalar" },
+      { key: "Right", label: "Right", kind: "scalar" },
       { key: "Hex", kind: "scalar" },
       { key: "N", kind: "scalar" },
     ],
     displayModes: [
-      { key: "xyBurn", label: "Sum/Term", renderer: "scope2d", settingsSchema: "scope2d", source: { x: "Left", y: "Right" } },
+      { key: "xyBurn", label: "Left/Right", renderer: "scope2d", settingsSchema: "scope2d", source: { x: "Left", y: "Right" } },
       { key: "waterfall", label: "Waterfall", renderer: "waterfall", settingsSchema: "waterfall" },
     ],
     stereoWaterfallPorts: { left: "Left", right: "Right" },
     outputs: ["Left", "Right", "Hex", "N", "T", "B3", "B2", "B1", "B0"],
     outputAliases: { "Left Out": "Left", "Right Out": "Right" },
     outputLabels: {
-      Left: "Sum",
-      Right: "Term" },
+      Left: "Left",
+      Right: "Right" },
     outputTooltips: {
-      Left: "Running BBP fractional sum {S} as bipolar audio.",
-      Right: "This sample’s BBP term (one of the four series).",
-      Hex: "Last finished hex digit of π (0…15 as 0…1).",
-      N: "Current hex-digit index into π.",
-      T: "Pulse when a hex digit finishes.",
-      B3: "Latched hex bit 8 (first 16th of the beat).",
-      B2: "Latched hex bit 4.",
-      B1: "Latched hex bit 2.",
-      B0: "Latched hex bit 1." },
+      Left: "Stored pi digits, 3 per sample (314, 159, 265, ...) as bipolar audio, from Start.",
+      Right: "Same digit table read half a table later (independent stereo side).",
+      Hex: "First decimal digit of the current Left group (0 to 9 as 0 to 1).",
+      N: "Read position through the 2,097,152-digit table (0 to 1).",
+      T: "Pulse when playback loops back to Start.",
+      B3: "BCD bit 8 of the current digit.",
+      B2: "BCD bit 4 of the current digit.",
+      B1: "BCD bit 2 of the current digit.",
+      B0: "BCD bit 1 of the current digit." },
     digitalOutputs: ["T", "B3", "B2", "B1", "B0"],
     parameters: [
       {
@@ -6082,7 +6082,7 @@ const nodeGraphModuleDefinitions = (
         min: "0",
         nonlinearSlider: false,
         step: "any",
-        tooltip: "Where in π the four-phase BBP walk begins (0 = first hex digits)."
+        tooltip: "Where in the stored digits playback starts (0 = the leading 314159..., 1 = the end of the table)."
       },
       {
         defaultValue: "1",
@@ -6094,7 +6094,7 @@ const nodeGraphModuleDefinitions = (
         min: "1",
         nonlinearSlider: false,
         step: "1",
-        tooltip: "How many hex places to skip after each finished digit."
+        tooltip: "Samples (3-digit groups) advanced per output sample. 1 = the original playback rate."
       },
       {
         choices: ["White", "Pink", "Brown", "Blue", "Violet"],
@@ -13207,7 +13207,7 @@ const nodeGraphModuleDefinitions = (
     digitalInputs: ["Reset"],
     inputAliases: { In: "Mono" },
     inputs: ["Mono", "Left", "Right", "Reset"],
-    inputLabels: { Mono: "Mono", Left: "Left", Right: "Right", Reset: "Reset" },
+    inputLabels: { Mono: "Mono", Left: "In L", Right: "In R", Reset: "Reset" },
     // Legacy long names → short Mix L/R / Dry L/R.
     outputAliases: {
       "Mix Left": "Mix L",
@@ -13235,13 +13235,13 @@ const nodeGraphModuleDefinitions = (
       "Mix R": "Mix R" },
     parameters: [
       { defaultValue: "0.43", key: "mix", label: "Mix", max: "1", mid: "0.43", min: "0", nonlinearSlider: false, step: "any", tooltip: "Dry/wet balance on the Mix outputs (not a wet-only path)." },
-      { defaultValue: "0.35", key: "diffusionSize", label: "Diffusion Size", max: "1", mid: "0.35", min: "0", nonlinearSlider: false, smoothingSeconds: 0.05, step: "any", tooltip: "Size of the diffusion network." },
+      { defaultValue: "140", key: "diffusionSize", label: "Diffusion Size", max: "400", mid: "140", min: "0", nonlinearSlider: false, smoothingSeconds: 0.05, step: "any", unit: "ms", tooltip: "Longest diffusion delay line, in ms (each line gets a random fraction of it)." },
       { defaultValue: "0.70", key: "diffusionAmount", label: "Diffusion Amount", max: "1", mid: "0.70", min: "0", nonlinearSlider: false, step: "any", tooltip: "Strength of early diffusion." },
-      { defaultValue: "0.02", key: "delaySize", label: "Delay Time", max: "1", mid: "0.02", min: "0", nonlinearSlider: false, smoothingSeconds: 0.05, step: "any", tooltip: "Main reverb delay length." },
+      { defaultValue: "8", key: "delaySize", label: "Delay Time", max: "400", mid: "50", min: "0", nonlinearSlider: true, smoothingSeconds: 0.05, step: "any", unit: "ms", tooltip: "Length of the 2 main reverb delay taps, in ms." },
       { defaultValue: "0.70", key: "recycle", label: "Recycle", max: "1", mid: "0.70", min: "0", nonlinearSlider: false, step: "any", tooltip: "Feedback amount for the reverb tail." },
-      { defaultValue: "0.07", key: "lfoAmplitude", label: "Mod(~)Amp", max: "1", mid: "0.07", min: "0", nonlinearSlider: false, step: "any", tooltip: "Amount of delay modulation." },
-      { defaultValue: "0.426", key: "lfoBaseSpeed", label: "Mod(~)Speed", max: "1", mid: "0.426", min: "0", nonlinearSlider: false, step: "any", tooltip: "Speed of delay modulation. LFO period 2 s (0) to 0.05 s (1), exponential; higher = faster." },
-      { defaultValue: "0.999", key: "lfoVariation", label: "Mod(~)Vary", max: "1", mid: "0.999", min: "0", nonlinearSlider: false, step: "any", tooltip: "Spread of modulation speed between delay lines. 0 = all lines modulate at the same speed; higher = more spread." },
+      { defaultValue: "0.028", key: "lfoAmplitude", label: "Mod(~)Amp", max: "0.4", mid: "0.028", min: "0", nonlinearSlider: false, step: "any", unit: "\u00d7", tooltip: "Delay modulation depth as a fraction of each line's own delay length (0.1 = each line swings by 10% of its length)." },
+      { defaultValue: "2.40684", key: "lfoBaseSpeed", label: "Mod(~)Speed", max: "20", mid: "2.40684", min: "0.5", nonlinearSlider: true, step: "any", unit: "Hz", tooltip: "Delay modulation LFO rate in Hz (base rate; Mod(~)Vary slows some lines down)." },
+      { defaultValue: "249.75", key: "lfoVariation", label: "Mod(~)Vary", max: "250", mid: "125", min: "0", nonlinearSlider: false, step: "any", unit: "ms", tooltip: "Spread of modulation speed between delay lines: up to this many ms of extra LFO period per line. 0 = all lines modulate at the same speed." },
       {
         choices: ["Parabol", "FBM"],
         choiceKeys: ["parabol", "fbm"],
@@ -13292,7 +13292,7 @@ const nodeGraphModuleDefinitions = (
     digitalInputs: ["Reset"],
     inputAliases: { In: "Mono" },
     inputs: ["Mono", "Left", "Right", "Reset"],
-    inputLabels: { Mono: "Mono", Left: "Left", Right: "Right", Reset: "Reset" },
+    inputLabels: { Mono: "Mono", Left: "In L", Right: "In R", Reset: "Reset" },
     // Legacy long names → short Mix L/R / Dry L/R.
     outputAliases: {
       "Mix Left": "Mix L",
@@ -13837,6 +13837,14 @@ const nodeGraphModuleDefinitions = (
   // Mono gold CV utility (In → Out) — not a stereo audio processor.
   slewLimiter: {
     planRole: "processor",
+    // Face: normalized Up (0->1) | Down (1->0) shape graph (slew-shape-display.js).
+    customDisplayArea: true,
+    displayType: "slewShapeFace",
+    displayHeightGu: 2,
+    displayModes: [
+      { key: "face", label: "Shape", renderer: "slewShapeFace", settingsSchema: "" },
+    ],
+    defaultDisplayMode: "face",
     inputAliases: { Mono: "In", Left: "In", Right: "In" },
     inputs: ["In"],
     outputAliases: { Mono: "Out", Left: "Out", Right: "Out" },

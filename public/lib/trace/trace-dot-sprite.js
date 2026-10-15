@@ -9,12 +9,8 @@
   const cache = new Map();
   let tintScratch = null;
 
-  function clamp01(n, fallback = 0) {
-    const v = Number(n);
-    if (!Number.isFinite(v)) {
-      return fallback;
-    }
-    return Math.max(0, Math.min(1, v));
+  function clamp01(value, fallback = 0) {
+    return globalThis.SoemMath.clamp01(value, fallback);
   }
 
   function hermite(t) {

@@ -563,8 +563,8 @@ function nodeGraphImageBurnFadeByLuma(canvas, hangKeep, burn01) {
   if (!canvas) {
     return;
   }
-  const hang = Math.max(0, Math.min(1, nodeGraphFiniteNumber(hangKeep)));
-  const burn = Math.max(0, Math.min(1, nodeGraphFiniteNumber(burn01)));
+  const hang = SoemMath.clamp01(hangKeep);
+  const burn = SoemMath.clamp01(burn01);
   const ctx = canvas.getContext("2d", { willReadFrequently: true });
   if (!ctx) {
     return;

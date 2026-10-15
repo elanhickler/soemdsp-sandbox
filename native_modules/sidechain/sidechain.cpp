@@ -7,10 +7,9 @@
 // Sidechain: moves a Dry/Wet crossfade under a key, using Pump Limiter's
 // detector + hard-knee gain computer + gain smoother
 // (native_modules/pumping_limiter/pumping_limiter.cpp), plus a Hold countdown.
-// MODULE-LOCAL COPY of the Pump Limiter maths: there is no shared dynamics
-// helper in library/include/soemdsp, and adding one needs Argi's APP_POLICY 19
-// approval (docs/SIDECHAIN_PLAN.md, Q6). With Hold 0 the gain path is the
-// same arithmetic as Pump Limiter's (look-ahead Off, Input Gain 0).
+// Detector + gain computer come from the shared library
+// (soemdsp/dynamics/ms_gain_computer.h), same as Pump Limiter. With Hold 0
+// the gain path is the same arithmetic (look-ahead Off, Input Gain 0).
 //
 // Per sample:
 //   pairs     Dry L/R and Wet L/R each fall back to mono: a lone side feeds both.
@@ -157,22 +156,14 @@ extern "C" double soemdsp_sidechain_sample(
     st.holdLeft = 0.0;
     env = 0.0;
   } else {
-    // Pump Limiter detector (module-local copy, see header).
+    // Shared Pump Limiter detector (soemdsp/dynamics/ms_gain_computer.h).
     const double detectPeak = dsp_fabs(finite_or(sidechain, 0.0));
-    const double instantPower = detectPeak * detectPeak;
     const double attMs = maxd(0.0, finite_or(attackMs, 5.0));
     double relMs = finite_or(releaseMs, 250.0);
     if (relMs < 1.0) relMs = 1.0;
-    const double attCoeff = attMs <= 0.0 ? 1.0 : 1.0 - dsp_exp(-1.0 / maxd(1.0, attMs * 0.001 * rate));
-    const double relCoeff = 1.0 - dsp_exp(-1.0 / maxd(1.0, relMs * 0.001 * rate));
-
-    if (instantPower > st.meanSquare) {
-      st.meanSquare += attCoeff * (instantPower - st.meanSquare);
-    } else {
-      st.meanSquare += relCoeff * (instantPower - st.meanSquare);
-    }
-    if (st.meanSquare < 1e-30) st.meanSquare = 0.0;
-    const double level = st.meanSquare > 0.0 ? dsp_exp(0.5 * dsp_ln(st.meanSquare)) : 0.0;
+    const double attCoeff = ms_detector_attack_coeff(attMs, rate);
+    const double relCoeff = ms_detector_release_coeff(relMs, rate);
+    const double level = ms_detector_step(st.meanSquare, detectPeak, attCoeff, relCoeff);
 
     double thresh = db_to_amp(finite_or(thresholdDb, -18.0));
     if (thresh < 1e-6) thresh = 1e-6;
@@ -180,14 +171,7 @@ extern "C" double soemdsp_sidechain_sample(
     if (r < 1.0) r = 1.0;
     if (r > 100.0) r = 100.0;
 
-    double targetGain = 1.0;
-    if (level > thresh) {
-      const double grExp = (r - 1.0) / r;
-      const double ratioLin = thresh / level;
-      targetGain = ratioLin > 0.0 ? dsp_exp(grExp * dsp_ln(ratioLin)) : 0.0;
-    }
-    if (!(targetGain * 0.0 == 0.0) || targetGain < 0.0) targetGain = 0.0;
-    if (targetGain > 1.0) targetGain = 1.0;
+    const double targetGain = hard_knee_target_gain(level, thresh, r);
 
     // Hold: reset the countdown while GR deepens or holds; release waits for 0.
     double hMs = finite_or(holdMs, 0.0);

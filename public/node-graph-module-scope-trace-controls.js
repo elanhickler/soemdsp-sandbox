@@ -1062,7 +1062,8 @@ const nodeGraphTraceDisplaySectionControls = Object.freeze({
       "puckSize",
     ]),
     colors: Object.freeze(["dot1Color"]),
-    toggles: Object.freeze(["bipolarBrightness"]),
+    // autoZoomLines: Sabrina / Cinematic Reverb (hypersawBurn schema) - filtered per node type in the form.
+    toggles: Object.freeze(["bipolarBrightness", "autoZoomLines"]),
     choices: Object.freeze(["shape"]),
   }),
   secondary: Object.freeze({

@@ -11,7 +11,8 @@ const root = path.join(__dirname, "..");
 const e = (await WebAssembly.instantiate(fs.readFileSync(path.join(root, "native_modules/sabrina_reverb/sabrina_reverb.wasm")), {})).instance.exports;
 const sr = 44100, frames = 128, N = 14;
 // Defaults (so a fresh instance has no smoothing glide), with seed 7.
-const P = { mix: 0.43, dSize: 0.35, dAmt: 0.7, delay: 0.02, recycle: 0.7, amp: 0.07, speed: 0.426, vary: 0.999, seed: 7, style: 0, tap: 1 };
+// Cinematic Reverb units: ms, ms, depth fraction, Hz, ms (Cinematic defaults).
+const P = { mix: 0.43, dSize: 140, dAmt: 0.7, delay: 8, recycle: 0.7, amp: 0.028, speed: 2.40684, vary: 249.75, seed: 7, style: 0, tap: 1 };
 let failed = false;
 const fail = (m) => { console.error("FAIL:", m); failed = true; };
 const set = (h, o = {}) => { const p = { ...P, ...o }; e.soemdsp_sabrina_reverb_set_params(h, p.mix, p.dSize, p.dAmt, p.delay, p.recycle, p.amp, p.speed, p.vary, p.seed, p.style, p.tap); };
@@ -37,7 +38,7 @@ for (const [name, style] of [["parabol", 0], ["fbm", 1]]) {
   set(a, { style });
   const blocks = Math.ceil((sr * 3) / frames);
   for (let b = 0; b < blocks; b += 1) {
-    if (b === 200) set(a, { style, delay: 0.3, amp: 0.6, speed: 0.9, vary: 0.2, dSize: 0.8, tap: 2 });
+    if (b === 200) set(a, { style, delay: 120, amp: 0.24, speed: 13.8, vary: 50, dSize: 320, tap: 2 });
     if (b === blocks - 3) set(a, { style }); // back to targets; smoothing still mid-glide
     block(a, (b < blocks / 3) ? rnd : () => 0, () => 0);
   }

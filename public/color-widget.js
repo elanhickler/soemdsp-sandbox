@@ -403,7 +403,7 @@ function injectStyles() {
 }
 
 function clamp(value, min, max) {
-  return Math.min(max, Math.max(min, value));
+  return globalThis.SoemMath.clamp(value, min, max);
 }
 
 function normalizeColor(color) {

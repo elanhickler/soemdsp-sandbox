@@ -11,11 +11,7 @@
 
 (function initTraceStroke(global) {
   function clamp01(value, fallback = 0) {
-    const n = Number(value);
-    if (!Number.isFinite(n)) {
-      return Math.max(0, Math.min(1, nodeGraphFiniteNumber(fallback)));
-    }
-    return Math.max(0, Math.min(1, n));
+    return globalThis.SoemMath.clamp01(value, fallback);
   }
 
   function normalizeBlur(value, fallback = 0.2) {

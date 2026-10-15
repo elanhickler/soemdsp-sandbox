@@ -201,13 +201,17 @@ function nodeGraphOnsetPaint(spec, live) {
       const buf = ch.buffer;
       let minV = Infinity;
       let maxV = -Infinity;
+      let minAt = 0;
+      let maxAt = 0;
+      let lastV = Number.NaN;
       for (let s = s0; s < s1; s += 1) {
         const v = typeof nodeGraphScopeBufferSampleAtAbsoluteFrame === "function"
           ? nodeGraphScopeBufferSampleAtAbsoluteFrame(buf, s)
           : null;
         if (v == null || !Number.isFinite(v)) continue;
-        if (v < minV) minV = v;
-        if (v > maxV) maxV = v;
+        if (v < minV) { minV = v; minAt = s; }
+        if (v > maxV) { maxV = v; maxAt = s; }
+        lastV = v;
       }
       let ys = null;
       if (minV <= maxV) {
@@ -219,6 +223,9 @@ function nodeGraphOnsetPaint(spec, live) {
       columnSpans.push({
         key: ch.lastYKey || String(i),
         ys,
+        waveYs: useStroke && minV <= maxV
+          ? nodeGraphWaterfallWaveYs({ has: true, min: minV, max: maxV, minAt, maxAt, last: lastV }, buf, spec.slot, settings, height)
+          : null,
         prevEdge: !seam && onset.edge ? onset.edge[ch.lastYKey] : null,
         rgb: nodeGraphWaterfallScaleRgb(
           nodeGraphWaterfallParseInkRgb(ch.color),
@@ -233,23 +240,9 @@ function nodeGraphOnsetPaint(spec, live) {
       if (!ys) continue;
       if (!onset.edge) onset.edge = Object.create(null);
       onset.edge[span.key] = { y0: ys.y0, y1: ys.y1 };
-      if (useStroke && typeof nodeGraphOnsetGlStrokePolyline === "function") {
-        const yLine = ((Number.isFinite(ys.strokeY0) ? ys.strokeY0 : ys.y0) + (Number.isFinite(ys.strokeY1) ? ys.strokeY1 : ys.y1)) * 0.5;
-        const pt = { x: screenX + 0.5, y: yLine };
-        if (!onset.strokePts) onset.strokePts = Object.create(null);
-        const key = span.key;
-        let strip = onset.strokePts[key];
-        if (seam || !strip) strip = [];
-        strip.push(pt);
-        if (strip.length >= 2) {
-          nodeGraphOnsetGlStrokePolyline(
-            canvas,
-            strip.slice(-2),
-            nodeGraphOnsetStrokeCanvasPx(canvas, settings),
-            nodeGraphWaterfallStrokeRgb(settings),
-          );
-        }
-        onset.strokePts[key] = strip;
+      if (useStroke) {
+        // Draw the waveform (both peaks + last sample), not the bar midline.
+        nodeGraphWaterfallStrokeWaveColumn(canvas, onset, span.key, screenX, span.waveYs, settings, seam);
       }
     }
     p += 1;
@@ -687,7 +680,8 @@ function nodeGraphWaterfallLatestY(buffer, slot, settings, height) {
 
 /** Fresh peak-to-peak accumulator (raw sample units). */
 function nodeGraphWaterfallAccMake() {
-  return { min: Infinity, max: -Infinity, has: false };
+  // minAt / maxAt / last: time order for the Stroke waveform (both peaks).
+  return { min: Infinity, max: -Infinity, has: false, minAt: 0, maxAt: 0, last: Number.NaN };
 }
 
 /** Fold samples into a running min/max. Does not scan beyond [start, end). */
@@ -709,10 +703,13 @@ function nodeGraphWaterfallAccPush(acc, buffer, start, end, settings = null, slo
           acc.min = v;
           acc.max = v;
           acc.has = true;
+          acc.minAt = right;
+          acc.maxAt = right;
         } else {
-          if (v < acc.min) acc.min = v;
-          if (v > acc.max) acc.max = v;
+          if (v < acc.min) { acc.min = v; acc.minAt = right; }
+          if (v > acc.max) { acc.max = v; acc.maxAt = right; }
         }
+        acc.last = v;
       }
     }
     return acc;
@@ -730,14 +727,19 @@ function nodeGraphWaterfallAccPush(acc, buffer, start, end, settings = null, slo
       acc.min = v;
       acc.max = v;
       acc.has = true;
+      acc.minAt = i;
+      acc.maxAt = i;
     } else {
       if (v < acc.min) {
         acc.min = v;
+        acc.minAt = i;
       }
       if (v > acc.max) {
         acc.max = v;
+        acc.maxAt = i;
       }
     }
+    acc.last = v;
   }
   // Always include the true last sample so the bar tip tracks the newest value.
   if (step > 1 && to > from) {
@@ -747,14 +749,19 @@ function nodeGraphWaterfallAccPush(acc, buffer, start, end, settings = null, slo
         acc.min = last;
         acc.max = last;
         acc.has = true;
+        acc.minAt = to - 1;
+        acc.maxAt = to - 1;
       } else {
         if (last < acc.min) {
           acc.min = last;
+          acc.minAt = to - 1;
         }
         if (last > acc.max) {
           acc.max = last;
+          acc.maxAt = to - 1;
         }
       }
+      acc.last = last;
     }
   }
   return acc;
@@ -767,7 +774,74 @@ function nodeGraphWaterfallAccReset(acc) {
   acc.min = Infinity;
   acc.max = -Infinity;
   acc.has = false;
+  acc.minAt = 0;
+  acc.maxAt = 0;
+  acc.last = Number.NaN;
   return acc;
+}
+
+/**
+ * Stroke = draw the waveform. Raw samples of one column in time order:
+ * the two peaks (whichever came first first) then the column's last sample.
+ * Absolute polarity folds a sign change through 0 between the peaks.
+ * Both peaks are kept, so the line covers the top AND bottom of the signal.
+ */
+function nodeGraphWaterfallWaveRaw(acc, settings = null) {
+  if (!acc?.has) return [];
+  const minFirst = !(Number(acc.maxAt) < Number(acc.minAt));
+  const a = minFirst ? acc.min : acc.max;
+  const b = minFirst ? acc.max : acc.min;
+  const out = [a];
+  if (nodeGraphWaterfallPolarity(settings) === "absolute" && acc.min < 0 && acc.max > 0) out.push(0);
+  out.push(b);
+  const last = Number(acc.last);
+  if (Number.isFinite(last)) out.push(last);
+  return out;
+}
+
+/** Face Y (canvas px) for nodeGraphWaterfallWaveRaw, same mapping as the bars. */
+function nodeGraphWaterfallWaveYs(acc, buffer, slot, settings, height) {
+  const raw = nodeGraphWaterfallWaveRaw(acc, settings);
+  if (!raw.length) return [];
+  const live = nodeGraphWaterfallPrepare(buffer, settings) || buffer;
+  const amp = nodeGraphWaterfallAmp(live, slot);
+  const midY = height * 0.5;
+  const halfHeight = nodeGraphWaterfallHalfHeight(height, slot, settings, amp);
+  const ys = [];
+  for (let i = 0; i < raw.length; i += 1) {
+    const y = nodeGraphWaterfallY(raw[i], amp.gain, amp.offset, midY, halfHeight, amp, settings);
+    if (Number.isFinite(y) && (!ys.length || Math.abs(ys[ys.length - 1] - y) > 1e-6)) ys.push(y);
+  }
+  return ys;
+}
+
+/**
+ * Stroke one waterfall column as the waveform: a polyline from the previous
+ * column's last sample through this column's peaks (time order) to its last
+ * sample. bag.strokePts[key] keeps that last point for the next column.
+ */
+function nodeGraphWaterfallStrokeWaveColumn(canvas, bag, key, x, ys, settings, seam = false) {
+  if (!bag.strokePts) bag.strokePts = Object.create(null);
+  const prev = !seam && Array.isArray(bag.strokePts[key]) ? bag.strokePts[key][bag.strokePts[key].length - 1] : null;
+  if (!ys || !ys.length) {
+    delete bag.strokePts[key];
+    return;
+  }
+  const cx = x + 0.5;
+  const pts = prev ? [prev] : [];
+  for (let i = 0; i < ys.length; i += 1) pts.push({ x: cx, y: ys[i] });
+  if (pts.length === 1) pts.push({ x: cx + 1e-3, y: ys[0] });
+  if (typeof nodeGraphOnsetGlStrokePolyline === "function") {
+    nodeGraphOnsetGlStrokePolyline(
+      canvas,
+      pts,
+      typeof nodeGraphOnsetStrokeCanvasPx === "function"
+        ? nodeGraphOnsetStrokeCanvasPx(canvas, settings)
+        : nodeGraphWaterfallStrokePx(settings),
+      nodeGraphWaterfallStrokeRgb(settings),
+    );
+  }
+  bag.strokePts[key] = [pts[pts.length - 1]];
 }
 
 /** Map a peak-to-peak accumulator to face Y extents (scale stays a display setting). */
@@ -2142,6 +2216,7 @@ function nodeGraphWaterfallSmoothAdvance(destCtx, destCanvas, spec, options) {
       columnSpans.push({
         key,
         ys,
+        waveYs: useStroke && mapped ? nodeGraphWaterfallWaveYs(acc, ch.buffer, spec.slot, settings, height) : null,
         prevEdge: connectEdge && edgeMap ? edgeMap[key] : null,
         rgb: nodeGraphWaterfallScaleRgb(
           nodeGraphWaterfallParseInkRgb(ch.color),
@@ -2157,35 +2232,10 @@ function nodeGraphWaterfallSmoothAdvance(destCtx, destCanvas, spec, options) {
       const ys = span.ys;
       if (!ys) continue;
       if (edgeMap) edgeMap[span.key] = { y0: ys.y0, y1: ys.y1 };
-      if (useStroke && typeof nodeGraphOnsetGlStrokePolyline === "function") {
-        const mid = height * 0.5;
-        const hi = Number.isFinite(ys.strokeY0) ? ys.strokeY0 : ys.y0;
-        const lo = Number.isFinite(ys.strokeY1) ? ys.strokeY1 : ys.y1;
-        const polarity = nodeGraphWaterfallPolarity(settings);
-        // Absolute and unipolar grow upward from the bottom. The stroke is
-        // that top edge. Bipolar follows whichever peak is farther from center.
-        const yLine = (polarity === "absolute" || polarity === "unipolar")
-          ? Math.min(hi, lo)
-          : (Math.abs(hi - mid) >= Math.abs(lo - mid) ? hi : lo);
-        const pt = { x: x + 0.5, y: yLine };
+      if (useStroke) {
+        // Draw the waveform (both peaks + last sample), not a one-sided edge.
         const bag = destCanvas._waterfall || (destCanvas._waterfall = {});
-        if (!bag.strokePts) bag.strokePts = Object.create(null);
-        const key = span.key;
-        let strip = bag.strokePts[key];
-        if (!strip) strip = [];
-        strip.push(pt);
-        if (strip.length >= 2) {
-          const strokePx = typeof nodeGraphOnsetStrokeCanvasPx === "function"
-            ? nodeGraphOnsetStrokeCanvasPx(destCanvas, settings)
-            : nodeGraphWaterfallStrokePx(settings);
-          nodeGraphOnsetGlStrokePolyline(
-            destCanvas,
-            strip.slice(-2),
-            strokePx,
-            nodeGraphWaterfallStrokeRgb(settings),
-          );
-        }
-        bag.strokePts[key] = strip.length > 2 ? strip.slice(-2) : strip;
+        nodeGraphWaterfallStrokeWaveColumn(destCanvas, bag, span.key, x, span.waveYs, settings, false);
       }
     }
   }

@@ -25,13 +25,13 @@ function setParams(h, diffusionAmount) {
   e.soemdsp_sabrina_reverb_set_params(
     h,
     1.0, // mix wet
-    0.35, // diffusionSize
+    140, // diffusionSize ms (Cinematic units; == old 0.35)
     diffusionAmount,
-    0.08, // delaySize
+    32, // delaySize ms (== old 0.08)
     0.85, // recycle
     0.0, // lfoAmplitude (geometry settled, no extra motion)
-    0.83,
-    0.001,
+    2.40684, // Hz
+    0.25, // Vary ms
     0,
     0, // lfoStyle Parabol
     1, // delayTapMod 1 (original depth)

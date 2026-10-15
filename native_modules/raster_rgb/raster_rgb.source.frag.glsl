@@ -19,42 +19,15 @@ float wrapHue(float n) {
   return n - floor(n);
 }
 
-float hslChannel(float p, float q, float t) {
-  if (t < 0.0) t += 1.0;
-  if (t > 1.0) t -= 1.0;
-  if (t < 1.0 / 6.0) return p + (q - p) * 6.0 * t;
-  if (t < 0.5) return q;
-  if (t < 2.0 / 3.0) return p + (q - p) * (2.0 / 3.0 - t) * 6.0;
-  return p;
-}
+// Shared HSL maths (SoemGl.GLSL_HSL, public/lib/gl/soem-gl-util.js) is
+// spliced in here by raster-rgb-gl.js at load time.
+// #include <soem-hsl>
 
 // nodeGraphRasterRgbHueRotate (raster-rgb-math.js).
 vec3 hueRotate(vec3 c, float hShift) {
-  float mx = max(c.r, max(c.g, c.b));
-  float mn = min(c.r, min(c.g, c.b));
-  float l = (mx + mn) * 0.5;
-  float d = mx - mn;
-  float h = 0.0;
-  float s = 0.0;
-  if (d > 1e-9) {
-    s = l > 0.5 ? d / (2.0 - mx - mn) : d / (mx + mn);
-    if (mx == c.r) {
-      h = ((c.g - c.b) / d + (c.g < c.b ? 6.0 : 0.0)) / 6.0;
-    } else if (mx == c.g) {
-      h = ((c.b - c.r) / d + 2.0) / 6.0;
-    } else {
-      h = ((c.r - c.g) / d + 4.0) / 6.0;
-    }
-  }
-  h = wrapHue(h + hShift);
-  if (s <= 0.0) return vec3(l);
-  float q = l < 0.5 ? l * (1.0 + s) : l + s - l * s;
-  float p = 2.0 * l - q;
-  return clamp(vec3(
-    hslChannel(p, q, h + 1.0 / 3.0),
-    hslChannel(p, q, h),
-    hslChannel(p, q, h - 1.0 / 3.0)
-  ), 0.0, 1.0);
+  vec3 hsl = soemRgbToHsl(c);
+  hsl.x = wrapHue(hsl.x + hShift);
+  return soemHslToRgb(hsl);
 }
 
 float lut(float v) {

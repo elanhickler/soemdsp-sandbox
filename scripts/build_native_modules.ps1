@@ -679,6 +679,10 @@ if ($node) {
   if ($LASTEXITCODE -ne 0) {
     throw "Combined build: sabrina Original variant smoke FAILED"
   }
+  & $node.Source "$root\scripts\smoke_cinematic_units.mjs"
+  if ($LASTEXITCODE -ne 0) {
+    throw "Combined build: Cinematic Reverb units smoke FAILED"
+  }
   & $node.Source "$root\scripts\smoke_named_portal_bus.mjs"
   if ($LASTEXITCODE -ne 0) {
     throw "Combined build: named portal bus smoke FAILED"

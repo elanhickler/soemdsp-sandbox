@@ -128,7 +128,7 @@ function nodeGraphRasterRgbScanSpeed(node) {
   if (!Number.isFinite(raw) || raw <= 0) {
     return 8;
   }
-  return Math.max(0.05, Math.min(64, raw));
+  return SoemMath.clamp(raw, 0.05, 64);
 }
 
 function nodeGraphRasterRgbUnit01(value, fallback) {
@@ -136,7 +136,7 @@ function nodeGraphRasterRgbUnit01(value, fallback) {
   if (!Number.isFinite(n)) {
     return fallback;
   }
-  return Math.max(0, Math.min(1, n));
+  return SoemMath.clamp01(n);
 }
 
 function nodeGraphRasterRgbHueParam(value) {
@@ -155,8 +155,8 @@ function nodeGraphRasterRgbGrade(node) {
   const invert = nodeGraphRasterRgbUnit01(params.invert, 0);
   const contrastRaw = Number(params.contrast);
   const brightnessRaw = Number(params.brightness);
-  const contrast = Number.isFinite(contrastRaw) ? Math.max(-4, Math.min(4, contrastRaw)) : 1;
-  const brightness = Number.isFinite(brightnessRaw) ? Math.max(-4, Math.min(4, brightnessRaw)) : 1;
+  const contrast = Number.isFinite(contrastRaw) ? SoemMath.clamp(contrastRaw, -4, 4) : 1;
+  const brightness = Number.isFinite(brightnessRaw) ? SoemMath.clamp(brightnessRaw, -4, 4) : 1;
   const blur = nodeGraphRasterRgbUnit01(params.blur, 0);
   const glow = nodeGraphRasterRgbUnit01(params.glow, 0);
   return {

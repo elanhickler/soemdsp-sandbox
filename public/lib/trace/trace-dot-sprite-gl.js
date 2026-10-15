@@ -67,32 +67,8 @@
     trapezoid: 6, diamond: 7, cross: 8, ring: 9, teardrop: 10, flower: 11,
   };
 
-  function compile(gl, type, src) {
-    const sh = gl.createShader(type);
-    gl.shaderSource(sh, src);
-    gl.compileShader(sh);
-    if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) {
-      gl.deleteShader(sh);
-      return null;
-    }
-    return sh;
-  }
-
   function link(gl, vsSrc, fsSrc) {
-    const vs = compile(gl, gl.VERTEX_SHADER, vsSrc);
-    const fs = compile(gl, gl.FRAGMENT_SHADER, fsSrc);
-    if (!vs || !fs) return null;
-    const p = gl.createProgram();
-    gl.attachShader(p, vs);
-    gl.attachShader(p, fs);
-    gl.linkProgram(p);
-    gl.deleteShader(vs);
-    gl.deleteShader(fs);
-    if (!gl.getProgramParameter(p, gl.LINK_STATUS)) {
-      gl.deleteProgram(p);
-      return null;
-    }
-    return p;
+    return SoemGl.link(gl, vsSrc, fsSrc, "trace-dot-sprite-gl.js");
   }
 
   function getShared() {
@@ -148,40 +124,8 @@
   }
 
   function parseCssColor(css) {
-    if (!css) return [1, 1, 1, 1];
-    const s = String(css).trim();
-    let m = /^#([0-9a-f]{6})$/i.exec(s);
-    if (m) {
-      const n = Number.parseInt(m[1], 16);
-      return [((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255, 1];
-    }
-    m = /^#([0-9a-f]{3})$/i.exec(s);
-    if (m) {
-      const h = m[1];
-      const n = Number.parseInt(h[0] + h[0] + h[1] + h[1] + h[2] + h[2], 16);
-      return [((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255, 1];
-    }
-    m = /^rgba?\(([^)]+)\)$/i.exec(s);
-    if (m) {
-      const body = m[1].trim();
-      let parts;
-      if (body.includes(",")) {
-        parts = body.split(",").map((x) => Number(x.trim()));
-      } else {
-        // Modern: rgb(R G B) or rgb(R G B / A)
-        const slash = body.split("/");
-        const rgb = slash[0].trim().split(/\s+/).map(Number);
-        const a = slash.length > 1 ? Number(slash[1].trim()) : 1;
-        parts = [rgb[0], rgb[1], rgb[2], a];
-      }
-      return [
-        (parts[0] || 0) / 255,
-        (parts[1] || 0) / 255,
-        (parts[2] || 0) / 255,
-        parts.length > 3 && Number.isFinite(parts[3]) ? parts[3] : 1,
-      ];
-    }
-    return [1, 1, 1, 1];
+    const c = globalThis.SoemColor.parse(css);
+    return c ? [c[0] / 255, c[1] / 255, c[2] / 255, c[3]] : [1, 1, 1, 1];
   }
 
   function uploadLut(device, colorAt) {
@@ -218,7 +162,7 @@
     const dw = Math.max(1, dest.width | 0);
     const dh = Math.max(1, dest.height | 0);
     const charR = Math.min(rx, ry);
-    const b = Math.max(0, Math.min(1, Number(blur01) || 0));
+    const b = SoemMath.clamp01(blur01);
     const b2 = b * b;
     const outer = charR * (1 + b2 * 1.65) + Math.max(1, 1.1 - b2);
     const extra = Math.max(0, outer - charR);
@@ -252,8 +196,8 @@
     gl.uniform2f(device.u.uHalf, Math.max(0.5, rx), Math.max(0.5, ry));
     gl.uniform1f(device.u.uBlur, b);
     gl.uniform1f(device.u.uShape, shapeId);
-    gl.uniform1f(device.u.uParam, Math.max(0, Math.min(1, Number(shapeParam) || 0)));
-    const amt = Math.max(0, Math.min(1, Number(amount)));
+    gl.uniform1f(device.u.uParam, SoemMath.clamp01(shapeParam));
+    const amt = SoemMath.clamp01(amount);
     gl.uniform1f(device.u.uAmount, Number.isFinite(amt) ? amt : 1);
 
     if (flat) {
@@ -272,7 +216,7 @@
     gl.disable(gl.BLEND);
     gl.disable(gl.SCISSOR_TEST);
 
-    const a = Math.max(0, Math.min(1, Number(alpha01)));
+    const a = SoemMath.clamp01(alpha01);
     const prev = destCtx.globalAlpha;
     destCtx.globalAlpha = prev * (Number.isFinite(a) ? a : 1);
     destCtx.imageSmoothingEnabled = true;

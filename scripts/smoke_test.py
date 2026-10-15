@@ -72,6 +72,8 @@ def read_bundled_default_ui_settings_script_payload() -> dict:
 
 PUBLIC_SCRIPT_PATHS = (
     "./public/embed-params.js",
+    "./public/lib/color/soem-color.js",
+    "./public/lib/gl/soem-gl-util.js",
     "./public/boot-loading.js",
     "./public/perform-boot.js",
     "./public/app-state.js",
@@ -476,6 +478,7 @@ PUBLIC_SCRIPT_PATHS = (
     "./public/lib/sample-interpolate.js",
     "./public/modules/basicShape/basic-shape-display.js",
     "./public/modules/sinCos/sin-cos-display.js",
+    "./public/modules/slewLimiter/slew-shape-display.js",
     "./public/modules/sineWavetable/sine-wavetable-display.js",
     "./public/modules/ellipsoid/ellipsoid-settings.js",
     "./public/modules/ellipsoid/ellipsoid-display.js",

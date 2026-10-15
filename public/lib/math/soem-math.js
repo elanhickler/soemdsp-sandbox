@@ -64,6 +64,20 @@
     return Math.max(0, Math.min(1, n));
   }
 
+  /**
+   * Clamp to [lo, hi]. Twin of soemdsp::math::clamp.
+   * Non-finite value -> clamp(fallback); finite 0 is valid.
+   * Ultimate fallback of a non-finite fallback is lo.
+   */
+  function clamp(value, lo, hi, fallback = lo) {
+    let n = Number(value);
+    if (!Number.isFinite(n)) {
+      n = Number(fallback);
+      if (!Number.isFinite(n)) n = lo;
+    }
+    return Math.max(lo, Math.min(hi, n));
+  }
+
 
   /**
    * Unit-square canvas tile. Missing/non-finite x/y/w/h use defaults.
@@ -153,6 +167,7 @@
     defaultIfZero,
     defaultIfNearZero,
     clamp01,
+    clamp,
     normalizeCanvasTileRect,
     dbToAmp,
     ampToDb,

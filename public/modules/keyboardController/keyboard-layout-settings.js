@@ -22,10 +22,7 @@ function normalizeNodeGraphMidiKeyboardKeyLabels(value) {
 
 function normalizeNodeGraphMidiKeyboardLayout(raw = {}) {
   const source = raw && typeof raw === "object" ? raw : {};
-  const clamp = (value, min, max, fallback) => {
-    const n = Number(value);
-    return Number.isFinite(n) ? Math.max(min, Math.min(max, n)) : fallback;
-  };
+  const clamp = (value, min, max, fallback) => globalThis.SoemMath.clamp(value, min, max, fallback);
   return {
     whiteKeyWidth: clamp(source.whiteKeyWidth, 6, 40, nodeGraphMidiKeyboardLayoutDefaults.whiteKeyWidth),
     blackKeyWidth: clamp(source.blackKeyWidth, 4, 28, nodeGraphMidiKeyboardLayoutDefaults.blackKeyWidth),

@@ -66,34 +66,8 @@ const NODE_GRAPH_VIDEO_DELAY_MAX = 512;
     }
   `;
 
-  function compile(gl, type, src) {
-    const sh = gl.createShader(type);
-    gl.shaderSource(sh, src);
-    gl.compileShader(sh);
-    if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) {
-      console.warn("[video-delay-gl] shader", gl.getShaderInfoLog(sh));
-      gl.deleteShader(sh);
-      return null;
-    }
-    return sh;
-  }
-
   function link(gl, vsSrc, fsSrc) {
-    const vs = compile(gl, gl.VERTEX_SHADER, vsSrc);
-    const fs = compile(gl, gl.FRAGMENT_SHADER, fsSrc);
-    if (!vs || !fs) return null;
-    const program = gl.createProgram();
-    gl.attachShader(program, vs);
-    gl.attachShader(program, fs);
-    gl.linkProgram(program);
-    gl.deleteShader(vs);
-    gl.deleteShader(fs);
-    if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
-      console.warn("[video-delay-gl] link", gl.getProgramInfoLog(program));
-      gl.deleteProgram(program);
-      return null;
-    }
-    return program;
+    return SoemGl.link(gl, vsSrc, fsSrc, "video-delay-gl.js");
   }
 
   function createSurface(gl, w, h) {
@@ -135,13 +109,7 @@ const NODE_GRAPH_VIDEO_DELAY_MAX = 512;
     const { gl } = picture;
     const program = link(gl, VERT, FRAG);
     if (!program) return null;
-    const quad = gl.createBuffer();
-    gl.bindBuffer(gl.ARRAY_BUFFER, quad);
-    gl.bufferData(
-      gl.ARRAY_BUFFER,
-      new Float32Array([-1, -1, 1, -1, -1, 1, -1, 1, 1, -1, 1, 1]),
-      gl.STATIC_DRAW,
-    );
+    const quad = SoemGl.quad(gl);
     sharedDevice = {
       rev: NODE_GRAPH_VIDEO_DELAY_GL_REV,
       gl,
