@@ -71,6 +71,7 @@ def read_bundled_default_ui_settings_script_payload() -> dict:
 
 
 PUBLIC_SCRIPT_PATHS = (
+    "./public/plugin-host.js",
     "./public/embed-params.js",
     "./public/lib/color/soem-color.js",
     "./public/lib/gl/soem-gl-util.js",
