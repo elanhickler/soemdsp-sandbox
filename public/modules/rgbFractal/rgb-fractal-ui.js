@@ -9,8 +9,7 @@ function createNodeGraphRgbFractalBody(node, type) {
   face.dataset.lightStrength = "1";
   face.setAttribute("aria-label", `${nodeGraphNodeDisplayName(node)} soft fractal`);
 
-  const canvas = document.createElement("canvas");
-  canvas.className = "node-rgb-fractal-canvas";
+  const canvas = nodeGraphDisplayCanvasCreate("node-rgb-fractal-canvas");
   canvas.setAttribute("aria-hidden", "true");
   face.append(canvas);
   // Restore orbit/rotation/color from node-keyed store (resize rebuilds this DOM).

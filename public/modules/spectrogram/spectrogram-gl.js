@@ -10,16 +10,16 @@
 //     affects new columns, same as the Canvas2D waterfall.
 //   • Colour: 256-wide LUT rows (one per gradient that still has ink on face).
 //   • Shader per pixel: ring lookup → Linear / Mel / Bark row→Hz → bilinear
-//     bin lerp → x/(1+x) fold → contrast → brightness → LUT. Mirrors
-//     spectrogramSpectrumToColumnMags / spectrogramGrade01 /
-//     spectrogramCssAtBrightness in spectrogram-display.js.
+//     bin lerp → x/(1+x) fold → contrast → brightness → LUT (the former CPU
+//     column/grade helpers are gone; colours match
+//     spectrogramCssAtBrightness in spectrogram-display.js).
 //
 // Device: the shared picture device (public/lib/visual/picture-device.js).
 // Its hidden canvas never resizes; we draw into a bottom-left scissor rect and
 // drawImage that rect onto the face. No WebGL context per face.
 //
 // The CPU copy of the ring is kept so a new / restored context re-uploads the
-// history, and the Canvas2D fallback can be rebuilt from it.
+// history.
 
 (function initSpectrogramGl(global) {
   const LUT_ROWS = 16;
@@ -164,7 +164,7 @@ void main() {
     gl.compileShader(shader);
     if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
       if (!gl.isContextLost()) {
-        console.warn("[spectrogram-gl] shader compile failed", gl.getShaderInfoLog(shader));
+        console.error("[spectrogram-gl] shader compile failed", gl.getShaderInfoLog(shader));
       }
       gl.deleteShader(shader);
       return null;
@@ -187,7 +187,10 @@ void main() {
         programs.delete(gl);
       }, false);
     }
-    const floatExt = gl.getExtension("OES_texture_float");
+    // WebGL2 (the shared device) has float textures in core and does not
+    // expose OES_texture_float; WebGL1 needs the extension.
+    const isGl2 = typeof WebGL2RenderingContext !== "undefined" && gl instanceof WebGL2RenderingContext;
+    const floatExt = isGl2 || gl.getExtension("OES_texture_float");
     const hp = gl.getShaderPrecisionFormat
       ? gl.getShaderPrecisionFormat(gl.FRAGMENT_SHADER, gl.HIGH_FLOAT)
       : null;
@@ -209,13 +212,15 @@ void main() {
     gl.deleteShader(fs);
     if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
       if (!gl.isContextLost()) {
-        console.warn("[spectrogram-gl] program link failed", gl.getProgramInfoLog(program));
+        console.error("[spectrogram-gl] program link failed", gl.getProgramInfoLog(program));
       }
       gl.deleteProgram(program);
       return null;
     }
     entry.ok = true;
     entry.program = program;
+    // WebGL2 needs a sized float internal format (RGBA + FLOAT is WebGL1-only).
+    entry.floatInternal = isGl2 ? gl.RGBA32F : gl.RGBA;
     entry.aPos = gl.getAttribLocation(program, "aPos");
     entry.maxTex = Number(gl.getParameter(gl.MAX_TEXTURE_SIZE)) || 2048;
     entry.u = {
@@ -511,9 +516,9 @@ void main() {
     const texW = ring.stride / 4;
     if (g.texW !== texW || g.texH !== ring.w) {
       gl.bindTexture(gl.TEXTURE_2D, g.ringTex);
-      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, texW, ring.w, 0, gl.RGBA, gl.FLOAT, ring.mags);
+      gl.texImage2D(gl.TEXTURE_2D, 0, g.entry.floatInternal, texW, ring.w, 0, gl.RGBA, gl.FLOAT, ring.mags);
       gl.bindTexture(gl.TEXTURE_2D, g.metaTex);
-      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 2, ring.w, 0, gl.RGBA, gl.FLOAT, ring.meta);
+      gl.texImage2D(gl.TEXTURE_2D, 0, g.entry.floatInternal, 2, ring.w, 0, gl.RGBA, gl.FLOAT, ring.meta);
       g.texW = texW;
       g.texH = ring.w;
       ring.dirtyCount = 0;
@@ -553,8 +558,8 @@ void main() {
 
   /**
    * Shade the ring into the shared canvas (bottom-left w×h, scissored) and
-   * copy that rect onto the face. Returns false when the caller must use the
-   * Canvas2D path instead.
+   * copy that rect onto the face. Returns false when GL cannot draw (the caller
+   * logs once and fills black).
    */
   function spectrogramGlRingPresent(ring, bufW, bufH, destCtx, destW, destH, subPx, plateRgb) {
     if (!ring || !destCtx) return false;
@@ -611,14 +616,9 @@ void main() {
 
     const dw = Math.max(1, destW | 0);
     const dh = Math.max(1, destH | 0);
-    destCtx.setTransform(1, 0, 0, 1, 0, 0);
-    destCtx.globalCompositeOperation = "source-over";
-    destCtx.globalAlpha = 1;
-    // Same scaling rule as spectrogramPresent: 1:1 crisp, else smooth.
+    // Same scaling rule as the old 2D present: 1:1 crisp, else smooth.
     const exact = w === dw && h === dh;
-    destCtx.imageSmoothingEnabled = !exact;
-    if ("imageSmoothingQuality" in destCtx) destCtx.imageSmoothingQuality = exact ? "low" : "medium";
-    destCtx.drawImage(dev.canvas, 0, dev.canvas.height - h, w, h, 0, 0, dw, dh);
+    nodeGraphDisplayCanvasBlit(destCtx, dev.canvas, 0, dev.canvas.height - h, w, h, 0, 0, dw, dh, !exact);
     return true;
   }
 

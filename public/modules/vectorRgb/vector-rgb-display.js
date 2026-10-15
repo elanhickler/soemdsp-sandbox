@@ -211,7 +211,7 @@ function wipeNodeGraphVectorRgbScreensToColdBoot(options = {}) {
     if (!canvas || seen.has(canvas)) return;
     if (onlyId && String(nodeId || "") !== onlyId) return;
     seen.add(canvas);
-    const ctx = canvas.getContext?.("2d");
+    const ctx = typeof nodeGraphDisplayCanvasPresentContext === "function" ? nodeGraphDisplayCanvasPresentContext(canvas) : null;
     const settings = nodeGraphVectorRgbSettingsForNode(
       typeof nodeGraphPatchNode === "function" ? nodeGraphPatchNode(nodeId) : null,
     );
@@ -240,24 +240,6 @@ function wipeNodeGraphVectorRgbScreensToColdBoot(options = {}) {
   }
 }
 
-function nodeGraphVectorRgbStampArcs(ctx, packed, count, radius) {
-  ctx.save();
-  ctx.globalCompositeOperation = "lighter";
-  for (let i = 0; i < count; i += 1) {
-    const o = i * 5;
-    const x = packed[o];
-    const y = packed[o + 1];
-    const r = packed[o + 2];
-    const g = packed[o + 3];
-    const b = packed[o + 4];
-    ctx.fillStyle = `rgb(${Math.round(r * 255)},${Math.round(g * 255)},${Math.round(b * 255)})`;
-    ctx.beginPath();
-    ctx.arc(x, y, radius, 0, Math.PI * 2);
-    ctx.fill();
-  }
-  ctx.restore();
-}
-
 function drawNodeGraphVectorRgbFaceItem(_renderer, item, pixelRatio) {
   const slot = item?.slot;
   const face = item?.screenElement || slot?.scopeElement;
@@ -277,8 +259,10 @@ function drawNodeGraphVectorRgbFaceItem(_renderer, item, pixelRatio) {
   if (!syncNodeGraphModuleScopeLocalFallbackCanvas(canvas, face, pixelRatio, density)) {
     return;
   }
-  canvas.style.imageRendering = density < 0.999 ? "pixelated" : "";
-  const ctx = canvas.getContext("2d");
+  // Density < 1: nearest-neighbour via the shared display-canvas class (styles.css).
+  canvas.classList?.toggle?.("display-canvas-pixelated", density < 0.999);
+  // 2D present surface for the shared-GL trails blit (display-canvas.js); no 2D drawing here.
+  const ctx = typeof nodeGraphDisplayCanvasPresentContext === "function" ? nodeGraphDisplayCanvasPresentContext(canvas) : null;
   if (!ctx) {
     return;
   }
@@ -307,25 +291,20 @@ function drawNodeGraphVectorRgbFaceItem(_renderer, item, pixelRatio) {
     return;
   }
 
-  // RGB trails GL on shared picture device; Canvas2D DestFade fallback.
+  // RGB trails GL on the shared picture device (no Canvas2D fallback: no GL ->
+  // plain black square, docs/WEBGL_DISPLAY_PLAN.md).
   const trails = typeof TraceRgbTrailsGl !== "undefined" ? TraceRgbTrailsGl : null;
   const useTrails = Boolean(
     trails
     && typeof trails.ensure === "function"
     && trails.ensure(canvas, canvas.width, canvas.height)
   );
-  if (useTrails) {
-    trails.stepFade(canvas, settings.trail, settings.ghost, bg);
-  } else if (typeof nodeGraphScopeDestFadeTowardPlate === "function") {
-    nodeGraphScopeDestFadeTowardPlate(ctx, canvas, bg, settings.trail, settings.ghost);
-  } else {
-    const fade = Math.max(0.02, 1 - settings.trail * 0.97);
-    ctx.save();
-    ctx.globalCompositeOperation = "source-over";
-    ctx.fillStyle = `rgba(0,0,0,${fade})`;
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    ctx.restore();
+  if (!useTrails) {
+    if (typeof nodeGraphGlLinesFillBlack === "function") nodeGraphGlLinesFillBlack(canvas);
+    canvas._vectorRgbPrimed = false;
+    return;
   }
+  trails.stepFade(canvas, settings.trail, settings.ghost, bg);
 
   try {
     const source = nodeGraphRgbPickPortBuffer(slot, "X");
@@ -439,23 +418,12 @@ function drawNodeGraphVectorRgbFaceItem(_renderer, item, pixelRatio) {
       prevG = g;
       prevB = b;
     }
-    if (count > 0) {
-      if (useTrails && typeof trails.stampPoints === "function") {
-        trails.stampPoints(canvas, packed, count, radius * 2);
-      } else {
-        const stamped = typeof TraceRgbPoints !== "undefined"
-          && typeof TraceRgbPoints.stamp === "function"
-          && TraceRgbPoints.stamp(ctx, packed, count, { sizePx: radius * 2 });
-        if (!stamped) {
-          nodeGraphVectorRgbStampArcs(ctx, packed, count, radius);
-        }
-      }
+    if (count > 0 && typeof trails.stampPoints === "function") {
+      trails.stampPoints(canvas, packed, count, radius * 2);
     }
   } finally {
-    if (useTrails && typeof trails.presentTo === "function") {
+    if (typeof trails.presentTo === "function") {
       trails.presentTo(canvas, ctx, bg);
-    } else if (typeof nodeGraphScopeDestFadeGhostAfterStamps === "function") {
-      nodeGraphScopeDestFadeGhostAfterStamps(ctx, canvas);
     }
   }
 }
@@ -473,7 +441,7 @@ if (typeof nodeGraphModuleScopeRegisterFaceWipe === "function") {
   });
   nodeGraphModuleScopeRegisterFaceWipe("gradientVectorscopeFace", (canvas, bg) => {
     if (!canvas) return;
-    const ctx = canvas.getContext?.("2d");
+    const ctx = typeof nodeGraphDisplayCanvasPresentContext === "function" ? nodeGraphDisplayCanvasPresentContext(canvas) : null;
     nodeGraphVectorRgbClearPlate(canvas, ctx, bg);
   });
 }

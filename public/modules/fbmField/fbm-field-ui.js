@@ -10,8 +10,7 @@ function createNodeGraphFbmFieldBody(node, type) {
   face.setAttribute("aria-label", `${nodeGraphNodeDisplayName(node)} Fractal Brownian Field`);
   face.style.cssText = "position:relative;width:100%;height:100%;overflow:hidden;background:#000000;";
 
-  const canvas = document.createElement("canvas");
-  canvas.className = "node-fbm-field-canvas";
+  const canvas = nodeGraphDisplayCanvasCreate("node-fbm-field-canvas");
   canvas.setAttribute("aria-hidden", "true");
   canvas.style.cssText = "display:block;width:100%;height:100%;";
   face.append(canvas);

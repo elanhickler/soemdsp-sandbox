@@ -2431,7 +2431,7 @@ function createNodeGraphSampleWaveformDisplay(nodeId, type) {
   section.setAttribute("aria-label", `${faceLabel} waveform display`);
 
   const canvas = document.createElement("canvas");
-  canvas.className = "node-sample-waveform-canvas";
+  canvas.className = "node-sample-waveform-canvas node-display-canvas";
   canvas.dataset.lightSource = "screen";
   canvas.dataset.lightStrength = "1";
   section.append(canvas);

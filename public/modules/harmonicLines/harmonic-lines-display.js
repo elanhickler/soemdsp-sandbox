@@ -81,8 +81,7 @@ function createNodeGraphHarmonicLinesDisplay(nodeId, type = "additiveOut") {
   if (typeof tagNodeGraphModuleBand === "function") {
     tagNodeGraphModuleBand(section, "face");
   }
-  const canvas = document.createElement("canvas");
-  canvas.className = "node-harmonic-lines-canvas";
+  const canvas = nodeGraphDisplayCanvasCreate("node-harmonic-lines-canvas");
   section.append(canvas);
   nodeGraphInstallDrawingFacePump(section, {
     clockKey: (el) => `harmonicLines:${el.dataset?.node || ""}`,
@@ -153,54 +152,33 @@ function drawNodeGraphHarmonicLinesDisplay(section) {
   const canvas = section.querySelector("canvas");
   if (!canvas) return;
 
-  let ctx;
-  let w;
-  let h;
-  let pixelRatio = 1;
-  if (typeof nodeGraphSizeDisplayCanvas === "function") {
-    const metrics = nodeGraphSizeDisplayCanvas(section, canvas, { pixelDensity: 1 });
-    if (!metrics) return;
-    ctx = metrics.context;
-    w = metrics.cssWidth;
-    h = metrics.cssHeight;
-    pixelRatio = metrics.pixelRatio || 1;
-  } else {
-    const face = typeof ensureFaceMetrics === "function"
-      ? ensureFaceMetrics(section, { observe: true })
-      : null;
-    if (!face || face.cssW < 8 || face.cssH < 8) return;
-    w = face.cssW;
-    h = face.cssH;
-    pixelRatio = face.dpr;
-    canvas.width = face.width;
-    canvas.height = face.height;
-    ctx = canvas.getContext("2d");
-  }
-  if (!ctx || w < 8 || h < 8) return;
+  const m = typeof nodeGraphDisplayCanvasSize === "function" ? nodeGraphDisplayCanvasSize(section, canvas) : null;
+  if (!m || m.cssWidth < 8 || m.cssHeight < 8) return;
+  const w = m.cssWidth;
+  const h = m.cssHeight;
 
-  ctx.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
-  ctx.fillStyle = "#050508";
-  ctx.fillRect(0, 0, w, h);
+  const batch = typeof nodeGraphGlLinesBegin === "function"
+    ? nodeGraphGlLinesBegin(canvas, [5 / 255, 5 / 255, 8 / 255, 1], { scale: m.pixelRatio })
+    : null;
+  if (!batch) {
+    if (typeof nodeGraphGlLinesFillBlack === "function") nodeGraphGlLinesFillBlack(canvas);
+    section._forceDraw = false;
+    return;
+  }
 
   const nodeId = section.dataset.node;
   // No Graph edge / no Additive Generator upstream → placeholder only (no bars, no curve).
   const maskGen = nodeGraphHarmonicLinesUpstreamGenerator(nodeId);
   if (!maskGen) {
-    ctx.fillStyle = "#666";
-    ctx.font = "12px ui-monospace, monospace";
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillText("connect Additive Generator", w * 0.5, h * 0.5);
+    nodeGraphGlLinesText(batch, "connect Additive Generator", w * 0.5, h * 0.5, { px: 12, weight: 400, family: "ui-monospace, monospace", rgba: [0.4, 0.4, 0.4, 1], maxWidth: w - 4 });
+    nodeGraphGlLinesEnd(batch);
     section._forceDraw = false;
     return;
   }
   const graph = nodeGraphHarmonicLinesReadGraph(nodeId);
   if (!graph || !graph.ratio || !graph.ratio.length) {
-    ctx.fillStyle = "#666";
-    ctx.font = "12px ui-monospace, monospace";
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillText("no Graph", w * 0.5, h * 0.5);
+    nodeGraphGlLinesText(batch, "no Graph", w * 0.5, h * 0.5, { px: 12, weight: 400, family: "ui-monospace, monospace", rgba: [0.4, 0.4, 0.4, 1] });
+    nodeGraphGlLinesEnd(batch);
     section._forceDraw = false;
     return;
   }
@@ -345,12 +323,9 @@ function drawNodeGraphHarmonicLinesDisplay(section) {
   );
 
   // Dim mid line — Left above, Right below.
-  ctx.strokeStyle = "rgba(255, 255, 255, 0.18)";
-  ctx.lineWidth = faceInkPx(1, faceMin);
-  ctx.beginPath();
-  ctx.moveTo(pad, midY);
-  ctx.lineTo(pad + span, midY);
-  ctx.stroke();
+  // Capsule half-width for a CSS stroke width: core = w/2 - 0.35, 0.7 px feather.
+  const half = (lw) => Math.max(0, lw * 0.5 - 0.35);
+  nodeGraphGlLinesSegment(batch, pad, midY, pad + span, midY, half(faceInkPx(1, faceMin)), 0.7, [1, 1, 1, 0.18]);
 
   const ampRef = maxAmp;
   const ampToHeight = (amp) => {
@@ -374,26 +349,14 @@ function drawNodeGraphHarmonicLinesDisplay(section) {
     const col = typeof additiveGraphPhaseColor === "function"
       ? additiveGraphPhaseColor(phase01)
       : { r: 224, g: 64, b: 251 };
-    ctx.strokeStyle = `rgb(${col.r},${col.g},${col.b})`;
-    ctx.lineWidth = lineW;
-    if (leftH > 0.5) {
-      ctx.beginPath();
-      ctx.moveTo(x, midY);
-      ctx.lineTo(x, midY - leftH);
-      ctx.stroke();
-    }
-    if (rightH > 0.5) {
-      ctx.beginPath();
-      ctx.moveTo(x, midY);
-      ctx.lineTo(x, midY + rightH);
-      ctx.stroke();
-    }
+    const rgba = [col.r / 255, col.g / 255, col.b / 255, 1];
+    // Butt ends like the 2D stroke: square-ended rect, not a capsule.
+    if (leftH > 0.5) nodeGraphGlLinesRect(batch, x - lineW * 0.5, midY - leftH, lineW, leftH, rgba);
+    if (rightH > 0.5) nodeGraphGlLinesRect(batch, x - lineW * 0.5, midY, lineW, rightH, rgba);
   }
 
   if (trackFilter) {
-    ctx.strokeStyle = "rgba(255, 255, 255, 0.85)";
-    ctx.lineWidth = faceInkPx(1.5, faceMin);
-    ctx.beginPath();
+    const pts = [];
     const steps = Math.max(32, Math.min(160, Math.round(span / 3)));
     for (let s = 0; s <= steps; s += 1) {
       const t = s / steps;
@@ -401,11 +364,11 @@ function drawNodeGraphHarmonicLinesDisplay(section) {
       const g = Math.max(0, Math.min(1, filterGainAt(hz)));
       const y = midY - g * maxH;
       const x = pad + t * span;
-      if (s === 0) ctx.moveTo(x, y);
-      else ctx.lineTo(x, y);
+      pts.push(x, y);
     }
-    ctx.stroke();
+    nodeGraphGlLinesPolyline(batch, pts, half(faceInkPx(1.5, faceMin)), 0.7, [1, 1, 1, 0.85]);
   }
+  if (!nodeGraphGlLinesEnd(batch) && typeof nodeGraphGlLinesFillBlack === "function") nodeGraphGlLinesFillBlack(canvas);
   section._forceDraw = false;
 }
 

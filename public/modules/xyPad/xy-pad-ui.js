@@ -598,14 +598,13 @@ function nodeGraphXyPadStepPhosphor(pad, canvas, ctx, width, height, options = {
     return false;
   }
   face._xyPadPresentedIdle = !liveDeposit;
-  ctx.save();
-  ctx.globalCompositeOperation = "source-over";
-  ctx.globalAlpha = 1;
-  ctx.imageSmoothingEnabled = true;
-  ctx.drawImage(face.canvas, 0, 0, width, height);
-  ctx.restore();
+  // ctx is the face's GL batch: the presented phosphor goes in as a smooth image quad.
+  nodeGraphGlLinesImage(ctx, face.canvas, 0, 0, width, height, { nearest: false });
   return true;
 }
+
+const XY_PAD_GL_BLACK = Object.freeze([0, 0, 0, 1]);
+const XY_PAD_GL_GHOST = Object.freeze([177 / 255, 132 / 255, 1, 0.48]);
 
 function drawNodeGraphXyPad(pad, options = {}) {
   const canvas = pad?.querySelector(".node-xy-pad-canvas");
@@ -613,56 +612,23 @@ function drawNodeGraphXyPad(pad, options = {}) {
     return;
   }
   const display = nodeGraphXyPadDisplaySettings(pad);
-  // Layout CSS size × devicePixelRatio — same contract as scope faces.
-  // Do NOT use getBoundingClientRect × dpr: that is screen-space and grows
-  // with workspace zoom, so a fixed-radius puck stayed constant on screen
-  // instead of scaling with the module.
-  const size = typeof nodeGraphModuleScopeFaceBackingSize === "function"
-    ? nodeGraphModuleScopeFaceBackingSize(canvas)
-    : null;
-  let layoutW;
-  let layoutH;
-  let dpr;
-  if (size && size.width >= 2 && size.height >= 2) {
-    layoutW = size.width;
-    layoutH = size.height;
-    dpr = size.pixelRatio || Math.max(1, window.devicePixelRatio || 1);
-  } else {
-    const cw = Math.max(0, canvas.clientWidth || 0);
-    const ch = Math.max(0, canvas.clientHeight || 0);
-    if (cw < 2 || ch < 2) {
-      return;
-    }
-    dpr = Math.max(1, window.devicePixelRatio || 1);
-    layoutW = Math.round(cw * dpr);
-    layoutH = Math.round(ch * dpr);
-  }
+  // Shared sizing (layout CSS x dpr, never workspace zoom; density < 1 is
+  // pixelated by the shared helper). Drawing is WebGL2 via gl-line-renderer.
   // Pixel density 0–1 (same as 2D Phosphor): 0 → 1×1, 1 → layout×dpr.
   const densityRaw = typeof nodeGraphFacePlateDensity === "function"
     ? nodeGraphFacePlateDensity(display, 1)
     : Number(display.pixelDensity);
   const density = Number.isFinite(densityRaw) ? Math.max(0, Math.min(1, densityRaw)) : 1;
-  const width = Math.max(1, Math.round(layoutW * density));
-  const height = Math.max(1, Math.round(layoutH * density));
-  if (canvas.width !== width || canvas.height !== height) {
-    canvas.width = width;
-    canvas.height = height;
-  }
-  // Clear any inline style so CSS 100% + workspace zoom scale the bitmap.
-  if (canvas.style.width || canvas.style.height) {
-    canvas.style.width = "";
-    canvas.style.height = "";
-  }
-  if (density < 0.999) {
-    canvas.style.imageRendering = "pixelated";
-  } else if (canvas.style.imageRendering) {
-    canvas.style.imageRendering = "";
-  }
-  const ctx = canvas.getContext("2d");
-  if (!ctx) {
+  const sized = typeof nodeGraphDisplayCanvasSize === "function"
+    ? nodeGraphDisplayCanvasSize(canvas.parentElement || pad, canvas, { pixelDensity: density })
+    : null;
+  if (!sized || sized.cssWidth < 2 || sized.cssHeight < 2) {
     return;
   }
-  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  const width = Math.max(1, sized.width);
+  const height = Math.max(1, sized.height);
+  const dpr = Math.max(1, (sized.pixelRatio || 1) / Math.max(density, 1e-6));
+  const size = sized;
   // Floor / peak follow gradientStops (shared gradient editor).
   const gradientStops = Array.isArray(display.gradientStops) && display.gradientStops.length >= 2
     ? display.gradientStops
@@ -765,6 +731,14 @@ function drawNodeGraphXyPad(pad, options = {}) {
     }
   }
   pad._xyPadBeamAuthored = beamAuthored;
+  const ctx = typeof nodeGraphGlLinesBegin === "function"
+    ? nodeGraphGlLinesBegin(canvas, XY_PAD_GL_BLACK)
+    : null;
+  if (!ctx) {
+    pad._xyPadLastDrawFp = null;
+    if (typeof nodeGraphGlLinesFillBlack === "function") nodeGraphGlLinesFillBlack(canvas);
+    return;
+  }
   nodeGraphXyPadStepPhosphor(pad, canvas, ctx, width, height, {
     liveDeposit,
     pathPoints,
@@ -796,21 +770,16 @@ function drawNodeGraphXyPad(pad, options = {}) {
     }
     const strength = Math.max(0, Math.min(1, nodeGraphXyPadParam(pad, quantKey, 0)));
     const strokeLine = (t, emphasize = false) => {
-      ctx.strokeStyle = `rgba(127, 199, 217, ${
-        emphasize ? 0.18 + strength * 0.22 : 0.10 + strength * 0.16
-      })`;
-      ctx.lineWidth = Math.max(1, dpr * (emphasize ? 1 : 0.75));
-      ctx.beginPath();
+      const rgba = [127 / 255, 199 / 255, 217 / 255, emphasize ? 0.18 + strength * 0.22 : 0.10 + strength * 0.16];
+      const lw = Math.max(1, dpr * (emphasize ? 1 : 0.75));
+      // Butt-capped line of width lw centred on the pixel centre (as the 2D stroke).
       if (vertical) {
         const x = Math.round(t * width) + 0.5;
-        ctx.moveTo(x, 0);
-        ctx.lineTo(x, height);
+        nodeGraphGlLinesRect(ctx, x - lw * 0.5, 0, lw, height, rgba);
       } else {
         const y = Math.round((1 - t) * height) + 0.5;
-        ctx.moveTo(0, y);
-        ctx.lineTo(width, y);
+        nodeGraphGlLinesRect(ctx, 0, y - lw * 0.5, width, lw, rgba);
       }
-      ctx.stroke();
     };
     if (levels === 1) {
       strokeLine(0.5, true);
@@ -828,29 +797,29 @@ function drawNodeGraphXyPad(pad, options = {}) {
   if (ghostConnected) {
     // Out tip when CV is patched (same unit space as phosphor tip).
     const ghostR = Math.max(2, puckSize01 * minSide * 0.55);
-    ctx.beginPath();
-    ctx.arc(trailX, trailY, ghostR, 0, Math.PI * 2);
-    ctx.fillStyle = "rgba(177, 132, 255, 0.48)";
-    ctx.fill();
+    nodeGraphGlLinesDot(ctx, trailX, trailY, Math.max(0, ghostR - 0.35), 0.7, XY_PAD_GL_GHOST);
   }
 
   // Phase puck: solid vector disc (re-drawn each paint — trivial vs phosphor).
   const puckR = Math.max(2.5, puckSize01 * minSide);
-  ctx.beginPath();
-  ctx.arc(px, py, puckR * 1.15, 0, Math.PI * 2);
-  ctx.strokeStyle = nodeGraphXyPadRgba(phosphorHex, 0.22);
-  ctx.lineWidth = Math.max(1, dpr);
-  ctx.stroke();
-  ctx.beginPath();
-  ctx.arc(px, py, puckR, 0, Math.PI * 2);
-  ctx.fillStyle = nodeGraphXyPadRgba(phosphorHex, 0.55 + brightness * 0.4);
-  ctx.fill();
-  ctx.strokeStyle = nodeGraphXyPadRgba(phosphorHex, 0.12);
-  ctx.lineWidth = Math.max(1, dpr * 0.75);
-  ctx.beginPath();
-  ctx.moveTo(px, 0); ctx.lineTo(px, height);
-  ctx.moveTo(0, py); ctx.lineTo(width, py);
-  ctx.stroke();
+  const ringW = Math.max(1, dpr);
+  const ring = pad._xyPadGlRing || (pad._xyPadGlRing = new Array(130));
+  const ringR = puckR * 1.15;
+  for (let i = 0; i <= 64; i += 1) {
+    const a = (i / 64) * Math.PI * 2;
+    ring[i * 2] = px + Math.cos(a) * ringR;
+    ring[i * 2 + 1] = py + Math.sin(a) * ringR;
+  }
+  nodeGraphGlLinesPolyline(ctx, ring, Math.max(0, ringW * 0.5 - 0.35), 0.7, nodeGraphGlLinesCss(nodeGraphXyPadRgba(phosphorHex, 0.22)));
+  nodeGraphGlLinesDot(ctx, px, py, Math.max(0, puckR - 0.35), 0.7, nodeGraphGlLinesCss(nodeGraphXyPadRgba(phosphorHex, 0.55 + brightness * 0.4)));
+  const crossW = Math.max(1, dpr * 0.75);
+  const cross = nodeGraphGlLinesCss(nodeGraphXyPadRgba(phosphorHex, 0.12));
+  nodeGraphGlLinesRect(ctx, px - crossW * 0.5, 0, crossW, height, cross);
+  nodeGraphGlLinesRect(ctx, 0, py - crossW * 0.5, width, crossW, cross);
+  if (!nodeGraphGlLinesEnd(ctx)) {
+    pad._xyPadLastDrawFp = null;
+    if (typeof nodeGraphGlLinesFillBlack === "function") nodeGraphGlLinesFillBlack(canvas);
+  }
 }
 
 /**
@@ -1067,8 +1036,7 @@ function createNodeGraphXyPadBody(node, type) {
   pad.dataset.nodeType = type;
   pad.dataset.lightSource = "screen";
   pad.dataset.parameterVisual = "true";
-  const canvas = document.createElement("canvas");
-  canvas.className = "node-xy-pad-canvas";
+  const canvas = nodeGraphDisplayCanvasCreate("node-xy-pad-canvas");
   canvas.setAttribute("aria-label", `${nodeGraphNodeDisplayName(node)} XY pad`);
   // Ensure the face is a hit target even if a parent toggles pointer-events.
   canvas.style.touchAction = "none";

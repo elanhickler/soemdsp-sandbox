@@ -1097,7 +1097,7 @@ const nodeGraphModuleDefinitions = (
     inputs: ["Reset", "f"],
     inputLabels: {
       f: "ƒ" },
-    outputs: ["A", "B", "C", "D"],
+    outputs: ["A", "B", "C", "D", "rgba"],
     parameters: [
       {
         choices: ["sine", "cosine", "sincos", "antiphase", "3-phase", "4-phase"],
@@ -1600,7 +1600,7 @@ const nodeGraphModuleDefinitions = (
       { key: "harmonicCount", renderer: "harmonicCount" },
     ],
     inputs: [],
-    outputs: [],
+    outputs: ["rgba"],
     dataOutputs: ["Graph"],
     parameters: [
       {
@@ -1693,7 +1693,7 @@ const nodeGraphModuleDefinitions = (
     inputs: [],
     inputLabels: { f: "ƒ" },
     inputAliases: { "ƒ": "f" },
-    outputs: [],
+    outputs: ["rgba"],
     dataInputs: ["Graph"],
     dataOutputs: ["Graph"],
     parameters: [
@@ -1838,7 +1838,7 @@ const nodeGraphModuleDefinitions = (
     inputs: [],
     inputLabels: { f: "ƒ" },
     inputAliases: { "ƒ": "f" },
-    outputs: [],
+    outputs: ["rgba"],
     dataInputs: ["Graph"],
     dataOutputs: ["Graph"],
     parameters: [
@@ -1902,7 +1902,7 @@ const nodeGraphModuleDefinitions = (
       { key: "additiveBubbleCascade", renderer: "additiveBubbleCascade" },
     ],
     inputs: [],
-    outputs: [],
+    outputs: ["rgba"],
     dataInputs: ["Graph"],
     dataOutputs: ["Graph"],
     parameters: [
@@ -2681,7 +2681,7 @@ const nodeGraphModuleDefinitions = (
       { key: "additiveBlasterBlocks", renderer: "additiveBlasterBlocks" },
     ],
     inputs: [],
-    outputs: [],
+    outputs: ["rgba"],
     dataInputs: ["Graph"],
     dataOutputs: ["Graph"],
     parameters: [
@@ -2993,7 +2993,7 @@ const nodeGraphModuleDefinitions = (
     inputLabels: { f: "ƒ" },
     inputAliases: { "ƒ": "f" },
     // Mono = unpanned sum; Left/Right use Graph pan[] (−1…+1).
-    outputs: ["Mono", "Left", "Right"],
+    outputs: ["Mono", "Left", "Right", "rgba"],
     outputAliases: {Out: "Mono", L: "Left", R: "Right"},
     outputLabels: {Mono: "Mono", Left: "Left", Right: "Right"},
     dataInputs: ["Graph"],
@@ -9995,7 +9995,7 @@ const nodeGraphModuleDefinitions = (
       Reset: "Rising edge reseeds every generator (noise and dither) from Seed and zeroes the phase.",
       f: "Hz cable. When wired it replaces Frequency, same as PolyBLEP.",
     },
-    outputs: ["Mono", "Left", "Right", "Noise L", "Noise R", "pitch L", "pitch R"],
+    outputs: ["Mono", "Left", "Right", "Noise L", "Noise R", "pitch L", "pitch R", "rgba"],
     outputLabels: { "pitch L": "♯/♭ L", "pitch R": "♯/♭ R" },
     digitalOutputs: ["pitch L", "pitch R"],
     outputTooltips: {
@@ -10145,7 +10145,7 @@ const nodeGraphModuleDefinitions = (
       Left: "Left audio in. Alone it counts as mono (both channels); with Right wired, Left channel = Left + Mono.",
       Right: "Right audio in. Alone it counts as mono (both channels); with Left wired, Right channel = Right + Mono.",
     },
-    outputs: ["Mono", "Left", "Right", "Noise L", "Noise R", "CV L", "CV R"],
+    outputs: ["Mono", "Left", "Right", "Noise L", "Noise R", "CV L", "CV R", "rgba"],
     outputTooltips: {
       Mono: "The Left channel render on its own: one complete voice, same level as Left or Right.",
       Left: "Left channel (its own noise generators).",
@@ -12385,7 +12385,7 @@ const nodeGraphModuleDefinitions = (
     defaultDisplayMode: "ensembleCloud",
     digitalInputs: ["Reset"],
     inputs: ["Mono", "Left", "Right", "Reset"],
-    outputs: ["Left", "Right"],
+    outputs: ["Left", "Right", "rgba"],
     parameters: [
       {
         defaultValue: "0.5",
@@ -13383,7 +13383,7 @@ const nodeGraphModuleDefinitions = (
       Left: "Mix L",
       Right: "Mix R" },
     // Dry before Mix (space FX outlet order).
-    outputs: ["Dry L", "Dry R", "Mix L", "Mix R"],
+    outputs: ["Dry L", "Dry R", "Mix L", "Mix R", "rgba"],
     outputLabels: {
       "Dry L": "Dry L",
       "Dry R": "Dry R",
@@ -14004,7 +14004,7 @@ const nodeGraphModuleDefinitions = (
     inputAliases: { Mono: "In", Left: "In", Right: "In" },
     inputs: ["In"],
     outputAliases: { Mono: "Out", Left: "Out", Right: "Out" },
-    outputs: ["Out"],
+    outputs: ["Out", "rgba"],
     defaultUi: {
       buttonsHidden: true,
       oscilloscopeHidden: true },
@@ -16729,7 +16729,7 @@ const nodeGraphModuleDefinitions = (
     inputs: ["In"],
     layout: "scopeFace",
     // Single In / Thru pair: → / ← come from nodeGraphThruPairPortDisplayLabel.
-    outputs: ["Thru"],
+    outputs: ["Thru", "rgba"],
     parameters: [
       {
         key: "minFreq",

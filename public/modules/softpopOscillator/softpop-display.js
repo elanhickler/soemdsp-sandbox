@@ -371,7 +371,7 @@ function drawNodeGraphSoftpopFaceItem(_renderer, item, pixelRatio) {
   const info = typeof nodeGraphDataBus !== "undefined"
     ? nodeGraphDataBus.get(nodeGraphDataBusKey(String(nodeId), "SoftpopInfo"))
     : null;
-  if (!bins || !bins.length || !info) return;  // no data yet: hold last frame
+  if (!bins || !bins.length || !info) return;  // no data yet: nothing to draw
   const cssW = Math.max(1, canvas.clientWidth || screenElement?.clientWidth || 1);
   nodeGraphSoftpopFacePresent(canvas, bins, info, settings, cssW);
 }

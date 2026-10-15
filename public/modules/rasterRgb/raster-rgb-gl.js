@@ -95,7 +95,7 @@
       const composite = await fetchGlsl("raster_rgb.composite.frag.glsl");
       if (!vs || !source || !blur || !down || !composite) {
         glsl.failed = true;
-        console.warn("[raster-rgb-gl] missing native_modules/raster_rgb/*.glsl");
+        console.error("[raster-rgb-gl] missing native_modules/raster_rgb/*.glsl");
         return null;
       }
       glsl.vs = vs;
@@ -124,7 +124,7 @@
     gl.compileShader(shader);
     if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
       if (!gl.isContextLost()) {
-        console.warn("[raster-rgb-gl] shader compile failed", gl.getShaderInfoLog(shader));
+        console.error("[raster-rgb-gl] shader compile failed", gl.getShaderInfoLog(shader));
       }
       gl.deleteShader(shader);
       return null;
@@ -148,7 +148,7 @@
     gl.deleteShader(fs);
     if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
       if (!gl.isContextLost()) {
-        console.warn("[raster-rgb-gl] program link failed", gl.getProgramInfoLog(program));
+        console.error("[raster-rgb-gl] program link failed", gl.getProgramInfoLog(program));
       }
       gl.deleteProgram(program);
       return null;
@@ -233,7 +233,7 @@
   }
 
   function lutFor(state, grade) {
-    // Same cache key as nodeGraphRasterRgbApplyGrade (shared state fields).
+    // Grade cache key lives on the shared state fields.
     const key = `${grade.invert}|${grade.contrast}|${grade.brightness}`;
     if (state.gradeLutKey !== key || !state.gradeLut) {
       state.gradeLut = nodeGraphRasterRgbGradeLut(grade);
@@ -490,14 +490,13 @@
       destCtx.globalCompositeOperation = "source-over";
       destCtx.globalAlpha = 1;
       destCtx.filter = "none";
-      destCtx.imageSmoothingEnabled = false;
       destCtx.drawImage(dev.canvas, 0, dev.canvas.height - ch, cw, ch, 0, 0, cw, ch);
       destCtx.restore();
       return true;
     } catch (err) {
       gl.disable(gl.SCISSOR_TEST);
       gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-      if (!gl.isContextLost()) console.warn("[raster-rgb-gl] present failed, using Canvas2D", err);
+      console.error("[raster-rgb-gl] present failed; face shows black", err);
       return false;
     }
   }

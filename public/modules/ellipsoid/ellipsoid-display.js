@@ -13,8 +13,7 @@ function createNodeGraphRoundShapeDisplay(nodeId, type = "ellipsoid") {
   section.dataset.parameterVisual = "true";
   section.dataset.lightSource = "screen";
   section.dataset.lightStrength = "0.66";
-  const canvas = document.createElement("canvas");
-  canvas.className = "node-filter-curve-canvas node-round-shape-canvas";
+  const canvas = nodeGraphDisplayCanvasCreate("node-filter-curve-canvas node-round-shape-canvas");
   canvas.dataset.lightSource = "screen";
   canvas.dataset.lightStrength = "0.66";
   section.append(canvas);
@@ -133,7 +132,7 @@ function drawNodeGraphRoundShapeDisplay(section) {
     const detail = error && typeof error === "object"
       ? (error.message || error.name || String(error))
       : String(error);
-    console.warn("[round-shape] draw failed", detail, error);
+    console.error("[round-shape] draw failed", detail, error);
     if (section) {
       section._roundShapeForceDraw = true;
       section._roundShapeLaidOut = false;
@@ -257,55 +256,30 @@ function drawNodeGraphRoundShapeDisplayInner(section) {
     return;
   }
 
-  let context;
-  let width;
-  let height;
-  let pixelRatio = 1;
-  if (typeof nodeGraphSizeDisplayCanvas === "function") {
-    const metrics = nodeGraphSizeDisplayCanvas(section, canvas, { pixelDensity });
-    if (!metrics) {
-      return;
-    }
-    context = metrics.context;
-    width = metrics.cssWidth;
-    height = metrics.cssHeight;
-    pixelRatio = metrics.pixelRatio || 1;
-  } else {
-    const dpr = Math.max(1, window.devicePixelRatio || 1);
-    const density = Math.max(0, Math.min(1, nodeGraphFiniteNumber(pixelDensity, 1)));
-    pixelRatio = dpr * Math.max(density, 1e-6);
-    width = Math.max(1, Math.floor(rawW));
-    height = Math.max(1, Math.floor(rawH));
-    canvas.width = Math.max(1, Math.round(width * pixelRatio));
-    canvas.height = Math.max(1, Math.round(height * pixelRatio));
-    context = canvas.getContext("2d");
-    if (!context) {
-      return;
-    }
-  }
-  if (!(width >= 8) || !(height >= 8) || !context) {
+  // Shared GL presenter (cycle-line-gl.js on the shared WebGL2 device): the
+  // orbit polyline is tessellated only when the look/shape signature or the
+  // backing size changes; per frame only the phase dot is rebuilt.
+  const metrics = typeof nodeGraphCycleLineGlMetrics === "function"
+    ? nodeGraphCycleLineGlMetrics(section, canvas, pixelDensity)
+    : null;
+  if (!metrics) {
     return;
   }
-
-  const orbitDirty = section._roundShapeOrbitSig !== signature
-    || !section._roundShapeOrbitCanvas
-    || section._roundShapeForceDraw;
-  section._roundShapeSignature = signature;
-  section._roundShapeForceDraw = false;
-  section._roundShapeLaidOut = true;
-
-  context.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
+  const pixelRatio = metrics.pixelRatio || 1;
   // Drawable CSS box (buffer / transform), not section.client* — the
   // backing store can be up to ~1px short, which eats the +X square side.
   const drawW = Math.max(1, canvas.width / pixelRatio);
   const drawH = Math.max(1, canvas.height / pixelRatio);
-  if (!orbitDirty) {
-    context.drawImage(section._roundShapeOrbitCanvas, 0, 0, drawW, drawH);
-  } else {
-    context.clearRect(0, 0, drawW, drawH);
-    context.fillStyle = plateBg;
-    context.fillRect(0, 0, drawW, drawH);
+  if (!(drawW >= 8) || !(drawH >= 8)) {
+    return;
   }
+  const glKey = `${signature}|${canvas.width}x${canvas.height}`;
+  // Also rebuild when the presenter state is fresh (context restored).
+  const orbitDirty = section._roundShapeOrbitSig !== glKey || section._roundShapeForceDraw
+    || canvas.__cycleLineGl?.waveKey !== glKey;
+  section._roundShapeSignature = signature;
+  section._roundShapeForceDraw = false;
+  section._roundShapeLaidOut = true;
 
   const samples = 256;
   const strokeInset = strokeW * 0.5 + 1 / Math.max(pixelRatio, 1);
@@ -315,24 +289,10 @@ function drawNodeGraphRoundShapeDisplayInner(section) {
   const half = Math.max(4, Math.min(drawW, drawH) * 0.5 - pad);
   const viewScale = half;
 
+  let lines = null;
   if (orbitDirty) {
-    context.beginPath();
-    if (isEllipsoidOsc) {
-      const eps = 0.5 / samples;
-      for (let i = 0; i < samples; i += 1) {
-        let phase = i / samples + eps;
-        phase -= Math.floor(phase);
-        const pt = nodeGraphRoundShapeEllipsoidOscPoint(phase, node);
-        const x = cx + pt.x * viewScale;
-        const y = cy - pt.y * viewScale;
-        if (i === 0) {
-          context.moveTo(x, y);
-        } else {
-          context.lineTo(x, y);
-        }
-      }
-      context.closePath();
-    } else if (typeof nodeGraphEllipsoidSineToSquareVector === "function") {
+    const points = [];
+    if (isEllipsoidOsc || typeof nodeGraphEllipsoidSineToSquareVector === "function") {
       // Phase 0/1 is the mid-point of the +X side at shape=1. Starting
       // and ending there drops that whole side (open path + clip). Walk
       // from just after the seam and close so the right edge is a join.
@@ -340,50 +300,20 @@ function drawNodeGraphRoundShapeDisplayInner(section) {
       for (let i = 0; i < samples; i += 1) {
         let phase = i / samples + eps;
         phase -= Math.floor(phase);
-        const pt = nodeGraphRoundShapeEllipsoidPoint(phase, shape);
-        const x = cx + pt.x * viewScale;
-        const y = cy - pt.y * viewScale;
-        if (i === 0) {
-          context.moveTo(x, y);
-        } else {
-          context.lineTo(x, y);
-        }
+        const pt = isEllipsoidOsc
+          ? nodeGraphRoundShapeEllipsoidOscPoint(phase, node)
+          : nodeGraphRoundShapeEllipsoidPoint(phase, shape);
+        points.push({ x: cx + pt.x * viewScale, y: cy - pt.y * viewScale });
       }
-      context.closePath();
     } else {
-      context.arc(cx, cy, half * 0.85, 0, Math.PI * 2);
+      for (let i = 0; i < samples; i += 1) {
+        const a = (i / samples) * Math.PI * 2;
+        points.push({ x: cx + Math.cos(a) * half * 0.85, y: cy + Math.sin(a) * half * 0.85 });
+      }
     }
-
-    if (typeof nodeGraphStrokePathWithLineBlur === "function") {
-      nodeGraphStrokePathWithLineBlur(context, {
-        strokeStyle: strokeColor,
-        lineWidth: strokeW,
-        lineBlur,
-        lineJoin: "round",
-        lineCap: "round",
-      });
-    } else {
-      context.strokeStyle = strokeColor;
-      context.lineWidth = strokeW;
-      context.lineJoin = "round";
-      context.lineCap = "round";
-      context.stroke();
-    }
-    if (!section._roundShapeOrbitCanvas) {
-      section._roundShapeOrbitCanvas = document.createElement("canvas");
-    }
-    const orbit = section._roundShapeOrbitCanvas;
-    if (orbit.width !== canvas.width || orbit.height !== canvas.height) {
-      orbit.width = canvas.width;
-      orbit.height = canvas.height;
-    }
-    const orbitCtx = orbit.getContext("2d");
-    if (orbitCtx) {
-      orbitCtx.setTransform(1, 0, 0, 1, 0, 0);
-      orbitCtx.clearRect(0, 0, orbit.width, orbit.height);
-      orbitCtx.drawImage(canvas, 0, 0);
-      section._roundShapeOrbitSig = signature;
-    }
+    if (points.length) points.push(points[0]);
+    lines = [{ points, color: strokeColor, width: strokeW, blur: lineBlur }];
+    section._roundShapeOrbitSig = glKey;
   }
 
   // Cursor: worklet live uses scope Bi X / Bi Y (no main-thread phases Map).
@@ -435,12 +365,20 @@ function drawNodeGraphRoundShapeDisplayInner(section) {
     px = cx + start.x * viewScale;
     py = cy - start.y * viewScale;
   }
-  if (Number.isFinite(px) && Number.isFinite(py)) {
-    context.beginPath();
-    context.fillStyle = dotColor;
-    context.arc(px, py, Math.max(0.5, dotW * 0.5), 0, Math.PI * 2);
-    context.fill();
-  }
+  const dot = section._roundShapeGlDot || (section._roundShapeGlDot = { x: 0, y: 0, color: "", radius: 0.5 });
+  const dots = section._roundShapeGlDots || (section._roundShapeGlDots = [dot]);
+  dot.x = px;
+  dot.y = py;
+  dot.color = dotColor;
+  dot.radius = Math.max(0.5, dotW * 0.5);
+  nodeGraphCycleLineGlPresent(canvas, {
+    cssWidth: drawW,
+    cssHeight: drawH,
+    background: plateBg,
+    waveKey: signature,
+    lines: lines || [],
+    dots: Number.isFinite(px) && Number.isFinite(py) ? dots : [],
+  });
 }
 
 function drawNodeGraphRoundShapeDisplays() {

@@ -6,7 +6,7 @@
 // fill_grid when GL works â€” only uniforms (seed, octaves, domainTime, â€¦).
 
 const NODE_GRAPH_FBM_FIELD_GL_REV = 5;
-const NODE_GRAPH_FBM_FIELD_GLSL_REV = "1";
+const NODE_GRAPH_FBM_FIELD_GLSL_REV = "2";
 
 const nodeGraphFbmFieldGlsl = {
   vs: "",
@@ -57,7 +57,7 @@ function nodeGraphFbmFieldLoadGlsl() {
     const fs = await nodeGraphFbmFieldGlslFetchText("fbm_field.frag.glsl");
     if (!vs || !fs) {
       nodeGraphFbmFieldGlsl.failed = true;
-      console.warn("[Fractal Brownian Field] missing native_modules/fbm_field/*.glsl");
+      console.error("[Fractal Brownian Field] missing native_modules/fbm_field/*.glsl");
       return null;
     }
     nodeGraphFbmFieldGlsl.vs = vs;
@@ -198,7 +198,7 @@ function nodeGraphFbmFieldGlEnsure(canvas) {
     nodeGraphFbmFieldGlStates.set(canvas, state);
     return state;
   } catch (err) {
-    console.warn("[Fractal Brownian Field] WebGL init failed", err);
+    console.error("[Fractal Brownian Field] WebGL init failed; face shows black", err);
     nodeGraphFbmFieldGlStates.set(canvas, { failed: true, gaveUp: true });
     return null;
   }
@@ -239,10 +239,7 @@ function nodeGraphFbmFieldGlPresentParams(canvas, params = {}) {
   if (!state?.gl || state.lost) return false;
   const gridW = Math.max(1, params.width | 0);
   const gridH = Math.max(1, params.height | 0);
-  if ((canvas.width | 0) !== gridW || (canvas.height | 0) !== gridH) {
-    canvas.width = gridW;
-    canvas.height = gridH;
-  }
+  nodeGraphDisplayCanvasSetBacking(canvas, gridW, gridH);
 
   const gl = state.gl;
   nodeGraphFbmFieldGlUploadPalette(state, params.gradientStops);
@@ -308,47 +305,8 @@ function nodeGraphFbmFieldGlPresentParams(canvas, params = {}) {
   return true;
 }
 
-/** Canvas2D LUT present from monoFloat grid (no-GL / context-loss fallback). */
-function nodeGraphFbmFieldPresentCanvas2d(canvas, monoGrid, gridW, gridH, options = {}) {
-  if (!canvas || !monoGrid || gridW < 1 || gridH < 1) return false;
-  if ((canvas.width | 0) !== (gridW | 0) || (canvas.height | 0) !== (gridH | 0)) {
-    canvas.width = gridW;
-    canvas.height = gridH;
-  }
-  const ctx = canvas.getContext("2d");
-  if (!ctx) return false;
-  const stops = options.gradientStops;
-  const sample = typeof nodeGraphSampleGradientStopsRgb === "function"
-    ? (t) => nodeGraphSampleGradientStopsRgb(stops, t, "#ffffff")
-    : (t) => {
-      const v = Math.round(t * 255);
-      return [v, v, v];
-    };
-  const lut = new Uint8Array(256 * 3);
-  for (let i = 0; i < 256; i += 1) {
-    const rgb = sample(i / 255);
-    lut[i * 3] = rgb[0];
-    lut[i * 3 + 1] = rgb[1];
-    lut[i * 3 + 2] = rgb[2];
-  }
-  const img = ctx.createImageData(gridW, gridH);
-  const data = img.data;
-  const n = Math.min(monoGrid.length, gridW * gridH);
-  for (let i = 0; i < n; i += 1) {
-    const e = Math.max(0, Math.min(1, monoGrid[i]));
-    const idx = Math.round(e * 255) * 3;
-    const o = i * 4;
-    data[o] = lut[idx];
-    data[o + 1] = lut[idx + 1];
-    data[o + 2] = lut[idx + 2];
-    data[o + 3] = 255;
-  }
-  ctx.putImageData(img, 0, 0);
-  return true;
-}
-
 /**
- * Legacy entry: prefer params path; mono grid â†’ Canvas2D fallback.
+ * Legacy entry: GL params path only (the mono-grid Canvas2D fallback is gone).
  */
 function nodeGraphFbmFieldGlPresent(canvas, monoGrid, gridW, gridH, options = {}) {
   if (options && options.fieldParams) {
@@ -361,21 +319,13 @@ function nodeGraphFbmFieldGlPresent(canvas, monoGrid, gridW, gridH, options = {}
       nodeId: options.nodeId,
     });
   }
-  return nodeGraphFbmFieldPresentCanvas2d(canvas, monoGrid, gridW, gridH, options);
+  return false;
 }
 
 function nodeGraphFbmFieldGlClearBlack(canvas) {
   if (!canvas) return false;
-  if (!(canvas.width > 0) || !(canvas.height > 0)) {
-    canvas.width = Math.max(1, canvas.width | 0, 1);
-    canvas.height = Math.max(1, canvas.height | 0, 1);
-  }
-  const ctx = canvas.getContext("2d");
-  if (!ctx) return false;
-  const w = Math.max(1, canvas.width | 0);
-  const h = Math.max(1, canvas.height | 0);
-  ctx.setTransform(1, 0, 0, 1, 0, 0);
-  ctx.fillStyle = "#000000";
-  ctx.fillRect(0, 0, w, h);
+  nodeGraphDisplayCanvasSetBacking(canvas, Math.max(1, canvas.width | 0), Math.max(1, canvas.height | 0));
+  if (typeof nodeGraphGlLinesFillBlack !== "function") return false;
+  nodeGraphGlLinesFillBlack(canvas);
   return true;
 }

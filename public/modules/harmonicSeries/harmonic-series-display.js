@@ -90,8 +90,7 @@ function createNodeGraphHarmonicSeriesDisplay(nodeId, type = "harmonicSeries") {
   section.dataset.parameterVisual = "true";
   section.dataset.lightSource = "screen";
   section.dataset.lightStrength = "0.4";
-  const canvas = document.createElement("canvas");
-  canvas.className = "node-filter-curve-canvas node-harmonic-series-canvas node-module-scope-vector-trace";
+  const canvas = nodeGraphDisplayCanvasCreate("node-filter-curve-canvas node-harmonic-series-canvas node-module-scope-vector-trace");
   canvas.setAttribute("aria-hidden", "true");
   section.append(canvas);
   nodeGraphInstallDrawingFacePump(section, {
@@ -146,61 +145,30 @@ function drawNodeGraphHarmonicSeriesFaceItem(sectionOrRenderer, item) {
     return;
   }
 
-  let ctx;
-  let width;
-  let height;
-  let pixelRatio = 1;
-  if (typeof nodeGraphSizeDisplayCanvas === "function") {
-    const metrics = nodeGraphSizeDisplayCanvas(section, canvas);
-    if (!metrics) {
-      return;
-    }
-    ctx = metrics.context;
-    width = metrics.cssWidth;
-    height = metrics.cssHeight;
-    pixelRatio = metrics.pixelRatio || 1;
-  } else {
-    ctx = canvas.getContext("2d");
-    if (!ctx) {
-      return;
-    }
-    pixelRatio = Math.max(1, window.devicePixelRatio || 1);
-    width = rawW;
-    height = rawH;
-    canvas.width = Math.max(1, Math.round(width * pixelRatio));
-    canvas.height = Math.max(1, Math.round(height * pixelRatio));
-  }
-  if (!ctx || !(width >= 8) || !(height >= 8)) {
+  const m = typeof nodeGraphDisplayCanvasSize === "function" ? nodeGraphDisplayCanvasSize(section, canvas) : null;
+  if (!m || !(m.cssWidth >= 8) || !(m.cssHeight >= 8)) {
     return;
   }
-
+  const width = m.cssWidth;
+  const height = m.cssHeight;
   section._harmonicSeriesSignature = signature;
   section._forceDraw = false;
   section._harmonicSeriesLaidOut = true;
-  canvas.style.imageRendering = "auto";
-  ctx.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
-  ctx.imageSmoothingEnabled = true;
-  if ("imageSmoothingQuality" in ctx) {
-    ctx.imageSmoothingQuality = "high";
+  const batch = typeof nodeGraphGlLinesBegin === "function"
+    ? nodeGraphGlLinesBegin(canvas, [0, 0, 4 / 255, 1], { scale: m.pixelRatio })
+    : null;
+  if (!batch) {
+    if (typeof nodeGraphGlLinesFillBlack === "function") nodeGraphGlLinesFillBlack(canvas);
+    return;
   }
-  ctx.clearRect(0, 0, width, height);
-  ctx.fillStyle = "#000004";
-  ctx.fillRect(0, 0, width, height);
-
   const harmSize = Math.max(14, Math.min(height * 0.42, width * 0.28));
   const hzSize = Math.max(11, Math.min(height * 0.28, width * 0.18));
   const unitSize = Math.max(8, Math.min(height * 0.16, width * 0.08));
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  ctx.font = `700 ${harmSize}px ${NODE_GRAPH_HARMONIC_SERIES_FACE_FONT}`;
-  ctx.fillStyle = "rgba(160, 214, 228, 0.98)";
-  ctx.fillText(harmText, width * 0.5, height * 0.38, width - 8);
-  ctx.font = `700 ${hzSize}px ${NODE_GRAPH_HARMONIC_SERIES_FACE_FONT}`;
-  ctx.fillStyle = "rgba(160, 214, 228, 0.92)";
-  ctx.fillText(hzText, width * 0.5, height * 0.68, width - 8);
-  ctx.font = `700 ${unitSize}px ${NODE_GRAPH_HARMONIC_SERIES_FACE_FONT}`;
-  ctx.fillStyle = "rgba(160, 167, 176, 0.82)";
-  ctx.fillText("Hz", width * 0.5, height * 0.88, width - 8);
+  const opt = (px, rgba) => ({ px, rgba, weight: 700, family: NODE_GRAPH_HARMONIC_SERIES_FACE_FONT, maxWidth: width - 8 });
+  nodeGraphGlLinesText(batch, harmText, width * 0.5, height * 0.38, opt(harmSize, [160 / 255, 214 / 255, 228 / 255, 0.98]));
+  nodeGraphGlLinesText(batch, hzText, width * 0.5, height * 0.68, opt(hzSize, [160 / 255, 214 / 255, 228 / 255, 0.92]));
+  nodeGraphGlLinesText(batch, "Hz", width * 0.5, height * 0.88, opt(unitSize, [160 / 255, 167 / 255, 176 / 255, 0.82]));
+  if (!nodeGraphGlLinesEnd(batch) && typeof nodeGraphGlLinesFillBlack === "function") nodeGraphGlLinesFillBlack(canvas);
 }
 
 if (typeof nodeGraphModuleScopeCustomRenderers === "object" && nodeGraphModuleScopeCustomRenderers) {

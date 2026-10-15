@@ -84,7 +84,7 @@ float valueNoise3d(float x, float y, float z, float seed, float smoothness) {
   float n000 = hash3d(x0, y0, z0, seed);
   float n100 = hash3d(x0 + 1.0, y0, z0, seed);
   float n010 = hash3d(x0, y0 + 1.0, z0, seed);
-  float n110 = hash3d(x0 + 1.0, y0 + 1.0, seed);
+  float n110 = hash3d(x0 + 1.0, y0 + 1.0, z0, seed);
   float n001 = hash3d(x0, y0, z0 + 1.0, seed);
   float n101 = hash3d(x0 + 1.0, y0, z0 + 1.0, seed);
   float n011 = hash3d(x0, y0 + 1.0, z0 + 1.0, seed);

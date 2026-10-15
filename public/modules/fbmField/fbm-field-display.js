@@ -1,5 +1,5 @@
 // Fractal Brownian Field face: GLSL evaluates fBm per present pixel
-// (css × dpr, picture-device cap 4096). WASM fill_grid (512²) is Canvas2D fallback.
+// (css × dpr, picture-device cap 4096). GL only (no Canvas2D fallback).
 
 const nodeGraphFbmFieldSettingsDefaults = Object.freeze({
   background: "#05060a",
@@ -109,15 +109,11 @@ function nodeGraphFbmFieldGridFromCss(cssW, cssH, maxW, maxH) {
 
 function syncNodeGraphFbmFieldCanvas1to1(canvas, face, gridW, gridH) {
   if (!canvas || !face) return false;
-  if (canvas.width !== gridW || canvas.height !== gridH) {
-    canvas.width = gridW;
-    canvas.height = gridH;
-  }
+  nodeGraphDisplayCanvasSetBacking(canvas, gridW, gridH);
   canvas.style.width = "100%";
   canvas.style.height = "100%";
-  // If CSS stretches past 1:1 (face larger than cap), show true samples as blocks — no blur
-  canvas.style.imageRendering = "pixelated";
-  canvas.style.imageRendering = "crisp-edges";
+  // If CSS stretches past 1:1 (face larger than cap), show true samples as blocks, no blur.
+  nodeGraphDisplayCanvasPixelated(canvas, true);
   return true;
 }
 
@@ -134,9 +130,8 @@ function nodeGraphFbmFieldSyncLayout(face, options = {}) {
   nodeGraphFbmFieldMetricsCache.set(face, metrics);
   face._fbmMetrics = metrics;
   if (canvas) {
-    const useGl = typeof nodeGraphFbmFieldGlPresentParams === "function";
-    const dpr = useGl ? Math.max(1, (typeof window !== "undefined" && window.devicePixelRatio) || 1) : 1;
-    const max = useGl ? 4096 : 512;
+    const dpr = nodeGraphDisplayCanvasPixelRatio();
+    const max = 4096;
     const grid = nodeGraphFbmFieldGridFromCss(cssW * dpr, cssH * dpr, max, max);
     syncNodeGraphFbmFieldCanvas1to1(canvas, face, grid.gridW, grid.gridH);
   }
@@ -191,9 +186,8 @@ function nodeGraphFbmFieldEnsureCanvasSize(canvas, face) {
   if (face && !nodeGraphFbmFieldReadMetrics(face)) {
     nodeGraphFbmFieldSyncLayout(face, { canvas });
   }
-  const useGl = typeof nodeGraphFbmFieldGlPresentParams === "function";
-  const dpr = useGl ? Math.max(1, (typeof window !== "undefined" && window.devicePixelRatio) || 1) : 1;
-  const max = useGl ? 4096 : 512;
+  const dpr = nodeGraphDisplayCanvasPixelRatio();
+  const max = 4096;
   const grid = nodeGraphFbmFieldResolveGridSize(face, max, max, dpr);
   return syncNodeGraphFbmFieldCanvas1to1(canvas, face, grid.gridW, grid.gridH);
 }
@@ -205,18 +199,7 @@ function nodeGraphFbmFieldFillBlack(canvas, face) {
   if (typeof nodeGraphFbmFieldGlClearBlack === "function") {
     cleared = Boolean(nodeGraphFbmFieldGlClearBlack(canvas));
   }
-  // If WebGL clear failed (no context yet / lost), force a blank buffer.
-  if (!cleared) {
-    try {
-      // Resize trick drops any prior drawing buffer contents.
-      const w = Math.max(1, canvas.width | 0);
-      const h = Math.max(1, canvas.height | 0);
-      canvas.width = w;
-      canvas.height = h;
-    } catch (_error) {
-      // Best-effort.
-    }
-  }
+  if (!cleared && typeof nodeGraphGlLinesFillBlack === "function") nodeGraphGlLinesFillBlack(canvas);
   if (face) {
     face.style.background = "#000000";
     face._fbmFieldBlack = true;
@@ -457,11 +440,9 @@ function paintNodeGraphFbmFieldFace(canvas, face, nodeId, options = {}) {
     face._fbmFieldTime = liveT;
   }
 
-  const useGl = typeof nodeGraphFbmFieldGlPresentParams === "function";
-  const wasm = typeof nodeGraphFbmFieldWasm !== "undefined" ? nodeGraphFbmFieldWasm.exports : null;
-  const dpr = useGl ? Math.max(1, (typeof window !== "undefined" && window.devicePixelRatio) || 1) : 1;
-  const maxW = useGl ? 4096 : (wasm?.soemdsp_fbm_field_grid_max_width?.() || 512);
-  const maxH = useGl ? 4096 : (wasm?.soemdsp_fbm_field_grid_max_height?.() || 512);
+  const dpr = nodeGraphDisplayCanvasPixelRatio();
+  const maxW = 4096;
+  const maxH = 4096;
   const { gridW, gridH } = nodeGraphFbmFieldResolveGridSize(face, maxW, maxH, dpr);
   if (!syncNodeGraphFbmFieldCanvas1to1(canvas, face, gridW, gridH)) return false;
 
@@ -488,7 +469,7 @@ function paintNodeGraphFbmFieldFace(canvas, face, nodeId, options = {}) {
   const patchNode = typeof nodeGraphPatchNode === "function" ? nodeGraphPatchNode(nodeId) : null;
   const settings = nodeGraphFbmFieldSettingsForNode(patchNode);
 
-  // Prefer GLSL field (no per-texel WASM). Canvas2D + fill_grid only if GL fails.
+  // GLSL field only (shared GL device); a failed frame is black + logged.
   let ok = false;
   if (typeof nodeGraphFbmFieldGlPresentParams === "function") {
     ok = nodeGraphFbmFieldGlPresentParams(canvas, {
@@ -498,26 +479,9 @@ function paintNodeGraphFbmFieldFace(canvas, face, nodeId, options = {}) {
       nodeId,
     });
   }
-  if (!ok && typeof nodeGraphFbmFieldFillGrid === "function") {
-    const grid = nodeGraphFbmFieldFillGrid(fieldParams);
-    if (grid?.mono && grid.width === gridW && grid.height === gridH) {
-      if (typeof nodeGraphFbmFieldPresentCanvas2d === "function") {
-        ok = nodeGraphFbmFieldPresentCanvas2d(canvas, grid.mono, grid.width, grid.height, {
-          gradientStops: settings.gradientStops,
-          background: settings.background,
-        });
-      } else if (typeof nodeGraphFbmFieldGlPresent === "function") {
-        ok = nodeGraphFbmFieldGlPresent(canvas, grid.mono, grid.width, grid.height, {
-          gradientStops: settings.gradientStops,
-          background: settings.background,
-          nodeId,
-        });
-      }
-    }
-  }
   if (!ok) {
-    if (!face._fbmFieldHasFrame) return nodeGraphFbmFieldFillBlack(canvas, face);
-    return true;
+    nodeGraphFbmFieldFillBlack(canvas, face);
+    return nodeGraphDisplayGlFailed(canvas, "fbm Field GL present failed");
   }
   if (ok) {
     if (face.dataset) face.dataset.lightStrength = "1";

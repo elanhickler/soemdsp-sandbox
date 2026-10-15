@@ -1023,7 +1023,7 @@ function createNodeGraphFilterCurveDisplay(nodeId, type) {
   // the curve every frame (same path as bug button / XY pad).
   section.dataset.parameterVisual = "true";
   const canvas = document.createElement("canvas");
-  canvas.className = "node-filter-curve-canvas";
+  canvas.className = "node-filter-curve-canvas node-display-canvas";
   canvas.dataset.lightSource = "screen";
   canvas.dataset.lightStrength = "1";
   section.dataset.lightStrength = "1";

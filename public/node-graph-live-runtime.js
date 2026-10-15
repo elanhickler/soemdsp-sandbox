@@ -3245,7 +3245,7 @@ const nodeGraphLiveWorkletSourceFilesEfficient = [
   "./public/node-live-audio-worklet-clear-plan.js?v=kbd-trig-1samp-20261013",
   "./public/node-live-audio-worklet-handle-message.js?v=kbd-trig-1samp-20261013",
   "./public/node-live-audio-worklet-scope-snapshot.js?v=sabrina-stems-1",
-  "./public/modules/spectrogram/spectrogram-worklet-evaluator.js?v=spectro-stride-1-s1d",
+  "./public/modules/spectrogram/spectrogram-worklet-evaluator.js?v=spectro-fft-tables-1",
   "./public/modules/_shared/output-amplitude.js?v=output-amp-1",
   // Yellow Graph: DOMAIN param chase for MOD (DSP is native opcodes 111â€“124).
   "./public/modules/additiveGraph/additive-param-smooth.js?v=main-guard-1",

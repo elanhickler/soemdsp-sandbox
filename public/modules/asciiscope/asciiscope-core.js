@@ -461,8 +461,8 @@ function normalizeNodeGraphAsciiscope(raw = null) {
 
 /**
  * Sharp (vector, default) | Pixel — same buffer & grid; filter/CSS only.
- *   Sharp: LINEAR atlas sample + image-rendering:auto (smooth)
- *   Pixel: NEAREST atlas sample + image-rendering:pixelated (same shapes, hard edges)
+ *   Sharp: LINEAR atlas sample + smooth CSS scale
+ *   Pixel: NEAREST atlas sample + .display-canvas-pixelated (same shapes, hard edges)
  * Style switch must not resize the buffer or rewrite energy (no full redraw / wipe).
  */
 function matrixNormalizeRenderStyle(value) {

@@ -10,6 +10,8 @@ const nodeGraphRgbShapeSettingsDefaults = Object.freeze({
   ]),
 });
 
+const RGB_SHAPE_GL_WHITE = Object.freeze([1, 1, 1, 1]);
+
 function normalizeNodeGraphRgbShapeSettings(settings = {}) {
   const source = settings && typeof settings === "object" ? settings : {};
   const defaults = nodeGraphRgbShapeSettingsDefaults;
@@ -42,22 +44,6 @@ function nodeGraphRgbShapeCanvasForSlot(slot) {
   return face.querySelector?.(":scope > .node-rgb-shape-canvas")
     || face.querySelector?.(".node-rgb-shape-canvas")
     || null;
-}
-
-function syncNodeGraphRgbShapeCanvas(canvas, face, pixelRatio) {
-  if (!canvas || !face) {
-    return false;
-  }
-  const dpr = Math.max(1, Number(pixelRatio) || window.devicePixelRatio || 1);
-  const w = Math.max(1, Math.round(face.clientWidth * dpr));
-  const h = Math.max(1, Math.round(face.clientHeight * dpr));
-  if (canvas.width !== w || canvas.height !== h) {
-    canvas.width = w;
-    canvas.height = h;
-  }
-  canvas.style.width = "100%";
-  canvas.style.height = "100%";
-  return w > 0 && h > 0;
 }
 
 function nodeGraphRgbShapeReadParam(nodeId, key, fallback) {
@@ -95,24 +81,25 @@ function paintNodeGraphRgbShapeFace(canvas, face, nodeId, buffer = null) {
   if (!canvas || !face || !nodeId) {
     return false;
   }
-  const pixelRatio = Number(nodeGraphModuleScopeState?.backingPixelRatio)
-    || Math.max(1, window.devicePixelRatio || 1);
-  if (!syncNodeGraphRgbShapeCanvas(canvas, face, pixelRatio)) {
-    return false;
-  }
-  const ctx = canvas.getContext("2d");
-  if (!ctx) {
+  // Shared sizing (css x dpr, never zoom); drawing is WebGL2 via gl-line-renderer.
+  const m = typeof nodeGraphDisplayCanvasSize === "function" ? nodeGraphDisplayCanvasSize(face, canvas) : null;
+  if (!m || !(m.width > 0) || !(m.height > 0)) {
     return false;
   }
   const patchNode = typeof nodeGraphPatchNode === "function" ? nodeGraphPatchNode(nodeId) : null;
   const settings = nodeGraphRgbShapeSettingsForNode(patchNode);
-  const w = canvas.width;
-  const h = canvas.height;
+  const w = m.width;
+  const h = m.height;
   const bg = settings.background || "#000000";
-  ctx.setTransform(1, 0, 0, 1, 0, 0);
-  ctx.clearRect(0, 0, w, h);
-  ctx.fillStyle = bg;
-  ctx.fillRect(0, 0, w, h);
+  // publishNodeId "": the rgba out keeps going through nodeGraphPicturePublishCanvas
+  // in drawNodeGraphRgbShapeFaceItem (unchanged), not the batch's own export.
+  const batch = typeof nodeGraphGlLinesBegin === "function"
+    ? nodeGraphGlLinesBegin(canvas, nodeGraphGlLinesCss(bg), { publishNodeId: "" })
+    : null;
+  if (!batch) {
+    if (typeof nodeGraphGlLinesFillBlack === "function") nodeGraphGlLinesFillBlack(canvas);
+    return false;
+  }
 
   let brightness = nodeGraphRgbShapeReadParam(nodeId, "brightness", 0.5);
   if (buffer?.length && !buffer.nodeGraphScopeXy) {
@@ -149,47 +136,34 @@ function paintNodeGraphRgbShapeFace(canvas, face, nodeId, buffer = null) {
   if (typeof nodeGraphSampleGradientStopsRgb === "function") {
     rgb = nodeGraphSampleGradientStopsRgb(settings.gradientStops, brightness, peak);
   }
-  const fillCss = `rgb(${rgb[0]}, ${rgb[1]}, ${rgb[2]})`;
-  // Same soft-edge stamp path as LED Dot / LCD Dot (smoothstep blur 0…1).
-  let stamped = false;
-  if (typeof TraceDotSprite !== "undefined" && typeof TraceDotSprite.draw === "function") {
-    stamped = TraceDotSprite.draw(
-      ctx,
-      cx,
-      cy,
-      Math.max(halfW, halfH),
-      blur,
-      {
-        shape: shapeId,
-        shapeParam,
-        rx: halfW,
-        ry: halfH,
-        color: fillCss,
-        amount: 1,
-        flat: true,
-      },
-      1,
-    );
-  }
-  if (!stamped) {
-    ctx.fillStyle = fillCss;
-    if (typeof RgbShapeMath !== "undefined" && typeof RgbShapeMath.fillPath === "function") {
-      RgbShapeMath.fillPath(ctx, shape, shapeParam, cx, cy, halfW, halfH);
-    } else {
-      ctx.beginPath();
-      ctx.ellipse(cx, cy, halfW, halfH, 0, 0, Math.PI * 2);
+  const tint = face._rgbShapeGlTint || (face._rgbShapeGlTint = [1, 1, 1, 1]);
+  tint[0] = rgb[0] / 255;
+  tint[1] = rgb[1] / 255;
+  tint[2] = rgb[2] / 255;
+  // Same soft-edge SDF stamp as LED Dot / LCD Dot (smoothstep blur 0…1): the
+  // TraceDotSprite white coverage mask (cached per shape/size/blur), drawn as a
+  // tinted textured quad; its texture is uploaded once per baked sprite.
+  if (typeof TraceDotSprite !== "undefined" && typeof TraceDotSprite.ensureRect === "function") {
+    const ext = TraceDotSprite.extents(Math.max(halfW, halfH), { shape: shapeId, shapeParam, rx: halfW, ry: halfH });
+    const sprite = TraceDotSprite.ensureRect(ext.rx, ext.ry, blur, ext.shape, ext.shapeParam);
+    if (sprite?.canvas) {
+      // Sprites cap their radius; stretch back to the requested extents.
+      const kx = ext.rx / Math.max(1e-6, sprite.rx);
+      const ky = ext.ry / Math.max(1e-6, sprite.ry);
+      const sw = sprite.width * kx;
+      const sh = sprite.height * ky;
+      nodeGraphGlLinesImage(batch, sprite.canvas, cx - sw * 0.5, cy - sh * 0.5, sw, sh, { nearest: false, tint, cache: true });
     }
-    ctx.fill("evenodd");
   }
 
   // Phase cursor on the outline (when live X/Y available from buffer pair).
   if (buffer?.nodeGraphScopeXy && Number.isFinite(buffer.x) && Number.isFinite(buffer.y)) {
     const px = cx + buffer.x * halfW;
     const py = cy - buffer.y * halfH;
-    ctx.beginPath();
-    ctx.arc(px, py, Math.max(2, minSide * 0.02), 0, Math.PI * 2);
-    ctx.fillStyle = "#ffffff";
-    ctx.fill();
+    nodeGraphGlLinesDot(batch, px, py, Math.max(2, minSide * 0.02) - 0.35, 0.7, RGB_SHAPE_GL_WHITE);
+  }
+  if (!nodeGraphGlLinesEnd(batch)) {
+    if (typeof nodeGraphGlLinesFillBlack === "function") nodeGraphGlLinesFillBlack(canvas);
   }
 
   if (face.dataset) {
@@ -220,6 +194,8 @@ function drawNodeGraphRgbShapeFaceItem(renderer, item, pixelRatio) {
     return;
   }
   paintNodeGraphRgbShapeFace(canvas, face, slot.nodeId, item?.buffer);
+  // rgba out: 2D face bridged into the node's picture texture (only when cabled).
+  if (typeof nodeGraphPicturePublishCanvas === "function") nodeGraphPicturePublishCanvas(slot.nodeId, canvas);
 }
 
 // Face paints on its own rAF (rgb-shape-ui.js), like RoundShape / BasicShape.

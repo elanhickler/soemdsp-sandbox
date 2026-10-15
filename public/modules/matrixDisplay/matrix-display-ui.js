@@ -21,8 +21,7 @@ function createNodeGraphMatrixDisplayFace(node) {
   const stage = document.createElement("div");
   stage.className = "node-matrix-display-stage";
 
-  const canvas = document.createElement("canvas");
-  canvas.className = "node-matrix-display-canvas";
+  const canvas = nodeGraphDisplayCanvasCreate("node-matrix-display-canvas");
   canvas.setAttribute("aria-hidden", "true");
   stage.append(canvas);
 

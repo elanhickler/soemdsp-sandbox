@@ -640,171 +640,13 @@ function matrixApplyInfoGrid(state, grid, deposit = 1) {
   }
 }
 
-/**
- * Mono energy → gradient RGB (2D fallback). Matches GPU path:
- * age/brightness is mono first; gradient is the last remap (no pre-colored alpha fade).
- */
-/** mono is already present-space (film applied). Brightness scales display only. */
-function matrixPhosphorColor(mono, brightness, gradientStops = null) {
-  const bRaw = Number(brightness);
-  const b = Number.isFinite(bRaw) ? Math.max(0, bRaw) : 1;
-  const e = Math.max(0, Math.min(1, (nodeGraphFiniteNumber(mono)) * b));
-  if (typeof matrixSampleGradientRgb === "function") {
-    const c = matrixSampleGradientRgb(gradientStops, e);
-    return { r: c.r, g: c.g, b: c.b, a: 1 };
-  }
-  const g = Math.floor(e * 255);
-  return { r: 0, g, b: 0, a: 1 };
-}
-
-/**
- * 2D fallback only (no WebGL).
- * Must not run on a canvas that already has a WebGL context.
- * Reuses the same letterboxed fixed-cell-aspect layout as the GL path.
- */
-function matrixSyncCanvasBacking2d(canvas, columns, rows, renderStyle = "vector") {
-  if (!canvas) return null;
-  // Prefer shared GL layout helper when present (same contain math).
-  if (typeof matrixGlSyncCanvasSize === "function") {
-    const fit = matrixGlSyncCanvasSize(canvas, columns, rows, renderStyle);
-    if (fit) {
-      const cols = Math.max(1, columns | 0);
-      const rws = Math.max(1, rows | 0);
-      return {
-        bw: fit.w,
-        bh: fit.h,
-        cellW: fit.w / cols,
-        cellH: fit.h / rws,
-        cols,
-        rws,
-        style: fit.style,
-      };
-    }
-  }
-  const style = typeof matrixNormalizeRenderStyle === "function"
-    ? matrixNormalizeRenderStyle(renderStyle)
-    : (renderStyle === "pixel" ? "pixel" : "vector");
-  const cellW = typeof MATRIX_GL_CELL_W === "number" ? MATRIX_GL_CELL_W : 8;
-  const cellH = typeof MATRIX_GL_CELL_H === "number" ? MATRIX_GL_CELL_H : 12;
-  const cols = Math.max(1, columns | 0);
-  const rws = Math.max(1, rows | 0);
-  const bw = cols * cellW;
-  const bh = rws * cellH;
-  if (canvas.width !== bw) canvas.width = bw;
-  if (canvas.height !== bh) canvas.height = bh;
-  canvas.style.display = "block";
-  // Sharp: smooth. Pixel: hard blocks. Explicit so workspace zoom CSS cannot override.
-  if (style === "pixel") {
-    canvas.style.imageRendering = "pixelated";
-    canvas.style.setProperty("image-rendering", "pixelated");
-  } else {
-    canvas.style.imageRendering = "auto";
-    canvas.style.setProperty("image-rendering", "auto");
-  }
-  return { bw, bh, cellW, cellH, cols, rws, style };
-}
-
-function matrixDrawFace2d(canvas, state, params, mode) {
-  if (!canvas || !state) return;
-  let ctx = null;
-  try {
-    ctx = canvas.getContext("2d");
-  } catch (_) {
-    return;
-  }
-  if (!ctx) return;
-
-  const columns = state.bufColumns || state.columns;
-  const rows = state.bufRows || state.rows;
-  const { energy } = state;
-  const backing = matrixSyncCanvasBacking2d(canvas, columns, rows, params?.renderStyle);
-  if (!backing) return;
-  const { bw, bh, cellW, cellH } = backing;
-
-  const stops = params?.gradientStops || null;
-  const plate = typeof matrixSampleGradientRgb === "function"
-    ? matrixSampleGradientRgb(stops, 0)
-    : { r: 1, g: 4, b: 2 };
-  ctx.setTransform(1, 0, 0, 1, 0, 0);
-  ctx.fillStyle = `rgb(${plate.r},${plate.g},${plate.b})`;
-  ctx.fillRect(0, 0, bw, bh);
-
-  const fontPx = Math.max(5, Math.min(cellW, cellH) * 0.82);
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  ctx.font = `700 ${fontPx}px ${MATRIX_FONT_STACK}`;
-  ctx.shadowBlur = 0;
-  // Match GL: Sharp soft text, Pixel hard edges — same cell size either way.
-  const style = typeof matrixNormalizeRenderStyle === "function"
-    ? matrixNormalizeRenderStyle(params?.renderStyle)
-    : (params?.renderStyle === "pixel" ? "pixel" : "vector");
-  ctx.imageSmoothingEnabled = style !== "pixel";
-  if ("imageSmoothingQuality" in ctx) {
-    ctx.imageSmoothingQuality = style === "pixel" ? "low" : "high";
-  }
-
-  const waterfall = mode === 1;
-  const bRaw = Number(params?.brightness);
-  const bright = Number.isFinite(bRaw) ? Math.max(0, bRaw) : 1;
-  // Brightness 0: plate only (no glyphs).
-  if (bright <= 0) {
-    return;
-  }
-
-  // Gradient last: one glyph + mono per cell, then LUT once (matches GPU).
-  // Waterfall: single live glyph (charSpeed replaces it). Plate: residual ghost + hard live.
-  for (let r = 0; r < rows; r += 1) {
-    for (let c = 0; c < columns; c += 1) {
-      const idx = r * columns + c;
-      const cx = (c + 0.5) * cellW;
-      const cy = (r + 0.5) * cellH;
-      const e = energy[idx];
-      const resG = state.residual[idx] || " ";
-      const live = state.live[idx] || " ";
-
-      let mono = 0;
-      let glyph = " ";
-      if (waterfall) {
-        // Live tip = full Bright (drawer LED). Residual = film(energy).
-        glyph = live !== " " ? live : resG;
-        if (glyph !== " " && (e > 0.001 || state.tip?.[idx])) {
-          if (state.tip?.[idx]) {
-            mono = 1;
-          } else {
-            const film = typeof matrixPhosphorFilm === "function"
-              ? matrixPhosphorFilm(e)
-              : Math.min(1, e);
-            mono = film;
-          }
-        }
-      } else {
-        if (e > 0.001 && resG !== " ") {
-          const film = typeof matrixPhosphorFilm === "function"
-            ? matrixPhosphorFilm(e)
-            : Math.min(1, e);
-          mono = Math.max(mono, film * 0.85);
-          glyph = resG;
-        }
-        if (live !== " ") {
-          mono = 1;
-          glyph = live;
-        }
-      }
-      if (glyph === " " || mono < 0.008) continue;
-      const col = matrixPhosphorColor(mono, bright, stops);
-      ctx.fillStyle = `rgb(${col.r},${col.g},${col.b})`;
-      ctx.fillText(glyph, cx, cy);
-    }
-  }
-}
-
-/** Prefer WebGL (one draw); fall back to cell-resolution 2D if GL missing. */
+/** WebGL (one draw on the shared device). */
 function matrixDrawFace(canvas, state, params, mode) {
   if (!canvas || !state) return;
   if (typeof matrixGlDrawFace === "function" && matrixGlDrawFace(canvas, state, params, mode)) {
     return;
   }
-  matrixDrawFace2d(canvas, state, params, mode);
+  nodeGraphDisplayGlFailed(canvas, "Matrix GL unavailable");
 }
 
 function matrixReadPortBuffer(nodeId, port) {
@@ -976,46 +818,6 @@ function matrixDrawColdPlate(canvas, columns = 40, rows = 22, renderStyle = "vec
     && matrixGlDrawColdPlate(canvas, columns, rows, style, gradientStops)) {
     return;
   }
-  let ctx = null;
-  try {
-    ctx = canvas.getContext("2d");
-  } catch (_) {
-    return;
-  }
-  if (!ctx) return;
-  const backing = matrixSyncCanvasBacking2d(canvas, columns, rows, style);
-  if (!backing) return;
-  const { bw, bh, cellW, cellH, cols, rws } = backing;
-  const stops = gradientStops || null;
-  const plate = typeof matrixSampleGradientRgb === "function"
-    ? matrixSampleGradientRgb(stops, 0)
-    : { r: 1, g: 4, b: 2 };
-  ctx.setTransform(1, 0, 0, 1, 0, 0);
-  ctx.imageSmoothingEnabled = style !== "pixel";
-  if ("imageSmoothingQuality" in ctx) {
-    ctx.imageSmoothingQuality = style === "pixel" ? "low" : "high";
-  }
-  ctx.fillStyle = `rgb(${plate.r},${plate.g},${plate.b})`;
-  ctx.fillRect(0, 0, bw, bh);
-  // Same cell-stamped glyphs as the live face so Sharp/Pixel match rain text.
-  const msg = "ENGINE OFF";
-  const startC = Math.max(0, Math.floor((cols - msg.length) * 0.5));
-  const row = Math.floor(rws * 0.5);
-  const fontPx = Math.max(5, Math.min(cellW, cellH) * 0.82);
-  const ink = typeof matrixPhosphorColor === "function"
-    ? matrixPhosphorColor(0.47, 1, stops)
-    : { r: 40, g: 90, b: 50 };
-  ctx.fillStyle = `rgb(${ink.r},${ink.g},${ink.b})`;
-  ctx.font = `700 ${fontPx}px ${typeof MATRIX_FONT_STACK === "string" ? MATRIX_FONT_STACK : "monospace"}`;
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  ctx.shadowBlur = 0;
-  for (let i = 0; i < msg.length && startC + i < cols; i += 1) {
-    const ch = msg.charAt(i);
-    if (ch === " ") continue;
-    const glyph = typeof matrixSanitizeChar === "function" ? matrixSanitizeChar(ch) : ch;
-    ctx.fillText(glyph, (startC + i + 0.5) * cellW, (row + 0.5) * cellH);
-  }
 }
 
 function matrixMarkLight(face, on) {
@@ -1182,7 +984,7 @@ function matrixTickFace(face) {
       matrixTickPlate(face, canvas, node, nodeId);
     }
   } catch (error) {
-    console.warn?.("[Matrix]", nodeId, kind, error);
+    console.error("[Matrix]", nodeId, kind, error);
     try {
       matrixDrawColdPlate(canvas, 40, 22);
     } catch (_) { /* ignore */ }

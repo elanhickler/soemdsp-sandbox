@@ -56,7 +56,7 @@
     gl.shaderSource(shader, source);
     gl.compileShader(shader);
     if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
-      console.warn("[image-burn-gl] shader compile failed", gl.getShaderInfoLog(shader));
+      console.error("[image-burn-gl] shader compile failed", gl.getShaderInfoLog(shader));
       gl.deleteShader(shader);
       return null;
     }
@@ -356,7 +356,7 @@
     const presentProgram = linkProgram(gl, VERT, PRESENT_FRAG);
     const copyProgram = linkProgram(gl, VERT, COPY_FRAG);
     if (!fadeProgram || !blurProgram || !depositProgram || !presentProgram || !copyProgram) {
-      console.warn("[image-burn-gl] core programs failed to link");
+      console.error("[image-burn-gl] core programs failed to link");
       return null;
     }
 
@@ -552,18 +552,10 @@
       const s = maxTex / Math.max(natW, natH);
       const tw = Math.max(1, Math.round(natW * s));
       const th = Math.max(1, Math.round(natH * s));
-      let c = renderer._imageUploadCanvas;
-      if (!c) {
-        c = document.createElement("canvas");
+      // Oversize source: high-quality downscale into a reusable texture-source canvas.
+      const c = nodeGraphDisplayCanvasDownscaleImage(img, tw, th, renderer._imageUploadCanvas);
+      if (c) {
         renderer._imageUploadCanvas = c;
-      }
-      c.width = tw;
-      c.height = th;
-      const c2d = c.getContext("2d");
-      if (c2d) {
-        c2d.imageSmoothingEnabled = true;
-        if ("imageSmoothingQuality" in c2d) c2d.imageSmoothingQuality = "high";
-        c2d.drawImage(img, 0, 0, tw, th);
         src = c;
         natW = tw;
         natH = th;
@@ -785,13 +777,9 @@
     gl.drawArrays(gl.TRIANGLES, 0, 6);
     gl.disable(gl.SCISSOR_TEST);
 
-    destCtx.save();
-    destCtx.setTransform(1, 0, 0, 1, 0, 0);
-    destCtx.globalCompositeOperation = "source-over";
-    destCtx.globalAlpha = 1;
-    destCtx.imageSmoothingEnabled = rw !== destW || rh !== destH;
     const srcY = Math.max(0, device.canvas.height - rh);
-    destCtx.drawImage(device.canvas, 0, srcY, rw, rh, 0, 0, destW, destH);
+    destCtx.save();
+    nodeGraphDisplayCanvasBlit(destCtx, device.canvas, 0, srcY, rw, rh, 0, 0, destW, destH, rw !== destW || rh !== destH);
     destCtx.restore();
     return true;
   }

@@ -15,8 +15,7 @@ function createNodeGraphAdditiveBubbleDisplay(nodeId, type = "additiveBubble") {
   if (typeof tagNodeGraphModuleBand === "function") {
     tagNodeGraphModuleBand(section, "face");
   }
-  const canvas = document.createElement("canvas");
-  canvas.className = "node-additive-bubble-canvas";
+  const canvas = nodeGraphDisplayCanvasCreate("node-additive-bubble-canvas");
   section.append(canvas);
   nodeGraphInstallDrawingFacePump(section, {
     clockKey: (el) => `additiveBubble:${el.dataset?.node || ""}`,
@@ -103,44 +102,27 @@ function drawNodeGraphAdditiveBubbleDisplay(section) {
   const canvas = section.querySelector("canvas");
   if (!canvas) return;
 
-  let ctx;
-  let w;
-  let h;
-  let pixelRatio = 1;
-  if (typeof nodeGraphSizeDisplayCanvas === "function") {
-    const metrics = nodeGraphSizeDisplayCanvas(section, canvas, { pixelDensity: 1 });
-    if (!metrics) return;
-    ctx = metrics.context;
-    w = metrics.cssWidth;
-    h = metrics.cssHeight;
-    pixelRatio = metrics.pixelRatio || 1;
-  } else {
-    const face = typeof ensureFaceMetrics === "function"
-      ? ensureFaceMetrics(section, { observe: true })
-      : null;
-    if (!face || face.cssW < 8 || face.cssH < 8) return;
-    w = face.cssW;
-    h = face.cssH;
-    pixelRatio = face.dpr;
-    canvas.width = face.width;
-    canvas.height = face.height;
-    ctx = canvas.getContext("2d");
-  }
-  if (!ctx || w < 8 || h < 8) return;
+  // Shared sizing (css x dpr, never zoom); drawing is WebGL2 via gl-line-renderer.
+  const m = typeof nodeGraphDisplayCanvasSize === "function" ? nodeGraphDisplayCanvasSize(section, canvas) : null;
+  if (!m || m.cssWidth < 8 || m.cssHeight < 8) return;
+  const w = m.cssWidth;
+  const h = m.cssHeight;
 
-  ctx.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
-  ctx.fillStyle = "#050508";
-  ctx.fillRect(0, 0, w, h);
+  const batch = typeof nodeGraphGlLinesBegin === "function"
+    ? nodeGraphGlLinesBegin(canvas, [5 / 255, 5 / 255, 8 / 255, 1], { scale: m.pixelRatio })
+    : null;
+  if (!batch) {
+    if (typeof nodeGraphGlLinesFillBlack === "function") nodeGraphGlLinesFillBlack(canvas);
+    section._forceDraw = false;
+    return;
+  }
 
   const nodeId = section.dataset.node;
   const params = nodeGraphAdditiveBubbleReadParams(nodeId);
   const { graph: incoming, processed } = nodeGraphAdditiveBubbleReadIncomingGraph(nodeId);
   if (!incoming || !incoming.ratio || !incoming.ratio.length) {
-    ctx.fillStyle = "#666";
-    ctx.font = "11px ui-monospace, monospace";
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillText("—", w * 0.5, h * 0.5);
+    nodeGraphGlLinesText(batch, "—", w * 0.5, h * 0.5, { px: 11, weight: 400, family: "ui-monospace, monospace", rgba: [0.4, 0.4, 0.4, 1] });
+    nodeGraphGlLinesEnd(batch);
     section._forceDraw = false;
     return;
   }
@@ -150,6 +132,7 @@ function drawNodeGraphAdditiveBubbleDisplay(section) {
     ? incoming
     : nodeGraphAdditiveBubbleBuildPreviewGraph(incoming, params);
   if (!preview?.ratio) {
+    nodeGraphGlLinesEnd(batch);
     section._forceDraw = false;
     return;
   }
@@ -173,16 +156,14 @@ function drawNodeGraphAdditiveBubbleDisplay(section) {
   const span = Math.max(1, w - pad * 2);
 
   // CMYK Y ink — same plane as Generator face.
-  ctx.strokeStyle = "rgb(255, 210, 40)";
-  ctx.lineWidth = 1.5;
-  ctx.beginPath();
+  const pts = new Array(wave.length * 2);
   for (let n = 0; n < wave.length; n += 1) {
-    const x = pad + (n / Math.max(1, wave.length - 1)) * span;
-    const y = midY - (nodeGraphFiniteNumber(wave[n])) * ampY;
-    if (n === 0) ctx.moveTo(x, y);
-    else ctx.lineTo(x, y);
+    pts[n * 2] = pad + (n / Math.max(1, wave.length - 1)) * span;
+    pts[n * 2 + 1] = midY - (nodeGraphFiniteNumber(wave[n])) * ampY;
   }
-  ctx.stroke();
+  // 1.5 px CMYK Y ink (was 2D lineWidth 1.5): core 0.4 + 0.7 smoothstep feather.
+  nodeGraphGlLinesPolyline(batch, pts, 0.4, 0.7, [1, 210 / 255, 40 / 255, 1]);
+  if (!nodeGraphGlLinesEnd(batch) && typeof nodeGraphGlLinesFillBlack === "function") nodeGraphGlLinesFillBlack(canvas);
   section._forceDraw = false;
 }
 

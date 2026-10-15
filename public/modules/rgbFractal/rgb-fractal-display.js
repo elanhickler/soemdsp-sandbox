@@ -1,4 +1,4 @@
-// Soft Fractal face: WebGL full-face Julia (primary) + CPU fallback.
+// Soft Fractal face: WebGL full-face Julia (GL only; failure = black + console.error).
 // Continuous phasors for seed/flow/warp/rotation/color (speed changes rate only).
 
 const nodeGraphRgbFractalSettingsDefaults = Object.freeze({
@@ -50,9 +50,6 @@ const NODE_GRAPH_RGB_FRACTAL_LOCI = Object.freeze([
   Object.freeze({ x: -0.74529, y: 0.11307, name: "seahorsemin" }),
   Object.freeze({ x: 0.32, y: 0.043, name: "minibrot" }),
 ]);
-
-/** CPU fallback throttle only (not a resolution cut). */
-const NODE_GRAPH_RGB_FRACTAL_CPU_SIM_MS = 33;
 
 function normalizeNodeGraphRgbFractalSettings(settings = {}) {
   const source = settings && typeof settings === "object" ? settings : {};
@@ -496,7 +493,7 @@ function syncNodeGraphRgbFractalCanvas(canvas, face, pixelRatio, downsample = 1)
   if (!canvas || !face) {
     return false;
   }
-  const dpr = Math.max(1, nodeGraphFiniteNumber(pixelRatio, nodeGraphFiniteNumber(window.devicePixelRatio, 1)));
+  const dpr = Math.max(1, nodeGraphFiniteNumber(pixelRatio, nodeGraphDisplayCanvasPixelRatio()));
   const ds = nodeGraphRgbFractalNormalizeDownsample(downsample);
   // clientWidth/Height = layout size; ignores workspace CSS transform scale.
   // Downsample divides the buffer so each face CSS pixel maps to a chunky texel.
@@ -509,19 +506,12 @@ function syncNodeGraphRgbFractalCanvas(canvas, face, pixelRatio, downsample = 1)
     w = Math.max(1, Math.round(w * s));
     h = Math.max(1, Math.round(h * s));
   }
-  if (canvas.width !== w || canvas.height !== h) {
-    canvas.width = w;
-    canvas.height = h;
-  }
+  nodeGraphDisplayCanvasSetBacking(canvas, w, h);
   canvas.style.width = "100%";
   canvas.style.height = "100%";
   // Downsample > 1: force nearest-neighbor so the grid is intentional blocks.
   // At 1, leave to CSS (.pixelated-canvas-zoom under workspace zoom).
-  if (ds > 1.001) {
-    canvas.style.setProperty("image-rendering", "pixelated");
-  } else {
-    canvas.style.removeProperty("image-rendering");
-  }
+  nodeGraphDisplayCanvasPixelated(canvas, ds > 1.001);
   face._rgbFractalDownsample = ds;
   return w > 0 && h > 0;
 }
@@ -550,15 +540,13 @@ function nodeGraphRgbFractalFillPlate(canvas, face, plateHex = "#000000") {
     }
     return true;
   }
-  const ctx = canvas.getContext("2d");
-  if (!ctx) {
+  const batch = typeof nodeGraphGlLinesBegin === "function"
+    ? nodeGraphGlLinesBegin(canvas, nodeGraphGlLinesCss(color), { publishNodeId: "" })
+    : null;
+  if (!batch) {
     return false;
   }
-  const w = Math.max(1, canvas.width || 1);
-  const h = Math.max(1, canvas.height || 1);
-  ctx.setTransform(1, 0, 0, 1, 0, 0);
-  ctx.fillStyle = color;
-  ctx.fillRect(0, 0, w, h);
+  nodeGraphGlLinesEnd(batch);
   if (face?.dataset) face.dataset.lightStrength = "0";
   if (face) {
     face._rgbFractalHasFrame = false;
@@ -582,247 +570,13 @@ function nodeGraphRgbFractalFillBlack(canvas, face) {
   return nodeGraphRgbFractalFillPlate(canvas, face, plate);
 }
 
-// —— CPU fallback (WebGL missing only) ————————————————————————————————
-
-function nodeGraphRgbFractalJuliaSmooth(zx, zy, cx, cy, maxIter) {
-  let x = zx;
-  let y = zy;
-  let i = 0;
-  let trap = 1e6;
-  const bail2 = 256;
-  for (; i < maxIter; i += 1) {
-    const x2 = x * x;
-    const y2 = y * y;
-    if (x2 + y2 > bail2) break;
-    const xy = 2 * x * y;
-    x = x2 - y2 + cx;
-    y = xy + cy;
-    const d = Math.hypot(x - 0.3, y);
-    if (d < trap) trap = d;
-  }
-  if (i >= maxIter) {
-    return 0.04 + 0.1 * (1 - Math.min(1, trap));
-  }
-  const r2 = x * x + y * y;
-  const logZn = Math.log(Math.max(1e-12, r2)) * 0.5;
-  const nu = Math.log(Math.max(1e-12, logZn / Math.LN2)) / Math.LN2;
-  const escape = Math.max(0, Math.min(1, (i + 1 - nu) / maxIter));
-  const tTrap = 1 - Math.min(1, trap / 1.2);
-  return Math.max(0, Math.min(1, escape * 0.55 + tTrap * 0.55));
-}
-
-function nodeGraphRgbFractalBuildPaletteLut(stops, peak) {
-  const lut = new Uint8ClampedArray(256 * 3);
-  const sample = typeof nodeGraphSampleGradientStopsRgb === "function"
-    ? (t) => nodeGraphSampleGradientStopsRgb(stops, t, peak)
-    : (t) => {
-      const v = Math.round(t * 255);
-      return [v, v, v];
-    };
-  for (let i = 0; i < 256; i += 1) {
-    const rgb = sample(i / 255);
-    const o = i * 3;
-    lut[o] = rgb[0];
-    lut[o + 1] = rgb[1];
-    lut[o + 2] = rgb[2];
-  }
-  return lut;
-}
-
-function paintNodeGraphRgbFractalFaceCpu(canvas, face, params) {
-  const ctx = canvas.getContext("2d");
-  if (!ctx) {
-    return false;
-  }
-  const w = canvas.width;
-  const h = canvas.height;
-  // Raw: one field sample per canvas pixel — no sim downscale.
-  const simW = w;
-  const simH = h;
-  const maxIter = nodeGraphRgbFractalResolveMaxIter(params.depth);
-  let field = face._rgbFractalField;
-  if (!field || field.length !== simW * simH) {
-    field = new Float32Array(simW * simH);
-    face._rgbFractalField = field;
-  }
-  const aspect = simW / Math.max(1, simH);
-  const { cx, cy, halfSpan, cosR, sinR, centerX, centerY, colorPhase, breath, glow } = params;
-  const panX = nodeGraphFiniteNumber(params.panX);
-  const panY = nodeGraphFiniteNumber(params.panY);
-  for (let j = 0; j < simH; j += 1) {
-    const row = j * simW;
-    for (let i = 0; i < simW; i += 1) {
-      // Pure offset pan (no UV wrap) — matches WebGL mapUvToZ
-      const un = ((i + 0.5) / simW) * 2 - 1;
-      const vn = ((j + 0.5) / simH) * 2 - 1;
-      const zx = un * halfSpan * aspect;
-      const zy = vn * halfSpan;
-      const rx = zx * cosR - zy * sinR + centerX + panX;
-      const ry = zx * sinR + zy * cosR + centerY + panY;
-      let e = nodeGraphRgbFractalJuliaSmooth(rx, ry, cx, cy, maxIter);
-      // Soft creams energy structure (gamma); Color Shift / Bands own palette mapping.
-      const soft = Math.max(0, Math.min(1, nodeGraphFiniteNumber(params.soft)));
-      const gamma = 0.72 + soft * 0.46 - (nodeGraphFiniteNumber(glow)) * 0.25;
-      e = Math.pow(Math.max(0, Math.min(1, e)), Math.max(0.45, gamma));
-      // Soft escape cream (smoothstep-ish)
-      if (soft > 0.01) {
-        const t = Math.max(0, Math.min(1, e / (0.35 + soft * 1.1)));
-        e = t * t * (3 - 2 * t);
-        e = e * (1 - soft * 0.55) + e * e * (3 - 2 * e) * soft * 0.55;
-      }
-      // Color Bands + Color Shift only — Soft must not scale phase/bands (was "gradient spin").
-      const bands = Math.max(0.25, nodeGraphFiniteNumber(params.bands, 1));
-      const phase = nodeGraphFiniteNumber(colorPhase);
-      let eColor = e * bands + phase;
-      eColor = eColor - Math.floor(eColor);
-      const tri = 1 - Math.abs(eColor * 2 - 1);
-      eColor = tri * tri * (3 - 2 * tri);
-      eColor = e * 0.48 + eColor * 0.52;
-      eColor = Math.max(0, Math.min(1, eColor * (nodeGraphFiniteNumber(breath, 1))));
-      eColor = eColor * (1 - soft * 0.35)
-        + (0.5 + (eColor - 0.5) * (1 - soft * 0.22)) * soft * 0.35;
-      field[row + i] = Math.max(0, Math.min(1, eColor));
-    }
-  }
-
-  // Soft + Edge Blur (CPU): spatial cream on field (Soft alone must read as soften, not recolor).
-  const softAmt = Math.max(0, Math.min(1, nodeGraphFiniteNumber(params.soft)));
-  const blurAmt = Math.max(0, Math.min(8, nodeGraphFiniteNumber(params.blur)));
-  const softSigma = softAmt * 1.25;
-  const blurSigma = blurAmt > 0.015 ? Math.min(2, 0.15 + blurAmt * 0.23) : 0;
-  const sigma = Math.sqrt(softSigma * softSigma + blurSigma * blurSigma);
-  if (sigma > 0.08) {
-    let dst = face._rgbFractalFieldB;
-    if (!dst || dst.length !== field.length) {
-      dst = new Float32Array(field.length);
-      face._rgbFractalFieldB = dst;
-    }
-    const radius = 2; // smaller kernel matches lower max sigma
-    const inv2s2 = 1 / Math.max(1e-4, 2 * sigma * sigma);
-    for (let j = 0; j < simH; j += 1) {
-      for (let i = 0; i < simW; i += 1) {
-        let acc = 0;
-        let wgt = 0;
-        for (let dj = -radius; dj <= radius; dj += 1) {
-          const y = j + dj;
-          if (y < 0 || y >= simH) continue;
-          for (let di = -radius; di <= radius; di += 1) {
-            const x = i + di;
-            if (x < 0 || x >= simW) continue;
-            const w = Math.exp(-(di * di + dj * dj) * inv2s2);
-            acc += field[y * simW + x] * w;
-            wgt += w;
-          }
-        }
-        dst[j * simW + i] = acc / Math.max(1e-6, wgt);
-      }
-    }
-    field = dst;
-    face._rgbFractalField = field;
-  }
-
-  let off = face._rgbFractalOff;
-  if (!off || off.width !== simW || off.height !== simH) {
-    off = document.createElement("canvas");
-    off.width = simW;
-    off.height = simH;
-    face._rgbFractalOff = off;
-    face._rgbFractalImg = null;
-  }
-  const octx = off.getContext("2d");
-  if (!octx) return false;
-  let img = face._rgbFractalImg;
-  if (!img || img.width !== simW || img.height !== simH) {
-    img = octx.createImageData(simW, simH);
-    face._rgbFractalImg = img;
-  }
-  const stops = params.gradientStops;
-  const peak = stops?.[stops.length - 1]?.color || "#ffffff";
-  const lutKey = peak + "|" + (stops?.length || 0);
-  if (!face._rgbFractalLut || face._rgbFractalLutKey !== lutKey) {
-    face._rgbFractalLut = nodeGraphRgbFractalBuildPaletteLut(stops, peak);
-    face._rgbFractalLutKey = lutKey;
-  }
-  const lut = face._rgbFractalLut;
-  const data = img.data;
-  for (let i = 0; i < field.length; i += 1) {
-    const idx = Math.max(0, Math.min(255, (field[i] * 255) | 0)) * 3;
-    const p = i * 4;
-    data[p] = lut[idx];
-    data[p + 1] = lut[idx + 1];
-    data[p + 2] = lut[idx + 2];
-    data[p + 3] = 255;
-  }
-  octx.putImageData(img, 0, 0);
-  ctx.setTransform(1, 0, 0, 1, 0, 0);
-  // Letterbox / beyond-sim: match outer plate (Stop 0.00 or Gradient).
-  const outerMode = String(params.outerPlate || "stop0");
-  const plate = (outerMode === "stop0" || outerMode === "gradientStart" || outerMode === "gradient" || outerMode === "haze")
-    ? nodeGraphRgbFractalStop0Color(Array.isArray(stops) ? stops : params)
-    : (params.background || "#000000");
-  ctx.fillStyle = plate;
-  ctx.fillRect(0, 0, w, h);
-  ctx.imageSmoothingEnabled = true;
-  if ("imageSmoothingQuality" in ctx) ctx.imageSmoothingQuality = "high";
-  ctx.drawImage(off, 0, 0, simW, simH, 0, 0, w, h);
-
-  // Screen Blur (CPU): one H+V pair, continuous sub-pixel → light max (matches GPU).
-  const screenBlurAmt = SoemMath.clamp(params.screenBlur, 0, 8);
-  if (screenBlurAmt > 0.02 && w > 2 && h > 2) {
-    const t = screenBlurAmt / 8;
-    const tEase = t * t;
-    const sigma = 0.22 + tEase * 1.45;
-    const inv2s2 = 1 / (2 * sigma * sigma);
-    let src = ctx.getImageData(0, 0, w, h);
-    let dst = ctx.createImageData(w, h);
-    const blur1D = (horizontal) => {
-      const sdata = src.data;
-      const ddata = dst.data;
-      for (let y = 0; y < h; y += 1) {
-        for (let x = 0; x < w; x += 1) {
-          let r = 0;
-          let g = 0;
-          let b = 0;
-          let wgt = 0;
-          for (let i = -5; i <= 5; i += 1) {
-            const xx = horizontal ? x + i : x;
-            const yy = horizontal ? y : y + i;
-            if (xx < 0 || xx >= w || yy < 0 || yy >= h) continue;
-            const ww = Math.exp(-(i * i) * inv2s2);
-            const o = (yy * w + xx) * 4;
-            r += sdata[o] * ww;
-            g += sdata[o + 1] * ww;
-            b += sdata[o + 2] * ww;
-            wgt += ww;
-          }
-          const p = (y * w + x) * 4;
-          const inv = 1 / Math.max(1e-6, wgt);
-          ddata[p] = r * inv;
-          ddata[p + 1] = g * inv;
-          ddata[p + 2] = b * inv;
-          ddata[p + 3] = 255;
-        }
-      }
-      const tmp = src;
-      src = dst;
-      dst = tmp;
-    };
-    blur1D(true);
-    blur1D(false);
-    ctx.putImageData(src, 0, 0);
-  }
-  return true;
-}
-
-// —— Main paint ————————————————————————————————————————————————————————
-
 function paintNodeGraphRgbFractalFace(canvas, face, nodeId, options = {}) {
   if (!canvas || !face || !nodeId) {
     return false;
   }
   const pixelRatio = nodeGraphFiniteNumber(typeof nodeGraphModuleScopeState !== "undefined"
     ? nodeGraphModuleScopeState?.backingPixelRatio
-    : 0, nodeGraphFiniteNumber(window.devicePixelRatio, 1));
+    : 0, nodeGraphDisplayCanvasPixelRatio());
   // Read downsample before buffer sync so resolution follows the knob live.
   const downsample = nodeGraphRgbFractalNormalizeDownsample(
     nodeGraphRgbFractalReadParam(nodeId, "downsample", 1),
@@ -865,26 +619,13 @@ function paintNodeGraphRgbFractalFace(canvas, face, nodeId, options = {}) {
     face._rgbFractalPendingDt = 0;
   }
 
-  // CPU fallback: throttle sim. WebGL: paint every rAF (cheap full-face).
+  // WebGL paints every rAF (cheap full-face).
   const wantGl = typeof nodeGraphRgbFractalGlPaint === "function";
   // Probe GL once (may bind context)
   const glReady = wantGl && typeof nodeGraphRgbFractalGlEnsure === "function"
     ? Boolean(nodeGraphRgbFractalGlEnsure(canvas))
     : false;
 
-  if (!glReady && !options.force && face._rgbFractalHasFrame && !frozen) {
-    const now = typeof performance !== "undefined" ? performance.now() : Date.now();
-    face._rgbFractalPendingDt = (nodeGraphFiniteNumber(face._rgbFractalPendingDt)) + dt;
-    const lastSim = nodeGraphFiniteNumber(face._rgbFractalLastSimMs);
-    if (now - lastSim < NODE_GRAPH_RGB_FRACTAL_CPU_SIM_MS) {
-      return true;
-    }
-    dt = nodeGraphFiniteNumber(face._rgbFractalPendingDt);
-    face._rgbFractalPendingDt = 0;
-    face._rgbFractalLastSimMs = now;
-  } else {
-    face._rgbFractalPendingDt = 0;
-  }
 
   const seed = ((nodeGraphRgbFractalReadParam(nodeId, "seed", 0) % 1) + 1) % 1;
   const scaleRaw = Number(nodeGraphRgbFractalReadParam(nodeId, "scale", 1.2));
@@ -1001,14 +742,17 @@ function paintNodeGraphRgbFractalFace(canvas, face, nodeId, options = {}) {
     fold: 0,
     bands,
     domainWarp: 0,
-    nodeId: id,
+    nodeId: String(nodeId || "").trim(),
   };
 
   let ok = false;
+  // GL only: a failed frame is black + logged.
   if (glReady && typeof nodeGraphRgbFractalGlPaint === "function") {
     ok = nodeGraphRgbFractalGlPaint(canvas, paintParams);
-  } else {
-    ok = paintNodeGraphRgbFractalFaceCpu(canvas, face, paintParams);
+  }
+  if (!ok) {
+    face._rgbFractalHasFrame = false;
+    return nodeGraphDisplayGlFailed(canvas, glReady ? "Soft Fractal GL paint failed" : "Soft Fractal WebGL unavailable");
   }
 
   if (ok) {

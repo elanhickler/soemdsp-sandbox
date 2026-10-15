@@ -137,7 +137,7 @@ function nodeGraphCycleLineGlContext(canvas) {
     lineProgram = nodeGraphCycleLineGlProgram(gl, NODE_GRAPH_CYCLE_LINE_GL_LINE_VS, NODE_GRAPH_CYCLE_LINE_GL_LINE_FS);
     dotProgram = nodeGraphCycleLineGlProgram(gl, NODE_GRAPH_CYCLE_LINE_GL_DOT_VS, NODE_GRAPH_CYCLE_LINE_GL_DOT_FS);
   } catch (error) {
-    console.warn("[cycle-line-gl] program failed", error);
+    console.error("[cycle-line-gl] program failed; faces show black", error);
     return null;
   }
   const state = {

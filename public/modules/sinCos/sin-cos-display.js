@@ -18,8 +18,7 @@ function createNodeGraphSinCosDisplay(nodeId, type = "sinCos") {
   section.dataset.parameterVisual = "true";
   section.dataset.lightSource = "screen";
   section.dataset.lightStrength = "0.66";
-  const canvas = document.createElement("canvas");
-  canvas.className = "node-filter-curve-canvas node-sincos-canvas";
+  const canvas = nodeGraphDisplayCanvasCreate("node-filter-curve-canvas node-sincos-canvas");
   canvas.dataset.lightSource = "screen";
   canvas.dataset.lightStrength = "0.66";
   section.append(canvas);
@@ -165,7 +164,7 @@ function drawNodeGraphSinCosDisplay(section) {
     const detail = error && typeof error === "object"
       ? (error.message || error.name || String(error))
       : String(error);
-    console.warn("[sincos] draw failed", detail, error);
+    console.error("[sincos] draw failed", detail, error);
     if (section) {
       section._sinCosForceDraw = true;
       section._sinCosLaidOut = false;

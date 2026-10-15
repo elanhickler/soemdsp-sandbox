@@ -99,8 +99,7 @@ function createNodeGraphPhoneToneDisplay(nodeId, type = "phoneTone") {
   section.dataset.parameterVisual = "true";
   section.dataset.lightSource = "screen";
   section.dataset.lightStrength = "0.4";
-  const canvas = document.createElement("canvas");
-  canvas.className = "node-filter-curve-canvas node-phone-tone-canvas node-module-scope-vector-trace";
+  const canvas = nodeGraphDisplayCanvasCreate("node-filter-curve-canvas node-phone-tone-canvas node-module-scope-vector-trace");
   canvas.setAttribute("aria-hidden", "true");
   section.append(canvas);
   nodeGraphInstallDrawingFacePump(section, {
@@ -111,18 +110,11 @@ function createNodeGraphPhoneToneDisplay(nodeId, type = "phoneTone") {
   return section;
 }
 
-function drawNodeGraphPhoneToneFacePane(ctx, cx, maxW, label, hz, labelSize, valueSize, unitSize, labelY, valueY, unitY) {
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  ctx.font = `700 ${labelSize}px ${NODE_GRAPH_PHONE_TONE_FACE_FONT}`;
-  ctx.fillStyle = "rgba(160, 167, 176, 0.9)";
-  ctx.fillText(label, cx, labelY, maxW);
-  ctx.font = `700 ${valueSize}px ${NODE_GRAPH_PHONE_TONE_FACE_FONT}`;
-  ctx.fillStyle = "rgba(160, 214, 228, 0.98)";
-  ctx.fillText(hz, cx, valueY, maxW);
-  ctx.font = `700 ${unitSize}px ${NODE_GRAPH_PHONE_TONE_FACE_FONT}`;
-  ctx.fillStyle = "rgba(160, 167, 176, 0.82)";
-  ctx.fillText("Hz", cx, unitY, maxW);
+function drawNodeGraphPhoneToneFacePane(batch, cx, maxW, label, hz, labelSize, valueSize, unitSize, labelY, valueY, unitY) {
+  const opt = (px, rgba) => ({ px, rgba, weight: 700, family: NODE_GRAPH_PHONE_TONE_FACE_FONT, maxWidth: maxW });
+  nodeGraphGlLinesText(batch, label, cx, labelY, opt(labelSize, [160 / 255, 167 / 255, 176 / 255, 0.9]));
+  nodeGraphGlLinesText(batch, hz, cx, valueY, opt(valueSize, [160 / 255, 214 / 255, 228 / 255, 0.98]));
+  nodeGraphGlLinesText(batch, "Hz", cx, unitY, opt(unitSize, [160 / 255, 167 / 255, 176 / 255, 0.82]));
 }
 
 function drawNodeGraphPhoneToneFaceItem(sectionOrRenderer, item) {
@@ -162,62 +154,38 @@ function drawNodeGraphPhoneToneFaceItem(sectionOrRenderer, item) {
     return;
   }
 
-  let ctx;
-  let width;
-  let height;
-  let pixelRatio = 1;
-  if (typeof nodeGraphSizeDisplayCanvas === "function") {
-    const metrics = nodeGraphSizeDisplayCanvas(section, canvas);
-    if (!metrics) {
-      return;
-    }
-    ctx = metrics.context;
-    width = metrics.cssWidth;
-    height = metrics.cssHeight;
-    pixelRatio = metrics.pixelRatio || 1;
-  } else {
-    ctx = canvas.getContext("2d");
-    if (!ctx) {
-      return;
-    }
-    pixelRatio = Math.max(1, window.devicePixelRatio || 1);
-    width = rawW;
-    height = rawH;
-    canvas.width = Math.max(1, Math.round(width * pixelRatio));
-    canvas.height = Math.max(1, Math.round(height * pixelRatio));
-  }
-  if (!ctx || !(width >= 8) || !(height >= 8)) {
+  const m = typeof nodeGraphDisplayCanvasSize === "function" ? nodeGraphDisplayCanvasSize(section, canvas) : null;
+  if (!m || !(m.cssWidth >= 8) || !(m.cssHeight >= 8)) {
     return;
   }
-
+  const width = m.cssWidth;
+  const height = m.cssHeight;
   section._phoneToneSignature = signature;
   section._forceDraw = false;
   section._phoneToneLaidOut = true;
-  canvas.style.imageRendering = "auto";
-  ctx.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
-  ctx.imageSmoothingEnabled = true;
-  if ("imageSmoothingQuality" in ctx) {
-    ctx.imageSmoothingQuality = "high";
+  const batch = typeof nodeGraphGlLinesBegin === "function"
+    ? nodeGraphGlLinesBegin(canvas, [0, 0, 4 / 255, 1], { scale: m.pixelRatio })
+    : null;
+  if (!batch) {
+    if (typeof nodeGraphGlLinesFillBlack === "function") nodeGraphGlLinesFillBlack(canvas);
+    return;
   }
-  ctx.clearRect(0, 0, width, height);
-  ctx.fillStyle = "#000004";
-  ctx.fillRect(0, 0, width, height);
   const mid = Math.round(width * 0.5);
-  ctx.fillStyle = "rgba(127, 199, 217, 0.22)";
-  ctx.fillRect(mid, Math.round(height * 0.12), 1, Math.round(height * 0.76));
+  nodeGraphGlLinesRect(batch, mid, Math.round(height * 0.12), 1, Math.round(height * 0.76), [127 / 255, 199 / 255, 217 / 255, 0.22]);
 
   const paneW = Math.max(8, mid - 8);
   const labelSize = Math.max(9, Math.min(height * 0.18, width * 0.07));
   const valueSize = Math.max(12, Math.min(height * 0.36, (width * 0.5) * 0.24));
   const unitSize = Math.max(8, Math.min(height * 0.16, width * 0.055));
   drawNodeGraphPhoneToneFacePane(
-    ctx, width * 0.25, paneW, "ƒ1", left, labelSize, valueSize, unitSize,
+    batch, width * 0.25, paneW, "ƒ1", left, labelSize, valueSize, unitSize,
     height * 0.2, height * 0.54, height * 0.82,
   );
   drawNodeGraphPhoneToneFacePane(
-    ctx, width * 0.75, paneW, "ƒ2", right, labelSize, valueSize, unitSize,
+    batch, width * 0.75, paneW, "ƒ2", right, labelSize, valueSize, unitSize,
     height * 0.2, height * 0.54, height * 0.82,
   );
+  if (!nodeGraphGlLinesEnd(batch) && typeof nodeGraphGlLinesFillBlack === "function") nodeGraphGlLinesFillBlack(canvas);
 }
 
 if (typeof nodeGraphModuleScopeCustomRenderers === "object" && nodeGraphModuleScopeCustomRenderers) {

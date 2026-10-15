@@ -172,7 +172,7 @@ function nodeGraphModuleScopeDisposeBurnFaceCanvas(canvas, nodeId) {
 
 function nodeGraphModuleScopeCreateFaceCanvasElement(kind) {
   const canvas = document.createElement("canvas");
-  canvas.className = NODE_GRAPH_FACE_CSS_CLASS;
+  canvas.className = `${NODE_GRAPH_FACE_CSS_CLASS} node-display-canvas`;
   canvas.style.mixBlendMode = "normal";
   canvas.setAttribute("aria-hidden", "true");
   tagNodeGraphModuleScopeFaceCanvas(canvas, kind);
@@ -277,6 +277,7 @@ function syncNodeGraphModuleScopeFaceCanvas(canvas, screenElement, pixelRatio, p
   if (!canvas || !screenElement) {
     return { resized: false, synced: false, density: 1 };
   }
+  canvas.classList?.add("node-display-canvas");
   let policy = String(options.policy || "auto");
   if (policy === "auto") {
     policy = String(canvas.dataset?.faceKind || "") === NODE_GRAPH_FACE_KIND_BURN

@@ -25,8 +25,7 @@ function createNodeGraphSoftClipperCurveDisplay(nodeId, type) {
     }
     drawNodeGraphSoftClipperCurveDisplay(section);
   };
-  const canvas = document.createElement("canvas");
-  canvas.className = "node-filter-curve-canvas node-soft-clipper-curve-canvas";
+  const canvas = nodeGraphDisplayCanvasCreate("node-filter-curve-canvas node-soft-clipper-curve-canvas");
   section.append(canvas);
   if (typeof ResizeObserver === "function" && !section._softClipResizeObs) {
     const ro = new ResizeObserver(() => {
@@ -92,7 +91,7 @@ function drawNodeGraphSoftClipperCurveDisplay(section) {
     const detail = error && typeof error === "object"
       ? (error.message || error.name || String(error))
       : String(error);
-    console.warn("[soft-clipper-curve] draw failed", detail, error);
+    console.error("[soft-clipper-curve] draw failed", detail, error);
   }
 }
 

@@ -171,30 +171,14 @@ function matrixGlBuildAtlasImage(cellW = MATRIX_GL_ATLAS_CELL_W, cellH = MATRIX_
   const rows = Math.max(1, Math.ceil(count / cols));
   const cw = Math.max(8, Math.round(cellW) | 0);
   const ch = Math.max(12, Math.round(cellH) | 0);
-  const canvas = document.createElement("canvas");
-  canvas.width = cols * cw;
-  canvas.height = rows * ch;
-  const ctx = canvas.getContext("2d", { alpha: false });
-  if (!ctx) return null;
-  ctx.imageSmoothingEnabled = true;
-  if ("imageSmoothingQuality" in ctx) ctx.imageSmoothingQuality = "high";
-  ctx.fillStyle = "#000";
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
-  ctx.fillStyle = "#fff";
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  // Slight inset so LINEAR mag doesn't bleed into neighboring tiles.
-  const fontPx = Math.max(6, Math.floor(ch * 0.78));
-  ctx.font = `700 ${fontPx}px ${MATRIX_FONT_STACK}`;
-  for (let i = 0; i < count; i += 1) {
-    const chGlyph = glyphs[i];
-    if (!chGlyph || chGlyph === " ") continue;
-    const gx = i % cols;
-    const gy = Math.floor(i / cols);
-    const cx = gx * cw + cw * 0.5;
-    const cy = gy * ch + ch * 0.54;
-    ctx.fillText(chGlyph, cx, cy);
-  }
+  // Glyph bake lives in display-canvas.js (the one CPU raster helper).
+  const canvas = nodeGraphDisplayCanvasBakeGlyphAtlas({
+    glyphs, count, cols, rows, cellW: cw, cellH: ch,
+    fontPx: Math.max(6, Math.floor(ch * 0.78)),
+    family: MATRIX_FONT_STACK,
+    yFrac: 0.54,
+  });
+  if (!canvas) return null;
   return { canvas, cols, rows, count, cellW: cw, cellH: ch };
 }
 
@@ -252,7 +236,7 @@ function matrixGlSyncAtlas(glState, pxPerCol, pxPerRow, loFi = false) {
 
 /**
  * Create (or recover) WebGL state for a face canvas.
- * Returns null if WebGL is unavailable (caller should use 2D fallback).
+ * Returns null if WebGL is unavailable (caller shows black + logs).
  */
 function matrixGlEnsure(canvas) {
   if (!canvas) return null;
@@ -262,9 +246,7 @@ function matrixGlEnsure(canvas) {
   }
   if (state?.failed) return null;
 
-  // Never call getContext("2d") on this canvas first — that permanently
-  // blocks WebGL. Prefer webgl only; 2D fallback uses a separate path only
-  // when this returns null.
+  // Draws on the shared GL device; the face canvas only receives the copy.
   let gl = null;
   try {
     const pic = typeof nodeGraphSharedGlDevice === "function" ? nodeGraphSharedGlDevice() : null;
@@ -371,7 +353,7 @@ function matrixGlEnsure(canvas) {
     matrixGlStates.set(canvas, state);
     return state;
   } catch (error) {
-    console.warn?.("[Matrix Display] WebGL init failed", error);
+    console.error("[Matrix Display] WebGL init failed; face shows black", error);
     matrixGlStates.set(canvas, { failed: true });
     return null;
   }
@@ -393,8 +375,8 @@ function matrixGlResolveRenderStyle(paramsOrStyle) {
  * Shared layout for Matrix Waterfall + Matrix Display.
  *   • Canvas fills the stage (no letterbox blank bars)
  *   • Sharp and Pixel share the SAME buffer size / cell grid (same shapes & area)
- *   • Sharp: LINEAR atlas sample + image-rendering:auto (smooth)
- *   • Pixel: NEAREST atlas sample + image-rendering:pixelated (same image, hard edges)
+ *   • Sharp: LINEAR atlas sample + smooth CSS scale
+ *   • Pixel: NEAREST atlas sample + .display-canvas-pixelated (same image, hard edges)
  * Switching style must not resize the buffer (would wipe the GL surface / look like a full redraw).
  *
  * @param {HTMLCanvasElement} canvas
@@ -458,7 +440,7 @@ function matrixGlSyncCanvasSize(canvas, columns, rows, renderStyle = "vector") {
 
   // Identical buffer for Sharp and Pixel (dpr×ss supersample).
   const maxPx = 3072;
-  const dpr = Math.max(1, Math.min(2.5, window.devicePixelRatio || 1));
+  const dpr = nodeGraphDisplayCanvasPixelRatio(2.5);
   const ss = 2;
   let w = Math.max(cols, Math.min(maxPx, Math.round(cssW * dpr * ss)));
   let h = Math.max(rws, Math.min(maxPx, Math.round(cssH * dpr * ss)));
@@ -481,17 +463,11 @@ function matrixGlSyncCanvasSize(canvas, columns, rows, renderStyle = "vector") {
   }
 
   // Only filter / CSS scale mode differs — never buffer geometry.
-  if (loFi) {
-    canvas.style.imageRendering = "pixelated";
-    canvas.style.setProperty("image-rendering", "pixelated");
-  } else {
-    canvas.style.imageRendering = "auto";
-    canvas.style.setProperty("image-rendering", "auto");
-  }
+  // Sharp pins smooth even under .pixelated-canvas-zoom (was an inline smooth override).
+  nodeGraphDisplayCanvasPixelated(canvas, loFi, true);
 
   // Only assign size when it changes — style-only toggles must not clear the surface.
-  if (canvas.width !== w) canvas.width = w;
-  if (canvas.height !== h) canvas.height = h;
+  nodeGraphDisplayCanvasSetBacking(canvas, w, h);
   const fit = {
     w,
     h,
@@ -682,17 +658,14 @@ function matrixGlDrawFace(canvas, state, params, mode) {
     if (typeof nodeGraphSharedGlEndPresent === "function") {
       nodeGraphSharedGlEndPresent(gl);
     }
-    const ctx = canvas.getContext("2d");
+    const ctx = nodeGraphDisplayCanvasPresentContext(canvas);
     if (ctx && typeof nodeGraphSharedGlBlitTo2D === "function") {
       nodeGraphSharedGlBlitTo2D(ctx, w, h);
     }
     return true;
   } catch (error) {
-    console.warn?.("[Matrix Display] WebGL draw failed", error);
-    try {
-      matrixGlStates.delete(canvas);
-    } catch (_) { /* ignore */ }
-    return false;
+    matrixGlStates.delete(canvas);
+    return nodeGraphDisplayGlFailed(canvas, "Matrix draw failed", error);
   }
 }
 

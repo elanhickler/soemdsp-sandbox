@@ -874,7 +874,7 @@ function nodeGraphWaterfallInkOverlay(face) {
   let ink = face._wfInkOverlay;
   if (!ink) {
     ink = document.createElement("canvas");
-    ink.className = "node-module-scope-local-fallback-canvas node-waterfall-ink-overlay";
+    ink.className = "node-module-scope-local-fallback-canvas node-waterfall-ink-overlay node-display-canvas";
     ink.setAttribute("aria-hidden", "true");
     ink.style.zIndex = "3";
     ink.style.background = "transparent";

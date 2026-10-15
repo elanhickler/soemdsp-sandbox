@@ -14,8 +14,7 @@ function createNodeGraphSinCos4Display(nodeId, type = "sineWavetable") {
   section.dataset.parameterVisual = "true";
   section.dataset.lightSource = "screen";
   section.dataset.lightStrength = "0.85";
-  const canvas = document.createElement("canvas");
-  canvas.className = "node-filter-curve-canvas node-sincos4-canvas";
+  const canvas = nodeGraphDisplayCanvasCreate("node-filter-curve-canvas node-sincos4-canvas");
   canvas.dataset.lightSource = "screen";
   canvas.dataset.lightStrength = "0.85";
   canvas.style.width = "100%";
@@ -121,7 +120,7 @@ function drawNodeGraphSinCos4Display(section) {
   try {
     drawNodeGraphSinCos4DisplayInner(section);
   } catch (error) {
-    console.warn("[sincos4] draw failed", error?.message || error);
+    console.error("[sincos4] draw failed", error?.message || error);
     if (section) {
       section._sinCos4ForceDraw = true;
       section._sinCos4LaidOut = false;
@@ -129,15 +128,9 @@ function drawNodeGraphSinCos4Display(section) {
   }
 }
 
-function drawNodeGraphSinCos4FillDot(ctx, x, y, r, fillStyle) {
-  if (!(r > 0)) {
-    return;
-  }
-  ctx.beginPath();
-  ctx.arc(x, y, r, 0, Math.PI * 2);
-  ctx.closePath();
-  ctx.fillStyle = fillStyle;
-  ctx.fill();
+// Round position dot (shared smoothstep capsule of zero length).
+function drawNodeGraphSinCos4FillDot(batch, x, y, radius, feather, rgba) {
+  nodeGraphGlLinesDot(batch, x, y, radius, feather, rgba);
 }
 
 function drawNodeGraphSinCos4DisplayInner(section) {
@@ -190,48 +183,38 @@ function drawNodeGraphSinCos4DisplayInner(section) {
   if (rawW < 8 || rawH < 8) {
     return;
   }
-  let ctx;
-  let pixelRatio = 1;
-  let cssW = rawW;
-  let cssH = rawH;
   const soloFace = section.classList.contains("node-screen-solo-face");
   // In F solo, size from the cell/square we resolved above — not the short
-  // filter-curve band that nodeGraphSizeDisplayCanvas would still see mid-layout.
-  if (soloFace || typeof nodeGraphSizeDisplayCanvas !== "function") {
-    const dpr = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
-    pixelRatio = dpr * Math.max(look.pixelDensity, 1e-6);
-    canvas.width = Math.max(1, Math.round(cssW * pixelRatio));
-    canvas.height = Math.max(1, Math.round(cssH * pixelRatio));
-    ctx = canvas.getContext("2d");
-    if (!ctx) {
-      return;
-    }
-  } else {
-    const metrics = nodeGraphSizeDisplayCanvas(section, canvas, { pixelDensity: look.pixelDensity });
-    if (!metrics?.context) {
-      return;
-    }
-    ctx = metrics.context;
-    pixelRatio = Math.max(1e-6, nodeGraphFiniteNumber(metrics.pixelRatio, 1));
-    cssW = Math.max(1, (metrics.width || canvas.width) / pixelRatio);
-    cssH = Math.max(1, (metrics.height || canvas.height) / pixelRatio);
+  // filter-curve band the shared sizing would still see mid-layout.
+  const m = soloFace
+    ? (typeof nodeGraphDisplayCanvasSizeCss === "function" ? nodeGraphDisplayCanvasSizeCss(canvas, rawW, rawH, look.pixelDensity) : null)
+    : (typeof nodeGraphDisplayCanvasSize === "function" ? nodeGraphDisplayCanvasSize(section, canvas, { pixelDensity: look.pixelDensity }) : null);
+  if (!m) {
+    return;
   }
+  const pixelRatio = Math.max(1e-6, nodeGraphFiniteNumber(m.pixelRatio, 1));
+  const cssW = Math.max(1, m.width / pixelRatio);
+  const cssH = Math.max(1, m.height / pixelRatio);
 
   const mode = Math.max(0, Math.min(5, Math.round(nodeGraphSinCos4LiveParam(node, "mode", 2))));
   const offsets = nodeGraphSinCos4PhaseOffsets(mode);
   const phase = nodeGraphSinCos4ReadPhase(nodeId, node, section);
 
   // CSS-pixel plate, then a centered unit square (0…1) so F scales cleanly.
-  ctx.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
-  ctx.imageSmoothingEnabled = true;
-  ctx.fillStyle = "#05060a";
-  ctx.fillRect(0, 0, cssW, cssH);
-
+  const batch = typeof nodeGraphGlLinesBegin === "function"
+    ? nodeGraphGlLinesBegin(canvas, [5 / 255, 6 / 255, 10 / 255, 1], { scale: pixelRatio })
+    : null;
+  if (!batch) {
+    if (typeof nodeGraphGlLinesFillBlack === "function") nodeGraphGlLinesFillBlack(canvas);
+    section._sinCos4ForceDraw = false;
+    return;
+  }
   const side = Math.min(cssW, cssH);
   const ox = (cssW - side) * 0.5;
   const oy = (cssH - side) * 0.5;
-  ctx.translate(ox, oy);
-  ctx.scale(side, side);
+  const X = (u) => ox + u * side;
+  const Y = (v) => oy + v * side;
+  const feather = 0.7;
 
   const cx = 0.5;
   const cy = 0.5;
@@ -239,32 +222,27 @@ function drawNodeGraphSinCos4DisplayInner(section) {
   const stroke = look.stroke;
   const tipR = look.tip;
   const hubR = look.hub;
+  const halfOf = (unitW) => Math.max(0, unitW * side * 0.5 - feather * 0.5);
 
-  ctx.beginPath();
-  ctx.arc(cx, cy, radius, 0, Math.PI * 2);
-  ctx.strokeStyle = "rgba(160, 190, 210, 0.35)";
-  ctx.lineWidth = stroke;
-  ctx.lineCap = "butt";
-  ctx.lineJoin = "round";
-  ctx.stroke();
+  const ring = [];
+  const n = 96;
+  for (let i = 0; i <= n; i += 1) {
+    const a = (i / n) * Math.PI * 2;
+    ring.push(X(cx + Math.cos(a) * radius), Y(cy - Math.sin(a) * radius));
+  }
+  nodeGraphGlLinesPolyline(batch, ring, halfOf(stroke), feather, [160 / 255, 190 / 255, 210 / 255, 0.35]);
 
-  // Rays: butt caps (no square tips) — position shown by round dots only.
+  // Rays; position shown by round dots.
   for (let i = 0; i < offsets.length; i += 1) {
     const ang = (phase + offsets[i]) * Math.PI * 2;
     const x = cx + Math.cos(ang) * radius;
     const y = cy - Math.sin(ang) * radius;
-    const color = NODE_GRAPH_SINCOS4_COLORS[i] || NODE_GRAPH_SINCOS4_COLORS[3];
-    ctx.beginPath();
-    ctx.moveTo(cx, cy);
-    ctx.lineTo(x, y);
-    ctx.strokeStyle = color;
-    ctx.lineWidth = stroke * (i === 0 ? 1.35 : 1);
-    ctx.lineCap = "butt";
-    ctx.stroke();
-    drawNodeGraphSinCos4FillDot(ctx, x, y, tipR * (i === 0 ? 1.15 : 1), color);
+    const color = nodeGraphGlLinesCss(NODE_GRAPH_SINCOS4_COLORS[i] || NODE_GRAPH_SINCOS4_COLORS[3]);
+    nodeGraphGlLinesSegment(batch, X(cx), Y(cy), X(x), Y(y), halfOf(stroke * (i === 0 ? 1.35 : 1)), feather, color);
+    drawNodeGraphSinCos4FillDot(batch, X(x), Y(y), Math.max(0, tipR * (i === 0 ? 1.15 : 1) * side - feather * 0.5), feather, color);
   }
-
-  drawNodeGraphSinCos4FillDot(ctx, cx, cy, hubR, "rgba(220, 230, 240, 0.9)");
+  drawNodeGraphSinCos4FillDot(batch, X(cx), Y(cy), Math.max(0, hubR * side - feather * 0.5), feather, [220 / 255, 230 / 255, 240 / 255, 0.9]);
+  if (!nodeGraphGlLinesEnd(batch) && typeof nodeGraphGlLinesFillBlack === "function") nodeGraphGlLinesFillBlack(canvas);
 
   section._sinCos4LaidOut = true;
   section._sinCos4ForceDraw = false;

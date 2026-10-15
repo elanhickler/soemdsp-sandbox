@@ -278,8 +278,10 @@ PUBLIC_SCRIPT_PATHS = (
     "./public/modules/rgbPicture/rgb-picture-display.js",
     "./public/modules/imageBurn/image-burn-ui.js",
     "./public/lib/visual/picture-device.js",
+    "./public/lib/visual/display-canvas.js",
     "./public/lib/visual/gl-line-renderer.js",
     "./public/modules/reverbEffect/sabrina-reverb-gl.js",
+    "./public/lib/visual/glyph-sdf-atlas.js",
     "./public/modules/numberReadout/number-readout-gl.js",
     "./public/lib/visual/color-widget-plane-gl.js",
     "./public/modules/imageBurn/image-burn-gl.js",
@@ -3319,7 +3321,7 @@ def require_xy_pad_interaction_contract() -> None:
         "drag.startY - ((event.clientY - drag.startClientY)",
         "nodeGraphXyPadApplyPointer(pad, event, drag)",
         "pad._xyPadPos",
-        "ctx.arc(px, py, puckR",
+        "nodeGraphGlLinesDot(ctx, px, py, Math.max(0, puckR",  # GL puck (was ctx.arc)
         "nodeGraphXyPadSnapUnit(pad, targetX, targetY)",
         "nodeGraphModuleScopeLatestOutputValue(nodeId, \"X\"",
         "function nodeGraphXyPadInputConnected(pad, port)",
@@ -3760,14 +3762,14 @@ def require_node_graph_mvp_contract() -> None:
         and 'rasterRgb: "Scan Grid"' in script_sources["./public/node-graph-module-definitions.js"]
         and 'gradientVectorscope: "Gradient Vectorscope"' in script_sources["./public/node-graph-module-definitions.js"]
         and "drawNodeGraphVectorRgbFaceItem" in script_sources["./public/modules/vectorRgb/vector-rgb-display.js"]
-        and "TraceRgbPoints.stamp" in script_sources["./public/modules/vectorRgb/vector-rgb-display.js"]
-        and "nodeGraphScopeDestFadeTowardPlate" in script_sources["./public/modules/vectorRgb/vector-rgb-display.js"]
+        and "trails.stampPoints" in script_sources["./public/modules/vectorRgb/vector-rgb-display.js"]
+        and "trails.presentTo" in script_sources["./public/modules/vectorRgb/vector-rgb-display.js"]
         and "TraceHistoryDraw" not in script_sources["./public/modules/vectorRgb/vector-rgb-display.js"]
         and "destFadeAmount" in script_sources["./public/lib/phosphor/phosphor-residual.js"]
         and "destGhostEraseAmount" in script_sources["./public/lib/phosphor/phosphor-residual.js"]
         and "_scopeDestHot" in script_sources["./public/node-graph-module-scope-paint-helpers.js"]
         and "nodeGraphScopeDestFadeGhostAfterStamps" in script_sources["./public/node-graph-module-scope-paint-helpers.js"]
-        and "nodeGraphScopeDestFadeGhostAfterStamps" in script_sources["./public/modules/vectorRgb/vector-rgb-display.js"]
+        and "TraceRgbPoints.stamp" not in script_sources["./public/modules/vectorRgb/vector-rgb-display.js"]
         and "function stamp(" in script_sources["./public/lib/trace/trace-rgb-points.js"]
         and "drawNodeGraphSinCos4DisplayInner" in script_sources["./public/modules/sineWavetable/sine-wavetable-display.js"]
         and "drawNodeGraphSinCos4FillDot" in script_sources["./public/modules/sineWavetable/sine-wavetable-display.js"]
@@ -18172,6 +18174,50 @@ def run_smoke(port: int, manifest: Path) -> None:
     )
 
 
+DISPLAY_GL_ALLOWLIST = ROOT / "scripts" / "display_gl_allowlist.txt"
+DISPLAY_GL_PATTERNS = (
+    ("getContext('2d')", re.compile(r"getContext\(\s*[\"']2d")),
+    ("canvas creation", re.compile(r"createElement\(\s*[\"']canvas|new\s+OffscreenCanvas")),
+    ("canvas sizing", re.compile(r"\b\w*[cC]anvas\w*\.(?:width|height)\s*=(?!=)")),
+    ("imageSmoothing", re.compile(r"imageSmoothing")),
+    ("image-rendering", re.compile(r"image-rendering|imageRendering")),
+    ("devicePixelRatio", re.compile(r"devicePixelRatio")),
+)
+
+
+def check_display_gl_contract() -> None:
+    """Module displays draw only through the shared WebGL2 renderer
+    (public/lib/visual/gl-line-renderer.js) on canvases from
+    public/lib/visual/display-canvas.js. Any public/modules/**/*.js with 2D
+    context, canvas creation/sizing, smoothing/image-rendering or
+    devicePixelRatio must be on scripts/display_gl_allowlist.txt with a reason.
+    The allowlist is shrink-only: new entries fail review, and an entry whose
+    file is clean must be deleted (the check fails until it is)."""
+    allowed: dict[str, str] = {}
+    for raw in DISPLAY_GL_ALLOWLIST.read_text(encoding="utf-8").splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        rel, sep, reason = line.partition("|")
+        require(bool(sep) and reason.strip(), f"display_gl_allowlist.txt entry needs 'path | reason': {line}")
+        allowed[rel.strip()] = reason.strip()
+    offenders: dict[str, list[str]] = {}
+    for path in sorted((ROOT / "public" / "modules").rglob("*.js")):
+        text = path.read_text(encoding="utf-8")
+        hits = [name for name, rx in DISPLAY_GL_PATTERNS if rx.search(text)]
+        if hits:
+            offenders[path.relative_to(ROOT).as_posix()] = hits
+    new = sorted(set(offenders) - set(allowed))
+    require(
+        not new,
+        "display GL contract: module display code must use display-canvas.js + gl-line-renderer.js "
+        "(no 2D context / canvas creation or sizing / smoothing / devicePixelRatio): "
+        + "; ".join(f"{p} ({', '.join(offenders[p])})" for p in new),
+    )
+    stale = sorted(set(allowed) - set(offenders))
+    require(not stale, "display_gl_allowlist.txt is shrink-only; delete clean entries: " + ", ".join(stale))
+
+
 def check_page_patch_index_covers_all_patches() -> None:
     """Every patches/**/*.json must be in patches/index.json, and every live
     demo must have its bare /<name> route, or the site 404s it."""
@@ -18205,6 +18251,7 @@ def main() -> None:
     args = parser.parse_args()
 
     check_page_patch_index_covers_all_patches()
+    check_display_gl_contract()
     run_smoke(args.port, Path(args.manifest).resolve())
     print("soemdsp-sandbox smoke test passed")
 

@@ -48,19 +48,16 @@ function nodeGraphVideoDelayEnsureCanvas(face, pixelRatio) {
   }
   let canvas = face.querySelector(":scope > .node-video-delay-canvas");
   if (!canvas) {
-    canvas = document.createElement("canvas");
-    canvas.className = "node-video-delay-canvas";
+    canvas = nodeGraphDisplayCanvasCreate("node-video-delay-canvas");
     canvas.setAttribute("aria-hidden", "true");
     face.appendChild(canvas);
   }
-  const cssW = Math.max(1, face.clientWidth || face.offsetWidth || 1);
-  const cssH = Math.max(1, face.clientHeight || face.offsetHeight || 1);
-  const dpr = Math.max(1, nodeGraphFiniteNumber(pixelRatio, nodeGraphFiniteNumber(window.devicePixelRatio, 1)));
-  const bw = Math.max(8, Math.round(cssW * dpr));
-  const bh = Math.max(8, Math.round(cssH * dpr));
-  if (canvas.width !== bw || canvas.height !== bh) {
-    canvas.width = bw;
-    canvas.height = bh;
+  // Shared sizing (layout css x dpr, never zoom); backing stays >= 8 px.
+  if (typeof nodeGraphDisplayCanvasSize === "function") {
+    const m = nodeGraphDisplayCanvasSize(face, canvas);
+    if (m && (m.width < 8 || m.height < 8) && typeof nodeGraphDisplayCanvasSizeCss === "function") {
+      nodeGraphDisplayCanvasSizeCss(canvas, Math.max(8, m.width) / m.pixelRatio, Math.max(8, m.height) / m.pixelRatio, 1);
+    }
   }
   canvas.style.position = "absolute";
   canvas.style.inset = "0";
@@ -97,7 +94,8 @@ function drawNodeGraphVideoDelayFaceItem(_renderer, item, pixelRatio) {
   if (!slot || !face) return;
   const canvas = nodeGraphVideoDelayEnsureCanvas(face, pixelRatio);
   if (!canvas) return;
-  const ctx = canvas.getContext("2d");
+  // 2D present surface for the shared-GL blit (display-canvas.js); no 2D drawing here.
+  const ctx = typeof nodeGraphDisplayCanvasPresentContext === "function" ? nodeGraphDisplayCanvasPresentContext(canvas) : null;
   if (!ctx) return;
   if (face._videoDelayOwnsClock && item?.fromFaceLoop !== true && item?.force !== true) {
     return;
@@ -119,14 +117,12 @@ function drawNodeGraphVideoDelayFaceItem(_renderer, item, pixelRatio) {
   const frozen = !nodeGraphVideoDelayCircuitLive();
   const host = canvas;
   if (typeof nodeGraphVideoDelayGlEnsure !== "function") {
-    ctx.fillStyle = "#000000";
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    nodeGraphGlLinesFillBlack(canvas);
     return;
   }
   const renderer = nodeGraphVideoDelayGlEnsure(host, canvas.width, canvas.height);
   if (!renderer) {
-    ctx.fillStyle = "#000000";
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    nodeGraphGlLinesFillBlack(canvas);
     return;
   }
   if (!frozen && typeof nodeGraphVideoDelayGlStep === "function") {
@@ -167,13 +163,8 @@ function wipeNodeGraphVideoDelayScreensToColdBoot(canvas) {
   if (host && typeof nodeGraphVideoDelayGlWipe === "function") {
     nodeGraphVideoDelayGlWipe(host);
   }
-  if (canvas?.getContext) {
-    const ctx = canvas.getContext("2d");
-    if (ctx) {
-      ctx.setTransform(1, 0, 0, 1, 0, 0);
-      ctx.fillStyle = "#000000";
-      ctx.fillRect(0, 0, canvas.width || 1, canvas.height || 1);
-    }
+  if (canvas && typeof nodeGraphGlLinesFillBlack === "function") {
+    nodeGraphGlLinesFillBlack(canvas);
   }
 }
 

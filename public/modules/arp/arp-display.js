@@ -2,6 +2,9 @@
 // Left = lowest arp note, right = highest. Only keys in the set are drawn.
 // No glow: fill + stroke only. Corners / rounding / edge spacing match Music Player.
 
+const ARP_GL_FONT = '"Cascadia Mono", "Cascadia Code", Consolas, sans-serif';
+const ARP_GL_BLACK = Object.freeze([0, 0, 0, 1]);
+
 function nodeGraphArpPitchLabel(midi) {
   if (typeof sequencerPitchLabel === "function") return sequencerPitchLabel(midi);
   const names = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
@@ -119,6 +122,77 @@ function nodeGraphArpKeysAddCornerRectPath(ctx, x, y, w, h, radius, squircle) {
   ctx.closePath();
 }
 
+/** Same outline as nodeGraphArpKeysAddCornerRectPath, as polygon points [x0,y0,...] (closed implicitly). */
+function nodeGraphArpKeysCornerRectPoints(x, y, w, h, radius, squircle, out = []) {
+  out.length = 0;
+  const r = Math.max(0, Math.min(radius, w * 0.5, h * 0.5));
+  if (!(w > 0) || !(h > 0)) return out;
+  if (r < 0.25) {
+    out.push(x, y, x + w, y, x + w, y + h, x, y + h);
+    return out;
+  }
+  const steps = 8;
+  const corner = (cx, cy, a0, a1) => {
+    for (let i = 0; i <= steps; i += 1) {
+      const a = a0 + (a1 - a0) * (i / steps);
+      const ca = Math.cos(a);
+      const sa = Math.sin(a);
+      if (squircle) {
+        out.push(cx + Math.sign(ca) * r * Math.sqrt(Math.abs(ca)), cy + Math.sign(sa) * r * Math.sqrt(Math.abs(sa)));
+      } else {
+        out.push(cx + ca * r, cy + sa * r);
+      }
+    }
+  };
+  corner(x + w - r, y + r, -Math.PI / 2, 0);
+  corner(x + w - r, y + h - r, 0, Math.PI / 2);
+  corner(x + r, y + h - r, Math.PI / 2, Math.PI);
+  corner(x + r, y + r, Math.PI, Math.PI * 1.5);
+  return out;
+}
+
+/** Fill the convex polygon `pts` clipped to xa <= x <= xb (fan triangles). */
+function nodeGraphArpKeysFillPolyBand(batch, pts, xa, xb, rgba, scratch) {
+  const clip = (src, dst, keep, edge) => {
+    dst.length = 0;
+    const n = src.length / 2;
+    for (let i = 0; i < n; i += 1) {
+      const ax = src[i * 2]; const ay = src[i * 2 + 1];
+      const j = (i + 1) % n;
+      const bx = src[j * 2]; const by = src[j * 2 + 1];
+      const ain = keep(ax); const bin = keep(bx);
+      if (ain) dst.push(ax, ay);
+      if (ain !== bin && bx !== ax) {
+        const t = (edge - ax) / (bx - ax);
+        dst.push(edge, ay + (by - ay) * t);
+      }
+    }
+    return dst;
+  };
+  const a = clip(pts, scratch[0], (x) => x >= xa, xa);
+  const b = clip(a, scratch[1], (x) => x <= xb, xb);
+  for (let i = 2; i + 3 < b.length; i += 2) {
+    nodeGraphGlLinesTriangle(batch, b[0], b[1], b[i], b[i + 1], b[i + 2], b[i + 3], rgba);
+  }
+}
+
+/** Closed outline stroke of polygon `pts` (device px). Square boxes stay crisp miters. */
+function nodeGraphArpKeysStrokePoly(batch, pts, strokeDev, rgba, closed) {
+  const half = strokeDev * 0.5;
+  if (pts.length === 8 && pts[1] === pts[3] && pts[0] === pts[6]) {
+    const x0 = pts[0]; const y0 = pts[1]; const x1 = pts[2]; const y1 = pts[5];
+    nodeGraphGlLinesRect(batch, x0 - half, y0 - half, x1 - x0 + strokeDev, strokeDev, rgba);
+    nodeGraphGlLinesRect(batch, x0 - half, y1 - half, x1 - x0 + strokeDev, strokeDev, rgba);
+    nodeGraphGlLinesRect(batch, x0 - half, y0 + half, strokeDev, Math.max(0, y1 - y0 - strokeDev), rgba);
+    nodeGraphGlLinesRect(batch, x1 - half, y0 + half, strokeDev, Math.max(0, y1 - y0 - strokeDev), rgba);
+    return;
+  }
+  closed.length = 0;
+  for (let i = 0; i < pts.length; i += 1) closed.push(pts[i]);
+  closed.push(pts[0], pts[1]);
+  nodeGraphGlLinesPolyline(batch, closed, Math.max(0, half - 0.35), 0.7, rgba);
+}
+
 function createNodeGraphArpKeysDisplay(nodeIdOrEl, _type) {
   const nodeId = nodeIdOrEl && typeof nodeIdOrEl === "object"
     ? String(nodeIdOrEl.dataset?.node || nodeIdOrEl.id || "")
@@ -127,8 +201,7 @@ function createNodeGraphArpKeysDisplay(nodeIdOrEl, _type) {
   section.className = "node-module-scope-window node-arp-keys-face";
   section.dataset.arpNode = nodeId;
   section.dataset.node = nodeId;
-  const canvas = document.createElement("canvas");
-  canvas.className = "node-arp-keys-canvas";
+  const canvas = nodeGraphDisplayCanvasCreate("node-arp-keys-canvas");
   section.append(canvas);
 
   let lastSig = "";
@@ -313,16 +386,26 @@ function createNodeGraphArpKeysDisplay(nodeIdOrEl, _type) {
     return mixCss(inactiveCss, previousCss, u);
   }
 
+  // Reused geometry scratch (no per-frame arrays for the outline / clip).
+  const glPts = [];
+  const glClip = [];
+  const glClosed = [];
+  const glBand = [[], []];
+  const arpTextOpts = { px: 12, weight: 400, family: ARP_GL_FONT, align: "center", baseline: "alphabetic", maxWidth: 0, rgba: null };
+
   function paint() {
     const { notes, play, projectOn } = faceState();
     const look = nodeGraphArpKeysLookForNodeId(nodeId);
-    const dpr = Math.max(1, window.devicePixelRatio || 1);
+    // Shared sizing (css x dpr, never zoom); drawing is WebGL2 via gl-line-renderer.
+    const m = typeof nodeGraphDisplayCanvasSize === "function" ? nodeGraphDisplayCanvasSize(section, canvas) : null;
+    if (!m) return;
+    const dpr = Math.max(1, m.pixelRatio || 1);
     const zoom = Math.max(0.0001, typeof nodeGraphZoom === "function" ? nodeGraphZoom() : 1);
     // Zoom-in is a CSS scale of this bitmap (nearest above 2.5). Do not redraw
     // for it. Zoom-out quantizes the stroke so a 1px line does not vanish.
     const zoomOut = zoom < 1 ? zoom : 1;
-    const bw = Math.max(1, Math.round((canvas.clientWidth || 1) * dpr));
-    const bh = Math.max(1, Math.round((canvas.clientHeight || 1) * dpr));
+    const bw = Math.max(1, m.width);
+    const bh = Math.max(1, m.height);
     const lookSig = [
       look.strokeColor,
       look.strokeBrightness,
@@ -367,19 +450,23 @@ function createNodeGraphArpKeysDisplay(nodeIdOrEl, _type) {
       }
     }
     const sig = `${bw}x${bh}:z${zoomQuant}:${play}:${projectOn ? 1 : 0}:${notes.join(",")}:${lookSig}`;
-    if (!fading && sig === lastSig && canvas.width === bw && canvas.height === bh) return;
+    if (!fading && sig === lastSig) return;
     lastSig = sig;
-    if (canvas.width !== bw || canvas.height !== bh) {
-      canvas.width = bw;
-      canvas.height = bh;
-      layoutCache = null;
-    }
-    const ctx = canvas.getContext("2d");
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.imageSmoothingEnabled = false;
     layoutCache = true;
-    ctx.fillStyle = "#000000";
-    ctx.fillRect(0, 0, bw, bh);
+    const batch = typeof nodeGraphGlLinesBegin === "function"
+      ? nodeGraphGlLinesBegin(canvas, ARP_GL_BLACK)
+      : null;
+    if (!batch) {
+      lastSig = "";
+      if (typeof nodeGraphGlLinesFillBlack === "function") nodeGraphGlLinesFillBlack(canvas);
+      return;
+    }
+    const finish = () => {
+      if (!nodeGraphGlLinesEnd(batch)) {
+        lastSig = "";
+        if (typeof nodeGraphGlLinesFillBlack === "function") nodeGraphGlLinesFillBlack(canvas);
+      }
+    };
     const tone = (color, bright, sat) => (
       typeof nodeGraphArpKeysHueCss === "function"
         ? nodeGraphArpKeysHueCss(color, bright, 1, sat, 165)
@@ -418,23 +505,12 @@ function createNodeGraphArpKeysDisplay(nodeIdOrEl, _type) {
     const bottom = yBox.c1;
     const boxW = Math.max(0, right - left);
     const boxH = Math.max(0, bottom - top);
-    ctx.strokeStyle = strokeCss;
-    ctx.lineWidth = strokeDev;
-    ctx.lineCap = "butt";
-    ctx.lineJoin = "miter";
+    const strokeRgba = nodeGraphGlLinesCss(strokeCss);
+    const outline = nodeGraphArpKeysCornerRectPoints(left, top, boxW, boxH, Math.max(0, radius - half), squircle, glPts);
     if (!notes.length) {
       hitLayout = null;
-      ctx.beginPath();
-      nodeGraphArpKeysAddCornerRectPath(
-        ctx,
-        left,
-        top,
-        boxW,
-        boxH,
-        Math.max(0, radius - half),
-        squircle,
-      );
-      ctx.stroke();
+      nodeGraphArpKeysStrokePoly(batch, outline, strokeDev, strokeRgba, glClosed);
+      finish();
       return;
     }
     const n = notes.length;
@@ -443,40 +519,23 @@ function createNodeGraphArpKeysDisplay(nodeIdOrEl, _type) {
       xs.push(Math.round(x0 + (i * innerW) / n));
     }
     hitLayout = { notes, xs, y0, y1, width: bw, height: bh };
-    ctx.save();
-    ctx.beginPath();
-    nodeGraphArpKeysAddCornerRectPath(ctx, x0, y0, innerW, innerH, radius, squircle);
-    ctx.clip();
+    // Cell fills clipped to the rounded face (convex polygon band per cell).
+    const clipPoly = nodeGraphArpKeysCornerRectPoints(x0, y0, innerW, innerH, radius, squircle, glClip);
     for (let i = 0; i < n; i += 1) {
       const midi = notes[i];
       const on = play === midi;
-      ctx.fillStyle = on
+      const fillCss = on
         ? activeFillCss
         : fillAfterPlay(midi, previousCss, inactiveFillCss);
-      ctx.fillRect(xs[i], y0, Math.max(0, xs[i + 1] - xs[i]), innerH);
+      if (xs[i + 1] > xs[i]) nodeGraphArpKeysFillPolyBand(batch, clipPoly, xs[i], xs[i + 1], nodeGraphGlLinesCss(fillCss), glBand);
     }
+    // Dividers: butt-capped strokeDev-wide bars, top..bottom (inside the clip).
     const odd = (strokeDev & 1) === 1;
     for (let i = 1; i < n; i += 1) {
       const ax = xs[i] + (odd ? 0.5 : 0);
-      ctx.beginPath();
-      ctx.moveTo(ax, top);
-      ctx.lineTo(ax, bottom);
-      ctx.stroke();
+      nodeGraphGlLinesRect(batch, ax - half, Math.max(y0, top), strokeDev, Math.max(0, Math.min(y1, bottom) - Math.max(y0, top)), strokeRgba);
     }
-    ctx.restore();
-    ctx.beginPath();
-    nodeGraphArpKeysAddCornerRectPath(
-      ctx,
-      left,
-      top,
-      boxW,
-      boxH,
-      Math.max(0, radius - half),
-      squircle,
-    );
-    ctx.stroke();
-    ctx.textAlign = "center";
-    ctx.textBaseline = "alphabetic";
+    nodeGraphArpKeysStrokePoly(batch, outline, strokeDev, strokeRgba, glClosed);
     const cellTop = top + half;
     const cellBot = bottom - half;
     const cellMidY = (cellTop + cellBot) * 0.5;
@@ -488,23 +547,18 @@ function createNodeGraphArpKeysDisplay(nodeIdOrEl, _type) {
       const maxW = Math.max(4, cellW - strokeDev * 2);
       const cellH = Math.max(1, cellBot - cellTop);
       let fontPx = Math.max(4, Math.min(cellW * 0.52, cellH * 0.46));
-      ctx.font = `${fontPx}px "Cascadia Mono", "Cascadia Code", Consolas, sans-serif`;
-      let metrics = ctx.measureText(label);
-      if (metrics.width > maxW && metrics.width > 0) {
-        fontPx = Math.max(4, fontPx * (maxW / metrics.width));
-        ctx.font = `${fontPx}px "Cascadia Mono", "Cascadia Code", Consolas, sans-serif`;
-        metrics = ctx.measureText(label);
+      const width = nodeGraphGlLinesMeasureText(label, fontPx, ARP_GL_FONT, 400);
+      if (width > maxW && width > 0) {
+        fontPx = Math.max(4, fontPx * (maxW / width));
       }
-      const ascent = Number.isFinite(metrics.actualBoundingBoxAscent)
-        ? metrics.actualBoundingBoxAscent
-        : fontPx * 0.72;
-      const descent = Number.isFinite(metrics.actualBoundingBoxDescent)
-        ? metrics.actualBoundingBoxDescent
-        : fontPx * 0.16;
-      const baseline = cellMidY + (ascent - descent) * 0.5;
-      ctx.fillStyle = on ? activeTextCss : inactiveTextCss;
-      ctx.fillText(label, (xs[i] + xs[i + 1]) * 0.5, baseline, maxW);
+      // Pitch labels are caps/digits/#: ascent ~0.72 em, descent ~0.16 em.
+      const baseline = cellMidY + (fontPx * 0.72 - fontPx * 0.16) * 0.5;
+      arpTextOpts.px = fontPx;
+      arpTextOpts.maxWidth = maxW;
+      arpTextOpts.rgba = nodeGraphGlLinesCss(on ? activeTextCss : inactiveTextCss);
+      nodeGraphGlLinesText(batch, label, (xs[i] + xs[i + 1]) * 0.5, baseline, arpTextOpts);
     }
+    finish();
   }
 
   let rafId = 0;

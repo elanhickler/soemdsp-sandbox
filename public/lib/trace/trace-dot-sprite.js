@@ -501,6 +501,8 @@
       }
       return ensure(radius, radius, blur01, shapeOrSquircle, shapeParam);
     },
+    // Explicit rx/ry sprite (white coverage mask) for GL tinted quads (RGB Shape).
+    ensureRect: (rx, ry, blur01, shape = "circle", shapeParam = 0.5) => ensure(rx, ry, blur01, shape, shapeParam),
     draw,
     innerOuter,
     extents: resolveExtents,

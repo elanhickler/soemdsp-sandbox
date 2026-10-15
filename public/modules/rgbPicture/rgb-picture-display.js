@@ -62,22 +62,6 @@ function nodeGraphRgbPictureCanvasForSlot(slot) {
     || null;
 }
 
-function syncNodeGraphRgbPictureCanvas(canvas, face, pixelRatio) {
-  if (!canvas || !face) {
-    return false;
-  }
-  const dpr = Math.max(1, Number(pixelRatio) || window.devicePixelRatio || 1);
-  const w = Math.max(1, Math.round(face.clientWidth * dpr));
-  const h = Math.max(1, Math.round(face.clientHeight * dpr));
-  if (canvas.width !== w || canvas.height !== h) {
-    canvas.width = w;
-    canvas.height = h;
-  }
-  canvas.style.width = "100%";
-  canvas.style.height = "100%";
-  return w > 0 && h > 0;
-}
-
 function nodeGraphRgbPictureReadParam(nodeId, key, fallback) {
   if (typeof nodeGraphReadNodeNumber === "function") {
     const n = nodeGraphReadNodeNumber(nodeId, key);
@@ -118,24 +102,16 @@ function paintNodeGraphRgbPictureFace(canvas, face, nodeId) {
   if (!canvas || !face || !nodeId) {
     return false;
   }
-  const pixelRatio = Number(nodeGraphModuleScopeState?.backingPixelRatio)
-    || Math.max(1, window.devicePixelRatio || 1);
-  if (!syncNodeGraphRgbPictureCanvas(canvas, face, pixelRatio)) {
-    return false;
-  }
-  const ctx = canvas.getContext("2d");
-  if (!ctx) {
+  // Shared sizing (css x dpr, never zoom); drawing is WebGL2 via gl-line-renderer.
+  const m = typeof nodeGraphDisplayCanvasSize === "function" ? nodeGraphDisplayCanvasSize(face, canvas) : null;
+  if (!m || !(m.width > 0) || !(m.height > 0)) {
     return false;
   }
   const patchNode = typeof nodeGraphPatchNode === "function" ? nodeGraphPatchNode(nodeId) : null;
   const settings = nodeGraphRgbPictureSettingsForNode(patchNode);
-  const w = canvas.width;
-  const h = canvas.height;
+  const w = m.width;
+  const h = m.height;
   const bg = settings.background || "#000000";
-  ctx.setTransform(1, 0, 0, 1, 0, 0);
-  ctx.clearRect(0, 0, w, h);
-  ctx.fillStyle = bg;
-  ctx.fillRect(0, 0, w, h);
 
   const width = Math.max(0, nodeGraphRgbPictureReadParam(nodeId, "width", 1));
   const height = Math.max(0, nodeGraphRgbPictureReadParam(nodeId, "height", 1));
@@ -147,14 +123,27 @@ function paintNodeGraphRgbPictureFace(canvas, face, nodeId) {
   const halfH = Math.max(0.5, (height * 0.5) * (h * 0.5));
 
   const img = nodeGraphRgbPictureEnsureImage(face, settings.dataUrl);
-  if (img?.complete && img.naturalWidth > 0) {
-    ctx.drawImage(
-      img,
-      cx - halfW,
-      cy - halfH,
-      halfW * 2,
-      halfH * 2,
-    );
+  const ready = Boolean(img?.complete && img.naturalWidth > 0);
+  if (face.dataset) {
+    face.dataset.lightStrength = settings.dataUrl ? "1" : "0";
+    face.classList.toggle("has-image", Boolean(settings.dataUrl));
+  }
+  // Static picture: skip the redraw (and the texture upload) when nothing moved.
+  const sig = `${w}x${h}|${bg}|${cx.toFixed(2)}|${cy.toFixed(2)}|${halfW.toFixed(2)}|${halfH.toFixed(2)}|${ready ? img.src.length : 0}|${settings.dataUrl ? 1 : 0}`;
+  if (face._rgbPictureGlSig === sig && ready) {
+    return true;
+  }
+
+  const batch = typeof nodeGraphGlLinesBegin === "function"
+    ? nodeGraphGlLinesBegin(canvas, nodeGraphGlLinesCss(bg))
+    : null;
+  if (!batch) {
+    face._rgbPictureGlSig = "";
+    if (typeof nodeGraphGlLinesFillBlack === "function") nodeGraphGlLinesFillBlack(canvas);
+    return false;
+  }
+  if (ready) {
+    nodeGraphGlLinesImage(batch, img, cx - halfW, cy - halfH, halfW * 2, halfH * 2, { nearest: false, cache: true });
   } else if (settings.dataUrl && img) {
     // Draw again when decode finishes.
     img.onload = () => {
@@ -164,17 +153,21 @@ function paintNodeGraphRgbPictureFace(canvas, face, nodeId) {
     };
   } else {
     // Empty plate hint
-    ctx.fillStyle = "rgba(127, 199, 217, 0.35)";
-    ctx.font = `${Math.max(10, Math.round(Math.min(w, h) * 0.06))}px Consolas, monospace`;
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillText("Load image in Display Settings", w * 0.5, h * 0.5);
+    nodeGraphGlLinesText(batch, "Load image in Display Settings", w * 0.5, h * 0.5, {
+      px: Math.max(10, Math.round(Math.min(w, h) * 0.06)),
+      weight: 400,
+      family: "Consolas, monospace",
+      align: "center",
+      baseline: "middle",
+      rgba: [127 / 255, 199 / 255, 217 / 255, 0.35],
+    });
   }
-
-  if (face.dataset) {
-    face.dataset.lightStrength = settings.dataUrl ? "1" : "0";
-    face.classList.toggle("has-image", Boolean(settings.dataUrl));
+  if (!nodeGraphGlLinesEnd(batch)) {
+    face._rgbPictureGlSig = "";
+    if (typeof nodeGraphGlLinesFillBlack === "function") nodeGraphGlLinesFillBlack(canvas);
+    return false;
   }
+  face._rgbPictureGlSig = ready ? sig : "";
   return true;
 }
 

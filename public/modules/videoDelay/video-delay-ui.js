@@ -8,8 +8,7 @@ function createNodeGraphVideoDelayBody(node, type) {
   face.setAttribute("aria-label", `${nodeGraphNodeDisplayName(node)} video delay`);
   face.style.cssText = "position:relative;width:100%;height:100%;overflow:hidden;background:#000000;";
 
-  const canvas = document.createElement("canvas");
-  canvas.className = "node-video-delay-canvas";
+  const canvas = nodeGraphDisplayCanvasCreate("node-video-delay-canvas");
   canvas.setAttribute("aria-hidden", "true");
   canvas.style.cssText = "display:block;position:absolute;inset:0;width:100%;height:100%;z-index:5;pointer-events:none;";
   face.append(canvas);
@@ -74,7 +73,7 @@ registerNodeGraphChromelessModuleUi("videoDelay", {
             fromFaceLoop: true,
             screenElement: host,
             slot: slot || { nodeId, scopeElement: host, type },
-          }, Math.max(1, window.devicePixelRatio || 1));
+          }, 1); // sizing reads dpr in display-canvas.js
         },
       });
     }

@@ -45,10 +45,6 @@ function drawNodeGraphEnsembleCloudItem(_renderer, item, pixelRatio) {
   if (!syncNodeGraphModuleScopeLocalFallbackCanvas(canvas, screenElement, pixelRatio, density)) {
     return;
   }
-  const context = canvas.getContext("2d");
-  if (!context) {
-    return;
-  }
   const delays = typeof nodeGraphDataBus !== "undefined"
     ? nodeGraphDataBus.get(nodeGraphDataBusKey(String(nodeId), "Delays"))
     : null;
@@ -82,37 +78,47 @@ function drawNodeGraphEnsembleCloudItem(_renderer, item, pixelRatio) {
   const sparkW = Math.max(2, ink(2));
   const sparkH = Math.max(1, scrollPx);
 
-  context.save();
-  context.setTransform(1, 0, 0, 1, 0, 0);
-  context.imageSmoothingEnabled = false;
-  if (scrollPx > 0) {
-    context.globalCompositeOperation = "copy";
-    context.drawImage(canvas, 0, -scrollPx);
-    context.globalCompositeOperation = "source-over";
-    context.fillStyle = bgHex;
-    context.fillRect(0, h - scrollPx, w, scrollPx);
+  // History of spark rows (device px, y = top of row). The old 2D path scrolled
+  // the canvas into itself; GL redraws the whole history each frame instead.
+  let rows = canvas._ensembleRows;
+  if (!Array.isArray(rows) || canvas._ensembleRowsW !== w || canvas._ensembleRowsH !== h) {
+    rows = [];
+    canvas._ensembleRowsW = w;
+    canvas._ensembleRowsH = h;
   }
-
-  if (!Array.isArray(delays) || !delays.length || scrollPx <= 0) {
-    context.restore();
+  if (scrollPx > 0) {
+    for (const row of rows) row.y -= scrollPx;
+    while (rows.length && rows[0].y + rows[0].h <= 0) rows.shift();
+    if (Array.isArray(delays) && delays.length) {
+      // Native Delays are delay01 = 0.5 + 0.5 * the pre-Depth bipolar signal.
+      // Keep the face independent of the audio Depth parameter.
+      const sparks = [];
+      for (let i = 0; i < delays.length; i += 1) {
+        const x01 = Math.max(0, Math.min(1, Number(delays[i]) || 0));
+        const pan = Math.max(0, Math.min(1, Number(pans && pans[i]) || 0.5));
+        sparks.push(Math.round(x01 * Math.max(1, w - sparkW)), (242 * (1 - pan)) / 255, (77 + 178 * pan) / 255);
+      }
+      rows.push({ y: h - scrollPx, h: sparkH, sparks });
+    }
+  }
+  canvas._ensembleRows = rows;
+  if (scrollPx <= 0 && canvas._ensembleDrawn) {
     return;
   }
-
-  context.globalCompositeOperation = "lighter";
-  // Native Delays are delay01 = 0.5 + 0.5 * the pre-Depth bipolar signal.
-  // Keep the face independent of the audio Depth parameter.
-  const y = h - scrollPx;
-  const n = delays.length;
-  for (let i = 0; i < n; i += 1) {
-    const x01 = Math.max(0, Math.min(1, Number(delays[i]) || 0));
-    const pan = Math.max(0, Math.min(1, Number(pans && pans[i]) || 0.5));
-    const x = Math.round(x01 * Math.max(1, w - sparkW));
-    const r = Math.round(242 * (1 - pan));
-    const b = Math.round(77 + (178 * pan));
-    context.fillStyle = `rgb(${r},40,${b})`;
-    context.fillRect(x, y, sparkW, sparkH);
+  const batch = typeof nodeGraphGlLinesBegin === "function" ? nodeGraphGlLinesBegin(canvas, [0, 0, 0, 1]) : null;
+  if (!batch) {
+    if (typeof nodeGraphGlLinesFillBlack === "function") nodeGraphGlLinesFillBlack(canvas);
+    return;
   }
-  context.restore();
+  for (const row of rows) {
+    const s = row.sparks;
+    for (let i = 0; i < s.length; i += 3) {
+      nodeGraphGlLinesRect(batch, s[i], row.y, sparkW, row.h, [s[i + 1], 40 / 255, s[i + 2], 1]);
+    }
+  }
+  // "lighter" in the 2D path -> additive blend.
+  canvas._ensembleDrawn = nodeGraphGlLinesEnd(batch, "add");
+  if (!canvas._ensembleDrawn && typeof nodeGraphGlLinesFillBlack === "function") nodeGraphGlLinesFillBlack(canvas);
 }
 
 if (typeof nodeGraphModuleScopeCustomRenderers === "object" && nodeGraphModuleScopeCustomRenderers) {

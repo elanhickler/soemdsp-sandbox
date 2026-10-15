@@ -150,6 +150,7 @@ function nodeGraphLimiterGainFaceLineCss(settings) {
 
 function drawNodeGraphLimiterGainFaceItem(renderer, item, pixelRatio) {
   // Instant Waterfall owns the Limiter Gain face (scroll strip, not remesh).
+  // The old Canvas2D history-line fallback was removed (WebGL-only displays).
   if (typeof drawNodeGraphTraceDisplayItem === "function") {
     drawNodeGraphTraceDisplayItem(renderer, item, pixelRatio);
     return;
@@ -158,90 +159,7 @@ function drawNodeGraphLimiterGainFaceItem(renderer, item, pixelRatio) {
     drawNodeGraphTraceDisplayCanvasItem(item, pixelRatio);
     return;
   }
-  const slot = item?.slot;
-  const screenElement = item?.screenElement || slot?.scopeElement;
-  if (!slot || !screenElement) {
-    return;
-  }
-  if (
-    typeof nodeGraphElementInSkippedContentVisibility === "function"
-    && nodeGraphElementInSkippedContentVisibility(screenElement)
-  ) {
-    return;
-  }
-  const canvas = typeof nodeGraphModuleScopeLocalFallbackCanvas === "function"
-    ? nodeGraphModuleScopeLocalFallbackCanvas(slot)
-    : null;
-  if (
-    !canvas
-    || typeof syncNodeGraphModuleScopeLocalFallbackCanvas !== "function"
-    || !syncNodeGraphModuleScopeLocalFallbackCanvas(canvas, screenElement, pixelRatio)
-  ) {
-    return;
-  }
-  const ctx = canvas.getContext("2d");
-  if (!ctx) {
-    return;
-  }
-
-  const node = typeof nodeGraphModuleScopeNodeForSlot === "function"
-    ? nodeGraphModuleScopeNodeForSlot(slot)
-    : (typeof nodeGraphPatchNode === "function" ? nodeGraphPatchNode(slot.nodeId) : null);
-  const settings = nodeGraphLimiterGainFaceSettingsForNode(node);
-  const bg = settings.backgroundColor || nodeGraphLimiterGainFaceSettingsDefaults.backgroundColor;
-  const w = canvas.width;
-  const h = canvas.height;
-  ctx.save();
-  ctx.setTransform(1, 0, 0, 1, 0, 0);
-  ctx.globalCompositeOperation = "source-over";
-  ctx.fillStyle = bg;
-  ctx.fillRect(0, 0, w, h);
-
-  const buffer = item?.buffer;
-  const available = typeof nodeGraphScopeAvailableSampleCount === "function"
-    ? nodeGraphScopeAvailableSampleCount(buffer)
-    : (buffer?.length || 0);
-  const rate = typeof nodeGraphScopeSampleRate === "function"
-    ? nodeGraphScopeSampleRate(buffer)
-    : 12000;
-  const want = Math.max(2, Math.ceil(Math.max(0.05, settings.historySeconds) * Math.max(1, rate)));
-  const count = Math.min(available, want);
-  const start = Math.max(0, (buffer?.length || 0) - count);
-  const columns = Math.max(2, w);
-  ctx.beginPath();
-  if (!buffer?.length || count < 2) {
-    const y = 0.5;
-    ctx.moveTo(0.5, y);
-    ctx.lineTo(w - 0.5, y);
-  } else {
-    for (let x = 0; x < columns; x += 1) {
-      const t = columns <= 1 ? 0 : x / (columns - 1);
-      const index = start + Math.min(count - 1, Math.floor(t * (count - 1)));
-      const gain = Math.max(0, Math.min(1, nodeGraphFiniteNumber(buffer[index])));
-      const y = (1 - gain) * (h - 1) + 0.5;
-      if (x === 0) {
-        ctx.moveTo(x + 0.5, y);
-      } else {
-        ctx.lineTo(x + 0.5, y);
-      }
-    }
-  }
-  const dpr = Math.max(1, nodeGraphFiniteNumber(pixelRatio, 1));
-  ctx.strokeStyle = nodeGraphLimiterGainFaceLineCss(settings);
-  ctx.lineWidth = Math.max(1, settings.lineThickness * dpr);
-  ctx.lineJoin = "round";
-  ctx.lineCap = "round";
-  ctx.stroke();
-  ctx.restore();
-
-  let latest = 1;
-  if (buffer?.length) {
-    latest = Math.max(0, Math.min(1, nodeGraphFiniteNumber(buffer[buffer.length - 1])));
-  }
-  const reduction = 1 - latest;
-  if (typeof nodeGraphModuleScopeMarkScreenLit === "function") {
-    nodeGraphModuleScopeMarkScreenLit(screenElement, Math.max(0.12, 0.18 + reduction * 0.75));
-  }
+  // No other path: Instant Waterfall (shared WebGL) is the only Gain face renderer.
 }
 
 if (typeof nodeGraphModuleScopeCustomRenderers === "object" && nodeGraphModuleScopeCustomRenderers) {

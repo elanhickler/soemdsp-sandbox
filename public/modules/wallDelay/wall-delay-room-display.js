@@ -272,8 +272,7 @@ function createNodeGraphWallRoomDisplay(nodeId, type) {
   section.className = "node-wall-room-display";
   section.dataset.node = nodeId;
   section.dataset.nodeType = type;
-  const canvas = document.createElement("canvas");
-  canvas.className = "node-wall-room-canvas";
+  const canvas = nodeGraphDisplayCanvasCreate("node-wall-room-canvas");
   section.append(canvas);
   requestAnimationFrame(() => drawNodeGraphWallRoomDisplay(section));
   return section;
@@ -285,27 +284,20 @@ function drawNodeGraphWallRoomDisplay(section) {
   if (!node || !canvas) {
     return;
   }
-  const pixelRatio = window.devicePixelRatio || 1;
-  const zoom = Math.max(0.01, nodeGraphFiniteNumber(nodeGraphMvp?.zoom, 1));
-  const rect = section.getBoundingClientRect();
-  const width = Math.max(1, nodeGraphFiniteNumber(section.clientWidth || section.offsetWidth || 0, rect.width) / zoom);
-  const height = Math.max(1, nodeGraphFiniteNumber(section.clientHeight || section.offsetHeight || 0, rect.height) / zoom);
-  const canvasWidth = Math.max(1, Math.round(width * pixelRatio));
-  const canvasHeight = Math.max(1, Math.round(height * pixelRatio));
-  if (canvas.width !== canvasWidth) {
-    canvas.width = canvasWidth;
-  }
-  if (canvas.height !== canvasHeight) {
-    canvas.height = canvasHeight;
-  }
-  const context = canvas.getContext("2d");
-  if (!context) {
+  // Shared sizing (css x dpr, never zoom); drawing is WebGL2 via gl-line-renderer.
+  const m = typeof nodeGraphDisplayCanvasSize === "function" ? nodeGraphDisplayCanvasSize(section, canvas) : null;
+  if (!m) {
     return;
   }
-  context.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
-  context.clearRect(0, 0, width, height);
-  context.fillStyle = "rgba(2, 6, 9, 0.88)";
-  context.fillRect(0, 0, width, height);
+  const width = Math.max(1, m.cssWidth);
+  const height = Math.max(1, m.cssHeight);
+  const batch = typeof nodeGraphGlLinesBegin === "function"
+    ? nodeGraphGlLinesBegin(canvas, [2 / 255, 6 / 255, 9 / 255, 0.88], { scale: m.pixelRatio })
+    : null;
+  if (!batch) {
+    if (typeof nodeGraphGlLinesFillBlack === "function") nodeGraphGlLinesFillBlack(canvas);
+    return;
+  }
 
   const preset = clampNodeSliderValue(Math.round(nodeGraphFiniteNumber(node.params?.roomPreset)), 0, 2);
   const seed = nodeGraphFiniteNumber(node.params?.roomSeed);
@@ -358,17 +350,17 @@ function drawNodeGraphWallRoomDisplay(section) {
 
   for (const ear of earSamples) {
     const [r, g, b] = ear.color;
+    const r1 = r / 255;
+    const g1 = g / 255;
+    const b1 = b / 255;
     const earOrigin = project(ear.rotatedListener);
     const order = ear.rotatedPoints.map((point, index) => index).sort((a, b2) => ear.rotatedPoints[a][2] - ear.rotatedPoints[b2][2]);
 
-    context.strokeStyle = `rgba(${r}, ${g}, ${b}, 0.16)`;
-    context.lineWidth = 1;
+    // 1 px rays (same core/feather split as the other GL faces).
+    const ray = [r1, g1, b1, 0.16];
     for (const index of order) {
       const [x, y] = project(ear.rotatedPoints[index]);
-      context.beginPath();
-      context.moveTo(earOrigin[0], earOrigin[1]);
-      context.lineTo(x, y);
-      context.stroke();
+      nodeGraphGlLinesSegment(batch, earOrigin[0], earOrigin[1], x, y, 0.15, 0.7, ray);
     }
 
     for (const index of order) {
@@ -376,24 +368,24 @@ function drawNodeGraphWallRoomDisplay(section) {
       const [x, y] = project(point);
       const depth = clampNodeSliderValue((point[2] + 1.3) / 2.6, 0, 1);
       const radius = 1 + depth * 1.5;
-      context.fillStyle = `rgba(${r}, ${g}, ${b}, ${(0.4 + depth * 0.5).toFixed(3)})`;
-      context.beginPath();
-      context.arc(x, y, radius, 0, Math.PI * 2);
-      context.fill();
+      nodeGraphGlLinesDot(batch, x, y, Math.max(0, radius - 0.35), 0.7, [r1, g1, b1, 0.4 + depth * 0.5]);
     }
 
     // Ear marker itself, drawn brighter and larger so it reads as the
     // listener position rather than just another wall sample.
-    context.fillStyle = `rgb(${r}, ${g}, ${b})`;
-    context.beginPath();
-    context.arc(earOrigin[0], earOrigin[1], 2.5, 0, Math.PI * 2);
-    context.fill();
+    nodeGraphGlLinesDot(batch, earOrigin[0], earOrigin[1], 2.15, 0.7, [r1, g1, b1, 1]);
   }
 
-  context.fillStyle = "rgba(229, 238, 242, 0.74)";
-  context.font = "600 10px system-ui, sans-serif";
   const roomLabel = nodeGraphWallRoomPresetLabels[preset] || "Room";
   const widthMeters = (roomWidthMeters * 2).toFixed(1);
   const heightMeters = (roomHeightMeters * 2).toFixed(1);
-  context.fillText(`${roomLabel} · ${widthMeters}m × ${heightMeters}m`, 8, 14);
+  nodeGraphGlLinesText(batch, `${roomLabel} · ${widthMeters}m × ${heightMeters}m`, 8, 14, {
+    px: 10,
+    weight: 600,
+    family: "system-ui, sans-serif",
+    align: "left",
+    baseline: "alphabetic",
+    rgba: [229 / 255, 238 / 255, 242 / 255, 0.74],
+  });
+  if (!nodeGraphGlLinesEnd(batch) && typeof nodeGraphGlLinesFillBlack === "function") nodeGraphGlLinesFillBlack(canvas);
 }

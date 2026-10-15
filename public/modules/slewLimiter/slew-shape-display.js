@@ -117,8 +117,7 @@ function createNodeGraphSlewShapeDisplay(nodeId, type = "slewLimiter") {
   section.dataset.node = id;
   section.dataset.nodeType = String(type || "slewLimiter");
   section.dataset.parameterVisual = "true";
-  const canvas = document.createElement("canvas");
-  canvas.className = "node-filter-curve-canvas node-slew-shape-canvas";
+  const canvas = nodeGraphDisplayCanvasCreate("node-filter-curve-canvas node-slew-shape-canvas");
   section.append(canvas);
   // Param-driven (no animation): repaint on param sync and resize only.
   section.syncFromParameters = () => {

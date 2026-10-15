@@ -347,7 +347,7 @@ function nodeGraphRgbFractalGlHexToRgb01(hex, fallback = [0, 0, 0]) {
 
 /**
  * Acquire or rebuild WebGL state for a face canvas.
- * Returns null if WebGL unavailable (caller uses CPU fallback).
+ * Returns null if WebGL unavailable (caller shows black + logs).
  */
 function nodeGraphRgbFractalGlEnsure(canvas) {
   if (!canvas) {
@@ -504,7 +504,7 @@ function nodeGraphRgbFractalGlEnsure(canvas) {
     nodeGraphRgbFractalGlStates.set(canvas, state);
     return state;
   } catch (err) {
-    console.warn("[Soft Fractal] WebGL init failed, using CPU fallback", err);
+    console.error("[Soft Fractal] WebGL init failed; face shows black", err);
     nodeGraphRgbFractalGlStates.set(canvas, {
       failed: true,
       rev: NODE_GRAPH_RGB_FRACTAL_GL_REV,
@@ -711,13 +711,11 @@ function nodeGraphRgbFractalGlClearPlate(canvas, plateHex = "#000000") {
     return false;
   }
   const rgb = nodeGraphRgbFractalGlHexToRgb01(plateHex);
-  const ctx = canvas.getContext("2d");
-  if (!ctx) return false;
-  const w = Math.max(1, canvas.width | 0);
-  const h = Math.max(1, canvas.height | 0);
-  ctx.setTransform(1, 0, 0, 1, 0, 0);
-  ctx.fillStyle = `rgb(${Math.round(rgb[0] * 255)}, ${Math.round(rgb[1] * 255)}, ${Math.round(rgb[2] * 255)})`;
-  ctx.fillRect(0, 0, w, h);
+  const batch = typeof nodeGraphGlLinesBegin === "function"
+    ? nodeGraphGlLinesBegin(canvas, [rgb[0], rgb[1], rgb[2], 1], { publishNodeId: "" })
+    : null;
+  if (!batch) return false;
+  nodeGraphGlLinesEnd(batch);
   return true;
 }
 

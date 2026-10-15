@@ -16,8 +16,7 @@ function createNodeGraphAdditiveBlasterDisplay(nodeId, type = "additiveBlaster")
   if (typeof tagNodeGraphModuleBand === "function") {
     tagNodeGraphModuleBand(section, "face");
   }
-  const canvas = document.createElement("canvas");
-  canvas.className = "node-additive-blaster-canvas";
+  const canvas = nodeGraphDisplayCanvasCreate("node-additive-blaster-canvas");
   section.append(canvas);
   nodeGraphInstallDrawingFacePump(section, {
     clockKey: (el) => `additiveBlaster:${el.dataset?.node || ""}`,
@@ -45,39 +44,31 @@ function nodeGraphAdditiveBlasterPhaseColor(phase01, binIndex = 0) {
   return `hsl(${hue} 80% 55%)`;
 }
 
+function nodeGraphAdditiveBlasterPhaseRgba(phase01, binIndex = 0, alpha = 1) {
+  const p = ((nodeGraphFiniteNumber(phase01)) % 1 + 1) % 1;
+  const hue = Math.floor((((p > 1e-6 ? p : (binIndex * 0.17)) % 1) + 1) % 1 * 360);
+  return nodeGraphGlLinesHsl(hue, 0.8, 0.55, alpha);
+}
+
 function drawNodeGraphAdditiveBlasterDisplay(section) {
   if (!section) return;
   const canvas = section.querySelector("canvas");
   if (!canvas) return;
 
-  let ctx;
-  let w;
-  let h;
-  let pixelRatio = 1;
-  if (typeof nodeGraphSizeDisplayCanvas === "function") {
-    const metrics = nodeGraphSizeDisplayCanvas(section, canvas, { pixelDensity: 1 });
-    if (!metrics) return;
-    ctx = metrics.context;
-    w = metrics.cssWidth;
-    h = metrics.cssHeight;
-    pixelRatio = metrics.pixelRatio || 1;
-  } else {
-    const face = typeof ensureFaceMetrics === "function"
-      ? ensureFaceMetrics(section, { observe: true })
-      : null;
-    if (!face || face.cssW < 8 || face.cssH < 8) return;
-    w = face.cssW;
-    h = face.cssH;
-    pixelRatio = face.dpr;
-    canvas.width = face.width;
-    canvas.height = face.height;
-    ctx = canvas.getContext("2d");
-  }
-  if (!ctx || w < 8 || h < 8) return;
+  // Shared sizing (css x dpr, never zoom); drawing is WebGL2 via gl-line-renderer.
+  const m = typeof nodeGraphDisplayCanvasSize === "function" ? nodeGraphDisplayCanvasSize(section, canvas) : null;
+  if (!m || m.cssWidth < 8 || m.cssHeight < 8) return;
+  const w = m.cssWidth;
+  const h = m.cssHeight;
 
-  ctx.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
-  ctx.fillStyle = "#0a0a12";
-  ctx.fillRect(0, 0, w, h);
+  const batch = typeof nodeGraphGlLinesBegin === "function"
+    ? nodeGraphGlLinesBegin(canvas, [10 / 255, 10 / 255, 18 / 255, 1], { scale: m.pixelRatio })
+    : null;
+  if (!batch) {
+    if (typeof nodeGraphGlLinesFillBlack === "function") nodeGraphGlLinesFillBlack(canvas);
+    section._forceDraw = false;
+    return;
+  }
 
   const nodeId = section.dataset.node;
   const graph = nodeGraphAdditiveBlasterReadGraph(nodeId);
@@ -89,11 +80,8 @@ function drawNodeGraphAdditiveBlasterDisplay(section) {
   const layout = 0;
 
   if (!graph || !graph.ratio || !graph.ratio.length) {
-    ctx.fillStyle = "#666";
-    ctx.font = "12px ui-monospace, monospace";
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillText("no Graph", w * 0.5, h * 0.5);
+    nodeGraphGlLinesText(batch, "no Graph", w * 0.5, h * 0.5, { px: 12, weight: 400, family: "ui-monospace, monospace", rgba: [0.4, 0.4, 0.4, 1] });
+    nodeGraphGlLinesEnd(batch);
     section._forceDraw = false;
     return;
   }
@@ -123,14 +111,15 @@ function drawNodeGraphAdditiveBlasterDisplay(section) {
     const phase = Number.isFinite(bin.phase)
       ? bin.phase
       : (bin.start >= 0 ? nodeGraphFiniteNumber(graph.phase?.[bin.start]) : 0);
-    ctx.fillStyle = nodeGraphAdditiveBlasterPhaseColor(phase, b);
-    ctx.globalAlpha = bin.start >= 0 ? 0.9 : 0.25;
-    ctx.fillRect(left, padY, bw, barH);
-    ctx.globalAlpha = 1;
-    ctx.strokeStyle = "rgba(0,0,0,0.65)";
-    ctx.lineWidth = 1;
-    ctx.strokeRect(left + 0.5, padY + 0.5, bw - 1, barH - 1);
+    nodeGraphGlLinesRect(batch, left, padY, bw, barH, nodeGraphAdditiveBlasterPhaseRgba(phase, b, bin.start >= 0 ? 0.9 : 0.25));
+    // 1 px dark inner border (was strokeRect).
+    const edge = [0, 0, 0, 0.65];
+    nodeGraphGlLinesRect(batch, left, padY, bw, 1, edge);
+    nodeGraphGlLinesRect(batch, left, padY + barH - 1, bw, 1, edge);
+    nodeGraphGlLinesRect(batch, left, padY + 1, 1, barH - 2, edge);
+    nodeGraphGlLinesRect(batch, left + bw - 1, padY + 1, 1, barH - 2, edge);
   }
+  if (!nodeGraphGlLinesEnd(batch) && typeof nodeGraphGlLinesFillBlack === "function") nodeGraphGlLinesFillBlack(canvas);
 
   section._forceDraw = false;
 }

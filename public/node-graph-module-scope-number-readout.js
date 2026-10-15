@@ -9,7 +9,7 @@ function nodeGraphNumberReadoutCanvasForSlot(slot) {
   let canvas = screenElement.querySelector(":scope > .node-number-readout-canvas");
   if (!canvas) {
     canvas = document.createElement("canvas");
-    canvas.className = "node-number-readout-canvas";
+    canvas.className = "node-number-readout-canvas node-display-canvas";
     canvas.setAttribute("aria-hidden", "true");
     screenElement.appendChild(canvas);
   }
@@ -808,46 +808,13 @@ function nodeGraphNumberReadoutPresentBurnPlate(
     host._numberReadoutGhostLutKey = lutKey;
   }
   const lut = host._numberReadoutGhostLut;
-  // GPU path (shared picture device). Canvas2D below is the no-GL fallback.
+  // GPU path only (shared picture device). No GL: black + logged once.
   if (nodeGraphNumberReadoutPresentBurnPlateGl(destCtx, burnPlate, lut, lutKey)) {
     return;
   }
-  let tint = host?._numberReadoutBurnTint;
-  if (!tint) {
-    tint = document.createElement("canvas");
-    if (host) {
-      host._numberReadoutBurnTint = tint;
-    }
+  if (typeof nodeGraphDisplayGlFailed === "function") {
+    nodeGraphDisplayGlFailed(host, "Number readout burn tint GL unavailable");
   }
-  if (tint.width !== burnPlate.width || tint.height !== burnPlate.height) {
-    tint.width = burnPlate.width;
-    tint.height = burnPlate.height;
-  }
-  const tctx = tint.getContext("2d", { willReadFrequently: true });
-  if (!tctx) {
-    return;
-  }
-  tctx.setTransform(1, 0, 0, 1, 0, 0);
-  tctx.clearRect(0, 0, tint.width, tint.height);
-  tctx.drawImage(burnPlate, 0, 0);
-  const img = tctx.getImageData(0, 0, tint.width, tint.height);
-  const d = img.data;
-  for (let i = 0; i < d.length; i += 4) {
-    const e = d[i + 3];
-    if (e === 0) {
-      continue;
-    }
-    const j = e * 3;
-    d[i] = lut[j];
-    d[i + 1] = lut[j + 1];
-    d[i + 2] = lut[j + 2];
-  }
-  tctx.putImageData(img, 0, 0);
-  destCtx.save();
-  destCtx.globalAlpha = 1;
-  destCtx.globalCompositeOperation = "source-over";
-  destCtx.drawImage(tint, 0, 0);
-  destCtx.restore();
 }
 
 
@@ -932,7 +899,7 @@ function wipeNodeGraphNumberReadoutScreensToColdBoot() {
       || face.querySelector?.(".node-number-readout-canvas");
     if (!canvas) {
       canvas = document.createElement("canvas");
-      canvas.className = "node-number-readout-canvas";
+      canvas.className = "node-number-readout-canvas node-display-canvas";
       canvas.setAttribute("aria-hidden", "true");
       face.appendChild(canvas);
     }

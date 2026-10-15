@@ -18,8 +18,7 @@ function createNodeGraphEnvelopeCurveDisplay(nodeId, type) {
     }
     drawNodeGraphEnvelopeCurveDisplay(section);
   };
-  const canvas = document.createElement("canvas");
-  canvas.className = "node-filter-curve-canvas node-envelope-curve-canvas";
+  const canvas = nodeGraphDisplayCanvasCreate("node-filter-curve-canvas node-envelope-curve-canvas");
   section.append(canvas);
   if (typeof ResizeObserver === "function" && !section._envelopeCurveResizeObs) {
     const ro = new ResizeObserver(() => {
@@ -65,7 +64,7 @@ function drawNodeGraphEnvelopeCurveDisplay(section) {
     const detail = error && typeof error === "object"
       ? (error.message || error.name || String(error))
       : String(error);
-    console.warn("[envelope-curve] draw failed", detail, error);
+    console.error("[envelope-curve] draw failed", detail, error);
   }
 }
 

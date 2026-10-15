@@ -60,7 +60,9 @@ const NODE_GRAPH_VIDEO_DELAY_MAX = 512;
         vec4 live = texture2D(uPic, uv);
         float luma = max(col.r, max(col.g, col.b));
         float seed = (1.0 - smoothstep(0.015, 0.12, luma)) * live.a * clamp(uMix, 0.0, 1.0);
-        col = mix(col, live.rgb, seed);
+        // Wire pictures are premultiplied RGBA: unpremultiply, alpha already in seed.
+        vec3 liveRgb = live.a > 1e-4 ? live.rgb / live.a : vec3(0.0);
+        col = mix(col, liveRgb, seed);
       }
       gl_FragColor = vec4(col, 1.0);
     }

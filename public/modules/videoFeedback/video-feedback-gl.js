@@ -123,7 +123,7 @@ const NODE_GRAPH_VIDEO_FEEDBACK_WAVE = 512;
     const { gl } = picture;
     const program = link(gl, VERT, FRAG);
     if (!program) {
-      console.warn("[video-feedback-gl] program failed to link");
+      console.error("[video-feedback-gl] program failed to link");
       return null;
     }
     const quad = SoemGl.quad(gl);

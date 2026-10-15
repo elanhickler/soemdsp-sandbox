@@ -28,8 +28,7 @@ function matrixCreateFaceShell(node, options = {}) {
   stage.className = `${stageClass} node-asciiscope-stage node-light-source`;
   stage.dataset.lightSource = "screen";
 
-  const canvas = document.createElement("canvas");
-  canvas.className = `${canvasClass} node-asciiscope-canvas`;
+  const canvas = nodeGraphDisplayCanvasCreate(`${canvasClass} node-asciiscope-canvas`);
   canvas.dataset.lightSource = "screen";
   canvas.setAttribute("aria-hidden", "true");
   canvas.style.width = "100%";

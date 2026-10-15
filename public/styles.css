@@ -15479,29 +15479,21 @@ body.node-screen-solo-active .node-screen-solo-face.node-sample-waveform-display
  * pixels instead of re-rendering denser detail. Soft Fractal is included —
  * fixed GPU buffer, CSS pixelate on zoom. Asciiscope Sharp keeps auto inline.
  */
-.node-graph-workspace.pixelated-canvas-zoom .node-filter-curve-canvas,
-.node-graph-workspace.pixelated-canvas-zoom .node-sample-waveform-canvas,
-.node-graph-workspace.pixelated-canvas-zoom .node-phosphillator-draw-canvas,
-.node-graph-workspace.pixelated-canvas-zoom .node-xy-pad-canvas,
-.node-graph-workspace.pixelated-canvas-zoom .node-module-scope-local-fallback-canvas,
-.node-graph-workspace.pixelated-canvas-zoom .node-number-readout-canvas,
-.node-graph-workspace.pixelated-canvas-zoom .node-phosphor-light-canvas,
-.node-graph-workspace.pixelated-canvas-zoom .node-rgb-shape-canvas,
-.node-graph-workspace.pixelated-canvas-zoom .node-rgb-picture-canvas,
-.node-graph-workspace.pixelated-canvas-zoom .node-rgb-fractal-canvas,
-.node-graph-workspace.pixelated-canvas-zoom .node-fbm-field-canvas,
-.node-graph-workspace.pixelated-canvas-zoom .node-evolve-field-canvas,
-.node-graph-workspace.pixelated-canvas-zoom .node-wall-room-canvas,
-.node-graph-workspace.pixelated-canvas-zoom .node-module-scope-canvas,
-.node-graph-workspace.pixelated-canvas-zoom .node-matrix-display-canvas,
-.node-graph-workspace.pixelated-canvas-zoom .node-additive-waveform-canvas,
-.node-graph-workspace.pixelated-canvas-zoom .node-additive-filter-curve-canvas,
-.node-graph-workspace.pixelated-canvas-zoom .node-additive-blaster-canvas,
-.node-graph-workspace.pixelated-canvas-zoom .node-additive-bubble-canvas,
-.node-graph-workspace.pixelated-canvas-zoom .node-harmonic-count-canvas,
-.node-graph-workspace.pixelated-canvas-zoom .node-softwave-osc-canvas,
-.node-graph-workspace.pixelated-canvas-zoom .node-harmonic-lines-canvas {
+/* One marker class (public/lib/visual/display-canvas.js) instead of a per-face list. */
+.node-graph-workspace.pixelated-canvas-zoom .node-display-canvas {
   image-rendering: pixelated;
+}
+
+/* Display canvases at pixel density < 1 (module toggles the class; JS never sets image-rendering). */
+.node-display-canvas.display-canvas-pixelated,
+.display-canvas-pixelated {
+  image-rendering: pixelated;
+}
+
+/* Pinned smooth (Asciiscope Sharp): beats the workspace zoom pixelation. */
+.node-graph-workspace.pixelated-canvas-zoom .node-display-canvas.display-canvas-smooth,
+.node-display-canvas.display-canvas-smooth {
+  image-rendering: auto;
 }
 
 /*

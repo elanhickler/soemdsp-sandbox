@@ -1,6 +1,6 @@
 # WebGL Display Plan: one shader path for every module display
 
-**Status: PLAN, docs only (2026-10-14). Nothing migrated yet beyond the two faces already on it.**
+**Status: Phase 1 in progress (2026-10-15 Grok Bot). Helper, marker CSS rule, smoke check + allowlist landed; first batch converted (section 7). Needs visual check.**
 **Policy:** `docs/APP_POLICY.md` section 3 (Module displays: WebGL2 + shaders only).
 **Owner:** Interface (faces), PlanningDocs (plan, allowlist bookkeeping).
 
@@ -25,6 +25,9 @@
 |---|---|---|
 | `reverbEffect` (Sabrina Reverb) | `public/modules/reverbEffect/sabrina-reverb-gl.js` | gl-line-renderer, matches the CLAP plugin's kLineFrag |
 | `softpopOscillator` / `softpopFilter` (Softpop) | `public/modules/softpopOscillator/softpop-display.js` | gl-line-renderer; both Softpop modules share the `softpopFace` renderer |
+| `slewLimiter` (Up/Down shape) | `public/modules/slewLimiter/slew-shape-display.js` | gl-line-renderer |
+| `additiveGenerator`, `additiveGrowl`, `additiveBlaster`, `additiveGraph` | waveform / bubble / blaster / filter-curve faces | 2026-10-15 batch 1 (section 7) |
+| `lookaheadLimiter` | Instant Waterfall (own GL path) | dead Canvas2D fallback removed 2026-10-15 |
 
 ## 3. Migration inventory (grep of `public/modules`, 2026-10-14)
 Method: per module folder, any `.js` with `getContext("2d")`, `createElement("canvas")`, or use of the shared GL device. Two folders (Sabrina, Softpop) are already done, which leaves **39 modules** to migrate.
@@ -80,7 +83,7 @@ Shared code outside `public/modules` that also needs moving: `public/lib/visual/
 
 **Suggested order:** (1) the 3 cycle-line-gl modules (already GL, proves the merge); (2) simple curve/bar faces (additive*, harmonic*, spectrum1d, lookaheadLimiter, softClipper, attackDecay); (3) the 9 Partial modules; (4) the rest; (5) decide exceptions.
 
-## 4. Enforcement
+## 4. Enforcement (landed 2026-10-15; see section 7)
 1. **One shared display-canvas helper** (new, in `public/lib/visual/`, e.g. `display-canvas.js`): creates the face canvas, applies the shared sizing path (backing = layout CSS box x devicePixelRatio, never x workspace zoom; APP_POLICY 15) and adds one **marker class** (e.g. `node-display-canvas`). `styles.css` adds that class to the `.node-graph-workspace.pixelated-canvas-zoom ...` rule so **>2.5x zoom pixelation applies automatically** (`node-graph-viewport-perf.js` toggles the workspace class at zoom > 2.5). The per-module canvas classes in that rule shrink away as modules move over.
 2. **`scripts/smoke_test.py` check** (`check_module_displays_use_shared_gl`): scans `public/modules/**/*.js` and fails on any `getContext("2d")`, `getContext("webgl...")`, or `createElement("canvas")` in a file that is **not** on an allowlist. The allowlist starts as exactly the files in section 3 and is **shrink-only**: the check also fails if an allowlisted file no longer needs its entry (so the entry must be deleted), and new entries are never added. A new module that draws its own canvas fails the smoke test.
 
@@ -91,3 +94,84 @@ Proposed for Argi's call, because they are text/UI widgets rather than pictures:
 - Section 3 table is empty, the allowlist holds only approved exceptions, and the smoke check passes.
 - `cycle-line-gl.js` is merged into gl-line-renderer.js.
 - Turning WebGL off shows black squares, never a 2D drawing.
+
+## 7. Phase 1 log (2026-10-15, Grok Bot)
+- **Helper:** `public/lib/visual/display-canvas.js` — `nodeGraphDisplayCanvasCreate(className)`, `nodeGraphDisplayCanvasSize(section, canvas)`, `nodeGraphDisplayCanvasMark(canvas)`. Marker class `node-display-canvas` is also added by `nodeGraphSizeDisplayCanvas`, the module face canvas (`node-graph-module-scope-face-canvas.js` create + sync), and the core canvases that were on the old CSS list (cookbook filter, number readout, phosphillator, pulse explosion, sample waveform, waterfall ink overlay, `#...node-module-scope-canvas` in index/perform.html). Every `public/modules/**` `createElement("canvas") + className` now goes through the helper.
+- **CSS:** the 22-selector `.pixelated-canvas-zoom` list in `styles.css` is now one rule: `.node-graph-workspace.pixelated-canvas-zoom .node-display-canvas`. Asciiscope (JS-controlled Sharp/Pixel) and the spectrogram smooth-at-1x rule are unchanged. Dropped stale selectors with no creator: `node-phosphor-light-canvas`, `node-evolve-field-canvas`.
+- **Renderer:** `gl-line-renderer.js` gained `begin(canvas, clear, { scale })` (CSS-px coords), `nodeGraphGlLinesImage` (textured quad, RGBA8 buffer or TexImageSource, nearest/linear, drawn under the quads), `nodeGraphGlLinesCss` / `nodeGraphGlLinesHsl` colour helpers.
+- **Smoke:** `check_display_gl_contract()` in `scripts/smoke_test.py` + shrink-only `scripts/display_gl_allowlist.txt` (each entry has a reason). Allowlist: 57 offending files before (clean tree 4b33aa4b), **41** after. `scripts/smoke_display_gl_batch.mjs` covers batch 1 with a fake GL device (GL draw, no 2D, black when GL is missing).
+- **Batch 1 converted (2D code removed):** Additive Generator waveform, Additive Bubble waveform, Additive Blaster blocks, Additive filter curve (Linear/Butterworth/Ladder), Lookahead Limiter (dead 2D fallback). Their tiny "—" / "no Graph" text placeholders became a dim centre dash (no text primitive yet).
+- **Not done here:** `cycle-line-gl.js` merge (Basic Shape / SinCos / Softwave), filter-curve-face.js (Attack Decay, Soft Clipper), everything in section 8.
+
+## 8. Remaining inventory, ranked (2026-10-15)
+Effort: **S** < 1 h, **M** a few hours, **L** a day+. Every row is on the allowlist unless noted.
+
+| Rank | Module / file | Today | Effort | Plan |
+|---|---|---|---|---|
+| 1 | `spectrum1d` | 2D on face canvas | S | polyline/rects |
+| 2 | `phoneTone` | 2D curve + own pixelation | S | polyline |
+| 3 | `harmonicSeries` | 2D bars | S | rects |
+| 4 | `harmonicLines` (lines face) | 2D curves | S-M | polyline; Count face is text (needs atlas) |
+| 5 | `sineWavetable` | 2D curves + own sizing | S-M | polyline |
+| 6 | `ensemble` | 2D dot cloud | S-M | zero-length capsules = round dots |
+| 7 | `speedColorInertia` | 2D colour plate; **file not loaded** by index/perform.html | S | delete or one rect (Argi) |
+| 8 | Basic Shape / SinCos / Softwave (`cycle-line-gl.js`, not allowlisted) | GL, own renderer | M | fold into gl-line-renderer |
+| 9 | Attack Decay / Soft Clipper (`filter-curve-face.js`, outside modules) | 2D shared path | M | port filter-curve-face once, both follow |
+| 10 | `ellipsoid`, `arp`, `wallDelay`, `rgbShape`, `matrixDisplay` | 2D faces | M | rects/segments/polylines |
+| 11 | `xyPad` | 2D, interactive | M | rects + dot |
+| 12 | `rgbPicture` | 2D blit | M | `nodeGraphGlLinesImage` |
+| 13 | `fbmField`, `rasterRgb`, `rgbFractal`, `spectrogram`, `vectorRgb`, `videoDelay`, `videoFeedback` | Partial: GL + 2D fallback / own sizing | M each | delete fallback, present via shared helper |
+| 14 | `gradientVectorscope` | TraceWoscope/2D then trails | M-L | needs trace pass |
+| 15 | `numberReadout`, `asciiscope` | Partial: 2D glyph-atlas bake | M-L | shared atlas bake helper (one 2D bake in lib, not module) |
+| 16 | `imageBurn` | Partial, 12 2D contexts (decode, dry flash, fallback) | L | image decode can stay `createImageBitmap` -> texture |
+| — | `audioPlayer`, `sequencer`, `transport`, `knob` | Text/UI widgets | ? | **proposed exceptions, Argi decides** |
+| — | Scope / waterfall / trace faces in `public/node-graph-module-scope-*` | own paths | L | separate pass; `trace-woscope.js` and Phosphor are BugsFix's (exceptions until they say) |
+
+**Text:** no text primitive. Recommended: one shared glyph atlas (reuse `number-readout-gl.js` SDF/EDT bake, moved into `public/lib/visual/`), drawn as image/SDF quads through gl-line-renderer. The one-time atlas bake may use a 2D canvas inside the shared lib only.
+
+## 9. RGBA picture outputs (Argi, 2026-10-15; plan only)
+- **Transport today:** `nodeGraphPicturePublish` copies a producer texture into a per-node RGBA8 FBO texture with blending off (`picture-device.js`), and `nodeGraphPictureRead` hands that texture to consumers. The device is `alpha: true, premultipliedAlpha: false`, so the wire **can** carry straight alpha end to end.
+- **In practice it is RGB:** every publisher's final shader writes `alpha = 1.0` (fbm_field.frag, raster_rgb composite/source, rgb-fractal-gl, image-burn-gl present, video-delay-gl, video-feedback-gl). Consumers (Video Delay / Feedback `uHasPic` sample) never use the alpha. gl-line-renderer also forces opaque alpha (`blendFuncSeparate(..., ONE, ONE)` + opaque clear).
+- **Real publishers (6):** fbmField, imageBurn, rgbFractal, rasterRgb, videoDelay, videoFeedback. **Declared but not published:** rgbShape (`rgba` out in its register), plus the `rgba` outs in `node-graph-module-definitions.js` (~lines 16647, 17344). Uppercase `RGBA` outs (~16346, 16355, 16407) are **not** TV taps: `isTvPort` only accepts `rgba` / 📺.
+- **Should get an `rgba` out** (any face that is a picture, not a UI widget): Sabrina Reverb, Softpop, Slew shape, the Additive faces, Spectrogram, Spectrum 1D, Vector RGB / Gradient Vectorscope, RGB Shape, RGB Picture, Matrix, Ensemble cloud, Wall Delay room, XY Pad, Instant Waterfall / Sidechain / Limiter Gain. Not: Number Readout / transport / sequencer / audio player / knob.
+- **Cheap path on the single context:** add `options.publishNodeId` to `nodeGraphGlLinesEnd`. When set, draw the batch into that node's export FBO (`ensureExport` in picture-device, same size as the face) instead of the default framebuffer, then present the face by blitting that texture (`nodeGraphPicturePresent`). One extra full-screen copy per frame, no readback. For real alpha: clear to `[0,0,0,0]` and use `blendFuncSeparate(SRC_ALPHA, ONE_MINUS_SRC_ALPHA, ONE, ONE_MINUS_SRC_ALPHA)` for the export pass; the face present composites over its plate colour. Only publish when an `rgba` cable is connected (`nodeGraphPictureRead` already walks cables) so idle faces pay nothing.
+
+## 10. Phase 2 log (2026-10-15)
+
+Allowlist: 57 (pre phase 1) -> 41 (phase 1) -> 32 (phase 2). `smoke_test.py` passes.
+
+### Approved exceptions (Argi 2026-10-15)
+Audio Player, Sequencer, Transport, Knob stay non-WebGL. Marked
+`APPROVED EXCEPTION (Argi 2026-10-15)` in `scripts/display_gl_allowlist.txt`.
+Also excluded: `trace-woscope.js` and Phosphor (owned by BugsFix; not touched).
+
+### Unified renderer (`lib/visual/gl-line-renderer.js`)
+- New primitives: Triangle, FillUnder, Dot, Image.
+- Shared glyph atlas + `nodeGraphGlLinesText(batch, text, x, y, {px, rgba, align, baseline, maxWidth, family, weight})`,
+  `nodeGraphGlLinesMeasureText`. Atlas baked once at 64 px (mipmapped), tinted in shader.
+- `lib/visual/glyph-sdf-atlas.js`: the SDF digit bake moved out of number-readout-gl.js (shared text infra).
+
+### Converted
+harmonic-count (GL text), phone-tone, harmonic-series, harmonic-lines, spectrum1d,
+ensemble (row history as rects), sine-wavetable, number-readout-gl (bake moved to lib; 1:1 blit).
+Real text restored where placeholders were: "—" on Additive Waveform/Bubble, "no Graph" on Blaster.
+Deleted `speedColorInertia/speed-color-inertia-display.js` (never loaded). `speedColorInertiaFace`
+displayType still named in module definitions (harmless leftover).
+
+### RGBA with true alpha (section 9 implemented)
+- Wire convention: **premultiplied RGBA**. Opaque sources unchanged.
+- `nodeGraphGlLinesEnd` renders into `nodeGraphPictureExportTarget(nodeId)` (clear 0,0,0,0, alpha-preserving
+  blend) only when `nodeGraphPictureHasConsumer(nodeId)`; the face is presented from that texture over the plate.
+  Node id from `batch.publishNodeId` or closest `.dsp-node`/`[data-node]`.
+- 2D bridge `nodeGraphPicturePublishCanvas` (flip + premultiply on upload) for faces not yet on GL
+  (rgbShape, spectrogram).
+- `rgba` outs added: reverbEffect (Sabrina), softpopOscillator, softpopFilter, slewLimiter, additive
+  Generator/Bubble/Blaster/LinearFilter/LadderFilter/Out, spectrum1d, ensemble, sineWavetable.
+- Consumers: picture present + Video Delay unpremultiply/respect alpha. Native worklet skips TV cables.
+- Caveats: Image Burn and Raster consumers still treat input as opaque/straight. New jacks may grow
+  module height (check layouts). Saved patches load (outs appended, no renames).
+
+### Left
+32 allowlisted files (see allowlist; 4 approved exceptions). Core
+`node-graph-module-scope-number-readout.js` still has its Canvas2D fallback path.
+Medium batch not started this phase.

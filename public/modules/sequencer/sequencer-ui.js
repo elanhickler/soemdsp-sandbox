@@ -280,8 +280,7 @@ function createNodeGraphSequencerBody(node) {
 
   const host = document.createElement("div");
   host.className = "node-sequencer-roll-host";
-  const canvas = document.createElement("canvas");
-  canvas.className = "node-sequencer-roll";
+  const canvas = nodeGraphDisplayCanvasCreate("node-sequencer-roll");
   host.append(canvas);
   section.append(chrome, host);
 

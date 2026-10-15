@@ -15,8 +15,7 @@ function createNodeGraphAdditiveFilterCurveDisplay(nodeId, type = "additiveLinea
   if (typeof tagNodeGraphModuleBand === "function") {
     tagNodeGraphModuleBand(section, "face");
   }
-  const canvas = document.createElement("canvas");
-  canvas.className = "node-additive-filter-curve-canvas";
+  const canvas = nodeGraphDisplayCanvasCreate("node-additive-filter-curve-canvas");
   section.append(canvas);
   nodeGraphInstallDrawingFacePump(section, {
     clockKey: (el) => `additiveFilterCurve:${el.dataset?.node || ""}`,
@@ -92,30 +91,11 @@ function drawNodeGraphAdditiveFilterCurveDisplay(section) {
   const canvas = section.querySelector("canvas");
   if (!canvas) return;
 
-  let ctx;
-  let w;
-  let h;
-  let pixelRatio = 1;
-  if (typeof nodeGraphSizeDisplayCanvas === "function") {
-    const metrics = nodeGraphSizeDisplayCanvas(section, canvas, { pixelDensity: 1 });
-    if (!metrics) return;
-    ctx = metrics.context;
-    w = metrics.cssWidth;
-    h = metrics.cssHeight;
-    pixelRatio = metrics.pixelRatio || 1;
-  } else {
-    const face = typeof ensureFaceMetrics === "function"
-      ? ensureFaceMetrics(section, { observe: true })
-      : null;
-    if (!face || face.cssW < 8 || face.cssH < 8) return;
-    w = face.cssW;
-    h = face.cssH;
-    pixelRatio = face.dpr;
-    canvas.width = face.width;
-    canvas.height = face.height;
-    ctx = canvas.getContext("2d");
-  }
-  if (!ctx || w < 8 || h < 8) return;
+  // Shared sizing (css x dpr, never zoom); drawing is WebGL2 via gl-line-renderer.
+  const m = typeof nodeGraphDisplayCanvasSize === "function" ? nodeGraphDisplayCanvasSize(section, canvas) : null;
+  if (!m || m.cssWidth < 8 || m.cssHeight < 8) return;
+  const w = m.cssWidth;
+  const h = m.cssHeight;
 
   const nodeId = section.dataset.node;
   const type = section.dataset.nodeType;
@@ -162,9 +142,13 @@ function drawNodeGraphAdditiveFilterCurveDisplay(section) {
   section._curveSig = sig;
   section._forceDraw = false;
 
-  ctx.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
-  ctx.fillStyle = "#0a0a12";
-  ctx.fillRect(0, 0, w, h);
+  const batch = typeof nodeGraphGlLinesBegin === "function"
+    ? nodeGraphGlLinesBegin(canvas, [10 / 255, 10 / 255, 18 / 255, 1], { scale: m.pixelRatio })
+    : null;
+  if (!batch) {
+    if (typeof nodeGraphGlLinesFillBlack === "function") nodeGraphGlLinesFillBlack(canvas);
+    return;
+  }
 
   // Same framing as Additive Out: pad + log-X cutoff marker.
   const minSide = faceMinSide(w, h);
@@ -173,33 +157,26 @@ function drawNodeGraphAdditiveFilterCurveDisplay(section) {
   const strokeGrid = faceInkPx(1, minSide);
   const strokeCurve = faceInkPx(1.5, minSide);
 
-  ctx.strokeStyle = "rgba(255, 230, 0, 0.12)";
-  ctx.lineWidth = strokeGrid;
-  ctx.beginPath();
-  ctx.moveTo(pad, h * 0.5);
-  ctx.lineTo(pad + span, h * 0.5);
+  const grid = [1, 230 / 255, 0, 0.12];
+  const gHalf = Math.max(0, strokeGrid * 0.5 - 0.35);
+  nodeGraphGlLinesSegment(batch, pad, h * 0.5, pad + span, h * 0.5, gHalf, 0.7, grid);
   const cutX = pad + Math.max(0, Math.min(1, cutoffT)) * span;
-  ctx.moveTo(cutX, 0);
-  ctx.lineTo(cutX, h);
-  ctx.stroke();
+  nodeGraphGlLinesSegment(batch, cutX, 0, cutX, h, gHalf, 0.7, grid);
 
-  if (!ys || !ys.length) return;
+  if (!ys || !ys.length) {
+    if (!nodeGraphGlLinesEnd(batch) && typeof nodeGraphGlLinesFillBlack === "function") nodeGraphGlLinesFillBlack(canvas);
+    return;
+  }
 
   const padY = Math.max(2, faceFracPx(0.022, minSide));
-  ctx.strokeStyle = "#ffe600";
-  ctx.lineWidth = strokeCurve;
-  ctx.lineJoin = "round";
-  ctx.lineCap = "round";
-  ctx.beginPath();
+  const pts = new Array(ys.length * 2);
   for (let i = 0; i < ys.length; i += 1) {
     const u = i / Math.max(1, ys.length - 1);
-    const x = pad + u * span;
-    const g = nodeGraphFiniteNumber(ys[i]);
-    const y = padY + (1 - g) * (h - padY * 2);
-    if (i === 0) ctx.moveTo(x, y);
-    else ctx.lineTo(x, y);
+    pts[i * 2] = pad + u * span;
+    pts[i * 2 + 1] = padY + (1 - nodeGraphFiniteNumber(ys[i])) * (h - padY * 2);
   }
-  ctx.stroke();
+  nodeGraphGlLinesPolyline(batch, pts, Math.max(0, strokeCurve * 0.5 - 0.35), 0.7, [1, 230 / 255, 0, 1]);
+  if (!nodeGraphGlLinesEnd(batch) && typeof nodeGraphGlLinesFillBlack === "function") nodeGraphGlLinesFillBlack(canvas);
 }
 
 if (typeof nodeGraphModuleScopeCustomRenderers === "object" && nodeGraphModuleScopeCustomRenderers) {

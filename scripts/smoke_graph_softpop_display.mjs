@@ -225,7 +225,7 @@ let curve;
   vm.createContext(ctx);
   // Real shared gradient helpers (nodeGraphPhosphorGradientStopsFromSettings /
   // nodeGraphSampleGradientStopsRgb) so the face uses the trace drawers' path.
-  for (const rel of ["node-graph-slider-values.js", "node-graph-stdlib/node-graph-param-surface-helpers.js", "node-graph-module-scope-normalize.js"]) {
+  for (const rel of ["lib/math/soem-math.js", "lib/color/soem-color.js", "node-graph-slider-values.js", "node-graph-stdlib/node-graph-param-surface-helpers.js", "node-graph-module-scope-normalize.js"]) {
     vm.runInContext(fs.readFileSync(path.join(root, "public", rel), "utf8"), ctx);
   }
   // Shared gradient selector (Bone preset + softpopFace profile defaultStops).
@@ -295,6 +295,35 @@ let curve;
   }
   gate(sineCols.some((c) => { const v = c.split(",").map(Number); return v[0] === 255 && v[1] > 100; }) && glLog.draws === 1,
     `Sine (GL): glow at the note climbs the gradient toward white, one draw (${glLog.draws})`);
+  // Full brightness: Brightness 1, max Decay, Line brightness 1, steady tone ->
+  // the note column reaches the top of the gradient (exactly LUT(1)).
+  {
+    const sF = ctx.__norm({ brightness: 1, decaySeconds: 2, lineBrightness: 1, backgroundBrightness: 0.03 });
+    const lutF = ctx.__lut(sF);
+    const top = [lutF[255 * 3], lutF[255 * 3 + 1], lutF[255 * 3 + 2]].join(",");
+    const results = [];
+    for (const [pitch, w, cssW] of [[0, 208, 208], [0, 416, 208], [600, 208, 208], [600, 416, 208]]) {
+      // Synthetic publishes (native semantics: bins sum |Amplitude| = 1 per sample).
+      const c = binOf(440);
+      const shape = new Float32Array(256);
+      if (pitch === 0) shape[c] = 1;
+      else { let z = 0; for (let i = 0; i < 256; i++) { const u = (i - c) / 12.8; shape[i] = Math.exp(-0.5 * u * u); z += shape[i]; } for (let i = 0; i < 256; i++) shape[i] /= z; }
+      const cv = mkCanvas(w, 40);
+      let best = "", bestSum = -1;
+      for (let f = 0; f < 240; f++) {  // 4 s at 60 fps, 800 samples per publish
+        const bins = new Float32Array(256);
+        for (let i = 0; i < 256; i++) bins[i] = shape[i] * 800;
+        reset();
+        ctx.__present(cv, bins, [1, 440, 0, SR, pitch, 20, 20000, 800], sF, cssW);
+      }
+      // Highest LUT position printed (match colours back to the LUT; sum of RGB
+      // is not monotonic along a coloured gradient).
+      const lutKey = (i) => [lutF[i * 3], lutF[i * 3 + 1], lutF[i * 3 + 2]].join(",");
+      for (const col of colours()) { for (let i = 255; i > bestSum; i--) if (lutKey(i) === col) { bestSum = i; best = col; break; } }
+      results.push(`${pitch}c/${w}px ${best}`);
+      gate(best === top, `Sine full brightness (Pitch Mod ${pitch}, ${w} px): brightest column = LUT(1) ${top} (got ${best})`);
+    }
+  }
   // Filter: plate = LUT(0); fill coloured per column; stroke one constant colour.
   const fInfo = [0, 2000, 4, SR, 0, 20, 20000, 0];
   reset();

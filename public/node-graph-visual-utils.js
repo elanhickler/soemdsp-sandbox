@@ -246,6 +246,8 @@ function nodeGraphSizeDisplayCanvas(section, canvas, options = {}) {
   if (!section || !canvas) {
     return null;
   }
+  // Marker class: styles.css pixelates every .node-display-canvas above 2.5x zoom.
+  canvas.classList?.add("node-display-canvas");
   const density = nodeGraphResolveDisplayPixelDensity(options?.pixelDensity);
   // Resize-only face metrics (display-face-metrics.js). Paint must not read
   // clientWidth every frame — SyncLayout owns chrome / CSS box size.

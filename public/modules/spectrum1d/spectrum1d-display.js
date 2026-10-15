@@ -57,21 +57,27 @@ function nodeGraphSpectrumLineBinTo01(i, ctx) {
   return (db - floorDb) / spanDb;
 }
 
-/** Max over the bins under one pixel column (interpolated when bins are wider than pixels). */
+/** Bin value at fractional bin x (linear between neighbours). */
+function nodeGraphSpectrumLineBinAt01(x, bins, ctx) {
+  const a = Math.max(0, Math.min(bins - 1, Math.floor(x)));
+  const b = Math.min(bins - 1, a + 1);
+  const f = Math.max(0, Math.min(1, x - a));
+  return nodeGraphSpectrumLineBinTo01(a, ctx) * (1 - f) + nodeGraphSpectrumLineBinTo01(b, ctx) * f;
+}
+
+/**
+ * Max of the spectrum over one pixel column's bin span [binA, binB].
+ * Only bins inside the span count, plus the interpolated edges. (The old
+ * version took floor(lo)..ceil(hi) whenever the span straddled a bin edge
+ * and interpolated otherwise, so narrow columns alternated between the two
+ * and drew a comb of regular one-bin-period spikes on the log axis.)
+ */
 function nodeGraphSpectrumLineColumn01(binA, binB, bins, ctx) {
   const lo = Math.max(0, Math.min(bins - 1, Math.min(binA, binB)));
   const hi = Math.max(0, Math.min(bins - 1, Math.max(binA, binB)));
-  const i0 = Math.floor(lo);
-  const i1 = Math.ceil(hi);
-  if (i1 - i0 <= 1) {
-    const mid = (lo + hi) * 0.5;
-    const a = Math.floor(mid);
-    const b = Math.min(bins - 1, a + 1);
-    const f = mid - a;
-    return nodeGraphSpectrumLineBinTo01(a, ctx) * (1 - f) + nodeGraphSpectrumLineBinTo01(b, ctx) * f;
-  }
-  let best = -Infinity;
-  for (let i = i0; i <= i1; i += 1) {
+  if (hi - lo < 1) return nodeGraphSpectrumLineBinAt01((lo + hi) * 0.5, bins, ctx);
+  let best = Math.max(nodeGraphSpectrumLineBinAt01(lo, bins, ctx), nodeGraphSpectrumLineBinAt01(hi, bins, ctx));
+  for (let i = Math.ceil(lo); i <= Math.floor(hi); i += 1) {
     const v = nodeGraphSpectrumLineBinTo01(i, ctx);
     if (v > best) best = v;
   }
@@ -107,17 +113,82 @@ function nodeGraphSpectrumLineComputeColumns(width, data, settings) {
     spanDb: Math.max(1, ceilDb - floorDb),
   };
   const axis = settings.spectrumAxis || "log";
-  // Bin k sits at k / (bins - 1) · Nyquist (matches spectrogramHzToLinearBin).
-  const hzToBin = (hz) => (Math.max(0, hz) / nyquist) * (bins - 1);
+  const map = nodeGraphSpectrumLineColumnMap(w, bins, axis, lo, hi, nyquist);
+  // Each bin converted once per frame (was: per column touch, with the
+  // interp helper re-converting neighbours), only over the visible bin range.
+  const v01 = nodeGraphSpectrumLineScratch(bins);
+  const { mode, compressedRef, floorDb: fl, spanDb } = ctx;
+  const useRaw = (mode === "exactDb" || mode === "linear") && raw;
+  for (let i = map.firstBin; i <= map.lastBin; i += 1) {
+    if (mode === "compressed") {
+      v01[i] = (compressed ? compressed[i] : 0) / compressedRef;
+      continue;
+    }
+    const mag = useRaw ? raw[i] : (Math.pow(10, compressed ? compressed[i] : 0) - 1) / 100;
+    const amp = Math.max(0, mag) / fullMag;
+    v01[i] = mode === "linear" ? amp : (20 * Math.log10(Math.max(amp, 1e-12)) - fl) / spanDb;
+  }
+  const at = (xb) => {
+    const a = Math.max(0, Math.min(bins - 1, Math.floor(xb)));
+    const b = Math.min(bins - 1, a + 1);
+    const f = Math.max(0, Math.min(1, xb - a));
+    return v01[a] * (1 - f) + v01[b] * f;
+  };
+  // Same rule as nodeGraphSpectrumLineColumn01 (spike fix), on cached spans.
   for (let x = 0; x < w; x += 1) {
-    const ta = w > 1 ? (x - 0.5) / (w - 1) : 0;
-    const tb = w > 1 ? (x + 0.5) / (w - 1) : 1;
-    const ba = hzToBin(nodeGraphSpectrumLineTToHz(ta, axis, lo, hi));
-    const bb = hzToBin(nodeGraphSpectrumLineTToHz(tb, axis, lo, hi));
-    const v = nodeGraphSpectrumLineColumn01(ba, bb, bins, ctx);
+    const cl = map.lo[x];
+    const ch = map.hi[x];
+    let v;
+    if (ch - cl < 1) {
+      v = at((cl + ch) * 0.5);
+    } else {
+      v = Math.max(at(cl), at(ch));
+      const end = Math.floor(ch);
+      for (let i = Math.ceil(cl); i <= end; i += 1) if (v01[i] > v) v = v01[i];
+    }
     out[x] = Number.isFinite(v) ? Math.max(0, Math.min(1, v)) : 0;
   }
   return out;
+}
+
+let nodeGraphSpectrumLineScratchBuf = null;
+function nodeGraphSpectrumLineScratch(n) {
+  if (!nodeGraphSpectrumLineScratchBuf || nodeGraphSpectrumLineScratchBuf.length < n) {
+    nodeGraphSpectrumLineScratchBuf = new Float32Array(n);
+  }
+  return nodeGraphSpectrumLineScratchBuf;
+}
+
+/**
+ * Column -> clamped fractional bin span [lo[x], hi[x]], cached per
+ * (width, bins, axis, range, nyquist): the Hz mapping (pow / mel / bark) runs
+ * once per size or axis change, not every frame.
+ */
+const nodeGraphSpectrumLineColumnMaps = new Map();
+function nodeGraphSpectrumLineColumnMap(w, bins, axis, loHz, hiHz, nyquist) {
+  const key = `${w}|${bins}|${axis}|${loHz}|${hiHz}|${nyquist}`;
+  let m = nodeGraphSpectrumLineColumnMaps.get(key);
+  if (m) return m;
+  // Bin k sits at k / (bins - 1) · Nyquist (matches spectrogramHzToLinearBin).
+  const hzToBin = (hz) => (Math.max(0, hz) / nyquist) * (bins - 1);
+  const lo = new Float64Array(w);
+  const hi = new Float64Array(w);
+  let firstBin = bins - 1;
+  let lastBin = 0;
+  for (let x = 0; x < w; x += 1) {
+    const ta = w > 1 ? (x - 0.5) / (w - 1) : 0;
+    const tb = w > 1 ? (x + 0.5) / (w - 1) : 1;
+    const ba = hzToBin(nodeGraphSpectrumLineTToHz(ta, axis, loHz, hiHz));
+    const bb = hzToBin(nodeGraphSpectrumLineTToHz(tb, axis, loHz, hiHz));
+    lo[x] = Math.max(0, Math.min(bins - 1, Math.min(ba, bb)));
+    hi[x] = Math.max(0, Math.min(bins - 1, Math.max(ba, bb)));
+    firstBin = Math.min(firstBin, Math.floor(lo[x]));
+    lastBin = Math.max(lastBin, Math.min(bins - 1, Math.floor(hi[x]) + 1));
+  }
+  m = { lo, hi, firstBin: Math.max(0, firstBin), lastBin };
+  if (nodeGraphSpectrumLineColumnMaps.size > 16) nodeGraphSpectrumLineColumnMaps.clear();
+  nodeGraphSpectrumLineColumnMaps.set(key, m);
+  return m;
 }
 
 function nodeGraphSpectrumLineSettingsForNode(node) {
@@ -140,19 +211,14 @@ function nodeGraphSpectrumLineHexToRgba(hex, alpha) {
   return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${alpha})`;
 }
 
-function nodeGraphSpectrumLinePath(ctx, cols, W, H, closeToBottom) {
-  ctx.beginPath();
+/** Column heights (0..1) -> polyline points in device px (y down). */
+function nodeGraphSpectrumLinePoints(cols, W, H) {
+  const pts = new Array(cols.length * 2);
   for (let x = 0; x < cols.length; x += 1) {
-    const px = cols.length > 1 ? (x / (cols.length - 1)) * W : 0;
-    const py = H - cols[x] * H;
-    if (x === 0) ctx.moveTo(px, py);
-    else ctx.lineTo(px, py);
+    pts[x * 2] = cols.length > 1 ? (x / (cols.length - 1)) * W : 0;
+    pts[x * 2 + 1] = H - cols[x] * H;
   }
-  if (closeToBottom) {
-    ctx.lineTo(W, H);
-    ctx.lineTo(0, H);
-    ctx.closePath();
-  }
+  return pts;
 }
 
 function drawNodeGraphSpectrumLineItem(renderer, item, pixelRatio) {
@@ -164,12 +230,13 @@ function drawNodeGraphSpectrumLineItem(renderer, item, pixelRatio) {
   if (!syncNodeGraphModuleScopeLocalFallbackCanvas(canvas, screenElement, pixelRatio, 1)) return;
   canvas.style.mixBlendMode = "normal";
   canvas.classList.add("node-spectrum-line-canvas");
-  const ctx = canvas.getContext("2d");
-  if (!ctx) return;
   const W = canvas.width | 0;
   const H = canvas.height | 0;
   if (W < 1 || H < 1) return;
 
+  // Offscreen / culled module: no work (wakes and repaints on the next frame).
+  if (typeof nodeGraphModuleIsViewportAsleep === "function"
+    && nodeGraphModuleIsViewportAsleep(screenElement.closest?.(".dsp-node") || nodeId)) return;
   const node = nodeGraphPatchNode(nodeId);
   const settings = nodeGraphSpectrumLineSettingsForNode(node);
   const bg = settings.backgroundColor || "#05070a";
@@ -190,9 +257,23 @@ function drawNodeGraphSpectrumLineItem(renderer, item, pixelRatio) {
     windowSum: gain instanceof Float32Array ? gain[0] : undefined,
   };
 
-  ctx.globalAlpha = 1;
-  ctx.fillStyle = bg;
-  ctx.fillRect(0, 0, W, H);
+  // Nothing new since the last paint (same FFT hop, size, settings): the face
+  // canvas keeps its pixels, so skip the GL frame. Peak hold animates -> always.
+  const hopSerial = meta instanceof Float32Array && meta.length >= 6 ? meta[5] : -1;
+  const sig = `${hopSerial}|${W}x${H}|${bg}|${ink}|${settings.spectrumAxis}|${settings.spectrumDbMode}|${settings.spectrumDbFloor}|${settings.spectrumDbCeiling}|${settings.spectrumDrawStyle}|${settings.minFreq}|${settings.maxFreq}|${pixelRatio}`;
+  if (hopSerial >= 0 && settings.spectrumPeakHold !== "hold" && canvas._spectrumLineSig === sig) return;
+  canvas._spectrumLineSig = sig;
+
+  // Device px (face canvas backing), WebGL2 only; no GL -> black.
+  const batch = typeof nodeGraphGlLinesBegin === "function"
+    ? nodeGraphGlLinesBegin(canvas, nodeGraphGlLinesCss(bg))
+    : null;
+  if (!batch) {
+    if (typeof nodeGraphGlLinesFillBlack === "function") nodeGraphGlLinesFillBlack(canvas);
+    return;
+  }
+  const inkRgba = nodeGraphGlLinesCss(ink);
+  const inkA = (a) => [inkRgba[0], inkRgba[1], inkRgba[2], a];
 
   const cols = nodeGraphSpectrumLineComputeColumns(W, data, settings);
   let st = nodeGraphSpectrumLineStates.get(nodeId);
@@ -205,16 +286,11 @@ function drawNodeGraphSpectrumLineItem(renderer, item, pixelRatio) {
   st.lastMs = now;
 
   const lineW = Math.max(1, 1.25 * (Number(pixelRatio) || 1));
+  const pts = nodeGraphSpectrumLinePoints(cols, W, H);
   if (settings.spectrumDrawStyle !== "line") {
-    nodeGraphSpectrumLinePath(ctx, cols, W, H, true);
-    ctx.fillStyle = nodeGraphSpectrumLineHexToRgba(ink, 0.35);
-    ctx.fill();
+    nodeGraphGlLinesFillUnder(batch, pts, H, inkA(0.35));
   }
-  nodeGraphSpectrumLinePath(ctx, cols, W, H, false);
-  ctx.strokeStyle = ink;
-  ctx.lineWidth = lineW;
-  ctx.lineJoin = "round";
-  ctx.stroke();
+  nodeGraphGlLinesPolyline(batch, pts, Math.max(0, lineW * 0.5 - 0.35), 0.7, inkRgba);
 
   if (settings.spectrumPeakHold === "hold") {
     const dbModes = settings.spectrumDbMode === "db" || settings.spectrumDbMode === "exactDb";
@@ -230,13 +306,11 @@ function drawNodeGraphSpectrumLineItem(renderer, item, pixelRatio) {
         st.peak[x] = Math.max(cols[x], st.peak[x] - fall);
       }
     }
-    nodeGraphSpectrumLinePath(ctx, st.peak, W, H, false);
-    ctx.strokeStyle = nodeGraphSpectrumLineHexToRgba(ink, 0.6);
-    ctx.lineWidth = Math.max(1, lineW * 0.8);
-    ctx.stroke();
+    nodeGraphGlLinesPolyline(batch, nodeGraphSpectrumLinePoints(st.peak, W, H), Math.max(0, Math.max(1, lineW * 0.8) * 0.5 - 0.35), 0.7, inkA(0.6));
   } else {
     st.peak.fill(0);
   }
+  if (!nodeGraphGlLinesEnd(batch) && typeof nodeGraphGlLinesFillBlack === "function") nodeGraphGlLinesFillBlack(canvas);
 }
 
 if (typeof nodeGraphModuleScopeCustomRenderers !== "undefined") {

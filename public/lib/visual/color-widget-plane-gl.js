@@ -158,8 +158,12 @@ void main() {
       }
       ctx.setTransform(1, 0, 0, 1, 0, 0);
       ctx.putImageData(img, 0, 0);
-    } catch (_e) {
+    } catch (error) {
       gl.viewport(0, 0, device.canvas.width, device.canvas.height);
+      if (!paint._readFailLogged) {
+        paint._readFailLogged = true;
+        console.error("[color-widget-plane-gl] readPixels failed", error);
+      }
       return false;
     }
     gl.viewport(0, 0, device.canvas.width, device.canvas.height);

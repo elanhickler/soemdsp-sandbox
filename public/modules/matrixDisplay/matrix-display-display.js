@@ -190,41 +190,39 @@ function matrixDisplayIngestBuffers(state, maxAge, brightness) {
   return plotted;
 }
 
+const MATRIX_DISPLAY_GL_FONT = '"Cascadia Mono", Consolas, "Courier New", monospace';
+const MATRIX_DISPLAY_GL_PLATE = [1 / 255, 1 / 255, 4 / 255, 1];
+// css colour -> rgba01, shared across faces (the age palette has few distinct
+// strings), so per-frame drawing does not reparse or allocate.
+const matrixDisplayGlColourCache = new Map();
+const matrixDisplayGlTextOpts = {
+  px: 12, weight: 600, family: MATRIX_DISPLAY_GL_FONT, align: "center", baseline: "middle", rgba: null,
+};
+
+function matrixDisplayGlColour(css) {
+  let c = matrixDisplayGlColourCache.get(css);
+  if (!c) {
+    if (matrixDisplayGlColourCache.size > 4096) matrixDisplayGlColourCache.clear();
+    c = nodeGraphGlLinesCss(css);
+    matrixDisplayGlColourCache.set(css, c);
+  }
+  return c;
+}
+
 function matrixDisplayDrawFace(canvas, state, glyphRamp, params) {
   const host = canvas?.parentElement || canvas;
-  const faceMetrics = typeof ensureFaceMetrics === "function"
-    ? ensureFaceMetrics(host, { observe: true })
+  // Shared sizing (css x dpr capped, never zoom); drawing is WebGL2 via gl-line-renderer.
+  const m = typeof nodeGraphDisplayCanvasSize === "function" ? nodeGraphDisplayCanvasSize(host, canvas) : null;
+  if (!m) return;
+  const pw = Math.max(1, m.width);
+  const ph = Math.max(1, m.height);
+  const batch = typeof nodeGraphGlLinesBegin === "function"
+    ? nodeGraphGlLinesBegin(canvas, MATRIX_DISPLAY_GL_PLATE)
     : null;
-  let cssW;
-  let cssH;
-  let dpr;
-  if (faceMetrics) {
-    cssW = Math.max(1, faceMetrics.cssW);
-    cssH = Math.max(1, faceMetrics.cssH);
-    dpr = Math.max(1, Math.min(2, faceMetrics.dpr || window.devicePixelRatio || 1));
-  } else {
-    dpr = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
-    const box = typeof nodeGraphElementClientSize === "function"
-      ? nodeGraphElementClientSize(canvas, canvas.width || 1, canvas.height || 1)
-      : {
-        width: Math.max(1, canvas.clientWidth || canvas.width || 1),
-        height: Math.max(1, canvas.clientHeight || canvas.height || 1),
-        skipped: false,
-      };
-    if (box.skipped) {
-      return;
-    }
-    cssW = Math.max(1, box.width);
-    cssH = Math.max(1, box.height);
+  if (!batch) {
+    if (typeof nodeGraphGlLinesFillBlack === "function") nodeGraphGlLinesFillBlack(canvas);
+    return;
   }
-  const pw = Math.round(cssW * dpr);
-  const ph = Math.round(cssH * dpr);
-  if (canvas.width !== pw || canvas.height !== ph) {
-    canvas.width = pw;
-    canvas.height = ph;
-  }
-  const ctx = canvas.getContext("2d");
-  if (!ctx) return;
 
   const cols = state.columns;
   const rows = state.rows;
@@ -232,34 +230,28 @@ function matrixDisplayDrawFace(canvas, state, glyphRamp, params) {
   const cellH = ph / rows;
   const fontPx = Math.max(4, Math.min(cellW, cellH) * 0.92);
 
-  ctx.setTransform(1, 0, 0, 1, 0, 0);
-  ctx.fillStyle = "#010104";
-  ctx.fillRect(0, 0, pw, ph);
   // Brightness 0: plate only, no glyphs.
   const bRaw = Number(params?.brightness);
   const bright = Number.isFinite(bRaw) ? bRaw : 1;
-  if (bright <= 0) {
-    return;
-  }
-  ctx.font = `600 ${fontPx}px "Cascadia Mono", Consolas, "Courier New", monospace`;
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-
-  const maxAge = MATRIX_DISPLAY_MAX_AGE;
-  const floor = params.blackFloor || 0;
-  const ages = state.ages;
-
-  for (let r = 0; r < rows; r += 1) {
-    for (let c = 0; c < cols; c += 1) {
-      const age = ages[r * cols + c];
-      if (age <= floor) continue;
-      const glyph = matrixDisplayGlyphForAge(glyphRamp, age, maxAge);
-      if (glyph === " ") continue;
-      ctx.fillStyle = matrixDisplayColorForAge(age, maxAge, params.brightness);
-      // No ad-hoc shadow glow — brightness/decay only.
-      ctx.fillText(glyph, (c + 0.5) * cellW, (r + 0.5) * cellH);
+  if (bright > 0) {
+    const maxAge = MATRIX_DISPLAY_MAX_AGE;
+    const floor = params.blackFloor || 0;
+    const ages = state.ages;
+    const opts = matrixDisplayGlTextOpts;
+    opts.px = fontPx;
+    for (let r = 0; r < rows; r += 1) {
+      for (let c = 0; c < cols; c += 1) {
+        const age = ages[r * cols + c];
+        if (age <= floor) continue;
+        const glyph = matrixDisplayGlyphForAge(glyphRamp, age, maxAge);
+        if (glyph === " ") continue;
+        opts.rgba = matrixDisplayGlColour(matrixDisplayColorForAge(age, maxAge, params.brightness));
+        // No ad-hoc shadow glow — brightness/decay only.
+        nodeGraphGlLinesText(batch, glyph, (c + 0.5) * cellW, (r + 0.5) * cellH, opts);
+      }
     }
   }
+  if (!nodeGraphGlLinesEnd(batch) && typeof nodeGraphGlLinesFillBlack === "function") nodeGraphGlLinesFillBlack(canvas);
 }
 
 function matrixDisplayTickFace(face) {

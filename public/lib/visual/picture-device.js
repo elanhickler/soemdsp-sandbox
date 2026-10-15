@@ -57,9 +57,14 @@
     return device;
   }
 
-  function drawTexturedQuad(gl, dev, texture, width, height) {
+  function drawTexturedQuad(gl, dev, texture, width, height, over = false) {
     gl.viewport(0, 0, width, height);
-    gl.disable(gl.BLEND);
+    if (over) {
+      gl.enable(gl.BLEND);
+      gl.blendFuncSeparate(gl.ONE, gl.ONE_MINUS_SRC_ALPHA, gl.ZERO, gl.ONE);
+    } else {
+      gl.disable(gl.BLEND);
+    }
     gl.disable(gl.DEPTH_TEST);
     gl.useProgram(dev.program);
     gl.bindBuffer(gl.ARRAY_BUFFER, dev.quad);
@@ -69,6 +74,10 @@
     gl.bindTexture(gl.TEXTURE_2D, texture);
     gl.uniform1i(dev.uTexture, 0);
     gl.drawArrays(gl.TRIANGLES, 0, 6);
+    if (over) {
+      gl.disable(gl.BLEND);
+      gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+    }
   }
 
   function ensureExport(gl, nodeId, width, height) {
@@ -138,6 +147,54 @@
     return name === "rgba" || name === "📺";
   }
 
+  /** True when any cable leaves this node's picture out (`rgba` / TV). */
+  function nodeGraphPictureHasConsumer(nodeId) {
+    const id = String(nodeId || "").trim();
+    if (!id) return false;
+    const list = nodeGraphMvp?.patch?.connections || nodeGraphMvp?.connections || [];
+    for (let i = 0; i < list.length; i += 1) {
+      const from = connectionEnd(list[i], "from");
+      if (from.node === id && isTvPort(from.port)) return true;
+    }
+    return false;
+  }
+
+  /**
+   * Render target for a node's picture out (gl-line-renderer draws straight
+   * into it). Same stable texture nodeGraphPictureRead hands to consumers.
+   * Wire convention: premultiplied RGBA; opaque sources are unaffected.
+   */
+  function nodeGraphPictureExportTarget(nodeId, width, height) {
+    const id = String(nodeId || "").trim();
+    const dev = nodeGraphPictureDevice();
+    if (!id || !dev?.gl) return null;
+    return ensureExport(dev.gl, id, width, height);
+  }
+
+  /**
+   * Bridge for faces still drawn on a 2D canvas: upload the canvas into the
+   * node's picture texture (only when a cable is connected). Opaque.
+   */
+  function nodeGraphPicturePublishCanvas(nodeId, canvas) {
+    const id = String(nodeId || "").trim();
+    if (!id || !canvas || !(canvas.width > 0) || !(canvas.height > 0)) return false;
+    if (!nodeGraphPictureHasConsumer(id)) return false;
+    const dev = nodeGraphPictureDevice();
+    if (!dev?.gl) return false;
+    const gl = dev.gl;
+    const slot = ensureExport(gl, id, canvas.width, canvas.height);
+    if (!slot) return false;
+    gl.bindTexture(gl.TEXTURE_2D, slot.texture);
+    // FBO-style orientation (row 0 = bottom) to match rendered pictures.
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+    gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, canvas);
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+    gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
+    gl.bindTexture(gl.TEXTURE_2D, null);
+    return true;
+  }
+
   /** Latest published picture for a node id (no cable walk). */
   function nodeGraphPictureGet(nodeId) {
     const id = String(nodeId || "").trim();
@@ -182,9 +239,10 @@
     gl.viewport(0, 0, rw, rh);
     gl.scissor(0, 0, rw, rh);
     gl.enable(gl.SCISSOR_TEST);
-    gl.clearColor(0, 0, 0, 0);
+    // Premultiplied picture over an opaque black plate (respects alpha).
+    gl.clearColor(0, 0, 0, 1);
     gl.clear(gl.COLOR_BUFFER_BIT);
-    drawTexturedQuad(gl, dev, texture, rw, rh);
+    drawTexturedQuad(gl, dev, texture, rw, rh, true);
     gl.disable(gl.SCISSOR_TEST);
     gl.bindTexture(gl.TEXTURE_2D, null);
     const ctx = destCanvas.getContext("2d");
@@ -236,4 +294,7 @@
   global.nodeGraphPictureGet = nodeGraphPictureGet;
   global.nodeGraphPictureRead = nodeGraphPictureRead;
   global.nodeGraphPicturePresent = nodeGraphPicturePresent;
+  global.nodeGraphPictureHasConsumer = nodeGraphPictureHasConsumer;
+  global.nodeGraphPictureExportTarget = nodeGraphPictureExportTarget;
+  global.nodeGraphPicturePublishCanvas = nodeGraphPicturePublishCanvas;
 })(typeof globalThis !== "undefined" ? globalThis : window);

@@ -10,7 +10,7 @@ function createNodeGraphPulseCurveDisplay(nodeId, type) {
   section.dataset.node = nodeId;
   section.dataset.nodeType = type;
   const canvas = document.createElement("canvas");
-  canvas.className = "node-filter-curve-canvas node-pulse-curve-canvas";
+  canvas.className = "node-filter-curve-canvas node-pulse-curve-canvas node-display-canvas";
   section.append(canvas);
   requestAnimationFrame(() => drawNodeGraphPulseCurveDisplay(section));
   return section;

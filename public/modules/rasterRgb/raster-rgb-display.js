@@ -232,51 +232,6 @@ function nodeGraphRasterRgbGradeLut(grade) {
   return lut;
 }
 
-function nodeGraphRasterRgbPresentImage(state, src, key = "presentImage") {
-  const w = state.width;
-  const h = state.height;
-  let image = state[key];
-  if (!image || image.width !== w || image.height !== h) {
-    image = new ImageData(w, h);
-    state[key] = image;
-  }
-  image.data.set(src);
-  return image;
-}
-
-function nodeGraphRasterRgbApplyGrade(state, grade) {
-  const src = state.pixels;
-  let dst = state.graded;
-  if (!dst || dst.length !== src.length) {
-    dst = new Uint8ClampedArray(src.length);
-    state.graded = dst;
-  }
-  const key = `${grade.invert}|${grade.contrast}|${grade.brightness}`;
-  if (state.gradeLutKey !== key || !state.gradeLut) {
-    state.gradeLut = nodeGraphRasterRgbGradeLut(grade);
-    state.gradeLutKey = key;
-  }
-  const lut = state.gradeLut;
-  const hue = nodeGraphFiniteNumber(grade?.hue);
-  const rotate = Math.abs(hue) > 1e-9 && typeof nodeGraphRasterRgbHueRotate === "function";
-  for (let i = 0; i < src.length; i += 4) {
-    let r = lut[src[i]];
-    let g = lut[src[i + 1]];
-    let b = lut[src[i + 2]];
-    if (rotate) {
-      const rot = nodeGraphRasterRgbHueRotate(r / 255, g / 255, b / 255, hue);
-      r = rot.r * 255;
-      g = rot.g * 255;
-      b = rot.b * 255;
-    }
-    dst[i] = r;
-    dst[i + 1] = g;
-    dst[i + 2] = b;
-    dst[i + 3] = 255;
-  }
-  return dst;
-}
-
 function nodeGraphRasterRgbState(nodeId, width, height, logicalWidth = width, logicalHeight = height) {
   const key = String(nodeId || "");
   let state = key ? nodeGraphRasterRgbBuffers.get(key) : null;
@@ -635,20 +590,16 @@ function nodeGraphRasterRgbEnsureCanvas(face, slot, pixelRatio) {
   }
   let canvas = face.querySelector(":scope > .node-raster-rgb-canvas");
   if (!canvas) {
-    canvas = document.createElement("canvas");
-    canvas.className = "node-raster-rgb-canvas";
+    canvas = nodeGraphDisplayCanvasCreate("node-raster-rgb-canvas");
     canvas.setAttribute("aria-hidden", "true");
     face.appendChild(canvas);
   }
   const cssW = Math.max(1, face.clientWidth || face.offsetWidth || 1);
   const cssH = Math.max(1, face.clientHeight || face.offsetHeight || 1);
-  const dpr = Math.max(1, nodeGraphFiniteNumber(pixelRatio, nodeGraphFiniteNumber(window.devicePixelRatio, 1)));
+  const dpr = Math.max(1, nodeGraphFiniteNumber(pixelRatio, nodeGraphDisplayCanvasPixelRatio()));
   const bw = Math.max(1, Math.round(cssW * dpr));
   const bh = Math.max(1, Math.round(cssH * dpr));
-  if (canvas.width !== bw || canvas.height !== bh) {
-    canvas.width = bw;
-    canvas.height = bh;
-  }
+  nodeGraphDisplayCanvasSetBacking(canvas, bw, bh);
   canvas.style.position = "absolute";
   canvas.style.inset = "0";
   canvas.style.width = "100%";
@@ -711,7 +662,7 @@ function drawNodeGraphRasterRgbFaceItem(_renderer, item, pixelRatio) {
   const paintSlot = slot || { nodeId, scopeElement: face, type: "rasterRgb" };
   const canvas = nodeGraphRasterRgbEnsureCanvas(face, paintSlot, pixelRatio);
   canvas.style.background = plate;
-  const ctx = canvas.getContext("2d");
+  const ctx = nodeGraphDisplayCanvasPresentContext(canvas);
   if (!ctx) {
     return;
   }
@@ -725,7 +676,7 @@ function drawNodeGraphRasterRgbFaceItem(_renderer, item, pixelRatio) {
   const bufW = grid.bufferWidth || 0;
   const bufH = grid.bufferHeight || 0;
   const sizeKey = `${cw}x${ch}|${grid.width}x${grid.height}|${bufW}x${bufH}`;
-  // Pause/speed 0: keep the last frame. Do not fill-wipe then early-return
+  // Pause/speed 0: hold the paused picture (a feature, not a GL fallback). Do not fill-wipe then early-return
   // (that left a blank plate while the pixel buffer still existed).
   if (frozen && canvas._rasterRgbBlit && canvas._rasterRgbHoldKey === sizeKey) {
     return;
@@ -849,8 +800,7 @@ function drawNodeGraphRasterRgbFaceItem(_renderer, item, pixelRatio) {
       : Math.floor(lastAbs) + take;
   }
   const gradeKey = `${grade.invert}|${grade.contrast}|${grade.brightness}|${grade.hue}|${grade.blur}|${grade.glow}|${grid.width}x${grid.height}|${bufW}x${bufH}|${wired ? captured.length : 0}`;
-  canvas.style.imageRendering = "pixelated";
-  ctx.imageSmoothingEnabled = false;
+  nodeGraphDisplayCanvasPixelated(canvas, true);
   let dw = cw;
   let dh = ch;
   let dx = 0;
@@ -869,7 +819,7 @@ function drawNodeGraphRasterRgbFaceItem(_renderer, item, pixelRatio) {
   const glowPx = Math.max(blurPx, grade.glow * span * 0.07) * 1.6;
   // GPU first (DISPLAY_SHADER_PLAN M3, raster-rgb-gl.js): raw buffer texture,
   // grade LUT + hue + separable blur / glow in shaders on the shared picture
-  // device. Canvas2D below is the fallback (no GL / lost context).
+  // device. No fallback: a failed GPU frame is black + logged.
   const pic = nodeGraphRasterRgbWiredPicture(paintSlot);
   const gpuDrawn = typeof nodeGraphRasterRgbGlPresent === "function"
     && nodeGraphRasterRgbGlPresent(state, grade, ctx, {
@@ -878,37 +828,10 @@ function drawNodeGraphRasterRgbFaceItem(_renderer, item, pixelRatio) {
       sourceW: pic?.width || 0,
       sourceH: pic?.height || 0,
     });
-  const graded = gpuDrawn ? null : nodeGraphRasterRgbApplyGrade(state, grade);
-  try {
-    if (!gpuDrawn) {
-      const image = nodeGraphRasterRgbPresentImage(state, graded);
-      let tile = state.tileCanvas;
-      if (!tile || tile.width !== state.width || tile.height !== state.height) {
-        tile = document.createElement("canvas");
-        tile.width = state.width;
-        tile.height = state.height;
-        state.tileCanvas = tile;
-      }
-      const tileCtx = tile.getContext("2d");
-      tileCtx.putImageData(image, 0, 0);
-      ctx.filter = blurPx > 0.05 ? `blur(${blurPx.toFixed(2)}px)` : "none";
-      ctx.drawImage(tile, 0, 0, state.width, state.height, dx, dy, dw, dh);
-      if (grade.glow > 0.001 && glowPx > 0.05) {
-        ctx.globalCompositeOperation = "lighter";
-        ctx.globalAlpha = grade.glow;
-        ctx.filter = `blur(${glowPx.toFixed(2)}px)`;
-        ctx.drawImage(tile, 0, 0, state.width, state.height, dx, dy, dw, dh);
-        ctx.globalCompositeOperation = "source-over";
-        ctx.globalAlpha = 1;
-      }
-    }
-    ctx.filter = "none";
-  } catch (_err) {
-    ctx.filter = "none";
-    ctx.globalCompositeOperation = "source-over";
-    ctx.globalAlpha = 1;
-    ctx.fillStyle = plate;
-    ctx.fillRect(0, 0, cw, ch);
+  if (!gpuDrawn) {
+    canvas._rasterRgbBlit = false;
+    nodeGraphDisplayGlFailed(canvas, "Raster RGB GL present failed");
+    return;
   }
   canvas._rasterRgbBlit = true;
   canvas._rasterRgbGradeKey = gradeKey;
@@ -1124,8 +1047,8 @@ function scheduleNodeGraphRasterRgbPump() {
   });
 }
 
-function paintNodeGraphRasterRgbFacesNow(pixelRatio = window.devicePixelRatio || 1) {
-  const pr = Math.max(1, nodeGraphFiniteNumber(pixelRatio, nodeGraphFiniteNumber(window.devicePixelRatio, 1)));
+function paintNodeGraphRasterRgbFacesNow(pixelRatio = nodeGraphDisplayCanvasPixelRatio()) {
+  const pr = Math.max(1, nodeGraphFiniteNumber(pixelRatio, nodeGraphDisplayCanvasPixelRatio()));
   let painted = 0;
   for (const { slot, face } of nodeGraphRasterRgbCollectFaces()) {
     const nodeId = slot?.nodeId || face?.dataset?.node;

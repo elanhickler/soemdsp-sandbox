@@ -12,8 +12,7 @@ function createNodeGraphBasicShapeDisplay(nodeId, type = "basicShape") {
   section.dataset.parameterVisual = "true";
   section.dataset.lightSource = "screen";
   section.dataset.lightStrength = "0.66";
-  const canvas = document.createElement("canvas");
-  canvas.className = "node-filter-curve-canvas node-basic-shape-canvas";
+  const canvas = nodeGraphDisplayCanvasCreate("node-filter-curve-canvas node-basic-shape-canvas");
   canvas.dataset.lightSource = "screen";
   canvas.dataset.lightStrength = "0.66";
   section.append(canvas);
@@ -142,7 +141,7 @@ function drawNodeGraphBasicShapeDisplay(section) {
     const detail = error && typeof error === "object"
       ? (error.message || error.name || String(error))
       : String(error);
-    console.warn("[basic-shape] draw failed", detail, error);
+    console.error("[basic-shape] draw failed", detail, error);
     if (section) {
       section._basicShapeForceDraw = true;
       section._basicShapeLaidOut = false;

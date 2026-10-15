@@ -107,6 +107,86 @@ function resizeNodeGraphLiveModuleScopeBuffer(buffer, frameCapacity) {
   return next;
 }
 
+// Props readers/writers keep on scope ring buffers; carried across the view
+// swap in nodeGraphScopeRingAdvance (typed arrays cannot be re-offset).
+const nodeGraphScopeRingCarriedProps = [
+  "nodeGraphScopeAbsoluteFrame",
+  "nodeGraphScopeAnalyzer",
+  "nodeGraphScopeBurnArmed",
+  "nodeGraphScopeBurnCrossings",
+  "nodeGraphScopeBurnLastSample",
+  "nodeGraphScopeBurnSweepLength",
+  "nodeGraphScopeBurnSweepStart",
+  "nodeGraphScopeCurrentSamplePosition",
+  "nodeGraphScopeDebugSnapshot",
+  "nodeGraphScopeDisableDiscontinuitySkip",
+  "nodeGraphScopeDiscontinuitySkipSamples",
+  "nodeGraphScopeDrawFullWindow",
+  "nodeGraphScopeDrawProgress",
+  "nodeGraphScopeDrawStartProgress",
+  "nodeGraphScopeDrawWrap",
+  "nodeGraphScopeFrameBrightness",
+  "nodeGraphScopeHoldPoint",
+  "nodeGraphScopeLength",
+  "nodeGraphScopeLimit",
+  "nodeGraphScopeMinPointSpacingPx",
+  "nodeGraphScopePeriodSamples",
+  "nodeGraphScopeRawValues",
+  "nodeGraphScopeRecentSampleCount",
+  "nodeGraphScopeRetainedSampleCount",
+  "nodeGraphScopeSampleRate",
+  "nodeGraphScopeSampleStride",
+  "nodeGraphScopeSkipDiscontinuities",
+  "nodeGraphScopeSkippedPoints",
+  "nodeGraphScopeSourceFrequency",
+  "nodeGraphScopeSourceSampleRate",
+  "nodeGraphScopeSpectrum",
+  "nodeGraphScopeStartFrame",
+  "nodeGraphScopeSyncBuffer",
+  "nodeGraphScopeTotalPosted",
+  "nodeGraphScopeTotalSampleCount",
+  "nodeGraphScopeTotalWritten",
+  "nodeGraphScopeTracePadding",
+  "nodeGraphScopeUniformAge",
+  "nodeGraphScopeUseFullWindow",
+  "nodeGraphScopeVersion",
+  "nodeGraphScopeVisualPointLimit",
+  "nodeGraphScopeWriteIndex",
+];
+
+function nodeGraphScopeRingAdvance(id, buffer, count) {
+  const capacity = buffer.length;
+  if (count >= capacity) {
+    // Whole ring replaced; caller overwrites every slot.
+    return buffer;
+  }
+  let backing = buffer.nodeGraphScopeBacking;
+  let offset = buffer.nodeGraphScopeBackingOffset | 0;
+  if (!(backing instanceof Float32Array) || backing.buffer !== buffer.buffer
+    || offset + capacity > backing.length || backing.length < capacity) {
+    const slack = Math.max(4096, capacity >> 2);
+    backing = new Float32Array(capacity + slack);
+    backing.set(buffer, 0);
+    offset = 0;
+  }
+  let nextOffset = offset + count;
+  if (nextOffset + capacity > backing.length) {
+    // Keep the newest capacity-count samples at the front.
+    backing.copyWithin(0, nextOffset, offset + capacity);
+    nextOffset = 0;
+  }
+  const next = backing.subarray(nextOffset, nextOffset + capacity);
+  for (const key of nodeGraphScopeRingCarriedProps) {
+    if (key in buffer) {
+      next[key] = buffer[key];
+    }
+  }
+  next.nodeGraphScopeBacking = backing;
+  next.nodeGraphScopeBackingOffset = nextOffset;
+  nodeGraphModuleScopeState.buffers.set(id, next);
+  return next;
+}
+
 function pushNodeGraphLiveModuleScopeSamples(nodeId, values, metadata = null) {
   const id = String(nodeId || "");
   if (!id) {
@@ -119,19 +199,38 @@ function pushNodeGraphLiveModuleScopeSamples(nodeId, values, metadata = null) {
     buffer = resizeNodeGraphLiveModuleScopeBuffer(buffer, frameCapacity);
     nodeGraphModuleScopeState.buffers.set(id, buffer);
   }
-  const samples = Array.isArray(values) || ArrayBuffer.isView(values)
-    ? [...values].map(nodeGraphModuleScopeScalarValue)
-    : [nodeGraphModuleScopeScalarValue(values)];
-  const count = Math.min(buffer.length, samples.length);
+  // Hot path (perf, softpop patch): scope posts arrive as Float32Array chunks
+  // into a 10 s ring, many per frame. Spreading each chunk into a JS array and
+  // mapping every sample through the object-aware scalar reader was the top
+  // main-thread cost. Write numeric typed arrays straight in; keep the generic
+  // reader for plain arrays (which may hold objects).
+  const isList = Array.isArray(values) || ArrayBuffer.isView(values);
+  const sampleCount = isList ? values.length : 1;
+  const count = Math.min(buffer.length, sampleCount);
   if (count <= 0) {
     return;
   }
-  if (count < buffer.length) {
-    buffer.copyWithin(0, count);
-  }
-  const start = samples.length - count;
-  for (let index = 0; index < count; index += 1) {
-    buffer[buffer.length - count + index] = samples[start + index] || 0;
+  // Sliding window over an oversized backing store instead of shifting the
+  // whole ring per post. Live rings hold 10 s (441k floats) and the worklet
+  // posts ~27 snapshots/s for ~50 scope keys, so copyWithin(0, count) moved
+  // ~2.5 GB/s on the main thread (softpop patch: ~35% of main thread, FPS
+  // ~35). Now each post only writes its new samples; the backing is compacted
+  // once per `slack` samples and the Map entry is swapped to the new view.
+  buffer = nodeGraphScopeRingAdvance(id, buffer, count);
+  const start = sampleCount - count;
+  const dest = buffer.length - count;
+  if (!isList) {
+    buffer[dest] = nodeGraphModuleScopeScalarValue(values) || 0;
+  } else if (ArrayBuffer.isView(values) && !(values instanceof DataView)) {
+    for (let index = 0; index < count; index += 1) {
+      const v = Number(values[start + index]);
+      // Same result as the scalar reader: non-finite and NaN become 0.
+      buffer[dest + index] = Number.isFinite(v) ? v : 0;
+    }
+  } else {
+    for (let index = 0; index < count; index += 1) {
+      buffer[dest + index] = nodeGraphModuleScopeScalarValue(values[start + index]) || 0;
+    }
   }
   buffer.nodeGraphScopeRecentSampleCount = count;
   buffer.nodeGraphScopeTotalSampleCount = Math.max(

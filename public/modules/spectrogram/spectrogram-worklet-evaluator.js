@@ -75,36 +75,60 @@ NodeLiveAudioProcessor.prototype.syncSpectrogramDisplayAnalysis = function syncS
 
 
 // Radix-2 Cooley-Tukey FFT (in-place on real/imag arrays).
-NodeLiveAudioProcessor.prototype.spectrogramFft = function spectrogramFft(real, imag) {
-  const n = real.length;
-  if (n <= 1 || (n & (n - 1)) !== 0) return;
-
+// Bit-reverse permutation and twiddles are cached per size (they used to be
+// recomputed per hop: n/2·log2(n) cos+sin calls on the audio thread).
+const SPECTROGRAM_FFT_TABLES = new Map();
+function spectrogramFftTables(n) {
+  let t = SPECTROGRAM_FFT_TABLES.get(n);
+  if (t) return t;
   const bits = Math.log2(n);
+  const rev = new Uint32Array(n);
   for (let i = 0; i < n; i++) {
     let j = 0;
     for (let b = 0; b < bits; b++) {
       if (i & (1 << b)) j |= (1 << (bits - 1 - b));
     }
+    rev[i] = j;
+  }
+  const half = n >> 1;
+  const cos = new Float64Array(half);
+  const sin = new Float64Array(half);
+  for (let k = 0; k < half; k++) {
+    const ang = (-2 * Math.PI * k) / n;
+    cos[k] = Math.cos(ang);
+    sin[k] = Math.sin(ang);
+  }
+  t = { rev, cos, sin };
+  SPECTROGRAM_FFT_TABLES.set(n, t);
+  return t;
+}
+
+NodeLiveAudioProcessor.prototype.spectrogramFft = function spectrogramFft(real, imag) {
+  const n = real.length;
+  if (n <= 1 || (n & (n - 1)) !== 0) return;
+  const { rev, cos, sin } = spectrogramFftTables(n);
+  for (let i = 0; i < n; i++) {
+    const j = rev[i];
     if (j > i) {
-      [real[i], real[j]] = [real[j], real[i]];
-      [imag[i], imag[j]] = [imag[j], imag[i]];
+      let t = real[i]; real[i] = real[j]; real[j] = t;
+      t = imag[i]; imag[i] = imag[j]; imag[j] = t;
     }
   }
-
   for (let len = 2; len <= n; len *= 2) {
     const half = len / 2;
-    const phase = -2 * Math.PI / len;
+    const step = n / len;
     for (let i = 0; i < n; i += len) {
       for (let j = 0; j < half; j++) {
-        const ang = phase * j;
-        const wr = Math.cos(ang);
-        const wi = Math.sin(ang);
-        const tr = real[i + j + half] * wr - imag[i + j + half] * wi;
-        const ti = real[i + j + half] * wi + imag[i + j + half] * wr;
-        real[i + j + half] = real[i + j] - tr;
-        imag[i + j + half] = imag[i + j] - ti;
-        real[i + j] += tr;
-        imag[i + j] += ti;
+        const wr = cos[j * step];
+        const wi = sin[j * step];
+        const a = i + j;
+        const b = a + half;
+        const tr = real[b] * wr - imag[b] * wi;
+        const ti = real[b] * wi + imag[b] * wr;
+        real[b] = real[a] - tr;
+        imag[b] = imag[a] - ti;
+        real[a] += tr;
+        imag[a] += ti;
       }
     }
   }
@@ -242,6 +266,12 @@ NodeLiveAudioProcessor.prototype.spectrogramCollectDisplayData = function spectr
     }
   }
   const rawCol = wantRaw ? state.rawOut : null;
+  // 1D Spectrum shows one curve: analyse at most ~60 hops/s (display rate)
+  // and skip the SpectrumBatch history the Spectrogram waterfall needs.
+  const minGap = wantRaw ? Math.max(1, Math.floor(writeRate / 60)) : 0;
+  if (wantRaw && (!state.colScratch || state.colScratch.length !== halfN)) {
+    state.colScratch = new Float32Array(halfN);
+  }
 
   // Extract fresh samples using own frame tracking
   const absFrame = Math.max(0, Math.floor(nodeGraphFiniteNumber(buf.absoluteFrame)));
@@ -269,7 +299,13 @@ NodeLiveAudioProcessor.prototype.spectrogramCollectDisplayData = function spectr
       state.accumulator[accIdx] = sample;
       accIdx++;
     }
+    if (accIdx >= winSize && wantRaw && (state.sinceFft = (state.sinceFft || 0) + hopSize) < minGap) {
+      // Throttled hop (1D Spectrum): slide the window, skip the FFT.
+      state.accumulator.copyWithin(0, hopSize, winSize);
+      accIdx = winSize - hopSize;
+    }
     if (accIdx >= winSize) {
+      state.sinceFft = 0;
       // Window + zero-pad into FFT buffer.
       state.fftReal.fill(0);
       state.fftImag.fill(0);
@@ -279,7 +315,7 @@ NodeLiveAudioProcessor.prototype.spectrogramCollectDisplayData = function spectr
       }
       this.spectrogramFft(state.fftReal, state.fftImag);
 
-      const col = new Float32Array(halfN);
+      const col = wantRaw ? state.colScratch : new Float32Array(halfN);
       for (let j = 0; j < halfN; j++) {
         const mag = Math.sqrt(
           state.fftReal[j] * state.fftReal[j] + state.fftImag[j] * state.fftImag[j],
@@ -298,11 +334,8 @@ NodeLiveAudioProcessor.prototype.spectrogramCollectDisplayData = function spectr
       }
       hopsThisFrame += 1;
 
-      const shift = hopSize;
-      for (let j = 0; j < winSize - shift; j++) {
-        state.accumulator[j] = state.accumulator[j + shift];
-      }
-      accIdx = winSize - shift;
+      state.accumulator.copyWithin(0, hopSize, winSize);
+      accIdx = winSize - hopSize;
     }
   }
   state.accumCount = accIdx;
@@ -317,18 +350,20 @@ NodeLiveAudioProcessor.prototype.spectrogramCollectDisplayData = function spectr
   state.spectrumOut.set(lastCol);
 
   let batchFlat = state.batchScratch;
-  if (!batchFlat || batchFlat.length !== batchCols * halfN) {
-    batchFlat = new Float32Array(batchCols * halfN);
-    state.batchScratch = batchFlat;
-  }
-  for (let c = 0; c < batchCols; c++) {
-    batchFlat.set(hopColumns[c], c * halfN);
+  if (!wantRaw) {
+    if (!batchFlat || batchFlat.length !== batchCols * halfN) {
+      batchFlat = new Float32Array(batchCols * halfN);
+      state.batchScratch = batchFlat;
+    }
+    for (let c = 0; c < batchCols; c++) {
+      batchFlat.set(hopColumns[c], c * halfN);
+    }
   }
 
   state.hopSerial = (nodeGraphFiniteNumber(state.hopSerial)) + 1;
 
   dataPorts.push([nodeId, "Spectrum", state.spectrumOut]);
-  dataPorts.push([nodeId, "SpectrumBatch", batchFlat]);
+  if (!wantRaw) dataPorts.push([nodeId, "SpectrumBatch", batchFlat]);
   if (rawCol) {
     dataPorts.push([nodeId, "SpectrumRaw", rawCol]);
     dataPorts.push([nodeId, "SpectrumGain", new Float32Array([state.windowSum || winSize / 2])]);

@@ -13,8 +13,7 @@ function createNodeGraphSoftwaveOscDisplay(nodeId, type = "softwaveOsc") {
   section.dataset.parameterVisual = "true";
   section.dataset.lightSource = "screen";
   section.dataset.lightStrength = "0.66";
-  const canvas = document.createElement("canvas");
-  canvas.className = "node-softwave-osc-canvas";
+  const canvas = nodeGraphDisplayCanvasCreate("node-softwave-osc-canvas");
   canvas.dataset.lightSource = "screen";
   canvas.dataset.lightStrength = "0.66";
   section.append(canvas);
@@ -99,7 +98,7 @@ function drawNodeGraphSoftwaveOscDisplay(section) {
     const detail = error && typeof error === "object"
       ? (error.message || error.name || String(error))
       : String(error);
-    console.warn("[softwave-osc] draw failed", detail, error);
+    console.error("[softwave-osc] draw failed", detail, error);
     if (section) {
       section._softwaveOscForceDraw = true;
       section._softwaveOscLaidOut = false;

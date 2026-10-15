@@ -23,8 +23,8 @@
 // GPU path (spectrogram-gl.js, display-shader plan M1): when the shared picture
 // device is usable, JS only keeps a ring of raw spectrum columns plus the
 // settings each column was painted with; the fragment shader does the row→Hz
-// mapping, bin lerp, fold, contrast/brightness and LUT per pixel. The Canvas2D
-// bitmap below stays as the fallback and is rebuilt from the ring on switch.
+// mapping, bin lerp, fold, contrast/brightness and LUT per pixel. GL only:
+// the Canvas2D bitmap + ring->2D rebuild fallback is gone (no ring -> plate).
 
 const spectrogramHistory = new Map();
 const spectrogramLutRgbCache = new Map();
@@ -199,13 +199,6 @@ function spectrogramCssAtBrightness(lutRgb, brightness01) {
   return "rgb(" + r + "," + g + "," + b + ")";
 }
 
-function spectrogramFillBrightness(ctx, lutRgb, brightness01, x, y, w, h) {
-  if (!ctx || !(w > 0) || !(h > 0)) return;
-  ctx.globalAlpha = 1;
-  ctx.fillStyle = spectrogramCssAtBrightness(lutRgb, brightness01);
-  ctx.fillRect(x, y, w, h);
-}
-
 function spectrogramHopMeta(settings, node) {
   const fftMeta = typeof nodeGraphDataBus !== "undefined"
     ? nodeGraphDataBus.get(nodeGraphDataBusKey(String(node?.id || ""), "FftSize"))
@@ -309,60 +302,14 @@ function spectrogramHzToLinearBin(hz, linearBins, sampleRate) {
   return Math.max(0, Math.min(lb - 1, t * (lb - 1)));
 }
 
-/**
- * Map one LINEAR spectrum column → face-height magnitudes (peak-normalized).
- * Bilinear blend between FFT bins for smooth freq-scale remap.
- * minFreqHz/maxFreqHz zoom the vertical axis onto a sub-band of the spectrum.
- */
-function spectrogramSpectrumToColumnMags(
-  out,
-  spectrum,
-  spectrumBins,
-  faceH,
-  freqScaleIdx,
-  sampleRate,
-  minFreqHz,
-  maxFreqHz,
-) {
-  const h = Math.max(1, faceH | 0);
-  if (!out || out.length < h) return;
-  out.fill(0);
-  if (!(spectrumBins > 0) || !spectrum) return;
-
-  const rowDenom = Math.max(1, h - 1);
-  for (let y = 0; y < h; y += 1) {
-    const t = y / rowDenom;
-    const hz = spectrogramRowTToHz(t, freqScaleIdx, sampleRate, minFreqHz, maxFreqHz);
-    const binF = spectrogramHzToLinearBin(hz, spectrumBins, sampleRate);
-    const b0 = Math.max(0, Math.min(spectrumBins - 1, Math.floor(binF)));
-    const b1 = Math.min(spectrumBins - 1, b0 + 1);
-    const bf = binF - b0;
-    const v = (nodeGraphFiniteNumber(spectrum[b0])) * (1 - bf) + (nodeGraphFiniteNumber(spectrum[b1])) * bf;
-    out[y] = v;
-  }
-}
-
 function spectrogramCreateState(faceW, faceH) {
   const w = Math.max(1, faceW | 0);
   const h = Math.max(1, faceH | 0);
-  const canvas = document.createElement("canvas");
-  canvas.width = w;
-  canvas.height = h;
-  const ctx = canvas.getContext("2d", { willReadFrequently: false, alpha: false });
-  if (ctx) {
-    ctx.imageSmoothingEnabled = false;
-    if ("imageSmoothingQuality" in ctx) ctx.imageSmoothingQuality = "low";
-  }
   return {
     faceW: w,
     faceH: h,
-    canvas,
-    ctx,
     // Audio-seconds not yet converted to face pixels (resize-safe; not in px).
     scrollDebtSec: 0,
-    // Max-pool of spectra waiting for the next integer pixel.
-    pendingMags: new Float32Array(h),
-    pendingValid: false,
     lastHop: -1,
     lastHistorySerial: -1,
     // View settings frozen into already-painted pixels; only new ink uses new settings.
@@ -410,29 +357,7 @@ function spectrogramResizePreserve(st, faceW, faceH) {
   next.ring = st.ring && typeof spectrogramGlRingResize === "function"
     ? spectrogramGlRingResize(st.ring, w)
     : null;
-  next.pendingValid = Boolean(st.pendingValid);
-  if (st.pendingValid && st.pendingMags?.length) {
-    // Bilinear-ish vertical remap of pending column (sample neighbors).
-    for (let y = 0; y < h; y += 1) {
-      const srcF = oldH <= 1 ? 0 : (y * (oldH - 1)) / Math.max(1, h - 1);
-      const y0 = Math.max(0, Math.min(oldH - 1, Math.floor(srcF)));
-      const y1 = Math.min(oldH - 1, y0 + 1);
-      const t = srcF - y0;
-      const a = nodeGraphFiniteNumber(st.pendingMags[y0]);
-      const b = nodeGraphFiniteNumber(st.pendingMags[y1]);
-      next.pendingMags[y] = a * (1 - t) + b * t;
-    }
-  }
 
-  const nctx = next.ctx;
-  if (nctx && st.canvas) {
-    // Smooth stretch — nearest-neighbor rebuffer on every layout tick looked
-    // like broken drawing under workspace zoom / module resize.
-    nctx.imageSmoothingEnabled = true;
-    if ("imageSmoothingQuality" in nctx) nctx.imageSmoothingQuality = "medium";
-    nctx.drawImage(st.canvas, 0, 0, oldW, oldH, 0, 0, w, h);
-    nctx.imageSmoothingEnabled = false;
-  }
   return next;
 }
 
@@ -506,85 +431,6 @@ function spectrogramEnsureState(nodeId, faceW, faceH, historySeconds) {
   return st;
 }
 
-/** Max-pool pending column with new mags. */
-function spectrogramPoolPending(st, mags) {
-  const h = st.faceH;
-  if (!st.pendingValid) {
-    st.pendingMags.set(mags.subarray(0, h));
-    st.pendingValid = true;
-    return;
-  }
-  for (let y = 0; y < h; y += 1) {
-    const a = st.pendingMags[y] || 0;
-    const b = mags[y] || 0;
-    st.pendingMags[y] = a > b ? a : b;
-  }
-}
-
-/** Scroll permanent bitmap left by n pixels and paint n right columns from pending mags. */
-function spectrogramGrade01(norm, contrast, brightness) {
-  const x = Number(norm);
-  // Worklet log-mags often sit above 1. Fold into 0…1 so Contrast can still
-  // shape peaks (a hard 0–1 window slammed them to white first).
-  const folded = !Number.isFinite(x) || x <= 0 ? 0 : x / (1 + x);
-  const t = folded > 1 ? 1 : folded;
-  if (typeof nodeGraphRasterRgbGradeChannel01 === "function") {
-    return nodeGraphRasterRgbGradeChannel01(t, { contrast, brightness, invert: 0 });
-  }
-  const b = Number(brightness);
-  if (!Number.isFinite(b) || b === 0) {
-    return 0;
-  }
-  let y = t * Math.abs(b);
-  if (y > 1) y = 1;
-  return b < 0 ? 1 - y : y;
-}
-
-function spectrogramScrollPaintPixels(st, nPixels, lutRgb, brightness, contrast) {
-  const n = Math.max(0, Math.floor(nPixels));
-  const sctx = st.ctx;
-  const w = st.faceW;
-  const h = st.faceH;
-  if (!sctx || n < 1 || w < 1 || h < 1 || !st.pendingValid) return;
-
-  sctx.imageSmoothingEnabled = false;
-  if ("imageSmoothingQuality" in sctx) sctx.imageSmoothingQuality = "low";
-  const bright = Number(brightness);
-  const cont = Number.isFinite(Number(contrast)) ? Number(contrast) : 1;
-
-  // Integer scroll of permanent ink (nearest-neighbor only).
-  if (n >= w) {
-    spectrogramFillBrightness(sctx, lutRgb, 0, 0, 0, w, h);
-  } else {
-    sctx.globalCompositeOperation = "copy";
-    sctx.imageSmoothingEnabled = false;
-    sctx.drawImage(st.canvas, -n, 0);
-    sctx.globalCompositeOperation = "source-over";
-  }
-
-  // Brightness 0: scroll history, deposit the gradient at brightness 0.
-  if (!Number.isFinite(bright) || bright === 0) {
-    spectrogramFillBrightness(sctx, lutRgb, 0, Math.max(0, w - n), 0, Math.min(n, w), h);
-    st.pendingValid = false;
-    st.pendingMags.fill(0);
-    return;
-  }
-
-  // Paint n identical right columns (large hop covering many pixels).
-  for (let p = 0; p < n; p += 1) {
-    const x = w - n + p;
-    if (x < 0 || x >= w) continue;
-    for (let y = 0; y < h; y += 1) {
-      const bright01 = spectrogramGrade01(nodeGraphFiniteNumber(st.pendingMags[y]), cont, bright);
-      sctx.globalAlpha = 1;
-      sctx.fillStyle = spectrogramCssAtBrightness(lutRgb, bright01);
-      sctx.fillRect(x, y, 1, 1);
-    }
-  }
-  st.pendingValid = false;
-  st.pendingMags.fill(0);
-}
-
 /**
  * Ingest one STFT hop worth of audio time.
  * Wall-clock mapping (resize-safe): full face width = historySeconds of audio.
@@ -622,23 +468,6 @@ function spectrogramIngestHop(
   if (st.ring && typeof spectrogramGlRingPool === "function") {
     spectrogramGlRingPool(st.ring, spectrum, spectrumBins);
   }
-  if (!st.useGl) {
-    // Map spectrum with CURRENT paint settings (frozen into this ink).
-    if (!st.columnScratch || st.columnScratch.length < h) {
-      st.columnScratch = new Float32Array(h);
-    }
-    spectrogramSpectrumToColumnMags(
-      st.columnScratch,
-      spectrum,
-      spectrumBins,
-      h,
-      freqScaleIdx,
-      sampleRate,
-      minFreqHz,
-      maxFreqHz,
-    );
-    spectrogramPoolPending(st, st.columnScratch);
-  }
 
   st.scrollDebtSec = Math.max(0, nodeGraphFiniteNumber(st.scrollDebtSec)) + hopSec;
   // Emit whole *buffer* pixels. Map display sec/px → buffer pixels so scroll
@@ -648,9 +477,6 @@ function spectrogramIngestHop(
   let whole = Math.floor(st.scrollDebtSec / Math.max(1e-12, secPerBufPx));
   if (whole >= 1) {
     whole = Math.min(bufW, whole);
-    if (!st.useGl) {
-      spectrogramScrollPaintPixels(st, whole, lutRgb, brightness, contrast);
-    }
     if (st.ring && typeof spectrogramGlRingWrite === "function") {
       // Settings frozen per column (permanent ink), resolved like spectrogramRowTToHz.
       const band = spectrogramResolveViewBand(minFreqHz, maxFreqHz, sampleRate);
@@ -669,78 +495,6 @@ function spectrogramIngestHop(
   }
 }
 
-/**
- * Rebuild the Canvas2D bitmap from the GPU ring (one-off, when the GL path is
- * lost). Same math as the shader, per column with that column's settings.
- */
-function spectrogramRasterizeRingTo2d(st) {
-  const ring = st?.ring;
-  const ctx = st?.ctx;
-  const w = st?.faceW | 0;
-  const h = st?.faceH | 0;
-  if (!ring || !ctx || w < 1 || h < 1 || ring.w !== w) return false;
-  const img = ctx.createImageData(w, h);
-  const d = img.data;
-  const stride = ring.stride;
-  const lutRows = Math.max(1, Math.floor(ring.lut.length / 1024));
-  const rowDenom = Math.max(1, h - 1);
-  for (let x = 0; x < w; x += 1) {
-    const r = (ring.head + x) % w;
-    const m = r * 8;
-    const contrast = ring.meta[m];
-    const bright = ring.meta[m + 1];
-    const scale = ring.meta[m + 2];
-    const bins = ring.meta[m + 3] | 0;
-    const lo = ring.meta[m + 4];
-    const hi = ring.meta[m + 5];
-    const sr = ring.meta[m + 6] * 2;
-    const lutO = Math.max(0, Math.min(lutRows - 1, ring.meta[m + 7] | 0)) * 1024;
-    const o = r * stride;
-    for (let y = 0; y < h; y += 1) {
-      let v = 0;
-      if (Number.isFinite(bright) && bright !== 0) {
-        let mag = 0;
-        if (bins >= 1) {
-          const hz = spectrogramRowTToHz(y / rowDenom, scale, sr, lo, hi);
-          const binF = spectrogramHzToLinearBin(hz, bins, sr);
-          const b0 = Math.max(0, Math.min(bins - 1, Math.floor(binF)));
-          const b1 = Math.min(bins - 1, b0 + 1);
-          const bf = binF - b0;
-          mag = ring.mags[o + b0] * (1 - bf) + ring.mags[o + b1] * bf;
-        }
-        v = spectrogramGrade01(mag, contrast, bright);
-      }
-      const li = Math.min(255, Math.max(0, Math.floor((Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : 0) * 255 + 1e-6)));
-      const s = lutO + li * 4;
-      const p = (y * w + x) * 4;
-      d[p] = ring.lut[s];
-      d[p + 1] = ring.lut[s + 1];
-      d[p + 2] = ring.lut[s + 2];
-      d[p + 3] = 255;
-    }
-  }
-  ctx.putImageData(img, 0, 0);
-  return true;
-}
-
-function spectrogramPresent(ctx, st, faceW, faceH, lutRgb) {
-  ctx.setTransform(1, 0, 0, 1, 0, 0);
-  ctx.globalCompositeOperation = "source-over";
-  // Empty plate is brightness 0 through the same LUT. Opaque. Not a fill color.
-  spectrogramFillBrightness(ctx, lutRgb, 0, 0, 0, faceW, faceH);
-  if (!st?.canvas || faceW < 1 || faceH < 1) return;
-  const srcW = Math.max(1, st.faceW | 0);
-  const srcH = Math.max(1, st.faceH | 0);
-  // 1:1 when buffer matches face (crisp). Smooth scale when sizes differ
-  // (module mid-drag, or brief size mismatch) so zoom doesn’t stair-step.
-  const exact = srcW === faceW && srcH === faceH;
-  ctx.imageSmoothingEnabled = !exact;
-  if ("imageSmoothingQuality" in ctx) ctx.imageSmoothingQuality = exact ? "low" : "medium";
-  const sub = spectrogramScrollSubPx(st);
-  const dx = exact ? -sub : -sub * (faceW / srcW);
-  ctx.drawImage(st.canvas, 0, 0, srcW, srcH, dx, 0, faceW, faceH);
-}
-
 function drawNodeGraphSpectrogramItem(renderer, item, pixelRatio) {
   const nodeId = String(item?.slot?.nodeId || "");
   if (!nodeId) return;
@@ -752,13 +506,10 @@ function drawNodeGraphSpectrogramItem(renderer, item, pixelRatio) {
   if (!syncNodeGraphModuleScopeLocalFallbackCanvas(canvas, screenElement, pixelRatio, 1)) return;
   canvas.style.mixBlendMode = "normal";
   canvas.classList.add("node-spectrogram-canvas");
-  // Don’t force pixelated here — CSS smooth-scales under workspace zoom;
-  // .pixelated-canvas-zoom (≥ 2.5) switches to nearest-neighbor like other faces.
-  if (canvas.style.imageRendering) {
-    canvas.style.imageRendering = "";
-  }
+  // No forced pixelation: CSS smooth-scales; .pixelated-canvas-zoom takes over at 2.5x.
+  nodeGraphDisplayCanvasPixelated(canvas, false);
 
-  const ctx = canvas.getContext("2d");
+  const ctx = nodeGraphDisplayCanvasPresentContext(canvas);
   if (!ctx) return;
 
   const faceW = canvas.width | 0;
@@ -797,10 +548,6 @@ function drawNodeGraphSpectrogramItem(renderer, item, pixelRatio) {
   const buf = spectrogramBufferSizeForFace(nodeId, faceW, faceH, screenElement);
   const st = spectrogramEnsureState(nodeId, buf.w, buf.h, historySeconds);
   st.lutRgb = lutRgb;
-  if (!st.plateReady && st.ctx) {
-    spectrogramFillBrightness(st.ctx, lutRgb, 0, 0, 0, st.faceW, st.faceH);
-    st.plateReady = true;
-  }
   // GPU ring (spectrogram-gl.js) is kept in both modes so either path can resume.
   if (!st.ring && typeof spectrogramGlRingCreate === "function") {
     st.ring = spectrogramGlRingCreate(st.faceW, lutRgb);
@@ -808,11 +555,7 @@ function drawNodeGraphSpectrogramItem(renderer, item, pixelRatio) {
   st.useGl = Boolean(st.ring)
     && typeof spectrogramGlUsable === "function"
     && spectrogramGlUsable(st.ring, st.faceW, st.faceH);
-  if (!st.useGl && st.inkMode === "gl") {
-    // GL went away: the Canvas2D bitmap is stale, rebuild it from the ring.
-    spectrogramRasterizeRingTo2d(st);
-  }
-  st.inkMode = st.useGl ? "gl" : "2d";
+  st.inkMode = st.useGl ? "gl" : "none";
 
   // Ink uses settings at paint time; already-drawn pixels stay as-is.
   st.paintFreqScale = freqScaleIdx;
@@ -906,9 +649,8 @@ function drawNodeGraphSpectrogramItem(renderer, item, pixelRatio) {
     }
   }
 
-  if (st.useGl) {
-    const plate = spectrogramLutRgb01(lutRgb, 0);
-    if (spectrogramGlRingPresent(
+  const plate = spectrogramLutRgb01(lutRgb, 0);
+  if (st.useGl && spectrogramGlRingPresent(
       st.ring,
       st.faceW,
       st.faceH,
@@ -917,32 +659,20 @@ function drawNodeGraphSpectrogramItem(renderer, item, pixelRatio) {
       faceH,
       spectrogramScrollSubPx(st),
       plate,
-    )) return;
-    // Failed mid-frame (context lost, bins past texture limit): fall back now.
-    spectrogramRasterizeRingTo2d(st);
-    st.inkMode = "2d";
+    )) {
+    st.hasFrame = true;
+    return;
   }
-  spectrogramPresent(ctx, st, faceW, faceH, lutRgb);
+  // No usable ring (no float textures, context lost, bins past texture
+  // limit): black + logged.
+  st.hasFrame = false;
+  nodeGraphDisplayGlFailed(canvas, st.useGl ? "Spectrogram GL present failed" : "Spectrogram GL ring unusable");
 }
 
 /** Drop waterfall history so engine stop returns faces to a cold empty plate. */
 function clearNodeGraphSpectrogramHistory() {
   for (const st of spectrogramHistory.values()) {
     try {
-      const ctx = st?.ctx;
-      if (ctx && st.canvas) {
-        ctx.save();
-        ctx.setTransform(1, 0, 0, 1, 0, 0);
-        ctx.globalCompositeOperation = "source-over";
-        if (st.lutRgb) {
-          spectrogramFillBrightness(ctx, st.lutRgb, 0, 0, 0, st.canvas.width, st.canvas.height);
-        }
-        ctx.restore();
-      }
-      if (st?.pendingMags?.fill) {
-        st.pendingMags.fill(0);
-      }
-      st.pendingValid = false;
       st.lastHop = 0;
       st.scrollDebtSec = 0;
       if (st.ring && typeof spectrogramGlRingRelease === "function") {
@@ -963,20 +693,6 @@ function clearNodeGraphSpectrogramHistoryForNode(nodeId) {
     return;
   }
   try {
-    const ctx = st.ctx;
-    if (ctx && st.canvas) {
-      ctx.save();
-      ctx.setTransform(1, 0, 0, 1, 0, 0);
-      ctx.globalCompositeOperation = "source-over";
-      if (st.lutRgb) {
-        spectrogramFillBrightness(ctx, st.lutRgb, 0, 0, 0, st.canvas.width, st.canvas.height);
-      }
-      ctx.restore();
-    }
-    if (st.pendingMags?.fill) {
-      st.pendingMags.fill(0);
-    }
-    st.pendingValid = false;
     st.lastHop = 0;
     st.scrollDebtSec = 0;
     if (st.ring && typeof spectrogramGlRingRelease === "function") {
@@ -988,4 +704,12 @@ function clearNodeGraphSpectrogramHistoryForNode(nodeId) {
   spectrogramHistory.delete(key);
 }
 
-nodeGraphModuleScopeCustomRenderers.spectrogramBurn = drawNodeGraphSpectrogramItem;
+nodeGraphModuleScopeCustomRenderers.spectrogramBurn = (renderer, item, pixelRatio) => {
+    drawNodeGraphSpectrogramItem(renderer, item, pixelRatio);
+    // rgba out: face canvas bridged into the node's picture texture (only when cabled).
+    const nodeId = item?.slot?.nodeId;
+    if (nodeId && typeof nodeGraphPicturePublishCanvas === "function" && typeof peekNodeGraphModuleScopeFaceCanvas === "function") {
+      const face = peekNodeGraphModuleScopeFaceCanvas(item.slot);
+      if (face) nodeGraphPicturePublishCanvas(nodeId, face);
+    }
+  };

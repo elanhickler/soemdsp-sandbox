@@ -9,8 +9,7 @@ function createNodeGraphImageBurnBody(node, type) {
   face.dataset.lightStrength = "1";
   face.setAttribute("aria-label", `${nodeGraphNodeDisplayName(node)} image ghost`);
 
-  const canvas = document.createElement("canvas");
-  canvas.className = "node-image-burn-canvas";
+  const canvas = nodeGraphDisplayCanvasCreate("node-image-burn-canvas");
   canvas.setAttribute("aria-hidden", "true");
   face.append(canvas);
   return face;
@@ -47,7 +46,7 @@ registerNodeGraphChromelessModuleUi("imageBurn", {
             fromFaceLoop: true,
             screenElement: host,
             slot: slot || { nodeId, scopeElement: host, type },
-          }, Math.max(1, window.devicePixelRatio || 1));
+          }, nodeGraphDisplayCanvasPixelRatio());
         },
       });
     }

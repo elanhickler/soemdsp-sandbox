@@ -11,8 +11,7 @@ function createNodeGraphRgbShapeBody(node, type) {
   face.dataset.parameterVisual = "true";
   face.setAttribute("aria-label", `${nodeGraphNodeDisplayName(node)} shape`);
 
-  const canvas = document.createElement("canvas");
-  canvas.className = "node-rgb-shape-canvas";
+  const canvas = nodeGraphDisplayCanvasCreate("node-rgb-shape-canvas");
   canvas.setAttribute("aria-hidden", "true");
   face.append(canvas);
 
@@ -22,7 +21,7 @@ function createNodeGraphRgbShapeBody(node, type) {
       try {
         paintNodeGraphRgbShapeFace(target, el, el.dataset?.node || "", null);
       } catch (error) {
-        console.warn("[rgb-shape] draw failed", el.dataset?.node, error);
+        console.error("[rgb-shape] draw failed", el.dataset?.node, error);
       }
     }
     el._rgbShapeForceDraw = false;

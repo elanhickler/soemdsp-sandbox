@@ -242,7 +242,7 @@ function createNodeGraphPhosphillatorDrawDisplay(nodeId, type) {
   section.setAttribute("aria-label", `${nodeGraphNodeDisplayName?.(nodeId) || "Phosphillator"} drawing surface — draw a shape, double-click to clear`);
 
   const canvas = document.createElement("canvas");
-  canvas.className = "node-phosphillator-draw-canvas";
+  canvas.className = "node-phosphillator-draw-canvas node-display-canvas";
   section.append(canvas);
   bindNodeGraphPhosphillatorInteractions(section, canvas);
   window.requestAnimationFrame(() => scheduleNodeGraphPhosphillatorFrame(section));

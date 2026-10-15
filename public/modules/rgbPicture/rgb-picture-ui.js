@@ -9,8 +9,7 @@ function createNodeGraphRgbPictureBody(node, type) {
   face.dataset.lightStrength = "1";
   face.setAttribute("aria-label", `${nodeGraphNodeDisplayName(node)} picture`);
 
-  const canvas = document.createElement("canvas");
-  canvas.className = "node-rgb-picture-canvas";
+  const canvas = nodeGraphDisplayCanvasCreate("node-rgb-picture-canvas");
   canvas.setAttribute("aria-hidden", "true");
   face.append(canvas);
   return face;
