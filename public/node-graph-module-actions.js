@@ -1661,6 +1661,64 @@ async function setNodeGraphModuleSettingsAsDefaultFromButton(event) {
   setNodeInteractionHelp(`Default settings saved for ${sourceNode.type}.`);
 }
 
+// Fields Restore Factory keeps: identity, placement, Metamodule membership /
+// interior, and bindings that other nodes or the host rely on. Everything else
+// (params, paramMeta, choices, ui, size, display settings, sequencer steps,
+// keyboard latches, chord memory, samples, ...) comes from a fresh spawn.
+const nodeGraphFactoryResetKeptFields = Object.freeze([
+  "ownerMetamoduleId",
+  "metamodule",
+  "metamoduleVoicePortal",
+  "metamoduleDefaultStereoOut",
+  "wirelessRole",
+  "pluginId",
+  "pluginFolder",
+  "pluginName",
+]);
+
+// Replace patch node `nodeId` with a freshly spawned node of its type built
+// from definition defaults (user Save-to-Default ignored). Keeps id, gx/gy,
+// the fields above and the node's Seed params (like Paste Settings; no master
+// seed consumed). Connections are untouched. Returns the new node or null.
+function nodeGraphFactoryResetPatchNode(patch, nodeId) {
+  const index = (patch?.nodes || []).findIndex((node) => node.id === nodeId);
+  if (index < 0) {
+    return null;
+  }
+  const old = patch.nodes[index];
+  const fresh = createNodeGraphPatchNode(old.type, { id: old.id, gx: old.gx, gy: old.gy }, { factory: true });
+  for (const field of nodeGraphFactoryResetKeptFields) {
+    if (Object.hasOwn(old, field)) {
+      fresh[field] = JSON.parse(JSON.stringify(old[field]));
+    }
+  }
+  for (const key of nodeGraphSeedParamKeysForType(old.type)) {
+    if (fresh.params && old.params && Object.hasOwn(old.params, key)) {
+      fresh.params[key] = old.params[key];
+    }
+  }
+  patch.nodes[index] = fresh;
+  return fresh;
+}
+
+function restoreNodeGraphModuleFactoryFromContext() {
+  const sourceNode = nodeGraphPatchNode(nodeGraphModuleActionTargetNodeId());
+  if (!sourceNode) {
+    return;
+  }
+  const patch = cloneNodeGraphPatch(nodeGraphMvp.patch);
+  if (!nodeGraphFactoryResetPatchNode(patch, sourceNode.id)) {
+    return;
+  }
+  commitNodeGraphPatch(patch, { status: "module factory reset" });
+  if ((sourceNode.type === "keyboard" || sourceNode.type === "gridKeyboard")
+    && typeof nodeGraphKeyboardPushArpLatch === "function") {
+    nodeGraphKeyboardPushArpLatch(sourceNode.id);
+  }
+  setNodeInteractionHelp(`${nodeGraphNodeDisplayName(sourceNode.id)} restored to factory settings.`);
+  configureNodeSceneContextMenu("module");
+}
+
 function deleteNodeGraphSelectionFromContext() {
   if (!nodeGraphMvp.selected && nodeGraphModuleActionTargetNodeId()) {
     setNodeGraphSelection({ type: "node", id: nodeGraphModuleActionTargetNodeId() });

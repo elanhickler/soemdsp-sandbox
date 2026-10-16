@@ -801,7 +801,7 @@ function setNodeGraphSceneContextButtonLines(button, line1, line2 = "") {
 }
 
 // Order in the Module Settings body: module title first (under nav), then
-// Copy Module / Settings / Paste / Default, then Show/Hide section, then rest.
+// Copy Module / Settings / Paste / Default / Restore Factory, then Show/Hide section, then rest.
 const nodeGraphModuleActionControlIds = [
   "nodeSceneSelectedModule",
   // Copy Module lives inside this group (left of Copy Settings).
@@ -818,7 +818,6 @@ const nodeGraphModuleActionControlIds = [
   "nodeSceneTextBoxTextControls",
   "nodeSceneMetamoduleVoiceControls",
     "nodeSceneImageControls",
-  "nodeSceneKnobFaceControls",
   "nodeSceneCanvasControls",
   "nodeSceneLedControls",
   "nodeSceneKeypadControls",
@@ -1122,6 +1121,7 @@ function configureNodeSceneContextMenu(mode) {
   const copySettingsButton = document.getElementById("nodeSceneCopyModuleSettings");
   const pasteSettingsButton = document.getElementById("nodeScenePasteModuleSettings");
   const setDefaultButton = document.getElementById("nodeSceneSetModuleSettingsAsDefault");
+  const restoreFactoryButton = document.getElementById("nodeSceneRestoreModuleFactory");
   const moduleActionsWindowButton = document.getElementById("nodeSceneOpenModuleActions");
   const metaparametersWindowButton = document.getElementById("nodeSceneOpenMetaparameters");
   const deleteButton = document.getElementById("nodeSceneDeleteModule");
@@ -1202,7 +1202,6 @@ function configureNodeSceneContextMenu(mode) {
   const imageControls = document.getElementById("nodeSceneImageControls");
   const imageSave = document.getElementById("nodeSceneImageSave");
   const imageRefresh = document.getElementById("nodeSceneImageRefresh");
-  const knobFaceControls = document.getElementById("nodeSceneKnobFaceControls");
   const canvasControls = document.getElementById("nodeSceneCanvasControls");
   const canvasScript = document.getElementById("nodeSceneCanvasScript");
   const ledControls = document.getElementById("nodeSceneLedControls");
@@ -1388,6 +1387,9 @@ function configureNodeSceneContextMenu(mode) {
   }
   if (setDefaultButton) {
     setDefaultButton.hidden = !moduleMode || multiModuleMode || targetIsInletOutlet;
+  }
+  if (restoreFactoryButton) {
+    restoreFactoryButton.hidden = !moduleMode || multiModuleMode || targetIsInletOutlet;
   }
   // Multi-select: visibility + enable + size (not copy/paste/default settings).
   const multiCanButtons = multiModuleMode && selectedNodes.length > 0;
@@ -1593,9 +1595,6 @@ function configureNodeSceneContextMenu(mode) {
   toggleTitleButton.hidden = !showTitleVisibilityChrome || (multiModuleMode && !selectedNodes.length);
   imageControls.hidden = !(moduleMode && !multiModuleMode && targetNode?.type === "image");
   // Image layers / span / offset / readout live in Display Settings, not Module Settings.
-  if (knobFaceControls) {
-    knobFaceControls.hidden = true;
-  }
   canvasControls.hidden = !(moduleMode && !multiModuleMode && targetNode?.type === "canvas");
   // Phosphor Dot settings live in Display Settings, not the Module Settings color swatch.
   ledControls.hidden = true;
@@ -1777,6 +1776,13 @@ function configureNodeSceneContextMenu(mode) {
       setDefaultButton.title = targetNode
         ? `Save these settings as the default for new ${targetNode.type} modules.`
         : "Select a module to save its default settings.";
+    }
+    if (restoreFactoryButton) {
+      setNodeGraphSceneContextButtonLines(restoreFactoryButton, "Restore", "Factory");
+      restoreFactoryButton.disabled = !targetNode;
+      restoreFactoryButton.title = targetNode
+        ? `Reset this module to factory ${targetNode.type} defaults (ignores Save to Default). Keeps position and cables. Undoable.`
+        : "Select a module to restore its factory settings.";
     }
     deleteButton.disabled = !canDelete;
     deleteButton.title = canDelete
@@ -2154,9 +2160,6 @@ function configureNodeSceneContextMenu(mode) {
       imageRefresh.disabled = false;
       imageSave.title = imageLayout.dataUrl ? "Save this image node's current image." : "Load an image before saving.";
       imageRefresh.title = "Refresh image preview and trace texture.";
-    }
-    if (targetNode?.type === "knob" && typeof syncNodeGraphKnobFaceControls === "function") {
-      syncNodeGraphKnobFaceControls(targetNode);
     }
     if (targetNode?.type === "canvas") {
       canvasScript.disabled = false;

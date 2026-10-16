@@ -109,9 +109,11 @@ function nodeGraphLegacyModuleSeed(nodeId, key) {
   return SoemMath.seedMix(hash, NODE_GRAPH_SEED_COMPONENT_LEGACY, 0) & SoemMath.SEED_MAX;
 }
 
-function createNodeGraphPatchNode(type, options = {}) {
+// creation.factory: skip the user's Save-to-Default override for this type
+// (Restore Factory -- definition defaults only).
+function createNodeGraphPatchNode(type, options = {}, creation = {}) {
   const resolvedType = nodeGraphResolveModuleTypeAlias(type);
-  const override = nodeGraphModuleDefaultOverrideForType(resolvedType);
+  const override = creation?.factory ? null : nodeGraphModuleDefaultOverrideForType(resolvedType);
   const opts = override ? { ...override, ...options } : options;
   const node = {
     gx: Number.isFinite(Number(opts.gx)) ? Number(opts.gx) : 0,
@@ -298,18 +300,6 @@ function createNodeGraphPatchNode(type, options = {}) {
   }
   if (Object.hasOwn(opts, "scopeShader")) {
     node.scopeShader = normalizeNodeGraphScopeShader(opts.scopeShader);
-  }
-  if (resolvedType === "knob" && typeof normalizeNodeGraphKnobFace === "function") {
-    const face = normalizeNodeGraphKnobFace(opts.knobFace);
-    if (typeof nodeGraphKnobFaceIsNonDefault === "function"
-      ? nodeGraphKnobFaceIsNonDefault(face)
-      : (typeof nodeGraphKnobFaceHasAnyImage === "function"
-        ? nodeGraphKnobFaceHasAnyImage(face)
-        : face.layers?.some?.((layer) => layer?.dataUrl))) {
-      node.knobFace = typeof nodeGraphKnobFaceToPatch === "function"
-        ? nodeGraphKnobFaceToPatch(face)
-        : face;
-    }
   }
   return node;
 }
