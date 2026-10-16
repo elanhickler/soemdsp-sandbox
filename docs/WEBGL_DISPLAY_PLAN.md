@@ -54,7 +54,7 @@ Method: per module folder, any `.js` with `getContext("2d")`, `createElement("ca
 | 14 | `harmonicLines` | `harmonic-lines-display.js`, `harmonic-count-display.js` | 2D | two faces |
 | 15 | `harmonicSeries` | `harmonic-series-display.js` | 2D | bars -> rect |
 | 16 | `imageBurn` | `image-burn-display.js`, `image-burn-gl.js`, `image-burn-ui.js` | Partial (shared GL + 2D, 12 2D contexts) | largest 2D user |
-| 17 | `knob` | `knob-face.js` | 2D | knob face; proposed exception |
+| 17 | `knob` | `knob-face.js` | GL | native GL dial (`_shared/controller-face-gl.js`); Slider / Toggle / Momentary share it |
 | 18 | `lookaheadLimiter` | `lookahead-limiter-display.js` | 2D | meter -> rect |
 | 19 | `matrixDisplay` | `matrix-display-display.js`, `matrix-display-ui.js` | 2D | LCD cells -> rect |
 | 20 | `numberReadout` | (`number-readout-gl.js` deleted 2026-10-15: unused) | Done | digit bake in `lib/visual/glyph-sdf-atlas.js` |
@@ -88,7 +88,7 @@ Shared code outside `public/modules` that also needs moving: `public/lib/visual/
 2. **`scripts/smoke_test.py` check** (`check_module_displays_use_shared_gl`): scans `public/modules/**/*.js` and fails on any `getContext("2d")`, `getContext("webgl...")`, or `createElement("canvas")` in a file that is **not** on an allowlist. The allowlist starts as exactly the files in section 3 and is **shrink-only**: the check also fails if an allowlisted file no longer needs its entry (so the entry must be deleted), and new entries are never added. A new module that draws its own canvas fails the smoke test.
 
 ## 5. Exceptions (explicit, none approved yet)
-Proposed for Argi's call, because they are text/UI widgets rather than pictures: `audioPlayer` playlist, `sequencer` step UI, `transport` status, `knob` face. Glyph atlases (`asciiscope`, `numberReadout`) may bake text once with 2D into a texture; that bake would live in the shared helper, not the module. Until approved, they stay on the shrink-only allowlist as debt.
+Proposed for Argi's call, because they are text/UI widgets rather than pictures: `audioPlayer` playlist, `sequencer` step UI, `transport` status. (`knob` was proposed, then converted to native GL with Slider / Toggle / Momentary.) Glyph atlases (`asciiscope`, `numberReadout`) may bake text once with 2D into a texture; that bake would live in the shared helper, not the module. Until approved, they stay on the shrink-only allowlist as debt.
 
 ## 6. Done when
 - Section 3 table is empty, the allowlist holds only approved exceptions, and the smoke check passes.
@@ -124,7 +124,7 @@ Effort: **S** < 1 h, **M** a few hours, **L** a day+. Every row is on the allowl
 | 14 | `gradientVectorscope` | TraceWoscope/2D then trails | M-L | needs trace pass |
 | 15 | `numberReadout`, `asciiscope` | Partial: 2D glyph-atlas bake | M-L | shared atlas bake helper (one 2D bake in lib, not module) |
 | 16 | `imageBurn` | Partial, 12 2D contexts (decode, dry flash, fallback) | L | image decode can stay `createImageBitmap` -> texture |
-| — | `audioPlayer`, `sequencer`, `transport`, `knob` | Text/UI widgets | ? | **proposed exceptions, Argi decides** |
+| — | `audioPlayer`, `sequencer`, `transport` | Text/UI widgets | ? | **proposed exceptions, Argi decides** |
 | — | Scope / waterfall / trace faces in `public/node-graph-module-scope-*` | own paths | L | separate pass; `trace-woscope.js` and Phosphor are BugsFix's (exceptions until they say) |
 
 **Text:** no text primitive. Recommended: one shared glyph atlas (reuse `number-readout-gl.js` SDF/EDT bake, moved into `public/lib/visual/`), drawn as image/SDF quads through gl-line-renderer. The one-time atlas bake may use a 2D canvas inside the shared lib only.
@@ -141,9 +141,17 @@ Effort: **S** < 1 h, **M** a few hours, **L** a day+. Every row is on the allowl
 Allowlist: 57 (pre phase 1) -> 41 (phase 1) -> 32 (phase 2). `smoke_test.py` passes.
 
 ### Approved exceptions (Argi 2026-10-15)
-Audio Player, Sequencer, Transport, Knob stay non-WebGL. Marked
+Audio Player, Sequencer, Transport stay non-WebGL. Marked
 `APPROVED EXCEPTION (Argi 2026-10-15)` in `scripts/display_gl_allowlist.txt`.
 Also excluded: `trace-woscope.js` and Phosphor (owned by BugsFix; not touched).
+
+### Controller faces (Knob, Slider, Toggle, Momentary)
+Native WebGL controls in `modules/_shared/controller-face-gl.js`: smoothstep
+quads / polylines + glyph-atlas text on the shared context, layout a pure
+function of the face box (zoom-1 layout; a 2x tile is exactly 2x). DOM keeps
+only transparent hit / edit elements over layout rects. Knob dropped its
+image layers and left the allowlist (4 -> 3). Smoke:
+`scripts/smoke_controller_faces_gl.mjs`.
 
 ### Unified renderer (`lib/visual/gl-line-renderer.js`)
 - New primitives: Triangle, FillUnder, Dot, Image.

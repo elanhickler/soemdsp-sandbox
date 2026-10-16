@@ -2,6 +2,10 @@
 
 This file collects project-shaping ideas that should survive day-to-day implementation without becoming immediate scope.
 
+## Music Player metadata, Album Art, rich Text Box (2026-10-15)
+
+Build-time ID3 metadata + small extracted covers in soundemote-com `playlist.json`; player API `track-change`; Music Player **Album Art** (RGBA) and **Track** (data) outputs; rich Text Box (safe HTML subset, live metadata fields, WebGL glyph atlas, loadable fonts); soundemote.dev rich-text editor. Status: planned, not started; Argi must OK step 1. Plan: `docs/MUSIC_PLAYER_METADATA_PLAN.md`
+
 ## WebGL2 displays everywhere (2026-10-14)
 All module displays move to WebGL2 + shaders via `gl-line-renderer.js` on the shared picture device; no 2D fallback (black on GL failure). 39 modules to migrate, enforced by a shrink-only smoke allowlist. Plan: `docs/WEBGL_DISPLAY_PLAN.md`.
 
