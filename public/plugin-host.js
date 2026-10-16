@@ -10,7 +10,8 @@
  *   fetch("/api/...") goes to the plugin (JUCE native function soemdspApi).
  *   Param edits go to the native engine as "param" events.
  *   Patch loads send the patch JSON as a "patch" event (native graph rebuild).
- *   Topology is locked: no wiring, adding or deleting modules.
+ *   Wiring and deleting modules stay locked; adding modules is allowed
+ *   (native graph rebuild/click is acceptable until surgical sync lands).
  *   Scopes / meters: the plugin sends frame batches (receiveFrameBatch) built
  *   from the watch list this file sends as "displayWatch" events.
  */
@@ -22,7 +23,7 @@
   var API_FUNCTION = "soemdspApi";
   var BODY_CLASS = "soemdsp-plugin-host";
   var PARAM_POLL_MS = 33;
-  var LOCK_HINT = "Plugin: wiring, adding and deleting modules are locked. Edit the patch in the Sandbox app.";
+  var LOCK_HINT = "Plugin: wiring and deleting modules are locked.";
 
   function hostFlag() {
     try {
@@ -429,15 +430,14 @@
     global[name] = wrapped;
   }
 
+  // Wiring + delete stay locked. Adding (shop / context / placement / duplicate)
+  // is allowed and reaches the native engine via the topology-change patch event.
   var BLOCKED = [
     "connectNodeGraphPorts",
     "connectNodeGraphModulation",
     "connectNodeGraphGraphInput",
     "disconnectNodeGraphConnection",
     "disconnectNodeGraphConnections",
-    "addNodeGraphModuleFromShop",
-    "addNodeGraphModuleFromContext",
-    "beginNodeGraphModulePlacement",
     "deleteNodeGraphSelectionFromContext",
     "deleteNodeGraphModuleFromContext",
   ];
@@ -452,7 +452,9 @@
     wrapOnce("commitNodeGraphPatch", function (original) {
       return function (patch, options) {
         var opts = options || {};
-        if (opts.wireEdit || opts.topologyEdit) {
+        // Wire edits stay locked. Topology edits (add module / duplicate) go through
+        // so the native engine gets the updated patch (click on rebuild is OK for now).
+        if (opts.wireEdit) {
           showLockHint();
           return undefined;
         }
