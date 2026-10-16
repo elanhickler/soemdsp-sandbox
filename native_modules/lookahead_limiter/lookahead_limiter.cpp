@@ -3,7 +3,7 @@
 // soemdsp-native-target: lookaheadLimiter
 // soemdsp-native-kind: dynamics
 //
-// Matches public/modules/lookaheadLimiter/lookahead-limiter-math.js.
+// Native-only (the JS twin was removed in C-001).
 // Control coeffs (db→gain, attack/release exp) rebuild only when inputs change.
 
 #include <soemdsp/soemdsp.hpp>

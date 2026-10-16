@@ -168,6 +168,65 @@ if (!(amp025.pS > amp1.pS * 0.5)) {
 }
 
 
+// Trigger (digital, port Square=5): 1-sample 0/1 pulse on exactly the latch sample.
+const PORT_TRIGGER = 5;
+setParam(g, hHold, PARAM_AMPLITUDE, 1);
+setParam(g, hHold, PARAM_PHASE, 0);
+setParam(g, hHold, PARAM_FREQUENCY, 480); // 100-sample period @ 48k
+snap(g);
+let trigPulses = 0;
+let trigMismatch = 0;
+let trigBad = 0;
+let trigWide = 0;
+let prevRaw = null;
+let prevTrig = 0;
+const trigIdx = [];
+let sampleIdx = 0;
+for (let q = 0; q < 40; q++) {
+  const n = process(g, frames) | 0;
+  if (n < 1) throw new Error(`trigger process_block returned ${n}`);
+  const trig = new Float64Array(mem.buffer, portPtr(g, hHold, PORT_TRIGGER) | 0, frames);
+  const raw = new Float64Array(mem.buffer, portPtr(g, hHold, PORT_SAW) | 0, frames);
+  for (let i = 0; i < frames; i++, sampleIdx++) {
+    const t = trig[i];
+    if (t !== 0 && t !== 1) trigBad += 1;
+    if (t === 1) {
+      trigPulses += 1;
+      trigIdx.push(sampleIdx);
+      if (prevTrig === 1) trigWide += 1;
+    }
+    // Latch sample == sample where held value changes (instant mode).
+    if (prevRaw !== null) {
+      const changed = raw[i] !== prevRaw;
+      if (changed && t !== 1) trigMismatch += 1;
+    }
+    prevRaw = raw[i];
+    prevTrig = t;
+  }
+}
+const expectPulses = Math.floor((40 * frames) / 100);
+if (trigBad) throw new Error(`Trigger must be 0/1 only, bad=${trigBad}`);
+if (trigWide) throw new Error(`Trigger must be 1 sample wide, wide=${trigWide}`);
+if (trigMismatch) throw new Error(`Trigger missing on ${trigMismatch} latch samples`);
+if (Math.abs(trigPulses - expectPulses) > 1) {
+  throw new Error(`Trigger pulses ${trigPulses}, expected ~${expectPulses}`);
+}
+for (let k = 1; k < trigIdx.length; k++) {
+  const d = trigIdx[k] - trigIdx[k - 1];
+  if (d < 99 || d > 101) throw new Error(`Trigger spacing ${d}, expected 100 samples`);
+}
+// No clock -> no latch -> Trigger stays low.
+setParam(g, hHold, PARAM_FREQUENCY, 0);
+snap(g);
+let idleHigh = 0;
+for (let q = 0; q < 10; q++) {
+  process(g, frames);
+  const trig = new Float64Array(mem.buffer, portPtr(g, hHold, PORT_TRIGGER) | 0, frames);
+  for (let i = 0; i < frames; i++) if (trig[i] !== 0) idleHigh += 1;
+}
+if (idleHigh) throw new Error(`Trigger high with no clock: ${idleHigh}`);
+console.log(`sample_hold Trigger ok: pulses=${trigPulses} (expected ~${expectPulses}), 1-sample, on every latch sample`);
+
 console.log(
   `smoke_graph_sample_hold ok: version=${version() | 0} peakL=${peakL.toFixed(3)} peakExt=${peakExt} changes=${changes} holdRuns=${holdRuns} mismatchLR=${mismatchLR} uni=[${uniMin.toFixed(3)},${uniMax.toFixed(3)}] saw=[${sawMin.toFixed(3)},${sawMax.toFixed(3)}] Amplitude scale: Left ${amp025.pL.toFixed(3)}/${amp1.pL.toFixed(3)} Saw ${amp025.pS.toFixed(3)}/${amp1.pS.toFixed(3)}`,
 );

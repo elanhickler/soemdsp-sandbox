@@ -3,24 +3,35 @@
 // soemdsp-native-target: earlyReflections
 // soemdsp-native-kind: delay
 //
-// Stereo early reflections from one mono In. Tap times follow supersaw
-// Exponential spacing (k=3) on u in (0,1]: denser at the short end,
-// stretched toward Time.
+// Stereo early reflections. Two input lanes, inL and inR (the graph resolves
+// Mono / Left / Right jacks into them per soemdsp/routing/stereo_route.h: a
+// single source feeds M + L + R into both lanes; Left and Right both wired
+// feed L + M and R + M). Ring 0 is written with inL, ring 1 with inR, so the
+// Left output only ever hears the Left lane and the Right output the Right
+// lane. Tap times follow supersaw Exponential spacing (k=3) on u in (0,1]:
+// denser at the short end, stretched toward Time.
 //
-// Stereo Mode 0 = Dual: two rings (L, R), each with its own full set of N
-//   taps and its own delay line. Left taps use u = i/N (last tap = Time);
-//   right taps sit halfway between them, u = (i - 0.5)/N, so the two sides
-//   always differ. Each side has its own seeded Random Offset and its own
-//   FBM drift seeds. Wet per side = side sum / N.
-// Stereo Mode 1 = Split: one ring, N taps. Odd taps (1st, 3rd, ...) go to
-//   Left, even taps to Right. Wet per side = side sum / that side's tap
-//   count. With N = 1 the single tap feeds both sides. Write = In (no
-//   feedback).
-// Stereo Mode 2 = Mono: the original single-ring layout. One ring, N taps
-//   at u = i/N, wet = sum / N, the same signal on Mix L and Mix R.
+// Stereo Mode 0 = Dual: each side has its own full set of N taps. Left taps
+//   use u = i/N (last tap = Time) on ring 0; right taps sit halfway between
+//   them, u = (i - 0.5)/N, on ring 1, so the two sides always differ. Each
+//   side has its own seeded Random Offset and its own FBM drift seeds. Wet
+//   per side = side sum / N.
+// Stereo Mode 1 = Split: one set of N taps. Odd taps (1st, 3rd, ...) read
+//   ring 0 into Left, even taps read ring 1 into Right. Wet per side = side
+//   sum / that side's tap count. With N = 1 the single tap is read from both
+//   rings (Left from ring 0, Right from ring 1).
+// Stereo Mode 2 = Mono: the original single tap layout, u = i/N, wet = sum / N.
+//   The same taps read ring 0 for Left and ring 1 for Right (identical
+//   outputs from a single source).
 // Random Offset: each tap gets a seeded random in [0,1] * Random Offset
 // seconds added (static). Drift: per-tap FBM, +-Drift Amp on that tap's
-// delay, walking at Drift Speed Hz. Mix L/R = dry * (1 - Mix) + wet side * Mix. Min read 1 sample.
+// delay, walking at Drift Speed Hz. Out side = dry side * (1 - Mix) + wet
+// side * Mix. Min read 1 sample. No feedback.
+//
+// Display: every sample stores each tap's delay and side for the face
+// (voice_count / voice_delay / voice_pan). voice_delay is x in [0,1] on the
+// axis 0 .. Time * (1 + Drift Amp) + Random Offset (the farthest a tap can
+// reach), so lines move with Time, Random Offset and drift.
 
 #include <soemdsp/soemdsp.hpp>
 
@@ -41,6 +52,9 @@ struct ExponentialDelayState {
   double fbmTime[2][kMaxTaps];
   unsigned int fbmSeed[2][kMaxTaps];
   double outRight;
+  int vizCount;
+  double vizX[2 * kMaxTaps];
+  double vizPan[2 * kMaxTaps];
 };
 
 static ExponentialDelayState gPool[kMaxInstances];
@@ -59,6 +73,7 @@ static void clear_buffer(ExponentialDelayState& s) {
   }
   s.writeIndex = 0;
   s.outRight = 0.0;
+  s.vizCount = 0;
 }
 
 static double read_tap(const float* buf, int write, double delaySamples) {
@@ -102,6 +117,16 @@ static double tap_delay(
   return delaySamples;
 }
 
+static void viz_push(ExponentialDelayState& s, double delaySamples, double span, double pan) {
+  if (s.vizCount >= 2 * kMaxTaps) return;
+  double x = span > 0.0 ? delaySamples / span : 0.0;
+  if (!(x >= 0.0)) x = 0.0;
+  if (x > 1.0) x = 1.0;
+  s.vizX[s.vizCount] = x;
+  s.vizPan[s.vizCount] = pan;
+  s.vizCount += 1;
+}
+
 }  // namespace
 
 extern "C" int soemdsp_exponential_delay_create() {
@@ -121,10 +146,11 @@ extern "C" void soemdsp_exponential_delay_destroy(int handle) {
   gPool[handle - 1].active = false;
 }
 
-// Returns Mix L; Mix R is read with soemdsp_exponential_delay_right().
+// Returns Left out; Right out is read with soemdsp_exponential_delay_right().
 extern "C" double soemdsp_exponential_delay_sample(
   int handle,
-  double input,
+  double inputLeft,
+  double inputRight,
   double timeSeconds,
   double delayCount,
   double mix,
@@ -139,7 +165,8 @@ extern "C" double soemdsp_exponential_delay_sample(
   ExponentialDelayState& s = gPool[handle - 1];
 
   const double rate = maxd(1.0, safe(sampleRate));
-  const double raw = safe(input);
+  const double rawL = safe(inputLeft);
+  const double rawR = safe(inputRight);
   double timeSec = safe(timeSeconds);
   if (!(timeSec >= 0.0)) timeSec = 0.0;
   if (timeSec > kMaxDelaySeconds) timeSec = kMaxDelaySeconds;
@@ -164,40 +191,52 @@ extern "C" double soemdsp_exponential_delay_sample(
   const double maxDelaySamples = timeSec * rate;
   const double offsetSamples = offsetSec * rate;
   const double fbmInc = driftSpeed / rate;
+  const double absAmount = amount > 0.0 ? amount : 0.0;
+  const double span = maxDelaySamples * (1.0 + absAmount) + offsetSamples;
   double wetL = 0.0;
   double wetR = 0.0;
+  s.vizCount = 0;
 
   if (mono) {
-    double sum = 0.0;
+    double sumL = 0.0;
+    double sumR = 0.0;
     for (int i = 1; i <= n; i++) {
       const int t = i - 1;
       const double d = tap_delay(
         s, 0, t, (double)i / (double)n, maxDelaySamples, offsetSamples,
         amount, seedU, fbmInc
       );
-      sum += read_tap(s.buffer[0], write, d);
+      sumL += read_tap(s.buffer[0], write, d);
+      sumR += read_tap(s.buffer[1], write, d);
+      viz_push(s, d, span, 0.0);
     }
-    wetL = sum / (double)n;
-    wetR = wetL;
-    s.buffer[0][write] = (float)raw;
+    wetL = sumL / (double)n;
+    wetR = sumR / (double)n;
   } else if (split) {
     double sumL = 0.0;
     double sumR = 0.0;
     int countL = 0;
     int countR = 0;
+    double firstDelay = 1.0;
     for (int i = 1; i <= n; i++) {
       const int t = i - 1;
       const double d = tap_delay(
         s, 0, t, (double)i / (double)n, maxDelaySamples, offsetSamples,
         amount, seedU, fbmInc
       );
-      const double v = read_tap(s.buffer[0], write, d);
-      if ((t & 1) == 0) { sumL += v; countL++; }
-      else { sumR += v; countR++; }
+      if (t == 0) firstDelay = d;
+      if ((t & 1) == 0) {
+        sumL += read_tap(s.buffer[0], write, d);
+        countL++;
+        viz_push(s, d, span, n == 1 ? 0.0 : -1.0);
+      } else {
+        sumR += read_tap(s.buffer[1], write, d);
+        countR++;
+        viz_push(s, d, span, 1.0);
+      }
     }
     wetL = sumL / (double)countL;
-    wetR = countR > 0 ? sumR / (double)countR : wetL;
-    s.buffer[0][write] = (float)raw;
+    wetR = countR > 0 ? sumR / (double)countR : read_tap(s.buffer[1], write, firstDelay);
   } else {
     double sumL = 0.0;
     double sumR = 0.0;
@@ -213,24 +252,47 @@ extern "C" double soemdsp_exponential_delay_sample(
       );
       sumL += read_tap(s.buffer[0], write, dL);
       sumR += read_tap(s.buffer[1], write, dR);
+      viz_push(s, dL, span, -1.0);
+      viz_push(s, dR, span, 1.0);
     }
     wetL = sumL / (double)n;
     wetR = sumR / (double)n;
-    s.buffer[0][write] = (float)raw;
-    s.buffer[1][write] = (float)raw;
   }
+  s.buffer[0][write] = (float)rawL;
+  s.buffer[1][write] = (float)rawR;
 
   s.writeIndex = write + 1;
   if (s.writeIndex >= kMaxDelaySamples) {
     s.writeIndex = 0;
   }
-  s.outRight = safe(raw * (1.0 - mx) + wetR * mx);
-  return safe(raw * (1.0 - mx) + wetL * mx);
+  s.outRight = safe(rawR * (1.0 - mx) + wetR * mx);
+  return safe(rawL * (1.0 - mx) + wetL * mx);
 }
 
 extern "C" double soemdsp_exponential_delay_right(int handle) {
   if (handle < 1 || handle > kMaxInstances) return 0.0;
   return gPool[handle - 1].outRight;
+}
+
+// Face: taps of the last sample. delay = x in [0,1] (see header), pan = -1
+// Left, +1 Right, 0 both.
+extern "C" int soemdsp_exponential_delay_voice_count(int handle) {
+  if (handle < 1 || handle > kMaxInstances) return 0;
+  return gPool[handle - 1].vizCount;
+}
+
+extern "C" double soemdsp_exponential_delay_voice_delay(int handle, int index) {
+  if (handle < 1 || handle > kMaxInstances) return 0.0;
+  const ExponentialDelayState& s = gPool[handle - 1];
+  if (index < 0 || index >= s.vizCount) return 0.0;
+  return s.vizX[index];
+}
+
+extern "C" double soemdsp_exponential_delay_voice_pan(int handle, int index) {
+  if (handle < 1 || handle > kMaxInstances) return 0.0;
+  const ExponentialDelayState& s = gPool[handle - 1];
+  if (index < 0 || index >= s.vizCount) return 0.0;
+  return s.vizPan[index];
 }
 
 extern "C" int soemdsp_exponential_delay_max_samples() {
@@ -242,5 +304,5 @@ extern "C" double soemdsp_exponential_delay_max_seconds() {
 }
 
 extern "C" int soemdsp_exponential_delay_version() {
-  return 6;
+  return 7;
 }

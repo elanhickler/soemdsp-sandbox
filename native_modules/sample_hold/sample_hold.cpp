@@ -34,6 +34,9 @@ struct SampleHoldState {
   double lastIntervalSamples;
   double samplesSinceFire;
   double lastTrigger;
+  double fired;            // 1.0 on the sample a new value latched, else 0.0
+  double samplesSinceEdge;  // samples since the last Clock rising edge
+  double lastEdgeInterval;  // Clock edge-to-edge interval (0 = unknown yet)
   int pendingFireSamples; // Clock-edge delay for phaseOffset (>0 counting down)
   unsigned int noiseSeed;
   int currentSeed;
@@ -74,6 +77,9 @@ extern "C" int soemdsp_sample_hold_create() {
       s.samplesSinceFire = 0.0;
       s.lastTrigger = 0.0;
       s.pendingFireSamples = 0;
+      s.fired = 0.0;
+      s.samplesSinceEdge = 0.0;
+      s.lastEdgeInterval = 0.0;
       s.noiseSeed = 1U;
       s.currentSeed = 0;
       s.active = true;
@@ -149,16 +155,30 @@ extern "C" double soemdsp_sample_hold_sample(
   const bool risingEdge = rising_edge(safeTrigger, &s.lastTrigger, safeThreshold);
   bool fire = internalFire;
 
+  // Clock period for the phase-offset delay is measured edge-to-edge, independent
+  // of this lane's own latches (a delayed lane used to wait for its own interval,
+  // which never existed, so the fallback delay was re-armed by every edge and the
+  // offset lane never latched on an external Clock).
+  s.samplesSinceEdge = safe(s.samplesSinceEdge) + 1.0;
+  if (risingEdge) {
+    // An offset latch still pending from the previous edge fires now rather than being dropped.
+    if (s.pendingFireSamples > 0) {
+      fire = true;
+      s.pendingFireSamples = 0;
+    }
+  }
+
   if (risingEdge) {
     // Ext/Left (offset~0) fire with Clock; Right delays by offset*period.
     if (offset <= 1.0e-12 || offset >= 1.0 - 1.0e-12) {
       fire = true;
       s.pendingFireSamples = 0;
     } else {
-      const double period = safeFreq > 0.0
-        ? (safeRate / safeFreq)
-        : maxd(1.0, s.lastIntervalSamples > 0.0 ? s.lastIntervalSamples : (safeRate / 10.0));
-      int delay = (int)(offset * period + 0.5);
+      // Internal clock: its period. External Clock: last edge-to-edge interval;
+      // on the very first edge (interval unknown) latch immediately.
+      const double edgePeriod = s.lastEdgeInterval;
+      const double period = safeFreq > 0.0 ? (safeRate / safeFreq) : edgePeriod;
+      int delay = period > 0.0 ? (int)(offset * period + 0.5) : 0;
       if (delay < 1) {
         fire = true;
         s.pendingFireSamples = 0;
@@ -168,7 +188,13 @@ extern "C" double soemdsp_sample_hold_sample(
     }
   }
 
-  if (s.pendingFireSamples > 0) {
+  if (risingEdge) {
+    s.lastEdgeInterval = s.samplesSinceEdge;
+    s.samplesSinceEdge = 0.0;
+  }
+
+  // Not on the scheduling edge itself, so the offset latch lands exactly delay samples later.
+  if (s.pendingFireSamples > 0 && !risingEdge) {
     s.pendingFireSamples -= 1;
     if (s.pendingFireSamples <= 0) {
       s.pendingFireSamples = 0;
@@ -177,6 +203,7 @@ extern "C" double soemdsp_sample_hold_sample(
   }
 
   s.samplesSinceFire = safe(s.samplesSinceFire) + 1.0;
+  s.fired = fire ? 1.0 : 0.0;
 
   if (fire) {
     const double interval = maxd(1.0, safe(s.samplesSinceFire));
@@ -216,6 +243,12 @@ extern "C" double soemdsp_sample_hold_sample(
   return safe(out * amp);
 }
 
+// 1.0 on the exact sample the last soemdsp_sample_hold_sample() call latched.
+extern "C" double soemdsp_sample_hold_fired(int handle) {
+  if (handle < 1 || handle > kMaxInstances) return 0.0;
+  return gPool[handle - 1].fired;
+}
+
 extern "C" int soemdsp_sample_hold_version() {
-  return 4; // smoothing factor + Slow End/Start; Off replaced by smoothing<=0
+  return 5; // external-Clock phase offset uses edge interval (offset lane latches)
 }

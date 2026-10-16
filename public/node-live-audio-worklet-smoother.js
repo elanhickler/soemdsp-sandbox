@@ -406,25 +406,21 @@ NodeLiveAudioProcessor.prototype.applyParameterModulation = function applyParame
     const min = Number(metadata.min);
     const max = Number(metadata.max);
     const range = max - min;
-    if (Number.isFinite(range) && range > 0 && Math.abs(mod) <= 1 + 1e-9) {
-      const unit = ((b - min) / range) + mod;
-      const result = min + unit * range;
-      return Number.isFinite(result) ? result : 0;
+    // "Use real mod values": raw add, no clamp (wraparound still wraps).
+    if (metadata.outputDomain === true) {
+      const raw = b + mod;
+      if (!Number.isFinite(raw)) return 0;
+      return metadata.wraparound ? this.applyParameterBounds(raw, metadata) : raw;
     }
-    let result = b + mod;
+    let result = (Number.isFinite(range) && range > 0 && Math.abs(mod) <= 1 + 1e-9)
+      ? min + (((b - min) / range) + mod) * range
+      : b + mod;
     if (!Number.isFinite(result)) {
       return 0;
     }
-    let shouldClamp = false;
-    if (Object.hasOwn(metadata, "modClamp")) {
-      shouldClamp = Boolean(metadata.modClamp);
-    } else if (metadata.wraparound || metadata.hardClamp === true) {
-      shouldClamp = true;
-    } else {
-      const c = String(metadata.constraint || "").toLowerCase();
-      shouldClamp = c === "cpu" || c === "gpu" || c === "ram" || c === "memory";
-    }
-    return shouldClamp ? this.applyParameterBounds(result, metadata) : result;
+    // MOD always clamps to the slider range (wraparound wraps). No opt-out.
+    if (!(Number.isFinite(range) && range > 0)) return result;
+    return metadata.wraparound ? this.applyParameterBounds(result, metadata) : this.clampValue(result, min, max);
 };
 
 NodeLiveAudioProcessor.prototype.readRuntimePortOutput = function readRuntimePortOutput(frameValues, nodeId, port = "Out", frame = 0, frames = 1, depth = 0) {

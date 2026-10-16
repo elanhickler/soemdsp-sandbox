@@ -1,4 +1,4 @@
-// Softpop Oscillator native tests (docs/SOFTPOP_PLAN.md §9 oscillator checks,
+﻿// Softpop Oscillator native tests (docs/SOFTPOP_PLAN.md Â§9 oscillator checks,
 // Oscillator Source / Morph). Builds
 // native_modules/softpop_oscillator/softpop_oscillator.cpp (+ ellipsoid.cpp for
 // the Robin dither) with scripts/softpop_test_probe.cpp (harness:
@@ -7,8 +7,27 @@
 // Usage: node scripts/test_softpop_oscillator.mjs
 import { SR, COLORS, CH, Qof, dB, buildProbe, makeHarness, bitEqual, welch, sineFit } from "./softpop_test_common.mjs";
 
-const SRC = { SINE: 0, DSINE: 1, TRISAW: 2, SQUARE: 3, TRI: 4 };
-const SRC_NAMES = ["Sine", "Dithered Sine", "Trisaw", "Soft Square", "Soft Tri"];
+const SRC = { SINE: 0, DSINE: 1, TRISAW: 2, SQUARE: 3, TRI: 4, PBTRI: 5 };
+const SRC_NAMES = ["Sine", "Dithered Sine", "Dithered Trisaw", "Soft Square", "Soft Tri", "PolyBLEP Trisaw"];
+// Ellipsoid sharpness limit (ellipsoid.cpp ellipseCMin): axis ratio >= omega = min(2 pi |f| / fs, 1).
+const cMin = (f) => Math.min(2 * Math.PI * Math.abs(f) / SR, 1);
+// soundemote.dev /softsquare SquareToSine, k floored by the Ellipsoid limit:
+// c = sqrt(k / (1 + k)) >= omega (identical to Ellipsoid getSineToSquare on sin).
+const softSquareRef = (t, m, f, floor = true) => {
+  const c = Math.max(Math.sqrt(Math.max(Math.cos(Math.PI * m / 2), 0)), floor ? cMin(f) : 0), sn = Math.sin(2 * Math.PI * t);
+  return sn / Math.sqrt((1 - c * c) * sn * sn + c * c);
+};
+// soundemote.dev /softtriangle Ellipsoid Sym (stEllipsoidSymY, C = 0.225), peak-normalised,
+// B = sqrt(Morph) with the same Ellipsoid floor B >= omega.
+const ELL_C = 0.225;
+const ellipsoidSymRef = (t, m, f, floor = true) => {
+  const B = Math.max(Math.sqrt(m), floor ? cMin(f) : 0), bb = B * B;
+  const c = Math.cos(2 * Math.PI * t + Math.PI * 0.5), ca = 1 - c, cb = 1 + c;
+  const d1 = Math.sqrt(ca + bb * cb), d2 = Math.sqrt(cb + bb * ca);
+  const p1 = d1 > 1e-18 ? ca / d1 : 0, p2 = d2 > 1e-18 ? cb / d2 : 0;
+  const corr = (p) => p + ELL_C * (p - p * p);
+  return (corr(p1) - corr(p2)) * Math.SQRT1_2 / (1 + ELL_C * (1 - Math.SQRT2));
+};
 const t0 = Date.now();
 const H = makeHarness(buildProbe("oscillator"), { source: SRC.SINE });
 const { gate, render, renderAll, withInstance, setParams, noiseLevel, x } = H;
@@ -101,7 +120,7 @@ for (const color of [0, 1, 2, 3, 4]) for (const a of [0, 0.25, 0.5, 0.75, 1]) {
   gate(cvErr < 1e-9 && cvErrW < 2e-6 && hzErr < 1e-6, `2 CV L/R: log2(fInst/fEff) (max err ${cvErr.toExponential(1)} oct; White ${cvErrW.toExponential(1)} oct, dsp_ln/dsp_exp mean correction), Hz = fEff * 2^CV (max rel err ${hzErr.toExponential(1)})`);
   const [c0] = withInstance({ ...base, pitch: 0 }, (h) => renderAll(h, SR / 10, [CH.CV_L]));
   gate(c0.every((v) => v === 0), "2 CV is exactly 0 with Pitch Mod 0");
-  // pitch L/R outs (♯/♭ MIDI, A4 = 69 = 440 Hz) = the Hz the oscillator steps with.
+  // pitch L/R outs (â™¯/â™­ MIDI, A4 = 69 = 440 Hz) = the Hz the oscillator steps with.
   {
     let pErr = 0, pErrCv = 0, sinErr = 0, flat = 0;
     for (const color of [0, 1, 2, 3, 4]) for (const pitch of [0, 600, 2400]) {
@@ -207,7 +226,7 @@ for (const color of [0, 1, 2, 3, 4]) for (const a of [0, 0.25, 0.5, 0.75, 1]) {
     if (Math.abs(sd - 1) > Math.abs(worst.sd - 1)) worst.sd = sd;
   }
   gate(Math.abs(worst.mean) < 0.1 && Math.abs(worst.skew) < 0.15 && Math.abs(worst.sd - 1) < 0.05,
-    `5 Pitch Mod: worst mean ${worst.mean.toFixed(3)}σ (<0.1), skew ${worst.skew.toFixed(3)} (<0.15), sd ${worst.sd.toFixed(3)} (1 ± 5 %)`);
+    `5 Pitch Mod: worst mean ${worst.mean.toFixed(3)}Ïƒ (<0.1), skew ${worst.skew.toFixed(3)} (<0.15), sd ${worst.sd.toFixed(3)} (1 Â± 5 %)`);
   let finite = true, maxHz = 0;
   for (const source of [0, 1, 2, 3, 4]) for (const color of [0, 1, 2, 3, 4]) {
     withInstance({ freq: 23000, pitch: 4800, ampMod: 1, color, source }, (h) => {
@@ -242,14 +261,8 @@ for (const color of [0, 1, 2, 3, 4]) for (const a of [0, 0.25, 0.5, 0.75, 1]) {
   const f = 437.3, n = SR;
   const ph = (i) => { const p = (f / SR) * i; return p - Math.floor(p); };  // reference phase (no dither)
   const naiveTri = (t) => { const v = (t + 0.25) - Math.floor(t + 0.25); return v < 0.5 ? 4 * v - 1 : 3 - 4 * v; };
-  // soundemote.dev /softsquare SquareToSine: S sqrt(1+k) / sqrt(S^2+k), k = 10^(4 - 8 Morph).
-  const softSquare = (t, m) => { const k = Math.pow(10, 4 - 8 * m), sn = Math.sin(2 * Math.PI * t); return sn * Math.sqrt(1 + k) / Math.sqrt(sn * sn + k); };
-  const softTri = (t, m) => {
-    const k = 0.16 * m ** 4, rr = Math.sqrt(0.25 + k), g = 4 * (rr + Math.sqrt(k));
-    const u = t - Math.floor(t), first = u < 0.5, b = (first ? 2 * u : 2 * u - 1) - 0.5;
-    const y = g * (rr - Math.sqrt(b * b + k));
-    return first ? y : -y;
-  };
+  const softSquare = (t, m) => softSquareRef(t, m, f);
+  const softTri = (t, m) => ellipsoidSymRef(t, m, f);
   const maxErr = (src, morph, ref) => withInstance({ freq: f, source: src, morph }, (h) => {
     const [y] = renderAll(h, n, [CH.L]);
     let e = 0, phase = 0;
@@ -257,8 +270,8 @@ for (const color of [0, 1, 2, 3, 4]) for (const a of [0, 0.25, 0.5, 0.75, 1]) {
     return e;
   });
   for (const m of [0, 0.5, 1]) {
-    gate(maxErr(SRC.SQUARE, m, softSquare) < 1e-6, `14 Soft Square Morph ${m}: == soundemote.dev SquareToSine S sqrt(1+k)/sqrt(S^2+k), k = 10^(4 - 8 Morph)`);
-    gate(maxErr(SRC.TRI, m, softTri) < 1e-9, `14 Soft Tri Morph ${m}: == soundemote.dev Diroxe tri g (rr - sqrt(b^2+k)), k = 0.16 Morph^4`);
+    gate(maxErr(SRC.SQUARE, m, softSquare) < 1e-6, `14 Soft Square Morph ${m}: == soundemote.dev SquareToSine S sqrt(1+k)/sqrt(S^2+k), c = sqrt(k/(1+k)) = max(sqrt(cos(pi Morph / 2)), 2 pi f / fs) (Ellipsoid limit)`);
+    gate(maxErr(SRC.TRI, m, softTri) < 1e-6, `14 Soft Tri Morph ${m}: == soundemote.dev Ellipsoid Sym, B = max(sqrt(Morph), 2 pi f / fs) (Ellipsoid limit)`);
   }
   // Dithered sources: the average period stays exact; the dither only moves the per-cycle length.
   const zeroRate = (src, morph) => withInstance({ freq: f, source: src, morph, seed: 9 }, (h) => {
@@ -267,7 +280,7 @@ for (const color of [0, 1, 2, 3, 4]) for (const a of [0, 0.25, 0.5, 0.75, 1]) {
     for (let i = 1; i < y.length; i++) if (y[i - 1] < 0 && y[i] >= 0) { if (first < 0) first = i; last = i; count++; }
     return (count - 1) * SR / (last - first);
   });
-  for (const [src, m] of [[SRC.DSINE, 1], [SRC.TRISAW, 0.5], [SRC.TRISAW, 0.1]]) {
+  for (const [src, m] of [[SRC.DSINE, 1], [SRC.TRISAW, 0.5], [SRC.TRISAW, 0.1], [SRC.PBTRI, 0.5], [SRC.PBTRI, 0.1]]) {
     const fz = zeroRate(src, m);
     gate(Math.abs(fz / f - 1) < 1e-3, `14 ${SRC_NAMES[src]} Morph ${m}: rising-zero rate ${fz.toFixed(3)} Hz vs ${f} (dither keeps the pitch)`);
   }
@@ -276,27 +289,110 @@ for (const color of [0, 1, 2, 3, 4]) for (const a of [0, 0.25, 0.5, 0.75, 1]) {
   const [d0] = ds(0), [d1l, d1r] = ds(1);
   gate(bitEqual(s0, d0) && !bitEqual(s0, d1l) && !bitEqual(d1l, d1r), "14 Dithered Sine: Morph 0 == Sine exactly; Morph 1 dithers; L and R dither independently");
   let range = true;
-  for (const src of [SRC.TRISAW, SRC.SQUARE, SRC.TRI]) for (const m of [0, 0.25, 0.5, 0.75, 1]) {
+  for (const src of [SRC.TRISAW, SRC.SQUARE, SRC.TRI, SRC.PBTRI]) for (const m of [0, 0.25, 0.5, 0.75, 1]) {
     const [y] = withInstance({ freq: f, source: src, morph: m }, (h) => renderAll(h, n, [CH.L]));
     let mx = 0;
     for (const v of y) mx = Math.max(mx, Math.abs(v));
     if (!(mx <= 1 + 1e-12 && mx > 0.97)) range = false;
   }
-  gate(range, "14 Trisaw / Soft Square / Soft Tri: peak level 1 (within 3 %) at every Morph");
+  gate(range, "14 Dithered Trisaw / Soft Square / Soft Tri / PolyBLEP Trisaw: peak level 1 (within 3 %) at every Morph");
+  // Dithered Trisaw = Robin's dithering oscillator: with a steady pitch every cycle
+  // (rising zero to rising zero) is a whole number of samples in {Lmid-1, Lmid, Lmid+1}.
+  {
+    const c = SR / f, lmid = Math.round(c);
+    const [y] = withInstance({ freq: f, source: SRC.TRISAW, morph: 0.5, seed: 9 }, (h) => renderAll(h, 4 * SR, [CH.L]));
+    const lens = new Set(); let prev = -1, bad = 0, sum = 0, cnt = 0;
+    for (let i = 1; i < y.length; i++) if (y[i - 1] < 0 && y[i] >= 0) {
+      if (prev >= 0) { const L = i - prev; lens.add(L); if (Math.abs(L - lmid) > 1) bad++; sum += L; cnt++; }
+      prev = i;
+    }
+    gate(bad === 0 && lens.size >= 2 && Math.abs(sum / cnt / c - 1) < 1e-3,
+      `14 Dithered Trisaw: Robin cycle lengths {${[...lens].sort((a, b) => a - b).join(", ")}} samples around ${c.toFixed(2)}, mean ${(sum / cnt).toFixed(3)}`);
+  }
+  // Soft Tri Morph 1 (B = 1) is a pure sine at peak 1.
+  {
+    const fl = 100;
+    const [y] = withInstance({ freq: fl, source: SRC.TRI, morph: 1 }, (h) => renderAll(h, SR, [CH.L]));
+    const { thdDb } = sineFit(y, fl);
+    gate(thdDb < -100, `14 Soft Tri Morph 1 = sine (THD+N ${thdDb.toFixed(1)} dB)`);
+  }
+}
+
+// ---------- 17. Max-edginess antialiasing (Soft Square / Soft Tri) ----------
+{
+  // Oversampled reference: the shape's harmonics (DFT of one cycle at 8192
+  // points, same k / B as the module would use) summed only below Nyquist,
+  // at the module's sample times. Whatever differs from that band-limited
+  // ideal is aliasing (folded harmonics). Error power is relative to the
+  // reference power. The un-floored shape at the same rate is measured the same
+  // way to show how much it would alias without the floor.
+  const M = 8192;
+  const aliasDb = (fn, m, f0, floor, y) => {
+    const H = Math.floor((SR / 2) / f0);
+    const an = new Float64Array(H + 1), bn = new Float64Array(H + 1);
+    const cyc = new Float64Array(M);
+    for (let j = 0; j < M; j++) cyc[j] = fn(j / M, m, f0, floor);
+    for (let h = 1; h <= H; h++) {
+      let sa = 0, sb = 0;
+      for (let j = 0; j < M; j++) { const w = 2 * Math.PI * h * j / M; sa += cyc[j] * Math.cos(w); sb += cyc[j] * Math.sin(w); }
+      an[h] = 2 * sa / M; bn[h] = 2 * sb / M;
+    }
+    let e = 0, r = 0, p = 0;
+    for (let i = 0; i < y.length; i++) {
+      let v = 0;
+      for (let h = 1; h <= H; h++) { const w = 2 * Math.PI * h * p; v += an[h] * Math.cos(w) + bn[h] * Math.sin(w); }
+      const yi = y ? y[i] : fn(p, m, f0, floor);
+      e += (yi - v) ** 2; r += v * v;
+      p += f0 / SR; p -= Math.floor(p);
+    }
+    return dB(e / r);
+  };
+  for (const [src, fn, m] of [[SRC.SQUARE, softSquareRef, 1], [SRC.TRI, ellipsoidSymRef, 0]]) for (const f0 of [1234.5, 4321.7, 9876.5]) {
+    const [y] = withInstance({ freq: f0, source: src, morph: m }, (h) => renderAll(h, SR / 4, [CH.L]));
+    const got = aliasDb(fn, m, f0, true, y);
+    const raw = aliasDb(fn, m, f0, false, new Float64Array(SR / 4).map((_, i) => { const p = (f0 / SR) * i; return fn(p - Math.floor(p), m, f0, false); }));
+    gate(got < -40 && raw > got + 20, `17 ${SRC_NAMES[src]} Morph ${m} @ ${f0} Hz: alias error vs band-limited reference ${got.toFixed(1)} dB (un-floored shape ${raw.toFixed(1)} dB)`);
+  }
+  // With Pitch Mod the floor follows the instantaneous frequency every sample.
+  {
+    const [y, fi] = withInstance({ freq: 3000, source: SRC.SQUARE, morph: 1, pitch: 1200, seed: 5 }, (h) => renderAll(h, SR / 4, [CH.L, CH.FI_L]));
+    let err = 0, p = 0;
+    for (let i = 0; i < y.length; i++) { err = Math.max(err, Math.abs(y[i] - softSquareRef(p, 1, fi[i]))); p += fi[i] / SR; p -= Math.floor(p); }
+    gate(err < 1e-5, `17 Soft Square with Pitch Mod 1200: Ellipsoid limit from the per-sample stepped Hz (max err ${err.toExponential(1)})`);
+  }
+}
+
+// ---------- 15b. Soft Square / Soft Tri Morph use the whole knob (220 Hz) ----------
+{
+  const f = 220;
+  const h3 = (m, source) => {
+    const [y] = withInstance({ freq: f, source, morph: m }, (h) => renderAll(h, 4 * SR, [CH.L]));
+    const { psd, df } = welch(y, 16384);
+    const harm = (k) => { const c = Math.round(k * f / df); return psd[c - 1] + psd[c] + psd[c + 1]; };
+    return dB(harm(3) / harm(1));
+  };
+  {
+    const ms = [0.25, 0.5, 0.75, 1], v = ms.map((m) => h3(m, SRC.SQUARE));
+    const steps = v.slice(1).map((x, i) => x - v[i]);
+    gate(v[0] < -30 && steps.every((s) => s > 5 && s < 15), `15b Soft Square H3 at Morph ${ms.join("/")}: ${v.map((x) => x.toFixed(1)).join(" / ")} dB (Morph 0 = sine; every quarter raises H3 5..15 dB)`);
+  }
+  const ms = [0, 0.25, 0.5, 0.75], v = ms.map((m) => h3(m, SRC.TRI));
+  const steps = v.slice(1).map((x, i) => v[i] - x);
+  gate(steps.every((s) => s > 4 && s < 15), `15b Soft Tri H3 at Morph ${ms.join("/")}: ${v.map((x) => x.toFixed(1)).join(" / ")} dB (every quarter of the knob drops H3 4..15 dB)`);
 }
 
 // ---------- 15. Morph ----------
 {
-  const f = 500;
+  const f = 50;  // low pitch: the AA floor is far from the Morph range here
   const spectrum = (src, morph) => {
     const [y] = withInstance({ freq: f, source: src, morph }, (h) => renderAll(h, 8 * SR, [CH.L]));
     const { psd, df } = welch(y, 16384);
     const harm = (k) => { const c = Math.round(k * f / df); return psd[c - 1] + psd[c] + psd[c + 1]; };
     return { h1: harm(1), h2: harm(2), h3: harm(3) };
   };
-  // Trisaw: Morph 0.5 = triangle (odd harmonics only), 0.1 = saw-like (strong even harmonics).
+  // Dithered Trisaw: Morph 0.5 = triangle (odd harmonics only), 0.1 = saw-like (strong even harmonics).
   const tri = spectrum(SRC.TRISAW, 0.5), saw = spectrum(SRC.TRISAW, 0.1);
-  gate(dB(tri.h2 / tri.h1) < -40 && dB(saw.h2 / saw.h1) > -15, `15 Trisaw Morph: 0.5 triangle (H2 ${dB(tri.h2 / tri.h1).toFixed(1)} dB), 0.1 saw-like (H2 ${dB(saw.h2 / saw.h1).toFixed(1)} dB)`);
+  gate(dB(tri.h2 / tri.h1) < -40 && dB(saw.h2 / saw.h1) > -15, `15 Dithered Trisaw Morph: 0.5 triangle (H2 ${dB(tri.h2 / tri.h1).toFixed(1)} dB), 0.1 saw-like (H2 ${dB(saw.h2 / saw.h1).toFixed(1)} dB)`);
   // Soft Square: Morph 0 = pure sine (no H3), Morph 1 = square (H3 -9.5 dB).
   const sq0 = spectrum(SRC.SQUARE, 0), sq1 = spectrum(SRC.SQUARE, 1);
   gate(dB(sq0.h3 / sq0.h1) < -80 && Math.abs(dB(sq1.h3 / sq1.h1) + 9.54) < 1.5,
@@ -305,10 +401,58 @@ for (const color of [0, 1, 2, 3, 4]) for (const a of [0, 0.25, 0.5, 0.75, 1]) {
   const t0s = spectrum(SRC.TRI, 0), t1s = spectrum(SRC.TRI, 1);
   gate(Math.abs(dB(t0s.h3 / t0s.h1) + 19.08) < 1.5 && dB(t1s.h3 / t1s.h1) < dB(t0s.h3 / t0s.h1) - 3,
     `15 Soft Tri Morph: 0 = triangle (H3 ${dB(t0s.h3 / t0s.h1).toFixed(1)} dB, ideal -19.1), 1 rounder (H3 ${dB(t1s.h3 / t1s.h1).toFixed(1)} dB)`);
+  // PolyBLEP Trisaw: Morph 0.5 = triangle (odd only, H3 -19.1 dB), 0.1 = saw-like.
+  const pt = spectrum(SRC.PBTRI, 0.5), ps = spectrum(SRC.PBTRI, 0.1);
+  gate(dB(pt.h2 / pt.h1) < -60 && Math.abs(dB(pt.h3 / pt.h1) + 19.08) < 0.5 && dB(ps.h2 / ps.h1) > -15,
+    `15 PolyBLEP Trisaw Morph: 0.5 triangle (H2 ${dB(pt.h2 / pt.h1).toFixed(1)} dB, H3 ${dB(pt.h3 / pt.h1).toFixed(2)} dB, ideal -19.08), 0.1 saw-like (H2 ${dB(ps.h2 / ps.h1).toFixed(1)} dB)`);
   // Sine ignores Morph.
   const [a] = withInstance({ freq: f, morph: 0, pitch: 300 }, (h) => renderAll(h, SR, [CH.L]));
   const [b] = withInstance({ freq: f, morph: 1, pitch: 300 }, (h) => renderAll(h, SR, [CH.L]));
   gate(bitEqual(a, b), "15 Sine: Morph has no effect");
+}
+
+// ---------- 15c. PolyBLEP Trisaw aliasing and pitch ----------
+{
+  // Alias power = PSD outside +-3 bins of every true harmonic k f (k f < fs/2),
+  // relative to total. Reference = the naive Trisaw Center at the same phase (JS).
+  const naiveTrisawCenter = (t, m) => {
+    const w = Math.min(Math.max(m, 1e-6), 1 - 1e-6);
+    const local = t < 0.5 ? t * 2 : (t - 0.5) * 2, sgn = t < 0.5 ? 1 : -1;
+    const pk = t < 0.5 ? w : 1 - w;
+    return sgn * (local < pk ? local / pk : (1 - local) / (1 - pk));
+  };
+  const aliasDb = (y, f) => {
+    const N = 32768, { psd, df } = welch(y, N);
+    const keep = new Uint8Array(psd.length);
+    for (let k = 1; k * f < SR / 2; k++) { const c = Math.round(k * f / df); for (let j = c - 3; j <= c + 3; j++) if (j >= 0 && j < keep.length) keep[j] = 1; }
+    let tot = 0, al = 0;
+    for (let i = 1; i < psd.length; i++) { tot += psd[i]; if (!keep[i]) al += psd[i]; }
+    return dB(al / tot);
+  };
+  // Bin-exact notes (f = whole Welch bins) so window leakage does not count as alias.
+  const binHz = SR / 32768;
+  for (const [f0, m] of [[2093.0, 0.5], [4186.0, 0.5], [2093.0, 0.1]]) {
+    const f = Math.round(f0 / binHz) * binHz;
+    const [y] = withInstance({ freq: f, source: SRC.PBTRI, morph: m }, (h) => renderAll(h, 4 * SR, [CH.L]));
+    const naive = new Float64Array(y.length);
+    let p = 0;
+    for (let i = 0; i < y.length; i++) { naive[i] = naiveTrisawCenter(p, m); p += f / SR; p -= Math.floor(p); }
+    const a = aliasDb(y, f), b = aliasDb(naive, f);
+    gate(a < b - 10, `15c PolyBLEP Trisaw ${f.toFixed(2)} Hz Morph ${m}: alias power ${a.toFixed(1)} dB vs naive ${b.toFixed(1)} dB (>= 10 dB less)`);
+  }
+  // Pitch: fundamental from sineFit-free zero rate at several notes (no dither, exact).
+  let worst = 0;
+  for (const f of [55, 440, 1760, 7040]) {
+    const [y] = withInstance({ freq: f, source: SRC.PBTRI, morph: 0.5 }, (h) => renderAll(h, 10 * SR, [CH.L]));
+    let first = -1, last = -1, count = 0, fl = 0, ll = 0;
+    for (let i = 1; i < y.length; i++) if (y[i - 1] < 0 && y[i] >= 0) {
+      const fr = i - 1 + (-y[i - 1]) / (y[i] - y[i - 1]);
+      if (first < 0) fl = fr; ll = fr; count++; first = 1;
+    }
+    const fz = (count - 1) * SR / (ll - fl);
+    worst = Math.max(worst, Math.abs(1200 * Math.log2(fz / f)));
+  }
+  gate(worst < 0.01, `15c PolyBLEP Trisaw pitch: worst ${worst.toFixed(5)} cents over 55 / 440 / 1760 / 7040 Hz (< 0.01)`);
 }
 
 // ---------- 16. Pitch Mod swing at constant level ----------
@@ -373,7 +517,7 @@ for (const color of [0, 1, 2, 3, 4]) for (const a of [0, 0.25, 0.5, 0.75, 1]) {
   });
   const [m0] = mean(0), [m600, u600] = mean(600);
   const c = 1200 * Math.log2(m600 / m0), cu = 1200 * Math.log2(u600 / m0);
-  gate(Math.abs(c) < 1, `12 mean Hz @440: PitchMod 0 ${m0.toFixed(3)} / 600 ${m600.toFixed(3)} (${c >= 0 ? "+" : ""}${c.toFixed(2)} cents, ±1; uncorrected would be +${cu.toFixed(1)} cents)`);
+  gate(Math.abs(c) < 1, `12 mean Hz @440: PitchMod 0 ${m0.toFixed(3)} / 600 ${m600.toFixed(3)} (${c >= 0 ? "+" : ""}${c.toFixed(2)} cents, Â±1; uncorrected would be +${cu.toFixed(1)} cents)`);
   // White (uniform +-sqrt3): c = ln(sinh(sqrt3 s) / (sqrt3 s)).
   for (const pitch of [600, 2400]) {
     const sw = pitch * Math.LN2 / 1200;
@@ -386,7 +530,7 @@ for (const color of [0, 1, 2, 3, 4]) for (const a of [0, 0.25, 0.5, 0.75, 1]) {
     });
     const [w0] = meanW(0), [w, g] = meanW(pitch);
     const cw = 1200 * Math.log2(w / w0), cg = 1200 * Math.log2(g / w0);
-    gate(Math.abs(cw) < (pitch > 1200 ? 3 : 1), `12 White mean Hz @440, Pitch Mod ${pitch}: ${w.toFixed(3)} (${cw >= 0 ? "+" : ""}${cw.toFixed(2)} cents, ±${pitch > 1200 ? 3 : 1} (60 s sampling); Gaussian s^2/2 would be ${cg >= 0 ? "+" : ""}${cg.toFixed(1)} cents)`);
+    gate(Math.abs(cw) < (pitch > 1200 ? 3 : 1), `12 White mean Hz @440, Pitch Mod ${pitch}: ${w.toFixed(3)} (${cw >= 0 ? "+" : ""}${cw.toFixed(2)} cents, Â±${pitch > 1200 ? 3 : 1} (60 s sampling); Gaussian s^2/2 would be ${cg >= 0 ? "+" : ""}${cg.toFixed(1)} cents)`);
   }
 }
 
@@ -398,3 +542,5 @@ for (const color of [0, 1, 2, 3, 4]) {
   gate(Math.max(...rows.map((r) => Math.abs(r.rmsDb - base))) < 0.5 && rows.every((r) => r.bad === 0), `6 ${COLORS[color]} Sine Amp Mod 0->1 RMS (dB re A0): ${row}`);
 }
 H.finish(t0);
+
+

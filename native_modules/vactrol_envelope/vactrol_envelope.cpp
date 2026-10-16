@@ -16,6 +16,12 @@
 //            raw += (target - raw) * (1 - exp(-scale / (release_eff * sr)))
 //     memory: m += (raw - m) * (1 - exp(-1 / (tau * sr)))   tau = kMemoryRise up / kMemoryFall down
 //     out = pow(raw, curve), raw snapped to 0 below kSnapFloor when dark.
+//
+// Retrigger + Recalc On Trig (same as Ping Envelope): On = Model, Attack,
+// Release, Curve and Sensitivity are latched on a rising Retrigger edge
+// (> 0) and held until the next one; Off = knobs live every sample.
+// Retrigger never resets the envelope level. The graph passes Off when
+// Retrigger is unconnected so Light-only use stays live.
 
 #include <soemdsp/soemdsp.hpp>
 
@@ -29,7 +35,7 @@ static const char kMetadataJson[] =
     "\"label\":\"Vactrol\","
     "\"targetType\":\"vactrol\","
     "\"kind\":\"envelope\","
-    "\"inputs\":[\"Light\"],"
+    "\"inputs\":[\"Light\",\"Retrigger\"],"
     "\"outputs\":[\"Out\"],"
     "\"parameters\":["
       "{"
@@ -84,6 +90,14 @@ static const char kMetadataJson[] =
         "\"max\":4,"
         "\"step\":\"any\","
         "\"tooltip\":\"Gain applied to the Light input before it drives the detector.\""
+      "},"
+      "{"
+        "\"key\":\"recalculateOnTrigger\","
+        "\"label\":\"Recalc On Trig\","
+        "\"kind\":\"choice\","
+        "\"choices\":[\"Off\",\"On\"],"
+        "\"defaultValue\":1,"
+        "\"tooltip\":\"On = latch Model/Attack/Release/Curve/Sensitivity on rising Retrigger. Off = knobs always live. Retrigger never resets the level.\""
       "}"
     "]"
   "}";
@@ -102,6 +116,13 @@ struct VactrolState {
   double raw;   // smoothed, unshaped light level
   double out;   // shaped output
   double m;     // ModelB light memory (slow follower of raw)
+  double lastRetrig;
+  double shotAttack;
+  double shotRelease;
+  double shotCurve;
+  double shotSensitivity;
+  double shotModel;
+  bool   hasShot;
   bool   active;
 };
 
@@ -161,6 +182,13 @@ extern "C" int soemdsp_vactrol_envelope_create() {
       s.raw = 0.0;
       s.out = 0.0;
       s.m = 0.0;
+      s.lastRetrig = 0.0;
+      s.shotAttack = 0.0;
+      s.shotRelease = 0.1;
+      s.shotCurve = 1.0;
+      s.shotSensitivity = 1.0;
+      s.shotModel = 0.0;
+      s.hasShot = false;
       s.active = true;
       return i + 1;
     }
@@ -176,27 +204,43 @@ extern "C" void soemdsp_vactrol_envelope_destroy(int handle) {
 extern "C" double soemdsp_vactrol_envelope_sample(
   int    handle,
   double light,
+  double retrigger,
   double attack,
   double release,
   double curve,
   double sensitivity,
   double model,
+  double recalculateOnTrigger,
   double sampleRate
 ) {
   if (handle < 1 || handle > kMaxInstances) return 0.0;
   VactrolState& s = gPool[handle - 1];
 
+  // Recalc On Trig: latch knobs on rising Retrigger (On) or copy every sample (Off).
+  const bool latch = safe(recalculateOnTrigger) >= 0.5;
+  const bool retrigHigh = safe(retrigger) > 0.0;
+  const bool retrigRise = !(s.lastRetrig > 0.0) && retrigHigh;
+  s.lastRetrig = retrigHigh ? 1.0 : 0.0;
+  if (!latch || retrigRise || !s.hasShot) {
+    s.shotAttack = attack;
+    s.shotRelease = release;
+    s.shotCurve = curve;
+    s.shotSensitivity = sensitivity;
+    s.shotModel = model;
+    s.hasShot = true;
+  }
+
   const double safeLight = safe(light);
-  const double safeAttack = attack > 0.0 ? attack : 0.0;
-  const double safeRelease = release > 0.0 ? release : 0.0;
-  const double safeCurve = curve > 0.001 ? curve : 0.001;
-  const double safeSensitivity = sensitivity > 0.0 ? sensitivity : 0.0;
+  const double safeAttack = s.shotAttack > 0.0 ? s.shotAttack : 0.0;
+  const double safeRelease = s.shotRelease > 0.0 ? s.shotRelease : 0.0;
+  const double safeCurve = s.shotCurve > 0.001 ? s.shotCurve : 0.001;
+  const double safeSensitivity = s.shotSensitivity > 0.0 ? s.shotSensitivity : 0.0;
   const double rate = sampleRate < 1.0 ? 1.0 : sampleRate;
 
   // target = Light × Sensitivity (no light-offset bias; settles to 0 when dark).
   const double target = clamp(safeLight * safeSensitivity, 0.0, 1.0);
   // ModelB (choiceId 1). ModelA (0 / default) falls through to the original path.
-  if (safe(model) >= 0.5) {
+  if (safe(s.shotModel) >= 0.5) {
     return vactrol_model_b(s, target, safeAttack, safeRelease, safeCurve, rate);
   }
   const double coefficient = target > s.raw
@@ -209,7 +253,7 @@ extern "C" double soemdsp_vactrol_envelope_sample(
 }
 
 extern "C" int soemdsp_vactrol_envelope_version() {
-  return 3; // 2: no lightOffset / darkCurrent. 3: Model choice (ModelA / ModelB)
+  return 4; // 2: no lightOffset / darkCurrent. 3: Model choice (ModelA / ModelB). 4: Retrigger + Recalc On Trig
 }
 
 extern "C" const char* soemdsp_vactrol_envelope_metadata_json() {

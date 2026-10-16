@@ -51,7 +51,7 @@ function peakFor({ ampBase, unitAdd, flags }) {
   setParam(g, hOsc, PARAM_FREQ, 440);
   setParam(g, hOsc, PARAM_WAVE, 5); // sine
   setParam(g, hOsc, PARAM_AMP, ampBase);
-  // bit1 = modClamp request; bit3 = legacy unbounded (native must still clamp unit-band)
+  // bit1 / bit3 are unused flag bits: native always clamps unit-band MOD, whatever they hold
   setDomain(g, hOsc, PARAM_AMP, 0, 1, flags);
   setMod(g, hOsc, PARAM_AMP, unitAdd, 0);
   if (compile(g)) throw new Error("compile");

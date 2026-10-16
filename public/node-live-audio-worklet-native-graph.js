@@ -237,6 +237,7 @@ NodeLiveAudioProcessor.NATIVE_GRAPH_TYPE_IDS = Object.freeze({
   fbmField: 211,
   formulaNoise: 88,
   fibonacciNoise: 217,
+  timeQuantizer: 218, // In changes land on the project-tempo grid
   randomWalk: 89,
   cheapWalk: 108,
   pulseExplosion: 90,
@@ -472,7 +473,6 @@ NodeLiveAudioProcessor.prototype.mapNativeGraphParamId = function mapNativeGraph
   const t = String(type || "");
   if (t === "pitchQuantizer") {
     if (k === "scaleMask") return P.NATIVE_GRAPH_PARAM_SEED;
-    if (k === "octaves") return P.NATIVE_GRAPH_PARAM_WIDTH;
     if (k === "octave" || k === "octaveOffset") return P.NATIVE_GRAPH_PARAM_ATT_OFFSET;
     if (k === "semitones" || k === "semitoneOffset") return P.NATIVE_GRAPH_PARAM_CENTER;
   }
@@ -944,6 +944,14 @@ NodeLiveAudioProcessor.prototype.mapNativeGraphSrcPortId = function mapNativeGra
       ? NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_MONO
       : NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_RIGHT; // clock T
   }
+  // Sample & Hold Trigger (1-sample latch pulse) lives on Square; must precede the
+  // generic "trigger" -> Right fallback below (Right is the S&H Right noise hold).
+  if (t === "sampleHold" && p === "trigger") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_SQUARE;
+  // Time Quantizer: Out on Mono, Trigger (1-sample, only when Out changed) on Right.
+  if (t === "timeQuantizer") {
+    if (p === "out") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_MONO;
+    if (p === "trigger") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_RIGHT;
+  }
   if (p === "t" || p === "trigger") {
     // randomClock Trigger → Mono; clock Pulse/T → Right; Trigger dest handled in dst map
     return t === "randomClock"
@@ -1219,6 +1227,10 @@ NodeLiveAudioProcessor.prototype.mapNativeGraphDstPortId = function mapNativeGra
       return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_MONO;
     }
   }
+  // Vactrol Retrigger: latches knobs (Recalc On Trig) on the Trigger bus.
+  if (p === "retrigger" && tDst === "vactrol") {
+    return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_TRIGGER;
+  }
   if (p === "trigger" || p === "trig" || (p === "latch" && type === "chordMemory")) {
     return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_TRIGGER;
   }
@@ -1406,7 +1418,7 @@ NodeLiveAudioProcessor.prototype.pushNativeGraphParamMod = function pushNativeGr
   } catch (_e) { /* ignore */ }
 };
 
-/** Domain min/max + wrap/modClamp flags for control_effective unit-band map. */
+/** Domain min/max + wrap / real-values flags for control_effective unit-band map. */
 NodeLiveAudioProcessor.prototype.pushNativeGraphParamDomain = function pushNativeGraphParamDomain(
   native,
   hash,
@@ -1425,7 +1437,7 @@ NodeLiveAudioProcessor.prototype.pushNativeGraphParamDomain = function pushNativ
       paramId,
       Number.isFinite(lo) ? lo : 0,
       Number.isFinite(hi) ? hi : 0,
-      // bit0 wrap, bit1 modClamp, bit2 VCA, bit3 unbounded, bit4 domainValued,
+      // bit0 wrap, bit1/bit3 unused, bit2 VCA, bit4 domainValued,
       // bit5 replaceOnly. Must keep & 63 (not 15/31) or domain/replace flags drop.
       (flags | 0) & 63,
     );
@@ -4462,7 +4474,7 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
       return;
     }
     // Merge patch paramMeta with module-definition defaults so Softwave Amp
-    // modClamp/modMultiply survive older saved paramMeta blobs.
+    // modMultiply survives older saved paramMeta blobs.
     const defParam = defParamEarly;
     const meta = metaEarly;
     let unitAdd = 0;
@@ -4488,19 +4500,10 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
     const max = Number(meta.max);
     let flags = 0;
     if (meta.wraparound) flags |= 1;
-    // Real values (outputDomain): domain ADD, no clamp (bit4 + bit3).
-    // Unit-band SSOT (B-082): ADD then always clamp to min/max (bit1).
-    // Legacy modClamp:false no longer sets unbounded for unit-band MOD.
+    // Real values (outputDomain): domain ADD, no clamp (bit4).
+    // Unit-band (B-082): native ADDs then always clamps to min/max. No opt-out.
     if (destDomain || (Number.isFinite(domainAdd) && domainAdd !== 0)) {
       flags |= 16;
-      flags |= 8;
-    } else {
-      flags |= 2;
-    }
-    if (meta.hardClamp === true) flags |= 2;
-    else {
-      const c = String(meta.constraint || "").trim().toLowerCase();
-      if (c === "cpu" || c === "gpu" || c === "ram" || c === "memory") flags |= 2;
     }
     if (Number.isFinite(min) && Number.isFinite(max) && max > min) {
       const domainToken = `${min}\0${max}\0${flags}`;
@@ -5575,6 +5578,7 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
       push("sustain", P.NATIVE_GRAPH_PARAM_MIX, cont("sustain", 0.7));
       push("release", P.NATIVE_GRAPH_PARAM_OFFSET_MS, cont("release", 0.3));
       push("level", P.NATIVE_GRAPH_PARAM_LEVEL, cont("level", 1));
+      push("recalculateOnTrigger", P.NATIVE_GRAPH_PARAM_TIMING_MODE, disc("recalculateOnTrigger", 0));
       continue;
     }
     if (type === "vactrol") {
@@ -5592,6 +5596,7 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
       push("release", P.NATIVE_GRAPH_PARAM_TIME_DENOMINATOR, cont("release", 0.1));
       push("curve", P.NATIVE_GRAPH_PARAM_SHAPE, cont("curve", 1));
       push("sensitivity", P.NATIVE_GRAPH_PARAM_WIDTH, cont("sensitivity", 1));
+      push("recalculateOnTrigger", P.NATIVE_GRAPH_PARAM_MODE, disc("recalculateOnTrigger", 1));
       push("amplitude", P.NATIVE_GRAPH_PARAM_AMPLITUDE, cont("amplitude", 1));
       continue;
     }
@@ -5861,7 +5866,6 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
     }
     if (type === "pitchQuantizer") {
       push("scaleMask", P.NATIVE_GRAPH_PARAM_SEED, disc("scaleMask", 2741));
-      push("octaves", P.NATIVE_GRAPH_PARAM_WIDTH, disc("octaves", 3));
       push("octave", P.NATIVE_GRAPH_PARAM_ATT_OFFSET, disc("octave", disc("octaveOffset", 0)));
       push("semitones", P.NATIVE_GRAPH_PARAM_CENTER, disc("semitones", disc("semitoneOffset", 0)));
       continue;
@@ -5901,6 +5905,12 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
       push("amplitude", P.NATIVE_GRAPH_PARAM_AMPLITUDE, cont("amplitude", 1));
       continue;
     }
+    if (type === "timeQuantizer") {
+      push("division", P.NATIVE_GRAPH_PARAM_MODE, disc("division", 4));
+      push("timing", P.NATIVE_GRAPH_PARAM_TIMING_MODE, disc("timing", 0));
+      push("changeThreshold", P.NATIVE_GRAPH_PARAM_CENTER, cont("changeThreshold", 1e-6));
+      continue;
+    }
     if (type === "fibonacciNoise") {
       push("speed", P.NATIVE_GRAPH_PARAM_FREQUENCY, cont("speed", 44100));
       push("interpolation", P.NATIVE_GRAPH_PARAM_MODE, disc("interpolation", 0));
@@ -5909,6 +5919,7 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
       push("operation", P.NATIVE_GRAPH_PARAM_SHAPE, disc("operation", 0));
       push("output", P.NATIVE_GRAPH_PARAM_CENTER, disc("output", 0));
       push("seed", P.NATIVE_GRAPH_PARAM_SEED, disc("seed", 1));
+      push("amplitude", P.NATIVE_GRAPH_PARAM_AMPLITUDE, cont("amplitude", 1));
       continue;
     }
     if (type === "formulaNoise") {
@@ -6406,6 +6417,7 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
       push("lookaheadMs", P.NATIVE_GRAPH_PARAM_TIME_NUMERATOR, cont("lookaheadMs", 5));
       push("lookaheadSamples", P.NATIVE_GRAPH_PARAM_TIME_DENOMINATOR, cont("lookaheadSamples", 0));
       push("attack", P.NATIVE_GRAPH_PARAM_OFFSET_MS, cont("attack", 5));
+      push("hold", P.NATIVE_GRAPH_PARAM_LANE_BIAS3, cont("hold", 0));
       push("release", P.NATIVE_GRAPH_PARAM_LANE_BIAS1, cont("release", 250));
       push("amplitude", P.NATIVE_GRAPH_PARAM_AMPLITUDE, cont("amplitude", 1));
       continue;
@@ -6760,7 +6772,32 @@ NodeLiveAudioProcessor.prototype.syncNativeEnsemblePublish =
       const ens = kind === "ensemble";
       const cho = kind === "chorus";
       const sab = kind === "reverbEffect" || kind === "sabrinaReverbOriginal";
-      if (!ens && !cho && !sab) {
+      // Early Reflections: per-tap x in [0,1] + side (-1 L / +1 R / 0 both), native-computed.
+      const er = kind === "earlyReflections";
+      if (!ens && !cho && !sab && !er) {
+        continue;
+      }
+      if (er) {
+        const erCount = native.soemdsp_exponential_delay_voice_count;
+        const erDelay = native.soemdsp_exponential_delay_voice_delay;
+        const erPan = native.soemdsp_exponential_delay_voice_pan;
+        if (!erCount || !erDelay || !erPan) continue;
+        live.add(id);
+        let h = 0;
+        try { h = handleFn(this.nativeGraphHandle, this.fnv1aHash32(id)) | 0; } catch (_e) { h = 0; }
+        if (!(h > 0)) continue;
+        let c = 0;
+        try { c = erCount(h) | 0; } catch (_e) { c = 0; }
+        if (c > 32) c = 32;
+        const phases = new Array(Math.max(0, c));
+        const pans = new Array(Math.max(0, c));
+        const amplitudes = new Array(Math.max(0, c));
+        for (let i = 0; i < c; i += 1) {
+          phases[i] = Number(erDelay(h, i));
+          pans[i] = Number(erPan(h, i));
+          amplitudes[i] = 1;
+        }
+        this.ensemblePublish.set(id, { phases, pans, amplitudes });
         continue;
       }
       const countFn = sab
@@ -6825,6 +6862,42 @@ NodeLiveAudioProcessor.prototype.syncNativeEnsemblePublish =
       if (!live.has(id)) {
         this.ensemblePublish.delete(id);
       }
+    }
+  };
+
+/**
+ * Filter faces: effective cutoff / center Hz the native DSP used on the last
+ * processed sample while ƒ is wired (-1 when not wired, face follows the knob).
+ * Relayed on the data bus as EffectiveHz. No audio math here.
+ */
+NodeLiveAudioProcessor.NATIVE_GRAPH_EFFECTIVE_HZ_TYPES = new Set([
+  "ladderFilter", "tb303Filter", "modeResonator", "cookbookFilter", "butterworth", "linkwitzRiley", "bessel", "chebyshev", "elliptic", "papoulisFilter", "bandpass", "allpass", "lowpass", "highpass", "eqFilter", "combResonator",
+]);
+NodeLiveAudioProcessor.prototype.syncNativeEffectiveHzPublish =
+  function syncNativeEffectiveHzPublish() {
+    if (!this.efficientProduct || !this.nativeGraphCompiled || !this.nativeGraphHandle) {
+      return;
+    }
+    const read = this.nativeGraph?.soemdsp_graph_node_effective_hz;
+    if (typeof read !== "function") {
+      return;
+    }
+    if (!this.effectiveHzPublish) {
+      this.effectiveHzPublish = new Map();
+    }
+    const types = NodeLiveAudioProcessor.NATIVE_GRAPH_EFFECTIVE_HZ_TYPES;
+    const live = new Set();
+    for (const [id, node] of this.nodes || []) {
+      if (!types.has(String(node?.type || ""))) {
+        continue;
+      }
+      live.add(id);
+      let hz = -1;
+      try { hz = Number(read(this.nativeGraphHandle, this.fnv1aHash32(id))); } catch (_e) { hz = -1; }
+      this.effectiveHzPublish.set(id, Number.isFinite(hz) ? hz : -1);
+    }
+    for (const id of [...this.effectiveHzPublish.keys()]) {
+      if (!live.has(id)) this.effectiveHzPublish.delete(id);
     }
   };
 
@@ -8349,7 +8422,9 @@ NodeLiveAudioProcessor.prototype.compileNativeGraphFromPlan = function compileNa
       const pictureType = srcType === "imageBurn" || srcType === "rgbFractal" || srcType === "fbmField"
         || dstType === "imageBurn" || dstType === "rgbFractal" || dstType === "fbmField";
       const tvPort = srcPort === "rgba" || srcPort === "📺" || dstPort === "rgba" || dstPort === "📺";
-      if (pictureType && tvPort) continue;
+      // Picture cables (rgba / TV) never carry audio. Raster RGB keeps its legacy
+      // rgba->Saw alias, so it is the one exception outside the picture types.
+      if (tvPort && (pictureType || (srcType !== "rasterRgb" && dstType !== "rasterRgb"))) continue;
       const resolved = this.resolveNativeGraphThruSources(src, srcPort, idSet, 0);
       if (!resolved.length) {
         // Thru with nothing upstream — leave destination unwired (silence).
@@ -8673,7 +8748,7 @@ NodeLiveAudioProcessor.prototype.nativeGraphPortNames = function nativeGraphPort
     if (type === "archimedes") return ["Sine", "Out"];
     if (type === "comparator") return ["Thru"];
     if (type === "sampleDelay") return ["Delayed", "Out", "Mono"];
-    if (type === "earlyReflections") return ["Mix L", "Mix R"];
+    if (type === "earlyReflections") return ["Mono"];
     // Face jack is Ext Out (Out/Mono are aliases). MOD/scope must publish that name.
     if (type === "sampleHold") return ["Ext Out", "Out", "Mono"];
     if (/^([2-9]|1[01])t$/.test(type)) return ["Out", "Mono"];

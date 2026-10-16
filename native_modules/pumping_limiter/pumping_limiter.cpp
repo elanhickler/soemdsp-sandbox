@@ -3,9 +3,13 @@
 // soemdsp-native-target: limiter
 // soemdsp-native-kind: dynamics
 //
-// Matches public/modules/lookaheadLimiter/lookahead-limiter-math.js
-// nodeGraphPumpingLimiterFrame — look-ahead delay + threshold/ratio GR,
+// Native-only (the JS twin was removed in C-001):
+// — look-ahead delay + threshold/ratio GR,
 // optional sidechain detect, Env out. No hard ceiling / no autogain.
+// Hold (ms): while GR deepens or stays put the countdown reloads to Hold;
+// once the target gain rises (release would begin) the gain is held for
+// Hold ms worth of samples, then the release coefficient applies. A new
+// deeper peak restarts the hold. Hold 0 = previous behaviour, bit-identical.
 
 #include <soemdsp/soemdsp.hpp>
 
@@ -23,6 +27,7 @@ struct State {
   int pos;
   int cap;
   double gain;
+  double holdLeft;  // samples left before release may start
   double meanSquare;
   double env;
   double lastOut;
@@ -55,6 +60,7 @@ extern "C" int soemdsp_pumping_limiter_create() {
       s.pos = 0;
       s.cap = kMaxSamples;
       s.gain = 1.0;
+      s.holdLeft = 0.0;
       s.meanSquare = 0.0;
       s.env = 0.0;
       s.lastOut = 0.0;
@@ -86,6 +92,7 @@ extern "C" double soemdsp_pumping_limiter_sample(
   double lookaheadMs,
   double lookaheadSamples,
   double attackMs,
+  double holdMs,
   double releaseMs,
   double sampleRate,
   double lookaheadEnabled,
@@ -130,8 +137,16 @@ extern "C" double soemdsp_pumping_limiter_sample(
 
   const double targetGain = hard_knee_target_gain(env, thresh, r);
 
-  if (targetGain < st.gain) st.gain += attCoeff * (targetGain - st.gain);
-  else st.gain += relCoeff * (targetGain - st.gain);
+  const double hMs = maxd(0.0, safe(holdMs));
+  if (targetGain <= st.gain) {
+    // Deepening or steady: (re)load the hold. targetGain == gain moves nothing.
+    st.holdLeft = hMs * 0.001 * rate;
+    st.gain += attCoeff * (targetGain - st.gain);
+  } else if (st.holdLeft > 0.0) {
+    st.holdLeft -= 1.0;  // hold the current reduction
+  } else {
+    st.gain += relCoeff * (targetGain - st.gain);
+  }
   if (!(st.gain * 0.0 == 0.0) || st.gain < 0.0) st.gain = 0.0;
   if (st.gain > 1.0) st.gain = 1.0;
 
@@ -182,6 +197,6 @@ extern "C" double soemdsp_pumping_limiter_env(int handle) {
   return gPool[handle - 1].lastEnv;
 }
 
-extern "C" int soemdsp_pumping_limiter_version() { return 1; }
+extern "C" int soemdsp_pumping_limiter_version() { return 2; } // 2: Hold (ms) before release
 extern "C" const char* soemdsp_pumping_limiter_metadata_json() { return kMetadataJson; }
 extern "C" int soemdsp_pumping_limiter_metadata_json_size() { return sizeof(kMetadataJson) - 1; }

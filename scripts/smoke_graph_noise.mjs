@@ -153,6 +153,37 @@ runSource("formulaNoise", 88, (g, h) => {
   console.log(`formulaNoise amplitude ok: default=1, 0.5/2/0 scale Bipolar+Unipolar exactly, Trigger unscaled`);
 }
 
+// fibonacciNoise Amplitude: same rule as formulaNoise (per-sample gain on Bipolar/Unipolar, Trigger unscaled).
+{
+  const runFib = (amp) => {
+    const g = create() | 0; setSr(g, 48000);
+    const h = 0x9988, hOut = h + 1;
+    add(g, h, 217); add(g, hOut, TYPE_OUT); connect(g, h, PORT_MONO, hOut, PORT_MONO);
+    setParam(g, h, PARAM_FREQUENCY, 2000);
+    if (amp !== null) setParam(g, h, PARAM_AMPLITUDE, amp);
+    compile(g); snap(g);
+    const mono = [], uni = [], trig = [];
+    for (let q = 0; q < 20; q++) { process(g, 128);
+      mono.push(...view(portPtr(g, h, PORT_MONO) | 0, 128)); uni.push(...view(portPtr(g, h, PORT_LEFT) | 0, 128));
+      trig.push(...view(portPtr(g, h, 2) | 0, 128)); }
+    destroy(g); return { mono, uni, trig };
+  };
+  const def = runFib(null), one = runFib(1), half = runFib(0.5), big = runFib(2), zero = runFib(0);
+  let peak = 0, trigs = 0;
+  for (let i = 0; i < one.mono.length; i++) {
+    peak = Math.max(peak, Math.abs(one.mono[i]));
+    if (one.trig[i] > 0) trigs++;
+    if (def.mono[i] !== one.mono[i] || def.uni[i] !== one.uni[i]) throw new Error(`fibonacciNoise amp default != 1 at ${i}`);
+    if (Math.abs(half.mono[i] - 0.5 * one.mono[i]) > 1e-12 || Math.abs(half.uni[i] - 0.5 * one.uni[i]) > 1e-12) throw new Error(`fibonacciNoise amp 0.5 at ${i}`);
+    if (Math.abs(big.mono[i] - 2 * one.mono[i]) > 1e-12 || Math.abs(big.uni[i] - 2 * one.uni[i]) > 1e-12) throw new Error(`fibonacciNoise amp 2 (no clamp) at ${i}`);
+    if (zero.mono[i] !== 0 || zero.uni[i] !== 0) throw new Error(`fibonacciNoise amp 0 at ${i}`);
+    if (half.trig[i] !== one.trig[i] || zero.trig[i] !== one.trig[i]) throw new Error(`fibonacciNoise trigger scaled at ${i}`);
+  }
+  if (!(peak > 0.05)) throw new Error("fibonacciNoise amp test silent");
+  if (!(trigs > 0)) throw new Error("fibonacciNoise amp test: no triggers to compare");
+  console.log(`fibonacciNoise amplitude ok: default=1, 0.5/2/0 scale Bipolar+Unipolar exactly, Trigger unscaled (${trigs} triggers)`);
+}
+
 runSource("randomWalk", 89, (g, h) => {
   setParam(g, h, PARAM_MODE, 3);
   setParam(g, h, PARAM_FREQUENCY, 32);

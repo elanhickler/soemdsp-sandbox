@@ -78,7 +78,7 @@ for (const sq of sequences) {
   for (let n = 0; n < sq.len; n++) {
     const L = sq.light(n);
     const want = modelARef(st, L, sq.attack, sq.release, sq.curve, sq.sens, SR);
-    const got = vSample(h, L, sq.attack, sq.release, sq.curve, sq.sens, 0, SR);
+    const got = vSample(h, L, 0, sq.attack, sq.release, sq.curve, sq.sens, 0, 0, SR);
     if (!Object.is(got, want)) throw new Error(`ModelA ${sq.name} n=${n} got=${got} want=${want}`);
   }
   vDestroy(h);
@@ -89,10 +89,10 @@ for (const sq of sequences) {
 function release(model, holdSeconds) {
   const h = vCreate() | 0;
   const hold = Math.round(holdSeconds * SR);
-  for (let n = 0; n < hold; n++) vSample(h, 1, 0, 0.1, 1, 1, model, SR);
+  for (let n = 0; n < hold; n++) vSample(h, 1, 0, 0, 0.1, 1, 1, model, 0, SR);
   let tHalf = null, t1e3 = null, tZero = null;
   for (let n = 0; n < 30 * SR; n++) {
-    const y = vSample(h, 0, 0, 0.1, 1, 1, model, SR);
+    const y = vSample(h, 0, 0, 0, 0.1, 1, 1, model, 0, SR);
     const t = (n + 1) / SR;
     if (tHalf === null && y <= 0.5) tHalf = t;
     if (t1e3 === null && y < 0.001) t1e3 = t;
@@ -120,7 +120,7 @@ if (bHeld.tZero === null || !(bHeld.tZero < 8)) throw new Error(`ModelB held nev
 // ModelB attack: attack 0 snaps to full light.
 {
   const h = vCreate() | 0;
-  const y = vSample(h, 1, 0, 0.1, 1, 1, 1, SR);
+  const y = vSample(h, 1, 0, 0, 0.1, 1, 1, 1, 0, SR);
   vDestroy(h);
   if (y !== 1) throw new Error(`ModelB attack 0 should snap to 1, got ${y}`);
 }

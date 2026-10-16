@@ -230,6 +230,12 @@ double oscillatorSample(SlotState& slot, double phase, double phaseIncrement, in
 
 }  // namespace
 
+// Bandlimited Trisaw Center for other modules (Softpop Oscillator PolyBLEP Tri).
+// Same function as waveform 9; resolved in the combined link.
+extern "C" double soemdsp_polyblep_trisaw_center(double phaseCycle, double incrementAbs, double morph) {
+  return polyBlepTrisawCenter(phaseCycle, incrementAbs, morph);
+}
+
 extern "C" int soemdsp_polyblep_create() {
   for (int i = 0; i < kMaxInstances; i++) {
     if (!gPool[i].active) {

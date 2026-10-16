@@ -51,6 +51,8 @@ export function buildProbe(which) {
   ];
   // The Oscillator's Robin dither lives in native_modules/ellipsoid.
   if (which === "oscillator") sources.push(path.join(root, "native_modules", "ellipsoid", "ellipsoid.cpp"));
+  // PolyBLEP Trisaw = native_modules/polyblep Trisaw Center (soemdsp_polyblep_trisaw_center).
+  if (which === "oscillator") sources.push(path.join(root, "native_modules", "polyblep", "polyblep.cpp"));
   execFileSync(clang, [
     "--target=wasm32", "-O3", "-msimd128", "-nostdlib", "-fno-exceptions", "-fno-rtti",
     `-DSOFTPOP_PROBE_FILTER=${which === "filter" ? 1 : 0}`,

@@ -9,6 +9,10 @@
 // - Analog-style: Gate↑ does NOT restart from 0 — attacks from current level
 // - Reset: rising edge → idle
 // - isIdle when Off
+// - Recalc On Trig (same as Ping Envelope): On = Shape, Attack, Decay,
+//   Sustain, Release and Level latched on rising Gate and held until the
+//   next one; Off = knobs live every sample. Graph passes Off when Gate is
+//   unconnected. Parameter ranges clamp; the DSP does not re-clamp them.
 
 #include <soemdsp/soemdsp.hpp>
 
@@ -25,12 +29,13 @@ static const char kMetadataJson[] =
     "\"inputs\":[\"Gate\",\"Reset\"],"
     "\"outputs\":[\"Out\",\"isIdle\"],"
     "\"parameters\":["
-      "{\"key\":\"shape\",\"label\":\"Shape\",\"defaultValue\":0,\"min\":0,\"max\":2,\"step\":1},"
+      "{\"key\":\"shape\",\"label\":\"Shape\",\"defaultValue\":0,\"min\":0,\"max\":3,\"step\":1},"
       "{\"key\":\"attack\",\"label\":\"Attack\",\"kind\":\"time\",\"defaultValue\":0.01,\"min\":0,\"mid\":0.2,\"max\":10,\"unit\":\"s\"},"
       "{\"key\":\"decay\",\"label\":\"Decay\",\"kind\":\"time\",\"defaultValue\":0.2,\"min\":0,\"mid\":0.5,\"max\":10,\"unit\":\"s\"},"
       "{\"key\":\"sustain\",\"label\":\"Sustain\",\"defaultValue\":0.7,\"min\":0,\"mid\":0.5,\"max\":1},"
       "{\"key\":\"release\",\"label\":\"Release\",\"kind\":\"time\",\"defaultValue\":0.3,\"min\":0,\"mid\":0.5,\"max\":10,\"unit\":\"s\"},"
-      "{\"key\":\"level\",\"label\":\"Level\",\"defaultValue\":1,\"min\":0,\"mid\":0.5,\"max\":1}"
+      "{\"key\":\"level\",\"label\":\"Level\",\"defaultValue\":1,\"min\":0,\"mid\":0.5,\"max\":1},"
+      "{\"key\":\"recalculateOnTrigger\",\"label\":\"Recalc On Trig\",\"kind\":\"choice\",\"choices\":[\"Off\",\"On\"],\"defaultValue\":0}"
     "]"
   "}";
 
@@ -52,6 +57,13 @@ struct WavetableAdsrState {
   double segTarget;
   int    stage;
   int    shape;
+  double shotShape;
+  double shotAttack;
+  double shotDecay;
+  double shotSustain;
+  double shotRelease;
+  double shotLevel;
+  bool   hasShot;
   bool   active;
 };
 
@@ -117,6 +129,13 @@ extern "C" int soemdsp_wavetable_adsr_create() {
       s.segTarget = 0.0;
       s.stage = STAGE_OFF;
       s.shape = SHAPE_ANALOG;
+      s.shotShape = 0.0;
+      s.shotAttack = 0.0;
+      s.shotDecay = 0.0;
+      s.shotSustain = 0.0;
+      s.shotRelease = 0.0;
+      s.shotLevel = 0.0;
+      s.hasShot = false;
       s.active = true;
       return i + 1;
     }
@@ -139,6 +158,7 @@ extern "C" double soemdsp_wavetable_adsr_sample(
   double sustain,
   double release,
   double level,
+  double recalculateOnTrigger,
   double sampleRate
 ) {
   if (handle < 1 || handle > kMaxInstances) return 0.0;
@@ -148,14 +168,26 @@ extern "C" double soemdsp_wavetable_adsr_sample(
   const double rIn = safe(reset);
   const double rate = sampleRate < 1.0 ? 1.0 : sampleRate;
   const double period = 1.0 / rate;
-  const double atk = maxd(0.0, safe(attack));
-  const double dec = maxd(0.0, safe(decay));
-  const double sus = clamp(safe(sustain), 0.0, 1.0);
-  const double rel = maxd(0.0, safe(release));
-  const double lev = clamp(safe(level), 0.0, 1.0);
-  int shape = (int)(safe(shapeParam) + 0.5);
-  if (shape < 0) shape = 0;
-  if (shape > 3) shape = 3;
+
+  // Recalc On Trig: latch every knob on rising Gate (On) or copy every sample (Off).
+  const bool latch = safe(recalculateOnTrigger) >= 0.5;
+  const bool gateRiseNow = !(s.lastGate > kGateOn) && gIn > kGateOn;
+  if (!latch || gateRiseNow || !s.hasShot) {
+    s.shotShape = shapeParam;
+    s.shotAttack = attack;
+    s.shotDecay = decay;
+    s.shotSustain = sustain;
+    s.shotRelease = release;
+    s.shotLevel = level;
+    s.hasShot = true;
+  }
+
+  const double atk = maxd(0.0, safe(s.shotAttack));
+  const double dec = maxd(0.0, safe(s.shotDecay));
+  const double sus = safe(s.shotSustain);
+  const double rel = maxd(0.0, safe(s.shotRelease));
+  const double lev = safe(s.shotLevel);
+  const int shape = (int)(safe(s.shotShape) + 0.5);
   s.shape = shape;
 
   // Reset rising edge → idle (hard).
@@ -291,7 +323,7 @@ extern "C" int soemdsp_wavetable_adsr_is_idle(int handle) {
 }
 
 extern "C" int soemdsp_wavetable_adsr_version() {
-  return 1;
+  return 2; // 2: Recalc On Trig; Shape 0-3 (Log); no DSP re-clamp of Sustain/Level/Shape
 }
 
 extern "C" const char* soemdsp_wavetable_adsr_metadata_json() {

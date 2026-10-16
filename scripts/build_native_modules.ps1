@@ -26,7 +26,7 @@ $modules = @(
   ) }
   @{ Name = "comparator"; Simd = $false; Exports = @("soemdsp_comparator_create", "soemdsp_comparator_destroy", "soemdsp_comparator_sample", "soemdsp_comparator_up", "soemdsp_comparator_down", "soemdsp_comparator_change", "soemdsp_comparator_steady", "soemdsp_comparator_sign", "soemdsp_comparator_thru", "soemdsp_comparator_version") },
   @{ Name = "sample_delay"; Simd = $false; Exports = @("soemdsp_sample_delay_create", "soemdsp_sample_delay_destroy", "soemdsp_sample_delay_sample", "soemdsp_sample_delay_max_samples", "soemdsp_sample_delay_max_seconds", "soemdsp_sample_delay_version") },
-  @{ Name = "exponential_delay"; Simd = $false; Exports = @("soemdsp_exponential_delay_create", "soemdsp_exponential_delay_destroy", "soemdsp_exponential_delay_sample", "soemdsp_exponential_delay_right", "soemdsp_exponential_delay_max_samples", "soemdsp_exponential_delay_max_seconds", "soemdsp_exponential_delay_version") },
+  @{ Name = "exponential_delay"; Simd = $false; Exports = @("soemdsp_exponential_delay_create", "soemdsp_exponential_delay_destroy", "soemdsp_exponential_delay_sample", "soemdsp_exponential_delay_right", "soemdsp_exponential_delay_voice_count", "soemdsp_exponential_delay_voice_delay", "soemdsp_exponential_delay_voice_pan", "soemdsp_exponential_delay_max_samples", "soemdsp_exponential_delay_max_seconds", "soemdsp_exponential_delay_version") },
   @{ Name = "min_max"; Simd = $false; Exports = @("soemdsp_min_max_create", "soemdsp_min_max_destroy", "soemdsp_min_max_sample", "soemdsp_min_max_min", "soemdsp_min_max_version") }
   @{ Name = "alias_sine"; Simd = $false; Exports = @("soemdsp_alias_sine_create", "soemdsp_alias_sine_destroy", "soemdsp_alias_sine_sample", "soemdsp_alias_sine_version", "soemdsp_alias_sine_metadata_json", "soemdsp_alias_sine_metadata_json_size") }
   @{ Name = "phone_tone"; Simd = $false; Exports = @("soemdsp_phone_tone_create", "soemdsp_phone_tone_destroy", "soemdsp_phone_tone_sample", "soemdsp_phone_tone_tone", "soemdsp_phone_tone_tone_l", "soemdsp_phone_tone_tone_r", "soemdsp_phone_tone_f1", "soemdsp_phone_tone_f2", "soemdsp_phone_tone_analog_thru", "soemdsp_phone_tone_digital_thru", "soemdsp_phone_tone_version", "soemdsp_phone_tone_metadata_json", "soemdsp_phone_tone_metadata_json_size") }
@@ -77,6 +77,7 @@ $modules = @(
     "soemdsp_graph_ear_protect_gain",
     "soemdsp_graph_node_port_ptr",
     "soemdsp_graph_node_native_handle",
+    "soemdsp_graph_node_effective_hz",
     "soemdsp_graph_yellow_harmonics",
     "soemdsp_graph_yellow_ratio_ptr",
     "soemdsp_graph_yellow_phase_ptr",
@@ -120,6 +121,7 @@ $modules = @(
     "soemdsp_polyblep_process_block", "soemdsp_polyblep_block_out_ptr", "soemdsp_polyblep_max_block_frames",
     "soemdsp_polyblep_out", "soemdsp_polyblep_saw", "soemdsp_polyblep_ramp",
     "soemdsp_polyblep_square", "soemdsp_polyblep_tri", "soemdsp_polyblep_sine",
+    "soemdsp_polyblep_trisaw_center",
     "soemdsp_polyblep_version"
   ) }
   @{ Name = "logistic_map"; Simd = $false; Exports = @("soemdsp_logistic_map_create", "soemdsp_logistic_map_destroy", "soemdsp_logistic_map_sample", "soemdsp_logistic_map_version") }
@@ -161,6 +163,11 @@ $modules = @(
   @{ Name = "wavetable_adsr"; Simd = $false; Exports = @("soemdsp_wavetable_adsr_create", "soemdsp_wavetable_adsr_destroy", "soemdsp_wavetable_adsr_sample", "soemdsp_wavetable_adsr_is_idle", "soemdsp_wavetable_adsr_version", "soemdsp_wavetable_adsr_metadata_json", "soemdsp_wavetable_adsr_metadata_json_size") }
   @{ Name = "random_walk"; Simd = $false; Exports = @("soemdsp_random_walk_create", "soemdsp_random_walk_destroy", "soemdsp_random_walk_reset_seed", "soemdsp_random_walk_sample", "soemdsp_random_walk_version", "soemdsp_random_walk_metadata_json", "soemdsp_random_walk_metadata_json_size") }
   @{ Name = "cheap_walk"; Simd = $false; Exports = @("soemdsp_cheap_walk_create", "soemdsp_cheap_walk_destroy", "soemdsp_cheap_walk_sample", "soemdsp_cheap_walk_sample_stereo", "soemdsp_cheap_walk_version") }
+  @{ Name = "time_quantizer"; Simd = $false; Exports = @(
+    "soemdsp_time_quantizer_create", "soemdsp_time_quantizer_destroy", "soemdsp_time_quantizer_sample",
+    "soemdsp_time_quantizer_trigger", "soemdsp_time_quantizer_version", "soemdsp_time_quantizer_metadata_json",
+    "soemdsp_time_quantizer_metadata_json_size"
+  ) },
   @{ Name = "fibonacci_noise"; Simd = $false; Exports = @(
     "soemdsp_fibonacci_noise_create", "soemdsp_fibonacci_noise_destroy", "soemdsp_fibonacci_noise_set_config",
     "soemdsp_fibonacci_noise_sample", "soemdsp_fibonacci_noise_bipolar", "soemdsp_fibonacci_noise_unipolar",
@@ -257,7 +264,7 @@ $modules = @(
     "soemdsp_slew_limiter_block_input_ptr", "soemdsp_slew_limiter_block_output_ptr",
     "soemdsp_slew_limiter_max_block_frames", "soemdsp_slew_limiter_version"
   ) }
-  @{ Name = "sample_hold"; Simd = $false; Exports = @("soemdsp_sample_hold_create", "soemdsp_sample_hold_destroy", "soemdsp_sample_hold_sample", "soemdsp_sample_hold_version") }
+  @{ Name = "sample_hold"; Simd = $false; Exports = @("soemdsp_sample_hold_create", "soemdsp_sample_hold_destroy", "soemdsp_sample_hold_sample", "soemdsp_sample_hold_fired", "soemdsp_sample_hold_version") }
   @{ Name = "chord_memory"; Simd = $false; Exports = @("soemdsp_chord_memory_create", "soemdsp_chord_memory_destroy", "soemdsp_chord_memory_sample", "soemdsp_chord_memory_note2", "soemdsp_chord_memory_note3", "soemdsp_chord_memory_note4", "soemdsp_chord_memory_arp", "soemdsp_chord_memory_gate", "soemdsp_chord_memory_version") }
   @{ Name = "turing_machine"; Simd = $false; Exports = @("soemdsp_turing_machine_create", "soemdsp_turing_machine_destroy", "soemdsp_turing_machine_sample", "soemdsp_turing_machine_scale", "soemdsp_turing_machine_gate", "soemdsp_turing_machine_version") }
   @{ Name = "flower_child_envelope_follower"; Simd = $false; Exports = @("soemdsp_flower_child_envelope_follower_create", "soemdsp_flower_child_envelope_follower_destroy", "soemdsp_flower_child_envelope_follower_sample", "soemdsp_flower_child_envelope_follower_version") }

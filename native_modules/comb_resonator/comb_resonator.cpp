@@ -12,7 +12,7 @@ namespace {
 
 using namespace soemdsp_maths;
 
-static const int kMaxInstances = 16;
+static const int kMaxInstances = 48;  // 3 per graph node (Mono / Left / Right lanes)
 static const double kMinHz = 10.0;
 static const double kMaxSeconds = 0.12;
 // 0.12s @ 192 kHz + headroom
@@ -37,8 +37,8 @@ static const char kMetadataJson[] =
     "\"label\":\"Comb Resonator\","
     "\"targetType\":\"combResonator\","
     "\"kind\":\"filter\","
-    "\"inputs\":[\"In\",\"Trigger\"],"
-    "\"outputs\":[\"Out\"],"
+    "\"inputs\":[\"In\",\"Left\",\"Right\",\"Trigger\",\"f\"],"
+    "\"outputs\":[\"Mono\",\"Left\",\"Right\"],"
     "\"parameters\":["
       "{\"key\":\"frequency\",\"label\":\"Frequency\",\"kind\":\"frequency\",\"defaultValue\":110,"
         "\"min\":10,\"mid\":110,\"max\":20000,\"step\":\"any\",\"unit\":\"Hz\"},"

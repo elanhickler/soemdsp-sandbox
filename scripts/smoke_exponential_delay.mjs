@@ -2,7 +2,7 @@
 // 1) Native taps: impulse in, count tap clusters per side for Dual and Split.
 // 2) No feedback: nothing after the last tap.
 // 3) Drift Speed / Drift Amp: Amp 0 = static, Speed 0 = frozen, both > 0 = moving.
-// 4) Graph: Mix L / Mix R ports carry audio, Dual L != R; drift params reach the DSP.
+// 4) Graph: Left / Right ports carry audio, Mono = (L+R)/2, Dual L != R; drift params reach the DSP.
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -38,8 +38,9 @@ function impulseResponse(mode, offset = 0, len = Math.ceil(TIME * SR) + 64) {
   const L = new Float64Array(len);
   const R = new Float64Array(len);
   for (let i = 0; i < len; i++) {
-    // args: in, time, count, mix, driftSpeed, driftAmp, seed, randomOffset, mode, sr
-    L[i] = erSample(h, i === 0 ? 1 : 0, TIME, N, 1, 0.25, 0, 1, offset, mode, SR);
+    // args: inL, inR, time, count, mix, driftSpeed, driftAmp, seed, randomOffset, mode, sr
+    const x = i === 0 ? 1 : 0;
+    L[i] = erSample(h, x, x, TIME, N, 1, 0.25, 0, 1, offset, mode, SR);
     R[i] = erRight(h);
   }
   erDestroy(h);
@@ -167,7 +168,7 @@ function noiseRun(speed, amp, len = SR) {
   for (let i = 0; i < len; i++) {
     x = (x * 1103515245 + 12345) >>> 0;
     const v = x / 4294967296 - 0.5;
-    L[i] = erSample(h, v, TIME, N, 1, speed, amp, 1, 0, 0, SR) + erRight(h);
+    L[i] = erSample(h, v, v, TIME, N, 1, speed, amp, 1, 0, 0, SR) + erRight(h);
   }
   erDestroy(h);
   return L;
@@ -186,7 +187,7 @@ function absDiff(a, b) { let d = 0; for (let i = 0; i < a.length; i++) d += Math
   console.log("drift speed/amp ok");
 }
 
-// ---- 4) graph wiring: Mix L / Mix R ----
+// ---- 4) graph wiring: Left / Right / Mono ----
 const create = must("soemdsp_graph_create");
 const destroy = must("soemdsp_graph_destroy");
 const add = must("soemdsp_graph_add_node");
@@ -260,9 +261,11 @@ function runGraph(mode) {
   }
   if (!(pl > 0.01 && pr > 0.01)) throw new Error(`mode ${mode} silent L=${pl} R=${pr}`);
   if (pl > 2 || pr > 2) throw new Error(`mode ${mode} too hot L=${pl} R=${pr}`);
-  if (!(diff > 0.1)) throw new Error(`mode ${mode} Mix L == Mix R diff=${diff}`);
-  if (pm > 1e-9) throw new Error(`mode ${mode} old mono port still carries audio ${pm}`);
-  console.log(`graph mode ${mode} ok peak Mix L=${pl.toFixed(4)} Mix R=${pr.toFixed(4)}`);
+  if (!(diff > 0.1)) throw new Error(`mode ${mode} Left == Right diff=${diff}`);
+  let me = 0;
+  for (let k = 0; k < l.length; k++) me = Math.max(me, Math.abs(m[k] - 0.5 * (l[k] + r[k])));
+  if (me > 1e-9) throw new Error(`mode ${mode} Mono out != (Left + Right) / 2 (err ${me}, peak ${pm})`);
+  console.log(`graph mode ${mode} ok peak Left=${pl.toFixed(4)} Right=${pr.toFixed(4)} Mono=(L+R)/2`);
 }
 runGraph(0);
 runGraph(1);

@@ -223,6 +223,7 @@ const NODE_GRAPH_EFFICIENT_PRODUCT_AUDIO_TYPES = Object.freeze([
   "fbmField",
   "formulaNoise",
   "fibonacciNoise",
+  "timeQuantizer",
   "randomWalk",
   "cheapWalk",
   "pulseExplosion",

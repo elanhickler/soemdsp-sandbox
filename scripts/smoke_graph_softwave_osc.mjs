@@ -163,7 +163,7 @@ console.log(`softwave version ${swVer}`);
   setParam(g, hOsc, PARAM_WAVEFORM, 0);
   setParam(g, hOsc, PARAM_SHAPE, 0.1); // soft morph base
   setParam(g, hOsc, PARAM_AMPLITUDE, 1);
-  // Morph domain 0…1 + modClamp so unit-band Bias CV maps into morph.
+  // Morph domain 0…1 so unit-band Bias CV maps into morph (MOD clamps to range).
   setDomain(g, hOsc, PARAM_SHAPE, 0, 1, 2);
   setParam(g, hBias, PARAM_ATT_OFFSET, 0.8); // unit-band Morph MOD
   clearMods(g);

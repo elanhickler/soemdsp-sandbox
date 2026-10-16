@@ -1068,6 +1068,12 @@ const nodeGraphModuleStoreCatalog = Object.freeze({
     label: "Fibonacci Noise",
     notes: ["lagged fibonacci", "lfg", "seeded", "stepped", "smoothing", "trigger", "native"],
   },
+  timeQuantizer: {
+    category: "modulator",
+    description: "Quantizes changes of a signal in time: Out holds and only takes the latest In value on the next grid line of the project tempo (Division 1/1 to 1/32, Normal/Dotted/Triplet), sample accurate and aligned to the transport. Trigger pulses only when Out changed. Gate edges both quantized.",
+    label: "Time Quantizer",
+    notes: ["quantize", "time", "grid", "tempo", "bpm", "sync", "gate", "trigger", "native"],
+  },
   codeBox: {
     category: "text",
     description: "Control-plane code editor. Apply text data out a white square Code jack — never runs in the audio path.",
@@ -3581,6 +3587,10 @@ const nodeGraphJsSourceEntriesByType = Object.freeze({
   fibonacciNoise: {
     source: "native_modules/fibonacci_noise/fibonacci_noise.cpp",
     sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/native_modules/fibonacci_noise/fibonacci_noise.cpp",
+  },
+  timeQuantizer: {
+    source: "native_modules/time_quantizer/time_quantizer.cpp",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/native_modules/time_quantizer/time_quantizer.cpp",
   },
   pingPongDelay: {
     source: "native_modules/ping_pong_delay/ping_pong_delay.cpp",
