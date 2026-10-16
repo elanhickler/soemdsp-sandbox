@@ -127,8 +127,7 @@ const nodeGraphNodeLabels = Object.freeze({
   noiseGenerator: "Noise Generator",
   randomWalk: "Random Walk",
   cheapWalk: "Cheap Walk",
-  formulaNoise: "Formula Noise",
-  fibonacciNoise: "Fibonacci Noise",
+  piNoise: "Pi Noise",
   timeQuantizer: "Time Quantizer",
   fractalBrownianNoise: "Fractal Brownian Motion",
   gain: "Gain",
@@ -294,7 +293,6 @@ const nodeGraphNodeLabels = Object.freeze({
   onset: "1D Onset",
   onset2d: "2D Onset",
   waterfallXyz: "1D Waterfall XYZ",
-  oscilloscopeBank: "Oscilloscope Bank (retired)",
   videoscope: "Videoscope",
   asciiscope: "Asciiscope",
   matrixDisplay: "Matrix Display",
@@ -386,9 +384,12 @@ const nodeGraphOutputAmplitudeParam = Object.freeze({
 
 const nodeGraphActiveFilterDefinition = {
   planRole: "processor",
-  inputAliases: {Mono: "In"},
-  inputLabels: {In: "Mono"},
-  inputs: ["In", "Left", "Right"],
+  // ƒ = absolute Hz band center (apply_multi_cutoff_f in graph_engine).
+  inputAliases: { Mono: "In", Freq: "f", "ƒ": "f" },
+  inputLabels: { In: "Mono", f: "ƒ" },
+  inputs: ["In", "Left", "Right", "f"],
+  inputTooltips: {
+    f: "Hz cable. When wired it moves the band center to ƒ every sample; HPF and LPF both scale by ƒ / center, so their octave spacing is kept. Center = √(HPF·LPF) with both slopes on, else the active cut. ƒ ≤ 0 = 0 Hz." },
   layout: "filterCurve",
   outputAliases: {Mono: "Out"},
   outputLabels: {Out: "Mono"},
@@ -433,7 +434,7 @@ const nodeGraphActiveFilterDefinition = {
       min: "0",
       step: "any",
       unit: "Hz",
-      tooltip: "Highpass cutoff (when HP Slope ≠ Bypass). Sweep / ƒ move cuts together." },
+      tooltip: "Highpass cutoff (when HP Slope ≠ Bypass). ƒ moves both cuts together." },
     {
       defaultValue: "1000",
       key: "highFrequency",
@@ -445,19 +446,7 @@ const nodeGraphActiveFilterDefinition = {
       min: "0",
       step: "any",
       unit: "Hz",
-      tooltip: "Lowpass cutoff (when LP Slope ≠ Bypass). Sweep / ƒ move cuts together." },
-    {
-      defaultValue: "0",
-      key: "sweep",
-      label: "Sweep",
-      max: "48",
-      mid: "0",
-      min: "-48",
-      nonlinearSlider: false,
-      showSign: true,
-      step: "any",
-      unit: "st",
-      tooltip: "Shift HPF and/or LPF in semitones. Dual path keeps the interval." },
+      tooltip: "Lowpass cutoff (when LP Slope ≠ Bypass). ƒ moves both cuts together." },
     {
       defaultValue: "0.2",
       key: "resonance",
@@ -3491,10 +3480,17 @@ const nodeGraphModuleDefinitions = (
       { key: "waterfall", label: "Waterfall", renderer: "waterfall", settingsSchema: "waterfall", source: { value: "Out" } },
     ],
     defaultDisplayMode: "waterfall",
-    inputs: ["Reset"],
-    outputs: ["Out"],
+    inputAliases: { Trigger: "Clock", Trig: "Clock" },
+    inputs: ["Reset", "Clock"],
+    inputTooltips: {
+      Clock: "External clock. When wired, each rising edge (crossing above 0, as Sample & Hold) runs exactly one iteration on that sample and Frequency is ignored." },
+    outputs: ["Out", "Trigger"],
+    outputTooltips: {
+      Out: "Current map value x as 2x-1 (-1 to +1), times Amplitude.",
+      Trigger: "1-sample pulse (0/1) on each sample where the map iterates (a new value). Several iterations in one sample give one pulse." },
+    digitalOutputs: ["Trigger"],
     parameters: [
-      { key: "rate", label: "Rate", kind: "frequency", defaultValue: "8", min: "0", mid: "20", max: "2000", maxDigits: 5, step: "any" },
+      { key: "rate", label: "Frequency", kind: "frequency", defaultValue: "8", min: "0", mid: "20", max: "2000", maxDigits: 5, step: "any", unit: "Hz", tooltip: "Iterations per second of the internal clock. Ignored while Clock is wired." },
       {
         choices: ["Off", "PolyBLEP"],
         choiceKeys: ["off", "polyblep"],
@@ -6001,7 +5997,7 @@ const nodeGraphModuleDefinitions = (
       },
     ]
   },
-  formulaNoise: {
+  piNoise: {
     planRole: "source",
     planFreeRun: true,
     displayType: "waterfall",
@@ -6022,21 +6018,6 @@ const nodeGraphModuleDefinitions = (
     digitalOutputs: ["Trigger"],
     parameters: [
       {
-        choices: ["Pi", "e", "Sqrt 2", "Phi", "Ln 2", "Random Digits", "White", "Gaussian", "Random Walk", "Logistic Map", "Fibonacci"],
-        defaultValue: "0",
-        displayChoices: true,
-        divideChoicesVisibly: true,
-        key: "source",
-        label: "Source",
-        linearSmoothing: false,
-        max: "10",
-        mid: "5",
-        min: "0",
-        nonlinearSlider: false,
-        step: "1",
-        tooltip: "What makes the steps. Pi / e / Sqrt 2 / Phi / Ln 2 = stored decimal digits (2,097,152 each). Random Digits = seeded 0-9. White = seeded continuous. Gaussian = seeded bell curve around the middle. Random Walk = moves one level up or down each step, bouncing off the ends. Logistic Map = chaotic r = 3.99. Fibonacci = Fibonacci numbers mod 10 (repeats every 60 steps; Seed shifts where it starts). Seed only affects the seeded sources and Fibonacci."
-      },
-      {
         defaultValue: "44100",
         key: "speed",
         label: "Speed",
@@ -6049,19 +6030,19 @@ const nodeGraphModuleDefinitions = (
         tooltip: "Steps per second. 44100 at 44.1 kHz = one step per sample; above the sample rate steps are skipped. 0 freezes."
       },
       {
-        choices: ["Hold", "Linear", "1-Pole", "2-Pole", "Cosine", "Smoothstep", "Cubic", "B-Spline", "Quintic B-Spline", "Gaussian"],
+        choices: ["Hold", "Linear", "1-Pole", "2-Pole", "Cosine", "Smoothstep", "Cubic", "B-Spline", "Quintic B-Spline", "Gaussian", "Quadratic In", "Quadratic Out"],
         defaultValue: "0",
         displayChoices: true,
         divideChoicesVisibly: true,
         key: "interpolation",
         label: "Smoothing",
         linearSmoothing: false,
-        max: "9",
+        max: "11",
         mid: "4",
         min: "0",
         nonlinearSlider: false,
         step: "1",
-        tooltip: "Hold = steps. Linear = ramp. 1-Pole / 2-Pole = lowpass chasing each step, cutoff Speed/2. Cosine = S-curve. Smoothstep = polynomial S-curve, a touch steeper in the middle. Cubic = Catmull-Rom through the steps. B-Spline = smooth, rounds the peaks. Quintic B-Spline = 6-point, even smoother, never overshoots. Gaussian = soft blur over ~16 steps, smoothest."
+        tooltip: "Hold = steps. Linear = ramp. 1-Pole / 2-Pole = lowpass chasing each step, cutoff Speed/2. Cosine = S-curve. Smoothstep = polynomial S-curve, a touch steeper in the middle. Cubic = Catmull-Rom through the steps. B-Spline = smooth, rounds the peaks. Quintic B-Spline = 6-point, even smoother, never overshoots. Gaussian = soft blur over ~16 steps, smoothest. Quadratic In = t², starts slow. Quadratic Out = 1-(1-t)², ends slow."
       },
       {
         defaultValue: "0",
@@ -6115,7 +6096,7 @@ const nodeGraphModuleDefinitions = (
         min: "0",
         step: "1",
         linearSmoothing: false,
-        tooltip: "Seed for Random Digits, White, Gaussian, Random Walk and Logistic Map (and the Fibonacci start). The stored constants ignore it."
+        tooltip: "Has no effect: Pi Noise always plays the stored digits of pi."
       },
       {
         defaultValue: "1",
@@ -6126,136 +6107,6 @@ const nodeGraphModuleDefinitions = (
         min: "0",
         step: "any",
         tooltip: "Output gain on Bipolar and Unipolar, applied per sample (Trigger and Index are not scaled)."
-      },
-    ]
-  },
-  fibonacciNoise: {
-    planRole: "source",
-    planFreeRun: true,
-    displayType: "waterfall",
-    defaultDisplayMode: "waterfall",
-    displaySignals: [
-      { key: "Bipolar", kind: "scalar" },
-    ],
-    displayModes: [
-      { key: "waterfall", label: "Waterfall", renderer: "waterfall", settingsSchema: "waterfall", source: { value: "Bipolar" } },
-    ],
-    inputs: ["Reset"],
-    outputs: ["Bipolar", "Unipolar", "Trigger"],
-    outputTooltips: {
-      Bipolar: "Current step value v (0 to 9) as v/9*2-1 (-1 to +1), smoothed as chosen.",
-      Unipolar: "Current step value v (0 to 9) as v/9 (0 to 1), smoothed as chosen.",
-      Trigger: "1-sample pulse whenever a new step starts (several steps in one sample still give one pulse; stays high at Speed >= sample rate)." },
-    digitalOutputs: ["Trigger"],
-    parameters: [
-      {
-        choices: ["24 / 55", "5 / 17", "31 / 63", "97 / 127", "273 / 607", "418 / 1279"],
-        defaultValue: "0",
-        displayChoices: true,
-        divideChoicesVisibly: true,
-        key: "lags",
-        label: "Lags",
-        linearSmoothing: false,
-        max: "5",
-        mid: "2",
-        min: "0",
-        nonlinearSlider: false,
-        step: "1",
-        tooltip: "Lag J / Lag K of x[n] = x[n-J] op x[n-K]. All pairs are full-period (primitive trinomials). Longer K = longer period and more seed words. Changing restarts the sequence."
-      },
-      {
-        choices: ["Add", "Subtract", "Multiply", "XOR"],
-        defaultValue: "0",
-        displayChoices: true,
-        divideChoicesVisibly: true,
-        key: "operation",
-        label: "Operation",
-        linearSmoothing: false,
-        max: "3",
-        mid: "1",
-        min: "0",
-        nonlinearSlider: false,
-        step: "1",
-        tooltip: "How the two lagged values combine (mod 2^32). Add / Subtract = classic additive LFG. Multiply = multiplicative LFG (odd words). XOR = bitwise, period 2^K - 1. Changing restarts the sequence."
-      },
-      {
-        choices: ["Digits", "Continuous"],
-        defaultValue: "0",
-        displayChoices: true,
-        divideChoicesVisibly: true,
-        key: "output",
-        label: "Output",
-        linearSmoothing: false,
-        max: "1",
-        mid: "0",
-        min: "0",
-        nonlinearSlider: false,
-        step: "1",
-        tooltip: "Digits = each value becomes one of 10 levels (0-9). Continuous = full-resolution value scaled to the same range."
-      },
-      {
-        defaultValue: "44100",
-        key: "speed",
-        label: "Speed",
-        max: "96000",
-        mid: "20",
-        min: "0.01",
-        step: "any",
-        unit: "steps/s",
-        maxDigits: 6,
-        tooltip: "Steps per second. 44100 at 44.1 kHz = one step per sample; above the sample rate steps are skipped. 0 freezes."
-      },
-      {
-        choices: ["Hold", "Linear", "1-Pole", "2-Pole", "Cosine", "Smoothstep", "Cubic", "B-Spline", "Quintic B-Spline", "Gaussian"],
-        defaultValue: "0",
-        displayChoices: true,
-        divideChoicesVisibly: true,
-        key: "interpolation",
-        label: "Smoothing",
-        linearSmoothing: false,
-        max: "9",
-        mid: "4",
-        min: "0",
-        nonlinearSlider: false,
-        step: "1",
-        tooltip: "Hold = steps. Linear = ramp. 1-Pole / 2-Pole = lowpass chasing each step, cutoff Speed/2. Cosine = S-curve. Smoothstep = polynomial S-curve. Cubic = Catmull-Rom through the steps. B-Spline = smooth, rounds the peaks. Quintic B-Spline = 6-point, even smoother. Gaussian = soft blur over ~16 steps, smoothest. Upcoming steps are generated ahead, so there is no delay."
-      },
-      {
-        choices: ["Off", "On"],
-        defaultValue: "0",
-        displayChoices: true,
-        divideChoicesVisibly: true,
-        key: "quantize",
-        label: "Quantize",
-        linearSmoothing: false,
-        max: "1",
-        mid: "0",
-        min: "0",
-        nonlinearSlider: false,
-        step: "1",
-        tooltip: "On snaps the smoothed output to the nearest of 10 levels (smoothing still sets when it changes)."
-      },
-      {
-        defaultValue: "1",
-        key: "seed", kind: "seed",
-        maxDigits: 0,
-        label: "Seed",
-        max: "16777215",
-        mid: "1",
-        min: "0",
-        step: "1",
-        linearSmoothing: false,
-        tooltip: "Fills the generator's K starting words. Changing restarts the sequence; Reset restarts the same sequence."
-      },
-      {
-        defaultValue: "1",
-        key: "amplitude",
-        label: "Amplitude",
-        max: "1",
-        mid: "1",
-        min: "0",
-        step: "any",
-        tooltip: "Output gain on Bipolar and Unipolar, applied per sample (Trigger is not scaled)."
       },
     ]
   },
@@ -8488,9 +8339,12 @@ const nodeGraphModuleDefinitions = (
     parameters: nodeGraphControllerButtonModuleParameters() },
   passiveFilter: {
     planRole: "processor",
-    inputAliases: {Mono: "In"},
-    inputLabels: {In: "Mono"},
-    inputs: ["In", "Left", "Right"],
+    // ƒ = absolute Hz center (apply_multi_cutoff_f in graph_engine).
+    inputAliases: { Mono: "In", Freq: "f", "ƒ": "f" },
+    inputLabels: { In: "Mono", f: "ƒ" },
+    inputs: ["In", "Left", "Right", "f"],
+    inputTooltips: {
+      f: "Hz cable. When wired it moves the center to ƒ every sample; HPF and LPF both scale by ƒ / center, so their octave spacing is kept. Center: LP = LPF, HP = HPF, BP = √(HPF·LPF). ƒ ≤ 0 = 0 Hz." },
     layout: "filterCurve",
     outputAliases: {Mono: "Out"},
     outputLabels: {Out: "Mono"},
@@ -8563,19 +8417,6 @@ const nodeGraphModuleDefinitions = (
         step: "any",
         unit: "Hz",
         tooltip: "Lowpass cutoff (LP and BP). In BP, lowering this past HPF collapses the passband (series HP→LP)."
-      },
-      {
-        defaultValue: "0",
-        key: "sweep",
-        label: "Sweep",
-        max: "48",
-        mid: "0",
-        min: "-48",
-        nonlinearSlider: false,
-        showSign: true,
-        step: "any",
-        unit: "st",
-        tooltip: "Shift used cutoffs in semitones. BP keeps the HPF/LPF interval (ratio) constant."
       },
       {
         choices: ["Off", "On"],
@@ -14695,9 +14536,20 @@ const nodeGraphModuleDefinitions = (
     digitalOutputs: ["Trigger"],
     parameters: [
       {
-        // Values match native sample_hold.cpp (v4): 0 Linear / 1 Smoothstep / 2 Slow End / 3 Slow Start.
-        // Classic hold = Smoothing 0 (any curve).
-        choices: ["Linear", "Smoothstep", "Slow End", "Slow Start"],
+        defaultValue: "0",
+        key: "sampleFrequency",
+        kind: "frequency",
+        label: "Sample Freq",
+        max: "20000",
+        maxDigits: 5,
+        mid: "10",
+        min: "0",
+        step: "any",
+        unit: "Hz" },
+      {
+        // Values match native sample_hold.cpp (v6): 0 Linear / 1 Smoothstep / 2 Quadratic Out / 3 Quadratic In / 4 Cosine / 5 Hold.
+        // Classic hold = Smoothing 0 (any curve) or Hold.
+        choices: ["Linear", "Smoothstep", "Quadratic Out", "Quadratic In", "Cosine", "Hold"],
         defaultValue: "0",
         displayChoices: true,
         divideChoicesVisibly: true,
@@ -14705,11 +14557,11 @@ const nodeGraphModuleDefinitions = (
         label: "Interpolate",
         linearSmoothing: false,
         smoothingType: "none",
-        max: "3",
+        max: "5",
         mid: "0",
         min: "0",
         step: "1",
-        tooltip: "Glide curve from the previous hold to the new sample. Only active when Smoothing > 0. Applies to Ext and internal Left/Right, internal Sample Freq or external Clock." },
+        tooltip: "Glide curve from the previous hold to the new sample: Linear = t, Smoothstep = 3t²-2t³, Quadratic Out = 1-(1-t)² (ends slow), Quadratic In = t² (starts slow), Cosine = (1-cos πt)/2, Hold = jump, no glide. Only active when Smoothing > 0. Applies to Ext and internal Left/Right, internal Sample Freq or external Clock." },
       {
         defaultValue: "0",
         key: "smoothing",
@@ -14749,17 +14601,6 @@ const nodeGraphModuleDefinitions = (
         step: "1",
         tooltip:
           "Bipolar = −1…1 (raw hold / noise). Unipolar = 0…1 on audio outs for MOD into unipolar params (Sweep, Frequency, etc.) without a B2U. Face/waterfall reads Left Raw / Right Raw (bipolar full height; ignores Polarity), same spirit as Amplitude." },
-      {
-        defaultValue: "0",
-        key: "sampleFrequency",
-        kind: "frequency",
-        label: "Sample Freq",
-        max: "20000",
-        maxDigits: 5,
-        mid: "10",
-        min: "0",
-        step: "any",
-        unit: "Hz" },
       {
         defaultValue: "0",
         key: "threshold",
@@ -16701,15 +16542,6 @@ const nodeGraphModuleDefinitions = (
     visualInputs: [
       { key: "dotOscilloscope", label: "In", port: "In" },
     ],
-    visualSink: true
-  },
-  oscilloscopeBank: {
-    planRole: "monitor",
-    displayType: "oscilloscopeBankBurn",
-    dataInputs: ["Phases", "Amplitudes", "Pans"],
-    layout: "scopeFace",
-    outputs: [],
-    parameters: [],
     visualSink: true
   },
   videoscope: {

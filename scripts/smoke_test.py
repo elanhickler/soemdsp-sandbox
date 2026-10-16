@@ -224,6 +224,7 @@ PUBLIC_SCRIPT_PATHS = (
     "./public/node-graph-module-scope-number-readout.js",
     "./public/node-graph-module-scope-draw-basic.js",
     "./public/node-graph-module-scope-draw-burn.js",
+    "./public/node-graph-module-scope-residual-face-gl.js",
     "./public/node-graph-module-scopes.js",
     "./public/node-graph-module-scope-spectrum.js",
     "./public/node-graph-module-scope-buffer-io.js",
@@ -254,7 +255,6 @@ PUBLIC_SCRIPT_PATHS = (
     "./public/modules/lookaheadLimiter/lookahead-limiter-display.js",
     "./public/modules/softpopOscillator/softpop-display.js",
     "./public/modules/phosphorLight/phosphor-light-display.js",
-    "./public/modules/oscilloscopeBank/oscilloscope-bank-display.js",
     "./public/modules/ensemble/ensemble-cloud-display.js",
     "./public/modules/videoscope/videoscope-display.js",
     "./public/modules/spectrogram/spectrogram-gl.js",
@@ -11870,8 +11870,16 @@ def require_node_graph_mvp_contract() -> None:
     require("scope2d: {" in module_store_source and 'label: "2D Burn"' in module_store_source, "2D Burn oscilloscope should exist")
     require("scope2dTrace: {" in module_store_source and 'label: "2D Trace"' in module_store_source, "2D Trace oscilloscope should exist")
     require("vectorDot: {" in module_store_source and 'label: "Vector Dot"' in module_store_source, "Vector Dot module should exist")
-    require("dotOscilloscope: {" in module_store_source and "oscilloscopeBank: {" in module_store_source and "valueOscilloscope: {" in module_store_source and "numberReadout: {" in module_store_source and "lineBurnOscilloscope: {" in module_store_source and "scope2d: {" in module_store_source and "scope2dTrace: {" in module_store_source, "Oscilloscope modules should be listed together")
-    require("oscilloscopeBank: {" in module_store_source and 'label: "Oscilloscope Bank"' in module_store_source, "Oscilloscope Bank should exist")
+    require("dotOscilloscope: {" in module_store_source and "valueOscilloscope: {" in module_store_source and "numberReadout: {" in module_store_source and "lineBurnOscilloscope: {" in module_store_source and "scope2d: {" in module_store_source and "scope2dTrace: {" in module_store_source, "Oscilloscope modules should be listed together")
+    # Oscilloscope Bank was removed (2026-10-15): never shipped, no patch used it.
+    require(
+        "oscilloscopeBank" not in module_store_source
+        and "oscilloscopeBank" not in module_definitions_source
+        and not (ROOT / "public" / "modules" / "oscilloscopeBank").exists()
+        and "oscilloscopeBank" not in (ROOT / "public" / "index.html").read_text(encoding="utf-8")
+        and "oscilloscopeBank" not in (ROOT / "public" / "perform.html").read_text(encoding="utf-8"),
+        "Oscilloscope Bank was removed and must stay absent",
+    )
     require(
         'matrixWaterfall: {\n    category: "multimeter"' in module_store_source,
         "Matrix Waterfall should live in the Multimeter category",
@@ -11908,7 +11916,6 @@ def require_node_graph_mvp_contract() -> None:
         and "nodeGraphModuleCatalogUnderConstructionSort = Object.freeze([" in module_store_source
         and '"canvas"' in module_store_source
         and '"humanFilter"' in module_store_source
-        and '"oscilloscopeBank"' in module_store_source
         and '"shootingStarTail"' in module_store_source
         and '"wallDelay"' in module_store_source
         and '"bloomGlow"' in module_store_source
@@ -17148,14 +17155,6 @@ def require_native_module_contract(base_url: str) -> None:
             "soemdsp_time_quantizer_metadata_json",
             "soemdsp_time_quantizer_metadata_json_size",
         ],
-        "fibonacci_noise": [
-            "soemdsp_fibonacci_noise_create",
-            "soemdsp_fibonacci_noise_destroy",
-            "soemdsp_fibonacci_noise_set_config",
-            "soemdsp_fibonacci_noise_sample",
-            "soemdsp_fibonacci_noise_unipolar",
-            "soemdsp_fibonacci_noise_trigger",
-        ],
         "formula_noise": [
             "soemdsp_formula_noise_create",
             "soemdsp_formula_noise_destroy",
@@ -17861,31 +17860,34 @@ def require_native_module_contract(base_url: str) -> None:
     graph_engine_source = (ROOT / "native_modules" / "graph_engine" / "graph_engine.cpp").read_text(encoding="utf-8")
     _af_push = native_graph_source.find('if (type === "activeFilter")')
     _pf_push = native_graph_source.find('if (type === "passiveFilter")')
+    _pf_push_end = native_graph_source.find('if (type === "tb303Filter")', _pf_push)
     require(
         _af_push >= 0
         and _pf_push > _af_push
-        and 'push("sweep", P.NATIVE_GRAPH_PARAM_CENTER, cont("sweep", 0))'
-        in native_graph_source[_af_push:_pf_push],
-        "Dual Ladder native param push must map sweep → CENTER (semitones), like Passive Filter",
+        and _pf_push_end > _pf_push
+        and 'push("sweep"' not in native_graph_source[_af_push:_pf_push_end],
+        "Dual Ladder / Passive Filter: Sweep param removed (no native sweep push)",
     )
     _af_proc = graph_engine_source.find("static void process_active_filter")
     _pf_proc = graph_engine_source.find("static void process_passive_filter")
+    _pf_proc_end = graph_engine_source.find("static void process_tb303_filter", _pf_proc)
     require(
         _af_proc >= 0
         and _pf_proc > _af_proc
-        and "apply_sweep_hz" in graph_engine_source[_af_proc:_pf_proc]
-        and "node.center" in graph_engine_source[_af_proc:_pf_proc],
-        "process_active_filter must apply sweep (node.center, semitones) to both Dual Ladder cuts",
+        and _pf_proc_end > _pf_proc
+        and "apply_sweep_hz" not in graph_engine_source
+        and "pitched_hz" not in graph_engine_source[_af_proc:_pf_proc_end]
+        and graph_engine_source[_af_proc:_pf_proc].count("apply_multi_cutoff_f(") == 1
+        and graph_engine_source[_pf_proc:_pf_proc_end].count("apply_multi_cutoff_f(") == 1
+        and "static void apply_multi_cutoff_f(" in graph_engine_source,
+        "Dual Ladder / Passive: wired ƒ via shared apply_multi_cutoff_f; no Sweep, no hidden 0.1V/oct center",
     )
     active_filter_math = (PUBLIC / "modules" / "activeFilter" / "active-filter-math.js").read_text(
         encoding="utf-8"
     )
     require(
-        "function nodeGraphSweepFrequencyHz(hz, semitones)" in active_filter_math
-        and "low = nodeGraphSweepFrequencyHz(low, sweep);" in active_filter_math
-        and "high = nodeGraphSweepFrequencyHz(high, sweep);" in active_filter_math
-        and "2 ** (st / 12)" in active_filter_math,
-        "JS Dual Ladder resolve already sweeps both cuts in semitones (native was the missing path)",
+        "nodeGraphSweepFrequencyHz" not in active_filter_math and "params?.sweep" not in active_filter_math,
+        "JS Dual Ladder resolve: Sweep removed",
     )
     require(
         'name === "ellipsoid" || targetType === "ellipsoid"' in worklet_source
