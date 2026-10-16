@@ -372,7 +372,9 @@ function drawNodeGraphSoftpopFaceItem(_renderer, item, pixelRatio) {
     ? nodeGraphDataBus.get(nodeGraphDataBusKey(String(nodeId), "SoftpopInfo"))
     : null;
   if (!bins || !bins.length || !info) return;  // no data yet: nothing to draw
-  const cssW = Math.max(1, canvas.clientWidth || screenElement?.clientWidth || 1);
+  // Resize-observer cache (display-face-metrics), not a per-frame layout read.
+  const faceMetrics = typeof ensureFaceMetrics === "function" ? ensureFaceMetrics(canvas) : null;
+  const cssW = Math.max(1, faceMetrics?.cssW || canvas.clientWidth || screenElement?.clientWidth || 1);
   nodeGraphSoftpopFacePresent(canvas, bins, info, settings, cssW);
 }
 

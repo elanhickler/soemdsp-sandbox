@@ -781,7 +781,51 @@ function nodeSliderTravelFromValue(slider, value) {
   return nodeSliderCurveTravelFromValue(slider, normalizedValue);
 }
 
+// Created by beginNodeSliderDrag, dropped on drag end: each slider's lane
+// width is measured once per gesture (the dragged one and every ghost slider
+// synced while it moves) instead of forcing layout on every pointermove.
+// Layout cannot change mid-drag; zoom is a CSS transform and does not touch it.
+var nodeSliderDragWidthCache = null;
+
+// Lane widths outside a drag (ghost sliders read every visible ghost lane per
+// frame). A measured width is reused until a ResizeObserver reports that the
+// element's box changed; the entry is then dropped and re-measured on the
+// next read, so the value is always the clientWidth layout would give.
+var nodeSliderLayoutWidthCache = typeof WeakMap === "function" ? new WeakMap() : null;
+var nodeSliderLayoutWidthObserver = null;
+
+function nodeSliderLayoutWidthObserve(element) {
+  if (!nodeSliderLayoutWidthCache || typeof ResizeObserver !== "function") {
+    return false;
+  }
+  if (!nodeSliderLayoutWidthObserver) {
+    nodeSliderLayoutWidthObserver = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        nodeSliderLayoutWidthCache.delete(entry.target);
+      }
+    });
+  }
+  try {
+    nodeSliderLayoutWidthObserver.observe(element, { box: "border-box" });
+  } catch (_error) {
+    return false;
+  }
+  return true;
+}
+
 function nodeSliderElementLayoutWidth(element) {
+  const dragCache = nodeGraphMvp?.sliderDragging ? nodeSliderDragWidthCache : null;
+  if (dragCache && element) {
+    const cached = dragCache.get(element);
+    if (cached !== undefined) {
+      return cached;
+    }
+    nodeSliderDragWidthCache = null;
+    const measured = nodeSliderElementLayoutWidth(element);
+    nodeSliderDragWidthCache = dragCache;
+    dragCache.set(element, measured);
+    return measured;
+  }
   if (
     typeof nodeGraphElementInSkippedContentVisibility === "function"
     && nodeGraphElementInSkippedContentVisibility(element)
@@ -789,10 +833,19 @@ function nodeSliderElementLayoutWidth(element) {
     const last = Number(element?._awakeClientWidth);
     return last > 0 ? last : 0;
   }
+  const cachedWidth = element && nodeSliderLayoutWidthCache
+    ? nodeSliderLayoutWidthCache.get(element)
+    : undefined;
+  if (cachedWidth !== undefined && element.isConnected) {
+    return cachedWidth;
+  }
   const width = Number(element?.clientWidth || element?.offsetWidth || 0);
   if (Number.isFinite(width) && width > 0) {
     if (element) {
       element._awakeClientWidth = width;
+      if (nodeSliderLayoutWidthObserve(element)) {
+        nodeSliderLayoutWidthCache.set(element, width);
+      }
     }
     return width;
   }

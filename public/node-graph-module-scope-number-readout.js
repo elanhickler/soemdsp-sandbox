@@ -169,8 +169,11 @@ function paintNodeGraphValueFacesNow(pixelRatio = window.devicePixelRatio || 1) 
       continue;
     }
     // Synthetic scope rect from layout box (draw path only needs positive size).
-    const w = Math.max(1, face.clientWidth || face.offsetWidth || 1);
-    const h = Math.max(1, face.clientHeight || face.offsetHeight || 1);
+    // Resize-observer cache: no forced layout per face per frame (that cost
+    // ~36 ms a frame right after a pan invalidated style).
+    const faceMetrics = typeof ensureFaceMetrics === "function" ? ensureFaceMetrics(face) : null;
+    const w = Math.max(1, faceMetrics?.cssW || face.clientWidth || face.offsetWidth || 1);
+    const h = Math.max(1, faceMetrics?.cssH || face.clientHeight || face.offsetHeight || 1);
     const item = {
       buffer,
       nodeId: slot.nodeId,
@@ -293,34 +296,8 @@ function nodeGraphNumberReadoutEnsureBurnPlate(canvas) {
   if (layer.width === w && layer.height === h) {
     return layer;
   }
-  const prevW = layer.width | 0;
-  const prevH = layer.height | 0;
-  if (prevW > 0 && prevH > 0) {
-    let scratch = canvas._numberReadoutBurnResizeScratch;
-    if (!scratch) {
-      scratch = document.createElement("canvas");
-      canvas._numberReadoutBurnResizeScratch = scratch;
-    }
-    if (scratch.width !== prevW || scratch.height !== prevH) {
-      scratch.width = prevW;
-      scratch.height = prevH;
-    }
-    const sctx = scratch.getContext("2d");
-    const lctx = layer.getContext("2d");
-    if (sctx && lctx) {
-      sctx.setTransform(1, 0, 0, 1, 0, 0);
-      sctx.clearRect(0, 0, prevW, prevH);
-      sctx.drawImage(layer, 0, 0);
-      layer.width = w;
-      layer.height = h;
-      lctx.setTransform(1, 0, 0, 1, 0, 0);
-      lctx.clearRect(0, 0, w, h);
-      lctx.imageSmoothingEnabled = true;
-      lctx.drawImage(scratch, 0, 0, prevW, prevH, 0, 0, w, h);
-      // Keep residual energy — geometry changed, deposits still live.
-      return layer;
-    }
-  }
+  // Stamp scratch only (always empty between stamps): deposits live in the
+  // GPU plate, which scale-preserves itself on resize.
   layer.width = w;
   layer.height = h;
   return layer;
@@ -335,6 +312,9 @@ function nodeGraphNumberReadoutClearBurnPlate(canvas) {
     const rctx = layer.getContext?.("2d");
     rctx?.setTransform?.(1, 0, 0, 1, 0, 0);
     rctx?.clearRect?.(0, 0, layer.width, layer.height);
+  }
+  if (canvas._numberReadoutGlPlate) {
+    nodeGraphNumberReadoutGlPlateClear(canvas._numberReadoutGlPlate);
   }
   canvas._numberReadoutResidualEnergy = 0;
 }
@@ -720,9 +700,9 @@ const NODE_GRAPH_NUMBER_READOUT_TINT_FS = `
     gl_FragColor = vec4(c, p.a);
   }
 `;
-const nodeGraphNumberReadoutTintGl = { gl: null, plate: null, lut: null, lutKey: "" };
+const nodeGraphNumberReadoutTintGl = { gl: null, lut: null, lutKey: "" };
 
-function nodeGraphNumberReadoutPresentBurnPlateGl(destCtx, burnPlate, lut, lutKey) {
+function nodeGraphNumberReadoutPresentBurnPlateGl(destCtx, burnPlate, lut, lutKey, plateTex = null) {
   if (typeof nodeGraphSharedGlDevice !== "function" || typeof SoemGl === "undefined") {
     return false;
   }
@@ -730,7 +710,7 @@ function nodeGraphNumberReadoutPresentBurnPlateGl(destCtx, burnPlate, lut, lutKe
   const gl = dev?.gl;
   const w = burnPlate.width | 0;
   const h = burnPlate.height | 0;
-  if (!gl || gl.isContextLost() || w > dev.canvas.width || h > dev.canvas.height) {
+  if (!plateTex || !gl || gl.isContextLost() || w > dev.canvas.width || h > dev.canvas.height) {
     return false;
   }
   const program = SoemGl.program(gl, "number-readout-burn-tint", SoemGl.GLSL_FULLSCREEN_VS, NODE_GRAPH_NUMBER_READOUT_TINT_FS);
@@ -740,7 +720,6 @@ function nodeGraphNumberReadoutPresentBurnPlateGl(destCtx, burnPlate, lut, lutKe
   const st = nodeGraphNumberReadoutTintGl;
   if (st.gl !== gl) {
     st.gl = gl;
-    st.plate = null;
     st.lut = null;
     st.lutKey = "";
   }
@@ -753,7 +732,6 @@ function nodeGraphNumberReadoutPresentBurnPlateGl(destCtx, burnPlate, lut, lutKe
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
     return t;
   };
-  if (!st.plate) st.plate = makeTex();
   if (!st.lut) st.lut = makeTex();
   gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
   gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
@@ -765,8 +743,8 @@ function nodeGraphNumberReadoutPresentBurnPlateGl(destCtx, burnPlate, lut, lutKe
     st.lutKey = lutKey;
   }
   gl.activeTexture(gl.TEXTURE0);
-  gl.bindTexture(gl.TEXTURE_2D, st.plate);
-  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, burnPlate);
+  // GPU-resident plate (faded / stamped on the GPU): nothing to upload.
+  gl.bindTexture(gl.TEXTURE_2D, plateTex);
   gl.pixelStorei(gl.UNPACK_ALIGNMENT, 4);
   nodeGraphSharedGlBindPresent(gl, w, h);
   gl.disable(gl.BLEND);
@@ -789,6 +767,235 @@ function nodeGraphNumberReadoutPresentBurnPlateGl(destCtx, burnPlate, lut, lutKe
   return true;
 }
 
+/*
+ * GPU burn plate. The residual energy plate lives in two RGBA8 textures on the
+ * shared GL device (ping-pong): the per-frame Trail/Ghost fade is one
+ * full-plate draw (read * (1 - erase) -> write, swap), exactly the old 2D
+ * destination-out fill (8-bit quantisation included, per frame as before).
+ * Deposits are still drawn with the 2D digit code onto the 2D burn-plate
+ * canvas, which is now only a stamp scratch: the stamped rect (digit cells
+ * only) is copied out, uploaded with texSubImage2D and blended source-over
+ * into the plate, then cleared. So a frame uploads nothing unless a value
+ * changed, and then only the changed cells. Texel row y = canvas row y in
+ * every pass, so the tint present samples the plate exactly as before.
+ * No shared device: nodeGraphDisplayGlFailed (black + one console.error);
+ * there is no 2D plate path.
+ */
+// uKeep255 >= 0: the 2D canvas destination-out maths, bit for bit:
+// out8 = round(in8 * (255 - erase8) / 255) with erase8 = round(erase * 255)
+// (measured against Chrome's 2D canvas). Otherwise plain src * uKeep.
+const NODE_GRAPH_NUMBER_READOUT_PLATE_FS = `
+  #ifdef GL_FRAGMENT_PRECISION_HIGH
+  precision highp float;
+  #else
+  precision mediump float;
+  #endif
+  uniform sampler2D uSrc;
+  uniform vec2 uSize;
+  uniform float uKeep;
+  uniform float uKeep255;
+  void main() {
+    vec4 t = texture2D(uSrc, gl_FragCoord.xy / uSize);
+    if (uKeep255 >= 0.0) {
+      vec4 d = floor(t * 255.0 + 0.5);
+      gl_FragColor = floor(d * uKeep255 / 255.0 + 0.5) / 255.0;
+    } else {
+      gl_FragColor = t * uKeep;
+    }
+  }
+`;
+const nodeGraphNumberReadoutStampTrack = { ctx: null, any: false, x0: 0, y0: 0, x1: 0, y1: 0 };
+const nodeGraphNumberReadoutPlateGlStats = { fades: 0, stamps: 0, stampPx: 0 };
+
+function nodeGraphNumberReadoutTrackStamp(context, x0, y0, x1, y1) {
+  const t = nodeGraphNumberReadoutStampTrack;
+  if (!t.ctx || t.ctx !== context) {
+    return;
+  }
+  if (!t.any) {
+    t.any = true;
+    t.x0 = x0; t.y0 = y0; t.x1 = x1; t.y1 = y1;
+    return;
+  }
+  t.x0 = Math.min(t.x0, x0); t.y0 = Math.min(t.y0, y0);
+  t.x1 = Math.max(t.x1, x1); t.y1 = Math.max(t.y1, y1);
+}
+
+function nodeGraphNumberReadoutGlPlateTexParams(gl, filter) {
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, filter);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, filter);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+}
+
+function nodeGraphNumberReadoutGlPlateTarget(gl, w, h) {
+  const tex = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D, tex);
+  nodeGraphNumberReadoutGlPlateTexParams(gl, gl.NEAREST);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+  gl.bindTexture(gl.TEXTURE_2D, null);
+  const fbo = gl.createFramebuffer();
+  gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+  gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
+  const ok = gl.checkFramebufferStatus(gl.FRAMEBUFFER) === gl.FRAMEBUFFER_COMPLETE;
+  if (ok) {
+    gl.disable(gl.SCISSOR_TEST);
+    gl.clearColor(0, 0, 0, 0);
+    gl.clear(gl.COLOR_BUFFER_BIT);
+  }
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  if (!ok) {
+    gl.deleteFramebuffer(fbo);
+    gl.deleteTexture(tex);
+    return null;
+  }
+  return { tex, fbo };
+}
+
+function nodeGraphNumberReadoutGlPlateDrop(gl, st) {
+  if (!gl || !st) return;
+  for (const t of [st.read, st.write]) {
+    if (t?.fbo) gl.deleteFramebuffer(t.fbo);
+    if (t?.tex) gl.deleteTexture(t.tex);
+  }
+  if (st.stampTex) gl.deleteTexture(st.stampTex);
+}
+
+// One full-plate pass: dst = src(scaled to the plate) * keep.
+function nodeGraphNumberReadoutGlPlatePass(st, dst, srcTex, keep, linear, keep255 = -1) {
+  const gl = st.gl;
+  const prog = SoemGl.program(gl, "number-readout-burn-plate", SoemGl.GLSL_FULLSCREEN_VS, NODE_GRAPH_NUMBER_READOUT_PLATE_FS);
+  if (!prog) return false;
+  gl.bindFramebuffer(gl.FRAMEBUFFER, dst.fbo);
+  gl.viewport(0, 0, st.w, st.h);
+  gl.useProgram(prog);
+  gl.activeTexture(gl.TEXTURE0);
+  gl.bindTexture(gl.TEXTURE_2D, srcTex);
+  if (linear) nodeGraphNumberReadoutGlPlateTexParams(gl, gl.LINEAR);
+  gl.uniform1i(gl.getUniformLocation(prog, "uSrc"), 0);
+  gl.uniform2f(gl.getUniformLocation(prog, "uSize"), st.w, st.h);
+  gl.uniform1f(gl.getUniformLocation(prog, "uKeep"), keep);
+  gl.uniform1f(gl.getUniformLocation(prog, "uKeep255"), keep255);
+  SoemGl.drawQuad(gl, gl.getAttribLocation(prog, "aPos"));
+  if (linear) nodeGraphNumberReadoutGlPlateTexParams(gl, gl.NEAREST);
+  gl.bindTexture(gl.TEXTURE_2D, null);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  return true;
+}
+
+function nodeGraphNumberReadoutGlPlateEnsure(canvas, burnPlate) {
+  if (!canvas || !burnPlate || typeof nodeGraphSharedGlDevice !== "function" || typeof SoemGl === "undefined") {
+    return null;
+  }
+  const dev = nodeGraphSharedGlDevice();
+  const gl = dev?.gl;
+  const w = burnPlate.width | 0;
+  const h = burnPlate.height | 0;
+  if (!gl || gl.isContextLost() || w < 1 || h < 1 || w > dev.canvas.width || h > dev.canvas.height) {
+    return null;
+  }
+  let prev = canvas._numberReadoutGlPlate || null;
+  if (prev && prev.gl !== gl) {
+    // Context replaced: old objects are gone with it.
+    prev = null;
+    canvas._numberReadoutGlPlate = null;
+  }
+  if (prev && prev.w === w && prev.h === h) {
+    return prev;
+  }
+  const read = nodeGraphNumberReadoutGlPlateTarget(gl, w, h);
+  const write = read ? nodeGraphNumberReadoutGlPlateTarget(gl, w, h) : null;
+  if (!read || !write) {
+    nodeGraphNumberReadoutGlPlateDrop(gl, { read, write });
+    return null;
+  }
+  const st = { gl, w, h, read, write, stampTex: null, stampCanvas: null };
+  gl.disable(gl.BLEND);
+  gl.disable(gl.SCISSOR_TEST);
+  if (prev) {
+    // Resize: scale-preserve deposits (the 2D path's smoothed drawImage).
+    nodeGraphNumberReadoutGlPlatePass(st, st.read, prev.read.tex, 1, true);
+    nodeGraphNumberReadoutGlPlateDrop(gl, prev);
+  }
+  canvas._numberReadoutGlPlate = st;
+  return st;
+}
+
+// erase: the alpha the 2D path filled with (already toFixed(4)-rounded).
+function nodeGraphNumberReadoutGlPlateFade(st, erase) {
+  const gl = st.gl;
+  gl.disable(gl.BLEND);
+  gl.disable(gl.SCISSOR_TEST);
+  const erase8 = Math.max(0, Math.min(255, Math.round(Number(erase) * 255)));
+  if (!nodeGraphNumberReadoutGlPlatePass(st, st.write, st.read.tex, 1, false, 255 - erase8)) return;
+  const tmp = st.read;
+  st.read = st.write;
+  st.write = tmp;
+  nodeGraphNumberReadoutPlateGlStats.fades += 1;
+}
+
+function nodeGraphNumberReadoutGlPlateClear(st) {
+  if (!st?.gl || st.gl.isContextLost()) return;
+  const gl = st.gl;
+  gl.disable(gl.SCISSOR_TEST);
+  gl.clearColor(0, 0, 0, 0);
+  for (const t of [st.read, st.write]) {
+    gl.bindFramebuffer(gl.FRAMEBUFFER, t.fbo);
+    gl.clear(gl.COLOR_BUFFER_BIT);
+  }
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+}
+
+// Move the stamped rect of the 2D scratch plate into the GPU plate
+// (source-over on alpha = the old 2D stamp), then clear that scratch rect.
+function nodeGraphNumberReadoutGlPlateStamp(st, burnPlate, x0In, y0In, x1In, y1In) {
+  const gl = st.gl;
+  const x0 = Math.max(0, Math.floor(x0In));
+  const y0 = Math.max(0, Math.floor(y0In));
+  const x1 = Math.min(st.w, Math.ceil(x1In));
+  const y1 = Math.min(st.h, Math.ceil(y1In));
+  const bw = x1 - x0;
+  const bh = y1 - y0;
+  if (bw < 1 || bh < 1) return;
+  let sc = st.stampCanvas;
+  if (!sc) {
+    sc = st.stampCanvas = document.createElement("canvas");
+  }
+  if (sc.width !== bw || sc.height !== bh) {
+    sc.width = bw;
+    sc.height = bh;
+  }
+  const sctx = sc.getContext("2d");
+  if (!sctx) return;
+  sctx.setTransform(1, 0, 0, 1, 0, 0);
+  sctx.globalCompositeOperation = "copy";
+  sctx.drawImage(burnPlate, x0, y0, bw, bh, 0, 0, bw, bh);
+  sctx.globalCompositeOperation = "source-over";
+  if (!st.stampTex) {
+    st.stampTex = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, st.stampTex);
+    nodeGraphNumberReadoutGlPlateTexParams(gl, gl.NEAREST);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, st.w, st.h, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+  }
+  gl.activeTexture(gl.TEXTURE0);
+  gl.bindTexture(gl.TEXTURE_2D, st.stampTex);
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+  gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
+  gl.texSubImage2D(gl.TEXTURE_2D, 0, x0, y0, gl.RGBA, gl.UNSIGNED_BYTE, sc);
+  gl.enable(gl.SCISSOR_TEST);
+  gl.scissor(x0, y0, bw, bh);
+  gl.enable(gl.BLEND);
+  gl.blendFuncSeparate(gl.ONE, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+  nodeGraphNumberReadoutGlPlatePass(st, st.read, st.stampTex, 1, false);
+  gl.disable(gl.BLEND);
+  gl.disable(gl.SCISSOR_TEST);
+  const bctx = burnPlate.getContext("2d");
+  bctx?.setTransform?.(1, 0, 0, 1, 0, 0);
+  bctx?.clearRect?.(x0, y0, bw, bh);
+  nodeGraphNumberReadoutPlateGlStats.stamps += 1;
+  nodeGraphNumberReadoutPlateGlStats.stampPx += bw * bh;
+}
+
 function nodeGraphNumberReadoutPresentBurnPlate(
   destCtx,
   burnPlate,
@@ -808,8 +1015,16 @@ function nodeGraphNumberReadoutPresentBurnPlate(
     host._numberReadoutGhostLutKey = lutKey;
   }
   const lut = host._numberReadoutGhostLut;
-  // GPU path only (shared picture device). No GL: black + logged once.
-  if (nodeGraphNumberReadoutPresentBurnPlateGl(destCtx, burnPlate, lut, lutKey)) {
+  // GPU plate only (shared picture device). No GL: black + logged once.
+  const plateGl = host?._numberReadoutGlPlate || null;
+  const plateTex = plateGl
+    && typeof nodeGraphSharedGlDevice === "function"
+    && plateGl.gl === nodeGraphSharedGlDevice()?.gl
+    && plateGl.w === (burnPlate.width | 0)
+    && plateGl.h === (burnPlate.height | 0)
+    ? plateGl.read.tex
+    : null;
+  if (nodeGraphNumberReadoutPresentBurnPlateGl(destCtx, burnPlate, lut, lutKey, plateTex)) {
     return;
   }
   if (typeof nodeGraphDisplayGlFailed === "function") {
@@ -1562,7 +1777,34 @@ function nodeGraphNumberReadoutPinSizePx(faceStyle, pixelRatio, zoom = 1) {
  *     +1 = one pin pixel remains;
  *     negative = enlarge fit box (digits grow toward walls; plate clips).
  */
+// Layout is a pure function of its inputs + font load state. Setting
+// context.font on a canvas in the document resolves style each time, so the
+// per-frame readout paint re-used to force a style recalc; memoise it.
+const nodeGraphNumberReadoutLayoutCache = new Map();
+
 function nodeGraphNumberReadoutComputeLayout(context, valueText, fontFamily, faceW, faceH, hasUnitOrOpts) {
+  const o = hasUnitOrOpts && typeof hasUnitOrOpts === "object" ? hasUnitOrOpts : { hasUnit: Boolean(hasUnitOrOpts) };
+  const fonts = typeof document !== "undefined" ? document.fonts : null;
+  const key = [
+    fontFamily, faceW, faceH, o.hasUnit ? 1 : 0, o.largeUnit ? 1 : 0, o.monoProbe ? 1 : 0,
+    o.padding01, o.faceStyle, o.pixelRatio, o.zoom,
+    nodeGraphNumberReadoutDsegWidthChars(o.fitText != null ? String(o.fitText) : String(valueText || "")),
+    nodeGraphNumberReadoutDsegWidthChars(valueText),
+    fonts ? `${fonts.status}:${fonts.size}` : "",
+  ].join("|");
+  const hit = nodeGraphNumberReadoutLayoutCache.get(key);
+  if (hit) {
+    return { ...hit };
+  }
+  const layout = nodeGraphNumberReadoutComputeLayoutUncached(context, valueText, fontFamily, faceW, faceH, hasUnitOrOpts);
+  if (nodeGraphNumberReadoutLayoutCache.size > 512) {
+    nodeGraphNumberReadoutLayoutCache.clear();
+  }
+  nodeGraphNumberReadoutLayoutCache.set(key, { ...layout });
+  return layout;
+}
+
+function nodeGraphNumberReadoutComputeLayoutUncached(context, valueText, fontFamily, faceW, faceH, hasUnitOrOpts) {
   const opts = hasUnitOrOpts && typeof hasUnitOrOpts === "object"
     ? hasUnitOrOpts
     : { hasUnit: Boolean(hasUnitOrOpts) };
@@ -1755,6 +1997,7 @@ function nodeGraphNumberReadoutDrawPixelPin(context, layout, faceLeft, faceTop, 
   const iy = Math.round(y);
   const is = Math.max(1, Math.round(side));
   context.fillStyle = `rgb(${r}, ${g}, ${b})`;
+  nodeGraphNumberReadoutTrackStamp(context, ix - 1, iy - 1, ix + is + 1, iy + is + 1);
   context.fillRect(ix, iy, is, is);
   context.restore();
 }
@@ -1879,7 +2122,10 @@ function nodeGraphNumberReadoutDrawDigits(context, {
   void plate;
   void energy;
 
+  const trackHalfW = Math.max(cellW, fontSize * 0.75) + 2;
+  const trackHalfH = fontSize * 0.9 + 2;
   const drawGlyph = (glyph, x) => {
+    nodeGraphNumberReadoutTrackStamp(context, x - trackHalfW, centerY - trackHalfH, x + trackHalfW, centerY + trackHalfH);
     context.shadowBlur = 0;
     context.fillStyle = `rgba(${ink[0]}, ${ink[1]}, ${ink[2]}, ${alpha.toFixed(4)})`;
     context.fillText(glyph, x, centerY);
@@ -2461,18 +2707,22 @@ function drawNodeGraphNumberReadoutItem(renderer, item, pixelRatio) {
   }
 
   const burnPlate = hangOn ? nodeGraphNumberReadoutEnsureBurnPlate(canvas) : null;
-  const burnCtx = burnPlate?.getContext?.("2d") || null;
+  // The plate lives on the GPU only. The 2D canvas is a stamp scratch for the
+  // digit draw; no shared GL device = black + one console.error (no 2D plate).
+  const plateGl = burnPlate && burnPlate.width > 0
+    ? nodeGraphNumberReadoutGlPlateEnsure(canvas, burnPlate)
+    : null;
+  if (burnPlate && burnPlate.width > 0 && !plateGl && typeof nodeGraphDisplayGlFailed === "function") {
+    nodeGraphDisplayGlFailed(canvas, "Number readout burn plate GL unavailable");
+  }
+  const burnCtx = plateGl ? (burnPlate.getContext?.("2d") || null) : null;
 
   // 1) Fade deposit plate (Trail; Ghost hang tracked on residual energy).
   if (burnCtx && hangOn && !frozen && burnPlate.width > 0) {
     burnCtx.setTransform(1, 0, 0, 1, 0, 0);
     const erase = nodeGraphNumberReadoutBurnEraseAlpha(trailHang, ghostHang);
     if (erase > 0.00005) {
-      burnCtx.save();
-      burnCtx.globalCompositeOperation = "destination-out";
-      burnCtx.fillStyle = `rgba(0, 0, 0, ${erase.toFixed(4)})`;
-      burnCtx.fillRect(0, 0, burnPlate.width, burnPlate.height);
-      burnCtx.restore();
+      nodeGraphNumberReadoutGlPlateFade(plateGl, Number(erase.toFixed(4)));
     }
     const prevE = nodeGraphFiniteNumber(canvas._numberReadoutResidualEnergy);
     const Residual = typeof PhosphorResidual !== "undefined" ? PhosphorResidual : null;
@@ -2525,6 +2775,11 @@ function drawNodeGraphNumberReadoutItem(renderer, item, pixelRatio) {
         && Number(snap.fontSize) > 0.25
         && Number(snap.cellW) > 0;
       burnCtx.setTransform(1, 0, 0, 1, 0, 0);
+      if (plateGl) {
+        const track = nodeGraphNumberReadoutStampTrack;
+        track.ctx = burnCtx;
+        track.any = false;
+      }
       burnCtx.save();
       burnCtx.globalCompositeOperation = "source-over";
       // White energy at alpha = Burn ⨯ (0…1). Present maps that to Ghost Gradient t.
@@ -2616,6 +2871,13 @@ function drawNodeGraphNumberReadoutItem(renderer, item, pixelRatio) {
         }
       }
       burnCtx.restore();
+      if (plateGl) {
+        const track = nodeGraphNumberReadoutStampTrack;
+        track.ctx = null;
+        if (track.any) {
+          nodeGraphNumberReadoutGlPlateStamp(plateGl, burnPlate, track.x0, track.y0, track.x1, track.y1);
+        }
+      }
       canvas._numberReadoutResidualEnergy = Math.max(
         nodeGraphFiniteNumber(canvas._numberReadoutResidualEnergy),
         depositPeak,
@@ -2638,6 +2900,9 @@ function drawNodeGraphNumberReadoutItem(renderer, item, pixelRatio) {
     ) {
       burnCtx.setTransform(1, 0, 0, 1, 0, 0);
       burnCtx.clearRect(0, 0, burnPlate.width, burnPlate.height);
+      if (plateGl) {
+        nodeGraphNumberReadoutGlPlateClear(plateGl);
+      }
     }
   }
   const depositActive = hangOn && depositEnergy > 0.008;
@@ -2765,7 +3030,7 @@ function drawNodeGraphNumberReadoutItem(renderer, item, pixelRatio) {
       composite: "source-over",
     });
   }
-  if (burnPlate?.width > 0) {
+  if (plateGl) {
     nodeGraphNumberReadoutPresentBurnPlate(
       context,
       burnPlate,

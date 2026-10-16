@@ -22,11 +22,18 @@ function paintNodeGraphSliderFaceLive(face, nodeId, buffer = null) {
   const s = nodeGraphSliderFaceDisplaySettingsForNode(patchNode);
   const value = nodeGraphKnobFaceShownValue(nodeId, patchNode, buffer);
   const u = nodeGraphKnobFaceUnits(nodeId, patchNode, value);
-  face.dataset.liveValue = String(value);
-  face.setAttribute("aria-valuenow", String(value));
-  const label = face.querySelector("[data-knob-face-label]");
+  const liveValue = String(value);
+  if (face.dataset.liveValue !== liveValue) {
+    face.dataset.liveValue = liveValue;
+  }
+  if (face.getAttribute("aria-valuenow") !== liveValue) {
+    face.setAttribute("aria-valuenow", liveValue);
+  }
+  const label = typeof nodeGraphCachedChild === "function"
+    ? nodeGraphCachedChild(face, "[data-knob-face-label]")
+    : face.querySelector("[data-knob-face-label]");
   const labelText = s.sliderShowLabel ? nodeGraphKnobFaceLabelTextForNode(patchNode) : "";
-  if (label && label.dataset.editing !== "true") {
+  if (label && label.dataset.editing !== "true" && label.textContent !== labelText) {
     label.textContent = labelText;
   }
   const unitText = s.sliderShowUnit
@@ -48,7 +55,9 @@ function paintNodeGraphSliderFaceLive(face, nodeId, buffer = null) {
     valueText: s.sliderShowNumber ? nodeGraphKnobFaceFormatReadout(u.numberValue, patchNode, u.slider) : "",
     valueEditing: face.dataset.knobFaceEditing === "true",
   };
-  const hit = face.querySelector("[data-knob-face-dial]");
+  const hit = typeof nodeGraphCachedChild === "function"
+    ? nodeGraphCachedChild(face, "[data-knob-face-dial]")
+    : face.querySelector("[data-knob-face-dial]");
   face._ctrlLayout = nodeGraphControllerFacePaint(face, "slider", model, (L) => {
     nodeGraphControllerFacePlace(hit, L.rects.bar, L.w, L.h);
     nodeGraphControllerFacePlace(label, labelText ? L.rects.label : null, L.w, L.h);

@@ -320,6 +320,12 @@ function createNodeGraphCameraWorldClone(source, wireSvg) {
   clone.style.setProperty("--node-graph-pan-x", "0px");
   clone.style.setProperty("--node-graph-pan-y", "0px");
   clone.style.setProperty("--node-graph-zoom", "1");
+  // Pan vars are non-inherited and live on the world layers too (inline,
+  // copied by cloneNode): zero them there as well.
+  for (const layer of clone.querySelectorAll(".node-graph-world-layer")) {
+    layer.style.setProperty("--node-graph-pan-x", "0px");
+    layer.style.setProperty("--node-graph-pan-y", "0px");
+  }
   clone.querySelector("#nodeModularOnlyBackButton")?.remove();
   clone.querySelector("#nodeCameraOverlayLayer")?.remove();
   clone.querySelector("#nodeSelectionMarquee")?.remove();

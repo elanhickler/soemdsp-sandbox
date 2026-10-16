@@ -484,8 +484,9 @@ function nodeGraphModuleScopeScreenItems(workspace, canvas, pixelRatio) {
         // grid, so the usual intersection cull marks the scope offscreen
         // and never paints the tile.
         const face = slot.scopeElement;
-        const w = Math.max(1, face.clientWidth || face.offsetWidth || 1);
-        const h = Math.max(1, face.clientHeight || face.offsetHeight || 1);
+        const faceMetrics = typeof ensureFaceMetrics === "function" ? ensureFaceMetrics(face) : null;
+        const w = Math.max(1, faceMetrics?.cssW || face.clientWidth || face.offsetWidth || 1);
+        const h = Math.max(1, faceMetrics?.cssH || face.clientHeight || face.offsetHeight || 1);
         screenRect = { left: 0, top: 0, width: w, height: h };
         itemViewport = screenRect;
       } else {

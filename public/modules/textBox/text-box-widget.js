@@ -273,7 +273,17 @@ const TEXT_BOX_VERTICAL_RANGE = 2;
 function textBoxWidgetApplyAlign(field, layout) {
   if (!field) return false;
   const face = field.parentElement;
-  const box = Math.max(0, face?.clientHeight || 0);
+  // ResizeObserver-cached height (no forced layout per visual pass).
+  if (face && !face._textBoxHeightObserved && typeof ResizeObserver === "function") {
+    face._textBoxHeightObserved = true;
+    new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        entry.target._textBoxClientHeight = entry.target.clientHeight;
+      }
+    }).observe(face);
+  }
+  const cachedBox = face?._textBoxClientHeight;
+  const box = Math.max(0, cachedBox > 0 ? cachedBox : (face?.clientHeight || 0));
   // Boot race: face may be 0 until chrome lays out — retry via scheduleVisual.
   if (!(box > 0)) {
     return false;
@@ -282,15 +292,30 @@ function textBoxWidgetApplyAlign(field, layout) {
   // Plain translate — no content-height math. 50 = natural top; slide freely.
   const t = (percent - 50) / 50;
   const offset = t * box * TEXT_BOX_VERTICAL_RANGE;
-  field.style.setProperty("--node-text-box-content-offset", `${offset.toFixed(2)}px`);
+  const offsetCss = `${offset.toFixed(2)}px`;
+  if (field._textBoxOffsetCss !== offsetCss) {
+    field._textBoxOffsetCss = offsetCss;
+    field.style.setProperty("--node-text-box-content-offset", offsetCss);
+  }
   return true;
 }
 
 function textBoxWidgetApplyVisual(field, layout) {
   if (!field) return false;
-  field.scrollLeft = 0;
-  field.scrollTop = 0;
-  field.style.setProperty("--node-text-box-font-fit-scale", "1");
+  // Scroll resets force layout; only do them once the field really scrolled.
+  if (!field._textBoxScrollWatched) {
+    field._textBoxScrollWatched = true;
+    field._textBoxScrolled = true;
+    field.addEventListener("scroll", () => { field._textBoxScrolled = true; }, { passive: true });
+  }
+  if (field._textBoxScrolled) {
+    field._textBoxScrolled = false;
+    field.scrollLeft = 0;
+    field.scrollTop = 0;
+  }
+  if (field.style.getPropertyValue("--node-text-box-font-fit-scale") !== "1") {
+    field.style.setProperty("--node-text-box-font-fit-scale", "1");
+  }
   return textBoxWidgetApplyAlign(field, layout);
 }
 

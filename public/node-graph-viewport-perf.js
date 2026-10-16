@@ -5,6 +5,43 @@
 // (camera viewBox on workspace siblings — not CSS-scaled). Mid-gesture
 // cull keeps off-screen modules asleep. Scopes on visible modules keep drawing.
 
+// Pan offsets are registered NON-inherited. As plain custom properties on the
+// workspace they inherited into ~2.5k module elements, so every pan event
+// restyled the whole graph (~370 ms/s of UpdateLayoutTree mid-pan). Only the
+// world layers' transform reads them, so they are also written onto those
+// layers directly (nodeGraphApplyPanVarsToWorldLayers).
+(function registerNodeGraphPanProperties() {
+  if (typeof CSS === "undefined" || typeof CSS.registerProperty !== "function") {
+    return;
+  }
+  for (const name of ["--node-graph-pan-x", "--node-graph-pan-y"]) {
+    try {
+      CSS.registerProperty({ name, syntax: "<length>", inherits: false, initialValue: "0px" });
+    } catch (_error) {
+      // Already registered (hot reload) or unsupported: plain inheritance.
+    }
+  }
+}());
+
+let nodeGraphWorldLayerCollection = null;
+
+function nodeGraphApplyPanVarsToWorldLayers(workspace, x, y) {
+  if (!workspace) {
+    return;
+  }
+  if (!nodeGraphWorldLayerCollection || nodeGraphWorldLayerCollection.owner !== workspace) {
+    nodeGraphWorldLayerCollection = {
+      owner: workspace,
+      layers: workspace.getElementsByClassName("node-graph-world-layer"),
+    };
+  }
+  const layers = nodeGraphWorldLayerCollection.layers;
+  for (let i = 0; i < layers.length; i += 1) {
+    layers[i].style.setProperty("--node-graph-pan-x", x);
+    layers[i].style.setProperty("--node-graph-pan-y", y);
+  }
+}
+
 const nodeGraphViewportPerf = {
   heavyRaf: 0,
   settleTimer: 0,
@@ -39,6 +76,8 @@ function nodeGraphViewportGestureIsZoom(kind = "") {
 /** Mark an interactive viewport gesture (wheel / pan / pinch / smooth-zoom). */
 function markNodeGraphViewportGesture(kind = "gesture") {
   nodeGraphViewportPerf.lastGestureKind = String(kind || "gesture");
+  // Bumped on every pan/zoom event: per-gesture client-rect caches key on it.
+  nodeGraphViewportPerf.viewEpoch = (nodeGraphViewportPerf.viewEpoch || 0) + 1;
   const workspace = document.getElementById("nodeGraphWorkspace");
   if (!workspace) {
     return;
@@ -194,6 +233,7 @@ function applyNodeGraphViewportCssLight(options = {}) {
       : pan;
     workspace.style.setProperty("--node-graph-pan-x", `${originOffset.x}px`);
     workspace.style.setProperty("--node-graph-pan-y", `${originOffset.y}px`);
+    nodeGraphApplyPanVarsToWorldLayers(workspace, `${originOffset.x}px`, `${originOffset.y}px`);
     workspace.dataset.panX = String(pan.x);
     workspace.dataset.panY = String(pan.y);
     // Scope screen-items convert layout->screen from this (no gBCR on paint).
@@ -386,17 +426,126 @@ const nodeGraphViewportCull = {
   observer: null,
 };
 
+// Live HTMLCollections: the browser keeps them current, and in the modular
+// view they are empty, so the per-face "is it presented?" check is O(1)
+// instead of a document-wide querySelector every paint.
+let nodeGraphPresentedFaceCollections = null;
+
 function nodeGraphPresentedDisplayFace(nodeId) {
   const id = String(nodeId || "").trim();
   if (!id || typeof document === "undefined") {
     return null;
   }
+  // Every presented face carries node-screen-solo-face (layout canvas,
+  // screen solo and metamodule mirror all add it), so one live collection
+  // covers all three; walking three made three document walks per frame.
+  if (!nodeGraphPresentedFaceCollections) {
+    nodeGraphPresentedFaceCollections = document.getElementsByClassName("node-screen-solo-face");
+  }
+  // id -> first presented face (same order as the old collection walk),
+  // built once per animation frame. Live-collection .length re-walks the
+  // document after any DOM write, and every face pump is its own rAF
+  // callback, so a per-call (or per-task) walk ran dozens of times a frame.
+  // Hits are re-validated on use; a face presented between frames is seen
+  // from the next frame on.
+  const frameStamp = nodeGraphViewportFrameStamp();
+  let map = nodeGraphPresentedFaceMap;
+  if (map && (frameStamp === null || map.frameStamp !== frameStamp)) {
+    map = null;
+  }
+  if (!map) {
+    map = { faces: new Map(), frameStamp };
+    const collection = nodeGraphPresentedFaceCollections;
+    const count = collection.length;
+    // Old lookup order: layout-canvas faces first, then solo, then metamodule
+    // (metamodule faces are also layout faces).
+    for (let pass = 0; pass < 2 && count > 0; pass += 1) {
+      for (let i = 0; i < count; i += 1) {
+        const element = collection[i];
+        if (pass === 0 && !element.classList.contains("node-layout-canvas-face")) continue;
+        const faceId = element.dataset.node;
+        if (faceId && !map.faces.has(faceId)) {
+          map.faces.set(faceId, element);
+        }
+      }
+    }
+    nodeGraphPresentedFaceMap = map;
+    if (frameStamp === null && typeof queueMicrotask === "function") {
+      queueMicrotask(() => {
+        nodeGraphPresentedFaceMap = null;
+      });
+    }
+  }
+  const hit = map.faces.get(id) || null;
+  if (hit && (!hit.isConnected || hit.dataset.node !== id)) {
+    nodeGraphPresentedFaceMap = null;
+    return nodeGraphPresentedDisplayFace(id);
+  }
+  return hit;
+}
+
+let nodeGraphPresentedFaceMap = null;
+
+/** Same value for every rAF callback of one frame (null when unavailable). */
+function nodeGraphViewportFrameStamp() {
+  const t = typeof document !== "undefined" ? document.timeline?.currentTime : null;
+  return Number.isFinite(t) ? t : null;
+}
+
+/**
+ * Cached `${selector}[data-node="id"]` lookup for per-frame paint paths.
+ * A hit is reused while it stays connected and still carries that node id;
+ * otherwise one fresh querySelector refills it.
+ */
+const nodeGraphNodeElementLookupCache = new Map();
+
+function nodeGraphCachedNodeElement(selector, nodeId) {
+  const id = String(nodeId || "");
+  if (!id || typeof document === "undefined") {
+    return null;
+  }
+  let bySelector = nodeGraphNodeElementLookupCache.get(selector);
+  if (!bySelector) {
+    bySelector = new Map();
+    nodeGraphNodeElementLookupCache.set(selector, bySelector);
+  }
+  const hit = bySelector.get(id);
+  if (hit && hit.isConnected && hit.dataset.node === id) {
+    return hit;
+  }
   const escaped = typeof CSS !== "undefined" && CSS.escape ? CSS.escape(id) : id.replace(/"/g, "");
-  return document.querySelector(
-    `.node-layout-canvas-face[data-node="${escaped}"], `
-    + `.node-screen-solo-face[data-node="${escaped}"], `
-    + `.node-metamodule-canvas-face[data-node="${escaped}"]`,
-  );
+  const element = document.querySelector(`${selector}[data-node="${escaped}"]`);
+  if (element) {
+    bySelector.set(id, element);
+  } else {
+    bySelector.delete(id);
+  }
+  return element;
+}
+
+/** Cached child lookup under a mounted element (paint paths). */
+const nodeGraphChildLookupCache = new WeakMap();
+
+function nodeGraphCachedChild(parent, selector) {
+  if (!parent?.querySelector) {
+    return null;
+  }
+  let bySelector = nodeGraphChildLookupCache.get(parent);
+  if (!bySelector) {
+    bySelector = new Map();
+    nodeGraphChildLookupCache.set(parent, bySelector);
+  }
+  const hit = bySelector.get(selector);
+  if (hit && hit.isConnected && parent.contains(hit)) {
+    return hit;
+  }
+  const element = parent.querySelector(selector);
+  if (element) {
+    bySelector.set(selector, element);
+  } else {
+    bySelector.delete(selector);
+  }
+  return element;
 }
 
 function nodeGraphDisplayIsPresented(nodeId) {
@@ -408,9 +557,11 @@ function nodeGraphModuleIsViewportAsleep(nodeOrElement) {
     ? (nodeOrElement.classList.contains("dsp-node")
       ? nodeOrElement
       : nodeOrElement.closest?.(".dsp-node"))
-    : (typeof nodeGraphNodeElement === "function"
-      ? nodeGraphNodeElement(nodeOrElement)
-      : null);
+    : (typeof nodeGraphCachedNodeElement === "function"
+      ? nodeGraphCachedNodeElement(".dsp-node", nodeOrElement)
+      : (typeof nodeGraphNodeElement === "function"
+        ? nodeGraphNodeElement(nodeOrElement)
+        : null));
   const nodeId = String(element?.dataset?.node || nodeOrElement || "").trim();
   if (nodeId && nodeGraphDisplayIsPresented(nodeId)) {
     return false;

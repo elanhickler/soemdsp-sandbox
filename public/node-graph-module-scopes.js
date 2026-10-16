@@ -164,6 +164,9 @@ function runNodeGraphModuleScopeDrawFrame(source = "raf", options = {}) {
     return;
   }
   nodeGraphModuleScopeState.drawBusy = true;
+  // One visible-slot pass per draw frame (collect, lit faces, drawable check
+  // all reuse it). Dropped in finally so nothing outside the draw sees it.
+  nodeGraphModuleScopeState.visibleSlotsFrameMemo = { slots: null };
   try {
     drawNodeGraphModuleScopes(options);
   } catch (error) {
@@ -172,6 +175,7 @@ function runNodeGraphModuleScopeDrawFrame(source = "raf", options = {}) {
     scheduleNodeGraphModuleScopeDraw(options?.force ? { force: true } : {});
   } finally {
     nodeGraphModuleScopeState.drawBusy = false;
+    nodeGraphModuleScopeState.visibleSlotsFrameMemo = null;
   }
 }
 

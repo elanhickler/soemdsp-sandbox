@@ -150,6 +150,9 @@ function setNodeGraphZoom(nextZoom, anchor = null) {
         : pan;
       workspace.style.setProperty("--node-graph-pan-x", `${originOffset.x}px`);
       workspace.style.setProperty("--node-graph-pan-y", `${originOffset.y}px`);
+      if (typeof nodeGraphApplyPanVarsToWorldLayers === "function") {
+        nodeGraphApplyPanVarsToWorldLayers(workspace, `${originOffset.x}px`, `${originOffset.y}px`);
+      }
       workspace.dataset.panX = String(pan.x);
       workspace.dataset.panY = String(pan.y);
     }

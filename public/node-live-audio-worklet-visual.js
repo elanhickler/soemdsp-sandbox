@@ -102,7 +102,7 @@ NodeLiveAudioProcessor.prototype.smoothVisualControl = function smoothVisualCont
 };
 
 NodeLiveAudioProcessor.prototype.postVisualControls = function postVisualControls() {
-    this.port.postMessage({
+    this.postFramePart("visualControls", {
       patchFingerprint: this.patchFingerprint,
       blue: this.clampValue(this.visualControls.blue, 0, 1),
       chromaAlpha: this.clampValue(this.visualControls.chromaAlpha, 0, 1),

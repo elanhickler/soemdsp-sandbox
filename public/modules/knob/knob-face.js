@@ -513,6 +513,13 @@ function nodeGraphKnobFaceUnitFromValue(value, patchNode) {
   return Math.max(0, Math.min(1, (Number(value) - lo) / (hi - lo)));
 }
 
+/** Per-frame paint helper: attribute writes invalidate style even when equal. */
+function nodeGraphSetAttrIfChanged(element, name, value) {
+  if (element && element.getAttribute(name) !== value) {
+    element.setAttribute(name, value);
+  }
+}
+
 /** Keep Bias slider + face ARIA matched to Bias Parameter Settings min/max. */
 function nodeGraphKnobFaceSyncOffsetDomain(patchNode) {
   if (!patchNode?.id) {
@@ -526,21 +533,36 @@ function nodeGraphKnobFaceSyncOffsetDomain(patchNode) {
     // Interactive thumb range only. Do NOT rewrite dataset.paramMin/paramMax —
     // those are Parameter Settings SSOT; stomping them from paramMeta every
     // paint raced metadata apply and snapped max back (e.g. 150 → 130).
-    slider.min = String(range.min);
-    slider.max = String(range.max);
+    const min = String(range.min);
+    const max = String(range.max);
+    const bipolar = range.bipolar ? "true" : "false";
+    if (slider.min !== min) {
+      slider.min = min;
+    }
+    if (slider.max !== max) {
+      slider.max = max;
+    }
     if (slider.dataset) {
-      slider.dataset.min = String(range.min);
-      slider.dataset.max = String(range.max);
-      slider.dataset.bipolar = range.bipolar ? "true" : "false";
+      if (slider.dataset.min !== min) {
+        slider.dataset.min = min;
+      }
+      if (slider.dataset.max !== max) {
+        slider.dataset.max = max;
+      }
+      if (slider.dataset.bipolar !== bipolar) {
+        slider.dataset.bipolar = bipolar;
+      }
     }
   }
   // Do not write Bias min/max / paramMin / paramMax here — Parameter Settings owns them.
-  const face = typeof document !== "undefined"
-    ? document.querySelector(`.node-knob-face[data-node="${CSS.escape(String(patchNode.id))}"]`)
-    : null;
+  const face = typeof nodeGraphCachedNodeElement === "function"
+    ? nodeGraphCachedNodeElement(".node-knob-face", patchNode.id)
+    : (typeof document !== "undefined"
+      ? document.querySelector(`.node-knob-face[data-node="${CSS.escape(String(patchNode.id))}"]`)
+      : null);
   if (face) {
-    face.setAttribute("aria-valuemin", String(range.min));
-    face.setAttribute("aria-valuemax", String(range.max));
+    nodeGraphSetAttrIfChanged(face, "aria-valuemin", String(range.min));
+    nodeGraphSetAttrIfChanged(face, "aria-valuemax", String(range.max));
   }
   return range;
 }
@@ -782,11 +804,18 @@ function paintNodeGraphKnobFaceLive(face, nodeId, buffer = null) {
   const s = nodeGraphKnobFaceDisplaySettingsForNode(patchNode);
   const value = nodeGraphKnobFaceShownValue(nodeId, patchNode, buffer);
   const u = nodeGraphKnobFaceUnits(nodeId, patchNode, value);
-  face.dataset.liveValue = String(value);
-  face.setAttribute("aria-valuenow", String(value));
-  const label = face.querySelector("[data-knob-face-label]");
+  const liveValue = String(value);
+  if (face.dataset.liveValue !== liveValue) {
+    face.dataset.liveValue = liveValue;
+  }
+  if (face.getAttribute("aria-valuenow") !== liveValue) {
+    face.setAttribute("aria-valuenow", liveValue);
+  }
+  const label = typeof nodeGraphCachedChild === "function"
+    ? nodeGraphCachedChild(face, "[data-knob-face-label]")
+    : face.querySelector("[data-knob-face-label]");
   const labelText = s.labelPosition === "off" ? "" : nodeGraphKnobFaceLabelTextForNode(patchNode);
-  if (label && label.dataset.editing !== "true") {
+  if (label && label.dataset.editing !== "true" && label.textContent !== labelText) {
     label.textContent = labelText;
   }
   const model = {
@@ -805,7 +834,9 @@ function paintNodeGraphKnobFaceLive(face, nodeId, buffer = null) {
     valueText: s.valuePosition === "off" ? "" : nodeGraphKnobFaceFormatReadout(u.numberValue, patchNode, u.slider),
     valueEditing: face.dataset.knobFaceEditing === "true",
   };
-  const hit = face.querySelector("[data-knob-face-dial]");
+  const hit = typeof nodeGraphCachedChild === "function"
+    ? nodeGraphCachedChild(face, "[data-knob-face-dial]")
+    : face.querySelector("[data-knob-face-dial]");
   face._ctrlLayout = nodeGraphControllerFacePaint(face, "knob", model, (L) => {
     nodeGraphControllerFacePlace(hit, L.rects.dial, L.w, L.h);
     nodeGraphControllerFacePlace(label, labelText ? L.rects.label : null, L.w, L.h);

@@ -661,15 +661,15 @@ function updateNodeGraphGridHeatmap(options = {}) {
   const visibleNodes = [...surface.querySelectorAll(".dsp-node:not(.removed):not([hidden])")];
   const lightSpread = Math.max(
     0.4,
-    Math.min(2.2, nodeGraphWorkspaceFloatProperty(workspace, "--node-module-light-spread", 0.78)),
+    Math.min(2.2, nodeGraphHeatmapFloatProperty(workspace, "--node-module-light-spread", 0.78)),
   );
   const gridSpread = Math.max(
     0.4,
-    Math.min(2.2, nodeGraphWorkspaceFloatProperty(workspace, "--node-grid-reveal-spread", 0.78)),
+    Math.min(2.2, nodeGraphHeatmapFloatProperty(workspace, "--node-grid-reveal-spread", 0.78)),
   );
   const lightBright = Math.max(
     0,
-    Math.min(1, nodeGraphWorkspaceFloatProperty(workspace, "--node-module-light-brightness", 1)),
+    Math.min(1, nodeGraphHeatmapFloatProperty(workspace, "--node-module-light-brightness", 1)),
   );
   const roomDim = typeof nodeGraphRoomDim === "function"
     ? Math.max(0, Math.min(1, nodeGraphFiniteNumber(nodeGraphRoomDim())))
@@ -679,11 +679,17 @@ function updateNodeGraphGridHeatmap(options = {}) {
     : (roomDim <= 0.5 ? 0 : Math.min(1, (roomDim - 0.5) * 2));
   const moduleAmt = Math.max(0, 1 - deep);
   const moduleBright = lightBright * moduleAmt;
+  // Module world bounds cannot change during a pan/zoom gesture: reuse the
+  // last measured box instead of forcing layout on every camera frame.
+  const heatmapGesturing = typeof nodeGraphViewportGestureActive === "function"
+    && nodeGraphViewportGestureActive();
   for (const node of visibleNodes) {
     if (node.classList.contains("viewport-asleep")) {
       continue;
     }
-    const bounds = nodeGraphNodeBounds(node);
+    const cachedBounds = heatmapGesturing ? nodeGraphHeatmapBoundsCache.get(node) : null;
+    const bounds = cachedBounds || nodeGraphHeatmapNodeBounds(node);
+    nodeGraphHeatmapBoundsCache.set(node, bounds);
     const centerX = (bounds.left + (bounds.right - bounds.left) / 2) * zoom + (nodeGraphFiniteNumber(origin.x));
     const centerY = (bounds.top + (bounds.bottom - bounds.top) / 2) * zoom + (nodeGraphFiniteNumber(origin.y));
     const baseX = Math.max(nodeGraphGridWidth() * 5, (bounds.right - bounds.left) * 1.18) * zoom;
@@ -709,8 +715,8 @@ function updateNodeGraphGridHeatmap(options = {}) {
   }
   // Screen glow is the veil SDF (sharp shape, smoothstep outward). Do not
   // stamp a CSS ellipse over the glass.
-  let mouseAmount = Math.max(0, Math.min(2, nodeGraphWorkspaceFloatProperty(workspace, "--node-mouse-light-amount")));
-  const mouseSpread = Math.max(0, Math.min(2, nodeGraphWorkspaceFloatProperty(workspace, "--node-mouse-light-spread")));
+  let mouseAmount = Math.max(0, Math.min(2, nodeGraphHeatmapFloatProperty(workspace, "--node-mouse-light-amount")));
+  const mouseSpread = Math.max(0, Math.min(2, nodeGraphHeatmapFloatProperty(workspace, "--node-mouse-light-spread")));
   const mousePoint = nodeGraphMvp.mouseLightPoint;
   // Without a mouse dimmer cutout, fade the mouse light with room dim so it
   // doesn't stay full-bright under the veil. With cutout on, keep full amount
@@ -732,6 +738,51 @@ function updateNodeGraphGridHeatmap(options = {}) {
   const mask = maskLayers.length ? maskLayers.join(", ") : "linear-gradient(transparent, transparent)";
   heatmap.style.setProperty("--node-grid-reveal-mask", mask);
   heatmap.style.setProperty("--node-grid-heatmap-mask", mask);
+}
+
+var nodeGraphHeatmapBoundsCache = new WeakMap();
+
+// Heatmap only (marquee / drag repaint it every frame): node size from a
+// ResizeObserver instead of offsetWidth/offsetHeight, position from the
+// inline --node-x/--node-y. First sight of a node measures once.
+var nodeGraphHeatmapSizeCache = new WeakMap();
+var nodeGraphHeatmapSizeObserver = null;
+function nodeGraphHeatmapNodeBounds(node) {
+  let size = nodeGraphHeatmapSizeCache.get(node);
+  if (!size) {
+    size = { w: node.offsetWidth, h: node.offsetHeight };
+    nodeGraphHeatmapSizeCache.set(node, size);
+    if (typeof ResizeObserver === "function") {
+      if (!nodeGraphHeatmapSizeObserver) {
+        nodeGraphHeatmapSizeObserver = new ResizeObserver((entries) => {
+          for (const entry of entries) {
+            const el = entry.target;
+            nodeGraphHeatmapSizeCache.set(el, { w: el.offsetWidth, h: el.offsetHeight });
+          }
+        });
+      }
+      nodeGraphHeatmapSizeObserver.observe(node);
+    }
+  }
+  const x = Number.parseFloat(node.style.getPropertyValue("--node-x")) || 0;
+  const y = Number.parseFloat(node.style.getPropertyValue("--node-y")) || 0;
+  return { bottom: y + size.h, left: x, right: x + size.w, top: y };
+}
+
+// Workspace tuning vars for the heatmap: computed style once per distinct
+// style state (pan / zoom vars excluded from the key, they change per frame).
+var nodeGraphHeatmapFloatCache = new Map();
+function nodeGraphHeatmapFloatProperty(workspace, property, fallback = 0) {
+  const styleKey = String(workspace?.getAttribute?.("style") || "")
+    .replace(/--node-graph-(pan|zoom)[^;]*;?/g, "");
+  const key = `${property}|${styleKey}|${workspace?.className || ""}|${document.body?.className || ""}|${document.documentElement.getAttribute("style") || ""}`;
+  if (nodeGraphHeatmapFloatCache.has(key)) {
+    return nodeGraphHeatmapFloatCache.get(key);
+  }
+  const value = nodeGraphWorkspaceFloatProperty(workspace, property, fallback);
+  if (nodeGraphHeatmapFloatCache.size > 256) nodeGraphHeatmapFloatCache.clear();
+  nodeGraphHeatmapFloatCache.set(key, value);
+  return value;
 }
 
 function scheduleNodeGraphGridHeatmapUpdate() {

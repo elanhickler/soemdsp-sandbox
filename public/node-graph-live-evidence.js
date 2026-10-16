@@ -1,8 +1,12 @@
 function setNodeGraphLiveEvidence(kind = "idle", details = {}) {
   const planEvidence = nodeGraphMvp.live.planEvidence || {};
   const patchFingerprint = String(details.patchFingerprint || "");
-  const currentPatchFingerprint = nodeGraphPatchFingerprint();
-  nodeGraphMvp.live.lastEvidence = {
+  // Drag deltas run every frame: compare against the current patch only when
+  // someone reads the evidence, not on every send.
+  // Same while a slider drag is in progress (worklet acks of each delta).
+  const lazyCurrent = details.delta === true || Boolean(nodeGraphMvp?.sliderDragging);
+  const currentPatchFingerprint = lazyCurrent ? "" : nodeGraphPatchFingerprint();
+  const evidence = {
     active: Boolean(nodeGraphMvp.live.node || nodeGraphMvp.live.context),
     connectionCount: nodeGraphFiniteNumber(details.connectionCount ?? planEvidence.connectionCount),
     currentPatchFingerprint,
@@ -42,6 +46,20 @@ function setNodeGraphLiveEvidence(kind = "idle", details = {}) {
       inputs: (sink.inputs || []).map((input) => ({ ...input })),
     })),
   };
+  if (lazyCurrent) {
+    let current = null;
+    const read = () => {
+      if (current === null) current = nodeGraphPatchFingerprint();
+      return current;
+    };
+    Object.defineProperty(evidence, "currentPatchFingerprint", { configurable: true, enumerable: true, get: read });
+    Object.defineProperty(evidence, "matchesCurrentPatch", {
+      configurable: true,
+      enumerable: true,
+      get: () => (patchFingerprint ? patchFingerprint === read() : false),
+    });
+  }
+  nodeGraphMvp.live.lastEvidence = evidence;
 }
 
 function nodeGraphBadValueMonitorEnabled() {

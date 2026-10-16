@@ -221,6 +221,19 @@ function pushNodeGraphLiveModuleScopeSamples(nodeId, values, metadata = null) {
   const dest = buffer.length - count;
   if (!isList) {
     buffer[dest] = nodeGraphModuleScopeScalarValue(values) || 0;
+  } else if (values instanceof Float32Array) {
+    // One native copy into the ring (no per-sample JS copy). Float32 only:
+    // that copy is bit-identical to the element-wise store.
+    buffer.set(start === 0 && count === values.length ? values : values.subarray(start, start + count), dest);
+    // Same result as the scalar reader: non-finite and NaN become 0. Read-only
+    // scan; v - v is NaN only for NaN / +-Infinity.
+    const end = dest + count;
+    for (let index = dest; index < end; index += 1) {
+      const v = buffer[index];
+      if (v - v !== 0) {
+        buffer[index] = 0;
+      }
+    }
   } else if (ArrayBuffer.isView(values) && !(values instanceof DataView)) {
     for (let index = 0; index < count; index += 1) {
       const v = Number(values[start + index]);
@@ -325,10 +338,10 @@ function pushNodeGraphLiveModuleScopeSnapshot(values, options = {}) {
       continue;
     }
     const entryMetadata = entry[2] && typeof entry[2] === "object" ? entry[2] : null;
-    const metadata = {
-      ...defaultMetadata,
-      ...(entryMetadata || {}),
-    };
+    // No per-entry merge object when the entry carries no metadata of its own.
+    const metadata = entryMetadata
+      ? { ...defaultMetadata, ...entryMetadata }
+      : defaultMetadata;
     pushNodeGraphLiveModuleScopeSamples(entry[0], entry[1], metadata);
   }
   notifyNodeGraphModuleScopeSnapshotListeners();

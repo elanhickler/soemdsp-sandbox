@@ -939,6 +939,9 @@ function nodeGraphRasterRgbDebugDump() {
   return dump;
 }
 
+// Live collection (browser-maintained); filtered by type per frame.
+let nodeGraphRasterRgbScopeWindows = null;
+
 function nodeGraphRasterRgbCollectFaces() {
   const faces = [];
   const seen = new Set();
@@ -958,14 +961,16 @@ function nodeGraphRasterRgbCollectFaces() {
     }
   }
   if (typeof document !== "undefined") {
-    const windows = document.querySelectorAll(
-      ".dsp-node[data-node-type=\"rasterRgb\"] .node-module-scope-window, .node-module-scope-window[data-node-type=\"rasterRgb\"]",
-    );
-    for (const face of windows) {
+    nodeGraphRasterRgbScopeWindows ||= document.getElementsByClassName("node-module-scope-window");
+    for (let i = 0; i < nodeGraphRasterRgbScopeWindows.length; i += 1) {
+      const face = nodeGraphRasterRgbScopeWindows[i];
       if (seen.has(face)) {
         continue;
       }
       const host = face.closest?.(".dsp-node");
+      if (face.dataset?.nodeType !== "rasterRgb" && host?.dataset?.nodeType !== "rasterRgb") {
+        continue;
+      }
       if (host?.classList.contains("viewport-asleep")) {
         continue;
       }

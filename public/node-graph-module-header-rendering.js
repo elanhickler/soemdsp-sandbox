@@ -62,6 +62,36 @@ function updateNodeGraphPatchTimingFromHeader(input) {
   });
 }
 
+/**
+ * Live preview of a header timing field while it is being dragged: swap in
+ * the new timing and coalesce one live plan sync per frame. No full patch
+ * commit (DOM re-apply of every module, wires, history, autosave) per
+ * pointer move; endNodeGraphScopeNumberDrag commits the final value once.
+ */
+function previewNodeGraphPatchTimingFromHeader(input) {
+  const key = input?.dataset?.timingField;
+  if (!key || !nodeGraphMvp?.patch) {
+    return;
+  }
+  const current = normalizeNodeGraphPatchTiming(nodeGraphMvp.patch.timing);
+  const next = normalizeNodeGraphPatchTiming({
+    ...current,
+    [key]: input.value,
+  });
+  if (
+    current.tempoBpm === next.tempoBpm &&
+    current.timeSignatureNumerator === next.timeSignatureNumerator &&
+    current.timeSignatureDenominator === next.timeSignatureDenominator
+  ) {
+    input.value = String(next[key]);
+    return;
+  }
+  nodeGraphMvp.patch.timing = next;
+  if (typeof scheduleNodeGraphLivePlanSync === "function") {
+    scheduleNodeGraphLivePlanSync();
+  }
+}
+
 function updateNodeGraphPatchAudioFromHeader(input) {
   const key = input?.dataset?.audioField;
   if (!key) {

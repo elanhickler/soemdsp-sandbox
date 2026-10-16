@@ -206,22 +206,6 @@ function nodeGraphBandpassMagnitudeAt(lowCut, highCut, frequency, sampleRate) {
     nodeGraphOnePoleLowpassMagnitudeAt(high, frequency, sampleRate);
 }
 
-function nodeGraphCookbookSweepHz(hz, semitones) {
-  if (typeof nodeGraphSweepFrequencyHz === "function") {
-    return nodeGraphSweepFrequencyHz(hz, semitones);
-  }
-  const f = Number(hz);
-  if (!Number.isFinite(f) || f <= 0) {
-    return 0;
-  }
-  const st = Number(semitones);
-  if (!Number.isFinite(st) || st === 0) {
-    return f;
-  }
-  const out = f * (2 ** (st / 12));
-  return Number.isFinite(out) && out > 0 ? out : 0;
-}
-
 function nodeGraphActiveFilterSlopeMagnitudeAt(kind, cutoff, frequency, slope, sampleRate) {
   // Slope: 0 Bypass, 1=6 … 4=24 dB → stage count = slope (when > 0).
   const stages = Number.isFinite(Number(slope))
@@ -326,15 +310,24 @@ const nodeGraphFilterCurveFKey = Object.freeze({
   butterworth: "frequency", linkwitzRiley: "frequency", bessel: "frequency",
   chebyshev: "frequency", elliptic: "frequency", papoulisFilter: "cutoff",
   bandpass: "frequency", allpass: "frequency", lowpass: "frequency",
-  highpass: "frequency", eqFilter: "frequency",
+  highpass: "frequency", eqFilter: "frequency", modeResonator: "frequency",
+  combResonator: "frequency",
+});
+// Multi-cutoff ƒ (Passive / Dual Ladder): engine publishes both final cuts.
+const nodeGraphFilterCurveFBusPort = Object.freeze({
+  passiveFilter: { highFrequency: "EffectiveHz", lowFrequency: "EffectiveLoHz" },
+  activeFilter: { highFrequency: "EffectiveHz", lowFrequency: "EffectiveLoHz" },
 });
 
 /** Native effective Hz while ƒ is wired (data bus EffectiveHz), else null. */
 function nodeGraphFilterCurveWiredHz(node, key) {
   const type = node && typeof node === "object" ? String(node.type || "") : "";
-  if (!type || nodeGraphFilterCurveFKey[type] !== key) return null;
+  if (!type) return null;
+  const port = nodeGraphFilterCurveFBusPort[type]?.[key]
+    || (nodeGraphFilterCurveFKey[type] === key ? "EffectiveHz" : null);
+  if (!port) return null;
   if (typeof nodeGraphDataBus === "undefined" || typeof nodeGraphDataBusKey !== "function") return null;
-  const hz = Number(nodeGraphDataBus.get(nodeGraphDataBusKey(String(node.id || ""), "EffectiveHz")));
+  const hz = Number(nodeGraphDataBus.get(nodeGraphDataBusKey(String(node.id || ""), port)));
   return Number.isFinite(hz) && hz >= 0 ? hz : null;
 }
 
@@ -492,12 +485,11 @@ function nodeGraphFilterCurveView(node) {
     };
   }
   if (node.type === "passiveFilter") {
-    const sweep = nodeGraphFilterCurveLiveParam(node, "sweep", 0);
     return {
       type: node.type,
       mode: Math.round(nodeGraphFilterCurveLiveParam(node, "mode", 0)),
-      lowFrequency: nodeGraphCookbookSweepHz(nodeGraphFilterCurveLiveParam(node, "lowFrequency", 200), sweep),
-      highFrequency: nodeGraphCookbookSweepHz(nodeGraphFilterCurveLiveParam(node, "highFrequency", 1000), sweep),
+      lowFrequency: nodeGraphFilterCurveLiveParam(node, "lowFrequency", 200),
+      highFrequency: nodeGraphFilterCurveLiveParam(node, "highFrequency", 1000),
       slope: nodeGraphFilterCurveLiveParam(node, "slope", 0),
       stagger: nodeGraphFilterCurveLiveParam(node, "stagger", 1),
       gainCompensation: nodeGraphFilterCurveLiveParam(node, "gainCompensation", 1),
@@ -510,7 +502,6 @@ function nodeGraphFilterCurveView(node) {
       lowFrequency: nodeGraphFilterCurveLiveParam(node, "lowFrequency", 200),
       lpSlope: nodeGraphFilterCurveLiveParam(node, "lpSlope", 4),
       mode: nodeGraphFilterCurveLiveParam(node, "mode", 3),
-      sweep: nodeGraphFilterCurveLiveParam(node, "sweep", 0),
     };
     const resolved = typeof nodeGraphActiveFilterResolveParams === "function"
       ? nodeGraphActiveFilterResolveParams(params)
@@ -1328,7 +1319,25 @@ function drawNodeGraphFilterCurveDisplayInner(section) {
   }
   // Layout size: offsetWidth avoids getBoundingClientRect (cheaper; zoom is
   // applied via CSS transform on the workspace, not on face layout size).
-  const measured = nodeGraphFilterCurveMeasureBox(section);
+  // Resize-observer cache first; the full measure only covers tiny/solo boxes.
+  const faceMetrics = typeof ensureFaceMetrics === "function" ? ensureFaceMetrics(section) : null;
+  let measured = faceMetrics && faceMetrics.cssW >= 8 && faceMetrics.cssH >= 8
+    ? { rawW: faceMetrics.cssW, rawH: faceMetrics.cssH }
+    : null;
+  if (!measured) {
+    // Tiny box: the measure falls back to the host module's grid size. Reuse
+    // it until the observed box or either inline style changes.
+    const host = section.closest?.(".dsp-node");
+    const key = `${faceMetrics?.cssW || 0}x${faceMetrics?.cssH || 0}\u0000${section.getAttribute("style") || ""}`
+      + `\u0000${host?.getAttribute?.("style") || ""}\u0000${section.parentElement?.id || ""}`;
+    if (section._filterCurveMeasureKey === key && section._filterCurveMeasured) {
+      measured = section._filterCurveMeasured;
+    } else {
+      measured = nodeGraphFilterCurveMeasureBox(section);
+      section._filterCurveMeasureKey = key;
+      section._filterCurveMeasured = measured;
+    }
+  }
   const rawW = measured.rawW;
   const rawH = measured.rawH;
   const cssW = Math.max(1, rawW);

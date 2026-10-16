@@ -58,10 +58,22 @@
     }
 
     /** Resolve a CSS length token on the zoom surface (handles calc()). */
+    // Probe results keyed by token + the inline styles that could override it
+    // (workspace, zoom surface, root). Wire paint calls this per endpoint cap;
+    // the probe forces layout, so measure once and reuse until a style changes.
+    const cssLengthCache = new Map();
+
     function resolveCssLengthPx(cssVarName, fallbackPx) {
       const workspace = document.getElementById("nodeGraphWorkspace");
       const surface = typeof deps.zoomSurface === "function" ? deps.zoomSurface() : null;
       const host = surface || workspace;
+      const cacheKey = host
+        ? `${cssVarName}\u0000${host.getAttribute("style") || ""}\u0000${workspace?.getAttribute("style") || ""}`
+          + `\u0000${document.documentElement.getAttribute("style") || ""}\u0000${document.body?.className || ""}`
+        : "";
+      if (host && cssLengthCache.has(cacheKey)) {
+        return cssLengthCache.get(cacheKey);
+      }
       if (host && typeof document !== "undefined") {
         const probe = document.createElement("div");
         probe.style.cssText = "position:absolute;left:0;top:0;visibility:hidden;pointer-events:none;"
@@ -70,6 +82,10 @@
         const size = probe.offsetWidth;
         probe.remove();
         if (Number.isFinite(size) && size > 0) {
+          if (cssLengthCache.size > 64) {
+            cssLengthCache.clear();
+          }
+          cssLengthCache.set(cacheKey, size);
           return size;
         }
       }
@@ -539,11 +555,21 @@
      * other jack, and it does not fall through to a neighboring port.
      * Returns { claimed, port }.
      */
-    function parameterWidgetHalfDrop(clientX, clientY) {
-      let best = null;
-      let bestDistance = Infinity;
-      const rows = document.querySelectorAll('.node-parameter-row');
-      for (const row of rows) {
+    // Per-gesture cache of one module's parameter-row hit boxes (client px).
+    // Keyed on the active wire drag / port-connection object, the module and
+    // the viewport epoch, so a pointermove during a drag is pure arithmetic.
+    let parameterRowHitCache = null;
+
+    function parameterRowHitBoxes(node) {
+      const mvp = typeof nodeGraphMvp === 'object' ? nodeGraphMvp : null;
+      const token = mvp?.wireDragging || mvp?.portConnectionMode || null;
+      const epoch = typeof nodeGraphViewportPerf === 'object' ? (nodeGraphViewportPerf.viewEpoch || 0) : 0;
+      const cache = parameterRowHitCache;
+      if (token && cache && cache.token === token && cache.node === node && cache.epoch === epoch) {
+        return cache.boxes;
+      }
+      const boxes = [];
+      for (const row of node.querySelectorAll('.node-parameter-row')) {
         if (row.hidden || row.classList.contains('node-parameter-row-hidden')) {
           continue;
         }
@@ -563,19 +589,45 @@
         if (rowRect.width <= 0 || rowRect.height <= 0 || widgetRect.width <= 0 || widgetRect.height <= 0) {
           continue;
         }
-        // Widget box, clamped to the row so the hit cannot leave the module.
-        const left = Math.max(widgetRect.left, rowRect.left);
-        const right = Math.min(widgetRect.right, rowRect.right);
+        boxes.push({
+          row,
+          // Widget box, clamped to the row so the hit cannot leave the module.
+          left: Math.max(widgetRect.left, rowRect.left),
+          right: Math.min(widgetRect.right, rowRect.right),
+          // Row band plus the widget's own box (optical slider nudge stays hittable).
+          top: Math.min(rowRect.top, widgetRect.top),
+          bottom: Math.max(rowRect.bottom, widgetRect.bottom),
+          midY: rowRect.top + rowRect.height * 0.5,
+        });
+      }
+      parameterRowHitCache = token ? { token, node, epoch, boxes } : null;
+      return boxes;
+    }
+
+    function parameterWidgetHalfDrop(clientX, clientY) {
+      let best = null;
+      let bestDistance = Infinity;
+      // The widget sits inside its module, so only the module under the
+      // pointer can claim the drop; never scan every row in the document.
+      let node = null;
+      for (const hit of document.elementsFromPoint(clientX, clientY)) {
+        node = hit.closest?.('.dsp-node') || null;
+        if (node) {
+          break;
+        }
+      }
+      if (!node) {
+        return { claimed: false, port: null };
+      }
+      for (const box of parameterRowHitBoxes(node)) {
+        const { left, right, top, bottom, row } = box;
         if (right - left <= 0 || clientX < left || clientX > right) {
           continue;
         }
-        // Row band plus the widget's own box (optical slider nudge stays hittable).
-        const top = Math.min(rowRect.top, widgetRect.top);
-        const bottom = Math.max(rowRect.bottom, widgetRect.bottom);
         if (clientY < top || clientY > bottom) {
           continue;
         }
-        const distance = Math.abs(clientY - (rowRect.top + rowRect.height * 0.5));
+        const distance = Math.abs(clientY - box.midY);
         if (distance < bestDistance) {
           best = { left, right, row };
           bestDistance = distance;
@@ -1615,7 +1667,12 @@
     }
 
     function handlePatchPointHover(event) {
-      if (state.sliderDragging) {
+      // No hover hit-testing mid pan/zoom: every read here would force a full
+      // workspace style recalc right after the camera moved (40-55 ms/move).
+      if (
+        state.sliderDragging
+        || (typeof nodeGraphViewportGestureActive === 'function' && nodeGraphViewportGestureActive())
+      ) {
         setHoveredPatchPoint(null);
         return;
       }
@@ -1639,6 +1696,12 @@
           return;
         }
         // Over empty row chrome, not jack∪label — leave it for module drag.
+        setHoveredPatchPoint(null);
+        return;
+      }
+      // Proximity / widget-half targeting only matters while a cable is being
+      // dragged or a port-connection is pending.
+      if (!state.wireDragging && !state.portConnectionMode) {
         setHoveredPatchPoint(null);
         return;
       }

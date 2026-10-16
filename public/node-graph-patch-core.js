@@ -1863,6 +1863,9 @@ function scheduleNodeGraphChromeHistoryAndAutosave(options = {}) {
 }
 
 function commitNodeGraphPatch(patch, options = {}) {
+  if (typeof nodeGraphClearParameterMetadataCache === "function") {
+    nodeGraphClearParameterMetadataCache();
+  }
   const isWireEdit = Boolean(options.wireEdit);
   // layoutEdit: module move / snap only — skip DOM rebuild + audio plan + render pending.
   const isLayoutEdit = Boolean(options.layoutEdit);

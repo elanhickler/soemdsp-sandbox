@@ -88,8 +88,19 @@ function nodeGraphParameterFallback(type, key) {
   return Number.isFinite(value) ? value : 0;
 }
 
-function nodeGraphReadPatchParameterMetadata(node, key) {
-  const patchNode = typeof node === "string" ? nodeGraphPatchNode(node) : node;
+// Normalized parameter metadata, stored per patch node. An entry is reused
+// while the patch object (replaced on every commit / load / undo), the node's
+// type, and the raw paramMeta[key] object are all the same; anything else
+// re-normalizes. nodeGraphClearParameterMetadataCache() drops everything.
+let nodeGraphParameterMetadataCache = new WeakMap();
+let nodeGraphParameterMetadataCachePatch = null;
+
+function nodeGraphClearParameterMetadataCache() {
+  nodeGraphParameterMetadataCache = new WeakMap();
+  nodeGraphParameterMetadataCachePatch = null;
+}
+
+function nodeGraphReadPatchParameterMetadataUncached(patchNode, node, key) {
   const type = patchNode?.type || nodeGraphPatchNodeType(node);
   return normalizeNodeGraphPatchParameterMetadata(
     type,
@@ -98,6 +109,37 @@ function nodeGraphReadPatchParameterMetadata(node, key) {
   ) || nodeGraphParameterDefinitionMetadata(
     nodeGraphModuleDefinitions[type]?.parameters?.find((parameter) => parameter.key === key),
   );
+}
+
+function nodeGraphReadPatchParameterMetadata(node, key) {
+  const patchNode = typeof node === "string" ? nodeGraphPatchNode(node) : node;
+  if (!patchNode || typeof patchNode !== "object") {
+    return nodeGraphReadPatchParameterMetadataUncached(patchNode, node, key);
+  }
+  const patch = typeof nodeGraphMvp !== "undefined" ? nodeGraphMvp?.patch : null;
+  if (nodeGraphParameterMetadataCachePatch !== patch) {
+    nodeGraphParameterMetadataCache = new WeakMap();
+    nodeGraphParameterMetadataCachePatch = patch;
+  }
+  const raw = patchNode.paramMeta?.[key];
+  let byKey = nodeGraphParameterMetadataCache.get(patchNode);
+  const hit = byKey?.get(key);
+  if (hit && hit.raw === raw && hit.paramMeta === patchNode.paramMeta && hit.type === patchNode.type) {
+    // Shallow copy: callers may tweak top-level fields on what they get.
+    return hit.result && typeof hit.result === "object" ? { ...hit.result } : hit.result;
+  }
+  const result = nodeGraphReadPatchParameterMetadataUncached(patchNode, node, key);
+  if (!byKey) {
+    byKey = new Map();
+    nodeGraphParameterMetadataCache.set(patchNode, byKey);
+  }
+  byKey.set(key, {
+    paramMeta: patchNode.paramMeta,
+    raw,
+    result: result && typeof result === "object" ? { ...result } : result,
+    type: patchNode.type,
+  });
+  return result;
 }
 
 function nodeGraphReadNodeParameterMetadata(node, key) {

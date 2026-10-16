@@ -1,7 +1,156 @@
 function nodeGraphSliderForParameter(node, key) {
+  // Map lookup (rebuilt when the patch / slider DOM changes) instead of a
+  // document querySelector + child querySelector per ghost per frame.
+  const entry = nodeGraphGhostSliderEntryFor(node, key);
+  if (entry) {
+    return entry.slider;
+  }
   return nodeGraphNodeElement(node)?.querySelector(
     `input[data-param="${CSS.escape(key)}"]`,
   );
+}
+
+// param -> slider map. Rebuilt when the patch object, node / modulation
+// lists, or the slider DOM (readout count, a detached cached slider) change.
+let nodeGraphGhostSliderMap = null;
+let nodeGraphGhostSliderReadoutCollection = null;
+
+function nodeGraphGhostSliderMapKey(node, key) {
+  return `${String(node || "")}\u0000${String(key || "")}`;
+}
+
+function nodeGraphGhostSliderMapIsCurrent(map) {
+  if (!map || typeof document === "undefined") {
+    return false;
+  }
+  const patch = nodeGraphMvp?.patch;
+  if (
+    map.patch !== patch
+    || map.nodes !== patch?.nodes
+    || map.nodeCount !== (patch?.nodes?.length || 0)
+    || map.modulations !== patch?.modulations
+    || map.modulationCount !== (patch?.modulations?.length || 0)
+    || map.readoutCount !== (nodeGraphGhostSliderReadoutCollection?.length || 0)
+  ) {
+    return false;
+  }
+  for (let i = 0; i < map.entries.length; i += 1) {
+    const entry = map.entries[i];
+    if (!entry.slider.isConnected || entry.slider.dataset.param !== entry.key) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function nodeGraphGhostSliderBuildMap() {
+  if (!nodeGraphGhostSliderReadoutCollection && typeof document.getElementsByClassName === "function") {
+    nodeGraphGhostSliderReadoutCollection = document.getElementsByClassName("node-slider-readout");
+  }
+  const patch = nodeGraphMvp?.patch;
+  const byKey = new Map();
+  const entries = [];
+  for (const slider of document.querySelectorAll(".dsp-node input[data-param]")) {
+    const node = slider.closest(".dsp-node")?.dataset.node;
+    const key = slider.dataset.param;
+    const readout = slider.closest("label")?.querySelector(".node-slider-readout");
+    if (!node || !key) {
+      continue;
+    }
+    const entry = { key, node, readout: readout || null, slider };
+    entries.push(entry);
+    const mapKey = nodeGraphGhostSliderMapKey(node, key);
+    // querySelector semantics: first slider in document order wins.
+    if (!byKey.has(mapKey)) {
+      byKey.set(mapKey, entry);
+    }
+  }
+  return {
+    byKey,
+    entries,
+    modulationCount: patch?.modulations?.length || 0,
+    modulations: patch?.modulations,
+    nodeCount: patch?.nodes?.length || 0,
+    nodes: patch?.nodes,
+    patch,
+    readoutCount: nodeGraphGhostSliderReadoutCollection?.length || 0,
+    targets: null,
+  };
+}
+
+// Validity is checked once per animation frame: many lookups per frame
+// (ghost sync, filter curves, Metronome BPM) run in separate rAF callbacks
+// and share one check. Without a frame clock, once per task.
+let nodeGraphGhostSliderMapCheckedThisTask = false;
+let nodeGraphGhostSliderMapCheckedStamp = null;
+
+function nodeGraphGhostSliderFrameStamp() {
+  const t = typeof document !== "undefined" ? document.timeline?.currentTime : null;
+  return Number.isFinite(t) ? t : null;
+}
+
+function nodeGraphGhostSliderCurrentMap() {
+  if (
+    typeof document === "undefined"
+    || typeof document.querySelectorAll !== "function"
+    || typeof document.getElementsByClassName !== "function"
+  ) {
+    return null;
+  }
+  const stamp = nodeGraphGhostSliderFrameStamp();
+  if (
+    nodeGraphGhostSliderMap
+    && nodeGraphGhostSliderMap.patch === nodeGraphMvp?.patch
+    && nodeGraphGhostSliderMap.modulationCount === (nodeGraphMvp?.patch?.modulations?.length || 0)
+    && (nodeGraphGhostSliderMapCheckedThisTask
+      || (stamp !== null && stamp === nodeGraphGhostSliderMapCheckedStamp))
+  ) {
+    return nodeGraphGhostSliderMap;
+  }
+  if (!nodeGraphGhostSliderMapIsCurrent(nodeGraphGhostSliderMap)) {
+    nodeGraphGhostSliderMap = nodeGraphGhostSliderBuildMap();
+  }
+  nodeGraphGhostSliderMapCheckedStamp = stamp;
+  if (stamp === null && typeof queueMicrotask === "function") {
+    nodeGraphGhostSliderMapCheckedThisTask = true;
+    queueMicrotask(() => {
+      nodeGraphGhostSliderMapCheckedThisTask = false;
+    });
+  }
+  return nodeGraphGhostSliderMap;
+}
+
+function nodeGraphGhostSliderEntryFor(node, key) {
+  const map = nodeGraphGhostSliderCurrentMap();
+  const entry = map ? map.byKey.get(nodeGraphGhostSliderMapKey(node, key)) || null : null;
+  // A slider swapped out mid-task: fall back to a fresh DOM lookup.
+  return entry && entry.slider.isConnected ? entry : null;
+}
+
+/** Modulation destinations (node + param) that can carry a ghost. */
+function nodeGraphGhostSliderTargets(map) {
+  if (map.targets) {
+    return map.targets;
+  }
+  const targets = new Set();
+  for (const modulation of nodeGraphMvp?.patch?.modulations || []) {
+    const destNode = String(modulation?.destinationNode || "");
+    const destParam = String(modulation?.destinationParam || "");
+    if (destNode && destParam) {
+      targets.add(nodeGraphGhostSliderMapKey(destNode, destParam));
+    }
+  }
+  map.targets = targets;
+  return targets;
+}
+
+/** Could nodeGraphParameterGhostSignal return non-null for this slider? */
+function nodeGraphGhostSliderIsCandidate(map, entry) {
+  if (nodeGraphGhostSliderTargets(map).has(nodeGraphGhostSliderMapKey(entry.node, entry.key))) {
+    return true;
+  }
+  // Root face mx_* rows ghost via cables into the exposed child param.
+  return entry.key.startsWith("mx_");
 }
 
 function nodeGraphNormalizedParameterSignalBounds(signal, metadata = {}) {
@@ -271,13 +420,15 @@ function nodeGraphParameterGhostModulationMatches(modulation, patchNode, key) {
   return false;
 }
 
-function nodeGraphParameterGhostSignal(node, key) {
+function nodeGraphParameterGhostSignal(node, key, sliderHint = null) {
   const patchNode = nodeGraphPatchNode(node);
   if (!patchNode) {
     return null;
   }
   const metadata = nodeGraphReadPatchParameterMetadata(patchNode, key) || {};
-  const targetSlider = nodeGraphSliderForParameter(node, key);
+  const targetSlider = sliderHint && sliderHint.isConnected
+    ? sliderHint
+    : nodeGraphSliderForParameter(node, key);
   const baseDomain = targetSlider
     ? nodeGraphReadNodeNumber(node, key)
     : nodeGraphReadPatchParameterValue(patchNode, key);
@@ -350,6 +501,26 @@ function nodeGraphParameterGhostSignal(node, key) {
 
 let nodeGraphGhostSliderLiveFrame = 0;
 let nodeGraphGhostSliderHadAny = false;
+let nodeGraphGhostSliderLastLiveSyncMs = 0;
+// Live (scope-snapshot driven) ghost refresh cap. Drag / input stay ungated.
+const nodeGraphGhostSliderLiveMinIntervalMs = 1000 / 30;
+
+function nodeGraphGhostSliderClearEntry(slider, readout) {
+  slider._nodeGraphGhostLast = null;
+  if (!readout) {
+    return;
+  }
+  readout.classList.toggle("has-ghost-slider", false);
+  readout.style.removeProperty("--ghost-start");
+  readout.style.removeProperty("--ghost-end");
+  if (Object.hasOwn(slider.dataset, "sentDomainValue")) {
+    delete slider.dataset.sentDomainValue;
+    // Restore in-slider number to editable base (no ghost target).
+    if (typeof syncNodeSliderReadout === "function") {
+      syncNodeSliderReadout(slider);
+    }
+  }
+}
 
 function syncNodeGraphGhostSliders() {
   const mods = nodeGraphMvp?.patch?.modulations;
@@ -364,6 +535,7 @@ function syncNodeGraphGhostSliders() {
       const slider = document.getElementById(readout.dataset.sliderTarget)
         || readout.closest("label")?.querySelector("input[data-param]");
       if (slider) {
+        slider._nodeGraphGhostLast = null;
         delete slider.dataset.sentDomainValue;
         if (typeof syncNodeSliderReadout === "function") {
           syncNodeSliderReadout(slider);
@@ -374,47 +546,85 @@ function syncNodeGraphGhostSliders() {
     return;
   }
   let any = false;
-  for (const slider of document.querySelectorAll(".dsp-node input[data-param]")) {
+  const map = nodeGraphGhostSliderCurrentMap() || (
+    typeof document !== "undefined" && typeof document.querySelectorAll === "function"
+      ? nodeGraphGhostSliderBuildMap()
+      : null
+  );
+  if (map) {
+    // Modulation edits can rewrite a destination in place; rebuild the small
+    // target set on every sync (the slider map itself stays cached).
+    map.targets = null;
+  }
+  for (const entry of map?.entries || []) {
+    const { slider, readout, node, key } = entry;
+    if (!readout) {
+      continue;
+    }
+    // Sliders no modulation can reach: nothing to compute. Only clear a ghost
+    // left over from before the modulation was removed.
+    if (!nodeGraphGhostSliderIsCandidate(map, entry)) {
+      if (
+        slider._nodeGraphGhostLast
+        || readout.classList.contains("has-ghost-slider")
+        || Object.hasOwn(slider.dataset, "sentDomainValue")
+      ) {
+        if (
+          typeof nodeGraphElementInSkippedContentVisibility === "function"
+          && nodeGraphElementInSkippedContentVisibility(slider)
+        ) {
+          continue;
+        }
+        nodeGraphGhostSliderClearEntry(slider, readout);
+      }
+      continue;
+    }
     if (
       typeof nodeGraphElementInSkippedContentVisibility === "function"
       && nodeGraphElementInSkippedContentVisibility(slider)
     ) {
       continue;
     }
-    const node = slider.closest(".dsp-node")?.dataset.node;
-    const key = slider.dataset.param;
-    const readout = slider.closest("label")?.querySelector(".node-slider-readout");
-    if (!node || !key || !readout) {
-      continue;
-    }
-    const ghost = nodeGraphParameterGhostSignal(node, key);
+    const ghost = nodeGraphParameterGhostSignal(node, key, slider);
     const ghostSignal = ghost && typeof ghost === "object" && "signal" in ghost
       ? ghost.signal
       : ghost;
-    readout.classList.toggle("has-ghost-slider", ghostSignal !== null);
     if (ghostSignal === null) {
-      readout.style.removeProperty("--ghost-start");
-      readout.style.removeProperty("--ghost-end");
-      if (Object.hasOwn(slider.dataset, "sentDomainValue")) {
-        delete slider.dataset.sentDomainValue;
-        // Restore in-slider number to editable base (no ghost target).
-        if (typeof syncNodeSliderReadout === "function") {
-          syncNodeSliderReadout(slider);
-        }
-      }
+      nodeGraphGhostSliderClearEntry(slider, readout);
       continue;
     }
     any = true;
     // Thumb stays on editable domainValue; ghost CSS + in-slider number show
     // the modulated *target* (effectiveDomain). Do not model smoothing.
-    if (ghost && typeof ghost === "object" && Number.isFinite(Number(ghost.effectiveDomain))) {
-      slider.dataset.sentDomainValue = String(ghost.effectiveDomain);
-    }
+    const effective = ghost && typeof ghost === "object" && Number.isFinite(Number(ghost.effectiveDomain))
+      ? String(ghost.effectiveDomain)
+      : null;
     const range = nodeSliderHandleRangeFromTravel(
       slider,
       readout,
       clampNodeSliderValue(ghostSignal, 0, 1),
     );
+    // Skip unchanged: same ghost range, same target number, same base value
+    // and the readout still carries the ghost (a re-render would drop it).
+    const last = slider._nodeGraphGhostLast;
+    const sentNow = effective ?? slider.dataset.sentDomainValue ?? null;
+    if (
+      last
+      && last.readout === readout
+      && last.start === range.start
+      && last.end === range.end
+      && last.sent === sentNow
+      && last.base === slider.dataset.domainValue
+      && last.value === slider.value
+      && readout.classList.contains("has-ghost-slider")
+      && (effective === null || slider.dataset.sentDomainValue === effective)
+    ) {
+      continue;
+    }
+    readout.classList.toggle("has-ghost-slider", true);
+    if (effective !== null) {
+      slider.dataset.sentDomainValue = effective;
+    }
     readout.style.setProperty("--ghost-start", `${range.start}px`);
     readout.style.setProperty("--ghost-end", `${range.end}px`);
     // Refresh numeric readout to sent/target (syncNodeSliderReadout prefers
@@ -422,6 +632,14 @@ function syncNodeGraphGhostSliders() {
     if (typeof syncNodeSliderReadout === "function") {
       syncNodeSliderReadout(slider);
     }
+    slider._nodeGraphGhostLast = {
+      base: slider.dataset.domainValue,
+      end: range.end,
+      readout,
+      sent: slider.dataset.sentDomainValue ?? null,
+      start: range.start,
+      value: slider.value,
+    };
   }
   nodeGraphGhostSliderHadAny = any;
 }
@@ -444,6 +662,14 @@ function scheduleNodeGraphGhostSlidersFromLive() {
       scheduleNodeGraphGhostSlidersFromLive();
       return;
     }
+    // Cap live refresh at ~30 Hz; keep the frame armed so the next due
+    // frame still runs.
+    const nowMs = typeof performance !== "undefined" && performance.now ? performance.now() : Date.now();
+    if (nowMs - nodeGraphGhostSliderLastLiveSyncMs < nodeGraphGhostSliderLiveMinIntervalMs - 1) {
+      scheduleNodeGraphGhostSlidersFromLive();
+      return;
+    }
+    nodeGraphGhostSliderLastLiveSyncMs = nowMs;
     syncNodeGraphGhostSliders();
   });
 }

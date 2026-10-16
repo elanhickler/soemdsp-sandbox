@@ -122,7 +122,15 @@ function setNodeGraphScopeNumberInputValue(input, value) {
   } else if (input.dataset.globalScopeInput === "pointBudget") {
     setNodeGraphModuleScopePointBudget(input.value);
   } else if (input.dataset.timingField) {
-    updateNodeGraphPatchTimingFromHeader(input);
+    if (
+      nodeGraphMvp.scopeNumberDragging?.input === input
+      && typeof previewNodeGraphPatchTimingFromHeader === "function"
+    ) {
+      // Mid-drag: preview only; the drag end commits once.
+      previewNodeGraphPatchTimingFromHeader(input);
+    } else {
+      updateNodeGraphPatchTimingFromHeader(input);
+    }
   } else if (input.dataset.audioField) {
     updateNodeGraphPatchAudioFromHeader(input);
   } else if (input.dataset.speedLimit === "true") {
@@ -347,6 +355,7 @@ function beginNodeGraphScopeNumberDrag(event) {
     startValue: nodeGraphFiniteNumber(input.value),
     startX: event.clientX,
     startY: event.clientY,
+    timingStart: input.dataset.timingField ? nodeGraphMvp.patch?.timing : undefined,
   };
   input.classList.add("value-dragging");
   input.closest(".node-header-timing-field")?.classList.add("value-dragging");
@@ -401,6 +410,13 @@ function endNodeGraphScopeNumberDrag(event) {
     captureTarget.releasePointerCapture(event.pointerId);
   }
   nodeGraphMvp.scopeNumberDragging = null;
+  // Timing fields previewed during the drag: commit the final value once
+  // (history / autosave / DOM), from the pre-drag timing so it registers.
+  if (drag.input.dataset.timingField && drag.timingStart !== undefined
+    && nodeGraphMvp.patch && nodeGraphMvp.patch.timing !== drag.timingStart) {
+    nodeGraphMvp.patch.timing = drag.timingStart;
+    updateNodeGraphPatchTimingFromHeader(drag.input);
+  }
   event.preventDefault();
 }
 

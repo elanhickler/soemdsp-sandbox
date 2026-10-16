@@ -392,7 +392,9 @@ function updateNodeGraphPitchDetectorFacesFromScopeValues(values) {
   }
 
   for (const nodeId of touchedNodes) {
-    const body = document.querySelector(`.node-pitch-detector-face[data-node="${CSS.escape(nodeId)}"]`);
+    const body = typeof nodeGraphCachedNodeElement === "function"
+      ? nodeGraphCachedNodeElement(".node-pitch-detector-face", nodeId)
+      : document.querySelector(`.node-pitch-detector-face[data-node="${CSS.escape(nodeId)}"]`);
     if (!body) {
       continue;
     }
@@ -405,7 +407,9 @@ function updateNodeGraphPitchDetectorFacesFromScopeValues(values) {
       }
     }
     const fid = lastByKey.get(`${nodeId}:Fidelity`);
-    const fidEl = body.querySelector?.('[data-pitch-value="fidelity"]');
+    const fidEl = typeof nodeGraphCachedChild === "function"
+      ? nodeGraphCachedChild(body, '[data-pitch-value="fidelity"]')
+      : body.querySelector?.('[data-pitch-value="fidelity"]');
     if (fidEl && fid != null) {
       const nextFid = nodeGraphPitchDetectorFormatFid(fid);
       if (fidEl.textContent !== nextFid) {
@@ -413,7 +417,9 @@ function updateNodeGraphPitchDetectorFacesFromScopeValues(values) {
       }
     }
     const freq = lastByKey.get(`${nodeId}:Frequency`);
-    const centsEl = body.querySelector?.('[data-pitch-value="cents"]');
+    const centsEl = typeof nodeGraphCachedChild === "function"
+      ? nodeGraphCachedChild(body, '[data-pitch-value="cents"]')
+      : body.querySelector?.('[data-pitch-value="cents"]');
     if (centsEl) {
       const mode = nodeGraphPitchDisplayModeNormalize(body.dataset.pitchDisplayMode);
       // Cents on 8ve page (internal mode "name").

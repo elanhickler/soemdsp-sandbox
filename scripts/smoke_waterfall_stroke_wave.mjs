@@ -161,7 +161,7 @@ gate(absRaw.length === 4 && absRaw[1] === 0, "absolute polarity: line passes thr
   gate(/st\.carrySamples = nodeGraphFiniteNumber\(st\.carrySamples\) \+/.test(wfSrc) && /sampleStart = Math\.max\(0, sampleStart - Math\.floor\(st\.carrySamples\)\)/.test(wfSrc),
     "Paint carries sub-pixel frame samples into the next column's window");
 }
-// Held steps (Formula Noise, smoothing Hold) on a stereo face: every column that
+// Held steps (Pi Noise, smoothing Hold) on a stereo face: every column that
 // sits inside a hold must show the held level (flat tops included), for both
 // channels, fill on and off, frames advancing 1..4 px. Regression: after the
 // plate scrolled, the last stroke point kept its old x, so the next column's

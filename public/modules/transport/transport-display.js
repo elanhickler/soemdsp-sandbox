@@ -241,9 +241,22 @@ function drawNodeGraphTransportBpmItem(renderer, item, pixelRatio) {
     canvas._nodeGraphTransportGateLit = gateLit;
   }
 
-  // Always repaint. Scope wipe / plate fills clear pixels but used to leave
-  // stale cache keys, which made the Metronome face stay blank forever.
+  // Redraw only when what the plate shows changes: digits, gate lamp, font,
+  // backing size. Every path that clears these pixels (cold-boot wipe, face
+  // wipe, plate fill, backing resize) resets _nodeGraphTransportBpmDigits to
+  // null, so a cleared plate always repaints.
+  if (
+    canvas._nodeGraphTransportBpmDigits === digits
+    && canvas._nodeGraphTransportGateDrawn === drawGate
+    && canvas._nodeGraphTransportBpmGateBlink === gateBlinkOn
+    && canvas._nodeGraphTransportBpmFontReady === nodeGraphTransportBpmFontReady
+    && canvas._nodeGraphTransportBpmWidth === canvas.width
+    && canvas._nodeGraphTransportBpmHeight === canvas.height
+  ) {
+    return;
+  }
   canvas._nodeGraphTransportBpmDigits = digits;
+  canvas._nodeGraphTransportBpmGateBlink = gateBlinkOn;
   canvas._nodeGraphTransportBpmFontReady = nodeGraphTransportBpmFontReady;
   canvas._nodeGraphTransportBpmWidth = canvas.width;
   canvas._nodeGraphTransportBpmHeight = canvas.height;

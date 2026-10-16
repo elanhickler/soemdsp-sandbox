@@ -212,6 +212,10 @@ NodeLiveAudioProcessor.prototype.process = function process(inputs, outputs) {
       }
     }
 
+    // Frame batch: parts held for the next scope post ship on their own after
+    // FRAME_BATCH_HOLD_SECONDS (no scopes / paused / main thread not acking).
+    this.flushHeldFrameParts?.(false);
+
     // Hard cutover: efficient never enters the sample loop / evaluateFrame.
     // Timing + meter posts still run below (native-graph contract).
     if (this.efficientProduct) {
@@ -254,7 +258,7 @@ NodeLiveAudioProcessor.prototype.process = function process(inputs, outputs) {
           : (Array.isArray(this.order) ? this.order.length : (this.nodes?.size || 0));
         const costUnits = nodeGraphFiniteNumber(this.dspCostUnits);
         const estimatedBudgetRatio = Math.max(0, Math.min(4, costUnits * 0.004));
-        this.port.postMessage({
+        this.postFramePart("meter", {
           audioPlayerNodeId: this.audioPlayerMeterNodeId || this.audioPlayerNodeIds[0] || "",
           audioPlayerNodeIds: [...this.audioPlayerNodeIds],
           audioPlayerPhase: this.audioPlayerMeterPhase,

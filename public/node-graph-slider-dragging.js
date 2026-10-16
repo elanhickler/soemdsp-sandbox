@@ -1198,6 +1198,11 @@ function beginNodeSliderDrag(event) {
     ? nodeSliderKnobDragMetrics(surface)
     : null;
   const lane = nodeSliderVisualLane(surface, slider);
+  if (typeof nodeSliderElementLayoutWidth === "function") {
+    nodeSliderDragWidthCache = null;
+    const width = nodeSliderElementLayoutWidth(surface);
+    nodeSliderDragWidthCache = new Map([[surface, width]]);
+  }
   const resetToDefaultOnClick = (event.ctrlKey || event.metaKey) && !event.altKey && !event.shiftKey;
   const jumpToPointerOnClick = event.altKey && !(event.shiftKey && (event.ctrlKey || event.metaKey));
   const pointerMode = "relative";
@@ -1388,6 +1393,7 @@ function endNodeSliderDrag(event) {
   );
   nodeGraphSliderDebugTrace("slider drag ended", { sliderId: drag.slider?.id || null, moved: drag.moved });
   nodeGraphMvp.sliderDragging = null;
+  nodeSliderDragWidthCache = null;
 }
 
 // ── Deferred readout display (decouples value from display, C++ ParameterPrototype pattern) ──

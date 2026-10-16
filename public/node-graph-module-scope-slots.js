@@ -138,12 +138,27 @@ function nodeGraphModuleScopeSlotIsDrawable(slot) {
   return nodeGraphModuleScopeSlotDisplayVisible(slot);
 }
 
-function nodeGraphVisibleModuleScopeSlots() {
+function nodeGraphVisibleModuleScopeSlotsUncached() {
   const slots = nodeGraphModuleScopeSlots().filter(nodeGraphModuleScopeSlotIsDrawable);
   if (typeof nodeGraphScreenSoloAllowsNode !== "function" || !nodeGraphScreenSoloIsActive?.()) {
     return slots;
   }
   return slots.filter((slot) => nodeGraphScreenSoloAllowsNode(slot?.nodeId));
+}
+
+function nodeGraphVisibleModuleScopeSlots() {
+  // Inside a draw frame the list is computed once (see
+  // runNodeGraphModuleScopeDrawFrame); callers get their own array copy.
+  const memo = typeof nodeGraphModuleScopeState === "object"
+    ? nodeGraphModuleScopeState?.visibleSlotsFrameMemo
+    : null;
+  if (!memo) {
+    return nodeGraphVisibleModuleScopeSlotsUncached();
+  }
+  if (!memo.slots) {
+    memo.slots = nodeGraphVisibleModuleScopeSlotsUncached();
+  }
+  return memo.slots.slice();
 }
 
 function nodeGraphVisibleModuleScopeNodeIds() {

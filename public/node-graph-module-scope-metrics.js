@@ -281,8 +281,14 @@ function commitNodeGraphModuleScopeRenderMetricsFrame(nowSeconds = (performance.
     metrics.pointsSamples = (nodeGraphFiniteNumber(metrics.pointsSamples)) + 1;
   }
   pushNodeGraphModuleScopeDebugHistory("commit");
-  syncNodeGraphScopeGpuMetricsDisplay();
+  // Header readout is a human-rate display: 4 Hz, not every paint frame.
+  if (now - nodeGraphScopeGpuMetricsDisplayAt >= 0.25 || now < nodeGraphScopeGpuMetricsDisplayAt) {
+    nodeGraphScopeGpuMetricsDisplayAt = now;
+    syncNodeGraphScopeGpuMetricsDisplay();
+  }
 }
+
+let nodeGraphScopeGpuMetricsDisplayAt = -Infinity;
 
 function formatNodeGraphScopeGpuMetricFixedNumber(value, digits = 6) {
   const count = Math.max(0, Math.floor(nodeGraphFiniteNumber(value)));
@@ -312,12 +318,15 @@ function syncNodeGraphScopeGpuMetricsDisplay() {
     Math.floor(nodeGraphFiniteNumber(metrics.pointsAvg, nodeGraphFiniteNumber(metrics.points))),
   );
   const vertices = Math.max(0, Math.floor(nodeGraphFiniteNumber(metrics.vertices)));
-  const contexts = document.querySelectorAll(
-    "#nodeGraphWorkspace canvas, #nodeGraphWorkspace .node-module-scope-webgl",
-  ).length;
   const fpsElement = root.querySelector("[data-scope-gpu-metric='fps']");
   const pointsElement = root.querySelector("[data-scope-gpu-metric='points']");
   const ctxElement = root.querySelector("[data-scope-gpu-metric='contexts']");
+  // Hidden readout: skip the document-wide canvas census entirely.
+  const contexts = ctxElement && !root.hidden
+    ? document.querySelectorAll(
+      "#nodeGraphWorkspace canvas, #nodeGraphWorkspace .node-module-scope-webgl",
+    ).length
+    : 0;
   if (fpsElement) {
     fpsElement.textContent = Number.isFinite(fps) && fps > 0 ? String(Math.round(Math.min(999, fps))) : "--";
   }

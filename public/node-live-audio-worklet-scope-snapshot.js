@@ -124,6 +124,8 @@ NodeLiveAudioProcessor.prototype.postModuleScopeSnapshot = function postModuleSc
     if (this.effectiveHzPublish) {
       for (const [nodeId, hz] of this.effectiveHzPublish) {
         dataPorts.push([nodeId, "EffectiveHz", hz]);
+        const lo = this.effectiveLoHzPublish?.get(nodeId);
+        if (lo !== undefined) dataPorts.push([nodeId, "EffectiveLoHz", lo]);
       }
     }
     if (this.softpopPublish) {
@@ -257,10 +259,70 @@ NodeLiveAudioProcessor.prototype.postModuleScopeSnapshot = function postModuleSc
     };
     // Transfer sample buffers so the audio thread does not structured-clone them.
     // Keep scopeBuffers Map + rings — wiping the Map every post was GC + dropout fuel.
-    if (transfer.length) {
-      this.port.postMessage(message, transfer);
-    } else {
-      this.port.postMessage(message);
-    }
+    // One combined frame batch: this scope snapshot + any held meter /
+    // visualControls parts (see docs/FRAME_BATCH_FORMAT.md).
+    this.postFrameBatch(message, transfer);
     return true;
+};
+
+// ---- Frame batch (docs/FRAME_BATCH_FORMAT.md) --------------------------------
+// The main thread used to get three independent message streams (scope at
+// display FPS, meter at 60 Hz, visualControls at 30 Hz). They now travel in
+// one { type: "frameBatch" } envelope per display frame; the page ingests it
+// once per requestAnimationFrame via nodeGraphReceiveFrameBatch().
+const FRAME_BATCH_VERSION = 1;
+const FRAME_BATCH_HOLD_SECONDS = 0.05;
+
+NodeLiveAudioProcessor.prototype.postFrameBatch = function postFrameBatch(scope = null, transfer = null) {
+    const held = this.heldFrameParts || null;
+    this.heldFrameParts = null;
+    const batch = {
+      type: "frameBatch",
+      version: FRAME_BATCH_VERSION,
+      sessionId: this.sessionId,
+      scope: scope || null,
+      meter: held?.meter || null,
+      visualControls: held?.visualControls || null,
+    };
+    if (transfer && transfer.length) {
+      this.port.postMessage(batch, transfer);
+    } else {
+      this.port.postMessage(batch);
+    }
+};
+
+// kind: "meter" (counters reset after each post, so never dropped: a second
+// meter before the flush makes the part an array) or "visualControls"
+// (latest state wins).
+NodeLiveAudioProcessor.prototype.postFramePart = function postFramePart(kind, body) {
+    const fps = Number(this.displayFps);
+    if (!(fps > 0)) {
+      // No display frames: nothing to ride along with.
+      this.port.postMessage(body);
+      return;
+    }
+    const held = this.heldFrameParts || (this.heldFrameParts = {
+      meter: null,
+      visualControls: null,
+      sinceFrame: typeof currentFrame === "number" ? currentFrame : 0,
+    });
+    if (kind === "meter") {
+      held.meter = held.meter
+        ? (Array.isArray(held.meter) ? [...held.meter, body] : [held.meter, body])
+        : body;
+    } else {
+      held[kind] = body;
+    }
+};
+
+NodeLiveAudioProcessor.prototype.flushHeldFrameParts = function flushHeldFrameParts(force = false) {
+    const held = this.heldFrameParts;
+    if (!held) {
+      return;
+    }
+    const now = typeof currentFrame === "number" ? currentFrame : 0;
+    const rate = Math.max(1, Number(sampleRate) || 44100);
+    if (force || (now - held.sinceFrame) >= rate * FRAME_BATCH_HOLD_SECONDS) {
+      this.postFrameBatch(null, null);
+    }
 };
