@@ -322,7 +322,24 @@ function applyNodeGraphViewportCssLight(options = {}) {
     (options.zoom !== false || options.pan !== false)
     && typeof syncNodeGraphWireSvgViewBox === "function"
   ) {
-    syncNodeGraphWireSvgViewBox();
+    // Mid-gesture: once per animation frame. The sync also re-presents the GL
+    // cable/grid canvases (two full batches + a layout read); per pointermove
+    // that ran 8-16x a frame on high-rate mice. rAF runs before this frame's
+    // paint, so cables stay glued to the world-layer transform.
+    if (cameraGesturing) {
+      if (!nodeGraphViewportPerf.wireViewBoxRaf) {
+        nodeGraphViewportPerf.wireViewBoxRaf = window.requestAnimationFrame(() => {
+          nodeGraphViewportPerf.wireViewBoxRaf = 0;
+          syncNodeGraphWireSvgViewBox();
+        });
+      }
+    } else {
+      if (nodeGraphViewportPerf.wireViewBoxRaf) {
+        window.cancelAnimationFrame(nodeGraphViewportPerf.wireViewBoxRaf);
+        nodeGraphViewportPerf.wireViewBoxRaf = 0;
+      }
+      syncNodeGraphWireSvgViewBox();
+    }
   }
   if (options.zoomButtons !== false && options.zoom !== false) {
     const zoomOutButton = document.getElementById("nodeZoomOutButton");
