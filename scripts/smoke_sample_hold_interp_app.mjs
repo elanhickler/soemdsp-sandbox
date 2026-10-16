@@ -46,8 +46,10 @@ p.speedMultiplier = 1;
 const CURVES = {
   0: ["Linear", (t) => t],
   1: ["Smoothstep", (t) => t * t * (3 - 2 * t)],
-  2: ["Slow End", (t) => 1 - (1 - t) * (1 - t)],
-  3: ["Slow Start", (t) => t * t],
+  2: ["Quadratic Out", (t) => 1 - (1 - t) * (1 - t)],
+  3: ["Quadratic In", (t) => t * t],
+  4: ["Cosine", (t) => (1 - Math.cos(Math.PI * t)) / 2],
+  5: ["Hold", () => 1], // jumps on the latch sample, Smoothing ignored
 };
 const PERIOD = 100; // 480 Hz @ 48k
 const QUANTA = 60;
@@ -110,7 +112,7 @@ const trigIdx = (T) => T.flatMap((v, i) => (v === 1 ? [i] : []));
 for (const external of [false, true]) {
   const clk = external ? "external Clock" : "internal Sample Freq";
   // Smoothing 0: classic hold, steps exactly at the latch sample, flat otherwise.
-  for (const m of [0, 1, 2, 3]) {
+  for (const m of [0, 1, 2, 3, 4, 5]) {
     const { L, R, T } = run({ interpolate: m, smoothing: 0, external });
     const tr = new Set(trigIdx(T));
     let offLatch = 0;
@@ -127,7 +129,7 @@ for (const external of [false, true]) {
   }
   // Each curve with Smoothing 0.5 (glide 50 samples, then hold).
   const outs = [];
-  for (const m of [0, 1, 2, 3]) {
+  for (const m of [0, 1, 2, 3, 4, 5]) {
     const { L, R, T } = run({ interpolate: m, smoothing: 0.5, external });
     outs.push(L);
     check(!badNumbers(L) && !badNumbers(R), `${clk} ${CURVES[m][0]}: no NaN/Inf`);
@@ -139,7 +141,7 @@ for (const external of [false, true]) {
   }
   // Choice reaches native: every pair of curves differs.
   let same = 0;
-  for (let a = 0; a < 4; a += 1) for (let b = a + 1; b < 4; b += 1) if (outs[a].every((v, i) => v === outs[b][i])) same += 1;
+  for (let a = 0; a < 6; a += 1) for (let b = a + 1; b < 6; b += 1) if (outs[a].every((v, i) => v === outs[b][i])) same += 1;
   check(same === 0, `${clk}: changing Interpolate changes the output (identical pairs=${same})`);
   // Smoothing 1: glide fills the whole period, continuous, reaches target on the sample before the next latch.
   const { L, T } = run({ interpolate: 0, smoothing: 1, external });

@@ -938,24 +938,6 @@
       "noticeUrl": "https://github.com/elanhickler/soemdsp-sandbox/blob/master/docs/THIRD_PARTY.md"
     },
     {
-      "name": "fibonacci_noise",
-      "label": "Fibonacci Noise",
-      "targetType": "fibonacciNoise",
-      "kind": "noise",
-      "source": "native_modules/fibonacci_noise/fibonacci_noise.cpp",
-      "sourceUrl": "https://github.com/elanhickler/soemdsp-sandbox/blob/master/native_modules/fibonacci_noise/fibonacci_noise.cpp",
-      "localSourceUrl": "/native_modules/fibonacci_noise/fibonacci_noise.cpp",
-      "libUrl": "",
-      "wasm": "native_modules/fibonacci_noise/fibonacci_noise.wasm",
-      "wasmUrl": "native_modules/fibonacci_noise/fibonacci_noise.wasm",
-      "wasmAvailable": true,
-      "license": "Soundemote Noncommercial",
-      "licenseUrl": "https://github.com/elanhickler/soemdsp-sandbox/blob/master/LICENSE",
-      "upstreamLicense": "",
-      "upstreamLicenseUrl": "",
-      "noticeUrl": "https://github.com/elanhickler/soemdsp-sandbox/blob/master/docs/THIRD_PARTY.md"
-    },
-    {
       "name": "filter_morph_oscillator",
       "label": "FilterMorph Oscillator",
       "targetType": "filterMorphOscillator",
@@ -1029,8 +1011,8 @@
     },
     {
       "name": "formula_noise",
-      "label": "Formula Noise",
-      "targetType": "formulaNoise",
+      "label": "Pi Noise",
+      "targetType": "piNoise",
       "kind": "noise",
       "source": "native_modules/formula_noise/formula_noise.cpp",
       "sourceUrl": "https://github.com/elanhickler/soemdsp-sandbox/blob/master/native_modules/formula_noise/formula_noise.cpp",

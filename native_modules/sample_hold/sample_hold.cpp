@@ -11,7 +11,9 @@
 // Ext (external hold), Left + Right (independent internal noise).
 // phaseOffset (cycles, mod 1) desyncs that lane's Sample Freq / Clock fires
 // vs offset 0: 0 and 1 fire together, 0.5 is halfway.
-// Interpolate 0..3 = Linear / Smoothstep / Slow End / Slow Start.
+// Interpolate 0..5 = Linear / Smoothstep / Quadratic Out / Quadratic In /
+// Cosine / Hold (shared curves, soemdsp/math/two_point_curves.h). Hold jumps
+// on the latch sample whatever Smoothing is.
 // Smoothing = glide duration as a factor of clock period (unclamped):
 //   <=0 -> 1 sample (instant); 1 -> one clock period; 2 -> slower than clock.
 
@@ -53,12 +55,15 @@ static double next_bipolar(unsigned int& seed) {
   return (double)lcg_next(seed) / (double)0xffffffffU * 2.0 - 1.0;
 }
 
+static const int kInterpHold = 5;
+
 static double apply_interpolate(int interp, double t) {
-  // 0 Linear, 1 Smoothstep, 2 Slow End (ease-out), 3 Slow Start (ease-in)
-  if (interp == 1) return smoothstep01(t);
-  if (interp == 2) return ease_out_quad01(t);
-  if (interp == 3) return ease_in_quad01(t);
-  return clamp01(t);
+  // 0 Linear, 1 Smoothstep, 2 Quadratic Out, 3 Quadratic In, 4 Cosine (5 Hold = instant)
+  if (interp == 1) return curve_smoothstep01(t);
+  if (interp == 2) return curve_quad_out01(t);
+  if (interp == 3) return curve_quad_in01(t);
+  if (interp == 4) return curve_cosine01(t);
+  return curve_linear01(t);
 }
 
 }  // namespace
@@ -127,11 +132,11 @@ extern "C" double soemdsp_sample_hold_sample(
   const bool unipolar = polarityMode >= 0.5;
   int interp = (int)(safe(interpolateMode) + (safe(interpolateMode) >= 0.0 ? 0.5 : -0.5));
   if (interp < 0) interp = 0;
-  if (interp > 3) interp = 3;
+  if (interp > 5) interp = 5;
   const double offset = wrap01(safe(phaseOffset));
   // Factor of clock period; <=0 -> one sample (instant). Unclamped above 0.
   const double smooth = safe(smoothingFactor);
-  const bool instant = !(smooth > 0.0);
+  const bool instant = !(smooth > 0.0) || interp == kInterpHold;
 
   bool internalFire = false;
   if (safeFreq > 0.0) {
@@ -250,5 +255,5 @@ extern "C" double soemdsp_sample_hold_fired(int handle) {
 }
 
 extern "C" int soemdsp_sample_hold_version() {
-  return 5; // external-Clock phase offset uses edge interval (offset lane latches)
+  return 6; // Interpolate + Cosine, Hold (shared two_point_curves.h). was 5: external-Clock phase offset uses edge interval (offset lane latches)
 }

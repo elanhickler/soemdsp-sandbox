@@ -2,6 +2,13 @@
 // soemdsp-native-label: Logistic Map
 // soemdsp-native-target: logisticMap
 // soemdsp-native-kind: chaos
+//
+// x[n+1] = R * x[n] * (1 - x[n]), x in [0, 1], output 2x-1. One iteration =
+// one new value. Clock unwired: the Frequency knob runs an internal phase
+// clock (iterations per second, Hz; several per sample at high rates).
+// Clock wired: each rising edge (prev <= 0 < now, as Sample & Hold) runs
+// exactly one iteration on that sample and the knob clock is ignored.
+// Trigger: 1 for the sample(s) on which at least one iteration ran.
 
 #include <soemdsp/soemdsp.hpp>
 
@@ -19,6 +26,8 @@ struct LogisticMapState {
   double phase;
   double x;
   double lastJump; // bipolar step at last iterate (for PolyBLEP)
+  double lastClock; // previous Clock sample (rising-edge detect)
+  double trigger;   // 1 on samples where an iteration ran
 };
 
 static const unsigned int kLogisticX0 = 0x4C01u;
@@ -43,6 +52,8 @@ extern "C" int soemdsp_logistic_map_create() {
       s.phase = 0.0;
       s.x = 0.5;
       s.lastJump = 0.0;
+      s.lastClock = 0.0;
+      s.trigger = 0.0;
       return i + 1;
     }
   }
@@ -62,7 +73,9 @@ extern "C" double soemdsp_logistic_map_sample(
   double seed,
   double antialias,
   double level,
-  double sampleRate
+  double sampleRate,
+  double clock,
+  int clockWired
 ) {
   if (handle < 1 || handle > kMaxInstances) return 0.0;
   LogisticMapState& s = gPool[handle - 1];
@@ -84,9 +97,17 @@ extern "C" double soemdsp_logistic_map_sample(
     s.lastSeedU = seedU;
   }
 
-  if (!resetActive && safeRate > 0.0) {
+  int iterations = 0;
+  const bool clockEdge = clockWired != 0 && rising_edge(safe(clock), &s.lastClock, 0.0);
+  if (clockWired != 0) {
+    if (!resetActive && clockEdge) {
+      const double oldB = s.x * 2.0 - 1.0;
+      s.x = clamp(safe_bounded(safeR * s.x * (1.0 - s.x)), 0.0, 1.0);
+      s.lastJump = (s.x * 2.0 - 1.0) - oldB;
+      iterations = 1;
+    }
+  } else if (!resetActive && safeRate > 0.0) {
     s.phase += dt;
-    int iterations = 0;
     while (s.phase >= 1.0 && iterations < kMaxIterationsPerSample) {
       s.phase -= 1.0;
       const double oldB = s.x * 2.0 - 1.0;
@@ -101,14 +122,23 @@ extern "C" double soemdsp_logistic_map_sample(
     }
   }
 
+  if (clockWired == 0) s.lastClock = 0.0;
+  s.trigger = iterations > 0 ? 1.0 : 0.0;
+
   double bipolar = s.x * 2.0 - 1.0;
   // 1 = PolyBLEP on each iterate step (same residual as a unit-scaled wrap).
-  if (aa == 1 && dt > 0.0) {
+  // Internal clock only: an external Clock has no known period.
+  if (aa == 1 && dt > 0.0 && clockWired == 0) {
     bipolar += s.lastJump * poly_blep(s.phase, dt);
   }
   return safe_bounded(bipolar * safeLevel);
 }
 
+extern "C" double soemdsp_logistic_map_trigger(int handle) {
+  if (handle < 1 || handle > kMaxInstances) return 0.0;
+  return gPool[handle - 1].trigger;
+}
+
 extern "C" int soemdsp_logistic_map_version() {
-  return 3;
+  return 4; // 4: Clock input + Trigger output
 }

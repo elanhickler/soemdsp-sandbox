@@ -1015,7 +1015,7 @@ extern "C" double soemdsp_passive_filter_sample(
 );
 extern "C" double soemdsp_passive_filter_sample_ex(
   int handle, double input, int mode, double lowFrequency, double highFrequency,
-  double sampleRate, double slope, double stagger, double sweepSemis, double gainCompensation
+  double sampleRate, double slope, double stagger, double gainCompensation
 );
 
 extern "C" int soemdsp_tb303_filter_create();
@@ -1351,8 +1351,9 @@ extern "C" int soemdsp_logistic_map_create();
 extern "C" void soemdsp_logistic_map_destroy(int handle);
 extern "C" double soemdsp_logistic_map_sample(
   int handle, double reset, double rate, double r, double seed, double antialias,
-  double level, double sampleRate
+  double level, double sampleRate, double clock, int clockWired
 );
+extern "C" double soemdsp_logistic_map_trigger(int handle);
 
 extern "C" int soemdsp_henon_map_create();
 extern "C" void soemdsp_henon_map_destroy(int handle);
@@ -1563,18 +1564,6 @@ extern "C" double soemdsp_formula_noise_sample(
 extern "C" double soemdsp_formula_noise_unipolar(int handle);
 extern "C" double soemdsp_formula_noise_trigger(int handle);
 extern "C" double soemdsp_formula_noise_index(int handle);
-
-extern "C" int soemdsp_fibonacci_noise_create();
-extern "C" void soemdsp_fibonacci_noise_destroy(int handle);
-extern "C" void soemdsp_fibonacci_noise_set_config(
-  int handle, double lags, double operation, double output, double seed
-);
-extern "C" double soemdsp_fibonacci_noise_sample(
-  int handle, double speed, double sampleRate, double interpolation,
-  double quantize, double reset
-);
-extern "C" double soemdsp_fibonacci_noise_unipolar(int handle);
-extern "C" double soemdsp_fibonacci_noise_trigger(int handle);
 
 extern "C" int soemdsp_random_walk_create();
 extern "C" void soemdsp_random_walk_destroy(int handle);
@@ -1978,7 +1967,6 @@ static const int kTypePitchQuantizer = 85;
 static const int kTypeTuringMachine = 86;
 static const int kTypeFractalBrownianNoise = 87;
 static const int kTypeFormulaNoise = 88;
-static const int kTypeFibonacciNoise = 217; // lagged Fibonacci stepped noise
 static const int kTypeTimeQuantizer = 218; // In changes land on the project-tempo grid
 static const int kTypeRandomWalk = 89;
 static const int kTypePulseExplosion = 90;
@@ -2381,6 +2369,7 @@ struct Node {
   // whether ƒ drove it (soemdsp_graph_node_effective_hz).
   double effectiveHz;
   unsigned char effectiveHzLive;
+  double effectiveLoHz; // multi-cutoff (Passive / Dual Ladder): HPF; effectiveHz = LPF
   unsigned char processedThisSample;
   // Compile-time SCC id for multi-node feedback (-1 = not in a group).
   int fbGroupId;
@@ -2817,8 +2806,6 @@ static void destroy_native_kind_handle(int kind, int handle) {
     soemdsp_fbm_field_destroy(handle);
   } else if (kind == kTypeFormulaNoise) {
     soemdsp_formula_noise_destroy(handle);
-  } else if (kind == kTypeFibonacciNoise) {
-    soemdsp_fibonacci_noise_destroy(handle);
   } else if (kind == kTypeTimeQuantizer) {
     soemdsp_time_quantizer_destroy(handle);
   } else if (kind == kTypeRandomWalk) {
@@ -3179,7 +3166,6 @@ static void init_node_defaults(Node& n, int typeId) {
       : (typeId == kTypeFractalBrownianNoise) ? 0.5
       : (typeId == kTypeFbmField) ? 20.0 // domain rate Hz
       : (typeId == kTypeFormulaNoise) ? 44100.0 // speed digits/s
-      : (typeId == kTypeFibonacciNoise) ? 44100.0 // speed steps/s
       : (typeId == kTypeCheapWalk) ? 8.0 // rate Hz
       : (typeId == kTypeVibratoGenerator) ? 3.5 // vibrato speed Hz
       : (typeId == kTypeChorus) ? 3.5 // VG Speed
@@ -3240,7 +3226,6 @@ static void init_node_defaults(Node& n, int typeId) {
       : (typeId == kTypeAdditivePan) ? 0.85 // AutoPan depth
       : (typeId == kTypeChaosfly) ? 0.5 // Volume default
       : (typeId == kTypeFormulaNoise) ? 1.0 // Amplitude (output gain)
-      : (typeId == kTypeFibonacciNoise) ? 1.0 // Amplitude (output gain)
       : 1.0,
     false
   );
@@ -3295,8 +3280,6 @@ static void init_node_defaults(Node& n, int typeId) {
       : (typeId == kTypeGravityWalker) ? 0.65 // gravity
       : (typeId == kTypeFractalBrownianNoise) ? 0.5 // persistence
       : (typeId == kTypeFbmField) ? 0.5 // persistence
-      : (typeId == kTypeFormulaNoise) ? 0.0 // source Pi
-      : (typeId == kTypeFibonacciNoise) ? 0.0 // operation Add
       : (typeId == kTypeSpiral || typeId == kTypeTorus) ? 1.0 // density
       : (typeId == kTypeFractalSpiral) ? 1.5 // growth
       : (typeId == kTypeLogSpiral) ? 3.0 // growth
@@ -3403,7 +3386,6 @@ static void init_node_defaults(Node& n, int typeId) {
       : (typeId == kTypeRasterRgb) ? 0.0 // polarity Bipolar
       : (typeId == kTypeWavetableAdsr) ? 0.0 // shape Analog
       : (typeId == kTypeFormulaNoise) ? 0.0 // interpolation Hold
-      : (typeId == kTypeFibonacciNoise) ? 0.0 // interpolation Hold
       : (typeId == kTypeAudioPlayer) ? 4.0 // Play
       : (typeId == kTypeSamplePlayer) ? 0.0 // One-shot
       : (typeId == kTypeAdditiveOut) ? 0.0 // optimize Inaudible off
@@ -3443,7 +3425,6 @@ static void init_node_defaults(Node& n, int typeId) {
       : (typeId == kTypeFractalBrownianNoise) ? 4.0 // octaves
       : (typeId == kTypeFbmField) ? 4.0 // octaves
       : (typeId == kTypeFormulaNoise) ? 0.0 // loop Wrap
-      : (typeId == kTypeFibonacciNoise) ? 0.0 // lags 24/55
       : (typeId == kTypePulseExplosion) ? 20.0 // numberOfPulses
       : (typeId == kTypeFractalSpiral) ? 5.0 // octaves
       : (typeId == kTypeLogSpiral) ? 4.0 // turns
@@ -3494,7 +3475,6 @@ static void init_node_defaults(Node& n, int typeId) {
       : (typeId == kTypeFractalBrownianNoise) ? 1.0 // scale
       : (typeId == kTypeFbmField) ? 1.0 // scale
       : (typeId == kTypeFormulaNoise) ? 0.0 // start
-      : (typeId == kTypeFibonacciNoise) ? 0.0 // output Digits
       : (typeId == kTypePulseExplosion) ? 0.5 // centerTime
       : (typeId == kTypeHarmonicSeries) ? 0.0 // offset
       : (typeId == kTypePitchQuantizer) ? 0.0 // semitoneOffset
@@ -3528,7 +3508,7 @@ static void init_node_defaults(Node& n, int typeId) {
   init_control(
     n.width,
     (typeId == kTypeVcvrackSuperloveFilter) ? 0.0 // spread
-      : (typeId == kTypeFormulaNoise || typeId == kTypeFibonacciNoise) ? 0.0 // quantize Off
+      : (typeId == kTypeFormulaNoise) ? 0.0 // quantize Off
       : (typeId == kTypeAcidSequencer) ? 0.0 // accentLow (definition default 0)
       : (typeId == kTypeExponentialDelay) ? 0.0 // random offset seconds
       : (typeId == kTypePhaser) ? 0.5 // spread octaves
@@ -3703,7 +3683,7 @@ static void init_node_defaults(Node& n, int typeId) {
       : (typeId == kTypeGravityWalker) ? 1.0 // RNG seed (host sends saved Seed)
       : (typeId == kTypeArp) ? 1.0 // RNG seed
       : (typeId == kTypeFractalBrownianNoise || typeId == kTypeFbmField || typeId == kTypeRandomWalk || typeId == kTypeCheapWalk
-          || typeId == kTypeFormulaNoise || typeId == kTypeFibonacciNoise) ? 1.0
+          || typeId == kTypeFormulaNoise) ? 1.0
       : (typeId == kTypeHypersaw2
           || typeId == kTypeVibratoGenerator || typeId == kTypeWowAndFlutter
           || typeId == kTypeChorus || typeId == kTypeEnsemble
@@ -4804,7 +4784,6 @@ static int create_native_for_type(int typeId, float sampleRate) {
   if (typeId == kTypeFractalBrownianNoise) return soemdsp_fbm_create();
   if (typeId == kTypeFbmField) return soemdsp_fbm_field_create();
   if (typeId == kTypeFormulaNoise) return soemdsp_formula_noise_create();
-  if (typeId == kTypeFibonacciNoise) return soemdsp_fibonacci_noise_create();
   if (typeId == kTypeTimeQuantizer) return soemdsp_time_quantizer_create();
   if (typeId == kTypeRandomWalk) return soemdsp_random_walk_create();
   if (typeId == kTypeCheapWalk) return soemdsp_cheap_walk_create();
@@ -5065,13 +5044,34 @@ static double circuit_pitch_ref_v(const Circuit& g) {
   return n;
 }
 
-// Dual Ladder / Passive Sweep: same JS law hz * 2^(st/12). +12 = one octave.
-static double apply_sweep_hz(double hz, double sweepSemis) {
-  if (!(hz > 0.0)) return 0.0;
-  if (!(sweepSemis == sweepSemis) || sweepSemis == 0.0) return hz;
-  const double out = hz * dsp_exp((sweepSemis / 12.0) * 0.6931471805599453);
-  if (!(out == out) || !(out > 0.0)) return 0.0;
-  return out;
+// Multi-cutoff ƒ (Passive Filter, Dual Ladder; reuse for any HP+LP module).
+// Wired ƒ moves the CENTER of the active cut(s) to fHz and scales BOTH cuts by
+// fHz / center, so their octave spacing is kept. Center: HP+LP active =
+// sqrt(lo*hi); LP-only = hi; HP-only = lo; none active = untouched.
+// ƒ <= 0 (or NaN) = 0 Hz like other ƒ modules. No clamp here: callers run
+// clamp_hz_nyquist once on the final cuts.
+static void apply_multi_cutoff_f(double fHz, bool useLo, bool useHi, double* lo, double* hi) {
+  if (!(fHz == fHz) || fHz <= 0.0) {
+    *lo = 0.0;
+    *hi = 0.0;
+    return;
+  }
+  if (!useLo && !useHi) return;
+  double center = 0.0;
+  if (useLo && useHi) {
+    center = (*lo > 0.0 && *hi > 0.0) ? dsp_exp(0.5 * dsp_ln(*lo * *hi)) : 0.0;
+  } else {
+    center = useHi ? *hi : *lo;
+  }
+  if (!(center > 0.0)) {
+    // Knob center at 0 Hz: no ratio to keep, put the active cut(s) on ƒ.
+    if (useLo) *lo = fHz;
+    if (useHi) *hi = fHz;
+    return;
+  }
+  const double ratio = fHz / center;
+  *lo *= ratio;
+  *hi *= ratio;
 }
 
 // Filter / resonator cutoff: Frequency knob (Hz), domain REPLACE from Pitchâ†”Hz.
@@ -8844,8 +8844,6 @@ static void process_active_filter(Circuit& g, Node& node, int frames) {
   mix_node_inputs(g, node, frames);
   const double sr = g.sampleRate < 1.0f ? 44100.0 : (double)g.sampleRate;
   const bool liveF = mix_live_port(g, node, kPortF, frames, g.mixF);
-  const bool livePitch = mix_live_port(g, node, kPortPitchCv, frames, g.mixPitch);
-  const double referenceVoltage = circuit_pitch_ref_v(g);
   const bool takeSamplePath = node_has_active_chase(node)
     || node.hpfFrequency.active || node.lpfFrequency.active;
   int hpSlope = (int)(control_effective(node.waveform) + (control_effective(node.waveform) >= 0.0 ? 0.5 : -0.5));
@@ -8868,45 +8866,15 @@ static void process_active_filter(Circuit& g, Node& node, int frames) {
     if (!(lo == lo)) lo = 200.0;
     if (!(hi == hi)) hi = control_audio(g, node.frequency, f);
     if (!(hi == hi)) hi = 1000.0;
-    double center = 0.0;
-    bool haveCenter = false;
-    if (livePitch) {
-      // Pitch the geometric mean of the HP/LP band from Frequency (or mid).
-      double base = control_audio(g, node.frequency, f);
-      if (!(base == base) || base <= 0.0) {
-        base = (lo > 0.0 && hi > 0.0) ? dsp_exp(0.5 * dsp_ln(lo * hi)) : 0.0;
-      }
-      if (base > 0.0) {
-        center = pitched_hz(base, g.mixPitch[f], referenceVoltage);
-        haveCenter = true;
-      }
-    }
-    if (haveCenter && center > 0.0) {
-      if (lo > 0.0 && hi > 0.0) {
-        // Move geometric mean to center while keeping the interval ratio.
-        const double geo = dsp_exp(0.5 * dsp_ln(lo * hi));
-        if (geo > 0.0) {
-          const double scale = center / geo;
-          lo *= scale;
-          hi *= scale;
-        }
-      } else if (hpSlope > 0 && lpSlope == 0) {
-        lo = center;
-      } else if (lpSlope > 0 && hpSlope == 0) {
-        hi = center;
-      } else {
-        lo = center * 0.5;
-        hi = center * 2.0;
-      }
-    }
-    // Sweep after ƒ / 0.1V (same order as JS resolve + Passive).
-    const double sweep = control_audio(g, node.center, f);
-    lo = apply_sweep_hz(lo, sweep);
-    hi = apply_sweep_hz(hi, sweep);
+    // ƒ wired: move the band center (keeps the HPF/LPF octave spacing).
+    if (liveF) apply_multi_cutoff_f(g.mixF[f], hpSlope > 0, lpSlope > 0, &lo, &hi);
     lo = clamp_hz_nyquist(lo, sr);
     hi = clamp_hz_nyquist(hi, sr);
     if (lo < 0.0) lo = 0.0;
     if (hi < 0.0) hi = 0.0;
+    node.effectiveHz = hi;
+    node.effectiveLoHz = lo;
+    node.effectiveHzLive = liveF ? 1 : 0;
     const double reso = control_audio(g, node.resonance, f);
     if (needMono) {
       double in = g.mixMono[f];
@@ -8931,17 +8899,16 @@ static void process_active_filter(Circuit& g, Node& node, int frames) {
   }
 }
 
-// Passive: hpfFrequency=HPF, lpfFrequency=LPF. Live ƒ centers the active cut(s).
+// Passive: hpfFrequency=HPF, lpfFrequency=LPF. Wired ƒ moves the center of the
+// active cut(s) (apply_multi_cutoff_f).
 // Mode 0 Bypass / 1 LP / 2 BP / 3 HP (matches JS + native sample()).
 static void process_passive_filter(Circuit& g, Node& node, int frames) {
   if (node.nativeHandle <= 0) return;
   mix_node_inputs(g, node, frames);
   const double sr = g.sampleRate < 1.0f ? 44100.0 : (double)g.sampleRate;
   const bool liveF = mix_live_port(g, node, kPortF, frames, g.mixF);
-  const bool livePitch = mix_live_port(g, node, kPortPitchCv, frames, g.mixPitch);
-  const double referenceVoltage = circuit_pitch_ref_v(g);
   const bool takeSamplePath = node_needs_sample_accurate_controls(
-    g, node, liveF || livePitch
+    g, node, liveF
   ) || node.hpfFrequency.active || node.lpfFrequency.active;
   (void)takeSamplePath;
   const double modeV = control_effective(node.mode);
@@ -8955,54 +8922,27 @@ static void process_passive_filter(Circuit& g, Node& node, int frames) {
     control_frame(g, node, f);
     double lo = control_audio(g, node.hpfFrequency, f);
     double hi = control_audio(g, node.lpfFrequency, f);
-    // stages=slope 0..3, width=stagger, center=sweep st, shape=gainComp
+    // stages=slope 0..3, width=stagger, shape=gainComp
     const double slope = control_audio(g, node.stages, f);
     const double stagger = control_audio(g, node.width, f);
-    const double sweep = control_audio(g, node.center, f);
     const double gainComp = control_audio(g, node.shape, f);
     if (!(lo == lo)) lo = 200.0;
     if (!(hi == hi)) hi = 1000.0;
-    double center = 0.0;
-    bool haveCenter = false;
-    if (livePitch && mode != 0) {
-      double base = 0.0;
-      if (mode == 1) base = hi;
-      else if (mode == 3) base = lo;
-      else if (lo > 0.0 && hi > 0.0) base = dsp_exp(0.5 * dsp_ln(lo * hi));
-      else if (hi > 0.0) base = hi;
-      else base = lo;
-      if (base > 0.0) {
-        center = pitched_hz(base, g.mixPitch[f], referenceVoltage);
-        haveCenter = true;
-      }
-    }
-    if (haveCenter && center > 0.0 && mode != 0) {
-      if (mode == 1) {
-        hi = center;
-      } else if (mode == 3) {
-        lo = center;
-      } else if (lo > 0.0 && hi > 0.0) {
-        const double geo = dsp_exp(0.5 * dsp_ln(lo * hi));
-        if (geo > 0.0) {
-          const double scale = center / geo;
-          lo *= scale;
-          hi *= scale;
-        }
-      } else {
-        lo = center * 0.5;
-        hi = center * 2.0;
-      }
-    }
+    // ƒ wired: LP = LPF, HP = HPF, BP = sqrt(HPF*LPF) is the center.
+    if (liveF) apply_multi_cutoff_f(g.mixF[f], mode == 2 || mode == 3, mode == 1 || mode == 2, &lo, &hi);
     lo = clamp_hz_nyquist(lo, sr);
     hi = clamp_hz_nyquist(hi, sr);
     if (lo < 0.0) lo = 0.0;
     if (hi < 0.0) hi = 0.0;
+    node.effectiveHz = hi;
+    node.effectiveLoHz = lo;
+    node.effectiveHzLive = liveF ? 1 : 0;
     const double amp = control_audio(g, node.amplitude, f);
     if (needMono) {
       double in = g.mixMono[f];
       if (!hasLeftIn && !hasRightIn) in += g.mixLeft[f] + g.mixRight[f];
       const double out = soemdsp_passive_filter_sample_ex(
-        node.nativeHandle, in, mode, lo, hi, sr, slope, stagger, sweep, gainComp
+        node.nativeHandle, in, mode, lo, hi, sr, slope, stagger, gainComp
       ) * amp;
       node.buf[kPortMono][f] = out;
       if (!hasLeftIn) node.buf[kPortLeft][f] = out;
@@ -9011,13 +8951,13 @@ static void process_passive_filter(Circuit& g, Node& node, int frames) {
     if (hasLeftIn && node.nativeHandleL > 0) {
       node.buf[kPortLeft][f] = soemdsp_passive_filter_sample_ex(
         node.nativeHandleL, g.mixLeft[f] + g.mixMono[f], mode, lo, hi, sr,
-        slope, stagger, sweep, gainComp
+        slope, stagger, gainComp
       ) * amp;
     }
     if (hasRightIn && node.nativeHandleR > 0) {
       node.buf[kPortRight][f] = soemdsp_passive_filter_sample_ex(
         node.nativeHandleR, g.mixRight[f] + g.mixMono[f], mode, lo, hi, sr,
-        slope, stagger, sweep, gainComp
+        slope, stagger, gainComp
       ) * amp;
     }
   }
@@ -10296,11 +10236,13 @@ static void process_lorenz_attractor(Circuit& g, Node& node, int frames) {
   }
 }
 
-// Logistic: Reset live. frequency=rate, shape=r, seed=integer Seed, amplitude=level.
-// Out→Mono/L/R.
+// Logistic: Reset + Clock (kPortTrigger) live. frequency=Frequency (iterations/s),
+// shape=r, seed=integer Seed, amplitude=level. Clock wired = one iteration per
+// rising edge (knob clock off). Out→Mono/Left, Trigger (1 on iteration samples)→Right.
 static void process_logistic_map(Circuit& g, Node& node, int frames) {
   if (node.nativeHandle <= 0) return;
   const bool hasReset = mix_live_port(g, node, kPortReset, frames, g.mixReset);
+  const bool hasClock = mix_live_port(g, node, kPortTrigger, frames, g.mixTrigger);
   const double sr = g.sampleRate < 1.0f ? 44100.0 : (double)g.sampleRate;
   const bool takeSamplePath = node_has_active_chase(node);
   for (int f = 0; f < frames; f++) {
@@ -10313,11 +10255,13 @@ static void process_logistic_map(Circuit& g, Node& node, int frames) {
       control_effective(node.seed),
       control_effective(node.mode),
       control_audio(g, node.amplitude, f),
-      sr
+      sr,
+      hasClock ? g.mixTrigger[f] : 0.0,
+      hasClock ? 1 : 0
     );
     node.buf[kPortMono][f] = out;
     node.buf[kPortLeft][f] = out;
-    node.buf[kPortRight][f] = out;
+    node.buf[kPortRight][f] = soemdsp_logistic_map_trigger(node.nativeHandle);
   }
 }
 
@@ -11237,8 +11181,8 @@ static void process_fbm_field(Circuit& g, Node& node, int frames) {
   }
 }
 
-// Formula noise: frequency=speed (digits/s), mode=interpolation, center=start,
-// stages=loop, width=quantize, shape=source, seed=Seed, amplitude=Amplitude
+// Pi Noise (native formula_noise, source fixed to 0 = Pi): frequency=speed
+// (digits/s), mode=interpolation, center=start, stages=loop, width=quantize, seed=Seed, amplitude=Amplitude
 // (per-sample gain on Bipolar/Unipolar), Reset live port.
 // Bipolar->Mono, Unipolar->Left, Trigger->Right, Index->Saw.
 static void process_formula_noise(Circuit& g, Node& node, int frames) {
@@ -11246,7 +11190,7 @@ static void process_formula_noise(Circuit& g, Node& node, int frames) {
   const bool hasReset = mix_live_port(g, node, kPortReset, frames, g.mixReset);
   const double sr = g.sampleRate < 1.0f ? 44100.0 : (double)g.sampleRate;
   soemdsp_formula_noise_set_source(
-    node.nativeHandle, control_effective(node.shape), control_effective(node.seed)
+    node.nativeHandle, 0.0 /* Pi */, control_effective(node.seed)
   );
   soemdsp_formula_noise_set_start(node.nativeHandle, control_effective(node.center));
   const double interp = control_effective(node.mode);
@@ -11262,33 +11206,6 @@ static void process_formula_noise(Circuit& g, Node& node, int frames) {
     node.buf[kPortLeft][f] = amp * soemdsp_formula_noise_unipolar(node.nativeHandle);
     node.buf[kPortRight][f] = soemdsp_formula_noise_trigger(node.nativeHandle);
     node.buf[kPortSaw][f] = soemdsp_formula_noise_index(node.nativeHandle);
-  }
-}
-
-// Fibonacci noise (lagged Fibonacci): frequency=speed (steps/s),
-// mode=interpolation, width=quantize, stages=lags pair, shape=operation,
-// center=output (Digits/Continuous), seed=Seed, Reset live port.
-// Bipolar->Mono, Unipolar->Left, Trigger->Right. amplitude scales Bipolar and
-// Unipolar per sample (as Formula Noise); Trigger is not scaled.
-static void process_fibonacci_noise(Circuit& g, Node& node, int frames) {
-  if (node.nativeHandle <= 0) return;
-  const bool hasReset = mix_live_port(g, node, kPortReset, frames, g.mixReset);
-  const double sr = g.sampleRate < 1.0f ? 44100.0 : (double)g.sampleRate;
-  soemdsp_fibonacci_noise_set_config(
-    node.nativeHandle, control_effective(node.stages), control_effective(node.shape),
-    control_effective(node.center), control_effective(node.seed)
-  );
-  const double interp = control_effective(node.mode);
-  const double quantize = control_effective(node.width);
-  for (int f = 0; f < frames; f++) {
-    control_frame(g, node, f);
-    const double reset = hasReset ? g.mixReset[f] : 0.0;
-    const double amp = control_audio(g, node.amplitude, f); // Amplitude, per sample, no clamp
-    node.buf[kPortMono][f] = amp * soemdsp_fibonacci_noise_sample(
-      node.nativeHandle, control_audio(g, node.frequency, f), sr, interp, quantize, reset
-    );
-    node.buf[kPortLeft][f] = amp * soemdsp_fibonacci_noise_unipolar(node.nativeHandle);
-    node.buf[kPortRight][f] = soemdsp_fibonacci_noise_trigger(node.nativeHandle);
   }
 }
 
@@ -13666,6 +13583,7 @@ extern "C" int soemdsp_graph_add_node(int handle, unsigned int nodeIdHash, int t
   }
   n.processedThisBlock = 0;
   n.effectiveHz = 0.0;
+  n.effectiveLoHz = 0.0;
   n.effectiveHzLive = 0;
 
   const bool needsNative =
@@ -13802,7 +13720,6 @@ extern "C" int soemdsp_graph_add_node(int handle, unsigned int nodeIdHash, int t
     || typeId == kTypeFractalBrownianNoise
     || typeId == kTypeFbmField
     || typeId == kTypeFormulaNoise
-    || typeId == kTypeFibonacciNoise
     || typeId == kTypeTimeQuantizer
     || typeId == kTypeRandomWalk
     || typeId == kTypeCheapWalk
@@ -15289,10 +15206,6 @@ static void dispatch_process_node(Circuit& g, Node& node, int frames) {
       process_formula_noise(g, node, frames);
       return;
     }
-    if (node.typeId == kTypeFibonacciNoise) {
-      process_fibonacci_noise(g, node, frames);
-      return;
-    }
     if (node.typeId == kTypeTimeQuantizer) {
       process_time_quantizer(g, node, frames);
       return;
@@ -15729,6 +15642,17 @@ extern "C" double soemdsp_graph_node_effective_hz(int handle, unsigned int nodeH
   return n.effectiveHzLive ? n.effectiveHz : -1.0;
 }
 
+// Multi-cutoff modules (Passive / Dual Ladder): HPF Hz used while ƒ wired, else -1.
+// soemdsp_graph_node_effective_hz is the LPF there.
+extern "C" double soemdsp_graph_node_effective_lo_hz(int handle, unsigned int nodeHash) {
+  Circuit* g = get(handle);
+  if (!g) return -1.0;
+  const int idx = find_node(*g, nodeHash);
+  if (idx < 0) return -1.0;
+  const Node& n = g->nodes[idx];
+  return n.effectiveHzLive ? n.effectiveLoHz : -1.0;
+}
+
 extern "C" int soemdsp_graph_node_native_handle(int handle, unsigned int nodeHash) {
   Circuit* g = get(handle);
   if (!g) return 0;
@@ -15848,5 +15772,5 @@ extern "C" int soemdsp_graph_version() {
   // 169: Time Quantizer (218)
   // 170: EQ Filter ZDF ƒ input (resolve_osc_hz)
   // 171: ƒ on Ladder/303/Mode/Cookbook/IIR/Papoulis/ZDF filters + soemdsp_graph_node_effective_hz
-  return 171; // was 164: Additive Generator Slope / Slope Start / Slope End, Even / Odd, automatic skipping
+  return 173; // Pi Noise (Source removed, always pi), Fibonacci Noise removed, Logistic Map Clock in + Trigger out. was 172: Passive / Dual Ladder: ƒ center input, Sweep + hidden 0.1V/oct removed. was 171; was 164: Additive Generator Slope / Slope Start / Slope End, Even / Odd, automatic skipping
 }

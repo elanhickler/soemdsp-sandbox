@@ -34,7 +34,7 @@ function rmsFor(hpf, lpf, slope = 3) {
   for (let i = 0; i < N; i++) {
     const x = Math.sin(phase);
     phase += inc;
-    const y = sample(h, x, MODE_BP, hpf, lpf, SR, slope, 1.0, 0.0, 1.0);
+    const y = sample(h, x, MODE_BP, hpf, lpf, SR, slope, 1.0, 1.0);
     sum += y * y;
   }
   destroy(h);

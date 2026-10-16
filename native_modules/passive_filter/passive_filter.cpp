@@ -5,7 +5,7 @@
 // soemdsp-native-lib: https://github.com/RobinSchmidt/RS-MET/blob/work/Libraries/RobsJuceModules/rapt/Filters/General/OnePoleFilter.h
 //
 // Cascaded real 1-poles (no Q). Slope 0..3 → 1..4 poles. Stagger spreads poles.
-// Sweep shifts cutoffs in semitones. Gain Comp scales stack to −3 dB at label fc.
+// Gain Comp scales stack to −3 dB at label fc.
 
 #include <soemdsp/soemdsp.hpp>
 
@@ -47,12 +47,6 @@ static int stage_count(double slope) {
 static double stagger_k(double stagger) {
   if (!(stagger == stagger) || stagger < 1.0) return 1.0;
   return stagger > 8.0 ? 8.0 : stagger;
-}
-
-static double apply_sweep_hz(double hz, double sweepSemis) {
-  if (!(hz > 0.0)) return 0.0;
-  if (!(sweepSemis == sweepSemis) || sweepSemis == 0.0) return hz;
-  return hz * dsp_exp((sweepSemis / 12.0) * 0.6931471805599453); // * 2^(st/12)
 }
 
 static double one_pole_lp(Pole& p, double x, double freq, double rate) {
@@ -172,7 +166,7 @@ extern "C" void soemdsp_passive_filter_destroy(int handle) {
   gPool[handle - 1].active = false;
 }
 
-// Extended sample: slope 0..3, stagger ≥1, sweep semitones, gainComp 0/1.
+// Extended sample: slope 0..3, stagger ≥1, gainComp 0/1.
 extern "C" double soemdsp_passive_filter_sample_ex(
   int handle,
   double input,
@@ -182,7 +176,6 @@ extern "C" double soemdsp_passive_filter_sample_ex(
   double sampleRate,
   double slope,
   double stagger,
-  double sweepSemis,
   double gainCompensation
 ) {
   if (handle < 1 || handle > kMaxInstances) return 0.0;
@@ -192,8 +185,10 @@ extern "C" double soemdsp_passive_filter_sample_ex(
   const int n = stage_count(slope);
   const double k = stagger_k(stagger);
   const bool comp = gainCompensation >= 0.5;
-  double lo = apply_sweep_hz(lowFrequency, sweepSemis);
-  double hi = apply_sweep_hz(highFrequency, sweepSemis);
+  double lo = lowFrequency;
+  double hi = highFrequency;
+  if (!(lo == lo)) lo = 0.0;
+  if (!(hi == hi)) hi = 0.0;
   if (lo < 0.0) lo = 0.0;
   if (hi < 0.0) hi = 0.0;
 
@@ -222,7 +217,7 @@ extern "C" double soemdsp_passive_filter_sample_ex(
   return cascade(s.lp, safeIn, lpHz, n, false, rate);
 }
 
-// Legacy 1-pole entry (slope=0, stagger=1, sweep=0, comp on).
+// Legacy 1-pole entry (slope=0, stagger=1, comp on).
 extern "C" double soemdsp_passive_filter_sample(
   int handle,
   double input,
@@ -232,10 +227,10 @@ extern "C" double soemdsp_passive_filter_sample(
   double sampleRate
 ) {
   return soemdsp_passive_filter_sample_ex(
-    handle, input, mode, lowFrequency, highFrequency, sampleRate, 0.0, 1.0, 0.0, 1.0
+    handle, input, mode, lowFrequency, highFrequency, sampleRate, 0.0, 1.0, 1.0
   );
 }
 
-extern "C" int soemdsp_passive_filter_version() { return 4; } // Mode: 0 Bypass / 1 LP / 2 BP / 3 HP
+extern "C" int soemdsp_passive_filter_version() { return 5; } // 5: Sweep arg removed (ƒ center lives in graph engine). // Mode: 0 Bypass / 1 LP / 2 BP / 3 HP
 extern "C" const char* soemdsp_passive_filter_metadata_json() { return kMetadataJson; }
 extern "C" int soemdsp_passive_filter_metadata_json_size() { return sizeof(kMetadataJson) - 1; }

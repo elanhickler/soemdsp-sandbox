@@ -235,8 +235,7 @@ NodeLiveAudioProcessor.NATIVE_GRAPH_TYPE_IDS = Object.freeze({
   turingMachine: 86,
   fractalBrownianNoise: 87,
   fbmField: 211,
-  formulaNoise: 88,
-  fibonacciNoise: 217,
+  piNoise: 88,
   timeQuantizer: 218, // In changes land on the project-tempo grid
   randomWalk: 89,
   cheapWalk: 108,
@@ -944,6 +943,12 @@ NodeLiveAudioProcessor.prototype.mapNativeGraphSrcPortId = function mapNativeGra
       ? NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_MONO
       : NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_RIGHT; // clock T
   }
+  // Logistic Map: Out on Mono, Trigger (1 per iteration sample) on Right. Before the
+  // generic "t"/"trigger" catch-all.
+  if (t === "logisticMap") {
+    if (p === "out") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_MONO;
+    if (p === "trigger") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_RIGHT;
+  }
   // Sample & Hold Trigger (1-sample latch pulse) lives on Square; must precede the
   // generic "trigger" -> Right fallback below (Right is the S&H Right noise hold).
   if (t === "sampleHold" && p === "trigger") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_SQUARE;
@@ -1083,12 +1088,7 @@ NodeLiveAudioProcessor.prototype.mapNativeGraphSrcPortId = function mapNativeGra
     if (p === "y") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_LEFT;
     if (p === "z") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_RIGHT;
   }
-  if (t === "fibonacciNoise") {
-    if (p === "bipolar") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_MONO;
-    if (p === "unipolar") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_LEFT;
-    if (p === "trigger") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_RIGHT;
-  }
-  if (t === "formulaNoise") {
+  if (t === "piNoise") {
     if (p === "bipolar") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_MONO;
     if (p === "unipolar") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_LEFT;
     if (p === "trigger") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_RIGHT;
@@ -5412,12 +5412,11 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
     if (type === "activeFilter") {
       // Dual Ladder: waveform=hpSlope, shape=lpSlope (0 Bypass … 4=24),
       // stages=feedbackCircuit, timingMode=gainCompensation,
-      // center=sweep st; hpf/lpf = cuts. Sweep after ƒ / 0.1V.
+      // hpf/lpf = cuts; wired ƒ moves the band center in the engine.
       push("hpSlope", P.NATIVE_GRAPH_PARAM_WAVEFORM, disc("hpSlope", 0));
       push("lpSlope", P.NATIVE_GRAPH_PARAM_SHAPE, disc("lpSlope", 4));
       push("highFrequency", P.NATIVE_GRAPH_PARAM_LPF_FREQUENCY, cont("highFrequency", 1000));
       push("lowFrequency", P.NATIVE_GRAPH_PARAM_HPF_FREQUENCY, cont("lowFrequency", 200));
-      push("sweep", P.NATIVE_GRAPH_PARAM_CENTER, cont("sweep", 0));
       push("resonance", P.NATIVE_GRAPH_PARAM_RESONANCE, cont("resonance", 0.2));
       push("feedbackCircuit", P.NATIVE_GRAPH_PARAM_STAGES, disc("feedbackCircuit", 3));
       push("gainCompensation", P.NATIVE_GRAPH_PARAM_TIMING_MODE, disc("gainCompensation", 1));
@@ -5425,14 +5424,13 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
       continue;
     }
     if (type === "passiveFilter") {
-      // stages=slope 0..3, width=stagger, center=sweep st, shape=gainComp.
+      // stages=slope 0..3, width=stagger, shape=gainComp. Wired ƒ = center (engine).
       // Mode default 1 = LP (0 = Bypass).
       push("mode", P.NATIVE_GRAPH_PARAM_MODE, disc("mode", 1));
       push("slope", P.NATIVE_GRAPH_PARAM_STAGES, disc("slope", 0));
       push("stagger", P.NATIVE_GRAPH_PARAM_WIDTH, cont("stagger", 1));
       push("lowFrequency", P.NATIVE_GRAPH_PARAM_HPF_FREQUENCY, cont("lowFrequency", 200));
       push("highFrequency", P.NATIVE_GRAPH_PARAM_LPF_FREQUENCY, cont("highFrequency", 1000));
-      push("sweep", P.NATIVE_GRAPH_PARAM_CENTER, cont("sweep", 0));
       push("gainCompensation", P.NATIVE_GRAPH_PARAM_SHAPE, disc("gainCompensation", 1));
       push("amplitude", P.NATIVE_GRAPH_PARAM_AMPLITUDE, cont("amplitude", 1));
       continue;
@@ -5911,24 +5909,12 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
       push("changeThreshold", P.NATIVE_GRAPH_PARAM_CENTER, cont("changeThreshold", 1e-6));
       continue;
     }
-    if (type === "fibonacciNoise") {
-      push("speed", P.NATIVE_GRAPH_PARAM_FREQUENCY, cont("speed", 44100));
-      push("interpolation", P.NATIVE_GRAPH_PARAM_MODE, disc("interpolation", 0));
-      push("quantize", P.NATIVE_GRAPH_PARAM_WIDTH, disc("quantize", 0));
-      push("lags", P.NATIVE_GRAPH_PARAM_STAGES, disc("lags", 0));
-      push("operation", P.NATIVE_GRAPH_PARAM_SHAPE, disc("operation", 0));
-      push("output", P.NATIVE_GRAPH_PARAM_CENTER, disc("output", 0));
-      push("seed", P.NATIVE_GRAPH_PARAM_SEED, disc("seed", 1));
-      push("amplitude", P.NATIVE_GRAPH_PARAM_AMPLITUDE, cont("amplitude", 1));
-      continue;
-    }
-    if (type === "formulaNoise") {
+    if (type === "piNoise") {
       push("speed", P.NATIVE_GRAPH_PARAM_FREQUENCY, cont("speed", 44100));
       push("interpolation", P.NATIVE_GRAPH_PARAM_MODE, disc("interpolation", 0));
       push("start", P.NATIVE_GRAPH_PARAM_CENTER, cont("start", 0));
       push("loop", P.NATIVE_GRAPH_PARAM_STAGES, disc("loop", 0));
       push("quantize", P.NATIVE_GRAPH_PARAM_WIDTH, disc("quantize", 0));
-      push("source", P.NATIVE_GRAPH_PARAM_SHAPE, disc("source", 0));
       push("seed", P.NATIVE_GRAPH_PARAM_SEED, disc("seed", 1));
       push("amplitude", P.NATIVE_GRAPH_PARAM_AMPLITUDE, cont("amplitude", 1));
       continue;
@@ -6214,7 +6200,7 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
     if (type === "sampleHold") {
       // center=threshold, frequency=sampleFrequency, amplitude=Amplitude,
       // mode=polarity (0 bipolar / 1 unipolar) — audio outs only; face Left Raw/Right Raw stay bipolar.
-      // shape=interpolate (0 Linear / 1 Smoothstep / 2 Slow End / 3 Slow Start),
+      // shape=interpolate (0 Linear / 1 Smoothstep / 2 Quadratic Out / 3 Quadratic In / 4 Cosine / 5 Hold),
       // mix=smoothing (clock-period factor; <=0 instant), phase=phaseOffset (Right lane).
       push("threshold", P.NATIVE_GRAPH_PARAM_CENTER, cont("threshold", 0));
       push("sampleFrequency", P.NATIVE_GRAPH_PARAM_FREQUENCY, cont("sampleFrequency", 0));
@@ -6871,8 +6857,10 @@ NodeLiveAudioProcessor.prototype.syncNativeEnsemblePublish =
  * Relayed on the data bus as EffectiveHz. No audio math here.
  */
 NodeLiveAudioProcessor.NATIVE_GRAPH_EFFECTIVE_HZ_TYPES = new Set([
-  "ladderFilter", "tb303Filter", "modeResonator", "cookbookFilter", "butterworth", "linkwitzRiley", "bessel", "chebyshev", "elliptic", "papoulisFilter", "bandpass", "allpass", "lowpass", "highpass", "eqFilter", "combResonator",
+  "ladderFilter", "tb303Filter", "modeResonator", "cookbookFilter", "butterworth", "linkwitzRiley", "bessel", "chebyshev", "elliptic", "papoulisFilter", "bandpass", "allpass", "lowpass", "highpass", "eqFilter", "combResonator", "passiveFilter", "activeFilter",
 ]);
+// Multi-cutoff types also publish HPF as EffectiveLoHz (EffectiveHz = LPF).
+NodeLiveAudioProcessor.NATIVE_GRAPH_EFFECTIVE_LO_HZ_TYPES = new Set(["passiveFilter", "activeFilter"]);
 NodeLiveAudioProcessor.prototype.syncNativeEffectiveHzPublish =
   function syncNativeEffectiveHzPublish() {
     if (!this.efficientProduct || !this.nativeGraphCompiled || !this.nativeGraphHandle) {
@@ -6885,6 +6873,11 @@ NodeLiveAudioProcessor.prototype.syncNativeEffectiveHzPublish =
     if (!this.effectiveHzPublish) {
       this.effectiveHzPublish = new Map();
     }
+    if (!this.effectiveLoHzPublish) {
+      this.effectiveLoHzPublish = new Map();
+    }
+    const readLo = this.nativeGraph?.soemdsp_graph_node_effective_lo_hz;
+    const loTypes = NodeLiveAudioProcessor.NATIVE_GRAPH_EFFECTIVE_LO_HZ_TYPES;
     const types = NodeLiveAudioProcessor.NATIVE_GRAPH_EFFECTIVE_HZ_TYPES;
     const live = new Set();
     for (const [id, node] of this.nodes || []) {
@@ -6895,9 +6888,17 @@ NodeLiveAudioProcessor.prototype.syncNativeEffectiveHzPublish =
       let hz = -1;
       try { hz = Number(read(this.nativeGraphHandle, this.fnv1aHash32(id))); } catch (_e) { hz = -1; }
       this.effectiveHzPublish.set(id, Number.isFinite(hz) ? hz : -1);
+      if (readLo && loTypes.has(String(node?.type || ""))) {
+        let lo = -1;
+        try { lo = Number(readLo(this.nativeGraphHandle, this.fnv1aHash32(id))); } catch (_e) { lo = -1; }
+        this.effectiveLoHzPublish.set(id, Number.isFinite(lo) ? lo : -1);
+      }
     }
     for (const id of [...this.effectiveHzPublish.keys()]) {
       if (!live.has(id)) this.effectiveHzPublish.delete(id);
+    }
+    for (const id of [...this.effectiveLoHzPublish.keys()]) {
+      if (!live.has(id)) this.effectiveLoHzPublish.delete(id);
     }
   };
 

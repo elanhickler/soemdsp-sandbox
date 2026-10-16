@@ -1,6 +1,6 @@
 // soemdsp-native-module: formula_noise
-// soemdsp-native-label: Formula Noise
-// soemdsp-native-target: formulaNoise
+// soemdsp-native-label: Pi Noise
+// soemdsp-native-target: piNoise
 // soemdsp-native-kind: noise
 //
 // Stepped / quantized noise: one value per step at Speed steps/s, from a
@@ -35,6 +35,9 @@
 //   0 Hold  1 Linear  2 1-Pole (cutoff Speed/2)  3 2-Pole  4 Cosine
 //   5 Smoothstep (3t^2-2t^3)  6 Cubic (Catmull-Rom)  7 B-Spline (cubic)
 //   8 Quintic B-Spline  9 Gaussian (sigma 1.5 steps over 16)
+//   10 Quadratic In (t^2)  11 Quadratic Out (1-(1-t)^2)
+// Linear / Cosine / Smoothstep / Quadratic In / Out are the shared two-point
+// curves (soemdsp/math/two_point_curves.h), same as Sample & Hold.
 // Quantize On snaps the smoothed value to the nearest of the 10 levels.
 // Trigger: 1 for one sample whenever the step index changed (also first
 // sample and after Reset / Start jumps). Index: position / (N - 1).
@@ -98,15 +101,15 @@ static const int kRing = 32;  // >= 16 Gaussian taps + headroom; power of 2
 static const char kMetadataJson[] =
   "{"
     "\"module\":\"formula_noise\","
-    "\"label\":\"Formula Noise\","
-    "\"targetType\":\"formulaNoise\","
+    "\"label\":\"Pi Noise\","
+    "\"targetType\":\"piNoise\","
     "\"kind\":\"noise\","
     "\"inputs\":[\"Reset\"],"
     "\"outputs\":[\"Bipolar\",\"Unipolar\",\"Trigger\",\"Index\"],"
     "\"parameters\":["
       "{\"key\":\"source\",\"label\":\"Source\",\"defaultValue\":0,\"choices\":[\"Pi\",\"e\",\"Sqrt 2\",\"Phi\",\"Ln 2\",\"Random Digits\",\"White\",\"Gaussian\",\"Random Walk\",\"Logistic Map\",\"Fibonacci\"],\"min\":0,\"max\":10,\"step\":1},"
       "{\"key\":\"speed\",\"label\":\"Speed\",\"defaultValue\":44100,\"min\":0.01,\"mid\":20,\"max\":96000,\"step\":\"any\"},"
-      "{\"key\":\"interpolation\",\"label\":\"Smoothing\",\"defaultValue\":0,\"choices\":[\"Hold\",\"Linear\",\"1-Pole\",\"2-Pole\",\"Cosine\",\"Smoothstep\",\"Cubic\",\"B-Spline\",\"Quintic B-Spline\",\"Gaussian\"],\"min\":0,\"max\":9,\"step\":1},"
+      "{\"key\":\"interpolation\",\"label\":\"Smoothing\",\"defaultValue\":0,\"choices\":[\"Hold\",\"Linear\",\"1-Pole\",\"2-Pole\",\"Cosine\",\"Smoothstep\",\"Cubic\",\"B-Spline\",\"Quintic B-Spline\",\"Gaussian\",\"Quadratic In\",\"Quadratic Out\"],\"min\":0,\"max\":11,\"step\":1},"
       "{\"key\":\"start\",\"label\":\"Start\",\"defaultValue\":0,\"min\":0,\"mid\":0.5,\"max\":1,\"step\":\"any\"},"
       "{\"key\":\"loop\",\"label\":\"Loop\",\"defaultValue\":0,\"choices\":[\"Wrap\",\"Ping-Pong\"],\"min\":0,\"max\":1,\"step\":1},"
       "{\"key\":\"quantize\",\"label\":\"Quantize\",\"defaultValue\":0,\"choices\":[\"Off\",\"On\"],\"min\":0,\"max\":1,\"step\":1},"
@@ -290,7 +293,7 @@ extern "C" double soemdsp_formula_noise_sample(
   if (!p) return 0.0;
   FormulaNoiseState& s = *p;
   const bool pingPong = safe(loop) >= 0.5;
-  const int mode = clamp_int((int)(safe(interpolation) + 0.5), 0, 9);
+  const int mode = clamp_int((int)(safe(interpolation) + 0.5), 0, 11);
   const double sr = safe(sampleRate) > 0.0 ? sampleRate : 44100.0;
   const double spd = speed;
 
@@ -307,11 +310,15 @@ extern "C" double soemdsp_formula_noise_sample(
 
   double v = d1;
   if (mode == 1) {
-    v = lerp(d1, step_value(s, k + 1, pingPong), t);
+    v = lerp(d1, step_value(s, k + 1, pingPong), curve_linear01(t));
   } else if (mode == 4) {
-    v = interp_cosine(d1, step_value(s, k + 1, pingPong), t);
+    v = lerp(d1, step_value(s, k + 1, pingPong), curve_cosine01(t));
   } else if (mode == 5) {
-    v = interp_smoothstep(d1, step_value(s, k + 1, pingPong), t);
+    v = lerp(d1, step_value(s, k + 1, pingPong), curve_smoothstep01(t));
+  } else if (mode == 10) {
+    v = lerp(d1, step_value(s, k + 1, pingPong), curve_quad_in01(t));
+  } else if (mode == 11) {
+    v = lerp(d1, step_value(s, k + 1, pingPong), curve_quad_out01(t));
   } else if (mode == 6 || mode == 7) {
     const double d0 = step_value(s, k - 1, pingPong);
     const double d2 = step_value(s, k + 1, pingPong);
@@ -402,7 +409,7 @@ extern "C" int soemdsp_formula_noise_source_count() {
 }
 
 extern "C" int soemdsp_formula_noise_version() {
-  return 9;
+  return 10; // Smoothing + Quadratic In / Out (shared two_point_curves.h)
 }
 
 extern "C" const char* soemdsp_formula_noise_metadata_json() {

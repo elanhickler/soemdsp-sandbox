@@ -2,9 +2,8 @@
 // Freestanding (no libm). Nested soemdsp::math; soemdsp_maths mirror.
 //
 // All take t in [0, 1] across the segment y1 -> y2 (y0 = point before y1,
-// y3 = point after y2). Linear interpolation is lerp() in scalar_helpers.h.
-//   interp_cosine       S-curve y1 -> y2 (zero slope at both ends)
-//   interp_smoothstep   polynomial S-curve y1 -> y2, weight 3t^2 - 2t^3
+// y3 = point after y2). Two-point curves (linear, cosine, smoothstep,
+// quadratic in/out) are blend weights in two_point_curves.h.
 //   interp_catmull_rom  cubic Hermite through y1 and y2 (Catmull-Rom tangents)
 //   interp_bspline3     uniform cubic B-spline (C2, does not pass through y1/y2)
 //   interp_bspline5     uniform quintic B-spline over 6 points (C4, no overshoot)
@@ -16,21 +15,6 @@
 #include <soemdsp/math/exp_log.h>
 
 namespace soemdsp::math {
-
-// Cosine interpolation: lerp with t' = (1 - cos(pi t)) / 2. t clamped to [0,1].
-static inline double interp_cosine(double y1, double y2, double t) {
-  const double x = clamp01(t);
-  const double w = 0.5 - 0.5 * soemdsp_maths::dsp_cos_0_pi(x * soemdsp_maths::kPi);
-  return y1 + w * (y2 - y1);
-}
-
-// Smoothstep interpolation: lerp with t' = t^2 (3 - 2t). t clamped to [0,1].
-// Same end slopes as interp_cosine (zero), slightly steeper middle, no trig.
-static inline double interp_smoothstep(double y1, double y2, double t) {
-  const double x = clamp01(t);
-  const double w = x * x * (3.0 - 2.0 * x);
-  return y1 + w * (y2 - y1);
-}
 
 // Catmull-Rom cubic Hermite: passes through y1 (t=0) and y2 (t=1); slope at
 // each point = half the difference of its neighbours. C1 continuous.
@@ -128,8 +112,6 @@ static inline double interp_gaussian(const double* y, double t) {
 }  // namespace soemdsp::math
 
 namespace soemdsp_maths {
-using soemdsp::math::interp_cosine;
-using soemdsp::math::interp_smoothstep;
 using soemdsp::math::interp_catmull_rom;
 using soemdsp::math::interp_bspline3;
 using soemdsp::math::interp_bspline5;

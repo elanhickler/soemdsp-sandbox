@@ -8,19 +8,6 @@ const nodeGraphActiveFilterSlopeChoices = Object.freeze([
   "Bypass", "6", "12", "18", "24",
 ]);
 
-function nodeGraphSweepFrequencyHz(hz, semitones) {
-  const f = Number(hz);
-  if (!Number.isFinite(f) || f <= 0) {
-    return 0;
-  }
-  const st = Number(semitones);
-  if (!Number.isFinite(st) || st === 0) {
-    return f;
-  }
-  const out = f * (2 ** (st / 12));
-  return Number.isFinite(out) && out > 0 ? out : 0;
-}
-
 /** Slope index 0..4 (Bypass..24). Migrates legacy mode 0..9 when slopes missing. */
 function nodeGraphActiveFilterSlopeIndex(value, fallback = 0) {
   const n = Math.round(Number(value));
@@ -41,7 +28,6 @@ function nodeGraphActiveFilterLegacyModeToSlopes(mode) {
 
 function nodeGraphActiveFilterResolveInto(dst, params) {
   const out = dst && typeof dst === "object" ? dst : {};
-  const sweep = nodeGraphFiniteNumber(params?.sweep);
   out.feedbackCircuit = params?.feedbackCircuit;
   out.gainCompensation = params?.gainCompensation;
   out.resonance = params?.resonance;
@@ -84,8 +70,6 @@ function nodeGraphActiveFilterResolveInto(dst, params) {
       high = centerHz * 2;
     }
   }
-  low = nodeGraphSweepFrequencyHz(low, sweep);
-  high = nodeGraphSweepFrequencyHz(high, sweep);
   const hpHz = Math.min(low, high);
   const lpHz = Math.max(low, high);
 

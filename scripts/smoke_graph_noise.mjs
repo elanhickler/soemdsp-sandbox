@@ -110,21 +110,21 @@ runSource("fractalBrownianNoise", 87, (g, h) => {
   setParam(g, h, PARAM_AMPLITUDE, 1);
 });
 
-runSource("formulaNoise", 88, (g, h) => {
+runSource("piNoise", 88, (g, h) => {
   setParam(g, h, PARAM_FREQUENCY, 44100); // speed digits/s
   setParam(g, h, PARAM_CENTER, 0);        // start
   setParam(g, h, PARAM_STAGES, 0);        // loop Wrap
   setParam(g, h, PARAM_MODE, 6);          // Cubic
 }, { blocks: 200, minPeak: 0.05 });
 
-runSource("formulaNoise", 88, (g, h) => {
+runSource("piNoise", 88, (g, h) => {
   setParam(g, h, PARAM_FREQUENCY, 2000);  // speed steps/s
   setParam(g, h, PARAM_SHAPE, 8);         // source Random Walk (graph Source wiring)
   setParam(g, h, PARAM_SEED, 0);          // Seed 0 is valid
   setParam(g, h, PARAM_MODE, 9);          // Gaussian
 }, { blocks: 200, minPeak: 0.05 });
 
-// formulaNoise Amplitude: per-sample gain on Bipolar/Unipolar (Trigger unscaled).
+// piNoise Amplitude: per-sample gain on Bipolar/Unipolar (Trigger unscaled).
 {
   const runFn = (amp) => {
     const g = create() | 0; setSr(g, 48000);
@@ -143,45 +143,14 @@ runSource("formulaNoise", 88, (g, h) => {
   let peak = 0;
   for (let i = 0; i < one.mono.length; i++) {
     peak = Math.max(peak, Math.abs(one.mono[i]));
-    if (def.mono[i] !== one.mono[i]) throw new Error(`formulaNoise amp default != 1 at ${i}`);
-    if (Math.abs(half.mono[i] - 0.5 * one.mono[i]) > 1e-12 || Math.abs(half.uni[i] - 0.5 * one.uni[i]) > 1e-12) throw new Error(`formulaNoise amp 0.5 at ${i}`);
-    if (Math.abs(big.mono[i] - 2 * one.mono[i]) > 1e-12) throw new Error(`formulaNoise amp 2 (no clamp) at ${i}`);
-    if (zero.mono[i] !== 0 || zero.uni[i] !== 0) throw new Error(`formulaNoise amp 0 at ${i}`);
-    if (half.trig[i] !== one.trig[i]) throw new Error(`formulaNoise trigger scaled at ${i}`);
+    if (def.mono[i] !== one.mono[i]) throw new Error(`piNoise amp default != 1 at ${i}`);
+    if (Math.abs(half.mono[i] - 0.5 * one.mono[i]) > 1e-12 || Math.abs(half.uni[i] - 0.5 * one.uni[i]) > 1e-12) throw new Error(`piNoise amp 0.5 at ${i}`);
+    if (Math.abs(big.mono[i] - 2 * one.mono[i]) > 1e-12) throw new Error(`piNoise amp 2 (no clamp) at ${i}`);
+    if (zero.mono[i] !== 0 || zero.uni[i] !== 0) throw new Error(`piNoise amp 0 at ${i}`);
+    if (half.trig[i] !== one.trig[i]) throw new Error(`piNoise trigger scaled at ${i}`);
   }
-  if (!(peak > 0.05)) throw new Error(`formulaNoise amp test silent`);
-  console.log(`formulaNoise amplitude ok: default=1, 0.5/2/0 scale Bipolar+Unipolar exactly, Trigger unscaled`);
-}
-
-// fibonacciNoise Amplitude: same rule as formulaNoise (per-sample gain on Bipolar/Unipolar, Trigger unscaled).
-{
-  const runFib = (amp) => {
-    const g = create() | 0; setSr(g, 48000);
-    const h = 0x9988, hOut = h + 1;
-    add(g, h, 217); add(g, hOut, TYPE_OUT); connect(g, h, PORT_MONO, hOut, PORT_MONO);
-    setParam(g, h, PARAM_FREQUENCY, 2000);
-    if (amp !== null) setParam(g, h, PARAM_AMPLITUDE, amp);
-    compile(g); snap(g);
-    const mono = [], uni = [], trig = [];
-    for (let q = 0; q < 20; q++) { process(g, 128);
-      mono.push(...view(portPtr(g, h, PORT_MONO) | 0, 128)); uni.push(...view(portPtr(g, h, PORT_LEFT) | 0, 128));
-      trig.push(...view(portPtr(g, h, 2) | 0, 128)); }
-    destroy(g); return { mono, uni, trig };
-  };
-  const def = runFib(null), one = runFib(1), half = runFib(0.5), big = runFib(2), zero = runFib(0);
-  let peak = 0, trigs = 0;
-  for (let i = 0; i < one.mono.length; i++) {
-    peak = Math.max(peak, Math.abs(one.mono[i]));
-    if (one.trig[i] > 0) trigs++;
-    if (def.mono[i] !== one.mono[i] || def.uni[i] !== one.uni[i]) throw new Error(`fibonacciNoise amp default != 1 at ${i}`);
-    if (Math.abs(half.mono[i] - 0.5 * one.mono[i]) > 1e-12 || Math.abs(half.uni[i] - 0.5 * one.uni[i]) > 1e-12) throw new Error(`fibonacciNoise amp 0.5 at ${i}`);
-    if (Math.abs(big.mono[i] - 2 * one.mono[i]) > 1e-12 || Math.abs(big.uni[i] - 2 * one.uni[i]) > 1e-12) throw new Error(`fibonacciNoise amp 2 (no clamp) at ${i}`);
-    if (zero.mono[i] !== 0 || zero.uni[i] !== 0) throw new Error(`fibonacciNoise amp 0 at ${i}`);
-    if (half.trig[i] !== one.trig[i] || zero.trig[i] !== one.trig[i]) throw new Error(`fibonacciNoise trigger scaled at ${i}`);
-  }
-  if (!(peak > 0.05)) throw new Error("fibonacciNoise amp test silent");
-  if (!(trigs > 0)) throw new Error("fibonacciNoise amp test: no triggers to compare");
-  console.log(`fibonacciNoise amplitude ok: default=1, 0.5/2/0 scale Bipolar+Unipolar exactly, Trigger unscaled (${trigs} triggers)`);
+  if (!(peak > 0.05)) throw new Error(`piNoise amp test silent`);
+  console.log(`piNoise amplitude ok: default=1, 0.5/2/0 scale Bipolar+Unipolar exactly, Trigger unscaled`);
 }
 
 runSource("randomWalk", 89, (g, h) => {
@@ -233,14 +202,14 @@ runSource("randomWalk", 89, (g, h) => {
   destroy(g);
 }
 
-// Formula Noise sources: first values per source (tables vs known digits; live
+// Pi Noise sources: first values per source (tables vs known digits; live
 // sources vs a JS twin of seed_mix / indexed_noise.h), determinism, and every
 // Source x Smoothing combination stays finite and near range.
 {
   const pn = (n) => must(`soemdsp_formula_noise_${n}`);
   const pnCreate = pn("create"), pnDestroy = pn("destroy"), pnSetSource = pn("set_source");
   const pnSample = pn("sample"), pnValueAt = pn("value_at"), pnSetStart = pn("set_start");
-  if ((pn("source_count")() | 0) !== 11) throw new Error("formulaNoise source count");
+  if ((pn("source_count")() | 0) !== 11) throw new Error("piNoise source count");
   const imul = Math.imul;
   const av = (x) => {
     x >>>= 0; x ^= x >>> 16; x = imul(x, 0x85EBCA6B) >>> 0; x ^= x >>> 13;
@@ -254,7 +223,7 @@ runSource("randomWalk", 89, (g, h) => {
   const idx = (seed, part, k) => mix(mix(seed, part, 0), part, k); // k < 2^32
   const u01 = (seed, part, k) => (idx(seed, part, k) >>> 8) / 16777216;
   const h = pnCreate() | 0;
-  if (h <= 0) throw new Error("formulaNoise create");
+  if (h <= 0) throw new Error("piNoise create");
   const first = (src, seed, n) => {
     pnSetSource(h, src, seed);
     const out = [];
@@ -265,9 +234,9 @@ runSource("randomWalk", 89, (g, h) => {
     3: "16180339887498948482", 4: "06931471805599453094" };
   for (const [src, digits] of Object.entries(known)) {
     const got = first(+src, 1, 20).join("");
-    if (got !== digits) throw new Error(`formulaNoise source ${src} digits ${got} != ${digits}`);
+    if (got !== digits) throw new Error(`piNoise source ${src} digits ${got} != ${digits}`);
   }
-  const close = (a, b, what) => { if (Math.abs(a - b) > 1e-12) throw new Error(`formulaNoise ${what}: ${a} vs ${b}`); };
+  const close = (a, b, what) => { if (Math.abs(a - b) > 1e-12) throw new Error(`piNoise ${what}: ${a} vs ${b}`); };
   for (const seed of [0, 1, 12345]) {
     const dig = first(5, seed, 64);
     dig.forEach((v, i) => close(v, Number((BigInt(idx(seed, 1, i)) * 10n) >> 32n), `digits seed ${seed} i ${i}`));
@@ -288,11 +257,11 @@ runSource("randomWalk", 89, (g, h) => {
     const fib = first(10, seed, 80);
     for (let i = 0; i + 2 < 80; i++) close(fib[i + 2], (fib[i] + fib[i + 1]) % 10, `fibonacci seed ${seed} i ${i}`);
   }
-  if (first(5, 0, 16).join() === first(5, 1, 16).join()) throw new Error("formulaNoise seed 0 == seed 1");
+  if (first(5, 0, 16).join() === first(5, 1, 16).join()) throw new Error("piNoise seed 0 == seed 1");
   // far value then back near the start (walk cursor both ways)
   pnSetSource(h, 8, 3);
   const w0 = pnValueAt(h, 5), wFar = pnValueAt(h, 2097151), w0b = pnValueAt(h, 5);
-  if (w0 !== w0b || !(wFar >= 0 && wFar <= 9)) throw new Error("formulaNoise walk cursor");
+  if (w0 !== w0b || !(wFar >= 0 && wFar <= 9)) throw new Error("piNoise walk cursor");
   for (let src = 0; src < 11; src++) {
     for (let mode = 0; mode < 10; mode++) {
       pnSetSource(h, src, 7);
@@ -300,111 +269,14 @@ runSource("randomWalk", 89, (g, h) => {
       let lo = Infinity, hi = -Infinity;
       for (let i = 0; i < 4000; i++) {
         const v = pnSample(h, 3000, 48000, mode, i > 2000 ? 1 : 0, 0, 0);
-        if (!Number.isFinite(v)) throw new Error(`formulaNoise src ${src} mode ${mode} non-finite`);
+        if (!Number.isFinite(v)) throw new Error(`piNoise src ${src} mode ${mode} non-finite`);
         lo = Math.min(lo, v); hi = Math.max(hi, v);
       }
-      if (lo < -1.3 || hi > 1.3 || !(hi > lo)) throw new Error(`formulaNoise src ${src} mode ${mode} range ${lo}..${hi}`);
+      if (lo < -1.3 || hi > 1.3 || !(hi > lo)) throw new Error(`piNoise src ${src} mode ${mode} range ${lo}..${hi}`);
     }
   }
   pnDestroy(h);
-  console.log("formulaNoise sources ok: 5 tables match known digits, 6 live sources match JS twin");
-}
-
-runSource("fibonacciNoise", 217, (g, h) => {
-  setParam(g, h, PARAM_FREQUENCY, 3000);  // speed steps/s
-  setParam(g, h, PARAM_STAGES, 5);        // lags 418/1279
-  setParam(g, h, PARAM_SHAPE, 3);         // XOR
-  setParam(g, h, PARAM_CENTER, 1);        // Continuous
-  setParam(g, h, PARAM_SEED, 0);          // Seed 0 is valid
-  setParam(g, h, PARAM_MODE, 9);          // Gaussian
-}, { blocks: 200, minPeak: 0.05 });
-
-// Fibonacci Noise: recurrence for every operation, exact XOR period,
-// no early repeat, output range / levels, Seed 0 vs 1, look-ahead smoothing.
-{
-  const fn = (n) => must(`soemdsp_fibonacci_noise_${n}`);
-  const tInit = fn("test_init"), tNext = fn("test_next");
-  const fCreate = fn("create"), fDestroy = fn("destroy"), fConfig = fn("set_config"), fSample = fn("sample");
-  const lagPairs = [[24, 55], [5, 17], [31, 63], [97, 127], [273, 607], [418, 1279]];
-  const ops = [(a, b) => (a + b) >>> 0, (a, b) => (a - b) >>> 0, (a, b) => Math.imul(a, b) >>> 0, (a, b) => (a ^ b) >>> 0];
-  for (let li = 0; li < lagPairs.length; li++) {
-    const [j, k] = lagPairs[li];
-    for (let op = 0; op < 4; op++) {
-      tInit(1, li, op);
-      const x = [];
-      for (let i = 0; i < k + 2000; i++) x.push(tNext());
-      for (let n = k; n < x.length; n++) {
-        if (x[n] !== ops[op](x[n - j], x[n - k])) throw new Error(`fibonacciNoise recurrence lags ${j}/${k} op ${op} n ${n}`);
-      }
-      if (new Set(x.slice(-200)).size < 150) throw new Error(`fibonacciNoise lags ${j}/${k} op ${op} degenerate`);
-    }
-  }
-  // XOR 5/17 is a GFSR: period exactly 2^17 - 1 = 131071 (prime, so 1 or 131071).
-  tInit(3, 1, 3);
-  const P = 131071;
-  const xs = new Float64Array(P + 300);
-  for (let i = 0; i < xs.length; i++) xs[i] = tNext();
-  for (let i = 0; i < 300; i++) if (xs[i] !== xs[i + P]) throw new Error("fibonacciNoise XOR 5/17 period != 131071");
-  if (xs[0] === xs[1] && xs[1] === xs[2]) throw new Error("fibonacciNoise XOR constant");
-  // Add 5/17: the first 8 outputs never reappear in the next 1,000,000.
-  tInit(3, 1, 0);
-  const head = []; for (let i = 0; i < 8; i++) head.push(tNext());
-  const win = head.slice();
-  for (let i = 0; i < 1000000; i++) {
-    win.shift(); win.push(tNext());
-    if (win.every((v, q) => v === head[q])) throw new Error(`fibonacciNoise Add 5/17 repeated after ${i + 1}`);
-  }
-  const run = (cfg, mode, n, speed = 48000) => {
-    const h = fCreate() | 0;
-    if (h <= 0) throw new Error("fibonacciNoise create");
-    fConfig(h, cfg.lags, cfg.op, cfg.out, cfg.seed);
-    const out = new Float64Array(n);
-    for (let i = 0; i < n; i++) out[i] = fSample(h, speed, 48000, mode, 0, 0);
-    fDestroy(h);
-    return out;
-  };
-  for (let li = 0; li < 6; li++) for (let op = 0; op < 4; op++) for (let outm = 0; outm < 2; outm++) {
-    const y = run({ lags: li, op, out: outm, seed: 1 }, 0, 20000);
-    const counts = new Array(10).fill(0);
-    for (const v of y) {
-      if (!(v >= -1 && v <= 1)) throw new Error(`fibonacciNoise range ${v}`);
-      if (outm === 0) {
-        const d = (v + 1) * 4.5;
-        if (Math.abs(d - Math.round(d)) > 1e-9) throw new Error(`fibonacciNoise digit level ${v}`);
-        counts[Math.round(d)]++;
-      }
-    }
-    if (outm === 0 && counts.some((c) => c < 1500 || c > 2500)) throw new Error(`fibonacciNoise digits uneven lags ${li} op ${op}: ${counts}`);
-  }
-  const s0 = run({ lags: 0, op: 0, out: 0, seed: 0 }, 0, 64), s1 = run({ lags: 0, op: 0, out: 0, seed: 1 }, 0, 64);
-  if (s0.join() === s1.join()) throw new Error("fibonacciNoise Seed 0 == Seed 1");
-  if (new Set(s0).size < 5) throw new Error("fibonacciNoise Seed 0 degenerate");
-  // look-ahead: at speed sr/8, Linear/Cubic/etc. at step starts; Linear equals Hold there.
-  const cfg = { lags: 3, op: 0, out: 1, seed: 9 };
-  const hold = run(cfg, 0, 8000, 6000);
-  const lin = run(cfg, 1, 8000, 6000);
-  for (let i = 0; i < 8000; i += 8) if (Math.abs(hold[i] - lin[i]) > 1e-12) throw new Error(`fibonacciNoise linear look-ahead i ${i}`);
-  for (let i = 1; i < 8; i++) {
-    const want = hold[0] + (hold[8] - hold[0]) * i / 8;
-    if (Math.abs(lin[i] - want) > 1e-9) throw new Error("fibonacciNoise linear ramp");
-  }
-  for (let mode = 0; mode < 10; mode++) {
-    const y = run(cfg, mode, 8000, 3000);
-    let lo = Infinity, hi = -Infinity;
-    for (const v of y) { if (!Number.isFinite(v)) throw new Error(`fibonacciNoise mode ${mode} NaN`); lo = Math.min(lo, v); hi = Math.max(hi, v); }
-    if (lo < -1.3 || hi > 1.3 || !(hi > lo)) throw new Error(`fibonacciNoise mode ${mode} range ${lo}..${hi}`);
-  }
-  // Reset restarts the same sequence.
-  {
-    const h = fCreate() | 0;
-    fConfig(h, 0, 0, 0, 5);
-    const a = []; for (let i = 0; i < 50; i++) a.push(fSample(h, 48000, 48000, 0, 0, 0));
-    for (let i = 0; i < 77; i++) fSample(h, 48000, 48000, 0, 0, 0);
-    const b = []; for (let i = 0; i < 50; i++) b.push(fSample(h, 48000, 48000, 0, 0, i === 0 ? 1 : 0));
-    if (a.join() !== b.join()) throw new Error("fibonacciNoise reset");
-    fDestroy(h);
-  }
-  console.log("fibonacciNoise ok: recurrence x 24 configs, XOR 5/17 period 131071, no early repeat, levels/range, Seed 0 != 1, look-ahead, reset");
+  console.log("piNoise sources ok: 5 tables match known digits, 6 live sources match JS twin");
 }
 
 console.log("noise smoke ok");

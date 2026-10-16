@@ -78,6 +78,7 @@ $modules = @(
     "soemdsp_graph_node_port_ptr",
     "soemdsp_graph_node_native_handle",
     "soemdsp_graph_node_effective_hz",
+    "soemdsp_graph_node_effective_lo_hz",
     "soemdsp_graph_yellow_harmonics",
     "soemdsp_graph_yellow_ratio_ptr",
     "soemdsp_graph_yellow_phase_ptr",
@@ -124,7 +125,7 @@ $modules = @(
     "soemdsp_polyblep_trisaw_center",
     "soemdsp_polyblep_version"
   ) }
-  @{ Name = "logistic_map"; Simd = $false; Exports = @("soemdsp_logistic_map_create", "soemdsp_logistic_map_destroy", "soemdsp_logistic_map_sample", "soemdsp_logistic_map_version") }
+  @{ Name = "logistic_map"; Simd = $false; Exports = @("soemdsp_logistic_map_create", "soemdsp_logistic_map_destroy", "soemdsp_logistic_map_sample", "soemdsp_logistic_map_trigger", "soemdsp_logistic_map_version") }
   @{ Name = "pitch_quantizer"; Simd = $false; Exports = @("soemdsp_pitch_quantizer_create", "soemdsp_pitch_quantizer_destroy", "soemdsp_pitch_quantizer_sample", "soemdsp_pitch_quantizer_version") }
   @{ Name = "surge_oscillator"; Simd = $false; Exports = @("soemdsp_surge_oscillator_create", "soemdsp_surge_oscillator_destroy", "soemdsp_surge_oscillator_reset", "soemdsp_surge_oscillator_sample", "soemdsp_surge_oscillator_out", "soemdsp_surge_oscillator_saw", "soemdsp_surge_oscillator_square", "soemdsp_surge_oscillator_tri", "soemdsp_surge_oscillator_sine", "soemdsp_surge_oscillator_synced", "soemdsp_surge_oscillator_internal_sync", "soemdsp_surge_oscillator_version") }
   @{ Name = "dsf_oscillator"; Simd = $false; Exports = @("soemdsp_dsf_oscillator_create", "soemdsp_dsf_oscillator_destroy", "soemdsp_dsf_oscillator_reset", "soemdsp_dsf_oscillator_sample", "soemdsp_dsf_oscillator_out", "soemdsp_dsf_oscillator_version") }
@@ -167,12 +168,6 @@ $modules = @(
     "soemdsp_time_quantizer_create", "soemdsp_time_quantizer_destroy", "soemdsp_time_quantizer_sample",
     "soemdsp_time_quantizer_trigger", "soemdsp_time_quantizer_version", "soemdsp_time_quantizer_metadata_json",
     "soemdsp_time_quantizer_metadata_json_size"
-  ) },
-  @{ Name = "fibonacci_noise"; Simd = $false; Exports = @(
-    "soemdsp_fibonacci_noise_create", "soemdsp_fibonacci_noise_destroy", "soemdsp_fibonacci_noise_set_config",
-    "soemdsp_fibonacci_noise_sample", "soemdsp_fibonacci_noise_bipolar", "soemdsp_fibonacci_noise_unipolar",
-    "soemdsp_fibonacci_noise_trigger", "soemdsp_fibonacci_noise_test_init", "soemdsp_fibonacci_noise_test_next",
-    "soemdsp_fibonacci_noise_version", "soemdsp_fibonacci_noise_metadata_json", "soemdsp_fibonacci_noise_metadata_json_size"
   ) },
   @{ Name = "formula_noise"; Simd = $false; Exports = @(
     "soemdsp_formula_noise_create", "soemdsp_formula_noise_destroy", "soemdsp_formula_noise_set_start",
@@ -744,9 +739,21 @@ if ($node) {
   if ($LASTEXITCODE -ne 0) {
     throw "Combined build: passive filter crossed BP smoke FAILED"
   }
-  & $node.Source "$root\scripts\smoke_active_filter_sweep.mjs"
+  & $node.Source "$root\scripts\smoke_multi_cutoff_f.mjs"
   if ($LASTEXITCODE -ne 0) {
-    throw "Combined build: Dual Ladder sweep smoke FAILED"
+    throw "Combined build: multi-cutoff f smoke FAILED"
+  }
+  & $node.Source "$root\scripts\smoke_filter_face_f_pipeline.mjs"
+  if ($LASTEXITCODE -ne 0) {
+    throw "Combined build: filter face f pipeline smoke FAILED"
+  }
+  & $node.Source "$root\scripts\smoke_logistic_map_clock.mjs"
+  if ($LASTEXITCODE -ne 0) {
+    throw "Combined build: logistic map clock smoke FAILED"
+  }
+  & $node.Source "$root\scripts\smoke_interpolation_curves.mjs"
+  if ($LASTEXITCODE -ne 0) {
+    throw "Combined build: interpolation curves smoke FAILED"
   }
   & $node.Source "$root\scripts\smoke_robin_supersaw_pitch_jitter.mjs"
   if ($LASTEXITCODE -ne 0) {

@@ -53,6 +53,11 @@ function nodeGraphLogisticMapSample(options = {}) {
     nodeGraphFiniteNumber(options.antialias, 0),
     nodeGraphFiniteNumber(options.level),
     Math.max(1, nodeGraphFiniteNumber(options.sampleRate, 44100)),
+    nodeGraphFiniteNumber(options.clock, 0),
+    options.clockWired ? 1 : 0,
   );
+  if (options.out && typeof options.out === "object") {
+    options.out.trigger = wasm.soemdsp_logistic_map_trigger ? wasm.soemdsp_logistic_map_trigger(state.nativeHandle) : 0;
+  }
   return Number.isFinite(out) ? out : 0;
 }

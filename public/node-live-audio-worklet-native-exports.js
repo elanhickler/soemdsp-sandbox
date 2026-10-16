@@ -1388,7 +1388,7 @@ NodeLiveAudioProcessor.prototype.applyNativeModuleExports = function applyNative
         });
         return;
       }
-      if (name === "formula_noise" || targetType === "formulaNoise") {
+      if (name === "formula_noise" || targetType === "piNoise") {
         for (const state of this.formulaNoiseStates.values()) {
           this.destroyFormulaNoiseNativeState(state);
         }

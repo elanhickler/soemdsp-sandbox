@@ -526,7 +526,7 @@ async function sendNodeGraphLiveNativeModule(liveNode, entry) {
 // Chrome caps wasm memories per process (~100); many standalone instances
 // hit that cap. Slim is for small used-sets when per-module files exist;
 // huge patches / site deploys should use combined.
-const nodeGraphLiveCombinedNativeModuleUrl = "native_modules/combined/soemdsp_combined.wasm?v=sc-stroke-20261014";
+const nodeGraphLiveCombinedNativeModuleUrl = "native_modules/combined/soemdsp_combined.wasm?v=pinoise-interp-20261015";
 
 /** @type {null|"slim"|"combined"} */
 let nodeGraphLiveNativeWasmLoadModeResolved = null;
@@ -1886,8 +1886,80 @@ if (typeof globalThis !== "undefined") {
   globalThis.sendNodeGraphArpOverride = sendNodeGraphArpOverride;
 }
 
+/*
+ * Frame batch entry point (docs/FRAME_BATCH_FORMAT.md).
+ *
+ * nodeGraphReceiveFrameBatch(batch) is the ONE source-agnostic way to feed the
+ * page a display frame: the AudioWorklet posts { type: "frameBatch" } and the
+ * plugin's native engine (C++ / JUCE event, no worklet) calls this function
+ * directly with the same object. Batches are ingested once per
+ * requestAnimationFrame; a newer batch arriving before that frame first
+ * ingests the older one (order kept, nothing dropped).
+ */
+const nodeGraphFrameBatchState = { pending: null, raf: 0, received: 0, ingested: 0 };
+
+function nodeGraphIngestFrameBatchNow(batch) {
+  const state = nodeGraphFrameBatchState;
+  state.ingested += 1;
+  const sessionId = batch.sessionId;
+  // Meter and visual state first so scope-driven paints see current values.
+  for (const kind of ["meter", "visualControls", "scope"]) {
+    const part = batch[kind];
+    if (!part) {
+      continue;
+    }
+    const parts = Array.isArray(part) ? part : [part];
+    for (const message of parts) {
+      if (!message || typeof message !== "object") {
+        continue;
+      }
+      message.type = kind;
+      if (message.sessionId === undefined) {
+        message.sessionId = sessionId;
+      }
+      handleNodeGraphLiveWorkletMessage({ data: message });
+    }
+  }
+}
+
+function nodeGraphFlushFrameBatch() {
+  const state = nodeGraphFrameBatchState;
+  state.raf = 0;
+  const batch = state.pending;
+  state.pending = null;
+  if (batch) {
+    nodeGraphIngestFrameBatchNow(batch);
+  }
+}
+
+function nodeGraphReceiveFrameBatch(batch) {
+  if (!batch || typeof batch !== "object") {
+    return false;
+  }
+  const state = nodeGraphFrameBatchState;
+  state.received += 1;
+  if (state.pending) {
+    nodeGraphIngestFrameBatchNow(state.pending);
+  }
+  state.pending = batch;
+  if (!state.raf) {
+    state.raf = typeof requestAnimationFrame === "function"
+      ? requestAnimationFrame(nodeGraphFlushFrameBatch)
+      : setTimeout(nodeGraphFlushFrameBatch, 16);
+  }
+  return true;
+}
+
+if (typeof window !== "undefined") {
+  window.nodeGraphReceiveFrameBatch = nodeGraphReceiveFrameBatch;
+}
+
 function handleNodeGraphLiveWorkletMessage(event) {
   const message = event.data || {};
+  if (message.type === "frameBatch") {
+    nodeGraphReceiveFrameBatch(message);
+    return;
+  }
   if (message.type === "recordChunk") {
     if (typeof nodeGraphAppendLiveRecordingChunk === "function") {
       nodeGraphAppendLiveRecordingChunk(message.left, message.right);
@@ -2427,6 +2499,8 @@ async function sendNodeGraphLivePlan() {
   if (!nodeGraphMvp.live.node && !nodeGraphMvp.live.context) {
     return false;
   }
+  // A plan carries every parameter; the next params push must be full.
+  nodeGraphMvp.live.paramSnapshot = null;
   const hadLivePlan = Boolean(
     nodeGraphMvp.live.planEvidence ||
     nodeGraphMvp.live.runtime ||
@@ -2631,14 +2705,91 @@ function scheduleNodeGraphLiveGraphData(nodeId, graph) {
   });
 }
 
+// Value signature of one built runtime parameter node, for drag-time diffs.
+// Params are numbers / choice ids; meta and extras are small objects.
+function nodeGraphLiveParameterNodeSignature(runtimeNode) {
+  let text = "";
+  for (const key of Object.keys(runtimeNode)) {
+    const value = runtimeNode[key];
+    if (key === "params") {
+      for (const pk of Object.keys(value || {})) {
+        text += `${pk}=${value[pk]};`;
+      }
+      text += "|";
+    } else if (value && typeof value === "object") {
+      text += `${key}:${JSON.stringify(value)}|`;
+    } else {
+      text += `${key}:${String(value)}|`;
+    }
+  }
+  return text;
+}
+
+function nodeGraphLiveRememberParameterNodes(nodes, patchFingerprint) {
+  const signatures = new Map();
+  for (const node of nodes) {
+    signatures.set(node.id, nodeGraphLiveParameterNodeSignature(node));
+  }
+  nodeGraphMvp.live.paramSnapshot = {
+    autoSmoothingSeconds: nodeGraphMvp.live.autoSmoothingSeconds,
+    patch: nodeGraphMvp.patch,
+    patchFingerprint,
+    sessionId: nodeGraphMvp.live.sessionId,
+    signatures,
+  };
+}
+
+/**
+ * Slider drag: send only the nodes whose built parameters changed since the
+ * last full send, and reuse that send's patch fingerprint (no whole-patch
+ * serialize per drag frame). Returns null when a full send is required.
+ */
+function nodeGraphLiveDragParameterDelta(nodes) {
+  const snapshot = nodeGraphMvp.live.paramSnapshot;
+  if (
+    !nodeGraphMvp.sliderDragging
+    || !snapshot
+    || snapshot.sessionId !== nodeGraphMvp.live.sessionId
+    || snapshot.patch !== nodeGraphMvp.patch
+    || snapshot.autoSmoothingSeconds !== nodeGraphMvp.live.autoSmoothingSeconds
+    || snapshot.signatures.size !== nodes.length
+  ) {
+    return null;
+  }
+  const changed = [];
+  for (const node of nodes) {
+    const previous = snapshot.signatures.get(node.id);
+    if (previous === undefined) {
+      return null;
+    }
+    const signature = nodeGraphLiveParameterNodeSignature(node);
+    if (signature !== previous || node._pendingSnapParams) {
+      changed.push(node);
+      snapshot.signatures.set(node.id, signature);
+    }
+  }
+  return { nodes: changed, patchFingerprint: snapshot.patchFingerprint };
+}
+
 function sendNodeGraphLiveParameterUpdate() {
   if (!nodeGraphMvp.live.node && !nodeGraphMvp.live.context) {
     return;
   }
 
   try {
-    const nodes = nodeGraphBuildLiveParameterNodes(nodeGraphMvp.live.activeNodeIds);
-    const patchFingerprint = nodeGraphPatchFingerprint();
+    const allNodes = nodeGraphBuildLiveParameterNodes(nodeGraphMvp.live.activeNodeIds);
+    const delta = nodeGraphLiveDragParameterDelta(allNodes);
+    if (delta && !delta.nodes.length) {
+      // Drag frame with no parameter change: nothing to send.
+      return;
+    }
+    const nodes = delta ? delta.nodes : allNodes;
+    // Fingerprint only on a full send (structure may have changed). A drag
+    // delta reuses the last full send's fingerprint; drag end sends in full.
+    const patchFingerprint = delta ? delta.patchFingerprint : nodeGraphPatchFingerprint();
+    if (!delta) {
+      nodeGraphLiveRememberParameterNodes(allNodes, patchFingerprint);
+    }
     const now = performance.now();
     nodeGraphMvp.live.lastParameterUpdateTime = now;
     // Smooth Time is user-owned. Do not rewrite it from slider update cadence.
@@ -2650,12 +2801,14 @@ function sendNodeGraphLiveParameterUpdate() {
     if (nodeGraphMvp.live.usesWorklet) {
       setNodeGraphLiveEvidence("params-sent", {
         autoSmoothingSeconds,
-        nodeCount: nodes.length,
-        parameterCount: nodeGraphLiveParameterCount(nodes),
+        delta: Boolean(delta),
+        // Counts describe the whole parameter set (a drag delta posts fewer).
+        nodeCount: allNodes.length,
+        parameterCount: nodeGraphLiveParameterCount(allNodes),
         patchFingerprint,
         planSerial: nodeGraphMvp.live.planSerial,
       });
-      setNodeGraphLivePlanStatus(nodeGraphLiveParametersSentStatusText(nodes), "warn");
+      setNodeGraphLivePlanStatus(nodeGraphLiveParametersSentStatusText(allNodes), "warn");
       nodeGraphMvp.live.node?.port?.postMessage({
         nodes,
         autoSmoothingSeconds,
@@ -2669,15 +2822,16 @@ function sendNodeGraphLiveParameterUpdate() {
       updateNodeGraphLiveRuntimeParameters(nodeGraphMvp.live.runtime, nodes);
       setNodeGraphLiveEvidence("params-applied", {
         autoSmoothingSeconds,
-        nodeCount: nodes.length,
-        parameterCount: nodeGraphLiveParameterCount(nodes),
+        delta: Boolean(delta),
+        nodeCount: allNodes.length,
+        parameterCount: nodeGraphLiveParameterCount(allNodes),
         patchFingerprint,
         planSerial: nodeGraphMvp.live.planSerial,
       });
       setNodeGraphLivePlanStatus(
         nodeGraphLiveParametersAppliedStatusText({
-          nodeCount: nodes.length,
-          parameterCount: nodeGraphLiveParameterCount(nodes),
+          nodeCount: allNodes.length,
+          parameterCount: nodeGraphLiveParameterCount(allNodes),
           patchFingerprint,
           planSerial: nodeGraphMvp.live.planSerial,
         }),
@@ -3139,6 +3293,7 @@ async function stopNodeGraphLiveAudio() {
   nodeGraphMvp.live.lastParameterUpdateTime = 0;
   nodeGraphMvp.live.planEvidence = null;
   nodeGraphMvp.live.planSerial = 0;
+  nodeGraphMvp.live.paramSnapshot = null;
   nodeGraphMvp.live.autoSmoothingSeconds = clampNodeGraphAutoSmoothingSeconds(nodeGraphMvp.live.autoSmoothingSeconds);
   nodeGraphMvp.live.runtime = null;
   nodeGraphMvp.live.scriptNode = null;
@@ -3219,8 +3374,8 @@ const nodeGraphLiveWorkletSourceFilesEfficient = [
   "./public/node-graph-stdlib/node-graph-seeded-rng-helpers.js?v=stdlib-batch3-20260715",
   "./public/node-graph-parameter-smoother-filters.js?v=smooth-gpu-3p-1",
   // Bypass passthrough maps + frame eval (shared with main thread).
-  "./public/node-graph-module-bypass.js?v=robin-sinepulse-1-s1d",
-  "./public/node-graph-efficient-product.js?v=robin-sinepulse-1-s1d",
+  "./public/node-graph-module-bypass.js?v=pinoise-20261015",
+  "./public/node-graph-efficient-product.js?v=pinoise-20261015",
   "./public/node-live-audio-worklet-core.js?v=softpop-ship-1",
   // Phase D: class methods extracted from core (must follow class definition).
   "./public/node-live-audio-worklet-graph.js?v=plan-d-split-5",
@@ -3235,16 +3390,16 @@ const nodeGraphLiveWorkletSourceFilesEfficient = [
   "./public/node-graph-keyboard-chord-memory.js?v=kbd-own-1",
   "./public/modules/sequencer/sequencer-math.js?v=seq-23",
   "./public/node-live-audio-worklet-events.js?v=rclick-sweep-2",
-  "./public/node-live-audio-worklet-visual.js?v=planck-eps-1",
+  "./public/node-live-audio-worklet-visual.js?v=perf-20261015",
   "./public/node-live-audio-worklet-scope-io.js?v=output-face-postvol-1",
   "./public/node-live-audio-worklet-native-load.js?v=plan-d-split-7",
-  "./public/node-live-audio-worklet-native-exports.js?v=hyperpluck-1",
-  "./public/node-live-audio-worklet-native-graph.js?v=sc-stroke-20261014",
+  "./public/node-live-audio-worklet-native-exports.js?v=pinoise-20261015",
+  "./public/node-live-audio-worklet-native-graph.js?v=pinoise-interp-20261015",
   "./public/node-live-audio-worklet-meta-view.js?v=voice-preview-1",
   "./public/node-live-audio-worklet-set-plan.js?v=softpop-ship-1",
   "./public/node-live-audio-worklet-clear-plan.js?v=kbd-trig-1samp-20261013",
   "./public/node-live-audio-worklet-handle-message.js?v=kbd-trig-1samp-20261013",
-  "./public/node-live-audio-worklet-scope-snapshot.js?v=sabrina-stems-1",
+  "./public/node-live-audio-worklet-scope-snapshot.js?v=multi-f-20261015",
   "./public/modules/spectrogram/spectrogram-worklet-evaluator.js?v=spectro-fft-tables-1",
   "./public/modules/_shared/output-amplitude.js?v=output-amp-1",
   // Yellow Graph: DOMAIN param chase for MOD (DSP is native opcodes 111â€“124).
@@ -3254,7 +3409,7 @@ const nodeGraphLiveWorkletSourceFilesEfficient = [
   // Keypad slot math (host CV controller — used by sidecar publish + setKeypadInteraction).
   "./public/modules/keypad/keypad-math.js?v=keypad-hostcv-1",
   "./public/modules/_shared/controller-efficient-sidecar.js?v=kbd-trig-1samp-20261013",
-  "./public/node-live-audio-worklet-process.js?v=scope-ack-1",
+  "./public/node-live-audio-worklet-process.js?v=perf-20261015",
 ];
 
 // Legacy JS DSP evaluators + evaluateFrame â€” RETIRED. Never load on any product.

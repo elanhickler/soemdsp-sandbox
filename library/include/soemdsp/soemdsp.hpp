@@ -32,6 +32,7 @@
 #include <soemdsp/utility/graph.h>
 #include <soemdsp/math/analog_filter_trig.h>
 #include <soemdsp/math/interpolation.h>
+#include <soemdsp/math/two_point_curves.h>
 #include <soemdsp/math/indexed_noise.h>
 #include <soemdsp/math/pan.h>
 #include <soemdsp/filter/scientific_iir.h>
