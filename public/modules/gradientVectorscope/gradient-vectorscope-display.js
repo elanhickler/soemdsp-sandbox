@@ -93,7 +93,20 @@ function nodeGraphGradientVectorscopeRotate(x, y, rotate90) {
   return { x: (x - y) * s, y: (x + y) * s };
 }
 
-function drawNodeGraphGradientVectorscopeFaceItem(_renderer, item, pixelRatio) {
+function nodeGraphGradientVectorscopeGlFailed(canvas, reason) {
+  if (typeof nodeGraphDisplayGlFailed === "function") {
+    nodeGraphDisplayGlFailed(canvas, reason);
+  } else if (!canvas._gvsGlErrorLogged) {
+    canvas._gvsGlErrorLogged = true;
+    console.error(`[display-gl] gradient vectorscope | ${reason}`);
+  }
+}
+
+// WebGL2 only (shared picture-device context): the residual lives in a
+// TraceRgbTrailsGl surface, the woscope beam stamps straight into it, and the
+// surface is presented to the face. No 2D drawing; GL failure = black + one
+// console.error.
+function drawNodeGraphGradientVectorscopeFaceItem(_renderer, item, _pixelRatio) {
   const slot = item?.slot;
   const face = item?.screenElement || slot?.scopeElement;
   if (!slot || !face) {
@@ -102,7 +115,7 @@ function drawNodeGraphGradientVectorscopeFaceItem(_renderer, item, pixelRatio) {
   const canvas = typeof nodeGraphModuleScopeLocalFallbackCanvas === "function"
     ? nodeGraphModuleScopeLocalFallbackCanvas(slot)
     : null;
-  if (!canvas || typeof syncNodeGraphModuleScopeLocalFallbackCanvas !== "function") {
+  if (!canvas || typeof nodeGraphDisplayCanvasSize !== "function") {
     return;
   }
   const settings = nodeGraphGradientVectorscopeSettingsForNode(
@@ -111,14 +124,12 @@ function drawNodeGraphGradientVectorscopeFaceItem(_renderer, item, pixelRatio) {
   const density = typeof nodeGraphFacePlateDensity === "function"
     ? nodeGraphFacePlateDensity(settings, 1)
     : 1;
-  if (!syncNodeGraphModuleScopeLocalFallbackCanvas(canvas, face, pixelRatio, density)) {
+  if (!nodeGraphDisplayCanvasSize(face, canvas, { pixelDensity: density })) {
     return;
   }
   canvas.classList.add("node-module-scope-vector-trace");
-  canvas.style.imageRendering = density < 0.999 ? "pixelated" : "";
-  const ctx = canvas.getContext("2d");
-  if (!ctx) {
-    return;
+  if (typeof nodeGraphDisplayCanvasPixelated === "function") {
+    nodeGraphDisplayCanvasPixelated(canvas, density < 0.999);
   }
   const bg = typeof nodeGraphFacePlateBackground === "function"
     ? nodeGraphFacePlateBackground(settings)
@@ -126,21 +137,24 @@ function drawNodeGraphGradientVectorscopeFaceItem(_renderer, item, pixelRatio) {
   if (typeof nodeGraphFacePlateApplyCss === "function") {
     nodeGraphFacePlateApplyCss(face, bg);
   }
-  const sizeKey = `${canvas.width}x${canvas.height}`;
-  if (canvas._gvsSizeKey !== sizeKey) {
+  const w = canvas.width;
+  const h = canvas.height;
+  const trails = typeof TraceRgbTrailsGl !== "undefined" ? TraceRgbTrailsGl : null;
+  const state = trails && typeof trails.ensure === "function" ? trails.ensure(canvas, w, h) : null;
+  const presentCtx = typeof nodeGraphDisplayCanvasPresentContext === "function"
+    ? nodeGraphDisplayCanvasPresentContext(canvas)
+    : null;
+  if (!state || !presentCtx || typeof TraceWoscope?.drawToFramebuffer !== "function") {
+    nodeGraphGradientVectorscopeGlFailed(canvas, "WebGL2 trails/woscope unavailable");
+    return;
+  }
+  const sizeKey = `${w}x${h}`;
+  if (canvas._gvsSizeKey !== sizeKey || canvas._gvsTrailState !== state) {
     canvas._gvsSizeKey = sizeKey;
-    canvas._gvsPrimed = false;
+    canvas._gvsTrailState = state;
     canvas._gvsAbs = 0;
     canvas._gvsLastPoint = null;
-  }
-  if (!canvas._gvsPrimed) {
-    if (typeof nodeGraphFacePlateFillCanvas === "function") {
-      nodeGraphFacePlateFillCanvas(ctx, canvas, bg);
-    } else {
-      ctx.fillStyle = bg;
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-    }
-    canvas._gvsPrimed = true;
+    trails.clear(canvas, bg);
   }
   const frozen = typeof nodeGraphModuleScopePhosphorFrozen === "function"
     && nodeGraphModuleScopePhosphorFrozen();
@@ -148,26 +162,8 @@ function drawNodeGraphGradientVectorscopeFaceItem(_renderer, item, pixelRatio) {
     return;
   }
 
-  const trails = typeof TraceRgbTrailsGl !== "undefined" ? TraceRgbTrailsGl : null;
-  const useTrails = Boolean(
-    trails
-    && typeof trails.ensure === "function"
-    && trails.ensure(canvas, canvas.width, canvas.height)
-  );
-  if (useTrails) {
-    trails.stepFade(canvas, settings.trail, settings.ghost, bg);
-    trails.presentTo(canvas, ctx, bg);
-  } else if (typeof nodeGraphScopeDestFadeTowardPlate === "function") {
-    nodeGraphScopeDestFadeTowardPlate(ctx, canvas, bg, settings.trail, settings.ghost);
-  } else {
-    ctx.save();
-    ctx.globalCompositeOperation = "source-over";
-    ctx.globalAlpha = Math.max(0.02, 1 - Number(settings.trail || 0) * 0.97);
-    ctx.fillStyle = bg;
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    ctx.restore();
-  }
-
+  trails.stepFade(canvas, settings.trail, settings.ghost, bg);
+  let glOk = true;
   try {
     const source = typeof nodeGraphRgbPickPortBuffer === "function"
       ? nodeGraphRgbPickPortBuffer(slot, "X")
@@ -193,8 +189,6 @@ function drawNodeGraphGradientVectorscopeFaceItem(_renderer, item, pixelRatio) {
     if (!captured?.length) {
       return;
     }
-    const w = canvas.width;
-    const h = canvas.height;
     const side = Math.min(w, h);
     const ox = (w - side) * 0.5;
     const oy = (h - side) * 0.5;
@@ -209,6 +203,8 @@ function drawNodeGraphGradientVectorscopeFaceItem(_renderer, item, pixelRatio) {
     for (let i = 0; i < captured.length; i += 1) {
       const rotated = nodeGraphGradientVectorscopeRotate(captured.X[i], captured.Y[i], settings.rotate90);
       const px = ox + (0.5 + 0.5 * rotated.x * scale) * side;
+      // Same canvas-space coords as before: the woscope shader maps y-down
+      // into the trails surface the way ingestCanvas (FLIP_Y) used to.
       const py = oy + (0.5 + 0.5 * -rotated.y * scale) * side;
       if (!Number.isFinite(px) || !Number.isFinite(py)) {
         points.push(null);
@@ -221,25 +217,22 @@ function drawNodeGraphGradientVectorscopeFaceItem(_renderer, item, pixelRatio) {
       lastPoint = point;
     }
     canvas._gvsLastPoint = lastPoint;
-    if (typeof TraceWoscope === "undefined" || typeof TraceWoscope.draw !== "function") {
-      return;
-    }
     const sample = typeof nodeGraphSampleGradientStopsRgb === "function"
       ? (t) => nodeGraphSampleGradientStopsRgb(settings.gradientStops, t, "#d8f4ff")
       : null;
-    TraceWoscope.draw(ctx, points, {
+    // Size is face-relative (faceInkPx: setting * minSide / 96, 0.5 px floor).
+    const drawn = TraceWoscope.drawToFramebuffer(state.read.framebuffer, w, h, points, {
       size: settings.dot1Size,
       faceMinSide: side,
       gradientStops: settings.gradientStops,
       sampleRgb: sample,
     });
+    if (drawn < 0) {
+      glOk = false;
+    }
   } finally {
-    if (useTrails && typeof trails.ingestCanvas === "function") {
-      // Woscope stamped onto 2D; fold back into RGB residual then present.
-      trails.ingestCanvas(canvas, canvas);
-      trails.presentTo(canvas, ctx, bg);
-    } else if (typeof nodeGraphScopeDestFadeGhostAfterStamps === "function") {
-      nodeGraphScopeDestFadeGhostAfterStamps(ctx, canvas);
+    if (!glOk || !trails.presentTo(canvas, presentCtx, bg)) {
+      nodeGraphGradientVectorscopeGlFailed(canvas, "WebGL2 draw/present failed");
     }
   }
 }

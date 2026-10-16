@@ -907,7 +907,112 @@ void main() {
     return segCount;
   }
 
+  // GL-only stamp for faces that own a residual surface on the shared
+  // context (TraceRgbTrailsGl hot plate). Same beam shader and additive
+  // src-alpha blend as draw() without brightAlong, but it draws straight into
+  // the caller's framebuffer: no clear, no 2D blit. Returns -1 if GL is down.
+  function drawToFramebuffer(framebuffer, width, height, points, options = {}) {
+    const w = Math.max(1, Math.floor(Number(width) || 0));
+    const h = Math.max(1, Math.floor(Number(height) || 0));
+    if (!framebuffer || w < 2 || h < 2 || !Array.isArray(points) || !points.length) {
+      return 0;
+    }
+    const face = Math.max(1, Number(options.faceMinSide) || Math.min(w, h));
+    const diameter = typeof faceInkPx === "function"
+      ? faceInkPx(options.size, face)
+      : Math.max(0, Number(options.size) || 0);
+    const intensity = Math.max(0, Number(options.intensity ?? options.brightness ?? 1));
+    if (!(diameter > 0) || intensity <= 0) {
+      return 0;
+    }
+    const packed = collectSegments(points);
+    const packedStride = 6;
+    const segCount = packed.length / packedStride;
+    if (segCount < 1) {
+      return 0;
+    }
+    const glDevice = getDevice();
+    if (!glDevice?.gl || glDevice.gl.isContextLost()) {
+      return -1;
+    }
+    const gl = glDevice.gl;
+    const uSize = Math.max(0.5, diameter * 0.5);
+    const color = parseColor(options.color, [1 / 32, 1, 1 / 32, 1]);
+    const useLut = (Array.isArray(options.gradientStops) && options.gradientStops.length >= 2)
+      || typeof options.sampleRgb === "function";
+    if (useLut) {
+      uploadLut(glDevice, options.gradientStops, options.sampleRgb, options.lutKey);
+    }
+    gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer);
+    gl.viewport(0, 0, w, h);
+    gl.disable(gl.DEPTH_TEST);
+    gl.disable(gl.CULL_FACE);
+    gl.disable(gl.SCISSOR_TEST);
+    gl.enable(gl.BLEND);
+    gl.blendEquation(gl.FUNC_ADD);
+    gl.blendFunc(gl.SRC_ALPHA, gl.ONE);
+    gl.useProgram(glDevice.program);
+    gl.uniform2f(glDevice.uCanvasSize, w, h);
+    gl.uniform1f(glDevice.uSize, uSize);
+    gl.uniform1f(glDevice.uIntensity, intensity);
+    if (glDevice.uBrightAlong) gl.uniform1f(glDevice.uBrightAlong, 0);
+    if (glDevice.uSolidCore) gl.uniform1f(glDevice.uSolidCore, options.solidCore === true ? 1 : 0);
+    gl.uniform4f(glDevice.uColor, color[0], color[1], color[2], color[3]);
+    gl.uniform1f(glDevice.uUseLut, useLut ? 1 : 0);
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, glDevice.lutTexture);
+    gl.uniform1i(glDevice.uLut, 0);
+    gl.bindBuffer(gl.ARRAY_BUFFER, glDevice.vertBuffer);
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, glDevice.indexBuffer);
+    const stride = FLOATS_PER_VERT * 4;
+    gl.enableVertexAttribArray(glDevice.aStart);
+    gl.vertexAttribPointer(glDevice.aStart, 2, gl.FLOAT, false, stride, 0);
+    gl.enableVertexAttribArray(glDevice.aEnd);
+    gl.vertexAttribPointer(glDevice.aEnd, 2, gl.FLOAT, false, stride, 8);
+    gl.enableVertexAttribArray(glDevice.aIdx);
+    gl.vertexAttribPointer(glDevice.aIdx, 1, gl.FLOAT, false, stride, 16);
+    if (glDevice.aT0 >= 0) {
+      gl.enableVertexAttribArray(glDevice.aT0);
+      gl.vertexAttribPointer(glDevice.aT0, 1, gl.FLOAT, false, stride, 20);
+    }
+    if (glDevice.aT1 >= 0) {
+      gl.enableVertexAttribArray(glDevice.aT1);
+      gl.vertexAttribPointer(glDevice.aT1, 1, gl.FLOAT, false, stride, 24);
+    }
+    const floats = glDevice.floats;
+    let drawn = 0;
+    while (drawn < segCount) {
+      const batch = Math.min(BATCH_SEGMENTS, segCount - drawn);
+      let o = 0;
+      for (let s = 0; s < batch; s += 1) {
+        const src = (drawn + s) * packedStride;
+        const baseIdx = drawn + s;
+        for (let v = 0; v < VERTS_PER_SEG; v += 1) {
+          floats[o] = packed[src];
+          floats[o + 1] = packed[src + 1];
+          floats[o + 2] = packed[src + 2];
+          floats[o + 3] = packed[src + 3];
+          floats[o + 4] = baseIdx * 4 + v;
+          floats[o + 5] = packed[src + 4];
+          floats[o + 6] = packed[src + 5];
+          o += FLOATS_PER_VERT;
+        }
+      }
+      gl.bufferData(gl.ARRAY_BUFFER, floats.subarray(0, o), gl.STREAM_DRAW);
+      gl.drawElements(gl.TRIANGLES, batch * 6, gl.UNSIGNED_SHORT, 0);
+      drawn += batch;
+    }
+    gl.disable(gl.BLEND);
+    gl.bindBuffer(gl.ARRAY_BUFFER, null);
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, null);
+    gl.bindTexture(gl.TEXTURE_2D, null);
+    gl.useProgram(null);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    return segCount;
+  }
+
   global.TraceWoscope = {
     draw,
+    drawToFramebuffer,
   };
 }(typeof window !== "undefined" ? window : globalThis));
