@@ -213,6 +213,8 @@ function applyNodeGraphMidiKeyboardLayoutBody() {
     }
     surface.dataset.keyLabels = s.keyLabels;
     surface.style.setProperty("--midi-white-key-width", `${whiteW}px`);
+    // White-key units across the surface; labels size per key from it (styles.css).
+    surface.style.setProperty("--midi-key-units", String(Math.max(1, totalUnits || 1)));
     surface.style.setProperty("--midi-black-key-width", `${blackW}px`);
     if (inModuleFace) {
       surface.style.removeProperty("--midi-keyboard-piano-height");

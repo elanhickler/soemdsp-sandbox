@@ -1,16 +1,31 @@
 /* Pitch Quantizer — one-octave pitch-class keyboard face */
 
+/* Every length is a container unit so the face scales exactly with its box
+   (canvas tiles, embeds). Values equal the old px at the zoom-1 face:
+   face container 264px (1px = 0.378789cqi), keyboard container 248px content
+   (1px = 0.403227cqi). The face is only the size container; the plate inside
+   carries what used to be the face's padding, border and background (an
+   element's own lengths cannot use its own container units). */
 .node-pitch-quantizer-face {
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
-  gap: 4px;
   width: 100%;
   height: 100%;
   min-height: 0;
-  padding: 6px;
   overflow: hidden;
-  border: 1px solid rgba(243, 241, 236, 0.12);
-  border-radius: 6px;
+  container-type: inline-size;
+  box-sizing: border-box;
+}
+
+.node-pitch-quantizer-plate {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 1.515153cqi;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  padding: 2.272728cqi;
+  overflow: hidden;
+  border: 0.378789cqi solid rgba(243, 241, 236, 0.12);
+  border-radius: 2.272728cqi;
   background:
     linear-gradient(180deg, rgba(127, 199, 217, 0.08), transparent 42%),
     #080a0c;
@@ -18,7 +33,7 @@
 }
 
 /* Scale jack driving the mask (e.g. Chord Pad) — keyboard is display-only. */
-.node-pitch-quantizer-face.scale-jacked {
+.node-pitch-quantizer-face.scale-jacked > .node-pitch-quantizer-plate {
   border-color: rgba(242, 93, 93, 0.45);
 }
 
@@ -36,18 +51,19 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 4px;
+  gap: 1.515153cqi;
   min-width: 0;
 }
 
 .node-pitch-quantizer-tool {
-  min-height: 22px;
-  padding: 0 8px;
-  border: 1px solid rgba(243, 241, 236, 0.14);
-  border-radius: 4px;
+  min-height: 8.333334cqi;
+  padding: 0 3.030304cqi;
+  border: 0.378789cqi solid rgba(243, 241, 236, 0.14);
+  border-radius: 1.515153cqi;
   background: rgba(5, 6, 7, 0.72);
   color: var(--text);
-  font: 700 0.68rem/1 "Cascadia Mono", Consolas, monospace;
+  /* 0.68rem (10.88px) at zoom 1. */
+  font: 700 4.121213cqi/1 "Cascadia Mono", Consolas, monospace;
   cursor: var(--node-dot-cursor);
 }
 
@@ -59,7 +75,8 @@
 .node-pitch-quantizer-hint {
   margin-left: auto;
   color: var(--muted);
-  font: 700 0.62rem/1 "Cascadia Mono", Consolas, monospace;
+  /* 0.62rem (9.92px) at zoom 1. */
+  font: 700 3.757577cqi/1 "Cascadia Mono", Consolas, monospace;
   text-transform: uppercase;
   letter-spacing: 0.04em;
   white-space: nowrap;
@@ -70,10 +87,10 @@
   container-type: inline-size;
   width: 100%;
   height: 100%;
-  min-height: 72px;
+  min-height: 27.272728cqi;
   overflow: hidden;
-  border: 1px solid rgba(243, 241, 236, 0.14);
-  border-radius: 5px;
+  border: 0.378789cqi solid rgba(243, 241, 236, 0.14);
+  border-radius: 1.89394cqi;
   background: #050607;
 }
 
@@ -109,10 +126,13 @@
   align-items: flex-end;
   justify-content: center;
   height: 100%;
-  padding: 0 1px 6px;
-  border-right: 1px solid rgba(5, 6, 7, 0.72);
+  padding: 0 0.403227cqi 2.419356cqi;
+  border-right: 0.403227cqi solid rgba(5, 6, 7, 0.72);
   color: rgba(5, 6, 7, 0.78);
-  font-size: clamp(0.5rem, 6cqi, 0.78rem);
+  /* Pure container units: scales with the face (canvas tiles, embeds). The old
+     clamp(0.5rem, 6cqi, 0.78rem) hit its 0.78rem cap on the 250px zoom-1
+     keyboard, so a bigger tile kept 12.48px text. 12.48 / 248 (content box). */
+  font-size: 5.032cqi;
   background: linear-gradient(180deg, #f7f2e8 0%, #cfc7b8 72%, #a79f93 100%);
 }
 
@@ -126,9 +146,9 @@
     radial-gradient(circle at 50% 18%, rgba(255, 210, 205, 0.9), transparent 30%),
     linear-gradient(180deg, #ff8a7a 0%, #e23b3b 74%, #7a1010 100%);
   box-shadow:
-    inset 0 0 0 1px rgba(255, 210, 205, 0.75),
-    inset 0 0 16px rgba(226, 59, 59, 0.4);
-  text-shadow: 0 0 6px rgba(255, 244, 242, 0.8);
+    inset 0 0 0 0.403227cqi rgba(255, 210, 205, 0.75),
+    inset 0 0 6.451614cqi rgba(226, 59, 59, 0.4);
+  text-shadow: 0 0 2.419356cqi rgba(255, 244, 242, 0.8);
 }
 
 .node-pitch-quantizer-black-row {
@@ -146,13 +166,14 @@
   align-items: flex-end;
   justify-content: center;
   height: 58%;
-  padding: 0 1px 5px;
-  border: 1px solid rgba(127, 199, 217, 0.22);
-  border-radius: 0 0 4px 4px;
+  padding: 0 0.403227cqi 2.01613cqi;
+  border: 0.403227cqi solid rgba(127, 199, 217, 0.22);
+  border-radius: 0 0 1.612904cqi 1.612904cqi;
   color: rgba(243, 241, 236, 0.88);
-  font-size: clamp(0.4rem, 4cqi, 0.62rem);
+  /* Was clamp(0.4rem, 4cqi, 0.62rem), capped at 9.92px on the 250px keyboard. */
+  font-size: 4cqi;
   background: linear-gradient(180deg, #2a3036 0%, #0a0c0f 100%);
-  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.45);
+  box-shadow: 0 2.419356cqi 5.645162cqi rgba(0, 0, 0, 0.45);
   pointer-events: auto;
 }
 
@@ -163,14 +184,14 @@
     radial-gradient(circle at 50% 18%, rgba(255, 160, 150, 0.65), transparent 32%),
     linear-gradient(180deg, #c42828 0%, #3a0808 100%);
   box-shadow:
-    inset 0 0 0 1px rgba(255, 190, 180, 0.7),
-    0 0 14px rgba(242, 93, 93, 0.55);
-  text-shadow: 0 0 6px rgba(255, 244, 242, 0.75);
+    inset 0 0 0 0.403227cqi rgba(255, 190, 180, 0.7),
+    0 0 5.645162cqi rgba(242, 93, 93, 0.55);
+  text-shadow: 0 0 2.419356cqi rgba(255, 244, 242, 0.75);
 }
 
 .node-pitch-quantizer-key:focus-visible {
-  outline: 2px solid rgba(127, 199, 217, 0.85);
-  outline-offset: -2px;
+  outline: 0.806453cqi solid rgba(127, 199, 217, 0.85);
+  outline-offset: -0.806453cqi;
 }
 .node-pitch-quantizer-key-black:focus-visible {
   z-index: 3;

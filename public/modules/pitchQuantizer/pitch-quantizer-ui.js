@@ -91,7 +91,12 @@ function createNodeGraphPitchQuantizerFace(node) {
   }
 
   surface.append(whiteRow, blackRow);
-  face.append(toolbar, surface);
+  // The face is the size container; the plate carries padding / border /
+  // background in face container units (pitch-quantizer-ui.css).
+  const plate = document.createElement("div");
+  plate.className = "node-pitch-quantizer-plate";
+  plate.append(toolbar, surface);
+  face.append(plate);
 
   // Don't start module drag when interacting with the face.
   face.addEventListener("pointerdown", (event) => {
