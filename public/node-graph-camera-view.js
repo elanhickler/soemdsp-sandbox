@@ -320,6 +320,9 @@ function createNodeGraphCameraWorldClone(source, wireSvg) {
   for (const layer of clone.querySelectorAll(".node-graph-world-layer")) {
     layer.style.setProperty("--node-graph-pan-x", "0px");
     layer.style.setProperty("--node-graph-pan-y", "0px");
+    // Live camera transform is inline on the layers; drop it so the clone's
+    // zoom 1 / pan 0 vars apply.
+    layer.style.removeProperty("transform");
   }
   clone.querySelector("#nodeModularOnlyBackButton")?.remove();
   clone.querySelector("#nodeCameraOverlayLayer")?.remove();

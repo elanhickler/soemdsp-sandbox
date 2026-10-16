@@ -36,9 +36,53 @@ function nodeGraphApplyPanVarsToWorldLayers(workspace, x, y) {
     };
   }
   const layers = nodeGraphWorldLayerCollection.layers;
+  // Camera transform inline on the world layers (same value as the stylesheet
+  // rule). It reads the live zoom, so mid-gesture zoom never has to touch the
+  // inherited --node-graph-zoom (that restyled ~2.9k elements, ~27 ms a step).
+  const zoom = typeof nodeGraphZoom === "function" ? nodeGraphZoom() : (nodeGraphMvp?.zoom || 1);
+  const transform = `translate3d(${x}, ${y}, 0) scale(${zoom})`;
   for (let i = 0; i < layers.length; i += 1) {
     layers[i].style.setProperty("--node-graph-pan-x", x);
     layers[i].style.setProperty("--node-graph-pan-y", y);
+    if (layers[i].style.transform !== transform) {
+      layers[i].style.transform = transform;
+    }
+  }
+}
+
+// FIX C (trial, easy revert: set false or delete this block + its 2 calls).
+// will-change: transform on the world layers only while a pan/zoom gesture is
+// active: Chrome keeps the layer's raster scale instead of re-rastering every
+// step (stays soft/blocky mid-gesture). Dropped on settle -> crisp re-raster.
+const NODE_GRAPH_GESTURE_WILL_CHANGE = true;
+
+function nodeGraphSetWorldLayerWillChange(workspace, on) {
+  if (!NODE_GRAPH_GESTURE_WILL_CHANGE || !workspace?.getElementsByClassName) {
+    return;
+  }
+  const layers = workspace.getElementsByClassName("node-graph-world-layer");
+  for (let i = 0; i < layers.length; i += 1) {
+    if (on) {
+      layers[i].style.willChange = "transform";
+    } else {
+      layers[i].style.removeProperty("will-change");
+    }
+  }
+}
+
+/**
+ * Inherited zoom var (module stroke compensate, grid size read it). Written
+ * only outside gestures / on settle: one restyle per gesture, not per step.
+ */
+function nodeGraphWriteInheritedZoomVar(workspace) {
+  const el = workspace || document.getElementById("nodeGraphWorkspace");
+  if (!el?.style) {
+    return;
+  }
+  const zoom = typeof nodeGraphZoom === "function" ? nodeGraphZoom() : (nodeGraphMvp?.zoom || 1);
+  const value = String(zoom);
+  if (el.style.getPropertyValue("--node-graph-zoom") !== value) {
+    el.style.setProperty("--node-graph-zoom", value);
   }
 }
 
@@ -84,6 +128,9 @@ function markNodeGraphViewportGesture(kind = "gesture") {
   }
   const wasGesturing = workspace.classList.contains("viewport-gesturing");
   workspace.classList.add("viewport-gesturing");
+  if (!wasGesturing) {
+    nodeGraphSetWorldLayerWillChange(workspace, true);
+  }
   // Gesture start: seed workspace layout metrics once (left/top/size) so wheel
   // zoom anchors avoid getBoundingClientRect every tick. ResizeObserver + settle
   // invalidate; mid-gesture samples reuse the cache.
@@ -185,7 +232,10 @@ function clearNodeGraphViewportGestureClass() {
   if (!workspace) {
     return;
   }
+  // Settle: catch the inherited zoom var up once, then drop the frozen stroke.
+  nodeGraphWriteInheritedZoomVar(workspace);
   workspace.classList.remove("viewport-gesturing", "viewport-zooming");
+  nodeGraphSetWorldLayerWillChange(workspace, false);
   unfreezeNodeGraphViewportStrokeCompensate(workspace);
   if (typeof invalidateNodeGraphWorkspaceLayoutMetrics === "function") {
     invalidateNodeGraphWorkspaceLayoutMetrics();
@@ -220,11 +270,23 @@ function applyNodeGraphViewportCssLight(options = {}) {
   if (!workspace) {
     return;
   }
+  const cameraGesturing = typeof nodeGraphViewportGestureActive === "function"
+    && nodeGraphViewportGestureActive();
   if (options.zoom !== false) {
     const zoom = typeof nodeGraphZoom === "function" ? nodeGraphZoom() : (nodeGraphMvp?.zoom || 1);
-    workspace.style.setProperty("--node-graph-zoom", String(zoom));
+    // Mid-gesture: world-layer transform only (below). Settle writes the var.
+    if (!cameraGesturing) {
+      nodeGraphWriteInheritedZoomVar(workspace);
+    }
     workspace.dataset.zoom = Number(zoom).toFixed(2);
     workspace.classList.toggle("pixelated-canvas-zoom", zoom > 2.5);
+  }
+  if (options.zoom !== false || options.pan !== false) {
+    const pan = nodeGraphMvp.pan || { x: 0, y: 0 };
+    const originOffset = typeof nodeGraphRenderedOriginOffset === "function"
+      ? nodeGraphRenderedOriginOffset(pan, workspace)
+      : pan;
+    nodeGraphApplyPanVarsToWorldLayers(workspace, `${originOffset.x}px`, `${originOffset.y}px`);
   }
   if (options.pan !== false) {
     const pan = nodeGraphMvp.pan || { x: 0, y: 0 };
@@ -233,7 +295,6 @@ function applyNodeGraphViewportCssLight(options = {}) {
       : pan;
     workspace.style.setProperty("--node-graph-pan-x", `${originOffset.x}px`);
     workspace.style.setProperty("--node-graph-pan-y", `${originOffset.y}px`);
-    nodeGraphApplyPanVarsToWorldLayers(workspace, `${originOffset.x}px`, `${originOffset.y}px`);
     workspace.dataset.panX = String(pan.x);
     workspace.dataset.panY = String(pan.y);
     // Scope screen-items convert layout->screen from this (no gBCR on paint).
