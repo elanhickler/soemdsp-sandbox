@@ -11,6 +11,8 @@
  *   Param edits go to the native engine as "param" events.
  *   Patch loads send the patch JSON as a "patch" event (native graph rebuild).
  *   Topology is locked: no wiring, adding or deleting modules.
+ *   Scopes / meters: the plugin sends frame batches (receiveFrameBatch) built
+ *   from the watch list this file sends as "displayWatch" events.
  */
 (function soemdspPluginHostBoot(global) {
   "use strict";
@@ -269,6 +271,151 @@
     } else {
       emitDirtyParams();
     }
+    try {
+      syncDisplayWatch();
+    } catch (error) {
+      console.warn("soemdspPluginHost: display watch failed", error);
+    }
+  }
+
+  // Native display feed (docs/FRAME_BATCH_FORMAT.md in soemdsp-sandbox).
+  // The plugin's engine captures the same outputs the AudioWorklet would
+  // (scopeCaptureNodeIds / scopeCaptureRates / visualSinks from the live
+  // plan) and calls receiveFrameBatch() at display rate. The page's scope,
+  // meter and paint gates expect a live worklet node; with no worklet in the
+  // plugin, a host node stands in once the first batch arrives. Its port only
+  // forwards scopeAck (flow control) to the plugin.
+
+  var WATCH_POLL_MS = 750;
+  var lastWatchJson = "";
+
+  function nodeTypeMap() {
+    var map = Object.create(null);
+    var nodes = patchNodes();
+    for (var i = 0; i < nodes.length; i += 1) {
+      if (nodes[i] && nodes[i].id) map[String(nodes[i].id)] = String(nodes[i].type || "");
+    }
+    return map;
+  }
+
+  function buildDisplayWatch() {
+    if (typeof global.nodeGraphBuildLivePlan !== "function") return null;
+    var plan;
+    try {
+      plan = global.nodeGraphBuildLivePlan();
+    } catch (_e) {
+      return null;
+    }
+    if (!plan) return null;
+    var types = nodeTypeMap();
+    var rates = plan.scopeCaptureRates || {};
+    var ids = Array.isArray(plan.scopeCaptureNodeIds) && plan.scopeCaptureNodeIds.length
+      ? plan.scopeCaptureNodeIds
+      : (plan.order || []);
+    var nodes = [];
+    for (var i = 0; i < ids.length; i += 1) {
+      var id = String(ids[i]);
+      nodes.push({ id: id, type: types[id] || "", writeHz: Number(rates[id]) || 0 });
+    }
+    var sinks = [];
+    var rawSinks = Array.isArray(plan.visualSinks) ? plan.visualSinks : [];
+    for (var s = 0; s < rawSinks.length; s += 1) {
+      var sink = rawSinks[s];
+      if (!sink || !sink.nodeId) continue;
+      var sinkType = String(sink.type || types[sink.nodeId] || "");
+      var inputs = [];
+      var rawInputs = sink.inputs || [];
+      for (var k = 0; k < rawInputs.length; k += 1) {
+        var input = rawInputs[k];
+        if (!input || !input.connected) continue;
+        var conns = [];
+        var rawConns = input.connections || [];
+        for (var c = 0; c < rawConns.length; c += 1) {
+          var src = String(rawConns[c].sourceNode || "");
+          conns.push({ sourceNode: src, sourceType: types[src] || "", sourcePort: String(rawConns[c].sourcePort || "Out") });
+        }
+        inputs.push({ port: String(input.port || "").trim(), buffered: Boolean(input.buffered), connections: conns });
+      }
+      sinks.push({
+        nodeId: String(sink.nodeId),
+        type: sinkType,
+        writeHz: Number(sink.visualWriteHz) || 0,
+        skipAggregate: (sink.bufferedInputs || []).length > 1 || sinkType === "output",
+        inputs: inputs,
+      });
+    }
+    var fps = typeof global.nodeGraphSimulationDisplayFps === "function" ? Number(global.nodeGraphSimulationDisplayFps()) : 60;
+    return {
+      fingerprint: String(plan.patchFingerprint || ""),
+      displayFps: fps > 0 ? fps : 60,
+      nodes: nodes,
+      sinks: sinks,
+    };
+  }
+
+  function syncDisplayWatch() {
+    var watch = buildDisplayWatch();
+    if (!watch) return;
+    var json = JSON.stringify(watch);
+    if (json === lastWatchJson) return;
+    lastWatchJson = json;
+    postToHost({ event: "displayWatch", json: json });
+  }
+
+  function ensureHostLiveNode() {
+    var live = global.nodeGraphMvp && global.nodeGraphMvp.live;
+    if (!live) return false;
+    if (live.node) return true;
+    live.node = {
+      soemdspPluginHostNode: true,
+      // Nothing to upload: the engine already runs native code.
+      nodeGraphSentNativeModules: { has: function () { return true; }, add: function () {}, delete: function () {}, size: 0 },
+      port: {
+        onmessage: null,
+        start: function () {},
+        close: function () {},
+        postMessage: function (message) {
+          if (message && message.type === "scopeAck") postToHost({ event: "frameAck" });
+        },
+      },
+      parameters: new Map(),
+      connect: function () {},
+      disconnect: function () {},
+    };
+    return true;
+  }
+
+  function base64ToFloat32(text) {
+    var bin = global.atob(String(text || ""));
+    var n = bin.length >> 2;
+    var bytes = new Uint8Array(n << 2);
+    for (var i = 0; i < bytes.length; i += 1) bytes[i] = bin.charCodeAt(i);
+    return new Float32Array(bytes.buffer, 0, n);
+  }
+
+  function receiveFrameBatch(batch) {
+    if (!batch || typeof batch !== "object" || typeof global.nodeGraphReceiveFrameBatch !== "function") {
+      if (batch && batch.scope) postToHost({ event: "frameAck" });
+      return false;
+    }
+    if (!ensureHostLiveNode()) {
+      if (batch.scope) postToHost({ event: "frameAck" });
+      return false;
+    }
+    batch.sessionId = global.nodeGraphMvp.live.sessionId;
+    var values = batch.scope && Array.isArray(batch.scope.values) ? batch.scope.values : [];
+    for (var i = 0; i < values.length; i += 1) {
+      if (values[i] && typeof values[i][1] === "string") values[i][1] = base64ToFloat32(values[i][1]);
+    }
+    var ok = false;
+    try {
+      ok = global.nodeGraphReceiveFrameBatch(batch);
+    } catch (error) {
+      console.warn("soemdspPluginHost: frame batch failed", error);
+    }
+    // The page only acks batches it ingests with a scope part; the plugin
+    // re-arms after 250 ms if an ack never comes.
+    return ok;
   }
 
   // Wrappers. Globals are wrapped as their scripts load (boot-loading
@@ -376,7 +523,7 @@
       isActive: function () { return true; },
     };
   }
-  global.soemdspPluginHostApi = { loadPatch: loadPatch, resendPatch: function () { lastSentSignature = null; afterCommit(); } };
+  global.soemdspPluginHostApi = { loadPatch: loadPatch, receiveFrameBatch: receiveFrameBatch, resendPatch: function () { lastSentSignature = null; afterCommit(); } };
 
   function autoStartBoot() {
     if (document.body && document.body.dataset.nodeBootStarted === "1") return;
@@ -393,6 +540,10 @@
     document.body.classList.add(BODY_CLASS);
     afterCommit();
     global.setInterval(emitDirtyParams, PARAM_POLL_MS);
+    // Face show/hide changes the watch list without a commit.
+    global.setInterval(function () {
+      try { syncDisplayWatch(); } catch (_e) { /* next poll */ }
+    }, WATCH_POLL_MS);
     postToHost({ event: "ready" });
   }
 
