@@ -202,6 +202,15 @@
       "folder": "hyperpluck"
     },
     {
+      "slug": "livedemos/earlyreflections",
+      "label": "earlyreflections",
+      "name": "",
+      "url": "/soemdsp-sandbox/patches/livedemos/earlyreflections.json",
+      "author": "",
+      "emoji": "",
+      "folder": "livedemos"
+    },
+    {
       "slug": "livedemos/sabrinareverb",
       "label": "sabrinareverb",
       "name": "",
@@ -215,6 +224,15 @@
       "label": "soemreverb",
       "name": "",
       "url": "/soemdsp-sandbox/patches/livedemos/soemreverb.json",
+      "author": "",
+      "emoji": "",
+      "folder": "livedemos"
+    },
+    {
+      "slug": "livedemos/softpop",
+      "label": "softpop",
+      "name": "",
+      "url": "/soemdsp-sandbox/patches/livedemos/softpop.json",
       "author": "",
       "emoji": "",
       "folder": "livedemos"
@@ -441,6 +459,14 @@
       "label": "dreamy_delay",
       "name": "",
       "url": "/soemdsp-sandbox/patches/guitar_pedals/dreamy_delay.json",
+      "author": "",
+      "emoji": ""
+    },
+    {
+      "slug": "earlyreflections",
+      "label": "earlyreflections",
+      "name": "",
+      "url": "/soemdsp-sandbox/patches/livedemos/earlyreflections.json",
       "author": "",
       "emoji": ""
     },
@@ -929,6 +955,14 @@
       "label": "Soft_Triangle",
       "name": "",
       "url": "/soemdsp-sandbox/patches/Soundemote_Softwave_prototypes/Soft_Triangle.json",
+      "author": "",
+      "emoji": ""
+    },
+    {
+      "slug": "softpop",
+      "label": "softpop",
+      "name": "",
+      "url": "/soemdsp-sandbox/patches/livedemos/softpop.json",
       "author": "",
       "emoji": ""
     },
