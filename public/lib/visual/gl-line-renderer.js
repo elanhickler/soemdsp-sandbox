@@ -25,7 +25,18 @@
 //
 // Text: nodeGraphGlLinesText draws from one shared glyph atlas per font
 // (white coverage baked once at 64 px with a 2D canvas inside this shared lib,
-// uploaded as an RGBA texture with mipmaps; tinted in the shader).
+// uploaded as an RGBA texture with mipmaps; tinted in the shader). Cells are
+// separated by a TEXT_GUTTER so mip levels never sample a neighbour glyph.
+//
+// Color emoji: a text run that contains emoji grapheme clusters
+// (Extended_Pictographic, ZWJ sequences, flags, keycaps, VS16) draws each
+// emoji from a shared colour atlas, inline with the coverage glyphs, with the
+// browser's advance and the same baseline. Each emoji is rasterized ONCE at
+// its base size: the drawn size in face-backing device px (font px x
+// pixelRatio; the backing is never x workspace zoom), cached by
+// emoji + base px, uploaded premultiplied with NEAREST filtering. Zoom never
+// re-bakes: zooming scales those pixels and the display pixelation rule
+// applies (no sharpening). Steady state allocates nothing and bakes nothing.
 //
 // RGBA picture out: when the face's module has a cable on its `rgba` / TV out
 // (picture-device nodeGraphPictureHasConsumer), end() renders the batch into
@@ -104,7 +115,10 @@ varying vec2 vUv;
 varying vec4 vTint;
 void main() {
   vec4 c = texture2D(tex, vUv);
-  if (mode > 1.5) {
+  if (mode > 2.5) {
+    // Premultiplied colour emoji x tint alpha.
+    gl_FragColor = c * vTint.a;
+  } else if (mode > 1.5) {
     gl_FragColor = c;
   } else if (mode > 0.5) {
     // Per-vertex tint (batched glyphs / tinted sprites) x coverage.
@@ -117,6 +131,21 @@ void main() {
   const TEXT_BAKE_PX = 64;
   const TEXT_WHITE = Object.freeze([1, 1, 1, 1]);
   const TEXT_PAD = 6;
+  // Empty texels between atlas cells: 64 px bake at 1/8 draw (mip 3) still
+  // keeps 4 empty texels between glyphs, so no neighbour bleed.
+  const TEXT_GUTTER = 32;
+  // Colour emoji atlas.
+  const EMOJI_SHEET = 1024;
+  const EMOJI_PAD = 2;
+  const EMOJI_MAX_PAGES = 4;
+  const EMOJI_FAMILY = '"Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", "Twemoji Mozilla", sans-serif';
+  // Cheap gate (no allocation): only text that may hold an emoji is segmented.
+  const EMOJI_HINT = /[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{2B00}-\u{2BFF}\u{3030}\u{303D}\u{3297}\u{3299}\u{200D}\u{FE0F}\u{20E3}\u{00A9}\u{00AE}\u{203C}\u{2049}\u{2122}\u{2139}\u{2194}-\u{21AA}\u{231A}-\u{23FF}\u{24C2}\u{25AA}-\u{25FE}]/u;
+  const EMOJI_CLUSTER = /\p{Extended_Pictographic}|\p{Regional_Indicator}|\u{FE0F}|\u{20E3}|\u{200D}/u;
+  const EMOJI_PRESENTATION = /\p{Emoji_Presentation}|\u{FE0F}|\u{20E3}|\u{200D}|\p{Regional_Indicator}/u;
+  const SEGMENT_CACHE_MAX = 512;
+  const segmentCache = new Map();
+  const emojiStats = { bakes: 0, uploads: 0, segmentMisses: 0, pages: 0, entries: 0, dropped: 0 };
   const TEXT_ASCENT = 0.8;   // of px, baseline from em top
   const TEXT_DEFAULT_FAMILY = '"Cascadia Mono", "Cascadia Code", Consolas, "Courier New", monospace';
   const TEXT_BASE_CHARS = " !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~—–°·×±µƒ♯♭";
@@ -177,6 +206,8 @@ void main() {
         imgTintLoc: gl.getUniformLocation(imgProgram, "tint"),
         imgModeLoc: gl.getUniformLocation(imgProgram, "mode"),
         atlases: new Map(),
+        // Colour emoji: pages [{ texture, x, y, rowH }], entries "emoji|px".
+        emoji: { pages: [], entries: new Map(), canvas: null, ctx: null },
         pool: [],
       };
       return state;
@@ -344,9 +375,9 @@ void main() {
     for (const ch of list) {
       const adv = Math.max(1, cx.measureText(ch).width || TEXT_BAKE_PX * 0.6);
       const gw = Math.ceil(adv) + TEXT_PAD * 2;
-      if (x + gw > sheetW) { x = 0; y += cellH; }
+      if (x + gw > sheetW) { x = 0; y += cellH + TEXT_GUTTER; }
       glyphs.set(ch, { x, y, w: gw, h: cellH, adv });
-      x += gw;
+      x += gw + TEXT_GUTTER;
     }
     const sheetH = y + cellH;
     cv.width = sheetW;
@@ -391,13 +422,174 @@ void main() {
     return atlas;
   }
 
+  // ---- colour emoji ---------------------------------------------------------
+  /**
+   * Grapheme segments of `text`: frozen [{ text, emoji }]. Cached per string,
+   * so a steady face re-uses the same array (no per-frame allocation).
+   */
+  function nodeGraphGlLinesTextSegments(text) {
+    const str = String(text ?? "");
+    let segs = segmentCache.get(str);
+    if (segs) return segs;
+    emojiStats.segmentMisses += 1;
+    const out = [];
+    const Seg = global.Intl?.Segmenter;
+    const clusters = Seg
+      ? Array.from(new Seg(undefined, { granularity: "grapheme" }).segment(str), (x) => x.segment)
+      : (str.match(/\p{Regional_Indicator}{2}|(?:\p{Extended_Pictographic}|[#*0-9])(?:\u{FE0F}|\u{20E3}|\p{Emoji_Modifier})*(?:\u{200D}\p{Extended_Pictographic}(?:\u{FE0F}|\p{Emoji_Modifier})*)*|[\s\S]/gu) || []);
+    let plain = "";
+    for (const c of clusters) {
+      // Emoji presentation only: default-text symbols (©, ™, ↔, bare ❤, digits)
+      // stay coverage glyphs unless a VS16 / keycap / ZWJ / flag asks for colour.
+      const isEmoji = EMOJI_CLUSTER.test(c) && EMOJI_PRESENTATION.test(c);
+      if (isEmoji) {
+        if (plain) { out.push(Object.freeze({ text: plain, emoji: false })); plain = ""; }
+        out.push(Object.freeze({ text: c, emoji: true }));
+      } else {
+        plain += c;
+      }
+    }
+    if (plain) out.push(Object.freeze({ text: plain, emoji: false }));
+    segs = Object.freeze(out);
+    if (segmentCache.size >= SEGMENT_CACHE_MAX) segmentCache.clear();
+    segmentCache.set(str, segs);
+    return segs;
+  }
+
+  function emojiRaster(s) {
+    const e = s.emoji;
+    if (e.ctx) return e.ctx;
+    const doc = global.document;
+    const cv = doc?.createElement?.("canvas");
+    const cx = cv?.getContext?.("2d", { willReadFrequently: false });
+    if (!cx) return null;
+    e.canvas = cv;
+    e.ctx = cx;
+    return cx;
+  }
+
+  function emojiPage(s, w, h) {
+    const e = s.emoji;
+    const gl = s.gl;
+    let page = e.pages[e.pages.length - 1];
+    if (page) {
+      if (page.x + w > EMOJI_SHEET) { page.x = 0; page.y += page.rowH; page.rowH = 0; }
+      if (page.y + h <= EMOJI_SHEET) return page;
+    }
+    if (e.pages.length >= EMOJI_MAX_PAGES || w > EMOJI_SHEET || h > EMOJI_SHEET) return null;
+    const texture = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, texture);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, EMOJI_SHEET, EMOJI_SHEET, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+    // Exact-size bake drawn 1:1; zoom pixelates (display policy), never smooths.
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.bindTexture(gl.TEXTURE_2D, null);
+    page = { texture, x: 0, y: 0, rowH: 0 };
+    e.pages.push(page);
+    emojiStats.pages = e.pages.length;
+    return page;
+  }
+
+  /**
+   * Colour atlas entry for one emoji at base size `px` (integer device px).
+   * Baked once; the same key is never rasterized again.
+   */
+  function emojiEntry(s, emoji, px) {
+    const e = s.emoji;
+    // Two-level lookup (emoji -> base px) so a cache hit builds no key string.
+    let bySize = e.entries.get(emoji);
+    let entry = bySize?.get(px);
+    if (entry !== undefined) return entry;
+    if (!bySize) { bySize = new Map(); e.entries.set(emoji, bySize); }
+    if (px < 4) {
+      // Unlaid-out / sub-legible box: advance only, never a texture bake.
+      entry = Object.freeze({ page: null, adv: px, px, w: 0, h: 0, u0: 0, v0: 0, u1: 0, v1: 0 });
+      bySize.set(px, entry);
+      return entry;
+    }
+    const cx = emojiRaster(s);
+    if (!cx) return null;
+    cx.font = `${px}px ${EMOJI_FAMILY}`;
+    const adv = Math.max(1, cx.measureText(emoji).width || px);
+    const w = Math.ceil(adv) + EMOJI_PAD * 2;
+    const h = Math.ceil(px * 1.25) + EMOJI_PAD * 2;
+    const page = emojiPage(s, w, h);
+    if (!page) {
+      // Atlas full: keep the advance, draw nothing (cached, so no retry loop).
+      emojiStats.dropped += 1;
+      entry = Object.freeze({ page: null, adv, px, w, h, u0: 0, v0: 0, u1: 0, v1: 0 });
+      bySize.set(px, entry);
+      return entry;
+    }
+    const cv = e.canvas;
+    if (cv.width < w || cv.height < h) {
+      cv.width = Math.max(cv.width, w);
+      cv.height = Math.max(cv.height, h);
+    }
+    cx.setTransform(1, 0, 0, 1, 0, 0);
+    cx.clearRect(0, 0, cv.width, cv.height);
+    cx.font = `${px}px ${EMOJI_FAMILY}`;
+    cx.textBaseline = "alphabetic";
+    cx.textAlign = "left";
+    cx.fillStyle = "#000";
+    cx.fillText(emoji, EMOJI_PAD, EMOJI_PAD + px * TEXT_ASCENT);
+    const gl = s.gl;
+    const pixels = cx.getImageData(0, 0, w, h);
+    gl.bindTexture(gl.TEXTURE_2D, page.texture);
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+    gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true);
+    gl.texSubImage2D(gl.TEXTURE_2D, 0, page.x, page.y, w, h, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+    gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
+    gl.bindTexture(gl.TEXTURE_2D, null);
+    emojiStats.bakes += 1;
+    emojiStats.uploads += 1;
+    entry = Object.freeze({
+      page, adv, px, w, h,
+      u0: page.x / EMOJI_SHEET, v0: page.y / EMOJI_SHEET,
+      u1: (page.x + w) / EMOJI_SHEET, v1: (page.y + h) / EMOJI_SHEET,
+    });
+    page.x += w;
+    page.rowH = Math.max(page.rowH, h);
+    bySize.set(px, entry);
+    emojiStats.entries += 1;
+    return entry;
+  }
+
+  /** Base bake size: drawn px in face-backing device px, rounded. */
+  function emojiBasePx(devicePx) {
+    return Math.max(1, Math.round(devicePx));
+  }
+
+  /** Counters for smokes / GPU checks (bakes never move at steady state or on zoom). */
+  function nodeGraphGlLinesEmojiStats() {
+    const keys = [];
+    if (state) for (const [emoji, bySize] of state.emoji.entries) for (const px of bySize.keys()) keys.push(`${emoji}|${px}`);
+    return { ...emojiStats, keys };
+  }
+
   /** Width of `text` at `px` (same units as the batch coordinates). */
   function nodeGraphGlLinesMeasureText(text, px, family = TEXT_DEFAULT_FAMILY, weight = 600) {
-    const atlas = nodeGraphGlLinesTextAtlas(family, weight, text);
-    if (!atlas) return String(text).length * px * 0.6;
-    let adv = 0;
-    for (const ch of String(text)) adv += atlas.glyphs.get(ch)?.adv || 0;
-    return adv * (px / TEXT_BAKE_PX);
+    const str = String(text ?? "");
+    const atlas = nodeGraphGlLinesTextAtlas(family, weight, str);
+    if (!atlas) return str.length * px * 0.6;
+    const g = px / TEXT_BAKE_PX;
+    if (!EMOJI_HINT.test(str)) {
+      let adv = 0;
+      for (const ch of str) adv += atlas.glyphs.get(ch)?.adv || 0;
+      return adv * g;
+    }
+    let width = 0;
+    for (const seg of nodeGraphGlLinesTextSegments(str)) {
+      if (seg.emoji) {
+        const entry = emojiEntry(state, seg.text, emojiBasePx(px));
+        width += entry ? entry.adv * (px / entry.px) : px;
+      } else {
+        for (const ch of seg.text) width += (atlas.glyphs.get(ch)?.adv || 0) * g;
+      }
+    }
+    return width;
   }
 
   /**
@@ -416,9 +608,21 @@ void main() {
     const k = batch.scale || 1;
     const px = Math.max(1, Number(options.px) || 12) * k;
     const g = px / TEXT_BAKE_PX;
-    let adv = 0;
-    for (const ch of str) adv += atlas.glyphs.get(ch)?.adv || 0;
-    let width = adv * g;
+    const segs = EMOJI_HINT.test(str) ? nodeGraphGlLinesTextSegments(str) : null;
+    let hasEmoji = false;
+    if (segs) for (let i = 0; i < segs.length; i += 1) if (segs[i].emoji) { hasEmoji = true; break; }
+    const emojiPx = emojiBasePx(px);
+    let width = 0;
+    if (hasEmoji) {
+      for (const seg of segs) {
+        if (seg.emoji) width += emojiEntry(batch.s, seg.text, emojiPx)?.adv || 0;
+        else for (const ch of seg.text) width += (atlas.glyphs.get(ch)?.adv || 0) * g;
+      }
+    } else {
+      let adv = 0;
+      for (const ch of str) adv += atlas.glyphs.get(ch)?.adv || 0;
+      width = adv * g;
+    }
     let squeeze = 1;
     const maxW = Number(options.maxWidth) * k;
     if (maxW > 0 && width > maxW) { squeeze = maxW / width; width = maxW; }
@@ -432,11 +636,43 @@ void main() {
     const sx = g * squeeze;
     const c = options.rgba || TEXT_WHITE;
     const cr = c[0]; const cg = c[1]; const cb = c[2]; const ca = c.length > 3 ? c[3] : 1;
+    if (!hasEmoji) {
+      pen = pushGlyphs(batch, atlas, str, pen, baseline, g, sx, cr, cg, cb, ca);
+      return;
+    }
+    for (const seg of segs) {
+      if (!seg.emoji) {
+        pen = pushGlyphs(batch, atlas, seg.text, pen, baseline, g, sx, cr, cg, cb, ca);
+        continue;
+      }
+      const entry = emojiEntry(batch.s, seg.text, emojiPx);
+      if (!entry) continue;
+      if (entry.page) {
+        // 1:1 device px (squeezed only by maxWidth); colour is the bake, tint alpha only.
+        const run = textRun(batch, entry.page.texture, true);
+        // Whole device px so NEAREST samples the bake texel-for-pixel.
+        const x0 = Math.round(pen - EMOJI_PAD * squeeze);
+        const y0 = Math.round(baseline - (EMOJI_PAD + entry.px * TEXT_ASCENT));
+        pushTextQuad(batch, x0, y0, x0 + entry.w * squeeze, y0 + entry.h,
+          entry.u0, entry.v0, entry.u1, entry.v1, 1, 1, 1, ca);
+        run.end = batch.tn;
+      }
+      pen += entry.adv * squeeze;
+    }
+  }
+
+  /** Current run for a texture (consecutive same-texture quads share one draw). */
+  function textRun(batch, texture, color) {
     let run = batch.texts.length ? batch.texts[batch.texts.length - 1] : null;
-    if (!run || run.atlas !== atlas) {
-      run = { atlas, start: batch.tn, end: batch.tn };
+    if (!run || run.texture !== texture) {
+      run = { texture, color, start: batch.tn, end: batch.tn };
       batch.texts.push(run);
     }
+    return run;
+  }
+
+  function pushGlyphs(batch, atlas, str, pen, baseline, g, sx, cr, cg, cb, ca) {
+    const run = textRun(batch, atlas.texture, false);
     for (const ch of str) {
       const gl = atlas.glyphs.get(ch);
       if (!gl) continue;
@@ -450,6 +686,7 @@ void main() {
       pen += gl.adv * sx;
     }
     run.end = batch.tn;
+    return pen;
   }
 
   function pushTextVertex(d, i, x, y, u, v, r, g, b, a) {
@@ -510,7 +747,7 @@ void main() {
   }
 
   /** Tinted textured triangles: data = pos2 uv2 rgba4 per vertex (device px). */
-  function drawTexturedTinted(s, w, h, data, start, end) {
+  function drawTexturedTinted(s, w, h, data, start, end, mode = 1) {
     const gl = s.gl;
     const len = end - start;
     if (len <= 0) return;
@@ -522,7 +759,7 @@ void main() {
       out[i + 2] = data[j + 2]; out[i + 3] = data[j + 3];
       out[i + 4] = data[j + 4]; out[i + 5] = data[j + 5]; out[i + 6] = data[j + 6]; out[i + 7] = data[j + 7];
     }
-    gl.uniform1f(s.imgModeLoc, 1);
+    gl.uniform1f(s.imgModeLoc, mode);
     gl.bindBuffer(gl.ARRAY_BUFFER, s.imgBuf);
     gl.bufferData(gl.ARRAY_BUFFER, out.subarray(0, len), gl.STREAM_DRAW);
     const [pl, ul, tl] = s.imgAttribs;
@@ -597,14 +834,17 @@ void main() {
     gl.bindTexture(gl.TEXTURE_2D, null);
   }
 
-  function drawTexts(batch) {
+  function drawTexts(batch, alphaDst) {
     const { s, w, h } = batch;
     const gl = s.gl;
     useTexturedProgram(s);
-    // One draw call per atlas run (all glyphs of consecutive same-font text).
+    // One draw call per texture run (glyph atlas or colour emoji page).
     for (const t of batch.texts) {
-      gl.bindTexture(gl.TEXTURE_2D, t.atlas.texture);
-      drawTexturedTinted(s, w, h, batch.tdata, t.start, t.end);
+      if (t.end <= t.start) continue;
+      gl.bindTexture(gl.TEXTURE_2D, t.texture);
+      if (t.color) gl.blendFuncSeparate(gl.ONE, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, alphaDst);
+      else gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, alphaDst);
+      drawTexturedTinted(s, w, h, batch.tdata, t.start, t.end, t.color ? 3 : 1);
     }
     gl.bindTexture(gl.TEXTURE_2D, null);
   }
@@ -640,7 +880,7 @@ void main() {
     }
     if (batch.texts.length) {
       gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, alphaDst);
-      drawTexts(batch);
+      drawTexts(batch, alphaDst);
     }
     gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
   }
@@ -793,6 +1033,8 @@ void main() {
     nodeGraphGlLinesText,
     nodeGraphGlLinesMeasureText,
     nodeGraphGlLinesTextAtlas,
+    nodeGraphGlLinesTextSegments,
+    nodeGraphGlLinesEmojiStats,
     nodeGraphGlLinesCss,
     nodeGraphGlLinesHsl,
     nodeGraphGlLinesEnd,
