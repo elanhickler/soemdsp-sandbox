@@ -254,13 +254,6 @@
       "tracePoints": []
     },
     {
-      "destinationNode": "passiveFilter-2",
-      "destinationParam": "sweep",
-      "sourceNode": "namedPortalOut-5",
-      "sourcePort": "Out",
-      "tracePoints": []
-    },
-    {
       "destinationNode": "hypersaw2-1",
       "destinationParam": "jitterDistance",
       "sourceNode": "namedPortalOut-6",
@@ -2227,41 +2220,6 @@
           "outputDomain": false,
           "domainOffset": 0
         },
-        "sweep": {
-          "alias": "",
-          "choices": [],
-          "curveAmount": 0,
-          "def": 0,
-          "displayChoices": false,
-          "divideChoicesVisibly": false,
-          "kind": "decimal",
-          "bipolar": true,
-          "max": 48,
-          "maxDigits": 3,
-          "mid": 0,
-          "min": -480,
-          "reverse": false,
-          "nonlinearSlider": false,
-          "sliderCurve": "linear",
-          "showSign": true,
-          "removeTrailingZeros": false,
-          "smoothingMode": "internal",
-          "smoothingSeconds": 1469,
-          "smoothingType": "linear",
-          "step": 0,
-          "tooltip": "Shift used cutoffs in semitones. BP keeps the HPF/LPF interval (ratio) constant.",
-          "modClamp": true,
-          "hardClamp": false,
-          "modMultiply": false,
-          "vca": false,
-          "constraint": "",
-          "unit": "st",
-          "wraparound": false,
-          "visible": true,
-          "linearSmoothing": true,
-          "outputDomain": false,
-          "domainOffset": 0
-        },
         "gainCompensation": {
           "alias": "",
           "choices": [
@@ -2340,9 +2298,8 @@
         "mode": 0,
         "slope": 2,
         "stagger": 1,
-        "lowFrequency": 97.87677151919408,
+        "lowFrequency": 6.447367930491459,
         "highFrequency": 0,
-        "sweep": -47.09021152531858,
         "gainCompensation": 1,
         "amplitude": 1
       },
