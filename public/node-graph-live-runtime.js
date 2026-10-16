@@ -1954,6 +1954,12 @@ if (typeof window !== "undefined") {
   window.nodeGraphReceiveFrameBatch = nodeGraphReceiveFrameBatch;
 }
 
+// Plugin build: the native host (window.soemdspPluginHost) stands in for
+// the AudioWorklet node for scope / meter / visualControls messages.
+function nodeGraphLivePluginHost() {
+  return typeof window !== "undefined" ? (window.soemdspPluginHost || null) : null;
+}
+
 function handleNodeGraphLiveWorkletMessage(event) {
   const message = event.data || {};
   if (message.type === "frameBatch") {
@@ -2048,7 +2054,7 @@ function handleNodeGraphLiveWorkletMessage(event) {
     return;
   }
   if (message.type === "meter") {
-    if (message.sessionId !== nodeGraphMvp.live.sessionId || !nodeGraphMvp.live.node) {
+    if (message.sessionId !== nodeGraphMvp.live.sessionId || !(nodeGraphMvp.live.node || nodeGraphLivePluginHost())) {
       return;
     }
     setNodeGraphLiveInputMeter(
@@ -2220,7 +2226,7 @@ function handleNodeGraphLiveWorkletMessage(event) {
       : [rejectError.message];
     setNodeGraphLiveBlockedError("plan", rejectError, { preservePreviousPlan: false });
   } else if (message.type === "scope") {
-    if (message.sessionId !== nodeGraphMvp.live.sessionId || !nodeGraphMvp.live.node) {
+    if (message.sessionId !== nodeGraphMvp.live.sessionId || !(nodeGraphMvp.live.node || nodeGraphLivePluginHost())) {
       return;
     }
     const scopeValues = message.values || [];
@@ -2273,7 +2279,7 @@ function handleNodeGraphLiveWorkletMessage(event) {
       });
     } catch (_error) { /* worklet gone */ }
   } else if (message.type === "visualControls") {
-    if (message.sessionId !== nodeGraphMvp.live.sessionId || !nodeGraphMvp.live.node) {
+    if (message.sessionId !== nodeGraphMvp.live.sessionId || !(nodeGraphMvp.live.node || nodeGraphLivePluginHost())) {
       return;
     }
     nodeGraphSetVisualControls({

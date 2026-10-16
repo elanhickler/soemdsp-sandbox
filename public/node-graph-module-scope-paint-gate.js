@@ -8,13 +8,19 @@
 // Load after node-graph-state / mvp exists; used by scope-canvas, phosphor,
 // draw-orchestrator, lifecycle, buffer-io. Extract-only policy helpers.
 
+/** Live AudioWorklet node, or the plugin's native host (window.soemdspPluginHost). */
+function scopePaintHasEngineHost(live) {
+  if (live?.node) return true;
+  return typeof window !== "undefined" && Boolean(window.soemdspPluginHost);
+}
+
 /**
  * Engine transport is playing (speed > 0) and a live audio node exists.
  * Does not require Live Output or AudioContext.state === "running".
  */
 function scopePaintIsEnginePlaying() {
   const live = typeof nodeGraphMvp !== "undefined" ? nodeGraphMvp?.live : null;
-  if (!live?.node) {
+  if (!scopePaintHasEngineHost(live)) {
     return false;
   }
   const speed = Number(live.speedMultiplier);
@@ -261,7 +267,7 @@ function scopePaintIsFrozen() {
   }
   const live = typeof nodeGraphMvp !== "undefined" ? nodeGraphMvp?.live : null;
   // Engine fully down → cold-boot / idle territory, not residual hold.
-  if (!live?.node) {
+  if (!scopePaintHasEngineHost(live)) {
     return false;
   }
   // Worklet still up but transport speed 0 → pause: hold residual.
