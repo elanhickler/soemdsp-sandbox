@@ -405,8 +405,7 @@ function cloneNodeGraphTypedDisplaySettings(node) {
     }
     case "scope2d":
     case "phosphorLight":
-    case "videoscopeBurn":
-    case "oscilloscopeBankBurn": {
+    case "videoscopeBurn": {
       const raw = bag || {};
       const mapped = {
         ...raw,

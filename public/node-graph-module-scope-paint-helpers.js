@@ -796,6 +796,11 @@ function nodeGraphFacePlateFillCanvas(context, canvas, bg) {
   if (!context || !canvas) {
     return;
   }
+  // Pixels are cleared: self-painted plates that skip unchanged redraws
+  // (Metronome BPM) must repaint.
+  if (canvas._nodeGraphTransportBpmDigits !== undefined) {
+    canvas._nodeGraphTransportBpmDigits = null;
+  }
   context.save();
   context.setTransform(1, 0, 0, 1, 0, 0);
   context.globalCompositeOperation = "source-over";
@@ -877,29 +882,6 @@ function bindNodeGraphScope2dQuad(renderer, program, positionLocation) {
 // phase (0..1) across the face. Canonical mono energy phosphor drawer
 // (same soft/hard stamps as 2D Burn / Lorenz).
 // drawNodeGraphHypersawBurnItem → node-graph-module-scope-draw-burn.js
-// Oscilloscope Bank -- a standalone, reusable "phase x amplitude" scope for
-// any voice-bank-shaped source (Hypersaw today, anything else that
-// publishes the same {phases, amplitudes, pans} snapshot shape later).
-// Unlike hypersawBurn (a fixed 1D dispersion-position display hardcoded to
-// Hypersaw), this node discovers ITS source at render time by looking at
-// what's actually wired into its own Phases/Amplitudes/Pans input ports --
-// "1 wire per major data array" is the whole patching model: the wire's
-// existence tells this renderer which node's published snapshot to read,
-// the real array payload rides the same lightweight scope-state relay
-// Hypersaw's own display already uses (worklet -> main thread), not the
-// per-sample audio-rate signal graph.
-//
-// x = phase (0..1 across the canvas, free / non-pixel-quantized), additive R/B
-// (left=red, right=blue, center=both). Legacy note — amplitude stem around
-// vertical center), color = pan (red at -1/left, green at 0/center, blue
-// at +1/right), additive blending so overlapping voices actually brighten
-// rather than overpaint, and phosphor persistence via painting a
-// translucent black rect instead of clearing -- so the ghost of where
-// each line has been stays visible while it fades, same technique as
-// hypersawBurn and lineBurn.
-// oscilloscopeBankBurn's renderer moved to
-// public/modules/oscilloscopeBank/oscilloscope-bank-display.js (self-registers
-// onto nodeGraphModuleScopeCustomRenderers on load).
 
 function nodeGraphScope2dFiniteSample(value) {
   const sample = Number(value);

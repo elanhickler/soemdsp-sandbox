@@ -50,6 +50,10 @@ function nodeGraphModuleScopeDisplayTypeForCanvas(canvas) {
 }
 
 function nodeGraphModuleScopeWipeCanvas(canvas, options = {}) {
+  // Any wipe means the BPM plate (skips unchanged redraws) must repaint.
+  if (canvas && canvas._nodeGraphTransportBpmDigits !== undefined) {
+    canvas._nodeGraphTransportBpmDigits = null;
+  }
   const displayType = String(options.displayType || nodeGraphModuleScopeDisplayTypeForCanvas(canvas) || "").trim();
   const fn = displayType ? nodeGraphModuleScopeFaceWipes[displayType] : null;
   if (typeof fn !== "function") {
@@ -276,6 +280,10 @@ function nodeGraphModuleScopeWipePhosphorCanvas(canvas, bg) {
     }
     canvas[key] = null;
   }
+  // Phosphor Dot / Hypersaw GPU residual plates.
+  if (typeof nodeGraphResidualFaceGlDrop === "function") {
+    nodeGraphResidualFaceGlDrop(canvas);
+  }
   const context = canvas.getContext?.("2d");
   if (context && canvas.width > 0 && canvas.height > 0) {
     if (typeof nodeGraphFacePlateFillCanvas === "function") {
@@ -312,7 +320,7 @@ function nodeGraphModuleScopeWipeNumberReadoutCanvas(canvas, bg, options) {
 (function registerNodeGraphModuleScopeBuiltinFaceWipes() {
   const phosphorTypes = [
     "scope2d", "phosphorLight", "lineBurn", "dot", "xyPad",
-    "videoscopeBurn", "oscilloscopeBankBurn", "hypersawBurn",
+    "videoscopeBurn", "hypersawBurn",
   ];
   for (let i = 0; i < phosphorTypes.length; i += 1) {
     nodeGraphModuleScopeRegisterFaceWipe(phosphorTypes[i], nodeGraphModuleScopeWipePhosphorCanvas);

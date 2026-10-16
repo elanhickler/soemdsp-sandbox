@@ -1035,7 +1035,6 @@ function nodeGraphModuleResourceConstraintsForType(type) {
     || display === "hypersawBurn"
     || display === "ensembleCloud"
     || display === "videoscopeBurn"
-    || display === "oscilloscopeBankBurn"
     || display === "vectorRgbFace"
     || display === "gradientVectorscopeFace"
     || display === "waterfallXyz"

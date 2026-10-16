@@ -989,15 +989,40 @@ function nodeGraphModuleFaceLayoutCssSize(canvas) {
     || "",
   ).trim();
   const escaped = id && typeof CSS !== "undefined" && CSS.escape ? CSS.escape(id) : id;
-  const moduleEl = escaped
-    ? document.querySelector(`.dsp-node[data-node="${escaped}"]`)
-    : null;
+  const moduleEl = id && typeof nodeGraphCachedNodeElement === "function"
+    ? nodeGraphCachedNodeElement(".dsp-node", id)
+    : (escaped ? document.querySelector(`.dsp-node[data-node="${escaped}"]`) : null);
   const node = id && typeof nodeGraphPatchNode === "function" ? nodeGraphPatchNode(id) : null;
   let widthGu = Number(node?.widthGu);
   let heightGu = Number(node?.displayHeightGu);
   let cell = 28;
+  // getComputedStyle per paint forced a style recalc every frame. The grid
+  // tokens only change with inline styles (settings / resize), so cache the
+  // parsed values per module keyed on those style attributes.
+  const styleHost = moduleEl || document.documentElement;
+  const styleKey = `${styleHost.getAttribute?.("style") || ""}\u0000${document.documentElement.getAttribute("style") || ""}`;
+  const cachedTokens = nodeGraphModuleFaceGridTokenCache.get(styleHost);
+  if (cachedTokens && cachedTokens.key === styleKey) {
+    if (!(widthGu > 0) && cachedTokens.widthGu > 0) widthGu = cachedTokens.widthGu;
+    if (!(heightGu > 0) && cachedTokens.heightGu > 0) heightGu = cachedTokens.heightGu;
+    if (cachedTokens.cell > 0) cell = cachedTokens.cell;
+    return {
+      w: widthGu > 0 ? Math.max(1, widthGu * cell) : Math.max(1, canvas?.clientWidth || canvas?.width || 1),
+      h: heightGu > 0 ? Math.max(1, heightGu * cell) : Math.max(1, canvas?.clientHeight || canvas?.height || 1),
+    };
+  }
   try {
-    const style = getComputedStyle(moduleEl || document.documentElement);
+    const style = getComputedStyle(styleHost);
+    nodeGraphModuleFaceGridTokenCache.set(styleHost, {
+      key: styleKey,
+      widthGu: Number.parseFloat(style.getPropertyValue("--node-grid-width-units") || ""),
+      heightGu: Number.parseFloat(style.getPropertyValue("--node-module-display-height-units") || ""),
+      cell: Number.parseFloat(
+        style.getPropertyValue("--node-grid-width")
+        || style.getPropertyValue("--node-grid-size")
+        || "",
+      ),
+    });
     if (!(widthGu > 0)) {
       const fromCss = Number.parseFloat(style.getPropertyValue("--node-grid-width-units") || "");
       if (fromCss > 0) widthGu = fromCss;
@@ -1020,6 +1045,8 @@ function nodeGraphModuleFaceLayoutCssSize(canvas) {
     h: heightGu > 0 ? Math.max(1, heightGu * cell) : Math.max(1, canvas?.clientHeight || canvas?.height || 1),
   };
 }
+
+var nodeGraphModuleFaceGridTokenCache = new WeakMap();
 
 function nodeGraphModuleFacePixelScale(canvas) {
   const layout = nodeGraphModuleFaceLayoutCssSize(canvas);
@@ -1061,173 +1088,9 @@ function nodeGraphModuleFaceLayoutCssWidth(canvas) {
 }
 
 function drawNodeGraphHypersawBurnItem(renderer, item, pixelRatio) {
-  // Vertical stems: free (non-pixel-quantized) x = phase∈[0,1] × width.
-  // Width = lineThickness∈[0,1] × face width. Additive: left=red, right=blue,
-  // center = red+blue (both channels) by amplitude.
-  const nodeId = item?.slot?.nodeId;
-  if (!nodeId) {
-    return;
-  }
-  const canvas = nodeGraphScope2dBurnCanvasForSlot(item?.slot);
-  const screenElement = item?.screenElement || item?.slot?.scopeElement;
-  const sync = syncNodeGraphScope2dBurnCanvas(canvas, screenElement, pixelRatio, 1);
-  if (!sync.synced || !canvas) {
-    return;
-  }
-  const context = canvas.getContext("2d");
-  if (!context) {
-    return;
-  }
-  const phases = typeof nodeGraphDataBus !== "undefined"
-    ? nodeGraphDataBus.get(nodeGraphDataBusKey(String(nodeId), "Phases"))
-    : null;
-  const pans = typeof nodeGraphDataBus !== "undefined"
-    ? nodeGraphDataBus.get(nodeGraphDataBusKey(String(nodeId), "Pans"))
-    : null;
-  const amps = typeof nodeGraphDataBus !== "undefined"
-    ? nodeGraphDataBus.get(nodeGraphDataBusKey(String(nodeId), "Amplitudes"))
-    : null;
-
-  const look = typeof nodeGraphScopePhosphorLookDefaults !== "undefined"
-    ? nodeGraphScopePhosphorLookDefaults
-    : null;
-  const trail = clampNodeSliderValue(Number(look?.trail ?? 0.35), 0, 1);
-  const ghost = clampNodeSliderValue(Number(look?.ghost ?? 0.45), 0, 1);
-  const bgHex = typeof nodeGraphFacePlateBackground === "function"
-    ? nodeGraphFacePlateBackground({ background: look?.background ?? "#000004" })
-    : (look?.background ?? "#000004");
-  if (typeof nodeGraphFacePlateApplyCss === "function") {
-    nodeGraphFacePlateApplyCss(screenElement, bgHex);
-  }
-
-  // No voice data → freeze last frame (do not fade/clear).
-  if (!Array.isArray(phases) || !phases.length) {
-    return;
-  }
-
-  const patchNodeEarly = typeof nodeGraphPatchNode === "function" ? nodeGraphPatchNode(nodeId) : null;
-  if (["reverbEffect", "sabrinaReverbOriginal"].includes(String(patchNodeEarly?.type || "")) && typeof nodeGraphSabrinaReverbGlPresent === "function") {
-    const cssW = Math.max(1, canvas.clientWidth || screenElement?.clientWidth || 1);
-    const sabrinaSettings = typeof nodeGraphHypersawBurnSettingsForNode === "function"
-      ? nodeGraphHypersawBurnSettingsForNode(patchNodeEarly)
-      : null;
-    if (nodeGraphSabrinaReverbGlPresent(canvas, phases, cssW, sabrinaSettings)) {
-      return;
-    }
-  }
-
-  const keep = Math.max(0, Math.min(0.995, trail * 0.97 + ghost * 0.02));
-  const fade = 1 - keep;
-  context.save();
-  context.setTransform(1, 0, 0, 1, 0, 0);
-  context.globalCompositeOperation = "source-over";
-  context.globalAlpha = 1;
-  if (fade > 0.0005) {
-    context.fillStyle = bgHex;
-    context.globalAlpha = fade;
-    context.fillRect(0, 0, canvas.width, canvas.height);
-    context.globalAlpha = 1;
-  }
-
-  context.imageSmoothingEnabled = false;
-  context.globalCompositeOperation = "lighter";
-
-  const patchNode = typeof nodeGraphPatchNode === "function" ? nodeGraphPatchNode(nodeId) : null;
-  const faceSettings = typeof nodeGraphHypersawBurnSettingsForNode === "function"
-    ? nodeGraphHypersawBurnSettingsForNode(patchNode)
-    : (typeof normalizeNodeGraphHypersawBurnSettings === "function"
-      ? normalizeNodeGraphHypersawBurnSettings(patchNode?.traceDisplaySettings)
-      : { lineThickness: 0.01 });
-  // Screen pixels of the module face. Canvas mode and zoom enlarge the
-  // bitmap; thickness grows by the same factor so the stem stays the same
-  // fraction of the face. Do not divide by workspace zoom, and do not use
-  // the stretched clientWidth — that cancels the enlargement.
-  const screenPx = clampNodeSliderValue(nodeGraphFiniteNumber(faceSettings?.lineThickness, 2), 0, 64);
-  const widthPx = canvas.width;
-  const heightPx = canvas.height;
-  const pixelScale = nodeGraphModuleFacePixelScale(canvas);
-  const thicknessPx = screenPx * pixelScale;
-  const sabrinaStems = ["reverbEffect", "sabrinaReverbOriginal"].includes(String(patchNode?.type || ""));
-
-  const count = phases.length;
-  for (let i = 0; i < count; i += 1) {
-    const p = Number(phases[i]);
-    if (!Number.isFinite(p)) continue;
-    const phase01 = clampNodeSliderValue(p, 0, 1);
-    if (!(screenPx > 0)) continue;
-    const xCenter = phase01 * widthPx;
-    const pan = Array.isArray(pans) && i < pans.length ? Number(pans[i]) : 0;
-    const ampRaw = Array.isArray(amps) && i < amps.length ? Number(amps[i]) : 1;
-    const alpha = clampNodeSliderValue(Math.abs(Number.isFinite(ampRaw) ? ampRaw : 0), 0, 1);
-    if (!(alpha > 0)) continue;
-    const cols = [];
-    if (sabrinaStems) {
-      // 1 CSS px core, 2 CSS px feather. Same coverage as the line shader.
-      const cssW = Math.max(1, canvas.clientWidth || screenElement?.clientWidth || 1);
-      const coreCss = Math.max(1, cssW / 222);
-      const solidW = coreCss * pixelScale;
-      const aaW = 2 * pixelScale;
-      const left = xCenter - solidW * 0.5;
-      const right = left + solidW;
-      const i0 = Math.floor(left - aaW);
-      const i1 = Math.ceil(right + aaW) - 1;
-      for (let ix = i0; ix <= i1; ix += 1) {
-        if (ix < 0 || ix >= widthPx) continue;
-        const c = ix + 0.5;
-        let gain = 0;
-        if (c >= left && c <= right) {
-          gain = 1;
-        } else if (aaW > 0 && c < left) {
-          gain = Math.max(0, 1 - (left - c) / aaW);
-        } else if (aaW > 0) {
-          gain = Math.max(0, 1 - (c - right) / aaW);
-        }
-        if (gain > 0) cols.push({ ix, gain: Math.min(1, gain) });
-      }
-    } else {
-      // Core never thinner than one canvas pixel. A one-pixel ramp on each
-      // side holds the fractional position. The brighter edge is scaled up
-      // to full so a half-pixel phase does not dim the stem.
-      const coreW = Math.max(thicknessPx, 1);
-      const left = xCenter - coreW * 0.5;
-      const right = left + coreW;
-      const coreIx = Math.max(0, Math.min(widthPx - 1, Math.floor(xCenter)));
-      const i0 = Math.floor(left);
-      const i1 = Math.ceil(right) - 1;
-      for (let ix = i0; ix <= i1; ix += 1) {
-        const coverage = Math.min(right, ix + 1) - Math.max(left, ix);
-        if (!(coverage > 0)) continue;
-        cols.push({ ix, gain: ix === coreIx ? 1 : Math.min(1, coverage) });
-      }
-      if (!cols.some((col) => col.ix === coreIx)) {
-        cols.push({ ix: coreIx, gain: 1 });
-      }
-    }
-    const paint = (rgbaPrefix) => {
-      for (let c = 0; c < cols.length; c += 1) {
-        const col = cols[c];
-        if (col.ix < 0 || col.ix >= widthPx) continue;
-        const a = Math.max(0, Math.min(1, alpha * col.gain));
-        context.fillStyle = `${rgbaPrefix}${a})`;
-        context.fillRect(col.ix, 0, 1, heightPx);
-      }
-    };
-    // Additive off-red / off-blue so left+right combine toward white.
-    // Sabrina recycle taps (12 and 13) are both green, at their own times.
-    if (sabrinaStems) {
-      if (i >= 12) paint("rgba(86,206,118,");
-      else if (i & 1) paint("rgba(110,130,255,");
-      else paint("rgba(255,130,110,");
-    } else if (pan < -0.25) {
-      paint("rgba(255,130,110,");
-    } else if (pan > 0.25) {
-      paint("rgba(110,130,255,");
-    } else {
-      paint("rgba(255,130,110,");
-      paint("rgba(110,130,255,");
-    }
-  }
-  context.restore();
+  // Hypersaw stems: batched quads on a GPU residual plate on the shared GL
+  // device (node-graph-module-scope-residual-face-gl.js). No 2D path.
+  return drawNodeGraphHypersawBurnGlItem(renderer, item, pixelRatio);
 }
 
 

@@ -19,7 +19,6 @@ const NODE_GRAPH_FACE_BURN_RENDERERS = new Set([
   "scope2d",
   "phosphorLight",
   "videoscopeBurn",
-  "oscilloscopeBankBurn",
 ]);
 
 /** Tape / Instant Waterfall style faces — never burn-recreate. */
@@ -304,6 +303,9 @@ function nodeGraphFaceCanvasResizeKeep(canvas, width, height) {
   }
   canvas.width = width;
   canvas.height = height;
+  if (canvas._nodeGraphTransportBpmDigits !== undefined) {
+    canvas._nodeGraphTransportBpmDigits = null;
+  }
   if (!previousCanvas) return;
   const context = canvas.getContext("2d");
   if (!context) return;

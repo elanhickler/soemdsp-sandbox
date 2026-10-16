@@ -20,7 +20,7 @@ Visualizers are **modules in the visual sense**, not audio DSP:
 - `public/lib/phosphor/` — energy residual, drawer, shared WebGL device
 - `public/lib/trace/` — waveform, stroke, tape, history, woscope, shape, dots
 - `public/node-graph-module-scope-*.js` — host glue (defaults, normalize, paint gate, orchestrator, settings)
-- Face folders under `public/modules/*` — catalog-facing displays (e.g. `phosphorLight`, `waterfallXyz`, `asciiscope`, `videoscope`, `oscilloscopeBank`, `gradientVectorscope`)
+- Face folders under `public/modules/*` — catalog-facing displays (e.g. `phosphorLight`, `waterfallXyz`, `asciiscope`, `videoscope`, `gradientVectorscope`)
 
 The series is: **one visual concern → one (or a tight cluster of) file(s)**, with a thin host adapter — same spirit as “efficientProduct” for DSP, but for observers.
 
@@ -101,7 +101,7 @@ Order = clarity of existing peel + observer purity (easy → harder). **V-batche
 | **V2** | Trace (1D / Instant Waterfall) | `lib/trace/*` + scope host | Same: one entry face file story; waveform/stroke stay metal |
 | **V3** | PhosphorLight / scope2d face | `modules/phosphorLight/` | Thin display → lib/phosphor only |
 | **V4** | TraceXyz | `modules/waterfallXyz/` | XYZ observe; no second sim |
-| **V5** | Oscilloscope bank | `modules/oscilloscopeBank/` | Multi-slot observer; shared GL discipline |
+| **V5** | ~~Oscilloscope bank~~ | removed 2026-10-15 (never shipped, no patch used it) | - |
 | **V6** | Asciiscope | `modules/asciiscope/` (already has `*-gl.js`) | Align with series file rules; GPU path first |
 | **V7** | Videoscope / gradient vectorscope | `modules/videoscope/`, `gradientVectorscope/` | Observer of L/R or XY taps; audio `vectorscopeTransform` stays DSP |
 | **V8+** | Spectrogram, matrix, RGB faces, radar, … | various | One face per batch when needed; fold shared upload into `lib/visual/` only if duplicated thrice |

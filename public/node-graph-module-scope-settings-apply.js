@@ -342,7 +342,6 @@ function assignNodeGraphTypedDisplaySettingsToNode(node, displayType, settings) 
   }
   if (
     displayType === "videoscopeBurn"
-    || displayType === "oscilloscopeBankBurn"
   ) {
     node.traceDisplaySettings = normalizeNodeGraphScope2dSettings(settings);
     return node.traceDisplaySettings;

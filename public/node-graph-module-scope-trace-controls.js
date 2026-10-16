@@ -121,7 +121,7 @@ function nodeGraphDisplaySettingsClipboardFamily(formType) {
   if (key === "scope2dTrace" || key === "gradientVectorscopeFace" || key === "waterfallXyz") {
     return "trace2d";
   }
-  if (key === "lineBurn" || key === "oscilloscopeBankBurn") {
+  if (key === "lineBurn") {
     return "phosphor1d";
   }
   if (key === "hypersawBurn") {
@@ -166,7 +166,6 @@ function nodeGraphDisplaySettingsIsPhosphorFormType(type) {
     || key === "dot"
     || key === "xyPad"
     || key === "videoscopeBurn"
-    || key === "oscilloscopeBankBurn"
     || key === "vectorRgbFace"
     || key.endsWith("Burn");
 }
@@ -354,9 +353,10 @@ const nodeGraphTraceDisplayActiveControlsByType = Object.freeze({
   lineBurn: Object.freeze({
     // Heart-monitor phosphor: Sweep first, then shared phosphor stack.
     // Form swaps sweepHz ↔ sweepCycles when Sync toggles (see syncNodeGraphLineBurnSweepLabel).
-    fields: Object.freeze([
+    // Scale first (shared phosphor order: Scale -> Sweep -> ...).
+    fields: Object.freeze(nodeGraphPhosphorDisplayFieldsFor([
+      "scale",
       "sweepHz",
-      ...nodeGraphPhosphorDisplayFieldsFor([
         "backgroundBrightness",
         "backgroundHue",
         "dot1Size",
@@ -367,8 +367,7 @@ const nodeGraphTraceDisplayActiveControlsByType = Object.freeze({
         "burnAmount",
         "pixelDensity",
         "dotBudget",
-      ]),
-    ]),
+    ])),
     colors: Object.freeze([]),
     // Skip at top; packing row: Sync | Clear (continuous packing always on)
     toggles: Object.freeze(["skipDiscontinuities", "sourceSync"]),
@@ -753,23 +752,6 @@ const nodeGraphTraceDisplayActiveControlsByType = Object.freeze({
       "trail",
       "burnAmount",
       "scale",
-      "pixelDensity",
-      "dotBudget",
-    ])),
-    colors: Object.freeze([]),
-    toggles: Object.freeze([]),
-    choices: Object.freeze(["drawMode"]),
-  }),
-  oscilloscopeBankBurn: Object.freeze({
-    fields: Object.freeze(nodeGraphPhosphorDisplayFieldsFor([
-      "backgroundBrightness",
-      "backgroundHue",
-      "dot1Size",
-      "lineThickness",
-      "dot1Brightness",
-      "ghost",
-      "trail",
-      "burnAmount",
       "pixelDensity",
       "dotBudget",
     ])),
@@ -2536,7 +2518,6 @@ const nodeGraphDisplaySettingsFormTypeTitles = Object.freeze({
   // Phosphor energy faces — must not fall through to generic "Trace"
   // (that title is what made Videoscope look like Output).
   videoscopeBurn: "Videoscope",
-  oscilloscopeBankBurn: "Bank",
   hypersawBurn: "Hypersaw",
   softpopFace: "Softpop",
   arpKeysFace: "Arp",

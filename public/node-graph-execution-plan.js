@@ -871,7 +871,6 @@ displayType === "scope1dTrace" ||
     displayType === "hypersawBurn" ||
     displayType === "ensembleCloud" ||
     displayType === "videoscopeBurn" ||
-    displayType === "oscilloscopeBankBurn" ||
     displayType === "spectrogramBurn" ||
     displayType === "spectrumLine" ||
     displayType === "phosphorLight" ||

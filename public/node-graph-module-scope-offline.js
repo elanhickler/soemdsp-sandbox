@@ -1,30 +1,50 @@
 // Scope offline analyzer / buffer helpers (Phase D).
 // Load after scopes.js. Extract-only.
 
+// Runs every paint frame: touch the DOM only when something changed
+// (setting hidden/textContent/class invalidates style even when equal).
 function renderNodeGraphModuleScopeAnalyzer(slot, buffer = null) {
-  const analyzer = slot?.scopeElement?.querySelector?.(".node-module-scope-analyzer");
+  const analyzer = typeof nodeGraphCachedChild === "function"
+    ? nodeGraphCachedChild(slot?.scopeElement, ".node-module-scope-analyzer")
+    : slot?.scopeElement?.querySelector?.(".node-module-scope-analyzer");
   if (!analyzer) {
     return;
   }
-  analyzer.classList.toggle("gain-scope-analyzer", slot?.type === "gain");
+  const gain = slot?.type === "gain";
+  if (analyzer.classList.contains("gain-scope-analyzer") !== gain) {
+    analyzer.classList.toggle("gain-scope-analyzer", gain);
+  }
   const metrics = buffer?.nodeGraphScopeAnalyzer;
   if (!metrics) {
-    analyzer.hidden = true;
-    analyzer.textContent = "";
+    if (!analyzer.hidden) {
+      analyzer.hidden = true;
+    }
+    if (analyzer.firstChild) {
+      analyzer.textContent = "";
+    }
+    analyzer._metricsKey = "";
     return;
   }
-  analyzer.hidden = false;
+  if (analyzer.hidden) {
+    analyzer.hidden = false;
+  }
   const rows = [
     ["gain", metrics.gainDb],
     metrics.inputRmsDb === undefined ? null : ["in", metrics.inputRmsDb],
     ["pk", metrics.peakDb],
     ["rms", metrics.rmsDb],
   ].filter(Boolean);
+  const texts = rows.map(([label, value]) => `${label} ${nodeGraphModuleScopeFormatDb(value)}`);
+  const key = texts.join("|");
+  if (analyzer._metricsKey === key) {
+    return;
+  }
+  analyzer._metricsKey = key;
   analyzer.replaceChildren(
-    ...rows.map(([label, value]) => {
+    ...rows.map(([label], index) => {
       const item = document.createElement("span");
       item.dataset.scopeMetric = label;
-      item.textContent = `${label} ${nodeGraphModuleScopeFormatDb(value)}`;
+      item.textContent = texts[index];
       return item;
     }),
   );
@@ -465,7 +485,7 @@ function nodeGraphTraceDisplayRenderPointBudget() {
 // nodeGraphGlobalTraceSettings → node-graph-module-scope-normalize.js
 // nodeGraphTraceDisplaySettingsEditingGlobal → node-graph-module-scope-normalize.js
 // nodeGraphWaterfallSettingsEditingDefaults → node-graph-module-scope-normalize.js
-const nodeGraphDisplayModeRenderers = Object.freeze(["waterfall", "waterfallRgb", "clock", "dot", "vectorDot", "pulseDot", "lcdDot", "value", "lineBurn", "hypersawBurn", "ensembleCloud", "oscilloscopeBankBurn", "videoscopeBurn", "spectrogramBurn", "spectrumLine", "transportBpm", "scope2d", "scope2dTrace", "scope1dTrace", "phosphorLight", "sampleWaveform", "numberReadout", "xyPad", "customDisplay", "spectrum", "selfPaintFace", "matrixFace", "matrixWaterfallFace", "matrixDisplayFace", "knobFace", "pluginSliderFace", "toggleButtonFace", "momentaryButtonFace", "rgbShapeFace", "rgbPictureFace", "imageBurnFace", "videoFeedbackFace", "videoDelayFace", "rgbFractalFace", "evolveFieldFace", "fbmFieldFace", "speedColorInertiaFace", "patchFace", "keypadFace", "keyboardControllerFace", "textBoxFace", "phoneToneFace", "harmonicSeriesFace", "vectorRgbFace", "rasterRgbFace", "gradientVectorscopeFace", "waterfallXyz", "portalFace", "roundShapeFace", "basicShapeFace", "sinCosFace", "softwaveOscFace", "sinCos4Face", "limiterGainFace", "softpopFace", "arpKeysFace", "slewShapeFace"]);
+const nodeGraphDisplayModeRenderers = Object.freeze(["waterfall", "waterfallRgb", "clock", "dot", "vectorDot", "pulseDot", "lcdDot", "value", "lineBurn", "hypersawBurn", "ensembleCloud", "videoscopeBurn", "spectrogramBurn", "spectrumLine", "transportBpm", "scope2d", "scope2dTrace", "scope1dTrace", "phosphorLight", "sampleWaveform", "numberReadout", "xyPad", "customDisplay", "spectrum", "selfPaintFace", "matrixFace", "matrixWaterfallFace", "matrixDisplayFace", "knobFace", "pluginSliderFace", "toggleButtonFace", "momentaryButtonFace", "rgbShapeFace", "rgbPictureFace", "imageBurnFace", "videoFeedbackFace", "videoDelayFace", "rgbFractalFace", "evolveFieldFace", "fbmFieldFace", "speedColorInertiaFace", "patchFace", "keypadFace", "keyboardControllerFace", "textBoxFace", "phoneToneFace", "harmonicSeriesFace", "vectorRgbFace", "rasterRgbFace", "gradientVectorscopeFace", "waterfallXyz", "portalFace", "roundShapeFace", "basicShapeFace", "sinCosFace", "softwaveOscFace", "sinCos4Face", "limiterGainFace", "softpopFace", "arpKeysFace", "slewShapeFace"]);
 const nodeGraphDisplayModeSignalKinds = Object.freeze(["scalar", "xy", "buffer"]);
 
 // nodeGraphDisplayModeSettingsSchemaForRenderer → node-graph-module-scope-display-mode.js

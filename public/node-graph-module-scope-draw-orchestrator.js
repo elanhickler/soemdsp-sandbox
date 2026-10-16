@@ -46,7 +46,8 @@ function drawNodeGraphKnobFaceItem(_renderer, item, _pixelRatio) {
 
 const nodeGraphModuleScopeCustomRenderers = {
   waterfall: drawNodeGraphTraceDisplayItem,
-  dot: drawNodeGraphVectorDotItem,
+  // Phosphor Dot (0D burn): its own GL residual renderer, not Vector Dot.
+  dot: drawNodeGraphDotOscilloscopeItem,
   vectorDot: drawNodeGraphVectorDotItem,
   pulseDot: drawNodeGraphVectorDotItem,
   lcdDot: drawNodeGraphVectorDotItem,
@@ -96,8 +97,6 @@ const nodeGraphModuleScopeCustomRenderers = {
   rgbShapeFace: () => {},
   // imageBurnFace / rgbPictureFace self-register from their display.js files.
   textBoxFace: () => {},
-  // oscilloscopeBankBurn self-registers from
-  // public/modules/oscilloscopeBank/oscilloscope-bank-display.js
   // videoscopeBurn self-registers from
   // public/modules/videoscope/videoscope-display.js
   // softpopFace self-registers from
@@ -188,9 +187,14 @@ function nodeGraphModuleScopeMarkScreenLit(screenElement, strength = 1) {
   const s = Math.max(0, Math.min(1, nodeGraphFiniteNumber(strength)));
   screenElement.dataset.lightStrength = s.toFixed(3);
   // Punch target is often the local fallback canvas, not the outer window.
-  const painted = screenElement.querySelector?.(
-    ":scope > canvas.node-module-scope-local-fallback-canvas, :scope > canvas.node-number-readout-canvas",
-  );
+  // Cached child lookup (re-queried when the hit detaches or moves away).
+  const paintedSelector = ":scope > canvas.node-module-scope-local-fallback-canvas, :scope > canvas.node-number-readout-canvas";
+  let painted = typeof nodeGraphCachedChild === "function"
+    ? nodeGraphCachedChild(screenElement, paintedSelector)
+    : screenElement.querySelector?.(paintedSelector);
+  if (painted && painted.parentElement !== screenElement) {
+    painted = screenElement.querySelector?.(paintedSelector) || null;
+  }
   if (painted?.dataset) {
     painted.dataset.lightStrength = s.toFixed(3);
     painted.dataset.lightSource = "screen";

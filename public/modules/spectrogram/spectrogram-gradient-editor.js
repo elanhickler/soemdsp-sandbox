@@ -1354,11 +1354,6 @@
       defaultStops: "phosphor",
       hint: "Select a stop Ã‚Â· presets Ã‚Â· live audition on the videoscope face",
     }),
-    oscilloscopeBankBurn: Object.freeze({
-      channels: "color",
-      defaultStops: "phosphor",
-      hint: "Select a stop Ã‚Â· presets Ã‚Â· live audition on the bank face",
-    }),
     // Same colorÃƒâ€”luma scheme as 2D phosphor: multi-stop color LUT maps
     // underlying light amount (energy / segment intensity) Ã¢â€ â€™ color.
     numberReadout: Object.freeze({

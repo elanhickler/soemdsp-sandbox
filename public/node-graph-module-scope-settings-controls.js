@@ -820,9 +820,6 @@ const nodeGraphTraceDisplayFormTypeValueClampOverrides = Object.freeze({
   videoscopeBurn: Object.freeze({
     lineThickness: nodeGraphTraceDisplayClampStampBlur,
   }),
-  oscilloscopeBankBurn: Object.freeze({
-    lineThickness: nodeGraphTraceDisplayClampStampBlur,
-  }),
   vectorRgbFace: Object.freeze({
     lineThickness: nodeGraphTraceDisplayClampStampBlur,
     dotBudget: nodeGraphTraceDisplayClampDotBudget,

@@ -527,7 +527,7 @@ if (type === "portalFace") {
   if (type === "phosphorLight") {
     return normalizeNodeGraphScope2dSettings(scope2dDefaults, scope2dDefaults);
   }
-  if (type === "videoscopeBurn" || type === "oscilloscopeBankBurn") {
+  if (type === "videoscopeBurn") {
     return normalizeNodeGraphScope2dSettings(nodeGraphScope2dSettingsDefaults);
   }
   if (type === "hypersawBurn") {
@@ -778,7 +778,7 @@ if (type === "portalFace") {
     return normalizeNodeGraphScope2dSettings(settings);
   }
   // Videoscope / bank: energy phosphor (scope2d settings model).
-  if (type === "videoscopeBurn" || type === "oscilloscopeBankBurn") {
+  if (type === "videoscopeBurn") {
     return normalizeNodeGraphScope2dSettings(settings);
   }
   if (type === "hypersawBurn") {
@@ -1074,7 +1074,7 @@ if (settingsSchema === "portalFace") {
     }
     return normalizeNodeGraphSpectrogramSettings(merged, node);
   }
-  if (settingsSchema === "videoscopeBurn" || settingsSchema === "oscilloscopeBankBurn") {
+  if (settingsSchema === "videoscopeBurn") {
     return normalizeNodeGraphScope2dSettings(node.traceDisplaySettings);
   }
   if (settingsSchema === "ensembleCloud") {

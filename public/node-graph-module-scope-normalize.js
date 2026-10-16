@@ -288,7 +288,6 @@ function nodeGraphDisplaySettingsFormTypeUsesGradient(type) {
     "scope2dTrace",
     "numberReadout",
     "videoscopeBurn",
-    "oscilloscopeBankBurn",
     "hypersawBurn",
     "rgbShapeFace",
     "rgbFractalFace",
