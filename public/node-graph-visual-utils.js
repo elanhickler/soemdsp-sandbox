@@ -257,7 +257,12 @@ function nodeGraphSizeDisplayCanvas(section, canvas, options = {}) {
   let cssWidth;
   let cssHeight;
   let devicePixelRatio;
+  // A 0 box (hidden / mid-gesture remeasure) keeps the last backing size
+  // instead of collapsing the canvas to 1x1 and forcing a redraw.
+  let measuredZero = false;
   if (face) {
+    // Face metrics clamp a 0 box to 1 css px, so <= 1 means "no box".
+    measuredZero = !(Number(face.cssW) > 1) || !(Number(face.cssH) > 1);
     cssWidth = Math.max(1, face.cssW);
     cssHeight = Math.max(1, face.cssH);
     devicePixelRatio = Math.max(1, face.dpr || window.devicePixelRatio || 1);
@@ -267,6 +272,7 @@ function nodeGraphSizeDisplayCanvas(section, canvas, options = {}) {
     cssHeight = Math.max(0, Number(section.clientHeight || section.offsetHeight || 0));
     if (!(cssWidth > 0) || !(cssHeight > 0)) {
       const rect = section.getBoundingClientRect();
+      measuredZero = !(rect.width > 0) || !(rect.height > 0);
       const zoom = Math.max(0.01, nodeGraphFiniteNumber(nodeGraphMvp?.zoom, 1));
       if (!(cssWidth > 0)) {
         cssWidth = Math.max(1, rect.width / zoom);
@@ -280,8 +286,14 @@ function nodeGraphSizeDisplayCanvas(section, canvas, options = {}) {
   }
   const nativeWidth = Math.max(1, Math.round(cssWidth * devicePixelRatio));
   const nativeHeight = Math.max(1, Math.round(cssHeight * devicePixelRatio));
-  const width = Math.max(1, Math.round(nativeWidth * density));
-  const height = Math.max(1, Math.round(nativeHeight * density));
+  let width = Math.max(1, Math.round(nativeWidth * density));
+  let height = Math.max(1, Math.round(nativeHeight * density));
+  if (measuredZero && canvas.width > 1 && canvas.height > 1) {
+    width = canvas.width;
+    height = canvas.height;
+    cssWidth = width / Math.max(1e-6, devicePixelRatio * density);
+    cssHeight = height / Math.max(1e-6, devicePixelRatio * density);
+  }
   if (canvas.width !== width) {
     canvas.width = width;
   }
