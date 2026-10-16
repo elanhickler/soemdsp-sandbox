@@ -1,4 +1,4 @@
-﻿// soemdsp-native-module: time_quantizer
+// soemdsp-native-module: time_quantizer
 // soemdsp-native-label: Time Quantizer
 // soemdsp-native-target: timeQuantizer
 // soemdsp-native-kind: utility
