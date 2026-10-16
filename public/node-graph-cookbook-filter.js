@@ -320,10 +320,33 @@ function nodeGraphLadderFilterMagnitudeAt(params, frequency, sampleRate) {
  * Face pumps already tick at Simulation FPS; returning live folded values here
  * lets the cutoff marker track MOD every frame.
  */
+// Frequency param a wired ƒ (absolute Hz) replaces in the DSP, per module type.
+const nodeGraphFilterCurveFKey = Object.freeze({
+  ladderFilter: "frequency", tb303Filter: "cutoff", cookbookFilter: "frequency",
+  butterworth: "frequency", linkwitzRiley: "frequency", bessel: "frequency",
+  chebyshev: "frequency", elliptic: "frequency", papoulisFilter: "cutoff",
+  bandpass: "frequency", allpass: "frequency", lowpass: "frequency",
+  highpass: "frequency", eqFilter: "frequency",
+});
+
+/** Native effective Hz while ƒ is wired (data bus EffectiveHz), else null. */
+function nodeGraphFilterCurveWiredHz(node, key) {
+  const type = node && typeof node === "object" ? String(node.type || "") : "";
+  if (!type || nodeGraphFilterCurveFKey[type] !== key) return null;
+  if (typeof nodeGraphDataBus === "undefined" || typeof nodeGraphDataBusKey !== "function") return null;
+  const hz = Number(nodeGraphDataBus.get(nodeGraphDataBusKey(String(node.id || ""), "EffectiveHz")));
+  return Number.isFinite(hz) && hz >= 0 ? hz : null;
+}
+
 function nodeGraphFilterCurveLiveParam(node, key, fallback = 0) {
   const nodeId = (node && typeof node === "object")
     ? String(node.id || "")
     : String(node || "");
+  // ƒ wired: the face follows the Hz the DSP actually used, not the knob.
+  const wiredHz = nodeGraphFilterCurveWiredHz(node, key);
+  if (wiredHz != null) {
+    return wiredHz;
+  }
   const rawMeta = typeof nodeGraphReadPatchParameterMetadata === "function"
     ? nodeGraphReadPatchParameterMetadata(node, key)
     : (node?.paramMeta?.[key] || {});

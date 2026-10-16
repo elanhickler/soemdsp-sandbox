@@ -697,14 +697,6 @@ function nodeGraphScreenSoloRestoreItem(item) {
   if (item.placeholder?.isConnected) {
     item.placeholder.remove();
   }
-  if (typeof nodeGraphKnobFaceSyncCellVar === "function") {
-    const host = face;
-    window.requestAnimationFrame(() => {
-      if (typeof nodeGraphKnobFaceSyncCellVar === "function") {
-        nodeGraphKnobFaceSyncCellVar(host);
-      }
-    });
-  }
 }
 
 function nodeGraphScreenSoloRelayoutHost(host, nodeId) {

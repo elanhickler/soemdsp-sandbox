@@ -1,3 +1,7 @@
+## 2026-10-15 - Music Player metadata plan (docs only)
+
+- Added `docs/MUSIC_PLAYER_METADATA_PLAN.md` (tracker MM-1..MM-9, open questions) and linked it from `docs/FUTURE_PLANNING.md`. Planned, not started; Argi must OK step 1. Not committed.
+
 ## 2026-10-14 - Sidechain waterfall dips from the top (local commit)
 
 - Argi: reduction displays dip from the top. Sidechain Envelope maps 0 = top, 1 = bottom (waterfall amp gain -2, offset 1); APP_POLICY 3 line added; smoke checks the orientation. Not pushed.

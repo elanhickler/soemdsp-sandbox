@@ -3825,11 +3825,32 @@ body[data-macro-knob-value-position="mid"] .node-macro-knob-edit-input {
   min-width: 0;
   min-height: var(--midi-keyboard-piano-height, 112px);
   overflow: hidden;
-  border: 1px solid rgba(243, 241, 236, 0.16);
+  /* border drawn by ::after in container units so tiles scale it 2x exactly */
+  border: 0;
   border-radius: 6px;
-  background:
-    linear-gradient(180deg, rgba(241, 184, 75, 0.06), transparent 34%),
-    #050607;
+  /* gradient lives on ::before (inset like the old padding box) */
+  background: #050607;
+}
+
+.node-midi-keyboard-surface::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(180deg, rgba(241, 184, 75, 0.06), transparent 34%);
+  /* tile = old padding box, repeated into the 1px ring like the old border-box paint */
+  background-position: 0 0.1016260163cqi;
+  background-size: 100% calc(100% - 2 * 0.1016260163cqi);
+}
+
+.node-midi-keyboard-surface::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  pointer-events: none;
+  border: 0.101627cqi solid rgba(243, 241, 236, 0.16);
+  border-radius: 6px;
 }
 
 .node-midi-keyboard-module .node-midi-keyboard-surface {
@@ -3856,7 +3877,9 @@ body[data-macro-knob-value-position="mid"] .node-macro-knob-edit-input {
 
 .node-midi-keyboard-white-row {
   position: absolute;
-  inset: 0;
+  inset: 0.101627cqi; /* = old 1px border at zoom 1 (984px) */
+  overflow: hidden;
+  border-radius: 5px; /* old inner border radius clip */
   display: grid;
   grid-template-columns: repeat(15, minmax(0, 1fr));
   align-items: end;
@@ -3877,7 +3900,11 @@ body[data-macro-knob-value-position="mid"] .node-macro-knob-edit-input {
   color: rgba(5, 6, 7, 0.92);
   font-family: "Cascadia Mono", Consolas, monospace;
   font-weight: 700;
-  font-size: clamp(0.42rem, 5.2cqi, 0.72rem);
+  /* Per key: label / white-key width is the zoom-1 ratio of the default
+     25-key keyboard (11.52px on 982 / 15 px keys). Scales with the tile and
+     keeps that ratio for any key count. Was clamp(0.42rem, 5.2cqi, 0.72rem),
+     capped at 0.72rem, so it never grew in canvas tiles. */
+  font-size: calc(17.560976cqi / var(--midi-key-units, 15));
   line-height: 1;
   letter-spacing: -0.02em;
   white-space: nowrap;
@@ -4148,7 +4175,9 @@ body[data-macro-knob-value-position="mid"] .node-macro-knob-edit-input {
 
 .node-midi-keyboard-black-row {
   position: absolute;
-  inset: 0;
+  inset: 0.101627cqi; /* = old 1px border at zoom 1 (984px) */
+  overflow: hidden;
+  border-radius: 5px; /* old inner border radius clip */
   pointer-events: none;
   min-width: 0;
 }
@@ -4175,7 +4204,9 @@ body[data-macro-knob-value-position="mid"] .node-macro-knob-edit-input {
   color: rgba(243, 241, 236, 0.82);
   font-family: "Cascadia Mono", Consolas, monospace;
   font-weight: 700;
-  font-size: clamp(0.4rem, 3.4cqi, 0.58rem);
+  /* Per key, as the white labels (9.28px at zoom 1 on the default keyboard).
+     Was clamp(0.4rem, 3.4cqi, 0.58rem). */
+  font-size: calc(14.146342cqi / var(--midi-key-units, 15));
   line-height: 1;
   white-space: nowrap;
   background:
@@ -13583,14 +13614,10 @@ body.node-screen-solo-active .node-screen-solo-face.node-sample-waveform-display
   filter: drop-shadow(0 14px 30px rgba(0, 0, 0, 0.32));
 }
 
-.dsp-node.slider-widget-layout.knob-face-has-image,
-.dsp-node.slider-widget-layout:has(.node-knob-face.has-image),
 .dsp-node.slider-widget-layout[data-hide-module-frame="1"] {
   outline: none;
 }
 
-.dsp-node.slider-widget-layout.knob-face-has-image::before,
-.dsp-node.slider-widget-layout:has(.node-knob-face.has-image)::before,
 .dsp-node.slider-widget-layout[data-hide-module-frame="1"]::before {
   content: none;
 }
@@ -14017,8 +14044,6 @@ body.node-screen-solo-active .node-screen-solo-face.node-sample-waveform-display
  *
  * --node-module-stroke is also forced transparent in JS on the element.
  */
-.dsp-node.slider-widget-layout.knob-face-has-image,
-.dsp-node.slider-widget-layout:has(.node-knob-face.has-image),
 .dsp-node.slider-widget-layout[data-hide-module-frame="1"] {
   --node-module-stroke: transparent !important;
   --node-module-selected-stroke: transparent !important;
@@ -14026,10 +14051,7 @@ body.node-screen-solo-active .node-screen-solo-face.node-sample-waveform-display
   --node-port-crescent-stroke: transparent !important;
 }
 
-.dsp-node.slider-widget-layout.knob-face-has-image > .node-module-frame,
-.dsp-node.slider-widget-layout:has(.node-knob-face.has-image) > .node-module-frame,
 .dsp-node.slider-widget-layout[data-hide-module-frame="1"] > .node-module-frame,
-.dsp-node.slider-widget-layout.knob-face-has-image .node-module-frame,
 .dsp-node.slider-widget-layout[data-hide-module-frame="1"] .node-module-frame {
   display: none !important;
   visibility: hidden !important;
@@ -14037,13 +14059,7 @@ body.node-screen-solo-active .node-screen-solo-face.node-sample-waveform-display
   pointer-events: none !important;
 }
 
-.dsp-node.slider-widget-layout.knob-face-has-image > .node-module-frame .node-module-frame-path,
-.dsp-node.slider-widget-layout:has(.node-knob-face.has-image) > .node-module-frame .node-module-frame-path,
 .dsp-node.slider-widget-layout[data-hide-module-frame="1"] > .node-module-frame .node-module-frame-path,
-.dsp-node.slider-widget-layout.knob-face-has-image.selected > .node-module-frame .node-module-frame-path,
-.dsp-node.slider-widget-layout.knob-face-has-image.connected > .node-module-frame .node-module-frame-path,
-.dsp-node.slider-widget-layout.knob-face-has-image.dragging > .node-module-frame .node-module-frame-path,
-.dsp-node.slider-widget-layout.knob-face-has-image .node-module-frame-path,
 .dsp-node.slider-widget-layout[data-hide-module-frame="1"] .node-module-frame-path {
   stroke: transparent !important;
   stroke: none !important;
@@ -14075,379 +14091,63 @@ body.node-screen-solo-active .node-screen-solo-face.node-sample-waveform-display
   user-select: none;
 }
 
-/* Knob module: dial fills the display; label + value are independent pins
-   (top / mid / bottom). Knob size scales only the arc graphic. No flex coupling. */
-.dsp-node.slider-widget-layout .node-knob-face.node-knob-module-macro.node-macro-knob,
-.node-knob-face.node-knob-module-macro.node-macro-knob {
-  display: block;
+/* Native WebGL controller faces (Knob, Slider, Toggle, Momentary):
+   modules/_shared/controller-face-gl.js draws everything on the canvas.
+   DOM keeps only transparent hit / edit elements laid over layout rects
+   (percent of the face box), so canvas tiles scale the zoom-1 layout. */
+.node-controller-gl-face {
   position: relative;
-  min-height: 0;
-  height: 100%;
-  width: 100%;
-  padding: 0;
-  box-sizing: border-box;
-  transform: none;
-  font: 700 0.68rem/1 "Cascadia Mono", Consolas, monospace;
-  color: var(--muted);
-  overflow: hidden;
-  /* cqmin for label/value/arc uses this face box — not JS px. */
   container-type: size;
-}
-
-/* Label: display-relative size; absolute pin (does not shrink the dial). */
-.dsp-node.slider-widget-layout .node-knob-face.node-knob-module-macro:not(.is-slider-look) .node-macro-knob-label,
-.node-knob-face.node-knob-module-macro:not(.is-slider-look) .node-macro-knob-label,
-.dsp-node .node-knob-face:not([data-knob-look="slider"]):not(.is-slider-look) > .node-macro-knob-label {
-  position: absolute;
-  left: 0;
-  right: 0;
-  z-index: 3;
-  margin: 0;
-  padding: 0 2px;
-  width: auto;
-  max-width: 100%;
-  line-height: 1;
-  text-align: center;
-  white-space: nowrap;
   overflow: hidden;
-  text-overflow: clip;
-  font-size: calc(var(--knob-label-size, 0.2) * 100cqmin);
-  text-fit: none;
-  transform: none;
-  pointer-events: auto;
-  cursor: text;
-  user-select: text;
 }
-
-.dsp-node .node-knob-face[data-knob-label-position="top"] .node-macro-knob-label,
-.dsp-node .node-knob-face[data-knob-label-position="above"] .node-macro-knob-label {
-  top: 2px;
-  bottom: auto;
-  transform: none;
-}
-
-.dsp-node .node-knob-face[data-knob-label-position="mid"] .node-macro-knob-label {
-  top: 50%;
-  bottom: auto;
-  transform: translateY(-50%);
-}
-
-.dsp-node .node-knob-face[data-knob-label-position="bottom"] .node-macro-knob-label,
-.dsp-node .node-knob-face[data-knob-label-position="below"] .node-macro-knob-label {
-  top: auto;
-  bottom: 2px;
-  transform: none;
-}
-
-.dsp-node .node-knob-face[data-knob-label-position="off"] .node-macro-knob-label {
-  display: none !important;
-}
-
-/* Value / number: same pin model as label (face child; may overlap). */
-.dsp-node .node-knob-face:not([data-knob-look="slider"]) > .node-macro-knob-value,
-.dsp-node .node-knob-face:not([data-knob-look="slider"]) > [data-knob-face-readout],
-.node-layout-canvas-tile .node-knob-face:not([data-knob-look="slider"]) > [data-knob-face-readout],
-.node-screen-solo-stage .node-knob-face:not([data-knob-look="slider"]) > [data-knob-face-readout],
-.node-metamodule-canvas-stage .node-knob-face:not([data-knob-look="slider"]) > [data-knob-face-readout] {
-  position: absolute;
-  left: 0;
-  right: 0;
-  z-index: 3;
-  margin: 0;
-  padding: 0 2px;
-  width: auto;
-  max-width: 100%;
-  line-height: 1;
-  text-align: center;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: clip;
-  color: var(--text);
-  font-size: calc(var(--knob-value-size, 0.2) * 100cqmin);
-  text-fit: none;
-  transform: none;
-  pointer-events: none;
-}
-
-/* Layout-canvas / solo faces are reparented outside .dsp-node; keep the same pin positions. */
-.dsp-node .node-knob-face[data-knob-value-position="top"] > .node-macro-knob-value,
-.dsp-node .node-knob-face[data-knob-value-position="top"] > [data-knob-face-readout],
-.dsp-node .node-knob-face[data-knob-value-position="above"] > .node-macro-knob-value,
-.dsp-node .node-knob-face[data-knob-value-position="above"] > [data-knob-face-readout],
-.node-layout-canvas-tile .node-knob-face[data-knob-value-position="top"] > .node-macro-knob-value,
-.node-layout-canvas-tile .node-knob-face[data-knob-value-position="top"] > [data-knob-face-readout],
-.node-layout-canvas-tile .node-knob-face[data-knob-value-position="above"] > .node-macro-knob-value,
-.node-layout-canvas-tile .node-knob-face[data-knob-value-position="above"] > [data-knob-face-readout],
-.node-screen-solo-stage .node-knob-face[data-knob-value-position="top"] > .node-macro-knob-value,
-.node-screen-solo-stage .node-knob-face[data-knob-value-position="top"] > [data-knob-face-readout],
-.node-screen-solo-stage .node-knob-face[data-knob-value-position="above"] > .node-macro-knob-value,
-.node-screen-solo-stage .node-knob-face[data-knob-value-position="above"] > [data-knob-face-readout],
-.node-metamodule-canvas-stage .node-knob-face[data-knob-value-position="top"] > .node-macro-knob-value,
-.node-metamodule-canvas-stage .node-knob-face[data-knob-value-position="top"] > [data-knob-face-readout],
-.node-metamodule-canvas-stage .node-knob-face[data-knob-value-position="above"] > .node-macro-knob-value,
-.node-metamodule-canvas-stage .node-knob-face[data-knob-value-position="above"] > [data-knob-face-readout] {
-  /* Value Y offset: positive moves down from the top edge. */
-  top: calc(2px + var(--knob-value-offset-y, 0) * 100%);
-  bottom: auto;
-  transform: none;
-}
-
-.dsp-node .node-knob-face[data-knob-value-position="mid"] > .node-macro-knob-value,
-.dsp-node .node-knob-face[data-knob-value-position="mid"] > [data-knob-face-readout],
-.node-layout-canvas-tile .node-knob-face[data-knob-value-position="mid"] > .node-macro-knob-value,
-.node-layout-canvas-tile .node-knob-face[data-knob-value-position="mid"] > [data-knob-face-readout],
-.node-screen-solo-stage .node-knob-face[data-knob-value-position="mid"] > .node-macro-knob-value,
-.node-screen-solo-stage .node-knob-face[data-knob-value-position="mid"] > [data-knob-face-readout],
-.node-metamodule-canvas-stage .node-knob-face[data-knob-value-position="mid"] > .node-macro-knob-value,
-.node-metamodule-canvas-stage .node-knob-face[data-knob-value-position="mid"] > [data-knob-face-readout] {
-  /* Face mid + Value Y offset (positive = down). Distinct from midknob (dial center). */
-  top: calc(50% + var(--knob-value-offset-y, 0) * 100%);
-  bottom: auto;
-  transform: translateY(-50%);
-}
-
-/* Mid knob: center of the dial/arc circle (tracks dialOffsetY), plus Value Y offset. */
-.dsp-node .node-knob-face[data-knob-value-position="midknob"] > .node-macro-knob-value,
-.dsp-node .node-knob-face[data-knob-value-position="midknob"] > [data-knob-face-readout],
-.node-layout-canvas-tile .node-knob-face[data-knob-value-position="midknob"] > .node-macro-knob-value,
-.node-layout-canvas-tile .node-knob-face[data-knob-value-position="midknob"] > [data-knob-face-readout],
-.node-screen-solo-stage .node-knob-face[data-knob-value-position="midknob"] > .node-macro-knob-value,
-.node-screen-solo-stage .node-knob-face[data-knob-value-position="midknob"] > [data-knob-face-readout],
-.node-metamodule-canvas-stage .node-knob-face[data-knob-value-position="midknob"] > .node-macro-knob-value,
-.node-metamodule-canvas-stage .node-knob-face[data-knob-value-position="midknob"] > [data-knob-face-readout] {
-  top: calc(50% + var(--knob-dial-offset-y, 0) * 100cqmin + var(--knob-value-offset-y, 0) * 100%);
-  bottom: auto;
-  transform: translateY(-50%);
-}
-
-.dsp-node .node-knob-face[data-knob-value-position="bottom"] > .node-macro-knob-value,
-.dsp-node .node-knob-face[data-knob-value-position="bottom"] > [data-knob-face-readout],
-.dsp-node .node-knob-face[data-knob-value-position="below"] > .node-macro-knob-value,
-.dsp-node .node-knob-face[data-knob-value-position="below"] > [data-knob-face-readout],
-.node-layout-canvas-tile .node-knob-face[data-knob-value-position="bottom"] > .node-macro-knob-value,
-.node-layout-canvas-tile .node-knob-face[data-knob-value-position="bottom"] > [data-knob-face-readout],
-.node-layout-canvas-tile .node-knob-face[data-knob-value-position="below"] > .node-macro-knob-value,
-.node-layout-canvas-tile .node-knob-face[data-knob-value-position="below"] > [data-knob-face-readout],
-.node-screen-solo-stage .node-knob-face[data-knob-value-position="bottom"] > .node-macro-knob-value,
-.node-screen-solo-stage .node-knob-face[data-knob-value-position="bottom"] > [data-knob-face-readout],
-.node-screen-solo-stage .node-knob-face[data-knob-value-position="below"] > .node-macro-knob-value,
-.node-screen-solo-stage .node-knob-face[data-knob-value-position="below"] > [data-knob-face-readout],
-.node-metamodule-canvas-stage .node-knob-face[data-knob-value-position="bottom"] > .node-macro-knob-value,
-.node-metamodule-canvas-stage .node-knob-face[data-knob-value-position="bottom"] > [data-knob-face-readout],
-.node-metamodule-canvas-stage .node-knob-face[data-knob-value-position="below"] > .node-macro-knob-value,
-.node-metamodule-canvas-stage .node-knob-face[data-knob-value-position="below"] > [data-knob-face-readout] {
-  /* Value Y offset: positive lifts the readout off the bottom edge. */
-  top: auto;
-  bottom: calc(2px + var(--knob-value-offset-y, 0) * 100%);
-  transform: none;
-}
-
-.dsp-node .node-knob-face[data-knob-value-position="off"] > .node-macro-knob-value,
-.dsp-node .node-knob-face[data-knob-value-position="off"] > [data-knob-face-readout],
-.node-layout-canvas-tile .node-knob-face[data-knob-value-position="off"] > .node-macro-knob-value,
-.node-layout-canvas-tile .node-knob-face[data-knob-value-position="off"] > [data-knob-face-readout],
-.node-screen-solo-stage .node-knob-face[data-knob-value-position="off"] > .node-macro-knob-value,
-.node-screen-solo-stage .node-knob-face[data-knob-value-position="off"] > [data-knob-face-readout],
-.node-metamodule-canvas-stage .node-knob-face[data-knob-value-position="off"] > .node-macro-knob-value,
-.node-metamodule-canvas-stage .node-knob-face[data-knob-value-position="off"] > [data-knob-face-readout] {
-  display: none !important;
-}
-
-/* Dial cell fills the entire display; knob size scales only the arc inside. */
-.dsp-node.slider-widget-layout .node-knob-face.node-knob-module-macro:not(.is-slider-look) .node-macro-knob-dial,
-.node-knob-face.node-knob-module-macro:not(.is-slider-look) .node-macro-knob-dial {
+.node-controller-gl-face > .node-controller-face-canvas {
   position: absolute;
   inset: 0;
-  width: auto;
-  height: auto;
-  min-height: 0;
-  flex: none;
-  container-type: size;
-  overflow: hidden;
+  width: 100%;
+  height: 100%;
+  display: block;
+  pointer-events: none !important;
 }
-
-/* Knob size 0…1 (--knob-dial-size): arc only. Label/value ignore this. */
-.dsp-node.slider-widget-layout .node-knob-face.node-knob-module-macro i,
-.node-knob-face.node-knob-module-macro i {
-  width: min(100cqmin, 100%);
-  max-width: 100%;
-  max-height: 100%;
-  height: auto;
-  aspect-ratio: 1 / 1;
-  /* Keep the arc centered, then translate it independently of its size. */
-  top: 50%;
-  transform: translate(-50%, calc(-50% + var(--knob-dial-offset-y, 0) * 100%)) scale(var(--knob-dial-size, 1));
-  transform-origin: center center;
-  filter: none;
-  outline: none;
-  box-shadow: none;
-  border: none;
-}
-
-/* Slider look: bar + pins are absolute on the face (module, canvas, solo, metamodule). */
-.node-knob-face.is-slider-look {
-  display: block !important;
-  position: relative;
-  container-type: size;
-  overflow: hidden !important;
-}
-
-.node-knob-face.is-slider-look .node-macro-knob-dial {
-  position: absolute !important;
-  left: 50% !important;
-  width: calc(var(--knob-slider-length, 1) * 100%) !important;
-  height: calc(var(--knob-slider-height, 0.22) * 100%) !important;
-  transform: translateX(-50%) !important;
-  container-type: size;
-  overflow: hidden;
-}
-
-.node-knob-face.is-slider-look[data-slider-align="top"] .node-macro-knob-dial {
-  top: calc(var(--knob-slider-padding, 0) * 100%) !important;
-  bottom: auto !important;
-  transform: translateX(-50%) !important;
-}
-
-.node-knob-face.is-slider-look[data-slider-align="mid"] .node-macro-knob-dial {
-  top: 50% !important;
-  bottom: auto !important;
-  transform: translate(-50%, -50%) !important;
-}
-
-.node-knob-face.is-slider-look[data-slider-align="bottom"] .node-macro-knob-dial {
-  top: auto !important;
-  bottom: calc(var(--knob-slider-padding, 0) * 100%) !important;
-  transform: translateX(-50%) !important;
-}
-
-.node-knob-face.is-slider-look.slider-bar-gone .node-macro-knob-dial {
-  display: none !important;
-}
-
-.node-knob-face.is-slider-look i,
-.node-knob-face.is-slider-look .node-macro-knob-arc {
-  top: 0 !important;
-  left: 0 !important;
-  width: 100% !important;
-  height: 100% !important;
-  max-width: none !important;
-  max-height: none !important;
-  aspect-ratio: auto !important;
-  transform: none !important;
-  background: linear-gradient(
-    to right,
-    var(--macro-arc-fill, #4a6a78) 0%,
-    var(--macro-arc-fill, #4a6a78) calc(var(--macro-value, 0) * 100%),
-    var(--macro-arc-track, #1a2226) calc(var(--macro-value, 0) * 100%),
-    var(--macro-arc-track, #1a2226) 100%
-  ) !important;
-  -webkit-mask-image: none !important;
-  mask-image: none !important;
-  filter: none !important;
-  border-radius: calc(var(--knob-slider-rounding, 0) * min(50cqw, 50cqh));
-  corner-shape: var(--knob-slider-corner-shape, squircle);
-}
-
-.node-knob-face.is-slider-look .node-macro-knob-label,
-.node-knob-face.is-slider-look .node-macro-knob-value,
-.node-knob-face.is-slider-look .node-knob-face-unit {
-  position: absolute !important;
-  z-index: 3;
+.node-controller-gl-face > .node-controller-face-hit {
+  position: absolute;
   box-sizing: border-box;
-  max-width: 100%;
-  max-height: 100%;
-  overflow: hidden !important;
-  line-height: 1;
+  margin: 0;
+  padding: 0;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: transparent;
+  appearance: none;
+  -webkit-appearance: none;
+  cursor: var(--node-dot-cursor);
+  touch-action: none;
+  user-select: none;
+}
+.node-controller-gl-face > button.node-controller-face-hit:focus-visible {
+  outline: 1px solid var(--node-module-selected-stroke, #89bfc2);
+  outline-offset: -1px;
+}
+.node-controller-gl-face > .node-controller-face-label {
+  position: absolute;
+  z-index: 2;
+  box-sizing: border-box;
+  overflow: hidden;
+  color: transparent;
+  font-weight: 700;
+  line-height: 1.2;
+  text-align: center;
   white-space: nowrap;
-  text-overflow: clip;
+  user-select: none;
 }
-
-.node-knob-face.is-slider-look .node-macro-knob-label {
-  color: var(--knob-slider-text-color, #cfdde5);
+.node-controller-gl-face > .node-controller-face-label[hidden] {
+  display: none;
 }
-
-.node-knob-face.is-slider-look .node-macro-knob-value {
-  color: var(--knob-slider-number-color, #ffffff);
-}
-
-.node-knob-face.is-slider-look .node-knob-face-unit {
-  color: var(--knob-slider-unit-color, #7fc7d9);
-}
-
-.node-knob-face.is-slider-look [data-pin-anchor="topleft"] {
-  top: calc(var(--knob-pin-pad, 0) * 100%);
-  left: calc(var(--knob-pin-pad, 0) * 100%);
-  right: auto;
-  bottom: auto;
-}
-
-.node-knob-face.is-slider-look [data-pin-anchor="top"] {
-  top: calc(var(--knob-pin-pad, 0) * 100%);
-  left: 50%;
-  right: auto;
-  bottom: auto;
-  margin-left: -0.5em;
-}
-
-.node-knob-face.is-slider-look [data-pin-anchor="topright"] {
-  top: calc(var(--knob-pin-pad, 0) * 100%);
-  right: calc(var(--knob-pin-pad, 0) * 100%);
-  left: auto;
-  bottom: auto;
-}
-
-.node-knob-face.is-slider-look [data-pin-anchor="midleft"] {
-  top: 50%;
-  left: calc(var(--knob-pin-pad, 0) * 100%);
-  right: auto;
-  bottom: auto;
-  margin-top: -0.5em;
-}
-
-.node-knob-face.is-slider-look [data-pin-anchor="mid"] {
-  top: 50%;
-  left: 50%;
-  right: auto;
-  bottom: auto;
-  margin-top: -0.5em;
-  margin-left: -0.5em;
-}
-
-.node-knob-face.is-slider-look [data-pin-anchor="midright"] {
-  top: 50%;
-  right: calc(var(--knob-pin-pad, 0) * 100%);
-  left: auto;
-  bottom: auto;
-  margin-top: -0.5em;
-}
-
-.node-knob-face.is-slider-look [data-pin-anchor="bottomleft"] {
-  bottom: calc(var(--knob-pin-pad, 0) * 100%);
-  top: auto;
-  left: calc(var(--knob-pin-pad, 0) * 100%);
-  right: auto;
-}
-
-.node-knob-face.is-slider-look [data-pin-anchor="bottom"] {
-  bottom: calc(var(--knob-pin-pad, 0) * 100%);
-  top: auto;
-  left: 50%;
-  right: auto;
-  margin-left: -0.5em;
-}
-
-.node-knob-face.is-slider-look [data-pin-anchor="bottomright"] {
-  bottom: calc(var(--knob-pin-pad, 0) * 100%);
-  top: auto;
-  right: calc(var(--knob-pin-pad, 0) * 100%);
-  left: auto;
-}
-
-.node-knob-face.is-slider-look.hide-slider-label .node-macro-knob-label,
-.node-knob-face.is-slider-look.hide-slider-number .node-macro-knob-value,
-.node-knob-face.is-slider-look.hide-slider-unit .node-knob-face-unit,
-.node-knob-face.is-slider-look .node-knob-face-unit[hidden] {
-  display: none !important;
+.node-controller-gl-face > .node-controller-face-label[data-editing="true"] {
+  color: #f4f7f8;
+  background: rgba(0, 0, 0, 0.82);
+  outline: 1px solid rgba(255, 255, 255, 0.35);
+  user-select: text;
+  cursor: text;
 }
 
 /* Phosphor LED plate — all remaining space above the content-sized meta row. */
@@ -21652,6 +21352,17 @@ button#nodeScenePasteModuleSettings.settings-paste-mismatch {
   border-inline-end: 1px solid var(--node-scene-context-menu-divider, rgba(243, 241, 236, 0.14));
 }
 
+/* 5-up: Copy Module / Settings / Paste / Save to Default / Restore Factory. */
+.scene-context-button-group-5 button {
+  flex: 1 1 20%;
+  font-size: 0.72rem;
+  font-weight: 650;
+}
+
+.scene-context-button-group-5 button:not(:last-child) {
+  border-inline-end: 1px solid var(--node-scene-context-menu-divider, rgba(243, 241, 236, 0.14));
+}
+
 /* 2-up: Hide Display + Hide Title. */
 .scene-context-button-group-2 button {
   flex: 1 1 50%;
@@ -25641,48 +25352,6 @@ code {
 .dsp-node .node-plugin-momentary-face canvas {
   pointer-events: none !important;
 }
-.node-plugin-button-label {
-  position: absolute;
-  z-index: 3;
-  left: 0;
-  right: 0;
-  margin: 0;
-  width: auto;
-  height: auto;
-  pointer-events: none;
-  color: var(--plugin-btn-text, #f4f7f8);
-  font-weight: 700;
-  font-size: calc(var(--plugin-label-font-px, 16) * 100cqmin / 96);
-  line-height: 1;
-  text-align: center;
-  text-fit: none;
-  white-space: nowrap;
-  user-select: none;
-  transform: none;
-}
-[data-label-align="topleft"] > .node-plugin-button-label { top: calc(var(--plugin-label-pad, 0) * 100%); left: 0; right: auto; transform: none; }
-[data-label-align="top"] > .node-plugin-button-label { top: calc(var(--plugin-label-pad, 0) * 100%); text-align: center; transform: none; }
-[data-label-align="topright"] > .node-plugin-button-label { top: calc(var(--plugin-label-pad, 0) * 100%); left: auto; right: 0; text-align: right; transform: none; }
-[data-label-align="midleft"] > .node-plugin-button-label { top: 50%; left: 0; right: auto; transform: translateY(-50%); }
-[data-label-align="mid"] > .node-plugin-button-label { top: 50%; transform: translateY(-50%); }
-[data-label-align="midright"] > .node-plugin-button-label { top: 50%; left: auto; right: 0; text-align: right; transform: translateY(-50%); }
-[data-label-align="bottomleft"] > .node-plugin-button-label { bottom: calc(var(--plugin-label-pad, 0) * 100%); left: 0; right: auto; transform: none; }
-[data-label-align="bottom"] > .node-plugin-button-label { bottom: calc(var(--plugin-label-pad, 0) * 100%); transform: none; }
-[data-label-align="bottomright"] > .node-plugin-button-label { bottom: calc(var(--plugin-label-pad, 0) * 100%); left: auto; right: 0; text-align: right; transform: none; }
-.btn-fit {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 100%;
-  height: 100%;
-  min-height: 0;
-  font-size: calc(var(--plugin-btn-font-px, 72) * 100cqmin / 96);
-  line-height: 1;
-  text-align: center;
-  white-space: nowrap;
-  text-fit: none;
-  transform: none;
-}
 [data-plugin-button-display-settings-panel] [data-plugin-btn-text] {
   min-width: 0;
   width: 100%;
@@ -25694,61 +25363,6 @@ code {
   color: inherit;
   font: inherit;
   outline: none;
-}
-.node-plugin-toggle-button,
-.node-plugin-momentary-button {
-  position: absolute;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  overflow: hidden;
-  box-sizing: border-box;
-  left: calc(var(--plugin-btn-pad-left, 0) * 100%);
-  right: calc(var(--plugin-btn-pad-right, 0) * 100%);
-  top: calc(var(--plugin-btn-pad-top, 0) * 100%);
-  bottom: calc(var(--plugin-btn-pad-bottom, 0) * 100%);
-  width: auto;
-  height: auto;
-  flex: 0 0 auto;
-  min-width: 0;
-  min-height: 0;
-  margin: 0;
-  padding: 0;
-  appearance: none;
-  -webkit-appearance: none;
-  border: calc(var(--plugin-btn-stroke-scale, 0.06) * 8cqmin) solid var(--plugin-btn-stroke, #5c5071);
-  border-radius: calc(var(--plugin-btn-rounding, 0.18) * 50cqmin);
-  corner-shape: var(--plugin-btn-corner-shape, squircle);
-  color: var(--plugin-btn-text, #f4f7f8);
-  font-weight: 700;
-  line-height: 1;
-  letter-spacing: 0;
-  text-align: center;
-  white-space: nowrap;
-  cursor: var(--node-dot-cursor);
-  user-select: none;
-  touch-action: none;
-  transition: none;
-  isolation: isolate;
-  background: color-mix(
-    in srgb,
-    var(--plugin-btn-active, #2f8f86) calc(var(--plugin-btn-value, 0) * 100%),
-    var(--plugin-btn-inactive, #1a2228)
-  );
-}
-/* Hover keeps the button face (active/inactive mix). No separate fill.
-   The old overlay painted hover color, default teal #89bfc2, at full opacity.
-   Global button:hover accent must not recolor the stroke. */
-.node-plugin-toggle-button:hover,
-.node-plugin-momentary-button:hover,
-.node-plugin-toggle-button:focus-visible,
-.node-plugin-momentary-button:focus-visible {
-  border-color: var(--plugin-btn-stroke, #5c5071);
-  background: color-mix(
-    in srgb,
-    var(--plugin-btn-active, #2f8f86) calc(var(--plugin-btn-value, 0) * 100%),
-    var(--plugin-btn-inactive, #1a2228)
-  );
 }
 .node-plugin-slider-face {
   pointer-events: auto;

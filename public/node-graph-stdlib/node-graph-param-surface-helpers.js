@@ -117,17 +117,6 @@ function nodeGraphParamApplyDomainBounds(value, metadata = {}) {
 }
 
 /**
- * After MOD, re-apply DOMAIN hard bounds for unit-band sources?
- * B-082 SSOT: always true. Unit-band post-MOD clamps into paramMeta [min,max].
- * Domain-valued / outputDomain path skips this (fold returns unclamped).
- * Wraparound still wraps via apply bounds. Legacy modClamp:false is ignored.
- */
-function nodeGraphParamModClamp(metadata = {}) {
-  void metadata;
-  return true;
-}
-
-/**
  * Nonlinear mid-style skew exponent for DOMAIN↔unit (MOD path).
  * - mid skew: unit 0.5 → domain mid
  * - custom skew: same power law; knee from curveAmount (SENSITIVITY −1…+1)
@@ -318,9 +307,7 @@ function nodeGraphParamUnitToDomainLinear(unit, metadata = {}) {
   if (!Number.isFinite(result)) {
     return 0;
   }
-  return nodeGraphParamModClamp(metadata)
-    ? nodeGraphParamApplyDomainBounds(result, metadata)
-    : result;
+  return nodeGraphParamApplyDomainBounds(result, metadata);
 }
 
 /**
@@ -505,12 +492,11 @@ function nodeGraphParamFoldModSources(base, sources, metadata = {}) {
   if (domainSum !== 0 || (metadata && metadata.outputDomain === true)) {
     return result;
   }
-  if (nodeGraphParamModClamp(metadata)) {
-    const lo = Number(metadata.min);
-    const hi = Number(metadata.max);
-    if (Number.isFinite(lo) && Number.isFinite(hi) && hi > lo) {
-      return nodeGraphParamClamp(result, lo, hi);
-    }
+  // B-082: unit-band MOD always clamps into the slider range [min,max]. No opt-out.
+  const lo = Number(metadata.min);
+  const hi = Number(metadata.max);
+  if (Number.isFinite(lo) && Number.isFinite(hi) && hi > lo) {
+    return nodeGraphParamClamp(result, lo, hi);
   }
   return result;
 }

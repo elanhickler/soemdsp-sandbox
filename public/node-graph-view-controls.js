@@ -2102,8 +2102,10 @@ function renderNodeGraphMidiKeyboardKeys() {
       return;
     }
     surface.dataset.keysSig = keysSig;
-    const { whiteKeys, blackKeys, totalWhite } = nodeGraphMidiKeyboardGenerateKeys(start, count);
+    const { whiteKeys, blackKeys, totalWhite, totalUnits } = nodeGraphMidiKeyboardGenerateKeys(start, count);
     whiteRow.style.gridTemplateColumns = `repeat(${totalWhite}, minmax(0, 1fr))`;
+    // Key labels size per key: font = ratio * (100cqi / units) in styles.css.
+    surface.style.setProperty("--midi-key-units", String(Math.max(1, totalUnits || totalWhite || 1)));
     whiteRow.replaceChildren(...whiteKeys.map((key) => {
       const span = document.createElement("span");
       span.dataset.midi = String(key.midi);

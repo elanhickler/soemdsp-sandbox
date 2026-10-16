@@ -116,7 +116,16 @@ NodeLiveAudioProcessor.prototype.postModuleScopeSnapshot = function postModuleSc
     if (typeof this.syncNativeSoftpopPublish === "function") {
       try { this.syncNativeSoftpopPublish(); } catch (_e) { /* keep prior publish */ }
     }
+    if (typeof this.syncNativeEffectiveHzPublish === "function") {
+      try { this.syncNativeEffectiveHzPublish(); } catch (_e) { /* keep prior publish */ }
+    }
     const dataPorts = [];
+    // Filter faces: native effective Hz while ƒ is wired (-1 = follow knob).
+    if (this.effectiveHzPublish) {
+      for (const [nodeId, hz] of this.effectiveHzPublish) {
+        dataPorts.push([nodeId, "EffectiveHz", hz]);
+      }
+    }
     if (this.softpopPublish) {
       for (const [nodeId, snap] of this.softpopPublish) {
         dataPorts.push([nodeId, "SoftpopBins", snap.bins]);

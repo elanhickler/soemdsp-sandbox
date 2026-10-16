@@ -506,11 +506,8 @@ function nodeGraphParameterDefinitionMetadata(parameter) {
         ? NODE_GRAPH_METADATA_TOOLTIP_MAX_CHARS
         : 2000,
     ),
-    // After MOD: clip to DOMAIN min…max (default true). Opt out with modClamp:false.
+    // MOD always clamps to min…max (except "use real mod values"); no per-param opt-out.
     // Resource params use constraint cpu|gpu|ram; wraparound always wraps.
-    modClamp: Object.hasOwn(parameter, "modClamp")
-      ? Boolean(parameter.modClamp)
-      : true,
     hardClamp: Boolean(parameter.hardClamp),
     // VCA multiply opt-in/out for native Control flags (Softwave Amp opts out).
     modMultiply: Object.hasOwn(parameter, "modMultiply")
@@ -890,16 +887,6 @@ function normalizeNodeGraphPatchParameterMetadata(type, key, metadata = {}) {
         ? NODE_GRAPH_METADATA_TOOLTIP_MAX_CHARS
         : 2000,
     ),
-    modClamp: (() => {
-      if (Object.hasOwn(source, "modClamp")) {
-        return Boolean(source.modClamp);
-      }
-      // Legacy paramMeta used unboundedMax/Min for “mod may leave domain”.
-      if (Object.hasOwn(source, "unboundedMax") || Object.hasOwn(source, "unboundedMin")) {
-        return false;
-      }
-      return Boolean(fallback.modClamp);
-    })(),
     hardClamp: Object.hasOwn(source, "hardClamp")
       ? Boolean(source.hardClamp)
       : Boolean(fallback.hardClamp),

@@ -326,6 +326,7 @@ PUBLIC_SCRIPT_PATHS = (
     "./public/node-graph-jack-chrome.js",
     "./public/node-graph-port-types.js",
     "./public/node-graph-slider-readout.js",
+    "./public/modules/_shared/controller-face-gl.js",
     "./public/modules/knob/knob-face.js",
     "./public/modules/slider/slider-face.js",
     "./public/modules/plugin/plugin-button-settings.js",
@@ -17138,6 +17139,15 @@ def require_native_module_contract(base_url: str) -> None:
         ],
         "exp_adsr": ["soemdsp_exp_adsr_create", "soemdsp_exp_adsr_destroy", "soemdsp_exp_adsr_sample"],
         "random_walk": ["soemdsp_random_walk_create", "soemdsp_random_walk_destroy", "soemdsp_random_walk_reset_seed", "soemdsp_random_walk_sample"],
+        "time_quantizer": [
+            "soemdsp_time_quantizer_create",
+            "soemdsp_time_quantizer_destroy",
+            "soemdsp_time_quantizer_sample",
+            "soemdsp_time_quantizer_trigger",
+            "soemdsp_time_quantizer_version",
+            "soemdsp_time_quantizer_metadata_json",
+            "soemdsp_time_quantizer_metadata_json_size",
+        ],
         "fibonacci_noise": [
             "soemdsp_fibonacci_noise_create",
             "soemdsp_fibonacci_noise_destroy",

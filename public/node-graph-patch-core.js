@@ -695,18 +695,6 @@ function validateNodeGraphPatch(patch) {
     if (type === "textStream" && typeof normalizeNodeGraphTextStream === "function") {
       normalizedNode.textStream = normalizeNodeGraphTextStream(node.textStream);
     }
-    if (type === "knob" && typeof normalizeNodeGraphKnobFace === "function") {
-      const face = normalizeNodeGraphKnobFace(node.knobFace);
-      if (typeof nodeGraphKnobFaceIsNonDefault === "function"
-        ? nodeGraphKnobFaceIsNonDefault(face)
-        : (typeof nodeGraphKnobFaceHasAnyImage === "function"
-          ? nodeGraphKnobFaceHasAnyImage(face)
-          : face.layers?.some?.((layer) => layer?.dataUrl))) {
-        normalizedNode.knobFace = typeof nodeGraphKnobFaceToPatch === "function"
-          ? nodeGraphKnobFaceToPatch(face)
-          : face;
-      }
-    }
     if (type === "rgbPicture" && typeof normalizeNodeGraphRgbPictureSettings === "function") {
       const picture = normalizeNodeGraphRgbPictureSettings(
         node.rgbPicture || node.traceDisplaySettings,

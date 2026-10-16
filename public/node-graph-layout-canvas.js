@@ -546,30 +546,11 @@ function beginNodeGraphLayoutCanvasStage(nodeIds, mode = "perform") {
     if (typeof nodeGraphScreenSoloWholeModuleFit === "function") nodeGraphScreenSoloWholeModuleFit(item.tile);
   }
 
-  // Knob/slider text uses CSS cqmin on the face/dial. Only clear any stale
-  // absolute --knob-cell / --knob-face-min left on the shared face DOM — never
-  // publish the canvas tile's measured px back onto the module plate.
-  const syncKnobFaceCells = () => {
-    for (const item of items) {
-      const face = item.face;
-      if (!face?.classList?.contains("node-knob-face")) {
-        continue;
-      }
-      if (typeof attachNodeGraphKnobFaceReadoutFit === "function") {
-        attachNodeGraphKnobFaceReadoutFit(face);
-      }
-      if (typeof nodeGraphKnobFaceSyncCellVar === "function") {
-        nodeGraphKnobFaceSyncCellVar(face);
-      }
-    }
-  };
-
   const relayoutKeyboardFaces = () => {
     for (const item of items) {
       nodeGraphLayoutCanvasApplyTileRect(item.tile, item.rect, stage);
     if (typeof nodeGraphScreenSoloWholeModuleFit === "function") nodeGraphScreenSoloWholeModuleFit(item.tile);
     }
-    syncKnobFaceCells();
     if (typeof installNodeGraphMidiKeyboardLayoutResizeObserver === "function") {
       installNodeGraphMidiKeyboardLayoutResizeObserver();
     }
