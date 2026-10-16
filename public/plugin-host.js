@@ -10,8 +10,7 @@
  *   fetch("/api/...") goes to the plugin (JUCE native function soemdspApi).
  *   Param edits go to the native engine as "param" events.
  *   Patch loads send the patch JSON as a "patch" event (native graph rebuild).
- *   Wiring and deleting modules stay locked; adding modules is allowed
- *   (native graph rebuild/click is acceptable until surgical sync lands).
+ *   Add, delete, and wiring commit the patch and rebuild the native graph.
  *   Scopes / meters: the plugin sends frame batches (receiveFrameBatch) built
  *   from the watch list this file sends as "displayWatch" events.
  */
@@ -23,7 +22,6 @@
   var API_FUNCTION = "soemdspApi";
   var BODY_CLASS = "soemdsp-plugin-host";
   var PARAM_POLL_MS = 33;
-  var LOCK_HINT = "Plugin: wiring and deleting modules are locked.";
 
   function hostFlag() {
     try {
@@ -131,41 +129,6 @@
         });
       });
   };
-
-  // Lock hint
-
-  var hintEl = null;
-  var hintTimer = 0;
-
-  function ensureHintStyle() {
-    if (document.getElementById("soemdspPluginHostStyle")) return;
-    var style = document.createElement("style");
-    style.id = "soemdspPluginHostStyle";
-    style.textContent =
-      ".soemdsp-plugin-lock-hint{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);"
-      + "z-index:2147483000;padding:6px 12px;border-radius:6px;background:rgba(20,20,24,0.92);"
-      + "color:#f2e9c8;font:12px/1.3 system-ui,sans-serif;pointer-events:none;opacity:0;"
-      + "transition:opacity 160ms}"
-      + ".soemdsp-plugin-lock-hint.is-visible{opacity:1}";
-    (document.head || document.documentElement).appendChild(style);
-  }
-
-  function showLockHint() {
-    if (!document.body) return;
-    ensureHintStyle();
-    if (!hintEl) {
-      hintEl = document.createElement("div");
-      hintEl.className = "soemdsp-plugin-lock-hint";
-      hintEl.setAttribute("role", "status");
-      hintEl.textContent = LOCK_HINT;
-      document.body.appendChild(hintEl);
-    }
-    hintEl.classList.add("is-visible");
-    global.clearTimeout(hintTimer);
-    hintTimer = global.setTimeout(function () {
-      if (hintEl) hintEl.classList.remove("is-visible");
-    }, 2600);
-  }
 
   // Topology signature: which modules exist and how they connect.
 
@@ -430,17 +393,33 @@
     global[name] = wrapped;
   }
 
-  // Wiring + delete stay locked. Adding (shop / context / placement / duplicate)
-  // is allowed and reaches the native engine via the topology-change patch event.
-  var BLOCKED = [
-    "connectNodeGraphPorts",
-    "connectNodeGraphModulation",
-    "connectNodeGraphGraphInput",
-    "disconnectNodeGraphConnection",
-    "disconnectNodeGraphConnections",
-    "deleteNodeGraphSelectionFromContext",
-    "deleteNodeGraphModuleFromContext",
-  ];
+  var keypadLive = new Map();
+
+  function postKeypad(nodeId) {
+    var id = String(nodeId || "");
+    var state = keypadLive.get(id);
+    if (!state || typeof global.nodeGraphKeypadSample !== "function") return;
+    var mode = 0;
+    var nodes = patchNodes();
+    for (var i = 0; i < nodes.length; i += 1) {
+      if (nodes[i] && String(nodes[i].id) === id) {
+        mode = nodes[i].params ? nodes[i].params.mode : 0;
+        break;
+      }
+    }
+    var sample = global.nodeGraphKeypadSample(state, { mode: mode });
+    if (!sample) return;
+    postToHost({
+      event: "keypad",
+      nodeId: id,
+      analog: Number(sample.Analog) || 0,
+      digital: Number(sample.Digital) || 0,
+      gate: Number(sample.Gate) || 0,
+      x: Number(sample.X) || 0,
+      y: Number(sample.Y) || 0,
+      index: Number(sample.Index) || 0,
+    });
+  }
 
   function installWrappers() {
     wrapOnce("setNodeGraphLiveOutputEnabled", function (original) {
@@ -449,15 +428,45 @@
         return original.apply(this, arguments);
       };
     });
+    wrapOnce("nodeGraphPluginWriteParamValue", function (original) {
+      return function (nodeId, key, value) {
+        if (String(key) === "offset") {
+          var numeric = Number(value);
+          if (Number.isFinite(numeric)) {
+            postToHost({ event: "param", nodeId: String(nodeId || ""), key: "offset", value: numeric });
+          }
+        }
+        return original.apply(this, arguments);
+      };
+    });
+    wrapOnce("setNodeGraphKeypadInteraction", function (original) {
+      return function (nodeId, update) {
+        var result;
+        try {
+          result = original.apply(this, arguments);
+        } catch (error) {
+          result = false;
+        }
+        try {
+          var id = String(nodeId || "");
+          var state = keypadLive.get(id) || { down: 0, latched: 0, needsRestore: false, pointerSlot: null };
+          var u = update || {};
+          if (u.down !== undefined) state.down = u.down ? 1 : 0;
+          if (u.latched !== undefined) state.latched = u.latched ? 1 : 0;
+          if (Object.prototype.hasOwnProperty.call(u, "pointerSlot")) {
+            state.pointerSlot = (u.pointerSlot == null || u.pointerSlot === "") ? null : u.pointerSlot;
+          }
+          state.needsRestore = false;
+          keypadLive.set(id, state);
+          postKeypad(id);
+        } catch (error) {
+          console.warn("soemdspPluginHost: keypad failed", error);
+        }
+        return result;
+      };
+    });
     wrapOnce("commitNodeGraphPatch", function (original) {
       return function (patch, options) {
-        var opts = options || {};
-        // Wire edits stay locked. Topology edits (add module / duplicate) go through
-        // so the native engine gets the updated patch (click on rebuild is OK for now).
-        if (opts.wireEdit) {
-          showLockHint();
-          return undefined;
-        }
         var result = original.apply(this, arguments);
         try {
           afterCommit();
@@ -467,42 +476,11 @@
         return result;
       };
     });
-    for (var i = 0; i < BLOCKED.length; i += 1) {
-      wrapOnce(BLOCKED[i], function () {
-        return function () {
-          showLockHint();
-          return null;
-        };
-      });
-    }
   }
 
   installWrappers();
   document.addEventListener("load", function (event) {
     if (event.target && event.target.tagName === "SCRIPT") installWrappers();
-  }, true);
-
-  // Wire drags start on jacks; stop them before the editor sees the press.
-  function blockJackPress(event) {
-    var target = event.target;
-    if (!target || typeof target.closest !== "function") return;
-    if (!target.closest(".node-port")) return;
-    event.stopPropagation();
-    event.preventDefault();
-    showLockHint();
-  }
-  document.addEventListener("pointerdown", blockJackPress, true);
-  document.addEventListener("mousedown", blockJackPress, true);
-
-  // Delete / Backspace on a selection removes modules or wires.
-  document.addEventListener("keydown", function (event) {
-    if (event.key !== "Delete" && event.key !== "Backspace") return;
-    var t = event.target;
-    var tag = t && t.tagName ? t.tagName.toLowerCase() : "";
-    if (tag === "input" || tag === "textarea" || (t && t.isContentEditable)) return;
-    event.stopPropagation();
-    event.preventDefault();
-    showLockHint();
   }, true);
 
   // Host commands (C++ evaluateJavascript)

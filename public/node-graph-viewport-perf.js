@@ -70,6 +70,17 @@ function nodeGraphSetWorldLayerWillChange(workspace, on) {
   }
 }
 
+// Gesture display hold (easy revert: set false). While a pan/zoom gesture is
+// active, scope frames and face pumps skip painting, so the world layer moves
+// as a cached GPU layer with no canvas updates; settle repaints everything
+// (flushNodeGraphViewportHeavyChrome -> scheduleNodeGraphModuleScopeDraw).
+// Trade-off: live displays freeze for the duration of the gesture.
+const NODE_GRAPH_GESTURE_HOLD_DISPLAYS = true;
+
+function nodeGraphViewportHoldsDisplays() {
+  return NODE_GRAPH_GESTURE_HOLD_DISPLAYS && nodeGraphViewportGestureActive();
+}
+
 /**
  * Inherited zoom var (module stroke compensate, grid size read it). Written
  * only outside gestures / on settle: one restyle per gesture, not per step.

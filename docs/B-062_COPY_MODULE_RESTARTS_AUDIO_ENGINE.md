@@ -1,6 +1,6 @@
 # B-062 - Non-audio UI changes restart audio engine
 
-**Status:** open  
+**Status:** fixed (2026-10-16)  
 **Severity:** hear  
 **Source:** user 2026-09-27 (inert module copy); user 2026-09-28 (Text Box deletion)
 
@@ -19,9 +19,13 @@ Copying a module restarts the audio engine even when the copied module is not co
 
 ## Investigation / fix shape
 
-Trace both module-copy and module-delete commits through the module action path, `commitNodeGraphPatch`, and the live-plan sync/restart path. Separate inert, unconnected copies and non-audio UI edits (including Text Box deletion) from changes that connect to the active graph or have side effects. A non-audio UI edit or inert copy should not restart the audio engine; when safe, it should use no live sync or a non-restarting incremental update. Required updates for modules that connect, publish, consume, or otherwise affect live execution must remain intact.
+`commitNodeGraphPatch` posted a live plan for every commit that was not layout, face, or chrome. Copying or deleting a Text Box took that path. A failed `soemdsp_graph_process_block` (`compiled == false`) then cleared `nativeGraphCompiled`, and the next sync called `soemdsp_graph_clear`.
 
-The root cause is not confirmed by this report. This is a docs-only bug entry; do not apply a code fix as part of filing it.
+Chrome types (Text Box and the other efficient-product chrome set, except named portals) now commit with `skipLivePlan`. A normal module title does too. Named-portal titles still post a plan because the title is the bus key. `process_block` returning -1 recompiles the existing nodes and does not clear `nativeGraphCompiled`.
+
+## Verification target
+
+With audio already running, copying an unconnected inert module or deleting a Text Box should preserve engine/session continuity and produce no restart gap or click. Connecting the copy, or making another change that affects live audio execution, should still receive whatever live update is required. Listen check not run in this change; the commit flags and the process_block path are what the code now does.
 
 ## Verification target
 

@@ -1862,6 +1862,19 @@ function scheduleNodeGraphChromeHistoryAndAutosave(options = {}) {
   }, 160);
 }
 
+// Chrome (Text Box, labels) does not own a native voice. Named portals do:
+// their title is the bus key the circuit splices on.
+function nodeGraphTypeNeedsLiveCircuit(type) {
+  const t = String(type || "").trim();
+  if (!t) return false;
+  if (t === "namedPortalIn" || t === "namedPortalOut") return true;
+  if (typeof nodeGraphModuleIsEfficientProductChromeType === "function"
+    && nodeGraphModuleIsEfficientProductChromeType(t)) {
+    return false;
+  }
+  return true;
+}
+
 function commitNodeGraphPatch(patch, options = {}) {
   if (typeof nodeGraphClearParameterMetadataCache === "function") {
     nodeGraphClearParameterMetadataCache();
@@ -2276,10 +2289,40 @@ function performNodeGraphDeleteSelection(selection = nodeGraphMvp.selected) {
       }
     }
 
+    let touchesCircuit = false;
+    const liveNodes = live.nodes || [];
+    for (const nodeId of removableNodeIds) {
+      const node = liveNodes.find((candidate) => candidate && candidate.id === nodeId);
+      if (typeof nodeGraphTypeNeedsLiveCircuit !== "function"
+        || nodeGraphTypeNeedsLiveCircuit(node?.type)) {
+        touchesCircuit = true;
+        break;
+      }
+    }
+    if (!touchesCircuit) {
+      const cables = []
+        .concat(live.connections || [])
+        .concat(live.modulations || [])
+        .concat(live.graphConnections || []);
+      for (const cable of cables) {
+        const srcGone = removableNodeIds.has(cable?.sourceNode);
+        const dstGone = removableNodeIds.has(cable?.destinationNode);
+        if (!srcGone && !dstGone) continue;
+        const otherId = srcGone ? cable?.destinationNode : cable?.sourceNode;
+        if (removableNodeIds.has(otherId)) continue;
+        const other = liveNodes.find((candidate) => candidate && candidate.id === otherId);
+        if (!other || nodeGraphTypeNeedsLiveCircuit(other.type)) {
+          touchesCircuit = true;
+          break;
+        }
+      }
+    }
     commitNodeGraphPatch(patch, {
       topologyEdit: true,
       deferUiPanels: true,
       status,
+      skipLivePlan: !touchesCircuit,
+      livePlan: touchesCircuit,
     });
     // Leave inner view if we deleted an open container.
     if (containerIdsToDelete.length && Array.isArray(nodeGraphMvp?.metamoduleViewStack)) {

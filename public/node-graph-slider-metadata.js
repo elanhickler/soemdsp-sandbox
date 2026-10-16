@@ -152,6 +152,12 @@ function nodeSliderIncrementWholeDigits(whole) {
 
 function formatNodeSliderNumber(value, options = {}) {
   const number = Number(value);
+  if (options.kind === "seed") {
+    if (!Number.isFinite(number)) {
+      return "";
+    }
+    return String(Math.round(number));
+  }
   if (options.kind === "decibels" && Number.isFinite(number) && number <= -139.5) {
     return options.reserveSignSpace ? " −∞" : "−∞";
   }

@@ -183,3 +183,40 @@ displayType still named in module definitions (harmless leftover).
 32 allowlisted files (see allowlist; 4 approved exceptions). Core
 `node-graph-module-scope-number-readout.js` still has its Canvas2D fallback path.
 Medium batch not started this phase.
+
+## 11. Phase 2: circuit builder to GL (planned, 2026-10-16)
+
+Owner: another agent executes. Status: **planned, not started.** Source: Interface/Argi.
+(Not the same as section 10 "Phase 2 log", which covers module displays.)
+
+### Why
+On ArchIV with softpop, zooming out from ~40x is GPU-bound: Chrome redraws the HTML graph
+(~2.7k elements, ~1,400 raster jobs at ~4 ms each, ~5.5 s per gesture). CSS fixes are exhausted
+(removing shadows/filters saved only 12%; oversized layers and display resizes ruled out).
+Zoom-in and pan are already fixed by a will-change hint + display hold during gestures
+(local, not pushed yet).
+
+### Tracker
+| ID | Stage | Status |
+|----|-------|--------|
+| GB-1 | Cables and grid drawn in screen space with a camera matrix, replacing wire SVGs and the grid background; pan/zoom only change a uniform | planned |
+| GB-2 | Module bodies: plates, borders, rounded corners, shadows as batched GL quads; existing display canvases become textures placed in the same pass | planned |
+| GB-3 | Jacks, labels, slider readouts: jacks/dots as GL sprites, text via the shared glyph atlas | planned |
+| GB-4 | HTML only for text inputs and popups, positioned from the camera; hit-testing in JS against module rectangles | planned |
+| GB-5 | Measure every stage with the same zoom-in / zoom-out / pan traces at 40x and low zoom | planned |
+
+All stages run on the shared picture-device context. Each stage ships behind a flag and is measured
+(GB-5) before the next. Stage 1 alone won't fix zoom-out; the gain comes in stages 2-3.
+
+### Policies
+- Zoom-1 layout is the source of truth; the camera only scales it.
+- No 2D fallbacks: on GL failure go black and log via `nodeGraphDisplayGlFailed`.
+- Jack labels use inward arrows.
+- Port labels are `<name> L/R` (bare Mono/Left/Right OK).
+
+### Shared glyph atlas
+GB-3 needs a shared glyph atlas, and so does the Music Player Text Box
+(`docs/MUSIC_PLAYER_METADATA_PLAN.md`, MM-5). Build one atlas for both.
+
+### Open question for Argi
+- Should module text be pixelated above 2.5x like displays, or stay sharp?

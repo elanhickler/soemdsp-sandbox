@@ -13261,6 +13261,8 @@ extern "C" void soemdsp_graph_clear(int handle) {
   clear_graph_contents(*g);
 }
 
+static void compile_feedback_groups(Circuit& g);
+
 // Surgical node removal — keeps other nodes' DSP state (env, phase, filters).
 extern "C" int soemdsp_graph_remove_node(int handle, unsigned int nodeIdHash) {
   Circuit* g = get(handle);
@@ -13304,29 +13306,64 @@ extern "C" int soemdsp_graph_remove_node(int handle, unsigned int nodeIdHash) {
   g->edgeCount = we;
 
   // Compact node slot so order/compile stay dense.
-  if (idx < g->nodeCount - 1) {
-    g->nodes[idx] = g->nodes[g->nodeCount - 1];
+  // A live circuit keeps `compiled` and a still-valid order: deleting one node
+  // only removes constraints, so the other instances (phase, delay, reverb) stay.
+  const bool wasCompiled = g->compiled;
+  const int removedIndex = idx;
+  const int lastIndex = g->nodeCount - 1;
+  if (removedIndex < lastIndex) {
+    g->nodes[removedIndex] = g->nodes[lastIndex];
   }
-  g->nodes[g->nodeCount - 1].used = false;
-  g->nodes[g->nodeCount - 1].idHash = 0;
+  g->nodes[lastIndex].used = false;
+  g->nodes[lastIndex].idHash = 0;
+  g->nodes[lastIndex].nativeHandle = 0;
   g->nodeCount -= 1;
-  g->compiled = false;
-  g->orderCount = 0;
-  g->outputNodeIndex = -1;
+  if (wasCompiled) {
+    int w = 0;
+    for (int i = 0; i < g->orderCount; i++) {
+      int oi = g->order[i];
+      if (oi == removedIndex) continue;
+      if (oi == lastIndex && removedIndex != lastIndex) oi = removedIndex;
+      if (oi < 0 || oi >= g->nodeCount) continue;
+      g->order[w++] = oi;
+    }
+    g->orderCount = w;
+    g->outputNodeIndex = -1;
+    for (int i = 0; i < g->nodeCount; i++) {
+      if (g->nodes[i].used && g->nodes[i].typeId == kTypeOutput) {
+        g->outputNodeIndex = i;
+        break;
+      }
+    }
+    compile_feedback_groups(*g);
+    g->compiled = true;
+  } else {
+    g->compiled = false;
+    g->orderCount = 0;
+    g->outputNodeIndex = -1;
+  }
   return 0;
 }
 
 // Drop Port + Control edges only — keep node DSP state.
+// A live circuit stays compiled. Fewer edges cannot invalidate the old order.
+// The next process mixes each input from whatever cables remain (none = 0).
 extern "C" int soemdsp_graph_clear_connections(int handle) {
   Circuit* g = get(handle);
   if (!g) return -1;
-  g->compiled = false;
+  const bool wasCompiled = g->compiled;
   g->connCount = 0;
   g->edgeCount = 0;
   g->paramModEdgeCount = 0;
   for (int i = 0; i < kMaxConnections; i++) g->conns[i].used = false;
   for (int i = 0; i < kMaxParamModEdges; i++) g->paramModEdges[i].used = false;
-  g->orderCount = 0;
+  if (wasCompiled) {
+    compile_feedback_groups(*g);
+    g->compiled = true;
+  } else {
+    g->compiled = false;
+    g->orderCount = 0;
+  }
   return 0;
 }
 
@@ -13566,7 +13603,7 @@ extern "C" void soemdsp_graph_set_sample_rate(int handle, float sampleRate) {
 extern "C" int soemdsp_graph_add_node(int handle, unsigned int nodeIdHash, int typeId) {
   Circuit* g = get(handle);
   if (!g) return -1;
-  g->compiled = false;
+  const bool wasCompiled = g->compiled;
   if (nodeIdHash == 0) return -2;
   if (find_node(*g, nodeIdHash) >= 0) return -3;
   if (g->nodeCount >= kMaxNodes) return -4;
@@ -13823,6 +13860,15 @@ extern "C" int soemdsp_graph_add_node(int handle, unsigned int nodeIdHash, int t
   }
 
   g->nodeCount += 1;
+  if (wasCompiled) {
+    const int ni = g->nodeCount - 1;
+    g->nodes[ni].reachable = true;
+    // No inbound edges yet, so the previous order plus this node is still valid.
+    if (g->orderCount < kMaxNodes) {
+      g->order[g->orderCount++] = ni;
+    }
+    g->compiled = true;
+  }
   return 0;
 }
 
@@ -13835,7 +13881,9 @@ extern "C" int soemdsp_graph_connect(
 ) {
   Circuit* g = get(handle);
   if (!g) return -1;
-  g->compiled = false;
+  // Do not uncompile. A bulk rewire calls soemdsp_graph_compile once at the end.
+  // One new edge on an already-running order still mixes; hist covers a source
+  // that has not run yet this block, until that compile refreshes order.
   if (find_node(*g, srcHash) < 0 || find_node(*g, dstHash) < 0) return -2;
   if (g->connCount >= kMaxConnections) return -3;
   Conn& c = g->conns[g->connCount];
@@ -13855,6 +13903,93 @@ extern "C" int soemdsp_graph_connect(
     e.sinkId = c.dstPort;
     e.sinkKind = kSinkPort;
   }
+  return 0;
+}
+
+// Remove one signal cable. Other cables, node instances, and `compiled` stay.
+// The destination port sums what remains, so a removed input reads 0 next block.
+extern "C" int soemdsp_graph_disconnect(
+  int handle,
+  unsigned int srcHash,
+  int srcPort,
+  unsigned int dstHash,
+  int dstPort
+) {
+  Circuit* g = get(handle);
+  if (!g) return -1;
+  if (srcHash == 0 || dstHash == 0) return -2;
+  const int sp = clamp_src_port(srcPort);
+  const int dp = clamp_dst_port(dstPort);
+  int removed = 0;
+  for (int i = 0; i < g->connCount; i++) {
+    Conn& c = g->conns[i];
+    if (!c.used) continue;
+    if (c.srcHash != srcHash || c.dstHash != dstHash) continue;
+    if (clamp_src_port(c.srcPort) != sp || clamp_dst_port(c.dstPort) != dp) continue;
+    c.used = false;
+    removed += 1;
+  }
+  if (!removed) return -3;
+  int wc = 0;
+  for (int i = 0; i < g->connCount; i++) {
+    if (!g->conns[i].used) continue;
+    g->conns[wc++] = g->conns[i];
+  }
+  g->connCount = wc;
+  int we = 0;
+  for (int i = 0; i < g->edgeCount; i++) {
+    Edge& e = g->edges[i];
+    if (!e.used) continue;
+    if (e.sinkKind == kSinkPort && e.srcHash == srcHash && e.dstHash == dstHash
+        && clamp_src_port(e.srcPort) == sp && clamp_dst_port(e.sinkId) == dp) {
+      continue;
+    }
+    g->edges[we++] = e;
+  }
+  g->edgeCount = we;
+  if (g->compiled) compile_feedback_groups(*g);
+  return 0;
+}
+
+extern "C" int soemdsp_graph_disconnect_param_mod(
+  int handle,
+  unsigned int srcHash,
+  int srcPort,
+  unsigned int dstHash,
+  int paramId
+) {
+  Circuit* g = get(handle);
+  if (!g) return -1;
+  if (srcHash == 0 || dstHash == 0) return -2;
+  const int sp = clamp_src_port(srcPort);
+  int removed = 0;
+  for (int i = 0; i < g->paramModEdgeCount; i++) {
+    ParamModEdge& e = g->paramModEdges[i];
+    if (!e.used) continue;
+    if (e.srcHash != srcHash || e.dstHash != dstHash || e.paramId != paramId) continue;
+    if (clamp_src_port(e.srcPort) != sp) continue;
+    e.used = false;
+    removed += 1;
+  }
+  if (!removed) return -3;
+  int wm = 0;
+  for (int i = 0; i < g->paramModEdgeCount; i++) {
+    if (!g->paramModEdges[i].used) continue;
+    g->paramModEdges[wm++] = g->paramModEdges[i];
+  }
+  g->paramModEdgeCount = wm;
+  int we = 0;
+  for (int i = 0; i < g->edgeCount; i++) {
+    Edge& e = g->edges[i];
+    if (!e.used) continue;
+    if (e.sinkKind == kSinkControl && e.srcHash == srcHash && e.dstHash == dstHash
+        && e.sinkId == paramId && clamp_src_port(e.srcPort) == sp) {
+      continue;
+    }
+    g->edges[we++] = e;
+  }
+  g->edgeCount = we;
+  if (g->compiled) compile_feedback_groups(*g);
   return 0;
 }
 
@@ -14447,7 +14582,8 @@ extern "C" void soemdsp_graph_set_named_portal(
   Node& n = g->nodes[idx];
   n.namedPortalBus = busKey;
   n.namedPortalKind = (kind == 1 || kind == 2) ? (unsigned char)kind : 0;
-  g->compiled = false;
+  // Bus key changed. Caller compiles so splice_named_portals rewrites that bus.
+  // Leaving compiled true keeps the previous block running until that compile.
 }
 
 extern "C" int soemdsp_graph_compile(int handle) {
@@ -15772,5 +15908,6 @@ extern "C" int soemdsp_graph_version() {
   // 169: Time Quantizer (218)
   // 170: EQ Filter ZDF ƒ input (resolve_osc_hz)
   // 171: ƒ on Ladder/303/Mode/Cookbook/IIR/Papoulis/ZDF filters + soemdsp_graph_node_effective_hz
-  return 173; // Pi Noise (Source removed, always pi), Fibonacci Noise removed, Logistic Map Clock in + Trigger out. was 172: Passive / Dual Ladder: ƒ center input, Sweep + hidden 0.1V/oct removed. was 171; was 164: Additive Generator Slope / Slope Start / Slope End, Even / Odd, automatic skipping
+  // 174: live add/remove/connect/disconnect keep compiled and other nodes' native handles
+  return 174; // was 173: Pi Noise (Source removed, always pi), Fibonacci Noise removed, Logistic Map Clock in + Trigger out. was 172: Passive / Dual Ladder: ƒ center input, Sweep + hidden 0.1V/oct removed. was 171; was 164: Additive Generator Slope / Slope Start / Slope End, Even / Odd, automatic skipping
 }

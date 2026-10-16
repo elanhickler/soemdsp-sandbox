@@ -367,7 +367,7 @@ function nodeSliderReadoutValueText(slider) {
   return formatNodeSliderNumber(formattedValue, {
     kind: formattedKind,
     maxDigits: formattedMaxDigits,
-    reserveSignSpace: true,
+    reserveSignSpace: formattedKind !== "seed",
     showSign: typeof nodeSliderShouldShowSign === "function" ? nodeSliderShouldShowSign(slider) : false,
     removeTrailingZeros: slider.dataset.removeTrailingZeros === "true",
   });

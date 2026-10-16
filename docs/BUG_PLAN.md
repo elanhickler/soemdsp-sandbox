@@ -723,14 +723,13 @@ ative_modules/polyblep/polyblep.cpp; library/include/soemdsp/math/analog_filter_
 - Fixed (2026-09-27): as above.
 
 ### B-062 - Non-audio UI changes restart audio engine
-- Status: open
+- Status: fixed (2026-10-16)
 - Severity: hear
 - Source: user 2026-09-27 (inert module copy); user 2026-09-28 (Text Box deletion)
 - Doc: `docs/B-062_COPY_MODULE_RESTARTS_AUDIO_ENGINE.md`
-- Files: module copy/delete actions; `public/node-graph-patch-core.js` (`commitNodeGraphPatch`); `public/node-graph-live-runtime.js` (live-plan sync/restart path)
-- What: Copying an unconnected, inert module or deleting a Text Box restarts the audio engine. These non-audio changes should not interrupt or restart running audio.
-- Repro: Run a patch with live audio; copy a module and leave the new copy unconnected/inert, or delete a Text Box. Observe the audio-engine restart or interruption. Compare with a change that connects the copy or otherwise changes the active audio graph.
-- Fix shape: Distinguish inert, unconnected copies and non-audio UI edits from live-topology or side-effecting changes. Do not restart the audio engine for an inert copy or Text Box deletion; use no live sync or a non-restarting incremental update when safe. Preserve required updates for modules that connect, publish, consume, or otherwise affect live execution. Docs only; no code fix in this report.
+- Files: `public/node-graph-module-actions.js`, `public/node-graph-patch-core.js` (`nodeGraphTypeNeedsLiveCircuit`, delete commit), `public/node-live-audio-worklet-native-graph.js` (`process_block` no longer clears `nativeGraphCompiled`)
+- What: Copying an unconnected Text Box or deleting one posted a live plan. A later uncompiled block cleared the native graph.
+- Fix: Chrome commits skip the live plan. Named portals still sync. `process_block` failure recompiles in place and does not `soemdsp_graph_clear`.
 
 ### B-063 — Robin Oscillator Morph MOD silent (ParamModEdge → wrong Control)
 - Status: fixed

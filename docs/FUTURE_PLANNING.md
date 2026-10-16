@@ -2,6 +2,14 @@
 
 This file collects project-shaping ideas that should survive day-to-day implementation without becoming immediate scope.
 
+## Sandbox DAW plugin (2026-10-16)
+
+Designer runs in the plugin (CLAP/VST3) with the native engine, but output is still silent in REAPER. Milestones DAW-1..8 (audible, DAW state, host integration, automation, glitch-free editing, editor, robustness, release) and the rename to 'Sandbox'. Plan: soemdsp-sandbox-audioplugin `docs/DAW_PLAN.md`
+
+## Circuit builder to GL (2026-10-16)
+
+Zoom-out from ~40x is GPU-bound on HTML raster; move cables/grid, module bodies, jacks/labels to the shared GL context in flagged stages GB-1..GB-5, HTML only for inputs/popups. Shares the glyph atlas with the Music Player Text Box. Status: planned. Plan: `docs/WEBGL_DISPLAY_PLAN.md` section 11
+
 ## Music Player metadata, Album Art, rich Text Box (2026-10-15)
 
 Build-time ID3 metadata + small extracted covers in soundemote-com `playlist.json`; player API `track-change`; Music Player **Album Art** (RGBA) and **Track** (data) outputs; rich Text Box (safe HTML subset, live metadata fields, WebGL glyph atlas, loadable fonts); soundemote.dev rich-text editor. Status: planned, not started; Argi must OK step 1. Plan: `docs/MUSIC_PLAYER_METADATA_PLAN.md`

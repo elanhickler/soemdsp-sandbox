@@ -1,13 +1,13 @@
 // Pitch Quantizer face: one-octave pitch-class keyboard. Toggle keys to
 // choose which classes quantize — applied across every octave via the
-// 12-bit scale mask (same as the Scale jack).
+// 12-bit scale mask (same as the Scale jack). Keys show the OUTPUT pitch
+// classes: the mask rotated by Semitone Offset (Octave Offset keeps the pitch
+// class). Clicking a key toggles the class that lands on that output note.
 
 function createNodeGraphPitchQuantizerFace(node) {
   const type = "pitchQuantizer";
   const patchNode = typeof nodeGraphPatchNode === "function" ? nodeGraphPatchNode(node) : null;
-  const mask = typeof nodeGraphPitchQuantizerMaskForNode === "function"
-    ? nodeGraphPitchQuantizerMaskForNode(patchNode)
-    : 2741;
+  const mask = nodeGraphPitchQuantizerDisplayMaskForNode(patchNode);
 
   const face = document.createElement("div");
   face.className = "node-pitch-quantizer-face node-light-source";
@@ -15,39 +15,6 @@ function createNodeGraphPitchQuantizerFace(node) {
   face.dataset.nodeType = type;
   face.setAttribute("aria-label", "Pitch quantizer scale keyboard");
 
-  const toolbar = document.createElement("div");
-  toolbar.className = "node-pitch-quantizer-toolbar";
-  const allBtn = document.createElement("button");
-  allBtn.type = "button";
-  allBtn.className = "node-pitch-quantizer-tool";
-  allBtn.tabIndex = -1;
-  allBtn.textContent = "All";
-  allBtn.setAttribute("aria-label", "Enable all pitch classes (chromatic)");
-  allBtn.addEventListener("click", (event) => {
-    if (typeof nodeGraphPitchQuantizerScaleJackConnected === "function"
-      && nodeGraphPitchQuantizerScaleJackConnected(node)) {
-      event.preventDefault();
-      event.stopPropagation();
-      return;
-    }
-    setNodeGraphPitchQuantizerMask(node, 0xFFF, event, "chromatic");
-  });
-  const noneBtn = document.createElement("button");
-  noneBtn.type = "button";
-  noneBtn.className = "node-pitch-quantizer-tool";
-  noneBtn.tabIndex = -1;
-  noneBtn.textContent = "None";
-  noneBtn.setAttribute("aria-label", "Clear all pitch classes");
-  noneBtn.addEventListener("click", (event) => {
-    if (typeof nodeGraphPitchQuantizerScaleJackConnected === "function"
-      && nodeGraphPitchQuantizerScaleJackConnected(node)) {
-      event.preventDefault();
-      event.stopPropagation();
-      return;
-    }
-    setNodeGraphPitchQuantizerMask(node, 0, event, "empty");
-  });
-  toolbar.append(allBtn, noneBtn);
 
   const surface = document.createElement("div");
   surface.className = "node-pitch-quantizer-keyboard";
@@ -95,7 +62,7 @@ function createNodeGraphPitchQuantizerFace(node) {
   // background in face container units (pitch-quantizer-ui.css).
   const plate = document.createElement("div");
   plate.className = "node-pitch-quantizer-plate";
-  plate.append(toolbar, surface);
+  plate.append(surface);
   face.append(plate);
 
   // Don't start module drag when interacting with the face.
@@ -142,7 +109,9 @@ function createNodeGraphPitchQuantizerKeyButton(nodeId, pitchClass, label, mask,
       event.stopPropagation();
       return;
     }
-    toggleNodeGraphPitchQuantizerKey(nodeId, pitchClass, event);
+    // pitchClass is the shown (output) class; toggle the source class under it.
+    const shift = nodeGraphPitchQuantizerSemitoneShift(nodeGraphPatchNode(nodeId));
+    toggleNodeGraphPitchQuantizerKey(nodeId, (((pitchClass - shift) % 12) + 12) % 12, event);
     btn.blur();
   });
   return btn;
@@ -216,10 +185,9 @@ function toggleNodeGraphPitchQuantizerKey(nodeId, pitchClass, event) {
   const names = typeof nodeGraphPitchQuantizerNoteNames !== "undefined"
     ? nodeGraphPitchQuantizerNoteNames
     : [];
-  const label = names[pitchClass] || String(pitchClass);
-  const on = typeof nodeGraphPitchQuantizerMaskHasClass === "function"
-    ? nodeGraphPitchQuantizerMaskHasClass(nextMask, pitchClass)
-    : false;
+  const shown = (pitchClass + nodeGraphPitchQuantizerSemitoneShift(patchNode)) % 12;
+  const label = names[shown] || String(shown);
+  const on = nodeGraphPitchQuantizerMaskHasClass(nextMask, pitchClass);
   return setNodeGraphPitchQuantizerMask(
     nodeId,
     nextMask,
@@ -234,17 +202,19 @@ function syncNodeGraphPitchQuantizerFace(nodeId) {
   if (!patchNode) {
     return;
   }
-  const mask = typeof nodeGraphPitchQuantizerMaskForNode === "function"
-    ? nodeGraphPitchQuantizerMaskForNode(patchNode)
-    : 0;
+  const mask = nodeGraphPitchQuantizerDisplayMaskForNode(patchNode);
   const jacked = typeof nodeGraphPitchQuantizerScaleJackConnected === "function"
     && nodeGraphPitchQuantizerScaleJackConnected(nodeId);
-  const root = document.querySelector(
-    `.dsp-node[data-node="${CSS.escape(String(nodeId))}"] .node-pitch-quantizer-face`,
-  );
-  if (!root) {
-    return;
+  // Match the face itself, not ".dsp-node .face": the layout canvas reparents
+  // the face into a .node-layout-canvas-tile outside its .dsp-node.
+  for (const root of document.querySelectorAll(
+    `.node-pitch-quantizer-face[data-node="${CSS.escape(String(nodeId))}"]`,
+  )) {
+    paintNodeGraphPitchQuantizerFace(root, mask, jacked);
   }
+}
+
+function paintNodeGraphPitchQuantizerFace(root, mask, jacked) {
   root.classList.toggle("scale-jacked", jacked);
   root.title = jacked
     ? "Scale in is patched — using that mask. Unplug to edit this keyboard."

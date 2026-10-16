@@ -16,7 +16,7 @@ function makeStyle(log, owner) {
     set transform(v) { this._t = v; log.push([owner, "transform", v]); },
     setProperty(k, v) { props.set(k, String(v)); log.push([owner, k, String(v)]); },
     getPropertyValue(k) { return props.get(k) || ""; },
-    removeProperty(k) { props.delete(k); log.push([owner, "-" + k]); },
+    removeProperty(k) { props.delete(k); if (k === "will-change") this.willChange = ""; log.push([owner, "-" + k]); },
   };
 }
 const log = [];
@@ -63,6 +63,18 @@ ok(`world layers carry the camera transform (${t})`);
 if (!classes.has("pixelated-canvas-zoom")) fail("pixelation above 2.5x must stay live mid-gesture");
 ok("nearest-neighbor class live above 2.5x");
 
+// Gesture display hold: displays are held mid-gesture, released on settle.
+if (ctx.nodeGraphViewportHoldsDisplays() !== true) fail("displays must be held mid-gesture");
+if (layers[0].style.willChange !== "transform") fail("world layers must be GPU-hinted mid-gesture");
+ok("mid-gesture: displays held, world layers will-change: transform");
+for (const [file, needle] of [
+  ["public/node-graph-module-scopes.js", "nodeGraphViewportHoldsDisplays()"],
+  ["public/node-graph-module-scope-paint-gate.js", "nodeGraphViewportHoldsDisplays()"],
+]) {
+  if (!fs.readFileSync(file, "utf8").includes(needle)) fail(`${file} must skip painting while nodeGraphViewportHoldsDisplays()`);
+}
+ok("scope frames and face pumps honour the gesture hold");
+
 // Settle: one write of the inherited var.
 log.length = 0;
 ctx.window.setTimeout = () => 1;
@@ -71,6 +83,9 @@ ctx.clearNodeGraphViewportGestureClass();
 const settle = log.filter(([o, k]) => k === "--node-graph-zoom");
 if (settle.length !== 1 || settle[0][2] !== "4") fail(`settle must write --node-graph-zoom once: ${JSON.stringify(settle)}`);
 ok("settle writes --node-graph-zoom once");
+if (ctx.nodeGraphViewportHoldsDisplays() !== false) fail("settle must release the display hold");
+if (layers[0].style.willChange) fail("settle must drop will-change");
+ok("settle releases the display hold and drops will-change");
 
 // Outside a gesture (programmatic zoom), the var is written directly.
 log.length = 0;

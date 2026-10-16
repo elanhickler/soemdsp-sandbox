@@ -210,6 +210,13 @@ function syncNodeGraphPatchParameterFromSlider(slider, options = {}) {
     }
   }
   if (
+    patchNode.type === "pitchQuantizer"
+    && key === "semitones"
+    && typeof syncNodeGraphPitchQuantizerFace === "function"
+  ) {
+    syncNodeGraphPitchQuantizerFace(node);
+  }
+  if (
     patchNode.type === "additiveGenerator"
     && key === "harmonics"
     && typeof nodeGraphAdditiveGeneratorSyncSlopeRange === "function"
@@ -302,7 +309,10 @@ function updateNodeSliderCurrentValue(slider, rawValue) {
     return;
   }
 
-  const normalizedValue = String(rawValue).trim();
+  let normalizedValue = String(rawValue).trim();
+  if (slider?.dataset?.kind === "seed") {
+    normalizedValue = normalizedValue.replace(/[, ]/g, "");
+  }
   const choiceIndex = nodeSliderChoiceIndexFromText(slider, normalizedValue);
   // choiceIndex is an array index (0..n-1). Map it through min/max/step so
   // typing the label "-1" writes domain -1, not index 0.

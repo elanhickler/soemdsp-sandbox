@@ -547,6 +547,11 @@ function showNodeGraphModule(node, point = null, options = {}) {
     nodeGraphMetamoduleEnsureInterior(newNode.id, patch);
   }
   const commitAdd = () => {
+    const addTouchesCircuit = typeof nodeGraphTypeNeedsLiveCircuit !== "function"
+      || nodeGraphTypeNeedsLiveCircuit(type);
+    const skipLive = options.skipLivePlan !== undefined
+      ? Boolean(options.skipLivePlan)
+      : !addTouchesCircuit;
     commitNodeGraphPatch(patch, {
       status: options.status || "module added",
       topologyEdit: true,
@@ -554,7 +559,8 @@ function showNodeGraphModule(node, point = null, options = {}) {
       // until drop). Heavy modules like multi-out crossovers were freezing on grab.
       record: options.record,
       autosaveWorkingPatch: options.autosaveWorkingPatch,
-      skipLivePlan: options.skipLivePlan,
+      skipLivePlan: skipLive,
+      livePlan: addTouchesCircuit && !skipLive,
       deferUiPanels: options.deferUiPanels !== false,
     });
   };
@@ -1050,12 +1056,28 @@ function finishNodeGraphModulePlacementAtCurrentPosition(status = "module placed
   const selectAfter = pairIds.length ? [...pairIds] : [placement.nodeId];
   nodeGraphMvp.modulePlacement = null;
   const commitDrop = () => {
-    // Position is already on the DOM. Ghost create skipped live plan — start it now.
+    // Position is already on the DOM. Ghost create skipped live plan — start it
+    // now only when the placed module is part of the circuit (not a Text Box).
+    const placed = typeof nodeGraphPatchNode === "function"
+      ? nodeGraphPatchNode(placement.nodeId)
+      : nodeGraphMvp.patch?.nodes?.find((candidate) => candidate.id === placement.nodeId);
+    const pairTouches = pairIds.some((pairId) => {
+      const pairNode = typeof nodeGraphPatchNode === "function"
+        ? nodeGraphPatchNode(pairId)
+        : nodeGraphMvp.patch?.nodes?.find((candidate) => candidate.id === pairId);
+      return typeof nodeGraphTypeNeedsLiveCircuit !== "function"
+        || nodeGraphTypeNeedsLiveCircuit(pairNode?.type);
+    });
+    const dropTouchesCircuit = pairTouches || (
+      typeof nodeGraphTypeNeedsLiveCircuit !== "function"
+      || nodeGraphTypeNeedsLiveCircuit(placed?.type)
+    );
     commitNodeGraphPatch(nodeGraphMvp.patch, {
       status: pairIds.length > 1 ? "portal IO placed" : status,
       layoutEdit: true,
       skipValidate: true,
-      livePlan: true,
+      skipLivePlan: !dropTouchesCircuit,
+      livePlan: dropTouchesCircuit,
     });
     if (typeof setNodeGraphNodeSelection === "function") {
       setNodeGraphNodeSelection(selectAfter);
@@ -1319,7 +1341,14 @@ function copyNodeGraphModule(sourceNode) {
   // Duplicate / paste rolls a new Seed (does not share the source's stream).
   nodeGraphAssignFreshModuleSeeds(patch, created);
   patch.nodes.push(created);
-  commitNodeGraphPatch(patch, { status: "module copied" });
+  const copyTouchesCircuit = typeof nodeGraphTypeNeedsLiveCircuit !== "function"
+    || nodeGraphTypeNeedsLiveCircuit(created.type);
+  commitNodeGraphPatch(patch, {
+    status: "module copied",
+    topologyEdit: true,
+    skipLivePlan: !copyTouchesCircuit,
+    livePlan: copyTouchesCircuit,
+  });
   return id;
 }
 
@@ -2130,11 +2159,34 @@ function commitNodeGraphModuleTitleFromHeaderInput(nodeId, value, { multiIds = n
     }
   }
   const anyAlias = Boolean(String(value ?? "").trim());
+  const portalTitle = portalBusSeeds.length > 0 || ownerMetaIds.size > 0;
   commitNodeGraphPatch(patch, {
     status: changed > 1
       ? (anyAlias ? "module titles changed" : "module titles cleared")
       : (anyAlias ? "module title changed" : "module title cleared"),
+    // A normal title is paint. A portal title is the bus key, so the circuit
+    // must hear it. softDom keeps the header the user just typed.
+    softDom: !portalTitle,
+    skipLivePlan: !portalTitle,
+    livePlan: portalTitle,
   });
+  if (!portalTitle && typeof document !== "undefined") {
+    for (const id of ids) {
+      const liveNode = nodeGraphMvp?.patch?.nodes?.find((node) => node && String(node.id) === String(id));
+      if (!liveNode) continue;
+      const title = typeof nodeGraphPatchNodeTitle === "function"
+        ? nodeGraphPatchNodeTitle(liveNode)
+        : String(liveNode.alias || "");
+      const fields = document.querySelectorAll(`.node-header-title[data-node="${String(id)}"]`);
+      fields.forEach((field) => {
+        if (field.dataset.titleEditing === "1") return;
+        if (field.textContent !== title) field.textContent = title;
+        if (typeof nodeGraphModuleTitleSyncChars === "function") {
+          nodeGraphModuleTitleSyncChars(field);
+        }
+      });
+    }
+  }
   if (portalBusSeeds.length && typeof nodeGraphNamedPortalRefreshModules === "function") {
     const refreshIds = [];
     for (const seed of portalBusSeeds) {

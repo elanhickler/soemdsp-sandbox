@@ -1943,7 +1943,20 @@ NodeLiveAudioProcessor.prototype.nativeGraphTopologyKey = function nativeGraphTo
     nodeParts.push(`${id}\0${type}`);
   }
   nodeParts.sort();
-  return `${nodeParts.join("|")}#${this.nativeGraphWireKey()}#${this.nativeGraphMetaKey()}#view:${String(this._metaViewId || "")}`;
+  return `${nodeParts.join("|")}#${this.nativeGraphWireKey()}#${this.nativeGraphMetaKey()}#${this.nativeGraphPortalKey()}#view:${String(this._metaViewId || "")}`;
+};
+
+NodeLiveAudioProcessor.prototype.nativeGraphPortalKey = function nativeGraphPortalKey() {
+  const parts = [];
+  for (const [id, node] of this.nodes) {
+    const type = String(node?.type || "");
+    if (type !== "namedPortalIn" && type !== "namedPortalOut") continue;
+    parts.push(
+      `${id}\0${type}\0${String(node?.alias || "").trim().toLowerCase()}\0${String(node?.ownerMetamoduleId || "")}`,
+    );
+  }
+  parts.sort();
+  return parts.join("|");
 };
 
 NodeLiveAudioProcessor.prototype.syncNativeGraphBypass = function syncNativeGraphBypass() {
@@ -1995,6 +2008,10 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphFromPlan = function syncNativeGr
   if (!needsMetaVoiceLanes && this._nativeGraphNodeIds instanceof Set) {
     for (const [id, node] of this.nodes) {
       if (this._nativeGraphNodeIds.has(id)) continue;
+      const addedType = String(node?.type || "");
+      if (!Object.prototype.hasOwnProperty.call(NodeLiveAudioProcessor.NATIVE_GRAPH_TYPE_IDS, addedType)) {
+        continue;
+      }
       const owner = String(node?.ownerMetamoduleId || "");
       if (!owner) continue;
       const meta = this.nodes.get(owner);
@@ -2091,6 +2108,7 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphFromPlanSurgical =
       // add_node/remove_node already ran. Compile only so the new id is ordered.
       const wireKey = this.nativeGraphWireKey();
       if (wireKey === this._nativeGraphWireKey) {
+        this.bindNativeNamedPortals?.();
         const crcSpawn = native.soemdsp_graph_compile(this.nativeGraphHandle) | 0;
         if (crcSpawn !== 0) {
           this.postNativeGraphStatus("error", `spawn compile failed (${crcSpawn})`);
@@ -2116,17 +2134,20 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphFromPlanSurgical =
         return true;
       }
 
-      // Drop prior host Bias + Scale noteMask feeders before rewiring.
-      const dropFeeders = []
+      // Keep host Bias / Scale feeders that the new cable set still uses.
+      // Destroying them dropped Keyboard gates to 0 and retriggered envelopes.
+      const previousFeeders = []
         .concat(Array.isArray(this._nativeHostCvFeeders) ? this._nativeHostCvFeeders : [])
         .concat(Array.isArray(this._nativeScaleFeeders) ? this._nativeScaleFeeders : []);
-      for (let i = 0; i < dropFeeders.length; i += 1) {
-        const feed = dropFeeders[i];
+      const hostFeederHashByKey = new Map();
+      for (let i = 0; i < previousFeeders.length; i += 1) {
+        const feed = previousFeeders[i];
         const feedHash = feed?.hash || feed?.feedHash;
         if (!feedHash) continue;
-        try {
-          native.soemdsp_graph_remove_node(this.nativeGraphHandle, feedHash | 0);
-        } catch (_e) { /* ignore */ }
+        const key = feed?.scaleMaskFeeder
+          ? `__scaleMask:${feed.destinationNode}`
+          : `${feed.sourceNode}\0${String(feed.sourcePort || "")}`;
+        hostFeederHashByKey.set(key, feedHash | 0);
       }
 
       // Rebuild edges without destroying surviving DSP instances.
@@ -2139,7 +2160,6 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphFromPlanSurgical =
       this.ensurePlanConnectionsByDst();
 
       const hostFeeders = [];
-      const hostFeederHashByKey = new Map();
       const biasTypeId = audioTypes.bias;
       this._nativeHostFeederBuild = { native, biasTypeId, hostFeeders, hostFeederHashByKey };
       const attOffsetParam = NodeLiveAudioProcessor.NATIVE_GRAPH_PARAM_ATT_OFFSET;
@@ -2160,7 +2180,30 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphFromPlanSurgical =
         if (String(dstPort || "") === "Scale") {
           const scaleKey = `__scaleMask:${dstId}`;
           let scaleHash = hostFeederHashByKey.get(scaleKey);
-          if (scaleHash) return true;
+          if (scaleHash) {
+            const already = hostFeeders.some((f) => f?.scaleMaskFeeder && f.destinationNode === dstId);
+            if (!already) {
+              hostFeeders.push({
+                hash: scaleHash,
+                sourceNode: srcId,
+                sourcePort: "Scale",
+                destinationNode: dstId,
+                scaleMaskFeeder: true,
+              });
+              const crcReuse = native.soemdsp_graph_connect(
+                this.nativeGraphHandle,
+                scaleHash,
+                monoPort,
+                hashById.get(dstId),
+                this.mapNativeGraphDstPortId(dstPort, typeById.get(dstId)),
+              ) | 0;
+              if (crcReuse !== 0) {
+                this.postNativeGraphStatus("error", `scale feeder reconnect failed (${crcReuse}) Scale->${dstId}`);
+                return false;
+              }
+            }
+            return true;
+          }
           if (!biasTypeId) return true;
           scaleHash = this.fnv1aHash32(scaleKey);
           const arc = native.soemdsp_graph_add_node(this.nativeGraphHandle, scaleHash, biasTypeId) | 0;
@@ -2231,6 +2274,14 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphFromPlanSurgical =
           this.pushNativeGraphSmoothType(native, feedHash, attOffsetParam, 3);
           this.pushNativeGraphSmoothMode(native, feedHash, attOffsetParam, 3);
           this.pushNativeGraphSmoothTime(native, feedHash, attOffsetParam, 0);
+        } else if (!hostFeeders.some((f) => (f?.hash | 0) === (feedHash | 0))) {
+          const prev = previousFeeders.find((f) => ((f?.hash || f?.feedHash) | 0) === (feedHash | 0));
+          hostFeeders.push({
+            hash: feedHash,
+            sourceNode: srcId,
+            sourcePort: String(srcPort || ""),
+            sampleBlock: Boolean(prev?.sampleBlock),
+          });
         }
         const rc = native.soemdsp_graph_connect(
           this.nativeGraphHandle,
@@ -2280,7 +2331,7 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphFromPlanSurgical =
         idSet,
         hashById,
         typeById,
-        removeOld: true,
+        removeOld: false,
       });
 
       // Audio→param MOD = ParamModEdge (orders src before dst; stamps each sample).
@@ -2380,6 +2431,19 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphFromPlanSurgical =
         return false;
       }
 
+      const usedFeederHashes = new Set();
+      for (let i = 0; i < hostFeeders.length; i += 1) {
+        const h = hostFeeders[i]?.hash;
+        if (h) usedFeederHashes.add(h | 0);
+      }
+      for (let i = 0; i < previousFeeders.length; i += 1) {
+        const h = (previousFeeders[i]?.hash || previousFeeders[i]?.feedHash) | 0;
+        if (!h || usedFeederHashes.has(h)) continue;
+        try {
+          native.soemdsp_graph_remove_node(this.nativeGraphHandle, h);
+        } catch (_e) { /* feeder already gone */ }
+      }
+
       this.nativeGraphCompiled = true;
       this._nativeGraphNodeIds = new Set(desired.keys());
       this._nativeHostCvFeeders = hostFeeders.filter((f) => !f?.scaleMaskFeeder);
@@ -2468,6 +2532,9 @@ NodeLiveAudioProcessor.prototype.installNativeMetaVoiceBusFeeders =
       }
       return "";
     };
+    const previousVoiceFeeders = Array.isArray(this._nativeMetaVoiceBusFeeders)
+      ? this._nativeMetaVoiceBusFeeders.slice()
+      : [];
     const metaVoiceBusFeeders = [];
     const metaVoiceGateCableMetas = new Set();
     const addVoiceBusFeeder = (kind, metaId, voiceIndex, dstId, dstPort) => {
@@ -2484,14 +2551,17 @@ NodeLiveAudioProcessor.prototype.installNativeMetaVoiceBusFeeders =
       const feedId = `__metaVoiceBus:${kind}:${metaId}:${voiceIndex}:${dstId}:${dstPort}`;
       const feedHash = this.fnv1aHash32(feedId);
       const arc = native.soemdsp_graph_add_node(this.nativeGraphHandle, feedHash, biasTypeId) | 0;
-      if (arc !== 0) {
+      const existed = arc === -3;
+      if (arc !== 0 && !existed) {
         this.postNativeGraphStatus("warning", `voice ${kind} feeder add failed (${arc}) ${feedId}`);
         return;
       }
-      this.pushNativeGraphSmoothType(native, feedHash, attOffsetParam, 3);
-      this.pushNativeGraphSmoothMode(native, feedHash, attOffsetParam, 3);
-      this.pushNativeGraphSmoothTime(native, feedHash, attOffsetParam, 0);
-      this.pushNativeGraphParam(native, feedHash, attOffsetParam, 0);
+      if (!existed) {
+        this.pushNativeGraphSmoothType(native, feedHash, attOffsetParam, 3);
+        this.pushNativeGraphSmoothMode(native, feedHash, attOffsetParam, 3);
+        this.pushNativeGraphSmoothTime(native, feedHash, attOffsetParam, 0);
+        this.pushNativeGraphParam(native, feedHash, attOffsetParam, 0);
+      }
       const crcBus = native.soemdsp_graph_connect(
         this.nativeGraphHandle,
         feedHash,
@@ -2551,6 +2621,16 @@ NodeLiveAudioProcessor.prototype.installNativeMetaVoiceBusFeeders =
       }
     }
 
+    if (opts.removeOld === false) {
+      const keepVoice = new Set(metaVoiceBusFeeders.map((f) => f?.hash | 0));
+      for (let i = 0; i < previousVoiceFeeders.length; i += 1) {
+        const h = previousVoiceFeeders[i]?.hash | 0;
+        if (!h || keepVoice.has(h)) continue;
+        try {
+          native.soemdsp_graph_remove_node(this.nativeGraphHandle, h);
+        } catch (_e) { /* feeder already gone */ }
+      }
+    }
     this._nativeMetaVoiceBusFeeders = metaVoiceBusFeeders;
     this._nativeMetaVoiceGateCableMetas = metaVoiceGateCableMetas;
     this._nativeMetaVoicePitchFeeders = metaVoiceBusFeeders.filter((f) => f.kind === "frequency");
@@ -9677,6 +9757,19 @@ NodeLiveAudioProcessor.prototype.processNativeGraphQuantum = function processNat
     } catch (_e) {
       processed = -1;
     }
+    // -1 means the circuit was left uncompiled. Recompile the existing nodes.
+    // Do not clear nativeGraphCompiled: that flag sends the next edit through
+    // compileNativeGraphFromPlan → soemdsp_graph_clear, which destroys every voice.
+    if (processed < 1 && typeof native.soemdsp_graph_compile === "function") {
+      try {
+        const crc = native.soemdsp_graph_compile(this.nativeGraphHandle) | 0;
+        if (crc === 0) {
+          processed = native.soemdsp_graph_process_block(this.nativeGraphHandle, chunk) | 0;
+        }
+      } catch (_e) {
+        processed = -1;
+      }
+    }
     // Invalidate view cache size when chunk length changes across iterations.
     if (this.nativeGraphBlockViews) this.nativeGraphBlockViews.frames = -1;
     // Trigger sample-block feeders carry their pulse in this chunk only.
@@ -9687,7 +9780,6 @@ NodeLiveAudioProcessor.prototype.processNativeGraphQuantum = function processNat
           output[channelIndex][frame] = 0;
         }
       }
-      this.nativeGraphCompiled = false;
       this.postNativeGraphStatus("error", "process_block failed");
       return true;
     }

@@ -25585,3 +25585,175 @@ html.soemdsp-whole-module .node-layout-canvas-frame,
 html.soemdsp-whole-module .node-layout-canvas-grip {
   display: none !important;
 }
+
+/* ---- Seed control [NUMBER][🎲][+][−] (node-graph-seed-control.js) ---- */
+.node-parameter-control.node-seed-control {
+  display: flex;
+  align-items: stretch;
+  box-sizing: border-box;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  overflow: hidden;
+  background: #080b0d;
+  container-type: inline-size;
+}
+.node-seed-control > .node-slider-readout,
+.node-seed-control > .node-slider-readout-input {
+  order: 0;
+  flex: 1 1 auto;
+  height: 100%;
+  min-height: 0;
+  max-height: none;
+  border: 0;
+  border-radius: 0;
+  border-left: 0;
+  border-right: 1px solid var(--line);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  cursor: ns-resize;
+}
+.node-seed-control > .node-slider-readout:not([data-control="number"]),
+.node-seed-control > .node-slider-readout:not([data-control="number"]):hover,
+.node-seed-control > .node-slider-readout.value-dragging {
+  cursor: ns-resize !important;
+}
+.node-seed-control > .node-slider-readout::before,
+.node-seed-control > .node-slider-readout::after,
+.node-seed-control .node-slider-amount-fill,
+.node-seed-control .node-slider-readout-portal,
+.node-seed-control .node-slider-readout-label,
+.node-seed-control .node-slider-readout-unit {
+  display: none !important;
+}
+.node-seed-control .node-slider-readout-value {
+  /* Fills its box: JS fits font size to width/height per value. */
+  font-size: 0.86rem; /* overridden per value by fitNodeGraphSeedNumber */
+  line-height: 1;
+  text-align: center;
+  overflow: visible;
+  text-overflow: clip;
+  white-space: nowrap;
+  max-width: none;
+  font-variant-numeric: tabular-nums;
+}
+.node-seed-btn {
+  flex: 0 0 var(--node-slider-readout-height);
+  width: var(--node-slider-readout-height);
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: rgba(250, 253, 255, 0.9);
+  font: inherit;
+  font-size: calc(var(--node-slider-readout-height) * 0.7);
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+.node-seed-btn:hover { background: rgba(255, 255, 255, 0.08); }
+.node-seed-btn:active { background: rgba(255, 255, 255, 0.16); }
+.node-seed-btn-dice { order: 1; }
+.node-seed-btn-plus { order: 2; border-left: 1px solid var(--line); }
+.node-seed-btn-minus { order: 3; border-left: 1px solid var(--line); }
+/* seed-value-center */
+.node-seed-control .node-slider-readout-value {
+  position: static;
+  grid-row: auto;
+  grid-column: auto;
+  margin: auto;
+  transform: none;
+  align-self: center;
+  justify-self: center;
+}
+/* seed-pm-fill: + and − glyphs fill their square button */
+.node-seed-btn-plus,
+.node-seed-btn-minus {
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: calc(var(--node-slider-readout-height) * 1.15);
+  font-weight: 300;
+  line-height: 0;
+  padding-bottom: calc(var(--node-slider-readout-height) * 0.06);
+  box-sizing: border-box;
+}
+
+/* seed-geom-glyphs: + / − are CSS bars (no font metrics), dice fits with margin */
+.node-seed-btn-plus,
+.node-seed-btn-minus {
+  position: relative;
+  font-size: 0 !important;
+  line-height: 0;
+  padding: 0 !important;
+  color: rgba(250, 253, 255, 0.9);
+}
+.node-seed-btn-plus::before,
+.node-seed-btn-minus::before,
+.node-seed-btn-plus::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: currentColor;
+  pointer-events: none;
+  border-radius: 0;
+}
+.node-seed-btn-plus::before,
+.node-seed-btn-minus::before {
+  width: calc(var(--node-slider-readout-height) * 0.62);
+  height: max(1px, calc(var(--node-slider-readout-height) * 0.09));
+}
+.node-seed-btn-plus::after {
+  width: max(1px, calc(var(--node-slider-readout-height) * 0.09));
+  height: calc(var(--node-slider-readout-height) * 0.62);
+}
+.node-seed-btn-dice {
+  overflow: hidden;
+  padding: 0 !important;
+  line-height: 1;
+  font-size: 0;
+}
+.node-seed-die {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  grid-template-rows: 1fr 1fr 1fr;
+  width: 62%;
+  height: 62%;
+  box-sizing: border-box;
+  padding: 10%;
+  border: max(1px, calc(var(--node-slider-readout-height) * 0.07)) solid currentColor;
+  border-radius: 18%;
+  pointer-events: none;
+}
+.node-seed-die-pip {
+  width: 72%;
+  height: 72%;
+  margin: auto;
+  border-radius: 50%;
+  background: currentColor;
+}
+.node-seed-die-pip:nth-child(1) { grid-column: 1; grid-row: 1; }
+.node-seed-die-pip:nth-child(2) { grid-column: 3; grid-row: 1; }
+.node-seed-die-pip:nth-child(3) { grid-column: 2; grid-row: 2; }
+.node-seed-die-pip:nth-child(4) { grid-column: 1; grid-row: 3; }
+.node-seed-die-pip:nth-child(5) { grid-column: 3; grid-row: 3; }
+
+/* seed-btn-height: buttons/number exactly fill the control height (no global button min-height) */
+.node-seed-control > .node-seed-btn,
+.node-seed-control > .node-slider-readout {
+  height: auto !important;
+  min-height: 0 !important;
+  max-height: none !important;
+  align-self: stretch;
+  margin: 0 !important;
+  box-sizing: border-box;
+}
+.node-seed-control > .node-slider-readout {
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+}

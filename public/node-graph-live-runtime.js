@@ -526,7 +526,7 @@ async function sendNodeGraphLiveNativeModule(liveNode, entry) {
 // Chrome caps wasm memories per process (~100); many standalone instances
 // hit that cap. Slim is for small used-sets when per-module files exist;
 // huge patches / site deploys should use combined.
-const nodeGraphLiveCombinedNativeModuleUrl = "native_modules/combined/soemdsp_combined.wasm?v=pinoise-interp-20261015";
+const nodeGraphLiveCombinedNativeModuleUrl = "native_modules/combined/soemdsp_combined.wasm?v=circuit-keep-1";
 
 /** @type {null|"slim"|"combined"} */
 let nodeGraphLiveNativeWasmLoadModeResolved = null;
@@ -2447,9 +2447,9 @@ function nodeGraphLivePlanShapeSignature(plan = {}) {
     // Wires change native topology â€” must invalidate connection-only shortcut.
     connections,
     metaVoice,
-    order: Array.isArray(plan.order) ? plan.order : [],
     outputNode: plan.outputNode || "output",
     samples: (Array.isArray(plan.samples) ? plan.samples : []).map((sample) => sample?.id || ""),
+    // `order` is a schedule, not a circuit. Reordering it must not setPlan.
     // Face show/hide only changes scope capture and visual sinks. Those must
     // not force setPlan (native graph clear restarts Music Player).
   });
@@ -2505,8 +2505,6 @@ async function sendNodeGraphLivePlan() {
   if (!nodeGraphMvp.live.node && !nodeGraphMvp.live.context) {
     return false;
   }
-  // A plan carries every parameter; the next params push must be full.
-  nodeGraphMvp.live.paramSnapshot = null;
   const hadLivePlan = Boolean(
     nodeGraphMvp.live.planEvidence ||
     nodeGraphMvp.live.runtime ||
@@ -2555,6 +2553,8 @@ async function sendNodeGraphLivePlan() {
       if (canSendConnectionUpdate) {
         nodeGraphMvp.live.node?.port?.postMessage(nodeGraphLiveConnectionUpdatePayload(plan, audio));
       } else {
+        // Full plan replaces the circuit the param snapshot was taken against.
+        nodeGraphMvp.live.paramSnapshot = null;
         {
           const pitchReference = normalizeNodeGraphPatchAudio(nodeGraphMvp.patch.audio);
           nodeGraphMvp.live.node?.port?.postMessage({
@@ -3400,7 +3400,7 @@ const nodeGraphLiveWorkletSourceFilesEfficient = [
   "./public/node-live-audio-worklet-scope-io.js?v=output-face-postvol-1",
   "./public/node-live-audio-worklet-native-load.js?v=plan-d-split-7",
   "./public/node-live-audio-worklet-native-exports.js?v=pinoise-20261015",
-  "./public/node-live-audio-worklet-native-graph.js?v=pinoise-interp-20261015",
+  "./public/node-live-audio-worklet-native-graph.js?v=circuit-keep-1",
   "./public/node-live-audio-worklet-meta-view.js?v=voice-preview-1",
   "./public/node-live-audio-worklet-set-plan.js?v=softpop-ship-1",
   "./public/node-live-audio-worklet-clear-plan.js?v=kbd-trig-1samp-20261013",

@@ -155,6 +155,11 @@ function nodeGraphArmDrawingFaceLoop(host, options = {}) {
     if (host.isConnected === false) {
       return;
     }
+    // Mid pan/zoom: hold the face (cheap re-arm, no paint) until settle.
+    if (typeof nodeGraphViewportHoldsDisplays === "function" && nodeGraphViewportHoldsDisplays()) {
+      host[rafKey] = requestAnimationFrame(tick);
+      return;
+    }
     const force = Boolean(host[forceKey]);
     if (!stillAnimate()) {
       if (force) {

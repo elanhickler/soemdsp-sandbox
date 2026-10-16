@@ -58,7 +58,9 @@ $modules = @(
     "soemdsp_graph_set_named_portal",
     "soemdsp_graph_set_speed_limit",
     "soemdsp_graph_set_host_transport",
-    "soemdsp_graph_add_node", "soemdsp_graph_connect", "soemdsp_graph_set_param",
+    "soemdsp_graph_add_node", "soemdsp_graph_connect",
+    "soemdsp_graph_disconnect", "soemdsp_graph_disconnect_param_mod",
+    "soemdsp_graph_set_param",
     "soemdsp_graph_set_param_mod", "soemdsp_graph_set_param_domain",
     "soemdsp_graph_clear_param_mod_edges", "soemdsp_graph_add_param_mod_edge",
     "soemdsp_graph_set_smooth_time", "soemdsp_graph_set_smooth_mode",
@@ -754,6 +756,10 @@ if ($node) {
   & $node.Source "$root\scripts\smoke_interpolation_curves.mjs"
   if ($LASTEXITCODE -ne 0) {
     throw "Combined build: interpolation curves smoke FAILED"
+  }
+  & $node.Source "$root\scripts\smoke_pitch_quantizer_face.mjs"
+  if ($LASTEXITCODE -ne 0) {
+    throw "Combined build: pitch quantizer face smoke FAILED"
   }
   & $node.Source "$root\scripts\smoke_robin_supersaw_pitch_jitter.mjs"
   if ($LASTEXITCODE -ne 0) {

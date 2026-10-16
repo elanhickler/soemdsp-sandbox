@@ -163,6 +163,10 @@ function runNodeGraphModuleScopeDrawFrame(source = "raf", options = {}) {
   if (nodeGraphModuleScopeState.drawBusy) {
     return;
   }
+  // Mid pan/zoom: no display paint; viewport settle reschedules the draw.
+  if (typeof nodeGraphViewportHoldsDisplays === "function" && nodeGraphViewportHoldsDisplays()) {
+    return;
+  }
   nodeGraphModuleScopeState.drawBusy = true;
   // One visible-slot pass per draw frame (collect, lit faces, drawable check
   // all reuse it). Dropped in finally so nothing outside the draw sees it.

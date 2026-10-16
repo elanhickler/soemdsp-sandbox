@@ -157,6 +157,27 @@ function syncNodeGraphPitchQuantizersFedByChordPad(chordPadNodeId) {
   }
 }
 
+// Semitone Offset as a pitch-class rotation 0..11 (display only; the engine
+// adds the offset after quantizing). Octave Offset never moves the class.
+function nodeGraphPitchQuantizerSemitoneShift(node) {
+  const semi = Math.round(nodeGraphFiniteNumber(node?.params?.semitones));
+  return ((semi % 12) + 12) % 12;
+}
+
+function nodeGraphPitchQuantizerRotateMask(mask, shift) {
+  const m = nodeGraphPitchQuantizerNormalizeMask(mask);
+  const s = ((Math.round(Number(shift)) % 12) + 12) % 12;
+  return ((m << s) | (m >> (12 - s))) & 0xFFF;
+}
+
+// Pitch classes the output actually lands on: effective mask + Semitone Offset.
+function nodeGraphPitchQuantizerDisplayMaskForNode(node) {
+  return nodeGraphPitchQuantizerRotateMask(
+    nodeGraphPitchQuantizerMaskForNode(node),
+    nodeGraphPitchQuantizerSemitoneShift(node),
+  );
+}
+
 function nodeGraphPitchQuantizerMaskHasClass(mask, pitchClass) {
   const pc = ((Math.round(Number(pitchClass)) % 12) + 12) % 12;
   return Boolean((nodeGraphPitchQuantizerNormalizeMask(mask) >> pc) & 1);

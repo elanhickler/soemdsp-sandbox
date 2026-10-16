@@ -527,6 +527,17 @@ function normalizeNodeSliderValue(slider, value, min = Number(slider.min), max =
   if (!Number.isFinite(value)) {
     return Number.isFinite(min) ? min : 0;
   }
+  if (slider?.dataset?.kind === "seed") {
+    const lo = Number.isFinite(min) ? Math.round(min) : 0;
+    const hi = Number.isFinite(max) ? Math.round(max) : 16777215;
+    const span = hi - lo + 1;
+    if (span <= 0) {
+      return lo;
+    }
+    let x = Math.round(value) - lo;
+    x = ((x % span) + span) % span;
+    return lo + x;
+  }
   if (nodeSliderShouldWraparound(slider)) {
     return wrapNodeSliderValue(value, min, max);
   }

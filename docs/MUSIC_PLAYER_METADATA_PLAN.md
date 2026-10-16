@@ -45,6 +45,7 @@ Order: MM-1..MM-4 (Album Art + Track data) first, then MM-5..MM-7 (text box + HT
 - Stored format: a safe, small HTML subset, pasteable from an external editor:
   `<span style>`, `<b>`, `<i>`, `<br>`, `<field name="title"/>`. Anything else is ignored.
 - Face renders in WebGL from a glyph atlas (WebGL display policy).
+- The glyph atlas is shared with the circuit builder GL work (`docs/WEBGL_DISPLAY_PLAN.md` section 11, GB-3).
 - Native builds read the same subset.
 
 ## 5. Fonts

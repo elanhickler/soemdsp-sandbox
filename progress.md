@@ -1,3 +1,11 @@
+## 2026-10-16 - DAW plugin plan (docs only)
+
+- Added `docs/DAW_PLAN.md` in soemdsp-sandbox-audioplugin (DAW-1..8, rename to Sandbox, open decisions); pointer in `docs/FUTURE_PLANNING.md`. Not committed.
+
+## 2026-10-16 - Circuit builder to GL plan (docs only)
+
+- Added section 11 "Phase 2: circuit builder to GL" (GB-1..GB-5) to `docs/WEBGL_DISPLAY_PLAN.md`; cross-linked the shared glyph atlas with `docs/MUSIC_PLAYER_METADATA_PLAN.md`; pointer in `docs/FUTURE_PLANNING.md`. Planned; another agent executes. Not committed.
+
 ## 2026-10-15 - Music Player metadata plan (docs only)
 
 - Added `docs/MUSIC_PLAYER_METADATA_PLAN.md` (tracker MM-1..MM-9, open questions) and linked it from `docs/FUTURE_PLANNING.md`. Planned, not started; Argi must OK step 1. Not committed.
