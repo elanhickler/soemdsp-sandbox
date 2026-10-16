@@ -3,7 +3,5 @@
 # Policy: docs/WEBGL_DISPLAY_PLAN.md, docs/APP_POLICY.md section 3.
 
 public/modules/audioPlayer/audio-player-playlist.js | APPROVED EXCEPTION (Argi 2026-10-15) - stays non-WebGL; Playlist text UI. Proposed exception (Argi decision). [getContext('2d'), canvas creation, canvas sizing, devicePixelRatio]
-public/modules/gradientVectorscope/gradient-vectorscope-display.js | Draws via TraceWoscope/2D then ingests into trails FBO. Medium-large. [getContext('2d'), image-rendering]
-public/modules/knob/knob-face.js | APPROVED EXCEPTION (Argi 2026-10-15) - stays non-WebGL; Knob face. Proposed exception (Argi decision). [getContext('2d'), canvas creation, canvas sizing]
 public/modules/sequencer/sequencer-ui.js | APPROVED EXCEPTION (Argi 2026-10-15) - stays non-WebGL; Step grid UI. Proposed exception (Argi decision). [getContext('2d'), canvas sizing, imageSmoothing, devicePixelRatio]
 public/modules/transport/transport-display.js | APPROVED EXCEPTION (Argi 2026-10-15) - stays non-WebGL; Text/status face. Proposed exception (Argi decision). [getContext('2d'), devicePixelRatio]

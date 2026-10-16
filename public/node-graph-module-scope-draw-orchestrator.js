@@ -35,15 +35,12 @@ function drawNodeGraphKnobFaceItem(_renderer, item, _pixelRatio) {
   }
   if (typeof paintNodeGraphKnobFaceLive === "function") {
     paintNodeGraphKnobFaceLive(face, nodeId, item?.buffer);
-  } else if (typeof renderNodeGraphKnobFace === "function") {
-    renderNodeGraphKnobFace(face, nodeId);
   }
-  // Lit when macro dial is showing or image art is loaded.
-  const lit = face.classList?.contains("has-image") || face.classList?.contains("node-knob-module-macro");
+  // Native GL knob face is always lit.
   if (typeof nodeGraphKnobFaceSyncLightSource === "function") {
-    nodeGraphKnobFaceSyncLightSource(face, lit);
+    nodeGraphKnobFaceSyncLightSource(face, true);
   } else {
-    nodeGraphModuleScopeMarkScreenLit(face, lit ? 1 : 0);
+    nodeGraphModuleScopeMarkScreenLit(face, 1);
   }
 }
 
@@ -71,16 +68,19 @@ const nodeGraphModuleScopeCustomRenderers = {
   matrixDisplayFace: drawNodeGraphSelfPaintFaceItem,
   knobFace: drawNodeGraphKnobFaceItem,
   pluginSliderFace: (renderer, item, pixelRatio) => {
+    drawNodeGraphSelfPaintFaceItem(renderer, item, pixelRatio);
     if (typeof paintNodeGraphSliderFaceLive === "function") {
       const face = item?.screenElement || item?.slot?.scopeElement;
       const nodeId = item?.slot?.nodeId || item?.nodeId;
       if (face && nodeId) paintNodeGraphSliderFaceLive(face, nodeId, item?.buffer);
     }
   },
-  toggleButtonFace: (renderer, item) => {
+  toggleButtonFace: (renderer, item, pixelRatio) => {
+    drawNodeGraphSelfPaintFaceItem(renderer, item, pixelRatio);
     item?.screenElement?.syncFromParameters?.();
   },
-  momentaryButtonFace: (renderer, item) => {
+  momentaryButtonFace: (renderer, item, pixelRatio) => {
+    drawNodeGraphSelfPaintFaceItem(renderer, item, pixelRatio);
     item?.screenElement?.syncFromParameters?.();
   },
   keypadFace: () => {},
@@ -152,7 +152,7 @@ function nodeGraphModuleScopeRearmScreenLightsAfterLiveStart() {
       } else if (typeof nodeGraphModuleScopeMarkScreenLit === "function") {
         nodeGraphModuleScopeMarkScreenLit(
           face,
-          face.classList.contains("has-image") ? 1 : 0,
+          1,
         );
       }
       continue;
@@ -495,7 +495,7 @@ function drawNodeGraphModuleScopes(options = {}) {
       } else {
         nodeGraphModuleScopeMarkScreenLit(
           face,
-          face.classList.contains("has-image") ? 1 : 0,
+          1,
         );
       }
       continue;

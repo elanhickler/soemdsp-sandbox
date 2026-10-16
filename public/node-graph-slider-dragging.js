@@ -891,17 +891,12 @@ function nodeGraphKnobFaceIsSliderLook(face) {
   );
 }
 
-/** Circular hit for a knob dial (not the rectangular parent plate). */
+/** Circular hit for a knob dial: the GL face's dial hit span (layout rect). */
 function nodeGraphCircularKnobHitElement(host) {
   if (!host) {
     return null;
   }
-  if (host.classList.contains("has-image")) {
-    return host.querySelector(".node-knob-face-layer:not(.is-empty)") || host;
-  }
-  return host.querySelector(
-    ".node-macro-knob-dial i, .node-macro-knob-arc, .node-macro-knob-dial",
-  ) || host;
+  return host.querySelector(":scope > .node-controller-face-hit") || host;
 }
 
 /** Visible knob circle in screen pixels — drag min→max spans this, not the plate. */
@@ -910,7 +905,7 @@ function nodeSliderKnobDragMetrics(surface) {
     return null;
   }
   if (nodeGraphKnobFaceIsSliderLook(surface)) {
-    const bar = surface.querySelector(".node-macro-knob-dial") || surface;
+    const bar = surface.querySelector(":scope > .node-controller-face-hit") || surface;
     const rect = bar.getBoundingClientRect?.();
     if (!rect || !(rect.width > 2) || !(rect.height > 1)) {
       return null;

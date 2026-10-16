@@ -1,23 +1,15 @@
-// Toggle and Momentary share one Display Settings set.
-// Button and label each have padding + nine-way alignment (slider-style).
-// Off / On text is Display Settings, not Parameter Settings.
-// Corner shape (Pill / Squircle) + rounding 0…1 of half min-edge (APP_POLICY §15).
+// Toggle and Momentary share one Display Settings set (native WebGL button,
+// modules/_shared/controller-face-gl.js): stroke, rounding, Off / On caption,
+// optional label row, and six colors (face background included). Off / On text is Display Settings, not
+// Parameter Settings. Older patches' extra keys (pads, font sizes, label
+// align/padding, corner shape) are dropped on load.
 
 const NODE_GRAPH_PLUGIN_BUTTON_TEXT_MAX = 48;
 
-const NODE_GRAPH_PLUGIN_BUTTON_SLIDER_FIELDS = Object.freeze([
-  "strokeScale",
-  "buttonPadLeft",
-  "buttonPadRight",
-  "buttonPadTop",
-  "buttonPadBottom",
-  "fontSize",
-  "labelPadding",
-  "labelSize",
-  "rounding",
-]);
+const NODE_GRAPH_PLUGIN_BUTTON_SLIDER_FIELDS = Object.freeze(["strokeScale", "rounding"]);
 
 const NODE_GRAPH_PLUGIN_BUTTON_COLOR_FIELDS = Object.freeze([
+  "backgroundColor",
   "strokeColor",
   "inactiveColor",
   "activeColor",
@@ -25,38 +17,21 @@ const NODE_GRAPH_PLUGIN_BUTTON_COLOR_FIELDS = Object.freeze([
   "textColor",
 ]);
 
-const NODE_GRAPH_PLUGIN_BUTTON_CHOICE_FIELDS = Object.freeze([
-  "labelAlign",
-]);
-
-const NODE_GRAPH_PLUGIN_BUTTON_TEXT_FIELDS = Object.freeze([
-  "labelText",
-  "offText",
-  "onText",
-]);
+const NODE_GRAPH_PLUGIN_BUTTON_TEXT_FIELDS = Object.freeze(["labelText", "offText", "onText"]);
 
 const NODE_GRAPH_PLUGIN_BUTTON_DISPLAY_DEFAULTS = Object.freeze({
   strokeScale: 0.06,
-  buttonPadLeft: 0,
-  buttonPadRight: 0,
-  buttonPadTop: 0,
-  buttonPadBottom: 0,
-  fontSize: 72,
-  labelText: "",
-  labelPadding: 0.035,
-  labelSize: 16,
-  labelAlign: "topleft",
+  rounding: 0.18,
   buttonShowLabel: true,
+  labelText: "",
   offText: "Off",
   onText: "On",
+  backgroundColor: "#000000",
   strokeColor: "#5c5071",
   inactiveColor: "#1a2228",
   activeColor: "#2f8f86",
   hoverColor: "#89bfc2",
   textColor: "#f4f7f8",
-  cornerShape: "squircle",
-  // 0…1 of half min-edge; ~0.18 matches pre-rewrite default rounding 18%.
-  rounding: 0.18,
 });
 
 function nodeGraphPluginButtonIsMomentaryType(type) {
@@ -68,29 +43,6 @@ function nodeGraphPluginButtonClamp01(value, fallback) {
   const n = Number(value);
   if (!Number.isFinite(n)) return fallback;
   return Math.max(0, Math.min(1, n));
-}
-
-function nodeGraphPluginButtonClampInkPx(value, fallback) {
-  const n = typeof clampAuthoredInkPx === "function"
-    ? clampAuthoredInkPx(value, fallback)
-    : (Number.isFinite(Number(value)) ? Math.max(0, Number(value)) : fallback);
-  return Math.max(0, Math.min(256, n));
-}
-
-function nodeGraphPluginButtonNormalizeRounding(value, fallback) {
-  const n = Number(value);
-  if (!Number.isFinite(n)) return fallback;
-  // Legacy patches stored percent 0…100 (pre-rewrite / keypad-style).
-  const unit = n > 1 ? n / 100 : n;
-  return Math.max(0, Math.min(1, unit));
-}
-
-function nodeGraphPluginButtonNormalizeCornerShape(value, fallback) {
-  const raw = String(value || "").trim().toLowerCase();
-  if (raw === "pill") return "pill";
-  if (raw === "squircle") return "squircle";
-  const fb = String(fallback || "squircle").trim().toLowerCase();
-  return fb === "pill" ? "pill" : "squircle";
 }
 
 function nodeGraphPluginButtonNormalizeHex(value, fallback) {
@@ -107,48 +59,25 @@ function nodeGraphPluginButtonNormalizeText(value, fallback) {
   return String(value).replace(/\s+/g, " ").trim().slice(0, NODE_GRAPH_PLUGIN_BUTTON_TEXT_MAX);
 }
 
-function nodeGraphPluginButtonNormalizeAlign(value, fallback) {
-  if (typeof normalizeNodeGraphKnobPinAlign === "function") {
-    return normalizeNodeGraphKnobPinAlign(value, fallback);
-  }
-  const raw = String(value || "").trim().toLowerCase().replace(/[\s_-]+/g, "");
-  const known = [
-    "topleft", "top", "topright",
-    "midleft", "mid", "midright",
-    "bottomleft", "bottom", "bottomright",
-  ];
-  if (known.includes(raw)) return raw;
-  const fb = String(fallback || "mid").trim().toLowerCase();
-  return known.includes(fb) ? fb : "mid";
-}
-
 function normalizeNodeGraphPluginButtonDisplaySettings(settings, type) {
   const d = NODE_GRAPH_PLUGIN_BUTTON_DISPLAY_DEFAULTS;
   const src = settings && typeof settings === "object" ? settings : {};
   const momentary = nodeGraphPluginButtonIsMomentaryType(type);
-  const fallbackOff = momentary ? "Gate" : d.offText;
-  const fallbackOn = momentary ? "Gate" : d.onText;
+  const rounding = Number(src.rounding);
   return {
     strokeScale: nodeGraphPluginButtonClamp01(src.strokeScale, d.strokeScale),
-    buttonPadLeft: nodeGraphPluginButtonClamp01(src.buttonPadLeft, d.buttonPadLeft),
-    buttonPadRight: nodeGraphPluginButtonClamp01(src.buttonPadRight, d.buttonPadRight),
-    buttonPadTop: nodeGraphPluginButtonClamp01(src.buttonPadTop, d.buttonPadTop),
-    buttonPadBottom: nodeGraphPluginButtonClamp01(src.buttonPadBottom, d.buttonPadBottom),
-    fontSize: nodeGraphPluginButtonClampInkPx(src.fontSize, d.fontSize),
-    labelText: nodeGraphPluginButtonNormalizeText(src.labelText, d.labelText),
-    labelPadding: nodeGraphPluginButtonClamp01(src.labelPadding, d.labelPadding),
-    labelSize: nodeGraphPluginButtonClampInkPx(src.labelSize, d.labelSize),
-    labelAlign: nodeGraphPluginButtonNormalizeAlign(src.labelAlign, d.labelAlign),
+    // Legacy patches stored percent 0…100.
+    rounding: nodeGraphPluginButtonClamp01(Number.isFinite(rounding) && rounding > 1 ? rounding / 100 : src.rounding, d.rounding),
     buttonShowLabel: src.buttonShowLabel !== false,
-    offText: nodeGraphPluginButtonNormalizeText(src.offText, fallbackOff),
-    onText: nodeGraphPluginButtonNormalizeText(src.onText, fallbackOn),
+    labelText: nodeGraphPluginButtonNormalizeText(src.labelText, d.labelText),
+    offText: nodeGraphPluginButtonNormalizeText(src.offText, momentary ? "Gate" : d.offText),
+    onText: nodeGraphPluginButtonNormalizeText(src.onText, momentary ? "Gate" : d.onText),
+    backgroundColor: nodeGraphPluginButtonNormalizeHex(src.backgroundColor ?? src.background, d.backgroundColor),
     strokeColor: nodeGraphPluginButtonNormalizeHex(src.strokeColor, d.strokeColor),
     inactiveColor: nodeGraphPluginButtonNormalizeHex(src.inactiveColor, d.inactiveColor),
     activeColor: nodeGraphPluginButtonNormalizeHex(src.activeColor, d.activeColor),
     hoverColor: nodeGraphPluginButtonNormalizeHex(src.hoverColor, d.hoverColor),
     textColor: nodeGraphPluginButtonNormalizeHex(src.textColor, d.textColor),
-    cornerShape: nodeGraphPluginButtonNormalizeCornerShape(src.cornerShape, d.cornerShape),
-    rounding: nodeGraphPluginButtonNormalizeRounding(src.rounding, d.rounding),
   };
 }
 
@@ -176,84 +105,14 @@ function nodeGraphPluginButtonFaceLabelText(node) {
   return s.labelText || "";
 }
 
-function nodeGraphPluginButtonClearPin(el) {
-  if (!el?.style) return;
-  for (const prop of [
-    "position", "top", "left", "right", "bottom", "margin", "transform",
-    "width", "height", "font-size", "line-height",
-  ]) {
-    el.style.removeProperty(prop);
-  }
-}
-
+/** Display Settings applied: repaint the live face. */
 function applyNodeGraphPluginButtonDisplaySettingsToFace(node) {
   const id = String(node?.id || "").trim();
   if (!id) return;
-  const face = document.querySelector(
-    `.node-plugin-toggle-face[data-node="${CSS.escape(id)}"], .node-plugin-momentary-face[data-node="${CSS.escape(id)}"]`,
-  );
-  if (!face) return;
-  nodeGraphPluginButtonPaintFace(face, nodeGraphPluginButtonDisplaySettingsForNode(node));
-}
-
-function nodeGraphPluginButtonSyncCaptionChars(btn) {
-  const fit = btn?.querySelector?.(":scope > .btn-fit");
-  const face = btn?.closest?.(".node-plugin-toggle-face, .node-plugin-momentary-face");
-  if (fit?.style) fit.style.removeProperty("font-size");
-  if (!face) return;
-  const text = String(fit?.textContent || "").replace(/\s+/g, " ").trim();
-  face.style.setProperty("--plugin-btn-chars", String(Math.max(1, text.length)));
-}
-
-function nodeGraphPluginButtonPaintFace(face, settings) {
-  if (!face) return;
-  const type = face.dataset.nodeType || "";
-  const s = normalizeNodeGraphPluginButtonDisplaySettings(settings, type);
-  const btn = face.querySelector(".node-plugin-toggle-button, .node-plugin-momentary-button");
-  const label = face.querySelector("[data-plugin-btn-label]");
-  face.dataset.labelAlign = s.labelAlign;
-  face.dataset.pluginBtnCorner = s.cornerShape;
-  face.style.setProperty("--plugin-btn-pad-left", String(s.buttonPadLeft));
-  face.style.setProperty("--plugin-btn-pad-right", String(s.buttonPadRight));
-  face.style.setProperty("--plugin-btn-pad-top", String(s.buttonPadTop));
-  face.style.setProperty("--plugin-btn-pad-bottom", String(s.buttonPadBottom));
-  face.style.setProperty("--plugin-btn-font-px", String(s.fontSize));
-  face.style.setProperty("--plugin-label-font-px", String(s.labelSize));
-  face.style.setProperty("--plugin-label-pad", String(s.labelPadding));
-  face.style.setProperty("--plugin-btn-stroke-scale", String(s.strokeScale));
-  face.style.setProperty("--plugin-btn-rounding", String(s.rounding));
-  face.style.setProperty("--plugin-btn-text", s.textColor);
-  face.style.padding = "0";
-  nodeGraphPluginButtonClearPin(btn);
-  nodeGraphPluginButtonClearPin(label);
-  if (btn) {
-    btn.style.setProperty("--plugin-btn-stroke", s.strokeColor);
-    nodeGraphPluginButtonSyncCaptionChars(btn);
-    btn.style.setProperty("--plugin-btn-inactive", s.inactiveColor);
-    btn.style.setProperty("--plugin-btn-active", s.activeColor);
-    btn.style.setProperty("--plugin-btn-hover", s.hoverColor);
-    btn.style.setProperty("--plugin-btn-text", s.textColor);
-    btn.style.removeProperty("--plugin-btn-radius");
-    btn.style.setProperty(
-      "--plugin-btn-corner-shape",
-      s.cornerShape === "pill" ? "round" : "squircle",
-    );
-  }
-  if (label) {
-    const patchNode = typeof nodeGraphPatchNode === "function"
-      ? nodeGraphPatchNode(face.dataset.node)
-      : null;
-    const title = s.buttonShowLabel === false
-      ? ""
-      : (typeof nodeGraphKnobResolvedDisplayNameForNode === "function"
-        ? nodeGraphKnobResolvedDisplayNameForNode(patchNode)
-        : (s.labelText || ""));
-    if (label.dataset.editing !== "true") {
-      label.textContent = title;
-    }
-    label.hidden = !title;
-    label.style.color = s.textColor;
-  }
+  const esc = CSS.escape(id);
+  document.querySelector(
+    `.node-plugin-toggle-face[data-node="${esc}"], .node-plugin-momentary-face[data-node="${esc}"]`,
+  )?.syncFromParameters?.();
 }
 
 function nodeGraphPluginButtonTextRowHtml(key, label, placeholder) {
@@ -269,38 +128,20 @@ function nodeGraphPluginButtonTextRowHtml(key, label, placeholder) {
 }
 
 function buildNodeGraphPluginButtonDisplaySettingsBodyHtml(formType) {
-  const colorRow = typeof nodeGraphDisplaySettingsBuildColorRowHtml === "function"
-    ? (key) => nodeGraphDisplaySettingsBuildColorRowHtml(key, formType || "toggleButtonFace")
-    : () => "";
-  const fieldRow = typeof nodeGraphDisplaySettingsBuildStepperRowHtml === "function"
-    ? (key) => nodeGraphDisplaySettingsBuildStepperRowHtml(key, formType || "toggleButtonFace")
-    : () => "";
-  const choiceRow = typeof nodeGraphDisplaySettingsBuildChoiceRowHtml === "function"
-    ? (key) => nodeGraphDisplaySettingsBuildChoiceRowHtml(key)
-    : () => "";
-  const toggleRow = typeof nodeGraphDisplaySettingsBuildToggleRowHtml === "function"
-    ? (key) => nodeGraphDisplaySettingsBuildToggleRowHtml(key)
-    : () => "";
-  const momentary = nodeGraphPluginButtonIsMomentaryType(formType);
-  const offPh = momentary ? "Gate" : "Off";
-  const onPh = momentary ? "Gate" : "On";
+  const type = formType || "toggleButtonFace";
+  const colorRow = (key) => nodeGraphDisplaySettingsBuildColorRowHtml(key, type);
+  const fieldRow = (key) => nodeGraphDisplaySettingsBuildStepperRowHtml(key, type);
+  const toggleRow = (key) => nodeGraphDisplaySettingsBuildToggleRowHtml(key);
+  const momentary = nodeGraphPluginButtonIsMomentaryType(type);
   return `
     <div data-plugin-button-display-settings-panel>
       <div class="metadata-section-title">Label</div>
-      <div class="metadata-field-section">${toggleRow("buttonShowLabel")}${choiceRow("labelAlign")}${["labelPadding", "labelSize"].map(fieldRow).join("")}${nodeGraphPluginButtonTextRowHtml("labelText", "Label", "")}</div>
+      <div class="metadata-field-section">${toggleRow("buttonShowLabel")}${nodeGraphPluginButtonTextRowHtml("labelText", "Label", "")}</div>
       <div class="metadata-section-title">Button</div>
-      <div class="metadata-field-section">
-        <div class="node-led-settings-row" role="group" aria-label="Button corner shape">
-          <span>Shape</span>
-          <button type="button" data-plugin-btn-corner="pill" aria-pressed="false">Pill</button>
-          <button type="button" data-plugin-btn-corner="squircle" aria-pressed="true">Squircle</button>
-        </div>
-        ${fieldRow("rounding")}
-        ${["buttonPadLeft", "buttonPadRight", "buttonPadTop", "buttonPadBottom", "strokeScale", "fontSize"].map(fieldRow).join("")}
-      </div>
-      <div class="metadata-field-section">${nodeGraphPluginButtonTextRowHtml("offText", "Off", offPh)}${nodeGraphPluginButtonTextRowHtml("onText", "On", onPh)}</div>
+      <div class="metadata-field-section">${NODE_GRAPH_PLUGIN_BUTTON_SLIDER_FIELDS.map(fieldRow).join("")}</div>
+      <div class="metadata-field-section">${nodeGraphPluginButtonTextRowHtml("offText", "Off", momentary ? "Gate" : "Off")}${nodeGraphPluginButtonTextRowHtml("onText", "On", momentary ? "Gate" : "On")}</div>
       <div class="metadata-section-title">Colors</div>
-      <div class="metadata-field-section">${["strokeColor", "activeColor", "inactiveColor", "hoverColor", "textColor"].map(colorRow).join("")}</div>
+      <div class="metadata-field-section">${["backgroundColor", "strokeColor", "activeColor", "inactiveColor", "hoverColor", "textColor"].map(colorRow).join("")}</div>
     </div>`;
 }
 
@@ -314,16 +155,11 @@ function syncNodeGraphPluginButtonDisplaySettingsControls(root, settings) {
     ? formatNodeGraphTraceDisplaySetting
     : (value) => String(value);
   for (const key of NODE_GRAPH_PLUGIN_BUTTON_SLIDER_FIELDS) {
-    const el = root.querySelector?.(`[data-trace-display-field="${key}"]`)
-      || root.querySelector?.(`[data-plugin-btn-field="${key}"]`);
+    const el = root.querySelector?.(`[data-trace-display-field="${key}"]`);
     if (el && document.activeElement !== el) {
       el.value = format(s[key]);
       if (el.dataset?.waterfallField) el.readOnly = true;
     }
-  }
-  for (const key of NODE_GRAPH_PLUGIN_BUTTON_CHOICE_FIELDS) {
-    const el = root.querySelector?.(`[data-trace-display-choice="${key}"]`);
-    if (el && document.activeElement !== el) el.value = String(s[key]);
   }
   const show = root.querySelector?.(`[data-trace-display-toggle="buttonShowLabel"]`);
   if (show) show.checked = s.buttonShowLabel !== false;
@@ -334,11 +170,6 @@ function syncNodeGraphPluginButtonDisplaySettingsControls(root, settings) {
   for (const key of NODE_GRAPH_PLUGIN_BUTTON_COLOR_FIELDS) {
     const input = root.querySelector?.(`[data-trace-display-color="${key}"]`);
     if (input) input.value = s[key];
-  }
-  for (const button of root.querySelectorAll?.("[data-plugin-btn-corner]") || []) {
-    const on = button.getAttribute("data-plugin-btn-corner") === s.cornerShape;
-    button.classList.toggle("active", on);
-    button.setAttribute("aria-pressed", String(on));
   }
 }
 
@@ -354,25 +185,13 @@ function bindNodeGraphPluginButtonDisplaySettingsBody(host) {
     }
   };
   const isOurs = (target) => target?.closest?.(
-    "[data-plugin-btn-field], [data-plugin-btn-text], [data-trace-display-field], [data-trace-display-choice], [data-trace-display-toggle]",
+    "[data-plugin-btn-text], [data-trace-display-field], [data-trace-display-toggle]",
   );
   host.addEventListener("input", (event) => {
     if (isOurs(event.target)) apply("none", false);
   });
   host.addEventListener("change", (event) => {
     if (isOurs(event.target)) apply("immediate", true);
-  });
-  host.addEventListener("click", (event) => {
-    const corner = event.target?.closest?.("[data-plugin-btn-corner]");
-    if (!corner || !host.contains(corner)) return;
-    event.preventDefault();
-    const next = corner.getAttribute("data-plugin-btn-corner") === "pill" ? "pill" : "squircle";
-    for (const button of host.querySelectorAll("[data-plugin-btn-corner]")) {
-      const on = button.getAttribute("data-plugin-btn-corner") === next;
-      button.classList.toggle("active", on);
-      button.setAttribute("aria-pressed", String(on));
-    }
-    apply("immediate", true);
   });
 }
 
@@ -383,13 +202,8 @@ function readNodeGraphPluginButtonDisplaySettingsForm(root, current) {
     : "";
   const next = { ...(current && typeof current === "object" ? current : {}) };
   for (const key of NODE_GRAPH_PLUGIN_BUTTON_SLIDER_FIELDS) {
-    const input = panel?.querySelector?.(`[data-trace-display-field="${key}"]`)
-      || panel?.querySelector?.(`[data-plugin-btn-field="${key}"]`);
+    const input = panel?.querySelector?.(`[data-trace-display-field="${key}"]`);
     if (input) next[key] = Number(input.value);
-  }
-  for (const key of NODE_GRAPH_PLUGIN_BUTTON_CHOICE_FIELDS) {
-    const input = panel?.querySelector?.(`[data-trace-display-choice="${key}"]`);
-    if (input) next[key] = input.value;
   }
   const show = panel?.querySelector?.(`[data-trace-display-toggle="buttonShowLabel"]`);
   if (show) next.buttonShowLabel = Boolean(show.checked);
@@ -401,28 +215,5 @@ function readNodeGraphPluginButtonDisplaySettingsForm(root, current) {
     const input = panel?.querySelector?.(`[data-trace-display-color="${key}"]`);
     if (input && input.value) next[key] = input.value;
   }
-  const activeCorner = panel?.querySelector?.(
-    "[data-plugin-btn-corner].active, [data-plugin-btn-corner][aria-pressed='true']",
-  );
-  if (activeCorner) {
-    next.cornerShape = activeCorner.getAttribute("data-plugin-btn-corner") === "pill"
-      ? "pill"
-      : "squircle";
-  }
   return normalizeNodeGraphPluginButtonDisplaySettings(next, type);
-}
-
-function nodeGraphPluginButtonBindLook(face, nodeId) {
-  if (!face) return;
-  const paint = () => {
-    const node = typeof nodeGraphPatchNode === "function" ? nodeGraphPatchNode(nodeId) : null;
-    nodeGraphPluginButtonPaintFace(face, nodeGraphPluginButtonDisplaySettingsForNode(node));
-  };
-  face._pluginBtnPaintLook = paint;
-  if (typeof ResizeObserver === "function" && !face._pluginBtnRo) {
-    const ro = new ResizeObserver(() => paint());
-    ro.observe(face);
-    face._pluginBtnRo = ro;
-  }
-  paint();
 }

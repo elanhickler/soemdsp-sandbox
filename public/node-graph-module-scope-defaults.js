@@ -443,7 +443,7 @@ const nodeGraphLcdDotSettingsDefaults = Object.freeze({
 });
 
 
-/** Knob module face: macro-dial look; colors + rotation are per-node Display Settings. */
+/** Knob module face: native WebGL dial (modules/_shared/controller-face-gl.js). */
 const nodeGraphKnobFaceDisplaySettingsDefaults = Object.freeze({
   decimals: 2,
   // Face number digit budget (whole + fraction). 0 = integer.
@@ -451,56 +451,32 @@ const nodeGraphKnobFaceDisplaySettingsDefaults = Object.freeze({
   background: "#000000",
   arcFill: "#f1b84b",
   arcTrack: "#3a3428",
-  // Centered arc span (degrees Bias 0→1). Start is always −span/2 (no Offset).
+  // Label and value text.
+  textColor: "#d8d2c4",
+  // Centered arc span in degrees (30…360). Start is always −span/2.
   rotationDegrees: 270,
-  // Knob graphic size 0…1 (1 = fill entire display; 0 = disappear). Arc only.
-  dialSize: 0.84,
-  // Knob graphic vertical offset in face-height units; positive moves lower.
-  dialOffsetY: 0.14,
-  // Label / value size 0…1 of display min-edge (independent of knob size/position).
-  labelSize: 0.2,
-  valueSize: 0.2,
-  // Value vertical offset −1…1 face heights (edge inset for top/bottom; bipolar for mid/midknob).
-  valueOffsetY: 0,
-  // Label / value align: off | top | mid | midknob | bottom (independent; may overlap).
+  // Ring hole 0.3…0.92 of the dial radius.
+  innerRadius: 0.72,
+  // Label: top | bottom | off. Value: mid (inside the cap) | bottom | off.
   labelPosition: "top",
-  valuePosition: "midknob",
+  valuePosition: "mid",
   // Face name — independent of module alias / header title.
   labelText: "",
-  // Hole size 0…1 (0 = solid disk, ~0.7 default, 1 = thin outer ring).
-  innerRadius: 0.7,
 });
 
+/** Slider module face: native WebGL bar. */
 const nodeGraphSliderFaceDisplaySettingsDefaults = Object.freeze({
   decimals: 2,
   maxDigits: 5,
   labelText: "",
   background: "#000000",
   arcTrack: "#1a2226",
-  sliderLength: 0.8909,
-  sliderHeight: 0.6473,
-  sliderPadding: 0.05,
-  sliderAlign: "bottom",
   sliderColor: "#5491ab",
   sliderNumberColor: "#ffffff",
   sliderTextColor: "#cad3d8",
-  sliderUnitColor: "#7fc7d9",
   sliderShowLabel: true,
   sliderShowNumber: true,
   sliderShowUnit: true,
-  sliderLabelInside: false,
-  sliderNumberInside: true,
-  sliderUnitInside: false,
-  sliderLabelAlign: "topleft",
-  sliderLabelPadding: 0.035,
-  sliderLabelScale: 0.26,
-  sliderNumberAlign: "mid",
-  sliderNumberPadding: 0,
-  sliderNumberScale: 0.35,
-  sliderUnitAlign: "topright",
-  sliderUnitPadding: 0.04,
-  sliderUnitScale: 0.18,
-  sliderCornerShape: "squircle",
   sliderRounding: 0.47,
 });
 

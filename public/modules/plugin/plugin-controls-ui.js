@@ -212,50 +212,105 @@ function nodeGraphControllerShownBias(nodeId, patchNode) {
   return target;
 }
 
-function createNodeGraphToggleButtonFace(node, type) {
+// Toggle / Momentary faces: native WebGL button (controller-face-gl.js).
+// The <button> stays as the transparent DOM hit target laid over the drawn
+// button; click / pointer handling is unchanged.
+
+function nodeGraphPluginButtonFaceDom(node, type, faceClass, buttonClass, ariaWord) {
   const face = document.createElement("div");
-  face.className = "node-plugin-toggle-face node-module-scope-window";
+  face.className = `${faceClass} node-module-scope-window node-controller-gl-face`;
   face.dataset.node = node;
   face.dataset.nodeType = type;
+  face.dataset.controllerFace = "button";
 
   const label = document.createElement("span");
-  label.className = "node-plugin-button-label";
+  label.className = "node-knob-face-label node-controller-face-label";
   label.dataset.pluginBtnLabel = "true";
   label.hidden = true;
+  if (typeof attachNodeGraphKnobFaceLabelEdit === "function") {
+    attachNodeGraphKnobFaceLabelEdit(label, node);
+  }
 
   const btn = document.createElement("button");
   btn.type = "button";
-  btn.className = "node-plugin-toggle-button";
-  btn.setAttribute("aria-label", `${nodeGraphNodeDisplayName(node)} toggle`);
-  const btnText = document.createElement("span");
-  btnText.className = "btn-fit";
-  btn.append(btnText);
+  btn.className = `${buttonClass} node-controller-face-hit`;
+  btn.setAttribute("aria-label", `${nodeGraphNodeDisplayName(node)} ${ariaWord}`);
+  btn.addEventListener("pointerenter", () => { face._pluginBtnHover = true; face.syncFromParameters?.(); });
+  btn.addEventListener("pointerleave", () => { face._pluginBtnHover = false; face.syncFromParameters?.(); });
 
+  face.append(btn, label);
+  nodeGraphControllerFaceCanvas(face);
+  return { face, btn, label };
+}
+
+/** Shared state → GL paint for both button faces. Returns the "on" state. */
+function nodeGraphPluginButtonFacePaint(face, btn, label, node) {
+  const patchNode = typeof nodeGraphPatchNode === "function" ? nodeGraphPatchNode(node) : null;
+  const target = nodeGraphPluginReadParamDom(node, "offset", 0);
+  const chased = nodeGraphControllerFaceChasedBias(node, target);
+  const unit = nodeGraphParamControlPosition(chased, nodeGraphControllerBiasMeta(node));
+  face._pluginBtnChaseActive = nodeGraphControllerFaceChasedBias._states.get(String(node))?.settled === false;
+  const wantsMouse = typeof nodeGraphDspControllerDisplayIsMouse === "function"
+    ? nodeGraphDspControllerDisplayIsMouse(patchNode)
+    : true;
+  const shown = wantsMouse ? chased : nodeGraphControllerShownBias(node, patchNode);
+  const on = nodeGraphControllerBiasAtHighThrow(node, shown);
+  const s = nodeGraphPluginButtonDisplaySettingsForNode(patchNode || { type: face.dataset.nodeType });
+  const labelText = nodeGraphPluginButtonFaceLabelText(patchNode);
+  if (label.dataset.editing !== "true") label.textContent = labelText;
+  const model = {
+    settings: { showLabel: Boolean(labelText), rounding: s.rounding, strokeScale: s.strokeScale },
+    background: s.backgroundColor,
+    strokeColor: s.strokeColor,
+    hoverColor: s.hoverColor,
+    inactiveColor: s.inactiveColor,
+    activeColor: s.activeColor,
+    textColor: s.textColor,
+    mix: Number.isFinite(unit) ? Math.max(0, Math.min(1, unit)) : 0,
+    hover: Boolean(face._pluginBtnHover),
+    held: btn.classList.contains("is-held"),
+    caption: (on ? s.onText : s.offText) || "",
+    labelText,
+    labelEditing: label.dataset.editing === "true",
+  };
+  nodeGraphControllerFacePaint(face, "button", model, (L) => {
+    nodeGraphControllerFacePlace(btn, L.rects.button, L.w, L.h);
+    nodeGraphControllerFacePlace(label, labelText ? L.rects.label : null, L.w, L.h);
+  });
+  if (typeof nodeGraphKnobFaceSyncLightSource === "function") {
+    nodeGraphKnobFaceSyncLightSource(face, true);
+  }
+  return on;
+}
+
+function nodeGraphPluginButtonFaceChase(face, sync) {
+  const chase = () => {
+    if (!face.isConnected) return;
+    sync();
+    if (face._pluginBtnChaseActive) {
+      face._pluginBtnChaseRaf = requestAnimationFrame(chase);
+    } else {
+      face._pluginBtnChaseRaf = 0;
+    }
+  };
+  face._pluginBtnKickChase = () => {
+    if (face._pluginBtnChaseRaf) return;
+    face._pluginBtnChaseRaf = requestAnimationFrame(chase);
+  };
+  face.syncFromParameters = sync;
+  nodeGraphControllerFaceObserve(face, sync);
+  requestAnimationFrame(sync);
+}
+
+function createNodeGraphToggleButtonFace(node, type) {
+  const { face, btn, label } = nodeGraphPluginButtonFaceDom(
+    node, type, "node-plugin-toggle-face", "node-plugin-toggle-button", "toggle",
+  );
   const sync = () => {
-    const patchNode = typeof nodeGraphPatchNode === "function" ? nodeGraphPatchNode(node) : null;
-    const wantsMouse = typeof nodeGraphDspControllerDisplayIsMouse === "function"
-      ? nodeGraphDspControllerDisplayIsMouse(patchNode)
-      : true;
-    const target = nodeGraphPluginReadParamDom(node, "offset", 0);
-    const chased = nodeGraphControllerFaceChasedBias(node, target);
-    const unit = nodeGraphParamControlPosition(chased, nodeGraphControllerBiasMeta(node));
-    const mix = Number.isFinite(unit) ? Math.max(0, Math.min(1, unit)) : 0;
-    btn.style.setProperty("--plugin-btn-value", String(mix));
-    face._pluginBtnChaseActive = nodeGraphControllerFaceChasedBias._states.get(String(node))?.settled === false;
-    const shown = wantsMouse ? chased : nodeGraphControllerShownBias(node, patchNode);
-    const on = nodeGraphControllerBiasAtHighThrow(node, shown);
+    const on = nodeGraphPluginButtonFacePaint(face, btn, label, node);
     btn.classList.toggle("is-on", on);
     btn.setAttribute("aria-pressed", on ? "true" : "false");
-    const labels = typeof nodeGraphPluginButtonFaceLabels === "function"
-      ? nodeGraphPluginButtonFaceLabels(patchNode || node)
-      : { off: "Off", on: "On" };
-    btnText.textContent = (on ? labels.on : labels.off) || "";
-    if (typeof nodeGraphPluginButtonSyncCaptionChars === "function") {
-      nodeGraphPluginButtonSyncCaptionChars(btn);
-    }
-    face._pluginBtnPaintLook?.();
   };
-
   btn.addEventListener("pointerdown", (event) => {
     if (event.button !== 0) return;
     event.stopPropagation();
@@ -269,71 +324,18 @@ function createNodeGraphToggleButtonFace(node, type) {
     sync();
     face._pluginBtnKickChase?.();
   });
-  face.append(btn, label);
-  face.syncFromParameters = sync;
-  const chase = () => {
-    if (!face.isConnected) return;
-    sync();
-    if (face._pluginBtnChaseActive) {
-      face._pluginBtnChaseRaf = requestAnimationFrame(chase);
-    } else {
-      face._pluginBtnChaseRaf = 0;
-    }
-  };
-  face._pluginBtnKickChase = () => {
-    if (face._pluginBtnChaseRaf) return;
-    face._pluginBtnChaseRaf = requestAnimationFrame(chase);
-  };
-  if (typeof nodeGraphPluginButtonBindLook === "function") {
-    nodeGraphPluginButtonBindLook(face, node);
-  }
-  requestAnimationFrame(sync);
+  nodeGraphPluginButtonFaceChase(face, sync);
   return face;
 }
 
 function createNodeGraphMomentaryButtonFace(node, type) {
-  const face = document.createElement("div");
-  face.className = "node-plugin-momentary-face node-module-scope-window";
-  face.dataset.node = node;
-  face.dataset.nodeType = type;
-
-  const label = document.createElement("span");
-  label.className = "node-plugin-button-label";
-  label.dataset.pluginBtnLabel = "true";
-  label.hidden = true;
-
-  const btn = document.createElement("button");
-  btn.type = "button";
-  btn.className = "node-plugin-momentary-button";
-  btn.setAttribute("aria-label", `${nodeGraphNodeDisplayName(node)} momentary`);
-  const btnText = document.createElement("span");
-  btnText.className = "btn-fit";
-  btn.append(btnText);
-
+  const { face, btn, label } = nodeGraphPluginButtonFaceDom(
+    node, type, "node-plugin-momentary-face", "node-plugin-momentary-button", "momentary",
+  );
   const sync = () => {
-    const patchNode = typeof nodeGraphPatchNode === "function" ? nodeGraphPatchNode(node) : null;
-    const target = nodeGraphPluginReadParamDom(node, "offset", 0);
-    const chased = nodeGraphControllerFaceChasedBias(node, target);
-    const unit = nodeGraphParamControlPosition(chased, nodeGraphControllerBiasMeta(node));
-    const mix = Number.isFinite(unit) ? Math.max(0, Math.min(1, unit)) : 0;
-    btn.style.setProperty("--plugin-btn-value", String(mix));
-    face._pluginBtnChaseActive = nodeGraphControllerFaceChasedBias._states.get(String(node))?.settled === false;
-    const wantsMouse = typeof nodeGraphDspControllerDisplayIsMouse === "function"
-      ? nodeGraphDspControllerDisplayIsMouse(patchNode)
-      : true;
-    const shown = wantsMouse ? chased : nodeGraphControllerShownBias(node, patchNode);
-    const down = nodeGraphControllerBiasAtHighThrow(node, shown);
+    const down = nodeGraphPluginButtonFacePaint(face, btn, label, node);
     btn.classList.toggle("is-down", down);
-    const labels = typeof nodeGraphPluginButtonFaceLabels === "function"
-      ? nodeGraphPluginButtonFaceLabels(patchNode || node)
-      : { off: "Off", on: "On" };
-    btnText.textContent = (down ? labels.on : labels.off) || "";
-    if (typeof nodeGraphPluginButtonSyncCaptionChars === "function") {
-      nodeGraphPluginButtonSyncCaptionChars(btn);
-    }
-    face._pluginBtnPaintLook?.();
   };
-
   const setDown = (down) => {
     nodeGraphPluginWriteParamValue(node, "offset", nodeGraphControllerBiasEnd(node, down), {
       record: false,
@@ -343,14 +345,12 @@ function createNodeGraphMomentaryButtonFace(node, type) {
     sync();
     face._pluginBtnKickChase?.();
   };
-
   btn.addEventListener("pointerdown", (event) => {
     if (event.button !== 0) return;
     event.preventDefault();
     event.stopPropagation();
     btn.setPointerCapture?.(event.pointerId);
     setDown(true);
-    face._pluginBtnKickChase?.();
   });
   const release = (event) => {
     if (event && btn.hasPointerCapture?.(event.pointerId)) {
@@ -361,26 +361,6 @@ function createNodeGraphMomentaryButtonFace(node, type) {
   btn.addEventListener("pointerup", release);
   btn.addEventListener("pointercancel", release);
   btn.addEventListener("lostpointercapture", () => setDown(false));
-
-  face.append(btn, label);
-  face.syncFromParameters = sync;
-  const chase = () => {
-    if (!face.isConnected) return;
-    sync();
-    if (face._pluginBtnChaseActive) {
-      face._pluginBtnChaseRaf = requestAnimationFrame(chase);
-    } else {
-      face._pluginBtnChaseRaf = 0;
-    }
-  };
-  face._pluginBtnKickChase = () => {
-    if (face._pluginBtnChaseRaf) return;
-    face._pluginBtnChaseRaf = requestAnimationFrame(chase);
-  };
-  if (typeof nodeGraphPluginButtonBindLook === "function") {
-    nodeGraphPluginButtonBindLook(face, node);
-  }
-  requestAnimationFrame(sync);
+  nodeGraphPluginButtonFaceChase(face, sync);
   return face;
 }
-

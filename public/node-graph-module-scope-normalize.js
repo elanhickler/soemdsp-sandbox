@@ -937,6 +937,7 @@ function normalizeNodeGraphWaterfallSettings(settings = {}) {
         .toLowerCase();
       if (raw === "unipolar" || raw === "uni" || raw === "unsigned") return "unipolar";
       if (raw === "absolute" || raw === "abs") return "absolute";
+      if (raw === "bottomfill" || raw === "bottom") return "bottomFill";
       return "bipolar";
     })(),
     stereoBlend: (function () {
@@ -1484,21 +1485,44 @@ function nodeGraphFaceClampMaxDigits(value, fallback = 2) {
   return Math.max(0, Math.min(12, safe));
 }
 
+function nodeGraphControllerFaceParseColor(value, fallback) {
+  const text = String(value || "").trim();
+  if (/^#[0-9a-fA-F]{6}$/.test(text)) return text;
+  if (/^#[0-9a-fA-F]{3}$/.test(text)) {
+    return `#${text[1]}${text[1]}${text[2]}${text[2]}${text[3]}${text[3]}`;
+  }
+  return fallback;
+}
+
+function nodeGraphControllerFaceLabelText(source, fallback = "") {
+  const raw = source.labelText ?? source.knobText ?? source.text ?? fallback;
+  return typeof nodeGraphKnobFaceNormalizeLabelText === "function"
+    ? nodeGraphKnobFaceNormalizeLabelText(raw)
+    : String(raw ?? "").replace(/\s+/g, " ").trim().slice(0, 48);
+}
+
+/** Knob label row: top | bottom | off (legacy mid / midknob → top). */
+function normalizeNodeGraphKnobFaceLabelPosition(value, fallback = "top") {
+  const raw = String(value ?? "").trim().toLowerCase();
+  if (raw === "off" || raw === "none" || raw === "hidden") return "off";
+  if (raw === "bottom" || raw === "below") return "bottom";
+  if (raw === "top" || raw === "above") return "top";
+  return raw ? "top" : fallback;
+}
+
+/** Knob value: mid (inside the cap) | bottom | off (legacy top / midknob → mid). */
+function normalizeNodeGraphKnobFaceValuePosition(value, fallback = "mid") {
+  const raw = String(value ?? "").trim().toLowerCase();
+  if (raw === "off" || raw === "none" || raw === "hidden") return "off";
+  if (raw === "bottom" || raw === "below") return "bottom";
+  return raw ? "mid" : fallback;
+}
+
+// Older patches' knob keys (dialSize, dialOffsetY, labelSize, valueSize,
+// valueOffsetY, image layers) are ignored; the native face has its own layout.
 function normalizeNodeGraphKnobFaceDisplaySettings(settings = {}) {
   const source = settings && typeof settings === "object" ? settings : {};
   const defaults = nodeGraphKnobFaceDisplaySettingsDefaults;
-  const parseColor = (value, fallback) => {
-    const text = String(value || "").trim();
-    if (/^#[0-9a-fA-F]{6}$/.test(text) || /^#[0-9a-fA-F]{3}$/.test(text)) {
-      return text.length === 4
-        ? `#${text[1]}${text[1]}${text[2]}${text[2]}${text[3]}${text[3]}`
-        : text;
-    }
-    if (/^rgba?\(/i.test(text) || /^hsla?\(/i.test(text)) {
-      return text;
-    }
-    return fallback;
-  };
   return {
     decimals: normalizeNodeGraphTraceDisplayNumber(
       source.decimals ?? source.numDecimals,
@@ -1509,239 +1533,50 @@ function normalizeNodeGraphKnobFaceDisplaySettings(settings = {}) {
     ),
     maxDigits: nodeGraphFaceClampMaxDigits(
       source.maxDigits,
-      source.decimals ?? source.numDecimals ?? defaults.maxDigits ?? defaults.decimals ?? 2,
+      source.decimals ?? source.numDecimals ?? defaults.maxDigits,
     ),
-    background: parseColor(
-      source.background ?? source.backgroundColor,
-      defaults.background,
-    ),
-    arcFill: parseColor(source.arcFill ?? source.dot1Color, defaults.arcFill),
-    arcTrack: parseColor(source.arcTrack ?? source.secondaryColor, defaults.arcTrack),
-    // Centered span only (offset removed — start is always −span/2).
-    rotationDegrees: normalizeNodeGraphTraceDisplayNumber(
-      source.rotationDegrees,
-      defaults.rotationDegrees,
-      0,
-      1440,
-      true,
-    ),
-    // Knob graphic size 0…1 (1 = fill display; only scales the arc widget).
-    dialSize: normalizeNodeGraphTraceDisplayNumber(
-      source.dialSize ?? source.knobSize ?? source.size,
-      defaults.dialSize ?? 1,
-      0,
-      1,
-    ),
-    // Positive Y offset moves only the knob graphic down; label/value stay pinned.
-    dialOffsetY: normalizeNodeGraphTraceDisplayNumber(
-      source.dialOffsetY ?? source.dialY ?? source.knobY ?? source.knobOffsetY ?? source.offsetY,
-      defaults.dialOffsetY ?? 0,
-      -1,
-      1,
-    ),
-    labelSize: normalizeNodeGraphTraceDisplayNumber(
-      source.labelSize ?? source.titleSize,
-      defaults.labelSize ?? 0.2,
-      0,
-      1,
-    ),
-    valueSize: normalizeNodeGraphTraceDisplayNumber(
-      source.valueSize ?? source.readoutSize,
-      defaults.valueSize ?? 0.2,
-      0,
-      1,
-    ),
-    // Positive Y: top→down, bottom→lift off edge, mid/midknob→down from center/dial.
-    valueOffsetY: normalizeNodeGraphTraceDisplayNumber(
-      source.valueOffsetY ?? source.readoutOffsetY ?? source.valueY ?? source.numberOffsetY,
-      defaults.valueOffsetY ?? 0,
-      -1,
-      1,
-    ),
-    labelPosition: normalizeNodeGraphKnobFaceTextPosition(
-      source.showLabel === false || source.showLabel === "false"
-        ? "off"
-        : (source.labelPosition ?? source.titlePosition ?? source.labelAlign),
-      defaults.labelPosition || "top",
-    ),
-    valuePosition: normalizeNodeGraphKnobFaceTextPosition(
-      source.showReadout === false || source.showReadout === "false"
-        ? "off"
-        : (source.valuePosition ?? source.readoutPosition ?? source.unitAlign ?? source.numberAlign),
-      defaults.valuePosition || "mid",
-    ),
-    // Arc ring hole 0…1 (maps to 1 − thickness of the conic mask).
-    innerRadius: normalizeNodeGraphTraceDisplayNumber(
-      source.innerRadius ?? source.arcInnerRadius,
-      defaults.innerRadius ?? 0.7,
-      0,
-      0.95,
-    ),
-    labelText: typeof nodeGraphKnobFaceNormalizeLabelText === "function"
-      ? nodeGraphKnobFaceNormalizeLabelText(source.labelText ?? source.knobText ?? source.text)
-      : String(source.labelText ?? source.knobText ?? source.text ?? defaults.labelText ?? "")
-        .replace(/\s+/g, " ")
-        .trim()
-        .slice(0, 48),
+    background: nodeGraphControllerFaceParseColor(source.background ?? source.backgroundColor, defaults.background),
+    arcFill: nodeGraphControllerFaceParseColor(source.arcFill, defaults.arcFill),
+    arcTrack: nodeGraphControllerFaceParseColor(source.arcTrack, defaults.arcTrack),
+    textColor: nodeGraphControllerFaceParseColor(source.textColor, defaults.textColor),
+    rotationDegrees: normalizeNodeGraphTraceDisplayNumber(source.rotationDegrees, defaults.rotationDegrees, 30, 360, true),
+    innerRadius: normalizeNodeGraphTraceDisplayNumber(source.innerRadius, defaults.innerRadius, 0.3, 0.92),
+    labelPosition: source.showLabel === false || source.showLabel === "false"
+      ? "off"
+      : normalizeNodeGraphKnobFaceLabelPosition(source.labelPosition, defaults.labelPosition),
+    valuePosition: source.showReadout === false || source.showReadout === "false"
+      ? "off"
+      : normalizeNodeGraphKnobFaceValuePosition(source.valuePosition, defaults.valuePosition),
+    labelText: nodeGraphControllerFaceLabelText(source, defaults.labelText),
   };
 }
 
-const nodeGraphKnobSliderBarAligns = Object.freeze(["top", "mid", "bottom"]);
-const nodeGraphKnobPinAligns = Object.freeze([
-  "topleft", "top", "topright",
-  "midleft", "mid", "midright",
-  "bottomleft", "bottom", "bottomright",
-]);
-
-function normalizeNodeGraphKnobSliderBarAlign(value, fallback = "mid") {
-  const raw = String(value || "").trim().toLowerCase().replace(/[\s_-]+/g, "");
-  if (raw === "middle" || raw === "center") {
-    return "mid";
-  }
-  if (nodeGraphKnobSliderBarAligns.includes(raw)) {
-    return raw;
-  }
-  const fb = String(fallback || "mid").trim().toLowerCase();
-  return nodeGraphKnobSliderBarAligns.includes(fb) ? fb : "mid";
-}
-
-function normalizeNodeGraphKnobPinAlign(value, fallback = "mid") {
-  const raw = String(value || "").trim().toLowerCase().replace(/[\s_-]+/g, "");
-  const aliases = {
-    topleft: "topleft",
-    topcenter: "top",
-    topmiddle: "top",
-    topright: "topright",
-    middleleft: "midleft",
-    centerleft: "midleft",
-    center: "mid",
-    middle: "mid",
-    middleright: "midright",
-    centerright: "midright",
-    bottomleft: "bottomleft",
-    bottomcenter: "bottom",
-    bottommiddle: "bottom",
-    bottomright: "bottomright",
-  };
-  if (aliases[raw]) {
-    return aliases[raw];
-  }
-  if (nodeGraphKnobPinAligns.includes(raw)) {
-    return raw;
-  }
-  const fb = String(fallback || "mid").trim().toLowerCase().replace(/[\s_-]+/g, "");
-  return nodeGraphKnobPinAligns.includes(fb) ? fb : "mid";
-}
-
-const nodeGraphKnobFaceTextPositions = Object.freeze(["off", "top", "mid", "midknob", "bottom"]);
-
-function normalizeNodeGraphKnobFaceTextPosition(value, fallback = "mid") {
-  const raw = String(value || "").trim().toLowerCase();
-  const compact = raw.replace(/[\s_-]+/g, "");
-  // Legacy above/below → top/bottom (toggle/unit-style align names).
-  if (raw === "above") {
-    return "top";
-  }
-  if (raw === "below") {
-    return "bottom";
-  }
-  // Mid knob = center of the dial/arc circle (tracks dialOffsetY), not face mid.
-  if (
-    compact === "midknob"
-    || compact === "knobmid"
-    || compact === "dialmid"
-    || compact === "dialcenter"
-    || compact === "knobcenter"
-    || compact === "arccenter"
-  ) {
-    return "midknob";
-  }
-  if (raw === "middle" || raw === "center") {
-    return "mid";
-  }
-  if (nodeGraphKnobFaceTextPositions.includes(raw)) {
-    return raw;
-  }
-  let fb = String(fallback || "mid").trim().toLowerCase();
-  if (fb === "above") fb = "top";
-  if (fb === "below") fb = "bottom";
-  const fbCompact = fb.replace(/[\s_-]+/g, "");
-  if (
-    fbCompact === "midknob"
-    || fbCompact === "knobmid"
-    || fbCompact === "dialmid"
-  ) {
-    return "midknob";
-  }
-  return nodeGraphKnobFaceTextPositions.includes(fb) ? fb : "mid";
-}
-
-
+// Older patches' slider layout keys (length, height, padding, align, pin
+// aligns / padding / scale / inside, unit color, corner shape) are ignored.
 function normalizeNodeGraphSliderFaceDisplaySettings(settings = {}, defaultsOverride = null) {
   const source = settings && typeof settings === "object" ? settings : {};
   const defaults = defaultsOverride && typeof defaultsOverride === "object"
     ? defaultsOverride
     : nodeGraphSliderFaceDisplaySettingsDefaults;
-  const parseColor = (value, fallback) => {
-    const hex = String(value || "").trim();
-    return /^#[0-9a-fA-F]{6}$/.test(hex) ? hex : fallback;
-  };
+  const on = (value) => value !== false && value !== "false";
   return {
     decimals: Math.max(0, Math.min(6, Math.round(Number(source.decimals ?? defaults.decimals ?? 2)) || 0)),
-    maxDigits: nodeGraphFaceClampMaxDigits(
-      source.maxDigits,
-      source.decimals ?? defaults.maxDigits ?? defaults.decimals ?? 2,
-    ),
-    background: parseColor(source.background ?? source.backgroundColor, defaults.background || "#000000"),
-    arcTrack: parseColor(source.arcTrack, defaults.arcTrack || "#1a2226"),
-    sliderLength: normalizeNodeGraphTraceDisplayNumber(source.sliderLength, defaults.sliderLength ?? 1, 0, 1),
-    sliderHeight: normalizeNodeGraphTraceDisplayNumber(source.sliderHeight, defaults.sliderHeight ?? 0.22, 0, 1),
-    sliderPadding: normalizeNodeGraphTraceDisplayNumber(source.sliderPadding, defaults.sliderPadding ?? 0, 0, 0.5),
-    sliderAlign: normalizeNodeGraphKnobSliderBarAlign(source.sliderAlign, defaults.sliderAlign || "mid"),
-    sliderColor: parseColor(source.sliderColor, defaults.sliderColor || "#4a6a78"),
-    sliderNumberColor: parseColor(source.sliderNumberColor, defaults.sliderNumberColor || "#ffffff"),
-    sliderTextColor: parseColor(source.sliderTextColor, defaults.sliderTextColor || "#cfdde5"),
-    sliderUnitColor: parseColor(source.sliderUnitColor, defaults.sliderUnitColor || "#7fc7d9"),
-    sliderShowLabel: source.sliderShowLabel !== false && source.sliderShowLabel !== "false",
-    sliderShowNumber: source.sliderShowNumber !== false && source.sliderShowNumber !== "false",
-    sliderShowUnit: source.sliderShowUnit !== false && source.sliderShowUnit !== "false",
-    sliderLabelInside: source.sliderLabelInside === true || source.sliderLabelInside === "true",
-    sliderNumberInside: source.sliderNumberInside == null
-      ? defaults.sliderNumberInside !== false
-      : source.sliderNumberInside === true || source.sliderNumberInside === "true",
-    sliderUnitInside: source.sliderUnitInside === true || source.sliderUnitInside === "true",
-    sliderLabelAlign: normalizeNodeGraphKnobPinAlign(source.sliderLabelAlign, defaults.sliderLabelAlign || "topleft"),
-    sliderLabelPadding: normalizeNodeGraphTraceDisplayNumber(source.sliderLabelPadding, defaults.sliderLabelPadding ?? 0.04, 0, 1),
-    sliderLabelScale: normalizeNodeGraphTraceDisplayNumber(source.sliderLabelScale, defaults.sliderLabelScale ?? 0.22, 0, 1),
-    sliderNumberAlign: normalizeNodeGraphKnobPinAlign(source.sliderNumberAlign, defaults.sliderNumberAlign || "mid"),
-    sliderNumberPadding: normalizeNodeGraphTraceDisplayNumber(source.sliderNumberPadding, defaults.sliderNumberPadding ?? 0, 0, 1),
-    sliderNumberScale: normalizeNodeGraphTraceDisplayNumber(source.sliderNumberScale, defaults.sliderNumberScale ?? 0.22, 0, 1),
-    sliderUnitAlign: normalizeNodeGraphKnobPinAlign(source.sliderUnitAlign, defaults.sliderUnitAlign || "topright"),
-    sliderUnitPadding: normalizeNodeGraphTraceDisplayNumber(source.sliderUnitPadding, defaults.sliderUnitPadding ?? 0.04, 0, 1),
-    sliderUnitScale: normalizeNodeGraphTraceDisplayNumber(source.sliderUnitScale, defaults.sliderUnitScale ?? 0.18, 0, 1),
-    sliderCornerShape: String(source.sliderCornerShape || defaults.sliderCornerShape || "squircle").trim().toLowerCase() === "square"
-      ? "square"
-      : "squircle",
-    sliderRounding: normalizeNodeGraphTraceDisplayNumber(source.sliderRounding ?? source.cornerRadius, defaults.sliderRounding ?? 0.5, 0, 1),
-    labelText: typeof nodeGraphKnobFaceNormalizeLabelText === "function"
-      ? nodeGraphKnobFaceNormalizeLabelText(source.labelText ?? source.knobText ?? source.text)
-      : String(source.labelText ?? defaults.labelText ?? "").replace(/\s+/g, " ").trim().slice(0, 48),
+    maxDigits: nodeGraphFaceClampMaxDigits(source.maxDigits, source.decimals ?? defaults.maxDigits ?? 2),
+    background: nodeGraphControllerFaceParseColor(source.background ?? source.backgroundColor, defaults.background || "#000000"),
+    arcTrack: nodeGraphControllerFaceParseColor(source.arcTrack, defaults.arcTrack || "#1a2226"),
+    sliderColor: nodeGraphControllerFaceParseColor(source.sliderColor, defaults.sliderColor || "#5491ab"),
+    sliderNumberColor: nodeGraphControllerFaceParseColor(source.sliderNumberColor, defaults.sliderNumberColor || "#ffffff"),
+    sliderTextColor: nodeGraphControllerFaceParseColor(source.sliderTextColor, defaults.sliderTextColor || "#cad3d8"),
+    sliderShowLabel: on(source.sliderShowLabel),
+    sliderShowNumber: on(source.sliderShowNumber),
+    sliderShowUnit: on(source.sliderShowUnit),
+    sliderRounding: normalizeNodeGraphTraceDisplayNumber(source.sliderRounding, defaults.sliderRounding ?? 0.47, 0, 1),
+    labelText: nodeGraphControllerFaceLabelText(source, defaults.labelText),
   };
 }
 
 function nodeGraphKnobFaceDisplaySettingsForNode(node) {
-  if (!node) {
-    return normalizeNodeGraphKnobFaceDisplaySettings();
-  }
-  // Prefer display-settings bucket for colors/decimals; face blob supplies
-  // image-layer rotation span when display has not written it yet.
-  const fromDisplay = node.traceDisplaySettings;
-  const fromFace = node.knobFace;
-  const merged = {
-    ...(fromFace && typeof fromFace === "object" ? fromFace : {}),
-    ...(fromDisplay && typeof fromDisplay === "object" ? fromDisplay : {}),
-  };
-  return normalizeNodeGraphKnobFaceDisplaySettings(merged);
+  return normalizeNodeGraphKnobFaceDisplaySettings(node?.traceDisplaySettings);
 }
 
 

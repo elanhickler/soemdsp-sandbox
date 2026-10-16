@@ -222,7 +222,6 @@ registerNodeGraphChromelessModule("fbmField", {
         min: "0",
         nonlinearSlider: false,
         step: "any",
-        modClamp: false,
         tooltip: "Output scale for X/Y/Z.",
       },
       {

@@ -49,7 +49,11 @@ for (const [rel, gone] of Object.entries(FACES)) {
 }
 const allow = read("scripts/display_gl_allowlist.txt");
 for (const rel of Object.keys(FACES)) gate(!allow.includes(rel), `allowlist no longer lists ${path.basename(rel)}`);
-gate(allow.includes("gradient-vectorscope-display.js"), "Gradient Vectorscope stays allowlisted (BugsFix-owned)");
+{
+  const gvs = read("public/modules/gradientVectorscope/gradient-vectorscope-display.js");
+  gate(!/getContext\(\s*["']2d/.test(gvs) && !/image-rendering|imageRendering/.test(gvs), "Gradient Vectorscope: no getContext('2d') / imageRendering");
+  gate(!allow.includes("gradient-vectorscope-display.js"), "allowlist no longer lists gradient-vectorscope-display.js");
+}
 // Real-GPU findings fixed with this port (the removed 2D paths had masked them):
 const sgl = read("public/modules/spectrogram/spectrogram-gl.js");
 gate(/instanceof WebGL2RenderingContext/.test(sgl) && sgl.includes("gl.RGBA32F") && sgl.includes("g.entry.floatInternal"),
