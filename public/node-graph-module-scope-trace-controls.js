@@ -808,54 +808,30 @@ const nodeGraphTraceDisplayActiveControlsByType = Object.freeze({
   }),
   knobFace: Object.freeze({
     fields: Object.freeze([
-      "labelSize",
       "decimals",
       "maxDigits",
       "rotationDegrees",
-      "dialSize",
-      "dialOffsetY",
-      "valueSize",
-      "valueOffsetY",
       "innerRadius",
     ]),
-    colors: Object.freeze(["backgroundColor", "arcFill", "arcTrack"]),
+    colors: Object.freeze(["backgroundColor", "arcFill", "arcTrack", "textColor"]),
     toggles: Object.freeze([]),
     choices: Object.freeze(["labelPosition", "valuePosition"]),
   }),
   pluginSliderFace: Object.freeze({
-    fields: Object.freeze([
-      "sliderLength",
-      "sliderHeight",
-      "sliderPadding",
-      "sliderLabelPadding",
-      "sliderLabelScale",
-      "maxDigits",
-      "sliderNumberPadding",
-      "sliderNumberScale",
-      "sliderUnitPadding",
-      "sliderUnitScale",
-    ]),
+    fields: Object.freeze(["maxDigits", "sliderRounding"]),
     colors: Object.freeze([
       "backgroundColor",
       "sliderColor",
-      "sliderNumberColor",
+      "arcTrack",
       "sliderTextColor",
-      "sliderUnitColor",
+      "sliderNumberColor",
     ]),
     toggles: Object.freeze([
       "sliderShowLabel",
       "sliderShowNumber",
       "sliderShowUnit",
-      "sliderLabelInside",
-      "sliderNumberInside",
-      "sliderUnitInside",
     ]),
-    choices: Object.freeze([
-      "sliderAlign",
-      "sliderLabelAlign",
-      "sliderNumberAlign",
-      "sliderUnitAlign",
-    ]),
+    choices: Object.freeze([]),
   }),
   graphFace: Object.freeze({
     fields: Object.freeze(["zoomMin", "zoomMax"]),
@@ -870,37 +846,19 @@ const nodeGraphTraceDisplayActiveControlsByType = Object.freeze({
     choices: Object.freeze([]),
   }),
   toggleButtonFace: Object.freeze({
-    fields: Object.freeze([
-      "strokeScale",
-      "buttonPadLeft",
-      "buttonPadRight",
-      "buttonPadTop",
-      "buttonPadBottom",
-      "fontSize",
-      "labelPadding",
-      "labelSize",
-      "rounding",
-    ]),
-    colors: Object.freeze(["strokeColor", "inactiveColor", "activeColor", "hoverColor", "textColor"]),
+    fields: Object.freeze(["strokeScale", "rounding"]),
+    colors: Object.freeze(["backgroundColor", "strokeColor", "inactiveColor", "activeColor", "hoverColor", "textColor"]),
     toggles: Object.freeze(["buttonShowLabel"]),
-    choices: Object.freeze(["labelAlign"]),
+    choices: Object.freeze([]),
   }),
+
   momentaryButtonFace: Object.freeze({
-    fields: Object.freeze([
-      "strokeScale",
-      "buttonPadLeft",
-      "buttonPadRight",
-      "buttonPadTop",
-      "buttonPadBottom",
-      "fontSize",
-      "labelPadding",
-      "labelSize",
-      "rounding",
-    ]),
-    colors: Object.freeze(["strokeColor", "inactiveColor", "activeColor", "hoverColor", "textColor"]),
+    fields: Object.freeze(["strokeScale", "rounding"]),
+    colors: Object.freeze(["backgroundColor", "strokeColor", "inactiveColor", "activeColor", "hoverColor", "textColor"]),
     toggles: Object.freeze(["buttonShowLabel"]),
-    choices: Object.freeze(["labelAlign"]),
+    choices: Object.freeze([]),
   }),
+
   keypadFace: Object.freeze({
     fields: Object.freeze(["textSize", "textWeight", "buttonWidth", "buttonHeight", "buttonSize", "padPx"]),
     colors: Object.freeze(["backgroundColor", "buttonColor", "hoverColor", "downColor", "textColor", "strokeColor"]),
@@ -1483,7 +1441,7 @@ const nodeGraphDisplaySettingsFieldMeta = Object.freeze({
     label: "Span °",
     inputmode: "numeric",
     id: "nodeTraceDisplayKnobSpan",
-    title: "Centered arc sweep across Bias 0…1 (0–1440°). Opens left and right together (gap stays opposite center). Default 270°.",
+    title: "Centered arc sweep across Bias 0…1 (30–360°). Opens left and right together (gap stays opposite center). Default 270°.",
   }),
   dialSize: Object.freeze({
     label: "Knob size",
@@ -1519,7 +1477,13 @@ const nodeGraphDisplaySettingsFieldMeta = Object.freeze({
     label: "Inner radius",
     inputmode: "decimal",
     id: "nodeTraceDisplayKnobInnerRadius",
-    title: "Arc hole size 0…1. 0 = solid disk; ~0.7 default ring; higher = thinner outer ring.",
+    title: "Ring hole size 0.3…0.92 of the dial radius. Default 0.72; higher = thinner ring.",
+  }),
+  sliderRounding: Object.freeze({
+    label: "Rounding",
+    inputmode: "decimal",
+    id: "nodeTraceDisplaySliderRounding",
+    title: "Bar corner radius 0…1 of half the bar height. 0 = square, 1 = capsule.",
   }),
   sliderLength: Object.freeze({
     label: "Length",
@@ -2211,16 +2175,16 @@ const nodeGraphDisplaySettingsChoiceMeta = Object.freeze({
   }),
   labelPosition: Object.freeze({
     label: "Label",
-    aria: "Label off, top, mid, or bottom on the display",
+    aria: "Knob label above the dial, below it, or off",
     id: "nodeTraceDisplayKnobLabelPosition",
-    title: "Label align on the display: off, top, mid, or bottom. Independent of value; overlap is OK.",
+    title: "Knob name row: top, bottom, or off.",
     options: Object.freeze([
       Object.freeze({ value: "off", label: "Off" }),
       Object.freeze({ value: "top", label: "Top" }),
-      Object.freeze({ value: "mid", label: "Mid" }),
       Object.freeze({ value: "bottom", label: "Bottom" }),
     ]),
   }),
+
   xyzLayout: Object.freeze({
     label: "Layout",
     aria: "Stack XYZ traces or split them vertically",
@@ -2233,17 +2197,16 @@ const nodeGraphDisplaySettingsChoiceMeta = Object.freeze({
   }),
   valuePosition: Object.freeze({
     label: "Value",
-    aria: "Value off, top, mid, mid knob, or bottom on the display",
+    aria: "Knob value inside the dial, below it, or off",
     id: "nodeTraceDisplayKnobValuePosition",
-    title: "Number / unit align: off, top, mid (face center), mid knob (dial/arc center), or bottom. Independent of label; overlap is OK. Value Y offset nudges from the chosen pin.",
+    title: "Number / unit: mid (inside the dial cap), bottom, or off. With mid the pointer line is hidden.",
     options: Object.freeze([
       Object.freeze({ value: "off", label: "Off" }),
-      Object.freeze({ value: "top", label: "Top" }),
       Object.freeze({ value: "mid", label: "Mid" }),
-      Object.freeze({ value: "midknob", label: "Mid knob" }),
       Object.freeze({ value: "bottom", label: "Bottom" }),
     ]),
   }),
+
   // Soft Fractal: Stop 0.00 (solid gradient t=0) / Gradient (soft palette exterior).
   outerPlate: Object.freeze({
     label: "Outer color",
@@ -2322,13 +2285,14 @@ const nodeGraphDisplaySettingsChoiceMeta = Object.freeze({
   }),
   facePolarity: Object.freeze({
     label: "Polarity",
-    aria: "Bipolar, unipolar, or absolute",
+    aria: "Bipolar, unipolar, absolute, or bottom fill",
     id: "nodeTraceDisplayFacePolarity",
-    title: "Bipolar: −1 at the bottom, 0 in the center, +1 at the top. Unipolar: 0 at the bottom, +1 at the top, negatives clipped. Absolute: both peaks fold upward.",
+    title: "Bipolar: −1 at the bottom, 0 in the center, +1 at the top. Unipolar: 0 at the bottom, +1 at the top, negatives clipped. Absolute: both peaks fold upward. Bottom fill: bipolar range (\u22121 bottom, 0 center, +1 top), each column filled from the bottom edge up to its peak.",
     options: Object.freeze([
       Object.freeze({ value: "bipolar", label: "Bipolar" }),
       Object.freeze({ value: "unipolar", label: "Unipolar" }),
       Object.freeze({ value: "absolute", label: "Absolute" }),
+      Object.freeze({ value: "bottomFill", label: "Bottom fill" }),
     ]),
   }),
   barInk: Object.freeze({

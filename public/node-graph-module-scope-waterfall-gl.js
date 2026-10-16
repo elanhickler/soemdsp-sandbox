@@ -355,10 +355,13 @@ function nodeGraphOnsetGlStrokePolyline(canvas, points, widthPx, rgb) {
   const half = width * 0.5;
   const expand = half + 0.75;
   const core = half / expand;
+  // rgb is 0..255 (nodeGraphWaterfallStrokeRgb / ParseInkRgb), like the bar
+  // path. Clamping it to 0..1 without /255 pushed every non-zero channel to
+  // full, so dark picks drew as bright primaries / white.
   const color = [
-    Math.max(0, Math.min(1, Number(rgb?.[0]) || 0)),
-    Math.max(0, Math.min(1, Number(rgb?.[1]) || 0)),
-    Math.max(0, Math.min(1, Number(rgb?.[2]) || 0)),
+    Math.max(0, Math.min(255, Number(rgb?.[0]) || 0)) / 255,
+    Math.max(0, Math.min(255, Number(rgb?.[1]) || 0)) / 255,
+    Math.max(0, Math.min(255, Number(rgb?.[2]) || 0)) / 255,
     1,
   ];
   const chunks = [];

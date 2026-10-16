@@ -43,22 +43,6 @@ function mountNodeGraphDisplaySettingsBody(popover, formType, node = null) {
       );
     }
   }
-  if (type === "knobFace") {
-    if (typeof bindNodeGraphKnobFaceDisplaySettingsEvents === "function") {
-      bindNodeGraphKnobFaceDisplaySettingsEvents(host);
-    }
-    if (typeof syncNodeGraphKnobFaceDisplaySettingsControls === "function") {
-      syncNodeGraphKnobFaceDisplaySettingsControls(host);
-    }
-  }
-  if (type === "pluginSliderFace") {
-    if (typeof bindNodeGraphSliderFaceDisplaySettingsEvents === "function") {
-      bindNodeGraphSliderFaceDisplaySettingsEvents(host);
-    }
-    if (typeof syncNodeGraphSliderFaceDisplaySettingsControls === "function") {
-      syncNodeGraphSliderFaceDisplaySettingsControls(host);
-    }
-  }
   if (type === "toggleButtonFace" || type === "momentaryButtonFace") {
     if (typeof bindNodeGraphPluginButtonDisplaySettingsBody === "function") {
       bindNodeGraphPluginButtonDisplaySettingsBody(host);
@@ -199,15 +183,6 @@ function mountNodeGraphDisplaySettingsBody(popover, formType, node = null) {
     }
     if (typeof syncNodeGraphImageBurnDisplaySettingsControls === "function") {
       syncNodeGraphImageBurnDisplaySettingsControls(host);
-    }
-  }
-  // Knob: image layers + rotate flags (span/readout are form fields).
-  if (type === "knobFace") {
-    if (typeof bindNodeGraphKnobFaceDisplaySettingsEvents === "function") {
-      bindNodeGraphKnobFaceDisplaySettingsEvents(host);
-    }
-    if (typeof syncNodeGraphKnobFaceDisplaySettingsControls === "function") {
-      syncNodeGraphKnobFaceDisplaySettingsControls(host);
     }
   }
   // XY Pad: action row for clearing the phosphor residual buffer.
@@ -1526,17 +1501,6 @@ function readNodeGraphTraceDisplaySettingsForm() {
   } else if (next.sourceSync === false) {
     next.syncChannel = "off";
   }
-  if (formType === "pluginSliderFace") {
-    const squareOn = Boolean(root?.querySelector?.("#nodeKnobSliderCornerSquareButton")?.classList.contains("active"));
-    const squircleOn = Boolean(root?.querySelector?.("#nodeKnobSliderCornerSquircleButton")?.classList.contains("active"));
-    if (squareOn || squircleOn) {
-      next.sliderCornerShape = squareOn ? "square" : "squircle";
-    }
-    const radius = root?.querySelector?.("#nodeKnobSliderCornerRadiusInput");
-    if (radius) {
-      next.sliderRounding = Number(radius.value);
-    }
-  }
   return normalizeNodeGraphDisplaySettingsForFormType(next, formType);
 }
 
@@ -1834,12 +1798,6 @@ function nodeGraphWriteTraceDisplaySettingsFormInner(settings) {
     document.getElementById("nodeTraceDisplaySettingsPopover"),
   );
   syncNodeGraphHueTitleSteppers(root);
-  if (formType === "knobFace" && typeof syncNodeGraphKnobFaceDisplaySettingsControls === "function") {
-    syncNodeGraphKnobFaceDisplaySettingsControls(root);
-  }
-  if (formType === "pluginSliderFace" && typeof syncNodeGraphSliderFaceDisplaySettingsControls === "function") {
-    syncNodeGraphSliderFaceDisplaySettingsControls(root, normalized);
-  }
   if ((formType === "vectorDot" || formType === "pulseDot" || formType === "lcdDot")
     && typeof syncNodeGraphStampShapeControls === "function") {
     syncNodeGraphStampShapeControls(root, normalized);
@@ -2370,6 +2328,7 @@ function nodeGraphTraceDisplayColorWidgetLabel(field) {
   // Title lives inside the widget (swatch). Never a side "Color" heading.
   const buttonForm = nodeGraphTraceDisplaySettingsFormType();
   if (buttonForm === "toggleButtonFace" || buttonForm === "momentaryButtonFace") {
+    if (field === "backgroundColor") return "Background";
     if (field === "strokeColor") return "Stroke";
     if (field === "activeColor") return "Active";
     if (field === "inactiveColor") return "Inactive";
@@ -2379,9 +2338,9 @@ function nodeGraphTraceDisplayColorWidgetLabel(field) {
   if (nodeGraphTraceDisplaySettingsFormType() === "pluginSliderFace") {
     if (field === "backgroundColor") return "Background";
     if (field === "sliderColor") return "Bar";
-    if (field === "sliderTextColor") return "Label";
+    if (field === "arcTrack") return "Track";
+    if (field === "sliderTextColor") return "Label / unit";
     if (field === "sliderNumberColor") return "Number";
-    if (field === "sliderUnitColor") return "Unit";
   }
   const nodeType = typeof nodeGraphPatchNode === "function"
     ? nodeGraphPatchNode(nodeGraphTraceDisplaySettingsTargetNodeId())?.type

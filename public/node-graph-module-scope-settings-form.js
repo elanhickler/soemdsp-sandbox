@@ -154,26 +154,6 @@ function nodeGraphDisplaySettingsBuildStepperRowHtml(key, formType = null, optio
     label = "Scale";
     title = "Amplitude zoom on the face (1 = full-scale). Does not change the Display Settings preview dot.";
   }
-  if (key === "dialSize" && formType === "knobFace") {
-    label = "Knob size";
-    title = "Knob graphic size 0…1. 1 = fill the entire display; 0 = disappear. Scales only the arc.";
-  }
-  if (key === "dialOffsetY" && formType === "knobFace") {
-    label = "Knob Y offset";
-    title = "Knob graphic vertical offset −1…1 face heights. Positive moves the graphic lower; label and value stay put.";
-  }
-  if (key === "labelSize" && formType === "knobFace") {
-    label = "Label size";
-    title = "Label size 0…1 of the display min-edge. Independent of knob size, position, and value size.";
-  }
-  if (key === "valueSize" && formType === "knobFace") {
-    label = "Value size";
-    title = "Number / unit size 0…1 of the display min-edge. Independent of knob size and position.";
-  }
-  if (key === "valueOffsetY" && formType === "knobFace") {
-    label = "Value Y offset";
-    title = "Value vertical offset −1…1 face heights. Top: positive moves down. Bottom: positive lifts off the edge. Mid / Mid knob: positive moves down from face mid or dial center.";
-  }
   if ((formType === "roundShapeFace" || formType === "basicShapeFace" || formType === "softwaveOscFace") && key === "lineThickness") {
     label = "Line thickness";
     title = formType === "roundShapeFace"
@@ -208,7 +188,7 @@ function nodeGraphDisplaySettingsBuildStepperRowHtml(key, formType = null, optio
   }
   if (key === "innerRadius" && formType === "knobFace") {
     label = "Inner radius";
-    title = "Arc hole size 0…1 (0 = solid, ~0.7 default ring, higher = thinner ring).";
+    title = "Ring hole size 0.3…0.92 of the dial radius (default 0.72; higher = thinner ring).";
   }
   if ((formType === "vectorDot" || formType === "pulseDot" || formType === "lcdDot") && key === "lineThickness") {
     label = "Blur";
@@ -576,6 +556,11 @@ function nodeGraphDisplaySettingsColorRowMeta(key, formType = null, options = {}
     aria = "Knob arc fill (value)";
   } else if (formType === "knobFace" && key === "arcTrack") {
     aria = "Knob arc track (unfilled)";
+  } else if (formType === "knobFace" && key === "textColor") {
+    aria = "Knob label and value text";
+    base = { ...base, defaultValue: "#d8d2c4" };
+  } else if (formType === "pluginSliderFace" && key === "arcTrack") {
+    aria = "Slider track (unfilled)";
   } else if (formType === "keypadFace" && key === "backgroundColor") {
     aria = "Keypad background color";
     base = { ...base, defaultValue: "#f4f3f0" };
@@ -2441,10 +2426,6 @@ function buildNodeGraphDisplaySettingsBodyHtml(formType, node = null) {
         nodeGraphDisplaySettingsBuildColorRowHtml("dot1Color", type),
       ])
     }</div>`);
-  }
-
-  if (type === "knobFace" && typeof buildNodeGraphKnobFaceLayersDisplaySettingsHtml === "function") {
-    parts.push(buildNodeGraphKnobFaceLayersDisplaySettingsHtml());
   }
 
   // Scan Grid: Clear packing row (wipe rolling W×H plate + re-arm ingest).

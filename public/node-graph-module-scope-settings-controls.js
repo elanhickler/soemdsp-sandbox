@@ -829,45 +829,19 @@ const nodeGraphTraceDisplayFormTypeValueClampOverrides = Object.freeze({
   }),
   toggleButtonFace: Object.freeze({
     strokeScale: nodeGraphTraceDisplayClampUnit,
-    buttonPadLeft: nodeGraphTraceDisplayClampUnit,
-    buttonPadRight: nodeGraphTraceDisplayClampUnit,
-    buttonPadTop: nodeGraphTraceDisplayClampUnit,
-    buttonPadBottom: nodeGraphTraceDisplayClampUnit,
-    fontSize: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value), 0, 256),
-    labelPadding: nodeGraphTraceDisplayClampUnit,
-    labelSize: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value), 0, 256),
     rounding: nodeGraphTraceDisplayClampUnit,
   }),
+
   momentaryButtonFace: Object.freeze({
     strokeScale: nodeGraphTraceDisplayClampUnit,
-    buttonPadLeft: nodeGraphTraceDisplayClampUnit,
-    buttonPadRight: nodeGraphTraceDisplayClampUnit,
-    buttonPadTop: nodeGraphTraceDisplayClampUnit,
-    buttonPadBottom: nodeGraphTraceDisplayClampUnit,
-    fontSize: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value), 0, 256),
-    labelPadding: nodeGraphTraceDisplayClampUnit,
-    labelSize: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value), 0, 256),
     rounding: nodeGraphTraceDisplayClampUnit,
   }),
+
   pluginSliderFace: Object.freeze({
-    sliderLength: nodeGraphTraceDisplayClampUnit,
-    sliderHeight: nodeGraphTraceDisplayClampUnit,
-    sliderPadding: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value), 0, 0.5),
-    sliderLabelPadding: nodeGraphTraceDisplayClampUnit,
-    sliderLabelScale: nodeGraphTraceDisplayClampUnit,
-    sliderNumberPadding: nodeGraphTraceDisplayClampUnit,
-    sliderNumberScale: nodeGraphTraceDisplayClampUnit,
-    sliderUnitPadding: nodeGraphTraceDisplayClampUnit,
-    sliderUnitScale: nodeGraphTraceDisplayClampUnit,
     sliderRounding: nodeGraphTraceDisplayClampUnit,
   }),
   knobFace: Object.freeze({
-    dialSize: nodeGraphTraceDisplayClampUnit,
-    dialOffsetY: nodeGraphTraceDisplayClampBipolarUnit,
-    labelSize: nodeGraphTraceDisplayClampUnit,
-    valueSize: nodeGraphTraceDisplayClampUnit,
-    valueOffsetY: nodeGraphTraceDisplayClampBipolarUnit,
-    innerRadius: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value), 0, 0.95),
+    innerRadius: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value), 0.3, 0.92),
   }),
   ensembleCloud: Object.freeze({
     cloudSpeed: (value) => {

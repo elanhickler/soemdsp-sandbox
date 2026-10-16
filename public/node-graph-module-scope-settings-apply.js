@@ -178,17 +178,8 @@ function assignNodeGraphTypedDisplaySettingsToNode(node, displayType, settings) 
   if (displayType === "knobFace") {
     const normalized = normalizeNodeGraphKnobFaceDisplaySettings(settings);
     node.traceDisplaySettings = normalized;
-    // Mirror span/readout/label into the face blob (image layers live there).
-    if (typeof normalizeNodeGraphKnobFace === "function") {
-      const face = normalizeNodeGraphKnobFace(node.knobFace);
-      const nextFace = {
-        ...face,
-        rotationDegrees: normalized.rotationDegrees,
-      };
-      node.knobFace = typeof nodeGraphKnobFaceToPatch === "function"
-        ? nodeGraphKnobFaceToPatch(nextFace)
-        : nextFace;
-    }
+    // Image-layer blob is gone (native GL knob); drop it from older patches.
+    delete node.knobFace;
     // Live repaint so Span / Inner radius apply immediately.
     if (typeof paintNodeGraphKnobFaceLive === "function" && node?.id) {
       const els = document.querySelectorAll?.(`.node-knob-face[data-node="${CSS.escape(String(node.id))}"]`);

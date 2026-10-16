@@ -345,7 +345,13 @@ function nodeGraphWaterfallPolarity(settings) {
   const raw = String(settings?.polarity || "").trim().toLowerCase();
   if (raw === "unipolar" || raw === "uni" || raw === "unsigned") return "unipolar";
   if (raw === "absolute" || raw === "abs") return "absolute";
+  if (raw === "bottomfill" || raw === "bottom") return "bottomFill";
   return "bipolar";
+}
+
+/** Bottom fill: bipolar -1..1 map, bars fill from the bottom edge to the peak. */
+function nodeGraphWaterfallIsBottomFill(settings) {
+  return nodeGraphWaterfallPolarity(settings) === "bottomFill";
 }
 
 function nodeGraphWaterfallIsUnipolar(settings) {
@@ -388,6 +394,10 @@ function nodeGraphWaterfallY(raw, gain, offset, midY, halfHeight, amp = null, se
     const u = Math.max(0, Math.min(1, bipolar));
     const h = Math.max(1, midY * 2);
     return h - u * h;
+  }
+  if (polarity === "bottomFill") {
+    const h = Math.max(1, midY * 2);
+    return Math.max(0, Math.min(h, midY - bipolar * halfHeight));
   }
   return midY - bipolar * halfHeight;
 }
@@ -873,7 +883,7 @@ function nodeGraphWaterfallAccToYs(acc, buffer, slot, settings, height) {
   const amp = nodeGraphWaterfallAmp(live, slot);
   const midY = height * 0.5;
   const halfHeight = nodeGraphWaterfallHalfHeight(height, slot, settings, amp);
-  const yMin = nodeGraphWaterfallY(acc.min, amp.gain, amp.offset, midY, halfHeight, amp, settings);
+  const yMin = nodeGraphWaterfallIsBottomFill(settings) ? height : nodeGraphWaterfallY(acc.min, amp.gain, amp.offset, midY, halfHeight, amp, settings);
   const yMax = nodeGraphWaterfallY(acc.max, amp.gain, amp.offset, midY, halfHeight, amp, settings);
   if (!Number.isFinite(yMin) || !Number.isFinite(yMax)) {
     return null;
@@ -1020,14 +1030,17 @@ function nodeGraphWaterfallColumnBars(buffer, slot, columns, height, settings, s
     // Exact rest (and Planck-silent) used to map to mid-face, then the <1px
     // pad fillRect'd a 1px hairline. Skip the column. RMS dB stays on its
     // scale: only this linear silence is dropped, not a negative dB reading.
-    if (nodeGraphWaterfallExtentIsSilent(minV, maxV)) {
+    const bottomFill = nodeGraphWaterfallIsBottomFill(settings);
+    if (!bottomFill && nodeGraphWaterfallExtentIsSilent(minV, maxV)) {
       continue;
     }
     // Shared excursion: one-sided -> rest (0); both sides stay raw min..max.
-    const excursion = nodeGraphWaterfallExcursionBar(minV, maxV, amp);
+    // Bottom fill keeps the raw max (no expansion to rest).
+    const excursion = bottomFill ? { min: minV, max: maxV } : nodeGraphWaterfallExcursionBar(minV, maxV, amp);
     minV = excursion.min;
     maxV = excursion.max;
-    const yMin = nodeGraphWaterfallY(minV, amp.gain, amp.offset, midY, halfHeight, amp, settings);
+    // Bottom fill: from the bottom edge up to the column max.
+    const yMin = bottomFill ? height : nodeGraphWaterfallY(minV, amp.gain, amp.offset, midY, halfHeight, amp, settings);
     const yMax = nodeGraphWaterfallY(maxV, amp.gain, amp.offset, midY, halfHeight, amp, settings);
     if (!Number.isFinite(yMin) || !Number.isFinite(yMax)) {
       continue;
@@ -2111,7 +2124,8 @@ function nodeGraphWaterfallLayoutColumns(spec, canvas, settings) {
 
 /** Peak-to-peak Y for one open column accumulator. Silent columns draw nothing. */
 function nodeGraphWaterfallAccBarYs(acc, buffer, slot, settings, height) {
-  if (!acc?.has || nodeGraphWaterfallExtentIsSilent(acc.min, acc.max)) {
+  const bottomFill = nodeGraphWaterfallIsBottomFill(settings);
+  if (!acc?.has || (!bottomFill && nodeGraphWaterfallExtentIsSilent(acc.min, acc.max))) {
     return null;
   }
   const live = nodeGraphWaterfallPrepare(buffer, settings) || buffer;
@@ -2119,8 +2133,9 @@ function nodeGraphWaterfallAccBarYs(acc, buffer, slot, settings, height) {
   const excursion = nodeGraphWaterfallExcursionBar(acc.min, acc.max, amp);
   const midY = height * 0.5;
   const halfHeight = nodeGraphWaterfallHalfHeight(height, slot, settings, amp);
-  const yMin = nodeGraphWaterfallY(excursion.min, amp.gain, amp.offset, midY, halfHeight, amp, settings);
-  const yMax = nodeGraphWaterfallY(excursion.max, amp.gain, amp.offset, midY, halfHeight, amp, settings);
+  // Bottom fill: from the bottom edge up to the column max (stroke stays min..max).
+  const yMin = bottomFill ? height : nodeGraphWaterfallY(excursion.min, amp.gain, amp.offset, midY, halfHeight, amp, settings);
+  const yMax = nodeGraphWaterfallY(bottomFill ? acc.max : excursion.max, amp.gain, amp.offset, midY, halfHeight, amp, settings);
   if (!Number.isFinite(yMin) || !Number.isFinite(yMax)) {
     return null;
   }
