@@ -349,41 +349,32 @@ function drawNodeGraphEnvelopeCurveDisplayInner(section) {
   if (!metrics) {
     return;
   }
-  const { context, cssHeight: height, cssWidth: width, pixelRatio } = metrics;
-  context.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
+  const { cssHeight: height, cssWidth: width, pixelRatio } = metrics;
   section._envelopeCurveSignature = signature;
   section._envelopeCurveCssW = width;
   section._envelopeCurveCssH = height;
   section._envelopeCurveForceDraw = false;
 
-  context.clearRect(0, 0, width, height);
-  context.fillStyle = "rgba(2, 6, 9, 0.88)";
-  context.fillRect(0, 0, width, height);
+  // Native GL face on the shared device; translucent plate, CSS-px coords.
+  const batch = typeof nodeGraphGlLinesBegin === "function"
+    ? nodeGraphGlLinesBegin(canvas, [2 / 255, 6 / 255, 9 / 255, 0.88], { scale: pixelRatio, transparent: true })
+    : null;
+  if (!batch) {
+    nodeGraphDisplayGlFailed(canvas, "envelope curve: no shared GL device");
+    return;
+  }
+  const fine = 1 / Math.max(1, pixelRatio);
 
   if (built.guideT > 0 && built.guideT < 1) {
     const gx = built.guideT * width;
-    context.strokeStyle = "rgba(226, 168, 109, 0.45)";
-    context.lineWidth = 1;
-    context.beginPath();
-    context.moveTo(gx, 0);
-    context.lineTo(gx, height);
-    context.stroke();
+    nodeGraphGlLinesSegment(batch, gx, 0, gx, height, 0.5, fine, [226 / 255, 168 / 255, 109 / 255, 0.45]);
   }
 
   const pts = built.points || [];
   const ampView = built.ampView ?? 1;
   if (pts.length > 1) {
-    context.beginPath();
-    for (let i = 0; i < pts.length; i += 1) {
-      const x = pts[i].t * width;
-      const y = (1 - pts[i].y * ampView) * height;
-      if (i === 0) context.moveTo(x, y);
-      else context.lineTo(x, y);
-    }
-    context.strokeStyle = "rgba(61, 224, 255, 0.95)";
-    context.lineWidth = 1.5;
-    context.lineJoin = "round";
-    context.stroke();
+    const line = pts.flatMap((p) => [p.t * width, (1 - p.y * ampView) * height]);
+    nodeGraphGlLinesPolyline(batch, line, 0.75, fine, [61 / 255, 224 / 255, 1, 0.95]);
   }
 
   const joinT = Number(built.guideT);
@@ -455,16 +446,16 @@ function drawNodeGraphEnvelopeCurveDisplayInner(section) {
     }
     const dx = dot.t * width;
     const dy = (1 - dot.y * ampView) * height;
-    context.fillStyle = "#ffffff";
-    context.beginPath();
-    context.arc(dx, dy, 3.5, 0, Math.PI * 2);
-    context.fill();
+    nodeGraphGlLinesDot(batch, dx, dy, 3.5 - fine * 0.5, fine, [1, 1, 1, 1]);
   }
 
-  context.fillStyle = "rgba(180, 210, 220, 0.55)";
-  context.font = "10px ui-sans-serif, system-ui, sans-serif";
-  context.textAlign = "left";
-  context.fillText(built.leftLabel || "A", 4, 12);
-  context.textAlign = "right";
-  context.fillText(built.rightLabel || "D", width - 4, 12);
+  const labelStyle = {
+    px: 10, rgba: [180 / 255, 210 / 255, 220 / 255, 0.55], baseline: "alphabetic",
+    family: "ui-sans-serif, system-ui, sans-serif",
+  };
+  nodeGraphGlLinesText(batch, built.leftLabel || "A", 4, 12, { ...labelStyle, align: "left" });
+  nodeGraphGlLinesText(batch, built.rightLabel || "D", width - 4, 12, { ...labelStyle, align: "right" });
+  if (!nodeGraphGlLinesEnd(batch, "alpha")) {
+    nodeGraphDisplayGlFailed(canvas, "envelope curve: GL present failed");
+  }
 }

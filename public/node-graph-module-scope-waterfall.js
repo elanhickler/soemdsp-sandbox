@@ -228,10 +228,8 @@ function nodeGraphOnsetPaint(spec, live) {
           : null,
         prevEdge: !seam && onset.edge ? onset.edge[ch.lastYKey] : null,
         strokeColor: ch.strokeColor,
-        rgb: nodeGraphWaterfallScaleRgb(
-          nodeGraphWaterfallParseInkRgb(ch.color),
-          nodeGraphWaterfallClamp01(ch.bright ?? 1, 1),
-        ),
+        // Brightness = ink alpha (4th entry), like the bar path.
+        rgb: [...nodeGraphWaterfallParseInkRgb(ch.color), nodeGraphWaterfallClamp01(ch.bright ?? 1, 1)],
       });
     }
     nodeGraphWaterfallStampColumnFills(canvas, screenX, columnSpans, blendMode, stampComposite, useFill);
@@ -617,8 +615,13 @@ function nodeGraphWaterfallStampColumnFills(canvas, x, spans, mode, stampComposi
     }
     return;
   }
-  const left = spans[0];
-  const right = spans[1];
+  // Meet is additive, where alpha and a scaled colour are the same thing:
+  // premultiply Brightness into the colours the Meet shader mixes.
+  const premul = (span) => (span && Array.isArray(span.rgb) && span.rgb.length > 3
+    ? { ...span, rgb: nodeGraphWaterfallScaleRgb(span.rgb.slice(0, 3), span.rgb[3]) }
+    : span);
+  const left = premul(spans[0]);
+  const right = premul(spans[1]);
   // Both channels: one GPU draw, the meet colour picked per pixel by the
   // shared Meet GLSL (trace-meet-glsl.js). The stamps below stay as the
   // path when that shader is missing.
@@ -1110,16 +1113,6 @@ function nodeGraphWaterfallParseInkRgb(color) {
   return nodeGraphWaterfallLutRgb(color);
 }
 
-function nodeGraphWaterfallClampPoint(x, y, radius, width, height) {
-  const r = Math.max(0.5, nodeGraphFiniteNumber(radius, 0.5));
-  const w = Math.max(1, nodeGraphFiniteNumber(width, 1));
-  const h = Math.max(1, nodeGraphFiniteNumber(height, 1));
-  return {
-    x: Math.max(r, Math.min(w - r, nodeGraphFiniteNumber(x))),
-    y: Math.max(r, Math.min(h - r, nodeGraphFiniteNumber(y))),
-  };
-}
-
 function nodeGraphWaterfallClamp01(n, fallback = 0) {
   const v = Number(n);
   if (!Number.isFinite(v)) return fallback;
@@ -1160,75 +1153,20 @@ function nodeGraphWaterfallBlurAlpha(dist, radius, blur01) {
   return 1 - s;
 }
 
-/** Tiny preview-sprite cache — color drag used to rebuild ImageData every move. */
-const nodeGraphWaterfallPreviewDabCache = new Map();
-const NODE_GRAPH_WATERFALL_PREVIEW_DAB_MAX = 32;
-
-function nodeGraphWaterfallPreviewDabSprite(radius, blur01, rgb) {
-  const rQ = Math.round(Math.max(0.5, nodeGraphFiniteNumber(radius, 0.5)) * 4) / 4;
-  const bQ = Math.round(nodeGraphWaterfallClamp01(blur01, 0) * 64) / 64;
-  const key = rQ + ":" + bQ + ":" + rgb[0] + "," + rgb[1] + "," + rgb[2];
-  let entry = nodeGraphWaterfallPreviewDabCache.get(key);
-  if (entry) {
-    nodeGraphWaterfallPreviewDabCache.delete(key);
-    nodeGraphWaterfallPreviewDabCache.set(key, entry);
-    return entry;
-  }
-  const rad = Math.ceil(rQ);
-  const size = rad * 2 + 1;
-  const canvas = document.createElement("canvas");
-  canvas.width = size;
-  canvas.height = size;
-  const c = canvas.getContext("2d");
-  if (!c) return null;
-  const img = c.createImageData(size, size);
-  const data = img.data;
-  for (let py = 0; py < size; py += 1) {
-    for (let px = 0; px < size; px += 1) {
-      const a = nodeGraphWaterfallBlurAlpha(Math.hypot(px - rad, py - rad), rQ, bQ);
-      if (a <= 0.001) continue;
-      const o = (py * size + px) * 4;
-      data[o] = rgb[0];
-      data[o + 1] = rgb[1];
-      data[o + 2] = rgb[2];
-      data[o + 3] = Math.round(a * 255);
-    }
-  }
-  c.putImageData(img, 0, 0);
-  entry = { canvas, rad };
-  nodeGraphWaterfallPreviewDabCache.set(key, entry);
-  while (nodeGraphWaterfallPreviewDabCache.size > NODE_GRAPH_WATERFALL_PREVIEW_DAB_MAX) {
-    const oldest = nodeGraphWaterfallPreviewDabCache.keys().next().value;
-    nodeGraphWaterfallPreviewDabCache.delete(oldest);
-  }
-  return entry;
-}
-
-/** Preview dab — Size-normalized radial smoothstep (matches TraceTape). */
-function nodeGraphWaterfallDab(ctx, x, y, radius, rgb, composite, blur01 = 0, alpha01 = 1) {
-  if (!ctx) return;
+/**
+ * Preview dab on a GL line batch: size-normalized radial smoothstep (matches
+ * nodeGraphWaterfallBlurAlpha / TraceTape). Hard when blur < 0.02.
+ */
+function nodeGraphWaterfallDab(batch, x, y, radius, rgb, blur01 = 0, alpha01 = 1) {
+  if (!batch || typeof nodeGraphGlLinesDot !== "function") return;
   const r = Math.max(0.5, nodeGraphFiniteNumber(radius, 0.5));
   const blur = nodeGraphWaterfallClamp01(blur01, 0);
   const aMul = nodeGraphWaterfallClamp01(alpha01, 1);
   if (aMul <= 0.001) return;
-  const c = nodeGraphWaterfallClampPoint(x, y, r, ctx.canvas.width, ctx.canvas.height);
-  ctx.save();
-  ctx.globalCompositeOperation = composite || "source-over";
-  ctx.globalAlpha = aMul;
-  if (blur < 0.02) {
-    ctx.imageSmoothingEnabled = false;
-    ctx.fillStyle = "rgb(" + rgb[0] + "," + rgb[1] + "," + rgb[2] + ")";
-    ctx.beginPath();
-    ctx.arc(c.x, c.y, r, 0, Math.PI * 2);
-    ctx.fill();
-  } else {
-    const sprite = nodeGraphWaterfallPreviewDabSprite(r, blur, rgb);
-    if (sprite) {
-      ctx.imageSmoothingEnabled = true;
-      ctx.drawImage(sprite.canvas, c.x - sprite.rad, c.y - sprite.rad);
-    }
-  }
-  ctx.restore();
+  const knee = blur < 0.02 ? 1 : (1 - blur) * (1 - blur) * 0.92;
+  const half = Math.max(0, r * knee - (blur < 0.02 ? 0.5 : 0));
+  const feather = Math.max(blur < 0.02 ? 1 : 1e-3, r - half);
+  nodeGraphGlLinesDot(batch, x, y, half, feather, [rgb[0] / 255, rgb[1] / 255, rgb[2] / 255, aMul]);
 }
 
 function nodeGraphWaterfallShiftPath(points, x0) {
@@ -1419,110 +1357,40 @@ function nodeGraphWaterfallColor01(color) {
  * right are filled with the *current* background so bg color changes travel
  * left with the ink (old canvas drawImage hold path).
  */
+/** History plate: the GPU ping-pong session (resize keeps history). No 2D hold. */
 function nodeGraphWaterfallEnsureHold(canvas, width, height, bg) {
-  if (!canvas) {
+  if (!canvas) return null;
+  const s = typeof nodeGraphWaterfallGlEnsure === "function"
+    ? nodeGraphWaterfallGlEnsure(canvas, bg || "#000000")
+    : null;
+  if (!s) {
+    nodeGraphDisplayGlFailed(canvas, "Waterfall GL unavailable");
     return null;
   }
-  let hold = canvas._waterfallHold;
-  if (!hold) {
-    hold = document.createElement("canvas");
-    canvas._waterfallHold = hold;
-  }
-  const w = Math.max(1, Math.floor(nodeGraphFiniteNumber(width, 1)));
-  const h = Math.max(1, Math.floor(nodeGraphFiniteNumber(height, 1)));
-  if (hold.width === w && hold.height === h) {
-    return hold;
-  }
-  const prevW = hold.width;
-  const prevH = hold.height;
-  let prev = null;
-  if (prevW > 0 && prevH > 0) {
-    prev = document.createElement("canvas");
-    prev.width = prevW;
-    prev.height = prevH;
-    prev.getContext("2d").drawImage(hold, 0, 0);
-  }
-  hold.width = w;
-  hold.height = h;
-  const ctx = hold.getContext("2d");
-  ctx.setTransform(1, 0, 0, 1, 0, 0);
-  if (prev) {
-    ctx.imageSmoothingEnabled = true;
-    ctx.drawImage(prev, 0, 0, w, h);
-  } else {
-    ctx.fillStyle = bg || "#000000";
-    ctx.fillRect(0, 0, w, h);
-  }
-  return hold;
+  return s;
 }
 
 function nodeGraphWaterfallResetHold(canvas, bg) {
   if (typeof nodeGraphWaterfallGlReset === "function") {
     nodeGraphWaterfallGlReset(canvas, bg);
   }
-  const hold = canvas?._waterfallHold;
-  if (!hold || hold.width <= 0 || hold.height <= 0) {
-    return;
-  }
-  const ctx = hold.getContext("2d");
-  ctx.setTransform(1, 0, 0, 1, 0, 0);
-  ctx.globalCompositeOperation = "source-over";
-  ctx.fillStyle = bg || "#000000";
-  ctx.fillRect(0, 0, hold.width, hold.height);
 }
 
-function nodeGraphWaterfallScrollHold(hold, scrollPx, bg) {
-  // Fractional pixels: low detail must not wait for a whole fat column.
+function nodeGraphWaterfallScrollHold(canvas, scrollPx, bg) {
   const n = Math.max(0, nodeGraphFiniteNumber(scrollPx));
-  if (!hold || !(n > 1e-4) || hold.width <= 0 || hold.height <= 0) {
-    return;
-  }
-  const w = hold.width;
-  const h = hold.height;
-  let scratch = hold._wfScrollScratch;
-  if (!scratch) {
-    scratch = document.createElement("canvas");
-    hold._wfScrollScratch = scratch;
-  }
-  if (scratch.width !== w || scratch.height !== h) {
-    scratch.width = w;
-    scratch.height = h;
-  }
-  const sctx = scratch.getContext("2d");
-  sctx.setTransform(1, 0, 0, 1, 0, 0);
-  sctx.globalCompositeOperation = "copy";
-  sctx.imageSmoothingEnabled = false;
-  sctx.drawImage(hold, -n, 0);
-  const ctx = hold.getContext("2d");
-  ctx.setTransform(1, 0, 0, 1, 0, 0);
-  ctx.globalCompositeOperation = "copy";
-  ctx.imageSmoothingEnabled = false;
-  ctx.drawImage(scratch, 0, 0);
-  ctx.globalCompositeOperation = "source-over";
-  ctx.fillStyle = bg || "#000000";
-  ctx.fillRect(Math.max(0, w - n), 0, n + 1, h);
+  if (!canvas || !(n > 1e-4)) return;
+  nodeGraphWaterfallGlScroll(canvas, n, bg || "#000000");
 }
 
 /** Blit scrolled hold (bg + baked filled bars) to the face. */
+/** Present the GPU history plate on the face. GL only. */
 function nodeGraphWaterfallPresentHold(destCtx, destCanvas, bg) {
+  if (!destCanvas) return;
   if (typeof nodeGraphWaterfallGlPresent === "function"
     && nodeGraphWaterfallGlPresent(destCanvas, bg)) {
     return;
   }
-  if (!destCtx || !destCanvas) return;
-  const w = destCanvas.width;
-  const h = destCanvas.height;
-  const hold = nodeGraphWaterfallEnsureHold(destCanvas, w, h, bg || "#000000");
-  if (!hold) {
-    return;
-  }
-  destCtx.save();
-  destCtx.setTransform(1, 0, 0, 1, 0, 0);
-  destCtx.globalCompositeOperation = "source-over";
-  destCtx.globalAlpha = 1;
-  destCtx.imageSmoothingEnabled = false;
-  destCtx.drawImage(hold, 0, 0);
-  destCtx.restore();
+  nodeGraphDisplayGlFailed(destCanvas, "Waterfall GL present failed");
 }
 
 /** Fill-style for a channel bar (honors brightness). */
@@ -1620,135 +1488,76 @@ function nodeGraphWaterfallStrokeRgb(settings, channelColor = null) {
   return nodeGraphWaterfallParseInkRgb(channelColor || settings?.strokeColor || "#ffffff");
 }
 
-function nodeGraphWaterfallStampConnectedRun(ctx, bars, i0, i1, ox, pitch, prevEdge) {
+/**
+ * Detail 1 run: each column is a GPU trapezoid from the previous column's
+ * edge to its own (continuous fill). Outline ink strokes each column instead.
+ */
+function nodeGraphWaterfallStampConnectedRun(canvas, bars, i0, i1, ox, pitch, prevEdge, rgb, composite) {
   const first = bars[i0];
   if (!first) return;
-  const usePrev = !!(prevEdge
+  const outline = !!(prevEdge && prevEdge.outline);
+  let edge = (prevEdge
     && first.x === 0
     && Number.isFinite(prevEdge.y0)
-    && Number.isFinite(prevEdge.y1));
-  const tops = [];
-  const bots = [];
-  const xs = [];
-  const firstSpan = nodeGraphWaterfallBarDeviceSpan(ox, first.x, pitch);
-  xs.push(firstSpan.x);
-  if (usePrev) {
-    tops.push(Math.min(prevEdge.y0, prevEdge.y1));
-    bots.push(Math.max(prevEdge.y0, prevEdge.y1));
-  } else {
-    tops.push(Math.min(first.y0, first.y1));
-    bots.push(Math.max(first.y0, first.y1));
-  }
+    && Number.isFinite(prevEdge.y1)) ? { y0: prevEdge.y0, y1: prevEdge.y1 } : null;
   for (let k = i0; k < i1; k += 1) {
     const b = bars[k];
     if (!b || !Number.isFinite(b.y0) || !Number.isFinite(b.y1)) continue;
     const span = nodeGraphWaterfallBarDeviceSpan(ox, b.x, pitch);
-    xs.push(span.x + span.fillW);
-    tops.push(Math.min(b.y0, b.y1));
-    bots.push(Math.max(b.y0, b.y1));
-  }
-  if (xs.length < 2) return;
-  if (prevEdge && prevEdge.outline) {
-    ctx.beginPath();
-    ctx.moveTo(xs[0], tops[0]);
-    for (let s = 1; s < xs.length; s += 1) ctx.lineTo(xs[s], tops[s]);
-    ctx.moveTo(xs[0], bots[0]);
-    for (let s = 1; s < xs.length; s += 1) ctx.lineTo(xs[s], bots[s]);
-    ctx.moveTo(xs[0], tops[0]);
-    ctx.lineTo(xs[0], bots[0]);
-    const last = xs.length - 1;
-    ctx.moveTo(xs[last], tops[last]);
-    ctx.lineTo(xs[last], bots[last]);
-    ctx.stroke();
-    return;
-  }
-  for (let s = 0; s < xs.length - 1; s += 1) {
-    const xL = xs[s];
-    const xR = xs[s + 1];
-    const w = xR - xL;
-    if (!(w > 0)) continue;
-    const yT0 = tops[s];
-    const yT1 = tops[s + 1];
-    const yB0 = bots[s];
-    const yB1 = bots[s + 1];
-    for (let x = xL; x < xR; x += 1) {
-      const f = (x + 0.5 - xL) / w;
-      const yT = yT0 + (yT1 - yT0) * f;
-      const yB = yB0 + (yB1 - yB0) * f;
-      const top = Math.min(yT, yB);
-      const h = Math.max(1, Math.abs(yB - yT));
-      ctx.fillRect(x, top, 1, h);
-    }
+    const ys = { y0: b.y0, y1: b.y1 };
+    nodeGraphWaterfallGlStampBar(
+      canvas, span.x, span.fillW, ys, edge || ys, true, rgb, composite, 1,
+      !outline, outline ? { on: true, px: 1, rgb } : null,
+    );
+    edge = ys;
   }
 }
 
-function nodeGraphWaterfallStampFilledBars(holdCtx, bars, x0, color, bright01, composite, barPx = 1, thickness01 = 1, edgeOpts = null, filled = true) {
-  if (!holdCtx || !Array.isArray(bars) || !bars.length) {
+/** Stamp peak-to-peak columns as batched GPU quads on the history plate. */
+function nodeGraphWaterfallStampFilledBars(canvas, bars, x0, color, bright01, composite, barPx = 1, thickness01 = 1, edgeOpts = null, filled = true) {
+  if (!canvas || !Array.isArray(bars) || !bars.length) {
     return;
   }
   const ox = nodeGraphFiniteNumber(x0);
   const pitch = Math.max(1e-6, nodeGraphFiniteNumber(barPx, 1));
-  const fill = nodeGraphWaterfallBarFillStyle(color, bright01);
+  // Brightness is ink alpha (the old rgba() fill), not a darker colour.
+  const rgb = [...nodeGraphWaterfallParseInkRgb(color), nodeGraphWaterfallClamp01(bright01, 1)];
   const thickN = Number(thickness01);
   const thick = Number.isFinite(thickN) ? Math.max(0, Math.min(1, thickN)) : 1;
   const connect = !!(edgeOpts && edgeOpts.connect) && thick >= 0.999;
   const prevEdge = connect ? edgeOpts.prevEdge : null;
-  holdCtx.save();
-  holdCtx.setTransform(1, 0, 0, 1, 0, 0);
-  holdCtx.imageSmoothingEnabled = false;
-  holdCtx.globalCompositeOperation = composite || "source-over";
-  holdCtx.shadowBlur = 0;
-  holdCtx.globalAlpha = 1;
-  holdCtx.fillStyle = fill;
-  holdCtx.strokeStyle = fill;
-  holdCtx.lineWidth = 1;
   const outline = filled === false;
+  // GPU blends: source-over, lighter/meet, screen, multiply via blend equations;
+  // difference / exclusion / xor read the history copy in the bar shader.
+  const blend = composite || "source-over";
   if (!connect) {
     for (let i = 0; i < bars.length; i += 1) {
       const b = bars[i];
       if (!b) continue;
       const y0 = nodeGraphFiniteNumber(b.y0);
       const y1 = nodeGraphFiniteNumber(b.y1);
-      if (!Number.isFinite(y0) || !Number.isFinite(y1)) {
-        continue;
-      }
+      if (!Number.isFinite(y0) || !Number.isFinite(y1)) continue;
       const span = nodeGraphWaterfallBarDeviceSpan(ox, b.x, pitch);
-      const ink = nodeGraphWaterfallBarInkRect(span, thickness01);
-      if (!ink) {
-        continue;
-      }
-      const top = Math.min(y0, y1);
-      const h = Math.max(1, Math.abs(y1 - y0));
-      if (!outline) {
-        holdCtx.fillRect(ink.x, top, ink.w, h);
-      } else if (ink.w <= 2 || h <= 2) {
-        holdCtx.fillRect(ink.x, top, ink.w, 1);
-        if (h > 1) holdCtx.fillRect(ink.x, top + h - 1, ink.w, 1);
-      } else {
-        holdCtx.strokeRect(ink.x + 0.5, top + 0.5, Math.max(0, ink.w - 1), Math.max(0, h - 1));
-      }
-    }
-  } else {
-    let i = 0;
-    while (i < bars.length) {
-      let j = i + 1;
-      while (
-        j < bars.length
-        && bars[j]
-        && bars[j - 1]
-        && bars[j].x === bars[j - 1].x + 1
-      ) {
-        j += 1;
-      }
-      nodeGraphWaterfallStampConnectedRun(
-        holdCtx, bars, i, j, ox, pitch,
-        outline ? { ...(prevEdge || {}), outline: true } : prevEdge,
+      nodeGraphWaterfallGlStampBar(
+        canvas, span.x, span.fillW, { y0, y1 }, null, false, rgb, blend, thick,
+        !outline, outline ? { on: true, px: 1, rgb } : null,
       );
-      i = j;
     }
+    return;
   }
-  holdCtx.shadowBlur = 0;
-  holdCtx.restore();
+  let i = 0;
+  while (i < bars.length) {
+    let j = i + 1;
+    while (j < bars.length && bars[j] && bars[j - 1] && bars[j].x === bars[j - 1].x + 1) {
+      j += 1;
+    }
+    nodeGraphWaterfallStampConnectedRun(
+      canvas, bars, i, j, ox, pitch,
+      outline ? { ...(prevEdge || {}), outline: true } : prevEdge,
+      rgb, blend,
+    );
+    i = j;
+  }
 }
 
 /**
@@ -1783,22 +1592,15 @@ function nodeGraphWaterfallInk(destCtx, destCanvas, spec, x0, columns, bg, sampl
   if (!channels.length) return n;
 
   const plateBg = mode === "multiply" ? "#ffffff" : (bg || "#000000");
-  const hold = nodeGraphWaterfallEnsureHold(destCanvas, width, height, plateBg);
-  if (!hold) {
-    nodeGraphWaterfallFillPlate(destCtx, destCanvas, bg);
-    return n;
-  }
-  const holdCtx = hold.getContext("2d");
-  if (!holdCtx) {
-    nodeGraphWaterfallFillPlate(destCtx, destCanvas, bg);
+  if (!nodeGraphWaterfallEnsureHold(destCanvas, width, height, plateBg)) {
     return n;
   }
 
-  // Scroll existing pixels left; reveal right edge with current bg (no full redraw).
+  // Scroll the GPU history left; the shader reveals the right edge in the plate colour.
   if (options?.resetHold) {
     nodeGraphWaterfallResetHold(destCanvas, plateBg);
   } else if (scrollPx > 0) {
-    nodeGraphWaterfallScrollHold(hold, scrollPx, plateBg);
+    nodeGraphWaterfallScrollHold(destCanvas, scrollPx, plateBg);
   }
 
   if (options?.resetHold && destCanvas._waterfall) {
@@ -1862,7 +1664,7 @@ function nodeGraphWaterfallInk(destCtx, destCanvas, spec, x0, columns, bg, sampl
       ? edgeMap[ch.lastYKey]
       : null;
     nodeGraphWaterfallStampFilledBars(
-      holdCtx, bars, x, ch.color, ch.bright ?? 1, layerComposite, barPx,
+      destCanvas, bars, x, ch.color, ch.bright ?? 1, layerComposite, barPx,
       barThick,
       connectEdge ? { connect: true, prevEdge } : null,
       nodeGraphWaterfallBarsFilled(settings),
@@ -1992,60 +1794,40 @@ function nodeGraphWaterfallFaceBlur(settings) {
 }
 
 function nodeGraphWaterfallFinishOutputInk(spec, context, canvas, scrollPx) {
+  void context;
   const face = spec?.canvas || canvas;
-  const overlay = typeof nodeGraphWaterfallInkOverlay === "function"
-    ? nodeGraphWaterfallInkOverlay(face)
-    : null;
-  const inkCtx = overlay && overlay.getContext("2d");
-  if (inkCtx) {
-    inkCtx.setTransform(1, 0, 0, 1, 0, 0);
-    inkCtx.clearRect(0, 0, overlay.width, overlay.height);
-  }
-  const destCtx = inkCtx || context;
-  const dest = overlay || canvas;
-  if (typeof paintNodeGraphOutputInkFrame === "function" && destCtx && dest) {
-    const px = Math.round(nodeGraphFiniteNumber(scrollPx));
-    paintNodeGraphOutputInkFrame(
-      destCtx, dest, spec?.slot, spec?.settings, spec?.density,
-      { scrollPx: px, scrolled: px > 0 },
-    );
-    if (dest._outputInkBake && overlay && typeof nodeGraphWaterfallGlStampCanvas === "function") {
-      nodeGraphWaterfallGlStampCanvas(face, overlay);
-      if (typeof nodeGraphWaterfallGlPresent === "function") {
-        nodeGraphWaterfallGlPresent(face, spec?.bg || "#000000");
-      }
-    }
+  if (typeof paintNodeGraphFaceInkOverlay !== "function") {
     return;
   }
-  if (typeof paintNodeGraphOutputProtectBannerIfNeeded === "function") {
-    paintNodeGraphOutputProtectBannerIfNeeded(context, canvas, spec?.slot, spec?.settings, spec?.density);
+  const def = typeof nodeGraphModuleDefinitions === "object"
+    ? nodeGraphModuleDefinitions[spec?.slot?.type]
+    : null;
+  const px = Math.round(nodeGraphFiniteNumber(scrollPx));
+  // Output pause/protect marks + RMS guides: one GL batch on the ink overlay.
+  const overlay = paintNodeGraphFaceInkOverlay(face, spec?.slot, spec?.settings, spec?.density, {
+    scrollPx: px,
+    rmsDbGuides: Boolean(def?.rmsDbGuides) && !spec?.cold,
+  });
+  if (overlay?._outputInkBake && typeof nodeGraphWaterfallGlStampCanvas === "function") {
+    nodeGraphWaterfallGlStampCanvas(face, overlay);
+    if (typeof nodeGraphWaterfallGlPresent === "function") {
+      nodeGraphWaterfallGlPresent(face, spec?.bg || "#000000");
+    }
   }
 }
 
+/** No GPU plate: black face + one logged failure (no 2D plate fill). */
 function nodeGraphWaterfallFillPlate(context, canvas, bg) {
-  if (typeof nodeGraphFacePlateFillCanvas === "function") {
-    nodeGraphFacePlateFillCanvas(context, canvas, bg);
-  } else {
-    context.save();
-    context.setTransform(1, 0, 0, 1, 0, 0);
-    context.globalCompositeOperation = "source-over";
-    context.fillStyle = bg || "#000000";
-    context.fillRect(0, 0, canvas.width, canvas.height);
-    context.restore();
-  }
+  nodeGraphDisplayGlFailed(canvas, "Waterfall GL unavailable");
 }
 
 function nodeGraphWaterfallPaintNowLine(spec, context, canvas, settings, width, height, bg) {
   const mode = nodeGraphWaterfallBlendMode(settings, { rgbGuns: Boolean(spec?.rgbBuffers) });
   const plateBg = mode === "multiply" ? "#ffffff" : (bg || "#000000");
-  nodeGraphWaterfallEnsureHold(canvas, width, height, plateBg);
-  nodeGraphWaterfallResetHold(canvas, plateBg);
-  const hold = canvas._waterfallHold;
-  const holdCtx = hold?.getContext("2d");
-  if (!holdCtx) {
-    nodeGraphWaterfallFillPlate(context, canvas, bg);
+  if (!nodeGraphWaterfallEnsureHold(canvas, width, height, plateBg)) {
     return true;
   }
+  nodeGraphWaterfallResetHold(canvas, plateBg);
   const channelList = nodeGraphWaterfallChannelList(spec, settings).filter((ch) => ch.enabled !== false);
   let stampComposite = "source-over";
   if (mode === "lighter" || mode === "screen") stampComposite = mode;
@@ -2058,13 +1840,10 @@ function nodeGraphWaterfallPaintNowLine(spec, context, canvas, settings, width, 
     const layerComposite = (idx === 0 && stampComposite !== "multiply")
       ? "source-over"
       : stampComposite;
-    holdCtx.save();
-    holdCtx.setTransform(1, 0, 0, 1, 0, 0);
-    holdCtx.globalCompositeOperation = layerComposite;
-    holdCtx.fillStyle = nodeGraphWaterfallBarFillStyle(ch.color, ch.bright ?? 1);
-    // 1px filled now-line across the face (not a stroked TraceTape path).
-    holdCtx.fillRect(0, Math.floor(y), width, 1);
-    holdCtx.restore();
+    // 1px filled now-line across the face as one GPU quad.
+    const rgb = [...nodeGraphWaterfallParseInkRgb(ch.color), nodeGraphWaterfallClamp01(ch.bright ?? 1, 1)];
+    const yi = Math.floor(y);
+    nodeGraphWaterfallGlStampBar(canvas, 0, width, { y0: yi, y1: yi + 1 }, null, false, rgb, layerComposite, 1, true, null);
   }
   nodeGraphWaterfallPresentHold(context, canvas, plateBg);
   return true;
@@ -2182,24 +1961,13 @@ function nodeGraphWaterfallSmoothAdvance(destCtx, destCanvas, spec, options) {
   const barAccMap = options?.barAcc || Object.create(null);
   const mode = nodeGraphWaterfallBlendMode(settings, { rgbGuns: Boolean(spec?.rgbBuffers) });
   const plateBg = mode === "multiply" ? "#ffffff" : (spec.bg || "#000000");
-  const hold = nodeGraphWaterfallEnsureHold(destCanvas, width, height, plateBg);
-  if (!hold) {
-    nodeGraphWaterfallFillPlate(destCtx, destCanvas, spec.bg);
-    return colPx;
-  }
-  const holdCtx = hold.getContext("2d");
-  if (!holdCtx) {
-    nodeGraphWaterfallFillPlate(destCtx, destCanvas, spec.bg);
+  if (!nodeGraphWaterfallEnsureHold(destCanvas, width, height, plateBg)) {
     return colPx;
   }
   const scroll = options?.scroll !== false;
   const paintPx = Math.max(0, Math.round(advancePx));
   if (scroll && paintPx >= 1) {
-    if (typeof nodeGraphWaterfallGlScroll === "function") {
-      nodeGraphWaterfallGlScroll(destCanvas, paintPx, plateBg);
-    } else {
-      nodeGraphWaterfallScrollHold(hold, paintPx, plateBg);
-    }
+    nodeGraphWaterfallScrollHold(destCanvas, paintPx, plateBg);
     // The plate moved left by paintPx; move each channel's last stroke point
     // with it. Left stale, the next column's connector (the vertical jump of
     // a held step at a frame boundary) started paintPx too far right and the
@@ -2269,10 +2037,8 @@ function nodeGraphWaterfallSmoothAdvance(destCtx, destCanvas, spec, options) {
         waveYs: useStroke && mapped ? nodeGraphWaterfallWaveYs(acc, ch.buffer, spec.slot, settings, height) : null,
         prevEdge: connectEdge && edgeMap ? edgeMap[key] : null,
         strokeColor: ch.strokeColor,
-        rgb: nodeGraphWaterfallScaleRgb(
-          nodeGraphWaterfallParseInkRgb(ch.color),
-          nodeGraphWaterfallClamp01(ch.bright ?? 1, 1),
-        ),
+        // Brightness = ink alpha (4th entry), like the bar path.
+        rgb: [...nodeGraphWaterfallParseInkRgb(ch.color), nodeGraphWaterfallClamp01(ch.bright ?? 1, 1)],
       });
     }
     nodeGraphWaterfallStampColumnFills(

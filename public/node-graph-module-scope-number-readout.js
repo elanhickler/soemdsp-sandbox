@@ -283,35 +283,25 @@ function nodeGraphNumberReadoutEnsureBurnPlate(canvas) {
   if (!canvas) {
     return null;
   }
+  // Size holder only: deposits live in the GPU plate (nodeGraphNumberReadoutGlPlateEnsure),
+  // which scale-preserves itself on resize. No 2D scratch.
   let layer = canvas._numberReadoutBurnPlate;
   if (!layer) {
-    layer = document.createElement("canvas");
+    layer = { width: 0, height: 0 };
     canvas._numberReadoutBurnPlate = layer;
   }
   const w = Math.max(0, canvas.width | 0);
   const h = Math.max(0, canvas.height | 0);
-  if (w < 1 || h < 1) {
-    return layer;
+  if (w >= 1 && h >= 1) {
+    layer.width = w;
+    layer.height = h;
   }
-  if (layer.width === w && layer.height === h) {
-    return layer;
-  }
-  // Stamp scratch only (always empty between stamps): deposits live in the
-  // GPU plate, which scale-preserves itself on resize.
-  layer.width = w;
-  layer.height = h;
   return layer;
 }
 
 function nodeGraphNumberReadoutClearBurnPlate(canvas) {
   if (!canvas) {
     return;
-  }
-  const layer = canvas._numberReadoutBurnPlate;
-  if (layer?.width && layer?.height) {
-    const rctx = layer.getContext?.("2d");
-    rctx?.setTransform?.(1, 0, 0, 1, 0, 0);
-    rctx?.clearRect?.(0, 0, layer.width, layer.height);
   }
   if (canvas._numberReadoutGlPlate) {
     nodeGraphNumberReadoutGlPlateClear(canvas._numberReadoutGlPlate);
@@ -511,112 +501,6 @@ function nodeGraphNumberReadoutSmoothstep01(t) {
 }
 
 /**
- * Value LCD inset glass shadow — true Gaussian falloff (canvas filter blur),
- * not box/linear edge ramps. Drawn last so digits read as “behind the screen.”
- *
- * @param {number} distance01  0…1 reach / depth of the inset band
- * @param {number} sharpness01 0 = soft translucent Gaussian, 1 = hard full-black rim
- * @param {number} offsetX01   −1…1 CSS-like inset offset X (positive → darker left)
- * @param {number} offsetY01   −1…1 CSS-like inset offset Y (positive → darker top)
- */
-function nodeGraphNumberReadoutDrawLcdInnerShadow(
-  context,
-  left,
-  top,
-  width,
-  height,
-  distance01,
-  sharpness01,
-  offsetX01 = 0,
-  offsetY01 = 0,
-) {
-  if (!context || !(width > 2) || !(height > 2)) {
-    return;
-  }
-  // Step 1: 2D Gaussian inset only (no GL SDF shadow).
-  const dist = clampNodeSliderValue(nodeGraphFiniteNumber(distance01), 0, 1);
-  if (dist <= 0.001) {
-    return;
-  }
-  const sharp = clampNodeSliderValue(nodeGraphFiniteNumber(sharpness01), 0, 1);
-  const ox01 = clampNodeSliderValue(nodeGraphFiniteNumber(offsetX01), -1, 1);
-  const oy01 = clampNodeSliderValue(nodeGraphFiniteNumber(offsetY01), -1, 1);
-  const minSide = Math.min(width, height);
-  // Reach of the shadow band from the rim (px) — also scales max offset.
-  const reach = Math.max(1, dist * minSide * 0.42);
-  // Hardness 0 → softFrac 1 (widest blur); hardness 1 → softFrac 0 (hard edge).
-  // smoothstep then square so the soft end stays smooth and the hard end
-  // actually reaches zero blur (old code floored soft≥0.06 / blur≥0.75px).
-  const hardEase = nodeGraphNumberReadoutSmoothstep01(sharp);
-  const softFrac = (1 - hardEase) * (1 - hardEase);
-  const maxBlurPx = reach * 1.35;
-  const blurPx = maxBlurPx * softFrac;
-  // Shadow-like opacity: soft = translucent veil; hard → solid black (α=1).
-  // softBase grows a little with distance so deep soft shadows still read.
-  const softBase = Math.min(0.55, 0.18 + dist * 0.28);
-  const alpha = softBase + (1 - softBase) * hardEase;
-  // Offset: move the punched “light” hole so shadow piles on the opposite side.
-  const maxOff = reach * 0.9;
-  const offX = ox01 * maxOff;
-  const offY = oy01 * maxOff;
-
-  const w = Math.max(1, Math.ceil(width));
-  const h = Math.max(1, Math.ceil(height));
-  // Padding so the blurred mask does not clip its soft edge.
-  const pad = Math.ceil(Math.max(blurPx * 2, 2) + Math.max(Math.abs(offX), Math.abs(offY)) + 2);
-  const ow = w + pad * 2;
-  const oh = h + pad * 2;
-
-  // Pool offscreen mask on the host canvas (face size changes under zoom).
-  const host = context.canvas;
-  let off = host && host._nodeGraphLcdShadowCanvas;
-  if (!off || off.width < ow || off.height < oh) {
-    off = document.createElement("canvas");
-    off.width = ow;
-    off.height = oh;
-    if (host) {
-      host._nodeGraphLcdShadowCanvas = off;
-    }
-  }
-  const octx = off.getContext("2d");
-  if (!octx) {
-    return;
-  }
-  octx.setTransform(1, 0, 0, 1, 0, 0);
-  octx.globalCompositeOperation = "source-over";
-  octx.globalAlpha = 1;
-  octx.filter = "none";
-  octx.clearRect(0, 0, off.width, off.height);
-
-  // Hard mask: solid black frame with an offset hole = unshadowed interior.
-  // Blurring this mask yields a Gaussian soft inset (not linear box ramps).
-  octx.fillStyle = "#000000";
-  octx.fillRect(0, 0, ow, oh);
-  octx.globalCompositeOperation = "destination-out";
-  octx.fillRect(pad + offX, pad + offY, w, h);
-  octx.globalCompositeOperation = "source-over";
-
-  context.save();
-  context.setTransform(1, 0, 0, 1, 0, 0);
-  context.globalCompositeOperation = "source-over";
-  context.globalAlpha = alpha;
-  // Keep blur bleed inside the plate.
-  context.beginPath();
-  context.rect(left, top, width, height);
-  context.clip();
-  // Hardness 1: draw the hard mask with no blur (true sharp rim).
-  if (blurPx > 0.35) {
-    context.filter = `blur(${blurPx.toFixed(2)}px)`;
-  } else {
-    context.filter = "none";
-  }
-  context.drawImage(off, 0, 0, ow, oh, left - pad, top - pad, ow, oh);
-  context.filter = "none";
-  context.globalAlpha = 1;
-  context.restore();
-}
-
-/**
  * Live digit light (top layer only). Same physically-based cone as LCD:
  *   Bright 0   → black
  *   Bright 0.5 → full hue
@@ -682,57 +566,49 @@ function nodeGraphNumberReadoutGhostLut256(stops, peakHex) {
   return lut;
 }
 
-// Burn-plate tint on the shared picture device: plate alpha (energy byte)
-// indexes the 256-entry ghost LUT per pixel; alpha passes through.
+// Burn-plate tint into the face target: plate alpha (energy byte) indexes the
+// 256-entry ghost LUT per pixel; output premultiplied (texel row = canvas row).
 const NODE_GRAPH_NUMBER_READOUT_TINT_FS = `
   precision mediump float;
   varying vec2 vUv;
   uniform sampler2D uPlate;
   uniform sampler2D uLut;
+  uniform vec2 uSize;
   void main() {
-    vec4 p = texture2D(uPlate, vec2(vUv.x, 1.0 - vUv.y));
+    vec4 p = texture2D(uPlate, gl_FragCoord.xy / uSize);
     float e = floor(p.a * 255.0 + 0.5);
     if (e < 0.5) {
-      gl_FragColor = vec4(0.0);
-      return;
+      discard;
     }
     vec3 c = texture2D(uLut, vec2((e + 0.5) / 256.0, 0.5)).rgb;
-    gl_FragColor = vec4(c, p.a);
+    gl_FragColor = vec4(c * p.a, p.a);
   }
 `;
 const nodeGraphNumberReadoutTintGl = { gl: null, lut: null, lutKey: "" };
 
-function nodeGraphNumberReadoutPresentBurnPlateGl(destCtx, burnPlate, lut, lutKey, plateTex = null) {
-  if (typeof nodeGraphSharedGlDevice !== "function" || typeof SoemGl === "undefined") {
+// Tint the GPU burn plate into the face target (premultiplied source-over),
+// same result as the old present + drawImage onto the face.
+function nodeGraphNumberReadoutPresentBurnPlateGl(pen, lut, lutKey, plateGl) {
+  const gl = pen?.gl;
+  if (!gl || !plateGl?.read?.tex || plateGl.gl !== gl || plateGl.w !== pen.w || plateGl.h !== pen.h) {
     return false;
   }
-  const dev = nodeGraphSharedGlDevice();
-  const gl = dev?.gl;
-  const w = burnPlate.width | 0;
-  const h = burnPlate.height | 0;
-  if (!plateTex || !gl || gl.isContextLost() || w > dev.canvas.width || h > dev.canvas.height) {
-    return false;
-  }
-  const program = SoemGl.program(gl, "number-readout-burn-tint", SoemGl.GLSL_FULLSCREEN_VS, NODE_GRAPH_NUMBER_READOUT_TINT_FS);
+  const program = SoemGl.program(gl, "number-readout-burn-tint-face", SoemGl.GLSL_FULLSCREEN_VS, NODE_GRAPH_NUMBER_READOUT_TINT_FS);
   if (!program) {
     return false;
   }
+  nodeGraphNumberReadoutGlPenFlush(pen);
   const st = nodeGraphNumberReadoutTintGl;
   if (st.gl !== gl) {
     st.gl = gl;
     st.lut = null;
     st.lutKey = "";
   }
-  const makeTex = () => {
-    const t = gl.createTexture();
-    gl.bindTexture(gl.TEXTURE_2D, t);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-    return t;
-  };
-  if (!st.lut) st.lut = makeTex();
+  if (!st.lut) {
+    st.lut = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, st.lut);
+    nodeGraphNumberReadoutGlPlateTexParams(gl, gl.NEAREST);
+  }
   gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
   gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
   gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
@@ -742,28 +618,26 @@ function nodeGraphNumberReadoutPresentBurnPlateGl(destCtx, burnPlate, lut, lutKe
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB, 256, 1, 0, gl.RGB, gl.UNSIGNED_BYTE, new Uint8Array(Uint8ClampedArray.from(lut).buffer));
     st.lutKey = lutKey;
   }
-  gl.activeTexture(gl.TEXTURE0);
-  // GPU-resident plate (faded / stamped on the GPU): nothing to upload.
-  gl.bindTexture(gl.TEXTURE_2D, plateTex);
   gl.pixelStorei(gl.UNPACK_ALIGNMENT, 4);
-  nodeGraphSharedGlBindPresent(gl, w, h);
-  gl.disable(gl.BLEND);
-  gl.clearColor(0, 0, 0, 0);
-  gl.clear(gl.COLOR_BUFFER_BIT);
+  gl.activeTexture(gl.TEXTURE0);
+  gl.bindTexture(gl.TEXTURE_2D, plateGl.read.tex);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, pen.target.fbo);
+  gl.viewport(0, 0, pen.w, pen.h);
+  gl.disable(gl.SCISSOR_TEST);
+  gl.enable(gl.BLEND);
+  gl.blendFuncSeparate(gl.ONE, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
   gl.useProgram(program);
   gl.uniform1i(gl.getUniformLocation(program, "uPlate"), 0);
   gl.uniform1i(gl.getUniformLocation(program, "uLut"), 1);
+  gl.uniform2f(gl.getUniformLocation(program, "uSize"), pen.w, pen.h);
   SoemGl.drawQuad(gl, gl.getAttribLocation(program, "aPos"));
-  nodeGraphSharedGlEndPresent(gl);
+  gl.disable(gl.BLEND);
   gl.activeTexture(gl.TEXTURE1);
   gl.bindTexture(gl.TEXTURE_2D, null);
   gl.activeTexture(gl.TEXTURE0);
   gl.bindTexture(gl.TEXTURE_2D, null);
-  destCtx.save();
-  destCtx.globalAlpha = 1;
-  destCtx.globalCompositeOperation = "source-over";
-  destCtx.drawImage(dev.canvas, 0, dev.canvas.height - h, w, h, 0, 0, w, h);
-  destCtx.restore();
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  nodeGraphNumberReadoutGlStats.tints += 1;
   return true;
 }
 
@@ -772,12 +646,9 @@ function nodeGraphNumberReadoutPresentBurnPlateGl(destCtx, burnPlate, lut, lutKe
  * shared GL device (ping-pong): the per-frame Trail/Ghost fade is one
  * full-plate draw (read * (1 - erase) -> write, swap), exactly the old 2D
  * destination-out fill (8-bit quantisation included, per frame as before).
- * Deposits are still drawn with the 2D digit code onto the 2D burn-plate
- * canvas, which is now only a stamp scratch: the stamped rect (digit cells
- * only) is copied out, uploaded with texSubImage2D and blended source-over
- * into the plate, then cleared. So a frame uploads nothing unless a value
- * changed, and then only the changed cells. Texel row y = canvas row y in
- * every pass, so the tint present samples the plate exactly as before.
+ * Deposits are GL glyph quads drawn straight into the plate (premultiplied
+ * source-over), so nothing is uploaded per frame. Texel row y = canvas row y
+ * in every pass; the tint pass samples the plate at gl_FragCoord.
  * No shared device: nodeGraphDisplayGlFailed (black + one console.error);
  * there is no 2D plate path.
  */
@@ -804,22 +675,8 @@ const NODE_GRAPH_NUMBER_READOUT_PLATE_FS = `
     }
   }
 `;
-const nodeGraphNumberReadoutStampTrack = { ctx: null, any: false, x0: 0, y0: 0, x1: 0, y1: 0 };
-const nodeGraphNumberReadoutPlateGlStats = { fades: 0, stamps: 0, stampPx: 0 };
+const nodeGraphNumberReadoutPlateGlStats = { fades: 0, stamps: 0 };
 
-function nodeGraphNumberReadoutTrackStamp(context, x0, y0, x1, y1) {
-  const t = nodeGraphNumberReadoutStampTrack;
-  if (!t.ctx || t.ctx !== context) {
-    return;
-  }
-  if (!t.any) {
-    t.any = true;
-    t.x0 = x0; t.y0 = y0; t.x1 = x1; t.y1 = y1;
-    return;
-  }
-  t.x0 = Math.min(t.x0, x0); t.y0 = Math.min(t.y0, y0);
-  t.x1 = Math.max(t.x1, x1); t.y1 = Math.max(t.y1, y1);
-}
 
 function nodeGraphNumberReadoutGlPlateTexParams(gl, filter) {
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, filter);
@@ -858,7 +715,6 @@ function nodeGraphNumberReadoutGlPlateDrop(gl, st) {
     if (t?.fbo) gl.deleteFramebuffer(t.fbo);
     if (t?.tex) gl.deleteTexture(t.tex);
   }
-  if (st.stampTex) gl.deleteTexture(st.stampTex);
 }
 
 // One full-plate pass: dst = src(scaled to the plate) * keep.
@@ -909,7 +765,7 @@ function nodeGraphNumberReadoutGlPlateEnsure(canvas, burnPlate) {
     nodeGraphNumberReadoutGlPlateDrop(gl, { read, write });
     return null;
   }
-  const st = { gl, w, h, read, write, stampTex: null, stampCanvas: null };
+  const st = { gl, w, h, read, write };
   gl.disable(gl.BLEND);
   gl.disable(gl.SCISSOR_TEST);
   if (prev) {
@@ -946,66 +802,17 @@ function nodeGraphNumberReadoutGlPlateClear(st) {
   gl.bindFramebuffer(gl.FRAMEBUFFER, null);
 }
 
-// Move the stamped rect of the 2D scratch plate into the GPU plate
-// (source-over on alpha = the old 2D stamp), then clear that scratch rect.
-function nodeGraphNumberReadoutGlPlateStamp(st, burnPlate, x0In, y0In, x1In, y1In) {
-  const gl = st.gl;
-  const x0 = Math.max(0, Math.floor(x0In));
-  const y0 = Math.max(0, Math.floor(y0In));
-  const x1 = Math.min(st.w, Math.ceil(x1In));
-  const y1 = Math.min(st.h, Math.ceil(y1In));
-  const bw = x1 - x0;
-  const bh = y1 - y0;
-  if (bw < 1 || bh < 1) return;
-  let sc = st.stampCanvas;
-  if (!sc) {
-    sc = st.stampCanvas = document.createElement("canvas");
-  }
-  if (sc.width !== bw || sc.height !== bh) {
-    sc.width = bw;
-    sc.height = bh;
-  }
-  const sctx = sc.getContext("2d");
-  if (!sctx) return;
-  sctx.setTransform(1, 0, 0, 1, 0, 0);
-  sctx.globalCompositeOperation = "copy";
-  sctx.drawImage(burnPlate, x0, y0, bw, bh, 0, 0, bw, bh);
-  sctx.globalCompositeOperation = "source-over";
-  if (!st.stampTex) {
-    st.stampTex = gl.createTexture();
-    gl.bindTexture(gl.TEXTURE_2D, st.stampTex);
-    nodeGraphNumberReadoutGlPlateTexParams(gl, gl.NEAREST);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, st.w, st.h, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
-  }
-  gl.activeTexture(gl.TEXTURE0);
-  gl.bindTexture(gl.TEXTURE_2D, st.stampTex);
-  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
-  gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
-  gl.texSubImage2D(gl.TEXTURE_2D, 0, x0, y0, gl.RGBA, gl.UNSIGNED_BYTE, sc);
-  gl.enable(gl.SCISSOR_TEST);
-  gl.scissor(x0, y0, bw, bh);
-  gl.enable(gl.BLEND);
-  gl.blendFuncSeparate(gl.ONE, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
-  nodeGraphNumberReadoutGlPlatePass(st, st.read, st.stampTex, 1, false);
-  gl.disable(gl.BLEND);
-  gl.disable(gl.SCISSOR_TEST);
-  const bctx = burnPlate.getContext("2d");
-  bctx?.setTransform?.(1, 0, 0, 1, 0, 0);
-  bctx?.clearRect?.(x0, y0, bw, bh);
-  nodeGraphNumberReadoutPlateGlStats.stamps += 1;
-  nodeGraphNumberReadoutPlateGlStats.stampPx += bw * bh;
-}
 
 function nodeGraphNumberReadoutPresentBurnPlate(
-  destCtx,
+  pen,
+  host,
   burnPlate,
   gradientStops,
   peakHex,
 ) {
-  if (!destCtx || !burnPlate?.width || !burnPlate?.height) {
+  if (!pen || !host || !burnPlate?.width || !burnPlate?.height) {
     return;
   }
-  const host = destCtx.canvas;
   const stopsSig = Array.isArray(gradientStops)
     ? gradientStops.map((s) => `${s.t}:${s.color}`).join(",")
     : "";
@@ -1014,17 +821,8 @@ function nodeGraphNumberReadoutPresentBurnPlate(
     host._numberReadoutGhostLut = nodeGraphNumberReadoutGhostLut256(gradientStops, peakHex);
     host._numberReadoutGhostLutKey = lutKey;
   }
-  const lut = host._numberReadoutGhostLut;
   // GPU plate only (shared picture device). No GL: black + logged once.
-  const plateGl = host?._numberReadoutGlPlate || null;
-  const plateTex = plateGl
-    && typeof nodeGraphSharedGlDevice === "function"
-    && plateGl.gl === nodeGraphSharedGlDevice()?.gl
-    && plateGl.w === (burnPlate.width | 0)
-    && plateGl.h === (burnPlate.height | 0)
-    ? plateGl.read.tex
-    : null;
-  if (nodeGraphNumberReadoutPresentBurnPlateGl(destCtx, burnPlate, lut, lutKey, plateTex)) {
+  if (nodeGraphNumberReadoutPresentBurnPlateGl(pen, host._numberReadoutGhostLut, lutKey, host._numberReadoutGlPlate || null)) {
     return;
   }
   if (typeof nodeGraphDisplayGlFailed === "function") {
@@ -1066,8 +864,7 @@ function paintNodeGraphNumberReadoutColdBoot(canvas, screenElement, node = null,
   })) {
     return false;
   }
-  const context = canvas.getContext("2d");
-  if (!context || !(canvas.width > 0) || !(canvas.height > 0)) {
+  if (!(canvas.width > 0) || !(canvas.height > 0)) {
     return false;
   }
   const settings = nodeGraphNumberReadoutSettingsForNode(node);
@@ -1090,12 +887,12 @@ function paintNodeGraphNumberReadoutColdBoot(canvas, screenElement, node = null,
     }
   }
   nodeGraphFacePlateApplyCss(screenElement, bg);
-  const width = canvas.width;
-  const height = canvas.height;
-  context.setTransform(1, 0, 0, 1, 0, 0);
-  context.clearRect(0, 0, width, height);
-  context.fillStyle = bg;
-  context.fillRect(0, 0, width, height);
+  const pen = nodeGraphNumberReadoutGlBeginFace(canvas);
+  if (!pen) {
+    return false;
+  }
+  nodeGraphNumberReadoutGlPenRect(pen, 0, 0, canvas.width, canvas.height, nodeGraphNumberReadoutCssRgb(bg), 1);
+  nodeGraphNumberReadoutGlEndFace(canvas, pen);
   // No unlit 88.88 grid — idle face is empty plate only.
   // Keep cache dirty (invalidate already did) so live samples always redraw.
   canvas._nodeGraphNumberReadoutText = null;
@@ -1204,28 +1001,16 @@ function syncNodeGraphNumberReadoutCanvas(canvas, screenElement, pixelRatio, opt
     canvas.style.imageRendering = "";
   }
   if (canvas.width !== width || canvas.height !== height) {
-    // Resizing the host canvas clears its pixels (browser). Copy the last
-    // plate first so pause+move/resize does not blank the LCD.
-    const prevW = canvas.width | 0;
-    const prevH = canvas.height | 0;
-    let previous = null;
-    if (prevW > 1 && prevH > 1 && width > 0 && height > 0) {
-      previous = document.createElement("canvas");
-      previous.width = prevW;
-      previous.height = prevH;
-      const prevCtx = previous.getContext("2d");
-      if (prevCtx) {
-        prevCtx.drawImage(canvas, 0, 0);
-      }
-    }
+    // Resizing the host canvas clears its pixels (browser). The face lives in
+    // a GL target: scale it to the new size on the GPU and re-present, so
+    // pause+move/resize does not blank the LCD.
     canvas.width = width;
     canvas.height = height;
     canvas._numberReadoutEnergyMask = null;
-    if (previous) {
-      const ctx = canvas.getContext("2d");
-      if (ctx) {
-        ctx.imageSmoothingEnabled = true;
-        ctx.drawImage(previous, 0, 0, prevW, prevH, 0, 0, width, height);
+    if (canvas._numberReadoutGlFace) {
+      const face = nodeGraphNumberReadoutGlFaceTarget(canvas);
+      if (face) {
+        nodeGraphNumberReadoutGlPresentFace(canvas, face);
       }
     }
   }
@@ -1713,23 +1498,18 @@ function nodeGraphPitchCentsBandIndex(cents) {
   return n < 0 ? 0 : 8;
 }
 
-function nodeGraphPitchDetectorDrawCentsBands(context, left, top, width, height, cents, brightness) {
+function nodeGraphPitchDetectorDrawCentsBands(pen, left, top, width, height, cents, brightness) {
   const b = clampNodeSliderValue(nodeGraphFiniteNumber(brightness), 0, 1);
-  if (!context || !(width > 0) || !(height > 0) || b <= 0.0005) {
+  if (!pen || !(width > 0) || !(height > 0) || b <= 0.0005) {
     return;
   }
   const n = NODE_GRAPH_PITCH_CENTS_BAND_RGB.length;
   const bandW = width / n;
   const hi = nodeGraphPitchCentsBandIndex(cents);
-  context.save();
   for (let i = 0; i < n; i += 1) {
-    const rgb = NODE_GRAPH_PITCH_CENTS_BAND_RGB[i];
     const alpha = i === hi ? b : b * 0.2;
-    context.fillStyle = `rgba(${rgb[0]}, ${rgb[1]}, ${rgb[2]}, ${alpha})`;
-    const x = left + i * bandW;
-    context.fillRect(x, top, bandW + 0.75, height);
+    nodeGraphNumberReadoutGlPenRect(pen, left + i * bandW, top, bandW + 0.75, height, NODE_GRAPH_PITCH_CENTS_BAND_RGB[i], alpha);
   }
-  context.restore();
 }
 
 
@@ -1882,8 +1662,8 @@ function nodeGraphNumberReadoutComputeLayoutUncached(context, valueText, fontFam
 
   // Contain-fit: max font that fits BOTH height and width of the fit string.
   const REF = 100;
-  context.font = `700 ${REF}px ${fontFamily}`;
-  const probe0 = context.measureText(cellProbeGlyph);
+  // Atlas-baked glyph metrics (no 2D context in the face path).
+  const probe0 = nodeGraphNumberReadoutGlyphMetrics(fontFamily, REF, cellProbeGlyph);
   const ascent0 = Number(probe0.actualBoundingBoxAscent);
   const descent0 = Number(probe0.actualBoundingBoxDescent);
   const glyphH0 = Number.isFinite(ascent0) && Number.isFinite(descent0) && (ascent0 + descent0) > 0.25
@@ -1913,8 +1693,7 @@ function nodeGraphNumberReadoutComputeLayoutUncached(context, valueText, fontFam
       totalW: side,
     };
   }
-  context.font = `700 ${fontSize}px ${fontFamily}`;
-  const probe = context.measureText(cellProbeGlyph);
+  const probe = nodeGraphNumberReadoutGlyphMetrics(fontFamily, fontSize, cellProbeGlyph);
   const ascent = Number(probe.actualBoundingBoxAscent);
   const descent = Number(probe.actualBoundingBoxDescent);
   const glyphH = Number.isFinite(ascent) && Number.isFinite(descent) && (ascent + descent) > 0.25
@@ -1923,17 +1702,15 @@ function nodeGraphNumberReadoutComputeLayoutUncached(context, valueText, fontFam
   // Only shrink when ink truly overflows the content box.
   if (glyphH > digitAreaH + 0.5) {
     fontSize = Math.max(0, fontSize * (digitAreaH / glyphH));
-    context.font = `700 ${fontSize}px ${fontFamily}`;
   }
-  let cellW = Math.max(0, context.measureText(cellProbeGlyph).width);
+  let cellW = Math.max(0, nodeGraphNumberReadoutGlyphMetrics(fontFamily, fontSize, cellProbeGlyph).width);
   let fitW = fitCells * cellW;
   const maxW = contentW;
   if (fitW > maxW + 0.5 && fitW > 0) {
     const scale = maxW / fitW;
     fontSize = Math.max(0, fontSize * scale);
     if (fontSize > 0.25) {
-      context.font = `700 ${fontSize}px ${fontFamily}`;
-      cellW = Math.max(0, context.measureText(cellProbeGlyph).width);
+      cellW = Math.max(0, nodeGraphNumberReadoutGlyphMetrics(fontFamily, fontSize, cellProbeGlyph).width);
       fitW = fitCells * cellW;
     } else {
       const side = Math.max(1, pin);
@@ -1976,30 +1753,21 @@ function nodeGraphNumberReadoutComputeLayoutUncached(context, valueText, fontFam
  * Draw the max-padding “one pixel of display” pin (LED light or LCD ink).
  * Integer canvas rect → hard edge on the monitor pixel grid (scales with pinPx).
  */
-function nodeGraphNumberReadoutDrawPixelPin(context, layout, faceLeft, faceTop, faceW, faceH, rgb, alpha = 1) {
-  if (!context || !layout?.pixelPin) {
+function nodeGraphNumberReadoutDrawPixelPin(pen, layout, faceLeft, faceTop, faceW, faceH, rgb, alpha = 1) {
+  if (!pen || !layout?.pixelPin) {
     return;
   }
   const side = Math.max(1, nodeGraphFiniteNumber(layout.pinPx, 1));
   const x = faceLeft + Math.max(0, (faceW - side) * 0.5);
   const y = faceTop + Math.max(0, (faceH - side) * 0.5);
   const a = clampNodeSliderValue(nodeGraphFiniteNumber(alpha), 0, 1);
-  const r = nodeGraphFiniteNumber(rgb?.[0]);
-  const g = nodeGraphFiniteNumber(rgb?.[1]);
-  const b = nodeGraphFiniteNumber(rgb?.[2]);
-  context.save();
-  context.setTransform(1, 0, 0, 1, 0, 0);
-  context.globalCompositeOperation = "source-over";
-  context.globalAlpha = a;
-  context.imageSmoothingEnabled = false;
   // Snap to integer canvas pixels so the pin is a crisp device-pixel square.
-  const ix = Math.round(x);
-  const iy = Math.round(y);
   const is = Math.max(1, Math.round(side));
-  context.fillStyle = `rgb(${r}, ${g}, ${b})`;
-  nodeGraphNumberReadoutTrackStamp(context, ix - 1, iy - 1, ix + is + 1, iy + is + 1);
-  context.fillRect(ix, iy, is, is);
-  context.restore();
+  nodeGraphNumberReadoutGlPenRect(pen, Math.round(x), Math.round(y), is, is, [
+    nodeGraphFiniteNumber(rgb?.[0]),
+    nodeGraphFiniteNumber(rgb?.[1]),
+    nodeGraphFiniteNumber(rgb?.[2]),
+  ], a);
 }
 
 /** Unit label font size for the number plate (boosted for Pitch Detector Hz). */
@@ -2078,7 +1846,7 @@ function nodeGraphNumberReadoutGhostDepositText(previousText, currentText) {
 }
 
 
-function nodeGraphNumberReadoutDrawDigits(context, {
+function nodeGraphNumberReadoutDrawDigits(pen, {
   text,
   centerX,
   centerY,
@@ -2087,28 +1855,21 @@ function nodeGraphNumberReadoutDrawDigits(context, {
   cellW: cellWIn,
   rgb,
   alpha,
-  glow = 0,
-  softBlurPx = 0,
   plate = false,
-  // energy: force white ink (luma) for the 0–1 energy buffer
+  // energy: force white ink (luma) for the 0-1 energy buffer
   energy = false,
-  // Canvas composite for this draw (source-over default).
-  composite = "source-over",
 }) {
-  // Step 1: no GL SDF / glow. Plain fillText so we can see the digits.
+  // GL glyphs from the shared atlas (textAlign center / textBaseline middle cells).
   const raw = String(text || "");
-  const ink = energy ? [255, 255, 255] : rgb;
-  context.save();
-  // Identity geometry in canvas pixels — never scaleX ≠ scaleY for glyphs.
-  context.setTransform(1, 0, 0, 1, 0, 0);
-  const op = String(composite || "source-over").trim() || "source-over";
-  if (op !== "source-over") {
-    context.globalCompositeOperation = op;
+  if (!pen || !(fontSize > 0.25) || !raw) {
+    return;
   }
-  context.font = `700 ${fontSize}px ${fontFamily}`;
-  context.textAlign = "center";
-  context.textBaseline = "middle";
-  const cellW = Math.max(1, Number(cellWIn) || context.measureText("8").width);
+  const ink = energy ? [255, 255, 255] : rgb;
+  const atlas = nodeGraphNumberReadoutGlyphAtlas(pen.gl, fontFamily, fontSize, plate ? `${raw}8-` : raw);
+  if (!atlas) {
+    return;
+  }
+  const cellW = Math.max(1, Number(cellWIn) || nodeGraphNumberReadoutGlyphMetrics(fontFamily, fontSize, "8").width);
   let cellCount = 0;
   for (let i = 0; i < raw.length; i += 1) {
     if (raw[i] !== ".") {
@@ -2117,147 +1878,38 @@ function nodeGraphNumberReadoutDrawDigits(context, {
   }
   cellCount = Math.max(1, cellCount);
   let penX = centerX - (cellCount * cellW) * 0.5 + cellW * 0.5;
-  void glow;
-  void softBlurPx;
-  void plate;
-  void energy;
-
-  const trackHalfW = Math.max(cellW, fontSize * 0.75) + 2;
-  const trackHalfH = fontSize * 0.9 + 2;
-  const drawGlyph = (glyph, x) => {
-    nodeGraphNumberReadoutTrackStamp(context, x - trackHalfW, centerY - trackHalfH, x + trackHalfW, centerY + trackHalfH);
-    context.shadowBlur = 0;
-    context.fillStyle = `rgba(${ink[0]}, ${ink[1]}, ${ink[2]}, ${alpha.toFixed(4)})`;
-    context.fillText(glyph, x, centerY);
-  };
-
+  const a = Number(alpha);
   for (let i = 0; i < raw.length; i += 1) {
     const ch = raw[i];
     if (ch === ".") {
-      // Zero advance — sit at the boundary between the previous and next cell.
-      drawGlyph(".", penX - cellW * 0.5);
+      // Zero advance: sit at the boundary between the previous and next cell.
+      nodeGraphNumberReadoutGlPenGlyph(pen, atlas, ".", penX - cellW * 0.5, centerY, ink, a);
       continue;
     }
     let glyph = ch;
     if (plate) {
       // Unlit LCD grid: digits are all-on "8". Sign column is only the minus bar.
       glyph = (ch === "-" || ch === " ") ? "-" : "8";
-    } else if (ch === " ") {
-      // Lit path: leave sign column empty (still advance a full cell).
-      penX += cellW;
-      continue;
-    } else if (ch === "!") {
-      // All-off placeholder cell — skip draw, keep spacing.
+    } else if (ch === " " || ch === "!") {
+      // Empty sign column / all-off placeholder: keep spacing, draw nothing.
       penX += cellW;
       continue;
     }
-    drawGlyph(glyph, penX);
+    nodeGraphNumberReadoutGlPenGlyph(pen, atlas, glyph, penX, centerY, ink, a);
     penX += cellW;
   }
-  context.restore();
 }
 
 
-function nodeGraphNumberReadoutDrawInnerShadow(context, left, top, width, height, amount) {
-  if (!(amount > 0.001) || width < 2 || height < 2) {
-    return;
-  }
-  const depth = Math.max(2, Math.min(width, height) * (0.06 + amount * 0.18));
-  const edge = Math.max(0.12, Math.min(0.85, amount * 0.72));
-  context.save();
-  // Top + left (darker lip), bottom + right (softer).
-  let grad = context.createLinearGradient(left, top, left, top + depth);
-  grad.addColorStop(0, `rgba(0, 0, 0, ${edge.toFixed(4)})`);
-  grad.addColorStop(1, "rgba(0, 0, 0, 0)");
-  context.fillStyle = grad;
-  context.fillRect(left, top, width, depth);
-
-  grad = context.createLinearGradient(left, top, left + depth, top);
-  grad.addColorStop(0, `rgba(0, 0, 0, ${(edge * 0.9).toFixed(4)})`);
-  grad.addColorStop(1, "rgba(0, 0, 0, 0)");
-  context.fillStyle = grad;
-  context.fillRect(left, top, depth, height);
-
-  grad = context.createLinearGradient(left, top + height, left, top + height - depth);
-  grad.addColorStop(0, `rgba(0, 0, 0, ${(edge * 0.55).toFixed(4)})`);
-  grad.addColorStop(1, "rgba(0, 0, 0, 0)");
-  context.fillStyle = grad;
-  context.fillRect(left, top + height - depth, width, depth);
-
-  grad = context.createLinearGradient(left + width, top, left + width - depth, top);
-  grad.addColorStop(0, `rgba(0, 0, 0, ${(edge * 0.5).toFixed(4)})`);
-  grad.addColorStop(1, "rgba(0, 0, 0, 0)");
-  context.fillStyle = grad;
-  context.fillRect(left + width - depth, top, depth, height);
-  context.restore();
-}
 
 
-function nodeGraphNumberReadoutLcdCompositeHang(canvas, context, spec = {}) {
-  const hangOn = Boolean(spec.hangOn);
-  if (!canvas || !context || !hangOn) {
-    return;
-  }
-  if (!canvas._lcdGhostPlate) {
-    canvas._lcdGhostPlate = document.createElement("canvas");
-  }
-  const plate = canvas._lcdGhostPlate;
-  const width = Math.max(1, Math.round(Number(spec.width) || canvas.width || 1));
-  const height = Math.max(1, Math.round(Number(spec.height) || canvas.height || 1));
-  if (plate.width !== width || plate.height !== height) {
-    plate.width = width;
-    plate.height = height;
-  }
-  const gctx = plate.getContext("2d");
-  if (!gctx) {
-    return;
-  }
-  if (!spec.frozen) {
-    const erase = nodeGraphNumberReadoutBurnEraseAlpha(spec.trailHang, spec.ghostHang);
-    if (erase > 0.00005) {
-      gctx.save();
-      gctx.globalCompositeOperation = "destination-out";
-      gctx.fillStyle = `rgba(0, 0, 0, ${erase.toFixed(4)})`;
-      gctx.fillRect(0, 0, width, height);
-      gctx.restore();
-    }
-    const previousValueText = String(spec.previousValueText || "");
-    const valueText = String(spec.valueText || "");
-    if (
-      spec.textChanged
-      && previousValueText
-      && previousValueText !== valueText
-      && spec.digitFontSize > 0.25
-    ) {
-      const depositText = nodeGraphNumberReadoutGhostDepositText(previousValueText, valueText);
-      if (depositText) {
-        const rgb = Array.isArray(spec.ghostRgb) ? spec.ghostRgb : [80, 80, 80];
-        nodeGraphNumberReadoutDrawDigits(gctx, {
-          text: depositText,
-          centerX: spec.digitX,
-          centerY: spec.digitY,
-          fontFamily: spec.digitFontFamily,
-          fontSize: spec.digitFontSize,
-          cellW: spec.cellW,
-          rgb,
-          alpha: 0.62,
-          softBlurPx: 0,
-          glow: 0,
-          plate: false,
-          composite: "source-over",
-        });
-      }
-    }
-  }
-  context.drawImage(plate, 0, 0);
-}
 
 /**
  * Value LCD — vector DSEG redraw every frame.
  * Background + unlit “8” ghost + solid FG digits + glass. No phosphor hang.
  */
-function drawNodeGraphValueLcdFace(canvas, context, screenElement, settings, valueText, unit, slot = null, options = null) {
-  if (!canvas || !context) {
+function drawNodeGraphValueLcdFace(canvas, pen, screenElement, settings, valueText, unit, slot = null, options = null) {
+  if (!canvas || !pen) {
     return;
   }
   const now = performance.now?.() || Date.now();
@@ -2297,7 +1949,7 @@ function drawNodeGraphValueLcdFace(canvas, context, screenElement, settings, val
   const decimals = nodeGraphNumberReadoutSafeDecimals(settings?.decimals);
   const lcdFitText = nodeGraphNumberReadoutLayoutFitText(slot, valueText, decimals, settings);
   const layout = nodeGraphNumberReadoutComputeLayout(
-    context,
+    null,
     valueText,
     digitFontFamily,
     width,
@@ -2333,26 +1985,22 @@ function drawNodeGraphValueLcdFace(canvas, context, screenElement, settings, val
   const shadowOffY = clampNodeSliderValue(nodeGraphFiniteNumber(settings?.innerShadowOffsetY), -1, 1);
   const text = unit ? `${valueText} ${unit}` : valueText;
 
-  // Full clear each frame — no residual burn plate.
-  context.setTransform(1, 0, 0, 1, 0, 0);
-  context.clearRect(0, 0, width, height);
-  context.save();
-  context.fillStyle = bg;
-  context.fillRect(left, top, width, height);
+  // Full repaint each frame (opaque plate) — no residual burn plate.
+  nodeGraphNumberReadoutGlPenRect(pen, left, top, width, height, nodeGraphNumberReadoutLcdBgRgb(settings), 1);
 
   // 8ve page: cents-accuracy stripes behind the note-name text.
   const pitchMode = options && options.pitchMode;
   const centsOff = options && options.cents;
   const centsBand = clampNodeSliderValue(nodeGraphFiniteNumber(settings?.centsBand), 0, 1);
   if (slot?.type === "helmholtzPitch" && pitchMode === "name" && centsBand > 0.0005) {
-    nodeGraphPitchDetectorDrawCentsBands(context, left, top, width, height, centsOff, centsBand);
+    nodeGraphPitchDetectorDrawCentsBands(pen, left, top, width, height, centsOff, centsBand);
   }
 
   // Max padding: one screen pixel of LCD “on” (no DSEG at pin size).
   if (layout.pixelPin) {
     if (!String(valueText || "").includes("!")) {
       nodeGraphNumberReadoutDrawPixelPin(
-        context,
+        pen,
         layout,
         left,
         top,
@@ -2367,7 +2015,7 @@ function drawNodeGraphValueLcdFace(canvas, context, screenElement, settings, val
       const plateText = typeof nodeGraphNumberReadoutGhostPlateText === "function"
         ? nodeGraphNumberReadoutGhostPlateText(valueText)
         : String(valueText || "").replace(/[0-9!]/g, "8");
-      nodeGraphNumberReadoutDrawDigits(context, {
+      nodeGraphNumberReadoutDrawDigits(pen, {
         text: plateText,
         centerX: digitX,
         centerY: digitY,
@@ -2376,14 +2024,11 @@ function drawNodeGraphValueLcdFace(canvas, context, screenElement, settings, val
         cellW,
         rgb: ghostRgb,
         alpha: ghostPlateAlpha,
-        softBlurPx: 0,
-        glow: 0,
         plate: true,
-        composite: "source-over",
       });
     }
     if (digitFontSize > 0.25 && !String(valueText || "").includes("!")) {
-      nodeGraphNumberReadoutDrawDigits(context, {
+      nodeGraphNumberReadoutDrawDigits(pen, {
         text: valueText,
         centerX: digitX,
         centerY: digitY,
@@ -2392,10 +2037,7 @@ function drawNodeGraphValueLcdFace(canvas, context, screenElement, settings, val
         cellW,
         rgb: inkRgb,
         alpha: 1,
-        softBlurPx: 0,
-        glow: 0,
         plate: false,
-        composite: "source-over",
       });
     }
 
@@ -2406,22 +2048,22 @@ function drawNodeGraphValueLcdFace(canvas, context, screenElement, settings, val
         digitFontSize,
         largeUnit,
       );
-      context.globalCompositeOperation = "source-over";
-      context.font = `700 ${labelFontSize}px "Consolas", "Courier New", monospace`;
-      context.textAlign = "center";
-      context.textBaseline = "middle";
-      context.fillStyle = `rgba(${inkRgb[0]}, ${inkRgb[1]}, ${inkRgb[2]}, ${largeUnit ? 0.78 : 0.55})`;
-      context.fillText(
+      nodeGraphNumberReadoutGlPenText(
+        pen,
         unit,
         left + padPx + layout.contentW * 0.5,
         top + padPxY + digitAreaHeight + labelHeight * 0.5,
+        NODE_GRAPH_NUMBER_READOUT_UNIT_FONT,
+        labelFontSize,
+        inkRgb,
+        largeUnit ? 0.78 : 0.55,
       );
     }
   }
 
   if (shadowDist > 0.001) {
-    nodeGraphNumberReadoutDrawLcdInnerShadow(
-      context,
+    nodeGraphNumberReadoutGlPenLcdInnerShadow(
+      pen,
       left,
       top,
       width,
@@ -2432,7 +2074,6 @@ function drawNodeGraphValueLcdFace(canvas, context, screenElement, settings, val
       shadowOffY,
     );
   }
-  context.restore();
 
   canvas._numberReadoutLastValueText = valueText;
   canvas._nodeGraphNumberReadoutText = text;
@@ -2444,10 +2085,6 @@ function drawNodeGraphValueLcdFace(canvas, context, screenElement, settings, val
   canvas._nodeGraphNumberReadoutPaintAt = now;
   canvas._numberReadoutResidualEnergy = 0;
   nodeGraphNumberReadoutClearBurnPlate(canvas);
-  if (canvas._lcdGhostPlate) {
-    const g = canvas._lcdGhostPlate.getContext("2d");
-    g?.clearRect(0, 0, canvas._lcdGhostPlate.width, canvas._lcdGhostPlate.height);
-  }
 }
 
 
@@ -2477,10 +2114,6 @@ function drawNodeGraphNumberReadoutItem(renderer, item, pixelRatio) {
   if (!canvas || !syncNodeGraphNumberReadoutCanvas(canvas, screenElement, pixelRatio, {
     screenSharp: false,
   })) {
-    return;
-  }
-  const context = canvas.getContext("2d");
-  if (!context) {
     return;
   }
   const hasSample = item?.buffer?.length > 0 && !item.buffer?.nodeGraphScopeXy;
@@ -2617,12 +2250,16 @@ function drawNodeGraphNumberReadoutItem(renderer, item, pixelRatio) {
       }
       return;
     }
-    context.imageSmoothingEnabled = false;
-    drawNodeGraphValueLcdFace(canvas, context, screenElement, settings, valueText, unit, slot, {
+    const lcdPen = nodeGraphNumberReadoutGlBeginFace(canvas);
+    if (!lcdPen) {
+      return;
+    }
+    drawNodeGraphValueLcdFace(canvas, lcdPen, screenElement, settings, valueText, unit, slot, {
       pitchMode,
       cents: pitchCents,
       frozen,
     });
+    nodeGraphNumberReadoutGlEndFace(canvas, lcdPen);
     nodeGraphNumberReadoutRememberGoodValue(canvas, valueText);
     return;
   }
@@ -2715,11 +2352,10 @@ function drawNodeGraphNumberReadoutItem(renderer, item, pixelRatio) {
   if (burnPlate && burnPlate.width > 0 && !plateGl && typeof nodeGraphDisplayGlFailed === "function") {
     nodeGraphDisplayGlFailed(canvas, "Number readout burn plate GL unavailable");
   }
-  const burnCtx = plateGl ? (burnPlate.getContext?.("2d") || null) : null;
+  const burnOn = Boolean(plateGl);
 
   // 1) Fade deposit plate (Trail; Ghost hang tracked on residual energy).
-  if (burnCtx && hangOn && !frozen && burnPlate.width > 0) {
-    burnCtx.setTransform(1, 0, 0, 1, 0, 0);
+  if (burnOn && hangOn && !frozen && burnPlate.width > 0) {
     const erase = nodeGraphNumberReadoutBurnEraseAlpha(trailHang, ghostHang);
     if (erase > 0.00005) {
       nodeGraphNumberReadoutGlPlateFade(plateGl, Number(erase.toFixed(4)));
@@ -2750,7 +2386,7 @@ function drawNodeGraphNumberReadoutItem(renderer, item, pixelRatio) {
   // Plate alpha is energy 0…1 → present LUT t (1.0 = last Ghost Gradient stop).
   const depositBright = depositPeak;
   if (
-    burnCtx
+    burnOn
     && hangOn
     && !frozen
     && textChanged
@@ -2774,18 +2410,12 @@ function drawNodeGraphNumberReadoutItem(renderer, item, pixelRatio) {
         && snap.height === height
         && Number(snap.fontSize) > 0.25
         && Number(snap.cellW) > 0;
-      burnCtx.setTransform(1, 0, 0, 1, 0, 0);
-      if (plateGl) {
-        const track = nodeGraphNumberReadoutStampTrack;
-        track.ctx = burnCtx;
-        track.any = false;
-      }
-      burnCtx.save();
-      burnCtx.globalCompositeOperation = "source-over";
+      // Glyphs go straight into the GPU plate (premultiplied source-over).
+      const depositPen = nodeGraphNumberReadoutGlPen(plateGl.gl, plateGl.read, plateGl.w, plateGl.h);
       // White energy at alpha = Burn ⨯ (0…1). Present maps that to Ghost Gradient t.
       if (snapOk && snap.pixelPin) {
         nodeGraphNumberReadoutDrawPixelPin(
-          burnCtx,
+          depositPen,
           {
             pixelPin: true,
             pinPx: snap.pinPx || snap.cellW,
@@ -2799,7 +2429,7 @@ function drawNodeGraphNumberReadoutItem(renderer, item, pixelRatio) {
         );
       } else if (snapOk) {
         // Pixel-match the previous live LED draw (same font/cell/center).
-        nodeGraphNumberReadoutDrawDigits(burnCtx, {
+        nodeGraphNumberReadoutDrawDigits(depositPen, {
           text: depositText,
           centerX: snap.digitX,
           centerY: snap.digitY,
@@ -2808,8 +2438,6 @@ function drawNodeGraphNumberReadoutItem(renderer, item, pixelRatio) {
           cellW: snap.cellW,
           rgb: [255, 255, 255],
           alpha: depositBright,
-          softBlurPx: 0,
-          glow: 0,
           plate: false,
           energy: true,
         });
@@ -2824,7 +2452,7 @@ function drawNodeGraphNumberReadoutItem(renderer, item, pixelRatio) {
           settings,
         );
         const residualLayout = nodeGraphNumberReadoutComputeLayout(
-          burnCtx,
+          null,
           previousValueText,
           digitFontFamily,
           width,
@@ -2844,7 +2472,7 @@ function drawNodeGraphNumberReadoutItem(renderer, item, pixelRatio) {
         const residualPadY = residualLayout.padPxY != null ? residualLayout.padPxY : residualPad;
         if (residualLayout.pixelPin) {
           nodeGraphNumberReadoutDrawPixelPin(
-            burnCtx,
+            depositPen,
             residualLayout,
             left,
             top,
@@ -2854,7 +2482,7 @@ function drawNodeGraphNumberReadoutItem(renderer, item, pixelRatio) {
             depositBright,
           );
         } else {
-          nodeGraphNumberReadoutDrawDigits(burnCtx, {
+          nodeGraphNumberReadoutDrawDigits(depositPen, {
             text: depositText,
             centerX: left + residualPad + residualLayout.contentW * 0.5,
             centerY: top + residualPadY + residualLayout.digitAreaH * 0.5,
@@ -2863,21 +2491,13 @@ function drawNodeGraphNumberReadoutItem(renderer, item, pixelRatio) {
             cellW: residualLayout.cellW,
             rgb: [255, 255, 255],
             alpha: depositBright,
-            softBlurPx: 0,
-            glow: 0,
             plate: false,
             energy: true,
           });
         }
       }
-      burnCtx.restore();
-      if (plateGl) {
-        const track = nodeGraphNumberReadoutStampTrack;
-        track.ctx = null;
-        if (track.any) {
-          nodeGraphNumberReadoutGlPlateStamp(plateGl, burnPlate, track.x0, track.y0, track.x1, track.y1);
-        }
-      }
+      nodeGraphNumberReadoutGlPenFlush(depositPen);
+      nodeGraphNumberReadoutPlateGlStats.stamps += 1;
       canvas._numberReadoutResidualEnergy = Math.max(
         nodeGraphFiniteNumber(canvas._numberReadoutResidualEnergy),
         depositPeak,
@@ -2894,15 +2514,11 @@ function drawNodeGraphNumberReadoutItem(renderer, item, pixelRatio) {
       depositEnergy > 0
       && hangOn
       && trailHang > 0.001
-      && burnCtx
+      && burnOn
       && burnPlate?.width > 0
       && !frozen
     ) {
-      burnCtx.setTransform(1, 0, 0, 1, 0, 0);
-      burnCtx.clearRect(0, 0, burnPlate.width, burnPlate.height);
-      if (plateGl) {
-        nodeGraphNumberReadoutGlPlateClear(plateGl);
-      }
+      nodeGraphNumberReadoutGlPlateClear(plateGl);
     }
   }
   const depositActive = hangOn && depositEnergy > 0.008;
@@ -2936,8 +2552,11 @@ function drawNodeGraphNumberReadoutItem(renderer, item, pixelRatio) {
   const rgb = nodeGraphNumberReadoutLightRgb(settings);
   const bg = nodeGraphFacePlateBackground(settings);
   const alpha = 1;
+  const pen = nodeGraphNumberReadoutGlBeginFace(canvas);
+  if (!pen) {
+    return;
+  }
 
-  context.setTransform(1, 0, 0, 1, 0, 0);
   const largeUnit = hasUnit && String(unit || "").trim().toLowerCase() === "hz";
   // User Padding 0 = flush to plate walls (no forced pitch/LCD inset).
   const pad01 = nodeGraphNumberReadoutFacePadding01(settings);
@@ -2948,7 +2567,7 @@ function drawNodeGraphNumberReadoutItem(renderer, item, pixelRatio) {
     liveFitText = String(valueText || "C#3");
   }
   const layout = nodeGraphNumberReadoutComputeLayout(
-    context,
+    null,
     valueText,
     digitFontFamily,
     width,
@@ -2998,11 +2617,7 @@ function drawNodeGraphNumberReadoutItem(renderer, item, pixelRatio) {
     && String(valueText) === String(nodeGraphPitchDetectorZeroDisplay(pitchMode, decimals));
   const drawLiveDigits = alpha > 0.001
     && (pitchNoLockGlyph || !nodeGraphNumberReadoutIsEmptyPlaceholder(valueText));
-  context.setTransform(1, 0, 0, 1, 0, 0);
-  context.imageSmoothingEnabled = false;
-  context.globalCompositeOperation = "source-over";
-  context.fillStyle = bg;
-  context.fillRect(left, top, width, height);
+  nodeGraphNumberReadoutGlPenRect(pen, left, top, width, height, nodeGraphNumberReadoutCssRgb(bg), 1);
   const ghostBlendAmt = clampNodeSliderValue(Number(settings.ghostBlend), 0, 1);
   if (ghostBlendAmt > 0.0005 && digitFontSize > 0.25 && !layout.pixelPin) {
     let stop0 = [0, 0, 4];
@@ -3015,7 +2630,7 @@ function drawNodeGraphNumberReadoutItem(renderer, item, pixelRatio) {
     const eight = typeof nodeGraphNumberReadoutGhostPlateText === "function"
       ? nodeGraphNumberReadoutGhostPlateText(valueText)
       : String(valueText || "").replace(/[0-9!]/g, "8");
-    nodeGraphNumberReadoutDrawDigits(context, {
+    nodeGraphNumberReadoutDrawDigits(pen, {
       text: eight,
       centerX: digitX,
       centerY: digitY,
@@ -3024,15 +2639,13 @@ function drawNodeGraphNumberReadoutItem(renderer, item, pixelRatio) {
       cellW,
       rgb: stop0,
       alpha: ghostBlendAmt,
-      softBlurPx: 0,
-      glow: 0,
       plate: true,
-      composite: "source-over",
     });
   }
   if (plateGl) {
     nodeGraphNumberReadoutPresentBurnPlate(
-      context,
+      pen,
+      canvas,
       burnPlate,
       gradientStops,
       peakHex,
@@ -3041,7 +2654,7 @@ function drawNodeGraphNumberReadoutItem(renderer, item, pixelRatio) {
   if (drawLiveDigits) {
     if (layout.pixelPin) {
       nodeGraphNumberReadoutDrawPixelPin(
-        context,
+        pen,
         layout,
         left,
         top,
@@ -3051,7 +2664,7 @@ function drawNodeGraphNumberReadoutItem(renderer, item, pixelRatio) {
         alpha,
       );
     } else if (digitFontSize > 0.25) {
-      nodeGraphNumberReadoutDrawDigits(context, {
+      nodeGraphNumberReadoutDrawDigits(pen, {
         text: valueText,
         centerX: digitX,
         centerY: digitY,
@@ -3060,10 +2673,7 @@ function drawNodeGraphNumberReadoutItem(renderer, item, pixelRatio) {
         cellW,
         rgb,
         alpha,
-        softBlurPx: 0,
-        glow: 0,
         plate: false,
-        composite: "source-over",
       });
     }
   }
@@ -3075,17 +2685,19 @@ function drawNodeGraphNumberReadoutItem(renderer, item, pixelRatio) {
       digitFontSize,
       largeUnit,
     );
-    context.font = `700 ${labelFontSize}px "Consolas", "Courier New", monospace`;
-    context.textAlign = "center";
-    context.textBaseline = "middle";
-    context.fillStyle = `rgba(${rgb[0]}, ${rgb[1]}, ${rgb[2]}, ${(alpha * (largeUnit ? 0.85 : 0.55)).toFixed(4)})`;
-    context.fillText(
+    nodeGraphNumberReadoutGlPenText(
+      pen,
       unit,
       left + padPx + layout.contentW * 0.5,
       top + padPxY + digitAreaHeight + labelHeight * 0.5,
+      NODE_GRAPH_NUMBER_READOUT_UNIT_FONT,
+      labelFontSize,
+      rgb,
+      alpha * (largeUnit ? 0.85 : 0.55),
     );
   }
 
+  nodeGraphNumberReadoutGlEndFace(canvas, pen);
   canvas._numberReadoutLastValueText = valueText;
   nodeGraphNumberReadoutRememberGoodValue(canvas, valueText);
   canvas._nodeGraphNumberReadoutText = text;
@@ -3096,3 +2708,513 @@ function drawNodeGraphNumberReadoutItem(renderer, item, pixelRatio) {
   canvas._nodeGraphNumberReadoutPaintAt = now;
 }
 
+
+
+/*
+ * Number readout GL face pipeline (Value LED / Value LCD / Pitch Detector).
+ * Each face canvas owns one RGBA8 target on the shared GL device; a frame is
+ * batched quads (solid rects + glyphs sampled from a baked atlas, premultiplied
+ * source-over), optional full-target passes (burn-plate tint, LCD inner
+ * shadow), then one present + blit into the face canvas. Texel row y = canvas
+ * row y in the target. No shared device: nodeGraphDisplayGlFailed (black +
+ * one console.error); there is no 2D face path.
+ */
+const NODE_GRAPH_NUMBER_READOUT_UNIT_FONT = '"Consolas", "Courier New", monospace';
+const nodeGraphNumberReadoutGlStats = { faces: 0, presents: 0, glyphs: 0, rects: 0, shadows: 0, tints: 0, atlasBakes: 0 };
+
+const NODE_GRAPH_NUMBER_READOUT_QUAD_VS = `
+  attribute vec2 aPos;
+  attribute vec2 aUv;
+  attribute vec4 aColor;
+  attribute float aMode;
+  uniform vec2 uSize;
+  varying vec2 vUv;
+  varying vec4 vColor;
+  varying float vMode;
+  void main() {
+    vUv = aUv;
+    vColor = aColor;
+    vMode = aMode;
+    gl_Position = vec4(aPos / uSize * 2.0 - 1.0, 0.0, 1.0);
+  }
+`;
+const NODE_GRAPH_NUMBER_READOUT_QUAD_FS = `
+  precision mediump float;
+  uniform sampler2D uAtlas;
+  varying vec2 vUv;
+  varying vec4 vColor;
+  varying float vMode;
+  void main() {
+    float cover = vMode > 0.5 ? texture2D(uAtlas, vUv).a : 1.0;
+    float a = vColor.a * cover;
+    gl_FragColor = vec4(vColor.rgb * a, a);
+  }
+`;
+// Value LCD inset glass shadow, analytic: black frame with an offset hole,
+// Gaussian-blurred (separable erf of the box hole) or hard (pixel-box
+// coverage), clipped to the plate. Same maths as the old blurred 2D mask.
+const NODE_GRAPH_NUMBER_READOUT_SHADOW_FS = `
+  #ifdef GL_FRAGMENT_PRECISION_HIGH
+  precision highp float;
+  #else
+  precision mediump float;
+  #endif
+  uniform vec4 uClip;
+  uniform vec4 uHole;
+  uniform float uSigma;
+  uniform float uAlpha;
+  float erfApprox(float x) {
+    float s = sign(x);
+    float a = abs(x);
+    float t = 1.0 / (1.0 + 0.3275911 * a);
+    float y = 1.0 - (((((1.061405429 * t - 1.453152027) * t) + 1.421413741) * t - 0.284496736) * t + 0.254829592) * t * exp(-a * a);
+    return s * y;
+  }
+  float cover1(float p, float a, float b) {
+    if (uSigma < 0.01) {
+      return clamp(min(p + 0.5, b) - max(p - 0.5, a), 0.0, 1.0);
+    }
+    float k = 0.70710678 / uSigma;
+    return 0.5 * (erfApprox((p - a) * k) - erfApprox((p - b) * k));
+  }
+  void main() {
+    vec2 p = gl_FragCoord.xy;
+    if (p.x < uClip.x || p.y < uClip.y || p.x > uClip.z || p.y > uClip.w) {
+      discard;
+    }
+    float hole = cover1(p.x, uHole.x, uHole.z) * cover1(p.y, uHole.y, uHole.w);
+    float a = uAlpha * clamp(1.0 - hole, 0.0, 1.0);
+    gl_FragColor = vec4(0.0, 0.0, 0.0, a);
+  }
+`;
+const NODE_GRAPH_NUMBER_READOUT_PRESENT_FS = `
+  precision mediump float;
+  varying vec2 vUv;
+  uniform sampler2D uSrc;
+  void main() {
+    gl_FragColor = texture2D(uSrc, vec2(vUv.x, 1.0 - vUv.y));
+  }
+`;
+
+function nodeGraphNumberReadoutCssRgb(css) {
+  const t = String(css || "").trim();
+  let m = t.match(/^#([0-9a-f]{3})$/i);
+  if (m) {
+    return [...m[1]].map((c) => parseInt(c + c, 16));
+  }
+  m = t.match(/^#([0-9a-f]{6})/i);
+  if (m) {
+    return [0, 2, 4].map((i) => parseInt(m[1].slice(i, i + 2), 16));
+  }
+  m = t.match(/^rgba?\(\s*([\d.]+)[\s,]+([\d.]+)[\s,]+([\d.]+)/i);
+  if (m) {
+    return [Number(m[1]), Number(m[2]), Number(m[3])];
+  }
+  return [0, 0, 0];
+}
+
+function nodeGraphNumberReadoutGlDevice() {
+  if (typeof nodeGraphSharedGlDevice !== "function" || typeof SoemGl === "undefined") {
+    return null;
+  }
+  const dev = nodeGraphSharedGlDevice();
+  const gl = dev?.gl;
+  if (!gl || gl.isContextLost()) {
+    return null;
+  }
+  return dev;
+}
+
+function nodeGraphNumberReadoutFontsSig() {
+  const fonts = typeof document !== "undefined" ? document.fonts : null;
+  return fonts ? `${fonts.status}:${fonts.size}` : "";
+}
+
+// Per-glyph metrics at REF px (bounding box + advance), from the atlas bake.
+const nodeGraphNumberReadoutGlyphMetricCache = new Map();
+const NODE_GRAPH_NUMBER_READOUT_METRIC_REF = 100;
+
+function nodeGraphNumberReadoutGlyphMetrics(fontFamily, fontPx, glyph) {
+  const ref = NODE_GRAPH_NUMBER_READOUT_METRIC_REF;
+  const key = `${fontFamily}|${nodeGraphNumberReadoutFontsSig()}`;
+  let map = nodeGraphNumberReadoutGlyphMetricCache.get(key);
+  if (!map) {
+    if (nodeGraphNumberReadoutGlyphMetricCache.size > 32) {
+      nodeGraphNumberReadoutGlyphMetricCache.clear();
+    }
+    map = new Map();
+    nodeGraphNumberReadoutGlyphMetricCache.set(key, map);
+  }
+  const g = String(glyph || " ");
+  let m = map.get(g);
+  if (!m) {
+    const baked = typeof nodeGraphDisplayCanvasBakeGlyphAtlas === "function"
+      ? nodeGraphDisplayCanvasBakeGlyphAtlas({
+        glyphs: [g], cols: 1, cellW: 1, cellH: 1, fontPx: ref, family: fontFamily, weight: 700,
+        transparent: true, metrics: true, skipDraw: true,
+      })
+      : null;
+    m = baked?.glyphMetrics?.[0] || { width: ref * 0.6, ascent: ref * 0.4, descent: ref * 0.4 };
+    map.set(g, m);
+  }
+  const k = Math.max(0, Number(fontPx) || 0) / ref;
+  return {
+    width: m.width * k,
+    actualBoundingBoxAscent: m.ascent * k,
+    actualBoundingBoxDescent: m.descent * k,
+  };
+}
+
+// Glyph atlases per (family, px, font state), LRU. Glyphs are drawn
+// textAlign center / textBaseline middle at the cell centre; white with
+// coverage in alpha. Missing characters rebake the atlas with the union.
+const nodeGraphNumberReadoutGlyphAtlasCache = new Map();
+const NODE_GRAPH_NUMBER_READOUT_ATLAS_BASE = "0123456789.-+8";
+const NODE_GRAPH_NUMBER_READOUT_ATLAS_MAX_PX = 384;
+
+function nodeGraphNumberReadoutGlyphAtlasDrop(entry) {
+  if (entry?.tex && entry.gl && !entry.gl.isContextLost()) {
+    entry.gl.deleteTexture(entry.tex);
+  }
+}
+
+function nodeGraphNumberReadoutGlyphAtlas(gl, fontFamily, fontPx, text) {
+  if (!gl || typeof nodeGraphDisplayCanvasBakeGlyphAtlas !== "function") {
+    return null;
+  }
+  const want = Math.max(1, Number(fontPx) || 1);
+  // Bake at the exact face font size so glyph quads land 1:1 on canvas pixels
+  // (a resampled atlas reads soft/bold); only oversize faces scale.
+  const bakePx = Math.min(NODE_GRAPH_NUMBER_READOUT_ATLAS_MAX_PX, want);
+  const key = `${fontFamily}|${bakePx}|${nodeGraphNumberReadoutFontsSig()}`;
+  const cache = nodeGraphNumberReadoutGlyphAtlasCache;
+  let entry = cache.get(key);
+  if (entry && entry.gl !== gl) {
+    cache.delete(key);
+    entry = null;
+  }
+  let missing = "";
+  for (const ch of String(text || "")) {
+    if (ch !== " " && ch !== "!" && !(entry ? entry.index.has(ch) : NODE_GRAPH_NUMBER_READOUT_ATLAS_BASE.includes(ch)) && !missing.includes(ch)) {
+      missing += ch;
+    }
+  }
+  if (!entry || (entry && missing)) {
+    const chars = [...new Set([...(entry ? entry.chars : NODE_GRAPH_NUMBER_READOUT_ATLAS_BASE), ...missing])];
+    const cw = Math.ceil(bakePx * 1.4) + 4;
+    const chh = Math.ceil(bakePx * 1.6) + 4;
+    const maxTex = Math.min(4096, gl.getParameter(gl.MAX_TEXTURE_SIZE) || 4096);
+    const cols = Math.max(1, Math.min(chars.length, Math.floor(maxTex / cw)));
+    const rows = Math.ceil(chars.length / cols);
+    if (rows * chh > maxTex) {
+      return null;
+    }
+    const baked = nodeGraphDisplayCanvasBakeGlyphAtlas({
+      glyphs: chars, cols, cellW: cw, cellH: chh, fontPx: bakePx, family: fontFamily, weight: 700, transparent: true,
+    });
+    if (!baked) {
+      return null;
+    }
+    const tex = entry?.tex || gl.createTexture();
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, tex);
+    nodeGraphNumberReadoutGlPlateTexParams(gl, gl.LINEAR);
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+    gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, baked);
+    gl.bindTexture(gl.TEXTURE_2D, null);
+    entry = {
+      gl, tex, chars, cols, cw, ch: chh, aw: baked.width, ah: baked.height, bakePx,
+      index: new Map(chars.map((c, i) => [c, i])),
+    };
+    nodeGraphNumberReadoutGlStats.atlasBakes += 1;
+  }
+  cache.delete(key);
+  cache.set(key, entry);
+  while (cache.size > 24) {
+    const oldest = cache.keys().next().value;
+    nodeGraphNumberReadoutGlyphAtlasDrop(cache.get(oldest));
+    cache.delete(oldest);
+  }
+  return { ...entry, scale: want / entry.bakePx };
+}
+
+function nodeGraphNumberReadoutGlFaceTarget(canvas) {
+  const dev = nodeGraphNumberReadoutGlDevice();
+  if (!dev || !canvas) {
+    return null;
+  }
+  const gl = dev.gl;
+  const w = canvas.width | 0;
+  const h = canvas.height | 0;
+  if (w < 1 || h < 1 || w > dev.canvas.width || h > dev.canvas.height) {
+    return null;
+  }
+  let prev = canvas._numberReadoutGlFace || null;
+  if (prev && prev.gl !== gl) {
+    prev = null;
+    canvas._numberReadoutGlFace = null;
+  }
+  if (prev && prev.w === w && prev.h === h) {
+    return prev;
+  }
+  const target = nodeGraphNumberReadoutGlPlateTarget(gl, w, h);
+  if (!target) {
+    return null;
+  }
+  const face = { gl, w, h, target };
+  if (prev) {
+    // Resize: scale the last face so a paused readout keeps its pixels.
+    gl.disable(gl.BLEND);
+    gl.disable(gl.SCISSOR_TEST);
+    nodeGraphNumberReadoutGlPlatePass(face, target, prev.target.tex, 1, true);
+    gl.deleteFramebuffer(prev.target.fbo);
+    gl.deleteTexture(prev.target.tex);
+  }
+  canvas._numberReadoutGlFace = face;
+  return face;
+}
+
+function nodeGraphNumberReadoutGlPen(gl, target, w, h) {
+  return { gl, target, w, h, verts: [], tex: null };
+}
+
+function nodeGraphNumberReadoutGlBeginFace(canvas) {
+  const face = nodeGraphNumberReadoutGlFaceTarget(canvas);
+  if (!face) {
+    if (typeof nodeGraphDisplayGlFailed === "function") {
+      nodeGraphDisplayGlFailed(canvas, "Number readout face GL unavailable");
+    }
+    return null;
+  }
+  const pen = nodeGraphNumberReadoutGlPen(face.gl, face.target, face.w, face.h);
+  pen.face = face;
+  nodeGraphNumberReadoutGlStats.faces += 1;
+  return pen;
+}
+
+function nodeGraphNumberReadoutGlEndFace(canvas, pen) {
+  if (!pen?.face) {
+    return false;
+  }
+  nodeGraphNumberReadoutGlPenFlush(pen);
+  return nodeGraphNumberReadoutGlPresentFace(canvas, pen.face);
+}
+
+const nodeGraphNumberReadoutGlQuadBuf = { gl: null, buf: null };
+
+function nodeGraphNumberReadoutGlPenFlush(pen) {
+  if (!pen || !pen.verts.length) {
+    return true;
+  }
+  const gl = pen.gl;
+  const verts = pen.verts;
+  pen.verts = [];
+  const prog = SoemGl.program(gl, "number-readout-face-quad", NODE_GRAPH_NUMBER_READOUT_QUAD_VS, NODE_GRAPH_NUMBER_READOUT_QUAD_FS);
+  if (!prog) {
+    return false;
+  }
+  const qb = nodeGraphNumberReadoutGlQuadBuf;
+  if (qb.gl !== gl || !qb.buf) {
+    qb.gl = gl;
+    qb.buf = gl.createBuffer();
+  }
+  gl.bindFramebuffer(gl.FRAMEBUFFER, pen.target.fbo);
+  gl.viewport(0, 0, pen.w, pen.h);
+  gl.disable(gl.SCISSOR_TEST);
+  gl.enable(gl.BLEND);
+  gl.blendFuncSeparate(gl.ONE, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+  gl.useProgram(prog);
+  gl.uniform2f(gl.getUniformLocation(prog, "uSize"), pen.w, pen.h);
+  gl.uniform1i(gl.getUniformLocation(prog, "uAtlas"), 0);
+  gl.activeTexture(gl.TEXTURE0);
+  gl.bindTexture(gl.TEXTURE_2D, pen.tex);
+  gl.bindBuffer(gl.ARRAY_BUFFER, qb.buf);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(verts), gl.STREAM_DRAW);
+  const stride = 9 * 4;
+  const attrs = [["aPos", 2, 0], ["aUv", 2, 2], ["aColor", 4, 4], ["aMode", 1, 8]];
+  const locs = [];
+  for (const [name, size, off] of attrs) {
+    const loc = gl.getAttribLocation(prog, name);
+    if (loc < 0) continue;
+    gl.enableVertexAttribArray(loc);
+    gl.vertexAttribPointer(loc, size, gl.FLOAT, false, stride, off * 4);
+    locs.push(loc);
+  }
+  gl.drawArrays(gl.TRIANGLES, 0, verts.length / 9);
+  for (const loc of locs) {
+    gl.disableVertexAttribArray(loc);
+  }
+  gl.disable(gl.BLEND);
+  gl.bindTexture(gl.TEXTURE_2D, null);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  return true;
+}
+
+function nodeGraphNumberReadoutGlPenQuad(pen, x0, y0, x1, y1, u0, v0, u1, v1, rgb, alpha, tex) {
+  if (tex && pen.tex !== tex) {
+    if (pen.verts.length && pen.tex) {
+      nodeGraphNumberReadoutGlPenFlush(pen);
+    }
+    pen.tex = tex;
+  }
+  const r = nodeGraphFiniteNumber(rgb?.[0]) / 255;
+  const g = nodeGraphFiniteNumber(rgb?.[1]) / 255;
+  const b = nodeGraphFiniteNumber(rgb?.[2]) / 255;
+  const a = Math.max(0, Math.min(1, nodeGraphFiniteNumber(alpha)));
+  const m = tex ? 1 : 0;
+  pen.verts.push(
+    x0, y0, u0, v0, r, g, b, a, m,
+    x1, y0, u1, v0, r, g, b, a, m,
+    x0, y1, u0, v1, r, g, b, a, m,
+    x1, y0, u1, v0, r, g, b, a, m,
+    x1, y1, u1, v1, r, g, b, a, m,
+    x0, y1, u0, v1, r, g, b, a, m,
+  );
+}
+
+function nodeGraphNumberReadoutGlPenRect(pen, x, y, w, h, rgb, alpha = 1) {
+  if (!pen || !(w > 0) || !(h > 0) || !(alpha > 0)) {
+    return;
+  }
+  nodeGraphNumberReadoutGlPenQuad(pen, x, y, x + w, y + h, 0, 0, 0, 0, rgb, alpha, null);
+  nodeGraphNumberReadoutGlStats.rects += 1;
+}
+
+// One glyph centred on (x, y) (textAlign center, textBaseline middle).
+function nodeGraphNumberReadoutGlPenGlyph(pen, atlas, glyph, x, y, rgb, alpha) {
+  const i = atlas?.index.get(glyph);
+  if (i == null || !(alpha > 0)) {
+    return;
+  }
+  const s = atlas.scale;
+  const dw = atlas.cw * s;
+  const dh = atlas.ch * s;
+  let x0 = x - dw * 0.5;
+  let y0 = y - dh * 0.5;
+  if (Math.abs(s - 1) < 1e-6) {
+    // 1:1 bake: land atlas texels on canvas pixels (no resample blur).
+    x0 = Math.round(x0);
+    y0 = Math.round(y0);
+  }
+  const col = i % atlas.cols;
+  const row = Math.floor(i / atlas.cols);
+  const u0 = (col * atlas.cw) / atlas.aw;
+  const v0 = (row * atlas.ch) / atlas.ah;
+  const u1 = ((col + 1) * atlas.cw) / atlas.aw;
+  const v1 = ((row + 1) * atlas.ch) / atlas.ah;
+  nodeGraphNumberReadoutGlPenQuad(pen, x0, y0, x0 + dw, y0 + dh, u0, v0, u1, v1, rgb, alpha, atlas.tex);
+  nodeGraphNumberReadoutGlStats.glyphs += 1;
+}
+
+// Centred single-line text (unit labels), advancing by measured glyph widths.
+function nodeGraphNumberReadoutGlPenText(pen, text, cx, cy, fontFamily, fontPx, rgb, alpha) {
+  const str = String(text || "");
+  if (!pen || !str || !(fontPx > 0.25)) {
+    return;
+  }
+  const atlas = nodeGraphNumberReadoutGlyphAtlas(pen.gl, fontFamily, fontPx, str);
+  if (!atlas) {
+    return;
+  }
+  const chars = [...str];
+  const widths = chars.map((c) => nodeGraphNumberReadoutGlyphMetrics(fontFamily, fontPx, c).width);
+  let x = cx - widths.reduce((a, b) => a + b, 0) * 0.5;
+  for (let i = 0; i < chars.length; i += 1) {
+    if (chars[i] !== " ") {
+      nodeGraphNumberReadoutGlPenGlyph(pen, atlas, chars[i], x + widths[i] * 0.5, cy, rgb, alpha);
+    }
+    x += widths[i];
+  }
+}
+
+function nodeGraphNumberReadoutGlPenLcdInnerShadow(
+  pen,
+  left,
+  top,
+  width,
+  height,
+  distance01,
+  sharpness01,
+  offsetX01 = 0,
+  offsetY01 = 0,
+) {
+  if (!pen || !(width > 2) || !(height > 2)) {
+    return;
+  }
+  const dist = clampNodeSliderValue(nodeGraphFiniteNumber(distance01), 0, 1);
+  if (dist <= 0.001) {
+    return;
+  }
+  const sharp = clampNodeSliderValue(nodeGraphFiniteNumber(sharpness01), 0, 1);
+  const ox01 = clampNodeSliderValue(nodeGraphFiniteNumber(offsetX01), -1, 1);
+  const oy01 = clampNodeSliderValue(nodeGraphFiniteNumber(offsetY01), -1, 1);
+  const minSide = Math.min(width, height);
+  // Inset-shadow parameter maths (former 2D Gaussian inset).
+  const reach = Math.max(1, dist * minSide * 0.42);
+  const hardEase = nodeGraphNumberReadoutSmoothstep01(sharp);
+  const softFrac = (1 - hardEase) * (1 - hardEase);
+  const blurPx = reach * 1.35 * softFrac;
+  const softBase = Math.min(0.55, 0.18 + dist * 0.28);
+  const alpha = softBase + (1 - softBase) * hardEase;
+  const maxOff = reach * 0.9;
+  const offX = ox01 * maxOff;
+  const offY = oy01 * maxOff;
+  const gl = pen.gl;
+  const prog = SoemGl.program(gl, "number-readout-lcd-shadow", SoemGl.GLSL_FULLSCREEN_VS, NODE_GRAPH_NUMBER_READOUT_SHADOW_FS);
+  if (!prog) {
+    return;
+  }
+  nodeGraphNumberReadoutGlPenFlush(pen);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, pen.target.fbo);
+  gl.viewport(0, 0, pen.w, pen.h);
+  gl.disable(gl.SCISSOR_TEST);
+  gl.enable(gl.BLEND);
+  gl.blendFuncSeparate(gl.ONE, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+  gl.useProgram(prog);
+  gl.uniform4f(gl.getUniformLocation(prog, "uClip"), left, top, left + width, top + height);
+  const hx = left + offX;
+  const hy = top + offY;
+  gl.uniform4f(gl.getUniformLocation(prog, "uHole"), hx, hy, hx + Math.ceil(width), hy + Math.ceil(height));
+  gl.uniform1f(gl.getUniformLocation(prog, "uSigma"), blurPx > 0.35 ? blurPx : 0);
+  gl.uniform1f(gl.getUniformLocation(prog, "uAlpha"), alpha);
+  SoemGl.drawQuad(gl, gl.getAttribLocation(prog, "aPos"));
+  gl.disable(gl.BLEND);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  nodeGraphNumberReadoutGlStats.shadows += 1;
+}
+
+function nodeGraphNumberReadoutGlPresentFace(canvas, face) {
+  const dev = nodeGraphNumberReadoutGlDevice();
+  if (!dev || dev.gl !== face?.gl) {
+    if (typeof nodeGraphDisplayGlFailed === "function") {
+      nodeGraphDisplayGlFailed(canvas, "Number readout face GL unavailable");
+    }
+    return false;
+  }
+  const gl = face.gl;
+  const prog = SoemGl.program(gl, "number-readout-face-present", SoemGl.GLSL_FULLSCREEN_VS, NODE_GRAPH_NUMBER_READOUT_PRESENT_FS);
+  const ctx = typeof nodeGraphDisplayCanvasPresentContext === "function"
+    ? nodeGraphDisplayCanvasPresentContext(canvas)
+    : null;
+  if (!prog || !ctx) {
+    if (typeof nodeGraphDisplayGlFailed === "function") {
+      nodeGraphDisplayGlFailed(canvas, "Number readout face present unavailable");
+    }
+    return false;
+  }
+  const w = face.w;
+  const h = face.h;
+  nodeGraphSharedGlBindPresent(gl, w, h);
+  gl.disable(gl.BLEND);
+  gl.useProgram(prog);
+  gl.activeTexture(gl.TEXTURE0);
+  gl.bindTexture(gl.TEXTURE_2D, face.target.tex);
+  gl.uniform1i(gl.getUniformLocation(prog, "uSrc"), 0);
+  SoemGl.drawQuad(gl, gl.getAttribLocation(prog, "aPos"));
+  gl.bindTexture(gl.TEXTURE_2D, null);
+  nodeGraphSharedGlEndPresent(gl);
+  nodeGraphDisplayCanvasBlit(ctx, dev.canvas, 0, dev.canvas.height - h, w, h, 0, 0, w, h, false);
+  nodeGraphNumberReadoutGlStats.presents += 1;
+  return true;
+}

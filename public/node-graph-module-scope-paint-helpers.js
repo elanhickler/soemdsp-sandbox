@@ -792,21 +792,49 @@ function nodeGraphFacePlateApplyCss(screenElement, bg) {
   }
 }
 
-function nodeGraphFacePlateFillCanvas(context, canvas, bg) {
-  if (!context || !canvas) {
-    return;
+/**
+ * Solid plate fill on the shared GL device (clear + blit). Returns "ok",
+ * "no-device" (shared GL unavailable) or "no-present" (the face cannot take a
+ * GL blit, e.g. it owns its own WebGL context); callers decide what that means.
+ */
+function nodeGraphFacePlateFill(canvas, bg) {
+  if (!canvas || !(canvas.width > 0) || !(canvas.height > 0)) {
+    return "no-present";
   }
   // Pixels are cleared: self-painted plates that skip unchanged redraws
   // (Metronome BPM) must repaint.
   if (canvas._nodeGraphTransportBpmDigits !== undefined) {
     canvas._nodeGraphTransportBpmDigits = null;
   }
-  context.save();
-  context.setTransform(1, 0, 0, 1, 0, 0);
-  context.globalCompositeOperation = "source-over";
-  context.fillStyle = bg || nodeGraphFacePlateDefaultBackground;
-  context.fillRect(0, 0, canvas.width, canvas.height);
-  context.restore();
+  const batch = typeof nodeGraphGlLinesBegin === "function"
+    ? nodeGraphGlLinesBegin(canvas, nodeGraphGlLinesCss(bg || nodeGraphFacePlateDefaultBackground), { publishNodeId: "" })
+    : null;
+  if (!batch) return "no-device";
+  return nodeGraphGlLinesEnd(batch) ? "ok" : "no-present";
+}
+
+/** Clear a face to transparent through the shared GL device (overlay / light layers). */
+function nodeGraphFaceClearTransparent(canvas) {
+  if (!canvas || !(canvas.width > 0) || !(canvas.height > 0)) {
+    return;
+  }
+  const batch = typeof nodeGraphGlLinesBegin === "function"
+    ? nodeGraphGlLinesBegin(canvas, [0, 0, 0, 0], { transparent: true })
+    : null;
+  if (!batch || !nodeGraphGlLinesEnd(batch)) {
+    nodeGraphDisplayGlFailed(canvas, "face clear: shared GL unavailable");
+  }
+}
+
+/** Plate fill; GL failure goes to nodeGraphDisplayGlFailed. `context` is unused (legacy arg). */
+function nodeGraphFacePlateFillCanvas(context, canvas, bg) {
+  void context;
+  if (!canvas || !(canvas.width > 0) || !(canvas.height > 0)) {
+    return;
+  }
+  if (nodeGraphFacePlateFill(canvas, bg) !== "ok") {
+    nodeGraphDisplayGlFailed(canvas, "face plate: shared GL unavailable");
+  }
 }
 
 /** Same modes as 1D Waterfall / TraceStroke.STEREO_BLEND_MODES. */
@@ -828,19 +856,6 @@ function nodeGraphScopeStereoBlendComposite(mode) {
     return "lighter";
   }
   return m;
-}
-
-/** Paint plate under existing pixels (e.g. after putImageData / transparent energy). */
-function nodeGraphFacePlateFillUnder(context, canvas, bg) {
-  if (!context || !canvas) {
-    return;
-  }
-  context.save();
-  context.setTransform(1, 0, 0, 1, 0, 0);
-  context.globalCompositeOperation = "destination-over";
-  context.fillStyle = bg || nodeGraphFacePlateDefaultBackground;
-  context.fillRect(0, 0, canvas.width, canvas.height);
-  context.restore();
 }
 
 // syncNodeGraphScope2dBurnCanvas → node-graph-module-scope-draw-burn.js
@@ -930,176 +945,6 @@ function nodeGraphScope2dSampleIsFinite(x, y) {
  */
 function nodeGraphScope2dTraceCanvasSquare(canvas) {
   return nodeGraphScope2dBurnCanvasSquare(canvas);
-}
-
-/**
- * DestFade plate persist — Trail and Ghost are separate and must not feed back.
- *
- * Hot path lives in `_scopeDestHot` (Trail wipe only). Ghost scorch lives in
- * `_scopeDestGhost` (own erase). Visible canvas is reset to hot-only here so
- * stamps draw clean; call `nodeGraphScopeDestFadeGhostAfterStamps` after ink
- * to deposit hot→ghost and present ghost without baking it into next deposit.
- */
-function nodeGraphScopeDestFadeEnsureLayer(canvas, key, w, h, plateCss) {
-  let layer = canvas[key];
-  if (!layer || layer.width !== w || layer.height !== h) {
-    layer = document.createElement("canvas");
-    layer.width = w;
-    layer.height = h;
-    canvas[key] = layer;
-    const boot = layer.getContext("2d");
-    if (boot) {
-      boot.setTransform(1, 0, 0, 1, 0, 0);
-      boot.globalAlpha = 1;
-      boot.globalCompositeOperation = "source-over";
-      boot.fillStyle = plateCss;
-      boot.fillRect(0, 0, w, h);
-    }
-  }
-  return layer;
-}
-
-function nodeGraphScopeDestFadeTowardPlate(context, canvas, plateCss, trail, ghost) {
-  if (!context || !canvas) {
-    return;
-  }
-  const Residual = typeof PhosphorResidual !== "undefined" ? PhosphorResidual : null;
-  const w = canvas.width | 0;
-  const h = canvas.height | 0;
-  if (w < 1 || h < 1) {
-    return;
-  }
-  const g = Math.max(0, Math.min(1, nodeGraphFiniteNumber(ghost)));
-  const trailErase = Residual?.destFadeAmount
-    ? Residual.destFadeAmount(trail, 0)
-    : Math.max(0.002, Math.min(0.55, 1 - Math.max(0, nodeGraphFiniteNumber(trail)) * 0.97));
-
-  canvas._scopeDestGhostAmount = g;
-  canvas._scopeDestGhostPlate = plateCss;
-
-  const hot = nodeGraphScopeDestFadeEnsureLayer(canvas, "_scopeDestHot", w, h, plateCss);
-  const hotCtx = hot.getContext("2d");
-  if (!hotCtx) {
-    return;
-  }
-
-  // Trail wipe on hot only (never includes ghost scorch).
-  if (trailErase > 0) {
-    hotCtx.save();
-    hotCtx.setTransform(1, 0, 0, 1, 0, 0);
-    hotCtx.globalCompositeOperation = "source-over";
-    hotCtx.globalAlpha = trailErase;
-    hotCtx.fillStyle = plateCss;
-    hotCtx.fillRect(0, 0, w, h);
-    hotCtx.restore();
-  }
-
-  if (g > 0) {
-    const gcan = nodeGraphScopeDestFadeEnsureLayer(canvas, "_scopeDestGhost", w, h, plateCss);
-    const gctx = gcan.getContext("2d");
-    if (gctx) {
-      // Fade scorch only — do NOT deposit from visible canvas here (that was the
-      // feedback loop: visible already had last frame's ghost blit baked in).
-      const gErase = Residual?.destGhostEraseAmount
-        ? Residual.destGhostEraseAmount(g)
-        : Math.max(0.004, 0.08 * (1 - g));
-      gctx.save();
-      gctx.setTransform(1, 0, 0, 1, 0, 0);
-      gctx.globalCompositeOperation = "source-over";
-      gctx.globalAlpha = Math.max(0.002, Math.min(0.55, gErase));
-      gctx.fillStyle = plateCss;
-      gctx.fillRect(0, 0, w, h);
-      gctx.restore();
-    }
-  } else if (canvas._scopeDestGhost) {
-    const gctx = canvas._scopeDestGhost.getContext("2d");
-    if (gctx) {
-      gctx.save();
-      gctx.setTransform(1, 0, 0, 1, 0, 0);
-      gctx.globalCompositeOperation = "source-over";
-      gctx.globalAlpha = 1;
-      gctx.fillStyle = plateCss;
-      gctx.fillRect(0, 0, w, h);
-      gctx.restore();
-    }
-  }
-
-  // Visible = hot-only so new stamps + next deposit stay ghost-free.
-  context.save();
-  context.setTransform(1, 0, 0, 1, 0, 0);
-  context.globalCompositeOperation = "copy";
-  context.globalAlpha = 1;
-  context.drawImage(hot, 0, 0);
-  context.restore();
-}
-
-/**
- * After stamps: deposit hot ink into Ghost scorch, then present hot+ghost.
- * Safe no-op when Ghost is 0 (visible already shows hot).
- */
-function nodeGraphScopeDestFadeGhostAfterStamps(context, canvas) {
-  if (!context || !canvas) {
-    return;
-  }
-  const Residual = typeof PhosphorResidual !== "undefined" ? PhosphorResidual : null;
-  const w = canvas.width | 0;
-  const h = canvas.height | 0;
-  const g = Math.max(0, Math.min(1, nodeGraphFiniteNumber(canvas._scopeDestGhostAmount)));
-  const plateCss = canvas._scopeDestGhostPlate || "#000000";
-  const hot = canvas._scopeDestHot;
-  if (!hot || hot.width !== w || hot.height !== h) {
-    return;
-  }
-  const hotCtx = hot.getContext("2d");
-  if (!hotCtx) {
-    return;
-  }
-
-  // Sync hot from visible (has new stamps; still ghost-free).
-  hotCtx.save();
-  hotCtx.setTransform(1, 0, 0, 1, 0, 0);
-  hotCtx.globalCompositeOperation = "copy";
-  hotCtx.globalAlpha = 1;
-  hotCtx.drawImage(canvas, 0, 0);
-  hotCtx.restore();
-
-  if (!(g > 0)) {
-    return;
-  }
-
-  const gcan = nodeGraphScopeDestFadeEnsureLayer(canvas, "_scopeDestGhost", w, h, plateCss);
-  const gctx = gcan.getContext("2d");
-  if (!gctx) {
-    return;
-  }
-
-  const deposit = Residual?.destGhostDeposit
-    ? Residual.destGhostDeposit(g)
-    : g * 0.08;
-  if (deposit > 0.0005) {
-    gctx.save();
-    gctx.setTransform(1, 0, 0, 1, 0, 0);
-    gctx.globalCompositeOperation = "lighter";
-    gctx.globalAlpha = deposit;
-    gctx.drawImage(hot, 0, 0);
-    gctx.restore();
-  }
-
-  // Present: hot plate, then dim ghost on top (display only — hotBuf stays clean).
-  const present = Residual?.destGhostPresent
-    ? Residual.destGhostPresent(g)
-    : g * 0.2;
-  context.save();
-  context.setTransform(1, 0, 0, 1, 0, 0);
-  context.globalCompositeOperation = "copy";
-  context.globalAlpha = 1;
-  context.drawImage(hot, 0, 0);
-  if (present > 0.0005) {
-    context.globalCompositeOperation = "lighter";
-    context.globalAlpha = present;
-    context.drawImage(gcan, 0, 0);
-  }
-  context.restore();
 }
 
 // nodeGraphScope2dBurnCanvasSquare → node-graph-module-scope-draw-burn.js
@@ -1415,77 +1260,6 @@ function buildNodeGraphTraceDisplayCanvasPoints(buffer, canvas, slot, viewOverri
   return points;
 }
 
-function drawNodeGraphTraceDisplayCanvasLayer(context, points, layer, canvas, options = {}) {
-  if (!context || !Array.isArray(points) || points.length < 1 || !canvas) {
-    return;
-  }
-  if (layer.enabled === false) {
-    return;
-  }
-  const face = Math.max(
-    1,
-    Number(options.faceMinSide) || Math.min(canvas.width, canvas.height),
-  );
-  const blur = Number.isFinite(Number(layer.blur)) ? Number(layer.blur) : 0;
-  const blend = typeof TraceHistoryDraw !== "undefined" && typeof TraceHistoryDraw.normalizeBlend === "function"
-    ? TraceHistoryDraw.normalizeBlend(layer.blend || options.blend, "source-over")
-    : String(layer.blend || options.blend || "source-over");
-  const layerBright = Number.isFinite(Number(layer.brightness)) ? Number(layer.brightness) : 1;
-  if (typeof TraceHistoryDraw !== "undefined" && typeof TraceHistoryDraw.strokeSolid === "function") {
-    TraceHistoryDraw.strokeSolid(context, points, {
-      size: layer.size,
-      blur,
-      brightness: layerBright,
-      fade: Number.isFinite(Number(layer.fade)) ? Number(layer.fade) : 0,
-      color: layer.color,
-      blend,
-      dotBudget: layer.dotBudget,
-      faceMinSide: face,
-      lineCap: options.lineCap,
-    });
-    return;
-  }
-  if (typeof TraceStroke !== "undefined" && TraceStroke.draw) {
-    TraceStroke.draw(context, points, {
-      size: layer.size,
-      blur,
-      brightness: layerBright,
-      fade: Number.isFinite(Number(layer.fade)) ? Number(layer.fade) : 0,
-      color: layer.color,
-      faceMinSide: face,
-      composite: blend === "combine" ? "source-over" : blend,
-      lineCap: options.lineCap,
-    });
-    return;
-  }
-  const size = typeof nodeGraphTraceDisplayNormalizeInkPx === "function"
-    ? nodeGraphTraceDisplayNormalizeInkPx(layer.size, 2)
-    : Math.max(0, nodeGraphFiniteNumber(layer.size, 2));
-  const rgb = nodeGraphScopeRgbFloatsToCanvasRgb(nodeGraphScopeHexColorToRgb(layer.color));
-  const lineWidth = typeof TraceStroke !== "undefined" && typeof TraceStroke.diameterPx === "function"
-    ? TraceStroke.diameterPx(face, size)
-    : (typeof faceInkPx === "function" && typeof clampAuthoredInkPx === "function"
-      ? faceInkPx(clampAuthoredInkPx(size, 0), face)
-      : size);
-  context.save();
-  context.globalCompositeOperation = blend === "combine" ? "source-over" : blend;
-  context.imageSmoothingEnabled = false;
-  context.lineCap = options.lineCap === "butt" ? "butt" : "round";
-  context.lineJoin = options.lineCap === "butt" ? "miter" : "round";
-  context.lineWidth = lineWidth;
-  context.strokeStyle = `rgb(${Math.round(rgb[0] * 255)}, ${Math.round(rgb[1] * 255)}, ${Math.round(rgb[2] * 255)})`;
-  context.shadowBlur = 0;
-  context.beginPath();
-  drawNodeGraphScopeCanvasSmoothPath(context, points);
-  context.stroke();
-  context.restore();
-}
-
-// Stereo Trace (Output / modules with stereoWaterfallPorts):
-// L/R colors + blend modes. Meet (combine): m=min(L,R);
-// pixel=(L-m)·C_L+(R-m)·C_R+m·C_meet (complement → red+blue→green).
-
-/** @returns {{ left: string, right: string } | null} */
 function nodeGraphModuleStereoWaterfallPorts(type) {
   const t = String(type || "").trim();
   if (!t) return null;
@@ -1748,178 +1522,160 @@ function nodeGraphOutputHoldContext(canvas) {
   }
 }
 
-function paintNodeGraphOutputFaceInk(context, canvas, text, options = {}) {
-  if (!context || !(canvas?.width > 0) || !(canvas?.height > 0) || !text) {
+function paintNodeGraphOutputFaceInk(batch, width, height, text, options = {}) {
+  if (!batch || !(width > 0) || !(height > 0) || !text) {
     return false;
   }
   const alpha = Math.max(0, Math.min(1, Number(options.alpha ?? 1)));
   if (!(alpha > 0.001)) {
     return false;
   }
-  const side = Math.min(canvas.width, canvas.height);
+  const side = Math.min(width, height);
   const pad = Math.max(2, Math.round(side * 0.18));
-  const maxW = Math.max(8, canvas.width - pad * 2);
+  const maxW = Math.max(8, width - pad * 2);
   const maxH = Math.max(8, Math.round(side * 0.64));
-  const fontFamily = options.fontFamily || NODE_GRAPH_OUTPUT_PROTECT_FONT;
-  const fontWeight = options.fontWeight ? `${options.fontWeight} ` : "";
-  const density = Number(options.density);
+  const family = options.fontFamily || NODE_GRAPH_OUTPUT_PROTECT_FONT;
+  const weight = Number(options.fontWeight) || 400;
   let lo = 8;
   let hi = Math.max(lo, Math.min(maxW, maxH * 2));
   let best = lo;
-  context.save();
-  context.setTransform(1, 0, 0, 1, 0, 0);
-  context.textAlign = "center";
-  context.textBaseline = "middle";
   for (let i = 0; i < 14; i += 1) {
     const mid = (lo + hi) * 0.5;
-    context.font = `${fontWeight}${mid}px ${fontFamily}`;
-    const metrics = context.measureText(text);
-    const w = metrics.width;
-    const h = (Number(metrics.actualBoundingBoxAscent) || mid * 0.85)
-      + (Number(metrics.actualBoundingBoxDescent) || mid * 0.2);
-    if (w <= maxW && h <= maxH) {
+    const w = nodeGraphGlLinesMeasureText(text, mid, family, weight);
+    if (w <= maxW && mid * 1.05 <= maxH) {
       best = mid;
       lo = mid;
     } else {
       hi = mid;
     }
   }
-  context.font = `${fontWeight}${best}px ${fontFamily}`;
-  context.imageSmoothingEnabled = !(density < 0.999);
-  context.globalCompositeOperation = "source-over";
-  context.globalAlpha = alpha;
-  const x = canvas.width * 0.5;
-  const y = canvas.height * 0.5;
-  if (options.stroke) {
-    context.lineJoin = "round";
-    context.miterLimit = 2;
-    context.lineWidth = Math.max(1, best * 0.06);
-    context.strokeStyle = options.stroke;
-    context.strokeText(text, x, y);
-  }
-  context.fillStyle = options.fill || "#ffffff";
-  context.fillText(text, x, y);
-  context.restore();
+  nodeGraphGlLinesText(batch, text, width * 0.5, height * 0.5, {
+    px: best,
+    rgba: nodeGraphGlLinesCss(options.fill || "#ffffff", alpha),
+    align: "center",
+    baseline: "middle",
+    family,
+    weight,
+  });
   return true;
 }
 
-function paintNodeGraphOutputPauseBars(context, canvas, options = {}) {
-  if (!context || !(canvas?.width > 0) || !(canvas?.height > 0)) {
+function paintNodeGraphOutputPauseBars(batch, width, height, options = {}) {
+  if (!batch || !(width > 0) || !(height > 0)) {
     return false;
   }
   const alpha = Math.max(0, Math.min(1, Number(options.alpha ?? 1)));
   if (!(alpha > 0.001)) {
     return false;
   }
-  const w = canvas.width;
-  const h = canvas.height;
-  const side = Math.min(w, h);
+  const side = Math.min(width, height);
   const fit = Math.max(8, side - Math.max(2, Math.round(side * 0.08)) * 2);
   const barH = Math.max(8, Math.round(fit * 0.52));
   const barW = Math.max(3, Math.round(fit * 0.2));
   const gap = Math.max(2, Math.round(fit * 0.14));
-  const totalW = barW * 2 + gap;
-  const x0 = Math.round((w - totalW) * 0.5);
-  const y0 = Math.round((h - barH) * 0.5);
-  const density = Number(options.density);
-  context.save();
-  context.setTransform(1, 0, 0, 1, 0, 0);
-  context.globalCompositeOperation = "source-over";
-  context.globalAlpha = alpha;
-  context.imageSmoothingEnabled = !(density < 0.999);
-  context.fillStyle = "#ffffff";
-  context.strokeStyle = "rgba(0,0,0,0.85)";
-  context.lineWidth = Math.max(1, Math.round(barW * 0.08));
-  context.lineJoin = "miter";
-  const drawBar = (x) => {
-    context.beginPath();
-    context.rect(x, y0, barW, barH);
-    context.fill();
-    context.stroke();
-  };
-  drawBar(x0);
-  drawBar(x0 + barW + gap);
-  context.restore();
+  const x0 = Math.round((width - (barW * 2 + gap)) * 0.5);
+  const y0 = Math.round((height - barH) * 0.5);
+  const lw = Math.max(1, Math.round(barW * 0.08));
+  const edge = [0, 0, 0, 0.85 * alpha];
+  const fill = [1, 1, 1, alpha];
+  for (const x of [x0, x0 + barW + gap]) {
+    // Dark outline centred on the bar edge, white body inside it.
+    nodeGraphGlLinesRect(batch, x - lw / 2, y0 - lw / 2, barW + lw, barH + lw, edge);
+    nodeGraphGlLinesRect(batch, x + lw / 2, y0 + lw / 2, barW - lw, barH - lw, fill);
+  }
   return true;
 }
 
-function nodeGraphOutputDrawProtect(context, canvas, alpha, density) {
-  return paintNodeGraphOutputFaceInk(context, canvas, NODE_GRAPH_OUTPUT_PROTECT_BANNER, {
-    density,
-    alpha,
+function nodeGraphOutputDrawMark(batch, width, height, kind, alpha) {
+  const a = Math.max(0, Math.min(1, Number(alpha)));
+  if (!(a > 0.001) || !batch) {
+    return false;
+  }
+  if (kind === "pause") {
+    return paintNodeGraphOutputPauseBars(batch, width, height, { alpha: a });
+  }
+  return paintNodeGraphOutputFaceInk(batch, width, height, NODE_GRAPH_OUTPUT_PROTECT_BANNER, {
+    alpha: a,
     fontFamily: NODE_GRAPH_OUTPUT_PROTECT_FONT,
     fill: "#ffffff",
   });
 }
 
-function nodeGraphOutputDrawMark(destCtx, canvas, kind, alpha, density) {
-  const a = Math.max(0, Math.min(1, Number(alpha)));
-  if (!(a > 0.001) || !destCtx || !canvas) {
-    return false;
+/** Pause / protect marks for this frame ([kind, alpha]); updates fade + bake state on target. */
+function nodeGraphOutputInkMarks(target, slot) {
+  const marks = [];
+  if (!target || !nodeGraphOutputProtectFaceSlot(slot)) {
+    return marks;
   }
-  if (kind === "pause") {
-    paintNodeGraphOutputPauseBars(destCtx, canvas, { alpha: a, density });
-  } else {
-    nodeGraphOutputDrawProtect(destCtx, canvas, a, density);
-  }
-  return true;
-}
-
-function paintNodeGraphOutputInkFrame(destCtx, canvas, slot, settings, density, options = {}) {
-  if (!nodeGraphOutputProtectFaceSlot(slot) || !canvas || !destCtx) {
-    return false;
-  }
-  void settings;
-  void options;
   const now = nodeGraphOutputInkNowMs();
-  const paused = nodeGraphOutputTransportIsPaused();
   let bake = false;
-  if (paused) {
+  if (nodeGraphOutputTransportIsPaused()) {
     nodeGraphOutputPauseHeld = true;
     nodeGraphOutputPauseFadeUntil = 0;
-    nodeGraphOutputDrawMark(destCtx, canvas, "pause", 1, density);
+    marks.push(["pause", 1]);
   } else {
     nodeGraphOutputBeginPauseFade();
     if (nodeGraphOutputPauseFadeUntil > now) {
-      const fade = Math.max(0, Math.min(1, (nodeGraphOutputPauseFadeUntil - now) / NODE_GRAPH_OUTPUT_PAUSE_FADE_MS));
-      nodeGraphOutputDrawMark(destCtx, canvas, "pause", fade, density);
+      marks.push(["pause", Math.max(0, Math.min(1, (nodeGraphOutputPauseFadeUntil - now) / NODE_GRAPH_OUTPUT_PAUSE_FADE_MS))]);
       bake = true;
     } else {
       nodeGraphOutputPauseFadeUntil = 0;
     }
   }
-
   const mute = Math.max(0, Math.min(1, nodeGraphFiniteNumber(globalThis.nodeGraphOutputProtectMute)));
   if (mute >= NODE_GRAPH_OUTPUT_PROTECT_SOLID_MUTE) {
-    canvas._outputProtectWasSolid = true;
-    nodeGraphOutputDrawMark(destCtx, canvas, "protect", 1, density);
-  } else if (mute > 0.001 && canvas._outputProtectWasSolid) {
-    nodeGraphOutputDrawMark(destCtx, canvas, "protect", mute, density);
+    target._outputProtectWasSolid = true;
+    marks.push(["protect", 1]);
+  } else if (mute > 0.001 && target._outputProtectWasSolid) {
+    marks.push(["protect", mute]);
     bake = true;
   } else {
-    canvas._outputProtectWasSolid = false;
+    target._outputProtectWasSolid = false;
   }
-  canvas._outputProtectLastMute = mute;
-  canvas._outputInkBake = bake;
-  return true;
+  target._outputProtectLastMute = mute;
+  target._outputInkBake = bake;
+  return marks;
 }
 
-function paintNodeGraphOutputProtectBanner(context, canvas, settings = {}, options = {}) {
+/**
+ * Face ink overlay (transparent canvas over the face): output pause/protect
+ * marks and RMS dB guides, drawn as one native GL batch. Clears itself once
+ * when nothing is left to show. Returns the overlay (or null).
+ */
+function paintNodeGraphFaceInkOverlay(face, slot, settings, density, options = {}) {
   void settings;
-  return paintNodeGraphOutputInkFrame(context, canvas, { type: "output" }, settings, options.density, options);
-}
-
-function paintNodeGraphOutputProtectBannerIfNeeded(context, canvas, slot, settings, density) {
-  return paintNodeGraphOutputInkFrame(context, canvas, slot, settings, density);
-}
-
-function paintNodeGraphOutputPauseBanner(context, canvas, settings = {}, options = {}) {
-  void settings;
-  return paintNodeGraphOutputInkFrame(context, canvas, { type: "output" }, settings, options.density, options);
-}
-
-function paintNodeGraphOutputPauseBannerIfNeeded(context, canvas, slot, settings, density, options = {}) {
-  return paintNodeGraphOutputInkFrame(context, canvas, slot, settings, density, options);
+  void density;
+  const overlay = typeof nodeGraphWaterfallInkOverlay === "function"
+    ? nodeGraphWaterfallInkOverlay(face)
+    : null;
+  if (!overlay) {
+    return null;
+  }
+  const marks = nodeGraphOutputInkMarks(overlay, slot);
+  const guides = options.rmsDbGuides === true;
+  if (!marks.length && !guides && !overlay._faceInkDirty) {
+    return overlay;
+  }
+  const batch = typeof nodeGraphGlLinesBegin === "function"
+    ? nodeGraphGlLinesBegin(overlay, [0, 0, 0, 0], { transparent: true, publishNodeId: "" })
+    : null;
+  if (!batch) {
+    nodeGraphDisplayGlFailed(overlay, "face ink overlay: no shared GL device");
+    return overlay;
+  }
+  const w = overlay.width;
+  const h = overlay.height;
+  if (guides) {
+    nodeGraphPaintRmsDbGuideOverlay(batch, w, h, slot);
+  }
+  for (const [kind, alpha] of marks) {
+    nodeGraphOutputDrawMark(batch, w, h, kind, alpha);
+  }
+  if (!nodeGraphGlLinesEnd(batch)) {
+    nodeGraphDisplayGlFailed(overlay, "face ink overlay: GL present failed");
+  }
+  overlay._faceInkDirty = marks.length > 0 || guides;
+  return overlay;
 }
 
 function nodeGraphWaterfallPinClocks(nowMs) {
@@ -1972,33 +1728,13 @@ function stampNodeGraphOutputPauseBanners(options = {}) {
     if (typeof tagNodeGraphModuleScopeFaceCanvas === "function") {
       tagNodeGraphModuleScopeFaceCanvas(canvas, "tape");
     }
-    let context = null;
-    const wfFace = typeof nodeGraphModuleDisplayRendererForSlot === "function"
-      && nodeGraphModuleDisplayRendererForSlot(slot) === "waterfall";
-    try {
-      if (wfFace && typeof nodeGraphWaterfallInkOverlay === "function") {
-        const overlay = nodeGraphWaterfallInkOverlay(canvas);
-        context = overlay && overlay.getContext("2d");
-        if (context) {
-          context.setTransform(1, 0, 0, 1, 0, 0);
-          context.clearRect(0, 0, overlay.width, overlay.height);
-        }
-      } else {
-        context = canvas.getContext("2d");
-      }
-    } catch (_error) {
-      context = null;
-    }
-    if (!context) {
-      continue;
-    }
     const settings = typeof nodeGraphTraceDisplaySettingsForSlot === "function"
       ? nodeGraphTraceDisplaySettingsForSlot(slot)
       : {};
     const density = typeof nodeGraphFacePlateDensity === "function"
       ? nodeGraphFacePlateDensity(settings, 1)
       : 1;
-    if (paintNodeGraphOutputPauseBannerIfNeeded(context, canvas, slot, settings, density, options)) {
+    if (paintNodeGraphFaceInkOverlay(canvas, slot, settings, density, options)?._faceInkDirty) {
       any = true;
     }
   }
@@ -2058,66 +1794,37 @@ function paintNodeGraphTraceDisplayColdPlate(slot, pixelRatio = window.devicePix
     canvas._wfBlur = Number(settings?.faceBlur) || 0;
     nodeGraphWaterfallGlCold(canvas, wfBg);
     if (typeof nodeGraphWaterfallFinishOutputInk === "function") {
-      nodeGraphWaterfallFinishOutputInk({ canvas, slot, settings, density }, null, canvas, 0);
+      nodeGraphWaterfallFinishOutputInk({ canvas, slot, settings, density, cold: true }, null, canvas, 0);
     }
     if (typeof nodeGraphModuleScopeMarkScreenLit === "function") {
       nodeGraphModuleScopeMarkScreenLit(screenElement, 1);
     }
     return true;
   }
-  const context = canvas.getContext("2d");
-  if (!context) {
-    return false;
-  }
-  // Waterfall dest is history. Never fillRect a started tape.
+  // Waterfall dest is history. Never repaint a started tape.
   if ((canvas._waterfall?.started || canvas._traceScroll?.started) && canvas.width > 1 && canvas.height > 1) {
     const holdBg = wfRenderer === "waterfall" && typeof nodeGraphWaterfallPlateCss === "function"
       ? nodeGraphWaterfallPlateCss(settings)
-      : (typeof nodeGraphFacePlateBackground === "function"
-        ? nodeGraphFacePlateBackground(settings)
-        : "#000000");
-    if (typeof nodeGraphFacePlateApplyCss === "function") {
-      nodeGraphFacePlateApplyCss(screenElement, holdBg);
-    }
-    const holdCtx = canvas.getContext?.("2d");
-    if (holdCtx) {
-      paintNodeGraphOutputPauseBannerIfNeeded(holdCtx, canvas, slot, settings, density);
-    }
+      : nodeGraphFacePlateBackground(settings);
+    nodeGraphFacePlateApplyCss(screenElement, holdBg);
+    paintNodeGraphFaceInkOverlay(canvas, slot, settings, density);
     return true;
   }
-  // Frozen + already-backed face: CSS plate only. fillRect here is what
+  // Frozen + already-backed face: CSS plate only. Repainting here is what
   // made pause+drag look like the capture buffer had been cleared.
   if (frozen && !force && canvas.width > 1 && canvas.height > 1) {
-    const holdBg = typeof nodeGraphFacePlateBackground === "function"
-      ? nodeGraphFacePlateBackground(settings)
-      : "#000000";
-    if (typeof nodeGraphFacePlateApplyCss === "function") {
-      nodeGraphFacePlateApplyCss(screenElement, holdBg);
-    }
-    paintNodeGraphOutputPauseBannerIfNeeded(context, canvas, slot, settings, density);
+    nodeGraphFacePlateApplyCss(screenElement, nodeGraphFacePlateBackground(settings));
+    paintNodeGraphFaceInkOverlay(canvas, slot, settings, density);
     return true;
   }
-  const bg = typeof nodeGraphFacePlateBackground === "function"
-    ? nodeGraphFacePlateBackground(settings)
-    : "#000000";
-  if (typeof nodeGraphFacePlateApplyCss === "function") {
-    nodeGraphFacePlateApplyCss(screenElement, bg);
-  }
-  if (typeof nodeGraphFacePlateFillCanvas === "function") {
-    nodeGraphFacePlateFillCanvas(context, canvas, bg);
-  } else {
-    context.save();
-    context.setTransform(1, 0, 0, 1, 0, 0);
-    context.globalCompositeOperation = "source-over";
-    context.fillStyle = bg || "#000000";
-    context.fillRect(0, 0, canvas.width, canvas.height);
-    context.restore();
-  }
+  const bg = nodeGraphFacePlateBackground(settings);
+  nodeGraphFacePlateApplyCss(screenElement, bg);
+  nodeGraphFacePlateFillCanvas(true, canvas, bg);
   canvas.classList.add("node-module-scope-vector-trace");
   if (typeof nodeGraphModuleScopeMarkScreenLit === "function") {
     nodeGraphModuleScopeMarkScreenLit(screenElement, 1);
   }
-  paintNodeGraphOutputInkFrame(context, canvas, slot, settings, density);
+  paintNodeGraphFaceInkOverlay(canvas, slot, settings, density);
   return true;
 }
 
@@ -2226,8 +1933,8 @@ function nodeGraphRmsDbGuideLabel(db) {
 }
 
 /** Horizontal dB guide lines + left-edge labels for RMS faces. */
-function nodeGraphPaintRmsDbGuideOverlay(context, canvas, slot = null) {
-  if (!context || !canvas) {
+function nodeGraphPaintRmsDbGuideOverlay(batch, width, height, slot = null) {
+  if (!batch) {
     return;
   }
   const face = typeof nodeGraphRmsFaceRangeFromSlot === "function"
@@ -2238,22 +1945,15 @@ function nodeGraphPaintRmsDbGuideOverlay(context, canvas, slot = null) {
   const levels = typeof nodeGraphRmsGuideLevels === "function"
     ? nodeGraphRmsGuideLevels(face.minDb, face.maxDb)
     : [{ db: face.maxDb, role: "max" }, { db: face.minDb, role: "min" }];
-  const width = Math.max(1, canvas.width);
-  const height = Math.max(1, canvas.height);
+  width = Math.max(1, width);
+  height = Math.max(1, height);
   const midY = height * 0.5;
   const halfHeight = height * 0.5;
   const labelPad = Math.max(4, Math.round(width * 0.02));
   const fontPx = Math.max(9, Math.min(13, Math.round(height * 0.045)));
   const minLabelGap = fontPx * 1.15;
-  // Draw lines first, then labels with Y collision so dense guides don't stack.
+  // Lines first, then labels with Y collision so dense guides don't stack.
   const drawn = [];
-  context.save();
-  context.setTransform(1, 0, 0, 1, 0, 0);
-  context.globalCompositeOperation = "source-over";
-  context.lineWidth = 1;
-  context.font = `${fontPx}px "Cascadia Mono", "Cascadia Code", Consolas, "Courier New", monospace`;
-  context.textAlign = "left";
-  context.textBaseline = "middle";
   for (const entry of levels) {
     const db = Number(entry?.db);
     const bipolar = typeof nodeGraphRmsDbToFaceBipolar === "function"
@@ -2265,13 +1965,8 @@ function nodeGraphPaintRmsDbGuideOverlay(context, canvas, slot = null) {
     }
     const isZero = Math.abs(db) < 1e-9;
     const isExtreme = entry?.role === "min" || entry?.role === "max";
-    context.strokeStyle = isZero
-      ? "rgba(255,255,255,0.55)"
-      : (isExtreme ? "rgba(255,255,255,0.38)" : "rgba(255,255,255,0.22)");
-    context.beginPath();
-    context.moveTo(0, y + 0.5);
-    context.lineTo(width, y + 0.5);
-    context.stroke();
+    const a = isZero ? 0.55 : (isExtreme ? 0.38 : 0.22);
+    nodeGraphGlLinesRect(batch, 0, Math.floor(y), width, 1, [1, 1, 1, a]);
     drawn.push({ db, y, isZero, isExtreme });
   }
   // Prefer extremes and 0 dB when labels would collide.
@@ -2290,12 +1985,14 @@ function nodeGraphPaintRmsDbGuideOverlay(context, canvas, slot = null) {
       continue;
     }
     labeledYs.push(entry.y);
-    context.fillStyle = entry.isZero || entry.isExtreme
-      ? "rgba(255,255,255,0.82)"
-      : "rgba(255,255,255,0.55)";
-    context.fillText(label, labelPad, entry.y);
+    nodeGraphGlLinesText(batch, label, labelPad, entry.y, {
+      px: fontPx,
+      rgba: [1, 1, 1, entry.isZero || entry.isExtreme ? 0.82 : 0.55],
+      align: "left",
+      baseline: "middle",
+      weight: 400,
+    });
   }
-  context.restore();
 }
 
 function drawNodeGraphTraceDisplayCanvasItem(item, pixelRatio) {
@@ -2356,11 +2053,8 @@ function drawNodeGraphTraceDisplayCanvasItem(item, pixelRatio) {
   const def = typeof nodeGraphModuleDefinitions === "object"
     ? nodeGraphModuleDefinitions[slot?.type]
     : null;
-  if (painted && def?.rmsDbGuides) {
-    const ink = canvas._wfInkOverlay;
-    const inkCtx = ink && ink.getContext("2d");
-    if (inkCtx) nodeGraphPaintRmsDbGuideOverlay(inkCtx, ink, slot);
-  }
+  // RMS dB guides ride the face ink overlay (nodeGraphWaterfallFinishOutputInk).
+  void def;
   return painted;
 }
 

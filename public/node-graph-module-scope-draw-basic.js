@@ -179,109 +179,9 @@ function drawNodeGraphModuleScopeSpectrumBarsWebGl(renderer, rect, buffer, pixel
 }
 
 
-function drawNodeGraphModuleScopeLightShape(context, shape, centerX, centerY, radius) {
-  context.beginPath();
-  if (shape === "square") {
-    context.rect(centerX - radius, centerY - radius, radius * 2, radius * 2);
-  } else if (shape === "diamond") {
-    context.moveTo(centerX, centerY - radius);
-    context.lineTo(centerX + radius, centerY);
-    context.lineTo(centerX, centerY + radius);
-    context.lineTo(centerX - radius, centerY);
-    context.closePath();
-  } else {
-    context.arc(centerX, centerY, radius, 0, Math.PI * 2);
-  }
-}
-
-
-function drawNodeGraphModuleScopeCanvasDotPath(context, points, proxyCanvas, pixelRatio, heatmapMode = false, slot = null) {
-  const pixelPoints = nodeGraphModuleScopePixelPoints(points, proxyCanvas);
-  if (pixelPoints.length < 4) {
+function drawNodeGraphModuleScopeLightDisplay(batch, rect, buffer, pixelRatio, slot) {
+  if (!batch || !buffer?.nodeGraphScopeLightDisplay) {
     return false;
-  }
-  const lineThickness = normalizeNodeGraphModuleScopeLineThickness(
-    nodeGraphMvp?.moduleScopeLineThickness ?? nodeGraphModuleScopeDefaultSettings.lineThickness,
-  );
-  const strokeUnit = Math.max(1, lineThickness * Math.max(1, pixelRatio));
-  const rawValues = Array.isArray(points?.nodeGraphScopeRawValues)
-    ? points.nodeGraphScopeRawValues
-    : null;
-  const skippedPoints = Array.isArray(points?.nodeGraphScopeSkippedPoints)
-    ? points.nodeGraphScopeSkippedPoints
-    : null;
-  const skipSamples = nodeGraphModuleScopeDiscontinuitySkipSamplesForPoints(points);
-  const colors = heatmapMode ? nodeGraphModuleScopeHeatmapTraceColors() : nodeGraphModuleScopeDotStyle(slot, null);
-  const coreBrightness = heatmapMode
-    ? (nodeGraphMvp?.moduleScopeDotCore1Enabled === false ? 0 : 1)
-    : colors.coreBrightness / nodeGraphModuleScopeDefaultDotCores.dot1.brightness;
-  let segmentCount = 0;
-
-  context.save();
-  context.globalCompositeOperation = "lighter";
-  context.imageSmoothingEnabled = false;
-
-  const drawConnectedStroke = (lineWidth, _shadowBlurIgnored, rgb, alpha) => {
-    context.beginPath();
-    context.lineCap = "round";
-    context.lineJoin = "round";
-    context.lineWidth = lineWidth;
-    // No ad-hoc canvas shadow glow — brightness is stroke alpha only.
-    context.shadowBlur = 0;
-    context.strokeStyle = nodeGraphModuleScopeCanvasRgba(rgb, alpha);
-    let pathOpen = false;
-    for (let index = 0; index + 3 < pixelPoints.length; index += 2) {
-      const segmentIndex = index / 2;
-      if (skippedPoints?.[segmentIndex] || skippedPoints?.[segmentIndex + 1]) {
-        pathOpen = false;
-        continue;
-      }
-      if (skipSamples > 0 && rawValues && segmentIndex + 1 < rawValues.length) {
-        const previousRaw = Number(rawValues[segmentIndex]);
-        const currentRaw = Number(rawValues[segmentIndex + 1]);
-        if (
-          Number.isFinite(previousRaw) &&
-          Number.isFinite(currentRaw) &&
-          Math.abs(currentRaw - previousRaw) > nodeGraphModuleScopeDiscontinuityThreshold
-        ) {
-          pathOpen = false;
-          continue;
-        }
-      }
-      const x1 = pixelPoints[index];
-      const y1 = pixelPoints[index + 1];
-      const x2 = pixelPoints[index + 2];
-      const y2 = pixelPoints[index + 3];
-      if (Math.hypot(x2 - x1, y2 - y1) < 0.001) {
-        continue;
-      }
-      if (!pathOpen) {
-        context.moveTo(x1, y1);
-        pathOpen = true;
-      }
-      context.lineTo(x2, y2);
-      segmentCount += 1;
-    }
-    context.stroke();
-  };
-
-  if (coreBrightness > 0) {
-    drawConnectedStroke(
-      strokeUnit * 1.65,
-      strokeUnit * 1.25,
-      colors.coreColor ?? colors.core,
-      (heatmapMode ? 0.5 : 0.76) * coreBrightness,
-    );
-  }
-  context.restore();
-  recordNodeGraphModuleScopeRenderMetrics(points.length / 2, segmentCount);
-  return segmentCount > 0;
-}
-
-
-function drawNodeGraphModuleScopeLightDisplay(context, rect, buffer, pixelRatio, slot) {
-  if (!context || !buffer?.nodeGraphScopeLightDisplay) {
-    return;
   }
   const nodeId = String(slot?.nodeId || "");
   const settings = nodeGraphModuleScopeSetting(nodeId);
@@ -311,7 +211,7 @@ function drawNodeGraphModuleScopeLightDisplay(context, rect, buffer, pixelRatio,
     nodeGraphModuleScopeState.lightDisplayStates.delete(nodeId);
   }
   if (brightness <= 0.002) {
-    return;
+    return false;
   }
 
   const lightStyle = nodeGraphModuleScopeLightShaderStyle(slot, buffer);
@@ -350,14 +250,16 @@ function drawNodeGraphModuleScopeLightDisplay(context, rect, buffer, pixelRatio,
     usesShader: lightStyle.usesShader,
   });
   if (!sprite) {
-    return;
+    return false;
   }
-
-  context.save();
-  context.globalCompositeOperation = lightStyle.usesShader ? "source-over" : "lighter";
-  context.globalAlpha = alpha;
-  context.drawImage(sprite.canvas, centerX - sprite.size * 0.5, centerY - sprite.size * 0.5);
-  context.restore();
+  // Transparent light layer: over and additive only differ where two lights
+  // overlap, so every sprite composites "over" in the one GL batch.
+  nodeGraphGlLinesImage(
+    batch, sprite.canvas,
+    centerX - sprite.size * 0.5, centerY - sprite.size * 0.5, sprite.size, sprite.size,
+    { alpha, nearest: false, cache: true },
+  );
+  return true;
 }
 
 
@@ -366,11 +268,7 @@ function drawNodeGraphModuleScopeLightDisplays(items, pixelRatio) {
   if (!canvas) {
     return;
   }
-  const context = canvas.getContext("2d");
-  if (!context) {
-    return;
-  }
-  context.clearRect(0, 0, canvas.width, canvas.height);
+  const lights = [];
   for (const item of items || []) {
     const renderer = typeof nodeGraphModuleDisplayRendererForSlot === "function"
       ? nodeGraphModuleDisplayRendererForSlot(item?.slot)
@@ -378,8 +276,31 @@ function drawNodeGraphModuleScopeLightDisplays(items, pixelRatio) {
     if (renderer === "vectorDot" || renderer === "pulseDot" || renderer === "lcdDot" || renderer === "dot") {
       continue;
     }
-    drawNodeGraphModuleScopeLightDisplay(context, item.scopeRect, item.buffer, pixelRatio, item.slot);
+    if (item?.buffer?.nodeGraphScopeLightDisplay) {
+      lights.push(item);
+    }
   }
+  // Nothing lit and already clear: skip the full-layer pass.
+  if (!lights.length && !canvas._lightLayerDirty) {
+    return;
+  }
+  const batch = typeof nodeGraphGlLinesBegin === "function"
+    ? nodeGraphGlLinesBegin(canvas, [0, 0, 0, 0], { transparent: true, publishNodeId: "" })
+    : null;
+  if (!batch) {
+    nodeGraphDisplayGlFailed(canvas, "light layer: no shared GL device");
+    return;
+  }
+  let drew = false;
+  for (const item of lights) {
+    if (drawNodeGraphModuleScopeLightDisplay(batch, item.scopeRect, item.buffer, pixelRatio, item.slot)) {
+      drew = true;
+    }
+  }
+  if (!nodeGraphGlLinesEnd(batch)) {
+    nodeGraphDisplayGlFailed(canvas, "light layer: GL present failed");
+  }
+  canvas._lightLayerDirty = drew;
 }
 
 
@@ -530,11 +451,6 @@ function drawNodeGraphValueOscilloscopeItem(renderer, item, pixelRatio) {
       return;
     }
   }
-  const context = canvas.getContext("2d");
-  if (!context) {
-    return;
-  }
-
   if (typeof renderNodeGraphModuleScopeAnalyzer === "function") {
     renderNodeGraphModuleScopeAnalyzer(slot, item.buffer);
   }
@@ -553,141 +469,101 @@ function drawNodeGraphValueOscilloscopeItem(renderer, item, pixelRatio) {
   const frozen = typeof nodeGraphModuleScopePhosphorFrozen === "function"
     && nodeGraphModuleScopePhosphorFrozen();
 
-  if (typeof nodeGraphFacePlateFillCanvas === "function") {
-    nodeGraphFacePlateFillCanvas(context, canvas, bg);
-  } else {
-    context.fillStyle = bg;
-    context.fillRect(0, 0, width, height);
-  }
-
-  let ink = canvas._valueLineInk;
-  if (!ink || ink.width !== width || ink.height !== height) {
-    ink = document.createElement("canvas");
-    ink.width = width;
-    ink.height = height;
-    canvas._valueLineInk = ink;
-  }
-
+  // Frozen: redraw the last frame's strokes over the plate.
+  let strokes = canvas._valueLineStrokes || [];
   if (!frozen) {
-    const inkCtx = ink.getContext("2d");
-    if (!inkCtx) {
-      return;
-    }
-    inkCtx.setTransform(1, 0, 0, 1, 0, 0);
-    inkCtx.clearRect(0, 0, width, height);
-
-    const amp = typeof nodeGraphDisplaySettingsAmplitudeScale === "function"
-      ? nodeGraphDisplaySettingsAmplitudeScale(safeSettings)
-      : 1;
-    const value = clampNodeSliderValue(
-      (typeof nodeGraphOscilloscopeLatestSample === "function"
-        ? nodeGraphOscilloscopeLatestSample(item?.buffer, 0)
-        : 0) * amp,
-      -1,
-      1,
-    );
-    // 0 is a real setting — never use `x || default` (that snaps 0 back to default).
-    const finiteUnit = (raw, fallback) => {
-      const n = Number(raw);
-      return clampNodeSliderValue(Number.isFinite(n) ? n : fallback, 0, 1);
-    };
-    const lineLength = finiteUnit(safeSettings.lineLength, 1);
-    const brightness = finiteUnit(
-      safeSettings.brightness ?? safeSettings.dot1Brightness,
-      0.72,
-    );
-    if (!(brightness > 0.001) || safeSettings.dot1Enabled === false) {
-      if (typeof recordNodeGraphModuleScopeRenderMetrics === "function") {
-        recordNodeGraphModuleScopeRenderMetrics(1, 0);
-      }
-      return;
-    }
-
-    const halfLine = width * 0.5 * lineLength;
-    const x1 = width * 0.5 - halfLine;
-    const x2 = width * 0.5 + halfLine;
-    const y = height * 0.5 - value * height * 0.44;
-
-    let rgb = [115, 235, 255];
-    const colorHex = safeSettings.color || safeSettings.dot1Color || "";
-    if (colorHex && typeof nodeGraphScopeHexColorToRgb === "function") {
-      const parsed = nodeGraphScopeHexColorToRgb(colorHex);
-      if (Array.isArray(parsed) && parsed.length >= 3) {
-        rgb = parsed[0] <= 1.01
-          ? [
-            Math.round(parsed[0] * 255),
-            Math.round(parsed[1] * 255),
-            Math.round(parsed[2] * 255),
-          ]
-          : [
-            Math.round(parsed[0]),
-            Math.round(parsed[1]),
-            Math.round(parsed[2]),
-          ];
-      }
-    }
-
-    const size01 = typeof nodeGraphTraceDisplayNormalizeInkPx === "function"
-      ? nodeGraphTraceDisplayNormalizeInkPx(safeSettings.dot1Size, 2)
-      : Math.max(0, nodeGraphFiniteNumber(safeSettings.dot1Size, 2));
-    if (!(size01 > 0)) {
-      return;
-    }
-    const blur01 = Math.max(0.12, finiteUnit(safeSettings.lineThickness, 0));
-    const strokeOpts = {
-      blur: blur01,
-      brightness,
-      color: `rgb(${rgb[0]}, ${rgb[1]}, ${rgb[2]})`,
-      faceMinSide,
-      rgb,
-      size: size01,
-    };
-
-    if (typeof TraceStroke !== "undefined" && typeof TraceStroke.draw === "function") {
-      TraceStroke.draw(inkCtx, [{ x: x1, y }, { x: x2, y }], strokeOpts);
-
-      if (safeSettings.capEnabled !== false) {
-        const capLen01 = finiteUnit(safeSettings.capLength, 0.16);
-        if (capLen01 > 0.001) {
-          const capHalf = height * capLen01 * 0.5;
-          const capSize01 = finiteUnit(
-            safeSettings.capSize ?? safeSettings.dot1Size,
-            size01,
-          );
-          const lineCoreR = typeof TraceStroke.radiusPx === "function"
-            ? TraceStroke.radiusPx(faceMinSide, size01)
-            : faceMinSide * size01 * 0.5;
-          const capCoreR = typeof TraceStroke.radiusPx === "function"
-            ? TraceStroke.radiusPx(faceMinSide, capSize01)
-            : faceMinSide * capSize01 * 0.5;
-          const edgeAlign = capCoreR - lineCoreR;
-          const capPad01 = finiteUnit(safeSettings.capPadding, 0);
-          const padPx = halfLine * capPad01;
-          const midX = (x1 + x2) * 0.5;
-          let leftCapX = x1 + edgeAlign + padPx;
-          let rightCapX = x2 - edgeAlign - padPx;
-          if (leftCapX > midX) leftCapX = midX;
-          if (rightCapX < midX) rightCapX = midX;
-          const capOpts = { ...strokeOpts, size: capSize01 };
-          TraceStroke.draw(
-            inkCtx,
-            [{ x: leftCapX, y: y - capHalf }, { x: leftCapX, y: y + capHalf }],
-            capOpts,
-          );
-          TraceStroke.draw(
-            inkCtx,
-            [{ x: rightCapX, y: y - capHalf }, { x: rightCapX, y: y + capHalf }],
-            capOpts,
-          );
-        }
-      }
-    }
+    strokes = nodeGraphValueOscilloscopeStrokes(item, safeSettings, width, height, faceMinSide);
+    canvas._valueLineStrokes = strokes;
   }
-
-  context.drawImage(ink, 0, 0);
+  const batch = typeof nodeGraphGlLinesBegin === "function"
+    ? nodeGraphGlLinesBegin(canvas, nodeGraphGlLinesCss(bg))
+    : null;
+  if (!batch) {
+    nodeGraphDisplayGlFailed(canvas, "value oscilloscope: no shared GL device");
+    return;
+  }
+  for (const st of strokes) {
+    // TraceStroke look: soft halo (blur) under the Size core, round caps.
+    if (st.blur >= 0.04) {
+      const expand = st.lineWidth * st.blur * 2;
+      nodeGraphGlLinesSegment(batch, st.x1, st.y1, st.x2, st.y2, (st.lineWidth + expand) * 0.5, 1, [...st.rgb, 0.28]);
+    }
+    nodeGraphGlLinesSegment(batch, st.x1, st.y1, st.x2, st.y2, st.lineWidth * 0.5, 1, [...st.rgb, 1]);
+  }
+  if (!nodeGraphGlLinesEnd(batch)) {
+    nodeGraphDisplayGlFailed(canvas, "value oscilloscope: GL present failed");
+  }
   if (typeof recordNodeGraphModuleScopeRenderMetrics === "function") {
-    recordNodeGraphModuleScopeRenderMetrics(1, 1);
+    recordNodeGraphModuleScopeRenderMetrics(1, strokes.length ? 1 : 0);
   }
+}
+
+/** Value line + end caps for this frame: [{ x1, y1, x2, y2, lineWidth, blur, rgb01 }]. */
+function nodeGraphValueOscilloscopeStrokes(item, safeSettings, width, height, faceMinSide) {
+  const amp = typeof nodeGraphDisplaySettingsAmplitudeScale === "function"
+    ? nodeGraphDisplaySettingsAmplitudeScale(safeSettings)
+    : 1;
+  const value = clampNodeSliderValue(
+    (typeof nodeGraphOscilloscopeLatestSample === "function"
+      ? nodeGraphOscilloscopeLatestSample(item?.buffer, 0)
+      : 0) * amp,
+    -1,
+    1,
+  );
+  // 0 is a real setting - never use `x || default` (that snaps 0 back to default).
+  const finiteUnit = (raw, fallback) => {
+    const n = Number(raw);
+    return clampNodeSliderValue(Number.isFinite(n) ? n : fallback, 0, 1);
+  };
+  const lineLength = finiteUnit(safeSettings.lineLength, 1);
+  const brightness = finiteUnit(safeSettings.brightness ?? safeSettings.dot1Brightness, 0.72);
+  if (!(brightness > 0.001) || safeSettings.dot1Enabled === false) {
+    return [];
+  }
+  const halfLine = width * 0.5 * lineLength;
+  const x1 = width * 0.5 - halfLine;
+  const x2 = width * 0.5 + halfLine;
+  const y = height * 0.5 - value * height * 0.44;
+  let rgb = [115, 235, 255];
+  const colorHex = safeSettings.color || safeSettings.dot1Color || "";
+  if (colorHex && typeof nodeGraphScopeHexColorToRgb === "function") {
+    const parsed = nodeGraphScopeHexColorToRgb(colorHex);
+    if (Array.isArray(parsed) && parsed.length >= 3) {
+      rgb = parsed[0] <= 1.01 ? parsed.map((v) => Math.round(v * 255)) : parsed.map((v) => Math.round(v));
+    }
+  }
+  const size01 = typeof nodeGraphTraceDisplayNormalizeInkPx === "function"
+    ? nodeGraphTraceDisplayNormalizeInkPx(safeSettings.dot1Size, 2)
+    : Math.max(0, nodeGraphFiniteNumber(safeSettings.dot1Size, 2));
+  if (!(size01 > 0)) {
+    return [];
+  }
+  const blur = Math.max(0.12, finiteUnit(safeSettings.lineThickness, 0));
+  const rgb01 = [0, 1, 2].map((i) => Math.round(rgb[i] * brightness) / 255);
+  const diameter = (s01) => faceInkPx(clampAuthoredInkPx(s01, 0), faceMinSide);
+  const lineWidth = diameter(size01);
+  if (!(lineWidth > 0)) {
+    return [];
+  }
+  const out = [{ x1, y1: y, x2, y2: y, lineWidth, blur, rgb: rgb01 }];
+  if (safeSettings.capEnabled !== false) {
+    const capLen01 = finiteUnit(safeSettings.capLength, 0.16);
+    if (capLen01 > 0.001) {
+      const capHalf = height * capLen01 * 0.5;
+      const capSize01 = finiteUnit(safeSettings.capSize ?? safeSettings.dot1Size, size01);
+      const capWidth = diameter(capSize01);
+      const edgeAlign = (capWidth - lineWidth) * 0.5;
+      const padPx = halfLine * finiteUnit(safeSettings.capPadding, 0);
+      const midX = (x1 + x2) * 0.5;
+      const leftCapX = Math.min(midX, x1 + edgeAlign + padPx);
+      const rightCapX = Math.max(midX, x2 - edgeAlign - padPx);
+      if (capWidth > 0) {
+        out.push({ x1: leftCapX, y1: y - capHalf, x2: leftCapX, y2: y + capHalf, lineWidth: capWidth, blur, rgb: rgb01 });
+        out.push({ x1: rightCapX, y1: y - capHalf, x2: rightCapX, y2: y + capHalf, lineWidth: capWidth, blur, rgb: rgb01 });
+      }
+    }
+  }
+  return out;
 }
 
 
@@ -747,28 +623,6 @@ function nodeGraphVectorDotStampExtents(width, height, size01, pill01) {
   return { rx: r, ry: rLong, radius: r };
 }
 
-function nodeGraphDrawVectorDotDisc(context, cx, cy, radius, blur01, style) {
-  if (!context || !(radius > 0.05)) {
-    return;
-  }
-  if (typeof TraceDotSprite !== "undefined" && typeof TraceDotSprite.draw === "function") {
-    TraceDotSprite.draw(context, cx, cy, radius, blur01, style, 1);
-    return;
-  }
-  const color = typeof style === "string"
-    ? style
-    : (typeof nodeGraphHueBrightnessCss === "function" && Number.isFinite(Number(style?.hue))
-      ? nodeGraphHueBrightnessCss(style.hue, style.amount, 1, style.saturation ?? 1)
-      : style?.color);
-  context.save();
-  context.globalCompositeOperation = "source-over";
-  context.beginPath();
-  context.arc(cx, cy, radius, 0, Math.PI * 2);
-  context.fillStyle = color || "#ffffff";
-  context.fill();
-  context.restore();
-}
-
 /**
  * Vector Dot — companion to Phosphor Dot. Cheap 2D disc, smoothstep edge blur,
  * hue+brightness, one energy gather per frame. No residual FBO, no gradients.
@@ -785,10 +639,6 @@ function drawNodeGraphVectorDotItem(renderer, item, pixelRatio) {
     pixelRatio,
     1,
   )) {
-    return;
-  }
-  const context = canvas.getContext("2d");
-  if (!context) {
     return;
   }
   if (buffer) {
@@ -830,7 +680,19 @@ function drawNodeGraphVectorDotItem(renderer, item, pixelRatio) {
   if (typeof nodeGraphFacePlateApplyCss === "function" && screenElement) {
     nodeGraphFacePlateApplyCss(screenElement, bg);
   }
-  nodeGraphFacePlateFillCanvas(context, canvas, bg);
+  // Native GL face (number-readout pen: plate rects, SDF stamps, inset shadow).
+  const pen = nodeGraphNumberReadoutGlBeginFace(canvas);
+  if (!pen) {
+    return;
+  }
+  const bgRgba = nodeGraphGlLinesCss(bg);
+  nodeGraphNumberReadoutGlPenRect(pen, 0, 0, canvas.width, canvas.height, [bgRgba[0] * 255, bgRgba[1] * 255, bgRgba[2] * 255], 1);
+  nodeGraphNumberReadoutGlPenFlush(pen);
+  let stampFailed = false;
+  const stamp = (style, alpha, additive) => {
+    const r = TraceDotSprite.drawTarget(pen, cx, cy, radius, blur, style, alpha, additive);
+    if (r === "failed") stampFailed = true;
+  };
   const width = canvas.width;
   const height = canvas.height;
   const lcdModule = node?.type === "lcdDot";
@@ -913,58 +775,44 @@ function drawNodeGraphVectorDotItem(renderer, item, pixelRatio) {
       ghostCss = `rgb(${Math.round(gr * 255)} ${Math.round(gg * 255)} ${Math.round(gb * 255)})`;
     }
     if (ghostAmt > 0.001 && radius > 0.05) {
-      context.save();
-      context.globalAlpha = ghostAmt;
-      nodeGraphDrawVectorDotDisc(context, cx, cy, radius, blur, {
-        ...shape,
-        color: ghostCss,
-        amount: 1,
-      });
-      context.restore();
+      stamp({ ...shape, color: ghostCss, amount: 1 }, ghostAmt, false);
     }
     // Digital In: on = opaque live ink. Do not fade live with energy (that
     // made the "on" stamp look like a second ghost).
     const last = Number(buffer && buffer.length ? buffer[buffer.length - 1] : 0);
     const lit = Number.isFinite(last) && Math.abs(last) >= 0.5;
     if (lit && radius > 0.05) {
-      context.save();
-      context.globalCompositeOperation = "source-over";
-      context.globalAlpha = 1;
-      nodeGraphDrawVectorDotDisc(context, cx, cy, radius, blur, {
-        ...shape,
-        color: inkCss,
-        amount: 1,
-      });
-      context.restore();
+      stamp({ ...shape, color: inkCss, amount: 1 }, 1, false);
     }
-    if (typeof nodeGraphNumberReadoutDrawLcdInnerShadow === "function") {
-      nodeGraphNumberReadoutDrawLcdInnerShadow(
-        context,
-        0,
-        0,
-        width,
-        height,
-        settings.innerShadowDistance,
-        settings.innerShadowSharpness,
-        settings.innerShadowOffsetX,
-        settings.innerShadowOffsetY,
-      );
-    }
+    nodeGraphNumberReadoutGlPenLcdInnerShadow(
+      pen,
+      0,
+      0,
+      width,
+      height,
+      settings.innerShadowDistance,
+      settings.innerShadowSharpness,
+      settings.innerShadowOffsetX,
+      settings.innerShadowOffsetY,
+    );
     if (typeof nodeGraphNumberReadoutApplyLcdLightCutout === "function") {
       nodeGraphNumberReadoutApplyLcdLightCutout(screenElement, canvas);
     }
   } else if (amount > 0 && radius > 0.05) {
-    context.save();
-    context.globalCompositeOperation = composite;
+    // Additive for Combine / Add; other blend modes composite "over".
     const inkSat = Number(settings.dot1Saturation ?? settings.colorSaturation);
-    nodeGraphDrawVectorDotDisc(context, cx, cy, radius, blur, {
+    stamp({
       ...shape,
       hue,
       amount,
       saturation: Number.isFinite(inkSat) ? inkSat : 1,
-    });
-    context.restore();
+    }, 1, composite === "lighter");
   }
+  if (stampFailed) {
+    nodeGraphDisplayGlFailed(canvas, "vector dot: SDF stamp shader unavailable");
+    return;
+  }
+  nodeGraphNumberReadoutGlEndFace(canvas, pen);
   const punch = lcd
     ? (typeof nodeGraphLcdDisplayLightStrength === "number" ? nodeGraphLcdDisplayLightStrength : 2 / 3)
     : amount;
@@ -980,35 +828,4 @@ function drawNodeGraphVectorDotItem(renderer, item, pixelRatio) {
   }
 }
 
-function drawNodeGraphScopeCanvasSmoothPath(context, points) {
-  let subpath = [];
-  const flushSubpath = () => {
-    if (subpath.length < 2) {
-      subpath = [];
-      return;
-    }
-    context.moveTo(subpath[0].x, subpath[0].y);
-    if (subpath.length === 2) {
-      context.lineTo(subpath[1].x, subpath[1].y);
-    } else {
-      for (let index = 1; index < subpath.length - 1; index += 1) {
-        const point = subpath[index];
-        const next = subpath[index + 1];
-        context.quadraticCurveTo(point.x, point.y, (point.x + next.x) * 0.5, (point.y + next.y) * 0.5);
-      }
-      const last = subpath[subpath.length - 1];
-      context.lineTo(last.x, last.y);
-    }
-    subpath = [];
-  };
-  for (let index = 0; index < points.length; index += 1) {
-    const point = points[index];
-    if (!point) {
-      flushSubpath();
-      continue;
-    }
-    subpath.push(point);
-  }
-  flushSubpath();
-}
 

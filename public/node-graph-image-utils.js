@@ -53,7 +53,7 @@ function nodeGraphFixSvgForRaster(svgText) {
   let text = String(svgText || "");
   let w = 1024;
   let h = 1024;
-  const vb = text.match(/viewBox\s*=\s*["']\s*([0-9eE.+-]+)\s+([0-9eE.+-]+)\s+([0-9eE.+-]+)\s+([0-9eE.+-]+)\s*["']/i);
+  const vb = text.match(/viewBox\s*=\s*[\x22\x27]\s*([0-9eE.+-]+)\s+([0-9eE.+-]+)\s+([0-9eE.+-]+)\s+([0-9eE.+-]+)\s*[\x22\x27]/i);
   if (vb) {
     const vw = Math.abs(Number(vb[3]));
     const vh = Math.abs(Number(vb[4]));
@@ -68,8 +68,8 @@ function nodeGraphFixSvgForRaster(svgText) {
   const outH = Math.max(1, Math.round(h * scale));
   text = text.replace(/<svg\b([^>]*)>/i, (full, attrs) => {
     let a = String(attrs || "");
-    a = a.replace(/\swidth\s*=\s*("[^"]*"|'[^']*')/i, "");
-    a = a.replace(/\sheight\s*=\s*("[^"]*"|'[^']*')/i, "");
+    a = a.replace(/\swidth\s*=\s*(\x22[^\x22]*\x22|\x27[^\x27]*\x27)/i, "");
+    a = a.replace(/\sheight\s*=\s*(\x22[^\x22]*\x22|\x27[^\x27]*\x27)/i, "");
     return `<svg width="${outW}" height="${outH}"${a}>`;
   });
   return { text, width: outW, height: outH };
@@ -206,7 +206,7 @@ function nodeGraphEscapeImageAssetHtml(value) {
   return String(value ?? "")
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
-    .replace(/"/g, "&quot;");
+    .replace(/\x22/g, "&quot;");
 }
 
 function nodeGraphBuildImageAssetRowHtml(options = {}) {
@@ -266,7 +266,7 @@ function nodeGraphImageLayoutForNode(node) {
 
 function nodeGraphImageFileName(layout = {}) {
   const normalized = normalizeNodeGraphImageLayout(layout);
-  const base = nodeGraphOneLineText(normalized.fileName || "trace-image").replace(/[\\/:*?"<>|]+/g, "-") || "trace-image";
+  const base = nodeGraphOneLineText(normalized.fileName || "trace-image").replace(/[\\/:*?\x22<>|]+/g, "-") || "trace-image";
   const extensionMatch = normalized.dataUrl.match(/^data:image\/([^;]+)/i);
   const extension = (extensionMatch?.[1] || "png").replace("jpeg", "jpg").replace("svg+xml", "svg");
   return base.toLowerCase().endsWith(`.${extension}`) ? base : `${base}.${extension}`;

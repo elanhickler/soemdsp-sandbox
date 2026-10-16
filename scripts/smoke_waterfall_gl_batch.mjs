@@ -33,6 +33,9 @@ const ctx = {
   TraceMeetGlsl: { MEET_SPAN_GLSL: "", MEET_GLSL: "" },
 };
 ctx.nodeGraphSharedGlDevice = () => ({ gl, canvas: { width: 4096, height: 4096 } });
+const blits = [];
+ctx.nodeGraphDisplayCanvasPresentContext = (c) => c.getContext("2d");
+ctx.nodeGraphDisplayCanvasBlit = (...a) => { blits.push(a); return true; };
 vm.createContext(ctx);
 vm.runInContext(src("node-graph-module-scope-waterfall-gl.js"), ctx);
 const face = { width: 320, height: 160, style: {}, getContext: () => ({}) };
@@ -70,22 +73,22 @@ for (let i = 0; i < 30; i += 1) {
   ctx.nodeGraphWaterfallGlClearColumn(face, 100 + i, 1, plate);
   ctx.nodeGraphWaterfallGlStampBar(face, 100 + i, 1, { y0: 20, y1: 60 + i, strokeY0: 20, strokeY1: 60 }, null, false, [200, 100, 50], "source-over", 1, true, { on: true, px: 2, rgb: [10, 20, 30] });
 }
-gate(s.wfQueue.kind === "bar" && s.wfQueue.n === 90 * 6 * 14, `90 bar quads queued in one bar run (${s.wfQueue.n / 84})`);
+gate(s.wfQueue.kind === "bar" && s.wfQueue.n === 90 * 6 * 15, `90 bar quads queued in one bar run (${s.wfQueue.n / 90})`);
 // Attributes carry the old uniform values (fill quad of column 0 = quad #1).
 const d = s.wfQueue.data;
-const v = 84; // second quad, first vertex
+const v = 90; // second quad (15 floats x 6 vertices), first vertex
 const near = (a, b) => Math.abs(a - b) < 1e-5;
 gate(near(d[v + 2], 200 / 255) && near(d[v + 3], 100 / 255) && near(d[v + 4], 50 / 255), "colour attribute = rgb / 255 (was uColor)");
 gate(near(d[v + 5], 100) && near(d[v + 6], 101), "span attribute = x0..x1 (was uSpan)");
 gate(near(d[v + 7], 20) && near(d[v + 9], 60), "edge attribute = top0/top1/bot0/bot1 (was uEdge)");
-gate(d[v + 11] === 0 && d[v + 12] === 0 && d[v + 13] === 1, "blend kind / fill mode / stroke px attributes");
-const sv = 84 * 2;
+gate(d[v + 11] === 0 && d[v + 12] === 0 && d[v + 13] === 1 && d[v + 14] === 1, "blend kind / fill mode / stroke px / ink alpha attributes");
+const sv = 90 * 2;
 gate(d[sv + 12] === 1 && d[sv + 13] === 2 && near(d[sv + 2], 10 / 255), "stroke quad: mode 1, stroke px 2, stroke colour");
 gate(d[2] === 0x10 / 255 || near(d[2], 0x10 / 255), "clear quad carries the plate colour");
 gate(d[12] === 2, "clear quad uses mode 2 (opaque replace)");
 // 3) A blend change flushes the source-over run first (order kept).
 ctx.nodeGraphWaterfallGlStampBar(face, 140, 1, { y0: 5, y1: 15 }, null, false, [1, 2, 3], "lighter", 1, true, null);
-gate(count("drawArrays") === 1 && s.wfQueue.blend === "lighter" && s.wfQueue.n === 84, "blend change: previous run drawn, new run started");
+gate(count("drawArrays") === 1 && s.wfQueue.blend === "lighter" && s.wfQueue.n === 90, "blend change: previous run drawn, new run started");
 ctx.nodeGraphWaterfallGlScroll(face, 1, plate);
 gate(count("drawArrays") === 3 && s.wfQueue.n === 0, "scroll flushes the pending run before moving the history");
 // 4) Shaders read attributes, not per-draw uniforms.

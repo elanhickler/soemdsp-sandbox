@@ -1,5 +1,4 @@
 const canvas = document.getElementById("teleportCanvas");
-const ctx = canvas.getContext("2d");
 const castButton = document.getElementById("castTeleportButton");
 const packet = document.getElementById("teleportPacket");
 
@@ -33,7 +32,7 @@ function readSettings() {
 }
 
 function formatSigned(value, digits = 1) {
-  const number = nodeGraphFiniteNumber(value);
+  const number = SoemMath.finiteOr(value, 0);
   return `${number >= 0 ? "+" : ""}${number.toFixed(digits)}`;
 }
 
@@ -187,26 +186,39 @@ function castTeleport() {
   triggerAudio(settings);
 }
 
-function drawBackground(width, height) {
-  ctx.clearRect(0, 0, width, height);
-  const gradient = ctx.createLinearGradient(0, 0, 0, height);
-  gradient.addColorStop(0, "#05070d");
-  gradient.addColorStop(0.58, "#070907");
-  gradient.addColorStop(1, "#090b07");
-  ctx.fillStyle = gradient;
-  ctx.fillRect(0, 0, width, height);
-  ctx.fillStyle = "rgba(239, 246, 230, 0.72)";
+// Native GL on the shared device: one batch per frame (background bands,
+// stars, glowing particles), presented to the canvas.
+const BACKGROUND_STOPS = [[0, [5, 7, 13]], [0.58, [7, 9, 7]], [1, [9, 11, 7]]];
+
+function backgroundAt(t) {
+  for (let i = 1; i < BACKGROUND_STOPS.length; i += 1) {
+    const [t1, c1] = BACKGROUND_STOPS[i];
+    const [t0, c0] = BACKGROUND_STOPS[i - 1];
+    if (t <= t1) {
+      const u = (t - t0) / Math.max(1e-6, t1 - t0);
+      return c0.map((c, k) => (c + (c1[k] - c) * u) / 255);
+    }
+  }
+  return BACKGROUND_STOPS[BACKGROUND_STOPS.length - 1][1].map((c) => c / 255);
+}
+
+function drawBackground(batch, width, height) {
+  const bands = 48;
+  for (let i = 0; i < bands; i += 1) {
+    const y0 = (i / bands) * height;
+    const y1 = ((i + 1) / bands) * height;
+    nodeGraphGlLinesRect(batch, 0, y0, width, y1 - y0 + 1, [...backgroundAt((i + 0.5) / bands), 1]);
+  }
   for (let index = 0; index < 74; index += 1) {
     const x = (index * 719) % width;
     const y = (index * 313) % Math.max(1, height * 0.58);
     const size = 0.8 + (index % 5) * 0.22;
-    ctx.globalAlpha = 0.2 + (index % 7) * 0.06;
-    ctx.fillRect(x, y, size, size);
+    const alpha = 0.72 * (0.2 + (index % 7) * 0.06);
+    nodeGraphGlLinesRect(batch, x, y, size, size, [239 / 255, 246 / 255, 230 / 255, alpha]);
   }
-  ctx.globalAlpha = 1;
 }
 
-function drawParticles(dt) {
+function drawParticles(batch, dt) {
   particles = particles.filter((particle) => particle.age < particle.life);
   for (const particle of particles) {
     particle.age += dt;
@@ -216,22 +228,30 @@ function drawParticles(dt) {
     particle.vy = particle.vy * 0.986 + 80 * dt;
     const t = clamp(particle.age / particle.life, 0, 1);
     const alpha = particle.alpha * (1 - t);
-    ctx.beginPath();
-    ctx.fillStyle = `hsla(${particle.hue}, 100%, ${62 + 20 * (1 - t)}%, ${alpha})`;
-    ctx.shadowColor = `hsla(${particle.hue}, 100%, 66%, ${alpha})`;
-    ctx.shadowBlur = particle.size * 5;
-    ctx.arc(particle.x, particle.y, particle.size * (1 + t * 1.8), 0, Math.PI * 2);
-    ctx.fill();
+    const radius = particle.size * (1 + t * 1.8);
+    // Glow (was shadowBlur = size * 5): a feathered halo under the core.
+    const glow = nodeGraphGlLinesCss(`hsl(${particle.hue}, 100%, 66%)`, alpha * 0.6);
+    nodeGraphGlLinesDot(batch, particle.x, particle.y, radius, particle.size * 2.5, glow);
+    const core = nodeGraphGlLinesCss(`hsl(${particle.hue}, 100%, ${62 + 20 * (1 - t)}%)`, alpha);
+    nodeGraphGlLinesDot(batch, particle.x, particle.y, Math.max(0, radius - 0.5), 1, core);
   }
-  ctx.shadowBlur = 0;
 }
 
 function animate(time) {
   resizeCanvas();
   const dt = Math.min(0.05, (time - lastTime) / 1000);
   lastTime = time;
-  drawBackground(canvas.width, canvas.height);
-  drawParticles(dt);
+  const batch = nodeGraphGlLinesBegin(canvas, [...backgroundAt(0), 1], { publishNodeId: "" });
+  if (!batch) {
+    nodeGraphDisplayGlFailed(canvas, "teleport workbench: no shared GL device");
+    return;
+  }
+  drawBackground(batch, canvas.width, canvas.height);
+  drawParticles(batch, dt);
+  if (!nodeGraphGlLinesEnd(batch)) {
+    nodeGraphDisplayGlFailed(canvas, "teleport workbench: GL present failed");
+    return;
+  }
   requestAnimationFrame(animate);
 }
 

@@ -101,7 +101,8 @@
   }
 
   /**
-   * Bake a glyph atlas (white on black, one glyph per cell, row-major) into a
+   * Bake a glyph atlas (white on black, or white coverage on transparent with
+   * options.transparent; one glyph per cell, row-major) into a
    * detached canvas for GL texture upload. The one CPU text raster a module
    * texture may need; nothing is presented from it directly.
    */
@@ -116,16 +117,37 @@
     if (!canvas) return null;
     canvas.width = cols * cw;
     canvas.height = rows * ch;
-    const ctx = canvas.getContext("2d", { alpha: false });
+    // transparent: white glyph coverage in alpha (no black plate).
+    const transparent = Boolean(options.transparent);
+    const ctx = canvas.getContext("2d", { alpha: transparent });
     if (!ctx) return null;
     ctx.imageSmoothingEnabled = true;
     if ("imageSmoothingQuality" in ctx) ctx.imageSmoothingQuality = "high";
-    ctx.fillStyle = "#000";
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    if (!transparent) {
+      ctx.fillStyle = "#000";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+    }
     ctx.fillStyle = "#fff";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     ctx.font = `${options.weight || 700} ${Math.max(1, Number(options.fontPx) || ch)}px ${options.family || "monospace"}`;
+    // metrics: per-glyph advance + ink bounds ({ width, ascent, descent }) on
+    // canvas.glyphMetrics, so faces lay out text without a 2D context.
+    if (options.metrics) {
+      // Bounds against the alphabetic baseline (measureText's default).
+      ctx.textBaseline = "alphabetic";
+      canvas.glyphMetrics = [];
+      for (let i = 0; i < count; i += 1) {
+        const m = ctx.measureText(glyphs[i] || " ");
+        canvas.glyphMetrics.push({
+          width: Number(m.width) || 0,
+          ascent: Number(m.actualBoundingBoxAscent) || 0,
+          descent: Number(m.actualBoundingBoxDescent) || 0,
+        });
+      }
+      ctx.textBaseline = "middle";
+    }
+    if (options.skipDraw) return canvas;
     const yFrac = Number.isFinite(Number(options.yFrac)) ? Number(options.yFrac) : 0.5;
     for (let i = 0; i < count; i += 1) {
       const g = glyphs[i];

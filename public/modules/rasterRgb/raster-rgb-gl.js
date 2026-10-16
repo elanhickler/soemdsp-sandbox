@@ -485,13 +485,8 @@
       gl.disable(gl.SCISSOR_TEST);
       if (gl.isContextLost()) return false;
 
-      destCtx.save();
-      destCtx.setTransform(1, 0, 0, 1, 0, 0);
-      destCtx.globalCompositeOperation = "source-over";
-      destCtx.globalAlpha = 1;
       destCtx.filter = "none";
-      destCtx.drawImage(dev.canvas, 0, dev.canvas.height - ch, cw, ch, 0, 0, cw, ch);
-      destCtx.restore();
+      nodeGraphDisplayCanvasBlit(destCtx, dev.canvas, 0, dev.canvas.height - ch, cw, ch, 0, 0, cw, ch, false);
       return true;
     } catch (err) {
       gl.disable(gl.SCISSOR_TEST);

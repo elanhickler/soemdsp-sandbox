@@ -3,9 +3,8 @@
 
 function clearNodeGraphModuleScopeLocalFallback(slot) {
   const canvas = slot?.scopeElement?.querySelector?.(":scope > .node-module-scope-local-fallback-canvas");
-  const context = canvas?.getContext?.("2d");
-  if (canvas && context) {
-    context.clearRect(0, 0, canvas.width, canvas.height);
+  if (canvas) {
+    nodeGraphFaceClearTransparent(canvas);
   }
 }
 
@@ -80,6 +79,49 @@ function nodeGraphModuleScopeTrimLightSpriteCache() {
   }
 }
 
+/**
+ * Light sprite pixels: shape mask (4x4 supersampled edge) times the radial
+ * profile (solid to the middle stop, then linear to 0 at the radius when
+ * blurred). Straight-alpha RGBA.
+ */
+function nodeGraphModuleScopeLightSpritePixels(size, center, radius, shape, rgb, alpha, blurValue = 0) {
+  const data = new Uint8Array(size * size * 4);
+  const alphaValue = clampNodeSliderValue(nodeGraphFiniteNumber(alpha), 0, 1);
+  const blur = normalizeNodeGraphModuleScopeDotBlur(blurValue, 0);
+  const middleStop = clampNodeSliderValue(0.22 + (1 - blur) * 0.58, 0.22, 0.8);
+  const inside = shape === "square"
+    ? (dx, dy) => Math.abs(dx) <= radius && Math.abs(dy) <= radius
+    : shape === "diamond"
+      ? (dx, dy) => Math.abs(dx) + Math.abs(dy) <= radius
+      : (dx, dy) => dx * dx + dy * dy <= radius * radius;
+  const profile = (dx, dy) => {
+    if (blur <= 0) return 1;
+    const t = Math.hypot(dx, dy) / Math.max(0.0001, radius);
+    if (t <= middleStop) return 1;
+    return t >= 1 ? 0 : 1 - (t - middleStop) / (1 - middleStop);
+  };
+  for (let py = 0; py < size; py += 1) {
+    for (let px = 0; px < size; px += 1) {
+      let a = 0;
+      for (let sy = 0; sy < 4; sy += 1) {
+        for (let sx = 0; sx < 4; sx += 1) {
+          const dx = px + (sx + 0.5) / 4 - center;
+          const dy = py + (sy + 0.5) / 4 - center;
+          if (inside(dx, dy)) a += profile(dx, dy);
+        }
+      }
+      a = (a / 16) * alphaValue;
+      if (a <= 0) continue;
+      const o = (py * size + px) * 4;
+      data[o] = rgb[0];
+      data[o + 1] = rgb[1];
+      data[o + 2] = rgb[2];
+      data[o + 3] = Math.round(a * 255);
+    }
+  }
+  return data;
+}
+
 function nodeGraphModuleScopeLightSpriteTexture(options) {
   const radius = Math.max(0.5, nodeGraphFiniteNumber(options.radius, 0.5));
   const size = Math.max(2, Math.ceil(radius * 2));
@@ -89,32 +131,13 @@ function nodeGraphModuleScopeLightSpriteTexture(options) {
     return cached;
   }
 
-  const canvas = document.createElement("canvas");
-  canvas.width = size;
-  canvas.height = size;
-  const context = canvas.getContext("2d");
-  if (!context) {
-    return null;
-  }
-
+  // RGBA texture for the shared GL light layer (uploaded once, cached by key).
   const center = size * 0.5;
   const drawRadius = Math.max(0.5, Math.min(center, radius));
-  context.save();
-  context.globalCompositeOperation = options.usesShader ? "source-over" : "lighter";
-  context.fillStyle = nodeGraphModuleScopeLightFillStyle(
-    context,
-    center,
-    center,
-    drawRadius,
-    options.centerRgb,
-    options.centerAlphaFactor,
-    options.centerBlur,
+  const data = nodeGraphModuleScopeLightSpritePixels(
+    size, center, drawRadius, options.shape, options.centerRgb, options.centerAlphaFactor, options.centerBlur,
   );
-  drawNodeGraphModuleScopeLightShape(context, options.shape, center, center, drawRadius);
-  context.fill();
-  context.restore();
-
-  const sprite = { canvas, size };
+  const sprite = { canvas: { data, width: size, height: size }, size };
   nodeGraphModuleScopeState.lightSpriteTextures.set(key, sprite);
   nodeGraphModuleScopeTrimLightSpriteCache();
   return sprite;

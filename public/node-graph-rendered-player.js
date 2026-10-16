@@ -69,43 +69,40 @@ function drawNodeGraphRenderedPlayerWave() {
     els.canvas.width = width;
     els.canvas.height = height;
   }
-  const ctx = els.canvas.getContext("2d");
-  ctx.clearRect(0, 0, width, height);
-  const columns = nodeGraphRenderedPlayerWaveColumns(Math.floor(width / dpr));
-  els.root?.classList.toggle("has-sample", Boolean(columns));
-  if (!columns) {
+  // Native GL face on the shared device (transparent), CSS-px coords.
+  const batch = typeof nodeGraphGlLinesBegin === "function"
+    ? nodeGraphGlLinesBegin(els.canvas, [0, 0, 0, 0], { scale: dpr, transparent: true })
+    : null;
+  if (!batch) {
+    nodeGraphDisplayGlFailed(els.canvas, "rendered player wave: no shared GL device");
     return;
   }
-  const mid = height / 2;
-  const amp = (height / 2) * 0.86;
-  // Phosphor pass: soft glow underlay then a crisp core, matching the
-  // Music Player's layered look.
-  for (const pass of [
-    { color: "rgba(57, 230, 163, 0.25)", blur: 6 * dpr, widthPx: 2.5 * dpr },
-    { color: "rgba(57, 230, 163, 0.85)", blur: 0, widthPx: Math.max(1, dpr) },
-  ]) {
-    ctx.save();
-    ctx.strokeStyle = pass.color;
-    ctx.lineWidth = pass.widthPx;
-    ctx.shadowColor = "rgba(57, 230, 163, 0.8)";
-    ctx.shadowBlur = pass.blur;
-    ctx.beginPath();
-    for (let x = 0; x < columns.length; x++) {
-      const [min, max] = columns[x];
-      const px = x * dpr + 0.5;
-      ctx.moveTo(px, mid - max * amp);
-      ctx.lineTo(px, mid - min * amp + 1);
+  const cssW = width / dpr;
+  const cssH = height / dpr;
+  const columns = nodeGraphRenderedPlayerWaveColumns(Math.floor(cssW));
+  els.root?.classList.toggle("has-sample", Boolean(columns));
+  if (columns) {
+    const mid = cssH / 2;
+    const amp = (cssH / 2) * 0.86;
+    const fine = 1 / dpr;
+    // Phosphor pass: soft glow underlay (feathered halo) then a crisp core.
+    for (const pass of [
+      { rgba: [57 / 255, 230 / 255, 163 / 255, 0.25], half: 1.25, feather: 4 },
+      { rgba: [57 / 255, 230 / 255, 163 / 255, 0.85], half: Math.max(0.5, 0.5 * fine), feather: fine },
+    ]) {
+      for (let x = 0; x < columns.length; x++) {
+        const [min, max] = columns[x];
+        const px = x + 0.5 * fine;
+        nodeGraphGlLinesSegment(batch, px, mid - max * amp, px, mid - min * amp + fine, pass.half, pass.feather, pass.rgba);
+      }
     }
-    ctx.stroke();
-    ctx.restore();
+    // Center line.
+    const lineHalf = Math.max(fine, 0.75) * 0.5;
+    nodeGraphGlLinesSegment(batch, 0, mid + 0.5 * fine, cssW, mid + 0.5 * fine, lineHalf, fine, [127 / 255, 199 / 255, 217 / 255, 0.18]);
   }
-  // Center line.
-  ctx.strokeStyle = "rgba(127, 199, 217, 0.18)";
-  ctx.lineWidth = Math.max(1, dpr * 0.75);
-  ctx.beginPath();
-  ctx.moveTo(0, mid + 0.5);
-  ctx.lineTo(width, mid + 0.5);
-  ctx.stroke();
+  if (!nodeGraphGlLinesEnd(batch, "alpha")) {
+    nodeGraphDisplayGlFailed(els.canvas, "rendered player wave: GL present failed");
+  }
 }
 
 function nodeGraphPaintTransportRecordButton() {

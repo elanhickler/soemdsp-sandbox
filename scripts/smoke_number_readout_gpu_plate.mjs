@@ -1,9 +1,9 @@
-// Smoke: Value LED burn plate lives on the GPU (ping-pong textures on the
-// shared device). Per frame: one fade pass, no plate upload. On a value
-// change: only the stamped digit rect goes up (texSubImage2D), then the 2D
-// scratch rect is cleared. Present binds the GPU plate instead of
-// texImage2D-ing the 2D canvas. Fade maths mirrors 2D destination-out
-// (round(in * (255 - round(erase * 255)) / 255), measured in Chrome).
+// Smoke: Value LED / LCD faces draw on the shared GL device. The burn plate
+// is two ping-pong textures (per frame: one fade pass, no upload); deposits
+// are GL glyph quads drawn straight into the plate. Each face draws into its
+// own GL target (rects + atlas glyphs batched, premultiplied source-over),
+// then presents through nodeGraphDisplayCanvasBlit. Fade maths mirrors 2D
+// destination-out (round(in * (255 - round(erase * 255)) / 255), measured in Chrome).
 import fs from "node:fs";
 import path from "node:path";
 import vm from "node:vm";
@@ -60,28 +60,57 @@ const k255 = log.filter(([k, a]) => k === "uniform1f" && a[0]?.n === "uKeep255")
 gate(k255.length === 60 && k255.every((v) => v === 255 - 51), "fade keep = 255 - round(0.2 * 255) = 204 (2D destination-out maths)");
 const plateFs = programs.find(([k]) => k === "number-readout-burn-plate")?.[1] || "";
 gate(/floor\(d \* uKeep255 \/ 255\.0 \+ 0\.5\) \/ 255\.0/.test(plateFs) && /floor\(t \* 255\.0 \+ 0\.5\)/.test(plateFs), "shader rounds like the 8-bit 2D path");
-// Stamp: only the tracked rect goes up, then the scratch rect is cleared.
+// Face pipeline: rects + glyphs batch into one draw, present blits once.
+const bakes = [];
+ctx.nodeGraphDisplayCanvasBakeGlyphAtlas = (o) => {
+  bakes.push(o);
+  const c = mkCanvas((o.cols | 0) * (o.cellW | 0), Math.ceil(o.glyphs.length / o.cols) * (o.cellH | 0));
+  if (o.metrics) c.glyphMetrics = o.glyphs.map(() => ({ width: 30, ascent: 30, descent: 2 }));
+  return c;
+};
+const blits = [];
+ctx.nodeGraphDisplayCanvasPresentContext = (c) => ({ canvas: c });
+ctx.nodeGraphDisplayCanvasBlit = (...a) => { blits.push(a); return true; };
+ctx.clampNodeSliderValue = (v, a, b) => Math.max(a, Math.min(b, v));
+ctx.nodeGraphFiniteNumber = (v, d = 0) => (Number.isFinite(Number(v)) ? Number(v) : d);
 log.length = 0;
-ctx.nodeGraphNumberReadoutGlPlateStamp(st, plate, 100.4, 20.2, 140.6, 70.1);
-const subs = log.filter(([k]) => k === "texSubImage2D");
-gate(subs.length === 1 && subs[0][1][2] === 100 && subs[0][1][3] === 20, "stamp: one texSubImage2D at the rect origin");
-gate(st.stampCanvas.width === 41 && st.stampCanvas.height === 51, `stamp upload is the digit rect only (${st.stampCanvas.width}x${st.stampCanvas.height}, not 240x90)`);
-gate(count("texImage2D", (a) => a.length === 6) === 0, "no full canvas texImage2D on stamp");
-gate(plate._ctx.calls.some(([k, x, y, w, h]) => k === "clearRect" && x === 100 && y === 20 && w === 41 && h === 51), "2D scratch rect cleared after the move");
-gate(count("blendFuncSeparate") === 1 && count("scissor") === 1, "stamp blends source-over inside a scissor");
-// Track bounds from the digit draw.
-const t = vm.runInContext("nodeGraphNumberReadoutStampTrack", ctx);
-const sc = plate.getContext("2d");
-t.ctx = sc; t.any = false;
-ctx.nodeGraphNumberReadoutDrawDigits(sc, { text: "12.5", centerX: 120, centerY: 45, fontFamily: "x", fontSize: 40, cellW: 26, rgb: [255, 255, 255], alpha: 0.8, energy: true });
-t.ctx = null;
-gate(t.any && t.x0 < 120 - 26 && t.x1 > 120 + 26 && t.y0 < 45 - 20 && t.y1 > 45 + 20, `digit draw tracked (${Math.round(t.x0)},${Math.round(t.y0)})-(${Math.round(t.x1)},${Math.round(t.y1)})`);
-// Present binds the GPU texture; no plate upload.
+const pen = ctx.nodeGraphNumberReadoutGlBeginFace(host);
+gate(Boolean(pen && host._numberReadoutGlFace && pen.target === host._numberReadoutGlFace.target), "face: GL target on the shared device");
+ctx.nodeGraphNumberReadoutGlPenRect(pen, 0, 0, 240, 90, [10, 20, 30], 1);
+ctx.nodeGraphNumberReadoutDrawDigits(pen, { text: "-12.5", centerX: 120, centerY: 45, fontFamily: "x", fontSize: 40, cellW: 26, rgb: [255, 200, 0], alpha: 1 });
+gate(pen.verts.length === 9 * 6 * 6, `face: 1 rect + 5 glyphs queued (${pen.verts.length / 54} quads; "." zero advance drawn)`);
+ctx.nodeGraphNumberReadoutGlEndFace(host, pen);
+gate(count("drawArrays", (a) => a[2] === 36) === 1, "face: one batched draw for rect + glyphs");
+gate(blits.length === 1 && blits[0][4] === 240 && blits[0][5] === 90, "face: one present blit at face size");
+gate(bakes.some((o) => o.transparent && o.fontPx === 40 && o.glyphs.includes("8")), "glyphs come from a transparent atlas baked at the face font size");
+const nBakes = bakes.length;
+const pen2 = ctx.nodeGraphNumberReadoutGlBeginFace(host);
+ctx.nodeGraphNumberReadoutDrawDigits(pen2, { text: "-13.7", centerX: 120, centerY: 45, fontFamily: "x", fontSize: 40, cellW: 26, rgb: [255, 200, 0], alpha: 1 });
+gate(bakes.length === nBakes, "atlas reused for the next value (no rebake per frame)");
+ctx.nodeGraphNumberReadoutDrawDigits(pen2, { text: "C#3", centerX: 120, centerY: 45, fontFamily: "x", fontSize: 40, cellW: 26, rgb: [255, 200, 0], alpha: 1 });
+gate(bakes.length === nBakes + 1 && bakes.at(-1).glyphs.includes("C") && bakes.at(-1).glyphs.includes("1"), "new characters rebake the atlas with the union");
+// LCD inner shadow: one analytic full-target pass.
 log.length = 0;
-const dest = { canvas: host, save() {}, restore() {}, drawImage() {} };
-ctx.nodeGraphNumberReadoutPresentBurnPlate(dest, plate, [{ t: 0, color: "#000000" }, { t: 1, color: "#ffffff" }], "#ffffff");
-gate(count("texImage2D", (a) => a.length === 6) === 0, "present: no texImage2D of the 2D plate");
-gate(log.some(([k, a]) => k === "bindTexture" && a[1] === st.read.tex), "present: samples the GPU plate texture");
+ctx.nodeGraphNumberReadoutGlPenLcdInnerShadow(pen2, 0, 0, 240, 90, 0.5, 0.2, 0.3, 0.1);
+const sig = log.filter(([k, a]) => k === "uniform1f" && a[0]?.n === "uSigma").map(([, a]) => a[1]);
+gate(sig.length === 1 && sig[0] > 0.35, `soft shadow: Gaussian sigma ${sig[0]?.toFixed?.(2)}px`);
+log.length = 0;
+ctx.nodeGraphNumberReadoutGlPenLcdInnerShadow(pen2, 0, 0, 240, 90, 0.5, 1, 0, 0);
+gate(log.some(([k, a]) => k === "uniform1f" && a[0]?.n === "uSigma" && a[1] === 0), "hard shadow: box coverage (sigma 0)");
+const shadowFs = programs.find(([k]) => k === "number-readout-lcd-shadow")?.[1] || "";
+gate(/erfApprox/.test(shadowFs) && /uClip/.test(shadowFs), "shadow shader: erf blur, clipped to the plate");
+// Deposits: glyphs into the GPU plate FBO, no upload.
+log.length = 0;
+const dpen = ctx.nodeGraphNumberReadoutGlPen(st.gl, st.read, st.w, st.h);
+ctx.nodeGraphNumberReadoutDrawDigits(dpen, { text: "12.5", centerX: 120, centerY: 45, fontFamily: "x", fontSize: 40, cellW: 26, rgb: [255, 255, 255], alpha: 0.8, energy: true });
+ctx.nodeGraphNumberReadoutGlPenFlush(dpen);
+gate(log.some(([k, a]) => k === "bindFramebuffer" && a[1] === st.read.fbo) && count("texSubImage2D") === 0, "deposit: drawn into the GPU plate, nothing uploaded");
+// Tint: samples the GPU plate into the face target.
+log.length = 0;
+const pen3 = ctx.nodeGraphNumberReadoutGlBeginFace(host);
+ctx.nodeGraphNumberReadoutPresentBurnPlate(pen3, host, plate, [{ t: 0, color: "#000000" }, { t: 1, color: "#ffffff" }], "#ffffff");
+gate(count("texImage2D", (a) => a.length === 6) === 0, "tint: no texImage2D of a 2D plate");
+gate(log.some(([k, a]) => k === "bindTexture" && a[1] === st.read.tex) && log.some(([k, a]) => k === "bindFramebuffer" && a[1] === pen3.target.fbo), "tint: GPU plate sampled into the face target");
 // Resize: scale-preserve on the GPU.
 const plate2 = mkCanvas(300, 100);
 log.length = 0;
@@ -95,8 +124,12 @@ gate(count("clear") === 2, "ClearBurnPlate clears both GPU targets");
 // Draw path wiring.
 const nr = src("node-graph-module-scope-number-readout.js");
 gate(/nodeGraphNumberReadoutGlPlateFade\(plateGl, Number\(erase\.toFixed\(4\)\)\)/.test(nr), "draw path fades on the GPU when the plate is up");
-gate(/nodeGraphNumberReadoutGlPlateStamp\(plateGl, burnPlate, track\.x0, track\.y0, track\.x1, track\.y1\)/.test(nr), "draw path moves stamps to the GPU");
-gate(!/UNSIGNED_BYTE, burnPlate\)/.test(nr) && /gl\.bindTexture\(gl\.TEXTURE_2D, plateTex\);/.test(nr), "present binds the GPU plate; the 2D plate is never uploaded");
+{
+  const twoD = [...nr.matchAll(/getContext\("2d"|getContext\('2d'/g)].length;
+  gate(twoD === 0 && !/DrawLcdInnerShadow/.test(nr), `no 2D context left; LCD shadow is the GL pen (${twoD})`);
+  gate(!/fillText|measureText|drawImage\(/.test(nr), "no fillText / measureText / drawImage in the face path");
+  gate(!/LcdCompositeHang|DrawInnerShadow\(|GlPlateStamp|StampTrack/.test(nr), "unused 2D helpers deleted");
+}
 // No shared device: black + nodeGraphDisplayGlFailed, no 2D plate work.
 {
   const failed = [];
@@ -107,19 +140,16 @@ gate(!/UNSIGNED_BYTE, burnPlate\)/.test(nr) && /gl\.bindTexture\(gl\.TEXTURE_2D,
   const p2 = mkCanvas(240, 90);
   gate(ctx.nodeGraphNumberReadoutGlPlateEnsure(h2, p2) === null, "no GL device: no GPU plate");
   log.length = 0;
-  ctx.nodeGraphNumberReadoutPresentBurnPlate({ canvas: h2, save() {}, restore() {}, drawImage() {} }, p2, [{ t: 0, color: "#000000" }], "#ffffff");
-  gate(failed.length === 1 && log.length === 0, `no GL device: present reports via nodeGraphDisplayGlFailed (${failed.join("; ")}) and draws nothing`);
+  gate(ctx.nodeGraphNumberReadoutGlBeginFace(h2) === null, "no GL device: no face pen");
+  gate(failed.length === 1 && log.length === 0 && !h2._ctx, `no GL device: nodeGraphDisplayGlFailed (${failed.join("; ")}), no 2D drawing`);
   ctx.nodeGraphSharedGlDevice = saveDev;
 }
-// Layout memo: second identical layout does not touch context.font.
-let fontSets = 0;
-const lctx = { set font(_v) { fontSets += 1; }, get font() { return ""; }, measureText: () => ({ width: 30, actualBoundingBoxAscent: 30, actualBoundingBoxDescent: 2 }) };
-ctx.clampNodeSliderValue = (v, a, b) => Math.max(a, Math.min(b, v));
-ctx.nodeGraphFiniteNumber = (v, d = 0) => (Number.isFinite(Number(v)) ? Number(v) : d);
+// Layout: measured from atlas metrics (no 2D context), memoised.
+const nBake2 = bakes.length;
 const opts = { hasUnit: false, padding01: 0, faceStyle: "led", pixelRatio: 1, zoom: 1, fitText: "12.5" };
-const l1 = ctx.nodeGraphNumberReadoutComputeLayout(lctx, "12.5", "x", 200, 80, opts);
-const sets1 = fontSets;
-const l2 = ctx.nodeGraphNumberReadoutComputeLayout(lctx, "13.7", "x", 200, 80, opts);
-gate(sets1 > 0 && fontSets === sets1 && JSON.stringify(l1) === JSON.stringify(l2), `layout memo: same cells/face reuse the layout (font sets ${sets1} -> ${fontSets})`);
+const l1 = ctx.nodeGraphNumberReadoutComputeLayout(null, "12.5", "y", 200, 80, opts);
+const bake1 = bakes.length;
+const l2 = ctx.nodeGraphNumberReadoutComputeLayout(null, "13.7", "y", 200, 80, opts);
+gate(l1.fontSize > 0 && bake1 > nBake2 && bakes.length === bake1 && JSON.stringify(l1) === JSON.stringify(l2), `layout: metrics baked once, layout memoised (fontSize ${l1.fontSize.toFixed(1)})`);
 console.log(failures ? `\n${failures} check(s) FAILED` : "\nnumber readout GPU plate smoke passed");
 process.exit(failures ? 1 : 0);

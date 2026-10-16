@@ -525,10 +525,6 @@ function renderNodeGraphModuleScopeDotPreview(
   if (canvas.height !== size) {
     canvas.height = size;
   }
-  const context = canvas.getContext("2d");
-  if (!context) {
-    return;
-  }
   const pixels = typeof nodeGraphModuleScopeGeneratedDotTextureData === "function"
     ? nodeGraphModuleScopeGeneratedDotTextureData({
       core1Brightness,
@@ -538,13 +534,19 @@ function renderNodeGraphModuleScopeDotPreview(
       size,
     })
     : new Uint8ClampedArray(size * size * 4);
-  const imageData = new ImageData(
-    pixels instanceof Uint8ClampedArray ? pixels : new Uint8ClampedArray(pixels),
-    size,
-    size,
-  );
-  context.clearRect(0, 0, size, size);
-  context.putImageData(imageData, 0, 0);
+  // Native GL: upload the generated dot texture as one image quad (transparent face).
+  const batch = typeof nodeGraphGlLinesBegin === "function"
+    ? nodeGraphGlLinesBegin(canvas, [0, 0, 0, 0], { transparent: true })
+    : null;
+  if (!batch) {
+    nodeGraphDisplayGlFailed(canvas, "dot preview: no shared GL device");
+    return;
+  }
+  const data = pixels instanceof Uint8Array ? pixels : new Uint8Array(pixels.buffer, pixels.byteOffset, pixels.byteLength);
+  nodeGraphGlLinesImage(batch, { data, width: size, height: size }, 0, 0, size, size, { nearest: true });
+  if (!nodeGraphGlLinesEnd(batch, "alpha")) {
+    nodeGraphDisplayGlFailed(canvas, "dot preview: GL present failed");
+  }
 }
 
 function renderNodeGraphModuleScopeBrightnessControl() {

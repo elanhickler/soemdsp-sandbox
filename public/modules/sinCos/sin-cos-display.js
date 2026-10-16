@@ -131,32 +131,6 @@ function nodeGraphSinCosOutputHasWire(nodeId, port) {
   return false;
 }
 
-function nodeGraphSinCosStrokeCycle(context, mapX, mapY, samples, sampleAt, strokeStyle, lineWidth) {
-  context.beginPath();
-  for (let i = 0; i <= samples; i += 1) {
-    const xNorm = i / samples;
-    const x = mapX(xNorm);
-    const y = mapY(sampleAt(xNorm));
-    if (i === 0) context.moveTo(x, y);
-    else context.lineTo(x, y);
-  }
-  if (typeof nodeGraphStrokePathWithLineBlur === "function") {
-    nodeGraphStrokePathWithLineBlur(context, {
-      strokeStyle,
-      lineWidth,
-      lineBlur: 0,
-      lineJoin: "round",
-      lineCap: "round",
-    });
-  } else {
-    context.strokeStyle = strokeStyle;
-    context.lineWidth = lineWidth;
-    context.lineJoin = "round";
-    context.lineCap = "round";
-    context.stroke();
-  }
-}
-
 function drawNodeGraphSinCosDisplay(section) {
   try {
     drawNodeGraphSinCosDisplayInner(section);

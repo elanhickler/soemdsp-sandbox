@@ -238,6 +238,8 @@ void main() {
       // Glyph quads for every text call: pos2 uv2 rgba4 per vertex, one draw per atlas run.
       tdata: s.tpool.pop() || new Float32Array(4096), tn: 0,
       publishNodeId: options?.publishNodeId,
+      // transparent: overlay faces; the 2D blit target is cleared first.
+      transparent: options?.transparent === true,
     };
   }
 
@@ -334,7 +336,7 @@ void main() {
 
   /**
    * Textured quad (image blit). source: { data: Uint8Array RGBA, width, height }
-   * or any TexImageSource. options: { nearest = true, alpha = 1 }. Drawn under
+   * or any TexImageSource. options: { nearest = true, alpha = 1, additive = false }. Drawn under
    * the line/rect quads, in call order.
    */
   function nodeGraphGlLinesImage(batch, source, x, y, w, h, options = {}) {
@@ -350,7 +352,43 @@ void main() {
       tint: Array.isArray(options.tint) ? options.tint : null,
       // cache: upload once per source object (static pictures / baked sprites).
       cache: options.cache === true,
+      additive: options.additive === true,
     });
+  }
+
+  /**
+   * Upload a source (e.g. a face canvas about to be resized) to a GL texture
+   * NOW, so a later batch can draw the old pixels. Pass the result to
+   * nodeGraphGlLinesImage; the texture is deleted after that batch draws it,
+   * unless { keep: true } (then free it with nodeGraphGlLinesReleaseSnapshot).
+   */
+  function nodeGraphGlLinesSnapshot(source, options = {}) {
+    const s = ensure();
+    if (!s || !source) return null;
+    const sw = source.naturalWidth || source.width || 0;
+    const sh = source.naturalHeight || source.height || 0;
+    if (!(sw > 0) || !(sh > 0)) return null;
+    const gl = s.gl;
+    const texture = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, texture);
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+    gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
+    try {
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, source);
+    } catch (_error) {
+      gl.bindTexture(gl.TEXTURE_2D, null);
+      gl.deleteTexture(texture);
+      return null;
+    }
+    gl.bindTexture(gl.TEXTURE_2D, null);
+    return { glSnapshot: true, keep: options?.keep === true, texture, width: sw, height: sh };
+  }
+
+  function nodeGraphGlLinesReleaseSnapshot(snapshot) {
+    if (!snapshot?.glSnapshot || !snapshot.texture) return;
+    const s = ensure();
+    if (s) s.gl.deleteTexture(snapshot.texture);
+    snapshot.texture = null;
   }
 
   // ---- text atlas ---------------------------------------------------------
@@ -779,7 +817,7 @@ void main() {
     gl.uniform1i(s.imgTexLoc, 0);
   }
 
-  function drawImages(batch) {
+  function drawImages(batch, alphaDst) {
     const { s, w, h } = batch;
     const gl = s.gl;
     useTexturedProgram(s);
@@ -788,27 +826,33 @@ void main() {
     gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
     for (const im of batch.images) {
       const src = im.source;
-      let cached = im.cache ? s.texCache.get(src) : null;
-      const sw = src.naturalWidth || src.width || 0;
-      const sh = src.naturalHeight || src.height || 0;
-      if (cached && (cached.w !== sw || cached.h !== sh || cached.src !== (src.currentSrc || src.src || ""))) {
-        gl.deleteTexture(cached.texture);
-        s.texCache.delete(src);
-        cached = null;
-      }
-      if (im.cache && !cached) {
-        cached = { texture: gl.createTexture(), w: sw, h: sh, src: src.currentSrc || src.src || "", fresh: true };
-        s.texCache.set(src, cached);
-      }
-      gl.bindTexture(gl.TEXTURE_2D, cached ? cached.texture : s.imgTex);
-      if (!cached || cached.fresh) {
-        if (src.data && src.width > 0 && src.height > 0) {
-          gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, src.width, src.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, src.data);
-        } else {
-          gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, src);
+      if (src.glSnapshot) {
+        gl.bindTexture(gl.TEXTURE_2D, src.texture);
+      } else {
+        let cached = im.cache ? s.texCache.get(src) : null;
+        const sw = src.naturalWidth || src.width || 0;
+        const sh = src.naturalHeight || src.height || 0;
+        if (cached && (cached.w !== sw || cached.h !== sh || cached.src !== (src.currentSrc || src.src || ""))) {
+          gl.deleteTexture(cached.texture);
+          s.texCache.delete(src);
+          cached = null;
         }
-        if (cached) cached.fresh = false;
+        if (im.cache && !cached) {
+          cached = { texture: gl.createTexture(), w: sw, h: sh, src: src.currentSrc || src.src || "", fresh: true };
+          s.texCache.set(src, cached);
+        }
+        gl.bindTexture(gl.TEXTURE_2D, cached ? cached.texture : s.imgTex);
+        if (!cached || cached.fresh) {
+          if (src.data && src.width > 0 && src.height > 0) {
+            gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, src.width, src.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, src.data);
+          } else {
+            gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, src);
+          }
+          if (cached) cached.fresh = false;
+        }
       }
+      // Per-image blend: normal over, or additive ({ additive: true }).
+      gl.blendFuncSeparate(gl.SRC_ALPHA, im.additive ? gl.ONE : gl.ONE_MINUS_SRC_ALPHA, gl.ONE, alphaDst);
       const f = im.nearest ? gl.NEAREST : gl.LINEAR;
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, f);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, f);
@@ -829,6 +873,10 @@ void main() {
         drawTexturedTinted(s, w, h, q, 0, 48);
       } else {
         drawTextured(s, w, h, [x0, y0, 0, 0, x1, y0, 1, 0, x0, y1, 0, 1, x1, y0, 1, 0, x1, y1, 1, 1, x0, y1, 0, 1], 0);
+      }
+      if (src.glSnapshot && src.texture && !src.keep) {
+        gl.deleteTexture(src.texture);
+        src.texture = null;
       }
     }
     gl.bindTexture(gl.TEXTURE_2D, null);
@@ -856,8 +904,7 @@ void main() {
     const colourDst = blend === "add" ? gl.ONE : gl.ONE_MINUS_SRC_ALPHA;
     gl.enable(gl.BLEND);
     if (batch.images.length) {
-      gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, alphaDst);
-      drawImages(batch);
+      drawImages(batch, alphaDst);
     }
     const count = batch.n / FLOATS;
     if (count > 0) {
@@ -968,6 +1015,7 @@ void main() {
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.globalCompositeOperation = "source-over";
     ctx.globalAlpha = 1;
+    if (batch.transparent) ctx.clearRect(0, 0, w, h);
     if (typeof global.nodeGraphSharedGlBlitTo2D === "function") {
       return global.nodeGraphSharedGlBlitTo2D(ctx, w, h) !== false;
     }
@@ -1030,6 +1078,8 @@ void main() {
     nodeGraphGlLinesDot,
     nodeGraphGlLinesPolyline,
     nodeGraphGlLinesImage,
+    nodeGraphGlLinesSnapshot,
+    nodeGraphGlLinesReleaseSnapshot,
     nodeGraphGlLinesText,
     nodeGraphGlLinesMeasureText,
     nodeGraphGlLinesTextAtlas,

@@ -2099,7 +2099,6 @@ function nodeGraphAudioPlayerPlaylistPaintWaveCanvas(canvas, {
   if (
     live
     && typeof nodeGraphSampleWaveformBuildVectorPath === "function"
-    && typeof nodeGraphSampleWaveformStrokeVectorPath === "function"
   ) {
     const points = nodeGraphSampleWaveformBuildVectorPath(
       samples,
@@ -2109,7 +2108,7 @@ function nodeGraphAudioPlayerPlaylistPaintWaveCanvas(canvas, {
       midY,
       amplitude,
     );
-    if (nodeGraphSampleWaveformStrokeVectorPath(context, points)) {
+    if (nodeGraphAudioPlayerPlaylistStrokeVectorPath(context, points)) {
       context.strokeStyle = stroke;
       context.lineWidth = Math.max(1, pixelRatio);
       context.lineJoin = "miter";
@@ -3226,4 +3225,23 @@ function nodeGraphAudioPlayerFitSectionLabels(section) {
     }
     nodeGraphAudioPlayerFitLabel(btn);
   }
+}
+
+// Playlist row waveform path (Playlist stays 2D: approved exception).
+function nodeGraphAudioPlayerPlaylistStrokeVectorPath(context, points) {
+  const count = points.length;
+  if (count < 2) {
+    return false;
+  }
+  context.beginPath();
+  context.moveTo(points[0], points[1]);
+  if (count === 2) {
+    // Single sample in view - tiny tick so it still inks.
+    context.lineTo(points[0], points[1] + 0.5);
+    return true;
+  }
+  for (let i = 2; i < count; i += 2) {
+    context.lineTo(points[i], points[i + 1]);
+  }
+  return true;
 }

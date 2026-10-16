@@ -83,12 +83,12 @@ function nodeGraphModuleScopeWipeNode(nodeId) {
     for (const canvas of canvases) {
       if (!(canvas instanceof HTMLCanvasElement)) continue;
       if (!nodeGraphModuleScopeWipeCanvas(canvas, { nodeId: id, displayType, face: host })) {
-        const ctx = canvas.getContext?.("2d");
         const bg = typeof nodeGraphModuleScopePlateBackgroundForElement === "function"
           ? nodeGraphModuleScopePlateBackgroundForElement(canvas)
           : "#000000";
-        if (ctx && canvas.width > 0 && canvas.height > 0 && typeof nodeGraphFacePlateFillCanvas === "function") {
-          nodeGraphFacePlateFillCanvas(ctx, canvas, bg);
+        // GL plate; a canvas that owns its own WebGL context is skipped.
+        if (nodeGraphFacePlateFill(canvas, bg) === "no-device") {
+          nodeGraphDisplayGlFailed(canvas, "wipe: shared GL unavailable");
         }
       }
     }
@@ -219,23 +219,16 @@ function wipeNodeGraphModuleScopeScreensToColdBoot() {
     if (typeof nodeGraphWaterfallWipeHistory === "function") {
       nodeGraphWaterfallWipeHistory(canvas);
     }
-    const context = canvas.getContext?.("2d");
-    if (!context || !(canvas.width > 0) || !(canvas.height > 0)) {
+    if (!(canvas.width > 0) || !(canvas.height > 0)) {
       continue;
     }
     if (canvas._nodeGraphTransportBpmDigits !== undefined) {
       canvas._nodeGraphTransportBpmDigits = null;
       canvas._nodeGraphTransportGateDrawn = null;
     }
-    if (typeof nodeGraphFacePlateFillCanvas === "function") {
-      nodeGraphFacePlateFillCanvas(context, canvas, bg);
-    } else {
-      context.save();
-      context.setTransform(1, 0, 0, 1, 0, 0);
-      context.globalCompositeOperation = "source-over";
-      context.fillStyle = bg || "#000000";
-      context.fillRect(0, 0, canvas.width, canvas.height);
-      context.restore();
+    // GL plate; a canvas that owns its own WebGL context is skipped.
+    if (nodeGraphFacePlateFill(canvas, bg) === "no-device") {
+      nodeGraphDisplayGlFailed(canvas, "wipe: shared GL unavailable");
     }
   }
   // LCD / LED idle plates (not a solid black fill) — registered + leftover walk.
@@ -284,11 +277,8 @@ function nodeGraphModuleScopeWipePhosphorCanvas(canvas, bg) {
   if (typeof nodeGraphResidualFaceGlDrop === "function") {
     nodeGraphResidualFaceGlDrop(canvas);
   }
-  const context = canvas.getContext?.("2d");
-  if (context && canvas.width > 0 && canvas.height > 0) {
-    if (typeof nodeGraphFacePlateFillCanvas === "function") {
-      nodeGraphFacePlateFillCanvas(context, canvas, bg);
-    }
+  if (nodeGraphFacePlateFill(canvas, bg) === "no-device") {
+    nodeGraphDisplayGlFailed(canvas, "wipe: shared GL unavailable");
   }
 }
 
@@ -544,44 +534,34 @@ function clearNodeGraphDisplaySettingsPhosphor(nodeIdOrIds = null, options = {})
       canvas._phosphorLiveScratchInk = false;
       canvas._phosphorLiveScratch = null;
       delete canvas._scope2dTraceLastPoints;
+      if (typeof nodeGraphGlLinesReleaseSnapshot === "function") {
+        nodeGraphGlLinesReleaseSnapshot(canvas._scope2dTraceHold);
+      }
       canvas._scope2dTraceHold = null;
       if (typeof nodeGraphScope2dTraceHoldByNodeId?.delete === "function") {
         nodeGraphScope2dTraceHoldByNodeId.delete(id);
       }
-      // Energy phosphor faces already own WebGL on this canvas — getContext("2d")
-      // is null. Never drop the canvas (that killed drawing until sim restart).
+      // Energy phosphor faces already own WebGL on this canvas (no shared-GL present).
+      // Never drop such a canvas (that killed drawing until sim restart).
       const hasEnergyFace = phosphorKeys.some((key) => Boolean(canvas[key]));
-      let context = null;
-      try {
-        context = canvas.getContext?.("2d") || null;
-      } catch (_error) {
-        context = null;
-      }
-      if (!context) {
-        if (hasEnergyFace) {
-          // FBO wipe above is enough; clear bridge/cursor metadata and continue.
-          canvas._outputPauseBannerStamped = false;
-          canvas._traceScroll = null;
-          canvas._waterfall = null;
-          continue;
-        }
-        // Non-energy face with no 2d context is genuinely dead — remove it.
-        nodeGraphDropScopeFaceCanvas(canvas, id);
+      if (hasEnergyFace) {
+        // FBO wipe above is enough; clear bridge/cursor metadata and continue.
+        canvas._outputPauseBannerStamped = false;
+        canvas._traceScroll = null;
+        canvas._waterfall = null;
         continue;
       }
       if (canvas.width > 0 && canvas.height > 0) {
         const bg = typeof nodeGraphModuleScopePlateBackgroundForElement === "function"
           ? nodeGraphModuleScopePlateBackgroundForElement(canvas)
           : "#000000";
-        if (typeof nodeGraphFacePlateFillCanvas === "function") {
-          nodeGraphFacePlateFillCanvas(context, canvas, bg);
-        } else {
-          context.save();
-          context.setTransform(1, 0, 0, 1, 0, 0);
-          context.globalCompositeOperation = "source-over";
-          context.fillStyle = bg || "#000000";
-          context.fillRect(0, 0, canvas.width, canvas.height);
-          context.restore();
+        const plate = nodeGraphFacePlateFill(canvas, bg);
+        if (plate === "no-device") {
+          nodeGraphDisplayGlFailed(canvas, "clear phosphor: shared GL unavailable");
+        } else if (plate === "no-present") {
+          // Non-energy face that cannot take a present is genuinely dead; remove it.
+          nodeGraphDropScopeFaceCanvas(canvas, id);
+          continue;
         }
         canvas._outputPauseBannerStamped = false;
         canvas._traceScroll = null;

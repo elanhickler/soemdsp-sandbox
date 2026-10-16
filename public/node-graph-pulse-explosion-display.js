@@ -39,8 +39,7 @@ function drawNodeGraphPulseCurveDisplay(section) {
   if (!metrics) {
     return;
   }
-  const { context, cssHeight: height, cssWidth: width, pixelRatio } = metrics;
-  context.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
+  const { cssHeight: height, cssWidth: width, pixelRatio } = metrics;
 
   const params = nodeGraphPulseCurveNodeParams(node);
   const safeStart = Math.max(0, params.startTime);
@@ -52,63 +51,52 @@ function drawNodeGraphPulseCurveDisplay(section) {
   const skew = -0.99 + 1.98 * Math.max(0, Math.min(1, params.timeSpread));
   const span = Math.max(1e-6, safeEnd - safeStart);
 
-  context.clearRect(0, 0, width, height);
-  context.fillStyle = "rgba(2, 6, 9, 0.88)";
-  context.fillRect(0, 0, width, height);
-  context.strokeStyle = "rgba(127, 199, 217, 0.18)";
-  context.lineWidth = 1;
+  // Native GL face on the shared device; translucent plate, CSS-px coords.
+  const batch = typeof nodeGraphGlLinesBegin === "function"
+    ? nodeGraphGlLinesBegin(canvas, [2 / 255, 6 / 255, 9 / 255, 0.88], { scale: pixelRatio, transparent: true })
+    : null;
+  if (!batch) {
+    nodeGraphDisplayGlFailed(canvas, "pulse curve: no shared GL device");
+    return;
+  }
+  const fine = 1 / Math.max(1, pixelRatio);
+  const grid = [127 / 255, 199 / 255, 217 / 255, 0.18];
   for (let line = 0; line <= 4; line += 1) {
     const y = (line / 4) * height;
-    context.beginPath();
-    context.moveTo(0, y);
-    context.lineTo(width, y);
-    context.stroke();
+    nodeGraphGlLinesSegment(batch, 0, y, width, y, 0.5, fine, grid);
   }
 
   const timeToX = (t) => ((t - safeStart) / span) * width;
   const densityToY = (d) => (1 - Math.max(0, Math.min(1, d))) * height;
 
   // Guide lines at start / center / end.
-  context.strokeStyle = "rgba(226, 168, 109, 0.5)";
-  context.lineWidth = 1;
   for (const t of [safeStart, safeCenter, safeEnd]) {
     const x = timeToX(t);
-    context.beginPath();
-    context.moveTo(x, 0);
-    context.lineTo(x, height);
-    context.stroke();
+    nodeGraphGlLinesSegment(batch, x, 0, x, height, 0.5, fine, [226 / 255, 168 / 255, 109 / 255, 0.5]);
   }
 
   // Density curve.
-  context.strokeStyle = "rgba(61, 224, 255, 0.95)";
-  context.lineWidth = 1.5;
-  context.beginPath();
+  const curve = [];
   for (let x = 0; x < width; x += 1) {
     const t = safeStart + (x / Math.max(1, width - 1)) * span;
-    const density = nodeGraphPulseExplosionDensity(t, safeStart, safeCenter, safeEnd, skew);
-    const y = densityToY(density);
-    if (x === 0) {
-      context.moveTo(x, y);
-    } else {
-      context.lineTo(x, y);
-    }
+    curve.push(x, densityToY(nodeGraphPulseExplosionDensity(t, safeStart, safeCenter, safeEnd, skew)));
   }
-  context.stroke();
+  nodeGraphGlLinesPolyline(batch, curve, 0.75, fine, [61 / 255, 224 / 255, 1, 0.95]);
 
   // Pre-calculated pulse positions: the exact schedule that a trigger with
   // this node's current seed/parameters would produce.
   const schedule = nodeGraphPulseExplosionComputeSchedule(params, nodeGraphPulseExplosionRandomFn(params.seed));
-  context.fillStyle = "rgba(255, 214, 102, 0.92)";
   for (const pulse of schedule.pulses) {
     const x = timeToX(pulse.time);
     const density = nodeGraphPulseExplosionDensity(pulse.time, safeStart, safeCenter, safeEnd, skew);
-    const y = densityToY(density);
-    context.beginPath();
-    context.arc(x, y, 2.25, 0, Math.PI * 2);
-    context.fill();
+    nodeGraphGlLinesDot(batch, x, densityToY(density), 2.25 - fine * 0.5, fine, [1, 214 / 255, 102 / 255, 0.92]);
   }
 
-  context.fillStyle = "rgba(229, 238, 242, 0.74)";
-  context.font = "600 10px system-ui, sans-serif";
-  context.fillText(`${schedule.pulses.length} pulses${params.seed ? ` · seed ${params.seed}` : ""}`, 8, 14);
+  nodeGraphGlLinesText(batch, `${schedule.pulses.length} pulses${params.seed ? ` · seed ${params.seed}` : ""}`, 8, 14, {
+    px: 10, rgba: [229 / 255, 238 / 255, 242 / 255, 0.74], align: "left", baseline: "alphabetic",
+    family: "system-ui, sans-serif", weight: 600,
+  });
+  if (!nodeGraphGlLinesEnd(batch, "alpha")) {
+    nodeGraphDisplayGlFailed(canvas, "pulse curve: GL present failed");
+  }
 }

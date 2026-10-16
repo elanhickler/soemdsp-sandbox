@@ -277,43 +277,12 @@
     };
   }
 
-  /** Canvas path for filled silhouette (same family as outline). */
-  function fillPath(ctx, shapeIdOrIndex, shapeParam, cx, cy, halfW, halfH) {
-    if (!ctx) {
-      return;
-    }
-    const id = typeof shapeIdOrIndex === "number" || /^\d+$/.test(String(shapeIdOrIndex))
-      ? shapeIdFromIndex(shapeIdOrIndex)
-      : (typeof global.normalizeTraceStampShape === "function"
-        ? global.normalizeTraceStampShape(shapeIdOrIndex)
-        : String(shapeIdOrIndex || "circle"));
-    const p = clamp01(shapeParam, 0.5);
-    const poly = buildOutlinePolyline(id, p);
-    ctx.beginPath();
-    for (let i = 0; i < poly.length; i += 2) {
-      const x = cx + poly[i] * halfW;
-      const y = cy + poly[i + 1] * halfH;
-      if (i === 0) {
-        ctx.moveTo(x, y);
-      } else {
-        ctx.lineTo(x, y);
-      }
-    }
-    ctx.closePath();
-    if (id === "ring") {
-      const hole = 0.08 + p * 0.78;
-      ctx.moveTo(cx + halfW * hole, cy);
-      ctx.arc(cx, cy, Math.min(halfW, halfH) * hole, 0, Math.PI * 2, true);
-    }
-  }
-
   global.RgbShapeMath = {
     clamp,
     clamp01,
     shapeIdFromIndex,
     shapeChoices,
     outlinePoint,
-    fillPath,
     buildOutlinePolyline,
   };
 })(typeof window !== "undefined" ? window : globalThis);

@@ -112,20 +112,18 @@
      * @returns {number} layers drawn
      */
     function paint() {
-      const ctx = presentCanvas.getContext("2d");
-      if (!ctx) return 0;
       const dstW = presentCanvas.width | 0;
       const dstH = presentCanvas.height | 0;
       if (!(dstW > 0) || !(dstH > 0)) return 0;
-
-      ctx.save();
-      ctx.setTransform(1, 0, 0, 1, 0, 0);
-      ctx.globalCompositeOperation = "source-over";
-      ctx.globalAlpha = 1;
-      ctx.imageSmoothingEnabled = false;
-      ctx.fillStyle = background;
-      ctx.fillRect(0, 0, dstW, dstH);
-
+      // Shared GL device: background clear + one textured quad per layer
+      // ("lighter" layers add, everything else draws over).
+      const batch = typeof global.nodeGraphGlLinesBegin === "function"
+        ? global.nodeGraphGlLinesBegin(presentCanvas, global.nodeGraphGlLinesCss(background), { publishNodeId: "" })
+        : null;
+      if (!batch) {
+        global.nodeGraphDisplayGlFailed?.(presentCanvas, "layer compositor: shared GL unavailable");
+        return 0;
+      }
       let drawn = 0;
       for (let i = 0; i < layers.length; i += 1) {
         const layer = layers[i];
@@ -139,16 +137,15 @@
         const alpha = Number.isFinite(opacity) ? opacity : 1;
         if (!(alpha > 0)) continue;
         const { dx, dy, dw, dh } = destRect(fit, srcW, srcH, dstW, dstH);
-        ctx.globalCompositeOperation = blend;
-        ctx.globalAlpha = alpha;
-        try {
-          ctx.drawImage(source, 0, 0, srcW, srcH, dx, dy, dw, dh);
-          drawn += 1;
-        } catch (_err) {
-          // Cross-origin / detached canvas — skip layer.
-        }
+        global.nodeGraphGlLinesImage(batch, source, dx, dy, dw, dh, {
+          alpha, nearest: true, additive: blend === "lighter",
+        });
+        drawn += 1;
       }
-      ctx.restore();
+      if (!global.nodeGraphGlLinesEnd(batch)) {
+        global.nodeGraphDisplayGlFailed?.(presentCanvas, "layer compositor: GL present failed");
+        return 0;
+      }
       return drawn;
     }
 

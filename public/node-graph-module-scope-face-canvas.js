@@ -57,8 +57,9 @@ function nodeGraphScopeFaceCanvasIsUsable(canvas) {
     }
     return true;
   }
+  // Shared-GL faces present through the canvas' blit context.
   try {
-    return Boolean(canvas.getContext("2d"));
+    return Boolean(nodeGraphDisplayCanvasPresentContext(canvas));
   } catch (_error) {
     return false;
   }
@@ -293,24 +294,27 @@ function nodeGraphFaceCanvasResizeKeep(canvas, width, height) {
   const previousWidth = canvas.width;
   const previousHeight = canvas.height;
   const webglFace = canvas._wfUseWebGL === true || Boolean(canvas._wfGl);
-  let previousCanvas = null;
-  if (!webglFace && previousWidth >= 2 && previousHeight >= 2) {
-    previousCanvas = document.createElement("canvas");
-    previousCanvas.width = previousWidth;
-    previousCanvas.height = previousHeight;
-    const previousContext = previousCanvas.getContext("2d");
-    if (previousContext) previousContext.drawImage(canvas, 0, 0);
-  }
+  // Old pixels go to a GL texture before the resize clears them, then are
+  // drawn back scaled (linear) through the shared device.
+  const snapshot = !webglFace && previousWidth >= 2 && previousHeight >= 2
+    && typeof nodeGraphGlLinesSnapshot === "function"
+    ? nodeGraphGlLinesSnapshot(canvas)
+    : null;
   canvas.width = width;
   canvas.height = height;
   if (canvas._nodeGraphTransportBpmDigits !== undefined) {
     canvas._nodeGraphTransportBpmDigits = null;
   }
-  if (!previousCanvas) return;
-  const context = canvas.getContext("2d");
-  if (!context) return;
-  context.imageSmoothingEnabled = true;
-  context.drawImage(previousCanvas, 0, 0, previousWidth, previousHeight, 0, 0, width, height);
+  if (!snapshot) return;
+  const batch = nodeGraphGlLinesBegin(canvas, [0, 0, 0, 0], { transparent: true });
+  if (!batch) {
+    nodeGraphDisplayGlFailed(canvas, "face resize: shared GL unavailable");
+    return;
+  }
+  nodeGraphGlLinesImage(batch, snapshot, 0, 0, width, height, { nearest: false });
+  if (!nodeGraphGlLinesEnd(batch)) {
+    nodeGraphDisplayGlFailed(canvas, "face resize: GL present failed");
+  }
 }
 
 function syncNodeGraphModuleScopeFaceCanvasTape(canvas, screenElement, pixelRatio, pixelDensity = 1) {

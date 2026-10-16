@@ -391,15 +391,11 @@
     gl.uniform1i(device.present.uPlate, 0);
     gl.drawArrays(gl.TRIANGLES, 0, 6);
     gl.disable(gl.SCISSOR_TEST);
-    destCtx.save();
-    destCtx.setTransform(1, 0, 0, 1, 0, 0);
-    destCtx.globalCompositeOperation = "copy";
-    destCtx.globalAlpha = 1;
-    destCtx.imageSmoothingEnabled = false;
+    // Opaque plate texture: the shared display-canvas blit (nearest) replaces the face.
     const srcY = Math.max(0, device.canvas.height - rh);
-    destCtx.drawImage(device.canvas, 0, srcY, rw, rh, 0, 0, destCtx.canvas.width, destCtx.canvas.height);
-    destCtx.restore();
-    return true;
+    return nodeGraphDisplayCanvasBlit(
+      destCtx, device.canvas, 0, srcY, rw, rh, 0, 0, destCtx.canvas.width, destCtx.canvas.height, false,
+    );
   }
 
   function clear(host, plateCss) {

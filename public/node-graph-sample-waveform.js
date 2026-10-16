@@ -524,7 +524,7 @@ function updateNodeGraphSampleWaveformSettings(patch) {
   renderNodeGraphSampleWaveformSettingsWindow();
   // Immediate paint — do not wait on the FPS gate (zoom does this too).
   const section = document.querySelector?.(
-    `.node-sample-waveform-display[data-node="${String(nodeId).replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"]`,
+    `.node-sample-waveform-display[data-node="${CSS.escape(String(nodeId))}"]`,
   );
   if (section) {
     if (typeof nodeGraphSampleWaveformResyncFrameClock === "function") {
@@ -1071,17 +1071,13 @@ function nodeGraphSampleWaveformSyncLayout(section, options = {}) {
     settings.backgroundHue,
   ].join("|");
   const prev = nodeGraphSampleWaveformFaceMetricsCache.get(section);
-  if (prev && prev.layoutFp === layoutFp && prev.context?.canvas === canvas) {
+  if (prev && prev.layoutFp === layoutFp && prev.canvas === canvas) {
     return prev;
   }
   if (canvas.width !== width) canvas.width = width;
   if (canvas.height !== height) canvas.height = height;
-  const context = canvas.getContext("2d");
-  if (!context) {
-    return null;
-  }
   const metrics = {
-    context,
+    canvas,
     width,
     height,
     pixelRatio: dpr,
@@ -1545,31 +1541,22 @@ function nodeGraphSampleWaveformPaintBuffer(canvas, samples, settings) {
   const height = Math.round(cssH * dpr);
   if (canvas.width !== width) canvas.width = width;
   if (canvas.height !== height) canvas.height = height;
-  const ctx = canvas.getContext("2d");
-  if (!ctx) return;
-  ctx.setTransform(1, 0, 0, 1, 0, 0);
-  const bg = typeof nodeGraphSampleWaveformBackgroundColor === "function"
-    ? nodeGraphSampleWaveformBackgroundColor(settings)
-    : "#050805";
-  ctx.fillStyle = bg;
-  ctx.fillRect(0, 0, width, height);
+  // Native WebGL2 (shared picture device): plate clear + one rect per column.
+  const batch = typeof nodeGraphGlLinesBegin === "function"
+    ? nodeGraphGlLinesBegin(canvas, nodeGraphGlLinesCss(nodeGraphSampleWaveformBackgroundColor(settings)))
+    : null;
+  if (!batch) {
+    nodeGraphDisplayGlFailed(canvas, "wavetable strip: no shared GL device");
+    return;
+  }
   const midY = height * 0.5;
   const amp = midY * 0.92;
-  const fill = typeof nodeGraphSampleWaveformLineColor === "function"
-    ? nodeGraphSampleWaveformLineColor(settings, 85, 0.95)
-    : "hsla(140, 80%, 62%, 0.95)";
-  nodeGraphSampleWaveformPaintEnvelopeColumns(
-    ctx,
-    samples,
-    0,
-    samples.length / Math.max(1, width),
-    0,
-    width,
-    height,
-    midY,
-    amp,
-    fill,
-  );
+  const env = nodeGraphSampleWaveformEnsureEnvelope({}, width);
+  nodeGraphSampleWaveformEnvelopeColumns(env, samples, 0, samples.length / Math.max(1, width), 0, width);
+  nodeGraphSampleWaveformGlEnvelope(batch, env, midY, amp, nodeGraphGlLinesCss(nodeGraphSampleWaveformLineColor(settings, 85, 0.95)));
+  if (!nodeGraphGlLinesEnd(batch)) {
+    nodeGraphDisplayGlFailed(canvas, "wavetable strip: GL present failed");
+  }
 }
 
 function nodeGraphWavetable2dPeakNormalize(buf) {
@@ -1745,7 +1732,7 @@ function nodeGraphWavetable2dWriteParam(nodeId, key, value) {
   const next = Number(value);
   if (!Number.isFinite(next)) return;
   node.params = { ...(node.params || {}), [key]: next };
-  const safeId = String(nodeId || "").replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+  const safeId = CSS.escape(String(nodeId || ""));
   const moduleEl = document.querySelector(`.dsp-node[data-node="${safeId}"]`);
   const slider = moduleEl?.querySelector?.(`input[data-param="${key}"]`);
   if (slider) {
@@ -1943,7 +1930,7 @@ function nodeGraphSampleWaveformNudgePhaseOffset(nodeId, deltaCycles) {
     : ((((current + delta) + 1) % 2) + 2) % 2 - 1;
   node.params = { ...(node.params || {}), phaseOffset: next };
   // Mirror the module slider if present.
-  const safeId = String(nodeId || "").replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+  const safeId = CSS.escape(String(nodeId || ""));
   const moduleEl = document.querySelector(`.dsp-node[data-node="${safeId}"]`);
   const slider = moduleEl?.querySelector?.('input[data-param="phaseOffset"]');
   if (slider) {
@@ -2114,7 +2101,7 @@ function nodeGraphSampleWaveformWriteRegionParam(nodeId, key, phase01) {
   }
   const next = clampNodeSliderValue(nodeGraphFiniteNumber(phase01), 0, 1);
   node.params = { ...(node.params || {}), [key]: next };
-  const safeId = String(nodeId || "").replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+  const safeId = CSS.escape(String(nodeId || ""));
   const moduleEl = document.querySelector(`.dsp-node[data-node="${safeId}"]`);
   const slider = moduleEl?.querySelector?.(`input[data-param="${key}"]`);
   if (slider) {
@@ -2648,51 +2635,34 @@ function nodeGraphSampleWaveformBuildVectorPath(
   return o === points.length ? points : points.subarray(0, o);
 }
 
-function nodeGraphSampleWaveformEnsureTape(state, width, height) {
+// Column envelope cache (min/max per device-px column). Scrolling shifts the
+// arrays and fills only the new columns; the GL pass draws one rect per column.
+function nodeGraphSampleWaveformEnsureEnvelope(state, width) {
   const w = Math.max(1, Math.round(width));
-  const h = Math.max(1, Math.round(height));
-  if (!state.waveTape || state.waveTape.width !== w || state.waveTape.height !== h) {
-    const tape = document.createElement("canvas");
-    tape.width = w;
-    tape.height = h;
-    state.waveTape = tape;
-    state.tapeCtx = tape.getContext("2d");
+  if (!state.envMin || state.envMin.length !== w) {
+    state.envMin = new Float32Array(w);
+    state.envMax = new Float32Array(w);
+    state.envHas = new Uint8Array(w);
     state.tapeStart = Number.NaN;
     state.tapeSig = "";
   }
-  return state.tapeCtx;
+  return state;
 }
 
-function nodeGraphSampleWaveformPaintEnvelopeColumns(
-  context,
-  samples,
-  viewStart,
-  spp,
-  x0,
-  x1,
-  height,
-  midY,
-  amplitude,
-  fillStyle,
-) {
-  if (!context || !samples?.length || !(spp > 0) || x1 <= x0) {
-    return;
-  }
-  const total = samples.length;
+function nodeGraphSampleWaveformEnvelopeColumns(env, samples, viewStart, spp, x0, x1) {
+  const w = env.envMin.length;
+  const total = samples?.length || 0;
   const maxScan = nodeGraphSampleWaveformMaxSamplesPerColumn;
-  context.fillStyle = fillStyle;
   const xa = Math.max(0, Math.floor(x0));
-  const xb = Math.min(context.canvas.width, Math.ceil(x1));
+  const xb = Math.min(w, Math.ceil(x1));
   for (let x = xa; x < xb; x += 1) {
-    const t0 = viewStart + x * spp;
-    const t1 = viewStart + (x + 1) * spp;
-    let i0 = Math.floor(t0);
-    let i1 = Math.ceil(t1);
+    env.envHas[x] = 0;
+    if (!total || !(spp > 0)) continue;
+    let i0 = Math.floor(viewStart + x * spp);
+    let i1 = Math.ceil(viewStart + (x + 1) * spp);
     if (i0 < 0) i0 = 0;
     if (i1 > total) i1 = total;
-    if (i1 <= i0) {
-      continue;
-    }
+    if (i1 <= i0) continue;
     let minV = Infinity;
     let maxV = -Infinity;
     const range = i1 - i0;
@@ -2706,28 +2676,45 @@ function nodeGraphSampleWaveformPaintEnvelopeColumns(
       minV = 0;
       maxV = 0;
     }
-    const y0 = midY - maxV * amplitude;
-    const y1 = midY - minV * amplitude;
-    context.fillRect(x, y0, 1, Math.max(1, y1 - y0));
+    env.envMin[x] = minV;
+    env.envMax[x] = maxV;
+    env.envHas[x] = 1;
   }
 }
 
-function nodeGraphSampleWaveformStrokeVectorPath(context, points) {
-  const count = points.length;
-  if (count < 2) {
-    return false;
+function nodeGraphSampleWaveformEnvelopeScroll(env, dx) {
+  const w = env.envMin.length;
+  for (const a of [env.envMin, env.envMax, env.envHas]) {
+    if (dx > 0) a.copyWithin(0, dx, w);
+    else a.copyWithin(-dx, 0, w + dx);
   }
-  context.beginPath();
-  context.moveTo(points[0], points[1]);
-  if (count === 2) {
-    // Single sample in view — tiny tick so it still inks.
-    context.lineTo(points[0], points[1] + 0.5);
-    return true;
+}
+
+function nodeGraphSampleWaveformGlEnvelope(batch, env, midY, amplitude, rgba) {
+  const w = env.envMin.length;
+  for (let x = 0; x < w; x += 1) {
+    if (!env.envHas[x]) continue;
+    const y0 = midY - env.envMax[x] * amplitude;
+    const y1 = midY - env.envMin[x] * amplitude;
+    nodeGraphGlLinesRect(batch, x, y0, 1, Math.max(1, y1 - y0), rgba);
   }
-  for (let i = 2; i < count; i += 2) {
-    context.lineTo(points[i], points[i + 1]);
-  }
-  return true;
+}
+
+const nodeGraphSampleWaveformHudFamily = "system-ui, sans-serif";
+
+function nodeGraphSampleWaveformGlPlaceholder(batch, width, height, message, settings) {
+  const fontUnit = settings && Number.isFinite(Number(settings.fontSize))
+    ? Number(settings.fontSize)
+    : nodeGraphSampleWaveformDefaultSettings.fontSize;
+  const fontPx = Math.max(1, Math.round(faceInkPx(clampAuthoredInkPx(fontUnit, 11), faceMinSide(width, height))));
+  nodeGraphGlLinesText(batch, message, Math.round(width / 2), Math.round(height / 2), {
+    px: fontPx,
+    rgba: nodeGraphGlLinesCss(nodeGraphSampleWaveformLineColor(settings, 57, 0.55)),
+    align: "center",
+    baseline: "middle",
+    family: nodeGraphSampleWaveformHudFamily,
+    weight: 600,
+  });
 }
 
 // Line family shares nodeGraphHueBrightnessCss (black → hue @ 0.5 → white).
@@ -2812,7 +2799,7 @@ function nodeGraphMusicPlayerFaceMetrics(section, canvas, face = "") {
   }
   const key = String(face || section.dataset?.musicPlayerFace || "wave");
   let metrics = nodeGraphSampleWaveformFaceMetricsCache.get(section);
-  if (!metrics || metrics.face !== key || metrics.context?.canvas !== canvas) {
+  if (!metrics || metrics.face !== key || metrics.canvas !== canvas) {
     metrics = nodeGraphSampleWaveformSyncLayout(section, { face: key });
   }
   return metrics || null;
@@ -2874,29 +2861,31 @@ function drawNodeGraphSampleWaveformDisplay(section) {
       circuitRunning,
     );
   }
-  const { context, height, pixelRatio, width } = metrics;
-  // Draw entirely in device-pixel space (no CSS-pixel transform) so every
-  // coordinate can be snapped to a real physical pixel — a fractional
-  // devicePixelRatio (1.25x/1.5x are common on Windows) would otherwise put
-  // "half pixel" offsets at non-integer physical positions, forcing the
-  // renderer to antialias/blur lines that should be crisp.
-  context.setTransform(1, 0, 0, 1, 0, 0);
-  const snap = (value) => Math.round(value);
-  const crisp = (value) => Math.round(value) + 0.5;
-
-  context.clearRect(0, 0, width, height);
+  const { height, pixelRatio, width } = metrics;
+  // Native WebGL2 on the shared picture device (gl-line-renderer.js), in
+  // device px with edges snapped to whole physical pixels.
   // Always paint a readable plate (not pure void). When the circuit is off
-  // or the AudioContext is still suspended, keep a cold dark field so the
-  // Music Player face is visibly "there" — pure #000 under the room dimmer
-  // looked identical to a dead/missing display.
+  // or the AudioContext is still suspended, keep a cold dark field.
   const entry = nodeGraphSampleWaveformSampleEntry(nodeId);
   if (entry && nodeGraphSampleWaveformMissingLogged.startsWith(`${nodeId}:`)) {
     nodeGraphSampleWaveformMissingLogged = "";
   }
-  context.fillStyle = circuitRunning
+  const plate = circuitRunning
     ? nodeGraphSampleWaveformBackgroundColor(settings)
     : (entry ? "hsl(140, 20%, 4%)" : "#050805");
-  context.fillRect(0, 0, width, height);
+  const batch = typeof nodeGraphGlLinesBegin === "function"
+    ? nodeGraphGlLinesBegin(canvas, nodeGraphGlLinesCss(plate))
+    : null;
+  if (!batch) {
+    nodeGraphDisplayGlFailed(canvas, "sample waveform: no shared GL device");
+    return;
+  }
+  const present = () => {
+    if (!nodeGraphGlLinesEnd(batch)) {
+      nodeGraphDisplayGlFailed(canvas, "sample waveform: GL present failed");
+    }
+  };
+  const snap = (value) => Math.round(value);
 
   // Room dimmer: punch a hole for any painted face so the waveform is not
   // swallowed by the veil (strength 0 made the whole panel look missing).
@@ -2925,15 +2914,15 @@ function drawNodeGraphSampleWaveformDisplay(section) {
         });
       }
     }
-    drawNodeGraphSampleWaveformPlaceholder(
-      context,
+    nodeGraphSampleWaveformGlPlaceholder(
+      batch,
       width,
       height,
       circuitRunning ? "No sample loaded" : "Load a sample",
-      pixelRatio,
       settings,
     );
-    nodeGraphSampleWaveformPaintSpeedLabel(context, nodeId, node, width, height, pixelRatio, settings);
+    nodeGraphSampleWaveformPaintSpeedLabel(batch, nodeId, node, width, height, pixelRatio, settings);
+    present();
     nodeGraphSampleWaveformPaintCompanionPlaylist(section, nodeId);
     return;
   }
@@ -3058,112 +3047,81 @@ function drawNodeGraphSampleWaveformDisplay(section) {
   const faceMinDevice = faceMinSide(width, height);
   const samples = nodeGraphSampleWaveformEntrySamples(entry);
   const spp = viewSpan / Math.max(1, width);
-  const tapeCtx = nodeGraphSampleWaveformEnsureTape(state, width, height);
+  nodeGraphSampleWaveformEnsureEnvelope(state, width);
   const tapeSig = [
     width, height, windowFrames, entry.frames, node?.sample?.id || "",
-    settings.hue, settings.lineBrightness, settings.backgroundHue,
-    settings.backgroundBrightness, settings.traceWidth,
     node?.type === "wavetable2d"
       ? `${node?.params?.morph ?? 0}:${node?.params?.warp ?? 0}`
       : "",
   ].join(":");
-  const fillStyle = nodeGraphSampleWaveformLineColor(settings, 85, 0.95);
-  const plate = circuitRunning
-    ? nodeGraphSampleWaveformBackgroundColor(settings)
-    : (entry ? "hsl(140, 20%, 4%)" : "#050805");
-  const paintStrip = (x0, x1, start) => {
-    tapeCtx.fillStyle = plate;
-    tapeCtx.fillRect(x0, 0, Math.max(0, x1 - x0), height);
-    nodeGraphSampleWaveformPaintEnvelopeColumns(
-      tapeCtx, samples, start, spp, x0, x1, height, midY, amplitude, fillStyle,
-    );
-  };
   const rebuildTape = () => {
-    paintStrip(0, width, viewStart);
+    nodeGraphSampleWaveformEnvelopeColumns(state, samples, viewStart, spp, 0, width);
     state.tapeStart = viewStart;
     state.tapeSig = tapeSig;
   };
-  if (!tapeCtx) {
-    rebuildTape();
-  } else if (state.tapeSig !== tapeSig || !Number.isFinite(state.tapeStart)) {
+  if (state.tapeSig !== tapeSig || !Number.isFinite(state.tapeStart)) {
     rebuildTape();
   } else {
     const dx = Math.round((viewStart - state.tapeStart) / spp);
     if (dx === 0) {
-      // History unchanged — do not redraw.
+      // History unchanged - columns reused as-is.
     } else if (Math.abs(dx) >= width) {
       rebuildTape();
     } else {
-      tapeCtx.save();
-      tapeCtx.setTransform(1, 0, 0, 1, 0, 0);
-      tapeCtx.imageSmoothingEnabled = false;
-      tapeCtx.globalCompositeOperation = "copy";
-      tapeCtx.drawImage(state.waveTape, -dx, 0);
-      tapeCtx.restore();
+      nodeGraphSampleWaveformEnvelopeScroll(state, dx);
       if (dx > 0) {
-        paintStrip(width - dx, width, viewStart);
+        nodeGraphSampleWaveformEnvelopeColumns(state, samples, viewStart, spp, width - dx, width);
       } else {
-        paintStrip(0, -dx, viewStart);
+        nodeGraphSampleWaveformEnvelopeColumns(state, samples, viewStart, spp, 0, -dx);
       }
       state.tapeStart = viewStart;
     }
   }
-  context.drawImage(state.waveTape, 0, 0);
+  nodeGraphSampleWaveformGlEnvelope(
+    batch, state, midY, amplitude,
+    nodeGraphGlLinesCss(nodeGraphSampleWaveformLineColor(settings, 85, 0.95)),
+  );
   if (showSampleGrid) {
     const gridHue = Number.isFinite(Number(settings.hue)) ? Number(settings.hue) : 140;
-    context.strokeStyle = typeof nodeGraphHueBrightnessCss === "function"
+    const gridRgba = nodeGraphGlLinesCss(typeof nodeGraphHueBrightnessCss === "function"
       ? nodeGraphHueBrightnessCss(gridHue, gridBrightness, 0.45)
-      : nodeGraphSampleWaveformLineColor(settings, 68, 0.45);
-    context.lineWidth = 1;
-    context.beginPath();
+      : nodeGraphSampleWaveformLineColor(settings, 68, 0.45));
     const firstFrame = Math.ceil(viewStart);
     const lastFrame = Math.floor(viewEnd);
     for (let frame = firstFrame; frame <= lastFrame; frame += 1) {
-      const x = Math.round(frameToX(frame)) + 0.5;
-      context.moveTo(x, 0);
-      context.lineTo(x, height);
+      nodeGraphGlLinesRect(batch, Math.round(frameToX(frame)), 0, 1, height, gridRgba);
     }
-    context.stroke();
   }
 
-  // Dim everything outside Start…End (over the waveform). Selected band
+  // Dim everything outside Start...End (over the waveform). Selected band
   // stays full brightness; unselected flanks get a solid dark veil.
+  const veil = [0, 0, 0, 0.58];
   if (regionX0 > 0.5) {
-    context.fillStyle = "rgba(0, 0, 0, 0.58)";
-    context.fillRect(0, 0, regionX0, height);
+    nodeGraphGlLinesRect(batch, 0, 0, snap(regionX0), height, veil);
   }
   if (regionX1 < width - 0.5) {
-    context.fillStyle = "rgba(0, 0, 0, 0.58)";
-    context.fillRect(regionX1, 0, width - regionX1, height);
+    nodeGraphGlLinesRect(batch, snap(regionX1), 0, width - snap(regionX1), height, veil);
   }
-  // Subtle selected-band lift so the active region still reads as “on”.
+  // Subtle selected-band lift so the active region still reads as on.
   if (regionX1 > regionX0) {
-    context.fillStyle = nodeGraphSampleWaveformLineColor(settings, 70, 0.06);
-    context.fillRect(regionX0, 0, regionX1 - regionX0, height);
+    nodeGraphGlLinesRect(
+      batch, snap(regionX0), 0, snap(regionX1) - snap(regionX0), height,
+      nodeGraphGlLinesCss(nodeGraphSampleWaveformLineColor(settings, 70, 0.06)),
+    );
   }
-  // Draggable Start / End handles (visible lines at region edges).
+  // Draggable Start / End handles (1 device px lines + top/bottom caps).
   {
-    const handlePx = 1;
-    context.shadowBlur = 0;
-    context.lineCap = "butt";
-    context.strokeStyle = "rgba(255, 220, 120, 0.95)";
-    context.lineWidth = handlePx;
-    context.beginPath();
-    context.moveTo(regionX0, 0);
-    context.lineTo(regionX0, height);
-    context.moveTo(regionX1, 0);
-    context.lineTo(regionX1, height);
-    context.stroke();
-    // Small top/bottom caps so the handles read as grab points.
+    const handle = [1, 220 / 255, 120 / 255, 0.95];
     const cap = 4;
-    context.fillStyle = "rgba(255, 220, 120, 0.95)";
-    context.fillRect(regionX0 - handlePx * 1.5, 0, handlePx * 3, cap);
-    context.fillRect(regionX0 - handlePx * 1.5, height - cap, handlePx * 3, cap);
-    context.fillRect(regionX1 - handlePx * 1.5, 0, handlePx * 3, cap);
-    context.fillRect(regionX1 - handlePx * 1.5, height - cap, handlePx * 3, cap);
+    for (const rx of [regionX0, regionX1]) {
+      const hx = Math.min(width - 1, Math.max(0, Math.floor(rx)));
+      nodeGraphGlLinesRect(batch, hx, 0, 1, height, handle);
+      nodeGraphGlLinesRect(batch, hx - 1, 0, 3, cap, handle);
+      nodeGraphGlLinesRect(batch, hx - 1, height - cap, 3, cap, handle);
+    }
   }
 
-  // Playhead — scrollLineWidth CSS px @ zoom 1. 0 = hidden.
+  // Playhead - scrollLineWidth CSS px @ zoom 1. 0 = hidden.
   // Offline: no playhead (static sample preview only).
   const scrollPx = faceInkPx(
     clampAuthoredInkPx(
@@ -3183,22 +3141,18 @@ function drawNodeGraphSampleWaveformDisplay(section) {
     const x = (!autoScrollPaused && settings.scrollMode === "smooth")
       ? Math.round(scrollLineRatio * width) + 0.5
       : Math.round(frameToX(playheadFrame)) + 0.5;
-    context.shadowBlur = 0;
-    context.strokeStyle = "rgba(255, 255, 255, 0.9)";
-    context.lineWidth = Math.max(0.5, scrollPx);
-    context.lineCap = "butt";
-    context.beginPath();
-    context.moveTo(x, 0);
-    context.lineTo(x, height);
-    context.stroke();
+    const lw = Math.max(1, Math.round(scrollPx));
+    nodeGraphGlLinesRect(batch, Math.round(x - lw / 2), 0, lw, height, [1, 1, 1, 0.9]);
   }
 
   if (node?.type !== "wavetable2d") {
     const zoomRatio = (viewEnd - viewStart) / Math.max(1, state.totalFrames);
     nodeGraphSampleWaveformSyncZoomControl(section, zoomRatio);
-    nodeGraphSampleWaveformPaintSpeedLabel(context, nodeId, node, width, height, pixelRatio, settings);
+    nodeGraphSampleWaveformPaintSpeedLabel(batch, nodeId, node, width, height, pixelRatio, settings);
+    present();
     nodeGraphSampleWaveformPaintCompanionPlaylist(section, nodeId);
   } else {
+    present();
     nodeGraphWavetable2dSyncStrips(section);
   }
 }
@@ -3215,8 +3169,8 @@ function nodeGraphSampleWaveformPaintCompanionPlaylist(section, nodeId) {
   }
 }
 
-function nodeGraphSampleWaveformPaintSpeedLabel(context, nodeId, node, width, height, pixelRatio, settings) {
-  if (!context) {
+function nodeGraphSampleWaveformPaintSpeedLabel(batch, nodeId, node, width, height, pixelRatio, settings) {
+  if (!batch) {
     return;
   }
   // Face HUD is the rate the engine is actually using (param + Speed jack),
@@ -3241,28 +3195,31 @@ function nodeGraphSampleWaveformPaintSpeedLabel(context, nodeId, node, width, he
     ? Number(settings.fontSize)
     : nodeGraphSampleWaveformDefaultSettings.fontSize;
   const fontPx = Math.max(1, Math.round(faceInkPx(clampAuthoredInkPx(fontUnit, 11), faceMin)));
-  context.font = `600 ${fontPx}px system-ui, sans-serif`;
+  const family = nodeGraphSampleWaveformHudFamily;
   const labelUnit = settings && Number.isFinite(Number(settings.labelInset))
     ? Number(settings.labelInset)
     : nodeGraphSampleWaveformDefaultSettings.labelInset;
   const pad = faceFracPx(labelUnit, faceMin);
   const x = Math.round(width - pad);
   const y = Math.round(height - pad);
-  context.textAlign = "right";
-  context.textBaseline = "bottom";
   if (Math.abs(speed) < 1e-5) {
-    const textW = context.measureText(speedLabel).width;
+    const textW = nodeGraphGlLinesMeasureText(speedLabel, fontPx, family, 600);
     const boxPad = Math.max(1, Math.round(fontPx * 0.2));
-    context.fillStyle = "#FF0000";
-    context.fillRect(
+    nodeGraphGlLinesRect(
+      batch,
       Math.round(x - textW - boxPad),
       Math.round(y - fontPx - boxPad),
       Math.round(textW + boxPad * 2),
       Math.round(fontPx + boxPad * 2),
+      [1, 0, 0, 1],
     );
   }
-  context.fillStyle = nodeGraphSampleWaveformLineColor(settings, 85, 0.7);
-  context.fillText(speedLabel, x, y);
-  context.textAlign = "left";
-  context.textBaseline = "alphabetic";
+  nodeGraphGlLinesText(batch, speedLabel, x, y, {
+    px: fontPx,
+    rgba: nodeGraphGlLinesCss(nodeGraphSampleWaveformLineColor(settings, 85, 0.7)),
+    align: "right",
+    baseline: "bottom",
+    family,
+    weight: 600,
+  });
 }

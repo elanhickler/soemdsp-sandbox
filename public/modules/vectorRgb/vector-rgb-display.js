@@ -191,16 +191,7 @@ function nodeGraphVectorRgbClearPlate(canvas, ctx, bg) {
     trails.clear(canvas, bg);
   }
   if (ctx) {
-    if (typeof nodeGraphFacePlateFillCanvas === "function") {
-      nodeGraphFacePlateFillCanvas(ctx, canvas, bg);
-    } else {
-      ctx.save();
-      ctx.setTransform(1, 0, 0, 1, 0, 0);
-      ctx.globalCompositeOperation = "source-over";
-      ctx.fillStyle = bg || "#000000";
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-      ctx.restore();
-    }
+    nodeGraphFacePlateFillCanvas(null, canvas, bg);
   }
 }
 

@@ -150,17 +150,10 @@
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 256, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, data);
   }
 
-  /**
-   * Draw one SDF sprite into destCtx via shared picture device present.
-   * @returns {boolean}
-   */
-  function draw(destCtx, cx, cy, rx, ry, blur01, shapeName, shapeParam, amount, colorAt, flat, flatCss, alpha01) {
+  function drawToTarget(fbo, tw, th, cx, cy, rx, ry, blur01, shapeName, shapeParam, amount, colorAt, flat, flatCss, alpha01, additive) {
     const device = getShared();
-    if (!device || !destCtx) return false;
+    if (!device) return false;
     const gl = device.gl;
-    const dest = destCtx.canvas;
-    const dw = Math.max(1, dest.width | 0);
-    const dh = Math.max(1, dest.height | 0);
     const charR = Math.min(rx, ry);
     const b = SoemMath.clamp01(blur01);
     const b2 = b * b;
@@ -170,40 +163,35 @@
     const halfH = Math.ceil(ry + extra + 1.5);
     const x0 = Math.max(0, Math.floor(cx - halfW));
     const y0 = Math.max(0, Math.floor(cy - halfH));
-    const x1 = Math.min(dw, Math.ceil(cx + halfW));
-    const y1 = Math.min(dh, Math.ceil(cy + halfH));
-    const bw = Math.max(1, x1 - x0);
-    const bh = Math.max(1, y1 - y0);
-
-    // Render sprite into bottom-left scissor of shared canvas, then blit that rect.
-    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-    gl.viewport(0, 0, bw, bh);
-    gl.scissor(0, 0, bw, bh);
+    const x1 = Math.min(tw, Math.ceil(cx + halfW));
+    const y1 = Math.min(th, Math.ceil(cy + halfH));
+    if (x1 <= x0 || y1 <= y0) return true;
+    gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+    gl.viewport(0, 0, tw, th);
     gl.enable(gl.SCISSOR_TEST);
-    gl.clearColor(0, 0, 0, 0);
-    gl.clear(gl.COLOR_BUFFER_BIT);
+    gl.scissor(x0, y0, x1 - x0, y1 - y0);
     gl.enable(gl.BLEND);
-    gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+    if (additive) gl.blendFunc(gl.ONE, gl.ONE);
+    else gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
     gl.useProgram(device.program);
     gl.bindBuffer(gl.ARRAY_BUFFER, device.quad);
     gl.enableVertexAttribArray(device.aPos);
     gl.vertexAttribPointer(device.aPos, 2, gl.FLOAT, false, 0, 0);
-
     const shapeId = SHAPE_IDS[String(shapeName || "circle").toLowerCase()] ?? 0;
-    gl.uniform2f(device.u.uResolution, bw, bh);
-    // Local centre inside the scissor rect
-    gl.uniform2f(device.u.uCenter, cx - x0, (bh - 1) - (cy - y0)); // flip Y for GL
+    gl.uniform2f(device.u.uResolution, tw, th);
+    gl.uniform2f(device.u.uCenter, cx, cy);
     gl.uniform2f(device.u.uHalf, Math.max(0.5, rx), Math.max(0.5, ry));
     gl.uniform1f(device.u.uBlur, b);
     gl.uniform1f(device.u.uShape, shapeId);
     gl.uniform1f(device.u.uParam, SoemMath.clamp01(shapeParam));
     const amt = SoemMath.clamp01(amount);
     gl.uniform1f(device.u.uAmount, Number.isFinite(amt) ? amt : 1);
-
+    const a = SoemMath.clamp01(alpha01);
+    const alpha = Number.isFinite(a) ? a : 1;
     if (flat) {
       const rgba = parseCssColor(flatCss);
       gl.uniform1f(device.u.uFlat, 1);
-      gl.uniform4f(device.u.uFlatColor, rgba[0], rgba[1], rgba[2], rgba[3]);
+      gl.uniform4f(device.u.uFlatColor, rgba[0], rgba[1], rgba[2], rgba[3] * alpha);
     } else {
       gl.uniform1f(device.u.uFlat, 0);
       uploadLut(device, colorAt || (() => "#ffffff"));
@@ -211,28 +199,16 @@
       gl.bindTexture(gl.TEXTURE_2D, device.lutTex);
       gl.uniform1i(device.u.uLut, 0);
     }
-
     gl.drawArrays(gl.TRIANGLES, 0, 6);
     gl.disable(gl.BLEND);
     gl.disable(gl.SCISSOR_TEST);
-
-    const a = SoemMath.clamp01(alpha01);
-    const prev = destCtx.globalAlpha;
-    destCtx.globalAlpha = prev * (Number.isFinite(a) ? a : 1);
-    destCtx.imageSmoothingEnabled = true;
-    try {
-      const srcY = Math.max(0, device.canvas.height - bh);
-      destCtx.drawImage(device.canvas, 0, srcY, bw, bh, x0, y0, bw, bh);
-    } catch (_e) {
-      destCtx.globalAlpha = prev;
-      return false;
-    }
-    destCtx.globalAlpha = prev;
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     return true;
   }
 
   global.TraceDotSpriteGl = {
-    draw,
+    drawToTarget,
+    failed: () => Boolean(glsl.failed),
     available: () => Boolean(getShared()),
     shapeId: (name) => SHAPE_IDS[String(name || "circle").toLowerCase()] ?? 0,
   };

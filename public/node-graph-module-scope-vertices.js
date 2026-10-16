@@ -543,21 +543,6 @@ function nodeGraphModuleScopeClippedPixelRect(canvas, rect, pixelRatio = window.
 
 // drawNodeGraphModuleScopeBufferWebGl → node-graph-module-scope-draw-basic.js
 // drawNodeGraphModuleScopeSpectrumBarsWebGl → node-graph-module-scope-draw-basic.js
-// drawNodeGraphModuleScopeLightShape → node-graph-module-scope-draw-basic.js
-function nodeGraphModuleScopeLightFillStyle(context, centerX, centerY, radius, rgb, alpha, blurValue = 0) {
-  const alphaValue = clampNodeSliderValue(nodeGraphFiniteNumber(alpha), 0, 1);
-  const blur = normalizeNodeGraphModuleScopeDotBlur(blurValue, 0);
-  if (blur <= 0) {
-    return `rgba(${rgb[0]}, ${rgb[1]}, ${rgb[2]}, ${alphaValue})`;
-  }
-  const gradient = context.createRadialGradient(centerX, centerY, 0, centerX, centerY, Math.max(0.0001, radius));
-  const middleStop = clampNodeSliderValue(0.22 + (1 - blur) * 0.58, 0.22, 0.8);
-  gradient.addColorStop(0, `rgba(${rgb[0]}, ${rgb[1]}, ${rgb[2]}, ${alphaValue})`);
-  gradient.addColorStop(middleStop, `rgba(${rgb[0]}, ${rgb[1]}, ${rgb[2]}, ${alphaValue})`);
-  gradient.addColorStop(1, `rgba(${rgb[0]}, ${rgb[1]}, ${rgb[2]}, 0)`);
-  return gradient;
-}
-
 // Face canvas Map / rescue / ensure / sync live in
 // node-graph-module-scope-face-canvas.js (tape vs burn SSOT).
 // Legacy names nodeGraphModuleScopeLocalFallbackCanvas +

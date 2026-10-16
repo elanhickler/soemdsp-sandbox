@@ -145,29 +145,16 @@ void main() {
 
     if (destCanvas.width !== w) destCanvas.width = w;
     if (destCanvas.height !== h) destCanvas.height = h;
-    const ctx = destCanvas.getContext("2d");
-    if (!ctx) return false;
-    try {
-      const pixels = new Uint8Array(w * h * 4);
-      gl.readPixels(0, 0, w, h, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
-      const img = ctx.createImageData(w, h);
-      const dst = img.data;
-      for (let y = 0; y < h; y += 1) {
-        const src = (h - 1 - y) * w * 4;
-        dst.set(pixels.subarray(src, src + w * 4), y * w * 4);
-      }
-      ctx.setTransform(1, 0, 0, 1, 0, 0);
-      ctx.putImageData(img, 0, 0);
-    } catch (error) {
-      gl.viewport(0, 0, device.canvas.width, device.canvas.height);
-      if (!paint._readFailLogged) {
-        paint._readFailLogged = true;
-        console.error("[color-widget-plane-gl] readPixels failed", error);
-      }
-      return false;
-    }
+    // Same-frame copy from the shared device (rows bottom-up) to the plane canvas.
+    const ctx = nodeGraphDisplayCanvasPresentContext(destCanvas);
+    const ok = Boolean(ctx) && nodeGraphDisplayCanvasBlit(
+      ctx, device.canvas, 0, Math.max(0, device.canvas.height - h), w, h, 0, 0, w, h, false,
+    );
     gl.viewport(0, 0, device.canvas.width, device.canvas.height);
-    return true;
+    if (!ok) {
+      nodeGraphDisplayGlFailed(destCanvas, "color plane: GL present failed");
+    }
+    return ok;
   }
 
   global.ColorWidgetPlaneGl = {

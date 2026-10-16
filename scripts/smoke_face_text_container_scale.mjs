@@ -49,7 +49,7 @@ for (const key of ALLOW.keys()) if (!found.has(key)) gate(false, `allowlist entr
 gate(true, `scanned ${files.length} css files; ${found.size} allowlisted mixed-unit font sizes`);
 const pq = fs.readFileSync(path.join(root, "public/modules/pitchQuantizer/pitch-quantizer-ui.css"), "utf8");
 gate(/\.node-pitch-quantizer-key-white \{[^}]*font-size: [\d.]+cqi;/.test(pq) && /\.node-pitch-quantizer-key-black \{[^}]*font-size: [\d.]+cqi;/.test(pq), "Pitch Quantizer note names: pure container units");
-gate(/\.node-pitch-quantizer-face \{[^}]*container-type: inline-size;/.test(pq) && /\.node-pitch-quantizer-tool \{[^}]*font: 700 [\d.]+cqi\/1/.test(pq), "Pitch Quantizer toolbar text: face container units");
+gate(/\.node-pitch-quantizer-face \{[^}]*container-type: inline-size;/.test(pq) && !/pitch-quantizer-(tool|toolbar|hint)/.test(pq), "Pitch Quantizer face: container units, no All/None toolbar");
 gate(/\.node-pitch-quantizer-plate \{[^}]*padding: [\d.]+cqi;/.test(pq) && !/\d+px/.test(pq.replace(/\/\*[\s\S]*?\*\//g, "").replace("minmax(2px, 1fr)", "")), "Pitch Quantizer face: padding/gaps/borders in container units (uniform tile scale)");
 const st = fs.readFileSync(path.join(root, "public/styles.css"), "utf8");
 gate(/\.node-midi-keyboard-white-row span \{[^}]*font-size: calc\([\d.]+cqi \/ var\(--midi-key-units, 15\)\);/.test(st) && /\.node-midi-keyboard-black-row span \{[^}]*font-size: calc\([\d.]+cqi \/ var\(--midi-key-units, 15\)\);/.test(st), "MIDI key labels: per-key container units");

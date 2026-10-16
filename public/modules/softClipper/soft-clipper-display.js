@@ -106,8 +106,7 @@ function drawNodeGraphSoftClipperCurveDisplayInner(section) {
     ? nodeGraphSizeDisplayCanvas(section, canvas)
     : null;
   if (!metrics) return;
-  const { context, cssHeight: height, cssWidth: width, pixelRatio } = metrics;
-  context.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
+  const { cssHeight: height, cssWidth: width, pixelRatio } = metrics;
 
   const drive = nodeGraphSoftClipperLiveParam(node, "drive", 0.5);
   const threshold = nodeGraphSoftClipperLiveParam(node, "threshold", 0);
@@ -121,27 +120,28 @@ function drawNodeGraphSoftClipperCurveDisplayInner(section) {
     return;
   }
 
-  context.clearRect(0, 0, width, height);
-  context.fillStyle = "rgba(2, 6, 9, 0.88)";
-  context.fillRect(0, 0, width, height);
-
-  context.strokeStyle = "rgba(127, 199, 217, 0.18)";
-  context.lineWidth = 1;
-  for (let line = 0; line <= 4; line += 1) {
-    const y = (line / 4) * height;
-    context.beginPath();
-    context.moveTo(0, y);
-    context.lineTo(width, y);
-    context.stroke();
+  // Native GL face on the shared device; translucent plate, CSS-px coords.
+  const batch = typeof nodeGraphGlLinesBegin === "function"
+    ? nodeGraphGlLinesBegin(canvas, [2 / 255, 6 / 255, 9 / 255, 0.88], { scale: pixelRatio, transparent: true })
+    : null;
+  if (!batch) {
+    nodeGraphDisplayGlFailed(canvas, "soft clipper curve: no shared GL device");
+    return;
   }
-  context.beginPath();
-  context.moveTo(width * 0.5, 0);
-  context.lineTo(width * 0.5, height);
-  context.stroke();
-  context.beginPath();
-  context.moveTo(0, height * 0.5);
-  context.lineTo(width, height * 0.5);
-  context.stroke();
+  const fine = 1 / Math.max(1, pixelRatio);
+  const line = (x0, y0, x1, y1, rgba) => nodeGraphGlLinesSegment(batch, x0, y0, x1, y1, 0.5, fine, rgba);
+  // 4-on / 4-off vertical dash (was setLineDash([4, 4])).
+  const dashV = (x, rgba) => {
+    for (let y = 0; y < height; y += 8) line(x, y, x, Math.min(height, y + 4), rgba);
+  };
+
+  const grid = [127 / 255, 199 / 255, 217 / 255, 0.18];
+  for (let row = 0; row <= 4; row += 1) {
+    const y = (row / 4) * height;
+    line(0, y, width, y, grid);
+  }
+  line(width * 0.5, 0, width * 0.5, height, grid);
+  line(0, height * 0.5, width, height * 0.5, grid);
 
   const xMin = -1.25;
   const xMax = 1.25;
@@ -152,52 +152,34 @@ function drawNodeGraphSoftClipperCurveDisplayInner(section) {
 
   const thr = Math.max(0, Math.min(1, threshold));
   const kn = Math.max(0, Math.min(1, knee));
-  context.strokeStyle = "rgba(226, 168, 109, 0.55)";
-  context.setLineDash([4, 4]);
-  context.beginPath();
-  context.moveTo(toX(thr), 0);
-  context.lineTo(toX(thr), height);
-  context.stroke();
-  context.beginPath();
-  context.moveTo(toX(-thr), 0);
-  context.lineTo(toX(-thr), height);
-  context.stroke();
+  const thrRgba = [226 / 255, 168 / 255, 109 / 255, 0.55];
+  dashV(toX(thr), thrRgba);
+  dashV(toX(-thr), thrRgba);
   const kneeEnd = thr + (1 - thr) * kn;
   if (kn > 1e-4 && Math.abs(kneeEnd - thr) > 1e-4) {
-    context.strokeStyle = "rgba(160, 255, 180, 0.4)";
-    context.beginPath();
-    context.moveTo(toX(kneeEnd), 0);
-    context.lineTo(toX(kneeEnd), height);
-    context.stroke();
-    context.beginPath();
-    context.moveTo(toX(-kneeEnd), 0);
-    context.lineTo(toX(-kneeEnd), height);
-    context.stroke();
+    const kneeRgba = [160 / 255, 1, 180 / 255, 0.4];
+    dashV(toX(kneeEnd), kneeRgba);
+    dashV(toX(-kneeEnd), kneeRgba);
   }
-  context.setLineDash([]);
 
-  context.strokeStyle = "rgba(127, 199, 217, 0.28)";
-  context.beginPath();
-  context.moveTo(toX(xMin), toY(xMin));
-  context.lineTo(toX(xMax), toY(xMax));
-  context.stroke();
+  line(toX(xMin), toY(xMin), toX(xMax), toY(xMax), [127 / 255, 199 / 255, 217 / 255, 0.28]);
 
   const pts = Math.max(64, Math.floor(width));
-  context.strokeStyle = "rgb(160, 255, 180)";
-  context.lineWidth = typeof nodeGraphFaceStrokeWidth === "function"
+  const curveW = typeof nodeGraphFaceStrokeWidth === "function"
     ? nodeGraphFaceStrokeWidth(section, 1.5)
     : 1.5;
-  context.beginPath();
+  const curve = [];
   for (let i = 0; i < pts; i += 1) {
     const t = i / (pts - 1);
     const x = xMin + t * (xMax - xMin);
     const y = nodeGraphSoftClipperTransferY(x, drive, threshold, knee, amplitude);
-    const px = toX(x);
-    const py = toY(y);
-    if (i === 0) context.moveTo(px, py);
-    else context.lineTo(px, py);
+    curve.push(toX(x), toY(y));
   }
-  context.stroke();
+  nodeGraphGlLinesPolyline(batch, curve, curveW * 0.5, fine, [160 / 255, 1, 180 / 255, 1]);
+  if (!nodeGraphGlLinesEnd(batch, "alpha")) {
+    nodeGraphDisplayGlFailed(canvas, "soft clipper curve: GL present failed");
+    return;
+  }
 
   section._softClipSignature = signature;
   section._softClipForceDraw = false;

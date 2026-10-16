@@ -337,15 +337,7 @@ function clearNodeGraphRasterRgbForNode(nodeId) {
         canvas._rasterRgbBlit = false;
         canvas._rasterRgbGradeKey = "";
         canvas._rasterRgbHoldKey = "";
-        const ctx = canvas.getContext?.("2d");
-        if (ctx && canvas.width > 0 && canvas.height > 0) {
-          ctx.setTransform(1, 0, 0, 1, 0, 0);
-          ctx.globalCompositeOperation = "source-over";
-          ctx.globalAlpha = 1;
-          ctx.filter = "none";
-          ctx.fillStyle = "#000000";
-          ctx.fillRect(0, 0, canvas.width, canvas.height);
-        }
+        nodeGraphFacePlateFillCanvas(null, canvas, "#000000");
       }
     }
   }
@@ -409,14 +401,8 @@ function wipeNodeGraphRasterRgbScreensToColdBoot(options = {}) {
       canvas._rasterRgbBlit = false;
       canvas._rasterRgbGradeKey = "";
     }
-    const ctx = canvas?.getContext?.("2d");
-    if (ctx && canvas.width > 0 && canvas.height > 0) {
-      ctx.setTransform(1, 0, 0, 1, 0, 0);
-      ctx.globalCompositeOperation = "source-over";
-      ctx.globalAlpha = 1;
-      ctx.filter = "none";
-      ctx.fillStyle = "#000000";
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
+    if (canvas) {
+      nodeGraphFacePlateFillCanvas(null, canvas, "#000000");
     }
     if (face.style) {
       face.style.background = "#000000";
@@ -681,12 +667,13 @@ function drawNodeGraphRasterRgbFaceItem(_renderer, item, pixelRatio) {
   if (frozen && canvas._rasterRgbBlit && canvas._rasterRgbHoldKey === sizeKey) {
     return;
   }
-  ctx.setTransform(1, 0, 0, 1, 0, 0);
-  ctx.globalCompositeOperation = "source-over";
-  ctx.globalAlpha = 1;
+  // Plate through the shared GL device; the graded picture is blitted over it.
   ctx.filter = "none";
-  ctx.fillStyle = plate;
-  ctx.fillRect(0, 0, cw, ch);
+  const plateFill = nodeGraphFacePlateFill(canvas, plate);
+  if (plateFill !== "ok") {
+    nodeGraphDisplayGlFailed(canvas, "raster RGB plate: GL " + plateFill);
+    return;
+  }
   if (!running && !frozen) {
     const held = nodeGraphRasterRgbBuffers.get(String(nodeId || ""));
     if (held) {

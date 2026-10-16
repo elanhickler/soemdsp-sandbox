@@ -240,24 +240,19 @@ function copyNodeGraphCanvasBitmap(sourceCanvas, cloneCanvas) {
   // Never raise backing store — magnify/zoom must not upscale display buffers.
   cloneCanvas.width = sourceCanvas.width;
   cloneCanvas.height = sourceCanvas.height;
-  try {
-    const context = cloneCanvas.getContext("2d");
-    if (!context) {
-      return false;
-    }
-    context.setTransform(1, 0, 0, 1, 0, 0);
-    context.imageSmoothingEnabled = false;
-    if ("imageSmoothingQuality" in context) {
-      context.imageSmoothingQuality = "low";
-    }
-    context.globalCompositeOperation = "copy";
-    context.drawImage(sourceCanvas, 0, 0);
-    cloneCanvas.style.imageRendering = "pixelated";
-    return true;
-  } catch {
-    // WebGL canvases can be unreadable; 2D Trace / phosphor faces are 2d bitmaps.
+  // Shared GL device: the face bitmap as one nearest-filtered textured quad.
+  const batch = typeof nodeGraphGlLinesBegin === "function"
+    ? nodeGraphGlLinesBegin(cloneCanvas, [0, 0, 0, 0], { transparent: true, publishNodeId: "" })
+    : null;
+  if (!batch) {
     return false;
   }
+  nodeGraphGlLinesImage(batch, sourceCanvas, 0, 0, sourceCanvas.width, sourceCanvas.height, { nearest: true });
+  if (!nodeGraphGlLinesEnd(batch)) {
+    return false;
+  }
+  cloneCanvas.style.imageRendering = "pixelated";
+  return true;
 }
 
 function copyNodeGraphCameraWorldCanvases(source, clone, options = {}) {

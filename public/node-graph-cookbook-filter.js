@@ -1181,7 +1181,7 @@ function nodeGraphPhaserApComplex(freq, f0, q, cascade) {
   return { re, im };
 }
 
-function drawNodeGraphPhaserPeakMarks(context, view, box) {
+function drawNodeGraphPhaserPeakMarks(batch, view, box) {
   const width = box.width;
   const height = box.height;
   const logMin = box.logMin;
@@ -1237,17 +1237,17 @@ function drawNodeGraphPhaserPeakMarks(context, view, box) {
     }
     return Math.abs(1 - mix) * 1 + Math.abs(mix) * sum;
   };
-  const drawBars = (octOffset, color) => {
+  const fine = 1 / Math.max(1, nodeGraphFiniteNumber(box.pixelRatio, 1));
+  const drawBars = (octOffset, rgba) => {
     if (!(barW > 0)) return;
-    context.fillStyle = color;
     const list = centers(octOffset);
     for (let i = 0; i < list.length; i += 1) {
       const x = xOf(list[i]);
       if (!Number.isFinite(x)) continue;
-      context.fillRect(x - barW * 0.5, 0, barW, height);
+      nodeGraphGlLinesRect(batch, x - barW * 0.5, 0, barW, height, rgba);
     }
   };
-  const drawCurve = (octOffset, color) => {
+  const drawCurve = (octOffset, rgba) => {
     if (!(curveW > 0)) return;
     const step = Math.max(2, Math.ceil(width / 96));
     let peak = 1e-9;
@@ -1259,26 +1259,19 @@ function drawNodeGraphPhaserPeakMarks(context, view, box) {
       ys.push({ x, m });
       if (m > peak) peak = m;
     }
-    context.strokeStyle = color;
-    context.lineWidth = curveW;
-    context.lineJoin = "round";
-    context.lineCap = "round";
-    context.beginPath();
+    const points = [];
     for (let i = 0; i < ys.length; i += 1) {
-      const y = height * (1 - ys[i].m / peak);
-      if (i === 0) context.moveTo(ys[i].x, y);
-      else context.lineTo(ys[i].x, y);
+      points.push(ys[i].x, height * (1 - ys[i].m / peak));
     }
-    context.stroke();
+    nodeGraphGlLinesPolyline(batch, points, curveW * 0.5, fine, rgba);
   };
-  const colorL = "rgb(255, 128, 128)";
-  const colorR = "rgb(128, 128, 255)";
-  const colorM = "rgb(80, 220, 110)";
-  context.save();
-  context.globalCompositeOperation = "lighter";
+  const colorL = [1, 128 / 255, 128 / 255, 1];
+  const colorR = [128 / 255, 128 / 255, 1, 1];
+  const colorM = [80 / 255, 220 / 255, 110 / 255, 1];
+  // Additive ("lighter"): the batch ends with blend "add" for phaser faces.
   if (!stereoOut) {
     drawBars(0, colorM);
-    drawCurve(0, "rgb(160, 255, 180)");
+    drawCurve(0, [160 / 255, 1, 180 / 255, 1]);
   } else {
     if (leftOut || !rightOut) {
       drawBars(-0.5 * stereo, colorL);
@@ -1289,7 +1282,6 @@ function drawNodeGraphPhaserPeakMarks(context, view, box) {
       drawCurve(0.5 * stereo, colorR);
     }
   }
-  context.restore();
 }
 
 function drawNodeGraphFilterCurveDisplayInner(section) {
@@ -1370,13 +1362,12 @@ function drawNodeGraphFilterCurveDisplayInner(section) {
   if (!metrics) {
     return;
   }
-  const { context, cssHeight: height, cssWidth: width, pixelRatio } = metrics;
+  const { cssHeight: height, cssWidth: width, pixelRatio } = metrics;
   if (!(width >= 8) || !(height >= 8)) {
     section._filterCurveLaidOut = false;
     section._filterCurveForceDraw = true;
     return;
   }
-  context.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
   const sampleRate = Math.max(1, nodeGraphFiniteNumber(nodeGraphMvp?.sampleRate, 44100));
   const minFreq = 20;
   const maxFreq = Math.max(minFreq * 2, Math.min(20000, sampleRate * 0.5));
@@ -1396,23 +1387,26 @@ function drawNodeGraphFilterCurveDisplayInner(section) {
   section._filterCurveCssH = cssH;
   section._filterCurveForceDraw = false;
   section._filterCurveLaidOut = true;
-  context.clearRect(0, 0, width, height);
-  context.fillStyle = "rgba(2, 6, 9, 0.88)";
-  context.fillRect(0, 0, width, height);
+  // Native WebGL2 face (shared device). CSS-px coordinates via { scale }.
+  // Translucent plate: the face canvas is cleared, then the batch blits over.
+  const batch = typeof nodeGraphGlLinesBegin === "function"
+    ? nodeGraphGlLinesBegin(canvas, [2 / 255, 6 / 255, 9 / 255, 0.88], { scale: pixelRatio, transparent: true })
+    : null;
+  if (!batch) {
+    nodeGraphDisplayGlFailed(canvas, "filter curve: no shared GL device");
+    return;
+  }
+  const fine = 1 / Math.max(1, pixelRatio);
+  const family = "system-ui, sans-serif";
   const isPhaser = node.type === "phaser";
   const zeroDbY = (1 - ((0 - minDb) / (maxDb - minDb))) * height;
   if (!isPhaser && Number.isFinite(zeroDbY)) {
-    context.strokeStyle = "rgba(255, 255, 255, 0.22)";
-    context.lineWidth = strokeGrid;
-    context.beginPath();
-    context.moveTo(0, zeroDbY);
-    context.lineTo(width, zeroDbY);
-    context.stroke();
+    nodeGraphGlLinesSegment(batch, 0, zeroDbY, width, zeroDbY, strokeGrid * 0.5, fine, [1, 1, 1, 0.22]);
   }
   const logMin = Math.log10(minFreq);
   const logRange = Math.log10(maxFreq) - logMin;
   if (isPhaser) {
-    drawNodeGraphPhaserPeakMarks(context, view, {
+    drawNodeGraphPhaserPeakMarks(batch, view, {
       width,
       height,
       logMin,
@@ -1420,6 +1414,7 @@ function drawNodeGraphFilterCurveDisplayInner(section) {
       minFreq,
       maxFreq,
       zeroDbY,
+      pixelRatio,
     });
   }
   const cutoffLineWidth = strokeCutoff;
@@ -1429,98 +1424,66 @@ function drawNodeGraphFilterCurveDisplayInner(section) {
   const isCrossover = nodeGraphIsCrossoverType(node.type);
 
   // Crossover faces: split lines + Hz only (no magnitude curves / band titles).
-  // Keeps 1gu display height readable and cheap to paint.
   if (!isCrossover && !isPhaser) {
     // Cap sample density for filter magnitude paths.
     const maxSamples = 220;
     const step = Math.max(1, Math.ceil(width / maxSamples));
-    context.strokeStyle = "rgba(61, 224, 255, 0.95)";
-    context.lineWidth = strokeCurve;
-    context.lineJoin = "round";
-    context.lineCap = "round";
-    context.beginPath();
-    let started = false;
+    const yAt = (x) => {
+      const progress = width <= 1 ? 0 : x / (width - 1);
+      const hz = 10 ** (logMin + progress * logRange);
+      let magnitude = nodeGraphFilterCurveResponseAt(node, hz, sampleRate, view);
+      if (!Number.isFinite(magnitude) || magnitude <= 0) {
+        magnitude = 1e-6;
+      }
+      magnitude *= amplitude;
+      const db = clampNodeSliderValue(20 * Math.log10(Math.max(1e-6, magnitude)), minDb, maxDb);
+      return (1 - ((db - minDb) / (maxDb - minDb))) * height;
+    };
+    const points = [];
     for (let x = 0; x < width; x += step) {
-      const progress = width <= 1 ? 0 : x / (width - 1);
-      const hz = 10 ** (logMin + progress * logRange);
-      let magnitude = nodeGraphFilterCurveResponseAt(node, hz, sampleRate, view);
-      if (!Number.isFinite(magnitude) || magnitude <= 0) {
-        magnitude = 1e-6;
-      }
-      magnitude *= amplitude;
-      const db = clampNodeSliderValue(20 * Math.log10(Math.max(1e-6, magnitude)), minDb, maxDb);
-      const y = (1 - ((db - minDb) / (maxDb - minDb))) * height;
-      if (!Number.isFinite(y)) {
-        continue;
-      }
-      if (!started) {
-        context.moveTo(x, y);
-        started = true;
-      } else {
-        context.lineTo(x, y);
-      }
+      const y = yAt(x);
+      if (Number.isFinite(y)) points.push(x, y);
     }
-    if (started && (width - 1) % step !== 0) {
-      const x = width - 1;
-      const progress = width <= 1 ? 0 : x / (width - 1);
-      const hz = 10 ** (logMin + progress * logRange);
-      let magnitude = nodeGraphFilterCurveResponseAt(node, hz, sampleRate, view);
-      if (!Number.isFinite(magnitude) || magnitude <= 0) {
-        magnitude = 1e-6;
-      }
-      magnitude *= amplitude;
-      const db = clampNodeSliderValue(20 * Math.log10(Math.max(1e-6, magnitude)), minDb, maxDb);
-      const y = (1 - ((db - minDb) / (maxDb - minDb))) * height;
-      if (Number.isFinite(y)) {
-        context.lineTo(x, y);
-      }
+    if (points.length && (width - 1) % step !== 0) {
+      const y = yAt(width - 1);
+      if (Number.isFinite(y)) points.push(width - 1, y);
     }
-    if (started) {
-      context.stroke();
-    }
+    nodeGraphGlLinesPolyline(batch, points, strokeCurve * 0.5, fine, [61 / 255, 224 / 255, 1, 0.95]);
   }
 
   // Vertical frequency markers + Hz labels (incl. single-cutoff LP/HP).
-  context.strokeStyle = "rgba(226, 168, 109, 0.85)";
-  context.lineWidth = cutoffLineWidth;
-  context.font = `600 ${fontPx}px system-ui, sans-serif`;
-  context.textBaseline = "middle";
   const labelY = height * 0.5;
   if (!isPhaser) cutoffs.forEach((frequency, index) => {
-    // 0 Hz (and anything below the log axis floor) → left edge, not minFreq.
+    // 0 Hz (and anything below the log axis floor) -> left edge, not minFreq.
     const cutoffRatio = nodeGraphFilterCurveCutoffRatio(frequency, minFreq, maxFreq);
     const cutoffX = cutoffInset + cutoffRatio * cutoffDrawableWidth;
-    context.beginPath();
-    context.moveTo(cutoffX, 0);
-    context.lineTo(cutoffX, height);
-    context.stroke();
-    if (cutoffs.length > 0) {
-      const label = nodeGraphFilterCurveFormatHz(frequency);
-      const textW = context.measureText(label).width;
-      let textX = cutoffX + labelGap;
-      if (textX + textW > width - labelGap) {
-        textX = Math.max(labelGap, cutoffX - textW - labelGap);
-      }
-      const stagger = height >= fontPx * 4 ? ((index % 3) - 1) * staggerPx : 0;
-      const textY = Math.max(fontPx * 0.55, Math.min(height - fontPx * 0.55, labelY + stagger));
-      context.fillStyle = "rgba(2, 6, 9, 0.75)";
-      context.fillRect(textX - labelGap * 0.35, textY - fontPx * 0.55, textW + labelGap, fontPx + labelGap * 0.7);
-      context.fillStyle = "rgba(255, 220, 170, 0.95)";
-      context.fillText(label, textX, textY);
+    nodeGraphGlLinesSegment(batch, cutoffX, 0, cutoffX, height, cutoffLineWidth * 0.5, fine, [226 / 255, 168 / 255, 109 / 255, 0.85]);
+    const label = nodeGraphFilterCurveFormatHz(frequency);
+    const textW = nodeGraphGlLinesMeasureText(label, fontPx, family, 600);
+    let textX = cutoffX + labelGap;
+    if (textX + textW > width - labelGap) {
+      textX = Math.max(labelGap, cutoffX - textW - labelGap);
     }
+    const stagger = height >= fontPx * 4 ? ((index % 3) - 1) * staggerPx : 0;
+    const textY = Math.max(fontPx * 0.55, Math.min(height - fontPx * 0.55, labelY + stagger));
+    nodeGraphGlLinesRect(batch, textX - labelGap * 0.35, textY - fontPx * 0.55, textW + labelGap, fontPx + labelGap * 0.7, [2 / 255, 6 / 255, 9 / 255, 0.75]);
+    nodeGraphGlLinesText(batch, label, textX, textY, {
+      px: fontPx, rgba: [1, 220 / 255, 170 / 255, 0.95], align: "left", baseline: "middle", family, weight: 600,
+    });
   });
 
   // Non-crossover filter title (crossovers stay markers-only).
   if (!isCrossover && !isPhaser) {
     const title = nodeGraphFilterCurveLabel(node);
-    context.font = `600 ${titlePx}px system-ui, sans-serif`;
-    context.textBaseline = "top";
-    const titleW = context.measureText(title).width;
+    const titleW = nodeGraphGlLinesMeasureText(title, titlePx, family, 600);
     const titleY = titlePad * 0.5;
-    context.fillStyle = "rgba(2, 6, 9, 0.65)";
-    context.fillRect(titlePad, titleY - titlePad * 0.15, titleW + titlePad * 0.7, titlePx + titlePad * 0.35);
-    context.fillStyle = "rgba(229, 238, 242, 0.82)";
-    context.fillText(title, titlePad * 1.3, titleY);
+    nodeGraphGlLinesRect(batch, titlePad, titleY - titlePad * 0.15, titleW + titlePad * 0.7, titlePx + titlePad * 0.35, [2 / 255, 6 / 255, 9 / 255, 0.65]);
+    nodeGraphGlLinesText(batch, title, titlePad * 1.3, titleY, {
+      px: titlePx, rgba: [229 / 255, 238 / 255, 242 / 255, 0.82], align: "left", baseline: "top", family, weight: 600,
+    });
+  }
+  if (!nodeGraphGlLinesEnd(batch, isPhaser ? "add" : "alpha")) {
+    nodeGraphDisplayGlFailed(canvas, "filter curve: GL present failed");
   }
 
   // Keep the dimmer hole open after paint. Stop wipe used to leave strength 0

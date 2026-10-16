@@ -32,8 +32,7 @@ function clearNodeGraphModuleScopeCanvas() {
   const canvas = nodeGraphModuleScopeCanvas();
   const lightCanvas = nodeGraphModuleScopeLightCanvas();
   if (lightCanvas) {
-    const context = lightCanvas.getContext("2d");
-    context?.clearRect(0, 0, lightCanvas.width, lightCanvas.height);
+    nodeGraphFaceClearTransparent(lightCanvas);
   }
   if (!canvas) return;
   if (nodeGraphModuleScopeState.renderer?.kind === "webgl") {

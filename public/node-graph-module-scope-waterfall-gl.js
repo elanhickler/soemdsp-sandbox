@@ -113,17 +113,20 @@ void main() {
 // face's columns go out in one bufferSubData + one drawArrays per blend run.
 // Layout: NODE_GRAPH_WF_GL_BAR_FLOATS floats per vertex, see
 // nodeGraphWaterfallGlQueueBar.
-const NODE_GRAPH_WF_GL_BAR_FLOATS = 14;
+const NODE_GRAPH_WF_GL_BAR_FLOATS = 15;
+// Blends that need the destination colour: drawn with blending off, the
+// shader samples a copy of the history (ping-pong write target) as uDst.
+const NODE_GRAPH_WF_GL_DST_READ = new Set(["difference", "exclusion", "xor"]);
 const NODE_GRAPH_WF_GL_BAR_VERT = `
 attribute vec2 aPos;
 attribute vec3 aColor;
 attribute vec2 aSpan;
 attribute vec4 aEdge;
-attribute vec3 aMisc;
+attribute vec4 aMisc;
 varying vec3 uColor;
 varying vec2 uSpan;
 varying vec4 uEdge;
-varying vec3 vMisc;
+varying vec4 vMisc;
 void main() {
   uColor = aColor;
   uSpan = aSpan;
@@ -136,12 +139,16 @@ void main() {
 const NODE_GRAPH_WF_GL_BAR = `
 precision mediump float;
 uniform vec2 uSize;
+uniform sampler2D uDst;
+uniform vec3 uPlate;
 varying vec3 uColor;
 varying vec2 uSpan;
 varying vec4 uEdge;
-varying vec3 vMisc;
+varying vec4 vMisc;
 void main() {
   float uBlendKind = vMisc.x;
+  // Ink alpha (channel Brightness), same as the canvas rgba() fill it replaces.
+  float inkA = vMisc.w;
   float uMode = vMisc.y;
   float uStrokePx = vMisc.z;
   // uMode 2 = queued column clear: opaque plate colour (source-over with
@@ -172,12 +179,20 @@ void main() {
     cover = max(topC, botC);
   }
   if (cover <= 0.0) discard;
-  if (uBlendKind > 1.5) {
-    gl_FragColor = vec4(mix(vec3(1.0), uColor, cover), 1.0);
+  float k = cover * inkA;
+  if (uBlendKind > 2.5) {
+    // 3 difference, 4 exclusion, 5 xor (covered ink punches through to the plate).
+    vec3 d = texture2D(uDst, gl_FragCoord.xy / uSize).rgb;
+    vec3 r = abs(d - uColor);
+    if (uBlendKind > 4.5) r = uPlate;
+    else if (uBlendKind > 3.5) r = d + uColor - 2.0 * d * uColor;
+    gl_FragColor = vec4(mix(d, r, k), 1.0);
+  } else if (uBlendKind > 1.5) {
+    gl_FragColor = vec4(mix(vec3(1.0), uColor, k), 1.0);
   } else if (uBlendKind > 0.5) {
-    gl_FragColor = vec4(uColor * cover, 0.0);
+    gl_FragColor = vec4(uColor * k, 0.0);
   } else {
-    gl_FragColor = vec4(uColor * cover, cover);
+    gl_FragColor = vec4(uColor * k, k);
   }
 }
 `;
@@ -556,7 +571,12 @@ function nodeGraphWaterfallGlClearColumn(canvas, x, w, plateCss) {
 function nodeGraphWaterfallGlApplyBlend(gl, mode) {
   gl.enable(gl.BLEND);
   const m = String(mode || "source-over");
-  if (m === "lighter" || m === "screen" || m === "combine" || m === "meet") {
+  if (NODE_GRAPH_WF_GL_DST_READ.has(m)) {
+    gl.disable(gl.BLEND);
+  } else if (m === "screen") {
+    // 1 - (1 - d)(1 - c): src * (1 - dst) + dst.
+    gl.blendFunc(gl.ONE_MINUS_DST_COLOR, gl.ONE);
+  } else if (m === "lighter" || m === "combine" || m === "meet") {
     gl.blendFunc(gl.ONE, gl.ONE);
   } else if (m === "multiply") {
     gl.blendFunc(gl.DST_COLOR, gl.ZERO);
@@ -602,6 +622,9 @@ function nodeGraphWaterfallGlBlendKind(mode) {
   const m = String(mode || "source-over");
   if (m === "lighter" || m === "screen" || m === "combine" || m === "meet") return 1;
   if (m === "multiply") return 2;
+  if (m === "difference") return 3;
+  if (m === "exclusion") return 4;
+  if (m === "xor") return 5;
   return 0;
 }
 
@@ -650,7 +673,25 @@ function nodeGraphWaterfallGlFlush(s) {
   const gl = s.gl;
   const n = q.n;
   q.n = 0;
+  q.boxes = null;
   if (!gl || gl.isContextLost()) return;
+  const dstRead = q.kind === "bar" && NODE_GRAPH_WF_GL_DST_READ.has(q.blend) && q.fbo === s.read.fbo;
+  if (dstRead) {
+    // Destination copy: history (read) -> write target, sampled as uDst below.
+    gl.bindFramebuffer(gl.FRAMEBUFFER, s.write.fbo);
+    gl.viewport(0, 0, s.w, s.h);
+    gl.disable(gl.BLEND);
+    gl.disable(gl.SCISSOR_TEST);
+    nodeGraphWaterfallGlFilter(gl, s.read.tex, false);
+    nodeGraphWaterfallGlBindQuad(gl, s, s.presentProg);
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, s.read.tex);
+    gl.uniform1i(gl.getUniformLocation(s.presentProg, "uTex"), 0);
+    gl.uniform2f(gl.getUniformLocation(s.presentProg, "uSize"), s.w, s.h);
+    gl.uniform1f(gl.getUniformLocation(s.presentProg, "uSub"), 0);
+    nodeGraphWaterfallGlDrawQuad(s);
+    s.wfDstCopies = (s.wfDstCopies || 0) + 1;
+  }
   const isMeet = q.kind === "meet";
   const prog = isMeet ? s.meetProg : s.barProg;
   if (!prog) return;
@@ -668,6 +709,13 @@ function nodeGraphWaterfallGlFlush(s) {
   const attribs = isMeet ? s.meetLoc.attribs : nodeGraphWaterfallGlBarAttribs(s);
   const sizeLoc = isMeet ? s.meetLoc.size : s.barSizeLoc;
   if (sizeLoc) gl.uniform2f(sizeLoc, s.w, s.h);
+  if (!isMeet) {
+    gl.uniform3f(gl.getUniformLocation(prog, "uPlate"), s.plate[0], s.plate[1], s.plate[2]);
+    gl.uniform1i(gl.getUniformLocation(prog, "uDst"), 1);
+    gl.activeTexture(gl.TEXTURE1);
+    gl.bindTexture(gl.TEXTURE_2D, dstRead ? s.write.tex : null);
+    gl.activeTexture(gl.TEXTURE0);
+  }
   gl.bindBuffer(gl.ARRAY_BUFFER, s.barBuf);
   nodeGraphWaterfallGlUploadFloats(gl, s.barBuf, q.data, n);
   let off = 0;
@@ -683,6 +731,11 @@ function nodeGraphWaterfallGlFlush(s) {
   for (const [loc] of attribs) {
     if (loc > 0) gl.disableVertexAttribArray(loc);
   }
+  if (dstRead) {
+    gl.activeTexture(gl.TEXTURE1);
+    gl.bindTexture(gl.TEXTURE_2D, null);
+    gl.activeTexture(gl.TEXTURE0);
+  }
   s.wfDraws = (s.wfDraws || 0) + 1;
 }
 
@@ -690,14 +743,34 @@ function nodeGraphWaterfallGlBarAttribs(s) {
   if (!s.barAttribs) {
     const gl = s.gl;
     const a = (name) => gl.getAttribLocation(s.barProg, name);
-    s.barAttribs = [[a("aPos"), 2], [a("aColor"), 3], [a("aSpan"), 2], [a("aEdge"), 4], [a("aMisc"), 3]];
+    s.barAttribs = [[a("aPos"), 2], [a("aColor"), 3], [a("aSpan"), 2], [a("aEdge"), 4], [a("aMisc"), 4]];
     s.barSizeLoc = gl.getUniformLocation(s.barProg, "uSize");
   }
   return s.barAttribs;
 }
 
 // verts: 6 clip-space (x, y) pairs. Same values the old uniforms carried.
-function nodeGraphWaterfallGlQueueBar(s, verts, fbo, blendKey, c, span0, span1, edge, blendKind, mode, strokePx) {
+function nodeGraphWaterfallGlQueueBar(s, verts, fbo, blendKey, c, span0, span1, edge, blendKind, mode, strokePx, alpha = 1) {
+  if (blendKind >= 3) {
+    // Destination-read blends sample a copy taken at flush time, so a stamp
+    // that overlaps one already queued must see it: flush first.
+    const pad = Math.max(1, Number(strokePx) || 1) + 1;
+    const box = [
+      Math.min(span0, span1), Math.max(span0, span1),
+      Math.min(edge[0], edge[1], edge[2], edge[3]) - pad, Math.max(edge[0], edge[1], edge[2], edge[3]) + pad,
+    ];
+    const pq = s.wfQueue;
+    if (pq && pq.n > 0 && pq.kind === "bar" && pq.blend === blendKey && pq.fbo === fbo && pq.boxes) {
+      for (const b of pq.boxes) {
+        if (box[0] < b[1] && b[0] < box[1] && box[2] < b[3] && b[2] < box[3]) {
+          nodeGraphWaterfallGlFlush(s);
+          break;
+        }
+      }
+    }
+    const q0 = nodeGraphWaterfallGlQueueFor(s, "bar", blendKey, fbo, NODE_GRAPH_WF_GL_BAR_FLOATS * 6);
+    (q0.boxes || (q0.boxes = [])).push(box);
+  }
   const q = nodeGraphWaterfallGlQueueFor(s, "bar", blendKey, fbo, NODE_GRAPH_WF_GL_BAR_FLOATS * 6);
   const d = q.data;
   let o = q.n;
@@ -707,6 +780,7 @@ function nodeGraphWaterfallGlQueueBar(s, verts, fbo, blendKey, c, span0, span1, 
     d[o + 5] = span0; d[o + 6] = span1;
     d[o + 7] = edge[0]; d[o + 8] = edge[1]; d[o + 9] = edge[2]; d[o + 10] = edge[3];
     d[o + 11] = blendKind; d[o + 12] = mode; d[o + 13] = strokePx;
+    d[o + 14] = alpha;
     o += NODE_GRAPH_WF_GL_BAR_FLOATS;
   }
   q.n = o;
@@ -722,6 +796,7 @@ function nodeGraphWaterfallGlDrawBar(s, verts, rgb, blend, edge, mode, strokePx)
     s, verts, s.read.fbo, String(blend || "source-over"), c, edge.x0, edge.x1,
     [edge.top0, edge.top1, edge.bot0, edge.bot1],
     nodeGraphWaterfallGlBlendKind(blend), mode > 0 ? 1 : 0, Math.max(0.5, Number(strokePx) || 1),
+    Number.isFinite(Number(rgb?.[3])) ? Math.max(0, Math.min(1, Number(rgb[3]))) : 1,
   );
 }
 
@@ -1009,10 +1084,10 @@ function nodeGraphWaterfallGlPresent(canvas, plateCss) {
   if (typeof nodeGraphSharedGlEndPresent === "function") {
     nodeGraphSharedGlEndPresent(gl);
   }
-  const ctx = canvas.getContext("2d");
-  if (ctx && typeof nodeGraphSharedGlBlitTo2D === "function") {
-    nodeGraphSharedGlBlitTo2D(ctx, s.w, s.h);
-  }
+  const ctx = nodeGraphDisplayCanvasPresentContext(canvas);
+  const dev = typeof nodeGraphSharedGlDevice === "function" ? nodeGraphSharedGlDevice() : null;
+  if (!ctx || !dev?.canvas || gl.isContextLost()) return false;
+  nodeGraphDisplayCanvasBlit(ctx, dev.canvas, 0, dev.canvas.height - s.h, s.w, s.h, 0, 0, s.w, s.h, false);
   if (canvas.style.imageRendering === "pixelated" || canvas.style.imageRendering === "auto") {
     canvas.style.imageRendering = "";
   }

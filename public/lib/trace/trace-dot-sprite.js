@@ -7,7 +7,6 @@
   const MAX_RADIUS = 512;
   /** @type {Map<string, object>} */
   const cache = new Map();
-  let tintScratch = null;
 
   function clamp01(value, fallback = 0) {
     return globalThis.SoemMath.clamp01(value, fallback);
@@ -237,15 +236,9 @@
     const halfH = Math.ceil(ry + extra + 1.5);
     const width = halfW * 2 + 1;
     const height = halfH * 2 + 1;
-    const canvas = document.createElement("canvas");
-    canvas.width = width;
-    canvas.height = height;
-    const ctx = canvas.getContext("2d", { willReadFrequently: false });
-    if (!ctx) {
-      return null;
-    }
-    const image = ctx.createImageData(width, height);
-    const data = image.data;
+    // White coverage mask as RGBA bytes: uploaded once as a GL texture
+    // (nodeGraphGlLinesImage { data, width, height } source, cached per entry).
+    const data = new Uint8Array(width * height * 4);
     const cx = halfW;
     const cy = halfH;
     const span = Math.max(1e-6, outer - inner);
@@ -263,9 +256,8 @@
         data[o + 3] = v;
       }
     }
-    ctx.putImageData(image, 0, 0);
     return {
-      canvas,
+      canvas: { data, width, height },
       width,
       height,
       size: Math.max(width, height),
@@ -321,50 +313,6 @@
     return (b) => (b <= 0.002 ? "rgba(0,0,0,0)" : flat);
   }
 
-  function paintGradient(ctx, sprite, amount, colorAt, flat) {
-    const w = sprite.width;
-    const h = sprite.height;
-    const cx = w * 0.5;
-    const cy = h * 0.5;
-    const a = clamp01(amount, 0);
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.globalCompositeOperation = "copy";
-    ctx.globalAlpha = 1;
-    if (flat) {
-      ctx.fillStyle = colorAt(a);
-      ctx.fillRect(0, 0, w, h);
-    } else {
-      const { inner, outer } = innerOuter(sprite.radius, sprite.blur);
-      const r0 = Math.max(0, inner);
-      const r1 = Math.max(r0 + 0.75, outer);
-      const g = ctx.createRadialGradient(cx, cy, r0, cx, cy, r1);
-      g.addColorStop(0, colorAt(a));
-      if (a > 0.51) {
-        const t = Math.max(0.04, Math.min(0.96, 1 - 0.5 / a));
-        g.addColorStop(t, colorAt(0.5));
-      } else if (a > 0.08) {
-        g.addColorStop(0.45, colorAt(a * 0.45));
-      }
-      g.addColorStop(1, colorAt(0));
-      ctx.fillStyle = g;
-      ctx.fillRect(0, 0, w, h);
-    }
-    ctx.globalCompositeOperation = "destination-in";
-    ctx.drawImage(sprite.canvas, 0, 0);
-    ctx.globalCompositeOperation = "source-over";
-  }
-
-  function tintScratchCtx(sprite) {
-    const w = sprite.width;
-    const h = sprite.height;
-    if (!tintScratch || tintScratch.width !== w || tintScratch.height !== h) {
-      tintScratch = document.createElement("canvas");
-      tintScratch.width = w;
-      tintScratch.height = h;
-    }
-    return tintScratch.getContext("2d");
-  }
-
   function resolveShapeOpts(style) {
     const opts = style && typeof style === "object" ? style : {};
     let shape = opts.shape;
@@ -415,85 +363,37 @@
     };
   }
 
-  /**
-   * @param {CanvasRenderingContext2D} context
-   * @param {number} cx
-   * @param {number} cy
-   * @param {number} radius
-   * @param {number} blur01
-   * @param {string|{hue?:number,amount?:number,color?:string,colorAt?:function,shape?:string,shapeParam?:number,pill?:number,squircle?:number,rx?:number,ry?:number}|undefined} style
-   * @param {number} [alpha01]
-   */
-  function draw(context, cx, cy, radius, blur01, style, alpha01 = 1) {
-    if (!context) {
-      return false;
-    }
-    const a = clamp01(alpha01, 1);
-    const extents = resolveExtents(radius, style);
-    if (a <= 0.001 || !(extents.rx > 0.05) || !(extents.ry > 0.05)) {
-      return false;
-    }
-    const opts = style && typeof style === "object" ? style : { color: style };
-    const amount = clamp01(opts.amount, 1);
-    if (amount <= 0.001 && typeof opts.colorAt !== "function" && !opts.color) {
-      return false;
-    }
-    const flat = Boolean(opts.flat)
-      || (Boolean(opts.color) && !Number.isFinite(Number(opts.hue)) && typeof opts.colorAt !== "function");
-    // Live frames: SDF in GLSL on shared picture device (no JS bake).
-    if (typeof global.TraceDotSpriteGl !== "undefined"
-      && typeof global.TraceDotSpriteGl.draw === "function") {
-      const ok = global.TraceDotSpriteGl.draw(
-        context,
-        Number(cx),
-        Number(cy),
-        extents.rx,
-        extents.ry,
-        blur01,
-        extents.shape,
-        extents.shapeParam,
-        amount,
-        resolveColorAt(opts),
-        flat,
-        flat ? (opts.color || resolveColorAt(opts)(amount)) : null,
-        a,
-      );
-      if (ok) {
-        return true;
-      }
-    }
-    // Fallback: bake sprite (CPU SDF) when GL unavailable / context lost.
-    const sprite = ensure(extents.rx, extents.ry, blur01, extents.shape, extents.shapeParam);
-    if (!sprite) {
-      return false;
-    }
-    const ctx = tintScratchCtx(sprite);
-    if (!ctx) {
-      return false;
-    }
-    paintGradient(ctx, sprite, amount, resolveColorAt(opts), flat);
-    const prev = context.globalAlpha;
-    context.globalAlpha = prev * a;
-    context.imageSmoothingEnabled = true;
-    try {
-      context.drawImage(
-        tintScratch,
-        Number(cx) - sprite.width * 0.5,
-        Number(cy) - sprite.height * 0.5,
-      );
-    } catch (error) {
-      context.globalAlpha = prev;
-      return false;
-    }
-    context.globalAlpha = prev;
-    return true;
-  }
-
   function clearCache() {
     cache.clear();
   }
 
+  /**
+   * Same stamp as draw(), rendered straight into a GL pen's target
+   * ({ target: { fbo }, w, h }, e.g. the number-readout face pen; see
+   * TraceDotSpriteGl.drawToTarget). Returns "ok", "loading" or "failed".
+   */
+  function drawTarget(pen, cx, cy, radius, blur01, style, alpha01 = 1, additive = false) {
+    const gl = global.TraceDotSpriteGl;
+    if (!gl || typeof gl.drawToTarget !== "function" || !pen?.target?.fbo) return "failed";
+    const a = clamp01(alpha01, 1);
+    const extents = resolveExtents(radius, style);
+    if (a <= 0.001 || !(extents.rx > 0.05) || !(extents.ry > 0.05)) return "ok";
+    const opts = style && typeof style === "object" ? style : { color: style };
+    const amount = clamp01(opts.amount, 1);
+    if (amount <= 0.001 && typeof opts.colorAt !== "function" && !opts.color) return "ok";
+    const flat = Boolean(opts.flat)
+      || (Boolean(opts.color) && !Number.isFinite(Number(opts.hue)) && typeof opts.colorAt !== "function");
+    const ok = gl.drawToTarget(
+      pen.target.fbo, pen.w, pen.h, Number(cx), Number(cy), extents.rx, extents.ry, blur01,
+      extents.shape, extents.shapeParam, amount, resolveColorAt(opts), flat,
+      flat ? (opts.color || resolveColorAt(opts)(amount)) : null, a, additive,
+    );
+    if (ok) return "ok";
+    return typeof gl.failed === "function" && gl.failed() ? "failed" : "loading";
+  }
+
   global.TraceDotSprite = {
+    drawTarget,
     ensure: (radius, blur01, shapeOrSquircle = "circle", shapeParam = 0.5) => {
       // Back-compat: numeric 3rd arg was squircle01.
       if (typeof shapeOrSquircle === "number") {
@@ -503,7 +403,6 @@
     },
     // Explicit rx/ry sprite (white coverage mask) for GL tinted quads (RGB Shape).
     ensureRect: (rx, ry, blur01, shape = "circle", shapeParam = 0.5) => ensure(rx, ry, blur01, shape, shapeParam),
-    draw,
     innerOuter,
     extents: resolveExtents,
     clearCache,

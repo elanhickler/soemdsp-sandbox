@@ -380,9 +380,9 @@ function nodeGraphCycleLineGlDraw(canvas, state, cssWidth, cssHeight, background
   if (typeof nodeGraphSharedGlEndPresent === "function") {
     nodeGraphSharedGlEndPresent(gl);
   }
-  const ctx = canvas.getContext("2d");
-  if (ctx && typeof nodeGraphSharedGlBlitTo2D === "function") {
-    nodeGraphSharedGlBlitTo2D(ctx, w, h);
+  const ctx = nodeGraphDisplayCanvasPresentContext(canvas);
+  if (!ctx || !nodeGraphSharedGlBlitTo2D(ctx, w, h)) {
+    nodeGraphDisplayGlFailed(canvas, "cycle line: GL present failed");
   }
 }
 

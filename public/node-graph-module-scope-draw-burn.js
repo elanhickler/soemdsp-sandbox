@@ -610,7 +610,7 @@ function drawNodeGraphScope2dEnergyBurnPath(item, pixelRatio, pathPoints, settin
   if (nodeGraphModuleScopeState.scope2dBurnRenderers?.get?.(canvas)) {
     disposeNodeGraphScope2dBurnRendererForCanvas(canvas);
   }
-  const context = canvas.getContext("2d");
+  const context = nodeGraphDisplayCanvasPresentContext(canvas);
   if (!context) {
     // Canvas already has a lost/foreign WebGL context — recreate the face.
     disposeNodeGraphScope2dBurnRendererForCanvas(canvas);
@@ -743,23 +743,13 @@ function drawNodeGraphScope2dEnergyBurnPath(item, pixelRatio, pathPoints, settin
   const presented = options.lineBurnOpaque === true
     ? nodeGraphPhosphorEnergyGlPresent(energyGl, 1, { lineBurnOpaque: true, plate: plate01 })
     : nodeGraphPhosphorEnergyGlPresent(energyGl, 1, { scope2dOpaque: true, plate: plate01 });
+  // Same-size copy from the shared device into the face (no 2D fallback).
   if (presented) {
-    context.save();
     context.globalCompositeOperation = "source-over";
     context.globalAlpha = 1;
-    // Always bilinear when compositing energy → face. Nearest upscale of a
-    // sub-1 density FBO made continuous beams look stair-stepped / jagged.
-    // (Pixel-density 0 1×1 “chunky” still soft-fills the plate.)
-    context.imageSmoothingEnabled = true;
-    if ("imageSmoothingQuality" in context) {
-      context.imageSmoothingQuality = "high";
+    if (!nodeGraphSharedGlBlitTo2D(context, width, height)) {
+      nodeGraphDisplayGlFailed(canvas, "2D phosphor burn: GL present failed");
     }
-    if (typeof nodeGraphSharedGlBlitTo2D === "function") {
-      nodeGraphSharedGlBlitTo2D(context, width, height);
-    } else {
-      context.drawImage(energyGl.canvas, 0, 0, width, height);
-    }
-    context.restore();
   }
   return true;
 }
@@ -1199,9 +1189,6 @@ function drawNodeGraphScope2dTraceLayer(context, points, dotSpace, settings) {
   }
   // XY beam: same woscope quads as 1D Trace. Gaussian coverage indexes the
   // Coverage is brightness. Present shader samples the shared gradient.
-  const inkRgb = typeof nodeGraphScope2dTraceInkRgb01 === "function"
-    ? nodeGraphScope2dTraceInkRgb01(settings)
-    : null;
   if (settings.channelInk === "flat" && typeof TraceWoscope !== "undefined" && typeof TraceWoscope.draw === "function") {
     const parse = (hex, fallback) => {
       const text = String(hex || fallback).replace("#", "");
@@ -1258,51 +1245,10 @@ function drawNodeGraphScope2dTraceLayer(context, points, dotSpace, settings) {
       return;
     }
   }
-  if (typeof TraceStroke !== "undefined" && TraceStroke.draw) {
-    const inkHex = typeof nodeGraphScope2dTraceInkHex === "function"
-      ? nodeGraphScope2dTraceInkHex(settings)
-      : settings.dot1Color;
-    const count = TraceStroke.draw(context, points, {
-      size: settings.dot1Size,
-      blur: 0,
-      brightness: 1,
-      color: inkHex,
-      faceMinSide: Math.max(1, nodeGraphFiniteNumber(dotSpace, 1)),
-      composite: "lighter",
-    });
-    if (count > 0) {
-      recordNodeGraphModuleScopeRenderMetrics(count, count);
-    }
-    return;
+  // Native GL only (TraceWoscope); no 2D stroke / dot fallback.
+  if (typeof TraceWoscope === "undefined" || typeof TraceWoscope.draw !== "function") {
+    nodeGraphDisplayGlFailed(context.canvas, "2D trace: TraceWoscope unavailable");
   }
-  const size = nodeGraphFiniteNumber(settings.dot1Size, 2);
-  const rgb01 = inkRgb || [1, 1, 1];
-  if (!(rgb01[0] > 0 || rgb01[1] > 0 || rgb01[2] > 0)) {
-    return;
-  }
-  const rgb = [
-    Math.round(rgb01[0] * 255),
-    Math.round(rgb01[1] * 255),
-    Math.round(rgb01[2] * 255),
-  ];
-  const side = Math.max(1, nodeGraphFiniteNumber(dotSpace, 1));
-  const radius = typeof nodeGraphScopeSize01ToRadiusPx === "function"
-    ? nodeGraphScopeSize01ToRadiusPx(side, size)
-    : Math.max(0.5, side * size * 0.5);
-  // Canvas fallback: soft dots only (match energy-GL dots path; no polyline joins).
-  context.save();
-  context.globalCompositeOperation = "lighter";
-  context.fillStyle = `rgba(${rgb[0]}, ${rgb[1]}, ${rgb[2]}, 1)`;
-  context.shadowBlur = 0;
-  const r = Math.max(0.5, radius);
-  for (let i = 0; i < points.length; i += 1) {
-    const p = points[i];
-    if (!p || !Number.isFinite(p.x) || !Number.isFinite(p.y)) continue;
-    context.beginPath();
-    context.arc(p.x, p.y, r, 0, Math.PI * 2);
-    context.fill();
-  }
-  context.restore();
 }
 
 
@@ -1334,26 +1280,17 @@ function snapshotNodeGraphScope2dTraceHold(canvas, nodeId = "") {
   if (!canvas || !(canvas.width > 0) || !(canvas.height > 0)) {
     return null;
   }
-  let hold = canvas._scope2dTraceHold;
+  // Held picture lives in a GL texture (kept until the next snapshot / wipe).
+  const id = String(nodeId || "");
+  const previous = canvas._scope2dTraceHold;
+  const hold = nodeGraphGlLinesSnapshot(canvas, { keep: true });
   if (!hold) {
-    hold = document.createElement("canvas");
-    canvas._scope2dTraceHold = hold;
-  }
-  if (hold.width !== canvas.width) {
-    hold.width = canvas.width;
-  }
-  if (hold.height !== canvas.height) {
-    hold.height = canvas.height;
-  }
-  const context = hold.getContext("2d");
-  if (!context) {
     return null;
   }
-  context.setTransform(1, 0, 0, 1, 0, 0);
-  context.imageSmoothingEnabled = false;
-  context.globalCompositeOperation = "copy";
-  context.drawImage(canvas, 0, 0);
-  const id = String(nodeId || "");
+  if (previous && previous !== hold) {
+    nodeGraphGlLinesReleaseSnapshot(previous);
+  }
+  canvas._scope2dTraceHold = hold;
   if (id) {
     nodeGraphScope2dTraceHoldByNodeId.set(id, hold);
   }
@@ -1380,22 +1317,28 @@ function blitNodeGraphScope2dTraceHold(slot) {
   }
   const hold = canvas._scope2dTraceHold
     || nodeGraphScope2dTraceHoldByNodeId.get(String(slot?.nodeId || ""));
-  const context = canvas.getContext?.("2d");
-  if (!context) {
-    return false;
-  }
-  if (hold && hold.width > 0 && hold.height > 0) {
+  if (hold?.texture && hold.width > 0 && hold.height > 0) {
     if (canvas.width !== hold.width) {
       canvas.width = hold.width;
     }
     if (canvas.height !== hold.height) {
       canvas.height = hold.height;
     }
-    context.setTransform(1, 0, 0, 1, 0, 0);
-    context.imageSmoothingEnabled = false;
-    context.globalCompositeOperation = "copy";
-    context.drawImage(hold, 0, 0);
+    const batch = nodeGraphGlLinesBegin(canvas, [0, 0, 0, 0], { transparent: true });
+    if (!batch) {
+      nodeGraphDisplayGlFailed(canvas, "2D trace hold: shared GL unavailable");
+      return false;
+    }
+    nodeGraphGlLinesImage(batch, hold, 0, 0, hold.width, hold.height, { nearest: true });
+    if (!nodeGraphGlLinesEnd(batch)) {
+      nodeGraphDisplayGlFailed(canvas, "2D trace hold: GL present failed");
+      return false;
+    }
   } else {
+    const context = nodeGraphDisplayCanvasPresentContext(canvas);
+    if (!context) {
+      return false;
+    }
     const last = canvas._scope2dTraceLastPoints;
     if (!(Array.isArray(last) && last.length >= 2)) {
       return false;
@@ -1525,8 +1468,10 @@ function drawNodeGraphScope2dTraceItem(renderer, item, pixelRatio) {
   } else {
     canvas.style.imageRendering = "";
   }
-  const context = canvas.getContext("2d");
+  // Present context handed to TraceWoscope (its GL output is copied in there).
+  const context = nodeGraphDisplayCanvasPresentContext(canvas);
   if (!context) {
+    nodeGraphDisplayGlFailed(canvas, "2D trace: no present context");
     return;
   }
   context.imageSmoothingEnabled = density >= 0.999;

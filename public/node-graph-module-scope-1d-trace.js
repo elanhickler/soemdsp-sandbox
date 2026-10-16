@@ -353,7 +353,6 @@ function nodeGraphScope1dTraceDrawLayer(context, points, settings, role = "prima
   }
   // Size SSOT (like Bright -> intensity): authored CSS px @ 96 -> TraceWoscope uSize.
   const size = nodeGraphScope1dTraceSizePx(settings, role);
-  const inkRgb = nodeGraphScope1dTraceInkRgb01(settings, role);
   // Bright scales the 0..1 coverage channel. The present shader looks the
   // shared gradient up at that brightness. Not an alpha, not rgb * bright.
   const brightness = nodeGraphScope1dTraceBrightness01(settings, role);
@@ -380,25 +379,11 @@ function nodeGraphScope1dTraceDrawLayer(context, points, settings, role = "prima
       tracePresent: phase.tracePresent !== false,
       presentComposite: phase.presentComposite || "copy",
     };
-    const count = TraceWoscope.draw(context, points, woscopeOpts);
-    if (count > 0) {
-      return count;
-    }
+    // Woscope draws on the shared device and presents into this context.
+    return TraceWoscope.draw(context, points, woscopeOpts) || 0;
   }
-  if (typeof TraceStroke !== "undefined" && TraceStroke.draw) {
-    const to = (c) => Math.round(Math.max(0, Math.min(1, Number(c) || 0)) * 255)
-      .toString(16)
-      .padStart(2, "0");
-    const inkHex = `#${to(inkRgb[0])}${to(inkRgb[1])}${to(inkRgb[2])}`;
-    return TraceStroke.draw(context, points, {
-      size,
-      blur: 0,
-      brightness: 1,
-      color: inkHex,
-      faceMinSide,
-      composite: "lighter",
-    }) || 0;
-  }
+  // Native GL only: no 2D stroke fallback.
+  nodeGraphDisplayGlFailed(context.canvas, "1D trace: TraceWoscope unavailable");
   return 0;
 }
 
@@ -446,8 +431,10 @@ function drawNodeGraphScope1dTraceItem(renderer, item, pixelRatio) {
   } else {
     canvas.style.imageRendering = "";
   }
-  const context = canvas.getContext("2d");
+  // Present context handed to TraceWoscope (its GL output is copied in there).
+  const context = nodeGraphDisplayCanvasPresentContext(canvas);
   if (!context) {
+    nodeGraphDisplayGlFailed(canvas, "1D trace: no present context");
     return;
   }
   context.imageSmoothingEnabled = density >= 0.999;

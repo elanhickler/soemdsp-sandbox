@@ -845,6 +845,34 @@ function nodeGraphStampPreviewBlit(plateCtx, plateW, plateH, scratch, bgHex = "#
   }
 }
 
+/**
+ * GL stamp plate: plate rect + one SDF dot stamp through the number-readout
+ * pen (TraceDotSprite.drawTarget). stamp(pen) returns "ok"|"loading"|"failed".
+ */
+function nodeGraphStampPreviewPenPlate(canvas, bgHex, stamp) {
+  const pen = nodeGraphNumberReadoutGlBeginFace(canvas);
+  if (!pen) {
+    return;
+  }
+  const bg = nodeGraphStampPreviewParseHex(bgHex, [2, 4, 5]);
+  nodeGraphNumberReadoutGlPenRect(pen, 0, 0, canvas.width, canvas.height, bg, 1);
+  nodeGraphNumberReadoutGlPenFlush(pen);
+  const r = stamp ? stamp(pen) : "ok";
+  if (r === "failed") {
+    nodeGraphDisplayGlFailed(canvas, "stamp preview: dot GLSL failed");
+    return;
+  }
+  nodeGraphNumberReadoutGlEndFace(canvas, pen);
+  if (r === "loading" && !canvas._stampPreviewRetry) {
+    // Shader still compiling: repaint once it is ready.
+    canvas._stampPreviewRetry = true;
+    requestAnimationFrame(() => {
+      canvas._stampPreviewRetry = false;
+      if (typeof canvas._stampPreviewRepaint === "function") canvas._stampPreviewRepaint();
+    });
+  }
+}
+
 function paintNodeGraphStampPreviewCanvas(canvas, settings = {}, side = "", kind = "waterfall") {
   if (!canvas) {
     return;
@@ -856,10 +884,7 @@ function paintNodeGraphStampPreviewCanvas(canvas, settings = {}, side = "", kind
   if (canvas.height !== plate.height) {
     canvas.height = plate.height;
   }
-  const context = canvas.getContext("2d");
-  if (!context) {
-    return;
-  }
+  canvas._stampPreviewRepaint = () => paintNodeGraphStampPreviewCanvas(canvas, settings, side, kind);
   const bgHex = typeof nodeGraphFacePlateBackground === "function"
     ? nodeGraphFacePlateBackground(settings, "#020405")
     : "#020405";
@@ -867,7 +892,9 @@ function paintNodeGraphStampPreviewCanvas(canvas, settings = {}, side = "", kind
     ? nodeGraphFacePlateDensity(settings, 1)
     : 1;
   const fillEmpty = () => {
-    nodeGraphStampPreviewBlit(context, plate.width, plate.height, null, bgHex);
+    if (nodeGraphFacePlateFill(canvas, bgHex) === "no-device") {
+      nodeGraphDisplayGlFailed(canvas, "stamp preview: shared GL unavailable");
+    }
   };
   // Instant Waterfall / RGB waterfall: same dab path as the face (hard or soft).
   // Draw in plate space, scaled so the full stamp (core + blur) fits — never
@@ -897,48 +924,23 @@ function paintNodeGraphStampPreviewCanvas(canvas, settings = {}, side = "", kind
     const radius = Math.max(0.5, faceRadius * fit);
     const cx = plate.width * 0.5;
     const cy = plate.height * 0.5;
-    context.setTransform(1, 0, 0, 1, 0, 0);
-    context.globalCompositeOperation = "source-over";
-    context.globalAlpha = 1;
-    context.fillStyle = bgHex;
-    context.fillRect(0, 0, plate.width, plate.height);
     let rgb = nodeGraphStampPreviewParseHex(ink.color);
     if (typeof nodeGraphWaterfallScaleRgb === "function") {
       rgb = nodeGraphWaterfallScaleRgb(rgb, ink.bright);
     }
-    // Same dab as the face (smoothstep blur, no size growth). Scratch avoids clamp nudge.
-    if (typeof nodeGraphWaterfallDab === "function") {
-      const pad = typeof nodeGraphWaterfallSoftPad === "function"
-        ? nodeGraphWaterfallSoftPad(radius, blur)
-        : radius;
-      const buf = Math.max(plateSide, Math.ceil(pad * 2 + 4));
-      const scratch = nodeGraphStampPreviewScratch(canvas, buf);
-      const scratchCtx = scratch.getContext("2d");
-      if (!scratchCtx) {
-        fillEmpty();
-        return;
-      }
-      scratchCtx.setTransform(1, 0, 0, 1, 0, 0);
-      scratchCtx.clearRect(0, 0, buf, buf);
-      nodeGraphWaterfallDab(scratchCtx, buf * 0.5, buf * 0.5, radius, rgb, "source-over", blur);
-      context.imageSmoothingEnabled = blur >= 0.02 && density >= 0.999;
-      context.drawImage(
-        scratch,
-        buf * 0.5 - plate.width * 0.5,
-        buf * 0.5 - plate.height * 0.5,
-        plate.width,
-        plate.height,
-        0,
-        0,
-        plate.width,
-        plate.height,
-      );
-    } else {
-      context.imageSmoothingEnabled = false;
-      context.fillStyle = "rgb(" + rgb[0] + "," + rgb[1] + "," + rgb[2] + ")";
-      context.beginPath();
-      context.arc(cx, cy, radius, 0, Math.PI * 2);
-      context.fill();
+    // Same dab profile as the face, drawn centered on a GL batch (no clamp nudge).
+    const bg = nodeGraphStampPreviewParseHex(bgHex);
+    const batch = typeof nodeGraphGlLinesBegin === "function"
+      ? nodeGraphGlLinesBegin(canvas, [bg[0] / 255, bg[1] / 255, bg[2] / 255, 1], { scale: 1 })
+      : null;
+    if (!batch) {
+      nodeGraphDisplayGlFailed(canvas, "stamp preview: no shared GL device");
+      return;
+    }
+    nodeGraphWaterfallDab(batch, cx, cy, radius, rgb, blur);
+    if (!nodeGraphGlLinesEnd(batch, "alpha")) {
+      nodeGraphDisplayGlFailed(canvas, "stamp preview: GL present failed");
+      return;
     }
     canvas.style.imageRendering = density < 0.999 || blur < 0.02 ? "pixelated" : "";
     return;
@@ -970,40 +972,19 @@ function paintNodeGraphStampPreviewCanvas(canvas, settings = {}, side = "", kind
       : { rx: radius * (1 + stretch * 2), ry: radius };
     const cx = plate.width * 0.5;
     const cy = plate.height * 0.5;
-    context.setTransform(1, 0, 0, 1, 0, 0);
-    context.globalCompositeOperation = "source-over";
-    context.globalAlpha = 1;
-    context.imageSmoothingEnabled = density >= 0.999;
-    context.fillStyle = bgHex;
-    context.fillRect(0, 0, plate.width, plate.height);
     const color = nodeGraphStampPreviewTraceColor(settings, side, kind);
     const bright = Math.max(0, Math.min(1, nodeGraphFiniteNumber(settings.dot1Brightness ?? settings.brightness, 1)));
-    if (typeof TraceDotSprite !== "undefined" && typeof TraceDotSprite.draw === "function") {
-      if (kind === "lcdDot") {
-        TraceDotSprite.draw(context, cx, cy, radius, blur01, {
-          color,
-          amount: 1,
-          rx: Math.max(1, ext.rx),
-          ry: Math.max(1, ext.ry),
-          shape: stampShape,
-          shapeParam,
-          saturation: nodeGraphFiniteNumber(settings.dot1Saturation ?? settings.colorSaturation, 1),
-        }, bright);
-      } else {
-        const hue = typeof nodeGraphHueDegFromHex === "function"
-          ? nodeGraphHueDegFromHex(color)
-          : 25;
-        TraceDotSprite.draw(context, cx, cy, radius, blur01, {
-          hue,
-          amount: bright,
-          rx: Math.max(1, ext.rx),
-          ry: Math.max(1, ext.ry),
-          shape: stampShape,
-          shapeParam,
-          saturation: nodeGraphFiniteNumber(settings.dot1Saturation ?? settings.colorSaturation, 1),
-        }, 1);
-      }
-    }
+    const saturation = nodeGraphFiniteNumber(settings.dot1Saturation ?? settings.colorSaturation, 1);
+    const shapeStyle = {
+      rx: Math.max(1, ext.rx), ry: Math.max(1, ext.ry), shape: stampShape, shapeParam, saturation,
+    };
+    nodeGraphStampPreviewPenPlate(canvas, bgHex, (pen) => (kind === "lcdDot"
+      ? TraceDotSprite.drawTarget(pen, cx, cy, radius, blur01, { ...shapeStyle, color, amount: 1 }, bright)
+      : TraceDotSprite.drawTarget(pen, cx, cy, radius, blur01, {
+        ...shapeStyle,
+        hue: typeof nodeGraphHueDegFromHex === "function" ? nodeGraphHueDegFromHex(color) : 25,
+        amount: bright,
+      }, 1)));
     canvas.style.imageRendering = density < 0.999 ? "pixelated" : "auto";
     return;
   }
@@ -1040,74 +1021,44 @@ function paintNodeGraphStampPreviewCanvas(canvas, settings = {}, side = "", kind
   }
   const extent = nodeGraphStampPreviewExtent(radius, blur01, phosphor);
   const buf = Math.max(1, Math.min(2048, Math.ceil(extent * 2 + 2)));
-  const scratch = nodeGraphStampPreviewScratch(canvas, buf);
-  const scratchCtx = scratch.getContext("2d");
-  if (!scratchCtx) {
-    fillEmpty();
-    return;
-  }
-  scratchCtx.setTransform(1, 0, 0, 1, 0, 0);
-  scratchCtx.imageSmoothingEnabled = false;
-  scratchCtx.globalCompositeOperation = "source-over";
-  scratchCtx.fillStyle = bgHex;
-  scratchCtx.fillRect(0, 0, buf, buf);
-  const cx = buf * 0.5;
-  const cy = buf * 0.5;
   const bright = Number(settings.dot1Brightness ?? settings.brightness);
   const bright01 = kind === "scope2dTrace"
     ? 1
     : (Number.isFinite(bright) ? Math.max(0, bright) : 1);
-  let painted = false;
+  const amt = Number.isFinite(bright01) ? Math.max(0, Math.min(1, bright01)) : 0.5;
+  // The stamp is laid out in a buf x buf box (stamp + blur) that is fitted to the plate.
+  const fit = Math.min(plate.width, plate.height) / buf;
+  const pcx = plate.width * 0.5;
+  const pcy = plate.height * 0.5;
   const spriteKind = kind === "vectorDot" || kind === "pulseDot" || kind === "lcdDot" || kind === "dot" || phosphor;
-  if (spriteKind && typeof TraceDotSprite !== "undefined" && typeof TraceDotSprite.draw === "function") {
-    const amt = Number.isFinite(bright01) ? Math.max(0, Math.min(1, bright01)) : 0.5;
-    if (kind === "vectorDot" || kind === "pulseDot" || kind === "lcdDot") {
-      const stampShape = typeof normalizeTraceStampShape === "function"
-        ? normalizeTraceStampShape(settings.shape)
-        : String(settings.shape || "circle");
-      const shapeParam = Math.max(0, Math.min(1, nodeGraphFiniteNumber(
-        settings.shapeParam ?? (stampShape === "oval" ? settings.pill : settings.squircle),
-      )));
-      const stretch = stampShape === "oval" ? shapeParam : 0;
-      const ext = typeof nodeGraphVectorDotStampExtents === "function"
-        ? nodeGraphVectorDotStampExtents(buf, buf, size, stretch)
-        : { rx: radius * (1 + stretch * 2), ry: radius };
-      if (kind === "lcdDot") {
-        TraceDotSprite.draw(scratchCtx, cx, cy, radius, blur01, {
-          color,
-          amount: 1,
-          rx: ext.rx,
-          ry: ext.ry,
-          shape: stampShape,
-          shapeParam,
-        }, amt);
-      } else {
-        const hue = typeof nodeGraphHueDegFromHex === "function"
-          ? nodeGraphHueDegFromHex(color)
-          : 25;
-        TraceDotSprite.draw(scratchCtx, cx, cy, radius, blur01, {
-          hue,
-          amount: amt,
-          rx: ext.rx,
-          ry: ext.ry,
-          shape: stampShape,
-          shapeParam,
-        }, 1);
-      }
-    } else if (kind === "dot" && typeof nodeGraphPhosphorDotLutCss === "function") {
-      TraceDotSprite.draw(scratchCtx, cx, cy, radius, blur01, {
-        amount: amt,
-        colorAt: (b) => nodeGraphPhosphorDotLutCss(settings, b),
-      }, 1);
+  const hasPen = typeof TraceDotSprite !== "undefined" && typeof TraceDotSprite.drawTarget === "function";
+  if (spriteKind && hasPen) {
+    let style;
+    if (kind === "dot" && typeof nodeGraphPhosphorDotLutCss === "function") {
+      style = { amount: amt, colorAt: (b) => nodeGraphPhosphorDotLutCss(settings, b) };
     } else {
-      TraceDotSprite.draw(scratchCtx, cx, cy, radius, blur01, {
-        amount: amt,
-        color,
-      }, 1);
+      style = { amount: amt, color };
     }
-    painted = true;
+    nodeGraphStampPreviewPenPlate(canvas, bgHex,
+      (pen) => TraceDotSprite.drawTarget(pen, pcx, pcy, radius * fit, blur01, style, 1));
+    canvas.style.imageRendering = density < 0.999 ? "pixelated" : "";
+    return;
   }
-  if (!painted && phosphor && typeof PhosphorDrawer !== "undefined" && PhosphorDrawer.ensure && PhosphorDrawer.stepDots) {
+  // PhosphorDrawer stamp (BugsFix-owned): scratch + 2D blit, unchanged.
+  if (phosphor && typeof PhosphorDrawer !== "undefined" && PhosphorDrawer.ensure && PhosphorDrawer.stepDots) {
+    const scratch = nodeGraphStampPreviewScratch(canvas, buf);
+    const scratchCtx = scratch.getContext("2d");
+    if (!scratchCtx) {
+      fillEmpty();
+      return;
+    }
+    scratchCtx.setTransform(1, 0, 0, 1, 0, 0);
+    scratchCtx.imageSmoothingEnabled = false;
+    scratchCtx.globalCompositeOperation = "source-over";
+    scratchCtx.fillStyle = bgHex;
+    scratchCtx.fillRect(0, 0, buf, buf);
+    const cx = buf * 0.5;
+    const cy = buf * 0.5;
     const splat = PhosphorDrawer.ensure(scratch, buf, buf, "_stampPreview");
     if (splat) {
       if (typeof nodeGraphPhosphorEnergyGlClear === "function") {
@@ -1146,29 +1097,26 @@ function paintNodeGraphStampPreviewCanvas(canvas, settings = {}, side = "", kind
             : undefined,
         });
       }
-      painted = true;
+      const context = canvas.getContext("2d");
+      if (context) {
+        context.imageSmoothingEnabled = density >= 0.999;
+        canvas.style.imageRendering = density < 0.999 ? "pixelated" : "";
+        nodeGraphStampPreviewBlit(context, plate.width, plate.height, scratch, bgHex);
+      }
+      return;
     }
   }
-  if (!painted && typeof TraceStroke !== "undefined" && typeof TraceStroke.draw === "function") {
-    TraceStroke.draw(scratchCtx, [{ x: cx, y: cy }], {
-      size,
-      blur: blur01,
-      brightness: bright01,
-      color,
-      faceMinSide: faceMin,
-      composite: "source-over",
-    });
-    painted = true;
+  // Trace ink: one flat SDF dot at the stroke radius, brightness-scaled colour.
+  if (!hasPen) {
+    fillEmpty();
+    return;
   }
-  if (!painted) {
-    scratchCtx.fillStyle = color;
-    scratchCtx.beginPath();
-    scratchCtx.arc(cx, cy, radius, 0, Math.PI * 2);
-    scratchCtx.fill();
-  }
-  context.imageSmoothingEnabled = density >= 0.999;
+  const rgb = nodeGraphStampPreviewParseHex(color, [117, 235, 255]);
+  const gain = Math.max(0, Math.min(1, bright01));
+  const hex = "#" + rgb.map((c) => Math.round(c * gain).toString(16).padStart(2, "0")).join("");
+  nodeGraphStampPreviewPenPlate(canvas, bgHex,
+    (pen) => TraceDotSprite.drawTarget(pen, pcx, pcy, radius * fit, blur01, { color: hex, flat: true }, 1));
   canvas.style.imageRendering = density < 0.999 ? "pixelated" : "";
-  nodeGraphStampPreviewBlit(context, plate.width, plate.height, scratch, bgHex);
 }
 
 function paintNodeGraphStampPreview(root, settings = {}) {

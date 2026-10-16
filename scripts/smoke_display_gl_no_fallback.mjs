@@ -46,7 +46,8 @@ for (const [rel, rules] of Object.entries(forbidIn)) {
 {
   const nr = fs.readFileSync(path.join(root, "public/node-graph-module-scope-number-readout.js"), "utf8");
   if (!/!plateGl[^\n]*\)\s*\{\s*nodeGraphDisplayGlFailed\(canvas,/.test(nr)) bad.push("number-readout: no GPU burn plate must call nodeGraphDisplayGlFailed");
-  if (!/const burnCtx = plateGl \?/.test(nr)) bad.push("number-readout: burn stamps must be gated on the GPU plate");
+  if (!/const burnOn = Boolean\(plateGl\);/.test(nr)) bad.push("number-readout: burn stamps must be gated on the GPU plate");
+  if (!/const pen = nodeGraphNumberReadoutGlBeginFace\(canvas\);\s*if \(!pen\) \{/.test(nr) || !/Number readout face GL unavailable/.test(nr)) bad.push("number-readout: face must be GL-only (BeginFace -> nodeGraphDisplayGlFailed)");
 }
 for (const f of targets) {
   const lines = fs.readFileSync(f, "utf8").split(/\r?\n/);

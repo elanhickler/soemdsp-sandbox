@@ -597,11 +597,8 @@
     destCtx.save();
     destCtx.globalCompositeOperation = options.composite || "source-over";
     destCtx.imageSmoothingEnabled = options.smooth === true;
-    if (typeof nodeGraphSharedGlBlitTo2D === "function") {
-      nodeGraphSharedGlBlitTo2D(destCtx, size.w, size.h);
-    } else {
-      destCtx.drawImage(dev.canvas, 0, 0, size.w, size.h, 0, 0, size.w, size.h);
-    }
+    // Shared-device blit only (no direct 2D drawImage path).
+    nodeGraphSharedGlBlitTo2D(destCtx, size.w, size.h);
     destCtx.restore();
     return true;
   }
@@ -653,11 +650,8 @@
     destCtx.save();
     destCtx.globalCompositeOperation = "source-over";
     destCtx.imageSmoothingEnabled = options.smooth === true;
-    if (typeof nodeGraphSharedGlBlitTo2D === "function") {
-      nodeGraphSharedGlBlitTo2D(destCtx, size.w, size.h);
-    } else {
-      destCtx.drawImage(dev.canvas, 0, 0, size.w, size.h, 0, 0, size.w, size.h);
-    }
+    // Shared-device blit only (no direct 2D drawImage path).
+    nodeGraphSharedGlBlitTo2D(destCtx, size.w, size.h);
     destCtx.restore();
     return true;
   }
@@ -724,11 +718,8 @@
     destCtx.save();
     destCtx.globalCompositeOperation = "source-over";
     destCtx.imageSmoothingEnabled = options.smooth === true;
-    if (typeof nodeGraphSharedGlBlitTo2D === "function") {
-      nodeGraphSharedGlBlitTo2D(destCtx, size.w, size.h);
-    } else {
-      destCtx.drawImage(dev.canvas, 0, 0, size.w, size.h, 0, 0, size.w, size.h);
-    }
+    // Shared-device blit only (no direct 2D drawImage path).
+    nodeGraphSharedGlBlitTo2D(destCtx, size.w, size.h);
     destCtx.restore();
     return true;
   }
