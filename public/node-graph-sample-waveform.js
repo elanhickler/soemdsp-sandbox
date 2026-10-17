@@ -2193,6 +2193,34 @@ function bindNodeGraphSampleWaveformInteractions(section, canvas) {
   canvas.addEventListener("pointerleave", () => setHudHover(""));
   section.addEventListener("pointerleave", () => setHudHover(""));
 
+  // HUD hits (playlist label, zoom %) on the face. The canvas is visibility:hidden
+  // under the GPU graph and on the empty plate, so the pointer lands on the face
+  // and the canvas pointerdown below never fires. Same split as the hover above.
+  section.addEventListener("pointerdown", (event) => {
+    if (event.target === canvas) {
+      return;
+    }
+    if (typeof nodeGraphAudioPlayerFaceIsWave === "function"
+      ? !nodeGraphAudioPlayerFaceIsWave(section)
+      : (section.dataset.musicPlayerFace || "wave") !== "wave") {
+      return;
+    }
+    if (event.button !== 0 && event.button !== undefined) {
+      return;
+    }
+    const hud = nodeGraphSampleWaveformHudHit(section, canvas, event.clientX, event.clientY);
+    if (hud === "playlist") {
+      event.preventDefault();
+      event.stopPropagation();
+      const nodeId = section.dataset.node;
+      if (nodeId && typeof nodeGraphAudioPlayerPlaylistSetFace === "function") {
+        nodeGraphAudioPlayerPlaylistSetFace(nodeId, "pl");
+      }
+    } else if (hud === "zoom") {
+      event.stopPropagation();
+      beginNodeGraphSampleWaveformZoomDrag(event, section, canvas);
+    }
+  });
   let dragPointerId = null;
   let lastClientX = 0;
   let lastClientY = 0;
