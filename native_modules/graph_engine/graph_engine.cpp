@@ -705,6 +705,8 @@ extern "C" double soemdsp_softpop2_sample(
   double freqHz,
   double crossfade,
   double ampOver,
+  double bandwidthOver,
+  double pitchOver,
   double amplitude,
   double color,
   double seedValue,
@@ -3583,6 +3585,7 @@ static void init_node_defaults(Node& n, int typeId) {
       : (typeId == kTypeRobinSinepulse) ? 0.0 // chirpShape
       : (typeId == kTypeRobinSinepulseAllpass) ? 1.0 // highQ
       : (typeId == kTypeSoftpopFilter) ? 0.3 // Width
+      : (typeId == kTypeSoftpop2) ? 1.0 // Bandwidth over Crossfade
       : (typeId == kTypeExponentialMix) ? 15.0 // Fast Rate
       : 2.0,
     false
@@ -3670,6 +3673,7 @@ static void init_node_defaults(Node& n, int typeId) {
       : (typeId == kTypeSoemReverb) ? 0.002 // lfoAmp
       : (typeId == kTypePingPongDelay) ? 25.0 // lfoAmp ms (audible like Delay modAmount)
       : (typeId == kTypeSoftpopOscillator || typeId == kTypeSoftpopFilter) ? 0.0 // Pitch Mod cents
+      : (typeId == kTypeSoftpop2) ? 0.0 // Pitch Mod over Crossfade
       : (typeId == kTypeFbmField) ? 0.0 // panY
       : (typeId == kTypeReverbEffect) ? 0.028 // Cinematic depth fraction
       : 0.07,
@@ -7610,12 +7614,20 @@ static void process_softpop2(Circuit& g, Node& node, int frames) {
     if (!(ao == ao)) ao = 0.0;
     if (ao < 0.0) ao = 0.0;
     if (ao > 1.0) ao = 1.0;
+    double bw = control_audio(g, node.width, f);
+    if (!(bw == bw)) bw = 1.0;
+    if (bw < 0.0) bw = 0.0;
+    if (bw > 1.0) bw = 1.0;
+    double po = control_audio(g, node.lfoAmplitude, f);
+    if (!(po == po)) po = 0.0;
+    if (po < 0.0) po = 0.0;
+    if (po > 1.0) po = 1.0;
     double level = control_audio(g, node.amplitude, f);
     if (!(level == level)) level = 1.0;
     if (level < 0.0) level = 0.0;
     if (softpop_reset_edge(g, node, liveReset, f)) soemdsp_softpop2_reset(node.nativeHandle);
     const double y = soemdsp_softpop2_sample(
-      node.nativeHandle, freq, xf, ao, level,
+      node.nativeHandle, freq, xf, ao, bw, po, level,
       control_effective(node.stages), control_effective(node.seed), sr
     );
     node.buf[kPortMono][f] = y;

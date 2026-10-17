@@ -97,6 +97,7 @@
         "frequency": 220,
         "crossfade": 0.35,
         "ampOverCrossfade": 0,
+        "bandwidthOverCrossfade": 1,
         "color": 1,
         "seed": 1,
         "amplitude": 0.8

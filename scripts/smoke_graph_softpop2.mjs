@@ -23,7 +23,7 @@ must("soemdsp_softpop2_display_bin_count");
 must("soemdsp_softpop2_sample");
 
 const TYPE = 219, TYPE_OUT = 6;
-const PARAM = { FREQUENCY: 10, AMPLITUDE: 12, SHAPE: 13, MIX: 40, STAGES: 22, SEED: 48 };
+const PARAM = { FREQUENCY: 10, AMPLITUDE: 12, SHAPE: 13, WIDTH: 31, MIX: 40, STAGES: 22, SEED: 48 };
 const PORT = { MONO: 0, LEFT: 1, RIGHT: 2 };
 const SR = 48000, FRAMES = 128, BLOCKS = 200;
 const HASH = 0x50f72001 >>> 0, OUT = 0x50f720ff >>> 0;
@@ -61,7 +61,7 @@ gate(eq(sine.m, sine.l), "Mono out == Left");
 gate(eq(sine.l, sine.r), "Crossfade 0: L == R");
 gate(Math.abs(20 * Math.log10(rms(sine.l) / Math.SQRT1_2)) < 0.2, `Crossfade 0 RMS ${rms(sine.l).toFixed(4)} ~ 1/sqrt2`);
 
-const noise = render({ FREQUENCY: 1000, MIX: 1, SHAPE: 0, AMPLITUDE: 1, STAGES: 1, SEED: 1 });
+const noise = render({ FREQUENCY: 1000, MIX: 1, SHAPE: 0, WIDTH: 1, AMPLITUDE: 1, STAGES: 1, SEED: 1 });
 gate(!eq(noise.l, noise.r), "Crossfade 1: L != R");
 gate(Math.abs(20 * Math.log10(rms(noise.l) / Math.SQRT1_2)) < 0.5, `Crossfade 1 RMS ${rms(noise.l).toFixed(4)} within 0.5 dB of sine`);
 

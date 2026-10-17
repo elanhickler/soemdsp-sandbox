@@ -5,8 +5,10 @@
 // soemdsp-native-lib: https://github.com/elanhickler/soemdsp-sandbox/blob/master/docs/SOFTPOP2_PLAN.md
 //
 // Softpop 2: a sine dispersing into band-limited Color noise centred on its
-// own pitch. Crossfade fades sine → noise and widens the band (Softpop Filter
-// Width curve). Amp over Crossfade squares a fade-to-silence on top.
+// own pitch. Crossfade fades sine → noise. Bandwidth over Crossfade scales
+// how far the band opens (Softpop Filter Width curve on b·c). Amp over
+// Crossfade squares a fade-to-silence on top. Pitch Mod over Crossfade
+// wobbles only the sine with White noise (0…2400 cents); Color is the band.
 // Shared: softpop_core.h, tpt_svf.h, noise_colors.h, softpop_band.h, seed.h.
 
 #include "../softpop_oscillator/softpop_core.h"
@@ -19,6 +21,7 @@ using namespace softpop;
 
 static const int kMaxInstances = 64;
 static const unsigned int kSeedNoise = kSeedAudio;
+static const double kPitchModCents = 2400.0;
 
 struct Chan {
   NoiseColorChannel noise;
@@ -30,10 +33,11 @@ struct Chan {
 struct State {
   bool active;
   Chan ch[2];
+  Noise pitch;  // sine Pitch Mod only (shared L/R phasor)
   double phase;
   unsigned int seed;
   bool seeded;
-  double lastCross, lastSr;
+  double lastWidth, lastSr;
   int lastColor;
   double q, sqrtQ, widthGain;
   SoftpopTilt tilt;
@@ -58,16 +62,17 @@ static void reseed(State& s) {
     tpt_svf_reset(ch.svf);
     ch.out = 0.0;
   }
+  noise_reset(s.pitch, s.seed, 0);
   s.phase = 0.0;
   s.seeded = true;
 }
 
-static void update_band(State& s, double cross, int color, double sr) {
-  if (cross == s.lastCross && color == s.lastColor && sr == s.lastSr) return;
-  s.lastCross = cross;
+static void update_band(State& s, double width, int color, double sr) {
+  if (width == s.lastWidth && color == s.lastColor && sr == s.lastSr) return;
+  s.lastWidth = width;
   s.lastColor = color;
   s.lastSr = sr;
-  s.q = width_to_q(clamp(cross, 0.0, 1.0));
+  s.q = width_to_q(clamp(width, 0.0, 1.0));
   s.sqrtQ = sqrt_pos(s.q);
   s.widthGain = softpop_width_gain(color, s.q);
   softpop_tilt_prepare(s.tilt, sr);
@@ -96,7 +101,7 @@ extern "C" int soemdsp_softpop2_create() {
     if (!gPool[i].active) {
       State& s = gPool[i];
       s = State{};
-      s.lastCross = 0.0 / 0.0;
+      s.lastWidth = 0.0 / 0.0;
       s.lastSr = 0.0 / 0.0;
       s.lastColor = -1;
       s.active = true;
@@ -116,13 +121,17 @@ extern "C" void soemdsp_softpop2_reset(int handle) {
 }
 
 // One frame. freqHz = fEff (graph_engine resolve_osc_hz). crossfade 0 = sine,
-// 1 = full noise at widest band. ampOver 0 = constant loudness, 1 = silence
-// at Crossfade 1. color: 0 White … 6 Violet. Returns Mono (= L render).
+// 1 = full noise. bandwidthOver 0 = band stays tight, 1 = Width curve opens
+// with Crossfade (Q = 2000·(0.5/2000)^(b·c)). ampOver 0 = constant loudness,
+// 1 = silence at Crossfade 1. pitchOver: White-noise cents on the sine only,
+// cents = p·c·2400 (none at Crossfade 0, full at 1). Color is the band.
 extern "C" double soemdsp_softpop2_sample(
   int handle,
   double freqHz,
   double crossfade,
   double ampOver,
+  double bandwidthOver,
+  double pitchOver,
   double amplitude,
   double color,
   double seedValue,
@@ -140,8 +149,10 @@ extern "C" double soemdsp_softpop2_sample(
   const int c = color_index(color);
   double xf = clamp(safe(crossfade), 0.0, 1.0);
   double ao = clamp(safe(ampOver), 0.0, 1.0);
+  double bw = clamp(safe(bandwidthOver), 0.0, 1.0);
+  double po = clamp(safe(pitchOver), 0.0, 1.0);
   const double amp = safe(amplitude);
-  update_band(s, xf, c, sr);
+  update_band(s, xf * bw, c, sr);
 
   double f = safe(freqHz);
   const double nyq = 0.5 * sr;
@@ -152,8 +163,12 @@ extern "C" double soemdsp_softpop2_sample(
   const double fcMax = 0.49 * sr;
   if (fc > fcMax) fc = fcMax;
 
+  const double cents = po * xf * kPitchModCents;
+  double fSine = noise_step(s.pitch, kColorWhite, f, cents);
+  if (fSine > nyq) fSine = nyq;
+  if (fSine < -nyq) fSine = -nyq;
   const double ph = s.phase;
-  const double inc = f / sr;
+  const double inc = fSine / sr;
   const double next = ph + inc;
   s.phase = next - dsp_floor(next);
   const double sine = dsp_sin_turns(ph);
@@ -168,7 +183,9 @@ extern "C" double soemdsp_softpop2_sample(
   s.ch[1].out = safety_limit((cw * sine + sw * nR) * env);
 
   const double envAbs = env < 0.0 ? -env : env;
-  display_note(s.disp, 0, f, s.q, 0.0, sr, fc, envAbs < 1.0 ? envAbs : 1.0);
+  const double dispHz = s.disp.armed > 0.0 && cents != 0.0
+    ? f * dsp_exp(s.pitch.np * cents * (kLn2 / 1200.0)) : f;
+  display_note(s.disp, 1, f, 0.0, cents, sr, dispHz, envAbs < 1.0 ? envAbs : 1.0);
   return s.ch[0].out;
 }
 
@@ -199,6 +216,6 @@ extern "C" double soemdsp_softpop2_display_info(int handle, int which) {
   return display_info(gPool[handle - 1].disp, which);
 }
 
-extern "C" int soemdsp_softpop2_version() { return 1; }
+extern "C" int soemdsp_softpop2_version() { return 6; }
 extern "C" const char* soemdsp_softpop2_metadata_json() { return kMetadataJson; }
 extern "C" int soemdsp_softpop2_metadata_json_size() { return sizeof(kMetadataJson) - 1; }

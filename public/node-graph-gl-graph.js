@@ -351,6 +351,14 @@ function nodeGraphGlGraphOutside(x, y, w, h, cssW, cssH, pad = 48) {
   return x + w < -pad || y + h < -pad || x > cssW + pad || y > cssH + pad;
 }
 
+function nodeGraphGlGraphDrawSliderGhost(batch, readout, x, y, h, zoom, hideGhost, ghostFill) {
+  if (hideGhost || !readout?.classList.contains("has-ghost-slider")) return;
+  const start = nodeGraphGlGraphCssPx(readout, "--ghost-start");
+  const end = nodeGraphGlGraphCssPx(readout, "--ghost-end");
+  if (!(end > start)) return;
+  nodeGraphGlLinesRect(batch, x + start * zoom, y, (end - start) * zoom, h, ghostFill);
+}
+
 function nodeGraphGlGraphDrawOver(batch, draw) {
   if (!batch) return;
   batch._over = true;
@@ -364,6 +372,11 @@ function nodeGraphGlGraphDrawChrome(batch, toX, toY, zoom, cssW, cssH) {
   const ink = [1, 1, 1, 1];
   const well = [0.031, 0.043, 0.051, 1];
   const valueFill = [0.27, 0.64, 1, 0.9];
+  const ghostHost = document.getElementById("nodeGraphWorkspace");
+  const hideGhost = ghostHost?.classList.contains("hide-slider-position");
+  const ghostFill = typeof nodeGraphGlLinesCss === "function"
+    ? nodeGraphGlLinesCss(getComputedStyle(ghostHost || document.documentElement).getPropertyValue("--node-slider-ghost-color") || "hsl(262 100% 76% / 0.38)")
+    : [0.78, 0.55, 1, 0.38];
   const sliders = chrome.sliders || [];
   for (let i = 0; i < sliders.length; i += 1) {
     const slider = sliders[i];
@@ -390,6 +403,7 @@ function nodeGraphGlGraphDrawChrome(batch, toX, toY, zoom, cssW, cssH) {
           if (!Number.isFinite(dx)) continue;
           nodeGraphGlLinesRect(batch, x + dx * zoom, y, Math.max(1, 0.5 * zoom), h, line);
         }
+        nodeGraphGlGraphDrawSliderGhost(batch, readout, x, y, h, zoom, hideGhost, ghostFill);
         return;
       }
       // No amount fill (track start -> position): sliders show only the position handle.
@@ -405,6 +419,7 @@ function nodeGraphGlGraphDrawChrome(batch, toX, toY, zoom, cssW, cssH) {
           valueFill,
         );
       }
+      nodeGraphGlGraphDrawSliderGhost(batch, readout, x, y, h, zoom, hideGhost, ghostFill);
     });
     if (typeof nodeGraphGlLinesText === "function") {
       const labelText = String(slider.labelEl?.textContent || "").replace(/\s+/g, " ").trim();

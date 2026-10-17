@@ -1640,7 +1640,7 @@ const nodeGraphModuleStoreCatalog = Object.freeze({
   },
   softpop2: {
     category: "oscillator",
-    description: "A sine that dissolves into band-limited noise centred on its own pitch. Crossfade widens the band; Amp over Crossfade can fade the sound away.",
+    description: "A sine that dissolves into band-limited noise centred on its own pitch. Crossfade mixes in the noise; Bandwidth over Crossfade opens the band; Pitch Mod over Crossfade wobbles the sine; Amp over Crossfade can fade the sound away.",
     label: "Softpop 2",
     notes: ["softpop", "softpop2", "noise oscillator", "band noise", "sine", "crossfade", "blue", "violet", "gaussian", "pink", "brown", "seed", "reset", "stereo", "mono", "native"],
   },

@@ -24,7 +24,7 @@ fs.writeFileSync(probeSrc, `
 extern "C" int soemdsp_softpop2_create();
 extern "C" void soemdsp_softpop2_destroy(int handle);
 extern "C" void soemdsp_softpop2_reset(int handle);
-extern "C" double soemdsp_softpop2_sample(int handle, double freqHz, double crossfade, double ampOver, double amplitude, double color, double seedValue, double sampleRate);
+extern "C" double soemdsp_softpop2_sample(int handle, double freqHz, double crossfade, double ampOver, double bandwidthOver, double pitchOver, double amplitude, double color, double seedValue, double sampleRate);
 extern "C" double soemdsp_softpop2_left(int handle);
 extern "C" double soemdsp_softpop2_right(int handle);
 static const int kCap = 1 << 20;
@@ -39,7 +39,7 @@ extern "C" void tp_reset(int h) { soemdsp_softpop2_reset(h); }
 extern "C" int tp_render(int h, int n, double freq, double xf, double ao, double amp, double color, double seed, double sr) {
   if (n < 1 || n > kCap) return 0;
   for (int i = 0; i < n; i++) {
-    soemdsp_softpop2_sample(h, freq, xf, ao, amp, color, seed, sr);
+    soemdsp_softpop2_sample(h, freq, xf, ao, 1.0, 0.0, amp, color, seed, sr);
     gL[i] = soemdsp_softpop2_left(h);
     gR[i] = soemdsp_softpop2_right(h);
   }

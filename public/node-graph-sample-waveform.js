@@ -1135,6 +1135,10 @@ function nodeGraphSampleWaveformEnsureLayoutObserver(section) {
     scheduled = window.requestAnimationFrame(() => {
       scheduled = 0;
       nodeGraphSampleWaveformSyncLayout(section);
+      // A resize clears the canvas; repaint when no rAF loop will do it.
+      if (section.dataset.phosphorRaf !== "1") {
+        drawNodeGraphSampleWaveformDisplay(section);
+      }
     });
   });
   try {
@@ -2383,14 +2387,25 @@ function scheduleNodeGraphSampleWaveformFrame(section) {
   const keep = nodeGraphSampleWaveformShouldKeepLoop(section);
   const face = section.dataset.musicPlayerFace || "wave";
   const skipFace = face === "pl" || face === "playinfo";
+  const noSample = typeof nodeGraphSampleWaveformSampleEntry !== "function"
+    || !nodeGraphSampleWaveformSampleEntry(section.dataset.node);
+  // No clip yet: still paint playlist / speed / zoom on the dark plate.
+  // Do not wait on the live frame clock or the stop-mode display freeze.
   if (
-    keep
-    && !skipFace
-    && !(typeof nodeGraphDisplaysFrozen === "function" && nodeGraphDisplaysFrozen())
-    && nodeGraphSampleWaveformFrameReady(section.dataset.node)
+    !skipFace
     && nodeGraphSampleWaveformSectionOnScreen(section)
+    && (
+      noSample
+      || (
+        !(typeof nodeGraphDisplaysFrozen === "function" && nodeGraphDisplaysFrozen())
+        && (!keep || nodeGraphSampleWaveformFrameReady(section.dataset.node))
+      )
+    )
   ) {
     drawNodeGraphSampleWaveformDisplay(section);
+    if (noSample && typeof nodeGraphGlGraphPresentSoon === "function") {
+      nodeGraphGlGraphPresentSoon();
+    }
     if (section.dataset.nodeType === "wavetable2d") {
       nodeGraphWavetable2dSyncStrips(section);
     }
@@ -3312,7 +3327,10 @@ function nodeGraphSampleWaveformPaintSpeedLabel(batch, nodeId, node, width, heig
     ? nodeGraphAudioPlayerLiveSpeedForNode(nodeId)
     : null;
   const hasSample = Boolean(node?.sample?.id);
-  if (!Number.isFinite(speed) || (!hasSample && speed === 0)) {
+  if (!hasSample) {
+    const paramSpeed = Number(node?.params?.speed);
+    speed = Number.isFinite(paramSpeed) ? paramSpeed : (Number.isFinite(speed) ? speed : 1);
+  } else if (!Number.isFinite(speed) || speed === 0) {
     const paramSpeed = Number(node?.params?.speed);
     if (!Number.isFinite(paramSpeed)) {
       if (!Number.isFinite(speed)) {

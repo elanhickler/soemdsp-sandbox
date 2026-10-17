@@ -10177,7 +10177,7 @@ const nodeGraphModuleDefinitions = (
         min: "0",
         nonlinearSlider: false,
         step: "any",
-        tooltip: "0 = pure sine. 1 = full noise at the widest band. The noise band widens with this control."
+        tooltip: "0 = pure sine. 1 = full noise. Bandwidth over Crossfade sets how wide the noise band opens."
       },
       {
         defaultValue: "0",
@@ -10190,6 +10190,30 @@ const nodeGraphModuleDefinitions = (
         nonlinearSlider: false,
         step: "any",
         tooltip: "0 = constant loudness across the crossfade. 1 = level falls to silence as Crossfade reaches 1 (squared)."
+      },
+      {
+        defaultValue: "1",
+        key: "bandwidthOverCrossfade",
+        label: "Bandwidth over Crossfade",
+        max: "1",
+        maxDigits: 4,
+        mid: "0.5",
+        min: "0",
+        nonlinearSlider: false,
+        step: "any",
+        tooltip: "How far the noise band opens as Crossfade rises. 0 = stays a tight ring at the pitch. 1 = full Width curve (Q 2000 → 0.5) at Crossfade 1."
+      },
+      {
+        defaultValue: "0",
+        key: "pitchModOverCrossfade",
+        label: "Pitch Mod over Crossfade",
+        max: "1",
+        maxDigits: 4,
+        mid: "0.5",
+        min: "0",
+        nonlinearSlider: false,
+        step: "any",
+        tooltip: "White-noise pitch wobble on the sine only. 0 = none. 1 = none at Crossfade 0, rising to ±2400 cents at Crossfade 1. Color is the noise band; the band stays on Frequency."
       },
       {
         choices: ["White", "Gaussian", "Average", "Pink", "Brown", "Blue", "Violet"],

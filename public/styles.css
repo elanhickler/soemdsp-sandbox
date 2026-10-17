@@ -1193,12 +1193,11 @@ button:disabled {
   --node-front-button-hover-bg: rgba(17, 20, 24, 0.7);
   /* Shared hover / selected look for flat buttons and list rows (DOM and GL HUD).
      Mixes the element's own text color, so it fits any palette. Hover is a clear
-     tint; selected is a strong fill plus a solid ring and stays selected on hover. */
+     tint; selected is a stronger fill (no ring) and stays selected on hover. */
   --node-ui-hover-mix: 26%;
   --node-ui-selected-mix: 55%;
   --node-ui-hover-bg: color-mix(in srgb, currentColor var(--node-ui-hover-mix), transparent);
   --node-ui-selected-bg: color-mix(in srgb, currentColor var(--node-ui-selected-mix), transparent);
-  --node-ui-selected-ring: inset 0 0 0 2px currentColor;
   --node-front-construction-hover-bg:
     repeating-linear-gradient(
       135deg,
@@ -1734,7 +1733,6 @@ button.scw-label:hover,
 .node-music-player-pl-transport-btn.is-active {
   color: var(--sample-waveform-hud-color-hot);
   background: var(--node-ui-selected-bg);
-  box-shadow: var(--node-ui-selected-ring);
   outline: none;
 }
 /* Fill the display content box (section padding already applies Edge Spacing). */
@@ -25687,7 +25685,7 @@ html.soemdsp-whole-module .node-layout-canvas-grip {
   font-size: 0 !important;
   line-height: 0;
   padding: 0 !important;
-  color: rgba(250, 253, 255, 0.9);
+  color: #fafdff;
 }
 .node-seed-btn-plus::before,
 .node-seed-btn-minus::before,
@@ -25697,7 +25695,7 @@ html.soemdsp-whole-module .node-layout-canvas-grip {
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  background: currentColor;
+  background: #fafdff;
   pointer-events: none;
   border-radius: 0;
 }
@@ -25715,13 +25713,14 @@ html.soemdsp-whole-module .node-layout-canvas-grip {
   padding: 0 !important;
   line-height: 1;
   font-size: 0;
+  container-type: size;
 }
 .node-seed-die {
   display: grid;
   grid-template-columns: 1fr 1fr 1fr;
   grid-template-rows: 1fr 1fr 1fr;
-  width: 62%;
-  height: 62%;
+  width: 62cqmin;
+  height: 62cqmin;
   box-sizing: border-box;
   padding: 10%;
   border: max(1px, calc(var(--node-slider-readout-height) * 0.07)) solid currentColor;

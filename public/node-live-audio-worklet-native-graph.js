@@ -605,6 +605,8 @@ NodeLiveAudioProcessor.prototype.mapNativeGraphParamId = function mapNativeGraph
   if (t === "softpop2") {
     if (k === "crossfade") return P.NATIVE_GRAPH_PARAM_MIX;
     if (k === "ampOverCrossfade") return P.NATIVE_GRAPH_PARAM_SHAPE;
+    if (k === "bandwidthOverCrossfade") return P.NATIVE_GRAPH_PARAM_WIDTH;
+    if (k === "pitchModOverCrossfade") return P.NATIVE_GRAPH_PARAM_LFO_AMPLITUDE;
   }
   if (t === "acidSequencer") {
     if (k === "bpm") return P.NATIVE_GRAPH_PARAM_TEMPO_BPM;
@@ -4994,6 +4996,8 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
       push("frequency", P.NATIVE_GRAPH_PARAM_FREQUENCY, cont("frequency", 440));
       push("crossfade", P.NATIVE_GRAPH_PARAM_MIX, cont("crossfade", 0));
       push("ampOverCrossfade", P.NATIVE_GRAPH_PARAM_SHAPE, cont("ampOverCrossfade", 0));
+      push("bandwidthOverCrossfade", P.NATIVE_GRAPH_PARAM_WIDTH, cont("bandwidthOverCrossfade", 1));
+      push("pitchModOverCrossfade", P.NATIVE_GRAPH_PARAM_LFO_AMPLITUDE, cont("pitchModOverCrossfade", 0));
       push("amplitude", P.NATIVE_GRAPH_PARAM_AMPLITUDE, cont("amplitude", 1));
       push("color", P.NATIVE_GRAPH_PARAM_STAGES, disc("color", 0));
       push("seed", P.NATIVE_GRAPH_PARAM_SEED, disc("seed", 1));

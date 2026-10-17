@@ -123,6 +123,23 @@ function nodeGraphModuleOutputPorts(type) {
   ];
 }
 
+function nodeGraphOrderSeedBeforeAmplitude(parameters) {
+  if (!Array.isArray(parameters) || parameters.length < 2) {
+    return parameters || [];
+  }
+  const seeds = [];
+  const amplitudes = [];
+  const rest = [];
+  for (let i = 0; i < parameters.length; i += 1) {
+    const parameter = parameters[i];
+    if (parameter?.key === "amplitude") amplitudes.push(parameter);
+    else if (parameter?.kind === "seed" || parameter?.key === "seed") seeds.push(parameter);
+    else rest.push(parameter);
+  }
+  if (!seeds.length && !amplitudes.length) return parameters;
+  return rest.concat(seeds, amplitudes);
+}
+
 function nodeGraphPatchNodeParameterDefinitions(node) {
   const patchNode = typeof node === "string" ? nodeGraphPatchNode(node) : node;
   const definition = typeof nodeGraphModuleDefinition === "function"
@@ -138,17 +155,16 @@ function nodeGraphPatchNodeParameterDefinitions(node) {
       : { ...parameter, defaultLabel: parameter.label };
   });
   // Metamodule shell: append child params marked "Show metaparameter".
+  let list = parameters;
   if (
     typeof nodeGraphIsContainerShellType === "function"
     && nodeGraphIsContainerShellType(patchNode?.type)
     && typeof nodeGraphMetamoduleExposedParameterDefinitions === "function"
   ) {
     const exposed = nodeGraphMetamoduleExposedParameterDefinitions(patchNode);
-    if (exposed.length) {
-      return parameters.concat(exposed);
-    }
+    if (exposed.length) list = parameters.concat(exposed);
   }
-  return parameters;
+  return nodeGraphOrderSeedBeforeAmplitude(list);
 }
 const nodeGraphCodeblockDefaultCode = "Out1 = In1;";
 const nodeGraphCodeblockPortNamePattern = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
