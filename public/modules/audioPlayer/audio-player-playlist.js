@@ -598,7 +598,12 @@ function nodeGraphAudioPlayerApplyTransportGesture(nodeId, mode) {
   const id = String(nodeId || "");
   const prev = nodeGraphAudioPlayerTransportGestureLast.get(id);
   nodeGraphAudioPlayerTransportGestureLast.set(id, next);
-  if (prev === next || next < 3) {
+  if (prev === next) {
+    return;
+  }
+  // Transport buttons follow the slider (UI only, no transport write).
+  nodeGraphAudioPlayerPlaylistSyncTransport(nodeId);
+  if (next < 3) {
     return;
   }
   const node = typeof nodeGraphPatchNode === "function" ? nodeGraphPatchNode(nodeId) : null;
@@ -609,12 +614,11 @@ function nodeGraphAudioPlayerApplyTransportGesture(nodeId, mode) {
   const hasBuf = Boolean(sid && nodeGraphMvp?.sampleBuffers?.get?.(sid));
   const reason = String(nodeGraphMvp?.sampleRuntimeStatus?.get?.(nodeId)?.reason || "").trim().toLowerCase();
   const ctxRunning = nodeGraphMvp?.live?.context?.state === "running";
-  if (
-    hasBuf
-    && ctxRunning
-    && reason !== "engine complete"
-    && reason !== "engine stopped"
-  ) {
+  // Bound + running: the param change itself drives the engine. From Stop ("engine stopped")
+  // the engine sees Stop -> playing mode and restarts the track, so nothing else may write the
+  // transport (PlaylistPlay's done-reset would write Stop over the slider). Only a finished
+  // track ("engine complete", still on a playing mode) needs PlaylistPlay's restart.
+  if (hasBuf && ctxRunning && reason !== "engine complete") {
     void nodeGraphAudioPlayerEnsureLiveOutput();
     return;
   }

@@ -729,15 +729,22 @@ function nodeGraphGlGraphRebuild(options = {}) {
         i,
       );
     }
+    const endpointColor = (endpoint) => {
+      if (!endpoint) return "#ffffff";
+      const port = endpoint.port || endpoint.param || endpoint.graphInput || "";
+      return colorOf(endpoint.node, port, endpoint.io) || "#ffffff";
+    };
     const drag = nodeGraphMvp.wireDragging;
     if (drag?.active && drag.from && drag.cursorPoint) {
-      nodeGraphGlGraphPushWire(wires, drag.from, drag.cursorPoint, "#ffffff", "#ffffff", zoom, null, false, false);
+      const dragColor = endpointColor(drag.endpoint);
+      nodeGraphGlGraphPushWire(wires, drag.from, drag.cursorPoint, dragColor, dragColor, zoom, null, false, false);
     }
     const mode = nodeGraphMvp.portConnectionMode;
     if (mode?.cursorPoint && mode.selected && typeof mode.selected.values === "function") {
       for (const entry of mode.selected.values()) {
         if (entry?.from) {
-          nodeGraphGlGraphPushWire(wires, entry.from, mode.cursorPoint, "#ffffff", "#ffffff", zoom, null, false, false);
+          const modeColor = mode.interactColor || endpointColor(entry.endpoint);
+          nodeGraphGlGraphPushWire(wires, entry.from, mode.cursorPoint, modeColor, modeColor, zoom, null, false, false);
         }
       }
     }
@@ -893,7 +900,7 @@ function nodeGraphGlGraphPresent() {
       });
     }
     if (typeof nodeGraphGlLinesModuleOutline === "function") {
-      nodeGraphGlLinesModuleOutline(batch, x0, y0, w0, h0, edge, color, plateJacks, plate.fill, 2 * zoom);
+      nodeGraphGlLinesModuleOutline(batch, x0, y0, w0, h0, edge, color, plateJacks, plate.fill, zoom);
     }
   }
   batch.textPixelated = zoom > 2.5;
@@ -1337,6 +1344,7 @@ function nodeGraphGlHitPointerUp(event) {
   if (!(port instanceof Element) || typeof nodeGraphWireInteractions?.handlePortClick !== "function") return;
   // A click that never crossed the drag threshold arms the wire so it can be
   // finished without holding the button.
+  event.glArmClick = true;
   nodeGraphWireInteractions.handlePortClick(nodeGraphGlHitRetarget(event, port));
   if (nodeGraphMvp.wireDragging && !nodeGraphMvp.wireDragging.active) {
     nodeGraphMvp.wireDragging = null;

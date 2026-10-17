@@ -1362,6 +1362,9 @@
       }
       const detail = nodeGraphFiniteNumber(event.detail, 1);
       if (handlePortClickFromElement(port, event.clientX, event.clientY, detail)) {
+        if (event.glArmClick && state.portConnectionMode && !state.portConnectionMode.movingWires) {
+          state.portConnectionMode.justArmed = true;
+        }
         event.preventDefault();
         event.stopPropagation();
       }
@@ -1369,6 +1372,12 @@
 
     function handleWorkspaceClick(event) {
       if (!state.portConnectionMode) {
+        return;
+      }
+      // The click that armed the wire lands on the workspace because jack DOM
+      // does not receive hits. Do not treat that click as a cancel.
+      if (state.portConnectionMode.justArmed) {
+        state.portConnectionMode.justArmed = false;
         return;
       }
       const target = event.target instanceof Element ? event.target : null;
