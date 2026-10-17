@@ -1050,9 +1050,12 @@ function nodeGraphSampleWaveformSyncLayout(section, options = {}) {
   const waveHost = face === "waveplay"
     ? section.querySelector("[data-music-player-wave-host]")
     : null;
-  const box = (waveHost && page && !page.hidden)
+  if (page?.hidden) {
+    return nodeGraphSampleWaveformFaceMetricsCache.get(section) || null;
+  }
+  const box = (waveHost && page)
     ? waveHost
-    : (page && !page.hidden ? page : canvas.parentElement);
+    : (page || canvas.parentElement);
   let cssWidth = 0;
   let cssHeight = 0;
   if (box) {
@@ -1094,6 +1097,7 @@ function nodeGraphSampleWaveformSyncLayout(section, options = {}) {
   if (prev && prev.layoutFp === layoutFp && prev.canvas === canvas) {
     return prev;
   }
+  const sized = canvas.width !== width || canvas.height !== height;
   if (canvas.width !== width) canvas.width = width;
   if (canvas.height !== height) canvas.height = height;
   const metrics = {
@@ -1109,6 +1113,9 @@ function nodeGraphSampleWaveformSyncLayout(section, options = {}) {
     layoutFp,
   };
   nodeGraphSampleWaveformFaceMetricsCache.set(section, metrics);
+  if (sized && typeof nodeGraphGlGraphNoteFaceCanvasSized === "function") {
+    nodeGraphGlGraphNoteFaceCanvasSized();
+  }
   return metrics;
 }
 
@@ -2384,6 +2391,11 @@ function nodeGraphSampleWaveformShouldKeepLoop(section) {
   if (section.dataset.nodeType === "wavetable2d") {
     return true;
   }
+  // Music Player pages are UI. Wave / waveplay / stereo paint whether the
+  // engine is playing, stopped, or the playlist is empty.
+  if (section.dataset.nodeType === "audioPlayer") {
+    return true;
+  }
   const live = typeof nodeGraphMvp !== "undefined" ? nodeGraphMvp?.live : null;
   if (!live?.outputEnabled || !live?.node) {
     return false;
@@ -2392,9 +2404,6 @@ function nodeGraphSampleWaveformShouldKeepLoop(section) {
   if (Number.isFinite(speed) && speed <= 0) {
     return false;
   }
-  // Stay on rAF while live is up, including Stop. Gating on Playmode killed
-  // the loop; Play from the slider (waveplay has no transport row) never
-  // restarted it until a page switch called EnsureLoop.
   return true;
 }
 

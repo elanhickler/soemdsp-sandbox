@@ -140,6 +140,8 @@ function nodeGraphGlGraphRebuildPlates() {
     for (let c = 0; c < canvases.length; c += 1) {
       const face = canvases[c];
       if (!(face.width > 1) || !(face.height > 1)) continue;
+      const page = face.closest("[data-music-player-page]");
+      if (page?.hidden || face.closest("[hidden]")) continue;
       const laid = nodeGraphGlGraphLayoutBox(face, el);
       if (!laid) continue;
       displays.push({

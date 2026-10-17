@@ -1481,12 +1481,19 @@ function nodeGraphAudioPlayerPlaylistApplyFace(nodeId) {
   } else if (typeof scheduleNodeGraphSampleWaveformFrame === "function") {
     scheduleNodeGraphSampleWaveformFrame(section);
   }
-  // The GL graph draws display canvases on its overlay from a collected list. Re-present so a
-  // page that hid the wave canvas (pl / playinfo) drops it and waveplay redraws it at its new
-  // rect; otherwise the last wave frame stays painted over the newly shown page.
-  if (typeof nodeGraphGlGraphPresentSoon === "function") {
-    nodeGraphGlGraphPresentSoon();
-  }
+  const flushGpuPage = () => {
+    if (nodeGraphAudioPlayerFaceIsWave(face) && typeof drawNodeGraphSampleWaveformDisplay === "function") {
+      drawNodeGraphSampleWaveformDisplay(section);
+    }
+    if (typeof nodeGraphGlGraphRebuildPlates === "function") {
+      nodeGraphGlGraphRebuildPlates();
+    }
+    if (typeof nodeGraphGlGraphPresentSoon === "function") {
+      nodeGraphGlGraphPresentSoon();
+    }
+  };
+  flushGpuPage();
+  window.requestAnimationFrame(flushGpuPage);
 }
 
 /** Write playlist scrub offset (hidden param). Does not touch ◀◀ ▶▶ / Scratch. */
@@ -2885,8 +2892,12 @@ function nodeGraphAudioPlayerVideoscopePaint(section) {
   const pixelRatio = Math.max(1, window.devicePixelRatio || 1);
   const width = Math.max(8, Math.round(cssW * pixelRatio));
   const height = Math.max(8, Math.round(cssH * pixelRatio));
+  const sized = canvas.width !== width || canvas.height !== height;
   if (canvas.width !== width) canvas.width = width;
   if (canvas.height !== height) canvas.height = height;
+  if (sized && typeof nodeGraphGlGraphNoteFaceCanvasSized === "function") {
+    nodeGraphGlGraphNoteFaceCanvasSized();
+  }
   const channels = nodeGraphAudioPlayerVideoscopeChannels(nodeId);
   const context = canvas.getContext("2d");
   if (!context) {
