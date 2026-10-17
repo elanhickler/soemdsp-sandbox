@@ -118,7 +118,8 @@ const paramFaces = () => {
   await page.close();
 }
 
-// 2. Every Music Player page switches while stopped.
+// 2. Every Music Player page switches while stopped, and a real click on the
+// wave face's playlist label opens the playlist.
 {
   const page = await open("musicplayer");
   const faces = await page.evaluate(() => [...new Set([...document.querySelectorAll("[data-music-player-face]")]
@@ -136,7 +137,34 @@ const paramFaces = () => {
     gate(r.state === "stopped" && r.shown.length === 1 && r.shown[0] === face && r.h > 10,
       `page '${face}' shows alone while stopped (shown=${r.shown.join(",")}, h=${Math.round(r.h)})`);
   }
-  await page.close();
+  // Real mouse click on the GL-drawn "playlist" label (top-left of the wave
+  // face). The canvas is visibility:hidden under the GPU graph, so this only
+  // works when the face (section) handles the press.
+  await page.click("button[data-music-player-face='wave']");
+  await page.waitForTimeout(500);
+  const lbl = await page.evaluate(() => {
+    const s = document.querySelector("article[data-node-type='audioPlayer'] .node-sample-waveform-display");
+    const c = s?.querySelector(".node-sample-waveform-canvas");
+    if (s && !s._sampleWaveHudHits && typeof drawNodeGraphSampleWaveformDisplay === "function") drawNodeGraphSampleWaveformDisplay(s);
+    const h = s?._sampleWaveHudHits?.playlist;
+    if (!c || !h) return null;
+    const r = c.getBoundingClientRect();
+    const k = r.width / (c.clientWidth || r.width);
+    const x = r.left + ((h.l + h.r) / 2) * k;
+    const y = r.top + ((h.t + h.b) / 2) * k;
+    const top = document.elementFromPoint(x, y);
+    return { x, y, top: top ? top.tagName + "." + String(top.className).split(" ")[0] : "" };
+  });
+  gate(Boolean(lbl), `playlist HUD label found on the wave face${lbl ? ` (top element ${lbl.top})` : ""}`);
+  if (lbl) {
+    await page.mouse.click(lbl.x, lbl.y);
+    await page.waitForTimeout(500);
+    const face = await page.evaluate(() => {
+      const pages = [...document.querySelectorAll("[data-music-player-page]")];
+      return pages.filter((p) => !p.hidden).map((p) => p.dataset.musicPlayerPage).join(",");
+    });
+    gate(face === "pl", `real click on the playlist label opens the playlist page (shown=${face})`);
+  }  await page.close();
 }
 
 gate(errors.length === 0, `no page errors${errors.length ? ": " + errors.slice(0, 3).join(" | ") : ""}`);

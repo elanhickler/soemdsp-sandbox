@@ -2172,7 +2172,7 @@ function bindNodeGraphSampleWaveformInteractions(section, canvas) {
       return;
     }
     section._sampleWaveHudHover = key;
-    canvas.style.cursor = key === "zoom" ? "ew-resize" : (key === "playlist" ? "pointer" : "");
+    section.style.cursor = key === "zoom" ? "ew-resize" : (key === "playlist" ? "pointer" : "");
     if (typeof drawNodeGraphSampleWaveformDisplay === "function") {
       drawNodeGraphSampleWaveformDisplay(section);
     }
@@ -2186,50 +2186,35 @@ function bindNodeGraphSampleWaveformInteractions(section, canvas) {
     }
     setHudHover(nodeGraphSampleWaveformHudHit(section, canvas, event.clientX, event.clientY) || "");
   };
-  // The face receives the pointer when the canvas is hidden (empty plate and
-  // the GPU graph). The canvas listener covers the non-GL face.
-  canvas.addEventListener("pointermove", onHudMove);
+  // On the section: the canvas is hidden under the GPU graph (see below).
   section.addEventListener("pointermove", onHudMove);
-  canvas.addEventListener("pointerleave", () => setHudHover(""));
   section.addEventListener("pointerleave", () => setHudHover(""));
 
-  // HUD hits (playlist label, zoom %) on the face. The canvas is visibility:hidden
-  // under the GPU graph and on the empty plate, so the pointer lands on the face
-  // and the canvas pointerdown below never fires. Same split as the hover above.
-  section.addEventListener("pointerdown", (event) => {
-    if (event.target === canvas) {
-      return;
+  // Input goes on the section, not the canvas. Under the GPU graph (and on the
+  // empty plate) the canvas is visibility:hidden, which takes it out of hit
+  // testing, so canvas listeners never fire. When the canvas is visible its
+  // events bubble here too. Only presses on the wave plate itself count:
+  // page buttons, other pages and form controls keep their own handling.
+  const faceIsWave = () => (typeof nodeGraphAudioPlayerFaceIsWave === "function"
+    ? nodeGraphAudioPlayerFaceIsWave(section)
+    : (section.dataset.musicPlayerFace || "wave") === "wave");
+  const onPlate = (event) => {
+    const t = event.target;
+    if (t && t !== canvas && t !== section && t.closest?.("button, input, select, textarea, a, [contenteditable]")) {
+      return false;
     }
-    if (typeof nodeGraphAudioPlayerFaceIsWave === "function"
-      ? !nodeGraphAudioPlayerFaceIsWave(section)
-      : (section.dataset.musicPlayerFace || "wave") !== "wave") {
-      return;
-    }
-    if (event.button !== 0 && event.button !== undefined) {
-      return;
-    }
-    const hud = nodeGraphSampleWaveformHudHit(section, canvas, event.clientX, event.clientY);
-    if (hud === "playlist") {
-      event.preventDefault();
-      event.stopPropagation();
-      const nodeId = section.dataset.node;
-      if (nodeId && typeof nodeGraphAudioPlayerPlaylistSetFace === "function") {
-        nodeGraphAudioPlayerPlaylistSetFace(nodeId, "pl");
-      }
-    } else if (hud === "zoom") {
-      event.stopPropagation();
-      beginNodeGraphSampleWaveformZoomDrag(event, section, canvas);
-    }
-  });
+    const r = canvas.getBoundingClientRect();
+    return r.width > 0 && r.height > 0
+      && event.clientX >= r.left && event.clientX <= r.right
+      && event.clientY >= r.top && event.clientY <= r.bottom;
+  };
   let dragPointerId = null;
   let lastClientX = 0;
   let lastClientY = 0;
   // "pan" = view window, "phase" = playlistScrub drag, "start"/"end" = region handles.
   let dragMode = "pan";
-  canvas.addEventListener("pointerdown", (event) => {
-    if (typeof nodeGraphAudioPlayerFaceIsWave === "function"
-      ? !nodeGraphAudioPlayerFaceIsWave(section)
-      : (section.dataset.musicPlayerFace || "wave") !== "wave") {
+  section.addEventListener("pointerdown", (event) => {
+    if (!faceIsWave() || !onPlate(event)) {
       return;
     }
     if (event.button !== 0 && event.button !== undefined) {
@@ -2246,7 +2231,7 @@ function bindNodeGraphSampleWaveformInteractions(section, canvas) {
       return;
     }
     if (hud === "zoom") {
-      beginNodeGraphSampleWaveformZoomDrag(event, section, canvas);
+      beginNodeGraphSampleWaveformZoomDrag(event, section, section);
       return;
     }
     dragPointerId = event.pointerId;
@@ -2261,17 +2246,21 @@ function bindNodeGraphSampleWaveformInteractions(section, canvas) {
     } else {
       dragMode = event.shiftKey ? "phase" : "pan";
     }
-    canvas.setPointerCapture?.(dragPointerId);
+    section.setPointerCapture?.(dragPointerId);
     canvas.classList.add("dragging");
     canvas.classList.toggle("phase-scrubbing", dragMode === "phase");
     canvas.classList.toggle("region-handle-dragging", dragMode === "start" || dragMode === "end");
+    event.preventDefault();
     event.stopPropagation();
   });
-  canvas.addEventListener("pointermove", (event) => {
+  section.addEventListener("pointermove", (event) => {
     if (dragPointerId === null || event.pointerId !== dragPointerId) {
-      const hud = nodeGraphSampleWaveformHudHit(section, canvas, event.clientX, event.clientY);
-      const handle = nodeGraphSampleWaveformRegionHandleHit(section, canvas, event.clientX);
-      canvas.style.cursor = handle || hud === "zoom"
+      if (!faceIsWave() || event.buttons) {
+        return;
+      }
+      const hud = onPlate(event) ? nodeGraphSampleWaveformHudHit(section, canvas, event.clientX, event.clientY) : null;
+      const handle = onPlate(event) ? nodeGraphSampleWaveformRegionHandleHit(section, canvas, event.clientX) : null;
+      section.style.cursor = handle || hud === "zoom"
         ? "ew-resize"
         : (hud === "playlist" ? "pointer" : "");
       return;
@@ -2314,19 +2303,17 @@ function bindNodeGraphSampleWaveformInteractions(section, canvas) {
     if (dragPointerId === null || event.pointerId !== dragPointerId) {
       return;
     }
-    canvas.releasePointerCapture?.(dragPointerId);
+    section.releasePointerCapture?.(dragPointerId);
     dragPointerId = null;
     dragMode = "pan";
     canvas.classList.remove("dragging");
     canvas.classList.remove("phase-scrubbing");
     canvas.classList.remove("region-handle-dragging");
   };
-  canvas.addEventListener("pointerup", endDrag);
-  canvas.addEventListener("pointercancel", endDrag);
-  canvas.addEventListener("dblclick", (event) => {
-    if (typeof nodeGraphAudioPlayerFaceIsWave === "function"
-      ? !nodeGraphAudioPlayerFaceIsWave(section)
-      : (section.dataset.musicPlayerFace || "wave") !== "wave") {
+  section.addEventListener("pointerup", endDrag);
+  section.addEventListener("pointercancel", endDrag);
+  section.addEventListener("dblclick", (event) => {
+    if (!faceIsWave() || !onPlate(event)) {
       return;
     }
     event.stopPropagation();
