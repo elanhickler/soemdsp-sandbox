@@ -2,7 +2,7 @@
 
 Source: Interface agent for Argi, 2026-10-17. Planning/tracking doc.
 
-Status: **in progress (ES-1 to ES-4 landed locally).** Owner: Grok Bot executor (perf/GL agent). Policy: `docs/APP_POLICY.md` §3b "Displays and engine state".
+Status: **in progress (ES-1 to ES-5 landed locally).** Owner: Grok Bot executor (perf/GL agent). Policy: `docs/APP_POLICY.md` §3b "Displays and engine state".
 
 ## Rules from Argi (2026-10-17)
 
@@ -28,7 +28,7 @@ Status: **in progress (ES-1 to ES-4 landed locally).** Owner: Grok Bot executor 
 | ES-2 | Param faces paint on create and on every parameter change regardless of engine state; only live overlays (playheads, lamps) check the engine. | Grok Bot | done (local) |
 | ES-3 | Buffer faces: a shared `ensureColdPlate(face)` on spawn and on stop, holding the last frame on pause. | Grok Bot | done (local) |
 | ES-4 | Draw loops keep running while any param face is visible; engine start re-arms them and is no longer the only way to wake them. | Grok Bot | done (local) |
-| ES-5 | Audit UI handlers, plus a smoke test: load a patch stopped, switch every Music Player page, drag a module, and assert every face painted. | TBD | planned |
+| ES-5 | Audit UI handlers, plus a smoke test: load a patch stopped, switch every Music Player page, drag a module, and assert every face painted. | Grok Bot | done (local) |
 | ES-6 | A static guard flagging new `live.node`, `outputEnabled` or `speedMultiplier` reads in display or UI files outside `paint-gate.js` and `live-runtime.js`. | TBD | planned |
 
 ## Landed
@@ -38,6 +38,7 @@ Status: **in progress (ES-1 to ES-4 landed locally).** Owner: Grok Bot executor 
 - **ES-2**: `scopePaintShouldColdBootFace(nodeId, slot)` wipes on stop only for buffer / modulation kinds (power-off still wipes everything). New `paintNodeGraphParamFacesNow()` paints visible param faces that draw through the shared renderer table (today: Transport BPM) from both not-live branches of the scope draw (`scheduleNodeGraphModuleScopeDraw`, `drawNodeGraphModuleScopes`). Audit result: the other listed param faces (shapes, sin/cos, softwave, slew, arp keys, harmonic / additive curves, phone tone) self-paint on create and `syncFromParameters` already; their engine reads gate only live overlays (playheads, dots, lamps), which ES-2 allows. Softpop face, FBM field and RGB fractal are buffer / sample-driven and stay black while stopped (ES-3).
 - **ES-3**: param list now also covers filter / envelope / shape / pulse / soft-clipper curve faces (class-marked: eqFilter, passiveFilter, cookbook filters, ...), controllers (knob, keyboard, buttons, plugin slider, round shape) and the sample waveform. New `scopePaintEnsureColdPlate(slot, { force, assumeStopped })` and `scopePaintEnsureColdPlates()`: param faces are never blanked; buffer / modulation faces get the registered face wipe, then the GL trace cold plate for waterfall / dot / value / lineBurn faces, else a black fill of the existing 2D face canvas; paused holds the frame. Called from Stop (`wipeNodeGraphModuleScopeScreensToColdBoot`, with `assumeStopped`), from slot spawn while stopped (`registerNodeGraphModuleScopeSlot`, two frames after layout), and from the typed-item cold boot in the orchestrator. ArchIV check on softpop (Play, Pause, Stop): param faces lit in every state; every buffer face held on pause; on Stop the Instant Waterfall faces (Output, Ping Pong, Time Quantizer) no longer keep the last trace (they did before ES-3); Output shows its designed stopped plate. Note: buffer faces spawned while stopped have no face canvas until first live draw, so they show their CSS plate.
 - **ES-4**: face loops no longer depend on engine start to wake. `scopePaintNotifyFaceLoops({ force })` carries a force flag; drawing-face pumps repaint once on a forced wake and on every viewport wake, in any engine state. Stop sends a forced wake so param pictures stay and live overlays (playheads, dots) drop to idle. A face spawned while stopped or paused queues one coalesced param paint pass per frame (buffer faces get the ES-3 cold plate). Param faces still do not spin a rAF while stopped: they only change on parameter, resize, viewport or forced wakes, all of which paint, so an idle loop would only cost frames.
+- **ES-5**: UI handler audit (`*-ui.js`, node dragging, selection, context menu, keyboard shortcuts, external UI events). No UI is wrongly blocked now that the Playlist is fixed. The remaining engine reads only guard posting messages to the worklet (keypad, external UI, quick restart) after the UI state is already updated, show status (badval lamp, Live Output menu tick), or keep paused residuals during a drag (`dragNodeGraphNode` skips the scope draw only while frozen, so held frames are not overwritten). New GPU smoke `scripts/smoke_engine_state_stopped_faces.mjs` (headed, needs server.py on :8765 and a real GPU): softpop loads stopped and every param face paints, a module drags while stopped and faces stay painted, and every Music Player page (wave, waveplay, pl, playinfo, vslr) shows alone while stopped, with no page errors.
 
 ## Cross-references
 
