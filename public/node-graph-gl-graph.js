@@ -101,22 +101,12 @@ function nodeGraphGlGraphPortBrightness(moduleEl, port) {
 // Layout pixels inside the module, before the camera transform. Same space as
 // the plate box, so the display and the stroke share one pixel grid.
 function nodeGraphGlGraphLayoutBox(el, moduleEl) {
-  if (!el || !moduleEl) return null;
-  let x = 0;
-  let y = 0;
-  let node = el;
-  while (node && node !== moduleEl) {
-    x += node.offsetLeft;
-    y += node.offsetTop;
-    const next = node.offsetParent;
-    if (!next || (next !== moduleEl && !moduleEl.contains(next))) return null;
-    node = next;
+  if (typeof nodeGraphModuleLayoutBox === "function") {
+    const laid = nodeGraphModuleLayoutBox(el, moduleEl);
+    if (!laid || !(laid.w > 1) || !(laid.h > 1)) return null;
+    return laid;
   }
-  if (node !== moduleEl) return null;
-  const w = el.offsetWidth;
-  const h = el.offsetHeight;
-  if (!(w > 1) || !(h > 1)) return null;
-  return { x, y, w, h };
+  return null;
 }
 
 function nodeGraphGlGraphRebuildPlates() {
@@ -170,32 +160,7 @@ function nodeGraphGlGraphRebuildPlates() {
 
 // Display meets the plate edge. The stroke is the band outside that edge.
 function nodeGraphGlGraphDisplayScreenRect(face, toX, toY, zoom) {
-  let x = toX(face.x);
-  let y = toY(face.y);
-  let x2 = x + face.w * zoom;
-  let y2 = y + face.h * zoom;
-  const plates = nodeGraphGlGraphState.plates;
-  let plate = null;
-  for (let i = 0; i < plates.length; i += 1) {
-    if (plates[i].id === face.id) {
-      plate = plates[i];
-      break;
-    }
-  }
-  if (!plate) return { x, y, w: x2 - x, h: y2 - y };
-  const minX = Math.round(toX(plate.x));
-  const minY = Math.round(toY(plate.y));
-  const maxX = minX + Math.max(1, Math.round(plate.w * zoom));
-  const maxY = minY + Math.max(1, Math.round(plate.h * zoom));
-  if (face.x - plate.x <= 1) x = minX;
-  if (plate.x + plate.w - (face.x + face.w) <= 1) x2 = maxX;
-  if (face.y - plate.y <= 1) y = minY;
-  if (plate.y + plate.h - (face.y + face.h) <= 1) y2 = maxY;
-  x = Math.max(x, minX);
-  y = Math.max(y, minY);
-  x2 = Math.min(x2, maxX);
-  y2 = Math.min(y2, maxY);
-  return { x, y, w: Math.max(0, x2 - x), h: Math.max(0, y2 - y) };
+  return nodeGraphGlGraphScreenRect(face.id, face, toX, toY, zoom);
 }
 
 function nodeGraphGlGraphCssPx(el, name) {
@@ -204,7 +169,7 @@ function nodeGraphGlGraphCssPx(el, name) {
   return Number.isFinite(value) ? value : 0;
 }
 
-function nodeGraphGlGraphWorldBox(el) {
+function nodeGraphGlGraphClientWorldBox(el) {
   if (!el || typeof nodeGraphClientToZoomSurfacePoint !== "function") return null;
   const rect = el.getBoundingClientRect();
   if (!(rect.width > 1) || !(rect.height > 1)) return null;
@@ -214,6 +179,50 @@ function nodeGraphGlGraphWorldBox(el) {
   const h = br.y - tl.y;
   if (!(w > 0.5) || !(h > 0.5)) return null;
   return { x: tl.x, y: tl.y, w, h };
+}
+
+function nodeGraphGlGraphWorldBox(el) {
+  if (!el) return null;
+  // Tiles map through the face's client rect. The workspace uses layout pixels.
+  if (nodeGraphGlGraphState.view) return nodeGraphGlGraphClientWorldBox(el);
+  const moduleEl = el.classList?.contains("dsp-node") ? el : el.closest?.(".dsp-node");
+  if (!moduleEl || typeof nodeGraphModuleLayoutBox !== "function") return nodeGraphGlGraphClientWorldBox(el);
+  const origin = nodeGraphModuleLayoutBox(moduleEl);
+  if (!origin) return null;
+  if (el === moduleEl) return origin;
+  const laid = nodeGraphModuleLayoutBox(el, moduleEl);
+  if (!laid) return null;
+  return { x: origin.x + laid.x, y: origin.y + laid.y, w: laid.w, h: laid.h };
+}
+
+// Project a layout box and snap any edge that sits on the plate to the plate's pixel.
+function nodeGraphGlGraphScreenRect(id, world, toX, toY, zoom) {
+  let x = toX(world.x);
+  let y = toY(world.y);
+  let x2 = toX(world.x + world.w);
+  let y2 = toY(world.y + world.h);
+  const plates = nodeGraphGlGraphState.plates;
+  let plate = null;
+  for (let i = 0; i < plates.length; i += 1) {
+    if (plates[i].id === id) {
+      plate = plates[i];
+      break;
+    }
+  }
+  if (!plate) return { x, y, w: Math.max(0, x2 - x), h: Math.max(0, y2 - y) };
+  const minX = Math.round(toX(plate.x));
+  const minY = Math.round(toY(plate.y));
+  const maxX = minX + Math.max(1, Math.round(plate.w * zoom));
+  const maxY = minY + Math.max(1, Math.round(plate.h * zoom));
+  if (world.x - plate.x <= 1) x = minX;
+  if (plate.x + plate.w - (world.x + world.w) <= 1) x2 = maxX;
+  if (world.y - plate.y <= 1) y = minY;
+  if (plate.y + plate.h - (world.y + world.h) <= 1) y2 = maxY;
+  x = Math.max(x, minX);
+  y = Math.max(y, minY);
+  x2 = Math.min(x2, maxX);
+  y2 = Math.min(y2, maxY);
+  return { x, y, w: Math.max(0, x2 - x), h: Math.max(0, y2 - y) };
 }
 
 function nodeGraphGlGraphTextAnchor(el, box) {
@@ -232,6 +241,7 @@ function nodeGraphGlGraphRebuildChrome() {
   const labels = [];
   const jacks = [];
   const sliders = [];
+  const seeds = [];
   const keys = [];
   const graphs = [];
   const host = document.getElementById("nodeGraphWorkspace");
@@ -251,6 +261,7 @@ function nodeGraphGlGraphRebuildChrome() {
     const titleBox = nodeGraphGlGraphWorldBox(titleRow);
     if (title && titleBox) {
       titles.push({
+        id,
         el: title,
         box: titleBox,
         x: titleBox.x + titleBox.w * 0.5,
@@ -258,7 +269,7 @@ function nodeGraphGlGraphRebuildChrome() {
         h: titleBox.h,
         fill: nodeGraphGlGraphParseCssColor(
           getComputedStyle(el).getPropertyValue("--node-module-title-fill"),
-          [0.012, 0.024, 0.016, 1],
+          [0.012, 0.004, 0.075, 1],
         ),
       });
     }
@@ -303,6 +314,8 @@ function nodeGraphGlGraphRebuildChrome() {
         x: px,
         y: py,
         r: radius,
+        // Invisible hit box: one port-diameter out from the pin on each side.
+        hit: diameter,
         inwardRight: io !== "output",
         inlet: true,
         rgba,
@@ -320,7 +333,11 @@ function nodeGraphGlGraphRebuildChrome() {
       const labelBox = nodeGraphGlGraphWorldBox(labelEl);
       const row = readout.closest(".node-parameter-row");
       const rowBox = nodeGraphGlGraphWorldBox(row);
+      if (readout.closest(".node-seed-control, .node-parameter-row-seed")) {
+        continue;
+      }
       sliders.push({
+        id,
         readout,
         input,
         x: box.x,
@@ -337,6 +354,33 @@ function nodeGraphGlGraphRebuildChrome() {
         labelEl,
         labelBox,
         labelAnchor: labelEl && labelBox ? nodeGraphGlGraphTextAnchor(labelEl, labelBox) : null,
+      });
+    }
+    const seedControls = el.querySelectorAll(".node-seed-control");
+    for (let se = 0; se < seedControls.length; se += 1) {
+      const control = seedControls[se];
+      const box = nodeGraphGlGraphWorldBox(control);
+      if (!box) continue;
+      const valueEl = control.querySelector(".node-slider-readout-value");
+      const dice = control.querySelector(".node-seed-btn-dice");
+      const plus = control.querySelector(".node-seed-btn-plus");
+      const minus = control.querySelector(".node-seed-btn-minus");
+      seeds.push({
+        id,
+        control,
+        x: box.x,
+        y: box.y,
+        w: box.w,
+        h: box.h,
+        valueEl,
+        valueBox: nodeGraphGlGraphWorldBox(valueEl),
+        diceBox: nodeGraphGlGraphWorldBox(dice),
+        plusBox: nodeGraphGlGraphWorldBox(plus),
+        minusBox: nodeGraphGlGraphWorldBox(minus),
+        hover: (dice?.matches?.(":hover") && "dice")
+          || (plus?.matches?.(":hover") && "plus")
+          || (minus?.matches?.(":hover") && "minus")
+          || "",
       });
     }
     const keypadKeys = el.querySelectorAll(".node-keypad-key");
@@ -359,7 +403,7 @@ function nodeGraphGlGraphRebuildChrome() {
       graphs.push({ id, x: graphBox.x, y: graphBox.y, w: graphBox.w, h: graphBox.h });
     }
   }
-  nodeGraphGlGraphState.chrome = { titles, labels, jacks, sliders, keys, graphs };
+  nodeGraphGlGraphState.chrome = { titles, labels, jacks, sliders, seeds, keys, graphs };
 }
 
 function nodeGraphGlGraphTextOpts(opts) {
@@ -417,6 +461,110 @@ function nodeGraphGlGraphDrawOver(batch, draw) {
   batch._over = false;
 }
 
+function nodeGraphGlGraphSeedCell(el, toX, toY, zoom) {
+  const box = nodeGraphGlGraphWorldBox(el);
+  if (!box) return null;
+  return { x: toX(box.x), y: toY(box.y), w: box.w * zoom, h: box.h * zoom };
+}
+
+function nodeGraphGlGraphDrawSeedBar(batch, cx, cy, w, h, ink) {
+  nodeGraphGlLinesRect(batch, cx - w * 0.5, cy - h * 0.5, w, h, ink);
+}
+
+function nodeGraphGlGraphDrawSeedDie(batch, cell, ink) {
+  const side = Math.min(cell.w, cell.h) * 0.62;
+  const stroke = Math.max(1, Math.min(cell.w, cell.h) * 0.07);
+  const x = cell.x + (cell.w - side) * 0.5;
+  const y = cell.y + (cell.h - side) * 0.5;
+  nodeGraphGlLinesRect(batch, x, y, side, stroke, ink);
+  nodeGraphGlLinesRect(batch, x, y + side - stroke, side, stroke, ink);
+  nodeGraphGlLinesRect(batch, x, y, stroke, side, ink);
+  nodeGraphGlLinesRect(batch, x + side - stroke, y, stroke, side, ink);
+  const r = side * 0.08;
+  const pips = [
+    [0.24, 0.24], [0.76, 0.24], [0.5, 0.5], [0.24, 0.76], [0.76, 0.76],
+  ];
+  if (typeof nodeGraphGlLinesDot !== "function") return;
+  for (let i = 0; i < pips.length; i += 1) {
+    nodeGraphGlLinesDot(batch, x + side * pips[i][0], y + side * pips[i][1], r, 0.7, ink);
+  }
+}
+
+function nodeGraphGlGraphDrawSeeds(batch, toX, toY, zoom, cssW, cssH) {
+  const seeds = nodeGraphGlGraphState.chrome?.seeds || [];
+  if (!seeds.length) return;
+  const ink = [0.98, 0.992, 1, 0.92];
+  const well = [0.031, 0.043, 0.051, 1];
+  const line = typeof nodeGraphGlLinesCss === "function"
+    ? nodeGraphGlLinesCss(getComputedStyle(document.documentElement).getPropertyValue("--line") || "#3a4248")
+    : [0.23, 0.26, 0.28, 1];
+  const hover = [1, 1, 1, 0.08];
+  for (let i = 0; i < seeds.length; i += 1) {
+    const seed = seeds[i];
+    const host = nodeGraphGlGraphSeedCell(seed.control, toX, toY, zoom);
+    if (!host || nodeGraphGlGraphOutside(host.x, host.y, host.w, host.h, cssW, cssH)) continue;
+    const valueEl = seed.control?.querySelector?.(".node-slider-readout-value");
+    const readout = seed.control?.querySelector?.(".node-slider-readout");
+    const dice = seed.control?.querySelector?.(".node-seed-btn-dice");
+    const plus = seed.control?.querySelector?.(".node-seed-btn-plus");
+    const minus = seed.control?.querySelector?.(".node-seed-btn-minus");
+    const valueCell = nodeGraphGlGraphSeedCell(readout, toX, toY, zoom);
+    const diceCell = nodeGraphGlGraphSeedCell(dice, toX, toY, zoom);
+    const plusCell = nodeGraphGlGraphSeedCell(plus, toX, toY, zoom);
+    const minusCell = nodeGraphGlGraphSeedCell(minus, toX, toY, zoom);
+    nodeGraphGlGraphDrawOver(batch, () => {
+      nodeGraphGlLinesRect(batch, host.x, host.y, host.w, host.h, well);
+      const stroke = Math.max(1, zoom);
+      nodeGraphGlLinesRect(batch, host.x, host.y, host.w, stroke, line);
+      nodeGraphGlLinesRect(batch, host.x, host.y + host.h - stroke, host.w, stroke, line);
+      nodeGraphGlLinesRect(batch, host.x, host.y, stroke, host.h, line);
+      nodeGraphGlLinesRect(batch, host.x + host.w - stroke, host.y, stroke, host.h, line);
+      const split = (cell) => {
+        if (!cell) return;
+        nodeGraphGlLinesRect(batch, cell.x, cell.y, stroke, cell.h, line);
+      };
+      split(diceCell);
+      split(plusCell);
+      split(minusCell);
+      const hoverCell = (dice?.matches?.(":hover") && diceCell)
+        || (plus?.matches?.(":hover") && plusCell)
+        || (minus?.matches?.(":hover") && minusCell)
+        || null;
+      if (hoverCell) {
+        nodeGraphGlLinesRect(batch, hoverCell.x, hoverCell.y, hoverCell.w, hoverCell.h, hover);
+      }
+      if (diceCell) nodeGraphGlGraphDrawSeedDie(batch, diceCell, ink);
+      const bar = (cell, cross) => {
+        if (!cell) return;
+        const t = Math.max(1, Math.min(cell.w, cell.h) * 0.09);
+        const len = Math.min(cell.w, cell.h) * 0.62;
+        const cx = cell.x + cell.w * 0.5;
+        const cy = cell.y + cell.h * 0.5;
+        nodeGraphGlGraphDrawSeedBar(batch, cx, cy, len, t, ink);
+        if (cross) nodeGraphGlGraphDrawSeedBar(batch, cx, cy, t, len, ink);
+      };
+      bar(minusCell, false);
+      bar(plusCell, true);
+    });
+    const text = String(valueEl?.textContent || "").replace(/\s+/g, " ").trim();
+    if (text && valueCell && typeof nodeGraphGlLinesText === "function") {
+      const cssPx = Number.parseFloat(valueEl ? getComputedStyle(valueEl).fontSize : "") || 0;
+      const fillPx = Math.max(
+        6,
+        Math.min(valueCell.h * 0.78, valueCell.w / Math.max(1, text.length) / 0.58),
+      );
+      nodeGraphGlLinesText(batch, text, valueCell.x + valueCell.w * 0.5, valueCell.y + valueCell.h * 0.5, nodeGraphGlGraphTextOpts({
+        px: Math.max(6, (cssPx > 4 ? cssPx * zoom : fillPx)),
+        rgba: ink,
+        align: "center",
+        baseline: "middle",
+        weight: 600,
+        family: "Consolas, \"Courier New\", monospace",
+      }));
+    }
+  }
+}
+
 function nodeGraphGlGraphDrawChrome(batch, toX, toY, zoom, cssW, cssH) {
   const chrome = nodeGraphGlGraphState.chrome;
   if (!chrome) return;
@@ -431,11 +579,17 @@ function nodeGraphGlGraphDrawChrome(batch, toX, toY, zoom, cssW, cssH) {
   const sliders = chrome.sliders || [];
   for (let i = 0; i < sliders.length; i += 1) {
     const slider = sliders[i];
-    const x = toX(slider.x);
-    const y = toY(slider.y);
-    const w = slider.w * zoom;
-    const h = slider.h * zoom;
+    const screen = nodeGraphGlGraphScreenRect(slider.id, {
+      x: slider.x, y: slider.y, w: slider.w, h: slider.h,
+    }, toX, toY, zoom);
+    const x = screen.x;
+    const y = screen.y;
+    const w = screen.w;
+    const h = screen.h;
     if (nodeGraphGlGraphOutside(x, y, w, h, cssW, cssH)) continue;
+    if (slider.readout?.closest?.(".node-seed-control, .node-parameter-row-seed")) {
+      continue;
+    }
     nodeGraphGlGraphDrawOver(batch, () => {
       nodeGraphGlLinesRect(batch, x, y, w, h, well);
       const readout = slider.readout;
@@ -507,6 +661,7 @@ function nodeGraphGlGraphDrawChrome(batch, toX, toY, zoom, cssW, cssH) {
       }
     }
   }
+  nodeGraphGlGraphDrawSeeds(batch, toX, toY, zoom, cssW, cssH);
   const labels = chrome.labels || [];
   for (let i = 0; i < labels.length; i += 1) {
     const label = labels[i];
@@ -527,10 +682,11 @@ function nodeGraphGlGraphDrawChrome(batch, toX, toY, zoom, cssW, cssH) {
   for (let i = 0; i < titles.length; i += 1) {
     const title = titles[i];
     if (title.fill && title.box && typeof nodeGraphGlLinesRect === "function") {
-      const bx = toX(title.box.x);
-      const by = toY(title.box.y);
-      const bw = title.box.w * zoom;
-      const bh = title.box.h * zoom;
+      const screen = nodeGraphGlGraphScreenRect(title.id, title.box, toX, toY, zoom);
+      const bx = screen.x;
+      const by = screen.y;
+      const bw = screen.w;
+      const bh = screen.h;
       nodeGraphGlGraphDrawOver(batch, () => {
         nodeGraphGlLinesRect(batch, bx, by, bw, bh, title.fill);
       });
@@ -615,7 +771,7 @@ function nodeGraphGlGraphDrawVeils(batch, toX, toY, zoom) {
     const veiled = el.classList.contains("bypassed")
       || el.querySelector(":scope > .node-module-under-construction");
     if (!veiled) continue;
-    nodeGraphGlLinesVeil(batch, toX(plate.x), toY(plate.y), plate.w * zoom, plate.h * zoom);
+    nodeGraphGlLinesVeil(batch, toX(plate.x), toY(plate.y), plate.w * zoom, plate.h * zoom, 18 * zoom);
   }
 }
 
@@ -848,7 +1004,8 @@ function nodeGraphGlGraphPresent() {
   // Contact dots first, as straight coverage, then displays over them.
   const contactBatch = nodeGraphGlLinesBegin(dotsCanvas, [0, 0, 0, 0], { scale, transparent: true });
   const dotBatch = nodeGraphGlLinesBegin(dotsCanvas, [0, 0, 0, 0], { scale, transparent: true, keep: true });
-  if (!batch || !contactBatch || !dotBatch) {
+  const veilBatch = nodeGraphGlLinesBegin(dotsCanvas, [0, 0, 0, 0], { scale, transparent: true, keep: true });
+  if (!batch || !contactBatch || !dotBatch || !veilBatch) {
     if (typeof nodeGraphGlLinesFillBlack === "function") nodeGraphGlLinesFillBlack(canvas);
     return false;
   }
@@ -1002,7 +1159,7 @@ function nodeGraphGlGraphPresent() {
   }
   dotBatch.textPixelated = pixelated;
   nodeGraphGlGraphDrawButtonCaptions(dotBatch, toX, toY, zoom, cssW, cssH);
-  nodeGraphGlGraphDrawVeils(dotBatch, toX, toY, zoom);
+  nodeGraphGlGraphDrawVeils(veilBatch, toX, toY, zoom);
   const outputPaused = typeof nodeGraphLiveEngineIsPaused === "function" && nodeGraphLiveEngineIsPaused();
   if (outputPaused) {
     const white = [1, 1, 1, 1];
@@ -1028,7 +1185,8 @@ function nodeGraphGlGraphPresent() {
   const cablesOk = nodeGraphGlLinesEnd(batch, "alpha") !== false;
   const contactOk = nodeGraphGlLinesEnd(contactBatch, "max") !== false;
   const dotsOk = nodeGraphGlLinesEnd(dotBatch, "alpha") !== false;
-  return cablesOk && contactOk && dotsOk;
+  const veilOk = nodeGraphGlLinesEnd(veilBatch, "alpha") !== false;
+  return cablesOk && contactOk && dotsOk && veilOk;
 }
 
 /**
@@ -1169,15 +1327,21 @@ function nodeGraphGlHitPoint(event) {
 function nodeGraphGlHitTest(x, y) {
   const chrome = nodeGraphGlGraphState.chrome || {};
   const jacks = chrome.jacks || [];
-  for (let i = jacks.length - 1; i >= 0; i -= 1) {
+  let jackHit = null;
+  let jackDist = Infinity;
+  for (let i = 0; i < jacks.length; i += 1) {
     const jack = jacks[i];
-    const reach = Math.max(8, jack.r * 1.25);
+    const reach = Math.max(jack.hit || 0, jack.r * 2, 8);
     const dx = jack.x - x;
     const dy = jack.y - y;
-    if (dx * dx + dy * dy <= reach * reach) {
-      return { kind: "jack", x: jack.x, y: jack.y };
+    if (Math.abs(dx) > reach || Math.abs(dy) > reach) continue;
+    const dist = dx * dx + dy * dy;
+    if (dist < jackDist) {
+      jackDist = dist;
+      jackHit = jack;
     }
   }
+  if (jackHit) return { kind: "jack", x: jackHit.x, y: jackHit.y };
   const labels = chrome.labels || [];
   for (let i = labels.length - 1; i >= 0; i -= 1) {
     const label = labels[i];

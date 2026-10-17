@@ -202,6 +202,7 @@
     if (changed) {
       drag.moved = true;
       write(drag.slider, v, true);
+      if (typeof nodeGraphGlGraphPresentSoon === "function") nodeGraphGlGraphPresentSoon();
     }
   }
   function onPointerUp(e) {
@@ -227,6 +228,16 @@
   window.addEventListener("pointercancel", onPointerUp, true);
   window.addEventListener("click", swallow, true);
   window.addEventListener("dblclick", swallow, true);
+  window.addEventListener("pointerover", (e) => {
+    if (e.target?.closest?.(".node-seed-control") && typeof nodeGraphGlGraphPresentSoon === "function") {
+      nodeGraphGlGraphPresentSoon();
+    }
+  }, true);
+  window.addEventListener("pointerout", (e) => {
+    if (e.target?.closest?.(".node-seed-control") && typeof nodeGraphGlGraphPresentSoon === "function") {
+      nodeGraphGlGraphPresentSoon();
+    }
+  }, true);
   window.addEventListener("mousedown", (e) => {
     if (e.target?.closest?.(".node-parameter-row-seed .node-seed-btn, .node-parameter-row-seed .node-slider-readout")
       && !e.target.closest(".node-slider-readout-input")) {

@@ -51,36 +51,6 @@ async function bindNodeGraphUiDevSettingsEvents() {
     .getElementById("nodeUiDevModuleGridInset")
     ?.addEventListener("input", syncNodeUiDevSettingsHeaderControls);
   document
-    .getElementById("nodeUiDevInletOutletSize")
-    ?.addEventListener("input", syncNodeUiDevPortSize);
-  document
-    .getElementById("nodeUiDevInletOutletSize")
-    ?.addEventListener("change", syncNodeUiDevPortSize);
-  document
-    .getElementById("nodeUiDevInletOutletStrokeThickness")
-    ?.addEventListener("input", syncNodeUiDevPortStrokeThickness);
-  document
-    .getElementById("nodeUiDevInletOutletStrokeThickness")
-    ?.addEventListener("change", syncNodeUiDevPortStrokeThickness);
-  document
-    .getElementById("nodeUiDevInletOutletGap")
-    ?.addEventListener("input", syncNodeUiDevInletOutletGap);
-  document
-    .getElementById("nodeUiDevInletOutletGap")
-    ?.addEventListener("change", syncNodeUiDevInletOutletGap);
-  document
-    .getElementById("nodeUiDevIoSectionPaddingTop")
-    ?.addEventListener("input", syncNodeUiDevIoSectionPadding);
-  document
-    .getElementById("nodeUiDevIoSectionPaddingTop")
-    ?.addEventListener("change", syncNodeUiDevIoSectionPadding);
-  document
-    .getElementById("nodeUiDevIoSectionPaddingBottom")
-    ?.addEventListener("input", syncNodeUiDevIoSectionPadding);
-  document
-    .getElementById("nodeUiDevIoSectionPaddingBottom")
-    ?.addEventListener("change", syncNodeUiDevIoSectionPadding);
-  document
     .getElementById("nodeUiDevUsedPortBrightness")
     ?.addEventListener("input", syncNodeUiDevPortBrightness);
   document

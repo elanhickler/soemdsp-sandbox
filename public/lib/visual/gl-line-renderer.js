@@ -175,11 +175,13 @@ void main() {
 precision mediump float;
 varying vec2 vPx;
 uniform vec4 uRect;
+uniform float uPeriod;
 void main() {
   if (vPx.x < uRect.x || vPx.y < uRect.y || vPx.x > uRect.x + uRect.z || vPx.y > uRect.y + uRect.w) discard;
-  float band = mod(vPx.x + vPx.y, 18.0);
-  if (band < 0.0) band += 18.0;
-  if (band > 9.0) discard;
+  float period = max(uPeriod, 1.0);
+  float band = mod(vPx.x + vPx.y, period);
+  if (band < 0.0) band += period;
+  if (band > period * 0.5) discard;
   gl_FragColor = vec4(0.886, 0.659, 0.427, 0.34);
 }
 `;
@@ -227,17 +229,16 @@ void main() {
     float radius = uJack[i].z;
     float d = length(vPx - jack) - radius;
     sd = max(sd, -d);
-    // Tint only the jack arc. Do not let a jack's alpha replace the plate stroke.
-    if (sdRect <= 0.0 && abs(d) <= halfRing + 1.0 && abs(d) < nearest) {
+    float ring = 1.0 - smoothstep(halfRing - 0.65, halfRing + 0.65, abs(d));
+    if (sdRect <= 0.85 && ring > arc) {
       nearest = abs(d);
       strokeCol = vec4(uJackColor[i].rgb, uPlateColor.a);
+      arc = ring;
     }
-    if (sdRect <= 0.0 && d <= 0.0) {
-      inMouth = 1.0;
-      arc = max(arc, 1.0 - smoothstep(halfRing, halfRing + 1.0, abs(d)));
-    }
+    inMouth = max(inMouth, 1.0 - smoothstep(0.0, 1.0, d));
     // Socket fill: the hole, off the ring, with a straight cut in from the wall.
-    if (uJack[i].w > 0.5 && radius > 0.0 && sdRect <= 0.0 && d < -halfRing) {
+    if (uJack[i].w > 0.5 && radius > 0.0 && sdRect <= 0.75) {
+      float hole = 1.0 - smoothstep(-halfRing - 0.2, -halfRing + 0.85, d);
       float dl = jack.x - plateMin.x;
       float dr = plateMax.x - jack.x;
       float dt = jack.y - plateMin.y;
@@ -246,13 +247,14 @@ void main() {
       if (dr <= dl && dr <= dt && dr <= db) inward = vec2(-1.0, 0.0);
       else if (dt <= dl && dt <= dr && dt <= db) inward = vec2(0.0, 1.0);
       else if (db <= dl && db <= dr && db <= dt) inward = vec2(0.0, -1.0);
-      if (dot(vPx - jack, inward) >= uInletGap) inletA = 1.0;
+      float cut = smoothstep(uInletGap - 0.65, uInletGap + 0.65, dot(vPx - jack, inward));
+      inletA = max(inletA, hole * cut);
     }
   }
   // Whole pixels outside the plate. A fractional fade reads as 1.5px on
-  // one part of the edge and 2.5px on another.
+  // one part of the edge and 2.5px on another. Jacks keep a 1px AA ring.
   float strokePx = max(1.0, floor(strokeW + 0.5));
-  float fat = (sd > 0.0 && sd <= strokePx) ? 1.0 : 0.0;
+  float fat = (sdRect > 0.0 && sdRect <= strokePx) ? 1.0 : 0.0;
   float strokeA = max(fat * (1.0 - inMouth), arc) * strokeCol.a;
   float plateA = sd <= 0.0 ? uFill.a * (1.0 - inletA) : 0.0;
   float underA = inletA + plateA;
@@ -309,6 +311,7 @@ void main() {
         veilPos: veilProgram ? gl.getAttribLocation(veilProgram, "position") : -1,
         veilPx: veilProgram ? gl.getAttribLocation(veilProgram, "pixel") : -1,
         veilRect: veilProgram ? gl.getUniformLocation(veilProgram, "uRect") : null,
+        veilPeriod: veilProgram ? gl.getUniformLocation(veilProgram, "uPeriod") : null,
         buf: gl.createBuffer(),
         attribs: ["position", "local", "segLen", "halfPx", "feather", "colour"].map((n) => gl.getAttribLocation(program, n)),
         coverage: gl.getUniformLocation(program, "uCoverage"),
@@ -1295,9 +1298,10 @@ void main() {
   }
 
   const OUT_MAX = 24;
-  function nodeGraphGlLinesVeil(batch, x, y, w, h) {
+  function nodeGraphGlLinesVeil(batch, x, y, w, h, period) {
     if (!batch || !(w > 0) || !(h > 0)) return;
     const k = batch.scale || 1;
+    if (period > 0) batch.veilPeriod = period * k;
     batch.veils.push({ x: x * k, y: y * k, w: w * k, h: h * k });
   }
 
@@ -1310,7 +1314,11 @@ void main() {
     gl.enableVertexAttribArray(s.veilPx);
     gl.vertexAttribPointer(s.veilPos, 2, gl.FLOAT, false, 16, 0);
     gl.vertexAttribPointer(s.veilPx, 2, gl.FLOAT, false, 16, 8);
-    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+    // Straight colour. A SRC_ALPHA write gets premultiplied again when the
+    // canvas is stacked on the module body, so the stripe vanished there
+    // and only survived on top of the display in this same buffer.
+    gl.disable(gl.BLEND);
+    if (s.veilPeriod) gl.uniform1f(s.veilPeriod, batch.veilPeriod > 0 ? batch.veilPeriod : 18);
     for (let n = 0; n < batch.veils.length; n += 1) {
       const shape = batch.veils[n];
       const x0 = shape.x;
@@ -1333,6 +1341,7 @@ void main() {
     }
     gl.disableVertexAttribArray(s.veilPos);
     gl.disableVertexAttribArray(s.veilPx);
+    gl.enable(gl.BLEND);
   }
 
   function nodeGraphGlLinesModuleOutline(batch, x, y, w, h, stroke, rgba, jacks, fill, inletGap) {

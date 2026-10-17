@@ -57,6 +57,67 @@ function nodeGraphModuleGeometryAttach(nodeId, port, io) {
  * Publish geometry for one module from current DOM (one-shot after layout).
  * Callers: applyNodeGraphModuleLayout, module move settle — NOT Play/scope loops.
  */
+// Layout pixels, before the camera transform. ancestor omitted: the element's
+// own box in zoom-surface space. ancestor set: the box inside that element.
+function nodeGraphModuleLayoutBox(el, ancestor) {
+  if (!(el instanceof Element)) return null;
+  if (ancestor instanceof Element && el !== ancestor) {
+    let x = 0;
+    let y = 0;
+    let node = el;
+    while (node && node !== ancestor) {
+      x += node.offsetLeft;
+      y += node.offsetTop;
+      const next = node.offsetParent;
+      if (!next || (next !== ancestor && !ancestor.contains(next))) return null;
+      node = next;
+    }
+    if (node !== ancestor) return null;
+    if (!(el.offsetWidth > 0) || !(el.offsetHeight > 0)) return null;
+    return { x, y, w: el.offsetWidth, h: el.offsetHeight };
+  }
+  const surface = typeof nodeGraphZoomSurface === "function" ? nodeGraphZoomSurface() : null;
+  let x = 0;
+  let y = 0;
+  let node = el;
+  while (node && node !== surface) {
+    x += node.offsetLeft;
+    y += node.offsetTop;
+    const next = node.offsetParent;
+    if (!next || (surface && next !== surface && !surface.contains(next))) break;
+    node = next;
+  }
+  if (!(el.offsetWidth > 0) || !(el.offsetHeight > 0)) return null;
+  return { x, y, w: el.offsetWidth, h: el.offsetHeight };
+}
+
+function nodeGraphModuleLayoutPatchPoint(el, moduleEl, origin, io) {
+  const laid = nodeGraphModuleLayoutBox(el, moduleEl);
+  if (!laid || !origin) return null;
+  let localX = laid.x;
+  if (el.classList.contains("node-param-port")) {
+    const side = typeof nodeGraphParameterPatchPointSide === "function"
+      ? nodeGraphParameterPatchPointSide(el, io)
+      : null;
+    localX = side === "right" ? laid.x + laid.w
+      : side === "left" ? laid.x
+        : laid.x + laid.w * 0.5;
+  } else {
+    const cssX = getComputedStyle(el).getPropertyValue("--node-patch-point-x").trim();
+    const percentMatch = cssX.match(/^(-?\d+(?:\.\d+)?)%$/);
+    const pixelMatch = cssX.match(/^(-?\d+(?:\.\d+)?)px$/);
+    const fallback = io === "output" ? 1 : 0;
+    const ratio = percentMatch ? Number(percentMatch[1]) / 100 : fallback;
+    localX = pixelMatch
+      ? laid.x + Number(pixelMatch[1])
+      : laid.x + laid.w * Math.max(0, Math.min(1, ratio));
+  }
+  return {
+    x: origin.x + localX,
+    y: origin.y + laid.y + laid.h * 0.5,
+  };
+}
+
 function nodeGraphModuleGeometryPublishFromDom(nodeId, options = {}) {
   const id = String(nodeId || "");
   if (!id || typeof nodeGraphNodeElement !== "function") {
@@ -86,38 +147,54 @@ function nodeGraphModuleGeometryPublishFromDom(nodeId, options = {}) {
     return { x: clientX - sr.left, y: clientY - sr.top };
   });
 
-  const boxRect = el.getBoundingClientRect();
-  if ((!(boxRect.width > 1) || !(boxRect.height > 1)) && kept?.box?.w > 1 && kept?.box?.h > 1) {
-    return kept;
+  const useLayout = !options.toSurface;
+  let box = null;
+  if (useLayout) {
+    const origin = nodeGraphModuleLayoutBox(el);
+    if ((!origin || !(origin.w > 1) || !(origin.h > 1)) && kept?.box?.w > 1 && kept?.box?.h > 1) {
+      return kept;
+    }
+    if (origin && origin.w > 1 && origin.h > 1) {
+      box = { x: origin.x, y: origin.y, w: origin.w, h: origin.h };
+    }
   }
-  const boxTl = toSurface(boxRect.left, boxRect.top);
-  const boxBr = toSurface(boxRect.right, boxRect.bottom);
-  const box = {
-    x: boxTl.x,
-    y: boxTl.y,
-    w: Math.max(0, boxBr.x - boxTl.x),
-    h: Math.max(0, boxBr.y - boxTl.y),
-  };
+  if (!box) {
+    const boxRect = el.getBoundingClientRect();
+    if ((!(boxRect.width > 1) || !(boxRect.height > 1)) && kept?.box?.w > 1 && kept?.box?.h > 1) {
+      return kept;
+    }
+    const boxTl = toSurface(boxRect.left, boxRect.top);
+    const boxBr = toSurface(boxRect.right, boxRect.bottom);
+    box = {
+      x: boxTl.x,
+      y: boxTl.y,
+      w: Math.max(0, boxBr.x - boxTl.x),
+      h: Math.max(0, boxBr.y - boxTl.y),
+    };
+  }
 
   const ports = [];
   for (const portEl of el.querySelectorAll(":scope .node-port:not(.node-param-port)")) {
     const port = String(portEl.dataset?.port || "").trim();
     const io = String(portEl.dataset?.io || "").trim();
     if (!port || (io !== "input" && io !== "output")) continue;
-    const visible = typeof nodeGraphPortElementIsLayoutVisible === "function"
-      ? nodeGraphPortElementIsLayoutVisible(portEl)
-      : (portEl.getBoundingClientRect().width > 0.5);
+    const laidPoint = useLayout ? nodeGraphModuleLayoutPatchPoint(portEl, el, box, io) : null;
+    const visible = laidPoint
+      ? true
+      : (typeof nodeGraphPortElementIsLayoutVisible === "function"
+        ? nodeGraphPortElementIsLayoutVisible(portEl)
+        : (portEl.getBoundingClientRect().width > 0.5));
     if (!visible) {
       ports.push({ port, io, x: 0, y: 0, visible: false });
       continue;
     }
-    const center = typeof nodeGraphElementPatchPointClientCenter === "function"
+    const center = laidPoint || (typeof nodeGraphElementPatchPointClientCenter === "function"
       ? nodeGraphElementPatchPointClientCenter(portEl, io)
       : (() => {
         const r = portEl.getBoundingClientRect();
         return { x: r.left + r.width * (io === "output" ? 1 : 0), y: r.top + r.height * 0.5 };
-      })();
-    const pt = toSurface(center.x, center.y);
+      })());
+    const pt = laidPoint || toSurface(center.x, center.y);
     ports.push({ port, io, x: pt.x, y: pt.y, visible: true });
   }
 
@@ -129,20 +206,24 @@ function nodeGraphModuleGeometryPublishFromDom(nodeId, options = {}) {
     if (jack.classList.contains("graph-input")) kind = "graph";
     else if (jack.classList.contains("parameter-output") || jack.dataset?.io === "output") kind = "output";
     else if (jack.dataset?.io === "modulation") kind = "modulation";
-    const visible = typeof nodeGraphPortElementIsLayoutVisible === "function"
-      ? nodeGraphPortElementIsLayoutVisible(jack)
-      : (jack.getBoundingClientRect().width > 0.5);
+    const jackIo = kind === "output" ? "output" : kind;
+    const laidPoint = useLayout ? nodeGraphModuleLayoutPatchPoint(jack, el, box, jackIo) : null;
+    const visible = laidPoint
+      ? true
+      : (typeof nodeGraphPortElementIsLayoutVisible === "function"
+        ? nodeGraphPortElementIsLayoutVisible(jack)
+        : (jack.getBoundingClientRect().width > 0.5));
     if (!visible) {
       paramJacks.push({ key, kind, x: 0, y: 0, visible: false });
       continue;
     }
-    const center = typeof nodeGraphElementPatchPointClientCenter === "function"
-      ? nodeGraphElementPatchPointClientCenter(jack, kind === "output" ? "output" : kind)
+    const center = laidPoint || (typeof nodeGraphElementPatchPointClientCenter === "function"
+      ? nodeGraphElementPatchPointClientCenter(jack, jackIo)
       : (() => {
         const r = jack.getBoundingClientRect();
         return { x: kind === "output" ? r.right : r.left, y: r.top + r.height * 0.5 };
-      })();
-    const pt = toSurface(center.x, center.y);
+      })());
+    const pt = laidPoint || toSurface(center.x, center.y);
     paramJacks.push({ key, kind, x: pt.x, y: pt.y, visible: true });
   }
 

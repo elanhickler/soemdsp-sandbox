@@ -377,7 +377,17 @@ function syncNodeGraphModuleScopeFaceCanvasTape(canvas, screenElement, pixelRati
     canvas.style.width = "";
     canvas.style.height = "";
   }
+  if (resized) nodeGraphGlGraphNoteFaceCanvasSized();
   return { resized, synced: true, density };
+}
+
+function nodeGraphGlGraphNoteFaceCanvasSized() {
+  if (typeof nodeGraphGlGraphRebuildPlates === "function") {
+    nodeGraphGlGraphRebuildPlates();
+  }
+  if (typeof nodeGraphGlGraphPresentSoon === "function") {
+    nodeGraphGlGraphPresentSoon();
+  }
 }
 
 function syncNodeGraphModuleScopeFaceCanvasBurn(canvas, screenElement, pixelRatio, pixelDensity = 1) {
@@ -415,6 +425,7 @@ function syncNodeGraphModuleScopeFaceCanvasBurn(canvas, screenElement, pixelRati
     canvas._nodeGraphScope2dLastDrawnPoint = null;
     canvas._phosphorLiveOverlayPoints = null;
     canvas._phosphorLiveScratchInk = false;
+    nodeGraphGlGraphNoteFaceCanvasSized();
   }
   if (density < 0.999) {
     canvas.style.imageRendering = "pixelated";

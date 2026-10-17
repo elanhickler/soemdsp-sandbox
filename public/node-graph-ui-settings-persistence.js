@@ -2049,12 +2049,6 @@ function resetNodeUiDevControlsToDeclaredDefaults() {
   if (typeof syncNodeUiDevModuleRoundness === "function") {
     syncNodeUiDevModuleRoundness();
   }
-  if (typeof syncNodeUiDevPortSize === "function") {
-    syncNodeUiDevPortSize();
-  }
-  if (typeof syncNodeUiDevIoSectionPadding === "function") {
-    syncNodeUiDevIoSectionPadding();
-  }
   if (typeof syncNodeUiDevPortBrightness === "function") {
     syncNodeUiDevPortBrightness();
   }

@@ -167,7 +167,7 @@ const nodeUiDevSettingControls = Object.freeze([
   },
   { defaultValue: "#171a1f", id: "nodeUiDevModuleFillColor", key: "moduleFillColor", type: "color" },
   { defaultValue: 100, id: "nodeUiDevModuleFillAlpha", key: "moduleFillAlpha", max: 100, min: 0, type: "number" },
-  { defaultValue: "#030805", id: "nodeUiDevModuleTitleFillColor", key: "moduleTitleFillColor", type: "color" },
+  { defaultValue: "#030113", id: "nodeUiDevModuleTitleFillColor", key: "moduleTitleFillColor", type: "color" },
   { defaultValue: "#a19b9b", id: "nodeUiDevModuleStrokeColor", key: "moduleStrokeColor", type: "color" },
   { defaultValue: "#e2a86d", id: "nodeUiDevModuleSelectedStrokeColor", key: "moduleSelectedStrokeColor", type: "color" },
   { defaultValue: 100, id: "nodeUiDevModuleSelectedStrokeAlpha", key: "moduleSelectedStrokeAlpha", max: 100, min: 0, type: "number" },

@@ -7525,7 +7525,7 @@ body.keyboard-debug-hidden .node-midi-keyboard-signal-bar {
   --node-io-column-padding: 0px;
   /* Stacked jack rows sit flush. */
   --node-io-gap: 0px;
-  --node-io-label-gap: calc(var(--node-grid-size) * 0.1071429);
+  --node-io-label-gap: 3px;
   --node-io-section-min-height: max(1em, var(--node-signal-port-height));
   --node-io-section-padding-block: 0;
   --node-io-section-padding-top: 0px;
@@ -7604,7 +7604,8 @@ body.keyboard-debug-hidden .node-midi-keyboard-signal-bar {
    * Tip/wall AA uses clip-path bleed on .node-port (not taller rows).
    */
   --node-signal-port-height: var(--node-port-diameter);
-  --node-signal-port-width: var(--node-port-area-radius);
+  /* Inward reach of the semicircle. Labels start here, not a half-grid in. */
+  --node-signal-port-width: calc(var(--node-port-diameter) * 0.5);
   --node-port-crescent-clip-bleed: var(--node-port-crescent-stroke-width, 2px);
   --node-slider-padding-block: calc(var(--node-grid-size) * 0.0357143);
   --node-slider-padding-inline: calc(var(--node-grid-size) * 0.25);
@@ -7624,7 +7625,7 @@ body.keyboard-debug-hidden .node-midi-keyboard-signal-bar {
   --node-selection-hit-trail-alpha: 0.95;
   --node-choice-divider-padding: 3px;
   --node-module-fill: #171a1f;
-  --node-module-title-fill: #030805;
+  --node-module-title-fill: #030113;
   /* I/O strip is see-through like the plate — jacks are stroke-only. */
   --node-module-io-fill: transparent;
   --node-module-stroke: #f3f1ec;
@@ -12995,6 +12996,8 @@ body.room-dimmer-on .node-room-dimmer-canvas,
 .node-graph-workspace.gl-graph-on .dsp-node .node-arp-keys-face,
 .node-graph-workspace.gl-graph-on .dsp-node .node-plugin-toggle-button,
 .node-graph-workspace.gl-graph-on .dsp-node .node-plugin-momentary-button,
+.node-graph-workspace.gl-graph-on .dsp-node .node-seed-control,
+.node-graph-workspace.gl-graph-on .dsp-node .node-seed-control *,
 .node-graph-workspace.gl-graph-on .dsp-node .node-sample-waveform-display,
 .node-graph-workspace.gl-graph-on .dsp-node .node-sample-waveform-display *,
 .node-graph-workspace.gl-graph-on .dsp-node .node-module-graph-face *,
@@ -15605,13 +15608,13 @@ body.node-screen-solo-active .node-screen-solo-face.node-sample-waveform-display
 :is(.node-solid-module-shell, .node-module-chrome-layout-b-shell).layout-b-port-labels
   > .node-io-column.input:not(.labels-hidden) .node-io-label {
   text-align: left;
-  padding-right: 1px;
+  padding-left: 3px;
 }
 
 :is(.node-solid-module-shell, .node-module-chrome-layout-b-shell).layout-b-port-labels
   > .node-io-column.output:not(.labels-hidden) .node-io-label {
   text-align: right;
-  padding-left: 1px;
+  padding-right: 3px;
 }
 
 .node-module-graph-display {
@@ -16899,15 +16902,8 @@ body.node-screen-solo-active .node-screen-solo-face.node-text-box-body > .node-t
     minmax(0, var(--node-io-output-track));
   align-items: stretch;
   min-width: 0;
-  min-height: calc(
-    var(--node-io-section-min-height)
-    + var(--node-io-section-padding-top, var(--node-io-section-padding-block, 0px))
-    + var(--node-io-section-padding-bottom, var(--node-io-section-padding-block, 0px))
-  );
-  padding:
-    var(--node-io-section-padding-top, var(--node-io-section-padding-block, 0px))
-    0
-    var(--node-io-section-padding-bottom, var(--node-io-section-padding-block, 0px));
+  min-height: var(--node-io-section-min-height);
+  padding: 0;
   background: transparent;
 }
 
@@ -17019,8 +17015,9 @@ body.node-screen-solo-active .node-screen-solo-face.node-text-box-body > .node-t
      columns mirror this: flush rows at signal-port height, gap from --node-io-gap.
      Do not 1fr-stretch rows — that drifted portal / Output Left Right spacing. */
   align-content: start;
-  grid-auto-rows: minmax(var(--node-signal-port-height), auto);
-  gap: var(--node-io-gap);
+  /* One jack per row, flush. A taller row leaves a stroke between semicircles. */
+  grid-auto-rows: var(--node-signal-port-height);
+  gap: 0;
   min-width: 0;
   overflow: visible;
 }
@@ -17055,8 +17052,9 @@ body.node-screen-solo-active .node-screen-solo-face.node-text-box-body > .node-t
   display: flex;
   align-items: center;
   box-sizing: border-box;
-  /* Slot owns the jack: never shorter than the port diameter. */
-  min-height: max(1em, var(--node-signal-port-height));
+  height: var(--node-signal-port-height);
+  min-height: var(--node-signal-port-height);
+  max-height: var(--node-signal-port-height);
   min-width: 0;
   max-width: 100%;
   width: 100%;
@@ -17073,19 +17071,24 @@ body.node-screen-solo-active .node-screen-solo-face.node-text-box-body > .node-t
 .node-io-row.input {
   justify-self: stretch;
   justify-content: flex-start;
-  padding-left: calc(var(--node-signal-port-width) + var(--node-io-label-gap));
+  padding-left: calc(var(--node-signal-port-width) + var(--node-io-label-gap, 3px));
 }
 
 .node-io-row.output {
   justify-self: stretch;
   justify-content: flex-end;
-  padding-right: calc(var(--node-signal-port-width) + var(--node-io-label-gap));
+  padding-right: calc(var(--node-signal-port-width) + var(--node-io-label-gap, 3px));
 }
 
 .node-io-row .node-port {
   position: absolute;
-  top: 50%;
-  transform: translateY(-50%);
+  /* Center in the row with layout, not transform. offsetTop ignores
+     translateY, which drew the GPU jack below the label and into the face. */
+  top: 0;
+  bottom: 0;
+  height: var(--node-signal-port-height);
+  margin-block: auto;
+  transform: none;
   box-sizing: border-box;
   /* Do not max-height/width:100% — a 0-tall or 0-wide row collapses the
      crescent to nothing (same bug as the old .node-port rule). */
@@ -25606,10 +25609,10 @@ html.soemdsp-whole-module .node-layout-canvas-grip {
   display: flex;
   align-items: stretch;
   box-sizing: border-box;
-  border: 1px solid var(--line);
+  border: 1px solid transparent;
   border-radius: 4px;
   overflow: hidden;
-  background: #080b0d;
+  background: transparent;
   container-type: inline-size;
 }
 .node-seed-control > .node-slider-readout,
@@ -25642,7 +25645,7 @@ html.soemdsp-whole-module .node-layout-canvas-grip {
   display: none !important;
 }
 .node-seed-control .node-slider-readout-value {
-  /* Fills its box: JS fits font size to width/height per value. */
+  /* Fills its box: JS fits font size to width/height per value. GPU paints it. */
   font-size: 0.86rem; /* overridden per value by fitNodeGraphSeedNumber */
   line-height: 1;
   text-align: center;
@@ -25651,6 +25654,7 @@ html.soemdsp-whole-module .node-layout-canvas-grip {
   white-space: nowrap;
   max-width: none;
   font-variant-numeric: tabular-nums;
+  color: transparent;
 }
 .node-seed-btn {
   flex: 0 0 var(--node-slider-readout-height);
@@ -25661,7 +25665,7 @@ html.soemdsp-whole-module .node-layout-canvas-grip {
   border: 0;
   border-radius: 0;
   background: transparent;
-  color: rgba(250, 253, 255, 0.9);
+  color: transparent;
   font: inherit;
   font-size: calc(var(--node-slider-readout-height) * 0.7);
   line-height: 1;
@@ -25713,7 +25717,7 @@ html.soemdsp-whole-module .node-layout-canvas-grip {
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  background: #fafdff;
+  background: transparent;
   pointer-events: none;
   border-radius: 0;
 }
@@ -25734,29 +25738,27 @@ html.soemdsp-whole-module .node-layout-canvas-grip {
   container-type: size;
 }
 .node-seed-die {
-  display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
-  grid-template-rows: 1fr 1fr 1fr;
+  position: relative;
   width: 62cqmin;
   height: 62cqmin;
   box-sizing: border-box;
-  padding: 10%;
-  border: max(1px, calc(var(--node-slider-readout-height) * 0.07)) solid currentColor;
+  border: max(1px, calc(var(--node-slider-readout-height) * 0.07)) solid transparent;
   border-radius: 18%;
   pointer-events: none;
 }
 .node-seed-die-pip {
-  width: 72%;
-  height: 72%;
-  margin: auto;
+  position: absolute;
+  width: 16%;
+  height: 16%;
   border-radius: 50%;
-  background: currentColor;
+  background: transparent;
 }
-.node-seed-die-pip:nth-child(1) { grid-column: 1; grid-row: 1; }
-.node-seed-die-pip:nth-child(2) { grid-column: 3; grid-row: 1; }
-.node-seed-die-pip:nth-child(3) { grid-column: 2; grid-row: 2; }
-.node-seed-die-pip:nth-child(4) { grid-column: 1; grid-row: 3; }
-.node-seed-die-pip:nth-child(5) { grid-column: 3; grid-row: 3; }
+/* Standard 5: four corners and the center. */
+.node-seed-die-pip:nth-child(1) { top: 16%; left: 16%; }
+.node-seed-die-pip:nth-child(2) { top: 16%; right: 16%; }
+.node-seed-die-pip:nth-child(3) { top: 50%; left: 50%; transform: translate(-50%, -50%); }
+.node-seed-die-pip:nth-child(4) { bottom: 16%; left: 16%; }
+.node-seed-die-pip:nth-child(5) { bottom: 16%; right: 16%; }
 
 /* seed-btn-height: buttons/number exactly fill the control height (no global button min-height) */
 .node-seed-control > .node-seed-btn,

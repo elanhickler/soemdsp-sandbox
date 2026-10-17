@@ -1,3 +1,7 @@
+## 2026-10-17 - Seed code plan (docs only)
+
+- Added `docs/SEED_CODE_PLAN.md` (Thoughts' plan + hex addendum verbatim, notes from the repo); pointer in `docs/FUTURE_PLANNING.md`. Planning only. Not committed.
+
 ## 2026-10-17 - Script language plan (docs only)
 
 - Added `docs/SCRIPT_LANGUAGE_PLAN.md` (Thoughts' plan verbatim + Policy check); pointer in `docs/FUTURE_PLANNING.md`. Planning only, no implementation until Argi says so. Not committed.

@@ -1164,7 +1164,7 @@ const nodeGraphAudioPlayerPlaylistFacesSpec = Object.freeze([
   ["waveplay", "waveplay", "Waveplay"],
   ["pl", "playlist", "Playlist"],
   ["playinfo", "playinfo", "Playinfo"],
-  ["vslr", "Stereo", "Stereo"],
+  ["vslr", "stereo", "Stereo"],
 ]);
 
 function nodeGraphAudioPlayerPlaylistEnsureFaceBar(section, nodeId) {

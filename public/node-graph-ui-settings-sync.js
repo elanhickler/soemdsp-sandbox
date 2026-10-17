@@ -491,153 +491,6 @@ function nodeUiDevSyncPortBrightnessControl(inputId, outputId, cssVar, fallback)
   document.documentElement.style.setProperty(cssVar, css);
 }
 
-function syncNodeUiDevIoSectionPadding() {
-  const apply = (inputId, outputId, cssVar, fallback) => {
-    const input = document.getElementById(inputId);
-    if (!input) return;
-    const raw = Number(input?.value);
-    const px = Number.isFinite(raw) ? Math.max(0, Math.min(32, raw)) : fallback;
-    if (input && input.value !== String(px)) {
-      input.value = String(px);
-    }
-    const output = document.getElementById(outputId);
-    if (output) {
-      output.textContent = `${Math.round(px)}px`;
-    }
-    const css = `${Math.round(px)}px`;
-    const workspace = document.getElementById("nodeGraphWorkspace");
-    workspace?.style.setProperty(cssVar, css);
-    document.documentElement.style.setProperty(cssVar, css);
-  };
-  apply(
-    "nodeUiDevIoSectionPaddingTop",
-    "nodeUiDevIoSectionPaddingTopValue",
-    "--node-io-section-padding-top",
-    0,
-  );
-  apply(
-    "nodeUiDevIoSectionPaddingBottom",
-    "nodeUiDevIoSectionPaddingBottomValue",
-    "--node-io-section-padding-bottom",
-    0,
-  );
-  if (typeof scheduleNodeGraphModuleFramesUpdate === "function") {
-    scheduleNodeGraphModuleFramesUpdate();
-  }
-}
-
-/** Vertical gap between stacked I/O jacks (--node-io-gap). */
-const NODE_UI_DEV_INLET_OUTLET_GAP_DEFAULT = 0;
-const NODE_UI_DEV_INLET_OUTLET_GAP_MIN = 0;
-const NODE_UI_DEV_INLET_OUTLET_GAP_MAX = 32;
-
-function syncNodeUiDevInletOutletGap() {
-  const input = document.getElementById("nodeUiDevInletOutletGap");
-  if (!input) return;
-  const raw = Number(input?.value);
-  const px = Number.isFinite(raw)
-    ? Math.max(
-      NODE_UI_DEV_INLET_OUTLET_GAP_MIN,
-      Math.min(NODE_UI_DEV_INLET_OUTLET_GAP_MAX, raw),
-    )
-    : NODE_UI_DEV_INLET_OUTLET_GAP_DEFAULT;
-  if (input && !input.matches(":active") && input.value !== String(px)) {
-    input.value = String(px);
-  }
-  const output = document.getElementById("nodeUiDevInletOutletGapValue");
-  if (output) {
-    output.textContent = `${Math.round(px)}px`;
-  }
-  const css = `${Math.round(px)}px`;
-  const workspace = document.getElementById("nodeGraphWorkspace");
-  workspace?.style.setProperty("--node-io-gap", css);
-  document.documentElement.style.setProperty("--node-io-gap", css);
-  if (typeof scheduleNodeUiDevPortGeometryFollowup === "function") {
-    scheduleNodeUiDevPortGeometryFollowup();
-  } else if (typeof scheduleNodeGraphModuleFramesUpdate === "function") {
-    scheduleNodeGraphModuleFramesUpdate();
-  }
-}
-
-/** Max inlet/outlet size % — leaves room for crescent stroke inside the 1gu slot. */
-const NODE_UI_DEV_PORT_SIZE_PERCENT_MAX = 90;
-const NODE_UI_DEV_PORT_SIZE_PERCENT_MIN = 20;
-const NODE_UI_DEV_PORT_SIZE_PERCENT_DEFAULT = 52;
-
-/** Crescent stroke in world px — scales with workspace zoom. */
-const NODE_UI_DEV_PORT_STROKE_THICKNESS_DEFAULT = 1.25;
-const NODE_UI_DEV_PORT_STROKE_THICKNESS_MIN = 0;
-const NODE_UI_DEV_PORT_STROKE_THICKNESS_MAX = 8;
-
-/**
- * Size / stroke change jack row heights and contact radius. Remeasure plate
- * gaps and redraw wires after layout settles (same double-rAF as other layout).
- */
-function scheduleNodeUiDevPortGeometryFollowup() {
-  if (typeof scheduleNodeGraphModuleFramesUpdate === "function") {
-    scheduleNodeGraphModuleFramesUpdate();
-  }
-  if (typeof scheduleNodeGraphWireRedrawAfterLayout === "function") {
-    scheduleNodeGraphWireRedrawAfterLayout();
-  } else if (typeof drawNodeGraphWires === "function") {
-    window.requestAnimationFrame(() => drawNodeGraphWires());
-  }
-}
-
-function syncNodeUiDevPortSize() {
-  const input = document.getElementById("nodeUiDevInletOutletSize");
-  if (!input) return;
-  const raw = Number(input?.value);
-  const percent = Number.isFinite(raw)
-    ? Math.max(
-      NODE_UI_DEV_PORT_SIZE_PERCENT_MIN,
-      Math.min(NODE_UI_DEV_PORT_SIZE_PERCENT_MAX, raw),
-    )
-    : NODE_UI_DEV_PORT_SIZE_PERCENT_DEFAULT;
-  if (input) {
-    if (Number(input.max) !== NODE_UI_DEV_PORT_SIZE_PERCENT_MAX) {
-      input.max = String(NODE_UI_DEV_PORT_SIZE_PERCENT_MAX);
-    }
-    if (input.value !== String(percent)) {
-      input.value = String(percent);
-    }
-  }
-  const output = document.getElementById("nodeUiDevInletOutletSizeValue");
-  if (output) {
-    output.textContent = `${Math.round(percent)}%`;
-  }
-  const css = String(percent / 100);
-  const workspace = document.getElementById("nodeGraphWorkspace");
-  workspace?.style.setProperty("--node-port-size-ratio", css);
-  document.documentElement.style.setProperty("--node-port-size-ratio", css);
-  scheduleNodeUiDevPortGeometryFollowup();
-}
-
-function syncNodeUiDevPortStrokeThickness() {
-  const input = document.getElementById("nodeUiDevInletOutletStrokeThickness");
-  if (!input) return;
-  const raw = Number(input?.value);
-  const px = Number.isFinite(raw)
-    ? Math.max(
-      NODE_UI_DEV_PORT_STROKE_THICKNESS_MIN,
-      Math.min(NODE_UI_DEV_PORT_STROKE_THICKNESS_MAX, raw),
-    )
-    : NODE_UI_DEV_PORT_STROKE_THICKNESS_DEFAULT;
-  if (input && !input.matches(":active") && input.value !== String(px)) {
-    input.value = String(px);
-  }
-  const output = document.getElementById("nodeUiDevInletOutletStrokeThicknessValue");
-  if (output) {
-    const rounded = Math.round(px * 100) / 100;
-    output.textContent = `${rounded}px`;
-  }
-  const css = `${px}px`;
-  const workspace = document.getElementById("nodeGraphWorkspace");
-  workspace?.style.setProperty("--node-port-crescent-stroke-thickness", css);
-  document.documentElement.style.setProperty("--node-port-crescent-stroke-thickness", css);
-  scheduleNodeUiDevPortGeometryFollowup();
-}
-
 function syncNodeUiDevPortBrightness() {
   nodeUiDevSyncPortBrightnessControl(
     "nodeUiDevUsedPortBrightness",
@@ -856,10 +709,6 @@ function syncNodeUiDevSettingsHeaderControls() {
   syncNodeUiDevModuleTitlePadding();
   syncNodeUiDevDimmerCutoutControls();
   syncNodeUiDevMagnifierRimControls();
-  syncNodeUiDevPortSize();
-  syncNodeUiDevPortStrokeThickness();
-  syncNodeUiDevInletOutletGap();
-  syncNodeUiDevIoSectionPadding();
   syncNodeUiDevPortBrightness();
   syncNodeUiDevJackColors();
   if (typeof syncNodeUiDevFullyOpaqueWires === "function") {
@@ -980,7 +829,7 @@ function syncNodeUiDevSettingsHeaderControls() {
   const gridColor = normalizeNodeUiDevColor(gridColorInput.value, "#ffffff");
   const workspaceBackgroundColor = normalizeNodeUiDevColor(workspaceBackgroundColorInput.value, "#1d1b1b");
   const moduleFillColor = normalizeNodeUiDevColor(moduleFillColorInput.value, "#171a1f");
-  const moduleTitleFillColor = normalizeNodeUiDevColor(moduleTitleFillColorInput?.value, "#030805");
+  const moduleTitleFillColor = normalizeNodeUiDevColor(moduleTitleFillColorInput?.value, "#030113");
   const moduleFillAlphaRaw = Number(moduleFillAlphaInput.value);
   const moduleFillAlphaPercent = Math.max(
     0,
@@ -1052,7 +901,6 @@ function syncNodeUiDevSettingsHeaderControls() {
       .getElementById("nodeGraphWorkspace")
       ?.style.setProperty("--node-module-title-fill", moduleTitleFillColor);
   }
-  // --node-port-size-ratio is owned by syncNodeUiDevPortSize().
   document
     .getElementById("nodeGraphWorkspace")
     ?.style.removeProperty("--node-slider-readout-height");

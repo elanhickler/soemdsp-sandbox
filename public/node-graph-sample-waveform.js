@@ -1992,14 +1992,21 @@ function nodeGraphSampleWaveformHudHit(section, canvas, clientX, clientY) {
   if (!hits || !canvas) {
     return null;
   }
-  const rect = canvas.getBoundingClientRect();
+  // The canvas is visibility:hidden under the GPU graph, so the pointer is on
+  // the face. Hits are still in the canvas's CSS px.
+  let rect = canvas.getBoundingClientRect();
+  let boxW = canvas.clientWidth || rect.width;
+  let boxH = canvas.clientHeight || rect.height;
+  if (!(rect.width > 0) || !(rect.height > 0)) {
+    rect = section?.getBoundingClientRect?.() || rect;
+    boxW = section?.clientWidth || rect.width;
+    boxH = section?.clientHeight || rect.height;
+  }
   if (!(rect.width > 0) || !(rect.height > 0)) {
     return null;
   }
-  // Hits are in the canvas's own CSS px; a whole-module tile (and workspace zoom) scales the
-  // canvas, so client px are converted back before testing.
-  const x = (clientX - rect.left) * ((canvas.clientWidth || rect.width) / rect.width);
-  const y = (clientY - rect.top) * ((canvas.clientHeight || rect.height) / rect.height);
+  const x = (clientX - rect.left) * (boxW / rect.width);
+  const y = (clientY - rect.top) * (boxH / rect.height);
   const pad = 6;
   const inside = (box) => box
     && x >= box.l - pad
@@ -2166,13 +2173,18 @@ function bindNodeGraphSampleWaveformInteractions(section, canvas) {
       nodeGraphGlGraphPresentSoon();
     }
   };
-  canvas.addEventListener("pointermove", (event) => {
+  const onHudMove = (event) => {
     if (event.buttons) {
       return;
     }
     setHudHover(nodeGraphSampleWaveformHudHit(section, canvas, event.clientX, event.clientY) || "");
-  });
+  };
+  // The face receives the pointer when the canvas is hidden (empty plate and
+  // the GPU graph). The canvas listener covers the non-GL face.
+  canvas.addEventListener("pointermove", onHudMove);
+  section.addEventListener("pointermove", onHudMove);
   canvas.addEventListener("pointerleave", () => setHudHover(""));
+  section.addEventListener("pointerleave", () => setHudHover(""));
 
   let dragPointerId = null;
   let lastClientX = 0;

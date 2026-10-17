@@ -24,6 +24,10 @@ Source: Thoughts agent for Argi, 2026-10-17. Planning only, no implementation un
 4. **Libraries:** a package manifest or bundled libraries are both acceptable; the implementer chooses. Binaryen is lazy-loaded.
 5. **Use real mod values:** yes, script params receive raw values in "Use real mod values" mode.
 
+**Decisions (Argi, 2026-10-17, round 4):**
+1. **Name:** the language is called **emo script**; files are `.emo` scripts (refined by Argi, 2026-10-17; not "Emote").
+2. **Save format:** scripts are embedded inside the patch JSON.
+
 ## Language sketch
 ```
 class OnePole {
@@ -80,12 +84,15 @@ display {
 6. **Polish:** good error messages, a small standard library written in the language (filters, noise, envelopes), multiple outputs.
 
 ## Open questions for Argi
-- Language name and file extension. Candidates: Sandscript `.sand`, Emote `.emo`, Tick `.tick`, Grain `.grain`, Soe `.soe`.
+
+All resolved (2026-10-17). None remain.
+
+- ~~Language name and file extension.~~ **Resolved (round 4):** **emo script**, `.emo` files (other candidates were Sandscript `.sand`, Emote `.emo`, Tick `.tick`, Grain `.grain`, Soe `.soe`).
 - ~~Loop syntax.~~ **Resolved (round 3):** `for` with fixed compile-time bounds only, no `while`.
 - ~~Integer/float conversion rules.~~ **Resolved (round 3):** f32 default, i32 int, implicit int -> float only, explicit cast for float -> int.
 - ~~Is `process()` per sample or per block?~~ **Resolved (round 2):** per sample.
 - ~~Where the editor lives.~~ **Resolved (round 3):** Code page in the Command Center, showing the selected Script module's script.
-- How scripts are saved: embedded in the patch JSON, as separate files, or both. Suggested: embedded in the patch JSON.
+- ~~How scripts are saved.~~ **Resolved (round 4):** embedded inside the patch JSON.
 - ~~Package manifest vs bundled libraries for Lezer / Binaryen.~~ **Resolved (round 3):** implementer chooses; lazy-load Binaryen.
 - ~~How a `param` behaves in "Use real mod values" mode.~~ **Resolved (round 3):** raw values.
 

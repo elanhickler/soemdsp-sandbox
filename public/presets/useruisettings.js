@@ -39,7 +39,7 @@
     "workspaceBackgroundColor": "#1d1b1b",
     "moduleFillColor": "#171a1f",
     "moduleFillAlpha": 100,
-    "moduleTitleFillColor": "#030805",
+    "moduleTitleFillColor": "#030113",
     "moduleStrokeColor": "#a19b9b",
     "moduleSelectedStrokeColor": "#e2a86d",
     "moduleSelectedStrokeAlpha": 100,
