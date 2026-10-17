@@ -321,7 +321,11 @@ function nodeGraphGlGraphSettleTextBake() {
   if (typeof nodeGraphGlLinesSetGlyphBakePx === "function") nodeGraphGlLinesSetGlyphBakePx(px);
 }
 
-function nodeGraphGlGraphDrawChrome(batch, toX, toY, zoom) {
+function nodeGraphGlGraphOutside(x, y, w, h, cssW, cssH, pad = 48) {
+  return x + w < -pad || y + h < -pad || x > cssW + pad || y > cssH + pad;
+}
+
+function nodeGraphGlGraphDrawChrome(batch, toX, toY, zoom, cssW, cssH) {
   const chrome = nodeGraphGlGraphState.chrome;
   if (!chrome) return;
   const ink = [1, 1, 1, 1];
@@ -335,6 +339,7 @@ function nodeGraphGlGraphDrawChrome(batch, toX, toY, zoom) {
     const cx = toX(jack.x);
     const cy = toY(jack.y);
     const r = Math.max(2, jack.r * zoom);
+    if (nodeGraphGlGraphOutside(cx - r, cy - r, r * 2, r * 2, cssW, cssH, r)) continue;
     const steps = 10;
     const pts = new Float32Array((steps + 1) * 2);
     const a0 = jack.inwardRight ? -Math.PI / 2 : Math.PI / 2;
@@ -353,7 +358,7 @@ function nodeGraphGlGraphDrawChrome(batch, toX, toY, zoom) {
     const y = toY(slider.y);
     const w = slider.w * zoom;
     const h = slider.h * zoom;
-    if (x + w < 0 || y + h < 0 || x > 8000 || y > 8000) continue;
+    if (nodeGraphGlGraphOutside(x, y, w, h, cssW, cssH)) continue;
     nodeGraphGlLinesRect(batch, x, y, w, h, well);
     const readout = slider.readout;
     const amountStart = nodeGraphGlGraphCssPx(readout, "--amount-start");
@@ -408,7 +413,10 @@ function nodeGraphGlGraphDrawChrome(batch, toX, toY, zoom) {
     const label = labels[i];
     const text = String(label.el?.textContent || "").replace(/\s+/g, " ").trim();
     if (!text || typeof nodeGraphGlLinesText !== "function") continue;
-    nodeGraphGlLinesText(batch, text, toX(label.x), toY(label.y), nodeGraphGlGraphTextOpts({
+    const lx = toX(label.x);
+    const ly = toY(label.y);
+    if (nodeGraphGlGraphOutside(lx, ly, 0, 0, cssW, cssH, 480)) continue;
+    nodeGraphGlLinesText(batch, text, lx, ly, nodeGraphGlGraphTextOpts({
       px: Math.max(1, (label.fontPx || 13) * zoom),
       rgba: ink,
       align: label.align,
@@ -422,7 +430,10 @@ function nodeGraphGlGraphDrawChrome(batch, toX, toY, zoom) {
     if (title.el?.dataset?.titleEditing === "1") continue;
     const text = String(title.el?.textContent || "").replace(/\s+/g, " ").trim();
     if (!text || typeof nodeGraphGlLinesText !== "function") continue;
-    nodeGraphGlLinesText(batch, text, toX(title.x), toY(title.y), nodeGraphGlGraphTextOpts({
+    const tx = toX(title.x);
+    const ty = toY(title.y);
+    if (nodeGraphGlGraphOutside(tx, ty, 0, 0, cssW, cssH, 480)) continue;
+    nodeGraphGlLinesText(batch, text, tx, ty, nodeGraphGlGraphTextOpts({
       px: Math.max(9, title.h * zoom * 0.78),
       rgba: [1, 1, 1, 1],
       align: "center",
@@ -440,6 +451,7 @@ function nodeGraphGlGraphDrawChrome(batch, toX, toY, zoom) {
     const y = toY(key.y);
     const w = key.w * zoom;
     const h = key.h * zoom;
+    if (nodeGraphGlGraphOutside(x, y, w, h, cssW, cssH)) continue;
     nodeGraphGlLinesRect(batch, x, y, w, h, down ? keyDown : keyIdle);
     if (key.label && typeof nodeGraphGlLinesText === "function") {
       nodeGraphGlLinesText(batch, key.label, x + w * 0.5, y + h * 0.5, nodeGraphGlGraphTextOpts({
@@ -458,6 +470,7 @@ function nodeGraphGlGraphDrawChrome(batch, toX, toY, zoom) {
     const y = toY(face.y);
     const w = face.w * zoom;
     const h = face.h * zoom;
+    if (nodeGraphGlGraphOutside(x, y, w, h, cssW, cssH)) continue;
     nodeGraphGlLinesRect(batch, x, y, w, h, [0.04, 0.05, 0.07, 1]);
     const patchNode = typeof nodeGraphPatchNode === "function" ? nodeGraphPatchNode(face.id) : null;
     const graph = patchNode && typeof nodeGraphGraphForNode === "function"
@@ -799,7 +812,7 @@ function nodeGraphGlGraphPresent() {
     paintSide(nodeGraphGlGraphStrokeRuns(plate.x, plate.x + plate.w, notches.bottom, gap), true, y + h);
   }
   batch.textPixelated = zoom > 2.5;
-  nodeGraphGlGraphDrawChrome(batch, toX, toY, zoom);
+  nodeGraphGlGraphDrawChrome(batch, toX, toY, zoom, cssW, cssH);
   const pixelated = zoom > 2.5;
   for (let i = 0; i < nodeGraphGlGraphState.displays.length; i += 1) {
     const face = nodeGraphGlGraphState.displays[i];

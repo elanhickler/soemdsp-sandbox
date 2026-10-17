@@ -672,6 +672,25 @@ const nodeGraphRmsModuleParameterDefs = Object.freeze([
     tooltip: "Gate goes high when measured RMS (absolute dBFS) crosses this level." },
 ]);
 
+// Music Player playback-rate parameter. Speed and << >> share this one
+// definition; << >> only changes key, label, range, default and tooltip. The
+// engine plays at (Speed + Speed CV) + << >>.
+function nodeGraphPlaybackSpeedParameter(overrides = {}) {
+  return {
+    defaultValue: "1",
+    key: "speed",
+    label: "Speed",
+    linearSmoothing: false,
+    max: "8",
+    maxDigits: 4,
+    mid: "1",
+    min: "0",
+    step: "any",
+    unit: "x",
+    ...overrides,
+  };
+}
+
 function nodeGraphControllerBiasParameter() {
   return {
     bipolar: false,
@@ -15060,28 +15079,19 @@ const nodeGraphModuleDefinitions = (
         step: "1",
         tooltip: "Fractional sample read. Off = linear. Hermite = 4-point cubic (smoother varispeed, more CPU)." },
       { choices: ["Off (reset)", "Stop", "Pause", "Loop", "Play", "Loop All"], defaultValue: "4", displayChoices: true, divideChoicesVisibly: true, key: "transport", label: "Playmode", linearSmoothing: false, max: "5", mid: "2", min: "0", nonlinearSlider: false, step: "1" },
-      { defaultValue: "1", key: "speed", label: "Speed", linearSmoothing: false, max: "8", maxDigits: 4, mid: "1", min: "0", step: "any", unit: "x" },
-      // Slow reverse/forward nudge. No wrap. Internal 5 s linear (220500 samples @ 44.1 kHz).
-      {
+      nodeGraphPlaybackSpeedParameter(),
+      // Forward / reverse speed offset (shares Speed's definition). Replaces
+      // the old phaseOffset nudge; saved phaseOffset values drop on load.
+      nodeGraphPlaybackSpeedParameter({
         defaultValue: "0",
-        key: "phaseOffset",
-        kind: "phase",
+        key: "direction",
         label: "◀◀ ▶▶",
-        max: "0.1",
-        maxDigits: 5,
+        max: "8",
         mid: "0",
-        min: "-0.1",
-        nonlinearSlider: false,
+        min: "-8",
         showSign: true,
-        sliderCurve: "linear",
-        smoothingMode: "internal",
-        smoothingSeconds: 220500,
-        smoothingType: "linear",
-        step: "any",
-        unit: "cycle",
-        wraparound: false,
-        tooltip: "Slow reverse / forward nudge (−0.1…+0.1). No wrap. 5 s linear internal glide."
-      },
+        tooltip: "Forward / reverse speed. Adds to Speed: 0 no change, negative pushes toward reverse.",
+      }),
       // Fine phase skip. Internal 0.156 s Papoulis.
       {
         defaultValue: "0",

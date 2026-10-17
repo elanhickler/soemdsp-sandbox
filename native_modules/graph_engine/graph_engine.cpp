@@ -11966,6 +11966,8 @@ static void process_audio_player(Circuit& g, Node& node, int frames) {
       }
     }
     const double reset = hasReset ? g.mixReset[f] : 0.0;
+    // << >> (direction, phaseParam slot): rate = (Speed + Speed CV) + direction.
+    const double direction = control_audio(g, node.phaseParam, f);
     const double speedCv = hasSpeed ? g.mixPitch[f] : 0.0;
     const double phaseCv = hasPhase ? g.mixIncrement[f] : 0.0;
     const double mono = soemdsp_audio_player_sample(
@@ -11975,11 +11977,11 @@ static void process_audio_player(Circuit& g, Node& node, int frames) {
       phaseCv,
       hasPhase ? 1 : 0,
       control_effective(node.mode),
-      control_audio(g, node.frequency, f),
+      control_audio(g, node.frequency, f) + direction,
       control_audio(g, node.timeNumerator, f),
       control_audio(g, node.timeDenominator, f),
       control_audio(g, node.amplitude, f),
-      control_audio(g, node.phaseParam, f),
+      0.0, // phase offset unused (slot carries direction)
       control_audio(g, node.shape, f),
       control_effective(node.seed),
       control_effective(node.stages),

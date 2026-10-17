@@ -579,7 +579,9 @@ void main() {
     cx.font = `${px}px ${EMOJI_FAMILY}`;
     const adv = Math.max(1, cx.measureText(emoji).width || px);
     const w = Math.ceil(adv) + EMOJI_PAD * 2;
-    const h = Math.ceil(px * 1.25) + EMOJI_PAD * 2;
+    // Extra headroom: colour emoji draw above the em box and were clipped.
+    const head = Math.ceil(px * 0.45);
+    const h = Math.ceil(px * 1.25) + EMOJI_PAD * 2 + head;
     const page = emojiPage(s, w, h);
     if (!page) {
       // Atlas full: keep the advance, draw nothing (cached, so no retry loop).
@@ -599,7 +601,7 @@ void main() {
     cx.textBaseline = "alphabetic";
     cx.textAlign = "left";
     cx.fillStyle = "#000";
-    cx.fillText(emoji, EMOJI_PAD, EMOJI_PAD + px * TEXT_ASCENT);
+    cx.fillText(emoji, EMOJI_PAD, EMOJI_PAD + head + px * TEXT_ASCENT);
     const gl = s.gl;
     const pixels = cx.getImageData(0, 0, w, h);
     gl.bindTexture(gl.TEXTURE_2D, page.texture);
@@ -681,7 +683,7 @@ void main() {
     let width = 0;
     if (hasEmoji) {
       for (const seg of segs) {
-        if (seg.emoji) width += emojiEntry(batch.s, seg.text, emojiPx)?.adv || 0;
+        if (seg.emoji) width += (emojiEntry(batch.s, seg.text, emojiPx)?.adv || 0) * emojiScale;
         else for (const ch of seg.text) width += (atlas.glyphs.get(ch)?.adv || 0) * g;
       }
     } else {
@@ -718,7 +720,7 @@ void main() {
         const run = textRun(batch, entry.page.texture, true);
         // Whole device px so NEAREST samples the bake texel-for-pixel.
         const x0 = Math.round(pen - EMOJI_PAD * squeeze * emojiScale);
-        const y0 = Math.round(baseline - (EMOJI_PAD + entry.px * TEXT_ASCENT) * emojiScale);
+        const y0 = Math.round(baseline - (EMOJI_PAD + Math.ceil(entry.px * 0.45) + entry.px * TEXT_ASCENT) * emojiScale);
         pushTextQuad(batch, x0, y0, x0 + entry.w * squeeze * emojiScale, y0 + entry.h * emojiScale,
           entry.u0, entry.v0, entry.u1, entry.v1, 1, 1, 1, ca);
         run.end = batch.tn;

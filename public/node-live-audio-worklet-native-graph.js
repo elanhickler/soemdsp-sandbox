@@ -506,6 +506,9 @@ NodeLiveAudioProcessor.prototype.mapNativeGraphParamId = function mapNativeGraph
     if (k === "smoothing") return P.NATIVE_GRAPH_PARAM_LPF_FREQUENCY;
     if (k === "range") return P.NATIVE_GRAPH_PARAM_MODE;
   }
+  if (t === "audioPlayer") {
+    if (k === "direction") return P.NATIVE_GRAPH_PARAM_PHASE;
+  }
   if (t === "sampleHold") {
     if (k === "smoothing") return P.NATIVE_GRAPH_PARAM_MIX;
     if (k === "interpolate") return P.NATIVE_GRAPH_PARAM_SHAPE;
@@ -6498,7 +6501,8 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
       push("start", P.NATIVE_GRAPH_PARAM_TIME_NUMERATOR, cont("start", 0));
       push("end", P.NATIVE_GRAPH_PARAM_TIME_DENOMINATOR, cont("end", 1));
       push("amplitude", P.NATIVE_GRAPH_PARAM_AMPLITUDE, cont("amplitude", 1));
-      push("phaseOffset", P.NATIVE_GRAPH_PARAM_PHASE, cont("phaseOffset", 0));
+      // << >> (direction) rides the phase slot; graph_engine adds it to Speed.
+      push("direction", P.NATIVE_GRAPH_PARAM_PHASE, cont("direction", 0));
       push("phase", P.NATIVE_GRAPH_PARAM_SHAPE, cont("phase", 0));
       push("playlistScrub", P.NATIVE_GRAPH_PARAM_SEED, cont("playlistScrub", 0));
       push("antialias", P.NATIVE_GRAPH_PARAM_STAGES, disc("antialias", 0));
@@ -7506,13 +7510,6 @@ NodeLiveAudioProcessor.prototype.ensureNativeAudioPlayerInternalSmoothing =
     const rate = Math.max(1, nodeGraphFiniteNumber(this.engineSampleRate || sampleRate, 44100));
     const specs = [
       {
-        key: "phaseOffset",
-        paramId: P.NATIVE_GRAPH_PARAM_PHASE,
-        mode: 0, // internal
-        type: 1, // linear
-        timeSamples: 220500, // 5 s @ 44.1 kHz (definition sample count)
-      },
-      {
         key: "phase",
         paramId: P.NATIVE_GRAPH_PARAM_SHAPE,
         mode: 0,
@@ -7745,6 +7742,7 @@ NodeLiveAudioProcessor.prototype.updateNativeAudioPlayerMeters = function update
       }
       speed += cv;
     }
+    if (nodeType === "audioPlayer") speed += readNum(node, "direction", 0);
     this.audioPlayerMeterSpeeds[id] = speed;
 
     const sampleId = String(node?.sample?.id || "");
@@ -7889,7 +7887,10 @@ NodeLiveAudioProcessor.prototype.syncNativeAudioPlayerPcm = function syncNativeA
       ok = 0;
     }
     if (!ok) {
-      cache.set(nodeId, { sampleId: "", frames: 0, error: "set_pcm refused" });
+      if (!prev || prev.error !== "set_pcm refused" || prev.refusedSample !== sampleId) {
+        console.warn(`[soemdsp] ${nodeType} ${nodeId}: native set_pcm refused ${frames} frames x ${channels} ch (WASM memory full or over the frame cap); this track will be silent`);
+      }
+      cache.set(nodeId, { sampleId: "", frames: 0, error: "set_pcm refused", refusedSample: sampleId });
       continue;
     }
 

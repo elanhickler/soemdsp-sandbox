@@ -214,8 +214,14 @@ function nodeGraphAudioPlayerLibraryNormalizeCard(raw, index = 0) {
   if (!path && !fileKey && !sampleId && !url) {
     return null;
   }
+  // Lazy host playlist entry (audio-player-api.js loading:"lazy"): bytes come from the host on play.
+  const hostIndex = Math.round(Number(source.hostIndex));
+  const host = Number.isFinite(hostIndex) && hostIndex >= 0 && source.hostGen != null
+    ? { hostIndex, hostGen: source.hostGen }
+    : {};
   return {
     ...(url ? { url } : {}),
+    ...host,
     bytes: Math.max(0, Math.round(nodeGraphFiniteNumber(source.bytes))),
     channels: Math.max(0, Math.round(nodeGraphFiniteNumber(source.channels))),
     fileKey,
@@ -1073,6 +1079,24 @@ async function nodeGraphAudioPlayerLibraryEnsureItemLoaded(nodeId, item) {
     });
     const node = typeof nodeGraphPatchNode === "function" ? nodeGraphPatchNode(nodeId) : null;
     return node?.sample?.id || "";
+  }
+  if (Number.isFinite(item.hostIndex) && typeof window.soemdspPlayerHostTrack === "function"
+    && typeof loadNodeGraphSampleForNode === "function") {
+    // Lazy: ask the host page for this one track. The File is not kept in the
+    // library store, and the previous track's PCM is released after binding
+    // (ReleaseOrphans), so only the playing track stays in memory.
+    nodeGraphAudioPlayerLog("INFO", "decode via host request", { nodeId, index: item.hostIndex });
+    const hosted = await window.soemdspPlayerHostTrack(item);
+    item.bytes = hosted.size;
+    const sample = await loadNodeGraphSampleForNode(nodeId, hosted, {
+      commit: true,
+      livePlan: true,
+      persist: false,
+      record: false,
+      sourcePath: item.name || hosted.name || "",
+      syncDisplay: true,
+    });
+    return sample?.id || "";
   }
   const url = String(item.url || "").trim();
   if (url && typeof loadNodeGraphSampleForNode === "function") {

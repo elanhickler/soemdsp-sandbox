@@ -1912,7 +1912,7 @@ function nodeGraphSampleWaveformResetZoom(section) {
 }
 
 /**
- * Nudge Music Player phaseOffset (−1…+1 wrap) by a relative cycle delta.
+ * Nudge the Music Player playlistScrub offset (−1…+1 wrap) by a relative cycle delta.
  * Does not touch free-running transport phase — only the relative scrub param.
  */
 function nodeGraphSampleWaveformNudgePhaseOffset(nodeId, deltaCycles) {
@@ -1924,23 +1924,11 @@ function nodeGraphSampleWaveformNudgePhaseOffset(nodeId, deltaCycles) {
   if (!delta) {
     return;
   }
-  const current = nodeGraphFiniteNumber(node.params?.phaseOffset);
-  const next = typeof wrapNodeSliderValue === "function"
-    ? wrapNodeSliderValue(current + delta, -1, 1)
-    : ((((current + delta) + 1) % 2) + 2) % 2 - 1;
-  node.params = { ...(node.params || {}), phaseOffset: next };
-  // Mirror the module slider if present.
-  const safeId = CSS.escape(String(nodeId || ""));
-  const moduleEl = document.querySelector(`.dsp-node[data-node="${safeId}"]`);
-  const slider = moduleEl?.querySelector?.('input[data-param="phaseOffset"]');
-  if (slider) {
-    slider.value = String(next);
-    if (typeof syncNodeSliderReadout === "function") {
-      syncNodeSliderReadout(slider);
-    }
-  }
-  if (typeof scheduleNodeGraphLiveParameterSync === "function") {
-    scheduleNodeGraphLiveParameterSync();
+  // << >> is now a speed control, so the relative drag rides the hidden
+  // playlistScrub offset (same path as click-to-seek).
+  const current = nodeGraphFiniteNumber(node.params?.playlistScrub);
+  if (typeof nodeGraphAudioPlayerPlaylistWritePhaseOffset === "function") {
+    nodeGraphAudioPlayerPlaylistWritePhaseOffset(nodeId, current + delta);
   }
   if (typeof markNodeGraphRenderPending === "function") {
     markNodeGraphRenderPending();
@@ -2149,7 +2137,7 @@ function bindNodeGraphSampleWaveformInteractions(section, canvas) {
   let dragPointerId = null;
   let lastClientX = 0;
   let lastClientY = 0;
-  // "pan" = view window, "phase" = phaseOffset scrub, "start"/"end" = region handles.
+  // "pan" = view window, "phase" = playlistScrub drag, "start"/"end" = region handles.
   let dragMode = "pan";
   canvas.addEventListener("pointerdown", (event) => {
     if (typeof nodeGraphAudioPlayerFaceIsWave === "function"

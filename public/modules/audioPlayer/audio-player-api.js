@@ -2,7 +2,9 @@
 // the direct parent; see ?origins=) loads tracks by URL or as bytes, drives
 // the transport, and receives ready/state/error events. Sending bytes
 // (ArrayBuffer / File / Blob) needs no CORS on the host's audio.
-// See docs/EMBED.md "Player API".
+// Loading modes: "all" (default) binds every track up front; "lazy" binds
+// metadata only and asks the host for one track's bytes (need-track) right
+// before it plays, so only the playing track is held. See docs/EMBED.md "Player API".
 (function soemdspPlayerApi() {
   const VERSION = 1;
   const PREFIX = "soemdsp:player:";
@@ -10,6 +12,23 @@
   let ready = false;
   const queue = [];
   let lastKey = "";
+  // Lazy loading: a playlist generation (each lazy load bumps it) and the
+  // outstanding need-track requests, keyed by requestId.
+  let lazyGen = 0;
+  let requestSeq = 0;
+  const pending = new Map();
+  const TRACK_TIMEOUT_MS = 120000;
+  const urlLoading = (() => {
+    try {
+      return String(new URLSearchParams(window.location.search || "").get("loading") || "").trim().toLowerCase();
+    } catch (_error) {
+      return "";
+    }
+  })();
+  const loadingMode = (value) => {
+    const v = String(value || urlLoading || "all").trim().toLowerCase();
+    return v === "lazy" ? "lazy" : "all";
+  };
 
   const parentWindow = () => (window.parent && window.parent !== window ? window.parent : null);
   const nodeId = () => (Array.isArray(nodeGraphMvp?.patch?.nodes) ? nodeGraphMvp.patch.nodes : [])
@@ -110,12 +129,75 @@
     return { file: new File([blob], name, { type: blob.type || track.mime || "", lastModified: Number(track.lastModified) || i }), title };
   }
 
+  function lazyCards(tracks) {
+    lazyGen += 1;
+    for (const [, req] of pending) req.reject(new Error("playlist replaced"));
+    pending.clear();
+    return tracks.map((t, i) => {
+      const name = String(t.title || t.name || baseName(t.url || "") || `track ${i + 1}`).trim();
+      const size = Number(typeof t.bytes === "number" ? t.bytes : t.size);
+      return {
+        name,
+        fileKey: `host-${lazyGen}-${i}`,
+        hostIndex: i,
+        hostGen: lazyGen,
+        ...(Number.isFinite(size) && size > 0 ? { bytes: size } : {}),
+      };
+    });
+  }
+
+  /** Ask the host for one lazy track's bytes; resolves to a File. */
+  function requestTrack(item) {
+    const index = Math.round(Number(item?.hostIndex));
+    if (!Number.isFinite(index) || item?.hostGen !== lazyGen) {
+      return Promise.reject(new Error("track is not from the current host playlist"));
+    }
+    if (!parentWindow() || !targetOrigin()) {
+      return Promise.reject(new Error("no host page to fetch the track from"));
+    }
+    requestSeq += 1;
+    const requestId = `t${lazyGen}-${requestSeq}`;
+    return new Promise((resolve, reject) => {
+      const timer = window.setTimeout(() => {
+        pending.delete(requestId);
+        reject(new Error(`host did not send ${item.name || "track"} in time`));
+      }, TRACK_TIMEOUT_MS);
+      pending.set(requestId, {
+        index,
+        name: String(item.name || ""),
+        resolve: (file) => { window.clearTimeout(timer); resolve(file); },
+        reject: (e) => { window.clearTimeout(timer); reject(e); },
+      });
+      emit("need-track", { index, requestId, title: String(item.name || "") });
+    });
+  }
+
+  function receiveTrack(msg) {
+    const requestId = String(msg.requestId || "");
+    const req = pending.get(requestId);
+    if (!req) return;
+    pending.delete(requestId);
+    if (msg.error) {
+      req.reject(new Error(`${req.name || "track"}: ${String(msg.error)}`));
+      return;
+    }
+    const got = trackFile({ ...msg, title: req.name, name: msg.name || req.name }, req.index);
+    if (!got) {
+      req.reject(new Error("track reply needs bytes (ArrayBuffer) or file (Blob)"));
+      return;
+    }
+    req.resolve(got.file);
+  }
+
   async function load(id, msg) {
     const tracks = Array.isArray(msg.tracks) ? msg.tracks.filter((t) => t && typeof t === "object") : [];
     if (!tracks.length) return error("bad-request", "load needs tracks: [{ url } | { bytes } | { file }]");
-    const asBytes = tracks.map(trackFile);
+    const lazy = loadingMode(msg.loading) === "lazy";
+    const asBytes = lazy ? [] : tracks.map(trackFile);
     let cards;
-    if (asBytes.every(Boolean)) {
+    if (lazy) {
+      cards = lazyCards(tracks);
+    } else if (asBytes.every(Boolean)) {
       const picked = nodeGraphAudioPlayerLibraryRememberPickedFiles(id, asBytes.map((t) => t.file)) || [];
       cards = picked.map((card, i) => (asBytes[i]?.title ? { ...card, name: asBytes[i].title, title: asBytes[i].title } : card));
     } else if (asBytes.some(Boolean)) {
@@ -199,6 +281,7 @@
         break;
       }
       case "volume": setVolume(id, msg.value); break;
+      case "track": receiveTrack(msg); return;
       case "get-state": emit("state", state(), origin); return;
       default: return error("unknown-type", `unknown message ${msg.type}`);
     }
@@ -225,4 +308,6 @@
   else window.addEventListener("nodeSandboxInterfaceReady", onReady, { once: true });
 
   window.soemdspPlayerApiState = state;
+  // Library hook (audio-player-library.js): fetch a lazy track's bytes from the host.
+  window.soemdspPlayerHostTrack = requestTrack;
 })();

@@ -1520,7 +1520,8 @@ function nodeGraphAudioPlayerPlaylistPlaybackRate(nodeId) {
   }
   const entry = nodeGraphMvp?.sampleBuffers?.get?.(node?.sample?.id);
   const seconds = entry?.frames > 0 ? entry.frames / Math.max(1, entry.sampleRate || 44100) : 0;
-  return seconds > 0 ? nodeGraphFiniteNumber(node?.params?.speed, 1) / seconds : 0;
+  const rate = nodeGraphFiniteNumber(node?.params?.speed, 1) + nodeGraphFiniteNumber(node?.params?.direction, 0);
+  return seconds > 0 ? rate / seconds : 0;
 }
 
 function nodeGraphAudioPlayerPlaylistSeekViaOffset(nodeId, desired01) {

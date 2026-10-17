@@ -20,6 +20,7 @@ Any site can embed a sandbox patch from soundemote.io with an iframe. No copy of
 | `src=<url>` | A single audio file instead of a playlist. |
 | `module=<nodeId|type>` | Show one whole module full-frame: its own panel with parameters, no graph (see below). `type` picks the first module of that type. |
 | `autoplay=1` | Start playing once loaded if the browser allows it. |
+| `loading=all\|lazy` | Default loading mode for Player API `load` (default `all`). A `load` message's own `loading` field wins. See "Loading modes". |
 | `hideui`, `autoframe`, `autostart`, `mode=perform`, `wasmLoad` | Existing params, unchanged. |
 
 `playlist`/`src` handling lives in `public/modules/audioPlayer/audio-player-embed.js` and runs after `nodeSandboxInterfaceReady`.
@@ -80,7 +81,8 @@ Commands (host -> iframe):
 
 | type | fields | effect |
 |---|---|---|
-| `soemdsp:player:load` | `tracks: [{ title?, bytes: ArrayBuffer \| Blob \| File, mimeType? }]` or `tracks: [{ title?, url }]` | Replace the playlist. Bytes need no CORS; urls must be fetchable by the iframe. Do not mix bytes and urls. |
+| `soemdsp:player:load` | `tracks: [{ title?, bytes: ArrayBuffer \| Blob \| File, mimeType? }]` or `tracks: [{ title?, url }]`; `loading?: "all" \| "lazy"`, `startIndex?`, `autoplay?` | Replace the playlist. Bytes need no CORS; urls must be fetchable by the iframe. Do not mix bytes and urls. With `loading: "lazy"`, tracks are metadata only: `[{ title?, name?, url?, size? }]` (no bytes). |
+| `soemdsp:player:track` | `requestId`, and `bytes: ArrayBuffer` (transfer it) or `file: Blob`, `name?`, `mime?`; or `error: string` | Reply to a `need-track` request (lazy mode). |
 | `soemdsp:player:play` | `index?` | Start (or resume) playback, optionally at a track. |
 | `soemdsp:player:pause` / `stop` / `next` / `prev` | - | Transport. |
 | `soemdsp:player:select` | `index`, `play?` | Select a track. |
@@ -88,7 +90,23 @@ Commands (host -> iframe):
 | `soemdsp:player:volume` | `value` (0..1) | Player amplitude. |
 | `soemdsp:player:get-state` | - | Replies with a `state` event. |
 
-Events (iframe -> host): `ready { patch, nodeId }`, `state { playing, paused, index, count, title, position, duration, volume, needsGesture }` (4 Hz while changing, and on demand), `error { code, message }` with code `bad-request`, `autoplay-blocked`, `decode`, `no-player`, `unknown-type`, `internal`. Commands sent before boot are queued. `state.needsGesture` is true while the AudioContext is not running.
+Events (iframe -> host): `need-track { index, requestId, title }` (lazy mode: send that one track with a `track` reply), `ready { patch, nodeId }`, `state { playing, paused, index, count, title, position, duration, volume, needsGesture }` (4 Hz while changing, and on demand), `error { code, message }` with code `bad-request`, `autoplay-blocked`, `decode`, `no-player`, `unknown-type`, `internal`. Commands sent before boot are queued. `state.needsGesture` is true while the AudioContext is not running.
+
+### Loading modes
+
+- `all` (default; sandbox and soundemote.io use): every track's bytes or url is bound up front, as before.
+- `lazy` (websites): the host sends the playlist without audio. The player shows the full list, and whenever a track is about to play (start, play/select, next/prev, playlist click, end-of-track advance) it posts `need-track { index, requestId }`. The host fetches that one file and replies `{ type: "soemdsp:player:track", version: 1, requestId, bytes }`, transferring the ArrayBuffer. Nothing is prefetched. The reply File is not cached, and the previous track's decoded PCM is released once the new one is bound, so only the playing track is held (in JS and in the WASM player buffer). Replaying a track asks again. Unanswered requests fail after 120 s with a `decode` error; a new `load` cancels outstanding ones.
+
+```js
+iframe.contentWindow.postMessage({ type: "soemdsp:player:load", version: 1, loading: "lazy",
+  tracks: [{ title: "Song", url: "/music/song.mp3", size: 4123456 }] }, sandboxOrigin);
+addEventListener("message", async (e) => {
+  if (e.origin !== sandboxOrigin || e.data?.type !== "soemdsp:player:need-track") return;
+  const bytes = await (await fetch(tracks[e.data.index].url)).arrayBuffer();
+  e.source.postMessage({ type: "soemdsp:player:track", version: 1, requestId: e.data.requestId, bytes },
+    sandboxOrigin, [bytes]);
+});
+```
 
 ## Message origins
 
