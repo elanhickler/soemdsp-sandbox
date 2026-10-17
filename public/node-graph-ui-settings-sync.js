@@ -743,10 +743,6 @@ function syncNodeUiDevSettingsHeaderControls() {
   const sliderValueColorValue = document.getElementById("nodeUiDevSliderValueColorValue");
   const sliderUnitColorInput = document.getElementById("nodeUiDevSliderUnitColor");
   const sliderUnitColorValue = document.getElementById("nodeUiDevSliderUnitColorValue");
-  const wireThicknessInput = document.getElementById("nodeUiDevWireThickness");
-  const wireThicknessValue = document.getElementById("nodeUiDevWireThicknessValue");
-  const traceWireThicknessInput = document.getElementById("nodeUiDevTraceWireThickness");
-  const traceWireThicknessValue = document.getElementById("nodeUiDevTraceWireThicknessValue");
   const choiceSlideEmptyBorderInput = document.getElementById("nodeUiDevChoiceSlideEmptyBorder");
   const choiceSlideEmptyBorderValue = document.getElementById("nodeUiDevChoiceSlideEmptyBorderValue");
   const choiceSlideDebugBoxesInput = document.getElementById("nodeUiDevChoiceSlideDebugBoxes");
@@ -793,10 +789,6 @@ function syncNodeUiDevSettingsHeaderControls() {
     !sliderValueColorValue ||
     !sliderUnitColorInput ||
     !sliderUnitColorValue ||
-    !wireThicknessInput ||
-    !wireThicknessValue ||
-    !traceWireThicknessInput ||
-    !traceWireThicknessValue ||
     !choiceSlideDebugBoxesInput ||
     !bypassIconSizeInput ||
     !bypassIconSizeValue ||
@@ -838,13 +830,6 @@ function syncNodeUiDevSettingsHeaderControls() {
   const sliderLabelColor = normalizeNodeUiDevColor(sliderLabelColorInput.value, "#cfdde5");
   const sliderValueColor = normalizeNodeUiDevColor(sliderValueColorInput.value, "#ffffff");
   const sliderUnitColor = normalizeNodeUiDevColor(sliderUnitColorInput.value, "#7fc7d9");
-  // Cable stroke is independent of inlet/outlet size (was 0.25 × port diameter).
-  const wireThicknessRaw = Number(wireThicknessInput.value);
-  const wireThicknessPx = Math.max(
-    0.25,
-    Math.min(12, Number.isFinite(wireThicknessRaw) ? wireThicknessRaw : 3.5),
-  );
-  const traceWireThicknessPx = Math.max(1, Math.min(12, nodeGraphFiniteNumber(traceWireThicknessInput.value, 1)));
   const choiceSlideEmptyBorderPx = choiceSlideEmptyBorderInput
     ? Math.max(0, Math.min(8, nodeGraphFiniteNumber(choiceSlideEmptyBorderInput.value)))
     : null;
@@ -916,12 +901,6 @@ function syncNodeUiDevSettingsHeaderControls() {
   document
     .getElementById("nodeGraphWorkspace")
     ?.style.setProperty("--node-slider-unit-color", sliderUnitColor);
-  document
-    .getElementById("nodeGraphWorkspace")
-    ?.style.setProperty("--node-wire-thickness", `${wireThicknessPx}px`);
-  document
-    .getElementById("nodeGraphWorkspace")
-    ?.style.setProperty("--node-trace-wire-thickness", `${traceWireThicknessPx}px`);
   if (choiceSlideEmptyBorderPx != null) {
     document
       .getElementById("nodeGraphWorkspace")
@@ -954,11 +933,6 @@ function syncNodeUiDevSettingsHeaderControls() {
   sliderLabelColorValue.textContent = sliderLabelColor;
   sliderValueColorValue.textContent = sliderValueColor;
   sliderUnitColorValue.textContent = sliderUnitColor;
-  if (!wireThicknessInput.matches(":active") && wireThicknessInput.value !== String(wireThicknessPx)) {
-    wireThicknessInput.value = String(wireThicknessPx);
-  }
-  wireThicknessValue.textContent = `${Math.round(wireThicknessPx * 100) / 100}px`;
-  traceWireThicknessValue.textContent = `${traceWireThicknessPx}px`;
   const sliderTextSizeInput = document.getElementById("nodeUiDevSliderTextSize");
   const sliderTextLineInput = document.getElementById("nodeUiDevSliderTextLineHeight");
   const sliderTextPadInput = document.getElementById("nodeUiDevSliderTextPadding");

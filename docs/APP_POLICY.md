@@ -322,6 +322,16 @@ This app is a **C++ DSP engine with a JS interface** (Â§0). JS authors and obs
 - CPU is still fine for one-shot layout and debug overlays, not for the displayed picture.
 - **Gain-reduction / ducking displays dip from the top** (Argi, 2026-10-14): at rest the line sits at the top and it moves down as reduction or ducking increases. Never draw reduction rising from the bottom.
 
+## 3b. Displays and engine state (Argi, 2026-10-17)
+
+1. Displays spawn and work while stopped.
+2. Buffer displays show black while stopped and freeze on pause.
+3. Parameter-driven displays update while stopped.
+4. Modulation displays may wait for project start.
+5. UI must never be blocked by engine state.
+
+Plan and tracker: `docs/ENGINE_STATE_DISPLAY_PLAN.md`.
+
 ---
 
 ## 4. What I See Is What I Hear (WISIWIH)
@@ -646,6 +656,11 @@ First consumers: Music Player, fbmField, Instant Waterfall compositor, RoundShap
 That ban applies only when all three are true: there is no consequence for leaving the value continuous, the DSP does not need an integer or a stepped value, and the parameter can already quantize through its own step. A hardcoded round or discrete snap in that case fights the parameter step. Do not do it.
 
 **Pitch Manager** octave and semitones were forced to integers even after step was set to 0. **Frequency Manager** octave and semitones are the same case as Pitch Manager: do not hardcode them discrete when the parameter step can already quantize them.
+
+## Public links (Argi, 2026-10-17)
+
+- The soundemote GitHub org is banned: code, docs and plugin metadata must never link to `github.com/soundemote`. Public links go to `github.com/elanhickler`.
+- The oldcode repo is never linked publicly.
 
 ## Amendments
 

@@ -158,20 +158,11 @@ async function bindNodeGraphUiDevSettingsEvents() {
     sliderTextInput?.addEventListener("change", syncNodeUiDevSettingsHeaderControls);
   }
   document
-    .getElementById("nodeUiDevWireThickness")
-    ?.addEventListener("input", syncNodeUiDevSettingsHeaderControls);
-  document
-    .getElementById("nodeUiDevWireThickness")
-    ?.addEventListener("change", syncNodeUiDevSettingsHeaderControls);
-  document
     .getElementById("nodeUiDevWirePatchPointSize")
     ?.addEventListener("input", syncNodeUiDevSettingsHeaderControls);
   document
     .getElementById("nodeUiDevWirePatchPointSize")
     ?.addEventListener("change", syncNodeUiDevSettingsHeaderControls);
-  document
-    .getElementById("nodeUiDevTraceWireThickness")
-    .addEventListener("input", syncNodeUiDevSettingsHeaderControls);
   document
     .getElementById("nodeUiDevChoiceSlideEmptyBorder")
     ?.addEventListener("input", syncNodeUiDevSettingsHeaderControls);

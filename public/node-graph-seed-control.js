@@ -5,8 +5,8 @@
 //  +/−   : click 1, Ctrl 10, Ctrl+Shift 100, Ctrl+Alt+Shift 1000, Alt alone = random.
 //          Wraps modularly over min..max.
 //  🎲    : random.
-//  number: drag 4px/step (right/up = up), step = 10^(digits-2) (min 1),
-//          each held Shift/Ctrl/Alt halves it, clamped. Wheel does nothing to Seed.
+//  number: drag 4px/step (right/up = up), step 1 on the stored integer
+//          (Shift/Ctrl/Alt still divide, min 1). Wheel does nothing to Seed.
 //          Alt/Ctrl click do nothing. Double-click types a value.
 (function () {
   const PX_PER_STEP = 4;
@@ -44,9 +44,8 @@
     if (e.ctrlKey) return 10;
     return 1;
   }
-  function dragStep(value, e) {
-    const digits = String(Math.abs(Math.round(value))).length;
-    let step = Math.pow(10, Math.max(0, digits - 2));
+  function dragStep(_value, e) {
+    let step = 1;
     const mods = (e.shiftKey ? 1 : 0) + (e.ctrlKey ? 1 : 0) + (e.altKey ? 1 : 0);
     step = Math.floor(step / Math.pow(2, mods));
     return Math.max(1, step);
@@ -68,7 +67,7 @@
     const w = readout.clientWidth, h = readout.clientHeight;
     if (!w || !h) return;
     const chars = Math.max(1, String(span.textContent || "").trim().length);
-    const pad = Math.max(2, h * 0.12);
+    const pad = Math.max(2, h * 0.12) + 4;
     const px = Math.max(6, Math.min((h - pad * 2) / 0.78, (w - pad * 2) / (chars * 0.58)));
     const v = `${px.toFixed(2)}px`;
     if (span.style.fontSize !== v) span.style.fontSize = v;

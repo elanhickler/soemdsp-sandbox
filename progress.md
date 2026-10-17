@@ -1,3 +1,11 @@
+## 2026-10-17 - Seed code: done
+
+- Argi confirms the seed code plan is implemented (`docs/SEED_CODE_PLAN.md`, status set to done). Docs note only. Not committed.
+
+## 2026-10-17 - Engine state and displays plan (docs only)
+
+- Added `docs/ENGINE_STATE_DISPLAY_PLAN.md` (rules, findings, tracker ES-1..ES-6) and APP_POLICY section 3b "Displays and engine state"; pointer in `docs/FUTURE_PLANNING.md`. The Playlist fix in the GL graph agent's uncommitted `?v=page-always-1` work must be committed together. Not committed.
+
 ## 2026-10-17 - Seed code plan (docs only)
 
 - Added `docs/SEED_CODE_PLAN.md` (Thoughts' plan + hex addendum verbatim, notes from the repo); pointer in `docs/FUTURE_PLANNING.md`. Planning only. Not committed.

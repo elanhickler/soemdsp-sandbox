@@ -156,6 +156,9 @@ function formatNodeSliderNumber(value, options = {}) {
     if (!Number.isFinite(number)) {
       return "";
     }
+    if (typeof formatNodeGraphSeedCode === "function") {
+      return formatNodeGraphSeedCode(number);
+    }
     return String(Math.round(number));
   }
   if (options.kind === "decibels" && Number.isFinite(number) && number <= -139.5) {

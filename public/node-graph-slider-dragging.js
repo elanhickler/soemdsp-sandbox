@@ -327,7 +327,9 @@ function updateNodeSliderCurrentValue(slider, rawValue) {
     ? (typeof nodeSliderChoiceValueFromIndex === "function"
       ? nodeSliderChoiceValueFromIndex(slider, choiceIndex)
       : Number(slider.min) + choiceIndex)
-    : parseNodeSliderMathExpression(normalizedValue);
+    : (slider?.dataset?.kind === "seed" && typeof parseNodeGraphSeedInput === "function"
+      ? parseNodeGraphSeedInput(normalizedValue)
+      : parseNodeSliderMathExpression(normalizedValue));
   if (!Number.isFinite(value)) {
     syncNodeSliderReadout(slider);
     return;

@@ -7593,9 +7593,8 @@ body.keyboard-debug-hidden .node-midi-keyboard-signal-bar {
   --node-wire-patch-point-size: calc(
     var(--node-port-diameter) * var(--node-wire-patch-point-size-ratio, 0.54)
   );
-  /* Cable stroke — UIDEV --node-wire-thickness (independent of inlet/outlet size).
-     Fallback ≈ former 0.25 × diameter at default 52% / 28px grid. */
-  --node-wire-thickness: 3.5px;
+  /* Zoom-1 cable and trace widths. Both scale with the camera. */
+  --node-wire-thickness: 2px;
   --node-trace-wire-thickness: 1px;
   /*
    * Signal jack cell:

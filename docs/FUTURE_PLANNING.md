@@ -2,6 +2,10 @@
 
 This file collects project-shaping ideas that should survive day-to-day implementation without becoming immediate scope.
 
+## Engine state and displays (2026-10-17)
+
+Displays must spawn and work while stopped; buffer faces black when stopped and frozen on pause; parameter faces always update; UI never blocked by engine state. Stages ES-1..ES-6 replace the ~138 engine gates with engineState() + per-face paint policy. Planned. Plan: `docs/ENGINE_STATE_DISPLAY_PLAN.md`
+
 ## Seed code (2026-10-17)
 
 Show seeds as a 4-character scrambled URL-safe base64 code (e.g. 🎲 P6nC) instead of 7-8 digit decimals; input also accepts decimal and #hex (raw 24-bit). Storage unchanged. Planning only. Plan: `docs/SEED_CODE_PLAN.md`

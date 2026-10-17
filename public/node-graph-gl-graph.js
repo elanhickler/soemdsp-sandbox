@@ -551,12 +551,13 @@ function nodeGraphGlGraphDrawSeeds(batch, toX, toY, zoom, cssW, cssH) {
     const text = String(valueEl?.textContent || "").replace(/\s+/g, " ").trim();
     if (text && valueCell && typeof nodeGraphGlLinesText === "function") {
       const cssPx = Number.parseFloat(valueEl ? getComputedStyle(valueEl).fontSize : "") || 0;
+      const pad = Math.max(2, valueCell.h * 0.12) + 4 * zoom;
       const fillPx = Math.max(
         6,
-        Math.min(valueCell.h * 0.78, valueCell.w / Math.max(1, text.length) / 0.58),
+        Math.min((valueCell.h - pad * 2) / 0.78, (valueCell.w - pad * 2) / Math.max(1, text.length) / 0.58),
       );
       nodeGraphGlLinesText(batch, text, valueCell.x + valueCell.w * 0.5, valueCell.y + valueCell.h * 0.5, nodeGraphGlGraphTextOpts({
-        px: Math.max(6, (cssPx > 4 ? cssPx * zoom : fillPx)),
+        px: Math.max(6, Math.min(cssPx > 4 ? cssPx * zoom : fillPx, fillPx)),
         rgba: ink,
         align: "center",
         baseline: "middle",
@@ -1019,7 +1020,7 @@ function nodeGraphGlGraphPresent() {
   let dotSize = nodeGraphGlGraphState.dotSize;
   if (!gesturing || !(thick > 0)) {
     const style = getComputedStyle(host);
-    thick = Number.parseFloat(style.getPropertyValue("--node-wire-thickness")) || 3.5;
+    thick = Number.parseFloat(style.getPropertyValue("--node-wire-thickness")) || 2;
     dotSize = Number.parseFloat(style.getPropertyValue("--node-wire-patch-point-size")) || 8;
     nodeGraphGlGraphState.thick = thick;
     nodeGraphGlGraphState.dotSize = dotSize;

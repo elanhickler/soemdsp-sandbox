@@ -2,6 +2,8 @@
 
 Source: Thoughts agent for Argi, 2026-10-17. Planning only.
 
+**Status: done (implemented; confirmed by Argi, 2026-10-17).**
+
 SEED CODE PLAN: show seeds as a 4-character code
 
 Problem: the seed range is 0 to 16,777,215 (2^24). With a decimal readout, about 99.4% of dice rolls land above 100,000, so seeds look like long, similar 7–8 digit numbers that are hard to remember.
@@ -31,7 +33,7 @@ Open question for the implementer: confirm where the new seed widget with the di
 2. **Alphabet confirmed:** letters + digits base64 (URL-safe, A–Z a–z 0–9 - _). Letters only would need 5 characters.
 3. **Revised (supersedes decision 1): codes carry a `~` prefix.** Codes are written `~P6nC`; the display shows 🎲 ~P6nC. Input parsing:
    - `~xxxx` = code (4 base64 characters after `~`).
-   - `#` = hex color, the raw 24-bit seed: `#RGB` and `#RRGGBB`. `#RGBA` (4 hex) and `#RRGGBBAA` are also accepted with alpha ignored (pending Argi objection).
+   - `#` = hex color, the raw 24-bit seed: `#RGB` and `#RRGGBB`. `#RRGGBBAA` is also accepted: the last 2 hex characters (alpha) are dropped and `#RRGGBB` is the seed. `#RGBA` (4 hex) expands CSS-style to `#RRGGBBAA`, then drops alpha the same way. So `#3FA9C2FF` gives the same seed as `#3FA9C2` (Argi, 2026-10-17).
    - Bare digits (any length) = decimal.
    - Why `~`: `!` looks like irrational/factorial, `@` is email, `$` is regex.
 4. **Bare 4-character input with a non-digit** (e.g. `P6nC`, no `~`) is still read as a code. Bare digits stay decimal (decision 3).

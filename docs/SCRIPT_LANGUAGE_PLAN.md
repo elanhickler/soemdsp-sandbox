@@ -28,6 +28,12 @@ Source: Thoughts agent for Argi, 2026-10-17. Planning only, no implementation un
 1. **Name:** the language is called **emo script**; files are `.emo` scripts (refined by Argi, 2026-10-17; not "Emote").
 2. **Save format:** scripts are embedded inside the patch JSON.
 
+**Decisions (Argi, 2026-10-17, round 5):**
+1. **Named lists:** `choice Name { a, b, c };` is a fixed list of names. It is not a `float` and not an `int`. No math on it.
+2. **`switch`:** the only branch on a `choice`. Each `case` is one of the names, ends on its own (no fall-through), and every name must appear. No `default`. A missing name does not compile.
+3. **As a parameter:** `param choice shape = exponential;` is a choice slider. The patch stores the name (`exponential`), never the index. Reordering names does not change a saved patch. Removing a name drops that choice, same as removing a `param`.
+4. **Codegen:** names lower to plain integers and `switch` is a jump table. Lands with statements (stage 2), not its own stage.
+
 ## Language sketch
 ```
 class OnePole {
@@ -36,6 +42,8 @@ class OnePole {
 }
 
 param float decay = 0.5;   // slider, audio-rate modulatable
+choice curve { linear, exponential, cosine };
+param choice shape = exponential;  // choice slider, saved by name
 in float gate;
 out float y;
 
@@ -44,10 +52,14 @@ float t;
 
 void process() {
   t = gate > 0.5 ? 0 : t + dt;
-  y = lp.tick(exp(-t / decay), 0.01);
+  switch (shape) {
+    case linear:      y = lp.tick(t, 0.01);
+    case exponential: y = lp.tick(exp(-t / decay), 0.01);
+    case cosine:      y = lp.tick(0.5 - 0.5 * cos(t), 0.01);
+  }
 }
 ```
-- Types: `float`, `int`, `bool`, user classes, fixed-size arrays (`float buf[512];`).
+- Types: `float`, `int`, `bool`, `choice`, user classes, fixed-size arrays (`float buf[512];`).
 - `in`/`out` declarations become the module's jacks. `param` declarations become sliders whose values arrive per sample (audio-rate modulation), clamped to slider range per app policy.
 - Built-ins: `exp`, `sin`, `cos`, `pow`, `log`, `abs`, `min`, `max`, `clamp`, `floor`, etc., plus `dt` and `sr`.
 - Classes: fields + methods; instances declared at top level, laid out in fixed state memory at compile time, and they keep their state across samples. No inheritance or virtuals (maybe simple interfaces later). Implementation is the standard lowering: a struct in linear memory plus functions taking its offset.
@@ -77,7 +89,7 @@ display {
 
 ## Stages (each usable on its own)
 1. **Expressions:** one-line `y = exp(-t * k)` with math, built-ins, inputs and params, in a Script module. Covers decay-curve experiments.
-2. **Statements and state:** multi-line, locals, `if`/`else`, ternary, state that persists across samples (`prev`, phase accumulators).
+2. **Statements and state:** multi-line, locals, `if`/`else`, ternary, `choice` and `switch`, state that persists across samples (`prev`, phase accumulators).
 3. **Functions and fixed arrays.**
 4. **Classes:** fields and methods, top-level instances.
 5. **Display block:** GLSL `display {}`, `show` / `show trace` / `show peak`, `prev`, 📺 video out.
@@ -95,6 +107,7 @@ All resolved (2026-10-17). None remain.
 - ~~How scripts are saved.~~ **Resolved (round 4):** embedded inside the patch JSON.
 - ~~Package manifest vs bundled libraries for Lezer / Binaryen.~~ **Resolved (round 3):** implementer chooses; lazy-load Binaryen.
 - ~~How a `param` behaves in "Use real mod values" mode.~~ **Resolved (round 3):** raw values.
+- ~~Switch on a named list.~~ **Resolved (round 5):** `choice` plus exhaustive `switch`, saved by name, no fall-through, no `default`.
 
 ## Policy check (Grok Bot, 2026-10-17)
 
@@ -120,6 +133,8 @@ Checked against `docs/APP_POLICY.md`, known Argi policies and the current repo.
 **Modulation clamped to slider range (APP_POLICY L622): complies.** `param` values are clamped to the slider range per sample. Note the "Use real mod values" mode: there the cable is a raw unit and not clamped to the range; **resolved (round 3):** script params receive the raw value in that mode.
 
 **📺 video port (APP_POLICY §11): complies if** the script's video out shows the 📺 emoji to users with internal id `rgba`, never the text "RGBA".
+
+**Choice lists: resolved (round 5).** `choice` matches the name-based persistence rule (APP_POLICY "Choice / enum persistence"): the patch stores the case name, never the list index. `switch` must name every case. No fall-through, no `default`, no math on a `choice`.
 
 **Fixed parameter sets: resolved (round 2).** Fixed per compiled script, keyed by declared name; a recompile that removes a name drops its cables, no shim. Original note: Scripts generate jacks and params from `in` / `out` / `param` declarations, so the set changes when the script changes. That conflicts with the fixed-parameter-set rule. Proposed rule (now adopted): the set is fixed per compiled script (no change at runtime); params are identified by their declared name (choices/params persist by stable name, APP_POLICY "Choice / enum persistence"); a recompile that removes a name drops its cables and modulation (no shim, §1).
 

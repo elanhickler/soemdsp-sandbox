@@ -10,6 +10,7 @@ Source: Thoughts agent for Argi, 2026-10-16. Planning only, no implementation un
 4. The video output port is shown to users as the 📺 emoji, never labeled "RGBA". The internal id stays lowercase `rgba`, like Softpop.
 5. Softpop Oscillator, Softpop Filter and Noise Generator also get **Blue** and **Violet**, appended to the end of their Color choice lists so existing saved indices/presets stay valid (choices also persist by name, APP_POLICY "Choice / enum persistence"). Existing colours bit-identical.
 6. Amp over Crossfade uses the **squared** curve by default: `out = Amplitude · x · (1 − a·c)²` (ear check can confirm).
+7. **Face (Argi, 2026-10-17):** keep the sine line and add a noise band centred at the pitch whose width follows Q. The band's brightness rises with the crossfade noise gain while the line fades; Amp over Crossfade dims the whole picture. WebGL/shaders only, using values the engine already computes.
 
 **Module:** `softpop2` ("Softpop 2"), native C++ `native_modules/softpop2/softpop2.cpp`. Reuses `native_modules/softpop_oscillator/softpop_core.h`, `library/include/soemdsp/filter/tpt_svf.h`, `library/include/soemdsp/math/noise_colors.h`, `math/seed.h`. No JS DSP.
 
@@ -41,6 +42,8 @@ Source: Thoughts agent for Argi, 2026-10-16. Planning only, no implementation un
 ## Face
 Reuse `softpopFace` (`public/modules/softpopOscillator/softpop-display.js`), WebGL, same display data from `softpop_core.h`. The 📺 output publishes that plate.
 
+**Decision (Argi, 2026-10-17, Decision 7):** keep the sine line (fades as Crossfade rises) and add a noise band centred at the pitch whose width follows the Crossfade-driven Q. Band brightness rises with the crossfade noise gain (`sin(π/2·c)`) while the line fades (`cos(π/2·c)`); Amp over Crossfade (`(1 − a·c)²`) dims the whole picture. WebGL/shaders only (`gl-line-renderer.js`), using values the engine already computes (pitch, Q, crossfade gains, Amp over Crossfade); no re-simulation in the display.
+
 **Publish call (to add):** `softpop-display.js` does not call `nodeGraphPicturePublish` / `nodeGraphPicturePublishCanvas` today, although Softpop Oscillator already lists an `rgba` output. Add the publish call after the face draws, the way Spectrogram (`spectrogram-display.js` L711-713) and RGB Shape (`rgb-shape-display.js` L198) call `nodeGraphPicturePublishCanvas(nodeId, canvas)`; this also fixes the existing Softpop outputs.
 
 ## Wiring checklist
@@ -55,7 +58,7 @@ Reuse `softpopFace` (`public/modules/softpopOscillator/softpop-display.js`), Web
 ## Still open
 - ~~Curve of Amp over Crossfade (linear vs squared).~~ **Resolved (Argi, 2026-10-16):** squared `(1 − a·c)²` (Decision 6); ear check can confirm.
 - ~~Whether Blue/Violet go into shared `noise_colors.h` or stay module-local.~~ **Resolved (Argi, 2026-10-16):** shared `noise_colors.h`, existing colours bit-identical, regression test.
-- Whether the face needs any change to show the crossfade/dispersion.
+- ~~Whether the face needs any change to show the crossfade/dispersion.~~ **Resolved (Argi, 2026-10-17):** see Face (Decision 7).
 - ~~Whether Softpop Oscillator / Softpop Filter / Noise Generator also expose Blue/Violet.~~ **Resolved (Argi, 2026-10-16):** yes, appended to their choice lists; existing colours bit-identical (Decision 5).
 
 ## Policy check (Grok Bot, 2026-10-16)
