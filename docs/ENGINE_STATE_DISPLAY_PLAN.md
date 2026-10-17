@@ -2,7 +2,7 @@
 
 Source: Interface agent for Argi, 2026-10-17. Planning/tracking doc.
 
-Status: **in progress (ES-1, ES-2 landed locally).** Owner: Grok Bot executor (perf/GL agent). Policy: `docs/APP_POLICY.md` §3b "Displays and engine state".
+Status: **in progress (ES-1 to ES-3 landed locally).** Owner: Grok Bot executor (perf/GL agent). Policy: `docs/APP_POLICY.md` §3b "Displays and engine state".
 
 ## Rules from Argi (2026-10-17)
 
@@ -26,7 +26,7 @@ Status: **in progress (ES-1, ES-2 landed locally).** Owner: Grok Bot executor (p
 |----|-------|-------|--------|
 | ES-1 | Paint-gate exposes `engineState()` (stopped / paused / playing) and `facePaintPolicy(kind)` (param / buffer / modulation); each face declares its kind at registration. | Grok Bot | done (local) |
 | ES-2 | Param faces paint on create and on every parameter change regardless of engine state; only live overlays (playheads, lamps) check the engine. | Grok Bot | done (local) |
-| ES-3 | Buffer faces: a shared `ensureColdPlate(face)` on spawn and on stop, holding the last frame on pause. | TBD | planned |
+| ES-3 | Buffer faces: a shared `ensureColdPlate(face)` on spawn and on stop, holding the last frame on pause. | Grok Bot | done (local) |
 | ES-4 | Draw loops keep running while any param face is visible; engine start re-arms them and is no longer the only way to wake them. | TBD | planned |
 | ES-5 | Audit UI handlers, plus a smoke test: load a patch stopped, switch every Music Player page, drag a module, and assert every face painted. | TBD | planned |
 | ES-6 | A static guard flagging new `live.node`, `outputEnabled` or `speedMultiplier` reads in display or UI files outside `paint-gate.js` and `live-runtime.js`. | TBD | planned |
@@ -36,6 +36,7 @@ Status: **in progress (ES-1, ES-2 landed locally).** Owner: Grok Bot executor (p
 - **Playlist fix** (`70d0d06a`): GL graph skips canvases in hidden Music Player pages; audioPlayer waveform loop runs in every engine state; face switch flushes the GPU page.
 - **ES-1**: `public/node-graph-module-scope-paint-gate.js` adds `scopePaintEngineState()` ("stopped" / "paused" / "playing"), `scopePaintFacePolicy(kind, state)` (`{ paint, black, freeze, animate }`), the kind table `nodeGraphFacePaintKindTable` (renderer key or node type), `nodeGraphRegisterFacePaintKind`, `nodeGraphDeclareFacePaintKind` (element `data-face-paint`), `nodeGraphFacePaintKindFor(slot | element | id | key)`, and `nodeGraphInstallDrawingFacePump({ paintKind })`. Unlisted faces default to "buffer" (old behaviour). Smoke: `scripts/smoke_engine_state_policy.mjs`.
 - **ES-2**: `scopePaintShouldColdBootFace(nodeId, slot)` wipes on stop only for buffer / modulation kinds (power-off still wipes everything). New `paintNodeGraphParamFacesNow()` paints visible param faces that draw through the shared renderer table (today: Transport BPM) from both not-live branches of the scope draw (`scheduleNodeGraphModuleScopeDraw`, `drawNodeGraphModuleScopes`). Audit result: the other listed param faces (shapes, sin/cos, softwave, slew, arp keys, harmonic / additive curves, phone tone) self-paint on create and `syncFromParameters` already; their engine reads gate only live overlays (playheads, dots, lamps), which ES-2 allows. Softpop face, FBM field and RGB fractal are buffer / sample-driven and stay black while stopped (ES-3).
+- **ES-3**: param list now also covers filter / envelope / shape / pulse / soft-clipper curve faces (class-marked: eqFilter, passiveFilter, cookbook filters, ...), controllers (knob, keyboard, buttons, plugin slider, round shape) and the sample waveform. New `scopePaintEnsureColdPlate(slot, { force, assumeStopped })` and `scopePaintEnsureColdPlates()`: param faces are never blanked; buffer / modulation faces get the registered face wipe, then the GL trace cold plate for waterfall / dot / value / lineBurn faces, else a black fill of the existing 2D face canvas; paused holds the frame. Called from Stop (`wipeNodeGraphModuleScopeScreensToColdBoot`, with `assumeStopped`), from slot spawn while stopped (`registerNodeGraphModuleScopeSlot`, two frames after layout), and from the typed-item cold boot in the orchestrator. ArchIV check on softpop (Play, Pause, Stop): param faces lit in every state; every buffer face held on pause; on Stop the Instant Waterfall faces (Output, Ping Pong, Time Quantizer) no longer keep the last trace (they did before ES-3); Output shows its designed stopped plate. Note: buffer faces spawned while stopped have no face canvas until first live draw, so they show their CSS plate.
 
 ## Cross-references
 

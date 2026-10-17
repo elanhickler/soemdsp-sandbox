@@ -505,6 +505,14 @@ const nodeGraphFacePaintKindTable = Object.assign(Object.create(null), {
   arpKeysFace: "param",
   phoneToneFace: "param",
   transportBpm: "param",
+  // Controllers and sample pictures (UI / param, never engine-gated).
+  knobFace: "param",
+  keyboardControllerFace: "param",
+  momentaryButtonFace: "param",
+  toggleButtonFace: "param",
+  pluginSliderFace: "param",
+  roundShapeFace: "param",
+  sampleWaveform: "param",
   // Node types whose faces are UI or param pictures.
   audioPlayer: "param",
   wavetable2d: "param",
@@ -515,6 +523,29 @@ const nodeGraphFacePaintKindTable = Object.assign(Object.create(null), {
   softwaveOsc: "param",
   slewLimiter: "param",
 });
+
+const NODE_GRAPH_CURVE_FACE_SELECTOR = [
+  ".node-filter-curve-display",
+  ".node-filter-curve-canvas",
+  ".node-envelope-curve-display",
+  ".node-round-shape-display",
+  ".node-basic-shape-display",
+  ".node-sincos4-display",
+  ".node-pulse-curve-display",
+  ".node-soft-clipper-curve-display",
+].join(", ");
+
+function nodeGraphFacePaintIsCurveFace(el) {
+  if (typeof nodeGraphFilterCurveIsPersistentScreen === "function" && nodeGraphFilterCurveIsPersistentScreen(el)) {
+    return true;
+  }
+  try {
+    return Boolean(el.matches?.(NODE_GRAPH_CURVE_FACE_SELECTOR) || el.closest?.(NODE_GRAPH_CURVE_FACE_SELECTOR)
+      || el.querySelector?.(NODE_GRAPH_CURVE_FACE_SELECTOR));
+  } catch (_e) {
+    return false;
+  }
+}
 
 function nodeGraphRegisterFacePaintKind(key, kind) {
   const k = String(key || "").trim();
@@ -551,6 +582,11 @@ function nodeGraphFacePaintKindFor(target) {
   if (NODE_GRAPH_FACE_PAINT_KINDS.includes(declared)) {
     return declared;
   }
+  // Filter / envelope / shape / clipper curve faces (eqFilter, passiveFilter,
+  // cookbook filters, envelopes, pulse curve, soft clipper): param pictures.
+  if (el && nodeGraphFacePaintIsCurveFace(el)) {
+    return "param";
+  }
   if (target.scopeElement || target.nodeId) {
     const renderer = typeof nodeGraphModuleDisplayRendererForSlot === "function"
       ? nodeGraphModuleDisplayRendererForSlot(target)
@@ -586,6 +622,81 @@ function scopePaintFacePolicy(kind, state = scopePaintEngineState()) {
     return { kind: k, state, paint: false, black: false, freeze: true, animate: false };
   }
   return { kind: k, state, paint: true, black: false, freeze: false, animate: true };
+}
+
+/**
+ * ES-3: shared cold plate for buffer / modulation faces.
+ * Stopped: black (registered face wipe if the display type has one, else a
+ * plain black fill of the face's existing 2D canvas). Paused: hold the last
+ * frame unless force. Param faces are never blanked. Never creates canvases;
+ * GL-owned canvases (no 2D context) are left to their own wipe.
+ */
+const NODE_GRAPH_TRACE_COLD_PLATE_RENDERERS = ["waterfall", "dot", "value", "lineBurn"];
+
+function scopePaintEnsureColdPlate(slot, options = {}) {
+  if (!slot) {
+    return false;
+  }
+  const force = options.force === true;
+  const nodeId = slot.nodeId || slot.dataset?.node || "";
+  const kind = nodeGraphFacePaintKindFor(slot);
+  const poweredOff = scopePaintIsFacePoweredOff(nodeId);
+  if (kind === "param" && !poweredOff) {
+    return false;
+  }
+  // Stop wipe runs while live.node may still be set: assumeStopped.
+  const policy = scopePaintFacePolicy(kind, options.assumeStopped ? "stopped" : undefined);
+  if (!poweredOff && !policy.black && !(force && policy.freeze)) {
+    return false;
+  }
+  const face = slot.scopeElement || (slot.dataset ? slot : null);
+  const canvas = options.canvas
+    || face?.querySelector?.(":scope > canvas.node-module-scope-local-fallback-canvas")
+    || face?.querySelector?.("canvas")
+    || null;
+  if (!canvas || !(canvas.width > 1) || !(canvas.height > 1)) {
+    return false;
+  }
+  const displayType = options.displayType
+    || (typeof nodeGraphModuleDisplayRendererForSlot === "function" && slot.scopeElement
+      ? nodeGraphModuleDisplayRendererForSlot(slot)
+      : "");
+  let done = false;
+  if (typeof nodeGraphModuleScopeWipeCanvas === "function") {
+    done = nodeGraphModuleScopeWipeCanvas(canvas, { nodeId, displayType: displayType || undefined });
+  }
+  // Trace faces (Instant Waterfall, dot, value, lineBurn, Output): the wipe
+  // drops history only; repaint the GL cold plate so no stale trace remains.
+  if (
+    slot.scopeElement
+    && NODE_GRAPH_TRACE_COLD_PLATE_RENDERERS.includes(displayType || "")
+    && typeof paintNodeGraphTraceDisplayColdPlate === "function"
+  ) {
+    const ratio = typeof window !== "undefined" ? Math.max(1, window.devicePixelRatio || 1) : 1;
+    try {
+      done = paintNodeGraphTraceDisplayColdPlate(slot, ratio, { force: true }) || done;
+    } catch (_error) {
+      // Best-effort.
+    }
+    return done;
+  }
+  if (!done && typeof nodeGraphGlLinesFillBlack === "function") {
+    nodeGraphGlLinesFillBlack(canvas);
+    done = true;
+  }
+  return done;
+}
+
+/** ES-3: cold plate every visible buffer / modulation face (spawn, Stop). */
+function scopePaintEnsureColdPlates(options = {}) {
+  if (typeof nodeGraphVisibleModuleScopeSlots !== "function") {
+    return 0;
+  }
+  let n = 0;
+  for (const slot of nodeGraphVisibleModuleScopeSlots()) {
+    if (scopePaintEnsureColdPlate(slot, options)) n += 1;
+  }
+  return n;
 }
 
 /**
@@ -633,6 +744,8 @@ function paintNodeGraphParamFacesNow(pixelRatio) {
 if (typeof module !== "undefined" && module.exports) {
   module.exports = {
     paintNodeGraphParamFacesNow,
+    scopePaintEnsureColdPlate,
+    scopePaintEnsureColdPlates,
     scopePaintEngineState,
     scopePaintFacePolicy,
     nodeGraphFacePaintKindFor,

@@ -62,6 +62,35 @@ ctx.nodeGraphVisibleModuleScopeSlots = () => [
 ];
 check(ctx.paintNodeGraphParamFacesNow(1) === 1 && drew === 1, "stopped: only param renderer faces painted");
 
+// ES-3: shared cold plate.
+{
+  const mkCanvas = () => ({ width: 64, height: 32, filled: 0 });
+  const mkFace = (canvas, cls = "") => ({ dataset: {}, querySelector: (sel) => (sel.includes("node-") && !sel.includes("canvas.node-module") ? null : canvas), matches: (sel) => cls && sel.includes(cls), closest: () => null });
+  ctx.nodeGraphGlLinesFillBlack = (c) => { c.filled += 1; };
+  ctx.nodeGraphModuleScopeWipeCanvas = () => false;
+  setLive(null);
+  const bc = mkCanvas();
+  check(ctx.scopePaintEnsureColdPlate({ nodeId: "x1", renderer: "softpopFace", scopeElement: mkFace(bc) }) === true && bc.filled === 1, "stopped buffer face gets black plate");
+  const pc = mkCanvas();
+  check(ctx.scopePaintEnsureColdPlate({ nodeId: "t1", renderer: "transportBpm", scopeElement: mkFace(pc) }) === false && pc.filled === 0, "param face never blanked");
+  const cc = mkCanvas();
+  check(ctx.scopePaintEnsureColdPlate({ nodeId: "e1", renderer: "", scopeElement: mkFace(cc, ".node-filter-curve-display") }) === false && cc.filled === 0, "filter curve face is param");
+  setLive({ node: {}, speedMultiplier: 0 });
+  const hc = mkCanvas();
+  check(ctx.scopePaintEnsureColdPlate({ nodeId: "x1", renderer: "softpopFace", scopeElement: mkFace(hc) }) === false && hc.filled === 0, "paused buffer face holds its frame");
+  setLive({ node: {}, speedMultiplier: 1 });
+  const sc = mkCanvas();
+  check(ctx.scopePaintEnsureColdPlate({ nodeId: "x1", renderer: "softpopFace", scopeElement: mkFace(sc) }, { assumeStopped: true }) === true && sc.filled === 1, "Stop wipe (assumeStopped) blacks buffer face");
+  setLive(null);
+  const tiny = { width: 1, height: 1, filled: 0 };
+  check(ctx.scopePaintEnsureColdPlate({ nodeId: "x1", renderer: "softpopFace", scopeElement: mkFace(tiny) }) === false, "unsized canvas skipped");
+  check(ctx.nodeGraphFacePaintKindFor("knobFace") === "param" && ctx.nodeGraphFacePaintKindFor("sampleWaveform") === "param", "controllers and sample waveform are param");
+  const wipe = fs.readFileSync("public/node-graph-module-scope-wipe.js", "utf8");
+  check(wipe.includes("scopePaintEnsureColdPlates({ assumeStopped: true })"), "Stop wipe calls shared cold plates");
+  const slots = fs.readFileSync("public/node-graph-module-scope-slots.js", "utf8");
+  check(slots.includes("scopePaintEnsureColdPlate(slot)"), "spawn while stopped calls cold plate");
+}
+
 // ES-2 wiring: orchestrator passes the slot and paints param faces when not live.
 const orch = fs.readFileSync("public/node-graph-module-scope-draw-orchestrator.js", "utf8");
 check(orch.includes("scopePaintShouldColdBootFace(nodeId, item?.slot)"), "typed item passes slot to cold-boot check");

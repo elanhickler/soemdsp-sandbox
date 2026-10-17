@@ -252,6 +252,14 @@ function wipeNodeGraphModuleScopeScreensToColdBoot() {
       // Best-effort.
     }
   }
+  // ES-3: every visible buffer / modulation face lands on its cold plate.
+  if (typeof scopePaintEnsureColdPlates === "function") {
+    try {
+      scopePaintEnsureColdPlates({ assumeStopped: true });
+    } catch (_error) {
+      // Best-effort.
+    }
+  }
 }
 
 function nodeGraphModuleScopeWipePhosphorCanvas(canvas, bg) {

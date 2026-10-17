@@ -114,7 +114,9 @@ function drawNodeGraphModuleScopeTypedItem(renderer, item, pixelRatio) {
       && nodeGraphModuleScopeLocalFallbackCanvas(item.slot))
       || item?.slot?.scopeElement?.querySelector?.("canvas")
       || null;
-    if (typeof nodeGraphModuleScopeWipeCanvas === "function") {
+    if (typeof scopePaintEnsureColdPlate === "function") {
+      scopePaintEnsureColdPlate(item.slot, { canvas, displayType: displayRenderer, force: true });
+    } else if (typeof nodeGraphModuleScopeWipeCanvas === "function") {
       nodeGraphModuleScopeWipeCanvas(canvas, { nodeId, displayType: displayRenderer });
     } else if (typeof nodeGraphModuleScopeWipeNode === "function") {
       nodeGraphModuleScopeWipeNode(nodeId);

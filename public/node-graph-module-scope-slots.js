@@ -49,6 +49,19 @@ function registerNodeGraphModuleScopeSlot(moduleElement, options = {}) {
   // stopped (each schedule used to reflow every face via HasModelDisplay).
   if (typeof nodeGraphModuleScopePaused !== "function" || !nodeGraphModuleScopePaused()) {
     scheduleNodeGraphModuleScopeDraw();
+  } else if (
+    typeof scopePaintEnsureColdPlate === "function"
+    && typeof scopePaintEngineState === "function"
+    && scopePaintEngineState() === "stopped"
+    && typeof requestAnimationFrame === "function"
+  ) {
+    // ES-3: a buffer face spawned while stopped shows its black plate (after
+    // the face canvas is sized), never a transparent hole or stale pixels.
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      if (nodeGraphModuleScopeState.slots.get(nodeId) === slot && scopePaintEngineState() === "stopped") {
+        scopePaintEnsureColdPlate(slot);
+      }
+    }));
   }
   return slot;
 }
