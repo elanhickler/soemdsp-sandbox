@@ -37,6 +37,9 @@ NodeLiveAudioProcessor.prototype.smoothingTypeFromMetadata = function smoothingT
       if (key === "threePole" || key === "3P" || key === "3p" || key === "three-pole" || key === "3pole") {
         return "threePole";
       }
+      if (key === "bessel" || key === "B" || key === "b") {
+        return "bessel";
+      }
       return key === "papoulis" ? "papoulis" : "onePole";
     }
     // Legacy: linearSmoothing=false → instant snaps (not linear ramps).

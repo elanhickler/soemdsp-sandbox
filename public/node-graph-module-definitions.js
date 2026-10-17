@@ -15212,7 +15212,7 @@ const nodeGraphModuleDefinitions = (
         nonlinearSlider: false,
         step: "1",
         tooltip: "Fractional sample read. Off = linear. Hermite = 4-point cubic (smoother varispeed, more CPU)." },
-      { choices: ["Off (reset)", "Stop", "Pause", "Loop", "Play", "Loop All"], defaultValue: "1", displayChoices: true, divideChoicesVisibly: true, key: "transport", label: "Playmode", linearSmoothing: false, smoothingMode: "off", smoothingType: "none", max: "5", mid: "2", min: "0", nonlinearSlider: false, step: "1" },
+      { choices: ["Off (reset)", "Stop", "Pause", "Loop", "Play", "Loop All"], defaultValue: "1", displayChoices: true, divideChoicesVisibly: true, key: "transport", label: "Mode", linearSmoothing: false, smoothingMode: "off", smoothingType: "none", max: "5", mid: "2", min: "0", nonlinearSlider: false, step: "1" },
       nodeGraphPlaybackSpeedParameter(),
       // Forward / reverse speed offset (shares Speed's definition). Replaces
       // the old phaseOffset nudge; saved phaseOffset values drop on load.

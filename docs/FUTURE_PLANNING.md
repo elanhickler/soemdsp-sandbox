@@ -2,6 +2,10 @@
 
 This file collects project-shaping ideas that should survive day-to-day implementation without becoming immediate scope.
 
+## Sandbox Script Language (2026-10-17)
+
+Argi's own small C-like language for DSP classes with state and audio-rate param modulation, compiled in the browser to WASM (Lezer parser, Binaryen codegen) and run in the worklet; never JS in the audio path. A `display {}` block of raw GLSL draws the face and can publish on 📺. Built in six stages, starting with one-line expressions. Planning only. Plan: `docs/SCRIPT_LANGUAGE_PLAN.md`
+
 ## Sandbox DAW plugin (2026-10-16)
 
 Designer runs in the plugin (CLAP/VST3) with the native engine, but output is still silent in REAPER. Milestones DAW-1..8 (audible, DAW state, host integration, automation, glitch-free editing, editor, robustness, release) and the rename to 'Sandbox'. Plan: soemdsp-sandbox-audioplugin `docs/DAW_PLAN.md`

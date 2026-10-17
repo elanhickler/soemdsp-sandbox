@@ -84,11 +84,15 @@ varying float vLen;
 varying float vHalf;
 varying float vFeather;
 varying vec4 vColour;
+uniform float uCoverage;
 void main() {
   float u = vLocal.x;
   float d = u < 0.0 ? length(vLocal) : (u > vLen ? length(vec2(u - vLen, vLocal.y)) : abs(vLocal.y));
   float a = 1.0 - smoothstep(vHalf, vHalf + max(vFeather, 1e-4), d);
-  gl_FragColor = vec4(vColour.rgb, vColour.a * a);
+  float cov = vColour.a * a;
+  // Coverage pass stores straight alpha. Zero-coverage corners must be
+  // (0,0,0,0) or MAX would paint the quad's bounding box.
+  gl_FragColor = (uCoverage > 0.5 && cov < 0.004) ? vec4(0.0) : vec4(vColour.rgb, cov);
 }
 `;
   // Textured quads: images (mode 0), tinted glyph coverage (mode 1),
@@ -208,10 +212,15 @@ void main() {
   // Cut each jack inward. A disk centered on the wall removes the inside
   // semicircle; the outside half stays outside the rectangle.
   float sd = sdRect;
-  float halfW = max(uStroke * 0.5, 0.75);
-  float nearest = abs(sdRect);
+  // uStroke is the full band, drawn only outside the plate. Zoom 1 is 1px.
+  float strokeW = max(uStroke, 0.0);
+  // Inlet arc is half that band. The 2px cable fade stays on the straight edge.
+  float halfRing = max(strokeW * 0.5, 0.5);
+  float nearest = halfRing + 2.0;
   vec4 strokeCol = uPlateColor;
   float inletA = 0.0;
+  float inMouth = 0.0;
+  float arc = 0.0;
   for (int i = 0; i < 24; i++) {
     if (i >= uCount) break;
     vec2 jack = uJack[i].xy;
@@ -219,12 +228,16 @@ void main() {
     float d = length(vPx - jack) - radius;
     sd = max(sd, -d);
     // Tint only the jack arc. Do not let a jack's alpha replace the plate stroke.
-    if (sdRect <= 0.0 && abs(d) <= halfW && abs(d) <= nearest) {
+    if (sdRect <= 0.0 && abs(d) <= halfRing + 1.0 && abs(d) < nearest) {
       nearest = abs(d);
       strokeCol = vec4(uJackColor[i].rgb, uPlateColor.a);
     }
-    // Socket fill: the hole, off the stroke, with a straight cut in from the wall.
-    if (uJack[i].w > 0.5 && radius > 0.0 && sdRect < 0.0 && d < -halfW) {
+    if (sdRect <= 0.0 && d <= 0.0) {
+      inMouth = 1.0;
+      arc = max(arc, 1.0 - smoothstep(halfRing, halfRing + 1.0, abs(d)));
+    }
+    // Socket fill: the hole, off the ring, with a straight cut in from the wall.
+    if (uJack[i].w > 0.5 && radius > 0.0 && sdRect <= 0.0 && d < -halfRing) {
       float dl = jack.x - plateMin.x;
       float dr = plateMax.x - jack.x;
       float dt = jack.y - plateMin.y;
@@ -236,8 +249,12 @@ void main() {
       if (dot(vPx - jack, inward) >= uInletGap) inletA = 1.0;
     }
   }
-  float strokeA = (1.0 - smoothstep(halfW - 0.6, halfW + 0.75, abs(sd))) * strokeCol.a;
-  float plateA = (1.0 - smoothstep(-halfW - 0.75, -halfW + 0.6, sd)) * uFill.a * (1.0 - inletA);
+  // Whole pixels outside the plate. A fractional fade reads as 1.5px on
+  // one part of the edge and 2.5px on another.
+  float strokePx = max(1.0, floor(strokeW + 0.5));
+  float fat = (sd > 0.0 && sd <= strokePx) ? 1.0 : 0.0;
+  float strokeA = max(fat * (1.0 - inMouth), arc) * strokeCol.a;
+  float plateA = sd <= 0.0 ? uFill.a * (1.0 - inletA) : 0.0;
   float underA = inletA + plateA;
   vec3 underRgb = inletA > 0.5 ? vec3(0.055, 0.063, 0.078) : uFill.rgb;
   float a = strokeA + underA * (1.0 - strokeA);
@@ -294,6 +311,7 @@ void main() {
         veilRect: veilProgram ? gl.getUniformLocation(veilProgram, "uRect") : null,
         buf: gl.createBuffer(),
         attribs: ["position", "local", "segLen", "halfPx", "feather", "colour"].map((n) => gl.getAttribLocation(program, n)),
+        coverage: gl.getUniformLocation(program, "uCoverage"),
         imgProgram,
         imgBuf: gl.createBuffer(),
         imgTex: gl.createTexture(),
@@ -347,6 +365,8 @@ void main() {
       _over: false,
       // transparent: overlay faces; the 2D blit target is cleared first.
       transparent: options?.transparent === true,
+      // Blit over the 2D canvas instead of clearing it first.
+      keep: options?.keep === true,
     };
   }
 
@@ -404,6 +424,33 @@ void main() {
     }
   }
 
+  // Keep the stroke quad inside the canvas. A zoomed segment whose ends are
+  // far offscreen becomes a huge quad, and the GPU drops the whole primitive
+  // even when the middle crosses the view.
+  function clipLineToRect(x0, y0, x1, y1, minX, minY, maxX, maxY) {
+    const dx = x1 - x0;
+    const dy = y1 - y0;
+    let u0 = 0;
+    let u1 = 1;
+    const p = [-dx, dx, -dy, dy];
+    const q = [x0 - minX, maxX - x0, y0 - minY, maxY - y0];
+    for (let i = 0; i < 4; i += 1) {
+      if (p[i] === 0) {
+        if (q[i] < 0) return null;
+      } else {
+        const t = q[i] / p[i];
+        if (p[i] < 0) {
+          if (t > u1) return null;
+          if (t > u0) u0 = t;
+        } else {
+          if (t < u0) return null;
+          if (t < u1) u1 = t;
+        }
+      }
+    }
+    return [x0 + u0 * dx, y0 + u0 * dy, x0 + u1 * dx, y0 + u1 * dy];
+  }
+
   /**
    * Capsule segment (x0,y0)-(x1,y1): solid core halfPx, then `feather` px of
    * smoothstep fade (Sabrina kLineFrag). Round ends/joins.
@@ -412,6 +459,16 @@ void main() {
     if (!batch) return;
     const k = batch.scale || 1;
     if (k !== 1) { x0 *= k; y0 *= k; x1 *= k; y1 *= k; halfPx *= k; feather *= k; }
+    const reach = Math.max(0, halfPx) + Math.max(0, feather) + 4;
+    const clipped = clipLineToRect(
+      x0, y0, x1, y1,
+      -reach, -reach, batch.w + reach, batch.h + reach,
+    );
+    if (!clipped) return;
+    x0 = clipped[0];
+    y0 = clipped[1];
+    x1 = clipped[2];
+    y1 = clipped[3];
     const dx = x1 - x0;
     const dy = y1 - y0;
     const len = Math.hypot(dx, dy);
@@ -1066,8 +1123,14 @@ void main() {
     const drawQuads = (data, n) => {
       const count = n / FLOATS;
       if (!(count > 0) || !data) return;
-      gl.blendFuncSeparate(gl.SRC_ALPHA, colourDst, gl.ONE, alphaDst);
+      // "max": straight coverage. The dot canvas is premultipliedAlpha:false,
+      // so a normal SRC_ALPHA write gets multiplied again when it crosses the
+      // wire and leaves a dark ring. MAX unions same-colour coverage.
+      const max = blend === "max";
+      if (max) gl.blendEquation(gl.MAX);
+      gl.blendFuncSeparate(max ? gl.ONE : gl.SRC_ALPHA, max ? gl.ONE : colourDst, gl.ONE, max ? gl.ONE : alphaDst);
       gl.useProgram(s.program);
+      if (s.coverage) gl.uniform1f(s.coverage, max ? 1 : 0);
       gl.bindBuffer(gl.ARRAY_BUFFER, s.buf);
       gl.bufferData(gl.ARRAY_BUFFER, data.subarray(0, n), gl.STREAM_DRAW);
       const sizes = [2, 2, 1, 1, 1, 4];
@@ -1082,6 +1145,7 @@ void main() {
       }
       gl.drawArrays(gl.TRIANGLES, 0, count);
       for (const loc of s.attribs) if (loc >= 0) gl.disableVertexAttribArray(loc);
+      if (max) gl.blendEquation(gl.FUNC_ADD);
     };
     drawQuads(batch.data, batch.n);
     if (batch.outlines?.length) drawOutlines(batch);
@@ -1177,7 +1241,7 @@ void main() {
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.globalCompositeOperation = "source-over";
     ctx.globalAlpha = 1;
-    if (batch.transparent) ctx.clearRect(0, 0, w, h);
+    if (batch.transparent && batch.keep !== true) ctx.clearRect(0, 0, w, h);
     if (typeof global.nodeGraphSharedGlBlitTo2D === "function") {
       return global.nodeGraphSharedGlBlitTo2D(ctx, w, h) !== false;
     }
@@ -1313,7 +1377,7 @@ void main() {
     const colorData = new Float32Array(OUT_MAX * 4);
     for (let n = 0; n < batch.outlines.length; n += 1) {
       const shape = batch.outlines[n];
-      const pad = shape.stroke + 2;
+      const pad = shape.stroke + 6;
       const x0 = shape.x - pad;
       const y0 = shape.y - pad;
       const x1 = shape.x + shape.w + pad;

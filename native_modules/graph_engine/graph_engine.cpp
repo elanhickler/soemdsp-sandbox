@@ -2242,6 +2242,7 @@ static const unsigned char kSmoothTypeTwoPole = 2;
 static const unsigned char kSmoothTypeNone = 3; // instant
 static const unsigned char kSmoothTypePapoulis = 4;
 static const unsigned char kSmoothTypeThreePole = 5; // 3× real one-pole (no overshoot)
+static const unsigned char kSmoothTypeBessel = 6; // 3rd-order Bessel (flat delay)
 
 // Freestanding Control slot: host writes knob target + MOD cells; smoother
 // chases target→out; DSP reads control_effective (MOD applied after smooth).
@@ -2261,7 +2262,11 @@ struct Control {
   double domainMax; // paramMeta max (max<=min → no unit map)
   double coeff; // one/two/three-pole b0, or linear increment (cached)
   double stage1; // multi-pole cascade stage
-  double stage2; // three-pole second stage
+  double stage2; // three-pole second stage / Bessel biquad z1
+  double besselB0; // Bessel LPF b0/a0 (cached)
+  double besselA1; // Bessel LPF a1/a0
+  double besselA2; // Bessel LPF a2/a0
+  double besselZ; // Bessel biquad z2
   int papHandle; // soemdsp_papoulis_filter_* instance (0 = none)
   bool dirty;
   bool active;
@@ -2944,6 +2949,10 @@ static void init_control(Control& c, double value, bool snap) {
   c.coeff = 1.0;
   c.stage1 = value;
   c.stage2 = value;
+  c.besselB0 = 1.0;
+  c.besselA1 = 0.0;
+  c.besselA2 = 0.0;
+  c.besselZ = value;
   c.papHandle = 0;
   c.dirty = true;
   c.active = false;
@@ -2993,6 +3002,7 @@ static inline void control_fold_wrap_state(Control& c) {
   c.out = w;
   c.stage1 = w;
   c.stage2 = w;
+  c.besselZ = w;
 }
 
 static inline bool node_take_seed(Node& node, unsigned int* seedOut);
@@ -4322,6 +4332,31 @@ static void control_ensure_coeff(Control& c, Circuit& g) {
     c.coeff = (c.target - c.out) / t;
     return;
   }
+  if (c.type == kSmoothTypeBessel) {
+    // 3rd-order Bessel, -3 dB at frequencyHz = sr/t (same knob as 1P).
+    // Real pole at 1.322675·fc, then quadratic ω0 = 1.447617·fc, Q = 0.691046.
+    const double sr = g.sampleRate < 1.0f ? 44100.0 : (double)g.sampleRate;
+    const double fc = sr / t;
+    const double fPole = fc * 1.322675 > sr * 0.45 ? sr * 0.45 : fc * 1.322675;
+    const double fQuad = fc * 1.447617 > sr * 0.45 ? sr * 0.45 : fc * 1.447617;
+    double wUnit = kTwoPi / sr;
+    if (wUnit > kTauOver44100) wUnit = kTauOver44100;
+    const double poleA = dsp_exp(-(wUnit * fPole));
+    c.coeff = 1.0 - poleA;
+    if (!(c.coeff == c.coeff) || c.coeff < 0.0) c.coeff = 1.0;
+    if (c.coeff > 1.0) c.coeff = 1.0;
+    const double w0 = kTwoPi * fQuad / sr;
+    double s = 0.0;
+    double co = 1.0;
+    soemdsp_maths::dsp_sin_cos(w0, &s, &co);
+    const double alpha = s / (2.0 * 0.691046);
+    const double a0 = 1.0 + alpha;
+    const double inv = a0 != 0.0 ? 1.0 / a0 : 0.0;
+    c.besselB0 = (1.0 - co) * 0.5 * inv;
+    c.besselA1 = (-2.0 * co) * inv;
+    c.besselA2 = (1.0 - alpha) * inv;
+    return;
+  }
   const double sr = g.sampleRate < 1.0f ? 44100.0 : (double)g.sampleRate;
   // Match JS onePole / twoPole / threePole: frequencyHz = 1/seconds = sr/tSamples
   const double frequencyValue = sr / t;
@@ -4359,6 +4394,7 @@ static void control_set_target(Circuit& g, Control& c, double value) {
     c.out = snapped;
     c.stage1 = snapped;
     c.stage2 = snapped;
+    c.besselZ = snapped;
     if (c.papHandle > 0) soemdsp_papoulis_filter_snap(c.papHandle, snapped);
     return;
   }
@@ -4370,6 +4406,7 @@ static void control_set_target(Circuit& g, Control& c, double value) {
       c.out = snapped;
       c.stage1 = snapped;
       c.stage2 = snapped;
+    c.besselZ = snapped;
       if (c.papHandle > 0) soemdsp_papoulis_filter_snap(c.papHandle, snapped);
       return;
     }
@@ -4379,6 +4416,7 @@ static void control_set_target(Circuit& g, Control& c, double value) {
       c.out = snapped;
       c.stage1 = snapped;
       c.stage2 = snapped;
+    c.besselZ = snapped;
       if (c.papHandle > 0) soemdsp_papoulis_filter_snap(c.papHandle, snapped);
       return;
     }
@@ -4396,6 +4434,7 @@ static void control_set_target(Circuit& g, Control& c, double value) {
     c.out = snapped;
     c.stage1 = snapped;
     c.stage2 = snapped;
+    c.besselZ = snapped;
     if (c.papHandle > 0) soemdsp_papoulis_filter_snap(c.papHandle, snapped);
     return;
   }
@@ -4406,6 +4445,7 @@ static void control_set_target(Circuit& g, Control& c, double value) {
     c.out = snapped;
     c.stage1 = snapped;
     c.stage2 = snapped;
+    c.besselZ = snapped;
     return;
   }
   if (dsp_fabs(c.out - c.target) <= kPlanck) {
@@ -4414,6 +4454,7 @@ static void control_set_target(Circuit& g, Control& c, double value) {
     c.out = snapped;
     c.stage1 = snapped;
     c.stage2 = snapped;
+    c.besselZ = snapped;
     return;
   }
   smoother_add(g, c);
@@ -4432,6 +4473,7 @@ static void control_step(Control& c, Circuit& g) {
     c.out = c.target;
     c.stage1 = c.target;
     c.stage2 = c.target;
+    c.besselZ = c.target;
     if (c.papHandle > 0) soemdsp_papoulis_filter_snap(c.papHandle, c.target);
     control_fold_wrap_state(c);
     return;
@@ -4444,6 +4486,7 @@ static void control_step(Control& c, Circuit& g) {
       c.out = c.target;
       c.stage1 = c.target;
       c.stage2 = c.target;
+    c.besselZ = c.target;
       if (c.papHandle > 0) soemdsp_papoulis_filter_snap(c.papHandle, c.target);
       control_fold_wrap_state(c);
       return;
@@ -4462,6 +4505,7 @@ static void control_step(Control& c, Circuit& g) {
     c.out = c.target;
     c.stage1 = c.target;
     c.stage2 = c.target;
+    c.besselZ = c.target;
     if (c.papHandle > 0) soemdsp_papoulis_filter_snap(c.papHandle, c.target);
     control_fold_wrap_state(c);
     return;
@@ -4473,6 +4517,7 @@ static void control_step(Control& c, Circuit& g) {
     c.out = c.target;
     c.stage1 = c.target;
     c.stage2 = c.target;
+    c.besselZ = c.target;
     control_fold_wrap_state(c);
     return;
   }
@@ -4483,6 +4528,7 @@ static void control_step(Control& c, Circuit& g) {
       c.out = c.target;
       c.stage1 = c.target;
       c.stage2 = c.target;
+    c.besselZ = c.target;
       control_fold_wrap_state(c);
       return;
     }
@@ -4491,6 +4537,7 @@ static void control_step(Control& c, Circuit& g) {
       c.out = c.target;
       c.stage1 = c.target;
       c.stage2 = c.target;
+    c.besselZ = c.target;
     }
     control_fold_wrap_state(c);
     return;
@@ -4507,6 +4554,18 @@ static void control_step(Control& c, Circuit& g) {
     c.stage1 += c.coeff * (c.target - c.stage1);
     c.stage2 += c.coeff * (c.stage1 - c.stage2);
     c.out += c.coeff * (c.stage2 - c.out);
+    control_fold_wrap_state(c);
+    return;
+  }
+  if (c.type == kSmoothTypeBessel) {
+    // Real pole, then the Bessel quadratic. Cutoff matches 1P (sr / smooth samples).
+    c.stage1 += c.coeff * (c.target - c.stage1);
+    const double x = c.stage1;
+    const double b0 = c.besselB0;
+    const double y = b0 * x + c.stage2;
+    c.stage2 = (2.0 * b0) * x - c.besselA1 * y + c.besselZ;
+    c.besselZ = b0 * x - c.besselA2 * y;
+    c.out = y;
     control_fold_wrap_state(c);
     return;
   }
@@ -4599,6 +4658,7 @@ static void control_snap_to_target(Control& c) {
   c.out = c.target;
   c.stage1 = c.target;
   c.stage2 = c.target;
+    c.besselZ = c.target;
   c.active = false;
   c.steppedCount = 0;
   c.dirty = true;
@@ -4641,6 +4701,7 @@ static void smoother_clean(Circuit& g) {
       c->out = c->target;
       c->stage1 = c->target;
       c->stage2 = c->target;
+    c->besselZ = c->target;
       c->active = false;
       if (c->papHandle > 0) soemdsp_papoulis_filter_snap(c->papHandle, c->target);
       continue;
@@ -14312,6 +14373,7 @@ extern "C" int soemdsp_graph_set_smooth_mode(
     c->out = c->target;
     c->stage1 = c->target;
     c->stage2 = c->target;
+    c->besselZ = c->target;
     if (c->papHandle > 0) soemdsp_papoulis_filter_snap(c->papHandle, c->target);
     return 0;
   }
@@ -14336,6 +14398,7 @@ extern "C" int soemdsp_graph_set_smooth_type(
   else if (type == (int)kSmoothTypeNone) t = kSmoothTypeNone;
   else if (type == (int)kSmoothTypePapoulis) t = kSmoothTypePapoulis;
   else if (type == (int)kSmoothTypeThreePole) t = kSmoothTypeThreePole;
+  else if (type == (int)kSmoothTypeBessel) t = kSmoothTypeBessel;
   if (c->type == t) return 0;
   if (c->type == kSmoothTypePapoulis && t != kSmoothTypePapoulis) {
     control_release_papoulis(*c);
@@ -14344,6 +14407,7 @@ extern "C" int soemdsp_graph_set_smooth_type(
   c->dirty = true;
   c->stage1 = c->out;
   c->stage2 = c->out;
+  c->besselZ = c->out;
   if (t == kSmoothTypePapoulis) {
     control_ensure_papoulis(*c);
   }
@@ -14351,6 +14415,7 @@ extern "C" int soemdsp_graph_set_smooth_type(
     c->out = c->target;
     c->stage1 = c->target;
     c->stage2 = c->target;
+    c->besselZ = c->target;
     if (c->papHandle > 0) soemdsp_papoulis_filter_snap(c->papHandle, c->target);
     return 0;
   }
@@ -15980,5 +16045,5 @@ extern "C" int soemdsp_graph_version() {
   // 170: EQ Filter ZDF ƒ input (resolve_osc_hz)
   // 171: ƒ on Ladder/303/Mode/Cookbook/IIR/Papoulis/ZDF filters + soemdsp_graph_node_effective_hz
   // 174: live add/remove/connect/disconnect keep compiled and other nodes' native handles
-  return 175; // 175: Softpop 2 (type 219). was 174: live add/remove/connect/disconnect keep compiled and other nodes' native handles
+  return 176; // 176: control smoother Bessel (type 6). was 175: Softpop 2
 }

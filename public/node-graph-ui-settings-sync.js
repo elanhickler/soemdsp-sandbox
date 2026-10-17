@@ -252,6 +252,7 @@ function syncNodeUiDevModuleIdleStroke() {
     selectedAlphaOut.textContent = `${selectedAlphaPercent}%`;
   }
   const workspace = document.getElementById("nodeGraphWorkspace");
+  workspace?.style.setProperty("--node-module-idle-stroke-width", "1px");
   workspace?.style.setProperty(
     "--node-module-idle-stroke",
     `rgb(${nodeUiDevHexColorToRgbTriplet(color)} / 0.9)`,
@@ -885,6 +886,8 @@ function syncNodeUiDevSettingsHeaderControls() {
   const moduleFillColorValue = document.getElementById("nodeUiDevModuleFillColorValue");
   const moduleFillAlphaInput = document.getElementById("nodeUiDevModuleFillAlpha");
   const moduleFillAlphaValue = document.getElementById("nodeUiDevModuleFillAlphaValue");
+  const moduleTitleFillColorInput = document.getElementById("nodeUiDevModuleTitleFillColor");
+  const moduleTitleFillColorValue = document.getElementById("nodeUiDevModuleTitleFillColorValue");
   const sliderLabelColorInput = document.getElementById("nodeUiDevSliderLabelColor");
   const sliderLabelColorValue = document.getElementById("nodeUiDevSliderLabelColorValue");
   const sliderValueColorInput = document.getElementById("nodeUiDevSliderValueColor");
@@ -977,6 +980,7 @@ function syncNodeUiDevSettingsHeaderControls() {
   const gridColor = normalizeNodeUiDevColor(gridColorInput.value, "#ffffff");
   const workspaceBackgroundColor = normalizeNodeUiDevColor(workspaceBackgroundColorInput.value, "#1d1b1b");
   const moduleFillColor = normalizeNodeUiDevColor(moduleFillColorInput.value, "#171a1f");
+  const moduleTitleFillColor = normalizeNodeUiDevColor(moduleTitleFillColorInput?.value, "#030805");
   const moduleFillAlphaRaw = Number(moduleFillAlphaInput.value);
   const moduleFillAlphaPercent = Math.max(
     0,
@@ -1042,6 +1046,12 @@ function syncNodeUiDevSettingsHeaderControls() {
       "--node-module-fill",
       `rgb(${nodeUiDevHexColorToRgbTriplet(moduleFillColor)} / ${moduleFillAlphaPercent / 100})`,
     );
+  if (moduleTitleFillColorInput) {
+    moduleTitleFillColorInput.value = moduleTitleFillColor;
+    document
+      .getElementById("nodeGraphWorkspace")
+      ?.style.setProperty("--node-module-title-fill", moduleTitleFillColor);
+  }
   // --node-port-size-ratio is owned by syncNodeUiDevPortSize().
   document
     .getElementById("nodeGraphWorkspace")
@@ -1092,6 +1102,7 @@ function syncNodeUiDevSettingsHeaderControls() {
   workspaceBackgroundColorValue.textContent = workspaceBackgroundColor;
   moduleFillColorValue.textContent = moduleFillColor;
   moduleFillAlphaValue.textContent = `${moduleFillAlphaPercent}%`;
+  if (moduleTitleFillColorValue) moduleTitleFillColorValue.textContent = moduleTitleFillColor;
   sliderLabelColorValue.textContent = sliderLabelColor;
   sliderValueColorValue.textContent = sliderValueColor;
   sliderUnitColorValue.textContent = sliderUnitColor;

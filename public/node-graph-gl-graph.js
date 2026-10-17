@@ -98,6 +98,27 @@ function nodeGraphGlGraphPortBrightness(moduleEl, port) {
   return Math.max(0, Math.min(1, amount));
 }
 
+// Layout pixels inside the module, before the camera transform. Same space as
+// the plate box, so the display and the stroke share one pixel grid.
+function nodeGraphGlGraphLayoutBox(el, moduleEl) {
+  if (!el || !moduleEl) return null;
+  let x = 0;
+  let y = 0;
+  let node = el;
+  while (node && node !== moduleEl) {
+    x += node.offsetLeft;
+    y += node.offsetTop;
+    const next = node.offsetParent;
+    if (!next || (next !== moduleEl && !moduleEl.contains(next))) return null;
+    node = next;
+  }
+  if (node !== moduleEl) return null;
+  const w = el.offsetWidth;
+  const h = el.offsetHeight;
+  if (!(w > 1) || !(h > 1)) return null;
+  return { x, y, w, h };
+}
+
 function nodeGraphGlGraphRebuildPlates() {
   const plates = [];
   const displays = [];
@@ -129,20 +150,15 @@ function nodeGraphGlGraphRebuildPlates() {
     for (let c = 0; c < canvases.length; c += 1) {
       const face = canvases[c];
       if (!(face.width > 1) || !(face.height > 1)) continue;
-      const rect = face.getBoundingClientRect();
-      if (!(rect.width > 1) || !(rect.height > 1)) continue;
-      const tl = typeof nodeGraphClientToZoomSurfacePoint === "function"
-        ? nodeGraphGlGraphToWorld(rect.left, rect.top)
-        : { x: box.x, y: box.y };
-      const br = typeof nodeGraphClientToZoomSurfacePoint === "function"
-        ? nodeGraphGlGraphToWorld(rect.right, rect.bottom)
-        : { x: box.x + box.w, y: box.y + box.h };
+      const laid = nodeGraphGlGraphLayoutBox(face, el);
+      if (!laid) continue;
       displays.push({
         canvas: face,
-        x: tl.x,
-        y: tl.y,
-        w: Math.max(0, br.x - tl.x),
-        h: Math.max(0, br.y - tl.y),
+        id,
+        x: box.x + laid.x,
+        y: box.y + laid.y,
+        w: laid.w,
+        h: laid.h,
         output: String(nodes[i]?.type || "") === "output",
       });
     }
@@ -150,6 +166,36 @@ function nodeGraphGlGraphRebuildPlates() {
   nodeGraphGlGraphState.plates = plates;
   nodeGraphGlGraphState.displays = displays;
   nodeGraphGlGraphRebuildChrome();
+}
+
+// Display meets the plate edge. The stroke is the band outside that edge.
+function nodeGraphGlGraphDisplayScreenRect(face, toX, toY, zoom) {
+  let x = toX(face.x);
+  let y = toY(face.y);
+  let x2 = x + face.w * zoom;
+  let y2 = y + face.h * zoom;
+  const plates = nodeGraphGlGraphState.plates;
+  let plate = null;
+  for (let i = 0; i < plates.length; i += 1) {
+    if (plates[i].id === face.id) {
+      plate = plates[i];
+      break;
+    }
+  }
+  if (!plate) return { x, y, w: x2 - x, h: y2 - y };
+  const minX = Math.round(toX(plate.x));
+  const minY = Math.round(toY(plate.y));
+  const maxX = minX + Math.max(1, Math.round(plate.w * zoom));
+  const maxY = minY + Math.max(1, Math.round(plate.h * zoom));
+  if (face.x - plate.x <= 1) x = minX;
+  if (plate.x + plate.w - (face.x + face.w) <= 1) x2 = maxX;
+  if (face.y - plate.y <= 1) y = minY;
+  if (plate.y + plate.h - (face.y + face.h) <= 1) y2 = maxY;
+  x = Math.max(x, minX);
+  y = Math.max(y, minY);
+  x2 = Math.min(x2, maxX);
+  y2 = Math.min(y2, maxY);
+  return { x, y, w: Math.max(0, x2 - x), h: Math.max(0, y2 - y) };
 }
 
 function nodeGraphGlGraphCssPx(el, name) {
@@ -201,7 +247,8 @@ function nodeGraphGlGraphRebuildChrome() {
     if (!el || !el.isConnected || el.hidden) continue;
     if (el.querySelector(":scope > .node-text-box-body")) continue;
     const title = el.querySelector(".node-header-title");
-    const titleBox = nodeGraphGlGraphWorldBox(title);
+    const titleRow = el.querySelector(".node-header-title-row") || title;
+    const titleBox = nodeGraphGlGraphWorldBox(titleRow);
     if (title && titleBox) {
       titles.push({
         el: title,
@@ -209,6 +256,10 @@ function nodeGraphGlGraphRebuildChrome() {
         x: titleBox.x + titleBox.w * 0.5,
         y: titleBox.y + titleBox.h * 0.5,
         h: titleBox.h,
+        fill: nodeGraphGlGraphParseCssColor(
+          getComputedStyle(el).getPropertyValue("--node-module-title-fill"),
+          [0.012, 0.024, 0.016, 1],
+        ),
       });
     }
     const ioLabels = el.querySelectorAll(".node-io-label");
@@ -475,6 +526,15 @@ function nodeGraphGlGraphDrawChrome(batch, toX, toY, zoom, cssW, cssH) {
   const titles = chrome.titles || [];
   for (let i = 0; i < titles.length; i += 1) {
     const title = titles[i];
+    if (title.fill && title.box && typeof nodeGraphGlLinesRect === "function") {
+      const bx = toX(title.box.x);
+      const by = toY(title.box.y);
+      const bw = title.box.w * zoom;
+      const bh = title.box.h * zoom;
+      nodeGraphGlGraphDrawOver(batch, () => {
+        nodeGraphGlLinesRect(batch, bx, by, bw, bh, title.fill);
+      });
+    }
     if (title.el?.dataset?.titleEditing === "1") continue;
     const text = String(title.el?.textContent || "").replace(/\s+/g, " ").trim();
     if (!text || typeof nodeGraphGlLinesText !== "function") continue;
@@ -785,8 +845,10 @@ function nodeGraphGlGraphPresent() {
   const scale = nodeGraphGlGraphFit(canvas, cssW, cssH);
   nodeGraphGlGraphFit(dotsCanvas, cssW, cssH);
   const batch = nodeGraphGlLinesBegin(canvas, [0, 0, 0, 0], { scale, transparent: true });
-  const dotBatch = nodeGraphGlLinesBegin(dotsCanvas, [0, 0, 0, 0], { scale, transparent: true });
-  if (!batch || !dotBatch) {
+  // Contact dots first, as straight coverage, then displays over them.
+  const contactBatch = nodeGraphGlLinesBegin(dotsCanvas, [0, 0, 0, 0], { scale, transparent: true });
+  const dotBatch = nodeGraphGlLinesBegin(dotsCanvas, [0, 0, 0, 0], { scale, transparent: true, keep: true });
+  if (!batch || !contactBatch || !dotBatch) {
     if (typeof nodeGraphGlLinesFillBlack === "function") nodeGraphGlLinesFillBlack(canvas);
     return false;
   }
@@ -804,10 +866,11 @@ function nodeGraphGlGraphPresent() {
     nodeGraphGlGraphState.dotSize = dotSize;
     nodeGraphGlGraphState.traceThick = Number.parseFloat(style.getPropertyValue("--node-trace-wire-thickness")) || 1;
   }
-  // Zoom-1 sizes. The camera scales them, same as the module plates.
-  const halfPx = Math.max(0.4, thick * 0.5 * zoom);
-  const traceHalf = Math.max(0.4, (nodeGraphGlGraphState.traceThick || 1) * 0.5 * zoom);
-  const dotR = Math.max(0.6, dotSize * 0.5 * zoom);
+  // Zoom-1 sizes. Core and the 2px fade both scale with the camera.
+  const halfPx = Math.max(0, thick * 0.5) * zoom;
+  const traceHalf = Math.max(0, (nodeGraphGlGraphState.traceThick || 1) * 0.5) * zoom;
+  const dotR = Math.max(0, dotSize * 0.5) * zoom;
+  const wireFeather = 2 * zoom;
   let cam = { x: 0, y: 0 };
   if (view) cam = view.cam;
   else if (typeof nodeGraphWireCameraViewBox === "function") cam = nodeGraphWireCameraViewBox(host);
@@ -819,14 +882,6 @@ function nodeGraphGlGraphPresent() {
     const wire = nodeGraphGlGraphState.wires[i];
     const src = wire.xy;
     if (!src || src.length < 4) continue;
-    const x0 = toX(src[0]);
-    const y0 = toY(src[1]);
-    const x1 = toX(src[src.length - 2]);
-    const y1 = toY(src[src.length - 1]);
-    if (Math.max(x0, x1) < -pad || Math.max(y0, y1) < -pad
-      || Math.min(x0, x1) > cssW + pad || Math.min(y0, y1) > cssH + pad) {
-      continue;
-    }
     let screen = nodeGraphGlGraphState.screen;
     if (screen.length < src.length) {
       screen = new Float32Array(src.length);
@@ -836,6 +891,28 @@ function nodeGraphGlGraphPresent() {
       screen[p] = toX(src[p]);
       screen[p + 1] = toY(src[p + 1]);
     }
+    // Keep a wire when any segment crosses the view. Endpoint-only culling
+    // dropped curves whose ends were offscreen and whose middle was not.
+    const left = -pad;
+    const top = -pad;
+    const right = cssW + pad;
+    const bottom = cssH + pad;
+    let visible = false;
+    for (let p = 2; p < src.length; p += 2) {
+      const ax = screen[p - 2];
+      const ay = screen[p - 1];
+      const bx = screen[p];
+      const by = screen[p + 1];
+      const minX = ax < bx ? ax : bx;
+      const maxX = ax < bx ? bx : ax;
+      const minY = ay < by ? ay : by;
+      const maxY = ay < by ? by : ay;
+      if (maxX >= left && minX <= right && maxY >= top && minY <= bottom) {
+        visible = true;
+        break;
+      }
+    }
+    if (!visible) continue;
     let stroke = wire.trace ? traceHalf : halfPx;
     let rgba = wire.rgba;
     if (wire.kind && wire.index >= 0 && typeof nodeGraphSelectedWireEntries === "function") {
@@ -844,10 +921,10 @@ function nodeGraphGlGraphPresent() {
       );
       if (picked) {
         rgba = [0.95, 0.86, 0.45, 1];
-        stroke = halfPx + Math.max(0.8, 0.35 * zoom);
+        stroke = halfPx + 0.8 * zoom;
       }
     }
-    nodeGraphGlLinesPolyline(batch, screen.subarray(0, src.length), stroke, 0.55, rgba);
+    nodeGraphGlLinesPolyline(batch, screen.subarray(0, src.length), stroke, wireFeather, rgba);
     const dots = wire.dots || [];
     for (let d = 0; d < dots.length; d += 1) {
       const dot = dots[d];
@@ -855,9 +932,9 @@ function nodeGraphGlGraphPresent() {
       const dy = toY(dot.y);
       if (dx < -dotR || dy < -dotR || dx > cssW + dotR || dy > cssH + dotR) continue;
       if (dot.square) {
-        nodeGraphGlLinesRect(dotBatch, dx - dotR, dy - dotR, dotR * 2, dotR * 2, dot.rgba);
+        nodeGraphGlLinesRect(contactBatch, dx - dotR, dy - dotR, dotR * 2, dotR * 2, dot.rgba);
       } else {
-        nodeGraphGlLinesDot(dotBatch, dx, dy, dotR, 0.55, dot.rgba);
+        nodeGraphGlLinesDot(contactBatch, dx, dy, dotR, wireFeather, dot.rgba);
       }
     }
   }
@@ -877,8 +954,8 @@ function nodeGraphGlGraphPresent() {
     const w = plate.w * zoom;
     const h = plate.h * zoom;
     if (x + w < 0 || y + h < 0 || x > cssW || y > cssH) continue;
-    // Same line as the thickness control at 0. Zoom 1 is one pixel; it scales with the module.
-    const edge = Math.max(0.5, zoom);
+    const strokeW = Number.parseFloat(plateStyle.getPropertyValue("--node-module-idle-stroke-width")) || 1;
+    const edge = strokeW * zoom;
     const x0 = Math.round(x);
     const y0 = Math.round(y);
     const w0 = Math.max(1, Math.round(w));
@@ -900,7 +977,7 @@ function nodeGraphGlGraphPresent() {
       });
     }
     if (typeof nodeGraphGlLinesModuleOutline === "function") {
-      nodeGraphGlLinesModuleOutline(batch, x0, y0, w0, h0, edge, color, plateJacks, plate.fill, zoom);
+      nodeGraphGlLinesModuleOutline(batch, x0, y0, w0, h0, edge, color, plateJacks, plate.fill, 0);
     }
   }
   batch.textPixelated = zoom > 2.5;
@@ -909,10 +986,12 @@ function nodeGraphGlGraphPresent() {
   for (let i = 0; i < nodeGraphGlGraphState.displays.length; i += 1) {
     const face = nodeGraphGlGraphState.displays[i];
     if (!face.canvas || !(face.w > 0) || !(face.h > 0)) continue;
-    const x = toX(face.x);
-    const y = toY(face.y);
-    const w = face.w * zoom;
-    const h = face.h * zoom;
+    const rect = nodeGraphGlGraphDisplayScreenRect(face, toX, toY, zoom);
+    const x = rect.x;
+    const y = rect.y;
+    const w = rect.w;
+    const h = rect.h;
+    if (!(w > 1) || !(h > 1)) continue;
     if (x + w < 0 || y + h < 0 || x > cssW || y > cssH) continue;
     nodeGraphGlLinesImage(dotBatch, face.canvas, x, y, w, h, {
       nearest: pixelated,
@@ -930,10 +1009,11 @@ function nodeGraphGlGraphPresent() {
     for (let i = 0; i < nodeGraphGlGraphState.displays.length; i += 1) {
       const face = nodeGraphGlGraphState.displays[i];
       if (!face.output || !(face.w > 0) || !(face.h > 0)) continue;
-      const x = toX(face.x);
-      const y = toY(face.y);
-      const w = face.w * zoom;
-      const h = face.h * zoom;
+      const rect = nodeGraphGlGraphDisplayScreenRect(face, toX, toY, zoom);
+      const x = rect.x;
+      const y = rect.y;
+      const w = rect.w;
+      const h = rect.h;
       if (x + w < 0 || y + h < 0 || x > cssW || y > cssH) continue;
       const side = Math.min(w, h);
       const barH = Math.max(6, side * 0.46);
@@ -946,8 +1026,9 @@ function nodeGraphGlGraphPresent() {
     }
   }
   const cablesOk = nodeGraphGlLinesEnd(batch, "alpha") !== false;
+  const contactOk = nodeGraphGlLinesEnd(contactBatch, "max") !== false;
   const dotsOk = nodeGraphGlLinesEnd(dotBatch, "alpha") !== false;
-  return cablesOk && dotsOk;
+  return cablesOk && contactOk && dotsOk;
 }
 
 /**
@@ -1039,7 +1120,7 @@ function nodeGraphGlHitIsLiveHtml(target) {
 function nodeGraphGlHitKeepsNativeTarget(target) {
   if (!(target instanceof Element)) return false;
   return Boolean(target.closest(
-    ".node-module-graph-face, .node-module-graph-display, .node-keypad-face, .node-knob-face, .node-xy-pad-canvas, .node-sequencer-roll, .acid-seq-face, .node-arp-keys-face, .node-plugin-toggle-button, .node-plugin-momentary-button",
+    ".node-module-graph-face, .node-module-graph-display, .node-keypad-face, .node-knob-face, .node-xy-pad-canvas, .node-sequencer-roll, .acid-seq-face, .node-arp-keys-face, .node-plugin-toggle-button, .node-plugin-momentary-button, .node-sample-waveform-display",
   ));
 }
 

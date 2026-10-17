@@ -1,3 +1,7 @@
+## 2026-10-17 - Script language plan (docs only)
+
+- Added `docs/SCRIPT_LANGUAGE_PLAN.md` (Thoughts' plan verbatim + Policy check); pointer in `docs/FUTURE_PLANNING.md`. Planning only, no implementation until Argi says so. Not committed.
+
 ## 2026-10-17 - Softpop 2
 
 - Shipped native `softpop2` (type 219): sine dispersing into band-limited Color noise. Blue/Violet on Softpop Oscillator, Softpop Filter, and Noise Generator. Tilt/decramp in `library/include/soemdsp/filter/softpop_band.h`. Combined wasm + livedemo `patches/livedemos/softpop2.json`.

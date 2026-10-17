@@ -172,6 +172,12 @@ async function bindNodeGraphUiDevSettingsEvents() {
   document
     .getElementById("nodeUiDevModuleFillAlpha")
     ?.addEventListener("input", syncNodeUiDevSettingsHeaderControls);
+  document
+    .getElementById("nodeUiDevModuleTitleFillColor")
+    ?.addEventListener("input", syncNodeUiDevSettingsHeaderControls);
+  document
+    .getElementById("nodeUiDevModuleTitleFillColor")
+    ?.addEventListener("change", syncNodeUiDevSettingsHeaderControls);
   for (const sliderTextId of [
     "nodeUiDevSliderTextSize",
     "nodeUiDevSliderTextLineHeight",

@@ -1752,9 +1752,8 @@ button.scw-label:hover,
   display: none !important;
 }
 .node-music-player-page-wave {
-  /* Cover the six-tab bar so wave is only waveform + HUD. */
-  z-index: 6;
-  bottom: 0;
+  z-index: 2;
+  bottom: var(--node-music-player-pl-row-height, 1.35rem);
 }
 .node-music-player-page-wave .node-sample-waveform-canvas {
   position: absolute;
@@ -1869,7 +1868,7 @@ button.scw-label:hover,
   );
   left: calc(-1 * var(--sample-waveform-inset, 0px));
   z-index: 2;
-  background: #050805;
+  background: #020503;
   overflow: hidden;
 }
 .node-music-player-page-bar {
@@ -1879,7 +1878,7 @@ button.scw-label:hover,
   bottom: 0;
   z-index: 5;
   display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   align-items: stretch;
   height: var(--node-music-player-pl-row-height, 1.35rem);
   min-height: var(--node-music-player-pl-row-height, 1.35rem);
@@ -7625,10 +7624,11 @@ body.keyboard-debug-hidden .node-midi-keyboard-signal-bar {
   --node-selection-hit-trail-alpha: 0.95;
   --node-choice-divider-padding: 3px;
   --node-module-fill: #171a1f;
+  --node-module-title-fill: #030805;
   /* I/O strip is see-through like the plate — jacks are stroke-only. */
   --node-module-io-fill: transparent;
   --node-module-stroke: #f3f1ec;
-  --node-module-idle-stroke-width: 0px;
+  --node-module-idle-stroke-width: 1px;
   --node-module-idle-stroke: rgb(161 155 155 / 0.9);
   --node-module-selected-stroke: rgb(226 168 109 / 1);
   --node-module-title-padding: 0px;
@@ -12995,6 +12995,8 @@ body.room-dimmer-on .node-room-dimmer-canvas,
 .node-graph-workspace.gl-graph-on .dsp-node .node-arp-keys-face,
 .node-graph-workspace.gl-graph-on .dsp-node .node-plugin-toggle-button,
 .node-graph-workspace.gl-graph-on .dsp-node .node-plugin-momentary-button,
+.node-graph-workspace.gl-graph-on .dsp-node .node-sample-waveform-display,
+.node-graph-workspace.gl-graph-on .dsp-node .node-sample-waveform-display *,
 .node-graph-workspace.gl-graph-on .dsp-node .node-module-graph-face *,
 .node-graph-workspace.gl-graph-on .dsp-node .node-keypad-face *,
 .node-graph-workspace.gl-graph-on .dsp-node .node-knob-face *,
@@ -13004,10 +13006,26 @@ body.room-dimmer-on .node-room-dimmer-canvas,
   pointer-events: auto;
 }
 
+.node-graph-workspace.gl-graph-on .dsp-node .node-sample-waveform-display,
+.node-graph-workspace.gl-graph-on .dsp-node .node-module-scope-window,
+.node-graph-workspace.gl-graph-on .dsp-node .node-module-scope-window-surface,
+.node-graph-workspace.gl-graph-on .dsp-node .node-filter-curve-display,
+.node-graph-workspace.gl-graph-on .dsp-node .node-phosphillator-draw-display,
+.node-graph-workspace.gl-graph-on .dsp-node .node-module-graph-display,
+.node-graph-workspace.gl-graph-on .dsp-node .node-wall-room-display,
+.node-graph-workspace.gl-graph-on .dsp-node .node-xy-pad {
+  background: transparent !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+}
+
 .node-graph-workspace.gl-graph-on .node-display-canvas,
 .node-module-graph-display svg,
 .node-module-graph-display canvas {
-  visibility: hidden;
+  /* Inline visibility:visible (trace faces) must not paint the full-bleed
+     bitmap under the GPU copy. The GPU quad is the picture. */
+  visibility: hidden !important;
+  border-width: 0;
 }
 
 .node-keypad-face,
@@ -13453,7 +13471,7 @@ body.node-screen-solo-active .node-screen-solo-face.node-sample-waveform-display
   bottom: var(--node-music-player-pl-row-height, 1.35rem) !important;
 }
 body.node-screen-solo-active .node-screen-solo-face.node-sample-waveform-display .node-music-player-page-wave {
-  bottom: 0 !important;
+  bottom: var(--node-music-player-pl-row-height, 1.35rem) !important;
 }
 body.node-screen-solo-active .node-screen-solo-face.node-sample-waveform-display .node-music-player-page-vs {
   top: 0 !important;

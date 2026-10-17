@@ -310,4 +310,19 @@
   window.soemdspPlayerApiState = state;
   // Library hook (audio-player-library.js): fetch a lazy track's bytes from the host.
   window.soemdspPlayerHostTrack = requestTrack;
+
+  // Embed (soundemote-com /music): Space play/pause. Iframe has focus, so the
+  // host page cannot see the key unless we handle it here.
+  window.addEventListener("keydown", (event) => {
+    if (event.code !== "Space" && event.key !== " ") return;
+    if (!document.documentElement.classList.contains("soemdsp-embed")) return;
+    const el = event.target instanceof Element ? event.target : null;
+    if (el?.closest?.("input, textarea, select, [contenteditable='true']")) return;
+    event.preventDefault();
+    const id = nodeId();
+    if (id && typeof nodeGraphAudioPlayerPlaylistTogglePlayPause === "function") {
+      nodeGraphAudioPlayerPlaylistTogglePlayPause(id);
+      window.setTimeout(tick, 50);
+    }
+  });
 })();

@@ -247,6 +247,15 @@
       "folder": "livedemos"
     },
     {
+      "slug": "livedemos/softpop3",
+      "label": "softpop3",
+      "name": "",
+      "url": "/soemdsp-sandbox/patches/livedemos/softpop3.json",
+      "author": "",
+      "emoji": "",
+      "folder": "livedemos"
+    },
+    {
       "slug": "livedemos/superlove",
       "label": "superlove",
       "name": "",
@@ -980,6 +989,14 @@
       "label": "softpop2",
       "name": "",
       "url": "/soemdsp-sandbox/patches/livedemos/softpop2.json",
+      "author": "",
+      "emoji": ""
+    },
+    {
+      "slug": "softpop3",
+      "label": "softpop3",
+      "name": "",
+      "url": "/soemdsp-sandbox/patches/livedemos/softpop3.json",
       "author": "",
       "emoji": ""
     },

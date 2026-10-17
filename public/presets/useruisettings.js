@@ -39,9 +39,8 @@
     "workspaceBackgroundColor": "#1d1b1b",
     "moduleFillColor": "#171a1f",
     "moduleFillAlpha": 100,
-
+    "moduleTitleFillColor": "#030805",
     "moduleStrokeColor": "#a19b9b",
-
     "moduleSelectedStrokeColor": "#e2a86d",
     "moduleSelectedStrokeAlpha": 100,
     "sliderLabelColor": "#cfdde5",
@@ -109,9 +108,8 @@
     "workspaceBackgroundColor": false,
     "moduleFillColor": false,
     "moduleFillAlpha": false,
-
+    "moduleTitleFillColor": false,
     "moduleStrokeColor": false,
-
     "moduleSelectedStrokeColor": false,
     "moduleSelectedStrokeAlpha": false,
     "sliderLabelColor": false,
@@ -161,7 +159,7 @@
       "ram": false,
       "gpu": false
     },
-    "tooltipEmbedded": false,
+    "tooltipEmbedded": true,
     "tooltipEmbedHeight": 61,
     "moduleButtonsVisible": false,
     "appChromeBarsVisible": true,

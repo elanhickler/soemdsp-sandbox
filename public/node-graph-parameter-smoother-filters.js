@@ -15,6 +15,7 @@
 //   onePole   — exponential chase (1P)
 //   twoPole   — cascaded one-poles (2P)
 //   threePole — cascaded one-poles ×3 (3P): steeper than 2P, no overshoot
+//   bessel    — 3rd-order Bessel: same cutoff knob as 1P, faster settle than 3P
 //   papoulis  — Optimum-L order-3 (Π); can overshoot on steps
 //   none      — instant snap (legacy linearSmoothing=false; not a UI L button)
 //
@@ -40,6 +41,7 @@ const nodeGraphParameterSmootherFilterTypes = Object.freeze([
   "onePole",
   "twoPole",
   "threePole",
+  "bessel",
   "papoulis",
   "none",
 ]);
@@ -62,6 +64,9 @@ function normalizeNodeGraphParameterSmootherFilterType(value) {
   }
   if (lower === "threepole" || lower === "3p" || lower === "three-pole" || lower === "3pole") {
     return "threePole";
+  }
+  if (lower === "bessel" || lower === "b") {
+    return "bessel";
   }
   if (lower === "papoulis" || lower === "pi" || lower === "π") {
     return "papoulis";
@@ -459,6 +464,69 @@ nodeGraphRegisterParameterSmootherFilter("threePole", {
     const v = nodeGraphFiniteNumber(target);
     state.stage1 = v;
     state.stage2 = v;
+    state.outputBuffer = v;
+  },
+});
+
+// ── bessel: 3rd-order, -3 dB at the same cutoff as 1P ────────────────────
+// Real pole (1.322675·fc) then quadratic (ω0 = 1.447617·fc, Q = 0.691046).
+
+function nodeGraphParameterSmootherBesselCoeffs(frequency, rate) {
+  const safeRate = Math.max(1, nodeGraphFiniteNumber(rate, 44100));
+  const fc = Math.max(0, Number.isFinite(Number(frequency)) ? Number(frequency) : 0);
+  const fPole = Math.min(fc * 1.322675, safeRate * 0.45);
+  const fQuad = Math.min(fc * 1.447617, safeRate * 0.45);
+  const { b0 } = nodeGraphParameterSmootherOnePoleCoeffs(fPole, safeRate);
+  const w0 = Math.PI * 2 * fQuad / safeRate;
+  const s = Math.sin(w0);
+  const co = Math.cos(w0);
+  const alpha = s / (2 * 0.691046);
+  const a0 = 1 + alpha;
+  const inv = a0 !== 0 ? 1 / a0 : 0;
+  return {
+    pole: b0,
+    b0: (1 - co) * 0.5 * inv,
+    a1: (-2 * co) * inv,
+    a2: (1 - alpha) * inv,
+  };
+}
+
+function nodeGraphParameterSmootherBesselStep(state, input, frequency, rate) {
+  const coeff = nodeGraphParameterSmootherBesselCoeffs(frequency, rate);
+  const prev = nodeGraphFiniteNumber(state.stage1);
+  const safeInput = Number.isFinite(Number(input)) ? Number(input) : prev;
+  const pole = prev + coeff.pole * (safeInput - prev);
+  state.stage1 = pole;
+  const z1 = nodeGraphFiniteNumber(state.stage2);
+  const z2 = nodeGraphFiniteNumber(state.besselZ);
+  const y = coeff.b0 * pole + z1;
+  state.stage2 = (2 * coeff.b0) * pole - coeff.a1 * y + z2;
+  state.besselZ = coeff.b0 * pole - coeff.a2 * y;
+  state.outputBuffer = y;
+  return y;
+}
+
+nodeGraphRegisterParameterSmootherFilter("bessel", {
+  createState(initial = 0) {
+    const v = nodeGraphFiniteNumber(initial);
+    return { stage1: v, stage2: 0, besselZ: v, outputBuffer: v };
+  },
+  process(state, input, frequency, rate) {
+    return nodeGraphParameterSmootherBesselStep(state, input, frequency, rate);
+  },
+  processN(state, input, frequency, rate, frames) {
+    const n = Math.max(0, Math.floor(nodeGraphFiniteNumber(frames)));
+    let out = nodeGraphFiniteNumber(state.outputBuffer);
+    for (let i = 0; i < n; i += 1) {
+      out = nodeGraphParameterSmootherBesselStep(state, input, frequency, rate);
+    }
+    return out;
+  },
+  snap(state, target) {
+    const v = nodeGraphFiniteNumber(target);
+    state.stage1 = v;
+    state.stage2 = 0;
+    state.besselZ = v;
     state.outputBuffer = v;
   },
 });

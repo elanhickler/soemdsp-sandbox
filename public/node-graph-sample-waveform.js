@@ -1985,6 +1985,9 @@ function nodeGraphSampleWaveformEnsureZoomControl(section) {
 }
 
 function nodeGraphSampleWaveformHudHit(section, canvas, clientX, clientY) {
+  if (section && !section._sampleWaveHudHits && typeof drawNodeGraphSampleWaveformDisplay === "function") {
+    drawNodeGraphSampleWaveformDisplay(section);
+  }
   const hits = section?._sampleWaveHudHits;
   if (!hits || !canvas) {
     return null;
@@ -2155,9 +2158,12 @@ function bindNodeGraphSampleWaveformInteractions(section, canvas) {
       return;
     }
     section._sampleWaveHudHover = key;
-    canvas.style.cursor = key === "zoom" ? "ew-resize" : "";
+    canvas.style.cursor = key === "zoom" ? "ew-resize" : (key === "playlist" ? "pointer" : "");
     if (typeof drawNodeGraphSampleWaveformDisplay === "function") {
       drawNodeGraphSampleWaveformDisplay(section);
+    }
+    if (typeof nodeGraphGlGraphPresentSoon === "function") {
+      nodeGraphGlGraphPresentSoon();
     }
   };
   canvas.addEventListener("pointermove", (event) => {
@@ -2216,9 +2222,11 @@ function bindNodeGraphSampleWaveformInteractions(section, canvas) {
   });
   canvas.addEventListener("pointermove", (event) => {
     if (dragPointerId === null || event.pointerId !== dragPointerId) {
-      // Hover cursor near start/end handles.
-      const hover = nodeGraphSampleWaveformRegionHandleHit(section, canvas, event.clientX);
-      canvas.style.cursor = hover ? "ew-resize" : "";
+      const hud = nodeGraphSampleWaveformHudHit(section, canvas, event.clientX, event.clientY);
+      const handle = nodeGraphSampleWaveformRegionHandleHit(section, canvas, event.clientX);
+      canvas.style.cursor = handle || hud === "zoom"
+        ? "ew-resize"
+        : (hud === "playlist" ? "pointer" : "");
       return;
     }
     const nodeId = section.dataset.node;
@@ -2747,21 +2755,6 @@ function nodeGraphSampleWaveformGlEnvelope(batch, env, midY, amplitude, rgba) {
 
 const nodeGraphSampleWaveformHudFamily = "system-ui, sans-serif";
 
-function nodeGraphSampleWaveformGlPlaceholder(batch, width, height, message, settings) {
-  const fontUnit = settings && Number.isFinite(Number(settings.fontSize))
-    ? Number(settings.fontSize)
-    : nodeGraphSampleWaveformDefaultSettings.fontSize;
-  const fontPx = Math.max(1, Math.round(faceInkPx(clampAuthoredInkPx(fontUnit, 11), faceMinSide(width, height))));
-  nodeGraphGlLinesText(batch, message, Math.round(width / 2), Math.round(height / 2), {
-    px: fontPx,
-    rgba: nodeGraphGlLinesCss(nodeGraphSampleWaveformLineColor(settings, 57, 0.55)),
-    align: "center",
-    baseline: "middle",
-    family: nodeGraphSampleWaveformHudFamily,
-    weight: 600,
-  });
-}
-
 // Line family shares nodeGraphHueBrightnessCss (black → hue @ 0.5 → white).
 // settings.hue is the pigment; settings.lineBrightness is the slider.
 // Always normalize: phosphillator (and other callers) may omit settings.
@@ -2880,7 +2873,7 @@ function drawNodeGraphSampleWaveformDisplay(section) {
   if (musicFace === "pl" || musicFace === "playinfo") {
     return;
   }
-  if (musicFace === "vsxy" || musicFace === "vslr") {
+  if (musicFace === "vslr") {
     if (typeof nodeGraphAudioPlayerVideoscopePaint === "function") {
       nodeGraphAudioPlayerVideoscopePaint(section);
     }
@@ -2959,13 +2952,7 @@ function drawNodeGraphSampleWaveformDisplay(section) {
         });
       }
     }
-    nodeGraphSampleWaveformGlPlaceholder(
-      batch,
-      width,
-      height,
-      circuitRunning ? "No sample loaded" : "Load a sample",
-      settings,
-    );
+    // No sample: empty plate, HUD only (playlist / zoom / speed stay usable).
     nodeGraphSampleWaveformPaintFaceHud(batch, section, nodeId, node, width, height, pixelRatio, settings, 1);
     present();
     nodeGraphSampleWaveformPaintCompanionPlaylist(section, nodeId);

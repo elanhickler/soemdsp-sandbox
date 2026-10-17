@@ -2284,6 +2284,8 @@ function nodeGraphSmoothingTypeStatusText(type) {
       return "2P Two-pole — cascaded one poles (more smooth, no overshoot).";
     case "threePole":
       return "3P Three-pole — cascaded one poles ×3 (steeper than 2P, no overshoot).";
+    case "bessel":
+      return "Bessel — 3rd order, flat delay. Reaches the value sooner than 3P. Tiny overshoot.";
     case "papoulis":
       return "Π Papoulis — 3rd-order Optimum-L (steep; can overshoot / wiggle on steps).";
     case "onePole":

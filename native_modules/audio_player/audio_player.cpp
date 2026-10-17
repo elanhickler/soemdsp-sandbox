@@ -327,7 +327,6 @@ extern "C" double soemdsp_audio_player_sample(
     st.phase = startPhase;
     st.completed = false;
   }
-  const bool playing = (transportPlayOnce || transportLooping) && !st.completed;
   st.lastReset = resetV;
 
   if (!st.pcmL || st.pcmFrames <= 1) {
@@ -343,12 +342,23 @@ extern "C" double soemdsp_audio_player_sample(
   const double sampleRateRatio = st.pcmRate / engineRate;
   const double increment = (speed * sampleRateRatio) / (double)st.pcmFrames;
   const bool phaseConnected = hasPhase != 0;
-  const double basePhase = phaseConnected
-    ? clamp(safe(phaseCv), 0.0, 1.0)
-    : clamp(st.phase, 0.0, 1.0);
-  const double phaseWithOffset =
-    basePhase + safe(phaseOffset) + safe(phaseSkip) + safe(playlistScrub);
-  const double boundedPhase = wrap(phaseWithOffset, startPhase, startPhase + span);
+  const double offsetSum = safe(phaseOffset) + safe(phaseSkip) + safe(playlistScrub);
+  const double basePhase = phaseConnected ? clamp(safe(phaseCv), 0.0, 1.0) : st.phase;
+  const double audible = basePhase + offsetSum;
+  // Play-once completes on the audible playhead. Rewind/seek inside the
+  // region must keep playing (internal phase hitting 1 used to complete
+  // while the playhead sat at 0).
+  if (st.completed && (transportPlayOnce || transportLooping) && !phaseConnected) {
+    if (speed >= 0.0 && audible < endPhase - 1.0e-12) {
+      st.completed = false;
+    } else if (speed < 0.0 && audible > startPhase + 1.0e-12) {
+      st.completed = false;
+    }
+  }
+  const bool playing = (transportPlayOnce || transportLooping) && !st.completed;
+  const double boundedPhase = transportLooping
+    ? wrap(audible, startPhase, startPhase + span)
+    : clamp(audible, startPhase, endPhase);
 
   const double frameIndex = boundedPhase * (double)(st.pcmFrames - 1);
   const double leftS = read_linear(st.pcmL, st.pcmFrames, frameIndex);
@@ -360,21 +370,21 @@ extern "C" double soemdsp_audio_player_sample(
 
   double done = 0.0;
   if (!phaseConnected && playing) {
-    const double nextPhase = basePhase + increment;
+    const double nextAudible = audible + increment;
     if (transportLooping) {
-      const double normalizedNext = (nextPhase - startPhase) / span;
+      const double normalizedNext = (nextAudible - startPhase) / span;
       done = (normalizedNext < 0.0 || normalizedNext >= 1.0) ? 1.0 : 0.0;
-      st.phase = wrap(nextPhase, startPhase, startPhase + span);
-    } else if (speed >= 0.0 && nextPhase >= endPhase) {
-      st.phase = endPhase;
+      st.phase = wrap(nextAudible, startPhase, startPhase + span) - offsetSum;
+    } else if (speed >= 0.0 && nextAudible >= endPhase) {
+      st.phase = endPhase - offsetSum;
       st.completed = true;
       done = 1.0;
-    } else if (speed < 0.0 && nextPhase <= startPhase) {
-      st.phase = startPhase;
+    } else if (speed < 0.0 && nextAudible <= startPhase) {
+      st.phase = startPhase - offsetSum;
       st.completed = true;
       done = 1.0;
     } else {
-      st.phase = clamp(nextPhase, startPhase, endPhase);
+      st.phase = nextAudible - offsetSum;
     }
   } else if (!phaseConnected && (transportReset || transportStopped)) {
     st.phase = startPhase;

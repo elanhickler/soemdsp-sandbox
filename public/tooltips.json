@@ -97,6 +97,7 @@
     "smoothingTypeOnePole": "1P One-pole: classic exponential parameter chase",
     "smoothingTypeTwoPole": "2P Two-pole — cascaded one poles (more smooth, no overshoot)",
     "smoothingTypeThreePole": "3P Three-pole — cascaded one poles ×3 (steeper than 2P, no overshoot)",
+    "smoothingTypeBessel": "Bessel — 3rd order, flat delay. Reaches the value sooner than 3P for the same smoothing time. Tiny overshoot.",
     "smoothingTypePapoulis": "Π Papoulis — 3rd-order Optimum-L (steep; can overshoot / wiggle on steps)",
     "showSign": "always show a plus or minus sign for this parameter",
     "wraparound": "let the parameter wrap from max to min and min to max",

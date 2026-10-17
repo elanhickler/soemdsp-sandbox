@@ -1260,13 +1260,20 @@ async function nodeGraphAudioPlayerLibraryPlayIndex(nodeId, index, { autoplay = 
     return;
   }
   nodeGraphAudioPlayerLibraryReleaseOrphans(nodeId, item.sampleId || found?.id || live.sample?.id);
+  const prevId = String(live.sample?.id || "");
+  const nextId = String(item.sampleId || found?.id || "");
   live.sample = {
     id: item.sampleId,
     name: item.name || found?.buf?.name || item.sampleId,
     ...(item.fileKey ? { fileKey: item.fileKey } : {}),
     ...(item.path ? { sourcePath: item.path } : {}),
   };
-  live.samplePhase = 0;
+  if (prevId && nextId && prevId !== nextId && typeof nodeGraphAudioPlayerRestartPhaseSet === "function") {
+    nodeGraphAudioPlayerRestartPhaseSet(nodeId, 0);
+  }
+  live.samplePhase = typeof nodeGraphAudioPlayerRestartPhaseGet === "function"
+    ? nodeGraphAudioPlayerRestartPhaseGet(nodeId)
+    : 0;
   live.samplePhaseSeek = Math.round(nodeGraphFiniteNumber(live.samplePhaseSeek, 0)) + 1;
   if (!live.params || typeof live.params !== "object") {
     live.params = {};
@@ -1360,7 +1367,15 @@ function nodeGraphAudioPlayerLibraryPlayNext(nodeId, options = {}) {
   const queued = queuedKey
     ? (pl.items || []).find((item) => keyOf(item) === queuedKey) || null
     : null;
-  if (!(pl.unplayed || []).length && !queued) {
+  const fromKeyEarly = String(options.fromKey || "");
+  let fromEarly = fromKeyEarly
+    ? (pl.items || []).findIndex((entry) => keyOf(entry) === fromKeyEarly)
+    : -1;
+  if (fromEarly < 0) {
+    fromEarly = Math.max(0, Math.round(nodeGraphFiniteNumber(pl.index)));
+  }
+  const sequentialNext = (pl.items || []).find((item, i) => i > fromEarly) || null;
+  if (!(pl.unplayed || []).length && !queued && !(transport === 4 && sequentialNext)) {
     if (wrap && (pl.played || []).length) {
       pl.played = [];
       if (typeof nodeGraphAudioPlayerPlaylistSyncQueues === "function") {
@@ -1416,6 +1431,9 @@ function nodeGraphAudioPlayerLibraryPlayNext(nodeId, options = {}) {
       return found > from;
     });
     next = after || pool[0];
+  }
+  if (!next && transport === 4 && sequentialNext) {
+    next = sequentialNext;
   }
   pl.playing = next || null;
   if (typeof nodeGraphAudioPlayerPlaylistSyncQueues === "function") {

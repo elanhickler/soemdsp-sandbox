@@ -279,6 +279,10 @@ function nodeGraphModulationPortCenter(node, parameter) {
 }
 
 function nodeGraphGraphInputPortCenter(node, graphInput) {
+  if (typeof nodeGraphModuleGeometryAttach === "function") {
+    const published = nodeGraphModuleGeometryAttach(node, graphInput, "graph");
+    if (published) return published;
+  }
   const surface = nodeGraphZoomSurface();
   const element = surface?.querySelector(nodeGraphGraphInputPortSelector(node, graphInput));
   return nodeGraphElementCenter(element, "graph");

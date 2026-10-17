@@ -526,7 +526,7 @@ async function sendNodeGraphLiveNativeModule(liveNode, entry) {
 // Chrome caps wasm memories per process (~100); many standalone instances
 // hit that cap. Slim is for small used-sets when per-module files exist;
 // huge patches / site deploys should use combined.
-const nodeGraphLiveCombinedNativeModuleUrl = "native_modules/combined/soemdsp_combined.wasm?v=softpop2-pmu-1";
+const nodeGraphLiveCombinedNativeModuleUrl = "native_modules/combined/soemdsp_combined.wasm?v=play-seek-eof-1";
 
 /** @type {null|"slim"|"combined"} */
 let nodeGraphLiveNativeWasmLoadModeResolved = null;
@@ -3385,7 +3385,7 @@ const nodeGraphLiveWorkletSourceFilesEfficient = [
   "./public/node-live-audio-worklet-core.js?v=softpop-ship-1",
   // Phase D: class methods extracted from core (must follow class definition).
   "./public/node-live-audio-worklet-graph.js?v=plan-d-split-5",
-  "./public/node-live-audio-worklet-smoother.js?v=hostcv-parammod-off-2",
+  "./public/node-live-audio-worklet-smoother.js?v=smooth-bessel-1",
   "./public/node-live-audio-worklet-param-map.js?v=domain-mod-1",
   "./public/node-live-audio-worklet-destroy.js?v=block-scope-1",
   "./public/node-live-audio-worklet-analog.js?v=plan-d-split-7",
@@ -3400,7 +3400,7 @@ const nodeGraphLiveWorkletSourceFilesEfficient = [
   "./public/node-live-audio-worklet-scope-io.js?v=output-face-postvol-1",
   "./public/node-live-audio-worklet-native-load.js?v=plan-d-split-7",
   "./public/node-live-audio-worklet-native-exports.js?v=pinoise-20261015",
-  "./public/node-live-audio-worklet-native-graph.js?v=softpop2-pm-1",
+  "./public/node-live-audio-worklet-native-graph.js?v=smooth-bessel-1",
   "./public/node-live-audio-worklet-meta-view.js?v=voice-preview-1",
   "./public/node-live-audio-worklet-set-plan.js?v=softpop-ship-1",
   "./public/node-live-audio-worklet-clear-plan.js?v=kbd-trig-1samp-20261013",

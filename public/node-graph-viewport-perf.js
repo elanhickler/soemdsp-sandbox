@@ -445,10 +445,8 @@ function flushNodeGraphViewportHeavyChrome(options = {}) {
     // Pause module lights / wires mid-gesture. Grid position already updated.
     return;
   }
-  // Camera/layout settle is a geometry owner — republish attaches before wires.
-  if (typeof nodeGraphModuleGeometryInvalidateAll === "function") {
-    nodeGraphModuleGeometryInvalidateAll();
-  }
+  // Republish modules that are on screen. Offscreen modules stay display:none
+  // and keep the attaches they already have, so their cables still have ends.
   if (typeof nodeGraphModuleGeometryPublishVisible === "function") {
     nodeGraphModuleGeometryPublishVisible();
   }

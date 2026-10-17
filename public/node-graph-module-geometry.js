@@ -67,6 +67,13 @@ function nodeGraphModuleGeometryPublishFromDom(nodeId, options = {}) {
     nodeGraphModuleGeometryById.delete(id);
     return null;
   }
+  // display:none (zoomed offscreen) has no rect. Keep the last real attaches
+  // so a cable still has both ends when one module is outside the view.
+  const kept = options.store === false ? null : nodeGraphModuleGeometryById.get(id);
+  const asleep = el.hidden || el.classList.contains("viewport-asleep");
+  if (asleep && kept?.box?.w > 1 && kept?.box?.h > 1) {
+    return kept;
+  }
   const surface = typeof nodeGraphZoomSurface === "function" ? nodeGraphZoomSurface() : null;
   if (!surface) return null;
 
@@ -80,6 +87,9 @@ function nodeGraphModuleGeometryPublishFromDom(nodeId, options = {}) {
   });
 
   const boxRect = el.getBoundingClientRect();
+  if ((!(boxRect.width > 1) || !(boxRect.height > 1)) && kept?.box?.w > 1 && kept?.box?.h > 1) {
+    return kept;
+  }
   const boxTl = toSurface(boxRect.left, boxRect.top);
   const boxBr = toSurface(boxRect.right, boxRect.bottom);
   const box = {
