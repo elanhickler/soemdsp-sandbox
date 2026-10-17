@@ -109,7 +109,7 @@ const nodeGraphModuleScopeCustomRenderers = {
 function drawNodeGraphModuleScopeTypedItem(renderer, item, pixelRatio) {
   const displayRenderer = nodeGraphModuleDisplayRendererForSlot(item?.slot);
   const nodeId = item?.slot?.nodeId;
-  if (typeof scopePaintShouldColdBootFace === "function" && scopePaintShouldColdBootFace(nodeId)) {
+  if (typeof scopePaintShouldColdBootFace === "function" && scopePaintShouldColdBootFace(nodeId, item?.slot)) {
     const canvas = (typeof nodeGraphModuleScopeLocalFallbackCanvas === "function"
       && nodeGraphModuleScopeLocalFallbackCanvas(item.slot))
       || item?.slot?.scopeElement?.querySelector?.("canvas")
@@ -341,6 +341,13 @@ function drawNodeGraphModuleScopes(options = {}) {
         paintNodeGraphRasterRgbFacesNow(window.devicePixelRatio || 1);
       } catch (_error) {
         // Best-effort — invert / plate must still update while paused.
+      }
+    }
+    if (typeof paintNodeGraphParamFacesNow === "function") {
+      try {
+        paintNodeGraphParamFacesNow(window.devicePixelRatio || 1);
+      } catch (_error) {
+        // Best-effort: param faces paint in every engine state (ES-2).
       }
     }
     if (force) {
@@ -781,6 +788,14 @@ function scheduleNodeGraphModuleScopeDraw(options = {}) {
       if (typeof paintNodeGraphRasterRgbFacesNow === "function") {
         try {
           paintNodeGraphRasterRgbFacesNow(window.devicePixelRatio || 1);
+        } catch (_error) {
+          // Best-effort.
+        }
+      }
+      // Param faces (BPM digits, curves) paint in every engine state (ES-2).
+      if (typeof paintNodeGraphParamFacesNow === "function") {
+        try {
+          paintNodeGraphParamFacesNow(window.devicePixelRatio || 1);
         } catch (_error) {
           // Best-effort.
         }

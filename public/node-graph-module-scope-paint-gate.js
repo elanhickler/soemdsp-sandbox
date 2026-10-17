@@ -196,6 +196,10 @@ function nodeGraphInstallDrawingFacePump(section, options = {}) {
   }
   const paint = options.paint;
   const forceKey = options.forceKey || "_forceDraw";
+  // ES-1: the face declares its paint kind (param / buffer / modulation).
+  if (options.paintKind && typeof nodeGraphDeclareFacePaintKind === "function") {
+    nodeGraphDeclareFacePaintKind(section, options.paintKind);
+  }
   const startLoop = () => {
     nodeGraphArmDrawingFaceLoop(section, {
       paint,
@@ -438,6 +442,201 @@ function scopePaintIsFacePoweredOff(nodeId) {
   return Array.isArray(listed) && listed.includes(id);
 }
 
-function scopePaintShouldColdBootFace(nodeId) {
-  return scopePaintIsEngineStopped() || scopePaintIsFacePoweredOff(nodeId);
+/**
+ * Wipe this face to its cold plate instead of drawing it.
+ * Power-off always wipes. Engine stop wipes buffer / modulation faces only;
+ * param faces keep painting while stopped (ES-2, APP_POLICY 3b).
+ */
+function scopePaintShouldColdBootFace(nodeId, slot) {
+  if (scopePaintIsFacePoweredOff(nodeId)) {
+    return true;
+  }
+  if (!scopePaintIsEngineStopped()) {
+    return false;
+  }
+  if (typeof nodeGraphFacePaintKindFor !== "function") {
+    return true;
+  }
+  const kind = nodeGraphFacePaintKindFor(slot || nodeId);
+  return scopePaintFacePolicy(kind, "stopped").black;
+}
+
+// --- Engine state and face paint policy (ES-1, docs/ENGINE_STATE_DISPLAY_PLAN.md) ---
+//
+// APP_POLICY 3b: displays work while stopped. Param faces paint on create and
+// on every parameter change in every engine state; buffer faces are black when
+// stopped and frozen when paused; modulation faces may wait for start. UI is
+// never gated on engine state. New display code asks scopePaintFacePolicy()
+// instead of reading live.node / outputEnabled / speedMultiplier itself.
+
+/** "stopped" (no engine host), "paused" (host up, speed 0), or "playing". */
+function scopePaintEngineState() {
+  const live = typeof nodeGraphMvp !== "undefined" ? nodeGraphMvp?.live : null;
+  if (!scopePaintHasEngineHost(live)) {
+    return "stopped";
+  }
+  return scopePaintIsEnginePlaying() ? "playing" : "paused";
+}
+
+const NODE_GRAPH_FACE_PAINT_KINDS = ["param", "buffer", "modulation"];
+
+/**
+ * Declared kinds, keyed by display renderer or node type. Faces may also
+ * declare per element (data-face-paint) via nodeGraphDeclareFacePaintKind or
+ * nodeGraphInstallDrawingFacePump({ paintKind }). Unlisted faces are "buffer"
+ * (the old behaviour: black while stopped, held while paused).
+ */
+const nodeGraphFacePaintKindTable = Object.assign(Object.create(null), {
+  // Parameter-driven pictures (curves, shapes, keys, digits from params).
+  basicShapeFace: "param",
+  sinCosFace: "param",
+  sinCos4Face: "param",
+  softwaveOscFace: "param",
+  rgbShapeFace: "param",
+  textBoxFace: "param",
+  slewShapeFace: "param",
+  additiveFilterCurve: "param",
+  additiveWaveform: "param",
+  additiveBlasterBlocks: "param",
+  additiveBubbleCascade: "param",
+  harmonicCount: "param",
+  harmonicLines: "param",
+  harmonicSeriesFace: "param",
+  arpKeysFace: "param",
+  phoneToneFace: "param",
+  transportBpm: "param",
+  // Node types whose faces are UI or param pictures.
+  audioPlayer: "param",
+  wavetable2d: "param",
+  sequencer: "param",
+  ellipsoid: "param",
+  basicShape: "param",
+  sinCos: "param",
+  softwaveOsc: "param",
+  slewLimiter: "param",
+});
+
+function nodeGraphRegisterFacePaintKind(key, kind) {
+  const k = String(key || "").trim();
+  if (!k || !NODE_GRAPH_FACE_PAINT_KINDS.includes(kind)) {
+    return;
+  }
+  nodeGraphFacePaintKindTable[k] = kind;
+}
+
+function nodeGraphDeclareFacePaintKind(element, kind) {
+  if (!element?.dataset || !NODE_GRAPH_FACE_PAINT_KINDS.includes(kind)) {
+    return;
+  }
+  element.dataset.facePaint = kind;
+}
+
+/**
+ * Paint kind for a slot, face element, node id, or renderer key.
+ * Order: element data-face-paint, display renderer, node type, then "buffer".
+ */
+function nodeGraphFacePaintKindFor(target) {
+  if (!target) {
+    return "buffer";
+  }
+  if (typeof target === "string") {
+    const direct = nodeGraphFacePaintKindTable[target];
+    if (direct) return direct;
+    const node = typeof nodeGraphPatchNode === "function" ? nodeGraphPatchNode(target) : null;
+    return (node?.type && nodeGraphFacePaintKindTable[node.type]) || "buffer";
+  }
+  const el = target.scopeElement || (target.dataset ? target : null);
+  const declared = el?.dataset?.facePaint
+    || el?.closest?.("[data-face-paint]")?.dataset?.facePaint;
+  if (NODE_GRAPH_FACE_PAINT_KINDS.includes(declared)) {
+    return declared;
+  }
+  if (target.scopeElement || target.nodeId) {
+    const renderer = typeof nodeGraphModuleDisplayRendererForSlot === "function"
+      ? nodeGraphModuleDisplayRendererForSlot(target)
+      : "";
+    if (renderer && nodeGraphFacePaintKindTable[renderer]) {
+      return nodeGraphFacePaintKindTable[renderer];
+    }
+  }
+  const type = target.type
+    || el?.dataset?.nodeType
+    || el?.closest?.("[data-node-type]")?.dataset?.nodeType
+    || "";
+  return (type && nodeGraphFacePaintKindTable[type]) || "buffer";
+}
+
+/**
+ * What a face of this kind does in the given (default: current) engine state.
+ *   paint:   draw the face picture now (on create / param change / tick)
+ *   black:   show the cold plate instead of a picture
+ *   freeze:  hold the last frame; repaint only on explicit force
+ *   animate: keep a per-frame loop running (live overlays, sample streams)
+ */
+function scopePaintFacePolicy(kind, state = scopePaintEngineState()) {
+  const k = NODE_GRAPH_FACE_PAINT_KINDS.includes(kind) ? kind : "buffer";
+  const playing = state === "playing";
+  if (k === "param") {
+    return { kind: k, state, paint: true, black: false, freeze: false, animate: playing };
+  }
+  if (state === "stopped") {
+    return { kind: k, state, paint: false, black: true, freeze: false, animate: false };
+  }
+  if (state === "paused") {
+    return { kind: k, state, paint: false, black: false, freeze: true, animate: false };
+  }
+  return { kind: k, state, paint: true, black: false, freeze: false, animate: true };
+}
+
+/**
+ * ES-2: paint every visible param face that draws through the shared scope
+ * renderer table, without the live compositor. Called from the stopped /
+ * paused branches of the scope draw, so param pictures update in any engine
+ * state. Self-painting faces (no-op table entries) keep their own pumps.
+ */
+function paintNodeGraphParamFacesNow(pixelRatio) {
+  if (
+    typeof nodeGraphVisibleModuleScopeSlots !== "function"
+    || typeof nodeGraphModuleScopeCustomRenderers !== "object"
+    || !nodeGraphModuleScopeCustomRenderers
+  ) {
+    return 0;
+  }
+  const ratio = Number(pixelRatio) > 0
+    ? Number(pixelRatio)
+    : (typeof window !== "undefined" ? Math.max(1, window.devicePixelRatio || 1) : 1);
+  let painted = 0;
+  for (const slot of nodeGraphVisibleModuleScopeSlots()) {
+    if (nodeGraphFacePaintKindFor(slot) !== "param") {
+      continue;
+    }
+    if (scopePaintIsFacePoweredOff(slot?.nodeId)) {
+      continue;
+    }
+    const key = typeof nodeGraphModuleDisplayRendererForSlot === "function"
+      ? nodeGraphModuleDisplayRendererForSlot(slot)
+      : "";
+    const draw = key ? nodeGraphModuleScopeCustomRenderers[key] : null;
+    if (typeof draw !== "function" || draw.length === 0) {
+      continue;
+    }
+    try {
+      draw(null, { slot, screenElement: slot.scopeElement }, ratio);
+      painted += 1;
+    } catch (error) {
+      console.error("param face paint failed", key, error);
+    }
+  }
+  return painted;
+}
+
+if (typeof module !== "undefined" && module.exports) {
+  module.exports = {
+    paintNodeGraphParamFacesNow,
+    scopePaintEngineState,
+    scopePaintFacePolicy,
+    nodeGraphFacePaintKindFor,
+    nodeGraphRegisterFacePaintKind,
+    nodeGraphDeclareFacePaintKind,
+  };
 }
