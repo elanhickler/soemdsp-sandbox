@@ -1,0 +1,23 @@
+# ES-6 baseline: engine reads (live.node / outputEnabled / speedMultiplier) in display + UI files.
+# Shrink-only. Lower a count (or drop a line) when you remove reads; never raise one.
+public/modules/asciiscope/asciiscope-display.js | 2
+public/modules/badvalMonitor/badval-monitor-ui.js | 1
+public/modules/basicShape/basic-shape-display.js | 1
+public/modules/ellipsoid/ellipsoid-display.js | 4
+public/modules/fbmField/fbm-field-display.js | 4
+public/modules/imageBurn/image-burn-display.js | 1
+public/modules/imageBurn/image-burn-ui.js | 1
+public/modules/keypad/keypad-ui.js | 2
+public/modules/rasterRgb/raster-rgb-display.js | 2
+public/modules/rgbFractal/rgb-fractal-display.js | 3
+public/modules/sequencer/sequencer-ui.js | 2
+public/modules/sinCos/sin-cos-display.js | 1
+public/modules/sineWavetable/sine-wavetable-display.js | 1
+public/modules/softwaveOsc/softwave-osc-display.js | 4
+public/modules/vectorRgb/vector-rgb-display.js | 1
+public/modules/videoDelay/video-delay-ui.js | 1
+public/modules/videoFeedback/video-feedback-ui.js | 1
+public/node-graph-module-scope-canvas.js | 7
+public/node-graph-module-scope-paint-helpers.js | 2
+public/node-graph-sample-waveform.js | 5
+public/node-graph-selection.js | 1
