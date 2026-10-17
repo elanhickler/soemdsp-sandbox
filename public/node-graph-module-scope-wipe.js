@@ -260,6 +260,11 @@ function wipeNodeGraphModuleScopeScreensToColdBoot() {
       // Best-effort.
     }
   }
+  // ES-4: every drawing face repaints once in the stopped state (param
+  // pictures stay, live overlays such as playheads and dots drop to idle).
+  if (typeof scopePaintNotifyFaceLoops === "function") {
+    scopePaintNotifyFaceLoops({ force: true });
+  }
 }
 
 function nodeGraphModuleScopeWipePhosphorCanvas(canvas, bg) {

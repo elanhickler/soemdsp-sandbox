@@ -91,6 +91,40 @@ check(ctx.paintNodeGraphParamFacesNow(1) === 1 && drew === 1, "stopped: only par
   check(slots.includes("scopePaintEnsureColdPlate(slot)"), "spawn while stopped calls cold plate");
 }
 
+// ES-4: wakes besides engine start (forced face-loop event, viewport wake).
+{
+  const docListeners = {};
+  ctx.document = {
+    addEventListener: (t, fn) => { (docListeners[t] ||= []).push(fn); },
+    dispatchEvent: (e) => { for (const fn of docListeners[e.type] || []) fn(e); return true; },
+  };
+  ctx.CustomEvent = class { constructor(type, init) { this.type = type; this.detail = init?.detail; } };
+  let rafQ = [];
+  ctx.requestAnimationFrame = (fn) => { rafQ.push(fn); return rafQ.length; };
+  const flush = () => { for (let i = 0; i < 5 && rafQ.length; i++) { const q = rafQ; rafQ = []; q.forEach((fn) => fn()); } };
+  const secListeners = {};
+  const section = { dataset: { nodeType: "slewLimiter" }, isConnected: true, addEventListener: (t, fn) => { secListeners[t] = fn; } };
+  let paints = 0;
+  setLive(null);
+  ctx.nodeGraphInstallDrawingFacePump(section, { paint: (h) => { paints += 1; h._forceDraw = false; }, observeResize: false, paintKind: "param" });
+  flush();
+  check(section.dataset.facePaint === "param", "pump paintKind declares the face kind");
+  const base = paints;
+  ctx.scopePaintNotifyFaceLoops({ force: true });
+  flush();
+  check(paints === base + 1, "forced face-loop wake repaints a stopped face once");
+  ctx.scopePaintNotifyFaceLoops();
+  flush();
+  check(paints === base + 1, "unforced wake does not repaint a stopped face");
+  secListeners.nodegraphviewport({ detail: { asleep: false } });
+  flush();
+  check(paints === base + 2, "viewport wake repaints in any engine state");
+  const wipe = fs.readFileSync("public/node-graph-module-scope-wipe.js", "utf8");
+  check(wipe.includes("scopePaintNotifyFaceLoops({ force: true })"), "Stop forces one face-loop repaint");
+  const slots = fs.readFileSync("public/node-graph-module-scope-slots.js", "utf8");
+  check(slots.includes("paramPaintQueued"), "spawn while stopped/paused queues one param paint pass");
+}
+
 // ES-2 wiring: orchestrator passes the slot and paints param faces when not live.
 const orch = fs.readFileSync("public/node-graph-module-scope-draw-orchestrator.js", "utf8");
 check(orch.includes("scopePaintShouldColdBootFace(nodeId, item?.slot)"), "typed item passes slot to cold-boot check");

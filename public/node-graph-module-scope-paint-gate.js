@@ -237,10 +237,19 @@ function nodeGraphInstallDrawingFacePump(section, options = {}) {
     section._drawingFaceResizeObserver = ro;
   }
   if (typeof document !== "undefined" && typeof document.addEventListener === "function") {
-    document.addEventListener("nodegraphfaceloops", startLoop);
+    // ES-4: engine start is not the only wake. A forced wake (Stop, page
+    // switch, patch load) repaints once even when the face no longer animates.
+    document.addEventListener("nodegraphfaceloops", (event) => {
+      if (event?.detail?.force) {
+        section[forceKey] = true;
+      }
+      startLoop();
+    });
   }
   section.addEventListener?.("nodegraphviewport", (event) => {
     if (!event?.detail?.asleep) {
+      // Waking from viewport sleep: repaint once in any engine state (ES-4).
+      section[forceKey] = true;
       startLoop();
     }
   });
@@ -252,12 +261,15 @@ function nodeGraphInstallDrawingFacePump(section, options = {}) {
 }
 
 /** Wake stopped face loops after Play / speed>0 / viewport wake. */
-function scopePaintNotifyFaceLoops() {
+function scopePaintNotifyFaceLoops(options = {}) {
   if (typeof document === "undefined" || typeof document.dispatchEvent !== "function") {
     return;
   }
   try {
-    document.dispatchEvent(new CustomEvent("nodegraphfaceloops", { bubbles: false }));
+    document.dispatchEvent(new CustomEvent("nodegraphfaceloops", {
+      bubbles: false,
+      detail: { force: options?.force === true },
+    }));
   } catch (_e) { /* ignore */ }
 }
 

@@ -52,13 +52,23 @@ function registerNodeGraphModuleScopeSlot(moduleElement, options = {}) {
   } else if (
     typeof scopePaintEnsureColdPlate === "function"
     && typeof scopePaintEngineState === "function"
-    && scopePaintEngineState() === "stopped"
     && typeof requestAnimationFrame === "function"
   ) {
-    // ES-3: a buffer face spawned while stopped shows its black plate (after
-    // the face canvas is sized), never a transparent hole or stale pixels.
+    // ES-3 / ES-4: spawned while stopped or paused. Param faces paint now
+    // (no engine needed); a buffer face spawned while stopped shows its cold
+    // plate after the face canvas is sized, never stale pixels.
     requestAnimationFrame(() => requestAnimationFrame(() => {
-      if (nodeGraphModuleScopeState.slots.get(nodeId) === slot && scopePaintEngineState() === "stopped") {
+      if (nodeGraphModuleScopeState.slots.get(nodeId) !== slot) return;
+      if (typeof nodeGraphFacePaintKindFor === "function" && nodeGraphFacePaintKindFor(slot) === "param") {
+        // One param pass per frame however many slots a patch load registers.
+        if (!nodeGraphModuleScopeState.paramPaintQueued && typeof paintNodeGraphParamFacesNow === "function") {
+          nodeGraphModuleScopeState.paramPaintQueued = true;
+          requestAnimationFrame(() => {
+            nodeGraphModuleScopeState.paramPaintQueued = false;
+            paintNodeGraphParamFacesNow();
+          });
+        }
+      } else if (scopePaintEngineState() === "stopped") {
         scopePaintEnsureColdPlate(slot);
       }
     }));
