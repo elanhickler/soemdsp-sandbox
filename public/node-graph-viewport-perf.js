@@ -759,10 +759,34 @@ function nodeGraphViewportCullWakePainters(element) {
   if (typeof scheduleNodeGraphModuleScopeDraw === "function") {
     scheduleNodeGraphModuleScopeDraw({ force: true });
   }
+  // Engine-state plan: a buffer face waking while stopped (or paused with no
+  // held canvas) gets its canvas and cold plate, same as a stopped spawn.
+  nodeGraphViewportWakeColdPlate(nodeId);
   element.dispatchEvent(new CustomEvent("nodegraphviewport", {
     bubbles: false,
     detail: { asleep: false },
   }));
+}
+
+function nodeGraphViewportWakeColdPlate(nodeId) {
+  if (
+    !nodeId
+    || typeof scopePaintEnsureColdPlate !== "function"
+    || typeof scopePaintEngineState !== "function"
+    || typeof requestAnimationFrame !== "function"
+  ) {
+    return;
+  }
+  requestAnimationFrame(() => {
+    const state = scopePaintEngineState();
+    const slot = nodeGraphModuleScopeState?.slots?.get?.(nodeId);
+    if (!slot || state === "playing") return;
+    if (state === "paused") {
+      const held = slot.scopeElement?.querySelector?.("canvas");
+      if (held && held.width > 1 && held.height > 1) return;
+    }
+    scopePaintEnsureColdPlate(slot, { create: true, force: true, assumeStopped: true });
+  });
 }
 
 function nodeGraphViewportCullSleepPainters(element) {

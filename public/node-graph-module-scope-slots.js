@@ -68,8 +68,19 @@ function registerNodeGraphModuleScopeSlot(moduleElement, options = {}) {
             paintNodeGraphParamFacesNow();
           });
         }
-      } else if (scopePaintEngineState() === "stopped") {
-        scopePaintEnsureColdPlate(slot);
+      } else {
+        // Stopped or paused spawn: no frame to hold, so plate it like Stop.
+        // Retry for up to ~1.5 s while the face is still laying out.
+        let tries = 0;
+        const plate = () => {
+          if (nodeGraphModuleScopeState.slots.get(nodeId) !== slot || scopePaintEngineState() === "playing") return;
+          const ok = scopePaintEnsureColdPlate(slot, { create: true, force: true, assumeStopped: true });
+          if (!ok && tries < 30) {
+            tries += 1;
+            setTimeout(plate, 50);
+          }
+        };
+        plate();
       }
     }));
   }

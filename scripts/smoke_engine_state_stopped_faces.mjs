@@ -67,6 +67,54 @@ const paramFaces = () => {
   gate(box && Math.abs(after - before) > 20, `module drags while stopped (${before} -> ${after})`);
   const r2 = await page.evaluate(paramFaces);
   for (const f of r2.faces) gate(f.lit > 0, `param face still painted after drag: ${f.id} (${f.lit})`);
+
+  // 4. Buffer modules added while stopped (and one while paused) get a face
+  // canvas and a painted (opaque) plate at once, like after Stop.
+  const addAndProbe = (types) => page.evaluate(async (list) => {
+    const before = new Set([...document.querySelectorAll("article[data-node-type]")].map((a) => a.dataset.node));
+    // Keep every new module on screen (off-screen faces are culled).
+    let x = 40;
+    for (const t of list) {
+      showNodeGraphModule(t, { x, y: 620 }, {});
+      x += 190;
+      await new Promise((r) => setTimeout(r, 400));
+    }
+    await new Promise((r) => setTimeout(r, 1200));
+    const out = [];
+    for (const a of document.querySelectorAll("article[data-node-type]")) {
+      if (before.has(a.dataset.node)) continue;
+      const slot = nodeGraphModuleScopeState?.slots?.get(a.dataset.node);
+      const kind = slot ? nodeGraphFacePaintKindFor(slot) : nodeGraphFacePaintKindFor(a);
+      const cs = [...a.querySelectorAll("canvas")].filter((c) => c.width > 1 && c.height > 1 && !c.closest("[hidden]"));
+      let opaque = 0;
+      for (const c of cs) {
+        try {
+          const o = document.createElement("canvas"); o.width = 16; o.height = 16;
+          const g = o.getContext("2d"); g.drawImage(c, 0, 0, 16, 16);
+          const d = g.getImageData(0, 0, 16, 16).data; let n = 0;
+          for (let i = 3; i < d.length; i += 4) if (d[i] > 200) n += 1;
+          opaque = Math.max(opaque, n);
+        } catch (_e) { /* ignore */ }
+      }
+      out.push({ type: a.dataset.nodeType, kind, slot: Boolean(slot), canvases: cs.length, opaque, state: scopePaintEngineState() });
+    }
+    return out;
+  }, types);
+  const added = await addAndProbe(["lineBurnOscilloscope", "numberReadout", "softpopOscillator", "timeQuantizer"]);
+  gate(added.length >= 4, `buffer modules added while stopped (${added.length})`);
+  for (const a of added) {
+    if (!a.slot || a.kind === "param") continue;
+    gate(a.state === "stopped" && a.canvases > 0 && a.opaque >= 200, `stopped spawn has a painted plate: ${a.type} [${a.kind}] canvases=${a.canvases} opaque=${a.opaque}/256`);
+  }
+  await page.click("#nodeTransportPlay");
+  await page.waitForTimeout(2500);
+  await page.click("#nodeTransportPause");
+  await page.waitForTimeout(800);
+  const pausedAdd = await addAndProbe(["lineBurnOscilloscope", "numberReadout"]);
+  for (const a of pausedAdd) {
+    if (!a.slot || a.kind === "param") continue;
+    gate(a.state === "paused" && a.canvases > 0 && a.opaque >= 200, `paused spawn has a painted plate: ${a.type} [${a.kind}] canvases=${a.canvases} opaque=${a.opaque}/256`);
+  }
   await page.close();
 }
 

@@ -662,39 +662,78 @@ function scopePaintEnsureColdPlate(slot, options = {}) {
     return false;
   }
   const face = slot.scopeElement || (slot.dataset ? slot : null);
-  const canvas = options.canvas
-    || face?.querySelector?.(":scope > canvas.node-module-scope-local-fallback-canvas")
-    || face?.querySelector?.("canvas")
-    || null;
-  if (!canvas || !(canvas.width > 1) || !(canvas.height > 1)) {
-    return false;
-  }
   const displayType = options.displayType
     || (typeof nodeGraphModuleDisplayRendererForSlot === "function" && slot.scopeElement
       ? nodeGraphModuleDisplayRendererForSlot(slot)
       : "");
-  let done = false;
-  if (typeof nodeGraphModuleScopeWipeCanvas === "function") {
-    done = nodeGraphModuleScopeWipeCanvas(canvas, { nodeId, displayType: displayType || undefined });
-  }
-  // Trace faces (Instant Waterfall, dot, value, lineBurn, Output): the wipe
-  // drops history only; repaint the GL cold plate so no stale trace remains.
-  if (
-    slot.scopeElement
+  const ratio = typeof window !== "undefined" ? Math.max(1, window.devicePixelRatio || 1) : 1;
+  const isTrace = Boolean(slot.scopeElement)
     && NODE_GRAPH_TRACE_COLD_PLATE_RENDERERS.includes(displayType || "")
-    && typeof paintNodeGraphTraceDisplayColdPlate === "function"
-  ) {
-    const ratio = typeof window !== "undefined" ? Math.max(1, window.devicePixelRatio || 1) : 1;
+    && typeof paintNodeGraphTraceDisplayColdPlate === "function";
+  let canvas = options.canvas
+    || face?.querySelector?.(":scope > canvas.node-module-scope-local-fallback-canvas")
+    || face?.querySelector?.("canvas")
+    || null;
+  // Spawn while stopped / paused: give the face its canvas now so it shows a
+  // plate immediately (trace faces build theirs in the cold-plate paint).
+  if (options.create === true && slot.scopeElement && !isTrace) {
     try {
-      done = paintNodeGraphTraceDisplayColdPlate(slot, ratio, { force: true }) || done;
+      if (!canvas && displayType === "numberReadout" && typeof nodeGraphNumberReadoutCanvasForSlot === "function") {
+        canvas = nodeGraphNumberReadoutCanvasForSlot(slot);
+      }
+      if (!canvas && typeof nodeGraphModuleScopeLocalFallbackCanvas === "function") {
+        canvas = nodeGraphModuleScopeLocalFallbackCanvas(slot);
+      }
+      if (
+        canvas
+        && !(canvas.width > 1 && canvas.height > 1)
+        && typeof syncNodeGraphModuleScopeLocalFallbackCanvas === "function"
+      ) {
+        syncNodeGraphModuleScopeLocalFallbackCanvas(canvas, slot.scopeElement, ratio);
+      }
     } catch (_error) {
       // Best-effort.
     }
-    return done;
   }
-  if (!done && typeof nodeGraphGlLinesFillBlack === "function") {
-    nodeGraphGlLinesFillBlack(canvas);
-    done = true;
+  if (isTrace) {
+    if (canvas && typeof nodeGraphModuleScopeWipeCanvas === "function") {
+      nodeGraphModuleScopeWipeCanvas(canvas, { nodeId, displayType });
+    }
+    try {
+      return Boolean(paintNodeGraphTraceDisplayColdPlate(slot, ratio, { force: true }));
+    } catch (_error) {
+      return false;
+    }
+  }
+  if (!canvas || !(canvas.width > 1) || !(canvas.height > 1)) {
+    return false;
+  }
+  let done = false;
+  // Number readouts: the registered wipe only resets text; paint the idle plate.
+  if (displayType === "numberReadout" && typeof paintNodeGraphNumberReadoutColdBoot === "function" && slot.scopeElement) {
+    try {
+      const node = typeof nodeGraphModuleScopeNodeForSlot === "function" ? nodeGraphModuleScopeNodeForSlot(slot) : null;
+      if (paintNodeGraphNumberReadoutColdBoot(canvas, slot.scopeElement, node, { force: true }) !== false) {
+        return true;
+      }
+    } catch (_error) {
+      // Fall through to the GL black plate.
+    }
+  }
+  if (typeof nodeGraphModuleScopeWipeCanvas === "function") {
+    done = nodeGraphModuleScopeWipeCanvas(canvas, { nodeId, displayType: displayType || undefined, force });
+  }
+  if (!done) {
+    // Black plate through the shared GL device; plain black only if GL failed.
+    const batch = typeof nodeGraphGlLinesBegin === "function"
+      ? nodeGraphGlLinesBegin(canvas, [0, 0, 0, 1])
+      : null;
+    if (batch && nodeGraphGlLinesEnd(batch, "alpha")) {
+      done = true;
+    } else if (typeof nodeGraphGlLinesFillBlack === "function") {
+      nodeGraphGlLinesFillBlack(canvas);
+      done = true;
+    }
   }
   return done;
 }

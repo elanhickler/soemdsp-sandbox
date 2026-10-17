@@ -88,7 +88,7 @@ check(ctx.paintNodeGraphParamFacesNow(1) === 1 && drew === 1, "stopped: only par
   const wipe = fs.readFileSync("public/node-graph-module-scope-wipe.js", "utf8");
   check(wipe.includes("scopePaintEnsureColdPlates({ assumeStopped: true })"), "Stop wipe calls shared cold plates");
   const slots = fs.readFileSync("public/node-graph-module-scope-slots.js", "utf8");
-  check(slots.includes("scopePaintEnsureColdPlate(slot)"), "spawn while stopped calls cold plate");
+  check(slots.includes("scopePaintEnsureColdPlate(slot, { create: true, force: true, assumeStopped: true })"), "spawn while stopped/paused creates the canvas and plates it");
 }
 
 // ES-4: wakes besides engine start (forced face-loop event, viewport wake).
