@@ -1,0 +1,131 @@
+{
+  "activeCameraId": "camera-1",
+  "audio": {
+    "oversamplingFactor": 1,
+    "targetSampleRate": 48000,
+    "pitchReferenceMidiNote": 69,
+    "pitchReferenceHz": 440,
+    "speedLimitHz": 22050
+  },
+  "bypassedNodes": [],
+  "cameras": [
+    {
+      "color": "#ff3333",
+      "enabled": true,
+      "height": 488,
+      "id": "camera-1",
+      "midiTrigger": null,
+      "name": "Camera 1",
+      "resolutionHeight": 1080,
+      "resolutionWidth": 1920,
+      "width": 868,
+      "x": 0,
+      "y": 0
+    }
+  ],
+  "codeScreen": {
+    "helpers": [],
+    "patchTools": [],
+    "samples": [],
+    "script": "",
+    "scriptLanguage": "javascript",
+    "slots": [],
+    "ui": []
+  },
+  "connections": [
+    {
+      "destinationNode": "output",
+      "destinationPort": "Left",
+      "sourceNode": "softpop2-1",
+      "sourcePort": "Left",
+      "tracePoints": []
+    },
+    {
+      "destinationNode": "output",
+      "destinationPort": "Right",
+      "sourceNode": "softpop2-1",
+      "sourcePort": "Right",
+      "tracePoints": []
+    }
+  ],
+  "format": {
+    "kind": "soemdsp-sandbox-node-patch",
+    "version": 2
+  },
+  "graphConnections": [],
+  "grid": {
+    "heightPx": 28,
+    "sizePx": 28,
+    "widthPx": 28
+  },
+  "info": {
+    "author": "",
+    "bank": 0,
+    "bankName": "",
+    "category": "",
+    "description": "Softpop 2 dissolving into noise. SineWavetable LFO on Crossfade.",
+    "emoji": "",
+    "program": 0
+  },
+  "masterSeed": 1,
+  "modularOnlyControlsVisible": false,
+  "modulations": [
+    {
+      "destinationNode": "softpop2-1",
+      "destinationParam": "crossfade",
+      "sourceNode": "sineWavetable-1",
+      "sourcePort": "A",
+      "tracePoints": []
+    }
+  ],
+  "nodes": [
+    {
+      "gx": 18,
+      "gy": 0,
+      "id": "output",
+      "paramMeta": {},
+      "params": { "volume": -6 },
+      "type": "output",
+      "widthGu": 8
+    },
+    {
+      "gx": 4,
+      "gy": 0,
+      "id": "softpop2-1",
+      "paramMeta": {},
+      "params": {
+        "frequency": 220,
+        "crossfade": 0.35,
+        "ampOverCrossfade": 0,
+        "color": 1,
+        "seed": 1,
+        "amplitude": 0.8
+      },
+      "type": "softpop2",
+      "widthGu": 10
+    },
+    {
+      "gx": -8,
+      "gy": 0,
+      "id": "sineWavetable-1",
+      "paramMeta": {},
+      "params": {
+        "frequency": 0.15,
+        "mode": 0,
+        "method": 1,
+        "amplitude": 0.7
+      },
+      "type": "sineWavetable",
+      "widthGu": 8
+    }
+  ],
+  "notes": [],
+  "selection": ["softpop2-1"],
+  "transport": {
+    "bpm": 120,
+    "playing": false
+  },
+  "ui": {
+    "view": "circuit"
+  }
+}

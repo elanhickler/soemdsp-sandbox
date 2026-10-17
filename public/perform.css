@@ -1,7 +1,13 @@
 ﻿/* Perform mode: hide workshop chrome; layout-canvas perform only. */
-html.node-perform-mode,
+/* Perform background: one settable layer on the root (--soemdsp-perform-bg, any CSS color incl.
+   alpha; embed-params.js sets it from ?bg=). body / .shell / stage stay transparent so a
+   translucent value is not stacked; alpha 0 shows the embedding page. */
+html.node-perform-mode {
+  background: var(--soemdsp-perform-bg, #0a0a0a);
+}
+
 body.node-perform-mode {
-  background: #0a0a0a;
+  background: transparent;
 }
 
 body.node-perform-mode .node-boot-menu-links,
@@ -36,7 +42,27 @@ body.node-perform-mode #nodeInteractionHelp {
 
 body.node-perform-mode .shell {
   min-height: 100vh;
-  background: #0a0a0a;
+  background: transparent;
+}
+
+/* Parameter IO (mod in / param out jacks). In/Out already collapses via
+   canvasIoHidden; these jacks sit on slider rows and stay unless we drop them. */
+body.node-perform-mode .node-param-port {
+  display: none !important;
+  width: 0 !important;
+  min-width: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  pointer-events: none !important;
+}
+
+body.node-perform-mode .node-parameter-row {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+body.node-perform-mode .node-parameter-control {
+  grid-column: 1;
 }
 
 body.node-perform-mode #nodeScreenSoloStage,
@@ -45,7 +71,21 @@ body.node-perform-mode .node-screen-solo-stage {
   position: fixed !important;
   inset: 0 !important;
   z-index: 40;
-  background: #0a0a0a;
+  background: transparent;
+}
+
+/* Embed letterbox matches the Music Player / module face, not a second grey stage
+   (default; ?bg= overrides via the inline --soemdsp-perform-bg on <html>). */
+html.soemdsp-embed {
+  background: var(--soemdsp-perform-bg, #050805);
+}
+
+html.soemdsp-embed body,
+html.soemdsp-embed body.node-perform-mode,
+html.soemdsp-embed body.node-perform-mode .shell,
+html.soemdsp-embed body.node-perform-mode #nodeScreenSoloStage,
+html.soemdsp-embed body.node-perform-mode .node-screen-solo-stage {
+  background: transparent;
 }
 
 body.node-perform-mode .node-layout-canvas-grip,

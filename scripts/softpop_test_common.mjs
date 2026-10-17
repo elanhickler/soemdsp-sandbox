@@ -12,7 +12,7 @@ import { fileURLToPath } from "url";
 import { Worker, isMainThread, parentPort, workerData } from "worker_threads";
 
 export const SR = 48000;
-export const COLORS = ["white", "gaussian", "average", "pink", "brown"];
+export const COLORS = ["white", "gaussian", "average", "pink", "brown", "blue", "violet"];
 export const COLOR = { WHITE: 0, PINK: 1, BROWN: 2 };
 // Probe channels (tp_render mask bits).
 export const CH = { MONO: 0, L: 1, R: 2, NP_L: 3, NP_R: 4, NA_L: 5, NA_R: 6, NAUD_L: 7, NAUD_R: 8, FI_L: 9, FI_R: 10, Q: 11, CV_L: 12, CV_R: 13, PITCH_L: 14, PITCH_R: 15 };

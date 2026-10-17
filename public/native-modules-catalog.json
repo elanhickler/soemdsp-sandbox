@@ -2576,6 +2576,24 @@
       "noticeUrl": "https://github.com/elanhickler/soemdsp-sandbox/blob/master/docs/THIRD_PARTY.md"
     },
     {
+      "name": "softpop2",
+      "label": "Softpop 2",
+      "targetType": "softpop2",
+      "kind": "oscillator",
+      "source": "native_modules/softpop2/softpop2.cpp",
+      "sourceUrl": "https://github.com/elanhickler/soemdsp-sandbox/blob/master/native_modules/softpop2/softpop2.cpp",
+      "localSourceUrl": "/native_modules/softpop2/softpop2.cpp",
+      "libUrl": "https://github.com/elanhickler/soemdsp-sandbox/blob/master/docs/SOFTPOP2_PLAN.md",
+      "wasm": "native_modules/softpop2/softpop2.wasm",
+      "wasmUrl": "native_modules/softpop2/softpop2.wasm",
+      "wasmAvailable": true,
+      "license": "Soundemote Noncommercial",
+      "licenseUrl": "https://github.com/elanhickler/soemdsp-sandbox/blob/master/LICENSE",
+      "upstreamLicense": "",
+      "upstreamLicenseUrl": "",
+      "noticeUrl": "https://github.com/elanhickler/soemdsp-sandbox/blob/master/docs/THIRD_PARTY.md"
+    },
+    {
       "name": "softpop_filter",
       "label": "Softpop Filter",
       "targetType": "softpopFilter",

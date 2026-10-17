@@ -170,7 +170,7 @@
         "start": 0,
         "amplitude": 1,
         "antialias": 0,
-        "transport": 4,
+        "transport": 1,
         "phaseOffset": 0,
         "playlistScrub": 0
       },
@@ -384,7 +384,7 @@
           "divideChoicesVisibly": true
         },
         "transport": {
-          "def": 4,
+          "def": 1,
           "max": 5,
           "mid": 2,
           "min": 0,

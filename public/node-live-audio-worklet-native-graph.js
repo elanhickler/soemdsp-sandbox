@@ -29,6 +29,7 @@ NodeLiveAudioProcessor.NATIVE_GRAPH_TYPE_IDS = Object.freeze({
   filterMorphOscillator: 201,
   softpopOscillator: 207,
   softpopFilter: 214,
+  softpop2: 219,
   slewLimiter: 17,
   comparator: 18,
   sampleDelay: 19,
@@ -600,6 +601,10 @@ NodeLiveAudioProcessor.prototype.mapNativeGraphParamId = function mapNativeGraph
   }
   if (t === "crossfade2" || t === "crossfade3" || t === "crossfade4") {
     if (k === "crossfade") return P.NATIVE_GRAPH_PARAM_SHAPE;
+  }
+  if (t === "softpop2") {
+    if (k === "crossfade") return P.NATIVE_GRAPH_PARAM_MIX;
+    if (k === "ampOverCrossfade") return P.NATIVE_GRAPH_PARAM_SHAPE;
   }
   if (t === "acidSequencer") {
     if (k === "bpm") return P.NATIVE_GRAPH_PARAM_TEMPO_BPM;
@@ -4985,6 +4990,15 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
       push("seed", P.NATIVE_GRAPH_PARAM_SEED, disc("seed", 1));
       continue;
     }
+    if (type === "softpop2") {
+      push("frequency", P.NATIVE_GRAPH_PARAM_FREQUENCY, cont("frequency", 440));
+      push("crossfade", P.NATIVE_GRAPH_PARAM_MIX, cont("crossfade", 0));
+      push("ampOverCrossfade", P.NATIVE_GRAPH_PARAM_SHAPE, cont("ampOverCrossfade", 0));
+      push("amplitude", P.NATIVE_GRAPH_PARAM_AMPLITUDE, cont("amplitude", 1));
+      push("color", P.NATIVE_GRAPH_PARAM_STAGES, disc("color", 0));
+      push("seed", P.NATIVE_GRAPH_PARAM_SEED, disc("seed", 1));
+      continue;
+    }
     if (type === "dsfOscillator") {
       // shape=morph/harmonics, width=PWM, mix=SquSaw blend.
       push("frequency", P.NATIVE_GRAPH_PARAM_FREQUENCY, cont("frequency", 100));
@@ -7003,7 +7017,7 @@ NodeLiveAudioProcessor.prototype.syncNativeSoftpopPublish =
     }
     // Softpop Oscillator and Softpop Filter export the same display API.
     const apis = new Map();
-    for (const [type, prefix] of [["softpopOscillator", "soemdsp_softpop_oscillator"], ["softpopFilter", "soemdsp_softpop_filter"]]) {
+    for (const [type, prefix] of [["softpopOscillator", "soemdsp_softpop_oscillator"], ["softpopFilter", "soemdsp_softpop_filter"], ["softpop2", "soemdsp_softpop2"]]) {
       const api = {
         count: native?.[`${prefix}_display_bin_count`],
         bin: native?.[`${prefix}_display_bin`],
@@ -8836,7 +8850,7 @@ NodeLiveAudioProcessor.prototype.nativeGraphPortNames = function nativeGraphPort
     if (/^([2-9]|1[01])t$/.test(type)) return ["Out", "Mono"];
     if (type === "wavetable2d" || type === "sineWarp") return ["Out", "Mono"];
     if (type === "filterMorphOscillator") return ["Wave", "Out", "Mono"];
-    if (type === "softpopOscillator" || type === "softpopFilter") return ["Mono"];
+    if (type === "softpopOscillator" || type === "softpopFilter" || type === "softpop2") return ["Mono"];
     if (type === "minMax") return ["Max"];
     if (type === "mix4" || type === "mix" || type === "gainBiasMix") return ["Out1"];
     if (type === "mix2") return ["Mix"];

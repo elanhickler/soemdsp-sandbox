@@ -258,6 +258,8 @@ function nodeGraphPluginButtonFacePaint(face, btn, label, node) {
   const s = nodeGraphPluginButtonDisplaySettingsForNode(patchNode || { type: face.dataset.nodeType });
   const labelText = nodeGraphPluginButtonFaceLabelText(patchNode);
   if (label.dataset.editing !== "true") label.textContent = labelText;
+  btn.dataset.glCaption = (on ? s.onText : s.offText) || "";
+  btn.dataset.glCaptionColor = s.textColor || "#ffffff";
   const model = {
     settings: { showLabel: Boolean(labelText), rounding: s.rounding, strokeScale: s.strokeScale },
     background: s.backgroundColor,

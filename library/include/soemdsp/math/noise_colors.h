@@ -95,4 +95,7 @@ static inline double noise_color_sample(NoiseColorChannel& chan, int mode, doubl
   return mean + noise_color_shaped_bipolar(chan, shape) * deviation;
 }
 
+// Blue (mode 5) and Violet (mode 6) live in noise_colors_ext.h so this header
+// stays bit-identical for TUs that include soemdsp.hpp (EQ Filter golden).
+
 }  // namespace soemdsp_maths

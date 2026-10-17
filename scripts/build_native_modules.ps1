@@ -244,6 +244,21 @@ $modules = @(
     "soemdsp_softpop_filter_metadata_json",
     "soemdsp_softpop_filter_metadata_json_size"
   ) }
+  @{ Name = "softpop2"; Simd = $false; Exports = @(
+    "soemdsp_softpop2_create",
+    "soemdsp_softpop2_destroy",
+    "soemdsp_softpop2_reset",
+    "soemdsp_softpop2_sample",
+    "soemdsp_softpop2_left",
+    "soemdsp_softpop2_right",
+    "soemdsp_softpop2_display_bin_count",
+    "soemdsp_softpop2_display_bin",
+    "soemdsp_softpop2_display_take",
+    "soemdsp_softpop2_display_info",
+    "soemdsp_softpop2_version",
+    "soemdsp_softpop2_metadata_json",
+    "soemdsp_softpop2_metadata_json_size"
+  ) }
   @{ Name = "soem_reverb"; Simd = $false; Exports = @(
     "soemdsp_soem_reverb_create", "soemdsp_soem_reverb_destroy", "soemdsp_soem_reverb_reset",
     "soemdsp_soem_reverb_set_params", "soemdsp_soem_reverb_process",
@@ -783,6 +798,18 @@ if ($node) {
   & $node.Source "$root\scripts\smoke_graph_robin_sinepulse_allpass.mjs"
   if ($LASTEXITCODE -ne 0) {
     throw "Combined build: Robin Sinepulse Allpass smoke FAILED"
+  }
+  & $node.Source "$root\scripts\test_softpop2.mjs"
+  if ($LASTEXITCODE -ne 0) {
+    throw "Combined build: Softpop 2 native smoke FAILED"
+  }
+  & $node.Source "$root\scripts\smoke_graph_softpop2.mjs"
+  if ($LASTEXITCODE -ne 0) {
+    throw "Combined build: Softpop 2 smoke FAILED"
+  }
+  & $node.Source "$root\scripts\test_softpop_filter_library_regression.mjs"
+  if ($LASTEXITCODE -ne 0) {
+    throw "Combined build: Softpop Filter library regression FAILED"
   }
   # Additive Generator harmonic mask: masked partials leave the Graph (Out never renders them).
   & $node.Source "$root\scripts\smoke_graph_additive_mask.mjs"

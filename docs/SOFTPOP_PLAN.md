@@ -4,6 +4,9 @@
 **Owner:** SandyModules (DSP); Interface (face).
 **Module types:** `softpopOscillator` ("Softpop Oscillator", `native_modules/softpop_oscillator/softpop_oscillator.cpp`) and `softpopFilter` ("Softpop Filter", new, `native_modules/softpop_filter/softpop_filter.cpp`). Shared parts (noise generators, Pitch Mod with mean correction, display data): `native_modules/softpop_oscillator/softpop_core.h`; Width -> Q is Softpop Filter only. Both use the `softpopFace` WebGL2 face (`public/modules/softpopOscillator/softpop-display.js`).
 
+**See also:** `docs/SOFTPOP2_PLAN.md`, Softpop 2 (sine dispersing into band noise; planning only).
+**Blue / Violet (Argi, 2026-10-16):** Softpop Oscillator, Softpop Filter and Noise Generator also get Blue and Violet, appended to their Color lists, existing colours bit-identical. Plan: `docs/SOFTPOP2_PLAN.md` (Decision 5).
+
 ## S. Current spec (confirmed against the code, 2026-10-14)
 
 Both modules: always stereo, independent noise generators per target and channel (from `seed_mix`), Color-shaped full-band Pitch Mod / Amp Mod noise with no smoothing, Pitch Mod exponential in cents with mean correction, frequency-only (Frequency knob; a wired `f` Hz cable replaces it, like `polyBlep`), Reset rising edge reseeds every generator from Seed. Outputs on both: Mono (= the Left render), Left, Right, Left Noise, Right Noise (internal Color noise, unit RMS), Left CV, Right CV (log2(fInst / fEff), octaves).

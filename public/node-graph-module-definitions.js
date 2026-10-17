@@ -215,6 +215,7 @@ const nodeGraphNodeLabels = Object.freeze({
   crossover6: "6-Crossover",
   softpopOscillator: "Softpop Oscillator",
   softpopFilter: "Softpop Filter",
+  softpop2: "Softpop 2",
   robinSinepulse: "Robin Sinepulse",
   robinSinepulseAllpass: "Robin Sinepulse Allpass",
   electroHat: "ElectroHat",
@@ -5820,19 +5821,19 @@ const nodeGraphModuleDefinitions = (
     outputLabels: { Left: "Left", Right: "Right" },
     parameters: [
       {
-        choices: ["Uniform", "Gaussian", "Brown", "Pink", "Crackle"],
+        choices: ["Uniform", "Gaussian", "Brown", "Pink", "Crackle", "Blue", "Violet"],
         defaultValue: "0",
         displayChoices: true,
         divideChoicesVisibly: true,
         key: "mode",
         label: "Mode",
         linearSmoothing: false,
-        max: "4",
+        max: "6",
         mid: "2",
         min: "0",
         nonlinearSlider: false,
         step: "1",
-        tooltip: "Uniform uses Shape (even ↔ Gaussian). Gaussian is pure normal. Brown/Pink/Crackle are spectral colors."
+        tooltip: "Uniform uses Shape (even ↔ Gaussian). Gaussian is pure normal. Brown/Pink/Crackle/Blue/Violet are spectral colors."
       },
       {
         defaultValue: "0",
@@ -9868,7 +9869,7 @@ const nodeGraphModuleDefinitions = (
       f: "Hz cable. When wired it replaces Frequency, same as PolyBLEP.",
     },
     outputs: ["Mono", "Left", "Right", "Noise L", "Noise R", "pitch L", "pitch R", "rgba"],
-    outputLabels: { "pitch L": "♯/♭ L", "pitch R": "♯/♭ R" },
+    outputLabels: { "pitch L": "♯/♭ L", "pitch R": "♯/♭ R", rgba: "📺" },
     digitalOutputs: ["pitch L", "pitch R"],
     outputTooltips: {
       Mono: "The Left channel render on its own: one complete voice, same level as Left or Right.",
@@ -9952,21 +9953,21 @@ const nodeGraphModuleDefinitions = (
         tooltip: "Level-preserving full-band noise AM. 1 = full ring mod (no carrier)."
       },
       {
-        choices: ["White", "Gaussian", "Average", "Pink", "Brown"],
-        choiceKeys: ["white", "gaussian", "average", "pink", "brown"],
-        choiceIds: [0, 1, 2, 3, 4],
+        choices: ["White", "Gaussian", "Average", "Pink", "Brown", "Blue", "Violet"],
+        choiceKeys: ["white", "gaussian", "average", "pink", "brown", "blue", "violet"],
+        choiceIds: [0, 1, 2, 3, 4, 5, 6],
         defaultValue: "gaussian",
         displayChoices: true,
         divideChoicesVisibly: true,
         key: "color",
         label: "Color",
         linearSmoothing: false,
-        max: "4",
+        max: "6",
         mid: "2",
         min: "0",
         nonlinearSlider: false,
         step: "1",
-        tooltip: "Noise for audio, Pitch Mod and Amp Mod. White = flat (uniform) distribution, Gaussian = normal, Average = Gaussian with 2-sample averaged Pitch Mod noise (smoother, null at Nyquist). Pink / Brown spectral colors. All unit std, so Pitch Mod cents stay true."
+        tooltip: "Noise for audio, Pitch Mod and Amp Mod. White = flat (uniform) distribution, Gaussian = normal, Average = Gaussian with 2-sample averaged Pitch Mod noise (smoother, null at Nyquist). Pink / Brown / Blue / Violet spectral colors. All unit std, so Pitch Mod cents stay true."
       },
       {
         defaultValue: "1",
@@ -10017,6 +10018,7 @@ const nodeGraphModuleDefinitions = (
       Right: "Right audio in. Alone it counts as mono (both channels); with Left wired, Right channel = Right + Mono.",
     },
     outputs: ["Mono", "Left", "Right", "Noise L", "Noise R", "CV L", "CV R", "rgba"],
+    outputLabels: { rgba: "📺" },
     outputTooltips: {
       Mono: "The Left channel render on its own: one complete voice, same level as Left or Right.",
       Left: "Left channel (its own noise generators).",
@@ -10082,21 +10084,21 @@ const nodeGraphModuleDefinitions = (
         tooltip: "Level-preserving full-band noise AM. 1 = full ring mod (no carrier)."
       },
       {
-        choices: ["White", "Gaussian", "Average", "Pink", "Brown"],
-        choiceKeys: ["white", "gaussian", "average", "pink", "brown"],
-        choiceIds: [0, 1, 2, 3, 4],
+        choices: ["White", "Gaussian", "Average", "Pink", "Brown", "Blue", "Violet"],
+        choiceKeys: ["white", "gaussian", "average", "pink", "brown", "blue", "violet"],
+        choiceIds: [0, 1, 2, 3, 4, 5, 6],
         defaultValue: "gaussian",
         displayChoices: true,
         divideChoicesVisibly: true,
         key: "color",
         label: "Color",
         linearSmoothing: false,
-        max: "4",
+        max: "6",
         mid: "2",
         min: "0",
         nonlinearSlider: false,
         step: "1",
-        tooltip: "Noise for audio, Pitch Mod and Amp Mod. White = flat (uniform) distribution, Gaussian = normal, Average = Gaussian with 2-sample averaged Pitch Mod noise (smoother, null at Nyquist). Pink / Brown spectral colors. All unit std, so Pitch Mod cents stay true."
+        tooltip: "Noise for audio, Pitch Mod and Amp Mod. White = flat (uniform) distribution, Gaussian = normal, Average = Gaussian with 2-sample averaged Pitch Mod noise (smoother, null at Nyquist). Pink / Brown / Blue / Violet spectral colors. All unit std, so Pitch Mod cents stay true."
       },
       {
         defaultValue: "1",
@@ -10111,6 +10113,114 @@ const nodeGraphModuleDefinitions = (
         nonlinearSlider: false,
         step: "1",
         tooltip: "Master seed. Reset jack reseeds every generator from this value."
+      },
+      {
+        defaultValue: "1",
+        key: "amplitude",
+        label: "Amplitude",
+        max: "1",
+        mid: "0.5",
+        min: "0",
+        nonlinearSlider: false,
+        step: "any",
+      },
+    ]
+  },
+  softpop2: {
+    planRole: "source",
+    planFreeRun: true,
+    displayType: "softpopFace",
+    displayModes: [
+      { key: "softpopFace", label: "Softpop", renderer: "softpopFace", settingsSchema: "softpopFace" },
+    ],
+    defaultDisplayMode: "softpopFace",
+    inputs: ["Reset", "f"],
+    inputLabels: { f: "ƒ" },
+    inputAliases: { "ƒ": "f" },
+    inputTooltips: {
+      Reset: "Rising edge reseeds every noise generator from Seed and zeroes the phase.",
+      f: "Hz cable. When wired it replaces Frequency, same as PolyBLEP.",
+    },
+    outputs: ["Mono", "Left", "Right", "rgba"],
+    outputLabels: { rgba: "📺" },
+    outputTooltips: {
+      Mono: "The Left channel render on its own: one complete voice, same level as Left or Right.",
+      Left: "Left channel (sine shared with Right, its own noise).",
+      Right: "Right channel (sine shared with Left, its own noise).",
+      rgba: "Face plate video out.",
+    },
+    parameters: [
+      {
+        defaultValue: "440",
+        key: "frequency",
+        kind: "frequency",
+        label: "Frequency",
+        max: "20000",
+        maxDigits: 5,
+        mid: "440",
+        min: "0",
+        smoothingMode: "internal",
+        smoothingSeconds: 0.0333,
+        smoothingType: "onePole",
+        step: "any",
+        unit: "Hz",
+        tooltip:
+          "Sine pitch and noise band centre. Default slider 0…20 kHz. Wired ƒ replaces this knob."
+      },
+      {
+        defaultValue: "0",
+        key: "crossfade",
+        label: "Crossfade",
+        max: "1",
+        maxDigits: 4,
+        mid: "0.5",
+        min: "0",
+        nonlinearSlider: false,
+        step: "any",
+        tooltip: "0 = pure sine. 1 = full noise at the widest band. The noise band widens with this control."
+      },
+      {
+        defaultValue: "0",
+        key: "ampOverCrossfade",
+        label: "Amp over Crossfade",
+        max: "1",
+        maxDigits: 4,
+        mid: "0.5",
+        min: "0",
+        nonlinearSlider: false,
+        step: "any",
+        tooltip: "0 = constant loudness across the crossfade. 1 = level falls to silence as Crossfade reaches 1 (squared)."
+      },
+      {
+        choices: ["White", "Gaussian", "Average", "Pink", "Brown", "Blue", "Violet"],
+        choiceKeys: ["white", "gaussian", "average", "pink", "brown", "blue", "violet"],
+        choiceIds: [0, 1, 2, 3, 4, 5, 6],
+        defaultValue: "white",
+        displayChoices: true,
+        divideChoicesVisibly: true,
+        key: "color",
+        label: "Color",
+        linearSmoothing: false,
+        max: "6",
+        mid: "2",
+        min: "0",
+        nonlinearSlider: false,
+        step: "1",
+        tooltip: "Noise colour. White / Gaussian / Average / Pink / Brown / Blue / Violet. Level stays flat across the keyboard."
+      },
+      {
+        defaultValue: "1",
+        key: "seed",
+        kind: "seed",
+        label: "Seed",
+        linearSmoothing: false,
+        max: "16777215",
+        maxDigits: 0,
+        mid: "1",
+        min: "0",
+        nonlinearSlider: false,
+        step: "1",
+        tooltip: "Master seed. Reset jack reseeds every noise generator from this value."
       },
       {
         defaultValue: "1",
@@ -15078,7 +15188,7 @@ const nodeGraphModuleDefinitions = (
         nonlinearSlider: false,
         step: "1",
         tooltip: "Fractional sample read. Off = linear. Hermite = 4-point cubic (smoother varispeed, more CPU)." },
-      { choices: ["Off (reset)", "Stop", "Pause", "Loop", "Play", "Loop All"], defaultValue: "4", displayChoices: true, divideChoicesVisibly: true, key: "transport", label: "Playmode", linearSmoothing: false, max: "5", mid: "2", min: "0", nonlinearSlider: false, step: "1" },
+      { choices: ["Off (reset)", "Stop", "Pause", "Loop", "Play", "Loop All"], defaultValue: "1", displayChoices: true, divideChoicesVisibly: true, key: "transport", label: "Playmode", linearSmoothing: false, smoothingMode: "off", smoothingType: "none", max: "5", mid: "2", min: "0", nonlinearSlider: false, step: "1" },
       nodeGraphPlaybackSpeedParameter(),
       // Forward / reverse speed offset (shares Speed's definition). Replaces
       // the old phaseOffset nudge; saved phaseOffset values drop on load.

@@ -28,6 +28,7 @@
 // k_color sets the 1 kHz Filter RMS to the Sine RMS (1/sqrt 2).
 
 #include "../softpop_oscillator/softpop_core.h"
+#include <soemdsp/filter/softpop_band.h>
 
 namespace {
 
@@ -35,18 +36,6 @@ using namespace soemdsp_maths;
 using namespace softpop;
 
 static const int kMaxInstances = 64;
-static const double kRefSampleRate = 48000.0;
-
-// k_color: 1 kHz Filter RMS = 1/sqrt 2 (the Sine RMS) at 48 kHz, W = 0.3.
-// White and pink: exact digital band power of the BP on the source PSD (flat;
-// Kellet taps), confirmed by simulation to 0.013 / 0.004 dB. Brown: measured
-// (node scripts/test_softpop_filter.mjs --calibrate, 3000 s); the clamped
-// walk sits 0.2 dB under the pure-integrator estimate 7.3484.
-// White / Gaussian / Average share the flat-spectrum k (unit-RMS white audio).
-static const double kFilterGain[kColorCount] = {2.7684485757734305, 2.7684485757734305, 2.7684485757734305, 1.721692744960082, 7.51834};
-// Tilt exponent alpha (T = (1000/fc)^(alpha/2)). Brown is measured (residual
-// slope +0.143 dB/oct over 50 Hz..10 kHz, i.e. alpha -1 + 0.048).
-static const double kTiltAlpha[kColorCount] = {1.0, 1.0, 1.0, 0.0, -0.95};
 
 struct Chan {
   Noise noise;
@@ -65,8 +54,7 @@ struct State {
   int lastColor;
   double q, sqrtQ;
   double widthGain;  // Pink broad-Q correction (1 for white / brown)
-  double warpRef;    // sin(w1k) / w1k at lastSr
-  double tiltSr;     // lastSr / 48 kHz
+  SoftpopTilt tilt;
   Display disp;
 };
 
@@ -80,26 +68,6 @@ static const char kMetadataJson[] =
     "\"kind\":\"filter\""
   "}";
 
-// atan(t) for t >= 0: three half-angle reductions, then the odd series to
-// t^15 (error < 1e-13). Only used on Width changes.
-static double atan_pos(double t) {
-  for (int i = 0; i < 3; i += 1) t = t / (1.0 + __builtin_sqrt(1.0 + t * t));
-  const double t2 = t * t;
-  double sum = 0.0;
-  for (int k = 15; k >= 1; k -= 2) sum = sum * t2 + ((((k - 1) / 2) & 1) ? -1.0 : 1.0) / (double)k;
-  return 8.0 * t * sum;
-}
-
-// Pink Width correction: constant-peak BP band power on a 1/f source is
-// I(Q) = 2 x acos(x) / sqrt(1 - x^2) (x = 1/(2Q)), not the narrowband pi x.
-static double pink_width_gain(double q) {
-  double x = 0.5 / q;
-  if (x > 1.0) x = 1.0;
-  const double acosx = 2.0 * atan_pos(sqrt_pos((1.0 - x) / (1.0 + x)));
-  if (acosx < 1.0e-9) return __builtin_sqrt(0.5 * kPI);
-  return sqrt_pos(kPI * sqrt_pos(1.0 - x * x) / (2.0 * acosx));
-}
-
 static void update_width(State& s, double width, int color, double sr) {
   if (width == s.lastWidth && color == s.lastColor && sr == s.lastSr) return;
   s.lastWidth = width;
@@ -107,10 +75,8 @@ static void update_width(State& s, double width, int color, double sr) {
   s.lastSr = sr;
   s.q = width_to_q(width);
   s.sqrtQ = sqrt_pos(s.q);
-  s.widthGain = color == kColorPink ? pink_width_gain(s.q) : 1.0;
-  const double w1k = kTwoPi * 1000.0 / sr;
-  s.warpRef = dsp_sin(w1k) / w1k;
-  s.tiltSr = sr / kRefSampleRate;
+  s.widthGain = softpop_width_gain(color, s.q);
+  softpop_tilt_prepare(s.tilt, sr);
 }
 
 static void reseed(State& s) {
@@ -124,17 +90,6 @@ static void reseed(State& s) {
   s.seeded = true;
 }
 
-// T_color(fc) times the bilinear-warp term, normalised at 1 kHz.
-static double tilt_warp(const State& s, double fc, int color, double sr) {
-  const double lo = 20.0;
-  const double hi = 0.45 * sr;
-  const double f = fc < lo ? lo : (fc > hi ? hi : fc);
-  const double warp = sqrt_pos(s.warpRef);
-  const double alpha = kTiltAlpha[color];
-  if (alpha == 0.0) return warp;
-  return warp * pow_pos_d((1000.0 / f) * s.tiltSr, 0.5 * alpha);
-}
-
 static double render_chan(State& s, Chan& ch, int color, double fEff, double pitchCents,
                           double ampMod, double amp, double sr, bool useInput, double in) {
   const double fInst = noise_step(ch.noise, color, fEff, pitchCents);
@@ -145,13 +100,13 @@ static double render_chan(State& s, Chan& ch, int color, double fEff, double pit
   TptSvfCoeffs k;
   // Decramp: Q * sin(w)/w makes the digital -3 dB width w/Q, the analog fc/Q in Hz.
   const double wc = kTwoPi * fc / sr;
-  const double r = 1.0 / (wc > 1.0e-9 ? s.q * dsp_sin(wc) / wc : s.q);
+  const double r = 1.0 / softpop_q_decramp(s.q, wc);
   // Trims scale the input of a plain BP (yB tap), so a fast Width / centre
   // move never rescales energy the SVF stored under the old setting.
   tpt_svf_setup(k, wc, r, 0.0, 1.0, 0.0, 1.0);
   const double x = useInput
     ? tpt_svf_tick(ch.svf, k, in * r)
-    : tpt_svf_tick(ch.svf, k, ch.noise.audio * (r * kFilterGain[color] * s.sqrtQ * s.widthGain * tilt_warp(s, fc, color, sr)));
+    : tpt_svf_tick(ch.svf, k, ch.noise.audio * (r * softpop_filter_gain(color) * s.sqrtQ * s.widthGain * softpop_tilt_warp(s.tilt, fc, color, sr)));
   ch.instHz = fInst < 0.0 ? -fc : fc;
   ch.out = safety_limit(x * amp_mod_gain(ampMod, ch.noise.na) * amp);
   return ch.out;
@@ -191,7 +146,7 @@ extern "C" void soemdsp_softpop_filter_reset(int handle) {
 
 // One frame. freqHz = fEff (graph_engine resolve_osc_hz). inL / inR = the
 // routed external input per channel (stereo_route.h); useInput != 0 filters
-// them instead of the internal noise. color: choiceId 0 White / 1 Gaussian / 2 Average / 3 Pink / 4 Brown.
+// them instead of the internal noise. color: 0 White / 1 Gaussian / 2 Average / 3 Pink / 4 Brown / 5 Blue / 6 Violet.
 // Returns Mono (= the L channel render).
 extern "C" double soemdsp_softpop_filter_sample(
   int handle,

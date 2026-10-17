@@ -376,6 +376,7 @@ function drawNodeGraphSoftpopFaceItem(_renderer, item, pixelRatio) {
   const faceMetrics = typeof ensureFaceMetrics === "function" ? ensureFaceMetrics(canvas) : null;
   const cssW = Math.max(1, faceMetrics?.cssW || canvas.clientWidth || screenElement?.clientWidth || 1);
   nodeGraphSoftpopFacePresent(canvas, bins, info, settings, cssW);
+  if (typeof nodeGraphPicturePublishCanvas === "function") nodeGraphPicturePublishCanvas(nodeId, canvas);
 }
 
 if (typeof nodeGraphModuleScopeCustomRenderers === "object" && nodeGraphModuleScopeCustomRenderers) {

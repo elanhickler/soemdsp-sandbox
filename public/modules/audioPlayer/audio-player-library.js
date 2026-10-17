@@ -1130,7 +1130,7 @@ async function nodeGraphAudioPlayerLibraryEnsureItemLoaded(nodeId, item) {
   throw new Error(`no local file for ${item.name || item.path || "track"} — paste a full folder path and Load`);
 }
 
-async function nodeGraphAudioPlayerLibraryPlayIndex(nodeId, index, { autoplay = true } = {}) {
+async function nodeGraphAudioPlayerLibraryPlayIndex(nodeId, index, { autoplay = true, transport } = {}) {
   if (typeof nodeGraphAudioPlayerPlaylistBeginLoad === "function") {
     nodeGraphAudioPlayerPlaylistBeginLoad(nodeId);
   }
@@ -1273,10 +1273,18 @@ async function nodeGraphAudioPlayerLibraryPlayIndex(nodeId, index, { autoplay = 
   }
   live.params.playlistScrub = "0";
   if (autoplay && typeof nodeGraphAudioPlayerWriteTransport === "function") {
-    nodeGraphAudioPlayerWriteTransport(
-      nodeId,
-      nodeGraphAudioPlayerPlaylistPlayModeForLoop(pl.loopMode),
-    );
+    if (Number.isFinite(Math.round(Number(transport)))) {
+      // Playmode slider: its value is the mode, and it may have moved during the load.
+      // Apply what it says now; Stop / Pause chosen meanwhile stay (no write behind the user).
+      const now = typeof nodeGraphAudioPlayerTransportBase === "function"
+        ? nodeGraphAudioPlayerTransportBase(nodeId)
+        : Math.round(Number(transport));
+      if (now >= 3) {
+        nodeGraphAudioPlayerWriteTransport(nodeId, now);
+      }
+    } else {
+      nodeGraphAudioPlayerWriteTransport(nodeId, nodeGraphAudioPlayerPlaylistPlayModeForLoop(pl.loopMode));
+    }
   }
   const est = typeof nodeGraphAudioPlayerPlaylistEstimateBytes === "function"
     ? nodeGraphAudioPlayerPlaylistEstimateBytes(item.sampleId)

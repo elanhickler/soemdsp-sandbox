@@ -404,6 +404,7 @@ This app is a **C++ DSP engine with a JS interface** (Â§0). JS authors and obs
 - **Pitch-family jack order:** when a module exposes **♯/♭** (`pitch`) and **ƒ** (`f` / `Frequency`), list **♯/♭ then ƒ** and keep them adjacent. Applies to Keyboard, Arp, Pitch Detector, Pitch Manager, Freq Manager, etc.
 - Prefer full, consistent product names where modules are siblings (e.g. **Fractal Brownian Field** next to **Fractal Brownian Motion**).
 - Internal type ids (`fbmField`) may stay short; **user-facing labels** should not be cryptic abbreviations unless established brand.
+- **Video output ports are labeled with the 📺 emoji for users, never the text "RGBA"** (Argi, 2026-10-16). The internal port id stays lowercase `rgba`.
 
 ---
 

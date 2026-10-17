@@ -207,7 +207,9 @@ function nodeGraphJackWireColor(type, port, io = "output") {
     return nodeGraphJackChannelCssColor(channel) || "";
   }
   if (nodeGraphJackSignalKind(type, port, io) === "digital") {
-    return "#ffffff";
+    return typeof nodeGraphCssColor === "function"
+      ? nodeGraphCssColor("--node-digital-fill", "#ffffff")
+      : "#ffffff";
   }
   if (!nodeGraphWiresFollowPortColors()) {
     return "";

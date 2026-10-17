@@ -49,15 +49,29 @@ async function nodeGraphResolvePagePatchUrls(slug) {
   return urls;
 }
 
+function nodeSandboxNextPaint() {
+  return new Promise((resolve) => {
+    window.requestAnimationFrame(() => resolve());
+  });
+}
+
 async function initNodeGraphMvp() {
   setNodeSandboxStartupProgress(10, "loading tooltips");
+  const tooltipLoad = typeof loadNodeGraphTooltips === "function"
+    ? loadNodeGraphTooltips()
+    : null;
   if (typeof installNodeGraphDebugApi === "function") {
     installNodeGraphDebugApi();
   }
   configureNodeGraphDefaultPresetButton();
-  await loadNodeGraphTooltips();
   setNodeSandboxStartupProgress(25, "binding events");
+  // Paint the next label before the sync binders. Otherwise the bar stays on
+  // "loading tooltips" for the whole bind.
+  await nodeSandboxNextPaint();
   await bindNodeGraphMvpEvents();
+  if (tooltipLoad) {
+    await tooltipLoad;
+  }
   setNodeSandboxStartupProgress(42, "loading resources");
   if (typeof loadNodeGraphResourceManifest === "function") {
     await loadNodeGraphResourceManifest();

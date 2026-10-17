@@ -188,85 +188,16 @@ function nodeInteractionMouseHint(element) {
   return nodeGraphTooltipText("common.interact");
 }
 
-// Tip text always fills its host box (floating window or embedded band).
-// There is no fixed "display size" — font scales up or down to the largest
-// value that still fits width × height. Embedded mode pins the box in CSS so
-// the graph does not reflow when the tip changes; floating mode resizes with
-// the window. Binary search settles under a tenth of a pixel in ~10 probes.
-// The floor keeps pathologically long tips readable (then they clip); the
-// ceiling is the box itself, optionally capped by --node-tooltip-text-size.
-const nodeInteractionHelpMinFontPx = 8;
-const nodeInteractionHelpAbsoluteMaxFontPx = 120;
-
-function nodeInteractionHelpMaxFontPx(help, availableH, availableW) {
-  // Largest size that could reasonably fill a short one-line tip in this box.
-  const fromBox = Math.min(
-    availableH * 0.78,
-    availableW * 0.22,
-    nodeInteractionHelpAbsoluteMaxFontPx,
-  );
-  const cssCap = Number.parseFloat(
-    window.getComputedStyle(help).getPropertyValue("--node-tooltip-text-size"),
-  );
-  // UI Dev "tooltip max text size" is a ceiling only (not the fixed size).
-  if (Number.isFinite(cssCap) && cssCap > 0) {
-    return Math.max(nodeInteractionHelpMinFontPx, Math.min(fromBox, cssCap));
-  }
-  return Math.max(nodeInteractionHelpMinFontPx, fromBox);
-}
-
+// One font size for every tip. The box stays fixed so the page does not reflow,
+// and the text wraps inside it. --node-tooltip-text-size is that size.
+// Longer tips clip. fitNodeInteractionHelpText only clears an inline size left
+// by an older session so the stylesheet value shows.
 function fitNodeInteractionHelpText(help = document.getElementById("nodeInteractionHelp")) {
   if (!help) {
     return;
   }
   help.style.removeProperty("font-size");
-  if (!help.textContent) {
-    return;
-  }
-  const availableH = help.clientHeight;
-  const availableW = help.clientWidth;
-  if (availableH <= 0 || availableW <= 0) {
-    return;
-  }
-  const minFont = nodeInteractionHelpMinFontPx;
-  const maxFont = nodeInteractionHelpMaxFontPx(help, availableH, availableW);
-  // The box centres its text (align-items: center). scrollHeight only counts
-  // content spilling past the BOTTOM edge, so with centring it can stay equal
-  // to clientHeight while the first line is already clipped off the top.
-  // Measure top-aligned so all overflow lands below and scrollHeight sees it.
-  const previousAlign = help.style.alignItems;
-  help.style.alignItems = "flex-start";
-  const overflows = () =>
-    help.scrollHeight > help.clientHeight + 0.5
-    || help.scrollWidth > help.clientWidth + 0.5;
-
-  // Always search for the largest fitting size so short tips expand to fill.
-  let low = minFont;
-  let high = maxFont;
-  help.style.fontSize = `${high.toFixed(2)}px`;
-  if (overflows()) {
-    help.style.fontSize = `${low.toFixed(2)}px`;
-    if (!overflows()) {
-      for (let i = 0; i < 10; i += 1) {
-        const mid = (low + high) * 0.5;
-        help.style.fontSize = `${mid.toFixed(2)}px`;
-        if (overflows()) {
-          high = mid;
-        } else {
-          low = mid;
-        }
-      }
-      help.style.fontSize = `${low.toFixed(2)}px`;
-    }
-    // else: even the floor overflows — leave at min and clip
-  }
-  // else: max already fits — keep it (tip fills the box)
-
-  if (previousAlign) {
-    help.style.alignItems = previousAlign;
-  } else {
-    help.style.removeProperty("align-items");
-  }
+  help.style.removeProperty("align-items");
 }
 
 function setNodeInteractionHelp(text = "") {

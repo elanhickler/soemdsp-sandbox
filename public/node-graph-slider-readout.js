@@ -538,6 +538,7 @@ function syncNodeSliderReadout(slider) {
     syncNodeSliderPortalHandle(readout, slider, position, usesPortalWrap);
   }
   syncNodeSliderMetadataTooltip(slider);
+  if (typeof nodeGraphGlGraphPresentSoon === "function") nodeGraphGlGraphPresentSoon();
 }
 
 function nodeSliderLabelText(slider) {

@@ -906,6 +906,8 @@ function nodeGraphScreenSoloWholeModuleFit(tile) {
   set("transform-origin", "0 0");
   set("transform", `translate(${ox}px, ${oy}px) scale(${s})`);
   face.dataset.wholeModuleScale = s.toFixed(4);
+  // The tile's plate / title / sliders are drawn by the shared GL graph pass (node-graph-gl-graph.js).
+  if (typeof nodeGraphGlGraphPresentSoon === "function") nodeGraphGlGraphPresentSoon();
 }
 
 /**
@@ -970,7 +972,13 @@ function nodeGraphScreenSoloCollectFaces(nodeIds) {
     if (typeof nodeGraphViewportCullWakePresentedFace === "function") {
       nodeGraphViewportCullWakePresentedFace(rawId);
     }
-    const found = nodeGraphScreenSoloWholeModuleFor(rawId) || nodeGraphScreenSoloFindFace(rawId);
+    let found = nodeGraphScreenSoloWholeModuleFor(rawId);
+    if (!found && typeof nodeGraphScreenSoloWantsWholeModule === "function"
+      && nodeGraphScreenSoloWantsWholeModule(rawId)) {
+      // Do not fall back to the waveform/display face: that drops title, sliders, body.
+      continue;
+    }
+    found = found || nodeGraphScreenSoloFindFace(rawId);
     if (!found || seen.has(found.id)) {
       continue;
     }

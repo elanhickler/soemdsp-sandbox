@@ -57,7 +57,7 @@ function nodeGraphModuleGeometryAttach(nodeId, port, io) {
  * Publish geometry for one module from current DOM (one-shot after layout).
  * Callers: applyNodeGraphModuleLayout, module move settle — NOT Play/scope loops.
  */
-function nodeGraphModuleGeometryPublishFromDom(nodeId) {
+function nodeGraphModuleGeometryPublishFromDom(nodeId, options = {}) {
   const id = String(nodeId || "");
   if (!id || typeof nodeGraphNodeElement !== "function") {
     return null;
@@ -70,13 +70,14 @@ function nodeGraphModuleGeometryPublishFromDom(nodeId) {
   const surface = typeof nodeGraphZoomSurface === "function" ? nodeGraphZoomSurface() : null;
   if (!surface) return null;
 
-  const toSurface = (clientX, clientY) => {
+  // options.toSurface / store:false: measure against another surface (a perform tile) without publishing.
+  const toSurface = options.toSurface || ((clientX, clientY) => {
     if (typeof nodeGraphClientToZoomSurfacePoint === "function") {
       return nodeGraphClientToZoomSurfacePoint(clientX, clientY);
     }
     const sr = surface.getBoundingClientRect();
     return { x: clientX - sr.left, y: clientY - sr.top };
-  };
+  });
 
   const boxRect = el.getBoundingClientRect();
   const boxTl = toSurface(boxRect.left, boxRect.top);
@@ -143,7 +144,7 @@ function nodeGraphModuleGeometryPublishFromDom(nodeId) {
     ports,
     paramJacks,
   };
-  nodeGraphModuleGeometryById.set(id, geo);
+  if (options.store !== false) nodeGraphModuleGeometryById.set(id, geo);
   return geo;
 }
 

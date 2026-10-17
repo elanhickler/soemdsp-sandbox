@@ -1,6 +1,8 @@
 // Embed URL aliases, run before boot so every later reader sees canonical params.
 //   ?patch=<slug>  -> ?pagePatch=<slug>
 //   ?embed=1       -> ?hideui=1&autoframe=1 (chrome-less player frame)
+//   ?bg=<css color> -> perform background (--soemdsp-perform-bg), any CSS color incl. alpha:
+//                     rgba(r,g,b,a), #rrggbbaa, transparent. Invalid values are ignored.
 // See docs/EMBED.md.
 (function soemdspEmbedParams() {
   try {
@@ -21,6 +23,10 @@
         }
       }
       document.documentElement.classList.add("soemdsp-embed");
+    }
+    const bg = String(q.get("bg") || "").trim();
+    if (bg && window.CSS && CSS.supports("color", bg)) {
+      document.documentElement.style.setProperty("--soemdsp-perform-bg", bg);
     }
     if (changed) {
       window.history.replaceState(window.history.state, "", url.toString());

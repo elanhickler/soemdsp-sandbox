@@ -49,7 +49,7 @@ async function bindNodeGraphUiDevSettingsEvents() {
 
   document
     .getElementById("nodeUiDevModuleGridInset")
-    .addEventListener("input", syncNodeUiDevSettingsHeaderControls);
+    ?.addEventListener("input", syncNodeUiDevSettingsHeaderControls);
   document
     .getElementById("nodeUiDevInletOutletSize")
     ?.addEventListener("input", syncNodeUiDevPortSize);
@@ -98,6 +98,13 @@ async function bindNodeGraphUiDevSettingsEvents() {
     "nodeUiDevJackRgbBlue",
     "nodeUiDevJackAnalog",
     "nodeUiDevJackDigital",
+    "nodeUiDevJackGold",
+    "nodeUiDevJackParameter",
+    "nodeUiDevJackGraph",
+    "nodeUiDevJackModulation",
+    "nodeUiDevJackVoices",
+    "nodeUiDevJackPurple",
+    "nodeUiDevJackMagenta",
   ]) {
     document.getElementById(jackColorId)?.addEventListener("input", syncNodeUiDevJackColors);
     document.getElementById(jackColorId)?.addEventListener("change", syncNodeUiDevJackColors);
@@ -165,6 +172,15 @@ async function bindNodeGraphUiDevSettingsEvents() {
   document
     .getElementById("nodeUiDevModuleFillAlpha")
     ?.addEventListener("input", syncNodeUiDevSettingsHeaderControls);
+  for (const sliderTextId of [
+    "nodeUiDevSliderTextSize",
+    "nodeUiDevSliderTextLineHeight",
+    "nodeUiDevSliderTextPadding",
+  ]) {
+    const sliderTextInput = document.getElementById(sliderTextId);
+    sliderTextInput?.addEventListener("input", syncNodeUiDevSettingsHeaderControls);
+    sliderTextInput?.addEventListener("change", syncNodeUiDevSettingsHeaderControls);
+  }
   document
     .getElementById("nodeUiDevWireThickness")
     ?.addEventListener("input", syncNodeUiDevSettingsHeaderControls);
@@ -182,7 +198,7 @@ async function bindNodeGraphUiDevSettingsEvents() {
     .addEventListener("input", syncNodeUiDevSettingsHeaderControls);
   document
     .getElementById("nodeUiDevChoiceSlideEmptyBorder")
-    .addEventListener("input", syncNodeUiDevSettingsHeaderControls);
+    ?.addEventListener("input", syncNodeUiDevSettingsHeaderControls);
   document
     .getElementById("nodeUiDevChoiceSlideDebugBoxes")
     .addEventListener("change", syncNodeUiDevSettingsHeaderControls);

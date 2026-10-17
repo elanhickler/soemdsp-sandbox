@@ -221,47 +221,23 @@ function bindNodeUiDevSliderFillColorControls() {
 // Unselected plate outline. CSS-only — do not fold into the header sync
 // (that rebuilds the patch / heatmap / wires on every input event).
 function syncNodeUiDevModuleIdleStroke() {
-  const thicknessInput = document.getElementById("nodeUiDevModuleStrokeThickness");
-  const thicknessOut = document.getElementById("nodeUiDevModuleStrokeThicknessValue");
   const colorInput = document.getElementById("nodeUiDevModuleStrokeColor");
   const colorOut = document.getElementById("nodeUiDevModuleStrokeColorValue");
-  const alphaInput = document.getElementById("nodeUiDevModuleStrokeAlpha");
-  const alphaOut = document.getElementById("nodeUiDevModuleStrokeAlphaValue");
   const selectedColorInput = document.getElementById("nodeUiDevModuleSelectedStrokeColor");
   const selectedColorOut = document.getElementById("nodeUiDevModuleSelectedStrokeColorValue");
   const selectedAlphaInput = document.getElementById("nodeUiDevModuleSelectedStrokeAlpha");
   const selectedAlphaOut = document.getElementById("nodeUiDevModuleSelectedStrokeAlphaValue");
-  const thicknessRaw = Number(thicknessInput?.value);
-  const thicknessPx = Number.isFinite(thicknessRaw)
-    ? Math.max(0, Math.min(8, thicknessRaw))
-    : 1;
-  const color = normalizeNodeUiDevColor(colorInput?.value, "#ffffff");
-  const alphaRaw = Number(alphaInput?.value);
-  const alphaPercent = Number.isFinite(alphaRaw)
-    ? Math.max(0, Math.min(100, alphaRaw))
-    : 50;
+  const color = normalizeNodeUiDevColor(colorInput?.value, "#a19b9b");
   const selectedColor = normalizeNodeUiDevColor(selectedColorInput?.value, "#e2a86d");
   const selectedAlphaRaw = Number(selectedAlphaInput?.value);
   const selectedAlphaPercent = Number.isFinite(selectedAlphaRaw)
     ? Math.max(0, Math.min(100, selectedAlphaRaw))
     : 100;
-  if (thicknessInput && !thicknessInput.matches(":active")) {
-    thicknessInput.value = String(thicknessPx);
-  }
   if (colorInput) {
     colorInput.value = color;
   }
-  if (alphaInput && !alphaInput.matches(":active")) {
-    alphaInput.value = String(alphaPercent);
-  }
-  if (thicknessOut) {
-    thicknessOut.textContent = `${thicknessPx}px`;
-  }
   if (colorOut) {
     colorOut.textContent = color;
-  }
-  if (alphaOut) {
-    alphaOut.textContent = `${alphaPercent}%`;
   }
   if (selectedColorInput) {
     selectedColorInput.value = selectedColor;
@@ -276,26 +252,15 @@ function syncNodeUiDevModuleIdleStroke() {
     selectedAlphaOut.textContent = `${selectedAlphaPercent}%`;
   }
   const workspace = document.getElementById("nodeGraphWorkspace");
-  workspace?.style.setProperty("--node-module-idle-stroke-width", `${thicknessPx}px`);
   workspace?.style.setProperty(
     "--node-module-idle-stroke",
-    `rgb(${nodeUiDevHexColorToRgbTriplet(color)} / ${alphaPercent / 100})`,
+    `rgb(${nodeUiDevHexColorToRgbTriplet(color)} / 0.9)`,
   );
   workspace?.style.setProperty(
     "--node-module-selected-stroke",
     `rgb(${nodeUiDevHexColorToRgbTriplet(selectedColor)} / ${selectedAlphaPercent / 100})`,
   );
-  // Fixed (default): compensate zoom so idle + selected strokes stay screen-constant.
-  // Off: compensate = 1 → strokes scale with workspace zoom.
-  const strokesFixedInput = document.getElementById("nodeUiDevModuleStrokesFixed");
-  const strokesFixed = strokesFixedInput ? Boolean(strokesFixedInput.checked) : true;
-  if (strokesFixed) {
-    workspace?.style.removeProperty("--node-module-stroke-zoom-compensate");
-    document.documentElement.style.removeProperty("--node-module-stroke-zoom-compensate");
-  } else {
-    workspace?.style.setProperty("--node-module-stroke-zoom-compensate", "1");
-    document.documentElement.style.setProperty("--node-module-stroke-zoom-compensate", "1");
-  }
+  if (typeof nodeGraphGlGraphPresent === "function") nodeGraphGlGraphPresent();
 }
 
 const NODE_MODULE_PLATE_ROUNDNESS_RATIO = 0.11;
@@ -348,10 +313,7 @@ function bindNodeUiDevModuleTitlePadding() {
 
 function bindNodeUiDevModuleIdleStroke() {
   for (const id of [
-    "nodeUiDevModuleStrokeThickness",
-    "nodeUiDevModuleStrokesFixed",
     "nodeUiDevModuleStrokeColor",
-    "nodeUiDevModuleStrokeAlpha",
     "nodeUiDevModuleSelectedStrokeColor",
     "nodeUiDevModuleSelectedStrokeAlpha",
   ]) {
@@ -481,15 +443,15 @@ function syncNodeUiDevMagnifierRimControls() {
 }
 
 function nodeGraphGridVisualScaleFromMultiply(multiply) {
+  // 1 = a line every module unit. Higher drops lines so each box is N units.
   const n = Math.round(Number(multiply));
-  const step = Number.isFinite(n) ? Math.max(1, Math.min(8, n)) : 2;
-  return 2 ** (step - 1);
+  return Number.isFinite(n) ? Math.max(1, Math.min(32, n)) : 16;
 }
 
 function syncNodeUiDevGridDivisionMultiply() {
   const input = document.getElementById("nodeUiDevGridDivisionMultiply");
   const raw = Math.round(Number(input?.value));
-  const multiply = Number.isFinite(raw) ? Math.max(1, Math.min(8, raw)) : 2;
+  const multiply = Number.isFinite(raw) ? Math.max(1, Math.min(32, raw)) : 16;
   if (input) {
     input.value = String(multiply);
   }
@@ -502,7 +464,9 @@ function syncNodeUiDevGridDivisionMultiply() {
   const css = String(scale);
   workspace?.style.setProperty("--node-grid-visual-scale", css);
   document.documentElement.style.setProperty("--node-grid-visual-scale", css);
-  if (typeof applyNodeGraphGridVisualCellSize === "function") {
+  if (typeof updateNodeGraphGridHeatmap === "function") {
+    updateNodeGraphGridHeatmap({ force: true });
+  } else if (typeof applyNodeGraphGridVisualCellSize === "function") {
     applyNodeGraphGridVisualCellSize(workspace);
   }
 }
@@ -529,6 +493,7 @@ function nodeUiDevSyncPortBrightnessControl(inputId, outputId, cssVar, fallback)
 function syncNodeUiDevIoSectionPadding() {
   const apply = (inputId, outputId, cssVar, fallback) => {
     const input = document.getElementById(inputId);
+    if (!input) return;
     const raw = Number(input?.value);
     const px = Number.isFinite(raw) ? Math.max(0, Math.min(32, raw)) : fallback;
     if (input && input.value !== String(px)) {
@@ -567,6 +532,7 @@ const NODE_UI_DEV_INLET_OUTLET_GAP_MAX = 32;
 
 function syncNodeUiDevInletOutletGap() {
   const input = document.getElementById("nodeUiDevInletOutletGap");
+  if (!input) return;
   const raw = Number(input?.value);
   const px = Number.isFinite(raw)
     ? Math.max(
@@ -619,6 +585,7 @@ function scheduleNodeUiDevPortGeometryFollowup() {
 
 function syncNodeUiDevPortSize() {
   const input = document.getElementById("nodeUiDevInletOutletSize");
+  if (!input) return;
   const raw = Number(input?.value);
   const percent = Number.isFinite(raw)
     ? Math.max(
@@ -647,6 +614,7 @@ function syncNodeUiDevPortSize() {
 
 function syncNodeUiDevPortStrokeThickness() {
   const input = document.getElementById("nodeUiDevInletOutletStrokeThickness");
+  if (!input) return;
   const raw = Number(input?.value);
   const px = Number.isFinite(raw)
     ? Math.max(
@@ -733,8 +701,55 @@ function syncNodeUiDevJackColors() {
     "--node-digital-fill",
     "#ffffff",
   );
+  nodeUiDevApplyJackColorVar(
+    "nodeUiDevJackGold",
+    "nodeUiDevJackGoldValue",
+    "--node-jack-gold",
+    "#f0b84a",
+  );
+  nodeUiDevApplyJackColorVar(
+    "nodeUiDevJackParameter",
+    "nodeUiDevJackParameterValue",
+    "--node-jack-cyan",
+    "#00e5ff",
+  );
+  nodeUiDevApplyJackColorVar(
+    "nodeUiDevJackGraph",
+    "nodeUiDevJackGraphValue",
+    "--node-jack-yellow",
+    "#ffe600",
+  );
+  nodeUiDevApplyJackColorVar(
+    "nodeUiDevJackModulation",
+    "nodeUiDevJackModulationValue",
+    "--node-mod-input-fill",
+    "#b184ff",
+  );
+  nodeUiDevApplyJackColorVar(
+    "nodeUiDevJackVoices",
+    "nodeUiDevJackVoicesValue",
+    "--node-jack-black",
+    "#6a6a6a",
+  );
+  nodeUiDevApplyJackColorVar(
+    "nodeUiDevJackPurple",
+    "nodeUiDevJackPurpleValue",
+    "--node-jack-purple",
+    "#c44dff",
+  );
+  nodeUiDevApplyJackColorVar(
+    "nodeUiDevJackMagenta",
+    "nodeUiDevJackMagentaValue",
+    "--node-jack-magenta",
+    "#e040fb",
+  );
   const workspace = document.getElementById("nodeGraphWorkspace");
   const root = document.documentElement;
+  const modulationColor = document.getElementById("nodeUiDevJackModulation")
+    ? (typeof normalizeNodeUiDevColor === "function"
+      ? normalizeNodeUiDevColor(document.getElementById("nodeUiDevJackModulation").value, "#b184ff")
+      : "#b184ff")
+    : "#b184ff";
   const setBoth = (name, value) => {
     workspace?.style.setProperty(name, value);
     root.style.setProperty(name, value);
@@ -749,6 +764,12 @@ function syncNodeUiDevJackColors() {
   root.style.removeProperty("--node-port-idle-stroke");
   workspace?.style.removeProperty("--node-port-crescent-stroke");
   root.style.removeProperty("--node-port-crescent-stroke");
+  setBoth("--node-mod-input-stroke", modulationColor);
+  setBoth("--node-param-output-fill", modulationColor);
+  setBoth("--node-param-output-stroke", modulationColor);
+  if (typeof drawNodeGraphWires === "function") {
+    drawNodeGraphWires();
+  }
   const fillIn = document.getElementById("nodeUiDevInputFillColor");
   const fillOut = document.getElementById("nodeUiDevOutputFillColor");
   if (fillIn) fillIn.value = analog;
@@ -872,8 +893,6 @@ function syncNodeUiDevSettingsHeaderControls() {
   const sliderUnitColorValue = document.getElementById("nodeUiDevSliderUnitColorValue");
   const wireThicknessInput = document.getElementById("nodeUiDevWireThickness");
   const wireThicknessValue = document.getElementById("nodeUiDevWireThicknessValue");
-  const wirePatchPointSizeInput = document.getElementById("nodeUiDevWirePatchPointSize");
-  const wirePatchPointSizeValue = document.getElementById("nodeUiDevWirePatchPointSizeValue");
   const traceWireThicknessInput = document.getElementById("nodeUiDevTraceWireThickness");
   const traceWireThicknessValue = document.getElementById("nodeUiDevTraceWireThicknessValue");
   const choiceSlideEmptyBorderInput = document.getElementById("nodeUiDevChoiceSlideEmptyBorder");
@@ -908,8 +927,6 @@ function syncNodeUiDevSettingsHeaderControls() {
     !minimumGridBrightnessValue ||
     !moduleLightSpreadInput ||
     !moduleLightSpreadValue ||
-    !moduleGridInsetInput ||
-    !moduleGridInsetValue ||
     !gridColorInput ||
     !gridColorValue ||
     !workspaceBackgroundColorInput ||
@@ -926,12 +943,8 @@ function syncNodeUiDevSettingsHeaderControls() {
     !sliderUnitColorValue ||
     !wireThicknessInput ||
     !wireThicknessValue ||
-    !wirePatchPointSizeInput ||
-    !wirePatchPointSizeValue ||
     !traceWireThicknessInput ||
     !traceWireThicknessValue ||
-    !choiceSlideEmptyBorderInput ||
-    !choiceSlideEmptyBorderValue ||
     !choiceSlideDebugBoxesInput ||
     !bypassIconSizeInput ||
     !bypassIconSizeValue ||
@@ -952,14 +965,15 @@ function syncNodeUiDevSettingsHeaderControls() {
 
   const mouseLightEnabled = Boolean(mouseLightEnabledInput.checked);
   const showOriginMarker = Boolean(showOriginMarkerInput.checked);
-  // Max ceiling for tip fit-to-box (not a fixed display size).
-  const tooltipTextSizePx = Math.max(12, Math.min(96, nodeGraphFiniteNumber(tooltipTextSizeInput.value, 64)));
+  const tooltipTextSizePx = Math.max(12, Math.min(96, nodeGraphFiniteNumber(tooltipTextSizeInput.value, 14)));
   const minimumGridBrightnessPercent = Math.max(
     0,
     Math.min(100, nodeGraphFiniteNumber(minimumGridBrightnessInput.value)),
   );
   const moduleLightSpreadPercent = Math.max(40, Math.min(220, nodeGraphFiniteNumber(moduleLightSpreadInput.value, 78)));
-  const moduleGridInsetPx = Math.max(0, Math.min(20, nodeGraphFiniteNumber(moduleGridInsetInput.value)));
+  const moduleGridInsetPx = moduleGridInsetInput
+    ? Math.max(0, Math.min(20, nodeGraphFiniteNumber(moduleGridInsetInput.value)))
+    : null;
   const gridColor = normalizeNodeUiDevColor(gridColorInput.value, "#ffffff");
   const workspaceBackgroundColor = normalizeNodeUiDevColor(workspaceBackgroundColorInput.value, "#1d1b1b");
   const moduleFillColor = normalizeNodeUiDevColor(moduleFillColorInput.value, "#171a1f");
@@ -977,13 +991,10 @@ function syncNodeUiDevSettingsHeaderControls() {
     0.25,
     Math.min(12, Number.isFinite(wireThicknessRaw) ? wireThicknessRaw : 3.5),
   );
-  const wirePatchPointSizeRaw = Number(wirePatchPointSizeInput.value);
-  const wirePatchPointSizePercent = Math.max(
-    0,
-    Math.min(200, Number.isFinite(wirePatchPointSizeRaw) ? wirePatchPointSizeRaw : 54),
-  );
   const traceWireThicknessPx = Math.max(1, Math.min(12, nodeGraphFiniteNumber(traceWireThicknessInput.value, 1)));
-  const choiceSlideEmptyBorderPx = Math.max(0, Math.min(8, nodeGraphFiniteNumber(choiceSlideEmptyBorderInput.value)));
+  const choiceSlideEmptyBorderPx = choiceSlideEmptyBorderInput
+    ? Math.max(0, Math.min(8, nodeGraphFiniteNumber(choiceSlideEmptyBorderInput.value)))
+    : null;
   const bypassIconSizePercent = Math.max(0, Math.min(100, nodeGraphFiniteNumber(bypassIconSizeInput.value)));
   const bypassIconGlowSpreadPercent = Math.max(
     0,
@@ -996,7 +1007,6 @@ function syncNodeUiDevSettingsHeaderControls() {
   document
     .getElementById("nodeWiringPanel")
     ?.style.setProperty("--node-tooltip-text-size", `${tooltipTextSizePx}px`);
-  // Tip text scales to the box; re-fit when the max ceiling changes.
   if (typeof fitNodeInteractionHelpText === "function") {
     fitNodeInteractionHelpText(document.getElementById("nodeInteractionHelp"));
   }
@@ -1012,9 +1022,11 @@ function syncNodeUiDevSettingsHeaderControls() {
   document
     .getElementById("nodeGraphWorkspace")
     ?.style.setProperty("--node-mouse-light-color-rgb", "127 199 217");
-  document
-    .getElementById("nodeGraphWorkspace")
-    ?.style.setProperty("--node-module-grid-inset", `${moduleGridInsetPx}px`);
+  if (moduleGridInsetPx != null) {
+    document
+      .getElementById("nodeGraphWorkspace")
+      ?.style.setProperty("--node-module-grid-inset", `${moduleGridInsetPx}px`);
+  }
   gridColorInput.value = gridColor;
   workspaceBackgroundColorInput.value = workspaceBackgroundColor;
   moduleFillColorInput.value = moduleFillColor;
@@ -1051,13 +1063,12 @@ function syncNodeUiDevSettingsHeaderControls() {
     ?.style.setProperty("--node-wire-thickness", `${wireThicknessPx}px`);
   document
     .getElementById("nodeGraphWorkspace")
-    ?.style.setProperty("--node-wire-patch-point-size-ratio", String(wirePatchPointSizePercent / 100));
-  document
-    .getElementById("nodeGraphWorkspace")
     ?.style.setProperty("--node-trace-wire-thickness", `${traceWireThicknessPx}px`);
-  document
-    .getElementById("nodeGraphWorkspace")
-    ?.style.setProperty("--node-choice-slide-empty-border", `${choiceSlideEmptyBorderPx}`);
+  if (choiceSlideEmptyBorderPx != null) {
+    document
+      .getElementById("nodeGraphWorkspace")
+      ?.style.setProperty("--node-choice-slide-empty-border", `${choiceSlideEmptyBorderPx}`);
+  }
   document
     .getElementById("nodeWiringPanel")
     ?.classList.toggle("choice-slider-debug", choiceSlideDebugBoxesInput.checked);
@@ -1076,7 +1087,7 @@ function syncNodeUiDevSettingsHeaderControls() {
   tooltipTextSizeValue.textContent = `${tooltipTextSizePx}px`;
   minimumGridBrightnessValue.textContent = `${minimumGridBrightnessPercent}%`;
   moduleLightSpreadValue.textContent = `${moduleLightSpreadPercent}%`;
-  moduleGridInsetValue.textContent = `${moduleGridInsetPx}px`;
+  if (moduleGridInsetValue) moduleGridInsetValue.textContent = `${moduleGridInsetPx}px`;
   gridColorValue.textContent = gridColor;
   workspaceBackgroundColorValue.textContent = workspaceBackgroundColor;
   moduleFillColorValue.textContent = moduleFillColor;
@@ -1088,15 +1099,24 @@ function syncNodeUiDevSettingsHeaderControls() {
     wireThicknessInput.value = String(wireThicknessPx);
   }
   wireThicknessValue.textContent = `${Math.round(wireThicknessPx * 100) / 100}px`;
-  if (
-    !wirePatchPointSizeInput.matches(":active")
-    && wirePatchPointSizeInput.value !== String(wirePatchPointSizePercent)
-  ) {
-    wirePatchPointSizeInput.value = String(wirePatchPointSizePercent);
-  }
-  wirePatchPointSizeValue.textContent = `${Math.round(wirePatchPointSizePercent)}%`;
   traceWireThicknessValue.textContent = `${traceWireThicknessPx}px`;
-  choiceSlideEmptyBorderValue.textContent = `${choiceSlideEmptyBorderPx}px`;
+  const sliderTextSizeInput = document.getElementById("nodeUiDevSliderTextSize");
+  const sliderTextLineInput = document.getElementById("nodeUiDevSliderTextLineHeight");
+  const sliderTextPadInput = document.getElementById("nodeUiDevSliderTextPadding");
+  const sliderTextSize = Math.max(8, Math.min(32, nodeGraphFiniteNumber(sliderTextSizeInput?.value, 13)));
+  const sliderTextLine = Math.max(0.6, Math.min(2, nodeGraphFiniteNumber(sliderTextLineInput?.value, 0.9)));
+  const sliderTextPad = Math.max(0, Math.min(16, nodeGraphFiniteNumber(sliderTextPadInput?.value, 0)));
+  const sliderTextHost = document.getElementById("nodeGraphWorkspace");
+  sliderTextHost?.style.setProperty("--node-slider-text-size", `${sliderTextSize}px`);
+  sliderTextHost?.style.setProperty("--node-slider-text-line-height", String(sliderTextLine));
+  sliderTextHost?.style.setProperty("--node-slider-text-padding", `${sliderTextPad}px`);
+  const sliderTextSizeValue = document.getElementById("nodeUiDevSliderTextSizeValue");
+  const sliderTextLineValue = document.getElementById("nodeUiDevSliderTextLineHeightValue");
+  const sliderTextPadValue = document.getElementById("nodeUiDevSliderTextPaddingValue");
+  if (sliderTextSizeValue) sliderTextSizeValue.textContent = `${sliderTextSize}px`;
+  if (sliderTextLineValue) sliderTextLineValue.textContent = String(sliderTextLine);
+  if (sliderTextPadValue) sliderTextPadValue.textContent = `${sliderTextPad}px`;
+  if (choiceSlideEmptyBorderValue) choiceSlideEmptyBorderValue.textContent = `${choiceSlideEmptyBorderPx}px`;
   bypassIconSizeValue.textContent = `${bypassIconSizePercent}%`;
   bypassIconGlowSpreadValue.textContent = `${bypassIconGlowSpreadPercent}%`;
   bypassIconGlowColorInput.value = bypassIconGlowColor;

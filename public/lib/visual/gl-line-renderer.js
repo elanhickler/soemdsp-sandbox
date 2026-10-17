@@ -167,6 +167,85 @@ void main() {
     return shader;
   }
 
+  const VEIL_FS = `
+precision mediump float;
+varying vec2 vPx;
+uniform vec4 uRect;
+void main() {
+  if (vPx.x < uRect.x || vPx.y < uRect.y || vPx.x > uRect.x + uRect.z || vPx.y > uRect.y + uRect.w) discard;
+  float band = mod(vPx.x + vPx.y, 18.0);
+  if (band < 0.0) band += 18.0;
+  if (band > 9.0) discard;
+  gl_FragColor = vec4(0.886, 0.659, 0.427, 0.34);
+}
+`;
+  const OUT_VS = `
+attribute vec2 position;
+attribute vec2 pixel;
+varying vec2 vPx;
+void main() {
+  gl_Position = vec4(position, 0.0, 1.0);
+  vPx = pixel;
+}
+`;
+  const OUT_FS = `
+precision mediump float;
+varying vec2 vPx;
+uniform vec4 uPlate;
+uniform vec4 uPlateColor;
+uniform vec4 uFill;
+uniform float uStroke;
+uniform float uInletGap;
+uniform int uCount;
+uniform vec4 uJack[24];
+uniform vec4 uJackColor[24];
+void main() {
+  vec2 plateMin = uPlate.xy;
+  vec2 plateMax = uPlate.xy + uPlate.zw;
+  vec2 c = plateMin + uPlate.zw * 0.5;
+  vec2 q = abs(vPx - c) - uPlate.zw * 0.5;
+  float sdRect = length(max(q, 0.0)) + min(max(q.x, q.y), 0.0);
+  // Cut each jack inward. A disk centered on the wall removes the inside
+  // semicircle; the outside half stays outside the rectangle.
+  float sd = sdRect;
+  float halfW = max(uStroke * 0.5, 0.75);
+  float nearest = abs(sdRect);
+  vec4 strokeCol = uPlateColor;
+  float inletA = 0.0;
+  for (int i = 0; i < 24; i++) {
+    if (i >= uCount) break;
+    vec2 jack = uJack[i].xy;
+    float radius = uJack[i].z;
+    float d = length(vPx - jack) - radius;
+    sd = max(sd, -d);
+    // Tint only the jack arc. Do not let a jack's alpha replace the plate stroke.
+    if (sdRect <= 0.0 && abs(d) <= halfW && abs(d) <= nearest) {
+      nearest = abs(d);
+      strokeCol = vec4(uJackColor[i].rgb, uPlateColor.a);
+    }
+    // Socket fill: the hole, off the stroke, with a straight cut in from the wall.
+    if (uJack[i].w > 0.5 && radius > 0.0 && sdRect < 0.0 && d < -halfW) {
+      float dl = jack.x - plateMin.x;
+      float dr = plateMax.x - jack.x;
+      float dt = jack.y - plateMin.y;
+      float db = plateMax.y - jack.y;
+      vec2 inward = vec2(1.0, 0.0);
+      if (dr <= dl && dr <= dt && dr <= db) inward = vec2(-1.0, 0.0);
+      else if (dt <= dl && dt <= dr && dt <= db) inward = vec2(0.0, 1.0);
+      else if (db <= dl && db <= dr && db <= dt) inward = vec2(0.0, -1.0);
+      if (dot(vPx - jack, inward) >= uInletGap) inletA = 1.0;
+    }
+  }
+  float strokeA = (1.0 - smoothstep(halfW - 0.6, halfW + 0.75, abs(sd))) * strokeCol.a;
+  float plateA = (1.0 - smoothstep(-halfW - 0.75, -halfW + 0.6, sd)) * uFill.a * (1.0 - inletA);
+  float underA = inletA + plateA;
+  vec3 underRgb = inletA > 0.5 ? vec3(0.055, 0.063, 0.078) : uFill.rgb;
+  float a = strokeA + underA * (1.0 - strokeA);
+  if (a < 0.01) discard;
+  vec3 rgb = (strokeCol.rgb * strokeA + underRgb * underA * (1.0 - strokeA)) / a;
+  gl_FragColor = vec4(rgb, a);
+}
+`;
   function link(gl, vs, fs) {
     const v = compile(gl, gl.VERTEX_SHADER, vs);
     const f = compile(gl, gl.FRAGMENT_SHADER, fs);
@@ -191,10 +270,28 @@ void main() {
     try {
       const program = link(gl, VS, FS);
       const imgProgram = link(gl, IMG_VS, IMG_FS);
+      const outProgram = link(gl, OUT_VS, OUT_FS);
+      const veilProgram = link(gl, OUT_VS, VEIL_FS);
       state = {
         gl,
         dev,
         program,
+        outProgram,
+        outBuf: gl.createBuffer(),
+        outPos: gl.getAttribLocation(outProgram, "position"),
+        outPx: gl.getAttribLocation(outProgram, "pixel"),
+        outPlate: gl.getUniformLocation(outProgram, "uPlate"),
+        outPlateColor: gl.getUniformLocation(outProgram, "uPlateColor"),
+        outFill: gl.getUniformLocation(outProgram, "uFill"),
+        outStroke: gl.getUniformLocation(outProgram, "uStroke"),
+        outInletGap: gl.getUniformLocation(outProgram, "uInletGap"),
+        outCount: gl.getUniformLocation(outProgram, "uCount"),
+        outJack: gl.getUniformLocation(outProgram, "uJack[0]"),
+        outJackColor: gl.getUniformLocation(outProgram, "uJackColor[0]"),
+        veilProgram,
+        veilPos: veilProgram ? gl.getAttribLocation(veilProgram, "position") : -1,
+        veilPx: veilProgram ? gl.getAttribLocation(veilProgram, "pixel") : -1,
+        veilRect: veilProgram ? gl.getUniformLocation(veilProgram, "uRect") : null,
         buf: gl.createBuffer(),
         attribs: ["position", "local", "segLen", "halfPx", "feather", "colour"].map((n) => gl.getAttribLocation(program, n)),
         imgProgram,
@@ -241,6 +338,13 @@ void main() {
       // Glyph quads for every text call: pos2 uv2 rgba4 per vertex, one draw per atlas run.
       tdata: s.tpool.pop() || new Float32Array(4096), tn: 0,
       publishNodeId: options?.publishNodeId,
+      outlines: [],
+      veils: [],
+      // Quads drawn after the plate fill (slider wells, keys) so the fill
+      // does not cover them. Text still draws after these.
+      over: null,
+      on: 0,
+      _over: false,
       // transparent: overlay faces; the 2D blit target is cleared first.
       transparent: options?.transparent === true,
     };
@@ -248,17 +352,25 @@ void main() {
 
   function push(batch, x, y, lu, lv, len, half, feather, c) {
     // Vertices go straight into a pooled Float32Array (no per-frame JS arrays).
-    let d = batch.data;
-    let i = batch.n;
+    const over = batch._over === true;
+    let d = over ? batch.over : batch.data;
+    let i = over ? batch.on : batch.n;
+    if (!d) d = new Float32Array(4096);
     if (i + FLOATS > d.length) {
       const grown = new Float32Array(d.length * 2);
       grown.set(d);
-      batch.data = d = grown;
+      d = grown;
     }
     d[i] = (x / batch.w) * 2 - 1; d[i + 1] = 1 - (y / batch.h) * 2;
     d[i + 2] = lu; d[i + 3] = lv; d[i + 4] = len; d[i + 5] = half; d[i + 6] = feather;
     d[i + 7] = c[0]; d[i + 8] = c[1]; d[i + 9] = c[2]; d[i + 10] = c.length > 3 ? c[3] : 1;
-    batch.n = i + FLOATS;
+    if (over) {
+      batch.over = d;
+      batch.on = i + FLOATS;
+    } else {
+      batch.data = d;
+      batch.n = i + FLOATS;
+    }
   }
 
   /** Solid axis-aligned rect. */
@@ -673,7 +785,7 @@ void main() {
     const atlas = nodeGraphGlLinesTextAtlas(family, weight, str);
     if (!atlas) return;
     const k = batch.scale || 1;
-    const px = Math.max(1, Number(options.px) || 12) * k;
+    const px = Math.max(1, Math.round((Number(options.px) || 12) * k));
     const g = px / glyphBakePx;
     const segs = EMOJI_HINT.test(str) ? nodeGraphGlLinesTextSegments(str) : null;
     let hasEmoji = false;
@@ -696,8 +808,8 @@ void main() {
     if (maxW > 0 && width > maxW) { squeeze = maxW / width; width = maxW; }
     const align = options.align || "center";
     const base = options.baseline || "middle";
-    let pen = x * k - (align === "center" ? width * 0.5 : (align === "right" ? width : 0));
-    let baseline = y * k;
+    let pen = Math.round(x * k - (align === "center" ? width * 0.5 : (align === "right" ? width : 0)));
+    let baseline = Math.round(y * k);
     if (base === "middle") baseline += px * (TEXT_ASCENT - 0.5);
     else if (base === "top") baseline += px * TEXT_ASCENT;
     else if (base === "bottom") baseline -= px * (1 - TEXT_ASCENT);
@@ -744,10 +856,10 @@ void main() {
     for (const ch of str) {
       const gl = atlas.glyphs.get(ch);
       if (!gl) continue;
-      const x0 = pen - TEXT_PAD * sx;
-      const y0 = baseline - (TEXT_PAD + glyphBakePx * TEXT_ASCENT) * g;
-      const x1 = x0 + gl.w * sx;
-      const y1 = y0 + gl.h * g;
+      const x0 = Math.round(pen - TEXT_PAD * sx);
+      const y0 = Math.round(baseline - (TEXT_PAD + glyphBakePx * TEXT_ASCENT) * g);
+      const x1 = Math.round(x0 + gl.w * sx);
+      const y1 = Math.round(y0 + gl.h * g);
       const u0 = gl.x / atlas.sheetW; const u1 = (gl.x + gl.w) / atlas.sheetW;
       const v0 = gl.y / atlas.sheetH; const v1 = (gl.y + gl.h) / atlas.sheetH;
       pushTextQuad(batch, x0, y0, x1, y1, u0, v0, u1, v1, cr, cg, cb, ca);
@@ -951,12 +1063,13 @@ void main() {
     if (batch.images.length) {
       drawImages(batch, alphaDst);
     }
-    const count = batch.n / FLOATS;
-    if (count > 0) {
+    const drawQuads = (data, n) => {
+      const count = n / FLOATS;
+      if (!(count > 0) || !data) return;
       gl.blendFuncSeparate(gl.SRC_ALPHA, colourDst, gl.ONE, alphaDst);
       gl.useProgram(s.program);
       gl.bindBuffer(gl.ARRAY_BUFFER, s.buf);
-      gl.bufferData(gl.ARRAY_BUFFER, batch.data.subarray(0, batch.n), gl.STREAM_DRAW);
+      gl.bufferData(gl.ARRAY_BUFFER, data.subarray(0, n), gl.STREAM_DRAW);
       const sizes = [2, 2, 1, 1, 1, 4];
       let off = 0;
       for (let i = 0; i < sizes.length; i += 1) {
@@ -969,11 +1082,15 @@ void main() {
       }
       gl.drawArrays(gl.TRIANGLES, 0, count);
       for (const loc of s.attribs) if (loc >= 0) gl.disableVertexAttribArray(loc);
-    }
+    };
+    drawQuads(batch.data, batch.n);
+    if (batch.outlines?.length) drawOutlines(batch);
+    drawQuads(batch.over, batch.on);
     if (batch.texts.length) {
       gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, alphaDst);
       drawTexts(batch, alphaDst);
     }
+    if (batch.veils?.length) drawVeils(batch);
     gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
   }
 
@@ -1113,6 +1230,136 @@ void main() {
     return [f(0), f(8), f(4), alpha];
   }
 
+  const OUT_MAX = 24;
+  function nodeGraphGlLinesVeil(batch, x, y, w, h) {
+    if (!batch || !(w > 0) || !(h > 0)) return;
+    const k = batch.scale || 1;
+    batch.veils.push({ x: x * k, y: y * k, w: w * k, h: h * k });
+  }
+
+  function drawVeils(batch) {
+    const { s, gl } = { s: batch.s, gl: batch.s.gl };
+    if (!s.veilProgram) return;
+    gl.useProgram(s.veilProgram);
+    gl.bindBuffer(gl.ARRAY_BUFFER, s.buf);
+    gl.enableVertexAttribArray(s.veilPos);
+    gl.enableVertexAttribArray(s.veilPx);
+    gl.vertexAttribPointer(s.veilPos, 2, gl.FLOAT, false, 16, 0);
+    gl.vertexAttribPointer(s.veilPx, 2, gl.FLOAT, false, 16, 8);
+    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+    for (let n = 0; n < batch.veils.length; n += 1) {
+      const shape = batch.veils[n];
+      const x0 = shape.x;
+      const y0 = shape.y;
+      const x1 = shape.x + shape.w;
+      const y1 = shape.y + shape.h;
+      const clip = (px, py) => [(px / batch.w) * 2 - 1, 1 - (py / batch.h) * 2];
+      const corners = [[x0, y0], [x1, y0], [x0, y1], [x1, y0], [x1, y1], [x0, y1]];
+      const data = new Float32Array(6 * 4);
+      for (let i = 0; i < corners.length; i += 1) {
+        const xy = clip(corners[i][0], corners[i][1]);
+        data[i * 4] = xy[0];
+        data[i * 4 + 1] = xy[1];
+        data[i * 4 + 2] = corners[i][0];
+        data[i * 4 + 3] = corners[i][1];
+      }
+      gl.bufferData(gl.ARRAY_BUFFER, data, gl.STREAM_DRAW);
+      gl.uniform4f(s.veilRect, shape.x, shape.y, shape.w, shape.h);
+      gl.drawArrays(gl.TRIANGLES, 0, 6);
+    }
+    gl.disableVertexAttribArray(s.veilPos);
+    gl.disableVertexAttribArray(s.veilPx);
+  }
+
+  function nodeGraphGlLinesModuleOutline(batch, x, y, w, h, stroke, rgba, jacks, fill, inletGap) {
+    if (!batch || !(w > 0) || !(h > 0)) return;
+    const k = batch.scale || 1;
+    const sx = x * k;
+    const sy = y * k;
+    const sw = w * k;
+    const sh = h * k;
+    const ss = Math.max(0.5, stroke * k);
+    const list = [];
+    const src = Array.isArray(jacks) ? jacks : [];
+    for (let i = 0; i < src.length && list.length < OUT_MAX; i += 1) {
+      const jack = src[i];
+      const r = Math.max(0, Number(jack.r) || 0) * k;
+      if (!(r > 0)) continue;
+      const jx = (Number(jack.x) || 0) * k;
+      const jy = (Number(jack.y) || 0) * k;
+      const color = jack.rgba || rgba;
+      list.push({ x: jx, y: jy, r, rgba: color, inlet: jack.inlet === true });
+    }
+    batch.outlines.push({
+      x: sx, y: sy, w: sw, h: sh, stroke: ss, rgba,
+      fill: fill || [0.09, 0.1, 0.12, 1],
+      inletGap: Math.max(0, Number(inletGap) || 0) * k,
+      jacks: list,
+    });
+  }
+
+  function drawOutlines(batch) {
+    const s = batch.s;
+    const gl = s.gl;
+    if (!s.outProgram) return;
+    gl.disable(gl.SCISSOR_TEST);
+    gl.useProgram(s.outProgram);
+    gl.bindBuffer(gl.ARRAY_BUFFER, s.outBuf);
+    gl.enableVertexAttribArray(s.outPos);
+    gl.enableVertexAttribArray(s.outPx);
+    gl.vertexAttribPointer(s.outPos, 2, gl.FLOAT, false, 16, 0);
+    gl.vertexAttribPointer(s.outPx, 2, gl.FLOAT, false, 16, 8);
+    const jackData = new Float32Array(OUT_MAX * 4);
+    const colorData = new Float32Array(OUT_MAX * 4);
+    for (let n = 0; n < batch.outlines.length; n += 1) {
+      const shape = batch.outlines[n];
+      const pad = shape.stroke + 2;
+      const x0 = shape.x - pad;
+      const y0 = shape.y - pad;
+      const x1 = shape.x + shape.w + pad;
+      const y1 = shape.y + shape.h + pad;
+      const clip = (px, py) => [(px / batch.w) * 2 - 1, 1 - (py / batch.h) * 2];
+      const corners = [[x0, y0], [x1, y0], [x0, y1], [x1, y0], [x1, y1], [x0, y1]];
+      const data = new Float32Array(6 * 4);
+      for (let i = 0; i < corners.length; i += 1) {
+        const xy = clip(corners[i][0], corners[i][1]);
+        data[i * 4] = xy[0];
+        data[i * 4 + 1] = xy[1];
+        data[i * 4 + 2] = corners[i][0];
+        data[i * 4 + 3] = corners[i][1];
+      }
+      gl.bufferData(gl.ARRAY_BUFFER, data, gl.STREAM_DRAW);
+      gl.uniform4f(s.outPlate, shape.x, shape.y, shape.w, shape.h);
+      const col = shape.rgba || [1, 1, 1, 1];
+      gl.uniform4f(s.outPlateColor, col[0], col[1], col[2], col.length > 3 ? col[3] : 1);
+      const fill = shape.fill || [0, 0, 0, 0];
+      if (s.outFill) gl.uniform4f(s.outFill, fill[0], fill[1], fill[2], fill.length > 3 ? fill[3] : 1);
+      gl.uniform1f(s.outStroke, shape.stroke);
+      if (s.outInletGap) gl.uniform1f(s.outInletGap, shape.inletGap || 0);
+      jackData.fill(0);
+      colorData.fill(0);
+      const count = Math.min(OUT_MAX, shape.jacks.length);
+      for (let i = 0; i < count; i += 1) {
+        const jack = shape.jacks[i];
+        jackData[i * 4] = jack.x;
+        jackData[i * 4 + 1] = jack.y;
+        jackData[i * 4 + 2] = jack.r;
+        jackData[i * 4 + 3] = jack.inlet ? 1 : 0;
+        const jc = jack.rgba || col;
+        colorData[i * 4] = jc[0];
+        colorData[i * 4 + 1] = jc[1];
+        colorData[i * 4 + 2] = jc[2];
+        colorData[i * 4 + 3] = jc.length > 3 ? jc[3] : 1;
+      }
+      gl.uniform1i(s.outCount, count);
+      if (s.outJack) gl.uniform4fv(s.outJack, jackData);
+      if (s.outJackColor) gl.uniform4fv(s.outJackColor, colorData);
+      gl.drawArrays(gl.TRIANGLES, 0, 6);
+    }
+    gl.disableVertexAttribArray(s.outPos);
+    gl.disableVertexAttribArray(s.outPx);
+  }
+
   function nodeGraphGlLinesSetGlyphBakePx(px) {
     const next = Math.max(16, Math.min(384, Math.round(Number(px) || TEXT_BAKE_PX)));
     if (next === glyphBakePx) return false;
@@ -1132,6 +1379,8 @@ void main() {
     nodeGraphGlLinesFillBlack,
     nodeGraphGlLinesBegin,
     nodeGraphGlLinesRect,
+    nodeGraphGlLinesModuleOutline,
+    nodeGraphGlLinesVeil,
     nodeGraphGlLinesTriangle,
     nodeGraphGlLinesFillUnder,
     nodeGraphGlLinesSegment,

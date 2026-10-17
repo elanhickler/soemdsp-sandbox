@@ -1,3 +1,11 @@
+## 2026-10-17 - Softpop 2
+
+- Shipped native `softpop2` (type 219): sine dispersing into band-limited Color noise. Blue/Violet on Softpop Oscillator, Softpop Filter, and Noise Generator. Tilt/decramp in `library/include/soemdsp/filter/softpop_band.h`. Combined wasm + livedemo `patches/livedemos/softpop2.json`.
+
+## 2026-10-16 - Softpop2 plan (docs only)
+
+- Added `docs/SOFTPOP2_PLAN.md` (Thoughts' plan verbatim + Policy check); See also in `docs/SOFTPOP_PLAN.md`. Implemented 2026-10-17.
+
 ## 2026-10-16 - Circuit builder GL, cables and grid (GB-1)
 
 - Screen-space WebGL cables and grid (`public/node-graph-gl-graph.js`). Pan/zoom reprojects a cached polyline list. SVG wires and the CSS grid hide while it is on. Default on; `?glGraph=0` restores the old draw. Look is approximate.

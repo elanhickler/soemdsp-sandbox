@@ -21,6 +21,7 @@
 #pragma once
 
 #include <soemdsp/soemdsp.hpp>
+#include <soemdsp/math/noise_colors_ext.h>
 
 namespace {
 namespace softpop {
@@ -34,8 +35,18 @@ static const unsigned int kSeedAudio = 0x5F03u;
 static const unsigned int kSeedDither = 0x5F04u;  // Oscillator dither stream
 
 // Color choices (choiceIds): White = flat U(-1,1) * sqrt 3, Gaussian = CLT-12,
-// Average = Gaussian streams + 2-tap averaged Pitch Mod noise, Pink, Brown.
-enum { kColorWhite = 0, kColorGaussian = 1, kColorAverage = 2, kColorPink = 3, kColorBrown = 4, kColorCount = 5 };
+// Average = Gaussian streams + 2-tap averaged Pitch Mod noise, Pink, Brown,
+// Blue (+3 dB/oct), Violet (+6 dB/oct). Blue/Violet appended so saved indices stay valid.
+enum {
+  kColorWhite = 0,
+  kColorGaussian = 1,
+  kColorAverage = 2,
+  kColorPink = 3,
+  kColorBrown = 4,
+  kColorBlue = 5,
+  kColorViolet = 6,
+  kColorCount = 7
+};
 
 static const double kLn2 = 0.6931471805599453;
 static const double kQMax = 2000.0;   // Width 0
@@ -47,7 +58,17 @@ static const double kModClamp = 4.0;  // n_pitch / n_amp clamp (sigma)
 // Pink: 1 / sqrt(sum of squares of the Kellet impulse response * 1/3)
 // (analytic, var 0.0375777). Brown: clamped walk measured variance 0.343276
 // (4000 chains x 1.2 M steps; uniform would be 1/3).
-static const double kCalColor[kColorCount] = {1.7320508075688772, 1.0, 1.0, 5.15863561638852, 1.7067830316927417};
+// Violet: first difference of U(-1,1), var 2/3 -> sqrt(3/2).
+// Blue: measured (differentiated Kellet pink).
+static const double kCalColor[kColorCount] = {
+  1.7320508075688772,
+  1.0,
+  1.0,
+  5.15863561638852,
+  1.7067830316927417,
+  8.67555230,          // Blue: 1 / RMS of differentiated Kellet pink
+  1.224744871391589    // Violet: sqrt(3/2)
+};
 
 // Face display: log 20 Hz .. 20 kHz histogram of the L channel's |fInst|.
 static const int kDisplayBins = 256;
@@ -61,7 +82,7 @@ static inline double pow_pos_d(double base, double e) { return dsp_exp(e * dsp_l
 static inline int color_index(double color) {
   int c = (int)(safe(color) + 0.5);
   if (c < kColorWhite) c = kColorWhite;
-  if (c > kColorBrown) c = kColorBrown;
+  if (c > kColorViolet) c = kColorViolet;
   return c;
 }
 
@@ -69,10 +90,12 @@ static inline double width_to_q(double width) {
   return kQMax * pow_pos_d(kQMin / kQMax, clamp(width, 0.0, 1.0));
 }
 
-static inline double color_sample(NoiseColorChannel& n, int color) {
+static inline double color_sample(NoiseColorChannel& n, NoiseColorExt& ext, int color) {
   if (color == kColorPink) return noise_color_sample(n, 3, 0.0, 1.0, 0.0) * kCalColor[kColorPink];
   if (color == kColorBrown) return noise_color_sample(n, 2, 0.0, 1.0, 0.0) * kCalColor[kColorBrown];
   if (color == kColorWhite) return noise_color_sample(n, 0, 0.0, 1.0, 0.0) * kCalColor[kColorWhite];
+  if (color == kColorBlue) return noise_color_sample_ext(n, ext, 5, 0.0, 1.0, 0.0) * kCalColor[kColorBlue];
+  if (color == kColorViolet) return noise_color_sample_ext(n, ext, 6, 0.0, 1.0, 0.0) * kCalColor[kColorViolet];
   return noise_color_sample(n, 1, 0.0, 1.0, 0.0);
 }
 
@@ -94,6 +117,9 @@ struct Noise {
   NoiseColorChannel nPitch;
   NoiseColorChannel nAmp;
   NoiseColorChannel nAudio;
+  NoiseColorExt ePitch;
+  NoiseColorExt eAmp;
+  NoiseColorExt eAudio;
   double np;     // last n_pitch (clamped, unit RMS)
   double na;     // last n_amp
   double audio;  // last N_audio (unit RMS) = the Noise output
@@ -109,6 +135,9 @@ static inline void noise_reset(Noise& n, unsigned int seed, unsigned int ch) {
   noise_color_reset(n.nPitch, seed_to_rng_state(seed_mix(seed, kSeedPitch, ch)));
   noise_color_reset(n.nAmp, seed_to_rng_state(seed_mix(seed, kSeedAmp, ch)));
   noise_color_reset(n.nAudio, seed_to_rng_state(seed_mix(seed, kSeedAudio, ch)));
+  noise_color_ext_reset(n.ePitch);
+  noise_color_ext_reset(n.eAmp);
+  noise_color_ext_reset(n.eAudio);
   n.np = n.na = n.audio = n.e = n.cv = n.npPrev = 0.0;
   n.cCents = 0.0;
   n.cColor = -1;
@@ -118,9 +147,9 @@ static inline void noise_reset(Noise& n, unsigned int seed, unsigned int ch) {
 // One sample of all three streams + the mean-corrected pitch offset.
 // Returns fInst = fEff * exp(e) (fEff when Pitch Mod is 0).
 static inline double noise_step(Noise& n, int color, double fEff, double pitchCents) {
-  const double xp = color_sample(n.nPitch, color);
-  const double xa = color_sample(n.nAmp, color);
-  n.audio = color_sample(n.nAudio, color);
+  const double xp = color_sample(n.nPitch, n.ePitch, color);
+  const double xa = color_sample(n.nAmp, n.eAmp, color);
+  n.audio = color_sample(n.nAudio, n.eAudio, color);
   const double w = clamp(xp, -kModClamp, kModClamp);
   n.np = color == kColorAverage ? (w + n.npPrev) * 0.7071067811865476 : w;
   n.npPrev = w;

@@ -2959,9 +2959,6 @@ IO_LABEL_TYPOGRAPHY_OWNER_SELECTOR = ".node-io-label"
 IO_LABEL_STATE_EXCEPTIONS = {
     # Bypassed modules keep I/O fully opaque above the dimmed body.
     ".dsp-node.bypassed .node-io-label": {"opacity": "1"},
-    # Label follows the row's hover / connection-selected tint.
-    ".node-io-row.patch-point-hover .node-io-label": {"color": "inherit"},
-    ".node-io-row.port-connection-selected .node-io-label": {"color": "inherit"},
 }
 
 
@@ -17363,6 +17360,17 @@ def require_native_module_contract(base_url: str) -> None:
             "soemdsp_softpop_filter_version",
             "soemdsp_softpop_filter_metadata_json",
             "soemdsp_softpop_filter_metadata_json_size",
+        ],
+        "softpop2": [
+            "soemdsp_softpop2_create",
+            "soemdsp_softpop2_destroy",
+            "soemdsp_softpop2_reset",
+            "soemdsp_softpop2_sample",
+            "soemdsp_softpop2_left",
+            "soemdsp_softpop2_right",
+            "soemdsp_softpop2_version",
+            "soemdsp_softpop2_metadata_json",
+            "soemdsp_softpop2_metadata_json_size",
         ],
         "helmholtz": [
             "soemdsp_helmholtz_create",

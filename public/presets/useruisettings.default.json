@@ -12,7 +12,7 @@
     "magnifierBorderThickness": 5,
     "magnifierBorderSoftness": 4,
     "showOriginMarker": false,
-    "tooltipTextSize": 64,
+    "tooltipTextSize": 14,
     "moduleLightBrightness": 100,
     "minimumGridBrightness": 20,
     "gridSpread": 121,
@@ -36,9 +36,9 @@
     "workspaceBackgroundColor": "#1d1b1b",
     "moduleFillColor": "#171a1f",
     "moduleFillAlpha": 100,
-    "moduleStrokeThickness": 3,
+
     "moduleStrokeColor": "#a19b9b",
-    "moduleStrokeAlpha": 46,
+
     "moduleSelectedStrokeColor": "#e2a86d",
     "moduleSelectedStrokeAlpha": 100,
     "sliderLabelColor": "#cfdde5",
@@ -105,9 +105,9 @@
     "workspaceBackgroundColor": false,
     "moduleFillColor": false,
     "moduleFillAlpha": false,
-    "moduleStrokeThickness": false,
+
     "moduleStrokeColor": false,
-    "moduleStrokeAlpha": false,
+
     "moduleSelectedStrokeColor": false,
     "moduleSelectedStrokeAlpha": false,
     "sliderLabelColor": false,

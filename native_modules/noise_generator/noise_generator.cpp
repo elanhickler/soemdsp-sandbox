@@ -1,12 +1,13 @@
 // soemdsp-native-module: noise_generator
 // soemdsp-native-label: Noise Generator
 // soemdsp-native-target: noiseGenerator
-// soemdsp-native-kind: noise
+// soemdsp-native-kind: noise
 // soemdsp-native-lib: https://github.com/elanhickler/soemdsp/blob/main/include/soemdsp/random/NoiseGenerator.hpp
 
 #include <wasm_simd128.h>
 
 #include <soemdsp/soemdsp.hpp>
+#include <soemdsp/math/noise_colors_ext.h>
 
 namespace {
 
@@ -21,6 +22,8 @@ static const int kMaxBlockFrames = 2048;
 struct NoiseGenState {
   NoiseColorChannel left;
   NoiseColorChannel right;
+  NoiseColorExt leftExt;
+  NoiseColorExt rightExt;
   int currentSeed;
   bool active;
   double lastLeft;
@@ -111,7 +114,12 @@ static void nextShapedBipolarPairSimd(NoiseColorChannel& chanL, NoiseColorChanne
   outR = uR * (1.0 - s) + gR * s;
 }
 
-static void channelSamplePairSimd(NoiseColorChannel& chanL, NoiseColorChannel& chanR, int mode, double mean, double deviation, double shape, double& outL, double& outR) {
+static void channelSamplePairSimd(NoiseColorChannel& chanL, NoiseColorExt& extL, NoiseColorChannel& chanR, NoiseColorExt& extR, int mode, double mean, double deviation, double shape, double& outL, double& outR) {
+  if (mode == 5 || mode == 6) {
+    outL = noise_color_sample_ext(chanL, extL, mode, mean, deviation, shape);
+    outR = noise_color_sample_ext(chanR, extR, mode, mean, deviation, shape);
+    return;
+  }
   double whiteL, whiteR;
   nextBipolarPairSimd(chanL, chanR, whiteL, whiteR);
   const v128_t white = wasm_f64x2_make(whiteL, whiteR);
@@ -214,8 +222,8 @@ static void channelSamplePairSimd(NoiseColorChannel& chanL, NoiseColorChannel& c
 // latency -- unlike Sabrina, which was deliberately kept native-only.
 static void noiseProcessBlockScalar(NoiseGenState& s, int mode, double mean, double deviation, double shape, double level, int frameCount) {
   for (int frame = 0; frame < frameCount; frame += 1) {
-    const double l = clamp11(noise_color_sample(s.left, mode, mean, deviation, shape)) * level;
-    const double r = clamp11(noise_color_sample(s.right, mode, mean, deviation, shape)) * level;
+    const double l = clamp11(noise_color_sample_ext(s.left, s.leftExt, mode, mean, deviation, shape)) * level;
+    const double r = clamp11(noise_color_sample_ext(s.right, s.rightExt, mode, mean, deviation, shape)) * level;
     s.blockOutLeft[frame] = l;
     s.blockOutRight[frame] = r;
   }
@@ -226,7 +234,7 @@ static void noiseProcessBlockScalar(NoiseGenState& s, int mode, double mean, dou
 static void noiseProcessBlockSimd(NoiseGenState& s, int mode, double mean, double deviation, double shape, double level, int frameCount) {
   for (int frame = 0; frame < frameCount; frame += 1) {
     double l, r;
-    channelSamplePairSimd(s.left, s.right, mode, mean, deviation, shape, l, r);
+    channelSamplePairSimd(s.left, s.leftExt, s.right, s.rightExt, mode, mean, deviation, shape, l, r);
     l = clamp11(l) * level;
     r = clamp11(r) * level;
     s.blockOutLeft[frame] = l;
@@ -271,12 +279,14 @@ extern "C" void soemdsp_noise_generator_sample(
     s.currentSeed = seed;
     noise_color_reset(s.left,  seedHash(seed, 0));
     noise_color_reset(s.right, seedHash(seed, 1));
+    noise_color_ext_reset(s.leftExt);
+    noise_color_ext_reset(s.rightExt);
   }
-  const int safeMode = mode < 0 ? 0 : (mode > 4 ? 4 : mode);
+  const int safeMode = mode < 0 ? 0 : (mode > 6 ? 6 : mode);
   const double safeDev = deviation < 0.0 ? 0.0 : deviation;
   const double safeShape = clamp(shape, 0.0, 1.0);
-  s.lastLeft  = clamp11(noise_color_sample(s.left,  safeMode, mean, safeDev, safeShape)) * level;
-  s.lastRight = clamp11(noise_color_sample(s.right, safeMode, mean, safeDev, safeShape)) * level;
+  s.lastLeft  = clamp11(noise_color_sample_ext(s.left,  s.leftExt,  safeMode, mean, safeDev, safeShape)) * level;
+  s.lastRight = clamp11(noise_color_sample_ext(s.right, s.rightExt, safeMode, mean, safeDev, safeShape)) * level;
 }
 
 extern "C" double soemdsp_noise_generator_left(int handle) {
@@ -321,8 +331,10 @@ extern "C" void soemdsp_noise_generator_process_block(
     s.currentSeed = seed;
     noise_color_reset(s.left, seedHash(seed, 0));
     noise_color_reset(s.right, seedHash(seed, 1));
+    noise_color_ext_reset(s.leftExt);
+    noise_color_ext_reset(s.rightExt);
   }
-  const int safeMode = mode < 0 ? 0 : (mode > 4 ? 4 : mode);
+  const int safeMode = mode < 0 ? 0 : (mode > 6 ? 6 : mode);
   const double safeDev = deviation < 0.0 ? 0.0 : deviation;
   const double safeShape = clamp(shape, 0.0, 1.0);
   const int safeFrameCount = frameCount < 1 ? 1 : (frameCount > kMaxBlockFrames ? kMaxBlockFrames : frameCount);

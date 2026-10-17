@@ -241,11 +241,9 @@
     } else {
       fillPoints(batch, outer, face, aa);
     }
+    // Caption is screen-space graph text so it rebakes at the settled size.
+    // The face canvas stays the zoom-1 plate and would only scale that bake.
     const ink = css(m.textColor);
-    if (m.caption) {
-      text(batch, m.caption, b.x + b.w * 0.5, b.y + b.h * 0.5,
-        { px: Math.min(b.h * 0.42, b.w * 0.5), maxWidth: (b.w - sw * 2) * 0.86, rgba: ink });
-    }
     if (L.rects.label && m.labelText && !m.labelEditing) {
       const r = L.rects.label;
       text(batch, m.labelText, r.x, r.y + r.h * 0.5, { px: r.h * 0.66, maxWidth: r.w, rgba: ink, align: "left" });

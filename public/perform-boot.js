@@ -21,7 +21,7 @@
   var PROTOCOL_TYPE = "soemdsp-perform";
   var PROTOCOL_V = 1;
   var BODY_CLASS = "node-perform-mode";
-  var CACHE_TAG = "mode-scheme-perform-1";
+  var CACHE_TAG = "perform-param-io-1-wm";
   var CONTROLLER_TYPES = {
     knob: true,
     pluginSlider: true,
@@ -113,6 +113,16 @@
   function openMobilePerformCanvas() {
     ensureBodyClassEarly();
     ensurePerformCssEarly();
+    // Whole-module embed (embed-module.js) pins one fixed tile. The settle re-opens
+    // after interface ready would rebuild that tile each time (a visible flash).
+    var wholeModule = document.documentElement.dataset.soemdspWholeModule;
+    if (
+      wholeModule && wholeModule !== "failed"
+      && global.nodeGraphMvp && global.nodeGraphMvp.layoutCanvasActive
+      && document.querySelector(".node-layout-canvas-tile > .node-whole-module-face")
+    ) {
+      return true;
+    }
     var opened = false;
     if (typeof global.nodeGraphLayoutCanvasOpen === "function") {
       opened = Boolean(global.nodeGraphLayoutCanvasOpen("perform", { silent: true }));

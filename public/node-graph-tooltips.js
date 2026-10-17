@@ -56,12 +56,11 @@ function sandboxInstallNativeTitlePropertyGuard(proto) {
   });
 }
 
-function installSandboxNativeTooltipBan() {
-  if (window.__sandboxNativeTooltipBanInstalled) {
-    sandboxStripNativeTitleAttributes();
+function installSandboxNativeTooltipHooks() {
+  if (window.__sandboxNativeTooltipHooksInstalled) {
     return;
   }
-  window.__sandboxNativeTooltipBanInstalled = true;
+  window.__sandboxNativeTooltipHooksInstalled = true;
   const nativeSetAttribute = Element.prototype.setAttribute;
   Element.prototype.setAttribute = function setAttributeWithoutNativeTitle(name, value) {
     if (String(name).toLowerCase() === "title") {
@@ -78,6 +77,16 @@ function installSandboxNativeTooltipBan() {
   };
   sandboxInstallNativeTitlePropertyGuard(HTMLElement.prototype);
   sandboxInstallNativeTitlePropertyGuard(SVGElement.prototype);
+}
+
+// The subtree observer walks every node the patch build inserts. That walk
+// ran while the loading bar still said "loading tooltips". Hooks cover titles
+// set from script. The observer starts after the boot screen drops.
+function installSandboxNativeTooltipObserver() {
+  if (window.__sandboxNativeTooltipObserverInstalled) {
+    return;
+  }
+  window.__sandboxNativeTooltipObserverInstalled = true;
   const observer = new MutationObserver((mutations) => {
     for (const mutation of mutations) {
       if (mutation.type === "attributes" && mutation.attributeName === "title") {
@@ -96,7 +105,23 @@ function installSandboxNativeTooltipBan() {
     childList: true,
     subtree: true,
   });
+}
+
+function installSandboxNativeTooltipBan() {
+  installSandboxNativeTooltipHooks();
   sandboxStripNativeTitleAttributes();
+  if (document.documentElement.dataset.nodeSandboxInterfaceReady === "true") {
+    installSandboxNativeTooltipObserver();
+    return;
+  }
+  if (window.__sandboxNativeTooltipObserverArmed) {
+    return;
+  }
+  window.__sandboxNativeTooltipObserverArmed = true;
+  window.addEventListener("nodeSandboxInterfaceReady", () => {
+    sandboxStripNativeTitleAttributes();
+    installSandboxNativeTooltipObserver();
+  }, { once: true });
 }
 
 function nodeGraphTooltipTemplate(key) {

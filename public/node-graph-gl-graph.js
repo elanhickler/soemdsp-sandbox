@@ -10,7 +10,29 @@ const nodeGraphGlGraphState = {
   displays: [],
   chrome: { titles: [], labels: [], jacks: [], sliders: [], keys: [], graphs: [] },
   screen: new Float32Array(0),
+  // null = the workspace camera. Set only while nodeGraphGlGraphPresentTile runs this same pass
+  // for a perform / layout canvas whole-module tile: { host, ids, zoom, cam, toWorld }.
+  view: null,
 };
+
+// Client -> graph point for the pass being built (workspace zoom surface, or the tile's zoom-1 module).
+function nodeGraphGlGraphToWorld(clientX, clientY) {
+  const view = nodeGraphGlGraphState.view;
+  return view ? view.toWorld(clientX, clientY) : nodeGraphClientToZoomSurfacePoint(clientX, clientY);
+}
+
+function nodeGraphGlGraphZoom() {
+  const view = nodeGraphGlGraphState.view;
+  if (view) return view.zoom;
+  return typeof nodeGraphZoom === "function" ? nodeGraphZoom() : 1;
+}
+
+function nodeGraphGlGraphGeometry(id) {
+  const view = nodeGraphGlGraphState.view;
+  if (!view) return typeof nodeGraphModuleGeometryGet === "function" ? nodeGraphModuleGeometryGet(id) : null;
+  if (!view.ids.has(id) || typeof nodeGraphModuleGeometryPublishFromDom !== "function") return null;
+  return nodeGraphModuleGeometryPublishFromDom(id, { toSurface: view.toWorld, store: false });
+}
 
 function nodeGraphGlGraphEnsureCanvas(host, key, id, className, beforeSelector) {
   let canvas = nodeGraphGlGraphState[key];
@@ -40,70 +62,50 @@ function nodeGraphGlGraphParseCssColor(color, fallback) {
   const text = String(color || "").trim();
   const hex = nodeGraphGlGraphCssColor(text);
   if (/^#[0-9a-fA-F]{6}$/.test(text)) return hex;
-  const rgb = text.match(/rgba?\(\s*([\d.]+)[,\s]+([\d.]+)[,\s]+([\d.]+)/);
+  const rgb = text.match(/rgba?\(\s*([\d.]+)[,\s]+([\d.]+)[,\s]+([\d.]+)(?:[,\s/]+([\d.]+)(%?))?/);
   if (rgb) {
-    return [Number(rgb[1]) / 255, Number(rgb[2]) / 255, Number(rgb[3]) / 255, 1];
+    let alpha = 1;
+    if (rgb[4] != null && rgb[4] !== "") {
+      alpha = rgb[5] === "%" ? Number(rgb[4]) / 100 : Number(rgb[4]);
+      if (alpha > 1) alpha /= 255;
+    }
+    return [
+      Number(rgb[1]) / 255,
+      Number(rgb[2]) / 255,
+      Number(rgb[3]) / 255,
+      Number.isFinite(alpha) ? Math.max(0, Math.min(1, alpha)) : 1,
+    ];
   }
   return fallback;
 }
 
-function nodeGraphGlGraphEdgeNotches(box, points, reach) {
-  const left = [];
-  const right = [];
-  const top = [];
-  const bottom = [];
-  const x1 = box.x + box.w;
-  const y1 = box.y + box.h;
-  for (let i = 0; i < points.length; i += 1) {
-    const p = points[i];
-    if (!p || p.visible === false) continue;
-    const x = Number(p.x);
-    const y = Number(p.y);
-    if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
-    const dl = Math.abs(x - box.x);
-    const dr = Math.abs(x - x1);
-    const dt = Math.abs(y - box.y);
-    const db = Math.abs(y - y1);
-    const nearest = Math.min(dl, dr, dt, db);
-    if (nearest > reach) continue;
-    if (dl <= dr && dl <= dt && dl <= db) left.push(y);
-    else if (dr <= dt && dr <= db) right.push(y);
-    else if (dt <= db) top.push(x);
-    else bottom.push(x);
+function nodeGraphGlGraphPortBrightness(moduleEl, port) {
+  const name = String(port || "");
+  let connected = false;
+  if (moduleEl && name && typeof CSS !== "undefined" && CSS.escape) {
+    const esc = CSS.escape(name);
+    const el = moduleEl.querySelector(
+      `.node-port[data-port="${esc}"], .node-param-port[data-port="${esc}"]`,
+    );
+    connected = Boolean(el?.classList.contains("connected-port"));
   }
-  return { left, right, top, bottom };
-}
-
-function nodeGraphGlGraphStrokeRuns(start, end, centers, gap) {
-  const half = gap * 0.5;
-  const cuts = (centers || []).slice().sort((a, b) => a - b);
-  const runs = [];
-  let cursor = start;
-  for (let i = 0; i < cuts.length; i += 1) {
-    const lo = cuts[i] - half;
-    const hi = cuts[i] + half;
-    if (hi <= start || lo >= end) continue;
-    const cutLo = Math.max(start, lo);
-    if (cutLo - cursor > 0.4) runs.push([cursor, cutLo]);
-    cursor = Math.max(cursor, Math.min(end, hi));
-  }
-  if (end - cursor > 0.4) runs.push([cursor, end]);
-  return runs;
+  const raw = getComputedStyle(moduleEl || document.documentElement).getPropertyValue(
+    connected ? "--node-port-used-brightness" : "--node-port-unused-brightness",
+  );
+  let amount = Number.parseFloat(raw);
+  if (!Number.isFinite(amount)) return connected ? 0.85 : 0.68;
+  if (String(raw).includes("%") || amount > 1) amount /= 100;
+  return Math.max(0, Math.min(1, amount));
 }
 
 function nodeGraphGlGraphRebuildPlates() {
   const plates = [];
   const displays = [];
-  const workspace = document.getElementById("nodeGraphWorkspace");
-  const diameter = Number.parseFloat(
-    workspace ? getComputedStyle(workspace).getPropertyValue("--node-port-diameter") : "",
-  ) || 14;
-  const gap = diameter * 1.55;
   const nodes = Array.isArray(nodeGraphMvp?.patch?.nodes) ? nodeGraphMvp.patch.nodes : [];
   for (let i = 0; i < nodes.length; i += 1) {
     const id = String(nodes[i]?.id || "");
     if (!id) continue;
-    const geo = typeof nodeGraphModuleGeometryGet === "function" ? nodeGraphModuleGeometryGet(id) : null;
+    const geo = nodeGraphGlGraphGeometry(id);
     const box = geo?.box;
     if (!box || !(box.w > 1) || !(box.h > 1)) continue;
     const el = typeof nodeGraphNodeElement === "function" ? nodeGraphNodeElement(id) : null;
@@ -114,7 +116,6 @@ function nodeGraphGlGraphRebuildPlates() {
       getComputedStyle(el).getPropertyValue("--node-module-fill"),
       [0.09, 0.1, 0.12, 1],
     );
-    const pins = [].concat(geo?.ports || [], geo?.paramJacks || []);
     plates.push({
       id,
       x: box.x,
@@ -123,8 +124,6 @@ function nodeGraphGlGraphRebuildPlates() {
       h: box.h,
       fill,
       selected: el.classList.contains("selected"),
-      gap,
-      notches: nodeGraphGlGraphEdgeNotches(box, pins, diameter),
     });
     const canvases = el.querySelectorAll(".node-display-canvas");
     for (let c = 0; c < canvases.length; c += 1) {
@@ -133,10 +132,10 @@ function nodeGraphGlGraphRebuildPlates() {
       const rect = face.getBoundingClientRect();
       if (!(rect.width > 1) || !(rect.height > 1)) continue;
       const tl = typeof nodeGraphClientToZoomSurfacePoint === "function"
-        ? nodeGraphClientToZoomSurfacePoint(rect.left, rect.top)
+        ? nodeGraphGlGraphToWorld(rect.left, rect.top)
         : { x: box.x, y: box.y };
       const br = typeof nodeGraphClientToZoomSurfacePoint === "function"
-        ? nodeGraphClientToZoomSurfacePoint(rect.right, rect.bottom)
+        ? nodeGraphGlGraphToWorld(rect.right, rect.bottom)
         : { x: box.x + box.w, y: box.y + box.h };
       displays.push({
         canvas: face,
@@ -163,8 +162,8 @@ function nodeGraphGlGraphWorldBox(el) {
   if (!el || typeof nodeGraphClientToZoomSurfacePoint !== "function") return null;
   const rect = el.getBoundingClientRect();
   if (!(rect.width > 1) || !(rect.height > 1)) return null;
-  const tl = nodeGraphClientToZoomSurfacePoint(rect.left, rect.top);
-  const br = nodeGraphClientToZoomSurfacePoint(rect.right, rect.bottom);
+  const tl = nodeGraphGlGraphToWorld(rect.left, rect.top);
+  const br = nodeGraphGlGraphToWorld(rect.right, rect.bottom);
   const w = br.x - tl.x;
   const h = br.y - tl.y;
   if (!(w > 0.5) || !(h > 0.5)) return null;
@@ -197,6 +196,7 @@ function nodeGraphGlGraphRebuildChrome() {
   const nodes = Array.isArray(nodeGraphMvp?.patch?.nodes) ? nodeGraphMvp.patch.nodes : [];
   for (let i = 0; i < nodes.length; i += 1) {
     const id = String(nodes[i]?.id || "");
+    if (nodeGraphGlGraphState.view && !nodeGraphGlGraphState.view.ids.has(id)) continue;
     const el = id && typeof nodeGraphNodeElement === "function" ? nodeGraphNodeElement(id) : null;
     if (!el || !el.isConnected || el.hidden) continue;
     if (el.querySelector(":scope > .node-text-box-body")) continue;
@@ -220,13 +220,14 @@ function nodeGraphGlGraphRebuildChrome() {
       const fontPx = Number.parseFloat(getComputedStyle(ioLabels[n]).fontSize) || 13;
       labels.push({
         el: ioLabels[n],
+        box,
         x: align === "right" ? box.x + box.w : box.x,
         y: box.y + box.h * 0.5,
         fontPx,
         align,
       });
     }
-    const geo = typeof nodeGraphModuleGeometryGet === "function" ? nodeGraphModuleGeometryGet(id) : null;
+    const geo = nodeGraphGlGraphGeometry(id);
     const pins = []
       .concat(geo?.ports || [])
       .concat(geo?.paramJacks || []);
@@ -243,13 +244,17 @@ function nodeGraphGlGraphRebuildChrome() {
         : "";
       const key = `${Math.round(px)}:${Math.round(py)}`;
       if (jacks.some((jack) => jack.key === key)) continue;
+      const rgba = nodeGraphGlGraphParseCssColor(color, nodeGraphGlGraphCssColor(color));
+      rgba[3] *= nodeGraphGlGraphPortBrightness(el, port);
       jacks.push({
         key,
+        id,
         x: px,
         y: py,
         r: radius,
         inwardRight: io !== "output",
-        rgba: nodeGraphGlGraphCssColor(color),
+        inlet: true,
+        rgba,
       });
     }
     const readouts = el.querySelectorAll(".node-slider-readout");
@@ -262,6 +267,8 @@ function nodeGraphGlGraphRebuildChrome() {
       const labelEl = readout.querySelector(".node-slider-readout-label");
       const valueBox = nodeGraphGlGraphWorldBox(valueEl);
       const labelBox = nodeGraphGlGraphWorldBox(labelEl);
+      const row = readout.closest(".node-parameter-row");
+      const rowBox = nodeGraphGlGraphWorldBox(row);
       sliders.push({
         readout,
         input,
@@ -269,6 +276,10 @@ function nodeGraphGlGraphRebuildChrome() {
         y: box.y,
         w: box.w,
         h: box.h,
+        hitX: rowBox ? rowBox.x : box.x,
+        hitY: rowBox ? rowBox.y : box.y,
+        hitW: rowBox ? rowBox.w : box.w,
+        hitH: rowBox ? rowBox.h : box.h,
         valueEl,
         valueBox,
         valueAnchor: valueEl && valueBox ? nodeGraphGlGraphTextAnchor(valueEl, valueBox) : null,
@@ -307,16 +318,31 @@ function nodeGraphGlGraphTextOpts(opts) {
 }
 
 function nodeGraphGlGraphSettleTextBake() {
-  const zoom = typeof nodeGraphZoom === "function" ? nodeGraphZoom() : 1;
+  const zoom = nodeGraphGlGraphZoom();
   const chrome = nodeGraphGlGraphState.chrome || {};
   let maxPx = 16;
-  for (const title of chrome.titles || []) maxPx = Math.max(maxPx, (title.h || 16) * 0.78 * zoom);
+  for (const title of chrome.titles || []) {
+    const chars = Math.max(1, String(title.el?.textContent || "").trim().length);
+    const fit = Math.min((title.h || 16) * 0.62, (title.box?.w || 16) / chars / 0.62);
+    maxPx = Math.max(maxPx, fit * zoom);
+  }
+  const buttonNodes = (nodeGraphGlGraphState.view?.host || document)
+    .querySelectorAll(".node-plugin-momentary-button, .node-plugin-toggle-button");
+  for (let i = 0; i < buttonNodes.length; i += 1) {
+    const box = nodeGraphGlGraphWorldBox(buttonNodes[i]);
+    if (!box) continue;
+    maxPx = Math.max(maxPx, Math.min(box.h * 0.42, box.w * 0.5) * zoom);
+  }
   for (const label of chrome.labels || []) maxPx = Math.max(maxPx, (label.fontPx || 13) * zoom);
   for (const slider of chrome.sliders || []) {
-    if (slider.labelBox) maxPx = Math.max(maxPx, slider.labelBox.h * 0.8 * zoom);
-    if (slider.valueBox) maxPx = Math.max(maxPx, slider.valueBox.h * 0.85 * zoom);
+    const labelPx = Number.parseFloat(slider.labelEl ? getComputedStyle(slider.labelEl).fontSize : "");
+    const valuePx = Number.parseFloat(slider.valueEl ? getComputedStyle(slider.valueEl).fontSize : "");
+    if (labelPx > 0) maxPx = Math.max(maxPx, labelPx * zoom);
+    if (valuePx > 0) maxPx = Math.max(maxPx, valuePx * zoom);
   }
-  const px = Math.max(16, Math.min(384, Math.round(maxPx)));
+  let px = Math.max(16, Math.min(384, Math.round(maxPx)));
+  // Tiles only raise the shared bake, so several tiles never rebake against each other.
+  if (nodeGraphGlGraphState.view) px = Math.max(px, nodeGraphGlGraphState.emojiPx || 0);
   nodeGraphGlGraphState.emojiPx = px;
   if (typeof nodeGraphGlLinesSetGlyphBakePx === "function") nodeGraphGlLinesSetGlyphBakePx(px);
 }
@@ -325,32 +351,19 @@ function nodeGraphGlGraphOutside(x, y, w, h, cssW, cssH, pad = 48) {
   return x + w < -pad || y + h < -pad || x > cssW + pad || y > cssH + pad;
 }
 
+function nodeGraphGlGraphDrawOver(batch, draw) {
+  if (!batch) return;
+  batch._over = true;
+  draw();
+  batch._over = false;
+}
+
 function nodeGraphGlGraphDrawChrome(batch, toX, toY, zoom, cssW, cssH) {
   const chrome = nodeGraphGlGraphState.chrome;
   if (!chrome) return;
   const ink = [1, 1, 1, 1];
   const well = [0.031, 0.043, 0.051, 1];
-  const amount = [0.05, 0.09, 0.12, 1];
   const valueFill = [0.27, 0.64, 1, 0.9];
-  const jacks = chrome.jacks || [];
-  const jackHalf = Math.max(0.6, 0.7 * zoom);
-  for (let i = 0; i < jacks.length; i += 1) {
-    const jack = jacks[i];
-    const cx = toX(jack.x);
-    const cy = toY(jack.y);
-    const r = Math.max(2, jack.r * zoom);
-    if (nodeGraphGlGraphOutside(cx - r, cy - r, r * 2, r * 2, cssW, cssH, r)) continue;
-    const steps = 10;
-    const pts = new Float32Array((steps + 1) * 2);
-    const a0 = jack.inwardRight ? -Math.PI / 2 : Math.PI / 2;
-    const a1 = jack.inwardRight ? Math.PI / 2 : Math.PI * 1.5;
-    for (let s = 0; s <= steps; s += 1) {
-      const a = a0 + (a1 - a0) * (s / steps);
-      pts[s * 2] = cx + Math.cos(a) * r;
-      pts[s * 2 + 1] = cy + Math.sin(a) * r;
-    }
-    nodeGraphGlLinesPolyline(batch, pts, jackHalf, 0.4, jack.rgba);
-  }
   const sliders = chrome.sliders || [];
   for (let i = 0; i < sliders.length; i += 1) {
     const slider = sliders[i];
@@ -359,32 +372,40 @@ function nodeGraphGlGraphDrawChrome(batch, toX, toY, zoom, cssW, cssH) {
     const w = slider.w * zoom;
     const h = slider.h * zoom;
     if (nodeGraphGlGraphOutside(x, y, w, h, cssW, cssH)) continue;
-    nodeGraphGlLinesRect(batch, x, y, w, h, well);
-    const readout = slider.readout;
-    const amountStart = nodeGraphGlGraphCssPx(readout, "--amount-start");
-    const amountEnd = nodeGraphGlGraphCssPx(readout, "--amount-end");
-    if (amountEnd > amountStart) {
-      nodeGraphGlLinesRect(
-        batch,
-        x + amountStart * zoom,
-        y,
-        (amountEnd - amountStart) * zoom,
-        h,
-        amount,
-      );
-    }
-    const valueStart = nodeGraphGlGraphCssPx(readout, "--value-start");
-    const valueEnd = nodeGraphGlGraphCssPx(readout, "--value-end");
-    if (valueEnd > valueStart) {
-      nodeGraphGlLinesRect(
-        batch,
-        x + valueStart * zoom,
-        y,
-        (valueEnd - valueStart) * zoom,
-        h,
-        valueFill,
-      );
-    }
+    nodeGraphGlGraphDrawOver(batch, () => {
+      nodeGraphGlLinesRect(batch, x, y, w, h, well);
+      const readout = slider.readout;
+      const divided = readout?.classList?.contains("choices-divided");
+      if (divided) {
+        const cell = readout.querySelector(".node-choice-debug-cell-fill");
+        const fx = Number(cell?.getAttribute("x"));
+        const fw = Number(cell?.getAttribute("width"));
+        if (fw > 0) {
+          nodeGraphGlLinesRect(batch, x + fx * zoom, y, fw * zoom, h, valueFill);
+        }
+        const dividers = readout.querySelectorAll(".node-choice-debug-divider");
+        const line = [0.62, 0.64, 0.66, 0.55];
+        for (let d = 0; d < dividers.length; d += 1) {
+          const dx = Number(dividers[d].getAttribute("x1"));
+          if (!Number.isFinite(dx)) continue;
+          nodeGraphGlLinesRect(batch, x + dx * zoom, y, Math.max(1, 0.5 * zoom), h, line);
+        }
+        return;
+      }
+      // No amount fill (track start -> position): sliders show only the position handle.
+      const valueStart = nodeGraphGlGraphCssPx(readout, "--value-start");
+      const valueEnd = nodeGraphGlGraphCssPx(readout, "--value-end");
+      if (valueEnd > valueStart) {
+        nodeGraphGlLinesRect(
+          batch,
+          x + valueStart * zoom,
+          y,
+          (valueEnd - valueStart) * zoom,
+          h,
+          valueFill,
+        );
+      }
+    });
     if (typeof nodeGraphGlLinesText === "function") {
       const labelText = String(slider.labelEl?.textContent || "").replace(/\s+/g, " ").trim();
       const valueText = String(slider.valueEl?.textContent || "").replace(/\s+/g, " ").trim();
@@ -394,7 +415,13 @@ function nodeGraphGlGraphDrawChrome(batch, toX, toY, zoom, cssW, cssH) {
           labelText,
           toX(slider.labelAnchor.x),
           toY(slider.labelBox.y + slider.labelBox.h * 0.5),
-          nodeGraphGlGraphTextOpts({ px: Math.max(8, slider.labelBox.h * zoom * 0.8), rgba: ink, align: slider.labelAnchor.align, baseline: "middle", weight: 400 }),
+          nodeGraphGlGraphTextOpts({
+            px: Math.max(8, (Number.parseFloat(getComputedStyle(slider.labelEl).fontSize) || 12.6) * zoom),
+            rgba: ink,
+            align: slider.labelAnchor.align,
+            baseline: "middle",
+            weight: 400,
+          }),
         );
       }
       if (valueText && slider.valueBox && slider.valueAnchor) {
@@ -403,7 +430,13 @@ function nodeGraphGlGraphDrawChrome(batch, toX, toY, zoom, cssW, cssH) {
           valueText,
           toX(slider.valueAnchor.x),
           toY(slider.valueBox.y + slider.valueBox.h * 0.5),
-          nodeGraphGlGraphTextOpts({ px: Math.max(8, slider.valueBox.h * zoom * 0.85), rgba: ink, align: slider.valueAnchor.align, baseline: "middle", weight: 400 }),
+          nodeGraphGlGraphTextOpts({
+            px: Math.max(8, (Number.parseFloat(getComputedStyle(slider.valueEl).fontSize) || 13.8) * zoom),
+            rgba: ink,
+            align: slider.valueAnchor.align,
+            baseline: "middle",
+            weight: 400,
+          }),
         );
       }
     }
@@ -433,8 +466,12 @@ function nodeGraphGlGraphDrawChrome(batch, toX, toY, zoom, cssW, cssH) {
     const tx = toX(title.x);
     const ty = toY(title.y);
     if (nodeGraphGlGraphOutside(tx, ty, 0, 0, cssW, cssH, 480)) continue;
+    const chars = Math.max(1, text.length);
+    const fit = Math.min(title.h * 0.62, (title.box?.w || title.h) / chars / 0.62);
+    const room = Math.max(8, ((title.box?.w || 0) - 12) * zoom);
     nodeGraphGlLinesText(batch, text, tx, ty, nodeGraphGlGraphTextOpts({
-      px: Math.max(9, title.h * zoom * 0.78),
+      px: Math.max(8, fit * zoom),
+      maxWidth: room,
       rgba: [1, 1, 1, 1],
       align: "center",
       baseline: "middle",
@@ -452,7 +489,7 @@ function nodeGraphGlGraphDrawChrome(batch, toX, toY, zoom, cssW, cssH) {
     const w = key.w * zoom;
     const h = key.h * zoom;
     if (nodeGraphGlGraphOutside(x, y, w, h, cssW, cssH)) continue;
-    nodeGraphGlLinesRect(batch, x, y, w, h, down ? keyDown : keyIdle);
+    nodeGraphGlGraphDrawOver(batch, () => nodeGraphGlLinesRect(batch, x, y, w, h, down ? keyDown : keyIdle));
     if (key.label && typeof nodeGraphGlLinesText === "function") {
       nodeGraphGlLinesText(batch, key.label, x + w * 0.5, y + h * 0.5, nodeGraphGlGraphTextOpts({
         px: Math.max(8, h * 0.42),
@@ -471,7 +508,8 @@ function nodeGraphGlGraphDrawChrome(batch, toX, toY, zoom, cssW, cssH) {
     const w = face.w * zoom;
     const h = face.h * zoom;
     if (nodeGraphGlGraphOutside(x, y, w, h, cssW, cssH)) continue;
-    nodeGraphGlLinesRect(batch, x, y, w, h, [0.04, 0.05, 0.07, 1]);
+    nodeGraphGlGraphDrawOver(batch, () => {
+      nodeGraphGlLinesRect(batch, x, y, w, h, [0.04, 0.05, 0.07, 1]);
     const patchNode = typeof nodeGraphPatchNode === "function" ? nodeGraphPatchNode(face.id) : null;
     const graph = patchNode && typeof nodeGraphGraphForNode === "function"
       ? nodeGraphGraphForNode(patchNode)
@@ -488,6 +526,48 @@ function nodeGraphGlGraphDrawChrome(batch, toX, toY, zoom, cssW, cssH) {
       }
       nodeGraphGlLinesPolyline(batch, pts, Math.max(0.8, zoom * 0.6), 0.4, [0.85, 0.9, 0.95, 1]);
     }
+    });
+  }
+}
+
+function nodeGraphGlGraphDrawVeils(batch, toX, toY, zoom) {
+  if (!batch || typeof nodeGraphGlLinesVeil !== "function") return;
+  const plates = nodeGraphGlGraphState.plates || [];
+  for (let i = 0; i < plates.length; i += 1) {
+    const plate = plates[i];
+    const el = typeof nodeGraphNodeElement === "function" ? nodeGraphNodeElement(plate.id) : null;
+    if (!el) continue;
+    const veiled = el.classList.contains("bypassed")
+      || el.querySelector(":scope > .node-module-under-construction");
+    if (!veiled) continue;
+    nodeGraphGlLinesVeil(batch, toX(plate.x), toY(plate.y), plate.w * zoom, plate.h * zoom);
+  }
+}
+
+function nodeGraphGlGraphDrawButtonCaptions(batch, toX, toY, zoom, cssW, cssH) {
+  if (!batch || typeof nodeGraphGlLinesText !== "function") return;
+  const buttons = (nodeGraphGlGraphState.view?.host || document)
+    .querySelectorAll(".node-plugin-momentary-button, .node-plugin-toggle-button");
+  for (let i = 0; i < buttons.length; i += 1) {
+    const button = buttons[i];
+    const caption = String(button.dataset.glCaption || "").replace(/\s+/g, " ").trim();
+    if (!caption) continue;
+    const box = nodeGraphGlGraphWorldBox(button);
+    if (!box) continue;
+    const x = toX(box.x);
+    const y = toY(box.y);
+    const w = box.w * zoom;
+    const h = box.h * zoom;
+    if (nodeGraphGlGraphOutside(x, y, w, h, cssW, cssH, 480)) continue;
+    const px = Math.min(h * 0.42, w * 0.5);
+    nodeGraphGlLinesText(batch, caption, x + w * 0.5, y + h * 0.5, nodeGraphGlGraphTextOpts({
+      px: Math.max(8, px),
+      maxWidth: Math.max(8, w * 0.86),
+      rgba: nodeGraphGlGraphCssColor(button.dataset.glCaptionColor || "#ffffff"),
+      align: "center",
+      baseline: "middle",
+      weight: 400,
+    }));
   }
 }
 
@@ -557,6 +637,7 @@ function nodeGraphGlGraphPushWire(wires, from, to, color, toColor, zoom, wire, s
   wires.push({
     rgba,
     kind: kind || "",
+    trace: Array.isArray(wire?.tracePoints) && wire.tracePoints.length > 0,
     index: Number.isInteger(index) ? index : -1,
     xy: nodeGraphGlGraphShape(from, to, wire, zoom),
     dots: [
@@ -661,14 +742,21 @@ function nodeGraphGlGraphFit(canvas, cssW, cssH) {
 }
 
 function nodeGraphGlGraphPresent() {
-  const host = document.getElementById("nodeGraphWorkspace");
+  const view = nodeGraphGlGraphState.view;
+  const host = view ? view.host : document.getElementById("nodeGraphWorkspace");
   if (!host || typeof nodeGraphGlLinesBegin !== "function") return false;
-  host.classList.add("gl-graph-on");
+  if (!view) {
+    nodeGraphGlGraphPresentTiles();
+    // Perform mode hides the workspace: nothing of it is on screen (its modules live in tiles).
+    if (!host.clientWidth && document.body?.classList.contains("node-perform-mode")) return true;
+    host.classList.add("gl-graph-on");
+  }
   const canvas = nodeGraphGlGraphEnsureCanvas(
-    host, "canvas", "nodeGlGraphCanvas", "node-gl-graph-canvas", ".node-graph-zoom-surface",
+    host, "canvas", view ? "" : "nodeGlGraphCanvas", "node-gl-graph-canvas",
+    view ? ":scope > .dsp-node" : ".node-graph-zoom-surface",
   );
   const dotsCanvas = nodeGraphGlGraphEnsureCanvas(
-    host, "dotsCanvas", "nodeGlGraphDots", "node-gl-graph-dots", null,
+    host, "dotsCanvas", view ? "" : "nodeGlGraphDots", "node-gl-graph-dots", null,
   );
   const cssW = Math.max(1, host.clientWidth || 1);
   const cssH = Math.max(1, host.clientHeight || 1);
@@ -680,7 +768,7 @@ function nodeGraphGlGraphPresent() {
     if (typeof nodeGraphGlLinesFillBlack === "function") nodeGraphGlLinesFillBlack(canvas);
     return false;
   }
-  const zoom = typeof nodeGraphZoom === "function" ? nodeGraphZoom() : 1;
+  const zoom = nodeGraphGlGraphZoom();
   const gesturing = typeof nodeGraphViewportHoldsDisplays === "function"
     && nodeGraphViewportHoldsDisplays();
   if (!gesturing) nodeGraphGlGraphSettleTextBake();
@@ -692,43 +780,17 @@ function nodeGraphGlGraphPresent() {
     dotSize = Number.parseFloat(style.getPropertyValue("--node-wire-patch-point-size")) || 8;
     nodeGraphGlGraphState.thick = thick;
     nodeGraphGlGraphState.dotSize = dotSize;
+    nodeGraphGlGraphState.traceThick = Number.parseFloat(style.getPropertyValue("--node-trace-wire-thickness")) || 1;
   }
   // Zoom-1 sizes. The camera scales them, same as the module plates.
   const halfPx = Math.max(0.4, thick * 0.5 * zoom);
+  const traceHalf = Math.max(0.4, (nodeGraphGlGraphState.traceThick || 1) * 0.5 * zoom);
   const dotR = Math.max(0.6, dotSize * 0.5 * zoom);
-  const cam = typeof nodeGraphWireCameraViewBox === "function"
-    ? nodeGraphWireCameraViewBox(host)
-    : { x: 0, y: 0 };
+  let cam = { x: 0, y: 0 };
+  if (view) cam = view.cam;
+  else if (typeof nodeGraphWireCameraViewBox === "function") cam = nodeGraphWireCameraViewBox(host);
   const toX = (x) => (x - cam.x) * zoom;
   const toY = (y) => (y - cam.y) * zoom;
-
-  if (nodeGraphMvp?.gridVisible === true && typeof nodeGraphGridScreenCellPx === "function") {
-    let cell = nodeGraphGridScreenCellPx(host, zoom);
-    let cw = cell.width;
-    let ch = cell.height;
-    while (cw > 0 && cw < 14) cw *= 2;
-    while (ch > 0 && ch < 14) ch *= 2;
-    const origin = typeof nodeGraphRenderedOriginOffset === "function"
-      ? nodeGraphRenderedOriginOffset()
-      : { x: 0, y: 0 };
-    const phaseX = typeof nodeGraphGridBackgroundPhase === "function"
-      ? nodeGraphGridBackgroundPhase(origin.x, cw)
-      : 0;
-    const phaseY = typeof nodeGraphGridBackgroundPhase === "function"
-      ? nodeGraphGridBackgroundPhase(origin.y, ch)
-      : 0;
-    const grid = [1, 1, 1, 0.14];
-    if (cw >= 14) {
-      for (let x = phaseX; x < cssW; x += cw) {
-        nodeGraphGlLinesSegment(batch, x, 0, x, cssH, 0.5, 0.4, grid);
-      }
-    }
-    if (ch >= 14) {
-      for (let y = phaseY; y < cssH; y += ch) {
-        nodeGraphGlLinesSegment(batch, 0, y, cssW, y, 0.5, 0.4, grid);
-      }
-    }
-  }
 
   const pad = 120;
   for (let i = 0; i < nodeGraphGlGraphState.wires.length; i += 1) {
@@ -752,7 +814,7 @@ function nodeGraphGlGraphPresent() {
       screen[p] = toX(src[p]);
       screen[p + 1] = toY(src[p + 1]);
     }
-    let stroke = halfPx;
+    let stroke = wire.trace ? traceHalf : halfPx;
     let rgba = wire.rgba;
     if (wire.kind && wire.index >= 0 && typeof nodeGraphSelectedWireEntries === "function") {
       const picked = nodeGraphSelectedWireEntries().some((entry) =>
@@ -777,8 +839,15 @@ function nodeGraphGlGraphPresent() {
       }
     }
   }
-  const borderIdle = [1, 1, 1, 0.55];
-  const borderOn = [0.95, 0.86, 0.45, 1];
+  const plateStyle = getComputedStyle(host);
+  const borderIdle = nodeGraphGlGraphParseCssColor(
+    plateStyle.getPropertyValue("--node-module-idle-stroke"),
+    [0.631, 0.608, 0.608, 0.9],
+  );
+  const borderOn = nodeGraphGlGraphParseCssColor(
+    plateStyle.getPropertyValue("--node-module-selected-stroke"),
+    [0.95, 0.86, 0.45, 1],
+  );
   for (let i = 0; i < nodeGraphGlGraphState.plates.length; i += 1) {
     const plate = nodeGraphGlGraphState.plates[i];
     const x = toX(plate.x);
@@ -786,30 +855,31 @@ function nodeGraphGlGraphPresent() {
     const w = plate.w * zoom;
     const h = plate.h * zoom;
     if (x + w < 0 || y + h < 0 || x > cssW || y > cssH) continue;
-    const edge = Math.max(1, zoom);
+    // Same line as the thickness control at 0. Zoom 1 is one pixel; it scales with the module.
+    const edge = Math.max(0.5, zoom);
+    const x0 = Math.round(x);
+    const y0 = Math.round(y);
+    const w0 = Math.max(1, Math.round(w));
+    const h0 = Math.max(1, Math.round(h));
     const selected = typeof nodeGraphNodeElement === "function"
       && nodeGraphNodeElement(plate.id)?.classList.contains("selected");
     const color = selected ? borderOn : borderIdle;
-    const gap = plate.gap || 16;
-    const notches = plate.notches || { left: [], right: [], top: [], bottom: [] };
-    nodeGraphGlLinesRect(batch, x, y, w, h, plate.fill);
-    const paintSide = (runs, horizontal, fixed) => {
-      for (let r = 0; r < runs.length; r += 1) {
-        const a = runs[r][0];
-        const b = runs[r][1];
-        if (horizontal) {
-          const sx = toX(a);
-          nodeGraphGlLinesRect(batch, sx, fixed, Math.max(0.5, toX(b) - sx), edge, color);
-        } else {
-          const sy = toY(a);
-          nodeGraphGlLinesRect(batch, fixed, sy, edge, Math.max(0.5, toY(b) - sy), color);
-        }
-      }
-    };
-    paintSide(nodeGraphGlGraphStrokeRuns(plate.y, plate.y + plate.h, notches.left, gap), false, x - edge);
-    paintSide(nodeGraphGlGraphStrokeRuns(plate.y, plate.y + plate.h, notches.right, gap), false, x + w);
-    paintSide(nodeGraphGlGraphStrokeRuns(plate.x, plate.x + plate.w, notches.top, gap), true, y - edge);
-    paintSide(nodeGraphGlGraphStrokeRuns(plate.x, plate.x + plate.w, notches.bottom, gap), true, y + h);
+    const plateJacks = [];
+    const allJacks = nodeGraphGlGraphState.chrome?.jacks || [];
+    for (let j = 0; j < allJacks.length; j += 1) {
+      const jack = allJacks[j];
+      if (jack.id !== plate.id) continue;
+      plateJacks.push({
+        x: toX(jack.x),
+        y: toY(jack.y),
+        r: jack.r * zoom,
+        rgba: jack.rgba,
+        inlet: jack.inlet === true,
+      });
+    }
+    if (typeof nodeGraphGlLinesModuleOutline === "function") {
+      nodeGraphGlLinesModuleOutline(batch, x0, y0, w0, h0, edge, color, plateJacks, plate.fill, 2 * zoom);
+    }
   }
   batch.textPixelated = zoom > 2.5;
   nodeGraphGlGraphDrawChrome(batch, toX, toY, zoom, cssW, cssH);
@@ -829,6 +899,9 @@ function nodeGraphGlGraphPresent() {
       alpha: 1,
     });
   }
+  dotBatch.textPixelated = pixelated;
+  nodeGraphGlGraphDrawButtonCaptions(dotBatch, toX, toY, zoom, cssW, cssH);
+  nodeGraphGlGraphDrawVeils(dotBatch, toX, toY, zoom);
   const outputPaused = typeof nodeGraphLiveEngineIsPaused === "function" && nodeGraphLiveEngineIsPaused();
   if (outputPaused) {
     const white = [1, 1, 1, 1];
@@ -855,6 +928,51 @@ function nodeGraphGlGraphPresent() {
   return cablesOk && dotsOk;
 }
 
+/**
+ * Perform / layout canvas whole-module tiles: the module was moved out of the (hidden) workspace,
+ * so run this same rebuild + present once per tile, mapped onto it (zoom = the tile's fit scale,
+ * camera = the module's offset in the tile, that module only, no cables).
+ */
+function nodeGraphGlGraphPresentTiles() {
+  const faces = document.querySelectorAll(".node-layout-canvas-tile > .dsp-node.node-whole-module-face");
+  for (let i = 0; i < faces.length; i += 1) nodeGraphGlGraphPresentTile(faces[i]);
+}
+
+function nodeGraphGlGraphPresentTile(face) {
+  const tile = face?.parentElement;
+  const nat = face?._wholeModuleNatural;
+  const id = String(face?.dataset?.node || "");
+  if (!tile || !id || !(nat?.w > 0) || !(tile.clientWidth > 0) || !(tile.clientHeight > 0)) return;
+  const faceRect = face.getBoundingClientRect();
+  const tileRect = tile.getBoundingClientRect();
+  if (!(faceRect.width > 1) || !(tileRect.width > 1)) return;
+  const k = faceRect.width / nat.w; // client px per zoom-1 px
+  const state = nodeGraphGlGraphState;
+  const saved = {
+    canvas: state.canvas, dotsCanvas: state.dotsCanvas, wires: state.wires, plates: state.plates,
+    displays: state.displays, chrome: state.chrome, thick: state.thick, dotSize: state.dotSize,
+  };
+  state.view = {
+    host: tile,
+    ids: new Set([id]),
+    zoom: k * (tile.clientWidth / tileRect.width),
+    cam: { x: -(faceRect.left - tileRect.left) / k, y: -(faceRect.top - tileRect.top) / k },
+    toWorld: (clientX, clientY) => ({ x: (clientX - faceRect.left) / k, y: (clientY - faceRect.top) / k }),
+  };
+  state.canvas = tile._glGraphCanvas || null;
+  state.dotsCanvas = tile._glGraphDots || null;
+  state.wires = [];
+  try {
+    nodeGraphGlGraphRebuildPlates();
+    nodeGraphGlGraphPresent();
+    tile._glGraphCanvas = state.canvas;
+    tile._glGraphDots = state.dotsCanvas;
+  } finally {
+    state.view = null;
+    Object.assign(state, saved);
+  }
+}
+
 /** Full rebuild from the patch. Returns true when GL owns cables. */
 function nodeGraphGlGraphPaint(options = {}) {
   if (!options.lite && nodeGraphMvp) {
@@ -873,6 +991,14 @@ function nodeGraphGlGraphPaint(options = {}) {
   nodeGraphGlGraphPresent();
   nodeGraphGlHitInstall();
   return true;
+}
+
+function nodeGraphGlGraphPresentSoon() {
+  if (nodeGraphGlGraphPresentSoon._frame) return;
+  nodeGraphGlGraphPresentSoon._frame = window.requestAnimationFrame(() => {
+    nodeGraphGlGraphPresentSoon._frame = 0;
+    nodeGraphGlGraphPresent();
+  });
 }
 
 function nodeGraphGlGraphPresentCamera() {
@@ -949,10 +1075,21 @@ function nodeGraphGlHitTest(x, y) {
       return { kind: "jack", x: jack.x, y: jack.y };
     }
   }
+  const labels = chrome.labels || [];
+  for (let i = labels.length - 1; i >= 0; i -= 1) {
+    const label = labels[i];
+    if (nodeGraphGlHitInside(x, y, label.box)) {
+      return { kind: "label", el: label.el };
+    }
+  }
   const sliders = chrome.sliders || [];
   for (let i = sliders.length - 1; i >= 0; i -= 1) {
     const slider = sliders[i];
-    if (x >= slider.x && x <= slider.x + slider.w && y >= slider.y && y <= slider.y + slider.h) {
+    const sx = slider.hitX ?? slider.x;
+    const sy = slider.hitY ?? slider.y;
+    const sw = slider.hitW ?? slider.w;
+    const sh = slider.hitH ?? slider.h;
+    if (x >= sx && x <= sx + sw && y >= sy && y <= sy + sh) {
       return { kind: "slider", readout: slider.readout };
     }
   }
@@ -961,7 +1098,8 @@ function nodeGraphGlHitTest(x, y) {
     const title = titles[i];
     const box = title.box;
     if (!box) continue;
-    if (x >= box.x && x <= box.x + box.w && y >= box.y && y <= box.y + box.h) {
+    const inset = 6;
+    if (x >= box.x + inset && x <= box.x + box.w - inset && y >= box.y && y <= box.y + box.h) {
       return { kind: "title", el: title.el };
     }
   }
@@ -1007,8 +1145,13 @@ function nodeGraphGlHitPortElement(moduleEl, x, y) {
 
 const nodeGraphGlHitState = { lastTitleDown: null };
 
+function nodeGraphGlHitLabelPort(label) {
+  const row = label?.closest?.(".node-io-row, .node-io-column, .node-parameter-row");
+  return row?.querySelector?.(".node-port, .node-param-port") || null;
+}
+
 function nodeGraphGlHitPointerDown(event) {
-  if (event.button !== 0) return;
+  if (event.button !== 0 && event.button !== 2) return;
   if (nodeGraphGlHitIsLiveHtml(event.target) || nodeGraphGlHitKeepsNativeTarget(event.target)) return;
   if (event.target instanceof Element && event.target.closest(".node-text-box-body, .node-text-box-input")) return;
   const point = nodeGraphGlHitPoint(event);
@@ -1023,10 +1166,23 @@ function nodeGraphGlHitPointerDown(event) {
     }
     return;
   }
-  if (hit.kind === "slider" && hit.readout && typeof beginNodeSliderDrag === "function") {
+  if (hit.kind === "slider" && hit.readout) {
     event.preventDefault();
     event.stopPropagation();
-    beginNodeSliderDrag(nodeGraphGlHitRetarget(event, hit.readout));
+    if (event.button === 0 && typeof beginNodeSliderDrag === "function") {
+      beginNodeSliderDrag(nodeGraphGlHitRetarget(event, hit.readout));
+    }
+    return;
+  }
+  if (hit.kind === "label" && hit.el) {
+    event.preventDefault();
+    event.stopPropagation();
+    if (event.button !== 0) return;
+    const port = nodeGraphGlHitLabelPort(hit.el);
+    const handler = nodeGraphWireInteractions?.handlePortPointerDown;
+    if (port && typeof handler === "function") {
+      handler(nodeGraphGlHitRetarget(event, port));
+    }
     return;
   }
   if (hit.kind === "jack") {
@@ -1080,24 +1236,95 @@ function nodeGraphGlHitPointerDown(event) {
   }
 }
 
+function nodeGraphGlHitInside(x, y, box) {
+  return Boolean(box) && x >= box.x && x <= box.x + box.w && y >= box.y && y <= box.y + box.h;
+}
+
+function nodeGraphGlHitContextElement(point) {
+  const chrome = nodeGraphGlGraphState.chrome || {};
+  const keys = chrome.keys || [];
+  for (let i = keys.length - 1; i >= 0; i -= 1) {
+    const key = keys[i];
+    if (nodeGraphGlHitInside(point.x, point.y, key) && key.el) return key.el;
+  }
+  const graphs = chrome.graphs || [];
+  for (let i = graphs.length - 1; i >= 0; i -= 1) {
+    const face = graphs[i];
+    if (!nodeGraphGlHitInside(point.x, point.y, face)) continue;
+    const moduleEl = typeof nodeGraphNodeElement === "function" ? nodeGraphNodeElement(face.id) : null;
+    return moduleEl?.querySelector(".node-module-graph-display") || moduleEl;
+  }
+  const hit = nodeGraphGlHitTest(point.x, point.y);
+  if (!hit) return null;
+  if (hit.kind === "slider" && hit.readout) return hit.readout;
+  if (hit.kind === "label" && hit.el) return nodeGraphGlHitLabelPort(hit.el) || hit.el;
+  if (hit.kind === "title" && hit.el) return hit.el;
+  if (hit.kind === "jack") {
+    const plates = nodeGraphGlGraphState.plates || [];
+    for (let i = plates.length - 1; i >= 0; i -= 1) {
+      const plate = plates[i];
+      const pad = 14;
+      if (point.x < plate.x - pad || point.x > plate.x + plate.w + pad
+        || point.y < plate.y - pad || point.y > plate.y + plate.h + pad) continue;
+      const moduleEl = typeof nodeGraphNodeElement === "function" ? nodeGraphNodeElement(plate.id) : null;
+      return nodeGraphGlHitPortElement(moduleEl, hit.x, hit.y) || moduleEl;
+    }
+  }
+  if (hit.kind === "plate") {
+    const moduleEl = typeof nodeGraphNodeElement === "function" ? nodeGraphNodeElement(hit.id) : null;
+    if (!moduleEl) return null;
+    const knob = moduleEl.querySelector(".node-knob-face");
+    const knobBox = nodeGraphGlGraphWorldBox(knob);
+    if (nodeGraphGlHitInside(point.x, point.y, knobBox)) return knob;
+    const face = moduleEl.querySelector(".node-display-canvas, .node-module-scope-canvas, .node-xy-pad-canvas");
+    const faceBox = nodeGraphGlGraphWorldBox(face);
+    if (nodeGraphGlHitInside(point.x, point.y, faceBox)) return face;
+    return moduleEl;
+  }
+  return null;
+}
+
 function nodeGraphGlHitContextMenu(event) {
+  if (event.glGraphRetarget) return;
   if (nodeGraphGlHitIsLiveHtml(event.target) || nodeGraphGlHitKeepsNativeTarget(event.target)) return;
   if (event.target instanceof Element && event.target.closest(".node-text-box-body, .node-text-box-input")) return;
   const point = nodeGraphGlHitPoint(event);
   if (!point) return;
-  const hit = nodeGraphGlHitTest(point.x, point.y);
-  if (!hit) return;
+  const element = nodeGraphGlHitContextElement(point);
+  if (!element) return;
   event.preventDefault();
   event.stopPropagation();
-  if (hit.kind === "slider" && hit.readout && typeof openNodeMetadataPopover === "function") {
-    openNodeMetadataPopover(nodeGraphGlHitRetarget(event, hit.readout), hit.readout);
+  const readout = element.closest?.(".node-slider-readout") || (element.classList?.contains("node-slider-readout") ? element : null);
+  if (readout && typeof openNodeMetadataPopover === "function") {
+    openNodeMetadataPopover(event, readout);
     return;
   }
-  const id = hit.id || hit.el?.closest?.(".dsp-node")?.dataset?.node;
-  const moduleEl = id && typeof nodeGraphNodeElement === "function" ? nodeGraphNodeElement(id) : hit.el?.closest?.(".dsp-node");
-  const shell = moduleEl?.querySelector(".node-solid-module-shell, .node-module-chrome-layout-b-shell") || moduleEl;
-  if (shell && typeof openNodeModuleActionMenu === "function") {
-    openNodeModuleActionMenu(nodeGraphGlHitRetarget(event, shell));
+  const forwarded = new MouseEvent("contextmenu", {
+    bubbles: true,
+    cancelable: true,
+    clientX: event.clientX,
+    clientY: event.clientY,
+    screenX: event.screenX,
+    screenY: event.screenY,
+    button: 2,
+    view: window,
+  });
+  forwarded.glGraphRetarget = true;
+  element.dispatchEvent(forwarded);
+}
+
+function nodeGraphGlHitPointerUp(event) {
+  if (event.button !== 0) return;
+  const drag = nodeGraphMvp?.wireDragging;
+  if (!drag || drag.active) return;
+  const hitbox = drag.element;
+  const port = hitbox?.querySelector?.(".node-port, .node-param-port") || hitbox;
+  if (!(port instanceof Element) || typeof nodeGraphWireInteractions?.handlePortClick !== "function") return;
+  // A click that never crossed the drag threshold arms the wire so it can be
+  // finished without holding the button.
+  nodeGraphWireInteractions.handlePortClick(nodeGraphGlHitRetarget(event, port));
+  if (nodeGraphMvp.wireDragging && !nodeGraphMvp.wireDragging.active) {
+    nodeGraphMvp.wireDragging = null;
   }
 }
 
@@ -1106,6 +1333,7 @@ function nodeGraphGlHitInstall() {
   const host = document.getElementById("nodeGraphWorkspace");
   if (!host) return;
   host.addEventListener("pointerdown", nodeGraphGlHitPointerDown, true);
+  host.addEventListener("pointerup", nodeGraphGlHitPointerUp, true);
   host.addEventListener("contextmenu", nodeGraphGlHitContextMenu, true);
   nodeGraphGlHitState.installed = true;
 }

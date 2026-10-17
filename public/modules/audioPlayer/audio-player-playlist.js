@@ -549,6 +549,8 @@ function nodeGraphAudioPlayerWriteTransport(nodeId, mode, { record = false } = {
   if (next >= 3) {
     void nodeGraphAudioPlayerEnsureLiveOutput();
   }
+  // Before the slider update below, so its echo through the slider sync is not a new gesture.
+  nodeGraphAudioPlayerTransportGestureLast.set(String(nodeId), next);
   node.params = { ...(node.params || {}), transport: String(next) };
   const slider = document.querySelector(
     `.dsp-node[data-node="${CSS.escape(String(nodeId))}"] input[data-param="transport"]`,
@@ -583,7 +585,46 @@ function nodeGraphAudioPlayerWriteTransport(nodeId, mode, { record = false } = {
 function nodeGraphAudioPlayerTransportBase(nodeId) {
   const node = typeof nodeGraphPatchNode === "function" ? nodeGraphPatchNode(nodeId) : null;
   const n = Math.round(Number(node?.params?.transport));
-  return Number.isFinite(n) ? Math.max(0, Math.min(5, n)) : 4;
+  return Number.isFinite(n) ? Math.max(0, Math.min(5, n)) : 1;
+}
+
+/** Slider / user Playmode: bind+decode like the Play button when entering 3–5. */
+// The slider value IS the mode (already in params when this runs): Stop / Pause / Off apply as
+// is. Only acts when the value changes; moving between playing modes never restarts the track.
+const nodeGraphAudioPlayerTransportGestureLast = new Map();
+
+function nodeGraphAudioPlayerApplyTransportGesture(nodeId, mode) {
+  const next = Math.max(0, Math.min(5, Math.round(nodeGraphFiniteNumber(mode))));
+  const id = String(nodeId || "");
+  const prev = nodeGraphAudioPlayerTransportGestureLast.get(id);
+  nodeGraphAudioPlayerTransportGestureLast.set(id, next);
+  if (prev === next || next < 3) {
+    return;
+  }
+  const node = typeof nodeGraphPatchNode === "function" ? nodeGraphPatchNode(nodeId) : null;
+  if (!node || node.type !== "audioPlayer") {
+    return;
+  }
+  const sid = node.sample?.id;
+  const hasBuf = Boolean(sid && nodeGraphMvp?.sampleBuffers?.get?.(sid));
+  const reason = String(nodeGraphMvp?.sampleRuntimeStatus?.get?.(nodeId)?.reason || "").trim().toLowerCase();
+  const ctxRunning = nodeGraphMvp?.live?.context?.state === "running";
+  if (
+    hasBuf
+    && ctxRunning
+    && reason !== "engine complete"
+    && reason !== "engine stopped"
+  ) {
+    void nodeGraphAudioPlayerEnsureLiveOutput();
+    return;
+  }
+  // A load started by an earlier playing mode is in flight: it applies the slider's mode when it lands.
+  if (prev >= 3 && nodeGraphAudioPlayerPlaylistLoadBusy.get(id)) {
+    return;
+  }
+  if (typeof nodeGraphAudioPlayerPlaylistPlay === "function") {
+    nodeGraphAudioPlayerPlaylistPlay(nodeId, { transport: next });
+  }
 }
 
 function nodeGraphAudioPlayerPlaylistPlayModeForLoop(loopMode) {
@@ -754,7 +795,7 @@ function nodeGraphAudioPlayerPlaylistSelectDelta(nodeId, dir) {
   nodeGraphAudioPlayerPlaylistPersist(nodeId);
 }
 
-function nodeGraphAudioPlayerPlaylistPlay(nodeId) {
+function nodeGraphAudioPlayerPlaylistPlay(nodeId, options = {}) {
   const pl = nodeGraphAudioPlayerPlaylistForNode(nodeId);
   const i = Number.isInteger(pl.selectedIndex) ? pl.selectedIndex : pl.index;
   const item = pl.items[i] || pl.items[pl.index] || pl.items[0];
@@ -770,11 +811,13 @@ function nodeGraphAudioPlayerPlaylistPlay(nodeId) {
   const reason = String(nodeGraphMvp?.sampleRuntimeStatus?.get?.(nodeId)?.reason || "").trim().toLowerCase();
   const transport = nodeGraphAudioPlayerTransportBase(nodeId);
   const ctxRunning = nodeGraphMvp?.live?.context?.state === "running";
+  const wantTransport = Math.round(nodeGraphFiniteNumber(options.transport, NaN));
   if (typeof nodeGraphAudioPlayerPlaylistDebug === "function") {
     nodeGraphAudioPlayerPlaylistDebug(nodeId, "play-button", {
       index: pl.items[i] ? i : 0,
       name: item.name || "",
       transport,
+      wantTransport,
       reason,
       ctxRunning,
     });
@@ -783,17 +826,24 @@ function nodeGraphAudioPlayerPlaylistPlay(nodeId) {
   // After a file ends the engine stays on Play (4) with completed=true.
   // Writing 4 again does not clear completed — Stop then Play does.
   // Same reset when audio never started (embed: transport already Play, context dead).
-  if (reason === "engine complete" || reason === "engine stopped" || transport <= 1 || !ctxRunning) {
+  // Only a finished / stopped engine gets the Stop write. Never rewrite the user's Playmode while
+  // audio or the track is still coming up: PlayIndex applies the mode once the track lands.
+  const engineDone = reason === "engine complete" || reason === "engine stopped";
+  if (engineDone || transport <= 1 || !ctxRunning) {
     const node = typeof nodeGraphPatchNode === "function" ? nodeGraphPatchNode(nodeId) : null;
     if (node) {
       node.samplePhase = 0;
       node.samplePhaseSeek = Math.round(nodeGraphFiniteNumber(node.samplePhaseSeek, 0)) + 1;
     }
-    if (transport !== 1 && typeof nodeGraphAudioPlayerWriteTransport === "function") {
+    if (engineDone && transport !== 1 && typeof nodeGraphAudioPlayerWriteTransport === "function") {
       nodeGraphAudioPlayerWriteTransport(nodeId, 1);
     }
   }
-  const result = nodeGraphAudioPlayerPlaylistPlayIndex(nodeId, pl.items[i] ? i : 0, { autoplay: true });
+  const playOpts = { autoplay: true };
+  if (Number.isFinite(wantTransport) && wantTransport >= 3 && wantTransport <= 5) {
+    playOpts.transport = wantTransport;
+  }
+  const result = nodeGraphAudioPlayerPlaylistPlayIndex(nodeId, pl.items[i] ? i : 0, playOpts);
   if (result && typeof result.catch === "function") {
     result.catch((error) => {
       if (typeof nodeGraphAudioPlayerLog === "function") {
@@ -1106,38 +1156,8 @@ const nodeGraphAudioPlayerPlaylistFacesSpec = Object.freeze([
 ]);
 
 function nodeGraphAudioPlayerPlaylistEnsureFaceBar(section, nodeId) {
-  if (!section) {
-    return;
-  }
-  let bar = section.querySelector(":scope > .node-music-player-face-bar");
-  if (!bar) {
-    bar = document.createElement("div");
-    bar.className = "node-music-player-face-bar";
-    section.append(bar);
-  }
-  const existing = [...bar.querySelectorAll("[data-music-player-face]")]
-    .map((btn) => `${btn.dataset.musicPlayerFace}:${btn.textContent}`)
-    .join(",");
-  if (existing === "pl:playlist") {
-    return bar;
-  }
-  bar.replaceChildren();
-  const btn = document.createElement("button");
-  btn.type = "button";
-  btn.className = "node-music-player-face-btn";
-  btn.dataset.musicPlayerFace = "pl";
-  btn.textContent = "playlist";
-  btn.title = "Open playlist";
-  btn.setAttribute("aria-label", "Open playlist");
-  btn.setAttribute("aria-pressed", "false");
-  btn.addEventListener("click", (event) => {
-    event.preventDefault();
-    event.stopPropagation();
-    nodeGraphAudioPlayerPlaylistSetFace(nodeId, "pl");
-  });
-  btn.addEventListener("pointerdown", (event) => event.stopPropagation());
-  bar.append(btn);
-  return bar;
+  section?.querySelectorAll?.(".node-music-player-face-bar").forEach((el) => el.remove());
+  return null;
 }
 
 function nodeGraphAudioPlayerPlaylistEnsurePlayinfoPage(section) {
@@ -1398,7 +1418,6 @@ function nodeGraphAudioPlayerPlaylistEnsureLayout(section, nodeId) {
     }
   }
   nodeGraphAudioPlayerPlaylistEnsureFaceBar(section, nodeId);
-  // Watch labels from build time so a later-revealed bar/page still gets fitted.
   nodeGraphAudioPlayerFitSectionLabels(section);
   if (typeof nodeGraphSampleWaveformEnsureZoomControl === "function") {
     nodeGraphSampleWaveformEnsureZoomControl(section);
@@ -2474,7 +2493,9 @@ function nodeGraphAudioPlayerPlaylistPaintSlots(nodeId, list, { followPlaying = 
     const num = row.querySelector(".node-music-player-pl-num");
     const name = row.querySelector(".node-music-player-pl-name");
     if (num) {
-      const listNumber = Math.max(1, Math.round(nodeGraphFiniteNumber(item.listNumber, index) + 1));
+      // listNumber is 1-based (library sets index + 1); 0 / missing falls back to the row's 1-based position.
+      const storedNumber = Math.round(nodeGraphFiniteNumber(item.listNumber, 0));
+      const listNumber = storedNumber >= 1 ? storedNumber : index + 1;
       num.textContent = String(listNumber).padStart(2, "0");
     }
     if (name) {
@@ -2839,16 +2860,18 @@ function nodeGraphAudioPlayerVideoscopePaint(section) {
   const settings = typeof nodeGraphSampleWaveformSettingsForNode === "function"
     ? nodeGraphSampleWaveformSettingsForNode(nodeId)
     : null;
-  const metrics = typeof nodeGraphMusicPlayerFaceMetrics === "function"
-    ? nodeGraphMusicPlayerFaceMetrics(section, canvas, face)
-    : null;
-  const context = metrics?.context || canvas.getContext("2d");
+  const page = canvas.parentElement;
+  const cssW = Math.max(8, Math.round(page?.clientWidth || canvas.clientWidth || 8));
+  const cssH = Math.max(8, Math.round(page?.clientHeight || canvas.clientHeight || 8));
+  const pixelRatio = Math.max(1, window.devicePixelRatio || 1);
+  const width = Math.max(8, Math.round(cssW * pixelRatio));
+  const height = Math.max(8, Math.round(cssH * pixelRatio));
+  if (canvas.width !== width) canvas.width = width;
+  if (canvas.height !== height) canvas.height = height;
+  const context = canvas.getContext("2d");
   if (!context) {
     return;
   }
-  const width = Math.max(1, metrics?.width || canvas.width);
-  const height = Math.max(1, metrics?.height || canvas.height);
-  const pixelRatio = metrics?.pixelRatio || Math.max(1, window.devicePixelRatio || 1);
   context.setTransform(1, 0, 0, 1, 0, 0);
   context.clearRect(0, 0, width, height);
   const bg = typeof nodeGraphSampleWaveformBackgroundColor === "function"
@@ -3035,11 +3058,11 @@ if (typeof document !== "undefined") {
  *   drag never starts;
  * - every move writes the live value with no history entry;
  * - release commits once.
- * The value is the absolute pointer x ratio across the display (from
- * getBoundingClientRect), so it works at any workspace zoom and under the
- * whole-module embed scale. Writes go through
- * nodeGraphAudioPlayerPlaylistApplyScrub (the phase-offset param). Seeks are
- * not undo steps, the same as the transport.
+ * The value is the file phase under the pointer in the current waveform
+ * view (zoom/pan window), not 0..1 of the whole file across the screen.
+ * getBoundingClientRect so workspace zoom and whole-module embed scale work.
+ * Writes go through nodeGraphAudioPlayerPlaylistApplyScrub (phase-offset).
+ * Seeks are not undo steps, the same as the transport.
  * Plain drag on the wave page used to pan the view. Pan is now Alt-drag;
  * Shift-drag (relative nudge) and the region handles are unchanged.
  */
@@ -3049,18 +3072,33 @@ function nodeGraphAudioPlayerPlaylistBindWaveSeek(section, nodeId) {
   }
   section.dataset.musicPlayerWaveSeekBound = "1";
   const surfaceFor = (target) => target?.closest?.(".node-music-player-page-wave, .node-music-player-waveplay-wave");
-  const ratioAt = (surface, event) => {
-    const rect = surface.getBoundingClientRect();
-    return rect.width > 0 ? Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width)) : 0;
-  };
   const idFor = () => String(nodeId || section.closest?.("[data-node]")?.dataset?.node || "");
+  const phaseAt = (surface, event) => {
+    const hit = surface.querySelector?.("canvas.node-sample-waveform-canvas") || surface;
+    const rect = hit.getBoundingClientRect();
+    const x = rect.width > 0 ? Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width)) : 0;
+    const id = idFor();
+    const entry = typeof nodeGraphSampleWaveformSampleEntry === "function"
+      ? nodeGraphSampleWaveformSampleEntry(id)
+      : nodeGraphMvp?.sampleBuffers?.get?.(
+        typeof nodeGraphPatchNode === "function" ? nodeGraphPatchNode(id)?.sample?.id : "",
+      );
+    const frames = Math.max(1, Math.round(Number(entry?.frames) || 0) || 1);
+    if (entry?.frames && typeof nodeGraphSampleWaveformViewState === "function") {
+      const state = nodeGraphSampleWaveformViewState(id, entry.frames, section);
+      const viewStart = Number(state.startFrame) || 0;
+      const viewSpan = Math.max(1e-9, (Number(state.endFrame) || frames) - viewStart);
+      return Math.max(0, Math.min(1, (viewStart + x * viewSpan) / frames));
+    }
+    return x;
+  };
   let drag = null;
 
   const move = (event) => {
     if (!drag || (drag.pointerId !== null && event.pointerId !== drag.pointerId)) {
       return;
     }
-    drag.value = ratioAt(drag.surface, event);
+    drag.value = phaseAt(drag.surface, event);
     nodeGraphAudioPlayerPlaylistApplyScrub(drag.nodeId, drag.value, { record: false, commit: false });
     event.preventDefault();
     event.stopPropagation();
@@ -3094,12 +3132,16 @@ function nodeGraphAudioPlayerPlaylistBindWaveSeek(section, nodeId) {
     if (event.target.closest?.("button, input, select, textarea, a, [contenteditable]")) {
       return;
     }
+    const waveCanvas = surface.querySelector("canvas.node-sample-waveform-canvas");
+    if (waveCanvas && typeof nodeGraphSampleWaveformHudHit === "function"
+      && nodeGraphSampleWaveformHudHit(section, waveCanvas, event.clientX, event.clientY)) {
+      return;
+    }
     // Shift-drag (relative phase nudge), Alt-drag (view pan) and the start/end
     // region handles keep the waveform canvas's own gestures.
     if (event.shiftKey || event.altKey) {
       return;
     }
-    const waveCanvas = surface.querySelector("canvas.node-sample-waveform-canvas");
     if (waveCanvas && typeof nodeGraphSampleWaveformRegionHandleHit === "function"
       && nodeGraphSampleWaveformRegionHandleHit(section, waveCanvas, event.clientX)) {
       return;
@@ -3114,7 +3156,13 @@ function nodeGraphAudioPlayerPlaylistBindWaveSeek(section, nodeId) {
     if (!id) {
       return;
     }
-    drag = { nodeId: id, surface, pointerId: event.pointerId ?? null, value: ratioAt(surface, event) };
+    const hit = surface.querySelector?.("canvas.node-sample-waveform-canvas") || surface;
+    const rect = hit.getBoundingClientRect();
+    const x01 = rect.width > 0 ? Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width)) : 0;
+    if (typeof nodeGraphSampleWaveformNoteClick === "function") {
+      nodeGraphSampleWaveformNoteClick(id, x01, section);
+    }
+    drag = { nodeId: id, surface, pointerId: event.pointerId ?? null, value: phaseAt(surface, event) };
     nodeGraphMvp.musicPlayerWaveSeekDragging = true;
     surface.classList.add("value-dragging");
     document.body.classList.add("node-slider-dragging");

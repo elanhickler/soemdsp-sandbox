@@ -366,6 +366,12 @@ function beginNodeGraphMagnifier(event) {
   if (event.button !== 2 || typeof nodeGraphEventTargetIsEmptyWorkspaceArea !== "function") {
     return;
   }
+  if (typeof nodeGraphGlHitPoint === "function" && typeof nodeGraphGlHitTest === "function") {
+    const point = nodeGraphGlHitPoint(event);
+    if (point && nodeGraphGlHitTest(point.x, point.y)) {
+      return;
+    }
+  }
   if (!nodeGraphEventTargetIsEmptyWorkspaceArea(event)) {
     return;
   }

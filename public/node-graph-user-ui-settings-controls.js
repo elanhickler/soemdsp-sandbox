@@ -371,13 +371,6 @@ function renderNodeUiDevHelperViewControls() {
     maybe(createNodeUserUiSettingsGridLightControl),
     maybe(createNodeUserUiSettingsWireLengthsControl),
     maybe(createNodeUserUiSettingsWiresAboveControl),
-    maybe(createNodeUserUiSettingsModuleButtonsControl),
-    maybe(createNodeUserUiSettingsModuleOscilloscopeControl),
-    maybe(createNodeUserUiSettingsModuleInterfaceControlsControl),
-    maybe(createNodeUserUiSettingsModuleSlidersControl),
-    maybe(createNodeUserUiSettingsSliderAmountControl),
-    maybe(createNodeUserUiSettingsSliderPositionControl),
-    maybe(createNodeUserUiSettingsSliderLayoutControl),
     maybe(createNodeUserUiSettingsKeyboardDebugControl),
   ].filter(Boolean);
   helperBody.append(...viewRows);

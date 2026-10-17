@@ -179,6 +179,13 @@ function syncNodeGraphPatchParameterFromSlider(slider, options = {}) {
   if (typeof nodeGraphWriteActiveCircuitPatchParam === "function") {
     nodeGraphWriteActiveCircuitPatchParam(node, key, patchNode.params[key]);
   }
+  if (
+    patchNode.type === "audioPlayer"
+    && key === "transport"
+    && typeof nodeGraphAudioPlayerApplyTransportGesture === "function"
+  ) {
+    nodeGraphAudioPlayerApplyTransportGesture(node, patchNode.params[key]);
+  }
   // Metamodule "Show metaparameter": shell slider writes through to the child.
   if (
     typeof nodeGraphIsContainerShellType === "function"

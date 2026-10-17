@@ -189,6 +189,7 @@ const nodeGraphModuleCatalogRetiredFromUnderConstruction = Object.freeze([
   "ellipsoidOsc",
   "softpopOscillator",
   "softpopFilter",
+  "softpop2",
   "acidSequencer",
 ]);
 
@@ -1636,6 +1637,12 @@ const nodeGraphModuleStoreCatalog = Object.freeze({
     description: "Noise (or your audio) through a resonant constant-peak bandpass. Pitch Mod wobbles the centre; Width sets the bandwidth. Wire Mono / Left / Right to filter external audio instead of the noise.",
     label: "Softpop Filter",
     notes: ["softpop", "band noise", "filter", "bandpass", "resonant", "gaussian", "pink", "brown", "pitch mod", "seed", "reset", "stereo", "mono", "native"],
+  },
+  softpop2: {
+    category: "oscillator",
+    description: "A sine that dissolves into band-limited noise centred on its own pitch. Crossfade widens the band; Amp over Crossfade can fade the sound away.",
+    label: "Softpop 2",
+    notes: ["softpop", "softpop2", "noise oscillator", "band noise", "sine", "crossfade", "blue", "violet", "gaussian", "pink", "brown", "seed", "reset", "stereo", "mono", "native"],
   },
   softpopOscillator: {
     category: "oscillator",

@@ -14,7 +14,7 @@ const H = makeHarness(buildProbe("filter"));
 const { x, gate, render, renderAll, withInstance, setParams, noiseLevel } = H;
 
 if (process.argv.includes("--calibrate")) {
-  for (const color of [0, 1, 2, 3, 4]) {
+  for (const color of [0, 1, 2, 3, 4, 5, 6]) {
     const r = await noiseLevel({ freq: 1000, width: 0.3, color }, 3000);
     console.log(`calibrate ${COLORS[color]}: 1 kHz W=0.3 Filter level ${r.rmsDb.toFixed(4)} dB re 1/sqrt2 (${r.seconds.toFixed(0)} s) -> k *= ${Math.pow(10, -r.rmsDb / 20).toFixed(6)}`);
   }

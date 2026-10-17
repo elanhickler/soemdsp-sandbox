@@ -10,6 +10,26 @@
 
 const nodeGraphSampleWaveformViewStates = new Map();
 let nodeGraphSampleWaveformMissingLogged = "";
+/** Click-seek flash: sample frame, t0 = performance.now(). Fades over 1 s. */
+const nodeGraphSampleWaveformClickMarks = new Map();
+
+function nodeGraphSampleWaveformNoteClick(nodeId, x01, section) {
+  const id = String(nodeId || "").trim();
+  if (!id) {
+    return;
+  }
+  const entry = typeof nodeGraphSampleWaveformSampleEntry === "function"
+    ? nodeGraphSampleWaveformSampleEntry(id)
+    : null;
+  const frames = Math.max(1, Number(entry?.frames) || 1);
+  const state = nodeGraphSampleWaveformViewState(id, frames, section);
+  const span = Math.max(1e-9, state.endFrame - state.startFrame);
+  const t = Math.max(0, Math.min(1, Number(x01) || 0));
+  nodeGraphSampleWaveformClickMarks.set(id, {
+    frame: state.startFrame + t * span,
+    t0: performance.now(),
+  });
+}
 
 function nodeGraphSampleWaveformFaceSlot(sectionOrFace) {
   const raw = typeof sectionOrFace === "string"
@@ -66,7 +86,7 @@ const nodeGraphSampleWaveformDefaultSettings = Object.freeze({
   timeWindowSeconds: 2,
   scrollLinePosition: "mid",
   // 0 = hide playhead. CSS px @ zoom 1.
-  scrollLineWidth: 2,
+  scrollLineWidth: 1,
   // Trace core width (+0.5 CSS-px skirt at draw).
   traceWidth: 2,
   hue: 140,
@@ -1956,44 +1976,39 @@ function nodeGraphSampleWaveformFormatZoomPercent(ratio) {
 }
 
 function nodeGraphSampleWaveformEnsureZoomControl(section) {
-  if (!section) {
+  section?.querySelectorAll?.(".node-sample-waveform-zoom").forEach((el) => el.remove());
+  return null;
+}
+
+function nodeGraphSampleWaveformHudHit(section, canvas, clientX, clientY) {
+  const hits = section?._sampleWaveHudHits;
+  if (!hits || !canvas) {
     return null;
   }
-  let control = section.querySelector(":scope > .node-sample-waveform-zoom");
-  if (control) {
-    return control;
+  const rect = canvas.getBoundingClientRect();
+  if (!(rect.width > 0) || !(rect.height > 0)) {
+    return null;
   }
-  control = document.createElement("button");
-  control.type = "button";
-  control.className = "node-sample-waveform-zoom";
-  control.textContent = "100%";
-  control.title = "Drag to zoom (right/up · left/down). Double-click resets.";
-  control.setAttribute("aria-label", "Waveform zoom percent");
-  control.addEventListener("pointerdown", (event) => {
-    event.stopPropagation();
-    beginNodeGraphSampleWaveformZoomDrag(event, section);
-  });
-  control.addEventListener("dblclick", (event) => {
-    event.preventDefault();
-    event.stopPropagation();
-    nodeGraphSampleWaveformResetZoom(section);
-  });
-  section.append(control);
-  return control;
+  // Hits are in the canvas's own CSS px; a whole-module tile (and workspace zoom) scales the
+  // canvas, so client px are converted back before testing.
+  const x = (clientX - rect.left) * ((canvas.clientWidth || rect.width) / rect.width);
+  const y = (clientY - rect.top) * ((canvas.clientHeight || rect.height) / rect.height);
+  const pad = 6;
+  const inside = (box) => box
+    && x >= box.l - pad
+    && x <= box.r + pad
+    && y >= box.t - pad
+    && y <= box.b + pad;
+  if (inside(hits.playlist)) {
+    return "playlist";
+  }
+  if (inside(hits.zoom)) {
+    return "zoom";
+  }
+  return null;
 }
 
-function nodeGraphSampleWaveformSyncZoomControl(section, ratio) {
-  const control = nodeGraphSampleWaveformEnsureZoomControl(section);
-  if (!control) {
-    return;
-  }
-  const label = nodeGraphSampleWaveformFormatZoomPercent(ratio);
-  if (control.textContent !== label) {
-    control.textContent = label;
-  }
-}
-
-function beginNodeGraphSampleWaveformZoomDrag(event, section) {
+function beginNodeGraphSampleWaveformZoomDrag(event, section, canvas) {
   if (event.button > 0 || (typeof nodeGraphAudioPlayerFaceIsWave === "function"
     ? !nodeGraphAudioPlayerFaceIsWave(section)
     : (section?.dataset?.musicPlayerFace || "wave") !== "wave")) {
@@ -2011,16 +2026,14 @@ function beginNodeGraphSampleWaveformZoomDrag(event, section) {
   const pointerId = event.pointerId;
   const startX = event.clientX;
   const startY = event.clientY;
-  const control = event.currentTarget;
-  control.setPointerCapture?.(pointerId);
-  control.classList.add("is-dragging");
+  const surface = canvas || section.querySelector(".node-sample-waveform-canvas") || event.currentTarget;
+  surface.setPointerCapture?.(pointerId);
   const applyFromStart = (moveEvent) => {
     if (moveEvent.pointerId !== pointerId) {
       return;
     }
     moveEvent.preventDefault();
     moveEvent.stopPropagation();
-    // Same diagonal 1D policy as sliders / Time Window: right+up / left+down.
     const axes = typeof nodeGraphPointerDragScreenDelta === "function"
       ? nodeGraphPointerDragScreenDelta(startX, startY, moveEvent.clientX, moveEvent.clientY)
       : { combined: (moveEvent.clientX - startX) + (startY - moveEvent.clientY) };
@@ -2035,15 +2048,14 @@ function beginNodeGraphSampleWaveformZoomDrag(event, section) {
     if (endEvent.pointerId !== pointerId) {
       return;
     }
-    control.releasePointerCapture?.(pointerId);
-    control.classList.remove("is-dragging");
-    control.removeEventListener("pointermove", applyFromStart);
-    control.removeEventListener("pointerup", endDrag);
-    control.removeEventListener("pointercancel", endDrag);
+    surface.releasePointerCapture?.(pointerId);
+    surface.removeEventListener("pointermove", applyFromStart);
+    surface.removeEventListener("pointerup", endDrag);
+    surface.removeEventListener("pointercancel", endDrag);
   };
-  control.addEventListener("pointermove", applyFromStart);
-  control.addEventListener("pointerup", endDrag);
-  control.addEventListener("pointercancel", endDrag);
+  surface.addEventListener("pointermove", applyFromStart);
+  surface.addEventListener("pointerup", endDrag);
+  surface.addEventListener("pointercancel", endDrag);
 }
 
 const nodeGraphSampleWaveformHandleHitPx = 10;
@@ -2133,6 +2145,24 @@ function nodeGraphSampleWaveformSetRegionFromClientX(section, canvas, clientX, w
 
 function bindNodeGraphSampleWaveformInteractions(section, canvas) {
   canvas.style.touchAction = "none";
+  // GL HUD labels (zoom %, playlist): hover highlight, drawn by nodeGraphSampleWaveformPaintFaceHud.
+  const setHudHover = (key) => {
+    if ((section._sampleWaveHudHover || "") === key) {
+      return;
+    }
+    section._sampleWaveHudHover = key;
+    canvas.style.cursor = key === "zoom" ? "ew-resize" : "";
+    if (typeof drawNodeGraphSampleWaveformDisplay === "function") {
+      drawNodeGraphSampleWaveformDisplay(section);
+    }
+  };
+  canvas.addEventListener("pointermove", (event) => {
+    if (event.buttons) {
+      return;
+    }
+    setHudHover(nodeGraphSampleWaveformHudHit(section, canvas, event.clientX, event.clientY) || "");
+  });
+  canvas.addEventListener("pointerleave", () => setHudHover(""));
 
   let dragPointerId = null;
   let lastClientX = 0;
@@ -2146,6 +2176,20 @@ function bindNodeGraphSampleWaveformInteractions(section, canvas) {
       return;
     }
     if (event.button !== 0 && event.button !== undefined) {
+      return;
+    }
+    const hud = nodeGraphSampleWaveformHudHit(section, canvas, event.clientX, event.clientY);
+    if (hud === "playlist") {
+      event.preventDefault();
+      event.stopPropagation();
+      const nodeId = section.dataset.node;
+      if (nodeId && typeof nodeGraphAudioPlayerPlaylistSetFace === "function") {
+        nodeGraphAudioPlayerPlaylistSetFace(nodeId, "pl");
+      }
+      return;
+    }
+    if (hud === "zoom") {
+      beginNodeGraphSampleWaveformZoomDrag(event, section, canvas);
       return;
     }
     dragPointerId = event.pointerId;
@@ -2324,11 +2368,9 @@ function nodeGraphSampleWaveformShouldKeepLoop(section) {
   if (Number.isFinite(speed) && speed <= 0) {
     return false;
   }
-  const nodeId = section.dataset.node;
-  if (typeof nodeGraphAudioPlayerPlaylistIsAudible === "function"
-    && !nodeGraphAudioPlayerPlaylistIsAudible(nodeId)) {
-    return false;
-  }
+  // Stay on rAF while live is up, including Stop. Gating on Playmode killed
+  // the loop; Play from the slider (waveplay has no transport row) never
+  // restarted it until a page switch called EnsureLoop.
   return true;
 }
 
@@ -2909,7 +2951,7 @@ function drawNodeGraphSampleWaveformDisplay(section) {
       circuitRunning ? "No sample loaded" : "Load a sample",
       settings,
     );
-    nodeGraphSampleWaveformPaintSpeedLabel(batch, nodeId, node, width, height, pixelRatio, settings);
+    nodeGraphSampleWaveformPaintFaceHud(batch, section, nodeId, node, width, height, pixelRatio, settings, 1);
     present();
     nodeGraphSampleWaveformPaintCompanionPlaylist(section, nodeId);
     return;
@@ -3021,8 +3063,8 @@ function drawNodeGraphSampleWaveformDisplay(section) {
   // outside is dimmed after the trace so the effect is obvious.
   const loopStart = clampNodeSliderValue(nodeGraphFiniteNumber(node.params?.start), 0, 1) * entry.frames;
   const loopEnd = clampNodeSliderValue(nodeGraphFiniteNumber(node.params?.end, 1), 0, 1) * entry.frames;
-  const regionX0 = clampNodeSliderValue(frameToX(Math.min(loopStart, loopEnd)), 0, width);
-  const regionX1 = clampNodeSliderValue(frameToX(Math.max(loopStart, loopEnd)), 0, width);
+  const regionX0 = frameToX(Math.min(loopStart, loopEnd));
+  const regionX1 = frameToX(Math.max(loopStart, loopEnd));
 
   // Per-sample grid, once zoomed in enough that individual frames are
   // legible (roughly 6+ device pixels per sample) — makes the discrete
@@ -3032,7 +3074,6 @@ function drawNodeGraphSampleWaveformDisplay(section) {
   const gridBrightness = Math.max(0, Math.min(1, nodeGraphFiniteNumber(settings.gridBrightness)));
   const showSampleGrid = gridBrightness > 0.001 && pixelsPerFrame >= 6 * pixelRatio;
 
-  const faceMinDevice = faceMinSide(width, height);
   const samples = nodeGraphSampleWaveformEntrySamples(entry);
   const spp = viewSpan / Math.max(1, width);
   nodeGraphSampleWaveformEnsureEnvelope(state, width);
@@ -3085,58 +3126,76 @@ function drawNodeGraphSampleWaveformDisplay(section) {
   // stays full brightness; unselected flanks get a solid dark veil.
   const veil = [0, 0, 0, 0.58];
   if (regionX0 > 0.5) {
-    nodeGraphGlLinesRect(batch, 0, 0, snap(regionX0), height, veil);
+    const w0 = snap(Math.min(width, Math.max(0, regionX0)));
+    if (w0 > 0.5) {
+      nodeGraphGlLinesRect(batch, 0, 0, w0, height, veil);
+    }
   }
   if (regionX1 < width - 0.5) {
-    nodeGraphGlLinesRect(batch, snap(regionX1), 0, width - snap(regionX1), height, veil);
+    const x1 = snap(Math.max(0, regionX1));
+    if (x1 < width - 0.5) {
+      nodeGraphGlLinesRect(batch, x1, 0, width - x1, height, veil);
+    }
   }
   // Subtle selected-band lift so the active region still reads as on.
-  if (regionX1 > regionX0) {
-    nodeGraphGlLinesRect(
-      batch, snap(regionX0), 0, snap(regionX1) - snap(regionX0), height,
-      nodeGraphGlLinesCss(nodeGraphSampleWaveformLineColor(settings, 70, 0.06)),
-    );
+  {
+    const sel0 = snap(Math.max(0, regionX0));
+    const sel1 = snap(Math.min(width, regionX1));
+    if (sel1 > sel0) {
+      nodeGraphGlLinesRect(
+        batch, sel0, 0, sel1 - sel0, height,
+        nodeGraphGlLinesCss(nodeGraphSampleWaveformLineColor(settings, 70, 0.06)),
+      );
+    }
   }
-  // Draggable Start / End handles (1 device px lines + top/bottom caps).
+  // Start / End handles at the sample frames (off-screen when zoomed away).
   {
     const handle = [1, 220 / 255, 120 / 255, 0.95];
     const cap = 4;
     for (const rx of [regionX0, regionX1]) {
-      const hx = Math.min(width - 1, Math.max(0, Math.floor(rx)));
+      if (rx < -1 || rx > width + 1) {
+        continue;
+      }
+      const hx = Math.floor(rx);
       nodeGraphGlLinesRect(batch, hx, 0, 1, height, handle);
       nodeGraphGlLinesRect(batch, hx - 1, 0, 3, cap, handle);
       nodeGraphGlLinesRect(batch, hx - 1, height - cap, 3, cap, handle);
     }
   }
 
-  // Playhead - scrollLineWidth CSS px @ zoom 1. 0 = hidden.
-  // Offline: no playhead (static sample preview only).
-  const scrollPx = faceInkPx(
-    clampAuthoredInkPx(
-      Number.isFinite(Number(settings.scrollLineWidth))
-        ? settings.scrollLineWidth
-        : nodeGraphSampleWaveformDefaultSettings.scrollLineWidth,
-      2,
-    ),
-    faceMinDevice,
-  );
+  // Playhead: 1 CSS-px core, short Sabrina feather. Do not scale with face size.
+  const scrollHide = Number.isFinite(Number(settings.scrollLineWidth))
+    ? Number(settings.scrollLineWidth)
+    : nodeGraphSampleWaveformDefaultSettings.scrollLineWidth;
   if (
     circuitRunning
-    && scrollPx > 0
+    && scrollHide > 0
     && playheadFrame >= viewStart
     && playheadFrame <= viewEnd
+    && typeof nodeGraphGlLinesSegment === "function"
   ) {
     const x = (!autoScrollPaused && settings.scrollMode === "smooth")
-      ? Math.round(scrollLineRatio * width) + 0.5
-      : Math.round(frameToX(playheadFrame)) + 0.5;
-    const lw = Math.max(1, Math.round(scrollPx));
-    nodeGraphGlLinesRect(batch, Math.round(x - lw / 2), 0, lw, height, [1, 1, 1, 0.9]);
+      ? scrollLineRatio * width
+      : frameToX(playheadFrame);
+    nodeGraphGlLinesSegment(batch, x, 0, x, height, 0.45, 0.7, [1, 1, 1, 0.88]);
+  }
+
+  const clickMark = nodeGraphSampleWaveformClickMarks.get(nodeId);
+  if (clickMark && typeof nodeGraphGlLinesSegment === "function") {
+    const age = (performance.now() - clickMark.t0) / 1000;
+    if (age >= 1) {
+      nodeGraphSampleWaveformClickMarks.delete(nodeId);
+    } else {
+      const cx = frameToX(clickMark.frame);
+      if (cx >= -1 && cx <= width + 1) {
+        nodeGraphGlLinesSegment(batch, cx, 0, cx, height, 0.45, 0.7, [1, 1, 1, 1 - age]);
+      }
+    }
   }
 
   if (node?.type !== "wavetable2d") {
     const zoomRatio = (viewEnd - viewStart) / Math.max(1, state.totalFrames);
-    nodeGraphSampleWaveformSyncZoomControl(section, zoomRatio);
-    nodeGraphSampleWaveformPaintSpeedLabel(batch, nodeId, node, width, height, pixelRatio, settings);
+    nodeGraphSampleWaveformPaintFaceHud(batch, section, nodeId, node, width, height, pixelRatio, settings, zoomRatio);
     present();
     nodeGraphSampleWaveformPaintCompanionPlaylist(section, nodeId);
   } else {
@@ -3155,6 +3214,92 @@ function nodeGraphSampleWaveformPaintCompanionPlaylist(section, nodeId) {
   if (typeof nodeGraphAudioPlayerPlaylistSyncScrubber === "function") {
     nodeGraphAudioPlayerPlaylistSyncScrubber(nodeId);
   }
+}
+
+function nodeGraphSampleWaveformPaintFaceHud(batch, section, nodeId, node, width, height, pixelRatio, settings, zoomRatio) {
+  if (!batch) {
+    return;
+  }
+  const face = section?.dataset?.musicPlayerFace || "wave";
+  const faceMin = faceMinSide(width, height);
+  const fontUnit = settings && Number.isFinite(Number(settings.fontSize))
+    ? Number(settings.fontSize)
+    : nodeGraphSampleWaveformDefaultSettings.fontSize;
+  const speedPx = Math.max(8, Math.round(faceInkPx(clampAuthoredInkPx(fontUnit, 11), faceMin) * 0.86));
+  const hudPx = Math.max(7, Math.round(speedPx * 0.72));
+  const family = nodeGraphSampleWaveformHudFamily;
+  const labelUnit = settings && Number.isFinite(Number(settings.labelInset))
+    ? Number(settings.labelInset)
+    : nodeGraphSampleWaveformDefaultSettings.labelInset;
+  const pad = faceFracPx(labelUnit, faceMin);
+  const ink = typeof nodeGraphGlLinesCss === "function"
+    ? nodeGraphGlLinesCss(nodeGraphSampleWaveformLineColor(settings, 85, 0.7))
+    : [0.45, 0.9, 0.55, 0.7];
+  const css = Math.max(1e-6, Number(pixelRatio) || 1);
+  const hits = { playlist: null, zoom: null };
+  // Hover: same shared mix as the DOM buttons (--node-ui-hover-mix, styles.css), in GL.
+  const hover = String(section?._sampleWaveHudHover || "");
+  const hudInk = (key) => (hover === key ? [ink[0], ink[1], ink[2], 1] : ink);
+  const hudHoverRect = (key, left, w) => {
+    if (hover !== key || typeof nodeGraphGlLinesRect !== "function") {
+      return;
+    }
+    const mix = Number.parseFloat(getComputedStyle(section).getPropertyValue("--node-ui-hover-mix"));
+    const a = Number.isFinite(mix) ? mix / 100 : 0.24;
+    const hp = Math.max(2, Math.round(hudPx * 0.25));
+    nodeGraphGlLinesRect(batch, Math.round(left - hp), Math.round(pad - hp), Math.round(w + hp * 2),
+      Math.round(hudPx + hp * 2), [ink[0], ink[1], ink[2], a]);
+  };
+  if (typeof nodeGraphGlLinesText === "function") {
+    if (face === "wave" || face === "waveplay") {
+      const zoomLabel = nodeGraphSampleWaveformFormatZoomPercent(
+        Number.isFinite(Number(zoomRatio)) ? Number(zoomRatio) : 1,
+      );
+      const zoomW = typeof nodeGraphGlLinesMeasureText === "function"
+        ? nodeGraphGlLinesMeasureText(zoomLabel, hudPx, family, 600)
+        : hudPx * zoomLabel.length * 0.55;
+      hudHoverRect("zoom", width - pad - zoomW, zoomW);
+      nodeGraphGlLinesText(batch, zoomLabel, Math.round(width - pad), Math.round(pad), {
+        px: hudPx,
+        rgba: hudInk("zoom"),
+        align: "right",
+        baseline: "top",
+        family,
+        weight: 600,
+      });
+      hits.zoom = {
+        l: (width - pad - zoomW) / css,
+        t: pad / css,
+        r: (width - pad) / css,
+        b: (pad + hudPx) / css,
+      };
+    }
+    if (face === "wave") {
+      const plLabel = "playlist";
+      const plW = typeof nodeGraphGlLinesMeasureText === "function"
+        ? nodeGraphGlLinesMeasureText(plLabel, hudPx, family, 600)
+        : hudPx * plLabel.length * 0.55;
+      hudHoverRect("playlist", pad, plW);
+      nodeGraphGlLinesText(batch, plLabel, Math.round(pad), Math.round(pad), {
+        px: hudPx,
+        rgba: hudInk("playlist"),
+        align: "left",
+        baseline: "top",
+        family,
+        weight: 600,
+      });
+      hits.playlist = {
+        l: pad / css,
+        t: pad / css,
+        r: (pad + plW) / css,
+        b: (pad + hudPx) / css,
+      };
+    }
+  }
+  if (section) {
+    section._sampleWaveHudHits = hits;
+  }
+  nodeGraphSampleWaveformPaintSpeedLabel(batch, nodeId, node, width, height, pixelRatio, settings);
 }
 
 function nodeGraphSampleWaveformPaintSpeedLabel(batch, nodeId, node, width, height, pixelRatio, settings) {
@@ -3182,7 +3327,7 @@ function nodeGraphSampleWaveformPaintSpeedLabel(batch, nodeId, node, width, heig
   const fontUnit = settings && Number.isFinite(Number(settings.fontSize))
     ? Number(settings.fontSize)
     : nodeGraphSampleWaveformDefaultSettings.fontSize;
-  const fontPx = Math.max(1, Math.round(faceInkPx(clampAuthoredInkPx(fontUnit, 11), faceMin)));
+  const fontPx = Math.max(8, Math.round(faceInkPx(clampAuthoredInkPx(fontUnit, 11), faceMin) * 0.86));
   const family = nodeGraphSampleWaveformHudFamily;
   const labelUnit = settings && Number.isFinite(Number(settings.labelInset))
     ? Number(settings.labelInset)
