@@ -526,7 +526,7 @@ async function sendNodeGraphLiveNativeModule(liveNode, entry) {
 // Chrome caps wasm memories per process (~100); many standalone instances
 // hit that cap. Slim is for small used-sets when per-module files exist;
 // huge patches / site deploys should use combined.
-const nodeGraphLiveCombinedNativeModuleUrl = "native_modules/combined/soemdsp_combined.wasm?v=circuit-keep-1";
+const nodeGraphLiveCombinedNativeModuleUrl = "native_modules/combined/soemdsp_combined.wasm?v=mem-1g-1";
 
 /** @type {null|"slim"|"combined"} */
 let nodeGraphLiveNativeWasmLoadModeResolved = null;
@@ -3674,6 +3674,35 @@ async function nodeGraphLiveOutputDisposeCancelledStart(outputSerial, localConte
   return true;
 }
 
+/** Create/resume AudioContext on the click stack so Chrome allows it. */
+function nodeGraphLiveEnsureContextFromGesture() {
+  const live = nodeGraphMvp?.live;
+  if (!live) {
+    return null;
+  }
+  const Ctor = window.AudioContext || window.webkitAudioContext;
+  if (!Ctor) {
+    return null;
+  }
+  let ctx = live.gestureContext;
+  if (!ctx || ctx.state === "closed") {
+    ctx = live.context && live.context.state !== "closed" ? live.context : null;
+  }
+  if (!ctx) {
+    const wantRate = typeof nodeGraphBaseSampleRate === "function" ? nodeGraphBaseSampleRate() : 0;
+    try {
+      ctx = wantRate > 0 ? new Ctor({ sampleRate: wantRate }) : new Ctor();
+    } catch (_error) {
+      ctx = new Ctor();
+    }
+    live.gestureContext = ctx;
+  }
+  if (ctx.state === "suspended" && typeof ctx.resume === "function") {
+    void ctx.resume();
+  }
+  return ctx;
+}
+
 async function startNodeGraphLiveAudio(outputSerial = nodeGraphMvp.live.outputToggleSerial) {
   if (nodeGraphLiveEngineStartCancelled(outputSerial)) {
     nodeGraphLiveOutputAbortStart("stopped");
@@ -3710,11 +3739,18 @@ async function startNodeGraphLiveAudio(outputSerial = nodeGraphMvp.live.outputTo
       throw new Error("Web Audio API unavailable");
     }
     const wantRate = nodeGraphBaseSampleRate();
-    let context;
-    try {
-      context = new AudioContextConstructor({ sampleRate: wantRate });
-    } catch (_e) {
-      context = new AudioContextConstructor();
+    let context = nodeGraphMvp.live.gestureContext;
+    if (context && context.state !== "closed") {
+      nodeGraphMvp.live.gestureContext = null;
+    } else {
+      context = null;
+    }
+    if (!context) {
+      try {
+        context = new AudioContextConstructor({ sampleRate: wantRate });
+      } catch (_e) {
+        context = new AudioContextConstructor();
+      }
     }
     nodeGraphMvp.live.sessionId += 1;
     nodeGraphMvp.live.planSerial = 0;

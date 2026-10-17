@@ -760,6 +760,20 @@ function nodeGraphLogJackVisibility(reason = "census") {
 
 let nodeGraphJackVisibilityLogTimer = 0;
 
+function nodeGraphJackCensusShouldWait() {
+  const body = typeof document !== "undefined" ? document.body : null;
+  if (
+    body?.classList?.contains("node-boot-loading")
+    || body?.classList?.contains("node-boot-fading")
+  ) {
+    return true;
+  }
+  const workspace = typeof document !== "undefined"
+    ? document.getElementById("nodeGraphWorkspace")
+    : null;
+  return Boolean(workspace?.classList.contains("viewport-zooming"));
+}
+
 function nodeGraphScheduleJackVisibilityLog(reason = "census") {
   if (typeof window === "undefined") {
     return;
@@ -770,8 +784,14 @@ function nodeGraphScheduleJackVisibilityLog(reason = "census") {
   nodeGraphJackVisibilityLogTimer = setTimeout(() => {
     nodeGraphJackVisibilityLogTimer = 0;
     const run = (attempt = 0) => {
+      // Boot keeps .shell visibility:hidden, and a zoom gesture hides jacks.
+      // Both still have a real layout box, so a census then is a false FAIL.
+      if (nodeGraphJackCensusShouldWait() && attempt < 200) {
+        setTimeout(() => run(attempt + 1), 250);
+        return;
+      }
       const report = nodeGraphLogJackVisibility(reason);
-      // patch-dom can fire before zoom/layout settles â€” awake ports briefly 0Ã—0.
+      // patch-dom can fire before zoom/layout settles — awake ports briefly 0×0.
       // Retry once after another frame instead of a hard false FAIL.
       if (
         report

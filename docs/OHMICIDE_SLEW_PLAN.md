@@ -55,7 +55,6 @@ Serial slew→shaper matches the name better than parallel.
 | `slewLimiter` (Up/Down Slew) | **Wrong law** for Ohmicide I | Time-to-target glide (Up/Down seconds, amplitude-independent). Related, not a max-`|dy/dt|` clip. |
 | `softClipper` | Have | Slew II primary shaper |
 | `tubeSaturation` | Have | Warmer Slew II variant |
-| `clipperLimiter` / hard clip | Have | Extra crest grit |
 | `gain` / `attenuverter` / `bias` | Have | Drive + Bias |
 | `mix` | Have | Dry/wet |
 | `sampleHold` | Have | Extreme “slew → 0” cousin |

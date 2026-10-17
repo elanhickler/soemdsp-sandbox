@@ -525,6 +525,20 @@ function nodeGraphAudioPlayerPlaylistPersist(nodeId) {
   }
 }
 
+/** Start (or unstick) the sandbox AudioContext from a user gesture. */
+function nodeGraphAudioPlayerEnsureLiveOutput() {
+  if (typeof nodeGraphLiveEnsureContextFromGesture === "function") {
+    nodeGraphLiveEnsureContextFromGesture();
+  }
+  if (nodeGraphMvp?.live?.context?.state === "running" && nodeGraphMvp.live.node) {
+    return Promise.resolve();
+  }
+  if (typeof nodeGraphExternalStartLiveOutput === "function") {
+    nodeGraphExternalStartLiveOutput();
+  }
+  return Promise.resolve();
+}
+
 /** Playmode base 0…5. Writes the param (modulation still stacks on top). */
 function nodeGraphAudioPlayerWriteTransport(nodeId, mode, { record = false } = {}) {
   const node = typeof nodeGraphPatchNode === "function" ? nodeGraphPatchNode(nodeId) : null;
@@ -532,6 +546,9 @@ function nodeGraphAudioPlayerWriteTransport(nodeId, mode, { record = false } = {
     return;
   }
   const next = Math.max(0, Math.min(5, Math.round(nodeGraphFiniteNumber(mode))));
+  if (next >= 3) {
+    void nodeGraphAudioPlayerEnsureLiveOutput();
+  }
   node.params = { ...(node.params || {}), transport: String(next) };
   const slider = document.querySelector(
     `.dsp-node[data-node="${CSS.escape(String(nodeId))}"] input[data-param="transport"]`,
@@ -752,17 +769,21 @@ function nodeGraphAudioPlayerPlaylistPlay(nodeId) {
   }
   const reason = String(nodeGraphMvp?.sampleRuntimeStatus?.get?.(nodeId)?.reason || "").trim().toLowerCase();
   const transport = nodeGraphAudioPlayerTransportBase(nodeId);
+  const ctxRunning = nodeGraphMvp?.live?.context?.state === "running";
   if (typeof nodeGraphAudioPlayerPlaylistDebug === "function") {
     nodeGraphAudioPlayerPlaylistDebug(nodeId, "play-button", {
       index: pl.items[i] ? i : 0,
       name: item.name || "",
       transport,
       reason,
+      ctxRunning,
     });
   }
+  void nodeGraphAudioPlayerEnsureLiveOutput();
   // After a file ends the engine stays on Play (4) with completed=true.
   // Writing 4 again does not clear completed — Stop then Play does.
-  if (reason === "engine complete" || reason === "engine stopped" || transport <= 1) {
+  // Same reset when audio never started (embed: transport already Play, context dead).
+  if (reason === "engine complete" || reason === "engine stopped" || transport <= 1 || !ctxRunning) {
     const node = typeof nodeGraphPatchNode === "function" ? nodeGraphPatchNode(nodeId) : null;
     if (node) {
       node.samplePhase = 0;

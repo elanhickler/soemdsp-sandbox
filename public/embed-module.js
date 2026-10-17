@@ -67,60 +67,6 @@
         nodeGraphAudioPlayerPlaylistSetFace(id, "pl");
       }
     });
-    // The player API (audio-player-api.js) asks for the overlay when a play is blocked.
-    window.soemdspEmbedShowStartOverlay = maybeShowStartOverlay;
-    // ?playlist / ?src have their own overlay (audio-player-embed.js).
-    const q = new URLSearchParams(window.location.search || "");
-    if (opened && !q.get("playlist") && !q.get("src")) {
-      window.setTimeout(maybeShowStartOverlay, 400);
-    }
-  }
-
-  function audioAllowedNow() {
-    try {
-      const Ctor = window.AudioContext || window.webkitAudioContext;
-      const probe = new Ctor();
-      const ok = probe.state === "running";
-      probe.close();
-      return ok;
-    } catch (_error) {
-      return false;
-    }
-  }
-
-  const running = () => nodeGraphMvp?.live?.context?.state === "running";
-
-  // Perform mode starts audio; without a user gesture the browser blocks it.
-  function maybeShowStartOverlay() {
-    if (running() || audioAllowedNow() || document.querySelector(".soemdsp-embed-start")) {
-      return;
-    }
-    const label = "\u25B6 Click to start";
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "soemdsp-embed-start";
-    button.textContent = label;
-    button.setAttribute("aria-label", "Start audio");
-    button.style.cssText = [
-      "position:fixed", "inset:0", "z-index:2147483000", "display:flex", "align-items:center",
-      "justify-content:center", "width:100%", "height:100%", "border:0", "cursor:pointer",
-      "background:rgba(5,5,10,.55)", "color:#fff", "font:600 28px/1 system-ui,sans-serif",
-    ].join(";");
-    button.addEventListener("click", async () => {
-      button.disabled = true;
-      const live = nodeGraphMvp?.live;
-      // The gesture-less start hangs in context.resume(); clear it, then start fresh.
-      if (live?.outputEnabled && !live.context && typeof setNodeGraphLiveOutputEnabled === "function") {
-        await setNodeGraphLiveOutputEnabled(false);
-      }
-      if (typeof nodeGraphExternalStartLiveOutput === "function") nodeGraphExternalStartLiveOutput();
-      const until = Date.now() + 4000;
-      while (!running() && Date.now() < until) await new Promise((r) => setTimeout(r, 100));
-      if (running()) button.remove();
-      else button.disabled = false;
-    });
-    document.body.appendChild(button);
-    document.documentElement.dataset.soemdspEmbedNeedsGesture = "true";
   }
 
   const go = () => {

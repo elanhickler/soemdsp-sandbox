@@ -622,6 +622,42 @@ function nodeGraphHitTrailEnsureWireGeomCache(drag) {
   if (drag?.wireGeomCache) {
     return drag.wireGeomCache;
   }
+  const glWires = typeof nodeGraphGlGraphState !== "undefined" ? nodeGraphGlGraphState?.wires : null;
+  if (Array.isArray(glWires) && glWires.length) {
+    const geoms = [];
+    for (let w = 0; w < glWires.length; w += 1) {
+      const wire = glWires[w];
+      const pts = wire?.xy;
+      if (!wire?.kind || wire.index < 0 || !pts || pts.length < 4) continue;
+      let minX = Infinity;
+      let minY = Infinity;
+      let maxX = -Infinity;
+      let maxY = -Infinity;
+      const flat = [];
+      for (let i = 0; i < pts.length; i += 2) {
+        const x = pts[i];
+        const y = pts[i + 1];
+        flat.push(x, y);
+        if (x < minX) minX = x;
+        if (y < minY) minY = y;
+        if (x > maxX) maxX = x;
+        if (y > maxY) maxY = y;
+      }
+      geoms.push({
+        maxX,
+        maxY,
+        minX,
+        minY,
+        pts: flat,
+        wireHit: { kind: "wire", wireKind: wire.kind, index: wire.index },
+      });
+    }
+    if (drag) {
+      drag.wireGeomCache = geoms;
+      drag.wirePathCache = [];
+    }
+    return geoms;
+  }
   const hitKeys = new Set();
   const pathEls = [];
   for (const pathEl of document.querySelectorAll(".node-wire-hit-path")) {

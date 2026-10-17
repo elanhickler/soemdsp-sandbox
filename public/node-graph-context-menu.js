@@ -2918,9 +2918,12 @@ function openNodeSceneContextMenu(event) {
 
   closeNodeScopeContextMenu();
   const contextWire = event.target.closest?.(".node-wire-hit-path, .node-wire-path");
-  if (contextWire) {
-    const index = Number(contextWire.dataset.connectionIndex);
-    const kind = contextWire.dataset.connectionKind || "signal";
+  const glWire = !contextWire && typeof nodeGraphGlHitWireAtEvent === "function"
+    ? nodeGraphGlHitWireAtEvent(event)
+    : null;
+  if (contextWire || glWire) {
+    const index = contextWire ? Number(contextWire.dataset.connectionIndex) : glWire.index;
+    const kind = contextWire ? (contextWire.dataset.connectionKind || "signal") : glWire.kind;
     if (Number.isFinite(index)) {
       event.preventDefault();
       event.stopPropagation();

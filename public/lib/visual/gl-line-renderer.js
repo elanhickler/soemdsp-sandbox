@@ -129,6 +129,9 @@ void main() {
 }
 `;
   const TEXT_BAKE_PX = 64;
+  // Raised when the caller wants glyphs baked closer to the size they are drawn.
+  // Capped so one cell still fits the sheet. Unset callers keep 64.
+  let glyphBakePx = TEXT_BAKE_PX;
   const TEXT_WHITE = Object.freeze([1, 1, 1, 1]);
   const TEXT_PAD = 6;
   // Empty texels between atlas cells: 64 px bake at 1/8 draw (mip 3) still
@@ -402,22 +405,40 @@ void main() {
     const cv = doc.createElement("canvas");
     const cx = cv.getContext?.("2d");
     if (!cx || typeof cx.measureText !== "function") return null;
-    const font = `${weight} ${TEXT_BAKE_PX}px ${family}`;
-    cx.font = font;
     const list = [...new Set([...chars])];
-    const cellH = Math.ceil(TEXT_BAKE_PX * 1.25) + TEXT_PAD * 2;
-    const sheetW = 1024;
-    const glyphs = new Map();
-    let x = 0;
-    let y = 0;
-    for (const ch of list) {
-      const adv = Math.max(1, cx.measureText(ch).width || TEXT_BAKE_PX * 0.6);
-      const gw = Math.ceil(adv) + TEXT_PAD * 2;
-      if (x + gw > sheetW) { x = 0; y += cellH + TEXT_GUTTER; }
-      glyphs.set(ch, { x, y, w: gw, h: cellH, adv });
-      x += gw + TEXT_GUTTER;
+    const maxTex = s.gl.getParameter(s.gl.MAX_TEXTURE_SIZE) || 4096;
+    const sheetW = Math.min(1024, maxTex);
+    let bakePx = glyphBakePx;
+    let glyphs = new Map();
+    let sheetH = 0;
+    let cellH = 0;
+    while (bakePx >= 16) {
+      const fontTry = `${weight} ${bakePx}px ${family}`;
+      cx.font = fontTry;
+      cellH = Math.ceil(bakePx * 1.25) + TEXT_PAD * 2;
+      glyphs = new Map();
+      let x = 0;
+      let y = 0;
+      let fits = cellH <= maxTex;
+      for (const ch of list) {
+        const adv = Math.max(1, cx.measureText(ch).width || bakePx * 0.6);
+        const gw = Math.ceil(adv) + TEXT_PAD * 2;
+        if (gw > sheetW || y + cellH > maxTex) { fits = false; break; }
+        if (x + gw > sheetW) {
+          x = 0;
+          y += cellH + TEXT_GUTTER;
+          if (y + cellH > maxTex) { fits = false; break; }
+        }
+        glyphs.set(ch, { x, y, w: gw, h: cellH, adv });
+        x += gw + TEXT_GUTTER;
+      }
+      sheetH = y + cellH;
+      if (fits && sheetH <= maxTex && glyphs.size === list.length) break;
+      bakePx = Math.floor(bakePx * 0.9);
     }
-    const sheetH = y + cellH;
+    if (bakePx < 16 || glyphs.size !== list.length) return null;
+    if (bakePx !== glyphBakePx) glyphBakePx = bakePx;
+    const font = `${weight} ${bakePx}px ${family}`;
     cv.width = sheetW;
     cv.height = sheetH;
     cx.font = font;
@@ -426,7 +447,7 @@ void main() {
     cx.fillStyle = "#fff";
     cx.clearRect(0, 0, sheetW, sheetH);
     for (const [ch, g] of glyphs) {
-      cx.fillText(ch, g.x + TEXT_PAD, g.y + TEXT_PAD + TEXT_BAKE_PX * TEXT_ASCENT);
+      cx.fillText(ch, g.x + TEXT_PAD, g.y + TEXT_PAD + bakePx * TEXT_ASCENT);
     }
     const gl = s.gl;
     const texture = gl.createTexture();
@@ -453,7 +474,12 @@ void main() {
     if (!atlas || missing.length) {
       const next = bakeAtlas(s, family, weight, (atlas?.chars || TEXT_BASE_CHARS) + missing.join(""));
       if (!next) return null;
-      if (atlas?.texture) s.gl.deleteTexture(atlas.texture);
+      // This frame's text runs already stored the old texture. Delete it
+      // after drawTexts, not while those runs are still queued.
+      if (atlas?.texture) {
+        if (!s.deadTextures) s.deadTextures = [];
+        s.deadTextures.push(atlas.texture);
+      }
       atlas = next;
       s.atlases.set(key, atlas);
     }
@@ -507,12 +533,13 @@ void main() {
   }
 
   function emojiPage(s, w, h) {
+    if (!(w > 0) || !(h > 0) || w > EMOJI_SHEET || h > EMOJI_SHEET) return null;
     const e = s.emoji;
     const gl = s.gl;
     let page = e.pages[e.pages.length - 1];
     if (page) {
       if (page.x + w > EMOJI_SHEET) { page.x = 0; page.y += page.rowH; page.rowH = 0; }
-      if (page.y + h <= EMOJI_SHEET) return page;
+      if (page.x + w <= EMOJI_SHEET && page.y + h <= EMOJI_SHEET) return page;
     }
     if (e.pages.length >= EMOJI_MAX_PAGES || w > EMOJI_SHEET || h > EMOJI_SHEET) return null;
     const texture = gl.createTexture();
@@ -612,7 +639,7 @@ void main() {
     const str = String(text ?? "");
     const atlas = nodeGraphGlLinesTextAtlas(family, weight, str);
     if (!atlas) return str.length * px * 0.6;
-    const g = px / TEXT_BAKE_PX;
+    const g = px / glyphBakePx;
     if (!EMOJI_HINT.test(str)) {
       let adv = 0;
       for (const ch of str) adv += atlas.glyphs.get(ch)?.adv || 0;
@@ -645,11 +672,12 @@ void main() {
     if (!atlas) return;
     const k = batch.scale || 1;
     const px = Math.max(1, Number(options.px) || 12) * k;
-    const g = px / TEXT_BAKE_PX;
+    const g = px / glyphBakePx;
     const segs = EMOJI_HINT.test(str) ? nodeGraphGlLinesTextSegments(str) : null;
     let hasEmoji = false;
     if (segs) for (let i = 0; i < segs.length; i += 1) if (segs[i].emoji) { hasEmoji = true; break; }
-    const emojiPx = emojiBasePx(px);
+    const emojiPx = options.emojiPx != null ? emojiBasePx(options.emojiPx) : emojiBasePx(px);
+    const emojiScale = options.emojiPx != null ? px / Math.max(1, emojiPx) : 1;
     let width = 0;
     if (hasEmoji) {
       for (const seg of segs) {
@@ -689,13 +717,13 @@ void main() {
         // 1:1 device px (squeezed only by maxWidth); colour is the bake, tint alpha only.
         const run = textRun(batch, entry.page.texture, true);
         // Whole device px so NEAREST samples the bake texel-for-pixel.
-        const x0 = Math.round(pen - EMOJI_PAD * squeeze);
-        const y0 = Math.round(baseline - (EMOJI_PAD + entry.px * TEXT_ASCENT));
-        pushTextQuad(batch, x0, y0, x0 + entry.w * squeeze, y0 + entry.h,
+        const x0 = Math.round(pen - EMOJI_PAD * squeeze * emojiScale);
+        const y0 = Math.round(baseline - (EMOJI_PAD + entry.px * TEXT_ASCENT) * emojiScale);
+        pushTextQuad(batch, x0, y0, x0 + entry.w * squeeze * emojiScale, y0 + entry.h * emojiScale,
           entry.u0, entry.v0, entry.u1, entry.v1, 1, 1, 1, ca);
         run.end = batch.tn;
       }
-      pen += entry.adv * squeeze;
+      pen += entry.adv * squeeze * emojiScale;
     }
   }
 
@@ -715,7 +743,7 @@ void main() {
       const gl = atlas.glyphs.get(ch);
       if (!gl) continue;
       const x0 = pen - TEXT_PAD * sx;
-      const y0 = baseline - (TEXT_PAD + TEXT_BAKE_PX * TEXT_ASCENT) * g;
+      const y0 = baseline - (TEXT_PAD + glyphBakePx * TEXT_ASCENT) * g;
       const x1 = x0 + gl.w * sx;
       const y1 = y0 + gl.h * g;
       const u0 = gl.x / atlas.sheetW; const u1 = (gl.x + gl.w) / atlas.sheetW;
@@ -888,13 +916,28 @@ void main() {
     useTexturedProgram(s);
     // One draw call per texture run (glyph atlas or colour emoji page).
     for (const t of batch.texts) {
-      if (t.end <= t.start) continue;
+      if (t.end <= t.start || !t.texture) continue;
+      if (typeof gl.isTexture === "function" && !gl.isTexture(t.texture)) continue;
       gl.bindTexture(gl.TEXTURE_2D, t.texture);
+      // Workspace zoom above 2.5 samples the 64px glyph bake nearest, same
+      // policy as .pixelated-canvas-zoom. Emoji pages stay NEAREST always.
+      if (!t.color) {
+        const pixel = batch.textPixelated === true;
+        const mag = pixel ? gl.NEAREST : gl.LINEAR;
+        const min = pixel ? gl.NEAREST : gl.LINEAR_MIPMAP_LINEAR;
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, mag);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, min);
+      }
       if (t.color) gl.blendFuncSeparate(gl.ONE, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, alphaDst);
       else gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, alphaDst);
       drawTexturedTinted(s, w, h, batch.tdata, t.start, t.end, t.color ? 3 : 1);
     }
     gl.bindTexture(gl.TEXTURE_2D, null);
+    const dead = s.deadTextures;
+    if (dead && dead.length) {
+      for (let i = 0; i < dead.length; i += 1) gl.deleteTexture(dead[i]);
+      dead.length = 0;
+    }
   }
 
   /** Draw images, quads, text into the bound framebuffer with the given blend funcs. */
@@ -1068,6 +1111,21 @@ void main() {
     return [f(0), f(8), f(4), alpha];
   }
 
+  function nodeGraphGlLinesSetGlyphBakePx(px) {
+    const next = Math.max(16, Math.min(384, Math.round(Number(px) || TEXT_BAKE_PX)));
+    if (next === glyphBakePx) return false;
+    glyphBakePx = next;
+    const s = ensure();
+    if (s?.atlases) {
+      if (!s.deadTextures) s.deadTextures = [];
+      for (const atlas of s.atlases.values()) {
+        if (atlas?.texture) s.deadTextures.push(atlas.texture);
+      }
+      s.atlases.clear();
+    }
+    return true;
+  }
+
   const api = {
     nodeGraphGlLinesFillBlack,
     nodeGraphGlLinesBegin,
@@ -1081,6 +1139,7 @@ void main() {
     nodeGraphGlLinesSnapshot,
     nodeGraphGlLinesReleaseSnapshot,
     nodeGraphGlLinesText,
+    nodeGraphGlLinesSetGlyphBakePx,
     nodeGraphGlLinesMeasureText,
     nodeGraphGlLinesTextAtlas,
     nodeGraphGlLinesTextSegments,

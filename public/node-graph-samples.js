@@ -1042,13 +1042,9 @@ function nodeGraphSampleSharedDecodeContext() {
     throw new Error("Web Audio API unavailable");
   }
   if (!nodeGraphSampleDecodeAudioContext || nodeGraphSampleDecodeAudioContext.state === "closed") {
-    try {
-      nodeGraphSampleDecodeAudioContext = new AudioContextConstructor({
-        sampleRate: nodeGraphSampleDecodeTargetRate,
-      });
-    } catch {
-      nodeGraphSampleDecodeAudioContext = new AudioContextConstructor();
-    }
+    // Hardware rate. Do not force 44.1 kHz — Music Player keeps native PCM
+    // and the engine steps phase by pcmRate / engineRate.
+    nodeGraphSampleDecodeAudioContext = new AudioContextConstructor();
   }
   return nodeGraphSampleDecodeAudioContext;
 }
@@ -1063,12 +1059,22 @@ async function resampleNodeGraphAudioBuffer(audioBuffer, targetRate = nodeGraphS
     return audioBuffer;
   }
   const frames = Math.max(1, Math.round(audioBuffer.length * (rate / Math.max(1, audioBuffer.sampleRate))));
-  const offline = new Offline(audioBuffer.numberOfChannels || 1, frames, rate);
-  const source = offline.createBufferSource();
-  source.buffer = audioBuffer;
-  source.connect(offline.destination);
-  source.start(0);
-  return offline.startRendering();
+  // OfflineAudioContext chokes on long 48 kHz songs (5+ min hypersaw psytrance).
+  if (frames > rate * 90) {
+    return audioBuffer;
+  }
+  try {
+    const offline = new Offline(audioBuffer.numberOfChannels || 1, frames, rate);
+    const source = offline.createBufferSource();
+    source.buffer = audioBuffer;
+    source.connect(offline.destination);
+    source.start(0);
+    return await offline.startRendering();
+  } catch (_error) {
+    // Long 48 kHz files (e.g. 5-minute 320 kbps MP3s) can exceed OfflineAudioContext
+    // limits. Keep the native-rate buffer so the Music Player can still play.
+    return audioBuffer;
+  }
 }
 
 function nodeGraphSampleChannelBytes(channelData = []) {
@@ -1232,7 +1238,6 @@ async function decodeNodeGraphSampleArrayBuffer(arrayBuffer, fallbackName = "Sam
   let audioBuffer = null;
   try {
     audioBuffer = await context.decodeAudioData(arrayBuffer.slice(0));
-    audioBuffer = await resampleNodeGraphAudioBuffer(audioBuffer, nodeGraphSampleDecodeTargetRate);
   } catch (error) {
     throw new Error(nodeGraphSampleLoadErrorMessage(error, fallbackName));
   }
@@ -1273,6 +1278,9 @@ async function loadNodeGraphSampleForNode(nodeId, file, options = {}) {
       sourcePath: String(options.sourcePath || rel || file.name || "").trim(),
     }, options);
   } catch (error) {
+    if ((file.size || arrayBuffer.byteLength) > 8 * 1024 * 1024) {
+      throw error;
+    }
     setNodeGraphSampleStatus(nodeId, "browser decode failed; transcoding...");
     const dataUrl = await nodeGraphSampleFileToDataUrl(file);
     try {

@@ -855,6 +855,14 @@ function nodeGraphScreenSoloWholeModuleCapture(host) {
   return host._wholeModuleNatural;
 }
 
+/** Whole-module fit margin: 4% of the smaller tile side, at least 12px (never more than a quarter of it). */
+const NODE_GRAPH_WHOLE_MODULE_PAD_FRACTION = 0.04;
+const NODE_GRAPH_WHOLE_MODULE_PAD_MIN_PX = 12;
+function nodeGraphScreenSoloWholeModulePadPx(tw, th) {
+  const side = Math.min(tw, th);
+  return Math.min(side / 4, Math.max(NODE_GRAPH_WHOLE_MODULE_PAD_MIN_PX, side * NODE_GRAPH_WHOLE_MODULE_PAD_FRACTION));
+}
+
 /** Lay the module out at its zoom-1 size and fit it into the tile with ONE uniform scale (contain, centered). */
 function nodeGraphScreenSoloWholeModuleFit(tile) {
   const face = tile?.querySelector?.(":scope > .dsp-node.node-whole-module-face");
@@ -871,7 +879,9 @@ function nodeGraphScreenSoloWholeModuleFit(tile) {
   if (!(tw > 0 && th > 0)) {
     return;
   }
-  const s = Math.min(tw / nat.w, th / nat.h);
+  // Shared breathing room so the module never touches the tile edges (scale math only; no reflow).
+  const pad = nodeGraphScreenSoloWholeModulePadPx(tw, th);
+  const s = Math.max(0.01, Math.min((tw - 2 * pad) / nat.w, (th - 2 * pad) / nat.h));
   const ox = (tw - nat.w * s) / 2;
   const oy = (th - nat.h * s) / 2;
   const st = face.style;

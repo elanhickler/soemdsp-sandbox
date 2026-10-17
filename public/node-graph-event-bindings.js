@@ -24,6 +24,9 @@ async function bindNodeGraphMvpEvents() {
     // element can scroll first -- so guard Space in the capture phase too,
     // except inside real text-editing fields where a space is legitimate.
     const preventSpaceDefault = (event) => {
+      if (typeof nodeGraphAppHotkeysLocked === "function" && nodeGraphAppHotkeysLocked()) {
+        return;
+      }
       if (event.code !== "Space" && event.key !== " ") {
         return;
       }

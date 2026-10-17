@@ -154,10 +154,30 @@
     return parts.join("|");
   }
 
+  function smoothingSignature(patch) {
+    if (!patch || typeof patch !== "object") return "";
+    var parts = [];
+    var nodes = Array.isArray(patch.nodes) ? patch.nodes : [];
+    for (var i = 0; i < nodes.length; i += 1) {
+      var n = nodes[i];
+      var meta = n && n.paramMeta;
+      if (!n || !meta) continue;
+      var keys = Object.keys(meta);
+      for (var k = 0; k < keys.length; k += 1) {
+        var m = meta[keys[k]];
+        if (!m) continue;
+        parts.push(String(n.id) + "." + keys[k] + ":" + m.smoothingMode + ":" + m.smoothingType + ":" + m.smoothingSeconds);
+      }
+    }
+    parts.sort();
+    return parts.join("|");
+  }
+
   // Native param sync (same diff as perform-boot)
 
   var lastParams = new Map();
   var lastSentSignature = null;
+  var lastSmoothSignature = null;
 
   function patchNodes() {
     var nodes = global.nodeGraphMvp && global.nodeGraphMvp.patch && global.nodeGraphMvp.patch.nodes;
@@ -196,6 +216,7 @@
         for (var k = 0; k < keys.length; k += 1) {
           if (prev[keys[k]] !== now[keys[k]]) {
             postToHost({ event: "param", nodeId: id, key: keys[k], value: now[keys[k]] });
+            scheduleDocumentDirty();
           }
         }
       }
@@ -215,7 +236,7 @@
     }
   }
 
-  function sendPatchToNative(patch) {
+  function sendPatchToNative(patch, user) {
     var json = serializedPatchJson(patch);
     if (!json) return;
     var name = "";
@@ -223,15 +244,45 @@
       name = String((patch.info && patch.info.name) || global.nodeGraphMvp.currentSavedPatchFilename || "");
     } catch (_e) { /* unnamed */ }
     lastSentSignature = topologySignature(patch);
-    postToHost({ event: "patch", json: json, name: name });
+    lastSmoothSignature = smoothingSignature(patch);
+    lastDocumentJson = json;
+    postToHost({ event: "patch", json: json, name: name, user: !!user });
     snapshotParams();
   }
 
-  function afterCommit() {
+  var lastDocumentJson = "";
+  var dirtyTimer = null;
+
+  function isAutomaticCommit(options) {
+    var status = options && options.status;
+    return status === "boot" || status === "plugin loadPatch" || status === "host tempo" || status === "resend";
+  }
+
+  // Face values for the host project. The graph is already updated by param events.
+  function publishDocument() {
+    var patch = global.nodeGraphMvp && global.nodeGraphMvp.patch;
+    var json = serializedPatchJson(patch);
+    if (!json || json === lastDocumentJson) return;
+    lastDocumentJson = json;
+    postToHost({ event: "document", json: json });
+  }
+
+  // One undo step after the knobs settle. Host tempo does not call this.
+  function scheduleDocumentDirty() {
+    if (dirtyTimer) global.clearTimeout(dirtyTimer);
+    dirtyTimer = global.setTimeout(function () {
+      dirtyTimer = null;
+      publishDocument();
+      postToHost({ event: "documentDirty" });
+    }, 250);
+  }
+
+  function afterCommit(options) {
     var patch = global.nodeGraphMvp && global.nodeGraphMvp.patch;
     if (!patch) return;
-    if (topologySignature(patch) !== lastSentSignature) {
-      sendPatchToNative(patch);
+    if (options && options.status === "host tempo") return;
+    if (topologySignature(patch) !== lastSentSignature || smoothingSignature(patch) !== lastSmoothSignature) {
+      sendPatchToNative(patch, !isAutomaticCommit(options));
     } else {
       emitDirtyParams();
     }
@@ -469,7 +520,7 @@
       return function (patch, options) {
         var result = original.apply(this, arguments);
         try {
-          afterCommit();
+          afterCommit(options);
         } catch (error) {
           console.warn("soemdspPluginHost: native sync failed", error);
         }
@@ -503,7 +554,7 @@
       isActive: function () { return true; },
     };
   }
-  global.soemdspPluginHostApi = { loadPatch: loadPatch, receiveFrameBatch: receiveFrameBatch, resendPatch: function () { lastSentSignature = null; afterCommit(); } };
+  global.soemdspPluginHostApi = { loadPatch: loadPatch, receiveFrameBatch: receiveFrameBatch, resendPatch: function () { lastSentSignature = null; afterCommit({ status: "resend" }); } };
 
   function autoStartBoot() {
     if (document.body && document.body.dataset.nodeBootStarted === "1") return;
@@ -518,7 +569,7 @@
   function afterInterfaceReady() {
     installWrappers();
     document.body.classList.add(BODY_CLASS);
-    afterCommit();
+    afterCommit({ status: "boot" });
     global.setInterval(emitDirtyParams, PARAM_POLL_MS);
     // Face show/hide changes the watch list without a commit.
     global.setInterval(function () {

@@ -401,6 +401,9 @@ function syncNodeGraphTransportPlayButtons({ playing = false, paused = false, st
     return;
   }
   nodeGraphLiveTransportButtonsSignature = signature;
+  if (typeof nodeGraphGlGraphPresent === "function") {
+    nodeGraphGlGraphPresent();
+  }
 
   for (const tp of document.querySelectorAll("[data-transport-play], #nodeTransportPlay, button.node-transport-play")) {
     if (!(tp instanceof HTMLElement)) continue;
@@ -675,6 +678,9 @@ function nodeGraphTransportHandleAction(action, button) {
       return;
     }
     if (!hasEngine || transportState === "stopped") {
+      if (typeof nodeGraphLiveEnsureContextFromGesture === "function") {
+        nodeGraphLiveEnsureContextFromGesture();
+      }
       if (typeof setNodeGraphLiveOutputEnabled === "function") {
         setNodeGraphLiveOutputEnabled(true);
       } else if (typeof soemdspSandboxToggleLiveOutput === "function") {

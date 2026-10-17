@@ -147,7 +147,7 @@
     if (!seShouldRecord(level)) {
       return null;
     }
-    if (paused && level !== "ERROR" && level !== "FAIL" && loc !== "vm") {
+    if (paused && level !== "ERROR" && level !== "FAIL" && loc !== "vm" && loc !== "note") {
       return null;
     }
     const lv = LEVELS[level] || LEVELS.LOG;
@@ -322,6 +322,8 @@
     FAIL: (msg) => push("FAIL", msg || "FAIL", callerLoc()),
     LIVE: (msg) => push("LIVE", msg || "", ""),
     VM: (msg) => push("LIVE", msg || "", "vm"),
+    // Recorded even while the log is paused. Used for one-shot measurements.
+    NOTE: (msg) => push("LIVE", msg || "", "note"),
     STOP: (msg) => push("FAIL", msg || "DEBUG BREAK", callerLoc()),
     WITHINSIZE: (value, container, msg) => {
       const n = container && container.length != null ? container.length : container && container.size;

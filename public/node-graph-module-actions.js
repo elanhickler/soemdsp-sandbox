@@ -1941,6 +1941,7 @@ function nodeGraphModuleTitleFieldBeginEdit(el) {
   el.dataset.titleEditing = "1";
   el.setAttribute("role", "textbox");
   el.setAttribute("aria-multiline", "false");
+  if (typeof nodeGraphGlGraphPresent === "function") nodeGraphGlGraphPresent();
 }
 
 function nodeGraphModuleTitleFieldEndEdit(el) {
@@ -1951,6 +1952,7 @@ function nodeGraphModuleTitleFieldEndEdit(el) {
   el.tabIndex = -1;
   delete el.dataset.titleEditing;
   el.setAttribute("role", "text");
+  if (typeof nodeGraphGlGraphPresent === "function") nodeGraphGlGraphPresent();
 }
 
 /** End any open header-title rename sessions (commit or revert). */

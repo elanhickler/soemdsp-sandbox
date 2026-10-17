@@ -620,13 +620,13 @@ $responseLines = foreach ($module in $modules) {
 }
 Set-Content -LiteralPath $responseFile -Value $responseLines -Encoding ascii
 
-# 512MB max: static pools (~130MB+) plus Music Player full-song PCM via
+# 1GB max (was 512MB: ~411MB initial left ~100MB, so 4-5 min stereo songs failed set_pcm silently). Static pools plus Music Player full-song PCM via
 # memory.grow (a few minutes of stereo float). Bounded so V8's reservation
 # stays finite; raise again only if longer multi-player banks need it.
 $ldArgs = @(
   "--no-entry",
   "--export-memory",
-  "--max-memory=536870912",
+  "--max-memory=1073741824",
   "@$responseFile",
   "-o", "$combinedDir\soemdsp_combined.wasm"
 ) + $objFiles

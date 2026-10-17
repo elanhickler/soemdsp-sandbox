@@ -364,291 +364,6 @@ function markNodeGraphWireEndpointsConnected(wire, destinationIo = "input") {
   markNodeGraphPortConnected(wire.destinationNode, wire.destinationPort, "input");
 }
 
-function nodeGraphDrawSignalWire(svg, connection, index, context) {
-  if (!nodeGraphSignalWireDestinationIsRenderable(connection)) {
-    return;
-  }
-  markNodeGraphWireEndpointsConnected(connection);
-  const from = nodeGraphPortCenter(connection.sourceNode, connection.sourcePort, "output");
-  const to = nodeGraphPortCenter(connection.destinationNode, connection.destinationPort, "input");
-  const both = nodeGraphWirePointIsFinite(from) && nodeGraphWirePointIsFinite(to);
-  if (!both && !nodeGraphWirePointIsFinite(from) && !nodeGraphWirePointIsFinite(to)) {
-    return;
-  }
-  // Hide In/Out → caps only. Otherwise connected + finite ends → full cable.
-  const ioHidden = (
-    typeof nodeGraphNodeSignalIoCollapsed === "function"
-    && (
-      nodeGraphNodeSignalIoCollapsed(connection.sourceNode)
-      || nodeGraphNodeSignalIoCollapsed(connection.destinationNode)
-    )
-  );
-  const allowPath = both && !ioHidden;
-  const isInactive = !nodeGraphSignalConnectionIsActive(connection, context.activeNodeIds);
-  const mode = nodeGraphWireInteractionMode(
-    connection,
-    nodeGraphSignalWireIdentity(connection),
-    context.feedbackSets.signal,
-    nodeGraphSignalConnectionIsActive,
-    context.activeNodeIds,
-    context.plan,
-  );
-  const fromCap = from && nodeGraphWireHelpers.wireEndpointCapCenter
-    ? (nodeGraphWireHelpers.wireEndpointCapCenter(from, "from") || from)
-    : from;
-  const toCap = to && nodeGraphWireHelpers.wireEndpointCapCenter
-    ? (nodeGraphWireHelpers.wireEndpointCapCenter(to, "to") || to)
-    : to;
-  const fromColor = nodeGraphPortWireColor(connection.sourceNode, connection.sourcePort, "output");
-  // Cable color is owned by the output jack — no from→to color transition.
-  const toColor = fromColor;
-  nodeGraphDrawWireWithOptionalPath(svg, {
-    sourceNode: connection.sourceNode,
-    sourcePort: connection.sourcePort,
-    destinationNode: connection.destinationNode,
-    destinationPort: connection.destinationPort,
-    alias: `${nodeGraphLabel(connection.sourceNode, connection.sourcePort)} -> ${nodeGraphLabel(
-      connection.destinationNode,
-      connection.destinationPort,
-    )}`,
-    from,
-    to,
-    fromColor,
-    toColor,
-    allowPath,
-    gradientId: `node-wire-gradient-${index}`,
-    index,
-    kind: "signal",
-    mode,
-    pathClass: nodeGraphWirePathClass(
-      "node-wire-path",
-      mode === "state-read" ? "state-read" : "",
-      isInactive ? "inactive-wire" : "",
-      connection.pixelWire ? "pixel-wire" : "",
-    ),
-    skipHitPath: Boolean(context.skipHitPath) || !allowPath,
-    wireType: connection.wireType,
-    pixelWire: Boolean(connection.pixelWire),
-    ...(allowPath ? nodeGraphManualTracePathOptions(connection, fromCap, toCap) : {}),
-  });
-}
-
-function nodeGraphDrawModulationWire(svg, modulation, index, context) {
-  if (!nodeGraphModulationWireDestinationIsRenderable(modulation)) {
-    return;
-  }
-  const from = nodeGraphPortCenter(modulation.sourceNode, modulation.sourcePort, "output");
-  const to = nodeGraphModulationPortCenter(
-    modulation.destinationNode,
-    modulation.destinationParam,
-  );
-  const isInactive = !nodeGraphModulationIsActive(modulation, context.activeNodeIds);
-  const mode = nodeGraphWireInteractionMode(
-    modulation,
-    nodeGraphModulationWireIdentity(modulation),
-    context.feedbackSets.modulation,
-    nodeGraphModulationIsActive,
-    context.activeNodeIds,
-    context.plan,
-  );
-  const fromCap = from && nodeGraphWireHelpers.wireEndpointCapCenter
-    ? (nodeGraphWireHelpers.wireEndpointCapCenter(from, "from") || from)
-    : from;
-  const toCap = to && nodeGraphWireHelpers.wireEndpointCapCenter
-    ? (nodeGraphWireHelpers.wireEndpointCapCenter(to, "to") || to)
-    : to;
-  const fromColor = nodeGraphPortWireColor(modulation.sourceNode, modulation.sourcePort, "output");
-  const toColor = fromColor;
-  const both = nodeGraphWirePointIsFinite(from) && nodeGraphWirePointIsFinite(to);
-  nodeGraphDrawWireWithOptionalPath(svg, {
-    sourceNode: modulation.sourceNode,
-    sourcePort: modulation.sourcePort,
-    destinationNode: modulation.destinationNode,
-    destinationPort: modulation.destinationParam,
-    alias: `${nodeGraphLabel(modulation.sourceNode, modulation.sourcePort)} -> ${nodeGraphNodeDisplayName(
-      modulation.destinationNode,
-    )}.${modulation.destinationParam} mod`,
-    from,
-    to,
-    fromColor,
-    toColor,
-    gradientClass: "node-modulation-wire-gradient-stop",
-    gradientId: `node-modulation-wire-gradient-${index}`,
-    index,
-    kind: "modulation",
-    mode,
-    pathClass: nodeGraphWirePathClass(
-      "node-wire-path",
-      "node-modulation-wire-path",
-      isInactive ? "inactive-wire" : "",
-      modulation.pixelWire ? "pixel-wire" : "",
-    ),
-    skipHitPath: Boolean(context.skipHitPath) || !both,
-    wireType: modulation.wireType,
-    pixelWire: Boolean(modulation.pixelWire),
-    ...(both ? nodeGraphManualTracePathOptions(modulation, fromCap, toCap) : {}),
-  });
-  if (!context.skipHitPath) {
-    markNodeGraphWireEndpointsConnected(modulation, "modulation");
-  }
-}
-
-function nodeGraphDrawGraphWire(svg, connection, index, context) {
-  if (!nodeGraphGraphWireDestinationIsRenderable(connection)) {
-    return;
-  }
-  const from = nodeGraphPortCenter(connection.sourceNode, connection.sourcePort, "output");
-  const to = nodeGraphGraphInputPortCenter(
-    connection.destinationNode,
-    connection.destinationGraphInput,
-  );
-  const isInactive = !nodeGraphGraphConnectionIsActive(connection, context.activeNodeIds);
-  const mode = nodeGraphWireInteractionMode(
-    connection,
-    nodeGraphGraphWireIdentity(connection),
-    context.feedbackSets.graph,
-    nodeGraphGraphConnectionIsActive,
-    context.activeNodeIds,
-    context.plan,
-  );
-  const fromCap = from && nodeGraphWireHelpers.wireEndpointCapCenter
-    ? (nodeGraphWireHelpers.wireEndpointCapCenter(from, "from") || from)
-    : from;
-  const toCap = to && nodeGraphWireHelpers.wireEndpointCapCenter
-    ? (nodeGraphWireHelpers.wireEndpointCapCenter(to, "to") || to)
-    : to;
-  const fromColor = nodeGraphPortWireColor(connection.sourceNode, connection.sourcePort, "output");
-  const toColor = fromColor;
-  const both = nodeGraphWirePointIsFinite(from) && nodeGraphWirePointIsFinite(to);
-  nodeGraphDrawWireWithOptionalPath(svg, {
-    sourceNode: connection.sourceNode,
-    sourcePort: connection.sourcePort,
-    destinationNode: connection.destinationNode,
-    destinationPort: connection.destinationGraphInput,
-    alias: `${nodeGraphLabel(connection.sourceNode, connection.sourcePort)} -> ${nodeGraphNodeDisplayName(
-      connection.destinationNode,
-    )}.${connection.destinationGraphInput} graph`,
-    from,
-    to,
-    fromColor,
-    toColor,
-    gradientClass: "node-modulation-wire-gradient-stop",
-    gradientId: `node-graph-wire-gradient-${index}`,
-    index,
-    kind: "graph",
-    mode,
-    pathClass: nodeGraphWirePathClass(
-      "node-wire-path",
-      "node-modulation-wire-path",
-      isInactive ? "inactive-wire" : "",
-      connection.pixelWire ? "pixel-wire" : "",
-    ),
-    skipHitPath: Boolean(context.skipHitPath) || !both,
-    wireType: connection.wireType,
-    pixelWire: Boolean(connection.pixelWire),
-    ...(both ? nodeGraphManualTracePathOptions(connection, fromCap, toCap) : {}),
-  });
-  if (!context.skipHitPath) {
-    markNodeGraphWireEndpointsConnected(connection, "graph");
-  }
-}
-
-/**
- * While selected wires are soft-lifted, keep endpoint dots on fixed jacks.
- * Free-end path is drawn as a temp ghost; dots on modules must stay.
- * Caps use interactColor (the jack that was grabbed) when provided.
- */
-function nodeGraphDrawMovingWireFixedCaps(svg, wire, kind = "signal", interactColor = null) {
-  if (typeof nodeGraphWireHelpers?.drawEndpointCap !== "function" || !wire) {
-    return;
-  }
-  const from = nodeGraphPortCenter(wire.sourceNode, wire.sourcePort, "output");
-  const nativeFromColor = nodeGraphPortWireColor(wire.sourceNode, wire.sourcePort, "output");
-  let to = null;
-  let nativeToColor = null;
-  if (kind === "modulation") {
-    to = nodeGraphModulationPortCenter(wire.destinationNode, wire.destinationParam);
-    nativeToColor = nodeGraphPortWireColor(wire.destinationNode, wire.destinationParam, "modulation");
-  } else if (kind === "graph") {
-    to = typeof nodeGraphGraphInputPortCenter === "function"
-      ? nodeGraphGraphInputPortCenter(wire.destinationNode, wire.destinationGraphInput)
-      : null;
-    nativeToColor = nodeGraphPortWireColor(wire.destinationNode, wire.destinationGraphInput, "graph");
-  } else {
-    to = nodeGraphPortCenter(wire.destinationNode, wire.destinationPort, "input");
-    nativeToColor = nodeGraphPortWireColor(wire.destinationNode, wire.destinationPort, "input");
-  }
-  const fromColor = interactColor || nativeFromColor;
-  const toColor = interactColor || nativeToColor;
-  const paint = fromColor || toColor || null;
-  const capClass = kind === "modulation" || kind === "graph" ? "modulation" : "";
-  if (nodeGraphWirePointIsFinite(from)) {
-    nodeGraphWireHelpers.drawEndpointCap(svg, from, "from", paint, capClass, {
-      endColor: fromColor,
-    });
-  }
-  if (nodeGraphWirePointIsFinite(to)) {
-    nodeGraphWireHelpers.drawEndpointCap(svg, to, "to", paint, capClass, {
-      endColor: toColor,
-    });
-  }
-}
-
-function nodeGraphDrawTemporaryWire(svg, options) {
-  const {
-    className,
-    endpoint,
-    from,
-    gradientId,
-    to,
-    tracePoints = null,
-    drawCursorCap = false,
-    interactColor = null,
-  } = options;
-  const nativeFromColor = nodeGraphPortWireColor(endpoint.node, endpoint.port, endpoint.io);
-  const fromColor = interactColor || nativeFromColor;
-  // Unconnected drag: solid source color end to end. Two-color blend only
-  // after both jacks exist.
-  const stroke = nodeGraphWireHelpers.createGradient(
-    svg,
-    gradientId,
-    from,
-    to,
-    "node-wire-gradient-stop",
-    [
-      fromColor,
-      fromColor,
-    ],
-  );
-  const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
-  path.setAttribute("class", className);
-  path.setAttribute("stroke", stroke);
-  path.style.stroke = stroke;
-  if (tracePoints) {
-    path.dataset.tracePoints = nodeGraphTraceWaypointAttribute(tracePoints);
-    path.setAttribute("d", nodeGraphTracePathFromPoints(from, tracePoints, to));
-  } else {
-    path.setAttribute("d", nodeGraphWireHelpers.path(from, to));
-  }
-  const paintSvg = typeof nodeGraphWireHelpers.visualCableSvg === "function"
-    ? nodeGraphWireHelpers.visualCableSvg(svg)
-    : svg;
-  paintSvg.append(path);
-  if (typeof nodeGraphWireHelpers.drawEndpointCap === "function") {
-    const role = endpoint?.io === "input" || endpoint?.io === "modulation" || endpoint?.io === "graph"
-      ? "to"
-      : "from";
-    nodeGraphWireHelpers.drawEndpointCap(paintSvg, from, role, fromColor, "temp", {
-      endColor: fromColor,
-    });
-    if (drawCursorCap && nodeGraphWirePointIsFinite(to)) {
-      const freeRole = role === "from" ? "to" : "from";
-      nodeGraphWireHelpers.drawEndpointCap(paintSvg, to, freeRole, fromColor, "temp", {
-        endColor: fromColor,
-      });
-    }
-  }
-}
 
 function nodeGraphResetConnectedWireClasses(workspace) {
   for (const node of workspace.querySelectorAll(".dsp-node")) {
@@ -691,6 +406,9 @@ function drawNodeGraphWires(options = {}) {
   if (typeof nodeGraphPortCenterCacheBegin === "function") {
     nodeGraphPortCenterCacheBegin();
   }
+  if (typeof nodeGraphGlGraphPaint === "function") {
+    nodeGraphGlGraphPaint(options);
+  }
   // Lite (gesture) path reuses a plan cache; full draws always recompile so
   // wire/feedback state stays correct after patch edits of the same size.
   let plan = null;
@@ -710,44 +428,13 @@ function drawNodeGraphWires(options = {}) {
     }
     return;
   }
-  const feedbackSets = nodeGraphFeedbackIdentitySets(plan);
-  const activeNodeIds = nodeGraphActiveNodeIds(plan);
-
-  const cam = typeof nodeGraphWireCameraViewBox === "function"
-    ? nodeGraphWireCameraViewBox()
-    : null;
-  const graphRect = cam || nodeGraphGraphRect();
-  const viewBox = cam
-    ? `${cam.x} ${cam.y} ${cam.width} ${cam.height}`
-    : `0 0 ${graphRect.width} ${graphRect.height}`;
-  svg.setAttribute("viewBox", viewBox);
   svg.replaceChildren();
-  const defs = document.createElementNS("http://www.w3.org/2000/svg", "defs");
-  svg.append(defs);
-  // Contact disks live above modules (separate SVG) so full circles show mid-jack.
-  const capSvg = document.getElementById("nodeWireEndpointSvg");
-  if (capSvg) {
-    capSvg.setAttribute("viewBox", viewBox);
-    capSvg.replaceChildren();
-  }
+  document.getElementById("nodeWireEndpointSvg")?.replaceChildren();
 
   if (!lite) {
     nodeGraphResetConnectedWireClasses(workspace);
   }
 
-  // Soft-lifted selected wires: hide cable paths (ghosts follow cursor) but keep
-  // endpoint dots on the fixed jacks so ports still look plugged.
-  const moveMode = nodeGraphMvp.portConnectionMode?.movingWires
-    ? nodeGraphMvp.portConnectionMode
-    : null;
-  const hideWireKeys = moveMode && Array.isArray(moveMode.hideWireKeys)
-    ? new Set(moveMode.hideWireKeys)
-    : null;
-
-  const interactColor = moveMode?.interactColor || null;
-  const context = { activeNodeIds, feedbackSets, plan, skipHitPath: lite };
-  // Connected wires claim their jacks first (hide-unused shows them), then draw.
-  // Rules: connected → solid path; connecting (temp) → dotted; deleted → gone.
   if (!lite) {
     for (const connection of nodeGraphMvp.connections) {
       markNodeGraphWireEndpointsConnected(connection);
@@ -764,70 +451,6 @@ function drawNodeGraphWires(options = {}) {
     if (typeof nodeGraphModuleGeometryPublishVisible === "function") {
       nodeGraphModuleGeometryPublishVisible();
     }
-  }
-  for (const [index, connection] of nodeGraphMvp.connections.entries()) {
-    if (hideWireKeys?.has(`signal:${index}`)) {
-      // Caps only at the fixed end(s) — path is replaced by temp ghosts.
-      nodeGraphDrawMovingWireFixedCaps(svg, connection, "signal", interactColor);
-      if (!lite) {
-        markNodeGraphWireEndpointsConnected(connection);
-      }
-      continue;
-    }
-    nodeGraphDrawSignalWire(svg, connection, index, context);
-  }
-
-  for (const [index, modulation] of nodeGraphMvp.modulations.entries()) {
-    if (hideWireKeys?.has(`modulation:${index}`)) {
-      nodeGraphDrawMovingWireFixedCaps(svg, modulation, "modulation", interactColor);
-      if (!lite) {
-        markNodeGraphWireEndpointsConnected(modulation, "modulation");
-      }
-      continue;
-    }
-    nodeGraphDrawModulationWire(svg, modulation, index, context);
-  }
-
-  for (const [index, graphConnection] of nodeGraphMvp.graphConnections.entries()) {
-    if (hideWireKeys?.has(`graph:${index}`)) {
-      nodeGraphDrawMovingWireFixedCaps(svg, graphConnection, "graph", interactColor);
-      if (!lite) {
-        markNodeGraphWireEndpointsConnected(graphConnection, "graph");
-      }
-      continue;
-    }
-    nodeGraphDrawGraphWire(svg, graphConnection, index, context);
-  }
-
-
-  if (nodeGraphMvp.portConnectionMode) {
-    const mode = nodeGraphMvp.portConnectionMode;
-    if (mode.cursorPoint) {
-      let ghostIndex = 0;
-      for (const { endpoint, from } of mode.selected.values()) {
-        nodeGraphDrawTemporaryWire(svg, {
-          className: "node-wire-path temp",
-          endpoint,
-          from,
-          gradientId: `node-wire-gradient-ghost-${ghostIndex}`,
-          to: mode.cursorPoint,
-          drawCursorCap: Boolean(mode.movingWires),
-          interactColor: mode.movingWires ? (mode.interactColor || null) : null,
-        });
-        ghostIndex += 1;
-      }
-    }
-  }
-
-  if (nodeGraphMvp.wireDragging?.active) {
-    const { endpoint, from, cursorPoint } = nodeGraphMvp.wireDragging;
-    nodeGraphDrawTemporaryWire(svg, {
-      className: "node-wire-path temp",
-      endpoint,
-      from,
-      gradientId: "node-wire-gradient-drag",
-      to: cursorPoint,
-    });
   }
 
   if (!skipSelection && typeof renderNodeGraphSelection === "function") {
@@ -867,6 +490,9 @@ function syncNodeGraphWireSvgViewBox() {
   const capSvg = document.getElementById("nodeWireEndpointSvg");
   if (capSvg && capSvg.getAttribute("viewBox") !== viewBox) {
     capSvg.setAttribute("viewBox", viewBox);
+  }
+  if (typeof nodeGraphGlGraphPresentCamera === "function") {
+    nodeGraphGlGraphPresentCamera();
   }
 }
 

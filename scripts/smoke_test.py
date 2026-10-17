@@ -14531,6 +14531,8 @@ def require_node_graph_mvp_contract() -> None:
         and ".scene-context-modular-view-controls {" in style_source
         and "toggleNodeGraphAppChromeBarsVisibility" in script_sources["./public/node-graph-keyboard-shortcuts.js"]
         and 'event.key.toLowerCase() === "v"' in script_sources["./public/node-graph-keyboard-shortcuts.js"]
+        and "function nodeGraphAppHotkeysLocked()" in script_sources["./public/node-graph-keyboard-shortcuts.js"]
+        and "if (nodeGraphAppHotkeysLocked())" in script_sources["./public/node-graph-keyboard-shortcuts.js"]
         and "toggleNodeGraphModularWindowedView" in node_graph_source
         and 'event.key.toLowerCase() === "b"' not in script_sources["./public/node-graph-keyboard-shortcuts.js"],
         "Modular chrome SSOT: V hides bars only (floating windows stay); ðŸ’» infinite; ðŸ“± condensed",

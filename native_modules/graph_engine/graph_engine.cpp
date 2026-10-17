@@ -1902,7 +1902,7 @@ static const int kTypeMinMax = 21;
 static const int kTypeMix = 22;
 static const int kTypeMix2 = 47;
 static const int kTypeMixStereo = 23;
-// clipperLimiter deleted (was type 24). Id reserved unused.
+// Type id 24 is unused.
 static const int kTypeMidSideEncode = 25;
 static const int kTypeVectorscopeTransform = 26;
 static const int kTypeRotate3dTo2d = 27;
@@ -15748,23 +15748,16 @@ extern "C" void soemdsp_graph_set_gravity_walker_chunks(int handle, double c0, d
   }
 }
 
+// One named Gravity Walker. A missing id, a keyboard, or any other module
+// does not write the other walkers. Host notes are not a note source.
 extern "C" void soemdsp_graph_set_node_note_chunks(int handle, unsigned int nodeHash, double c0, double c1, double c2) {
   Circuit* g = get(handle);
-  if (!g || nodeHash == 0) {
-    soemdsp_graph_set_gravity_walker_chunks(handle, c0, c1, c2);
-    return;
-  }
+  if (!g || nodeHash == 0) return;
   const int idx = find_node(*g, nodeHash);
-  if (idx < 0) {
-    soemdsp_graph_set_gravity_walker_chunks(handle, c0, c1, c2);
-    return;
-  }
+  if (idx < 0) return;
   Node& n = g->nodes[idx];
-  if (n.used && n.typeId == kTypeGravityWalker && n.nativeHandle > 0) {
+  if (n.used && n.typeId == kTypeGravityWalker && n.nativeHandle > 0)
     soemdsp_gravity_walker_set_chunks(n.nativeHandle, c0, c1, c2);
-    return;
-  }
-  soemdsp_graph_set_gravity_walker_chunks(handle, c0, c1, c2);
 }
 
 // Filter faces: effective Hz the DSP used on the last processed sample when ƒ is

@@ -186,7 +186,7 @@ Medium batch not started this phase.
 
 ## 11. Phase 2: circuit builder to GL (planned, 2026-10-16)
 
-Owner: another agent executes. Status: **planned, not started.** Source: Interface/Argi.
+Owner: another agent executes. Status: **GB-1 through GB-5 measured** (2026-10-16). Source: Interface/Argi.
 (Not the same as section 10 "Phase 2 log", which covers module displays.)
 
 ### Why
@@ -199,11 +199,11 @@ Zoom-in and pan are already fixed by a will-change hint + display hold during ge
 ### Tracker
 | ID | Stage | Status |
 |----|-------|--------|
-| GB-1 | Cables and grid drawn in screen space with a camera matrix, replacing wire SVGs and the grid background; pan/zoom only change a uniform | planned |
-| GB-2 | Module bodies: plates, borders, rounded corners, shadows as batched GL quads; existing display canvases become textures placed in the same pass | planned |
-| GB-3 | Jacks, labels, slider readouts: jacks/dots as GL sprites, text via the shared glyph atlas | planned |
-| GB-4 | HTML only for text inputs and popups, positioned from the camera; hit-testing in JS against module rectangles | planned |
-| GB-5 | Measure every stage with the same zoom-in / zoom-out / pan traces at 40x and low zoom | planned |
+| GB-1 | Cables and grid drawn in screen space with a camera matrix, replacing wire SVGs and the grid background; pan/zoom only change a uniform | testing. Default on. `?glGraph=0` restores SVG. Look is approximate (flat cables, coarse grid when zoomed out). |
+| GB-2 | Module bodies: plates, borders, rounded corners, shadows as batched GL quads; existing display canvases become textures placed in the same pass | testing. Plates, border, and shadow are GL rects (square corners). Display canvases are textures in the same pass. HTML titles, jacks, and sliders stay. |
+| GB-3 | Jacks, labels, slider readouts: jacks/dots as GL sprites, text via the shared glyph atlas | testing. Jacks, titles, port labels, and slider tracks/readouts draw in the graph pass. HTML stays as the click target. |
+| GB-4 | HTML only for text inputs and popups, positioned from the camera; hit-testing in JS against module rectangles | testing. Module chrome does not take hits. Clicks resolve against plate, jack, slider, and title rectangles and call the existing drag, wire, and menu actions. Text fields, popups, and special faces (graph, keypad, knob) stay HTML. |
+| GB-5 | Measure every stage with the same zoom-in / zoom-out / pan traces at 40x and low zoom | measured 2026-10-16, `nodeGraphGlGraphMeasureGb5()`, 24 frames each, same numbers on a second run. Zoom-out 40→0.35: total 201 ms, present 40 ms, max frame 41 ms. Zoom-in 0.35→40: total 86 ms, present 38 ms, max frame 8 ms. Pan at 40×: total 53 ms, present 20 ms, max frame 3 ms. Pan at 0.35×: total 100 ms, present 35 ms, max frame 13 ms. The old HTML zoom-out gesture was about 5.5 s. |
 
 All stages run on the shared picture-device context. Each stage ships behind a flag and is measured
 (GB-5) before the next. Stage 1 alone won't fix zoom-out; the gain comes in stages 2-3.

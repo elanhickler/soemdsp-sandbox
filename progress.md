@@ -1,3 +1,7 @@
+## 2026-10-16 - Circuit builder GL, cables and grid (GB-1)
+
+- Screen-space WebGL cables and grid (`public/node-graph-gl-graph.js`). Pan/zoom reprojects a cached polyline list. SVG wires and the CSS grid hide while it is on. Default on; `?glGraph=0` restores the old draw. Look is approximate.
+
 ## 2026-10-16 - DAW plugin plan (docs only)
 
 - Added `docs/DAW_PLAN.md` in soemdsp-sandbox-audioplugin (DAW-1..8, rename to Sandbox, open decisions); pointer in `docs/FUTURE_PLANNING.md`. Not committed.

@@ -32,7 +32,9 @@
       ref = "";
     }
     const allow = typeof nodeGraphExternalAllowedParentOrigins === "function" ? nodeGraphExternalAllowedParentOrigins() : null;
-    return ref && (ref === window.location.origin || !allow || allow.includes(ref)) ? ref : "";
+    if (ref && (ref === window.location.origin || !allow || allow.includes(ref))) return ref;
+    if (Array.isArray(allow) && allow.length === 1) return allow[0];
+    return "";
   }
 
   function emit(type, payload = {}, origin = "") {
@@ -86,17 +88,15 @@
   }
 
   async function startAudio() {
-    const live = nodeGraphMvp?.live;
-    // A start begun without a gesture hangs in context.resume(); clear it.
-    if (live?.outputEnabled && !live.context && typeof setNodeGraphLiveOutputEnabled === "function") {
-      await setNodeGraphLiveOutputEnabled(false);
+    if (typeof nodeGraphAudioPlayerEnsureLiveOutput === "function") {
+      await nodeGraphAudioPlayerEnsureLiveOutput();
+    } else if (typeof nodeGraphExternalStartLiveOutput === "function") {
+      nodeGraphExternalStartLiveOutput();
     }
-    if (typeof nodeGraphExternalStartLiveOutput === "function") nodeGraphExternalStartLiveOutput();
     const until = Date.now() + 800;
     while (!running() && Date.now() < until) await new Promise((r) => setTimeout(r, 50));
     if (!running()) {
       error("autoplay-blocked", "The browser needs a click in the player before audio can start.");
-      if (typeof window.soemdspEmbedShowStartOverlay === "function") window.soemdspEmbedShowStartOverlay(true);
     }
   }
 
@@ -132,7 +132,15 @@
     document.documentElement.dataset.soemdspEmbedTracks = String(cards.length);
     const start = Math.max(0, Math.min(cards.length - 1, Math.round(Number(msg.startIndex) || 0)));
     if (msg.autoplay) await play(id, start);
-    else await nodeGraphAudioPlayerLibraryPlayIndex(id, start, { autoplay: false }).catch(() => {});
+    else {
+      const pl = typeof nodeGraphAudioPlayerPlaylistForNode === "function"
+        ? nodeGraphAudioPlayerPlaylistForNode(id)
+        : null;
+      if (pl) {
+        pl.index = start;
+        pl.selectedIndex = start;
+      }
+    }
     // Keep the visible page in sync with the stored face after the playlist changes.
     if (typeof nodeGraphAudioPlayerPlaylistApplyFace === "function") nodeGraphAudioPlayerPlaylistApplyFace(id);
   }

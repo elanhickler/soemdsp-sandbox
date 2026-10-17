@@ -153,54 +153,9 @@
       return "";
     }
 
-    function drawEndpointCap(svg, attachPoint, role, paint, extraClass = "", options = {}) {
-      // Always on the overlay above modules — fakes the plug where the
-      // under-module cable disappears into the plate. Do not follow the cable
-      // host (visualCableSvg); that hid the disc under the idle stroke.
-      const target = endpointCapSvg() || visualCableSvg(svg) || svg;
-      const point = wireEndpointCapCenter(attachPoint, role);
-      if (!target || !point || !Number.isFinite(point.x) || !Number.isFinite(point.y)) {
-        return null;
-      }
-      const fill = wireEndColor(options.endColor, paint);
-      const square = options.square === true;
-      const r = wireEndpointCapRadius();
-      if (square) {
-        const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
-        rect.setAttribute(
-          "class",
-          ["node-wire-endpoint-cap", "node-wire-endpoint-cap-square", extraClass].filter(Boolean).join(" "),
-        );
-        const side = r * 2;
-        rect.setAttribute("x", String(point.x - r));
-        rect.setAttribute("y", String(point.y - r));
-        rect.setAttribute("width", String(side));
-        rect.setAttribute("height", String(side));
-        rect.setAttribute("color-interpolation", "sRGB");
-        if (fill) {
-          rect.setAttribute("fill", fill);
-          rect.style.fill = fill;
-        }
-        rect.setAttribute("pointer-events", "none");
-        target.append(rect);
-        return rect;
-      }
-      const circle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
-      circle.setAttribute(
-        "class",
-        ["node-wire-endpoint-cap", extraClass].filter(Boolean).join(" "),
-      );
-      circle.setAttribute("cx", String(point.x));
-      circle.setAttribute("cy", String(point.y));
-      circle.setAttribute("r", String(r));
-      circle.setAttribute("color-interpolation", "sRGB");
-      if (fill) {
-        circle.setAttribute("fill", fill);
-        circle.style.fill = fill;
-      }
-      circle.setAttribute("pointer-events", "none");
-      target.append(circle);
-      return circle;
+    function drawEndpointCap() {
+      // Contact discs are drawn by the GL graph, above the modules.
+      return null;
     }
 
     // Currently unreachable from any live call site (nodeGraphManualTracePathOptions
@@ -370,8 +325,7 @@
       const isPixel = pixelWire === true
         || (typeof normalizeNodeGraphWirePixel === "function" && normalizeNodeGraphWirePixel(pixelWire));
       const pathData = explicitPathData || (isTrace ? tracePath(from, to) : path(from, to));
-      const stroke = createGradient(svg, gradientId, from, to, gradientClass, wireColors);
-      // Hit paths stay on the under-module wire SVG (interaction only).
+      // Picture is the GL graph. This path is only the click target.
       if (!skipHitPath) {
         const hitPath = document.createElementNS("http://www.w3.org/2000/svg", "path");
         hitPath.setAttribute("class", "node-wire-hit-path");
@@ -389,49 +343,6 @@
         hitPath.addEventListener("click", (event) => deps.selectWire(event, index, kind));
         svg.append(hitPath);
       }
-
-      // Curve follows Visibility → Wires Above. Contact discs are always
-      // drawn on #nodeWireEndpointSvg (drawEndpointCap), above the plate.
-      const paintSvg = visualCableSvg(svg) || svg;
-      const showLength = typeof nodeGraphMvp === "undefined"
-        || nodeGraphMvp?.wireLengthsVisible !== false;
-      const [fromColor, toColor] = wireColors || [null, null];
-      const capClass = [
-        String(pathClass).includes("inactive-wire") ? "inactive-wire" : "",
-        kind === "modulation" || kind === "graph" ? "modulation" : "",
-      ].filter(Boolean).join(" ");
-
-      if (showLength) {
-        const renderedPath = document.createElementNS("http://www.w3.org/2000/svg", "path");
-        renderedPath.setAttribute(
-          "class",
-          `${pathClass}${isTrace ? " trace-wire" : ""}${isPixel ? " pixel-wire" : ""}`,
-        );
-        renderedPath.dataset.alias = alias;
-        renderedPath.dataset.connectionIndex = String(index);
-        renderedPath.dataset.connectionKind = kind;
-        renderedPath.dataset.interactionMode = mode;
-        if (isPixel) {
-          renderedPath.dataset.pixelWire = "true";
-        }
-        if (Array.isArray(options.tracePoints)) {
-          renderedPath.dataset.tracePoints = nodeGraphTraceWaypointAttribute(options.tracePoints);
-        }
-        renderedPath.setAttribute("d", pathData);
-        renderedPath.setAttribute("stroke", stroke);
-        renderedPath.setAttribute("color-interpolation", "sRGB");
-        renderedPath.style.stroke = stroke;
-        paintSvg.append(renderedPath);
-      }
-
-      drawEndpointCap(paintSvg, from, "from", fromColor, capClass, {
-        endColor: fromColor,
-        square: options.squareFrom === true,
-      });
-      drawEndpointCap(paintSvg, to, "to", toColor, capClass, {
-        endColor: toColor,
-        square: options.squareTo === true,
-      });
     }
 
     function elementForEndpoint(endpoint) {

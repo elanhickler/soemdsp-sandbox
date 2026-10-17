@@ -58,10 +58,13 @@ function nodeGraphPerformViewRequested() {
 
 function nodeGraphExternalAutostartRequested() {
   try {
-    const raw = String(new URLSearchParams(window.location.search).get("autostart") || "")
-      .trim()
-      .toLowerCase();
+    const q = new URLSearchParams(window.location.search);
+    const raw = String(q.get("autostart") || "").trim().toLowerCase();
     if (raw === "1" || raw === "true" || raw === "yes") return true;
+    const embed = ["1", "true", "yes"].includes(String(q.get("embed") || "").trim().toLowerCase());
+    // Embed waits for a click on the module (Play). Gesture-less autostart
+    // hangs AudioContext.resume and used to force a full-frame overlay.
+    if (embed) return false;
   } catch (_error) {
     /* fall through */
   }
@@ -655,6 +658,17 @@ function soemdspSandboxLiveOutputEnabled() {
 // can stay in sync without polling.
 let nodeGraphExternalLastReportedLiveOutputEnabled = null;
 let nodeGraphExternalLastReportedLiveSpeed = null;
+function nodeGraphExternalParentReplyOrigin() {
+  try {
+    if (document.referrer) return new URL(document.referrer).origin;
+  } catch (_error) {
+    // ignore
+  }
+  const allow = nodeGraphExternalAllowedParentOrigins();
+  if (Array.isArray(allow) && allow.length === 1) return allow[0];
+  return "";
+}
+
 function nodeGraphExternalNotifyLiveOutputChanged() {
   const enabled = soemdspSandboxLiveOutputEnabled();
   const rawSpeed = nodeGraphMvp?.live?.speedMultiplier;
@@ -668,13 +682,14 @@ function nodeGraphExternalNotifyLiveOutputChanged() {
   nodeGraphExternalLastReportedLiveOutputEnabled = enabled;
   nodeGraphExternalLastReportedLiveSpeed = speed;
   const parentWindow = window.parent;
-  if (!parentWindow || parentWindow === window) {
+  const target = nodeGraphExternalParentReplyOrigin();
+  if (!parentWindow || parentWindow === window || !target) {
     return;
   }
   try {
     parentWindow.postMessage(
       { type: "soundemote:live-output-changed", enabled, speed },
-      window.location.origin,
+      target,
     );
   } catch (error) {
     // Cross-origin parent with a mismatched origin guess -- nothing to do.
@@ -701,9 +716,11 @@ function soemdspSandboxEmitHeroEvent(event, payload = {}) {
   const parentWindow = window.parent;
   if (!parentWindow || parentWindow === window) return false;
   try {
+    const target = nodeGraphExternalParentReplyOrigin();
+    if (!target) return false;
     parentWindow.postMessage(
       { type: "soundemote:hero-event", event: eventName, payload: payload || {} },
-      window.location.origin,
+      target,
     );
     return true;
   } catch (error) {

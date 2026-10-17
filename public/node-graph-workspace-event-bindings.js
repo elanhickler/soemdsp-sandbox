@@ -51,6 +51,9 @@ function bindNodeGraphWorkspaceInteractionEvents() {
       }
     });
   document.addEventListener("keydown", (event) => {
+    if (typeof nodeGraphAppHotkeysLocked === "function" && nodeGraphAppHotkeysLocked()) {
+      return;
+    }
     if (event.key === "Escape") {
       if (typeof nodeGraphScreenSoloIsActive === "function" && nodeGraphScreenSoloIsActive()) {
         event.preventDefault();

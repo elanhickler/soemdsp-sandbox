@@ -771,6 +771,9 @@ function renderNodeGraphSelection() {
   for (const node of document.querySelectorAll(".dsp-node")) {
     node.classList.toggle("selected", selectedNodeIds.has(node.dataset.node));
   }
+  if (typeof nodeGraphGlGraphPresent === "function") {
+    nodeGraphGlGraphPresent();
+  }
 
   const selectedWireKeys = new Set(
     nodeGraphSelectedWireEntries().map((e) => nodeGraphWireSelectionKey(e.kind, e.index)),

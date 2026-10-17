@@ -615,10 +615,15 @@ function nodeGraphLayoutCanvasOpen(mode = "perform", options = {}) {
   nodeGraphMvp.layoutCanvasMode = next;
   nodeGraphMvp.layoutCanvasActive = true;
   if (next === "perform") {
-    if (typeof nodeGraphTransportHandleAction === "function") {
-      nodeGraphTransportHandleAction("play");
-    } else if (typeof nodeGraphExternalStartLiveOutput === "function") {
-      nodeGraphExternalStartLiveOutput();
+    // Embed waits for Play on the module. Starting AudioContext here has no
+    // user gesture, so Chrome suspends it and later Play stays silent.
+    const embed = document.documentElement.classList.contains("soemdsp-embed");
+    if (!embed) {
+      if (typeof nodeGraphTransportHandleAction === "function") {
+        nodeGraphTransportHandleAction("play");
+      } else if (typeof nodeGraphExternalStartLiveOutput === "function") {
+        nodeGraphExternalStartLiveOutput();
+      }
     }
   }
   const stage = document.getElementById("nodeScreenSoloStage");

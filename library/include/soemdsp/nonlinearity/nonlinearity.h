@@ -19,7 +19,7 @@ static inline double hypot1(double x) {
   return r;
 }
 
-// Saturating soft-clip used by soft_clipper / clipper_limiter / soft_clip_apply.
+// Saturating soft-clip used by soft_clipper / soft_clip_apply.
 // f(x) = x / sqrt(1+x*x): odd, smooth, |f|->1 as |x|->inf (unlike the old
 // Pade x*(27+x*x)/(27+9*x*x) which grew like x/9 and exploded under drive).
 static inline double tanh_approx(double value) {
@@ -39,7 +39,7 @@ static inline double soft_clip_rational(double x) {
   return v / (1.0 + v * v);
 }
 
-// Affine soft-clip coefficients from center/width (soft_clipper / clipper_limiter).
+// Affine soft-clip coefficients from center/width (soft_clipper).
 // Width near zero falls back to 2.0. Output: sx, shx, sy, shy.
 static inline void soft_clip_coeffs(
   double center, double width, double* sx, double* shx, double* sy, double* shy
@@ -51,7 +51,7 @@ static inline void soft_clip_coeffs(
   *shy = -(*shx) * (*sy);
 }
 
-// shy + sy * tanh_approx(sx*x + shx). Matches soft_clipper / clipper_limiter.
+// shy + sy * tanh_approx(sx*x + shx). Matches soft_clipper.
 // ping_pong_delay / soem_reverb keep local exact-tanh apply (behavior differs).
 static inline double soft_clip_apply(double x, double sx, double shx, double sy, double shy) {
   return shy + sy * tanh_approx(sx * x + shx);

@@ -15,11 +15,11 @@ Any site can embed a sandbox patch from soundemote.io with an iframe. No copy of
 | Param | Meaning |
 | --- | --- |
 | `patch=<slug>` | Patch from `patches/` to load. Alias of `pagePatch` (`public/embed-params.js` rewrites it before boot). |
-| `embed=1` | Chrome-less frame: sets `hideui=1` and `autoframe=1` (unless given) and adds the `soemdsp-embed` class on `<html>`. Shows a ▶ Play overlay when there's no `autoplay`. |
+| `embed=1` | Chrome-less frame: sets `hideui=1` and `autoframe=1` (unless given) and adds the `soemdsp-embed` class on `<html>`. Live audio waits for a click on the module (no full-frame start overlay). |
 | `playlist=<url>` | JSON manifest of tracks, bound to the patch's first Music Player (`audioPlayer`) node. |
 | `src=<url>` | A single audio file instead of a playlist. |
 | `module=<nodeId|type>` | Show one whole module full-frame: its own panel with parameters, no graph (see below). `type` picks the first module of that type. |
-| `autoplay=1` | Start playing once loaded if the browser allows it, otherwise show the ▶ Play overlay. |
+| `autoplay=1` | Start playing once loaded if the browser allows it. |
 | `hideui`, `autoframe`, `autostart`, `mode=perform`, `wasmLoad` | Existing params, unchanged. |
 
 `playlist`/`src` handling lives in `public/modules/audioPlayer/audio-player-embed.js` and runs after `nodeSandboxInterfaceReady`.
@@ -45,7 +45,7 @@ The sandbox fetches the manifest and audio with `fetch(..., { mode: "cors" })`, 
 
 - Browsers start Web Audio only after a user gesture inside the frame. Chrome may allow it after earlier engagement with the site; Safari/iOS and Firefox generally don't. A click on the host page doesn't count for a cross-origin iframe.
 - The iframe needs `allow="autoplay"`.
-- `autoplay=1` probes whether audio may start. If not (or it doesn't reach `running` within 4 s), a full-frame ▶ Play button appears. One click starts audio, and `<html data-soemdsp-embed-needs-gesture="true">` is set while it's needed.
+- `autoplay=1` tries to start audio. If the browser blocks it, use Play on the Music Player itself. Embeds do not autostart live output unless `autostart=1`.
 - A muted start doesn't help: Web Audio stays suspended either way.
 
 ## postMessage security
@@ -65,7 +65,7 @@ Messages that edit the graph (`soundemote:sandbox-project-data`, `soemdsp-sandbo
 - **Hiding:** the CSS at the end of `public/styles.css` ("Whole-module canvas tiles") hides the drag handle, jacks, param ports and the direct-child input/output section with `visibility: hidden` and pointer events off. Their space is kept, so nothing reflows. The header ignores the pointer, so nothing in the tile can move the module or make wires. Parameters stay adjustable.
 - **Input under the scale:** sliders, playlist rows and buttons work under the scale, because the sandbox maps pointer positions with `getBoundingClientRect`. The Music Player has no pointer waveform-seek control today; you seek with its slider rows.
 - **Rebuilds:** a module rebuilt while shown is re-captured. A MutationObserver on the module's graph container sees the new element and reopens the canvas with it. The stale element is dropped rather than restored.
-- **Start overlay:** without `playlist`/`src`, `embed-module.js` shows the same click-to-start overlay when the browser blocks audio. A click clears the stuck start and starts audio fresh.
+- **Audio start:** embed does not show a full-frame click-to-start overlay. Play on the module is the gesture.
 - In `public/node-graph-patch-core.js`, `applyNodeGraphModuleElementFromPatch` leaves a module that is inside a canvas tile where it is when the patch re-renders.
 - **Limits:**
   - The module appears exactly as in the workspace, so a tall module letterboxes in a wide frame.
@@ -88,7 +88,7 @@ Commands (host -> iframe):
 | `soemdsp:player:volume` | `value` (0..1) | Player amplitude. |
 | `soemdsp:player:get-state` | - | Replies with a `state` event. |
 
-Events (iframe -> host): `ready { patch, nodeId }`, `state { playing, paused, index, count, title, position, duration, volume, needsGesture }` (4 Hz while changing, and on demand), `error { code, message }` with code `bad-request`, `autoplay-blocked`, `decode`, `no-player`, `unknown-type`, `internal`. Commands sent before boot are queued. When audio is blocked by autoplay policy the embed shows its own start overlay and `state.needsGesture` is true.
+Events (iframe -> host): `ready { patch, nodeId }`, `state { playing, paused, index, count, title, position, duration, volume, needsGesture }` (4 Hz while changing, and on demand), `error { code, message }` with code `bad-request`, `autoplay-blocked`, `decode`, `no-player`, `unknown-type`, `internal`. Commands sent before boot are queued. `state.needsGesture` is true while the AudioContext is not running.
 
 ## Message origins
 
@@ -98,4 +98,4 @@ Events (iframe -> host): `ready { patch, nodeId }`, `state { playing, paused, in
 
 ## Perform-canvas embed (`?mode=perform&embed=1`)
 
-A patch can set up its own full-frame embed: pin a module in `view.canvases.root.elements` (x 0, y 0, w 1, h 1), and set `node.ui.showInCanvas` and `node.ui.canvasWholeModule` on it. `?patch=<slug>&mode=perform&embed=1` then boots straight into the perform canvas (no start menu) with that module shown whole at its zoom-1 size, scaled uniformly to fit. A Music Player opens on its playlist page, and the start overlay appears when audio needs a click. Example: `patches/soundemotecommusicplayer.json` (used by soundemote.com/music).
+A patch can set up its own full-frame embed: pin a module in `view.canvases.root.elements` (x 0, y 0, w 1, h 1), and set `node.ui.showInCanvas` and `node.ui.canvasWholeModule` on it. `?patch=<slug>&mode=perform&embed=1` then boots straight into the perform canvas (no start menu) with that module shown whole at its zoom-1 size, scaled uniformly to fit. A Music Player opens on its playlist page. Example: `patches/soundemotecommusicplayer.json` (used by soundemote.com/music). Circuit-builder view hotkeys (F, Escape, V, arrows, Space transport steal, …) stay off in perform and embed.

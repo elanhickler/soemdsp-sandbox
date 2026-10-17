@@ -217,6 +217,8 @@
       "barThickness": 1,
       "barInk": "fill",
       "strokeColor": "#ffffff",
+      "strokeLeftColor": "#ffffff",
+      "strokeRightColor": "#ffffff",
       "scale": 1,
       "strokeThickness": 1,
       "pauseOnSilence": false,

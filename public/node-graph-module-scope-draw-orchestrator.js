@@ -642,6 +642,9 @@ function drawNodeGraphModuleScopes(options = {}) {
   gl.viewport(0, 0, canvas.width, canvas.height);
   setNodeGraphModuleScopeDebugPhase("commit");
   commitNodeGraphModuleScopeRenderMetricsFrame(animationTime);
+  if (typeof nodeGraphGlGraphPresent === "function") {
+    nodeGraphGlGraphPresent();
+  }
   // Keep RAF alive while the paint gate says live and faces exist.
   if (typeof nodeGraphModuleScopeState !== "undefined" && nodeGraphModuleScopeState) {
     nodeGraphModuleScopeState.idleHold = typeof nodeGraphModuleScopeBuffersIdleSilent === "function"

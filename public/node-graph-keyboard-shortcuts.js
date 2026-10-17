@@ -116,7 +116,29 @@ function nodeGraphArrowKeyYieldsToTextCaret(event) {
  * App-wide: arrows move the selection, Shift+arrows resize it.
  * Nothing else may use these keys. No selection means the key is swallowed.
  */
+/** Perform / embed: circuit-builder view hotkeys stay off (F, Escape, V, arrows, …). */
+function nodeGraphAppHotkeysLocked() {
+  if (typeof window !== "undefined" && window.soemdspPerformPage) {
+    return true;
+  }
+  if (typeof nodeGraphPerformViewRequested === "function" && nodeGraphPerformViewRequested()) {
+    return true;
+  }
+  try {
+    const html = document.documentElement;
+    if (html?.classList.contains("soemdsp-embed")) return true;
+    if (html?.classList.contains("node-perform-mode")) return true;
+    if (document.body?.classList.contains("node-perform-mode")) return true;
+  } catch (_error) {
+    // ignore
+  }
+  return false;
+}
+
 function handleNodeGraphModuleArrowKeys(event) {
+  if (nodeGraphAppHotkeysLocked()) {
+    return false;
+  }
   if (!nodeGraphArrowKeyIsModulePolicy(event) || nodeGraphArrowKeyYieldsToTextCaret(event)) {
     return false;
   }
@@ -300,6 +322,9 @@ function nodeGraphQuickRestartProject() {
 }
 
 function handleNodeGraphKeydown(event) {
+  if (nodeGraphAppHotkeysLocked()) {
+    return;
+  }
   if (event.key === "Escape" && typeof nodeGraphScreenSoloIsActive === "function" && nodeGraphScreenSoloIsActive()) {
     event.preventDefault();
     event.stopPropagation();
