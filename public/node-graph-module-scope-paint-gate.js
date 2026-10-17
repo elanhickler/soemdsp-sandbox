@@ -724,14 +724,15 @@ function scopePaintEnsureColdPlate(slot, options = {}) {
     done = nodeGraphModuleScopeWipeCanvas(canvas, { nodeId, displayType: displayType || undefined, force });
   }
   if (!done) {
-    // Black plate through the shared GL device; plain black only if GL failed.
+    // Black plate through the shared GL device. GL failure is reported by
+    // nodeGraphDisplayGlFailed (black face + one console.error), no 2D path.
     const batch = typeof nodeGraphGlLinesBegin === "function"
       ? nodeGraphGlLinesBegin(canvas, [0, 0, 0, 1])
       : null;
     if (batch && nodeGraphGlLinesEnd(batch, "alpha")) {
       done = true;
-    } else if (typeof nodeGraphGlLinesFillBlack === "function") {
-      nodeGraphGlLinesFillBlack(canvas);
+    } else if (typeof nodeGraphDisplayGlFailed === "function") {
+      nodeGraphDisplayGlFailed(canvas, "cold plate GL unavailable");
       done = true;
     }
   }

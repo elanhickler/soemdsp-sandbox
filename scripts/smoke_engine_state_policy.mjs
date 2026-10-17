@@ -66,7 +66,9 @@ check(ctx.paintNodeGraphParamFacesNow(1) === 1 && drew === 1, "stopped: only par
 {
   const mkCanvas = () => ({ width: 64, height: 32, filled: 0 });
   const mkFace = (canvas, cls = "") => ({ dataset: {}, querySelector: (sel) => (sel.includes("node-") && !sel.includes("canvas.node-module") ? null : canvas), matches: (sel) => cls && sel.includes(cls), closest: () => null });
-  ctx.nodeGraphGlLinesFillBlack = (c) => { c.filled += 1; };
+  ctx.nodeGraphGlLinesBegin = (c) => ({ c });
+  ctx.nodeGraphGlLinesEnd = (b) => { b.c.filled += 1; return true; };
+  ctx.nodeGraphGlLinesFillBlack = () => { throw new Error("2D fill used"); };
   ctx.nodeGraphModuleScopeWipeCanvas = () => false;
   setLive(null);
   const bc = mkCanvas();

@@ -21,6 +21,15 @@ const targets = files.filter((p) => /lib[\\/]visual|-display\.js$|-gl\.js$/.test
 for (const rel of ["public/node-graph-module-scope-number-readout.js", "public/node-graph-module-scope-waterfall-gl.js"]) {
   targets.push(path.join(root, rel));
 }
+// Engine-state plan files (cold plates, param pass, spawn / wake plates):
+// GL failure goes through nodeGraphDisplayGlFailed, never a direct 2D fill.
+const enginePlateFiles = [
+  "public/node-graph-module-scope-paint-gate.js",
+  "public/node-graph-module-scope-slots.js",
+  "public/node-graph-module-scope-draw-orchestrator.js",
+  "public/node-graph-viewport-perf.js",
+];
+for (const rel of enginePlateFiles) targets.push(path.join(root, rel));
 const bad = [];
 const forbid = [
   [/console\.warn/, "console.warn in display/GL code (use console.error / nodeGraphDisplayGlFailed)"],
@@ -39,6 +48,16 @@ const forbidIn = {
     [/_numberReadoutBurnResizeScratch/, "2D burn-plate scale-preserve on resize"],
   ],
 };
+for (const rel of enginePlateFiles) {
+  forbidIn[rel] = [
+    [/nodeGraphGlLinesFillBlack\(/, "direct 2D black fill (use nodeGraphDisplayGlFailed)"],
+    [/getContext\(\s*["']2d["']\s*\)[\s\S]*fillRect|\.fillRect\(/, "2D fillRect plate"],
+  ];
+}
+{
+  const pg = fs.readFileSync(path.join(root, "public/node-graph-module-scope-paint-gate.js"), "utf8");
+  if (!/nodeGraphDisplayGlFailed\(canvas, "cold plate GL unavailable"\)/.test(pg)) bad.push("paint-gate: cold plate GL failure must call nodeGraphDisplayGlFailed");
+}
 for (const [rel, rules] of Object.entries(forbidIn)) {
   const lines = fs.readFileSync(path.join(root, rel), "utf8").split(/\r?\n/);
   lines.forEach((l, i) => { for (const [re, why] of rules) if (re.test(l)) bad.push(`${rel}:${i + 1}: ${why}`); });
