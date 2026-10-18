@@ -171,6 +171,8 @@ const nodeGraphWaterfallSettingsDefaults = Object.freeze({
   strokeThickness: 1,
   // Off: keep scrolling. On: silence (linear amp at or below Planck) holds the plate.
   pauseOnSilence: false,
+  // On: sloped column edges get slope-aware AA (waterfall GL bar shader).
+  smoothLines: true,
   // Bipolar: −1 bottom, 0 center, +1 top. Unipolar: 0 bottom, +1 top.
   polarity: "bipolar",
   // XYZ: stack all three on one plot, or split the face into three bands.

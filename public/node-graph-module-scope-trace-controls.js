@@ -300,7 +300,7 @@ const nodeGraphTraceDisplayActiveControlsByType = Object.freeze({
       "strokeThickness",
     ]),
     colors: Object.freeze(["dot1Color", "secondaryColor", "tertiaryColor", "backgroundColor", "strokeColor", "strokeLeftColor", "strokeRightColor"]),
-    toggles: Object.freeze(["skipDiscontinuities", "pauseOnSilence"]),
+    toggles: Object.freeze(["skipDiscontinuities", "pauseOnSilence", "smoothLines"]),
     choices: Object.freeze(["barInk", "facePolarity", "stereoBlend"]),
   }),
   // Phosphor energy faces: color via shared Gradient editor (not single swatches).
@@ -498,7 +498,7 @@ const nodeGraphTraceDisplayActiveControlsByType = Object.freeze({
       "faceBlur",
     ]),
     colors: Object.freeze(["backgroundColor", "strokeColor"]),
-    toggles: Object.freeze(["pauseOnSilence"]),
+    toggles: Object.freeze(["pauseOnSilence", "smoothLines"]),
     choices: Object.freeze(["barInk", "facePolarity", "stereoBlend", "xyzLayout"]),
   }),
   // 1D Waterfall RGB — Size / Blur / Dot density / Bright; RGB Add or CMY Multiply.
@@ -515,7 +515,7 @@ const nodeGraphTraceDisplayActiveControlsByType = Object.freeze({
       "faceBlur",
     ]),
     colors: Object.freeze(["backgroundColor", "strokeColor"]),
-    toggles: Object.freeze(["cmyMode", "skipDiscontinuities", "pauseOnSilence"]),
+    toggles: Object.freeze(["cmyMode", "skipDiscontinuities", "pauseOnSilence", "smoothLines"]),
     choices: Object.freeze(["barInk", "facePolarity"]),
   }),
   numberReadout: Object.freeze({
@@ -1781,6 +1781,11 @@ const nodeGraphDisplaySettingsToggleMeta = Object.freeze({
     label: "Draw stroke",
     id: "nodeTraceDisplayDrawStroke",
     title: "Stroke the top and bottom of each bar. Off by default. Does not draw a vertical line between them.",
+  }),
+  smoothLines: Object.freeze({
+    label: "Smooth lines",
+    id: "nodeTraceDisplaySmoothLines",
+    title: "Antialias sloped waveform edges (on by default). Off: hard 1px column edges. Applies to new columns; history already drawn keeps its look.",
   }),
   pauseOnSilence: Object.freeze({
     label: "Pause on silence",

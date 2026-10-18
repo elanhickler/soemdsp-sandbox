@@ -1597,6 +1597,10 @@ function buildNodeGraphInstantTraceDisplaySettingsBodyHtml(type, node, allowKey)
     rows.push(nodeGraphDisplaySettingsBuildToggleRowHtml("pauseOnSilence"));
     usedToggles.add("pauseOnSilence");
   }
+  if (isInstantWaterfall && toggleKeys.includes("smoothLines")) {
+    rows.push(nodeGraphDisplaySettingsBuildToggleRowHtml("smoothLines"));
+    usedToggles.add("smoothLines");
+  }
   pushStackField("backgroundBrightness");
   pushStackField("backgroundHue");
   const inkPrimary = orderedPrimary.filter((key) => !stackHead.has(key));

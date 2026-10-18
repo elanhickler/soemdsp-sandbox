@@ -1007,6 +1007,12 @@ function normalizeNodeGraphWaterfallSettings(settings = {}) {
       if (raw === false || raw === 0 || raw === "0" || raw === "false") return false;
       return defaults.pauseOnSilence === true;
     })(),
+    smoothLines: (() => {
+      const raw = source.smoothLines;
+      if (raw === true || raw === 1 || raw === "1" || raw === "true") return true;
+      if (raw === false || raw === 0 || raw === "0" || raw === "false") return false;
+      return defaults.smoothLines !== false;
+    })(),
     // Mirror Bright for form field key (Display Settings edits dot1Brightness).
     dot1Brightness: normalizeNodeGraphTraceDisplayBrightness(
       source.dot1Brightness ?? source.brightness,

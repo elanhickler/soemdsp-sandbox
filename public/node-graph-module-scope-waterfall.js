@@ -173,6 +173,7 @@ function nodeGraphOnsetPaint(spec, live) {
   } else if (typeof nodeGraphWaterfallGlEnsure === "function") {
     nodeGraphWaterfallGlEnsure(canvas, plateBg);
   }
+  if (canvas._wfGlSession) canvas._wfGlSession.smooth = nodeGraphWaterfallSmoothLines(settings);
   const channels = nodeGraphWaterfallChannelList({
     slot: spec.slot,
     settings,
@@ -1467,6 +1468,12 @@ function nodeGraphWaterfallDrawStroke(settings) {
   return ink === "stroke" || ink === "both";
 }
 
+/** Smooth lines (default on): slope-aware edge AA in the GL stamps. */
+function nodeGraphWaterfallSmoothLines(settings) {
+  const raw = settings?.smoothLines;
+  return !(raw === false || raw === 0 || raw === "0" || raw === "false");
+}
+
 function nodeGraphWaterfallStrokePx(settings) {
   const n = Number(settings?.strokeThickness);
   if (!Number.isFinite(n)) return 1;
@@ -1592,9 +1599,11 @@ function nodeGraphWaterfallInk(destCtx, destCanvas, spec, x0, columns, bg, sampl
   if (!channels.length) return n;
 
   const plateBg = mode === "multiply" ? "#ffffff" : (bg || "#000000");
-  if (!nodeGraphWaterfallEnsureHold(destCanvas, width, height, plateBg)) {
+  const hold = nodeGraphWaterfallEnsureHold(destCanvas, width, height, plateBg);
+  if (!hold) {
     return n;
   }
+  hold.smooth = nodeGraphWaterfallSmoothLines(settings);
 
   // Scroll the GPU history left; the shader reveals the right edge in the plate colour.
   if (options?.resetHold) {
