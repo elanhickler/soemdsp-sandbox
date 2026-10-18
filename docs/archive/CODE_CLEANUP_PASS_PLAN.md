@@ -1,11 +1,13 @@
 # Code cleanup pass (behavior-preserving)
 
-**Status:** Active  
+> **Archived 2026-10-18** (finished or superseded; cleanup approved by Argi). Kept for history; do not work from it.
+
+**Status:** Done — all 9 items landed (closed 2026-10-18)  
 **Constraint:** **No intentional behavior change.** Refactors, dead-code removal, docs hygiene, and structure only. If a change could alter audio, UI, or patch I/O, skip it or gate it behind an explicit product task.
 
 **Context:** CLAP *host* code was extracted to soemdsp-sandbox-claphost. Mainline still has feature WIP (Asciiscope, pitch quantizer face, keyboard layout, etc.) uncommitted. This pass cleans **around** that work; it does not redesign features.
 
-Related: `docs/CORE_REDUCTION_PLAN.md` (core shell reduction). This doc is a **hygiene pass**, not a second core rewrite.
+Related: `docs/archive/CORE_REDUCTION_PLAN.md` (core shell reduction). This doc is a **hygiene pass**, not a second core rewrite.
 
 ---
 

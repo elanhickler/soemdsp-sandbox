@@ -1,6 +1,6 @@
 # Softpop Plan: two modules, Softpop Oscillator and Softpop Filter
 
-**Status (2026-10-14): SPLIT INTO TWO MODULES, built locally by SandyModules, uncommitted, awaiting Argi's ear check.** The old single module with a Sine / Filter Model choice is gone. Sections 1-11 below are the history of the single-module design; where they talk about the Model choice, the Filter model now lives in **Softpop Filter** and the Sine model became **Softpop Oscillator**'s Source choice. Section S is the current spec.
+**Status (2026-10-14): SPLIT INTO TWO MODULES, built by SandyModules, now committed and pushed (checked 2026-10-18); ear-check result not recorded here.** Follow-up module: Softpop 2 (`docs/SOFTPOP2_PLAN.md`, done). The old single module with a Sine / Filter Model choice is gone. Sections 1-11 below are the history of the single-module design; where they talk about the Model choice, the Filter model now lives in **Softpop Filter** and the Sine model became **Softpop Oscillator**'s Source choice. Section S is the current spec.
 **Owner:** SandyModules (DSP); Interface (face).
 **Module types:** `softpopOscillator` ("Softpop Oscillator", `native_modules/softpop_oscillator/softpop_oscillator.cpp`) and `softpopFilter` ("Softpop Filter", new, `native_modules/softpop_filter/softpop_filter.cpp`). Shared parts (noise generators, Pitch Mod with mean correction, display data): `native_modules/softpop_oscillator/softpop_core.h`; Width -> Q is Softpop Filter only. Both use the `softpopFace` WebGL2 face (`public/modules/softpopOscillator/softpop-display.js`).
 

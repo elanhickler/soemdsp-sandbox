@@ -465,6 +465,7 @@ function nodeGraphGlGraphSettleTextBake() {
 }
 
 function nodeGraphGlGraphOutside(x, y, w, h, cssW, cssH, pad = 48) {
+  if (nodeGraphGlGraphState.frameCamera) return false;
   return x + w < -pad || y + h < -pad || x > cssW + pad || y > cssH + pad;
 }
 
@@ -589,7 +590,9 @@ function nodeGraphGlGraphDrawPlate(batch, plate, toX, toY, zoom, cssW, cssH, pla
   const y = toY(plate.y);
   const w = plate.w * zoom;
   const h = plate.h * zoom;
-  if (x + w < 0 || y + h < 0 || x > cssW || y > cssH) return;
+  if (!batch?.camera) {
+    if (x + w < 0 || y + h < 0 || x > cssW || y > cssH) return;
+  }
   const strokeW = Number.parseFloat(plateStyle.getPropertyValue("--node-module-idle-stroke-width")) || 1;
   const edge = strokeW * zoom;
   const x0 = Math.round(x);
@@ -1039,6 +1042,7 @@ function nodeGraphGlGraphPushWire(wires, from, to, color, toColor, zoom, wire, s
 }
 
 function nodeGraphGlGraphRebuild(options = {}) {
+  nodeGraphGlGraphState.gen = (nodeGraphGlGraphState.gen || 0) + 1;
   const lite = options.lite === true;
   const wires = [];
   const zoom = typeof nodeGraphZoom === "function" ? nodeGraphZoom() : 1;
@@ -1149,9 +1153,14 @@ function nodeGraphGlGraphPresent() {
     if (!host.clientWidth && document.body?.classList.contains("node-perform-mode")) return true;
     host.classList.add("gl-graph-on");
   }
+  if (!view && typeof nodeGraphEnsureTextWireLayers === "function") nodeGraphEnsureTextWireLayers(host);
   const canvas = nodeGraphGlGraphEnsureCanvas(
     host, "canvas", view ? "" : "nodeGlGraphCanvas", "node-gl-graph-canvas",
     view ? ":scope > .dsp-node" : ".node-graph-zoom-surface",
+  );
+  const wireCanvas = nodeGraphGlGraphEnsureCanvas(
+    host, "wireCanvas", view ? "" : "nodeGlGraphWires", "node-gl-graph-wires",
+    view ? null : ".node-graph-text-front",
   );
   const dotsCanvas = nodeGraphGlGraphEnsureCanvas(
     host, "dotsCanvas", view ? "" : "nodeGlGraphDots", "node-gl-graph-dots", null,
@@ -1159,17 +1168,38 @@ function nodeGraphGlGraphPresent() {
   const cssW = Math.max(1, host.clientWidth || 1);
   const cssH = Math.max(1, host.clientHeight || 1);
   const scale = nodeGraphGlGraphFit(canvas, cssW, cssH);
+  nodeGraphGlGraphFit(wireCanvas, cssW, cssH);
   nodeGraphGlGraphFit(dotsCanvas, cssW, cssH);
-  const batch = nodeGraphGlLinesBegin(canvas, [0, 0, 0, 0], { scale, transparent: true });
+  const zoom = nodeGraphGlGraphZoom();
+  let cam = { x: 0, y: 0 };
+  if (view) cam = view.cam;
+  else if (typeof nodeGraphWireCameraViewBox === "function") cam = nodeGraphWireCameraViewBox(host);
+  const frameCamera = view ? null : { x: cam.x, y: cam.y, zoom };
+  nodeGraphGlGraphState.frameCamera = frameCamera;
+  const gesturingEarly = typeof nodeGraphViewportGestureActive === "function" && nodeGraphViewportGestureActive();
+  const mesh = nodeGraphGlGraphState.mesh;
+  if (!view && frameCamera && gesturingEarly && mesh && mesh.gen === nodeGraphGlGraphState.gen
+    && mesh.w === canvas.width && mesh.h === canvas.height) {
+    for (let i = 0; i < mesh.batches.length; i += 1) {
+      const held = mesh.batches[i];
+      held.camera = frameCamera;
+      nodeGraphGlLinesEnd(held, held._blend || "alpha");
+    }
+    if (typeof nodeGraphPositionGridHtml === "function") nodeGraphPositionGridHtml();
+    return true;
+  }
+  const beginOpts = { scale, transparent: true, camera: frameCamera, keepMesh: !view };
+  const batch = nodeGraphGlLinesBegin(canvas, [0, 0, 0, 0], beginOpts);
+  const wireBatch = nodeGraphGlLinesBegin(wireCanvas, [0, 0, 0, 0], beginOpts);
   // Contact dots first, as straight coverage, then displays over them.
-  const contactBatch = nodeGraphGlLinesBegin(dotsCanvas, [0, 0, 0, 0], { scale, transparent: true });
-  const dotBatch = nodeGraphGlLinesBegin(dotsCanvas, [0, 0, 0, 0], { scale, transparent: true, keep: true });
-  const veilBatch = nodeGraphGlLinesBegin(dotsCanvas, [0, 0, 0, 0], { scale, transparent: true, keep: true });
-  if (!batch || !contactBatch || !dotBatch || !veilBatch) {
+  const contactBatch = nodeGraphGlLinesBegin(dotsCanvas, [0, 0, 0, 0], beginOpts);
+  const dotBatch = nodeGraphGlLinesBegin(dotsCanvas, [0, 0, 0, 0], { ...beginOpts, keep: true });
+  const veilBatch = nodeGraphGlLinesBegin(dotsCanvas, [0, 0, 0, 0], { ...beginOpts, keep: true });
+  if (!batch || !wireBatch || !contactBatch || !dotBatch || !veilBatch) {
     if (typeof nodeGraphGlLinesFillBlack === "function") nodeGraphGlLinesFillBlack(canvas);
+    if (typeof nodeGraphDisplayGlFailed === "function") nodeGraphDisplayGlFailed(canvas, "GL graph begin");
     return false;
   }
-  const zoom = nodeGraphGlGraphZoom();
   const gesturing = typeof nodeGraphViewportHoldsDisplays === "function"
     && nodeGraphViewportHoldsDisplays();
   if (!gesturing) nodeGraphGlGraphSettleTextBake();
@@ -1189,11 +1219,12 @@ function nodeGraphGlGraphPresent() {
   const traceHalf = zoom;
   const dotR = Math.max(0, dotSize * 0.5) * zoom;
   const wireFeather = 2;
-  let cam = { x: 0, y: 0 };
-  if (view) cam = view.cam;
-  else if (typeof nodeGraphWireCameraViewBox === "function") cam = nodeGraphWireCameraViewBox(host);
-  const toX = (x) => (x - cam.x) * zoom;
-  const toY = (y) => (y - cam.y) * zoom;
+  const screenX = (x) => (x - cam.x) * zoom;
+  const screenY = (y) => (y - cam.y) * zoom;
+  // Camera uniform: geometry stays in zoom-1 px. Tiles still project on the CPU.
+  const toX = frameCamera ? (x) => x : screenX;
+  const toY = frameCamera ? (y) => y : screenY;
+  const layoutZoom = frameCamera ? 1 : zoom;
 
   const pad = 120;
   for (let i = 0; i < nodeGraphGlGraphState.wires.length; i += 1) {
@@ -1206,8 +1237,8 @@ function nodeGraphGlGraphPresent() {
       nodeGraphGlGraphState.screen = screen;
     }
     for (let p = 0; p < src.length; p += 2) {
-      screen[p] = toX(src[p]);
-      screen[p + 1] = toY(src[p + 1]);
+      screen[p] = screenX(src[p]);
+      screen[p + 1] = screenY(src[p + 1]);
     }
     // Keep a wire when any segment crosses the view. Endpoint-only culling
     // dropped curves whose ends were offscreen and whose middle was not.
@@ -1245,26 +1276,29 @@ function nodeGraphGlGraphPresent() {
         stroke = style === "trace" ? traceHalf + 0.5 * zoom : halfPx + 0.8 * zoom;
       }
     }
-    const pts = screen.subarray(0, src.length);
+    const pts = frameCamera ? src : screen.subarray(0, src.length);
     if (style === "trace") {
-      nodeGraphGlLinesPolyline(batch, pts, stroke, feather, rgba, "ortho");
+      nodeGraphGlLinesPolyline(wireBatch, pts, stroke, feather, rgba, "ortho");
     } else if (typeof nodeGraphGlLinesRibbon !== "function") {
-      nodeGraphGlLinesPolyline(batch, pts, stroke, feather, rgba, "butt");
+      nodeGraphGlLinesPolyline(wireBatch, pts, stroke, feather, rgba, "butt");
     } else {
-      nodeGraphGlLinesRibbon(batch, pts, stroke, feather, rgba);
+      nodeGraphGlLinesRibbon(wireBatch, pts, stroke, feather, rgba);
     }
     const dots = wire.dots || [];
     const selectedRgba = [0.95, 0.86, 0.45, 1];
     for (let d = 0; d < dots.length; d += 1) {
       const dot = dots[d];
-      const dx = toX(dot.x);
-      const dy = toY(dot.y);
+      const dx = screenX(dot.x);
+      const dy = screenY(dot.y);
+      const dotX = frameCamera ? dot.x : dx;
+      const dotY = frameCamera ? dot.y : dy;
       if (dx < -dotR || dy < -dotR || dx > cssW + dotR || dy > cssH + dotR) continue;
       const dotColor = picked ? selectedRgba : dot.rgba;
       if (dot.square) {
-        nodeGraphGlLinesRect(contactBatch, dx - dotR, dy - dotR, dotR * 2, dotR * 2, dotColor);
+        const r = frameCamera ? dotSize * 0.5 : dotR;
+        nodeGraphGlLinesRect(contactBatch, dotX - r, dotY - r, r * 2, r * 2, dotColor);
       } else {
-        nodeGraphGlLinesDot(contactBatch, dx, dy, dotR, wireFeather, dotColor);
+        nodeGraphGlLinesDot(contactBatch, dotX, dotY, frameCamera ? dotR : dotR, wireFeather, dotColor);
       }
     }
   }
@@ -1280,26 +1314,21 @@ function nodeGraphGlGraphPresent() {
   for (let i = 0; i < nodeGraphGlGraphState.plates.length; i += 1) {
     const plate = nodeGraphGlGraphState.plates[i];
     if (plate.onTop) continue;
-    nodeGraphGlGraphDrawPlate(batch, plate, toX, toY, zoom, cssW, cssH, plateStyle, borderOn, borderIdle);
+    nodeGraphGlGraphDrawPlate(batch, plate, toX, toY, layoutZoom, cssW, cssH, plateStyle, borderOn, borderIdle);
   }
   batch.textPixelated = zoom > 2.5;
-  nodeGraphGlGraphDrawChrome(batch, toX, toY, zoom, cssW, cssH);
-  for (let i = 0; i < nodeGraphGlGraphState.plates.length; i += 1) {
-    const plate = nodeGraphGlGraphState.plates[i];
-    if (!plate.textBox || plate.onTop) continue;
-    nodeGraphGlGraphDrawTextBox(batch, plate, toX, toY, zoom, cssW, cssH);
-  }
+  nodeGraphGlGraphDrawChrome(batch, toX, toY, layoutZoom, cssW, cssH);
   const pixelated = zoom > 2.5;
   for (let i = 0; i < nodeGraphGlGraphState.displays.length; i += 1) {
     const face = nodeGraphGlGraphState.displays[i];
     if (!face.canvas || !(face.w > 0) || !(face.h > 0)) continue;
-    const rect = nodeGraphGlGraphDisplayScreenRect(face, toX, toY, zoom);
+    const rect = nodeGraphGlGraphDisplayScreenRect(face, toX, toY, layoutZoom);
     const x = rect.x;
     const y = rect.y;
     const w = rect.w;
     const h = rect.h;
     if (!(w > 1) || !(h > 1)) continue;
-    if (x + w < 0 || y + h < 0 || x > cssW || y > cssH) continue;
+    if (!frameCamera && (x + w < 0 || y + h < 0 || x > cssW || y > cssH)) continue;
     nodeGraphGlLinesImage(dotBatch, face.canvas, x, y, w, h, {
       nearest: pixelated,
       // Pan/zoom already froze the face pixels. Re-upload only when displays paint.
@@ -1308,26 +1337,25 @@ function nodeGraphGlGraphPresent() {
     });
   }
   dotBatch.textPixelated = pixelated;
-  nodeGraphGlGraphDrawButtonCaptions(dotBatch, toX, toY, zoom, cssW, cssH);
+  nodeGraphGlGraphDrawButtonCaptions(dotBatch, toX, toY, layoutZoom, cssW, cssH);
   for (let i = 0; i < nodeGraphGlGraphState.plates.length; i += 1) {
     const plate = nodeGraphGlGraphState.plates[i];
     if (!plate.onTop) continue;
-    nodeGraphGlGraphDrawPlate(veilBatch, plate, toX, toY, zoom, cssW, cssH, plateStyle, borderOn, borderIdle);
-    nodeGraphGlGraphDrawTextBox(veilBatch, plate, toX, toY, zoom, cssW, cssH);
+    nodeGraphGlGraphDrawPlate(veilBatch, plate, toX, toY, layoutZoom, cssW, cssH, plateStyle, borderOn, borderIdle);
   }
-  nodeGraphGlGraphDrawVeils(veilBatch, toX, toY, zoom);
+  nodeGraphGlGraphDrawVeils(veilBatch, toX, toY, layoutZoom);
   const outputPaused = typeof nodeGraphLiveEngineIsPaused === "function" && nodeGraphLiveEngineIsPaused();
   if (outputPaused) {
     const white = [1, 1, 1, 1];
     for (let i = 0; i < nodeGraphGlGraphState.displays.length; i += 1) {
       const face = nodeGraphGlGraphState.displays[i];
       if (!face.output || !(face.w > 0) || !(face.h > 0)) continue;
-      const rect = nodeGraphGlGraphDisplayScreenRect(face, toX, toY, zoom);
+      const rect = nodeGraphGlGraphDisplayScreenRect(face, toX, toY, layoutZoom);
       const x = rect.x;
       const y = rect.y;
       const w = rect.w;
       const h = rect.h;
-      if (x + w < 0 || y + h < 0 || x > cssW || y > cssH) continue;
+      if (!frameCamera && (x + w < 0 || y + h < 0 || x > cssW || y > cssH)) continue;
       const side = Math.min(w, h);
       const barH = Math.max(6, side * 0.46);
       const barW = Math.max(2, side * 0.14);
@@ -1338,11 +1366,26 @@ function nodeGraphGlGraphPresent() {
       nodeGraphGlLinesRect(dotBatch, x0 + barW + gap, y0, barW, barH, white);
     }
   }
-  const cablesOk = nodeGraphGlLinesEnd(batch, "alpha") !== false;
+  batch._blend = "alpha";
+  wireBatch._blend = "alpha";
+  contactBatch._blend = "max";
+  dotBatch._blend = "alpha";
+  veilBatch._blend = "alpha";
+  const platesOk = nodeGraphGlLinesEnd(batch, "alpha") !== false;
+  const wiresOk = nodeGraphGlLinesEnd(wireBatch, "alpha") !== false;
   const contactOk = nodeGraphGlLinesEnd(contactBatch, "max") !== false;
   const dotsOk = nodeGraphGlLinesEnd(dotBatch, "alpha") !== false;
   const veilOk = nodeGraphGlLinesEnd(veilBatch, "alpha") !== false;
-  return cablesOk && contactOk && dotsOk && veilOk;
+  if (!view) {
+    nodeGraphGlGraphState.mesh = {
+      gen: nodeGraphGlGraphState.gen,
+      w: canvas.width,
+      h: canvas.height,
+      batches: [batch, wireBatch, contactBatch, dotBatch, veilBatch],
+    };
+  }
+  if (typeof nodeGraphPositionGridHtml === "function") nodeGraphPositionGridHtml();
+  return platesOk && wiresOk && contactOk && dotsOk && veilOk;
 }
 
 /**

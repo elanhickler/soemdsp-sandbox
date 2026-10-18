@@ -1,5 +1,7 @@
 # A1 — Live vs worklet DSP duplication inventory
 
+> **Archived 2026-10-18** (finished or superseded; cleanup approved by Argi). Kept for history; do not work from it.
+
 **Date:** 2026-08-02  
 **Phase:** A of `HIGH_RISK_HIGH_REWARD_PLAN.md`
 

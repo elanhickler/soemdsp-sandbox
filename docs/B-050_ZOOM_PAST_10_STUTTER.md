@@ -3,7 +3,7 @@
 **Status:** open (unfixed)  
 **Severity:** see  
 **Source:** user 2026-09-27  
-**Related:** `docs/ZOOM_PAN_MAGNIFIER_PERF_PLAN.md` (2026-08-20 camera/pan workstream — implemented, status header partially stale); B-041 (dimmer cutouts vs zoom/pan, fixed); display-ink policy in `docs/DISPLAY_SCALE_REWRITE.md` (not a stutter fix)
+**Related:** `docs/archive/ZOOM_PAN_MAGNIFIER_PERF_PLAN.md` (2026-08-20 camera/pan workstream — implemented, status header partially stale); B-041 (dimmer cutouts vs zoom/pan, fixed); display-ink policy in `docs/DISPLAY_SCALE_REWRITE.md` (not a stutter fix)
 
 ## Actual broken UI (user-reported 2026-09-27)
 
@@ -70,7 +70,7 @@ Honest summary: **agents already spent a large camera/pan performance pass**. Th
 
 - **Commit:** `af49a289` — *…camera cull, magnifier snapshot-only* (styles rewrite).
 - **What:** Removed `width/height: 100%/zoom` + CSS `zoom: var(--node-graph-zoom)` on the zoom surface. World layer is **1× layout** + `translate3d(pan) scale(zoom)`. Wire SVGs stay screen-space siblings (not CSS-scaled). Removed gesture `will-change: transform` on the zoom surface (was enlarging the layer).
-- **Note:** `docs/ZOOM_PAN_MAGNIFIER_PERF_PLAN.md` header still says “camera is CSS zoom … not transform: scale” — that header is **stale**; tree matches Attempt C.
+- **Note:** `docs/archive/ZOOM_PAN_MAGNIFIER_PERF_PLAN.md` header still says “camera is CSS zoom … not transform: scale” — that header is **stale**; tree matches Attempt C.
 - **Outcome:** **Partial.** Fixed the old “CSS zoom rasterizes zoom× pixels and pan dies” failure mode. User still reports horrible stutter past ~10× on current camera.
 
 ### Attempt D — Mid-zoom stroke compensate freeze + hide wires/jacks
@@ -126,6 +126,6 @@ Number Readout sizing, phosphor residual copy, scope draw in buffer space, wire 
 ## Pointers
 
 - Index: `docs/BUG_PLAN.md` → B-050 (status **open**)
-- Prior plan (implemented, header stale): `docs/ZOOM_PAN_MAGNIFIER_PERF_PLAN.md`
+- Prior plan (implemented, header stale): `docs/archive/ZOOM_PAN_MAGNIFIER_PERF_PLAN.md`
 - Display vs camera policy (not the fix): `docs/DISPLAY_SCALE_REWRITE.md`
 - Agent rules / progress: `progress.md`

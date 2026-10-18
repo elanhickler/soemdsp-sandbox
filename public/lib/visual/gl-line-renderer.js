@@ -60,6 +60,10 @@ attribute float halfPx;
 attribute float feather;
 attribute float caps;
 attribute vec4 colour;
+uniform float uPixel;
+uniform vec3 uCam;
+uniform vec2 uVp;
+uniform float uDevice;
 varying vec2 vLocal;
 varying float vLen;
 varying float vHalf;
@@ -67,12 +71,38 @@ varying float vFeather;
 varying float vCaps;
 varying vec4 vColour;
 void main() {
-  gl_Position = vec4(position, 0.0, 1.0);
-  vLocal = local;
+  vec2 pos = position;
+  float capsOut = caps;
+  vec2 localOut = local;
+  if (uPixel > 0.5 && caps > 3.75) {
+    float reach = halfPx + feather;
+    float z = max(uCam.z, 0.0001);
+    pos = position + local * (reach / z);
+    localOut = local * reach;
+    capsOut = 0.0;
+  } else if (uPixel > 0.5 && caps > 2.5) {
+    float side = caps > 3.25 ? -1.0 : 1.0;
+    vec2 n = local;
+    float nl = length(n);
+    if (nl > 0.0001) n /= nl;
+    float reach = halfPx + feather;
+    float z = max(uCam.z, 0.0001);
+    pos = position + n * side * (reach / z);
+    localOut = vec2(0.0, side * reach);
+    capsOut = 1.0;
+  }
+  if (uPixel > 0.5) {
+    vec2 css = (pos - uCam.xy) * max(uCam.z, 0.0001);
+    vec2 dev = css * uDevice;
+    gl_Position = vec4(dev.x / uVp.x * 2.0 - 1.0, 1.0 - dev.y / uVp.y * 2.0, 0.0, 1.0);
+  } else {
+    gl_Position = vec4(position, 0.0, 1.0);
+  }
+  vLocal = localOut;
   vLen = segLen;
   vHalf = halfPx;
   vFeather = feather;
-  vCaps = caps;
+  vCaps = capsOut;
   vColour = colour;
 }
 `;
@@ -136,10 +166,20 @@ void main() {
 attribute vec2 position;
 attribute vec2 uv;
 attribute vec4 vtint;
+uniform float uPixel;
+uniform vec3 uCam;
+uniform vec2 uVp;
+uniform float uDevice;
 varying vec2 vUv;
 varying vec4 vTint;
 void main() {
-  gl_Position = vec4(position, 0.0, 1.0);
+  if (uPixel > 0.5) {
+    vec2 css = (position - uCam.xy) * max(uCam.z, 0.0001);
+    vec2 dev = css * uDevice;
+    gl_Position = vec4(dev.x / uVp.x * 2.0 - 1.0, 1.0 - dev.y / uVp.y * 2.0, 0.0, 1.0);
+  } else {
+    gl_Position = vec4(position, 0.0, 1.0);
+  }
   vUv = uv;
   vTint = vtint;
 }
@@ -223,9 +263,19 @@ void main() {
   const OUT_VS = `
 attribute vec2 position;
 attribute vec2 pixel;
+uniform float uPixel;
+uniform vec3 uCam;
+uniform vec2 uVp;
+uniform float uDevice;
 varying vec2 vPx;
 void main() {
-  gl_Position = vec4(position, 0.0, 1.0);
+  if (uPixel > 0.5) {
+    vec2 css = (position - uCam.xy) * max(uCam.z, 0.0001);
+    vec2 dev = css * uDevice;
+    gl_Position = vec4(dev.x / uVp.x * 2.0 - 1.0, 1.0 - dev.y / uVp.y * 2.0, 0.0, 1.0);
+  } else {
+    gl_Position = vec4(position, 0.0, 1.0);
+  }
   vPx = pixel;
 }
 `;
@@ -346,14 +396,26 @@ void main() {
         outCount: gl.getUniformLocation(outProgram, "uCount"),
         outJack: gl.getUniformLocation(outProgram, "uJack[0]"),
         outJackColor: gl.getUniformLocation(outProgram, "uJackColor[0]"),
+        outCamPixel: gl.getUniformLocation(outProgram, "uPixel"),
+        outCamCam: gl.getUniformLocation(outProgram, "uCam"),
+        outCamVp: gl.getUniformLocation(outProgram, "uVp"),
+        outCamDevice: gl.getUniformLocation(outProgram, "uDevice"),
         veilProgram,
         veilPos: veilProgram ? gl.getAttribLocation(veilProgram, "position") : -1,
         veilPx: veilProgram ? gl.getAttribLocation(veilProgram, "pixel") : -1,
         veilRect: veilProgram ? gl.getUniformLocation(veilProgram, "uRect") : null,
         veilPeriod: veilProgram ? gl.getUniformLocation(veilProgram, "uPeriod") : null,
+        veilCamPixel: veilProgram ? gl.getUniformLocation(veilProgram, "uPixel") : null,
+        veilCamCam: veilProgram ? gl.getUniformLocation(veilProgram, "uCam") : null,
+        veilCamVp: veilProgram ? gl.getUniformLocation(veilProgram, "uVp") : null,
+        veilCamDevice: veilProgram ? gl.getUniformLocation(veilProgram, "uDevice") : null,
         buf: gl.createBuffer(),
         attribs: ["position", "local", "segLen", "halfPx", "feather", "caps", "colour"].map((n) => gl.getAttribLocation(program, n)),
         coverage: gl.getUniformLocation(program, "uCoverage"),
+        camPixel: gl.getUniformLocation(program, "uPixel"),
+        camCam: gl.getUniformLocation(program, "uCam"),
+        camVp: gl.getUniformLocation(program, "uVp"),
+        camDevice: gl.getUniformLocation(program, "uDevice"),
         imgProgram,
         imgBuf: gl.createBuffer(),
         imgTex: gl.createTexture(),
@@ -365,6 +427,10 @@ void main() {
         imgAlphaLoc: gl.getUniformLocation(imgProgram, "alpha"),
         imgTintLoc: gl.getUniformLocation(imgProgram, "tint"),
         imgModeLoc: gl.getUniformLocation(imgProgram, "mode"),
+        imgCamPixel: gl.getUniformLocation(imgProgram, "uPixel"),
+        imgCamCam: gl.getUniformLocation(imgProgram, "uCam"),
+        imgCamVp: gl.getUniformLocation(imgProgram, "uVp"),
+        imgCamDevice: gl.getUniformLocation(imgProgram, "uDevice"),
         atlases: new Map(),
         // Colour emoji: pages [{ texture, x, y, rowH }], entries "emoji|px".
         emoji: { pages: [], entries: new Map(), canvas: null, ctx: null },
@@ -412,7 +478,28 @@ void main() {
       transparent: options?.transparent === true,
       // Blit over the 2D canvas instead of clearing it first.
       keep: options?.keep === true,
+      // World-pixel camera. Positions stay in CSS px; the vertex shader applies pan/zoom.
+      camera: options?.camera || null,
+      // Keep the vertex arrays so a later camera change can redraw without rebuilding them.
+      keepMesh: options?.keepMesh === true,
     };
+  }
+
+  function bindCam(gl, locs, batch) {
+    if (!locs || locs.pixel == null) return;
+    const cam = batch?.camera;
+    if (!cam) {
+      gl.uniform1f(locs.pixel, 0);
+      return;
+    }
+    gl.uniform1f(locs.pixel, 1);
+    gl.uniform3f(locs.cam, cam.x || 0, cam.y || 0, cam.zoom > 0 ? cam.zoom : 1);
+    gl.uniform2f(locs.vp, batch.w, batch.h);
+    gl.uniform1f(locs.device, batch.scale > 0 ? batch.scale : 1);
+  }
+
+  function lineCamLocs(s) {
+    return { pixel: s.camPixel, cam: s.camCam, vp: s.camVp, device: s.camDevice };
   }
 
   function push(batch, x, y, lu, lv, len, half, feather, c, caps) {
@@ -427,7 +514,11 @@ void main() {
       grown.set(d);
       d = grown;
     }
-    d[i] = (x / batch.w) * 2 - 1; d[i + 1] = 1 - (y / batch.h) * 2;
+    if (batch.camera) {
+      d[i] = x; d[i + 1] = y;
+    } else {
+      d[i] = (x / batch.w) * 2 - 1; d[i + 1] = 1 - (y / batch.h) * 2;
+    }
     d[i + 2] = lu; d[i + 3] = lv; d[i + 4] = len; d[i + 5] = half; d[i + 6] = feather;
     d[i + 7] = caps || 0;
     d[i + 8] = c[0]; d[i + 9] = c[1]; d[i + 10] = c[2]; d[i + 11] = c.length > 3 ? c[3] : 1;
@@ -446,7 +537,7 @@ void main() {
   /** Solid axis-aligned rect. */
   function nodeGraphGlLinesRect(batch, x, y, w, h, rgba) {
     if (!batch || !(w > 0) || !(h > 0)) return;
-    const k = batch.scale || 1;
+    const k = batch.camera ? 1 : (batch.scale || 1);
     if (k !== 1) { x *= k; y *= k; w *= k; h *= k; }
     const big = 1e6;
     const q = [[x, y], [x + w, y], [x, y + h], [x + w, y], [x + w, y + h], [x, y + h]];
@@ -508,7 +599,31 @@ void main() {
   function nodeGraphGlLinesSegment(batch, x0, y0, x1, y1, halfPx, feather, rgba, caps) {
     if (!batch) return;
     const square = caps === "square" || caps === 1;
-    const k = batch.scale || 1;
+    if (batch.camera && (square || !(Math.hypot(x1 - x0, y1 - y0) > 1e-4))) {
+      const dx = x1 - x0;
+      const dy = y1 - y0;
+      const len = Math.hypot(dx, dy);
+      const ux = len > 1e-6 ? dx / len : 1;
+      const uy = len > 1e-6 ? dy / len : 0;
+      const nx = -uy;
+      const ny = ux;
+      const half = Math.max(0, halfPx);
+      const fade = Math.max(0, feather);
+      if (!(len > 1e-4)) {
+        const corner = (sx, sy) => [x0, y0, sx, sy];
+        const quad = [corner(-1, -1), corner(1, -1), corner(-1, 1), corner(1, -1), corner(1, 1), corner(-1, 1)];
+        for (let i = 0; i < quad.length; i += 1) {
+          const v = quad[i];
+          push(batch, v[0], v[1], v[2], v[3], 0, half, fade, rgba, 4);
+        }
+        return;
+      }
+      const end = (x, y, side) => push(batch, x, y, nx, ny, 0, half, fade, rgba, side > 0 ? 3 : 3.5);
+      end(x0, y0, 1); end(x0, y0, -1); end(x1, y1, 1);
+      end(x0, y0, -1); end(x1, y1, -1); end(x1, y1, 1);
+      return;
+    }
+    const k = batch.camera ? 1 : (batch.scale || 1);
     if (k !== 1) { x0 *= k; y0 *= k; x1 *= k; y1 *= k; halfPx *= k; feather *= k; }
     const reach = Math.max(0, halfPx) + Math.max(0, feather) + 4;
     const clipped = clipLineToRect(
@@ -558,7 +673,8 @@ void main() {
     if (!batch || !points || points.length < 4) return;
     const square = caps === "square" || caps === "butt" || caps === "ortho" || caps === 1;
     const ortho = caps === "ortho";
-    const reach = Math.max(0, halfPx) + Math.max(0, feather);
+    const reachScale = batch.camera ? (batch.camera.zoom > 0 ? batch.camera.zoom : 1) : 1;
+    const reach = (Math.max(0, halfPx) + Math.max(0, feather)) / reachScale;
     const segs = [];
     for (let i = 2; i < points.length; i += 2) {
       const x0 = points[i - 2];
@@ -587,7 +703,7 @@ void main() {
   // has no end cap and no gap. `across` is the distance from the centerline.
   function nodeGraphGlLinesRibbon(batch, points, halfPx, feather, rgba) {
     if (!batch || !points || points.length < 4) return;
-    const k = batch.scale || 1;
+    const k = batch.camera ? 1 : (batch.scale || 1);
     const r = Math.max(0, halfPx) + Math.max(0, feather);
     const count = points.length / 2;
     const dirX = new Float32Array(count);
@@ -631,9 +747,15 @@ void main() {
       if (x0 === x1 && y0 === y1) continue;
       const n0 = edge[i];
       const n1 = edge[i + 1];
+      const half = Math.max(0, halfPx) * (batch.camera ? 1 : k);
+      const fade = Math.max(0, feather) * (batch.camera ? 1 : k);
+      if (batch.camera) {
+        const end = (x, y, n, side) => push(batch, x, y, n[0], n[1], 0, half, fade, rgba, side > 0 ? 3 : 3.5);
+        end(x0, y0, n0, 1); end(x0, y0, n0, -1); end(x1, y1, n1, 1);
+        end(x0, y0, n0, -1); end(x1, y1, n1, -1); end(x1, y1, n1, 1);
+        continue;
+      }
       const rk = r * k;
-      const half = Math.max(0, halfPx) * k;
-      const fade = Math.max(0, feather) * k;
       const quad = [
         [x0 + n0[0] * rk, y0 + n0[1] * rk, rk],
         [x0 - n0[0] * rk, y0 - n0[1] * rk, -rk],
@@ -694,7 +816,7 @@ void main() {
    */
   function nodeGraphGlLinesImage(batch, source, x, y, w, h, options = {}) {
     if (!batch || !source || !(w > 0) || !(h > 0)) return;
-    const k = batch.scale || 1;
+    const k = batch.camera ? 1 : (batch.scale || 1);
     batch.images.push({
       source,
       x: x * k, y: y * k, w: w * k, h: h * k,
@@ -1022,7 +1144,7 @@ void main() {
     const weight = options.weight || 600;
     const atlas = nodeGraphGlLinesTextAtlas(family, weight, str);
     if (!atlas) return;
-    const k = batch.scale || 1;
+    const k = batch.camera ? 1 : (batch.scale || 1);
     const px = Math.max(1, Math.round((Number(options.px) || 12) * k));
     const g = px / glyphBakePx;
     const segs = EMOJI_HINT.test(str) ? nodeGraphGlLinesTextSegments(str) : null;
@@ -1146,9 +1268,11 @@ void main() {
     const gl = s.gl;
     const n = verts.length / 4;
     const out = scratch(s, "imgScratch", verts.length);
+    const pix = s._drawBatch && s._drawBatch.camera;
+    bindCam(gl, { pixel: s.imgCamPixel, cam: s.imgCamCam, vp: s.imgCamVp, device: s.imgCamDevice }, s._drawBatch);
     for (let i = 0; i < n; i += 1) {
-      out[i * 4] = (verts[i * 4] / w) * 2 - 1;
-      out[i * 4 + 1] = 1 - (verts[i * 4 + 1] / h) * 2;
+      out[i * 4] = pix ? verts[i * 4] : (verts[i * 4] / w) * 2 - 1;
+      out[i * 4 + 1] = pix ? verts[i * 4 + 1] : 1 - (verts[i * 4 + 1] / h) * 2;
       out[i * 4 + 2] = verts[i * 4 + 2];
       out[i * 4 + 3] = verts[i * 4 + 3];
     }
@@ -1170,10 +1294,12 @@ void main() {
     const len = end - start;
     if (len <= 0) return;
     const out = scratch(s, "tintScratch", len);
+    const pix = s._drawBatch && s._drawBatch.camera;
+    bindCam(gl, { pixel: s.imgCamPixel, cam: s.imgCamCam, vp: s.imgCamVp, device: s.imgCamDevice }, s._drawBatch);
     for (let i = 0; i < len; i += 8) {
       const j = start + i;
-      out[i] = (data[j] / w) * 2 - 1;
-      out[i + 1] = 1 - (data[j + 1] / h) * 2;
+      out[i] = pix ? data[j] : (data[j] / w) * 2 - 1;
+      out[i + 1] = pix ? data[j + 1] : 1 - (data[j + 1] / h) * 2;
       out[i + 2] = data[j + 2]; out[i + 3] = data[j + 3];
       out[i + 4] = data[j + 4]; out[i + 5] = data[j + 5]; out[i + 6] = data[j + 6]; out[i + 7] = data[j + 7];
     }
@@ -1296,6 +1422,7 @@ void main() {
   function drawContent(batch, blend, alphaDst) {
     const { s } = batch;
     const gl = s.gl;
+    s._drawBatch = batch;
     const colourDst = blend === "add" ? gl.ONE : gl.ONE_MINUS_SRC_ALPHA;
     gl.enable(gl.BLEND);
     if (batch.images.length) {
@@ -1311,6 +1438,7 @@ void main() {
       if (max) gl.blendEquation(gl.MAX);
       gl.blendFuncSeparate(max ? gl.ONE : gl.SRC_ALPHA, max ? gl.ONE : colourDst, gl.ONE, max ? gl.ONE : alphaDst);
       gl.useProgram(s.program);
+      bindCam(gl, lineCamLocs(s), batch);
       if (s.coverage) gl.uniform1f(s.coverage, max ? 1 : 0);
       gl.bindBuffer(gl.ARRAY_BUFFER, s.buf);
       gl.bufferData(gl.ARRAY_BUFFER, data.subarray(0, n), gl.STREAM_DRAW);
@@ -1360,6 +1488,7 @@ void main() {
     try {
       return endBatch(batch, blend);
     } finally {
+      if (batch.keepMesh) return;
       // Hand the vertex array back for the next face (pool stays tiny).
       if (batch.data && batch.s.pool.length < 8) batch.s.pool.push(batch.data);
       if (batch.tdata && batch.s.tpool.length < 8) batch.s.tpool.push(batch.tdata);
@@ -1483,7 +1612,7 @@ void main() {
   const OUT_MAX = 24;
   function nodeGraphGlLinesVeil(batch, x, y, w, h, period) {
     if (!batch || !(w > 0) || !(h > 0)) return;
-    const k = batch.scale || 1;
+    const k = batch.camera ? 1 : (batch.scale || 1);
     if (period > 0) batch.veilPeriod = period * k;
     batch.veils.push({ x: x * k, y: y * k, w: w * k, h: h * k });
   }
@@ -1492,6 +1621,7 @@ void main() {
     const { s, gl } = { s: batch.s, gl: batch.s.gl };
     if (!s.veilProgram) return;
     gl.useProgram(s.veilProgram);
+    bindCam(gl, { pixel: s.veilCamPixel, cam: s.veilCamCam, vp: s.veilCamVp, device: s.veilCamDevice }, batch);
     gl.bindBuffer(gl.ARRAY_BUFFER, s.buf);
     gl.enableVertexAttribArray(s.veilPos);
     gl.enableVertexAttribArray(s.veilPx);
@@ -1508,7 +1638,10 @@ void main() {
       const y0 = shape.y;
       const x1 = shape.x + shape.w;
       const y1 = shape.y + shape.h;
-      const clip = (px, py) => [(px / batch.w) * 2 - 1, 1 - (py / batch.h) * 2];
+      const pix = Boolean(batch.camera);
+      const clip = pix
+        ? (px, py) => [px, py]
+        : (px, py) => [(px / batch.w) * 2 - 1, 1 - (py / batch.h) * 2];
       const corners = [[x0, y0], [x1, y0], [x0, y1], [x1, y0], [x1, y1], [x0, y1]];
       const data = new Float32Array(6 * 4);
       for (let i = 0; i < corners.length; i += 1) {
@@ -1529,7 +1662,7 @@ void main() {
 
   function nodeGraphGlLinesModuleOutline(batch, x, y, w, h, stroke, rgba, jacks, fill, inletGap) {
     if (!batch || !(w > 0) || !(h > 0)) return;
-    const k = batch.scale || 1;
+    const k = batch.camera ? 1 : (batch.scale || 1);
     const sx = x * k;
     const sy = y * k;
     const sw = w * k;
@@ -1560,6 +1693,7 @@ void main() {
     if (!s.outProgram) return;
     gl.disable(gl.SCISSOR_TEST);
     gl.useProgram(s.outProgram);
+    bindCam(gl, { pixel: s.outCamPixel, cam: s.outCamCam, vp: s.outCamVp, device: s.outCamDevice }, batch);
     gl.bindBuffer(gl.ARRAY_BUFFER, s.outBuf);
     gl.enableVertexAttribArray(s.outPos);
     gl.enableVertexAttribArray(s.outPx);
@@ -1574,7 +1708,10 @@ void main() {
       const y0 = shape.y - pad;
       const x1 = shape.x + shape.w + pad;
       const y1 = shape.y + shape.h + pad;
-      const clip = (px, py) => [(px / batch.w) * 2 - 1, 1 - (py / batch.h) * 2];
+      const pix = Boolean(batch.camera);
+      const clip = pix
+        ? (px, py) => [px, py]
+        : (px, py) => [(px / batch.w) * 2 - 1, 1 - (py / batch.h) * 2];
       const corners = [[x0, y0], [x1, y0], [x0, y1], [x1, y0], [x1, y1], [x0, y1]];
       const data = new Float32Array(6 * 4);
       for (let i = 0; i < corners.length; i += 1) {

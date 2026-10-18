@@ -1,6 +1,6 @@
 # Sidechain Plan: sidechain ducking helper built on the Pump Limiter
 
-**Status:** built 2026-10-14 (type id 216, local commit, not pushed). Awaiting Argi's ear check (S6). Defaults chosen are in §11.
+**Status:** built 2026-10-14 (type id 216, committed and pushed (checked 2026-10-18)). Awaiting Argi's ear check (S6). Defaults chosen are in §11.
 **Owner once approved:** SandyModules (DSP), WebUI (face).
 **Module type (proposed):** `sidechain`, label "Sidechain", category `dynamics`.
 
@@ -172,7 +172,7 @@ Face (WebUI, proposed): a Gain waterfall like Pump Limiter's, fed by an internal
 | S3 | Definition, store card, tooltips | Grok Bot | Done |
 | S4 | Tests §8 | Grok Bot | Done: `scripts/smoke_graph_sidechain.mjs` (in combined build) + smoke_test exports; full smoke passes |
 | S5 | Face | Grok Bot | Done: Instant Waterfall (WebGL scroll strip, same as Pump Limiter) on Envelope |
-| S6 | Argi's ear check | Argi | Waiting (committed locally, not pushed) |
+| S6 | Argi's ear check | Argi | Waiting (code committed and pushed (checked 2026-10-18)) |
 
 ## 11. As built (2026-10-14)
 

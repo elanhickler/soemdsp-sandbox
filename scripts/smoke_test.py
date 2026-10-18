@@ -787,7 +787,6 @@ REQUIRED_SHELL_IDS = {
     "nodeLiveInputButton",
     "nodeLiveOutputButton",
     "nodeUndoButton",
-    "nodeWireSvg",
     "metadataAdvancedToggle",
     "metadataAliasValue",
     "metadataDefaultValue",
@@ -1208,12 +1207,6 @@ def require_shell_contract(html: str) -> None:
         "nodeGraphWorkspace",
         "div",
         {"aria-label": "Drag wires between DSP node ports"},
-    )
-    require_shell_element(
-        parser,
-        "nodeWireSvg",
-        "svg",
-        {"aria-hidden": "true", "focusable": "false"},
     )
     require_shell_element(
         parser,
@@ -7418,10 +7411,7 @@ def require_node_graph_mvp_contract() -> None:
         "function nodeGraphGridHeight()",
         "function nodeGraphCameraAspectRatio(camera)",
         "function nodeGraphCameraWithAspectFromCenter(camera, previousCamera)",
-        "function nodeGraphCameraCloneWireSvg(liveSvg)",
         "nodeGraphDefaultPresetPatchIsUsable",
-        "node-camera-preview-wire-svg",
-        "clone.setAttribute(\"viewBox\", viewBox)",
         "function nodeGraphSnapCameraPoint(point)",
         "function handleNodeGraphCameraResolutionChange()",
         "function applyNodeGraphZoom()",
@@ -8667,7 +8657,6 @@ def require_node_graph_mvp_contract() -> None:
         "output: {",
         'label: "Output"',
         'symbol: "OUT"',
-        'node-camera-preview-wire-svg',
         "function renderNodeGraphCameraView()",
         "if (typeof drawNodeGraphWires === \"function\")",
         "element.closest(\"defs\")",
@@ -9898,7 +9887,6 @@ def require_node_graph_mvp_contract() -> None:
         'nodeGraphTooltipText("actions.copyUnavailableOutput")',
         "function deleteNodeGraphModuleFromContext()",
         "const targetNode = nodeGraphPatchNode(nodeGraphModuleActionTargetNodeId())",
-        "function path(from, to)",
         "function normalizeNodeGraphTracePoints(points)",
         "(Math.round(screen - 0.5) + 0.5) / safeZoom",
         "function nodeGraphTraceWaypointAttribute(points)",
@@ -9906,7 +9894,6 @@ def require_node_graph_mvp_contract() -> None:
         "function nodeGraphTraceOrthogonalPoints(from, points, to)",
         "function nodeGraphTracePathFromPoints(from, points, to)",
         "wireType: nodeGraphWireTypes.trace",
-        "path.dataset.tracePoints = nodeGraphTraceWaypointAttribute(tracePoints)",
         "function nodeGraphSelfTraceModuleRect(nodeId)",
         "function nodeGraphSelfTracePoints(wire, from, to)",
         'node.querySelector(".node-header-title-row")?.getBoundingClientRect()',
@@ -9922,12 +9909,7 @@ def require_node_graph_mvp_contract() -> None:
         "pathData: nodeGraphTracePathFromPoints(from, tracePoints, to)",
         "tracePoints: normalizeNodeGraphTracePoints(connection.tracePoints)",
         "tracePoints: normalizeNodeGraphTracePoints(modulation.tracePoints)",
-        "function createGradient(svg, id, from, to, stopClass = \"node-wire-gradient-stop\", colors = null)",
-        "linearGradient",
-        "gradientUnits",
-        '["48%", "0.36", fromColor]',
         "function nodeGraphPortWireColor(node, port, io)",
-        "wireColors: [",
         "const nodeSliderHandleHalfWidthPx = 8",
         "function nodeSliderVisualLane(surface, slider)",
         "function nodeSliderHandleRangeFromTravel(slider, surface, travel)",
@@ -12983,7 +12965,6 @@ def require_node_graph_mvp_contract() -> None:
             and "NODE_SHADER_GLOW_AMOUNT" in shader_script_source
             and "warmGlassAmount: 1.0," in shader_script_source
             and "softLight(screenBloom)" in shader_script_source
-            and ".node-graph-workspace.shader-enabled .node-wire-path:not(.inactive-wire)" in style_source
             and ".node-graph-workspace.shader-enabled .node-module-scope-window" in style_source
             and "--node-text-light-level: 0.46;" in style_source
             and ".node-graph-workspace.shader-enabled .dsp-node" in style_source
@@ -14789,14 +14770,6 @@ def require_node_graph_mvp_contract() -> None:
         and "element.dataset.structuralUiSignature = structuralUiSignature;" in script_sources["./public/node-graph-patch-core.js"],
         "show/hide display should rebuild module body when its visual face was previously omitted",
     )
-    state_read_style = style_source[
-        style_source.index(".node-wire-path.state-read {"):
-        style_source.index(".node-wire-path.state-read.selected {")
-    ]
-    require(
-        "stroke-dasharray" not in state_read_style,
-        "state-read feedback wires should be solid; only inactive wires should be dashed",
-    )
     require(
         "function nodeGraphModuleDisplayVisibleForUi(type, ui = {})" in script_sources["./public/node-graph-module-sizing.js"]
         and 'nodeGraphMvp?.moduleOscilloscopesVisible === false' in script_sources["./public/node-graph-module-sizing.js"]
@@ -15269,23 +15242,7 @@ def require_node_graph_mvp_contract() -> None:
         ".node-patch-header-field.name",
         ".node-patch-header-field.tags",
         ".node-demo-patch-row.active",
-        ".node-wire-svg",
-        ".node-wire-path",
-        ".node-wire-gradient-stop",
-        ".node-modulation-wire-gradient-stop",
-        ".node-modulation-wire-path",
-        ".node-wire-path.state-read",
-        ".node-wire-path.state-read.selected",
-        ".node-wire-path.trace-wire.selected",
-        ".node-wire-path.state-read.trace-wire.selected",
-        ".node-wire-path.inactive-wire",
-        ".node-wire-path.inactive-wire.selected",
-        ".node-wire-path.inactive-wire.trace-wire.selected",
-        ".node-wire-path.selected",
-        ".node-wire-hit-path",
-        ".node-wire-path.temp",
-        ".node-wire-path.destroyed",
-        "@keyframes node-wire-destroyed",
+        ".node-gl-graph-wires",
         ".node-selection-marquee",
         ".dsp-node",
         ".dsp-node-header",

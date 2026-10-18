@@ -1,17 +1,19 @@
 # Unconfuse / reduce / refactor plan
 
+> **Archived 2026-10-18** (finished or superseded; cleanup approved by Argi). Kept for history; do not work from it.
+
 **Date:** 2026-08-20  
-**Status:** Proposed — work this doc; check boxes as items land  
+**Status:** Done — all 4 items landed (closed 2026-10-18)  
 **Constraint:** Default is **behavior-preserving**. Product changes (new persist fields, stamp-preview meaning) are called out separately.
 
 This is not a second Graphify peel list and not a core-shell rewrite.
 
 | Existing plan | Use it for |
 |---|---|
-| `docs/CORE_REDUCTION_PLAN.md` | Floating chrome, satellites, net-negative *core* LOC |
+| `docs/archive/CORE_REDUCTION_PLAN.md` | Floating chrome, satellites, net-negative *core* LOC |
 | `docs/GRAPHIFY_WINS_PLAN.md` | Code Screen / view-controls / graph-utils peels |
-| `docs/SCOPE_PAINT_SIMPLIFICATION_PLAN.md` | Live paint gate, freeze policy |
-| `docs/CODE_CLEANUP_PASS_PLAN.md` | Dead CLAP-host leftovers, docs hygiene |
+| `docs/archive/SCOPE_PAINT_SIMPLIFICATION_PLAN.md` | Live paint gate, freeze policy |
+| `docs/archive/CODE_CLEANUP_PASS_PLAN.md` | Dead CLAP-host leftovers, docs hygiene |
 | **This doc** | Confusion that still burns: **persist**, **Display Settings**, **stamp preview names**, **phosphor leftovers** |
 
 ---

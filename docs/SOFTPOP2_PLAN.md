@@ -1,6 +1,8 @@
 # Softpop2 plan
 
-Source: Thoughts agent for Argi, 2026-10-16. Planning only, no implementation until Argi says so.
+Source: Thoughts agent for Argi, 2026-10-16.
+
+**Status: done.** Shipped as native `softpop2` (type 219) in `b77c40af` and `d96cf2ed` (2026-10-17, committed and pushed (checked 2026-10-18)); Blue/Violet on Softpop Oscillator, Softpop Filter and Noise Generator; livedemo `patches/livedemos/softpop2.json`. The plan below is kept as the design record.
 
 ## Decisions (Argi, 2026-10-16)
 

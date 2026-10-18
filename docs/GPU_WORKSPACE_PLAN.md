@@ -8,12 +8,12 @@ Argi, after confirming pan works: the app menu, the top and bottom button bars, 
 
 Do this and stop. No code, no shader edits, no patch edits.
 
-**Filed 2026-10-18** (docs only, not committed): steps 1-5 done. This file owns the workspace picture and the camera; GB-6 = GW-2 is defined only here. `docs/WEBGL_DISPLAY_PLAN.md` GB-6 and `docs/PHONE_AND_GPU_CAMERA_PLAN.md` carry pointer / dependency rows only.
+**Filed 2026-10-18** (docs only, not committed): steps 1-5 done. This file owns the workspace picture and the camera; GB-6 = GW-2 is defined only here. `docs/WEBGL_DISPLAY_PLAN.md` GB-6 and `docs/PHONE_COMPAT_PLAN.md` carry pointer / dependency rows only.
 
 1. Keep this file at `docs/GPU_WORKSPACE_PLAN.md`.
 2. Add a pointer at the top of `docs/FUTURE_PLANNING.md`: workspace picture is GPU-only; bars, app menu, and extra windows stay HTML. Plan: this file. Status: planned, not started.
 3. In `docs/WEBGL_DISPLAY_PLAN.md` section 11, point GB-6 at this file. GB-6 is stage GW-2 here. Do not open a second camera project. Leave the GB-1..GB-5 history as it is.
-4. In `docs/PHONE_AND_GPU_CAMERA_PLAN.md`, note that GB-6's picture scope is this file. The camera API rule stays: `nodeGraphMvp.pan` / `nodeGraphZoom` signatures do not change. PH-6 still waits until GW-2 has landed.
+4. In `docs/PHONE_COMPAT_PLAN.md`, note that GB-6's picture scope is this file. The camera API rule stays: `nodeGraphMvp.pan` / `nodeGraphZoom` signatures do not change. PH-6 still waits until GW-2 has landed.
 5. One `progress.md` line: planning only, not started, not committed.
 6. Do not commit unless Argi says so.
 
@@ -60,7 +60,21 @@ No canvas-2D fallback and no SVG-wire fallback in the end state. If WebGL fails,
 - When `.node-graph-workspace.gl-graph-on` is set, `.dsp-node *` has `pointer-events: none` except an allowlist in `public/styles.css` (about line 13013). Display canvases under the GPU quad are `visibility: hidden`. Keypad chrome is already forced transparent.
 - The allowlist is the HTML that still lives in the grid: text fields and the editing title; module popovers; graph face; keypad; knob; XY pad; acid sequencer; arp keys; plugin toggle and momentary buttons; seed row; sample waveform; piano keyboard; grid keyboard; text-box body.
 - Text boxes currently also draw their plate and glyphs in the GL pass (`nodeGraphGlGraphDrawTextBox`; `showOnTop` boxes go on the upper veil batch), and the field stays HTML for the caret. Per the Text Box decision this GL copy is retired (GW-4).
-- Phone gestures are a separate plan (`docs/PHONE_AND_GPU_CAMERA_PLAN.md`); PH-1..PH-5 are in the tree. They do not decide this picture split. PH-6 (workspace pinch and two-finger pan) waits for GW-2, and PH-5b (tooltip positioning) follows GW-2.
+- Phone gestures are a separate plan (`docs/PHONE_COMPAT_PLAN.md`); PH-1..PH-5 are in the tree. They do not decide this picture split. PH-6 (workspace pinch and two-finger pan) waits for GW-2, and PH-5b (tooltip positioning) follows GW-2.
+
+## Inventory (GW-1, 2026-10-18)
+
+Chrome, leave as HTML: app menu, top and bottom bars, command center, module shop, settings, visibility, other floating windows, boot menu, docked help. They are not inside `.node-graph-world-layer`.
+
+Workspace, GPU picture: grid, cables, traces, plates, borders, titles, jacks, port labels, slider tracks and readouts, display quads. Drawn by `node-graph-gl-graph.js`.
+
+Workspace HTML that stays, positioned per module from the camera:
+
+- Text carets: input, textarea, select, contenteditable, title while editing.
+- Text Box: the whole module. Plate stays on the plate canvas. Glyphs are HTML. **Behind wires** parents the module under the wire canvas (`#nodeGraphTextBehind`). **In front of wires** parents it over the wire canvas (`#nodeGraphTextFront`).
+- Hit targets that are still real controls: graph face, keypad, knob, XY pad, acid sequencer, arp keys, plugin buttons, seed row, sample waveform, piano, grid keyboard. The GPU paints the picture. The HTML receives the pointer.
+
+SVG wire nodes (`.node-wire-svg`) are still in the DOM. GW-5 deletes them after a visual check.
 
 ## Order
 
@@ -75,13 +89,13 @@ No canvas-2D fallback and no SVG-wire fallback in the end state. If WebGL fails,
 
 | ID | Milestone | Status |
 |----|-----------|--------|
-| GW-1 | Inventory every element inside `#nodeGraphWorkspace` / `.node-graph-world-layer` that still paints (background, border, text, shadow, canvas, svg). Mark each as chrome-outside-the-grid (leave) or workspace (GPU picture, or invisible hit target). Write the list into this file. Do not restyle during the inventory. | planned |
-| GW-2 | True GPU camera. Same stage as GB-6 (Argi approved 2026-10-18); this row is its only definition. Pan/zoom write `nodeGraphMvp.pan` / `nodeGraphZoom` and a camera uniform (view matrix) in the GL graph shaders. Remove the per-camera CPU reprojection of cached geometry. Remove the CSS `translate3d` / `scale` on `.node-graph-world-layer`. Remaining in-grid HTML (carets, Text Boxes, and GW-4 hit targets) is positioned per element from the camera; popups and floating windows are chrome and do not follow it. Hit testing stays JS, world space. Zoom 1.0 stays the source of truth. Do not change the pan/zoom function signatures. Acceptance: no CSS transform on world layers; pan/zoom causes no geometry rebuild; GB-5 timing re-measured (GW-6). Unblocks PH-6 and PH-5b. | planned |
-| GW-3 | Workspace module chrome paints only in the GL pass: plates, borders, titles, jacks, port labels, slider tracks, slider readouts, cables, traces, grid. Delete the CSS paint on those nodes while `gl-graph-on` (background, border, shadow, label color). Display canvases stay hidden under the GPU quad. | planned |
-| GW-4 | Special faces in the grid. GPU paints the face. HTML is a transparent hit target positioned from the camera: graph face, keypad, knob, XY pad, acid sequencer, arp keys, plugin toggle and momentary buttons, seed row, sample waveform, piano keyboard, grid keyboard. A face that is not yet drawn by the GPU stays listed here until it is. It does not get a new CSS look. **Seed row:** `public/node-graph-seed-control.js` also carries the phone PH-4 touch gestures (in tree); keep those handlers working and coordinate with the phone plan owner before editing. **Text Box (not a special face):** stays HTML (Argi, 2026-10-18). Draw wires on two stacked GL canvases, below and above the Text Box HTML layer; add the per-box setting **Behind wires** / **In front of wires** and route each box's stacking to it; this z-order is independent of the existing "Show on top" setting (wires in front of modules), which stays: lower-z boxes always draw behind wires, higher-z boxes always in front, regardless of Show on top. Retire `nodeGraphGlGraphDrawTextBox` (keep a GL plate only if needed; never GL glyphs). | planned |
-| GW-5 | Delete the old workspace picture: the SVG wire code (`syncNodeGraphWireSvgViewBox` and the wire SVGs), and HTML plate/jack/label paint. (The `?glGraph=0` switch is already gone.) One workspace picture remains. | planned |
+| GW-1 | Inventory every element inside `#nodeGraphWorkspace` / `.node-graph-world-layer` that still paints (background, border, text, shadow, canvas, svg). Mark each as chrome-outside-the-grid (leave) or workspace (GPU picture, or invisible hit target). Write the list into this file. Do not restyle during the inventory. | in tree (see Inventory) |
+| GW-2 | True GPU camera. Same stage as GB-6 (Argi approved 2026-10-18); this row is its only definition. Pan/zoom write `nodeGraphMvp.pan` / `nodeGraphZoom` and a camera uniform (view matrix) in the GL graph shaders. Remove the per-camera CPU reprojection of cached geometry. Remove the CSS `translate3d` / `scale` on `.node-graph-world-layer`. Remaining in-grid HTML (carets, Text Boxes, and GW-4 hit targets) is positioned per element from the camera; popups and floating windows are chrome and do not follow it. Hit testing stays JS, world space. Zoom 1.0 stays the source of truth. Do not change the pan/zoom function signatures. Acceptance: no CSS transform on world layers; pan/zoom causes no geometry rebuild; GB-5 timing re-measured (GW-6). Unblocks PH-6 and PH-5b. | in tree. World-layer CSS transform is off. Each in-grid module is positioned from the camera. GL batches take a camera uniform. A pan/zoom gesture redraws the retained mesh instead of rebuilding it. GW-6 numbers not re-measured yet. |
+| GW-3 | Workspace module chrome paints only in the GL pass: plates, borders, titles, jacks, port labels, slider tracks, slider readouts, cables, traces, grid. Delete the CSS paint on those nodes while `gl-graph-on` (background, border, shadow, label color). Display canvases stay hidden under the GPU quad. | in tree for module background and shadow. Label color and jack paint still need a visual pass. |
+| GW-4 | Special faces in the grid. GPU paints the face. HTML is a transparent hit target positioned from the camera: graph face, keypad, knob, XY pad, acid sequencer, arp keys, plugin toggle and momentary buttons, seed row, sample waveform, piano keyboard, grid keyboard. A face that is not yet drawn by the GPU stays listed here until it is. It does not get a new CSS look. **Seed row:** `public/node-graph-seed-control.js` also carries the phone PH-4 touch gestures (in tree); keep those handlers working and coordinate with the phone plan owner before editing. **Text Box (not a special face):** stays HTML (Argi, 2026-10-18). Draw wires on two stacked GL canvases, below and above the Text Box HTML layer; add the per-box setting **Behind wires** / **In front of wires** and route each box's stacking to it; this z-order is independent of the existing "Show on top" setting (wires in front of modules), which stays: lower-z boxes always draw behind wires, higher-z boxes always in front, regardless of Show on top. Retire `nodeGraphGlGraphDrawTextBox` (keep a GL plate only if needed; never GL glyphs). | Text Box is in tree: HTML glyphs, GL plate, Behind wires / In front of wires, wire canvas between those layers. Other special faces stay hit targets. |
+| GW-5 | Delete the old workspace picture: the SVG wire code (`syncNodeGraphWireSvgViewBox` and the wire SVGs), and HTML plate/jack/label paint. (The `?glGraph=0` switch is already gone.) One workspace picture remains. | SVG wires, hit paths, gradients, and their CSS are deleted. `syncNodeGraphWireSvgViewBox` only redraws the GPU camera. Plate/jack CSS paint is still GW-3. |
 | GW-6 | Re-run the GB-5 zoom-in, zoom-out, and pan traces at 40× and low zoom (`nodeGraphGlGraphMeasureGb5()`). Record the numbers next to the 2026-10-16 baseline. | planned |
-| GW-7 | GL failure logs: when `nodeGraphGlLinesBegin` fails in the GL graph (`node-graph-gl-graph.js` ~L1169), call `nodeGraphDisplayGlFailed` (`public/lib/visual/display-canvas.js`) as well as filling black, so a black workspace is always logged. | planned |
+| GW-7 | GL failure logs: when `nodeGraphGlLinesBegin` fails in the GL graph (`node-graph-gl-graph.js` ~L1169), call `nodeGraphDisplayGlFailed` (`public/lib/visual/display-canvas.js`) as well as filling black, so a black workspace is always logged. | in tree |
 
 ## Acceptance
 
@@ -101,7 +115,7 @@ No canvas-2D fallback and no SVG-wire fallback in the end state. If WebGL fails,
 - Pages that load the graph: `public/index.html`, `public/perform.html`. Cache-bust query strings move together.
 - Text Box: `public/modules/textBox/text-box-host.js`, `public/modules/textBox/text-box-settings.js`, `public/node-graph-text-box-utils.js`.
 - Shared with the phone plan: `public/node-graph-seed-control.js` (PH-4 gestures, GW-4 hit target) and `public/styles.css` (edit only your own rules). The camera API (`nodeGraphMvp.pan` / `nodeGraphZoom`) is shared and its signatures do not change.
-- Related plans, read only: `docs/WEBGL_DISPLAY_PLAN.md` section 11, `docs/PHONE_AND_GPU_CAMERA_PLAN.md`.
+- Related plans, read only: `docs/WEBGL_DISPLAY_PLAN.md` section 11, `docs/PHONE_COMPAT_PLAN.md`.
 
 ## Out of scope
 

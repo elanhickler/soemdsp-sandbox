@@ -78,6 +78,8 @@ function buildNodeGraphTextBoxDisplaySettingsBodyHtml() {
         <span>Stack</span>
         <div class="textbox-display-controls">
           <button type="button" data-textbox-stack="top" aria-pressed="false">Show on top</button>
+          <button type="button" data-textbox-wires="behind" aria-pressed="false">Behind wires</button>
+          <button type="button" data-textbox-wires="front" aria-pressed="true">In front of wires</button>
         </div>
       </div>
       <div class="node-led-settings-row textbox-display-settings-row" role="group" aria-label="Text mode">
@@ -200,6 +202,12 @@ function syncNodeGraphTextBoxDisplaySettingsControls(root, settings) {
     stack.classList.toggle("active", on);
     stack.setAttribute("aria-pressed", String(on));
   }
+  const wire = settings.wireStack === "behind" ? "behind" : "front";
+  for (const button of root.querySelectorAll?.("[data-textbox-wires]") || []) {
+    const on = button.getAttribute("data-textbox-wires") === wire;
+    button.classList.toggle("active", on);
+    button.setAttribute("aria-pressed", String(on));
+  }
   const font = root.querySelector?.(`[data-trace-display-choice="font"], [data-textbox-font]`);
   if (font) {
     const fallback = typeof NODE_GRAPH_TEXT_BOX_DEFAULT_FONT === "string"
@@ -261,6 +269,19 @@ function bindNodeGraphTextBoxDisplaySettingsBody(host) {
       stackButton.classList.toggle("active", on);
       stackButton.setAttribute("aria-pressed", String(on));
       apply("immediate", true);
+      return;
+    }
+    const wireButton = event.target?.closest?.("[data-textbox-wires]");
+    if (wireButton && host.contains(wireButton)) {
+      event.preventDefault();
+      const next = wireButton.getAttribute("data-textbox-wires");
+      for (const button of host.querySelectorAll("[data-textbox-wires]")) {
+        const on = button.getAttribute("data-textbox-wires") === next;
+        button.classList.toggle("active", on);
+        button.setAttribute("aria-pressed", String(on));
+      }
+      apply("immediate", true);
+      if (typeof nodeGraphPositionGridHtml === "function") nodeGraphPositionGridHtml();
       return;
     }
     const alignButton = event.target?.closest?.("[data-textbox-align]");

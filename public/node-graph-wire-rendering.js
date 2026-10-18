@@ -241,73 +241,6 @@ function nodeGraphWirePointIsFinite(point) {
   );
 }
 
-/**
- * Draw cable path only when both ends have real on-screen jacks.
- * Caps (wire dots) always draw for any finite end — including synthetic edge
- * anchors when Hide In/Out collapses the IO section, or one-sided slider hides.
- */
-function nodeGraphDrawWireWithOptionalPath(svg, options) {
-  const {
-    from,
-    to,
-    fromColor = null,
-    toColor = null,
-    skipHitPath = false,
-    allowPath = true,
-    ...pathOptions
-  } = options;
-  const fromOk = nodeGraphWirePointIsFinite(from);
-  const toOk = nodeGraphWirePointIsFinite(to);
-  if (!fromOk && !toOk) {
-    return false;
-  }
-  // Both jacks laid out and path allowed → full cable + caps.
-  if (
-    allowPath
-    && fromOk
-    && toOk
-    && typeof nodeGraphWireHelpers?.drawPath === "function"
-  ) {
-    nodeGraphWireHelpers.drawPath(svg, {
-      ...pathOptions,
-      from,
-      to,
-      skipHitPath,
-      wireColors: [fromColor, toColor],
-      squareFrom: nodeGraphWireJackIsSquare(
-        pathOptions.sourceNode,
-        pathOptions.sourcePort,
-        "output"
-      ),
-      squareTo: nodeGraphWireJackIsSquare(
-        pathOptions.destinationNode,
-        pathOptions.destinationPort,
-        pathOptions.kind === "modulation" ? "modulation" : "input"
-      ),
-    });
-    return true;
-  }
-  // Dots only (hidden IO / hidden sliders).
-  if (typeof nodeGraphWireHelpers?.drawEndpointCap !== "function") {
-    return false;
-  }
-  const capClass = [
-    String(pathOptions.pathClass || "").includes("inactive-wire") ? "inactive-wire" : "",
-    pathOptions.kind === "modulation" || pathOptions.kind === "graph" ? "modulation" : "",
-  ].filter(Boolean).join(" ");
-  if (fromOk) {
-    nodeGraphWireHelpers.drawEndpointCap(svg, from, "from", fromColor, capClass, {
-      endColor: fromColor,
-    });
-  }
-  if (toOk) {
-    nodeGraphWireHelpers.drawEndpointCap(svg, to, "to", toColor, capClass, {
-      endColor: toColor,
-    });
-  }
-  return true;
-}
-
 function nodeGraphWireInteractionMode(wire, identity, feedbackSet, activeWirePredicate, activeNodeIds, plan) {
   if (nodeGraphWireTouchesBypassed(wire, plan)) {
     return "bypassed";
@@ -382,8 +315,7 @@ function nodeGraphResetConnectedWireClasses(workspace) {
 
 function drawNodeGraphWires(options = {}) {
   const workspace = nodeGraphZoomSurface();
-  const svg = document.getElementById("nodeWireSvg");
-  if (!workspace || !svg) {
+  if (!workspace) {
     return;
   }
   const lite = Boolean(options.lite);
@@ -428,8 +360,6 @@ function drawNodeGraphWires(options = {}) {
     }
     return;
   }
-  svg.replaceChildren();
-  document.getElementById("nodeWireEndpointSvg")?.replaceChildren();
 
   if (!lite) {
     nodeGraphResetConnectedWireClasses(workspace);
@@ -471,26 +401,6 @@ function drawNodeGraphWires(options = {}) {
 }
 
 function syncNodeGraphWireSvgViewBox() {
-  const svg = document.getElementById("nodeWireSvg");
-  if (!svg) {
-    return;
-  }
-  const cam = typeof nodeGraphWireCameraViewBox === "function"
-    ? nodeGraphWireCameraViewBox()
-    : (typeof nodeGraphGraphRect === "function" ? nodeGraphGraphRect() : null);
-  if (!cam) {
-    return;
-  }
-  const viewBox = Number.isFinite(cam.x)
-    ? `${cam.x} ${cam.y} ${cam.width} ${cam.height}`
-    : `0 0 ${cam.width} ${cam.height}`;
-  if (svg.getAttribute("viewBox") !== viewBox) {
-    svg.setAttribute("viewBox", viewBox);
-  }
-  const capSvg = document.getElementById("nodeWireEndpointSvg");
-  if (capSvg && capSvg.getAttribute("viewBox") !== viewBox) {
-    capSvg.setAttribute("viewBox", viewBox);
-  }
   if (typeof nodeGraphGlGraphPresentCamera === "function") {
     nodeGraphGlGraphPresentCamera();
   }

@@ -24,7 +24,7 @@ On context restore, the waterfall face recreates its GL session and draws again.
 - Path: `public/node-graph-module-scope-waterfall-gl.js` and callers in `public/node-graph-module-scope-waterfall.js`.
 - Each waterfall face keeps its own WebGL context (`canvas._wfGl`). When the context is lost, the stamp paths return false, but nothing recreates the session on restore.
 - Predates the recent Meet shader work. The Meet stamp (`nodeGraphWaterfallGlStampMeetColumn`) behaves the same as the old bar stamps while the context is lost.
-- Related to `docs/DISPLAY_SHADER_PLAN.md` P0a (too many per-face contexts). Spectrogram scroll jitter B-096 is also still open.
+- Related to `docs/WEBGL_DISPLAY_PLAN.md` §12 P0a (too many per-face contexts). Spectrogram scroll jitter B-096 is also still open.
 
 ## Investigation / fix shape
 

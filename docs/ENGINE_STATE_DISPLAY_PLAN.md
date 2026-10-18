@@ -2,7 +2,7 @@
 
 Source: Interface agent for Argi, 2026-10-17. Planning/tracking doc.
 
-Status: **ES-1 to ES-6 landed locally (not pushed); awaiting Argi testing.** Owner: Grok Bot executor (perf/GL agent). Policy: `docs/APP_POLICY.md` §3b "Displays and engine state".
+Status: **ES-1 to ES-6 committed and pushed (checked 2026-10-18): `0fab9f69`..`87eaa37b`, plus `3a5b21c6` (cold-plate GL failure path), 2026-10-17. Awaiting Argi testing.** Owner: Grok Bot executor (perf/GL agent). Policy: `docs/APP_POLICY.md` §3b "Displays and engine state".
 
 ## Rules from Argi (2026-10-17)
 
@@ -49,5 +49,5 @@ Status: **ES-1 to ES-6 landed locally (not pushed); awaiting Argi testing.** Own
 ## Cross-references
 
 - `docs/WEBGL_DISPLAY_PLAN.md`: displays are WebGL2 only; cold plates and frozen frames still draw through `gl-line-renderer.js` / `nodeGraphGlLinesFillBlack` (no 2D fallback). Section 11 (circuit builder to GL) is the GL graph work.
-- GL graph agent's uncommitted `?v=page-always-1` work (cache-bust in `public/index.html` and `public/perform.html`): fixes the Music Player Playlist bug and **must be committed together** with it.
+- GL graph agent's `?v=page-always-1` work (Music Player Playlist bug fix): committed together in `70d0d06a` (2026-10-17); the cache-bust string has since moved on.
 - `docs/APP_POLICY.md` L348: faces observe the worklet run and never re-simulate; a cold plate is black or the last frame, never a fake simulation.

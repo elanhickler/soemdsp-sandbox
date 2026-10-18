@@ -1,7 +1,9 @@
 # Architecture plan — remaining work
 
+> **Archived 2026-10-18** (finished or superseded; cleanup approved by Argi). Kept for history; do not work from it.
+
 Active bets only. Finished work lives in git history and `docs/ARCHITECTURE.md`.
-**Session map:** `docs/SESSION_PROGRESS_2026-08-02.md`.
+**Session map:** `docs/SESSION_PROGRESS_2026-08-02.md` (no longer in the repo; see git history).
 
 **Constraint:** live/offline/worklet parity for DSP you change.  
 **Patch compatibility:** not a goal right now — **old patches may break** when module
@@ -18,7 +20,7 @@ types, ports, or format change. Prefer clean current graph over migrators.
 - Optional: small `node` smoke for pure helpers
 
 **Shared extensively:** utilities, clocks, sequencers, chaos maps/attractors (henon, logistic, lorenz, chua), envelopes (linear, exp ADSR), noise, slews, etc.  
-**Refs:** `docs/A1_LIVE_WORKLET_DSP_INVENTORY.md`, `docs/PARAM_SURFACES.md`
+**Refs:** `docs/archive/A1_LIVE_WORKLET_DSP_INVENTORY.md`, `docs/PARAM_SURFACES.md`
 
 ---
 

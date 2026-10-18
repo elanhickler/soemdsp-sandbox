@@ -1,5 +1,7 @@
 # Module layout — overview and rebuild plan
 
+> **Archived 2026-10-18** (finished or superseded; cleanup approved by Argi). Kept for history; do not work from it.
+
 Status: implemented (apply path + CSS forest removed). §7 band-stack
 checks live in `scripts/test_module_layout_bands.js` (Output, Gain,
 Sample Player/Looper, Music Player, RoundShape, Active Filter,

@@ -25,6 +25,62 @@
 
 let nodeGraphWorldLayerCollection = null;
 
+function nodeGraphEnsureTextWireLayers(host) {
+  const workspace = host || document.getElementById("nodeGraphWorkspace");
+  if (!workspace) return;
+  const zoom = workspace.querySelector(".node-graph-zoom-surface");
+  let behind = document.getElementById("nodeGraphTextBehind");
+  if (!behind) {
+    behind = document.createElement("div");
+    behind.id = "nodeGraphTextBehind";
+    behind.className = "node-graph-text-behind";
+    if (zoom) workspace.insertBefore(behind, zoom);
+    else workspace.append(behind);
+  }
+  let front = document.getElementById("nodeGraphTextFront");
+  if (!front) {
+    front = document.createElement("div");
+    front.id = "nodeGraphTextFront";
+    front.className = "node-graph-text-front";
+    workspace.append(front);
+  }
+}
+
+function nodeGraphPositionGridHtml() {
+  const workspace = document.getElementById("nodeGraphWorkspace");
+  if (!workspace) return;
+  nodeGraphEnsureTextWireLayers(workspace);
+  const zoom = typeof nodeGraphZoom === "function" ? nodeGraphZoom() : (nodeGraphMvp?.zoom || 1);
+  const pan = nodeGraphMvp?.pan || { x: 0, y: 0 };
+  const origin = typeof nodeGraphRenderedOriginOffset === "function"
+    ? nodeGraphRenderedOriginOffset(pan, workspace)
+    : pan;
+  const panX = Number(origin?.x) || 0;
+  const panY = Number(origin?.y) || 0;
+  const behind = document.getElementById("nodeGraphTextBehind");
+  const front = document.getElementById("nodeGraphTextFront");
+  const nodes = workspace.querySelectorAll("#nodeGraphWorldLayer .dsp-node, #nodeGraphAnnotationWorldLayer .dsp-node, #nodeGraphTextBehind .dsp-node, #nodeGraphTextFront .dsp-node");
+  for (let i = 0; i < nodes.length; i += 1) {
+    const node = nodes[i];
+    const text = node.querySelector(":scope > .node-text-box-body");
+    if (text && behind && front) {
+      const layout = nodeGraphMvp?.patch?.nodes?.find?.((item) => item?.id === node.dataset.node)?.layout;
+      const place = layout?.wireStack === "behind" ? behind : front;
+      if (node.parentElement !== place) place.append(node);
+    }
+    const wx = Number.parseFloat(node.style.left) || 0;
+    const wy = Number.parseFloat(node.style.top) || 0;
+    const tx = wx * zoom + panX - wx;
+    const ty = wy * zoom + panY - wy;
+    node.style.transformOrigin = "0 0";
+    node.style.transform = `translate(${tx}px, ${ty}px) scale(${zoom})`;
+  }
+  const layers = workspace.getElementsByClassName("node-graph-world-layer");
+  for (let i = 0; i < layers.length; i += 1) {
+    layers[i].style.transform = "none";
+  }
+}
+
 function nodeGraphApplyPanVarsToWorldLayers(workspace, x, y) {
   if (!workspace) {
     return;
@@ -36,18 +92,12 @@ function nodeGraphApplyPanVarsToWorldLayers(workspace, x, y) {
     };
   }
   const layers = nodeGraphWorldLayerCollection.layers;
-  // Camera transform inline on the world layers (same value as the stylesheet
-  // rule). It reads the live zoom, so mid-gesture zoom never has to touch the
-  // inherited --node-graph-zoom (that restyled ~2.9k elements, ~27 ms a step).
-  const zoom = typeof nodeGraphZoom === "function" ? nodeGraphZoom() : (nodeGraphMvp?.zoom || 1);
-  const transform = `translate3d(${x}, ${y}, 0) scale(${zoom})`;
   for (let i = 0; i < layers.length; i += 1) {
     layers[i].style.setProperty("--node-graph-pan-x", x);
     layers[i].style.setProperty("--node-graph-pan-y", y);
-    if (layers[i].style.transform !== transform) {
-      layers[i].style.transform = transform;
-    }
+    layers[i].style.transform = "none";
   }
+  nodeGraphPositionGridHtml();
 }
 
 // FIX C (trial, easy revert: set false or delete this block + its 2 calls).

@@ -152,8 +152,8 @@ When fixing: mark `fixed`, one-line what changed, run `python scripts\smoke_test
 ---
 
 ## Inbox (unnumbered user reports)
-- 2026-09-28: Tube Sat TraceWoscope face blank (demo Bright=0) — fixed → **B-083** (docs/B-083_TUBE_SAT_TRACE_FACE_BLANK.md).
-- 2026-09-28: Tube Sat / scope1dTrace TraceWoscope not applying Display Settings gradient (2D Trace stays solid) — fixed → **B-084** (docs/B-084_SCOPE1DTRACE_GRADIENT_LUT.md).
+- 2026-09-28: Tube Sat TraceWoscope face blank (demo Bright=0) — fixed → **B-083** (docs/BUG_PLAN.md (B-083)).
+- 2026-09-28: Tube Sat / scope1dTrace TraceWoscope not applying Display Settings gradient (2D Trace stays solid) — fixed → **B-084** (docs/BUG_PLAN.md (B-084)).
 
 Paste raw notes here. An agent will promote them to `B-xxx` on the next pass.
 
@@ -162,20 +162,20 @@ Paste raw notes here. An agent will promote them to `B-xxx` on the next pass.
 - 2026-09-10: Desktop patch `zipper noise on volume knob of output module.json` — Output Volume zipper while dragging. Promoted → **B-043**.
 - 2026-09-10: Desktop `repeating clicks from a sinewave.json` — PolyBLEP Sine @ 4 Hz clicks once/cycle. Promoted → **B-044**.
 - 2026-09-27: User — zooming in past 10 stutters the app horribly. Promoted → **B-050** (`docs/B-050_ZOOM_PAST_10_STUTTER.md`).
-- 2026-09-28: User - Text Box: hiding the title causes the background to overflow the module outline/border. Promoted -> **B-064** (`docs/B-064_TEXT_BOX_HIDDEN_TITLE_BACKGROUND_OVERFLOW.md`).
+- 2026-09-28: User - Text Box: hiding the title causes the background to overflow the module outline/border. Promoted -> **B-064** (`docs/BUG_PLAN.md (B-064)`).
 - 2026-09-28: User - making a portal on multiple wires creates multiple portals for the same signal instead of one Portal In and multiple Portal Outs. Promoted -> **B-065** (`docs/B-065_PORTAL_MULTIWIRE_DUPLICATES.md`).
 - 2026-09-28: User - selecting two portals makes Title disappear and Display uneditable, preventing multi-select title/display changes. Promoted -> **B-066** (`docs/B-066_PORTAL_MULTISELECT_TITLE_DISPLAY.md`).
 - 2026-09-28: User - bottom lip must keep at least 2 px clearance from the last element; otherwise lower the lip by 1 GU. Promoted -> **B-067** (`docs/B-067_BOTTOM_LIP_CLEARANCE.md`).
 - 2026-09-28: User - slider display and knob do not scale properly in canvas mode; slider-associated text can be positioned/scaled outside the module; WYSIWYG ("what I see is what is scaled") is not held for slider/knob display. Promoted -> **B-068** (`docs/B-068_CANVAS_SLIDER_KNOB_SCALING.md`).
 - 2026-09-28: User - if the display is not in view, it will not appear in canvas mode. Promoted -> **B-069** (`docs/B-069_CANVAS_MODE_OFFSCREEN_DISPLAY_MISSING.md`).
-- 2026-09-28: User - CallNow: keyboard/keypad not sending clicks, PhoneTone not sending tones; Gate button works. Promoted -> **B-070** (`docs/B-070_CALLNOW_KEYPAD_PHONETONE_SILENT.md`).
-- 2026-09-28: User - Text Box in canvas mode is not taking scaling into account. Promoted -> **B-071** (`docs/B-071_CANVAS_TEXT_BOX_SCALING.md`); separate from B-068 knob/slider cqmin path.
-- 2026-09-28: User - PolyBLEP display phosphor Size does not stick after closing Display Settings. Promoted -> **B-072** (`docs/B-072_POLYBLEP_PHOSPHOR_DOT_SIZE_PERSIST.md`).
-- 2026-09-28: User - Keyboard not sending out Inc. Promoted -> **B-077** (`docs/B-077_KEYBOARD_INC_HOST_CV_MISSING.md`).
-- 2026-09-28: User - Choices range clamp (PolyBLEP Waveform 4–5) does not remap choice set. Promoted → **B-079** (`docs/B-079_CHOICES_RANGE_CLAMP_SUBSET.md`).
+- 2026-09-28: User - CallNow: keyboard/keypad not sending clicks, PhoneTone not sending tones; Gate button works. Promoted -> **B-070** (`docs/BUG_PLAN.md (B-070)`).
+- 2026-09-28: User - Text Box in canvas mode is not taking scaling into account. Promoted -> **B-071** (`docs/BUG_PLAN.md (B-071)`); separate from B-068 knob/slider cqmin path.
+- 2026-09-28: User - PolyBLEP display phosphor Size does not stick after closing Display Settings. Promoted -> **B-072** (`docs/BUG_PLAN.md (B-072)`).
+- 2026-09-28: User - Keyboard not sending out Inc. Promoted -> **B-077** (`docs/BUG_PLAN.md (B-077)`).
+- 2026-09-28: User - Choices range clamp (PolyBLEP Waveform 4–5) does not remap choice set. Promoted → **B-079** (`docs/BUG_PLAN.md (B-079)`).
 - 2026-09-28: User - Choices parameter (Tube Saturation context): choice divide/segment text ellipsizes too early / does not use full slider width. Promoted → **B-080** (`docs/B-080_CHOICE_SEGMENT_TEXT_FULLWIDTH.md`).
-- 2026-09-28: User - Parameter modulation must clamp to param max/min (Keyboard Gate + Toggle into PolyBLEP Amplitude). Promoted -> **B-082** (`docs/B-082_PARAM_MOD_CLAMP_MIN_MAX.md`).
-- 2026-09-29: User - selecting multiple displays and changing one setting (example: Show in canvas) also copies the edited module's other, unchanged settings onto the rest of the selection. Promoted -> **B-085** (`docs/B-085_MULTISELECT_DISPLAY_SETTINGS_COPY.md`).
+- 2026-09-28: User - Parameter modulation must clamp to param max/min (Keyboard Gate + Toggle into PolyBLEP Amplitude). Promoted -> **B-082** (`docs/BUG_PLAN.md (B-082)`).
+- 2026-09-29: User - selecting multiple displays and changing one setting (example: Show in canvas) also copies the edited module's other, unchanged settings onto the rest of the selection. Promoted -> **B-085** (`docs/BUG_PLAN.md (B-085)`).
 - 2026-09-29: User - 1D Trace / woscope sync mode glitches a lot more than phosphor sync. Maybe zero crossings per quantum. Logged only, do not fix yet. Promoted -> **B-086** (`docs/B-086_SCOPE1DTRACE_SYNC_GLITCH.md`).
 - 2026-09-30: User - Longer sequencer clips get cut short when a patch has two or more sequencers. Promoted -> **B-087** (`docs/B-087_LONG_SEQUENCER_CLIPS_CUT_SHORT.md`).
 - 2026-10-05: User (ArchIV) - Intermittently all slider positions on a module show at 0 (visual/render); suspected race; repositioning the module forces an update and corrects. Logged only, do not tackle. Promoted -> **B-089** (`docs/B-089_MODULE_SLIDERS_ALL_ZERO_RENDER.md`).
@@ -417,6 +417,7 @@ Paste raw notes here. An agent will promote them to `B-xxx` on the next pass.
 - What: Stop punched canvas `lightStrength` to 0; pause froze hold; Play did not always 0→1. Uncommitted work rearms faces and treats full Stop as not-frozen. Not done: B-020, B-022, B-024.
 - Repro: Pause → Stop → Play. Value LCD/LED/Pitch Detector stay dark or idle.
 - Fix shape: Finish the in-flight rearm; do not regress pause residual hold.
+- Note (2026-10-18): ES-3 (cold plates on Stop) and ES-4 (face loops wake on Stop / viewport / spawn) in `docs/ENGINE_STATE_DISPLAY_PLAN.md` touch this path and may cover it. Not closed: this bug needs the manual Pause → Stop → Play check with a waterfall face and the room dimmer on, which has not been recorded.
 
 ### B-027 — Header Speed 2.0 slows the patch
 - Status: open
@@ -509,7 +510,7 @@ Paste raw notes here. An agent will promote them to `B-xxx` on the next pass.
 - Status: verify (apply path landed; `scripts/test_module_layout_bands.js` covers §7 stacks; confirm once on the workspace before closing)
 - Severity: see
 - Source: user
-- Plan: `docs/MODULE_LAYOUT_PLAN.md` (rebuild module stacks; do not add another hide-display selector)
+- Plan: `docs/archive/MODULE_LAYOUT_PLAN.md` (rebuild module stacks; do not add another hide-display selector)
 - Files: `public/node-graph-module-sizing.js` (`nodeGraphModuleLayoutBands`, `applyNodeGraphModuleLayout`); `public/node-graph-module-rendering.js`; `public/styles.css` `.dsp-node.module-stack`
 - What: Hiding the display leaves sliders overlapping the I/O / out-jack strip. Root cause: CSS still reserved a face **track** after the face node is `display: none` or unmounted; I/O auto-places into that hole and sliders sit on the jack row.
 - Repro: Hide display on Output or any LayoutA module with sliders + I/O. Param rows collide with jacks.
@@ -583,13 +584,19 @@ ative_modules/polyblep/polyblep.cpp; library/include/soemdsp/math/analog_filter_
 - Status: fixed (code; needs Live UI verify)
 - Severity: see
 - Source: user
-- Doc: `docs/B-048_MODULE_SETTINGS_BYPASS_SSOT.md`
+- Doc: folded below (file removed 2026-10-18)
 - Files: `public/styles.css`; `public/node-graph-ui-settings-sync.js`; `public/node-graph-patch-core.js` (`syncNodeGraphBypassButtonElement`); `public/node-graph-context-menu.js`
 - What: The module settings enable/disable control does not mirror the module button: it does not turn red when disabled, does not match the button background, and does not glow like the module enable/disable button.
 - Repro: Disable a module and compare its module settings control with the module button (and repeat in the other direction).
 - Root cause: `--node-bypass-*` paint tokens lived only on `#nodeGraphWorkspace`; Module Settings is a sibling under `#nodeWiringPanel`, so off-bg/on-bg/icon-size were undefined → no black plate, no red pressed, glyph vanished.
 - Fix: Hoist bypass CSS vars to `.node-wiring-panel` / `#nodeWiringPanel` (face + settings SSOT); UIDEV defaults `#000000` / `#5c1818`; explicit settings button backgrounds. UI only.
 - Fixed (2026-09-28): as above.
+- Folded from `docs/B-048_MODULE_SETTINGS_BYPASS_SSOT.md` (file removed 2026-10-18; status there: fixed (code; needs Live UI verify)):
+  - **Root cause:** Bypass chrome CSS custom properties (`--node-bypass-off-bg`, `--node-bypass-on-bg`, icon size/glow colors) were defined and applied **only** on `#nodeGraphWorkspace` / `.node-graph-workspace`.; Module Settings lives in `#nodeSceneContextMenu`, a **sibling** under `#nodeWiringPanel`, not a descendant of the workspace. Outside the workspace:; `--node-bypass-off-bg` was undefined → `background: var(--node-bypass-off-bg)` invalid → fell through to generic `button { background: var(--panel-2) }` (no black plate); `--node-bypass-on-bg` undefined → pressed/disabled state never painted red; `--node-bypass-icon-size-ratio` undefined → `::before` glyph `font-size: calc(… * 100cqh)` invalid → icon vanished (`color: transparent` on the button text left an empty cell); State wiring already shared `syncNodeGraphBypassButtonElement` + `.node-bypass-button`; only the **paint tokens** had drifted off the shared ancestor.
+  - **Fix (same spirit as B-074 jack SSOT):** **`public/styles.css`** — Move `--node-bypass-*` defaults onto `.node-wiring-panel` (covers face + settings). Defaults match UIDEV: off `#000000`, on `#5c1818`. Add `var(..., fallback)` on `.node-bypass-button` and explicit black/red backgrounds on `.scene-context-module-bypass-button`.; **`public/node-graph-ui-settings-sync.js`** — Write runtime UIDEV bypass colors to `#nodeWiringPanel` (not workspace-only).; Cache bump `b048-bypass-ssot-1`.; UI chrome only. No audio-path / worklet / WASM changes. JS in settings/header remains UI-only.
+  - **Verify (Live UI):** Hard-reload Live UI after cache bump `b048-bypass-ssot-1`.; Place a normal module (e.g. Gain). Confirm face power button: **black** when enabled, **red** + glow when disabled.; Open Module Settings → Visibility. Confirm the disable control matches the face: black when enabled, red+glow when disabled; glyph always visible (never empty cell).; Toggle from face → settings updates; toggle from settings → face updates (shared `aria-pressed` / bypassed state).; Change UIDEV "bypass off background" / "bypass on background" — both face and settings pick up the new colors.; InletOutlet modules still omit disable chrome (unchanged gate).; No audio / bypass DSP behavior change expected (B-003 is separate).
+  - **Smoke:** `node scripts/smoke_display_follows_title.mjs` asserts wiring-panel SSOT defaults + sync host.
+  - **Regression (2026-10-01):** Disable control moved into `#nodeModuleActionsWindow`. Floating-window content-button fill (`rgb(16,22,26)`, high `:is()` specificity) overrode B-048 black/red paint, so pressed never went red.; Fix: exclude `.node-bypass-button` from floating-window button fills; retarget Module Settings / Command Center bypass selectors at `#nodeModuleActionsWindow` with the same UIDEV off/on/::before glow as the face.
 
 ### B-050 — Workspace zoom past ~10× stutters badly
 - Status: open
@@ -660,26 +667,34 @@ ative_modules/polyblep/polyblep.cpp; library/include/soemdsp/math/analog_filter_
 - Status: **fixed** (2026-09-28)
 - Severity: see
 - Source: user 2026-09-27
-- Doc: `docs/B-056_FILTER_DRAWER_DISPLAY_POLLUTION.md`
+- Doc: folded below (file removed 2026-10-18)
 - Files: `public/lib/visual/filter-curve-face.js` (ownership SSOT); `public/node-graph-cookbook-filter.js` (mark owned + owned-only paint/sync); `public/modules/softClipper/soft-clipper-display.js` (plate + `softClipperCurve` kind, never filter-owned); `public/node-graph-module-rendering.js` (softClipperCurve layout class); `public/index.html` (lib script); `scripts/test_b056_filter_curve_face_ownership.js`
 - What: Softclipper jittered between unused filter magnitude face and its transfer curve because it reused `.node-filter-curve-display` and the filter drawer selected every plate class (exclusion-list anti-pattern; Softclipper omitted).
 - Root cause: Filter paint/sync ownership was CSS-class based with ad-hoc exclusions instead of an explicit face-kind SSOT.
 - Fix: Lib `FilterCurveFace` marks true filters `data-face-kind=filterCurve`; Softclipper is plate-only `softClipperCurve`; drawer paints owned faces only. Display/UI only.
 - Smoke: `node scripts/test_b056_filter_curve_face_ownership.js`
 - Fixed (2026-09-28): as above.
+- Folded from `docs/B-056_FILTER_DRAWER_DISPLAY_POLLUTION.md` (file removed 2026-10-18; status there: fixed):
+  - **Root cause:** Softclipper’s transfer-curve face reused the shared plate class `node-filter-curve-display` (for layout CSS) but did **not** opt out of filter-drawer ownership. `drawNodeGraphFilterCurveDisplays` / `scheduleNodeGraphFilterCurveDraw` selected every `.node-filter-curve-display` and painted the generic filter magnitude curve onto Softclipper (and relied on an ad-hoc exclusion list for other borrowers). Softclipper was missing from that list, so its intended transfer curve and the filter drawer alternated.
+  - **Fix (structural ownership + lib SSOT):** **`public/lib/visual/filter-curve-face.js`** — SSOT for filter-face ownership:; True filter faces: `markFilterCurveOwnedFace` → `data-face-kind="filterCurve"`.; Non-filter plates: `markCurveFacePlate(section, kind)` (e.g. `softClipperCurve`) — plate CSS allowed, never filter-owned.; `queryFilterCurveOwnedFaces` / `scheduleFilterCurveOwnedDraw` paint **only** owned faces.; **`createNodeGraphFilterCurveDisplay`** marks ownership on create.; Softclipper mounts as plate + `softClipperCurve` kind — never `filterCurve`.; Cookbook paint/sync loops drop the exclusion-list dispatcher; they route through the lib owned-face scheduler.; Display/UI only — no JS in the audio path.
+  - **Verification:** Smoke: `node scripts/test_b056_filter_curve_face_ownership.js`; Manual: default preset (ladderFilter + softClipper). Softclipper transfer curve stays stable while filter params change; Softclipper params redraw Softclipper only.
 
 ### B-057 — Hide unused leaves oversized bottom lip
 - Status: fixed
 - Severity: see
 - Source: user 2026-09-27
 - Related: B-036 (shared module layout/band recomputation path; separate hide-unused symptom unless the same root is confirmed)
-- Doc: `docs/B-057_HIDE_UNUSED_BOTTOM_LIP.md`
+- Doc: folded below (file removed 2026-10-18)
 - Files: `public/node-graph-module-sizing.js` (`nodeGraphModuleIoRowCount` / IO height); `public/node-graph-patch-core.js` (chrome layout reapply + wireEdit refresh)
 - What: Enabling Hide unused does not recalculate the module's bottom lip after unused controls or I/O are removed. For example, Keyboard can retain a large bottom lip when Hide unused is on and only a few I/O remain, wasting vertical space.
 - Repro: Show a Keyboard module with unused controls or I/O; enable Hide unused so only a few I/O remain; observe that the module keeps a large bottom lip instead of shrinking to the visible content.
 - Root cause: IO band/outer height always used the full definition port count. CSS hid unused rows, but the grid track and `--node-grid-height-units` kept the old tall strip; chrome sync also skipped `applyNodeGraphModuleLayout`.
 - Fix: Count only connected signal ports when `ui.hideUnused`; collapse IO height to 0 when none remain; re-apply layout bands on chrome sync; refresh hide-unused modules after wire edits. Smoke: `scripts/test_b057_hide_unused_io_height.js`.
 - Fixed (2026-09-27): as above.
+- Folded from `docs/B-057_HIDE_UNUSED_BOTTOM_LIP.md` (file removed 2026-10-18; status there: fixed (2026-09-27)):
+  - **Root cause:** IO section / outer height used the full definition port count. CSS `.unused-hidden` hid unused jack rows, but the IO grid track and `--node-grid-height-units` stayed tall. Chrome sync also did not re-run `applyNodeGraphModuleLayout`, so stack rows could stay stale.
+  - **Fix:** `nodeGraphModuleIoRowCount` counts only connected signal ports when `ui.hideUnused`.; `nodeGraphModuleIoSectionHeightGu` returns 0 when no rows remain (no min-floor).; `syncNodeGraphModuleChromeElement` re-applies layout bands after height CSS writes.; Wire edits refresh hide-unused modules so connect/disconnect resizes the strip.; Smoke: `scripts/test_b057_hide_unused_io_height.js`.
+  - **Follow-up — empty strip must leave the grid (2026-10-01):** Zero-row hide-unused omitted the IO **band** but CSS still forced `.dsp-node-io-section[hidden]` to `display: grid`, so the orphan strip shared a row with face/params and opened an implicit second column (content left, blank right).; `nodeGraphModuleStripIoBandVisible` is the strip-IO gate (LayoutA / Metamodule / InletOutlet only; LayoutB always false).; `applyNodeGraphModuleLayout` toggles `io-strip-collapsed`, sets the section `hidden`, and clears stale `grid-row`.; CSS paints the strip only when not collapsed / not `[hidden]`; collapsed strips are `display: none`.; LayoutB shell columns are unchanged.
 
 ### B-058 — Voice parameter modulation misses active and idle voice updates
 - Status: open
@@ -696,10 +711,15 @@ ative_modules/polyblep/polyblep.cpp; library/include/soemdsp/math/analog_filter_
 - Status: **removed** (feature deleted 2026-09-27; not wontfix)
 - Severity: see
 - Source: user 2026-09-27 (corrected: Alt+click jack, not abandoned wire drag)
-- Doc: `docs/B-059_ABANDONED_WIRE_DRAG_ORPHAN_DOT.md`
+- Doc: folded below (file removed 2026-10-18)
 - Files (former): `public/node-graph-module-scope-monitors.js` (toggle/sync removed; capture helpers kept); `public/node-graph-module-rendering.js`; `public/styles.css` (`.monitored-port` removed); patch clone/core/serialize/runtime/history (no `patch.monitors`)
 - What was: Lone cyan jack pip from **Alt+click** scope-monitor toggle (`patch.monitors` + `.monitored-port`).
 - Resolution: Feature fully removed. Alt+click on jack does nothing special. Old `monitors` fields ignored on load and omitted on save. Scope faces still use default capture endpoints (not jack UI).
+- Folded from `docs/B-059_ABANDONED_WIRE_DRAG_ORPHAN_DOT.md` (file removed 2026-10-18; status there: removed (feature deleted 2026-09-27)):
+  - **Outcome:** The Alt+click jack **scope-monitor** feature was **removed** from local `soemdsp-sandbox` (not wontfix). User asked for full deletion: toggle, pip CSS, `patch.monitors` persistence, listeners, and docs.
+  - **What was removed:** Piece — Role (former); `toggleNodeGraphMonitorFromPortEvent` / `toggleNodeGraphMonitorForPort` — Alt+click toggle on inlet/outlet/MOD; `syncNodeGraphMonitorIndicators` — Applied `.monitored-port` + `data-monitor-state`; CSS `.monitored-port` pip/glow — Cyan center pip / glow (`--node-monitor-color`); `patch.monitors` read/write — Persist custom monitor endpoints; Module-rendering `pointerdown` listeners — Wired the Alt+click toggle; Load/clone/serialize **omit** `monitors` so old patches with that field still load and do not re-save it.
+  - **What was kept:** Real cable wiring (unchanged).; Scope/waterfall **face** capture via `nodeGraphDefaultModuleScopeMonitors` (internal endpoints only; not jack UI).; Helpers in `node-graph-module-scope-monitors.js` still used by the capture pipeline (`nodeGraphRenderedScopeMonitorValue`, fingerprints, live capacity).
+  - **Verification:** Alt+click an unconnected inlet/outlet/MOD → **no** cyan pip; no "monitor added" status.; No orphan cyan jack dots from this path.; Patches without `monitors` (and old patches that had them) still load; faces still draw from defaults.
 
 ### B-060 — Pulse Explosion does not modulate PolyBLEP amplitude
 - Status: open
@@ -714,28 +734,35 @@ ative_modules/polyblep/polyblep.cpp; library/include/soemdsp/math/analog_filter_
 - Status: fixed
 - Severity: see
 - Source: user 2026-09-27
-- Doc: `docs/B-061_SLIDER_SCIENTIFIC_NOTATION_READOUT.md`
+- Doc: folded below (file removed 2026-10-18)
 - Files: `public/node-graph-slider-metadata.js` (`nodeSliderPlainDecimalSource`, `limit_decimals`, `formatNodeSliderNumber`); `public/node-graph-module-scope-number-readout.js` (delegates to shared helper)
 - What: When slider values are very small (|n| < 1e-6), the face/readout shows the mantissa only (e.g. `8.0357`) instead of the true magnitude (e.g. `0.00000080357`).
 - Repro: Set a slider domain value below 1e-6 (or any value whose `String(n)` is scientific). Observe the slider value face / compact readout.
 - Root cause: **Yes — exponent.** `formatNodeSliderNumber` passed `String(number)` into `limit_decimals`, which only regex-parses `whole.fraction`. For `"8.0357e-7"` the `e-7` is ignored, leaving `"8.0357"`. (Value LED/LCD already had a plain-decimal helper; slider faces did not.)
 - Fix: Add `nodeSliderPlainDecimalSource` (expand via `toLocaleString` / `toFixed`), expand scientific input at the top of `limit_decimals`, and route `formatNodeSliderNumber` through the helper. Smoke: `scripts/test_b061_slider_sci_notation.js`.
 - Fixed (2026-09-27): as above.
+- Folded from `docs/B-061_SLIDER_SCIENTIFIC_NOTATION_READOUT.md` (file removed 2026-10-18; status there: fixed (2026-09-27)):
+  - **Root cause:** **Yes — it was the exponent.**; `formatNodeSliderNumber` fed `String(number)` into `limit_decimals`.; For `|n| < 1e-6` (or `|n| >= 1e21`), `String(n)` is scientific, e.g. `"8.0357e-7"`.; `limit_decimals` only regex-parses `whole.fraction` (`/^(\d*)(\.?)(\d*)/`), so the `e-7` is dropped and the display becomes `"8.0357"`.; Value LED/LCD already expanded via `nodeGraphNumberReadoutPlainDecimalSource`; slider faces did not.
+  - **Fix:** Added `nodeSliderPlainDecimalSource` in `public/node-graph-slider-metadata.js` (expand with `toLocaleString` / `toFixed` fallback).; `limit_decimals` expands any scientific input at entry (covers all callers).; `formatNodeSliderNumber` routes through the plain-decimal helper.; Number-readout plain-decimal helper delegates to the shared one when available.; Smoke: `scripts/test_b061_slider_sci_notation.js` (includes the `8.0357e-7` → `0.00000080357` case).; Cache-bust: `node-graph-slider-metadata.js?v=b061-sci-notation-1`.
+  - **Verification:** Run `node scripts/test_b061_slider_sci_notation.js`. Manually drag a slider into sub-1e-6 domain and confirm the face shows leading zeros, not a bare mantissa.
 
 ### B-062 - Non-audio UI changes restart audio engine
 - Status: fixed (2026-10-16)
 - Severity: hear
 - Source: user 2026-09-27 (inert module copy); user 2026-09-28 (Text Box deletion)
-- Doc: `docs/B-062_COPY_MODULE_RESTARTS_AUDIO_ENGINE.md`
+- Doc: folded below (file removed 2026-10-18)
 - Files: `public/node-graph-module-actions.js`, `public/node-graph-patch-core.js` (`nodeGraphTypeNeedsLiveCircuit`, delete commit), `public/node-live-audio-worklet-native-graph.js` (`process_block` no longer clears `nativeGraphCompiled`)
 - What: Copying an unconnected Text Box or deleting one posted a live plan. A later uncompiled block cleared the native graph.
 - Fix: Chrome commits skip the live plan. Named portals still sync. `process_block` failure recompiles in place and does not `soemdsp_graph_clear`.
+- Folded from `docs/B-062_COPY_MODULE_RESTARTS_AUDIO_ENGINE.md` (file removed 2026-10-18; status there: fixed (2026-10-16)):
+  - **Investigation / fix shape:** `commitNodeGraphPatch` posted a live plan for every commit that was not layout, face, or chrome. Copying or deleting a Text Box took that path. A failed `soemdsp_graph_process_block` (`compiled == false`) then cleared `nativeGraphCompiled`, and the next sync called `soemdsp_graph_clear`.; Chrome types (Text Box and the other efficient-product chrome set, except named portals) now commit with `skipLivePlan`. A normal module title does too. Named-portal titles still post a plan because the title is the bus key. `process_block` returning -1 recompiles the existing nodes and does not clear `nativeGraphCompiled`.
+  - **Verification target:** With audio already running, copying an unconnected inert module or deleting a Text Box should preserve engine/session continuity and produce no restart gap or click. Connecting the copy, or making another change that affects live audio execution, should still receive whatever live update is required. Listen check not run in this change; the commit flags and the process_block path are what the code now does.
 
 ### B-063 — Robin Oscillator Morph MOD silent (ParamModEdge → wrong Control)
 - Status: fixed
 - Severity: hear
 - Source: user 2026-09-27 (`analoghorror.json`)
-- Doc: `docs/B-063_ROBIN_OSCILLATOR_MORPH_PARAM_MOD.md`
+- Doc: folded below (file removed 2026-10-18)
 - Files: `public/node-live-audio-worklet-native-graph.js` (`mapNativeGraphParamId`); smoke `scripts/test_b063_robin_morph_param_mod.js`
 - What: Robin Morph MOD cable had no audible effect. ParamModEdge targeted SHAPE (Softwave default) while Robin DSP / knob push use WIDTH.
 - Related: B-051 is Softwave *display* refresh (see); not a duplicate of this hear wiring bug.
@@ -743,17 +770,24 @@ ative_modules/polyblep/polyblep.cpp; library/include/soemdsp/math/analog_filter_
 - Root cause: `mapNativeGraphParamId` morph → SHAPE for robinOscillator; process_robin_oscillator reads `node.width`.
 - Fix: `robinOscillator` + `morph` → `NATIVE_GRAPH_PARAM_WIDTH`.
 - Fixed (2026-09-27): as above. Smoke OK.
+- Folded from `docs/B-063_ROBIN_OSCILLATOR_MORPH_PARAM_MOD.md` (file removed 2026-10-18; status there: fixed):
+  - **Root cause:** Native DSP (`process_robin_oscillator`) and quantum knob push both store Morph on **WIDTH** (`NATIVE_GRAPH_PARAM_WIDTH`).; Softwave Morph correctly lives on **SHAPE**.; `mapNativeGraphParamId("morph")` defaulted to **SHAPE** (Softwave-correct) for every type except Hypersaw/Spiral overrides.; Live audio→param MOD compiles as **ParamModEdge** via `mapNativeGraphParamId`, so Robin Morph MOD stamped **SHAPE** while DSP read **WIDTH** → silent Morph CV.; Same class as the Softwave Morph→MIX dead-audio lesson already noted in the KEY_IDS comment.; B-051 remains a separate display-invalidation issue; this fix does not claim Softwave face refresh.
+  - **Fix:** In `public/node-live-audio-worklet-native-graph.js` `mapNativeGraphParamId`:; `robinOscillator` + `morph` → `NATIVE_GRAPH_PARAM_WIDTH`; No native C++ / graph_engine change required — Control slot was already WIDTH.
+  - **Verification:** Smoke: `node scripts/test_b063_robin_morph_param_mod.js`; Manual: load `patches/demo_patches/analoghorror.json`, run live.; Patch Morph cable: `passiveFilter-2` Out → `robinOscillator-1` Morph.; Saved waveform is **Ramp** (index 1), which **ignores** Morph in DSP — switch to **Trisaw Center**, **Pulse**, or **Analog Square** to hear Morph CV.; Softwave Morph MOD must still target SHAPE.
 
 ### B-064 - Text Box background overflows outline when title is hidden
 - Status: fixed (2026-10-01)
 - Severity: see
 - Source: user 2026-09-28; reopen 2026-10-01 (face vs stroke + perform bg)
 - Related: B-032 (Text Box resize/text clipping; verify shared title/content-height geometry); B-055 (Text Box wire z-order, fixed; separate layering symptom unless the same host/layout path is implicated)
-- Doc: `docs/B-064_TEXT_BOX_HIDDEN_TITLE_BACKGROUND_OVERFLOW.md`
+- Doc: folded below (file removed 2026-10-18)
 - Files: `public/node-graph-module-sizing.js`; `public/styles.css`; `public/modules/textBox/text-box-widget.js`
 - What: Hiding the Text Box title causes its background to extend beyond the module outline/border. Perform/canvas dropped the background color.
 - Repro: Add or open a Text Box, hide its title, and observe the background at the module edges. Compare the same Text Box with the title visible. Check layout-canvas / Perform for the same fill.
 - Fix: Text Box face `fillsPlate` → `minmax(0, 1fr)`; face gu subtracts plate inset; title+buttons-hidden inherits plate radius; face+plate share `--node-text-box-bg-color`; empty bg no longer writes blank CSS vars.
+- Folded from `docs/B-064_TEXT_BOX_HIDDEN_TITLE_BACKGROUND_OVERFLOW.md` (file removed 2026-10-18; status there: fixed (2026-10-01)):
+  - **Root cause:** Article CSS height is `(outerGu × grid) − plate inset-y`. Title-hidden Text Box set face gu to `outer − header` and grew with `minmax(scope-height, 1fr)`, so the face min height exceeded the article and painted past the rounded stroke.; Plate `::before` used `--node-module-fill` while the face used `--node-text-box-bg*`. Empty/`transparent` bg writes cleared face vars (defined empty beats CSS fallback); editor still looked painted via the plate, perform/canvas only has the face.
+  - **Fix:** Text Box face band: `fillsPlate` → track `minmax(0, 1fr)`; face gu subtracts plate inset.; Title+buttons hidden: face inherits plate `border-radius` / `corner-shape`.; Face + plate share `--node-text-box-bg-color` / alpha; widget defaults empty color to `#020407` instead of writing blank vars.; Layout-canvas / screen-solo face keeps the same background paint.
 
 ### B-065 - Multi-wire portal action creates duplicate portals instead of one Portal In / multiple Portal Outs
 - Status: open
@@ -821,60 +855,83 @@ ative_modules/polyblep/polyblep.cpp; library/include/soemdsp/math/analog_filter_
 - Severity: hear
 - Source: user 2026-09-28
 - Related: `patches/callnow.json`; keypad host CV; Phone Tone; portal outlet speaker sum; controller efficient sidecar
-- Doc: `docs/B-070_CALLNOW_KEYPAD_PHONETONE_SILENT.md`
+- Doc: folded below (file removed 2026-10-18)
 - Files: `public/modules/_shared/controller-efficient-sidecar.js`; `public/node-graph-live-runtime.js`; `scripts/smoke_test.py`
 - What: Keypad Analog never reached Phone Tone on efficient Live. Gate (momentaryButton Bias) still published. Keypad interaction handler was deleted with JS evaluator twins; sidecar never republished keypad CV; keypad-math was missing from the worklet blob.
 - Repro: Load CallNow, Play, press CALL🐞NOW (works), press keypad keys (no DTMF).
 - Fix shape: Restore worklet `setKeypadInteraction` + publish keypad in `processControllerEfficientSidecar`; load `keypad-math.js` in efficient worklet blob. Not a JS DSP evaluator restore.
+- Folded from `docs/B-070_CALLNOW_KEYPAD_PHONETONE_SILENT.md` (file removed 2026-10-18; status there: fixed (code; needs Live UI verify)):
+  - **Root cause:** Keypad is a **host CV controller** (no native GraphEngine opcode), same family as Knob / Momentary.; UI posts `keypadInteraction` to the worklet (`keypad-ui.js`).; Worklet must apply it via `setKeypadInteraction` into `keypadStates`.; Efficient Live must publish Analog/Digital/Gate/X/Y from that state in `processControllerEfficientSidecar` so `syncNativeHostCvFeeders` can Bias-feed native `phoneTone`.; Regression from retiring JS DSP evaluator twins (`77f269d9`):; `keypad-worklet-evaluator.js` (which defined `setKeypadInteraction`) was deleted.; `handle-message.js` still calls `this.setKeypadInteraction(message)` → no-op / throw.; Controller sidecar published Knob / Momentary Bias but **never published keypad**.; `keypad-math.js` was not in the efficient worklet blob, so even a restore needed slot math in-scope.; Momentary Gate kept working because the sidecar already publishes smoothed Bias for `momentaryButton`.; Phone Tone native DSP and portal outlet speaker sum were fine; they never received Analog > 0 (idle Analog is silence per `phone_tone.cpp`).
+  - **Fix:** Restore `setKeypadInteraction` / `createKeypadState` on the worklet in `controller-efficient-sidecar.js` (UI→CV only; **not** a JS DSP evaluator).; Publish keypad ports in `processControllerEfficientSidecar`.; Load `keypad-math.js` in `nodeGraphLiveWorkletSourceFilesEfficient` before the sidecar.; Smoke: efficient blob must include keypad-math + sidecar; sidecar must define `setKeypadInteraction` and publish `type === "keypad"`.
+  - **Verify (manual Live UI):** Hard-refresh sandbox (new worklet blob cache busters: `keypad-hostcv-1`).; Load `patches/callnow.json` (or cookbook CallNow).; Start Live / Play.; Press CALL🐞NOW — filter bed should swell (Gate still OK).; Press keypad keys 1–9, *, 0, # — each should produce a DTMF tone through the portal (heard at speakers).; Release key — tone should stop (momentary mode).; Optional: scope `phoneTone` Tone / ToneL / ToneR or keypad Analog while pressing.
+  - **Files:** `public/modules/_shared/controller-efficient-sidecar.js`; `public/node-graph-live-runtime.js`; `scripts/smoke_test.py`; `docs/BUG_PLAN.md`; `docs/BUG_PLAN.md (B-070)`
 
 ### B-071 — Canvas-mode Text Box does not scale with the tile (WYSIWIS)
 - Status: fixed (code; needs Live UI verify)
 - Severity: see
 - Source: user 2026-09-28
 - Related: B-068 (canvas slider/knob scaling — shared stage, different paint path); B-064 / B-055 (Text Box layout/layer)
-- Doc: `docs/B-071_CANVAS_TEXT_BOX_SCALING.md`
+- Doc: folded below (file removed 2026-10-18)
 - Files: `public/modules/textBox/text-box-widget.js`; `public/styles.css`; `public/node-graph-layout-canvas.js`; `public/node-graph-screen-solo.js`; `public/modules/metamodule/metamodule-display-mirror.js`
 - What: Text Box glyphs ignore canvas tile scale; body fills the tile but type stays at plate `--node-grid-size` absolute size.
 - Repro: Show in canvas on a Text Box → F canvas → resize tile. Text does not scale with the tile (unlike knob/slider cqmin faces).
 - Root cause: Text Box uses its own grid-size font formula; it never joined the face `cqmin` scale pipeline knobs use. Not the same leak as B-068.
 - Fix: Capture plate source-min + source-font-px before reparent; canvas-scoped CSS `source-font-px * font-scale * 100cqmin / source-min`; clear on restore. UI only.
+- Folded from `docs/B-071_CANVAS_TEXT_BOX_SCALING.md` (file removed 2026-10-18; status there: fixed (code; needs Live UI verify)):
+  - **Root cause:** Text Box type is authored as `font-size: calc(var(--node-grid-size) * 0.36 * font-scale)` on the plate. Knobs/sliders use **container query units** (`cqmin`) on the face, so layout-canvas tile stretch scales their type automatically.; Text Box never joined that pipeline: reparenting the face into a `.node-layout-canvas-tile` changes the CSS box, but glyphs keep the workspace grid-size absolute length. That is a **separate paint path** from B-068's knob/slider geometry (not the same scale leak), so this is tracked as B-071 rather than folded into B-068.
+  - **Fix:** Capture plate `--node-text-box-source-min` (min edge) and `--node-text-box-source-font-px` (`grid-size * 0.36`) **before** reparent (`nodeGraphTextBoxCaptureCanvasScaleSource`).; In layout-canvas / metamodule / screen-solo contexts only, make `.node-text-box-body` a size container and size type as; `source-font-px * font-scale * 100cqmin / source-min`.; Clear the capture vars on restore (`nodeGraphTextBoxClearCanvasScaleSource`) so the plate formula returns.; Metamodule tiles now also pass `savedFaceDom` so style restore matches layout-canvas / solo.; No audio / WASM / DSP changes.
+  - **Files:** `public/modules/textBox/text-box-widget.js` — capture/clear helpers; `public/styles.css` — canvas-scoped cqmin font-size; `public/node-graph-layout-canvas.js` — capture before tile reparent; `public/node-graph-screen-solo.js` — capture + clear on restore; `public/modules/metamodule/metamodule-display-mirror.js` — capture + savedFaceDom
+  - **Verify:** Plate Text Box: text size unchanged vs before (still grid-size × textSizePercent).; Canvas: grow tile → glyphs grow; shrink tile → glyphs shrink; aspect stretch follows min-edge (cqmin).; Exit canvas / F off: plate size restored; no sticky canvas font vars.; Metamodule Show-in-canvas child Text Box: same tile scaling.; No change to audio path.
 
 ### B-072 — PolyBLEP phosphor Size reverts after closing Display Settings
 - Status: fixed (code; needs Live UI verify)
 - Severity: see
 - Source: user 2026-09-28
 - Related: DISPLAY_SCALE_REWRITE / APP_POLICY §15 (ink px @ 96); XY Pad already ink-px normalize
-- Doc: `docs/B-072_POLYBLEP_PHOSPHOR_DOT_SIZE_PERSIST.md`
+- Doc: folded below (file removed 2026-10-18)
 - Files: `public/node-graph-module-scope-normalize.js`; `public/node-graph-module-scope-settings-form.js`
 - What: PolyBLEP (lineBurn) Display Settings Size looks editable while open, then snaps back on close/reopen.
 - Repro: PolyBLEP → Display Settings → set Size > 1 (e.g. 5) → close → reopen. Size was pegged to 1.
 - Root cause: `normalizeNodeGraphLineBurnSettings` (also zeroD / scope2d) clamped `dot1Size` to 0…1 while UI/paint use authored CSS px @ 96. Every Size ≥ 1 stored as 1.
 - Fix: Persist phosphor Size via `nodeGraphTraceDisplayNormalizeInkPx` (0…32). UI-only; no audio path.
+- Folded from `docs/B-072_POLYBLEP_PHOSPHOR_DOT_SIZE_PERSIST.md` (file removed 2026-10-18; status there: fixed (code; needs Live UI verify)):
+  - **Root cause:** `normalizeNodeGraphLineBurnSettings` (PolyBLEP / Instant Waterfall line-burn face) clamped `dot1Size` with `normalizeNodeGraphTraceDisplayNumber(..., 0, 1)`.; Display Settings UI and phosphor paint already treat Size as **authored ink px** (`nodeGraphTraceDisplayClampInkPx` / `faceInkPx` @ ref 96). Live drag wrote the ink-px number into the form input, but every apply/read path re-normalized through the 0…1 clamp, so any Size ≥ 1 became **1**. Closing and reopening reseeded the form from the clamped store — looked like "does not stick."; Same wrong clamp also lived on shared phosphor normals:; `normalizeNodeGraphZeroDBurnSettings` (0D phosphor Dot); `normalizeNodeGraphScope2dSettings` (2D scope2d / Lorenz / phosphorLight SSOT); XY Pad had already been migrated to ink-px normalize; lineBurn/scope2d/zeroD were left on the old fraction clamp.; Not an audio-path bug. No JS in the audio path.
+  - **Fix:** Store phosphor `dot1Size` via `nodeGraphTraceDisplayNormalizeInkPx` (0…32 ink @ 96) in lineBurn / zeroD / scope2d normalize.; Extend Display Settings Size field labels/tooltips to include `lineBurn`, `scope2d`, `phosphorLight`, `xyPad`, `dot` so the control reads as CSS px @ 96.
+  - **Files:** `public/node-graph-module-scope-normalize.js` — ink-px `dot1Size` for lineBurn, zeroD, scope2d; `public/node-graph-module-scope-settings-form.js` — Size label/tooltip for phosphor schemas; `docs/BUG_PLAN.md` — B-072 index + open/fixed notes; `docs/BUG_PLAN.md (B-072)` — this doc
+  - **Verify:** Soft refresh / reload sandbox so the updated normalize scripts load.; PolyBLEP → Display Settings → set Size to e.g. **5** → close → reopen → Size still **5**; face stamp thicker than default.; Set Size to **0.5** → close → reopen → still **0.5**; thinner stamp.; Optional same check on a scope2d / phosphorLight / 0D Dot face (shared normalize).; `python scripts\smoke_test.py` (UI-only; smoke is sanity, not the Size repro).
+  - **Notes for coordinator:** Local edits only; no commit/push/PR from this pass.; Audio / WASM untouched.
 
 ### B-073 - Parameter label left padding vs number (sign column)
 - Status: fixed (code; needs Live UI verify)
 - Severity: see
 - Source: user 2026-09-28
 - Related: commit `44f69817` (Align slider labels with value sign column); B-061 (slider readout formatting)
-- Doc: `docs/B-073_PARAM_LABEL_SIGN_COLUMN_PADDING.md`
+- Doc: folded below (file removed 2026-10-18)
 - Files: `public/styles.css`
 - What: Parameter labels/names sit ~1ch right of the number (readout/value).
 - Repro: Stacked label-over-value slider readout; compare left edges especially for negative or showSign `+` values.
 - Root cause: `.reserves-sign-column .node-slider-readout-label { padding-left: 1ch }` indented labels while values already reserve the sign column in the formatted string.
 - Fix: Remove the label `padding-left: 1ch` rule. CSS only; no audio path.
-
+- Folded from `docs/B-073_PARAM_LABEL_SIGN_COLUMN_PADDING.md` (file removed 2026-10-18; status there: fixed (code; needs Live UI verify)):
+  - **Root cause:** `.node-slider-readout.reserves-sign-column .node-slider-readout-label { padding-left: 1ch; }` (added in `44f69817`) indented every numeric/choice label. Values already reserve the sign column in text via `formatNodeSliderNumber(..., { reserveSignSpace: true })` (leading space) or an explicit `+`/`−`. When the value starts with a real sign character, the label padding made the name sit right of the number.; Several alternate slider layouts already forced `padding-left: 0` on the label, which was a partial workaround for the same rule.
+  - **Fix:** Removed the `padding-left: 1ch` rule from `public/styles.css`.; Left a short CSS comment (B-073) so the sign-column pad is not reintroduced.; UI/CSS only; no JS audio path changes. The `reserves-sign-column` class toggle in `node-graph-slider-readout.js` remains (harmless; no longer styles the label).
+  - **Verify:** Hard-reload Live UI.; Module with stacked label + value: label left edge matches the value string left edge for positive (leading space), negative (`−`), and showSign (`+`) cases.; Spot-check layouts that already zeroed label padding (`label-value-slider`, `label-outside`, `value-outside`) — unchanged / still flush.; No audio / DSP behavior change expected.
 
 ### B-074 - Input / Output / Portal jack spacing drifted from shared SSOT
 - Status: fixed (code; needs Live UI verify)
 - Severity: see
 - Source: user 2026-09-28
 - Related: MODULE_LAYOUT_PLAN (InletOutletLayout); LayoutB flush-jack rule; B-057
-- Doc: `docs/B-074_IO_PORTAL_JACK_SPACING_SSOT.md`
+- Doc: folded below (file removed 2026-10-18)
 - Files: `public/styles.css`; `public/node-graph-module-sizing.js`; `public/modules/portal/portal-named-register.js`; `public/modules/portal/portal-lanes.js`; `public/modules/portal/portal-ui.css`; `public/modules/metamodule/metamodule-register.js`
 - What: Output Left Right / Output Mono Left Right / Input * / Portal IO (and Meta In/Out / voice jacks) inlet/outlet rows did not match LayoutA jack spacing.
 - Repro: Place Output Left Right (or Input Mono Left Right / Portal IO) beside Gain; compare vertical jack pitch - stretched/uneven on InletOutlet modules.
 - Root cause: InletOutletLayout private CSS `1fr`-stretched jack rows + `io.grow` (no lip) + pinned `defaultHeightGu` leftover height.
 - Fix: Point InletOutlet at shared `.node-io-column` packing SSOT; lip absorbs leftover; drop private stretch CSS and defaultHeightGu. UI only.
+- Folded from `docs/B-074_IO_PORTAL_JACK_SPACING_SSOT.md` (file removed 2026-10-18; status there: fixed (code; needs Live UI verify)):
+  - **Root cause:** InletOutletLayout had a **private** jack-column dialect:; CSS forced `grid-auto-rows: minmax(…, 1fr)` and `height: 100%` on `.node-io-column` / `.node-io-row`, stretching jack bands to fill leftover plate height.; Band stack set `io.grow = true` (no lip), so ceil’d outer height and manual `heightGu` / `defaultHeightGu: 3` leftover went into the IO track and into that 1fr stretch.; Normal LayoutA (and LayoutB shell columns) pack flush: `align-content: start`, row height = `--node-signal-port-height`, gap = `--node-io-gap`. That is the SSOT.
+  - **Fix (unify onto SSOT — no one-off spacing tweaks):** **`public/styles.css`** — Drop InletOutlet 1fr / stretch overrides on IO columns and rows. Section keeps equal in/out columns only. Shared `.node-io-column` documents and sets the flush packing SSOT (`grid-auto-rows: minmax(var(--node-signal-port-height), auto)`).; **`public/node-graph-module-sizing.js`** — InletOutlet uses the same **lip** leftover band as LayoutA; IO stays content-sized (no `io.grow`).; **Portal / meta registers** — Remove pinned `defaultHeightGu` so spawn height = content formula (already the documented InletOutlet contract).; **`public/modules/portal/portal-ui.css`** — Remove dead custom-face absolute jack layout (modules mount shared IO section only).; UI / module-chrome only. No audio-path / WASM / C++ changes.
+  - **Verify (Live UI):** Hard-reload Live UI after cache bump `b074-io-jack-ssot-1`.; For each variant, place next to a normal LayoutA module with the same jack count (e.g. Gain) and confirm jack vertical pitch matches:; **Output Mono**, **Output Left**, **Output Right**, **Output Left Right**, **Output Mono Left Right**; **Input Mono**, **Input Left**, **Input Right**, **Input Left Right**, **Input Mono Left Right**; **Portal IO** (paired → / ←), plus load an old patch with separate namedPortalIn / namedPortalOut; Inside a Metamodule: **Metamodule In**, **Metamodule Out**, **Voice Inc / Gate / Trigger / Idle**; Grow an InletOutlet module taller than content — leftover should be empty lip below the jack pack, **not** stretched gaps between jacks; Spot-check speaker **Output** and mic **Input** — unchanged flush packing; No audio / wire routing change expected
 
 ### B-075 - Pitch Mod Wheel face has no pitch/mod-wheel UI or display control
 - Status: open
@@ -893,48 +950,63 @@ ative_modules/polyblep/polyblep.cpp; library/include/soemdsp/math/analog_filter_
 - Severity: see
 - Source: user 2026-09-28
 - Related: layout-canvas F-cycle (off→perform→edit→off); B-050 (workspace zoom, separate)
-- Doc: `docs/B-076_F11_FULLSCREEN_CANVAS_SHUFFLE.md`
+- Doc: folded below (file removed 2026-10-18)
 - Files: `public/node-graph-screen-solo.js` (`handleNodeGraphScreenSoloResize`, `applyNodeGraphScreenSoloFit`); `public/node-graph-layout-canvas.js` (`nodeGraphLayoutCanvasHandleViewportChange`, `fullscreenchange` → `RefreshOpenStage`)
 - What: Pressing F11 to enter fullscreen shuffled the layout-canvas tiles. While still fullscreen, pressing `F` three times recycled the view and reset/corrected the arrangement.
 - Repro: Arrange a canvas (F perform), press F11, observe shuffle. Press `F`, `F`, `F` while remaining fullscreen; the view resets/corrects.
 - Root cause: Layout canvas shares the screen-solo stage with `session.fit ""` and freeform absolute tiles. Window resize (F11) still ran `handleNodeGraphScreenSoloResize` → `applyNodeGraphScreenSoloFit(fit || "contain")`, which forced the classic solo grid/contain layout over the freeform canvas. F-cycle recycle reopened via `nodeGraphLayoutCanvasRefreshOpenStage` and repaired it.
 - Fix: Skip solo fit when layout canvas is active; on `fullscreenchange` deferred-rebuild with `nodeGraphLayoutCanvasRefreshOpenStage` (same as F recycle); deferred light tile re-apply on resize for browsers where F11 only fires resize.
 - Fixed (2026-09-28): as above. UI/layout only; no audio/JS audio-path changes.
+- Folded from `docs/B-076_F11_FULLSCREEN_CANVAS_SHUFFLE.md` (file removed 2026-10-18; status there: fixed):
+  - **Root cause:** Layout canvas reuses the screen-solo stage with freeform absolute tiles and `session.fit ""`. On window resize (what F11 triggers), `handleNodeGraphScreenSoloResize` still called `applyNodeGraphScreenSoloFit(session.fit || "contain")`, which applied the classic solo **grid / contain** layout and shuffled the freeform tiles. The F-cycle path that corrects it is `nodeGraphLayoutCanvasRefreshOpenStage` (full reopen).
+  - **Fix:** `public/node-graph-screen-solo.js`: skip solo fit/resize when `session.layoutCanvas` / layout canvas is active.; `public/node-graph-layout-canvas.js`: `nodeGraphLayoutCanvasHandleViewportChange` — light deferred tile re-apply on resize; `fullscreenchange` deferred rebuild via `RefreshOpenStage` (same as F recycle).; UI/layout only. No audio-path changes.
+  - **Verify:** Open a patch with canvas pins; **F** into canvas perform.; Arrange tiles if needed (**F** arrange, then **F** back to perform).; Press **F11** enter fullscreen — tiles keep their freeform layout (no grid shuffle).; Press **F11** exit fullscreen — same.; Optional: classic screen solo (no canvas) still F-cycles fit→stretch→off on resize correctly.
 
 ### B-077 — Keyboard Inc outlet not publishing (host CV)
 - Status: fixed (code; needs Live UI verify)
 - Severity: hear
 - Source: user 2026-09-28
 - Related: B-070 keypad host CV; B-047/B-049 Arp/Softwave Inc; controller efficient sidecar
-- Doc: `docs/B-077_KEYBOARD_INC_HOST_CV_MISSING.md`
+- Doc: folded below (file removed 2026-10-18)
 - Files: `public/modules/_shared/controller-efficient-sidecar.js`; `public/node-graph-live-runtime.js`; `scripts/smoke_test.py`
 - What: Keyboard `inc` (Hz/sr) never reached native Increment on efficient Live. Sidecar `buildCv` computed increment but Pass 1/2 never published `outs.inc` (retired evaluator did). Same class as B-070 missing host publish; not a port-name/wiring bug.
 - Repro: Keyboard.inc → osc Increment; Play; press key — silent / no phase advance from Inc.
 - Fix shape: Publish `outs.inc = cv.increment` for Keyboard in efficient sidecar; Pass 2 refresh; cache-bust `keyboard-inc-1`. Not a JS DSP evaluator restore.
-
+- Folded from `docs/B-077_KEYBOARD_INC_HOST_CV_MISSING.md` (file removed 2026-10-18; status there: fixed (code; needs Live UI verify)):
+  - **Root cause:** Regression from retiring JS DSP evaluator twins / moving Keyboard to the efficient sidecar:; Old `nodeGraphLiveModuleEvaluators.keyboard` returned `inc: cv.increment`.; Sidecar Pass 1 published `KeyIndex` / `KeyNorm` / `pitch` / Gate / Trigger / masks but **never** `outs.inc`.; `buildCv` still computed `increment`; host feeder for cables from `Keyboard.inc` stayed at Bias 0.; Same class as B-070 (missing host publish after evaluator retirement), different port (Inc vs Keypad Analog). Not a wiring/port-name bug — definition already has `outputs: […, "inc", …]` and aliases `Inc`/`Increment` → `inc`.
+  - **Fix:** Publish `outs.inc = cv.increment` for non-grid Keyboard in Pass 1.; Pass 2 (after Play Keys / Arp / Chord IN remix): refresh `KeyIndex` / `KeyNorm` / `pitch` / `inc` for `type === "keyboard"`.; Cache-bust efficient sidecar `?v=keyboard-inc-1`.; Smoke: sidecar must contain `outs.inc = cv.increment` and `outs2.inc = cv.increment`.; **Not** a JS DSP evaluator restore. Host-CV / controller sidecar only (APP_POLICY).
+  - **Verify (manual Live UI):** Hard-refresh sandbox (worklet blob cache buster `keyboard-inc-1`).; Drop Keyboard + PolyBLEP (or Softwave). Wire **Keyboard.inc → Increment**.; Start Live / Play. Press a Keyboard key — oscillator should track pitch via Increment.; Optional: Value / scope on Keyboard `inc` while holding a key (should be `f/sr`, e.g. A4 ≈ 440/48000).; Gate / pitch / Play Keys still behave as before.
+  - **Files:** `public/modules/_shared/controller-efficient-sidecar.js`; `public/node-graph-live-runtime.js`; `scripts/smoke_test.py`; `docs/BUG_PLAN.md`; `docs/BUG_PLAN.md (B-077)`
 
 ### B-078 - Trace / Phosphor / Instant Waterfall faces hidden after waterfall rename
 
 - Status: **fixed**
 - Severity: see
-- Doc: `docs/B-078_SCOPEFACE_TRACE_BAND_HIDDEN.md`
+- Doc: folded below (file removed 2026-10-18)
 - What: Catalog Trace / Phosphor (and Instant Waterfall) monitors spawned with no visible face.
 - Root cause: Waterfall rename replaced band alias `trace?face` with `waterfall?face` while `scopeFace` still used band id `"trace"`. LayoutA marked `face-track-omitted`; CSS hid `.node-module-face`.
 - Fix: `scopeFace` band id `"face"`; restore `trace: "face"`; canonical `faceBandVisible`. Thrus / WiredInputs for `scope1dTrace*`.
 - Verify: `node scripts/test_module_layout_bands.js`.
+- Folded from `docs/B-078_SCOPEFACE_TRACE_BAND_HIDDEN.md` (file removed 2026-10-18; status there: fixed):
+  - **Root cause:** Waterfall rename (`traceDisplay*` → `waterfall*`, layout `traceDisplay` → `scopeFace`) replaced the chrome band alias:; trace: "face",; +  waterfall: "face",; in `NODE_GRAPH_MODULE_WIDGET_BAND_ID`, while `scopeFace` layout bands still used `{ id: "trace", ... }`.; `applyNodeGraphModuleLayout` set `face-track-omitted` when no band had raw `id === "face"`. CSS then hid the mounted face:; .dsp-node.face-track-omitted .node-module-face { display: none !important; }; `displayType` / `settingsSchema` / paint registration were intact — faces were mounted then forced invisible.
+  - **Fix:** `scopeFace` stack band id → `"face"`.; Restore `trace: "face"` alias (keep `waterfall: "face"`).; `faceBandVisible` uses `nodeGraphModuleCanonicalBandId`.; Harden: `scope1dTrace` / `scope1dTraceStereo` dry thrus + `UsesWiredInputs`.
+  - **Verification:** `node scripts/test_module_layout_bands.js` (scopeFace regression); Manual: drag 1D Phosphor / 1D Trace / Instant Waterfall — face row visible; Display Settings gear paints.; Display/UI only — no audio path.
 
 ### B-079 — Choices range clamp does not remap UI subset
 - Status: fixed (code; needs Live UI verify)
 - Severity: see
 - Source: user 2026-09-28
 - Related: choice index/label mapping; PolyBLEP Waveform metaparam range
-- Doc: `docs/B-079_CHOICES_RANGE_CLAMP_SUBSET.md`
+- Doc: folded below (file removed 2026-10-18)
 - Files: `public/node-graph-slider-metadata.js`; `public/node-graph-slider-readout.js`; `public/node-graph-slider-values.js`; `public/node-graph-parameter-metadata.js`; `public/node-graph-metadata-editor.js`; `public/node-graph-module-factories.js`; `public/index.html`; `scripts/test_b079_choice_range_remap.js`
 - What: Clamping a choices param min/max (e.g. Waveform 4–5) left full-catalog labels/dividers (~9 segments); ends mapped as full-list proportional indices.
 - Repro: PolyBLEP Waveform metaparam Min=4 Max=5; observe dividers/labels vs Triangle/Sine.
 - Root cause: Discrete index path required span===choices.length; clamp failed that check and used t*(n-1) over the full list. Dividers used full dataset.choices length.
 - Fix: `nodeGraphResolveChoiceSet` slices catalog by range + `choiceOriginMin`; index/label/dividers use subset. Persist origin from definition. Smoke `test_b079_choice_range_remap.js`.
-
+- Folded from `docs/B-079_CHOICES_RANGE_CLAMP_SUBSET.md` (file removed 2026-10-18; status there: fixed (code; needs Live UI verify)):
+  - **Root cause:** `nodeGraphPatchChoiceIndexFromValue` only used the discrete `(v-min)/step` path when `(max-min)/step+1 === choices.length`. After a range clamp that equality fails, so it fell through to proportional mapping across the **full** catalog (`t * (n-1)`). Readout dividers always used `parseNodeMetadataChoices(dataset.choices)` length, ignoring the clamped span.
+  - **Fix:** Added `nodeGraphResolveChoiceSet` — slices the catalog to the contiguous `[min,max]` subset using `choiceOriginMin` (domain value of `choices[0]`, persisted from definition min).; Index / label / value-from-index / type-in / readout dividers consume the resolved subset (even division over filtered count).; Persist `choiceOriginMin` through definition metadata, patch normalize, slider dataset, factories, and metaparameter editor.; Cache-bust `b079-choice-range-1`. Smoke: `scripts/test_b079_choice_range_remap.js`.
+  - **Verify:** `node scripts/test_b079_choice_range_remap.js` and `node scripts/test_knob_choice_neg.js`.; Hard-reload Live UI. PolyBLEP Waveform → Min 4 Max 5 → labels Triangle/Sine; one divider; values 4 and 5 still select those shapes.; Restore Min 0 Max 9 → full catalog / 9 dividers again.; No audio/DSP path change beyond existing absolute domain values.
 
 ### B-080 — Choice segment text ellipsizes before full track width
 - Status: fixed (code; needs Live UI verify)
@@ -954,15 +1026,17 @@ ative_modules/polyblep/polyblep.cpp; library/include/soemdsp/math/analog_filter_
 - Severity: see
 - Source: user 2026-09-28 (Vibrato Generator; all scope1dTrace faces)
 - Related: B-072; Bright to TraceWoscope intensity polish; Instant Waterfall Size drop
-- Doc: docs/B-081_SCOPE1DTRACE_SIZE_THICKNESS.md
+- Doc: folded below (file removed 2026-10-18)
 - Files: public/node-graph-module-definitions.js; public/node-graph-module-scope-1d-trace.js; public/node-graph-module-scope-metrics.js; public/node-graph-module-scope-settings-form.js; public/index.html
 - What: Vibrato could not set trace thickness; Size must drive TraceWoscope like Bright; Scale <1 must not shrink Y.
 - Repro: Vibrato Display Settings Size; Scale 0.5 vs 2.
 - Root cause: Vibrato on waterfall (no Size); 1dTrace Size lacked Bright-style SSOT helper; Y used amp Scale <1.
 - Fix: Vibrato to scope1dTrace; nodeGraphScope1dTraceSizePx to TraceWoscope; Y clamps Scale floor to 1; signature + tip; cache-bust b081-1dtrace-size-1.
-
-
-
+- Folded from `docs/B-081_SCOPE1DTRACE_SIZE_THICKNESS.md` (file removed 2026-10-18; status there: fixed (code; needs Live UI verify)):
+  - **Root cause:** Vibrato was locked on Instant Waterfall (settingsSchema: waterfall), which dropped Trace **Size** after the premium waterfall redesign — no thickness control.; scope1dTrace paint already passed dot1Size, but Size lacked a Bright-style SSOT helper into TraceWoscope (size / intensity aliases + normalize).; Y used; odeGraphDisplaySettingsAmplitudeScale as-is, so Scale below 1 shrank the heart-monitor stroke.
+  - **Fix:** Vibrato Generator to displayType / mode / schema **scope1dTrace** (Wave source).; -; odeGraphScope1dTraceSizePx SSOT (like Bright01) to TraceWoscope size + explicit intensity: brightness.; Full-height Y: when Scale is below 1, force scale: 1 for SampleToY (boost at or above 1 still allowed).; Draw signature includes dot1Size / secondarySize; Size field tip names TraceWoscope binding.; Cache-bust 081-1dtrace-size-1.
+  - **Files:** public/node-graph-module-definitions.js; public/node-graph-module-scope-1d-trace.js; public/node-graph-module-scope-metrics.js; public/node-graph-module-scope-settings-form.js; public/index.html; docs/BUG_PLAN.md / progress.md
+  - **Verify:** Manual: Vibrato + Tube Sat Display Settings Size thickens beam; Bright still works; Scale 0.5 does not shrink Y; Scale 2 still zooms. Local, no push.
 
 ### B-084 — scope1dTrace Display Settings gradient → TraceWoscope LUT
 
@@ -970,33 +1044,44 @@ ative_modules/polyblep/polyblep.cpp; library/include/soemdsp/math/analog_filter_
 - Severity: see
 - Source: user 2026-09-28 (Tube Sat / scope1dTrace; 2D Trace must stay non-gradient)
 - Related: B-083; FEATURE_TUBE_SAT_CRT_AMBER; B-081
-- Doc: docs/B-084_SCOPE1DTRACE_GRADIENT_LUT.md
+- Doc: folded below (file removed 2026-10-18)
 - What: 1D TraceWoscope ignored meaningful LUT mapping from Display Settings gradientStops; Color swatches conflicted with Gradient-owns-color.
 - Fix: energy t on 1D points; ink from gradient peak; scope1dTrace colors:[]; 2D Trace untouched; cache-bust b084-1dtrace-grad-1.
+- Folded from `docs/B-084_SCOPE1DTRACE_GRADIENT_LUT.md` (file removed 2026-10-18; status there: fixed):
+  - **Root cause:** Points pushed for TraceWoscope had **no energy 	**. TraceWoscope fell back to index-along-window T, so short undrawn chunks compressed the full LUT into a few pixels (muddy / peak-like) and Display Settings edits were hard to see as a colormap.; Display Settings still exposed **Color** swatches (dot1Color / secondaryColor) while the Bright tip already said **Gradient owns color** — phosphor faces use colors: [] + shared Gradient editor only.; Flat ink RGB ignored gradientStops (hue from dot1Color), so TraceStroke fallback and any non-LUT path stayed on the swatch.; Wiring to pass gradientStops into TraceWoscope.draw already existed; the LUT was underfed.
+  - **Fix (1D only):** Tag each 1D Trace point with 	 = clamp01(|sample|) so TraceWoscope LUT maps **signal energy → color** from Display Settings gradientStops.; When gradientStops present,; odeGraphScope1dTraceInkRgb01 samples LUT peak (	=1) for flat tip / TraceStroke fallback.; scope1dTrace Display Settings colors: [] — Gradient editor only (same pattern as lineBurn / scope2d phosphor).; **No change** to drawNodeGraphScope2dTraceLayer /; ormalizeNodeGraphScope2dTraceSettings (still solid hue + Bright, no gradientStops).; Cache-bust 084-1dtrace-grad-1 (index + perform).
+  - **Verify:** Load **demo_patches/tubesaturation.json** — Tube Sat beam follows crt-amber LUT (quiet = floor, peaks = tip).; Open Display Settings → change Gradient preset / stops — beam colors update live; no Color swatches on 1D Trace.; Spawn **2D Trace** / XY Trace — still solid hue + Bright additive blend; no gradient forced.; Bright still scales TraceWoscope intensity; Size still thickness (B-081).; Display/UI only — no audio path.
 
 ### B-082 — Unit-band param MOD must clamp to paramMeta [min,max]
 - Status: fixed
 - Severity: hear
 - Source: user 2026-09-28
-- Doc: `docs/B-082_PARAM_MOD_CLAMP_MIN_MAX.md`
+- Doc: folded below (file removed 2026-10-18)
 - Files: `native_modules/graph_engine/graph_engine.cpp` (v156); `public/node-live-audio-worklet-native-graph.js`; `public/node-graph-stdlib/node-graph-param-surface-helpers.js`; `public/node-graph-live-parameter-runtime.js`; PolyBLEP Amp meta
 - What: Keyboard Gate + Toggle both ON into PolyBLEP Amplitude exceeded Amp max (usually 1).
 - Repro: Amp MOD from Gate + Toggle; hold key + Toggle ON -> level past full-scale.
 - Root cause: Host packed `modClamp:false` as unbounded; native `control_effective` skipped [min,max] clamp for unit-band.
 - Fix: Unit-band SSOT always clamps in `control_effective`; host always sets bit1 for unit-band; helpers ignore legacy `modClamp:false`. Domain-valued MOD unchanged. Smoke `scripts/smoke_b082_amp_mod_clamp.mjs`. No JS DSP. Local, no push.
-
+- Folded from `docs/B-082_PARAM_MOD_CLAMP_MIN_MAX.md` (file removed 2026-10-18; status there: fixed (code; needs Live UI verify)):
+  - **Root cause:** Native `control_effective` only clamped unit-band when `modClamp || !unbounded`.; Host packed `modClamp: false` (common on Amp defs, including PolyBLEP) as bit3 unbounded, so Gate+Toggle summed past max.; JS fold SSOT (`nodeGraphParamModClamp`) honored `modClamp: false` the same way for UI/ghost paths.; Domain-valued / `outputDomain` MOD correctly stays unclamped (real units).
+  - **Fix (SSOT, native / host-CV — no JS DSP):** **Native** `control_effective`: unit-band always clamps to `domainMin…domainMax` when a range exists (unless wraparound). Legacy unbounded / `modClamp:false` ignored for unit-band. Graph version **156**.; **Host** `pushChanged` domain flags: unit-band always sets bit1; stop setting bit3 from `modClamp: false`.; **Helpers** `nodeGraphParamModClamp` always returns true (fold/UI match native). Live-parameter-runtime fallback matches.; PolyBLEP Amplitude meta `modClamp: true` + tooltip; `docs/PARAM_SURFACES.md` updated.
+  - **Files:** `native_modules/graph_engine/graph_engine.cpp` (+ combined wasm relink); `public/node-live-audio-worklet-native-graph.js`; `public/node-graph-stdlib/node-graph-param-surface-helpers.js`; `public/node-graph-live-parameter-runtime.js`; `public/node-graph-module-definitions.js`; `public/node-graph-live-runtime.js` (worklet cache-bust); `docs/PARAM_SURFACES.md`; `scripts/smoke_b082_amp_mod_clamp.mjs`
+  - **Verify:** `node scripts/smoke_b082_amp_mod_clamp.mjs` (Amp base 0 + unitAdd 2; Amp 1 + unitAdd 1; legacy flags=8 — all peak ≤ ~1); Live: Gate + Toggle → PolyBLEP Amp cannot exceed Amp max; Local, no push
 
 ### B-085 — Multi-select Display Settings copies unedited settings
 - Status: fixed
 - Severity: see
 - Source: user 2026-09-29
 - Related: B-066 (multi-select Portal Title/Display hidden or locked; different symptom)
-- Doc: `docs/B-085_MULTISELECT_DISPLAY_SETTINGS_COPY.md`
+- Doc: folded below (file removed 2026-10-18)
 - Files: `public/node-graph-module-scope-settings-apply.js` (baseline diff; no star full-form copy); `public/node-graph-module-scope-settings-form-io.js` (seed snapshot); `public/node-graph-layout-canvas.js` (Show in canvas pins every selected display); `public/index.html` (b085-multiselect-1)
 - What: Selecting multiple displays and changing one setting (example: Show in canvas) also writes the edited module's other display settings onto every selected module. Modules that were not edited pick up unchanged settings from the edited module, so multi-select loses per-module settings.
 - Repro: Select two or more display modules whose display settings differ. Open Display Settings for the selection and change only Show in canvas (or one other control). The other selected modules take on settings from the edited module that were not touched.
 - Expected: Only the setting the user edited is applied to all selected modules. Every other setting stays as it was on each module.
 - Fix: Multi-apply merges only keys that differ from the seeded form snapshot. Star no longer copies the primary form. Show in canvas sets the pin on the whole selection and does not write display settings. Paste and Defaults still force the whole form. Not committed.
+- Folded from `docs/B-085_MULTISELECT_DISPLAY_SETTINGS_COPY.md` (file removed 2026-10-18; status there: fixed):
+  - **Investigation:** The code that decides which settings to apply to all selected modules was wrong.; `nodeGraphTraceDisplaySettingsDirtyKeysFromEvent` in `public/node-graph-module-scope-settings-apply.js` returned `["*"]` when the control was not tagged `data-trace-display-field`, `data-trace-display-toggle`, `data-trace-display-color`, or `data-trace-display-choice`.; Show in canvas (`#nodeLayoutCanvasShowInCanvas`) has none of those attributes, so toggling it marked the whole form dirty.; `applyNodeGraphTraceDisplaySettingsForm` skipped `nodeGraphMergeDisplaySettingsDirty` when the dirty set contained `*` and wrote the primary module's full form onto every selected target.
+  - **Fix:** Multi-select apply no longer treats `*` as "copy the primary form". After the form is seeded, `nodeGraphCaptureTraceDisplaySettingsBaseline` snapshots that read. A later edit merges only keys that differ from the snapshot onto each selected module. Paste and Defaults still force-apply the whole form.; Show in canvas is not a display-settings field. Its change handler stops before the form commit and sets the pin on every module in the open Display Settings selection, not only the primary.; Untagged controls no longer return `["*"]`. Named controls (trace fields, keypad, text box, and the other display-settings attributes) record that one key. Cache-bust `b085-multiselect-1` on the apply, form-io, and layout-canvas scripts.; Not committed. Left in the working tree until Website & UI finishes.
 
 ### B-086 — 1D Trace sync glitches more than phosphor sync
 - Status: open
@@ -1073,12 +1158,15 @@ ative_modules/polyblep/polyblep.cpp; library/include/soemdsp/math/analog_filter_
 - Status: fixed (local, uncommitted) 2026-10-06; Argi to verify.
 - Severity: see
 - Source: user 2026-10-05 (ArchIV)
-- Doc: `docs/B-092_METRONOME_BLINK_NOT_SYNCED_TO_GATE.md`
+- Doc: folded below (file removed 2026-10-18)
 - Files: Metronome module face indicator (not pinned).
 - What: User: "the metronome still doesn't blink with the gate". The Metronome face indicator does not blink in sync with its gate output. "Still" implies a prior report/attempt, but no earlier metronome blink entry was found in `docs/`.
 - Repro: Add a Metronome, run it, watch the face indicator vs. the gate output.
 - Expected: Indicator blinks on each gate pulse, in sync with the gate.
 - Fix shape: Done locally. The face lamp copies the native "Gate 0-1" display signal (`nodeGraphModuleScopeLatestOutputValue`). The JS `currentTime` phase is removed. See the doc.
+- Folded from `docs/B-092_METRONOME_BLINK_NOT_SYNCED_TO_GATE.md` (file removed 2026-10-18; status there: fixed (committed and pushed (checked 2026-10-18))):
+  - **Investigation / fix shape:** Not started. Logged only; do not tackle. Docs-only bug report; no code change included.
+  - **Fixed — 2026-10-06 (now committed and pushed (checked 2026-10-18)):** Approved by Argi.; Cause: `public/modules/transport/transport-display.js` computed its own beat phase from `audioContext.currentTime × f` (via `nodeGraphTransportPeriodSeconds`). So the lamp jumped on BPM change, ignored Reset and Mode (Sync/Free), and was forced on when half a beat was shorter than a paint.; Fix: the lamp copies the engine's published **Gate 0-1** display signal. This is the transport `displaySignals` entry, written by C++ `process_transport` to Mono and named "Gate 0-1" by `nativeGraphPortNames`. It is read with `nodeGraphModuleScopeLatestOutputValue(nodeId, "Gate 0-1")`, the same latest-scope-sample path other faces use (Ellipsoid, Basic Shape, Keypad, Harmonic Series). The lamp is lit while the copied gate is non-zero. The JS phase computation is removed, with no fallback. No C++ change: the signal was already published, and the transportBpm face makes the node a scope-capture node, so it posts at Simulation FPS.; Caveat: the lamp shows the gate as sampled at Simulation FPS. Gates shorter than a frame can be missed or alias. The old forced-on behaviour is gone.; Cache: `transport-display.js?v=env-vel-20261006` in index.html and perform.html.; `nodeGraphTransportPeriodSeconds` (`transport-math.js`) is now used only inside `transport-math.js`, by `nodeGraphTransportCore`, which has no callers outside that file. Reported, not deleted.
 
 ### B-093 — Gravity Walker: Seed ignored until Reset / Steps wrap (RNG seeded from engine counter)
 - Status: fixed in code in `87b1b517` (2026-10-05, "Seeding rework"); not yet verified by Argi.
@@ -1097,13 +1185,17 @@ ative_modules/polyblep/polyblep.cpp; library/include/soemdsp/math/analog_filter_
 - Status: fixed (local, uncommitted) 2026-10-06; Argi to verify.
 - Severity: hear
 - Source: user 2026-10-06 (ArchIV)
-- Doc: `docs/B-094_CURVE_AR_IGNORES_GATE_VELOCITY.md`
+- Doc: folded below (file removed 2026-10-18)
 - Files: Curve AR module (not pinned).
 - What: Curve AR does not respond to velocity on the Gate input. In this app the gate level carries velocity (e.g. keyboard Gate = velocity while held), but the envelope output ignores it.
 - Repro: Patch keyboard Gate into Curve AR Gate; play soft vs. hard notes; envelope output level is the same.
 - Expected: Envelope output follows gate velocity.
 - Notes: Other similar gate-driven envelope modules may have the same bug; audit pending.
 - Fix shape: Done locally (C++). Latched Gate velocity is the peak and velocity × Sustain the sustain level in Curve AR, Curve ADSR, Linear ADSR, Linear AR and Attack Decay. Linear AR and Attack Decay use gate_on/gate_hit. Pluck's inner Curve AR gets a binary gate, so its output is unchanged. Test: `scripts/test_envelope_gate_velocity.mjs`. See the doc.
+- Folded from `docs/B-094_CURVE_AR_IGNORES_GATE_VELOCITY.md` (file removed 2026-10-18; status there: fixed (committed and pushed (checked 2026-10-18))):
+  - **Investigation / fix shape:** Not started. Logged only; do not tackle. Docs-only bug report; no code change included.
+  - **Findings (read-only, 2026-10-06):** Status: still open, not tackled. Affects Curve AR, Curve ADSR, Linear ADSR, Linear AR (and retired Attack Decay).
+  - **Fixed — 2026-10-06 (now committed and pushed (checked 2026-10-18)):** Approved by Argi. C++ only; latch at note-on (Wavetable ADSR pattern). No new params.; Each module latches `velocity` = raw Gate height (no clamp) on the hit, and in Gate mode also when the Gate is already on while idle (Curve AR, Linear AR, Attack Decay). Peak target = velocity; sustain level = velocity × Sustain. The peak is a target, not an output multiplier: a re-strike glides from the current level (down too, for a softer hit).; `curve_attack_release.cpp`: velocity in start_attack / attack retarget / attack complete / hold. The attack and release "reached" checks work in either direction. Output is `out * amplitude` (the [0,1] clamp is gone).; `exp_adsr.cpp` (Curve ADSR): velocity latched at `rising_edge`. Peak = velocity in trigger_attack, live retarget, Delay→Attack/Decay, Attack→Decay. Sustain = velocity × sustain in enter_sustain_or_release, Decay live retarget/release check, and STAGE_SUSTAIN.; `linear_envelope.cpp` (Linear ADSR): the attack stops at velocity (glides either way). Decay runs toward velocity × sustain with step `(velocity − velocity×sustain)·period/decay`, so decay time is unchanged. The output clamp is gone. The attack *rate* is unchanged (1/attack per second of full scale), so a softer hit reaches its peak sooner.; `linear_attack_release.cpp` (Linear AR): `gate > 0.5` replaced with `gate_on` / `gate_hit` (it now fires at 0.3). Peak/hold = velocity. Release end works for either sign. The output [0,1] clamp is gone.; `attack_decay.cpp` (retired): `gate_on` / `gate_hit`. Targets = velocity; the attack-complete check is `kPeak × velocity`. Velocity starts at 1, so an ungated Cycle still runs. The output keeps a floor at 0 (pow_pos needs a non-negative base), and the upper clamp is gone.; `pluck_envelope_fb.cpp`: the inner Curve AR gets `gate_on(safeGate) ? 1.0 : 0.0` so velocity is applied only once, by Pluck itself. Pluck output is bit-identical to before (max diff 0 across five gate/trigger/keytrack cases).; `graph_engine.cpp` process_* for these modules only sum the gate and pass it through. No change needed.; Test: `node scripts/test_envelope_gate_velocity.mjs` checks that Curve AR, Curve ADSR, Linear ADSR and Linear AR peak at gate 0.3 and 1.0, that the ADSR sustain is 0.15 / 0.5, that Linear AR fires at 0.3, and that a re-strike glides. Add `--compare-pluck <file>` to compare Pluck against a dump taken with `--dump-pluck` on the old wasm. The old wasm fails 10 checks; the new wasm passes all of them. `smoke_graph_envelopes`, `smoke_graph_pluck_envelope` and `smoke_graph_attack_decay` pass.; Cache: `soemdsp_combined.wasm?v=env-vel-20261006` and `node-live-audio-worklet-native-graph.js?v=env-vel-20261006` in `public/node-graph-live-runtime.js`. That file's script tag in index/perform is also `env-vel-20261006`.; Note: velocity is signed, as in the app Gate contract. A negative Gate gives a negative peak on Curve AR and Linear AR. Curve/Linear ADSR only trigger on Gate > 0.
 
 ### B-095 — Slew: S curve looks like a double S instead of one smooth S
 - Status: open
@@ -1120,11 +1212,14 @@ ative_modules/polyblep/polyblep.cpp; library/include/soemdsp/math/analog_filter_
 - Status: fixed
 - Severity: see
 - Source: user 2026-10-06 (ArchIV), reported by Argi via LibraryCleaner
-- Doc: `docs/B-096_SPECTROGRAM_SCROLL_JITTER.md`
+- Doc: folded below (file removed 2026-10-18)
 - Files: `public/modules/spectrogram/spectrogram-gl.js`, `spectrogram-display.js`.
-- What: After the Spectrogram GPU port (DISPLAY_SHADER_PLAN M1) the scroll alternates slightly fast / slightly slow, like a badly tapped tempo.
+- What: After the Spectrogram GPU port (WEBGL_DISPLAY_PLAN §12 M1) the scroll alternates slightly fast / slightly slow, like a badly tapped tempo.
 - Cause: whole-pixel column advance per frame (1,2,1,2 or 0,1) when hop/History timing is not a multiple of the frame rate.
 - Fix: leftover hop-time as `uSub` (waterfall leftover-time scroll). Cache `spectro-sub-1`.
+- Folded from `docs/B-096_SPECTROGRAM_SCROLL_JITTER.md` (file removed 2026-10-18; status there: fixed):
+  - **Investigation / fix shape:** Whole-pixel emit stayed. Leftover hop-time (`scrollDebtSec / secPerBufPx`) is now `uSub`, same leftover-time scroll as Instant Waterfall. No extra clock: hop duration still comes from published hopSize/sampleRate. Past-newest sliver is brightness-0 LUT (`uPlate`). Canvas2D blit uses the same sub-pixel offset. Cache `spectro-sub-1`.
+
 ### B-097 — Instant Waterfall: blank after WebGL context lost and restored
 - Status: open
 - Severity: see
@@ -1132,7 +1227,7 @@ ative_modules/polyblep/polyblep.cpp; library/include/soemdsp/math/analog_filter_
 - Doc: `docs/B-097_WATERFALL_BLANK_AFTER_WEBGL_CONTEXT_RESTORE.md`
 - Files: `public/node-graph-module-scope-waterfall-gl.js`, `public/node-graph-module-scope-waterfall.js`.
 - What: After a WebGL context is lost and restored, 1D Instant Waterfall faces stay blank; the face never rebuilds its GL session (`canvas._wfGl`).
-- Likely cause (unconfirmed): stamp paths return false on lost context, but nothing recreates the session on restore. Meet stamp same as bar stamps while lost. Related to DISPLAY_SHADER_PLAN P0a (too many per-face contexts).
+- Likely cause (unconfirmed): stamp paths return false on lost context, but nothing recreates the session on restore. Meet stamp same as bar stamps while lost. Related to WEBGL_DISPLAY_PLAN §12 P0a (too many per-face contexts).
 - Expected: On restore, recreate the GL session and draw again.
 - Fix shape: Not started. Logged only; Argi said do not fix now. Docs-only; no code fix in this report.
 
@@ -1147,6 +1242,16 @@ ative_modules/polyblep/polyblep.cpp; library/include/soemdsp/math/analog_filter_
 - Fix shape: Not started. Logged only; not investigated. Docs-only; no code fix in this report.
 
 ---
+
+### B-083 — Tube Saturation TraceWoscope face blank (demo Bright=0)
+- Status: fixed
+- Severity: see
+- Source: user 2026-09-28 (index row and Inbox note above)
+- Folded from `docs/B-083_TUBE_SAT_TRACE_FACE_BLANK.md` (file removed 2026-10-18; status there: fixed):
+  - **Checks (not the root cause):** Check — Result; Layout band / B-078 `face-track-omitted` — OK — LayoutA default uses band id `scope` → canonical `face`. Hide-display omits face correctly.; Paint registration — OK — `nodeGraphModuleScopeCustomRenderers.scope1dTrace` → `drawNodeGraphScope1dTraceItem`.; Mount path — OK — processor LayoutA else-branch mounts `createNodeGraphModuleScopeSection` + registers slot (same as PolyBLEP/Limiter; **no** `layout:"scopeFace"` required).; Normalize migrate stripping displayType — OK — schema stays `scope1dTrace`.
+  - **Root cause:** `patches/demo_patches/tubesaturation.json` shipped (CRT polish commit) with:; `traceDisplaySettings.dot1Brightness: 0`; mismatched plate (`background: #0000ff`) while still carrying crt-amber `gradientStops`; TraceWoscope early-outs when intensity ≤ 0:; if (intensity <= 0 || !(diameter > 0)) { /* draw nothing */ }; So the face chrome stayed mounted but the beam never painted — looked like a lost face.
+  - **Fix:** Demo patch: Bright=1, plate `#050200`, ink `#ffb020`, crt-amber stops (match def defaults).; `nodeGraphScope1dTraceSettingsForNode` + clone `scope1dTrace` path merge module `defaultDisplaySettings` under the saved bag (gradient/amber seed without wiping user edits).; Display Settings form defaults for `scope1dTrace` seed target module `defaultDisplaySettings`.; Tube Sat def: explicit `displayHeightGu: 2`.; Regression: `scripts/test_module_layout_bands.js` tubeSaturation face band + hide-display.; Cache-bust `tubesat-crt-face-1` (index + perform).
+  - **Verify:** Load **demo_patches/tubesaturation.json** — Tube Sat face shows amber TraceWoscope beam (not blank).; Spawn fresh Tube Saturation — crt-amber defaults, Bright full.; `node scripts/test_module_layout_bands.js` — tubeSat face band ok.; Displays off / Display Height 0 still hides the face track.; Display/UI only — no audio path.
 
 ## Cleanup
 
@@ -1180,7 +1285,7 @@ Planned removals that are not bugs. Same rules as bugs: one entry per cleanup, s
 **Still open:**
 1. **Done 2026-10-13 (local, uncommitted): Render Sample JS DSP deleted.** Render Sample bounces through the live worklet in an OfflineAudioContext at the host rate, so the native `rapt_elliptic_decimator` wasm already does the 2?/4? decimation. The output rate always equals the host rate, so the JS resample step only ever ran at ratio 1 (a plain copy); no ratio was dropped. Removed from `node-graph-render-output.js`: `nodeGraphRaptEllipticQuarterbandSos`, `nodeGraphTemporaryPrefilterForResample`, `nodeGraphCreateRaptEllipticRenderState`, `nodeGraphRaptEllipticRenderSample`, `nodeGraphRaptEllipticDecimateRenderedChannel`, `nodeGraphResampleLinear`, `nodeGraphResampleRenderedChannel`; their 3 `smoke_test.py` presence rows removed. New parity smoke `scripts/smoke_render_native_parity.mjs`: Render Sample vs a direct live-worklet bounce at 1?/2?/4? (lorenz demo patch), max difference 0 (bit-identical), and it fails if any JS decimator/resampler name returns. No audible change. Original note: Render Sample still runs a JS copy of the rapt elliptic decimator in `public/node-graph-render-output.js` (~9–126: `nodeGraphRaptEllipticQuarterbandSos`, `nodeGraphRaptEllipticRenderSample`, `nodeGraphRaptEllipticDecimateRenderedChannel`; called through `nodeGraphResampleRenderedChannel` at ~367 / ~373). This is audio-path JS DSP and breaks Argi's never-in-JS rule. Same function, found 2026-10-06: ratios other than exactly 2× / 4× go through a JS triangle prefilter (`nodeGraphTemporaryPrefilterForResample`, ~45) and a linear resampler (`nodeGraphResampleLinear`, ~99).
 2. `public/node-graph-turing-machine.js` is a dead JS kernel that still loads. Lines 52–57 used the deleted musical helpers behind a `typeof` check.
-3. The retired WebGPU additive osc (`public/node-graph-gpu-additive-backend.js`) and its JS DSP fallback (`node-graph-oscillator-runtime.js` `nodeGraphAdditiveOscillatorSample`). Script still loads. Cross-reference `docs/DISPLAY_SHADER_PLAN.md` P0e-1.
+3. The retired WebGPU additive osc (`public/node-graph-gpu-additive-backend.js`) and its JS DSP fallback (`node-graph-oscillator-runtime.js` `nodeGraphAdditiveOscillatorSample`). Script still loads. Cross-reference `docs/WEBGL_DISPLAY_PLAN.md` §12 P0e-1.
 4. Sidecar `modules/additiveGraph/additive-yellow-graph-sidecar.js`: delete after the Additive Out scope work lands.
 5. CI guard not implemented (see **CI guard** below).
 6. Host-control smoothers decision (D2, still open).
@@ -1337,7 +1442,7 @@ Consider renaming these off the `*-math.js` suffix later so the CI name rule sta
 | `modules/additiveGraph/additive-yellow-graph-sidecar.js` | DEAD (orphan; re-verified 2026-10-04) | Old Yellow Graph JS sidecar. It defines `NodeLiveAudioProcessor.prototype.processAdditiveYellowGraphSidecar` (Generator → Effect → Out in JS; writes `additiveGraphBus`, `additiveGraphPublish`, `_additiveScratchL/R`). **It does not make the Yellow Graph signals.** Native `graph_engine` does: opcodes 111–127 (`kTypeAdditiveGenerator` … `kTypeAdditiveDiffusor`, `graph_engine.cpp` ~1799–1815; JS opcode map `node-live-audio-worklet-native-graph.js` ~103–119). Faces get Graph data from `syncNativeYellowGraphPublish` (`native-graph.js` ~6527, reads `soemdsp_graph_yellow_*`), called from `node-live-audio-worklet-scope-snapshot.js` ~178. Why it is unreachable: (1) it was dropped from `nodeGraphLiveWorkletSourceFilesEfficient` in `7af0c8bf` (2026-08-31, "ADDITIVE SYNTH BETA"), together with `additive-graph-math.js`; no HTML script tag, no `importScripts`, no dynamic import, no string-built path, no smoke or test reference. (2) Its only callers (`native-graph.js` ~8324 and ~8811–8824) are `typeof this.processAdditiveYellowGraphSidecar === "function"` guards, which are always false. (3) Even if it were loaded, it returns at line 9: `additiveGraphBuildFromWaveform` lives in `additive-graph-math.js`, which is not in the worklet blob. (4) It needs `NodeLiveAudioProcessor`, which only exists in the worklet. Nothing reads state it sets: `additiveGraphPublish` is filled by native `syncNativeYellowGraphPublish`, and the old `_additiveOutMono/Left/Right` scope-tap reader in `publishNativeGraphScopeTaps` is removed in the working tree. **Uncommitted edits (2026-10-04, someone else's in-progress work):** they strip those per-Out Mono/L/R scope rings. This pairs with the matching tap removal in `native-graph.js` (cache-bust `additive-out-track-1`), so Additive Out scopes read native ports. Leave the edits alone; delete the file after that work lands or with its owner's ok. | `graph_engine` 111–127 |
 | `modules/additiveGraph/additive-mod-control.js` | DEAD | Per-sample ADSR / Robin mod packet eval (`additiveModControlStepAdsr/ValueAt/BakeStrip`). Only `additiveModControlIsPacketSourceType` is referenced, from the worklet, where this file is not loaded. idx 4127 · perf 4121 · smoke 510 | native opcodes 70/72 |
 | `public/node-graph-metallic-ratio.js` | DEAD | Compat shim twin of `nodeGraphMetallicRatioSample` | `metallic_ratio.cpp` |
-| `public/node-graph-gpu-additive-backend.js` (`nodeGraphGpuAdditiveCpuRender`, WGSL) + `node-graph-oscillator-runtime.js` `nodeGraphAdditiveOscillatorSample` | DEAD | Only for `gpuAdditiveOsc`, retired (`node-graph-module-definitions.js:1575`). Script still loads. Cross-reference `docs/DISPLAY_SHADER_PLAN.md` P0e-1 | `graph_engine` `additive_osc` |
+| `public/node-graph-gpu-additive-backend.js` (`nodeGraphGpuAdditiveCpuRender`, WGSL) + `node-graph-oscillator-runtime.js` `nodeGraphAdditiveOscillatorSample` | DEAD | Only for `gpuAdditiveOsc`, retired (`node-graph-module-definitions.js:1575`). Script still loads. Cross-reference `docs/WEBGL_DISPLAY_PLAN.md` §12 P0e-1 | `graph_engine` `additive_osc` |
 | `public/node-graph-module-scope-offline.js` (`nodeGraphModuleScopeOfflineSignalSample`, `…OfflineGainAnalyzerBuffer`) | DEAD in practice (face re-sim) | Re-simulates osc / clock / gain / bias per sample for a gain analyzer face (APP_POLICY §5 says never re-sim). Only reached from the fallback branch of `node-graph-module-scope-spectrum.js:184`; `gain`'s only renderer is `waterfall`, which takes an earlier branch | n/a (face) |
 | `node-graph-jerobeam-{spiral,blubb,boing,kepler-bouwkamp,mushroom,nyquist-shannon,radar,torus,wirdo-spiral}.js`, `node-graph-fractal-spiral.js`, `node-graph-log-spiral.js`, `node-graph-surge-oscillator.js`, `node-graph-robin-supersaw.js`, `node-graph-turing-machine.js`, `node-graph-lut-cell.js`, `node-graph-chord-memory.js`, `node-graph-chord-sequencer.js`, `node-graph-musical-engines.js` | DEAD | Full JS kernels (`…Sample`, `create…State`). Only the vestigial runtime allocates their state; nothing steps them. `node-graph-musical-engines.js` deleted in `87b1b517`; `node-graph-turing-machine.js` still loads | `graph_engine` has a processor for each (`jerobeam_spiral`, `blubb`, `boing`, `kepler_bouwkamp`, `mushroom`, `nyquist_shannon`, `radar`, `torus`, `wirdo_spiral`, `fractal_spiral`, `log_spiral`, `surge_oscillator`, `robin_supersaw`, `turing_machine`, `lut_cell`, `chord_memory`, `chord_sequencer`, `degree_turing`, `gravity_walker`, `degree_phrase`, `note_glide`) |
 | `node-graph-stdlib/node-graph-sinc-kernel.js`, `node-graph-stdlib/node-graph-analog-filter-helpers.js` | DEAD | No callers | `graph_engine` `sinc` |
@@ -1438,7 +1543,7 @@ Add `require_no_js_dsp()` to `scripts/smoke_test.py` (or `scripts/check_no_js_ds
 - **B-081** — scope1dTrace Size to TraceWoscope thickness SSOT; Vibrato on 1D Trace; Scale <1 no longer shrinks Y (b081-1dtrace-size-1).
 - **B-055** — Text Boxes mount under `#nodeWireSvg` via `#nodeGraphAnnotationNodes` so cables paint above annotations.
 - **B-057** — Hide unused recomputes IO/outer height from connected ports; layout bands re-applied on chrome/wire edits.
-- **B-059** — Alt+click jack scope-monitor feature **removed** (deleted, not wontfix). See section above / `docs/B-059_ABANDONED_WIRE_DRAG_ORPHAN_DOT.md`.
+- **B-059** — Alt+click jack scope-monitor feature **removed** (deleted, not wontfix). See section above / `docs/BUG_PLAN.md (B-059)`.
 - **B-061** — Slider / LED number faces expand scientific notation before `limit_decimals` so small values keep their magnitude.
 - **B-063** — Robin Oscillator Morph ParamModEdge targets WIDTH (was SHAPE; Softwave-correct default left Morph CV silent).
 - **B-070** — CallNow keypad host CV: restore `setKeypadInteraction` + sidecar Analog publish; load keypad-math in efficient worklet blob.

@@ -1,65 +1,46 @@
-# soemdsp-sandbox
+# Sandbox setup reference
 
-## Live Demo: http://soundemote.io/sandbox
+Project overview, live demo and license: [`README.md`](../README.md). This file owns setup.
 
-Browser sandbox for trying `soemdsp` patching, generated artifacts, waveform
-views, Render Sample, and Live Audio.
+## Requirements
 
-## License
+- Python 3
+- A modern browser
+- No package install is required for the sandbox server.
 
-This repository is source-available for noncommercial use only. Commercial use
-requires a separate written commercial license from Soundemote. See
-[`LICENSE`](LICENSE).
+## Download, run, stop, test
 
 ```powershell
-# Requirements:
-# - Python 3
-# - A modern browser
-# No package install is required for the sandbox server.
-
-# Download:
 git clone https://github.com/elanhickler/soemdsp-sandbox.git
 cd soemdsp-sandbox
 
-# Run:
 python server.py
+# open http://127.0.0.1:8765
+# stop: Ctrl+C
 
-# Open:
-# http://127.0.0.1:8765
-
-# Stop:
-# Ctrl+C
-
-# Test:
-python scripts\smoke_test.py
+python scripts\smoke_test.py   # optional
 ```
 
-Optional artifact packet:
+## Optional artifact packet
+
+Only if the sibling soemdsp repo is built locally:
 
 ```powershell
-# Use this only if the sibling soemdsp repo is built locally.
 C:\Users\argit\Documents\_PROGRAMMING\soemdsp\build-moved\examples\Debug\runtime_dsp_object_bound_wav_resync_demo.exe
 python server.py
 ```
 
-
 CLAP *host* experiments (third-party plugins) live in a separate fork (soemdsp-sandbox-claphost), not in this tree.
 
-Guides:
+## Guides
 
-```text
-docs/ADDING_HARDCODED_SANDBOX_MODULE.md
-docs/OSC_MODULE_NON_UI_REFERENCE.md
-```
+- [`ADDING_HARDCODED_SANDBOX_MODULE.md`](ADDING_HARDCODED_SANDBOX_MODULE.md)
+- [`OSC_MODULE_NON_UI_REFERENCE.md`](OSC_MODULE_NON_UI_REFERENCE.md)
 
-Boundaries:
+## Boundaries
 
-```text
-The server only writes through explicit save/settings/audio helper routes.
-Open Path is restricted to Downloads.
-The browser patch graph is demo-scoped state.
-The browser compiler is not the production soemdsp scheduler.
-The WebUI does not instantiate real C++ DSP objects yet.
-Patch files can save current module instances and settings.
-Patch files cannot define new module types by themselves.
-```
+- The server only writes through explicit save / settings / audio helper routes.
+- Open Path is restricted to Downloads.
+- The browser patch graph is demo-scoped state.
+- The browser path is not the production soemdsp scheduler.
+- Patch files save current module instances and settings; they cannot define new module types by themselves.

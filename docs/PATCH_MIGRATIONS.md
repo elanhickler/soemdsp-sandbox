@@ -1,5 +1,7 @@
 # Patch format migrations
 
+> **Policy changed 2026-10-18 (Argi):** migrations are one-shot (APP_POLICY §1). The 26 migrators are being removed per `docs/PATCH_MIGRATION_PURGE_PLAN.md`; this file is archived at PM-5. The "Policy (current)" text below is out of date.
+
 **Phase C** of the architecture plan. Implementation: `public/node-graph-patch-migrations.js`.
 
 ## Policy (current)

@@ -441,3 +441,49 @@ Fixed constants (by ear): c:m 1:1.4, index range 0–8, noise HP ~1 kHz, bend ti
 - J. O. Smith III, *Physical Audio Signal Processing*, "Modal Expansion" — [CCRMA](https://ccrma.stanford.edu/~jos/pasp/Modal_Expansion.html)
 - "Vibration of a circular membrane" — [Wikipedia](https://en.wikipedia.org/wiki/Vibration_of_a_circular_membrane)
 - J. M. Chowning, "The Synthesis of Complex Audio Spectra by Means of Frequency Modulation", J. Audio Eng. Soc. 21(7), 1973 — [PDF](https://www.charlesames.net/pdf/JohnChowning/frequency-modulation.pdf); [CCRMA record](https://ccrma.stanford.edu/papers/synthesis-of-complex-audio-spectra-means-of-frequency-modulation)
+
+---
+
+## Electro Hat (seed, moved from `docs/FUTURE_PLANNING.md` 2026-10-18)
+
+**Status:** seed only. **Discussion with Argi, not final.** Dated 2026-10-06. Do not build until Argi says go.
+
+**Direction:** One hi-hat voice on the Electro Snare model: one fixed shared parameter set and an **Algorithm** choice (stored by name). Native C++/WASM only, no JS DSP, no shims. Proposed to replace the parked `electroHat` placeholder card (listed as a candidate in `docs/KICK_PLAN.md` → Removal).
+
+**I/O (proposed):** **Closed ⎍** (port `Trigger`) and **Open ⎍** (port `Open`) trigger inputs, **Reset ↺**; **Hat** (audio) and **Env** out. **Choke:** one voice. An Open hit rings with Open Decay. A Closed hit restarts the envelope with Closed Decay, so it chokes a ringing open hat. The 808 and 606 both choke this way (the 606's envelope shut-off circuit), and on the 909 open and closed share one circuit and cannot sound together ([Baratatronix, 606 hats](https://www.baratatronix.com/blog/606-cymbal-and-hi-hat-synthesis); [polynominal, TR-909](https://www.polynominal.com/site/studio/gear/drum/roland-tr909/roland-tr909.html)). Alternative: a single Trigger plus an Open amount param (like the placeholder).
+
+**Proposed shared params (not final):** Algorithm, **Tune** (metal pitch scale, 1 = stock), **Tone** (brightness: band-pass / high-pass cutoff), **Closed Decay** (s T60), **Open Decay** (s T60), **Metal** (metallic source ↔ white noise balance; 808 / 606 stock = all metal), **Amplitude**.
+
+**Candidate algorithms:**
+
+| Key | Design | Facts (web-checked 2026-10-06) |
+|-----|--------|-------------------------------|
+| `tr808` | Six square oscillators at inharmonic frequencies → two band-passes → high-pass → VCA | Six Schmitt-trigger square oscillators (one HD14584, ≈ 48 % duty) at **205.3, 304.4, 369.6, 522.7, 540, 800 Hz** (the last two factory-trimmed), summed, then band-passes at ≈ **3440 Hz** and ≈ **7100 Hz**, then high-pass and VCA. Shared by cymbal, hats and cowbell. Closed hat fixed ≈ 50 ms; open hat 90–600 ms ([Werner, Abel, Smith, "The TR-808 Cymbal", ICMC/SMC 2014](https://www.icmc14-smc14.net/images/proceedings/OS24-B10-TheTR-808Cymbal.pdf); [Baratatronix, 808 hats](https://www.baratatronix.com/blog/cascadia-808-cymbal-hi-hat-synthesis)). Square oscillators need band-limiting (PolyBLEP) |
+| `tr606` | Same six-oscillator design, different tuning, no noise | Same HD14584 design with different (unit-varying) frequencies, no added noise; the hats use the high band through a shared VCA and resonant high-pass; closed shuts off open ([Baratatronix, 606 hats](https://www.baratatronix.com/blog/606-cymbal-and-hi-hat-synthesis); [TR-606 mod notes](http://machines.hyperreal.org/manufacturers/Roland/TR-606/info/drumantix/mods/various.txt)) |
+| `tr909` | **Cannot be synthesized faithfully** | 909 hats (and cymbals) are **6-bit samples** in a Hitachi HN61256P ROM (closed = top quarter, open = the rest), played by an address counter into a DAC, then an analog VCA and lowpass ([Wikipedia, TR-909](https://en.wikipedia.org/wiki/Roland_TR-909); [polynominal](https://www.polynominal.com/site/studio/gear/drum/roland-tr909/roland-tr909.html); [synth-diy, 909 HH ROM](https://synth-diy.org/pipermail/synth-diy/2006-June/098691.html); [SOS Synth Secrets 39](https://github.com/micjamking/synth-secrets/blob/master/part-39.md)). Options: leave it out (proposed), or a "909-style" approximation clearly labelled as one. Sample playback is not synthesis and would need rights to Roland's data |
+| `fm` | Metallic FM / ring-mod: inharmonic square or pulse operators, frequency- or ring-modulated, high-passed, short decay | Gordon Reid's cymbal / hat patches build the metal spectrum with FM and ring modulation of inharmonic oscillators ([SOS, Synthesizing Realistic Cymbals](https://www.soundonsound.com/techniques/synthesizing-realistic-cymbals); [SOS, Practical Cymbal Synthesis](https://www.soundonsound.com/techniques/practical-cymbal-synthesis)) |
+| `noise` | Filtered white noise → band-pass / high-pass → VCA | The simplest analog hat. Metal = noise only; Tune shifts the filter |
+
+**Shared-param reading (draft):** Tune scales all oscillator frequencies (808 / 606 / FM) or the filter (noise). Tone moves the band-pass / high-pass. Closed / Open Decay are the two envelope T60s. Metal crossfades the metal source with white noise (808 / 606 stock = 0 % noise). Amplitude is the output level.
+
+**Still open:** two trigger jacks vs one Trigger + Open amount; choke rule (Closed always chokes Open, proposed); whether 909 appears at all; 606 frequencies (they vary per unit; pick by ear); Accent / velocity (height is velocity, proposed); Env definition.
+
+---
+
+## Electro Tom (seed, moved from `docs/FUTURE_PLANNING.md` 2026-10-18)
+
+**Status:** seed only. **Discussion with Argi, not final.** Dated 2026-10-06. Do not build until Argi says go.
+
+**Direction (Argi):** a separate tom module on the Electro Snare model: one fixed shared parameter set, an **Algorithm** choice (stored by name), no per-algorithm params. Same I/O as Electro Snare: **Trigger ⎍** and **Reset ↺** in (Reset restarts all oscillation mid-hit); **Tom** (audio) and **Env** out. Native C++/WASM only, no JS DSP, no shims.
+
+**Shared params (Argi):** Algorithm, **Tune**, **Tone**, **Body Decay**, **Bend**, **Noise**, **Amplitude**. **Tune and Bend are the primary controls** (first and largest on the card). **Noise** is a small attack-noise amount; it replaces the snare's Snappy / Snap Decay (the noise envelope is a fixed per-algorithm constant).
+
+**Candidate algorithms:**
+
+| Key | Design | Facts (web-checked 2026-10-06) | Shared-param reading (draft) |
+|-----|--------|-------------------------------|-----------------------------|
+| `tr808` | Pinged resonator, small pitch drop, a little noise | Bridged-T resonator per tom; diodes damp it as it fades, so the pitch drops a little ("less like a boing, more like a tonk"); a little low-passed pink noise on a slightly longer envelope. Tunings: low 80–100 Hz (≈ 90), mid 120–160 Hz (≈ 135), high 165–220 Hz (≈ 185); decays ≈ 200 / 130 / 100 ms ([Baratatronix, 808 toms](https://www.baratatronix.com/blog/808-tom-synthesis)) | Tune = resonator Hz; Bend = small drop as it decays (stock ≈ a few semitones at most); Body Decay = ring T60; Tone = noise lowpass / brightness; Noise = pink-noise level |
+| `tr909` | Phase-reset oscillators with a pitch sweep plus noise | Three triangle VCOs per tom, reset together on the trigger, each rounded to a sine by a diode clipper (VCO-1's clipper moves from square to sine during the hit); ENV-4 sweeps the pitch of all three; "tom noise" is mixed with VCO-3 for the attack; panel Tune and Decay ([network-909, Toms](http://www.network-909.de/toms.htm)) | Tune = base Hz (fixed VCO ratios, by ear); Bend = ENV-4 depth; Body Decay = VCA decays; Tone = VCO-1 clipper hardness (square → sine); Noise = tom-noise level |
+| `simmons` | Simmons SDS-V tom: sine / triangle with a big downward bend plus filtered noise | SDS-V modules have tone pitch, bend, decay, noise, noise tone and click controls; the falling-pitch "peew" is the signature sound ([SDS-V Service Notes](https://synth-diy.org/yg-archives2/raw/Simmons_Drums/files/16_Manuals/4_SDS-V_SM.pdf); [Wikipedia, Simmons SDS-V](https://en.wikipedia.org/wiki/Simmons_SDS-V); [Still Not Working, SDS V](http://snw.lonningdal.no/sds5.php)) | Tune = tone pitch; Bend = big drop (1–2 oct suggested); Body Decay = VCA decay; Tone = noise filter; Noise = noise level |
+
+**Still open:** default algorithm; Bend time fixed per algorithm (proposed, as the snare) or tied to Body Decay (Simmons); Tune range (proposed 40–400 Hz) and default; low / mid / high as presets vs one free Tune (proposed: free Tune); shared resonator / noise helpers with Electro Snare (library helpers need Architect approval); velocity; Env definition.

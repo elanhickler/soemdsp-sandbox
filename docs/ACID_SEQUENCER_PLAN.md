@@ -194,7 +194,7 @@ Host sync: step table + params must reach the native instance every edit (same p
 
 ---
 
-## Files (landed locally; not committed)
+## Files (landed; committed and pushed (checked 2026-10-18))
 
 **Create**
 

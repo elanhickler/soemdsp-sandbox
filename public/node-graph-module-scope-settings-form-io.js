@@ -1289,6 +1289,10 @@ function readNodeGraphTraceDisplaySettingsForm() {
     if (stack) {
       next.showOnTop = stack.getAttribute("aria-pressed") === "true";
     }
+    const wires = panel?.querySelector?.("[data-textbox-wires][aria-pressed='true']");
+    if (wires) {
+      next.wireStack = wires.getAttribute("data-textbox-wires") === "behind" ? "behind" : "front";
+    }
     const font = panel?.querySelector?.(`[data-trace-display-choice="font"], [data-textbox-font]`);
     if (font) {
       next.font = font.value;

@@ -2,25 +2,38 @@
 
 This file collects project-shaping ideas that should survive day-to-day implementation without becoming immediate scope.
 
+## Patch migration purge (2026-10-18)
+
+Argi policy (APP_POLICY §1): migrations are one-shot. Convert every stored patch to the current format, then delete the 26 migrators; `node-graph-patch-migrations.js` stays as an empty hook. Plan and inventory: `docs/PATCH_MIGRATION_PURGE_PLAN.md` (PM-1..PM-5, owner TBD).
+
+## Core shell standing items (from CORE_REDUCTION_PLAN, 2026-10-18)
+
+Standing rules, no end date. The core shell that unites modules stays small; `public/modules/**` may grow. History: `docs/archive/CORE_REDUCTION_PLAN.md`.
+
+- Delete dead CSS when you find it. Do not add `*-heading` classes for floating chrome; use the shared `.scene-context-heading` and `.scene-context-resize-handle`.
+- Scopes megafile: lazy-load the rare display modes (careful).
+- Optional: split `styles.css`.
+- Shell freeze: review each new feature for core-shell growth (aim for net-negative core LOC).
+
 ## GPU-only workspace picture (2026-10-18)
 
 Workspace picture is GPU-only; the app menu, top and bottom bars, and extra windows stay HTML. Owns the true GPU camera (GB-6 = GW-2). Text Box stays HTML (editable control), with wires on two stacked canvases and a per-box Behind wires / In front of wires setting. Status: planned, not started. Plan: `docs/GPU_WORKSPACE_PLAN.md`
 
 ## Phone compatibility + GPU camera (2026-10-18)
 
-Make the sandbox itself work on phones, mainly performance mode: one shared touch-gesture layer (double-tap, long hold, pinch, two-finger pan), audio unlock on first touch, no accidental scroll/zoom, double-tap reset and long-hold text edit on parameters, hover info on touch. Not a phone app; no soundemote.com special-casing. PH-1..PH-5 in tree. The GPU camera (GB-6) is now GW-2 in `docs/GPU_WORKSPACE_PLAN.md` and lands before the workspace gestures (PH-6). Plan: `docs/PHONE_AND_GPU_CAMERA_PLAN.md`
+Make the sandbox itself work on phones, mainly performance mode: one shared touch-gesture layer (double-tap, long hold, pinch, two-finger pan), audio unlock on first touch, no accidental scroll/zoom, double-tap reset and long-hold text edit on parameters, hover info on touch. Not a phone app; no soundemote.com special-casing. PH-1..PH-5 in tree. The GPU camera (GB-6) is now GW-2 in `docs/GPU_WORKSPACE_PLAN.md` and lands before the workspace gestures (PH-6). Plan: `docs/PHONE_COMPAT_PLAN.md`
 
 ## Engine state and displays (2026-10-17)
 
-Displays must spawn and work while stopped; buffer faces black when stopped and frozen on pause; parameter faces always update; UI never blocked by engine state. Stages ES-1..ES-6 replace the ~138 engine gates with engineState() + per-face paint policy. Planned. Plan: `docs/ENGINE_STATE_DISPLAY_PLAN.md`
+Displays must spawn and work while stopped; buffer faces black when stopped and frozen on pause; parameter faces always update; UI never blocked by engine state. Stages ES-1..ES-6 replace the ~138 engine gates with engineState() + per-face paint policy. ES-1..ES-6 committed and pushed (checked 2026-10-18) (2026-10-17); awaiting Argi testing. Plan: `docs/ENGINE_STATE_DISPLAY_PLAN.md`
 
 ## Seed code (2026-10-17)
 
-Show seeds as a 4-character scrambled URL-safe base64 code (e.g. 🎲 P6nC) instead of 7-8 digit decimals; input also accepts decimal and #hex (raw 24-bit). Storage unchanged. Planning only. Plan: `docs/SEED_CODE_PLAN.md`
+Show seeds as a 4-character scrambled URL-safe base64 code (e.g. 🎲 P6nC) instead of 7-8 digit decimals; input also accepts decimal and #hex (raw 24-bit). Storage unchanged. Done (`84877a07`, 2026-10-17). Plan: `docs/SEED_CODE_PLAN.md`
 
 ## Sandbox Script Language (2026-10-17)
 
-Argi's own small C-like language for DSP classes with state and audio-rate param modulation, compiled in the browser to WASM (Lezer parser, Binaryen codegen) and run in the worklet; never JS in the audio path. A `display {}` block of raw GLSL draws the face and can publish on 📺. Built in six stages, starting with one-line expressions. Planning only. Plan: `docs/SCRIPT_LANGUAGE_PLAN.md`
+Argi's own small C-like language for DSP classes with state and audio-rate param modulation, compiled in the browser to WASM (Lezer parser, Binaryen codegen) and run in the worklet; never JS in the audio path. A `display {}` block of raw GLSL draws the face and can publish on 📺. Built in six stages, starting with one-line expressions. Argi said execute all stages (2026-10-17); implementation committed in `a6c99720` (`public/lib/emo/`, `script` module); per-stage status not tracked. Plan: `docs/SCRIPT_LANGUAGE_PLAN.md`
 
 ## Sandbox DAW plugin (2026-10-16)
 
@@ -28,7 +41,7 @@ Designer runs in the plugin (CLAP/VST3) with the native engine, but output is st
 
 ## Circuit builder to GL (2026-10-16)
 
-Zoom-out from ~40x is GPU-bound on HTML raster; move cables/grid, module bodies, jacks/labels to the shared GL context in flagged stages GB-1..GB-5, HTML only for inputs/popups. Shares the glyph atlas with the Music Player Text Box. Status: planned. Plan: `docs/WEBGL_DISPLAY_PLAN.md` section 11
+Zoom-out from ~40x is GPU-bound on HTML raster; move cables/grid, module bodies, jacks/labels to the shared GL context in flagged stages GB-1..GB-5, HTML only for inputs/popups. Shares the glyph atlas with the Music Player Text Box. Status: GB-1..GB-4 on by default, GB-5 measured 2026-10-16; GB-6 = GW-2 in `docs/GPU_WORKSPACE_PLAN.md`. Plan: `docs/WEBGL_DISPLAY_PLAN.md` section 11
 
 ## Music Player metadata, Album Art, rich Text Box (2026-10-15)
 
@@ -49,7 +62,7 @@ docs/SLIDER_BUFFERED_MODULATION_PLAN.md
 
 ## Lo-Fi Pitch Shift (component-first)
 
-Realtime pitch tools aimed at **abusable lo-fi character**, not transparent stretch. Build lowest modules first (buffer â†’ varispeed â†’ grains â†’ grain pitch â†’ optional spectral dirt), each useful alone, then compose.
+Realtime pitch tools aimed at **abusable lo-fi character**, not transparent stretch. Build lowest modules first (buffer → varispeed → grains → grain pitch → optional spectral dirt), each useful alone, then compose.
 
 Primary note:
 
@@ -67,9 +80,9 @@ Keep this as a next-version cleanup, not a release blocker.
 
 ## Inlets / outlets above displays (app-wide)
 
-**Implemented.** LayoutA (and sample / phosphor face stacks) use `header â†’ io â†’ face â†’ params â†’ lip`. Display off and Display Height 0 omit the face track; I/O stays under the header.
+**Implemented.** LayoutA (and sample / phosphor face stacks) use `header → io → face → params → lip`. Display off and Display Height 0 omit the face track; I/O stays under the header.
 
-Standing rule: `docs/APP_POLICY.md` (LayoutA I/O above the face). Band contract: `docs/MODULE_LAYOUT_PLAN.md`.
+Standing rule: `docs/APP_POLICY.md` (LayoutA I/O above the face). Band contract: `docs/archive/MODULE_LAYOUT_PLAN.md`.
 
 LayoutB (ports beside the face) and InletOutletLayout (title + I/O, no face) are unchanged. Do not add a second layout or an old-patch shim for the previous face-then-I/O stack.
 
@@ -210,7 +223,7 @@ docs/ACID_SEQUENCER_PLAN.md
 
 ## Display shaders
 
-**Status:** plan + progress tracker in `docs/DISPLAY_SHADER_PLAN.md` (2026-10-06; GLSL-on-disk 2026-10-09; face wipe 2026-10-09): move per-pixel display math into GLSL on one shared WebGL context; audio stays native C++/WASM. Shipped present shaders that belong to a native module live as `.vert.glsl` / `.frag.glsl` next to that module’s wasm (`DISPLAY_SHADER_PLAN.md` §GLSL files next to WASM). Stop / power-off must use one face-wipe registry (`DISPLAY_SHADER_PLAN.md` §Face wipe registry, W1/W2). Do not start a G-row or W-row until Argi says go.
+**Status:** plan + progress tracker in `docs/WEBGL_DISPLAY_PLAN.md` §12 (2026-10-06; GLSL-on-disk 2026-10-09; face wipe 2026-10-09): move per-pixel display math into GLSL on one shared WebGL context; audio stays native C++/WASM. Shipped present shaders that belong to a native module live as `.vert.glsl` / `.frag.glsl` next to that module’s wasm (`WEBGL_DISPLAY_PLAN.md` §12 §GLSL files next to WASM). Stop / power-off must use one face-wipe registry (`WEBGL_DISPLAY_PLAN.md` §12 §Face wipe registry, W1/W2). Do not start a G-row or W-row until Argi says go.
 
 ## Scope video out
 
@@ -218,101 +231,31 @@ docs/ACID_SEQUENCER_PLAN.md
 
 ## Electro Snare
 
-**Status:** planned, not started. Plan in `docs/SNARE_PLAN.md` (2026-10-06, owner Sandy). The parameter set and algorithm list are under discussion with Argi, not final. Do not build until Argi says go.
-
-**Direction:** New drum module **Electro Snare** (Argi, 2026-10-06). It replaces the `electroSnare` placeholder card, which was removed on 2026-10-06 (`docs/BUG_PLAN.md` C-002); the new module takes the freed key in place (type key `electroSnare` proposed, `docs/SNARE_PLAN.md`). Trigger ⎍ and Reset ↺ in (Reset restarts every oscillator, resonator and envelope phase mid-hit). Snare (audio) and Env out. One fixed shared parameter set that every algorithm interprets (no per-algorithm params): Algorithm (stored by name), Tune, Tone, Snappy, Body Decay, Snap Decay, Bend, Amplitude. Candidate algorithms: 808, 909, Simmons SDS-V, Modal (membrane modes + snare-wire noise), FM. Env = overall amplitude envelope (proposed). Native C++/WASM only, cheap resonators / decaying sines / enveloped noise, no JS DSP, no shims.
-
-**Still open:** final parameter set and algorithm list, default algorithm, Reset vs noise, Accent / velocity, Env definition, keep the key `electroSnare` vs a new key `snare`. See the plan's Open questions.
+Planned, not started; do not build until Argi says go. Plan: `docs/SNARE_PLAN.md`.
 
 ## Kick (SweepKicker)
 
-**Status:** built as **Robin Sinepulse** (`robinSinepulse`, graph type 205, `native_modules/robin_sinepulse/`), local and uncommitted (Argi, 2026-10-06: "add SweepKicker as Robin Sinepulse"). Plan in `docs/KICK_PLAN.md` (2026-10-06, owner SandyModules). Trigger only, no Reset: Trigger hard-resets the phase and restarts the sweep and envelope (Argi, 2026-10-06).
-
-**Direction:** New drum module **Robin Sinepulse** (`robinSinepulse`; planned as Kick) built on Robin Schmidt's SweepKicker (RS-MET `rosic::rsSweepKicker`), used with Robin's permission (2026-10-06, quoted in the plan). One oscillator whose frequency falls along Robin's rational sweep law (High Freq → Low Freq, Sweep Time, Chirp, Chirp Shape), with Robin's Wave / Wave Shape / Phase. Trigger ⎍ in; Kick and Env out. Decay (T60) is a sandbox addition (SweepKicker has no amp envelope), kept by Argi on 2026-10-06; it drives Env and the Kick amplitude. Trigger hard-resets the oscillator phase and restarts the sweep and envelope; no Reset (Argi, 2026-10-06). Parity test against Robin's own class. Robin's FlatZapper (allpass-chain "zap") is not part of the Kick; it has its own seed (§Flat Zapper). Native C++/WASM only, no JS DSP, no shims.
-
-**Removal (done 2026-10-06):** Sinepulse, Sine Kick, Kick Envelope, the `electroSnare` placeholder and `electroKick` were removed (`docs/BUG_PLAN.md` C-002; file list in `docs/KICK_PLAN.md` → Removal). Local, uncommitted.
-
-**Decided (Argi, 2026-10-06):** Decay kept; Trigger only (hard-resets the phase), no Reset; Kick and Electro Kick are separate modules; Flat Zapper is its own module (Robin Sinepulse Allpass).
-
-**Still open:** permission scope, latching, velocity, units, stereo. See the plan's Open questions.
+Built as Robin Sinepulse (`robinSinepulse`, type 205), committed. Plan: `docs/KICK_PLAN.md`.
 
 ## Flat Zapper
 
-**Status:** built as **Robin Sinepulse Allpass** (`robinSinepulseAllpass`, graph type 206, `native_modules/robin_sinepulse_allpass/`), local and uncommitted (Argi, 2026-10-06: "add module rsFlatZapper as Robin Sinepulse Allpass"). A separate module (Phase Disperse unchanged), no Reset jack, no brown post-filter in v1, default 50 stages. Details and measured cost in `docs/KICK_PLAN.md` → Flat Zapper module (seed).
-
-**Direction:** A module built on Robin Schmidt's `rsFlatZapper` (RS-MET, used with his permission): a chain of 0–256 allpass stages (one-pole or biquad) tuned from Low Freq to High Freq along a shape curve. **Trigger ⎍** fires an internal impulse, which comes out as a flat-spectrum (white) falling zap. An **audio input** feeds anything through the same dispersion chain (a disperser / smear). Out = Amplitude × (Mix × chain + (1 − Mix) × dry). Proposed params: Stages, Mode (`onePole` / `biquad`, stored by name), Low Freq, High Freq, Freq Shape, Low Q, High Q, Q Shape, Impulse, Input, Mix, Amplitude. Native C++/WASM only, no JS DSP, no shims.
-
-**Cost (measured on the box, native clang -O2):** the serial chain costs ≈ 2.3–2.7 ns per stage per sample in either mode (latency-bound). 50 biquad stages ≈ 110 ns/sample (≈ 1.25 × a SweepKicker voice at ≈ 90 ns); 256 stages ≈ 640–690 ns (≈ 7 ×); ≈ 300 ns at 256 stages with stage-major block processing.
-
-**Still open:** Robin's brown post-filter as a Tone choice (left out of v1).
+Built as Robin Sinepulse Allpass (`robinSinepulseAllpass`, type 206), committed. Plan: `docs/KICK_PLAN.md` §Flat Zapper module.
 
 ## Electro Kick
 
-**Status:** seed only. **Discussion with Argi, not final.** Dated 2026-10-06. Do not build until Argi says go.
-
-**Direction:** One kick voice on the Electro Snare model: one fixed shared parameter set and an **Algorithm** choice (stored by name). Every algorithm gives every param a meaning; no param is added, removed, shown or hidden per algorithm. Trigger ⎍ and Reset ↺ in (Reset restarts all oscillation mid-hit); **Kick** (audio) and **Env** (amplitude envelope) out. Native C++/WASM only, cheap resonators / oscillators / enveloped noise, no JS DSP, no shims. The parked `electroKick` placeholder card was removed on 2026-10-06 (`docs/BUG_PLAN.md` C-002), so this would be a new module (the key `electroKick` is free).
-
-**Proposed shared params (not final):** Algorithm, **Tune** (rest pitch, Hz), **Bend** (octaves above Tune at the hit), **Bend Time** (how fast the pitch falls, s), **Decay** (body, s T60), **Click** (attack transient level), **Tone** (timbre, per algorithm), **Amplitude**.
-
-**Candidate algorithms:**
-
-| Key | Design | Facts (web-checked 2026-10-06) | Shared-param reading |
-|-----|--------|-------------------------------|----------------------|
-| `tr808` | Pinged 2-pole resonator standing in for the bridged-T, plus a short attack frequency jump and a slow "sigh" | The 808 bass drum is a bridged-T network pinged by the trigger, ringing at about 49–56 Hz. At the start of a note its centre frequency jumps up for ≈ 4–6 ms, then returns (Werner computes about 2.8 ×, an octave plus five semitones; the Service Notes say "twice" and tie it to accent); a slower downward "pitch sigh" comes from leakage through R161. Panel: Level, Tone, Decay ([Werner, Abel, Smith, DAFx-14](https://www.dafx.de/paper-archive/2014/dafx14_kurt_james_werner_a_physically_informed,_ci.pdf); [Werner, 808 BD post](https://kurtjameswerner.tumblr.com/post/50274769999/chuck-tr-808-emulator-bass-drum-bd-emulation); [SOS, Practical Bass Drum Synthesis](https://www.soundonsound.com/techniques/practical-bass-drum-synthesis)) | Tune = resonator Hz; Bend / Bend Time = the attack jump (stock ≈ 1.5 oct, ≈ 5 ms); Decay = ring T60; Click = trigger-pulse level; Tone = output lowpass (the 808's Tone) |
-| `tr909` | Phase-reset triangle VCO rounded toward sine, pitch envelope, plus a click / noise attack path | Triangle VCO reset on every trigger, rounded by a diode clipper toward a sine. ENV-3 bends the pitch down; the panel **Tune** sets that sweep (it is really the decay of ENV-3, about 30–120 ms stock). Body VCA on ENV-1 (panel **Decay**). The attack path is a shaped trigger pulse plus low-passed noise on ENV-2 (panel **Attack**) ([network-909, Bass Drum](http://www.network-909.de/bassdrum.htm); [C. Fraser, TR-909 mods](http://www.colinfraser.com/tr909/909mods/909mods.htm); [Whittle, TR-909 Sound Mods](https://www.firstpr.com.au/rwi/tr-909/TR-909-Sound-Mods.pdf)) | Tune = rest Hz (no panel pitch on stock 909); Bend = sweep depth; Bend Time = ENV-3 decay (= 909 panel Tune); Decay = ENV-1; Click = 909 Attack (pulse + noise); Tone = clipper drive (sine → square, Whittle's "Drive" mod) |
-| `simmons` | Simmons SDS-V bass drum: oscillator with bend, filtered noise, click | Per-module controls: noise, tone (pitch), bend, decay, noise/tone balance, click (pad-impact attack) ([SDS-V Service Notes](https://synth-diy.org/yg-archives2/raw/Simmons_Drums/files/16_Manuals/4_SDS-V_SM.pdf); [Wikipedia, Simmons SDS-V](https://en.wikipedia.org/wiki/Simmons_SDS-V)) | Tune = tone pitch; Bend / Bend Time = bend; Decay = VCA decay; Click = click; Tone = noise ↔ tone balance |
-
-Not added: an FM kick (no single documented reference design) and the 909's sampled cousins (LinnDrum / DMX kicks are samples).
-
-**Decided (Argi, 2026-10-06): Electro Kick and Kick (SweepKicker) are separate modules.** Kick keeps Robin's full parameter set (`docs/KICK_PLAN.md`); SweepKicker is not an Electro Kick algorithm. Electro Kick will be our common kick algorithms (Argi, 2026-10-06): the classic machines.
-
-**Still open:** final param list (is Bend Time shared or fixed per algorithm, like the snare's bend time?), default algorithm, Click on 808 (stock has none beyond the pulse), velocity (the 808 Service Notes tie the attack jump to accent; height is velocity, proposed), Env definition (proposed: overall amp envelope, as Electro Snare).
+Seed only, not final; separate from Kick. Moved to `docs/KICK_PLAN.md` §Electro Kick (2026-10-18).
 
 ## Electro Hat
 
-**Status:** seed only. **Discussion with Argi, not final.** Dated 2026-10-06. Do not build until Argi says go.
-
-**Direction:** One hi-hat voice on the Electro Snare model: one fixed shared parameter set and an **Algorithm** choice (stored by name). Native C++/WASM only, no JS DSP, no shims. Proposed to replace the parked `electroHat` placeholder card (listed as a candidate in `docs/KICK_PLAN.md` → Removal).
-
-**I/O (proposed):** **Closed ⎍** (port `Trigger`) and **Open ⎍** (port `Open`) trigger inputs, **Reset ↺**; **Hat** (audio) and **Env** out. **Choke:** one voice. An Open hit rings with Open Decay. A Closed hit restarts the envelope with Closed Decay, so it chokes a ringing open hat. The 808 and 606 both choke this way (the 606's envelope shut-off circuit), and on the 909 open and closed share one circuit and cannot sound together ([Baratatronix, 606 hats](https://www.baratatronix.com/blog/606-cymbal-and-hi-hat-synthesis); [polynominal, TR-909](https://www.polynominal.com/site/studio/gear/drum/roland-tr909/roland-tr909.html)). Alternative: a single Trigger plus an Open amount param (like the placeholder).
-
-**Proposed shared params (not final):** Algorithm, **Tune** (metal pitch scale, 1 = stock), **Tone** (brightness: band-pass / high-pass cutoff), **Closed Decay** (s T60), **Open Decay** (s T60), **Metal** (metallic source ↔ white noise balance; 808 / 606 stock = all metal), **Amplitude**.
-
-**Candidate algorithms:**
-
-| Key | Design | Facts (web-checked 2026-10-06) |
-|-----|--------|-------------------------------|
-| `tr808` | Six square oscillators at inharmonic frequencies → two band-passes → high-pass → VCA | Six Schmitt-trigger square oscillators (one HD14584, ≈ 48 % duty) at **205.3, 304.4, 369.6, 522.7, 540, 800 Hz** (the last two factory-trimmed), summed, then band-passes at ≈ **3440 Hz** and ≈ **7100 Hz**, then high-pass and VCA. Shared by cymbal, hats and cowbell. Closed hat fixed ≈ 50 ms; open hat 90–600 ms ([Werner, Abel, Smith, "The TR-808 Cymbal", ICMC/SMC 2014](https://www.icmc14-smc14.net/images/proceedings/OS24-B10-TheTR-808Cymbal.pdf); [Baratatronix, 808 hats](https://www.baratatronix.com/blog/cascadia-808-cymbal-hi-hat-synthesis)). Square oscillators need band-limiting (PolyBLEP) |
-| `tr606` | Same six-oscillator design, different tuning, no noise | Same HD14584 design with different (unit-varying) frequencies, no added noise; the hats use the high band through a shared VCA and resonant high-pass; closed shuts off open ([Baratatronix, 606 hats](https://www.baratatronix.com/blog/606-cymbal-and-hi-hat-synthesis); [TR-606 mod notes](http://machines.hyperreal.org/manufacturers/Roland/TR-606/info/drumantix/mods/various.txt)) |
-| `tr909` | **Cannot be synthesized faithfully** | 909 hats (and cymbals) are **6-bit samples** in a Hitachi HN61256P ROM (closed = top quarter, open = the rest), played by an address counter into a DAC, then an analog VCA and lowpass ([Wikipedia, TR-909](https://en.wikipedia.org/wiki/Roland_TR-909); [polynominal](https://www.polynominal.com/site/studio/gear/drum/roland-tr909/roland-tr909.html); [synth-diy, 909 HH ROM](https://synth-diy.org/pipermail/synth-diy/2006-June/098691.html); [SOS Synth Secrets 39](https://github.com/micjamking/synth-secrets/blob/master/part-39.md)). Options: leave it out (proposed), or a "909-style" approximation clearly labelled as one. Sample playback is not synthesis and would need rights to Roland's data |
-| `fm` | Metallic FM / ring-mod: inharmonic square or pulse operators, frequency- or ring-modulated, high-passed, short decay | Gordon Reid's cymbal / hat patches build the metal spectrum with FM and ring modulation of inharmonic oscillators ([SOS, Synthesizing Realistic Cymbals](https://www.soundonsound.com/techniques/synthesizing-realistic-cymbals); [SOS, Practical Cymbal Synthesis](https://www.soundonsound.com/techniques/practical-cymbal-synthesis)) |
-| `noise` | Filtered white noise → band-pass / high-pass → VCA | The simplest analog hat. Metal = noise only; Tune shifts the filter |
-
-**Shared-param reading (draft):** Tune scales all oscillator frequencies (808 / 606 / FM) or the filter (noise). Tone moves the band-pass / high-pass. Closed / Open Decay are the two envelope T60s. Metal crossfades the metal source with white noise (808 / 606 stock = 0 % noise). Amplitude is the output level.
-
-**Still open:** two trigger jacks vs one Trigger + Open amount; choke rule (Closed always chokes Open, proposed); whether 909 appears at all; 606 frequencies (they vary per unit; pick by ear); Accent / velocity (height is velocity, proposed); Env definition.
+Seed only, not final. Moved to `docs/SNARE_PLAN.md` §Electro Hat (2026-10-18).
 
 ## Electro Tom
 
-**Status:** seed only. **Discussion with Argi, not final.** Dated 2026-10-06. Do not build until Argi says go.
-
-**Direction (Argi):** a separate tom module on the Electro Snare model: one fixed shared parameter set, an **Algorithm** choice (stored by name), no per-algorithm params. Same I/O as Electro Snare: **Trigger ⎍** and **Reset ↺** in (Reset restarts all oscillation mid-hit); **Tom** (audio) and **Env** out. Native C++/WASM only, no JS DSP, no shims.
-
-**Shared params (Argi):** Algorithm, **Tune**, **Tone**, **Body Decay**, **Bend**, **Noise**, **Amplitude**. **Tune and Bend are the primary controls** (first and largest on the card). **Noise** is a small attack-noise amount; it replaces the snare's Snappy / Snap Decay (the noise envelope is a fixed per-algorithm constant).
-
-**Candidate algorithms:**
-
-| Key | Design | Facts (web-checked 2026-10-06) | Shared-param reading (draft) |
-|-----|--------|-------------------------------|-----------------------------|
-| `tr808` | Pinged resonator, small pitch drop, a little noise | Bridged-T resonator per tom; diodes damp it as it fades, so the pitch drops a little ("less like a boing, more like a tonk"); a little low-passed pink noise on a slightly longer envelope. Tunings: low 80–100 Hz (≈ 90), mid 120–160 Hz (≈ 135), high 165–220 Hz (≈ 185); decays ≈ 200 / 130 / 100 ms ([Baratatronix, 808 toms](https://www.baratatronix.com/blog/808-tom-synthesis)) | Tune = resonator Hz; Bend = small drop as it decays (stock ≈ a few semitones at most); Body Decay = ring T60; Tone = noise lowpass / brightness; Noise = pink-noise level |
-| `tr909` | Phase-reset oscillators with a pitch sweep plus noise | Three triangle VCOs per tom, reset together on the trigger, each rounded to a sine by a diode clipper (VCO-1's clipper moves from square to sine during the hit); ENV-4 sweeps the pitch of all three; "tom noise" is mixed with VCO-3 for the attack; panel Tune and Decay ([network-909, Toms](http://www.network-909.de/toms.htm)) | Tune = base Hz (fixed VCO ratios, by ear); Bend = ENV-4 depth; Body Decay = VCA decays; Tone = VCO-1 clipper hardness (square → sine); Noise = tom-noise level |
-| `simmons` | Simmons SDS-V tom: sine / triangle with a big downward bend plus filtered noise | SDS-V modules have tone pitch, bend, decay, noise, noise tone and click controls; the falling-pitch "peew" is the signature sound ([SDS-V Service Notes](https://synth-diy.org/yg-archives2/raw/Simmons_Drums/files/16_Manuals/4_SDS-V_SM.pdf); [Wikipedia, Simmons SDS-V](https://en.wikipedia.org/wiki/Simmons_SDS-V); [Still Not Working, SDS V](http://snw.lonningdal.no/sds5.php)) | Tune = tone pitch; Bend = big drop (1–2 oct suggested); Body Decay = VCA decay; Tone = noise filter; Noise = noise level |
-
-**Still open:** default algorithm; Bend time fixed per algorithm (proposed, as the snare) or tied to Body Decay (Simmons); Tune range (proposed 40–400 Hz) and default; low / mid / high as presets vs one free Tune (proposed: free Tune); shared resonator / noise helpers with Electro Snare (library helpers need Architect approval); velocity; Env definition.
+Seed only, not final. Moved to `docs/SNARE_PLAN.md` §Electro Tom (2026-10-18).
 
 ## Softpop Oscillator (pure tone ↔ noise)
 
-**Status:** ready to build (2026-10-07), owner SandyModules. Redefine `softpopOscillator` in place as a native C++ oscillator. **Model** by stable name, default `filter` (TPT/ZDF SVF constant-peak bandpass on noise + √Q trim + effective-frequency tilt correction `(1000/fc)^(α/2)`, α = +1 white / 0 pink / −1 brown) or `sine`. No Purity. One fixed param set, every knob active in both models: Frequency, Width (noise bandwidth = Filter Q on a log scale, and mod-noise speed; no Mod Rate knob), Pitch Mod (cents, exponential), Amp Mod (level-preserving), Amplitude, Color, Stereo, Seed. I/O: Reset, `f` in; Mono / Left / Right out; no pitch input, no Trigger. Frequency-only like `polyBlep`: a wired `f` (Hz) replaces the Frequency knob; Pitch Mod and the tilt use that effective frequency. Independent seeded noise per target and channel (`seed_mix`). **Argi approved (2026-10-07, APP_POLICY §19)** extracting the TPT SVF and white/pink/brown noise into `library/include/soemdsp/filter/tpt_svf.h` and `math/noise_colors.h`, with EQ Filter and Noise Generator refactored onto them under a bit-identical regression test. Plan: `docs/SOFTPOP_PLAN.md`.
+**Status:** built (split into Softpop Oscillator + Softpop Filter 2026-10-14; Softpop 2 shipped 2026-10-17; committed and pushed (checked 2026-10-18)). Plans: `docs/SOFTPOP_PLAN.md`, `docs/SOFTPOP2_PLAN.md`. Original seed (2026-10-07), owner SandyModules: Redefine `softpopOscillator` in place as a native C++ oscillator. **Model** by stable name, default `filter` (TPT/ZDF SVF constant-peak bandpass on noise + √Q trim + effective-frequency tilt correction `(1000/fc)^(α/2)`, α = +1 white / 0 pink / −1 brown) or `sine`. No Purity. One fixed param set, every knob active in both models: Frequency, Width (noise bandwidth = Filter Q on a log scale, and mod-noise speed; no Mod Rate knob), Pitch Mod (cents, exponential), Amp Mod (level-preserving), Amplitude, Color, Stereo, Seed. I/O: Reset, `f` in; Mono / Left / Right out; no pitch input, no Trigger. Frequency-only like `polyBlep`: a wired `f` (Hz) replaces the Frequency knob; Pitch Mod and the tilt use that effective frequency. Independent seeded noise per target and channel (`seed_mix`). **Argi approved (2026-10-07, APP_POLICY §19)** extracting the TPT SVF and white/pink/brown noise into `library/include/soemdsp/filter/tpt_svf.h` and `math/noise_colors.h`, with EQ Filter and Noise Generator refactored onto them under a bit-identical regression test. Plan: `docs/SOFTPOP_PLAN.md`.
 
 ## Ohmicide Slew I / Slew II
 
@@ -353,4 +296,4 @@ docs/PLUGIN_REPO_PLAN.md
 
 ## Sidechain
 
-**Status:** seed, draft plan for Argi's review (2026-10-14). New module **Sidechain**, a ducking helper reusing the Pump Limiter (`limiter` / `native_modules/pumping_limiter`) detector, hard-knee gain computer and gain smoother. Hold is new; Pump Limiter has none. Inputs: Left Dry, Right Dry, Left Wet, Right Wet, Sidechain, Envelope. Outputs: Left, Right. Params: Threshold, Ratio, Attack Time, Hold Time, Release Time. Proposed: the detector keys from Sidechain (else Dry); a wired Envelope (0..1) bypasses the detector as the duck amount; Wet is ducked; Out = Dry + g·Wet (crossfade is an alternative). Reuse via a shared `soemdsp/dynamics/pump_gain.h` needs Argi's APP_POLICY §19 approval. Native only, owner SandyModules once approved. Plan: `docs/SIDECHAIN_PLAN.md`.
+**Status:** built (type 216, 2026-10-14, committed and pushed (checked 2026-10-18)); awaiting Argi's ear check. Plan: `docs/SIDECHAIN_PLAN.md`. Original seed (2026-10-14): New module **Sidechain**, a ducking helper reusing the Pump Limiter (`limiter` / `native_modules/pumping_limiter`) detector, hard-knee gain computer and gain smoother. Hold is new; Pump Limiter has none. Inputs: Left Dry, Right Dry, Left Wet, Right Wet, Sidechain, Envelope. Outputs: Left, Right. Params: Threshold, Ratio, Attack Time, Hold Time, Release Time. Proposed: the detector keys from Sidechain (else Dry); a wired Envelope (0..1) bypasses the detector as the duck amount; Wet is ducked; Out = Dry + g·Wet (crossfade is an alternative). Reuse via a shared `soemdsp/dynamics/pump_gain.h` needs Argi's APP_POLICY §19 approval. Native only, owner SandyModules once approved. Plan: `docs/SIDECHAIN_PLAN.md`.

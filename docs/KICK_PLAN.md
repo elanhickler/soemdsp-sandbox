@@ -1,13 +1,13 @@
 # Kick — SweepKicker percussion module plan
 
-**Status:** built as **Robin Sinepulse** (`robinSinepulse`, graph type 205, `native_modules/robin_sinepulse/`), local and uncommitted (Argi, 2026-10-06: "add SweepKicker as Robin Sinepulse"). "Kick" in this plan means that module. Trigger only, no Reset: Trigger hard-resets the phase and restarts the sweep and envelope (Argi, 2026-10-06). Flat Zapper is built as **Robin Sinepulse Allpass** (see **Flat Zapper module (seed)**). Change to done only after Argi tests.
+**Status:** built as **Robin Sinepulse** (`robinSinepulse`, graph type 205, `native_modules/robin_sinepulse/`), now committed and pushed (checked 2026-10-18) (Argi, 2026-10-06: "add SweepKicker as Robin Sinepulse"). "Kick" in this plan means that module. Trigger only, no Reset: Trigger hard-resets the phase and restarts the sweep and envelope (Argi, 2026-10-06). Flat Zapper is built as **Robin Sinepulse Allpass** (see **Flat Zapper module (seed)**). Change to done only after Argi tests.
 **Date:** 2026-10-06.
 **Owner:** SandyModules (Sandbox build agent).
 **Decided (Argi, 2026-10-06):** keep the added Decay envelope; Trigger only, no Reset ↺: Trigger hard-resets the phase and restarts the sweep and envelope (this replaced the earlier keep-phase rule the same day); Kick and Electro Kick stay separate modules; FlatZapper gets its own seed with an audio input. See **Decisions**. **Still under discussion:** velocity, latching, units, stereo, and whether Flat Zapper is a new module or a mode of Phase Disperse.
 
 **Algorithm source:** Robin Schmidt (RS-MET), `rosic::rsSweepKicker`, with permission (see Credit). FlatZapper (`rosic::rsFlatZapper`) is not part of the Kick; it is seeded as its own module (see **Flat Zapper module (seed)**).
 
-**Parent seeds:** `docs/FUTURE_PLANNING.md` §Kick (SweepKicker) and §Electro Kick.
+**Parent seeds:** `docs/FUTURE_PLANNING.md` §Kick (SweepKicker) and §Electro Kick (the Electro Kick seed now lives at the end of this file, moved 2026-10-18).
 
 **Related:** `docs/APP_POLICY.md` (native-only DSP §2 / §5, Sine SSOT §2, no legacy helpers §1, shared library maths and Architect gate §19, a stored 0 is a value §18, Choice / enum persistence); `docs/GATES_TRIGGERS.md` (Trigger ⎍ / Reset ↺ jacks, `gate_hit`, height is velocity); `docs/PORT_TYPES.md`; `docs/ADDING_HARDCODED_SANDBOX_MODULE.md`; `docs/MODULE_PATTERN_REFERENCE.md`; `docs/SNARE_PLAN.md` (I/O conventions, format); `docs/VARISPEED_DELAY_PLAN.md` (format); `docs/BUG_PLAN.md` **Cleanup** → **C-002** (removal of the old kick / snare cards).
 
@@ -253,7 +253,7 @@ N DF1 biquads per sample (5 multiplies, 4 adds each). **Measured ≈ 325 ns/samp
 
 ### Flat Zapper module (seed)
 
-**Status:** built as **Robin Sinepulse Allpass** (`robinSinepulseAllpass`, graph type 206, `native_modules/robin_sinepulse_allpass/`), local and uncommitted (Argi, 2026-10-06: "add module rsFlatZapper as Robin Sinepulse Allpass"). A separate module (Phase Disperse unchanged), no Reset jack, no brown post-filter in v1, default 50 stages. Parity: `scripts/parity_robin_sinepulse_allpass.py`. Also in `docs/FUTURE_PLANNING.md` §Flat Zapper.
+**Status:** built as **Robin Sinepulse Allpass** (`robinSinepulseAllpass`, graph type 206, `native_modules/robin_sinepulse_allpass/`), now committed and pushed (checked 2026-10-18) (Argi, 2026-10-06: "add module rsFlatZapper as Robin Sinepulse Allpass"). A separate module (Phase Disperse unchanged), no Reset jack, no brown post-filter in v1, default 50 stages. Parity: `scripts/parity_robin_sinepulse_allpass.py`. Also in `docs/FUTURE_PLANNING.md` §Flat Zapper.
 
 **Idea.** Robin's `rsFlatZapper` as its own module. A chain of 0–256 allpass stages whose tuning frequencies are spread from Low Freq to High Freq. **Trigger** fires an internal unit impulse into the chain; it comes out as a flat-spectrum (white) falling "zap". An **audio input** feeds anything else through the same dispersion chain, so the module is also an effect: a disperser / smear for noise bursts, clicks, the Kick, other drums, pads. Robin's ToolChain wrapper already has both paths (Exciter % and Input %).
 
@@ -531,7 +531,7 @@ Goal: prove the port computes Robin's SweepKicker, not a look-alike.
 
 ## Removal (done 2026-10-06)
 
-**Status: done.** Argi said "start" on 2026-10-06. Local, uncommitted (nothing committed or pushed). Tracked as `docs/BUG_PLAN.md` **Cleanup** → **C-002**.
+**Status: done.** Argi said "start" on 2026-10-06. Now committed and pushed (checked 2026-10-18). Tracked as `docs/BUG_PLAN.md` **Cleanup** → **C-002**.
 
 **Removed types:** `sinepulse` (Sinepulse), `sineKick` (Sine Kick), `kickEnvelope` (Kick Envelope), `electroKick` (ElectroKick placeholder) and `electroSnare` (ElectroSnare placeholder). `electroSnare` was a pure placeholder: a definition, a label and a store card, with no DSP, no C++, no opcode, no face code and no patch. Electro Snare (`docs/SNARE_PLAN.md`) adds the key back where the card sat (just before `electroHat`). No aliases, no migration (APP_POLICY §1). Persisted `underconstructionsort` lists need no shim: `nodeGraphModuleCatalogNormalizeTypeList` already drops unknown types on load.
 
@@ -557,7 +557,7 @@ Goal: prove the port computes Robin's SweepKicker, not a look-alike.
 | `public/presets/useruisettings.default.json`, `public/presets/useruisettings.js`, `public/presets/useruisettings.json` | Removed types from `underconstructionsort` |
 | `scripts/smoke_test.py` | `kick-envelope-math.js` from the public script list |
 | `scripts/test_module_layout_bands.js` | Kick Envelope fixture and case replaced by RoundShape (`ellipsoid`): same LayoutA `roundShape` band checks |
-| `docs/MODULE_LAYOUT_PLAN.md` | Band-check list: Kick Envelope → RoundShape |
+| `docs/archive/MODULE_LAYOUT_PLAN.md` | Band-check list: Kick Envelope → RoundShape |
 | `docs/SNARE_PLAN.md`, `docs/FUTURE_PLANNING.md`, `docs/BUG_PLAN.md`, `progress.md`, this plan | Status and wording (SNARE_PLAN references kept) |
 
 **Kept on purpose**
@@ -607,3 +607,27 @@ Goal: prove the port computes Robin's SweepKicker, not a look-alike.
 - `Main.cpp` (experiment calls ~line 315) — [GitHub](https://github.com/RobinSchmidt/RS-MET/blob/work/Tests/TestsRosicAndRapt/Source/Main.cpp); `GeneratorExperiments.cpp` (flatZapper, freqSweeper, sineSweepBassdrum1–4) — [GitHub](https://github.com/RobinSchmidt/RS-MET/blob/work/Tests/TestsRosicAndRapt/Source/rapt_tests/Experiments/GeneratorExperiments.cpp)
 - `ZappyKicksReadMe.txt` — [GitHub](https://github.com/RobinSchmidt/RS-MET/blob/work/Notes/Scratch/ZappyKicksReadMe.txt)
 - R. Bristow-Johnson, *Audio EQ Cookbook* (allpass biquad) — [W3C mirror](https://www.w3.org/TR/audio-eq-cookbook/)
+
+---
+
+## Electro Kick (seed, moved from `docs/FUTURE_PLANNING.md` 2026-10-18)
+
+**Status:** seed only. **Discussion with Argi, not final.** Dated 2026-10-06. Do not build until Argi says go.
+
+**Direction:** One kick voice on the Electro Snare model: one fixed shared parameter set and an **Algorithm** choice (stored by name). Every algorithm gives every param a meaning; no param is added, removed, shown or hidden per algorithm. Trigger ⎍ and Reset ↺ in (Reset restarts all oscillation mid-hit); **Kick** (audio) and **Env** (amplitude envelope) out. Native C++/WASM only, cheap resonators / oscillators / enveloped noise, no JS DSP, no shims. The parked `electroKick` placeholder card was removed on 2026-10-06 (`docs/BUG_PLAN.md` C-002), so this would be a new module (the key `electroKick` is free).
+
+**Proposed shared params (not final):** Algorithm, **Tune** (rest pitch, Hz), **Bend** (octaves above Tune at the hit), **Bend Time** (how fast the pitch falls, s), **Decay** (body, s T60), **Click** (attack transient level), **Tone** (timbre, per algorithm), **Amplitude**.
+
+**Candidate algorithms:**
+
+| Key | Design | Facts (web-checked 2026-10-06) | Shared-param reading |
+|-----|--------|-------------------------------|----------------------|
+| `tr808` | Pinged 2-pole resonator standing in for the bridged-T, plus a short attack frequency jump and a slow "sigh" | The 808 bass drum is a bridged-T network pinged by the trigger, ringing at about 49–56 Hz. At the start of a note its centre frequency jumps up for ≈ 4–6 ms, then returns (Werner computes about 2.8 ×, an octave plus five semitones; the Service Notes say "twice" and tie it to accent); a slower downward "pitch sigh" comes from leakage through R161. Panel: Level, Tone, Decay ([Werner, Abel, Smith, DAFx-14](https://www.dafx.de/paper-archive/2014/dafx14_kurt_james_werner_a_physically_informed,_ci.pdf); [Werner, 808 BD post](https://kurtjameswerner.tumblr.com/post/50274769999/chuck-tr-808-emulator-bass-drum-bd-emulation); [SOS, Practical Bass Drum Synthesis](https://www.soundonsound.com/techniques/practical-bass-drum-synthesis)) | Tune = resonator Hz; Bend / Bend Time = the attack jump (stock ≈ 1.5 oct, ≈ 5 ms); Decay = ring T60; Click = trigger-pulse level; Tone = output lowpass (the 808's Tone) |
+| `tr909` | Phase-reset triangle VCO rounded toward sine, pitch envelope, plus a click / noise attack path | Triangle VCO reset on every trigger, rounded by a diode clipper toward a sine. ENV-3 bends the pitch down; the panel **Tune** sets that sweep (it is really the decay of ENV-3, about 30–120 ms stock). Body VCA on ENV-1 (panel **Decay**). The attack path is a shaped trigger pulse plus low-passed noise on ENV-2 (panel **Attack**) ([network-909, Bass Drum](http://www.network-909.de/bassdrum.htm); [C. Fraser, TR-909 mods](http://www.colinfraser.com/tr909/909mods/909mods.htm); [Whittle, TR-909 Sound Mods](https://www.firstpr.com.au/rwi/tr-909/TR-909-Sound-Mods.pdf)) | Tune = rest Hz (no panel pitch on stock 909); Bend = sweep depth; Bend Time = ENV-3 decay (= 909 panel Tune); Decay = ENV-1; Click = 909 Attack (pulse + noise); Tone = clipper drive (sine → square, Whittle's "Drive" mod) |
+| `simmons` | Simmons SDS-V bass drum: oscillator with bend, filtered noise, click | Per-module controls: noise, tone (pitch), bend, decay, noise/tone balance, click (pad-impact attack) ([SDS-V Service Notes](https://synth-diy.org/yg-archives2/raw/Simmons_Drums/files/16_Manuals/4_SDS-V_SM.pdf); [Wikipedia, Simmons SDS-V](https://en.wikipedia.org/wiki/Simmons_SDS-V)) | Tune = tone pitch; Bend / Bend Time = bend; Decay = VCA decay; Click = click; Tone = noise ↔ tone balance |
+
+Not added: an FM kick (no single documented reference design) and the 909's sampled cousins (LinnDrum / DMX kicks are samples).
+
+**Decided (Argi, 2026-10-06): Electro Kick and Kick (SweepKicker) are separate modules.** Kick keeps Robin's full parameter set (`docs/KICK_PLAN.md`); SweepKicker is not an Electro Kick algorithm. Electro Kick will be our common kick algorithms (Argi, 2026-10-06): the classic machines.
+
+**Still open:** final param list (is Bend Time shared or fixed per algorithm, like the snare's bend time?), default algorithm, Click on 808 (stock has none beyond the pulse), velocity (the 808 Service Notes tie the attack jump to accent; height is velocity, proposed), Env definition (proposed: overall amp envelope, as Electro Snare).

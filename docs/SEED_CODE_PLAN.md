@@ -58,7 +58,7 @@ Open question for the implementer: confirm where the new seed widget with the di
 - Display text: `formatNodeSliderNumber` in `public/node-graph-slider-metadata.js` (L155) returns `String(Math.round(n))` for `kind === "seed"`. This is the one place to swap in the code.
 - Typed input: `public/node-graph-slider-dragging.js` (~L320) strips commas/spaces for seeds before parsing; the new code / decimal / hex parser goes here. `normalizeNodeSliderValue` (`node-graph-slider-values.js` ~L530) wraps the integer into min..max and stays as is.
 - Definitions declare seeds as `kind: "seed"`, `min 0`, `max 16777215`, `step 1` (e.g. `node-graph-module-definitions.js` L1303, L1427).
-- Note: `public/node-graph-seed-control.js` and `public/node-graph-gl-graph.js` have uncommitted edits from another agent right now; coordinate before implementing.
+- ~~Note: `public/node-graph-seed-control.js` and `public/node-graph-gl-graph.js` have uncommitted edits from another agent right now; coordinate before implementing.~~ Resolved: all committed; seed code shipped in `84877a07` (2026-10-17).
 
 **Saved patches and URLs:**
 - Patches store seeds as plain decimal integers in `params` (e.g. `"seed": 12328661` in `patches/livedemos/softpop.json`; 107 numeric seed values across `patches/`). Since storage doesn't change, they keep loading with no migration.

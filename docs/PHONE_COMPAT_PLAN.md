@@ -1,10 +1,8 @@
-# Phone and GPU Camera Plan
+# Phone Compatibility Plan
 
 Source: Argi, 2026-10-18 (phone scope by Webby for Argi, approved 2026-10-18; GB-6 approved by Argi 2026-10-18). PH-1 through PH-5 are in the tree. GB-6, PH-6, PH-5b, and PH-7 are not started.
 
-Merges the former `docs/PHONE_COMPAT_PLAN.md` and GB-6 (true GPU camera) from `docs/WEBGL_DISPLAY_PLAN.md` section 11 into one plan, because phone workspace gestures (PH-6) and the camera move (GB-6) share the same camera.
-
-**2026-10-18 update:** GB-6 is now defined only in `docs/GPU_WORKSPACE_PLAN.md` as **GW-2**, which owns the workspace picture and camera. This plan keeps a dependency row for it, the camera-API rule, the ordering and PH-5b.
+Named `docs/PHONE_AND_GPU_CAMERA_PLAN.md` from 2026-10-18 until the same day, when the GPU camera (GB-6) moved to `docs/GPU_WORKSPACE_PLAN.md` (GW-2) and this file went back to its original name. It is phone-only; it depends on GW-2 for PH-6 and PH-5b.
 
 ## Scope (Webby / Argi)
 

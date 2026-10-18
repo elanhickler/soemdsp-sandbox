@@ -2,7 +2,7 @@
 
 **Status:** plan only (no code yet). Parallel track to the C++ DSP allowlist — not Batch 13.
 
-**Policy anchors:** `APP_POLICY` §0 (JS = observers), §3 (prefer GPU), §5 (one sim, many observers). Scopes paint gate: `docs/SCOPE_PAINT_SIMPLIFICATION_PLAN.md`.
+**Policy anchors:** `APP_POLICY` §0 (JS = observers), §3 (prefer GPU), §5 (one sim, many observers). Scopes paint gate: `docs/archive/SCOPE_PAINT_SIMPLIFICATION_PLAN.md`.
 
 ---
 

@@ -20,17 +20,10 @@ Plugin **hosting** experiments live elsewhere (soemdsp-sandbox-claphost). This r
 ## Quick start
 
 ```powershell
-# Requirements: Python 3, a modern browser
-
-git clone https://github.com/elanhickler/soemdsp-sandbox.git
-cd soemdsp-sandbox
-python server.py
-# open http://127.0.0.1:8765
-
-python scripts\smoke_test.py   # optional
+python server.py   # then open http://127.0.0.1:8765
 ```
 
-Optional: if a local sibling `soemdsp` build is available, you can resync native artifacts before `python server.py` (see the build docs in that repo).
+Full setup (requirements, clone, smoke test, optional native artifact resync, server boundaries): [`docs/SANDBOX_REFERENCE.md`](docs/SANDBOX_REFERENCE.md).
 
 ---
 
@@ -38,12 +31,12 @@ Optional: if a local sibling `soemdsp` build is available, you can resync native
 
 | Doc | Topic |
 |---|---|
-| [`docs/SANDBOX_REFERENCE.md`](docs/SANDBOX_REFERENCE.md) | Sandbox setup / API reference |
+| [`docs/SANDBOX_REFERENCE.md`](docs/SANDBOX_REFERENCE.md) | Setup, run, test, boundaries |
 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | High-level architecture |
 | [`docs/ADDING_HARDCODED_SANDBOX_MODULE.md`](docs/ADDING_HARDCODED_SANDBOX_MODULE.md) | Add a hardcoded module |
 | [`docs/OSC_MODULE_NON_UI_REFERENCE.md`](docs/OSC_MODULE_NON_UI_REFERENCE.md) | Oscillator module non-UI notes |
 | [`POWER_ENGINE_SYNTHESIS.md`](POWER_ENGINE_SYNTHESIS.md) | Spiral / engine synthesis notes |
-| [`BEAMING_RADAR_SIGNAL_TO_JEROBEAM.md`](BEAMING_RADAR_SIGNAL_TO_JEROBEAM.md) | Jerobeam module dedication |
+| `BEAMING_RADAR_SIGNAL_TO_JEROBEAM.md` (removed from the repo; see git history) | Jerobeam module dedication |
 
 ---
 
@@ -64,13 +57,3 @@ Optional: if a local sibling `soemdsp` build is available, you can resync native
 ## License
 
 Source-available for noncommercial use only. Commercial use requires a separate written commercial license from Soundemote. See [`LICENSE`](LICENSE).
-
----
-
-## Boundaries
-
-- Server writes only via explicit save / settings / audio helper routes
-- Open Path is restricted to Downloads
-- Browser patch graph is demo-scoped state
-- Browser path is not the production soemdsp scheduler
-- Patch files save instances and settings; they do not define new module types

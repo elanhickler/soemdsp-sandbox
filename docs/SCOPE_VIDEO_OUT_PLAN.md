@@ -4,7 +4,7 @@
 
 **Date:** 2026-10-13. Source: Argi via the Thoughts agent; filed by PlanningDocs. Claims spot-checked against the working tree on 2026-10-13 (corrections below).
 
-**Related:** `docs/APP_POLICY.md` (§1, §2, §3, §5 "Live chaos and video", §10, §19); `docs/DISPLAY_SHADER_PLAN.md` (Phase 0 P0a/P0c/P0d, Face wipe registry W1/W2); `docs/PORT_TYPES.md`; `docs/FUTURE_PLANNING.md` → Scope video out.
+**Related:** `docs/APP_POLICY.md` (§1, §2, §3, §5 "Live chaos and video", §10, §19); `docs/WEBGL_DISPLAY_PLAN.md` §12 (Phase 0 P0a/P0c/P0d, Face wipe registry W1/W2); `docs/PORT_TYPES.md`; `docs/FUTURE_PLANNING.md` → Scope video out.
 
 ---
 
@@ -26,7 +26,7 @@ Every oscilloscope, videoscope and display module gets a 📺 `rgba` video outpu
 ## Current state (verified 2026-10-13)
 
 - **The 📺 path works end to end, and the shared mechanism already exists.** `public/lib/visual/picture-device.js` has `nodeGraphPicturePublish(nodeId, texture, w, h)` (copies a finished texture into a per-node export FBO on the shared picture device), `nodeGraphPictureGet(nodeId)` and `nodeGraphPictureRead(nodeId, port)` (walks the cable to the source's published slot; any source port named `rgba` / `📺` counts). Spectrum Circle (type `videoFeedback`, `public/modules/videoFeedback/video-feedback-register.js`, publish at `video-feedback-gl.js:354`) and Video Delay (`public/modules/videoDelay/`, reads at `video-delay-display.js:117`, publishes at `video-delay-gl.js:269`) use it. So do Image Burn, fBm Field and RGB Fractal.
-- All displays render on the one shared WebGL2 picture device (DISPLAY_SHADER_PLAN P0a/P0c/P0d, Done 2026-10-11) and copy onto their 2D face canvas with `nodeGraphSharedGlBlitTo2D` (`picture-device.js:259`).
+- All displays render on the one shared WebGL2 picture device (WEBGL_DISPLAY_PLAN §12 P0a/P0c/P0d, Done 2026-10-11) and copy onto their 2D face canvas with `nodeGraphSharedGlBlitTo2D` (`picture-device.js:259`).
 - **Videoscope** (`node-graph-module-definitions.js:16018`, `displayType: "videoscopeBurn"`) has **no** `rgba` output today: `outputs: ["Thru"]` only.
 - Declared but unimplemented `rgba` taps with the "TV tap — unimplemented" tooltip: **Spectrogram** (`node-graph-module-definitions.js:16106`, tooltip at :16109, `outputs: ["Thru", "rgba"]`) and **RGB Shape** (`public/modules/rgbShape/rgb-shape-register.js:43`/`:55`). Also check the `R, G, B, rgba` module at `node-graph-module-definitions.js:16803` during VO-0.
 - `docs/PORT_TYPES.md` line 16 still lists `texture` / 📺 as **reserved** — stale.
@@ -44,7 +44,7 @@ Every oscilloscope, videoscope and display module gets a 📺 `rgba` video outpu
 - **No special cases.** One shared mechanism: the face's present path calls `nodeGraphPicturePublish(nodeId, tex, w, h)` once. No `if (displayType === …)` branches, no per-type JS or worklet special cases, no per-scope publish code.
 - **§3 prefer GPU.** Tap the GPU texture/FBO the face just drew, **before** `nodeGraphSharedGlBlitTo2D`. Never read the 2D face canvas back (no `getImageData`, no `drawImage`→upload of the face).
 - **§1 / §10 no shims.** No legacy fallback outputs, no silent stub jack. A jack that is declared must publish; unimplemented "reserved" taps are either wired or removed. Patches that cable a reserved tap break and get repaired (§1).
-- **Face wipe W1 (DISPLAY_SHADER_PLAN).** Bypass / Stop / power-off go through `nodeGraphModuleScopeFaceWipes[displayType]`; the published slot follows the face (black or hold, see open questions). No new `if (typeof wipeX)` list.
+- **Face wipe W1 (WEBGL_DISPLAY_PLAN §12).** Bypass / Stop / power-off go through `nodeGraphModuleScopeFaceWipes[displayType]`; the published slot follows the face (black or hold, see open questions). No new `if (typeof wipeX)` list.
 - **§19 library approval.** Not expected to apply: all work is in `public/` JS/GLSL display code, no `library/include/soemdsp` change. If a row ever touches the library, it needs Argi's OK first.
 
 ---
@@ -56,7 +56,7 @@ Every oscilloscope, videoscope and display module gets a 📺 `rgba` video outpu
 3. **Rollout:**
    - **V1:** Spectrogram (jack already declared; wire it, fix tooltip). Videoscope: add `rgba` output and wire it.
    - **V2:** scopes that already draw fully on GPU: phosphor 1D/2D, Trace (woscope / stroke / tape), Vector RGB, Gradient Vectorscope, Matrix/asciiscope, Waterfall GL path, number readout GL. RGB Shape's declared tap goes here too.
-   - **V3:** faces still drawn in Canvas2D (1D Waterfall scrolling history, 2D fallbacks). Port to GPU (preferred, matches DISPLAY_SHADER_PLAN), or one texture upload per frame as a stopgap (Argi decides).
+   - **V3:** faces still drawn in Canvas2D (1D Waterfall scrolling history, 2D fallbacks). Port to GPU (preferred, matches WEBGL_DISPLAY_PLAN §12), or one texture upload per frame as a stopgap (Argi decides).
 4. **Feedback loops.** A consumer reads the previous frame's published texture (like audio's 1-sample history). Never read and write the same texture in one frame; publish copies into the export slot, so a scope in its own loop samples last frame's slot.
 5. **Docs.** PORT_TYPES change proposed below; apply it in VO-7.
 

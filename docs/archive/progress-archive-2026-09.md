@@ -1,0 +1,197 @@
+# progress.md archive (entries before 2026-10-07)
+
+Moved out of `progress.md` on 2026-10-18 (cleanup, Argi approved). Text is unchanged; "(local, uncommitted)" tags describe the state at the time. Everything here has since been committed and pushed.
+
+## Dated log entries (2026-09-27 .. 2026-10-06)
+
+### 2026-10-06 — C-002: old kick / snare cards removed (local, uncommitted)
+
+- Argi ("start"): remove Sinepulse, Sine Kick, Kick Envelope, the `electroKick` placeholder and the `electroSnare` placeholder (Electro Snare, `docs/SNARE_PLAN.md`, takes the key back). Kept: `electroHat`, `drummer`, `percussion`.
+- Deleted `public/modules/kickEnvelope/kick-envelope-math.js` and `scripts/test_kick_envelope.js`. Removed definitions, labels, store cards, UC lists, tooltips, bypass, scope defaults, dead runtime / worklet state maps, script tags, smoke row, the RoundShape face kick branch and the preset UC entries. Layout-band test checks RoundShape instead of Kick Envelope. No patch used any removed type. Smoke test passes. File list: `docs/KICK_PLAN.md` → Removal. Kick plan updated with Argi's decisions (Decay kept, Trigger keeps phase / Reset is the phase reset, Kick ≠ Electro Kick) and a Flat Zapper seed with measured cost. No commit.
+
+### 2026-09-29 - Instant Waterfall Detail max 1 (local, uncommitted)
+
+- User: cap waterfall Detail (detail) max at 1. Range 0..1, default stays 1. Clamp stored values >1 down to 1. waterfall, waterfallRgb, waterfallXyz. Cache-bust wf-detail-max1.
+- Fix: NODE_GRAPH_WATERFALL_DETAIL_MAX 4 to 1. Shared normalizeNodeGraphWaterfallSettings clamps on load/apply for all three schemas; slider range, drag clamp, and paint fallback match. Default remains 1. No commit.
+
+### 2026-09-28 - Instant Waterfall: paint crash + drop Persist/Bloom/Detail (local, uncommitted)
+
+- User: typed scope draw failed displayType waterfall (vibratoGenerator / output) — empty error {}; also REMOVE Persist/Bloom/Detail, KEEP+FIX Blur (not scope1dTrace).
+- Cause: duplicate `const NODE_GRAPH_WATERFALL_HISTORY_SEC_EPS` in normalize.js + waterfall.js (classic scripts) aborted waterfall.js load → ReferenceError on `nodeGraphWaterfallPaint` (console showed error as {}).
+- Fix: remove redeclare in waterfall.js; strip Persist/Bloom/Detail from defaults/normalize/form/controls/paint; strengthen filled-bar Blur soft skirt; keep frac carry. Cache-bust wf-nobloom-1. No push.
+
+﻿## 2026-09-28 - Space FX Instant Waterfall faces (local, uncommitted)
+
+- User: Sabrina Reverb + SoEm Reverb need Instant Waterfall (displayType waterfall) same premium treatment as Vibrato; also Delay + Ping Pong Delay.
+- Catalog / switch ids: sabrina_reverb→reverbEffect; soem_reverb→soemReverb; delay_effect→delayEffect; ping_pong_delay→pingPongDelay.
+- Switch defs (`public/node-graph-module-definitions.js`): all four now displayType/mode/schema waterfall with stereoWaterfallPorts Mix L/R + displaySignals (premium defaults inherited from nodeGraphWaterfallSettingsDefaults). Delay had no face; Ping Pong was on LFO L/R — both now Mix Out. Cache-bust fx-instant-wf-1. No push.
+### 2026-09-28 - B-084 scope1dTrace gradient → TraceWoscope LUT (local, uncommitted)
+
+- User: Tube Sat / scope1dTrace / TraceWoscope not applying Display Settings gradient. 2D Trace is NOT gradient-based — do not force gradient onto 2D.
+- Cause: 1D points lacked energy t for LUT; Color swatches fought Gradient-owns-color; flat ink ignored stops.
+- Fix: |sample| energy t on 1D points; ink peak from gradientStops; scope1dTrace colors:[]; 2D Trace untouched. Cache-bust b084-1dtrace-grad-1.
+- Docs: docs/BUG_PLAN.md (B-084). No push.
+
+### 2026-09-28 - Instant Waterfall blank Wave/Out (local, uncommitted)
+- User: nothing on waterfall displays (Vibrato Wave / Output and similar).
+- Cause: History Hz->seconds made multi-second windows common; samplesPerColumn then exceeds one undrawn chunk. Paint dropped st.frac when columns<1, so columnsFloat never reached 1 (hold stayed empty).
+- Fix: carry st.frac = columnsFloat across frames until a column stamps. History seconds 0 still pauses (early freeze path unchanged). Cache-bust wf-frac-1. No push.
+
+ï»¿## 2026-09-28 - Tube Sat TraceWoscope face blank (B-083, local, uncommitted)
+
+- User: Tube Saturation lost TraceWoscope / scope1dTrace face on ArchIV.
+- Not B-078 face-track-omitted / paint registration / missing layout:scopeFace — LayoutA processor mount + scope→face band OK.
+- Cause: demo `tubesaturation.json` shipped `dot1Brightness: 0`; TraceWoscope skips draw when intensity ≤ 0 (blank face).
+- Fix: restore demo crt-amber Bright=1; merge `defaultDisplaySettings` in scope1dTrace settingsForNode/clone/form defaults; `displayHeightGu: 2`; layout-band regression; cache-bust `tubesat-crt-face-1`.
+- Docs: `docs/BUG_PLAN.md (B-083)`. No push.
+### 2026-09-28 - Vibrato Generator Instant Waterfall restore (local, uncommitted)
+
+- User: give Vibrato Generator the new waterfall 1d scope treatment = Instant Waterfall (displayType waterfall / premium Blur Persist Bloom Detail ampLaw), NOT scope1dTrace.
+- Cause: B-081 parked Vibrato on scope1dTrace so Size could bind TraceWoscope; Instant Waterfall redesign had dropped Trace Size.
+- Fix: restore vibratoGenerator displayType/mode/schema waterfall with Wave source; inherit shared premium defaults (Blur/Persist/Bloom/Detail/ampLaw). Tube Sat / catalog 1D Trace stay on scope1dTrace (B-081 Size SSOT unchanged). Cache-bust vibrato-instant-wf-1. No push.
+
+### 2026-09-28 - Patch save dialog suggestedName = patch name.json (local, uncommitted)
+
+- Native Save Patch (showSaveFilePicker) autofills filename from live patch name + .json (FS-unsafe chars sanitized). Download fallback uses same name.
+- Also fixed duplicate `nodeGraphDownloadTextFile` arg-order clash (text,filename vs filename,text).
+- Files: `public/node-graph-file-actions.js`; cache-bust `patch-save-suggested-name-1` in index/perform. No push.
+### 2026-09-28 - B-082 param MOD clamp to [min,max] (local, uncommitted)
+
+- User: Keyboard Gate + Toggle into PolyBLEP Amplitude — both ON must not exceed Amp max (usually 1).
+- Cause: Host packed modClamp:false as unbounded; native control_effective skipped unit-band clamp.
+- Fix: SSOT unit-band always clamps in control_effective (graph v156); host domain flags always bit1 for unit-band; helpers nodeGraphParamModClamp always true; PolyBLEP Amp meta + PARAM_SURFACES. Smoke scripts/smoke_b082_amp_mod_clamp.mjs. No JS DSP. Cache-bust b082-mod-clamp-1.
+- Docs: docs/BUG_PLAN.md (B-082); BUG_PLAN. No push.
+
+### 2026-09-28 - B-081 scope1dTrace Size / Vibrato thickness (local, uncommitted)
+
+- User: Vibrato can't set trace thickness; possibly all 1D Trace Size/blur drawers broken; full-height signal (no amp shrink on Y).
+- Cause: Vibrato locked on Instant Waterfall (Size dropped); scope1dTrace Size lacked Bright-style SSOT into TraceWoscope; SampleToY honored Scale <1.
+- Fix: Vibrato -> scope1dTrace; nodeGraphScope1dTraceSizePx + intensity alias; Y floor Scale at 1; metrics Size signature; cache-bust b081-1dtrace-size-1.
+- Docs: docs/BUG_PLAN.md (B-081); BUG_PLAN inventory/detail/fixed. No push.
+
+### 2026-09-28 - B-079 Choices range clamp subset remap (local, uncommitted)
+
+- User: Limiting choices param range (PolyBLEP Waveform 4-5 Tri/Sine) left full-catalog dividers/labels.
+- Cause: Discrete choice index required span===choices.length; clamp fell through to proportional map over full list; dividers used full catalog length.
+- Fix: nodeGraphResolveChoiceSet + choiceOriginMin; index/label/type-in/dividers use filtered subset; persist origin in paramMeta/slider/factories/editor. Cache-bust b079-choice-range-1.
+- Verify: node scripts/test_b079_choice_range_remap.js (+ test_knob_choice_neg.js). Doc docs/BUG_PLAN.md (B-079). No push.
+
+
+### 2026-09-28 — Trace/Phosphor faces lost after waterfall rename (local, uncommitted)
+
+- Cause: WIP waterfall rename replaced `NODE_GRAPH_MODULE_WIDGET_BAND_ID.trace ? face` with `waterfall ? face`, but `scopeFace` layout still emitted band id `"trace"`. LayoutA `faceBandVisible` only checked `band.id === "face"`, so Trace / Phosphor / Instant Waterfall monitors got `face-track-omitted` ? CSS `display:none` on the face.
+- Not displayType/settingsSchema stripping; defs still had `displayType` + `layout: "scopeFace"`.
+- Fix: scopeFace band id `"face"`; restore `trace: "face"` alias; canonical `faceBandVisible`. Also register `scope1dTrace` / stereo thrus + WiredInputs.
+- Verify: `node scripts/test_module_layout_bands.js`. No push.
+
+### 2026-09-28 — Acoustic Pluck native module (local, uncommitted)
+
+- Baked `patches/modulator_breadboards/pluck_envelope.json` feedback AR into native **Pluck Envelope** (`pluckEnvelope` / opcode 198).
+- Algorithm: Curve AR + env→invert→atten(Feedback,Bias)→Amp Curve Exp→unit-MOD Release (128-sample fb delay). Demo keyboard/PolyBLEP/filter/portals/orphan KT attack path discarded.
+- Files: `native_modules/pluck_envelope_fb/`, defs/store/efficient allowlist, graph_engine + combined wasm, face PreviewCurve.
+- Breadboard patch left intact (portal-splice smoke still green). No commit/push.
+
+
+
+### 2026-09-28 — Tube Sat 1D Trace + crt-amber (local, uncommitted)
+
+- Restored Tube Saturation face as **scope1dTrace** (TraceWoscope), not lineBurn phosphor / not curve canvas.
+- New shared colormap `crt-amber` / kind `crtAmber`; Tube Sat `defaultDisplaySettings.gradientStops` seeds it.
+- Docs: `docs/FEATURE_TUBE_SAT_CRT_AMBER.md`. No PR/push.
+
+### 2026-09-28 — B-077 Keyboard Inc host CV (local, uncommitted)
+
+- User: Keyboard not sending out Inc.
+- Cause: efficient sidecar `buildCv` computed `increment` but never published `outs.inc` (retired keyboard live evaluator did). Same host-CV class as B-070 keypad, different port.
+- Fix: publish `outs.inc = cv.increment` Pass 1 + Pass 2 for `keyboard`; cache-bust `keyboard-inc-1`. No JS DSP evaluator restore.
+- Docs: `docs/BUG_PLAN.md (B-077)`; BUG_PLAN inventory/inbox/detail.
+- No PR/push.
+
+
+### 2026-09-28 — 1D Trace ≠ 1D Waterfall rename (local, uncommitted)
+
+- Architect correction: Instant Trace / `displayType: "trace"` / module types `traceDisplay*` were **1D Waterfall** (TraceTape strip-chart), not heart-monitor 1D Trace.
+- Renamed waterfall identity to `waterfall` / `waterfallStereo` / `waterfallXyz` / `waterfallRgb`; `displayType` / renderer / settingsSchema `waterfall` (plus `waterfallRgb` / `waterfallXyz` where specialized).
+- True 1D Trace remains `scope1dTrace` / `scope1dTraceStereo`.
+- Shared face layout id `traceDisplay` → `scopeFace` (CSS class `scope-face-layout`).
+- No commit/push; no legacy remap for old `"trace"` as waterfall.
+﻿# Progress — soemdsp-sandbox
+
+
+
+### Waterfall rename finished locally (no commit)
+
+- Identity complete: module ids `waterfall*`, `displayType`/`renderer`/`settingsSchema` `waterfall` (+ rgb/xyz), mode keys `*Waterfall` where they were Instant-Trace strip modes.
+- Shared Display Settings chrome left as `nodeGraphTraceDisplay*` / `traceDisplaySettings`.
+- 1D Trace (`scope1dTrace`) untouched. Layout `scopeFace`.
+- Send removal on Sabrina/SoEm/Delay/PingPong preserved (no `key: "send"`).
+
+### 2026-09-27
+- **B-061 fixed** — small slider readout stripped scientific exponents (`String(n)` → `limit_decimals` mantissa-only). Plain-decimal expand in `node-graph-slider-metadata.js`.
+Branch: `master` @ `4d25266` **SPEED LIMIT FIX** (and later hygiene if present).
+
+
+### Completed (selected)
+
+#### C++ AUDIO ENGINE CLEANING (2026-09-10, `execute-plan/papoulis-filter-finish`)
+- Control chase SSOT: `control_frame` (all continuous Controls per sample; not per-knob)
+- Sample-path gate: `node_needs_sample_accurate_controls` (Control sink / live IN / chase)
+- Unified edges Port|Control + 1-sample / histBuf feedback (self-mod + cycle FM)
+- Sine SSOT wavetable; PolyBLEP sine click fixed; JS DSP twins retired
+- Contracts: `check_graph_engine_contracts.py` + ParamMod/self-mod/cycle smokes in native build
+- Tip commits: `e03ee57c` … `b6412277`
+
+#### MODULE DELETE DOES NOT (should not) RESET AUDIO ENGINE (2026-09-10)
+- Deleting any module (even unconnected) used `soemdsp_graph_clear` and recreated every native instance
+- Fix: `soemdsp_graph_remove_node` + `clear_connections` + surgical `syncNativeGraphFromPlan`
+- Survivors keep env/phase/filter state; smoke `smoke_remove_node_preserves_state.mjs`
+- Commit: `5a6e8fbb`
+
+#### NORMALIZING DISPLAY SETTINGS UX (2026-09-10)
+- Every module opens Display Settings (blank + Show in canvas if no face schema)
+- Stop inventing Instant Waterfall settings for custom layout faces (envelopeCurve / filterCurve)
+- Instant Waterfall monitors (Flower Child, …) keep Instant Waterfall face + Instant Waterfall settings
+- Right-click on display faces → Display Settings (not Module Settings)
+- Layout canvas Phase 1: Show in canvas + phone/F; condensed phone frame removed
+- Commits: `4f6d8c93` … `b60b747e`
+
+
+
+- [x] **CLAP host extracted** (soemdsp-sandbox-claphost)
+- [x] **Code cleanup pass plan** — `docs/CODE_CLEANUP_PASS_PLAN.md`
+- [x] **Core reduction** Phase A/B (floating window registry, Code Screen satellite)
+- [x] **Soft Fractal** WebGL face, blur, pan, params, resource-agnostic pixelated app zoom
+- [x] Graphify re-index after Soft Fractal land
+- [x] Graphify re-index + scope paint-gate after oscilloscope freeze hunt
+
+
+## Backlog Ideas (as of 2026-10-18, before the rebuild)
+
+- Varispeed Delay — plan only (`docs/VARISPEED_DELAY_PLAN.md`). Doppler is a separate parked Space card.
+- Display shaders — move per-pixel display math into GLSL fragment shaders on one shared WebGL context; audio stays native. Plan + progress tracker (all Not started): `docs/WEBGL_DISPLAY_PLAN.md` §12.
+- Electro Snare drum module (Argi 2026-10-06: replaces the `electroSnare` placeholder, removed in C-002) — plan only, not started (`docs/SNARE_PLAN.md`). One shared param set (Tune / Tone / Snappy / Body Decay / Snap Decay / Bend / Amplitude + Algorithm). Candidate algorithms 808 / 909 / Simmons / Modal / FM. Param set and algorithm list under discussion with Argi.
+- Kick (SweepKicker) — built as Robin Sinepulse (type 205), committed and pushed (checked 2026-10-18) (`docs/KICK_PLAN.md`). Robin Schmidt's RS-MET SweepKicker ported to native C++ with his permission (2026-10-06); Trigger / Reset in, Kick / Env out; parity test against Robin's class. Decided 2026-10-06: Decay kept; Trigger keeps the phase (Reset ↺ is the only phase reset); separate from Electro Kick. Owner SandyModules.
+- Flat Zapper — seed (Argi 2026-10-06): Robin's `rsFlatZapper` allpass chain (0–256 one-pole / biquad stages) with an audio input (feed anything through the dispersion chain) and a Trigger (internal impulse → flat-spectrum zap). Params: Stages, Mode, Low / High Freq, Freq Shape, Low / High Q, Q Shape, Impulse, Input, Mix, Amplitude. Measured ≈ 110 ns/sample at 50 biquad stages (≈ 1.25 × SweepKicker), ≈ 640–690 ns at 256. Separate module vs a Phase Disperse mode is open (`docs/KICK_PLAN.md` → Flat Zapper module (seed); `docs/FUTURE_PLANNING.md` §Flat Zapper).
+- Electro Kick — seed, discussion with Argi, not final (`docs/FUTURE_PLANNING.md`). Shared params + Algorithm: 808 / 909 / Simmons SDS-V (SweepKicker stays its own Kick module, Argi 2026-10-06).
+- Electro Hat — seed, discussion with Argi, not final (`docs/FUTURE_PLANNING.md`). 808 / 606 six-oscillator metal, FM / ring-mod, filtered noise; 909 hats are 6-bit samples (not synthesizable); Closed / Open triggers with choke proposed.
+- Electro Tom — seed, discussion with Argi, not final (`docs/FUTURE_PLANNING.md`). Trigger / Reset in, Tom / Env out; 808 / 909 / Simmons SDS-V; Tune, Tone, Body Decay, Bend, Noise, Amplitude (Tune and Bend primary).
+- Softpop Oscillator — built (SandyModules, 2026-10-14), committed and pushed (checked 2026-10-18); ear-check result not recorded. Softpop 2 shipped 2026-10-17. Model Filter (default; TPT SVF const-peak BP + √Q trim + per-Color tilt) / Sine. Pitch Mod (1σ = knob cents) and Amp Mod use raw full-band, Color-shaped noise from their own generators; smoothing deleted. Width only affects Filter (Sine bit-identical across Width, tested). Amp Mod kept but hidden by default (Argi). Latest build: always stereo (Stereo param removed); outs Mono (= Left) / Left / Right / Left Noise / Right Noise / Left CV / Right CV (octaves); log-axis face (glow line / filter curve, HSB + Brightness / Decay); pitch-mod mean correction + sin(w)/w Q decramp. Reset / f in (f replaces Frequency, as on polyBlep). Library extraction approved: `soemdsp/filter/tpt_svf.h` + `soemdsp/math/noise_colors.h`. Plan: `docs/SOFTPOP_PLAN.md`.
+- Sidechain — built (type 216, 2026-10-14), committed and pushed (checked 2026-10-18); awaiting Argi's ear check (S6): ducking helper on the Pump Limiter maths (+ new Hold). In: Left/Right Dry, Left/Right Wet, Sidechain, Envelope; Out: Left, Right; Threshold, Ratio, Attack, Hold, Release. Shared `soemdsp/dynamics/pump_gain.h` proposed (needs §19 approval). Plan: `docs/SIDECHAIN_PLAN.md`.
+- Scope video out - plan only, not started (2026-10-13, Argi via Thoughts): 📺 `rgba` out on every scope / videoscope / display via the existing `nodeGraphPicturePublish`; V1 Spectrogram + Videoscope, V2 GPU scopes, V3 Canvas2D faces. Plan + tracker (VO-0..VO-8, all Not started): `docs/SCOPE_VIDEO_OUT_PLAN.md`.
+- [x] Remove old kick / snare cards (Sinepulse, Sine Kick, Kick Envelope, `electroSnare` placeholder, `electroKick`) — done 2026-10-06, committed and pushed (checked 2026-10-18) (`docs/BUG_PLAN.md` C-002, file list in `docs/KICK_PLAN.md` → Removal).
+- Unipolar switch on every 1D display — plan only, not implemented (docs/FUTURE_PLANNING.md).
+- VU meter — seed only, behavior not specified yet (docs/FUTURE_PLANNING.md).
+- AcidSequencer — shop-shipped (native type 199; `docs/ACID_SEQUENCER_PLAN.md`). Like Sequencer, per-step Gate / Accent / Slide / Octave on a 13-note C-to-C grid (seed in `docs/FUTURE_PLANNING.md`).
+- Name-based choice persistence — audit/migrate index-based saves (`docs/APP_POLICY.md` + `docs/FUTURE_PLANNING.md`).
+- Delay with exposed feedback path — insert arbitrary modules in the loop (seed in `docs/FUTURE_PLANNING.md`).
+- Dimensional parameter prototyping — different settings across frequency/pitch (seed in ``docs/FUTURE_PLANNING.md``).
+- Circuits on a keyboard — play circuits like a sample library (seed in ``docs/FUTURE_PLANNING.md``).
+- Keytracking / pitch-tracking modulation UI (seed in ``docs/FUTURE_PLANNING.md``).
+- True metamodule parameter mirror: outer `mx_*` edits/menus target inner child (one conceptual param); nested parent-unexpose vs grandparent-expose stays explicit (seed in `docs/FUTURE_PLANNING.md`). Website limited checkbox mirror ships first.
+- Remove Sync from waterfall scopes (incompatible; decision in `docs/FUTURE_PLANNING.md`, not done in code).
+- Waterfall redesign (P2P bars): **implemented** on ArchIV — visual glance after reload (`docs/FUTURE_PLANNING.md`).
+- [ ] JS DSP removal (audio native WASM/C++ only) — in progress (updated 2026-10-06). Landed in `9c3a4d7d` (pushed 2026-10-04): Speaker Protector 2 native (Render Sample uses `createNodeGraphNativeEarProtector`, no JS fallback), live-worklet decimator native (`native_modules/rapt_elliptic_decimator/`), all 50 dead `*-math.js` deleted. `node-graph-musical-engines.js` deleted in `87b1b517`. Top blocker now: Render Sample still runs a JS copy of the rapt elliptic decimator in `public/node-graph-render-output.js`. Open list: `docs/BUG_PLAN.md` → **Cleanup** → **C-001** → State (2026-10-06). Do not commit/push without Argi's ok.
+
+- [ ] Inlets/outlets above displays, app-wide (`docs/FUTURE_PLANNING.md`)
+- [ ] **Sabrina instance handles** — multi-instance (`docs/INSTANCE_HANDLE_PATTERN.md`)
+- [ ] Lo-Fi Pitch Shift component-first (`docs/LOFI_PITCH_SHIFT_PLAN.md`)

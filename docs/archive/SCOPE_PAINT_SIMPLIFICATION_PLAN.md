@@ -1,5 +1,7 @@
 # Scope paint simplification plan (Graphify-backed)
 
+> **Archived 2026-10-18** (finished or superseded; cleanup approved by Argi). Kept for history; do not work from it.
+
 Refreshed: `graphify update . --force` (2026-08-09) → **7759 nodes · 13571 edges · 1198 communities**.
 
 ## Why oscilloscopes kept “only updating on Settings / Unpause”

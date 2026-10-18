@@ -1,8 +1,11 @@
 # Zoom / pan + magnifier performance plan
 
+> **Archived 2026-10-18** (finished or superseded; cleanup approved by Argi). Kept for history; do not work from it.
+
 **Date:** 2026-08-20  
+**Superseded camera note (2026-10-18):** the camera is no longer CSS `zoom`. Today the HTML world layers move by `translate3d(x, y, 0) scale(zoom)` (`nodeGraphApplyPanVarsToWorldLayers`, `public/node-graph-viewport-perf.js` ~L28-43) and the GL graph draws the picture; the true GPU camera is GW-2 in `docs/GPU_WORKSPACE_PLAN.md`. Historical status follows.  
 **Status:** Implemented — camera is CSS `zoom` on a clipped (workspace/zoom) box, not `transform: scale` (that path exploded the compositor layer). Magnifier freeze-all. No freeze on zoom/pan.  
-**Constraint:** Planning only. Do not amend `docs/UNCONFUSE_REFACTOR_PLAN.md` or `docs/DEBUG_LOG_PERFORMANCE_PLAN.md`.
+**Constraint:** Planning only. Do not amend `docs/archive/UNCONFUSE_REFACTOR_PLAN.md` or `docs/DEBUG_LOG_PERFORMANCE_PLAN.md`.
 
 ---
 

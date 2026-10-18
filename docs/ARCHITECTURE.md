@@ -1,6 +1,6 @@
 # soemdsp-sandbox architecture map
 
-North-star layout after the high-risk refactor track (`docs/HIGH_RISK_HIGH_REWARD_PLAN.md`).
+North-star layout after the high-risk refactor track (`docs/archive/HIGH_RISK_HIGH_REWARD_PLAN.md`).
 Prefer this over outdated “four edit points” mental models when they conflict.
 
 ## Layers
@@ -105,7 +105,7 @@ Mechanical rule: **extract only** — same method bodies on `NodeLiveAudioProces
 
 ## Persist + Display Settings (unconfuse)
 
-Session blob vs UI-settings blob, Display Settings schema table, phosphor shims, and deprecated no-ops: **`docs/UNCONFUSE_REFACTOR_PLAN.md` Phase 0**.
+Session blob vs UI-settings blob, Display Settings schema table, phosphor shims, and deprecated no-ops: **`docs/archive/UNCONFUSE_REFACTOR_PLAN.md` Phase 0**.
 
 Boot (target): load UI settings → load session → hydrate → commit patch → restore selection → restore windows. Do not persist empty selection / empty live graph over a good session during that window.
 
@@ -166,8 +166,8 @@ Same globals and load order. Not required for sound or patches; pure maintainabi
 
 ## Related docs
 
-- `HIGH_RISK_HIGH_REWARD_PLAN.md` — phased bets and gates  
+- `archive/HIGH_RISK_HIGH_REWARD_PLAN.md` — phased bets and gates  
 - `MODULE_PATTERN_REFERENCE.md` — module translation patterns  
 - `ADDING_HARDCODED_SANDBOX_MODULE.md` — step-by-step add  
-- `A1_LIVE_WORKLET_DSP_INVENTORY.md` — dual-lane inventory  
+- `archive/A1_LIVE_WORKLET_DSP_INVENTORY.md` — dual-lane inventory  
 - `PATCH_MIGRATIONS.md` — format migrators  

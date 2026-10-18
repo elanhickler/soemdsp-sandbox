@@ -1,6 +1,6 @@
 # Plugin Repo Plan: `soemdsp-sandbox-plugins`
 
-**Status:** plan only, nothing built or pushed. Filed 2026-10-14.
+**Status:** PR-1 (history push) done; PR-2..PR-12 commits are on `origin/main` of soemdsp-sandbox-plugins (checked 2026-10-18; PR-12 CI written, run state per tracker). Filed 2026-10-14.
 **Repo:** `github.com/elanhickler/soemdsp-sandbox-plugins` (private, created by Argi 2026-10-14). Sabrina history pushed 2026-10-14: `main` = `8da83ea4378b0486fb78e80ad3cc5a78a42406eb`, no tags.
 **Basis:** the **Sabrina Reverb** plugin shell (`C:\Users\argit\Documents\_PROGRAMMING\sabrina-reverb-clap`), **not** `soemdsp-sandbox-audioplugin`.
 **Rule:** every product shares the shell (CLAP/VST3/AU via clap-wrapper, engine, UI, presets, CI/release) and differs only in **DSP + parameters**. Every plugin looks like Sabrina.
@@ -221,17 +221,17 @@ Inputs/outputs: start with stereo effects (2→2). Instruments (note/MIDI input,
 | ID | Item | Status |
 | --- | --- | --- |
 | PR-1 | Push sabrina-reverb-clap `main` (no tags) into `soemdsp-sandbox-plugins` | Done 2026-10-14, `8da83ea` (verified on GitHub) |
-| PR-2 | Restructure: `src/` → `shell/`, `dsp/` → `products/sabrina-reverb/dsp/`, `runtime/`, `dsp-common/` | Done locally 2026-10-14, `f7132bb` (not pushed) |
-| PR-3 | `product.json` schema + generator → `product_desc.h`, plus `params.lock` check | Done locally, `2ffbb95`: CMake `string(JSON)` generator `cmake/product_json.cmake` → `build/generated/<slug>/product_generated.h` (not pushed) |
-| PR-4 | `product-api.h` (`Descriptor`, `Kernel`, `makeViz`) + Sabrina adapter | Done locally, `c81db67`: `shell/product/product-api.h` (Kernel), `product-face.h` (Face, makeFace), `products/sabrina-reverb/src/sabrina-kernel.cpp` (not pushed) |
-| PR-5 | `Patch` built from the descriptor. Delete `SabrinaNode` + `SabrinaSoemParams` duplication | Done locally, `2ffbb95` (not pushed) |
-| PR-6 | `Engine` uses `Kernel` (dirty-param push, block process, idle) | Done locally, `c81db67`: block process + idle via Kernel. Params still pushed every block (no dirty flags yet, keeps golden identical) (not pushed) |
+| PR-2 | Restructure: `src/` → `shell/`, `dsp/` → `products/sabrina-reverb/dsp/`, `runtime/`, `dsp-common/` | Done locally 2026-10-14, `f7132bb` (pushed, on `origin/main` per 2026-10-18 check) |
+| PR-3 | `product.json` schema + generator → `product_desc.h`, plus `params.lock` check | Done locally, `2ffbb95`: CMake `string(JSON)` generator `cmake/product_json.cmake` → `build/generated/<slug>/product_generated.h` (pushed, on `origin/main` per 2026-10-18 check) |
+| PR-4 | `product-api.h` (`Descriptor`, `Kernel`, `makeViz`) + Sabrina adapter | Done locally, `c81db67`: `shell/product/product-api.h` (Kernel), `product-face.h` (Face, makeFace), `products/sabrina-reverb/src/sabrina-kernel.cpp` (pushed, on `origin/main` per 2026-10-18 check) |
+| PR-5 | `Patch` built from the descriptor. Delete `SabrinaNode` + `SabrinaSoemParams` duplication | Done locally, `2ffbb95` (pushed, on `origin/main` per 2026-10-18 check) |
+| PR-6 | `Engine` uses `Kernel` (dirty-param push, block process, idle) | Done locally, `c81db67`: block process + idle via Kernel. Params still pushed every block (no dirty flags yet, keeps golden identical) (pushed, on `origin/main` per 2026-10-18 check) |
 | PR-7 | Generic `SeFace` from `layout.order` + theme file. Sabrina stems → `products/sabrina-reverb/viz` | Partly: sliders follow `layout.order` (`2ffbb95`), face is behind `se::product::Face`/`makeFace` (`c81db67`). Still open: move SabrinaSlider/TitleBar/palette into `shell/ui/face/`, waterfall into `products/sabrina-reverb/viz/` |
-| PR-8 | Presets from the descriptor (ext, vendor folder, cmrc namespace) | Done locally, `c81db67` (cmrc namespace is now `se_presets` for every product) (not pushed) |
-| PR-9 | `cmake/add_product.cmake` + `SE_PRODUCTS` selection | Done locally, `a6c5793` (not pushed) |
+| PR-8 | Presets from the descriptor (ext, vendor folder, cmrc namespace) | Done locally, `c81db67` (cmrc namespace is now `se_presets` for every product) (pushed, on `origin/main` per 2026-10-18 check) |
+| PR-9 | `cmake/add_product.cmake` + `SE_PRODUCTS` selection | Done locally, `a6c5793` (pushed, on `origin/main` per 2026-10-18 check) |
 | PR-10 | Identity regression test: clap id, param ids, preset load of a v0.1.6 `.sabrina` file | Partly, `2ffbb95`: test checks clap/patch id, patchVersion 2, `.sabrina`, 11 params with ids 500–510. Still open: load a real v0.1.6 `.sabrina` preset file |
-| PR-11 | Sabrina parity test: new repo output == sabrina-reverb v0.1.6 output | Done locally, `46c422d`: golden FNV-1a hash `158daa45d1c696c3` (48 kHz, block 8, 4 s impulse+noise, fixed params + one automation step) recorded from the unmodified pushed code and unchanged after every commit (not pushed) |
-| PR-12 | CI: OS × product matrix, `<slug>-v<ver>` tags, artifact names, owner = elanhickler | Written, not run, `98bd1b8`: `.github/workflows/build.yml` (not pushed) |
+| PR-11 | Sabrina parity test: new repo output == sabrina-reverb v0.1.6 output | Done locally, `46c422d`: golden FNV-1a hash `158daa45d1c696c3` (48 kHz, block 8, 4 s impulse+noise, fixed params + one automation step) recorded from the unmodified pushed code and unchanged after every commit (pushed, on `origin/main` per 2026-10-18 check) |
+| PR-12 | CI: OS × product matrix, `<slug>-v<ver>` tags, artifact names, owner = elanhickler | Written, not run, `98bd1b8`: `.github/workflows/build.yml` (pushed, on `origin/main` per 2026-10-18 check) |
 | PR-13 | First release `sabrina-reverb-v0.2.0` + public download host + site switch (catalog plan) | Not started |
 | PR-14 | Old repo: banner + archive (deferred, ask Argi again at PR-13) | Not started |
 | PR-15 | `tools/import-sandbox-module.mjs` (definitions → params JSON) | Not started |
@@ -242,7 +242,7 @@ Inputs/outputs: start with stereo effects (2→2). Instruments (note/MIDI input,
 | PR-21 | Rename leftover shell identifiers (`soundemote::sabrina` namespace, `SabrinaPlugin`, `sabrina_*_factory`, header guards) to neutral names | Not started |
 | PR-19 | Fix `libs/soemdsp` submodule's own remote (soundemote → elanhickler) in the new repo | Not started |
 
-### Restructure log (2026-10-14, local only, not pushed)
+### Restructure log (2026-10-14; pushed since, checked 2026-10-18)
 
 Clone: `C:\Users\argit\Documents\_PROGRAMMING\soemdsp-sandbox-plugins`. Each commit was built (CLAP + VST3 + tests, VS 2022 x64 Release) and passed the golden render with `scripts/verify.ps1`:
 

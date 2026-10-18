@@ -2872,16 +2872,6 @@ html.soemdsp-hide-ui.body.node-patch-load-fault-open #nodePatchLoadFault {
   transform-origin: 0 0;
 }
 
-.node-camera-preview-wire-svg {
-  position: absolute;
-  inset: 0;
-  z-index: 1;
-  width: 100%;
-  height: 100%;
-  overflow: visible;
-  pointer-events: none;
-}
-
 .node-camera-preview-world .node-graph-nodes {
   z-index: auto;
 }
@@ -7885,8 +7875,6 @@ body.node-graph-magnifying-active .node-graph-workspace * {
 
 /* Hide cables, jack inlets/outlets, and connection dots while zooming.
    Modules stay. visibility so settle unhides (class drop). */
-.node-graph-workspace.viewport-zooming #nodeWireSvg,
-.node-graph-workspace.viewport-zooming #nodeWireEndpointSvg,
 .node-graph-workspace.viewport-zooming .node-port,
 .node-graph-workspace.viewport-zooming .node-param-port {
   visibility: hidden !important;
@@ -12729,13 +12717,34 @@ body.node-graph-magnifying-active .node-graph-workspace * {
   top: 0;
   width: 100%;
   height: 100%;
-  transform-origin: 0 0;
-  transform: translate3d(
-    var(--node-graph-pan-x),
-    var(--node-graph-pan-y),
-    0
-  ) scale(var(--node-graph-zoom));
+  transform: none;
   pointer-events: none;
+}
+
+.node-graph-text-behind,
+.node-graph-text-front {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  overflow: visible;
+}
+
+.node-graph-text-behind {
+  z-index: 1;
+}
+
+.node-gl-graph-wires {
+  z-index: 0;
+}
+
+.node-graph-workspace.wires-above-modules .node-gl-graph-wires {
+  z-index: 3;
+}
+
+.node-graph-text-front {
+  z-index: 3;
 }
 
 /* B-055: Text Box host under #nodeWireSvg. Shares .node-graph-world-layer transform. */
@@ -12908,9 +12917,9 @@ body.node-graph-magnifying-active .node-graph-workspace * {
   display: block;
 }
 
-/* Visibility → Wire Lengths off: hide permanent cable strokes (dots stay). */
-.node-graph-workspace.wire-lengths-hidden .node-wire-path:not(.temp) {
-  display: none;
+/* Visibility → Wire Lengths off: the GPU wire canvas stays hidden. Dots stay on the overlay. */
+.node-graph-workspace.wire-lengths-hidden .node-gl-graph-wires {
+  visibility: hidden;
 }
 
 .node-module-scope-canvas,
@@ -13002,7 +13011,7 @@ body.room-dimmer-on .node-room-dimmer-canvas,
 }
 
 .node-gl-graph-dots {
-  z-index: 3;
+  z-index: 4;
 }
 
 .node-graph-workspace.gl-graph-on .dsp-node,
@@ -13075,148 +13084,6 @@ body.room-dimmer-on .node-room-dimmer-canvas,
   color: transparent !important;
 }
 
-.node-wire-svg {
-  position: absolute;
-  inset: 0;
-  /* Behind .node-graph-zoom-surface (z:1) so cables sit under modules.
-     Screen-space: viewBox is the camera frustum; clip to the viewport. */
-  z-index: 0;
-  width: 100%;
-  height: 100%;
-  overflow: hidden;
-  /* Above annotation Text Boxes (sibling layer before this SVG). Full-bleed
-     must not steal clicks — hit targets stay on .node-wire-hit-path. */
-  pointer-events: none;
-}
-
-/* Contact discs always on the overlay. Visual cable follows Visibility →
-   Wires Above Modules (overlay vs .node-wire-svg). Hit targets stay under. */
-.node-wire-endpoint-svg {
-  position: absolute;
-  inset: 0;
-  /* Above zoom-surface modules; screen-space camera viewBox like #nodeWireSvg. */
-  z-index: 3;
-  width: 100%;
-  height: 100%;
-  overflow: hidden;
-  pointer-events: none;
-}
-
-.node-wire-path {
-  fill: none;
-  stroke-linecap: round;
-  stroke-width: var(--node-wire-thickness);
-  pointer-events: none;
-  color-interpolation: sRGB;
-}
-
-/* Overlay cables sit on the plugs. Drop-shadow / opacity pulse here is the
-   halo on every jack ("the shadow"). Selected glow stays on under-module SVG. */
-.node-wire-endpoint-svg .node-wire-path,
-.node-wire-endpoint-svg .node-wire-path.selected,
-.node-wire-endpoint-svg .node-wire-path.state-read,
-.node-wire-endpoint-svg .node-wire-path.inactive-wire.selected,
-.node-wire-endpoint-svg .node-wire-path.trace-wire.selected {
-  filter: none !important;
-  animation: none;
-}
-
-.node-wire-path.trace-wire {
-  stroke-linecap: butt;
-  stroke-linejoin: miter;
-  stroke-width: var(--node-trace-wire-thickness);
-  shape-rendering: crispEdges;
-}
-
-/* stop-color comes from the wire path (port colors). No accent/mod fallback —
-   those could disagree with the endpoint disc at the jack. */
-.node-wire-gradient-stop,
-.node-modulation-wire-gradient-stop {
-  /* intentional empty — color set inline on each <stop> */
-}
-
-.node-wire-path.selected {
-  filter:
-    drop-shadow(0 0 3px rgba(255, 236, 153, 0.78))
-    drop-shadow(0 0 8px rgba(247, 183, 88, 0.44));
-  animation: node-wire-selected-glow 920ms ease-in-out infinite alternate;
-}
-
-.node-modulation-wire-path {
-  stroke-width: max(1px, calc(var(--node-wire-thickness) * 0.84));
-}
-
-.node-modulation-wire-path.trace-wire {
-  stroke-width: var(--node-trace-wire-thickness);
-}
-
-.node-wire-path.state-read {
-  filter: drop-shadow(0 0 4px rgba(177, 132, 255, 0.22));
-}
-
-.node-wire-path.state-read.selected {
-  filter:
-    drop-shadow(0 0 4px rgba(255, 236, 153, 0.9))
-    drop-shadow(0 0 10px rgba(247, 183, 88, 0.56))
-    drop-shadow(0 0 7px rgba(177, 132, 255, 0.34));
-}
-
-.node-wire-path.trace-wire.selected {
-  stroke-width: max(3px, calc(var(--node-trace-wire-thickness) * 3));
-  filter:
-    drop-shadow(0 0 4px rgba(255, 236, 153, 0.92))
-    drop-shadow(0 0 9px rgba(247, 183, 88, 0.5));
-}
-
-.node-wire-path.state-read.trace-wire.selected {
-  filter:
-    drop-shadow(0 0 4px rgba(255, 236, 153, 0.95))
-    drop-shadow(0 0 12px rgba(247, 183, 88, 0.58))
-    drop-shadow(0 0 8px rgba(177, 132, 255, 0.42));
-}
-
-/* Dim only — never dash. Dotted = .temp (connecting) only. */
-.node-wire-path.inactive-wire {
-  opacity: 0.45;
-}
-
-.node-wire-path.inactive-wire.selected {
-  opacity: 0.78;
-  filter: drop-shadow(0 0 5px rgba(247, 183, 88, 0.36));
-}
-
-.node-wire-path.inactive-wire.trace-wire.selected,
-.node-wire-path.inactive-wire.state-read.trace-wire.selected {
-  opacity: 0.9;
-  stroke-width: max(3px, calc(var(--node-trace-wire-thickness) * 3));
-  filter:
-    drop-shadow(0 0 4px rgba(255, 236, 153, 0.92))
-    drop-shadow(0 0 10px rgba(247, 183, 88, 0.52))
-    drop-shadow(0 0 7px rgba(177, 132, 255, 0.34));
-}
-
-@keyframes node-wire-selected-glow {
-  0% {
-    stroke-opacity: 0.82;
-  }
-  100% {
-    stroke-opacity: 1;
-  }
-}
-
-.node-wire-hit-path {
-  fill: none;
-  stroke: rgba(255, 255, 255, 0.001);
-  stroke-linecap: round;
-  stroke-width: max(18px, calc(var(--node-wire-thickness) * 5));
-  pointer-events: stroke;
-}
-
-.node-wire-path.temp {
-  stroke-dasharray: 8 7;
-  pointer-events: none;
-}
-
 .node-io-row.port-connection-selected,
 .node-io-row.port-connection-selected .node-port {
   color: var(--accent);
@@ -13235,26 +13102,6 @@ body.room-dimmer-on .node-room-dimmer-canvas,
 .node-param-port.port-connection-selected {
   --node-port-crescent-fill: transparent;
   --node-port-crescent-stroke: color-mix(in srgb, var(--accent) 80%, transparent);
-}
-
-.node-wire-path.destroyed {
-  stroke: rgba(255, 82, 82, 0.96);
-  stroke-dasharray: 10 5;
-  stroke-width: calc(var(--node-wire-thickness) + 1px);
-  filter: drop-shadow(0 0 7px rgba(255, 82, 82, 0.52));
-  pointer-events: none;
-  animation: node-wire-destroyed 520ms ease-out forwards;
-}
-
-@keyframes node-wire-destroyed {
-  0% {
-    opacity: 1;
-    stroke-dashoffset: 0;
-  }
-  100% {
-    opacity: 0;
-    stroke-dashoffset: 28;
-  }
 }
 
 .node-graph-nodes {
@@ -13850,8 +13697,6 @@ body.node-screen-solo-active .node-screen-solo-face.node-sample-waveform-display
 
 .node-graph-workspace.patch-locked .node-port,
 .node-graph-workspace.patch-locked .node-param-port,
-.node-graph-workspace.patch-locked .node-wire-svg,
-.node-graph-workspace.patch-locked .node-wire-endpoint-svg,
 .node-graph-workspace.patch-locked .node-selection-hit-trail {
   pointer-events: none !important;
 }
@@ -16111,12 +15956,14 @@ body.node-screen-solo-active .node-screen-solo-face.node-sample-waveform-display
   background-color: transparent !important;
 }
 
-.node-graph-workspace.gl-graph-on .dsp-node:has(> .node-text-box-body) .node-text-box-input {
-  color: transparent;
-  -webkit-text-fill-color: transparent;
+.node-graph-workspace.gl-graph-on .dsp-node {
+  background: transparent !important;
+  box-shadow: none !important;
 }
 
-.node-graph-workspace.gl-graph-on .dsp-node:has(> .node-text-box-body):focus-within .node-text-box-input {
+.node-graph-text-front .node-text-box-input,
+.node-graph-text-behind .node-text-box-input,
+.node-graph-workspace.gl-graph-on .node-text-box-input {
   color: var(--node-text-box-fg, var(--node-module-primary-text-color));
   -webkit-text-fill-color: currentColor;
 }

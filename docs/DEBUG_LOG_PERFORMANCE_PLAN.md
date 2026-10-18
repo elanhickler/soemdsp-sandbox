@@ -4,7 +4,7 @@
 **Status:** Proposed — implement only when granted  
 **Constraint:** Planning only until an explicit implement pass.
 
-This is a **new** plan. It does not amend `docs/UNCONFUSE_REFACTOR_PLAN.md`.
+This is a **new** plan. It does not amend `docs/archive/UNCONFUSE_REFACTOR_PLAN.md`.
 
 ---
 

@@ -234,6 +234,7 @@ function normalizeNodeGraphTextBoxLayout(layout = {}) {
       { fromBipolar },
     ),
     showOnTop: source.showOnTop === true || source.showOnTop === "true" || source.showOnTop === 1,
+    wireStack: source.wireStack === "behind" ? "behind" : "front",
   };
 }
 

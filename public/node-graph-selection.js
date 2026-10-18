@@ -778,14 +778,6 @@ function renderNodeGraphSelection() {
   const selectedWireKeys = new Set(
     nodeGraphSelectedWireEntries().map((e) => nodeGraphWireSelectionKey(e.kind, e.index)),
   );
-  for (const path of document.querySelectorAll(".node-wire-path")) {
-    const key = nodeGraphWireSelectionKey(
-      path.dataset.connectionKind || "signal",
-      Number(path.dataset.connectionIndex),
-    );
-    path.classList.toggle("selected", selectedWireKeys.has(key));
-  }
-
   for (const item of document.querySelectorAll("[data-connection-row-index]")) {
     const key = nodeGraphWireSelectionKey(
       item.dataset.connectionRowKind || "signal",

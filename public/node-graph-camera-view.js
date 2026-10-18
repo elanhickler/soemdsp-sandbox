@@ -136,62 +136,6 @@ function handleNodeGraphCameraResolutionChange() {
   patchNodeGraphCamera(next);
 }
 
-function nodeGraphCameraCloneWireSvg(liveSvg) {
-  if (!liveSvg) {
-    return null;
-  }
-  const clone = liveSvg.cloneNode(true);
-  clone.removeAttribute("id");
-  clone.classList.add("node-camera-preview-wire-svg");
-  clone.setAttribute("aria-hidden", "true");
-  clone.setAttribute("focusable", "false");
-  clone.style.pointerEvents = "none";
-  clone.style.width = "100%";
-  clone.style.height = "100%";
-  clone.style.overflow = "visible";
-  // Preview world is pan=0 zoom=1: wire paths are world coords, so viewBox is
-  // the layout box — not the live screen-space camera frustum.
-  const graphRect = typeof nodeGraphGraphRect === "function" ? nodeGraphGraphRect() : null;
-  if (graphRect && graphRect.width > 0 && graphRect.height > 0) {
-    clone.setAttribute("viewBox", `0 0 ${graphRect.width} ${graphRect.height}`);
-  } else {
-    const viewBox = liveSvg.getAttribute("viewBox");
-    if (viewBox) {
-      clone.setAttribute("viewBox", viewBox);
-    }
-  }
-  const rect = liveSvg.getBoundingClientRect();
-  if (rect.width > 0 && rect.height > 0) {
-    clone.setAttribute("width", String(rect.width));
-    clone.setAttribute("height", String(rect.height));
-  }
-  const idMap = new Map();
-  clone.querySelectorAll("defs [id]").forEach((element) => {
-    const oldId = element.id;
-    const newId = `camera-preview-${oldId}`;
-    idMap.set(oldId, newId);
-    element.id = newId;
-  });
-  if (idMap.size) {
-    clone.querySelectorAll("*").forEach((element) => {
-      for (const attribute of ["clip-path", "fill", "filter", "mask", "stroke"]) {
-        const value = element.getAttribute(attribute);
-        if (!value) {
-          continue;
-        }
-        let nextValue = value;
-        for (const [oldId, newId] of idMap) {
-          nextValue = nextValue.replaceAll(`url(#${oldId})`, `url(#${newId})`);
-        }
-        if (nextValue !== value) {
-          element.setAttribute(attribute, nextValue);
-        }
-      }
-    });
-  }
-  return clone;
-}
-
 function nodeGraphCanvasCopyIsExpensive(canvas) {
   if (!canvas) {
     return true;
@@ -306,7 +250,7 @@ function copyNodeGraphCameraWorldCanvases(source, clone, options = {}) {
   });
 }
 
-function createNodeGraphCameraWorldClone(source, wireSvg) {
+function createNodeGraphCameraWorldClone(source) {
   if (typeof stampNodeGraphCanvasCopyKeys === "function") {
     stampNodeGraphCanvasCopyKeys(source);
   }
@@ -328,29 +272,6 @@ function createNodeGraphCameraWorldClone(source, wireSvg) {
   clone.querySelector("#nodeCameraOverlayLayer")?.remove();
   clone.querySelector("#nodeSelectionMarquee")?.remove();
   clone.querySelector("#nodeSelectionHitTrail")?.remove();
-  clone.querySelector("#nodeWireSvg, .node-wire-svg")?.remove();
-  clone.querySelector("#nodeWireEndpointSvg, .node-wire-endpoint-svg")?.remove();
-  const zoomSurface = clone.querySelector("#nodeGraphZoomSurface, .node-graph-zoom-surface") || clone;
-  // Prefer the module world layer — annotation layer also uses .node-graph-world-layer (B-055).
-  const worldLayer = clone.querySelector("#nodeGraphWorldLayer")
-    || clone.querySelector(".node-graph-world-layer:not(.node-graph-annotation-world-layer)")
-    || zoomSurface;
-  if (wireSvg) {
-    worldLayer.prepend(wireSvg);
-  }
-  // Cap layer above modules (same order as live graph).
-  const endpointSvg = nodeGraphCameraCloneWireSvg(document.getElementById("nodeWireEndpointSvg"));
-  if (endpointSvg) {
-    endpointSvg.classList.add("node-wire-endpoint-svg");
-    const nodes = worldLayer.querySelector(".node-graph-nodes");
-    if (nodes?.nextSibling) {
-      worldLayer.insertBefore(endpointSvg, nodes.nextSibling);
-    } else if (nodes) {
-      nodes.after(endpointSvg);
-    } else {
-      worldLayer.append(endpointSvg);
-    }
-  }
   copyNodeGraphCameraWorldCanvases(source, clone);
   if (typeof clearNodeGraphCanvasCopyKeys === "function") {
     clearNodeGraphCanvasCopyKeys(source);
@@ -383,8 +304,7 @@ function renderNodeGraphCameraFeed(options = {}) {
   if (typeof drawNodeGraphWires === "function") {
     drawNodeGraphWires();
   }
-  const wireSvg = nodeGraphCameraCloneWireSvg(document.getElementById("nodeWireSvg"));
-  const clone = createNodeGraphCameraWorldClone(workspace, wireSvg);
+  const clone = createNodeGraphCameraWorldClone(workspace);
   if (typeof options.decorateClone === "function") {
     options.decorateClone(clone, { camera, surface, viewport });
   }

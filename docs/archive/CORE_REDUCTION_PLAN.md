@@ -1,8 +1,10 @@
 # Core reduction plan (not modules)
 
+> **Archived 2026-10-18** (finished or superseded; cleanup approved by Argi). Kept for history; do not work from it.
+
 **Premise:** The app is a modular patcher + live audio. The core shell that *unites* modules should stay small and simple. `modules/**` may grow forever; core should not.
 
-**Status:** Active. Work against this doc; update checkboxes as items land.
+**Status:** Closed 2026-10-18 — 12 of 16 items done. The 4 open items (Phase C dead CSS, Phase D) are now standing items in `docs/FUTURE_PLANNING.md` "Core shell standing items".
 
 ---
 
@@ -56,7 +58,7 @@ Patch serialization keeps a **thin** always-on model (`node-graph-code-screen-mo
 - [x] Loader stubs so callers keep working (`typeof` / direct calls).
 - [x] No new Code Screen features outside Code Screen files while unfinished.
 
-**Landed:** `docs/CORE_REDUCTION_PLAN.md`, registry + bridge in `node-graph-floating-windows.js`, `node-graph-code-screen-loader.js`, index.html always-on script drop for code-screen UI.
+**Landed:** this plan, registry + bridge in `node-graph-floating-windows.js`, `node-graph-code-screen-loader.js`, index.html always-on script drop for code-screen UI.
 
 ### Phase C — Chrome discipline (already started)
 
