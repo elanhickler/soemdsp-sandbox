@@ -2805,7 +2805,7 @@ const nodeGraphWorkspaceFloatingUiSelector =
   "#nodeSampleWaveformSettingsWindow, #nodeModuleShopView, " +
   "#nodeTraceDisplaySettingsPopover, #nodeUserUiSettingsPanel, #nodeUiDevHelper, " +
   "#nodeVisibilityMenu, #nodePatchDefaultsPanel, " +
-  "#nodeHotkeysPage, #nodeEmojiPage, " +
+  "#nodeHotkeysPage, #nodeEmojiPage, #nodeMiniPerformPage, " +
   ".node-floating-window-surface";
 // Legacy alias: includes form fields for empty-canvas / marquee checks only.
 const nodeGraphWorkspaceInteractiveDialogSelector =

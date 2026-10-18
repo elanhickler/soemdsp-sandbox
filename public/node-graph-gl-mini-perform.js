@@ -1,0 +1,246 @@
+// Mini Performance View, GL pass (docs/MINI_PERFORM_VIEW_PLAN.md MP-3).
+// WebGL2 through gl-line-renderer on the shared context. No 2D drawing, no
+// DOM copies of faces: display tiles draw the module's display canvases as
+// textured quads; whole-module, Text Box and not-yet-GPU tiles run the GL
+// graph's own module pass (its `view` path) aimed at a host over the tile.
+// Everything is laid out at the reference screen size and scaled by one
+// factor s (zoom-1 / no reflow).
+
+const NODE_GRAPH_MINI_PERFORM_BACKDROP = [0, 0, 0, 1];
+const NODE_GRAPH_MINI_PERFORM_FRAME = [1, 1, 1, 0.28];
+const NODE_GRAPH_MINI_PERFORM_TEXT = [0.8, 0.82, 0.86, 1];
+
+function nodeGraphGlMiniPerformView() {
+  let view = document.getElementById("nodeMiniPerformView");
+  const host = document.getElementById("nodeGraphWorkspace");
+  if (!host) return null;
+  if (!view || view.parentElement !== host) {
+    view?.remove();
+    view = document.createElement("div");
+    view.id = "nodeMiniPerformView";
+    view.className = "node-mini-perform-view";
+    view.setAttribute("aria-hidden", "true");
+    const canvas = document.createElement("canvas");
+    canvas.id = "nodeGlGraphMiniPerform";
+    canvas.className = "node-mini-perform-canvas";
+    view.append(canvas);
+    view._moduleHosts = new Map();
+    // Window capture: runs before the document-level capture handlers
+    // (selection / value drags) that would otherwise swallow the press.
+    if (!nodeGraphGlMiniPerformView._bound) {
+      nodeGraphGlMiniPerformView._bound = true;
+      window.addEventListener("pointerdown", (event) => {
+        const v = document.getElementById("nodeMiniPerformView");
+        if (!v || v.hidden || !v.contains(event.target)) return;
+        if (typeof beginNodeGraphMiniPerformPointer === "function") beginNodeGraphMiniPerformPointer(event);
+      }, true);
+    }
+    host.append(view);
+  }
+  return view;
+}
+
+function nodeGraphGlMiniPerformTextOpts(opts) {
+  return typeof nodeGraphGlGraphTextOpts === "function" ? nodeGraphGlGraphTextOpts(opts) : opts;
+}
+
+function nodeGraphGlMiniPerformHide() {
+  const view = document.getElementById("nodeMiniPerformView");
+  if (view) view.hidden = true;
+}
+
+/** Display canvases of a module in zoom-1 layout px relative to the module. */
+function nodeGraphGlMiniPerformDisplays(el) {
+  const out = [];
+  if (!el || typeof nodeGraphModuleLayoutBox !== "function") return out;
+  const canvases = el.querySelectorAll(".node-display-canvas");
+  for (let i = 0; i < canvases.length; i += 1) {
+    const c = canvases[i];
+    if (!(c.width > 1) || !(c.height > 1) || c.closest("[hidden]")) continue;
+    const box = nodeGraphModuleLayoutBox(c, el);
+    if (box && box.w > 1 && box.h > 1) out.push({ canvas: c, ...box });
+  }
+  return out;
+}
+
+/** Vertical bands of a whole module to show: the In/Out band is cropped out (F hides it). */
+function nodeGraphGlMiniPerformBands(el, nat) {
+  const io = el.classList.contains("io-hidden") ? null : el.querySelector(":scope > .dsp-node-io-section");
+  const ioBox = io && typeof nodeGraphModuleLayoutBox === "function" ? nodeGraphModuleLayoutBox(io, el) : null;
+  if (!ioBox || !(ioBox.h > 1)) return [{ y0: 0, y1: nat.h }];
+  const bands = [];
+  if (ioBox.y > 0.5) bands.push({ y0: 0, y1: ioBox.y });
+  if (ioBox.y + ioBox.h < nat.h - 0.5) bands.push({ y0: ioBox.y + ioBox.h, y1: nat.h });
+  return bands.length ? bands : [{ y0: 0, y1: nat.h }];
+}
+
+/**
+ * Run the GL graph module pass for one module into `host`. Same mechanism as
+ * nodeGraphGlGraphPresentTile: the workspace state is saved and restored, so
+ * the workspace picture and its held mesh are untouched.
+ */
+function nodeGraphGlMiniPerformPresentModule(host, el, id, scale, camY, camX = 0) {
+  if (typeof nodeGraphGlGraphPresent !== "function" || typeof nodeGraphGlGraphRebuildPlates !== "function") return false;
+  const mr = el.getBoundingClientRect();
+  const wz = el.offsetWidth > 0 ? mr.width / el.offsetWidth : 0;
+  if (!(wz > 0)) return false;
+  const state = nodeGraphGlGraphState;
+  const keys = ["canvas", "wireCanvas", "dotsCanvas", "wires", "plates", "displays", "chrome", "thick", "dotSize", "frameCamera", "view"];
+  const saved = {};
+  for (const key of keys) saved[key] = state[key];
+  state.view = {
+    host,
+    ids: new Set([id]),
+    zoom: scale,
+    cam: { x: camX, y: camY },
+    toWorld: (clientX, clientY) => ({ x: (clientX - mr.left) / wz, y: (clientY - mr.top) / wz }),
+  };
+  state.canvas = host._miniCanvas || null;
+  state.wireCanvas = host._miniWires || null;
+  state.dotsCanvas = host._miniDots || null;
+  state.wires = [];
+  let ok = false;
+  try {
+    nodeGraphGlGraphRebuildPlates();
+    ok = nodeGraphGlGraphPresent() !== false;
+    host._miniCanvas = state.canvas;
+    host._miniWires = state.wireCanvas;
+    host._miniDots = state.dotsCanvas;
+  } finally {
+    for (const key of keys) state[key] = saved[key];
+  }
+  return ok;
+}
+
+function nodeGraphGlMiniPerformModuleHost(view, key) {
+  let host = view._moduleHosts.get(key);
+  if (!host || !host.isConnected) {
+    host = document.createElement("div");
+    host.className = "node-mini-perform-module";
+    view.append(host);
+    view._moduleHosts.set(key, host);
+  }
+  host._miniUsed = true;
+  return host;
+}
+
+function nodeGraphGlMiniPerformPlaceHost(host, x, y, w, h, z) {
+  const st = host.style;
+  st.left = `${x}px`;
+  st.top = `${y}px`;
+  st.width = `${Math.max(1, w)}px`;
+  st.height = `${Math.max(1, h)}px`;
+  st.zIndex = String(2 + z);
+}
+
+/** Whole module (or Text Box / plate-only) tile through the module pass. */
+function nodeGraphGlMiniPerformModuleTile(view, tile, el, frame, order) {
+  const nat = typeof nodeGraphModuleLayoutBox === "function" ? nodeGraphModuleLayoutBox(el) : null;
+  if (!nat || !(nat.w > 1) || !(nat.h > 1)) return;
+  const bands = nodeGraphGlMiniPerformBands(el, nat);
+  const shownH = bands.reduce((sum, b) => sum + (b.y1 - b.y0), 0);
+  // F's fit, computed at reference size, then scaled by s.
+  const fit = nodeGraphWholeModuleFitBox(tile.refW, tile.refH, nat.w, shownH);
+  if (!fit) return;
+  const scale = fit.s * frame.s;
+  let y = tile.y + fit.oy * frame.s;
+  for (let i = 0; i < bands.length; i += 1) {
+    const band = bands[i];
+    const h = (band.y1 - band.y0) * scale;
+    const host = nodeGraphGlMiniPerformModuleHost(view, `${tile.nodeId}:${i}`);
+    nodeGraphGlMiniPerformPlaceHost(host, tile.x + fit.ox * frame.s, y, nat.w * scale, h, order);
+    nodeGraphGlMiniPerformPresentModule(host, el, tile.nodeId, scale, band.y0);
+    y += h;
+  }
+}
+
+function nodeGraphGlMiniPerformPresent() {
+  const view = nodeGraphGlMiniPerformView();
+  if (!view || typeof nodeGraphGlLinesBegin !== "function") return false;
+  const settings = nodeGraphMiniPerformSettings();
+  const frame = nodeGraphMiniPerformFrame();
+  view.hidden = false;
+  if (!view._miniDragging) {
+    view.style.left = `${frame.x}px`;
+    view.style.top = `${frame.y}px`;
+  }
+  view.style.width = `${frame.w}px`;
+  view.style.height = `${frame.h}px`;
+  view.style.opacity = String(settings.opacity);
+  view.classList.toggle("interactive", settings.pointer === "interactive");
+  const canvas = view.querySelector("#nodeGlGraphMiniPerform");
+  const cssW = Math.max(1, Math.round(frame.w));
+  const cssH = Math.max(1, Math.round(frame.h));
+  if (canvas.width !== cssW) canvas.width = cssW;
+  if (canvas.height !== cssH) canvas.height = cssH;
+  const tiles = nodeGraphMiniPerformTiles(frame);
+  view._miniTiles = tiles;
+  const batch = nodeGraphGlLinesBegin(
+    canvas,
+    // Backdrop as the clear colour: the renderer draws images under its rect quads.
+    settings.frame ? NODE_GRAPH_MINI_PERFORM_BACKDROP : [0, 0, 0, 0],
+    { scale: 1, transparent: !settings.frame },
+  );
+  if (!batch) {
+    if (typeof nodeGraphDisplayGlFailed === "function") nodeGraphDisplayGlFailed(canvas, "GL mini perform begin");
+    return false;
+  }
+  for (const host of view._moduleHosts.values()) host._miniUsed = false;
+  if (!tiles.length) {
+    nodeGraphGlLinesText(batch, "Canvas is empty. Turn on Show in canvas on a module.", cssW / 2, cssH / 2, nodeGraphGlMiniPerformTextOpts({
+      px: Math.max(9, Math.min(14, cssW / 32)),
+      rgba: NODE_GRAPH_MINI_PERFORM_TEXT,
+      align: "center",
+      baseline: "middle",
+      weight: 400,
+    }));
+  }
+  for (let i = 0; i < tiles.length; i += 1) {
+    const tile = tiles[i];
+    const el = typeof nodeGraphNodeElement === "function" ? nodeGraphNodeElement(tile.nodeId) : null;
+    if (!el || !el.isConnected || el.hidden) continue;
+    const patchNode = typeof nodeGraphPatchNode === "function" ? nodeGraphPatchNode(tile.nodeId) : null;
+    const whole = Boolean(patchNode?.ui?.canvasWholeModule) || Boolean(el.querySelector(":scope > .node-text-box-body"));
+    const displays = whole ? [] : nodeGraphGlMiniPerformDisplays(el);
+    if (whole || !displays.length) {
+      nodeGraphGlMiniPerformModuleTile(view, tile, el, frame, i);
+      continue;
+    }
+    let x0 = Infinity;
+    let y0 = Infinity;
+    let x1 = -Infinity;
+    let y1 = -Infinity;
+    for (const d of displays) {
+      x0 = Math.min(x0, d.x);
+      y0 = Math.min(y0, d.y);
+      x1 = Math.max(x1, d.x + d.w);
+      y1 = Math.max(y1, d.y + d.h);
+    }
+    const fit = nodeGraphContainFitBox(tile.w, tile.h, x1 - x0, y1 - y0);
+    if (!fit) continue;
+    for (const d of displays) {
+      const w = d.w * fit.s;
+      const h = d.h * fit.s;
+      nodeGraphGlLinesImage(batch, d.canvas, tile.x + fit.ox + (d.x - x0) * fit.s, tile.y + fit.oy + (d.y - y0) * fit.s, w, h, {
+        // Nearest neighbour once a face pixel covers more than 2.5 screen pixels.
+        nearest: w / d.canvas.width > 2.5,
+        alpha: 1,
+      });
+    }
+  }
+  if (settings.frame) {
+    const c = NODE_GRAPH_MINI_PERFORM_FRAME;
+    nodeGraphGlLinesRect(batch, 0, 0, cssW, 1, c);
+    nodeGraphGlLinesRect(batch, 0, cssH - 1, cssW, 1, c);
+    nodeGraphGlLinesRect(batch, 0, 1, 1, cssH - 2, c);
+    nodeGraphGlLinesRect(batch, cssW - 1, 1, 1, cssH - 2, c);
+  }
+  const ok = nodeGraphGlLinesEnd(batch, "alpha") !== false;
+  for (const [key, host] of view._moduleHosts) {
+    if (!host._miniUsed) {
+      host.remove();
+      view._moduleHosts.delete(key);
+    }
+  }
+  return ok;
+}

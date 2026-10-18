@@ -373,13 +373,13 @@ function nodeGraphLayoutCanvasApplyTileRect(tile, rect, stage) {
   if (!(tile instanceof HTMLElement) || !(stage instanceof HTMLElement)) {
     return;
   }
-  const r = nodeGraphLayoutCanvasNormalizeRect(rect);
-  const sw = Math.max(1, stage.clientWidth || 1);
-  const sh = Math.max(1, stage.clientHeight || 1);
-  tile.style.left = `${r.x * sw}px`;
-  tile.style.top = `${r.y * sh}px`;
-  tile.style.width = `${r.w * sw}px`;
-  tile.style.height = `${r.h * sh}px`;
+  // Shared with the Mini Performance View (node-graph-canvas-fit.js).
+  const px = nodeGraphCanvasTileRectPx(rect, stage.clientWidth, stage.clientHeight);
+  const r = px.rect;
+  tile.style.left = `${px.x}px`;
+  tile.style.top = `${px.y}px`;
+  tile.style.width = `${px.w}px`;
+  tile.style.height = `${px.h}px`;
   tile.style.zIndex = String(100 + (r.z || 0));
   const textFace = tile.querySelector(".node-text-box-body");
   if (textFace && typeof nodeGraphTextBoxApplyCanvasScale === "function") {

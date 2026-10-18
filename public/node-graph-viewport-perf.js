@@ -1073,6 +1073,9 @@ function nodeGraphViewportCullMustStayAwake(elementOrNodeId) {
   if (!nodeId) {
     return false;
   }
+  if (typeof nodeGraphMiniPerformPresentsNode === "function" && nodeGraphMiniPerformPresentsNode(nodeId)) {
+    return true; // Mini Performance View is showing it.
+  }
   const patchNode = typeof nodeGraphPatchNode === "function" ? nodeGraphPatchNode(nodeId) : null;
   if (
     patchNode

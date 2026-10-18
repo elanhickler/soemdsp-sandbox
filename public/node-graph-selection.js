@@ -152,6 +152,7 @@ function nodeGraphEventTargetIsFloatingWindow(target) {
     "#nodeVisibilityMenu",
     "#nodeHotkeysPage",
     "#nodeEmojiPage",
+    "#nodeMiniPerformPage",
     "#nodeModuleShopView",
     "#nodeUserUiSettingsPanel",
     "#nodePatchDefaultsPanel",

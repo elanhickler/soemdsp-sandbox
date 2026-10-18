@@ -499,7 +499,8 @@ function nodeGraphModuleScopeScreenItems(workspace, canvas, pixelRatio) {
       }
       const presentedOnStage = Boolean(slot?.scopeElement?.closest?.(
         ".node-layout-canvas-tile, .node-screen-solo-stage, .node-metamodule-canvas-stage",
-      ));
+      )) || (typeof nodeGraphMiniPerformPresentsNode === "function"
+        && nodeGraphMiniPerformPresentsNode(slot?.scopeElement?.closest?.(".dsp-node")?.dataset?.node));
       let screenRect = null;
       let itemViewport = viewportRect;
       if (presentedOnStage) {

@@ -5566,6 +5566,89 @@ body.keyboard-debug-hidden .node-midi-keyboard-signal-bar {
   padding: 8px 10px 14px;
 }
 
+/* Mini Performance View (docs/MINI_PERFORM_VIEW_PLAN.md). */
+.node-mini-perform-page {
+  position: fixed;
+  z-index: 80;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  min-width: var(--node-unified-window-min-width, 24px);
+  min-height: var(--node-unified-window-min-height, 120px);
+  overflow: hidden;
+  padding: 0;
+  border: 1px solid rgba(127, 199, 217, 0.42);
+  border-radius: var(--node-module-frame-radius);
+  corner-shape: var(--node-module-corner-shape, squircle);
+  background: rgba(9, 12, 15, 0.96);
+  box-shadow: 0 18px 42px rgba(0, 0, 0, 0.36);
+}
+
+.node-mini-perform-page[hidden],
+.node-mini-perform-view[hidden] {
+  display: none !important;
+}
+
+.node-mini-perform-page-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  padding: 8px 10px 14px;
+}
+
+.node-mini-perform-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 26px;
+}
+
+.node-mini-perform-row select,
+.node-mini-perform-row input[type="number"] {
+  width: 9em;
+}
+
+.node-mini-perform-note {
+  margin: 0 0 6px;
+  opacity: 0.7;
+}
+
+.node-mini-perform-view {
+  position: absolute;
+  z-index: 6;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.node-mini-perform-view.interactive {
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+.node-mini-perform-canvas,
+.node-mini-perform-module {
+  position: absolute;
+  left: 0;
+  top: 0;
+}
+
+.node-mini-perform-canvas {
+  width: 100%;
+  height: 100%;
+}
+
+.node-mini-perform-module {
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.node-mini-perform-module > canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
 .node-emoji-section + .node-emoji-section {
   margin-top: 12px;
 }

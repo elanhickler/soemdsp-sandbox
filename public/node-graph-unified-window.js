@@ -110,6 +110,14 @@ const nodeGraphUnifiedWindowPages = Object.freeze({
     icon: "🕯️",
     showInNav: true,
   }),
+  miniPerform: Object.freeze({
+    key: "miniPerform",
+    elementId: "nodeMiniPerformPage",
+    workspaceKey: "miniPerform",
+    label: "Mini Performance View",
+    icon: "\uD83D\uDDBC\uFE0F",
+    showInNav: true,
+  }),
 });
 
 // Module / Display / Parameter settings sit after Modules in the shared
@@ -122,6 +130,7 @@ const nodeGraphUnifiedWindowPageOrder = Object.freeze([
   "traceDisplaySettings",
   "metaparameters",
   "patchDefaults",
+  "miniPerform",
   "uiSettings",
   "visibilityMenu",
   "hotkeys",
@@ -476,6 +485,8 @@ function applyNodeGraphUnifiedWindowSize(element, pageKey = "", size = null) {
     applyNodeGraphVisibilityMenuSize(box, element);
   } else if (key === "hotkeys" && typeof applyNodeGraphHotkeysPageSize === "function") {
     applyNodeGraphHotkeysPageSize(box, element);
+  } else if (key === "miniPerform" && typeof applyNodeGraphMiniPerformPageSize === "function") {
+    applyNodeGraphMiniPerformPageSize(box, element);
   } else if (key === "emoji" && typeof applyNodeGraphEmojiPageSize === "function") {
     applyNodeGraphEmojiPageSize(box, element);
   } else if (key === "uiSettings" && typeof applyNodeUserUiSettingsWindowSize === "function") {
@@ -602,6 +613,11 @@ function closeNodeGraphUnifiedWindowPage(page = "", options = {}) {
       case "emoji":
         if (typeof setNodeGraphEmojiPageOpen === "function") {
           setNodeGraphEmojiPageOpen(false);
+        }
+        break;
+      case "miniPerform":
+        if (typeof setNodeGraphMiniPerformPageOpen === "function") {
+          setNodeGraphMiniPerformPageOpen(false);
         }
         break;
       case "pages":
@@ -904,6 +920,11 @@ function openNodeGraphUnifiedWindowPage(page = "", options = {}) {
       case "emoji":
         if (typeof setNodeGraphEmojiPageOpen === "function") {
           setNodeGraphEmojiPageOpen(true);
+        }
+        break;
+      case "miniPerform":
+        if (typeof setNodeGraphMiniPerformPageOpen === "function") {
+          setNodeGraphMiniPerformPageOpen(true);
         }
         break;
       case "pages":
@@ -1579,6 +1600,17 @@ function syncNodeGraphUnifiedWindowNavBars() {
       page: "pages",
       prepare(element) {
         const existing = element.querySelector("#nodePagesUnifiedNavHost, :scope > .node-unified-window-nav-host");
+        if (existing) {
+          return existing;
+        }
+        return ensureNodeGraphUnifiedWindowNavHost(element);
+      },
+    },
+    {
+      elementId: "nodeMiniPerformPage",
+      page: "miniPerform",
+      prepare(element) {
+        const existing = element.querySelector("#nodeMiniPerformUnifiedNavHost, :scope > .node-unified-window-nav-host");
         if (existing) {
           return existing;
         }

@@ -390,6 +390,12 @@ function handleNodeGraphKeydown(event) {
     nodeGraphQuickRestartProject();
     return;
   }
+  // Shift+F = Mini Performance View on/off (docs/MINI_PERFORM_VIEW_PLAN.md). Same typing gate.
+  if (!event.ctrlKey && !event.metaKey && !event.altKey && event.shiftKey && event.key.toLowerCase() === "f" && typeof toggleNodeGraphMiniPerformView === "function") {
+    event.preventDefault();
+    toggleNodeGraphMiniPerformView();
+    return;
+  }
   // F = layout canvas cycle (phone button). Same typing gate as Space.
   if (!event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey && event.key.toLowerCase() === "f") {
     event.preventDefault();

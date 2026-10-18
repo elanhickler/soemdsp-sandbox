@@ -505,8 +505,11 @@ PUBLIC_SCRIPT_PATHS = (
     "./public/node-graph-pulse-explosion-display.js",
     "./public/node-graph-live-runtime.js",
     "./public/node-graph-wire-controller-bootstrap.js",
+    "./public/node-graph-canvas-fit.js",
     "./public/node-graph-screen-solo.js",
     "./public/node-graph-layout-canvas.js",
+    "./public/node-graph-mini-perform.js",
+    "./public/node-graph-gl-mini-perform.js",
     "./public/embed-module.js",
     "./public/modules/audioPlayer/audio-player-api.js",
     "./public/node-graph-workspace-event-bindings.js",
@@ -18220,7 +18223,7 @@ def check_snake_trail_gl() -> None:
     require("nodeGraphHitTrailSmoothPathD" not in marquee, "SVG trail path builder is gone")
     gl = (public / "node-graph-gl-graph.js").read_text(encoding="utf-8")
     for needle in (
-        "function nodeGraphGlGraphDrawTrail(trailBatch, zoom)",
+        "function nodeGraphGlGraphDrawTrail(trailBatch",
         "function nodeGraphGlGraphPresentTrail()",
         "nodeGraphDisplayGlFailed(held.canvas, \"GL snake trail begin\")",
         "batches: [batch, wireBatch, contactBatch, dotBatch, veilBatch, trailBatch]",
@@ -18229,6 +18232,56 @@ def check_snake_trail_gl() -> None:
     css = (public / "styles.css").read_text(encoding="utf-8")
     require(".node-selection-hit-trail" not in css and ".node-selection-marquee" not in css, "SVG trail CSS is gone")
 
+
+def check_mini_perform_view() -> None:
+    """Mini Performance View (docs/MINI_PERFORM_VIEW_PLAN.md MP-1..MP-8).
+    Command Center page registered in every place Emojis is, WebGL2 only
+    (no 2D / SVG in the mini files), Shift+F behind the typing gate, settings
+    per machine (localStorage), no transport calls, and the pure helpers pass
+    their node unit checks."""
+    public = ROOT / "public"
+    mini_files = ("node-graph-canvas-fit.js", "node-graph-mini-perform.js", "node-graph-gl-mini-perform.js")
+    texts = {name: (public / name).read_text(encoding="utf-8") for name in mini_files}
+    for name, text in texts.items():
+        require("\r\n" not in text, f"{name}: LF line endings")
+        require("getContext(\"2d\")" not in text and "getContext('2d')" not in text, f"{name}: no 2D canvas drawing")
+        require("createElementNS" not in text and "<svg" not in text, f"{name}: no SVG")
+        for transport in ("nodeGraphQuickRestartProject", "toggleNodeGraphPlayback", "startNodeGraphAudio", "stopNodeGraphAudio"):
+            require(transport not in text, f"{name}: never touches transport ({transport})")
+    gl = texts["node-graph-gl-mini-perform.js"]
+    require("nodeGraphDisplayGlFailed(canvas, \"GL mini perform begin\")" in gl, "mini GL pass reports Begin failure")
+    require("> 2.5" in gl, "mini GL pass switches to nearest above 2.5x")
+    mini = texts["node-graph-mini-perform.js"]
+    require("\"soemdsp.miniPerform\"" in mini and "localStorage" in mini, "settings live in localStorage")
+    require("patch.view.miniPerform" not in mini, "settings are not stored in the patch")
+    for page in ("index.html", "perform.html"):
+        text = (public / page).read_text(encoding="utf-8")
+        require("id=\"nodeMiniPerformPage\"" in text, f"{page}: #nodeMiniPerformPage markup")
+        for el in ("nodeMiniPerformPageClose", "nodeMiniPerformPageResizeHandle", "nodeMiniPerformUnifiedNavHost", "nodeMiniPerformPageBody"):
+            require(f"id=\"{el}\"" in text, f"{page}: #{el}")
+        require("<kbd>Shift+F</kbd>" in text, f"{page}: Shift+F in the hotkeys list")
+        order = [text.find(f"./public/{n}") for n in ("node-graph-canvas-fit.js", "node-graph-screen-solo.js", "node-graph-layout-canvas.js", "node-graph-mini-perform.js", "node-graph-gl-mini-perform.js")]
+        require(-1 not in order and order == sorted(order), f"{page}: mini perform scripts load in order")
+    registrations = {
+        "node-graph-unified-window.js": ("miniPerform: Object.freeze({", "\"miniPerform\",", "applyNodeGraphMiniPerformPageSize(box, element)", "setNodeGraphMiniPerformPageOpen(false)", "setNodeGraphMiniPerformPageOpen(true)", "elementId: \"nodeMiniPerformPage\","),
+        "node-graph-floating-windows.js": ("workspaceKey: \"miniPerform\"", "resizeHandleId: \"nodeMiniPerformPageResizeHandle\""),
+        "node-graph-ui-settings-persistence.js": ("  \"miniPerform\",", "miniPerform: \"nodeMiniPerformPage\""),
+        "node-graph-context-menu.js": ("#nodeMiniPerformPage, ",),
+        "node-graph-selection.js": ("\"#nodeMiniPerformPage\"",),
+        "node-graph-viewport-perf.js": ("nodeGraphMiniPerformPresentsNode(nodeId)",),
+        "node-graph-module-scope-screen-items.js": ("nodeGraphMiniPerformPresentsNode(",),
+    }
+    for name, needles in registrations.items():
+        text = (public / name).read_text(encoding="utf-8")
+        for needle in needles:
+            require(needle in text, f"{name}: mini perform registration missing {needle}")
+    keys = (public / "node-graph-keyboard-shortcuts.js").read_text(encoding="utf-8")
+    shift_f = keys.find("toggleNodeGraphMiniPerformView()")
+    require(shift_f != -1 and "event.shiftKey && event.key.toLowerCase() === \"f\"" in keys, "Shift+F toggles the mini view")
+    gate = keys.find("nodeGraphQuickRestartProject();")
+    require(gate != -1 and gate < shift_f, "Shift+F sits after the typing gate (with the other bare keys)")
+    unit = subprocess.run(["node", str(ROOT / "scripts" / "smoke_mini_perform_unit.cjs")], capture_output=True, text=True)
+    require(unit.returncode == 0, f"mini perform unit checks: {unit.stdout}{unit.stderr}")
 
 def check_page_patch_index_covers_all_patches() -> None:
     """Every patches/**/*.json must be in patches/index.json, and every live
@@ -18265,6 +18318,7 @@ def main() -> None:
     check_page_patch_index_covers_all_patches()
     check_display_gl_contract()
     check_snake_trail_gl()
+    check_mini_perform_view()
     run_smoke(args.port, Path(args.manifest).resolve())
     print("soemdsp-sandbox smoke test passed")
 
