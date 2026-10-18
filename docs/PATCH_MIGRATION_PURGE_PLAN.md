@@ -1,7 +1,7 @@
 # Patch migration purge plan
 
 **Date:** 2026-10-18
-**Status:** Planned. Owner TBD. Nothing run yet.
+**Status:** PM-1 through PM-4 done in soemdsp-sandbox (2026-10-18). PM-5 docs are updated. Gitignored build outputs were not rebuilt. The user note in section E was not posted.
 **Policy:** APP_POLICY §1 "Patch migrations are one-shot" (Argi, 2026-10-18). Convert every stored patch to the current format once, then delete the migration code. `public/node-graph-patch-migrations.js` may remain as an empty hook (`migrateNodeGraphPatchToCurrent` with no migrators). Any future migrator must be run over all patches and deleted in the same change.
 
 ## What runs today

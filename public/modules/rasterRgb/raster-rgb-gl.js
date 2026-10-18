@@ -1,4 +1,4 @@
-// Raster RGB GPU present (docs/DISPLAY_SHADER_PLAN.md, M3).
+// Raster RGB GPU present (docs/WEBGL_DISPLAY_PLAN.md).
 //
 // The Canvas2D present ran, every frame: a JS loop over every buffer pixel
 // (grade LUT + HSL hue rotate), ImageData copy, putImageData, then one or two

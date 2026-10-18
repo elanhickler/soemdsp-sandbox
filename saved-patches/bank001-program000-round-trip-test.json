@@ -28,7 +28,7 @@
   ],
   "format": {
     "kind": "soemdsp-sandbox-node-patch",
-    "version": 1
+    "version": 2
   },
   "uiItems": [],
   "connections": [

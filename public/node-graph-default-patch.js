@@ -11,19 +11,9 @@ function nodeGraphModuleDefaultOverrideForType(type) {
 }
 
 function nodeGraphResolveModuleTypeAlias(type) {
-  const t = String(type || "").trim();
-  // phosphorLight → scope2d (2D Phosphor).
-  if (t === "phosphorLight") return "scope2d";
-  // Gain Bias folded into Gain (offset lives on Gain now).
-  if (t === "gainBias") return "gain";
-  // GainBiasMix renamed to Mix.
-  if (t === "gainBiasMix") return "mix";
-  // Noisy → NoisyFreq (ratio jitter).
-  if (t === "additiveNoisy") return "additiveNoisyFreq";
-  // Pre-rename graph modules (keep patches; do not retire-drop).
-  if (t === "graph2" || t === "graph") return "smoothGraph";
-  if (t === "graphCopy") return "stepGraph";
-  return t;
+  // Old type names are not rewritten. Stored patches were migrated once;
+  // a leftover name fails load instead of being aliased.
+  return String(type || "").trim();
 }
 
 // --- Module seeds -----------------------------------------------------------

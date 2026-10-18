@@ -58,7 +58,7 @@
   ],
   "format": {
     "kind": "soemdsp-sandbox-node-patch",
-    "version": 1
+    "version": 2
   },
   "grid": {
     "heightPx": 28,
@@ -84,30 +84,11 @@
       "id": "output",
       "paramMeta": {
         "volume": {
-          "alias": "",
-          "choices": [],
-          "curveAmount": 0,
-          "def": 0.1,
-          "displayChoices": false,
-          "divideChoicesVisibly": false,
-          "kind": "decimal",
-          "linearSmoothing": true,
-          "max": 1,
-          "maxDigits": 3,
-          "mid": 0.1,
-          "min": 0,
-          "nonlinearSlider": false,
-          "sliderCurve": "linear",
-          "showSign": false,
-          "step": 0,
-          "unboundedMax": false,
-          "unboundedMin": false,
-          "unit": "",
-          "wraparound": false
+          "kind": "decibels"
         }
       },
       "params": {
-        "volume": 0.482564277763742
+        "volume": -6.328896605208208
       },
       "type": "output",
       "ui": {

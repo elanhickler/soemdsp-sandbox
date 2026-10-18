@@ -151,43 +151,12 @@ const nodeGraphRetiredNodeTypes = new Set([
   "additiveEffect",
 ]);
 
-/**
- * Legacy phosphorLight → scope2d (2D Phosphor).
- * Ports stay X/Y; settings map color/brightness → dot1Color/dot1Brightness.
- */
-function migrateNodeGraphPhosphorLightToScope2d(node) {
-  if (!node || String(node.type || "").trim() !== "phosphorLight") {
-    return node;
-  }
-  const src = node.traceDisplaySettings && typeof node.traceDisplaySettings === "object"
-    ? node.traceDisplaySettings
-    : {};
-  const migratedSettings = {
-    ...src,
-    background: src.background ?? src.backgroundColor,
-    trail: src.trail,
-    ghost: src.ghost,
-    scale: src.scale,
-    dot1Size: src.dot1Size,
-    lineThickness: src.lineThickness ?? src.dot1Blur,
-    pixelDensity: src.pixelDensity,
-    dot1Color: src.dot1Color ?? src.color,
-    dot1Brightness: src.dot1Brightness ?? src.brightness,
-  };
-  delete migratedSettings.decay;
-  return {
-    ...node,
-    type: "scope2d",
-    traceDisplaySettings: migratedSettings,
-  };
-}
-
 function validateNodeGraphPatch(patch) {
   if (!patch || typeof patch !== "object") {
     throw new Error("patch must be an object");
   }
 
-  // Phase C: climb format.version before shape checks / unknown-type throws.
+  // Empty one-shot hook. Stored patches are already current; this does not migrate.
   const migrated = typeof migrateNodeGraphPatchToCurrent === "function"
     ? migrateNodeGraphPatchToCurrent(patch)
     : patch;
@@ -236,9 +205,7 @@ function validateNodeGraphPatch(patch) {
     const resolved = typeof nodeGraphResolveModuleTypeAlias === "function"
       ? nodeGraphResolveModuleTypeAlias(rawType)
       : rawType;
-    // phosphorLight migrates to scope2d — not unknown.
-    const probeType = resolved === "phosphorLight" ? "scope2d" : resolved;
-    if (!Object.hasOwn(nodeGraphModuleDefinitions, probeType)) {
+    if (!Object.hasOwn(nodeGraphModuleDefinitions, resolved)) {
       droppedNodeIds.add(id);
       loadWarnings.push(`unknown node type ${resolved || rawType || "(missing)"} (node id ${id})`);
     }
@@ -249,13 +216,6 @@ function validateNodeGraphPatch(patch) {
   const uniqueTypesSeen = new Set();
   const nodes = patch.nodes
     .filter((node) => !droppedNodeIds.has(String(node.id || "").trim()))
-    // phosphorLight → scope2d also runs inside migrateNodeGraphPatchToCurrent;
-    // keep local map for boot if migrations.js is missing.
-    .map((rawNode) => (
-      typeof migrateNodeGraphPhosphorLightToScope2d === "function"
-        ? migrateNodeGraphPhosphorLightToScope2d(rawNode)
-        : rawNode
-    ))
     .filter((node) => {
       const type = typeof nodeGraphResolveModuleTypeAlias === "function"
         ? nodeGraphResolveModuleTypeAlias(node.type)
@@ -562,15 +522,6 @@ function validateNodeGraphPatch(patch) {
         value,
         metadata,
       );
-    }
-    // Keep `_…` migration stamps (e.g. _wfBasic, _freqSkewCurve). They are not
-    // module parameters, but must survive normalize/save so one-shot migrators
-    // do not rewrite real parameter values on every load.
-    for (const [stampKey, stampValue] of Object.entries(rawParams)) {
-      if (!stampKey.startsWith("_") || Object.hasOwn(params, stampKey)) {
-        continue;
-      }
-      params[stampKey] = stampValue;
     }
     ids.add(id);
     const normalizedNode = {

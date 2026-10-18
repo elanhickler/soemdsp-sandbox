@@ -1905,8 +1905,8 @@
       "params": {
         "aa": 0,
         "drive": 7.279803254158489,
-        "threshold": 0.0,
-        "knee": 1.0,
+        "threshold": 0,
+        "knee": 1,
         "amplitude": 0.5753843160224134
       },
       "type": "softClipper",
@@ -2395,10 +2395,10 @@
       "paramMeta": {},
       "params": {
         "aa": 1,
-        "drive": 8.0,
-        "threshold": 1.0,
-        "knee": 1.0,
-        "amplitude": 1.0
+        "drive": 8,
+        "threshold": 1,
+        "knee": 1,
+        "amplitude": 1
       },
       "type": "softClipper",
       "widthGu": 7,

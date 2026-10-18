@@ -1,4 +1,4 @@
-// Spectrogram GPU path (docs/DISPLAY_SHADER_PLAN.md, M1).
+// Spectrogram GPU path (docs/WEBGL_DISPLAY_PLAN.md).
 //
 // The per-pixel work moves into one fragment shader:
 //   • Ring history: one texture row per face column holds that column's RAW

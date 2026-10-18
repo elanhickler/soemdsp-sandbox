@@ -1,4 +1,4 @@
-// Code Screen satellite loader — docs/CORE_REDUCTION_PLAN.md
+// Code Screen satellite loader — docs/archive/CORE_REDUCTION_PLAN.md
 // Always-on: this file + node-graph-code-screen-model.js (patch normalize).
 // On demand: ordered satellite scripts when Code Screen / Code Box is used
 // (docs/GRAPHIFY_WINS_PLAN.md Track 1 peels).

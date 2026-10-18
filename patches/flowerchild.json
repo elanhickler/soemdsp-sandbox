@@ -6,7 +6,7 @@
   },
   "info": {
     "bank": 0,
-"author": "",
+    "author": "",
     "program": 0,
     "bankName": "",
     "category": "",
@@ -584,7 +584,7 @@
         "backgroundBrightness": 0
       }
     },
-        {
+    {
       "gx": -17,
       "gy": -7,
       "id": "clock-2",
@@ -1386,7 +1386,7 @@
       "destinationNode": "output",
       "destinationPort": "Right"
     },
-        {
+    {
       "sourceNode": "clock-2",
       "sourcePort": "T",
       "tracePoints": [],
@@ -1409,7 +1409,7 @@
     }
   ],
   "modulations": [
-        {
+    {
       "sourceNode": "attenuverter-1",
       "sourcePort": "Out",
       "tracePoints": [],

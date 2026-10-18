@@ -663,9 +663,7 @@ function cloneNodeGraphPatch(patch) {
       tracePoints: normalizeNodeGraphTracePoints(modulation.tracePoints),
     })),
     nodes: (patch.nodes || []).map((rawNode) => {
-      const node = typeof migrateNodeGraphPhosphorLightToScope2d === "function"
-        ? migrateNodeGraphPhosphorLightToScope2d(rawNode)
-        : rawNode;
+      const node = rawNode;
       const ui = nodeGraphModuleDefinitions[node.type]?.layout === "textBox" && !Object.hasOwn(node, "ui")
         ? { buttonsHidden: true }
         : normalizeNodeGraphPatchNodeUi(node.ui, node.type);

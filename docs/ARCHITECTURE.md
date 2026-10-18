@@ -57,7 +57,7 @@ Coverage: `nodeGraphPlanRoleCoverageReport()` in console.
 load → migrateNodeGraphPatchToCurrent → validateNodeGraphPatch → compileNodeGraphExecutionPlan
 ```
 
-See `docs/PATCH_MIGRATIONS.md`.
+See `docs/archive/PATCH_MIGRATIONS.md`. Migrations are one-shot; the load hook is empty.
 
 ## Boot + persist order
 
@@ -170,4 +170,4 @@ Same globals and load order. Not required for sound or patches; pure maintainabi
 - `MODULE_PATTERN_REFERENCE.md` — module translation patterns  
 - `ADDING_HARDCODED_SANDBOX_MODULE.md` — step-by-step add  
 - `archive/A1_LIVE_WORKLET_DSP_INVENTORY.md` — dual-lane inventory  
-- `PATCH_MIGRATIONS.md` — format migrators  
+- `archive/PATCH_MIGRATIONS.md` — retired format migrators  

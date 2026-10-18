@@ -81,7 +81,7 @@
       "sourcePort": "Trigger",
       "tracePoints": []
     },
-        {
+    {
       "destinationNode": "pingEnvelope-1",
       "destinationPort": "Trigger",
       "sourceNode": "transport-1",
@@ -102,7 +102,7 @@
       "sourcePort": "Curve",
       "tracePoints": []
     },
-            {
+    {
       "destinationNode": "lineBurnOscilloscope-1",
       "destinationPort": "In",
       "sourceNode": "pingEnvelope-1",
@@ -152,7 +152,7 @@
       "sourcePort": "amplitude",
       "tracePoints": []
     },
-        {
+    {
       "sourceNode": "range-2",
       "sourcePort": "Out",
       "tracePoints": [],
@@ -1277,7 +1277,7 @@
         "titleHidden": false
       }
     },
-        {
+    {
       "gx": -45,
       "gy": -8,
       "id": "pingEnvelope-1",

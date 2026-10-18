@@ -61,7 +61,7 @@
       "alias": "📢❗🚨",
       "params": {
         "pan": 0,
-        "volume": 0.74
+        "volume": -2.615365605380476
       },
       "paramMeta": {
         "pan": {
@@ -96,35 +96,7 @@
           "divideChoicesVisibly": false
         },
         "volume": {
-          "def": 0.1,
-          "max": 1,
-          "mid": 0.1,
-          "min": 0,
-          "kind": "decimal",
-          "step": 0,
-          "unit": "",
-          "alias": "",
-          "bipolar": false,
-          "choices": [],
-          "tooltip": "",
-          "visible": true,
-          "modClamp": true,
-          "showSign": false,
-          "hardClamp": false,
-          "maxDigits": 4,
-          "constraint": "",
-          "wraparound": false,
-          "curveAmount": 0.5,
-          "sliderCurve": "skew",
-          "outputDomain": false,
-          "smoothingMode": "internal",
-          "smoothingType": "linear",
-          "displayChoices": false,
-          "linearSmoothing": true,
-          "nonlinearSlider": true,
-          "smoothingSeconds": 0.0333,
-          "removeTrailingZeros": false,
-          "divideChoicesVisibly": false
+          "kind": "decibels"
         }
       },
       "traceDisplaySettings": {
@@ -617,11 +589,11 @@
         "mix": 0.43,
         "seed": 0,
         "recycle": 0.7,
-        "delaySize": 8.0,
+        "delaySize": 8,
         "lfoAmplitude": 0.028,
         "lfoBaseSpeed": 2.40684188477012,
         "lfoVariation": 249.75,
-        "diffusionSize": 140.0,
+        "diffusionSize": 140,
         "diffusionAmount": 0.7
       },
       "paramMeta": {
@@ -719,10 +691,10 @@
           "divideChoicesVisibly": false
         },
         "delaySize": {
-          "def": 8.0,
-          "max": 400.0,
-          "mid": 8.0,
-          "min": 0.0,
+          "def": 8,
+          "max": 400,
+          "mid": 8,
+          "min": 0,
           "kind": "decimal",
           "step": 0,
           "unit": "ms",
@@ -753,7 +725,7 @@
           "def": 0.028,
           "max": 0.4,
           "mid": 0.028,
-          "min": 0.0,
+          "min": 0,
           "kind": "decimal",
           "step": 0,
           "unit": "×",
@@ -782,7 +754,7 @@
         },
         "lfoBaseSpeed": {
           "def": 2.40684188477012,
-          "max": 20.0,
+          "max": 20,
           "mid": 2.40684188477012,
           "min": 0.5,
           "kind": "decimal",
@@ -813,9 +785,9 @@
         },
         "lfoVariation": {
           "def": 249.75,
-          "max": 250.0,
+          "max": 250,
           "mid": 249.75,
-          "min": 0.0,
+          "min": 0,
           "kind": "decimal",
           "step": 0,
           "unit": "ms",
@@ -843,10 +815,10 @@
           "divideChoicesVisibly": false
         },
         "diffusionSize": {
-          "def": 140.0,
-          "max": 400.0,
-          "mid": 140.0,
-          "min": 0.0,
+          "def": 140,
+          "max": 400,
+          "mid": 140,
+          "min": 0,
           "kind": "decimal",
           "step": 0,
           "unit": "ms",

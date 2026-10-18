@@ -83,8 +83,14 @@
       "gx": 18,
       "gy": 0,
       "id": "output",
-      "paramMeta": {},
-      "params": { "volume": -6 },
+      "paramMeta": {
+        "volume": {
+          "kind": "decibels"
+        }
+      },
+      "params": {
+        "volume": -6
+      },
       "type": "output",
       "widthGu": 8
     },
@@ -121,7 +127,9 @@
     }
   ],
   "notes": [],
-  "selection": ["softpop2-1"],
+  "selection": [
+    "softpop2-1"
+  ],
   "transport": {
     "bpm": 120,
     "playing": false

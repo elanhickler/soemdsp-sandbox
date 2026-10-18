@@ -1756,7 +1756,7 @@
           "bipolar": true,
           "max": 200,
           "maxDigits": 3,
-          "mid": 0.0,
+          "mid": 0,
           "min": -200,
           "nonlinearSlider": false,
           "sliderCurve": "linear",
@@ -1789,7 +1789,7 @@
           "bipolar": true,
           "max": 200,
           "maxDigits": 3,
-          "mid": 0.0,
+          "mid": 0,
           "min": -200,
           "nonlinearSlider": false,
           "sliderCurve": "linear",
@@ -2486,9 +2486,9 @@
         "cursorX": 0,
         "nodes": [
           {
-            "x": 0.0,
+            "x": 0,
             "y": 0.0368,
-            "c": 0.0,
+            "c": 0,
             "shape": "linear"
           },
           {
@@ -2498,7 +2498,7 @@
             "shape": "rational"
           },
           {
-            "x": 1.0,
+            "x": 1,
             "y": 0.6333,
             "c": -0.38,
             "shape": "rational"
@@ -2632,8 +2632,8 @@
         }
       },
       "params": {
-        "amplitude1": 1.0,
-        "amplitude2": 1.0,
+        "amplitude1": 1,
+        "amplitude2": 1,
         "amplitude": 1.4
       },
       "type": "mix2",
@@ -2716,21 +2716,21 @@
         "inLow": {
           "min": -120,
           "max": 120,
-          "mid": 0.0,
+          "mid": 0,
           "def": -120,
           "bipolar": true
         },
         "inHigh": {
           "min": -120,
           "max": 120,
-          "mid": 0.0,
+          "mid": 0,
           "def": 120,
           "bipolar": true
         },
         "outLow": {
           "min": -200,
           "max": 200,
-          "mid": 0.0,
+          "mid": 0,
           "def": 90,
           "bipolar": true,
           "outputDomain": true
@@ -2738,7 +2738,7 @@
         "outHigh": {
           "min": -200,
           "max": 200,
-          "mid": 0.0,
+          "mid": 0,
           "def": 180,
           "bipolar": true,
           "outputDomain": true
@@ -2773,21 +2773,21 @@
         "inLow": {
           "min": -120,
           "max": 120,
-          "mid": 0.0,
+          "mid": 0,
           "def": -120,
           "bipolar": true
         },
         "inHigh": {
           "min": -120,
           "max": 120,
-          "mid": 0.0,
+          "mid": 0,
           "def": 120,
           "bipolar": true
         },
         "outLow": {
           "min": -200,
           "max": 200,
-          "mid": 0.0,
+          "mid": 0,
           "def": 80,
           "bipolar": true,
           "outputDomain": true
@@ -2795,7 +2795,7 @@
         "outHigh": {
           "min": -200,
           "max": 200,
-          "mid": 0.0,
+          "mid": 0,
           "def": 130,
           "bipolar": true,
           "outputDomain": true

@@ -1,4 +1,4 @@
-// Execution-plan roles (Phase B of docs/HIGH_RISK_HIGH_REWARD_PLAN.md).
+// Execution-plan roles (Phase B of docs/archive/HIGH_RISK_HIGH_REWARD_PLAN.md).
 //
 // B3 complete: compileNodeGraphExecutionPlan seeds sources only via
 // nodeGraphModuleIsPlanSourceType. Prefer definition.planRole; realtime

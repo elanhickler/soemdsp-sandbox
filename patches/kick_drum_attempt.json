@@ -1911,8 +1911,8 @@
       "paramMeta": {},
       "params": {
         "aa": 0,
-        "drive": 8.0,
-        "threshold": 0.0,
+        "drive": 8,
+        "threshold": 0,
         "knee": 0.36214326852184214,
         "amplitude": 0.318698006269076
       },
@@ -2403,9 +2403,9 @@
       "params": {
         "aa": 1,
         "drive": 1.291089914505076,
-        "threshold": 1.0,
-        "knee": 1.0,
-        "amplitude": 1.0
+        "threshold": 1,
+        "knee": 1,
+        "amplitude": 1
       },
       "type": "softClipper",
       "traceDisplaySettings": {
@@ -2451,10 +2451,10 @@
       "paramMeta": {},
       "params": {
         "aa": 1,
-        "drive": 8.0,
-        "threshold": 1.0,
-        "knee": 1.0,
-        "amplitude": 1.0
+        "drive": 8,
+        "threshold": 1,
+        "knee": 1,
+        "amplitude": 1
       },
       "type": "softClipper",
       "widthGu": 7,

@@ -231,27 +231,8 @@ assert(defs.indexOf('Polyphony: "Monophony"') < 0, "arp no longer outputs Monoph
 assert(defs.indexOf('Monophony: "Play Keys"') >= 0, "old arp Monophony aliases to Play Keys");
 
 var migrations = fs.readFileSync(path.join(root, "node-graph-patch-migrations.js"), "utf8");
-assert(migrations.indexOf('srcPort === "Play Keys" || srcPort === "Arp Keys"') < 0, "do not rewrite Play/Arp into Polyphony");
-var migStart = migrations.indexOf("function nodeGraphPatchMigrateMetaPolyphonyToVoices");
-var migEnd = migrations.indexOf("function nodeGraphPatchMigrateValueSliderToKnob");
-assert(migStart >= 0 && migEnd > migStart, "voices migration is present");
-eval(migrations.slice(migStart, migEnd));
-var migrated = nodeGraphPatchMigrateMetaPolyphonyToVoices({
-  nodes: [
-    { id: "keyboard-1", type: "keyboard" },
-    { id: "metamodule-1", type: "metamodule" },
-  ],
-  connections: [
-    {
-      sourceNode: "keyboard-1",
-      sourcePort: "Polyphony",
-      destinationNode: "metamodule-1",
-      destinationPort: "Voices",
-    },
-  ],
-});
-var ports = migrated.connections.map(function (c) { return c.sourcePort; }).sort();
-assert(ports.join(",") === "Arp Keys,Chord Memory,Play Keys", "old Polyphony fans into play/arp/chord at Voices");
+assert(migrations.indexOf("function nodeGraphPatchMigrate") < 0, "patch migrators are one-shot and deleted");
+assert(migrations.indexOf("function migrateNodeGraphPatchToCurrent") >= 0, "empty patch migration hook remains");
 
 setGold("keyboard-1", [50, 52]);
 assert(nodeGraphChordMemoryToggleLatch("keyboard-1", 60, 100), "re-latch after unlatch");

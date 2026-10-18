@@ -2917,7 +2917,7 @@
       },
       "params": {
         "waveform": 4,
-        "frequency": 3.477592057602134e-09,
+        "frequency": 3.477592057602134e-9,
         "morph": 1,
         "phase": 0,
         "antialias": 0,
