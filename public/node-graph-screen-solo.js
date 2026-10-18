@@ -1275,6 +1275,11 @@ function bindNodeGraphScreenSoloEvents() {
     }
     event.preventDefault();
     event.stopPropagation();
+    // Perform / embed: this stage is the only visible UI. Ending it moves the
+    // faces back into the hidden workspace and leaves a black page.
+    if (typeof nodeGraphAppHotkeysLocked === "function" && nodeGraphAppHotkeysLocked()) {
+      return;
+    }
     endNodeGraphScreenSolo();
   }, true);
 }

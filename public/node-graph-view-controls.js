@@ -917,6 +917,9 @@ function setNodeGraphAppChromeBarsVisible(visible, options = {}) {
 }
 
 function toggleNodeGraphAppChromeBarsVisibility() {
+  if (typeof nodeGraphAppHotkeysLocked === "function" && nodeGraphAppHotkeysLocked()) {
+    return;
+  }
   const mode = nodeGraphAppChromeBarsMode();
   const next = mode === "all" ? "topHidden" : mode === "topHidden" ? "none" : "all";
   setNodeGraphAppChromeBarsMode(next);

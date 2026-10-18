@@ -674,6 +674,11 @@ function nodeGraphLayoutCanvasSetIoHidden(on) {
 }
 
 function nodeGraphLayoutCanvasClose(options = {}) {
+  // Perform / embed has no circuit builder to return to. Closing the canvas
+  // is the black page. Open/refresh still calls endNodeGraphScreenSolo directly.
+  if (typeof nodeGraphAppHotkeysLocked === "function" && nodeGraphAppHotkeysLocked()) {
+    return false;
+  }
   nodeGraphMvp.layoutCanvasMode = "off";
   nodeGraphMvp.layoutCanvasActive = false;
   const hud = document.getElementById("nodeGraphCanvasDebugHud");
@@ -718,6 +723,9 @@ function nodeGraphLayoutCanvasStageIsLive() {
  * No auto-organize; freeform rects only.
  */
 function toggleNodeGraphLayoutCanvasView(options = {}) {
+  if (typeof nodeGraphAppHotkeysLocked === "function" && nodeGraphAppHotkeysLocked()) {
+    return false;
+  }
   let mode = nodeGraphLayoutCanvasMode();
   // Repair desync: mode says canvas is on but stage was torn down (common after
   // heavy face layout thrash / Music Player interaction in canvas). Treat as off

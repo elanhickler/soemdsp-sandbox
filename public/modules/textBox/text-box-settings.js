@@ -74,6 +74,12 @@ function buildNodeGraphTextBoxDisplaySettingsBodyHtml() {
       </label>`;
   return `
     <div class="node-led-display-settings-panel" data-textbox-display-settings-panel>
+      <div class="node-led-settings-row textbox-display-settings-row" role="group" aria-label="Stack">
+        <span>Stack</span>
+        <div class="textbox-display-controls">
+          <button type="button" data-textbox-stack="top" aria-pressed="false">Show on top</button>
+        </div>
+      </div>
       <div class="node-led-settings-row textbox-display-settings-row" role="group" aria-label="Text mode">
         <span>Mode</span>
         <div class="textbox-display-controls">
@@ -188,6 +194,12 @@ function syncNodeGraphTextBoxDisplaySettingsControls(root, settings) {
     button.classList.toggle("active", on);
     button.setAttribute("aria-pressed", String(on));
   }
+  const stack = root.querySelector?.("[data-textbox-stack]");
+  if (stack) {
+    const on = settings.showOnTop === true;
+    stack.classList.toggle("active", on);
+    stack.setAttribute("aria-pressed", String(on));
+  }
   const font = root.querySelector?.(`[data-trace-display-choice="font"], [data-textbox-font]`);
   if (font) {
     const fallback = typeof NODE_GRAPH_TEXT_BOX_DEFAULT_FONT === "string"
@@ -239,6 +251,15 @@ function bindNodeGraphTextBoxDisplaySettingsBody(host) {
         button.classList.toggle("active", on);
         button.setAttribute("aria-pressed", String(on));
       }
+      apply("immediate", true);
+      return;
+    }
+    const stackButton = event.target?.closest?.("[data-textbox-stack]");
+    if (stackButton && host.contains(stackButton)) {
+      event.preventDefault();
+      const on = stackButton.getAttribute("aria-pressed") !== "true";
+      stackButton.classList.toggle("active", on);
+      stackButton.setAttribute("aria-pressed", String(on));
       apply("immediate", true);
       return;
     }

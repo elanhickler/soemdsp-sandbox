@@ -203,6 +203,27 @@ function clearNodeGraphWorkingPatchFromUserSettings() {
   return persist();
 }
 
+async function loadNodeGraphInitPatchFromFile() {
+  const patch = typeof loadNodeGraphDefaultPresetPatch === "function"
+    ? await loadNodeGraphDefaultPresetPatch()
+    : null;
+  if (!patch || !Array.isArray(patch.nodes)) {
+    if (typeof setNodeGraphScriptStatus === "function") {
+      setNodeGraphScriptStatus("init patch missing", false);
+    }
+    return;
+  }
+  clearNodeGraphWorkingPatchFromUserSettings();
+  if (nodeGraphMvp) nodeGraphMvp.defaultPatch = cloneNodeGraphPatch(patch);
+  commitNodeGraphPatch(cloneNodeGraphPatch(patch), {
+    autosaveWorkingPatch: false,
+    record: true,
+    patchDirtyState: "untouched",
+    status: "init patch loaded",
+  });
+  setNodeGraphCurrentSavedPatch("");
+}
+
 function initNodeGraphPatchFromDefault() {
   clearNodeGraphWorkingPatchFromUserSettings();
   commitNodeGraphPatch(cloneNodeGraphPatch(nodeGraphMvp.defaultPatch || nodeGraphDefaultPatch), {

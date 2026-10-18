@@ -1323,6 +1323,7 @@ function nodeGraphTraceDisplaySettingsNamedKeyFromTarget(target) {
   if (t.closest?.("[data-plugin-btn-corner]")) return "cornerShape";
   if (t.closest?.("[data-textbox-mode]")) return "textMode";
   if (t.closest?.("[data-textbox-align]")) return "horizontalAlign";
+  if (t.closest?.("[data-textbox-stack]")) return "showOnTop";
   if (t.closest?.("[data-textbox-font]")) return "font";
   if (t.closest?.("[data-corner-shape]")) return "sliderCornerShape";
   const id = t.id || t.closest?.("input, select, button")?.id || "";

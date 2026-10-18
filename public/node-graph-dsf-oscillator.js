@@ -7,7 +7,7 @@ function nodeGraphDsfOscillatorLoadWasm() {
   if (nodeGraphDsfOscillatorWasm.promise || typeof fetch !== "function" || typeof WebAssembly === "undefined") {
     return;
   }
-  nodeGraphDsfOscillatorWasm.promise = fetch("/native_modules/dsf_oscillator/dsf_oscillator.wasm")
+  nodeGraphDsfOscillatorWasm.promise = fetch("/native_modules/dsf_oscillator/dsf_oscillator.wasm?v=dsf-tz-1")
     .then((response) => {
       if (!response.ok) throw new Error(`dsf_oscillator wasm HTTP ${response.status}`);
       return response.arrayBuffer();

@@ -130,10 +130,10 @@
       "folder": "demonstration"
     },
     {
-      "slug": "foley/CALLNOW",
-      "label": "CALLNOW",
+      "slug": "foley/callnow",
+      "label": "callnow",
       "name": "",
-      "url": "/soemdsp-sandbox/patches/foley/CALLNOW.json",
+      "url": "/soemdsp-sandbox/patches/foley/callnow.json",
       "author": "",
       "emoji": "",
       "folder": "foley"
@@ -369,10 +369,10 @@
       "emoji": ""
     },
     {
-      "slug": "CALLNOW",
-      "label": "CALLNOW",
+      "slug": "callnow",
+      "label": "callnow",
       "name": "",
-      "url": "/soemdsp-sandbox/patches/foley/CALLNOW.json",
+      "url": "/soemdsp-sandbox/patches/foley/callnow.json",
       "author": "",
       "emoji": ""
     },
@@ -453,14 +453,6 @@
       "label": "decay_envelope_shootout",
       "name": "",
       "url": "/soemdsp-sandbox/patches/demo_patches/decay_envelope_shootout.json",
-      "author": "",
-      "emoji": ""
-    },
-    {
-      "slug": "default",
-      "label": "default",
-      "name": "",
-      "url": "/soemdsp-sandbox/patches/default.json",
       "author": "",
       "emoji": ""
     },

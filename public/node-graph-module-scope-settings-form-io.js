@@ -1285,6 +1285,10 @@ function readNodeGraphTraceDisplaySettingsForm() {
     if (align) {
       next.horizontalAlign = align.getAttribute("data-textbox-align");
     }
+    const stack = panel?.querySelector?.("[data-textbox-stack]");
+    if (stack) {
+      next.showOnTop = stack.getAttribute("aria-pressed") === "true";
+    }
     const font = panel?.querySelector?.(`[data-trace-display-choice="font"], [data-textbox-font]`);
     if (font) {
       next.font = font.value;

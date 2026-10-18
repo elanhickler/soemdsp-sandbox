@@ -454,4 +454,9 @@ function bindNodeGraphHeaderControlEvents() {
   // Copy / Paste patch: toolbar only (not Command Center).
   document.getElementById("nodeToolbarCopyPatchButton")?.addEventListener("click", copyNodeGraphScriptToClipboard);
   document.getElementById("nodeToolbarPastePatchButton")?.addEventListener("click", pasteNodeGraphScriptFromClipboard);
+  document.getElementById("nodeToolbarInitPatchButton")?.addEventListener("click", () => {
+    if (typeof loadNodeGraphInitPatchFromFile === "function") {
+      void loadNodeGraphInitPatchFromFile();
+    }
+  });
 }

@@ -1,3 +1,15 @@
+## 2026-10-18 - Phone + GPU camera plans merged (docs only)
+
+- Merged `docs/PHONE_COMPAT_PLAN.md` and GB-6 into `docs/PHONE_AND_GPU_CAMERA_PLAN.md` (one ordered tracker: PH-1..PH-5 and GB-6 in parallel, GB-6 before PH-6, PH-5b tooltip touch-up after GB-6, PH-7 last; file ownership; `nodeGraphMvp.pan` / `nodeGraphZoom` are the single camera API). `docs/WEBGL_DISPLAY_PLAN.md` GB-6 row now points there; GB-1 not-met note kept. Old file removed (was untracked). Not committed.
+
+## 2026-10-18 - GB-6 True GPU camera planned (docs only)
+
+- Added GB-6 to `docs/WEBGL_DISPLAY_PLAN.md` section 11 (Argi approved 2026-10-18; owner TBD): pan/zoom as a camera uniform only, no CPU reprojection, no CSS world-layer transform, HTML positioned per element. Noted that GB-1's uniform claim is not yet met. Cross-ref `docs/PHONE_AND_GPU_CAMERA_PLAN.md` PH-6. Not committed.
+
+## 2026-10-18 - Phone compatibility plan (docs only)
+
+- Added `docs/PHONE_AND_GPU_CAMERA_PLAN.md` (scope from Webby/Argi, repo findings, tracker PH-1..PH-7, coordination with ENGINE_STATE_DISPLAY_PLAN and WEBGL_DISPLAY_PLAN section 11); pointer in `docs/FUTURE_PLANNING.md`. Not started. Not committed.
+
 ## 2026-10-17 - Seed code: done
 
 - Argi confirms the seed code plan is implemented (`docs/SEED_CODE_PLAN.md`, status set to done). Docs note only. Not committed.

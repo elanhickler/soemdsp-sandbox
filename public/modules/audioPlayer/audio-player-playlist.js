@@ -2401,6 +2401,42 @@ function nodeGraphAudioPlayerPlaylistBindListResize(list, nodeId) {
       event.stopPropagation();
     }
   });
+  // Double-click and touch double-tap share one path. Mobile browsers often never fire
+  // dblclick, so two touch/pen taps on the same row within 350 ms count as one; the audio
+  // context is started inside that gesture (iOS/Android only allow it from a user gesture).
+  const activateRow = (event, row) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (list.__playNextClickTimer) {
+      window.clearTimeout(list.__playNextClickTimer);
+      list.__playNextClickTimer = 0;
+    }
+    list.__rowActivatedAt = performance.now();
+    if (typeof nodeGraphAudioPlayerEnsureLiveOutput === "function") {
+      void nodeGraphAudioPlayerEnsureLiveOutput();
+    }
+    nodeGraphAudioPlayerPlaylistActivateRow(nodeId, Number(row.dataset.playlistIndex), { play: true });
+  };
+  const justActivated = () => performance.now() - (list.__rowActivatedAt || -1e9) < 400;
+  list.addEventListener("pointerup", (event) => {
+    if (event.pointerType === "mouse") {
+      return;
+    }
+    const row = event.target.closest(".node-music-player-pl-row");
+    if (!row || row.dataset.slot === "empty") {
+      list.__lastRowTap = null;
+      return;
+    }
+    const now = performance.now();
+    const last = list.__lastRowTap;
+    const index = row.dataset.playlistIndex;
+    if (last && last.index === index && now - last.t <= 350) {
+      list.__lastRowTap = null;
+      activateRow(event, row);
+      return;
+    }
+    list.__lastRowTap = { index, t: now };
+  });
   list.addEventListener("click", (event) => {
     const row = event.target.closest(".node-music-player-pl-row");
     if (!row || row.dataset.slot === "empty") {
@@ -2408,6 +2444,10 @@ function nodeGraphAudioPlayerPlaylistBindListResize(list, nodeId) {
     }
     event.preventDefault();
     event.stopPropagation();
+    // The second tap of a double-tap still sends a click: it must not queue play-next.
+    if (justActivated()) {
+      return;
+    }
     if (list.__playNextClickTimer) {
       window.clearTimeout(list.__playNextClickTimer);
     }
@@ -2422,13 +2462,13 @@ function nodeGraphAudioPlayerPlaylistBindListResize(list, nodeId) {
     if (!row || row.dataset.slot === "empty") {
       return;
     }
-    event.preventDefault();
-    event.stopPropagation();
-    if (list.__playNextClickTimer) {
-      window.clearTimeout(list.__playNextClickTimer);
-      list.__playNextClickTimer = 0;
+    if (justActivated()) {
+      // A browser that also fires dblclick after a touch double-tap: already handled.
+      event.preventDefault();
+      event.stopPropagation();
+      return;
     }
-    nodeGraphAudioPlayerPlaylistActivateRow(nodeId, Number(row.dataset.playlistIndex), { play: true });
+    activateRow(event, row);
   });
 }
 

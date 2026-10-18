@@ -2185,6 +2185,8 @@ button.scw-label:hover,
   flex: 1 1 0;
   box-sizing: border-box;
   opacity: var(--node-music-player-pl-fade, 1);
+  /* Double-tap plays the row: no double-tap zoom / tap delay. */
+  touch-action: manipulation;
 }
 .node-music-player-pl-empty {
   flex: 1 1 auto;
@@ -16068,6 +16070,26 @@ body.node-screen-solo-active .node-screen-solo-face.node-sample-waveform-display
      Text clipping stays on .node-text-box-body. */
   overflow: visible;
   z-index: 2;
+}
+
+.dsp-node.text-box-on-top {
+  z-index: 12;
+}
+
+.node-graph-workspace.gl-graph-on .dsp-node:has(> .node-text-box-body)::before,
+.node-graph-workspace.gl-graph-on .dsp-node:has(> .node-text-box-body) > .node-text-box-body {
+  background: transparent !important;
+  background-color: transparent !important;
+}
+
+.node-graph-workspace.gl-graph-on .dsp-node:has(> .node-text-box-body) .node-text-box-input {
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+}
+
+.node-graph-workspace.gl-graph-on .dsp-node:has(> .node-text-box-body):focus-within .node-text-box-input {
+  color: var(--node-text-box-fg, var(--node-module-primary-text-color));
+  -webkit-text-fill-color: currentColor;
 }
 
 .node-text-box-body {

@@ -1,7 +1,7 @@
 // soemdsp-native-module: dsf_oscillator
 // soemdsp-native-label: DSF Oscillator
 // soemdsp-native-target: dsfOscillator
-// soemdsp-native-kind: oscillator
+// soemdsp-native-kind: oscillator
 // soemdsp-native-lib: https://github.com/elanhickler/soemdsp/blob/main/include/soemdsp/oscillator/DSFOscillator.hpp
 
 // The "DSF starter kit" -- a Discrete Summation Formula oscillator, the
@@ -74,6 +74,7 @@
 // 18 kHz, where the fixed-retention version was measurably distorted.
 
 #include <soemdsp/soemdsp.hpp>
+#include <soemdsp/math/analog_filter_trig.h>
 
 namespace {
 
@@ -106,16 +107,65 @@ double sinApprox(double value) {
   return x * result;
 }
 
-// pureSawEng(t, n), transcribed and simplified directly from "Extended DSF
-// Oscillators.cxx": sin(PI*t*(2N+1)) / sin(PI*t) - 1. Guarded at the
-// removable singularity t=0 (denominator's zero) via its L'Hopital limit
-// (2N+1), same as the reference's own numerically-stable behavior there.
-double pureSawEng(double t, int n) {
-  const double denom = sinApprox(kPi * t);
-  if (denom > -1.0e-9 && denom < 1.0e-9) {
-    return static_cast<double>(2 * n + 1) - 1.0;
-  }
-  return sinApprox(kPi * t * static_cast<double>(2 * n + 1)) / denom - 1.0;
+double dsfPow(double base, double exponent) {
+  if (!(base > 0.0)) return 0.0;
+  return dsp_exp(exponent * dsp_ln(base));
+}
+
+// SineSaw.cxx. The closed form contains cos(x*(n+1)), so n+1 must sit at
+// or under Nyquist. floor(Nyquist/f) leaves that partial one step over.
+int sawPartials(double nyquist, double freq) {
+  int n = static_cast<int>(nyquist / freq) - 1;
+  if (n < 1) n = 1;
+  // Below a few hertz the uncapped count makes n·phase lose its fraction.
+  if (n > 4096) n = 4096;
+  return n;
+}
+
+// Coefficients depend only on morph and n. Steady pitch reuses them.
+struct DsfKernelCoeffs {
+  double morph;
+  double n;
+  double k42;
+  double eightK2;
+  double decay;
+  double twoK2;
+  double denCos;
+  int ready;
+};
+
+void prepareSawCoeffs(DsfKernelCoeffs& c, double morph, double n) {
+  if (c.ready && c.morph == morph && c.n == n) return;
+  const double m = clamp(morph, 0.0, 1.0);
+  double k = (1.0 - dsfPow(m, 0.14)) * 4.0;
+  if (k < 1.0e-6) k = 1.0e-6;
+  const double k2 = k * k;
+  c.morph = morph;
+  c.n = n;
+  c.k42 = dsp_exp2(2.0 * k2);
+  c.eightK2 = dsfPow(8.0, k2);
+  c.decay = dsp_exp2(-k2 * (n + 1.0));
+  c.twoK2 = dsp_exp2(k2);
+  c.denCos = dsp_exp2(1.0 + k2);
+  c.ready = 1;
+}
+
+// Geometric sine-to-saw from SineSaw.cxx. turns is 0..1. Morph 0 is a sine
+// (k = 4) and morph 1 is the brightest saw the partial cap allows.
+// sin(n·x) is the same wavetable read at turns*n.
+double sineSawKernel(double turns, const DsfKernelCoeffs& c) {
+  const double nTurns = turns * c.n;
+  double sinx = 0.0;
+  double cosx = 0.0;
+  double sinxn = 0.0;
+  double cosxn = 0.0;
+  dsp_sin_cos_turns_lut(turns, &sinx, &cosx);
+  dsp_sin_cos_turns_lut(nTurns, &sinxn, &cosxn);
+  const double num = (c.k42 * cosxn - c.eightK2 * (cosxn * cosx - sinxn * sinx)) * c.decay
+    + cosx * c.k42 - c.twoK2;
+  const double den = 1.0 - c.denCos * cosx + c.k42;
+  if (den > -1.0e-12 && den < 1.0e-12) return 0.0;
+  return num / den;
 }
 
 // exp(x) for small negative x (here always in roughly [-0.12, 0], since
@@ -136,26 +186,8 @@ double expSmallApprox(double x) {
 // ~20 periods of memory (decayed to ~1%) at any frequency, keeping every
 // waveform's shape and DC symmetry consistent across the audible range.
 double adaptiveRetention(double dt) {
-  return expSmallApprox(-0.23026 * dt);
-}
-
-// Harmonics (0..1): crossfades the harmonic count n from 1 (a single
-// harmonic -- verified >98% spectral energy at the fundamental, i.e. an
-// exact sine) up to nMax (Nyquist/frequency, the maximum alias-free
-// count), blending between the two nearest integer harmonic counts so
-// the sweep is smooth rather than stepped. Blending pureSawEng's raw
-// output before it enters the leaky integrator is equivalent to blending
-// two separately-integrated signals, since the integrator is linear --
-// verified numerically (Python) that this stays bounded across the full
-// Harmonics range before shipping.
-double pureSawEngMorphed(double t, int nMax, double harmonics) {
-  const double m = clamp(harmonics, 0.0, 1.0);
-  const double target = 1.0 + m * static_cast<double>(nMax - 1);
-  int lowN = static_cast<int>(target);
-  if (lowN < 1) lowN = 1;
-  int highN = lowN + 1 > nMax ? nMax : lowN + 1;
-  const double frac = target - static_cast<double>(lowN);
-  return pureSawEng(t, lowN) * (1.0 - frac) + pureSawEng(t, highN) * frac;
+  const double step = dt < 0.0 ? -dt : dt;
+  return expSmallApprox(-0.23026 * step);
 }
 
 constexpr int kMaxInstances = 16;
@@ -171,6 +203,7 @@ struct DsfOscillatorState {
   double triAcc;       // Trimorph's second-stage leaky-integrator accumulator
   double triPeak;      // Trimorph's adaptive peak-follower
   double out;
+  DsfKernelCoeffs kernel;
 };
 
 static DsfOscillatorState gPool[kMaxInstances];
@@ -239,13 +272,15 @@ extern "C" void soemdsp_dsf_oscillator_sample(
     sample = sinApprox(wrap01(s.t + phaseOffset) * kPi * 2.0);
   } else {
     const double nyquist = safeSampleRate * 0.5;
-    int nMax = static_cast<int>(nyquist / safeAbsFrequency);
-    if (nMax < 1) nMax = 1;
+    const double nSaw = static_cast<double>(sawPartials(nyquist, safeAbsFrequency));
+    prepareSawCoeffs(s.kernel, morph, nSaw);
+    // Signed dt runs the phase backward through zero. The 0.9999 is the
+    // original guard against the closed form sitting exactly on a sample.
     s.t = wrap01(s.t + dt * 0.9999);
     const double renderT = wrap01(s.t + phaseOffset);
 
     const double retention = adaptiveRetention(dt);
-    const double rawSaw = pureSawEngMorphed(renderT, nMax, morph);
+    const double rawSaw = sineSawKernel(renderT, s.kernel);
     s.sawAcc = s.sawAcc * retention + rawSaw * dt;
 
     if (waveform == 1) {
@@ -256,13 +291,13 @@ extern "C" void soemdsp_dsf_oscillator_sample(
       // to the very first Saw/Square crossfade this module had, which
       // just mixed two cleanly-shaped waveforms rather than inheriting
       // PWM's variable-duty shape.
-      const double rawBlendSquare = rawSaw - pureSawEngMorphed(wrap01(renderT - 0.5), nMax, morph);
+      const double rawBlendSquare = rawSaw - sineSawKernel(wrap01(renderT - 0.5), s.kernel);
       s.blendSqAcc = s.blendSqAcc * retention + rawBlendSquare * dt;
       const double b = clamp(blend, 0.0, 1.0);
       sample = s.sawAcc * (1.0 - b) + s.blendSqAcc * b;
     } else {
       const double pw = clamp(pulseWidth, 0.01, 0.99);
-      const double rawShiftedSaw = pureSawEngMorphed(wrap01(renderT - pw), nMax, morph);
+      const double rawShiftedSaw = sineSawKernel(wrap01(renderT - pw), s.kernel);
       const double rawSquare = rawSaw - rawShiftedSaw;
       s.sqAcc = s.sqAcc * retention + rawSquare * dt;
 
@@ -306,5 +341,5 @@ extern "C" double soemdsp_dsf_oscillator_out(int handle) {
 }
 
 extern "C" int soemdsp_dsf_oscillator_version() {
-  return 11;
+  return 13;
 }

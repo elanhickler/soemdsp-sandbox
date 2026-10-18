@@ -2,6 +2,10 @@
 
 This file collects project-shaping ideas that should survive day-to-day implementation without becoming immediate scope.
 
+## Phone compatibility + GPU camera (2026-10-18)
+
+Make the sandbox itself work on phones, mainly performance mode: one shared touch-gesture layer (double-tap, long hold, pinch, two-finger pan), audio unlock on first touch, no accidental scroll/zoom, double-tap reset and long-hold text edit on parameters, hover info on touch. Not a phone app; no soundemote.com special-casing. Merged with GB-6 (true GPU camera: pan/zoom as a shader uniform, no CSS world-layer transform), which lands before the workspace gestures. Planned. Plan: `docs/PHONE_AND_GPU_CAMERA_PLAN.md`
+
 ## Engine state and displays (2026-10-17)
 
 Displays must spawn and work while stopped; buffer faces black when stopped and frozen on pause; parameter faces always update; UI never blocked by engine state. Stages ES-1..ES-6 replace the ~138 engine gates with engineState() + per-face paint policy. Planned. Plan: `docs/ENGINE_STATE_DISPLAY_PLAN.md`

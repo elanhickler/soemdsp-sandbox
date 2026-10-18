@@ -233,6 +233,7 @@ function normalizeNodeGraphTextBoxLayout(layout = {}) {
       source.verticalAlignPercent ?? source.verticalAlign,
       { fromBipolar },
     ),
+    showOnTop: source.showOnTop === true || source.showOnTop === "true" || source.showOnTop === 1,
   };
 }
 

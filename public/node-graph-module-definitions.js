@@ -15248,8 +15248,8 @@ const nodeGraphModuleDefinitions = (
         wraparound: false,
         tooltip: "Fine scratch skip (−0.003…+0.003). 0.156 s Papoulis internal glide."
       },
-      { defaultValue: "0", key: "start", label: "[⇐", linearSmoothing: false, max: "1", mid: "0.5", min: "0", nonlinearSlider: false, step: "any" },
-      { defaultValue: "1", key: "end", label: "⇒]", linearSmoothing: false, max: "1", mid: "0.5", min: "0", nonlinearSlider: false, step: "any" },
+      { defaultValue: "0", key: "start", label: "[⇐", linearSmoothing: false, smoothingMode: "off", smoothingType: "none", max: "1", mid: "0.5", min: "0", nonlinearSlider: false, step: "any" },
+      { defaultValue: "1", key: "end", label: "⇒]", linearSmoothing: false, smoothingMode: "off", smoothingType: "none", max: "1", mid: "0.5", min: "0", nonlinearSlider: false, step: "any" },
       { defaultValue: "1", key: "amplitude", label: "Amplitude", max: "1", mid: "1", min: "0", nonlinearSlider: false, step: "any" },
       // Playlist / waveform scrub only — not a face slider.
       {

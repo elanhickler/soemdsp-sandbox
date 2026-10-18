@@ -47,6 +47,7 @@ function nodeGraphTextBoxHostWriteLiveText(nodeId, text) {
   node.layout = normalizeNodeGraphTextBoxLayout({ ...layout, text });
   nodeGraphTextBoxHostPaintFace(nodeId, node.layout.text);
   nodeGraphTextBoxHostMirrorSceneText(node.layout.text);
+  if (typeof nodeGraphGlGraphPresentSoon === "function") nodeGraphGlGraphPresentSoon();
 }
 
 function nodeGraphTextBoxHostCommitText(nodeId, text) {
@@ -150,8 +151,12 @@ function nodeGraphTextBoxHostSync(element, patchNode) {
     backgroundAlpha: layout.backgroundAlpha,
     backgroundColor: layout.backgroundColor,
     textColor: layout.textColor,
+    showOnTop: layout.showOnTop,
   });
+  element.classList.toggle("text-box-on-top", layout.showOnTop === true);
   nodeGraphTextBoxHostMirrorSceneText(displayText);
+  if (typeof nodeGraphGlGraphRebuildPlates === "function") nodeGraphGlGraphRebuildPlates();
+  if (typeof nodeGraphGlGraphPresentSoon === "function") nodeGraphGlGraphPresentSoon();
 }
 
 const nodeGraphTextBoxFloatingFieldIds = Object.freeze({
