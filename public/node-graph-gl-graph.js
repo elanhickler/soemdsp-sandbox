@@ -1195,7 +1195,9 @@ function nodeGraphGlGraphPresent() {
   const contactBatch = nodeGraphGlLinesBegin(dotsCanvas, [0, 0, 0, 0], beginOpts);
   const dotBatch = nodeGraphGlLinesBegin(dotsCanvas, [0, 0, 0, 0], { ...beginOpts, keep: true });
   const veilBatch = nodeGraphGlLinesBegin(dotsCanvas, [0, 0, 0, 0], { ...beginOpts, keep: true });
-  if (!batch || !wireBatch || !contactBatch || !dotBatch || !veilBatch) {
+  // Snake select trail, last over everything. Workspace only (tiles have no camera).
+  const trailBatch = view ? null : nodeGraphGlLinesBegin(dotsCanvas, [0, 0, 0, 0], { ...beginOpts, keep: true });
+  if (!batch || !wireBatch || !contactBatch || !dotBatch || !veilBatch || (!view && !trailBatch)) {
     if (typeof nodeGraphGlLinesFillBlack === "function") nodeGraphGlLinesFillBlack(canvas);
     if (typeof nodeGraphDisplayGlFailed === "function") nodeGraphDisplayGlFailed(canvas, "GL graph begin");
     return false;
@@ -1366,6 +1368,7 @@ function nodeGraphGlGraphPresent() {
       nodeGraphGlLinesRect(dotBatch, x0 + barW + gap, y0, barW, barH, white);
     }
   }
+  if (trailBatch) nodeGraphGlGraphDrawTrail(trailBatch, zoom);
   batch._blend = "alpha";
   wireBatch._blend = "alpha";
   contactBatch._blend = "max";
@@ -1376,16 +1379,18 @@ function nodeGraphGlGraphPresent() {
   const contactOk = nodeGraphGlLinesEnd(contactBatch, "max") !== false;
   const dotsOk = nodeGraphGlLinesEnd(dotBatch, "alpha") !== false;
   const veilOk = nodeGraphGlLinesEnd(veilBatch, "alpha") !== false;
+  if (trailBatch) trailBatch._blend = "alpha";
+  const trailOk = !trailBatch || nodeGraphGlLinesEnd(trailBatch, "alpha") !== false;
   if (!view) {
     nodeGraphGlGraphState.mesh = {
       gen: nodeGraphGlGraphState.gen,
       w: canvas.width,
       h: canvas.height,
-      batches: [batch, wireBatch, contactBatch, dotBatch, veilBatch],
+      batches: [batch, wireBatch, contactBatch, dotBatch, veilBatch, trailBatch],
     };
   }
   if (typeof nodeGraphPositionGridHtml === "function") nodeGraphPositionGridHtml();
-  return platesOk && wiresOk && contactOk && dotsOk && veilOk;
+  return platesOk && wiresOk && contactOk && dotsOk && veilOk && trailOk;
 }
 
 /**
@@ -1459,6 +1464,75 @@ function nodeGraphGlGraphPresentSoon() {
     nodeGraphGlGraphPresentSoon._frame = 0;
     nodeGraphGlGraphPresent();
   });
+}
+
+/**
+ * Snake select trail. Points are zoom-1 world px, the camera projects them.
+ * Width and dash are screen px, so world dash lengths divide by zoom here.
+ */
+function nodeGraphGlGraphDrawTrail(trailBatch, zoom) {
+  if (!trailBatch || typeof nodeGraphHitTrailAllStrokes !== "function") return;
+  if (typeof nodeGraphStrokeSmoothPoints !== "function" || typeof nodeGraphStrokeDashes !== "function") return;
+  const strokes = nodeGraphHitTrailAllStrokes();
+  if (!strokes.length) return;
+  const z = Math.max(0.0001, Number(zoom) || 1);
+  const host = document.getElementById("nodeGraphWorkspace");
+  const style = host ? getComputedStyle(host) : null;
+  const rgba = nodeGraphGlGraphParseCssColor(
+    style?.getPropertyValue("--node-selection-hit-trail-color") || "",
+    [0, 208 / 255, 1, 1],
+  ).slice();
+  const alpha = Number.parseFloat(style?.getPropertyValue("--node-selection-hit-trail-alpha") || "");
+  rgba[3] = (rgba[3] ?? 1) * (Number.isFinite(alpha) ? alpha : 0.95);
+  for (let i = 0; i < strokes.length; i += 1) {
+    const stroke = strokes[i];
+    const half = Math.max(0.5, (Number(stroke.width) || 6) * 0.5);
+    const dash = Array.isArray(stroke.dash) ? stroke.dash : [14, 11];
+    const flat = nodeGraphStrokeSmoothPoints(stroke.points, 2 / z);
+    const pieces = nodeGraphStrokeDashes(flat, dash[0] / z, dash[1] / z);
+    for (let d = 0; d < pieces.length; d += 1) {
+      const piece = pieces[d];
+      if (piece.length < 4) {
+        nodeGraphGlLinesDot(trailBatch, piece[0], piece[1], half, 1, rgba);
+      } else {
+        nodeGraphGlLinesRibbon(trailBatch, piece, half, 1, rgba);
+        // Round caps, as the SVG trail had.
+        nodeGraphGlLinesDot(trailBatch, piece[0], piece[1], half, 1, rgba);
+        nodeGraphGlLinesDot(trailBatch, piece[piece.length - 2], piece[piece.length - 1], half, 1, rgba);
+      }
+    }
+  }
+}
+
+/**
+ * Redraw only the trail. Reuses the held mesh for everything else (same path
+ * the pan/zoom gesture takes), so a drag does not rebuild plates and wires.
+ */
+function nodeGraphGlGraphPresentTrail() {
+  const state = nodeGraphGlGraphState;
+  const mesh = state.mesh;
+  const held = mesh?.batches?.[5];
+  const camera = held?.camera;
+  if (state.view || !mesh || !held || !camera || mesh.gen !== state.gen
+    || mesh.w !== held.canvas.width || mesh.h !== held.canvas.height) {
+    nodeGraphGlGraphPresentSoon();
+    return;
+  }
+  const trailBatch = nodeGraphGlLinesBegin(held.canvas, [0, 0, 0, 0], {
+    scale: held.scale, transparent: true, camera, keepMesh: true, keep: true,
+  });
+  if (!trailBatch) {
+    if (typeof nodeGraphGlLinesFillBlack === "function") nodeGraphGlLinesFillBlack(held.canvas);
+    if (typeof nodeGraphDisplayGlFailed === "function") nodeGraphDisplayGlFailed(held.canvas, "GL snake trail begin");
+    return;
+  }
+  nodeGraphGlGraphDrawTrail(trailBatch, camera.zoom);
+  trailBatch._blend = "alpha";
+  mesh.batches[5] = trailBatch;
+  for (let i = 0; i < mesh.batches.length; i += 1) {
+    const b = mesh.batches[i];
+    if (b) nodeGraphGlLinesEnd(b, b._blend || "alpha");
+  }
 }
 
 function nodeGraphGlGraphPresentCamera() {

@@ -20,10 +20,10 @@ function applyNodeGraphZoom(options = {}) {
     workspace.classList.toggle("pixelated-canvas-zoom", nodeGraphZoom() > 2.5);
   }
   if (
-    typeof renderNodeGraphMarqueeSelection === "function"
+    typeof presentNodeGraphHitTrail === "function"
     && (nodeGraphMvp?.marqueeSelection || nodeGraphMvp?.hitTrailKeptStrokes?.length)
   ) {
-    renderNodeGraphMarqueeSelection();
+    presentNodeGraphHitTrail();
   }
   // Workspace size CSS only when not mid-wheel (avoids layout thrash).
   if (options.layout !== false && typeof applyNodeGraphWorkspaceView === "function") {
@@ -158,10 +158,10 @@ function setNodeGraphZoom(nextZoom, anchor = null) {
     }
   }
   if (
-    typeof renderNodeGraphMarqueeSelection === "function"
+    typeof presentNodeGraphHitTrail === "function"
     && (nodeGraphMvp?.marqueeSelection || nodeGraphMvp?.hitTrailKeptStrokes?.length)
   ) {
-    renderNodeGraphMarqueeSelection();
+    presentNodeGraphHitTrail();
   }
   if (typeof syncNodeGraphWorkspaceResizeHandlePosition === "function") {
     syncNodeGraphWorkspaceResizeHandlePosition();

@@ -21,14 +21,6 @@ const nodeGraphHitTrailSampleStepPx = 14;
  */
 const nodeGraphHitTrailHitRadiusPx = 10;
 
-function nodeGraphHitTrailSvg() {
-  return document.getElementById("nodeSelectionHitTrail");
-}
-
-function nodeGraphHitTrailPath() {
-  return document.getElementById("nodeSelectionHitTrailPath");
-}
-
 function nodeGraphHitTrailZoom() {
   return Math.max(0.0001, typeof nodeGraphZoom === "function" ? nodeGraphFiniteNumber(nodeGraphZoom(), 1) : 1);
 }
@@ -46,43 +38,6 @@ function nodeGraphSurfacePointToClient(point, surface = typeof nodeGraphZoomSurf
   };
 }
 
-/**
- * Catmull–Rom → cubic Bézier for snake *display* only (hits stay on raw points).
- * Cheap C1 corners so the trail doesn't look like a polyline of hard elbows.
- * Tension 0.5 = standard centripetal-ish midpoint handles (1/6 chord rule).
- */
-function nodeGraphHitTrailSmoothPathD(points) {
-  if (!points || !points.length) {
-    return "";
-  }
-  const pts = points.map((p) => ({
-    x: nodeGraphFiniteNumber(p.x),
-    y: nodeGraphFiniteNumber(p.y),
-  }));
-  if (pts.length === 1) {
-    // A lone M does not paint a stroke — fake a tiny segment so the tip is visible.
-    return `M ${pts[0].x} ${pts[0].y} l 0.5 0`;
-  }
-  if (pts.length === 2) {
-    return `M ${pts[0].x} ${pts[0].y} L ${pts[1].x} ${pts[1].y}`;
-  }
-  // Cubic Hermite/Catmull–Rom with endpoint doubling (open curve).
-  let d = `M ${pts[0].x} ${pts[0].y}`;
-  for (let i = 0; i < pts.length - 1; i += 1) {
-    const p0 = pts[Math.max(0, i - 1)];
-    const p1 = pts[i];
-    const p2 = pts[i + 1];
-    const p3 = pts[Math.min(pts.length - 1, i + 2)];
-    // Control points: p1 + (p2−p0)/6 , p2 − (p3−p1)/6
-    const c1x = p1.x + (p2.x - p0.x) / 6;
-    const c1y = p1.y + (p2.y - p0.y) / 6;
-    const c2x = p2.x - (p3.x - p1.x) / 6;
-    const c2y = p2.y - (p3.y - p1.y) / 6;
-    d += ` C ${c1x} ${c1y} ${c2x} ${c2y} ${p2.x} ${p2.y}`;
-  }
-  return d;
-}
-
 function nodeGraphHitTrailKeptStrokes() {
   if (!Array.isArray(nodeGraphMvp.hitTrailKeptStrokes)) {
     nodeGraphMvp.hitTrailKeptStrokes = [];
@@ -90,11 +45,11 @@ function nodeGraphHitTrailKeptStrokes() {
   return nodeGraphMvp.hitTrailKeptStrokes;
 }
 
-function nodeGraphHitTrailLivePen(zoom = nodeGraphHitTrailZoom()) {
-  const z = Math.max(0.0001, nodeGraphFiniteNumber(zoom, 1));
+/** Screen px. The GL pass divides by zoom, so the trail looks the same at any zoom. */
+function nodeGraphHitTrailLivePen() {
   return {
-    width: 6 / z,
-    dash: `${14 / z} ${11 / z}`,
+    width: 6,
+    dash: [14, 11],
   };
 }
 
@@ -204,61 +159,10 @@ function nodeGraphHitTrailAllStrokes() {
   return strokes;
 }
 
-function nodeGraphHitTrailSyncPaths(svg, count) {
-  const ns = "http://www.w3.org/2000/svg";
-  const paths = [...svg.querySelectorAll("path")];
-  while (paths.length < count) {
-    const next = document.createElementNS(ns, "path");
-    next.setAttribute("class", "node-selection-hit-trail-path");
-    svg.append(next);
-    paths.push(next);
-  }
-  while (paths.length > Math.max(1, count)) {
-    paths.pop().remove();
-  }
-  return paths;
-}
-
-function renderNodeGraphMarqueeSelection() {
-  // Legacy name kept for call sites. Renders the hit trail snake.
-  const svg = nodeGraphHitTrailSvg();
-  const marquee = document.getElementById("nodeSelectionMarquee");
-  if (marquee) {
-    marquee.hidden = true;
-  }
-  const strokes = nodeGraphHitTrailAllStrokes();
-  if (!svg) {
-    return;
-  }
-  if (!strokes.length) {
-    svg.setAttribute("hidden", "");
-    svg.style.display = "none";
-    nodeGraphHitTrailSyncPaths(svg, 1)[0]?.removeAttribute("d");
-    return;
-  }
-
-  const surface = typeof nodeGraphZoomSurface === "function" ? nodeGraphZoomSurface() : null;
-  const w = Math.max(1, Math.round(surface?.clientWidth || surface?.offsetWidth || 1));
-  const h = Math.max(1, Math.round(surface?.clientHeight || surface?.offsetHeight || 1));
-  // Match surface layout coords used by nodeGraphClientPoint / module --node-x/y.
-  svg.setAttribute("viewBox", `0 0 ${w} ${h}`);
-  svg.setAttribute("preserveAspectRatio", "none");
-  svg.removeAttribute("hidden");
-  svg.style.display = "block";
-  svg.style.visibility = "visible";
-  svg.style.opacity = "1";
-  svg.style.pointerEvents = "none";
-
-  const paths = nodeGraphHitTrailSyncPaths(svg, strokes.length);
-  for (let i = 0; i < strokes.length; i += 1) {
-    const stroke = strokes[i];
-    const el = paths[i];
-    const d = nodeGraphHitTrailSmoothPathD(stroke.points);
-    el.setAttribute("d", d);
-    el.setAttribute("fill", "none");
-    el.style.strokeWidth = String(stroke.width);
-    el.style.strokeDasharray = stroke.dash;
-    el.style.opacity = "0.95";
+/** Draw the snake trail. The GL graph owns it (on #nodeGlGraphDots). */
+function presentNodeGraphHitTrail() {
+  if (typeof nodeGraphGlGraphPresentTrail === "function") {
+    nodeGraphGlGraphPresentTrail();
   }
 }
 
@@ -956,7 +860,7 @@ function syncNodeGraphMarqueeShiftMirror(shiftHeld) {
   } else {
     drag.mirrorDraw = false;
   }
-  renderNodeGraphMarqueeSelection();
+  presentNodeGraphHitTrail();
   return true;
 }
 
@@ -996,7 +900,7 @@ function updateNodeGraphMarqueeSelection(event = null) {
     drag.lastSampleSurface = { x: tip.x, y: tip.y };
     drag.lastClient = { x: event.clientX, y: event.clientY };
   }
-  renderNodeGraphMarqueeSelection();
+  presentNodeGraphHitTrail();
 }
 
 function nodeGraphMarqueeTargetIsBlocked(target) {
@@ -1072,7 +976,7 @@ function startNodeGraphMarqueeSelection(event, workspace) {
       point,
     );
   }
-  renderNodeGraphMarqueeSelection();
+  presentNodeGraphHitTrail();
   try {
     workspace.setPointerCapture(event.pointerId);
   } catch (_error) {
@@ -1190,7 +1094,7 @@ function endNodeGraphMarqueeSelection(event) {
     }
   }
   nodeGraphMvp.marqueeSelection = null;
-  renderNodeGraphMarqueeSelection();
+  presentNodeGraphHitTrail();
   if (event.currentTarget.hasPointerCapture?.(event.pointerId)) {
     try {
       event.currentTarget.releasePointerCapture(event.pointerId);

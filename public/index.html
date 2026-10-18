@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Big+Shoulders:wght@100..900&family=JetBrains+Mono:wght@400;500;600;700&family=Poiret+One&family=Tenor+Sans&family=Thasadith:ital,wght@0,400;0,700;1,400;1,700&family=Zen+Loop&display=swap">
   <script src="./public/boot-plugin-host.js?v=boot-plugin-1"></script>
-  <link rel="stylesheet" href="./public/styles.css?v=svg-wires-gone">
+  <link rel="stylesheet" href="./public/styles.css?v=gpu-html-cam-1">
   <link rel="stylesheet" href="./public/modules/portal/portal-ui.css?v=inlet-outlet-layout-1">
   <link rel="stylesheet" href="./public/modules/keypad/keypad-ui.css?v=keypad-press-once-1">
   <link rel="stylesheet" href="./public/modules/patch/patch-ui.css?v=patch-face-1">
@@ -662,16 +662,6 @@
               title="World origin: X 0, Y 0"></div>
             <div id="nodeGraphNodes" class="node-graph-nodes"></div>
             <div id="nodeCameraOverlayLayer" class="node-camera-overlay-layer" aria-hidden="true"></div>
-            <div id="nodeSelectionMarquee" class="node-selection-marquee" hidden></div>
-            <!-- Hitpoint select trail: thick phosphor dotted snake while dragging -->
-            <svg
-              id="nodeSelectionHitTrail"
-              class="node-selection-hit-trail"
-              aria-hidden="true"
-              focusable="false"
-              hidden>
-              <path id="nodeSelectionHitTrailPath" class="node-selection-hit-trail-path"></path>
-            </svg>
           </div>
         </div>
         <canvas
@@ -3142,15 +3132,15 @@
   <script data-boot-defer type="text/plain" src="./public/node-graph-default-preset.js?v=clear-startup-blank-1"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-script-status.js?v=dbgpanel-rm-1"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-view-controls.js?v=perform-escape-1"></script>
-  <script data-boot-defer type="text/plain" src="./public/node-graph-workspace-geometry.js?v=perf2-20261015"></script>
+  <script data-boot-defer type="text/plain" src="./public/node-graph-workspace-geometry.js?v=gpu-html-cam-1"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-viewport-perf.js?v=gpu-workspace-1"></script>
-  <script data-boot-defer type="text/plain" src="./public/node-graph-workspace-zoom.js?v=perf-20261015"></script>
+  <script data-boot-defer type="text/plain" src="./public/node-graph-workspace-zoom.js?v=snake-gl-1"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-workspace-view.js?v=perf-20261015"></script>
-  <script data-boot-defer type="text/plain" src="./public/node-graph-camera-view.js?v=svg-wires-gone"></script>
-  <script data-boot-defer type="text/plain" src="./public/node-graph-marquee-selection.js?v=gl-graph-16"></script>
+  <script data-boot-defer type="text/plain" src="./public/node-graph-camera-view.js?v=snake-gl-1"></script>
+  <script data-boot-defer type="text/plain" src="./public/node-graph-marquee-selection.js?v=snake-gl-1"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-node-dragging.js?v=keyboard-hit-1"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-context-menu.js?v=gl-graph-16"></script>
-  <script data-boot-defer type="text/plain" src="./public/node-graph-magnifier.js?v=label-wire-1"></script>
+  <script data-boot-defer type="text/plain" src="./public/node-graph-magnifier.js?v=snake-gl-1"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-module-actions.js?v=emo-1"></script>
   <!-- node-graph-code-screen.js loaded by node-graph-code-screen-loader.js on demand -->
     <script data-boot-defer type="text/plain" src="./public/lib/phosphor/phosphor-residual.js?v=hue-sat-1"></script>
@@ -3327,7 +3317,8 @@
   <script data-boot-defer type="text/plain" src="./public/node-graph-wire-actions.js?v=wire-style-2"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-trace-router.js?v=no-self-burst-1780321400000"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-wire-rendering.js?v=svg-wires-gone"></script>
-  <script data-boot-defer type="text/plain" src="./public/node-graph-gl-graph.js?v=gpu-workspace-1"></script>
+  <script data-boot-defer type="text/plain" src="./public/node-graph-stroke-builder.js?v=snake-gl-1"></script>
+  <script data-boot-defer type="text/plain" src="./public/node-graph-gl-graph.js?v=snake-gl-1"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-render-output.js?v=dbgpanel-rm-1"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-debug-copy.js?v=dbgpanel-rm-1"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-execution-debug-api.js?v=dbgpanel-rm-1"></script>

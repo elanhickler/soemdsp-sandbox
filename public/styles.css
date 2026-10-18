@@ -13113,46 +13113,6 @@ body.room-dimmer-on .node-room-dimmer-canvas,
   pointer-events: none;
 }
 
-/* Legacy area marquee (unused — hit trail replaced it). */
-.node-selection-marquee {
-  position: absolute;
-  z-index: 3;
-  box-sizing: border-box;
-  border: 1px dotted var(--accent, #7fc7d9);
-  border-radius: 0;
-  background: color-mix(in srgb, var(--accent, #7fc7d9) 8%, transparent);
-  box-shadow: none;
-  pointer-events: none;
-}
-
-/* Hitpoint select snake — thick phosphor dotted trail following the cursor.
-   Lives on the zoom surface; path coords are surface layout px (same as modules). */
-.node-selection-hit-trail {
-  position: absolute;
-  left: 0;
-  top: 0;
-  right: 0;
-  bottom: 0;
-  z-index: 50;
-  width: 100%;
-  height: 100%;
-  overflow: visible;
-  pointer-events: none !important;
-}
-
-.node-selection-hit-trail[hidden] {
-  display: none !important;
-}
-
-.node-selection-hit-trail-path {
-  fill: none !important;
-  stroke: var(--node-selection-hit-trail-color, var(--accent, #7fc7d9)) !important;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  opacity: var(--node-selection-hit-trail-alpha, 0.95);
-  pointer-events: none !important;
-}
-
 /* F / 📱 layout canvas + legacy screen-solo stage. */
 .node-screen-solo-stage {
   position: fixed;
@@ -13696,8 +13656,7 @@ body.node-screen-solo-active .node-screen-solo-face.node-sample-waveform-display
 }
 
 .node-graph-workspace.patch-locked .node-port,
-.node-graph-workspace.patch-locked .node-param-port,
-.node-graph-workspace.patch-locked .node-selection-hit-trail {
+.node-graph-workspace.patch-locked .node-param-port {
   pointer-events: none !important;
 }
 

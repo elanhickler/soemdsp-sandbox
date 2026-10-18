@@ -442,7 +442,10 @@ function nodeGraphGraphRect() {
   if (!rect) {
     return { height: 0, width: 0 };
   }
-  const zoom = Math.max(0.0001, nodeGraphZoom());
+  // A CSS-scaled world layer reports the scaled box. The GPU camera leaves the
+  // layer unscaled, so that box is already the layout size.
+  const scaled = graphElement?.style?.transform && graphElement.style.transform !== "none";
+  const zoom = scaled ? Math.max(0.0001, nodeGraphZoom()) : 1;
   return {
     height: rect.height / zoom,
     width: rect.width / zoom,
@@ -495,9 +498,21 @@ function nodeGraphClientToZoomSurfacePoint(clientX, clientY, surface = nodeGraph
     return { x: 0, y: 0 };
   }
   const scale = nodeGraphZoomSurfaceClientScale(surface);
+  const scaled = surface?.style?.transform && surface.style.transform !== "none";
+  let panX = 0;
+  let panY = 0;
+  if (!scaled) {
+    const host = document.getElementById("nodeGraphWorkspace");
+    const pan = nodeGraphMvp?.pan || { x: 0, y: 0 };
+    const origin = typeof nodeGraphRenderedOriginOffset === "function"
+      ? nodeGraphRenderedOriginOffset(pan, host)
+      : pan;
+    panX = Number(origin?.x) || 0;
+    panY = Number(origin?.y) || 0;
+  }
   return {
-    x: (clientX - rect.left) / scale.x,
-    y: (clientY - rect.top) / scale.y,
+    x: (clientX - rect.left - panX) / scale.x,
+    y: (clientY - rect.top - panY) / scale.y,
   };
 }
 

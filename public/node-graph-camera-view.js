@@ -270,8 +270,6 @@ function createNodeGraphCameraWorldClone(source) {
   }
   clone.querySelector("#nodeModularOnlyBackButton")?.remove();
   clone.querySelector("#nodeCameraOverlayLayer")?.remove();
-  clone.querySelector("#nodeSelectionMarquee")?.remove();
-  clone.querySelector("#nodeSelectionHitTrail")?.remove();
   copyNodeGraphCameraWorldCanvases(source, clone);
   if (typeof clearNodeGraphCanvasCopyKeys === "function") {
     clearNodeGraphCanvasCopyKeys(source);

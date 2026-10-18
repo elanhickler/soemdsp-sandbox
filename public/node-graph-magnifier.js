@@ -202,8 +202,6 @@ function nodeGraphMagnifierCloneWorkspace(workspace) {
     "#nodeModularOnlyBackButton",
     "#nodeGraphResizeHandle",
     "#nodeGraphEmptyModuleButton",
-    "#nodeSelectionMarquee",
-    "#nodeSelectionHitTrail",
     "#nodeCameraOverlayLayer",
     "#nodeGraphMagnifier",
   ]) {

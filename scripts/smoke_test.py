@@ -353,6 +353,7 @@ PUBLIC_SCRIPT_PATHS = (
     "./public/node-graph-execution-plan.js",
     "./public/node-graph-execution-summary.js",
     "./public/node-graph-wire-actions.js",
+    "./public/node-graph-stroke-builder.js",
     "./public/node-graph-gl-graph.js",
     "./public/node-graph-seed-code.js",
     "./public/node-graph-seed-control.js",
@@ -5614,8 +5615,6 @@ def require_node_graph_mvp_contract() -> None:
         "Selected modular camera output",
         "nodeGraphZoomSurface",
         "nodeModuleScopeCanvas",
-        "nodeSelectionMarquee",
-        "node-selection-marquee",
         "nodeSelectionCountReadout",
         "node-selection-count-readout",
         "data-selection-count-value",
@@ -9778,7 +9777,7 @@ def require_node_graph_mvp_contract() -> None:
         "const additiveSelection = event.ctrlKey || event.metaKey || event.shiftKey",
         "function nodeGraphSelectionHelpText()",
         "function composeNodeInteractionHelpText(text = \"\")",
-        "function renderNodeGraphMarqueeSelection()",
+        "function presentNodeGraphHitTrail()",
         "function nodeGraphWireSelectionExists(selection = nodeGraphMvp.selected)",
         "function nodeGraphNodeCanBeDeleted(node)",
         'return Boolean(node && node.type !== "output" && node.id !== "home")',
@@ -15239,7 +15238,6 @@ def require_node_graph_mvp_contract() -> None:
         ".node-patch-header-field.tags",
         ".node-demo-patch-row.active",
         ".node-gl-graph-wires",
-        ".node-selection-marquee",
         ".dsp-node",
         ".dsp-node-header",
         "box-sizing: border-box;",
@@ -18202,6 +18200,36 @@ def check_display_gl_contract() -> None:
     require(not stale, "display_gl_allowlist.txt is shrink-only; delete clean entries: " + ", ".join(stale))
 
 
+def check_snake_trail_gl() -> None:
+    """Snake select trail draws in WebGL2 on #nodeGlGraphDots (PENCIL R1).
+    No SVG trail or dead marquee box in either page, no SVG element creation
+    in the marquee code, and the gl-graph present has the trail pass."""
+    public = ROOT / "public"
+    for page in ("index.html", "perform.html"):
+        text = (public / page).read_text(encoding="utf-8")
+        require("nodeSelectionHitTrail" not in text, f"{page}: SVG snake trail is gone (GL draws it)")
+        require("nodeSelectionMarquee" not in text, f"{page}: dead #nodeSelectionMarquee is gone")
+        require(
+            text.find("node-graph-stroke-builder.js") != -1
+            and text.find("node-graph-stroke-builder.js") < text.find("node-graph-gl-graph.js"),
+            f"{page}: stroke builder loads before gl-graph",
+        )
+    marquee = (public / "node-graph-marquee-selection.js").read_text(encoding="utf-8")
+    require("createElementNS" not in marquee, "marquee-selection.js must not build SVG")
+    require("renderNodeGraphMarqueeSelection" not in marquee, "renderNodeGraphMarqueeSelection was renamed")
+    require("nodeGraphHitTrailSmoothPathD" not in marquee, "SVG trail path builder is gone")
+    gl = (public / "node-graph-gl-graph.js").read_text(encoding="utf-8")
+    for needle in (
+        "function nodeGraphGlGraphDrawTrail(trailBatch, zoom)",
+        "function nodeGraphGlGraphPresentTrail()",
+        "nodeGraphDisplayGlFailed(held.canvas, \"GL snake trail begin\")",
+        "batches: [batch, wireBatch, contactBatch, dotBatch, veilBatch, trailBatch]",
+    ):
+        require(needle in gl, f"gl-graph trail pass missing: {needle}")
+    css = (public / "styles.css").read_text(encoding="utf-8")
+    require(".node-selection-hit-trail" not in css and ".node-selection-marquee" not in css, "SVG trail CSS is gone")
+
+
 def check_page_patch_index_covers_all_patches() -> None:
     """Every patches/**/*.json must be in patches/index.json, and every live
     demo must have its bare /<name> route, or the site 404s it."""
@@ -18236,6 +18264,7 @@ def main() -> None:
 
     check_page_patch_index_covers_all_patches()
     check_display_gl_contract()
+    check_snake_trail_gl()
     run_smoke(args.port, Path(args.manifest).resolve())
     print("soemdsp-sandbox smoke test passed")
 
