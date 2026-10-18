@@ -903,6 +903,7 @@ function nodeGraphScreenSoloWholeModuleFit(tile) {
   set("max-height", `${nat.h}px`);
   set("box-shadow", "none");
   set("filter", "none");
+  set("zoom", "1");
   set("transform-origin", "0 0");
   set("transform", `translate(${ox}px, ${oy}px) scale(${s})`);
   face.dataset.wholeModuleScale = s.toFixed(4);

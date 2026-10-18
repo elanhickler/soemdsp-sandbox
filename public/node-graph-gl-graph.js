@@ -351,8 +351,10 @@ function nodeGraphGlGraphRebuildChrome() {
       const input = readout.closest("label")?.querySelector("input[type='range']") || null;
       const valueEl = readout.querySelector(".node-slider-readout-value");
       const labelEl = readout.querySelector(".node-slider-readout-label");
+      const unitEl = readout.querySelector(".node-slider-readout-unit");
       const valueBox = nodeGraphGlGraphWorldBox(valueEl);
       const labelBox = nodeGraphGlGraphWorldBox(labelEl);
+      const unitBox = nodeGraphGlGraphWorldBox(unitEl);
       const row = readout.closest(".node-parameter-row");
       const rowBox = nodeGraphGlGraphWorldBox(row);
       if (readout.closest(".node-seed-control, .node-parameter-row-seed")) {
@@ -376,6 +378,9 @@ function nodeGraphGlGraphRebuildChrome() {
         labelEl,
         labelBox,
         labelAnchor: labelEl && labelBox ? nodeGraphGlGraphTextAnchor(labelEl, labelBox) : null,
+        unitEl,
+        unitBox,
+        unitAnchor: unitEl && unitBox ? nodeGraphGlGraphTextAnchor(unitEl, unitBox) : null,
       });
     }
     const seedControls = el.querySelectorAll(".node-seed-control");
@@ -812,6 +817,27 @@ function nodeGraphGlGraphDrawChrome(batch, toX, toY, zoom, cssW, cssH) {
             px: Math.max(8, (Number.parseFloat(getComputedStyle(slider.valueEl).fontSize) || 13.8) * zoom),
             rgba: ink,
             align: slider.valueAnchor.align,
+            baseline: "middle",
+            weight: 400,
+          }),
+        );
+      }
+      const unitText = String(slider.unitEl?.textContent || "").replace(/\s+/g, " ").trim();
+      if (unitText && slider.unitBox && slider.unitAnchor && !slider.unitEl.classList.contains("is-empty")) {
+        const unitStyle = getComputedStyle(slider.unitEl);
+        const unitInk = nodeGraphGlGraphParseCssColor(
+          unitStyle.getPropertyValue("--node-slider-unit-color"),
+          [127 / 255, 199 / 255, 217 / 255, 1],
+        );
+        nodeGraphGlLinesText(
+          batch,
+          unitText,
+          toX(slider.unitAnchor.x),
+          toY(slider.unitBox.y + slider.unitBox.h * 0.5),
+          nodeGraphGlGraphTextOpts({
+            px: Math.max(8, (Number.parseFloat(unitStyle.fontSize) || 11) * zoom),
+            rgba: unitInk,
+            align: slider.unitAnchor.align,
             baseline: "middle",
             weight: 400,
           }),

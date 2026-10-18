@@ -1,9 +1,9 @@
 // Viewport (zoom/pan) performance: light CSS every event, heavy chrome
 // (wires / heatmap / scopes) coalesced to rAF; full fidelity + settings
 // persist after the gesture settles.
-// Camera: world-layer translate3d+scale; wire SVGs are screen-space
-// (camera viewBox on workspace siblings — not CSS-scaled). Mid-gesture
-// cull keeps off-screen modules asleep. Scopes on visible modules keep drawing.
+// Camera: GPU shader. World layers stay untransformed. Each module uses
+// CSS zoom (not transform:scale) so carets and edit fields stay on the
+// glyphs. offsetWidth stays zoom-1, which the GPU plate measures.
 
 // Pan offsets are registered NON-inherited. As plain custom properties on the
 // workspace they inherited into ~2.5k module elements, so every pan event
@@ -50,7 +50,10 @@ function nodeGraphPositionGridHtml() {
   const workspace = document.getElementById("nodeGraphWorkspace");
   if (!workspace) return;
   nodeGraphEnsureTextWireLayers(workspace);
-  const zoom = typeof nodeGraphZoom === "function" ? nodeGraphZoom() : (nodeGraphMvp?.zoom || 1);
+  const zoom = Math.max(
+    0.0001,
+    typeof nodeGraphZoom === "function" ? nodeGraphZoom() : (nodeGraphMvp?.zoom || 1),
+  );
   const pan = nodeGraphMvp?.pan || { x: 0, y: 0 };
   const origin = typeof nodeGraphRenderedOriginOffset === "function"
     ? nodeGraphRenderedOriginOffset(pan, workspace)
@@ -60,20 +63,22 @@ function nodeGraphPositionGridHtml() {
   const behind = document.getElementById("nodeGraphTextBehind");
   const front = document.getElementById("nodeGraphTextFront");
   const nodes = workspace.querySelectorAll("#nodeGraphWorldLayer .dsp-node, #nodeGraphAnnotationWorldLayer .dsp-node, #nodeGraphTextBehind .dsp-node, #nodeGraphTextFront .dsp-node");
+  // Zoom scales around the layer origin, so layout left (wx) already lands
+  // at wx * zoom. The translate is only the camera origin, in pre-zoom px.
+  const zoomText = String(zoom);
+  const transform = `translate(${panX / zoom}px, ${panY / zoom}px)`;
   for (let i = 0; i < nodes.length; i += 1) {
     const node = nodes[i];
+    if (node.closest?.(".node-layout-canvas-tile, .node-screen-solo-stage")) continue;
     const text = node.querySelector(":scope > .node-text-box-body");
     if (text && behind && front) {
       const layout = nodeGraphMvp?.patch?.nodes?.find?.((item) => item?.id === node.dataset.node)?.layout;
       const place = layout?.wireStack === "behind" ? behind : front;
       if (node.parentElement !== place) place.append(node);
     }
-    const wx = Number.parseFloat(node.style.left) || 0;
-    const wy = Number.parseFloat(node.style.top) || 0;
-    const tx = wx * zoom + panX - wx;
-    const ty = wy * zoom + panY - wy;
+    if (node.style.zoom !== zoomText) node.style.zoom = zoomText;
     node.style.transformOrigin = "0 0";
-    node.style.transform = `translate(${tx}px, ${ty}px) scale(${zoom})`;
+    node.style.transform = transform;
   }
   const layers = workspace.getElementsByClassName("node-graph-world-layer");
   for (let i = 0; i < layers.length; i += 1) {

@@ -32,12 +32,31 @@ const workspace = {
     toggle: (c, on) => (on ? classes.add(c) : classes.delete(c)),
   },
   getElementsByClassName: () => layers,
+  querySelector: () => null,
+  querySelectorAll: () => nodes,
 };
+const nodeStyle = makeStyle(log, "module");
+nodeStyle.setProperty("--node-x", "100px");
+nodeStyle.setProperty("--node-y", "40px");
+const nodes = [{
+  style: nodeStyle,
+  dataset: {},
+  parentElement: null,
+  querySelector: () => null,
+  closest: () => null,
+}];
 const ctx = {
   console,
   performance: { now: () => 1000 },
   window: { setTimeout: () => 1, clearTimeout() {}, cancelAnimationFrame() {}, requestAnimationFrame: () => 1, addEventListener() {}, __nodeGraphViewportStrokeRescue: true },
-  document: { getElementById: (id) => (id === "nodeGraphWorkspace" ? workspace : null), addEventListener() {} },
+  document: {
+    getElementById: (id) => {
+      if (id === "nodeGraphWorkspace") return workspace;
+      if (id === "nodeGraphTextBehind" || id === "nodeGraphTextFront") return { id, append() {} };
+      return null;
+    },
+    addEventListener() {},
+  },
   nodeGraphMvp: { zoom: 3, pan: { x: 10, y: 20 } },
   nodeGraphFiniteNumber: (v, f = 0) => (Number.isFinite(Number(v)) ? Number(v) : f),
 };
@@ -57,9 +76,10 @@ const zoomWrites = log.filter(([o, k]) => k === "--node-graph-zoom");
 if (zoomWrites.length) fail(`per-step zoom wrote the inherited var: ${JSON.stringify(zoomWrites)}`);
 ok("per-step zoom does not write --node-graph-zoom");
 const t = layers[0].style.transform;
-if (!/scale\(4\)/.test(t) || !/translate3d\(10px, 20px, 0\)/.test(t)) fail(`world layer transform not live: ${t}`);
-if (layers[1].style.transform !== t) fail("both world layers must carry the camera transform");
-ok(`world layers carry the camera transform (${t})`);
+if (t !== "none" || layers[1].style.transform !== "none") fail(`world layers must stay untransformed: ${t}`);
+if (nodeStyle.zoom !== "4") fail(`module zoom must follow the camera: ${nodeStyle.zoom}`);
+if (nodeStyle.transform !== "translate(2.5px, 5px)") fail(`module translate must be pan/zoom: ${nodeStyle.transform}`);
+ok(`modules carry CSS zoom (${nodeStyle.zoom}) and ${nodeStyle.transform}`);
 if (!classes.has("pixelated-canvas-zoom")) fail("pixelation above 2.5x must stay live mid-gesture");
 ok("nearest-neighbor class live above 2.5x");
 

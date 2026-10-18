@@ -12703,8 +12703,8 @@ body.node-graph-magnifying-active .node-graph-workspace * {
   width: 100%;
   height: 100%;
   background: transparent;
-  /* Host stays scale(1). Camera pan/zoom lives on .node-graph-world-layer
-     so full-bleed wire SVGs (workspace siblings) are never CSS-scaled. */
+  /* Host stays scale(1). The GPU camera draws the picture. Each module's
+     CSS zoom follows that camera so HTML hit targets stay on the plate. */
   transform: none;
   pointer-events: none;
   overflow: hidden;
@@ -17620,6 +17620,15 @@ body.node-screen-solo-active .node-screen-solo-face.node-text-box-body > .node-t
   line-height: 1;
 }
 
+/* The readout button stays invisible (GPU paints label, value, unit).
+   The edit field replaces that button, so it has to show the typed text. */
+.node-slider-readout-input {
+  color: var(--node-slider-value-color, #ffffff);
+  caret-color: var(--node-slider-value-color, #ffffff);
+  -webkit-text-fill-color: currentColor;
+  background: #080b0d;
+}
+
 .node-slider-readout {
   border-color: transparent;
   padding: 0;
@@ -17886,7 +17895,7 @@ body.node-slider-dragging * {
   z-index: 1;
   grid-column: 2;
   min-width: var(--node-slider-unit-width);
-  color: color-mix(in srgb, var(--node-slider-unit-color, #7fc7d9) 58%, rgba(160, 167, 176, 0.5));
+  color: transparent;
   font-size: calc(var(--node-slider-readout-height) * 0.5);
   line-height: 0.9;
   text-align: right;
@@ -17894,7 +17903,7 @@ body.node-slider-dragging * {
 }
 
 .node-slider-readout:focus-within .node-slider-readout-unit {
-  color: color-mix(in srgb, var(--node-slider-unit-color, #7fc7d9) 58%, rgba(160, 167, 176, 0.5));
+  color: transparent;
 }
 
 .node-slider-readout-unit.is-empty {
