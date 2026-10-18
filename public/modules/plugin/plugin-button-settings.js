@@ -141,7 +141,12 @@ function buildNodeGraphPluginButtonDisplaySettingsBodyHtml(formType) {
       <div class="metadata-field-section">${NODE_GRAPH_PLUGIN_BUTTON_SLIDER_FIELDS.map(fieldRow).join("")}</div>
       <div class="metadata-field-section">${nodeGraphPluginButtonTextRowHtml("offText", "Off", momentary ? "Gate" : "Off")}${nodeGraphPluginButtonTextRowHtml("onText", "On", momentary ? "Gate" : "On")}</div>
       <div class="metadata-section-title">Colors</div>
-      <div class="metadata-field-section">${["backgroundColor", "strokeColor", "activeColor", "inactiveColor", "hoverColor", "textColor"].map(colorRow).join("")}</div>
+      <div class="metadata-field-section">${(typeof nodeGraphDisplaySettingsColorRows === "function"
+        ? nodeGraphDisplaySettingsColorRows(
+          ["backgroundColor", "strokeColor", "textColor", "inactiveColor", "activeColor", "hoverColor"].map(colorRow),
+          [3, 3],
+        )
+        : ["backgroundColor", "strokeColor", "textColor", "inactiveColor", "activeColor", "hoverColor"].map(colorRow).join(""))}</div>
     </div>`;
 }
 

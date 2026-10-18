@@ -107,15 +107,26 @@ function buildNodeGraphKeypadDisplaySettingsBodyHtml() {
         <span>Stroke</span>
         <input type="range" min="0" max="1" step="0.01" data-keypad-field="stroke" aria-label="Button stroke 0–1">
       </label>
-      ${colorRow("backgroundColor", "keypadFace")}
+      ${(typeof nodeGraphDisplaySettingsColorRows === "function"
+        ? nodeGraphDisplaySettingsColorRows([
+          colorRow("backgroundColor", "keypadFace"),
+          colorRow("buttonColor", "keypadFace"),
+          colorRow("strokeColor", "keypadFace"),
+          colorRow("textColor", "keypadFace"),
+          colorRow("hoverColor", "keypadFace"),
+          colorRow("downColor", "keypadFace"),
+        ], [3, 3])
+        : [
+          colorRow("backgroundColor", "keypadFace"),
+          colorRow("buttonColor", "keypadFace"),
+          colorRow("strokeColor", "keypadFace"),
+          colorRow("textColor", "keypadFace"),
+          colorRow("hoverColor", "keypadFace"),
+          colorRow("downColor", "keypadFace"),
+        ].join(""))}
       ${(typeof nodeGraphBuildImageAssetRowHtml === "function"
         ? nodeGraphBuildImageAssetRowHtml({ key: "background", label: "Background" })
         : "")}
-      ${colorRow("buttonColor", "keypadFace")}
-      ${colorRow("hoverColor", "keypadFace")}
-      ${colorRow("downColor", "keypadFace")}
-      ${colorRow("textColor", "keypadFace")}
-      ${colorRow("strokeColor", "keypadFace")}
       <div class="node-keypad-image-slots" role="group" aria-label="Key images">
         ${((typeof NODE_GRAPH_KEYPAD_LABELS !== "undefined" ? NODE_GRAPH_KEYPAD_LABELS : ["1","2","3","4","5","6","7","8","9","*","0","#"])).map((label, slot) => (
           typeof nodeGraphBuildImageAssetRowHtml === "function"

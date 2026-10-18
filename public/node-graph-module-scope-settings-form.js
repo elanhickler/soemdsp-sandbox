@@ -422,12 +422,90 @@ function nodeGraphDisplaySettingsBuildHueTitleStepperRowHtml(options = {}) {
     </div>`;
 }
 
+function nodeGraphDisplaySettingsColorRowSizes(count) {
+  const n = Math.max(0, Math.round(Number(count) || 0));
+  if (n <= 4) {
+    return n ? [n] : [];
+  }
+  const table = {
+    5: [3, 2],
+    6: [3, 3],
+    7: [4, 3],
+    8: [4, 4],
+    9: [3, 3, 3],
+    10: [4, 3, 3],
+    11: [4, 4, 3],
+    12: [4, 4, 4],
+  };
+  if (table[n]) {
+    return table[n];
+  }
+  const sizes = [];
+  let left = n;
+  while (left > 0) {
+    if (left === 1) {
+      if (sizes.length) {
+        sizes[sizes.length - 1] -= 1;
+        sizes.push(2);
+      } else {
+        sizes.push(1);
+      }
+      break;
+    }
+    const take = left === 5 ? 3 : Math.min(4, left);
+    sizes.push(take);
+    left -= take;
+  }
+  return sizes;
+}
+
 function nodeGraphDisplaySettingsHbsRow(cells) {
   const list = (Array.isArray(cells) ? cells : [cells]).filter(Boolean);
   if (!list.length) {
     return "";
   }
-  return `<div class="node-trace-display-hbs-row">${list.join("")}</div>`;
+  const n = list.length;
+  if (n > 4) {
+    return nodeGraphDisplaySettingsColorRows(list);
+  }
+  const cols = n === 1 ? 2 : n;
+  return `<div class="node-trace-display-hbs-row" style="--color-row-cells:${cols}" data-color-row-cells="${n}">${list.join("")}</div>`;
+}
+
+function nodeGraphDisplaySettingsColorRows(cells, groups) {
+  const list = (Array.isArray(cells) ? cells : [cells]).filter(Boolean);
+  if (!list.length) {
+    return "";
+  }
+  let chunks;
+  if (Array.isArray(groups) && groups.length) {
+    if (Array.isArray(groups[0])) {
+      chunks = groups.map((group) => (Array.isArray(group) ? group : [group]).filter(Boolean));
+    } else {
+      let i = 0;
+      chunks = groups.map((size) => {
+        const n = Math.max(0, Math.round(Number(size) || 0));
+        const slice = list.slice(i, i + n);
+        i += n;
+        return slice;
+      }).filter((slice) => slice.length);
+    }
+  } else {
+    const sizes = nodeGraphDisplaySettingsColorRowSizes(list.length);
+    let i = 0;
+    chunks = sizes.map((size) => {
+      const slice = list.slice(i, i + size);
+      i += size;
+      return slice;
+    });
+  }
+  for (let c = 0; c < chunks.length; c += 1) {
+    const n = chunks[c].length;
+    if (n >= 5) {
+      throw new Error(`color row has ${n} cells; rows are 2 to 4 (or one half-width cell)`);
+    }
+  }
+  return chunks.map((chunk) => nodeGraphDisplaySettingsHbsRow(chunk)).join("");
 }
 
 
@@ -1515,9 +1593,6 @@ function buildNodeGraphInstantTraceDisplaySettingsBodyHtml(type, node, allowKey)
   if (isInstantWaterfall && orderedPrimary.includes("strokeThickness")) {
     rows.push(nodeGraphDisplaySettingsBuildStepperRowHtml("strokeThickness", type));
   }
-  if (isInstantWaterfall && !quadInk && !monoInk && activeColors.has("strokeColor") && allow("colors", "strokeColor")) {
-    rows.push(nodeGraphDisplaySettingsBuildColorRowHtml("strokeColor", type));
-  }
   if (isInstantWaterfall && toggleKeys.includes("pauseOnSilence")) {
     rows.push(nodeGraphDisplaySettingsBuildToggleRowHtml("pauseOnSilence"));
     usedToggles.add("pauseOnSilence");
@@ -1617,15 +1692,15 @@ function buildNodeGraphInstantTraceDisplaySettingsBodyHtml(type, node, allowKey)
     && inkColors.includes("secondaryColor")
     && inkColors.includes("tertiaryColor");
   if (quadInk) {
-    rows.push(nodeGraphDisplaySettingsHbsRow([
+    rows.push(nodeGraphDisplaySettingsColorRows([
       nodeGraphDisplaySettingsBuildColorRowHtml("backgroundColor", type),
       nodeGraphDisplaySettingsBuildColorRowHtml("dot1Color", type),
       nodeGraphDisplaySettingsBuildColorRowHtml("secondaryColor", type),
       nodeGraphDisplaySettingsBuildColorRowHtml("strokeLeftColor", type),
       nodeGraphDisplaySettingsBuildColorRowHtml("strokeRightColor", type),
-    ]));
+    ], [3, 2]));
   } else if (monoInk) {
-    rows.push(nodeGraphDisplaySettingsHbsRow([
+    rows.push(nodeGraphDisplaySettingsColorRows([
       nodeGraphDisplaySettingsBuildColorRowHtml("backgroundColor", type),
       nodeGraphDisplaySettingsBuildColorRowHtml("dot1Color", type),
       nodeGraphDisplaySettingsBuildColorRowHtml("strokeColor", type),
@@ -1661,7 +1736,7 @@ function buildNodeGraphInstantTraceDisplaySettingsBodyHtml(type, node, allowKey)
     }));
   }
   if (leftoverColors.length) {
-    rows.push(nodeGraphDisplaySettingsHbsRow(leftoverColors));
+    rows.push(nodeGraphDisplaySettingsColorRows(leftoverColors));
   }
   if (
     typeof nodeGraphDisplaySettingsFormTypeUsesGradient === "function"
@@ -1779,8 +1854,10 @@ function buildNodeGraphPhosphorDisplaySettingsBodyHtml(type, node, allowKey) {
     rows.push(nodeGraphDisplaySettingsBuildToggleRowHtml(key));
   }
   rows.push(nodeGraphDisplaySettingsBuildPackingToggleRowHtml(packingKeys));
-  for (const key of colorKeys) {
-    rows.push(nodeGraphDisplaySettingsBuildColorRowHtml(key, type));
+  if (colorKeys.length) {
+    rows.push(nodeGraphDisplaySettingsColorRows(
+      colorKeys.map((key) => nodeGraphDisplaySettingsBuildColorRowHtml(key, type)),
+    ));
   }
   if (
     typeof nodeGraphDisplaySettingsFormTypeUsesGradient === "function"
@@ -1946,6 +2023,7 @@ function buildNodeGraphDisplaySettingsBodyHtml(formType, node = null) {
     : (isVectorTraceForm && typeof nodeGraphTraceDisplaySettingsSectionOrder !== "undefined"
       ? nodeGraphTraceDisplaySettingsSectionOrder
       : nodeGraphDisplaySettingsSectionOrder);
+  const collectedColorCells = [];
   for (const section of sectionOrder) {
     if (section === "gradient") {
       if (!nodeGraphDisplaySettingsFormTypeUsesGradient(type)) {
@@ -2328,7 +2406,7 @@ function buildNodeGraphDisplaySettingsBodyHtml(formType, node = null) {
       hbsCells.push(nodeGraphDisplaySettingsBuildColorRowHtml(key, type));
     }
     if (hbsCells.length) {
-      rows.push(nodeGraphDisplaySettingsHbsRow(hbsCells));
+      collectedColorCells.push(...hbsCells);
     }
     // Value LED: Ghost Gradient under Background. Value LCD skips (reflective ink model).
     if (type === "numberReadout" && section === "waterfall"
@@ -2352,28 +2430,12 @@ function buildNodeGraphDisplaySettingsBodyHtml(formType, node = null) {
     parts.push(`<div class="metadata-field-section node-trace-display-${section}-section">${rows.join("")}</div>`);
   }
 
-  if (type === "waterfall" && isStereoWaterfallNode) {
-    const stereoColors = NODE_GRAPH_TRACE_STEREO_COLOR_ORDER.filter(
-      (key) => activeColors.has(key) && allowKey("colors", key),
+  if (collectedColorCells.length) {
+    parts.push(
+      `<div class="metadata-field-section node-trace-display-colors-section">${
+        nodeGraphDisplaySettingsColorRows(collectedColorCells)
+      }</div>`,
     );
-    if (stereoColors.length) {
-      parts.push(
-        `<div class="metadata-field-section node-trace-display-stereo-colors-section">${
-          nodeGraphDisplaySettingsHbsRow(
-            stereoColors.map((key) => nodeGraphDisplaySettingsBuildColorRowHtml(key, type, { stereo: true })),
-          )
-        }</div>`,
-      );
-    }
-  }
-
-  if (type === "value") {
-    parts.push(`<div class="metadata-field-section node-trace-display-value-colors-section">${
-      nodeGraphDisplaySettingsHbsRow([
-        nodeGraphDisplaySettingsBuildColorRowHtml("backgroundColor", type),
-        nodeGraphDisplaySettingsBuildColorRowHtml("dot1Color", type),
-      ])
-    }</div>`);
   }
 
   // Scan Grid: Clear packing row (wipe rolling W×H plate + re-arm ingest).

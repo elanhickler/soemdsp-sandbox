@@ -6946,9 +6946,10 @@ body.keyboard-debug-hidden .node-midi-keyboard-signal-bar {
   gap: 4px;
 }
 
-.node-trace-display-hbs-row {
+.node-trace-display-hbs-row,
+.node-color-row {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(var(--color-row-cells, 3), minmax(0, 1fr));
   gap: 4px;
   width: 100%;
   align-items: stretch;

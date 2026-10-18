@@ -152,8 +152,12 @@ function buildNodeGraphTextBoxDisplaySettingsBodyHtml() {
           >
         </div>
       </label>
-      ${colorRow("backgroundColor", "textBoxFace")}
-      ${colorRow("textColor", "textBoxFace")}
+      ${(typeof nodeGraphDisplaySettingsColorRows === "function"
+        ? nodeGraphDisplaySettingsColorRows([
+          colorRow("backgroundColor", "textBoxFace"),
+          colorRow("textColor", "textBoxFace"),
+        ])
+        : colorRow("backgroundColor", "textBoxFace") + colorRow("textColor", "textBoxFace"))}
     </div>`;
 }
 

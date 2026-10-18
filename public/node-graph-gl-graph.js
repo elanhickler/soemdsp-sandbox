@@ -1496,9 +1496,58 @@ function nodeGraphGlGraphPresentSoon() {
   });
 }
 
+// Unit-orbit step longer than this is a jump, not a side. It is not stroked.
+const NODE_GRAPH_ROUND_ORBIT_JUMP = 0.45;
+
+function nodeGraphGlGraphRoundOrbitRuns(unitPts) {
+  const n = unitPts.length;
+  if (n < 2) return [];
+  const brk = new Array(n);
+  let any = false;
+  for (let i = 0; i < n; i += 1) {
+    const a = unitPts[i];
+    const b = unitPts[(i + 1) % n];
+    brk[i] = Math.hypot(b.x - a.x, b.y - a.y) > NODE_GRAPH_ROUND_ORBIT_JUMP;
+    if (brk[i]) any = true;
+  }
+  const compact = (pts) => {
+    const out = [];
+    for (let i = 0; i < pts.length; i += 1) {
+      const p = pts[i];
+      const prev = out[out.length - 1];
+      if (prev && Math.hypot(p.x - prev.x, p.y - prev.y) < 0.02) continue;
+      out.push(p);
+    }
+    return out;
+  };
+  if (!any) return [{ closed: true, pts: compact(unitPts) }];
+  let start = 0;
+  for (let i = 0; i < n; i += 1) {
+    if (brk[i]) {
+      start = (i + 1) % n;
+      break;
+    }
+  }
+  const runs = [];
+  let cur = [unitPts[start]];
+  for (let k = 0; k < n; k += 1) {
+    const i = (start + k) % n;
+    const j = (i + 1) % n;
+    if (brk[i]) {
+      const packed = compact(cur);
+      if (packed.length) runs.push({ closed: false, pts: packed });
+      cur = [];
+    }
+    if (k < n - 1) cur.push(unitPts[j]);
+  }
+  const tail = compact(cur);
+  if (tail.length) runs.push({ closed: false, pts: tail });
+  return runs;
+}
+
 /**
- * RoundShape orbit. World-space polyline + dot on the graph shader, so zoom
- * is the camera and the face is not a scaled bitmap.
+ * RoundShape orbit. Continuous runs are one ribbon. A jump is not stroked:
+ * a run that collapses to a point is a dot, so a full square is four dots.
  */
 function nodeGraphGlGraphDrawRoundShapes(batch, toX, toY, zoom, cameraOn) {
   if (!batch || typeof nodeGraphGlLinesPolyline !== "function") return;
@@ -1538,7 +1587,7 @@ function nodeGraphGlGraphDrawRoundShapes(batch, toX, toY, zoom, cameraOn) {
     const half = Math.max(4, Math.min(box.w, box.h) * 0.5 - pad);
     const cx = box.w * 0.5;
     const cy = box.h * 0.5;
-    const flat = new Float32Array((samples + 1) * 2);
+    const unit = new Array(samples);
     const eps = 0.5 / samples;
     let px = cx;
     let py = cy;
@@ -1554,23 +1603,43 @@ function nodeGraphGlGraphDrawRoundShapes(batch, toX, toY, zoom, cameraOn) {
         const a = phase * Math.PI * 2;
         pt = { x: Math.cos(a), y: Math.sin(a) };
       }
-      const lx = cx + pt.x * half;
-      const ly = cy - pt.y * half;
-      flat[s * 2] = toX(box.x + lx);
-      flat[s * 2 + 1] = toY(box.y + ly);
+      unit[s] = {
+        x: Number.isFinite(pt.x) ? pt.x : 0,
+        y: Number.isFinite(pt.y) ? pt.y : 0,
+      };
       if (s === 0) {
-        px = lx;
-        py = ly;
+        px = cx + unit[s].x * half;
+        py = cy - unit[s].y * half;
       }
     }
-    flat[samples * 2] = flat[0];
-    flat[samples * 2 + 1] = flat[1];
     const halfStroke = strokeW * 0.5 * (cameraOn ? 1 : scale);
-    if (cameraOn && typeof nodeGraphGlLinesDash === "function") {
-      // One solid stadium. The shader rounds the ends and antialiases in screen px.
-      nodeGraphGlLinesDash(batch, flat, halfStroke, 1e6, 0, stroke);
-    } else {
-      nodeGraphGlLinesPolyline(batch, flat, halfStroke, 1, stroke);
+    const feather = cameraOn ? 1.25 : scale;
+    const place = (p) => [toX(box.x + cx + p.x * half), toY(box.y + cy - p.y * half)];
+    const runs = nodeGraphGlGraphRoundOrbitRuns(unit);
+    const cornerDots = [];
+    for (let r = 0; r < runs.length; r += 1) {
+      const run = runs[r];
+      if (run.pts.length < 2) {
+        if (run.pts[0]) cornerDots.push(run.pts[0]);
+        continue;
+      }
+      const seq = run.closed ? run.pts.concat([run.pts[0]]) : run.pts;
+      const flat = new Float32Array(seq.length * 2);
+      for (let p = 0; p < seq.length; p += 1) {
+        const at = place(seq[p]);
+        flat[p * 2] = at[0];
+        flat[p * 2 + 1] = at[1];
+      }
+      if (typeof nodeGraphGlLinesRibbon === "function") {
+        nodeGraphGlLinesRibbon(batch, flat, halfStroke, feather, stroke);
+      }
+    }
+    if (typeof nodeGraphGlLinesDot === "function") {
+      const cornerR = Math.max(0.5, dotW * 0.5) * (cameraOn ? 1 : scale);
+      for (let d = 0; d < cornerDots.length; d += 1) {
+        const at = place(cornerDots[d]);
+        nodeGraphGlLinesDot(batch, at[0], at[1], cornerR, feather, stroke);
+      }
     }
     if (typeof nodeGraphRoundShapeLiveCursor === "function" && !isOsc) {
       const cursor = nodeGraphRoundShapeLiveCursor(id, node, section);

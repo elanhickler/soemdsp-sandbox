@@ -44,7 +44,9 @@ function buildNodeGraphVideoFeedbackDisplaySettingsBodyHtml() {
   return `
     <div class="metadata-field-section" data-video-feedback-display-settings-panel>
       <div class="metadata-section-title">SPECTRUM</div>
-      ${colorRow}
+      ${(typeof nodeGraphDisplaySettingsColorRows === "function"
+        ? nodeGraphDisplaySettingsColorRows([colorRow])
+        : colorRow)}
     </div>
   `;
 }

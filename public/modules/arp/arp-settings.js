@@ -228,9 +228,17 @@ function buildNodeGraphArpKeysDisplaySettingsBodyHtml() {
           <input id="nodeArpKeysTrailInput" type="range" min="0" max="1" step="0.01" title="Linear recursive drain of the hot leftover. 0 = wipe. 1 = 4 seconds 1→0. Ghost cannot add to this.">
         </span>
       </label>
-      ${wrapHbs(colorWidgets.slice(0, 3))}
-      ${wrapHbs(colorWidgets.slice(3, 6))}
-      ${wrapHbs(colorWidgets.slice(6))}
+      ${(typeof nodeGraphDisplaySettingsColorRows === "function"
+        ? nodeGraphDisplaySettingsColorRows([
+          colorWidgets[2],
+          colorWidgets[3],
+          colorWidgets[4],
+          colorWidgets[5],
+          colorWidgets[0],
+          colorWidgets[1],
+          colorWidgets[6],
+        ], [4, 3])
+        : wrapHbs(colorWidgets.slice(0, 3)) + wrapHbs(colorWidgets.slice(3, 6)) + wrapHbs(colorWidgets.slice(6)))}
     </div>`;
 }
 

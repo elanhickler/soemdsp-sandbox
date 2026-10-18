@@ -18283,6 +18283,12 @@ def check_mini_perform_view() -> None:
     unit = subprocess.run(["node", str(ROOT / "scripts" / "smoke_mini_perform_unit.cjs")], capture_output=True, text=True)
     require(unit.returncode == 0, f"mini perform unit checks: {unit.stdout}{unit.stderr}")
 
+
+def check_color_rows() -> None:
+    """Color widgets sit in rows of 2 to 4 (docs/COLOR_ROW_PLAN.md CR-6)."""
+    unit = subprocess.run(["node", str(ROOT / "scripts" / "smoke_color_rows.cjs")], capture_output=True, text=True)
+    require(unit.returncode == 0, f"color rows: {unit.stdout}{unit.stderr}")
+
 def check_page_patch_index_covers_all_patches() -> None:
     """Every patches/**/*.json must be in patches/index.json, and every live
     demo must have its bare /<name> route, or the site 404s it."""
@@ -18319,6 +18325,7 @@ def main() -> None:
     check_display_gl_contract()
     check_snake_trail_gl()
     check_mini_perform_view()
+    check_color_rows()
     run_smoke(args.port, Path(args.manifest).resolve())
     print("soemdsp-sandbox smoke test passed")
 

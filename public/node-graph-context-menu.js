@@ -1205,15 +1205,7 @@ function configureNodeSceneContextMenu(mode) {
   const canvasControls = document.getElementById("nodeSceneCanvasControls");
   const canvasScript = document.getElementById("nodeSceneCanvasScript");
   const ledControls = document.getElementById("nodeSceneLedControls");
-  const ledColor = document.getElementById("nodeSceneLedColor");
   const keypadControls = document.getElementById("nodeSceneKeypadControls");
-  const keypadFont = document.getElementById("nodeSceneKeypadFont");
-  const keypadTextSize = document.getElementById("nodeSceneKeypadTextSize");
-  const keypadTextWeight = document.getElementById("nodeSceneKeypadTextWeight");
-  const keypadButtonColor = document.getElementById("nodeSceneKeypadButtonColor");
-  const keypadTextColor = document.getElementById("nodeSceneKeypadTextColor");
-  const keypadButtonWidth = document.getElementById("nodeSceneKeypadButtonWidth");
-  const keypadButtonHeight = document.getElementById("nodeSceneKeypadButtonHeight");
   const bugButtonControls = document.getElementById("nodeSceneBugButtonControls");
   const bugButtonGlyph = document.getElementById("nodeSceneBugButtonGlyph");
   const textBoxControls = document.getElementById("nodeSceneTextBoxControls");
@@ -2165,56 +2157,6 @@ function configureNodeSceneContextMenu(mode) {
       canvasScript.disabled = false;
       canvasScript.title = "Open this canvas module's layer and compositor script.";
     }
-    if (targetNode?.type === "led") {
-      const vd = typeof nodeGraphVectorDotSettingsForNode === "function"
-        ? nodeGraphVectorDotSettingsForNode(targetNode)
-        : (targetNode.vectorDotSettings || {});
-      ledColor.disabled = false;
-      ledColor.value = vd.dot1Color || vd.color || "#ff0000";
-      ledColor.title = "LED Vector Dot hue (legacy swatch). Prefer Display Settings.";
-    } else {
-      ledColor.disabled = true;
-      ledColor.value = typeof nodeGraphLedDefaultColor === "string" ? nodeGraphLedDefaultColor : "#ff0000";
-    }
-    if (targetNode?.type === "keypad" && typeof normalizeNodeGraphKeypadLayout === "function") {
-      const pad = normalizeNodeGraphKeypadLayout(targetNode.layout);
-      if (keypadFont) {
-        keypadFont.disabled = false;
-        keypadFont.value = pad.font;
-      }
-      if (keypadTextSize) {
-        keypadTextSize.disabled = false;
-        keypadTextSize.value = String(pad.textSizePx);
-      }
-      if (keypadTextWeight) {
-        keypadTextWeight.disabled = false;
-        keypadTextWeight.value = String(pad.textWeight);
-      }
-      if (keypadButtonColor) {
-        keypadButtonColor.disabled = false;
-        keypadButtonColor.value = pad.buttonColor;
-      }
-      if (keypadTextColor) {
-        keypadTextColor.disabled = false;
-        keypadTextColor.value = pad.textColor;
-      }
-      if (keypadButtonWidth) {
-        keypadButtonWidth.disabled = false;
-        keypadButtonWidth.value = String(pad.buttonWidth);
-      }
-      if (keypadButtonHeight) {
-        keypadButtonHeight.disabled = false;
-        keypadButtonHeight.value = String(pad.buttonHeight);
-      }
-    } else {
-      if (keypadFont) keypadFont.disabled = true;
-      if (keypadTextSize) keypadTextSize.disabled = true;
-      if (keypadTextWeight) keypadTextWeight.disabled = true;
-      if (keypadButtonColor) keypadButtonColor.disabled = true;
-      if (keypadTextColor) keypadTextColor.disabled = true;
-      if (keypadButtonWidth) keypadButtonWidth.disabled = true;
-      if (keypadButtonHeight) keypadButtonHeight.disabled = true;
-    }
     if (targetNode?.type === "bugButton") {
       bugButtonGlyph.disabled = false;
       if (document.activeElement !== bugButtonGlyph) {
@@ -2401,8 +2343,6 @@ function configureNodeSceneContextMenu(mode) {
     imageSave.disabled = true;
     imageRefresh.disabled = true;
     canvasScript.disabled = true;
-    ledColor.disabled = true;
-    ledColor.value = nodeGraphLedDefaultColor;
     bugButtonGlyph.disabled = true;
     bugButtonGlyph.value = "";
   } else {
@@ -2472,8 +2412,6 @@ function configureNodeSceneContextMenu(mode) {
     imageSave.disabled = true;
     imageRefresh.disabled = true;
     canvasScript.disabled = true;
-    ledColor.disabled = true;
-    ledColor.value = nodeGraphLedDefaultColor;
     bugButtonGlyph.disabled = true;
     bugButtonGlyph.value = "";
   }

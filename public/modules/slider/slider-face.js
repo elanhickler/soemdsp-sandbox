@@ -114,5 +114,10 @@ function buildNodeGraphSliderFaceDisplaySettingsHtml() {
     <div class="metadata-section-title">Bar</div>
     <div class="metadata-field-section">${fieldRow("sliderRounding")}</div>
     <div class="metadata-section-title">Colors</div>
-    <div class="metadata-field-section">${["backgroundColor", "sliderColor", "arcTrack", "sliderTextColor", "sliderNumberColor"].map(colorRow).join("")}</div>`;
+    <div class="metadata-field-section">${(typeof nodeGraphDisplaySettingsColorRows === "function"
+      ? nodeGraphDisplaySettingsColorRows(
+        ["backgroundColor", "sliderColor", "arcTrack", "sliderTextColor", "sliderNumberColor"].map(colorRow),
+        [3, 2],
+      )
+      : ["backgroundColor", "sliderColor", "arcTrack", "sliderTextColor", "sliderNumberColor"].map(colorRow).join(""))}</div>`;
 }

@@ -67,7 +67,9 @@ function buildNodeGraphLimiterGainDisplaySettingsBodyHtml() {
         <span>Line brightness</span>
         <input type="range" min="0" max="1" step="0.01" data-limiter-gain-field="lineBrightness" aria-label="Limiter gain line brightness">
       </label>
-      ${colorRow}
+      ${(typeof nodeGraphDisplaySettingsColorRows === "function"
+        ? nodeGraphDisplaySettingsColorRows([colorRow])
+        : colorRow)}
     </div>`;
 }
 

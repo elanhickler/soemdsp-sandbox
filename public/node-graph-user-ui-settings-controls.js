@@ -324,7 +324,34 @@ function createNodeUserUiSettingsSection(title, controls) {
   heading.textContent = title;
   const body = document.createElement("div");
   body.className = "node-ui-dev-section-body";
-  body.append(...visibleControls);
+  const sizes = typeof nodeGraphDisplaySettingsColorRowSizes === "function"
+    ? nodeGraphDisplaySettingsColorRowSizes
+    : (n) => (n <= 4 ? (n ? [n] : []) : n === 5 ? [3, 2] : n === 6 ? [3, 3] : n === 7 ? [4, 3] : [4, n - 4]);
+  let i = 0;
+  while (i < visibleControls.length) {
+    const control = visibleControls[i];
+    if (control?.classList?.contains("color")) {
+      const group = [];
+      while (i < visibleControls.length && visibleControls[i]?.classList?.contains("color")) {
+        group.push(visibleControls[i]);
+        i += 1;
+      }
+      let offset = 0;
+      for (const size of sizes(group.length)) {
+        const row = document.createElement("div");
+        row.className = "node-color-row";
+        const cols = size === 1 ? 2 : size;
+        row.style.setProperty("--color-row-cells", String(cols));
+        row.dataset.colorRowCells = String(size);
+        row.append(...group.slice(offset, offset + size));
+        body.append(row);
+        offset += size;
+      }
+    } else {
+      if (control) body.append(control);
+      i += 1;
+    }
+  }
   section.append(heading, body);
   return section;
 }
