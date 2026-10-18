@@ -227,6 +227,109 @@
     if (typeof nodeGraphAudioPlayerPlaylistApplyFace === "function") nodeGraphAudioPlayerPlaylistApplyFace(id);
   }
 
+  function playlistLen(id) {
+    const pl = typeof nodeGraphAudioPlayerPlaylistForNode === "function"
+      ? nodeGraphAudioPlayerPlaylistForNode(id)
+      : null;
+    return Array.isArray(pl?.items) ? pl.items.length : 0;
+  }
+
+  function hostTrackCount(id) {
+    const pl = typeof nodeGraphAudioPlayerPlaylistForNode === "function"
+      ? nodeGraphAudioPlayerPlaylistForNode(id)
+      : null;
+    return Array.isArray(pl?.items) ? pl.items.filter((it) => it?.hostGen === lazyGen).length : 0;
+  }
+
+  function appendCardsToPlaylist(id, cards) {
+    if (!cards.length) return;
+    const pl = nodeGraphAudioPlayerPlaylistForNode(id);
+    const start = Array.isArray(pl.items) ? pl.items.length : 0;
+    const numbered = cards.map((card, i) => ({ ...card, listNumber: start + i + 1 }));
+    pl.items = [...(pl.items || []), ...numbered];
+    pl.unplayed = [...(pl.unplayed || []), ...numbered];
+    if (!pl.playing) pl.playing = numbered[0] || null;
+    if (typeof nodeGraphAudioPlayerPlaylistSyncQueues === "function") {
+      nodeGraphAudioPlayerPlaylistSyncQueues(pl);
+    }
+    const node = nodeGraphPatchNode(id);
+    if (node) node.playlist = pl;
+    if (typeof nodeGraphAudioPlayerPlaylistRefreshUi === "function") {
+      nodeGraphAudioPlayerPlaylistRefreshUi(id);
+    }
+    if (typeof nodeGraphAudioPlayerPlaylistApplyFace === "function") {
+      nodeGraphAudioPlayerPlaylistApplyFace(id);
+    }
+    document.documentElement.dataset.soemdspEmbedTracks = String(pl.items.length);
+  }
+
+  function lazyAppendCards(tracks, offset) {
+    return tracks.map((t, i) => {
+      const n = offset + i;
+      const name = String(t.title || t.name || baseName(t.url || "") || `track ${n + 1}`).trim();
+      const size = Number(typeof t.bytes === "number" ? t.bytes : t.size);
+      return {
+        name,
+        fileKey: `host-${lazyGen}-${n}`,
+        hostIndex: n,
+        hostGen: lazyGen,
+        ...(Number.isFinite(size) && size > 0 ? { bytes: size } : {}),
+      };
+    });
+  }
+
+  async function append(id, msg) {
+    const tracks = Array.isArray(msg.tracks) ? msg.tracks.filter((t) => t && typeof t === "object") : [];
+    if (!tracks.length) return error("bad-request", "append needs tracks");
+    const lazy = loadingMode(msg.loading) === "lazy";
+    // Lazy hostIndex is the index in the HOST's list (current generation only),
+    // not in the player's list, which can hold rows the host never sent.
+    const offset = lazy ? hostTrackCount(id) : playlistLen(id);
+    let cards;
+    if (lazy) {
+      cards = lazyAppendCards(tracks, offset);
+    } else {
+      const asBytes = tracks.map(trackFile);
+      if (asBytes.every(Boolean)) {
+        const picked = nodeGraphAudioPlayerLibraryRememberPickedFiles(id, asBytes.map((t) => t.file)) || [];
+        cards = picked.map((card, i) => (asBytes[i]?.title ? { ...card, name: asBytes[i].title, title: asBytes[i].title } : card));
+      } else if (asBytes.some(Boolean)) {
+        return error("bad-request", "append: send either all bytes/files or all urls, not a mix");
+      } else {
+        cards = tracks.map((t, i) => {
+          if (!t.url) return null;
+          const url = new URL(String(t.url), window.location.href).href;
+          return { url, name: String(t.title || baseName(url) || `track ${offset + i + 1}`) };
+        }).filter(Boolean);
+      }
+    }
+    if (!cards.length) return error("bad-request", "append: no usable tracks");
+    appendCardsToPlaylist(id, cards);
+  }
+
+  function clearPlaylist(id) {
+    lazyGen += 1;
+    for (const [, req] of pending) req.reject(new Error("playlist cleared"));
+    pending.clear();
+    if (typeof nodeGraphAudioPlayerPlaylistStop === "function") {
+      nodeGraphAudioPlayerPlaylistStop(id);
+    }
+    // Unbind the decoded track BEFORE emptying the list: a refresh with a bound
+    // sample re-adds it as a row (EnsureCurrentSample), so Clear left the last
+    // played track behind and later appends were offset by it.
+    if (typeof nodeGraphAudioPlayerPlaylistUnbindCurrentSample === "function") {
+      nodeGraphAudioPlayerPlaylistUnbindCurrentSample(id);
+    }
+    nodeGraphAudioPlayerLibraryBindCards(id, [], { folderDive: false, folderPath: "", persist: false });
+    if (typeof nodeGraphAudioPlayerPlaylistRefreshUi === "function") {
+      nodeGraphAudioPlayerPlaylistRefreshUi(id);
+    }
+    document.documentElement.dataset.soemdspEmbedTracks = "0";
+    if (typeof nodeGraphAudioPlayerPlaylistApplyFace === "function") {
+      nodeGraphAudioPlayerPlaylistApplyFace(id);
+    }
+  }
+
   async function play(id, index) {
     await startAudio();
     const node = nodeGraphPatchNode(id);
@@ -261,6 +364,8 @@
     const cmd = msg.type.slice(PREFIX.length);
     switch (cmd) {
       case "load": await load(id, msg); break;
+      case "append": await append(id, msg); break;
+      case "clear": clearPlaylist(id); break;
       case "play": await play(id, msg.index != null ? Math.round(Number(msg.index)) : undefined); break;
       case "pause": nodeGraphAudioPlayerWriteTransport(id, 2); break;
       case "stop": nodeGraphAudioPlayerPlaylistStop(id); break;
