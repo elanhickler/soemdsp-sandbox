@@ -272,6 +272,9 @@ function nodeGraphBuildLiveParameterNodes(activeNodeIds = null, bypassedNodes = 
           ? { slots: nodeGraphChordMemoryNormalizeSlots(node.chordMemory) }
           : node.chordMemory;
       }
+      if (node.type === "script" && typeof nodeGraphEmoCopyRuntime === "function") {
+        nodeGraphEmoCopyRuntime(node, runtimeNode);
+      }
       return runtimeNode;
     });
 }
@@ -394,6 +397,9 @@ function nodeGraphBuildLiveParameterNodesForPatch(patch, activeNodeIds = null, b
         runtimeNode.chordMemory = typeof nodeGraphChordMemoryNormalizeSlots === "function"
           ? { slots: nodeGraphChordMemoryNormalizeSlots(node.chordMemory) }
           : node.chordMemory;
+      }
+      if (node.type === "script" && typeof nodeGraphEmoCopyRuntime === "function") {
+        nodeGraphEmoCopyRuntime(node, runtimeNode);
       }
       return runtimeNode;
     });

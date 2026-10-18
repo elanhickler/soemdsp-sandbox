@@ -310,12 +310,15 @@ function nodeGraphGlGraphRebuildChrome() {
       if (jacks.some((jack) => jack.key === key)) continue;
       const rgba = nodeGraphGlGraphParseCssColor(color, nodeGraphGlGraphCssColor(color));
       rgba[3] *= nodeGraphGlGraphPortBrightness(el, port);
+      const squareJack = typeof nodeGraphWireJackIsSquare === "function"
+        && nodeGraphWireJackIsSquare(id, port, io);
       jacks.push({
         key,
         id,
         x: px,
         y: py,
         r: radius,
+        square: squareJack,
         // Invisible hit box: one port-diameter out from the pin on each side.
         hit: diameter,
         inwardRight: io !== "output",
@@ -454,6 +457,31 @@ function nodeGraphGlGraphDrawSliderGhost(batch, readout, x, y, h, zoom, hideGhos
   const end = nodeGraphGlGraphCssPx(readout, "--ghost-end");
   if (!(end > start)) return;
   nodeGraphGlLinesRect(batch, x + start * zoom, y, (end - start) * zoom, h, ghostFill);
+}
+
+// Wraparound handle: the part that would leave the track is clipped, and that
+// same width is drawn on the opposite edge. Matches --portal-left-width /
+// --portal-right-width from syncNodeSliderPortalHandle.
+function nodeGraphGlGraphDrawSliderHandle(batch, readout, x, y, h, zoom, layoutW, fill) {
+  const valueStart = nodeGraphGlGraphCssPx(readout, "--value-start");
+  const valueEnd = nodeGraphGlGraphCssPx(readout, "--value-end");
+  if (!(valueEnd > valueStart) || !(layoutW > 0)) return;
+  const wrap = readout?.classList?.contains("wraparound-slider");
+  const start = wrap ? Math.max(0, valueStart) : valueStart;
+  const end = wrap ? Math.min(layoutW, valueEnd) : valueEnd;
+  if (end > start) {
+    nodeGraphGlLinesRect(batch, x + start * zoom, y, (end - start) * zoom, h, fill);
+  }
+  if (!wrap) return;
+  const portalLeft = nodeGraphGlGraphCssPx(readout, "--portal-left-width");
+  const portalRight = nodeGraphGlGraphCssPx(readout, "--portal-right-width");
+  if (portalLeft > 0) {
+    nodeGraphGlLinesRect(batch, x, y, Math.min(layoutW, portalLeft) * zoom, h, fill);
+  }
+  if (portalRight > 0) {
+    const width = Math.min(layoutW, portalRight);
+    nodeGraphGlLinesRect(batch, x + (layoutW - width) * zoom, y, width * zoom, h, fill);
+  }
 }
 
 function nodeGraphGlGraphDrawOver(batch, draw) {
@@ -614,19 +642,9 @@ function nodeGraphGlGraphDrawChrome(batch, toX, toY, zoom, cssW, cssH) {
         nodeGraphGlGraphDrawSliderGhost(batch, readout, x, y, h, zoom, hideGhost, ghostFill);
         return;
       }
-      // No amount fill (track start -> position): sliders show only the position handle.
-      const valueStart = nodeGraphGlGraphCssPx(readout, "--value-start");
-      const valueEnd = nodeGraphGlGraphCssPx(readout, "--value-end");
-      if (valueEnd > valueStart) {
-        nodeGraphGlLinesRect(
-          batch,
-          x + valueStart * zoom,
-          y,
-          (valueEnd - valueStart) * zoom,
-          h,
-          valueFill,
-        );
-      }
+      // Position handle only. Wraparound clips it to the track and draws the
+      // overflow on the other edge.
+      nodeGraphGlGraphDrawSliderHandle(batch, readout, x, y, h, zoom, slider.w, valueFill);
       nodeGraphGlGraphDrawSliderGhost(batch, readout, x, y, h, zoom, hideGhost, ghostFill);
     });
     if (typeof nodeGraphGlLinesText === "function") {
@@ -840,16 +858,19 @@ function nodeGraphGlGraphShape(from, to, wire, zoom) {
       trace = opts.tracePoints;
     }
   }
-  if (trace) {
-    const xy = new Float32Array((trace.length + 2) * 2);
-    xy[0] = ax;
-    xy[1] = ay;
-    for (let i = 0; i < trace.length; i += 1) {
-      xy[(i + 1) * 2] = Number(trace[i].x);
-      xy[(i + 1) * 2 + 1] = Number(trace[i].y);
+  const style = typeof normalizeNodeGraphWireType === "function"
+    ? normalizeNodeGraphWireType(wire?.wireType)
+    : (wire?.wireType === "trace" ? "trace" : "ribbon");
+  if (style === "trace") {
+    const routed = typeof nodeGraphTraceOrthogonalPoints === "function"
+      ? nodeGraphTraceOrthogonalPoints({ x: ax, y: ay }, trace || [], { x: bx, y: by })
+      : null;
+    const pts = routed && routed.length >= 2 ? routed : [{ x: ax, y: ay }, { x: bx, y: by }];
+    const xy = new Float32Array(pts.length * 2);
+    for (let i = 0; i < pts.length; i += 1) {
+      xy[i * 2] = Number(pts[i].x);
+      xy[i * 2 + 1] = Number(pts[i].y);
     }
-    xy[xy.length - 2] = bx;
-    xy[xy.length - 1] = by;
     return xy;
   }
   const screenLen = Math.hypot((bx - ax) * zoom, (by - ay) * zoom);
@@ -871,7 +892,9 @@ function nodeGraphGlGraphPushWire(wires, from, to, color, toColor, zoom, wire, s
   wires.push({
     rgba,
     kind: kind || "",
-    trace: Array.isArray(wire?.tracePoints) && wire.tracePoints.length > 0,
+    style: typeof normalizeNodeGraphWireType === "function"
+      ? normalizeNodeGraphWireType(wire?.wireType)
+      : "ribbon",
     index: Number.isInteger(index) ? index : -1,
     xy: nodeGraphGlGraphShape(from, to, wire, zoom),
     dots: [
@@ -1026,11 +1049,12 @@ function nodeGraphGlGraphPresent() {
     nodeGraphGlGraphState.dotSize = dotSize;
     nodeGraphGlGraphState.traceThick = Number.parseFloat(style.getPropertyValue("--node-trace-wire-thickness")) || 1;
   }
-  // Zoom-1 sizes. Core and the 2px fade both scale with the camera.
+  // Zoom-1 core is 2px and scales. The cable fade stays 2 CSS pixels.
+  // Traces are a hard 2px stroke that scales, with no fade.
   const halfPx = Math.max(0, thick * 0.5) * zoom;
-  const traceHalf = Math.max(0, (nodeGraphGlGraphState.traceThick || 1) * 0.5) * zoom;
+  const traceHalf = zoom;
   const dotR = Math.max(0, dotSize * 0.5) * zoom;
-  const wireFeather = 2 * zoom;
+  const wireFeather = 2;
   let cam = { x: 0, y: 0 };
   if (view) cam = view.cam;
   else if (typeof nodeGraphWireCameraViewBox === "function") cam = nodeGraphWireCameraViewBox(host);
@@ -1073,28 +1097,40 @@ function nodeGraphGlGraphPresent() {
       }
     }
     if (!visible) continue;
-    let stroke = wire.trace ? traceHalf : halfPx;
+    const style = wire.style === "trace" ? "trace" : "ribbon";
+    let stroke = style === "trace" ? traceHalf : halfPx;
+    let feather = style === "trace" ? 0 : wireFeather;
     let rgba = wire.rgba;
+    let picked = false;
     if (wire.kind && wire.index >= 0 && typeof nodeGraphSelectedWireEntries === "function") {
-      const picked = nodeGraphSelectedWireEntries().some((entry) =>
+      picked = nodeGraphSelectedWireEntries().some((entry) =>
         (entry.kind || "signal") === wire.kind && Number(entry.index) === wire.index,
       );
       if (picked) {
         rgba = [0.95, 0.86, 0.45, 1];
-        stroke = halfPx + 0.8 * zoom;
+        stroke = style === "trace" ? traceHalf + 0.5 * zoom : halfPx + 0.8 * zoom;
       }
     }
-    nodeGraphGlLinesPolyline(batch, screen.subarray(0, src.length), stroke, wireFeather, rgba);
+    const pts = screen.subarray(0, src.length);
+    if (style === "trace") {
+      nodeGraphGlLinesPolyline(batch, pts, stroke, feather, rgba, "ortho");
+    } else if (typeof nodeGraphGlLinesRibbon !== "function") {
+      nodeGraphGlLinesPolyline(batch, pts, stroke, feather, rgba, "butt");
+    } else {
+      nodeGraphGlLinesRibbon(batch, pts, stroke, feather, rgba);
+    }
     const dots = wire.dots || [];
+    const selectedRgba = [0.95, 0.86, 0.45, 1];
     for (let d = 0; d < dots.length; d += 1) {
       const dot = dots[d];
       const dx = toX(dot.x);
       const dy = toY(dot.y);
       if (dx < -dotR || dy < -dotR || dx > cssW + dotR || dy > cssH + dotR) continue;
+      const dotColor = picked ? selectedRgba : dot.rgba;
       if (dot.square) {
-        nodeGraphGlLinesRect(contactBatch, dx - dotR, dy - dotR, dotR * 2, dotR * 2, dot.rgba);
+        nodeGraphGlLinesRect(contactBatch, dx - dotR, dy - dotR, dotR * 2, dotR * 2, dotColor);
       } else {
-        nodeGraphGlLinesDot(contactBatch, dx, dy, dotR, wireFeather, dot.rgba);
+        nodeGraphGlLinesDot(contactBatch, dx, dy, dotR, wireFeather, dotColor);
       }
     }
   }
@@ -1133,6 +1169,7 @@ function nodeGraphGlGraphPresent() {
         y: toY(jack.y),
         r: jack.r * zoom,
         rgba: jack.rgba,
+        square: jack.square === true,
         inlet: jack.inlet === true,
       });
     }

@@ -162,7 +162,14 @@ NodeLiveAudioProcessor.prototype._setPlanImpl = function _setPlanImpl(plan, mess
         ? Math.max(0, Math.round(Number(node.samplePhaseSeek)) || 0)
         : 0,
       type: node.type,
+      emoInputs: Array.isArray(node.emoInputs) ? node.emoInputs.slice() : [],
+      emoOutputs: Array.isArray(node.emoOutputs) ? node.emoOutputs.slice() : [],
+      emoParamOrder: Array.isArray(node.emoParamOrder) ? node.emoParamOrder.slice() : [],
+      emoChoices: node.emoChoices && typeof node.emoChoices === "object" ? node.emoChoices : {},
+      emoShows: Array.isArray(node.emoShows) ? node.emoShows : [],
+      scriptWasm: node.scriptWasm || null,
     }]));
+    this.installEmoScripts?.();
     this.samples = new Map((Array.isArray(plan?.samples) ? plan.samples : []).map((sample) => [
       String(sample?.id || ""),
       {

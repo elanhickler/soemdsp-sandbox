@@ -2569,7 +2569,7 @@ function commitNodeGraphGraphEdit(patch, targetNode, status, options = {}) {
 
 
 
-function pruneNodeGraphConnectionsForCodeblockPortChange(patch, nodeId, inputs, outputs) {
+function nodeGraphPruneConnectionsForPortChange(patch, nodeId, inputs, outputs) {
   const inputSet = new Set(inputs);
   const outputSet = new Set(outputs);
   patch.connections = (patch.connections || []).filter((connection) => {

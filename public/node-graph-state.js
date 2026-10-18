@@ -40,7 +40,7 @@ var nodeGraphMvp = {
   codeScreenAutocompleteIndex: 0,
   codeScreenAutocompleteItems: [],
   codeScreenAutocompleteOpen: false,
-  codeScreenCodeblockSearch: "",
+  codeScreenScriptSearch: "",
   codeScreenHelperDetailKey: "",
   codeScreenHelperNamespaceFilter: "",
   codeScreenHelperSearch: "",

@@ -71,6 +71,7 @@ def read_bundled_default_ui_settings_script_payload() -> dict:
 
 
 PUBLIC_SCRIPT_PATHS = (
+    "./public/boot-plugin-host.js",
     "./public/plugin-host.js",
     "./public/embed-params.js",
     "./public/lib/color/soem-color.js",
@@ -280,6 +281,9 @@ PUBLIC_SCRIPT_PATHS = (
     "./public/lib/visual/picture-device.js",
     "./public/lib/visual/display-canvas.js",
     "./public/lib/visual/gl-line-renderer.js",
+    "./public/lib/emo/emo-compiler.js",
+    "./public/lib/emo/emo-module.js",
+    "./public/lib/emo/emo-display.js",
     "./public/modules/reverbEffect/sabrina-reverb-gl.js",
     "./public/lib/visual/glyph-sdf-atlas.js",
     "./public/lib/visual/color-widget-plane-gl.js",
@@ -348,6 +352,9 @@ PUBLIC_SCRIPT_PATHS = (
     "./public/node-graph-execution-plan.js",
     "./public/node-graph-execution-summary.js",
     "./public/node-graph-wire-actions.js",
+    "./public/node-graph-gl-graph.js",
+    "./public/node-graph-seed-code.js",
+    "./public/node-graph-seed-control.js",
     "./public/node-graph-trace-router.js",
     "./public/node-graph-wire-rendering.js",
     "./public/node-graph-render-output.js",
@@ -3132,7 +3139,6 @@ def require_io_label_typography_contract() -> None:
         ("font-weight", "400"),
         ("line-height", "1"),
         ("letter-spacing", "normal"),
-        ("color", "var(--muted)"),
     ):
         value = owner_declarations.get(prop, "")
         knob = owner_declarations.get(f"--node-io-label-{prop}")
@@ -3142,6 +3148,11 @@ def require_io_label_typography_contract() -> None:
             f"base .node-io-label {prop} should come from --node-io-label-{prop} (default {default}), "
             f"got {prop}: {value!r}, knob: {knob!r}",
         )
+    require(
+        owner_declarations.get("color") == "transparent",
+        "base .node-io-label stays transparent because the GPU draws the name, "
+        f"got {owner_declarations.get('color')!r}",
+    )
     js_sources = {
         js_path.relative_to(ROOT).as_posix(): js_path.read_text(encoding="utf-8", errors="replace")
         for js_path in sorted(PUBLIC.rglob("*.js"))
@@ -4264,7 +4275,7 @@ def require_node_graph_mvp_contract() -> None:
             codeblock_contract_sources["actions"],
             [
                 "function applyNodeGraphCodeblockPortsFromContext",
-                "pruneNodeGraphConnectionsForCodeblockPortChange",
+                "nodeGraphPruneConnectionsForPortChange",
                 "function setNodeGraphCodeblockSourceFromContext",
                 "function nodeGraphCodeblockCompileStatus",
                 "const state = __state;",
@@ -5192,7 +5203,7 @@ def require_node_graph_mvp_contract() -> None:
                 "Use Helper",
                 "availability: \"patch local\"",
                 "function applyNodeGraphCodeScreenCodeblockPorts",
-                "pruneNodeGraphConnectionsForCodeblockPortChange",
+                "nodeGraphPruneConnectionsForPortChange",
                 "function applyNodeGraphCodeScreenCodeblockSource",
                 "function applyNodeGraphCodeScreenCodeblockAll",
                 "function resetNodeGraphCodeScreenCodeblockDraft",
@@ -13939,7 +13950,7 @@ def require_node_graph_mvp_contract() -> None:
         'trace: "trace",' in wire_actions_source
         and 'wire: "wire"' not in wire_actions_source
         and '"actions.wireType.wire"' not in node_graph_source,
-        "production wire types should be limited to Cable and Trace",
+        "production wire types should be Ribbon and Trace",
     )
 
     choice_divider_helper_source = slider_readout_source[

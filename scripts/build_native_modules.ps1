@@ -61,6 +61,7 @@ $modules = @(
     "soemdsp_graph_add_node", "soemdsp_graph_connect",
     "soemdsp_graph_disconnect", "soemdsp_graph_disconnect_param_mod",
     "soemdsp_graph_set_param",
+    "soemdsp_graph_set_emo_counts",
     "soemdsp_graph_set_param_mod", "soemdsp_graph_set_param_domain",
     "soemdsp_graph_clear_param_mod_edges", "soemdsp_graph_add_param_mod_edge",
     "soemdsp_graph_set_smooth_time", "soemdsp_graph_set_smooth_mode",
@@ -662,6 +663,8 @@ if ($LASTEXITCODE -ne 0) {
 
 $node = Get-Command node -ErrorAction SilentlyContinue
 if ($node) {
+  $emoPreload = "$root\scripts\emo_instantiate_preload.cjs"
+  $env:NODE_OPTIONS = "--require `"$emoPreload`""
   & $node.Source "$root\scripts\smoke_native_param_ids.mjs"
   if ($LASTEXITCODE -ne 0) {
     throw "Combined build: native param id smoke FAILED"

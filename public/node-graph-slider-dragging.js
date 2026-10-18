@@ -41,6 +41,10 @@ function syncNodeGraphPatchMetadataFromSlider(slider, options = {}) {
       patchNode.paramMeta[key],
     ),
   };
+  if (patchNode.type === "script" && typeof nodeGraphEmoChoiceNameForValue === "function") {
+    const named = nodeGraphEmoChoiceNameForValue(patchNode, key, patchNode.params[key]);
+    if (named != null) patchNode.params[key] = named;
+  }
   if (
     typeof nodeGraphIsContainerShellType === "function"
     && nodeGraphIsContainerShellType(patchNode.type)

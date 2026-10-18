@@ -1,5 +1,5 @@
 const nodeGraphWireTypes = Object.freeze({
-  cable: "cable",
+  ribbon: "ribbon",
   trace: "trace",
 });
 
@@ -69,14 +69,15 @@ function setNodeGraphWireCurve(value, options = {}) {
 }
 
 function normalizeNodeGraphWireType(value) {
+  if (value === "cable" || value === "phosphor" || value == null || value === "") return nodeGraphWireTypes.ribbon;
   return Object.values(nodeGraphWireTypes).includes(value)
     ? value
-    : nodeGraphWireTypes.cable;
+    : nodeGraphWireTypes.ribbon;
 }
 
 function nodeGraphWireTypePatchValue(value) {
   const wireType = normalizeNodeGraphWireType(value);
-  return wireType === nodeGraphWireTypes.cable ? undefined : wireType;
+  return wireType === nodeGraphWireTypes.ribbon ? undefined : wireType;
 }
 
 /** Manual pixel-wire flag (right-click wire panel). Off by default; never auto. */
@@ -190,11 +191,12 @@ function nodeGraphConnectionOptionsWithSelfTrace(_sourceNode, _destinationNode, 
 function setSelectedNodeGraphWireType(wireType) {
   const nextType = normalizeNodeGraphWireType(wireType);
   const changed = applySelectedNodeGraphWires((wire) => {
-    if (nextType === nodeGraphWireTypes.cable) {
+    if (nextType === nodeGraphWireTypes.ribbon) {
       delete wire.wireType;
       delete wire.tracePoints;
     } else {
       wire.wireType = nextType;
+      if (nextType !== nodeGraphWireTypes.trace) delete wire.tracePoints;
     }
   }, `wires set to ${nextType}`);
   return changed > 0;

@@ -301,6 +301,10 @@ function createNodeGraphPatchNode(type, options = {}, creation = {}) {
   if (Object.hasOwn(opts, "scopeShader")) {
     node.scopeShader = normalizeNodeGraphScopeShader(opts.scopeShader);
   }
+  if (resolvedType === "script") {
+    if (typeof opts.scriptSource === "string") node.scriptSource = opts.scriptSource;
+    if (typeof nodeGraphEmoStampNewNode === "function") nodeGraphEmoStampNewNode(node);
+  }
   return node;
 }
 

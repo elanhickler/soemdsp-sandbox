@@ -45,13 +45,13 @@ function nodeGraphCodeBoxDraftFromWindow(node) {
     return null;
   }
   const kind = nodeGraphCodeScreenKindForNode(node);
-  const current = kind.normalize(node[kind.property]);
+  const current = kind.normalize(node[kind.property], node);
   return kind.normalize({
     ...current,
-    inputs: document.getElementById("nodeCodeBoxInputs")?.value ?? current.inputs,
-    outputs: kind.nodeType === "customDisplay" ? [] : (document.getElementById("nodeCodeBoxOutputs")?.value ?? current.outputs),
+    inputs: kind.lockPorts ? current.inputs : (document.getElementById("nodeCodeBoxInputs")?.value ?? current.inputs),
+    outputs: kind.lockPorts ? current.outputs : (document.getElementById("nodeCodeBoxOutputs")?.value ?? current.outputs),
     code: document.getElementById("nodeCodeBoxSource")?.value ?? current.code,
-  });
+  }, node);
 }
 
 function nodeGraphCodeBoxPortListsEqual(a = [], b = []) {
@@ -250,7 +250,7 @@ function syncNodeGraphCodeBoxWindow() {
   }
   nodeGraphMvp.codeBoxWindowTargetNodeId = node.id;
   const kind = nodeGraphCodeScreenKindForNode(node);
-  const codeBox = kind.normalize(node[kind.property]);
+  const codeBox = kind.normalize(node[kind.property], node);
   const compile = kind.compileStatus(codeBox);
   if (title) {
     title.innerHTML = `<span>CODE</span><small>${nodeGraphCodeScreenEscapeHtml(kind.label)}</small>`;
@@ -263,10 +263,12 @@ function syncNodeGraphCodeBoxWindow() {
     inputs.disabled = false;
     inputs.value = codeBox.inputs.join(", ");
   }
+  if (inputs && kind.lockPorts) inputs.readOnly = true;
   if (outputs && document.activeElement !== outputs) {
-    outputs.disabled = kind.nodeType === "customDisplay";
+    outputs.readOnly = kind.lockPorts === true;
+    outputs.disabled = false;
     outputs.value = codeBox.outputs.join(", ");
-    outputs.placeholder = kind.nodeType === "customDisplay" ? "display only" : "";
+    outputs.placeholder = kind.lockPorts ? "from the script" : "";
   }
   if (source && document.activeElement !== source) {
     source.disabled = false;
@@ -364,12 +366,16 @@ function applyNodeGraphCodeBoxWindowPorts() {
   if (!targetNode) {
     return;
   }
-  const current = kind.normalize(targetNode[kind.property]);
+  if (kind.lockPorts) {
+    updateNodeGraphCodeBoxWindowStatus();
+    return;
+  }
+  const current = kind.normalize(targetNode[kind.property], targetNode);
   const next = kind.normalize({
     ...current,
     inputs: document.getElementById("nodeCodeBoxInputs")?.value,
     outputs: document.getElementById("nodeCodeBoxOutputs")?.value,
-  });
+  }, targetNode);
   if (
     nodeGraphCodeBoxPortListsEqual(current.inputs, next.inputs) &&
     nodeGraphCodeBoxPortListsEqual(current.outputs, next.outputs)
@@ -377,8 +383,11 @@ function applyNodeGraphCodeBoxWindowPorts() {
     updateNodeGraphCodeBoxWindowStatus();
     return;
   }
-  targetNode[kind.property] = next;
-  kind.pruneConnections(patch, targetNode.id, next.inputs, next.outputs);
+  if (typeof kind.write === "function") kind.write(targetNode, next, patch);
+  else {
+    targetNode[kind.property] = next;
+    kind.pruneConnections(patch, targetNode.id, next.inputs, next.outputs);
+  }
   commitNodeGraphPatch(patch, { status: `code box ${kind.label.toLowerCase()} ports changed` });
   syncNodeGraphCodeBoxWindow();
 }
@@ -406,10 +415,10 @@ function applyNodeGraphCodeBoxWindowCode() {
   if (!targetNode) {
     return;
   }
-  const next = nodeGraphCodeBoxDraftFromWindow(sourceNode);
-  targetNode[kind.property] = next;
-  kind.pruneConnections(patch, targetNode.id, next.inputs, next.outputs);
-  const compile = kind.compileStatus(next);
+  const next = nodeGraphCodeBoxDraftFromWindow(targetNode);
+  const compile = typeof kind.write === "function"
+    ? (kind.write(targetNode, next, patch) || kind.compileStatus(next))
+    : (targetNode[kind.property] = next, kind.pruneConnections(patch, targetNode.id, next.inputs, next.outputs), kind.compileStatus(next));
   commitNodeGraphPatch(patch, {
     status: compile.ok ? `code box ${kind.label.toLowerCase()} changed` : "code box compile error",
   });

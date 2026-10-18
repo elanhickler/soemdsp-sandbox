@@ -1,6 +1,6 @@
 # Sandbox Script Language Plan
 
-Source: Thoughts agent for Argi, 2026-10-17. Planning only, no implementation until Argi says so.
+Source: Thoughts agent for Argi, 2026-10-17. Argi said execute all stages on 2026-10-17. Implementation lives in `public/lib/emo/` (compiler), the `script` module, and the Code page section Emo Script.
 
 **Goal:** Argi's own small, C-like language for writing simple DSP classes with state, doing math, and modulating parameters at audio rate (first use: experimenting with decay envelope curves). It compiles to WASM and runs in the worklet at near-native speed. **Never JS in the audio path** (hard rule).
 

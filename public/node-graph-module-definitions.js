@@ -131,6 +131,7 @@ const nodeGraphNodeLabels = Object.freeze({
   timeQuantizer: "Time Quantizer",
   fractalBrownianNoise: "Fractal Brownian Motion",
   gain: "Gain",
+  script: "Script",
   // Legacy id — patches migrate to "gain" on load.
   gainBias: "Gain",
   mix4: "Mix4",

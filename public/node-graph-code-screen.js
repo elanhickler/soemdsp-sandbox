@@ -1,37 +1,60 @@
-// Custom Display (and similar code-box kinds) share the same
-// {code, inputs, outputs} normalized shape and {ok, message} compile-status
-// shape (see customDisplay below) but have their own storage property,
-// compile helpers, and execution model. Rather than a parallel copy of
-// list/editor/draft/apply rendering code per type (which would immediately
-// start drifting between them -- see Wall Delay's "generic check against
-// declared ports instead of a hardcoded list" fix), every rendering/draft/apply
-// function below is parameterized by this descriptor, keyed by node.type, instead.
+// Code Boxes edit the selected Script module. Ports come from in/out
+// declarations in the source. The descriptor keeps one editor path.
 const nodeGraphCodeScreenCodeBoxKinds = Object.freeze({
-  customDisplay: {
-    nodeType: "customDisplay",
-    property: "customDisplay",
-    label: "Custom Display",
-    kindLabelPlural: "custom displays",
-    normalize: (value) => {
-      const source = value && typeof value === "object" ? value : {};
+  script: {
+    nodeType: "script",
+    property: "scriptSource",
+    label: "Script",
+    kindLabelPlural: "scripts",
+    lockPorts: true,
+    normalize(value, node) {
+      if (value && typeof value === "object") {
+        return {
+          code: String(value.code ?? node?.scriptSource ?? ""),
+          inputs: Array.isArray(value.inputs) ? value.inputs.map((port) => String(port || "")).filter(Boolean) : (node?.emoInputs || []).slice(),
+          outputs: Array.isArray(value.outputs) ? value.outputs.map((port) => String(port || "")).filter(Boolean) : (node?.emoOutputs || []).slice(),
+        };
+      }
       return {
-        code: String(source.code || ""),
-        inputs: Array.isArray(source.inputs) ? source.inputs.map((port) => String(port || "")).filter(Boolean) : [],
-        outputs: [],
+        code: typeof value === "string" ? value : String(node?.scriptSource || ""),
+        inputs: Array.isArray(node?.emoInputs) ? node.emoInputs.slice() : [],
+        outputs: Array.isArray(node?.emoOutputs) ? node.emoOutputs.slice() : [],
       };
     },
-    compileStatus: () => ({ ok: false, message: "custom display was removed" }),
-    pruneConnections: (patch, nodeId, inputs) =>
-      pruneNodeGraphConnectionsForCodeblockPortChange(patch, nodeId, inputs, []),
-    contextHint: "Define function draw(api). api has ctx, width, height, inputs, time, frame, pixelRatio, helpers, and node.",
-    emptyStateMessage: "No Custom Display modules exist in this patch yet. Custom Displays draw directly inside their module face from wired input buffers.",
-    createLabel: "New Custom Display",
-    createFn: () => {},
+    compileStatus(bag) {
+      if (typeof nodeGraphEmoStatus !== "function") return { ok: false, message: "emo compiler missing" };
+      const status = nodeGraphEmoStatus(bag?.code || "");
+      return { ok: status.ok, message: status.message };
+    },
+    write(node, bag, patch) {
+      if (typeof nodeGraphEmoWrite !== "function") {
+        node.scriptSource = String(bag?.code || "");
+        return { ok: false, message: "emo compiler missing" };
+      }
+      return nodeGraphEmoWrite(node, bag?.code || "", patch);
+    },
+    pruneConnections(patch, nodeId, inputs, outputs) {
+      if (typeof nodeGraphPruneConnectionsForPortChange === "function") {
+        nodeGraphPruneConnectionsForPortChange(patch, nodeId, inputs, outputs);
+      }
+    },
+    contextHint: "emo script. in, out, and param become jacks and sliders. void process() runs once per sample. display { } is raw GLSL: uv, time, resolution, prev, rgbaIn, rgbaLive, delayFrame(ago), delayFrameAt(ago, uv). 📺 in and 📺 out are the picture cable. A failed compile keeps the last good build.",
+    emptyStateMessage: "No Script modules in this patch yet.",
+    createLabel: "New Script",
+    createFn() {
+      if (typeof showNodeGraphModule !== "function") return;
+      const id = showNodeGraphModule("script", null, { status: "script added" });
+      if (id) {
+        nodeGraphMvp.codeScreenSelectedNodeId = id;
+        if (typeof setNodeGraphNodeSelection === "function") setNodeGraphNodeSelection([id]);
+      }
+      if (typeof renderNodeGraphCodeScreen === "function") renderNodeGraphCodeScreen();
+    },
   },
 });
 
 function nodeGraphCodeScreenKindForNode(node) {
-  return nodeGraphCodeScreenCodeBoxKinds[node?.type] || nodeGraphCodeScreenCodeBoxKinds.customDisplay;
+  return nodeGraphCodeScreenCodeBoxKinds[node?.type] || nodeGraphCodeScreenCodeBoxKinds.script;
 }
 
 const nodeGraphCodeScreenSections = Object.freeze([
@@ -39,7 +62,7 @@ const nodeGraphCodeScreenSections = Object.freeze([
     id: "codeblocks",
     title: "Code Boxes",
     eyebrow: "Code Boxes",
-    summary: "Central editing for Custom Display and other code-box modules.",
+    summary: "Source for Script modules. Jacks and sliders come from the script.",
   },
   {
     id: "helpers",
@@ -284,7 +307,7 @@ function nodeGraphCodeScreenUpdateCodeStatus() {
     return;
   }
   const kind = nodeGraphCodeScreenKindForNode(node);
-  const current = kind.normalize(node[kind.property]);
+  const current = kind.normalize(node[kind.property], node);
   const danglingNamespace = /(^|[^A-Za-z0-9_$])([A-Za-z][A-Za-z0-9_]*)\.\s*$/.exec(source.value);
   const status = danglingNamespace
     ? { ok: false, message: `choose a ${danglingNamespace[2]}. helper` }
@@ -1656,7 +1679,7 @@ function bindNodeGraphCodeScreenEvents() {
   view.addEventListener("click", (event) => {
     if (event.target?.id === "nodeCodeScreenApplyPorts") {
       applyNodeGraphCodeScreenCodeblockPorts();
-    } else if (event.target?.id === "nodeCodeScreenNewCodeblock") {
+    } else if (event.target?.id === "nodeCodeScreenNewCodeblock" || event.target?.id === "nodeCodeScreenCreateCodeblockFromList") {
       // Label reflects the currently-selected node's kind (see
       // renderNodeGraphCodeScreenCodeblockEditor) -- must create that same
       // kind, not silently fall back to a Codeblock.

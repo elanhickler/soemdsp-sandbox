@@ -14,7 +14,9 @@ function nodeGraphLoadEarProtectNative() {
       if (!(bytes instanceof ArrayBuffer)) {
         throw new Error("native Speaker Protector 2: combined wasm unavailable");
       }
-      const { instance } = await WebAssembly.instantiate(bytes, {});
+      const { instance } = await WebAssembly.instantiate(bytes, {
+        env: { emo_process_block() {} },
+      });
       const native = instance?.exports;
       if (!native?.memory || typeof native.soemdsp_speaker_protector2_process_block !== "function") {
         throw new Error("native Speaker Protector 2: process_block export missing");

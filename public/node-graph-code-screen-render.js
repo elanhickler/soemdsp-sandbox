@@ -9,7 +9,7 @@ function nodeGraphCodeScreenCodeblockNodes() {
 
 function nodeGraphCodeScreenCodeblockSearchText(node) {
   const kind = nodeGraphCodeScreenKindForNode(node);
-  const codeblock = kind.normalize(node[kind.property]);
+  const codeblock = kind.normalize(node[kind.property], node);
   const status = kind.compileStatus(codeblock);
   return [
     node.id,
@@ -24,7 +24,7 @@ function nodeGraphCodeScreenCodeblockSearchText(node) {
 
 
 function nodeGraphCodeScreenFilteredCodeblockNodes() {
-  const query = String(nodeGraphMvp.codeScreenCodeblockSearch || "").trim().toLowerCase();
+  const query = String(nodeGraphMvp.codeScreenScriptSearch || "").trim().toLowerCase();
   const codeblocks = nodeGraphCodeScreenCodeblockNodes();
   if (!query) {
     return codeblocks;
@@ -37,7 +37,7 @@ function nodeGraphCodeScreenSelectedCodeblock() {
   const codeblocks = nodeGraphCodeScreenCodeblockNodes();
   const selected = codeblocks.find((node) => node.id === nodeGraphMvp.codeScreenSelectedNodeId);
   const filtered = nodeGraphCodeScreenFilteredCodeblockNodes();
-  if (selected && (!nodeGraphMvp.codeScreenCodeblockSearch || filtered.some((node) => node.id === selected.id))) {
+  if (selected && (!nodeGraphMvp.codeScreenScriptSearch || filtered.some((node) => node.id === selected.id))) {
     return selected;
   }
   const fallback = filtered[0] || codeblocks[0] || null;
@@ -162,16 +162,16 @@ function renderNodeGraphCodeScreenCodeblocksLanding() {
   heading.textContent = "Code Boxes";
   const text = document.createElement("p");
   text.textContent =
-    "Custom Display modules edit here. Curve/data Code boxes live on the modular face (Text shelf → Code).";
+    "Script modules edit here. in, out, and param in the source are the jacks and sliders.";
   landing.append(heading, text);
   const actions = document.createElement("div");
   actions.className = "node-code-screen-codeblocks-landing-actions";
   const customButton = document.createElement("button");
   customButton.type = "button";
   customButton.className = "node-code-screen-landing-cta";
-  customButton.textContent = "New Custom Display";
+  customButton.textContent = "New Script";
   customButton.addEventListener("click", () => {
-    const kind = nodeGraphCodeScreenCodeBoxKinds.customDisplay;
+    const kind = nodeGraphCodeScreenCodeBoxKinds.script;
     if (kind?.createFn) kind.createFn();
   });
   actions.append(customButton);
@@ -196,16 +196,16 @@ function renderNodeGraphCodeScreenCodeblockList(selectedNode) {
   search.className = "node-code-screen-helper-search node-code-screen-codeblock-search";
   search.innerHTML = `
     <label>
-      <span>search debug codeblocks</span>
+      <span>search scripts</span>
       <input id="nodeCodeScreenCodeblockSearch" type="search" spellcheck="false" placeholder="node id, port, source...">
     </label>
     <button id="nodeCodeScreenClearCodeblockSearch" type="button">Clear</button>
   `;
-  search.querySelector("input").value = nodeGraphMvp.codeScreenCodeblockSearch || "";
+  search.querySelector("input").value = nodeGraphMvp.codeScreenScriptSearch || "";
   panel.append(search);
   const statusLine = document.createElement("div");
   statusLine.className = "node-code-screen-list-status";
-  const hasSearch = Boolean(String(nodeGraphMvp.codeScreenCodeblockSearch || "").trim());
+  const hasSearch = Boolean(String(nodeGraphMvp.codeScreenScriptSearch || "").trim());
   statusLine.textContent = hasSearch
     ? `${codeblocks.length} of ${totalCodeblocks.length} codeblocks shown`
     : `${totalCodeblocks.length} codeblocks in patch`;
@@ -213,7 +213,7 @@ function renderNodeGraphCodeScreenCodeblockList(selectedNode) {
   const actions = document.createElement("div");
   actions.className = "node-code-screen-registry-actions";
   actions.innerHTML = `
-    <button id="nodeCodeScreenCreateCodeblockFromList" type="button">New Debug Codeblock</button>
+    <button id="nodeCodeScreenCreateCodeblockFromList" type="button">New Script</button>
   `;
   panel.append(actions);
   const list = document.createElement("div");
@@ -223,7 +223,7 @@ function renderNodeGraphCodeScreenCodeblockList(selectedNode) {
   }
   for (const node of codeblocks) {
     const kind = nodeGraphCodeScreenKindForNode(node);
-    const codeblock = kind.normalize(node[kind.property]);
+    const codeblock = kind.normalize(node[kind.property], node);
     const status = kind.compileStatus(codeblock);
     const button = document.createElement("button");
     button.type = "button";
@@ -1160,13 +1160,13 @@ function nodeGraphCodeScreenCodeblockDraftFromInputs(node) {
     return null;
   }
   const kind = nodeGraphCodeScreenKindForNode(node);
-  const current = kind.normalize(node[kind.property]);
+  const current = kind.normalize(node[kind.property], node);
   return kind.normalize({
     ...current,
     code: document.getElementById("nodeCodeScreenCodeblockSource")?.value ?? current.code,
     inputs: document.getElementById("nodeCodeScreenCodeblockInputs")?.value ?? current.inputs,
     outputs: document.getElementById("nodeCodeScreenCodeblockOutputs")?.value ?? current.outputs,
-  });
+  }, node);
 }
 
 
@@ -1190,7 +1190,7 @@ function updateNodeGraphCodeScreenCodeblockDraftState(node, draft, status) {
     return;
   }
   const kind = nodeGraphCodeScreenKindForNode(node);
-  const current = kind.normalize(node[kind.property]);
+  const current = kind.normalize(node[kind.property], node);
   const changes = nodeGraphCodeScreenCodeblockDraftChanges(current, draft);
   const changed = changes.length > 0;
   if (state) {
@@ -1231,13 +1231,18 @@ function updateNodeGraphCodeScreenCodeblockSummary() {
 
 function renderNodeGraphCodeScreenCodeblockEditor(node) {
   const kind = nodeGraphCodeScreenKindForNode(node);
-  const codeblock = kind.normalize(node[kind.property]);
+  const codeblock = kind.normalize(node[kind.property], node);
   const status = kind.compileStatus(codeblock);
   const editor = document.createElement("div");
   editor.className = "node-code-screen-editor";
   const title = nodeGraphCodeScreenEscapeHtml(nodeGraphPatchNodeTitle(node));
   const nodeId = nodeGraphCodeScreenEscapeHtml(node.id);
-  const statusText = status.ok ? "code ok" : `compile error: ${nodeGraphCodeScreenEscapeHtml(status.message)}`;
+  const shaderError = String(node.emoShaderError || "");
+  const statusText = !status.ok
+    ? `compile error: ${nodeGraphCodeScreenEscapeHtml(status.message)}`
+    : (shaderError
+      ? `shader error: ${nodeGraphCodeScreenEscapeHtml(shaderError)}`
+      : "code ok");
   editor.innerHTML = `
     <div class="node-code-screen-editor-heading">
       <div>
@@ -1245,7 +1250,7 @@ function renderNodeGraphCodeScreenCodeblockEditor(node) {
         <strong>${title}</strong>
         <small>${nodeId}</small>
       </div>
-      <output id="nodeCodeScreenCodeblockStatus" class="${status.ok ? "ok" : "error"}" aria-live="polite">${statusText}</output>
+      <output id="nodeCodeScreenCodeblockStatus" class="${status.ok && !shaderError ? "ok" : "error"}" aria-live="polite">${statusText}</output>
     </div>
     <p class="node-code-screen-editor-context-hint">${nodeGraphCodeScreenEscapeHtml(kind.contextHint)}</p>
     <div id="nodeCodeScreenCodeblockSummary" class="node-code-screen-codeblock-summary ${status.ok ? "ok" : "error"}">${nodeGraphCodeScreenEscapeHtml(nodeGraphCodeScreenCodeblockDraftSummary(node, codeblock, status))}</div>
@@ -1276,8 +1281,16 @@ function renderNodeGraphCodeScreenCodeblockEditor(node) {
   if (debugValues) {
     debugValues.replaceChildren(...renderNodeGraphCodeScreenCodeblockDebugValues(node, codeblock, status).children);
   }
-  editor.querySelector("#nodeCodeScreenCodeblockInputs").value = codeblock.inputs.join(", ");
-  editor.querySelector("#nodeCodeScreenCodeblockOutputs").value = codeblock.outputs.join(", ");
+  const inputField = editor.querySelector("#nodeCodeScreenCodeblockInputs");
+  const outputField = editor.querySelector("#nodeCodeScreenCodeblockOutputs");
+  inputField.value = codeblock.inputs.join(", ");
+  outputField.value = codeblock.outputs.join(", ");
+  if (kind.lockPorts) {
+    inputField.readOnly = true;
+    outputField.readOnly = true;
+    const applyPorts = editor.querySelector("#nodeCodeScreenApplyPorts");
+    if (applyPorts) applyPorts.hidden = true;
+  }
   editor.querySelector("#nodeCodeScreenCodeblockSource").value = codeblock.code;
   editor.insertBefore(renderNodeGraphCodeScreenNamespaceRail(), editor.querySelector(".node-code-screen-source-label"));
   editor.append(renderNodeGraphCodeScreenAutocompleteMount());
@@ -1362,14 +1375,18 @@ function applyNodeGraphCodeScreenCodeblockPorts() {
   if (!targetNode) {
     return;
   }
-  const current = kind.normalize(targetNode[kind.property]);
+  if (kind.lockPorts) return;
+  const current = kind.normalize(targetNode[kind.property], targetNode);
   const next = kind.normalize({
     ...current,
     inputs: document.getElementById("nodeCodeScreenCodeblockInputs")?.value,
     outputs: document.getElementById("nodeCodeScreenCodeblockOutputs")?.value,
-  });
-  targetNode[kind.property] = next;
-  kind.pruneConnections(patch, targetNode.id, next.inputs, next.outputs);
+  }, targetNode);
+  if (typeof kind.write === "function") kind.write(targetNode, next, patch);
+  else {
+    targetNode[kind.property] = next;
+    kind.pruneConnections(patch, targetNode.id, next.inputs, next.outputs);
+  }
   commitNodeGraphPatch(patch, { status: `code screen ${kind.label.toLowerCase()} ports changed` });
 }
 
@@ -1386,12 +1403,11 @@ function applyNodeGraphCodeScreenCodeblockSource() {
   if (!targetNode) {
     return;
   }
-  const current = kind.normalize(targetNode[kind.property]);
-  targetNode[kind.property] = kind.normalize({
-    ...current,
-    code: source.value,
-  });
-  const status = kind.compileStatus(targetNode[kind.property]);
+  const current = kind.normalize(targetNode[kind.property], targetNode);
+  const next = kind.normalize({ ...current, code: source.value }, targetNode);
+  const status = typeof kind.write === "function"
+    ? (kind.write(targetNode, next, patch) || kind.compileStatus(next))
+    : (targetNode[kind.property] = next, kind.compileStatus(next));
   commitNodeGraphPatch(patch, {
     status: status.ok ? `code screen ${kind.label.toLowerCase()} code changed` : "code screen compile error",
   });
@@ -1410,16 +1426,16 @@ function applyNodeGraphCodeScreenCodeblockAll() {
   if (!targetNode) {
     return;
   }
-  const current = kind.normalize(targetNode[kind.property]);
+  const current = kind.normalize(targetNode[kind.property], targetNode);
   const next = kind.normalize({
     ...current,
     code: source.value,
-    inputs: document.getElementById("nodeCodeScreenCodeblockInputs")?.value,
-    outputs: document.getElementById("nodeCodeScreenCodeblockOutputs")?.value,
-  });
-  targetNode[kind.property] = next;
-  kind.pruneConnections(patch, targetNode.id, next.inputs, next.outputs);
-  const status = kind.compileStatus(next);
+    inputs: kind.lockPorts ? current.inputs : document.getElementById("nodeCodeScreenCodeblockInputs")?.value,
+    outputs: kind.lockPorts ? current.outputs : document.getElementById("nodeCodeScreenCodeblockOutputs")?.value,
+  }, targetNode);
+  const status = typeof kind.write === "function"
+    ? (kind.write(targetNode, next, patch) || kind.compileStatus(kind.normalize(targetNode.scriptSource, targetNode)))
+    : (targetNode[kind.property] = next, kind.pruneConnections(patch, targetNode.id, next.inputs, next.outputs), kind.compileStatus(next));
   commitNodeGraphPatch(patch, {
     status: status.ok ? `code screen ${kind.label.toLowerCase()} changed` : "code screen compile error",
   });
@@ -1443,7 +1459,7 @@ function updateNodeGraphCodeScreenWorkspaceWatchSearch(value, selectionStart = n
 
 
 function updateNodeGraphCodeScreenCodeblockSearch(value, selectionStart = null, selectionEnd = null) {
-  nodeGraphMvp.codeScreenCodeblockSearch = String(value || "").slice(0, 160);
+  nodeGraphMvp.codeScreenScriptSearch = String(value || "").slice(0, 160);
   renderNodeGraphCodeScreen();
   queueMicrotask(() => {
     const input = document.getElementById("nodeCodeScreenCodeblockSearch");

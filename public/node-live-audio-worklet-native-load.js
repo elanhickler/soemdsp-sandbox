@@ -1,6 +1,74 @@
 // Extracted from node-live-audio-worklet-core.js (Phase D — native wasm load + gpu additive).
 // Load after core class, before registerProcessor.
 
+NodeLiveAudioProcessor.prototype.installEmoScripts = function installEmoScripts() {
+  if (!this.emoInstances) this.emoInstances = new Map();
+  const live = new Set();
+  for (const node of this.nodes?.values?.() || []) {
+    if (node?.type !== "script" || !node.scriptWasm) continue;
+    const hash = this.fnv1aHash32(String(node.id));
+    live.add(hash);
+    const prev = this.emoInstances.get(hash);
+    const bytes = node.scriptWasm;
+    const view = bytes instanceof ArrayBuffer ? new Uint8Array(bytes) : bytes;
+    let wasmHash = 2166136261;
+    for (let i = 0; i < view.length; i += 1) wasmHash = Math.imul(wasmHash ^ view[i], 16777619);
+    const key = `${view.length}:${wasmHash >>> 0}`;
+    if (prev && prev.key === key && prev.exports) {
+      prev.nodeId = String(node.id);
+      prev.shows = Array.isArray(node.emoShows) ? node.emoShows : [];
+      continue;
+    }
+    try {
+      const bytesSource = bytes instanceof ArrayBuffer || ArrayBuffer.isView(bytes) ? bytes : bytes.buffer;
+      const imported = new WebAssembly.Instance(new WebAssembly.Module(bytesSource));
+      this.emoInstances.set(hash, {
+        key,
+        exports: imported.exports,
+        inN: (node.emoInputs || []).length,
+        outN: (node.emoOutputs || []).length,
+        paramN: (node.emoParamOrder || []).length,
+        nodeId: String(node.id),
+        shows: Array.isArray(node.emoShows) ? node.emoShows : [],
+      });
+    } catch (_error) {
+      this.emoInstances.delete(hash);
+    }
+  }
+  for (const hash of [...this.emoInstances.keys()]) {
+    if (!live.has(hash)) this.emoInstances.delete(hash);
+  }
+};
+
+NodeLiveAudioProcessor.prototype.runEmoBlock = function runEmoBlock(hash, frames, sr, inN, outN, paramN, inPtr, outPtr, paramPtr) {
+  const graphMem = this.nativeGraphMemory;
+  const inst = this.emoInstances?.get?.(hash >>> 0);
+  if (!graphMem || !inst?.exports?.process_block || !inst.exports.memory) {
+    if (graphMem && outPtr && outN > 0) {
+      new Float32Array(graphMem.buffer, outPtr, frames * outN).fill(0);
+    }
+    return;
+  }
+  const g = new Float32Array(graphMem.buffer);
+  const s = new Float32Array(inst.exports.memory.buffer);
+  const n = frames | 0;
+  for (let i = 0; i < n * inN; i += 1) s[(4096 / 4) + i] = g[(inPtr / 4) + i];
+  for (let i = 0; i < n * paramN; i += 1) s[(8192 / 4) + i] = g[(paramPtr / 4) + i];
+  inst.exports.process_block(n, sr);
+  for (let i = 0; i < n * outN; i += 1) g[(outPtr / 4) + i] = s[(12288 / 4) + i];
+  const shows = inst.shows || [];
+  for (let i = 0; i < shows.length; i += 1) {
+    const show = shows[i];
+    if (!show || show.mode === "trace" || !(show.addr >= 0)) continue;
+    const value = s[(show.addr / 4) | 0];
+    this.appendScopeBufferSample?.(`${inst.nodeId}:emo:${show.name}`, Number.isFinite(value) ? value : 0);
+    if (show.mode === "peak") {
+      const max = s[(show.addr / 4) + 1];
+      this.appendScopeBufferSample?.(`${inst.nodeId}:emo:${show.name}:max`, Number.isFinite(max) ? max : 0);
+    }
+  }
+};
+
 NodeLiveAudioProcessor.prototype.setNativeModuleWasm = async function setNativeModuleWasm(message) {
     if (!(message.bytes instanceof ArrayBuffer)) {
       return;
@@ -9,7 +77,14 @@ NodeLiveAudioProcessor.prototype.setNativeModuleWasm = async function setNativeM
     const targetType = String(message.targetType || "");
     let exports = null;
     try {
-      const result = await WebAssembly.instantiate(message.bytes, {});
+      const processor = this;
+      const result = await WebAssembly.instantiate(message.bytes, {
+        env: {
+          emo_process_block(hash, frames, sr, inN, outN, paramN, inPtr, outPtr, paramPtr) {
+            processor.runEmoBlock(hash, frames, sr, inN, outN, paramN, inPtr, outPtr, paramPtr);
+          },
+        },
+      });
       exports = result?.instance?.exports || null;
     } catch (error) {
       // For the combined binary, report per-module errors (so Module

@@ -142,6 +142,16 @@ function nodeGraphOrderSeedBeforeAmplitude(parameters) {
 
 function nodeGraphPatchNodeParameterDefinitions(node) {
   const patchNode = typeof node === "string" ? nodeGraphPatchNode(node) : node;
+  if (patchNode?.type === "script") {
+    if (typeof nodeGraphEmoEnsure === "function") nodeGraphEmoEnsure(patchNode);
+    const defs = Array.isArray(patchNode.emoParamDefs) ? patchNode.emoParamDefs : [];
+    return nodeGraphOrderSeedBeforeAmplitude(defs.map((parameter) => {
+      const alias = normalizeNodeGraphPatchMetadataAlias(patchNode?.paramMeta?.[parameter.key]?.alias);
+      return alias
+        ? { ...parameter, defaultLabel: parameter.label, label: alias }
+        : { ...parameter, defaultLabel: parameter.label };
+    }));
+  }
   const definition = typeof nodeGraphModuleDefinition === "function"
     ? nodeGraphModuleDefinition(patchNode?.type)
     : nodeGraphModuleDefinitions[patchNode?.type];
@@ -166,120 +176,6 @@ function nodeGraphPatchNodeParameterDefinitions(node) {
   }
   return nodeGraphOrderSeedBeforeAmplitude(list);
 }
-const nodeGraphCodeblockDefaultCode = "Out1 = In1;";
-const nodeGraphCodeblockPortNamePattern = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
-const nodeGraphCodeblockShadowedGlobals = Object.freeze([
-  "window",
-  "document",
-  "fetch",
-  "Function",
-  "eval",
-  "globalThis",
-  "self",
-]);
-const nodeGraphCodeblockReservedNames = Object.freeze(new Set([
-  ...nodeGraphCodeblockShadowedGlobals,
-  "__context",
-  "__ctx",
-  "__inputs",
-  "__outputs",
-  "__state",
-  "arguments",
-  "await",
-  "break",
-  "case",
-  "catch",
-  "class",
-  "const",
-  "continue",
-  "debugger",
-  "default",
-  "delete",
-  "do",
-  "else",
-  "export",
-  "extends",
-  "false",
-  "finally",
-  "frame",
-  "frames",
-  "for",
-  "if",
-  "import",
-  "in",
-  "instanceof",
-  "let",
-  "new",
-  "null",
-  "return",
-  "sampleRate",
-  "super",
-  "switch",
-  "state",
-  "this",
-  "throw",
-  "time",
-  "true",
-  "try",
-  "typeof",
-  "var",
-  "void",
-  "while",
-  "with",
-  "yield",
-  "dt",
-]));
-
-function nodeGraphCodeblockIdentifierIsValid(name) {
-  const value = String(name || "").trim();
-  return nodeGraphCodeblockPortNamePattern.test(value) &&
-    !nodeGraphCodeblockReservedNames.has(value);
-}
-
-function normalizeNodeGraphCodeblockPortList(value, fallbackPrefix = "In") {
-  const raw = Array.isArray(value)
-    ? value
-    : String(value ?? "").split(/[\s,]+/);
-  const ports = [];
-  const seen = new Set();
-  for (const item of raw) {
-    const name = String(item || "").trim();
-    if (!nodeGraphCodeblockIdentifierIsValid(name) || seen.has(name)) {
-      continue;
-    }
-    seen.add(name);
-    ports.push(name.slice(0, 32));
-  }
-  if (!ports.length) {
-    ports.push(`${fallbackPrefix}1`);
-  }
-  return ports;
-}
-
-function normalizeNodeGraphCodeblock(value = {}) {
-  const source = value && typeof value === "object" ? value : {};
-  const inputs = normalizeNodeGraphCodeblockPortList(source.inputs, "In");
-  const reserved = new Set(inputs);
-  const rawOutputs = normalizeNodeGraphCodeblockPortList(source.outputs, "Out");
-  const outputs = rawOutputs.filter((port) => !reserved.has(port));
-  if (!outputs.length) {
-    let index = 1;
-    let name = "Out1";
-    while (reserved.has(name)) {
-      index += 1;
-      name = `Out${index}`;
-    }
-    outputs.push(name);
-  }
-  return {
-    code: String(source.code ?? nodeGraphCodeblockDefaultCode),
-    inputs,
-    outputs,
-  };
-}
-
-
-
 /** inputs+dataInputs (and outs) are both jack lists. Overlap is a definition bug — throw, do not silence. */
 function nodeGraphAssertJackListsDisjoint(signalPorts, dataPorts, where) {
   const signal = Array.isArray(signalPorts) ? signalPorts : [];
@@ -301,6 +197,12 @@ function nodeGraphAssertJackListsDisjoint(signalPorts, dataPorts, where) {
 
 function nodeGraphPatchNodeInputPorts(node) {
   const patchNode = typeof node === "string" ? nodeGraphPatchNode(node) : node;
+  if (patchNode?.type === "script") {
+    if (typeof nodeGraphEmoEnsure === "function") nodeGraphEmoEnsure(patchNode);
+    const inputs = Array.isArray(patchNode.emoInputs) ? patchNode.emoInputs.slice() : [];
+    if (!inputs.includes("rgba")) inputs.push("rgba");
+    return inputs;
+  }
   if (patchNode?.type === "canvas") {
     return normalizeNodeGraphCanvasScript(patchNode.canvasScript).inputs;
   }
@@ -329,6 +231,14 @@ function nodeGraphPatchNodeInputPorts(node) {
 
 function nodeGraphPatchNodeOutputPorts(node) {
   const patchNode = typeof node === "string" ? nodeGraphPatchNode(node) : node;
+  if (patchNode?.type === "script") {
+    if (typeof nodeGraphEmoEnsure === "function") nodeGraphEmoEnsure(patchNode);
+    const outs = Array.isArray(patchNode.emoOutputs) ? patchNode.emoOutputs.slice() : [];
+    const params = Array.isArray(patchNode.emoParamOrder) ? patchNode.emoParamOrder : [];
+    const ports = outs.concat(params.filter((key) => !outs.includes(key)));
+    if (!ports.includes("rgba")) ports.push("rgba");
+    return ports;
+  }
   if (
     typeof nodeGraphIsContainerShellType === "function"
     && nodeGraphIsContainerShellType(patchNode?.type)

@@ -17836,6 +17836,8 @@ body.node-slider-dragging * {
   border-radius: 0;
   background: var(--node-slider-position-color);
   pointer-events: none;
+  /* GPU draws the wrap pieces. These nodes only publish the widths. */
+  visibility: hidden;
 }
 
 .node-slider-readout-portal-left {

@@ -5,6 +5,7 @@ NodeLiveAudioProcessor.prototype.applyNativeModuleExports = function applyNative
       if (name === "graph_engine" || targetType === "graphEngine") {
         this.destroyNativeGraphHandle?.();
         this.nativeGraph = exports;
+        this.nativeGraphMemory = exports?.memory || this.nativeGraphMemory || null;
         this.nativeGraphReady = Boolean(
           this.nativeGraph?.soemdsp_graph_create
           && this.nativeGraph?.soemdsp_graph_compile

@@ -886,9 +886,13 @@ function createNodeGraphParameter(node, type, parameter) {
   // Prefer live patch value (critical for Metamodule mx_* mirrors).
   const patchValue = patchNode?.params?.[parameter.key];
   const patchDef = Number(patchNode?.paramMeta?.[parameter.key]?.def);
-  const seedValue = (patchValue != null && Number.isFinite(Number(patchValue)))
+  let seedValue = (patchValue != null && Number.isFinite(Number(patchValue)))
     ? patchValue
     : (Number.isFinite(patchDef) ? patchDef : (metadata?.def ?? parameter.defaultValue));
+  if (type === "script" && typeof nodeGraphEmoChoiceIndex === "function") {
+    const choiceIndex = nodeGraphEmoChoiceIndex(patchNode, parameter.key, patchValue);
+    if (choiceIndex != null) seedValue = choiceIndex;
+  }
   input.value = String(seedValue);
   input.dataset.step = metadata?.step > 0 ? String(metadata.step) : "any";
   input.dataset.mid = String(metadata?.mid ?? parameter.mid);

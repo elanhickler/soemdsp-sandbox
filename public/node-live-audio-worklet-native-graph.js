@@ -30,6 +30,7 @@ NodeLiveAudioProcessor.NATIVE_GRAPH_TYPE_IDS = Object.freeze({
   softpopOscillator: 207,
   softpopFilter: 214,
   softpop2: 219,
+  script: 220,
   slewLimiter: 17,
   comparator: 18,
   sampleDelay: 19,
@@ -471,6 +472,7 @@ NodeLiveAudioProcessor.prototype.mapNativeGraphParamId = function mapNativeGraph
   const P = NodeLiveAudioProcessor;
   const k = String(key || "");
   const t = String(type || "");
+  if (t === "script") return undefined;
   if (t === "pitchQuantizer") {
     if (k === "scaleMask") return P.NATIVE_GRAPH_PARAM_SEED;
     if (k === "octave" || k === "octaveOffset") return P.NATIVE_GRAPH_PARAM_ATT_OFFSET;
@@ -644,10 +646,23 @@ NodeLiveAudioProcessor.prototype.mapNativeGraphTypeId = function mapNativeGraphT
 NodeLiveAudioProcessor.prototype.mapNativeGraphSrcPortId = function mapNativeGraphSrcPortId(
   port,
   type,
+  nodeId,
 ) {
   const raw = String(port || "").trim();
   const p = raw.toLowerCase();
   const t = String(type || "").trim();
+  if (t === "script") {
+    if (nodeId && this.nodes) {
+      const node = this.nodes.get(String(nodeId));
+      const ins = node?.emoInputs || [];
+      const outs = node?.emoOutputs || [];
+      const ii = ins.findIndex((name) => String(name).toLowerCase() === p);
+      if (ii >= 0) return ii;
+      const oi = outs.findIndex((name) => String(name).toLowerCase() === p);
+      if (oi >= 0) return 6 + oi;
+    }
+    return undefined;
+  }
   if (t === "acidSequencer") {
     if (p === "gate") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_MONO;
     if (p === "trigger") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_LEFT;
@@ -1160,10 +1175,12 @@ NodeLiveAudioProcessor.prototype.mapNativeGraphSrcPortId = function mapNativeGra
 NodeLiveAudioProcessor.prototype.mapNativeGraphDstPortId = function mapNativeGraphDstPortId(
   port,
   type,
+  nodeId,
 ) {
   const raw = String(port || "").trim();
   const p = raw.toLowerCase();
   const tDst = String(type || "").trim();
+  if (tDst === "script") return this.mapNativeGraphSrcPortId(port, type, nodeId);
   // Sidechain: Wet L/R on Left/Right, Dry L/R on the reverb Dry slots, Envelope
   // on Square, Sidechain key on the Morph live bus (as Pump Limiter).
   if (tDst === "sidechain") {
@@ -1384,7 +1401,7 @@ NodeLiveAudioProcessor.prototype.mapNativeGraphDstPortId = function mapNativeGra
     if (p === "g") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_LEFT;
     if (p === "b") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_RIGHT;
   }
-  return this.mapNativeGraphSrcPortId(port, type);
+  return this.mapNativeGraphSrcPortId(port, type, nodeId);
 };
 
 /** @deprecated Prefer mapNativeGraphSrcPortId / mapNativeGraphDstPortId. */
@@ -2206,7 +2223,7 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphFromPlanSurgical =
                 scaleHash,
                 monoPort,
                 hashById.get(dstId),
-                this.mapNativeGraphDstPortId(dstPort, typeById.get(dstId)),
+                this.mapNativeGraphDstPortId(dstPort, typeById.get(dstId), dstId),
               ) | 0;
               if (crcReuse !== 0) {
                 this.postNativeGraphStatus("error", `scale feeder reconnect failed (${crcReuse}) Scale->${dstId}`);
@@ -2238,7 +2255,7 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphFromPlanSurgical =
             scaleHash,
             monoPort,
             hashById.get(dstId),
-            this.mapNativeGraphDstPortId(dstPort, typeById.get(dstId)),
+            this.mapNativeGraphDstPortId(dstPort, typeById.get(dstId), dstId),
           ) | 0;
           if (crcScale !== 0) {
             this.postNativeGraphStatus(
@@ -2251,14 +2268,14 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphFromPlanSurgical =
         }
 
         if (idSet.has(srcId)) {
-          const srcPortId = this.mapNativeGraphSrcPortId(srcPort, typeById.get(srcId));
+          const srcPortId = this.mapNativeGraphSrcPortId(srcPort, typeById.get(srcId), srcId);
           if (!Number.isFinite(srcPortId)) return true;
           const rc = native.soemdsp_graph_connect(
             this.nativeGraphHandle,
             hashById.get(srcId),
             srcPortId,
             hashById.get(dstId),
-            this.mapNativeGraphDstPortId(dstPort, typeById.get(dstId)),
+            this.mapNativeGraphDstPortId(dstPort, typeById.get(dstId), dstId),
           ) | 0;
           return rc === 0;
         }
@@ -2299,7 +2316,7 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphFromPlanSurgical =
           feedHash,
           monoPort,
           hashById.get(dstId),
-          this.mapNativeGraphDstPortId(dstPort, typeById.get(dstId)),
+          this.mapNativeGraphDstPortId(dstPort, typeById.get(dstId), dstId),
         ) | 0;
         return rc === 0;
       };
@@ -2410,7 +2427,7 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphFromPlanSurgical =
                 ? (hashById.get(srcId) || this.fnv1aHash32(srcId))
                 : this.nativeHostCvFeederHash(srcId, srcPort);
               const srcPortId = idSet.has(srcId)
-                ? this.mapNativeGraphSrcPortId(srcPort, typeById.get(srcId))
+                ? this.mapNativeGraphSrcPortId(srcPort, typeById.get(srcId), srcId)
                 : NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_MONO;
               if (!srcHash || !Number.isFinite(srcPortId) || srcPortId < 0) continue;
               try {
@@ -2578,7 +2595,7 @@ NodeLiveAudioProcessor.prototype.installNativeMetaVoiceBusFeeders =
         feedHash,
         monoPort,
         hashById.get(dstId),
-        this.mapNativeGraphDstPortId(dstPort, typeById.get(dstId)),
+        this.mapNativeGraphDstPortId(dstPort, typeById.get(dstId), dstId),
       ) | 0;
       if (crcBus !== 0) {
         this.postNativeGraphStatus("warning", `voice ${kind} connect failed (${crcBus}) ${feedId}`);
@@ -3830,7 +3847,7 @@ NodeLiveAudioProcessor.prototype.compileNativeMetaVoiceCircuits = function compi
         const srcLane = byBase.get(srcId);
         if (!srcLane || srcLane.metaId !== dstLane.metaId) continue;
         if (!idSet?.has?.(srcId)) continue;
-        const srcPortId = this.mapNativeGraphSrcPortId(srcPort, typeById?.get?.(srcId));
+        const srcPortId = this.mapNativeGraphSrcPortId(srcPort, typeById?.get?.(srcId), srcId);
         if (!Number.isFinite(srcPortId) || srcPortId < 0) continue;
         const n = Math.min(srcLane.voiceIds.length, dstLane.voiceIds.length);
         for (let v = 0; v < n; v += 1) {
@@ -4691,6 +4708,24 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
       if (!collectOnly) pushChanged(hash, cache, key, paramId, value, node);
     };
 
+    if (type === "script") {
+      const order = Array.isArray(node.emoParamOrder) ? node.emoParamOrder : [];
+      const choiceMap = node.emoChoices || {};
+      for (let i = 0; i < order.length && i < 16; i += 1) {
+        const key = order[i];
+        const names = choiceMap[key];
+        let value;
+        if (Array.isArray(names)) {
+          const raw = String((node.params || {})[key] ?? names[0]);
+          const idx = names.indexOf(raw);
+          value = idx >= 0 ? idx : 0;
+        } else {
+          value = cont(key, 0);
+        }
+        push(key, 300 + i, value);
+      }
+      continue;
+    }
     if (type === "namedPortalIn" || type === "namedPortalOut") {
       const title = String(node.alias || "").trim().toLowerCase();
       const uni = String(node.ownerMetamoduleId || "");
@@ -8211,6 +8246,18 @@ NodeLiveAudioProcessor.prototype.compileNativeGraphFromPlan = function compileNa
         continue;
       }
       addNativeNode(id, type, node.params || {});
+      if (type === "script" && native.soemdsp_graph_set_emo_counts) {
+        const ins = Array.isArray(node.emoInputs) ? node.emoInputs.length : 0;
+        const outs = Array.isArray(node.emoOutputs) ? node.emoOutputs.length : 0;
+        const paramCount = Array.isArray(node.emoParamOrder) ? node.emoParamOrder.length : 0;
+        native.soemdsp_graph_set_emo_counts(
+          this.nativeGraphHandle,
+          this.fnv1aHash32(id),
+          ins,
+          outs,
+          paramCount,
+        );
+      }
     }
     // A Meta voice is one circuit: every owned module at the same slot
     // (Hypersaw + Ping + Filter + …). Cables inside the Meta stay inside
@@ -8408,7 +8455,7 @@ NodeLiveAudioProcessor.prototype.compileNativeGraphFromPlan = function compileNa
           scaleHash,
           monoPort,
           hashById.get(dstId),
-          this.mapNativeGraphDstPortId(dstPort, typeById.get(dstId)),
+          this.mapNativeGraphDstPortId(dstPort, typeById.get(dstId), dstId),
         ) | 0;
         if (crcScale !== 0) {
           this.postNativeGraphStatus(
@@ -8424,9 +8471,9 @@ NodeLiveAudioProcessor.prototype.compileNativeGraphFromPlan = function compileNa
         const rc = native.soemdsp_graph_connect(
           this.nativeGraphHandle,
           hashById.get(srcId),
-          this.mapNativeGraphSrcPortId(srcPort, typeById.get(srcId)),
+          this.mapNativeGraphSrcPortId(srcPort, typeById.get(srcId), srcId),
           hashById.get(dstId),
-          this.mapNativeGraphDstPortId(dstPort, typeById.get(dstId)),
+          this.mapNativeGraphDstPortId(dstPort, typeById.get(dstId), dstId),
         ) | 0;
         if (rc !== 0) {
           this.postNativeGraphStatus("error", `connect failed (${rc}) ${srcId}->${dstId}`);
@@ -8463,7 +8510,7 @@ NodeLiveAudioProcessor.prototype.compileNativeGraphFromPlan = function compileNa
         feedHash,
         monoPort,
         hashById.get(dstId),
-        this.mapNativeGraphDstPortId(dstPort, typeById.get(dstId)),
+        this.mapNativeGraphDstPortId(dstPort, typeById.get(dstId), dstId),
       ) | 0;
       if (crcHost !== 0) {
         this.postNativeGraphStatus(
@@ -8687,7 +8734,7 @@ NodeLiveAudioProcessor.prototype.compileNativeGraphFromPlan = function compileNa
             const hostSrc = !idSet.has(srcId);
             const srcPortId = hostSrc
               ? NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_MONO
-              : this.mapNativeGraphSrcPortId(srcPort, typeById.get(srcId));
+              : this.mapNativeGraphSrcPortId(srcPort, typeById.get(srcId), srcId);
             if (hostSrc) this.nativeHostCvFeederHash(srcId, srcPort);
             if (!Number.isFinite(srcPortId) || srcPortId < 0) continue;
             const srcLane = voiceLaneByBase.get(srcId);
@@ -9490,7 +9537,7 @@ NodeLiveAudioProcessor.prototype.publishNativeGraphScopeTaps = function publishN
   const readLeafSample = (sourceNode, sourcePort, frame) => {
     const srcType = String(this.nodes.get(sourceNode)?.type || "");
     if (srcType === "output" && protectedLeft) {
-      const portId = this.mapNativeGraphSrcPortId(sourcePort, srcType);
+      const portId = this.mapNativeGraphSrcPortId(sourcePort, srcType, sourceNode);
       const idx = frameOffset + frame;
       if (portId === P.NATIVE_GRAPH_PORT_RIGHT) {
         return nodeGraphFiniteNumber(protectedRight?.[idx] ?? protectedLeft[idx]);
@@ -9502,7 +9549,7 @@ NodeLiveAudioProcessor.prototype.publishNativeGraphScopeTaps = function publishN
       const r = nodeGraphFiniteNumber(protectedRight?.[idx] ?? l);
       return (l + r) * 0.5;
     }
-    const portId = this.mapNativeGraphSrcPortId(sourcePort, srcType);
+    const portId = this.mapNativeGraphSrcPortId(sourcePort, srcType, sourceNode);
     const tapSrc = this.nativeVoicePreviewSourceId?.(sourceNode) || sourceNode;
     const hash = this.fnv1aHash32(tapSrc);
     const view = this.bindNativeGraphNodePortView(hash, portId, frames);

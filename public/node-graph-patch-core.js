@@ -1397,10 +1397,15 @@ function nodeGraphModuleStructuralUiSignature(patchNode) {
 }
 
 function nodeGraphModulePortSignature(patchNode) {
+  const paramKeys = patchNode?.type === "script"
+    ? (patchNode.emoParamOrder || [])
+    : (nodeGraphModuleDefinitions[patchNode.type]?.parameters || []).map((parameter) => parameter.key);
   const outputPorts = nodeGraphPatchNodeOutputPorts(patchNode).filter(
-    (port) => !(nodeGraphModuleDefinitions[patchNode.type]?.parameters || []).some((parameter) => parameter.key === port),
+    (port) => !paramKeys.some((key) => key === port),
   );
-  return `${nodeGraphPatchNodeInputPorts(patchNode).join(",")}=>${outputPorts.join(",")}=>${nodeGraphModuleGraphInputs(patchNode.type).join(",")}`;
+  const base = `${nodeGraphPatchNodeInputPorts(patchNode).join(",")}=>${outputPorts.join(",")}=>${nodeGraphModuleGraphInputs(patchNode.type).join(",")}`;
+  if (patchNode?.type === "script") return `${base}=>${(patchNode.emoParamOrder || []).join(",")}`;
+  return base;
 }
 
 function syncNodeGraphModuleChromeElement(element, patchNode) {

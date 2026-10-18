@@ -43,7 +43,7 @@ Local AST map of the repo. Use it to:
 
 **Why:** #1 public hub by graph degree (~1955 total deg, ~309 symbols, ~6k lines in `node-graph-code-screen.js`).
 
-**What it is *not*:** The modular **Codeblock** processor (audio-thread custom code). Code Screen is the full-page editor/browser (codeblocks list, workspace script, helpers/snippets, registry, run history) plus floating **Code Box** UI.
+Code Screen is the full-page editor (Code Boxes for Script modules, workspace script, helpers/snippets, registry, run history) plus the floating Code Box.
 
 **Constraint:** Code Screen UI stays a **satellite**. Peels must load with the satellite (update `node-graph-code-screen-loader.js` ordered script list). Always-on remains: `node-graph-code-screen-model.js` + loader only.
 

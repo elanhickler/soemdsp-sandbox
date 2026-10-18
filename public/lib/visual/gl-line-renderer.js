@@ -51,18 +51,20 @@
 
 (function initNodeGraphGlLineRenderer(global) {
   const MAX_DIM = 4096;
-  const FLOATS = 11; // pos2, local2, len1, half1, feather1, rgba4
+  const FLOATS = 12; // pos2, local2, len1, half1, feather1, caps1, rgba4
   const VS = `
 attribute vec2 position;
 attribute vec2 local;
 attribute float segLen;
 attribute float halfPx;
 attribute float feather;
+attribute float caps;
 attribute vec4 colour;
 varying vec2 vLocal;
 varying float vLen;
 varying float vHalf;
 varying float vFeather;
+varying float vCaps;
 varying vec4 vColour;
 void main() {
   gl_Position = vec4(position, 0.0, 1.0);
@@ -70,6 +72,7 @@ void main() {
   vLen = segLen;
   vHalf = halfPx;
   vFeather = feather;
+  vCaps = caps;
   vColour = colour;
 }
 `;
@@ -83,12 +86,44 @@ varying vec2 vLocal;
 varying float vLen;
 varying float vHalf;
 varying float vFeather;
+varying float vCaps;
 varying vec4 vColour;
 uniform float uCoverage;
 void main() {
   float u = vLocal.x;
-  float d = u < 0.0 ? length(vLocal) : (u > vLen ? length(vec2(u - vLen, vLocal.y)) : abs(vLocal.y));
-  float a = 1.0 - smoothstep(vHalf, vHalf + max(vFeather, 1e-4), d);
+  float across = abs(vLocal.y);
+  float a;
+  if (vCaps > 1.5) {
+    // Phosphor beam. erf integrates the gaussian along the segment so
+    // overlapping ends add to one continuous brightness.
+    float sigma = max(vHalf, 1e-3);
+    float inv = 0.70710678 / sigma;
+    float x = vLocal.x * inv;
+    float s = sign(x);
+    float ax = abs(x);
+    float p = 1.0 + (0.278393 + (0.230389 + 0.078108 * ax * ax) * ax) * ax;
+    p *= p;
+    float e0 = s - s / (p * p);
+    x = (vLocal.x - vLen) * inv;
+    s = sign(x);
+    ax = abs(x);
+    p = 1.0 + (0.278393 + (0.230389 + 0.078108 * ax * ax) * ax) * ax;
+    p *= p;
+    float e1 = s - s / (p * p);
+    float along = clamp(0.5 * (e0 - e1), 0.0, 1.0);
+    float y = vLocal.y;
+    float acrossGlow = exp(-y * y / (2.0 * sigma * sigma));
+    a = along * acrossGlow;
+  } else {
+    float d;
+    if (vCaps > 0.5) {
+      float outside = u < 0.0 ? -u : (u > vLen ? u - vLen : 0.0);
+      d = outside > 0.0 ? vHalf + vFeather + outside : across;
+    } else {
+      d = u < 0.0 ? length(vLocal) : (u > vLen ? length(vec2(u - vLen, vLocal.y)) : across);
+    }
+    a = 1.0 - smoothstep(vHalf, vHalf + max(vFeather, 1e-4), d);
+  }
   float cov = vColour.a * a;
   // Coverage pass stores straight alpha. Zero-coverage corners must be
   // (0,0,0,0) or MAX would paint the quad's bounding box.
@@ -227,7 +262,11 @@ void main() {
     if (i >= uCount) break;
     vec2 jack = uJack[i].xy;
     float radius = uJack[i].z;
-    float d = length(vPx - jack) - radius;
+    float square = radius < 0.0 ? 1.0 : 0.0;
+    radius = abs(radius);
+    float d = square > 0.5
+      ? max(abs(vPx.x - jack.x), abs(vPx.y - jack.y)) - radius
+      : length(vPx - jack) - radius;
     sd = max(sd, -d);
     float ring = 1.0 - smoothstep(halfRing - 0.65, halfRing + 0.65, abs(d));
     if (sdRect <= 0.85 && ring > arc) {
@@ -313,7 +352,7 @@ void main() {
         veilRect: veilProgram ? gl.getUniformLocation(veilProgram, "uRect") : null,
         veilPeriod: veilProgram ? gl.getUniformLocation(veilProgram, "uPeriod") : null,
         buf: gl.createBuffer(),
-        attribs: ["position", "local", "segLen", "halfPx", "feather", "colour"].map((n) => gl.getAttribLocation(program, n)),
+        attribs: ["position", "local", "segLen", "halfPx", "feather", "caps", "colour"].map((n) => gl.getAttribLocation(program, n)),
         coverage: gl.getUniformLocation(program, "uCoverage"),
         imgProgram,
         imgBuf: gl.createBuffer(),
@@ -366,6 +405,9 @@ void main() {
       over: null,
       on: 0,
       _over: false,
+      gdata: null,
+      gn: 0,
+      _glow: false,
       // transparent: overlay faces; the 2D blit target is cleared first.
       transparent: options?.transparent === true,
       // Blit over the 2D canvas instead of clearing it first.
@@ -373,11 +415,12 @@ void main() {
     };
   }
 
-  function push(batch, x, y, lu, lv, len, half, feather, c) {
+  function push(batch, x, y, lu, lv, len, half, feather, c, caps) {
     // Vertices go straight into a pooled Float32Array (no per-frame JS arrays).
-    const over = batch._over === true;
-    let d = over ? batch.over : batch.data;
-    let i = over ? batch.on : batch.n;
+    const glow = batch._glow === true;
+    const over = !glow && batch._over === true;
+    let d = glow ? batch.gdata : (over ? batch.over : batch.data);
+    let i = glow ? batch.gn : (over ? batch.on : batch.n);
     if (!d) d = new Float32Array(4096);
     if (i + FLOATS > d.length) {
       const grown = new Float32Array(d.length * 2);
@@ -386,8 +429,12 @@ void main() {
     }
     d[i] = (x / batch.w) * 2 - 1; d[i + 1] = 1 - (y / batch.h) * 2;
     d[i + 2] = lu; d[i + 3] = lv; d[i + 4] = len; d[i + 5] = half; d[i + 6] = feather;
-    d[i + 7] = c[0]; d[i + 8] = c[1]; d[i + 9] = c[2]; d[i + 10] = c.length > 3 ? c[3] : 1;
-    if (over) {
+    d[i + 7] = caps || 0;
+    d[i + 8] = c[0]; d[i + 9] = c[1]; d[i + 10] = c[2]; d[i + 11] = c.length > 3 ? c[3] : 1;
+    if (glow) {
+      batch.gdata = d;
+      batch.gn = i + FLOATS;
+    } else if (over) {
       batch.over = d;
       batch.on = i + FLOATS;
     } else {
@@ -458,8 +505,9 @@ void main() {
    * Capsule segment (x0,y0)-(x1,y1): solid core halfPx, then `feather` px of
    * smoothstep fade (Sabrina kLineFrag). Round ends/joins.
    */
-  function nodeGraphGlLinesSegment(batch, x0, y0, x1, y1, halfPx, feather, rgba) {
+  function nodeGraphGlLinesSegment(batch, x0, y0, x1, y1, halfPx, feather, rgba, caps) {
     if (!batch) return;
+    const square = caps === "square" || caps === 1;
     const k = batch.scale || 1;
     if (k !== 1) { x0 *= k; y0 *= k; x1 *= k; y1 *= k; halfPx *= k; feather *= k; }
     const reach = Math.max(0, halfPx) + Math.max(0, feather) + 4;
@@ -480,17 +528,19 @@ void main() {
     const nx = -uy;
     const ny = ux;
     const r = Math.max(0, halfPx) + Math.max(0, feather);
+    const alongPad = square ? 0 : r;
+    const capFlag = square ? 1 : 0;
     const corner = (along, across) => [
       x0 + ux * along + nx * across,
       y0 + uy * along + ny * across,
       along,
       across,
     ];
-    const a = corner(-r, -r);
-    const b = corner(len + r, -r);
-    const c = corner(-r, r);
-    const d = corner(len + r, r);
-    for (const v of [a, b, c, b, d, c]) push(batch, v[0], v[1], v[2], v[3], len, halfPx, feather, rgba);
+    const a = corner(-alongPad, -r);
+    const b = corner(len + alongPad, -r);
+    const c = corner(-alongPad, r);
+    const d = corner(len + alongPad, r);
+    for (const v of [a, b, c, b, d, c]) push(batch, v[0], v[1], v[2], v[3], len, halfPx, feather, rgba, capFlag);
   }
 
   /** Round dot (zero-length capsule) of radius r. */
@@ -498,15 +548,143 @@ void main() {
     nodeGraphGlLinesSegment(batch, x, y, x, y, r, feather, rgba);
   }
 
-  /** Polyline as capsules (one continuous outline; joins are round). */
-  function nodeGraphGlLinesPolyline(batch, points, halfPx, feather, rgba) {
+  /**
+   * Polyline. caps "butt" ends each segment flat.
+   * caps "ortho" is for axis-aligned traces: at each corner the segment runs
+   * to the far edge of the crossing stroke, so the corner square is covered
+   * by overlap. No diagonal.
+   */
+  function nodeGraphGlLinesPolyline(batch, points, halfPx, feather, rgba, caps) {
     if (!batch || !points || points.length < 4) return;
+    const square = caps === "square" || caps === "butt" || caps === "ortho" || caps === 1;
+    const ortho = caps === "ortho";
+    const reach = Math.max(0, halfPx) + Math.max(0, feather);
+    const segs = [];
     for (let i = 2; i < points.length; i += 2) {
-      const x0 = points[i - 2]; const y0 = points[i - 1];
-      const x1 = points[i]; const y1 = points[i + 1];
-      if (x0 === x1 && y0 === y1 && i > 2) continue;
-      nodeGraphGlLinesSegment(batch, x0, y0, x1, y1, halfPx, feather, rgba);
+      const x0 = points[i - 2];
+      const y0 = points[i - 1];
+      const x1 = points[i];
+      const y1 = points[i + 1];
+      if (x0 === x1 && y0 === y1) continue;
+      segs.push({ x0, y0, x1, y1 });
     }
+    for (let s = 0; s < segs.length; s += 1) {
+      let { x0, y0, x1, y1 } = segs[s];
+      if (ortho) {
+        const dx = x1 - x0;
+        const dy = y1 - y0;
+        const len = Math.hypot(dx, dy) || 1;
+        const ux = dx / len;
+        const uy = dy / len;
+        if (s > 0) { x0 -= ux * reach; y0 -= uy * reach; }
+        if (s < segs.length - 1) { x1 += ux * reach; y1 += uy * reach; }
+      }
+      nodeGraphGlLinesSegment(batch, x0, y0, x1, y1, halfPx, feather, rgba, square ? 1 : 0);
+    }
+  }
+
+  // One continuous ribbon. Neighboring pieces share the edge points, so a bend
+  // has no end cap and no gap. `across` is the distance from the centerline.
+  function nodeGraphGlLinesRibbon(batch, points, halfPx, feather, rgba) {
+    if (!batch || !points || points.length < 4) return;
+    const k = batch.scale || 1;
+    const r = Math.max(0, halfPx) + Math.max(0, feather);
+    const count = points.length / 2;
+    const dirX = new Float32Array(count);
+    const dirY = new Float32Array(count);
+    for (let i = 0; i < count - 1; i += 1) {
+      let dx = points[(i + 1) * 2] - points[i * 2];
+      let dy = points[(i + 1) * 2 + 1] - points[i * 2 + 1];
+      const len = Math.hypot(dx, dy);
+      if (!(len > 0)) { dirX[i] = 1; dirY[i] = 0; continue; }
+      dirX[i] = dx / len;
+      dirY[i] = dy / len;
+    }
+    dirX[count - 1] = dirX[count - 2] || 1;
+    dirY[count - 1] = dirY[count - 2] || 0;
+    const miter = (index) => {
+      const ax = index === 0 ? dirX[0] : dirX[index - 1];
+      const ay = index === 0 ? dirY[0] : dirY[index - 1];
+      const bx = dirX[Math.min(index, count - 2)];
+      const by = dirY[Math.min(index, count - 2)];
+      const n0x = -ay;
+      const n0y = ax;
+      const n1x = -by;
+      const n1y = bx;
+      let nx = n0x + n1x;
+      let ny = n0y + n1y;
+      const nl = Math.hypot(nx, ny);
+      if (!(nl > 1e-4)) return [n0x, n0y];
+      nx /= nl;
+      ny /= nl;
+      const dot = nx * n0x + ny * n0y;
+      const scale = dot > 0.35 ? 1 / dot : 1 / 0.35;
+      return [nx * scale, ny * scale];
+    };
+    const edge = [];
+    for (let i = 0; i < count; i += 1) edge.push(miter(i));
+    for (let i = 0; i < count - 1; i += 1) {
+      const x0 = points[i * 2] * k;
+      const y0 = points[i * 2 + 1] * k;
+      const x1 = points[(i + 1) * 2] * k;
+      const y1 = points[(i + 1) * 2 + 1] * k;
+      if (x0 === x1 && y0 === y1) continue;
+      const n0 = edge[i];
+      const n1 = edge[i + 1];
+      const rk = r * k;
+      const half = Math.max(0, halfPx) * k;
+      const fade = Math.max(0, feather) * k;
+      const quad = [
+        [x0 + n0[0] * rk, y0 + n0[1] * rk, rk],
+        [x0 - n0[0] * rk, y0 - n0[1] * rk, -rk],
+        [x1 + n1[0] * rk, y1 + n1[1] * rk, rk],
+        [x1 - n1[0] * rk, y1 - n1[1] * rk, -rk],
+      ];
+      const tri = [0, 1, 2, 1, 3, 2];
+      for (let t = 0; t < tri.length; t += 1) {
+        const v = quad[tri[t]];
+        push(batch, v[0], v[1], 0, v[2], 0, half, fade, rgba, 1);
+      }
+    }
+  }
+
+  // Woscope-style beam. Each segment is its own rectangle and the glow overlaps
+  // on purpose. Drawn into the additive glow pass.
+  function nodeGraphGlLinesPhosphor(batch, points, sigma, rgba) {
+    if (!batch || !points || points.length < 4 || !(sigma > 0)) return;
+    const prev = batch._glow;
+    batch._glow = true;
+    const k = batch.scale || 1;
+    const sig = sigma * k;
+    const reach = sig * 4;
+    for (let i = 2; i < points.length; i += 2) {
+      let x0 = points[i - 2] * k;
+      let y0 = points[i - 1] * k;
+      let x1 = points[i] * k;
+      let y1 = points[i + 1] * k;
+      let dx = x1 - x0;
+      let dy = y1 - y0;
+      const len = Math.hypot(dx, dy);
+      if (!(len > 0)) continue;
+      const ux = dx / len;
+      const uy = dy / len;
+      const nx = -uy;
+      const ny = ux;
+      const corner = (along, across) => [
+        x0 + ux * along + nx * across,
+        y0 + uy * along + ny * across,
+        along,
+        across,
+      ];
+      const a = corner(-reach, -reach);
+      const b = corner(len + reach, -reach);
+      const c = corner(-reach, reach);
+      const d = corner(len + reach, reach);
+      for (const v of [a, b, c, b, d, c]) {
+        push(batch, v[0], v[1], v[2], v[3], len, sig, 0, rgba, 2);
+      }
+    }
+    batch._glow = prev;
   }
 
   /**
@@ -1136,7 +1314,7 @@ void main() {
       if (s.coverage) gl.uniform1f(s.coverage, max ? 1 : 0);
       gl.bindBuffer(gl.ARRAY_BUFFER, s.buf);
       gl.bufferData(gl.ARRAY_BUFFER, data.subarray(0, n), gl.STREAM_DRAW);
-      const sizes = [2, 2, 1, 1, 1, 4];
+      const sizes = [2, 2, 1, 1, 1, 1, 4];
       let off = 0;
       for (let i = 0; i < sizes.length; i += 1) {
         const loc = s.attribs[i];
@@ -1150,6 +1328,11 @@ void main() {
       for (const loc of s.attribs) if (loc >= 0) gl.disableVertexAttribArray(loc);
       if (max) gl.blendEquation(gl.FUNC_ADD);
     };
+    if (batch.gn > 0) {
+      gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE, gl.ONE, gl.ONE);
+      drawQuads(batch.gdata, batch.gn);
+      gl.blendFuncSeparate(gl.SRC_ALPHA, colourDst, gl.ONE, alphaDst);
+    }
     drawQuads(batch.data, batch.n);
     if (batch.outlines?.length) drawOutlines(batch);
     drawQuads(batch.over, batch.on);
@@ -1361,7 +1544,7 @@ void main() {
       const jx = (Number(jack.x) || 0) * k;
       const jy = (Number(jack.y) || 0) * k;
       const color = jack.rgba || rgba;
-      list.push({ x: jx, y: jy, r, rgba: color, inlet: jack.inlet === true });
+      list.push({ x: jx, y: jy, r: jack.square ? -r : r, rgba: color, inlet: jack.inlet === true });
     }
     batch.outlines.push({
       x: sx, y: sy, w: sw, h: sh, stroke: ss, rgba,
@@ -1448,6 +1631,275 @@ void main() {
     return true;
   }
 
+  // User fragment quad (emo script display {}). One program per source, an 8-frame
+  // ring for delayFrame(ago), and prev = the newest stored frame. Pictures are
+  // premultiplied RGBA, same as the 📺 wire.
+  const USER_SHADER_DELAY = 8;
+  const USER_SHADER_MAX = 512;
+  const userShaderReserved = new Set([
+    "uv", "time", "resolution", "prev", "rgbaIn", "rgbaLive", "out_color", "delayFrame", "delayFrameAt", "emoDelaySample", "vUv", "gl_FragColor",
+  ]);
+  for (let i = 0; i < USER_SHADER_DELAY; i += 1) userShaderReserved.add(`delay${i}`);
+  const userShaderNodes = new Map();
+  let userShaderBlack = null;
+  let userShaderQuad = null;
+
+  function userShaderSurface(gl, w, h) {
+    const texture = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, texture);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    const internal = gl.RGBA8 !== undefined ? gl.RGBA8 : gl.RGBA;
+    gl.texImage2D(gl.TEXTURE_2D, 0, internal, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+    const framebuffer = gl.createFramebuffer();
+    gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texture, 0);
+    const ok = gl.checkFramebufferStatus(gl.FRAMEBUFFER) === gl.FRAMEBUFFER_COMPLETE;
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    gl.bindTexture(gl.TEXTURE_2D, null);
+    if (!ok) {
+      gl.deleteFramebuffer(framebuffer);
+      gl.deleteTexture(texture);
+      return null;
+    }
+    return { texture, framebuffer, width: w, height: h };
+  }
+
+  function userShaderDropSurface(gl, surface) {
+    if (!surface) return;
+    gl.deleteFramebuffer(surface.framebuffer);
+    gl.deleteTexture(surface.texture);
+  }
+
+  function userShaderBlackTex(gl) {
+    if (userShaderBlack) return userShaderBlack;
+    const texture = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, texture);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([0, 0, 0, 0]));
+    gl.bindTexture(gl.TEXTURE_2D, null);
+    userShaderBlack = texture;
+    return texture;
+  }
+
+  function userShaderSource(userBody, floatNames) {
+    const names = [];
+    const seen = new Set();
+    for (const raw of floatNames || []) {
+      const name = String(raw || "");
+      if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name) || userShaderReserved.has(name) || seen.has(name)) continue;
+      seen.add(name);
+      names.push(name);
+    }
+    const header = [
+      "#version 300 es",
+      "precision highp float;",
+      "in vec2 vUv;",
+      "uniform vec2 resolution;",
+      "uniform float time;",
+      "uniform sampler2D prev;",
+      "uniform sampler2D rgbaIn;",
+      "uniform float rgbaLive;",
+    ];
+    for (let i = 0; i < USER_SHADER_DELAY; i += 1) header.push(`uniform sampler2D delay${i};`);
+    for (const name of names) header.push(`uniform float ${name};`);
+    header.push(
+      "out vec4 out_color;",
+      "vec4 emoDelaySample(int i, vec2 p) {",
+      "  if (i <= 0) return texture(delay0, p);",
+      "  if (i == 1) return texture(delay1, p);",
+      "  if (i == 2) return texture(delay2, p);",
+      "  if (i == 3) return texture(delay3, p);",
+      "  if (i == 4) return texture(delay4, p);",
+      "  if (i == 5) return texture(delay5, p);",
+      "  if (i == 6) return texture(delay6, p);",
+      "  return texture(delay7, p);",
+      "}",
+      "vec4 delayFrameAt(float ago, vec2 p) {",
+      "  float x = clamp(ago, 0.0, 7.0);",
+      "  int i = int(floor(x));",
+      "  vec4 a = emoDelaySample(i, p);",
+      "  vec4 b = emoDelaySample(min(i + 1, 7), p);",
+      "  return mix(a, b, fract(x));",
+      "}",
+      "vec4 delayFrame(float ago) {",
+      "  return delayFrameAt(ago, vUv);",
+      "}",
+      "void main() {",
+      "  vec2 uv = vUv;",
+      "  out_color = vec4(0.0, 0.0, 0.0, 1.0);",
+    );
+    const body = String(userBody || "");
+    const source = `${header.join("\n")}\n${body}\n}\n`;
+    return { source, names, headerLines: header.length };
+  }
+
+  function userShaderShiftLog(log, headerLines) {
+    return String(log || "").replace(/:(\d+):/g, (all, num) => {
+      const line = Number(num) - headerLines;
+      return line > 0 ? `:${line}:` : all;
+    });
+  }
+
+  /**
+   * Draw one user fragment into the face and the 📺 picture.
+   * userBody is the inside of main(): uv, time, resolution, prev, rgbaIn,
+   * rgbaLive, delayFrame(ago), and one float uniform per name in floatNames.
+   * advance stores this frame in the 8-frame ring (ago 0 = prev).
+   * @returns {{ok:boolean, error:string}}
+   */
+  function nodeGraphGlLinesUserShader(spec) {
+    const canvas = spec?.canvas;
+    const key = String(spec?.key || "");
+    const dev = typeof global.nodeGraphPictureDevice === "function" ? global.nodeGraphPictureDevice() : null;
+    const gl = dev?.gl;
+    if (!canvas || !gl || gl.isContextLost()) {
+      if (canvas && typeof nodeGraphGlLinesFillBlack === "function") nodeGraphGlLinesFillBlack(canvas);
+      return { ok: false, error: "WebGL2 picture device missing" };
+    }
+    const w = Math.max(1, Math.min(USER_SHADER_MAX, canvas.width | 0));
+    const h = Math.max(1, Math.min(USER_SHADER_MAX, canvas.height | 0));
+    let node = userShaderNodes.get(key);
+    if (!node || node.w !== w || node.h !== h || node.gl !== gl) {
+      if (node) {
+        for (const surface of node.ring) userShaderDropSurface(gl, surface);
+        userShaderDropSurface(gl, node.scratch);
+        if (node.program) gl.deleteProgram(node.program);
+      }
+      const ring = [];
+      for (let i = 0; i < USER_SHADER_DELAY; i += 1) {
+        const surface = userShaderSurface(gl, w, h);
+        if (!surface) {
+          if (typeof global.nodeGraphDisplayGlFailed === "function") {
+            global.nodeGraphDisplayGlFailed(canvas, "emo shader surface");
+          }
+          return { ok: false, error: "shader surface failed" };
+        }
+        ring.push(surface);
+      }
+      const scratch = userShaderSurface(gl, w, h);
+      if (!scratch) return { ok: false, error: "shader surface failed" };
+      node = { gl, w, h, ring, scratch, head: -1, program: null, source: "", locs: null, names: [] };
+      userShaderNodes.set(key, node);
+    }
+    const built = userShaderSource(spec.userBody, spec.floatNames);
+    if (node.source !== built.source) {
+      let program = null;
+      let error = "";
+      try {
+        const vs = compile(gl, gl.VERTEX_SHADER, `#version 300 es
+in vec2 aPos;
+out vec2 vUv;
+void main() {
+  vUv = aPos * 0.5 + 0.5;
+  gl_Position = vec4(aPos, 0.0, 1.0);
+}
+`);
+        const fs = compile(gl, gl.FRAGMENT_SHADER, built.source);
+        program = gl.createProgram();
+        gl.attachShader(program, vs);
+        gl.attachShader(program, fs);
+        gl.linkProgram(program);
+        gl.deleteShader(vs);
+        gl.deleteShader(fs);
+        if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+          error = userShaderShiftLog(gl.getProgramInfoLog(program) || "link failed", built.headerLines);
+          gl.deleteProgram(program);
+          program = null;
+        }
+      } catch (err) {
+        error = userShaderShiftLog(err?.message || String(err), built.headerLines);
+      }
+      if (!program) {
+        if (typeof global.nodeGraphDisplayGlFailed === "function") {
+          global.nodeGraphDisplayGlFailed(canvas, "emo shader", new Error(error));
+        }
+        nodeGraphGlLinesFillBlack(canvas);
+        return { ok: false, error: error || "shader failed" };
+      }
+      if (node.program) gl.deleteProgram(node.program);
+      const locs = {
+        aPos: gl.getAttribLocation(program, "aPos"),
+        resolution: gl.getUniformLocation(program, "resolution"),
+        time: gl.getUniformLocation(program, "time"),
+        rgbaLive: gl.getUniformLocation(program, "rgbaLive"),
+        prev: gl.getUniformLocation(program, "prev"),
+        rgbaIn: gl.getUniformLocation(program, "rgbaIn"),
+        delay: [],
+        floats: {},
+      };
+      for (let i = 0; i < USER_SHADER_DELAY; i += 1) locs.delay.push(gl.getUniformLocation(program, `delay${i}`));
+      for (const name of built.names) locs.floats[name] = gl.getUniformLocation(program, name);
+      node.program = program;
+      node.locs = locs;
+      node.names = built.names;
+      node.source = built.source;
+    }
+    if (!userShaderQuad) {
+      userShaderQuad = gl.createBuffer();
+      gl.bindBuffer(gl.ARRAY_BUFFER, userShaderQuad);
+      gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, -1, 1, 1, -1, 1, 1]), gl.STATIC_DRAW);
+      gl.bindBuffer(gl.ARRAY_BUFFER, null);
+    }
+    const black = userShaderBlackTex(gl);
+    const head = node.head;
+    const prevTex = head < 0 ? black : node.ring[head].texture;
+    const picture = spec.picture?.texture || black;
+    gl.bindFramebuffer(gl.FRAMEBUFFER, node.scratch.framebuffer);
+    gl.viewport(0, 0, w, h);
+    gl.disable(gl.SCISSOR_TEST);
+    gl.disable(gl.BLEND);
+    gl.useProgram(node.program);
+    gl.uniform2f(node.locs.resolution, w, h);
+    gl.uniform1f(node.locs.time, Number(spec.time) || 0);
+    gl.uniform1f(node.locs.rgbaLive, spec.picture?.texture ? 1 : 0);
+    const floats = spec.floats || {};
+    for (const name of node.names) {
+      const value = Number(floats[name]);
+      gl.uniform1f(node.locs.floats[name], Number.isFinite(value) ? value : 0);
+    }
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, prevTex);
+    gl.uniform1i(node.locs.prev, 0);
+    gl.activeTexture(gl.TEXTURE1);
+    gl.bindTexture(gl.TEXTURE_2D, picture);
+    gl.uniform1i(node.locs.rgbaIn, 1);
+    for (let i = 0; i < USER_SHADER_DELAY; i += 1) {
+      const slot = head < 0 ? black : node.ring[(head - i + USER_SHADER_DELAY) % USER_SHADER_DELAY].texture;
+      gl.activeTexture(gl.TEXTURE2 + i);
+      gl.bindTexture(gl.TEXTURE_2D, slot);
+      gl.uniform1i(node.locs.delay[i], 2 + i);
+    }
+    gl.bindBuffer(gl.ARRAY_BUFFER, userShaderQuad);
+    gl.enableVertexAttribArray(node.locs.aPos);
+    gl.vertexAttribPointer(node.locs.aPos, 2, gl.FLOAT, false, 0, 0);
+    gl.drawArrays(gl.TRIANGLES, 0, 6);
+    gl.disableVertexAttribArray(node.locs.aPos);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, null);
+    if (spec.advance !== false) {
+      const next = (head + 1 + USER_SHADER_DELAY) % USER_SHADER_DELAY;
+      const stored = node.ring[next];
+      node.ring[next] = node.scratch;
+      node.scratch = stored;
+      node.head = next;
+    }
+    const shown = node.head < 0 ? node.scratch.texture : node.ring[node.head].texture;
+    if (spec.publishNodeId && typeof global.nodeGraphPicturePublish === "function") {
+      global.nodeGraphPicturePublish(spec.publishNodeId, shown, w, h);
+    }
+    if (typeof global.nodeGraphPicturePresent === "function") {
+      global.nodeGraphPicturePresent(shown, w, h, canvas, canvas.width, canvas.height);
+    }
+    return { ok: true, error: "" };
+  }
+
   const api = {
     nodeGraphGlLinesFillBlack,
     nodeGraphGlLinesBegin,
@@ -1459,6 +1911,8 @@ void main() {
     nodeGraphGlLinesSegment,
     nodeGraphGlLinesDot,
     nodeGraphGlLinesPolyline,
+    nodeGraphGlLinesRibbon,
+    nodeGraphGlLinesPhosphor,
     nodeGraphGlLinesImage,
     nodeGraphGlLinesSnapshot,
     nodeGraphGlLinesReleaseSnapshot,
@@ -1471,6 +1925,7 @@ void main() {
     nodeGraphGlLinesCss,
     nodeGraphGlLinesHsl,
     nodeGraphGlLinesEnd,
+    nodeGraphGlLinesUserShader,
   };
   Object.assign(global, api);
   if (typeof module !== "undefined" && module.exports) module.exports = api;

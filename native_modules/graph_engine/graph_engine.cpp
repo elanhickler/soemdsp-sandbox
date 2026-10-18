@@ -1852,6 +1852,10 @@ extern "C" void soemdsp_speaker_protector2_sample(
 );
 extern "C" double soemdsp_speaker_protector2_gain(int handle);
 
+__attribute__((import_module("env"), import_name("emo_process_block")))
+void emo_process_block(unsigned int hash, int frames, float sr, int inN, int outN, int paramN,
+  float* inPack, float* outPack, float* paramPack);
+
 namespace {
 
 using soemdsp_maths::dsp_exp;
@@ -2111,6 +2115,7 @@ static const int kTypeFlanger = 179; // Short interpolating delay comb + LFO
 static const int kTypeChorus = 188; // Multi-voice delay + shared vibrato + filtered FB
 static const int kTypeEnsemble = 189; // Chorus topology + SoEm Reverb RW/FBM delay mod
 static const int kTypeCrossfade = 196; // Stereo pair crossfade (2/3/4 via stages)
+static const int kTypeScript = 220; // emo script: WASM process_block via env import
 
 static const int kPortMono = 0;
 static const int kPortLeft = 1;
@@ -4041,7 +4046,21 @@ static void init_node_defaults(Node& n, int typeId) {
   }
 }
 
+static Control* emo_slot(Node& n, int i) {
+  Control* slots[16] = {
+    &n.amplitude, &n.shape, &n.frequency, &n.waveform,
+    &n.resonance, &n.mode, &n.stages, &n.center,
+    &n.width, &n.mix, &n.offset, &n.level,
+    &n.feedback, &n.seed, &n.phaseParam, &n.pan,
+  };
+  if (i < 0 || i >= 16) return nullptr;
+  return slots[i];
+}
+
 static Control* control_for_param(Node& n, int paramId) {
+  if (n.typeId == kTypeScript && paramId >= 300 && paramId < 316) {
+    return emo_slot(n, paramId - 300);
+  }
   if (paramId == kParamVolumeDb) return &n.volumeDb;
   if (paramId == kParamPan) return &n.pan;
   if (paramId == kParamFrequency) return &n.frequency;
@@ -6023,6 +6042,40 @@ static void process_pitch_manager(Circuit& g, Node& node, int frames) {
   }
 }
 
+
+static float gEmoIn[6 * 128];
+static float gEmoOut[6 * 128];
+static float gEmoParam[16 * 128];
+
+static void process_script(Circuit& g, Node& node, int frames) {
+  int inN = node.nativeHandle & 255;
+  int outN = (node.nativeHandle >> 8) & 255;
+  int paramN = (node.nativeHandle >> 16) & 255;
+  if (inN < 0) inN = 0;
+  if (inN > 6) inN = 6;
+  if (outN < 0) outN = 0;
+  if (outN > 6) outN = 6;
+  if (paramN < 0) paramN = 0;
+  if (paramN > 16) paramN = 16;
+  if (frames > 128) frames = 128;
+  double tmp[128];
+  for (int i = 0; i < inN; i++) {
+    mix_live_port(g, node, i, frames, tmp);
+    for (int f = 0; f < frames; f++) gEmoIn[f * inN + i] = (float)tmp[f];
+  }
+  for (int f = 0; f < frames; f++) {
+    control_frame(g, node, f);
+    for (int p = 0; p < paramN; p++) {
+      Control* c = emo_slot(node, p);
+      gEmoParam[f * paramN + p] = c ? (float)control_audio(g, *c, f) : 0.0f;
+    }
+  }
+  const float sr = g.sampleRate > 1.0f ? g.sampleRate : 44100.0f;
+  emo_process_block(node.idHash, frames, sr, inN, outN, paramN, gEmoIn, gEmoOut, gEmoParam);
+  for (int i = 0; i < outN; i++) {
+    for (int f = 0; f < frames; f++) node.buf[6 + i][f] = gEmoOut[f * outN + i];
+  }
+}
 
 // Amp â†” dB: In is dB (mode 0) or linear amplitude (mode 1). 0 dB = 1.
 // dBToAmp: 10^(dB/20). ampToDb: 20Â·log10(amp); non-positive → −120.
@@ -14217,6 +14270,19 @@ extern "C" int soemdsp_graph_snap_param(int handle, unsigned int nodeHash, int p
 
 // double — Arp Keys / Scale bitmasks must survive host→Bias feeders (float32
 // only keeps exact ints through 2^24; middle-C is bit 36).
+extern "C" void soemdsp_graph_set_emo_counts(int handle, unsigned int hash, int inN, int outN, int paramN) {
+  Circuit* g = get(handle);
+  if (!g) return;
+  const int idx = find_node(*g, hash);
+  if (idx < 0) return;
+  Node& n = g->nodes[idx];
+  if (n.typeId != kTypeScript) return;
+  if (inN < 0) inN = 0;
+  if (outN < 0) outN = 0;
+  if (paramN < 0) paramN = 0;
+  n.nativeHandle = (inN & 255) | ((outN & 255) << 8) | ((paramN & 255) << 16);
+}
+
 extern "C" int soemdsp_graph_set_param(int handle, unsigned int nodeHash, int paramId, double value) {
   Circuit* g = get(handle);
   if (!g) return -1;
@@ -15609,6 +15675,10 @@ static void dispatch_process_node(Circuit& g, Node& node, int frames) {
       process_amp_db(g, node, frames);
       return;
     }
+    if (node.typeId == kTypeScript) {
+      process_script(g, node, frames);
+      return;
+    }
     if (node.typeId == kTypeInv) {
       process_inv(g, node, frames);
       return;
@@ -16045,5 +16115,5 @@ extern "C" int soemdsp_graph_version() {
   // 170: EQ Filter ZDF ƒ input (resolve_osc_hz)
   // 171: ƒ on Ladder/303/Mode/Cookbook/IIR/Papoulis/ZDF filters + soemdsp_graph_node_effective_hz
   // 174: live add/remove/connect/disconnect keep compiled and other nodes' native handles
-  return 176; // 176: control smoother Bessel (type 6). was 175: Softpop 2
+  return 177; // 177: emo script module (type 220). was 176: Bessel smoother
 }

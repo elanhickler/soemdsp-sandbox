@@ -1644,6 +1644,12 @@ const nodeGraphModuleStoreCatalog = Object.freeze({
     label: "Softpop 2",
     notes: ["softpop", "softpop2", "noise oscillator", "band noise", "sine", "crossfade", "blue", "violet", "gaussian", "pink", "brown", "seed", "reset", "stereo", "mono", "native"],
   },
+  script: {
+    category: "processor",
+    description: "Write a small emo script. It compiles to WASM and runs once per sample. in, out, and param become jacks and sliders.",
+    label: "Script",
+    notes: ["emo", "script", "wasm", "dsp", "decay"],
+  },
   softpopOscillator: {
     category: "oscillator",
     description: "Sine, Dithered Sine, Trisaw, Soft Square or Soft Tri with noise Pitch Mod. Morph shapes the source; Width makes far pitch excursions quieter like a bandpass.",

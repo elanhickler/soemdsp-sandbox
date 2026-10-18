@@ -1,0 +1,28 @@
+// emo script standard library. Compiled in front of every user script.
+// Names are prefixed so a user class called OnePole does not collide.
+
+class EmoOnePole {
+  float z;
+  float tick(float x, float k) {
+    z += k * (x - z);
+    return z;
+  }
+}
+
+class EmoDecay {
+  float t;
+  float step(float gate, float decay) {
+    t = gate > 0.5 ? 0.0 : t + dt;
+    return exp(-t / decay);
+  }
+}
+
+class EmoNoise {
+  int s;
+  float step() {
+    s = s * 1664525 + 1013904223;
+    float u = float(s) * (1.0 / 4294967296.0);
+    if (u < 0.0) u = 0.0;
+    return u * 2.0 - 1.0;
+  }
+}
