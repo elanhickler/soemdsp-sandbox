@@ -2,8 +2,9 @@
 // Ported from soundemote.dev preset-browser prototype / Sabrina Reverb face.
 // DOM control like the other parameter readouts; sizes come from the
 // existing readout CSS vars, so it scales with workspace zoom.
-//  +/−   : click 1, Ctrl 10, Ctrl+Shift 100, Ctrl+Alt+Shift 1000, Alt alone = random.
-//          Wraps modularly over min..max.
+//  +/−   : steps one character of the 4-character code.
+//          click = last, +1 modifier = 3rd, +2 = 2nd, +3 = 1st.
+//          Modifiers are Ctrl, Shift, and Alt. Alt alone = random.
 //  🎲    : random.
 //  number: drag 4px/step (right/up = up), step 1 on the stored integer
 //          (Shift/Ctrl/Alt still divide, min 1). Wheel does nothing to Seed.
@@ -38,11 +39,12 @@
     const { min, max } = bounds(slider);
     return min + Math.floor(Math.random() * (max - min + 1));
   }
-  function buttonStep(e) {
-    if (e.ctrlKey && e.shiftKey && e.altKey) return 1000;
-    if (e.ctrlKey && e.shiftKey) return 100;
-    if (e.ctrlKey) return 10;
-    return 1;
+  function modifierCount(e) {
+    return (e.ctrlKey ? 1 : 0) + (e.shiftKey ? 1 : 0) + (e.altKey ? 1 : 0);
+  }
+  // 0 modifiers → last character (index 3). Each extra modifier moves one place left.
+  function characterPlace(e) {
+    return Math.max(0, 3 - modifierCount(e));
   }
   function dragStep(_value, e) {
     let step = 1;
@@ -104,8 +106,8 @@
     label.classList.add("node-seed-control");
     label.append(
       makeButton("dice", "\u{1F3B2}", "Random seed"),
-      makeButton("plus", "+", "+1 (Ctrl 10, Ctrl+Shift 100, Ctrl+Alt+Shift 1000, Alt random). Wraps."),
-      makeButton("minus", "\u2212", "\u22121 (Ctrl 10, Ctrl+Shift 100, Ctrl+Alt+Shift 1000, Alt random). Wraps."),
+      makeButton("plus", "+", "Next last character. 1 modifier: 3rd. 2: 2nd. 3: 1st. Alt = random."),
+      makeButton("minus", "\u2212", "Previous last character. 1 modifier: 3rd. 2: 2nd. 3: 1st. Alt = random."),
     );
     let queued = false;
     const refit = () => {
@@ -165,8 +167,12 @@
         write(slider, randomIn(slider), false);
         return;
       }
-      const s = buttonStep(e) * (action === "minus" ? -1 : 1);
-      write(slider, wrap(current(slider) + s, min, max), false);
+      const place = characterPlace(e);
+      const dir = action === "minus" ? -1 : 1;
+      const next = typeof stepNodeGraphSeedCode === "function"
+        ? stepNodeGraphSeedCode(current(slider), place, dir)
+        : wrap(current(slider) + dir, min, max);
+      write(slider, wrap(next, min, max), false);
       return;
     }
     const now = performance.now();

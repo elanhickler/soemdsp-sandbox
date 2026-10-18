@@ -37,6 +37,20 @@
       + ALPHA[x & 63];
   }
 
+  // place 0 is the first character, 3 is the last. dir +1 / -1 walks the alphabet.
+  function stepNodeGraphSeedCode(n, place, dir) {
+    const code = formatNodeGraphSeedCode(n);
+    if (code.length !== 4) return u24(n);
+    const index = Math.max(0, Math.min(3, place | 0));
+    const delta = dir < 0 ? -1 : 1;
+    const chars = code.split("");
+    const at = ALPHA.indexOf(chars[index]);
+    if (at < 0) return u24(n);
+    chars[index] = ALPHA[(at + delta + ALPHA.length) % ALPHA.length];
+    const next = decodeNodeGraphSeedCode(chars.join(""));
+    return Number.isFinite(next) ? next : u24(n);
+  }
+
   function decodeNodeGraphSeedCode(text) {
     const s = String(text ?? "");
     if (s.length !== 4) return NaN;
@@ -60,14 +74,13 @@
     return parseInt(h, 16);
   }
 
-  // Code, decimal, or #hex. All-digit input is always decimal, so 4-digit
-  // codes are only reached by dice / +/− / drag. A leading "-" on a 4-char
-  // code is a code, not a negative integer.
+  // Typed text is always a 4-character seed code, including all-digit codes
+  // such as 1000. #rgb / #rrggbb is a color: the seed becomes that color.
+  // It is not a hex number entry. A leading "-" is a code character, not a minus.
   function parseNodeGraphSeedInput(text) {
     const s = String(text ?? "").trim().replace(/[, ]/g, "");
     if (!s) return NaN;
     if (s.charAt(0) === "#") return parseNodeGraphSeedHex(s);
-    if (/^[0-9]+$/.test(s)) return Number(s);
     if (s.length === 4) return decodeNodeGraphSeedCode(s);
     return NaN;
   }
@@ -81,6 +94,7 @@
     scrambleNodeGraphSeed: scramble,
     unscrambleNodeGraphSeed: unscramble,
     formatNodeGraphSeedCode,
+    stepNodeGraphSeedCode,
     decodeNodeGraphSeedCode,
     parseNodeGraphSeedHex,
     parseNodeGraphSeedInput,

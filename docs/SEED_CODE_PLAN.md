@@ -65,7 +65,7 @@ Open question for the implementer: confirm where the new seed widget with the di
 - No URL query parameter carrying a seed was found in `public/`.
 
 **Gaps for the implementer / Argi:** all resolved (2026-10-17); no open questions remain. The plan's original implementer question (where the widget lives, decimal seeds in patches/URLs) is answered above.
-- ~~**Decimal vs code ambiguity** (all-digit 4-character input).~~ **Resolved (Argi, 2026-10-17, revised):** the `~` prefix marks a code, `#` marks hex, bare digits are always decimal. Codes may contain `-` (`~-1AB`), so the parser reads the prefix first and never treats a code as a negative number.
+- ~~**Decimal vs code ambiguity** (all-digit 4-character input).~~ **Resolved (Argi, 2026-10-17, revised again):** typed text is always a 4-character code, including all-digit codes such as `1000`. No `~` prefix. `#rgb` / `#rrggbb` is a color, and the seed becomes that color. It is not hex number entry. Decimal entry is not supported. `-` is a code character.
 - ~~**+/− and drag on a scrambled display.**~~ **Resolved (Argi, 2026-10-17, decisions 5 and 6):** clicks and drag both step per character in code space.
 - ~~**Scramble constants.**~~ **Resolved (Argi, 2026-10-17, decision 7):** the implementer picks the odd multiplier + xor-shift (with inverse) once and freezes them forever; a round-trip test over all 2^24 values verifies them (plus the hex and decimal examples, `#0003E8` = 1000, `#3AC` = `#33AACC`).
 
@@ -73,4 +73,4 @@ Open question for the implementer: confirm where the new seed widget with the di
 - No JS DSP: complies. The helper is UI-only (display/input boundary); the engine and patches still get the integer.
 - Labels: the parameter keeps the full-word label **Seed**; the code is a value readout, not a label abbreviation (APP_POLICY §11 L406).
 - Stored values (§18 "A stored 0 is a value"): seed 0 must show its own code, never be replaced by a default.
-- No legacy shims (§1): none needed, since storage is unchanged; decimal input is a supported input form, not a compatibility path.
+- No legacy shims (§1): none needed, since storage is unchanged. Typed entry is the code. Decimal input is not supported.

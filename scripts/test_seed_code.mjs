@@ -26,25 +26,42 @@ const gate = (ok, msg) => {
 };
 
 gate(enc(1000) !== enc(1001), `neighbors scramble: ${enc(1000)} vs ${enc(1001)}`);
-gate(parse("#0003E8") === 1000, `#0003E8 = 1000 (got ${parse("#0003E8")})`);
-gate(parse("#3AC") === 0x33AACC, `#3AC = #33AACC (got ${parse("#3AC")})`);
-gate(parse("#3ac") === 0x33AACC, `#3ac case-insensitive`);
-gate(parse("1000") === 1000, `decimal 1000`);
-gate(parse("0042") === 42, `decimal 0042`);
+gate(parse("#3AC") === 0x33AACC, `color #3AC expands to #33AACC (got ${parse("#3AC")})`);
+gate(parse("#3ac") === 0x33AACC, `color #3ac case-insensitive`);
+gate(parse("#33AACC") === 0x33AACC, `color #33AACC is that color`);
+gate(Number.isNaN(parse("42")), `42 is not a seed code`);
+gate(Number.isNaN(parse("10000")), `10000 is not a seed code`);
 const code1000 = enc(1000);
 gate(code1000.length === 4, `code length 4 (${code1000})`);
 gate(parse(code1000) === 1000, `code ${code1000} → 1000`);
-gate(/^[0-9]{4}$/.test("1000"), "sanity");
-if (/^[0-9]{4}$/.test(code1000)) {
-  gate(parse(code1000) === Number(code1000), `all-digit code ${code1000} parses as decimal by rule`);
-} else {
-  gate(parse(code1000) === 1000, `non-digit code round-trips`);
-}
+gate(parse("1000") === dec("1000"), `code 1000 stays the code, not decimal 1000`);
+gate(enc(parse("1000")) === "1000", `code 1000 round-trips to itself`);
+gate(parse("1000") !== 1000, `code 1000 is not the integer 1000`);
 gate(parse("-1AB") === dec("-1AB") && Number.isFinite(parse("-1AB")), `-1AB is a code, not -1`);
 gate(parse("-1AB") !== -1, `-1AB is not decimal -1`);
 gate(enc(0).length === 4, `seed 0 has its own code ${enc(0)}`);
 gate(dec(enc(0)) === 0, `seed 0 round-trips through the code`);
 gate(enc(16777215).length === 4, `max seed codes`);
+const step = ctx.stepNodeGraphSeedCode;
+const alpha = ctx.NODE_GRAPH_SEED_ALPHA;
+function expectPlace(n, place, dir) {
+  const before = enc(n);
+  const after = enc(step(n, place, dir));
+  for (let i = 0; i < 4; i += 1) {
+    if (i === place) continue;
+    gate(after[i] === before[i], `place ${place} left char ${i} (${before} → ${after})`);
+  }
+  const from = alpha.indexOf(before[place]);
+  const to = alpha.indexOf(after[place]);
+  const want = (from + (dir < 0 ? -1 : 1) + alpha.length) % alpha.length;
+  gate(to === want, `place ${place} ${before} → ${after}, want index ${want} got ${to}`);
+}
+expectPlace(1000, 3, 1);
+expectPlace(1000, 3, -1);
+expectPlace(1000, 0, 1);
+expectPlace(1000, 2, -1);
+const wrapped = enc(step(dec(alpha[0] + alpha[0] + alpha[0] + alpha[alpha.length - 1]), 3, 1));
+gate(wrapped[3] === alpha[0], `last character wraps ${wrapped}`);
 
 let bad = 0;
 const img = new Uint8Array(MASK + 1);
