@@ -2185,8 +2185,37 @@ button.scw-label:hover,
   flex: 1 1 0;
   box-sizing: border-box;
   opacity: var(--node-music-player-pl-fade, 1);
-  /* Double-tap plays the row: no double-tap zoom / tap delay. */
-  touch-action: manipulation;
+  /* Touch on a row must not scroll or pinch-zoom the page. Double-tap is the gesture layer. */
+  touch-action: none;
+}
+
+/* PH-3: a gesture that starts on a control does not scroll or zoom the page.
+   Pinch-zoom on empty page chrome stays allowed (html/body are not set). */
+button,
+.node-parameter-control,
+.node-slider-readout,
+.node-seed-control,
+.node-seed-btn,
+.node-knob-face,
+.node-plugin-slider-face,
+.node-plugin-toggle-button,
+.node-plugin-button-shell,
+input[type="range"],
+.node-music-player-pl-row {
+  touch-action: none;
+}
+
+.node-touch-hover-tip {
+  position: fixed;
+  z-index: 80;
+  max-width: min(18rem, 80vw);
+  padding: 0.35rem 0.55rem;
+  border: 1px solid #333;
+  border-radius: 6px;
+  background: #141414;
+  color: #e8e8e8;
+  font: 500 0.8rem/1.35 "JetBrains Mono", ui-monospace, monospace;
+  pointer-events: none;
 }
 .node-music-player-pl-empty {
   flex: 1 1 auto;
@@ -11050,7 +11079,7 @@ body.node-graph-magnifying-active .node-graph-workspace * {
   white-space: nowrap;
   overflow: hidden;
   cursor: var(--node-dot-cursor);
-  touch-action: manipulation;
+  touch-action: none;
   aspect-ratio: 1 / 1;
 }
 

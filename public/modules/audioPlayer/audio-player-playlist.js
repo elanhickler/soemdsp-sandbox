@@ -2396,14 +2396,8 @@ function nodeGraphAudioPlayerPlaylistBindListResize(list, nodeId) {
     list.dataset.plViewStart = String(next);
     nodeGraphAudioPlayerPlaylistPaintSlots(nodeId, list, { followPlaying: false });
   }, { passive: false });
-  list.addEventListener("pointerdown", (event) => {
-    if (event.target.closest(".node-music-player-pl-row")) {
-      event.stopPropagation();
-    }
-  });
-  // Double-click and touch double-tap share one path. Mobile browsers often never fire
-  // dblclick, so two touch/pen taps on the same row within 350 ms count as one; the audio
-  // context is started inside that gesture (iOS/Android only allow it from a user gesture).
+  // Double-click and touch double-tap share one path. Touch timing is the shared
+  // gesture layer (phones often never fire dblclick). Audio starts inside that gesture.
   const activateRow = (event, row) => {
     event.preventDefault();
     event.stopPropagation();
@@ -2412,30 +2406,35 @@ function nodeGraphAudioPlayerPlaylistBindListResize(list, nodeId) {
       list.__playNextClickTimer = 0;
     }
     list.__rowActivatedAt = performance.now();
+    if (typeof nodeGraphTouchGestureUnlockAudio === "function") {
+      nodeGraphTouchGestureUnlockAudio();
+    }
     if (typeof nodeGraphAudioPlayerEnsureLiveOutput === "function") {
       void nodeGraphAudioPlayerEnsureLiveOutput();
     }
     nodeGraphAudioPlayerPlaylistActivateRow(nodeId, Number(row.dataset.playlistIndex), { play: true });
   };
   const justActivated = () => performance.now() - (list.__rowActivatedAt || -1e9) < 400;
-  list.addEventListener("pointerup", (event) => {
-    if (event.pointerType === "mouse") {
-      return;
-    }
+  list.addEventListener("pointerdown", (event) => {
     const row = event.target.closest(".node-music-player-pl-row");
-    if (!row || row.dataset.slot === "empty") {
-      list.__lastRowTap = null;
+    if (!row) {
       return;
     }
-    const now = performance.now();
-    const last = list.__lastRowTap;
-    const index = row.dataset.playlistIndex;
-    if (last && last.index === index && now - last.t <= 350) {
-      list.__lastRowTap = null;
+    event.stopPropagation();
+    if (row.dataset.slot === "empty") {
+      return;
+    }
+    if (typeof nodeGraphTouchGestureDown !== "function" || typeof nodeGraphTouchGestureIsTouch !== "function") {
+      return;
+    }
+    if (!nodeGraphTouchGestureIsTouch(event)) {
+      return;
+    }
+    const index = String(row.dataset.playlistIndex || "");
+    const gesture = nodeGraphTouchGestureDown(`playlist:${nodeId}:${index}`, event);
+    if (gesture.doubleTap) {
       activateRow(event, row);
-      return;
     }
-    list.__lastRowTap = { index, t: now };
   });
   list.addEventListener("click", (event) => {
     const row = event.target.closest(".node-music-player-pl-row");

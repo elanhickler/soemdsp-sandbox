@@ -1,3 +1,11 @@
+## 2026-10-18 - GPU workspace plan filed (docs only)
+
+- Filed `docs/GPU_WORKSPACE_PLAN.md` (Argi): workspace picture GPU-only; app menu, bars and floating windows stay HTML. It owns the camera: GB-6 = GW-2, defined only there; `docs/WEBGL_DISPLAY_PLAN.md` GB-6 and `docs/PHONE_AND_GPU_CAMERA_PLAN.md` now point at it (PH-6 and PH-5b still wait for GW-2). Added GW-7 (GL graph logs failure via `nodeGraphDisplayGlFailed`), seed-row PH-4 / GW-4 coordination, and Argi's Text Box decision: Text Box stays HTML, wires on two stacked canvases, per-box Behind wires / In front of wires, retire `nodeGraphGlGraphDrawTextBox`. Corrected stale `?glGraph=0` claims. APP_POLICY §16: displays WebGL2 only; Text Box is an editable-control exception. Planning only, not started, not committed.
+
+## 2026-10-18 - Phone gestures PH-1..PH-5
+
+- Shared pointer layer `public/node-graph-touch-gestures.js`: double-tap, 500 ms long hold, pinch, two-finger pan. Playlist double-tap uses it. Touch on a parameter double-taps to the default and long-holds into type-in. Seed double-tap still edits the code. First touch resumes the AudioContext through one call. Controls use `touch-action: none`; page pinch-zoom elsewhere stays. A floating tip shows hover text while the finger is down. GB-6 and PH-6 not started.
+
 ## 2026-10-18 - Phone + GPU camera plans merged (docs only)
 
 - Merged `docs/PHONE_COMPAT_PLAN.md` and GB-6 into `docs/PHONE_AND_GPU_CAMERA_PLAN.md` (one ordered tracker: PH-1..PH-5 and GB-6 in parallel, GB-6 before PH-6, PH-5b tooltip touch-up after GB-6, PH-7 last; file ownership; `nodeGraphMvp.pan` / `nodeGraphZoom` are the single camera API). `docs/WEBGL_DISPLAY_PLAN.md` GB-6 row now points there; GB-1 not-met note kept. Old file removed (was untracked). Not committed.
@@ -36,7 +44,7 @@
 
 ## 2026-10-16 - Circuit builder GL, cables and grid (GB-1)
 
-- Screen-space WebGL cables and grid (`public/node-graph-gl-graph.js`). Pan/zoom reprojects a cached polyline list. SVG wires and the CSS grid hide while it is on. Default on; `?glGraph=0` restores the old draw. Look is approximate.
+- Screen-space WebGL cables and grid (`public/node-graph-gl-graph.js`). Pan/zoom reprojects a cached polyline list. SVG wires and the CSS grid hide while it is on. Default on; `?glGraph=0` restores the old draw (2026-10-18: that switch no longer exists in code; the GL graph is always on). Look is approximate.
 
 ## 2026-10-16 - DAW plugin plan (docs only)
 

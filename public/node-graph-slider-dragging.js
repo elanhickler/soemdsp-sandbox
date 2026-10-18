@@ -1179,15 +1179,18 @@ function beginNodeSliderDrag(event) {
     return;
   }
 
-  // Double-click -> type-in edit, detected MANUALLY from pointerdown timing
-  // instead of relying on the native "dblclick" event -- pointerdown always
-  // fires, so this path can't be suppressed. The old `event.detail > 1`
-  // early-return is folded in here: either signal routes to the editor
-  // instead of a second drag. Face surfaces edit the linked Bias readout.
+  // Mouse double-click -> type-in edit, detected from pointerdown timing
+  // instead of the native "dblclick" event. Touch/pen uses the shared gesture
+  // layer: double-tap resets to default, long hold (500 ms) opens type-in.
   const lastDown = nodeGraphMvp.sliderLastPointerDown;
   const now = performance.now();
   const altClick = Boolean(event.altKey);
-  const isDoubleClick = !altClick && (
+  const touch = typeof nodeGraphTouchGestureIsTouch === "function" && nodeGraphTouchGestureIsTouch(event);
+  const touchKey = `slider:${surface.dataset.sliderTarget || ""}`;
+  const touchGesture = touch && typeof nodeGraphTouchGestureDown === "function"
+    ? nodeGraphTouchGestureDown(touchKey, event)
+    : { touch: false, doubleTap: false };
+  const isDoubleClick = !touch && !altClick && (
     event.detail > 1 ||
     (lastDown &&
       lastDown.surface === surface &&
@@ -1200,7 +1203,7 @@ function beginNodeSliderDrag(event) {
   const skipTypeIn = surface.classList.contains("node-plugin-slider-face")
     || surface.classList.contains("node-plugin-toggle-button")
     || surface.closest?.(".node-plugin-button-shell, .node-bug-button-face, .node-plugin-toggle-button");
-  if (isDoubleClick && skipTypeIn) {
+  if ((isDoubleClick || touchGesture.doubleTap) && skipTypeIn) {
     event.preventDefault();
     event.stopPropagation();
     return;
@@ -1210,6 +1213,18 @@ function beginNodeSliderDrag(event) {
     event.preventDefault();
     event.stopPropagation();
     beginNodeSliderSurfaceEdit(surface);
+    return;
+  }
+  if (touchGesture.doubleTap) {
+    nodeGraphMvp.sliderLastPointerDown = null;
+    event.preventDefault();
+    event.stopPropagation();
+    const resetSlider = document.getElementById(surface.dataset.sliderTarget);
+    const reset = nodeSliderCtrlClickDefaultValue(resetSlider);
+    if (resetSlider && Number.isFinite(reset)) {
+      setNodeSliderValue(resetSlider, reset, { interaction: "drag" });
+      commitNodeSliderDragValue(resetSlider, "parameter reset to default");
+    }
     return;
   }
   const slider = document.getElementById(surface.dataset.sliderTarget);
@@ -1267,7 +1282,21 @@ function beginNodeSliderDrag(event) {
     startDomain: nodeSliderDomainForTravel(slider),
     visualScale: knobMetrics ? 1 : nodeSliderElementVisualScale(surface),
     width: knobMetrics ? knobMetrics.travelWidth : lane.travelWidth,
+    touchKey: touch ? touchKey : "",
   };
+  if (touch && !skipTypeIn && typeof nodeGraphTouchGestureArmHold === "function") {
+    nodeGraphTouchGestureArmHold(touchKey, event, () => {
+      const drag = nodeGraphMvp.sliderDragging;
+      if (!drag || drag.surface !== surface || drag.touchMoved) {
+        return;
+      }
+      endNodeSliderDrag({ pointerId: drag.pointerId });
+      beginNodeSliderSurfaceEdit(surface);
+      if (typeof nodeGraphTooltipShowTouch === "function") {
+        nodeGraphTooltipShowTouch(surface, event);
+      }
+    });
+  }
   surface.classList.add("value-dragging");
   document.body.classList.add("node-slider-dragging");
   // soemdspPerformDragBegin
@@ -1315,6 +1344,9 @@ function dragNodeSlider(event) {
       : (Math.abs(event.clientX - drag.startX) > 1 || Math.abs(drag.startY - event.clientY) > 1)
   ) {
     drag.moved = true;
+  }
+  if (drag.touchKey && typeof nodeGraphTouchGestureMove === "function" && nodeGraphTouchGestureMove(drag.touchKey, event)) {
+    drag.touchMoved = true;
   }
 
   // Alt-click already snapped on pointerdown. Further motion (incl. alt-drag)

@@ -551,17 +551,17 @@ First consumers: Music Player, fbmField, Instant Waterfall compositor, RoundShap
 
 ---
 
-## 16. Workspace vs displays (soft preference)
+## 16. Workspace vs displays
 
 | Layer | Owns | Prefer not to |
 |-------|------|----------------|
 | **Workspace** | Module shells, ports, wires, pan/zoom camera, DOM chrome, Display Settings windows | Paint DSP/visual face content with CSS text hacks |
 | **Displays** | Face visual content (waveform, Instant Waterfall, FBM, curves, â€¦) | Drive workspace layout; fake face pixels with stretched HTML overlays |
 
-**Preference, not a hard ban:** use **WebGL for most visual faces** (waveforms, Instant Waterfall, fields, curves, knob graphics). Use **DOM where the job is real editable text** (Text Box / `contenteditable`) or chrome beside the face (playlist, transport, Display Settings).
+**Displays are WebGL2 only** (§3, hard rule; Argi, 2026-10-18). Every visual face (waveforms, Instant Waterfall, fields, curves, knob graphics) draws through the shared WebGL2 picture device. DOM is only for chrome beside the face (playlist, transport, Display Settings) and for editable controls (below). Any older wording here that called WebGL a preference is replaced by this rule.
 
 - Do **not** stretch face glyphs with CSS `transform: scale(sx, sy)` or non-uniform buffer/CSS aspect.
-- Do **not** force Text Box through WebGL (IME, caret, selection, a11y).
+- **Text Box stays HTML** (Argi, 2026-10-18). It is an editable control, not a display, so WebGL-only does not apply to it: typing, IME, caret, selection and a11y stay native. Do not draw its text in GL. Its stacking against cables comes from the GL workspace drawing wires on two stacked canvases (below and above the Text Box layer) and a per-box z-order setting **Behind wires** / **In front of wires** (`docs/GPU_WORKSPACE_PLAN.md` GW-4): a lower-z Text Box always draws behind wires, a higher-z one always in front, regardless of the separate, kept **Show on top** setting (wires drawn in front of modules). A GPU-drawn text box (or any GPU box) belongs to the emo Script module (`docs/SCRIPT_LANGUAGE_PLAN.md`), not to Text Box.
 - Migrating Canvas2D visual drawers toward WebGL is the direction; donâ€™t invent new HTML-as-bitmap hybrids for DSP faces.
 
 ---
@@ -601,7 +601,7 @@ First consumers: Music Player, fbmField, Instant Waterfall compositor, RoundShap
 | Publish tile-measured px vars onto shared face DOM | **No** (Â§15) |
 | Store layout fraction (inset / radius / pad) as CSS px | **No** â€” 0â€¦1 of face min-edge (Â§15) |
 | Stretch face text by widthâ‰ height | **No** â€” uniform min-edge only (Â§15) |
-| Stretch HTML as fake face pixels / force Text Box through WebGL | **No** â€” WebGL for most visuals; DOM for editable text (Â§16) |
+| Stretch HTML as fake face pixels / force Text Box through WebGL | **No**: displays are WebGL2 only; Text Box is the editable-control exception and stays HTML (§16) |
 | Dual `labelInsetPx` + `labelInset` for compatibility | **No** â€” one key, clean rename (Â§1 / Â§15) |
 | Wipe Control dirty-cache / re-push all knobs every `setParams` | **No** â€” stickiness (Â§0b); cold push only after compile/destroy |
 | Nested DSP coeff objects in instance pools that lose writes | **No** â€” flat fields on the instance; smoke â€œset once, process manyâ€ |
@@ -680,7 +680,7 @@ Add new rules here when the same class of mistake happens twice. Keep this file 
 - **2026-09-25 â€” Ink is authored px, scaled by face:** Strokes/HUD are CSS px at a 96 px reference min-edge, then `Ã— min(faceW,faceH)/96` at paint. Constant CSS px (ignore face size) made filter/EQ curves hairline when the display grew. Workspace zoom still must not be multiplied into `lineWidth`. No patch migration.
 - **2026-09-10 â€” Legacy display scrub:** Raster/Matrix chrome â†’ `edgeSpacing`/`cornerRadius` 0â€¦1 (no `screenPadding`/`rounding` %). Phosphor residual SSOT = `trail`/`ghost`/`burn`/`burnAmount` (no `decay` mirror, no burn-as-ghost). Dropped `sweepSeconds`, xyPad `scale`â†’puck, spectrogram overlap+1 shift. Yellow sidecar type/param aliases deleted. Display renderer id `"legacy"` â†’ `"layoutOwned"`. Dead module-frame gapped-SVG path deleted (workspace/faces stay layout **px**; displays/canvases stay **0â€¦1**).
 - **2026-09-10 â€” Paint never forces layout:** Music Player / fbmField / Instant Waterfall / curveÂ·shapeÂ·harmonic faces stop remasuring every RAF. Shared `display-face-metrics.js`; scope screen rects from layout cache + pan/zoom math (not gBCR per pan sample).
-- **2026-09-10 â€” Music Player play + HUD:** Finite-rewriter comma bug set `samplePhaseSeek = (â€¦+1, 1)` always `1` â€” seeks never bumped, Play looked dead. Fixed increment. HUD/canvas text: uniform min-edge font; buffer sized to canvas CSS box (no aspect stretch). Policy Â§16: workspace vs displays â€” WebGL preferred for visuals; DOM for Text Box / chrome (soft preference, not a hard ban).
+- **2026-09-10 â€” Music Player play + HUD:** Finite-rewriter comma bug set `samplePhaseSeek = (â€¦+1, 1)` always `1` â€” seeks never bumped, Play looked dead. Fixed increment. HUD/canvas text: uniform min-edge font; buffer sized to canvas CSS box (no aspect stretch). Policy Â§16: workspace vs displays â€” WebGL preferred for visuals; DOM for Text Box / chrome (soft preference, not a hard ban). *(Superseded 2026-10-18: displays WebGL2 only; Text Box is an editable-control exception, §16.)*
 
 ## Choice / enum persistence (name-based)
 

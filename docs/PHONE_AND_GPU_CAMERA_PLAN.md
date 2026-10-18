@@ -1,8 +1,10 @@
 # Phone and GPU Camera Plan
 
-Source: Argi, 2026-10-18 (phone scope by Webby for Argi, approved 2026-10-18; GB-6 approved by Argi 2026-10-18). Planning doc, not started.
+Source: Argi, 2026-10-18 (phone scope by Webby for Argi, approved 2026-10-18; GB-6 approved by Argi 2026-10-18). PH-1 through PH-5 are in the tree. GB-6, PH-6, PH-5b, and PH-7 are not started.
 
 Merges the former `docs/PHONE_COMPAT_PLAN.md` and GB-6 (true GPU camera) from `docs/WEBGL_DISPLAY_PLAN.md` section 11 into one plan, because phone workspace gestures (PH-6) and the camera move (GB-6) share the same camera.
+
+**2026-10-18 update:** GB-6 is now defined only in `docs/GPU_WORKSPACE_PLAN.md` as **GW-2**, which owns the workspace picture and camera. This plan keeps a dependency row for it, the camera-API rule, the ordering and PH-5b.
 
 ## Scope (Webby / Argi)
 
@@ -46,7 +48,7 @@ soemdsp-sandbox phone compatibility pass. Scope: make the sandbox itself work we
 
 ## Shared rule: one camera API
 
-`nodeGraphMvp.pan` / `nodeGraphZoom` are the single camera API. Phone gestures (PH-6), wheel zoom, and the GL graph all read and write the camera only through them. **Neither side changes their signatures.** GB-6 changes what the camera drives (a shader uniform and per-element HTML positions instead of CPU reprojection and a CSS transform), not how it is set.
+`nodeGraphMvp.pan` / `nodeGraphZoom` are the single camera API. Phone gestures (PH-6), wheel zoom, and the GL graph all read and write the camera only through them. **Neither side changes their signatures.** GB-6 / GW-2 (`docs/GPU_WORKSPACE_PLAN.md`) changes what the camera drives (a shader uniform and per-element HTML positions instead of CPU reprojection and a CSS transform), not how it is set.
 
 ## Order
 
@@ -60,25 +62,25 @@ soemdsp-sandbox phone compatibility pass. Scope: make the sandbox itself work we
 
 | ID | Milestone | Owner | Status |
 |----|-----------|-------|--------|
-| PH-1 | Shared touch-gesture layer: one module (pointer events) recognizing tap / double-tap / long-hold / pinch / two-finger pan, used by every module. Fold the Music Player double-tap (`audio-player-playlist.js` pointerup path + row `touch-action: manipulation`) into it and delete the local copy. | TBD | planned |
-| PH-2 | Audio unlock: the first touch resumes the AudioContext inside the gesture, through one shared call (not one per resume site). | TBD | planned |
-| PH-3 | `touch-action` on all controls so touching a control never scrolls or zooms the page. Page pinch-zoom elsewhere stays allowed, also in performance mode (Decision 3). | TBD | planned |
-| PH-4 | Parameter double-tap = reset to default (reuse the Ctrl/Cmd-click reset path, `nodeSliderCtrlClickDefaultValue`); long hold (500 ms) = text edit (reuse `beginNodeSliderReadoutEdit`). Seed rows differ (Decision 2): double-tap on the code = text entry, tap 🎲 = random, tap + / − = ±1. | TBD | planned |
-| PH-5 | Hover-only info (tooltips, readouts) shows while touching or on long hold (500 ms), via `node-graph-tooltips.js`. | TBD | planned |
-| GB-6 | **True GPU camera** (Argi approved 2026-10-18; moved here from `docs/WEBGL_DISPLAY_PLAN.md` section 11). Pan/zoom change only a camera uniform (view matrix) in the GL graph shaders; remove the per-camera-change CPU reprojection of cached geometry; remove the CSS `translate3d`/`scale` world-layer transform (`public/node-graph-viewport-perf.js` ~L43). Remaining HTML (text inputs, popups, special faces: graph, keypad, knob) is positioned per element from the camera. Hit-testing stays JS against module rectangles in world space. Camera state remains `nodeGraphMvp.pan` / `nodeGraphZoom`. Zoom 1.0 remains the source of truth. Acceptance: no CSS transform on world layers; pan/zoom causes no geometry rebuild; GB-5 timing re-measured. | TBD | planned |
+| PH-1 | Shared touch-gesture layer: one module (pointer events) recognizing tap / double-tap / long-hold / pinch / two-finger pan, used by every module. Fold the Music Player double-tap (`audio-player-playlist.js` pointerup path + row `touch-action: manipulation`) into it and delete the local copy. | | in tree (`node-graph-touch-gestures.js`; playlist uses it) |
+| PH-2 | Audio unlock: the first touch resumes the AudioContext inside the gesture, through one shared call (not one per resume site). | | in tree (`nodeGraphTouchGestureUnlockAudio` on touch pointerdown) |
+| PH-3 | `touch-action` on all controls so touching a control never scrolls or zooms the page. Page pinch-zoom elsewhere stays allowed, also in performance mode (Decision 3). | | in tree (`touch-action: none` on controls; html/body unchanged) |
+| PH-4 | Parameter double-tap = reset to default (reuse the Ctrl/Cmd-click reset path, `nodeSliderCtrlClickDefaultValue`); long hold (500 ms) = text edit (reuse `beginNodeSliderReadoutEdit`). Seed rows differ (Decision 2): double-tap on the code = text entry, tap 🎲 = random, tap + / − = ±1. | | in tree (slider drag + seed readout) |
+| PH-5 | Hover-only info (tooltips, readouts) shows while touching or on long hold (500 ms), via `node-graph-tooltips.js`. | | in tree (`.node-touch-hover-tip`; docked help still updates) |
+| GB-6 | Dependency: true GPU camera = **GW-2** in `docs/GPU_WORKSPACE_PLAN.md` (defined only there). Must land before PH-6 and PH-5b. | GW owner | planned |
 | PH-6 | Workspace touch on the PH-1 layer: keep one-finger pan on empty workspace; pinch zoom (finger distance change); add two-finger pan (both fingers moving together translate the view, distinct from pinch). Reuse/replace the existing touch pan and pinch code in `node-graph-workspace-view.js`, driving the existing `nodeGraphMvp.pan` / `nodeGraphZoom` functions after GB-6 lands (Decisions 4, 5; see Order). Zoom 1.0 stays the source of truth. | TBD | planned |
 | PH-5b | Tooltip touch-up after GB-6: PH-5 tooltip / hover-readout positioning switched to the GB-6 per-element camera positioning. | TBD | planned |
 | PH-7 | Device test pass (real phones, performance mode first) + a smoke test that drives synthetic pointer events through PH-1..PH-6, plus the GB-6 acceptance checks. | TBD | planned |
 
 ## File ownership
 
-- **GB-6:** the GL graph and viewport files: `public/node-graph-gl-graph.js`, `public/node-graph-viewport-perf.js`, the world-layer CSS in `public/styles.css`, and the HTML positioning for the remaining text inputs / popups / special faces.
+- **GB-6 / GW-2 and the rest of the workspace picture:** owned by `docs/GPU_WORKSPACE_PLAN.md` (GL graph, viewport, picture device, world-layer CSS, per-element HTML positioning; popups and floating windows are chrome and do not follow the camera).
 - **Phone (PH-1..PH-7):** the new shared gesture layer, the slider files (`public/node-graph-slider-dragging.js`, `public/node-graph-slider-readout-controls.js`, `public/node-graph-seed-control.js`), the tooltip file (`public/node-graph-tooltips.js`), `public/modules/audioPlayer/audio-player-playlist.js` (PH-1 fold-in), the audio resume call sites (PH-2) and the workspace touch handlers in `public/node-graph-workspace-view.js` / `public/node-graph-workspace-event-bindings.js` (PH-6).
-- Overlap points: `public/styles.css` (both sides; edit only your own rules) and the camera API (shared rule above).
+- Overlap points: `public/styles.css` (both sides; edit only your own rules), the camera API (shared rule above), and the seed row `public/node-graph-seed-control.js` (PH-4 touch gestures are in tree; GW-4 makes the seed row a transparent hit target over a GPU-painted face). Whoever edits the seed row second keeps the other side's behaviour and coordinates first.
 
 ## Coordination
 
 - **Interface, `docs/ENGINE_STATE_DISPLAY_PLAN.md`:** ES-1..ES-6 are committed (ES-5 UI handler audit and the stopped-faces GPU smoke `scripts/smoke_engine_state_stopped_faces.mjs`). PH-1 / PH-4 / PH-6 change the same UI handlers (slider drag, workspace drag); reuse that smoke harness, and APP_POLICY §3b rule 5 (UI never blocked by engine state) applies to touch too. ES-6's static guard flags new engine reads in UI files.
-- **`docs/WEBGL_DISPLAY_PLAN.md` section 11:** GB-1..GB-4 are in testing and on by default (`?glGraph=0` restores the old draw); GB-5 was measured 2026-10-16. Today the GL pass reprojects cached world geometry on the CPU on each camera change and the HTML world layers move by an inline CSS `translate3d(...) scale(zoom)`; GB-1's "pan/zoom only change a uniform" is completed by GB-6 here.
-- **Uncommitted edits by other agents (2026-10-18)** in files this plan touches: `public/modules/audioPlayer/audio-player-playlist.js`, `public/node-graph-gl-graph.js`, `public/node-graph-live-runtime.js`, `public/styles.css`. Coordinate before editing them.
-- Script language "Code page" is unaffected; the seed widget is touched only by PH-4's seed-row gestures (`public/node-graph-seed-control.js`).
+- **`docs/WEBGL_DISPLAY_PLAN.md` section 11:** GB-1..GB-4 are in testing and always on (the `?glGraph=0` switch no longer exists in code, checked 2026-10-18); GB-5 was measured 2026-10-16. Today the GL pass reprojects cached world geometry on the CPU on each camera change and the HTML world layers move by an inline CSS `translate3d(...) scale(zoom)`; GB-1's "pan/zoom only change a uniform" is completed by GB-6 = GW-2 in `docs/GPU_WORKSPACE_PLAN.md`.
+- Those files landed in `9f568d73`. Later touch-gesture edits are on top of that commit.
+- Script language "Code page" is unaffected; the seed widget is touched by PH-4's seed-row gestures and by GW-4 (`public/node-graph-seed-control.js`; see File ownership).

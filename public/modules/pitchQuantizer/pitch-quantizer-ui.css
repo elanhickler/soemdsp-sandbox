@@ -75,7 +75,7 @@
   overflow: hidden;
   text-overflow: clip;
   user-select: none;
-  touch-action: manipulation;
+  touch-action: none;
 }
 
 .node-pitch-quantizer-key-white {

@@ -2,9 +2,13 @@
 
 This file collects project-shaping ideas that should survive day-to-day implementation without becoming immediate scope.
 
+## GPU-only workspace picture (2026-10-18)
+
+Workspace picture is GPU-only; the app menu, top and bottom bars, and extra windows stay HTML. Owns the true GPU camera (GB-6 = GW-2). Text Box stays HTML (editable control), with wires on two stacked canvases and a per-box Behind wires / In front of wires setting. Status: planned, not started. Plan: `docs/GPU_WORKSPACE_PLAN.md`
+
 ## Phone compatibility + GPU camera (2026-10-18)
 
-Make the sandbox itself work on phones, mainly performance mode: one shared touch-gesture layer (double-tap, long hold, pinch, two-finger pan), audio unlock on first touch, no accidental scroll/zoom, double-tap reset and long-hold text edit on parameters, hover info on touch. Not a phone app; no soundemote.com special-casing. Merged with GB-6 (true GPU camera: pan/zoom as a shader uniform, no CSS world-layer transform), which lands before the workspace gestures. Planned. Plan: `docs/PHONE_AND_GPU_CAMERA_PLAN.md`
+Make the sandbox itself work on phones, mainly performance mode: one shared touch-gesture layer (double-tap, long hold, pinch, two-finger pan), audio unlock on first touch, no accidental scroll/zoom, double-tap reset and long-hold text edit on parameters, hover info on touch. Not a phone app; no soundemote.com special-casing. PH-1..PH-5 in tree. The GPU camera (GB-6) is now GW-2 in `docs/GPU_WORKSPACE_PLAN.md` and lands before the workspace gestures (PH-6). Plan: `docs/PHONE_AND_GPU_CAMERA_PLAN.md`
 
 ## Engine state and displays (2026-10-17)
 

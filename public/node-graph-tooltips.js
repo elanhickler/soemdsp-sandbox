@@ -214,3 +214,70 @@ async function loadNodeGraphTooltips() {
 }
 
 installSandboxNativeTooltipBan();
+
+// PH-5: hover text while a finger is down, and again on long hold.
+// The docked help bar is hidden in performance mode, so the tip is its own element.
+let nodeGraphTouchTipEl = null;
+let nodeGraphTouchTipTimer = 0;
+
+function nodeGraphTooltipShowTouch(target, event) {
+  const source = target instanceof Element ? target : event?.target;
+  if (!(source instanceof Element)) {
+    return;
+  }
+  const text = typeof nodeInteractionHelpText === "function"
+    ? nodeInteractionHelpText(source)
+    : (typeof nodeGraphElementTooltipText === "function" ? nodeGraphElementTooltipText(source) : "");
+  if (!text) {
+    return;
+  }
+  if (!nodeGraphTouchTipEl) {
+    nodeGraphTouchTipEl = document.createElement("div");
+    nodeGraphTouchTipEl.className = "node-touch-hover-tip";
+    nodeGraphTouchTipEl.setAttribute("role", "status");
+    document.body.appendChild(nodeGraphTouchTipEl);
+  }
+  nodeGraphTouchTipEl.textContent = text;
+  nodeGraphTouchTipEl.hidden = false;
+  const x = Number(event?.clientX);
+  const y = Number(event?.clientY);
+  if (Number.isFinite(x) && Number.isFinite(y)) {
+    nodeGraphTouchTipEl.style.left = `${Math.round(x + 12)}px`;
+    nodeGraphTouchTipEl.style.top = `${Math.round(Math.max(8, y - 36))}px`;
+  }
+  if (typeof setNodeInteractionHelp === "function") {
+    setNodeInteractionHelp(text);
+  }
+}
+
+function nodeGraphTooltipHideTouch() {
+  if (nodeGraphTouchTipEl) {
+    nodeGraphTouchTipEl.hidden = true;
+  }
+}
+
+document.addEventListener("pointerdown", (event) => {
+  if (typeof nodeGraphTouchGestureIsTouch !== "function" || !nodeGraphTouchGestureIsTouch(event)) {
+    return;
+  }
+  if (nodeGraphTouchTipTimer) {
+    window.clearTimeout(nodeGraphTouchTipTimer);
+    nodeGraphTouchTipTimer = 0;
+  }
+  nodeGraphTooltipShowTouch(event.target, event);
+}, true);
+
+document.addEventListener("pointerup", () => {
+  if (nodeGraphTouchTipTimer) {
+    window.clearTimeout(nodeGraphTouchTipTimer);
+  }
+  nodeGraphTouchTipTimer = window.setTimeout(nodeGraphTooltipHideTouch, 500);
+}, true);
+
+document.addEventListener("pointercancel", () => {
+  if (nodeGraphTouchTipTimer) {
+    window.clearTimeout(nodeGraphTouchTipTimer);
+    nodeGraphTouchTipTimer = 0;
+  }
+  nodeGraphTooltipHideTouch();
+}, true);

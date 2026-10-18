@@ -150,6 +150,7 @@ PUBLIC_SCRIPT_PATHS = (
     "./public/node-graph-graph-face-extras.js",
     "./public/node-graph-samples.js",
     "./public/modules/audioPlayer/audio-player-library.js",
+    "./public/node-graph-touch-gestures.js",
     "./public/modules/audioPlayer/audio-player-playlist.js",
     "./public/lib/visual/display-scale.js",
     "./public/lib/visual/display-face-metrics.js",

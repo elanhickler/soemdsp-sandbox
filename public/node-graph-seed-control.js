@@ -176,9 +176,12 @@
       return;
     }
     const now = performance.now();
-    const dbl = !e.altKey && !e.ctrlKey && lastDown && lastDown.readout === readout
+    const touch = typeof nodeGraphTouchGestureIsTouch === "function" && nodeGraphTouchGestureIsTouch(e);
+    const touchDbl = touch && typeof nodeGraphTouchGestureDown === "function"
+      && nodeGraphTouchGestureDown(`seed:${slider.id || "seed"}`, e).doubleTap;
+    const dbl = touchDbl || (!touch && !e.altKey && !e.ctrlKey && lastDown && lastDown.readout === readout
       && now - lastDown.time < 400
-      && Math.abs(e.clientX - lastDown.x) < 6 && Math.abs(e.clientY - lastDown.y) < 6;
+      && Math.abs(e.clientX - lastDown.x) < 6 && Math.abs(e.clientY - lastDown.y) < 6);
     lastDown = { readout, time: now, x: e.clientX, y: e.clientY };
     if (dbl) {
       lastDown = null;
