@@ -19,12 +19,6 @@ function applyNodeGraphZoom(options = {}) {
     // density-reduced faces bilinear-smoothed (soft) below that threshold.
     workspace.classList.toggle("pixelated-canvas-zoom", nodeGraphZoom() > 2.5);
   }
-  if (
-    typeof presentNodeGraphHitTrail === "function"
-    && (nodeGraphMvp?.marqueeSelection || nodeGraphMvp?.hitTrailKeptStrokes?.length)
-  ) {
-    presentNodeGraphHitTrail();
-  }
   // Workspace size CSS only when not mid-wheel (avoids layout thrash).
   if (options.layout !== false && typeof applyNodeGraphWorkspaceView === "function") {
     if (!options.gesture || options.forceLayout) {
@@ -156,12 +150,6 @@ function setNodeGraphZoom(nextZoom, anchor = null) {
       workspace.dataset.panX = String(pan.x);
       workspace.dataset.panY = String(pan.y);
     }
-  }
-  if (
-    typeof presentNodeGraphHitTrail === "function"
-    && (nodeGraphMvp?.marqueeSelection || nodeGraphMvp?.hitTrailKeptStrokes?.length)
-  ) {
-    presentNodeGraphHitTrail();
   }
   if (typeof syncNodeGraphWorkspaceResizeHandlePosition === "function") {
     syncNodeGraphWorkspaceResizeHandlePosition();

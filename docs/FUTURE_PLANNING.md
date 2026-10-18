@@ -2,9 +2,13 @@
 
 This file collects project-shaping ideas that should survive day-to-day implementation without becoming immediate scope.
 
+## Mini performance view (2026-10-18)
+
+Live, uniformly scaled copy of the F performance screen inside the circuit builder, turned on from a new Command Center page (Mini Performance View, Shift+F). GPU mirror of the pinned faces; faces stay in their modules; settings are UI preferences. Plan: `docs/MINI_PERFORM_VIEW_PLAN.md` (MP-1..MP-9, owner TBD, ready to implement).
+
 ## Pencil page (2026-10-18)
 
-Command Center Pencil page: a mini drawing program for hand-drawn notes on patches. WebGL2 strokes; layers with Workspace / Screen / Module anchors and Behind / In front of modules; saved in the patch as `drawings`. The mouse smoothing slider moves there from the top bar. Plan: `docs/PENCIL_PAGE_PLAN.md` (PE-1..PE-8, owner TBD, open questions).
+Command Center Pencil page: a mini drawing program for hand-drawn notes on patches. WebGL2 strokes; layers with Workspace / Screen / Module anchors and Behind / In front of modules; saved in the patch as `drawings`. The mouse smoothing slider stays in the top bar. Plan: `docs/PENCIL_PAGE_PLAN.md` (Round 1 done, pushed `3277ddc5`; PE-1..PE-9, owner TBD, open questions).
 
 ## Patch migration purge (2026-10-18)
 

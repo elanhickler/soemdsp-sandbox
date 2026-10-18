@@ -74,21 +74,40 @@ void main() {
   vec2 pos = position;
   float capsOut = caps;
   vec2 localOut = local;
-  if (uPixel > 0.5 && caps > 3.75) {
-    float reach = halfPx + feather;
+  float halfOut = halfPx;
+  // Camera: halfPx is zoom-1 world px, feather is screen px. Reach uses the
+  // live zoom so a retained mesh does not pulse when the camera changes.
+  if (uPixel > 0.5 && caps > 5.5 && caps < 9.5) {
     float z = max(uCam.z, 0.0001);
+    float aaWorld = 1.5 / z;
+    float reach = halfPx + aaWorld;
+    float alongSign = ((caps > 6.5 && caps < 7.5) || caps > 8.5) ? 1.0 : -1.0;
+    float acrossSign = caps > 7.5 ? 1.0 : -1.0;
+    vec2 tangent = local;
+    float tl = length(tangent);
+    if (tl > 0.0001) tangent /= tl;
+    vec2 normal = vec2(-tangent.y, tangent.x);
+    pos = position + (tangent * alongSign + normal * acrossSign) * reach;
+    // segLen = arc at the end + alongSign * halfPx. Add the AA pad on top.
+    localOut = vec2(segLen + alongSign * aaWorld, acrossSign * reach);
+    capsOut = 6.0;
+  } else if (uPixel > 0.5 && caps > 3.75) {
+    float z = max(uCam.z, 0.0001);
+    float reach = halfPx * z + feather;
     pos = position + local * (reach / z);
     localOut = local * reach;
+    halfOut = halfPx * z;
     capsOut = 0.0;
   } else if (uPixel > 0.5 && caps > 2.5) {
     float side = caps > 3.25 ? -1.0 : 1.0;
     vec2 n = local;
     float nl = length(n);
     if (nl > 0.0001) n /= nl;
-    float reach = halfPx + feather;
     float z = max(uCam.z, 0.0001);
+    float reach = halfPx * z + feather;
     pos = position + n * side * (reach / z);
     localOut = vec2(0.0, side * reach);
+    halfOut = halfPx * z;
     capsOut = 1.0;
   }
   if (uPixel > 0.5) {
@@ -100,7 +119,7 @@ void main() {
   }
   vLocal = localOut;
   vLen = segLen;
-  vHalf = halfPx;
+  vHalf = halfOut;
   vFeather = feather;
   vCaps = capsOut;
   vColour = colour;
@@ -119,11 +138,38 @@ varying float vFeather;
 varying float vCaps;
 varying vec4 vColour;
 uniform float uCoverage;
+uniform vec3 uCam;
+uniform vec2 uDash;
 void main() {
   float u = vLocal.x;
   float across = abs(vLocal.y);
   float a;
-  if (vCaps > 1.5) {
+  if (vCaps > 5.5 && vCaps < 6.5) {
+    // One stadium per dash. Arc length is zoom-1 px, so the pattern stays
+    // put while the camera moves. Caps and the body share this coverage.
+    float z = max(uCam.z, 0.0001);
+    float arc = vLocal.x;
+    float gap = abs(vLocal.y);
+    float total = max(vFeather, 0.0);
+    float on = max(uDash.x, 0.5);
+    float period = max(on + max(uDash.y, 0.0), 1e-3);
+    float k = floor(arc / period);
+    float best = 1e4;
+    for (int s = -1; s <= 1; s += 1) {
+      float dash0 = (k + float(s)) * period;
+      float dash1 = dash0 + on;
+      float c0 = max(dash0, 0.0);
+      float c1 = min(dash1, total);
+      if (c1 > c0) {
+        float along = arc < c0 ? c0 - arc : (arc > c1 ? arc - c1 : 0.0);
+        best = min(best, along);
+      }
+    }
+    float dScreen = length(vec2(best, gap)) * z;
+    float halfScreen = max(vHalf, 0.0) * z;
+    float fw = max(fwidth(dScreen), 0.6);
+    a = 1.0 - smoothstep(halfScreen, halfScreen + fw, dScreen);
+  } else if (vCaps > 1.5) {
     // Phosphor beam. erf integrates the gaussian along the segment so
     // overlapping ends add to one continuous brightness.
     float sigma = max(vHalf, 1e-3);
@@ -234,14 +280,14 @@ void main() {
   let state = null;
   let failedGl = null;
 
-  function compile(gl, type, source) {
+  function compile(gl, type, source, label) {
     const shader = gl.createShader(type);
     gl.shaderSource(shader, source);
     gl.compileShader(shader);
     if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
       const log = gl.getShaderInfoLog(shader) || "compile failed";
       gl.deleteShader(shader);
-      throw new Error(log);
+      throw new Error(label ? label + " compile: " + log : log);
     }
     return shader;
   }
@@ -299,11 +345,12 @@ void main() {
   // Cut each jack inward. A disk centered on the wall removes the inside
   // semicircle; the outside half stays outside the rectangle.
   float sd = sdRect;
-  // uStroke is the full band, drawn only outside the plate. Zoom 1 is 1px.
+  // uStroke is the full band in zoom-1 px. The camera scales it. fwidth keeps
+  // the jack fringe one screen pixel at whatever zoom is current.
   float strokeW = max(uStroke, 0.0);
-  // Inlet arc is half that band. The 2px cable fade stays on the straight edge.
   float halfRing = max(strokeW * 0.5, 0.5);
   float nearest = halfRing + 2.0;
+  float edgeAa = max(fwidth(sdRect), 1e-4);
   vec4 strokeCol = uPlateColor;
   float inletA = 0.0;
   float inMouth = 0.0;
@@ -318,16 +365,17 @@ void main() {
       ? max(abs(vPx.x - jack.x), abs(vPx.y - jack.y)) - radius
       : length(vPx - jack) - radius;
     sd = max(sd, -d);
-    float ring = 1.0 - smoothstep(halfRing - 0.65, halfRing + 0.65, abs(d));
+    float aa = max(fwidth(d), edgeAa);
+    float ring = 1.0 - smoothstep(halfRing - aa, halfRing + aa, abs(d));
     if (sdRect <= 0.85 && ring > arc) {
       nearest = abs(d);
       strokeCol = vec4(uJackColor[i].rgb, uPlateColor.a);
       arc = ring;
     }
-    inMouth = max(inMouth, 1.0 - smoothstep(0.0, 1.0, d));
+    inMouth = max(inMouth, 1.0 - smoothstep(-aa, aa, d));
     // Socket fill: the hole, off the ring, with a straight cut in from the wall.
     if (uJack[i].w > 0.5 && radius > 0.0 && sdRect <= 0.75) {
-      float hole = 1.0 - smoothstep(-halfRing - 0.2, -halfRing + 0.85, d);
+      float hole = 1.0 - smoothstep(-halfRing - aa, -halfRing + aa, d);
       float dl = jack.x - plateMin.x;
       float dr = plateMax.x - jack.x;
       float dt = jack.y - plateMin.y;
@@ -336,7 +384,7 @@ void main() {
       if (dr <= dl && dr <= dt && dr <= db) inward = vec2(-1.0, 0.0);
       else if (dt <= dl && dt <= dr && dt <= db) inward = vec2(0.0, 1.0);
       else if (db <= dl && db <= dr && db <= dt) inward = vec2(0.0, -1.0);
-      float cut = smoothstep(uInletGap - 0.65, uInletGap + 0.65, dot(vPx - jack, inward));
+      float cut = smoothstep(uInletGap - aa, uInletGap + aa, dot(vPx - jack, inward));
       inletA = max(inletA, hole * cut);
     }
   }
@@ -354,9 +402,24 @@ void main() {
   gl_FragColor = vec4(rgb, a);
 }
 `;
-  function link(gl, vs, fs) {
-    const v = compile(gl, gl.VERTEX_SHADER, vs);
-    const f = compile(gl, gl.FRAGMENT_SHADER, fs);
+  // The shared context is WebGL2, where GLSL 1.00 has no derivatives
+  // (OES_standard_derivatives is a WebGL1 extension). Shaders that use fwidth
+  // are written in 1.00 style and lifted to 300 es here, where it is built in.
+  function es3(source, stage) {
+    let out = String(source).replace(/^\s*#extension[^\n]*\n/gm, "");
+    out = out.replace(/\battribute\b/g, "in");
+    out = out.replace(/\bvarying\b/g, stage === "fs" ? "in" : "out");
+    if (stage === "fs") {
+      out = out.replace(/\btexture2D\b/g, "texture").replace(/\bgl_FragColor\b/g, "fragColor");
+      out = out.replace(/(precision \w+ float;\s*(?:#endif\s*)?)/, "$1out vec4 fragColor;\n");
+    }
+    return "#version 300 es\n" + out.replace(/^\s+/, "");
+  }
+
+  function link(gl, vs, fs, opts) {
+    const v3 = !!opts?.es3;
+    const v = compile(gl, gl.VERTEX_SHADER, v3 ? es3(vs, "vs") : vs, "vertex");
+    const f = compile(gl, gl.FRAGMENT_SHADER, v3 ? es3(fs, "fs") : fs, "fragment");
     const program = gl.createProgram();
     gl.attachShader(program, v);
     gl.attachShader(program, f);
@@ -364,7 +427,9 @@ void main() {
     gl.deleteShader(v);
     gl.deleteShader(f);
     if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
-      throw new Error(gl.getProgramInfoLog(program) || "link failed");
+      const log = gl.getProgramInfoLog(program) || "link failed";
+      gl.deleteProgram(program);
+      throw new Error("link: " + log);
     }
     return program;
   }
@@ -376,9 +441,9 @@ void main() {
     if (state && state.gl === gl) return state;
     if (failedGl === gl) return null;
     try {
-      const program = link(gl, VS, FS);
+      const program = link(gl, VS, FS, { es3: true });
       const imgProgram = link(gl, IMG_VS, IMG_FS);
-      const outProgram = link(gl, OUT_VS, OUT_FS);
+      const outProgram = link(gl, OUT_VS, OUT_FS, { es3: true });
       const veilProgram = link(gl, OUT_VS, VEIL_FS);
       state = {
         gl,
@@ -416,6 +481,7 @@ void main() {
         camCam: gl.getUniformLocation(program, "uCam"),
         camVp: gl.getUniformLocation(program, "uVp"),
         camDevice: gl.getUniformLocation(program, "uDevice"),
+        lineDash: gl.getUniformLocation(program, "uDash"),
         imgProgram,
         imgBuf: gl.createBuffer(),
         imgTex: gl.createTexture(),
@@ -440,7 +506,8 @@ void main() {
     } catch (error) {
       failedGl = gl;
       state = null;
-      console.error("[gl-line-renderer] shader failed; faces show black", error);
+      // Error fields are not enumerable; log the info-log text itself.
+      console.error("[gl-line-renderer] shader failed; faces show black: " + String(error?.message || error));
       return null;
     }
   }
@@ -767,6 +834,53 @@ void main() {
         const v = quad[tri[t]];
         push(batch, v[0], v[1], 0, v[2], 0, half, fade, rgba, 1);
       }
+    }
+  }
+
+  // Dashed round stroke. One quad per segment; the fragment shader cuts the
+  // dashes and their round caps from arc length. halfWorld is zoom-1 px.
+  // on/off are zoom-1 px along the curve. Zoom only changes uCam.
+  function nodeGraphGlLinesDash(batch, points, halfWorld, on, off, rgba) {
+    if (!batch || !points || points.length < 4) return;
+    const half = Math.max(0.25, Number(halfWorld) || 0);
+    const count = points.length / 2;
+    const arc = new Float32Array(count);
+    const dirX = new Float32Array(Math.max(1, count - 1));
+    const dirY = new Float32Array(Math.max(1, count - 1));
+    for (let i = 0; i < count - 1; i += 1) {
+      const dx = points[(i + 1) * 2] - points[i * 2];
+      const dy = points[(i + 1) * 2 + 1] - points[i * 2 + 1];
+      const len = Math.hypot(dx, dy);
+      arc[i + 1] = arc[i] + (len > 0 ? len : 0);
+      if (len > 1e-6) {
+        dirX[i] = dx / len;
+        dirY[i] = dy / len;
+      } else {
+        dirX[i] = i > 0 ? dirX[i - 1] : 1;
+        dirY[i] = i > 0 ? dirY[i - 1] : 0;
+      }
+    }
+    const total = arc[count - 1];
+    if (!(total > 0)) return;
+    batch.dashOn = Math.max(0.5, Number(on) || 0);
+    batch.dashOff = Math.max(0, Number(off) || 0);
+    for (let i = 0; i < count - 1; i += 1) {
+      if (!(arc[i + 1] > arc[i])) continue;
+      const x0 = points[i * 2];
+      const y0 = points[i * 2 + 1];
+      const x1 = points[(i + 1) * 2];
+      const y1 = points[(i + 1) * 2 + 1];
+      const tx = dirX[i];
+      const ty = dirY[i];
+      const s0 = arc[i] - half;
+      const s1 = arc[i + 1] + half;
+      const vert = (x, y, arcBase, capsId) => push(batch, x, y, tx, ty, arcBase, half, total, rgba, capsId);
+      vert(x0, y0, s0, 6);
+      vert(x0, y0, s0, 8);
+      vert(x1, y1, s1, 7);
+      vert(x0, y0, s0, 8);
+      vert(x1, y1, s1, 9);
+      vert(x1, y1, s1, 7);
     }
   }
 
@@ -1439,6 +1553,7 @@ void main() {
       gl.blendFuncSeparate(max ? gl.ONE : gl.SRC_ALPHA, max ? gl.ONE : colourDst, gl.ONE, max ? gl.ONE : alphaDst);
       gl.useProgram(s.program);
       bindCam(gl, lineCamLocs(s), batch);
+      if (s.lineDash) gl.uniform2f(s.lineDash, batch.dashOn || 0, batch.dashOff || 0);
       if (s.coverage) gl.uniform1f(s.coverage, max ? 1 : 0);
       gl.bindBuffer(gl.ARRAY_BUFFER, s.buf);
       gl.bufferData(gl.ARRAY_BUFFER, data.subarray(0, n), gl.STREAM_DRAW);
@@ -2049,6 +2164,7 @@ void main() {
     nodeGraphGlLinesDot,
     nodeGraphGlLinesPolyline,
     nodeGraphGlLinesRibbon,
+    nodeGraphGlLinesDash,
     nodeGraphGlLinesPhosphor,
     nodeGraphGlLinesImage,
     nodeGraphGlLinesSnapshot,

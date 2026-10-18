@@ -1,6 +1,10 @@
+## 2026-10-18 - Mini performance view plan (docs only)
+
+- Added `docs/MINI_PERFORM_VIEW_PLAN.md` (Argi; planned, ready to implement, owner TBD): a live scaled copy of the F performance screen inside the circuit builder, turned on from a new Command Center page (Mini Performance View, Shift+F). GPU mirror of the pinned faces (no reparenting), WebGL2 only, uniform scale of the zoom-1 perform layout, read-only to the patch and transport. Tracker MP-1..MP-9 (MP-9 optional library edit needs Argi OK); pointer in `docs/FUTURE_PLANNING.md`. Not committed.
+
 ## 2026-10-18 - Pencil page plan (docs only)
 
-- Added `docs/PENCIL_PAGE_PLAN.md` (Argi; planned, owner TBD): new Command Center Pencil page for hand-drawn notes on patches. Strokes are WebGL2 through gl-line-renderer, layers have Workspace / Screen / Module anchors and Behind / In front of modules, and drawings are saved in the patch as `drawings`. The mouse smoothing slider moves there from the top bar. Tracker PE-1..PE-8 and open questions; pointer in `docs/FUTURE_PLANNING.md`. Not committed.
+- Added `docs/PENCIL_PAGE_PLAN.md` (Argi; planned, owner TBD): new Command Center Pencil page for hand-drawn notes on patches. Strokes are WebGL2 through gl-line-renderer, layers have Workspace / Screen / Module anchors and Behind / In front of modules, and drawings are saved in the patch as `drawings`. The mouse smoothing slider stays in the top bar. Round 1 done (pushed `3277ddc5`); tracker PE-1..PE-9 and open questions; pointer in `docs/FUTURE_PLANNING.md`. Not committed.
 
 ## 2026-10-18 - Patch migration purge plan + docs archive (docs only)
 

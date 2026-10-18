@@ -1208,6 +1208,7 @@ function nodeGraphGlGraphPresent() {
     && mesh.w === canvas.width && mesh.h === canvas.height) {
     for (let i = 0; i < mesh.batches.length; i += 1) {
       const held = mesh.batches[i];
+      if (!held) continue;
       held.camera = frameCamera;
       nodeGraphGlLinesEnd(held, held._blend || "alpha");
     }
@@ -1241,11 +1242,11 @@ function nodeGraphGlGraphPresent() {
     nodeGraphGlGraphState.dotSize = dotSize;
     nodeGraphGlGraphState.traceThick = Number.parseFloat(style.getPropertyValue("--node-trace-wire-thickness")) || 1;
   }
-  // Zoom-1 core is 2px and scales. The cable fade stays 2 CSS pixels.
-  // Traces are a hard 2px stroke that scales, with no fade.
-  const halfPx = Math.max(0, thick * 0.5) * zoom;
-  const traceHalf = zoom;
-  const dotR = Math.max(0, dotSize * 0.5) * zoom;
+  // Widths are zoom-1 px. The line shader scales them by the live camera,
+  // and the cable fade stays 2 screen px. Traces are a 2px stroke that scales.
+  const halfWorld = Math.max(0, thick * 0.5);
+  const traceHalf = 1;
+  const dotWorld = Math.max(0, dotSize * 0.5);
   const wireFeather = 2;
   const screenX = (x) => (x - cam.x) * zoom;
   const screenY = (y) => (y - cam.y) * zoom;
@@ -1291,8 +1292,8 @@ function nodeGraphGlGraphPresent() {
     }
     if (!visible) continue;
     const style = wire.style === "trace" ? "trace" : "ribbon";
-    let stroke = style === "trace" ? traceHalf : halfPx;
-    let feather = style === "trace" ? 0 : wireFeather;
+    let strokeWorld = style === "trace" ? traceHalf : halfWorld;
+    const feather = style === "trace" ? 0 : wireFeather;
     let rgba = wire.rgba;
     let picked = false;
     if (wire.kind && wire.index >= 0 && typeof nodeGraphSelectedWireEntries === "function") {
@@ -1301,9 +1302,10 @@ function nodeGraphGlGraphPresent() {
       );
       if (picked) {
         rgba = [0.95, 0.86, 0.45, 1];
-        stroke = style === "trace" ? traceHalf + 0.5 * zoom : halfPx + 0.8 * zoom;
+        strokeWorld += style === "trace" ? 0.5 : 0.8;
       }
     }
+    const stroke = frameCamera ? strokeWorld : strokeWorld * zoom;
     const pts = frameCamera ? src : screen.subarray(0, src.length);
     if (style === "trace") {
       nodeGraphGlLinesPolyline(wireBatch, pts, stroke, feather, rgba, "ortho");
@@ -1320,13 +1322,13 @@ function nodeGraphGlGraphPresent() {
       const dy = screenY(dot.y);
       const dotX = frameCamera ? dot.x : dx;
       const dotY = frameCamera ? dot.y : dy;
-      if (dx < -dotR || dy < -dotR || dx > cssW + dotR || dy > cssH + dotR) continue;
+      const dotReach = frameCamera ? dotWorld : dotWorld * zoom;
+      if (dx < -dotReach || dy < -dotReach || dx > cssW + dotReach || dy > cssH + dotReach) continue;
       const dotColor = picked ? selectedRgba : dot.rgba;
       if (dot.square) {
-        const r = frameCamera ? dotSize * 0.5 : dotR;
-        nodeGraphGlLinesRect(contactBatch, dotX - r, dotY - r, r * 2, r * 2, dotColor);
+        nodeGraphGlLinesRect(contactBatch, dotX - dotReach, dotY - dotReach, dotReach * 2, dotReach * 2, dotColor);
       } else {
-        nodeGraphGlLinesDot(contactBatch, dotX, dotY, frameCamera ? dotR : dotR, wireFeather, dotColor);
+        nodeGraphGlLinesDot(contactBatch, dotX, dotY, dotReach, wireFeather, dotColor);
       }
     }
   }
@@ -1493,15 +1495,14 @@ function nodeGraphGlGraphPresentSoon() {
 }
 
 /**
- * Snake select trail. Points are zoom-1 world px, the camera projects them.
- * Width and dash are screen px, so world dash lengths divide by zoom here.
+ * Snake select trail. The centerline is uploaded once. Dash phase, round caps,
+ * and the fringe are one fragment shader, in zoom-1 px, so zoom only moves uCam.
  */
-function nodeGraphGlGraphDrawTrail(trailBatch, zoom) {
+function nodeGraphGlGraphDrawTrail(trailBatch) {
   if (!trailBatch || typeof nodeGraphHitTrailAllStrokes !== "function") return;
-  if (typeof nodeGraphStrokeSmoothPoints !== "function" || typeof nodeGraphStrokeDashes !== "function") return;
+  if (typeof nodeGraphStrokeSmoothPoints !== "function" || typeof nodeGraphGlLinesDash !== "function") return;
   const strokes = nodeGraphHitTrailAllStrokes();
   if (!strokes.length) return;
-  const z = Math.max(0.0001, Number(zoom) || 1);
   const host = document.getElementById("nodeGraphWorkspace");
   const style = host ? getComputedStyle(host) : null;
   const rgba = nodeGraphGlGraphParseCssColor(
@@ -1514,19 +1515,9 @@ function nodeGraphGlGraphDrawTrail(trailBatch, zoom) {
     const stroke = strokes[i];
     const half = Math.max(0.5, (Number(stroke.width) || 6) * 0.5);
     const dash = Array.isArray(stroke.dash) ? stroke.dash : [14, 11];
-    const flat = nodeGraphStrokeSmoothPoints(stroke.points, 2 / z);
-    const pieces = nodeGraphStrokeDashes(flat, dash[0] / z, dash[1] / z);
-    for (let d = 0; d < pieces.length; d += 1) {
-      const piece = pieces[d];
-      if (piece.length < 4) {
-        nodeGraphGlLinesDot(trailBatch, piece[0], piece[1], half, 1, rgba);
-      } else {
-        nodeGraphGlLinesRibbon(trailBatch, piece, half, 1, rgba);
-        // Round caps, as the SVG trail had.
-        nodeGraphGlLinesDot(trailBatch, piece[0], piece[1], half, 1, rgba);
-        nodeGraphGlLinesDot(trailBatch, piece[piece.length - 2], piece[piece.length - 1], half, 1, rgba);
-      }
-    }
+    const flat = nodeGraphStrokeSmoothPoints(stroke.points, 4);
+    if (flat.length < 4) continue;
+    nodeGraphGlLinesDash(trailBatch, flat, half, Math.max(0.5, dash[0]), Math.max(0, dash[1]), rgba);
   }
 }
 
@@ -1552,7 +1543,7 @@ function nodeGraphGlGraphPresentTrail() {
     if (typeof nodeGraphDisplayGlFailed === "function") nodeGraphDisplayGlFailed(held.canvas, "GL snake trail begin");
     return;
   }
-  nodeGraphGlGraphDrawTrail(trailBatch, camera.zoom);
+  nodeGraphGlGraphDrawTrail(trailBatch);
   trailBatch._blend = "alpha";
   mesh.batches[5] = trailBatch;
   for (let i = 0; i < mesh.batches.length; i += 1) {
