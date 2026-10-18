@@ -1,3 +1,7 @@
+## 2026-10-18 - Pencil page plan (docs only)
+
+- Added `docs/PENCIL_PAGE_PLAN.md` (Argi; planned, owner TBD): new Command Center Pencil page for hand-drawn notes on patches. Strokes are WebGL2 through gl-line-renderer, layers have Workspace / Screen / Module anchors and Behind / In front of modules, and drawings are saved in the patch as `drawings`. The mouse smoothing slider moves there from the top bar. Tracker PE-1..PE-8 and open questions; pointer in `docs/FUTURE_PLANNING.md`. Not committed.
+
 ## 2026-10-18 - Patch migration purge plan + docs archive (docs only)
 
 - Argi policy: patch migrations are one-shot (APP_POLICY §1). Added `docs/PATCH_MIGRATION_PURGE_PLAN.md` (inventory of every patch source, tracker PM-1..PM-5, owner TBD); pointer in `docs/FUTURE_PLANNING.md`; banner on `docs/PATCH_MIGRATIONS.md`.

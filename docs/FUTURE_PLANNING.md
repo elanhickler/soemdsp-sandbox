@@ -2,6 +2,10 @@
 
 This file collects project-shaping ideas that should survive day-to-day implementation without becoming immediate scope.
 
+## Pencil page (2026-10-18)
+
+Command Center Pencil page: a mini drawing program for hand-drawn notes on patches. WebGL2 strokes; layers with Workspace / Screen / Module anchors and Behind / In front of modules; saved in the patch as `drawings`. The mouse smoothing slider moves there from the top bar. Plan: `docs/PENCIL_PAGE_PLAN.md` (PE-1..PE-8, owner TBD, open questions).
+
 ## Patch migration purge (2026-10-18)
 
 Argi policy (APP_POLICY §1): migrations are one-shot. Convert every stored patch to the current format, then delete the 26 migrators; `node-graph-patch-migrations.js` stays as an empty hook. Plan and inventory: `docs/PATCH_MIGRATION_PURGE_PLAN.md` (PM-1..PM-5, owner TBD).
