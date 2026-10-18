@@ -1,3 +1,7 @@
+## 2026-10-18 - Color row plan (docs only)
+
+- Added `docs/COLOR_ROW_PLAN.md` (Argi; planned, owner TBD, for an outside agent): app-wide rule that color widgets sit in horizontal rows of 2 to 4 (`docs/APP_POLICY.md` §21). RoundShape display settings is the reference; Keypad is the example violator. Inventory of 36 color surfaces (10 compliant, 16 violating, 9 single-color pending a decision, 1 exempt) with file and line, tracker CR-1..CR-7 (shared row helper, conversion batches, headless smoke test `check_color_rows`), open questions. Pointer in `docs/FUTURE_PLANNING.md`. Not committed.
+
 ## 2026-10-18 - Mini performance view plan (docs only)
 
 - Added `docs/MINI_PERFORM_VIEW_PLAN.md` (Argi; planned, ready to implement, owner TBD): a live scaled copy of the F performance screen inside the circuit builder, turned on from a new Command Center page (Mini Performance View, Shift+F). GPU mirror of the pinned faces (no reparenting), WebGL2 only, uniform scale of the zoom-1 perform layout, read-only to the patch and transport. Tracker MP-1..MP-9 (MP-9 optional library edit needs Argi OK); pointer in `docs/FUTURE_PLANNING.md`. Not committed.

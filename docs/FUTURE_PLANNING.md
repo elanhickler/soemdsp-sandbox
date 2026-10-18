@@ -2,6 +2,10 @@
 
 This file collects project-shaping ideas that should survive day-to-day implementation without becoming immediate scope.
 
+## Color rows (2026-10-18)
+
+App-wide rule: color widgets sit in horizontal rows of 2 to 4, never stacked one per line (`docs/APP_POLICY.md` §21). RoundShape display settings is the reference; Keypad and 15 other surfaces need converting. Plan: `docs/COLOR_ROW_PLAN.md` (CR-1..CR-7, owner TBD, open questions on single-color panels).
+
 ## Mini performance view (2026-10-18)
 
 Live, uniformly scaled copy of the F performance screen inside the circuit builder, turned on from a new Command Center page (Mini Performance View, Shift+F). GPU mirror of the pinned faces; faces stay in their modules; settings are UI preferences. Plan: `docs/MINI_PERFORM_VIEW_PLAN.md` (MP-1..MP-9, owner TBD, ready to implement).

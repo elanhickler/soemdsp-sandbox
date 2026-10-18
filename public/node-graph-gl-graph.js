@@ -160,6 +160,7 @@ function nodeGraphGlGraphRebuildPlates() {
       if (!(face.width > 1) || !(face.height > 1)) continue;
       const page = face.closest("[data-music-player-page]");
       if (page?.hidden || face.closest("[hidden]")) continue;
+      if (face.classList.contains("node-round-shape-canvas")) continue;
       const laid = nodeGraphGlGraphLayoutBox(face, el);
       if (!laid) continue;
       displays.push({
@@ -1368,6 +1369,7 @@ function nodeGraphGlGraphPresent() {
   }
   dotBatch.textPixelated = pixelated;
   nodeGraphGlGraphDrawButtonCaptions(dotBatch, toX, toY, layoutZoom, cssW, cssH);
+  nodeGraphGlGraphDrawRoundShapes(dotBatch, toX, toY, zoom, Boolean(frameCamera));
   for (let i = 0; i < nodeGraphGlGraphState.plates.length; i += 1) {
     const plate = nodeGraphGlGraphState.plates[i];
     if (!plate.onTop) continue;
@@ -1492,6 +1494,101 @@ function nodeGraphGlGraphPresentSoon() {
     nodeGraphGlGraphPresentSoon._frame = 0;
     nodeGraphGlGraphPresent();
   });
+}
+
+/**
+ * RoundShape orbit. World-space polyline + dot on the graph shader, so zoom
+ * is the camera and the face is not a scaled bitmap.
+ */
+function nodeGraphGlGraphDrawRoundShapes(batch, toX, toY, zoom, cameraOn) {
+  if (!batch || typeof nodeGraphGlLinesPolyline !== "function") return;
+  const faces = document.querySelectorAll(".node-round-shape-display");
+  const samples = 256;
+  for (let i = 0; i < faces.length; i += 1) {
+    const section = faces[i];
+    if (section.offsetWidth < 8 || section.offsetHeight < 8) continue;
+    const nodeEl = section.closest(".dsp-node");
+    if (!nodeEl || nodeEl.classList.contains("oscilloscope-hidden") || nodeEl.classList.contains("face-track-omitted")) continue;
+    const box = typeof nodeGraphGlGraphWorldBox === "function" ? nodeGraphGlGraphWorldBox(section) : null;
+    if (!box || !(box.w > 4) || !(box.h > 4)) continue;
+    const id = String(nodeEl.dataset.node || "");
+    const node = typeof nodeGraphPatchNode === "function" ? nodeGraphPatchNode(id) : null;
+    if (!node) continue;
+    const isOsc = node.type === "ellipsoidOsc";
+    let shape = typeof nodeGraphRoundShapeLiveParam === "function"
+      ? Number(nodeGraphRoundShapeLiveParam(node, "morph", 0))
+      : Number(node.params?.morph);
+    if (!Number.isFinite(shape)) shape = 0;
+    shape = Math.max(0, Math.min(1, shape));
+    const look = typeof nodeGraphRoundShapeFaceLook === "function"
+      ? nodeGraphRoundShapeFaceLook(node)
+      : {};
+    const strokeW = Math.max(0.25, Number(look.lineThickness) || 2);
+    const dotW = Math.max(0.25, Number(look.dotThickness) || 5);
+    const bg = nodeGraphGlGraphParseCssColor(look.backgroundPaint || look.background || "#020609", [0.008, 0.024, 0.035, 1]);
+    const stroke = nodeGraphGlGraphParseCssColor(look.strokePaint || look.strokeColor || "#7fc7d9", [0.5, 0.86, 0.78, 1]);
+    const dotColor = nodeGraphGlGraphParseCssColor(look.dotPaint || look.dotColor || "#ffffff", [1, 1, 1, 1]);
+    const scale = cameraOn ? 1 : zoom;
+    const x = toX(box.x);
+    const y = toY(box.y);
+    const w = box.w * scale;
+    const h = box.h * scale;
+    nodeGraphGlLinesRect(batch, x, y, w, h, bg);
+    const pad = Math.max(6, Math.min(box.w, box.h) * 0.08) + strokeW * 0.5 + 1;
+    const half = Math.max(4, Math.min(box.w, box.h) * 0.5 - pad);
+    const cx = box.w * 0.5;
+    const cy = box.h * 0.5;
+    const flat = new Float32Array((samples + 1) * 2);
+    const eps = 0.5 / samples;
+    let px = cx;
+    let py = cy;
+    for (let s = 0; s < samples; s += 1) {
+      let phase = s / samples + eps;
+      phase -= Math.floor(phase);
+      let pt;
+      if (isOsc && typeof nodeGraphRoundShapeEllipsoidOscPoint === "function") {
+        pt = nodeGraphRoundShapeEllipsoidOscPoint(phase, node);
+      } else if (typeof nodeGraphRoundShapeEllipsoidPoint === "function") {
+        pt = nodeGraphRoundShapeEllipsoidPoint(phase, shape);
+      } else {
+        const a = phase * Math.PI * 2;
+        pt = { x: Math.cos(a), y: Math.sin(a) };
+      }
+      const lx = cx + pt.x * half;
+      const ly = cy - pt.y * half;
+      flat[s * 2] = toX(box.x + lx);
+      flat[s * 2 + 1] = toY(box.y + ly);
+      if (s === 0) {
+        px = lx;
+        py = ly;
+      }
+    }
+    flat[samples * 2] = flat[0];
+    flat[samples * 2 + 1] = flat[1];
+    const halfStroke = strokeW * 0.5 * (cameraOn ? 1 : scale);
+    if (cameraOn && typeof nodeGraphGlLinesDash === "function") {
+      // One solid stadium. The shader rounds the ends and antialiases in screen px.
+      nodeGraphGlLinesDash(batch, flat, halfStroke, 1e6, 0, stroke);
+    } else {
+      nodeGraphGlLinesPolyline(batch, flat, halfStroke, 1, stroke);
+    }
+    if (typeof nodeGraphRoundShapeLiveCursor === "function" && !isOsc) {
+      const cursor = nodeGraphRoundShapeLiveCursor(id, node, section);
+      if (cursor && Number.isFinite(cursor.x) && Number.isFinite(cursor.y)) {
+        px = cx + cursor.x * half;
+        py = cy - cursor.y * half;
+      }
+    } else if (isOsc && typeof nodeGraphRoundShapeReadScopePort === "function") {
+      let phase = nodeGraphRoundShapeReadScopePort(id, "__Phase");
+      if (!Number.isFinite(phase)) phase = 0;
+      const pt = nodeGraphRoundShapeEllipsoidOscPoint(phase, node);
+      px = cx + pt.x * half;
+      py = cy - pt.y * half;
+    }
+    if (typeof nodeGraphGlLinesDot === "function") {
+      nodeGraphGlLinesDot(batch, toX(box.x + px), toY(box.y + py), Math.max(0.5, dotW * 0.5) * scale, Math.max(0.75, scale), dotColor);
+    }
+  }
 }
 
 /**

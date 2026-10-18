@@ -614,6 +614,7 @@ First consumers: Music Player, fbmField, Instant Waterfall compositor, RoundShap
 | `x \|\| default` or `x > 0 ? x : magic` on a stored setting | **No** — 0 is a value (§18) |
 | Copy the same helper into a second module `.cpp` | **No** — use / extend `library/include/soemdsp` (§19) |
 | Edit `library/include/soemdsp` without Architect OK | **No** — propose first (§19) |
+| Stack color widgets one per line, or put 5+ in one row | **No** — rows of 2 to 4 (§21) |
 
 ---
 
@@ -662,6 +663,16 @@ First consumers: Music Player, fbmField, Instant Waterfall compositor, RoundShap
 That ban applies only when all three are true: there is no consequence for leaving the value continuous, the DSP does not need an integer or a stepped value, and the parameter can already quantize through its own step. A hardcoded round or discrete snap in that case fights the parameter step. Do not do it.
 
 **Pitch Manager** octave and semitones were forced to integers even after step was set to 0. **Frequency Manager** octave and semitones are the same case as Pitch Manager: do not hardcode them discrete when the parameter step can already quantize them.
+
+## 21. Color widgets sit in rows of 2 to 4 (Argi, 2026-10-18)
+
+**Every color widget in a settings surface sits in a horizontal row of 2, 3 or 4 color widgets.** Colors are never stacked one per line, and a row never holds 5 or more.
+
+- Color widgets are the shared Sound Color Widget host, the hue-title (HBS) stepper, the HSL lamp, and plain `<input type="color">`. The rule covers Display Settings, Command Center pages, the UIDEV helper, UI Settings and every other window with colors.
+- Compliant reference: **RoundShape** display settings (Line, Dot, Background in one row through `nodeGraphDisplaySettingsHbsRow`). Violating example: **Keypad** display settings (six colors stacked).
+- Group by meaning, then balance the rows (5 = 3 + 2, 6 = 3 + 3, 7 = 4 + 3, 8 = 4 + 4). Never leave a row of 1. Colors that belong together but are built in different sections go into one row.
+- Panels with exactly one color are an open question (`docs/COLOR_ROW_PLAN.md`).
+- Plan, inventory and smoke test: `docs/COLOR_ROW_PLAN.md` (CR-1..CR-7).
 
 ## Public links (Argi, 2026-10-17)
 
