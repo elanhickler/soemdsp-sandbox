@@ -1564,7 +1564,9 @@ void main() {
     // One draw call per texture run (glyph atlas or colour emoji page).
     for (const t of batch.texts) {
       if (t.end <= t.start || !t.texture) continue;
-      if (typeof gl.isTexture === "function" && !gl.isTexture(t.texture)) continue;
+      // A retired atlas is marked at delete. gl.isTexture is a synchronous GPU
+      // round trip per run; on replayed meshes it cost ~4 ms a frame.
+      if (t.texture.__glDeleted) continue;
       gl.bindTexture(gl.TEXTURE_2D, t.texture);
       // Workspace zoom above 2.5 samples the 64px glyph bake nearest, same
       // policy as .pixelated-canvas-zoom. Emoji pages stay NEAREST always.
@@ -1582,7 +1584,10 @@ void main() {
     gl.bindTexture(gl.TEXTURE_2D, null);
     const dead = s.deadTextures;
     if (dead && dead.length) {
-      for (let i = 0; i < dead.length; i += 1) gl.deleteTexture(dead[i]);
+      for (let i = 0; i < dead.length; i += 1) {
+        dead[i].__glDeleted = true;
+        gl.deleteTexture(dead[i]);
+      }
       dead.length = 0;
     }
   }

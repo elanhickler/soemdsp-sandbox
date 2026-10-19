@@ -187,6 +187,18 @@ function nodeGraphWorkspaceLayoutMetrics(container = document.getElementById("no
   let left = 0;
   let top = 0;
   const prior = nodeGraphMvp?._workspaceLayoutMetrics;
+  // Same size and classes: the borders cannot have moved. Skip the per-frame
+  // getComputedStyle (camera presents call this several times a frame).
+  if (
+    prior
+    && prior._cssW === css.width
+    && prior._cssH === css.height
+    && prior._cls === nodeGraphWorkspaceClassKey(container)
+    && Number.isFinite(prior.left)
+    && Number.isFinite(prior.top)
+  ) {
+    return prior;
+  }
   if (
     prior
     && prior._cssW === css.width
@@ -203,6 +215,7 @@ function nodeGraphWorkspaceLayoutMetrics(container = document.getElementById("no
   }
   const style = container ? getComputedStyle(container) : null;
   const metrics = {
+    _cls: nodeGraphWorkspaceClassKey(container),
     _cssH: css.height,
     _cssW: css.width,
     borderBottom: Number.parseFloat(style?.borderBottomWidth) || 0,
@@ -567,10 +580,19 @@ function nodeGraphWorkspaceFloatProperty(element, property, fallback = 0) {
   return Number.isFinite(value) ? value : fallback;
 }
 
+var nodeGraphGridVisualScaleLast = 0;
 function nodeGraphGridVisualScaleCss(workspace) {
   const host = workspace || document.getElementById("nodeGraphWorkspace");
   if (!host) {
     return 1;
+  }
+  // The scale is a setting, not a camera value: mid-gesture reuse the last read.
+  if (
+    nodeGraphGridVisualScaleLast > 0
+    && typeof nodeGraphViewportGestureActive === "function"
+    && nodeGraphViewportGestureActive()
+  ) {
+    return nodeGraphGridVisualScaleLast;
   }
   const raw = Number.parseFloat(
     host.style.getPropertyValue("--node-grid-visual-scale")
@@ -578,6 +600,7 @@ function nodeGraphGridVisualScaleCss(workspace) {
     || "",
   );
   if (Number.isFinite(raw) && raw > 0) {
+    nodeGraphGridVisualScaleLast = raw;
     return raw;
   }
   if (typeof nodeGraphGridVisualScaleFromMultiply === "function") {
@@ -663,10 +686,13 @@ function updateNodeGraphGridHeatmap(options = {}) {
   const gesturing = typeof nodeGraphViewportGestureActive === "function"
     && nodeGraphViewportGestureActive();
   // Pause only the O(modules) light/mask rebuild. Grid position already updated.
+  // camera:true is the once-a-frame gesture pass (ZP-4): the module glows are
+  // screen-space gradients, so they must follow the camera or they stay at the
+  // old zoom as blobs. It reuses the cached module bounds (no layout reads).
   if (
     options?.lite === true
     || options?.phaseOnly === true
-    || (gesturing && options?.force !== true)
+    || (gesturing && options?.force !== true && options?.camera !== true)
   ) {
     return;
   }
@@ -787,14 +813,35 @@ function nodeGraphHeatmapNodeBounds(node) {
 // Workspace tuning vars for the heatmap: computed style once per distinct
 // style state (pan / zoom vars excluded from the key, they change per frame).
 var nodeGraphHeatmapFloatCache = new Map();
+function nodeGraphWorkspaceClassKey(workspace) {
+  return String(workspace?.className || "")
+    .replace(/\b(viewport-gesturing|viewport-zooming|pixelated-canvas-zoom)\b/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+var nodeGraphHeatmapFloatLast = new Map();
 function nodeGraphHeatmapFloatProperty(workspace, property, fallback = 0) {
+  // Tuning vars are settings, not camera state: a gesture reuses the last value.
+  if (
+    nodeGraphHeatmapFloatLast.has(property)
+    && typeof nodeGraphViewportGestureActive === "function"
+    && nodeGraphViewportGestureActive()
+  ) {
+    return nodeGraphHeatmapFloatLast.get(property);
+  }
+  // Gesture classes and the frozen stroke var do not touch these tuning vars;
+  // keeping them out of the key means a gesture never starts with a miss.
   const styleKey = String(workspace?.getAttribute?.("style") || "")
-    .replace(/--node-graph-(pan|zoom)[^;]*;?/g, "");
-  const key = `${property}|${styleKey}|${workspace?.className || ""}|${document.body?.className || ""}|${document.documentElement.getAttribute("style") || ""}`;
+    .replace(/--node-graph-(pan|zoom)[^;]*;?/g, "")
+    .replace(/--node-module-stroke-zoom-compensate-frozen[^;]*;?/g, "");
+  const key = `${property}|${styleKey}|${nodeGraphWorkspaceClassKey(workspace)}|${document.body?.className || ""}|${document.documentElement.getAttribute("style") || ""}`;
   if (nodeGraphHeatmapFloatCache.has(key)) {
-    return nodeGraphHeatmapFloatCache.get(key);
+    const hit = nodeGraphHeatmapFloatCache.get(key);
+    nodeGraphHeatmapFloatLast.set(property, hit);
+    return hit;
   }
   const value = nodeGraphWorkspaceFloatProperty(workspace, property, fallback);
+  nodeGraphHeatmapFloatLast.set(property, value);
   if (nodeGraphHeatmapFloatCache.size > 256) nodeGraphHeatmapFloatCache.clear();
   nodeGraphHeatmapFloatCache.set(key, value);
   return value;

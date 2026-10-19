@@ -850,10 +850,21 @@ function nodeSliderElementLayoutWidth(element) {
   if (cachedWidth !== undefined && element.isConnected) {
     return cachedWidth;
   }
+  // Module HTML is frozen mid pan/zoom (ZP-4): layout cannot have changed,
+  // so the last measured width stands, including 0 for a hidden slider.
+  if (
+    element
+    && typeof nodeGraphHtmlFrozen === "function"
+    && nodeGraphHtmlFrozen()
+    && Number.isFinite(element._sliderFrozenWidth)
+  ) {
+    return element._sliderFrozenWidth;
+  }
   const width = Number(element?.clientWidth || element?.offsetWidth || 0);
   if (Number.isFinite(width) && width > 0) {
     if (element) {
       element._awakeClientWidth = width;
+      element._sliderFrozenWidth = width;
       if (nodeSliderLayoutWidthObserve(element)) {
         nodeSliderLayoutWidthCache.set(element, width);
       }
@@ -862,7 +873,9 @@ function nodeSliderElementLayoutWidth(element) {
   }
   const rectWidth = nodeGraphFiniteNumber(element?.getBoundingClientRect?.().width);
   const zoom = Math.max(0.01, nodeGraphFiniteNumber(nodeGraphMvp?.zoom, 1));
-  return Math.max(0, rectWidth / zoom);
+  const measured = Math.max(0, rectWidth / zoom);
+  if (element) element._sliderFrozenWidth = measured;
+  return measured;
 }
 
 function nodeSliderElementLayoutHeight(element) {

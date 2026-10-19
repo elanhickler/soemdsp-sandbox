@@ -49,6 +49,8 @@ function nodeGraphEnsureTextWireLayers(host) {
 function nodeGraphPositionGridHtml() {
   const workspace = document.getElementById("nodeGraphWorkspace");
   if (!workspace) return;
+  // Frozen mid-gesture: the layer transform carries the modules (ZP-4).
+  if (nodeGraphViewportPerf.htmlFrozen) return;
   nodeGraphEnsureTextWireLayers(workspace);
   const zoom = Math.max(
     0.0001,
@@ -77,17 +79,88 @@ function nodeGraphPositionGridHtml() {
       if (node.parentElement !== place) place.append(node);
     }
     if (node.style.zoom !== zoomText) node.style.zoom = zoomText;
-    node.style.transformOrigin = "0 0";
-    node.style.transform = transform;
+    if (node.style.transformOrigin !== "0px 0px") node.style.transformOrigin = "0 0";
+    if (node.style.transform !== transform) node.style.transform = transform;
   }
+  nodeGraphViewportPerf.htmlCamera = { zoom, x: panX, y: panY };
   const layers = workspace.getElementsByClassName("node-graph-world-layer");
   for (let i = 0; i < layers.length; i += 1) {
     layers[i].style.transform = "none";
   }
 }
 
+// ZP-4 frozen module HTML. Mid-gesture no module style is written: each
+// module keeps the CSS zoom and translate it had when the gesture began, and
+// one transform per world/text layer carries the whole HTML picture from the
+// frozen camera to the live one (hit targets stay on the GPU plates). Settle
+// writes CSS zoom, --node-graph-zoom and the module transforms once.
+function nodeGraphHtmlFreezeLayers(workspace) {
+  const layers = [];
+  const world = workspace.getElementsByClassName("node-graph-world-layer");
+  for (let i = 0; i < world.length; i += 1) layers.push(world[i]);
+  const behind = document.getElementById("nodeGraphTextBehind");
+  const front = document.getElementById("nodeGraphTextFront");
+  if (behind) layers.push(behind);
+  if (front) layers.push(front);
+  return layers;
+}
+
+function nodeGraphHtmlFrozen() {
+  return Boolean(nodeGraphViewportPerf.htmlFrozen);
+}
+
+function nodeGraphFreezeHtmlCamera(workspace) {
+  if (nodeGraphViewportPerf.htmlFrozen || !workspace) return nodeGraphViewportPerf.htmlFrozen;
+  // Freeze at the camera the HTML was last written for, not the new sample.
+  const last = nodeGraphViewportPerf.htmlCamera;
+  if (!last) return null;
+  nodeGraphViewportPerf.htmlFrozen = { zoom: last.zoom, x: last.x, y: last.y };
+  return nodeGraphViewportPerf.htmlFrozen;
+}
+
+function nodeGraphApplyFrozenHtmlCamera(workspace, originX, originY) {
+  const frozen = nodeGraphViewportPerf.htmlFrozen;
+  if (!frozen) return;
+  const zoom = Math.max(
+    0.0001,
+    typeof nodeGraphZoom === "function" ? nodeGraphZoom() : (nodeGraphMvp?.zoom || 1),
+  );
+  // Screen p0 = w * z0 + o0 maps to p = w * z + o: p = p0 * s + (o - o0 * s).
+  const sc = zoom / Math.max(0.0001, frozen.zoom);
+  const tx = (Number(originX) || 0) - frozen.x * sc;
+  const ty = (Number(originY) || 0) - frozen.y * sc;
+  const transform = `translate(${tx}px, ${ty}px) scale(${sc})`;
+  const layers = nodeGraphHtmlFreezeLayers(workspace);
+  for (let i = 0; i < layers.length; i += 1) {
+    const style = layers[i].style;
+    if (style.transformOrigin !== "0px 0px") style.transformOrigin = "0 0";
+    style.transform = transform;
+  }
+}
+
+function nodeGraphThawHtmlCamera(workspace) {
+  if (!nodeGraphViewportPerf.htmlFrozen) return;
+  nodeGraphViewportPerf.htmlFrozen = null;
+  const el = workspace || document.getElementById("nodeGraphWorkspace");
+  if (!el) return;
+  const pan = nodeGraphMvp?.pan || { x: 0, y: 0 };
+  const origin = typeof nodeGraphRenderedOriginOffset === "function"
+    ? nodeGraphRenderedOriginOffset(pan, el)
+    : pan;
+  // Layers back to identity; modules get the live zoom + translate once.
+  nodeGraphApplyPanVarsToWorldLayers(el, `${origin.x}px`, `${origin.y}px`);
+  const behind = document.getElementById("nodeGraphTextBehind");
+  const front = document.getElementById("nodeGraphTextFront");
+  if (behind) behind.style.transform = "";
+  if (front) front.style.transform = "";
+}
+
 function nodeGraphApplyPanVarsToWorldLayers(workspace, x, y) {
   if (!workspace) {
+    return;
+  }
+  if (nodeGraphViewportPerf.htmlFrozen) {
+    nodeGraphApplyFrozenHtmlCamera(workspace, Number.parseFloat(x), Number.parseFloat(y));
     return;
   }
   if (!nodeGraphWorldLayerCollection || nodeGraphWorldLayerCollection.owner !== workspace) {
@@ -125,12 +198,10 @@ function nodeGraphSetWorldLayerWillChange(workspace, on) {
   }
 }
 
-// Gesture display hold (easy revert: set false). While a pan/zoom gesture is
-// active, scope frames and face pumps skip painting, so the world layer moves
-// as a cached GPU layer with no canvas updates; settle repaints everything
-// (flushNodeGraphViewportHeavyChrome -> scheduleNodeGraphModuleScopeDraw).
-// Trade-off: live displays freeze for the duration of the gesture.
-const NODE_GRAPH_GESTURE_HOLD_DISPLAYS = true;
+// Gesture display hold. While a pan/zoom gesture is active, scope frames and
+// face pumps skip painting so the world layer moves as a cached GPU layer;
+// settle repaints everything. False keeps live displays animating mid-zoom.
+const NODE_GRAPH_GESTURE_HOLD_DISPLAYS = false;
 
 function nodeGraphViewportHoldsDisplays() {
   return NODE_GRAPH_GESTURE_HOLD_DISPLAYS && nodeGraphViewportGestureActive();
@@ -300,6 +371,10 @@ function clearNodeGraphViewportGestureClass() {
   }
   // Settle: catch the inherited zoom var up once, then drop the frozen stroke.
   nodeGraphWriteInheritedZoomVar(workspace);
+  if (nodeGraphViewportPerf.htmlFrozen) {
+    nodeGraphThawHtmlCamera(workspace);
+    scheduleNodeGraphViewportCullRefresh();
+  }
   workspace.classList.remove("viewport-gesturing", "viewport-zooming");
   nodeGraphSetWorldLayerWillChange(workspace, false);
   unfreezeNodeGraphViewportStrokeCompensate(workspace);
@@ -352,6 +427,8 @@ function applyNodeGraphViewportCssLight(options = {}) {
     const originOffset = typeof nodeGraphRenderedOriginOffset === "function"
       ? nodeGraphRenderedOriginOffset(pan, workspace)
       : pan;
+    if (cameraGesturing) nodeGraphFreezeHtmlCamera(workspace);
+    else nodeGraphThawHtmlCamera(workspace);
     nodeGraphApplyPanVarsToWorldLayers(workspace, `${originOffset.x}px`, `${originOffset.y}px`);
   }
   if (options.pan !== false) {
@@ -436,15 +513,28 @@ function applyNodeGraphViewportCssLight(options = {}) {
   if (!gesturing && typeof updateNodeGraphGridHeatmap === "function") {
     updateNodeGraphGridHeatmap({ lite: true });
   }
+  // Mid-gesture: grid cell, phase and module glows follow the camera once a
+  // frame from cached bounds (ZP-4: the stale glows were the light blobs).
+  if (gesturing && !nodeGraphViewportPerf.heatmapCameraRaf && typeof updateNodeGraphGridHeatmap === "function") {
+    nodeGraphViewportPerf.heatmapCameraRaf = window.requestAnimationFrame(() => {
+      nodeGraphViewportPerf.heatmapCameraRaf = 0;
+      if (nodeGraphViewportGestureActive()) updateNodeGraphGridHeatmap({ camera: true });
+    });
+  }
   // Mid-gesture: skip heatmap phase updates (esp. costly at high zoom).
   // Settle / pointer-up restores via flushNodeGraphViewportHeavyChrome.
   // Cull must keep running while zoomed-in pan: otherwise modules that leave
   // the view stay awake (display:block) and the composited layer keeps growing
   // → "I'm zoomed in and pan is laggy for no reason." Use cached sizes only.
-  scheduleNodeGraphViewportCullRefresh({
-    cacheSizesOnly: gesturing,
-    minIntervalMs: gesturing ? 48 : 0,
-  });
+  // Frozen HTML (ZP-4): waking or sleeping a module mid-gesture re-lays it
+  // out and fires its resize observers. The GPU plates are drawn for every
+  // module anyway; settle culls once.
+  if (!gesturing || !nodeGraphViewportPerf.htmlFrozen) {
+    scheduleNodeGraphViewportCullRefresh({
+      cacheSizesOnly: gesturing,
+      minIntervalMs: gesturing ? 48 : 0,
+    });
+  }
 }
 
 function nodeGraphWirePlanCacheKey() {
@@ -1187,6 +1277,11 @@ function ensureNodeGraphViewportModuleCull() {
           nodeGraphViewportCullApply(node, true);
         }
       }
+      return;
+    }
+    // Frozen HTML mid-gesture (ZP-4): a sleep/wake is a module re-layout plus
+    // its resize observers. The thaw runs one geometric cull for every module.
+    if (nodeGraphViewportPerf.htmlFrozen) {
       return;
     }
     for (const entry of entries) {

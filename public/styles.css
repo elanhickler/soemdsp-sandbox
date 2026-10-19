@@ -12996,9 +12996,13 @@ body.node-graph-magnifying-active .node-graph-workspace * {
   background-position:
     var(--node-grid-heatmap-grid-position, 0 0),
     var(--node-grid-heatmap-grid-position, 0 0);
+  /* JS writes the cell with the live camera zoom (same value as the phase);
+     --node-graph-zoom itself is only written on settle (ZP-4). */
   background-size:
-    calc(var(--node-grid-width) * var(--node-graph-zoom) * var(--node-grid-visual-scale, 2))
-    calc(var(--node-grid-height) * var(--node-graph-zoom) * var(--node-grid-visual-scale, 2));
+    var(--node-grid-heatmap-grid-size, calc(var(--node-grid-width) * var(--node-graph-zoom) * var(--node-grid-visual-scale, 2))
+    calc(var(--node-grid-height) * var(--node-graph-zoom) * var(--node-grid-visual-scale, 2))),
+    var(--node-grid-heatmap-grid-size, calc(var(--node-grid-width) * var(--node-graph-zoom) * var(--node-grid-visual-scale, 2))
+    calc(var(--node-grid-height) * var(--node-graph-zoom) * var(--node-grid-visual-scale, 2)));
   -webkit-mask-image: var(--node-grid-reveal-mask, none);
   mask-image: var(--node-grid-reveal-mask, none);
   -webkit-mask-repeat: no-repeat;
