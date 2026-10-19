@@ -16,31 +16,6 @@ function nodeGraphVideoDelayReadParam(nodeId, key, fallback) {
   return Number.isFinite(raw) ? raw : fallback;
 }
 
-function nodeGraphVideoDelayBufferFromKey(nodeId, port) {
-  const state = typeof nodeGraphModuleScopeState === "object" ? nodeGraphModuleScopeState : null;
-  if (!state?.buffers || !nodeId) return null;
-  const names = [port, String(port).toLowerCase(), String(port).toUpperCase()];
-  for (let i = 0; i < names.length; i += 1) {
-    const ring = state.buffers.get(`${nodeId}:${names[i]}`);
-    if (ring?.length) return ring;
-  }
-  if (typeof nodeGraphModuleScopeConnectedSourceBuffer === "function") {
-    const connected = nodeGraphModuleScopeConnectedSourceBuffer(nodeId, port);
-    if (connected?.length) return connected;
-  }
-  return null;
-}
-
-function nodeGraphVideoDelayLatest(ring) {
-  if (!ring?.length) return 0;
-  let n = ring.length;
-  if (typeof nodeGraphScopeAvailableSampleCount === "function") {
-    n = nodeGraphScopeAvailableSampleCount(ring) || n;
-  }
-  const v = Number(ring[n - 1]);
-  return Number.isFinite(v) ? v : 0;
-}
-
 function nodeGraphVideoDelayEnsureCanvas(face, pixelRatio) {
   if (!face) return null;
   for (const leftover of face.querySelectorAll(":scope > .node-module-scope-local-fallback-canvas")) {
@@ -106,10 +81,10 @@ function drawNodeGraphVideoDelayFaceItem(_renderer, item, pixelRatio) {
   const zoom = Math.max(0, Math.min(1, nodeGraphVideoDelayReadParam(nodeId, "zoom", 0.12)));
   const twist = Math.max(-1, Math.min(1, nodeGraphVideoDelayReadParam(nodeId, "twist", 0)));
   const panX = Math.max(-1, Math.min(1,
-    nodeGraphVideoDelayReadParam(nodeId, "panX", 0) + 0.55 * nodeGraphVideoDelayLatest(nodeGraphVideoDelayBufferFromKey(nodeId, "X")),
+    nodeGraphVideoDelayReadParam(nodeId, "panX", 0) + 0.55 * nodeGraphVideoGraphAudioLatest(nodeId, "X"),
   ));
   const panY = Math.max(-1, Math.min(1,
-    nodeGraphVideoDelayReadParam(nodeId, "panY", 0) + 0.55 * nodeGraphVideoDelayLatest(nodeGraphVideoDelayBufferFromKey(nodeId, "Y")),
+    nodeGraphVideoDelayReadParam(nodeId, "panY", 0) + 0.55 * nodeGraphVideoGraphAudioLatest(nodeId, "Y"),
   ));
   const picture = typeof nodeGraphPictureRead === "function"
     ? (nodeGraphPictureRead(nodeId, "rgba") || nodeGraphPictureRead(nodeId, "📺"))

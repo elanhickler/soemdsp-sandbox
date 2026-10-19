@@ -19,6 +19,13 @@
 // viewport-asleep themselves, and register a wake so a stopped loop restarts
 // when a visible sink starts needing it.
 //
+// Audio to video handoff (VG-6). Video nodes read their audio inputs here,
+// once per frame per inlet: control mode (default, decision 4) is the latest
+// sample; block mode hands the whole ring window (Video Feedback's wave/
+// spectrum). The rings are the module-scope input rings, which the audio
+// ingest fills for every connected buffered input whether or not the face is
+// on screen, so an asleep-but-needed node still follows its audio.
+//
 // Adapter (VG-3): modules not yet migrated keep their own step/paint code;
 // they only swap requestAnimationFrame / cancelAnimationFrame for
 // nodeGraphVideoGraphRequestFrame / nodeGraphVideoGraphCancelFrame, and their
@@ -208,6 +215,64 @@
     }
   }
 
+  const audio = { frame: -1, rings: new Map(), latest: new Map() };
+
+  function audioFrameCache() {
+    if (audio.frame !== frame) {
+      audio.frame = frame;
+      audio.rings.clear();
+      audio.latest.clear();
+    }
+    return audio;
+  }
+
+  /** Samples available in a module-scope ring (may be shorter than its length). */
+  function nodeGraphVideoGraphAudioCount(ring) {
+    if (!ring?.length) return 0;
+    if (typeof global.nodeGraphScopeAvailableSampleCount === "function") {
+      return global.nodeGraphScopeAvailableSampleCount(ring) || ring.length;
+    }
+    return ring.length;
+  }
+
+  /** Block mode: the ring feeding this audio inlet, or null. */
+  function nodeGraphVideoGraphAudioBlock(nodeId, port) {
+    const id = String(nodeId || "");
+    const key = `${id}:${port}`;
+    const cache = audioFrameCache();
+    if (cache.rings.has(key)) return cache.rings.get(key);
+    let ring = null;
+    // Top-level `const` in its own script: a global binding, not a window property.
+    // eslint-disable-next-line no-undef
+    const state = typeof nodeGraphModuleScopeState === "object" ? nodeGraphModuleScopeState : null;
+    if (state?.buffers && id) {
+      const names = [port, String(port).toLowerCase(), String(port).toUpperCase()];
+      for (let i = 0; i < names.length && !ring; i += 1) {
+        const r = state.buffers.get(`${id}:${names[i]}`);
+        if (r?.length) ring = r;
+      }
+      if (!ring && typeof global.nodeGraphModuleScopeConnectedSourceBuffer === "function") {
+        const r = global.nodeGraphModuleScopeConnectedSourceBuffer(id, port);
+        if (r?.length) ring = r;
+      }
+    }
+    cache.rings.set(key, ring);
+    return ring;
+  }
+
+  /** Control mode: latest sample on this audio inlet (0 when unconnected). */
+  function nodeGraphVideoGraphAudioLatest(nodeId, port) {
+    const key = `${nodeId}:${port}`;
+    const cache = audioFrameCache();
+    if (cache.latest.has(key)) return cache.latest.get(key);
+    const ring = nodeGraphVideoGraphAudioBlock(nodeId, port);
+    const n = nodeGraphVideoGraphAudioCount(ring);
+    const v = n > 0 ? Number(ring[n - 1]) : 0;
+    const out = Number.isFinite(v) ? v : 0;
+    cache.latest.set(key, out);
+    return out;
+  }
+
   /** requestAnimationFrame for a video node. Returns a token. */
   function nodeGraphVideoGraphRequestFrame(nodeId, cb) {
     const token = nextToken++;
@@ -250,4 +315,7 @@
   global.nodeGraphVideoGraphStats = nodeGraphVideoGraphStats;
   global.nodeGraphVideoGraphShouldSleep = nodeGraphVideoGraphShouldSleep;
   global.nodeGraphVideoGraphRegisterWake = nodeGraphVideoGraphRegisterWake;
+  global.nodeGraphVideoGraphAudioBlock = nodeGraphVideoGraphAudioBlock;
+  global.nodeGraphVideoGraphAudioLatest = nodeGraphVideoGraphAudioLatest;
+  global.nodeGraphVideoGraphAudioCount = nodeGraphVideoGraphAudioCount;
 })(typeof window !== "undefined" ? window : globalThis);

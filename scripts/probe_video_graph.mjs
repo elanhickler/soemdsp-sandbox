@@ -25,11 +25,11 @@ const SECONDS = Number(process.env.SECONDS || 4);
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 export const VG_CHAIN_EDGES = [
-  ["fbm-1", "vd-1"], ["vd-1", "ib-1"], ["vf-1", "ib-2"], ["vd-3", "ib-3"], ["ib-3", "vd-3"], ["fbm-far", "vd-far"],
+  ["fbm-1", "vd-1"], ["vd-1", "ib-1"], ["vf-1", "ib-2"], ["vd-3", "ib-3"], ["ib-3", "vd-3"], ["fbm-far", "vd-far"], ["vd-x", "ib-x"],
 ];
 const LOOP = new Set(["vd-3>ib-3", "ib-3>vd-3"]);
 const NODES = ["fbm-1", "vd-1", "ib-1", "vf-1", "ib-2", "vd-3", "ib-3", "fbm-far", "vd-far"];
-const SOLO = ["fbm-solo", "rf-solo", "vf-solo", "vd-solo", "ib-solo"];
+const SOLO = ["fbm-solo", "rf-solo", "vf-solo", "vd-solo", "ib-solo", "vd-x", "ib-x"];
 export function vgChainPatch() {
   const d = JSON.parse(fs.readFileSync(path.join(root, "patches/livedemos/softpop.json"), "utf8"));
   d.nodes = d.nodes.filter((n) => n.id === "output").map((n) => ({ ...n, gx: 26, gy: 1 }));
@@ -52,9 +52,15 @@ export function vgChainPatch() {
   at("vf-solo", "videoFeedback", 26, 17);
   at("vd-solo", "videoDelay", 32, 17);
   at("ib-solo", "imageBurn", 38, 17);
+  // VG-6 audio handoff: a 1 Hz sine drives Video Delay X on a delay parked
+  // far off screen (asleep) whose picture feeds a visible Image Burn.
+  d.nodes.push({ gx: 44, gy: 17, id: "sw-1", type: "sineWavetable", params: { frequency: 1, mode: 0, amplitude: 0.7 } });
+  at("vd-x", "videoDelay", 400, 17);
+  at("ib-x", "imageBurn", 44, 1);
   for (const [a, b] of VG_CHAIN_EDGES) {
     d.connections.push({ sourceNode: a, sourcePort: "rgba", destinationNode: b, destinationPort: "rgba", tracePoints: [] });
   }
+  d.connections.push({ sourceNode: "sw-1", sourcePort: "A", destinationNode: "vd-x", destinationPort: "X", tracePoints: [] });
   return JSON.stringify(d);
 }
 
@@ -96,6 +102,24 @@ await page.evaluate(() => {
   window.nodeGraphPicturePublish = function (nodeId, ...a) { const ok = pub.call(this, nodeId, ...a); if (ok) mark(nodeId); return ok; };
   const exp = window.nodeGraphPictureExportTarget;
   window.nodeGraphPictureExportTarget = function (nodeId, ...a) { const t = exp.call(this, nodeId, ...a); if (t) mark(nodeId); return t; };
+  vg.panX = [];
+  vg.ingests = [];
+  vg.lastIngest = 0;
+  const ingest = window.nodeGraphIngestFrameBatchNow;
+  if (typeof ingest === "function") {
+    window.nodeGraphIngestFrameBatchNow = function (batch) {
+      const r = ingest.call(this, batch);
+      if (batch?.scope) { vg.lastIngest = performance.now(); if (vg.on) vg.ingests.push(vg.lastIngest); }
+      return r;
+    };
+  }
+  const vdStep = window.nodeGraphVideoDelayGlStep;
+  if (typeof vdStep === "function") {
+    window.nodeGraphVideoDelayGlStep = function (host, o) {
+      if (vg.on && o?.nodeId === "vd-x") vg.panX.push([performance.now(), Number(o.panX), vg.lastIngest ? performance.now() - vg.lastIngest : -1]);
+      return vdStep.call(this, host, o);
+    };
+  }
   const read = window.nodeGraphPictureRead;
   window.nodeGraphPictureRead = function (nodeId, port) {
     const r = read.call(this, nodeId, port);
@@ -146,7 +170,7 @@ const res = await page.evaluate(() => {
   const total = f.reduce((s, d) => s + d, 0);
   return {
     frames: vg.frame - vg.frame0, fps: f.length ? (1000 * f.length) / total : 0, p50: q(0.5), p90: q(0.9), max: f[f.length - 1] || 0,
-    pubs: vg.pubs, reads: vg.reads, scans: vg.scans,
+    pubs: vg.pubs, reads: vg.reads, scans: vg.scans, panX: vg.panX, ingests: vg.ingests,
     // VG-1: rebuilds of the ?? edge table in the window (each is one walk of
     // the connection list). Before VG-1 every read was a walk: null here.
     listScans: vg.edges0 ? nodeGraphPictureEdgeStats().rebuilds - vg.edges0.rebuilds : null,
@@ -237,6 +261,17 @@ console.log(`all off screen (${off.frames} frames, ${off.asleep} modules asleep)
 if (back.frames < 30) console.log("WARN: rAF stalled in the pan-back window (browser window hidden?); rerun");
 console.log(`panned back (${back.frames} frames): fbm-far ${back.asleep ? "asleep" : "awake"} publishes ${r1((back.pubs["fbm-far"] || 0) / Math.max(1, back.frames))}/frame, vd-far ${r1((back.pubs["vd-far"] || 0) / Math.max(1, back.frames))}/frame; fbm-far picture ${back.lit}% lit`);
 console.log(`rewire (drop vd-1 -> ib-1): ${rewire.before && rewire.after && rewire.other ? "ok" : "FAIL " + JSON.stringify(rewire)}`);
+{
+  // VG-6: X seen by the asleep vd-x (1 Hz sine, amplitude 0.7 -> panX +-0.385).
+  const v = res.panX.map((p) => p[1]);
+  const lo = Math.min(...v); const hi = Math.max(...v);
+  let changes = 0; for (let i = 1; i < v.length; i += 1) if (v[i] !== v[i - 1]) changes += 1;
+  const ages = res.panX.map((p) => p[2]).filter((a) => a >= 0).sort((a, b) => a - b);
+  const gaps = res.ingests.slice(1).map((t, i) => t - res.ingests[i]).sort((a, b) => a - b);
+  const med = (a) => (a.length ? a[Math.floor(a.length / 2)] : -1);
+  console.log(`audio ingest: ${res.ingests.length} scope batches, interval p50 ${r1(med(gaps))} ms; ring age at the vd-x step p50 ${r1(med(ages))} ms, max ${r1(ages[ages.length - 1] ?? -1)} ms (plus the worklet block and output latency)`);
+  console.log(`audio X -> asleep vd-x: ${v.length} steps, panX ${v.length ? `${r1(lo * 100) / 100}..${r1(hi * 100) / 100}` : "-"}, value changed on ${changes} steps`);
+}
 if (res.glFailures.length) console.log("display GL failures:", res.glFailures);
 const errs = [...new Set(errors.filter((e) => !/favicon|Failed to load resource/.test(e)))];
 if (errs.length) console.log("page errors:", errs.slice(0, 6));

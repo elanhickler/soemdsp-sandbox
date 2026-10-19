@@ -61,36 +61,6 @@ function nodeGraphVideoFeedbackReadParam(nodeId, key, fallback) {
   return Number.isFinite(raw) ? raw : fallback;
 }
 
-function nodeGraphVideoFeedbackBufferFromKey(nodeId, port) {
-  const state = typeof nodeGraphModuleScopeState === "object" ? nodeGraphModuleScopeState : null;
-  if (!state?.buffers || !nodeId) return null;
-  const names = [port, String(port).toLowerCase(), String(port).toUpperCase()];
-  for (let i = 0; i < names.length; i += 1) {
-    const ring = state.buffers.get(`${nodeId}:${names[i]}`);
-    if (ring?.length) return ring;
-  }
-  if (typeof nodeGraphModuleScopeConnectedSourceBuffer === "function") {
-    const connected = nodeGraphModuleScopeConnectedSourceBuffer(nodeId, port);
-    if (connected?.length) return connected;
-  }
-  return null;
-}
-
-function nodeGraphVideoFeedbackRingCount(ring) {
-  if (!ring?.length) return 0;
-  if (typeof nodeGraphScopeAvailableSampleCount === "function") {
-    return nodeGraphScopeAvailableSampleCount(ring) || ring.length;
-  }
-  return ring.length;
-}
-
-function nodeGraphVideoFeedbackLatest(ring) {
-  const n = nodeGraphVideoFeedbackRingCount(ring);
-  if (!(n > 0)) return 0;
-  const v = Number(ring[n - 1]);
-  return Number.isFinite(v) ? v : 0;
-}
-
 function nodeGraphVideoFeedbackEnsureSpectrumState(canvas) {
   const n = NODE_GRAPH_VIDEO_FEEDBACK_FFT;
   let st = canvas._videoFeedbackSpectrum;
@@ -116,7 +86,7 @@ function nodeGraphVideoFeedbackSpectrumWindow(canvas, ring, smooth01) {
   const st = nodeGraphVideoFeedbackEnsureSpectrumState(canvas);
   st.real.fill(0);
   st.imag.fill(0);
-  const count = nodeGraphVideoFeedbackRingCount(ring);
+  const count = nodeGraphVideoGraphAudioCount(ring);
   const take = Math.min(count, n);
   const src0 = Math.max(0, count - take);
   const dst0 = n - take;
@@ -148,7 +118,7 @@ function nodeGraphVideoFeedbackSpectrumWindow(canvas, ring, smooth01) {
 }
 
 function nodeGraphVideoFeedbackWaveWindow(ring, outLen) {
-  const n = nodeGraphVideoFeedbackRingCount(ring);
+  const n = nodeGraphVideoGraphAudioCount(ring);
   if (!(n > 0) || !(outLen > 0)) return null;
   const start = Math.max(0, n - outLen);
   if (start === 0 && n === outLen) return ring;
@@ -224,9 +194,9 @@ function drawNodeGraphVideoFeedbackFaceItem(_renderer, item, pixelRatio) {
   const twist = Math.max(-1, Math.min(1, nodeGraphVideoFeedbackReadParam(nodeId, "twist", 0)));
   const bright = Math.max(0, Math.min(1, nodeGraphVideoFeedbackReadParam(nodeId, "bright", 0.75)));
   const smooth = Math.max(0, Math.min(1, nodeGraphVideoFeedbackReadParam(nodeId, "smooth", 0.64)));
-  const ringA = nodeGraphVideoFeedbackBufferFromKey(nodeId, "A");
-  const ringB = nodeGraphVideoFeedbackBufferFromKey(nodeId, "B");
-  const bSigned = Math.max(-1, Math.min(1, nodeGraphVideoFeedbackLatest(ringB)));
+  // VG-6: block mode for the wave (A), control mode for spin (B).
+  const ringA = nodeGraphVideoGraphAudioBlock(nodeId, "A");
+  const bSigned = Math.max(-1, Math.min(1, nodeGraphVideoGraphAudioLatest(nodeId, "B")));
   const ink = nodeGraphVideoFeedbackHexRgb01(nodeGraphVideoFeedbackSettingsForNode(node).dot1Color);
   const wave = nodeGraphVideoFeedbackSpectrumWindow(canvas, ringA, smooth);
   const host = canvas;
