@@ -184,6 +184,11 @@
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.globalCompositeOperation = "source-over";
     ctx.globalAlpha = 1;
+    const dev = typeof nodeGraphPictureDevice === "function" ? nodeGraphPictureDevice() : null;
+    if (dev?.canvas && src === dev.canvas && typeof nodeGraphSharedGlCopyToContext === "function"
+      && nodeGraphSharedGlCopyToContext(ctx, sx, sy, sw, sh, dx, dy, dw, dh, smooth)) {
+      return true;
+    }
     ctx.imageSmoothingEnabled = Boolean(smooth);
     if ("imageSmoothingQuality" in ctx) ctx.imageSmoothingQuality = smooth ? "medium" : "low";
     ctx.drawImage(src, sx, sy, sw, sh, dx, dy, dw, dh);

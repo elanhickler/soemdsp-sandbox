@@ -23,10 +23,26 @@ async function open(patch) {
   return page;
 }
 const paramFaces = () => {
-  const lit = (c) => {
+  // GL-composited faces keep their picture in a GPU texture (ZP-2), not the
+  // hidden 2D bitmap: read that when it exists. 16x16 RGBA grid.
+  const px16 = (c) => {
+    const gpu = typeof nodeGraphSharedGlFacePixels === "function" ? nodeGraphSharedGlFacePixels(c) : null;
+    if (gpu) {
+      const d = new Uint8Array(16 * 16 * 4);
+      for (let y = 0; y < 16; y += 1) for (let x = 0; x < 16; x += 1) {
+        const sx = Math.min(gpu.width - 1, Math.floor((x + 0.5) * gpu.width / 16));
+        const sy = Math.min(gpu.height - 1, Math.floor((y + 0.5) * gpu.height / 16));
+        const si = (sy * gpu.width + sx) * 4; const di = (y * 16 + x) * 4;
+        d[di] = gpu.data[si]; d[di + 1] = gpu.data[si + 1]; d[di + 2] = gpu.data[si + 2]; d[di + 3] = gpu.data[si + 3];
+      }
+      return d;
+    }
     const o = document.createElement("canvas"); o.width = 16; o.height = 16;
     const g = o.getContext("2d"); g.drawImage(c, 0, 0, 16, 16);
-    const d = g.getImageData(0, 0, 16, 16).data; let n = 0;
+    return g.getImageData(0, 0, 16, 16).data;
+  };
+  const lit = (c) => {
+    const d = px16(c); let n = 0;
     for (let i = 0; i < d.length; i += 4) if (d[i] + d[i + 1] + d[i + 2] > 30) n += 1;
     return n;
   };
@@ -71,6 +87,24 @@ const paramFaces = () => {
   // 4. Buffer modules added while stopped (and one while paused) get a face
   // canvas and a painted (opaque) plate at once, like after Stop.
   const addAndProbe = (types) => page.evaluate(async (list) => {
+    // GL-composited faces keep their picture in a GPU texture (ZP-2), not the
+    // hidden 2D bitmap: read that when it exists. 16x16 RGBA grid.
+    const px16 = (c) => {
+      const gpu = typeof nodeGraphSharedGlFacePixels === "function" ? nodeGraphSharedGlFacePixels(c) : null;
+      if (gpu) {
+        const d = new Uint8Array(16 * 16 * 4);
+        for (let y = 0; y < 16; y += 1) for (let x = 0; x < 16; x += 1) {
+          const sx = Math.min(gpu.width - 1, Math.floor((x + 0.5) * gpu.width / 16));
+          const sy = Math.min(gpu.height - 1, Math.floor((y + 0.5) * gpu.height / 16));
+          const si = (sy * gpu.width + sx) * 4; const di = (y * 16 + x) * 4;
+          d[di] = gpu.data[si]; d[di + 1] = gpu.data[si + 1]; d[di + 2] = gpu.data[si + 2]; d[di + 3] = gpu.data[si + 3];
+        }
+        return d;
+      }
+      const o = document.createElement("canvas"); o.width = 16; o.height = 16;
+      const g = o.getContext("2d"); g.drawImage(c, 0, 0, 16, 16);
+      return g.getImageData(0, 0, 16, 16).data;
+    };
     const before = new Set([...document.querySelectorAll("article[data-node-type]")].map((a) => a.dataset.node));
     // Keep every new module on screen (off-screen faces are culled).
     let x = 40;
@@ -89,9 +123,7 @@ const paramFaces = () => {
       let opaque = 0;
       for (const c of cs) {
         try {
-          const o = document.createElement("canvas"); o.width = 16; o.height = 16;
-          const g = o.getContext("2d"); g.drawImage(c, 0, 0, 16, 16);
-          const d = g.getImageData(0, 0, 16, 16).data; let n = 0;
+          const d = px16(c); let n = 0;
           for (let i = 3; i < d.length; i += 4) if (d[i] > 200) n += 1;
           opaque = Math.max(opaque, n);
         } catch (_e) { /* ignore */ }

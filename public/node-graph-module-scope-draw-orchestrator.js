@@ -652,7 +652,8 @@ function drawNodeGraphModuleScopes(options = {}) {
   setNodeGraphModuleScopeDebugPhase("commit");
   commitNodeGraphModuleScopeRenderMetricsFrame(animationTime);
   if (typeof nodeGraphGlGraphPresent === "function") {
-    nodeGraphGlGraphPresent();
+    // Faces are already on their canvases. Stamp those. Do not rebuild cables.
+    nodeGraphGlGraphPresent({ displaysOnly: true });
   }
   // Keep RAF alive while the paint gate says live and faces exist.
   if (typeof nodeGraphModuleScopeState !== "undefined" && nodeGraphModuleScopeState) {

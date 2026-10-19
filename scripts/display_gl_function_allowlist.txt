@@ -23,7 +23,7 @@ public/lib/visual/gl-line-renderer.js::endBatch | BAKE | shared-device helper [g
 public/lib/visual/gl-line-renderer.js::nodeGraphGlLinesFillBlack | BAKE | shared-device helper [2D fillRect()]
 public/lib/visual/glyph-sdf-atlas.js::bake | BAKE | Argi 2026-10-16: font raster for the SDF glyph texture (no GL text raster) [getContext('2d'), 2D clearRect()]
 public/lib/visual/picture-device.js::nodeGraphPicturePresent | BAKE | shared-device helper [getContext('2d'), 2D drawImage()]
-public/lib/visual/picture-device.js::nodeGraphSharedGlBlitTo2D | BAKE | shared-device helper [2D drawImage()]
+public/lib/visual/picture-device.js::nodeGraphSharedGlCopyToContext | BAKE | shared-device helper: on-screen 2D canvases only; GL-composited faces get a GPU texture (ZP-2) [2D drawImage()]
 public/node-graph-image-utils.js::nodeGraphRasterizeSvgFile | BAKE | Argi 2026-10-16: load-time SVG import bake, not a display [getContext('2d'), 2D clearRect()]
 public/node-graph-module-scope-settings-form.js::nodeGraphStampPreviewBlit | BUGSFIX | Argi 2026-10-16: only the PhosphorDrawer stamp branch keeps 2D (BugsFix-owned); dot/waterfall/trace stamps are GL [2D fillRect()]
 public/node-graph-module-scope-settings-form.js::paintNodeGraphStampPreviewCanvas | BUGSFIX | Argi 2026-10-16: only the PhosphorDrawer stamp branch keeps 2D (BugsFix-owned); dot/waterfall/trace stamps are GL [getContext('2d'), 2D fillRect()]

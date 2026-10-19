@@ -998,6 +998,13 @@ void main() {
     const sh = source.naturalHeight || source.height || 0;
     if (!(sw > 0) || !(sh > 0)) return null;
     const gl = s.gl;
+    // A face that lives on the GPU has no current 2D bitmap: copy its texture.
+    const faceCopy = typeof global.nodeGraphSharedGlFaceCopyTexture === "function" && source.getContext
+      ? global.nodeGraphSharedGlFaceCopyTexture(source)
+      : null;
+    if (faceCopy) {
+      return { glSnapshot: true, keep: options?.keep === true, texture: faceCopy.texture, width: faceCopy.width, height: faceCopy.height };
+    }
     const texture = gl.createTexture();
     gl.bindTexture(gl.TEXTURE_2D, texture);
     gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
@@ -1484,10 +1491,18 @@ void main() {
     gl.bindTexture(gl.TEXTURE_2D, s.imgTex);
     gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
     gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
+    const faceTexture = typeof global.nodeGraphSharedGlFaceTexture === "function"
+      ? global.nodeGraphSharedGlFaceTexture
+      : null;
     for (const im of batch.images) {
       const src = im.source;
+      // A face canvas that renders on this device: sample its GPU copy
+      // (top-down, same orientation as a canvas upload). No upload (ZP-2).
+      const face = !src.glSnapshot && faceTexture && src.getContext ? faceTexture(src) : null;
       if (src.glSnapshot) {
         gl.bindTexture(gl.TEXTURE_2D, src.texture);
+      } else if (face) {
+        gl.bindTexture(gl.TEXTURE_2D, face.texture);
       } else {
         let cached = im.cache ? s.texCache.get(src) : null;
         const sw = src.naturalWidth || src.width || 0;
@@ -1711,9 +1726,11 @@ void main() {
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.globalCompositeOperation = "source-over";
     ctx.globalAlpha = 1;
-    if (batch.transparent && batch.keep !== true) ctx.clearRect(0, 0, w, h);
+    const replace = batch.transparent && batch.keep !== true;
+    if (replace) ctx.clearRect(0, 0, w, h);
     if (typeof global.nodeGraphSharedGlBlitTo2D === "function") {
-      return global.nodeGraphSharedGlBlitTo2D(ctx, w, h) !== false;
+      // replace: the face texture gets this rect as is (the 2D clear above).
+      return global.nodeGraphSharedGlBlitTo2D(ctx, w, h, { replace }) !== false;
     }
     ctx.drawImage(s.dev.canvas, 0, Math.max(0, s.dev.canvas.height - h), w, h, 0, 0, w, h);
     return true;
@@ -1728,6 +1745,8 @@ void main() {
     ctx.globalAlpha = 1;
     ctx.fillStyle = "#000";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
+    // The black plate is the picture now; drop any GPU copy of the face.
+    if (typeof global.nodeGraphSharedGlFaceForget === "function") global.nodeGraphSharedGlFaceForget(canvas);
   }
 
   /** "#rgb" / "#rrggbb" / "rgb(a)(...)" / "hsl(a)(...)" -> [r,g,b,a] 0..1. */
