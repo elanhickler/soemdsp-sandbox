@@ -57,6 +57,25 @@ function nodeGraphWaterfallGlProgram(gl, vert, frag) {
   return prog;
 }
 
+// The three session programs are built once per shared context and reused by
+// every face. A failed build is cached (false) and logged once, so a broken
+// shader never recompiles per frame (ZP-1).
+const nodeGraphWaterfallGlProgramCache = new WeakMap();
+function nodeGraphWaterfallGlSharedPrograms(gl) {
+  const hit = nodeGraphWaterfallGlProgramCache.get(gl);
+  if (hit !== undefined) return hit || null;
+  const scrollProg = nodeGraphWaterfallGlProgram(gl, NODE_GRAPH_WF_GL_VERT, NODE_GRAPH_WF_GL_SCROLL);
+  const presentProg = nodeGraphWaterfallGlProgram(gl, NODE_GRAPH_WF_GL_VERT, NODE_GRAPH_WF_GL_PRESENT);
+  const barProg = nodeGraphWaterfallGlProgram(gl, NODE_GRAPH_WF_GL_BAR_VERT, NODE_GRAPH_WF_GL_BAR);
+  const out = scrollProg && presentProg && barProg ? { scrollProg, presentProg, barProg } : false;
+  if (!out) {
+    for (const p of [scrollProg, presentProg, barProg]) if (p) gl.deleteProgram(p);
+    if (typeof nodeGraphDisplayGlFailed === "function") nodeGraphDisplayGlFailed(null, "waterfall: GL program link failed");
+  }
+  nodeGraphWaterfallGlProgramCache.set(gl, out);
+  return out || null;
+}
+
 function nodeGraphWaterfallGlMakeTarget(gl, w, h) {
   const tex = gl.createTexture();
   gl.bindTexture(gl.TEXTURE_2D, tex);
@@ -231,10 +250,9 @@ function nodeGraphWaterfallGlEnsure(canvas, plateCss) {
   const pic = typeof nodeGraphSharedGlDevice === "function" ? nodeGraphSharedGlDevice() : null;
   const gl = pic?.gl || null;
   if (!gl || gl.isContextLost()) return null;
-  const scrollProg = nodeGraphWaterfallGlProgram(gl, NODE_GRAPH_WF_GL_VERT, NODE_GRAPH_WF_GL_SCROLL);
-  const presentProg = nodeGraphWaterfallGlProgram(gl, NODE_GRAPH_WF_GL_VERT, NODE_GRAPH_WF_GL_PRESENT);
-  const barProg = nodeGraphWaterfallGlProgram(gl, NODE_GRAPH_WF_GL_BAR_VERT, NODE_GRAPH_WF_GL_BAR);
-  if (!scrollProg || !presentProg || !barProg) return null;
+  const progs = nodeGraphWaterfallGlSharedPrograms(gl);
+  if (!progs) return null;
+  const { scrollProg, presentProg, barProg } = progs;
   const quad = gl.createBuffer();
   gl.bindBuffer(gl.ARRAY_BUFFER, quad);
   gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
@@ -389,22 +407,33 @@ function nodeGraphOnsetGlLineProgram(gl) {
   gl.attachShader(prog, vs);
   gl.attachShader(prog, fs);
   gl.linkProgram(prog);
-  if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) return null;
+  gl.deleteShader(vs);
+  gl.deleteShader(fs);
+  if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
+    console.error("[waterfall-gl] onset line link failed: " + (gl.getProgramInfoLog(prog) || "no info log"));
+    gl.deleteProgram(prog);
+    return null;
+  }
   return prog;
 }
 
+// A failed link is cached on the session: no per-frame recompile (ZP-1).
 function nodeGraphOnsetGlEnsureLine(s) {
-  if (s.lineProg) return s;
+  if (s.lineProg || s.lineProgFailed) return s;
   const gl = s.gl;
   const prog = nodeGraphOnsetGlLineProgram(gl);
-  if (!prog) return s;
+  if (!prog) {
+    s.lineProgFailed = true;
+    return s;
+  }
   s.lineProg = prog;
   s.lineBuf = gl.createBuffer();
   s.lineLoc = {
     pos: gl.getAttribLocation(prog, "aPos"),
-    side: gl.getAttribLocation(prog, "aSide"),
-    core: gl.getAttribLocation(prog, "aCore"),
+    p0: gl.getAttribLocation(prog, "aP0"),
     color: gl.getAttribLocation(prog, "aColor"),
+    p1: gl.getAttribLocation(prog, "aP1"),
+    half: gl.getAttribLocation(prog, "aHalf"),
     css: gl.getUniformLocation(prog, "uCss"),
   };
   return s;
@@ -414,7 +443,10 @@ function nodeGraphOnsetGlStrokePolyline(canvas, points, widthPx, rgb) {
   const s = canvas && canvas._wfGlSession;
   if (!s || !points || points.length < 2) return false;
   nodeGraphOnsetGlEnsureLine(s);
-  if (!s.lineProg) return false;
+  if (!s.lineProg) {
+    if (typeof nodeGraphDisplayGlFailed === "function") nodeGraphDisplayGlFailed(canvas, "onset line: GL program link failed");
+    return false;
+  }
   nodeGraphWaterfallGlFlush(s);
   const gl = s.gl;
   const width = Math.max(0.75, Number(widthPx) || 1);
