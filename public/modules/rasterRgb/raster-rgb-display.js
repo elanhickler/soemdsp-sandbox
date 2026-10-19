@@ -165,13 +165,27 @@ function nodeGraphRasterRgbGridSize(node) {
   };
 }
 
-/** Pixels advanced per ingested audio sample (1 = sample clock; fractional OK). */
-function nodeGraphRasterRgbScanSpeed(node) {
-  const raw = Number(node?.params?.scanSpeed);
+/** Line Rate param: lines drawn per second (Hz). */
+function nodeGraphRasterRgbLineRate(node) {
+  const raw = Number(node?.params?.lineRate);
   if (!Number.isFinite(raw) || raw <= 0) {
-    return 8;
+    return 3675;
   }
-  return SoemMath.clamp(raw, 0.05, 64);
+  return SoemMath.clamp(raw, 0.1, 500000);
+}
+
+/**
+ * Beam pixels per ingested sample: Width x Line Rate / sampleRate, from the
+ * ring's real engine rate (re-read every paint, so a Width or rate change
+ * applies at once). One line then takes exactly sampleRate / Line Rate samples.
+ */
+function nodeGraphRasterRgbBeamSpeed(node, logicalW, sampleRate) {
+  const sr = Number(sampleRate);
+  const rate = Number.isFinite(sr) && sr > 0
+    ? sr
+    : (typeof nodeGraphLiveHostSampleRate === "function" ? nodeGraphLiveHostSampleRate() : 44100);
+  const w = Math.max(1e-9, nodeGraphFiniteNumber(logicalW));
+  return (w * nodeGraphRasterRgbLineRate(node)) / rate;
 }
 
 function nodeGraphRasterRgbUnit01(value, fallback) {
@@ -735,7 +749,7 @@ function drawNodeGraphRasterRgbFaceItem(_renderer, item, pixelRatio) {
     // Every undrawn sample since the last paint (a stall included). The only
     // bound is the ring itself: older samples are no longer there to draw.
     const take = Math.min(undrawn, captured.length);
-    // Beam on the GPU (raster-rgb-gl.js): Scan Speed pixels per sample
+    // Beam on the GPU (raster-rgb-gl.js): Width x Line Rate / sampleRate pixels per sample
     // (fractional credit carried over), x = pos mod W, y = floor(pos / W) mod H.
     const scanned = nodeGraphRasterRgbGlScan(state, {
       take,
@@ -746,7 +760,11 @@ function drawNodeGraphRasterRgbFaceItem(_renderer, item, pixelRatio) {
       ],
       logicalW,
       logicalH,
-      speed: nodeGraphRasterRgbScanSpeed(node),
+      speed: nodeGraphRasterRgbBeamSpeed(
+        node,
+        logicalW,
+        typeof nodeGraphScopeSampleRate === "function" ? nodeGraphScopeSampleRate(primary) : primary?.nodeGraphScopeSampleRate,
+      ),
       syncs: nodeGraphRasterRgbSyncHits(state, paintSlot, take),
     });
     if (!scanned) {

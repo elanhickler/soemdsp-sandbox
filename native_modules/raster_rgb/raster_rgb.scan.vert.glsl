@@ -43,13 +43,21 @@ float level(float v) {
   return floor(clamp(abs(v), 0.0, 1.0) * 255.0 + 0.5) / 255.0;
 }
 
+// Stamp count through sample i. kTie: a value this close below a whole stamp
+// counts as reaching it, so exact ties (Line Rate locked to the source) land
+// on the same sample in every chunk and the picture holds still (float32
+// error at 4096 stamps is ~2.4e-4; real fractions stay far from 1 - kTie).
+const float kTie = 1e-3;
+float stampsThrough(int i) {
+  return floor(uCredit0 + float(i) * uSpeed + kTie);
+}
 void main() {
   float k = float(gl_VertexID);
   // Closed form, then nudged so float rounding can never pick a neighbour.
   int i = int(ceil((k + 1.0 - uCredit0) / uSpeed)) - 1;
   if (i < 0) i = 0;
-  if (floor(uCredit0 + float(i + 1) * uSpeed) <= k) i += 1;
-  if (i > 0 && floor(uCredit0 + float(i) * uSpeed) > k) i -= 1;
+  if (stampsThrough(i + 1) <= k) i += 1;
+  if (i > 0 && stampsThrough(i) > k) i -= 1;
   int s = uSample0 + i;
   vec3 v = vec3(
     sampleAt(uR, s - uSkip.x),

@@ -361,6 +361,8 @@
    * sample) }. Updates state.writePos / state.scanCredit like the old JS loop.
    * Returns false on a GL failure.
    */
+  const TIE_EPS = 1e-9;
+
   function nodeGraphRasterRgbGlScan(state, input) {
     const dev = nodeGraphPictureDevice();
     const gl = dev?.gl;
@@ -425,7 +427,12 @@
       }
       const end = next < syncs.length ? Math.min(take, syncs[next].at) : take;
       const n = Math.min(chunkSamples, end - i);
-      const total = credit + n * s;
+      let total = credit + n * s;
+      // Exact ties (rational Width x Line Rate / sampleRate lands on a whole
+      // pixel) must resolve the same way every time, or float drift flips one
+      // stamp and shifts the whole picture a pixel: snap near-integers.
+      const whole = Math.round(total);
+      if (Math.abs(total - whole) < TIE_EPS) total = whole;
       const stamps = Math.floor(total);
       if (stamps > 0) {
         gl.uniform1i(p.u.uSample0, i);

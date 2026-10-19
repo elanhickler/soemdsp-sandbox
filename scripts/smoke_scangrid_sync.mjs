@@ -4,10 +4,10 @@
 //   2. Beam jumps (nodeGraphRasterRgbGlScan syncs): H = start of the next line
 //      (stays put at column 0), V = top-left, before that sample writes; GPU
 //      grid and pos/credit equal a CPU reference.
-//   3. Live: Clock T (200 Hz) into V Sync of a cleared 96x54, Scan Speed 8 grid
-//      restarts the frame every sampleRate/200 samples (88.2 kHz: 441 samples
-//      = 3528 px = 36.75 lines), so the lines below stay black; with the cable
-//      removed every line lights.
+//   3. Live: Clock T (200 Hz) into V Sync of a cleared 96x54, Line Rate 7350 Hz
+//      grid restarts the frame every 7350 / 200 = 36.75 lines (at any engine
+//      rate), so the lines below stay black; with the cable removed every line
+//      lights.
 // Usage: node scripts/smoke_scangrid_sync.mjs   (server.py on :8765)
 import fs from "node:fs";
 import path from "node:path";
@@ -25,7 +25,7 @@ function patchJson() {
   d.modulations = [];
   d.nodes.push({ gx: 1, gy: 1, id: "sw-1", type: "sineWavetable", params: { freq: 50, mode: 0, amp: 0.9 } });
   d.nodes.push({ gx: 1, gy: 8, id: "ck-1", type: "clock", params: { rate: 200 } });
-  d.nodes.push({ gx: 8, gy: 1, id: "rg-1", type: "rasterRgb", params: { width: 96, height: 54, scanSpeed: 8 } });
+  d.nodes.push({ gx: 8, gy: 1, id: "rg-1", type: "rasterRgb", params: { width: 96, height: 54, lineRate: 7350 } });
   d.connections.push({ sourceNode: "sw-1", sourcePort: "A", destinationNode: "rg-1", destinationPort: "R", tracePoints: [] });
   return JSON.stringify(d);
 }
@@ -164,7 +164,7 @@ await wire(false);
 await page.waitForTimeout(1500);
 const unsynced = await litRows();
 check("live: free run lights every line", free && free.lit === free.h, JSON.stringify(free));
-const lines = synced ? (synced.sr / 200) * 8 / 96 : 0;
+const lines = synced ? 7350 / 200 : 0;
 const wantLast = Math.ceil(lines) - 1;
 check(`live: V Sync 200 Hz restarts every ${lines.toFixed(2)} lines (line ${wantLast} is the last lit)`,
   synced && lines < 54 && synced.last === wantLast && synced.lit >= wantLast - 2, JSON.stringify(synced));

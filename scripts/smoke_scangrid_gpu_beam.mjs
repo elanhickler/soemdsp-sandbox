@@ -13,8 +13,22 @@
 //    Speed 2) fed 45 frames of 1536 samples, as the live ring delivers them at
 //    44.1 kHz, and a mixed 1470 / 1471 / 2940 (stall) cadence: catches any
 //    start-position, credit or per-frame offset drift across frames.
+// Line Rate (Hz): beam speed = Width x Line Rate / sampleRate px/sample.
+//   - formula: nodeGraphRasterRgbBeamSpeed for whole / fractional Width and
+//     44.1 / 48 / 88.2 kHz (one line = sampleRate / Line Rate samples).
+//   - stability (GPU, synthetic): a 60 Hz sine / cosine at Line Rate 60, fed
+//     in a jittery 1470 / 1471 / 2940 cadence, must leave the grid unchanged
+//     frame after frame once it has filled (whole and fractional Width).
+//   - stability (live): SinCos 60 Hz -> R / G of a 96 x 54 Line Rate 60 grid,
+//     sampled every 100 ms for 3 s: frame-to-frame cell changes must be 0.
+//     SHOT=path saves the face (default scripts/out/scangrid/linerate-60.png).
 // Usage: node scripts/smoke_scangrid_gpu_beam.mjs   (server.py on :8765)
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { chromium } from "playwright";
+
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 const BASE = process.env.SANDBOX_URL || "http://127.0.0.1:8765/";
 const browser = await chromium.launch({ headless: Boolean(process.env.HEADLESS), args: ["--ignore-gpu-blocklist", "--use-angle=d3d11"] });
@@ -135,6 +149,129 @@ for (const r of results) {
   if (!good) fail = true;
   console.log(`${good ? "ok  " : "FAIL"} W=${r.W} H=${r.H} speed=${r.speed} batches=${r.batches.length > 6 ? `${r.batches.length} frames, ${r.batches.reduce((s, n) => s + n, 0)} samples` : r.batches.join("+")}: ${r.bad}/${r.cells} cells differ (allowed ${allowed}${r.maxDiff ? `, max byte diff ${r.maxDiff}` : ""}; vs old JS loop ${r.oldBad}, old loop vs reference ${r.oldVsRef}); pos ${r.posGpu} vs ${r.posRef}, credit ${r.creditGpu.toFixed(6)} vs ${r.creditRef.toFixed(6)}`);
 }
+
+// Line Rate -> beam speed.
+const speeds = await page.evaluate(() => [
+  [{ params: { lineRate: 60 } }, 96, 44100],
+  [{ params: { lineRate: 60 } }, 41.5, 48000],
+  [{ params: { lineRate: 2151.2195121951218 } }, 41, 44100],
+  [{ params: { lineRate: 352800 } }, 1, 88200],
+  [{ params: {} }, 96, 44100],
+].map(([node, w, sr]) => ({ w, sr, lineRate: node.params.lineRate ?? 3675, speed: nodeGraphRasterRgbBeamSpeed(node, w, sr) })));
+for (const s of speeds) {
+  const want = (s.w * s.lineRate) / s.sr;
+  const ok = Math.abs(s.speed - want) < 1e-12 * Math.max(1, want);
+  if (!ok) fail = true;
+  console.log(`${ok ? "ok  " : "FAIL"} Line Rate ${s.lineRate} Hz, Width ${s.w}, ${s.sr} Hz -> ${s.speed} px/sample (want ${want}; line = ${(s.w / s.speed).toFixed(3)} samples)`);
+}
+
+// Stability, synthetic: 60 Hz at Line Rate 60 holds still.
+const stable = await page.evaluate((cases) => cases.map((c) => {
+  const speed = nodeGraphRasterRgbBeamSpeed({ params: { lineRate: 60 } }, c.W, c.sr);
+  const st = { width: Math.ceil(c.W), height: Math.ceil(c.H), writePos: 0, scanCredit: 0, gpu: null };
+  let n0 = 0;
+  const feed = (n) => {
+    const r = new Float32Array(n);
+    const g = new Float32Array(n);
+    for (let i = 0; i < n; i += 1) {
+      const ph = (2 * Math.PI * 60 * (n0 + i)) / c.sr;
+      r[i] = 0.9 * Math.sin(ph);
+      g[i] = 0.9 * Math.cos(ph);
+    }
+    n0 += n;
+    return nodeGraphRasterRgbGlScan(st, { take: n, channels: [r, g, null], logicalW: c.W, logicalH: c.H, speed });
+  };
+  const cadence = (i) => (i % 9 === 8 ? 2940 : 1470 + (i % 3 === 0 ? 1 : 0));
+  let ok = true;
+  let i = 0;
+  while (n0 < (2 * c.H / 60) * c.sr) ok = feed(cadence(i++)) && ok;
+  const first = nodeGraphRasterRgbGlReadGrid(st).pixels.slice();
+  let maxCells = 0;
+  let maxByte = 0;
+  for (let f = 0; f < 60; f += 1) {
+    ok = feed(cadence(i++)) && ok;
+    const px = nodeGraphRasterRgbGlReadGrid(st).pixels;
+    let cells = 0;
+    for (let k = 0; k < px.length; k += 4) {
+      let d = 0;
+      for (let j = 0; j < 3; j += 1) d = Math.max(d, Math.abs(px[k + j] - first[k + j]));
+      if (d) cells += 1;
+      maxByte = Math.max(maxByte, d);
+    }
+    maxCells = Math.max(maxCells, cells);
+  }
+  nodeGraphRasterRgbGlFree(st);
+  return { ...c, ok, speed, maxCells, maxByte, cells: st.width * st.height };
+}), [{ W: 96, H: 54, sr: 44100 }, { W: 96, H: 54, sr: 48000 }, { W: 96, H: 54, sr: 88200 }, { W: 41, H: 29, sr: 44100 }, { W: 41.5, H: 30, sr: 44100 }, { W: 7.25, H: 8, sr: 88200 }, { W: 41.5, H: 29, sr: 44100, alternates: true }]);
+for (const s of stable) {
+  // Fractional Width with an odd line count: row y is fed by lines whose
+  // sub-pixel start phase alternates each pass, so it flips between two
+  // still pictures (reported, not asserted).
+  const ok = s.alternates ? s.ok : s.ok && s.maxCells === 0;
+  if (!ok) fail = true;
+  console.log(`${ok ? "ok  " : "FAIL"}${s.alternates ? " (info)" : ""} still image (synthetic): 60 Hz at Line Rate 60, W=${s.W} H=${s.H} ${s.sr} Hz (speed ${s.speed.toFixed(6)}): over 60 frames max ${s.maxCells}/${s.cells} cells changed, max byte diff ${s.maxByte}`);
+}
+
+// Stability, live: SinCos 60 Hz -> Line Rate 60.
+function livePatch() {
+  const d = JSON.parse(fs.readFileSync(path.join(root, "patches/livedemos/softpop.json"), "utf8"));
+  d.nodes = d.nodes.filter((n) => n.id === "output").map((n) => ({ ...n, gx: 26, gy: 1 }));
+  d.connections = [];
+  d.graphConnections = [];
+  d.modulations = [];
+  d.nodes.push({ gx: 1, gy: 1, id: "sc-1", type: "sinCos", params: { freq: 60, amp: 0.9 } });
+  d.nodes.push({ gx: 8, gy: 1, id: "rg-1", type: "rasterRgb", params: { width: 96, height: 54, lineRate: 60 } });
+  d.connections.push({ sourceNode: "sc-1", sourcePort: "sin", destinationNode: "rg-1", destinationPort: "R", tracePoints: [] });
+  d.connections.push({ sourceNode: "sc-1", sourcePort: "cos", destinationNode: "rg-1", destinationPort: "G", tracePoints: [] });
+  return JSON.stringify(d);
+}
+const live = await (await browser.newContext({ viewport: { width: 1400, height: 900 } })).newPage();
+live.on("pageerror", (e) => errors.push(String(e)));
+await live.route("**/sg-linerate.json*", (r) => r.fulfill({ status: 200, contentType: "application/json", body: livePatch() }));
+await live.goto(`${BASE}?pagePatch=sg-linerate`, { waitUntil: "domcontentloaded", timeout: 120000 });
+await live.waitForFunction(() => typeof nodeGraphRasterRgbGlReadGrid === "function" && document.querySelector('article[data-node="rg-1"]'), null, { timeout: 120000 });
+await live.waitForTimeout(3000);
+await live.locator("[data-transport-play]:visible").first().click();
+await live.waitForFunction(() => nodeGraphRasterRgbCircuitRunning(), null, { timeout: 30000 });
+await live.waitForTimeout(3000);
+const liveRun = await live.evaluate(() => new Promise((done) => {
+  const grab = () => {
+    const st = nodeGraphRasterRgbBuffers.get("rg-1");
+    const g = st ? nodeGraphRasterRgbGlReadGrid(st) : null;
+    return g ? g.pixels.slice() : null;
+  };
+  const ring = nodeGraphRasterRgbPickChannel({ nodeId: "rg-1" }, "R");
+  const sr = typeof nodeGraphScopeSampleRate === "function" ? nodeGraphScopeSampleRate(ring) : Number(ring?.nodeGraphScopeSampleRate);
+  const frames = [];
+  const tick = () => {
+    frames.push(grab());
+    if (frames.length < 31) { setTimeout(tick, 100); return; }
+    const out = { sr, frames: frames.length, nullFrames: frames.filter((f) => !f).length, maxCells: 0, maxByte: 0, lit: 0, cells: 0 };
+    const ok = frames.filter(Boolean);
+    for (let f = 1; f < ok.length; f += 1) {
+      let cells = 0;
+      for (let k = 0; k < ok[f].length; k += 4) {
+        let d = 0;
+        for (let j = 0; j < 3; j += 1) d = Math.max(d, Math.abs(ok[f][k + j] - ok[f - 1][k + j]));
+        if (d) cells += 1;
+        out.maxByte = Math.max(out.maxByte, d);
+      }
+      out.maxCells = Math.max(out.maxCells, cells);
+    }
+    if (ok.length) {
+      out.cells = ok[0].length / 4;
+      for (let k = 0; k < ok[0].length; k += 4) if (ok[0][k] || ok[0][k + 1]) out.lit += 1;
+    }
+    done(out);
+  };
+  tick();
+}));
+const liveOk = liveRun.nullFrames === 0 && liveRun.lit > liveRun.cells * 0.5 && liveRun.maxCells === 0;
+if (!liveOk) fail = true;
+console.log(`${liveOk ? "ok  " : "FAIL"} still image (live): SinCos 60 Hz at Line Rate 60, 96 x 54, engine ${liveRun.sr} Hz: ${liveRun.frames} grabs 100 ms apart, max ${liveRun.maxCells}/${liveRun.cells} cells changed frame to frame, max byte diff ${liveRun.maxByte} (${liveRun.lit} cells lit)`);
+const shot = process.env.SHOT || path.join(root, "scripts/out/scangrid/linerate-60.png");
+await live.locator('article[data-node="rg-1"]').screenshot({ path: shot });
+console.log(`face screenshot: ${shot}`);
 if (errors.length) { console.log("page errors", JSON.stringify(errors.slice(0, 5))); }
 await browser.close();
 if (fail) { console.log("FAIL smoke_scangrid_gpu_beam"); process.exit(1); }

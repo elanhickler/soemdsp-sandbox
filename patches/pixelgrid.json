@@ -165,7 +165,8 @@
         "height": 13,
         "invert": 0,
         "contrast": -1.1043907144601608,
-        "brightness": -1.8058004002982617
+        "brightness": -1.8058004002982617,
+        "lineRate": 18568.42105263158
       },
       "widthGu": 8,
       "paramMeta": {

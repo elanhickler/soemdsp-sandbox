@@ -2634,7 +2634,7 @@ const nodeGraphModuleStoreCatalog = Object.freeze({
   },
   rasterRgb: {
     category: "rgb",
-    description: "Analog RGB color-corrector and rolling framebuffer. Scan Speed sets pixels per sample; invert/contrast/brightness/hue land on R/G/B/📺 outs.",
+    description: "Analog RGB color-corrector and rolling framebuffer. Line Rate (Hz) sets lines per second; invert/contrast/brightness/hue land on R/G/B/📺 outs.",
     label: "Scan Grid",
     notes: ["scan grid", "pixel grid", "raster", "framebuffer", "scan", "rgb", "hue", "color correct", "tv"],
   },

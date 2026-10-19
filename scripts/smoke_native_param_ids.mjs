@@ -102,7 +102,7 @@ const ALLOW_UNBOUND = new Set([
   "pingPongDelay.interpolation",
   "rasterRgb.width",
   "rasterRgb.height",
-  "rasterRgb.scanSpeed",
+  "rasterRgb.lineRate",
   "rasterRgb.blur",
   "rasterRgb.glow",
   "rasterRgb.rasterRgbR",
