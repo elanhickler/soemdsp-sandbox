@@ -155,15 +155,27 @@
     }
   }
 
-  function canvasForFace(face) {
-    let canvas = face.querySelector?.(":scope > .node-t-series-crossfade-canvas");
+  // Paint into the module's own face canvas. The scope keeps that canvas in a
+  // persistent map and re-appends it (cold plate on spawn / Stop), so a second
+  // canvas lost: the GL graph composites every .node-display-canvas in DOM
+  // order and the re-appended black plate covered the crossfade picture.
+  function canvasForFace(face, slot) {
+    let canvas = slot?.scopeElement === face && typeof ensureNodeGraphModuleScopeFaceCanvas === "function"
+      ? ensureNodeGraphModuleScopeFaceCanvas(slot, { mode: "tape" })
+      : null;
+    if (canvas) {
+      for (const stale of face.querySelectorAll?.(":scope > .node-t-series-crossfade-canvas") || []) {
+        if (stale !== canvas) stale.remove();
+      }
+      canvas.classList.add("node-t-series-crossfade-canvas");
+      return canvas;
+    }
+    // Detached face (probe screenshots): own canvas.
+    canvas = face.querySelector?.(":scope > .node-t-series-crossfade-canvas");
     if (!canvas) {
       canvas = nodeGraphDisplayCanvasCreate("node-t-series-crossfade-canvas");
       canvas.setAttribute("aria-hidden", "true");
       face.append(canvas);
-    }
-    for (const overlay of face.querySelectorAll?.(":scope > .node-module-scope-local-fallback-canvas") || []) {
-      overlay.remove();
     }
     return canvas;
   }
@@ -191,7 +203,7 @@
     if (!slot || !face) return;
     const node = typeof nodeGraphModuleScopeNodeForSlot === "function" ? nodeGraphModuleScopeNodeForSlot(slot) : null;
     const type = String(node?.type || slot.type || "");
-    const canvas = canvasForFace(face);
+    const canvas = canvasForFace(face, slot);
     const size = syncCanvas(canvas, face, pixelRatio);
     // Stopped / powered off: black plate like the other signal screens.
     if (typeof scopePaintShouldColdBootFace === "function" && scopePaintShouldColdBootFace(slot.nodeId, slot)) {
