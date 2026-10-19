@@ -202,8 +202,9 @@ void main() {
   }
   float cov = vColour.a * a;
   // Coverage pass stores straight alpha. Zero-coverage corners must be
-  // (0,0,0,0) or MAX would paint the quad's bounding box.
-  gl_FragColor = (uCoverage > 0.5 && cov < 0.004) ? vec4(0.0) : vec4(vColour.rgb, cov);
+  // (0,0,0,0) or MAX would paint the quad's bounding box. The cut tests
+  // geometric coverage only, never colour alpha: no brightness threshold.
+  gl_FragColor = (uCoverage > 0.5 && a < 0.004) ? vec4(0.0) : vec4(vColour.rgb, cov);
 }
 `;
   // Textured quads: images (mode 0), tinted glyph coverage (mode 1),
@@ -437,7 +438,10 @@ void main() {
   float underA = inletA + plateA;
   vec3 underRgb = inletA > 0.5 ? vec3(0.055, 0.063, 0.078) : uFill.rgb;
   float a = strokeA + underA * (1.0 - strokeA);
-  if (a < 0.01) discard;
+  // Discard on geometry only (outside stroke, plate and inlets), never on
+  // colour alpha, so a faint fill or stroke still draws.
+  float geomA = max(max(fat * (1.0 - inMouth), arc), max(sd <= 0.0 ? 1.0 : 0.0, inletA));
+  if (geomA < 0.01 || a <= 0.0) discard;
   vec3 rgb = (strokeCol.rgb * strokeA + underRgb * underA * (1.0 - strokeA)) / a;
   gl_FragColor = vec4(rgb, a);
 }
