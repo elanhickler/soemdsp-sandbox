@@ -527,21 +527,12 @@ function nodeGraphRasterRgbPickChannel(slot, port) {
 function nodeGraphRasterRgbWiredPicture(slot) {
   const nodeId = slot?.nodeId;
   if (!nodeId) return null;
-  if (typeof nodeGraphPictureRead === "function") {
-    const tv = nodeGraphPictureRead(nodeId, "rgba") || nodeGraphPictureRead(nodeId, "📺");
-    if (tv?.texture) return tv;
-  }
-  if (typeof nodeGraphPictureGet !== "function") return null;
-  const ports = ["R", "G", "B", "rgba"];
+  if (typeof nodeGraphPictureRead !== "function") return null;
+  // Edge table (VG-1): rgba / 📺 first, then any picture source cabled to R/G/B.
+  const ports = ["rgba", "📺", "R", "G", "B"];
   for (let i = 0; i < ports.length; i += 1) {
-    const conns = typeof nodeGraphModuleScopeConnectionsTo === "function"
-      ? nodeGraphModuleScopeConnectionsTo(nodeId, ports[i])
-      : [];
-    for (let c = 0; c < (conns || []).length; c += 1) {
-      const src = conns[c]?.sourceNode;
-      const pic = nodeGraphPictureGet(src);
-      if (pic?.texture) return pic;
-    }
+    const pic = nodeGraphPictureRead(nodeId, ports[i]);
+    if (pic?.texture) return pic;
   }
   return null;
 }
