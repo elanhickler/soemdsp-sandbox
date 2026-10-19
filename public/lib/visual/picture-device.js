@@ -147,16 +147,56 @@
     return name === "rgba" || name === "📺";
   }
 
+  // VG-1: ?? edge table. Built once from the patch's connection list and
+  // reused until the list changes (new array or new length: every patch edit
+  // commits a fresh array). Reads and consumer checks never walk the list.
+  // nodeGraphPictureEdgesInvalidate() forces a rebuild after an in-place edit.
+  const edges = { list: null, length: -1, inlets: new Map(), sources: new Set(), rebuilds: 0, lookups: 0 };
+
+  function patchConnections() {
+    return nodeGraphMvp?.patch?.connections || nodeGraphMvp?.connections || null;
+  }
+
+  function nodeGraphPictureEdges() {
+    const list = patchConnections();
+    const length = Array.isArray(list) ? list.length : 0;
+    if (list === edges.list && length === edges.length) return edges;
+    edges.list = list;
+    edges.length = length;
+    edges.inlets = new Map();
+    edges.sources = new Set();
+    edges.rebuilds += 1;
+    for (let i = 0; i < length; i += 1) {
+      const from = connectionEnd(list[i], "from");
+      if (!from.node || !isTvPort(from.port)) continue;
+      const to = connectionEnd(list[i], "to");
+      edges.sources.add(from.node);
+      if (!to.node) continue;
+      const key = `${to.node}\u0000${to.port}`;
+      const feeds = edges.inlets.get(key);
+      if (feeds) feeds.push(from.node);
+      else edges.inlets.set(key, [from.node]);
+    }
+    return edges;
+  }
+
+  function nodeGraphPictureEdgesInvalidate() {
+    edges.list = null;
+    edges.length = -1;
+  }
+
+  /** Probe/smoke counters: table rebuilds and lookups served from it. */
+  function nodeGraphPictureEdgeStats() {
+    return { rebuilds: edges.rebuilds, lookups: edges.lookups, inlets: edges.inlets.size, sources: edges.sources.size };
+  }
+
   /** True when any cable leaves this node's picture out (`rgba` / TV). */
   function nodeGraphPictureHasConsumer(nodeId) {
     const id = String(nodeId || "").trim();
     if (!id) return false;
-    const list = nodeGraphMvp?.patch?.connections || nodeGraphMvp?.connections || [];
-    for (let i = 0; i < list.length; i += 1) {
-      const from = connectionEnd(list[i], "from");
-      if (from.node === id && isTvPort(from.port)) return true;
-    }
-    return false;
+    const table = nodeGraphPictureEdges();
+    table.lookups += 1;
+    return table.sources.has(id);
   }
 
   /**
@@ -211,17 +251,15 @@
   /** Latest published texture feeding this inlet, or null. */
   function nodeGraphPictureRead(nodeId, portName) {
     const id = String(nodeId || "").trim();
-    const port = String(portName || "rgba");
     if (!id) return null;
-    const list = nodeGraphMvp?.patch?.connections || nodeGraphMvp?.connections || [];
-    for (let i = 0; i < list.length; i += 1) {
-      const to = connectionEnd(list[i], "to");
-      if (to.node !== id || to.port !== port) continue;
-      const from = connectionEnd(list[i], "from");
-      if (!isTvPort(from.port)) continue;
-      const slot = published.get(from.node);
+    const table = nodeGraphPictureEdges();
+    table.lookups += 1;
+    const feeds = table.inlets.get(`${id}\u0000${String(portName || "rgba")}`);
+    if (!feeds) return null;
+    for (let i = 0; i < feeds.length; i += 1) {
+      const slot = published.get(feeds[i]);
       if (slot?.texture) {
-        return { texture: slot.texture, width: slot.width, height: slot.height, nodeId: from.node };
+        return { texture: slot.texture, width: slot.width, height: slot.height, nodeId: feeds[i] };
       }
     }
     return null;
@@ -583,6 +621,9 @@
   global.nodeGraphPictureRead = nodeGraphPictureRead;
   global.nodeGraphPicturePresent = nodeGraphPicturePresent;
   global.nodeGraphPictureHasConsumer = nodeGraphPictureHasConsumer;
+  global.nodeGraphPictureEdges = nodeGraphPictureEdges;
+  global.nodeGraphPictureEdgesInvalidate = nodeGraphPictureEdgesInvalidate;
+  global.nodeGraphPictureEdgeStats = nodeGraphPictureEdgeStats;
   global.nodeGraphPictureExportTarget = nodeGraphPictureExportTarget;
   global.nodeGraphPicturePublishCanvas = nodeGraphPicturePublishCanvas;
 })(typeof globalThis !== "undefined" ? globalThis : window);

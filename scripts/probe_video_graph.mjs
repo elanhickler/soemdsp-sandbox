@@ -120,7 +120,7 @@ const states = await page.evaluate(() => Object.fromEntries([...document.querySe
     return [a.dataset.node, `${a.classList.contains("viewport-asleep") ? "asleep" : "awake"}${on ? "" : "(off)"}`];
   })));
 if (process.env.SHOT) await page.screenshot({ path: process.env.SHOT });
-await page.evaluate(() => { const vg = window.__vg; vg.on = true; vg.frame0 = vg.frame; });
+await page.evaluate(() => { const vg = window.__vg; vg.on = true; vg.frame0 = vg.frame; vg.edges0 = typeof nodeGraphPictureEdgeStats === "function" ? nodeGraphPictureEdgeStats() : null; });
 await page.waitForTimeout(SECONDS * 1000);
 const res = await page.evaluate(() => {
   const vg = window.__vg; vg.on = false;
@@ -130,6 +130,9 @@ const res = await page.evaluate(() => {
   return {
     frames: vg.frame - vg.frame0, fps: f.length ? (1000 * f.length) / total : 0, p50: q(0.5), p90: q(0.9), max: f[f.length - 1] || 0,
     pubs: vg.pubs, reads: vg.reads, scans: vg.scans,
+    // VG-1: rebuilds of the ?? edge table in the window (each is one walk of
+    // the connection list). Before VG-1 every read was a walk: null here.
+    listScans: vg.edges0 ? nodeGraphPictureEdgeStats().rebuilds - vg.edges0.rebuilds : null,
     glFailures: typeof nodeGraphDisplayGlFailures === "function" ? [...nodeGraphDisplayGlFailures().keys()] : [],
   };
 });
@@ -141,10 +144,20 @@ const off = await page.evaluate((ms) => new Promise((done) => {
   const vg = window.__vg; vg.pubs = {}; vg.on = true; const f0 = vg.frame;
   setTimeout(() => { vg.on = false; done({ frames: vg.frame - f0, pubs: vg.pubs }); }, ms);
 }), 2000);
+// Edge table follows patch edits: drop vd-1 -> ib-1 through the normal commit.
+const rewire = await page.evaluate(() => {
+  const before = Boolean(nodeGraphPictureRead("ib-1", "rgba")) && nodeGraphPictureHasConsumer("vd-1");
+  const patch = cloneNodeGraphPatch(nodeGraphMvp.patch);
+  patch.connections = patch.connections.filter((c) => !(c.sourceNode === "vd-1" && c.destinationNode === "ib-1"));
+  commitNodeGraphPatch(patch, { wireEdit: true });
+  return { before, after: !nodeGraphPictureRead("ib-1", "rgba") && !nodeGraphPictureHasConsumer("vd-1"), other: Boolean(nodeGraphPictureRead("vd-1", "rgba")) };
+});
 await browser.close();
 const r1 = (v) => Math.round(v * 10) / 10;
 if (process.env.JSON) console.log(JSON.stringify({ states, ...res }, null, 1));
-console.log(`vg-chain ${SECONDS}s: frames=${res.frames} fps=${r1(res.fps)} p50=${r1(res.p50)}ms p90=${r1(res.p90)}ms max=${r1(res.max)}ms pictureRead calls=${res.scans} (${r1(res.scans / Math.max(1, res.frames))}/frame, each a connection-list scan)`);
+console.log(`vg-chain ${SECONDS}s: frames=${res.frames} fps=${r1(res.fps)} p50=${r1(res.p50)}ms p90=${r1(res.p90)}ms max=${r1(res.max)}ms pictureRead calls=${res.scans} (${r1(res.scans / Math.max(1, res.frames))}/frame)`);
+const scans = res.listScans == null ? res.scans : res.listScans;
+console.log(`connection-list scans: ${scans} (${r1(scans / Math.max(1, res.frames))}/frame)${res.listScans == null ? " [no edge table: every read scans]" : " [edge table rebuilds]"}`);
 console.log("node        state        publishes/frame");
 for (const id of NODES) {
   console.log(`${id.padEnd(11)} ${String(states[id] || "?").padEnd(12)} ${r1((res.pubs[id] || 0) / Math.max(1, res.frames))}`);
@@ -162,6 +175,7 @@ for (const [a, b] of VG_CHAIN_EDGES) {
   console.log(`${key.padEnd(16)} ${String(n).padStart(5)}  ${hist || "(no reads)"}${LOOP.has(key) ? "   [loop edge]" : ""}`);
 }
 console.log(`all off screen (${off.frames} frames): ` + NODES.map((id) => `${id}=${r1((off.pubs[id] || 0) / Math.max(1, off.frames))}`).join(" ") + " publishes/frame");
+console.log(`rewire (drop vd-1 -> ib-1): ${rewire.before && rewire.after && rewire.other ? "ok" : "FAIL " + JSON.stringify(rewire)}`);
 if (res.glFailures.length) console.log("display GL failures:", res.glFailures);
 const errs = [...new Set(errors.filter((e) => !/favicon|Failed to load resource/.test(e)))];
 if (errs.length) console.log("page errors:", errs.slice(0, 6));
