@@ -1,4 +1,6 @@
-// Raster RGB — one analog sample is one pixel. Rolling W×H buffer.
+// Raster RGB — one analog sample is one pixel. Rolling W×H grid on the GPU
+// (raster-rgb-gl.js): only new samples are uploaded; the beam writes run in a
+// shader. Channel brightness = clamp(|v|, 0, 1) (unipolar, rectified).
 // paint-rev syntax-3: file must parse (no ?? mixed with ||).
 // Display Settings → Square ratio screen: on = uniform contain (square
 // pixels); off (default) = stretch to the face. 0×N / N×0 draws nothing.
@@ -7,9 +9,9 @@
 // original canvas Gaussian: filter:blur() on the present, then an
 // additive wider Gaussian for glow.
 
-const NODE_GRAPH_RASTER_RGB_PAINT_REV = "scan-pic-1";
+const NODE_GRAPH_RASTER_RGB_PAINT_REV = "gpu-beam-1";
 
-// Rolling framebuffer lives by node id — not on the face canvas.
+// Grid state (GPU texture + beam phase) lives by node id — not on the face canvas.
 // Hide/show title rebuilds the module DOM; the raster must survive that.
 const nodeGraphRasterRgbBuffers = new Map();
 
@@ -238,19 +240,17 @@ function nodeGraphRasterRgbState(nodeId, width, height, logicalWidth = width, lo
   const lw = Math.max(1e-9, nodeGraphFiniteNumber(logicalWidth, width));
   const lh = Math.max(1e-9, nodeGraphFiniteNumber(logicalHeight, height));
   if (!state || state.width !== width || state.height !== height) {
+    nodeGraphRasterRgbGlFree(state);
     state = {
       height,
       logicalHeight: lh,
       logicalWidth: lw,
-      pixels: new Uint8ClampedArray(width * height * 4),
       width,
       // Continuous sample index — X wraps every logicalWidth (fractional OK).
       writePos: 0,
+      // GPU grid (raster-rgb-gl.js gridFor), created opaque black on first use.
+      gpu: null,
     };
-    const pix = state.pixels;
-    for (let i = 0; i < pix.length; i += 4) {
-      pix[i + 3] = 255;
-    }
     if (key) {
       nodeGraphRasterRgbBuffers.set(key, state);
     }
@@ -299,16 +299,10 @@ function nodeGraphRasterRgbRingAbsEnd(ring) {
 }
 
 function nodeGraphRasterRgbClearState(state) {
-  if (!state?.pixels) {
+  if (!state) {
     return;
   }
-  const pix = state.pixels;
-  for (let i = 0; i < pix.length; i += 4) {
-    pix[i] = 0;
-    pix[i + 1] = 0;
-    pix[i + 2] = 0;
-    pix[i + 3] = 255;
-  }
+  nodeGraphRasterRgbGlFree(state);
   state.write = 0;
   state.writePos = 0;
   state.lastAbs = Number.NaN;
@@ -414,42 +408,15 @@ function wipeNodeGraphRasterRgbScreensToColdBoot(options = {}) {
   }
 }
 
-function nodeGraphRasterRgbAnalog01(value, bipolar) {
-  const n = Number(value);
-  if (!Number.isFinite(n)) {
-    return 0;
+/** The newest `take` samples of a ring as a Float32Array view (no copy). */
+function nodeGraphRasterRgbRingTail(ring, take) {
+  if (!ring?.length || !(take > 0)) {
+    return null;
   }
-  if (bipolar) {
-    const c = n < -1 ? -1 : n > 1 ? 1 : n;
-    return 0.5 + 0.5 * c;
-  }
-  if (n <= 0) {
-    return 0;
-  }
-  if (n >= 1) {
-    return 1;
-  }
-  return n;
-}
-
-function nodeGraphRasterRgbRingLooksBipolar(ring, start, count) {
-  if (!ring?.length) {
-    return false;
-  }
-  const begin = Math.max(0, start | 0);
-  const n = Math.max(0, count | 0);
-  const end = Math.min(ring.length, begin + n);
-  for (let i = begin; i < end; i += 8) {
-    if (Number(ring[i]) < -1e-6) {
-      return true;
-    }
-  }
-  return false;
-}
-
-function nodeGraphRasterRgbByte(value, bipolar = false) {
-  const u = nodeGraphRasterRgbAnalog01(value, bipolar);
-  return u <= 0 ? 0 : u >= 1 ? 255 : Math.round(u * 255);
+  const start = Math.max(0, ring.length - take);
+  return ring instanceof Float32Array
+    ? ring.subarray(start)
+    : Float32Array.from(Array.prototype.slice.call(ring, start));
 }
 
 function nodeGraphRasterRgbBufferFromKey(nodeId, port) {
@@ -703,10 +670,7 @@ function drawNodeGraphRasterRgbFaceItem(_renderer, item, pixelRatio) {
     const red = captured.R;
     const green = captured.G;
     const blue = captured.B;
-    const redLen = red?.length || 0;
-    const greenLen = green?.length || 0;
-    const blueLen = blue?.length || 0;
-    const primary = redLen ? red : (greenLen ? green : blue);
+    const primary = red?.length ? red : (green?.length ? green : blue);
     const absEnd = nodeGraphRasterRgbRingAbsEnd(primary);
     const oneFrame = Math.max(1, Math.ceil(frameSamples));
     let lastAbs = Number(state.lastAbs);
@@ -728,51 +692,27 @@ function drawNodeGraphRasterRgbFaceItem(_renderer, item, pixelRatio) {
       );
       undrawn = recent > 0 ? recent : Math.min(captured.length, oneFrame);
     }
-    // Keep up with audio: take every undrawn sample (ring already holds ~0.5–1 s).
-    // Cap only when a long stall would dump many full frames in one paint.
-    const take = Math.min(undrawn, oneFrame * 8, captured.length);
-    const redStart = Math.max(0, redLen - take);
-    const greenStart = Math.max(0, greenLen - take);
-    const blueStart = Math.max(0, blueLen - take);
-    const redBi = nodeGraphRasterRgbRingLooksBipolar(red, redStart, take);
-    const greenBi = nodeGraphRasterRgbRingLooksBipolar(green, greenStart, take);
-    const blueBi = nodeGraphRasterRgbRingLooksBipolar(blue, blueStart, take);
-    // Scan Speed: pixels per audio sample (fractional OK). Accrue leftovers so
-    // 1.5 averages three pixels every two samples, 0.5 writes every other sample.
-    const scanSpeed = nodeGraphRasterRgbScanSpeed(node);
-    let scanCredit = Number(state.scanCredit);
-    if (!Number.isFinite(scanCredit) || scanCredit < 0) {
-      scanCredit = 0;
+    // Every undrawn sample since the last paint (a stall included). The only
+    // bound is the ring itself: older samples are no longer there to draw.
+    const take = Math.min(undrawn, captured.length);
+    // Beam on the GPU (raster-rgb-gl.js): Scan Speed pixels per sample
+    // (fractional credit carried over), x = pos mod W, y = floor(pos / W) mod H.
+    const scanned = nodeGraphRasterRgbGlScan(state, {
+      take,
+      channels: [
+        nodeGraphRasterRgbRingTail(red, take),
+        nodeGraphRasterRgbRingTail(green, take),
+        nodeGraphRasterRgbRingTail(blue, take),
+      ],
+      logicalW,
+      logicalH,
+      speed: nodeGraphRasterRgbScanSpeed(node),
+    });
+    if (!scanned) {
+      canvas._rasterRgbBlit = false;
+      nodeGraphDisplayGlFailed(canvas, "Scan Grid GL beam failed");
+      return;
     }
-    let writePos = nodeGraphFiniteNumber(state.writePos);
-    for (let i = 0; i < take; i += 1) {
-      const rByte = nodeGraphRasterRgbByte(redLen ? red[redStart + i] : 0, redBi);
-      const gByte = nodeGraphRasterRgbByte(greenLen ? green[greenStart + i] : 0, greenBi);
-      const bByte = nodeGraphRasterRgbByte(blueLen ? blue[blueStart + i] : 0, blueBi);
-      scanCredit += scanSpeed;
-      let stamps = Math.floor(scanCredit);
-      scanCredit -= stamps;
-      // Never stall forever on tiny speeds — at least attempt when credit wraps.
-      for (let s = 0; s < stamps; s += 1) {
-        // Fractional Width/Height = samples per line / lines per frame.
-        // x = pos % logicalW, y = floor(pos / logicalW) % logicalH (storage ceil).
-        const x = Math.min(state.width - 1, Math.floor(nodeGraphRasterRgbPosMod(writePos, logicalW)));
-        const line = Math.floor(writePos / logicalW);
-        const y = Math.min(state.height - 1, Math.floor(nodeGraphRasterRgbPosMod(line, logicalH)));
-        const o = (y * state.width + x) * 4;
-        state.pixels[o] = rByte;
-        state.pixels[o + 1] = gByte;
-        state.pixels[o + 2] = bByte;
-        state.pixels[o + 3] = 255;
-        writePos += 1;
-      }
-    }
-    state.scanCredit = scanCredit;
-    // Keep writePos bounded without disturbing phase within a frame.
-    if (writePos >= frameSamples * 4096) {
-      writePos = nodeGraphRasterRgbPosMod(writePos, frameSamples);
-    }
-    state.writePos = writePos;
     state.lastAbs = Number.isFinite(absEnd)
       ? Math.floor(absEnd)
       : Math.floor(lastAbs) + take;

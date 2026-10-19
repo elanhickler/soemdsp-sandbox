@@ -1,11 +1,14 @@
-// Raster RGB GPU present (docs/WEBGL_DISPLAY_PLAN.md).
+// Raster RGB (Scan Grid) on the GPU (docs/WEBGL_DISPLAY_PLAN.md).
 //
-// The Canvas2D present ran, every frame: a JS loop over every buffer pixel
-// (grade LUT + HSL hue rotate), ImageData copy, putImageData, then one or two
-// drawImage calls through ctx.filter = blur(Npx) (blur, then additive glow).
-// Here the raw rolling buffer (state.pixels, the CPU copy the ingest already
-// writes) is uploaded as a texture and the shaders do the per-pixel work:
-//   1. Source pass, per face pixel: nearest-neighbour lookup of the buffer
+// Beam: the grid is one persistent RGBA8 texture per node (row 0 = top).
+// Each frame only the new samples go up (one R32F texture per channel, the
+// newest `take` samples of the R/G/B rings) and scanDraw() draws one point per
+// pixel write (raster_rgb.scan.*.glsl): the scan position maths runs in the
+// vertex shader, the colour is clamp(|v|, 0, 1). A pixel changes only when the
+// beam writes it again. No CPU pixel buffer, no full-grid upload.
+//
+// Present, per frame (same look as the old Canvas2D path):
+//   1. Source pass, per face pixel: nearest-neighbour lookup of the grid
 //      texel (drawImage with smoothing off) → grade LUT texture (contrast →
 //      brightness → invert, built by nodeGraphRasterRgbGradeLut from
 //      nodeGraphRasterRgbGradeChannel01) → HSL hue rotate, a straight GLSL
@@ -27,19 +30,22 @@
 // Its 4096² canvas never resizes: the composite draws into the bottom-left
 // cw×ch scissor rect, which is drawImage'd onto the face. Scratch targets are
 // grow-only and shared by every Raster RGB face. No new WebGL context.
-// Fallback: returns false → raster-rgb-display.js keeps the Canvas2D path.
-// The pixel buffer stays on the CPU, so a new / restored context simply
-// re-uploads it on the next present.
+// Failure: returns false and raster-rgb-display.js calls
+// nodeGraphDisplayGlFailed (black face, one console.error). No fallback.
+// A lost context loses the grid; it restarts black on the new context.
 //
-// Present GLSL lives next to the wasm:
+// GLSL lives next to the wasm:
 //   native_modules/raster_rgb/raster_rgb.vert.glsl
 //   native_modules/raster_rgb/raster_rgb.{source,blur,down,composite}.frag.glsl
+//   native_modules/raster_rgb/raster_rgb.scan.{vert,frag}.glsl (beam writes)
 
 (function initRasterRgbGl(global) {
   const SIGMA_DIRECT = 6; // px; above this, blur at a halved level
   const MAX_TAPS_RADIUS = 24; // ceil(3 · SIGMA_DIRECT) + margin; must match blur.frag loop
   const MAX_LEVELS = 8;
-  const GLSL_REV = "2";
+  const GLSL_REV = "3";
+  const SAMPLE_TEX_W = 4096; // sample textures are row-major, this wide
+  const CHUNK_STAMPS = 4096; // stamps per draw: keeps the shader's float maths exact
 
   const glsl = {
     vs: "",
@@ -47,6 +53,8 @@
     blur: "",
     down: "",
     composite: "",
+    scanVs: "",
+    scanFs: "",
     promise: null,
     failed: false,
   };
@@ -93,7 +101,9 @@
       const blur = await fetchGlsl("raster_rgb.blur.frag.glsl");
       const down = await fetchGlsl("raster_rgb.down.frag.glsl");
       const composite = await fetchGlsl("raster_rgb.composite.frag.glsl");
-      if (!vs || !source || !blur || !down || !composite) {
+      const scanVs = await fetchGlsl("raster_rgb.scan.vert.glsl");
+      const scanFs = await fetchGlsl("raster_rgb.scan.frag.glsl");
+      if (!vs || !source || !blur || !down || !composite || !scanVs || !scanFs) {
         glsl.failed = true;
         console.error("[raster-rgb-gl] missing native_modules/raster_rgb/*.glsl");
         return null;
@@ -103,6 +113,8 @@
       glsl.blur = blur;
       glsl.down = down;
       glsl.composite = composite;
+      glsl.scanVs = scanVs;
+      glsl.scanFs = scanFs;
       global.NODE_GRAPH_RASTER_RGB_GL_SOURCE_FS = source;
       global.NODE_GRAPH_RASTER_RGB_GL_BLUR_FS = blur;
       return glsl;
@@ -113,7 +125,7 @@
   loadGlsl();
 
   const entries = new WeakMap();
-  /** Per buffer state: raw + LUT textures (WeakMap: dropped states free them). */
+  /** Per state: the grade LUT texture (WeakMap: dropped states free it). */
   const stateGpu = new WeakMap();
   const watchedCanvases = new WeakSet();
 
@@ -132,8 +144,8 @@
     return shader;
   }
 
-  function link(gl, fsSrc, uniforms) {
-    const vs = compile(gl, gl.VERTEX_SHADER, glsl.vs);
+  function link(gl, fsSrc, uniforms, vsSrc = glsl.vs) {
+    const vs = compile(gl, gl.VERTEX_SHADER, vsSrc);
     const fs = compile(gl, gl.FRAGMENT_SHADER, fsSrc);
     if (!vs || !fs) {
       if (vs) gl.deleteShader(vs);
@@ -162,7 +174,7 @@
     const gl = dev?.gl;
     if (!gl || gl.isContextLost()) return null;
     if (glsl.failed) return null;
-    if (!glsl.vs || !glsl.source || !glsl.blur || !glsl.down || !glsl.composite) {
+    if (!glsl.vs || !glsl.source || !glsl.blur || !glsl.down || !glsl.composite || !glsl.scanVs || !glsl.scanFs) {
       loadGlsl();
       return null;
     }
@@ -182,8 +194,17 @@
     const composite = link(gl, glsl.composite, [
       "uImage", "uGlow", "uImageUv", "uImageOff", "uGlowUv", "uGlowOff", "uGlowAlpha", "uPlate",
     ]);
-    if (!source || !blur || !down || !composite) return null;
+    const scan = link(gl, glsl.scanFs, [
+      "uR", "uG", "uB", "uTexW", "uSkip", "uHas", "uSample0", "uCredit0", "uSpeed",
+      "uRem0", "uLineRem0", "uLogical", "uGrid",
+    ], glsl.scanVs);
+    if (!source || !blur || !down || !composite || !scan) return null;
     entry.ok = true;
+    entry.scan = scan;
+    // Empty VAO: the beam draws from gl_VertexID only, never from another
+    // renderer's enabled attribute arrays.
+    entry.scanVao = gl.createVertexArray();
+    entry.samples = { R: null, G: null, B: null, rows: 0 };
     entry.source = source;
     entry.blur = blur;
     entry.down = down;
@@ -242,28 +263,15 @@
     return { lut: state.gradeLut, key };
   }
 
-  function syncState(gl, state, grade) {
+  function syncLut(gl, state, grade) {
     let g = stateGpu.get(state);
     if (!g || g.gl !== gl) {
-      g = { gl, raw: makeTexture(gl, gl.NEAREST), lut: makeTexture(gl, gl.NEAREST), w: 0, h: 0, lutKey: "" };
+      g = { gl, lut: makeTexture(gl, gl.NEAREST), lutKey: "" };
       stateGpu.set(state, g);
     }
     gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
     gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
     gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
-    const pix = state.pixels;
-    if (pix) {
-      const bytes = pix instanceof Uint8Array ? pix : new Uint8Array(pix.buffer, pix.byteOffset, pix.byteLength);
-      gl.bindTexture(gl.TEXTURE_2D, g.raw);
-      if (g.w !== state.width || g.h !== state.height) {
-        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, state.width, state.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, bytes);
-        g.w = state.width;
-        g.h = state.height;
-      } else {
-        // The ingest writes scattered pixels; one sub-upload of the whole plate.
-        gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, state.width, state.height, gl.RGBA, gl.UNSIGNED_BYTE, bytes);
-      }
-    }
     const { lut, key } = lutFor(state, grade);
     if (g.lutKey !== key) {
       const rgba = new Uint8Array(256 * 4);
@@ -279,6 +287,184 @@
     }
     gl.pixelStorei(gl.UNPACK_ALIGNMENT, 4);
     return g;
+  }
+
+  /** The node's persistent grid (RGBA8, row 0 = top), created opaque black. */
+  function gridFor(gl, state) {
+    const g = state.gpu;
+    if (g && g.gl === gl && g.w === state.width && g.h === state.height) return g;
+    nodeGraphRasterRgbGlFree(state);
+    const tex = makeTexture(gl, gl.NEAREST);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, state.width, state.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+    const fbo = gl.createFramebuffer();
+    gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
+    if (gl.checkFramebufferStatus(gl.FRAMEBUFFER) !== gl.FRAMEBUFFER_COMPLETE) {
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+      gl.deleteFramebuffer(fbo);
+      gl.deleteTexture(tex);
+      return null;
+    }
+    gl.disable(gl.SCISSOR_TEST);
+    gl.viewport(0, 0, state.width, state.height);
+    gl.clearColor(0, 0, 0, 1);
+    gl.clear(gl.COLOR_BUFFER_BIT);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    gl.bindTexture(gl.TEXTURE_2D, null);
+    state.gpu = { gl, tex, fbo, w: state.width, h: state.height };
+    return state.gpu;
+  }
+
+  /** Delete a state's grid (Clear, resize, stop, power off). */
+  function nodeGraphRasterRgbGlFree(state) {
+    const g = state?.gpu;
+    if (!g) return;
+    state.gpu = null;
+    if (g.gl.isContextLost()) return;
+    g.gl.deleteFramebuffer(g.fbo);
+    g.gl.deleteTexture(g.tex);
+  }
+
+  /** Grow-only R32F sample textures (one per channel), SAMPLE_TEX_W wide. */
+  function sampleTextures(gl, entry, rows) {
+    const s = entry.samples;
+    if (s.R && s.rows >= rows) return s;
+    const cap = Math.max(rows, s.rows * 2, 1);
+    for (const ch of ["R", "G", "B"]) {
+      if (s[ch]) gl.deleteTexture(s[ch]);
+      s[ch] = makeTexture(gl, gl.NEAREST);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.R32F, SAMPLE_TEX_W, cap, 0, gl.RED, gl.FLOAT, null);
+    }
+    s.rows = cap;
+    return s;
+  }
+
+  function uploadSamples(gl, tex, data) {
+    const n = data.length;
+    gl.bindTexture(gl.TEXTURE_2D, tex);
+    const full = Math.floor(n / SAMPLE_TEX_W);
+    if (full > 0) gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, SAMPLE_TEX_W, full, gl.RED, gl.FLOAT, data, 0);
+    const rest = n - full * SAMPLE_TEX_W;
+    if (rest > 0) gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, full, rest, 1, gl.RED, gl.FLOAT, data, full * SAMPLE_TEX_W);
+  }
+
+  function posMod(pos, period) {
+    const m = pos % period;
+    return m < 0 ? m + period : m;
+  }
+
+  /**
+   * Beam writes for one frame. input: { take, channels: [R, G, B] each a
+   * Float32Array of the newest samples (length <= take; shorter rings are
+   * zero-padded at the front) or null, logicalW, logicalH, speed, syncs:
+   * sorted [{ at, kind: "h" | "v" }] (sample index; applied before that
+   * sample) }. Updates state.writePos / state.scanCredit like the old JS loop.
+   * Returns false on a GL failure.
+   */
+  function nodeGraphRasterRgbGlScan(state, input) {
+    const dev = nodeGraphPictureDevice();
+    const gl = dev?.gl;
+    if (!gl || gl.isContextLost()) return false;
+    const entry = entryFor(dev);
+    if (!entry) return false;
+    const g = gridFor(gl, state);
+    if (!g) return false;
+    const take = Math.max(0, Math.floor(input.take || 0));
+    if (!take) return true;
+    const W = input.logicalW;
+    const H = input.logicalH;
+    const s = input.speed;
+    const rows = Math.ceil(take / SAMPLE_TEX_W);
+    const tex = sampleTextures(gl, entry, rows);
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+    gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
+    gl.pixelStorei(gl.UNPACK_ALIGNMENT, 4);
+    const skip = [0, 0, 0];
+    const has = [0, 0, 0];
+    ["R", "G", "B"].forEach((ch, c) => {
+      const data = input.channels[c];
+      if (!data?.length) return;
+      has[c] = 1;
+      skip[c] = take - data.length;
+      uploadSamples(gl, tex[ch], data);
+    });
+    const p = entry.scan;
+    gl.useProgram(p.program);
+    ["R", "G", "B"].forEach((ch, c) => {
+      gl.activeTexture(gl.TEXTURE0 + c);
+      gl.bindTexture(gl.TEXTURE_2D, tex[ch]);
+    });
+    gl.uniform1i(p.u.uR, 0);
+    gl.uniform1i(p.u.uG, 1);
+    gl.uniform1i(p.u.uB, 2);
+    gl.uniform1i(p.u.uTexW, SAMPLE_TEX_W);
+    gl.uniform3i(p.u.uSkip, skip[0], skip[1], skip[2]);
+    gl.uniform3f(p.u.uHas, has[0], has[1], has[2]);
+    gl.uniform1f(p.u.uSpeed, s);
+    gl.uniform2f(p.u.uLogical, W, H);
+    gl.uniform2f(p.u.uGrid, g.w, g.h);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, g.fbo);
+    gl.viewport(0, 0, g.w, g.h);
+    gl.disable(gl.SCISSOR_TEST);
+    gl.disable(gl.BLEND);
+    gl.disable(gl.DEPTH_TEST);
+    gl.bindVertexArray(entry.scanVao);
+    let pos = Number.isFinite(state.writePos) ? state.writePos : 0;
+    let credit = Number.isFinite(state.scanCredit) && state.scanCredit >= 0 ? state.scanCredit : 0;
+    const syncs = input.syncs || [];
+    const chunkSamples = Math.max(1, Math.floor(CHUNK_STAMPS / s));
+    let draws = 0;
+    let stampsTotal = 0;
+    let next = 0;
+    for (let i = 0; i < take;) {
+      // Sync hits at this sample move the beam before it writes.
+      while (next < syncs.length && syncs[next].at <= i) {
+        if (syncs[next].kind === "v") pos = 0;
+        else if (posMod(pos, W) > 0) pos = (Math.floor(pos / W) + 1) * W;
+        next += 1;
+      }
+      const end = next < syncs.length ? Math.min(take, syncs[next].at) : take;
+      const n = Math.min(chunkSamples, end - i);
+      const total = credit + n * s;
+      const stamps = Math.floor(total);
+      if (stamps > 0) {
+        gl.uniform1i(p.u.uSample0, i);
+        gl.uniform1f(p.u.uCredit0, credit);
+        gl.uniform1f(p.u.uRem0, posMod(pos, W));
+        gl.uniform1f(p.u.uLineRem0, posMod(Math.floor(pos / W), H));
+        gl.drawArrays(gl.POINTS, 0, stamps);
+        draws += 1;
+        stampsTotal += stamps;
+      }
+      pos += stamps;
+      credit = total - stamps;
+      i += n;
+    }
+    // Keep writePos bounded without disturbing phase within a frame.
+    const frameSamples = W * H;
+    if (pos >= frameSamples * 4096) pos = posMod(pos, frameSamples);
+    state.writePos = pos;
+    state.scanCredit = credit;
+    state.lastScan = { take, draws, stamps: stampsTotal };
+    gl.bindVertexArray(null);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    for (let c = 2; c >= 0; c -= 1) {
+      gl.activeTexture(gl.TEXTURE0 + c);
+      gl.bindTexture(gl.TEXTURE_2D, null);
+    }
+    return !gl.isContextLost();
+  }
+
+  /** Smoke/probe only: the grid as RGBA bytes, row 0 = top. */
+  function nodeGraphRasterRgbGlReadGrid(state) {
+    const g = state?.gpu;
+    if (!g || g.gl.isContextLost()) return null;
+    const gl = g.gl;
+    const out = new Uint8Array(g.w * g.h * 4);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, g.fbo);
+    gl.readPixels(0, 0, g.w, g.h, gl.RGBA, gl.UNSIGNED_BYTE, out);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    return { width: g.w, height: g.h, pixels: out };
   }
 
   function parsePlate(plate) {
@@ -380,7 +566,7 @@
     const picW = opts.sourceW | 0;
     const picH = opts.sourceH | 0;
     const usePic = Boolean(picTex) && picW > 0 && picH > 0;
-    if (!usePic && !state?.pixels) return false;
+    if (!usePic && !state) return false;
     const cw = opts.cw | 0;
     const ch = opts.ch | 0;
     const bufW = usePic ? picW : (state.width | 0);
@@ -402,7 +588,9 @@
       // stays inside written (transparent) pixels.
       const W0 = Math.ceil(cw / unit) * unit;
       const H0 = Math.ceil(ch / unit) * unit;
-      const g = syncState(gl, state || { pixels: null, width: bufW, height: bufH }, grade);
+      const g = syncLut(gl, state || { width: bufW, height: bufH }, grade);
+      const grid = usePic ? null : gridFor(gl, state);
+      if (!usePic && !grid) return false;
 
       gl.disable(gl.DEPTH_TEST);
       gl.disable(gl.BLEND);
@@ -415,7 +603,7 @@
       const sp = entry.source;
       gl.useProgram(sp.program);
       gl.activeTexture(gl.TEXTURE0);
-      gl.bindTexture(gl.TEXTURE_2D, usePic ? picTex : g.raw);
+      gl.bindTexture(gl.TEXTURE_2D, usePic ? picTex : grid.tex);
       gl.uniform1i(sp.u.uRaw, 0);
       gl.activeTexture(gl.TEXTURE1);
       gl.bindTexture(gl.TEXTURE_2D, g.lut);
@@ -498,4 +686,7 @@
 
   global.nodeGraphRasterRgbGlUsable = nodeGraphRasterRgbGlUsable;
   global.nodeGraphRasterRgbGlPresent = nodeGraphRasterRgbGlPresent;
+  global.nodeGraphRasterRgbGlScan = nodeGraphRasterRgbGlScan;
+  global.nodeGraphRasterRgbGlFree = nodeGraphRasterRgbGlFree;
+  global.nodeGraphRasterRgbGlReadGrid = nodeGraphRasterRgbGlReadGrid;
 })(typeof globalThis !== "undefined" ? globalThis : window);
