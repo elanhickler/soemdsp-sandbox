@@ -240,10 +240,12 @@ function nodeGraphWaterfallGlEnsure(canvas, plateCss) {
   if (s && s.gl && s.gl.isContextLost()) s = null;
   if (s && s.w === w && s.h === h && s.gl && s.read) {
     s.plate = nodeGraphWaterfallGlParsePlate(plateCss);
+    s.plateCss = plateCss;
     return s;
   }
   if (s && s.gl && s.read && s.presentProg) {
     s.plate = nodeGraphWaterfallGlParsePlate(plateCss);
+    s.plateCss = plateCss;
     nodeGraphWaterfallGlResizeHistory(s, w, h);
     return s;
   }
@@ -265,6 +267,7 @@ function nodeGraphWaterfallGlEnsure(canvas, plateCss) {
     w,
     h,
     plate: nodeGraphWaterfallGlParsePlate(plateCss),
+    plateCss,
     read: nodeGraphWaterfallGlMakeTarget(gl, w, h),
     write: nodeGraphWaterfallGlMakeTarget(gl, w, h),
     scrollProg,
@@ -371,31 +374,50 @@ function nodeGraphWaterfallGlClearRead(s) {
 
 const NODE_GRAPH_ONSET_LINE_VS = `
 attribute vec2 aPos;
-attribute float aSide;
-attribute float aCore;
+attribute vec2 aP0;
 attribute vec4 aColor;
+attribute vec2 aP1;
+attribute float aHalf;
 uniform vec2 uCss;
-varying float vSide;
-varying float vCore;
+varying highp vec2 vP0;
+varying highp vec2 vP1;
+varying highp float vHalf;
 varying vec4 vColor;
 void main() {
   vec2 clip = (aPos / uCss) * 2.0 - 1.0;
   clip.y = -clip.y;
   gl_Position = vec4(clip, 0.0, 1.0);
-  vSide = aSide;
-  vCore = aCore;
+  vP0 = aP0;
+  vP1 = aP1;
+  vHalf = aHalf;
   vColor = aColor;
 }
 `;
 
 const NODE_GRAPH_ONSET_LINE_FS = `
 precision mediump float;
-varying float vSide;
-varying float vCore;
+// highp to match the vertex stage's default: a precision mismatch on a
+// shared uniform fails the link (ZP-1).
+uniform highp vec2 uCss;
+varying highp vec2 vP0;
+varying highp vec2 vP1;
+varying highp float vHalf;
 varying vec4 vColor;
 void main() {
-  float alpha = 1.0 - smoothstep(vCore, 1.0, abs(vSide));
-  gl_FragColor = vec4(vColor.rgb, vColor.a * alpha);
+  // Canvas pixels, top-down, the same space as the sample points.
+  // gl_FragCoord is bottom-up. highp so a long face does not snap the line.
+  vec2 px = vec2(gl_FragCoord.x, uCss.y - gl_FragCoord.y);
+  vec2 ab = vP1 - vP0;
+  float den = dot(ab, ab);
+  float t = den > 1e-8 ? clamp(dot(px - vP0, ab) / den, 0.0, 1.0) : 0.0;
+  float dist = length(px - (vP0 + ab * t));
+  // Same 1px box filter as a filled waterfall edge (clamp(d + 0.5)): a pixel
+  // on the line is solid, a pixel one away is empty. Distance is perpendicular
+  // to the sample segment, so a steep line stays a line.
+  float cover = clamp(vHalf + 0.5 - dist, 0.0, 1.0);
+  if (cover <= 0.0) discard;
+  float k = cover * vColor.a;
+  gl_FragColor = vec4(vColor.rgb * k, k);
 }
 `;
 
@@ -451,66 +473,67 @@ function nodeGraphOnsetGlStrokePolyline(canvas, points, widthPx, rgb) {
   const gl = s.gl;
   const width = Math.max(0.75, Number(widthPx) || 1);
   const half = width * 0.5;
-  const expand = half + 0.75;
-  const core = half / expand;
+  const pad = half + 1;
   // rgb is 0..255 (nodeGraphWaterfallStrokeRgb / ParseInkRgb), like the bar
   // path. Clamping it to 0..1 without /255 pushed every non-zero channel to
   // full, so dark picks drew as bright primaries / white.
+  // Colour sits at float 4 so a packed vertex still reads rgba there.
+  const alpha = Number(rgb?.[3]);
   const color = [
     Math.max(0, Math.min(255, Number(rgb?.[0]) || 0)) / 255,
     Math.max(0, Math.min(255, Number(rgb?.[1]) || 0)) / 255,
     Math.max(0, Math.min(255, Number(rgb?.[2]) || 0)) / 255,
-    1,
+    Number.isFinite(alpha) ? Math.max(0, Math.min(1, alpha)) : 1,
   ];
   const chunks = [];
+  const pushVert = (x, y, p0, p1) => {
+    chunks.push(x, y, p0.x, p0.y, color[0], color[1], color[2], color[3], p1.x, p1.y, half);
+  };
   for (let p = 1; p < points.length; p += 1) {
     const p0 = points[p - 1];
     const p1 = points[p];
-    const dx = p1.x - p0.x;
-    const dy = p1.y - p0.y;
-    const len = Math.hypot(dx, dy);
-    if (!(len > 1e-4)) continue;
-    const inv = 1 / len;
-    const dirX = dx * inv;
-    const dirY = dy * inv;
-    const nx = -dirY;
-    const ny = dirX;
-    const ax = p0.x - dirX * half;
-    const ay = p0.y - dirY * half;
-    const bx = p1.x + dirX * half;
-    const by = p1.y + dirY * half;
-    const corners = [
-      [ax + nx * expand, ay + ny * expand, 1],
-      [ax - nx * expand, ay - ny * expand, -1],
-      [bx + nx * expand, by + ny * expand, 1],
-      [ax - nx * expand, ay - ny * expand, -1],
-      [bx - nx * expand, by - ny * expand, -1],
-      [bx + nx * expand, by + ny * expand, 1],
-    ];
-    for (let c = 0; c < corners.length; c += 1) {
-      const corner = corners[c];
-      chunks.push(corner[0], corner[1], corner[2], core, color[0], color[1], color[2], color[3]);
-    }
+    if (!(Math.hypot(p1.x - p0.x, p1.y - p0.y) > 1e-6)) continue;
+    const minX = Math.min(p0.x, p1.x) - pad;
+    const maxX = Math.max(p0.x, p1.x) + pad;
+    const minY = Math.min(p0.y, p1.y) - pad;
+    const maxY = Math.max(p0.y, p1.y) + pad;
+    pushVert(minX, minY, p0, p1);
+    pushVert(maxX, minY, p0, p1);
+    pushVert(minX, maxY, p0, p1);
+    pushVert(minX, maxY, p0, p1);
+    pushVert(maxX, minY, p0, p1);
+    pushVert(maxX, maxY, p0, p1);
   }
   if (!chunks.length) return false;
   gl.bindFramebuffer(gl.FRAMEBUFFER, s.read.fbo);
   gl.viewport(0, 0, s.w, s.h);
   gl.enable(gl.BLEND);
-  gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+  // Premultiplied coverage, same blend as the filled bars.
+  gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
   gl.useProgram(s.lineProg);
   gl.uniform2f(s.lineLoc.css, s.w, s.h);
   gl.bindBuffer(gl.ARRAY_BUFFER, s.lineBuf);
   nodeGraphWaterfallGlUploadFloats(gl, s.lineBuf, chunks);
-  const stride = 32;
-  gl.enableVertexAttribArray(s.lineLoc.pos);
-  gl.vertexAttribPointer(s.lineLoc.pos, 2, gl.FLOAT, false, stride, 0);
-  gl.enableVertexAttribArray(s.lineLoc.side);
-  gl.vertexAttribPointer(s.lineLoc.side, 1, gl.FLOAT, false, stride, 8);
-  gl.enableVertexAttribArray(s.lineLoc.core);
-  gl.vertexAttribPointer(s.lineLoc.core, 1, gl.FLOAT, false, stride, 12);
-  gl.enableVertexAttribArray(s.lineLoc.color);
-  gl.vertexAttribPointer(s.lineLoc.color, 4, gl.FLOAT, false, stride, 16);
-  gl.drawArrays(gl.TRIANGLES, 0, chunks.length / 8);
+  const stride = 44;
+  const enable = (loc, size, offset) => {
+    if (!(loc >= 0)) return;
+    gl.enableVertexAttribArray(loc);
+    gl.vertexAttribPointer(loc, size, gl.FLOAT, false, stride, offset);
+  };
+  enable(s.lineLoc.pos, 2, 0);
+  enable(s.lineLoc.p0, 2, 8);
+  enable(s.lineLoc.color, 4, 16);
+  enable(s.lineLoc.p1, 2, 32);
+  enable(s.lineLoc.half, 1, 40);
+  gl.drawArrays(gl.TRIANGLES, 0, chunks.length / 11);
+  const disable = (loc) => {
+    if (loc >= 0) gl.disableVertexAttribArray(loc);
+  };
+  disable(s.lineLoc.pos);
+  disable(s.lineLoc.p0);
+  disable(s.lineLoc.color);
+  disable(s.lineLoc.p1);
+  disable(s.lineLoc.half);
   return true;
 }
 
@@ -1113,11 +1136,16 @@ function nodeGraphWaterfallGlStampMeetColumn(canvas, x, leftYs, leftPrevEdge, pa
   return true;
 }
 
+// Onset position cursor: a 1px grey line drawn in the present pass, over the
+// history and under the ink (it used to be drawn after the face copy, so it
+// never reached the face).
 function nodeGraphOnsetGlPositionLine(canvas, x) {
-  const s = canvas && canvas._wfGlSession;
-  if (!s || !s.gl) return;
-  const gl = s.gl;
-  nodeGraphWaterfallGlFlush(s);
+  if (!canvas) return;
+  const px = Number(x);
+  canvas._wfPositionX = Number.isFinite(px) ? px : null;
+}
+
+function nodeGraphWaterfallGlDrawPositionLine(s, x) {
   const px = Math.max(0, Math.min(s.w - 1, Math.floor(Number(x) || 0)));
   const clip = (ax, ay) => nodeGraphWaterfallGlClip(ax, ay, s.w, s.h);
   const a = clip(px, -1);
@@ -1151,6 +1179,17 @@ function nodeGraphWaterfallGlPresent(canvas, plateCss) {
   gl.uniform2f(gl.getUniformLocation(s.presentProg, "uSize"), s.w, s.h);
   gl.uniform1f(gl.getUniformLocation(s.presentProg, "uSub"), sub);
   nodeGraphWaterfallGlDrawQuad(s);
+  if (Number.isFinite(canvas._wfPositionX)) {
+    nodeGraphWaterfallGlDrawPositionLine(s, canvas._wfPositionX);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    gl.viewport(0, 0, s.w, s.h);
+  }
+  // Ink (pause / protect marks, RMS dB guides) on top, same pass, same
+  // texture: GL only, no overlay canvas (nodeGraphFaceInkDraw).
+  if (canvas._faceInk && typeof nodeGraphFaceInkDraw === "function") {
+    nodeGraphFaceInkDraw(canvas);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  }
   if (typeof nodeGraphSharedGlEndPresent === "function") {
     nodeGraphSharedGlEndPresent(gl);
   }
@@ -1177,56 +1216,18 @@ function nodeGraphWaterfallGlCold(canvas, plateCss) {
   return nodeGraphWaterfallGlPresent(canvas, plateCss);
 }
 
-function nodeGraphWaterfallGlStampCanvas(face, sourceCanvas) {
+// Burn this frame's ink into the history texture (pause / protect fade
+// frames scroll away with the tape). GL draw into the read FBO, no upload.
+function nodeGraphWaterfallGlStampInk(face) {
   const s = face && face._wfGlSession;
-  if (!s?.gl || !s.read?.fbo || !sourceCanvas) return false;
+  if (!s?.gl || !s.read?.fbo || !face._faceInk) return false;
+  if (typeof nodeGraphFaceInkDraw !== "function") return false;
   nodeGraphWaterfallGlFlush(s);
   const gl = s.gl;
-  if (!s.inkTex) {
-    s.inkTex = gl.createTexture();
-  }
-  gl.bindTexture(gl.TEXTURE_2D, s.inkTex);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
-  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, sourceCanvas);
-  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
   gl.bindFramebuffer(gl.FRAMEBUFFER, s.read.fbo);
   gl.viewport(0, 0, s.w, s.h);
-  gl.enable(gl.BLEND);
-  // Canvas2D ink (pause/protect) is straight RGBA + globalAlpha — not premultiplied bars.
-  gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
-  nodeGraphWaterfallGlBindQuad(gl, s, s.presentProg);
-  gl.activeTexture(gl.TEXTURE0);
-  gl.bindTexture(gl.TEXTURE_2D, s.inkTex);
-  const texLoc = gl.getUniformLocation(s.presentProg, "uTex");
-  if (texLoc) gl.uniform1i(texLoc, 0);
-  const sizeLoc = gl.getUniformLocation(s.presentProg, "uSize");
-  if (sizeLoc) gl.uniform2f(sizeLoc, s.w, s.h);
-  const subLoc = gl.getUniformLocation(s.presentProg, "uSub");
-  if (subLoc) gl.uniform1f(subLoc, 0);
-  nodeGraphWaterfallGlDrawQuad(s);
-  gl.disable(gl.BLEND);
-  return true;
-}
-
-function nodeGraphWaterfallInkOverlay(face) {
-  if (!face || !face.parentElement) return null;
-  let ink = face._wfInkOverlay;
-  if (!ink) {
-    ink = document.createElement("canvas");
-    ink.className = "node-module-scope-local-fallback-canvas node-waterfall-ink-overlay node-display-canvas";
-    ink.setAttribute("aria-hidden", "true");
-    ink.style.zIndex = "3";
-    ink.style.background = "transparent";
-    face._wfInkOverlay = ink;
-  }
-  if (ink.parentElement !== face.parentElement) face.parentElement.appendChild(ink);
-  const w = Math.max(1, face.width | 0);
-  const h = Math.max(1, face.height | 0);
-  if (ink.width !== w) ink.width = w;
-  if (ink.height !== h) ink.height = h;
-  return ink;
+  gl.disable(gl.SCISSOR_TEST);
+  const drew = nodeGraphFaceInkDraw(face);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  return drew;
 }

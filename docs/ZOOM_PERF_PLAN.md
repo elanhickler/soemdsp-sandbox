@@ -136,7 +136,7 @@ Left open for later stages:
 - Mid-gesture, the scope light layer (`#nodeModuleScopeLightCanvas`) shows a soft glow blob that is not there
   when settled. The light pass draws from layout rects that are frozen during the gesture (ZP-4).
 - Waterfall ink overlays (`.node-waterfall-ink-overlay`, a 2D canvas) are re-uploaded about 3 times per frame
-  (about 110 ms per 3 s of play).
+  (about 110 ms per 3 s of play). Done 2026-10-18, see "Waterfall ink on the GPU" below.
 - Remaining gesture reads: `nodeGraphModuleLayoutBox` offset* (ZP-4) and occasional full presents
   (`SettleTextBake`, ZP-5).
 - `trace-woscope.js` (BugsFix) keeps its uncommitted edits. ZP-2 did not need to touch it.
@@ -202,3 +202,30 @@ Still open:
   values update on settle). Displays keep running.
 - Waterfall ink overlay uploads (`texImage2D(canvas)`, about 60 ms per second of gesture) are still there.
 - `trace-woscope.js` (BugsFix) still has uncommitted edits from another agent. ZP-4..6 did not touch it.
+
+## Waterfall ink on the GPU (2026-10-18)
+
+The face ink (Output pause / protect marks, RMS dB guides) was a second 2D canvas stacked on every trace face
+(`.node-waterfall-ink-overlay`, 9 on softpop). The GL graph composited each one by `texImage2D(canvas)` every
+frame (about 4,100 uploads per probe run, 128 ms per 3 s of play), and fade frames uploaded it once more into the
+waterfall history (`nodeGraphWaterfallGlStampCanvas`).
+
+Now the ink is drawn by GL straight into the waterfall face: `nodeGraphWaterfallGlPresent` draws the history quad,
+the onset position line and then the ink (`nodeGraphFaceInkDraw` -> `nodeGraphGlLinesDrawInto`, a gl-line-renderer
+batch drawn into the bound framebuffer without clear or copy) in one pass; fade frames burn the same batch into the
+history FBO (`nodeGraphWaterfallGlStampInk`). No overlay canvas, no 2D context, no upload. GL failure goes through
+`nodeGraphDisplayGlFailed`. The onset position line was drawn after the face copy before, so it never reached the
+face; it is drawn in the present pass now.
+
+Why the guards missed it: `smoke_display_gl_renderers` only looked for `getContext('2d')` and 2D draw calls. The
+overlay's 2D surface came from the allowlisted shared helper (`endBatch`), the overlay was made with a bare
+`createElement("canvas")`, and the uploads (`texImage2D(canvas)` in `drawImages` and in the waterfall stamp) were
+not scanned. `smoke_display_gl_no_fallback` only greps for fallback wording. Fix: the renderer scan now also flags
+`texImage2D`/`texSubImage2D` with a DOM source (6 / 7 args) and canvases stacked over a face; one-time atlas bakes,
+`<img>`/snapshot uploads and the face-texture seed are listed as UPLOAD. New runtime smoke
+`smoke_display_no_canvas_upload.mjs`: no canvas is uploaded repeatedly while playing (except Audio Player playlist,
+Sequencer, Transport), no overlay canvas, pause bars in the Output face's GPU picture, RMS guides armed. Both fail
+on the old code.
+
+Softpop after: play 60 fps, no `texImage2D(canvas)` time; zoom 57.8 / 57.3 fps (two runs), p50 16.7 ms, 0 reads
+mid-gesture.

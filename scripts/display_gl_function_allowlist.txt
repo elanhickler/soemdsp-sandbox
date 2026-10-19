@@ -10,6 +10,10 @@
 #             GL->face blit, or the black GL-failure fill.
 #   BUGSFIX   Owned by BugsFix (trace-woscope.js / Phosphor files); not edited here.
 #   PENDING   Canvas2D draw path found by the scan on 2026-10-15; port to GL.
+#   UPLOAD    texImage2D from a DOM source (added 2026-10-18 with the upload rule):
+#             one-time glyph-atlas bakes, <img> / snapshot uploads and the face
+#             texture seed. Per-frame canvas uploads are caught at runtime by
+#             scripts/smoke_display_no_canvas_upload.mjs.
 
 public/modules/audioPlayer/audio-player-playlist.js::* | APPROVED | Argi 2026-10-15: stays non-WebGL (Playlist text UI)
 public/modules/sequencer/sequencer-ui.js::* | APPROVED | Argi 2026-10-15: stays non-WebGL (Step grid UI)
@@ -32,3 +36,10 @@ public/node-graph-phosphillator.js::drawNodeGraphPhosphillatorGlowPath | BUGSFIX
 public/node-graph-phosphor-gaussian-drawer.js::bakeKernel | BUGSFIX | owned by BugsFix [getContext('2d'), 2D createImageData()]
 public/node-graph-sample-waveform.js::drawNodeGraphSampleWaveformPlaceholder | BUGSFIX | Argi 2026-10-16: Phosphillator is owned by BugsFix [2D fillText()]
 public/node-graph-visual-utils.js::nodeGraphSizeDisplayCanvas | PENDING | Canvas2D in display code; port to the shared GL device [getContext('2d')]
+public/lib/phosphor/phosphor-energy-gl.js::stepEnergy | BUGSFIX | owned by BugsFix: uploads the 2D maskCanvas each energy step when a mask is on [texImage2D(DOM source)]
+public/lib/visual/gl-line-renderer.js::bakeAtlas | UPLOAD | glyph atlas bake, once per family/weight/char set [texImage2D(DOM source)]
+public/lib/visual/gl-line-renderer.js::drawImages | UPLOAD | <img>/ImageData sources (cached) and the approved 2D faces; GL faces sample their GPU face texture [texImage2D(DOM source)]
+public/lib/visual/gl-line-renderer.js::nodeGraphGlLinesSnapshot | UPLOAD | resize snapshot of a non-GPU source; GPU faces copy their texture [texImage2D(DOM source)]
+public/lib/visual/picture-device.js::faceEnsure | UPLOAD | seeds a new face texture from its canvas once (drawImage semantics) [texImage2D(DOM source)]
+public/modules/asciiscope/asciiscope-gl.js::matrixGlUploadAtlas | UPLOAD | glyph atlas bake, once [texImage2D(DOM source)]
+public/node-graph-module-scope-number-readout.js::nodeGraphNumberReadoutGlyphAtlas | UPLOAD | glyph atlas bake, once [texImage2D(DOM source)]

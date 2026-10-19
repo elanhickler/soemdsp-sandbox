@@ -1663,14 +1663,46 @@ void main() {
     try {
       return endBatch(batch, blend);
     } finally {
-      if (batch.keepMesh) return;
-      // Hand the vertex array back for the next face (pool stays tiny).
-      if (batch.data && batch.s.pool.length < 8) batch.s.pool.push(batch.data);
-      if (batch.tdata && batch.s.tpool.length < 8) batch.s.tpool.push(batch.tdata);
-      batch.data = null;
-      batch.tdata = null;
-      batch.n = 0;
-      batch.tn = 0;
+      releaseBatch(batch);
+    }
+  }
+
+  function releaseBatch(batch) {
+    if (batch.keepMesh) return;
+    // Hand the vertex array back for the next face (pool stays tiny).
+    if (batch.data && batch.s.pool.length < 8) batch.s.pool.push(batch.data);
+    if (batch.tdata && batch.s.tpool.length < 8) batch.s.tpool.push(batch.tdata);
+    batch.data = null;
+    batch.tdata = null;
+    batch.n = 0;
+    batch.tn = 0;
+  }
+
+  /**
+   * Draw the batch into the framebuffer the caller has bound (its viewport
+   * covers batch.w x batch.h, y down like Begin). No clear, no picture out, no
+   * copy to a face canvas: for faces that own their GPU picture and layer
+   * marks on it in the same pass (waterfall ink: pause / protect / RMS dB
+   * guides go straight into the waterfall present or its history texture).
+   * @returns {boolean} false -> caller calls nodeGraphDisplayGlFailed.
+   */
+  function nodeGraphGlLinesDrawInto(batch, blend = "alpha") {
+    if (!batch) return false;
+    try {
+      const gl = batch.s.gl;
+      if (gl.isContextLost()) return false;
+      if (gl.bindVertexArray) gl.bindVertexArray(null);
+      // The caller's quads may leave arrays enabled on the default VAO; a
+      // constant attribute (text tint) must not read a stale buffer.
+      for (let i = 0; i < 8; i += 1) gl.disableVertexAttribArray(i);
+      gl.disable(gl.DEPTH_TEST);
+      gl.disable(gl.CULL_FACE);
+      // Opaque target: colour over, alpha stays 1.
+      drawContent(batch, blend, gl.ONE);
+      gl.disable(gl.BLEND);
+      return !gl.isContextLost();
+    } finally {
+      releaseBatch(batch);
     }
   }
 
@@ -1957,6 +1989,11 @@ void main() {
   ]);
   for (let i = 0; i < USER_SHADER_DELAY; i += 1) userShaderReserved.add(`delay${i}`);
   const userShaderNodes = new Map();
+  let userShaderCompiles = 0;
+  /** Smokes: user shader compiles so far (a failed source must not recompile per frame). */
+  function nodeGraphGlLinesUserShaderStats() {
+    return { compiles: userShaderCompiles, nodes: userShaderNodes.size };
+  }
   let userShaderBlack = null;
   let userShaderQuad = null;
 
@@ -2100,11 +2137,25 @@ void main() {
       }
       const scratch = userShaderSurface(gl, w, h);
       if (!scratch) return { ok: false, error: "shader surface failed" };
-      node = { gl, w, h, ring, scratch, head: -1, program: null, source: "", locs: null, names: [] };
+      node = { gl, w, h, ring, scratch, head: -1, program: null, source: "", locs: null, names: [], failedSource: "", failedError: "", failedSize: "" };
       userShaderNodes.set(key, node);
     }
     const built = userShaderSource(spec.userBody, spec.floatNames);
+    // A source that failed to compile stays failed until it changes: no
+    // per-frame recompile, no repeated log, the face stays the black plate.
+    // The error text is returned every frame for the Code page.
+    if (node.failedSource && node.failedSource === built.source) {
+      const size = `${canvas.width | 0}x${canvas.height | 0}`;
+      const cached = node.failedSize === size;
+      if (!cached) {
+        // The canvas was resized (cleared): black plate again, once.
+        node.failedSize = size;
+        nodeGraphGlLinesFillBlack(canvas);
+      }
+      return { ok: false, error: node.failedError || "shader failed", cached: true };
+    }
     if (node.source !== built.source) {
+      userShaderCompiles += 1;
       let program = null;
       let error = "";
       try {
@@ -2132,12 +2183,18 @@ void main() {
         error = userShaderShiftLog(err?.message || String(err), built.headerLines);
       }
       if (!program) {
+        node.failedSource = built.source;
+        node.failedError = error || "shader failed";
+        node.failedSize = `${canvas.width | 0}x${canvas.height | 0}`;
         if (typeof global.nodeGraphDisplayGlFailed === "function") {
-          global.nodeGraphDisplayGlFailed(canvas, "emo shader", new Error(error));
+          global.nodeGraphDisplayGlFailed(canvas, "emo shader", new Error(node.failedError));
+        } else {
+          nodeGraphGlLinesFillBlack(canvas);
         }
-        nodeGraphGlLinesFillBlack(canvas);
-        return { ok: false, error: error || "shader failed" };
+        return { ok: false, error: node.failedError, cached: true };
       }
+      node.failedSource = "";
+      node.failedError = "";
       if (node.program) gl.deleteProgram(node.program);
       const locs = {
         aPos: gl.getAttribLocation(program, "aPos"),
@@ -2242,7 +2299,9 @@ void main() {
     nodeGraphGlLinesCss,
     nodeGraphGlLinesHsl,
     nodeGraphGlLinesEnd,
+    nodeGraphGlLinesDrawInto,
     nodeGraphGlLinesUserShader,
+    nodeGraphGlLinesUserShaderStats,
   };
   Object.assign(global, api);
   if (typeof module !== "undefined" && module.exports) module.exports = api;

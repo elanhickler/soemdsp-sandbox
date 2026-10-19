@@ -1640,44 +1640,78 @@ function nodeGraphOutputInkMarks(target, slot) {
 }
 
 /**
- * Face ink overlay (transparent canvas over the face): output pause/protect
- * marks and RMS dB guides, drawn as one native GL batch. Clears itself once
- * when nothing is left to show. Returns the overlay (or null).
+ * Face ink: output pause / protect marks and RMS dB guides. GL only, drawn
+ * straight into the waterfall face: nodeGraphWaterfallGlPresent draws it over
+ * the history quad in the same pass (and nodeGraphWaterfallGlStampInk burns
+ * fade frames into the history texture). No overlay canvas, no 2D context,
+ * no texture upload.
+ *
+ * This arms the face (slot + guides) and re-presents it when the ink changed
+ * or options.present is true. Faces without a waterfall GL session have no
+ * ink (only Output and the RMS meters carry it, and both are waterfalls).
+ * Returns the face, or null when it has no ink.
  */
 function paintNodeGraphFaceInkOverlay(face, slot, settings, density, options = {}) {
   void settings;
   void density;
-  const overlay = typeof nodeGraphWaterfallInkOverlay === "function"
-    ? nodeGraphWaterfallInkOverlay(face)
-    : null;
-  if (!overlay) {
+  const s = face?._wfGlSession;
+  const guides = options.rmsDbGuides === true;
+  const marked = nodeGraphOutputProtectFaceSlot(slot);
+  if (!s) {
+    if (marked && face && (nodeGraphOutputTransportIsPaused() || nodeGraphOutputInkWantsFrames())) {
+      nodeGraphDisplayGlFailed(face, "face ink: no waterfall GL session");
+    }
     return null;
   }
-  const marks = nodeGraphOutputInkMarks(overlay, slot);
-  const guides = options.rmsDbGuides === true;
-  if (!marks.length && !guides && !overlay._faceInkDirty) {
-    return overlay;
+  if (!marked && !guides) {
+    if (face._faceInk) {
+      face._faceInk = null;
+      face._faceInkDirty = false;
+      face._outputInkBake = false;
+      if (options.present !== false) nodeGraphWaterfallGlPresent(face, s.plateCss || "#000000");
+    }
+    return null;
   }
+  const prev = face._faceInk;
+  const changed = !prev || prev.slot !== slot || prev.guides !== guides;
+  if (changed) face._faceInk = { slot, guides };
+  if (options.present === true || (changed && options.present !== false)) {
+    nodeGraphWaterfallGlPresent(face, s.plateCss || "#000000");
+  }
+  return face;
+}
+
+/**
+ * Draw the armed ink into the bound framebuffer (face-sized viewport): the
+ * waterfall present target or its history FBO. Returns false only on a GL
+ * failure, which goes through nodeGraphDisplayGlFailed.
+ */
+function nodeGraphFaceInkDraw(face) {
+  const ink = face?._faceInk;
+  if (!ink) return true;
+  const marks = nodeGraphOutputInkMarks(face, ink.slot);
+  face._faceInkDirty = marks.length > 0 || ink.guides;
+  if (!marks.length && !ink.guides) return true;
   const batch = typeof nodeGraphGlLinesBegin === "function"
-    ? nodeGraphGlLinesBegin(overlay, [0, 0, 0, 0], { transparent: true, publishNodeId: "" })
+    ? nodeGraphGlLinesBegin(face, [0, 0, 0, 0], { publishNodeId: "" })
     : null;
-  if (!batch) {
-    nodeGraphDisplayGlFailed(overlay, "face ink overlay: no shared GL device");
-    return overlay;
+  if (!batch || typeof nodeGraphGlLinesDrawInto !== "function") {
+    nodeGraphDisplayGlFailed(face, "face ink: no shared GL device");
+    return false;
   }
-  const w = overlay.width;
-  const h = overlay.height;
-  if (guides) {
-    nodeGraphPaintRmsDbGuideOverlay(batch, w, h, slot);
+  const w = batch.w;
+  const h = batch.h;
+  if (ink.guides) {
+    nodeGraphPaintRmsDbGuideOverlay(batch, w, h, ink.slot);
   }
   for (const [kind, alpha] of marks) {
     nodeGraphOutputDrawMark(batch, w, h, kind, alpha);
   }
-  if (!nodeGraphGlLinesEnd(batch)) {
-    nodeGraphDisplayGlFailed(overlay, "face ink overlay: GL present failed");
+  if (!nodeGraphGlLinesDrawInto(batch)) {
+    nodeGraphDisplayGlFailed(face, "face ink: GL draw failed");
+    return false;
   }
-  overlay._faceInkDirty = marks.length > 0 || guides;
-  return overlay;
+  return true;
 }
 
 function nodeGraphWaterfallPinClocks(nowMs) {
@@ -1736,7 +1770,8 @@ function stampNodeGraphOutputPauseBanners(options = {}) {
     const density = typeof nodeGraphFacePlateDensity === "function"
       ? nodeGraphFacePlateDensity(settings, 1)
       : 1;
-    if (paintNodeGraphFaceInkOverlay(canvas, slot, settings, density, options)?._faceInkDirty) {
+    // The scope loop may be stopped while paused: present the face with its ink now.
+    if (paintNodeGraphFaceInkOverlay(canvas, slot, settings, density, { ...options, present: true })?._faceInkDirty) {
       any = true;
     }
   }

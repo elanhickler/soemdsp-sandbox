@@ -353,23 +353,6 @@
     return true;
   }
 
-  /** Upload a 2D canvas (after external stamps) as the new hot plate. */
-  function ingestCanvas(host, canvas) {
-    const state = host?.[KEY];
-    if (!state?.alive || !canvas) return false;
-    const gl = state.device.gl;
-    gl.bindTexture(gl.TEXTURE_2D, state.read.texture);
-    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, 1);
-    try {
-      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, canvas);
-    } catch (_e) {
-      gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, 0);
-      return false;
-    }
-    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, 0);
-    return true;
-  }
-
   function presentTo(host, destCtx, plateCss) {
     const state = host?.[KEY];
     if (!state?.alive || !destCtx) return false;
@@ -418,7 +401,6 @@
     destroy,
     stepFade,
     stampPoints,
-    ingestCanvas,
     presentTo,
     clear,
     available: () => Boolean(getShared()),

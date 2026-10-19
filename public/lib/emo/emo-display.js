@@ -79,7 +79,8 @@
       })
       : { ok: false, error: "shader quad missing" };
     if (node) node.emoShaderError = drawn.ok ? "" : String(drawn.error || "shader failed");
-    if (!drawn.ok && typeof root.nodeGraphGlLinesFillBlack === "function") {
+    // cached: the renderer already showed the failure (black plate, one log).
+    if (!drawn.ok && !drawn.cached && typeof root.nodeGraphGlLinesFillBlack === "function") {
       root.nodeGraphGlLinesFillBlack(canvas);
     }
   }

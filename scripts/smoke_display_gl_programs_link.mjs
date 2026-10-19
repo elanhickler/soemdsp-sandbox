@@ -2,7 +2,8 @@
 // on the shared context, and a failed link is not retried per frame.
 // Loads patches with play on, records every linkProgram on the page, and fails
 // on any link failure, any nodeGraphDisplayGlFailed entry, or links that keep
-// happening once the patch is warm (a per-frame recompile).
+// happening once the patch is warm (a per-frame recompile). Also: a broken
+// Script display {} shader is compiled once per source, not per frame.
 // Usage: node scripts/smoke_display_gl_programs_link.mjs [patch ...]  (server.py on :8765)
 // Needs a real GPU: headed by default; HEADLESS=1 only with GPU headless.
 import { chromium } from "playwright";
@@ -56,6 +57,31 @@ for (const patch of PATCHES) {
   gate(r.fails.length === 0, `${patch}: every GL program links${r.fails.length ? " - " + r.fails.slice(0, 3).join(" | ") : ""}`);
   gate(r.gl.length === 0, `${patch}: no nodeGraphDisplayGlFailed entries${r.gl.length ? " - " + r.gl.slice(0, 4).join(" | ") : ""}`);
   gate(r.links - mid <= 2, `${patch}: no per-frame relink once warm (warm ${warm}, after zoom ${mid}, 2 s later ${r.links})`);
+  if (patch === PATCHES[0]) {
+    // Script display {} user shader: a broken source compiles once, logs once,
+    // and keeps its error text; a new source compiles again.
+    const u = await page.evaluate(() => {
+      const canvas = document.createElement("canvas");
+      canvas.width = 64; canvas.height = 32;
+      const errors = [];
+      const log = console.error;
+      console.error = (...a) => { errors.push(String(a[0])); };
+      const before = nodeGraphGlLinesUserShaderStats().compiles;
+      const texts = [];
+      try {
+        for (let i = 0; i < 30; i += 1) {
+          texts.push(nodeGraphGlLinesUserShader({ key: "__smoke_bad_shader", canvas, userBody: "out_color = vec4(nope);", floatNames: [], floats: {}, time: i }).error);
+        }
+        const afterBad = nodeGraphGlLinesUserShaderStats().compiles;
+        const good = nodeGraphGlLinesUserShader({ key: "__smoke_bad_shader", canvas, userBody: "out_color = vec4(uv, 0.0, 1.0);", floatNames: [], floats: {}, time: 0 });
+        return { bad: afterBad - before, total: nodeGraphGlLinesUserShaderStats().compiles - before, logs: errors.filter((e) => /emo shader/.test(e)).length, withText: texts.filter((s) => /nope|undeclared|ERROR/i.test(String(s))).length, good: good.ok };
+      } finally {
+        console.error = log;
+      }
+    });
+    gate(u.bad === 1 && u.logs === 1 && u.withText === 30, `${patch}: broken Script shader compiles once, logs once, keeps its error text (${JSON.stringify(u)})`);
+    gate(u.total === 2 && u.good, `${patch}: a changed Script shader source compiles again`);
+  }
   await ctx.close();
 }
 await browser.close();

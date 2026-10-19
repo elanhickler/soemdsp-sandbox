@@ -14,6 +14,17 @@
 //      stamp / blit / bake / wipe / clear / fill ...) in display code:
 //      public/node-graph-module-scope-*.js, public/modules/**,
 //      public/lib/visual/**, public/lib/trace/**, public/*display*.js.
+//   3. Texture uploads from a DOM source: gl.texImage2D(target, level,
+//      internal, format, type, source) (6 args) and texSubImage2D with 7.
+//      A canvas uploaded as a texture is a 2D picture in a display path, even
+//      when its 2D context lives in a shared helper (the waterfall ink overlay
+//      drew through gl-line-renderer's endBatch and was re-uploaded by the GL
+//      graph every frame; neither showed up as getContext/2D calls).
+//   4. Stacked display canvases: display code that creates a <canvas> and
+//      lays it over a face (appended to the face's parentElement, z-index, or
+//      an overlay class). A display has one face canvas; marks go into its GL
+//      pass.
+// Runtime counterpart: scripts/smoke_display_no_canvas_upload.mjs.
 // Every hit must be on scripts/display_gl_function_allowlist.txt
 // (`path::function | CATEGORY | reason`, or `path::* | ...` for a whole
 // approved file). The list is shrink-only: a new hit fails, and an entry that
@@ -46,6 +57,30 @@ const files = [];
 
 const CTX2D = /getContext\(\s*["'`]2d["'`]/;
 const DRAW2D = /\b(?:ctx|context|\w+Ctx|\w+Context|g2d|c2d)\s*\.\s*(fillRect|strokeRect|clearRect|arc|arcTo|ellipse|rect|roundRect|fill|stroke|drawImage|fillText|strokeText|putImageData|getImageData|createImageData|beginPath|moveTo|lineTo|quadraticCurveTo|bezierCurveTo|createLinearGradient|createRadialGradient|createConicGradient|createPattern|clip)\s*\(/;
+// texImage2D / texSubImage2D call sites with a DOM-source arity (see 3. above).
+function domUploads(body) {
+  const out = [];
+  const re = /\.(texImage2D|texSubImage2D)\s*\(/g;
+  let m;
+  while ((m = re.exec(body))) {
+    const open = m.index + m[0].length - 1;
+    const end = parenEnd(body, open);
+    let depth = 0;
+    let args = 1;
+    for (let i = open + 1; i < end; i += 1) {
+      const c = body[i];
+      if (c === "(" || c === "[" || c === "{") depth += 1;
+      else if (c === ")" || c === "]" || c === "}") depth -= 1;
+      else if (c === "," && depth === 0) args += 1;
+    }
+    if ((m[1] === "texImage2D" && args === 6) || (m[1] === "texSubImage2D" && args === 7)) out.push(m[1]);
+  }
+  return out;
+}
+const STACKED_SELFTEST = 'const ink = document.createElement("canvas"); face.parentElement.appendChild(ink);';
+// A second canvas laid over a face: put beside it (parentElement), lifted
+// with z-index, or named an overlay. Creating the face canvas itself is fine.
+const STACKED = /document\.createElement\(\s*["'`]canvas["'`]\s*\)[\s\S]*(\.parentElement\s*\.\s*(appendChild|append|insertBefore|prepend)\s*\(|style\.zIndex\s*=|className\s*=\s*["'`][^"'`]*overlay)/;
 // Self-test: the old Hypersaw / Phosphor Dot 2D lines must be caught, GL must not.
 for (const [line, want] of [
   ['const context = canvas.getContext("2d");', true],
@@ -54,11 +89,19 @@ for (const [line, want] of [
   ["context.drawImage(ink, 0, 0);", true],
   ["gl.drawArrays(gl.TRIANGLES, 0, vertexCount);", false],
   ["verts.fill(0);", false],
+  ["gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, sourceCanvas);", true],
+  ["gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, gl.RGBA, gl.UNSIGNED_BYTE, inkCanvas);", true],
+  ["gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);", false],
+  ["gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 256, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, f(a, b));", false],
 ]) {
-  if ((CTX2D.test(line) || DRAW2D.test(line)) !== want) {
+  if ((CTX2D.test(line) || DRAW2D.test(line) || domUploads(line).length > 0) !== want) {
     console.error(`FAIL scanner self-test: ${line} should ${want ? "" : "not "}be flagged`);
     process.exit(1);
   }
+}
+if (!STACKED.test(STACKED_SELFTEST)) {
+  console.error("FAIL scanner self-test: a stacked overlay canvas must be flagged");
+  process.exit(1);
 }
 const DISPLAY_FILE = /^public\/(node-graph-module-scope-[^/]+\.js|modules\/.+\.js|lib\/visual\/.+\.js|lib\/trace\/.+\.js|[^/]*display[^/]*\.js)$/;
 const DRAW_NAME = /(^|[a-z])(draw|paint|present|render|stamp|blit|bake|wipe|clear|fill|stroke|composite|deposit)/i;
@@ -185,6 +228,9 @@ for (const rec of fns) {
   if (CTX2D.test(rec.body)) what.push("getContext('2d')");
   const d = DRAW2D.exec(rec.body);
   if (d) what.push(`2D ${d[1]}()`);
+  const up = domUploads(rec.body);
+  if (up.length) what.push(`${up[0]}(DOM source)`);
+  if (DISPLAY_FILE.test(rec.file) && STACKED.test(rec.body)) what.push("stacked display canvas");
   if (!what.length) continue;
   const key = `${rec.file}::${rec.name}`;
   if (!hits.has(key)) hits.set(key, { ...rec, what, how: viaRenderer ? "renderer" : "display-name" });

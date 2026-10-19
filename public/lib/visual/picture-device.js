@@ -172,8 +172,8 @@
   }
 
   /**
-   * Bridge for faces still drawn on a 2D canvas: upload the canvas into the
-   * node's picture texture (only when a cable is connected). Opaque.
+   * A face's GPU picture into the node's picture texture (only when a cable
+   * is connected). GPU-to-GPU blit from the face texture; no canvas upload.
    */
   function nodeGraphPicturePublishCanvas(nodeId, canvas) {
     const id = String(nodeId || "").trim();
@@ -194,15 +194,9 @@
       gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, null);
       return true;
     }
-    gl.bindTexture(gl.TEXTURE_2D, slot.texture);
-    // FBO-style orientation (row 0 = bottom) to match rendered pictures.
-    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
-    gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, canvas);
-    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
-    gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
-    gl.bindTexture(gl.TEXTURE_2D, null);
-    return true;
+    // GPU faces only: a face that has not painted yet has no picture to
+    // publish. Never upload its 2D canvas (all-GPU display rule).
+    return false;
   }
 
   /** Latest published picture for a node id (no cable walk). */

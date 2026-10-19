@@ -10,6 +10,7 @@
 // face — only scroll existing pixels and fill the new column(s) on the right.
 // History (seconds) = freerun window across the face. Shorter = faster scroll. At 0 the same scale is one current bar.
 // No source sync. A zero-crossing lock fights the scroll+stamp strip.
+// 1D Onset Sync is separate: while on, History seconds is the time between Reset rising edges.
 // WebGL history texture. Instant Waterfall only — no Hz dual-path.
 
 function nodeGraphWaterfallNowMs() {
@@ -51,7 +52,21 @@ function nodeGraphWaterfallHistoryIsFrozen(settings) {
   return !(nodeGraphWaterfallHistorySeconds(settings) > NODE_GRAPH_WATERFALL_HISTORY_SEC_EPS);
 }
 
-function nodeGraphOnsetScanEdges(buffer, fromAbs, toAbs, planck, latch, kind) {
+function nodeGraphOnsetResetSyncOn(settings) {
+  const raw = settings?.resetSync;
+  return raw === true || raw === 1 || raw === "1" || raw === "true";
+}
+
+/** Seconds from the previous Reset rising edge to this one. The first edge only arms the clock. */
+function nodeGraphOnsetNoteResetGap(onset, frame, hz) {
+  const prev = onset.resetAt;
+  if (Number.isFinite(prev) && frame > prev && hz > 0) {
+    onset.syncSeconds = (frame - prev) / hz;
+  }
+  onset.resetAt = frame;
+}
+
+function nodeGraphOnsetScanEdges(buffer, fromAbs, toAbs, planck, latch, kind, onHit) {
   let hit = -1;
   if (!buffer || typeof nodeGraphScopeBufferSampleAtAbsoluteFrame !== "function") return hit;
   const from = Math.floor(fromAbs);
@@ -61,7 +76,10 @@ function nodeGraphOnsetScanEdges(buffer, fromAbs, toAbs, planck, latch, kind) {
     if (sample == null || !Number.isFinite(sample)) continue;
     const hot = Math.abs(sample) > planck;
     if (kind === "reset") {
-      if (hot && !latch.hi) hit = frame;
+      if (hot && !latch.hi) {
+        hit = frame;
+        if (typeof onHit === "function") onHit(frame);
+      }
       latch.hi = hot;
     } else if (hot && latch.below) {
       hit = frame;
@@ -71,6 +89,147 @@ function nodeGraphOnsetScanEdges(buffer, fromAbs, toAbs, planck, latch, kind) {
     }
   }
   return hit;
+}
+
+/** Unwrapped time position and the on-face x (the pass can wrap at Position). */
+function nodeGraphOnsetTraceX(frame, origin, faceSamples, width, startPx) {
+  const u = startPx + ((frame - origin) / Math.max(1, faceSamples)) * width;
+  let x = u % width;
+  if (x < 0) x += width;
+  return { u, x };
+}
+
+function nodeGraphOnsetTraceY(raw, buffer, slot, settings, height, strokePx) {
+  const live = nodeGraphWaterfallPrepare(buffer, settings) || buffer;
+  const amp = nodeGraphWaterfallAmp(live, slot);
+  const midY = height * 0.5;
+  const halfHeight = nodeGraphWaterfallHalfHeight(height, slot, settings, amp);
+  let y = nodeGraphWaterfallY(raw, amp.gain, amp.offset, midY, halfHeight, amp, settings);
+  if (!Number.isFinite(y)) return null;
+  const inset = Math.min(height * 0.5, Math.max(0, strokePx) * 0.5);
+  if (height > 0) y = Math.max(inset, Math.min(height - inset, y));
+  return y;
+}
+
+function nodeGraphOnsetTraceHasSamples(onset) {
+  const traces = onset?.traces;
+  if (!traces) return false;
+  const keys = Object.keys(traces);
+  for (let i = 0; i < keys.length; i += 1) {
+    const cols = traces[keys[i]]?.columns;
+    if (cols) {
+      for (let c = 0; c < cols.length; c += 1) {
+        if (cols[c]) return true;
+      }
+    }
+  }
+  return false;
+}
+
+function nodeGraphOnsetTraceEnsure(onset, key, rgb, buffer, width) {
+  if (!onset.traces) onset.traces = Object.create(null);
+  let trace = onset.traces[key];
+  if (!trace || trace.columns?.length !== width) {
+    trace = onset.traces[key] = { columns: new Array(width), rgb, buffer };
+  }
+  trace.rgb = rgb;
+  trace.buffer = buffer;
+  return trace;
+}
+
+/** Pixel column for an absolute frame. Many audio samples share one column. */
+function nodeGraphOnsetTraceColumn(frame, origin, faceSamples, width) {
+  const t = (frame - origin) / Math.max(1, faceSamples);
+  let p = Math.floor(t * width);
+  if (p < 0) p = 0;
+  if (p >= width) p = width - 1;
+  return p;
+}
+
+/**
+ * Keep the first sample, the min, the max, and the last, in time order.
+ * A 4 second kick is hundreds of samples per pixel. Drawing each one pegs
+ * the UI thread. These four still trace the buffer through that pixel.
+ */
+function nodeGraphOnsetColumnNote(col, frame, raw) {
+  const pt = { frame, raw };
+  if (!col.first) {
+    col.first = pt;
+    col.min = pt;
+    col.max = pt;
+    col.last = pt;
+    return;
+  }
+  col.last = pt;
+  if (raw < col.min.raw) col.min = pt;
+  if (raw > col.max.raw) col.max = pt;
+}
+
+function nodeGraphOnsetColumnPoints(col) {
+  if (!col?.first) return [];
+  const list = [col.first, col.min, col.max, col.last];
+  list.sort((a, b) => a.frame - b.frame);
+  const out = [];
+  for (let i = 0; i < list.length; i += 1) {
+    const pt = list[i];
+    if (!pt) continue;
+    if (out.length && out[out.length - 1].frame === pt.frame) continue;
+    out.push(pt);
+  }
+  return out;
+}
+
+/** Draw stored column points. begin/end are column indexes. */
+function nodeGraphOnsetEmitTrace(canvas, onset, key, trace, slot, settings, height, width, origin, faceSamples, startPx, begin, end) {
+  if (typeof nodeGraphOnsetGlStrokePolyline !== "function") return;
+  if (!(end > begin)) return;
+  if (!onset.pens) onset.pens = Object.create(null);
+  const strokePx = typeof nodeGraphOnsetStrokeCanvasPx === "function"
+    ? nodeGraphOnsetStrokeCanvasPx(canvas, settings)
+    : 1;
+  const runs = [];
+  let run = [];
+  const pen = onset.pens[key];
+  let prevU = pen ? pen.u : NaN;
+  if (pen) run.push({ x: pen.x, y: pen.y });
+  const cols = trace.columns || [];
+  for (let c = begin; c < end; c += 1) {
+    const pts = nodeGraphOnsetColumnPoints(cols[c]);
+    for (let i = 0; i < pts.length; i += 1) {
+      const y = nodeGraphOnsetTraceY(pts[i].raw, trace.buffer, slot, settings, height, strokePx);
+      if (y == null) continue;
+      const loc = nodeGraphOnsetTraceX(pts[i].frame, origin, faceSamples, width, startPx);
+      const wrap = Number.isFinite(prevU) && Math.floor(loc.u / width) !== Math.floor(prevU / width);
+      if (wrap) {
+        if (run.length >= 2) runs.push(run);
+        run = [];
+      }
+      run.push({ x: loc.x, y });
+      prevU = loc.u;
+      onset.pens[key] = { x: loc.x, y, u: loc.u, frame: pts[i].frame };
+    }
+  }
+  if (run.length >= 2) runs.push(run);
+  else if (run.length === 1) runs.push([run[0], { x: run[0].x + 1e-3, y: run[0].y }]);
+  const color = trace.rgb || [255, 255, 255, 1];
+  for (let r = 0; r < runs.length; r += 1) {
+    nodeGraphOnsetGlStrokePolyline(canvas, runs[r], strokePx, color);
+  }
+}
+
+function nodeGraphOnsetRedrawTraces(canvas, onset, slot, settings, height, width, origin, faceSamples, startPx) {
+  onset.pens = Object.create(null);
+  const traces = onset.traces;
+  if (!traces) return;
+  const keys = Object.keys(traces);
+  for (let i = 0; i < keys.length; i += 1) {
+    const key = keys[i];
+    const trace = traces[key];
+    if (!trace?.columns?.length) continue;
+    nodeGraphOnsetEmitTrace(
+      canvas, onset, key, trace, slot, settings, height, width, origin, faceSamples, startPx, 0, trace.columns.length,
+    );
+  }
 }
 
 function nodeGraphOnsetPaint(spec, live) {
@@ -101,7 +260,26 @@ function nodeGraphOnsetPaint(spec, live) {
   const resetBuf = id && nodeGraphModuleScopeState?.buffers
     ? nodeGraphModuleScopeState.buffers.get(`${id}:Reset`)
     : null;
-  const resetHit = nodeGraphOnsetScanEdges(resetBuf, scanFrom, absEnd, planck, onset, "reset");
+  const node = typeof nodeGraphModuleScopeNodeForSlot === "function"
+    ? nodeGraphModuleScopeNodeForSlot(spec.slot)
+    : null;
+  // 1D Onset only. 2D Onset keeps the History stepper. Off clears the clock so
+  // the next enable waits for two new Reset edges.
+  const resetSync = node?.type === "onset" && nodeGraphOnsetResetSyncOn(settings);
+  const hz = nodeGraphWaterfallVisualHz(live);
+  if (!resetSync) {
+    onset.syncSeconds = 0;
+    onset.resetAt = NaN;
+  }
+  const resetHit = nodeGraphOnsetScanEdges(
+    resetBuf,
+    scanFrom,
+    absEnd,
+    planck,
+    onset,
+    "reset",
+    resetSync ? (frame) => nodeGraphOnsetNoteResetGap(onset, frame, hz) : null,
+  );
   let signalHit = nodeGraphOnsetScanEdges(live, scanFrom, absEnd, planck, onset, "signal");
   const right = spec.stereoBuffers?.right;
   if (right && right !== live) {
@@ -120,10 +298,9 @@ function nodeGraphOnsetPaint(spec, live) {
     onset.lastPixel = -1;
     onset.edge = Object.create(null);
     onset.strokePts = Object.create(null);
+    onset.traces = Object.create(null);
+    onset.pens = Object.create(null);
   }
-  const node = typeof nodeGraphModuleScopeNodeForSlot === "function"
-    ? nodeGraphModuleScopeNodeForSlot(spec.slot)
-    : null;
   let position = typeof nodeGraphModuleScopeNodeParam === "function"
     ? nodeGraphModuleScopeNodeParam(node, "position", 0)
     : 0;
@@ -144,33 +321,53 @@ function nodeGraphOnsetPaint(spec, live) {
   const scaleChanged = Number.isFinite(onset.paintScale)
     && Math.abs(onset.paintScale - ampScale) > 1e-5;
   onset.paintScale = ampScale;
-  let reprintScale = false;
-  if (scaleChanged && onset.live && Number.isFinite(onset.origin) && onset.origin + 1 >= absStart) {
-    onset.drawn = onset.origin;
-    onset.lastPixel = -1;
-    onset.edge = Object.create(null);
-    onset.strokePts = Object.create(null);
-    onset.parked = false;
-    reprintScale = true;
-  }
   if (!onset.live || !Number.isFinite(onset.origin)) {
     present();
     return true;
   }
-  const hz = nodeGraphWaterfallVisualHz(live);
-  const history = nodeGraphWaterfallHistorySeconds(settings);
+  let history = nodeGraphWaterfallHistorySeconds(settings);
+  if (resetSync && onset.syncSeconds > 0) {
+    const pct = typeof nodeGraphOnsetClampHistoryPercent === "function"
+      ? nodeGraphOnsetClampHistoryPercent(settings?.historyPercent, 100)
+      : 100;
+    history = onset.syncSeconds * (pct / 100);
+  }
   const faceSamples = Math.max(1, Math.round(hz * Math.max(history, 0)));
   const endDraw = Math.min(absEnd, onset.origin + faceSamples);
+  const blendMode = nodeGraphWaterfallBlendMode(settings, { rgbGuns: Boolean(spec?.rgbBuffers) });
+  const plateBg = blendMode === "multiply" ? "#ffffff" : (spec.bg || "#000000");
+  if (
+    onset.live
+    && Number.isFinite(onset.latchedSamples)
+    && onset.latchedSamples !== faceSamples
+  ) {
+    // Percent or seconds changed. Replay this pass so 10% zooms the start.
+    onset.drawn = onset.origin;
+    onset.lastPixel = -1;
+    onset.parked = false;
+    onset.edge = Object.create(null);
+    onset.strokePts = Object.create(null);
+    onset.traces = Object.create(null);
+    onset.pens = Object.create(null);
+    if (typeof nodeGraphWaterfallGlReset === "function") nodeGraphWaterfallGlReset(canvas, plateBg);
+  }
+  onset.latchedSamples = faceSamples;
+  const startPx = Math.floor(position * width) % width;
+  if (scaleChanged && nodeGraphOnsetTraceHasSamples(onset)) {
+    // The ring has usually moved past the parked pass. Replay every stored
+    // sample at the new Scale so the line follows the buffer.
+    if (typeof nodeGraphWaterfallGlReset === "function") nodeGraphWaterfallGlReset(canvas, plateBg);
+    else if (typeof nodeGraphWaterfallGlEnsure === "function") nodeGraphWaterfallGlEnsure(canvas, plateBg);
+    nodeGraphOnsetRedrawTraces(
+      canvas, onset, spec.slot, settings, height, width, onset.origin, faceSamples, startPx,
+    );
+  }
   if (!(endDraw > onset.drawn)) {
     if (endDraw >= onset.origin + faceSamples) onset.parked = true;
     present();
     return true;
   }
-  const blendMode = nodeGraphWaterfallBlendMode(settings, { rgbGuns: Boolean(spec?.rgbBuffers) });
-  const plateBg = blendMode === "multiply" ? "#ffffff" : (spec.bg || "#000000");
-  if (reprintScale && typeof nodeGraphWaterfallGlReset === "function") {
-    nodeGraphWaterfallGlReset(canvas, plateBg);
-  } else if (typeof nodeGraphWaterfallGlEnsure === "function") {
+  if (typeof nodeGraphWaterfallGlEnsure === "function") {
     nodeGraphWaterfallGlEnsure(canvas, plateBg);
   }
   if (canvas._wfGlSession) canvas._wfGlSession.smooth = nodeGraphWaterfallSmoothLines(settings);
@@ -180,76 +377,48 @@ function nodeGraphOnsetPaint(spec, live) {
     buffer: live,
     stereoBuffers: spec.stereoBuffers,
   }, settings).filter((ch) => ch.enabled !== false);
-  let stampComposite = "source-over";
-  if (blendMode === "lighter" || blendMode === "screen" || blendMode === "multiply") stampComposite = blendMode;
-  else if (blendMode === "combine" || blendMode === "meet") stampComposite = "lighter";
-  const startPx = Math.floor(position * width) % width;
   const p1 = Math.max(0, Math.min(width, Math.floor(((endDraw - onset.origin) / faceSamples) * width)));
   let p = Number.isFinite(onset.lastPixel) ? onset.lastPixel + 1 : 0;
-  const useFill = nodeGraphWaterfallBarsFilled(settings);
-  const useStroke = nodeGraphWaterfallDrawStroke(settings);
   while (p < p1) {
-    const s0 = Math.floor(onset.origin + (p / width) * faceSamples);
-    const s1 = Math.max(s0 + 1, Math.ceil(onset.origin + ((p + 1) / width) * faceSamples));
     const screenX = (startPx + p) % width;
-    const seam = p > 0 && screenX === 0;
     if (typeof nodeGraphWaterfallGlClearColumn === "function") {
       nodeGraphWaterfallGlClearColumn(canvas, screenX, 1, plateBg);
-    }
-    const columnSpans = [];
-    for (let i = 0; i < channels.length; i += 1) {
-      const ch = channels[i];
-      const buf = ch.buffer;
-      let minV = Infinity;
-      let maxV = -Infinity;
-      let minAt = 0;
-      let maxAt = 0;
-      let lastV = Number.NaN;
-      for (let s = s0; s < s1; s += 1) {
-        const v = typeof nodeGraphScopeBufferSampleAtAbsoluteFrame === "function"
-          ? nodeGraphScopeBufferSampleAtAbsoluteFrame(buf, s)
-          : null;
-        if (v == null || !Number.isFinite(v)) continue;
-        if (v < minV) { minV = v; minAt = s; }
-        if (v > maxV) { maxV = v; maxAt = s; }
-        lastV = v;
-      }
-      let ys = null;
-      if (minV <= maxV) {
-        ys = nodeGraphWaterfallAccBarYs(
-          { has: true, min: minV, max: maxV },
-          buf, spec.slot, settings, height,
-        );
-      }
-      columnSpans.push({
-        key: ch.lastYKey || String(i),
-        ys,
-        waveYs: useStroke && minV <= maxV
-          ? nodeGraphWaterfallWaveYs({ has: true, min: minV, max: maxV, minAt, maxAt, last: lastV }, buf, spec.slot, settings, height)
-          : null,
-        prevEdge: !seam && onset.edge ? onset.edge[ch.lastYKey] : null,
-        strokeColor: ch.strokeColor,
-        // Brightness = ink alpha (4th entry), like the bar path.
-        rgb: [...nodeGraphWaterfallParseInkRgb(ch.color), nodeGraphWaterfallClamp01(ch.bright ?? 1, 1)],
-      });
-    }
-    nodeGraphWaterfallStampColumnFills(canvas, screenX, columnSpans, blendMode, stampComposite, useFill);
-    for (let i = 0; i < columnSpans.length; i += 1) {
-      const span = columnSpans[i];
-      // Stroke does not depend on the fill: a raw-0 column (Sidechain Wet
-      // Gain fully ducked = bottom) has no bar but still has a line.
-      if (useStroke) {
-        // Draw the waveform (both peaks + last sample), not the bar midline.
-        nodeGraphWaterfallStrokeWaveColumn(canvas, onset, span.key, screenX, span.waveYs, settings, seam, span.strokeColor);
-      }
-      const ys = span.ys;
-      if (!ys) continue;
-      if (!onset.edge) onset.edge = Object.create(null);
-      onset.edge[span.key] = { y0: ys.y0, y1: ys.y1 };
     }
     p += 1;
   }
   onset.lastPixel = p1 - 1;
+  const fromFrame = onset.drawn;
+  for (let i = 0; i < channels.length; i += 1) {
+    const ch = channels[i];
+    const key = ch.lastYKey || String(i);
+    const rgb = [...nodeGraphWaterfallParseInkRgb(ch.color), nodeGraphWaterfallClamp01(ch.bright ?? 1, 1)];
+    const trace = nodeGraphOnsetTraceEnsure(onset, key, rgb, ch.buffer, width);
+    let beginCol = width;
+    let endCol = -1;
+    for (let s = fromFrame; s < endDraw; s += 1) {
+      const v = typeof nodeGraphScopeBufferSampleAtAbsoluteFrame === "function"
+        ? nodeGraphScopeBufferSampleAtAbsoluteFrame(ch.buffer, s)
+        : null;
+      if (v == null || !Number.isFinite(v)) continue;
+      const col = nodeGraphOnsetTraceColumn(s, onset.origin, faceSamples, width);
+      if (!trace.columns[col]) trace.columns[col] = {};
+      nodeGraphOnsetColumnNote(trace.columns[col], s, v);
+      if (col < beginCol) beginCol = col;
+      if (col > endCol) endCol = col;
+    }
+    if (endCol >= beginCol) {
+      // The open column can gain a new peak after it was drawn. Clear it
+      // before the short line is stamped again.
+      if (typeof nodeGraphWaterfallGlClearColumn === "function") {
+        for (let c = beginCol; c <= endCol; c += 1) {
+          nodeGraphWaterfallGlClearColumn(canvas, (startPx + c) % width, 1, plateBg);
+        }
+      }
+      nodeGraphOnsetEmitTrace(
+        canvas, onset, key, trace, spec.slot, settings, height, width, onset.origin, faceSamples, startPx, beginCol, endCol + 1,
+      );
+    }
+  }
   onset.drawn = endDraw;
   if (endDraw >= onset.origin + faceSamples) onset.parked = true;
   present();
@@ -1804,6 +1973,7 @@ function nodeGraphWaterfallFaceBlur(settings) {
 
 function nodeGraphWaterfallFinishOutputInk(spec, context, canvas, scrollPx) {
   void context;
+  void scrollPx;
   const face = spec?.canvas || canvas;
   if (typeof paintNodeGraphFaceInkOverlay !== "function") {
     return;
@@ -1811,17 +1981,15 @@ function nodeGraphWaterfallFinishOutputInk(spec, context, canvas, scrollPx) {
   const def = typeof nodeGraphModuleDefinitions === "object"
     ? nodeGraphModuleDefinitions[spec?.slot?.type]
     : null;
-  const px = Math.round(nodeGraphFiniteNumber(scrollPx));
-  // Output pause/protect marks + RMS guides: one GL batch on the ink overlay.
-  const overlay = paintNodeGraphFaceInkOverlay(face, spec?.slot, spec?.settings, spec?.density, {
-    scrollPx: px,
+  // Output pause/protect marks + RMS guides: GL, inside the waterfall present
+  // (nodeGraphFaceInkDraw). This arms the face; the present draws it.
+  const inked = paintNodeGraphFaceInkOverlay(face, spec?.slot, spec?.settings, spec?.density, {
     rmsDbGuides: Boolean(def?.rmsDbGuides) && !spec?.cold,
   });
-  if (overlay?._outputInkBake && typeof nodeGraphWaterfallGlStampCanvas === "function") {
-    nodeGraphWaterfallGlStampCanvas(face, overlay);
-    if (typeof nodeGraphWaterfallGlPresent === "function") {
-      nodeGraphWaterfallGlPresent(face, spec?.bg || "#000000");
-    }
+  // Fade frames burn the mark into the history, then re-present.
+  if (inked?._outputInkBake && typeof nodeGraphWaterfallGlStampInk === "function") {
+    nodeGraphWaterfallGlStampInk(face);
+    nodeGraphWaterfallGlPresent(face, spec?.bg || "#000000");
   }
 }
 
