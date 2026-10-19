@@ -2207,6 +2207,11 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphFromPlanSurgical =
         ) {
           return true;
         }
+        // Scan Grid H Sync / V Sync are read on the host (scope rings). The
+        // kernel has no such port: unmapped, the cable would land on MONO (= R).
+        if (dstType === "rasterRgb" && (dstPort === "H Sync" || dstPort === "V Sync")) {
+          return true;
+        }
 
 
         // Scale dest: 12-bit feeder (Pitch Quantizer / Turing / Degree).
@@ -8449,6 +8454,11 @@ NodeLiveAudioProcessor.prototype.compileNativeGraphFromPlan = function compileNa
         srcType === "namedPortalIn" || srcType === "namedPortalOut"
         || dstType === "namedPortalIn" || dstType === "namedPortalOut"
       ) {
+        return true;
+      }
+      // Scan Grid H Sync / V Sync are read on the host (scope rings). The
+      // kernel has no such port: unmapped, the cable would land on MONO (= R).
+      if (dstType === "rasterRgb" && (dstPort === "H Sync" || dstPort === "V Sync")) {
         return true;
       }
 

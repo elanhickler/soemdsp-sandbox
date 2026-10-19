@@ -9,7 +9,7 @@
 // original canvas Gaussian: filter:blur() on the present, then an
 // additive wider Gaussian for glow.
 
-const NODE_GRAPH_RASTER_RGB_PAINT_REV = "gpu-beam-2-tv";
+const NODE_GRAPH_RASTER_RGB_PAINT_REV = "gpu-beam-3-sync";
 
 // Grid state (GPU texture + beam phase) lives by node id — not on the face canvas.
 // Hide/show title rebuilds the module DOM; the raster must survive that.
@@ -250,6 +250,8 @@ function nodeGraphRasterRgbState(nodeId, width, height, logicalWidth = width, lo
       writePos: 0,
       // GPU grid (raster-rgb-gl.js gridFor), created opaque black on first use.
       gpu: null,
+      // H / V Sync trigger state (last sample out of Planck silence).
+      syncOn: { h: false, v: false },
     };
     if (key) {
       nodeGraphRasterRgbBuffers.set(key, state);
@@ -307,6 +309,7 @@ function nodeGraphRasterRgbClearState(state) {
   state.writePos = 0;
   state.lastAbs = Number.NaN;
   state.scanCredit = 0;
+  state.syncOn = { h: false, v: false };
 }
 
 /** Display Settings Clear — wipe the rolling plate and re-arm ingest phase. */
@@ -406,6 +409,48 @@ function wipeNodeGraphRasterRgbScreensToColdBoot(options = {}) {
   if (!onlyId) {
     nodeGraphRasterRgbBuffers.clear();
   }
+}
+
+const NODE_GRAPH_RASTER_RGB_SYNC_PORTS = [["H Sync", "h"], ["V Sync", "v"]];
+
+/**
+ * H / V Sync hits in this frame's window, sorted: [{ at, kind }], `at` = index
+ * into the newest `take` samples (the beam moves before that sample writes).
+ * Trigger rule (docs/GATES_TRIGGERS.md): a hit is leaving Planck silence in
+ * either sign, |last| < Planck <= |now|. Only for a wired sync input; this is
+ * a scan of the sync ring for edges, no pixel work (the beam stays on the GPU).
+ */
+function nodeGraphRasterRgbSyncHits(state, slot, take) {
+  const hits = [];
+  const nodeId = slot?.nodeId;
+  const planck = nodeGraphPlanck();
+  state.syncOn ||= { h: false, v: false };
+  for (const [port, kind] of NODE_GRAPH_RASTER_RGB_SYNC_PORTS) {
+    const wired = typeof nodeGraphModuleScopeConnectionsTo === "function"
+      && (nodeGraphModuleScopeConnectionsTo(nodeId, port) || []).length > 0;
+    if (!wired) {
+      state.syncOn[kind] = false;
+      continue;
+    }
+    const tail = nodeGraphRasterRgbRingTail(nodeGraphRasterRgbPickChannel(slot, port), take);
+    if (!tail) {
+      continue;
+    }
+    const offset = take - tail.length;
+    let on = state.syncOn[kind];
+    for (let i = 0; i < tail.length; i += 1) {
+      const now = Math.abs(tail[i]) >= planck;
+      if (now && !on) {
+        hits.push({ at: offset + i, kind });
+      }
+      on = now;
+    }
+    state.syncOn[kind] = on;
+  }
+  if (hits.length > 1) {
+    hits.sort((a, b) => a.at - b.at);
+  }
+  return hits;
 }
 
 /** The newest `take` samples of a ring as a Float32Array view (no copy). */
@@ -710,6 +755,7 @@ function drawNodeGraphRasterRgbFaceItem(_renderer, item, pixelRatio) {
       logicalW,
       logicalH,
       speed: nodeGraphRasterRgbScanSpeed(node),
+      syncs: nodeGraphRasterRgbSyncHits(state, paintSlot, take),
     });
     if (!scanned) {
       canvas._rasterRgbBlit = false;

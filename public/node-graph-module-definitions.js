@@ -17621,7 +17621,10 @@ const nodeGraphModuleDefinitions = (
     visualSink: true },
   rasterRgb: {
     planRole: "processor",
-    bufferedInputs: ["R", "G", "B"],
+    bufferedInputs: ["R", "G", "B", "H Sync", "V Sync"],
+    // Optional beam sync (triggers, Planck rising edge): H Sync jumps the beam
+    // to the start of the next line, V Sync to the top-left. Unwired: free run.
+    digitalInputs: ["H Sync", "V Sync"],
     displayHeightGu: 5,
     displayType: "rasterRgbFace",
     displayModes: [
@@ -17632,8 +17635,8 @@ const nodeGraphModuleDefinitions = (
         settingsSchema: "rasterRgbFace",
         source: { value: "R" } },
     ],
-    inputs: ["R", "G", "B"],
-    inputLabels: { R: "R", G: "G", B: "B" },
+    inputs: ["R", "G", "B", "H Sync", "V Sync"],
+    inputLabels: { R: "R", G: "G", B: "B", "H Sync": "H Sync", "V Sync": "V Sync" },
     layout: "scopeFace",
     outputs: ["R", "G", "B", "rgba"],
     outputLabels: { R: "R", G: "G", B: "B", rgba: "📺" },
@@ -17764,6 +17767,8 @@ const nodeGraphModuleDefinitions = (
       { key: "rasterRgbR", label: "R", port: "R" },
       { key: "rasterRgbG", label: "G", port: "G" },
       { key: "rasterRgbB", label: "B", port: "B" },
+      { key: "rasterRgbHSync", label: "H Sync", port: "H Sync" },
+      { key: "rasterRgbVSync", label: "V Sync", port: "V Sync" },
     ],
     visualSink: true },
   waterfallXyz: {
