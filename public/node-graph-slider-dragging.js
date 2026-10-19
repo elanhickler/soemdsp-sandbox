@@ -327,13 +327,19 @@ function updateNodeSliderCurrentValue(slider, rawValue) {
   const choiceIndex = nodeSliderChoiceIndexFromText(slider, normalizedValue);
   // choiceIndex is an array index (0..n-1). Map it through min/max/step so
   // typing the label "-1" writes domain -1, not index 0.
-  const value = choiceIndex != null
+  const parsed = choiceIndex != null
     ? (typeof nodeSliderChoiceValueFromIndex === "function"
       ? nodeSliderChoiceValueFromIndex(slider, choiceIndex)
       : Number(slider.min) + choiceIndex)
     : (slider?.dataset?.kind === "seed" && typeof parseNodeGraphSeedInput === "function"
       ? parseNodeGraphSeedInput(normalizedValue)
       : parseNodeSliderMathExpression(normalizedValue));
+  // Whole-number params (definition wholeNumber: true): typed entry rounds.
+  const nodeId = slider.closest?.(".dsp-node")?.dataset?.node;
+  const nodeType = nodeId ? nodeGraphMvp.patch.nodes.find((n) => n.id === nodeId)?.type : "";
+  const value = nodeType && nodeGraphParameterByKey(nodeType, slider.dataset.param)?.wholeNumber
+    ? Math.round(parsed)
+    : parsed;
   if (!Number.isFinite(value)) {
     syncNodeSliderReadout(slider);
     return;

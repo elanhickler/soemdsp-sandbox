@@ -120,37 +120,11 @@ function nodeGraphRasterRgbSettingsForNode(node) {
   return normalizeNodeGraphRasterRgbSettings(node?.traceDisplaySettings);
 }
 
-/** Logical (fractional) grid axis — 0 hides; otherwise keep the exact param. */
+/** Whole-number grid axis (Width / Height step 1; a saved fraction rounds). 0 hides. */
 function nodeGraphRasterRgbDim(value, fallback) {
-  const n = Number(value);
-  if (!Number.isFinite(n)) {
-    const fb = Number(fallback);
-    return Number.isFinite(fb) && fb > 0 ? fb : 0;
-  }
-  return n > 0 ? n : 0;
-}
-
-/**
- * Integer storage size for a logical axis.
- * ceil so fractional Width (e.g. 96.3) still has a column for the partial step;
- * write mapping uses the exact logical period so high-rate RGB can line up.
- */
-function nodeGraphRasterRgbBufferDim(logical) {
-  const n = Number(logical);
-  if (!Number.isFinite(n) || n <= 0) {
-    return 0;
-  }
-  return Math.max(1, Math.ceil(n - 1e-12));
-}
-
-function nodeGraphRasterRgbPosMod(pos, period) {
-  const p = Number(period);
-  if (!(p > 0)) {
-    return 0;
-  }
-  const n = nodeGraphFiniteNumber(pos);
-  const m = n % p;
-  return m < 0 ? m + p : m;
+  let n = Number(value);
+  if (!Number.isFinite(n)) n = Number(fallback);
+  return Number.isFinite(n) && n >= 0.5 ? Math.round(n) : 0;
 }
 
 function nodeGraphRasterRgbGridSize(node) {
@@ -160,8 +134,6 @@ function nodeGraphRasterRgbGridSize(node) {
   return {
     width,
     height,
-    bufferWidth: nodeGraphRasterRgbBufferDim(width),
-    bufferHeight: nodeGraphRasterRgbBufferDim(height),
   };
 }
 
@@ -179,12 +151,12 @@ function nodeGraphRasterRgbLineRate(node) {
  * ring's real engine rate (re-read every paint, so a Width or rate change
  * applies at once). One line then takes exactly sampleRate / Line Rate samples.
  */
-function nodeGraphRasterRgbBeamSpeed(node, logicalW, sampleRate) {
+function nodeGraphRasterRgbBeamSpeed(node, width, sampleRate) {
   const sr = Number(sampleRate);
   const rate = Number.isFinite(sr) && sr > 0
     ? sr
     : (typeof nodeGraphLiveHostSampleRate === "function" ? nodeGraphLiveHostSampleRate() : 44100);
-  const w = Math.max(1e-9, nodeGraphFiniteNumber(logicalW));
+  const w = Math.max(1, nodeGraphFiniteNumber(width));
   return (w * nodeGraphRasterRgbLineRate(node)) / rate;
 }
 
@@ -264,19 +236,15 @@ function nodeGraphRasterRgbGradeLut(grade) {
   return lut;
 }
 
-function nodeGraphRasterRgbState(nodeId, width, height, logicalWidth = width, logicalHeight = height) {
+function nodeGraphRasterRgbState(nodeId, width, height) {
   const key = String(nodeId || "");
   let state = key ? nodeGraphRasterRgbBuffers.get(key) : null;
-  const lw = Math.max(1e-9, nodeGraphFiniteNumber(logicalWidth, width));
-  const lh = Math.max(1e-9, nodeGraphFiniteNumber(logicalHeight, height));
   if (!state || state.width !== width || state.height !== height) {
     nodeGraphRasterRgbGlFree(state);
     state = {
       height,
-      logicalHeight: lh,
-      logicalWidth: lw,
       width,
-      // Continuous sample index — X wraps every logicalWidth (fractional OK).
+      // Stamps written (raster-rgb-gl.js beam); Clear sets it back to 0.
       writePos: 0,
       // GPU grid (raster-rgb-gl.js gridFor), created opaque black on first use.
       gpu: null,
@@ -286,13 +254,6 @@ function nodeGraphRasterRgbState(nodeId, width, height, logicalWidth = width, lo
     if (key) {
       nodeGraphRasterRgbBuffers.set(key, state);
     }
-  } else if (
-    Math.abs((nodeGraphFiniteNumber(state.logicalWidth)) - lw) > 1e-9
-    || Math.abs((nodeGraphFiniteNumber(state.logicalHeight)) - lh) > 1e-9
-  ) {
-    // Same ceil buffer, new line period — retune without wiping the plate.
-    state.logicalWidth = lw;
-    state.logicalHeight = lh;
   }
   return state;
 }
@@ -679,9 +640,7 @@ function drawNodeGraphRasterRgbFaceItem(_renderer, item, pixelRatio) {
   const frozen = (typeof scopePaintIsFrozen === "function" && scopePaintIsFrozen())
     || (typeof nodeGraphModuleScopePhosphorFrozen === "function"
       && nodeGraphModuleScopePhosphorFrozen());
-  const bufW = grid.bufferWidth || 0;
-  const bufH = grid.bufferHeight || 0;
-  const sizeKey = `${cw}x${ch}|${grid.width}x${grid.height}|${bufW}x${bufH}`;
+  const sizeKey = `${cw}x${ch}|${grid.width}x${grid.height}`;
   // Pause/speed 0: hold the paused picture (a feature, not a GL fallback). Do not fill-wipe then early-return
   // (that left a blank plate while the pixel buffer still existed).
   if (frozen && canvas._rasterRgbBlit && canvas._rasterRgbHoldKey === sizeKey) {
@@ -698,14 +657,14 @@ function drawNodeGraphRasterRgbFaceItem(_renderer, item, pixelRatio) {
     nodeGraphRasterRgbReset(nodeId, canvas);
     return;
   }
-  if (!(grid.width > 0) || !(grid.height > 0) || !(bufW > 0) || !(bufH > 0)) {
+  if (!(grid.width > 0) || !(grid.height > 0)) {
     canvas._rasterRgbBlit = true;
     canvas._rasterRgbHoldKey = sizeKey;
     return;
   }
   let state;
   try {
-    state = nodeGraphRasterRgbState(nodeId, bufW, bufH, grid.width, grid.height);
+    state = nodeGraphRasterRgbState(nodeId, grid.width, grid.height);
     canvas._rasterRgb = state;
   } catch (_err) {
     canvas._rasterRgbBlit = true;
@@ -715,9 +674,7 @@ function drawNodeGraphRasterRgbFaceItem(_renderer, item, pixelRatio) {
   const captured = nodeGraphRasterRgbTakeChannels(paintSlot);
   const cellCount = state.width * state.height;
   const wired = Boolean(captured.length);
-  const logicalW = Math.max(1e-9, nodeGraphFiniteNumber(state.logicalWidth, grid.width) || state.width);
-  const logicalH = Math.max(1e-9, nodeGraphFiniteNumber(state.logicalHeight, grid.height) || state.height);
-  const frameSamples = logicalW * logicalH;
+  const frameSamples = state.width * state.height;
   // New pixels only when the shared Simulation FPS tick arms ingest.
   // Extra paints (pump, collect, slider) re-present grade without a second write.
   if (wired && cellCount > 0 && !frozen && nodeGraphRasterRgbShouldIngest()) {
@@ -726,7 +683,7 @@ function drawNodeGraphRasterRgbFaceItem(_renderer, item, pixelRatio) {
     const blue = captured.B;
     const primary = red?.length ? red : (green?.length ? green : blue);
     const absEnd = nodeGraphRasterRgbRingAbsEnd(primary);
-    const oneFrame = Math.max(1, Math.ceil(frameSamples));
+    const oneFrame = Math.max(1, frameSamples);
     let lastAbs = Number(state.lastAbs);
     // Cold start / after Clear: skip ring backlog so project open does not
     // dump half a second of history (misaligned until Width/Height retune).
@@ -749,8 +706,8 @@ function drawNodeGraphRasterRgbFaceItem(_renderer, item, pixelRatio) {
     // Every undrawn sample since the last paint (a stall included). The only
     // bound is the ring itself: older samples are no longer there to draw.
     const take = Math.min(undrawn, captured.length);
-    // Beam on the GPU (raster-rgb-gl.js): Width x Line Rate / sampleRate pixels per sample
-    // (fractional credit carried over), x = pos mod W, y = floor(pos / W) mod H.
+    // Beam on the GPU (raster-rgb-gl.js): Width x Line Rate / sampleRate pixels
+    // per sample; every line restarts at column 0, every frame at row 0.
     const scanned = nodeGraphRasterRgbGlScan(state, {
       take,
       channels: [
@@ -758,11 +715,11 @@ function drawNodeGraphRasterRgbFaceItem(_renderer, item, pixelRatio) {
         nodeGraphRasterRgbRingTail(green, take),
         nodeGraphRasterRgbRingTail(blue, take),
       ],
-      logicalW,
-      logicalH,
+      width: state.width,
+      height: state.height,
       speed: nodeGraphRasterRgbBeamSpeed(
         node,
-        logicalW,
+        state.width,
         typeof nodeGraphScopeSampleRate === "function" ? nodeGraphScopeSampleRate(primary) : primary?.nodeGraphScopeSampleRate,
       ),
       syncs: nodeGraphRasterRgbSyncHits(state, paintSlot, take),
@@ -776,15 +733,13 @@ function drawNodeGraphRasterRgbFaceItem(_renderer, item, pixelRatio) {
       ? Math.floor(absEnd)
       : Math.floor(lastAbs) + take;
   }
-  const gradeKey = `${grade.invert}|${grade.contrast}|${grade.brightness}|${grade.hue}|${grade.blur}|${grade.glow}|${grid.width}x${grid.height}|${bufW}x${bufH}|${wired ? captured.length : 0}`;
+  const gradeKey = `${grade.invert}|${grade.contrast}|${grade.brightness}|${grade.hue}|${grade.blur}|${grade.glow}|${grid.width}x${grid.height}|${wired ? captured.length : 0}`;
   nodeGraphDisplayCanvasPixelated(canvas, true);
   let dw = cw;
   let dh = ch;
   let dx = 0;
   let dy = 0;
   if (settings.squareRatio) {
-    // Logical (fractional) size drives on-screen cell size so fine Width/Height
-    // nudges are visible between whole-pixel buffer snaps.
     const scale = Math.min(cw / grid.width, ch / grid.height);
     dw = Math.max(1, Math.floor(grid.width * scale));
     dh = Math.max(1, Math.floor(grid.height * scale));

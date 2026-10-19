@@ -17682,8 +17682,9 @@ const nodeGraphModuleDefinitions = (
         min: "0",
         nonlinearSlider: true,
         sliderCurve: "custom",
-        step: "any",
-        tooltip: "Pixels per line (fractional OK); Line Rate sets how fast lines are drawn. Tune Width to lock RGB to the raster. Storage uses ceil(Width)." },
+        step: "1",
+        wholeNumber: true,
+        tooltip: "Pixels per line (whole numbers). Line Rate sets how fast lines are drawn." },
       {
         curveAmount: "0.55",
         defaultValue: "54",
@@ -17695,8 +17696,9 @@ const nodeGraphModuleDefinitions = (
         min: "0",
         nonlinearSlider: true,
         sliderCurve: "custom",
-        step: "any",
-        tooltip: "Lines per frame (fractional OK). Pairs with Width for the raster period. Storage uses ceil(Height)." },
+        step: "1",
+        wholeNumber: true,
+        tooltip: "Lines per frame (whole numbers). Frame rate = Line Rate / Height." },
       {
         // Lines per second (Hz). Beam speed = Width * Line Rate / engine sampleRate
         // pixels per sample, so a 60 Hz source at Line Rate 60 holds one cycle per line.

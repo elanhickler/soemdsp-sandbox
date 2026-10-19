@@ -76,19 +76,19 @@ check("edges: short ring aligned to the window end", at(hits.c) === "h5", at(hit
 // 2. Beam jumps vs a CPU reference.
 const CASES = [
   { W: 10, H: 6, speed: 1, take: 200, syncs: [{ at: 3, kind: "h" }, { at: 17, kind: "h" }, { at: 20, kind: "h" }, { at: 21, kind: "h" }, { at: 100, kind: "v" }, { at: 150, kind: "h" }] },
-  { W: 7.5, H: 4.25, speed: 2, take: 300, syncs: [{ at: 1, kind: "h" }, { at: 50, kind: "v" }, { at: 50, kind: "h" }, { at: 77, kind: "h" }, { at: 210, kind: "v" }] },
+  { W: 7, H: 4, speed: 2, take: 300, syncs: [{ at: 1, kind: "h" }, { at: 50, kind: "v" }, { at: 50, kind: "h" }, { at: 77, kind: "h" }, { at: 210, kind: "v" }] },
   { W: 12, H: 9, speed: 0.75, take: 500, syncs: [{ at: 9, kind: "h" }, { at: 99, kind: "h" }, { at: 333, kind: "v" }, { at: 334, kind: "h" }] },
 ];
 const beam = await page.evaluate((cases) => {
   const TIE = 1e-3;
   const out = [];
   for (const c of cases) {
-    const width = Math.ceil(c.W);
-    const height = Math.ceil(c.H);
+    const width = c.W;
+    const height = c.H;
     const data = new Float32Array(c.take);
     for (let i = 0; i < c.take; i += 1) data[i] = ((i * 37) % 255 + 1) / 255;
-    const st = { width, height, logicalWidth: c.W, logicalHeight: c.H, writePos: 0, scanCredit: 0, gpu: null };
-    const ok = nodeGraphRasterRgbGlScan(st, { take: c.take, channels: [data, null, null], logicalW: c.W, logicalH: c.H, speed: c.speed, syncs: c.syncs });
+    const st = { width, height, writePos: 0, gpu: null };
+    const ok = nodeGraphRasterRgbGlScan(st, { take: c.take, channels: [data, null, null], width, height, speed: c.speed, syncs: c.syncs });
     const grid = nodeGraphRasterRgbGlReadGrid(st);
     nodeGraphRasterRgbGlFree(st);
     // Per-cell walk: line D = W / speed, column 1 / speed, frame H * D.
@@ -103,7 +103,7 @@ const beam = await page.evaluate((cases) => {
     let k = 0;
     let pos = 0;
     for (;;) {
-      const exit = Math.min(line + Math.min((col + 1) * DW, D), frame + F);
+      const exit = line + (col + 1) * DW;
       const s = Math.ceil(exit - TIE) - 1;
       if (k < c.syncs.length && c.syncs[k].at <= Math.max(s, 0) && c.syncs[k].at < c.take) {
         const at = c.syncs[k].at;

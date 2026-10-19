@@ -3,16 +3,14 @@
 // Pair: raster_rgb.scan.frag.glsl. Driven by raster-rgb-gl.js nodeGraphRasterRgbGlScan().
 //
 // Raster timing (Line Rate): a line lasts D = sampleRate / Line Rate samples,
-// a frame F = Height x D. Every line restarts at column 0 and writes all
-// ceil(Width) columns; every frame restarts at row 0 and writes all
-// ceil(Height) rows. Cell (row r, column c) of a frame is stamped by the sample
-// current when the beam leaves it (the old Scan Speed convention):
-//   exit = min(lineStart(r) + min(c + 1, Width) * D / Width, frameEnd)
+// a frame F = Height x D (Width and Height are whole numbers). Every line
+// restarts at column 0, every frame at row 0. Cell (row r, column c) of a
+// frame is stamped by the sample current when the beam leaves it (the old
+// Scan Speed convention):
+//   exit = lineStart(r) + (c + 1) * D / Width
 //   sample = ceil(exit - kTie) - 1
-// A fractional last column is left at the line end on every line, so it is
-// never stale. Cells past the frame end (fractional Height: the rest of the
-// last row) take the frame's last sample. kTie makes exact ties (Line Rate
-// locked to the source) resolve the same way in every draw.
+// kTie makes exact ties (Line Rate locked to the source) resolve the same way
+// in every draw.
 //
 // Stamp v of this draw is grid cell (r0, c0) + v in row-major order (wrapping
 // into following rows / frames). Times come relative to sample uBase so the
@@ -29,9 +27,9 @@ uniform vec3 uHas;         // 1 = channel wired
 uniform int uBase;         // sample index (into this take) the times are relative to
 uniform int uLast;         // last sample index this draw may use
 uniform ivec2 uCell0;      // first stamp: (column, row)
-uniform ivec2 uCells;      // ceil(Width), ceil(Height) = storage size
+uniform ivec2 uCells;      // Width, Height = storage size
 uniform float uLine0;      // start time of row uCell0.y (relative to uBase)
-uniform float uFrameEnd;   // end time of the current frame (relative to uBase)
+uniform float uFrameEnd;   // start time of the next frame (relative to uBase)
 uniform vec3 uTiming;      // D (samples / line), D / Width (samples / column), F (samples / frame)
 out vec3 vColor;
 const float kTie = 1e-3;
@@ -56,8 +54,7 @@ void main() {
   float lineStart = df == 0
     ? uLine0 + float(r - uCell0.y) * D
     : uFrameEnd + float(df - 1) * uTiming.z + float(r) * D;
-  float frameEnd = uFrameEnd + float(df) * uTiming.z;
-  float exit = min(lineStart + min(float(c + 1) * uTiming.y, D), frameEnd);
+  float exit = lineStart + float(c + 1) * uTiming.y;
   int s = clamp(uBase + int(ceil(exit - kTie)) - 1, 0, uLast);
   vec3 v = vec3(
     sampleAt(uR, s - uSkip.x),

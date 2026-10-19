@@ -349,15 +349,10 @@
     if (rest > 0) gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, full, rest, 1, gl.RED, gl.FLOAT, data, full * SAMPLE_TEX_W);
   }
 
-  function posMod(pos, period) {
-    const m = pos % period;
-    return m < 0 ? m + period : m;
-  }
-
   /**
    * Beam writes for one frame. input: { take, channels: [R, G, B] each a
    * Float32Array of the newest samples (length <= take; shorter rings are
-   * zero-padded at the front) or null, logicalW, logicalH, speed, syncs:
+   * zero-padded at the front) or null, width, height (whole cells), speed, syncs:
    * sorted [{ at, kind: "h" | "v" }] (sample index; applied before that
    * sample) }. Updates state.beam / state.writePos (stamps written).
    * Returns false on a GL failure.
@@ -372,8 +367,8 @@
     if (!g) return false;
     const take = Math.max(0, Math.floor(input.take || 0));
     if (!take) return true;
-    const W = input.logicalW;
-    const H = input.logicalH;
+    const W = input.width;
+    const H = input.height;
     const s = input.speed;
     if (!(W > 0) || !(H > 0) || !(s > 0)) return true;
     // Raster timing in samples: line D = W / speed (= sampleRate / Line Rate),
@@ -457,15 +452,14 @@
       let count = 0;
       let firstT = NaN;
       // A cell is due when the beam left it by `end` (sample = ceil(exit) - 1).
-      const exitOf = (col, ln, fe) => Math.min(ln + Math.min((col + 1) * DW, D), fe);
+      const exitOf = (col, ln) => ln + (col + 1) * DW;
       while (count < CHUNK_STAMPS) {
         const frameEnd = frame + F;
         const lim = end + TIE;
-        let due = clampInt(Math.floor((lim - line) / DW), 0, Wc);
-        if (due < Wc && (line + D <= lim || frameEnd <= lim)) due = Wc;
+        const due = clampInt(Math.floor((lim - line) / DW), 0, Wc);
         let upto = Math.min(due, c + (CHUNK_STAMPS - count));
         if (upto > c) {
-          if (!(firstT === firstT)) firstT = exitOf(c, line, frameEnd);
+          if (!(firstT === firstT)) firstT = exitOf(c, line);
           count += upto - c;
           c = upto;
         }
@@ -492,7 +486,6 @@
     // Rebase times to the next take's sample 0.
     state.beam = { q, r, c, line: line - take, frame: frame - take, Wc, Hc };
     state.writePos = q;
-    state.scanCredit = 0;
     state.lastScan = { take, draws, stamps: stampsTotal };
     gl.bindVertexArray(null);
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);

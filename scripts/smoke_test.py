@@ -3802,7 +3802,10 @@ def require_node_graph_mvp_contract() -> None:
             script_sources["./public/node-graph-module-definitions.js"].index("rasterRgb: {"):
             script_sources["./public/node-graph-module-definitions.js"].index("waterfallXyz: {")
         ]
-        and "nodeGraphRasterRgbBufferDim" in script_sources["./public/modules/rasterRgb/raster-rgb-display.js"]
+        and "wholeNumber: true" in script_sources["./public/node-graph-module-definitions.js"][
+            script_sources["./public/node-graph-module-definitions.js"].index("rasterRgb: {"):
+            script_sources["./public/node-graph-module-definitions.js"].index("waterfallXyz: {")
+        ]
         and "nodeGraphRasterRgbGridSize" in script_sources["./public/modules/rasterRgb/raster-rgb-display.js"]
         and 'Object.hasOwn(rawParams, "squares")' in script_sources["./public/node-graph-patch-core.js"]
         and '"rgba"' in script_sources["./public/node-graph-module-definitions.js"]

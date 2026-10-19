@@ -348,7 +348,7 @@ function validateNodeGraphPatch(patch) {
           value = hz;
         }
       }
-      // Squares+offset era → absolute W×H. Missing Squares means W×H already absolute.
+      // Squares+offset era -> absolute W / H. Missing Squares means W / H already absolute.
       if (
         type === "rasterRgb"
         && (parameter.key === "width" || parameter.key === "height")
@@ -356,7 +356,11 @@ function validateNodeGraphPatch(patch) {
       ) {
         const squares = nodeGraphFiniteNumber(rawParams.squares);
         const offset = Number(value);
-        value = Math.max(0, Math.round((Number.isFinite(offset) ? offset : 0) + squares));
+        value = Math.max(0, (Number.isFinite(offset) ? offset : 0) + squares);
+      }
+      // Whole-number params (definition wholeNumber: true): a saved fraction rounds.
+      if (parameter.wholeNumber && Number.isFinite(Number(value))) {
+        value = Math.round(Number(value));
       }
       // Hypersaw / Hypersaw2 waveform: Pulse Center moved to sit after Saw.
       // Old: 0 Trisaw, 1 Saw, 2 Ramp, 3 Pulse, 4 Pulse Center, 5 RectSin, 6 Trap
