@@ -7340,6 +7340,26 @@ body.keyboard-debug-hidden .node-midi-keyboard-signal-bar {
   line-height: 1.2;
 }
 
+/* Drawn on #nodeGlConstraintHud. This element is only the checkbox hit target. */
+.node-constraint-color-guide.gl-constraint-hits {
+  position: fixed;
+  z-index: 32;
+  width: max-content;
+  height: auto;
+  margin: 0;
+  opacity: 0;
+}
+
+.node-gl-constraint-hud {
+  position: fixed;
+  z-index: 31;
+  pointer-events: none;
+}
+
+.node-graph-workspace.gl-graph-on .node-constraint-badges {
+  display: none !important;
+}
+
 .node-constraint-stack {
   display: inline-flex;
   flex-direction: column;

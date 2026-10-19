@@ -215,6 +215,7 @@ function syncNodeGraphConstraintOverlayToggles(options = {}) {
     persistNodeGraphDebugChromePreference();
   }
   syncNodeGraphConstraintResourceMetrics();
+  if (typeof nodeGraphGlGraphPresentSoon === "function") nodeGraphGlGraphPresentSoon();
 }
 
 function formatNodeGraphConstraintMetricNumber(value, digits = 4) {
@@ -334,6 +335,9 @@ function syncNodeGraphConstraintResourceMetrics() {
   syncNodeGraphRamConstraintMetrics();
   if (typeof syncNodeGraphScopeGpuMetricsDisplay === "function") {
     syncNodeGraphScopeGpuMetricsDisplay();
+  }
+  if (typeof nodeGraphGlConstraintGuidePresent === "function") {
+    nodeGraphGlConstraintGuidePresent();
   }
 }
 

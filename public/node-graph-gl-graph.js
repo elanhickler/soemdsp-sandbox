@@ -382,6 +382,8 @@ function nodeGraphGlGraphRebuildChrome() {
         unitEl,
         unitBox,
         unitAnchor: unitEl && unitBox ? nodeGraphGlGraphTextAnchor(unitEl, unitBox) : null,
+        // Text metrics read once here (ZP-5); presents never call getComputedStyle.
+        ...nodeGraphGlGraphSliderTextMetrics(labelEl, valueEl, unitEl),
       });
     }
     const seedControls = el.querySelectorAll(".node-seed-control");
@@ -402,6 +404,11 @@ function nodeGraphGlGraphRebuildChrome() {
         h: box.h,
         valueEl,
         valueBox: nodeGraphGlGraphWorldBox(valueEl),
+        readoutBox: nodeGraphGlGraphWorldBox(control.querySelector(".node-slider-readout")),
+        valuePx: Number.parseFloat(valueEl ? getComputedStyle(valueEl).fontSize : "") || 0,
+        dice,
+        plus,
+        minus,
         diceBox: nodeGraphGlGraphWorldBox(dice),
         plusBox: nodeGraphGlGraphWorldBox(plus),
         minusBox: nodeGraphGlGraphWorldBox(minus),
@@ -431,7 +438,73 @@ function nodeGraphGlGraphRebuildChrome() {
       graphs.push({ id, x: graphBox.x, y: graphBox.y, w: graphBox.w, h: graphBox.h });
     }
   }
-  nodeGraphGlGraphState.chrome = { titles, labels, jacks, sliders, seeds, keys, graphs };
+  const root = document.documentElement;
+  const ghostHost = host || root;
+  nodeGraphGlGraphState.chrome = {
+    titles, labels, jacks, sliders, seeds, keys, graphs,
+    // Read once per rebuild, not per present.
+    seedLine: typeof nodeGraphGlLinesCss === "function"
+      ? nodeGraphGlLinesCss(getComputedStyle(root).getPropertyValue("--line") || "#3a4248")
+      : [0.23, 0.26, 0.28, 1],
+    ghostFill: typeof nodeGraphGlLinesCss === "function"
+      ? nodeGraphGlLinesCss(getComputedStyle(ghostHost).getPropertyValue("--node-slider-ghost-color") || "hsl(262 100% 76% / 0.38)")
+      : [0.78, 0.55, 1, 0.38],
+    bakePx: 0,
+    constraints: nodeGraphGlGraphCollectConstraintBoxes(),
+  };
+  nodeGraphGlGraphState.chrome.bakePx = nodeGraphGlGraphChromeBakePx(nodeGraphGlGraphState.chrome);
+}
+
+// ZP-6: constraint badge boxes are world boxes read at rebuild. The badges
+// are drawn into the veil batch, so they ride the cached mesh mid-gesture.
+function nodeGraphGlGraphCollectConstraintBoxes() {
+  const out = [];
+  const nodes = document.querySelectorAll(".node-graph-workspace [data-node-constraint]");
+  for (let i = 0; i < nodes.length; i += 1) {
+    const el = nodes[i];
+    if (el.closest(".node-layout-canvas-tile, .node-screen-solo-stage")) continue;
+    const keys = String(el.dataset.nodeConstraint || "").split(/\s+/).filter(Boolean);
+    if (!keys.length) continue;
+    const box = nodeGraphGlGraphWorldBox(el);
+    if (box) out.push({ box, keys });
+  }
+  return out;
+}
+
+function nodeGraphGlGraphSliderTextMetrics(labelEl, valueEl, unitEl) {
+  const px = (el) => Number.parseFloat(el ? getComputedStyle(el).fontSize : "") || 0;
+  const out = { labelPx: px(labelEl), valuePx: px(valueEl), unitPx: 0, unitInk: null };
+  if (unitEl) {
+    const unitStyle = getComputedStyle(unitEl);
+    out.unitPx = Number.parseFloat(unitStyle.fontSize) || 0;
+    out.unitInk = nodeGraphGlGraphParseCssColor(
+      unitStyle.getPropertyValue("--node-slider-unit-color"),
+      [127 / 255, 199 / 255, 217 / 255, 1],
+    );
+  }
+  return out;
+}
+
+// ZP-5: one glyph bake size per rebuild, from zoom-1 text sizes. The camera
+// scales the atlas (nearest above 2.5x); zooming never re-bakes it.
+const NODE_GRAPH_GL_TEXT_BAKE_FLOOR = 64;
+function nodeGraphGlGraphChromeBakePx(chrome) {
+  let maxPx = NODE_GRAPH_GL_TEXT_BAKE_FLOOR;
+  for (const title of chrome.titles || []) {
+    const chars = Math.max(1, String(title.el?.textContent || "").trim().length);
+    maxPx = Math.max(maxPx, Math.min((title.h || 16) * 0.62, (title.box?.w || 16) / chars / 0.62));
+  }
+  const buttonNodes = (nodeGraphGlGraphState.view?.host || document)
+    .querySelectorAll(".node-plugin-momentary-button, .node-plugin-toggle-button");
+  for (let i = 0; i < buttonNodes.length; i += 1) {
+    const box = nodeGraphGlGraphWorldBox(buttonNodes[i]);
+    if (box) maxPx = Math.max(maxPx, Math.min(box.h * 0.42, box.w * 0.5));
+  }
+  for (const label of chrome.labels || []) maxPx = Math.max(maxPx, label.fontPx || 13);
+  for (const slider of chrome.sliders || []) {
+    maxPx = Math.max(maxPx, slider.labelPx || 0, slider.valuePx || 0, slider.unitPx || 0);
+  }
+  return Math.max(16, Math.min(384, Math.round(maxPx)));
 }
 
 function nodeGraphGlGraphTextOpts(opts) {
@@ -441,29 +514,8 @@ function nodeGraphGlGraphTextOpts(opts) {
 }
 
 function nodeGraphGlGraphSettleTextBake() {
-  const zoom = nodeGraphGlGraphZoom();
   const chrome = nodeGraphGlGraphState.chrome || {};
-  let maxPx = 16;
-  for (const title of chrome.titles || []) {
-    const chars = Math.max(1, String(title.el?.textContent || "").trim().length);
-    const fit = Math.min((title.h || 16) * 0.62, (title.box?.w || 16) / chars / 0.62);
-    maxPx = Math.max(maxPx, fit * zoom);
-  }
-  const buttonNodes = (nodeGraphGlGraphState.view?.host || document)
-    .querySelectorAll(".node-plugin-momentary-button, .node-plugin-toggle-button");
-  for (let i = 0; i < buttonNodes.length; i += 1) {
-    const box = nodeGraphGlGraphWorldBox(buttonNodes[i]);
-    if (!box) continue;
-    maxPx = Math.max(maxPx, Math.min(box.h * 0.42, box.w * 0.5) * zoom);
-  }
-  for (const label of chrome.labels || []) maxPx = Math.max(maxPx, (label.fontPx || 13) * zoom);
-  for (const slider of chrome.sliders || []) {
-    const labelPx = Number.parseFloat(slider.labelEl ? getComputedStyle(slider.labelEl).fontSize : "");
-    const valuePx = Number.parseFloat(slider.valueEl ? getComputedStyle(slider.valueEl).fontSize : "");
-    if (labelPx > 0) maxPx = Math.max(maxPx, labelPx * zoom);
-    if (valuePx > 0) maxPx = Math.max(maxPx, valuePx * zoom);
-  }
-  let px = Math.max(16, Math.min(384, Math.round(maxPx)));
+  let px = chrome.bakePx || NODE_GRAPH_GL_TEXT_BAKE_FLOOR;
   // Tiles only raise the shared bake, so several tiles never rebake against each other.
   if (nodeGraphGlGraphState.view) px = Math.max(px, nodeGraphGlGraphState.emojiPx || 0);
   nodeGraphGlGraphState.emojiPx = px;
@@ -668,23 +720,20 @@ function nodeGraphGlGraphDrawSeeds(batch, toX, toY, zoom, cssW, cssH) {
   if (!seeds.length) return;
   const ink = [0.98, 0.992, 1, 0.92];
   const well = [0.031, 0.043, 0.051, 1];
-  const line = typeof nodeGraphGlLinesCss === "function"
-    ? nodeGraphGlLinesCss(getComputedStyle(document.documentElement).getPropertyValue("--line") || "#3a4248")
-    : [0.23, 0.26, 0.28, 1];
+  const line = nodeGraphGlGraphState.chrome?.seedLine || [0.23, 0.26, 0.28, 1];
   const hover = [1, 1, 1, 0.08];
+  // World boxes come from the rebuild (no layout reads per present).
+  const cell = (box) => (box ? { x: toX(box.x), y: toY(box.y), w: box.w * zoom, h: box.h * zoom } : null);
   for (let i = 0; i < seeds.length; i += 1) {
     const seed = seeds[i];
-    const host = nodeGraphGlGraphSeedCell(seed.control, toX, toY, zoom);
+    const host = cell(seed);
     if (!host || nodeGraphGlGraphOutside(host.x, host.y, host.w, host.h, cssW, cssH)) continue;
-    const valueEl = seed.control?.querySelector?.(".node-slider-readout-value");
-    const readout = seed.control?.querySelector?.(".node-slider-readout");
-    const dice = seed.control?.querySelector?.(".node-seed-btn-dice");
-    const plus = seed.control?.querySelector?.(".node-seed-btn-plus");
-    const minus = seed.control?.querySelector?.(".node-seed-btn-minus");
-    const valueCell = nodeGraphGlGraphSeedCell(readout, toX, toY, zoom);
-    const diceCell = nodeGraphGlGraphSeedCell(dice, toX, toY, zoom);
-    const plusCell = nodeGraphGlGraphSeedCell(plus, toX, toY, zoom);
-    const minusCell = nodeGraphGlGraphSeedCell(minus, toX, toY, zoom);
+    const valueEl = seed.valueEl;
+    const { dice, plus, minus } = seed;
+    const valueCell = cell(seed.readoutBox);
+    const diceCell = cell(seed.diceBox);
+    const plusCell = cell(seed.plusBox);
+    const minusCell = cell(seed.minusBox);
     nodeGraphGlGraphDrawOver(batch, () => {
       nodeGraphGlLinesRect(batch, host.x, host.y, host.w, host.h, well);
       const stroke = Math.max(1, zoom);
@@ -721,7 +770,8 @@ function nodeGraphGlGraphDrawSeeds(batch, toX, toY, zoom, cssW, cssH) {
     });
     const text = String(valueEl?.textContent || "").replace(/\s+/g, " ").trim();
     if (text && valueCell && typeof nodeGraphGlLinesText === "function") {
-      const cssPx = Number.parseFloat(valueEl ? getComputedStyle(valueEl).fontSize : "") || 0;
+      // The seed fit writes an inline size per value; else the rebuild's computed size.
+      const cssPx = Number.parseFloat(valueEl?.style?.fontSize || "") || seed.valuePx || 0;
       const pad = Math.max(2, valueCell.h * 0.12) + 4 * zoom;
       const fillPx = Math.max(
         6,
@@ -747,9 +797,7 @@ function nodeGraphGlGraphDrawChrome(batch, toX, toY, zoom, cssW, cssH) {
   const valueFill = [0.27, 0.64, 1, 0.9];
   const ghostHost = document.getElementById("nodeGraphWorkspace");
   const hideGhost = ghostHost?.classList.contains("hide-slider-position");
-  const ghostFill = typeof nodeGraphGlLinesCss === "function"
-    ? nodeGraphGlLinesCss(getComputedStyle(ghostHost || document.documentElement).getPropertyValue("--node-slider-ghost-color") || "hsl(262 100% 76% / 0.38)")
-    : [0.78, 0.55, 1, 0.38];
+  const ghostFill = chrome.ghostFill || [0.78, 0.55, 1, 0.38];
   const sliders = chrome.sliders || [];
   for (let i = 0; i < sliders.length; i += 1) {
     const slider = sliders[i];
@@ -800,7 +848,7 @@ function nodeGraphGlGraphDrawChrome(batch, toX, toY, zoom, cssW, cssH) {
           toX(slider.labelAnchor.x),
           toY(slider.labelBox.y + slider.labelBox.h * 0.5),
           nodeGraphGlGraphTextOpts({
-            px: Math.max(8, (Number.parseFloat(getComputedStyle(slider.labelEl).fontSize) || 12.6) * zoom),
+            px: Math.max(8, (slider.labelPx || 12.6) * zoom),
             rgba: ink,
             align: slider.labelAnchor.align,
             baseline: "middle",
@@ -815,7 +863,7 @@ function nodeGraphGlGraphDrawChrome(batch, toX, toY, zoom, cssW, cssH) {
           toX(slider.valueAnchor.x),
           toY(slider.valueBox.y + slider.valueBox.h * 0.5),
           nodeGraphGlGraphTextOpts({
-            px: Math.max(8, (Number.parseFloat(getComputedStyle(slider.valueEl).fontSize) || 13.8) * zoom),
+            px: Math.max(8, (slider.valuePx || 13.8) * zoom),
             rgba: ink,
             align: slider.valueAnchor.align,
             baseline: "middle",
@@ -825,18 +873,14 @@ function nodeGraphGlGraphDrawChrome(batch, toX, toY, zoom, cssW, cssH) {
       }
       const unitText = String(slider.unitEl?.textContent || "").replace(/\s+/g, " ").trim();
       if (unitText && slider.unitBox && slider.unitAnchor && !slider.unitEl.classList.contains("is-empty")) {
-        const unitStyle = getComputedStyle(slider.unitEl);
-        const unitInk = nodeGraphGlGraphParseCssColor(
-          unitStyle.getPropertyValue("--node-slider-unit-color"),
-          [127 / 255, 199 / 255, 217 / 255, 1],
-        );
+        const unitInk = slider.unitInk || [127 / 255, 199 / 255, 217 / 255, 1];
         nodeGraphGlLinesText(
           batch,
           unitText,
           toX(slider.unitAnchor.x),
           toY(slider.unitBox.y + slider.unitBox.h * 0.5),
           nodeGraphGlGraphTextOpts({
-            px: Math.max(8, (Number.parseFloat(unitStyle.fontSize) || 11) * zoom),
+            px: Math.max(8, (slider.unitPx || 11) * zoom),
             rgba: unitInk,
             align: slider.unitAnchor.align,
             baseline: "middle",
@@ -1170,6 +1214,137 @@ function nodeGraphGlGraphFit(canvas, cssW, cssH) {
   return bw / cssW;
 }
 
+function nodeGraphGlGraphConstraintMarksAllowed() {
+  const body = document.body;
+  if (!body || body.classList.contains("node-screen-solo-active")) return false;
+  if (body.classList.contains("keyboard-debug-hidden") && !body.classList.contains("constraint-guide-visible")) {
+    return false;
+  }
+  return true;
+}
+
+const NODE_GRAPH_CONSTRAINT_INK = {
+  cpu: [240 / 255, 179 / 255, 95 / 255, 1],
+  ram: [95 / 255, 199 / 255, 238 / 255, 1],
+  gpu: [192 / 255, 131 / 255, 255 / 255, 1],
+};
+
+function nodeGraphGlGraphDrawConstraintBadges(batch, toX, toY, zoom, cssW, cssH) {
+  if (!batch || !nodeGraphGlGraphConstraintMarksAllowed()) return;
+  const marks = nodeGraphGlGraphState.chrome?.constraints || [];
+  const bodyClasses = document.body.classList;
+  for (let i = 0; i < marks.length; i += 1) {
+    const box = marks[i].box;
+    const keys = marks[i].keys.filter((key) =>
+      NODE_GRAPH_CONSTRAINT_INK[key] && bodyClasses.contains(`node-constraint-${key}-active`));
+    if (!keys.length) continue;
+    const s = zoom > 0 ? zoom : 1;
+    let right = box.x + box.w - 4;
+    for (let k = keys.length - 1; k >= 0; k -= 1) {
+      const key = keys[k];
+      const label = key.toUpperCase();
+      const bwWorld = 10 + label.length * 6;
+      const bhWorld = 12;
+      right -= bwWorld;
+      const ink = NODE_GRAPH_CONSTRAINT_INK[key];
+      const fill = [ink[0] * 0.28 + 0.02, ink[1] * 0.28 + 0.02, ink[2] * 0.28 + 0.03, 0.94];
+      const x = toX(right);
+      const y = toY(box.y + 3);
+      const bw = bwWorld * s;
+      const bh = bhWorld * s;
+      if (nodeGraphGlGraphOutside(x, y, bw, bh, cssW, cssH)) {
+        right -= 2;
+        continue;
+      }
+      nodeGraphGlLinesRect(batch, x - 1, y - 1, bw + 2, bh + 2, ink);
+      nodeGraphGlLinesRect(batch, x, y, bw, bh, fill);
+      if (typeof nodeGraphGlLinesText === "function") {
+        nodeGraphGlLinesText(batch, label, x + bw * 0.5, y + bh * 0.5, nodeGraphGlGraphTextOpts({
+          px: Math.max(8, 9 * s),
+          rgba: ink,
+          align: "center",
+          baseline: "middle",
+          weight: 700,
+        }));
+      }
+      right -= 2;
+    }
+  }
+}
+
+function nodeGraphGlConstraintGuidePresent() {
+  // A screen HUD, not camera content. It reads its own layout, so never
+  // mid-gesture: mark it and redraw on the settle rebuild (ZP-6).
+  if (typeof nodeGraphHtmlFrozen === "function" && nodeGraphHtmlFrozen()) {
+    nodeGraphGlGraphState.guideDirty = true;
+    return;
+  }
+  nodeGraphGlGraphState.guideDirty = false;
+  const guide = document.querySelector(".node-constraint-color-guide");
+  if (!guide || typeof nodeGraphGlLinesBegin !== "function") return;
+  guide.classList.add("gl-constraint-hits");
+  let canvas = document.getElementById("nodeGlConstraintHud");
+  if (!canvas) {
+    canvas = document.createElement("canvas");
+    canvas.id = "nodeGlConstraintHud";
+    canvas.className = "node-gl-constraint-hud";
+    canvas.setAttribute("aria-hidden", "true");
+    document.body.appendChild(canvas);
+  }
+  const hidden = !nodeGraphGlGraphConstraintMarksAllowed()
+    || getComputedStyle(guide).display === "none";
+  canvas.hidden = hidden;
+  if (hidden) return;
+  const width = Math.max(1, Math.ceil(guide.offsetWidth));
+  const height = Math.max(1, Math.ceil(guide.offsetHeight));
+  const host = document.getElementById("nodeGraphWorkspace");
+  const hostRect = host?.getBoundingClientRect();
+  const left = hostRect ? hostRect.left + Math.max(0, (hostRect.width - width) * 0.5) : 8;
+  const top = hostRect ? Math.max(8, hostRect.bottom - height - 8) : 8;
+  guide.style.left = `${left}px`;
+  guide.style.top = `${top}px`;
+  canvas.style.left = `${left}px`;
+  canvas.style.top = `${top}px`;
+  if (canvas.width !== width) canvas.width = width;
+  if (canvas.height !== height) canvas.height = height;
+  const batch = nodeGraphGlLinesBegin(canvas, [0.012, 0.02, 0.027, 0.86], {
+    scale: 1,
+    transparent: true,
+    camera: { x: 0, y: 0, zoom: 1 },
+  });
+  if (!batch) return;
+  const stacks = guide.querySelectorAll(".node-constraint-stack");
+  for (let i = 0; i < stacks.length; i += 1) {
+    const stack = stacks[i];
+    const key = stack.getAttribute("data-constraint-stack") || "cpu";
+    const ink = NODE_GRAPH_CONSTRAINT_INK[key] || [1, 1, 1, 1];
+    const parts = stack.querySelectorAll(".node-constraint-chip, .node-constraint-metrics");
+    for (let p = 0; p < parts.length; p += 1) {
+      const part = parts[p];
+      if (getComputedStyle(part).display === "none") continue;
+      const box = part.getBoundingClientRect();
+      const x = box.left - left;
+      const y = box.top - top;
+      if (!(box.width > 1) || !(box.height > 1)) continue;
+      const checked = Boolean(part.querySelector("input")?.checked);
+      const mix = checked ? 0.42 : 0.16;
+      const fill = [ink[0] * mix + 0.02, ink[1] * mix + 0.02, ink[2] * mix + 0.03, 0.92];
+      nodeGraphGlLinesRect(batch, x, y, box.width, box.height, fill);
+      const text = String(part.textContent || "").replace(/\s+/g, " ").trim();
+      if (text && typeof nodeGraphGlLinesText === "function") {
+        nodeGraphGlLinesText(batch, text, x + box.width * 0.5, y + box.height * 0.5, nodeGraphGlGraphTextOpts({
+          px: 11,
+          rgba: ink,
+          align: "center",
+          baseline: "middle",
+          weight: 700,
+        }));
+      }
+    }
+  }
+  nodeGraphGlLinesEnd(batch, "alpha");
+}
+
 // Replay the cached mesh with the live camera (ZP-2 / ZP-3). Face quads in it
 // sample each face's GPU texture (picture-device face textures), so a replay
 // shows the latest display frame with no rebuild, no CSS reads and no upload.
@@ -1286,7 +1461,8 @@ function nodeGraphGlGraphPresent(options = {}) {
   if (!gesturing) nodeGraphGlGraphSettleTextBake();
   let thick = nodeGraphGlGraphState.thick;
   let dotSize = nodeGraphGlGraphState.dotSize;
-  if (!gesturing || !(thick > 0)) {
+  if (nodeGraphGlGraphState.thickGen !== nodeGraphGlGraphState.gen || !(thick > 0)) {
+    nodeGraphGlGraphState.thickGen = nodeGraphGlGraphState.gen;
     const style = getComputedStyle(host);
     thick = Number.parseFloat(style.getPropertyValue("--node-wire-thickness")) || 2;
     dotSize = Number.parseFloat(style.getPropertyValue("--node-wire-patch-point-size")) || 8;
@@ -1384,7 +1560,17 @@ function nodeGraphGlGraphPresent(options = {}) {
       }
     }
   }
-  const plateStyle = getComputedStyle(host);
+  // Plate stroke vars: read once per rebuild generation, not per present.
+  if (nodeGraphGlGraphState.plateStyleGen !== nodeGraphGlGraphState.gen || !nodeGraphGlGraphState.plateStyle) {
+    const cs = getComputedStyle(host);
+    const props = {};
+    for (const name of ["--node-module-idle-stroke", "--node-module-selected-stroke", "--node-module-idle-stroke-width"]) {
+      props[name] = cs.getPropertyValue(name);
+    }
+    nodeGraphGlGraphState.plateStyle = { getPropertyValue: (name) => props[name] ?? "" };
+    nodeGraphGlGraphState.plateStyleGen = nodeGraphGlGraphState.gen;
+  }
+  const plateStyle = nodeGraphGlGraphState.plateStyle;
   const borderIdle = nodeGraphGlGraphParseCssColor(
     plateStyle.getPropertyValue("--node-module-idle-stroke"),
     [0.631, 0.608, 0.608, 0.9],
@@ -1427,6 +1613,7 @@ function nodeGraphGlGraphPresent(options = {}) {
     nodeGraphGlGraphDrawPlate(veilBatch, plate, toX, toY, layoutZoom, cssW, cssH, plateStyle, borderOn, borderIdle);
   }
   nodeGraphGlGraphDrawVeils(veilBatch, toX, toY, layoutZoom);
+  nodeGraphGlGraphDrawConstraintBadges(veilBatch, toX, toY, layoutZoom, cssW, cssH);
   const outputPaused = typeof nodeGraphLiveEngineIsPaused === "function" && nodeGraphLiveEngineIsPaused();
   if (outputPaused) {
     const white = [1, 1, 1, 1];
@@ -1472,12 +1659,20 @@ function nodeGraphGlGraphPresent(options = {}) {
   if (!view) {
     nodeGraphGlGraphState.mesh = {
       gen: nodeGraphGlGraphState.gen,
+      displayGen: nodeGraphGlGraphState.displayGen || 0,
       w: canvas.width,
       h: canvas.height,
+      cam: frameCamera ? { x: frameCamera.x, y: frameCamera.y, zoom: frameCamera.zoom } : null,
       batches: [batch, wireBatch, contactBatch, dotBatch, veilBatch, trailBatch],
     };
   }
   if (typeof nodeGraphPositionGridHtml === "function") nodeGraphPositionGridHtml();
+  // The guide HUD changes with the constraint toggles/metrics (they call it
+  // directly) and with the layout: once per rebuild here, not per present.
+  if (!view && (nodeGraphGlGraphState.guideGen !== nodeGraphGlGraphState.gen || nodeGraphGlGraphState.guideDirty)) {
+    nodeGraphGlGraphState.guideGen = nodeGraphGlGraphState.gen;
+    nodeGraphGlConstraintGuidePresent();
+  }
   return platesOk && wiresOk && contactOk && dotsOk && veilOk && trailOk;
 }
 
