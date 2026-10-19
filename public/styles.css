@@ -5614,16 +5614,32 @@ body.keyboard-debug-hidden .node-midi-keyboard-signal-bar {
   opacity: 0.7;
 }
 
+.node-mini-perform-choices {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 4px;
+}
+
+.node-mini-perform-choices button[aria-pressed="true"] {
+  outline: 1px solid rgba(127, 199, 217, 0.9);
+}
+
+.node-mini-perform-row-stack {
+  align-items: flex-start;
+}
+
 .node-mini-perform-view {
   position: absolute;
   z-index: 6;
   overflow: hidden;
-  pointer-events: none;
+  pointer-events: auto;
+  cursor: default;
 }
 
-.node-mini-perform-view.interactive {
-  pointer-events: auto;
-  cursor: pointer;
+.node-mini-perform-view,
+.node-mini-perform-view * {
+  cursor: default;
 }
 
 .node-mini-perform-canvas,
@@ -13096,6 +13112,23 @@ body.room-dimmer-on .node-room-dimmer-canvas,
 
 .node-gl-graph-dots {
   z-index: 4;
+}
+
+.node-gl-graph-snake {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 8;
+}
+
+.node-layout-canvas-empty-egg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
 }
 
 .node-graph-workspace.gl-graph-on .dsp-node,

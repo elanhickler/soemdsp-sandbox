@@ -97,6 +97,7 @@ const TYPE_OUT = 6;
 const TYPE_SINEPULSE = 205;
 const PORT_MONO = 0;
 const PORT_LEFT = 1;
+const PORT_RIGHT = 2;
 const PORT_TRIGGER = 20;
 const P = {
   FREQUENCY: 10, WAVEFORM: 11, AMPLITUDE: 12, SHAPE: 13, PHASE: 14,
@@ -132,11 +133,13 @@ function runGraph({ wave = 0, waveShape = 0, blocks = 750 } = {}) {
   snap(g);
   const sig = [];
   const freq = [];
+  const env = [];
   for (let q = 0; q < blocks; q++) {
     process(g, 128);
     const kb = new Float64Array(mem.buffer, portPtr(g, hSp, PORT_MONO) | 0, 128);
     const fb = new Float64Array(mem.buffer, portPtr(g, hSp, PORT_LEFT) | 0, 128);
-    for (let i = 0; i < 128; i++) { sig.push(kb[i]); freq.push(fb[i]); }
+    const eb = new Float64Array(mem.buffer, portPtr(g, hSp, PORT_RIGHT) | 0, 128);
+    for (let i = 0; i < 128; i++) { sig.push(kb[i]); freq.push(fb[i]); env.push(eb[i]); }
   }
   destroy(g);
   const hits = [];
@@ -144,7 +147,7 @@ function runGraph({ wave = 0, waveShape = 0, blocks = 750 } = {}) {
     if (freq[n - 1] < 1000 && freq[n] > 5000) hits.push(n);
   }
   if (freq[0] > 5000) hits.unshift(0);
-  return { sig, freq, hits };
+  return { sig, freq, env, hits };
 }
 
 {
@@ -159,6 +162,13 @@ function runGraph({ wave = 0, waveShape = 0, blocks = 750 } = {}) {
   }
   if (!(Math.abs(peakFreq - 10000) < 1)) throw new Error(`graph ƒ peak ${peakFreq} != highFreq 10000`);
   if (!(peakSig > 0.3)) throw new Error(`graph Kick peak ${peakSig}`);
+  let peakEnv = 0;
+  for (let n = 0; n < a.env.length; n++) {
+    if (!(a.env[n] >= 0 && a.env[n] <= 1)) throw new Error(`0–1 output ${a.env[n]} outside 0..1`);
+    peakEnv = Math.max(peakEnv, a.env[n]);
+  }
+  if (!(a.env[a.hits[0]] > 0.99)) throw new Error(`0–1 peak at hit ${a.env[a.hits[0]]}`);
+  if (!(peakEnv <= 1)) throw new Error(`0–1 peak ${peakEnv}`);
   // Every Trigger hard-resets: first sample of each hit is 0 (Sine, phase 0).
   for (const n of a.hits) {
     if (a.sig[n] !== 0 || !(a.sig[n + 1] > 0)) throw new Error(`Trigger hit at ${n} not a zero-phase start`);
@@ -209,7 +219,8 @@ function runGraph({ wave = 0, waveShape = 0, blocks = 750 } = {}) {
     const got = ctx.idFor("robinSinepulse", "wave", saved.params.wave);
     if (got !== id) throw new Error(`wave ${name} -> ${got}, expected ${id}`);
   }
-  if (JSON.stringify(def.outputs) !== JSON.stringify(["Kick", "f"])) throw new Error(`robinSinepulse outputs ${JSON.stringify(def.outputs)}`);
+  if (JSON.stringify(def.outputs) !== JSON.stringify(["Kick", "f", "env"])) throw new Error(`robinSinepulse outputs ${JSON.stringify(def.outputs)}`);
+  if (def.outputLabels?.env !== "0–1") throw new Error("robinSinepulse 0–1 label missing");
   if (/\n  kick: \{/.test(defsSrc)) throw new Error("leftover kick module key in definitions");
-  console.log("ok robinSinepulse wave choice persists by name; inputs=[Trigger], outputs=[Kick, f]");
+  console.log("ok robinSinepulse wave choice persists by name; inputs=[Trigger], outputs=[Kick, f, env]");
 }

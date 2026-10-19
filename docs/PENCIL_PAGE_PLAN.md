@@ -209,7 +209,7 @@ Both tiers save the same stroke format and render through the same pipeline.
 
 - Each stroke is built once into a cached mesh in layer-local coordinates (port of draw.js ribbon: arc resample at 0.75 px, per-point radius, round joins and caps, single-point dot fan), using the GL graph's retained-mesh path. Camera uniform pans and zooms with no rebuild (GW-2); per-layer translation covers offset and module position; Screen layers use an identity camera with a corner origin.
 - **Behind modules:** in the `#nodeGlGraphCanvas` pass after the grid, before plates.
-- **In front of modules:** above modules, wires, front Text Boxes and jack dots; the exact canvas (last batch on `#nodeGlGraphDots` or a new `#nodeGlGraphPencil`) is settled in PE-4 with the GPU workspace owner.
+- **In front of modules:** above modules, wires, front Text Boxes and jack dots; **and above the Mini Performance View**, but **below the Snake select trail** (see `docs/MINI_PERFORM_VIEW_PLAN.md` Round 2 MP-19). Z-index: mini view `.node-mini-perform-view` is **6**, Pencil In-front `#nodeGlGraphPencil` takes **7**, Snake `#nodeGlGraphSnake` is **8**. Do not put In-front as the last batch on `#nodeGlGraphDots` (that canvas stays at z-index 4, under the mini). Settled finally in PE-4 with the GPU workspace owner; keep both plans in sync.
 - Within a z group, layers draw in list order, strokes in time order.
 - Opacity below 1 must not darken self-overlaps: one ribbon per stroke or per-layer composite. Check in PE-4.
 

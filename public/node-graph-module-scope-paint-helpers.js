@@ -1568,6 +1568,8 @@ function paintNodeGraphOutputPauseBars(batch, width, height, options = {}) {
   if (!(alpha > 0.001)) {
     return false;
   }
+  const ox = Number(options.x) || 0;
+  const oy = Number(options.y) || 0;
   const side = Math.min(width, height);
   const fit = Math.max(8, side - Math.max(2, Math.round(side * 0.08)) * 2);
   const barH = Math.max(8, Math.round(fit * 0.52));
@@ -1580,8 +1582,8 @@ function paintNodeGraphOutputPauseBars(batch, width, height, options = {}) {
   const fill = [1, 1, 1, alpha];
   for (const x of [x0, x0 + barW + gap]) {
     // Dark outline centred on the bar edge, white body inside it.
-    nodeGraphGlLinesRect(batch, x - lw / 2, y0 - lw / 2, barW + lw, barH + lw, edge);
-    nodeGraphGlLinesRect(batch, x + lw / 2, y0 + lw / 2, barW - lw, barH - lw, fill);
+    nodeGraphGlLinesRect(batch, ox + x - lw / 2, oy + y0 - lw / 2, barW + lw, barH + lw, edge);
+    nodeGraphGlLinesRect(batch, ox + x + lw / 2, oy + y0 + lw / 2, barW - lw, barH - lw, fill);
   }
   return true;
 }

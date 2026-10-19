@@ -949,22 +949,16 @@ function setNodeGraphModularWindowedActive(active, options = {}) {
   }
 }
 
-function toggleNodeGraphModularWindowedView() {
-  if (typeof toggleNodeGraphLayoutCanvasView === "function") {
-    toggleNodeGraphLayoutCanvasView();
-    return;
-  }
-  setNodeGraphModularWindowedActive(false);
-}
-
-/** @deprecated alias — M path */
-function toggleNodeGraphModularOnlyView() {
-  toggleNodeGraphModularWindowedView();
-}
-
 /** @deprecated alias — V path (bars) */
 function toggleNodeGraphViewButtonsVisibility() {
   toggleNodeGraphAppChromeBarsVisibility();
+}
+
+function nodeGraphPerformanceViewButtonTitle() {
+  const mode = typeof nodeGraphLayoutCanvasMode === "function" ? nodeGraphLayoutCanvasMode() : "off";
+  if (mode === "edit") return "Performance view: Arrange. F = close.";
+  if (mode === "perform") return "Performance view: Perform. F = Arrange.";
+  return "Show performance view [ F ]";
 }
 
 function renderNodeGraphModularViewModeButtons() {
@@ -976,13 +970,22 @@ function renderNodeGraphModularViewModeButtons() {
   computerBtn?.setAttribute("aria-pressed", String(!canvasOn));
   phoneBtn?.classList.toggle("active", canvasOn);
   phoneBtn?.setAttribute("aria-pressed", String(canvasOn));
+  if (phoneBtn) phoneBtn.title = nodeGraphPerformanceViewButtonTitle();
   const sceneComputer = document.getElementById("nodeSceneToggleModularInfiniteView");
   sceneComputer?.classList.toggle("active", !canvasOn);
   sceneComputer?.setAttribute("aria-pressed", String(!canvasOn));
-  const scenePhone = document.getElementById("nodeSceneToggleModularWindowedView")
-    || document.getElementById("nodeSceneToggleModularOnlyView");
+  const scenePhone = document.getElementById("nodeSceneToggleModularWindowedView");
   scenePhone?.classList.toggle("active", canvasOn);
   scenePhone?.setAttribute("aria-pressed", String(canvasOn));
+  if (scenePhone) scenePhone.title = nodeGraphPerformanceViewButtonTitle();
+  const miniBtn = document.getElementById("nodeSceneToggleMiniPerformView");
+  if (miniBtn) {
+    const mode = typeof nodeGraphMiniPerformSettings === "function" ? nodeGraphMiniPerformSettings().mode : "off";
+    const allowed = typeof nodeGraphMiniPerformPageAllowed !== "function" || nodeGraphMiniPerformPageAllowed();
+    miniBtn.hidden = !allowed;
+    miniBtn.classList.toggle("active", mode !== "off");
+    miniBtn.setAttribute("aria-pressed", String(mode !== "off"));
+  }
 }
 
 function persistNodeGraphModuleScopeFramesPerSecondSetting() {

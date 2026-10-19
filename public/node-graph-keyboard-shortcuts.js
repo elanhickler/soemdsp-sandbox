@@ -331,6 +331,17 @@ function handleNodeGraphKeydown(event) {
     endNodeGraphScreenSolo();
     return;
   }
+  // Escape order: screen-solo, then Enlarged, then Metamodule-to-Root, then chrome.
+  // Enlarged exits only the large mini frame. It does not change the mini mode.
+  if (event.key === "Escape" && typeof nodeGraphMiniPerformExitEnlarged === "function") {
+    const typing = (typeof nodeGraphTextBoxIsTyping === "function" && nodeGraphTextBoxIsTyping(event))
+      || nodeGraphEventTargetIsTextEditable(event.target);
+    if (!typing && nodeGraphMiniPerformExitEnlarged()) {
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
+  }
   // Inside Metamodule: Escape returns to Root (before typing / chrome handlers).
   if (
     event.key === "Escape"
@@ -396,27 +407,17 @@ function handleNodeGraphKeydown(event) {
     toggleNodeGraphMiniPerformView();
     return;
   }
-  // F = layout canvas cycle (phone button). Same typing gate as Space.
+  // F = Performance view cycle. Same entry as the top-bar button and the scene menu.
   if (!event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey && event.key.toLowerCase() === "f") {
     event.preventDefault();
-    if (
-      typeof nodeGraphMetamoduleToggleDisplaysForSelection === "function"
-      && nodeGraphMetamoduleToggleDisplaysForSelection()
-    ) {
-      return;
-    }
-    if (typeof toggleNodeGraphLayoutCanvasView === "function") {
-      toggleNodeGraphLayoutCanvasView();
-    }
+    if (typeof toggleNodeGraphPerformanceView === "function") toggleNodeGraphPerformanceView();
     return;
   }
-  // G = toggle phone guide orientation in arrange (edit) mode only.
+  // G = flip phone guides while Performance view Arrange or mini Arrange is up.
   if (!event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey && event.key.toLowerCase() === "g") {
-    if (
-      typeof nodeGraphLayoutCanvasMode === "function"
-      && nodeGraphLayoutCanvasMode() === "edit"
-      && typeof toggleNodeGraphLayoutCanvasPhoneGuideOrientation === "function"
-    ) {
+    const performanceArrange = typeof nodeGraphLayoutCanvasMode === "function" && nodeGraphLayoutCanvasMode() === "edit";
+    const miniArrange = typeof nodeGraphMiniPerformArrangeShown === "function" && nodeGraphMiniPerformArrangeShown();
+    if ((performanceArrange || miniArrange) && typeof toggleNodeGraphLayoutCanvasPhoneGuideOrientation === "function") {
       event.preventDefault();
       toggleNodeGraphLayoutCanvasPhoneGuideOrientation();
       return;

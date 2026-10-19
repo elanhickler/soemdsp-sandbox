@@ -14493,8 +14493,8 @@ def require_node_graph_mvp_contract() -> None:
     require(
         'id="nodeModularInfiniteViewButton"' in index_source
         and 'id="nodeModularWindowedViewButton"' in index_source
-        and 'aria-hidden="true">ðŸ’»</span></button>' in index_source
-        and 'aria-hidden="true">ðŸ“±</span></button>' in index_source
+        and 'aria-hidden="true">💻</span></button>' in index_source
+        and 'aria-label="Show performance view [ F ]"' in index_source
         and 'id="nodeAppChromeBarsToggleButton"' in index_source
         and "<kbd>V</kbd>" in index_source
         and 'id="nodeSceneToggleModularInfiniteView"' in index_source
@@ -14502,10 +14502,10 @@ def require_node_graph_mvp_contract() -> None:
         and 'bindNodeGraphSceneElementEvent("nodeSceneToggleModularInfiniteView", "click", () => {' in node_graph_source
         and "setNodeGraphModularWindowedActive(false)" in node_graph_source
         and 'bindNodeGraphSceneElementEvent("nodeSceneToggleModularWindowedView", "click", () => {' in node_graph_source
-        and "setNodeGraphModularWindowedActive(true)" in node_graph_source
+        and "function toggleNodeGraphPerformanceView(" in node_graph_source
         and "function toggleNodeGraphAppChromeBarsVisibility()" in node_graph_source
         and "function renderNodeGraphAppChromeBarsToggle()" in node_graph_source
-        and "function toggleNodeGraphModularWindowedView()" in node_graph_source
+        and "toggleNodeGraphPerformanceView()" in script_sources["./public/node-graph-keyboard-shortcuts.js"]
         and "function setNodeGraphModularWindowedActive" in node_graph_source
         and "appChromeBarsVisible: true," in script_sources["./public/node-graph-state.js"]
         and ".node-wiring-panel.app-chrome-bars-hidden > .node-view-toolbar" in style_source
@@ -14521,7 +14521,7 @@ def require_node_graph_mvp_contract() -> None:
         and 'event.key.toLowerCase() === "v"' in script_sources["./public/node-graph-keyboard-shortcuts.js"]
         and "function nodeGraphAppHotkeysLocked()" in script_sources["./public/node-graph-keyboard-shortcuts.js"]
         and "if (nodeGraphAppHotkeysLocked())" in script_sources["./public/node-graph-keyboard-shortcuts.js"]
-        and "toggleNodeGraphModularWindowedView" in node_graph_source
+        and "toggleNodeGraphModularWindowedView" not in node_graph_source
         and 'event.key.toLowerCase() === "b"' not in script_sources["./public/node-graph-keyboard-shortcuts.js"],
         "Modular chrome SSOT: V hides bars only (floating windows stay); ðŸ’» infinite; ðŸ“± condensed",
     )
@@ -18280,6 +18280,47 @@ def check_mini_perform_view() -> None:
     require(shift_f != -1 and "event.shiftKey && event.key.toLowerCase() === \"f\"" in keys, "Shift+F toggles the mini view")
     gate = keys.find("nodeGraphQuickRestartProject();")
     require(gate != -1 and gate < shift_f, "Shift+F sits after the typing gate (with the other bare keys)")
+    solo = keys.find("endNodeGraphScreenSolo();")
+    enlarged = keys.find("nodeGraphMiniPerformExitEnlarged()")
+    meta = keys.find("exitNodeGraphMetamoduleViewToRoot();")
+    require(solo != -1 and enlarged != -1 and meta != -1 and solo < enlarged < meta, "Escape: screen-solo, then Enlarged, then Metamodule")
+    require("toggleNodeGraphPerformanceView()" in keys, "F calls the shared performance view entry")
+    require("cursor: pointer" not in (public / "styles.css").read_text(encoding="utf-8").split(".node-mini-perform-page")[1].split(".node-emoji-section")[0], "mini view cursor stays the default arrow")
+    require("z-index: 6" in (public / "styles.css").read_text(encoding="utf-8") and ".node-gl-graph-snake" in (public / "styles.css").read_text(encoding="utf-8"), "mini stays under the snake overlay")
+    require("pointer-events: none" in (public / "styles.css").read_text(encoding="utf-8").split(".node-gl-graph-snake")[1][:240], "snake canvas ignores the pointer")
+    for banned in ("margin:", "reference:", "show:", "clickThrough", ".interactive"):
+        require(banned not in mini, f"mini settings dropped {banned}")
+    require("Off" in mini and "Perform" in mini and "Background" in mini and "Position" in mini and "Arrange" in mini, "page has Off / Perform / Background / Position / Arrange")
+    require('trailBatch._blend = "max"' in (public / "node-graph-gl-graph.js").read_text(encoding="utf-8"), "snake trail uses straight coverage")
+    require("keep: true" not in (public / "node-graph-gl-graph.js").read_text(encoding="utf-8").split("nodeGlGraphSnake")[1][:500], "snake canvas clears each frame")
+    require("nodeGraphMiniPerformForwardControl" in mini, "perform mode forwards knob drags")
+    require("Reset position and size" in mini and "Aspect ratio" in mini, "page has aspect and reset")
+    for gone in ("Mini view mode (Shift+F)",):
+        require(gone in mini, "page mode row is present")
+    for gone in ('"Corner"', "Margin (px)", "Width (px)", "Reference screen", "Click-through"):
+        require(gone not in mini, f"page dropped {gone}")
+    require("nodeGraphLayoutCanvasWriteRect" in mini, "mini arrange writes through the shared rect helper")
+    for transport in ("nodeGraphTransportHandleAction", "nodeGraphExternalStartLiveOutput"):
+        require(transport not in mini and transport not in gl, "mini never starts transport")
+    require("cssW / 32" not in gl, "empty line is not the old clamped size")
+    require("nearest: true" in gl and "soundemote-logo.svg" in gl, "DVD logo uses nearest sampling")
+    require("emptyCanvasDvdEgg" in gl and "localStorage" not in gl.split("emptyCanvasDvdEgg")[1][:400], "egg flag is not stored")
+    debug = (public / "node-graph-debug-console.js").read_text(encoding="utf-8")
+    bug = debug.find("[data-se-fake-err]")
+    require(bug != -1 and "ladybug" in debug[bug:bug + 400] and "nodeGraphEmptyCanvasToggleEgg" in debug[bug:bug + 400], "ladybug click still logs and toggles the egg")
+    require("Show in performance view" in (public / "node-graph-module-scope-settings-window.js").read_text(encoding="utf-8"), "module setting label renamed")
+    require('aria-label="Show performance view [ F ]"' in (public / "index.html").read_text(encoding="utf-8"), "top bar names the performance view")
+    require('aria-label="Show performance view [ F ]"' in (public / "perform.html").read_text(encoding="utf-8"), "perform.html names the performance view")
+    for page in ("index.html", "perform.html"):
+        text = (public / page).read_text(encoding="utf-8")
+        require("Layout canvas" not in text, f"{page}: no Layout canvas label")
+        require("nodeSceneToggleModularOnlyView" not in text and "nodeSceneToggleModularOnlyControls" not in text, f"{page}: legacy modular buttons gone")
+        require("Mini performance view [ Shift+F ]" in text, f"{page}: mini scene button")
+    for name in ("node-graph-layout-canvas.js", "node-graph-interaction-help.js"):
+        require("Layout canvas" not in (public / name).read_text(encoding="utf-8"), f"{name}: no Layout canvas label")
+    gl_graph = (public / "node-graph-gl-graph.js").read_text(encoding="utf-8")
+    require('nodeGlGraphSnake' in gl_graph and "nodeGraphGlLinesBegin(snakeCanvas" in gl_graph, "snake trail is its own canvas")
+    require("z-index 7" in (ROOT / "docs" / "PENCIL_PAGE_PLAN.md").read_text(encoding="utf-8") or "z-index: mini" in (ROOT / "docs" / "PENCIL_PAGE_PLAN.md").read_text(encoding="utf-8") or "**7**" in (ROOT / "docs" / "PENCIL_PAGE_PLAN.md").read_text(encoding="utf-8"), "PE-4 z slot documented")
     unit = subprocess.run(["node", str(ROOT / "scripts" / "smoke_mini_perform_unit.cjs")], capture_output=True, text=True)
     require(unit.returncode == 0, f"mini perform unit checks: {unit.stdout}{unit.stderr}")
 

@@ -159,7 +159,7 @@ function nodeGraphHitTrailAllStrokes() {
   return strokes;
 }
 
-/** Draw the snake trail. The GL graph owns it (on #nodeGlGraphDots). */
+/** Draw the snake trail. The GL graph owns it (on #nodeGlGraphSnake, above the mini view). */
 function presentNodeGraphHitTrail() {
   if (typeof nodeGraphGlGraphPresentTrail === "function") {
     nodeGraphGlGraphPresentTrail();

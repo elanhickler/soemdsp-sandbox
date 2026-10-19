@@ -81,6 +81,7 @@ function nodeGraphScreenSoloNodeIds() {
 }
 
 function nodeGraphScreenSoloIsActive() {
+  if (nodeGraphMvp?.layoutCanvasEmptyEgg) return true;
   return nodeGraphScreenSoloItems().length > 0 || Boolean(nodeGraphScreenSoloNodeId());
 }
 
@@ -1134,6 +1135,9 @@ function endNodeGraphScreenSolo(options = {}) {
   const session = nodeGraphScreenSoloSession();
   const items = nodeGraphScreenSoloItems();
   if (!items.length && !session.face) {
+    if (typeof nodeGraphLayoutCanvasClearEmptyEgg === "function") nodeGraphLayoutCanvasClearEmptyEgg();
+    const emptyStage = document.getElementById("nodeScreenSoloStage");
+    if (emptyStage && !emptyStage.querySelector(".node-layout-canvas-tile")) emptyStage.hidden = true;
     document.body.classList.remove(
       "node-screen-solo-active",
       "node-layout-canvas-active",

@@ -1192,11 +1192,17 @@ function nodeGraphGlGraphPresent() {
   const dotsCanvas = nodeGraphGlGraphEnsureCanvas(
     host, "dotsCanvas", view ? "" : "nodeGlGraphDots", "node-gl-graph-dots", null,
   );
+  // Snake trail is its own overlay so it paints above the mini view (z 8).
+  // Pencil PE-4 In-front takes z 7, between mini (6) and this canvas.
+  const snakeCanvas = view ? null : nodeGraphGlGraphEnsureCanvas(
+    host, "snakeCanvas", "nodeGlGraphSnake", "node-gl-graph-snake", null,
+  );
   const cssW = Math.max(1, host.clientWidth || 1);
   const cssH = Math.max(1, host.clientHeight || 1);
   const scale = nodeGraphGlGraphFit(canvas, cssW, cssH);
   nodeGraphGlGraphFit(wireCanvas, cssW, cssH);
   nodeGraphGlGraphFit(dotsCanvas, cssW, cssH);
+  if (snakeCanvas) nodeGraphGlGraphFit(snakeCanvas, cssW, cssH);
   const zoom = nodeGraphGlGraphZoom();
   let cam = { x: 0, y: 0 };
   if (view) cam = view.cam;
@@ -1223,8 +1229,9 @@ function nodeGraphGlGraphPresent() {
   const contactBatch = nodeGraphGlLinesBegin(dotsCanvas, [0, 0, 0, 0], beginOpts);
   const dotBatch = nodeGraphGlLinesBegin(dotsCanvas, [0, 0, 0, 0], { ...beginOpts, keep: true });
   const veilBatch = nodeGraphGlLinesBegin(dotsCanvas, [0, 0, 0, 0], { ...beginOpts, keep: true });
-  // Snake select trail, last over everything. Workspace only (tiles have no camera).
-  const trailBatch = view ? null : nodeGraphGlLinesBegin(dotsCanvas, [0, 0, 0, 0], { ...beginOpts, keep: true });
+  // Snake select trail on its own canvas. Do not keep: this is the only batch,
+  // so the previous stroke must be cleared or each drag sticks forever.
+  const trailBatch = view ? null : nodeGraphGlLinesBegin(snakeCanvas, [0, 0, 0, 0], beginOpts);
   if (!batch || !wireBatch || !contactBatch || !dotBatch || !veilBatch || (!view && !trailBatch)) {
     if (typeof nodeGraphGlLinesFillBlack === "function") nodeGraphGlLinesFillBlack(canvas);
     if (typeof nodeGraphDisplayGlFailed === "function") nodeGraphDisplayGlFailed(canvas, "GL graph begin");
@@ -1388,14 +1395,19 @@ function nodeGraphGlGraphPresent() {
       const w = rect.w;
       const h = rect.h;
       if (!frameCamera && (x + w < 0 || y + h < 0 || x > cssW || y > cssH)) continue;
-      const side = Math.min(w, h);
-      const barH = Math.max(6, side * 0.46);
-      const barW = Math.max(2, side * 0.14);
-      const gap = Math.max(2, side * 0.1);
-      const x0 = x + (w - (barW * 2 + gap)) * 0.5;
-      const y0 = y + (h - barH) * 0.5;
-      nodeGraphGlLinesRect(dotBatch, x0, y0, barW, barH, white);
-      nodeGraphGlLinesRect(dotBatch, x0 + barW + gap, y0, barW, barH, white);
+      if (typeof paintNodeGraphOutputPauseBars === "function") {
+        paintNodeGraphOutputPauseBars(dotBatch, w, h, { x, y });
+      } else {
+        const side = Math.min(w, h);
+        const fit = Math.max(8, side - Math.max(2, Math.round(side * 0.08)) * 2);
+        const barH = Math.max(8, Math.round(fit * 0.52));
+        const barW = Math.max(3, Math.round(fit * 0.2));
+        const gap = Math.max(2, Math.round(fit * 0.14));
+        const x0 = x + Math.round((w - (barW * 2 + gap)) * 0.5);
+        const y0 = y + Math.round((h - barH) * 0.5);
+        nodeGraphGlLinesRect(dotBatch, x0, y0, barW, barH, white);
+        nodeGraphGlLinesRect(dotBatch, x0 + barW + gap, y0, barW, barH, white);
+      }
     }
   }
   if (trailBatch) nodeGraphGlGraphDrawTrail(trailBatch, zoom);
@@ -1409,8 +1421,10 @@ function nodeGraphGlGraphPresent() {
   const contactOk = nodeGraphGlLinesEnd(contactBatch, "max") !== false;
   const dotsOk = nodeGraphGlLinesEnd(dotBatch, "alpha") !== false;
   const veilOk = nodeGraphGlLinesEnd(veilBatch, "alpha") !== false;
-  if (trailBatch) trailBatch._blend = "alpha";
-  const trailOk = !trailBatch || nodeGraphGlLinesEnd(trailBatch, "alpha") !== false;
+  // "max" stores straight coverage. SRC_ALPHA on this premultipliedAlpha:false
+  // blit is multiplied again and leaves a dark edge on a bright picture.
+  if (trailBatch) trailBatch._blend = "max";
+  const trailOk = !trailBatch || nodeGraphGlLinesEnd(trailBatch, "max") !== false;
   if (!view) {
     nodeGraphGlGraphState.mesh = {
       gen: nodeGraphGlGraphState.gen,
@@ -1635,7 +1649,7 @@ function nodeGraphGlGraphDrawRoundShapes(batch, toX, toY, zoom, cameraOn) {
       }
     }
     if (typeof nodeGraphGlLinesDot === "function") {
-      const cornerR = Math.max(0.5, dotW * 0.5) * (cameraOn ? 1 : scale);
+      const cornerR = halfStroke;
       for (let d = 0; d < cornerDots.length; d += 1) {
         const at = place(cornerDots[d]);
         nodeGraphGlLinesDot(batch, at[0], at[1], cornerR, feather, stroke);
@@ -1647,12 +1661,35 @@ function nodeGraphGlGraphDrawRoundShapes(batch, toX, toY, zoom, cameraOn) {
         px = cx + cursor.x * half;
         py = cy - cursor.y * half;
       }
-    } else if (isOsc && typeof nodeGraphRoundShapeReadScopePort === "function") {
-      let phase = nodeGraphRoundShapeReadScopePort(id, "__Phase");
-      if (!Number.isFinite(phase)) phase = 0;
-      const pt = nodeGraphRoundShapeEllipsoidOscPoint(phase, node);
-      px = cx + pt.x * half;
-      py = cy - pt.y * half;
+    } else if (isOsc) {
+      const liveX = typeof nodeGraphRoundShapeReadScopePort === "function"
+        ? nodeGraphRoundShapeReadScopePort(id, "Left")
+        : Number.NaN;
+      const liveY = typeof nodeGraphRoundShapeReadScopePort === "function"
+        ? nodeGraphRoundShapeReadScopePort(id, "Right")
+        : Number.NaN;
+      if (Number.isFinite(liveX) && Number.isFinite(liveY)) {
+        const amp = Math.max(1e-9, Math.abs(Number(node.params?.amplitude)) || 1);
+        px = cx + (liveX / amp) * half;
+        py = cy - (liveY / amp) * half;
+      } else {
+        let phase = typeof nodeGraphRoundShapeReadScopePort === "function"
+          ? nodeGraphRoundShapeReadScopePort(id, "__Phase")
+          : Number.NaN;
+        if (!Number.isFinite(phase) && typeof nodeGraphRoundShapeLiveCursor === "function") {
+          const cursor = nodeGraphRoundShapeLiveCursor(id, node, section);
+          if (cursor && Number.isFinite(cursor.x) && Number.isFinite(cursor.y)) {
+            px = cx + cursor.x * half;
+            py = cy - cursor.y * half;
+            phase = Number.NaN;
+          }
+        }
+        if (Number.isFinite(phase) && typeof nodeGraphRoundShapeEllipsoidOscPoint === "function") {
+          const pt = nodeGraphRoundShapeEllipsoidOscPoint(phase, node);
+          px = cx + pt.x * half;
+          py = cy - pt.y * half;
+        }
+      }
     }
     if (typeof nodeGraphGlLinesDot === "function") {
       nodeGraphGlLinesDot(batch, toX(box.x + px), toY(box.y + py), Math.max(0.5, dotW * 0.5) * scale, Math.max(0.75, scale), dotColor);
@@ -1702,7 +1739,7 @@ function nodeGraphGlGraphPresentTrail() {
     return;
   }
   const trailBatch = nodeGraphGlLinesBegin(held.canvas, [0, 0, 0, 0], {
-    scale: held.scale, transparent: true, camera, keepMesh: true, keep: true,
+    scale: held.scale, transparent: true, camera, keepMesh: true,
   });
   if (!trailBatch) {
     if (typeof nodeGraphGlLinesFillBlack === "function") nodeGraphGlLinesFillBlack(held.canvas);
@@ -1710,7 +1747,7 @@ function nodeGraphGlGraphPresentTrail() {
     return;
   }
   nodeGraphGlGraphDrawTrail(trailBatch);
-  trailBatch._blend = "alpha";
+  trailBatch._blend = "max";
   mesh.batches[5] = trailBatch;
   for (let i = 0; i < mesh.batches.length; i += 1) {
     const b = mesh.batches[i];
@@ -1813,7 +1850,15 @@ function nodeGraphGlHitTest(x, y) {
     const sw = slider.hitW ?? slider.w;
     const sh = slider.hitH ?? slider.h;
     if (x >= sx && x <= sx + sw && y >= sy && y <= sy + sh) {
-      return { kind: "slider", readout: slider.readout };
+      let readout = slider.readout;
+      if (readout && !readout.isConnected && typeof nodeSliderResolveLiveReadout === "function") {
+        readout = nodeSliderResolveLiveReadout(readout);
+      }
+      if (!readout?.isConnected && slider.input) {
+        readout = slider.input.closest?.("label")?.querySelector?.(".node-slider-readout") || null;
+      }
+      if (!readout?.isConnected) continue;
+      return { kind: "slider", readout };
     }
   }
   const titles = chrome.titles || [];

@@ -25,6 +25,11 @@ function nodeGraphGlMiniPerformView() {
     canvas.className = "node-mini-perform-canvas";
     view.append(canvas);
     view._moduleHosts = new Map();
+    const refreshMarks = () => {
+      if (typeof nodeGraphGlMiniPerformPresent === "function") nodeGraphGlMiniPerformPresent();
+    };
+    view.addEventListener("pointerenter", () => { view._miniHover = true; refreshMarks(); });
+    view.addEventListener("pointerleave", () => { view._miniHover = false; refreshMarks(); });
     // Window capture: runs before the document-level capture handlers
     // (selection / value drags) that would otherwise swallow the press.
     if (!nodeGraphGlMiniPerformView._bound) {
@@ -148,10 +153,175 @@ function nodeGraphGlMiniPerformModuleTile(view, tile, el, frame, order) {
     const band = bands[i];
     const h = (band.y1 - band.y0) * scale;
     const host = nodeGraphGlMiniPerformModuleHost(view, `${tile.nodeId}:${i}`);
-    nodeGraphGlMiniPerformPlaceHost(host, tile.x + fit.ox * frame.s, y, nat.w * scale, h, order);
+    const hx = tile.x + fit.ox * frame.s;
+    nodeGraphGlMiniPerformPlaceHost(host, hx, y, nat.w * scale, h, order);
     nodeGraphGlMiniPerformPresentModule(host, el, tile.nodeId, scale, band.y0);
+    view._miniMaps?.push({
+      nodeId: tile.nodeId,
+      x: hx,
+      y,
+      w: nat.w * scale,
+      h,
+      scale,
+      layoutX: 0,
+      layoutY: band.y0,
+    });
     y += h;
   }
+}
+
+const NODE_GRAPH_MINI_PERFORM_EMPTY_FAMILY = "Cascadia Mono, Consolas, monospace";
+
+function nodeGraphEmptyCanvasDvdBox(cssW, cssH, now) {
+  const size = Math.max(8, 0.28 * Math.min(cssW, cssH));
+  const prev = nodeGraphEmptyCanvasDvdBox._box;
+  const t0 = nodeGraphEmptyCanvasDvdBox._t || now;
+  const dt = Math.min(0.05, Math.max(0, (now - t0) / 1000));
+  nodeGraphEmptyCanvasDvdBox._t = now;
+  if (!prev) {
+    const speed = 80;
+    const vx = 56;
+    const vy = Math.sqrt(Math.max(0, speed * speed - vx * vx));
+    nodeGraphEmptyCanvasDvdBox._box = nodeGraphEmptyCanvasDvdStep({
+      x: (cssW - size) / 2,
+      y: (cssH - size) / 2,
+      vx,
+      vy,
+      size,
+    }, 0, cssW, cssH);
+    return nodeGraphEmptyCanvasDvdBox._box;
+  }
+  prev.size = size;
+  nodeGraphEmptyCanvasDvdBox._box = nodeGraphEmptyCanvasDvdStep(prev, dt, cssW, cssH);
+  return nodeGraphEmptyCanvasDvdBox._box;
+}
+
+function nodeGraphEmptyCanvasLogoImage() {
+  if (nodeGraphEmptyCanvasLogoImage._img) return nodeGraphEmptyCanvasLogoImage._img;
+  if (typeof Image === "undefined") return null;
+  const img = new Image();
+  img.src = "./public/soundemote-logo.svg";
+  nodeGraphEmptyCanvasLogoImage._img = img;
+  return img;
+}
+
+function nodeGraphEmptyCanvasToggleEgg() {
+  if (!nodeGraphMvp || typeof nodeGraphMvp !== "object") return false;
+  nodeGraphMvp.emptyCanvasDvdEgg = nodeGraphMvp.emptyCanvasDvdEgg !== true;
+  if (!nodeGraphMvp.emptyCanvasDvdEgg) nodeGraphEmptyCanvasDvdBox._box = null;
+  if (typeof nodeGraphMiniPerformShown === "function" && nodeGraphMiniPerformShown()) nodeGraphGlMiniPerformPresent();
+  if (nodeGraphMvp.layoutCanvasEmptyEgg) nodeGraphEmptyCanvasEnsureLoop();
+  return nodeGraphMvp.emptyCanvasDvdEgg === true;
+}
+
+function nodeGraphGlMiniPerformDrawEmpty(batch, cssW, cssH) {
+  const text = typeof NODE_GRAPH_EMPTY_CANVAS_LINE === "string"
+    ? NODE_GRAPH_EMPTY_CANVAS_LINE
+    : "Canvas is empty. Turn on Show in performance view on a module.";
+  const egg = nodeGraphMvp?.emptyCanvasDvdEgg === true;
+  if (egg && typeof nodeGraphGlLinesImage === "function") {
+    const img = nodeGraphEmptyCanvasLogoImage();
+    if (img && img.complete && img.naturalWidth > 0) {
+      const box = nodeGraphEmptyCanvasDvdBox(cssW, cssH, typeof performance !== "undefined" ? performance.now() : Date.now());
+      nodeGraphGlLinesImage(batch, img, box.x, box.y, box.size, box.size, {
+        nearest: true,
+        alpha: 0.35,
+        cache: true,
+      });
+    } else {
+      nodeGraphEmptyCanvasDvdBox(cssW, cssH, typeof performance !== "undefined" ? performance.now() : Date.now());
+    }
+  }
+  const px = nodeGraphEmptyCanvasLinePx(cssW, text, (size) => (
+    typeof nodeGraphGlLinesMeasureText === "function"
+      ? nodeGraphGlLinesMeasureText(text, size, NODE_GRAPH_MINI_PERFORM_EMPTY_FAMILY, 400)
+      : text.length * size * 0.6
+  ));
+  nodeGraphGlLinesText(batch, text, cssW / 2, cssH / 2, nodeGraphGlMiniPerformTextOpts({
+    px,
+    rgba: NODE_GRAPH_MINI_PERFORM_TEXT,
+    align: "center",
+    baseline: "middle",
+    weight: 400,
+    family: NODE_GRAPH_MINI_PERFORM_EMPTY_FAMILY,
+  }));
+}
+
+function nodeGraphGlMiniPerformCornerMarks(batch, cssW, cssH) {
+  const arm = 16;
+  const t = 2;
+  const c = [1, 1, 1, 0.85];
+  nodeGraphGlLinesRect(batch, 1, 1, arm, t, c);
+  nodeGraphGlLinesRect(batch, 1, 1, t, arm, c);
+  nodeGraphGlLinesRect(batch, cssW - arm - 1, 1, arm, t, c);
+  nodeGraphGlLinesRect(batch, cssW - t - 1, 1, t, arm, c);
+  nodeGraphGlLinesRect(batch, 1, cssH - t - 1, arm, t, c);
+  nodeGraphGlLinesRect(batch, 1, cssH - arm - 1, t, arm, c);
+  nodeGraphGlLinesRect(batch, cssW - arm - 1, cssH - t - 1, arm, t, c);
+  nodeGraphGlLinesRect(batch, cssW - t - 1, cssH - arm - 1, t, arm, c);
+}
+
+function nodeGraphGlMiniPerformArrangeChrome(batch, tiles, cssW, cssH, frame) {
+  const guide = nodeGraphMiniPerformPhoneGuideRect(
+    cssW,
+    cssH,
+    typeof nodeGraphLayoutCanvasPhoneGuideOrientation === "function"
+      ? nodeGraphLayoutCanvasPhoneGuideOrientation()
+      : "vertical",
+  );
+  const guideColor = [1, 1, 1, 0.35];
+  nodeGraphGlLinesRect(batch, guide.x, guide.y, guide.w, 1, guideColor);
+  nodeGraphGlLinesRect(batch, guide.x, guide.y + guide.h - 1, guide.w, 1, guideColor);
+  nodeGraphGlLinesRect(batch, guide.x, guide.y, 1, guide.h, guideColor);
+  nodeGraphGlLinesRect(batch, guide.x + guide.w - 1, guide.y, 1, guide.h, guideColor);
+  const outline = [1, 1, 1, 0.55];
+  const grip = Math.max(8, 12 * frame.s);
+  for (let i = 0; i < tiles.length; i += 1) {
+    const tile = tiles[i];
+    nodeGraphGlLinesRect(batch, tile.x, tile.y, tile.w, 1, outline);
+    nodeGraphGlLinesRect(batch, tile.x, tile.y + tile.h - 1, tile.w, 1, outline);
+    nodeGraphGlLinesRect(batch, tile.x, tile.y, 1, tile.h, outline);
+    nodeGraphGlLinesRect(batch, tile.x + tile.w - 1, tile.y, 1, tile.h, outline);
+    nodeGraphGlLinesRect(batch, tile.x, tile.y, grip, grip, [0, 0.82, 1, 0.9]);
+    nodeGraphGlLinesRect(batch, tile.x + tile.w - grip, tile.y, grip, grip, [0, 0.82, 1, 0.9]);
+    nodeGraphGlLinesRect(batch, tile.x, tile.y + tile.h - grip, grip, grip, [0, 0.82, 1, 0.9]);
+    nodeGraphGlLinesRect(batch, tile.x + tile.w - grip, tile.y + tile.h - grip, grip, grip, [0, 0.82, 1, 0.9]);
+  }
+  nodeGraphGlLinesText(batch, "Arrange", 8, 6, nodeGraphGlMiniPerformTextOpts({
+    px: 12,
+    rgba: NODE_GRAPH_MINI_PERFORM_TEXT,
+    align: "left",
+    baseline: "top",
+    weight: 600,
+  }));
+}
+
+function nodeGraphEmptyCanvasPresentStage() {
+  const canvas = document.getElementById("nodeLayoutCanvasEmptyEgg");
+  const stage = canvas?.parentElement;
+  if (!canvas || !stage || typeof nodeGraphGlLinesBegin !== "function") return false;
+  const cssW = Math.max(1, stage.clientWidth || window.innerWidth || 1);
+  const cssH = Math.max(1, stage.clientHeight || window.innerHeight || 1);
+  if (canvas.width !== cssW) canvas.width = cssW;
+  if (canvas.height !== cssH) canvas.height = cssH;
+  const batch = nodeGraphGlLinesBegin(canvas, NODE_GRAPH_MINI_PERFORM_BACKDROP, { scale: 1 });
+  if (!batch) return false;
+  nodeGraphGlMiniPerformDrawEmpty(batch, cssW, cssH);
+  return nodeGraphGlLinesEnd(batch, "alpha") !== false;
+}
+
+function nodeGraphEmptyCanvasEnsureLoop() {
+  if (nodeGraphEmptyCanvasEnsureLoop._raf) return;
+  const tick = () => {
+    const egg = nodeGraphMvp?.layoutCanvasEmptyEgg === true && document.getElementById("nodeLayoutCanvasEmptyEgg");
+    if (!egg) {
+      nodeGraphEmptyCanvasEnsureLoop._raf = 0;
+      return;
+    }
+    nodeGraphEmptyCanvasPresentStage();
+    nodeGraphEmptyCanvasEnsureLoop._raf = window.requestAnimationFrame(tick);
+  };
+  nodeGraphEmptyCanvasEnsureLoop._raf = window.requestAnimationFrame(tick);
 }
 
 function nodeGraphGlMiniPerformPresent() {
@@ -160,14 +330,12 @@ function nodeGraphGlMiniPerformPresent() {
   const settings = nodeGraphMiniPerformSettings();
   const frame = nodeGraphMiniPerformFrame();
   view.hidden = false;
-  if (!view._miniDragging) {
-    view.style.left = `${frame.x}px`;
-    view.style.top = `${frame.y}px`;
-  }
+  view.style.left = `${frame.x}px`;
+  view.style.top = `${frame.y}px`;
   view.style.width = `${frame.w}px`;
   view.style.height = `${frame.h}px`;
   view.style.opacity = String(settings.opacity);
-  view.classList.toggle("interactive", settings.pointer === "interactive");
+  view.style.pointerEvents = settings.mode === "background" ? "none" : "auto";
   const canvas = view.querySelector("#nodeGlGraphMiniPerform");
   const cssW = Math.max(1, Math.round(frame.w));
   const cssH = Math.max(1, Math.round(frame.h));
@@ -175,6 +343,7 @@ function nodeGraphGlMiniPerformPresent() {
   if (canvas.height !== cssH) canvas.height = cssH;
   const tiles = nodeGraphMiniPerformTiles(frame);
   view._miniTiles = tiles;
+  view._miniMaps = [];
   const batch = nodeGraphGlLinesBegin(
     canvas,
     // Backdrop as the clear colour: the renderer draws images under its rect quads.
@@ -186,15 +355,7 @@ function nodeGraphGlMiniPerformPresent() {
     return false;
   }
   for (const host of view._moduleHosts.values()) host._miniUsed = false;
-  if (!tiles.length) {
-    nodeGraphGlLinesText(batch, "Canvas is empty. Turn on Show in canvas on a module.", cssW / 2, cssH / 2, nodeGraphGlMiniPerformTextOpts({
-      px: Math.max(9, Math.min(14, cssW / 32)),
-      rgba: NODE_GRAPH_MINI_PERFORM_TEXT,
-      align: "center",
-      baseline: "middle",
-      weight: 400,
-    }));
-  }
+  if (!tiles.length) nodeGraphGlMiniPerformDrawEmpty(batch, cssW, cssH);
   for (let i = 0; i < tiles.length; i += 1) {
     const tile = tiles[i];
     const el = typeof nodeGraphNodeElement === "function" ? nodeGraphNodeElement(tile.nodeId) : null;
@@ -218,6 +379,16 @@ function nodeGraphGlMiniPerformPresent() {
     }
     const fit = nodeGraphContainFitBox(tile.w, tile.h, x1 - x0, y1 - y0);
     if (!fit) continue;
+    view._miniMaps.push({
+      nodeId: tile.nodeId,
+      x: tile.x + fit.ox,
+      y: tile.y + fit.oy,
+      w: (x1 - x0) * fit.s,
+      h: (y1 - y0) * fit.s,
+      scale: fit.s,
+      layoutX: x0,
+      layoutY: y0,
+    });
     for (const d of displays) {
       const w = d.w * fit.s;
       const h = d.h * fit.s;
@@ -228,12 +399,16 @@ function nodeGraphGlMiniPerformPresent() {
       });
     }
   }
+  if (settings.mode === "arrange") nodeGraphGlMiniPerformArrangeChrome(batch, tiles, cssW, cssH, frame);
   if (settings.frame) {
     const c = NODE_GRAPH_MINI_PERFORM_FRAME;
     nodeGraphGlLinesRect(batch, 0, 0, cssW, 1, c);
     nodeGraphGlLinesRect(batch, 0, cssH - 1, cssW, 1, c);
     nodeGraphGlLinesRect(batch, 0, 1, 1, cssH - 2, c);
     nodeGraphGlLinesRect(batch, cssW - 1, 1, 1, cssH - 2, c);
+  }
+  if (settings.mode === "position" && (view._miniHover || view._miniDragging)) {
+    nodeGraphGlMiniPerformCornerMarks(batch, cssW, cssH);
   }
   const ok = nodeGraphGlLinesEnd(batch, "alpha") !== false;
   for (const [key, host] of view._moduleHosts) {

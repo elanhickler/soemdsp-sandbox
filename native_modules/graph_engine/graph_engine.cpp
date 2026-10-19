@@ -8142,6 +8142,7 @@ static void process_ellipsoid(Circuit& g, Node& node, int frames) {
     node.buf[kPortSaw][f] = uniX;
     node.buf[kPortRamp][f] = uniY;
     node.buf[kPortMono][f] = biX;
+    node.buf[kPortPhase01][f] = samplePhase;
 
     if (!useSimTime) {
       const double nextPhase = phase + phaseInc;
@@ -8238,6 +8239,7 @@ static void process_ellipsoid_osc(Circuit& g, Node& node, int frames) {
     y *= level;
     node.buf[kPortLeft][f] = x;
     node.buf[kPortRight][f] = y;
+    node.buf[kPortPhase01][f] = samplePhase;
 
     phase += phaseInc;
     phase -= dsp_floor(phase);
@@ -9959,7 +9961,8 @@ static void process_ellipsoid_decay(Circuit& g, Node& node, int frames) {
 // Controls: frequency=highFreq, center=lowFreq, timeNumerator=sweepTime,
 // shape=chirp, width=chirpShape, waveform=wave (choiceId), mix=waveShape,
 // phaseParam=phase (cycles), timeDenominator=decay s, amplitude.
-// Out: Kick -> Mono, ƒ (instantaneous sweep Hz) -> Left.
+// Out: Kick -> Mono, ƒ (instantaneous sweep Hz) -> Left,
+// 0–1 decay envelope (hit height, not scaled by Amplitude) -> Right.
 static void process_robin_sinepulse(Circuit& g, Node& node, int frames) {
   if (node.nativeHandle <= 0) return;
   const bool hasTrig = mix_live_port(g, node, kPortTrigger, frames, g.mixTrigger);
@@ -9983,7 +9986,7 @@ static void process_robin_sinepulse(Circuit& g, Node& node, int frames) {
     );
     node.buf[kPortMono][f] = out;
     node.buf[kPortLeft][f] = soemdsp_robin_sinepulse_freq(node.nativeHandle);
-    node.buf[kPortRight][f] = 0.0;
+    node.buf[kPortRight][f] = soemdsp_robin_sinepulse_env(node.nativeHandle);
     node.buf[kPortIsIdle][f] = soemdsp_robin_sinepulse_is_idle(node.nativeHandle) ? 1.0 : 0.0;
   }
 }
@@ -16115,5 +16118,5 @@ extern "C" int soemdsp_graph_version() {
   // 170: EQ Filter ZDF ƒ input (resolve_osc_hz)
   // 171: ƒ on Ladder/303/Mode/Cookbook/IIR/Papoulis/ZDF filters + soemdsp_graph_node_effective_hz
   // 174: live add/remove/connect/disconnect keep compiled and other nodes' native handles
-  return 177; // 177: emo script module (type 220). was 176: Bessel smoother
+  return 178; // 178: Robin Sinepulse 0–1 envelope on Right. was 177: emo script module
 }

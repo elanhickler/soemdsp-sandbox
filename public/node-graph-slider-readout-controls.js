@@ -17,6 +17,26 @@ function populateNodeSliderReadoutShell(readout) {
   readout.append(amountFill, portalLeft, portalRight, labelText, valueText, unitText);
 }
 
+function nodeSliderResolveLiveReadout(readout) {
+  if (readout?.isConnected) {
+    return readout;
+  }
+  const id = String(readout?.dataset?.sliderTarget || "").trim();
+  if (!id) {
+    return null;
+  }
+  return document.querySelector(`.node-slider-readout[data-slider-target="${CSS.escape(id)}"]`);
+}
+
+function nodeSliderReadoutEditRefreshChrome() {
+  if (typeof nodeGraphGlGraphRebuildChrome === "function") {
+    nodeGraphGlGraphRebuildChrome();
+  }
+  if (typeof nodeGraphGlGraphPresentSoon === "function") {
+    nodeGraphGlGraphPresentSoon();
+  }
+}
+
 function commitNodeSliderReadoutEdit(input) {
   if (input.dataset.editCanceled === "true" || input.dataset.editCommitted === "true") {
     return;
@@ -29,8 +49,11 @@ function commitNodeSliderReadoutEdit(input) {
   const slider = document.getElementById(input.dataset.sliderTarget);
   updateNodeSliderCurrentValue(slider, input.value);
   if (input.dataset.faceOverlay === "true") {
+    const surface = input.parentElement;
     input.remove();
+    if (surface) surface.dataset.sliderFaceEditing = "false";
     if (typeof syncNodeSliderReadout === "function") syncNodeSliderReadout(slider);
+    nodeSliderReadoutEditRefreshChrome();
     return;
   }
   const readout = document.createElement("button");
@@ -45,6 +68,7 @@ function commitNodeSliderReadoutEdit(input) {
   input.replaceWith(readout);
   attachNodeSliderReadoutEvents(readout);
   syncNodeSliderReadout(slider);
+  nodeSliderReadoutEditRefreshChrome();
 }
 
 function cancelNodeSliderReadoutEdit(input) {
@@ -54,8 +78,11 @@ function cancelNodeSliderReadoutEdit(input) {
   input.dataset.editCanceled = "true";
   const slider = document.getElementById(input.dataset.sliderTarget);
   if (input.dataset.faceOverlay === "true") {
+    const surface = input.parentElement;
     input.remove();
+    if (surface) surface.dataset.sliderFaceEditing = "false";
     if (typeof syncNodeSliderReadout === "function") syncNodeSliderReadout(slider);
+    nodeSliderReadoutEditRefreshChrome();
     return;
   }
   const readout = document.createElement("button");
@@ -70,6 +97,7 @@ function cancelNodeSliderReadoutEdit(input) {
   input.replaceWith(readout);
   attachNodeSliderReadoutEvents(readout);
   syncNodeSliderReadout(slider);
+  nodeSliderReadoutEditRefreshChrome();
 }
 
 function beginNodeSliderFaceValueEdit(surface) {
@@ -169,6 +197,10 @@ function beginNodeSliderFaceValueEdit(surface) {
 
 function beginNodeSliderReadoutEdit(readout) {
   if (typeof nodeGraphPatchIsLocked === "function" && nodeGraphPatchIsLocked()) {
+    return;
+  }
+  readout = nodeSliderResolveLiveReadout(readout);
+  if (!readout?.isConnected) {
     return;
   }
   const slider = document.getElementById(readout.dataset.sliderTarget);

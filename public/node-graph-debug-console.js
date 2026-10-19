@@ -624,6 +624,7 @@
     // exercising the full push -> render -> badge pipeline on demand.
     p.querySelector("[data-se-fake-err]").addEventListener("click", () => {
       push("ERROR", "ladybug", "debug-console");
+      if (typeof nodeGraphEmptyCanvasToggleEgg === "function") nodeGraphEmptyCanvasToggleEgg();
     });
     p.querySelector("[data-se-clear]").addEventListener("click", clearLog);
     p.querySelector("[data-se-copy]").addEventListener("click", copyLog);

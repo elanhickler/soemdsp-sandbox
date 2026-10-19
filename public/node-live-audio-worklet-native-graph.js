@@ -700,10 +700,11 @@ NodeLiveAudioProcessor.prototype.mapNativeGraphSrcPortId = function mapNativeGra
     if (p === "out1") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_LEFT;
     if (p === "out2") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_RIGHT;
   }
-  // Robin Sinepulse: Kick audio on Mono, sweep Hz (ƒ) on Left.
+  // Robin Sinepulse: Kick audio on Mono, sweep Hz (ƒ) on Left, 0–1 envelope on Right.
   if (t === "robinSinepulse") {
     if (p === "kick") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_MONO;
     if (p === "f" || p === "\u0192") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_LEFT;
+    if (p === "env" || p === "0-1" || p === "0\u20131" || p === "0..1") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_RIGHT;
   }
   // Yellow Graph chunk — never collapse to Mono.
   if (p === "graph") {
@@ -789,6 +790,9 @@ NodeLiveAudioProcessor.prototype.mapNativeGraphSrcPortId = function mapNativeGra
     if (p === "__phase" || p === "phase01") {
       return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_PHASE01;
     }
+  }
+  if ((t === "ellipsoid" || t === "ellipsoidOsc") && (p === "__phase" || p === "phase01")) {
+    return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_PHASE01;
   }
   if ((t === "sineWavetable" || t === "sinCos") && (p === "cos" || p === "cosine")) {
     return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_LEFT;
@@ -9031,6 +9035,7 @@ NodeLiveAudioProcessor.prototype.nativeGraphPortNames = function nativeGraphPort
     return ["Left"];
   }
   if (portId === P.NATIVE_GRAPH_PORT_RIGHT) {
+    if (type === "robinSinepulse") return ["env", "0-1", "0\u20131", "0..1"];
     if (type === "acidSequencer") return ["pitch", "\u266f/\u266d"];
     if (type === "helmholtzPitch") return ["Fidelity", "fid"];
     if (type === "sampleHold") return ["Right"];
@@ -9186,7 +9191,8 @@ NodeLiveAudioProcessor.prototype.nativeGraphPortNames = function nativeGraphPort
   if (portId === P.NATIVE_GRAPH_PORT_PHASE01) {
     if (type === "acidSequencer") return ["__AcidStep"];
     // Face playhead — not a patchable jack.
-    if (type === "basicShape" || type === "sineWavetable" || type === "sinCos") {
+    if (type === "basicShape" || type === "sineWavetable" || type === "sinCos"
+      || type === "ellipsoid" || type === "ellipsoidOsc") {
       return ["__Phase"];
     }
     // Smooth/Step Graph purple ghost (syncNodeGraphGraphLivePlayheads).
@@ -9283,6 +9289,7 @@ NodeLiveAudioProcessor.prototype.publishNativeGraphScopeTaps = function publishN
       )
       : (type === "sineWavetable" || type === "sinCos" || type === "smoothGraph" || type === "stepGraph"
         || type === "acidSequencer" || type === "fbmField"
+        || type === "ellipsoid" || type === "ellipsoidOsc"
         ? audioPorts.concat(P.NATIVE_GRAPH_PORT_PHASE01)
         : audioPorts);
     for (let pi = 0; pi < ports.length; pi += 1) {
@@ -9446,6 +9453,7 @@ NodeLiveAudioProcessor.prototype.publishNativeGraphScopeTaps = function publishN
         type === "basicShape" || type === "sineWavetable" || type === "sinCos"
         || type === "smoothGraph" || type === "stepGraph"
         || type === "acidSequencer"
+        || type === "ellipsoid" || type === "ellipsoidOsc"
       ) {
         ports = facePorts.concat(P.NATIVE_GRAPH_PORT_PHASE01);
       } else if (type === "polyBlep" || type === "blit") {

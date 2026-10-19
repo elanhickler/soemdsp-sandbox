@@ -44,7 +44,7 @@ function nodeGraphTraceDisplaySettingsElement() {
           id="nodeLayoutCanvasShowInCanvas"
           type="checkbox"
           data-tooltip-key="displaySettings.showInCanvas">
-        <span>Show in canvas</span>
+        <span>Show in performance view</span>
       </label>
       <div data-display-settings-body class="node-trace-display-settings-body"></div>
     </div>

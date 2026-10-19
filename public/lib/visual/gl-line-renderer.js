@@ -313,10 +313,24 @@ uniform float uPixel;
 uniform vec3 uCam;
 uniform vec2 uVp;
 uniform float uDevice;
+uniform vec4 uPlate;
 varying vec2 vPx;
 void main() {
+  vec2 pos = position;
+  // Keep the 1px screen stroke inside the quad at any zoom. Veil draws leave
+  // uPlate at zero, so they stay put.
+  if (uPixel > 0.5 && uPlate.z > 0.5 && uPlate.w > 0.5) {
+    vec2 center = uPlate.xy + uPlate.zw * 0.5;
+    vec2 dir = pos - center;
+    float len = length(dir);
+    if (len > 0.001) {
+      float z = max(uCam.z, 0.0001);
+      float devScale = max(uDevice, 0.0001);
+      pos += (dir / len) * (2.0 / (z * devScale));
+    }
+  }
   if (uPixel > 0.5) {
-    vec2 css = (position - uCam.xy) * max(uCam.z, 0.0001);
+    vec2 css = (pos - uCam.xy) * max(uCam.z, 0.0001);
     vec2 dev = css * uDevice;
     gl_Position = vec4(dev.x / uVp.x * 2.0 - 1.0, 1.0 - dev.y / uVp.y * 2.0, 0.0, 1.0);
   } else {
@@ -328,7 +342,9 @@ void main() {
   const OUT_FS = `
 precision mediump float;
 varying vec2 vPx;
-uniform vec4 uPlate;
+// Shared with the vertex shader, whose floats are highp. An unqualified
+// float here is mediump and the program fails to link.
+uniform highp vec4 uPlate;
 uniform vec4 uPlateColor;
 uniform vec4 uFill;
 uniform float uStroke;
@@ -336,18 +352,37 @@ uniform float uInletGap;
 uniform int uCount;
 uniform vec4 uJack[24];
 uniform vec4 uJackColor[24];
+uniform highp float uPixel;
+uniform highp vec3 uCam;
+uniform highp float uDevice;
 void main() {
   vec2 plateMin = uPlate.xy;
   vec2 plateMax = uPlate.xy + uPlate.zw;
-  vec2 c = plateMin + uPlate.zw * 0.5;
-  vec2 q = abs(vPx - c) - uPlate.zw * 0.5;
+  vec2 px = vPx;
+  float strokeW = max(uStroke, 0.0);
+  float gap = max(uInletGap, 0.0);
+  float z = max(uCam.z, 0.0001);
+  float devScale = max(uDevice, 0.0001);
+  if (uPixel > 0.5) {
+    // Screen pixels. Edges snap to whole pixels so zoom does not walk the
+    // border and the body across the pixel grid. Stroke is at least 1 px.
+    vec2 origin = uCam.xy;
+    px = (vPx - origin) * z * devScale;
+    plateMin = floor((uPlate.xy - origin) * z * devScale + 0.5);
+    plateMax = floor((uPlate.xy + uPlate.zw - origin) * z * devScale + 0.5);
+    plateMax = max(plateMax, plateMin + vec2(1.0));
+    strokeW = max(1.0, floor(max(uStroke, 0.0) * z * devScale + 0.5));
+    gap = max(uInletGap, 0.0) * z * devScale;
+  }
+  vec2 c = (plateMin + plateMax) * 0.5;
+  vec2 halfSize = (plateMax - plateMin) * 0.5;
+  vec2 q = abs(px - c) - halfSize;
   float sdRect = length(max(q, 0.0)) + min(max(q.x, q.y), 0.0);
   // Cut each jack inward. A disk centered on the wall removes the inside
   // semicircle; the outside half stays outside the rectangle.
   float sd = sdRect;
-  // uStroke is the full band in zoom-1 px. The camera scales it. fwidth keeps
-  // the jack fringe one screen pixel at whatever zoom is current.
-  float strokeW = max(uStroke, 0.0);
+  // fwidth keeps the jack fringe one screen pixel. The plate stroke itself
+  // is a whole-pixel band (see strokePx).
   float halfRing = max(strokeW * 0.5, 0.5);
   float nearest = halfRing + 2.0;
   float edgeAa = max(fwidth(sdRect), 1e-4);
@@ -359,11 +394,16 @@ void main() {
     if (i >= uCount) break;
     vec2 jack = uJack[i].xy;
     float radius = uJack[i].z;
+    if (uPixel > 0.5) {
+      float signr = radius < 0.0 ? -1.0 : 1.0;
+      jack = (jack - uCam.xy) * z * devScale;
+      radius = signr * abs(uJack[i].z) * z * devScale;
+    }
     float square = radius < 0.0 ? 1.0 : 0.0;
     radius = abs(radius);
     float d = square > 0.5
-      ? max(abs(vPx.x - jack.x), abs(vPx.y - jack.y)) - radius
-      : length(vPx - jack) - radius;
+      ? max(abs(px.x - jack.x), abs(px.y - jack.y)) - radius
+      : length(px - jack) - radius;
     sd = max(sd, -d);
     float aa = max(fwidth(d), edgeAa);
     float ring = 1.0 - smoothstep(halfRing - aa, halfRing + aa, abs(d));
@@ -384,13 +424,13 @@ void main() {
       if (dr <= dl && dr <= dt && dr <= db) inward = vec2(-1.0, 0.0);
       else if (dt <= dl && dt <= dr && dt <= db) inward = vec2(0.0, 1.0);
       else if (db <= dl && db <= dr && db <= dt) inward = vec2(0.0, -1.0);
-      float cut = smoothstep(uInletGap - aa, uInletGap + aa, dot(vPx - jack, inward));
+      float cut = smoothstep(gap - aa, gap + aa, dot(px - jack, inward));
       inletA = max(inletA, hole * cut);
     }
   }
-  // Whole pixels outside the plate. A fractional fade reads as 1.5px on
-  // one part of the edge and 2.5px on another. Jacks keep a 1px AA ring.
-  float strokePx = max(1.0, floor(strokeW + 0.5));
+  // Whole screen pixels outside the plate. Camera mode already rounded
+  // strokeW to an integer of at least 1. Jacks keep a 1px AA ring.
+  float strokePx = uPixel > 0.5 ? strokeW : max(1.0, floor(strokeW + 0.5));
   float fat = (sdRect > 0.0 && sdRect <= strokePx) ? 1.0 : 0.0;
   float strokeA = max(fat * (1.0 - inMouth), arc) * strokeCol.a;
   float plateA = sd <= 0.0 ? uFill.a * (1.0 - inletA) : 0.0;

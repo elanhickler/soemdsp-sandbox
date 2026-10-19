@@ -139,7 +139,7 @@ function nodeInteractionMouseHint(element) {
   }
   if (element.id === "nodeModularWindowedViewButton"
     || element.id === "nodeSceneToggleModularWindowedView") {
-    return "Layout canvas — shows displays with “Show in canvas” enabled (same as F).";
+    return "Performance view — shows displays with “Show in performance view” enabled (same as F).";
   }
   if (element.id === "nodeUndoButton" || element.id === "nodeRedoButton") {
     return nodeGraphTooltipText("history.help");

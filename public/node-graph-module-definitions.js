@@ -10274,12 +10274,13 @@ const nodeGraphModuleDefinitions = (
     ],
     inputs: ["Trigger"],
     inputTooltips: {
-      Trigger: "Each hit zeroes the phase (Robin's hard reset), restarts the sweep at High Freq, and restarts the Decay envelope. Hit height = velocity (Env peak)." },
-    outputs: ["Kick", "f"],
-    outputLabels: { f: "ƒ" },
+      Trigger: "Each hit zeroes the phase (Robin's hard reset), restarts the sweep at High Freq, and restarts the Decay envelope. Hit height is the 0–1 output peak." },
+    outputs: ["Kick", "f", "env"],
+    outputLabels: { f: "ƒ", env: "0–1" },
     outputTooltips: {
-      Kick: "Kick audio: Amplitude x Env x swept wave.",
+      Kick: "Kick audio: Amplitude x envelope x swept wave.",
       f: "Sweep frequency in Hz. White ƒ jack. Before the first hit this is Low Freq. After a hit it follows the sweep and stays where the sweep lands.",
+      env: "Decay envelope, 0 to 1. A full Trigger peaks at 1 and the envelope falls to 0. Amplitude does not scale it.",
     },
     parameters: [
       {
@@ -10392,7 +10393,7 @@ const nodeGraphModuleDefinitions = (
         min: "0.02",
         step: "any",
         unit: "s",
-        tooltip: "Amplitude envelope: seconds to fall 60 dB (T60) after a hit. Drives Env and the Kick level. Acts at once." },
+        tooltip: "Amplitude envelope: seconds to fall 60 dB (T60) after a hit. Drives the 0–1 output and the Kick level. Acts at once." },
       {
         defaultValue: "1",
         key: "amplitude",
@@ -10402,7 +10403,7 @@ const nodeGraphModuleDefinitions = (
         min: "0",
         nonlinearSlider: false,
         step: "any",
-        tooltip: "Kick output level. Does not scale Env." },
+        tooltip: "Kick output level. Does not scale the 0–1 output." },
     ] },
   // Robin Sinepulse Allpass: Robin Schmidt's rsFlatZapper (RS-MET), used with
   // Robin's permission (docs/KICK_PLAN.md). Native only:

@@ -1,34 +1,45 @@
 // Mini Performance View (docs/MINI_PERFORM_VIEW_PLAN.md).
-// A live, scaled copy of the F performance screen inside the workspace.
+// A live, scaled copy of the Performance view inside the workspace.
 // Settings are UI preferences kept per machine (localStorage), never in the
-// patch. The view only reads patch.view.canvases; it never pins, never writes
-// the layout and never touches transport or audio. Drawing lives in
-// node-graph-gl-mini-perform.js (WebGL2, shared context).
+// patch. Mini Perform only reads patch.view.canvases. Mini Arrange writes
+// tile rects through nodeGraphLayoutCanvasWriteRect. Neither mode touches
+// transport or audio. Drawing lives in node-graph-gl-mini-perform.js.
 
 const NODE_GRAPH_MINI_PERFORM_STORAGE_KEY = "soemdsp.miniPerform";
 
 const nodeGraphMiniPerformDefaults = Object.freeze({
-  show: false,
+  mode: "off",
   anchor: "screen",
   corner: "bottomRight",
-  margin: 16,
+  offsetX: 16,
+  offsetY: 16,
   worldX: null,
   worldY: null,
   width: 360,
-  reference: "window",
+  aspect: "window",
   opacity: 1,
-  pointer: "clickThrough",
   refresh: 30,
   frame: true,
 });
 
 const nodeGraphMiniPerformChoices = Object.freeze({
+  mode: [["off", "Off"], ["perform", "Perform"], ["background", "Background"], ["position", "Position"], ["arrange", "Arrange"]],
   anchor: [["screen", "Screen"], ["workspace", "Workspace"]],
   corner: [["topLeft", "Top left"], ["topRight", "Top right"], ["bottomLeft", "Bottom left"], ["bottomRight", "Bottom right"]],
-  reference: [["window", "Window"], ["phonePortrait", "Phone portrait (9:19.5)"], ["phoneLandscape", "Phone landscape (19.5:9)"]],
-  pointer: [["clickThrough", "Click-through"], ["interactive", "Interactive"]],
+  aspect: [
+    ["window", "Window"],
+    ["16:9", "16:9"],
+    ["4:3", "4:3"],
+    ["1:1", "1:1"],
+    ["9:16", "9:16"],
+    ["phonePortrait", "Phone portrait"],
+    ["phoneLandscape", "Phone landscape"],
+  ],
   refresh: [["0", "Every frame"], ["30", "30 per second"], ["15", "15 per second"]],
 });
+
+const nodeGraphMiniPerformEnlarged = { on: false, box: null };
+let nodeGraphMiniPerformDrag = null;
 
 function nodeGraphMiniPerformClamp(value, lo, hi, fallback) {
   const n = Number(value);
@@ -42,23 +53,36 @@ function nodeGraphMiniPerformChoice(key, value, fallback) {
   return list.some((entry) => entry[0] === text) ? text : fallback;
 }
 
-/** Clean a stored or edited settings object. Unknown keys are dropped. */
-function normalizeNodeGraphMiniPerformSettings(raw) {
+/** Next mini mode. off → perform → arrange → off. */
+function nodeGraphMiniPerformNextMode(mode) {
+  const order = nodeGraphMiniPerformChoices.mode.map((entry) => entry[0]);
+  const index = order.indexOf(mode);
+  return order[(index < 0 ? 0 : index + 1) % order.length];
+}
+
+/**
+ * Clean a stored or edited settings object. Unknown keys are dropped.
+ * fromStorage: a saved "arrange" comes back as "perform" so a fresh session
+ * never opens already editing. In-session edits keep Arrange.
+ */
+function normalizeNodeGraphMiniPerformSettings(raw, options = {}) {
   const src = raw && typeof raw === "object" ? raw : {};
   const d = nodeGraphMiniPerformDefaults;
   const worldX = Number(src.worldX);
   const worldY = Number(src.worldY);
+  let mode = nodeGraphMiniPerformChoice("mode", src.mode, d.mode);
+  if (options.fromStorage && (mode === "arrange" || mode === "position" || mode === "background")) mode = "perform";
   return {
-    show: src.show === true,
+    mode,
     anchor: nodeGraphMiniPerformChoice("anchor", src.anchor, d.anchor),
     corner: nodeGraphMiniPerformChoice("corner", src.corner, d.corner),
-    margin: Math.round(nodeGraphMiniPerformClamp(src.margin, 0, 200, d.margin)),
+    offsetX: nodeGraphMiniPerformClamp(src.offsetX, -8000, 8000, d.offsetX),
+    offsetY: nodeGraphMiniPerformClamp(src.offsetY, -8000, 8000, d.offsetY),
     worldX: src.worldX == null || !Number.isFinite(worldX) ? null : worldX,
     worldY: src.worldY == null || !Number.isFinite(worldY) ? null : worldY,
     width: Math.round(nodeGraphMiniPerformClamp(src.width, 120, 1600, d.width)),
-    reference: nodeGraphMiniPerformChoice("reference", src.reference, d.reference),
+    aspect: nodeGraphMiniPerformChoice("aspect", src.aspect, d.aspect),
     opacity: nodeGraphMiniPerformClamp(src.opacity, 0.1, 1, d.opacity),
-    pointer: nodeGraphMiniPerformChoice("pointer", src.pointer, d.pointer),
     refresh: Number(nodeGraphMiniPerformChoice("refresh", src.refresh, String(d.refresh))),
     frame: src.frame !== false,
   };
@@ -72,7 +96,7 @@ function nodeGraphMiniPerformSettings() {
     } catch (_error) {
       stored = null;
     }
-    nodeGraphMvp.miniPerform = normalizeNodeGraphMiniPerformSettings(stored);
+    nodeGraphMvp.miniPerform = normalizeNodeGraphMiniPerformSettings(stored, { fromStorage: true });
   }
   return nodeGraphMvp.miniPerform;
 }
@@ -88,12 +112,12 @@ function saveNodeGraphMiniPerformSettings() {
 function setNodeGraphMiniPerformSettings(patch = {}, options = {}) {
   const next = normalizeNodeGraphMiniPerformSettings({ ...nodeGraphMiniPerformSettings(), ...patch });
   const wasShown = nodeGraphMiniPerformShown();
-  // Switching to Workspace with no stored spot: centre of the current view.
   if (next.anchor === "workspace" && (next.worldX == null || next.worldY == null)) {
     const spot = nodeGraphMiniPerformViewCentreWorld(next);
     next.worldX = spot.x;
     next.worldY = spot.y;
   }
+  if (next.mode === "off") nodeGraphMiniPerformExitEnlarged();
   nodeGraphMvp.miniPerform = next;
   if (options.persist !== false) saveNodeGraphMiniPerformSettings();
   if (options.sync !== false) syncNodeGraphMiniPerformPage();
@@ -113,21 +137,93 @@ function nodeGraphMiniPerformPageAllowed() {
 
 /** True when the mini view should be on screen right now. */
 function nodeGraphMiniPerformShown() {
-  if (!nodeGraphMiniPerformSettings().show || !nodeGraphMiniPerformPageAllowed()) return false;
+  const mode = nodeGraphMiniPerformSettings().mode;
+  if (mode === "off" || !nodeGraphMiniPerformPageAllowed()) return false;
   if (typeof nodeGraphLayoutCanvasMode === "function" && nodeGraphLayoutCanvasMode() !== "off") return false;
   if (document.body?.classList.contains("node-screen-solo-active")) return false;
   const host = document.getElementById("nodeGraphWorkspace");
   return Boolean(host && host.clientWidth > 0 && host.clientHeight > 0);
 }
 
+function nodeGraphMiniPerformArrangeShown() {
+  return nodeGraphMiniPerformSettings().mode === "arrange" && nodeGraphMiniPerformShown();
+}
+
+function nodeGraphMiniPerformHelpForMode(mode) {
+  const hidden = typeof nodeGraphLayoutCanvasMode === "function" && nodeGraphLayoutCanvasMode() !== "off";
+  if (mode === "off") return "Mini performance view off";
+  if (mode === "arrange") {
+    return hidden
+      ? "Mini performance view: Arrange (shows when the performance view closes)."
+      : "Mini performance view: Arrange. Drag tiles to move, tile corners to resize. Shift+F exits arrange.";
+  }
+  if (mode === "position") {
+    return hidden
+      ? "Mini performance view: Position (shows when the performance view closes)."
+      : "Mini performance view: Position. Drag to move, corners to resize.";
+  }
+  if (mode === "background") {
+    return hidden
+      ? "Mini performance view: Background (shows when the performance view closes)."
+      : "Mini performance view: Background. Display only.";
+  }
+  return hidden
+    ? "Mini performance view: Perform (shows when the performance view closes)."
+    : "Mini performance view: Perform. Drag knobs in the view.";
+}
+
 function toggleNodeGraphMiniPerformView() {
   if (!nodeGraphMiniPerformPageAllowed()) return false;
-  const next = !nodeGraphMiniPerformSettings().show;
-  setNodeGraphMiniPerformSettings({ show: next });
-  if (typeof setNodeInteractionHelp === "function") {
-    setNodeInteractionHelp(next ? "Mini performance view on" : "Mini performance view off");
-  }
+  const next = nodeGraphMiniPerformNextMode(nodeGraphMiniPerformSettings().mode);
+  setNodeGraphMiniPerformSettings({ mode: next });
+  if (typeof setNodeInteractionHelp === "function") setNodeInteractionHelp(nodeGraphMiniPerformHelpForMode(next));
   return next;
+}
+
+function nodeGraphMiniPerformEnlargedActive() {
+  return nodeGraphMiniPerformEnlarged.on === true;
+}
+
+function nodeGraphMiniPerformEnterEnlarged() {
+  if (nodeGraphMiniPerformEnlarged.on) return true;
+  nodeGraphMiniPerformEnlarged.on = true;
+  nodeGraphMiniPerformEnlarged.box = null;
+  return true;
+}
+
+/** Exit Enlarged only. Mini mode and the remembered rect stay. */
+function nodeGraphMiniPerformExitEnlarged() {
+  if (!nodeGraphMiniPerformEnlarged.on) return false;
+  nodeGraphMiniPerformEnlarged.on = false;
+  nodeGraphMiniPerformEnlarged.box = null;
+  if (typeof nodeGraphGlMiniPerformPresent === "function" && nodeGraphMiniPerformShown()) nodeGraphGlMiniPerformPresent();
+  return true;
+}
+
+function nodeGraphMiniPerformToggleEnlarged() {
+  if (nodeGraphMiniPerformEnlarged.on) return !nodeGraphMiniPerformExitEnlarged();
+  nodeGraphMiniPerformEnterEnlarged();
+  if (typeof setNodeInteractionHelp === "function") setNodeInteractionHelp("Mini performance view enlarged. Escape exits.");
+  return true;
+}
+
+/** Drop Enlarged and put an in-progress tile back where the drag started. */
+function nodeGraphMiniPerformOnPerformanceViewOpening() {
+  nodeGraphMiniPerformExitEnlarged();
+  nodeGraphMiniPerformCancelTileDrag();
+}
+
+function nodeGraphMiniPerformCancelTileDrag() {
+  const drag = nodeGraphMiniPerformDrag;
+  if (!drag || drag.kind !== "tile") return;
+  if (drag.origin && typeof nodeGraphLayoutCanvasWriteRect === "function") {
+    nodeGraphLayoutCanvasWriteRect(drag.nodeId, drag.origin, { persist: false });
+  }
+  drag.view?.removeEventListener("pointermove", drag.move);
+  drag.view?.removeEventListener("pointerup", drag.up);
+  drag.view?.removeEventListener("pointercancel", drag.up);
+  if (drag.view) drag.view._miniDragging = false;
+  nodeGraphMiniPerformDrag = null;
 }
 
 /** Pinned elements of the current scope. Read-only: never creates buckets. */
@@ -164,7 +260,7 @@ function nodeGraphMiniPerformPresentsNode(nodeId) {
 
 /** Host px <-> zoom-1 world px for the workspace camera. */
 function nodeGraphMiniPerformCamera() {
-  const host = document.getElementById("nodeGraphWorkspace");
+  const host = typeof document !== "undefined" ? document.getElementById("nodeGraphWorkspace") : null;
   const zoom = typeof nodeGraphZoom === "function" ? Math.max(0.0001, nodeGraphZoom()) : 1;
   const surface = typeof nodeGraphZoomSurface === "function" ? nodeGraphZoomSurface() : null;
   const sr = surface?.getBoundingClientRect?.();
@@ -180,11 +276,11 @@ function nodeGraphMiniPerformCamera() {
 }
 
 function nodeGraphMiniPerformReference(settings = nodeGraphMiniPerformSettings()) {
-  return nodeGraphMiniPerformReferenceSize(settings.reference, window.innerWidth, window.innerHeight);
+  return nodeGraphMiniPerformReferenceSize(settings.aspect, window.innerWidth, window.innerHeight);
 }
 
 function nodeGraphMiniPerformViewCentreWorld(settings) {
-  const host = document.getElementById("nodeGraphWorkspace");
+  const host = typeof document !== "undefined" ? document.getElementById("nodeGraphWorkspace") : null;
   const cam = nodeGraphMiniPerformCamera();
   const ref = nodeGraphMiniPerformReference(settings);
   const wWorld = Number(settings.width) || 360;
@@ -194,19 +290,26 @@ function nodeGraphMiniPerformViewCentreWorld(settings) {
   return { x: Math.round(cx - wWorld / 2), y: Math.round(cy - hWorld / 2) };
 }
 
-/** Current frame rect in host px plus scale. */
+/** Current frame rect in host px plus scale. Enlarged is a session overlay. */
 function nodeGraphMiniPerformFrame() {
   const host = document.getElementById("nodeGraphWorkspace");
   const settings = nodeGraphMiniPerformSettings();
   const ref = nodeGraphMiniPerformReference(settings);
+  const hw = host?.clientWidth || 0;
+  const hh = host?.clientHeight || 0;
+  if (nodeGraphMiniPerformEnlarged.on) {
+    const box = nodeGraphMiniPerformEnlarged.box
+      || nodeGraphMiniPerformEnlargedRect(hw, hh, ref.w, ref.h);
+    return { ...box, ref, s: box.w / Math.max(1, ref.w) };
+  }
   const frame = nodeGraphMiniPerformFrameRect(
-    settings, ref, host?.clientWidth || 0, host?.clientHeight || 0,
+    settings, ref, hw, hh,
     settings.anchor === "workspace" ? nodeGraphMiniPerformCamera() : null,
   );
   return { ...frame, ref };
 }
 
-/** Tile rects in mini-view px (relative to the frame), from the reference stage. */
+/** Tile rects in mini-view px (relative to the frame), from the stage. */
 function nodeGraphMiniPerformTiles(frame = nodeGraphMiniPerformFrame()) {
   const tiles = [];
   const elements = nodeGraphMiniPerformElements();
@@ -231,27 +334,25 @@ function nodeGraphMiniPerformAfterChange(wasShown) {
   const shown = nodeGraphMiniPerformShown();
   nodeGraphMiniPerformPresentsNode._cache = null;
   if (shown !== wasShown) {
-    // Pinned modules wake (or sleep again) under the viewport cull.
     if (shown && typeof nodeGraphViewportCullWakeNodeById === "function") {
       for (const el of nodeGraphMiniPerformElements()) nodeGraphViewportCullWakeNodeById(el.nodeId);
     }
     if (typeof nodeGraphViewportCullRefresh === "function") nodeGraphViewportCullRefresh();
   }
+  if (typeof renderNodeGraphModularViewModeButtons === "function") renderNodeGraphModularViewModeButtons();
   nodeGraphMiniPerformEnsureLoop();
 }
 
-// ---- Loop: one rAF while the setting is on. Draws at the refresh rate. ----
-
 function nodeGraphMiniPerformEnsureLoop() {
   if (nodeGraphMiniPerformEnsureLoop._raf) return;
-  if (!nodeGraphMiniPerformSettings().show) {
+  if (nodeGraphMiniPerformSettings().mode === "off") {
     if (typeof nodeGraphGlMiniPerformHide === "function") nodeGraphGlMiniPerformHide();
     return;
   }
   const tick = (now) => {
     nodeGraphMiniPerformEnsureLoop._raf = 0;
     const settings = nodeGraphMiniPerformSettings();
-    if (!settings.show) {
+    if (settings.mode === "off") {
       if (typeof nodeGraphGlMiniPerformHide === "function") nodeGraphGlMiniPerformHide();
       return;
     }
@@ -268,8 +369,6 @@ function nodeGraphMiniPerformEnsureLoop() {
       const last = nodeGraphMiniPerformEnsureLoop._last || 0;
       if (!interval || now - last >= interval - 2) {
         nodeGraphMiniPerformEnsureLoop._last = now;
-        // After this frame's other rAF work: face painters fill their canvases
-        // inside rAF, so presenting from a task reads finished pictures.
         setTimeout(() => {
           if (nodeGraphMiniPerformShown() && typeof nodeGraphGlMiniPerformPresent === "function") nodeGraphGlMiniPerformPresent();
         }, 0);
@@ -280,18 +379,44 @@ function nodeGraphMiniPerformEnsureLoop() {
   nodeGraphMiniPerformEnsureLoop._raf = window.requestAnimationFrame(tick);
 }
 
-// ---- Pointer (Interactive). Click-through leaves pointer-events off. ----
+// ---- Pointer. The frame always takes the hit. Wheel is left to the workspace. ----
 
-function nodeGraphMiniPerformTileAt(clientX, clientY) {
+function nodeGraphMiniPerformCornerAt(rect, clientX, clientY) {
+  const x = clientX - rect.left;
+  const y = clientY - rect.top;
+  if (x < 0 || y < 0 || x > rect.width || y > rect.height) return "";
+  const m = 14;
+  if (x <= m && y <= m) return "topLeft";
+  if (x >= rect.width - m && y <= m) return "topRight";
+  if (x <= m && y >= rect.height - m) return "bottomLeft";
+  if (x >= rect.width - m && y >= rect.height - m) return "bottomRight";
+  return "";
+}
+
+function nodeGraphMiniPerformTileHit(clientX, clientY) {
   const view = document.getElementById("nodeMiniPerformView");
   const rect = view?.getBoundingClientRect?.();
   if (!rect) return null;
   const x = clientX - rect.left;
   const y = clientY - rect.top;
+  const frame = nodeGraphMiniPerformFrame();
+  const grip = Math.max(8, 12 * frame.s);
   const tiles = view._miniTiles || [];
   for (let i = tiles.length - 1; i >= 0; i -= 1) {
-    const t = tiles[i];
-    if (x >= t.x && y >= t.y && x <= t.x + t.w && y <= t.y + t.h) return t;
+    const tile = tiles[i];
+    if (x < tile.x || y < tile.y || x > tile.x + tile.w || y > tile.y + tile.h) continue;
+    let corner = "";
+    if (nodeGraphMiniPerformSettings().mode === "arrange") {
+      const left = x - tile.x <= grip;
+      const right = tile.x + tile.w - x <= grip;
+      const top = y - tile.y <= grip;
+      const bottom = tile.y + tile.h - y <= grip;
+      if (left && top) corner = "nw";
+      else if (right && top) corner = "ne";
+      else if (left && bottom) corner = "sw";
+      else if (right && bottom) corner = "se";
+    }
+    return { tile, corner };
   }
   return null;
 }
@@ -312,106 +437,321 @@ function nodeGraphMiniPerformFocusNode(nodeId) {
   setNodeGraphPan(pan.x + host.clientWidth / 2 - sx, pan.y + host.clientHeight / 2 - sy);
 }
 
-function nodeGraphMiniPerformGripAt(view, clientX, clientY) {
-  const rect = view.getBoundingClientRect();
-  const settings = nodeGraphMiniPerformSettings();
-  // Grip on the corner away from the anchor corner (Workspace: bottom right).
-  const corner = settings.anchor === "workspace" ? "topLeft" : settings.corner;
-  const gx = corner.endsWith("Right") ? rect.left : rect.right;
-  const gy = corner.startsWith("bottom") ? rect.top : rect.bottom;
-  const hit = Math.abs(clientX - gx) <= 14 && Math.abs(clientY - gy) <= 14;
-  return hit ? { sign: corner.endsWith("Right") ? -1 : 1 } : null;
-}
-
-function beginNodeGraphMiniPerformPointer(event) {
-  const view = document.getElementById("nodeMiniPerformView");
-  if (!view || event.button !== 0 || nodeGraphMiniPerformSettings().pointer !== "interactive") return;
-  event.preventDefault();
-  event.stopPropagation();
-  const settings = nodeGraphMiniPerformSettings();
-  const rect = view.getBoundingClientRect();
+function nodeGraphMiniPerformHostRect() {
   const host = document.getElementById("nodeGraphWorkspace");
   const hostRect = host.getBoundingClientRect();
-  const grip = nodeGraphMiniPerformGripAt(view, event.clientX, event.clientY);
-  const drag = {
-    id: event.pointerId,
-    x0: event.clientX,
-    y0: event.clientY,
-    rect,
+  const view = document.getElementById("nodeMiniPerformView");
+  const rect = view.getBoundingClientRect();
+  return {
+    host,
     hostRect,
-    grip,
-    width0: settings.width,
-    world0: { x: settings.worldX || 0, y: settings.worldY || 0 },
-    moved: false,
+    x: rect.left - hostRect.left,
+    y: rect.top - hostRect.top,
+    w: rect.width,
+    h: rect.height,
   };
-  try { view.setPointerCapture(event.pointerId); } catch (_error) { /* not active */ }
-  const move = (e) => {
-    if (e.pointerId !== drag.id) return;
-    const dx = e.clientX - drag.x0;
-    const dy = e.clientY - drag.y0;
-    if (!drag.moved && Math.hypot(dx, dy) < 4) return;
-    drag.moved = true;
-    const zoom = settings.anchor === "workspace" ? nodeGraphMiniPerformCamera().zoom : 1;
-    if (drag.grip) {
-      setNodeGraphMiniPerformSettings({ width: drag.width0 + (drag.grip.sign * dx) / zoom }, { persist: false });
-    } else if (settings.anchor === "workspace") {
-      setNodeGraphMiniPerformSettings({ worldX: drag.world0.x + dx / zoom, worldY: drag.world0.y + dy / zoom }, { persist: false });
-    } else {
-      // Screen: follow the pointer, then snap to the nearest corner on release.
-      view.style.left = `${drag.rect.left - drag.hostRect.left + dx}px`;
-      view.style.top = `${drag.rect.top - drag.hostRect.top + dy}px`;
-      view._miniDragging = true;
-    }
-  };
-  const up = (e) => {
-    if (e.pointerId !== drag.id) return;
-    view.removeEventListener("pointermove", move);
-    view.removeEventListener("pointerup", up);
-    view.removeEventListener("pointercancel", up);
-    view._miniDragging = false;
-    if (!drag.moved) {
-      nodeGraphMiniPerformClick(e);
-      return;
-    }
-    if (!drag.grip && settings.anchor !== "workspace") {
-      const left = drag.rect.left - drag.hostRect.left + (e.clientX - drag.x0);
-      const top = drag.rect.top - drag.hostRect.top + (e.clientY - drag.y0);
-      const w = drag.rect.width;
-      const h = drag.rect.height;
-      const hw = drag.hostRect.width;
-      const hh = drag.hostRect.height;
-      const right = left + w / 2 > hw / 2;
-      const bottom = top + h / 2 > hh / 2;
-      const mx = right ? hw - left - w : left;
-      const my = bottom ? hh - top - h : top;
-      setNodeGraphMiniPerformSettings({
-        corner: `${bottom ? "bottom" : "top"}${right ? "Right" : "Left"}`,
-        margin: Math.min(Math.max(0, mx), Math.max(0, my)),
-      });
-    } else {
-      saveNodeGraphMiniPerformSettings();
-    }
-  };
-  view.addEventListener("pointermove", move);
-  view.addEventListener("pointerup", up);
-  view.addEventListener("pointercancel", up);
 }
 
-function nodeGraphMiniPerformClick(event) {
+function nodeGraphMiniPerformApplyHostRect(rect, options = {}) {
+  if (nodeGraphMiniPerformEnlarged.on) {
+    nodeGraphMiniPerformEnlarged.box = { x: rect.x, y: rect.y, w: rect.w, h: rect.h };
+    return;
+  }
+  const settings = nodeGraphMiniPerformSettings();
+  const zoom = settings.anchor === "workspace" ? nodeGraphMiniPerformCamera().zoom : 1;
+  const width = Math.round(nodeGraphMiniPerformClamp(rect.w / zoom, 120, 1600, settings.width));
+  if (settings.anchor === "workspace") {
+    const cam = nodeGraphMiniPerformCamera();
+    setNodeGraphMiniPerformSettings({
+      width,
+      worldX: (rect.x - cam.originX) / zoom,
+      worldY: (rect.y - cam.originY) / zoom,
+    }, options);
+    return;
+  }
+  const host = document.getElementById("nodeGraphWorkspace");
+  const placed = nodeGraphMiniPerformCornerFromRect(
+    rect.x, rect.y, rect.w, rect.h, host?.clientWidth || rect.w, host?.clientHeight || rect.h,
+  );
+  setNodeGraphMiniPerformSettings({ width, ...placed }, options);
+}
+
+function nodeGraphMiniPerformResizeHostRect(start, dx, dy, corner) {
+  const settings = nodeGraphMiniPerformSettings();
+  const enlarged = nodeGraphMiniPerformEnlarged.on;
+  const zoom = !enlarged && settings.anchor === "workspace" ? nodeGraphMiniPerformCamera().zoom : 1;
+  const ref = nodeGraphMiniPerformReference(settings);
+  const delta = nodeGraphMiniPerformResizeDelta(dx / zoom, dy / zoom, corner, ref.w, ref.h);
+  let stored = (start.w / zoom) + delta;
+  if (!enlarged) stored = nodeGraphMiniPerformClamp(stored, 120, 1600, start.w / zoom);
+  let w = Math.max(1, stored * zoom);
+  let h = w * (ref.h / ref.w);
+  const host = document.getElementById("nodeGraphWorkspace");
+  const hw = host?.clientWidth || w;
+  const hh = host?.clientHeight || h;
+  if (enlarged || settings.anchor !== "workspace") {
+    if (w > hw) {
+      w = hw;
+      h = w * (ref.h / ref.w);
+    }
+    if (h > hh) {
+      h = hh;
+      w = h * (ref.w / ref.h);
+    }
+  }
+  const right = start.x + start.w;
+  const bottom = start.y + start.h;
+  let x = corner.endsWith("Left") ? right - w : start.x;
+  let y = corner.startsWith("top") ? bottom - h : start.y;
+  if (enlarged || settings.anchor !== "workspace") {
+    x = Math.max(0, Math.min(hw - w, x));
+    y = Math.max(0, Math.min(hh - h, y));
+  }
+  return { x, y, w, h };
+}
+
+function nodeGraphMiniPerformMoveHostRect(start, dx, dy) {
+  const settings = nodeGraphMiniPerformSettings();
+  let x = start.x + dx;
+  let y = start.y + dy;
+  if (nodeGraphMiniPerformEnlarged.on || settings.anchor !== "workspace") {
+    const host = document.getElementById("nodeGraphWorkspace");
+    const hw = host?.clientWidth || start.w;
+    const hh = host?.clientHeight || start.h;
+    x = Math.max(0, Math.min(hw - start.w, x));
+    y = Math.max(0, Math.min(hh - start.h, y));
+  }
+  return { x, y, w: start.w, h: start.h };
+}
+
+function nodeGraphMiniPerformTileRectFromDrag(drag, dx, dy) {
+  const frame = nodeGraphMiniPerformFrame();
+  const settings = nodeGraphMiniPerformSettings();
+  const zoom = !nodeGraphMiniPerformEnlarged.on && settings.anchor === "workspace"
+    ? nodeGraphMiniPerformCamera().zoom
+    : 1;
+  const scale = frame.s / zoom;
+  const step = nodeGraphMiniPerformDragFraction(dx, dy, frame.ref.w, frame.ref.h, scale, zoom);
+  let { x, y, w, h, z } = drag.origin;
+  if (drag.tileKind === "move") {
+    x += step.x;
+    y += step.y;
+  } else {
+    const c = drag.tileCorner;
+    if (c.includes("e")) w += step.x;
+    if (c.includes("s")) h += step.y;
+    if (c.includes("w")) {
+      x += step.x;
+      w -= step.x;
+    }
+    if (c.includes("n")) {
+      y += step.y;
+      h -= step.y;
+    }
+  }
+  return typeof nodeGraphLayoutCanvasNormalizeRect === "function"
+    ? nodeGraphLayoutCanvasNormalizeRect({ x, y, w, h, z }, z)
+    : { x, y, w, h, z };
+}
+
+function nodeGraphMiniPerformReleaseClick(event) {
   const now = typeof performance !== "undefined" ? performance.now() : Date.now();
-  const last = nodeGraphMiniPerformClick._last || 0;
-  nodeGraphMiniPerformClick._last = now;
-  if (now - last < 320) {
-    // Double click / double tap: open F perform (the mini view hides itself while F is up).
-    nodeGraphMiniPerformClick._last = 0;
-    if (typeof nodeGraphLayoutCanvasMode === "function" && nodeGraphLayoutCanvasMode() === "off"
+  const last = nodeGraphMiniPerformReleaseClick._last || 0;
+  nodeGraphMiniPerformReleaseClick._last = now;
+  const double = now - last < 320;
+  if (double) nodeGraphMiniPerformReleaseClick._last = 0;
+  const arrange = nodeGraphMiniPerformSettings().mode === "arrange";
+  const hit = nodeGraphMiniPerformTileHit(event.clientX, event.clientY);
+  if (hit?.tile) {
+    if (typeof setNodeGraphNodeSelection === "function") setNodeGraphNodeSelection([hit.tile.nodeId]);
+    if (double && !arrange && typeof nodeGraphLayoutCanvasMode === "function" && nodeGraphLayoutCanvasMode() === "off"
       && typeof toggleNodeGraphLayoutCanvasView === "function") {
       toggleNodeGraphLayoutCanvasView();
     }
     return;
   }
-  const tile = nodeGraphMiniPerformTileAt(event.clientX, event.clientY);
-  if (tile) nodeGraphMiniPerformFocusNode(tile.nodeId);
+  if (double) nodeGraphMiniPerformToggleEnlarged();
+}
+
+const NODE_GRAPH_MINI_PERFORM_CONTROL_SEL = ".node-knob-face, .node-slider-readout, .node-plugin-slider-face";
+
+/** Module-layout point under a mini-view pixel, from the maps the GL pass stores. */
+function nodeGraphMiniPerformLayoutAt(clientX, clientY) {
+  const view = document.getElementById("nodeMiniPerformView");
+  const rect = view?.getBoundingClientRect?.();
+  const maps = view?._miniMaps;
+  if (!rect || !maps?.length) return null;
+  const x = clientX - rect.left;
+  const y = clientY - rect.top;
+  for (let i = maps.length - 1; i >= 0; i -= 1) {
+    const map = maps[i];
+    if (!(map.scale > 0) || x < map.x || y < map.y || x > map.x + map.w || y > map.y + map.h) continue;
+    return {
+      nodeId: map.nodeId,
+      x: map.layoutX + (x - map.x) / map.scale,
+      y: map.layoutY + (y - map.y) / map.scale,
+    };
+  }
+  return null;
+}
+
+/** Knob or slider drawn in the mini picture. */
+function nodeGraphMiniPerformControlAt(clientX, clientY) {
+  const at = nodeGraphMiniPerformLayoutAt(clientX, clientY);
+  if (!at || typeof nodeGraphNodeElement !== "function" || typeof nodeGraphModuleLayoutBox !== "function") return null;
+  const moduleEl = nodeGraphNodeElement(at.nodeId);
+  if (!moduleEl) return null;
+  const nodes = moduleEl.querySelectorAll(NODE_GRAPH_MINI_PERFORM_CONTROL_SEL);
+  let best = null;
+  let bestArea = Infinity;
+  for (let i = 0; i < nodes.length; i += 1) {
+    const node = nodes[i];
+    if (node.closest("[hidden]")) continue;
+    const box = nodeGraphModuleLayoutBox(node, moduleEl);
+    if (!box || at.x < box.x || at.y < box.y || at.x > box.x + box.w || at.y > box.y + box.h) continue;
+    const area = box.w * box.h;
+    if (area < bestArea) {
+      best = node;
+      bestArea = area;
+    }
+  }
+  return best;
+}
+
+/**
+ * Start the real knob/slider drag from a press on its picture.
+ * The hit test needs a point on the live control. The drag then tracks the
+ * real pointer, so the value follows the hand in the mini view.
+ */
+function nodeGraphMiniPerformForwardControl(event, surface) {
+  const rect = surface.getBoundingClientRect?.();
+  if (!rect || !(rect.width > 0) || !(rect.height > 0) || typeof beginNodeSliderDrag !== "function") return false;
+  const fakeX = rect.left + rect.width / 2;
+  const fakeY = rect.top + rect.height / 2;
+  const forwarded = new Proxy(event, {
+    get(source, key) {
+      if (key === "target" || key === "currentTarget") return surface;
+      if (key === "clientX") return fakeX;
+      if (key === "clientY") return fakeY;
+      const value = source[key];
+      return typeof value === "function" ? value.bind(source) : value;
+    },
+  });
+  beginNodeSliderDrag(forwarded);
+  const drag = nodeGraphMvp?.sliderDragging;
+  if (drag && drag.surface === surface) {
+    drag.startX = event.clientX;
+    drag.startY = event.clientY;
+    return true;
+  }
+  return nodeGraphMvp?.sliderLastPointerDown?.surface === surface;
+}
+
+function beginNodeGraphMiniPerformPointer(event) {
+  const view = document.getElementById("nodeMiniPerformView");
+  if (!view || event.button !== 0 || view.hidden) return;
+  const mode = nodeGraphMiniPerformSettings().mode;
+  if (mode === "background") return;
+  const positioning = mode === "position";
+  const arrange = mode === "arrange";
+  if (mode === "perform") {
+    const control = nodeGraphMiniPerformControlAt(event.clientX, event.clientY);
+    if (control && nodeGraphMiniPerformForwardControl(event, control)) {
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
+  }
+  if (!positioning && !arrange && mode !== "perform") return;
+  event.preventDefault();
+  event.stopPropagation();
+  const placed = nodeGraphMiniPerformHostRect();
+  const corner = positioning ? nodeGraphMiniPerformCornerAt(view.getBoundingClientRect(), event.clientX, event.clientY) : "";
+  const hit = corner ? null : nodeGraphMiniPerformTileHit(event.clientX, event.clientY);
+  const tileDrag = Boolean(arrange && hit?.tile);
+  let origin = null;
+  if (tileDrag && typeof nodeGraphLayoutCanvasElementForNode === "function") {
+    const el = nodeGraphLayoutCanvasElementForNode(hit.tile.nodeId);
+    origin = typeof nodeGraphLayoutCanvasNormalizeRect === "function"
+      ? nodeGraphLayoutCanvasNormalizeRect(el, el?.z || 0)
+      : { x: el?.x || 0, y: el?.y || 0, w: el?.w || 0.36, h: el?.h || 0.32, z: el?.z || 0 };
+  }
+  const drag = {
+    id: event.pointerId,
+    x0: event.clientX,
+    y0: event.clientY,
+    start: { x: placed.x, y: placed.y, w: placed.w, h: placed.h },
+    corner,
+    kind: tileDrag ? "tile" : (positioning ? (corner ? "resize" : "move") : "click"),
+    tileKind: hit?.corner ? "resize" : "move",
+    tileCorner: hit?.corner || "",
+    nodeId: hit?.tile?.nodeId || "",
+    origin,
+    view,
+    moved: false,
+  };
+  const move = (e) => {
+    if (!nodeGraphMiniPerformDrag || e.pointerId !== drag.id) return;
+    if (drag.kind === "click") return;
+    const dx = e.clientX - drag.x0;
+    const dy = e.clientY - drag.y0;
+    if (!drag.moved && Math.hypot(dx, dy) < 4) return;
+    drag.moved = true;
+    view._miniDragging = true;
+    if (drag.kind === "tile") {
+      const rect = nodeGraphMiniPerformTileRectFromDrag(drag, dx, dy);
+      if (typeof nodeGraphLayoutCanvasWriteRect === "function") {
+        nodeGraphLayoutCanvasWriteRect(drag.nodeId, rect, { persist: false });
+      }
+      return;
+    }
+    const next = drag.corner
+      ? nodeGraphMiniPerformResizeHostRect(drag.start, dx, dy, drag.corner)
+      : nodeGraphMiniPerformMoveHostRect(drag.start, dx, dy);
+    nodeGraphMiniPerformApplyHostRect(next, { persist: false });
+  };
+  const up = (e) => {
+    if (!nodeGraphMiniPerformDrag || e.pointerId !== drag.id) return;
+    view.removeEventListener("pointermove", move);
+    view.removeEventListener("pointerup", up);
+    view.removeEventListener("pointercancel", up);
+    view._miniDragging = false;
+    nodeGraphMiniPerformDrag = null;
+    if (!drag.moved) {
+      nodeGraphMiniPerformReleaseClick(e);
+      return;
+    }
+    if (drag.kind === "tile") {
+      const rect = nodeGraphMiniPerformTileRectFromDrag(drag, e.clientX - drag.x0, e.clientY - drag.y0);
+      if (typeof nodeGraphLayoutCanvasWriteRect === "function") nodeGraphLayoutCanvasWriteRect(drag.nodeId, rect);
+      return;
+    }
+    if (drag.kind === "click") return;
+    saveNodeGraphMiniPerformSettings();
+  };
+  drag.move = move;
+  drag.up = up;
+  nodeGraphMiniPerformDrag = drag;
+  try { view.setPointerCapture(event.pointerId); } catch (_error) { /* not active */ }
+  view.addEventListener("pointermove", move);
+  view.addEventListener("pointerup", up);
+  view.addEventListener("pointercancel", up);
+}
+
+function nodeGraphMiniPerformResetPlacement() {
+  const settings = nodeGraphMiniPerformSettings();
+  nodeGraphMiniPerformExitEnlarged();
+  if (settings.anchor === "workspace") {
+    const spot = nodeGraphMiniPerformViewCentreWorld({ ...settings, width: 360 });
+    setNodeGraphMiniPerformSettings({ width: 360, worldX: spot.x, worldY: spot.y });
+    return;
+  }
+  setNodeGraphMiniPerformSettings({
+    width: 360,
+    corner: "bottomRight",
+    offsetX: 16,
+    offsetY: 16,
+  });
 }
 
 // ---- Command Center page ----
@@ -430,10 +770,6 @@ function setNodeGraphMiniPerformPageOpen(open) {
   if (!panel) return;
   const switching = Boolean(nodeGraphMvp?._unifiedWindowSwitching);
   if (open && !switching && typeof openNodeGraphUnifiedWindowPage === "function") {
-    if (!panel.hidden && typeof pulseNodeGraphFloatingWindowAttention === "function") {
-      openNodeGraphUnifiedWindowPage("miniPerform");
-      return;
-    }
     openNodeGraphUnifiedWindowPage("miniPerform");
     return;
   }
@@ -475,6 +811,25 @@ function nodeGraphMiniPerformInput(key, type, attrs = {}) {
   return input;
 }
 
+function nodeGraphMiniPerformButtonRow(label, key) {
+  const row = document.createElement("div");
+  row.className = "node-mini-perform-row node-mini-perform-row-stack";
+  const text = document.createElement("span");
+  text.textContent = label;
+  const group = document.createElement("div");
+  group.className = "node-mini-perform-choices";
+  for (const [value, name] of nodeGraphMiniPerformChoices[key]) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.dataset.miniPerformKey = key;
+    button.dataset.miniPerformValue = value;
+    button.textContent = name;
+    group.append(button);
+  }
+  row.append(text, group);
+  return row;
+}
+
 function renderNodeGraphMiniPerformPage() {
   const body = document.getElementById("nodeMiniPerformPageBody");
   if (!body) return;
@@ -484,21 +839,23 @@ function renderNodeGraphMiniPerformPage() {
     note.id = "nodeMiniPerformNote";
     note.className = "node-mini-perform-note";
     note.textContent = "Only in the circuit builder.";
+    const reset = document.createElement("button");
+    reset.type = "button";
+    reset.dataset.miniPerformKey = "reset";
+    reset.textContent = "Reset position and size";
     const rows = [
-      nodeGraphMiniPerformRow("Show mini view (Shift+F)", nodeGraphMiniPerformInput("show", "checkbox")),
+      nodeGraphMiniPerformButtonRow("Mini view mode (Shift+F)", "mode"),
       nodeGraphMiniPerformRow("Anchor", nodeGraphMiniPerformSelect("anchor")),
-      nodeGraphMiniPerformRow("Corner", nodeGraphMiniPerformSelect("corner")),
-      nodeGraphMiniPerformRow("Margin (px)", nodeGraphMiniPerformInput("margin", "number", { min: 0, max: 200, step: 1 })),
-      nodeGraphMiniPerformRow("Width (px)", nodeGraphMiniPerformInput("width", "number", { min: 120, max: 1600, step: 10 })),
-      nodeGraphMiniPerformRow("Reference screen", nodeGraphMiniPerformSelect("reference")),
+      nodeGraphMiniPerformButtonRow("Aspect ratio", "aspect"),
       nodeGraphMiniPerformRow("Opacity", nodeGraphMiniPerformInput("opacity", "range", { min: 0.1, max: 1, step: 0.05 })),
-      nodeGraphMiniPerformRow("Pointer", nodeGraphMiniPerformSelect("pointer")),
       nodeGraphMiniPerformRow("Refresh rate", nodeGraphMiniPerformSelect("refresh")),
       nodeGraphMiniPerformRow("Show frame", nodeGraphMiniPerformInput("frame", "checkbox")),
+      nodeGraphMiniPerformRow("Placement", reset),
     ];
     body.replaceChildren(note, ...rows);
     body.addEventListener("change", handleNodeGraphMiniPerformControl);
     body.addEventListener("input", handleNodeGraphMiniPerformControl);
+    body.addEventListener("click", handleNodeGraphMiniPerformControl);
   }
   syncNodeGraphMiniPerformPage();
 }
@@ -507,7 +864,17 @@ function handleNodeGraphMiniPerformControl(event) {
   const control = event.target;
   const key = control?.dataset?.miniPerformKey;
   if (!key) return;
-  // Number boxes commit on change only, so typing "3" toward "360" does not clamp.
+  if (key === "reset") {
+    if (event.type !== "click") return;
+    nodeGraphMiniPerformResetPlacement();
+    return;
+  }
+  if (control.dataset.miniPerformValue) {
+    if (event.type !== "click") return;
+    setNodeGraphMiniPerformSettings({ [key]: control.dataset.miniPerformValue });
+    return;
+  }
+  if (event.type === "click") return;
   if (event.type === "input" && control.type === "number") return;
   let value;
   if (control.type === "checkbox") value = control.checked;
@@ -530,11 +897,16 @@ function syncNodeGraphMiniPerformPage() {
   if (note) note.hidden = allowed;
   for (const control of body.querySelectorAll("[data-mini-perform-key]")) {
     const key = control.dataset.miniPerformKey;
-    control.disabled = !allowed;
+    control.disabled = !allowed && key !== "reset";
+    if (control.dataset.miniPerformValue) {
+      control.setAttribute("aria-pressed", String(settings[key] === control.dataset.miniPerformValue));
+      continue;
+    }
     if (document.activeElement === control && control.type === "number") continue;
     if (control.type === "checkbox") control.checked = Boolean(settings[key]);
-    else control.value = String(settings[key]);
-    if (key === "corner" || key === "margin") control.closest("label").hidden = settings.anchor === "workspace";
+    else if (control.tagName === "SELECT" || control.type === "range" || control.type === "number") {
+      control.value = String(settings[key]);
+    }
   }
 }
 
@@ -560,9 +932,13 @@ function bindNodeGraphMiniPerformPageEvents() {
   });
   window.addEventListener("storage", (event) => {
     if (event.key !== NODE_GRAPH_MINI_PERFORM_STORAGE_KEY) return;
+    const was = nodeGraphMiniPerformShown();
     nodeGraphMvp.miniPerform = null;
-    setNodeGraphMiniPerformSettings({}, { persist: false });
+    nodeGraphMiniPerformSettings();
+    syncNodeGraphMiniPerformPage();
+    nodeGraphMiniPerformAfterChange(was);
   });
+  if (typeof renderNodeGraphModularViewModeButtons === "function") renderNodeGraphModularViewModeButtons();
   nodeGraphMiniPerformEnsureLoop();
 }
 

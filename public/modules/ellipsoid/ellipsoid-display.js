@@ -68,6 +68,15 @@ function nodeGraphRoundShapeLivePlaying() {
 /** Unit-orbit cursor from live oscillator phase (same math as the stroke). */
 function nodeGraphRoundShapeLiveCursor(nodeId, node, section) {
   const shape = Math.max(0, Math.min(1, nodeGraphFiniteNumber(nodeGraphRoundShapeLiveParam(node, "morph", 0))));
+  const liveX = nodeGraphRoundShapeReadScopePort(nodeId, "Bi X");
+  const liveY = nodeGraphRoundShapeReadScopePort(nodeId, "Bi Y");
+  if (Number.isFinite(liveX) && Number.isFinite(liveY)) {
+    const amp = Math.max(1e-9, Math.abs(nodeGraphFiniteNumber(nodeGraphRoundShapeLiveParam(node, "amplitude", 1))) || 1);
+    if (section) {
+      section._roundShapeClock = Number.NaN;
+    }
+    return { x: liveX / amp, y: liveY / amp };
+  }
   let phase = nodeGraphRoundShapeReadScopePort(nodeId, "__Phase");
   if (!Number.isFinite(phase) && typeof nodeGraphMvp !== "undefined") {
     const stored = nodeGraphMvp?.live?.runtime?.phases?.get?.(nodeId);
@@ -75,6 +84,9 @@ function nodeGraphRoundShapeLiveCursor(nodeId, node, section) {
       const offset = nodeGraphFiniteNumber(nodeGraphRoundShapeLiveParam(node, "phase", 0));
       phase = Number(stored) + offset;
     }
+  }
+  if (Number.isFinite(phase) && section) {
+    section._roundShapeClock = Number.NaN;
   }
   if (!Number.isFinite(phase) && nodeGraphRoundShapeLivePlaying()) {
     const now = (typeof performance !== "undefined" ? performance.now() : Date.now()) / 1000;
@@ -320,15 +332,25 @@ function drawNodeGraphRoundShapeDisplayInner(section) {
   let px = null;
   let py = null;
   if (isEllipsoidOsc) {
-    let phase = nodeGraphRoundShapeReadScopePort(nodeId, "__Phase");
-    if (!Number.isFinite(phase) && typeof nodeGraphMvp !== "undefined") {
+    const liveX = nodeGraphRoundShapeReadScopePort(nodeId, "Left");
+    const liveY = nodeGraphRoundShapeReadScopePort(nodeId, "Right");
+    if (Number.isFinite(liveX) && Number.isFinite(liveY)) {
+      const amp = Math.max(1e-9, Math.abs(nodeGraphFiniteNumber(nodeGraphRoundShapeLiveParam(node, "amplitude", 1))) || 1);
+      px = cx + (liveX / amp) * viewScale;
+      py = cy - (liveY / amp) * viewScale;
+    }
+    let phase = Number.NaN;
+    if (!Number.isFinite(px)) {
+      phase = nodeGraphRoundShapeReadScopePort(nodeId, "__Phase");
+    }
+    if (!Number.isFinite(phase) && !Number.isFinite(px) && typeof nodeGraphMvp !== "undefined") {
       const stored = nodeGraphMvp?.live?.runtime?.phases?.get?.(nodeId);
       if (Number.isFinite(Number(stored))) {
         const offset = nodeGraphFiniteNumber(nodeGraphRoundShapeLiveParam(node, "phase", 0));
         phase = Number(stored) + offset;
       }
     }
-    if (!Number.isFinite(phase) && nodeGraphRoundShapeLivePlaying()) {
+    if (!Number.isFinite(phase) && !Number.isFinite(px) && nodeGraphRoundShapeLivePlaying()) {
       const now = (typeof performance !== "undefined" ? performance.now() : Date.now()) / 1000;
       const freq = nodeGraphFiniteNumber(nodeGraphRoundShapeLiveParam(node, "frequency", 100));
       const offset = nodeGraphFiniteNumber(nodeGraphRoundShapeLiveParam(node, "phase", 0));
@@ -347,12 +369,14 @@ function drawNodeGraphRoundShapeDisplayInner(section) {
         phase = offset;
       }
     }
-    const pt = nodeGraphRoundShapeEllipsoidOscPoint(
-      Number.isFinite(phase) ? phase : 0,
-      node,
-    );
-    px = cx + pt.x * viewScale;
-    py = cy - pt.y * viewScale;
+    if (!Number.isFinite(px) || !Number.isFinite(py)) {
+      const pt = nodeGraphRoundShapeEllipsoidOscPoint(
+        Number.isFinite(phase) ? phase : 0,
+        node,
+      );
+      px = cx + pt.x * viewScale;
+      py = cy - pt.y * viewScale;
+    }
   } else {
     const cursor = nodeGraphRoundShapeLiveCursor(nodeId, node, section);
     if (cursor && Number.isFinite(cursor.x) && Number.isFinite(cursor.y)) {

@@ -37,7 +37,8 @@ const state = () => page.evaluate(() => {
   }
   const r = v?.getBoundingClientRect();
   return {
-    show: nodeGraphMiniPerformSettings().show,
+    show: nodeGraphMiniPerformSettings().mode !== "off",
+    mode: nodeGraphMiniPerformSettings().mode,
     visible: Boolean(v && !v.hidden && r.width > 10),
     rect: r ? [Math.round(r.left), Math.round(r.top), Math.round(r.width), Math.round(r.height)] : null,
     tiles: (v?._miniTiles || []).map((t) => [t.nodeId, Math.round(t.x), Math.round(t.y), Math.round(t.w), Math.round(t.h)]),
@@ -57,16 +58,15 @@ await page.keyboard.press("Shift+F");
 await page.waitForTimeout(800);
 s = await state();
 console.log(JSON.stringify(s));
-gate(s.show && s.visible, "Shift+F shows the mini view");
+gate(s.mode === "perform" && s.visible, "Shift+F shows mini Perform");
 gate(s.tiles.length >= 1, `tiles laid out (${s.tiles.length})`);
 gate(s.lit >= 2 || s.hosts > 0, `mini view paints (${s.lit} lit cells, ${s.hosts} module hosts)`);
 await page.screenshot({ path: process.env.SHOT || "mp_probe.png" });
 // Persistence across reload.
 await load();
 s = await state();
-gate(s.show && s.visible, "show persists across reload (localStorage)");
-// Interactive: click a display tile -> module selected.
-await page.evaluate(() => setNodeGraphMiniPerformSettings({ pointer: "interactive" }));
+gate(s.mode === "perform" && s.visible, "perform persists across reload (localStorage)");
+// Click a display tile -> module selected.
 await page.waitForTimeout(400);
 s = await state();
 if (s.tiles.length) {
@@ -76,7 +76,7 @@ if (s.tiles.length) {
   const sel = await page.evaluate((nid) => Boolean(document.querySelector(`[data-node="${nid}"]`)?.classList.contains("selected")) || [...(nodeGraphMvp.selectedNodeIds || [])].map(String).includes(nid), id);
   gate(sel, `click on tile selects ${id}`);
 }
-// Drag in Screen mode snaps to the top-left corner.
+// Drag stays where it is dropped (no corner snap).
 const before = await state();
 if (process.env.DEBUG_MP) { page.on("console", (m) => console.log("  page:", m.text())); await page.evaluate(() => { const o = beginNodeGraphMiniPerformPointer; window.beginNodeGraphMiniPerformPointer = (e) => { console.log("down", e.clientX, e.clientY, e.button, nodeGraphMiniPerformSettings().pointer); return o(e); }; const v = document.getElementById("nodeMiniPerformView"); v.addEventListener("pointermove", (e) => { if (!v._mm) { v._mm = 1; console.log("move seen"); } }); window.addEventListener("pointerup", (e) => console.log("up", e.target.id || e.target.className), true); window.addEventListener("pointerdown", (e) => console.log("cap-down", e.clientX, e.clientY, e.target.id || e.target.className, e.pointerType), true); }); console.log("before", JSON.stringify(before.rect), await page.evaluate(() => { const v = document.getElementById("nodeMiniPerformView"); const r = v.getBoundingClientRect(); const e = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2); return [v.hidden, getComputedStyle(v).pointerEvents, getComputedStyle(v).zIndex, e?.id || e?.className, JSON.stringify(r)]; })); }
 await page.mouse.move(before.rect[0] + before.rect[2] / 2, before.rect[1] + before.rect[3] / 2);
@@ -84,8 +84,11 @@ await page.mouse.down();
 await page.mouse.move(200, 200, { steps: 12 });
 await page.mouse.up();
 await page.waitForTimeout(500);
-const corner = await page.evaluate(() => nodeGraphMiniPerformSettings().corner);
-gate(corner === "topLeft", `drag snaps to a corner (${corner})`);
+const dropped = await state();
+const expectX = before.rect[0] + (200 - (before.rect[0] + before.rect[2] / 2));
+gate(dropped.rect && Math.abs(dropped.rect[0] - Math.max(0, expectX)) < 12, `drag stays put (${dropped.rect} vs ${Math.round(expectX)})`);
+const cursor = await page.evaluate(() => getComputedStyle(document.getElementById("nodeMiniPerformView")).cursor);
+gate(cursor === "default", `cursor stays default (${cursor})`);
 // Resize grip: width changes.
 const g0 = await state();
 const w0 = await page.evaluate(() => nodeGraphMiniPerformSettings().width);
@@ -95,7 +98,6 @@ await page.waitForTimeout(400);
 const w1 = await page.evaluate(() => nodeGraphMiniPerformSettings().width);
 gate(w1 > w0, `grip resizes width (${w0} -> ${w1})`);
 // Hidden while F mode is on.
-await page.evaluate(() => setNodeGraphMiniPerformSettings({ pointer: "clickThrough" }));
 await page.mouse.click(800, 960);
 await page.keyboard.press("f");
 await page.waitForTimeout(800);

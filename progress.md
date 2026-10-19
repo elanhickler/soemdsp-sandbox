@@ -1,3 +1,23 @@
+## 2026-10-18 - Resonant Envelope plan (docs only)
+
+- Added `docs/RESONANT_ENVELOPE_PLAN.md` (Argi via Thoughts; exploration idea, not a committed build, owner TBD). Name confirmed **Resonant Envelope**; not "filter envelope", and not "Ping Envelope" (an existing module, documented in section 2 for context). Idea: a feedback envelope is a lowpass with its pole at DC; moving the pole off-axis makes it ring (radius = decay time, angle = ring frequency). Core: TPT SVF (`tpt_svf.h`, reuse needs Argi's OK) at envelope rate, Decay + Resonance (zeta = 4*200^-Resonance, dominant decay held). New `f` input (Softpop 2 convention, label ƒ) with Tracking 0..1, neutral at 440 Hz; Impulse (gate edge ping); Output Range Fit / Raw for overshoot vs the 0..1 / slider-clamp rules; native C++ only; WebGL2 shape preview from native. Milestones RE-1 (prototype and listening test) to RE-9, open questions A-J. Pointer in `docs/FUTURE_PLANNING.md`. Not committed.
+
+## 2026-10-18 - Mini performance view Round 2: Performance view naming (docs only)
+
+- Argi reversed the interim "Game view" label. User-facing name is **Performance view**: button "Show performance view [ F ]", mini "Mini performance view [ Shift+F ]", module setting "Show in performance view", page stays "Mini Performance View". Page icon planned 🖼️ → 🖥️ (code in local `4cc51840` still 🖼️ in `node-graph-unified-window.js` — change when implementing, not in this pass). Updated `docs/MINI_PERFORM_VIEW_PLAN.md` Round 2 (Design 6, MP-16, open question 9 settled), `docs/FUTURE_PLANNING.md`, `docs/PENCIL_PAGE_PLAN.md`. Behaviour unchanged. Not committed.
+
+## 2026-10-18 - Mini performance view Round 2: Game view naming and mini modes (docs only)
+
+- Revised Round 2 in `docs/MINI_PERFORM_VIEW_PLAN.md` (Argi): full-screen perform view is "Game view" in user-facing labels; top-bar 📱 becomes the labelled button "Show game view [ F ]" and, with F and the scene menu, calls one shared Game view cycle (off → Perform → Arrange → off). MP-16 rewritten (supersedes "phone opens perform only", never built); new MP-17: Shift+F cycles the mini view off → Perform → Arrange → off, independent of the Game view; mini Arrange drags tiles through `nodeGraphLayoutCanvasWriteRect` (mini view no longer purely read-only in Arrange). Scene menu proposal: Game view [ F ] + new Mini game view [ Shift+F ], legacy hidden buttons deleted. Mini stays hidden while the Game view is open (keeps its mode, drops Enlarged, cancels a tile drag). MP-14 tests, tracker updated; open questions 9-14. Not committed.
+
+## 2026-10-18 - Mini performance view Round 2: Enlarged + phone button (docs only)
+
+- Extended Round 2 in `docs/MINI_PERFORM_VIEW_PLAN.md` (Argi): MP-15 Enlarged (double-click frame/empty toggles large centred view, Escape exits, tile double-click still opens F; Escape precedence after screen-solo, before metamodule/chrome; F Escape unchanged); MP-16 top-bar phone button opens/closes perform only (never arrange); arrange stays on F key and scene menu. MP-14 tests cover both. Tracker `docs/FUTURE_PLANNING.md` now MP-10..MP-16. Not committed.
+
+## 2026-10-18 - Mini performance view round 2 plan (docs only)
+
+- Added Round 2 to `docs/MINI_PERFORM_VIEW_PLAN.md` (Argi; planned, owner TBD), tracker MP-10..MP-14: all four corners drag to resize (opposite corner fixed, ratio locked) and the frame drags to move with no snap, always on (Pointer / Click-through removed); default arrow cursor everywhere with GL corner marks on hover; page drops Corner, Margin, Width, Reference screen and Pointer; Aspect ratio becomes a wrapping button row (Window, 16:9, 4:3, 1:1, 9:16, Phone portrait, Phone landscape). No migration of removed per-machine settings. Six open questions. Not committed.
+
 ## 2026-10-18 - Color row plan (docs only)
 
 - Added `docs/COLOR_ROW_PLAN.md` (Argi; planned, owner TBD, for an outside agent): app-wide rule that color widgets sit in horizontal rows of 2 to 4 (`docs/APP_POLICY.md` §21). RoundShape display settings is the reference; Keypad is the example violator. Inventory of 36 color surfaces (10 compliant, 16 violating, 9 single-color pending a decision, 1 exempt) with file and line, tracker CR-1..CR-7 (shared row helper, conversion batches, headless smoke test `check_color_rows`), open questions. Pointer in `docs/FUTURE_PLANNING.md`. Not committed.

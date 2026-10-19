@@ -147,29 +147,11 @@ function bindNodeGraphSceneMenuEvents() {
     }
   });
   bindNodeGraphSceneElementEvent("nodeSceneToggleModularWindowedView", "click", () => {
-    if (
-      typeof nodeGraphMetamoduleToggleDisplaysForSelection === "function"
-      && nodeGraphMetamoduleToggleDisplaysForSelection()
-    ) {
-      return;
-    }
-    if (typeof toggleNodeGraphLayoutCanvasView === "function") {
-      toggleNodeGraphLayoutCanvasView();
-    }
+    if (typeof toggleNodeGraphPerformanceView === "function") toggleNodeGraphPerformanceView();
   });
-  // Legacy ids (hidden).
-  bindNodeGraphSceneElementEvent("nodeSceneToggleModularOnlyView", "click", () => {
-    if (
-      typeof nodeGraphMetamoduleToggleDisplaysForSelection === "function"
-      && nodeGraphMetamoduleToggleDisplaysForSelection()
-    ) {
-      return;
-    }
-    if (typeof toggleNodeGraphLayoutCanvasView === "function") {
-      toggleNodeGraphLayoutCanvasView();
-    }
+  bindNodeGraphSceneElementEvent("nodeSceneToggleMiniPerformView", "click", () => {
+    if (typeof toggleNodeGraphMiniPerformView === "function") toggleNodeGraphMiniPerformView();
   });
-  bindNodeGraphSceneElementEvent("nodeSceneToggleModularOnlyControls", "click", toggleNodeGraphAppChromeBarsVisibility);
   bindNodeGraphSceneElementEvent("nodeSceneOpenModuleBrowser", "click", () => {
     if (typeof openNodeGraphUnifiedWindowPage === "function") {
       openNodeGraphUnifiedWindowPage("moduleBrowser", {

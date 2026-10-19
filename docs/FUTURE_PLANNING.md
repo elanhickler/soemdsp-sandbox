@@ -2,13 +2,17 @@
 
 This file collects project-shaping ideas that should survive day-to-day implementation without becoming immediate scope.
 
+## Resonant Envelope (2026-10-18)
+
+Exploration idea (Argi), not a committed build: an envelope whose pole moves off the real axis so it rings as it decays (pole radius = decay time, angle = ring frequency; a plain feedback envelope is the angle-zero case). Coupled-integrator (TPT SVF) core with one Resonance control from smooth to bouncy, an `f` input with Tracking (neutral at 440 Hz), Impulse drive from the gate edge, and Fit / Raw output range. Native C++ only; relationship to the existing Ping Envelope is an open question. Plan: `docs/RESONANT_ENVELOPE_PLAN.md` (RE-1 prototype and listening test first; RE-1..RE-9, owner TBD, open questions A-J).
+
 ## Color rows (2026-10-18)
 
 App-wide rule: color widgets sit in horizontal rows of 2 to 4, never stacked one per line (`docs/APP_POLICY.md` §21). RoundShape display settings is the reference; Keypad and 15 other surfaces need converting. Plan: `docs/COLOR_ROW_PLAN.md` (CR-1..CR-7, owner TBD, open questions on single-color panels).
 
 ## Mini performance view (2026-10-18)
 
-Live, uniformly scaled copy of the F performance screen inside the circuit builder, turned on from a new Command Center page (Mini Performance View, Shift+F). GPU mirror of the pinned faces; faces stay in their modules; settings are UI preferences. Plan: `docs/MINI_PERFORM_VIEW_PLAN.md` (MP-1..MP-9, owner TBD, ready to implement).
+Live, uniformly scaled copy of the F performance screen inside the circuit builder, turned on from a new Command Center page (Mini Performance View, Shift+F). GPU mirror of the pinned faces; faces stay in their modules; settings are UI preferences. Plan: `docs/MINI_PERFORM_VIEW_PLAN.md`. MP-1..MP-6 and MP-8 done (local `4cc51840`); MP-7 after Pencil PE-4; MP-9 optional. Round 2 MP-10..MP-19 (draggable corners, default cursor, fewer page controls, aspect ratio buttons, Enlarged double-click / Escape; full-screen view renamed Performance view with a labelled Show performance view [ F ] button; F cycles the Performance view and Shift+F cycles the mini view off → Perform → Arrange → off, independently, with mini Arrange editing the layout; empty-canvas bouncing soundemote logo behind one cinematic monospace empty line, WebGL2 NEAREST; Snake select trail above the mini view / Enlarged, coordinated with Pencil PE-4 In-front order) planned, owner TBD.
 
 ## Pencil page (2026-10-18)
 

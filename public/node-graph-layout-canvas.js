@@ -1,4 +1,4 @@
-// Layout canvas: pinned displays fullscreen (phone button + F).
+// Performance view: pinned displays fullscreen (Show performance view button + F).
 // F cycle: off → perform → edit (arrange) → off.
 // Arrange mode: thin white phone-aspect guides (9:19.5); G toggles vertical/horizontal.
 // Freeform x/y/w/h only — no auto-grid / auto-organize.
@@ -589,19 +589,61 @@ function nodeGraphLayoutCanvasRefreshOpenStage() {
   return nodeGraphLayoutCanvasOpen(mode, { silent: true });
 }
 
+function nodeGraphLayoutCanvasClearEmptyEgg() {
+  if (nodeGraphMvp && typeof nodeGraphMvp === "object") nodeGraphMvp.layoutCanvasEmptyEgg = false;
+  document.getElementById("nodeLayoutCanvasEmptyEgg")?.remove();
+}
+
+function nodeGraphLayoutCanvasOpenEmptyEgg(mode, options = {}) {
+  const stage = typeof ensureNodeGraphScreenSoloStage === "function"
+    ? ensureNodeGraphScreenSoloStage()
+    : document.getElementById("nodeScreenSoloStage");
+  if (!(stage instanceof HTMLElement)) return false;
+  nodeGraphLayoutCanvasClearEmptyEgg();
+  const canvas = document.createElement("canvas");
+  canvas.id = "nodeLayoutCanvasEmptyEgg";
+  canvas.className = "node-layout-canvas-empty-egg";
+  canvas.setAttribute("aria-hidden", "true");
+  stage.append(canvas);
+  nodeGraphMvp.layoutCanvasMode = mode;
+  nodeGraphMvp.layoutCanvasActive = true;
+  nodeGraphMvp.layoutCanvasEmptyEgg = true;
+  document.body.classList.add("node-screen-solo-active", "node-layout-canvas-active");
+  document.body.classList.toggle("node-layout-canvas-edit", mode === "edit");
+  stage.hidden = false;
+  stage.classList.add("node-layout-canvas-stage");
+  stage.classList.toggle("node-layout-canvas-edit", mode === "edit");
+  stage.style.display = "block";
+  stage.setAttribute("aria-label", "Performance view");
+  if (options.silent !== true && typeof setNodeInteractionHelp === "function") {
+    setNodeInteractionHelp(NODE_GRAPH_EMPTY_CANVAS_LINE);
+  }
+  if (typeof renderNodeGraphModularViewModeButtons === "function") renderNodeGraphModularViewModeButtons();
+  if (typeof nodeGraphEmptyCanvasEnsureLoop === "function") nodeGraphEmptyCanvasEnsureLoop();
+  return true;
+}
+
 function nodeGraphLayoutCanvasOpen(mode = "perform", options = {}) {
+  if (typeof nodeGraphMiniPerformOnPerformanceViewOpening === "function") {
+    nodeGraphMiniPerformOnPerformanceViewOpening();
+  }
   const next = mode === "edit" ? "edit" : "perform";
   const ids = nodeGraphLayoutCanvasPinnedNodeIds();
   if (!ids.length) {
+    if (nodeGraphMvp?.emptyCanvasDvdEgg === true) {
+      return nodeGraphLayoutCanvasOpenEmptyEgg(next, options);
+    }
+    nodeGraphLayoutCanvasClearEmptyEgg();
     nodeGraphMvp.layoutCanvasMode = "off";
     nodeGraphMvp.layoutCanvasActive = false;
     if (options.silent !== true && typeof setNodeInteractionHelp === "function") {
       setNodeInteractionHelp(
-        "Canvas is empty. Open Display Settings on a module and enable “Show in canvas”.",
+        `Canvas is empty. Open Display Settings on a module and enable “${NODE_GRAPH_SHOW_IN_PERFORMANCE_VIEW_LABEL}”.`,
       );
     }
     return false;
   }
+  nodeGraphLayoutCanvasClearEmptyEgg();
   const started = beginNodeGraphLayoutCanvasStage(ids, next);
   if (!started) {
     nodeGraphLayoutCanvasSetIoHidden(false);
@@ -631,8 +673,8 @@ function nodeGraphLayoutCanvasOpen(mode = "perform", options = {}) {
     stage.setAttribute(
       "aria-label",
       next === "edit"
-        ? "Layout canvas arrange. Drag tiles to move, corners to resize. Phone guides on; G toggles vertical/horizontal. F exits arrange, F again exits canvas."
-        : "Layout canvas. F enters arrange mode, F again exits.",
+        ? "Performance view arrange. Drag tiles to move, corners to resize. Phone guides on; G toggles vertical/horizontal. F exits arrange, F again exits."
+        : "Performance view. F enters arrange mode, F again exits.",
     );
     nodeGraphLayoutCanvasSyncPhoneGuides(stage);
   }
@@ -644,8 +686,8 @@ function nodeGraphLayoutCanvasOpen(mode = "perform", options = {}) {
       : "guides vertical";
     setNodeInteractionHelp(
       next === "edit"
-        ? `Canvas arrange (${scope}): move/resize ${n} display${n === 1 ? "" : "s"}; ${guideHint} (G). F exits arrange.`
-        : `Canvas (${scope}): ${n} display${n === 1 ? "" : "s"}. F = arrange layout.`,
+        ? `Performance view arrange (${scope}): move/resize ${n} display${n === 1 ? "" : "s"}; ${guideHint} (G). F exits arrange.`
+        : `Performance view (${scope}): ${n} display${n === 1 ? "" : "s"}. F = arrange layout.`,
     );
   }
   if (typeof renderNodeGraphModularViewModeButtons === "function") {
@@ -674,6 +716,7 @@ function nodeGraphLayoutCanvasSetIoHidden(on) {
 }
 
 function nodeGraphLayoutCanvasClose(options = {}) {
+  nodeGraphLayoutCanvasClearEmptyEgg();
   // Perform / embed has no circuit builder to return to. Closing the canvas
   // is the black page. Open/refresh still calls endNodeGraphScreenSolo directly.
   if (typeof nodeGraphAppHotkeysLocked === "function" && nodeGraphAppHotkeysLocked()) {
@@ -698,7 +741,7 @@ function nodeGraphLayoutCanvasClose(options = {}) {
     nodeGraphMetamoduleRefreshAllMirrors();
   }
   if (options.silent !== true && typeof setNodeInteractionHelp === "function") {
-    setNodeInteractionHelp("Canvas off.");
+    setNodeInteractionHelp("Performance view off.");
   }
   if (typeof renderNodeGraphModularViewModeButtons === "function") {
     renderNodeGraphModularViewModeButtons();
@@ -718,7 +761,21 @@ function nodeGraphLayoutCanvasStageIsLive() {
 }
 
 /**
- * Phone + F cycle: off → perform → edit (arrange) → off.
+ * F / Show performance view / scene menu. Metamodule selection wins, then
+ * off → Perform → Arrange → off.
+ */
+function toggleNodeGraphPerformanceView(options = {}) {
+  if (
+    typeof nodeGraphMetamoduleToggleDisplaysForSelection === "function"
+    && nodeGraphMetamoduleToggleDisplaysForSelection()
+  ) {
+    return false;
+  }
+  return toggleNodeGraphLayoutCanvasView(options);
+}
+
+/**
+ * Performance view cycle: off → perform → edit (arrange) → off.
  * Arrange shows phone-aspect guides; G toggles vertical/horizontal.
  * No auto-organize; freeform rects only.
  */
@@ -947,8 +1004,8 @@ function bindNodeGraphLayoutCanvasSettingsControl() {
     if (typeof setNodeInteractionHelp === "function") {
       setNodeInteractionHelp(
         input.checked
-          ? "Show in canvas on. F = canvas, F again = arrange (phone guides; G flips), F again = exit."
-          : "Removed from canvas.",
+          ? `${NODE_GRAPH_SHOW_IN_PERFORMANCE_VIEW_LABEL} on. F = Performance view, F again = Arrange (phone guides; G flips), F again = exit.`
+          : "Removed from the performance view.",
       );
     }
   });

@@ -400,7 +400,7 @@ function bindNodeGraphHeaderControlEvents() {
   document
     .getElementById("nodeModularInfiniteViewButton")
     ?.addEventListener("click", () => {
-      // 💻 — exit layout canvas if open; stay on infinite modular workspace.
+      // Computer view — close the Performance view; stay on the infinite workspace.
       if (typeof nodeGraphLayoutCanvasClose === "function") {
         nodeGraphLayoutCanvasClose({ silent: true });
       }
@@ -408,19 +408,10 @@ function bindNodeGraphHeaderControlEvents() {
         setNodeGraphModularWindowedActive(false);
       }
     });
-  // 📱 — same as F: Meta canvas pin when a child is selected, else layout canvas.
   document
     .getElementById("nodeModularWindowedViewButton")
     ?.addEventListener("click", () => {
-      if (
-        typeof nodeGraphMetamoduleToggleDisplaysForSelection === "function"
-        && nodeGraphMetamoduleToggleDisplaysForSelection()
-      ) {
-        return;
-      }
-      if (typeof toggleNodeGraphLayoutCanvasView === "function") {
-        toggleNodeGraphLayoutCanvasView();
-      }
+      if (typeof toggleNodeGraphPerformanceView === "function") toggleNodeGraphPerformanceView();
     });
   document
     .getElementById("nodeSnapGridViewButton")
