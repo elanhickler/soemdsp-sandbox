@@ -1210,6 +1210,20 @@ const nodeGraphModuleDefinitions = (
         nonlinearSlider: false,
         step: "any"
       },
+      {
+        choices: ["Bipolar", "Unipolar"],
+        defaultValue: "0",
+        displayChoices: true,
+        divideChoicesVisibly: true,
+        key: "polarity",
+        label: "Polarity",
+        linearSmoothing: false,
+        max: "1",
+        mid: "0",
+        min: "0",
+        step: "1",
+        tooltip:
+          "Bipolar: outs swing -Amp..+Amp. Unipolar: 0.5*Amp*(v+1), so 0..Amp (0..1 at Amp 1; Amp 0 = 0). Applies to every active A..D tap; unused taps stay 0." },
     ]
   },
   sinCos: {
@@ -1288,6 +1302,20 @@ const nodeGraphModuleDefinitions = (
         nonlinearSlider: false,
         step: "any"
       },
+      {
+        choices: ["Bipolar", "Unipolar"],
+        defaultValue: "0",
+        displayChoices: true,
+        divideChoicesVisibly: true,
+        key: "polarity",
+        label: "Polarity",
+        linearSmoothing: false,
+        max: "1",
+        mid: "0",
+        min: "0",
+        step: "1",
+        tooltip:
+          "Bipolar: outs swing -Amp..+Amp. Unipolar: 0.5*Amp*(v+1), so 0..Amp (0..1 at Amp 1; Amp 0 = 0). Applies to sin and cos." },
     ]
   },
   archimedes: {

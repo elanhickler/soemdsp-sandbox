@@ -88,13 +88,18 @@ function nodeGraphSinCosReadPhase(nodeId, node, section) {
   return Number.NaN;
 }
 
-function nodeGraphSinCosSample(phase01, kind, amplitude) {
+// polarity 1 = Unipolar: same lift as the engine, 0.5*amp*(v+1).
+function nodeGraphSinCosSample(phase01, kind, amplitude, polarity = 0) {
   const cycle = nodeGraphFiniteNumber(phase01);
   const wrapped = cycle - Math.floor(cycle);
   const amp = Number(amplitude);
   const scale = Number.isFinite(amp) ? amp : 1;
   const angle = wrapped * Math.PI * 2;
   const y = kind === "cos" ? Math.cos(angle) : Math.sin(angle);
+  if (polarity >= 0.5) {
+    const lift = scale > 0 ? scale : 0;
+    return 0.5 * (y * scale + lift);
+  }
   return y * scale;
 }
 
@@ -157,6 +162,7 @@ function drawNodeGraphSinCosDisplayInner(section) {
     return;
   }
   const amplitude = nodeGraphSinCosLiveParam(node, "amp", 1);
+  const polarity = Math.round(nodeGraphFiniteNumber(nodeGraphSinCosLiveParam(node, "polarity", 0))) >= 1 ? 1 : 0;
   const phaseParam = nodeGraphFiniteNumber(nodeGraphSinCosLiveParam(node, "phase", 0));
   const drawSin = nodeGraphSinCosOutputHasWire(nodeId, "sin");
   const drawCos = nodeGraphSinCosOutputHasWire(nodeId, "cos");
@@ -177,6 +183,7 @@ function drawNodeGraphSinCosDisplayInner(section) {
     drawSin ? "sin" : "",
     drawCos ? "cos" : "",
     String(Number(amplitude).toFixed(4)),
+    polarity ? "uni" : "bi",
     String((phaseParam - Math.floor(phaseParam)).toFixed(4)),
     `${Math.round(rawW)}x${Math.round(rawH)}`,
   ].join("|");
@@ -224,14 +231,17 @@ function drawNodeGraphSinCosDisplayInner(section) {
   const midY = padY + innerH * 0.5;
   const halfH = innerH * 0.5;
   const mapX = (phase) => padX + phase * innerW;
-  const mapY = (value) => midY - value * halfH;
+  // Bipolar: -1..1 over the full height. Unipolar: 0 at the bottom, 1 at the top.
+  const mapY = polarity
+    ? (value) => padY + innerH - value * innerH
+    : (value) => midY - value * halfH;
   const samples = Math.max(32, Math.min(256, Math.ceil(innerW)));
   const wrap01 = (p) => {
     const n = nodeGraphFiniteNumber(p);
     return n - Math.floor(n);
   };
   const phaseOff = wrap01(phaseParam);
-  const sampleKind = (cycle01, kind) => nodeGraphSinCosSample(wrap01(cycle01 + phaseOff), kind, amplitude);
+  const sampleKind = (cycle01, kind) => nodeGraphSinCosSample(wrap01(cycle01 + phaseOff), kind, amplitude, polarity);
   const lines = [];
   const pushLine = (kind, color) => {
     const points = [];
@@ -256,7 +266,7 @@ function drawNodeGraphSinCosDisplayInner(section) {
   const dots = [];
   // One white phase marker per drawn line. Lines stay red/blue; dots do not.
   const pushDot = (kind) => {
-    const py = mapY(nodeGraphSinCosSample(play, kind, amplitude));
+    const py = mapY(nodeGraphSinCosSample(play, kind, amplitude, polarity));
     if (!Number.isFinite(px) || !Number.isFinite(py)) return;
     dots.push({ x: px, y: py, color: NODE_GRAPH_SINCOS_DOT, radius: dotR });
   };

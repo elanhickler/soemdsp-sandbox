@@ -513,6 +513,9 @@ NodeLiveAudioProcessor.prototype.mapNativeGraphParamId = function mapNativeGraph
   if (t === "audioPlayer") {
     if (k === "direction") return P.NATIVE_GRAPH_PARAM_PHASE;
   }
+  if (t === "sineWavetable" || t === "sinCos") {
+    if (k === "polarity") return P.NATIVE_GRAPH_PARAM_CENTER;
+  }
   if (t === "sampleHold") {
     if (k === "smoothing") return P.NATIVE_GRAPH_PARAM_MIX;
     if (k === "interpolate") return P.NATIVE_GRAPH_PARAM_SHAPE;
@@ -4941,6 +4944,8 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
       push("phase", P.NATIVE_GRAPH_PARAM_PHASE, cont("phase", 0));
       push("mode", P.NATIVE_GRAPH_PARAM_MODE, disc("mode", 2));
       push("method", P.NATIVE_GRAPH_PARAM_SHAPE, disc("method", 1));
+      // center = polarity (0 bipolar / 1 unipolar 0.5*amp*(v+1)) on active outs.
+      push("polarity", P.NATIVE_GRAPH_PARAM_CENTER, disc("polarity", 0));
       continue;
     }
     if (type === "sinCos") {
@@ -4948,6 +4953,7 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
       push("amp", P.NATIVE_GRAPH_PARAM_AMPLITUDE, cont("amp", 1));
       push("phase", P.NATIVE_GRAPH_PARAM_PHASE, cont("phase", 0));
       push("method", P.NATIVE_GRAPH_PARAM_SHAPE, disc("method", 1));
+      push("polarity", P.NATIVE_GRAPH_PARAM_CENTER, disc("polarity", 0));
       continue;
     }
     if (type === "antisaw") {

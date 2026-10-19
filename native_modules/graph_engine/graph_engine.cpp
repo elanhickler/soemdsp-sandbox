@@ -6497,6 +6497,11 @@ static void sin_cos_pair_advance(
     if (mode < 0) mode = 0;
     if (mode > 5) mode = 5;
   }
+  // Polarity (center): 0 = Bipolar (+-amp, saved patches), 1 = Unipolar
+  // 0.5*amp*(v+1) on every active out (0..amp; amp 0 = silent 0).
+  const bool unipolar = control_effective(node.center) >= 0.5;
+  const int activeOuts = !applyMode4 ? 2
+    : (mode <= 1 ? 1 : (mode <= 3 ? 2 : (mode == 4 ? 3 : 4)));
 
   if (!liveReset) node.lastReset = 0.0;
   for (int f = 0; f < frames; f++) {
@@ -6518,16 +6523,25 @@ static void sin_cos_pair_advance(
     soemdsp_sine_wavetable_sample(node.nativeHandle, phaseOff, freq, amp, sr, inc);
     const double sn = soemdsp_sine_wavetable_sin(node.nativeHandle);
     const double cn = soemdsp_sine_wavetable_cos(node.nativeHandle);
+    // Unipolar centre = native level floor (amp < 0 reads as 0 there too).
+    const double ampU = amp > 0.0 ? amp : 0.0;
     if (applyMode4) {
       double a = 0.0, b = 0.0, c = 0.0, d = 0.0;
       sin_cos4_from_pair(sn, cn, mode, &a, &b, &c, &d);
+      if (unipolar) {
+        // Unused taps stay 0 (only the active ones are lifted).
+        a = 0.5 * (a + ampU);
+        if (activeOuts > 1) b = 0.5 * (b + ampU);
+        if (activeOuts > 2) c = 0.5 * (c + ampU);
+        if (activeOuts > 3) d = 0.5 * (d + ampU);
+      }
       node.buf[kPortMono][f] = a;
       node.buf[kPortLeft][f] = b;
       node.buf[kPortRight][f] = c;
       node.buf[kPortSaw][f] = d;
     } else {
-      node.buf[kPortMono][f] = sn;
-      node.buf[kPortLeft][f] = cn;
+      node.buf[kPortMono][f] = unipolar ? 0.5 * (sn + ampU) : sn;
+      node.buf[kPortLeft][f] = unipolar ? 0.5 * (cn + ampU) : cn;
     }
     // Face playhead (cycles 0…1).
     node.buf[kPortPhase01][f] = soemdsp_sine_wavetable_phase(node.nativeHandle);
@@ -16224,5 +16238,5 @@ extern "C" int soemdsp_graph_version() {
   // 170: EQ Filter ZDF ƒ input (resolve_osc_hz)
   // 171: ƒ on Ladder/303/Mode/Cookbook/IIR/Papoulis/ZDF filters + soemdsp_graph_node_effective_hz
   // 174: live add/remove/connect/disconnect keep compiled and other nodes' native handles
-  return 181; // 181: Flower Child ƒ in (resonance-pitch Hz replaces Cutoff). was 180: Robin Sinepulse 0–1 jack is sweep position (High=1, Low=0). was 179: Resonant Envelope (221)
+  return 182; // 182: SinCos / SinCos4 Polarity (center 0 Bipolar / 1 Unipolar). was 181: Flower Child ƒ in (resonance-pitch Hz replaces Cutoff). was 180: Robin Sinepulse 0–1 jack is sweep position (High=1, Low=0). was 179: Resonant Envelope (221)
 }
