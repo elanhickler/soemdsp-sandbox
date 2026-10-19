@@ -114,8 +114,11 @@
   /** Copy a finished picture into a stable texture other modules can bind. */
   function nodeGraphPicturePublish(nodeId, texture, width, height) {
     const id = String(nodeId || "").trim();
+    if (!id || !texture) return false;
+    // VG-2: no cable reads this picture, so skip the copy.
+    if (!nodeGraphPictureHasConsumer(id)) return false;
     const dev = nodeGraphPictureDevice();
-    if (!id || !texture || !dev?.gl) return false;
+    if (!dev?.gl) return false;
     const gl = dev.gl;
     const slot = ensureExport(gl, id, width, height);
     if (!slot) return false;
@@ -151,7 +154,10 @@
   // reused until the list changes (new array or new length: every patch edit
   // commits a fresh array). Reads and consumer checks never walk the list.
   // nodeGraphPictureEdgesInvalidate() forces a rebuild after an in-place edit.
-  const edges = { list: null, length: -1, inlets: new Map(), sources: new Set(), rebuilds: 0, lookups: 0 };
+  const edges = { list: null, length: -1, nodes: null, nodesLength: -1, inlets: new Map(), sources: new Set(), rebuilds: 0, lookups: 0 };
+  // RGB Picture also takes a source's picture over its R/G/B (and rgba) cables
+  // through nodeGraphPictureGet, so those sources count as consumed too.
+  const PICTURE_GET_INLETS = { rasterRgb: new Set(["R", "G", "B", "rgba"]) };
 
   function patchConnections() {
     return nodeGraphMvp?.patch?.connections || nodeGraphMvp?.connections || null;
@@ -160,16 +166,26 @@
   function nodeGraphPictureEdges() {
     const list = patchConnections();
     const length = Array.isArray(list) ? list.length : 0;
-    if (list === edges.list && length === edges.length) return edges;
+    const nodes = nodeGraphMvp?.patch?.nodes || null;
+    const nodesLength = Array.isArray(nodes) ? nodes.length : 0;
+    if (list === edges.list && length === edges.length && nodes === edges.nodes && nodesLength === edges.nodesLength) return edges;
     edges.list = list;
     edges.length = length;
+    edges.nodes = nodes;
+    edges.nodesLength = nodesLength;
+    const typeOf = new Map();
+    for (let i = 0; i < nodesLength; i += 1) typeOf.set(String(nodes[i]?.id || ""), String(nodes[i]?.type || ""));
     edges.inlets = new Map();
     edges.sources = new Set();
     edges.rebuilds += 1;
     for (let i = 0; i < length; i += 1) {
       const from = connectionEnd(list[i], "from");
-      if (!from.node || !isTvPort(from.port)) continue;
+      if (!from.node) continue;
       const to = connectionEnd(list[i], "to");
+      if (!isTvPort(from.port)) {
+        if (PICTURE_GET_INLETS[typeOf.get(to.node)]?.has(to.port)) edges.sources.add(from.node);
+        continue;
+      }
       edges.sources.add(from.node);
       if (!to.node) continue;
       const key = `${to.node}\u0000${to.port}`;
@@ -183,6 +199,7 @@
   function nodeGraphPictureEdgesInvalidate() {
     edges.list = null;
     edges.length = -1;
+    edges.nodes = null;
   }
 
   /** Probe/smoke counters: table rebuilds and lookups served from it. */

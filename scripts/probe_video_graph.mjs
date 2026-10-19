@@ -10,6 +10,7 @@
 //   videoFeedback vf-1 -> imageBurn ib-2                        acyclic
 //   videoDelay vd-3 <-> imageBurn ib-3                          2-node loop
 //   fbmField fbm-far (far off screen) -> videoDelay vd-far      asleep source
+//   fbm-solo, rf-solo, vf-solo, vd-solo, ib-solo                no cable out
 // (videoFeedback has no 📺 inlet, so the plan's fbm -> delay -> feedback ->
 // burn chain is split as above and the loop is delay <-> burn.)
 // Usage: node scripts/probe_video_graph.mjs   (server.py on :8765)
@@ -28,6 +29,7 @@ export const VG_CHAIN_EDGES = [
 ];
 const LOOP = new Set(["vd-3>ib-3", "ib-3>vd-3"]);
 const NODES = ["fbm-1", "vd-1", "ib-1", "vf-1", "ib-2", "vd-3", "ib-3", "fbm-far", "vd-far"];
+const SOLO = ["fbm-solo", "rf-solo", "vf-solo", "vd-solo", "ib-solo"];
 export function vgChainPatch() {
   const d = JSON.parse(fs.readFileSync(path.join(root, "patches/livedemos/softpop.json"), "utf8"));
   d.nodes = d.nodes.filter((n) => n.id === "output").map((n) => ({ ...n, gx: 26, gy: 1 }));
@@ -44,6 +46,12 @@ export function vgChainPatch() {
   at("vd-3", "videoDelay", 13, 17);
   at("ib-3", "imageBurn", 19, 17);
   at("fbm-far", "fbmField", 400, 1);
+  // No cable out: VG-2 says these publish nothing.
+  at("fbm-solo", "fbmField", 38, 1);
+  at("rf-solo", "rgbFractal", 44, 1);
+  at("vf-solo", "videoFeedback", 26, 17);
+  at("vd-solo", "videoDelay", 32, 17);
+  at("ib-solo", "imageBurn", 38, 17);
   for (const [a, b] of VG_CHAIN_EDGES) {
     d.connections.push({ sourceNode: a, sourcePort: "rgba", destinationNode: b, destinationPort: "rgba", tracePoints: [] });
   }
@@ -83,9 +91,10 @@ await page.evaluate(() => {
     vg.pub[id] = vg.frame;
   };
   const pub = window.nodeGraphPicturePublish;
-  window.nodeGraphPicturePublish = function (nodeId, ...a) { mark(nodeId); return pub.call(this, nodeId, ...a); };
+  // Count only real copies (publish returns false when it skips).
+  window.nodeGraphPicturePublish = function (nodeId, ...a) { const ok = pub.call(this, nodeId, ...a); if (ok) mark(nodeId); return ok; };
   const exp = window.nodeGraphPictureExportTarget;
-  window.nodeGraphPictureExportTarget = function (nodeId, ...a) { mark(nodeId); return exp.call(this, nodeId, ...a); };
+  window.nodeGraphPictureExportTarget = function (nodeId, ...a) { const t = exp.call(this, nodeId, ...a); if (t) mark(nodeId); return t; };
   const read = window.nodeGraphPictureRead;
   window.nodeGraphPictureRead = function (nodeId, port) {
     const r = read.call(this, nodeId, port);
@@ -158,8 +167,8 @@ if (process.env.JSON) console.log(JSON.stringify({ states, ...res }, null, 1));
 console.log(`vg-chain ${SECONDS}s: frames=${res.frames} fps=${r1(res.fps)} p50=${r1(res.p50)}ms p90=${r1(res.p90)}ms max=${r1(res.max)}ms pictureRead calls=${res.scans} (${r1(res.scans / Math.max(1, res.frames))}/frame)`);
 const scans = res.listScans == null ? res.scans : res.listScans;
 console.log(`connection-list scans: ${scans} (${r1(scans / Math.max(1, res.frames))}/frame)${res.listScans == null ? " [no edge table: every read scans]" : " [edge table rebuilds]"}`);
-console.log("node        state        publishes/frame");
-for (const id of NODES) {
+console.log("node        state        publish copies/frame");
+for (const id of [...NODES, ...SOLO]) {
   console.log(`${id.padEnd(11)} ${String(states[id] || "?").padEnd(12)} ${r1((res.pubs[id] || 0) / Math.max(1, res.frames))}`);
 }
 console.log("edge             reads  age histogram (frames since the source published: count)");
