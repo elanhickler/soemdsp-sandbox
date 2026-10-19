@@ -129,7 +129,7 @@
     const id = String(nodeId || "").trim();
     if (!id || !texture) return false;
     // VG-2: no cable reads this picture, so skip the copy.
-    if (!nodeGraphPictureHasConsumer(id)) return false;
+    if (!nodeGraphPictureHasReader(id)) return false;
     const dev = nodeGraphPictureDevice();
     if (!dev?.gl) return false;
     const gl = dev.gl;
@@ -178,11 +178,16 @@
   // reused until the list changes (new array or new length: every patch edit
   // commits a fresh array). Reads and consumer checks never walk the list.
   // nodeGraphPictureEdgesInvalidate() forces a rebuild after an in-place edit.
-  const edges = { list: null, length: -1, nodes: null, nodesLength: -1, inlets: new Map(), upstream: new Map(), sources: new Set(), rebuilds: 0, lookups: 0 };
+  const edges = { list: null, length: -1, nodes: null, nodesLength: -1, inlets: new Map(), upstream: new Map(), sources: new Set(), tvSources: new Set(), rebuilds: 0, lookups: 0 };
   // upstream: dest node -> source nodes over any picture cable (??, and the
   // RGB Picture R/G/B/rgba inlets). The video graph walks it for culling.
   // RGB Picture also takes a source's picture over its R/G/B (and rgba) cables
   // (any cable type); those are inlets too, read with nodeGraphPictureRead.
+  // sources: every node read over any picture inlet (a video producer's own
+  // output publishes for these). tvSources: only nodes with a 📺 / rgba cable
+  // leaving them. Module faces (gl-line-renderer, PublishCanvas) publish only
+  // for tvSources: an audio cable into Scan Grid R/G/B must not turn the
+  // source's face (e.g. SinCos4) into the picture Scan Grid shows.
   const PICTURE_GET_INLETS = { rasterRgb: new Set(["R", "G", "B", "rgba"]) };
 
   function patchConnections() {
@@ -204,6 +209,7 @@
     edges.inlets = new Map();
     edges.upstream = new Map();
     edges.sources = new Set();
+    edges.tvSources = new Set();
     const up = (dest, src) => {
       const list = edges.upstream.get(dest);
       if (!list) edges.upstream.set(dest, [src]);
@@ -218,6 +224,7 @@
       // RGB Picture's R/G/B/rgba inlets take the source's picture over any
       // cable (an explicit edge, read through nodeGraphPictureRead).
       edges.sources.add(from.node);
+      if (isTvPort(from.port)) edges.tvSources.add(from.node);
       if (!to.node) continue;
       up(to.node, from.node);
       const key = `${to.node}\u0000${to.port}`;
@@ -236,11 +243,20 @@
 
   /** Probe/smoke counters: table rebuilds and lookups served from it. */
   function nodeGraphPictureEdgeStats() {
-    return { rebuilds: edges.rebuilds, lookups: edges.lookups, inlets: edges.inlets.size, sources: edges.sources.size, copies: publishStats.copies, refs: publishStats.refs };
+    return { rebuilds: edges.rebuilds, lookups: edges.lookups, inlets: edges.inlets.size, sources: edges.sources.size, tvSources: edges.tvSources.size, copies: publishStats.copies, refs: publishStats.refs };
   }
 
   /** True when any cable leaves this node's picture out (`rgba` / TV). */
   function nodeGraphPictureHasConsumer(nodeId) {
+    const id = String(nodeId || "").trim();
+    if (!id) return false;
+    const table = nodeGraphPictureEdges();
+    table.lookups += 1;
+    return table.tvSources.has(id);
+  }
+
+  /** True when any picture inlet reads this node (TV cables, Scan Grid R/G/B/rgba). */
+  function nodeGraphPictureHasReader(nodeId) {
     const id = String(nodeId || "").trim();
     if (!id) return false;
     const table = nodeGraphPictureEdges();
@@ -675,6 +691,7 @@
   global.nodeGraphPictureRead = nodeGraphPictureRead;
   global.nodeGraphPicturePresent = nodeGraphPicturePresent;
   global.nodeGraphPictureHasConsumer = nodeGraphPictureHasConsumer;
+  global.nodeGraphPictureHasReader = nodeGraphPictureHasReader;
   global.nodeGraphPictureEdges = nodeGraphPictureEdges;
   global.nodeGraphPictureEdgesInvalidate = nodeGraphPictureEdgesInvalidate;
   global.nodeGraphPictureEdgeStats = nodeGraphPictureEdgeStats;
