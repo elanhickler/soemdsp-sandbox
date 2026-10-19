@@ -4,9 +4,11 @@
 // getComputedStyle, getBoundingClientRect, offsetWidth/offsetHeight/
 // offsetLeft/offsetTop, plus GL program links (should be 0 once warm).
 // Usage: node scripts/probe_zoom_perf.mjs [patch]   (server.py on :8765)
+//   patch "vg-chain" = the in-memory video graph test patch (VG-9).
 //   GATE=1  exit 1 when fps < MIN_FPS (default 50) or a forbidden read happens.
 // Headed by default (faces are WebGL only); HEADLESS=1 only with GPU headless.
 import { chromium } from "playwright";
+import { vgChainPatch } from "./lib/vg-chain-patch.mjs";
 
 const BASE = process.env.SANDBOX_URL || "http://127.0.0.1:8765/";
 const PATCH = process.argv[2] || "softpop";
@@ -84,6 +86,7 @@ const errors = [];
 page.on("pageerror", (e) => errors.push(String(e.message || e)));
 page.on("console", (m) => { if (m.type() === "error") errors.push(m.text().slice(0, 200)); });
 await page.route("**/*", (r) => (r.request().method() === "GET" ? r.continue() : r.abort()));
+if (PATCH === "vg-chain") await page.route("**/vg-chain.json*", (r) => r.fulfill({ status: 200, contentType: "application/json", body: vgChainPatch() }));
 await page.goto(`${BASE}?pagePatch=${PATCH}`, { waitUntil: "domcontentloaded", timeout: 120000 });
 await page.waitForFunction(() => typeof nodeGraphZoom === "function"
   && document.querySelectorAll("article[data-node-type]").length > 1, null, { timeout: 120000 });

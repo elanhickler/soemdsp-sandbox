@@ -149,11 +149,16 @@ function drawNodeGraphSinCos4DisplayInner(section) {
   }
   section._sinCos4Canvas = canvas;
 
+  // Viewport-asleep faces are display:none: nothing to paint, and measuring
+  // them would force a layout every frame (zoom gesture reads).
+  if (section.closest?.(".viewport-asleep") && !section.classList.contains("node-screen-solo-face")) {
+    return;
+  }
   const look = nodeGraphSinCos4FaceNorm(node);
   // Prefer the live layout box; in F solo fill, fall back to the stage cell so
   // we never paint into a leftover short filter-curve band.
-  let rawW = nodeGraphFiniteNumber(section.clientWidth || section.offsetWidth);
-  let rawH = nodeGraphFiniteNumber(section.clientHeight || section.offsetHeight);
+  let rawW = nodeGraphFiniteNumber(section.clientWidth);
+  let rawH = nodeGraphFiniteNumber(section.clientHeight);
   if (
     (rawW < 8 || rawH < 8 || section.classList.contains("node-screen-solo-face"))
     && typeof document !== "undefined"

@@ -60,7 +60,7 @@ counts. Each stage is committed locally on its own. Nothing is pushed without Ar
 | ZP-4 | Module HTML is frozen during gestures (a single container transform, or a hidden hit layer). CSS `zoom` and `--node-graph-zoom` are written once on settle. World boxes and text metrics are cached at rebuild. | `getComputedStyle` = 0 and `offset*` = 0 during the gesture | 0 / 0 | done 2026-10-18 (0 / 0, see ZP-4..6 result) |
 | ZP-5 | Text drawn from a fixed-size or SDF glyph atlas. The bake size never depends on zoom. | No `nodeGraphGlLinesSetGlyphBakePx` change across a zoom | no re-bake | done 2026-10-18 (bake size from zoom-1 sizes at rebuild, floor 64 px) |
 | ZP-6 | Constraint guide and badges go into the cached mesh (no per-frame DOM reads). | No reads from these paths during the gesture | 0 reads | done 2026-10-18 (built on constraint-gpu-1) |
-| ZP-7 | `scripts/probe_zoom_perf.mjs` with `GATE=1` as a regression guard (fps floor plus zero forbidden reads). Run before any viewport, gl-graph or picture-device change lands. | Gate passes on softpop at about 60 fps | GATE=1 exit 0 | gate passes 2026-10-18 (57.7 fps, MIN_FPS 50, 0 reads mid-gesture) |
+| ZP-7 | `scripts/probe_zoom_perf.mjs` with `GATE=1` as a regression guard (fps floor plus zero forbidden reads). Run before any viewport, gl-graph or picture-device change lands. | Gate passes on softpop at about 60 fps | GATE=1 exit 0 | gate passes 2026-10-18 (57.7 fps, MIN_FPS 50, 0 reads mid-gesture); 2026-10-19 VG-9: also run on the video graph patch, `GATE=1 node scripts/probe_zoom_perf.mjs vg-chain` (60 fps, 0 reads) plus `GATE=1 node scripts/probe_video_graph.mjs` (idle >= 58 fps) |
 
 ## Tracker
 

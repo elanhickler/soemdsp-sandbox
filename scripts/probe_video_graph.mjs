@@ -15,55 +15,16 @@
 // burn chain is split as above and the loop is delay <-> burn.)
 // Usage: node scripts/probe_video_graph.mjs   (server.py on :8765)
 //   SECONDS=4  measuring window.  JSON=1  print the raw result.  SHOT=file.png  screenshot.
-import fs from "node:fs";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
+//   GATE=1  VG-9 gate: exit 1 when idle fps < MIN_FPS (default 58), a display GL failure is logged, or the rAF stalled.
 import { chromium } from "playwright";
+import { VG_CHAIN_EDGES, vgChainPatch } from "./lib/vg-chain-patch.mjs";
 
 const BASE = process.env.SANDBOX_URL || "http://127.0.0.1:8765/";
 const SECONDS = Number(process.env.SECONDS || 4);
-const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
-export const VG_CHAIN_EDGES = [
-  ["fbm-1", "vd-1"], ["vd-1", "ib-1"], ["vf-1", "ib-2"], ["vd-3", "ib-3"], ["ib-3", "vd-3"], ["fbm-far", "vd-far"], ["vd-x", "ib-x"],
-];
 const LOOP = new Set(["vd-3>ib-3", "ib-3>vd-3"]);
 const NODES = ["fbm-1", "vd-1", "ib-1", "vf-1", "ib-2", "vd-3", "ib-3", "fbm-far", "vd-far"];
 const SOLO = ["fbm-solo", "rf-solo", "vf-solo", "vd-solo", "ib-solo", "vd-x", "ib-x"];
-export function vgChainPatch() {
-  const d = JSON.parse(fs.readFileSync(path.join(root, "patches/livedemos/softpop.json"), "utf8"));
-  d.nodes = d.nodes.filter((n) => n.id === "output").map((n) => ({ ...n, gx: 26, gy: 1 }));
-  d.connections = [];
-  d.graphConnections = [];
-  d.modulations = [];
-  const at = (id, type, gx, gy) => d.nodes.push({ gx, gy, id, type });
-  at("fbm-1", "fbmField", 1, 1);
-  at("vd-1", "videoDelay", 7, 1);
-  at("ib-1", "imageBurn", 13, 1);
-  at("vd-far", "videoDelay", 19, 1);
-  at("vf-1", "videoFeedback", 1, 17);
-  at("ib-2", "imageBurn", 7, 17);
-  at("vd-3", "videoDelay", 13, 17);
-  at("ib-3", "imageBurn", 19, 17);
-  at("fbm-far", "fbmField", 400, 1);
-  // No cable out: VG-2 says these publish nothing.
-  at("fbm-solo", "fbmField", 38, 1);
-  at("rf-solo", "rgbFractal", 44, 1);
-  at("vf-solo", "videoFeedback", 26, 17);
-  at("vd-solo", "videoDelay", 32, 17);
-  at("ib-solo", "imageBurn", 38, 17);
-  // VG-6 audio handoff: a 1 Hz sine drives Video Delay X on a delay parked
-  // far off screen (asleep) whose picture feeds a visible Image Burn.
-  d.nodes.push({ gx: 44, gy: 17, id: "sw-1", type: "sineWavetable", params: { frequency: 1, mode: 0, amplitude: 0.7 } });
-  at("vd-x", "videoDelay", 400, 17);
-  at("ib-x", "imageBurn", 44, 1);
-  for (const [a, b] of VG_CHAIN_EDGES) {
-    d.connections.push({ sourceNode: a, sourcePort: "rgba", destinationNode: b, destinationPort: "rgba", tracePoints: [] });
-  }
-  d.connections.push({ sourceNode: "sw-1", sourcePort: "A", destinationNode: "vd-x", destinationPort: "X", tracePoints: [] });
-  return JSON.stringify(d);
-}
-
 const browser = await chromium.launch({ headless: Boolean(process.env.HEADLESS), args: ["--ignore-gpu-blocklist", "--use-angle=d3d11"] });
 const ctx = await browser.newContext({ viewport: { width: 1600, height: 1000 } });
 await ctx.addInitScript(() => {
@@ -73,6 +34,7 @@ await ctx.addInitScript(() => {
   let last = 0;
   const tick = (t) => {
     vg.frame += 1;
+    if (vg.gpuTick) vg.gpuTick();
     if (vg.on && last) vg.frames.push(t - last);
     last = t;
     requestAnimationFrame(tick);
@@ -102,6 +64,26 @@ await page.evaluate(() => {
   window.nodeGraphPicturePublish = function (nodeId, ...a) { const ok = pub.call(this, nodeId, ...a); if (ok) mark(nodeId); return ok; };
   const exp = window.nodeGraphPictureExportTarget;
   window.nodeGraphPictureExportTarget = function (nodeId, ...a) { const t = exp.call(this, nodeId, ...a); if (t) mark(nodeId); return t; };
+  // VG-9: GPU time of the shared context per frame (EXT_disjoint_timer_query_webgl2,
+  // when the browser exposes it): one TIME_ELAPSED query from frame start to the next.
+  vg.gpu = [];
+  const gl = typeof nodeGraphPictureDevice === "function" ? nodeGraphPictureDevice()?.gl : null;
+  const ext = gl?.getExtension("EXT_disjoint_timer_query_webgl2");
+  vg.gpuExt = Boolean(ext);
+  if (ext) {
+    let q = null;
+    const pending = [];
+    vg.gpuTick = () => {
+      if (q) { gl.endQuery(ext.TIME_ELAPSED_EXT); pending.push([q, vg.on]); q = null; }
+      while (pending.length && gl.getQueryParameter(pending[0][0], gl.QUERY_RESULT_AVAILABLE)) {
+        const [done, on] = pending.shift();
+        if (on && !gl.getParameter(ext.GPU_DISJOINT_EXT)) vg.gpu.push(gl.getQueryParameter(done, gl.QUERY_RESULT) / 1e6);
+        gl.deleteQuery(done);
+      }
+      q = gl.createQuery();
+      gl.beginQuery(ext.TIME_ELAPSED_EXT, q);
+    };
+  }
   vg.panX = [];
   vg.ingests = [];
   vg.lastIngest = 0;
@@ -171,6 +153,7 @@ const res = await page.evaluate(() => {
   return {
     frames: vg.frame - vg.frame0, fps: f.length ? (1000 * f.length) / total : 0, p50: q(0.5), p90: q(0.9), max: f[f.length - 1] || 0,
     pubs: vg.pubs, reads: vg.reads, scans: vg.scans, panX: vg.panX, ingests: vg.ingests,
+    gpuExt: vg.gpuExt, gpu: vg.gpu.slice().sort((a, b) => a - b),
     // VG-1: rebuilds of the ?? edge table in the window (each is one walk of
     // the connection list). Before VG-1 every read was a walk: null here.
     listScans: vg.edges0 ? nodeGraphPictureEdgeStats().rebuilds - vg.edges0.rebuilds : null,
@@ -250,6 +233,10 @@ await browser.close();
 const r1 = (v) => Math.round(v * 10) / 10;
 if (process.env.JSON) console.log(JSON.stringify({ states, ...res }, null, 1));
 console.log(`vg-chain ${SECONDS}s: frames=${res.frames} fps=${r1(res.fps)} p50=${r1(res.p50)}ms p90=${r1(res.p90)}ms max=${r1(res.max)}ms pictureRead calls=${res.scans} (${r1(res.scans / Math.max(1, res.frames))}/frame)`);
+{
+  const g = res.gpu; const gq = (p) => g[Math.min(g.length - 1, Math.floor(p * g.length))] || 0;
+  console.log(res.gpuExt ? `GPU frame time (shared context): p50=${r1(gq(0.5))}ms p90=${r1(gq(0.9))}ms max=${r1(g[g.length - 1] || 0)}ms (${g.length} frames)` : "GPU frame time: EXT_disjoint_timer_query_webgl2 not exposed");
+}
 const scans = res.listScans == null ? res.scans : res.listScans;
 console.log(`connection-list scans: ${scans} (${r1(scans / Math.max(1, res.frames))}/frame)${res.listScans == null ? " [no edge table: every read scans]" : " [edge table rebuilds]"}`);
 if (res.copies != null) console.log(`publish: ${r1(res.copies / Math.max(1, res.frames))} copies/frame, ${r1(res.refs / Math.max(1, res.frames))} by reference/frame`);
@@ -293,3 +280,9 @@ console.log(`rewire (drop vd-1 -> ib-1): ${rewire.before && rewire.after && rewi
 if (res.glFailures.length) console.log("display GL failures:", res.glFailures);
 const errs = [...new Set(errors.filter((e) => !/favicon|Failed to load resource/.test(e)))];
 if (errs.length) console.log("page errors:", errs.slice(0, 6));
+if (process.env.GATE) {
+  const minFps = Number(process.env.MIN_FPS || 58);
+  const bad = res.fps < minFps || res.glFailures.length || back.frames < 30;
+  console.log(bad ? `FAIL vg-chain idle gate (fps ${r1(res.fps)} < ${minFps}, or GL failure / rAF stall)` : `ok   vg-chain idle gate (fps ${r1(res.fps)} >= ${minFps})`);
+  process.exit(bad ? 1 : 0);
+}
