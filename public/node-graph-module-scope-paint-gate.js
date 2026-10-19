@@ -259,9 +259,15 @@ function nodeGraphInstallDrawingFacePump(section, options = {}) {
   if (typeof document !== "undefined" && typeof document.addEventListener === "function") {
     // ES-4: engine start is not the only wake. A forced wake (Stop, page
     // switch, patch load) repaints once even when the face no longer animates.
+    const videoFace = typeof nodeGraphVideoGraphIsVideoType === "function"
+      && nodeGraphVideoGraphIsVideoType(section.dataset?.nodeType);
     document.addEventListener("nodegraphfaceloops", (event) => {
       if (event?.detail?.force) {
         section[forceKey] = true;
+      } else if (videoFace && nodeGraphVideoGraphShouldSleep(section.dataset?.node)) {
+        // VG-7: this fires on every scope snapshot; an unneeded video node
+        // stays stopped (the video graph wakes it when a sink needs it).
+        return;
       }
       startLoop();
     });

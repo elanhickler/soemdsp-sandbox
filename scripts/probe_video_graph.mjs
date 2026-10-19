@@ -187,10 +187,21 @@ await page.evaluate(() => { const p = nodeGraphMvp.pan || { x: 0, y: 0 }; setNod
 await page.waitForTimeout(1500);
 const off = await page.evaluate((ms) => new Promise((done) => {
   const vg = window.__vg; vg.pubs = {}; vg.wantStack = "vd-1"; vg.stack = ""; vg.on = true; const f0 = vg.frame;
+  if (vg.wantStack) {
+    const rq = window.nodeGraphVideoGraphRequestFrame;
+    vg.reqStacks = [];
+    window.nodeGraphVideoGraphRequestFrame = function (id, cb) {
+      if (vg.on && id === "vd-1" && vg.reqStacks.length < 3) vg.reqStacks.push(new Error("request").stack);
+      return rq.call(this, id, cb);
+    };
+  }
+  const runs0 = typeof nodeGraphVideoGraphStats === "function" ? nodeGraphVideoGraphStats().runsBy : {};
   setTimeout(() => {
     vg.on = false;
     const asleep = [...document.querySelectorAll("article[data-node-type]")].filter((a) => a.classList.contains("viewport-asleep")).length;
-    done({ frames: vg.frame - f0, pubs: vg.pubs, asleep, stack: vg.stack || "" });
+    const runs1 = typeof nodeGraphVideoGraphStats === "function" ? nodeGraphVideoGraphStats().runsBy : {};
+    const runs = Object.fromEntries(Object.keys(runs1).map((k) => [k, runs1[k] - (runs0[k] || 0)]).filter(([, v]) => v > 0));
+    done({ frames: vg.frame - f0, pubs: vg.pubs, asleep, stack: vg.stack || "", runs, reqStacks: (vg.reqStacks || []).join("\n----\n") });
   }, ms);
 }), 2000);
 // Phase C: pan back. vd-far wakes on screen; the scheduler must wake the
@@ -212,14 +223,19 @@ const back = await page.evaluate((ms) => new Promise((done) => {
     gl.readPixels(0, 0, pic.width, pic.height, gl.RGBA, gl.UNSIGNED_BYTE, px);
     gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.deleteFramebuffer(fb);
     let n = 0; for (let k = 0; k < px.length; k += 4) if (px[k] + px[k + 1] + px[k + 2] > 24) n += 1;
-    vg.lit.push(Math.round((100 * n) / (pic.width * pic.height)));
+    vg.lit.push(`${Math.round((100 * n) / (pic.width * pic.height))}%@${pic.width}x${pic.height}`);
   };
-  for (let t = 1; t <= 4; t += 1) setTimeout(sample, (ms * t) / 5);
+  const nSamples = Number(globalThis.__vgLitSamples || 4);
+  for (let t = 1; t <= nSamples; t += 1) setTimeout(sample, (ms * t) / (nSamples + 1));
   setTimeout(() => {
     vg.on = false;
     const lit = vg.lit.join("/");
     const asleep = document.querySelector('article[data-node="fbm-far"]')?.classList.contains("viewport-asleep");
-    done({ frames: vg.frame - f0, pubs: vg.pubs, lit, asleep });
+    const sizes = Object.fromEntries(["fbm-1", "fbm-far", "vd-1", "vd-x", "ib-3"].map((id) => {
+      const pic = nodeGraphPictureGet(id);
+      return [id, pic ? `${pic.width}x${pic.height}` : "-"];
+    }));
+    done({ frames: vg.frame - f0, pubs: vg.pubs, lit, asleep, sizes });
   }, ms);
 }), 1000);
 // Edge table follows patch edits: drop vd-1 -> ib-1 through the normal commit.
@@ -256,10 +272,12 @@ for (const [a, b] of VG_CHAIN_EDGES) {
   const hist = fresh.join(" ");
   console.log(`${key.padEnd(16)} ${String(n).padStart(5)}  ${hist || "(no reads)"}${LOOP.has(key) ? "   [loop edge]" : ""}`);
 }
-if (process.env.STACK) console.log(off.stack);
+if (process.env.STACK) console.log(off.stack, off.reqStacks);
+console.log(`all off screen: scheduler passes ${Object.keys(off.runs).length ? JSON.stringify(off.runs) : "0 on every node"}`);
 console.log(`all off screen (${off.frames} frames, ${off.asleep} modules asleep): ` + NODES.map((id) => `${id}=${r1((off.pubs[id] || 0) / Math.max(1, off.frames))}`).join(" ") + " publishes/frame");
 if (back.frames < 30) console.log("WARN: rAF stalled in the pan-back window (browser window hidden?); rerun");
-console.log(`panned back (${back.frames} frames): fbm-far ${back.asleep ? "asleep" : "awake"} publishes ${r1((back.pubs["fbm-far"] || 0) / Math.max(1, back.frames))}/frame, vd-far ${r1((back.pubs["vd-far"] || 0) / Math.max(1, back.frames))}/frame; fbm-far picture ${back.lit}% lit`);
+console.log(`panned back (${back.frames} frames): fbm-far ${back.asleep ? "asleep" : "awake"} publishes ${r1((back.pubs["fbm-far"] || 0) / Math.max(1, back.frames))}/frame, vd-far ${r1((back.pubs["vd-far"] || 0) / Math.max(1, back.frames))}/frame; fbm-far picture ${back.lit} lit`);
+console.log(`picture sizes (awake vs asleep sources): ${Object.entries(back.sizes).map(([k, v]) => `${k} ${v}`).join(", ")}`);
 console.log(`rewire (drop vd-1 -> ib-1): ${rewire.before && rewire.after && rewire.other ? "ok" : "FAIL " + JSON.stringify(rewire)}`);
 {
   // VG-6: X seen by the asleep vd-x (1 Hz sine, amplitude 0.7 -> panX +-0.385).

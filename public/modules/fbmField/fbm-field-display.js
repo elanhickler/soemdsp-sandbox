@@ -124,8 +124,14 @@ function syncNodeGraphFbmFieldCanvas1to1(canvas, face, gridW, gridH) {
 function nodeGraphFbmFieldSyncLayout(face, options = {}) {
   if (!face) return null;
   const canvas = options.canvas || face.querySelector?.(".node-fbm-field-canvas");
-  const cssW = Math.max(1, Math.round(face.clientWidth || face.offsetWidth || 1));
-  const cssH = Math.max(1, Math.round(face.clientHeight || face.offsetHeight || 1));
+  const liveW = Math.round(face.clientWidth || face.offsetWidth || 0);
+  const liveH = Math.round(face.clientHeight || face.offsetHeight || 0);
+  // Asleep modules are display:none (0x0). VG-4 runs a needed field while
+  // asleep, so keep the last awake size instead of collapsing to 1x1.
+  const prev = nodeGraphFbmFieldReadMetrics(face);
+  if (!(liveW > 0 && liveH > 0) && prev && prev.cssW > 1 && prev.cssH > 1) return prev;
+  const cssW = Math.max(1, liveW || 1);
+  const cssH = Math.max(1, liveH || 1);
   const metrics = { cssW, cssH };
   nodeGraphFbmFieldMetricsCache.set(face, metrics);
   face._fbmMetrics = metrics;

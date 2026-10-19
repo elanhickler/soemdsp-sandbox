@@ -52,22 +52,22 @@ function nodeGraphRgbFractalStartLoop(face, nodeId) {
   // Do not wipe phasors on (re)start — only clock anchors so first dt is 0.
   face._rgbFractalLastTs = 0;
   face._rgbFractalPendingDt = 0;
-  face._rgbFractalLastPaintTs = 0;
 
   const tick = (ts) => {
     if (!face.isConnected) {
       nodeGraphRgbFractalStopLoop(face);
       return;
     }
+    // VG-4/VG-7: nothing visible needs this fractal: stop (the video graph
+    // wakes the loop when a visible sink starts reading it).
+    if (nodeGraphVideoGraphShouldSleep(nodeId)) {
+      nodeGraphRgbFractalStopLoop(face);
+      return;
+    }
     face._rgbFractalRaf = nodeGraphVideoGraphRequestFrame(nodeId, tick);
 
-    // Respect global scope FPS (fixed layout×dpr buffer; zoom is CSS pixelate).
-    const fps = typeof normalizeNodeGraphModuleScopeFramesPerSecond === "function"
-      ? normalizeNodeGraphModuleScopeFramesPerSecond(nodeGraphMvp?.moduleScopeFramesPerSecond ?? 60)
-      : Math.max(1, nodeGraphFiniteNumber(nodeGraphMvp?.moduleScopeFramesPerSecond, 60));
-    const minDtMs = 1000 / Math.max(1, fps);
-    const lastPaint = nodeGraphFiniteNumber(face._rgbFractalLastPaintTs);
-    if (lastPaint && (ts - lastPaint) < minDtMs - 0.5) {
+    // VG-7: the video graph's one Simulation FPS clock (was a per-face limiter).
+    if (!nodeGraphVideoGraphFrameReady(false)) {
       return;
     }
 
@@ -78,7 +78,6 @@ function nodeGraphRgbFractalStartLoop(face, nodeId) {
       dt = 0;
     }
     face._rgbFractalLastTs = ts;
-    face._rgbFractalLastPaintTs = ts;
     if (typeof paintNodeGraphRgbFractalFaceForNode === "function") {
       paintNodeGraphRgbFractalFaceForNode(nodeId, { dt, face });
     }
@@ -114,6 +113,12 @@ registerNodeGraphChromelessModuleUi("rgbFractal", {
       }
     });
     // Teardown: tick exits on !face.isConnected (no document-wide MutationObserver).
+    nodeGraphVideoGraphRegisterWake(node, () => {
+      if (body.isConnected) nodeGraphRgbFractalStartLoop(body, node);
+    });
+    article.addEventListener("nodegraphviewport", (event) => {
+      if (!event.detail?.asleep && body.isConnected) nodeGraphRgbFractalStartLoop(body, node);
+    });
     nodeGraphRgbFractalStartLoop(body, node);
     repaint();
     requestAnimationFrame(repaint);

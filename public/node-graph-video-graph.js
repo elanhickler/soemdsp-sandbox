@@ -46,6 +46,7 @@
   let ready = { frame: -1, value: false };
   const order = { rebuilds: -1, nodes: null, rank: new Map(), backEdges: 0 };
   const stats = { frames: 0, runs: 0, wakes: 0 };
+  const runsBy = new Map(); // nodeId -> scheduled callbacks run (probe/smoke counter)
   const need = { frame: -1, set: new Set() };
   const wakes = new Map(); // nodeId -> Set of wake callbacks
 
@@ -205,6 +206,7 @@
     const now = typeof performance !== "undefined" ? performance.now() : Date.now();
     for (let i = 0; i < batch.length; i += 1) {
       stats.runs += 1;
+      runsBy.set(batch[i].nodeId, (runsBy.get(batch[i].nodeId) || 0) + 1);
       try {
         batch[i].cb(now);
       } catch (error) {
@@ -305,7 +307,7 @@
 
   function nodeGraphVideoGraphStats() {
     rebuildOrder();
-    return { ...stats, frame, pending: pending.size, needed: [...neededSet()], backEdges: order.backEdges, order: [...order.rank.entries()].sort((a, b) => a[1] - b[1]).map(([id]) => id) };
+    return { ...stats, frame, pending: pending.size, needed: [...neededSet()], runsBy: Object.fromEntries(runsBy), backEdges: order.backEdges, order: [...order.rank.entries()].sort((a, b) => a[1] - b[1]).map(([id]) => id) };
   }
 
   global.nodeGraphVideoGraphIsVideoType = nodeGraphVideoGraphIsVideoType;
