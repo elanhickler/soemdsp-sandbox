@@ -188,8 +188,8 @@ Only these live-audio types exist in the efficient build:
 | `crossover6` | Stereo Linkwitz–Riley 6-way crossover |
 | `robinSinepulse` | Robin Sinepulse: sweep kick (port of Robin Schmidt's SweepKicker, RS-MET; Trigger → Kick / Env) |
 | `robinSinepulseAllpass` | Robin Sinepulse Allpass: 0–256 allpass zap / disperser (port of Robin Schmidt's FlatZapper, RS-MET; Trigger + In → Out) |
-| `output` | Sink (singleton — unique, undeleteable) |
-| `audioInput` | Live mic/line Input (singleton — unique, undeleteable; host capture bus TBD) |
+| `output` | Sink (unique per patch, deletable; returns via Undo or the Output button) |
+| `audioInput` | Live mic/line Input (unique per patch, deletable; returns via Undo or the Input button; host capture bus TBD) |
 
 Canonical circuit:
 
@@ -234,7 +234,7 @@ polyBlep → ladderFilter → softClipper → reverbEffect → pingPongDelay →
 
 **VoiceManager** (wasm) only **assigns notes to voice slots**: `note_on` → Sustaining, `note_off` → Releasing, per-voice **isIdle** → `clean_slot` → Available. When more notes than Available slots: take oldest releasing, then oldest sustaining (allocation across slots — unrelated to what Gate/Trigger mean on a voice). **DSP steps only Sustaining + Releasing voices** (Available replicas stay compiled but are not processed). **`isIdle` is rare and explicit (boolean outs):** **envelopes** (ADSR stage Off; Ping Envelope when env &lt; 1e-5) and **reverbs** (SilenceDetector ~1s quiet) — not delays, not oscillators. **Voice Idle** only collects those booleans (never measures level). If Voice Idle has no `isIdle` cable: assume idle=false while that voice is on, idle=true when that voice is off (releasing → Available). Blue/gold/MIDI are plain note events — monophony only when Meta playmode is Mono/Legato. MIDI/Keyboard **Polyphony** → Meta **Voices**; Play/Arp Keys bitmasks must not be OR'd into Voices.
 
-**Singleton app I/O:** exactly one `output` and one `audioInput` may exist in a patch. Both are shop-visible, `uniqueInPatch`, and **must not be deleted**. Day-to-day routing should prefer Portal In/Out modules; the singletons stay as the app-wide mic/speaker endpoints.
+**App I/O (Output and Input):** at most one `output` (id `output`) and one `audioInput` (id `audioInput`) may exist in a patch. Both are shop-visible and `uniqueInPatch`, and both are **deletable** like any module. Each comes back only two ways: **Undo**, or its lower-bar button (`#nodeLiveOutputButton` / `#nodeLiveInputButton`) turning on, which spawns the module if it is missing. Nothing else spawns them, and a patch without them loads as-is. On delete, the module's settings (params, position, title, display) are saved in the patch under `ioModuleSettings.output` / `ioModuleSettings.audioInput` and are never erased; a respawn restores them. They stay out of Metamodules. Day-to-day routing should prefer Portal In/Out modules; Output and Input stay the app-wide speaker/mic endpoints.
 
 **SSOT:** `public/node-graph-efficient-product.js` — used by module shop / Add Module **and** live plan refuse (host + worklet `setPlan`).
 
@@ -615,6 +615,7 @@ First consumers: Music Player, fbmField, Instant Waterfall compositor, RoundShap
 | Copy the same helper into a second module `.cpp` | **No** — use / extend `library/include/soemdsp` (§19) |
 | Edit `library/include/soemdsp` without Architect OK | **No** — propose first (§19) |
 | Stack color widgets one per line, or put 5+ in one row | **No** — rows of 2 to 4 (§21) |
+| Auto-spawn / ensure Output or Input on load, Play, or anywhere but its lower-bar button turning on | **No** — deletable; Undo or its button only; settings live in `ioModuleSettings` |
 
 ---
 
