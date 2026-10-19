@@ -47,11 +47,6 @@ function nodeGraphWaterfallHistorySeconds(settings) {
   return 0.25;
 }
 
-/** @deprecated History 0 is one bar. Kept so older now-line callers still resolve. */
-function nodeGraphWaterfallHistoryIsFrozen(settings) {
-  return !(nodeGraphWaterfallHistorySeconds(settings) > NODE_GRAPH_WATERFALL_HISTORY_SEC_EPS);
-}
-
 function nodeGraphOnsetResetSyncOn(settings) {
   const raw = settings?.resetSync;
   return raw === true || raw === 1 || raw === "1" || raw === "true";
@@ -179,8 +174,13 @@ function nodeGraphOnsetColumnPoints(col) {
   return out;
 }
 
-/** Draw stored column points. begin/end are column indexes. */
-function nodeGraphOnsetEmitTrace(canvas, onset, key, trace, slot, settings, height, width, origin, faceSamples, startPx, begin, end) {
+/**
+ * Draw stored column points. begin/end are column indexes.
+ * reopen: redraw from column `begin` after a strip clear. The line starts at
+ * column begin-1's last point (not the stored pen) and is scissored to the
+ * strip, so the finished columns left of it are never inked twice.
+ */
+function nodeGraphOnsetEmitTrace(canvas, onset, key, trace, slot, settings, height, width, origin, faceSamples, startPx, begin, end, reopen = false) {
   if (typeof nodeGraphOnsetGlStrokePolyline !== "function") return;
   if (!(end > begin)) return;
   if (!onset.pens) onset.pens = Object.create(null);
@@ -189,10 +189,24 @@ function nodeGraphOnsetEmitTrace(canvas, onset, key, trace, slot, settings, heig
     : 1;
   const runs = [];
   let run = [];
-  const pen = onset.pens[key];
+  const cols = trace.columns || [];
+  let pen = onset.pens[key];
+  if (reopen) {
+    pen = null;
+    const before = begin > 0 ? nodeGraphOnsetColumnPoints(cols[begin - 1]) : [];
+    for (let i = before.length - 1; i >= 0 && !pen; i -= 1) {
+      const y = nodeGraphOnsetTraceY(before[i].raw, trace.buffer, slot, settings, height, strokePx);
+      if (y == null) continue;
+      const loc = nodeGraphOnsetTraceX(before[i].frame, origin, faceSamples, width, startPx);
+      pen = { x: loc.x, y, u: loc.u, frame: before[i].frame };
+    }
+  }
   let prevU = pen ? pen.u : NaN;
   if (pen) run.push({ x: pen.x, y: pen.y });
-  const cols = trace.columns || [];
+  // The strip's left edge on screen: only the run holding it can reach back
+  // into finished history (later runs start after a wrap, at x = 0).
+  const clipX0 = reopen ? (startPx + begin) % width : null;
+  let clipRun = reopen ? 0 : -1;
   for (let c = begin; c < end; c += 1) {
     const pts = nodeGraphOnsetColumnPoints(cols[c]);
     for (let i = 0; i < pts.length; i += 1) {
@@ -202,6 +216,7 @@ function nodeGraphOnsetEmitTrace(canvas, onset, key, trace, slot, settings, heig
       const wrap = Number.isFinite(prevU) && Math.floor(loc.u / width) !== Math.floor(prevU / width);
       if (wrap) {
         if (run.length >= 2) runs.push(run);
+        else if (clipRun === runs.length) clipRun = -1;
         run = [];
       }
       run.push({ x: loc.x, y });
@@ -213,7 +228,7 @@ function nodeGraphOnsetEmitTrace(canvas, onset, key, trace, slot, settings, heig
   else if (run.length === 1) runs.push([run[0], { x: run[0].x + 1e-3, y: run[0].y }]);
   const color = trace.rgb || [255, 255, 255, 1];
   for (let r = 0; r < runs.length; r += 1) {
-    nodeGraphOnsetGlStrokePolyline(canvas, runs[r], strokePx, color);
+    nodeGraphOnsetGlStrokePolyline(canvas, runs[r], strokePx, color, r === clipRun ? clipX0 : null);
   }
 }
 
@@ -388,11 +403,21 @@ function nodeGraphOnsetPaint(spec, live) {
   }
   onset.lastPixel = p1 - 1;
   const fromFrame = onset.drawn;
+  // Note every channel's new samples first, then redraw one open strip for
+  // all of them in channel order: L, then R on top. Stroked channel by
+  // channel with a clear each, R's clear erased L's ink in the open column
+  // and the next frame's L covered R where they cross (the order flipped
+  // along the line). The strip starts `reach` columns before the first new
+  // one, so a thick line's spill into its neighbours is redrawn, not cut.
+  const traces = [];
+  let beginAll = width;
+  let endAll = -1;
   for (let i = 0; i < channels.length; i += 1) {
     const ch = channels[i];
     const key = ch.lastYKey || String(i);
     const rgb = [...nodeGraphWaterfallParseInkRgb(ch.color), nodeGraphWaterfallClamp01(ch.bright ?? 1, 1)];
     const trace = nodeGraphOnsetTraceEnsure(onset, key, rgb, ch.buffer, width);
+    traces.push({ key, trace });
     let beginCol = width;
     let endCol = -1;
     for (let s = fromFrame; s < endDraw; s += 1) {
@@ -407,15 +432,26 @@ function nodeGraphOnsetPaint(spec, live) {
       if (col > endCol) endCol = col;
     }
     if (endCol >= beginCol) {
-      // The open column can gain a new peak after it was drawn. Clear it
-      // before the short line is stamped again.
-      if (typeof nodeGraphWaterfallGlClearColumn === "function") {
-        for (let c = beginCol; c <= endCol; c += 1) {
-          nodeGraphWaterfallGlClearColumn(canvas, (startPx + c) % width, 1, plateBg);
-        }
+      beginAll = Math.min(beginAll, beginCol);
+      endAll = Math.max(endAll, endCol);
+    }
+  }
+  if (endAll >= beginAll) {
+    const strokePx = typeof nodeGraphOnsetStrokeCanvasPx === "function"
+      ? nodeGraphOnsetStrokeCanvasPx(canvas, settings)
+      : 1;
+    const c0 = Math.max(0, beginAll - Math.ceil(strokePx * 0.5 + 1.5));
+    // The open column can gain a new peak after it was drawn: it is cleared
+    // and drawn again with the rest of the strip.
+    if (typeof nodeGraphWaterfallGlClearColumn === "function") {
+      for (let c = c0; c <= endAll; c += 1) {
+        nodeGraphWaterfallGlClearColumn(canvas, (startPx + c) % width, 1, plateBg);
       }
+    }
+    for (let i = 0; i < traces.length; i += 1) {
       nodeGraphOnsetEmitTrace(
-        canvas, onset, key, trace, spec.slot, settings, height, width, onset.origin, faceSamples, startPx, beginCol, endCol + 1,
+        canvas, onset, traces[i].key, traces[i].trace, spec.slot, settings, height, width, onset.origin, faceSamples, startPx,
+        c0, endAll + 1, true,
       );
     }
   }
@@ -499,11 +535,6 @@ function nodeGraphWaterfallIncomingIsSilent(spec, settings, window, liveBuffer) 
   return examined;
 }
 
-/** @deprecated Use nodeGraphWaterfallHistoryIsFrozen — 0 s pauses; it does not wipe to a now-line. */
-function nodeGraphWaterfallIsNowLine(settings) {
-  return nodeGraphWaterfallHistoryIsFrozen(settings);
-}
-
 /** Bipolar +/-1 reaches the face edges. No vertical inset. RMS dB guides use the same full span. */
 function nodeGraphWaterfallHalfHeight(height, _slot, _settings, _amp) {
   return nodeGraphFiniteNumber(height, 0) * 0.5;
@@ -520,10 +551,6 @@ function nodeGraphWaterfallPolarity(settings) {
 /** Bottom fill: bipolar -1..1 map, bars fill from the bottom edge to the peak. */
 function nodeGraphWaterfallIsBottomFill(settings) {
   return nodeGraphWaterfallPolarity(settings) === "bottomFill";
-}
-
-function nodeGraphWaterfallIsUnipolar(settings) {
-  return nodeGraphWaterfallPolarity(settings) === "unipolar";
 }
 
 /** Display Scale. 1 leaves the face unchanged. Not a module amplitude. */
@@ -635,22 +662,6 @@ function nodeGraphWaterfallAbsEnd(buffer) {
   if (Number.isFinite(abs) && abs > 0) return abs;
   const total = Number(buffer?.nodeGraphScopeTotalSampleCount);
   return Number.isFinite(total) && total > 0 ? total : Number.NaN;
-}
-
-function nodeGraphWaterfallAbsAtBufferIndex(buffer, index) {
-  const len = buffer?.length || 0;
-  if (!(len > 0) || !Number.isFinite(index)) return NaN;
-  const absEnd = nodeGraphWaterfallAbsEnd(buffer);
-  if (!(absEnd > 0)) return index;
-  return absEnd - (len - index);
-}
-
-function nodeGraphWaterfallBufferIndexAtAbs(buffer, absFrame) {
-  const len = buffer?.length || 0;
-  if (!(len > 0) || !Number.isFinite(absFrame)) return NaN;
-  const absEnd = nodeGraphWaterfallAbsEnd(buffer);
-  if (!(absEnd > 0)) return absFrame;
-  return len - (absEnd - absFrame);
 }
 
 /**
@@ -854,24 +865,6 @@ function nodeGraphWaterfallUndrawn(buffer, lastAbs) {
   return { count: recentN, absEnd, start: Math.max(0, end - recentN), end };
 }
 
-function nodeGraphWaterfallLatestY(buffer, slot, settings, height) {
-  const live = nodeGraphWaterfallPrepare(buffer, settings);
-  if (!live?.length) return Number.NaN;
-  const amp = nodeGraphWaterfallAmp(live, slot);
-  const halfHeight = nodeGraphWaterfallHalfHeight(height, slot, settings, amp);
-  const raw = Number(live[live.length - 1]);
-  if (!Number.isFinite(raw)) return Number.NaN;
-  return nodeGraphWaterfallY(
-    raw,
-    amp.gain,
-    amp.offset,
-    height * 0.5,
-    halfHeight,
-    amp,
-    settings,
-  );
-}
-
 /** Fresh peak-to-peak accumulator (raw sample units). */
 function nodeGraphWaterfallAccMake() {
   // minAt / maxAt / last: time order for the Stroke waveform (both peaks).
@@ -1009,70 +1002,65 @@ function nodeGraphWaterfallWaveYs(acc, buffer, slot, settings, height) {
   return ys;
 }
 
-/**
- * Stroke one waterfall column as the waveform: a polyline from the previous
- * column's last sample through this column's peaks (time order) to its last
- * sample. bag.strokePts[key] keeps that last point for the next column.
- */
-function nodeGraphWaterfallStrokeWaveColumn(canvas, bag, key, x, ys, settings, seam = false, strokeColor = null) {
-  if (!bag.strokePts) bag.strokePts = Object.create(null);
-  const prev = !seam && Array.isArray(bag.strokePts[key]) ? bag.strokePts[key][bag.strokePts[key].length - 1] : null;
-  if (!ys || !ys.length) {
-    delete bag.strokePts[key];
-    return;
-  }
-  const cx = x + 0.5;
+/** Stroke width in history pixels and how far a stroke reaches past a point. */
+function nodeGraphWaterfallStrokeReach(canvas, settings) {
   const strokePx = typeof nodeGraphOnsetStrokeCanvasPx === "function"
     ? nodeGraphOnsetStrokeCanvasPx(canvas, settings)
     : nodeGraphWaterfallStrokePx(settings);
+  // Half the width plus the 1px AA ramp, rounded up to whole columns.
+  return { strokePx, reach: Math.ceil(strokePx * 0.5 + 1.5) };
+}
+
+/**
+ * Stroke one channel's new columns as the waveform, once per frame: a
+ * polyline through each column's peaks (time order, spread across the
+ * column) from the previous frame's tail. bag.strokePts[key] keeps the tail
+ * (the points whose line can still reach the open strip).
+ * clipX0: the strip that was cleared and is being redrawn; the line is drawn
+ * only there, so finished history is never inked twice. cols: [{ x, ys }]
+ * in x order (ys null = no signal, which breaks the line).
+ */
+function nodeGraphWaterfallStrokeWaveRun(canvas, bag, key, cols, settings, strokeColor, clipX0) {
+  if (!bag.strokePts) bag.strokePts = Object.create(null);
+  const { strokePx, reach } = nodeGraphWaterfallStrokeReach(canvas, settings);
   // Clamp to the panel so values past the top / bottom (Sidechain gain > 2x
   // rest) ride the edge, fully visible, instead of leaving the canvas.
   const faceH = Number(canvas?.height);
-  const clampY = (y) => {
-    if (!(faceH > 0)) return y;
-    const inset = Math.min(faceH * 0.5, Math.max(0, strokePx) * 0.5);
-    return Math.max(inset, Math.min(faceH - inset, y));
+  const inset = faceH > 0 ? Math.min(faceH * 0.5, Math.max(0, strokePx) * 0.5) : 0;
+  const clampY = (y) => (faceH > 0 ? Math.max(inset, Math.min(faceH - inset, y)) : y);
+  const rgb = nodeGraphWaterfallStrokeRgb(settings, strokeColor);
+  const draw = (pts) => {
+    if (pts.length > 1 && typeof nodeGraphOnsetGlStrokePolyline === "function") {
+      nodeGraphOnsetGlStrokePolyline(canvas, pts, strokePx, rgb, clipX0);
+    }
   };
-  const pts = prev ? [prev] : [];
-  for (let i = 0; i < ys.length; i += 1) pts.push({ x: cx, y: clampY(ys[i]) });
-  if (pts.length === 1) pts.push({ x: cx + 1e-3, y: pts[0].y });
-  if (typeof nodeGraphOnsetGlStrokePolyline === "function") {
-    nodeGraphOnsetGlStrokePolyline(
-      canvas,
-      pts,
-      strokePx,
-      nodeGraphWaterfallStrokeRgb(settings, strokeColor),
-    );
+  const kept = Array.isArray(bag.strokePts[key]) ? bag.strokePts[key] : [];
+  let run = kept.slice();
+  for (let c = 0; c < cols.length; c += 1) {
+    const { x, ys } = cols[c];
+    if (!ys || !ys.length) {
+      draw(run);
+      run = [];
+      continue;
+    }
+    // Spread the column's peaks over its width (x .. x+1) instead of
+    // stacking them on one x (a vertical spike, a stair at every pixel).
+    // The last sample sits on the right edge, where the next column starts.
+    const n = ys.length;
+    if (!run.length) run.push({ x, y: clampY(ys[0]) });
+    for (let i = 0; i < n; i += 1) run.push({ x: x + (i + 1) / n, y: clampY(ys[i]) });
   }
-  bag.strokePts[key] = [pts[pts.length - 1]];
-}
-
-/** Map a peak-to-peak accumulator to face Y extents (scale stays a display setting). */
-function nodeGraphWaterfallAccToYs(acc, buffer, slot, settings, height) {
-  if (!acc?.has) {
-    return null;
+  draw(run);
+  if (!run.length) {
+    delete bag.strokePts[key];
+    return;
   }
-  const live = nodeGraphWaterfallPrepare(buffer, settings) || buffer;
-  const amp = nodeGraphWaterfallAmp(live, slot);
-  const midY = height * 0.5;
-  const halfHeight = nodeGraphWaterfallHalfHeight(height, slot, settings, amp);
-  const yMin = nodeGraphWaterfallIsBottomFill(settings) ? height : nodeGraphWaterfallY(acc.min, amp.gain, amp.offset, midY, halfHeight, amp, settings);
-  const yMax = nodeGraphWaterfallY(acc.max, amp.gain, amp.offset, midY, halfHeight, amp, settings);
-  if (!Number.isFinite(yMin) || !Number.isFinite(yMax)) {
-    return null;
-  }
-  return { y0: Math.min(yMin, yMax), y1: Math.max(yMin, yMax) };
-}
-
-/** One vertical peak-to-peak bar as a 2-point TraceTape path. */
-function nodeGraphWaterfallBarPoints(x, y0, y1) {
-  if (!Number.isFinite(x) || !Number.isFinite(y0) || !Number.isFinite(y1)) {
-    return [];
-  }
-  if (Math.abs(y1 - y0) < 0.5) {
-    return [{ x, y: y0 }];
-  }
-  return [{ x, y: y0 }, { x, y: y1 }];
+  // Tail for the next frame: next frame redraws from (its strip - reach), so
+  // keep every point whose line can reach that far, plus the one before.
+  const last = run[run.length - 1];
+  let first = 0;
+  while (first < run.length - 1 && run[first + 1].x < last.x - 2 * reach - 2) first += 1;
+  bag.strokePts[key] = run.slice(first);
 }
 
 /**
@@ -1112,124 +1100,6 @@ function nodeGraphWaterfallLerpSample(buffer, index) {
   return a + (b - a) * frac;
 }
 
-/**
- * Peak-to-peak filled-bar specs per pixel column across [start, end).
- * Each entry is a vertical extent in face Y (min sample .. max sample).
- * Detail 1 stores a point sample when a column is narrower than one sample
- * so later stamps can interpolate instead of holding a stair.
- * seedAcc (optional): merge freerun fractional-column remainder into column 0.
- * @returns {{ x:number, y0:number, y1:number }[]}
- */
-function nodeGraphWaterfallColumnBars(buffer, slot, columns, height, settings, start, end, seedAcc) {
-  const live = nodeGraphWaterfallPrepare(buffer, settings);
-  const cols = Math.max(1, Math.floor(nodeGraphFiniteNumber(columns, 1)));
-  if (!live?.length || cols < 1) {
-    return [];
-  }
-  const from = Math.max(0, Math.floor(start));
-  const to = Math.min(live.length, Math.max(from + 1, Math.floor(end)));
-  const amp = nodeGraphWaterfallAmp(live, slot);
-  const midY = height * 0.5;
-  const halfHeight = nodeGraphWaterfallHalfHeight(height, slot, settings, amp);
-  const span = Math.max(1, to - from);
-  const continuous = nodeGraphWaterfallDetailConnects(settings);
-  const bars = [];
-  for (let c = 0; c < cols; c += 1) {
-    const rel0 = (c / cols) * span;
-    const rel1 = ((c + 1) / cols) * span;
-    let minV = Infinity;
-    let maxV = -Infinity;
-    let has = false;
-    // Detail 1 and this column is narrower than one sample: repeating the
-    // held sample across the pixel run is the stair. Take the value at the
-    // column's right edge so the next column continues the same line.
-    if (continuous && (rel1 - rel0) < 1) {
-      const v = nodeGraphWaterfallLerpSample(live, from + rel1);
-      if (Number.isFinite(v)) {
-        minV = v;
-        maxV = v;
-        has = true;
-      }
-    } else {
-      const lo = from + Math.floor(rel0);
-      const hi = from + Math.min(span, Math.floor(rel1));
-      const rangeStart = Math.max(from, lo);
-      const rangeEnd = Math.max(rangeStart + 1, Math.min(to, hi === lo ? lo + 1 : hi));
-      const spanN = rangeEnd - rangeStart;
-      // Fixed peak-tip inspect budget (Detail control removed).
-      const maxInspect = 8192;
-      const step = spanN > maxInspect ? Math.ceil(spanN / maxInspect) : 1;
-      for (let i = rangeStart; i < rangeEnd; i += step) {
-        const v = Number(live[i]);
-        if (!Number.isFinite(v)) {
-          continue;
-        }
-        if (!has) {
-          minV = v;
-          maxV = v;
-          has = true;
-        } else {
-          if (v < minV) minV = v;
-          if (v > maxV) maxV = v;
-        }
-      }
-      if (step > 1 && rangeEnd > rangeStart) {
-        const last = Number(live[rangeEnd - 1]);
-        if (Number.isFinite(last)) {
-          if (!has) {
-            minV = last;
-            maxV = last;
-            has = true;
-          } else {
-            if (last < minV) minV = last;
-            if (last > maxV) maxV = last;
-          }
-        }
-      }
-    }
-    if (c === 0 && seedAcc?.has) {
-      if (!has) {
-        minV = seedAcc.min;
-        maxV = seedAcc.max;
-        has = true;
-      } else {
-        if (seedAcc.min < minV) minV = seedAcc.min;
-        if (seedAcc.max > maxV) maxV = seedAcc.max;
-      }
-    }
-    if (!has || !(minV <= maxV)) {
-      continue;
-    }
-    // Exact rest (and Planck-silent) used to map to mid-face, then the <1px
-    // pad fillRect'd a 1px hairline. Skip the column. RMS dB stays on its
-    // scale: only this linear silence is dropped, not a negative dB reading.
-    const bottomFill = nodeGraphWaterfallIsBottomFill(settings);
-    if (!bottomFill && nodeGraphWaterfallExtentIsSilent(minV, maxV)) {
-      continue;
-    }
-    // Shared excursion: one-sided -> rest (0); both sides stay raw min..max.
-    // Bottom fill keeps the raw max (no expansion to rest).
-    const excursion = bottomFill ? { min: minV, max: maxV } : nodeGraphWaterfallExcursionBar(minV, maxV, amp);
-    minV = excursion.min;
-    maxV = excursion.max;
-    // Bottom fill: from the bottom edge up to the column max.
-    const yMin = bottomFill ? height : nodeGraphWaterfallY(minV, amp.gain, amp.offset, midY, halfHeight, amp, settings);
-    const yMax = nodeGraphWaterfallY(maxV, amp.gain, amp.offset, midY, halfHeight, amp, settings);
-    if (!Number.isFinite(yMin) || !Number.isFinite(yMax)) {
-      continue;
-    }
-    let y0 = Math.min(yMin, yMax);
-    let y1 = Math.max(yMin, yMax);
-    if (y1 - y0 < 1) {
-      const mid = (y0 + y1) * 0.5;
-      y0 = mid - 0.5;
-      y1 = mid + 0.5;
-    }
-    bars.push({ x: c, y0, y1 });
-  }
-  return bars;
-}
-
 function nodeGraphWaterfallSizePx(face, size01) {
   if (typeof TraceStroke !== "undefined" && typeof TraceStroke.diameterPx === "function") {
     return Math.max(0, TraceStroke.diameterPx(face, size01));
@@ -1242,10 +1112,6 @@ function nodeGraphWaterfallSizePx(face, size01) {
 
 function nodeGraphWaterfallGlRadius(faceMin, size01) {
   return Math.max(0.5, nodeGraphWaterfallSizePx(faceMin, size01) * 0.5);
-}
-
-function nodeGraphWaterfallMargin(radiusPx) {
-  return Math.max(1, Math.ceil(Math.max(0.5, nodeGraphFiniteNumber(radiusPx, 0.5))));
 }
 
 function nodeGraphWaterfallLutRgb(hex, fallback) {
@@ -1337,38 +1203,6 @@ function nodeGraphWaterfallDab(batch, x, y, radius, rgb, blur01 = 0, alpha01 = 1
   const half = Math.max(0, r * knee - (blur < 0.02 ? 0.5 : 0));
   const feather = Math.max(blur < 0.02 ? 1 : 1e-3, r - half);
   nodeGraphGlLinesDot(batch, x, y, half, feather, [rgb[0] / 255, rgb[1] / 255, rgb[2] / 255, aMul]);
-}
-
-function nodeGraphWaterfallShiftPath(points, x0) {
-  const ox = nodeGraphFiniteNumber(x0);
-  if (!ox || !Array.isArray(points)) return points || [];
-  return points.map((p) => {
-    if (!p || !Number.isFinite(p.x) || !Number.isFinite(p.y)) {
-      return null;
-    }
-    return { x: p.x + ox, y: p.y };
-  });
-}
-
-/** Polyline length in px (null breaks reset). Used for stamp budget vs Scale. */
-function nodeGraphWaterfallPathLength(points) {
-  if (!Array.isArray(points) || !points.length) {
-    return 0;
-  }
-  let len = 0;
-  let prev = null;
-  for (let i = 0; i < points.length; i += 1) {
-    const p = points[i];
-    if (!p || !Number.isFinite(p.x) || !Number.isFinite(p.y)) {
-      prev = null;
-      continue;
-    }
-    if (prev) {
-      len += Math.hypot(p.x - prev.x, p.y - prev.y);
-    }
-    prev = p;
-  }
-  return len;
 }
 
 function nodeGraphWaterfallChannelList(spec, settings) {
@@ -1465,21 +1299,6 @@ function nodeGraphWaterfallChannelList(spec, settings) {
   }];
 }
 
-function nodeGraphWaterfallInkRadius(spec, width, height) {
-  const face = Math.min(Math.max(1, width), Math.max(1, height));
-  let radius = 1;
-  for (const ch of nodeGraphWaterfallChannelList(spec, spec?.settings || {})) {
-    radius = Math.max(radius, nodeGraphWaterfallSizePx(face, ch.size) * 0.5);
-  }
-  return radius;
-}
-
-/** Stamp packing 0…1 (sparse → dense). Default 0.5. */
-function nodeGraphWaterfallStampDensity(settings) {
-  const n = Number(settings?.stampDensity ?? settings?.dotDensity);
-  return Number.isFinite(n) ? nodeGraphWaterfallClamp01(n, 0.5) : 0.5;
-}
-
 function nodeGraphWaterfallBlendMode(settings, options = {}) {
   if (options?.rgbGuns) {
     // CMY checkbox → multiply (darken to black). Else additive lighter → white.
@@ -1499,27 +1318,12 @@ function nodeGraphWaterfallHasTraceTape() {
     && typeof TraceTape.presentTo === "function";
 }
 
-function nodeGraphWaterfallEnsureTape(host, index, width, height) {
-  if (!nodeGraphWaterfallHasTraceTape()) return null;
-  return TraceTape.ensure(host, width, height, "_traceTape" + index);
-}
-
 function nodeGraphWaterfallClearTapes(host) {
   if (!host || !nodeGraphWaterfallHasTraceTape()) return;
   for (let i = 0; i < 3; i += 1) {
     const tape = host["_traceTape" + i];
     if (tape) TraceTape.clear(tape);
   }
-}
-
-function nodeGraphWaterfallColor01(color) {
-  if (typeof TraceTape !== "undefined" && TraceTape.hexToRgb01) {
-    if (typeof color === "string" && color.charAt(0) === "#") {
-      return TraceTape.hexToRgb01(color);
-    }
-  }
-  const rgb = nodeGraphWaterfallParseInkRgb(color);
-  return [rgb[0] / 255, rgb[1] / 255, rgb[2] / 255];
 }
 
 /**
@@ -1563,57 +1367,10 @@ function nodeGraphWaterfallPresentHold(destCtx, destCanvas, bg) {
   nodeGraphDisplayGlFailed(destCanvas, "Waterfall GL present failed");
 }
 
-/** Fill-style for a channel bar (honors brightness). */
-function nodeGraphWaterfallBarFillStyle(color, bright01) {
-  const rgb = nodeGraphWaterfallParseInkRgb(color);
-  const a = Math.max(0, Math.min(1, nodeGraphWaterfallClamp01(bright01, 1)));
-  if (a >= 0.999) {
-    return "rgb(" + rgb[0] + "," + rgb[1] + "," + rgb[2] + ")";
-  }
-  return "rgba(" + rgb[0] + "," + rgb[1] + "," + rgb[2] + "," + a + ")";
-}
-
-/**
- * Integer device-pixel span for one column. Body stays filled peak-to-peak.
- * fillW is the full column (left of this column through left of the next).
- * A 1 device-px column stays 1px. Wider columns are not shrunk by a gutter.
- */
-function nodeGraphWaterfallBarDeviceSpan(x0, columnIndex, pitch) {
-  const col = nodeGraphFiniteNumber(columnIndex);
-  const step = Math.max(1e-6, nodeGraphFiniteNumber(pitch, 1));
-  const left = Math.floor(nodeGraphFiniteNumber(x0) + col * step);
-  const right = Math.floor(nodeGraphFiniteNumber(x0) + (col + 1) * step);
-  const span = Math.max(1, right - left);
-  return { x: left, fillW: span };
-}
-
 function nodeGraphWaterfallBarThickness(settings) {
   const n = Number(settings?.barThickness);
   if (!Number.isFinite(n)) return 1;
   return Math.max(0, Math.min(1, n));
-}
-
-/**
- * Horizontal ink inside a column. 1 = full device span (current look).
- * 0 = nothing. In between, that fraction of the column, centered.
- */
-function nodeGraphWaterfallBarInkRect(span, thickness01) {
-  if (!span || !(span.fillW > 0) || !Number.isFinite(span.x)) {
-    return null;
-  }
-  const t = Number(thickness01);
-  const thick = Number.isFinite(t) ? Math.max(0, Math.min(1, t)) : 1;
-  if (!(thick > 0)) {
-    return null;
-  }
-  if (thick >= 0.999) {
-    return { x: span.x, w: span.fillW };
-  }
-  const w = span.fillW * thick;
-  if (!(w > 0)) {
-    return null;
-  }
-  return { x: span.x + (span.fillW - w) * 0.5, w };
 }
 
 /** Stamp solid filled peak-to-peak columns. No polyline, no Blur, no Stretch.
@@ -1662,202 +1419,6 @@ function nodeGraphOnsetStrokeCanvasPx(canvas, settings) {
 // Per-channel stroke (two-channel faces) wins over the shared strokeColor.
 function nodeGraphWaterfallStrokeRgb(settings, channelColor = null) {
   return nodeGraphWaterfallParseInkRgb(channelColor || settings?.strokeColor || "#ffffff");
-}
-
-/**
- * Detail 1 run: each column is a GPU trapezoid from the previous column's
- * edge to its own (continuous fill). Outline ink strokes each column instead.
- */
-function nodeGraphWaterfallStampConnectedRun(canvas, bars, i0, i1, ox, pitch, prevEdge, rgb, composite) {
-  const first = bars[i0];
-  if (!first) return;
-  const outline = !!(prevEdge && prevEdge.outline);
-  let edge = (prevEdge
-    && first.x === 0
-    && Number.isFinite(prevEdge.y0)
-    && Number.isFinite(prevEdge.y1)) ? { y0: prevEdge.y0, y1: prevEdge.y1 } : null;
-  for (let k = i0; k < i1; k += 1) {
-    const b = bars[k];
-    if (!b || !Number.isFinite(b.y0) || !Number.isFinite(b.y1)) continue;
-    const span = nodeGraphWaterfallBarDeviceSpan(ox, b.x, pitch);
-    const ys = { y0: b.y0, y1: b.y1 };
-    nodeGraphWaterfallGlStampBar(
-      canvas, span.x, span.fillW, ys, edge || ys, true, rgb, composite, 1,
-      !outline, outline ? { on: true, px: 1, rgb } : null,
-    );
-    edge = ys;
-  }
-}
-
-/** Stamp peak-to-peak columns as batched GPU quads on the history plate. */
-function nodeGraphWaterfallStampFilledBars(canvas, bars, x0, color, bright01, composite, barPx = 1, thickness01 = 1, edgeOpts = null, filled = true) {
-  if (!canvas || !Array.isArray(bars) || !bars.length) {
-    return;
-  }
-  const ox = nodeGraphFiniteNumber(x0);
-  const pitch = Math.max(1e-6, nodeGraphFiniteNumber(barPx, 1));
-  // Brightness is ink alpha (the old rgba() fill), not a darker colour.
-  const rgb = [...nodeGraphWaterfallParseInkRgb(color), nodeGraphWaterfallClamp01(bright01, 1)];
-  const thickN = Number(thickness01);
-  const thick = Number.isFinite(thickN) ? Math.max(0, Math.min(1, thickN)) : 1;
-  const connect = !!(edgeOpts && edgeOpts.connect) && thick >= 0.999;
-  const prevEdge = connect ? edgeOpts.prevEdge : null;
-  const outline = filled === false;
-  // GPU blends: source-over, lighter/meet, screen, multiply via blend equations;
-  // difference / exclusion / xor read the history copy in the bar shader.
-  const blend = composite || "source-over";
-  if (!connect) {
-    for (let i = 0; i < bars.length; i += 1) {
-      const b = bars[i];
-      if (!b) continue;
-      const y0 = nodeGraphFiniteNumber(b.y0);
-      const y1 = nodeGraphFiniteNumber(b.y1);
-      if (!Number.isFinite(y0) || !Number.isFinite(y1)) continue;
-      const span = nodeGraphWaterfallBarDeviceSpan(ox, b.x, pitch);
-      nodeGraphWaterfallGlStampBar(
-        canvas, span.x, span.fillW, { y0, y1 }, null, false, rgb, blend, thick,
-        !outline, outline ? { on: true, px: 1, rgb } : null,
-      );
-    }
-    return;
-  }
-  let i = 0;
-  while (i < bars.length) {
-    let j = i + 1;
-    while (j < bars.length && bars[j] && bars[j - 1] && bars[j].x === bars[j - 1].x + 1) {
-      j += 1;
-    }
-    nodeGraphWaterfallStampConnectedRun(
-      canvas, bars, i, j, ox, pitch,
-      outline ? { ...(prevEdge || {}), outline: true } : prevEdge,
-      rgb, blend,
-    );
-    i = j;
-  }
-}
-
-/**
- * Classic strip ink: scroll history left, stamp filled P2P bars on the right.
- * Never rebuilds the whole face. Only scrollPx plus new columns.
- * Freerun seeds options.barAcc into column 0.
- * Detail 1 interpolates column edges (including the previous frame's right edge).
- */
-function nodeGraphWaterfallInk(destCtx, destCanvas, spec, x0, columns, bg, sampleStart, sampleEnd, options) {
-  const width = destCanvas.width;
-  const height = destCanvas.height;
-  const settings = spec.settings || {};
-  // n is layout-pixel columns. scrollPx is the backing-store strip they occupy
-  // (column width comes from the face pixel density, not 1 device px).
-  let n = Math.max(1, Math.floor(columns));
-  const barPxIn = Math.max(1e-6, nodeGraphFiniteNumber(options?.barPx, 1));
-  let strip = Math.max(0, Math.round(nodeGraphFiniteNumber(options?.scrollPx)));
-  if (strip < 1) strip = Math.max(1, Math.round(n * barPxIn));
-  if (strip > width) strip = width;
-  if (n > strip) n = strip;
-  let x = Math.floor(nodeGraphFiniteNumber(x0));
-  if (!(x >= 0) || x + strip > width) {
-    x = Math.max(0, width - strip);
-  }
-  if (n < 1 || x >= width) return 0;
-  const barPx = strip / n;
-
-  const scrollPx = strip;
-  const mode = nodeGraphWaterfallBlendMode(settings, { rgbGuns: Boolean(spec?.rgbBuffers) });
-  const count = Math.max(0, Math.floor(sampleEnd) - Math.floor(sampleStart));
-  const channels = nodeGraphWaterfallChannelList(spec, settings).filter((ch) => ch.enabled !== false);
-  if (!channels.length) return n;
-
-  const plateBg = mode === "multiply" ? "#ffffff" : (bg || "#000000");
-  const hold = nodeGraphWaterfallEnsureHold(destCanvas, width, height, plateBg);
-  if (!hold) {
-    return n;
-  }
-  hold.smooth = nodeGraphWaterfallSmoothLines(settings);
-
-  // Scroll the GPU history left; the shader reveals the right edge in the plate colour.
-  if (options?.resetHold) {
-    nodeGraphWaterfallResetHold(destCanvas, plateBg);
-  } else if (scrollPx > 0) {
-    nodeGraphWaterfallScrollHold(destCanvas, scrollPx, plateBg);
-  }
-
-  if (options?.resetHold && destCanvas._waterfall) {
-    destCanvas._waterfall.edge = Object.create(null);
-  }
-
-  const barAccMap = options?.barAcc || null;
-  let stampComposite = "source-over";
-  if (mode === "lighter" || mode === "screen") stampComposite = mode;
-  else if (mode === "multiply" || mode === "difference" || mode === "exclusion" || mode === "xor") {
-    stampComposite = mode;
-  } else if (mode === "combine" || mode === "meet") {
-    // Meet without GPU tapes: additive overlap of solid bars.
-    stampComposite = "lighter";
-  }
-
-  for (let i = 0; i < channels.length; i += 1) {
-    const ch = channels[i];
-    const buf = nodeGraphWaterfallPrepare(ch.buffer, settings);
-    const bufLen = buf?.length || 0;
-    const argStart = Math.floor(Number(sampleStart));
-    const argEnd = Math.floor(Number(sampleEnd));
-    const useArgs = Number.isFinite(argStart) && Number.isFinite(argEnd) && argEnd > argStart;
-    const end = useArgs ? Math.min(bufLen, argEnd) : bufLen;
-    const start = useArgs
-      ? Math.max(0, Math.min(end - 1, argStart))
-      : Math.max(0, end - count);
-
-    let seed = null;
-    if (barAccMap) {
-      seed = barAccMap[ch.lastYKey] || null;
-    }
-    const bars = nodeGraphWaterfallColumnBars(
-      ch.buffer, spec.slot, n, height, settings, start, end, seed,
-    );
-    if (seed) {
-      nodeGraphWaterfallAccReset(seed);
-    }
-    const continuousEdge = nodeGraphWaterfallDetailConnects(settings);
-    const barThick = nodeGraphWaterfallBarThickness(settings);
-    const connectEdge = continuousEdge && barThick >= 0.999;
-    const edgeMap = connectEdge && destCanvas._waterfall
-      ? (destCanvas._waterfall.edge || (destCanvas._waterfall.edge = Object.create(null)))
-      : null;
-    if (!bars.length) {
-      if (edgeMap) delete edgeMap[ch.lastYKey];
-      continue;
-    }
-    const last = bars[bars.length - 1];
-    if (last && Number.isFinite(last.y1)) {
-      destCanvas[ch.lastYKey] = last.y1;
-    }
-    // First channel source-over into cleared right edge; further channels blend.
-    const layerComposite = (i === 0 && stampComposite !== "multiply")
-      ? "source-over"
-      : stampComposite;
-    // Prev edge is the right side of the last stamp, now scrolled to the left
-    // of this strip. Use it only when this strip's first column is drawn
-    // (no silent gap) so a slow sine does not step between frames.
-    const prevEdge = (edgeMap && bars[0] && bars[0].x === 0)
-      ? edgeMap[ch.lastYKey]
-      : null;
-    nodeGraphWaterfallStampFilledBars(
-      destCanvas, bars, x, ch.color, ch.bright ?? 1, layerComposite, barPx,
-      barThick,
-      connectEdge ? { connect: true, prevEdge } : null,
-      nodeGraphWaterfallBarsFilled(settings),
-    );
-    if (edgeMap) {
-      if (last && last.x === n - 1 && Number.isFinite(last.y0) && Number.isFinite(last.y1)) {
-        edgeMap[ch.lastYKey] = { y0: last.y0, y1: last.y1 };
-      } else {
-        delete edgeMap[ch.lastYKey];
-      }
-    }
-  }
-
-  nodeGraphWaterfallPresentHold(destCtx, destCanvas, plateBg);
-  return n;
 }
 
 function nodeGraphWaterfallAbandonTape(canvas) {
@@ -1993,39 +1554,6 @@ function nodeGraphWaterfallFinishOutputInk(spec, context, canvas, scrollPx) {
   }
 }
 
-/** No GPU plate: black face + one logged failure (no 2D plate fill). */
-function nodeGraphWaterfallFillPlate(context, canvas, bg) {
-  nodeGraphDisplayGlFailed(canvas, "Waterfall GL unavailable");
-}
-
-function nodeGraphWaterfallPaintNowLine(spec, context, canvas, settings, width, height, bg) {
-  const mode = nodeGraphWaterfallBlendMode(settings, { rgbGuns: Boolean(spec?.rgbBuffers) });
-  const plateBg = mode === "multiply" ? "#ffffff" : (bg || "#000000");
-  if (!nodeGraphWaterfallEnsureHold(canvas, width, height, plateBg)) {
-    return true;
-  }
-  nodeGraphWaterfallResetHold(canvas, plateBg);
-  const channelList = nodeGraphWaterfallChannelList(spec, settings).filter((ch) => ch.enabled !== false);
-  let stampComposite = "source-over";
-  if (mode === "lighter" || mode === "screen") stampComposite = mode;
-  else if (mode === "multiply") stampComposite = "multiply";
-  else if (mode === "combine" || mode === "meet") stampComposite = "lighter";
-  for (let idx = 0; idx < channelList.length; idx += 1) {
-    const ch = channelList[idx];
-    const y = nodeGraphWaterfallLatestY(ch.buffer, spec.slot, settings, height);
-    if (!Number.isFinite(y)) continue;
-    const layerComposite = (idx === 0 && stampComposite !== "multiply")
-      ? "source-over"
-      : stampComposite;
-    // 1px filled now-line across the face as one GPU quad.
-    const rgb = [...nodeGraphWaterfallParseInkRgb(ch.color), nodeGraphWaterfallClamp01(ch.bright ?? 1, 1)];
-    const yi = Math.floor(y);
-    nodeGraphWaterfallGlStampBar(canvas, 0, width, { y0: yi, y1: yi + 1 }, null, false, rgb, layerComposite, 1, true, null);
-  }
-  nodeGraphWaterfallPresentHold(context, canvas, plateBg);
-  return true;
-}
-
 
 /**
  * History column count from the circuit-builder face, not from a fixed
@@ -2157,6 +1685,10 @@ function nodeGraphWaterfallSmoothAdvance(destCtx, destCanvas, spec, options) {
         strokeBag.strokePts[k] = pts.map((q) => ({ x: q.x - paintPx, y: q.y }));
       }
     }
+    // The recent columns kept for the stroke redraw move with the plate too.
+    if (Array.isArray(strokeBag?.recentCols)) {
+      for (const c of strokeBag.recentCols) c.x -= paintPx;
+    }
   }
   const channels = nodeGraphWaterfallChannelList(spec, settings).filter((ch) => ch.enabled !== false);
   if (!channels.length || paintPx < 1) {
@@ -2177,16 +1709,35 @@ function nodeGraphWaterfallSmoothAdvance(destCtx, destCanvas, spec, options) {
     : null;
   const sampleSpan = Math.max(0, sampleEnd - sampleStart);
   const pix0 = Math.max(0, width - paintPx);
+  const useFill = nodeGraphWaterfallBarsFilled(settings);
+  const useStroke = nodeGraphWaterfallDrawStroke(settings);
+  const bag = destCanvas._waterfall || (destCanvas._waterfall = {});
+  // Stroke layering: a thick, antialiased stroke reaches past its column, and
+  // channels were stroked column by column (L, R, L, R ...), so in each
+  // column L could land on top of the previous column's R: the overlap order
+  // flickered along the line. Now the last `reach` columns stay open: each
+  // frame they are cleared with the new strip, their fills restamped from
+  // the kept spans, then every channel strokes the whole open strip in
+  // channel order (L, then R on top). Columns left of the strip are final.
+  let redo = [];
+  if (useStroke && scroll && bag.recentW === width && Array.isArray(bag.recentCols)) {
+    const { reach } = nodeGraphWaterfallStrokeReach(destCanvas, settings);
+    redo = bag.recentCols.filter((c) => c.x >= pix0 - reach && c.x < pix0);
+  }
+  const clipX0 = redo.length ? redo[0].x : pix0;
+  if (typeof nodeGraphWaterfallGlClearColumn === "function" && width > clipX0) {
+    nodeGraphWaterfallGlClearColumn(destCanvas, clipX0, width - clipX0, plateBg);
+  }
+  for (const c of redo) {
+    nodeGraphWaterfallStampColumnFills(destCanvas, c.x, c.spans, mode, stampComposite, useFill);
+  }
+  const strokeCols = Object.create(null);
+  const recent = [];
   for (let x = pix0; x < width; x += 1) {
     const t0 = (x - pix0) / paintPx;
     const t1 = (x + 1 - pix0) / paintPx;
     const s0 = sampleStart + sampleSpan * t0;
     const s1 = sampleStart + sampleSpan * Math.max(t1, t0 + 1e-6);
-    if (typeof nodeGraphWaterfallGlClearColumn === "function") {
-      nodeGraphWaterfallGlClearColumn(destCanvas, x, 1, plateBg);
-    }
-    const useFill = nodeGraphWaterfallBarsFilled(settings);
-    const useStroke = nodeGraphWaterfallDrawStroke(settings);
     const columnSpans = [];
     for (let i = 0; i < channels.length; i += 1) {
       const ch = channels[i];
@@ -2221,18 +1772,31 @@ function nodeGraphWaterfallSmoothAdvance(destCtx, destCanvas, spec, options) {
     nodeGraphWaterfallStampColumnFills(
       destCanvas, x, columnSpans, mode, stampComposite, useFill,
     );
+    if (useStroke) recent.push({ x, spans: columnSpans });
     for (let i = 0; i < columnSpans.length; i += 1) {
       const span = columnSpans[i];
-      // Stroke does not depend on the fill (see the onset path).
+      // Stroke does not depend on the fill (see the onset path): collected
+      // here, drawn per channel after all fills.
       if (useStroke) {
-        // Draw the waveform (both peaks + last sample), not a one-sided edge.
-        const bag = destCanvas._waterfall || (destCanvas._waterfall = {});
-        nodeGraphWaterfallStrokeWaveColumn(destCanvas, bag, span.key, x, span.waveYs, settings, false, span.strokeColor);
+        const run = strokeCols[span.key] || (strokeCols[span.key] = { color: span.strokeColor, cols: [] });
+        run.cols.push({ x, ys: span.waveYs });
       }
       const ys = span.ys;
       if (!ys) continue;
       if (edgeMap) edgeMap[span.key] = { y0: ys.y0, y1: ys.y1 };
     }
+  }
+  if (useStroke) {
+    // Channel order = z order: the first channel (L) first, later ones (R) on top.
+    for (const key of Object.keys(strokeCols)) {
+      // Draw the waveform (both peaks + last sample), not a one-sided edge.
+      nodeGraphWaterfallStrokeWaveRun(destCanvas, bag, key, strokeCols[key].cols, settings, strokeCols[key].color, clipX0);
+    }
+    const { reach } = nodeGraphWaterfallStrokeReach(destCanvas, settings);
+    bag.recentCols = redo.concat(recent).filter((c) => c.x >= width - reach - 1);
+    bag.recentW = width;
+  } else {
+    bag.recentCols = null;
   }
   nodeGraphWaterfallPresentHold(destCtx, destCanvas, plateBg);
   return 0;
@@ -2361,6 +1925,7 @@ function nodeGraphWaterfallPaint(spec) {
     st.frac = 0;
     st.carrySamples = 0;
     if (st.strokePts) st.strokePts = Object.create(null);
+    st.recentCols = null;
     const blend = nodeGraphWaterfallBlendMode(settings, { rgbGuns: Boolean(spec?.rgbBuffers) });
     const plateBg = blend === "multiply" ? "#ffffff" : (spec.bg || "#000000");
     if (typeof nodeGraphWaterfallGlReset === "function") {

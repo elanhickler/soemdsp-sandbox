@@ -461,7 +461,9 @@ function nodeGraphOnsetGlEnsureLine(s) {
   return s;
 }
 
-function nodeGraphOnsetGlStrokePolyline(canvas, points, widthPx, rgb) {
+// clipX0 (optional, canvas px): draw only at x >= clipX0 (scissor), to repaint
+// the part of an earlier segment that a strip clear erased.
+function nodeGraphOnsetGlStrokePolyline(canvas, points, widthPx, rgb, clipX0 = null) {
   const s = canvas && canvas._wfGlSession;
   if (!s || !points || points.length < 2) return false;
   nodeGraphOnsetGlEnsureLine(s);
@@ -525,7 +527,13 @@ function nodeGraphOnsetGlStrokePolyline(canvas, points, widthPx, rgb) {
   enable(s.lineLoc.color, 4, 16);
   enable(s.lineLoc.p1, 2, 32);
   enable(s.lineLoc.half, 1, 40);
+  const clip = Number.isFinite(clipX0) ? Math.max(0, Math.min(s.w, Math.floor(clipX0))) : null;
+  if (clip !== null) {
+    gl.enable(gl.SCISSOR_TEST);
+    gl.scissor(clip, 0, s.w - clip, s.h);
+  }
   gl.drawArrays(gl.TRIANGLES, 0, chunks.length / 11);
+  if (clip !== null) gl.disable(gl.SCISSOR_TEST);
   const disable = (loc) => {
     if (loc >= 0) gl.disableVertexAttribArray(loc);
   };

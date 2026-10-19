@@ -23,17 +23,22 @@ gate(raw.length === 3 && Math.abs(raw[0] - 0.8) < 1e-6 && Math.abs(raw[1] + 0.6)
   `wave points in time order: max, min, last (${raw.map((v) => v.toFixed(2)).join(", ")})`);
 const ys = ctx.nodeGraphWaterfallWaveYs(acc, buf, null, {}, H);
 gate(Math.min(...ys) < H / 2 && Math.max(...ys) > H / 2, "stroke spans both the top AND bottom of the signal (not top-only)");
-// Stroke column polyline: previous last point -> peaks -> last.
+// Stroke run: previous frame's tail -> each column's peaks -> last.
 const drawn = [];
-ctx.nodeGraphOnsetGlStrokePolyline = (_c, pts) => { drawn.push(pts.map((p) => [p.x, p.y])); return true; };
+ctx.nodeGraphOnsetGlStrokePolyline = (_c, pts, _w, _rgb, clip) => { drawn.push({ pts: pts.map((p) => [p.x, p.y]), clip }); return true; };
 ctx.nodeGraphOnsetStrokeCanvasPx = () => 1;
 const bag = {};
-ctx.nodeGraphWaterfallStrokeWaveColumn({}, bag, "L", 10, ys, {}, false);
-ctx.nodeGraphWaterfallStrokeWaveColumn({}, bag, "L", 11, [40, 60], {}, false);
-gate(drawn.length === 2 && drawn[1][0][1] === ys[ys.length - 1] && drawn[1].length === 3,
-  "next column continues from the previous column's last sample (one continuous waveform)");
-ctx.nodeGraphWaterfallStrokeWaveColumn({}, bag, "L", 0, [50], {}, true);
-gate(drawn[2].length === 2 && drawn[2][0][0] === 0.5, "seam starts a new line (no wrap-around segment)");
+ctx.nodeGraphWaterfallStrokeWaveRun({}, bag, "L", [{ x: 10, ys }], {}, null, 10);
+ctx.nodeGraphWaterfallStrokeWaveRun({}, bag, "L", [{ x: 11, ys: [40, 60] }], {}, null, 11);
+gate(drawn.length === 2 && drawn[1].pts.some((q) => q[0] === 11 && q[1] === ys[ys.length - 1]) && drawn[1].clip === 11,
+  "next frame continues from the previous column's last sample (one continuous waveform), clipped to the new strip");
+{
+  const xs = drawn[0].pts.map((q) => q[0]);
+  gate(xs.length === ys.length + 1 && xs[0] === 10 && xs[xs.length - 1] === 11 && xs.every((v, i) => i === 0 || v > xs[i - 1]),
+    "a column's peaks are spread across its width in time order (no vertical spike per column)");
+}
+ctx.nodeGraphWaterfallStrokeWaveRun({}, bag, "L", [{ x: 12, ys: null }, { x: 13, ys: [50] }], {}, null, 12);
+gate(drawn[drawn.length - 1].pts[0][0] === 13, "a column without signal breaks the line");
 // Absolute polarity folds a zero crossing between the peaks.
 const absRaw = ctx.nodeGraphWaterfallWaveRaw(acc, { polarity: "absolute" });
 gate(absRaw.length === 4 && absRaw[1] === 0, "absolute polarity: line passes through 0 between opposite-sign peaks");
@@ -43,8 +48,8 @@ gate(absRaw.length === 4 && absRaw[1] === 0, "absolute polarity: line passes thr
   const colors = [];
   ctx.nodeGraphOnsetGlStrokePolyline = (_c, _pts, _px, rgb) => { colors.push(JSON.stringify(rgb)); return true; };
   const b2 = {};
-  ctx.nodeGraphWaterfallStrokeWaveColumn({}, b2, "L", 1, [40, 60], { strokeColor: "#ffffff" }, false, "#ff8000");
-  ctx.nodeGraphWaterfallStrokeWaveColumn({}, b2, "R", 1, [40, 60], { strokeColor: "#ffffff" }, false, null);
+  ctx.nodeGraphWaterfallStrokeWaveRun({}, b2, "L", [{ x: 1, ys: [40, 60] }], { strokeColor: "#ffffff" }, "#ff8000", 1);
+  ctx.nodeGraphWaterfallStrokeWaveRun({}, b2, "R", [{ x: 1, ys: [40, 60] }], { strokeColor: "#ffffff" }, null, 1);
   gate(colors[0] === rgbOf("#ff8000") && colors[1] === rgbOf("#ffffff"), "channel stroke color wins; missing falls back to the shared Stroke");
   const stereo = { stereoBuffers: { left: new Float32Array(4), right: new Float32Array(4) } };
   const both = ctx.nodeGraphWaterfallChannelList(stereo, { strokeColor: "#aaaaaa", strokeLeftColor: "#ff0000", strokeRightColor: "#00ff00" });
@@ -72,7 +77,8 @@ gate(absRaw.length === 4 && absRaw[1] === 0, "absolute polarity: line passes thr
   ctx.nodeGraphOnsetStrokeCanvasPx = () => strokeW;
   const lines = { D: [], W: [] };
   let cur = null;
-  ctx.nodeGraphOnsetGlStrokePolyline = (_c, pts) => { lines[cur].push(pts.map((q) => ({ x: q.x, y: q.y }))); return true; };
+  // Keep only what lands in the new strip (the tail before it is clipped).
+  ctx.nodeGraphOnsetGlStrokePolyline = (_c, pts, _w, _rgb, clip) => { lines[cur].push(pts.filter((q) => q.x >= clip).map((q) => ({ x: q.x, y: q.y }))); return true; };
   const slot = { type: "sidechain" };
   const canvas = { height: H };
   const run = (mix, ducked, label) => {
@@ -93,7 +99,7 @@ gate(absRaw.length === 4 && absRaw[1] === 0, "absolute polarity: line passes thr
         ctx.nodeGraphWaterfallAccPush(acc, Float32Array.from(sig), c * per, (c + 1) * per, {}, slot);
         const ys = ctx.nodeGraphWaterfallWaveYs(acc, null, slot, {}, H);
         cur = key;
-        ctx.nodeGraphWaterfallStrokeWaveColumn(canvas, bag, key, c, ys, {}, false, null);
+        ctx.nodeGraphWaterfallStrokeWaveRun(canvas, bag, key, [{ x: c, ys }], {}, null, c);
       }
     }
     const ok = (arr) => arr.length === cols
@@ -113,9 +119,9 @@ gate(absRaw.length === 4 && absRaw[1] === 0, "absolute polarity: line passes thr
   const m1 = run(1, 0, "Mix 1 / Ducked 0 (dry rest 0 -> top, wet -> bottom)");
   gate(ys(m1.lines.D[12]).every((y) => Math.abs(y - inset) < 1e-9) && ys(m1.lines.W[12]).every((y) => Math.abs(y - (H - inset)) < 1e-9), "Mix 1 full duck: Dry at the top edge, Wet at the bottom edge");
   const wfSrc = fs.readFileSync(path.join(root, "public", "node-graph-module-scope-waterfall.js"), "utf8");
-  const strokeFirst = wfSrc.match(/if \(useStroke\) \{[\s\S]{0,300}?nodeGraphWaterfallStrokeWaveColumn\([\s\S]{0,200}?\}\s*const ys = span\.ys;\s*if \(!ys\) continue;/g) || [];
+  const strokeFirst = wfSrc.match(/if \(useStroke\) \{\s*const run = strokeCols\[span\.key\][\s\S]{0,200}?\}\s*const ys = span\.ys;\s*if \(!ys\) continue;/g) || [];
   // Onset no longer uses this column stroke. It draws one sample-accurate line.
-  gate(strokeFirst.length === 1, `waterfall column path strokes before the fill's silent-column skip (${strokeFirst.length}/1)`);
+  gate(strokeFirst.length === 1, `waterfall column path collects the stroke before the fill's silent-column skip (${strokeFirst.length}/1)`);
 }
 // Sub-pixel frames (advance < 1 px, e.g. long History at 60 fps): their
 // samples must reach the next column. Regression: SmoothAdvance reset the
@@ -128,13 +134,13 @@ gate(absRaw.length === 4 && absRaw[1] === 0, "absolute polarity: line passes thr
   ctx.nodeGraphWaterfallPresentHold = () => {};
   ctx.nodeGraphWaterfallStampColumnFills = () => {};
   ctx.nodeGraphWaterfallGlScroll = (_c, px) => { grid = grid.map((_, x) => (x + px < W ? grid[x + px] : new Array(H).fill(0))); };
-  ctx.nodeGraphWaterfallGlClearColumn = (_c, x) => { grid[x] = new Array(H).fill(0); };
+  ctx.nodeGraphWaterfallGlClearColumn = (_c, x, w = 1) => { for (let i = x; i < Math.min(W, x + w); i++) grid[i] = new Array(H).fill(0); };
   ctx.nodeGraphOnsetStrokeCanvasPx = () => 1;
-  ctx.nodeGraphOnsetGlStrokePolyline = (_c, pts, _w, rgb) => {
+  ctx.nodeGraphOnsetGlStrokePolyline = (_c, pts, _w, rgb, clip = 0) => {
     const bit = rgb[0] > rgb[2] ? 1 : 2;
     for (let i = 1; i < pts.length; i++) {
       const a = pts[i - 1], q = pts[i], n = Math.ceil(Math.hypot(q.x - a.x, q.y - a.y) * 4) + 1;
-      for (let k = 0; k <= n; k++) { const x = Math.floor(a.x + (q.x - a.x) * k / n), y = Math.floor(a.y + (q.y - a.y) * k / n); if (x >= 0 && x < W && y >= 0 && y < H) grid[x][y] |= bit; }
+      for (let k = 0; k <= n; k++) { const x = Math.floor(a.x + (q.x - a.x) * k / n), y = Math.floor(a.y + (q.y - a.y) * k / n); if (x >= clip && x < W && y >= 0 && y < H) grid[x][y] |= bit; }
     }
   };
   ctx.nodeGraphModuleSelectedDisplayMode = () => ({ key: "gains" });
@@ -172,20 +178,19 @@ gate(absRaw.length === 4 && absRaw[1] === 0, "absolute polarity: line passes thr
   const W = 160, H = 64, N = 16384;
   let grid;
   ctx.nodeGraphWaterfallGlScroll = (_c, px) => { grid = grid.map((_, x) => (x + px < W ? grid[x + px] : new Array(H).fill(0))); };
-  ctx.nodeGraphWaterfallGlClearColumn = (_c, x) => { grid[x] = new Array(H).fill(0); };
+  ctx.nodeGraphWaterfallGlClearColumn = (_c, x, w = 1) => { for (let i = x; i < Math.min(W, x + w); i++) grid[i] = new Array(H).fill(0); };
   ctx.nodeGraphWaterfallGlStampBar = (_c, x, _w, ys, _p, _cn, _rgb, blend) => {
     for (let y = Math.max(0, Math.floor(Math.min(ys.y0, ys.y1))); y < Math.min(H, Math.ceil(Math.max(ys.y0, ys.y1))); y++) grid[x][y] = blend === "source-over" ? 4 : (grid[x][y] | 8);
     return true;
   };
-  ctx.nodeGraphOnsetGlStrokePolyline = (_c, pts, _w, rgb) => {
+  ctx.nodeGraphOnsetGlStrokePolyline = (_c, pts, _w, rgb, clip = 0) => {
     const bit = rgb[0] > rgb[2] ? 1 : 2;
-    // The held flat between columns is the connector from the previous
-    // column's last point, exactly one column to the left.
-    if (pts.length >= 2 && Math.abs(pts[0].x - pts[1].x) > 0.01 && Math.abs(pts[0].x - (pts[1].x - 1)) > 0.01) badConnectors++;
-    connectors++;
+    // The line is continuous: every step moves right by at most one column
+    // (a stale tail after a scroll would jump or step backwards).
+    for (let i = 1; i < pts.length; i++) { connectors++; const d = pts[i].x - pts[i - 1].x; if (d < 0 || d > 1 + 1e-9) badConnectors++; }
     for (let i = 1; i < pts.length; i++) {
       const a = pts[i - 1], q = pts[i], n = Math.ceil(Math.hypot(q.x - a.x, q.y - a.y) * 4) + 1;
-      for (let k = 0; k <= n; k++) { const x = Math.floor(a.x + (q.x - a.x) * k / n), y = Math.floor(a.y + (q.y - a.y) * k / n); if (x >= 0 && x < W && y >= 0 && y < H) grid[x][y] |= bit; }
+      for (let k = 0; k <= n; k++) { const x = Math.floor(a.x + (q.x - a.x) * k / n), y = Math.floor(a.y + (q.y - a.y) * k / n); if (x >= clip && x < W && y >= 0 && y < H) grid[x][y] |= bit; }
     }
   };
   let connectors = 0, badConnectors = 0;
@@ -228,7 +233,7 @@ gate(absRaw.length === 4 && absRaw[1] === 0, "absolute polarity: line passes thr
             if (!(grid[x][Math.min(H - 1, Math.floor(yOf(v)))] & bit)) missing++;
           }
         }
-        gate(connectors > 100 && badConnectors === 0, `held steps (${barInk}, history ${faceSamples}, frame ${frame}): every flat connector starts one column left, also after a multi-px scroll (${badConnectors} misplaced of ${connectors})`);
+        gate(connectors > 100 && badConnectors === 0, `held steps (${barInk}, history ${faceSamples}, frame ${frame}): the line steps right by at most one column, also after a multi-px scroll (${badConnectors} bad of ${connectors})`);
         connectors = 0; badConnectors = 0;
         gate(checked > 50 && missing === 0, `held steps (${barInk}, history ${faceSamples}, frame ${frame}): flat tops drawn in every held column (${missing} missing of ${checked})`);
       }
@@ -236,6 +241,57 @@ gate(absRaw.length === 4 && absRaw[1] === 0, "absolute polarity: line passes thr
   }
   const wfSrc2 = fs.readFileSync(path.join(root, "public", "node-graph-module-scope-waterfall.js"), "utf8");
   gate(/strokeBag\.strokePts\[k\] = pts\.map\(\(q\) => \(\{ x: q\.x - paintPx, y: q\.y \}\)\)/.test(wfSrc2), "scroll moves the stored stroke points with the plate");
+}
+// Fixed z order: Right always over Left. Thick strokes reach past their
+// column; stroked column by column (L, R, L, R ...) the next column's Left
+// covered the previous column's Right where they cross. Every pixel the
+// Right stroke covers must end Right, at every frame size.
+{
+  const W = 140, H = 60, N = 16384, R = 1;
+  let main, rOnly;
+  const blank = () => Array.from({ length: W }, () => new Array(H).fill(0));
+  const shift = (g, px) => g.map((_, x) => (x + px < W ? g[x + px] : new Array(H).fill(0)));
+  ctx.nodeGraphWaterfallGlScroll = (_c, px) => { main = shift(main, px); rOnly = shift(rOnly, px); };
+  ctx.nodeGraphWaterfallGlClearColumn = (_c, x, w = 1) => { for (let i = x; i < Math.min(W, x + w); i++) { main[i] = new Array(H).fill(0); rOnly[i] = new Array(H).fill(0); } };
+  ctx.nodeGraphWaterfallGlStampBar = () => true;
+  ctx.nodeGraphOnsetStrokeCanvasPx = () => 2 * R + 1;
+  ctx.nodeGraphOnsetGlStrokePolyline = (_c, pts, _w, rgb, clip = 0) => {
+    const id = rgb[0] > rgb[2] ? 1 : 2;
+    for (let i = 1; i < pts.length; i++) {
+      const a = pts[i - 1], q = pts[i], n = Math.ceil(Math.hypot(q.x - a.x, q.y - a.y) * 4) + 1;
+      for (let k = 0; k <= n; k++) {
+        const cx = Math.floor(a.x + (q.x - a.x) * k / n), cy = Math.floor(a.y + (q.y - a.y) * k / n);
+        for (let x = cx - R; x <= cx + R; x++) for (let y = cy - R; y <= cy + R; y++) {
+          if (x < clip || x >= W || y < 0 || y >= H) continue;
+          main[x][y] = id;  // source-over: the last stroke wins
+          if (id === 2) rOnly[x][y] = 1;
+        }
+      }
+    }
+  };
+  ctx.nodeGraphModuleSelectedDisplayMode = () => ({ key: "wave" });
+  const total = 400000, left = new Float32Array(total), right = new Float32Array(total);
+  for (let i = 0; i < total; i++) { left[i] = 0.8 * Math.sin(i / 900); right[i] = 0.5 * Math.sin(i / 640 + 1); }
+  for (const frame of [600, 1500, 4000]) {
+    main = blank(); rOnly = blank();
+    const settings = { barInk: "stroke", blendMode: "lighter", strokeLeftColor: "#ff0000", strokeRightColor: "#0000ff" };
+    const canvas = { width: W, height: H, _waterfall: {} };
+    let pos = N, carryPx = 0, carry = 0, colPx = 0; const barAcc = Object.create(null);
+    const faceSamples = 140000;
+    while (pos + frame < total) {
+      pos += frame;
+      carryPx += frame / faceSamples * W; const move = Math.floor(carryPx + 1e-6); carryPx -= move;
+      if (move < 1) { carry += frame; continue; }
+      const L = left.slice(pos - N, pos), Rb = right.slice(pos - N, pos);
+      colPx = ctx.nodeGraphWaterfallSmoothAdvance(null, canvas, { slot: { type: "output" }, settings, buffer: L, stereoBuffers: { left: L, right: Rb } },
+        { advancePx: move, barPx: 1, sampleStart: N - frame - carry, sampleEnd: N, colPx, barAcc });
+      carry = 0;
+    }
+    let rPx = 0, under = 0, both = 0;
+    for (let x = 0; x < W; x++) for (let y = 0; y < H; y++) if (rOnly[x][y]) { rPx++; if (main[x][y] !== 2) under++; }
+    for (let x = 0; x < W; x++) for (let y = 0; y < H; y++) if (main[x][y] === 1) both++;
+    gate(rPx > 300 && both > 300 && under === 0, `L/R z order (frame ${frame}): Right on top of Left at every crossing (${under} of ${rPx} Right pixels under Left)`);
+  }
 }
 console.log(failures ? `FAILED ${failures}` : "smoke_waterfall_stroke_wave ok");
 if (failures) process.exit(1);

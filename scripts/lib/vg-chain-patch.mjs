@@ -33,7 +33,7 @@ export function vgChainPatch() {
   at("ib-solo", "imageBurn", 38, 17);
   // VG-6 audio handoff: a 1 Hz sine drives Video Delay X on a delay parked
   // far off screen (asleep) whose picture feeds a visible Image Burn.
-  d.nodes.push({ gx: 44, gy: 17, id: "sw-1", type: "sineWavetable", params: { frequency: 1, mode: 0, amplitude: 0.7 } });
+  d.nodes.push({ gx: 44, gy: 17, id: "sw-1", type: "sineWavetable", params: { freq: 1, mode: 0, amp: 0.7 } });
   at("vd-x", "videoDelay", 400, 17);
   at("ib-x", "imageBurn", 44, 1);
   for (const [a, b] of VG_CHAIN_EDGES) {
