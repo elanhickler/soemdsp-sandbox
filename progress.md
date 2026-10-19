@@ -1,3 +1,7 @@
+## 2026-10-19 - Deletable Output and Input (done locally)
+
+- Implemented `docs/DELETABLE_OUTPUT_PLAN.md` DO-1..DO-9 (Grok Bot executor, Argi via Librarian), local commits `db043232`..`23d546c4`, not pushed. Output and Input are deletable (one undo step, cables go too) and come back only via Undo or their lower-bar button turning on (`nodeGraphSpawnIoModuleIfMissing`; transport Play never spawns). On delete, settings and position go to `patch.ioModuleSettings` (saved with the patch, never erased); respawn restores them at the saved spot or the nearest free one. Toolbar volume / input level use the saved value while the module is gone. Input id forced to `audioInput` (one-shot migration: 0 of 103 repo patches needed it; script deleted). Must-have-Output boot checks and the legacy-default fingerprint removed. Smoke: `scripts/smoke_deletable_io.mjs`.
+
 ## 2026-10-18 - Zoom performance plan (docs only)
 
 - Added `docs/ZOOM_PERF_PLAN.md` (Interface executing, Argi request): slow zoom with Play on was ~3 fps; target ~60 with displays running and zero `readPixels` / `getComputedStyle` / `offset*` during the gesture. Tracker ZP-1..ZP-7. ZP-1 done locally (`d895e36a` / `f2cd9bce`), not pushed. ZP-2 paused for Argi scope OK and owner handoff of the uncommitted play-blit `readPixels` path. Pointer in `docs/FUTURE_PLANNING.md`. Not committed.

@@ -2,6 +2,10 @@
 
 This file collects project-shaping ideas that should survive day-to-day implementation without becoming immediate scope.
 
+## Deletable Output and Input (2026-10-19)
+
+Done locally (DO-1..DO-9, not pushed). Output and Input are deletable; each returns only via Undo or its lower-bar button turning on, which respawns it with its saved settings and position (`patch.ioModuleSettings`). Play never spawns. Plan and deviations: `docs/DELETABLE_OUTPUT_PLAN.md`.
+
 ## Zoom performance (2026-10-18)
 
 Slow zoom with Play on was ~3 fps; target ~60 with displays running and zero `readPixels` / layout reads during the gesture. Tracker ZP-1..ZP-7. ZP-1 done locally (`d895e36a` / `f2cd9bce`), not pushed. ZP-2 paused for Argi scope OK and owner handoff of the uncommitted play-blit `readPixels` path. Plan: `docs/ZOOM_PERF_PLAN.md`.
