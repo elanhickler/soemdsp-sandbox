@@ -789,6 +789,23 @@ function nodeGraphModulePlacementPixelFromCursor(cursorPoint, element) {
   };
 }
 
+function syncNodeGraphPlacementGlPlates(placement) {
+  const ids = Array.isArray(placement?.pairNodeIds) && placement.pairNodeIds.length
+    ? placement.pairNodeIds
+    : [placement?.nodeId];
+  if (typeof nodeGraphModuleGeometryPublishFromDom === "function") {
+    for (const id of ids) {
+      if (id) nodeGraphModuleGeometryPublishFromDom(id);
+    }
+  }
+  if (typeof nodeGraphGlGraphRebuildPlates === "function") {
+    nodeGraphGlGraphRebuildPlates();
+  }
+  if (typeof nodeGraphGlGraphPresent === "function") {
+    nodeGraphGlGraphPresent();
+  }
+}
+
 function applyNodeGraphPendingModuleCursor(cursorPoint) {
   const placement = nodeGraphMvp.modulePlacement;
   if (!placement?.nodeId) {
@@ -819,6 +836,10 @@ function applyNodeGraphPendingModuleCursor(cursorPoint) {
   placement.cursorPoint = cursorPoint;
   placement.point = point;
   syncNodeGraphPlacementSnapGhost(element, placement.overWorkspace !== false);
+  // The GL graph draws the visible module plate from published geometry, and
+  // the HTML is hidden under it. Republish the moved module(s) and rebuild the
+  // plates each step, or the preview stays where the module was spawned.
+  syncNodeGraphPlacementGlPlates(placement);
   // New shop ghosts have no cables. A full wire rebuild + scope paint here
   // is what made heavy faces (Sabrina Trace, crossovers) hitch: freeze-move.
   // Teleport of an already-wired unique module still needs a lite wire pass.
