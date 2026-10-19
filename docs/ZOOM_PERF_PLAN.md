@@ -55,7 +55,7 @@ counts. Each stage is committed locally on its own. Nothing is pushed without Ar
 | ID | Task | Done when | Gate | Status |
 |---|---|---|---|---|
 | ZP-1 | Waterfall `uCss` precision fixed. Failed links are cached once (`lineProgFailed`; session programs shared per context in a WeakMap, `false` on failure) and reported once through `nodeGraphDisplayGlFailed`, with no per-frame retry. New smoke: every renderer's GL programs link. | `scripts/smoke_display_gl_programs_link.mjs` passes on softpop and musicplayer: no link failure, no GL-failed entry, no links once warm | 0 links during the gesture | done 2026-10-18 (links during gesture 0) |
-| ZP-2 | Remove the readPixels / putImageData copy path. Faces render into per-face FBO textures (or an atlas) in the shared context at zoom-1 size, and only when their data changes. Every face renders upright, matching the old drawImage orientation. The flips at `gl-line-renderer.js` ~1700 and the UNPACK_FLIP_Y uploads stay as they are. New orientation smoke: paint the top red and the bottom blue, then assert both survive every present path (`nodeGraphPicturePresent`, `nodeGraphDisplayCanvasBlit`, `nodeGraphSharedGlBlitTo2D` at 512 px or less and above). | `readPixels` count 0 during the gesture. Orientation smoke passes | readPixels = 0 | open, paused (see the ZP-2 note) |
+| ZP-2 | Remove the readPixels / putImageData copy path. Faces render into per-face FBO textures (or an atlas) in the shared context at zoom-1 size, and only when their data changes. Every face renders upright, matching the old drawImage orientation. The flips at `gl-line-renderer.js` ~1700 and the UNPACK_FLIP_Y uploads stay as they are. New orientation smoke: paint the top red and the bottom blue, then assert both survive every present path (`nodeGraphPicturePresent`, `nodeGraphDisplayCanvasBlit`, `nodeGraphSharedGlBlitTo2D` at 512 px or less and above). | `readPixels` count 0 during the gesture. Orientation smoke passes | readPixels = 0 | done 2026-10-18 (see ZP-2 result) |
 | ZP-3 | The GL graph is the only compositor: one on-screen WebGL canvas. During a gesture only the camera uniform changes; cached meshes are replayed and face quads draw from their textures (NEAREST above 2.5x). Separate "camera moving" from "displays held": with hold off, a gesture frame reuses the cached chrome, wire and plate meshes and only updates face textures. Overlaps GW-2 (camera) in `GPU_WORKSPACE_PLAN.md`, which owns the camera API. | No mesh rebuild and no glyph bake during the gesture | p90 < 20 ms | open |
 | ZP-4 | Module HTML is frozen during gestures (a single container transform, or a hidden hit layer). CSS `zoom` and `--node-graph-zoom` are written once on settle. World boxes and text metrics are cached at rebuild. | `getComputedStyle` = 0 and `offset*` = 0 during the gesture | 0 / 0 | open |
 | ZP-5 | Text drawn from a fixed-size or SDF glyph atlas. The bake size never depends on zoom. | No `nodeGraphGlLinesSetGlyphBakePx` change across a zoom | no re-bake | open |
@@ -67,6 +67,8 @@ counts. Each stage is committed locally on its own. Nothing is pushed without Ar
 | Date | Stage | fps | p50 | p90 | readPixels | gCS | offset* | Commit |
 |---|---|---|---|---|---|---|---|---|
 | 2026-10-18 | ZP-1 (baseline) | 3.3 | 217 ms | 700 ms | 246 | 50,784 | 29,760 | d895e36a |
+| 2026-10-18 | before ZP-2 (re-run, current tree) | 6.7 | 117 ms | 283 ms | 268 | 52,419 | 30,263 | - |
+| 2026-10-18 | ZP-2 | 23.7 | 33 ms | 83 ms | 0 | 3,843 | 17,600 | 5ab0351f + ZP-2b |
 
 ## ZP-2 note (2026-10-18, before any code)
 
@@ -87,3 +89,48 @@ handed over.
   texture, or the face keeps a 2D copy for it. That audit is the first ZP-2 task.
 - Orientation smoke (parent request): paint the top red and the bottom blue, then assert both survive every
   present path, at 512 px or less and above.
+
+## ZP-2 result (2026-10-18)
+
+Argi: "Just take it over and start stage 2". Interface owns the play-blit path now.
+
+Audit of everything that reads face pixels:
+- **GPU consumers** go through `nodeGraphGlLinesImage` / `drawImages`: the GL graph (workspace and perform
+  tiles), the mini perform view, the display-layer compositor, camera view and magnifier copies
+  (`copyNodeGraphCanvasBitmap`), and the xy-pad. They now sample the face texture.
+- **Snapshots** (`nodeGraphGlLinesSnapshot`: face resize hold, burn hold) copy the face texture.
+- **TV cable publish** (`nodeGraphPicturePublishCanvas`) blits from the face texture (flipped to FBO rows).
+- **2D readers:** `nodeGraphGlGraphPresentDisplaysOnly` (2D drawImage onto the dots layer) is replaced by a
+  mesh replay. The phosphor drawer's `lighter` composite is kept by blending into the face texture.
+  `smoke_engine_state_stopped_faces` reads `nodeGraphSharedGlFacePixels`.
+- **On-screen 2D canvases** (not `.node-display-canvas` inside `#nodeGraphWorkspace.gl-graph-on`) still get the
+  HEAD drawImage from the shared canvas as well.
+
+Design: `nodeGraphSharedGlCopyToContext` (picture-device) copies the source rectangle into a scratch texture
+(`copyTexSubImage2D`), then draws it into a per-face FBO texture at the face canvas size, v-flipped to top-down,
+with the destination context's composite mode and globalAlpha. It runs only when a face presents. The GL graph
+replays its cached mesh (camera uniform, NEAREST above 2.5x chosen at replay time) for display frames (dots
+layer) and for gesture frames (all layers), so displays keep running while zooming with no rebuild.
+
+| softpop, ArchIV | play-only fps | play readPixels / 3 s | zoom fps | p50 | p90 | gCS | offset* | texImage2D(canvas) |
+|---|---|---|---|---|---|---|---|---|
+| before | 55 | 1005 (853 ms) | 6.7 | 117 ms | 283 ms | 52,419 | 30,263 | 2501 ms |
+| after | 60 | 0 | 23.7 | 33 ms | 83 ms | 3,843 | 17,600 | 215 ms |
+
+musicplayer after: play 60 fps; zoom 42 fps, p50 17 ms, p90 33 ms.
+
+Smokes: `smoke_display_face_orientation.mjs` (new, 65 gates: 4 present paths x 64/600 px x texture-only/DOM,
+the face itself and a GL consumer, no readPixels), `smoke_display_gl_programs_link`, `smoke_display_gl_renderers`
+(allowlist entry moved from BlitTo2D to CopyToContext), `no_fallback`, `phase3c`, `controller_faces_gl` and
+`smoke_engine_state_stopped_faces` pass (the last one passed on a re-run: one run failed the music-player
+pages 'playinfo'/'vslr' engine-state check, and those pages show `stopped` when probed directly).
+`smoke_display_gl_batch` (4) and `smoke_display_gl_phase3` (3) fail the same way on a clean HEAD worktree.
+
+Left open for later stages:
+- Mid-gesture, the scope light layer (`#nodeModuleScopeLightCanvas`) shows a soft glow blob that is not there
+  when settled. The light pass draws from layout rects that are frozen during the gesture (ZP-4).
+- Waterfall ink overlays (`.node-waterfall-ink-overlay`, a 2D canvas) are re-uploaded about 3 times per frame
+  (about 110 ms per 3 s of play).
+- Remaining gesture reads: `nodeGraphModuleLayoutBox` offset* (ZP-4) and occasional full presents
+  (`SettleTextBake`, ZP-5).
+- `trace-woscope.js` (BugsFix) keeps its uncommitted edits. ZP-2 did not need to touch it.

@@ -1170,7 +1170,59 @@ function nodeGraphGlGraphFit(canvas, cssW, cssH) {
   return bw / cssW;
 }
 
-function nodeGraphGlGraphPresent() {
+// Replay the cached mesh with the live camera (ZP-2 / ZP-3). Face quads in it
+// sample each face's GPU texture (picture-device face textures), so a replay
+// shows the latest display frame with no rebuild, no CSS reads and no upload.
+// layers: "all" (gesture) or "dots" (a display frame: only the dots layer holds
+// face quads). Returns false when there is no valid cached mesh.
+function nodeGraphGlGraphReplayMesh(layers = "all") {
+  const mesh = nodeGraphGlGraphState.mesh;
+  if (!mesh || mesh.gen !== nodeGraphGlGraphState.gen || nodeGraphGlGraphState.view) return false;
+  const canvas = nodeGraphGlGraphState.canvas;
+  if (!canvas || mesh.w !== canvas.width || mesh.h !== canvas.height) return false;
+  const host = document.getElementById("nodeGraphWorkspace");
+  if (!host) return false;
+  const zoom = nodeGraphGlGraphZoom();
+  const cam = typeof nodeGraphWireCameraViewBox === "function" ? nodeGraphWireCameraViewBox(host) : { x: 0, y: 0 };
+  const frameCamera = { x: cam.x, y: cam.y, zoom };
+  // Zoom-1 pictures, nearest-neighbour above 2.5x, chosen at replay time.
+  const pixelated = zoom > 2.5;
+  // mesh.batches: [plates, wires, contacts, dots, veil, trail]. Contacts clear
+  // the dots canvas; dots and veil keep, so the dots layer replays as a unit.
+  const from = layers === "dots" ? 2 : 0;
+  const to = layers === "dots" ? 5 : mesh.batches.length;
+  let ok = true;
+  for (let i = from; i < to; i += 1) {
+    const held = mesh.batches[i];
+    if (!held) continue;
+    held.camera = frameCamera;
+    held.textPixelated = pixelated;
+    if (i === 3 && Array.isArray(held.images)) {
+      for (const im of held.images) im.nearest = pixelated;
+    }
+    if (nodeGraphGlLinesEnd(held, held._blend || "alpha") === false) ok = false;
+  }
+  if (layers !== "dots") {
+    mesh.cam = { x: frameCamera.x, y: frameCamera.y, zoom };
+    if (typeof nodeGraphPositionGridHtml === "function") nodeGraphPositionGridHtml();
+  }
+  return ok;
+}
+
+// Live scopes painted their face textures. Replay the dots layer, which holds
+// the face quads. A full present would rebuild every cable and re-read CSS.
+function nodeGraphGlGraphPresentDisplaysOnly() {
+  if (nodeGraphGlGraphState.view) return false;
+  return nodeGraphGlGraphReplayMesh("dots");
+}
+
+function nodeGraphGlGraphPresent(options = {}) {
+  // Scope frames must not rebuild cables. A failed stamp leaves the last
+  // picture; falling through read the whole workspace and pinned Play at a few fps.
+  if (options?.displaysOnly) {
+    // No cached mesh yet (first frame, or the patch changed): one full present.
+    if (nodeGraphGlGraphPresentDisplaysOnly()) return true;
+  }
   const view = nodeGraphGlGraphState.view;
   const host = view ? view.host : document.getElementById("nodeGraphWorkspace");
   if (!host || typeof nodeGraphGlLinesBegin !== "function") return false;
@@ -1210,18 +1262,10 @@ function nodeGraphGlGraphPresent() {
   const frameCamera = view ? null : { x: cam.x, y: cam.y, zoom };
   nodeGraphGlGraphState.frameCamera = frameCamera;
   const gesturingEarly = typeof nodeGraphViewportGestureActive === "function" && nodeGraphViewportGestureActive();
-  const mesh = nodeGraphGlGraphState.mesh;
-  if (!view && frameCamera && gesturingEarly && mesh && mesh.gen === nodeGraphGlGraphState.gen
-    && mesh.w === canvas.width && mesh.h === canvas.height) {
-    for (let i = 0; i < mesh.batches.length; i += 1) {
-      const held = mesh.batches[i];
-      if (!held) continue;
-      held.camera = frameCamera;
-      nodeGraphGlLinesEnd(held, held._blend || "alpha");
-    }
-    if (typeof nodeGraphPositionGridHtml === "function") nodeGraphPositionGridHtml();
-    return true;
-  }
+  // Gesture: camera uniform only. The cached mesh replays and its face quads
+  // sample the live face textures, so displays keep running while zooming
+  // without a rebuild (display hold stays off).
+  if (!view && frameCamera && gesturingEarly && nodeGraphGlGraphReplayMesh("all")) return true;
   const beginOpts = { scale, transparent: true, camera: frameCamera, keepMesh: !view };
   const batch = nodeGraphGlLinesBegin(canvas, [0, 0, 0, 0], beginOpts);
   const wireBatch = nodeGraphGlLinesBegin(wireCanvas, [0, 0, 0, 0], beginOpts);

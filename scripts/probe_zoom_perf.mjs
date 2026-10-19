@@ -34,9 +34,28 @@ await ctx.addInitScript(() => {
     const f = proto[name];
     proto[name] = function (...a) { if (c.on) note(key); return f.apply(this, a); };
   };
+  // Time spent in the expensive copies (ms), split by kind.
+  c.ms = {};
+  const timed = (proto, name, kindOf) => {
+    const f = proto[name];
+    proto[name] = function (...a) {
+      if (!c.on) return f.apply(this, a);
+      const t = performance.now();
+      try { return f.apply(this, a); } finally {
+        const k = kindOf ? kindOf.call(this, a) : name;
+        c.ms[k] = (c.ms[k] || 0) + performance.now() - t;
+      }
+    };
+  };
+  const isGlCanvas = (src) => src instanceof HTMLCanvasElement && src.width >= 2048 && src.height >= 2048;
+  timed(CanvasRenderingContext2D.prototype, "drawImage", (a) => (isGlCanvas(a[0]) ? "drawImage(4096 GL canvas)" : "drawImage(other)"));
+  timed(CanvasRenderingContext2D.prototype, "putImageData");
   for (const P of [window.WebGL2RenderingContext, window.WebGLRenderingContext]) {
     if (!P) continue;
+    timed(P.prototype, "texImage2D", (a) => (a[a.length - 1] instanceof HTMLCanvasElement ? "texImage2D(canvas)" : "texImage2D(other)"));
+    timed(P.prototype, "blitFramebuffer");
     wrap(P.prototype, "readPixels", "readPixels");
+    timed(P.prototype, "readPixels", () => "readPixels ms");
     const link = P.prototype.linkProgram;
     P.prototype.linkProgram = function (prog) {
       const r = link.call(this, prog);
@@ -73,11 +92,37 @@ await page.waitForTimeout(2500);
 await page.evaluate(() => { if (typeof resetNodeGraphZoomToOne === "function") resetNodeGraphZoomToOne(); });
 await page.waitForTimeout(800);
 
+const PLAY_MS = Number(process.env.PLAY_MS || 3000);
+const frameStats = () => {
+  const z = window.__zp; z.on = false; z.stop = true;
+  const f = z.frames.slice(1).filter((d) => d > 0).sort((a, b) => a - b);
+  const q = (p) => f[Math.min(f.length - 1, Math.floor(p * f.length))] || 0;
+  const total = f.reduce((sum, d) => sum + d, 0);
+  const ms = Object.entries(z.ms).map(([k, v]) => [k, Math.round(v)]).filter(([, v]) => v > 0);
+  const out = { frames: f.length, fps: f.length ? (1000 * f.length) / total : 0, p50: q(0.5), p90: q(0.9), max: f[f.length - 1] || 0, readPixels: z.readPixels, ms };
+  z.ms = {}; z.readPixels = 0; z.gcs = 0; z.gbcr = 0; z.offset = 0; z.link = 0; z.who = {};
+  return out;
+};
+await page.evaluate(() => {
+  const z = window.__zp;
+  z.frames = []; z.stop = false;
+  let last = performance.now();
+  const tick = (t) => { if (!z.stop) { z.frames.push(t - last); last = t; requestAnimationFrame(tick); } };
+  requestAnimationFrame(tick);
+  z.on = true;
+});
+await page.waitForTimeout(PLAY_MS);
+const play = await page.evaluate(frameStats);
+{
+  const r1 = (v) => Math.round(v * 10) / 10;
+  console.log(`play only ${PLAY_MS / 1000}s: fps=${r1(play.fps)} p50=${r1(play.p50)}ms p90=${r1(play.p90)}ms max=${r1(play.max)}ms readPixels=${play.readPixels} time: ${play.ms.map(([k, v]) => `${k}=${v}ms`).join(" ")}`);
+}
+
 const vp = page.viewportSize();
 await page.mouse.move(vp.width * 0.5, vp.height * 0.55);
 await page.evaluate(() => {
   const z = window.__zp;
-  z.frames = [];
+  z.frames = []; z.stop = false;
   let last = performance.now();
   const tick = (t) => { if (!z.stop) { z.frames.push(t - last); last = t; requestAnimationFrame(tick); } };
   requestAnimationFrame(tick);
@@ -114,6 +159,7 @@ const res = await page.evaluate(() => {
     p50: q(0.5), p90: q(0.9), p99: q(0.99), max: f[f.length - 1] || 0,
     readPixels: z.readPixels, getComputedStyle: z.gcs, getBoundingClientRect: z.gbcr,
     offsetReads: z.offset, links: z.link, linkFail: z.linkFail, linkLogs: z.linkLogs,
+    ms: Object.entries(z.ms).map(([k, v]) => [k, Math.round(v)]).filter(([, v]) => v > 0),
     who: Object.entries(z.who).sort((a, b) => b[1] - a[1]).slice(0, 25),
     glFailures: typeof nodeGraphDisplayGlFailures === "function" ? [...nodeGraphDisplayGlFailures().keys()] : [],
   };
@@ -123,6 +169,7 @@ const r1 = (v) => Math.round(v * 10) / 10;
 console.log(`patch=${PATCH} gesture=${r1(secs)}s zoomIn=${r1(zIn)} zoomOut=${r1(zOut)}`);
 console.log(`frames=${res.frames} fps=${r1(res.fps)} p50=${r1(res.p50)}ms p90=${r1(res.p90)}ms p99=${r1(res.p99)}ms max=${r1(res.max)}ms`);
 console.log(`during gesture: readPixels=${res.readPixels} getComputedStyle=${res.getComputedStyle} getBoundingClientRect=${res.getBoundingClientRect} offset*=${res.offsetReads} links=${res.links} linkFail(total)=${res.linkFail}`);
+console.log(`time: ${res.ms.map(([k, v]) => `${k}=${v}ms`).join(" ")}`);
 if (res.who.length) for (const [k, n] of res.who) console.log(String(n).padStart(7), k);
 if (res.linkLogs.length) console.log("link logs:", res.linkLogs);
 if (res.glFailures.length) console.log("display GL failures:", res.glFailures);
