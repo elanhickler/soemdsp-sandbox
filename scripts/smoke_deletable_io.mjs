@@ -192,6 +192,38 @@ const occupied = await page.evaluate(async () => {
 gate(occupied.outs === 1 && !occupied.overlap && (occupied.at[0] !== occupied.saved[0] || occupied.at[1] !== occupied.saved[1]),
   `saved spot occupied: respawn at nearest free spot (${occupied.saved} -> ${occupied.at})`);
 
+// Audio off -> on (bug report 2026-10-19): an existing Output survives
+// unchanged; a deleted Output respawns on the Output button (also after a
+// transport Stop); transport Play never spawns (plan A).
+const offOn = await page.evaluate(async () => {
+  const B = () => document.getElementById("nodeLiveOutputButton").click();
+  const ensureOff = async () => { if (nodeGraphMvp.live.outputEnabled) { B(); await __w(1500); } };
+  const out = {};
+  await ensureOff();
+  B(); await __w(2500);
+  const before = __snap("output");
+  B(); await __w(1500); B(); await __w(2500);
+  out.present = { same: __snap("output") === before, outs: __io("output").length, on: nodeGraphMvp.live.outputEnabled && !!nodeGraphMvp.live.node };
+  setNodeGraphSelection({ type: "node", id: "output" }); deleteSelectedNodeGraphItem(); await __w();
+  B(); await __w(1500); B(); await __w(2500);
+  out.deletedButton = { outs: __io("output").length, on: nodeGraphMvp.live.outputEnabled && !!nodeGraphMvp.live.node };
+  setNodeGraphSelection({ type: "node", id: "output" }); deleteSelectedNodeGraphItem(); await __w();
+  nodeGraphTransportHandleAction("stop"); await __w(1500);
+  B(); await __w(2500);
+  out.afterStop = { outs: __io("output").length, on: nodeGraphMvp.live.outputEnabled && !!nodeGraphMvp.live.node };
+  setNodeGraphSelection({ type: "node", id: "output" }); deleteSelectedNodeGraphItem(); await __w();
+  nodeGraphTransportHandleAction("stop"); await __w(1500);
+  nodeGraphTransportHandleAction("play"); await __w(2500);
+  out.play = { outs: __io("output").length, on: !!nodeGraphMvp.live.node };
+  await ensureOff();
+  B(); await __w(2500); // restore an Output for the rest of the smoke
+  return out;
+});
+gate(offOn.present.same && offOn.present.outs === 1 && offOn.present.on, "audio off/on with Output present: same Output survives, no duplicate");
+gate(offOn.deletedButton.outs === 1 && offOn.deletedButton.on, "Output deleted, Output button off/on: Output respawns, audio on");
+gate(offOn.afterStop.outs === 1 && offOn.afterStop.on, "Output deleted, transport Stop, Output button on: Output respawns");
+gate(offOn.play.outs === 0 && offOn.play.on, "Output deleted, transport Play: audio on, no spawn (only the Output button spawns)");
+
 // 10 + 9 + 11 + 14: Input.
 const input = await page.evaluate(async () => {
   const out = {};
