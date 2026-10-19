@@ -49,12 +49,53 @@ function normalizeNodeGraphRasterRgbSettings(settings = {}) {
   };
 }
 
+// Face layout size without a layout read per paint (a zoom gesture repaints
+// every frame and offsetWidth / clientWidth there force layout): one read when
+// a face is first seen, then a ResizeObserver keeps it current. w/h = the
+// offset (border-box) size; cw/ch = the client size (border-box minus the
+// face's own border / scrollbar, measured on the first read).
+const nodeGraphRasterRgbFaceSizes = new WeakMap();
+let nodeGraphRasterRgbFaceObserver = null;
+
+function nodeGraphRasterRgbFaceSize(face) {
+  let size = nodeGraphRasterRgbFaceSizes.get(face);
+  if (size) {
+    return size;
+  }
+  const w = face.offsetWidth || 0;
+  const h = face.offsetHeight || 0;
+  const cw = face.clientWidth || 0;
+  const ch = face.clientHeight || 0;
+  size = { w, h, cw, ch, edgeW: cw ? w - cw : 0, edgeH: ch ? h - ch : 0 };
+  nodeGraphRasterRgbFaceSizes.set(face, size);
+  if (typeof ResizeObserver === "function") {
+    nodeGraphRasterRgbFaceObserver ||= new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const s = nodeGraphRasterRgbFaceSizes.get(entry.target);
+        const box = entry.borderBoxSize?.[0];
+        if (!s || !box) {
+          continue;
+        }
+        s.w = Math.round(box.inlineSize);
+        s.h = Math.round(box.blockSize);
+        s.cw = Math.max(0, s.w - s.edgeW);
+        s.ch = Math.max(0, s.h - s.edgeH);
+      }
+    });
+    nodeGraphRasterRgbFaceObserver.observe(face, { box: "border-box" });
+  } else {
+    nodeGraphRasterRgbFaceSizes.delete(face);
+  }
+  return size;
+}
+
 function nodeGraphRasterRgbApplyScreenChrome(face, canvas, settings) {
   if (!face?.style) {
     return;
   }
-  const cellW = face.offsetWidth || 0;
-  const cellH = face.offsetHeight || 0;
+  const faceSize = nodeGraphRasterRgbFaceSize(face);
+  const cellW = faceSize.w;
+  const cellH = faceSize.h;
   const maxInset = Math.max(0, Math.min(cellW, cellH) / 2);
   const inset = Math.round(nodeGraphFiniteNumber(settings.edgeSpacing) * maxInset);
   const panelW = Math.max(0, cellW - inset * 2);
@@ -541,8 +582,9 @@ function nodeGraphRasterRgbEnsureCanvas(face, slot, pixelRatio) {
     canvas.setAttribute("aria-hidden", "true");
     face.appendChild(canvas);
   }
-  const cssW = Math.max(1, face.clientWidth || face.offsetWidth || 1);
-  const cssH = Math.max(1, face.clientHeight || face.offsetHeight || 1);
+  const faceSize = nodeGraphRasterRgbFaceSize(face);
+  const cssW = Math.max(1, faceSize.cw || faceSize.w || 1);
+  const cssH = Math.max(1, faceSize.ch || faceSize.h || 1);
   const dpr = Math.max(1, nodeGraphFiniteNumber(pixelRatio, nodeGraphDisplayCanvasPixelRatio()));
   const bw = Math.max(1, Math.round(cssW * dpr));
   const bh = Math.max(1, Math.round(cssH * dpr));
@@ -775,7 +817,7 @@ function drawNodeGraphRasterRgbFaceItem(_renderer, item, pixelRatio) {
       ? nodeGraphModuleDisplayRendererForSlot(paintSlot)
       : "",
     type: paintSlot.type || "",
-    faceCss: `${face.clientWidth || 0}x${face.clientHeight || 0}`,
+    faceCss: `${nodeGraphRasterRgbFaceSize(face).cw}x${nodeGraphRasterRgbFaceSize(face).ch}`,
     canvasPx: `${cw}x${ch}`,
     grid: `${grid.width}x${grid.height}`,
     invert: grade.invert,
