@@ -545,6 +545,72 @@
     };
   }
 
+  /**
+   * Source pass: nearest texel -> grade LUT -> hue, into the bound target
+   * (face px cw x ch, image at dest). Shared by the face present and the 📺 out.
+   */
+  function sourcePass(gl, dev, entry, srcTex, lut, grade, buf, face, dest, flipY) {
+    const sp = entry.source;
+    gl.useProgram(sp.program);
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, srcTex);
+    gl.uniform1i(sp.u.uRaw, 0);
+    gl.activeTexture(gl.TEXTURE1);
+    gl.bindTexture(gl.TEXTURE_2D, lut);
+    gl.uniform1i(sp.u.uLut, 1);
+    gl.uniform2f(sp.u.uBuf, buf[0], buf[1]);
+    gl.uniform2f(sp.u.uFace, face[0], face[1]);
+    gl.uniform4f(sp.u.uDest, dest[0], dest[1], dest[2], dest[3]);
+    gl.uniform1f(sp.u.uFlipY, flipY ? 1 : 0);
+    const hue = nodeGraphFiniteNumber(grade?.hue);
+    gl.uniform1f(sp.u.uHue, Math.abs(hue) > 1e-9 ? hue : 0);
+    drawQuad(gl, dev, sp);
+    gl.activeTexture(gl.TEXTURE1);
+    gl.bindTexture(gl.TEXTURE_2D, null);
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, null);
+  }
+
+  /**
+   * 📺 out: the graded grid (grade LUT + hue, no blur / glow / plate) at grid
+   * resolution into the node's published picture (nodeGraphPictureExportTarget,
+   * FBO convention: row 0 = bottom). The caller only asks when a cable reads
+   * it. With an fBm picture on R/G/B the passthrough picture is what goes out,
+   * as on the face. Returns false on GL failure.
+   */
+  function nodeGraphRasterRgbGlExport(nodeId, state, grade, opts = {}) {
+    const picTex = opts.sourceTex || null;
+    const usePic = Boolean(picTex) && (opts.sourceW | 0) > 0 && (opts.sourceH | 0) > 0;
+    if (!usePic && !state) return false;
+    const bufW = usePic ? (opts.sourceW | 0) : (state.width | 0);
+    const bufH = usePic ? (opts.sourceH | 0) : (state.height | 0);
+    const dev = nodeGraphPictureDevice();
+    const gl = dev?.gl;
+    if (!gl || gl.isContextLost() || !bufW || !bufH) return false;
+    const entry = entryFor(dev);
+    if (!entry) return false;
+    const out = nodeGraphPictureExportTarget(nodeId, bufW, bufH);
+    if (!out?.framebuffer) return false;
+    try {
+      const g = syncLut(gl, state || { width: bufW, height: bufH }, grade);
+      const grid = usePic ? null : gridFor(gl, state);
+      if (!usePic && !grid) return false;
+      gl.disable(gl.DEPTH_TEST);
+      gl.disable(gl.BLEND);
+      gl.enable(gl.SCISSOR_TEST);
+      bindTarget(gl, { fbo: out.framebuffer }, bufW, bufH);
+      sourcePass(gl, dev, entry, usePic ? picTex : grid.tex, g.lut, grade, [bufW, bufH], [bufW, bufH], [0, 0, bufW, bufH], usePic);
+      gl.disable(gl.SCISSOR_TEST);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+      return !gl.isContextLost();
+    } catch (err) {
+      gl.disable(gl.SCISSOR_TEST);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+      console.error("[raster-rgb-gl] 📺 export failed", err);
+      return false;
+    }
+  }
+
   /** True when this face can present through the shared device. */
   function nodeGraphRasterRgbGlUsable(cw, ch) {
     const dev = typeof nodeGraphPictureDevice === "function" ? nodeGraphPictureDevice() : null;
@@ -600,26 +666,7 @@
       const src = target(gl, entry, "src", W0, H0);
       if (!src) return false;
       bindTarget(gl, src, W0, H0);
-      const sp = entry.source;
-      gl.useProgram(sp.program);
-      gl.activeTexture(gl.TEXTURE0);
-      gl.bindTexture(gl.TEXTURE_2D, usePic ? picTex : grid.tex);
-      gl.uniform1i(sp.u.uRaw, 0);
-      gl.activeTexture(gl.TEXTURE1);
-      gl.bindTexture(gl.TEXTURE_2D, g.lut);
-      gl.uniform1i(sp.u.uLut, 1);
-      gl.uniform2f(sp.u.uBuf, bufW, bufH);
-      gl.uniform2f(sp.u.uFace, cw, ch);
-      gl.uniform4f(sp.u.uDest, opts.dx, opts.dy, opts.dw, opts.dh);
-      gl.uniform1f(sp.u.uFlipY, usePic ? 1 : 0);
-      const hue = nodeGraphFiniteNumber(grade?.hue);
-      const rotate = Math.abs(hue) > 1e-9 && typeof nodeGraphRasterRgbHueRotate === "function";
-      gl.uniform1f(sp.u.uHue, rotate ? hue : 0);
-      drawQuad(gl, dev, sp);
-      gl.activeTexture(gl.TEXTURE1);
-      gl.bindTexture(gl.TEXTURE_2D, null);
-      gl.activeTexture(gl.TEXTURE0);
-      gl.bindTexture(gl.TEXTURE_2D, null);
+      sourcePass(gl, dev, entry, usePic ? picTex : grid.tex, g.lut, grade, [bufW, bufH], [cw, ch], [opts.dx, opts.dy, opts.dw, opts.dh], usePic);
 
       // 2. Pyramid (only as deep as the widest sigma needs), then blur / glow.
       const pyramid = [src];
@@ -687,6 +734,7 @@
   global.nodeGraphRasterRgbGlUsable = nodeGraphRasterRgbGlUsable;
   global.nodeGraphRasterRgbGlPresent = nodeGraphRasterRgbGlPresent;
   global.nodeGraphRasterRgbGlScan = nodeGraphRasterRgbGlScan;
+  global.nodeGraphRasterRgbGlExport = nodeGraphRasterRgbGlExport;
   global.nodeGraphRasterRgbGlFree = nodeGraphRasterRgbGlFree;
   global.nodeGraphRasterRgbGlReadGrid = nodeGraphRasterRgbGlReadGrid;
 })(typeof globalThis !== "undefined" ? globalThis : window);

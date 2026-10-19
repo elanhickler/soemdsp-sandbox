@@ -9,7 +9,7 @@
 // original canvas Gaussian: filter:blur() on the present, then an
 // additive wider Gaussian for glow.
 
-const NODE_GRAPH_RASTER_RGB_PAINT_REV = "gpu-beam-1";
+const NODE_GRAPH_RASTER_RGB_PAINT_REV = "gpu-beam-2-tv";
 
 // Grid state (GPU texture + beam phase) lives by node id — not on the face canvas.
 // Hide/show title rebuilds the module DOM; the raster must survive that.
@@ -587,6 +587,9 @@ function drawNodeGraphRasterRgbFaceItem(_renderer, item, pixelRatio) {
     return;
   }
   const nodeId = slot?.nodeId || face.dataset?.node || item?.nodeId;
+  // Face off screen but a visible sink reads the 📺 out: scan and publish,
+  // skip the face present.
+  const asleep = Boolean(item?.asleep);
   const node = (typeof nodeGraphModuleScopeNodeForSlot === "function" && slot
     ? nodeGraphModuleScopeNodeForSlot(slot)
     : null)
@@ -613,7 +616,7 @@ function drawNodeGraphRasterRgbFaceItem(_renderer, item, pixelRatio) {
   const grid = nodeGraphRasterRgbGridSize(node);
   const cw = canvas.width;
   const ch = canvas.height;
-  nodeGraphRasterRgbApplyScreenChrome(face, canvas, settings);
+  if (!asleep) nodeGraphRasterRgbApplyScreenChrome(face, canvas, settings);
   const frozen = (typeof scopePaintIsFrozen === "function" && scopePaintIsFrozen())
     || (typeof nodeGraphModuleScopePhosphorFrozen === "function"
       && nodeGraphModuleScopePhosphorFrozen());
@@ -627,7 +630,7 @@ function drawNodeGraphRasterRgbFaceItem(_renderer, item, pixelRatio) {
   }
   // Plate through the shared GL device; the graded picture is blitted over it.
   ctx.filter = "none";
-  const plateFill = nodeGraphFacePlateFill(canvas, plate);
+  const plateFill = asleep ? "ok" : nodeGraphFacePlateFill(canvas, plate);
   if (plateFill !== "ok") {
     nodeGraphDisplayGlFailed(canvas, "raster RGB plate: GL " + plateFill);
     return;
@@ -739,6 +742,23 @@ function drawNodeGraphRasterRgbFaceItem(_renderer, item, pixelRatio) {
   // grade LUT + hue + separable blur / glow in shaders on the shared picture
   // device. No fallback: a failed GPU frame is black + logged.
   const pic = nodeGraphRasterRgbWiredPicture(paintSlot);
+  // 📺 out: the graded grid at grid resolution, only while a cable reads it
+  // (pull-based: the video graph keeps this node needed through that cable).
+  if (nodeGraphPictureHasConsumer(nodeId)) {
+    const exported = nodeGraphRasterRgbGlExport(nodeId, state, grade, {
+      sourceTex: pic?.texture || null,
+      sourceW: pic?.width || 0,
+      sourceH: pic?.height || 0,
+    });
+    if (!exported) {
+      canvas._rasterRgbBlit = false;
+      nodeGraphDisplayGlFailed(canvas, "Scan Grid 📺 export failed");
+      return;
+    }
+  }
+  if (asleep) {
+    return;
+  }
   const gpuDrawn = typeof nodeGraphRasterRgbGlPresent === "function"
     && nodeGraphRasterRgbGlPresent(state, grade, ctx, {
       cw, ch, dx, dy, dw, dh, blurPx, glowPx, plate,
@@ -860,6 +880,38 @@ function nodeGraphRasterRgbDebugDump() {
 // Live collection (browser-maintained); filtered by type per frame.
 let nodeGraphRasterRgbScopeWindows = null;
 
+// An off-screen Scan Grid that feeds a visible sink acts as a video producer:
+// it asks the video graph for a frame, so the graph's needed set (cached per
+// graph frame) is recomputed and drops it as soon as no visible sink reads it.
+const nodeGraphRasterRgbVideoTicks = new Set();
+
+function nodeGraphRasterRgbTickVideoGraph(nodeId) {
+  if (typeof nodeGraphVideoGraphRequestFrame !== "function" || nodeGraphRasterRgbVideoTicks.has(nodeId)) {
+    return;
+  }
+  nodeGraphRasterRgbVideoTicks.add(nodeId);
+  nodeGraphVideoGraphRequestFrame(nodeId, () => nodeGraphRasterRgbVideoTicks.delete(nodeId));
+}
+
+/**
+ * Off screen (viewport-asleep / outside screen solo): null when nothing needs
+ * the face (skip it), "asleep" when a visible sink reads the 📺 out (scan and
+ * publish, no present), "" when on screen.
+ */
+function nodeGraphRasterRgbFaceMode(face, nodeId) {
+  const host = face?.closest?.(".dsp-node");
+  const hidden = host?.classList.contains("viewport-asleep")
+    || (typeof nodeGraphScreenSoloAllowsNode === "function" && !nodeGraphScreenSoloAllowsNode(nodeId));
+  if (!hidden) {
+    return "";
+  }
+  if (typeof nodeGraphVideoGraphShouldSleep !== "function" || nodeGraphVideoGraphShouldSleep(nodeId)) {
+    return null;
+  }
+  nodeGraphRasterRgbTickVideoGraph(nodeId);
+  return "asleep";
+}
+
 function nodeGraphRasterRgbCollectFaces() {
   const faces = [];
   const seen = new Set();
@@ -875,7 +927,11 @@ function nodeGraphRasterRgbCollectFaces() {
         continue;
       }
       seen.add(slot.scopeElement);
-      faces.push({ slot, face: slot.scopeElement });
+      const mode = nodeGraphRasterRgbFaceMode(slot.scopeElement, slot.nodeId);
+      if (mode === null) {
+        continue;
+      }
+      faces.push({ slot, face: slot.scopeElement, asleep: mode === "asleep" });
     }
   }
   if (typeof document !== "undefined") {
@@ -889,19 +945,16 @@ function nodeGraphRasterRgbCollectFaces() {
       if (face.dataset?.nodeType !== "rasterRgb" && host?.dataset?.nodeType !== "rasterRgb") {
         continue;
       }
-      if (host?.classList.contains("viewport-asleep")) {
-        continue;
-      }
-      if (typeof nodeGraphScreenSoloAllowsNode === "function"
-        && !nodeGraphScreenSoloAllowsNode(face.dataset?.node || host?.dataset?.node)) {
-        continue;
-      }
-      seen.add(face);
       const nodeId = face.dataset?.node || host?.dataset?.node;
+      seen.add(face);
+      const mode = nodeGraphRasterRgbFaceMode(face, nodeId);
+      if (mode === null) {
+        continue;
+      }
       const slot = (typeof nodeGraphModuleScopeState === "object"
         && nodeGraphModuleScopeState?.slots?.get?.(nodeId))
         || { nodeId, scopeElement: face, type: "rasterRgb" };
-      faces.push({ slot, face });
+      faces.push({ slot, face, asleep: mode === "asleep" });
     }
   }
   return faces;
@@ -973,7 +1026,7 @@ function scheduleNodeGraphRasterRgbPump() {
 function paintNodeGraphRasterRgbFacesNow(pixelRatio = nodeGraphDisplayCanvasPixelRatio()) {
   const pr = Math.max(1, nodeGraphFiniteNumber(pixelRatio, nodeGraphDisplayCanvasPixelRatio()));
   let painted = 0;
-  for (const { slot, face } of nodeGraphRasterRgbCollectFaces()) {
+  for (const { slot, face, asleep } of nodeGraphRasterRgbCollectFaces()) {
     const nodeId = slot?.nodeId || face?.dataset?.node;
     if (typeof scopePaintIsFacePoweredOff === "function" && scopePaintIsFacePoweredOff(nodeId)) {
       wipeNodeGraphRasterRgbScreensToColdBoot({ nodeId });
@@ -984,6 +1037,7 @@ function paintNodeGraphRasterRgbFacesNow(pixelRatio = nodeGraphDisplayCanvasPixe
         nodeId: slot?.nodeId,
         screenElement: face,
         slot,
+        asleep,
       }, pr);
       painted += 1;
     } catch (err) {
