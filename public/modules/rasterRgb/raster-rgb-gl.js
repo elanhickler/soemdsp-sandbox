@@ -46,6 +46,7 @@
   const GLSL_REV = "3";
   const SAMPLE_TEX_W = 4096; // sample textures are row-major, this wide
   const CHUNK_STAMPS = 4096; // stamps per draw: keeps the shader's float maths exact
+  const TIE = 1e-3; // same tie margin as the scan shader's kTie
 
   const glsl = {
     vs: "",
@@ -195,8 +196,8 @@
       "uImage", "uGlow", "uImageUv", "uImageOff", "uGlowUv", "uGlowOff", "uGlowAlpha", "uPlate",
     ]);
     const scan = link(gl, glsl.scanFs, [
-      "uR", "uG", "uB", "uTexW", "uSkip", "uHas", "uSample0", "uCredit0", "uSpeed",
-      "uRem0", "uLineRem0", "uLogical", "uGrid",
+      "uR", "uG", "uB", "uTexW", "uSkip", "uHas", "uBase", "uLast",
+      "uCell0", "uCells", "uLine0", "uFrameEnd", "uTiming",
     ], glsl.scanVs);
     if (!source || !blur || !down || !composite || !scan) return null;
     entry.ok = true;
@@ -358,11 +359,9 @@
    * Float32Array of the newest samples (length <= take; shorter rings are
    * zero-padded at the front) or null, logicalW, logicalH, speed, syncs:
    * sorted [{ at, kind: "h" | "v" }] (sample index; applied before that
-   * sample) }. Updates state.writePos / state.scanCredit like the old JS loop.
+   * sample) }. Updates state.beam / state.writePos (stamps written).
    * Returns false on a GL failure.
    */
-  const TIE_EPS = 1e-9;
-
   function nodeGraphRasterRgbGlScan(state, input) {
     const dev = nodeGraphPictureDevice();
     const gl = dev?.gl;
@@ -376,6 +375,14 @@
     const W = input.logicalW;
     const H = input.logicalH;
     const s = input.speed;
+    if (!(W > 0) || !(H > 0) || !(s > 0)) return true;
+    // Raster timing in samples: line D = W / speed (= sampleRate / Line Rate),
+    // column D / W, frame F = H * D. See raster_rgb.scan.vert.glsl.
+    const D = W / s;
+    const DW = 1 / s;
+    const F = H * D;
+    const Wc = g.w;
+    const Hc = g.h;
     const rows = Math.ceil(take / SAMPLE_TEX_W);
     const tex = sampleTextures(gl, entry, rows);
     gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
@@ -402,56 +409,90 @@
     gl.uniform1i(p.u.uTexW, SAMPLE_TEX_W);
     gl.uniform3i(p.u.uSkip, skip[0], skip[1], skip[2]);
     gl.uniform3f(p.u.uHas, has[0], has[1], has[2]);
-    gl.uniform1f(p.u.uSpeed, s);
-    gl.uniform2f(p.u.uLogical, W, H);
-    gl.uniform2f(p.u.uGrid, g.w, g.h);
+    gl.uniform2i(p.u.uCells, Wc, Hc);
+    gl.uniform3f(p.u.uTiming, D, DW, F);
     gl.bindFramebuffer(gl.FRAMEBUFFER, g.fbo);
     gl.viewport(0, 0, g.w, g.h);
     gl.disable(gl.SCISSOR_TEST);
     gl.disable(gl.BLEND);
     gl.disable(gl.DEPTH_TEST);
     gl.bindVertexArray(entry.scanVao);
-    let pos = Number.isFinite(state.writePos) ? state.writePos : 0;
-    let credit = Number.isFinite(state.scanCredit) && state.scanCredit >= 0 ? state.scanCredit : 0;
+    // Beam: next cell (r, c) and the start times of its line and frame, in
+    // samples relative to sample 0 of this take. A writePos that no longer
+    // matches (Clear / cold start set it to 0, a new size) restarts the raster.
+    let b = state.beam;
+    const q0 = Number.isFinite(state.writePos) ? state.writePos : 0;
+    if (!b || b.q !== q0 || b.Wc !== Wc || b.Hc !== Hc) {
+      b = { q: 0, r: 0, c: 0, line: 0, frame: 0, Wc, Hc };
+    }
+    let { r, c, line, frame } = b;
+    let q = b.q;
     const syncs = input.syncs || [];
-    const chunkSamples = Math.max(1, Math.floor(CHUNK_STAMPS / s));
     let draws = 0;
     let stampsTotal = 0;
     let next = 0;
-    for (let i = 0; i < take;) {
-      // Sync hits at this sample move the beam before it writes.
+    let i = 0;
+    const clampInt = (v, lo, hi) => (v < lo ? lo : (v > hi ? hi : v));
+    while (i < take) {
+      // Sync hits at this sample move the beam before it writes: the line
+      // (H: the next one, unless the beam already waits at column 0) or the
+      // frame (V) starts at that sample.
       while (next < syncs.length && syncs[next].at <= i) {
-        if (syncs[next].kind === "v") pos = 0;
-        else if (posMod(pos, W) > 0) pos = (Math.floor(pos / W) + 1) * W;
+        const at = syncs[next].at;
+        if (syncs[next].kind === "v") {
+          r = 0; c = 0; line = at; frame = at;
+        } else {
+          if (c > 0) { c = 0; r += 1; }
+          if (r >= Hc) { r = 0; frame = at; }
+          line = at;
+        }
         next += 1;
       }
       const end = next < syncs.length ? Math.min(take, syncs[next].at) : take;
-      const n = Math.min(chunkSamples, end - i);
-      let total = credit + n * s;
-      // Exact ties (rational Width x Line Rate / sampleRate lands on a whole
-      // pixel) must resolve the same way every time, or float drift flips one
-      // stamp and shifts the whole picture a pixel: snap near-integers.
-      const whole = Math.round(total);
-      if (Math.abs(total - whole) < TIE_EPS) total = whole;
-      const stamps = Math.floor(total);
-      if (stamps > 0) {
-        gl.uniform1i(p.u.uSample0, i);
-        gl.uniform1f(p.u.uCredit0, credit);
-        gl.uniform1f(p.u.uRem0, posMod(pos, W));
-        gl.uniform1f(p.u.uLineRem0, posMod(Math.floor(pos / W), H));
-        gl.drawArrays(gl.POINTS, 0, stamps);
-        draws += 1;
-        stampsTotal += stamps;
+      // Stamps whose sample is below `end`, at most CHUNK_STAMPS per draw.
+      const r0 = r;
+      const c0 = c;
+      const line0 = line;
+      const frameEnd0 = frame + F;
+      let count = 0;
+      let firstT = NaN;
+      // A cell is due when the beam left it by `end` (sample = ceil(exit) - 1).
+      const exitOf = (col, ln, fe) => Math.min(ln + Math.min((col + 1) * DW, D), fe);
+      while (count < CHUNK_STAMPS) {
+        const frameEnd = frame + F;
+        const lim = end + TIE;
+        let due = clampInt(Math.floor((lim - line) / DW), 0, Wc);
+        if (due < Wc && (line + D <= lim || frameEnd <= lim)) due = Wc;
+        let upto = Math.min(due, c + (CHUNK_STAMPS - count));
+        if (upto > c) {
+          if (!(firstT === firstT)) firstT = exitOf(c, line, frameEnd);
+          count += upto - c;
+          c = upto;
+        }
+        if (c < Wc) break;
+        c = 0;
+        r += 1;
+        if (r >= Hc) { r = 0; frame = frameEnd; line = frame; } else line += D;
       }
-      pos += stamps;
-      credit = total - stamps;
-      i += n;
+      if (count > 0) {
+        const base = Math.max(0, Math.ceil(firstT - TIE) - 1);
+        gl.uniform1i(p.u.uBase, base);
+        gl.uniform1i(p.u.uLast, Math.max(0, end - 1));
+        gl.uniform2i(p.u.uCell0, c0, r0);
+        gl.uniform1f(p.u.uLine0, line0 - base);
+        gl.uniform1f(p.u.uFrameEnd, frameEnd0 - base);
+        gl.drawArrays(gl.POINTS, 0, count);
+        draws += 1;
+        stampsTotal += count;
+        q += count;
+        continue;
+      }
+      i = end;
     }
-    // Keep writePos bounded without disturbing phase within a frame.
-    const frameSamples = W * H;
-    if (pos >= frameSamples * 4096) pos = posMod(pos, frameSamples);
-    state.writePos = pos;
-    state.scanCredit = credit;
+    // Rebase times to the next take's sample 0.
+    state.beam = { q, r, c, line: line - take, frame: frame - take, Wc, Hc };
+    state.writePos = q;
+    state.scanCredit = 0;
     state.lastScan = { take, draws, stamps: stampsTotal };
     gl.bindVertexArray(null);
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);

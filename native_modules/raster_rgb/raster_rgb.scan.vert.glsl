@@ -1,40 +1,44 @@
 #version 300 es
 // Scan Grid beam: one point per pixel write (stamp) into the persistent grid.
-// Pair: raster_rgb.scan.frag.glsl. Driven by raster-rgb-gl.js scanDraw().
+// Pair: raster_rgb.scan.frag.glsl. Driven by raster-rgb-gl.js nodeGraphRasterRgbGlScan().
 //
-// Stamp k of this chunk belongs to sample i = the i with
-//   floor(c0 + i*s) <= k < floor(c0 + (i+1)*s)        (s = Scan Speed)
-// which is exactly the old JS credit loop (credit += s; stamps = floor).
-// Its position is pos0 + k:
-//   x = floor((pos0 + k) mod W), line = floor((pos0 + k) / W), y = floor(line mod H)
-// with fractional W / H. The chunk start comes split as rem0 = pos0 mod W and
-// lineRem0 = floor(pos0 / W) mod H, so the float maths stays small and exact
-// for whole and binary-fraction sizes. Chunks are at most 4096 stamps.
+// Raster timing (Line Rate): a line lasts D = sampleRate / Line Rate samples,
+// a frame F = Height x D. Every line restarts at column 0 and writes all
+// ceil(Width) columns; every frame restarts at row 0 and writes all
+// ceil(Height) rows. Cell (row r, column c) of a frame is stamped by the sample
+// current when the beam leaves it (the old Scan Speed convention):
+//   exit = min(lineStart(r) + min(c + 1, Width) * D / Width, frameEnd)
+//   sample = ceil(exit - kTie) - 1
+// A fractional last column is left at the line end on every line, so it is
+// never stale. Cells past the frame end (fractional Height: the rest of the
+// last row) take the frame's last sample. kTie makes exact ties (Line Rate
+// locked to the source) resolve the same way in every draw.
+//
+// Stamp v of this draw is grid cell (r0, c0) + v in row-major order (wrapping
+// into following rows / frames). Times come relative to sample uBase so the
+// float maths stays small; positions are integers (exact).
 precision highp float;
 precision highp int;
 precision highp sampler2D;
-
 uniform sampler2D uR;      // R32F, this frame's samples, row-major uTexW wide
 uniform sampler2D uG;
 uniform sampler2D uB;
 uniform int uTexW;
 uniform ivec3 uSkip;       // per channel: take - available samples (leading zeros)
 uniform vec3 uHas;         // 1 = channel wired
-uniform int uSample0;      // first sample of this chunk (index into the frame)
-uniform float uCredit0;    // Scan Speed credit at the chunk start, [0, 1)
-uniform float uSpeed;      // pixels per sample
-uniform float uRem0;       // pos0 mod W
-uniform float uLineRem0;   // floor(pos0 / W) mod H
-uniform vec2 uLogical;     // W, H (fractional)
-uniform vec2 uGrid;        // storage width, height (ceil of W, H)
-
+uniform int uBase;         // sample index (into this take) the times are relative to
+uniform int uLast;         // last sample index this draw may use
+uniform ivec2 uCell0;      // first stamp: (column, row)
+uniform ivec2 uCells;      // ceil(Width), ceil(Height) = storage size
+uniform float uLine0;      // start time of row uCell0.y (relative to uBase)
+uniform float uFrameEnd;   // end time of the current frame (relative to uBase)
+uniform vec3 uTiming;      // D (samples / line), D / Width (samples / column), F (samples / frame)
 out vec3 vColor;
-
+const float kTie = 1e-3;
 float sampleAt(sampler2D t, int i) {
   if (i < 0) return 0.0;
   return texelFetch(t, ivec2(i % uTexW, i / uTexW), 0).r;
 }
-
 // Unipolar, rectified: brightness = clamp(|v|, 0, 1). Continuous through 0.
 // Quantised here (round(u * 255)) so the RGBA8 write is the same byte the old
 // CPU grid stored, whatever rounding the GPU's float-to-unorm step uses.
@@ -42,41 +46,26 @@ float level(float v) {
   if (isnan(v) || isinf(v)) return 0.0;
   return floor(clamp(abs(v), 0.0, 1.0) * 255.0 + 0.5) / 255.0;
 }
-
-// Stamp count through sample i. kTie: a value this close below a whole stamp
-// counts as reaching it, so exact ties (Line Rate locked to the source) land
-// on the same sample in every chunk and the picture holds still (float32
-// error at 4096 stamps is ~2.4e-4; real fractions stay far from 1 - kTie).
-const float kTie = 1e-3;
-float stampsThrough(int i) {
-  return floor(uCredit0 + float(i) * uSpeed + kTie);
-}
 void main() {
-  float k = float(gl_VertexID);
-  // Closed form, then nudged so float rounding can never pick a neighbour.
-  int i = int(ceil((k + 1.0 - uCredit0) / uSpeed)) - 1;
-  if (i < 0) i = 0;
-  if (stampsThrough(i + 1) <= k) i += 1;
-  if (i > 0 && stampsThrough(i) > k) i -= 1;
-  int s = uSample0 + i;
+  int q = uCell0.x + gl_VertexID;
+  int c = q % uCells.x;
+  int rAbs = uCell0.y + q / uCells.x;
+  int df = rAbs / uCells.y;
+  int r = rAbs - df * uCells.y;
+  float D = uTiming.x;
+  float lineStart = df == 0
+    ? uLine0 + float(r - uCell0.y) * D
+    : uFrameEnd + float(df - 1) * uTiming.z + float(r) * D;
+  float frameEnd = uFrameEnd + float(df) * uTiming.z;
+  float exit = min(lineStart + min(float(c + 1) * uTiming.y, D), frameEnd);
+  int s = clamp(uBase + int(ceil(exit - kTie)) - 1, 0, uLast);
   vec3 v = vec3(
     sampleAt(uR, s - uSkip.x),
     sampleAt(uG, s - uSkip.y),
     sampleAt(uB, s - uSkip.z));
   vColor = vec3(level(v.r), level(v.g), level(v.b)) * uHas;
-
-  float p = uRem0 + k;
-  float dl = floor(p / uLogical.x);
-  float col = p - dl * uLogical.x;
-  if (col < 0.0) { dl -= 1.0; col += uLogical.x; }
-  if (col >= uLogical.x) { dl += 1.0; col -= uLogical.x; }
-  float line = uLineRem0 + dl;
-  float row = line - floor(line / uLogical.y) * uLogical.y;
-  if (row < 0.0) row += uLogical.y;
-  if (row >= uLogical.y) row -= uLogical.y;
-  float x = min(uGrid.x - 1.0, floor(col));
-  float y = min(uGrid.y - 1.0, floor(row));
-  // Grid texel (x, y), row 0 = top of the picture = texture row 0.
-  gl_Position = vec4((x + 0.5) / uGrid.x * 2.0 - 1.0, (y + 0.5) / uGrid.y * 2.0 - 1.0, 0.0, 1.0);
+  // Grid texel (c, r), row 0 = top of the picture = texture row 0.
+  vec2 grid = vec2(uCells);
+  gl_Position = vec4((float(c) + 0.5) / grid.x * 2.0 - 1.0, (float(r) + 0.5) / grid.y * 2.0 - 1.0, 0.0, 1.0);
   gl_PointSize = 1.0;
 }

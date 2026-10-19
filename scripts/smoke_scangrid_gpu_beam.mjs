@@ -1,18 +1,15 @@
 // Scan Grid (rasterRgb) GPU beam smoke, on a real GPU (headed Chromium).
 // 1. Beam writes: nodeGraphRasterRgbGlScan into a fresh grid, fed in several
-//    frames, must match a CPU reference of the position maths byte for byte:
-//    sample i makes floor(c + (i+1)*speed) - floor(c + i*speed) stamps (c =
-//    credit carried in), stamp at pos: x = floor(pos mod W),
-//    y = floor(floor(pos / W) mod H) (clamped to the storage grid), colour
-//    round(clamp(|v|, 0, 1) * 255). Whole, binary-fraction and decimal W/H/Speed.
-//    The old JS loop (credit += speed each sample) is reported alongside: it
-//    equals the reference exactly for binary-fraction speeds; for decimal
-//    speeds (0.3) its running sum drifts and flips stamps at the exact ties.
-//    For whole / binary-fraction values the GPU must equal the old JS loop
-//    too (asserted). Streaming cases: the saved rgb patch (41 x 29, Scan
-//    Speed 2) fed 45 frames of 1536 samples, as the live ring delivers them at
-//    44.1 kHz, and a mixed 1470 / 1471 / 2940 (stall) cadence: catches any
-//    start-position, credit or per-frame offset drift across frames.
+//    batches, must match a CPU reference of the raster timing byte for byte.
+//    Line D = Width / speed samples, column D / Width, frame F = Height x D;
+//    every line restarts at column 0 and writes all ceil(Width) columns, every
+//    frame restarts at row 0 and writes all ceil(Height) rows. Cell (r, c) is
+//    stamped by sample ceil(exit - 1e-3) - 1, exit = min(lineStart +
+//    min(c + 1, Width) x D / Width, frameEnd). Colour round(clamp(|v|) x 255).
+//    The reference walks absolute time in doubles, so batching cannot matter.
+//    Whole sizes must also equal the old Scan Speed loop (credit += speed per
+//    sample): saved patches keep their look. Last column: on fractional Width
+//    every row's last column must hold its line-end sample (no stale cells).
 // Line Rate (Hz): beam speed = Width x Line Rate / sampleRate px/sample.
 //   - formula: nodeGraphRasterRgbBeamSpeed for whole / fractional Width and
 //     44.1 / 48 / 88.2 kHz (one line = sampleRate / Line Rate samples).
@@ -58,24 +55,23 @@ const CASES = [
   { W: 64, H: 48, speed: 64, batches: [9000, 1] },
   { W: 41, H: 29, speed: 2, batches: Array(45).fill(1536) },
   { W: 41, H: 29, speed: 2, batches: Array.from({ length: 40 }, (_, i) => (i % 9 === 8 ? 2940 : 1470 + (i % 3 === 0 ? 1 : 0))) },
+  // Fractional Width / Height at Line Rate 60 (96.4 x 54, 96 x 54.5 at 48 kHz).
+  { W: 96.4, H: 54, speed: 96.4 * 60 / 48000, batches: Array(60).fill(800) },
+  { W: 96, H: 54.5, speed: 96 * 60 / 48000, batches: Array(60).fill(801) },
+  { W: 12.6, H: 7.3, speed: 3.3, batches: [1500, 2222, 17] },
 ];
 const results = await page.evaluate((cases) => {
   function rng(seed) { let s = seed >>> 0; return () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; }; }
   const posMod = (p, m) => { const r = p % m; return r < 0 ? r + m : r; };
+  const byte = (v) => { const u = Math.min(1, Math.abs(v)); return Number.isFinite(u) ? Math.round(u * 255) : 0; };
   const out = [];
   for (const c of cases) {
     const width = Math.ceil(c.W - 1e-12);
     const height = Math.ceil(c.H - 1e-12);
     const gpuState = { width, height, logicalWidth: c.W, logicalHeight: c.H, writePos: 0, scanCredit: 0, gpu: null };
-    const ref = new Uint8Array(width * height * 4);
-    for (let i = 3; i < ref.length; i += 4) ref[i] = 255;
-    const old = ref.slice();
-    let pos = 0;
-    let credit = 0;
-    let oldPos = 0;
-    let oldCredit = 0;
     const r = rng(c.W * 1000 + c.H);
     let ok = true;
+    const all = [[], [], []];
     for (const n of c.batches) {
       const ch = [0, 1, 2].map(() => {
         const a = new Float32Array(n);
@@ -85,36 +81,52 @@ const results = await page.evaluate((cases) => {
       // Missing channel in one batch: G unwired.
       const channels = n === 7 ? [ch[0], null, ch[2]] : ch;
       ok = nodeGraphRasterRgbGlScan(gpuState, { take: n, channels, logicalW: c.W, logicalH: c.H, speed: c.speed }) && ok;
-      const byte = (v) => { const u = Math.min(1, Math.abs(v)); return Number.isFinite(u) ? Math.round(u * 255) : 0; };
-      const stamp = (grid, p, i) => {
-        const x = Math.min(width - 1, Math.floor(posMod(p, c.W)));
-        const y = Math.min(height - 1, Math.floor(posMod(Math.floor(p / c.W), c.H)));
+      for (let k = 0; k < 3; k += 1) for (let i = 0; i < n; i += 1) all[k].push(channels[k] ? channels[k][i] : 0);
+    }
+    const total = all[0].length;
+    // CPU reference: raster timing in absolute samples (doubles).
+    const D = c.W / c.speed;
+    const DW = 1 / c.speed;
+    const F = c.H * D;
+    const ref = new Uint8Array(width * height * 4);
+    for (let i = 3; i < ref.length; i += 4) ref[i] = 255;
+    const sampleOf = new Int32Array(width * height).fill(-1);
+    let stamps = 0;
+    outer: for (let f = 0; ; f += 1) {
+      for (let y = 0; y < height; y += 1) {
+        for (let x = 0; x < width; x += 1) {
+          const exit = Math.min(f * F + y * D + Math.min((x + 1) * DW, D), (f + 1) * F);
+          const s = Math.ceil(exit - 1e-3) - 1;
+          if (s >= total) break outer;
+          const o = (y * width + x) * 4;
+          ref[o] = byte(all[0][s]); ref[o + 1] = byte(all[1][s]); ref[o + 2] = byte(all[2][s]);
+          sampleOf[y * width + x] = s;
+          stamps += 1;
+        }
+      }
+    }
+    // The old Scan Speed loop (credit += speed), for whole sizes.
+    const old = new Uint8Array(width * height * 4);
+    for (let i = 3; i < old.length; i += 4) old[i] = 255;
+    let oldPos = 0;
+    let oldCredit = 0;
+    for (let i = 0; i < total; i += 1) {
+      oldCredit += c.speed;
+      const n = Math.floor(oldCredit);
+      oldCredit -= n;
+      for (let k = 0; k < n; k += 1) {
+        const x = Math.min(width - 1, Math.floor(posMod(oldPos, c.W)));
+        const y = Math.min(height - 1, Math.floor(posMod(Math.floor(oldPos / c.W), c.H)));
         const o = (y * width + x) * 4;
-        grid[o] = byte(channels[0] ? channels[0][i] : 0);
-        grid[o + 1] = byte(channels[1] ? channels[1][i] : 0);
-        grid[o + 2] = byte(channels[2] ? channels[2][i] : 0);
-        grid[o + 3] = 255;
-      };
-      // CPU reference: closed-form stamp schedule.
-      for (let i = 0; i < n; i += 1) {
-        const stamps = Math.floor(credit + (i + 1) * c.speed) - Math.floor(credit + i * c.speed);
-        for (let s = 0; s < stamps; s += 1) { stamp(ref, pos, i); pos += 1; }
+        old[o] = byte(all[0][i]); old[o + 1] = byte(all[1][i]); old[o + 2] = byte(all[2][i]);
+        oldPos += 1;
       }
-      const total = credit + n * c.speed;
-      credit = total - Math.floor(total);
-      if (pos >= c.W * c.H * 4096) pos = posMod(pos, c.W * c.H);
-      // The old JS loop, for the report.
-      for (let i = 0; i < n; i += 1) {
-        oldCredit += c.speed;
-        const stamps = Math.floor(oldCredit);
-        oldCredit -= stamps;
-        for (let s = 0; s < stamps; s += 1) { stamp(old, oldPos, i); oldPos += 1; }
-      }
-      if (oldPos >= c.W * c.H * 4096) oldPos = posMod(oldPos, c.W * c.H);
     }
     const grid = nodeGraphRasterRgbGlReadGrid(gpuState);
     let bad = 0;
     let off = 0;
+    let lastColBad = 0;
+    let lastColStale = 0;
     for (let i = 0; i < width * height; i += 1) {
       let diff = false;
       for (let k = 0; k < 4; k += 1) {
@@ -123,31 +135,32 @@ const results = await page.evaluate((cases) => {
         if (d > 1) off = Math.max(off, d);
       }
       if (diff) bad += 1;
+      if (i % width === width - 1) {
+        if (diff) lastColBad += 1;
+        // Stale: the row's beam passed (neighbour written) but the last
+        // column was never written, or holds a sample from another pass.
+        const s = sampleOf[i];
+        const left = width > 1 ? sampleOf[i - 1] : s;
+        if (left >= 0 && (s < 0 || (s >= left && s - left > D))) lastColStale += 1;
+      }
     }
     let oldBad = 0;
-    let oldVsRef = 0;
     for (let i = 0; i < width * height; i += 1) {
       for (let k = 0; k < 3; k += 1) if (grid.pixels[i * 4 + k] !== old[i * 4 + k]) { oldBad += 1; break; }
-      for (let k = 0; k < 3; k += 1) if (ref[i * 4 + k] !== old[i * 4 + k]) { oldVsRef += 1; break; }
     }
-    out.push({ ...c, ok, cells: width * height, bad, oldBad, oldVsRef, maxDiff: off, posGpu: gpuState.writePos, posRef: pos, creditGpu: gpuState.scanCredit, creditRef: credit, draws: gpuState.lastScan?.draws });
+    out.push({ ...c, ok, cells: width * height, bad, oldBad, lastColBad, lastColStale, maxDiff: off, stampsGpu: gpuState.writePos, stampsRef: stamps, draws: gpuState.lastScan?.draws });
     nodeGraphRasterRgbGlFree(gpuState);
   }
   return out;
 }, CASES);
 let fail = false;
 for (const r of results) {
-  const exactMath = Number.isInteger(r.W * 4) && Number.isInteger(r.H * 4) && Number.isInteger(r.speed * 4);
-  // Decimal sizes / speeds are not exact in binary. Where the exact maths
-  // lands a stamp exactly on a boundary (2.6 * 5 = 13), float32 (GPU) and
-  // double (CPU) can round it to the neighbouring sample or column. That pixel
-  // then holds the colour of a sample 1/44100 s away. The old JS loop has
-  // the same kind of tie flips against the exact maths (reported). Allow 5% of
-  // cells there; binary fractions (all saved patches) must match exactly.
-  const allowed = exactMath ? 0 : Math.ceil(r.cells * 0.05);
-  const good = r.ok && r.bad <= allowed && (!exactMath || r.oldBad === 0) && Math.abs(r.posGpu - r.posRef) < 1e-6 && Math.abs(r.creditGpu - r.creditRef) < 1e-6;
+  const whole = Number.isInteger(r.W) && Number.isInteger(r.H) && Number.isInteger(r.speed * 4);
+  // No tolerance: positions are integers and every stamp's sample uses the
+  // same tie rule on the CPU and GPU.
+  const good = r.ok && r.bad === 0 && r.lastColBad === 0 && r.lastColStale === 0 && (!whole || r.oldBad === 0) && r.stampsGpu === r.stampsRef;
   if (!good) fail = true;
-  console.log(`${good ? "ok  " : "FAIL"} W=${r.W} H=${r.H} speed=${r.speed} batches=${r.batches.length > 6 ? `${r.batches.length} frames, ${r.batches.reduce((s, n) => s + n, 0)} samples` : r.batches.join("+")}: ${r.bad}/${r.cells} cells differ (allowed ${allowed}${r.maxDiff ? `, max byte diff ${r.maxDiff}` : ""}; vs old JS loop ${r.oldBad}, old loop vs reference ${r.oldVsRef}); pos ${r.posGpu} vs ${r.posRef}, credit ${r.creditGpu.toFixed(6)} vs ${r.creditRef.toFixed(6)}`);
+  console.log(`${good ? "ok  " : "FAIL"} W=${r.W} H=${r.H} speed=${r.speed} batches=${r.batches.length > 6 ? `${r.batches.length} frames, ${r.batches.reduce((s, n) => s + n, 0)} samples` : r.batches.join("+")}: ${r.bad}/${r.cells} cells differ${r.maxDiff ? ` (max byte diff ${r.maxDiff})` : ""}; last column ${r.lastColBad} wrong, ${r.lastColStale} stale; vs old Scan Speed loop ${r.oldBad}${whole ? "" : " (fractional: new raster)"}; stamps ${r.stampsGpu} vs ${r.stampsRef}`);
 }
 
 // Line Rate -> beam speed.
@@ -202,11 +215,11 @@ const stable = await page.evaluate((cases) => cases.map((c) => {
   }
   nodeGraphRasterRgbGlFree(st);
   return { ...c, ok, speed, maxCells, maxByte, cells: st.width * st.height };
-}), [{ W: 96, H: 54, sr: 44100 }, { W: 96, H: 54, sr: 48000 }, { W: 96, H: 54, sr: 88200 }, { W: 41, H: 29, sr: 44100 }, { W: 41.5, H: 30, sr: 44100 }, { W: 7.25, H: 8, sr: 88200 }, { W: 41.5, H: 29, sr: 44100, alternates: true }]);
+}), [{ W: 96, H: 54, sr: 44100 }, { W: 96, H: 54, sr: 48000 }, { W: 96, H: 54, sr: 88200 }, { W: 41, H: 29, sr: 44100 }, { W: 41.5, H: 30, sr: 44100 }, { W: 7.25, H: 8, sr: 88200 }, { W: 41.5, H: 29, sr: 44100 }, { W: 96.4, H: 54, sr: 48000 }, { W: 96, H: 54.5, sr: 48000, alternates: true }]);
 for (const s of stable) {
-  // Fractional Width with an odd line count: row y is fed by lines whose
-  // sub-pixel start phase alternates each pass, so it flips between two
-  // still pictures (reported, not asserted).
+  // Fractional Height: a frame lasts 54.5 lines, so each frame starts half a
+  // source cycle later than the last and the picture flips between two (a
+  // real raster does the same; reported, not asserted).
   const ok = s.alternates ? s.ok : s.ok && s.maxCells === 0;
   if (!ok) fail = true;
   console.log(`${ok ? "ok  " : "FAIL"}${s.alternates ? " (info)" : ""} still image (synthetic): 60 Hz at Line Rate 60, W=${s.W} H=${s.H} ${s.sr} Hz (speed ${s.speed.toFixed(6)}): over 60 frames max ${s.maxCells}/${s.cells} cells changed, max byte diff ${s.maxByte}`);

@@ -3,7 +3,8 @@
 //      silence in either sign, carried across frames; unwired = no hits.
 //   2. Beam jumps (nodeGraphRasterRgbGlScan syncs): H = start of the next line
 //      (stays put at column 0), V = top-left, before that sample writes; GPU
-//      grid and pos/credit equal a CPU reference.
+//      grid and stamp count equal a per-cell CPU reference of the line-restart
+//      raster (cell (r, c) takes the sample the beam is in when it leaves it).
 //   3. Live: Clock T (200 Hz) into V Sync of a cleared 96x54, Line Rate 7350 Hz
 //      grid restarts the frame every 7350 / 200 = 36.75 lines (at any engine
 //      rate), so the lines below stay black; with the cable removed every line
@@ -79,7 +80,7 @@ const CASES = [
   { W: 12, H: 9, speed: 0.75, take: 500, syncs: [{ at: 9, kind: "h" }, { at: 99, kind: "h" }, { at: 333, kind: "v" }, { at: 334, kind: "h" }] },
 ];
 const beam = await page.evaluate((cases) => {
-  const posMod = (p, m) => { const r = p % m; return r < 0 ? r + m : r; };
+  const TIE = 1e-3;
   const out = [];
   for (const c of cases) {
     const width = Math.ceil(c.W);
@@ -90,35 +91,46 @@ const beam = await page.evaluate((cases) => {
     const ok = nodeGraphRasterRgbGlScan(st, { take: c.take, channels: [data, null, null], logicalW: c.W, logicalH: c.H, speed: c.speed, syncs: c.syncs });
     const grid = nodeGraphRasterRgbGlReadGrid(st);
     nodeGraphRasterRgbGlFree(st);
+    // Per-cell walk: line D = W / speed, column 1 / speed, frame H * D.
+    const D = c.W / c.speed;
+    const DW = 1 / c.speed;
+    const F = c.H * D;
     const ref = new Uint8Array(width * height);
-    let pos = 0;
-    let credit = 0;
+    let r = 0;
+    let col = 0;
+    let line = 0;
+    let frame = 0;
     let k = 0;
-    for (let i = 0; i < c.take; i += 1) {
-      while (k < c.syncs.length && c.syncs[k].at === i) {
-        if (c.syncs[k].kind === "v") pos = 0;
-        else if (posMod(pos, c.W) > 0) pos = (Math.floor(pos / c.W) + 1) * c.W;
+    let pos = 0;
+    for (;;) {
+      const exit = Math.min(line + Math.min((col + 1) * DW, D), frame + F);
+      const s = Math.ceil(exit - TIE) - 1;
+      if (k < c.syncs.length && c.syncs[k].at <= Math.max(s, 0) && c.syncs[k].at < c.take) {
+        const at = c.syncs[k].at;
+        if (c.syncs[k].kind === "v") { r = 0; col = 0; line = at; frame = at; }
+        else { if (col > 0) { col = 0; r += 1; } if (r >= height) { r = 0; frame = at; } line = at; }
         k += 1;
+        continue;
       }
-      credit += c.speed;
-      const n = Math.floor(credit);
-      credit -= n;
-      for (let s = 0; s < n; s += 1) {
-        const x = Math.min(width - 1, Math.floor(posMod(pos, c.W)));
-        const y = Math.min(height - 1, Math.floor(posMod(Math.floor(pos / c.W), c.H)));
-        ref[y * width + x] = Math.round(Math.min(1, Math.abs(data[i])) * 255);
-        pos += 1;
+      if (s >= c.take) break;
+      ref[r * width + col] = Math.round(Math.min(1, Math.abs(data[Math.max(0, s)])) * 255);
+      pos += 1;
+      col += 1;
+      if (col >= width) {
+        col = 0;
+        r += 1;
+        if (r >= height) { r = 0; frame += F; line = frame; } else line += D;
       }
     }
     let bad = 0;
     for (let i = 0; i < width * height; i += 1) if (grid.pixels[i * 4] !== ref[i]) bad += 1;
-    out.push({ W: c.W, H: c.H, speed: c.speed, ok, bad, cells: width * height, pos: [st.writePos, pos], credit: [st.scanCredit, credit] });
+    out.push({ W: c.W, H: c.H, speed: c.speed, ok, bad, cells: width * height, pos: [st.writePos, pos] });
   }
   return out;
 }, CASES);
 for (const r of beam) {
-  check(`beam W=${r.W} H=${r.H} speed=${r.speed}`, r.ok && r.bad === 0 && Math.abs(r.pos[0] - r.pos[1]) < 1e-9 && Math.abs(r.credit[0] - r.credit[1]) < 1e-9,
-    `${r.bad}/${r.cells} cells differ; pos ${r.pos[0]} vs ${r.pos[1]}; credit ${r.credit[0]} vs ${r.credit[1]}`);
+  check(`beam W=${r.W} H=${r.H} speed=${r.speed}`, r.ok && r.bad === 0 && r.pos[0] === r.pos[1],
+    `${r.bad}/${r.cells} cells differ; stamps ${r.pos[0]} vs ${r.pos[1]}`);
 }
 
 // 3. Live: Clock T -> V Sync.
