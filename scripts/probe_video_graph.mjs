@@ -150,6 +150,9 @@ const res = await page.evaluate(() => {
     // VG-1: rebuilds of the ?? edge table in the window (each is one walk of
     // the connection list). Before VG-1 every read was a walk: null here.
     listScans: vg.edges0 ? nodeGraphPictureEdgeStats().rebuilds - vg.edges0.rebuilds : null,
+    // VG-5: publish copies vs by-reference publishes in the window.
+    copies: vg.edges0 && vg.edges0.copies != null ? nodeGraphPictureEdgeStats().copies - vg.edges0.copies : null,
+    refs: vg.edges0 && vg.edges0.refs != null ? nodeGraphPictureEdgeStats().refs - vg.edges0.refs : null,
     scheduler: typeof nodeGraphVideoGraphStats === "function" ? nodeGraphVideoGraphStats() : null,
     glFailures: typeof nodeGraphDisplayGlFailures === "function" ? [...nodeGraphDisplayGlFailures().keys()] : [],
   };
@@ -172,21 +175,25 @@ await page.evaluate(() => { const p = nodeGraphMvp.pan || { x: 0, y: 0 }; setNod
 await page.waitForTimeout(1500);
 const back = await page.evaluate((ms) => new Promise((done) => {
   const vg = window.__vg; vg.pubs = {}; vg.on = true; const f0 = vg.frame;
+  // Probe-only readback, 4 times across the window: the asleep source's
+  // picture is not black (% of pixels lit).
+  vg.lit = [];
+  const sample = () => {
+    const pic = nodeGraphPictureGet("fbm-far"); const gl = nodeGraphPictureDevice()?.gl;
+    if (!pic?.texture || !gl) { vg.lit.push(-1); return; }
+    const fb = gl.createFramebuffer();
+    gl.bindFramebuffer(gl.FRAMEBUFFER, fb);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, pic.texture, 0);
+    const px = new Uint8Array(pic.width * pic.height * 4);
+    gl.readPixels(0, 0, pic.width, pic.height, gl.RGBA, gl.UNSIGNED_BYTE, px);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.deleteFramebuffer(fb);
+    let n = 0; for (let k = 0; k < px.length; k += 4) if (px[k] + px[k + 1] + px[k + 2] > 24) n += 1;
+    vg.lit.push(Math.round((100 * n) / (pic.width * pic.height)));
+  };
+  for (let t = 1; t <= 4; t += 1) setTimeout(sample, (ms * t) / 5);
   setTimeout(() => {
     vg.on = false;
-    // Probe-only readback: the asleep source's picture is not black.
-    let lit = -1;
-    const pic = nodeGraphPictureGet("fbm-far"); const gl = nodeGraphPictureDevice()?.gl;
-    if (pic?.texture && gl) {
-      const fb = gl.createFramebuffer();
-      gl.bindFramebuffer(gl.FRAMEBUFFER, fb);
-      gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, pic.texture, 0);
-      const px = new Uint8Array(pic.width * pic.height * 4);
-      gl.readPixels(0, 0, pic.width, pic.height, gl.RGBA, gl.UNSIGNED_BYTE, px);
-      gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.deleteFramebuffer(fb);
-      lit = 0; for (let i = 0; i < px.length; i += 4) if (px[i] + px[i + 1] + px[i + 2] > 24) lit += 1;
-      lit = Math.round((100 * lit) / (pic.width * pic.height));
-    }
+    const lit = vg.lit.join("/");
     const asleep = document.querySelector('article[data-node="fbm-far"]')?.classList.contains("viewport-asleep");
     done({ frames: vg.frame - f0, pubs: vg.pubs, lit, asleep });
   }, ms);
@@ -205,6 +212,7 @@ if (process.env.JSON) console.log(JSON.stringify({ states, ...res }, null, 1));
 console.log(`vg-chain ${SECONDS}s: frames=${res.frames} fps=${r1(res.fps)} p50=${r1(res.p50)}ms p90=${r1(res.p90)}ms max=${r1(res.max)}ms pictureRead calls=${res.scans} (${r1(res.scans / Math.max(1, res.frames))}/frame)`);
 const scans = res.listScans == null ? res.scans : res.listScans;
 console.log(`connection-list scans: ${scans} (${r1(scans / Math.max(1, res.frames))}/frame)${res.listScans == null ? " [no edge table: every read scans]" : " [edge table rebuilds]"}`);
+if (res.copies != null) console.log(`publish: ${r1(res.copies / Math.max(1, res.frames))} copies/frame, ${r1(res.refs / Math.max(1, res.frames))} by reference/frame`);
 console.log(res.scheduler
   ? `video graph scheduler: order ${res.scheduler.order.filter((id) => [...NODES, ...SOLO].includes(id)).join(" ")}; back edges ${res.scheduler.backEdges}`
   : "video graph scheduler: none (per-module rAF loops)");
@@ -226,6 +234,7 @@ for (const [a, b] of VG_CHAIN_EDGES) {
 }
 if (process.env.STACK) console.log(off.stack);
 console.log(`all off screen (${off.frames} frames, ${off.asleep} modules asleep): ` + NODES.map((id) => `${id}=${r1((off.pubs[id] || 0) / Math.max(1, off.frames))}`).join(" ") + " publishes/frame");
+if (back.frames < 30) console.log("WARN: rAF stalled in the pan-back window (browser window hidden?); rerun");
 console.log(`panned back (${back.frames} frames): fbm-far ${back.asleep ? "asleep" : "awake"} publishes ${r1((back.pubs["fbm-far"] || 0) / Math.max(1, back.frames))}/frame, vd-far ${r1((back.pubs["vd-far"] || 0) / Math.max(1, back.frames))}/frame; fbm-far picture ${back.lit}% lit`);
 console.log(`rewire (drop vd-1 -> ib-1): ${rewire.before && rewire.after && rewire.other ? "ok" : "FAIL " + JSON.stringify(rewire)}`);
 if (res.glFailures.length) console.log("display GL failures:", res.glFailures);

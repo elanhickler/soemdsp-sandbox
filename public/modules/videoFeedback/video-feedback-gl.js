@@ -319,7 +319,8 @@ const NODE_GRAPH_VIDEO_FEEDBACK_WAVE = 512;
     renderer.read = renderer.write;
     renderer.write = tmp;
     if (options.nodeId && typeof nodeGraphPicturePublish === "function") {
-      nodeGraphPicturePublish(options.nodeId, renderer.read.texture, renderer.width, renderer.height);
+      // VG-5: the ping-pong read side is the output (RGBA8 LINEAR, next step writes the other side).
+      nodeGraphPicturePublish(options.nodeId, renderer.read.texture, renderer.width, renderer.height, { byReference: true });
     }
     return true;
   }

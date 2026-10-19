@@ -696,7 +696,8 @@ function nodeGraphRgbFractalGlPaint(canvas, params) {
 
   gl.bindFramebuffer(gl.FRAMEBUFFER, null);
   if (params.nodeId && typeof nodeGraphPicturePublish === "function") {
-    nodeGraphPicturePublish(params.nodeId, state.sceneTex, w, h);
+    // VG-5: sceneTex is the output (RGBA8 LINEAR, redrawn from scratch before each publish).
+    nodeGraphPicturePublish(params.nodeId, state.sceneTex, w, h, { byReference: true });
   }
   if (typeof nodeGraphPicturePresent === "function") {
     nodeGraphPicturePresent(state.sceneTex, w, h, canvas, w, h);

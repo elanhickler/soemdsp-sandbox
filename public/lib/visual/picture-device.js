@@ -7,7 +7,11 @@
 (function initNodeGraphPictureDevice(global) {
   const MAX_DIM = 4096;
   let device = null;
+  // nodeId -> { texture, width, height, framebuffer?, ref? }. A ref slot
+  // (VG-5) points at the producer's own output texture: nothing to copy and
+  // nothing to delete here (the producer owns it).
   const published = new Map();
+  const publishStats = { copies: 0, refs: 0 };
 
   const COPY_FS = `
     precision mediump float;
@@ -84,9 +88,11 @@
     const w = Math.max(1, width | 0);
     const h = Math.max(1, height | 0);
     let slot = published.get(nodeId);
-    if (slot && slot.width === w && slot.height === h && slot.texture) return slot;
-    if (slot?.framebuffer) gl.deleteFramebuffer(slot.framebuffer);
-    if (slot?.texture) gl.deleteTexture(slot.texture);
+    if (slot && !slot.ref && slot.width === w && slot.height === h && slot.texture) return slot;
+    if (slot && !slot.ref) {
+      if (slot.framebuffer) gl.deleteFramebuffer(slot.framebuffer);
+      if (slot.texture) gl.deleteTexture(slot.texture);
+    }
     const texture = gl.createTexture();
     gl.bindTexture(gl.TEXTURE_2D, texture);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
@@ -111,8 +117,15 @@
     return slot;
   }
 
-  /** Copy a finished picture into a stable texture other modules can bind. */
-  function nodeGraphPicturePublish(nodeId, texture, width, height) {
+  /**
+   * Publish a finished picture for the node's ?? out.
+   * options.byReference (VG-5): the texture itself becomes the output, no
+   * copy. Only for RGBA8 LINEAR textures the producer never draws into while
+   * they are published (ping-pong read side, or a texture rebuilt from scratch
+   * before each publish). Other producers (NEAREST grids, float accumulators
+   * that the RGBA8 copy clamps) keep the copy so consumers see the same look.
+   */
+  function nodeGraphPicturePublish(nodeId, texture, width, height, options = null) {
     const id = String(nodeId || "").trim();
     if (!id || !texture) return false;
     // VG-2: no cable reads this picture, so skip the copy.
@@ -120,6 +133,17 @@
     const dev = nodeGraphPictureDevice();
     if (!dev?.gl) return false;
     const gl = dev.gl;
+    if (options?.byReference) {
+      const old = published.get(id);
+      if (old && !old.ref) {
+        if (old.framebuffer) gl.deleteFramebuffer(old.framebuffer);
+        if (old.texture) gl.deleteTexture(old.texture);
+      }
+      published.set(id, { texture, width: Math.max(1, width | 0), height: Math.max(1, height | 0), ref: true });
+      publishStats.refs += 1;
+      return true;
+    }
+    publishStats.copies += 1;
     const slot = ensureExport(gl, id, width, height);
     if (!slot) return false;
     gl.bindFramebuffer(gl.FRAMEBUFFER, slot.framebuffer);
@@ -216,7 +240,7 @@
 
   /** Probe/smoke counters: table rebuilds and lookups served from it. */
   function nodeGraphPictureEdgeStats() {
-    return { rebuilds: edges.rebuilds, lookups: edges.lookups, inlets: edges.inlets.size, sources: edges.sources.size };
+    return { rebuilds: edges.rebuilds, lookups: edges.lookups, inlets: edges.inlets.size, sources: edges.sources.size, copies: publishStats.copies, refs: publishStats.refs };
   }
 
   /** True when any cable leaves this node's picture out (`rgba` / TV). */
