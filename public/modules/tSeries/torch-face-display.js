@@ -8,7 +8,7 @@
 // centred in it, so trimmed and padded frames line up.
 
 (function initNodeGraphTorchFace(global) {
-  const IMAGE_TOKEN = "torch-4f-20261019";
+  const IMAGE_TOKEN = "torch-4f-20261019b";
   const FRAME_FILES = ["torch0.png", "torch1.png", "torch2.png", "torch4.png"];
   const scriptSrc = (global.document?.currentScript?.src)
     || global.document?.querySelector?.('script[src*="torch-face-display.js"]')?.src
