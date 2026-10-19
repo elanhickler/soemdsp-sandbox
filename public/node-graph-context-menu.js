@@ -1782,7 +1782,7 @@ function configureNodeSceneContextMenu(mode) {
         ? `Delete ${selectedNodeIds.size} selected modules.`
         : nodeGraphTooltipText("actions.deleteModule"))
       : targetNode
-        ? nodeGraphTooltipText("actions.deleteUnavailableOutput")
+        ? nodeGraphTooltipText("actions.deleteUnavailableProtected")
         : nodeGraphTooltipText("actions.deleteUnavailableOneModule");
     const multiWidthValues = multiModuleMode
       ? selectedNodes

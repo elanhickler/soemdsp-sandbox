@@ -2031,8 +2031,7 @@ function deleteSelectedNodeGraphItem() {
         const node = typeof nodeGraphPatchNode === "function" ? nodeGraphPatchNode(id) : null;
         return node
           && typeof nodeGraphNodeCanBeDeleted === "function"
-          && nodeGraphNodeCanBeDeleted(node)
-          && !(typeof nodeGraphNodeDeleteHidesOnly === "function" && nodeGraphNodeDeleteHidesOnly(node));
+          && nodeGraphNodeCanBeDeleted(node);
       })
       : true);
   if (deletingModule && typeof noteNodeGraphHeavyHistoryAction === "function") {
@@ -2073,23 +2072,11 @@ function performNodeGraphDeleteSelection(selection = nodeGraphMvp.selected) {
   }
 
   const selectedNodeIds = nodeGraphSelectedNodeIds(selection);
-  const hideOnlyNodeIds = new Set();
   const removableNodeIds = new Set();
   for (const nodeId of selectedNodeIds) {
-    const node = nodeGraphPatchNode(nodeId);
-    if (!nodeGraphNodeCanBeDeleted(node)) {
-      continue;
-    }
-    if (nodeGraphNodeDeleteHidesOnly(node)) {
-      hideOnlyNodeIds.add(nodeId);
-    } else {
+    if (nodeGraphNodeCanBeDeleted(nodeGraphPatchNode(nodeId))) {
       removableNodeIds.add(nodeId);
     }
-  }
-
-  if (hideOnlyNodeIds.size) {
-    nodeGraphMvp.live.inputActive = false;
-    stopNodeGraphLiveInputSource();
   }
 
   if (removableNodeIds.size) {

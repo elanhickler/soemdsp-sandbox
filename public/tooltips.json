@@ -258,7 +258,7 @@
     "deleteModuleShort": "delete selected module",
     "deleteModulesShort": "delete selected modules",
     "deleteWireShort": "delete selected wire",
-    "deleteUnavailableOutput": "delete unavailable: Output module is required",
+    "deleteUnavailableProtected": "delete unavailable: this module is protected",
     "deleteUnavailableOneModule": "delete unavailable: select one module",
     "deleteWire": "delete selected wire (Delete)",
     "deleteWireMissing": "delete unavailable: selected wire no longer exists",

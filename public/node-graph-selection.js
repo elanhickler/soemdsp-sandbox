@@ -659,8 +659,9 @@ function nodeGraphNodeCanBeDeleted(node) {
   if (!node) {
     return false;
   }
-  // Singleton app I/O — unique, always present, never deleted (APP_POLICY).
-  if (node.type === "output" || node.type === "audioInput" || node.id === "home") {
+  // Output / Input are deletable (APP_POLICY): they return via Undo or their
+  // lower-bar button. Only home stays.
+  if (node.id === "home") {
     return false;
   }
   // Metamodule Voice* bus + default Left/Right Meta Outs.
@@ -669,11 +670,6 @@ function nodeGraphNodeCanBeDeleted(node) {
     return false;
   }
   return true;
-}
-
-function nodeGraphNodeDeleteHidesOnly(node) {
-  // Input used to "hide" on delete; it is undeleteable now (same as Output).
-  return false && node?.type === "audioInput";
 }
 
 function nodeGraphSelectionCanDelete(selection = nodeGraphMvp.selected) {
@@ -709,8 +705,8 @@ function nodeGraphDeleteTitle(selection = nodeGraphMvp.selected) {
   if (!selectedNodeIds.size) {
     return nodeGraphTooltipText("actions.deleteNothing");
   }
-  if ([...selectedNodeIds].every((id) => id === "output")) {
-    return nodeGraphTooltipText("actions.deleteUnavailableOutput");
+  if ([...selectedNodeIds].every((id) => !nodeGraphNodeCanBeDeleted(nodeGraphPatchNode(id)))) {
+    return nodeGraphTooltipText("actions.deleteUnavailableProtected");
   }
   // Delete container shell → delete shell + owned children.
   if (

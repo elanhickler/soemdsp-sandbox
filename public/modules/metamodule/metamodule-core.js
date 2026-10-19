@@ -477,10 +477,8 @@ function nodeGraphSelectionCanGroupIntoMetamodule(selection = nodeGraphMvp?.sele
     if (nodeGraphIsContainerShellType(node.type)) return false;
     if (nodeGraphIsMetamoduleBoundaryType(node.type)) return false;
     if (node.ownerMetamoduleId) return false;
-    if (typeof nodeGraphNodeCanBeDeleted === "function" && !nodeGraphNodeCanBeDeleted(node)) {
-      // Allow grouping undeleteable singletons? No â€” keep out of groups for v1.
-      if (node.type === "output" || node.type === "audioInput") return false;
-    }
+    // Output / Input stay out of Metamodules (deletable, but app I/O).
+    if (node.type === "output" || node.type === "audioInput") return false;
   }
   return true;
 }
