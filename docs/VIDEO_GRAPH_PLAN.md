@@ -148,12 +148,14 @@ Defined once in the scheduler, not per module. At the start of each video frame:
 ## Stages
 
 Every stage is committed locally on its own and measured with the VG probe. Nothing pushed without
-Argi's OK. Measurements on ArchIV, softpop plus a test patch `vg-chain` (fbmField -> videoDelay ->
-videoFeedback -> imageBurn, plus a videoFeedback <-> videoDelay loop).
+Argi's OK. Measurements on ArchIV, softpop plus a test patch `vg-chain`
+(built in memory by the probe; videoFeedback has no ?? inlet, so the chain is split): fbmField ->
+videoDelay -> imageBurn, videoFeedback -> imageBurn, a videoDelay <-> imageBurn loop, and an fbmField
+parked ~10000 px off screen feeding a visible videoDelay.
 
 | ID | Task | Done when | Gate | Status |
 |---|---|---|---|---|
-| VG-0 | Probe: `scripts/probe_video_graph.mjs` builds `vg-chain`, stamps a frame counter into each node's output (test-only uniform or a 1-px corner), reads it back **in the probe only** (`nodeGraphSharedGlFacePixels`), and reports hop latency per edge, frames updated per node, fps, p50/p90. Baseline recorded. | Probe runs on today's code and records the current random latencies | baseline row in tracker | open |
+| VG-0 | Probe: `scripts/probe_video_graph.mjs` builds `vg-chain`, stamps a frame counter into each node's output (test-only uniform or a 1-px corner), reads it back **in the probe only** (`nodeGraphSharedGlFacePixels`), and reports hop latency per edge, frames updated per node, fps, p50/p90. Baseline recorded. | Probe runs on today's code and records the current random latencies | baseline row in tracker | done (2026-10-18). Probe hooks publish/read instead of stamping pixels: each read records how many frames ago its source published, so no pixel readback at all. |
 | VG-1 | Edge table: cached 📺 edges, rebuilt on patch change. `nodeGraphPictureRead` / `nodeGraphPictureHasConsumer` use it. | 0 connection-list scans per frame (counter) | scans/frame = 0 | open |
 | VG-2 | Publish only if connected: every publisher checks the edge table (or a visible face) before publishing. | Unconnected fbmField/rgbFractal/feedback/delay/imageBurn/user shader do 0 publish copies | publish copies with no cable = 0 | open |
 | VG-3 | Scheduler skeleton (`node-graph-video-graph.js`): one rAF, topological order, SCC back edges on previous frame, Simulation FPS clock, engine-state gating. Modules not yet migrated are called through an adapter that wraps their existing step function. | Single rAF drives all video nodes; per-module rAF loops disabled for adapted modules | hop latency 0 frames on every acyclic edge of `vg-chain`; loop edge exactly 1 | open |
@@ -215,4 +217,13 @@ User-facing labels say ??, never "RGBA".
 ## Tracker
 | Date | Stage | hop latency (acyclic) | offscreen source updates | fps idle | fps zoom | Commit |
 |---|---|---|---|---|---|---|
-| - | - | - | - | - | - | - |
+| 2026-10-18 | VG-0 baseline | fbm->delay 1, delay->burn 0, feedback->burn 0; loop delay->burn 0, burn->delay 1 (every frame, order-dependent) | fbm-far asleep: 0 updates, its visible consumer reads a picture 92-331 frames old (stale) | 60 (p50 16.7, p90 16.7 ms) | - (VG-9) | VG-0 commit |
+
+VG-0 baseline notes (ArchIV, `node scripts/probe_video_graph.mjs`, 4 s window, play on):
+- Hop latency is fixed per edge but depends on rAF registration order, not graph order: fbmField
+  renders after Video Delay, so fbm->delay is always 1 frame late while delay->burn is 0.
+- The off-screen fbmField stops (viewport-asleep) while its consumer is on screen: the consumer shows
+  a frozen picture. VG-4 fixes this.
+- The opposite leak: with the whole cluster panned off screen, Video Delay, Image Burn and Video
+  Feedback still publish ~0.9 times per frame (only fbmField stops). Nothing visible needs them.
+- `nodeGraphPictureRead` scans the connection list 6 times per frame on this patch (VG-1 target 0).
