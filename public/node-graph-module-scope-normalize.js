@@ -719,11 +719,24 @@ function normalizeNodeGraphWaterfallHistory(source, defaults = {}) {
   }
   const historySeconds = nodeGraphWaterfallClampHistorySeconds(sec, defSec);
   const historyCycles = nodeGraphTraceDisplayClampHistoryCycles(cycles, defCycles);
+  const historyPercent = nodeGraphOnsetClampHistoryPercent(
+    source?.historyPercent,
+    defaults?.historyPercent ?? 100,
+  );
   return {
     historySeconds,
     historyCycles,
+    historyPercent,
     zoomSeconds: historySeconds,
   };
+}
+
+/** 1D Onset Sync window. 0 = one bar. 100 = the whole Reset gap. */
+function nodeGraphOnsetClampHistoryPercent(value, fallback = 100) {
+  const n = Number(value);
+  const fb = Number(fallback);
+  const use = Number.isFinite(n) ? n : (Number.isFinite(fb) ? fb : 100);
+  return Math.max(0, Math.min(100, use));
 }
 
 
@@ -1006,6 +1019,13 @@ function normalizeNodeGraphWaterfallSettings(settings = {}) {
       if (raw === true || raw === 1 || raw === "1" || raw === "true") return true;
       if (raw === false || raw === 0 || raw === "0" || raw === "false") return false;
       return defaults.pauseOnSilence === true;
+    })(),
+    // 1D Onset face width follows Reset spacing. Other waterfalls ignore it.
+    resetSync: (() => {
+      const raw = source.resetSync;
+      if (raw === true || raw === 1 || raw === "1" || raw === "true") return true;
+      if (raw === false || raw === 0 || raw === "0" || raw === "false") return false;
+      return defaults.resetSync === true;
     })(),
     smoothLines: (() => {
       const raw = source.smoothLines;
@@ -1813,6 +1833,10 @@ function normalizeNodeGraphScope1dTraceSettings(settings = {}) {
     trail: typeof PhosphorResidual !== "undefined" && PhosphorResidual.migrateTrail
       ? PhosphorResidual.migrateTrail(source, defaults.trail)
       : normalizeNodeGraphTraceDisplayNumber(source.trail, defaults.trail, 0, 1),
+    // Must survive normalize or the Burn ⨯ stepper never reaches the painter.
+    burnAmount: typeof PhosphorResidual !== "undefined" && PhosphorResidual.migrateBurnAmount
+      ? PhosphorResidual.migrateBurnAmount(source, defaults.burnAmount ?? 1)
+      : normalizeNodeGraphTraceDisplayNumber(source.burnAmount, defaults.burnAmount ?? 1, 0, 4),
     pixelDensity: normalizeNodeGraphTraceDisplayNumber(
       source.pixelDensity,
       defaults.pixelDensity,

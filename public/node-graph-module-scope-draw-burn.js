@@ -1238,6 +1238,7 @@ function drawNodeGraphScope2dTraceLayer(context, points, dotSpace, settings) {
       plateBrightness: Number.isFinite(plateN) ? Math.max(0, Math.min(1, plateN)) : 0,
       trail: settings.trail,
       ghost: settings.ghost,
+      burnAmount: settings.burnAmount,
       tracePresent: true,
     });
     if (count > 0) {

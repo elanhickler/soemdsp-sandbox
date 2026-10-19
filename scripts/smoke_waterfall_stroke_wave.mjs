@@ -114,7 +114,8 @@ gate(absRaw.length === 4 && absRaw[1] === 0, "absolute polarity: line passes thr
   gate(ys(m1.lines.D[12]).every((y) => Math.abs(y - inset) < 1e-9) && ys(m1.lines.W[12]).every((y) => Math.abs(y - (H - inset)) < 1e-9), "Mix 1 full duck: Dry at the top edge, Wet at the bottom edge");
   const wfSrc = fs.readFileSync(path.join(root, "public", "node-graph-module-scope-waterfall.js"), "utf8");
   const strokeFirst = wfSrc.match(/if \(useStroke\) \{[\s\S]{0,300}?nodeGraphWaterfallStrokeWaveColumn\([\s\S]{0,200}?\}\s*const ys = span\.ys;\s*if \(!ys\) continue;/g) || [];
-  gate(strokeFirst.length === 2, `both column paths stroke before the fill's silent-column skip (${strokeFirst.length}/2)`);
+  // Onset no longer uses this column stroke. It draws one sample-accurate line.
+  gate(strokeFirst.length === 1, `waterfall column path strokes before the fill's silent-column skip (${strokeFirst.length}/1)`);
 }
 // Sub-pixel frames (advance < 1 px, e.g. long History at 60 fps): their
 // samples must reach the next column. Regression: SmoothAdvance reset the

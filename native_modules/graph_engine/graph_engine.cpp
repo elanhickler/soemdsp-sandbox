@@ -1178,6 +1178,18 @@ extern "C" int soemdsp_ping_envelope_version();
 extern "C" const char* soemdsp_ping_envelope_metadata_json();
 extern "C" int soemdsp_ping_envelope_metadata_json_size();
 
+extern "C" int soemdsp_resonant_envelope_create();
+extern "C" void soemdsp_resonant_envelope_destroy(int handle);
+extern "C" int soemdsp_resonant_envelope_is_idle(int handle);
+extern "C" double soemdsp_resonant_envelope_sample(
+  int handle, double input, double freqHz, double attackSec, double decaySec,
+  double resonance, double impulse, double tracking, double amplitude,
+  double outputRange, double recalculateOnTrigger, double sampleRate
+);
+extern "C" int soemdsp_resonant_envelope_version();
+extern "C" const char* soemdsp_resonant_envelope_metadata_json();
+extern "C" int soemdsp_resonant_envelope_metadata_json_size();
+
 extern "C" int soemdsp_power_decay_create();
 extern "C" void soemdsp_power_decay_destroy(int handle);
 extern "C" int soemdsp_power_decay_is_idle(int handle);
@@ -1226,6 +1238,7 @@ extern "C" int soemdsp_robin_sinepulse_create();
 extern "C" void soemdsp_robin_sinepulse_destroy(int handle);
 extern "C" int soemdsp_robin_sinepulse_is_idle(int handle);
 extern "C" double soemdsp_robin_sinepulse_env(int handle);
+extern "C" double soemdsp_robin_sinepulse_unit(int handle);
 extern "C" double soemdsp_robin_sinepulse_freq(int handle);
 extern "C" double soemdsp_robin_sinepulse_sample(
   int handle, double trigger, double highFreq, double lowFreq,
@@ -2116,6 +2129,7 @@ static const int kTypeChorus = 188; // Multi-voice delay + shared vibrato + filt
 static const int kTypeEnsemble = 189; // Chorus topology + SoEm Reverb RW/FBM delay mod
 static const int kTypeCrossfade = 196; // Stereo pair crossfade (2/3/4 via stages)
 static const int kTypeScript = 220; // emo script: WASM process_block via env import
+static const int kTypeResonantEnvelope = 221; // Resonant Envelope: TPT SVF lowpass at envelope rate
 
 static const int kPortMono = 0;
 static const int kPortLeft = 1;
@@ -2787,6 +2801,8 @@ static void destroy_native_kind_handle(int kind, int handle) {
     soemdsp_pluck_envelope_fb_destroy(handle);
   } else if (kind == kTypePingEnvelope) {
     soemdsp_ping_envelope_destroy(handle);
+  } else if (kind == kTypeResonantEnvelope) {
+    soemdsp_resonant_envelope_destroy(handle);
   } else if (kind == kTypePowerDecay) {
     soemdsp_power_decay_destroy(handle);
   } else if (kind == kTypeExponentialSkew) {
@@ -3302,6 +3318,7 @@ static void init_node_defaults(Node& n, int typeId) {
       : (typeId == kTypeExpAdsr || typeId == kTypeCurveAttackRelease) ? 0.0 // attackShape (bipolar; 0=linear)
       : (typeId == kTypePluckEnvelopeFb) ? -0.07 // attackShape (breadboard)
       : (typeId == kTypePowerDecay) ? 2.0 // power
+      : (typeId == kTypeResonantEnvelope) ? 0.0 // impulse
       : (typeId == kTypeExponentialSkew || typeId == kTypeHyperbolicDecay) ? 0.0 // Shape w
       : (typeId == kTypeEllipsoidDecay) ? 0.0 // Morph
       : (typeId == kTypeRobinSinepulse) ? 0.0 // chirp
@@ -3358,6 +3375,7 @@ static void init_node_defaults(Node& n, int typeId) {
       : (typeId == kTypeLorenzAttractor) ? 28.0 // rho
       : (typeId == kTypeAdditiveBubble) ? 481.53 // unskew (settled default)
       : (typeId == kTypeAdditiveLadderFilter) ? 0.0 // resonance
+      : (typeId == kTypeResonantEnvelope) ? 0.0 // resonance
       : (typeId == kTypeAdditiveSync) ? 0.0 // pinch
       : (typeId == kTypeAdditiveOut) ? 1.0 // slope skew
       : (typeId == kTypeWavetable2d) ? 0.0 // warp
@@ -3391,6 +3409,7 @@ static void init_node_defaults(Node& n, int typeId) {
       : (typeId == kTypePluckEnvelopeFb) ? 1.0 // inputMode Trigger (breadboard)
       : (typeId == kTypeInertialFilter) ? 1.0 // smoothAttack On
       : (typeId == kTypePingEnvelope) ? 1.0 // recalculateOnTrigger On
+      : (typeId == kTypeResonantEnvelope) ? 0.0 // Output Range Fit
       : (typeId == kTypeVactrol) ? 1.0 // recalculateOnTrigger On
       : (typeId == kTypePingPongDelay) ? 1.0 // Left Right
       : (typeId == kTypeTransport) ? 1.0 // Mode Sync
@@ -3553,6 +3572,7 @@ static void init_node_defaults(Node& n, int typeId) {
       : (typeId == kTypeNoiseGenerator) ? 0.5
       : (typeId == kTypePluckEnvelopeFb) ? 1.1 // tail (inverted Dampen; 1.1 = breadboard rest)
       : (typeId == kTypePingEnvelope) ? 0.5 // Decay 1 (0=amp 1 … 1=amp 0)
+      : (typeId == kTypeResonantEnvelope) ? 0.3 // decay s
       : (typeId == kTypeTransport) ? 0.5 // pulseWidth gate duty
       : (typeId == kTypeRobinSupersaw) ? 30.0 // detuneCents
       : (typeId == kTypeHyperpluck) ? 5.0 // detuneHz
@@ -3636,6 +3656,7 @@ static void init_node_defaults(Node& n, int typeId) {
       : (typeId == kTypeSoftpop2) ? 0.0 // Crossfade
       : (typeId == kTypeFbmField) ? 0.55 // smoothness
       : (typeId == kTypeExponentialMix) ? 0.75 // Mix p
+      : (typeId == kTypeResonantEnvelope) ? 0.0 // tracking
       : (typeId == kTypeSidechain) ? 0.35 // Mix (env 0)
       : (typeId == kTypeLorenzAttractor) ? 0.4 // zDepth
       : (typeId == kTypeHenonMap) ? 0.1 // seedY
@@ -3805,6 +3826,7 @@ static void init_node_defaults(Node& n, int typeId) {
       : (typeId == kTypeAttackDecay || typeId == kTypeCurveAttackRelease) ? 0.01 // attack
       : (typeId == kTypePluckEnvelopeFb) ? 0.0 // attack
       : (typeId == kTypePingEnvelope) ? 0.0 // attack s
+      : (typeId == kTypeResonantEnvelope) ? 0.01 // attack s
       : (typeId == kTypePowerDecay) ? 1.0 // decayTime s
       : (typeId == kTypeExponentialSkew || typeId == kTypeHyperbolicDecay
           || typeId == kTypeExponentialMix || typeId == kTypeEllipsoidDecay) ? 2.0 // Duration / Decay Time s
@@ -3828,6 +3850,7 @@ static void init_node_defaults(Node& n, int typeId) {
       : (typeId == kTypePluckEnvelopeFb) ? 0.0 // updateOnTrigger Off (live)
       : (typeId == kTypeExpAdsr || typeId == kTypeCurveAttackRelease) ? 0.0 // updateOnTrigger Off (live)
       : (typeId == kTypeWavetableAdsr) ? 0.0 // recalculateOnTrigger Off (live)
+      : (typeId == kTypeResonantEnvelope) ? 1.0 // recalculateOnTrigger On
       : 0.0, // also mode/comb resonator hold Off
     true
   ); // pingPong timing; lookaheadLimiter / activeFilter = gainCompensation
@@ -4855,6 +4878,7 @@ static int create_native_for_type(int typeId, float sampleRate) {
   if (typeId == kTypeCurveAttackRelease) return soemdsp_curve_attack_release_create();
   if (typeId == kTypePluckEnvelopeFb) return soemdsp_pluck_envelope_fb_create();
   if (typeId == kTypePingEnvelope) return soemdsp_ping_envelope_create();
+  if (typeId == kTypeResonantEnvelope) return soemdsp_resonant_envelope_create();
   if (typeId == kTypePowerDecay) return soemdsp_power_decay_create();
   if (typeId == kTypeExponentialSkew) return soemdsp_exponential_skew_create();
   if (typeId == kTypeHyperbolicDecay) return soemdsp_hyperbolic_decay_create();
@@ -9374,6 +9398,36 @@ static void process_softpop_filter(Circuit& g, Node& node, int frames) {
   }
 }
 
+// Flower Child ƒ: the wired Hz is the resonance pitch you hear. The core's
+// Cutoff u (0..1) sets an internal Hz = midi_to_hz(3 + 158 u); at high
+// Resonance the self-oscillation rings at a mode-dependent fraction of it.
+// Model: log2(pitch) = A + B u  ->  u = (log2(Hz) - A) / B.
+//   Clean  pitch = 0.2453 x internal Hz (measured, <0.1 st over u 0.15..0.85)
+//   Dirty  pitch = 0.239  x internal Hz (measured, ~0.5 st rms, 1.3 st worst)
+//   Rev3 / Downsampled: no fixed ratio; least-squares fit at Resonance 1
+//   (Rev3 ~1.5 st rms / 3 st worst, Downsampled ~3 st rms / 8.6 st worst).
+// u is clamped once to the core's valid range [0, maxNorm] (maxNorm 0.928 at
+// <= 44.1 kHz, as the core does), so the native clamp is a no-op.
+static const double kFlowerChildFA[4] = {
+  1.2540151, // log2(0.2453 * 440) - 66/12
+  1.2164389, // log2(0.239 * 440) - 66/12
+  -2.1567,
+  3.7480,
+};
+static const double kFlowerChildFB[4] = { 158.0 / 12.0, 158.0 / 12.0, 17.2326, 11.4013 };
+
+static inline double flower_child_u_from_hz(double hz, int mode, double sr, double* pitchOut) {
+  const int m = mode < 0 ? 0 : (mode > 3 ? 3 : mode);
+  const double maxNorm = sr <= 44100.0 ? 0.928 : 1.0;
+  double u = hz > 1.0e-9
+    ? (dsp_ln(hz) * 1.4426950408889634 - kFlowerChildFA[m]) / kFlowerChildFB[m]
+    : 0.0;
+  if (!(u == u) || u < 0.0) u = 0.0;
+  if (u > maxNorm) u = maxNorm;
+  *pitchOut = dsp_exp((kFlowerChildFA[m] + kFlowerChildFB[m] * u) * 0.6931471805599453);
+  return u;
+}
+
 // Routing: soemdsp/routing/stereo_route.h. Same cutoff Hz on every core.
 static void process_flower_child_filter(Circuit& g, Node& node, int frames) {
   if (node.nativeHandle <= 0) return;
@@ -9389,10 +9443,21 @@ static void process_flower_child_filter(Circuit& g, Node& node, int frames) {
   const double sr = g.sampleRate < 1.0f ? 44100.0 : (double)g.sampleRate;
   const double modeV = control_effective(node.mode);
   const int mode = (int)(modeV + (modeV >= 0.0 ? 0.5 : -0.5));
+  const bool liveF = mix_live_port(g, node, kPortF, frames, g.mixF);
   double freq = 0.0, reso = 0.0, chaos = 0.0, amp = 1.0;
   process_stereo_route_filter(g, node, frames,
     [&](int f, bool) {
-      freq = norm_pitch_freq_from_control(control_audio(g, node.frequency, f));
+      if (liveF) {
+        // ƒ wired: resonance-pitch Hz replaces Cutoff per sample (resolve_osc_hz).
+        const double hz = resolve_osc_hz(g, f, true, false, node.frequency, 0.0, sr);
+        double pitch = 0.0;
+        freq = flower_child_u_from_hz(hz, mode, sr, &pitch);
+        node.effectiveHz = pitch;
+        node.effectiveHzLive = 1;
+      } else {
+        freq = norm_pitch_freq_from_control(control_audio(g, node.frequency, f));
+        node.effectiveHzLive = 0;
+      }
       reso = control_audio(g, node.resonance, f);
       chaos = control_audio(g, node.shape, f);
       amp = control_audio(g, node.amplitude, f);
@@ -9830,6 +9895,42 @@ static void process_ping_envelope(Circuit& g, Node& node, int frames) {
   }
 }
 
+// Resonant Envelope (resonantEnvelope, type 221).
+// timeDenominator=attack s, width=decay s, resonance, shape=impulse,
+// mix=tracking, amplitude, mode=output range (0 Fit / 1 Raw),
+// timingMode=recalculate on trigger. f is the Hz cable (kPortF).
+static void process_resonant_envelope(Circuit& g, Node& node, int frames) {
+  if (node.nativeHandle <= 0) return;
+  mix_node_inputs(g, node, frames);
+  const bool hasTrig = mix_live_port(g, node, kPortTrigger, frames, g.mixTrigger);
+  const bool hasF = mix_live_port(g, node, kPortF, frames, g.mixF);
+  const double sr = g.sampleRate < 1.0f ? 44100.0 : (double)g.sampleRate;
+  for (int f = 0; f < frames; f++) {
+    control_frame(g, node, f);
+    const double trig = hasTrig ? g.mixTrigger[f] : 0.0;
+    const double input = trig + g.mixMono[f] + g.mixLeft[f] + g.mixRight[f];
+    const double hz = hasF ? g.mixF[f] : 0.0;
+    const double out = soemdsp_resonant_envelope_sample(
+      node.nativeHandle,
+      input,
+      hz,
+      control_audio(g, node.timeDenominator, f),
+      control_audio(g, node.width, f),
+      control_audio(g, node.resonance, f),
+      control_audio(g, node.shape, f),
+      control_audio(g, node.mix, f),
+      control_audio(g, node.amplitude, f),
+      control_effective(node.mode),
+      control_effective(node.timingMode),
+      sr
+    );
+    node.buf[kPortMono][f] = out;
+    node.buf[kPortLeft][f] = out;
+    node.buf[kPortRight][f] = out;
+    node.buf[kPortIsIdle][f] = soemdsp_resonant_envelope_is_idle(node.nativeHandle) ? 1.0 : 0.0;
+  }
+}
+
 // PowerDecay (powerDecay): timeDenominator=decayTime s, shape=power, amplitude.
 // Trigger/Gate on Mono(+L/R) and the Trigger bus; each hit restarts t = 0.
 // Out = height * amplitude * pow(1 - t / decayTime, power), 0 once t >= decayTime.
@@ -9962,7 +10063,7 @@ static void process_ellipsoid_decay(Circuit& g, Node& node, int frames) {
 // shape=chirp, width=chirpShape, waveform=wave (choiceId), mix=waveShape,
 // phaseParam=phase (cycles), timeDenominator=decay s, amplitude.
 // Out: Kick -> Mono, ƒ (instantaneous sweep Hz) -> Left,
-// 0–1 decay envelope (hit height, not scaled by Amplitude) -> Right.
+// 0–1 sweep position (High Freq = 1, Low Freq = 0) -> Right.
 static void process_robin_sinepulse(Circuit& g, Node& node, int frames) {
   if (node.nativeHandle <= 0) return;
   const bool hasTrig = mix_live_port(g, node, kPortTrigger, frames, g.mixTrigger);
@@ -9986,7 +10087,7 @@ static void process_robin_sinepulse(Circuit& g, Node& node, int frames) {
     );
     node.buf[kPortMono][f] = out;
     node.buf[kPortLeft][f] = soemdsp_robin_sinepulse_freq(node.nativeHandle);
-    node.buf[kPortRight][f] = soemdsp_robin_sinepulse_env(node.nativeHandle);
+    node.buf[kPortRight][f] = soemdsp_robin_sinepulse_unit(node.nativeHandle);
     node.buf[kPortIsIdle][f] = soemdsp_robin_sinepulse_is_idle(node.nativeHandle) ? 1.0 : 0.0;
   }
 }
@@ -13921,6 +14022,7 @@ extern "C" int soemdsp_graph_add_node(int handle, unsigned int nodeIdHash, int t
     || typeId == kTypeCurveAttackRelease
     || typeId == kTypePluckEnvelopeFb
     || typeId == kTypePingEnvelope
+    || typeId == kTypeResonantEnvelope
     || typeId == kTypePowerDecay
     || typeId == kTypeExponentialSkew
     || typeId == kTypeHyperbolicDecay
@@ -15454,6 +15556,10 @@ static void dispatch_process_node(Circuit& g, Node& node, int frames) {
       process_ping_envelope(g, node, frames);
       return;
     }
+    if (node.typeId == kTypeResonantEnvelope) {
+      process_resonant_envelope(g, node, frames);
+      return;
+    }
     if (node.typeId == kTypePowerDecay) {
       process_power_decay(g, node, frames);
       return;
@@ -16118,5 +16224,5 @@ extern "C" int soemdsp_graph_version() {
   // 170: EQ Filter ZDF ƒ input (resolve_osc_hz)
   // 171: ƒ on Ladder/303/Mode/Cookbook/IIR/Papoulis/ZDF filters + soemdsp_graph_node_effective_hz
   // 174: live add/remove/connect/disconnect keep compiled and other nodes' native handles
-  return 178; // 178: Robin Sinepulse 0–1 envelope on Right. was 177: emo script module
+  return 181; // 181: Flower Child ƒ in (resonance-pitch Hz replaces Cutoff). was 180: Robin Sinepulse 0–1 jack is sweep position (High=1, Low=0). was 179: Resonant Envelope (221)
 }

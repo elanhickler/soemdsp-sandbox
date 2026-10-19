@@ -300,7 +300,7 @@ function nodeGraphDisplaySettingsBuildStepperRowHtml(key, formType = null, optio
     ? ""
     : (key === "sweepHz" || key === "sweepCycles"
       ? `<span data-trace-display-sweep-label>${nodeGraphDisplaySettingsEscapeHtml(label)}</span>`
-      : (key === "historySeconds" || key === "zoomSeconds" || key === "historyHz" || key === "historyCycles")
+      : (key === "historySeconds" || key === "zoomSeconds" || key === "historyHz" || key === "historyCycles" || key === "historyPercent")
         ? `<span data-trace-display-history-label>${nodeGraphDisplaySettingsEscapeHtml(label)}</span>`
         : `<span>${nodeGraphDisplaySettingsEscapeHtml(label)}</span>`);
   const rowClass = options.hideLabel
@@ -1277,13 +1277,23 @@ function syncNodeGraphLineBurnSweepLabel(root, settings = {}) {
   }
 }
 
+function nodeGraphWaterfallHistoryUsesPercent(settings) {
+  const on = typeof nodeGraphOnsetResetSyncOn === "function"
+    ? nodeGraphOnsetResetSyncOn(settings)
+    : settings?.resetSync === true;
+  if (!on) return false;
+  const id = nodeGraphMvp?.traceDisplaySettingsTargetNode;
+  const node = typeof nodeGraphPatchNode === "function" ? nodeGraphPatchNode(id) : null;
+  return node?.type === "onset";
+}
+
 /**
- * Instant Waterfall History stays seconds. Sync/Cycles retarget is gone.
- * If an open form still points at historyCycles, pin it back to historySeconds.
+ * Instant Waterfall History is seconds. 1D Onset Sync retargets that same
+ * stepper to History (percent). Other faces keep seconds.
  */
 function syncNodeGraphWaterfallHistoryLabel(root, settings = {}) {
   const host = root?.querySelector?.(
-    "[data-trace-display-history-label], [data-trace-display-field=\"historySeconds\"], [data-trace-display-field=\"zoomSeconds\"], [data-trace-display-field=\"historyHz\"], [data-trace-display-field=\"historyCycles\"]",
+    "[data-trace-display-history-label], [data-trace-display-field=\"historySeconds\"], [data-trace-display-field=\"historyPercent\"], [data-trace-display-field=\"zoomSeconds\"], [data-trace-display-field=\"historyHz\"], [data-trace-display-field=\"historyCycles\"]",
   )
     ? root
     : document.getElementById("nodeTraceDisplaySettingsPopover");
@@ -1292,15 +1302,19 @@ function syncNodeGraphWaterfallHistoryLabel(root, settings = {}) {
   }
   const titleSpan = host.querySelector("[data-trace-display-history-label]");
   const field = host.querySelector(`[data-trace-display-field="historySeconds"]`)
+    || host.querySelector(`[data-trace-display-field="historyPercent"]`)
     || host.querySelector(`[data-trace-display-field="historyCycles"]`)
     || host.querySelector(`[data-trace-display-field="historyHz"]`)
     || host.querySelector(`[data-trace-display-field="zoomSeconds"]`);
   if (!titleSpan && !field) {
     return;
   }
-  const key = "historySeconds";
-  const label = "History (seconds)";
-  const title = "History window duration in seconds across the face. Longer = slower scroll. At 0 the face is the current bar.";
+  const percent = nodeGraphWaterfallHistoryUsesPercent(settings);
+  const key = percent ? "historyPercent" : "historySeconds";
+  const label = percent ? "History (percent)" : "History (seconds)";
+  const title = percent
+    ? "Percent of the time between Reset pulses. 10 fills the face with the first 10% of that interval. 100 is the whole interval. 0 is the current bar."
+    : "History window duration in seconds across the face. Longer = slower scroll. At 0 the face is the current bar.";
   if (titleSpan) {
     titleSpan.textContent = label;
   }
@@ -1502,7 +1516,8 @@ function buildNodeGraphInstantTraceDisplaySettingsBodyHtml(type, node, allowKey)
     usedToggles.add("skipDiscontinuities");
   }
   if (isInstantWaterfall) {
-    // Scroll+stamp history cannot lock to a zero-crossing. No Sync control.
+    // Scroll+stamp history cannot lock to a zero-crossing. sourceSync stays hidden.
+    // 1D Onset Sync (resetSync) is the Reset-spacing window, added after History.
     if (choiceKeys.includes("syncChannel")) usedChoices.add("syncChannel");
     if (toggleKeys.includes("sourceSync")) usedToggles.add("sourceSync");
   } else if (toggleKeys.includes("sourceSync")) {
@@ -1566,14 +1581,24 @@ function buildNodeGraphInstantTraceDisplaySettingsBodyHtml(type, node, allowKey)
   if (isInstantWaterfall && (orderedPrimary.includes("scale") || activeFields.has("scale"))) {
     rows.push(nodeGraphDisplaySettingsBuildStepperRowHtml("scale", type));
   }
-  // Instant Waterfall: History (seconds) only. Other faces may still swap to Cycles.
+  // Instant Waterfall: History (seconds). 1D Onset Sync shows History (percent)
+  // on that same stepper. Other faces may still swap to Cycles.
   if (orderedPrimary.includes("historySeconds") || orderedPrimary.includes("historyCycles")
     || orderedPrimary.includes("historyHz")) {
     const freeRunKey = orderedPrimary.includes("historySeconds") || !orderedPrimary.includes("historyHz")
       ? "historySeconds"
       : "historyHz";
+    const onsetSettings = typeof nodeGraphTraceDisplaySettingsForNode === "function"
+      ? nodeGraphTraceDisplaySettingsForNode(node)
+      : null;
+    const onsetPercent = isInstantWaterfall
+      && node?.type === "onset"
+      && typeof nodeGraphOnsetResetSyncOn === "function"
+      && nodeGraphOnsetResetSyncOn(onsetSettings);
     rows.push(nodeGraphDisplaySettingsBuildStepperRowHtml(
-      (!isInstantWaterfall && syncOnForStack) ? "historyCycles" : freeRunKey,
+      onsetPercent
+        ? "historyPercent"
+        : ((!isInstantWaterfall && syncOnForStack) ? "historyCycles" : freeRunKey),
       type,
       { syncOn: !isInstantWaterfall && syncOnForStack },
     ));
@@ -1581,6 +1606,12 @@ function buildNodeGraphInstantTraceDisplaySettingsBodyHtml(type, node, allowKey)
     pushStackField("historySeconds");
     pushStackField("zoomSeconds");
   }
+  // 1D Onset only. Mark the key used either way so other waterfalls do not
+  // pick it up from the leftover toggle loop. 2D Onset stays on History.
+  if (node?.type === "onset" && toggleKeys.includes("resetSync")) {
+    rows.push(nodeGraphDisplaySettingsBuildToggleRowHtml("resetSync"));
+  }
+  usedToggles.add("resetSync");
   const isOnsetFace = node?.type === "onset" || node?.type === "onset2d";
   if (!isOnsetFace) {
     pushStackField("detail");

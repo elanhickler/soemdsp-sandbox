@@ -20,7 +20,8 @@
 // (Sine, SinFatSaw, TriSaw with triSawParamMap 0.60).
 //
 // Sandbox additions (docs/KICK_PLAN.md, Argi 2026-10-06; Reset removed 2026-10-06):
-//   - Decay: one-multiply T60 amplitude envelope e (Env out, scales Kick).
+//   - Decay: one-multiply T60 amplitude envelope e (scales Kick; not a jack).
+//   - 0–1 jack: sweep position of the same Hz as ƒ. High Freq is 1, Low Freq is 0.
 //   - Trigger only (gate_hit, height = velocity): latches High/Low/Sweep,
 //     zeroes the phase (Robin's hard-reset noteOn), restarts the sweep, and
 //     sets e = |height|. No Reset port.
@@ -60,9 +61,10 @@ struct State {
   double sampleCount;
   double instPhase;
   double instFreq;
-  // Decay envelope.
+  // Decay envelope (Kick only). unitOut is the 0–1 sweep jack.
   double env;
   double envOut;
+  double unitOut;
   double freqOut;
   bool swept;
   double decayCached;
@@ -99,6 +101,7 @@ static void init_state(State& s) {
   s.instFreq = s.fHi;
   s.env = 0.0;
   s.envOut = 0.0;
+  s.unitOut = 0.0;
   s.freqOut = s.fLo;
   s.swept = false;
   s.decayCached = -1.0;
@@ -207,7 +210,19 @@ extern "C" void soemdsp_robin_sinepulse_destroy(int handle) {
   gPool[handle - 1].active = false;
 }
 
-// Returns Kick; soemdsp_robin_sinepulse_env() returns this sample's Env.
+// 0–1 jack: position of freq along the latched High..Low span.
+// High is 1, Low is 0. A zero span (High == Low) is 1 after a hit, else 0.
+static double sweep_unit(double freq, double fHi, double fLo, bool swept) {
+  const double span = fHi - fLo;
+  if (!(span > 1.0e-12) && !(span < -1.0e-12)) return swept ? 1.0 : 0.0;
+  double u = (freq - fLo) / span;
+  if (u < 0.0) u = 0.0;
+  if (u > 1.0) u = 1.0;
+  return u;
+}
+
+// Returns Kick. soemdsp_robin_sinepulse_env() is the T60 envelope (Kick gain).
+// soemdsp_robin_sinepulse_unit() is the 0–1 sweep jack.
 extern "C" double soemdsp_robin_sinepulse_sample(
   int handle,
   double trigger,
@@ -244,8 +259,10 @@ extern "C" double soemdsp_robin_sinepulse_sample(
     if (!s.swept) {
       const double nyquist = 0.5 * sr;
       s.freqOut = clamp(safe(lowFreq), 0.0, nyquist);
+      s.unitOut = 0.0;
     } else {
       s.freqOut = s.instFreq;
+      s.unitOut = sweep_unit(s.freqOut, s.fHi, s.fLo, true);
     }
     return 0.0;
   }
@@ -264,6 +281,7 @@ extern "C" double soemdsp_robin_sinepulse_sample(
   if (s.dirty || ch != s.coeffChirp || sh != s.coeffShape) update_coeffs(s, ch, sh);
   s.sampleCount += 1.0;
   s.freqOut = s.instFreq;
+  s.unitOut = sweep_unit(s.freqOut, s.fHi, s.fLo, true);
   const double newFreq = inst_freq(s, s.sampleCount / sr);
   s.instPhase += (0.5 / sr) * (s.instFreq + newFreq);  // trapezoidal integration
   if (s.instPhase >= 1.0) s.instPhase -= 1.0;
@@ -292,12 +310,17 @@ extern "C" double soemdsp_robin_sinepulse_env(int handle) {
   return gPool[handle - 1].envOut;
 }
 
+extern "C" double soemdsp_robin_sinepulse_unit(int handle) {
+  if (handle < 1 || handle > kMaxInstances || !gPool[handle - 1].active) return 0.0;
+  return gPool[handle - 1].unitOut;
+}
+
 extern "C" int soemdsp_robin_sinepulse_is_idle(int handle) {
   if (handle < 1 || handle > kMaxInstances) return 1;
   const State& s = gPool[handle - 1];
   return (!s.active || s.env < kPlanck) ? 1 : 0;
 }
 
-extern "C" int soemdsp_robin_sinepulse_version() { return 3; }
+extern "C" int soemdsp_robin_sinepulse_version() { return 4; }
 extern "C" const char* soemdsp_robin_sinepulse_metadata_json() { return kMetadataJson; }
 extern "C" int soemdsp_robin_sinepulse_metadata_json_size() { return sizeof(kMetadataJson) - 1; }

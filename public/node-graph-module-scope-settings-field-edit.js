@@ -422,7 +422,9 @@ function dragNodeGraphTraceDisplayField(event) {
   const blurPx = typeof nodeGraphTraceDisplayBlurDragPixels === "number"
     ? nodeGraphTraceDisplayBlurDragPixels
     : 640;
-  const controlDelta = drag.unitDrag
+  const controlDelta = drag.key === "historyPercent"
+    ? (axes.combined / unitPx) * 100 * drag.multiplier
+    : drag.unitDrag
     ? (axes.combined / unitPx) * drag.multiplier
     : drag.integerPixelDrag
       ? axes.combined * drag.quantum * drag.multiplier

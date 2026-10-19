@@ -2,7 +2,7 @@
 
 Source: Argi, via the Thoughts agent, 2026-10-18.
 
-**Status: exploration idea, not a committed build.** Nothing here is approved for implementation yet. RE-1 (prototype and listening test) decides whether the rest goes ahead. Owner TBD.
+**Status: module shipped.** Argi OK'd a new module `resonantEnvelope` and reuse of `tpt_svf.h` unchanged (2026-10-18). Decisions taken as the proposals in §10: Decay + Resonance, ƒ reference 440 Hz, rising edges only, Attack 0 maps to 0.5 ms, Fit clips below 0, ƒ stays live, no z-plane inset. The face is the live Waterfall on Out. A native shape-preview curve is still open.
 
 **Name (Argi, 2026-10-18): Resonant Envelope.** Confirmed. Do not call it "filter envelope": that already means an envelope that modulates a filter's cutoff. "Ping Envelope" is not used as an alternative name, because the sandbox already has a module with that name (see §2).
 
@@ -191,11 +191,11 @@ Open question (G): should ƒ be latched too when Recalculate On Trigger is On?
 | Step | What | Status |
 |---|---|---|
 | RE-1 | **Prototype and listening test.** Standalone C++ test program under `scripts/` (not in the app). It renders WAVs of the envelope on a sine and a noise burst, plus CSV curves, across Resonance 0 / 0.26 / 0.5 / 0.8 / 1, Impulse 0 / 1, Tracking 0 / 1 at a few notes, and Fit vs Raw. Argi listens. Decision gate: go/no-go, and (A) new module vs Ping Envelope Model. | planned |
-| RE-2 | Decisions recorded here: module shape (A), parametrisation (B), f_ref (C), Argi's OK to reuse `tpt_svf.h`, and any library helper proposals. | planned |
-| RE-3 | Native module core (approach 1): `resonant_envelope.cpp`, `graph_engine.cpp` process function, module definition (ports and params from §7), combined/efficient wasm registration, `isIdle`. | planned |
-| RE-4 | `f` input and Tracking (approach 2), with the 440 Hz neutral point and the clamps. | planned |
-| RE-5 | Impulse (approach 3), with K normalisation. | planned |
-| RE-6 | Output Range Fit / Raw (§5), with peakGain. | planned |
+| RE-2 | Decisions recorded here: module shape (A), parametrisation (B), f_ref (C), Argi's OK to reuse `tpt_svf.h`, and any library helper proposals. | done (proposals; OK 2026-10-18) |
+| RE-3 | Native module core (approach 1): `resonant_envelope.cpp`, `graph_engine.cpp` process function, module definition (ports and params from §7), combined/efficient wasm registration, `isIdle`. | done |
+| RE-4 | `f` input and Tracking (approach 2), with the 440 Hz neutral point and the clamps. | done |
+| RE-5 | Impulse (approach 3), with K normalisation. | done |
+| RE-6 | Output Range Fit / Raw (§5), with peakGain. | done |
 | RE-7 | WebGL2 face: native shape preview, Waterfall, optional z-plane inset. | planned |
 | RE-8 | Tests (native unit test: decay time, ring frequency, overshoot vs formula, tracking neutral at 440 Hz, no NaN, `isIdle`), smoke test, a livedemo patch, docs. | planned |
 | RE-9 | Optional: level-dependent feedback on the pole radius (Ping Envelope style), or a Resonance option on Ping Envelope if (A) goes that way. | idea |

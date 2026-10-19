@@ -17037,6 +17037,15 @@ def require_native_module_contract(base_url: str) -> None:
             "soemdsp_ping_envelope_metadata_json",
             "soemdsp_ping_envelope_metadata_json_size",
         ],
+        "resonant_envelope": [
+            "soemdsp_resonant_envelope_create",
+            "soemdsp_resonant_envelope_destroy",
+            "soemdsp_resonant_envelope_sample",
+            "soemdsp_resonant_envelope_is_idle",
+            "soemdsp_resonant_envelope_version",
+            "soemdsp_resonant_envelope_metadata_json",
+            "soemdsp_resonant_envelope_metadata_json_size",
+        ],
         "power_decay": [
             "soemdsp_power_decay_create",
             "soemdsp_power_decay_destroy",

@@ -375,6 +375,7 @@ function nodeGraphScope1dTraceDrawLayer(context, points, settings, role = "prima
       plateBrightness: Number.isFinite(plateN) ? Math.max(0, Math.min(1, plateN)) : 0,
       trail: settings?.trail,
       ghost: settings?.ghost,
+      burnAmount: settings?.burnAmount,
       traceContinue: phase.traceContinue === true,
       tracePresent: phase.tracePresent !== false,
       presentComposite: phase.presentComposite || "copy",

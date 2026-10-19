@@ -160,7 +160,7 @@ $modules = @(
   @{ Name = "hyperbolic_decay"; Simd = $false; Exports = @("soemdsp_hyperbolic_decay_create", "soemdsp_hyperbolic_decay_destroy", "soemdsp_hyperbolic_decay_sample", "soemdsp_hyperbolic_decay_is_idle", "soemdsp_hyperbolic_decay_version", "soemdsp_hyperbolic_decay_metadata_json", "soemdsp_hyperbolic_decay_metadata_json_size") }
   @{ Name = "exponential_mix"; Simd = $false; Exports = @("soemdsp_exponential_mix_create", "soemdsp_exponential_mix_destroy", "soemdsp_exponential_mix_sample", "soemdsp_exponential_mix_is_idle", "soemdsp_exponential_mix_version", "soemdsp_exponential_mix_metadata_json", "soemdsp_exponential_mix_metadata_json_size") }
   @{ Name = "ellipsoid_decay"; Simd = $false; Exports = @("soemdsp_ellipsoid_decay_create", "soemdsp_ellipsoid_decay_destroy", "soemdsp_ellipsoid_decay_sample", "soemdsp_ellipsoid_decay_is_idle", "soemdsp_ellipsoid_decay_version", "soemdsp_ellipsoid_decay_metadata_json", "soemdsp_ellipsoid_decay_metadata_json_size") }
-  @{ Name = "robin_sinepulse"; Simd = $false; Exports = @("soemdsp_robin_sinepulse_create", "soemdsp_robin_sinepulse_destroy", "soemdsp_robin_sinepulse_sample", "soemdsp_robin_sinepulse_env", "soemdsp_robin_sinepulse_freq", "soemdsp_robin_sinepulse_is_idle", "soemdsp_robin_sinepulse_version", "soemdsp_robin_sinepulse_metadata_json", "soemdsp_robin_sinepulse_metadata_json_size") }
+  @{ Name = "robin_sinepulse"; Simd = $false; Exports = @("soemdsp_robin_sinepulse_create", "soemdsp_robin_sinepulse_destroy", "soemdsp_robin_sinepulse_sample", "soemdsp_robin_sinepulse_env", "soemdsp_robin_sinepulse_unit", "soemdsp_robin_sinepulse_freq", "soemdsp_robin_sinepulse_is_idle", "soemdsp_robin_sinepulse_version", "soemdsp_robin_sinepulse_metadata_json", "soemdsp_robin_sinepulse_metadata_json_size") }
   @{ Name = "robin_sinepulse_allpass"; Simd = $false; Exports = @("soemdsp_robin_sinepulse_allpass_create", "soemdsp_robin_sinepulse_allpass_destroy", "soemdsp_robin_sinepulse_allpass_set_params", "soemdsp_robin_sinepulse_allpass_process_chain", "soemdsp_robin_sinepulse_allpass_dry", "soemdsp_robin_sinepulse_allpass_out", "soemdsp_robin_sinepulse_allpass_sample", "soemdsp_robin_sinepulse_allpass_is_idle", "soemdsp_robin_sinepulse_allpass_num_stages", "soemdsp_robin_sinepulse_allpass_update_count", "soemdsp_robin_sinepulse_allpass_version", "soemdsp_robin_sinepulse_allpass_metadata_json", "soemdsp_robin_sinepulse_allpass_metadata_json_size") }
   @{ Name = "vactrol_envelope"; Simd = $false; Exports = @("soemdsp_vactrol_envelope_create", "soemdsp_vactrol_envelope_destroy", "soemdsp_vactrol_envelope_sample", "soemdsp_vactrol_envelope_version", "soemdsp_vactrol_envelope_metadata_json", "soemdsp_vactrol_envelope_metadata_json_size") }
   @{ Name = "exp_adsr"; Simd = $false; Exports = @("soemdsp_exp_adsr_create", "soemdsp_exp_adsr_destroy", "soemdsp_exp_adsr_sample", "soemdsp_exp_adsr_is_idle", "soemdsp_exp_adsr_version", "soemdsp_exp_adsr_metadata_json", "soemdsp_exp_adsr_metadata_json_size") }
@@ -180,6 +180,7 @@ $modules = @(
     "soemdsp_formula_noise_set_source", "soemdsp_formula_noise_value_at", "soemdsp_formula_noise_source_count",
     "soemdsp_formula_noise_version", "soemdsp_formula_noise_metadata_json", "soemdsp_formula_noise_metadata_json_size"
   ) }
+  @{ Name = "resonant_envelope"; Simd = $false; Exports = @("soemdsp_resonant_envelope_create", "soemdsp_resonant_envelope_destroy", "soemdsp_resonant_envelope_sample", "soemdsp_resonant_envelope_is_idle", "soemdsp_resonant_envelope_version", "soemdsp_resonant_envelope_metadata_json", "soemdsp_resonant_envelope_metadata_json_size") }
   @{ Name = "lorenz_attractor"; Simd = $false; Exports = @("soemdsp_lorenz_attractor_create", "soemdsp_lorenz_attractor_destroy", "soemdsp_lorenz_attractor_sample", "soemdsp_lorenz_attractor_x", "soemdsp_lorenz_attractor_y", "soemdsp_lorenz_attractor_z", "soemdsp_lorenz_attractor_version", "soemdsp_lorenz_attractor_metadata_json", "soemdsp_lorenz_attractor_metadata_json_size") }
   @{ Name = "sine_wavetable"; Simd = $false; Exports = @("soemdsp_sine_wavetable_create", "soemdsp_sine_wavetable_destroy", "soemdsp_sine_wavetable_reset", "soemdsp_sine_wavetable_set_method", "soemdsp_sine_wavetable_sample", "soemdsp_sine_wavetable_sin", "soemdsp_sine_wavetable_cos", "soemdsp_sine_wavetable_phase", "soemdsp_sine_wavetable_version", "soemdsp_sine_wavetable_metadata_json", "soemdsp_sine_wavetable_metadata_json_size") }
   @{ Name = "log_spiral"; Simd = $false; Exports = @("soemdsp_log_spiral_create", "soemdsp_log_spiral_destroy", "soemdsp_log_spiral_sample", "soemdsp_log_spiral_x", "soemdsp_log_spiral_y", "soemdsp_log_spiral_z", "soemdsp_log_spiral_version", "soemdsp_log_spiral_metadata_json", "soemdsp_log_spiral_metadata_json_size") }
@@ -778,6 +779,10 @@ if ($node) {
   & $node.Source "$root\scripts\smoke_pitch_quantizer_face.mjs"
   if ($LASTEXITCODE -ne 0) {
     throw "Combined build: pitch quantizer face smoke FAILED"
+  }
+  & $node.Source "$root\scripts\smoke_flower_child_f.mjs"
+  if ($LASTEXITCODE -ne 0) {
+    throw "Combined build: flower child f smoke FAILED"
   }
   & $node.Source "$root\scripts\smoke_robin_supersaw_pitch_jitter.mjs"
   if ($LASTEXITCODE -ne 0) {

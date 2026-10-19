@@ -154,6 +154,8 @@ const nodeGraphWaterfallSettingsDefaults = Object.freeze({
   // Sync off: History window duration in seconds (0 = pause). Sync on: cycles in view.
   // Stored separately so toggling Sync keeps both dials. Instant Waterfall only — no Hz.
   historySeconds: 0.25,
+  // 1D Onset Sync. 100 = the whole Reset gap. 10 = first 10% across the face.
+  historyPercent: 100,
   // 1 = ±1 fills the face. Higher enlarges the signal.
   scale: 1,
   historyCycles: 4,
@@ -171,6 +173,9 @@ const nodeGraphWaterfallSettingsDefaults = Object.freeze({
   strokeThickness: 1,
   // Off: keep scrolling. On: silence (linear amp at or below Planck) holds the plate.
   pauseOnSilence: false,
+  // 1D Onset only. On: face width is History (percent) of the Reset gap.
+  // History (seconds) is the fallback until two edges have been measured.
+  resetSync: false,
   // On: sloped column edges get slope-aware AA (waterfall GL bar shader).
   smoothLines: true,
   // Bipolar: −1 bottom, 0 center, +1 top. Unipolar: 0 bottom, +1 top.
@@ -653,6 +658,8 @@ const nodeGraphScope1dTraceSettingsDefaults = Object.freeze({
   trail: typeof PhosphorResidual !== "undefined"
     ? PhosphorResidual.DEFAULT_TRAIL
     : nodeGraphScopePhosphorLookDefaults.trail,
+  // Residual deposit gain vs Bright. 1 = hung ink at Bright. Live pen stays Bright.
+  burnAmount: 1,
   pixelDensity: nodeGraphScopePhosphorLookDefaults.pixelDensity,
   scale: nodeGraphScopePhosphorLookDefaults.scale,
   skipDiscontinuities: true,

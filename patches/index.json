@@ -130,6 +130,60 @@
       "folder": "demonstration"
     },
     {
+      "slug": "drums/kick using fcf",
+      "label": "kick using fcf",
+      "name": "",
+      "url": "/soemdsp-sandbox/patches/drums/kick%20using%20fcf.json",
+      "author": "",
+      "emoji": "",
+      "folder": "drums"
+    },
+    {
+      "slug": "drums/kick_drum_attempt",
+      "label": "kick_drum_attempt",
+      "name": "",
+      "url": "/soemdsp-sandbox/patches/drums/kick_drum_attempt.json",
+      "author": "",
+      "emoji": "",
+      "folder": "drums"
+    },
+    {
+      "slug": "drums/kick_drum_attempt_2",
+      "label": "kick_drum_attempt_2",
+      "name": "",
+      "url": "/soemdsp-sandbox/patches/drums/kick_drum_attempt_2.json",
+      "author": "",
+      "emoji": "",
+      "folder": "drums"
+    },
+    {
+      "slug": "drums/light_kick_variation",
+      "label": "light_kick_variation",
+      "name": "",
+      "url": "/soemdsp-sandbox/patches/drums/light_kick_variation.json",
+      "author": "",
+      "emoji": "",
+      "folder": "drums"
+    },
+    {
+      "slug": "drums/sine_kick_attempt",
+      "label": "sine_kick_attempt",
+      "name": "",
+      "url": "/soemdsp-sandbox/patches/drums/sine_kick_attempt.json",
+      "author": "",
+      "emoji": "",
+      "folder": "drums"
+    },
+    {
+      "slug": "drums/sine_kick_attempt_2",
+      "label": "sine_kick_attempt_2",
+      "name": "",
+      "url": "/soemdsp-sandbox/patches/drums/sine_kick_attempt_2.json",
+      "author": "",
+      "emoji": "",
+      "folder": "drums"
+    },
+    {
       "slug": "foley/callnow",
       "label": "callnow",
       "name": "",
@@ -593,10 +647,18 @@
       "emoji": ""
     },
     {
+      "slug": "kick using fcf",
+      "label": "kick using fcf",
+      "name": "",
+      "url": "/soemdsp-sandbox/patches/drums/kick%20using%20fcf.json",
+      "author": "",
+      "emoji": ""
+    },
+    {
       "slug": "kick_drum_attempt",
       "label": "kick_drum_attempt",
       "name": "",
-      "url": "/soemdsp-sandbox/patches/kick_drum_attempt.json",
+      "url": "/soemdsp-sandbox/patches/drums/kick_drum_attempt.json",
       "author": "",
       "emoji": ""
     },
@@ -604,7 +666,7 @@
       "slug": "kick_drum_attempt_2",
       "label": "kick_drum_attempt_2",
       "name": "",
-      "url": "/soemdsp-sandbox/patches/kick_drum_attempt_2.json",
+      "url": "/soemdsp-sandbox/patches/drums/kick_drum_attempt_2.json",
       "author": "",
       "emoji": ""
     },
@@ -628,7 +690,7 @@
       "slug": "light_kick_variation",
       "label": "light_kick_variation",
       "name": "",
-      "url": "/soemdsp-sandbox/patches/light_kick_variation.json",
+      "url": "/soemdsp-sandbox/patches/drums/light_kick_variation.json",
       "author": "",
       "emoji": ""
     },
@@ -916,7 +978,7 @@
       "slug": "sine_kick_attempt",
       "label": "sine_kick_attempt",
       "name": "",
-      "url": "/soemdsp-sandbox/patches/sine_kick_attempt.json",
+      "url": "/soemdsp-sandbox/patches/drums/sine_kick_attempt.json",
       "author": "",
       "emoji": ""
     },
@@ -924,7 +986,7 @@
       "slug": "sine_kick_attempt_2",
       "label": "sine_kick_attempt_2",
       "name": "",
-      "url": "/soemdsp-sandbox/patches/sine_kick_attempt_2.json",
+      "url": "/soemdsp-sandbox/patches/drums/sine_kick_attempt_2.json",
       "author": "",
       "emoji": ""
     },

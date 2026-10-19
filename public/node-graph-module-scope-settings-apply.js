@@ -913,6 +913,7 @@ function applyNodeGraphTraceDisplaySettingsForm(options = {}) {
         || k === "backgroundHue"
         || k === "backgroundBrightness"
         || k === "historySeconds"
+        || k === "historyPercent"
         || k === "zoomSeconds"
         || k === "historyHz"
         || k === "historyCycles"

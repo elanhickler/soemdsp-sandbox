@@ -158,6 +158,7 @@ NodeLiveAudioProcessor.NATIVE_GRAPH_TYPE_IDS = Object.freeze({
   chaosfly: 161,
   linearAttackRelease: 164,
   pingEnvelope: 165,
+  resonantEnvelope: 221,
   powerDecay: 204,
   exponentialSkew: 208,
   hyperbolicDecay: 209,
@@ -1246,6 +1247,7 @@ NodeLiveAudioProcessor.prototype.mapNativeGraphDstPortId = function mapNativeGra
         || tGateEnv === "curveAttackRelease"
         || tGateEnv === "attackDecay"
         || tGateEnv === "pingEnvelope"
+        || tGateEnv === "resonantEnvelope"
         || tGateEnv === "powerDecay"
         || tGateEnv === "exponentialSkew"
         || tGateEnv === "hyperbolicDecay"
@@ -5784,6 +5786,26 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
       push("amplitude", P.NATIVE_GRAPH_PARAM_AMPLITUDE, cont("amplitude", 1));
       continue;
     }
+    if (type === "resonantEnvelope") {
+      // timeDen=attack, width=decay, resonance, shape=impulse, mix=tracking,
+      // mode=output range (0 Fit / 1 Raw), timingMode=recalculate on trigger.
+      let rangeId = disc("outputRange", 0);
+      const rawRange = node?.params?.outputRange;
+      if (typeof rawRange === "string") {
+        const s = rawRange.trim().toLowerCase();
+        if (s === "raw") rangeId = 1;
+        else if (s === "fit") rangeId = 0;
+      }
+      push("attack", P.NATIVE_GRAPH_PARAM_TIME_DENOMINATOR, cont("attack", 0.01));
+      push("decay", P.NATIVE_GRAPH_PARAM_WIDTH, cont("decay", 0.3));
+      push("resonance", P.NATIVE_GRAPH_PARAM_RESONANCE, cont("resonance", 0));
+      push("impulse", P.NATIVE_GRAPH_PARAM_SHAPE, cont("impulse", 0));
+      push("tracking", P.NATIVE_GRAPH_PARAM_MIX, cont("tracking", 0));
+      push("amplitude", P.NATIVE_GRAPH_PARAM_AMPLITUDE, cont("amplitude", 1));
+      push("outputRange", P.NATIVE_GRAPH_PARAM_MODE, rangeId);
+      push("recalculateOnTrigger", P.NATIVE_GRAPH_PARAM_TIMING_MODE, disc("recalculateOnTrigger", 1));
+      continue;
+    }
     if (type === "powerDecay") {
       // timeDenominator=decayTime s, shape=power, amplitude.
       push("decayTime", P.NATIVE_GRAPH_PARAM_TIME_DENOMINATOR, cont("decayTime", 1));
@@ -6999,7 +7021,7 @@ NodeLiveAudioProcessor.prototype.syncNativeEnsemblePublish =
  * Relayed on the data bus as EffectiveHz. No audio math here.
  */
 NodeLiveAudioProcessor.NATIVE_GRAPH_EFFECTIVE_HZ_TYPES = new Set([
-  "ladderFilter", "tb303Filter", "modeResonator", "cookbookFilter", "butterworth", "linkwitzRiley", "bessel", "chebyshev", "elliptic", "papoulisFilter", "bandpass", "allpass", "lowpass", "highpass", "eqFilter", "combResonator", "passiveFilter", "activeFilter",
+  "ladderFilter", "tb303Filter", "modeResonator", "cookbookFilter", "butterworth", "linkwitzRiley", "bessel", "chebyshev", "elliptic", "papoulisFilter", "bandpass", "allpass", "lowpass", "highpass", "eqFilter", "combResonator", "passiveFilter", "activeFilter", "flowerChildFilter",
 ]);
 // Multi-cutoff types also publish HPF as EffectiveLoHz (EffectiveHz = LPF).
 NodeLiveAudioProcessor.NATIVE_GRAPH_EFFECTIVE_LO_HZ_TYPES = new Set(["passiveFilter", "activeFilter"]);

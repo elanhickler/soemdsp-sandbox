@@ -414,10 +414,29 @@ uniform float uDeposit;
 void main() {
     // Decaying brightness (not a colored afterimage). Keep the peak hot
     // brightness, then fade it by uErase. uDeposit is 1 while Ghost is on.
+    // uHot is already Bright × Burn, so Ghost must not multiply Burn again.
     float g = texture2D(uGhost, vUv).r * (1.0 - clamp(uErase, 0.0, 1.0));
     float hot = texture2D(uHot, vUv).r;
     g = max(g, hot * clamp(uDeposit, 0.0, 1.0));
     gl_FragColor = vec4(g, g, g, 1.0);
+}
+`;
+
+  // Hung buffer = faded hot + this frame's integrated pen × Burn.
+  // Burn is applied here, after segments have summed. Multiplying uIntensity
+  // before the 0.999 beam clamp does nothing on a fine sweep: each short
+  // segment is boosted so the pass sums to full, and 0.5 still hits the cap.
+  const FS_TRACE_DEPOSIT = `
+precision highp float;
+varying vec2 vUv;
+uniform sampler2D uHot;
+uniform sampler2D uLive;
+uniform float uBurn;
+void main() {
+    float hot = texture2D(uHot, vUv).r;
+    float live = texture2D(uLive, vUv).r * max(uBurn, 0.0);
+    float b = clamp(hot + live, 0.0, 0.999);
+    gl_FragColor = vec4(b, b, b, 1.0);
 }
 `;
 
@@ -431,10 +450,13 @@ uniform sampler2D uGhost;
 uniform sampler2D uLut;
 uniform float uPlate;
 uniform float uGhostGain;
+uniform sampler2D uLive;
 void main() {
     float hot = texture2D(uBright, vUv).r;
     float ghost = texture2D(uGhost, vUv).r * clamp(uGhostGain, 0.0, 1.0);
-    float b = max(hot, ghost);
+    // uLive is this frame's pen at Bright. uBright is hung ink (Bright × Burn).
+    float live = texture2D(uLive, vUv).r;
+    float b = max(live, max(hot, ghost));
     b = max(b, clamp(uPlate, 0.0, 1.0));
     b = clamp(b, 0.0, 0.999);
     vec3 c = texture2D(uLut, vec2(b, 0.5)).rgb;
@@ -455,8 +477,9 @@ void main() {
     const gl = glDevice.gl;
     const fade = linkProgram(gl, VS_QUAD, FS_TRACE_FADE);
     const ghost = linkProgram(gl, VS_QUAD, FS_TRACE_GHOST);
+    const deposit = linkProgram(gl, VS_QUAD, FS_TRACE_DEPOSIT);
     const present = linkProgram(gl, VS_QUAD, FS_TRACE_PRESENT);
-    if (!fade || !ghost || !present) {
+    if (!fade || !ghost || !deposit || !present) {
       return null;
     }
     const quad = gl.createBuffer();
@@ -475,6 +498,13 @@ void main() {
         uErase: gl.getUniformLocation(ghost, "uErase"),
         uDeposit: gl.getUniformLocation(ghost, "uDeposit"),
       },
+      deposit: {
+        program: deposit,
+        aPos: gl.getAttribLocation(deposit, "aPos"),
+        uHot: gl.getUniformLocation(deposit, "uHot"),
+        uLive: gl.getUniformLocation(deposit, "uLive"),
+        uBurn: gl.getUniformLocation(deposit, "uBurn"),
+      },
       present: {
         program: present,
         aPos: gl.getAttribLocation(present, "aPos"),
@@ -483,6 +513,7 @@ void main() {
         uLut: gl.getUniformLocation(present, "uLut"),
         uPlate: gl.getUniformLocation(present, "uPlate"),
         uGhostGain: gl.getUniformLocation(present, "uGhostGain"),
+        uLive: gl.getUniformLocation(present, "uLive"),
       },
     };
     return glDevice.tracePresent;
@@ -517,6 +548,7 @@ void main() {
         write: allocBrightTarget(gl, w, h),
         ghostRead: allocBrightTarget(gl, w, h),
         ghostWrite: allocBrightTarget(gl, w, h),
+        live: allocBrightTarget(gl, w, h),
       };
       traceByDest.set(dest, st);
     }
@@ -540,6 +572,85 @@ void main() {
     const n = Number(value);
     if (!Number.isFinite(n)) return fallback;
     return Math.max(0, Math.min(1, n));
+  }
+
+  function traceBurnAmount(options) {
+    const Residual = typeof PhosphorResidual !== "undefined" ? PhosphorResidual : null;
+    const max = Residual?.BURN_AMOUNT_MAX || 4;
+    const n = Number(options?.burnAmount);
+    if (!Number.isFinite(n)) return 1;
+    return Math.max(0, Math.min(max, n));
+  }
+
+  function clearTraceTarget(gl, target, width, height) {
+    gl.bindFramebuffer(gl.FRAMEBUFFER, target.fbo);
+    gl.viewport(0, 0, width, height);
+    gl.disable(gl.BLEND);
+    gl.clearColor(0, 0, 0, 1);
+    gl.clear(gl.COLOR_BUFFER_BIT);
+  }
+
+  /** Additive brightness stroke into one framebuffer. intensity 0 writes nothing. */
+  function strokeTraceBrightness(gl, glDevice, fbo, intensity, width, height, uSize, solidCore, packed, packedStride, segCount) {
+    if (!(segCount >= 1) || !(intensity > 0)) return;
+    gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+    gl.enable(gl.BLEND);
+    gl.blendEquation(gl.FUNC_ADD);
+    gl.blendFunc(gl.ONE, gl.ONE);
+    gl.useProgram(glDevice.program);
+    gl.uniform2f(glDevice.uCanvasSize, width, height);
+    gl.uniform1f(glDevice.uSize, uSize);
+    gl.uniform1f(glDevice.uIntensity, intensity);
+    if (glDevice.uBrightAlong) gl.uniform1f(glDevice.uBrightAlong, 1);
+    if (glDevice.uSolidCore) gl.uniform1f(glDevice.uSolidCore, solidCore ? 1 : 0);
+    gl.uniform4f(glDevice.uColor, 1, 1, 1, 1);
+    gl.uniform1f(glDevice.uUseLut, 0);
+    gl.bindBuffer(gl.ARRAY_BUFFER, glDevice.vertBuffer);
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, glDevice.indexBuffer);
+    const stride = FLOATS_PER_VERT * 4;
+    gl.enableVertexAttribArray(glDevice.aStart);
+    gl.vertexAttribPointer(glDevice.aStart, 2, gl.FLOAT, false, stride, 0);
+    gl.enableVertexAttribArray(glDevice.aEnd);
+    gl.vertexAttribPointer(glDevice.aEnd, 2, gl.FLOAT, false, stride, 8);
+    gl.enableVertexAttribArray(glDevice.aIdx);
+    gl.vertexAttribPointer(glDevice.aIdx, 1, gl.FLOAT, false, stride, 16);
+    if (glDevice.aT0 >= 0) {
+      gl.enableVertexAttribArray(glDevice.aT0);
+      gl.vertexAttribPointer(glDevice.aT0, 1, gl.FLOAT, false, stride, 20);
+    }
+    if (glDevice.aT1 >= 0) {
+      gl.enableVertexAttribArray(glDevice.aT1);
+      gl.vertexAttribPointer(glDevice.aT1, 1, gl.FLOAT, false, stride, 24);
+    }
+    const floats = glDevice.floats;
+    let drawn = 0;
+    while (drawn < segCount) {
+      const batch = Math.min(BATCH_SEGMENTS, segCount - drawn);
+      let w = 0;
+      for (let s = 0; s < batch; s += 1) {
+        const src = (drawn + s) * packedStride;
+        const sx = packed[src];
+        const sy = packed[src + 1];
+        const ex = packed[src + 2];
+        const ey = packed[src + 3];
+        const t0 = packed[src + 4];
+        const t1 = packed[src + 5];
+        const baseIdx = drawn + s;
+        for (let v = 0; v < VERTS_PER_SEG; v += 1) {
+          floats[w] = sx;
+          floats[w + 1] = sy;
+          floats[w + 2] = ex;
+          floats[w + 3] = ey;
+          floats[w + 4] = baseIdx * 4 + v;
+          floats[w + 5] = t0;
+          floats[w + 6] = t1;
+          w += FLOATS_PER_VERT;
+        }
+      }
+      gl.bufferData(gl.ARRAY_BUFFER, floats.subarray(0, w), gl.STREAM_DRAW);
+      gl.drawElements(gl.TRIANGLES, batch * 6, gl.UNSIGNED_SHORT, 0);
+      drawn += batch;
+    }
   }
 
   function traceTrailErase(options) {
@@ -609,70 +720,39 @@ void main() {
       gl.enableVertexAttribArray(presentApi.fade.aPos);
       gl.vertexAttribPointer(presentApi.fade.aPos, 2, gl.FLOAT, false, 0, 0);
       gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+      if (!st.live) st.live = allocBrightTarget(gl, width, height);
+      clearTraceTarget(gl, st.live, width, height);
     }
+    if (!st.live) st.live = allocBrightTarget(gl, width, height);
     if (segCount >= 1 && diameter > 0) {
-      gl.bindFramebuffer(gl.FRAMEBUFFER, st.write.fbo);
-      gl.enable(gl.BLEND);
-      // Additive deposit: energy sums across segments and frames.
-      gl.blendEquation(gl.FUNC_ADD);
-      gl.blendFunc(gl.ONE, gl.ONE);
-      gl.useProgram(glDevice.program);
-      gl.uniform2f(glDevice.uCanvasSize, width, height);
-      gl.uniform1f(glDevice.uSize, uSize);
-      gl.uniform1f(glDevice.uIntensity, intensity);
-      if (glDevice.uBrightAlong) gl.uniform1f(glDevice.uBrightAlong, 1);
-      if (glDevice.uSolidCore) gl.uniform1f(glDevice.uSolidCore, solidCore ? 1 : 0);
-      gl.uniform4f(glDevice.uColor, 1, 1, 1, 1);
-      gl.uniform1f(glDevice.uUseLut, 0);
-      gl.bindBuffer(gl.ARRAY_BUFFER, glDevice.vertBuffer);
-      gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, glDevice.indexBuffer);
-      const stride = FLOATS_PER_VERT * 4;
-      gl.enableVertexAttribArray(glDevice.aStart);
-      gl.vertexAttribPointer(glDevice.aStart, 2, gl.FLOAT, false, stride, 0);
-      gl.enableVertexAttribArray(glDevice.aEnd);
-      gl.vertexAttribPointer(glDevice.aEnd, 2, gl.FLOAT, false, stride, 8);
-      gl.enableVertexAttribArray(glDevice.aIdx);
-      gl.vertexAttribPointer(glDevice.aIdx, 1, gl.FLOAT, false, stride, 16);
-      if (glDevice.aT0 >= 0) {
-        gl.enableVertexAttribArray(glDevice.aT0);
-        gl.vertexAttribPointer(glDevice.aT0, 1, gl.FLOAT, false, stride, 20);
-      }
-      if (glDevice.aT1 >= 0) {
-        gl.enableVertexAttribArray(glDevice.aT1);
-        gl.vertexAttribPointer(glDevice.aT1, 1, gl.FLOAT, false, stride, 24);
-      }
-      const floats = glDevice.floats;
-      let drawn = 0;
-      while (drawn < segCount) {
-        const batch = Math.min(BATCH_SEGMENTS, segCount - drawn);
-        let w = 0;
-        for (let s = 0; s < batch; s += 1) {
-          const src = (drawn + s) * packedStride;
-          const sx = packed[src];
-          const sy = packed[src + 1];
-          const ex = packed[src + 2];
-          const ey = packed[src + 3];
-          const t0 = packed[src + 4];
-          const t1 = packed[src + 5];
-          const baseIdx = drawn + s;
-          for (let v = 0; v < VERTS_PER_SEG; v += 1) {
-            floats[w] = sx;
-            floats[w + 1] = sy;
-            floats[w + 2] = ex;
-            floats[w + 3] = ey;
-            floats[w + 4] = baseIdx * 4 + v;
-            floats[w + 5] = t0;
-            floats[w + 6] = t1;
-            w += FLOATS_PER_VERT;
-          }
-        }
-        gl.bufferData(gl.ARRAY_BUFFER, floats.subarray(0, w), gl.STREAM_DRAW);
-        gl.drawElements(gl.TRIANGLES, batch * 6, gl.UNSIGNED_SHORT, 0);
-        drawn += batch;
-      }
+      // Pen stays at Bright. Burn scales the copy into the hung buffer
+      // after this frame's segments have summed (see FS_TRACE_DEPOSIT).
+      strokeTraceBrightness(gl, glDevice, st.live.fbo, intensity, width, height, uSize, solidCore, packed, packedStride, segCount);
     }
     const doPresent = options.tracePresent !== false;
     if (doPresent) {
+      // Stereo draws channel 0 with tracePresent false, so both pens are
+      // in st.live before one deposit. Burn 0 adds nothing; the fade keeps
+      // wiping whatever was already hung.
+      const burn = traceBurnAmount(options);
+      gl.disable(gl.BLEND);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, st.read.fbo);
+      gl.viewport(0, 0, width, height);
+      gl.useProgram(presentApi.deposit.program);
+      gl.activeTexture(gl.TEXTURE0);
+      gl.bindTexture(gl.TEXTURE_2D, st.write.tex);
+      gl.uniform1i(presentApi.deposit.uHot, 0);
+      gl.activeTexture(gl.TEXTURE1);
+      gl.bindTexture(gl.TEXTURE_2D, st.live.tex);
+      gl.uniform1i(presentApi.deposit.uLive, 1);
+      gl.uniform1f(presentApi.deposit.uBurn, burn);
+      gl.bindBuffer(gl.ARRAY_BUFFER, presentApi.quad);
+      gl.enableVertexAttribArray(presentApi.deposit.aPos);
+      gl.vertexAttribPointer(presentApi.deposit.aPos, 2, gl.FLOAT, false, 0, 0);
+      gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+      const deposited = st.read;
+      st.read = st.write;
+      st.write = deposited;
       const ghostAmt = Number(options.ghost);
       const ghostOn = Number.isFinite(ghostAmt) && ghostAmt > 0;
       const Residual = typeof PhosphorResidual !== "undefined" ? PhosphorResidual : null;
@@ -715,6 +795,9 @@ void main() {
       const plate = traceUnit(options.plateBrightness, 0);
       gl.uniform1f(presentApi.present.uPlate, plate);
       gl.uniform1f(presentApi.present.uGhostGain, ghostOn ? Math.max(0, Number(gGain) || 0) : 0);
+      gl.activeTexture(gl.TEXTURE3);
+      gl.bindTexture(gl.TEXTURE_2D, st.live.tex);
+      gl.uniform1i(presentApi.present.uLive, 3);
       gl.bindBuffer(gl.ARRAY_BUFFER, presentApi.quad);
       gl.enableVertexAttribArray(presentApi.present.aPos);
       gl.vertexAttribPointer(presentApi.present.aPos, 2, gl.FLOAT, false, 0, 0);
@@ -788,11 +871,13 @@ void main() {
     }
     const gl = glDevice.gl;
     const canvas = glDevice.canvas;
-    if (canvas.width !== width) {
-      canvas.width = width;
-    }
-    if (canvas.height !== height) {
-      canvas.height = height;
+    // The picture device stays 4096. Resizing it drops every texture on the context.
+    if (typeof nodeGraphSharedGlBindPresent === "function") {
+      nodeGraphSharedGlBindPresent(gl, width, height);
+    } else {
+      gl.viewport(0, 0, width, height);
+      gl.enable(gl.SCISSOR_TEST);
+      gl.scissor(0, 0, width, height);
     }
     // Half-width in px. sigma = uSize/4 (upstream); 1D solidCore uses
     // uSize/2. 0.5px floor only keeps the beam from vanishing.
@@ -805,10 +890,8 @@ void main() {
       uploadLut(glDevice, options.gradientStops, options.sampleRgb, options.lutKey);
     }
 
-    gl.viewport(0, 0, width, height);
     gl.disable(gl.DEPTH_TEST);
     gl.disable(gl.CULL_FACE);
-    gl.disable(gl.SCISSOR_TEST);
     gl.clearColor(0, 0, 0, 1);
     gl.clear(gl.COLOR_BUFFER_BIT);
     gl.enable(gl.BLEND);

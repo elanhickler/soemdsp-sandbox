@@ -2314,6 +2314,22 @@ const nodeGraphModuleStoreCatalog = Object.freeze({
       "pluck",
     ],
   },
+  resonantEnvelope: {
+    category: "envelope",
+    description: "Resonant Envelope: two-pole envelope. Decay sets the time, Resonance adds bounce. ƒ tracks around 440 Hz. Fit keeps the peak at Amplitude.",
+    label: "Resonant Envelope",
+    notes: [
+      "Trigger",
+      "ƒ",
+      "Attack",
+      "Decay",
+      "Resonance",
+      "Impulse",
+      "Tracking",
+      "Output Range",
+      "native",
+    ],
+  },
   pingEnvelope: {
     category: "envelope",
     description: "Ping Envelope: inertial rise toward Trigger. Model Short/Long feedback sets. Recalc On Trig latches knobs on rise.",

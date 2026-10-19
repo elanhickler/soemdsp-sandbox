@@ -1,11 +1,17 @@
-﻿// Logistic Map Clock + Trigger. Native: x[n+1] = R x (1-x); one iteration per
+// Logistic Map Clock + Trigger. Native: x[n+1] = R x (1-x); one iteration per
 // Clock rising edge (prev <= 0 < now) when wired, Frequency phase clock when not.
 // Graph: Clock jack -> kPortTrigger, Trigger out on Right, Out on Mono/Left.
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const { instance } = await WebAssembly.instantiate(fs.readFileSync(path.join(root, "native_modules", "combined", "soemdsp_combined.wasm")), {});
+const wasmBytes = fs.readFileSync(path.join(root, "native_modules", "combined", "soemdsp_combined.wasm"));
+// Stub every host import (e.g. env.emo_process_block); this smoke never calls them.
+const imports = {};
+for (const imp of WebAssembly.Module.imports(new WebAssembly.Module(wasmBytes))) {
+  if (imp.kind === "function") (imports[imp.module] ||= {})[imp.name] = () => 0;
+}
+const { instance } = await WebAssembly.instantiate(wasmBytes, imports);
 const e = instance.exports;
 const must = (n) => { if (typeof e[n] !== "function") throw new Error(`missing ${n}`); return e[n]; };
 const create = must("soemdsp_logistic_map_create"), destroy = must("soemdsp_logistic_map_destroy");

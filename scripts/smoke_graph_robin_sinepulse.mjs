@@ -30,30 +30,36 @@ const kCreate = must("soemdsp_robin_sinepulse_create");
 const kDestroy = must("soemdsp_robin_sinepulse_destroy");
 const kSample = must("soemdsp_robin_sinepulse_sample");
 const kEnv = must("soemdsp_robin_sinepulse_env");
+const kUnit = must("soemdsp_robin_sinepulse_unit");
+const kFreq = must("soemdsp_robin_sinepulse_freq");
 const kIdle = must("soemdsp_robin_sinepulse_is_idle");
 const SR = 48000;
 const DEF = { hi: 10000, lo: 0, sweep: 0.2, chirp: 0, shape: 0, wave: 0, ws: 0, phase: 0, decay: 0.05, amp: 1 };
 function step(h, trig, p = DEF) {
   const k = kSample(h, trig, p.hi, p.lo, p.sweep, p.chirp, p.shape, p.wave, p.ws, p.phase, p.decay, p.amp, SR);
-  return [k, kEnv(h)];
+  return [k, kEnv(h), kUnit(h), kFreq(h)];
 }
 {
   const h = kCreate() | 0;
   if (!(h > 0)) throw new Error("robinSinepulse create");
   for (let n = 0; n < 1000; n++) {
-    const [k, env] = step(h, 0);
-    if (k !== 0 || env !== 0) throw new Error("robinSinepulse not silent before the first Trigger");
+    const [k, env, unit] = step(h, 0);
+    if (k !== 0 || env !== 0 || unit !== 0) throw new Error("robinSinepulse not silent before the first Trigger");
   }
   if ((kIdle(h) | 0) !== 1) throw new Error("robinSinepulse should be idle before a hit");
-  let [k0, e0] = step(h, 0.6);
+  let [k0, e0, u0, f0] = step(h, 0.6);
   if (e0 !== 0.6) throw new Error(`Env on hit ${e0} != velocity 0.6`);
+  if (u0 !== 1 || f0 !== 10000) throw new Error(`0–1 on hit ${u0} freq ${f0}, expected 1 at High Freq`);
   if (k0 !== 0) throw new Error(`first sample of a fresh instance ${k0} != 0 (phase 0, Sine)`);
   let zeroAt = -1;
   let peakK = 0;
   for (let n = 1; n < 20000; n++) {
-    const [k, env] = step(h, 0);
+    const [k, env, unit, freq] = step(h, 0);
     peakK = Math.max(peakK, Math.abs(k));
     if (Math.abs(k) > env + 1e-12) throw new Error("|Kick| > Env");
+    const span = 10000;
+    const expect = Math.max(0, Math.min(1, freq / span));
+    if (Math.abs(unit - expect) > 1e-9) throw new Error(`0–1 ${unit} != sweep position ${expect}`);
     if (env === 0 && zeroAt < 0) zeroAt = n;
     if (zeroAt >= 0 && (env !== 0 || k !== 0)) throw new Error("Env/Kick not exact 0 at rest");
   }
@@ -61,13 +67,23 @@ function step(h, trig, p = DEF) {
   if (!(peakK > 0.3)) throw new Error(`Kick too quiet ${peakK}`);
   if ((kIdle(h) | 0) !== 1) throw new Error("robinSinepulse should be idle after Decay");
   // Trigger after silence hard-resets: first sample is 0 again (Sine, phase 0).
-  [k0, e0] = step(h, 1);
-  if (e0 !== 1 || k0 !== 0) throw new Error(`Trigger after silence should hard-reset phase (k0=${k0})`);
-  // Mid-hit retrigger also hard-resets.
+  [k0, e0, u0] = step(h, 1);
+  if (e0 !== 1 || u0 !== 1 || k0 !== 0) throw new Error(`Trigger after silence should hard-reset phase (k0=${k0} u0=${u0})`);
+  // Mid-hit retrigger also hard-resets. Amplitude does not move the 0–1 jack.
   for (let n = 0; n < 100; n++) step(h, 0);
-  [k0, e0] = step(h, 1);
-  if (e0 !== 1 || k0 !== 0) throw new Error(`mid-hit Trigger should hard-reset phase (k0=${k0})`);
+  [k0, e0, u0] = step(h, 1);
+  if (e0 !== 1 || u0 !== 1 || k0 !== 0) throw new Error(`mid-hit Trigger should hard-reset phase (k0=${k0} u0=${u0})`);
   kDestroy(h);
+  const hAmpA = kCreate() | 0;
+  const hAmpB = kCreate() | 0;
+  const ampParams = { ...DEF, lo: 2000, hi: 8000 };
+  step(hAmpA, 1, { ...ampParams, amp: 1 });
+  step(hAmpB, 1, { ...ampParams, amp: 0.25 });
+  if (kUnit(hAmpA) !== kUnit(hAmpB) || kUnit(hAmpA) !== 1) {
+    throw new Error(`Amplitude moved 0–1 (${kUnit(hAmpA)} vs ${kUnit(hAmpB)})`);
+  }
+  kDestroy(hAmpA);
+  kDestroy(hAmpB);
   // fHi below 50 Hz is clamped: no upward sweep / blow-up.
   const h2 = kCreate() | 0;
   const low = { ...DEF, hi: 40, decay: 4 };
@@ -165,9 +181,12 @@ function runGraph({ wave = 0, waveShape = 0, blocks = 750 } = {}) {
   let peakEnv = 0;
   for (let n = 0; n < a.env.length; n++) {
     if (!(a.env[n] >= 0 && a.env[n] <= 1)) throw new Error(`0–1 output ${a.env[n]} outside 0..1`);
+    const expect = Math.max(0, Math.min(1, a.freq[n] / 10000));
+    if (Math.abs(a.env[n] - expect) > 1e-6) throw new Error(`0–1 ${a.env[n]} != ƒ position ${expect} at ${n}`);
     peakEnv = Math.max(peakEnv, a.env[n]);
   }
   if (!(a.env[a.hits[0]] > 0.99)) throw new Error(`0–1 peak at hit ${a.env[a.hits[0]]}`);
+  if (!(a.env[a.hits[0] + 400] < 0.95)) throw new Error("0–1 did not follow the sweep down");
   if (!(peakEnv <= 1)) throw new Error(`0–1 peak ${peakEnv}`);
   // Every Trigger hard-resets: first sample of each hit is 0 (Sine, phase 0).
   for (const n of a.hits) {

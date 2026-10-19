@@ -94,6 +94,9 @@ function nodeGraphTraceDisplayStepperQuantum(input, currentValue = null, directi
   const historyKey = input.dataset?.traceDisplayField
     || input.getAttribute?.("data-trace-display-field")
     || "";
+  if (key === "historyPercent" || historyKey === "historyPercent") {
+    return 1;
+  }
   if (
     key === "historySeconds" || key === "zoomSeconds" || key === "detail"
     || historyKey === "historySeconds" || historyKey === "zoomSeconds" || historyKey === "detail"
@@ -650,6 +653,9 @@ const nodeGraphTraceDisplaySharedValueClamps = Object.freeze({
   historySeconds: (value) => (typeof nodeGraphWaterfallClampHistorySeconds === "function"
     ? nodeGraphWaterfallClampHistorySeconds(value, 0.25)
     : nodeGraphTraceDisplayClampHistorySeconds(value)),
+  historyPercent: (value) => (typeof nodeGraphOnsetClampHistoryPercent === "function"
+    ? nodeGraphOnsetClampHistoryPercent(value, 100)
+    : Math.max(0, Math.min(100, Number.isFinite(Number(value)) ? Number(value) : 100))),
   lineLength: nodeGraphTraceDisplayClampUnit,
   lineThickness: nodeGraphTraceDisplayClampNonNegative,
   faceBlur: nodeGraphTraceDisplayClampUnit,

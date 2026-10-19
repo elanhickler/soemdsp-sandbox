@@ -2,9 +2,17 @@
 
 This file collects project-shaping ideas that should survive day-to-day implementation without becoming immediate scope.
 
+## Zoom performance (2026-10-18)
+
+Slow zoom with Play on was ~3 fps; target ~60 with displays running and zero `readPixels` / layout reads during the gesture. Tracker ZP-1..ZP-7. ZP-1 done locally (`d895e36a` / `f2cd9bce`), not pushed. ZP-2 paused for Argi scope OK and owner handoff of the uncommitted play-blit `readPixels` path. Plan: `docs/ZOOM_PERF_PLAN.md`.
+
+## Video graph (2026-10-18)
+
+One ordered GPU pass per video frame for 📺 nodes on the shared WebGL2 context (like the C++ audio graph). Tracker VG-0..VG-9, not started; waits for zoom work and Argi go-ahead; 7 open questions. Plan: `docs/VIDEO_GRAPH_PLAN.md`.
+
 ## Resonant Envelope (2026-10-18)
 
-Exploration idea (Argi), not a committed build: an envelope whose pole moves off the real axis so it rings as it decays (pole radius = decay time, angle = ring frequency; a plain feedback envelope is the angle-zero case). Coupled-integrator (TPT SVF) core with one Resonance control from smooth to bouncy, an `f` input with Tracking (neutral at 440 Hz), Impulse drive from the gate edge, and Fit / Raw output range. Native C++ only; relationship to the existing Ping Envelope is an open question. Plan: `docs/RESONANT_ENVELOPE_PLAN.md` (RE-1 prototype and listening test first; RE-1..RE-9, owner TBD, open questions A-J).
+Shipped as `resonantEnvelope` in the Envelope category (Argi OK 2026-10-18, `tpt_svf.h` reused unchanged). Two-pole TPT SVF envelope: Decay, Resonance, ƒ Tracking around 440 Hz, Impulse, Fit / Raw. Face is the live Waterfall. Native shape preview and the z-plane inset are still open. Plan: `docs/RESONANT_ENVELOPE_PLAN.md`.
 
 ## Color rows (2026-10-18)
 

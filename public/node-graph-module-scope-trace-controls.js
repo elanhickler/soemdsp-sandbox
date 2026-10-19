@@ -300,7 +300,7 @@ const nodeGraphTraceDisplayActiveControlsByType = Object.freeze({
       "strokeThickness",
     ]),
     colors: Object.freeze(["dot1Color", "secondaryColor", "tertiaryColor", "backgroundColor", "strokeColor", "strokeLeftColor", "strokeRightColor"]),
-    toggles: Object.freeze(["skipDiscontinuities", "pauseOnSilence", "smoothLines"]),
+    toggles: Object.freeze(["skipDiscontinuities", "resetSync", "pauseOnSilence", "smoothLines"]),
     choices: Object.freeze(["barInk", "facePolarity", "stereoBlend"]),
   }),
   // Phosphor energy faces: color via shared Gradient editor (not single swatches).
@@ -1398,6 +1398,13 @@ const nodeGraphDisplaySettingsFieldMeta = Object.freeze({
     id: "nodeTraceDisplayHistoryCycles",
     title: "Sync On: cycles in view across the face. Rising zero-crossing locks phase.",
   }),
+  historyPercent: Object.freeze({
+    label: "History (percent)",
+    inputmode: "decimal",
+    id: "nodeTraceDisplayHistoryPercent",
+    title:
+      "1D Onset Sync: percent of the time between Reset pulses. 10 fills the face with the first 10% of that interval. 100 is the whole interval. 0 is the current bar.",
+  }),
   cycles: Object.freeze({ label: "Cycles", inputmode: "decimal", id: "nodeTraceDisplayCycles" }),
   digits: Object.freeze({
     label: "Digits",
@@ -1792,6 +1799,12 @@ const nodeGraphDisplaySettingsToggleMeta = Object.freeze({
     id: "nodeTraceDisplayPauseOnSilence",
     title:
       "While on, Instant Waterfall stops scrolling when every enabled channel is at or below Planck amplitude. Off (default) keeps scrolling. History at 0 is the current bar either way.",
+  }),
+  resetSync: Object.freeze({
+    label: "Sync",
+    id: "nodeTraceDisplayResetSync",
+    title:
+      "1D Onset: On sets the face to a percent of the time between Reset pulses. History (seconds) returns when Sync is off, and is used until two Reset edges have been measured.",
   }),
   skipDiscontinuities: Object.freeze({
     label: "Skip Discontinuity",
