@@ -55,7 +55,7 @@ counts. Each stage is committed locally on its own. Nothing is pushed without Ar
 | ID | Task | Done when | Gate | Status |
 |---|---|---|---|---|
 | ZP-1 | Waterfall `uCss` precision fixed. Failed links are cached once (`lineProgFailed`; session programs shared per context in a WeakMap, `false` on failure) and reported once through `nodeGraphDisplayGlFailed`, with no per-frame retry. New smoke: every renderer's GL programs link. | `scripts/smoke_display_gl_programs_link.mjs` passes on softpop and musicplayer: no link failure, no GL-failed entry, no links once warm | 0 links during the gesture | done 2026-10-18 (links during gesture 0) |
-| ZP-2 | Remove the readPixels / putImageData copy path. Faces render into per-face FBO textures (or an atlas) in the shared context at zoom-1 size, and only when their data changes. Every face renders upright, matching the old drawImage orientation. The flips at `gl-line-renderer.js` ~1700 and the UNPACK_FLIP_Y uploads stay as they are. New orientation smoke: paint the top red and the bottom blue, then assert both survive every present path (`nodeGraphPicturePresent`, `nodeGraphDisplayCanvasBlit`, `nodeGraphSharedGlBlitTo2D` at 512 px or less and above). | `readPixels` count 0 during the gesture. Orientation smoke passes | readPixels = 0 | open |
+| ZP-2 | Remove the readPixels / putImageData copy path. Faces render into per-face FBO textures (or an atlas) in the shared context at zoom-1 size, and only when their data changes. Every face renders upright, matching the old drawImage orientation. The flips at `gl-line-renderer.js` ~1700 and the UNPACK_FLIP_Y uploads stay as they are. New orientation smoke: paint the top red and the bottom blue, then assert both survive every present path (`nodeGraphPicturePresent`, `nodeGraphDisplayCanvasBlit`, `nodeGraphSharedGlBlitTo2D` at 512 px or less and above). | `readPixels` count 0 during the gesture. Orientation smoke passes | readPixels = 0 | open, paused (see the ZP-2 note) |
 | ZP-3 | The GL graph is the only compositor: one on-screen WebGL canvas. During a gesture only the camera uniform changes; cached meshes are replayed and face quads draw from their textures (NEAREST above 2.5x). Separate "camera moving" from "displays held": with hold off, a gesture frame reuses the cached chrome, wire and plate meshes and only updates face textures. Overlaps GW-2 (camera) in `GPU_WORKSPACE_PLAN.md`, which owns the camera API. | No mesh rebuild and no glyph bake during the gesture | p90 < 20 ms | open |
 | ZP-4 | Module HTML is frozen during gestures (a single container transform, or a hidden hit layer). CSS `zoom` and `--node-graph-zoom` are written once on settle. World boxes and text metrics are cached at rebuild. | `getComputedStyle` = 0 and `offset*` = 0 during the gesture | 0 / 0 | open |
 | ZP-5 | Text drawn from a fixed-size or SDF glyph atlas. The bake size never depends on zoom. | No `nodeGraphGlLinesSetGlyphBakePx` change across a zoom | no re-bake | open |
@@ -66,4 +66,24 @@ counts. Each stage is committed locally on its own. Nothing is pushed without Ar
 
 | Date | Stage | fps | p50 | p90 | readPixels | gCS | offset* | Commit |
 |---|---|---|---|---|---|---|---|---|
-| 2026-10-18 | ZP-1 (baseline) | 3.3 | 217 ms | 700 ms | 246 | 50,784 | 29,760 | (this commit) |
+| 2026-10-18 | ZP-1 (baseline) | 3.3 | 217 ms | 700 ms | 246 | 50,784 | 29,760 | d895e36a |
+
+## ZP-2 note (2026-10-18, before any code)
+
+ZP-2 is bigger than one stage. It is paused until Argi OKs the scope and the play-blit work in progress is
+handed over.
+
+- The copy path being replaced is uncommitted, live work (`?v=play-blit-2`: `picture-device.js`, `gl-graph.js`,
+  `display-canvas.js`, `draw-orchestrator.js`, and `trace-woscope.js`, which is a BugsFix file). It was added
+  because `drawImage` from the 4096 shared canvas resolved the whole buffer once per face per frame (Play at
+  about 5 fps).
+- Proposed shape: after a face renders into its region of the shared canvas, `copyTexSubImage2D` that region
+  into a per-face texture (GPU to GPU, no stall), sized at zoom 1 and re-allocated only on resize. The GL graph
+  draws face quads from that texture (the `glSnapshot` path in `drawImages`, plus a v-flip because framebuffer
+  rows are bottom-up; image uploads use UNPACK_FLIP_Y false and are top-down). No 2D copy for faces the graph
+  composites.
+- Open question that sets the size: who else reads a face's 2D canvas pixels (perform-mode tiles, the mini
+  view, the magnifier, Music Player pages, smokes that sample face canvases)? Each one must move to the
+  texture, or the face keeps a 2D copy for it. That audit is the first ZP-2 task.
+- Orientation smoke (parent request): paint the top red and the bottom blue, then assert both survive every
+  present path, at 512 px or less and above.
