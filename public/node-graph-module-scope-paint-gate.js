@@ -173,6 +173,7 @@ function nodeGraphArmDrawingFaceLoop(host, options = {}) {
     if (!stillAnimate()) {
       if (force) {
         paint(host);
+        if (videoNodeId) host[forceKey] = false;
       }
       return;
     }
@@ -190,6 +191,8 @@ function nodeGraphArmDrawingFaceLoop(host, options = {}) {
       return;
     }
     paint(host);
+    // Force is one paint, not a standing pass through the frame clock.
+    if (videoNodeId) host[forceKey] = false;
     if (stillAnimate()) {
       host[rafKey] = schedule(tick);
     }
@@ -221,6 +224,12 @@ function nodeGraphInstallDrawingFacePump(section, options = {}) {
     });
   };
   section._startFaceLoop = startLoop;
+  // VG-4: the video graph restarts this loop when a visible sink needs it.
+  if (typeof nodeGraphVideoGraphIsVideoType === "function" && nodeGraphVideoGraphIsVideoType(section.dataset?.nodeType)) {
+    nodeGraphVideoGraphRegisterWake(section.dataset?.node, () => {
+      if (section.isConnected) startLoop();
+    });
+  }
   if (options.ownSync !== false) {
     section.syncFromParameters = () => {
       section[forceKey] = true;

@@ -87,6 +87,7 @@ await page.evaluate(() => {
   const vg = window.__vg;
   const mark = (nodeId) => {
     const id = String(nodeId || "");
+    if (vg.on && vg.wantStack === id && !vg.stack) vg.stack = new Error("publish").stack;
     if (vg.on) vg.pubs[id] = (vg.pubs[id] || 0) + 1;
     vg.pub[id] = vg.frame;
   };
@@ -129,6 +130,13 @@ const states = await page.evaluate(() => Object.fromEntries([...document.querySe
     return [a.dataset.node, `${a.classList.contains("viewport-asleep") ? "asleep" : "awake"}${on ? "" : "(off)"}`];
   })));
 if (process.env.SHOT) await page.screenshot({ path: process.env.SHOT });
+if (process.env.DEBUG) {
+  console.log(await page.evaluate(() => {
+    const face = document.querySelector('.dsp-node[data-node="fbm-far"] .node-fbm-field-face');
+    return JSON.stringify({ sleep: nodeGraphVideoGraphShouldSleep("fbm-far"), running: face?._fbmFieldRunning, raf: face?._fbmFieldRaf,
+      needed: nodeGraphVideoGraphStats().needed, upstream: [...nodeGraphPictureEdges().upstream.entries()] });
+  }));
+}
 await page.evaluate(() => { const vg = window.__vg; vg.on = true; vg.frame0 = vg.frame; vg.edges0 = typeof nodeGraphPictureEdgeStats === "function" ? nodeGraphPictureEdgeStats() : null; });
 await page.waitForTimeout(SECONDS * 1000);
 const res = await page.evaluate(() => {
@@ -151,9 +159,38 @@ const res = await page.evaluate(() => {
 await page.evaluate(() => { const p = nodeGraphMvp.pan || { x: 0, y: 0 }; setNodeGraphPan(p.x - 20000, p.y); });
 await page.waitForTimeout(1500);
 const off = await page.evaluate((ms) => new Promise((done) => {
-  const vg = window.__vg; vg.pubs = {}; vg.on = true; const f0 = vg.frame;
-  setTimeout(() => { vg.on = false; done({ frames: vg.frame - f0, pubs: vg.pubs }); }, ms);
+  const vg = window.__vg; vg.pubs = {}; vg.wantStack = "vd-1"; vg.stack = ""; vg.on = true; const f0 = vg.frame;
+  setTimeout(() => {
+    vg.on = false;
+    const asleep = [...document.querySelectorAll("article[data-node-type]")].filter((a) => a.classList.contains("viewport-asleep")).length;
+    done({ frames: vg.frame - f0, pubs: vg.pubs, asleep, stack: vg.stack || "" });
+  }, ms);
 }), 2000);
+// Phase C: pan back. vd-far wakes on screen; the scheduler must wake the
+// still-asleep fbm-far it reads (VG-4 wake on "newly needed").
+await page.evaluate(() => { const p = nodeGraphMvp.pan || { x: 0, y: 0 }; setNodeGraphPan(p.x + 20000, p.y); });
+await page.waitForTimeout(1500);
+const back = await page.evaluate((ms) => new Promise((done) => {
+  const vg = window.__vg; vg.pubs = {}; vg.on = true; const f0 = vg.frame;
+  setTimeout(() => {
+    vg.on = false;
+    // Probe-only readback: the asleep source's picture is not black.
+    let lit = -1;
+    const pic = nodeGraphPictureGet("fbm-far"); const gl = nodeGraphPictureDevice()?.gl;
+    if (pic?.texture && gl) {
+      const fb = gl.createFramebuffer();
+      gl.bindFramebuffer(gl.FRAMEBUFFER, fb);
+      gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, pic.texture, 0);
+      const px = new Uint8Array(pic.width * pic.height * 4);
+      gl.readPixels(0, 0, pic.width, pic.height, gl.RGBA, gl.UNSIGNED_BYTE, px);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.deleteFramebuffer(fb);
+      lit = 0; for (let i = 0; i < px.length; i += 4) if (px[i] + px[i + 1] + px[i + 2] > 24) lit += 1;
+      lit = Math.round((100 * lit) / (pic.width * pic.height));
+    }
+    const asleep = document.querySelector('article[data-node="fbm-far"]')?.classList.contains("viewport-asleep");
+    done({ frames: vg.frame - f0, pubs: vg.pubs, lit, asleep });
+  }, ms);
+}), 1000);
 // Edge table follows patch edits: drop vd-1 -> ib-1 through the normal commit.
 const rewire = await page.evaluate(() => {
   const before = Boolean(nodeGraphPictureRead("ib-1", "rgba")) && nodeGraphPictureHasConsumer("vd-1");
@@ -187,7 +224,9 @@ for (const [a, b] of VG_CHAIN_EDGES) {
   const hist = fresh.join(" ");
   console.log(`${key.padEnd(16)} ${String(n).padStart(5)}  ${hist || "(no reads)"}${LOOP.has(key) ? "   [loop edge]" : ""}`);
 }
-console.log(`all off screen (${off.frames} frames): ` + NODES.map((id) => `${id}=${r1((off.pubs[id] || 0) / Math.max(1, off.frames))}`).join(" ") + " publishes/frame");
+if (process.env.STACK) console.log(off.stack);
+console.log(`all off screen (${off.frames} frames, ${off.asleep} modules asleep): ` + NODES.map((id) => `${id}=${r1((off.pubs[id] || 0) / Math.max(1, off.frames))}`).join(" ") + " publishes/frame");
+console.log(`panned back (${back.frames} frames): fbm-far ${back.asleep ? "asleep" : "awake"} publishes ${r1((back.pubs["fbm-far"] || 0) / Math.max(1, back.frames))}/frame, vd-far ${r1((back.pubs["vd-far"] || 0) / Math.max(1, back.frames))}/frame; fbm-far picture ${back.lit}% lit`);
 console.log(`rewire (drop vd-1 -> ib-1): ${rewire.before && rewire.after && rewire.other ? "ok" : "FAIL " + JSON.stringify(rewire)}`);
 if (res.glFailures.length) console.log("display GL failures:", res.glFailures);
 const errs = [...new Set(errors.filter((e) => !/favicon|Failed to load resource/.test(e)))];

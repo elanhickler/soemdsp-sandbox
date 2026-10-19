@@ -153,11 +153,9 @@ function nodeGraphFbmFieldStartLoop(face, nodeId) {
       nodeGraphFbmFieldStopLoop(face);
       return;
     }
-    if (face.closest?.(".viewport-asleep")) {
-      nodeGraphFbmFieldStopLoop(face);
-      return;
-    }
-    if (typeof nodeGraphScreenSoloAllowsNode === "function" && !nodeGraphScreenSoloAllowsNode(nodeId)) {
+    // VG-4: keep running while a visible sink reads this field, even with
+    // the face asleep or outside screen solo.
+    if (nodeGraphVideoGraphShouldSleep(nodeId)) {
       nodeGraphFbmFieldStopLoop(face);
       return;
     }
@@ -221,9 +219,13 @@ registerNodeGraphChromelessModuleUi("fbmField", {
     article.addEventListener("change", (event) => {
       if (event.target?.dataset?.param) repaint();
     });
+    nodeGraphVideoGraphRegisterWake(node, () => {
+      // StartLoop itself refuses while the engine is stopped.
+      if (body.isConnected) nodeGraphFbmFieldStartLoop(body, node);
+    });
     article.addEventListener("nodegraphviewport", (event) => {
       if (event.detail?.asleep) {
-        nodeGraphFbmFieldStopLoop(body);
+        if (nodeGraphVideoGraphShouldSleep(node)) nodeGraphFbmFieldStopLoop(body);
         return;
       }
       const circuitOn = typeof nodeGraphFbmFieldCircuitRunning === "function"

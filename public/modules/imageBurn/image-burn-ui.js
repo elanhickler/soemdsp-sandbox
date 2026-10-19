@@ -61,21 +61,7 @@ function nodeGraphImageBurnShouldAnimate(face) {
   if (Number.isFinite(speed) && speed <= 0) {
     return false;
   }
-  const nodeId = face?.dataset?.node || "";
-  if (
-    typeof nodeGraphModuleIsViewportAsleep === "function"
-    && nodeGraphModuleIsViewportAsleep(face)
-  ) {
-    return false;
-  }
-  if (
-    nodeId
-    && typeof nodeGraphScreenSoloIsActive === "function"
-    && nodeGraphScreenSoloIsActive()
-    && typeof nodeGraphScreenSoloAllowsNode === "function"
-    && !nodeGraphScreenSoloAllowsNode(nodeId)
-  ) {
-    return false;
-  }
-  return true;
+  // VG-4: runs while its face is on screen or a visible sink reads its
+  // picture (even with its own face asleep / not in screen solo).
+  return !nodeGraphVideoGraphShouldSleep(face?.dataset?.node || "");
 }

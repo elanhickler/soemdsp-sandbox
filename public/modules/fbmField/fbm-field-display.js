@@ -511,14 +511,11 @@ function nodeGraphFbmFieldCollectFaces() {
   }
   const nodes = document.querySelectorAll(".node-fbm-field-face");
   for (const face of nodes) {
-    if (face.closest?.(".dsp-node")?.classList.contains("viewport-asleep")) {
-      continue;
-    }
     const nodeId = face.dataset?.node
       || face.closest?.(".dsp-node")?.dataset?.node
       || "";
-    if (typeof nodeGraphScreenSoloAllowsNode === "function"
-      && !nodeGraphScreenSoloAllowsNode(nodeId)) {
+    // VG-4: asleep / outside screen solo still paints when a visible sink needs it.
+    if (nodeGraphVideoGraphShouldSleep(nodeId)) {
       continue;
     }
     faces.push({ face, nodeId });

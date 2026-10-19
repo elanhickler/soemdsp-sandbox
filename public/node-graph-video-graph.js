@@ -11,6 +11,14 @@
 // Clock: one Simulation FPS decision per frame for the whole graph
 // (nodeGraphVideoGraphFrameReady), instead of one clock per module type.
 //
+// Pull-based culling (VG-4): a node runs when it is needed: its own face is
+// on screen (a visible sink), or a visible sink reads its picture through
+// any chain of picture cables. Needed nodes run even when their own face is
+// viewport-asleep or hidden; nodes nothing visible needs run 0 passes.
+// Modules ask nodeGraphVideoGraphShouldSleep(nodeId) instead of checking
+// viewport-asleep themselves, and register a wake so a stopped loop restarts
+// when a visible sink starts needing it.
+//
 // Adapter (VG-3): modules not yet migrated keep their own step/paint code;
 // they only swap requestAnimationFrame / cancelAnimationFrame for
 // nodeGraphVideoGraphRequestFrame / nodeGraphVideoGraphCancelFrame, and their
@@ -30,7 +38,9 @@
   let frame = 0;
   let ready = { frame: -1, value: false };
   const order = { rebuilds: -1, nodes: null, rank: new Map(), backEdges: 0 };
-  const stats = { frames: 0, runs: 0, outOfOrder: 0 };
+  const stats = { frames: 0, runs: 0, wakes: 0 };
+  const need = { frame: -1, set: new Set() };
+  const wakes = new Map(); // nodeId -> Set of wake callbacks
 
   function nodeGraphVideoGraphIsVideoType(type) {
     return VIDEO_TYPES.has(String(type || ""));
@@ -110,11 +120,75 @@
     order.backEdges = back;
   }
 
+  /** Face on screen: not viewport-asleep, not hidden, allowed by screen solo. */
+  function sinkVisible(id) {
+    const el = typeof global.nodeGraphCachedNodeElement === "function"
+      ? global.nodeGraphCachedNodeElement(".dsp-node", id)
+      : global.document?.querySelector?.(`.dsp-node[data-node="${id}"]`);
+    if (!el || el.hidden) return false;
+    if (typeof global.nodeGraphModuleIsViewportAsleep === "function" && global.nodeGraphModuleIsViewportAsleep(el)) return false;
+    if (typeof global.nodeGraphScreenSoloIsActive === "function" && global.nodeGraphScreenSoloIsActive()
+      && typeof global.nodeGraphScreenSoloAllowsNode === "function" && !global.nodeGraphScreenSoloAllowsNode(id)) return false;
+    return true;
+  }
+
+  /** Needed nodes this frame: visible sinks plus everything upstream of them. */
+  function neededSet() {
+    if (need.frame === frame) return need.set;
+    const table = typeof global.nodeGraphPictureEdges === "function" ? global.nodeGraphPictureEdges() : null;
+    const upstream = table?.upstream || new Map();
+    const nodes = global.nodeGraphMvp?.patch?.nodes || [];
+    const set = new Set();
+    const walk = [];
+    for (let i = 0; i < nodes.length; i += 1) {
+      const id = String(nodes[i]?.id || "");
+      if (!id) continue;
+      // Sinks: video nodes (own face) and any node a picture cable feeds.
+      if (!VIDEO_TYPES.has(String(nodes[i]?.type || "")) && !upstream.has(id)) continue;
+      if (sinkVisible(id)) { set.add(id); walk.push(id); }
+    }
+    while (walk.length) {
+      const srcs = upstream.get(walk.pop());
+      if (!srcs) continue;
+      for (const src of srcs) if (!set.has(src)) { set.add(src); walk.push(src); }
+    }
+    const before = need.set;
+    need.frame = frame;
+    need.set = set;
+    // Newly needed nodes may have stopped their loop while unneeded: wake them.
+    for (const id of set) {
+      if (before.has(id)) continue;
+      const fns = wakes.get(id);
+      if (!fns) continue;
+      for (const fn of fns) {
+        stats.wakes += 1;
+        try { fn(); } catch (error) { setTimeout(() => { throw error; }); }
+      }
+    }
+    return set;
+  }
+
+  /** True when no visible sink needs this node's picture or face. */
+  function nodeGraphVideoGraphShouldSleep(nodeId) {
+    return !neededSet().has(String(nodeId || ""));
+  }
+
+  /** Restart callback for a node whose loop stopped (returns an unregister). */
+  function nodeGraphVideoGraphRegisterWake(nodeId, fn) {
+    const id = String(nodeId || "");
+    if (!id || typeof fn !== "function") return () => {};
+    let fns = wakes.get(id);
+    if (!fns) wakes.set(id, (fns = new Set()));
+    fns.add(fn);
+    return () => fns.delete(fn);
+  }
+
   function runFrame() {
     raf = 0;
     frame += 1;
     stats.frames += 1;
     if (!pending.size) return;
+    neededSet();
     rebuildOrder();
     const batch = [...pending.values()];
     pending.clear();
@@ -166,7 +240,7 @@
 
   function nodeGraphVideoGraphStats() {
     rebuildOrder();
-    return { ...stats, frame, pending: pending.size, backEdges: order.backEdges, order: [...order.rank.entries()].sort((a, b) => a[1] - b[1]).map(([id]) => id) };
+    return { ...stats, frame, pending: pending.size, needed: [...neededSet()], backEdges: order.backEdges, order: [...order.rank.entries()].sort((a, b) => a[1] - b[1]).map(([id]) => id) };
   }
 
   global.nodeGraphVideoGraphIsVideoType = nodeGraphVideoGraphIsVideoType;
@@ -174,4 +248,6 @@
   global.nodeGraphVideoGraphCancelFrame = nodeGraphVideoGraphCancelFrame;
   global.nodeGraphVideoGraphFrameReady = nodeGraphVideoGraphFrameReady;
   global.nodeGraphVideoGraphStats = nodeGraphVideoGraphStats;
+  global.nodeGraphVideoGraphShouldSleep = nodeGraphVideoGraphShouldSleep;
+  global.nodeGraphVideoGraphRegisterWake = nodeGraphVideoGraphRegisterWake;
 })(typeof window !== "undefined" ? window : globalThis);

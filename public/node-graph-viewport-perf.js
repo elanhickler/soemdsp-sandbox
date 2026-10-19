@@ -942,8 +942,11 @@ function nodeGraphViewportCullSleepPainters(element) {
     && nodeGraphViewportCullMustStayAwake(element)) {
     return;
   }
+  // Video nodes (VG-4) keep running while a visible sink reads their picture.
+  const videoNeeded = typeof nodeGraphVideoGraphShouldSleep === "function"
+    && !nodeGraphVideoGraphShouldSleep(element.dataset?.node);
   for (const face of element.querySelectorAll(".node-fbm-field-face")) {
-    if (typeof nodeGraphFbmFieldStopLoop === "function") {
+    if (!videoNeeded && typeof nodeGraphFbmFieldStopLoop === "function") {
       nodeGraphFbmFieldStopLoop(face);
     }
   }
