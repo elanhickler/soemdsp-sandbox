@@ -17664,7 +17664,9 @@ const nodeGraphModuleDefinitions = (
         source: { value: "R" } },
     ],
     inputs: ["R", "G", "B", "H Sync", "V Sync"],
-    inputLabels: { R: "R", G: "G", B: "B", "H Sync": "H Sync", "V Sync": "V Sync" },
+    // Labels only (port ids stay H Sync / V Sync for saved patches): app-wide
+    // Trigger glyph \u238D (NODE_GRAPH_TRIGGER_GLYPH) + what the pulse restarts.
+    inputLabels: { R: "R", G: "G", B: "B", "H Sync": "\u238D Line", "V Sync": "\u238D Frame" },
     layout: "scopeFace",
     outputs: ["R", "G", "B", "rgba"],
     outputLabels: { R: "R", G: "G", B: "B", rgba: "📺" },
@@ -17795,8 +17797,8 @@ const nodeGraphModuleDefinitions = (
       { key: "rasterRgbR", label: "R", port: "R" },
       { key: "rasterRgbG", label: "G", port: "G" },
       { key: "rasterRgbB", label: "B", port: "B" },
-      { key: "rasterRgbHSync", label: "H Sync", port: "H Sync" },
-      { key: "rasterRgbVSync", label: "V Sync", port: "V Sync" },
+      { key: "rasterRgbHSync", label: "\u238D Line", port: "H Sync" },
+      { key: "rasterRgbVSync", label: "\u238D Frame", port: "V Sync" },
     ],
     visualSink: true },
   waterfallXyz: {
