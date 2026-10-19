@@ -437,6 +437,24 @@ function nodeGraphModuleScopeScreenItems(workspace, canvas, pixelRatio) {
               slot,
             }, pixelRatio);
           }
+        } else if (nodeGraphModuleDisplayRendererForSlot(slot) === "tSeriesFace") {
+          // t2…t11 / 2t…11t: gains from the Analog/Digital input rings (no output ring).
+          if (typeof drawNodeGraphTSeriesCrossfadeFaceItem === "function") {
+            drawNodeGraphTSeriesCrossfadeFaceItem(null, {
+              buffer: null,
+              screenElement: slot.scopeElement,
+              slot,
+            }, pixelRatio);
+          }
+        } else if (nodeGraphModuleDisplayRendererForSlot(slot) === "torchFace") {
+          // Lone t: Open comes from the latest output value when Out has no capture ring.
+          if (typeof drawNodeGraphTorchFaceItem === "function") {
+            drawNodeGraphTorchFaceItem(null, {
+              buffer: null,
+              screenElement: slot.scopeElement,
+              slot,
+            }, pixelRatio);
+          }
         } else if (nodeGraphModuleDisplayRendererForSlot(slot) === "softpopFace") {
           // Softpop paints from data-bus SoftpopBins / SoftpopInfo (no capture ring).
           if (typeof drawNodeGraphSoftpopFaceItem === "function") {

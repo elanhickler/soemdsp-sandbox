@@ -503,6 +503,25 @@ function nodeGraphTSeriesValueDisplayModes() {
   ];
 }
 
+/** t2…t11 / 2t…11t face: per-path gain cells + crossfade playhead. */
+function nodeGraphTSeriesCrossfadeDisplayModes() {
+  return [
+    {
+      key: "crossfade",
+      label: "Crossfade",
+      renderer: "tSeriesFace",
+      settingsSchema: "",
+      source: { value: "Open" } },
+  ];
+}
+
+function nodeGraphTSeriesCrossfadeVisualInputs() {
+  return [
+    { key: "tSeriesAnalog", label: "A", port: "Analog" },
+    { key: "tSeriesDigital", label: "D", port: "Digital" },
+  ];
+}
+
 function nodeGraphTSeriesModuleDefinition(lastIndex, options = {}) {
   const last = Math.max(0, Math.min(10, Math.round(nodeGraphFiniteNumber(lastIndex))));
   const adFirst = options.adFirst === true;
@@ -510,9 +529,13 @@ function nodeGraphTSeriesModuleDefinition(lastIndex, options = {}) {
   return {
     planRole: "processor",
     chrome: NodeGraphModuleChromeLayout.LayoutA,
-    displayType: "value",
+    // Crossfade face: one cell per numbered path, fill = gain, playhead = position.
+    displayType: "tSeriesFace",
     displayHeightGu: 1,
-    displayModes: nodeGraphTSeriesValueDisplayModes(),
+    displayModes: nodeGraphTSeriesCrossfadeDisplayModes(),
+    // A/D input rings (summed cables, every engine sample) drive the face.
+    visualSink: true,
+    visualInputs: nodeGraphTSeriesCrossfadeVisualInputs(),
     digitalInputs: ["Digital"],
     inputAliases: { A: "Analog", D: "Digital", Mono: "In" },
     inputLabels: { Analog: "A", Digital: "D", In: inLabel },
@@ -535,9 +558,13 @@ function nodeGraphTSeriesMuxModuleDefinition(lastIndex, options = {}) {
   return {
     planRole: "processor",
     chrome: NodeGraphModuleChromeLayout.LayoutA,
-    displayType: "value",
+    // Crossfade face: one cell per numbered path, fill = gain, playhead = position.
+    displayType: "tSeriesFace",
     displayHeightGu: 1,
-    displayModes: nodeGraphTSeriesValueDisplayModes(),
+    displayModes: nodeGraphTSeriesCrossfadeDisplayModes(),
+    // A/D input rings (summed cables, every engine sample) drive the face.
+    visualSink: true,
+    visualInputs: nodeGraphTSeriesCrossfadeVisualInputs(),
     digitalInputs: ["Digital"],
     inputAliases: { A: "Analog", D: "Digital" },
     inputLabels: { Analog: "A", Digital: "D" },
@@ -559,9 +586,19 @@ function nodeGraphTSeriesSingleModuleDefinition() {
     planRole: "processor",
     chrome: NodeGraphModuleChromeLayout.LayoutB,
     layoutBPortLabels: true,
-    displayType: "value",
+    // Torch face: 4 frames crossfaded by Open (0..1) from the A/D input rings.
+    displayType: "torchFace",
+    visualSink: true,
+    visualInputs: nodeGraphTSeriesCrossfadeVisualInputs(),
     displayHeightGu: 1,
-    displayModes: nodeGraphTSeriesValueDisplayModes(),
+    displayModes: [
+      {
+        key: "torch",
+        label: "Torch",
+        renderer: "torchFace",
+        settingsSchema: "",
+        source: { value: "Open" } },
+    ],
     digitalInputs: ["Digital"],
     inputAliases: { A: "Analog", D: "Digital", Mono: "In" },
     inputLabels: { Analog: "A", Digital: "D", In: "→" },

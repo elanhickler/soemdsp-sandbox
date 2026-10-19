@@ -2538,6 +2538,8 @@ const nodeGraphDisplaySettingsFormTypeTitles = Object.freeze({
   videoscopeBurn: "Videoscope",
   hypersawBurn: "Hypersaw",
   softpopFace: "Softpop",
+  torchFace: "Torch",
+  tSeriesFace: "Crossfade",
   arpKeysFace: "Arp",
   knobFace: "Knob",
   pluginSliderFace: "Slider",

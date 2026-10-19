@@ -17,6 +17,7 @@
 
 public/modules/audioPlayer/audio-player-playlist.js::* | APPROVED | Argi 2026-10-15: stays non-WebGL (Playlist text UI)
 public/modules/sequencer/sequencer-ui.js::* | APPROVED | Argi 2026-10-15: stays non-WebGL (Step grid UI)
+public/modules/tSeries/torch-face-display.js::uploadFrame | UPLOAD | torch frame PNGs, once per image load (cached per frame) [texImage2D(DOM source)]
 public/modules/transport/transport-display.js::* | APPROVED | Argi 2026-10-15: stays non-WebGL (Text/status face)
 public/lib/trace/trace-woscope.js::draw | BUGSFIX | owned by BugsFix [2D drawImage()]
 public/lib/trace/trace-woscope.js::drawTraceBrightness | BUGSFIX | owned by BugsFix [2D drawImage()]

@@ -310,6 +310,7 @@ function nodeGraphModuleScopeHasModelDisplay() {
       // Hypersaw face paints from data-bus Phases (no sample buffer).
       renderer === "hypersawBurn" ||
       renderer === "softpopFace" ||
+      renderer === "tSeriesFace" ||
       renderer === "videoFeedbackFace" ||
       renderer === "videoDelayFace" ||
       nodeGraphModuleScopeIsOscillatorType(slot.type) ||
