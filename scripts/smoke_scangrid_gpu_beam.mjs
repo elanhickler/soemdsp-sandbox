@@ -8,6 +8,11 @@
 //    The old JS loop (credit += speed each sample) is reported alongside: it
 //    equals the reference exactly for binary-fraction speeds; for decimal
 //    speeds (0.3) its running sum drifts and flips stamps at the exact ties.
+//    For whole / binary-fraction values the GPU must equal the old JS loop
+//    too (asserted). Streaming cases: the saved rgb patch (41 x 29, Scan
+//    Speed 2) fed 45 frames of 1536 samples, as the live ring delivers them at
+//    44.1 kHz, and a mixed 1470 / 1471 / 2940 (stall) cadence: catches any
+//    start-position, credit or per-frame offset drift across frames.
 // Usage: node scripts/smoke_scangrid_gpu_beam.mjs   (server.py on :8765)
 import { chromium } from "playwright";
 
@@ -37,6 +42,8 @@ const CASES = [
   { W: 13.7, H: 9.3, speed: 0.3, batches: [2000, 777] },
   { W: 33.3, H: 17.9, speed: 2.6, batches: [735, 735, 735] },
   { W: 64, H: 48, speed: 64, batches: [9000, 1] },
+  { W: 41, H: 29, speed: 2, batches: Array(45).fill(1536) },
+  { W: 41, H: 29, speed: 2, batches: Array.from({ length: 40 }, (_, i) => (i % 9 === 8 ? 2940 : 1470 + (i % 3 === 0 ? 1 : 0))) },
 ];
 const results = await page.evaluate((cases) => {
   function rng(seed) { let s = seed >>> 0; return () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; }; }
@@ -124,9 +131,9 @@ for (const r of results) {
   // the same kind of tie flips against the exact maths (reported). Allow 5% of
   // cells there; binary fractions (all saved patches) must match exactly.
   const allowed = exactMath ? 0 : Math.ceil(r.cells * 0.05);
-  const good = r.ok && r.bad <= allowed && Math.abs(r.posGpu - r.posRef) < 1e-6 && Math.abs(r.creditGpu - r.creditRef) < 1e-6;
+  const good = r.ok && r.bad <= allowed && (!exactMath || r.oldBad === 0) && Math.abs(r.posGpu - r.posRef) < 1e-6 && Math.abs(r.creditGpu - r.creditRef) < 1e-6;
   if (!good) fail = true;
-  console.log(`${good ? "ok  " : "FAIL"} W=${r.W} H=${r.H} speed=${r.speed} batches=${r.batches.join("+")}: ${r.bad}/${r.cells} cells differ (allowed ${allowed}${r.maxDiff ? `, max byte diff ${r.maxDiff}` : ""}; vs old JS loop ${r.oldBad}, old loop vs reference ${r.oldVsRef}); pos ${r.posGpu} vs ${r.posRef}, credit ${r.creditGpu.toFixed(6)} vs ${r.creditRef.toFixed(6)}`);
+  console.log(`${good ? "ok  " : "FAIL"} W=${r.W} H=${r.H} speed=${r.speed} batches=${r.batches.length > 6 ? `${r.batches.length} frames, ${r.batches.reduce((s, n) => s + n, 0)} samples` : r.batches.join("+")}: ${r.bad}/${r.cells} cells differ (allowed ${allowed}${r.maxDiff ? `, max byte diff ${r.maxDiff}` : ""}; vs old JS loop ${r.oldBad}, old loop vs reference ${r.oldVsRef}); pos ${r.posGpu} vs ${r.posRef}, credit ${r.creditGpu.toFixed(6)} vs ${r.creditRef.toFixed(6)}`);
 }
 if (errors.length) { console.log("page errors", JSON.stringify(errors.slice(0, 5))); }
 await browser.close();
