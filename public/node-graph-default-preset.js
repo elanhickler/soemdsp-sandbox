@@ -97,13 +97,13 @@ function nodeGraphDefaultPresetPatchIsUsable(patch) {
   if (!patch || !Array.isArray(patch.nodes)) {
     return false;
   }
-  const hasOutput = patch.nodes.some((node) => node?.id === "output" && node?.type === "output");
+  // Output is deletable (APP_POLICY): a preset without it is still usable.
   const visibleNodeCount = patch.nodes.filter((node) => (
     typeof nodeGraphModuleShouldBeVisible === "function"
       ? nodeGraphModuleShouldBeVisible(node)
       : Boolean(node)
   )).length;
-  if (!(hasOutput && visibleNodeCount > 1)) {
+  if (visibleNodeCount < 1) {
     return false;
   }
   if (typeof nodeGraphEfficientProductEnabled === "function"
@@ -118,38 +118,12 @@ function nodeGraphDefaultPresetPatchIsUsable(patch) {
 }
 
 /**
- * Old factory default (polyBlep→ladder→clip→reverb→pingpong). Sessions often
- * autosaved that as workingPatch when it was still the default — treat it as
- * "no real user patch" so boot falls through to Init.
+ * Working/autosave restores any non-empty graph, with or without Output / Input.
+ * Not nodeGraphDefaultPresetPatchIsUsable: that rejects foreign efficient-product
+ * types, and session restore must keep the user's graph.
  */
-function nodeGraphPatchIsLegacyEfficientDefault(patch) {
-  if (!patch || !Array.isArray(patch.nodes)) {
-    return false;
-  }
-  const types = new Set(patch.nodes.map((node) => String(node?.type || "")));
-  return types.has("polyBlep")
-    && types.has("ladderFilter")
-    && types.has("softClipper")
-    && types.has("reverbEffect")
-    && types.has("pingPongDelay")
-    && types.has("output")
-    && !types.has("textBox");
-}
-
-/** Working/autosave counts only when it is a real user graph, not legacy default. */
 function nodeGraphWorkingPatchShouldRestore(patch) {
-  if (!patch || !Array.isArray(patch.nodes) || patch.nodes.length === 0) {
-    return false;
-  }
-  if (nodeGraphPatchIsLegacyEfficientDefault(patch)) {
-    return false;
-  }
-  // Do NOT use nodeGraphDefaultPresetPatchIsUsable here — that rejects patches
-  // with any "foreign" efficient-product type (e.g. a new Voice Idle portal)
-  // and boot then wipes the session back to Init. Plan-time stripping handles
-  // foreign modules; session restore must keep the user's graph.
-  const hasOutput = patch.nodes.some((node) => node?.id === "output" && node?.type === "output");
-  return hasOutput || patch.nodes.length > 1;
+  return Boolean(patch && Array.isArray(patch.nodes) && patch.nodes.length > 0);
 }
 
 function nodeGraphLocalDefaultPresetAllowed() {

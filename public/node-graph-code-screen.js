@@ -628,12 +628,16 @@ function nodeGraphCodeScreenWorkspaceCircuitApi() {
       const idMap = {};
       const errors = [];
       for (const moduleSpec of target.modules || []) {
-        // A patch has exactly one "output" node, id always "output" -- a
-        // planned output module isn't a new node, it's a reference to the
-        // one that already exists (showNodeGraphModule would throw trying
-        // to create a second one).
+        // A patch has at most one "output" node, id always "output" -- a
+        // planned output module is a reference to it, never a new node. Only
+        // the Output button spawns a deleted Output (APP_POLICY), so with no
+        // Output the planned one is skipped and its cables report errors.
         if (moduleSpec.type === "output") {
-          idMap[moduleSpec.id] = "output";
+          if (nodeGraphMvp.patch.nodes.some((node) => node.type === "output")) {
+            idMap[moduleSpec.id] = "output";
+          } else {
+            errors.push("no Output module (turn Output on to add it); skipped the planned output");
+          }
           continue;
         }
         const realId = showNodeGraphModule(moduleSpec.type, null, {
