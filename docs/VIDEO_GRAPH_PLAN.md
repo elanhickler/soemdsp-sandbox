@@ -1,6 +1,6 @@
 # Video graph plan (VG)
 
-Status: **plan only, no code yet** (2026-10-18). Source: Argi via Interface.
+Status: **decisions recorded, executing from VG-0** (2026-10-18). Source: Argi via Interface.
 Related: `docs/ZOOM_PERF_PLAN.md` (ZP-2 per-face textures are the foundation, ZP-7 is the perf gate),
 `docs/WEBGL_DISPLAY_PLAN.md` section 9 (RGBA picture outputs) and section 11 (circuit builder to GL),
 `docs/GPU_WORKSPACE_PLAN.md` (GW-2 camera), `docs/SCOPE_VIDEO_OUT_PLAN.md` (scope 📺 outs).
@@ -82,7 +82,7 @@ module running its own clock.
 
 ### Frame clock
 - **One rAF scheduler** (`node-graph-video-graph.js`, new file) runs one pass per video frame.
-- Video rate = display refresh, divided down by Simulation FPS (`nodeGraphSimFpsShouldPaint("videoGraph")`).
+- Video rate = min(display refresh, Simulation FPS) (Decision 1; `nodeGraphSimFpsShouldPaint("videoGraph")`).
   FPS <= 0 freezes all video nodes (current behaviour).
 - Engine state follows APP_POLICY §3b: param-driven sources may render while stopped; buffer/audio-driven
   inputs hold black when stopped and frozen when paused. The UI is never blocked.
@@ -92,13 +92,16 @@ module running its own clock.
 Each frame (or on edge-table rebuild plus visibility change), mark **sinks**:
 - a face that is visible (in viewport, current page, not hidden by solo/metamodule),
 - a 📺 output leaving the patch (perform tiles, mini perform view, camera view, magnifier),
-- a recorder or export consumer (future).
-Walk upstream from sinks; only marked nodes run. **A source that is offscreen or asleep still runs if
-anything downstream is visible.** A node nobody reaches costs nothing (no pass, no publish).
+- a recorder or export consumer (out of scope, Decision 7; later plan).
+Walk upstream from sinks; only marked nodes run. **A source that is offscreen or asleep still runs, at full
+rate, if anything downstream is visible** (Decision 2). A node nobody reaches pauses and costs nothing (no
+pass, no publish).
 
 ### Output and publishing
 - Each node owns its output texture at **zoom-1 size** (face canvas backing size, from
-  `nodeGraphDisplayCanvasSize`, never scaled by camera zoom). Realloc only on resize.
+  `nodeGraphDisplayCanvasSize`, never scaled by camera zoom). Realloc only on resize. Optional per-node
+  resolution Half / Full / Double (Decision 6), capped at screen size x devicePixelRatio and the GPU's
+  MAX_TEXTURE_SIZE (replaces the 512 px cap).
 - Textures are published only when a 📺 consumer or a visible face needs them. The separate
   "copy into export texture" step goes away: the node's output **is** the published texture
   (ping-pong nodes publish the read side after swap).
@@ -111,10 +114,13 @@ anything downstream is visible.** A node nobody reaches costs nothing (no pass, 
   (same `drawImages` path), with no extra present copy.
 - Zoom: the GL graph composites face quads through the camera; NEAREST above 2.5x, the node is never
   re-rendered for zoom (Zoom-1 is the source of truth).
-- During gestures the graph keeps running if the display hold is off (ZP-3 decouples camera from hold).
+- During gestures the graph keeps running (Decision 3; display hold stays off). A display whose pass costs
+  more than its frame budget during a gesture may hold its last frame while the others keep moving, chosen
+  from ZOOM_PERF profiling, not by default.
 
 ### Audio-to-video handoff
 Defined once in the scheduler, not per module. At the start of each video frame:
+- Default is **latest sample** (Decision 4); block mode is a later per-module "Send whole block" option.
 - **Latest sample (control):** for each audio input a node declares as `control`, read the newest value
   from its scope ring (`nodeGraphModuleScopeConnectedSourceBuffer`) -> uniform.
   Latency: audio output latency + up to one video frame (about 16.7 ms at 60 Hz).
@@ -186,14 +192,25 @@ Order: simplest pure sources first, then feedback, then consumers, then the 2D/s
 - **Context loss / 4096 canvas:** many node textures add memory; budget and log total texture bytes.
 - **BugsFix ownership:** trace-woscope, Phosphor files and rgb trails need BugsFix's OK.
 
-## Open questions for Argi
-1. Video rate: lock to display refresh, or to Simulation FPS? (Plan: display refresh divided by Simulation FPS.)
-2. Should offscreen sources run at full rate, or at a reduced rate when only feeding a visible sink?
-3. Should video keep running during zoom gestures by default (display hold off)?
-4. Which audio-to-video mode should be the default for new modules: latest sample or block?
-5. Should the 1-frame delay on a feedback loop's back edge be visible in the UI (e.g. a marker on the cable)?
-6. Video node resolution: always the face's zoom-1 size, or a per-node resolution setting independent of the face?
-7. Recorder / export sink: in scope for this plan or a later one?
+## Decisions (Argi via Librarian, 2026-10-18)
+The seven open questions, answered:
+1. **Video rate** = min(display refresh, Simulation FPS). Simulation FPS is the user's knob; the display
+   refresh is the ceiling.
+2. **Offscreen sources** run at full rate unless their ?? output feeds no visible display (the display is
+   off screen and nothing else reads it); then they pause.
+3. **Zoom gestures:** video keeps running by default. Per-display exception: a display that costs more than
+   its frame budget during a gesture holds its last frame while the others keep moving; such displays are
+   identified with ZOOM_PERF profiling (`probe_zoom_perf.mjs PROFILE=1`).
+4. **Audio to video** defaults to the latest sample. A later per-module "Send whole block" option is for
+   modules that need it (e.g. scopes).
+5. **No UI marker** for the 1-frame feedback delay.
+6. **Node resolution** defaults to the face's zoom-1 size (zoom 1.0 is the source of truth), plus an optional
+   per-node resolution setting (Half / Full / Double). The max cap is the user's screen resolution in device
+   pixels (screen size x devicePixelRatio), clamped to the GPU's MAX_TEXTURE_SIZE. This replaces the 512 px
+   cap.
+7. **Recorder / export** is out of scope; it gets a later plan.
+
+User-facing labels say ??, never "RGBA".
 
 ## Tracker
 | Date | Stage | hop latency (acyclic) | offscreen source updates | fps idle | fps zoom | Commit |
