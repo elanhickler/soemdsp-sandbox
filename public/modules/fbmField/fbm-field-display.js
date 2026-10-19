@@ -231,7 +231,7 @@ function wipeNodeGraphFbmFieldScreensToColdBoot(options = {}) {
     if (typeof nodeGraphFbmFieldStopLoop === "function") {
       nodeGraphFbmFieldStopLoop(face);
     } else if (face._fbmFieldRaf) {
-      cancelAnimationFrame(face._fbmFieldRaf);
+      nodeGraphVideoGraphCancelFrame(face._fbmFieldRaf);
       face._fbmFieldRaf = 0;
       face._fbmFieldRunning = false;
     }
@@ -409,7 +409,7 @@ function paintNodeGraphFbmFieldFace(canvas, face, nodeId, options = {}) {
       nodeGraphFbmFieldStopLoop(face);
     } else if (face._fbmFieldRunning) {
       if (face._fbmFieldRaf) {
-        cancelAnimationFrame(face._fbmFieldRaf);
+        nodeGraphVideoGraphCancelFrame(face._fbmFieldRaf);
         face._fbmFieldRaf = 0;
       }
       face._fbmFieldRunning = false;

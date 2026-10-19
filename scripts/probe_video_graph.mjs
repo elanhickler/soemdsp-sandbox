@@ -142,6 +142,7 @@ const res = await page.evaluate(() => {
     // VG-1: rebuilds of the ?? edge table in the window (each is one walk of
     // the connection list). Before VG-1 every read was a walk: null here.
     listScans: vg.edges0 ? nodeGraphPictureEdgeStats().rebuilds - vg.edges0.rebuilds : null,
+    scheduler: typeof nodeGraphVideoGraphStats === "function" ? nodeGraphVideoGraphStats() : null,
     glFailures: typeof nodeGraphDisplayGlFailures === "function" ? [...nodeGraphDisplayGlFailures().keys()] : [],
   };
 });
@@ -167,6 +168,9 @@ if (process.env.JSON) console.log(JSON.stringify({ states, ...res }, null, 1));
 console.log(`vg-chain ${SECONDS}s: frames=${res.frames} fps=${r1(res.fps)} p50=${r1(res.p50)}ms p90=${r1(res.p90)}ms max=${r1(res.max)}ms pictureRead calls=${res.scans} (${r1(res.scans / Math.max(1, res.frames))}/frame)`);
 const scans = res.listScans == null ? res.scans : res.listScans;
 console.log(`connection-list scans: ${scans} (${r1(scans / Math.max(1, res.frames))}/frame)${res.listScans == null ? " [no edge table: every read scans]" : " [edge table rebuilds]"}`);
+console.log(res.scheduler
+  ? `video graph scheduler: order ${res.scheduler.order.filter((id) => [...NODES, ...SOLO].includes(id)).join(" ")}; back edges ${res.scheduler.backEdges}`
+  : "video graph scheduler: none (per-module rAF loops)");
 console.log("node        state        publish copies/frame");
 for (const id of [...NODES, ...SOLO]) {
   console.log(`${id.padEnd(11)} ${String(states[id] || "?").padEnd(12)} ${r1((res.pubs[id] || 0) / Math.max(1, res.frames))}`);

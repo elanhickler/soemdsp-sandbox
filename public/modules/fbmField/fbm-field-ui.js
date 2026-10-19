@@ -129,7 +129,7 @@ function createNodeGraphFbmFieldBody(node, type) {
 function nodeGraphFbmFieldStopLoop(face) {
   if (!face) return;
   if (face._fbmFieldRaf) {
-    cancelAnimationFrame(face._fbmFieldRaf);
+    nodeGraphVideoGraphCancelFrame(face._fbmFieldRaf);
     face._fbmFieldRaf = 0;
   }
   face._fbmFieldRunning = false;
@@ -172,11 +172,9 @@ function nodeGraphFbmFieldStartLoop(face, nodeId) {
     // Paint on the shared Simulation FPS clock. Do not defer to the compositor
     // alone — compositor early-outs (fps-gate wait, trace-unchanged, etc.) left
     // FBM faces blank while this loop only rAF-spun.
-    const frameReady = typeof nodeGraphSimFpsShouldPaint === "function"
-      ? nodeGraphSimFpsShouldPaint(`fbmField:${nodeId}`, false)
-      : (typeof nodeGraphDisplayFrameReady === "function"
-        ? nodeGraphDisplayFrameReady(`fbmField:${nodeId}`)
-        : true);
+    // VG-3: one Simulation FPS clock and one frame for the whole video graph
+    // (node-graph-video-graph.js runs nodes in ?? cable order).
+    const frameReady = nodeGraphVideoGraphFrameReady(false);
     if (frameReady) {
       const last = face._fbmFieldLastTs || ts;
       let dt = Math.min(0.05, Math.max(0, (ts - last) / 1000));
@@ -188,10 +186,10 @@ function nodeGraphFbmFieldStartLoop(face, nodeId) {
     }
     // paint may have stopped the loop (engine off); only reschedule if still live.
     if (face._fbmFieldRunning) {
-      face._fbmFieldRaf = requestAnimationFrame(tick);
+      face._fbmFieldRaf = nodeGraphVideoGraphRequestFrame(nodeId, tick);
     }
   };
-  face._fbmFieldRaf = requestAnimationFrame(tick);
+  face._fbmFieldRaf = nodeGraphVideoGraphRequestFrame(nodeId, tick);
 }
 
 registerNodeGraphChromelessModuleUi("fbmField", {

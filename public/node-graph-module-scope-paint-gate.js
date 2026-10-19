@@ -150,6 +150,15 @@ function nodeGraphArmDrawingFaceLoop(host, options = {}) {
         ? scopePaintFaceShouldAnimate(host)
         : (typeof scopePaintIsLive === "function" ? scopePaintIsLive() : true)
     );
+  // VG-3: video nodes (?? modules) run on the video graph scheduler: one rAF,
+  // ?? cable order, one Simulation FPS clock (node-graph-video-graph.js).
+  const videoNodeId = typeof nodeGraphVideoGraphIsVideoType === "function"
+    && nodeGraphVideoGraphIsVideoType(host.dataset?.nodeType)
+    ? String(host.dataset?.node || "")
+    : "";
+  const schedule = videoNodeId
+    ? (cb) => nodeGraphVideoGraphRequestFrame(videoNodeId, cb)
+    : (cb) => requestAnimationFrame(cb);
   const tick = () => {
     host[rafKey] = 0;
     if (host.isConnected === false) {
@@ -157,7 +166,7 @@ function nodeGraphArmDrawingFaceLoop(host, options = {}) {
     }
     // Mid pan/zoom: hold the face (cheap re-arm, no paint) until settle.
     if (typeof nodeGraphViewportHoldsDisplays === "function" && nodeGraphViewportHoldsDisplays()) {
-      host[rafKey] = requestAnimationFrame(tick);
+      host[rafKey] = schedule(tick);
       return;
     }
     const force = Boolean(host[forceKey]);
@@ -168,22 +177,24 @@ function nodeGraphArmDrawingFaceLoop(host, options = {}) {
       return;
     }
     if (
-      typeof nodeGraphSimFpsShouldPaint === "function"
-      && !nodeGraphSimFpsShouldPaint(clockKeyFor(host), force)
+      videoNodeId
+        ? !nodeGraphVideoGraphFrameReady(force)
+        : (typeof nodeGraphSimFpsShouldPaint === "function"
+          && !nodeGraphSimFpsShouldPaint(clockKeyFor(host), force))
     ) {
       // FPS ≤ 0 freezes — do not spin waiting for a tick that never comes.
       if (typeof nodeGraphSimFpsRate === "function" && !(nodeGraphSimFpsRate() > 0)) {
         return;
       }
-      host[rafKey] = requestAnimationFrame(tick);
+      host[rafKey] = schedule(tick);
       return;
     }
     paint(host);
     if (stillAnimate()) {
-      host[rafKey] = requestAnimationFrame(tick);
+      host[rafKey] = schedule(tick);
     }
   };
-  host[rafKey] = requestAnimationFrame(tick);
+  host[rafKey] = schedule(tick);
 }
 
 /**

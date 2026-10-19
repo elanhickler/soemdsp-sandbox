@@ -24,7 +24,7 @@ function nodeGraphRgbFractalStopLoop(face) {
     return;
   }
   if (face._rgbFractalRaf) {
-    cancelAnimationFrame(face._rgbFractalRaf);
+    nodeGraphVideoGraphCancelFrame(face._rgbFractalRaf);
     face._rgbFractalRaf = 0;
   }
   face._rgbFractalRunning = false;
@@ -59,7 +59,7 @@ function nodeGraphRgbFractalStartLoop(face, nodeId) {
       nodeGraphRgbFractalStopLoop(face);
       return;
     }
-    face._rgbFractalRaf = requestAnimationFrame(tick);
+    face._rgbFractalRaf = nodeGraphVideoGraphRequestFrame(nodeId, tick);
 
     // Respect global scope FPS (fixed layout×dpr buffer; zoom is CSS pixelate).
     const fps = typeof normalizeNodeGraphModuleScopeFramesPerSecond === "function"
@@ -83,7 +83,7 @@ function nodeGraphRgbFractalStartLoop(face, nodeId) {
       paintNodeGraphRgbFractalFaceForNode(nodeId, { dt, face });
     }
   };
-  face._rgbFractalRaf = requestAnimationFrame(tick);
+  face._rgbFractalRaf = nodeGraphVideoGraphRequestFrame(nodeId, tick);
 }
 
 registerNodeGraphChromelessModuleUi("rgbFractal", {
