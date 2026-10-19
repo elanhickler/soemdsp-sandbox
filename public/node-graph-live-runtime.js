@@ -943,7 +943,7 @@ function stopNodeGraphMockInput() {
 async function startNodeGraphMockInput(options = {}) {
   setNodeGraphMockInputFactory(options);
   nodeGraphMvp.live.inputActive = true;
-  ensureNodeGraphLiveInputModule();
+  nodeGraphSpawnIoModuleIfMissing("audioInput");
   if (!nodeGraphMvp.live.node || !nodeGraphMvp.live.context) {
     const serial = nodeGraphMvp.live.outputToggleSerial + 1;
     nodeGraphMvp.live.outputToggleSerial = serial;
@@ -992,7 +992,7 @@ function toggleNodeGraphLiveInput() {
   const enabling = !nodeGraphMvp.live.inputActive;
   nodeGraphMvp.live.inputActive = enabling;
   const addedInputModule = nodeGraphMvp.live.inputActive
-    ? ensureNodeGraphLiveInputModule()
+    ? nodeGraphSpawnIoModuleIfMissing("audioInput")
     : false;
   if (nodeGraphMvp.live.inputActive) {
     const routeState = nodeGraphLiveInputRouteState();
@@ -1220,7 +1220,14 @@ async function restartNodeGraphLiveSimulation() {
  * Engine stays up while either Input or Output remains armed.
  */
 function toggleNodeGraphLiveOutput() {
-  setNodeGraphLiveOutputEnabled(!nodeGraphMvp.live.outputEnabled);
+  const enabling = !nodeGraphMvp.live.outputEnabled;
+  // The off->on edge of the Output button is the only place a missing Output
+  // spawns (APP_POLICY); Play goes through setNodeGraphLiveOutputEnabled and
+  // never spawns. The spawn is its own undo step, committed before audio starts.
+  if (enabling) {
+    nodeGraphSpawnIoModuleIfMissing("output");
+  }
+  setNodeGraphLiveOutputEnabled(enabling);
 }
 
 /**

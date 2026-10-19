@@ -6,23 +6,73 @@ function defaultNodeGraphModuleGridPoint(type) {
   };
 }
 
-function ensureNodeGraphLiveInputModule() {
-  // Singleton Input — always allowed; unique in patch (APP_POLICY).
-  if (nodeGraphMvp.patch.nodes.some((node) => node.type === "audioInput")) {
+/**
+ * Output / Input respawn (APP_POLICY): the only place either is created
+ * besides Undo. Called from the off->on edge of the Output button / face toggle
+ * and of the Input button (and its mock harness). Restores the saved settings
+ * and position from patch.ioModuleSettings (nearest free spot if occupied);
+ * with nothing saved, lands right of the rightmost module on the view's centre
+ * row. No cables. Its own undo step. Returns true when it spawned one.
+ */
+function nodeGraphSpawnIoModuleIfMissing(type) {
+  if (!nodeGraphIoModuleTypes.includes(type)) {
+    throw new Error(`nodeGraphSpawnIoModuleIfMissing: ${type} is not Output or Input`);
+  }
+  if (nodeGraphMvp.patch.nodes.some((node) => node.type === type)) {
     return false;
   }
-
   const patch = cloneNodeGraphPatch(nodeGraphMvp.patch);
-  const counts = nextNodeGraphTypeCounts(patch.nodes);
-  const id = counts.audioInput > 0 ? `audioInput-${counts.audioInput + 1}` : "audioInput";
-  const gridPoint = nodeGraphFindFreeModuleGridPoint("audioInput", patch.nodes, { gx: 0, gy: 1 });
-  patch.nodes.push(createNodeGraphPatchNode("audioInput", {
-    id,
-    gx: gridPoint.gx,
-    gy: gridPoint.gy,
-  }));
-  commitNodeGraphPatch(patch, { status: "input module shown" });
+  const saved = nodeGraphIoModuleSavedSettings(type, patch);
+  const hasSavedSpot = Number.isFinite(Number(saved?.gx)) && Number.isFinite(Number(saved?.gy));
+  const node = saved
+    ? { ...JSON.parse(JSON.stringify(saved)), id: type, type }
+    : createNodeGraphPatchNode(type, { id: type });
+  const gridPoint = hasSavedSpot
+    ? nodeGraphFindNearestFreeModuleGridPoint(node, patch.nodes, { gx: Number(saved.gx), gy: Number(saved.gy) })
+    : nodeGraphFindFreeModuleGridPoint(type, patch.nodes, nodeGraphIoModuleFallbackGridPoint(type, patch.nodes));
+  node.gx = gridPoint.gx;
+  node.gy = gridPoint.gy;
+  patch.nodes.push(node);
+  commitNodeGraphPatch(patch, { status: type === "output" ? "output module spawned" : "input module spawned" });
   return true;
+}
+
+/** Never-saved Output / Input: right of the rightmost module, view centre row. Camera stays. */
+function nodeGraphIoModuleFallbackGridPoint(type, nodes) {
+  const rootNodes = nodes.filter((node) => !node.ownerMetamoduleId);
+  const right = rootNodes.length
+    ? Math.max(...rootNodes.map((node) => nodeGraphPatchNodeGridRect(node).right))
+    : 0;
+  const zoom = Math.max(0.0001, nodeGraphZoom());
+  const centreGy = -(nodeGraphFiniteNumber(nodeGraphMvp.pan?.y) / zoom) / nodeGraphGridHeight();
+  const heightGu = nodeGraphPatchNodeGridHeightUnits({ type, gx: 0, gy: 0 });
+  return { gx: right + 1, gy: Math.round(centreGy - heightGu / 2) };
+}
+
+/** Free grid spot nearest `preferred` (ring by ring) that fits `node` at its own size. */
+function nodeGraphFindNearestFreeModuleGridPoint(node, nodes, preferred) {
+  const fits = (gx, gy) => {
+    const rect = nodeGraphPatchNodeGridRect({ ...node, gx, gy });
+    return !nodes.some((other) => nodeGraphGridRectsOverlap(rect, nodeGraphPatchNodeGridRect(other)));
+  };
+  for (let ring = 0; ring <= 200; ring += 1) {
+    let best = null;
+    for (let dy = -ring; dy <= ring; dy += 1) {
+      for (let dx = -ring; dx <= ring; dx += 1) {
+        if (Math.max(Math.abs(dx), Math.abs(dy)) !== ring) {
+          continue;
+        }
+        const distance = dx * dx + dy * dy;
+        if ((!best || distance < best.distance) && fits(preferred.gx + dx, preferred.gy + dy)) {
+          best = { gx: preferred.gx + dx, gy: preferred.gy + dy, distance };
+        }
+      }
+    }
+    if (best) {
+      return { gx: best.gx, gy: best.gy };
+    }
+  }
+  return nodeGraphFindFreeModuleGridPoint(node.type, nodes, preferred);
 }
 
 /** Spawn the Portal MIDI (keyboardController) module if the patch has none. */

@@ -635,6 +635,10 @@ function soemdspSandboxSetLiveOutput(enabled) {
   if (typeof setNodeGraphLiveOutputEnabled !== "function") {
     return false;
   }
+  // Same as the button's off->on edge: a missing Output spawns first.
+  if (enabled && !nodeGraphMvp?.live?.outputEnabled) {
+    nodeGraphSpawnIoModuleIfMissing("output");
+  }
   setNodeGraphLiveOutputEnabled(Boolean(enabled));
   return true;
 }
