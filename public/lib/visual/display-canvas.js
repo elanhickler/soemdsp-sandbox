@@ -204,9 +204,15 @@
     const cls = String(target?.className || "").split(/\s+/)[0] || "display";
     return node ? `${node} ${cls}` : cls;
   }
+  // One report per display: the first reason is the root cause; follow-on
+  // failures of the same face (a copy that then cannot present) stay quiet.
+  const failedDisplays = new Set();
   function nodeGraphDisplayGlFailed(target, reason, error = null) {
-    const key = `${displayFailKey(target)} | ${reason || "GL failed"}`;
-    if (!glFailures.has(key)) {
+    const display = displayFailKey(target);
+    const key = `${display} | ${reason || "GL failed"}`;
+    const isElement = Boolean(target?.closest);
+    if (!glFailures.has(key) && !(isElement && failedDisplays.has(display))) {
+      if (isElement) failedDisplays.add(display);
       glFailures.set(key, error ? String(error?.message || error) : "");
       if (error) console.error(`[display-gl] ${key}`, error);
       else console.error(`[display-gl] ${key}`);

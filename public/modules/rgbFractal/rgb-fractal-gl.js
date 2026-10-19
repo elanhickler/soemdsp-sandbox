@@ -465,6 +465,11 @@ function nodeGraphRgbFractalGlEnsure(canvas) {
         tex,
         0,
       );
+      if (gl.checkFramebufferStatus(gl.FRAMEBUFFER) !== gl.FRAMEBUFFER_COMPLETE) {
+        gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+        gl.deleteFramebuffer(fbo);
+        throw new Error("framebuffer incomplete");
+      }
       return fbo;
     };
     const sceneFbo = attachFbo(sceneTex);

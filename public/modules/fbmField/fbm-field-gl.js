@@ -142,7 +142,13 @@ function nodeGraphFbmFieldGlEnsure(canvas) {
     const colorFbo = gl.createFramebuffer();
     gl.bindFramebuffer(gl.FRAMEBUFFER, colorFbo);
     gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, colorTex, 0);
+    const fboOk = gl.checkFramebufferStatus(gl.FRAMEBUFFER) === gl.FRAMEBUFFER_COMPLETE;
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    if (!fboOk) {
+      gl.deleteFramebuffer(colorFbo);
+      gl.deleteTexture(colorTex);
+      throw new Error("framebuffer incomplete");
+    }
 
     const paletteTex = gl.createTexture();
     gl.bindTexture(gl.TEXTURE_2D, paletteTex);

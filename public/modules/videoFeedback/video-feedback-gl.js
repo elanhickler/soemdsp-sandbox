@@ -8,6 +8,14 @@ const NODE_GRAPH_VIDEO_FEEDBACK_WAVE = 512;
   const KEY = "_videoFeedbackGl";
   let sharedDevice = null;
 
+  // VG-8 failure policy: a failed link (per GL context) or FBO (per face and
+  // size) is reported once through nodeGraphDisplayGlFailed and never retried
+  // every frame; the face stays black and nothing is published downstream.
+  let linkFailedGl = null;
+  function reportFailure(host, reason) {
+    if (host && typeof nodeGraphDisplayGlFailed === "function") nodeGraphDisplayGlFailed(host, reason);
+  }
+
   const VERT = `
     attribute vec2 aPos;
     varying vec2 vUv;
@@ -121,9 +129,10 @@ const NODE_GRAPH_VIDEO_FEEDBACK_WAVE = 512;
     const picture = typeof nodeGraphPictureDevice === "function" ? nodeGraphPictureDevice() : null;
     if (!picture?.gl) return null;
     const { gl } = picture;
+    if (linkFailedGl === gl && !gl.isContextLost()) return null;
     const program = link(gl, VERT, FRAG);
     if (!program) {
-      console.error("[video-feedback-gl] program failed to link");
+      linkFailedGl = gl;
       return null;
     }
     const quad = SoemGl.quad(gl);
@@ -155,7 +164,11 @@ const NODE_GRAPH_VIDEO_FEEDBACK_WAVE = 512;
 
   function ensureRenderer(host, width, height) {
     const device = getSharedDevice();
-    if (!device?.gl || !host) return null;
+    if (!host) return null;
+    if (!device?.gl) {
+      if (linkFailedGl) reportFailure(host, "Video Feedback: GL program link failed");
+      return null;
+    }
     const gl = device.gl;
     const w = Math.max(8, Math.min(NODE_GRAPH_VIDEO_FEEDBACK_MAX, width | 0));
     const h = Math.max(8, Math.min(NODE_GRAPH_VIDEO_FEEDBACK_MAX, height | 0));
@@ -165,10 +178,19 @@ const NODE_GRAPH_VIDEO_FEEDBACK_WAVE = 512;
       renderer.gl = gl;
       return renderer;
     }
+    const size = `${w}x${h}`;
+    if (host[KEY + "Failed"] === size) return null;
     disposeRenderer(host);
     const read = createSurface(gl, w, h);
     const write = createSurface(gl, w, h);
-    if (!read || !write) return null;
+    if (!read || !write) {
+      destroySurface(gl, read);
+      destroySurface(gl, write);
+      host[KEY + "Failed"] = size;
+      reportFailure(host, "Video Feedback: framebuffer incomplete");
+      return null;
+    }
+    host[KEY + "Failed"] = "";
     gl.bindFramebuffer(gl.FRAMEBUFFER, read.framebuffer);
     gl.viewport(0, 0, w, h);
     gl.clearColor(0, 0, 0, 1);

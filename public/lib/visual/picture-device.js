@@ -381,6 +381,8 @@
   // only. Any other destination is on screen as a 2D canvas, so it also gets
   // the HEAD-style drawImage from this canvas.
   const faceTextures = new WeakMap();
+  // canvas -> "WxH" whose face texture FBO failed: not retried every frame.
+  const faceFailed = new WeakMap();
   let faceKit = null;
 
   const FACE_VS = `
@@ -479,6 +481,7 @@
     if (!(cw > 0) || !(ch > 0) || cw > MAX_DIM || ch > MAX_DIM) return null;
     let entry = faceTextures.get(canvas);
     if (entry && entry.gl === gl && entry.w === cw && entry.h === ch && entry.texture) return entry;
+    if (faceFailed.get(canvas) === `${cw}x${ch}`) return null;
     if (entry) faceDelete(gl, entry);
     const texture = gl.createTexture();
     gl.bindTexture(gl.TEXTURE_2D, texture);
@@ -497,8 +500,10 @@
       gl.deleteFramebuffer(fbo);
       gl.deleteTexture(texture);
       faceTextures.delete(canvas);
+      faceFailed.set(canvas, `${cw}x${ch}`);
       return null;
     }
+    faceFailed.delete(canvas);
     entry = { gl, texture, fbo, w: cw, h: ch, gen: 0, glFaceTexture: true };
     faceTextures.set(canvas, entry);
     return entry;

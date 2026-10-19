@@ -19,6 +19,9 @@
 
   const IMAGE_BURN_GL_REV = 2;
   let sharedDevice = null;
+  // VG-8: a failed link (per context) or FBO (per face and size) is not
+  // retried every frame; the display reports it once and shows black.
+  let linkFailedGl = null;
 
   function clamp01(value, fallback = 0) {
     return globalThis.SoemMath.clamp01(value, fallback);
@@ -349,6 +352,7 @@
     const picture = typeof nodeGraphPictureDevice === "function" ? nodeGraphPictureDevice() : null;
     if (!picture?.gl) return null;
     const { canvas, gl } = picture;
+    if (linkFailedGl === gl && !gl.isContextLost()) return null;
 
     const fadeProgram = linkProgram(gl, VERT, FADE_FRAG);
     const blurProgram = linkProgram(gl, VERT, BLUR_FRAG);
@@ -356,7 +360,8 @@
     const presentProgram = linkProgram(gl, VERT, PRESENT_FRAG);
     const copyProgram = linkProgram(gl, VERT, COPY_FRAG);
     if (!fadeProgram || !blurProgram || !depositProgram || !presentProgram || !copyProgram) {
-      console.error("[image-burn-gl] core programs failed to link");
+      for (const p of [fadeProgram, blurProgram, depositProgram, presentProgram, copyProgram]) if (p) gl.deleteProgram(p);
+      linkFailedGl = gl;
       return null;
     }
 
@@ -516,8 +521,15 @@
       destroyRenderer(renderer);
       host[KEY] = null;
     }
+    const size = `${width | 0}x${height | 0}`;
+    if (host[KEY + "Failed"] === size) return null;
     renderer = createRenderer(width, height);
-    if (!renderer) return null;
+    if (!renderer) {
+      // Only a real GL failure is sticky; no device yet is retried.
+      if (typeof nodeGraphPictureDevice === "function" && nodeGraphPictureDevice()?.gl) host[KEY + "Failed"] = size;
+      return null;
+    }
+    host[KEY + "Failed"] = "";
     host[KEY] = renderer;
     return renderer;
   }

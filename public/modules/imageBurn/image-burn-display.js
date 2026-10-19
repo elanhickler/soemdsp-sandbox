@@ -521,7 +521,7 @@ function drawNodeGraphImageBurnFaceItem(renderer, item, pixelRatio) {
   }
 
   // Status label: GL text over the frame (transparent clear, source-over copy).
-  const label = !settings.dataUrl
+  const label = !usedGl ? null : !settings.dataUrl
     ? { text: "Load image", rgba: [127 / 255, 199 / 255, 217 / 255, 0.4], k: 0.05 }
     : (imageFailed
       ? { text: "Load failed", rgba: [220 / 255, 120 / 255, 120 / 255, 0.5], k: 0.045 }
