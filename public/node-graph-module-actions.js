@@ -568,7 +568,8 @@ function showNodeGraphModule(node, point = null, options = {}) {
   const live = nodeGraphMvp.patch;
   const counts = nextNodeGraphTypeCounts(live.nodes);
   counts[type] = (counts[type] || 0) + 1;
-  const id = `${type}-${counts[type]}`;
+  // Output / Input ids are fixed (normalize rejects any other).
+  const id = nodeGraphIoModuleTypes.includes(type) ? type : `${type}-${counts[type]}`;
   const gridPoint = point ? nodeGraphPixelToGrid(point) : defaultNodeGraphModuleGridPoint(type);
   const newNode = createNodeGraphPatchNode(type, {
     id,

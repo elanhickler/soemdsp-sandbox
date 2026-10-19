@@ -246,6 +246,9 @@ function validateNodeGraphPatch(patch) {
     if (type === "output" && id !== "output") {
       throw new Error("output module id must be output");
     }
+    if (type === "audioInput" && id !== "audioInput") {
+      throw new Error("audioInput module id must be audioInput");
+    }
     const gx = roundNodeGraphGridCoordinate(Number(node.gx));
     const gy = roundNodeGraphGridCoordinate(Number(node.gy));
     if (!Number.isFinite(gx) || !Number.isFinite(gy)) {
