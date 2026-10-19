@@ -470,11 +470,8 @@
   function parsePlate(plate) {
     const m = /rgba?\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)/i.exec(String(plate || ""));
     if (m) return [Number(m[1]) / 255, Number(m[2]) / 255, Number(m[3]) / 255];
-    if (typeof nodeGraphRasterRgbParseHexRgb === "function") {
-      const c = nodeGraphRasterRgbParseHexRgb(plate, "#000000");
-      return [c[0] / 255, c[1] / 255, c[2] / 255];
-    }
-    return [0, 0, 0];
+    const c = nodeGraphRasterRgbParseHexRgb(plate, "#000000");
+    return [c[0] / 255, c[1] / 255, c[2] / 255];
   }
 
   /** Level for a CSS blur sigma: 0 = full res, k = image halved k times. */
@@ -615,7 +612,6 @@
   function nodeGraphRasterRgbGlUsable(cw, ch) {
     const dev = typeof nodeGraphPictureDevice === "function" ? nodeGraphPictureDevice() : null;
     if (!dev?.gl || !dev.canvas || dev.gl.isContextLost()) return false;
-    if (typeof nodeGraphRasterRgbGradeLut !== "function") return false;
     const entry = entryFor(dev);
     if (!entry) return false;
     return cw >= 1 && ch >= 1 && cw <= dev.canvas.width && ch <= dev.canvas.height

@@ -3781,7 +3781,6 @@ def require_node_graph_mvp_contract() -> None:
         and "sineWavetable:" in (PUBLIC / "node-live-audio-worklet-native-graph.js").read_text(encoding="utf-8")
         and "this.efficientProduct" in (PUBLIC / "node-live-audio-worklet-process.js").read_text(encoding="utf-8")
         and "drawNodeGraphRasterRgbFaceItem" in script_sources["./public/modules/rasterRgb/raster-rgb-display.js"]
-        and "function nodeGraphRasterRgbProcessSample" in script_sources["./public/modules/rasterRgb/raster-rgb-math.js"]
         and "function nodeGraphRasterRgbGradeChannel01" in script_sources["./public/modules/rasterRgb/raster-rgb-math.js"]
         and 'bipolar: true' in script_sources["./public/node-graph-module-definitions.js"][
             script_sources["./public/node-graph-module-definitions.js"].index("rasterRgb: {"):

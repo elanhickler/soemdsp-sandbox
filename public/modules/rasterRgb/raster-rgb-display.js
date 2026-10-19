@@ -9,7 +9,7 @@
 // original canvas Gaussian: filter:blur() on the present, then an
 // additive wider Gaussian for glow.
 
-const NODE_GRAPH_RASTER_RGB_PAINT_REV = "gpu-beam-3-sync";
+const NODE_GRAPH_RASTER_RGB_PAINT_REV = "gpu-beam-4";
 
 // Grid state (GPU texture + beam phase) lives by node id — not on the face canvas.
 // Hide/show title rebuilds the module DOM; the raster must survive that.
@@ -146,10 +146,7 @@ function nodeGraphRasterRgbHueParam(value) {
   if (!Number.isFinite(n)) {
     return 0;
   }
-  if (typeof nodeGraphRasterRgbWrapHue === "function") {
-    return nodeGraphRasterRgbWrapHue(n);
-  }
-  return ((n % 1) + 1) % 1;
+  return nodeGraphRasterRgbWrapHue(n);
 }
 
 function nodeGraphRasterRgbGrade(node) {
@@ -169,26 +166,6 @@ function nodeGraphRasterRgbGrade(node) {
     blur,
     glow,
   };
-}
-
-/** Power S-curve. 1 = identity, 0 = mid grey, >1 = steeper mids, <0 = inverted. */
-function nodeGraphRasterRgbContrastCurve(x, contrast) {
-  if (typeof nodeGraphRasterRgbContrast01 === "function") {
-    return nodeGraphRasterRgbContrast01(x, contrast);
-  }
-  const t = x < 0 ? 0 : x > 1 ? 1 : x;
-  const c = Number(contrast);
-  if (!Number.isFinite(c) || c === 0) {
-    return 0.5;
-  }
-  const mag = Math.abs(c);
-  let y = t;
-  if (Math.abs(mag - 1) >= 1e-4) {
-    y = t < 0.5
-      ? 0.5 * (2 * t) ** mag
-      : 1 - 0.5 * (2 * (1 - t)) ** mag;
-  }
-  return c < 0 ? 1 - y : y;
 }
 
 function nodeGraphRasterRgbParseHexRgb(value, fallback = "#000000") {
@@ -226,9 +203,7 @@ function nodeGraphRasterRgbInvertCssColor(value, invert) {
 function nodeGraphRasterRgbGradeLut(grade) {
   const lut = new Uint8Array(256);
   for (let i = 0; i < 256; i += 1) {
-    const x = typeof nodeGraphRasterRgbGradeChannel01 === "function"
-      ? nodeGraphRasterRgbGradeChannel01(i / 255, grade)
-      : nodeGraphRasterRgbContrastCurve(i / 255, grade?.contrast);
+    const x = nodeGraphRasterRgbGradeChannel01(i / 255, grade);
     lut[i] = x <= 0 ? 0 : x >= 1 ? 255 : Math.round(x * 255);
   }
   return lut;
@@ -267,10 +242,24 @@ function nodeGraphRasterRgbState(nodeId, width, height, logicalWidth = width, lo
   return state;
 }
 
-function nodeGraphRasterRgbDropState(nodeId) {
+/**
+ * The one Scan Grid reset (Display Settings Clear, stop, power-off / cold-boot
+ * wipe): free the GPU grid and drop the state, so the next paint starts a
+ * black grid with the cold-start ingest phase; the canvas forgets its held
+ * picture.
+ */
+function nodeGraphRasterRgbReset(nodeId, canvas = null) {
   const key = String(nodeId || "");
+  const state = (key && nodeGraphRasterRgbBuffers.get(key)) || canvas?._rasterRgb || null;
+  nodeGraphRasterRgbGlFree(state);
   if (key) {
     nodeGraphRasterRgbBuffers.delete(key);
+  }
+  if (canvas) {
+    canvas._rasterRgb = null;
+    canvas._rasterRgbBlit = false;
+    canvas._rasterRgbGradeKey = "";
+    canvas._rasterRgbHoldKey = "";
   }
 }
 
@@ -300,29 +289,13 @@ function nodeGraphRasterRgbRingAbsEnd(ring) {
   return Number.isFinite(total) && total > 0 ? total : Number.NaN;
 }
 
-function nodeGraphRasterRgbClearState(state) {
-  if (!state) {
-    return;
-  }
-  nodeGraphRasterRgbGlFree(state);
-  state.write = 0;
-  state.writePos = 0;
-  state.lastAbs = Number.NaN;
-  state.scanCredit = 0;
-  state.syncOn = { h: false, v: false };
-}
-
 /** Display Settings Clear — wipe the rolling plate and re-arm ingest phase. */
 function clearNodeGraphRasterRgbForNode(nodeId) {
   const key = String(nodeId || "");
   if (!key) {
     return false;
   }
-  const state = nodeGraphRasterRgbBuffers.get(key);
-  if (state) {
-    nodeGraphRasterRgbClearState(state);
-  }
-  nodeGraphRasterRgbDropState(key);
+  nodeGraphRasterRgbReset(key);
   if (typeof document !== "undefined") {
     const faces = document.querySelectorAll(
       `.dsp-node[data-node="${key}"] .node-module-scope-window, .node-module-scope-window[data-node="${key}"]`,
@@ -330,10 +303,7 @@ function clearNodeGraphRasterRgbForNode(nodeId) {
     for (const face of faces) {
       const canvas = face.querySelector?.(":scope > .node-raster-rgb-canvas");
       if (canvas) {
-        canvas._rasterRgb = null;
-        canvas._rasterRgbBlit = false;
-        canvas._rasterRgbGradeKey = "";
-        canvas._rasterRgbHoldKey = "";
+        nodeGraphRasterRgbReset(key, canvas);
         nodeGraphFacePlateFillCanvas(null, canvas, "#000000");
       }
     }
@@ -363,9 +333,7 @@ function wipeNodeGraphRasterRgbScreensToColdBoot(options = {}) {
     return;
   }
   const onlyId = String(options.nodeId || "").trim();
-  const faces = typeof nodeGraphRasterRgbCollectFaces === "function"
-    ? nodeGraphRasterRgbCollectFaces()
-    : [];
+  const faces = nodeGraphRasterRgbCollectFaces();
   const seen = new Set();
   const list = faces.length
     ? faces.map((entry) => entry.face).filter(Boolean)
@@ -385,19 +353,7 @@ function wipeNodeGraphRasterRgbScreensToColdBoot(options = {}) {
     if (onlyId && nodeId !== onlyId) {
       continue;
     }
-    const state = (nodeId && nodeGraphRasterRgbBuffers.get(String(nodeId)))
-      || canvas?._rasterRgb;
-    if (state) {
-      nodeGraphRasterRgbClearState(state);
-    }
-    if (nodeId) {
-      nodeGraphRasterRgbDropState(nodeId);
-    }
-    if (canvas) {
-      canvas._rasterRgb = null;
-      canvas._rasterRgbBlit = false;
-      canvas._rasterRgbGradeKey = "";
-    }
+    nodeGraphRasterRgbReset(nodeId, canvas);
     if (canvas) {
       nodeGraphFacePlateFillCanvas(null, canvas, "#000000");
     }
@@ -407,7 +363,9 @@ function wipeNodeGraphRasterRgbScreensToColdBoot(options = {}) {
     nodeGraphRasterRgbUnlightFace(face);
   }
   if (!onlyId) {
-    nodeGraphRasterRgbBuffers.clear();
+    for (const key of [...nodeGraphRasterRgbBuffers.keys()]) {
+      nodeGraphRasterRgbReset(key);
+    }
   }
 }
 
@@ -681,15 +639,7 @@ function drawNodeGraphRasterRgbFaceItem(_renderer, item, pixelRatio) {
     return;
   }
   if (!running && !frozen) {
-    const held = nodeGraphRasterRgbBuffers.get(String(nodeId || ""));
-    if (held) {
-      nodeGraphRasterRgbClearState(held);
-    }
-    nodeGraphRasterRgbDropState(nodeId);
-    canvas._rasterRgb = null;
-    canvas._rasterRgbBlit = false;
-    canvas._rasterRgbGradeKey = "";
-    canvas._rasterRgbHoldKey = "";
+    nodeGraphRasterRgbReset(nodeId, canvas);
     return;
   }
   if (!(grid.width > 0) || !(grid.height > 0) || !(bufW > 0) || !(bufH > 0)) {
@@ -805,8 +755,7 @@ function drawNodeGraphRasterRgbFaceItem(_renderer, item, pixelRatio) {
   if (asleep) {
     return;
   }
-  const gpuDrawn = typeof nodeGraphRasterRgbGlPresent === "function"
-    && nodeGraphRasterRgbGlPresent(state, grade, ctx, {
+  const gpuDrawn = nodeGraphRasterRgbGlPresent(state, grade, ctx, {
       cw, ch, dx, dy, dw, dh, blurPx, glowPx, plate,
       sourceTex: pic?.texture || null,
       sourceW: pic?.width || 0,
@@ -836,17 +785,6 @@ function drawNodeGraphRasterRgbFaceItem(_renderer, item, pixelRatio) {
       R: captured.R?.length || 0,
       G: captured.G?.length || 0,
       B: captured.B?.length || 0,
-    },
-    wires: {
-      R: typeof nodeGraphModuleScopeConnectionsTo === "function"
-        ? (nodeGraphModuleScopeConnectionsTo(nodeId, "R") || []).map((c) => `${c.sourceNode}.${c.sourcePort}`)
-        : [],
-      G: typeof nodeGraphModuleScopeConnectionsTo === "function"
-        ? (nodeGraphModuleScopeConnectionsTo(nodeId, "G") || []).map((c) => `${c.sourceNode}.${c.sourcePort}`)
-        : [],
-      B: typeof nodeGraphModuleScopeConnectionsTo === "function"
-        ? (nodeGraphModuleScopeConnectionsTo(nodeId, "B") || []).map((c) => `${c.sourceNode}.${c.sourcePort}`)
-        : [],
     },
     paintRev: NODE_GRAPH_RASTER_RGB_PAINT_REV,
     at: Date.now(),
@@ -893,9 +831,7 @@ function nodeGraphRasterRgbBuildStamp() {
 
 function nodeGraphRasterRgbDebugDump() {
   const stamp = nodeGraphRasterRgbBuildStamp();
-  const faces = typeof nodeGraphRasterRgbCollectFaces === "function"
-    ? nodeGraphRasterRgbCollectFaces()
-    : [];
+  const faces = nodeGraphRasterRgbCollectFaces();
   const dump = {
     ...stamp,
     parsed: true,
