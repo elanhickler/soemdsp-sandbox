@@ -108,6 +108,8 @@ const ALLOW_UNBOUND = new Set([
   "rasterRgb.rasterRgbR",
   "rasterRgb.rasterRgbG",
   "rasterRgb.rasterRgbB",
+  "rasterRgb.rasterRgbHSync",
+  "rasterRgb.rasterRgbVSync",
   "curveEnvelopeMod.delayTrigger",
   "smoothGraph.lockEndpointY",
   "smoothGraph.steps",
