@@ -1,5 +1,5 @@
 // Torch face for the lone `t` module: four pixel-art frames (torch0, torch1,
-// torch2, torch4 .png, unlit -> fully lit). Open (the combined Digital/Analog
+// torch2, torch3 .png, unlit -> fully lit). Open (the combined Digital/Analog
 // openness the worklet publishes, 0..1) maps linearly across them: 0 = frame 0,
 // 1/3 = frame 1, 2/3 = frame 2, 1 = frame 3, and the shader mixes the two
 // neighbouring frames linearly. Digital open is Open = 1 (last frame).
@@ -8,8 +8,8 @@
 // centred in it, so trimmed and padded frames line up.
 
 (function initNodeGraphTorchFace(global) {
-  const IMAGE_TOKEN = "torch-4f-20261019b";
-  const FRAME_FILES = ["torch0.png", "torch1.png", "torch2.png", "torch4.png"];
+  const IMAGE_TOKEN = "torch-0123-20261019";
+  const FRAME_FILES = ["torch0.png", "torch1.png", "torch2.png", "torch3.png"];
   const scriptSrc = (global.document?.currentScript?.src)
     || global.document?.querySelector?.('script[src*="torch-face-display.js"]')?.src
     || "";
