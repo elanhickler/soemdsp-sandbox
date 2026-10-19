@@ -2256,13 +2256,15 @@ function performNodeGraphDeleteSelection(selection = nodeGraphMvp.selected) {
       status = "module deleted";
     }
     // Drop canvas pins / meta layout buckets for deleted shells so saves
-    // never keep ghost UI for modules that are already gone.
+    // never keep ghost UI for modules that are already gone. A deleted Output /
+    // Input keeps its root pin (rect) for its respawn; no tile shows meanwhile.
     if (patch.view?.canvases && typeof patch.view.canvases === "object") {
       const canvases = patch.view.canvases;
       if (Array.isArray(canvases.root?.elements)) {
-        canvases.root.elements = canvases.root.elements.filter(
-          (el) => !removableNodeIds.has(String(el?.nodeId || "")),
-        );
+        canvases.root.elements = canvases.root.elements.filter((el) => {
+          const id = String(el?.nodeId || "");
+          return !removableNodeIds.has(id) || nodeGraphIoModuleTypes.includes(id);
+        });
       }
       if (canvases.byMetamodule && typeof canvases.byMetamodule === "object") {
         for (const metaId of removableNodeIds) {

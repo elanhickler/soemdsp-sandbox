@@ -233,8 +233,10 @@ function nodeGraphMiniPerformElements(patch = nodeGraphMvp?.patch) {
   const scope = typeof nodeGraphLayoutCanvasActiveScopeId === "function" ? nodeGraphLayoutCanvasActiveScopeId() : "";
   const bucket = scope ? canvases.byMetamodule?.[scope] : canvases.root;
   const list = Array.isArray(bucket?.elements) ? bucket.elements : [];
+  // A deleted Output / Input keeps its pin (for its respawn) but shows no tile.
+  const live = new Set((patch?.nodes || []).map((node) => String(node?.id || "")));
   return list
-    .filter((el) => el && el.enabled !== false && String(el.nodeId || "").trim())
+    .filter((el) => el && el.enabled !== false && live.has(String(el.nodeId || "").trim()))
     .slice()
     .sort((a, b) => (Number(a.z) || 0) - (Number(b.z) || 0));
 }

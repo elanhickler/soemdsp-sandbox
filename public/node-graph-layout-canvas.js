@@ -102,7 +102,11 @@ function nodeGraphLayoutCanvasPruneMissingPins(patch = nodeGraphMvp?.patch) {
   if (!canvases || typeof canvases !== "object") {
     return false;
   }
+  // A deleted Output / Input keeps its pin for its respawn (its id is its type).
   const live = nodeGraphLayoutCanvasLiveNodeIds(patch);
+  for (const type of Object.keys(patch?.ioModuleSettings || {})) {
+    live.add(type);
+  }
   const pruneBucket = (bucket) => {
     if (!bucket || !Array.isArray(bucket.elements)) {
       return false;

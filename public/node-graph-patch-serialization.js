@@ -60,11 +60,15 @@ function serializeNodeGraphPatch(patch = nodeGraphMvp.patch, options = {}) {
       return node;
     })
     : patch.nodes;
+  // A deleted Output / Input keeps its canvas pin for its respawn.
   const viewPruned = nodeGraphPruneViewCanvasesToExistingNodes(
     typeof normalizeNodeGraphPatchView === "function"
       ? normalizeNodeGraphPatchView(viewSource)
       : viewSource,
-    nodesOut,
+    [
+      ...(nodesOut || []),
+      ...Object.keys(patch.ioModuleSettings || {}).map((type) => ({ id: type, type })),
+    ],
   );
   const payload = {
     activeCameraId: cameraState.activeCameraId,
