@@ -1,7 +1,10 @@
 ﻿// Smoke: per-step zoom never writes the inherited --node-graph-zoom.
-// Mid-gesture only the world layers' inline transform changes; the inherited
-// var (module stroke compensate, grid size) is caught up once on settle.
-// Setting it per wheel step restyled ~2.9k elements (~27 ms a step).
+// ZP-4 design (docs/ZOOM_PERF_PLAN.md): mid-gesture no module style is
+// written; one transform per world/text layer carries the frozen HTML picture
+// to the live camera. Settle writes CSS zoom, the module transforms and the
+// inherited var (module stroke compensate, grid size) once. Displays keep
+// painting through the gesture (display hold off).
+// Setting the var per wheel step restyled ~2.9k elements (~27 ms a step).
 import fs from "node:fs";
 import vm from "node:vm";
 
@@ -35,6 +38,7 @@ const workspace = {
   querySelector: () => null,
   querySelectorAll: () => nodes,
 };
+const textLayers = Object.fromEntries(["nodeGraphTextBehind", "nodeGraphTextFront"].map((id) => [id, { id, append() {}, style: makeStyle(log, id) }]));
 const nodeStyle = makeStyle(log, "module");
 nodeStyle.setProperty("--node-x", "100px");
 nodeStyle.setProperty("--node-y", "40px");
@@ -52,7 +56,7 @@ const ctx = {
   document: {
     getElementById: (id) => {
       if (id === "nodeGraphWorkspace") return workspace;
-      if (id === "nodeGraphTextBehind" || id === "nodeGraphTextFront") return { id, append() {} };
+      if (id === "nodeGraphTextBehind" || id === "nodeGraphTextFront") return textLayers[id];
       return null;
     },
     addEventListener() {},
@@ -65,6 +69,10 @@ ctx.nodeGraphRenderedOriginOffset = (pan) => pan;
 vm.createContext(ctx);
 vm.runInContext(fs.readFileSync("public/node-graph-viewport-perf.js", "utf8"), ctx);
 
+// Camera written once outside a gesture (zoom 3): modules carry it.
+ctx.applyNodeGraphViewportCssLight({ zoom: true, pan: true, readouts: false });
+if (nodeStyle.zoom !== "3") fail(`module zoom must follow the camera outside a gesture: ${nodeStyle.zoom}`);
+
 // Wheel gesture: several zoom steps.
 ctx.markNodeGraphViewportGesture("wheel");
 log.length = 0;
@@ -75,25 +83,21 @@ for (const z of [3.3, 3.6, 4.0]) {
 const zoomWrites = log.filter(([o, k]) => k === "--node-graph-zoom");
 if (zoomWrites.length) fail(`per-step zoom wrote the inherited var: ${JSON.stringify(zoomWrites)}`);
 ok("per-step zoom does not write --node-graph-zoom");
-const t = layers[0].style.transform;
-if (t !== "none" || layers[1].style.transform !== "none") fail(`world layers must stay untransformed: ${t}`);
-if (nodeStyle.zoom !== "4") fail(`module zoom must follow the camera: ${nodeStyle.zoom}`);
-if (nodeStyle.transform !== "translate(2.5px, 5px)") fail(`module translate must be pan/zoom: ${nodeStyle.transform}`);
-ok(`modules carry CSS zoom (${nodeStyle.zoom}) and ${nodeStyle.transform}`);
+const moduleWrites = log.filter(([o]) => o === "module");
+if (moduleWrites.length || nodeStyle.zoom !== "3") fail(`mid-gesture module style must stay frozen: ${JSON.stringify(moduleWrites)} zoom=${nodeStyle.zoom}`);
+ok("mid-gesture: no module style writes (HTML frozen at the gesture-start camera)");
+// Frozen at zoom 3, origin (10,20); live zoom 4: s = 4/3, t = o - o0 * s.
+const sc = 4 / 3;
+const want = `translate(${10 - 10 * sc}px, ${20 - 20 * sc}px) scale(${sc})`;
+for (const el of [layers[0], layers[1], textLayers.nodeGraphTextBehind, textLayers.nodeGraphTextFront]) {
+  if (el.style.transform !== want) fail(`frozen layer transform: got ${el.style.transform}, want ${want}`);
+}
+ok(`world and text layers carry ${want}`);
 if (!classes.has("pixelated-canvas-zoom")) fail("pixelation above 2.5x must stay live mid-gesture");
 ok("nearest-neighbor class live above 2.5x");
-
-// Gesture display hold: displays are held mid-gesture, released on settle.
-if (ctx.nodeGraphViewportHoldsDisplays() !== true) fail("displays must be held mid-gesture");
+if (ctx.nodeGraphViewportHoldsDisplays() !== false) fail("display hold must stay off: displays paint through gestures");
 if (layers[0].style.willChange !== "transform") fail("world layers must be GPU-hinted mid-gesture");
-ok("mid-gesture: displays held, world layers will-change: transform");
-for (const [file, needle] of [
-  ["public/node-graph-module-scopes.js", "nodeGraphViewportHoldsDisplays()"],
-  ["public/node-graph-module-scope-paint-gate.js", "nodeGraphViewportHoldsDisplays()"],
-]) {
-  if (!fs.readFileSync(file, "utf8").includes(needle)) fail(`${file} must skip painting while nodeGraphViewportHoldsDisplays()`);
-}
-ok("scope frames and face pumps honour the gesture hold");
+ok("mid-gesture: displays not held, world layers will-change: transform");
 
 // Settle: one write of the inherited var.
 log.length = 0;
@@ -103,9 +107,12 @@ ctx.clearNodeGraphViewportGestureClass();
 const settle = log.filter(([o, k]) => k === "--node-graph-zoom");
 if (settle.length !== 1 || settle[0][2] !== "4") fail(`settle must write --node-graph-zoom once: ${JSON.stringify(settle)}`);
 ok("settle writes --node-graph-zoom once");
-if (ctx.nodeGraphViewportHoldsDisplays() !== false) fail("settle must release the display hold");
+if (nodeStyle.zoom !== "4") fail(`settle must write module zoom: ${nodeStyle.zoom}`);
+if (nodeStyle.transform !== "translate(2.5px, 5px)") fail(`settle module translate must be pan/zoom: ${nodeStyle.transform}`);
+if (layers[0].style.transform !== "none" || textLayers.nodeGraphTextFront.style.transform !== "") fail("settle must return the layers to identity");
+ok(`settle: modules carry CSS zoom 4 and translate(2.5px, 5px); layers back to identity`);
 if (layers[0].style.willChange) fail("settle must drop will-change");
-ok("settle releases the display hold and drops will-change");
+ok("settle drops will-change");
 
 // Outside a gesture (programmatic zoom), the var is written directly.
 log.length = 0;
