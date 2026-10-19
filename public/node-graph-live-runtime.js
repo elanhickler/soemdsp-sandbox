@@ -174,7 +174,9 @@ function getNodeGraphOutputModuleVolumeDb() {
   const node = nodeGraphOutputModuleNode();
   const fallback = -3;
   if (!node) {
-    return fallback;
+    // Output deleted: its saved Volume stays the live level (APP_POLICY).
+    const saved = Number(nodeGraphIoModuleSavedSettings("output")?.params?.volume);
+    return Number.isFinite(saved) ? saved : fallback;
   }
   const slider = nodeGraphModuleParamSlider(node, "volume");
   if (slider) {
@@ -200,14 +202,14 @@ function getNodeGraphOutputModuleVolume() {
 /** Canonical live in level = Input module Amplitude / level (0..1). */
 function getNodeGraphAudioInputModuleLevel() {
   const node = nodeGraphAudioInputModuleNode();
-  const fromAmplitude = nodeGraphReadModuleParamLevel(node, "amplitude", NaN);
-  if (Number.isFinite(fromAmplitude)) {
-    return fromAmplitude;
+  if (node) {
+    return nodeGraphReadModuleParamLevel(node, "amplitude", 1);
   }
+  // Input deleted: its saved Amplitude stays the live level (APP_POLICY).
   return nodeGraphReadModuleParamLevel(
-    node,
-    "level",
-    nodeGraphMvp?.live?.inputVolume ?? 1,
+    null,
+    "amplitude",
+    nodeGraphIoModuleSavedSettings("audioInput")?.params?.amplitude ?? nodeGraphMvp?.live?.inputVolume ?? 1,
   );
 }
 
@@ -239,6 +241,8 @@ function setNodeGraphOutputModuleVolumeDb(db, options = {}) {
         scheduleNodeGraphLiveParameterSync();
       }
     }
+  } else if (!node && !options.fromModuleSlider) {
+    writeNodeGraphIoModuleSavedParam("output", "volume", value);
   }
   const lin = typeof nodeGraphOutputVolumeDbToLin === "function"
     ? nodeGraphOutputVolumeDbToLin(value)
@@ -271,12 +275,16 @@ function setNodeGraphOutputModuleVolume(value, options = {}) {
 }
 
 function setNodeGraphAudioInputModuleLevel(value, options = {}) {
+  const node = nodeGraphAudioInputModuleNode();
   const level = nodeGraphWriteModuleParamLevel(
-    nodeGraphAudioInputModuleNode(),
+    node,
     "amplitude",
     value,
     { ...options, lockKey: "_inputVolumeMirrorLock" },
   );
+  if (!node && !options.fromModuleSlider) {
+    writeNodeGraphIoModuleSavedParam("audioInput", "amplitude", level);
+  }
   if (nodeGraphMvp?.live) {
     nodeGraphMvp.live.inputVolume = level;
   }

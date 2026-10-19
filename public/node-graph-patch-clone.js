@@ -656,6 +656,9 @@ function cloneNodeGraphPatch(patch) {
     grid: normalizeNodeGraphPatchGrid(patch.grid),
     graphConnections: normalizeNodeGraphGraphConnections(patch.graphConnections),
     info: normalizeNodeGraphPatchInfo(patch.info),
+    ...(patch.ioModuleSettings
+      ? { ioModuleSettings: JSON.parse(JSON.stringify(patch.ioModuleSettings)) }
+      : {}),
     masterSeed: patch.masterSeed,
     modularOnlyControlsVisible: Boolean(patch.modularOnlyControlsVisible),
     modulations: (patch.modulations || []).map((modulation) => ({

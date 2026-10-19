@@ -53,6 +53,45 @@ function normalizeNodeGraphPatchInfo(info = {}) {
   };
 }
 
+/** Output / Input: unique, deletable; their settings outlive a delete (APP_POLICY). */
+const nodeGraphIoModuleTypes = Object.freeze(["output", "audioInput"]);
+
+/**
+ * patch.ioModuleSettings = { output?, audioInput? }: each entry is the deleted
+ * module's node minus its id (type, gx/gy, params, ui, ...). Written only on
+ * delete; read while the module is gone and by its respawn. Returns null when
+ * nothing is saved, so patches that never deleted one stay byte-identical.
+ */
+function normalizeNodeGraphIoModuleSettings(raw) {
+  if (raw === undefined || raw === null) {
+    return null;
+  }
+  if (typeof raw !== "object" || Array.isArray(raw)) {
+    throw new Error("ioModuleSettings must be an object");
+  }
+  const out = {};
+  for (const [type, entry] of Object.entries(raw)) {
+    if (!nodeGraphIoModuleTypes.includes(type)) {
+      throw new Error(`ioModuleSettings.${type}: only output and audioInput are saved`);
+    }
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
+      throw new Error(`ioModuleSettings.${type} must be an object`);
+    }
+    if (Object.hasOwn(entry, "id")) {
+      throw new Error(`ioModuleSettings.${type} must not carry an id`);
+    }
+    if (entry.type !== type) {
+      throw new Error(`ioModuleSettings.${type}.type must be ${type}`);
+    }
+    for (const axis of ["gx", "gy"]) {
+      if (Object.hasOwn(entry, axis) && !Number.isFinite(Number(entry[axis]))) {
+        throw new Error(`ioModuleSettings.${type}.${axis} invalid`);
+      }
+    }
+    out[type] = JSON.parse(JSON.stringify(entry));
+  }
+  return Object.keys(out).length ? out : null;
+}
 
 /** Last path segment of a patch slug/filename, without .json. */
 function nodeGraphPatchFileStem(pathOrSlug = "") {

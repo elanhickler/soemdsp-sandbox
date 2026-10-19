@@ -1028,6 +1028,9 @@ function validateNodeGraphPatch(patch) {
     graphConnections: metaHygiene.graphConnections,
     grid,
     info: normalizeNodeGraphPatchInfo(patch.info),
+    ...(normalizeNodeGraphIoModuleSettings(patch.ioModuleSettings)
+      ? { ioModuleSettings: normalizeNodeGraphIoModuleSettings(patch.ioModuleSettings) }
+      : {}),
     masterSeed,
     modularOnlyControlsVisible: Boolean(patch.modularOnlyControlsVisible),
     modulations: metaHygiene.modulations,
@@ -2044,6 +2047,33 @@ function deleteSelectedNodeGraphItem() {
   performNodeGraphDeleteSelection(selection);
 }
 
+/** Saved-settings entry of a deleted Output / Input: the node minus its id. */
+function nodeGraphIoModuleSettingsFromNode(node) {
+  const { id: _id, ...settings } = JSON.parse(JSON.stringify(node));
+  return settings;
+}
+
+/** Saved settings of a deleted Output / Input, or null (never deleted, or present). */
+function nodeGraphIoModuleSavedSettings(type, patch = nodeGraphMvp?.patch) {
+  return patch?.ioModuleSettings?.[type] || null;
+}
+
+/**
+ * Toolbar slider while Output / Input is gone: write one param into its saved
+ * entry (seeded as { type } if the patch never had one), so a respawn uses it.
+ */
+function writeNodeGraphIoModuleSavedParam(type, key, value, patch = nodeGraphMvp?.patch) {
+  if (!patch) {
+    return;
+  }
+  const store = patch.ioModuleSettings || {};
+  const entry = store[type] || { type };
+  patch.ioModuleSettings = {
+    ...store,
+    [type]: { ...entry, params: { ...(entry.params || {}), [key]: value } },
+  };
+}
+
 function performNodeGraphDeleteSelection(selection = nodeGraphMvp.selected) {
   if (!selection) {
     return;
@@ -2164,8 +2194,19 @@ function performNodeGraphDeleteSelection(selection = nodeGraphMvp.selected) {
           shellOwnersToRefresh.add(owner);
         }
       }
+      // Output / Input keep their settings in the patch (APP_POLICY): the
+      // store is overwritten only by the next delete of the same type.
+      const savedIo = {};
+      for (const node of patch.nodes || []) {
+        if (removableNodeIds.has(node?.id) && nodeGraphIoModuleTypes.includes(node.type)) {
+          savedIo[node.type] = nodeGraphIoModuleSettingsFromNode(node);
+        }
+      }
       patch = {
         ...patch,
+        ...(Object.keys(savedIo).length
+          ? { ioModuleSettings: { ...(patch.ioModuleSettings || {}), ...savedIo } }
+          : {}),
         nodes: (patch.nodes || []).filter((node) => !removableNodeIds.has(node.id)),
         bypassedNodes: (patch.bypassedNodes || []).filter((nodeId) => !removableNodeIds.has(nodeId)),
         connections: (patch.connections || []).filter(
