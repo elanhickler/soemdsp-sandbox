@@ -5839,6 +5839,7 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
       push("resonance", P.NATIVE_GRAPH_PARAM_RESONANCE, cont("resonance", 0));
       push("impulse", P.NATIVE_GRAPH_PARAM_SHAPE, cont("impulse", 0));
       push("tracking", P.NATIVE_GRAPH_PARAM_MIX, cont("tracking", 0));
+      push("frequency", P.NATIVE_GRAPH_PARAM_FREQUENCY, cont("frequency", 440));
       push("amplitude", P.NATIVE_GRAPH_PARAM_AMPLITUDE, cont("amplitude", 1));
       push("outputRange", P.NATIVE_GRAPH_PARAM_MODE, rangeId);
       push("recalculateOnTrigger", P.NATIVE_GRAPH_PARAM_TIMING_MODE, disc("recalculateOnTrigger", 1));

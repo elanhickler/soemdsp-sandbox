@@ -3242,6 +3242,7 @@ static void init_node_defaults(Node& n, int typeId) {
       : (typeId == kTypeArp) ? 8.0 // Internal Clock Hz
       : (typeId == kTypeAliasSine) ? 0.1 // normFreq (0→sr)
       : (typeId == kTypePhoneTone) ? 0.0 // freqOffset Hz
+      : (typeId == kTypeResonantEnvelope) ? 440.0 // Frequency Hz (Tracking reference when f unwired)
       : (typeId == kTypeTheremin) ? 440.0
       : (typeId == kTypeBlit || typeId == kTypeSineWavetable || typeId == kTypeSinCos
           || typeId == kTypeArchimedes
@@ -9954,7 +9955,9 @@ static void process_ping_envelope(Circuit& g, Node& node, int frames) {
 // Resonant Envelope (resonantEnvelope, type 221).
 // timeDenominator=attack s, width=decay s, resonance, shape=impulse,
 // mix=tracking, amplitude, mode=output range (0 Fit / 1 Raw),
-// timingMode=recalculate on trigger. f is the Hz cable (kPortF).
+// timingMode=recalculate on trigger, frequency=Frequency Hz.
+// Wired f replaces the Frequency knob per sample (resolve_osc_hz); the result
+// is the Hz that Tracking compares against 440.
 static void process_resonant_envelope(Circuit& g, Node& node, int frames) {
   if (node.nativeHandle <= 0) return;
   mix_node_inputs(g, node, frames);
@@ -9965,7 +9968,7 @@ static void process_resonant_envelope(Circuit& g, Node& node, int frames) {
     control_frame(g, node, f);
     const double trig = hasTrig ? g.mixTrigger[f] : 0.0;
     const double input = trig + g.mixMono[f] + g.mixLeft[f] + g.mixRight[f];
-    const double hz = hasF ? g.mixF[f] : 0.0;
+    const double hz = resolve_osc_hz(g, f, hasF, false, node.frequency, 0.0, sr);
     const double out = soemdsp_resonant_envelope_sample(
       node.nativeHandle,
       input,
@@ -16464,5 +16467,5 @@ extern "C" int soemdsp_graph_version() {
   // 170: EQ Filter ZDF ƒ input (resolve_osc_hz)
   // 171: ƒ on Ladder/303/Mode/Cookbook/IIR/Papoulis/ZDF filters + soemdsp_graph_node_effective_hz
   // 174: live add/remove/connect/disconnect keep compiled and other nodes' native handles
-  return 191; // 191: Electro Clap (226). was 190: Mode Resonator / Random Clock / Turing Machine / Degree Turing back to their original mono outs (stereo R removed). was 189: fBm back to its 3 outs Out X / Out Y / Out Z (stereo R axes removed). was 188: Electro Hat (223) / Electro Tom (224) / Electro Kick (225). was 187: stereo L/R outs: Bradley 2A, fBm (X/Y/Z R on Tri/Sine/Trisaw), Mode Resonator (R quadrature), Random Clock / Turing Machine / Degree Turing (R Seed lane), Softpop 2 R Pitch Mod. was 186: Electro Snare stereo (Snare L -> Left, Snare R -> Right, Env -> Mono). was 185: Electro Snare (type 222). was 184: Robin Sinepulse 0–1 jack is log sweep position (L = max(Low, 20 Hz)). was 183: Flower Child ƒ input removed (Cutoff knob only again). was 182: SinCos / SinCos4 Polarity (center 0 Bipolar / 1 Unipolar). was 181: Flower Child ƒ in (resonance-pitch Hz replaces Cutoff). was 180: Robin Sinepulse 0–1 jack is sweep position (High=1, Low=0). was 179: Resonant Envelope (221)
+  return 192; // 192: Resonant Envelope Frequency knob (unwired f uses it for Tracking). was 191: Electro Clap (226). was 190: Mode Resonator / Random Clock / Turing Machine / Degree Turing back to their original mono outs (stereo R removed). was 189: fBm back to its 3 outs Out X / Out Y / Out Z (stereo R axes removed). was 188: Electro Hat (223) / Electro Tom (224) / Electro Kick (225). was 187: stereo L/R outs: Bradley 2A, fBm (X/Y/Z R on Tri/Sine/Trisaw), Mode Resonator (R quadrature), Random Clock / Turing Machine / Degree Turing (R Seed lane), Softpop 2 R Pitch Mod. was 186: Electro Snare stereo (Snare L -> Left, Snare R -> Right, Env -> Mono). was 185: Electro Snare (type 222). was 184: Robin Sinepulse 0–1 jack is log sweep position (L = max(Low, 20 Hz)). was 183: Flower Child ƒ input removed (Cutoff knob only again). was 182: SinCos / SinCos4 Polarity (center 0 Bipolar / 1 Unipolar). was 181: Flower Child ƒ in (resonance-pitch Hz replaces Cutoff). was 180: Robin Sinepulse 0–1 jack is sweep position (High=1, Low=0). was 179: Resonant Envelope (221)
 }
