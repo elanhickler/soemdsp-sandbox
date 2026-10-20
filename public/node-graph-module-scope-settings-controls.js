@@ -49,96 +49,6 @@ function nodeGraphMagnitudeStepperQuantum(currentValue, direction = 0) {
   return q;
 }
 
-/**
- * −/+ step size for Display Settings.
- * Special fields keep fixed quanta; 0…1 unit fields always 0.1;
- * others use magnitude policy (with down-from-boundary refinement).
- *
- * @param {HTMLInputElement|null} input
- * @param {number|null} currentValue
- * @param {number} [direction]  -1 / +1 for steppers (affects decade boundary)
- */
-function nodeGraphTraceDisplayStepperQuantum(input, currentValue = null, direction = 0) {
-  if (!input) {
-    return 0.1;
-  }
-  const key = input.dataset?.waterfallField;
-  if (["cycles", "decimals", "maxDigits", "textSizePx"].includes(key)) {
-    return 1;
-  }
-  if (key === "textWeight") {
-    return 100;
-  }
-  if (key === "dotBudget") {
-    return 1;
-  }
-  if (key === "lineThickness") {
-    const formType = typeof nodeGraphTraceDisplaySettingsFormType === "function"
-      ? nodeGraphTraceDisplaySettingsFormType()
-      : "";
-    if (formType === "hypersawBurn") {
-      return 1;
-    }
-  }
-  if (key === "bins") {
-    return 8;
-  }
-  if (key === "fftSize") {
-    return 1; // stepped via table in stepNodeGraphTraceDisplaySetting
-  }
-  // History (s): control-space step on the existing skew/exp map.
-  // Live rows use data-trace-display-field. dataset.waterfallField is unset,
-  // so this branch never ran and History used magnitude quanta (0.1 / 1 / 10)
-  // inside 0..1 control space. A few pixels then covered the whole window.
-  // Trace-field lookup is History-only so hue / blur / other keys stay as they are.
-  const historyKey = input.dataset?.traceDisplayField
-    || input.getAttribute?.("data-trace-display-field")
-    || "";
-  if (key === "historyPercent" || historyKey === "historyPercent") {
-    return 1;
-  }
-  if (
-    key === "historySeconds" || key === "zoomSeconds" || key === "detail"
-    || historyKey === "historySeconds" || historyKey === "zoomSeconds" || historyKey === "detail"
-  ) {
-    return 0.025;
-  }
-  // Fixed sub-unit fields that are not magnitude-stepped.
-  if (key === "pixelDensity" || key === "stampDensity") {
-    return 0.05;
-  }
-  if (key === "sweepHz" || key === "sweepCycles"
-    || key === "historyHz" || key === "historyCycles") {
-    return 0.05;
-  }
-  if (key === "backgroundHue" || key === "hue") {
-    return 1;
-  }
-  // Stamp Size: fixed control-space quantum (exp-mapped) — not magnitude 0.1.
-  if (typeof nodeGraphTraceDisplaySizeControlField === "function"
-    && nodeGraphTraceDisplaySizeControlField(key)
-    && key !== "capSize") {
-    return 0.04;
-  }
-  // Instant Waterfall Blur: control-space step (exp map) — fine near a hard line.
-  if (typeof nodeGraphWaterfallBlurField === "function"
-    && nodeGraphWaterfallBlurField(key)) {
-    return 0.03;
-  }
-  // Image Burn Blur: exp map — micro soften (~0.004) needs fine steps near 0.
-  if (typeof nodeGraphTraceDisplayImageBurnBlurField === "function"
-    && nodeGraphTraceDisplayImageBurnBlurField(key)) {
-    return 0.025;
-  }
-  // 0…1 unit fields (Bright, Ghost Bright, Residual, …): always 0.1.
-  if (typeof nodeGraphTraceDisplayUnitDragField === "function"
-    && nodeGraphTraceDisplayUnitDragField(key)) {
-    return 0.1;
-  }
-  const value = currentValue != null ? currentValue : Number(input.value);
-  return nodeGraphMagnitudeStepperQuantum(value, direction);
-}
-
 function nodeGraphTraceDisplaySizeControlField(key) {
   // imageSize: Image Burn zoom (domain 0…4) — same exp feel as stamp Size.
   return ["dot1Size", "secondarySize", "capSize", "imageSize"].includes(key);
@@ -165,17 +75,6 @@ function nodeGraphTraceDisplayImageBurnBlurField(key, formType = null) {
     ? nodeGraphTraceDisplaySettingsFormType()
     : "");
   return type === "imageBurnFace";
-}
-
-/** History / sweep dials — exponential control mapping (units depend on key). */
-function nodeGraphTraceDisplayHistoryControlField(key) {
-  return key === "historySeconds"
-    || key === "zoomSeconds"
-    || key === "detail"
-    || key === "historyHz"
-    || key === "historyCycles"
-    || key === "sweepHz"
-    || key === "sweepCycles";
 }
 
 /**
@@ -440,6 +339,8 @@ const nodeGraphDisplaySettingsFieldSpecOverrides = Object.freeze({
   cycles: { min: 1, max: 64, taper: "linear", step: 1, integer: true },
   decimals: { min: 0, max: 8, taper: "linear", step: 1, integer: true },
   digits: { min: 1, max: 12, taper: "linear", step: 1, integer: true },
+  maxDigits: { min: 1, max: 12, taper: "linear", step: 1, integer: true },
+  historyPercent: { min: 0, max: 100, taper: "linear", step: 1 },
   dotBudget: { min: 1, max: 8192, taper: "log", step: 1, integer: true },
   textWeight: { min: 100, max: 900, taper: "linear", step: 100, integer: true },
   fftSize: { min: 128, max: 16384, taper: "log", step: 1, integer: true, table: true },

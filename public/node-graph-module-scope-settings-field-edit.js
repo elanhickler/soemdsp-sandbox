@@ -500,7 +500,8 @@ function stepNodeGraphTraceDisplaySetting(event) {
   const baseValue = Number.isFinite(current) ? current : nodeGraphDisplaySettingsDefaultValue(key);
   const nextValue = normalizeNodeGraphTraceDisplaySettingValueForKey(
     key,
-    nodeGraphDisplaySettingsStepValue(nodeGraphDisplaySettingsFieldSpec(key), baseValue, direction, 1),
+    // Shift = fine ×0.1 (same direction as drag fine; not the module keyboard ×10).
+    nodeGraphDisplaySettingsStepValue(nodeGraphDisplaySettingsFieldSpec(key), baseValue, direction, event.shiftKey ? 0.1 : 1),
   );
   input.value = formatNodeGraphTraceDisplaySetting(nextValue);
   if (typeof markNodeGraphTraceDisplaySettingsDirty === "function") {
