@@ -27,7 +27,7 @@
 | 2 | **Electro Tom** | `electroTom` (new key) | `docs/SNARE_PLAN.md` §Electro Tom |
 | 3 | **Electro Kick** | `electroKick` (key freed in C-002) | `docs/KICK_PLAN.md` §Electro Kick. Argi decided 2026-10-06 that it is separate from Kick (SweepKicker): "our common kick algorithms, the classic machines". |
 
-No other drum module is seeded. Clap, cymbal, rimshot, cowbell and so on appear only as side facts in the Hat seed (the 808 cymbal / cowbell share the six-oscillator bank). They are listed as **suggestions** in §7 and are not part of the milestones.
+Electro Clap was added later (2026-10-19, §5b). No other drum module is seeded. Clap (now §5b), cymbal, rimshot, cowbell and so on appear only as side facts in the Hat seed (the 808 cymbal / cowbell share the six-oscillator bank). They are listed as **suggestions** in §7 and are not part of the milestones.
 
 ---
 
@@ -186,6 +186,51 @@ Kick body is identical L/R (keeps the low end mono). Only the 909 attack noise a
 ### Env
 
 `Env = (eBody + click · eClick) / (1 + click)`, peaks at `v`.
+
+---
+
+## 5b. Electro Clap (`electroClap`)
+
+Added 2026-10-19 (Argi: "we forgot a clap module"). One hand-clap voice, stereo. Type id: next free at build time (226).
+
+### I/O
+
+`Trigger`, `Reset` in; **`Clap L`**, **`Clap R`**, **`Env`** out.
+
+### Shared params
+
+| Key | Label | Range | Default | Unit | Generic meaning |
+|-----|-------|-------|---------|------|-----------------|
+| `algorithm` | Algorithm | `tr808` / `tr909` / `simple` | `tr808` | choice | Clap design |
+| `tone` | Tone | 0–1 | 0.5 | – | Band-pass centre, one octave down (0) / up (1) from stock, level-compensated (1/√shift) |
+| `spread` | Spread | 0–1 | 0.5 | – | Burst spacing 5–20 ms (exponential; stock ≈10 ms 808 / ≈11 ms 909 at 0.5). Simple: length of its one burst on the same scale |
+| `decay` | Decay | 0.05–2 | 0.3 | s (T60) | Tail ("reverb") decay |
+| `snappy` | Snappy | 0–1 | 0.6 | – | Burst vs tail mix (0 tail only, 1 bursts only) |
+| `amplitude` | Amplitude | 0–1 | 1 | – | Output level |
+
+Burst count is fixed per algorithm (no knob): 808 / 909 = 4 (three sawtooth bursts, T60 = 3 × spacing, then a longer last one, T60 = 6 × spacing), Simple = 1.
+
+### Algorithms
+
+| Key | Label | Design | Source |
+|-----|-------|--------|--------|
+| `tr808` | 808 | White noise → one band-pass ≈1 kHz feeding two VCAs: a sawtooth Burst envelope retriggered four times ≈10 ms apart, and a decay-only Tail envelope | TR-808 service notes; Baratatronix 808 clap outline |
+| `tr909` | 909 | Same burst train (≈11 ms) on a 1140 Hz, Q ≈1.95 band-pass; the tail runs on its own brighter, wider band (≈2.4 kHz, by ear) | network-909 hand clap notes (808-derived circuit); KVR schematic analysis (1140 Hz / Q 1.95) |
+| `simple` | Simple | One noise burst (no retrigger train) + tail through one ≈1.2 kHz band-pass: the common single-burst synth clap | Generic subtractive patch; LinnDrum / later machines are samples, so not modelled |
+
+Mix: `out = snappy · eBurst · burst + (1 − snappy) · eTail · tail`.
+
+### Stereo
+
+No width knob. Envelopes are computed once (shared); only the white noise is per channel (own seed, own filter state; L keeps the base seed). So L ≠ R always.
+
+### Env
+
+`Env = snappy · eBurst + (1 − snappy) · eTail`, peaks at `v` on the hit sample, excludes Amplitude, exact 0 at rest. Retrigger restarts both envelopes at the new `v` (the sawtooth edge is the clap attack).
+
+### Tests
+
+Shared smoke list (§6) plus: L ≠ R; block sizes 1 / 64 / 128 identical; `scripts/smoke_graph_electro_clap.mjs`.
 
 ---
 

@@ -758,6 +758,24 @@
       "noticeUrl": "https://github.com/elanhickler/soemdsp-sandbox/blob/master/docs/THIRD_PARTY.md"
     },
     {
+      "name": "electro_clap",
+      "label": "Electro Clap",
+      "targetType": "electroClap",
+      "kind": "drum",
+      "source": "native_modules/electro_clap/electro_clap.cpp",
+      "sourceUrl": "https://github.com/elanhickler/soemdsp-sandbox/blob/master/native_modules/electro_clap/electro_clap.cpp",
+      "localSourceUrl": "/native_modules/electro_clap/electro_clap.cpp",
+      "libUrl": "",
+      "wasm": "native_modules/electro_clap/electro_clap.wasm",
+      "wasmUrl": "native_modules/electro_clap/electro_clap.wasm",
+      "wasmAvailable": true,
+      "license": "Soundemote Noncommercial",
+      "licenseUrl": "https://github.com/elanhickler/soemdsp-sandbox/blob/master/LICENSE",
+      "upstreamLicense": "",
+      "upstreamLicenseUrl": "",
+      "noticeUrl": "https://github.com/elanhickler/soemdsp-sandbox/blob/master/docs/THIRD_PARTY.md"
+    },
+    {
       "name": "electro_hat",
       "label": "Electro Hat",
       "targetType": "electroHat",

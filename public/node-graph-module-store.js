@@ -1714,6 +1714,25 @@ const nodeGraphModuleStoreCatalog = Object.freeze({
       "cpu",
     ],
   },
+  electroClap: {
+    category: "drum",
+    description: "Classic analog hand clap with three designs on one knob set: 808 (1 kHz band-passed noise, four sawtooth bursts + reverb tail), 909 (1.14 kHz burst band + brighter tail band) and Simple (one burst + tail). Stereo Clap L / Clap R (per-channel noise), Trigger (height = velocity), Reset re-strikes exactly; Env out.",
+    label: "Electro Clap",
+    notes: [
+      "clap",
+      "hand clap",
+      "handclap",
+      "808",
+      "909",
+      "tr-808",
+      "tr-909",
+      "drum",
+      "percussion",
+      "electro",
+      "Trigger",
+      "native",
+    ],
+  },
   electroKick: {
     category: "drum",
     description: "Classic machine kick voice with three designs on one knob set: 808 (pinged resonator + attack jump + click), 909 (soft-clipped triangle sweep + pulse/noise attack) and Simmons (bending sine + noise + click). Stereo Kick L / Kick R (mono body), Trigger (height = velocity), Reset re-strikes exactly; Env out.",
@@ -3735,6 +3754,10 @@ const nodeGraphJsSourceEntriesByType = Object.freeze({
   electroKick: {
     source: "native_modules/electro_kick/electro_kick.cpp",
     sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/native_modules/electro_kick/electro_kick.cpp",
+  },
+  electroClap: {
+    source: "native_modules/electro_clap/electro_clap.cpp",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/native_modules/electro_clap/electro_clap.cpp",
   },
   robinSinepulseAllpass: {
     source: "native_modules/robin_sinepulse_allpass/robin_sinepulse_allpass.cpp",

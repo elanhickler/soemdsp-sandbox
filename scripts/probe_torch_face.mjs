@@ -153,10 +153,10 @@ gate(r.ds && r.ds.schema === "torchFace" && r.ds.params.length === 0, `t has no 
 gate(r.ds && r.ds.stored === 0.25 && r.ds.hue === 0.25 && r.ds.clone === 0.25 && r.ds.defaults === 0, "torchHue stores, drives the face, clones, defaults 0");
 const near = (x, y) => Math.abs(x - y) < 1e-6;
 gate(r.buf && JSON.stringify(r.buf.buffered) === '["Analog","Digital"]' && JSON.stringify(r.buf.visual) === '["Analog","Digital"]', `t has buffered A/D inputs (${JSON.stringify(r.buf?.buffered)})`);
-gate(r.buf && near(r.buf.duty, 0.5) && near(r.buf.ledDot, 0.5), `50% Digital frame: Open ${r.buf?.duty} = LED Dot energy ${r.buf?.ledDot}`);
+gate(r.buf && near(r.buf.duty, 1) && near(r.buf.ledDot, 0.5), `50% Digital frame: Open is the frame peak ${r.buf?.duty} (LED Dot energy, a mean, ${r.buf?.ledDot})`);
 gate(r.buf && near(r.buf.analog, 0.25), `next frame uses only its 100 new samples (${r.buf?.analog})`);
 gate(r.buf && near(r.buf.negative, 0), `negative Analog clamps to 0 (${r.buf?.negative})`);
-gate(r.buf && near(r.buf.digitalAny, 0.25), `Digital > 0 opens fully, averaged over the frame (${r.buf?.digitalAny})`);
+gate(r.buf && near(r.buf.digitalAny, 1), `Digital > 0 opens fully, peak over the frame (${r.buf?.digitalAny})`);
 gate(r.buf && near(r.buf.analogOnly, 0.6), `Analog-only wiring (${r.buf?.analogOnly})`);
 gate(r.hue && r.hue.diff0 === 0, `hue 0 is bit-identical to the original (${r.hue?.diff0} px differ)`);
 const s = r.hue?.sample;

@@ -1277,6 +1277,13 @@ extern "C" double soemdsp_electro_kick_sample(
   int handle, double trigger, double reset, double algorithm, double tune, double bend,
   double bendTime, double decay, double click, double tone, double amplitude,
   double sampleRate);
+extern "C" int soemdsp_electro_clap_create();
+extern "C" void soemdsp_electro_clap_destroy(int handle);
+extern "C" double soemdsp_electro_clap_env(int handle);
+extern "C" double soemdsp_electro_clap_right(int handle);
+extern "C" double soemdsp_electro_clap_sample(
+  int handle, double trigger, double reset, double algorithm, double tone, double spread,
+  double decay, double snappy, double amplitude, double sampleRate);
 extern "C" int soemdsp_robin_sinepulse_allpass_create();
 extern "C" void soemdsp_robin_sinepulse_allpass_destroy(int handle);
 extern "C" int soemdsp_robin_sinepulse_allpass_set_params(
@@ -2133,6 +2140,7 @@ static const int kTypeElectroSnare = 222; // Electro Snare: 808 / 909 / Simmons 
 static const int kTypeElectroHat = 223; // Electro Hat: 808 / 606 / FM / Noise hi-hat, Closed + Open + choke (docs/DRUM_PACK_PLAN.md)
 static const int kTypeElectroTom = 224; // Electro Tom: 808 / 909 / Simmons tom voice (docs/DRUM_PACK_PLAN.md)
 static const int kTypeElectroKick = 225; // Electro Kick: 808 / 909 / Simmons kick voice (docs/DRUM_PACK_PLAN.md)
+static const int kTypeElectroClap = 226; // Electro Clap: 808 / 909 / Simple hand-clap voice (docs/DRUM_PACK_PLAN.md)
 static const int kTypeCurveAttackRelease = 166;
 // 167 retired (thumpEnvelope).
 static const int kTypePluckEnvelopeFb = 198;
@@ -2859,6 +2867,8 @@ static void destroy_native_kind_handle(int kind, int handle) {
     soemdsp_electro_tom_destroy(handle);
   } else if (kind == kTypeElectroKick) {
     soemdsp_electro_kick_destroy(handle);
+  } else if (kind == kTypeElectroClap) {
+    soemdsp_electro_clap_destroy(handle);
   } else if (kind == kTypeRobinSinepulseAllpass) {
     soemdsp_robin_sinepulse_allpass_destroy(handle);
   } else if (kind == kTypeFlowerChildEnvelopeFollower) {
@@ -3372,6 +3382,7 @@ static void init_node_defaults(Node& n, int typeId) {
       : (typeId == kTypeRobinSinepulse) ? 0.0 // chirp
       : (typeId == kTypeElectroSnare) ? 0.5 // tone
       : (typeId == kTypeElectroHat || typeId == kTypeElectroTom || typeId == kTypeElectroKick) ? 0.5 // tone
+      : (typeId == kTypeElectroClap) ? 0.5 // tone
       : (typeId == kTypeRobinSinepulseAllpass) ? 0.0 // freqShape
       : (typeId == kTypeAttackDecay) ? 1.0 // curve Î³
       : (typeId == kTypeLorenzAttractor) ? 10.0 // sigma
@@ -3569,6 +3580,7 @@ static void init_node_defaults(Node& n, int typeId) {
     (typeId == kTypeFm) ? 0.0 // cents
       : (typeId == kTypeElectroTom) ? 0.25 // bend oct
       : (typeId == kTypeElectroKick) ? 1.5 // bend oct
+      : (typeId == kTypeElectroClap) ? 0.5 // spread
       : (typeId == kTypeTimeQuantizer) ? 1e-6 // Change Threshold
       : (typeId == kTypeHypersaw2) ? 2.0 // jitterDistance
       : (typeId == kTypeRobinSinepulseAllpass) ? 15.0 // lowFreq Hz
@@ -3674,6 +3686,7 @@ static void init_node_defaults(Node& n, int typeId) {
       : (typeId == kTypeElectroHat) ? 1.0 // metal
       : (typeId == kTypeElectroTom) ? 0.2 // noise
       : (typeId == kTypeElectroKick) ? 0.3 // click
+      : (typeId == kTypeElectroClap) ? 0.6 // snappy
       : (typeId == kTypeRobinSinepulseAllpass) ? 1.0 // highQ
       : (typeId == kTypeSoftpopFilter) ? 0.3 // Width
       : (typeId == kTypeSoftpop2) ? 1.0 // Bandwidth over Crossfade
@@ -3871,6 +3884,7 @@ static void init_node_defaults(Node& n, int typeId) {
       : (typeId == kTypeElectroHat) ? 0.05 // closedDecay s (T60)
       : (typeId == kTypeElectroTom) ? 0.2 // bodyDecay s (T60)
       : (typeId == kTypeElectroKick) ? 0.6 // decay s (T60)
+      : (typeId == kTypeElectroClap) ? 0.3 // decay s (T60)
       : 1.0,
     false
   );
@@ -4952,6 +4966,7 @@ static int create_native_for_type(int typeId, float sampleRate) {
   if (typeId == kTypeElectroHat) return soemdsp_electro_hat_create();
   if (typeId == kTypeElectroTom) return soemdsp_electro_tom_create();
   if (typeId == kTypeElectroKick) return soemdsp_electro_kick_create();
+  if (typeId == kTypeElectroClap) return soemdsp_electro_clap_create();
   if (typeId == kTypeRobinSinepulseAllpass) return soemdsp_robin_sinepulse_allpass_create();
   if (typeId == kTypeFlowerChildEnvelopeFollower) {
     return soemdsp_flower_child_envelope_follower_create();
@@ -10263,6 +10278,35 @@ static void process_electro_kick(Circuit& g, Node& node, int frames) {
   }
 }
 
+// Electro Clap (type 226): Trigger + Reset in (per-sample gate_hit in the
+// module), Clap L -> Left, Clap R -> Right, Env -> Mono.
+// Slots: waveform=algorithm, shape=tone, center=spread, timeNumerator=decay,
+// width=snappy, amplitude.
+static void process_electro_clap(Circuit& g, Node& node, int frames) {
+  if (node.nativeHandle <= 0) return;
+  const bool hasTrig = mix_live_port(g, node, kPortTrigger, frames, g.mixTrigger);
+  const bool hasReset = mix_live_port(g, node, kPortReset, frames, g.mixReset);
+  const double sr = g.sampleRate < 1.0f ? 44100.0 : (double)g.sampleRate;
+  for (int f = 0; f < frames; f++) {
+    control_frame(g, node, f);
+    const double out = soemdsp_electro_clap_sample(
+      node.nativeHandle,
+      hasTrig ? g.mixTrigger[f] : 0.0,
+      hasReset ? g.mixReset[f] : 0.0,
+      control_audio(g, node.waveform, f),
+      control_audio(g, node.shape, f),
+      control_audio(g, node.center, f),
+      control_audio(g, node.timeNumerator, f),
+      control_audio(g, node.width, f),
+      control_audio(g, node.amplitude, f),
+      sr
+    );
+    node.buf[kPortLeft][f] = out;
+    node.buf[kPortRight][f] = soemdsp_electro_clap_right(node.nativeHandle);
+    node.buf[kPortMono][f] = soemdsp_electro_clap_env(node.nativeHandle);
+  }
+}
+
 // Robin Sinepulse Allpass (robinSinepulseAllpass): Robin Schmidt's rsFlatZapper
 // (RS-MET), a chain of 0..256 allpass stages tuned from Low Freq to High Freq.
 // Trigger (height = velocity) adds one impulse of |height| x Impulse; In x Input
@@ -14203,6 +14247,7 @@ extern "C" int soemdsp_graph_add_node(int handle, unsigned int nodeIdHash, int t
     || typeId == kTypeElectroHat
     || typeId == kTypeElectroTom
     || typeId == kTypeElectroKick
+    || typeId == kTypeElectroClap
     || typeId == kTypeRobinSinepulse
     || typeId == kTypeRobinSinepulseAllpass
     || typeId == kTypeFlowerChildEnvelopeFollower
@@ -15775,6 +15820,10 @@ static void dispatch_process_node(Circuit& g, Node& node, int frames) {
       process_electro_kick(g, node, frames);
       return;
     }
+    if (node.typeId == kTypeElectroClap) {
+      process_electro_clap(g, node, frames);
+      return;
+    }
     if (node.typeId == kTypeRobinSinepulseAllpass) {
       process_robin_sinepulse_allpass(g, node, frames);
       return;
@@ -16415,5 +16464,5 @@ extern "C" int soemdsp_graph_version() {
   // 170: EQ Filter ZDF ƒ input (resolve_osc_hz)
   // 171: ƒ on Ladder/303/Mode/Cookbook/IIR/Papoulis/ZDF filters + soemdsp_graph_node_effective_hz
   // 174: live add/remove/connect/disconnect keep compiled and other nodes' native handles
-  return 190; // 190: Mode Resonator / Random Clock / Turing Machine / Degree Turing back to their original mono outs (stereo R removed). was 189: fBm back to its 3 outs Out X / Out Y / Out Z (stereo R axes removed). was 188: Electro Hat (223) / Electro Tom (224) / Electro Kick (225). was 187: stereo L/R outs: Bradley 2A, fBm (X/Y/Z R on Tri/Sine/Trisaw), Mode Resonator (R quadrature), Random Clock / Turing Machine / Degree Turing (R Seed lane), Softpop 2 R Pitch Mod. was 186: Electro Snare stereo (Snare L -> Left, Snare R -> Right, Env -> Mono). was 185: Electro Snare (type 222). was 184: Robin Sinepulse 0–1 jack is log sweep position (L = max(Low, 20 Hz)). was 183: Flower Child ƒ input removed (Cutoff knob only again). was 182: SinCos / SinCos4 Polarity (center 0 Bipolar / 1 Unipolar). was 181: Flower Child ƒ in (resonance-pitch Hz replaces Cutoff). was 180: Robin Sinepulse 0–1 jack is sweep position (High=1, Low=0). was 179: Resonant Envelope (221)
+  return 191; // 191: Electro Clap (226). was 190: Mode Resonator / Random Clock / Turing Machine / Degree Turing back to their original mono outs (stereo R removed). was 189: fBm back to its 3 outs Out X / Out Y / Out Z (stereo R axes removed). was 188: Electro Hat (223) / Electro Tom (224) / Electro Kick (225). was 187: stereo L/R outs: Bradley 2A, fBm (X/Y/Z R on Tri/Sine/Trisaw), Mode Resonator (R quadrature), Random Clock / Turing Machine / Degree Turing (R Seed lane), Softpop 2 R Pitch Mod. was 186: Electro Snare stereo (Snare L -> Left, Snare R -> Right, Env -> Mono). was 185: Electro Snare (type 222). was 184: Robin Sinepulse 0–1 jack is log sweep position (L = max(Low, 20 Hz)). was 183: Flower Child ƒ input removed (Cutoff knob only again). was 182: SinCos / SinCos4 Polarity (center 0 Bipolar / 1 Unipolar). was 181: Flower Child ƒ in (resonance-pitch Hz replaces Cutoff). was 180: Robin Sinepulse 0–1 jack is sweep position (High=1, Low=0). was 179: Resonant Envelope (221)
 }

@@ -164,6 +164,7 @@ $modules = @(
   @{ Name = "electro_hat"; Simd = $false; Exports = @("soemdsp_electro_hat_create", "soemdsp_electro_hat_destroy", "soemdsp_electro_hat_sample", "soemdsp_electro_hat_env", "soemdsp_electro_hat_right", "soemdsp_electro_hat_version", "soemdsp_electro_hat_metadata_json", "soemdsp_electro_hat_metadata_json_size") }
   @{ Name = "electro_tom"; Simd = $false; Exports = @("soemdsp_electro_tom_create", "soemdsp_electro_tom_destroy", "soemdsp_electro_tom_sample", "soemdsp_electro_tom_env", "soemdsp_electro_tom_right", "soemdsp_electro_tom_version", "soemdsp_electro_tom_metadata_json", "soemdsp_electro_tom_metadata_json_size") }
   @{ Name = "electro_kick"; Simd = $false; Exports = @("soemdsp_electro_kick_create", "soemdsp_electro_kick_destroy", "soemdsp_electro_kick_sample", "soemdsp_electro_kick_env", "soemdsp_electro_kick_right", "soemdsp_electro_kick_version", "soemdsp_electro_kick_metadata_json", "soemdsp_electro_kick_metadata_json_size") }
+  @{ Name = "electro_clap"; Simd = $false; Exports = @("soemdsp_electro_clap_create", "soemdsp_electro_clap_destroy", "soemdsp_electro_clap_sample", "soemdsp_electro_clap_env", "soemdsp_electro_clap_right", "soemdsp_electro_clap_version", "soemdsp_electro_clap_metadata_json", "soemdsp_electro_clap_metadata_json_size") }
   @{ Name = "robin_sinepulse"; Simd = $false; Exports = @("soemdsp_robin_sinepulse_create", "soemdsp_robin_sinepulse_destroy", "soemdsp_robin_sinepulse_sample", "soemdsp_robin_sinepulse_env", "soemdsp_robin_sinepulse_unit", "soemdsp_robin_sinepulse_freq", "soemdsp_robin_sinepulse_is_idle", "soemdsp_robin_sinepulse_version", "soemdsp_robin_sinepulse_metadata_json", "soemdsp_robin_sinepulse_metadata_json_size") }
   @{ Name = "robin_sinepulse_allpass"; Simd = $false; Exports = @("soemdsp_robin_sinepulse_allpass_create", "soemdsp_robin_sinepulse_allpass_destroy", "soemdsp_robin_sinepulse_allpass_set_params", "soemdsp_robin_sinepulse_allpass_process_chain", "soemdsp_robin_sinepulse_allpass_dry", "soemdsp_robin_sinepulse_allpass_out", "soemdsp_robin_sinepulse_allpass_sample", "soemdsp_robin_sinepulse_allpass_is_idle", "soemdsp_robin_sinepulse_allpass_num_stages", "soemdsp_robin_sinepulse_allpass_update_count", "soemdsp_robin_sinepulse_allpass_version", "soemdsp_robin_sinepulse_allpass_metadata_json", "soemdsp_robin_sinepulse_allpass_metadata_json_size") }
   @{ Name = "vactrol_envelope"; Simd = $false; Exports = @("soemdsp_vactrol_envelope_create", "soemdsp_vactrol_envelope_destroy", "soemdsp_vactrol_envelope_sample", "soemdsp_vactrol_envelope_version", "soemdsp_vactrol_envelope_metadata_json", "soemdsp_vactrol_envelope_metadata_json_size") }
@@ -816,6 +817,11 @@ if ($node) {
   & $node.Source "$root\scripts\smoke_graph_electro_kick.mjs"
   if ($LASTEXITCODE -ne 0) {
     throw "Combined build: Electro Kick smoke FAILED"
+  }
+  # Electro Clap (docs/DRUM_PACK_PLAN.md): per-algorithm direct + graph + choice + live path.
+  & $node.Source "$root\scripts\smoke_graph_electro_clap.mjs"
+  if ($LASTEXITCODE -ne 0) {
+    throw "Combined build: Electro Clap smoke FAILED"
   }
   # Stereo L/R outs: Bradley 2A, Mode Resonator, Random Clock, Turing Machine, Degree Turing, Softpop 2.
   & $node.Source "$root\scripts\smoke_graph_stereo_lr.mjs"

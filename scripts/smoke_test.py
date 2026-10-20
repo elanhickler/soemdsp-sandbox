@@ -17153,6 +17153,16 @@ def require_native_module_contract(base_url: str) -> None:
             "soemdsp_electro_kick_metadata_json",
             "soemdsp_electro_kick_metadata_json_size",
         ],
+        "electro_clap": [
+            "soemdsp_electro_clap_create",
+            "soemdsp_electro_clap_destroy",
+            "soemdsp_electro_clap_sample",
+            "soemdsp_electro_clap_env",
+            "soemdsp_electro_clap_right",
+            "soemdsp_electro_clap_version",
+            "soemdsp_electro_clap_metadata_json",
+            "soemdsp_electro_clap_metadata_json_size",
+        ],
         "robin_sinepulse": [
             "soemdsp_robin_sinepulse_create",
             "soemdsp_robin_sinepulse_destroy",

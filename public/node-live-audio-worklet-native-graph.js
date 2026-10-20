@@ -170,6 +170,7 @@ NodeLiveAudioProcessor.NATIVE_GRAPH_TYPE_IDS = Object.freeze({
   electroHat: 223,
   electroTom: 224,
   electroKick: 225,
+  electroClap: 226,
   curveAttackRelease: 166,
   pluckEnvelope: 198,
   acidSequencer: 199,
@@ -715,8 +716,8 @@ NodeLiveAudioProcessor.prototype.mapNativeGraphSrcPortId = function mapNativeGra
     if (p === "env") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_MONO;
   }
   // Electro Hat / Tom / Kick: <name> L on Left, <name> R on Right, Env on Mono.
-  if (t === "electroHat" || t === "electroTom" || t === "electroKick") {
-    const nm = t === "electroHat" ? "hat" : (t === "electroTom" ? "tom" : "kick");
+  if (t === "electroHat" || t === "electroTom" || t === "electroKick" || t === "electroClap") {
+    const nm = t === "electroHat" ? "hat" : (t === "electroTom" ? "tom" : (t === "electroKick" ? "kick" : "clap"));
     if (p === nm + " l") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_LEFT;
     if (p === nm + " r") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_RIGHT;
     if (p === "env") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_MONO;
@@ -5940,6 +5941,17 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
       push("amplitude", P.NATIVE_GRAPH_PARAM_AMPLITUDE, cont("amplitude", 1));
       continue;
     }
+    if (type === "electroClap") {
+      // Electro Clap: waveform = Algorithm choiceId (0 tr808 / 1 tr909 / 2 simple),
+      // shape=tone, center=spread, timeNumerator=decay, width=snappy, amplitude.
+      push("algorithm", P.NATIVE_GRAPH_PARAM_WAVEFORM, disc("algorithm", 0));
+      push("tone", P.NATIVE_GRAPH_PARAM_SHAPE, cont("tone", 0.5));
+      push("spread", P.NATIVE_GRAPH_PARAM_CENTER, cont("spread", 0.5));
+      push("decay", P.NATIVE_GRAPH_PARAM_TIME_NUMERATOR, cont("decay", 0.3));
+      push("snappy", P.NATIVE_GRAPH_PARAM_WIDTH, cont("snappy", 0.6));
+      push("amplitude", P.NATIVE_GRAPH_PARAM_AMPLITUDE, cont("amplitude", 1));
+      continue;
+    }
     if (type === "robinSinepulseAllpass") {
       // Robin Schmidt's rsFlatZapper: stages, mode = choiceId (0 onePole /
       // 1 biquad; main thread resolves choiceKeys), center=lowFreq,
@@ -9083,7 +9095,7 @@ NodeLiveAudioProcessor.prototype.nativeGraphPortNames = function nativeGraphPort
     if (type === "vibratoGenerator") return ["Wave", "Out", "Mono"];
     if (type === "robinSinepulse") return ["Kick"];
     if (type === "electroSnare") return ["Env"];
-    if (type === "electroHat" || type === "electroTom" || type === "electroKick") return ["Env"];
+    if (type === "electroHat" || type === "electroTom" || type === "electroKick" || type === "electroClap") return ["Env"];
     return ["Out", "Mono", "In"];
   }
   if (portId === P.NATIVE_GRAPH_PORT_LEFT) {
@@ -9093,6 +9105,7 @@ NodeLiveAudioProcessor.prototype.nativeGraphPortNames = function nativeGraphPort
     if (type === "electroHat") return ["Hat L"];
     if (type === "electroTom") return ["Tom L"];
     if (type === "electroKick") return ["Kick L"];
+    if (type === "electroClap") return ["Clap L"];
     if (type === "sampleHold") return ["Left"];
     if (type === "rasterRgb") return ["G"];
     if (type === "fractalBrownianNoise") {
@@ -9168,6 +9181,7 @@ NodeLiveAudioProcessor.prototype.nativeGraphPortNames = function nativeGraphPort
     if (type === "electroHat") return ["Hat R"];
     if (type === "electroTom") return ["Tom R"];
     if (type === "electroKick") return ["Kick R"];
+    if (type === "electroClap") return ["Clap R"];
     if (type === "rasterRgb") return ["B"];
     if (type === "fractalBrownianNoise") {
       return ["Out Z", "Z", "Right"];

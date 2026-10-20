@@ -27,7 +27,7 @@ const NODE_GRAPH_BYPASS_AUDIO_OUT = new Set([
   "Out", "Mono", "Left", "Right", "L", "R", "Thru", "Delayed", "Mix", "Dry",
   "Left Out", "Right Out", "Dry L", "Dry R", "Mix L", "Mix R", "Wet L", "Wet R",
   "Mod L", "Mod R", "Out X", "Out Y", "Out Z", "X", "Y", "Z",
-  "Out L", "Out R", "Snare L", "Snare R", "Hat L", "Hat R", "Tom L", "Tom R", "Kick L", "Kick R",
+  "Out L", "Out R", "Snare L", "Snare R", "Hat L", "Hat R", "Tom L", "Tom R", "Kick L", "Kick R", "Clap L", "Clap R",
   "Out1", "Out2", "Out3", "Out4",
   "Mid", "Side", "I", "Q", "MidI", "SideQ", "Gain",
 ]);
@@ -72,6 +72,8 @@ const NODE_GRAPH_BYPASS_OUT_ALIASES = Object.freeze({
   "Tom R": ["Right", "R", "In", "Mono"],
   "Kick L": ["Left", "L", "In", "Mono"],
   "Kick R": ["Right", "R", "In", "Mono"],
+  "Clap L": ["Left", "L", "In", "Mono"],
+  "Clap R": ["Right", "R", "In", "Mono"],
   // XY outs: same-name first, then stereo L/R (Vectorscope Rotation L→X, R→Y).
   X: ["X", "L", "Left", "In", "Mono"],
   Y: ["Y", "R", "Right", "In", "Mono"],
@@ -185,6 +187,7 @@ const NODE_GRAPH_BYPASS_TYPE_OVERRIDES = Object.freeze({
   electroHat: "silence",
   electroTom: "silence",
   electroKick: "silence",
+  electroClap: "silence",
   pulseExplosion: "silence",
   clock: "silence",
   randomClock: "silence",

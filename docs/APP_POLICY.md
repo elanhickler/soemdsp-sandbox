@@ -190,6 +190,7 @@ Only these live-audio types exist in the efficient build:
 | `electroHat` | Electro Hat: hi-hat voice, Algorithm 808 / 606 / FM / Noise, Closed / Open choke (docs/DRUM_PACK_PLAN.md; Trigger (Closed) + Open + Reset → Hat L / Hat R / Env) |
 | `electroTom` | Electro Tom: tom voice, Algorithm 808 / 909 / Simmons (docs/DRUM_PACK_PLAN.md; Trigger + Reset → Tom L / Tom R / Env) |
 | `electroKick` | Electro Kick: classic machine kick, Algorithm 808 / 909 / Simmons (docs/DRUM_PACK_PLAN.md; Trigger + Reset → Kick L / Kick R / Env) |
+| `electroClap` | Electro Clap: hand clap, Algorithm 808 / 909 / Simple (docs/DRUM_PACK_PLAN.md; Trigger + Reset → Clap L / Clap R / Env) |
 | `robinSinepulse` | Robin Sinepulse: sweep kick (port of Robin Schmidt's SweepKicker, RS-MET; Trigger → Kick / Env) |
 | `robinSinepulseAllpass` | Robin Sinepulse Allpass: 0–256 allpass zap / disperser (port of Robin Schmidt's FlatZapper, RS-MET; Trigger + In → Out) |
 | `output` | Sink (unique per patch, deletable; returns via Undo or the Output button) |
