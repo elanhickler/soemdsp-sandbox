@@ -10,6 +10,12 @@
 // with the gate step. App Gate contract (gate_on / gate_hit, docs/GATES_TRIGGERS.md):
 // on = leaves Planck silence in either sign; Peak = input height latched on the hit. Output Range Fit scales the peak to Amplitude
 // and clips below 0. Raw is the filter output.
+//
+// Follow (optional jack): |Follow| * Amplitude is fed straight into the SVF as
+// its target (no gate, no ping) -> resonant envelope follower. Attack timing is
+// used while the target is above the filter output, Decay timing while below.
+// If Trigger and Follow are both wired their drives add (one SVF, one sum).
+// Follow unwired (followWired < 0.5 or NaN from old callers) = old behaviour.
 
 #include <soemdsp/soemdsp.hpp>
 #include <soemdsp/filter/tpt_svf.h>
@@ -33,6 +39,7 @@ struct State {
   TptSvfState filt;
   double lastGate;
   double velocity;
+  double lastY;
   double shotAttack;
   double shotDecay;
   double shotResonance;
@@ -167,6 +174,7 @@ extern "C" int soemdsp_resonant_envelope_create() {
       tpt_svf_reset(s.filt);
       s.lastGate = 0.0;
       s.velocity = 1.0;
+      s.lastY = 0.0;
       s.shotAttack = 0.01;
       s.shotDecay = 0.3;
       s.shotResonance = 0.0;
@@ -213,7 +221,9 @@ extern "C" double soemdsp_resonant_envelope_sample(
   double amplitude,
   double outputRange,
   double recalculateOnTrigger,
-  double sampleRate
+  double sampleRate,
+  double follow,
+  double followWired
 ) {
   if (handle < 1 || handle > kMaxInstances || !gPool[handle - 1].active) return 0.0;
   State& s = gPool[handle - 1];
@@ -255,9 +265,15 @@ extern "C" double soemdsp_resonant_envelope_sample(
     if (scale < kTrackMin) scale = kTrackMin;
     if (scale > kTrackMax) scale = kTrackMax;
   }
-  const double tau = high ? attack : decay;
+  const bool hasFollow = safe(followWired) >= 0.5;
+  double fol = hasFollow ? dsp_fabs(safe(follow)) : 0.0;
+  if (!(fol * 0.0 == 0.0)) fol = 0.0;
+  const double folDrive = fol * amp;
+  // Attack while gated, or while the Follow target is above the filter output.
+  const bool attackPhase = high || (hasFollow && folDrive > s.lastY);
+  const double tau = attackPhase ? attack : decay;
   if (!s.coeffValid
-      || s.gateHigh != high
+      || s.gateHigh != attackPhase
       || s.cAttack != attack
       || s.cDecay != decay
       || s.cZeta != zeta
@@ -265,7 +281,7 @@ extern "C" double soemdsp_resonant_envelope_sample(
       || s.cScale != scale
       || s.cSr != sr) {
     setup_coeff(s, tau, zeta, scale, imp, sr);
-    s.gateHigh = high;
+    s.gateHigh = attackPhase;
     s.cAttack = attack;
     s.cDecay = decay;
     s.cZeta = zeta;
@@ -276,7 +292,7 @@ extern "C" double soemdsp_resonant_envelope_sample(
   // Step holds the velocity latched on the hit; the ping fires on the hit sample only.
   const double gateLevel = high ? s.velocity : 0.0;
   const double edge = rising ? s.velocity : 0.0;
-  const double drive = (1.0 - imp) * gateLevel * amp + imp * edge * s.kImpulse * amp;
+  const double drive = (1.0 - imp) * gateLevel * amp + imp * edge * s.kImpulse * amp + folDrive;
   if (!(s.filt.z1 * 0.0 == 0.0) || !(s.filt.z2 * 0.0 == 0.0)) tpt_svf_reset(s.filt);
   double y = tpt_svf_tick(s.filt, s.coeff, drive);
   flush_denorm(s.filt);
@@ -284,6 +300,7 @@ extern "C" double soemdsp_resonant_envelope_sample(
     tpt_svf_reset(s.filt);
     y = 0.0;
   }
+  s.lastY = y;
   const bool fit = !(clamp01_param(outputRange, 0.0) >= 0.5);
   double out = y;
   if (fit) {
@@ -295,12 +312,12 @@ extern "C" double soemdsp_resonant_envelope_sample(
   const bool quiet = dsp_fabs(out) < 1e-5
     && dsp_fabs(s.filt.z1) < 1e-5
     && dsp_fabs(s.filt.z2) < 1e-5;
-  s.idle = quiet && !high;
+  s.idle = quiet && !high && !(fol >= 1e-5);
   return out;
 }
 
 extern "C" int soemdsp_resonant_envelope_version() {
-  return 1;
+  return 2;  // 2: Follow input (envelope follower). 1: initial
 }
 
 extern "C" const char* soemdsp_resonant_envelope_metadata_json() {

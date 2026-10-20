@@ -1222,6 +1222,10 @@ NodeLiveAudioProcessor.prototype.mapNativeGraphDstPortId = function mapNativeGra
     if (p === "envelope" || p === "env") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_SQUARE;
     if (p === "sidechain" || p === "sc" || p === "key") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_MORPH;
   }
+  // Resonant Envelope Follow: envelope-follower input on the Morph live bus.
+  if (tDst === "resonantEnvelope" && p === "follow") {
+    return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_MORPH;
+  }
   // Electro Hat: Open hit jack on the Mono live bus (Trigger = Closed on the Trigger bus).
   if (tDst === "electroHat" && p === "open") {
     return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_MONO;

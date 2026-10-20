@@ -1185,7 +1185,8 @@ extern "C" int soemdsp_resonant_envelope_is_idle(int handle);
 extern "C" double soemdsp_resonant_envelope_sample(
   int handle, double input, double freqHz, double attackSec, double decaySec,
   double resonance, double impulse, double tracking, double amplitude,
-  double outputRange, double recalculateOnTrigger, double sampleRate
+  double outputRange, double recalculateOnTrigger, double sampleRate,
+  double follow, double followWired
 );
 extern "C" int soemdsp_resonant_envelope_version();
 extern "C" const char* soemdsp_resonant_envelope_metadata_json();
@@ -9960,15 +9961,19 @@ static void process_ping_envelope(Circuit& g, Node& node, int frames) {
 // timingMode=recalculate on trigger, frequency=Frequency Hz.
 // Wired f replaces the Frequency knob per sample (resolve_osc_hz); the result
 // is the Hz that Tracking compares against 440.
+// Follow jack rides the Morph live bus (as Sidechain key): |Follow| is the SVF
+// target (envelope follower). Unwired = old Trigger-only behaviour.
 static void process_resonant_envelope(Circuit& g, Node& node, int frames) {
   if (node.nativeHandle <= 0) return;
   mix_node_inputs(g, node, frames);
   const bool hasTrig = mix_live_port(g, node, kPortTrigger, frames, g.mixTrigger);
   const bool hasF = mix_live_port(g, node, kPortF, frames, g.mixF);
+  const bool hasFollow = mix_live_port(g, node, kPortMorph, frames, g.mixMorph);
   const double sr = g.sampleRate < 1.0f ? 44100.0 : (double)g.sampleRate;
   for (int f = 0; f < frames; f++) {
     control_frame(g, node, f);
     const double trig = hasTrig ? g.mixTrigger[f] : 0.0;
+    const double follow = hasFollow ? g.mixMorph[f] : 0.0;
     const double input = trig + g.mixMono[f] + g.mixLeft[f] + g.mixRight[f];
     const double hz = resolve_osc_hz(g, f, hasF, false, node.frequency, 0.0, sr);
     const double out = soemdsp_resonant_envelope_sample(
@@ -9983,7 +9988,9 @@ static void process_resonant_envelope(Circuit& g, Node& node, int frames) {
       control_audio(g, node.amplitude, f),
       control_effective(node.mode),
       control_effective(node.timingMode),
-      sr
+      sr,
+      follow,
+      hasFollow ? 1.0 : 0.0
     );
     node.buf[kPortMono][f] = out;
     node.buf[kPortLeft][f] = out;
@@ -16469,5 +16476,5 @@ extern "C" int soemdsp_graph_version() {
   // 170: EQ Filter ZDF ƒ input (resolve_osc_hz)
   // 171: ƒ on Ladder/303/Mode/Cookbook/IIR/Papoulis/ZDF filters + soemdsp_graph_node_effective_hz
   // 174: live add/remove/connect/disconnect keep compiled and other nodes' native handles
-  return 193; // 193: DSF Oscillator face playhead (__Phase on kPortPhase01). was 192: Resonant Envelope Frequency knob (unwired f uses it for Tracking). was 191: Electro Clap (226). was 190: Mode Resonator / Random Clock / Turing Machine / Degree Turing back to their original mono outs (stereo R removed). was 189: fBm back to its 3 outs Out X / Out Y / Out Z (stereo R axes removed). was 188: Electro Hat (223) / Electro Tom (224) / Electro Kick (225). was 187: stereo L/R outs: Bradley 2A, fBm (X/Y/Z R on Tri/Sine/Trisaw), Mode Resonator (R quadrature), Random Clock / Turing Machine / Degree Turing (R Seed lane), Softpop 2 R Pitch Mod. was 186: Electro Snare stereo (Snare L -> Left, Snare R -> Right, Env -> Mono). was 185: Electro Snare (type 222). was 184: Robin Sinepulse 0–1 jack is log sweep position (L = max(Low, 20 Hz)). was 183: Flower Child ƒ input removed (Cutoff knob only again). was 182: SinCos / SinCos4 Polarity (center 0 Bipolar / 1 Unipolar). was 181: Flower Child ƒ in (resonance-pitch Hz replaces Cutoff). was 180: Robin Sinepulse 0–1 jack is sweep position (High=1, Low=0). was 179: Resonant Envelope (221)
+  return 194; // 194: Resonant Envelope Follow input (Morph live bus, |x| is the SVF target). was 193: DSF Oscillator face playhead (__Phase on kPortPhase01). was 192: Resonant Envelope Frequency knob (unwired f uses it for Tracking). was 191: Electro Clap (226). was 190: Mode Resonator / Random Clock / Turing Machine / Degree Turing back to their original mono outs (stereo R removed). was 189: fBm back to its 3 outs Out X / Out Y / Out Z (stereo R axes removed). was 188: Electro Hat (223) / Electro Tom (224) / Electro Kick (225). was 187: stereo L/R outs: Bradley 2A, fBm (X/Y/Z R on Tri/Sine/Trisaw), Mode Resonator (R quadrature), Random Clock / Turing Machine / Degree Turing (R Seed lane), Softpop 2 R Pitch Mod. was 186: Electro Snare stereo (Snare L -> Left, Snare R -> Right, Env -> Mono). was 185: Electro Snare (type 222). was 184: Robin Sinepulse 0–1 jack is log sweep position (L = max(Low, 20 Hz)). was 183: Flower Child ƒ input removed (Cutoff knob only again). was 182: SinCos / SinCos4 Polarity (center 0 Bipolar / 1 Unipolar). was 181: Flower Child ƒ in (resonance-pitch Hz replaces Cutoff). was 180: Robin Sinepulse 0–1 jack is sweep position (High=1, Low=0). was 179: Resonant Envelope (221)
 }
