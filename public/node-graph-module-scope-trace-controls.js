@@ -902,6 +902,19 @@ const nodeGraphTraceDisplayActiveControlsByType = Object.freeze({
     toggles: Object.freeze(["showDot"]),
     choices: Object.freeze([]),
   }),
+  // SinCos: line (sine; cosine follows) / dot / background HBS + thickness.
+  sinCosFace: Object.freeze({
+    fields: Object.freeze([
+      "lineThickness",
+      "lineBrightness",
+      "dotThickness",
+      "dotBrightness",
+      "backgroundBrightness",
+    ]),
+    colors: Object.freeze(["strokeColor", "dotColor", "backgroundColor"]),
+    toggles: Object.freeze([]),
+    choices: Object.freeze([]),
+  }),
   // Size (dot1Size) is 0…1 of the centered face square — F-fullscreen scales with it.
   sinCos4Face: Object.freeze({
     fields: Object.freeze(["dot1Size", "pixelDensity"]),
@@ -2575,6 +2588,7 @@ const nodeGraphDisplaySettingsFormTypeTitles = Object.freeze({
   keypadFace: "Keypad",
   roundShapeFace: "RoundShape",
   sinCos4Face: "SinCos4",
+  sinCosFace: "SinCos",
   textBoxFace: "Text Box",
   keyboardControllerFace: "MIDI Keyboard",
   toggleButtonFace: "Toggle",

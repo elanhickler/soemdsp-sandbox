@@ -1242,7 +1242,7 @@ const nodeGraphModuleDefinitions = (
         key: "face",
         label: "Face",
         renderer: "sinCosFace",
-        settingsSchema: "" },
+        settingsSchema: "sinCosFace" },
     ],
     defaultDisplayMode: "face",
     inputs: ["Reset", "f"],

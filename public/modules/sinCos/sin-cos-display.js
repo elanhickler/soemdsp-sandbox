@@ -3,9 +3,53 @@
 // A line is drawn only when a patch wire leaves that output jack.
 // Each drawn line gets its own phase dot. Both dots are white.
 
-const NODE_GRAPH_SINCOS_SINE_STROKE = "#ff2d2d";
-const NODE_GRAPH_SINCOS_COS_STROKE = "#3d7eff";
-const NODE_GRAPH_SINCOS_DOT = "#ffffff";
+// Display Settings schema `sinCosFace`: line / dot / background HBS
+// (nodeGraphHueBrightnessCss) + line / dot thickness, on the RoundShape model.
+// Defaults reproduce the original fixed look exactly: sine #ff2d2d =
+// HBS(0, 0.544, 1), white dots, plate #020609 = HBS(205.714, 0.009, 0.59).
+// Line HBS drives the sine; the cosine follows it at a fixed hue offset and
+// brightness ratio (default HBS(212.6, 0.562, 1) = the original #3d7eff).
+const nodeGraphSinCosFaceDisplaySettingsDefaults = Object.freeze({
+  lineHue: 0,
+  lineBrightness: 0.544,
+  lineSaturation: 1,
+  lineThickness: 2,
+  lineBlur: 0,
+  dotHue: 0,
+  dotBrightness: 1,
+  dotSaturation: 0,
+  dotThickness: 5,
+  backgroundHue: 205.714,
+  backgroundBrightness: 0.009,
+  backgroundSaturation: 0.59,
+  pixelDensity: 1,
+});
+const NODE_GRAPH_SINCOS_COS_HUE_OFFSET = 212.6;
+const NODE_GRAPH_SINCOS_COS_BRIGHTNESS_RATIO = 0.562 / 0.544;
+
+function normalizeNodeGraphSinCosFaceSettings(settings = {}) {
+  const source = settings && typeof settings === "object" ? settings : {};
+  return normalizeNodeGraphRoundShapeFaceSettings({ ...nodeGraphSinCosFaceDisplaySettingsDefaults, ...source });
+}
+
+function nodeGraphSinCosFaceSettingsForNode(node) {
+  return normalizeNodeGraphSinCosFaceSettings(node?.traceDisplaySettings);
+}
+
+function nodeGraphSinCosCosPaint(look) {
+  const hue = Number(look.lineHue) + NODE_GRAPH_SINCOS_COS_HUE_OFFSET;
+  const bright = Math.min(1, Number(look.lineBrightness) * NODE_GRAPH_SINCOS_COS_BRIGHTNESS_RATIO);
+  return nodeGraphHueBrightnessCss(((hue % 360) + 360) % 360, bright, 1, look.lineSaturation);
+}
+
+function applyNodeGraphSinCosDisplaySettingsToFace(node) {
+  if (!node?.id) return;
+  const el = document.querySelector?.(`.node-sincos-display[data-node="${CSS.escape(String(node.id))}"]`);
+  if (!el) return;
+  el._sinCosForceDraw = true;
+  el._sinCosLaidOut = false;
+  drawNodeGraphSinCosDisplay(el);
+}
 
 function createNodeGraphSinCosDisplay(nodeId, type = "sinCos") {
   const id = nodeId && typeof nodeId === "object"
@@ -166,8 +210,9 @@ function drawNodeGraphSinCosDisplayInner(section) {
   const phaseParam = nodeGraphFiniteNumber(nodeGraphSinCosLiveParam(node, "phase", 0));
   const drawSin = nodeGraphSinCosOutputHasWire(nodeId, "sin");
   const drawCos = nodeGraphSinCosOutputHasWire(nodeId, "cos");
-  const strokeW = 2;
-  const dotW = 5;
+  const look = nodeGraphSinCosFaceSettingsForNode(node);
+  const strokeW = look.lineThickness;
+  const dotW = look.dotThickness;
   const pixelDensity = 1;
   const faceMetrics = typeof ensureFaceMetrics === "function"
     ? ensureFaceMetrics(section, { observe: true })
@@ -186,6 +231,7 @@ function drawNodeGraphSinCosDisplayInner(section) {
     polarity ? "uni" : "bi",
     String((phaseParam - Math.floor(phaseParam)).toFixed(4)),
     `${Math.round(rawW)}x${Math.round(rawH)}`,
+    look.strokePaint, look.dotPaint, look.backgroundPaint, strokeW, dotW,
   ].join("|");
   const livePlaying = typeof nodeGraphRoundShapeLivePlaying === "function"
     ? nodeGraphRoundShapeLivePlaying()
@@ -252,8 +298,8 @@ function drawNodeGraphSinCosDisplayInner(section) {
     lines.push({ points, color, width: strokeW, blur: 0 });
   };
   // Red sine only if a wire leaves the sin jack. Blue cosine only for cos.
-  if (drawSin) pushLine("sin", NODE_GRAPH_SINCOS_SINE_STROKE);
-  if (drawCos) pushLine("cos", NODE_GRAPH_SINCOS_COS_STROKE);
+  if (drawSin) pushLine("sin", look.strokePaint);
+  if (drawCos) pushLine("cos", nodeGraphSinCosCosPaint(look));
 
   let play = nodeGraphSinCosReadPhase(nodeId, node, section);
   if (!Number.isFinite(play)) {
@@ -268,14 +314,14 @@ function drawNodeGraphSinCosDisplayInner(section) {
   const pushDot = (kind) => {
     const py = mapY(nodeGraphSinCosSample(play, kind, amplitude, polarity));
     if (!Number.isFinite(px) || !Number.isFinite(py)) return;
-    dots.push({ x: px, y: py, color: NODE_GRAPH_SINCOS_DOT, radius: dotR });
+    dots.push({ x: px, y: py, color: look.dotPaint, radius: dotR });
   };
   if (drawSin) pushDot("sin");
   if (drawCos) pushDot("cos");
   nodeGraphCycleLineGlPresent(canvas, {
     cssWidth: drawW,
     cssHeight: drawH,
-    background: "#020609",
+    background: look.backgroundPaint,
     waveKey: signature,
     lines,
     dots,

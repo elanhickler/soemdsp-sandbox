@@ -73,6 +73,13 @@ function assignNodeGraphTypedDisplaySettingsToNode(node, displayType, settings) 
     }
     return { channel };
   }
+  if (displayType === "sinCosFace" && typeof normalizeNodeGraphSinCosFaceSettings === "function") {
+    node.traceDisplaySettings = normalizeNodeGraphSinCosFaceSettings(settings);
+    if (typeof applyNodeGraphSinCosDisplaySettingsToFace === "function") {
+      applyNodeGraphSinCosDisplaySettingsToFace(node);
+    }
+    return node.traceDisplaySettings;
+  }
   if (
     displayType === "roundShapeFace"
     || displayType === "basicShapeFace"

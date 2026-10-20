@@ -395,6 +395,9 @@ function nodeGraphDisplaySettingsDefaultsForFormType(type = nodeGraphTraceDispla
 if (type === "portalFace") {
     return { channel: 0 };
   }
+  if (type === "sinCosFace" && typeof normalizeNodeGraphSinCosFaceSettings === "function") {
+    return normalizeNodeGraphSinCosFaceSettings();
+  }
   if (type === "softwaveOscFace") {
     return typeof normalizeNodeGraphSoftwaveOscFaceSettings === "function"
       ? normalizeNodeGraphSoftwaveOscFaceSettings()
@@ -708,6 +711,9 @@ if (type === "portalFace") {
         : Math.max(0, Math.round(nodeGraphFiniteNumber(settings?.channel))),
     };
   }
+  if (type === "sinCosFace" && typeof normalizeNodeGraphSinCosFaceSettings === "function") {
+    return normalizeNodeGraphSinCosFaceSettings(settings);
+  }
   if (type === "softwaveOscFace") {
     return typeof normalizeNodeGraphSoftwaveOscFaceSettings === "function"
       ? normalizeNodeGraphSoftwaveOscFaceSettings(settings)
@@ -921,6 +927,9 @@ if (settingsSchema === "portalFace") {
     return typeof nodeGraphPortalDisplaySettingsForNode === "function"
       ? nodeGraphPortalDisplaySettingsForNode(node)
       : { channel: 0 };
+  }
+  if (settingsSchema === "sinCosFace" && typeof nodeGraphSinCosFaceSettingsForNode === "function") {
+    return nodeGraphSinCosFaceSettingsForNode(node);
   }
   if (settingsSchema === "softwaveOscFace") {
     return typeof nodeGraphSoftwaveOscFaceSettingsForNode === "function"
@@ -2267,7 +2276,7 @@ function syncNodeGraphHslLampWidgets(popover = document.getElementById("nodeTrac
   const formType = typeof nodeGraphTraceDisplaySettingsFormType === "function"
     ? nodeGraphTraceDisplaySettingsFormType()
     : "";
-  const shape = formType === "roundShapeFace" || formType === "basicShapeFace" || formType === "softwaveOscFace";
+  const shape = formType === "roundShapeFace" || formType === "basicShapeFace" || formType === "softwaveOscFace" || formType === "sinCosFace";
   if (!popover || !shape) {
     return;
   }
