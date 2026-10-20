@@ -134,6 +134,19 @@ if (!(Test-Path -LiteralPath $dstCombinedDir)) { New-Item -ItemType Directory -P
 Copy-Item -LiteralPath $srcCombinedWasm -Destination (Join-Path $dstCombinedDir "soemdsp_combined.wasm") -Force
 Write-Host "  native_modules\combined\soemdsp_combined.wasm"
 
+# GL modules (fbm_field, raster_rgb, ...) fetch their shaders at runtime from
+# native_modules/<module>/*.glsl, so ship those next to the combined wasm.
+$glslCount = 0
+foreach ($glsl in @(Get-ChildItem -LiteralPath $srcNative -Recurse -File -Filter "*.glsl")) {
+  $rel = $glsl.FullName.Substring($srcNative.Length).TrimStart("\", "/")
+  $glslDst = Join-Path $dstNative $rel
+  $glslDir = Split-Path -Parent $glslDst
+  if (!(Test-Path -LiteralPath $glslDir)) { New-Item -ItemType Directory -Path $glslDir | Out-Null }
+  Copy-Item -LiteralPath $glsl.FullName -Destination $glslDst -Force
+  $glslCount++
+}
+Write-Host "  native_modules\**\*.glsl ($glslCount shader files)"
+
 # --- public/: mirror for release embed ---
 # Always omit local-dev / personal / example trees. The site copy is release-only.
 $excludeTop = @(
