@@ -1100,7 +1100,7 @@ function nodeGraphGlGraphDragFrom(point, endpoint) {
   return point;
 }
 
-function nodeGraphGlGraphPushWire(wires, from, to, color, toColor, zoom, wire, squareFrom, squareTo, kind, index) {
+function nodeGraphGlGraphPushWire(wires, from, to, color, zoom, wire, squareFrom, squareTo, kind, index) {
   if (!from || !to) return;
   const ax = Number(from.x);
   const ay = Number(from.y);
@@ -1109,8 +1109,8 @@ function nodeGraphGlGraphPushWire(wires, from, to, color, toColor, zoom, wire, s
   if (!Number.isFinite(ax) || !Number.isFinite(ay) || !Number.isFinite(bx) || !Number.isFinite(by)) {
     return;
   }
+  // Both end dots take the wire's own (source outlet) colour.
   const rgba = nodeGraphGlGraphCssColor(color);
-  const endRgba = nodeGraphGlGraphCssColor(toColor || color);
   wires.push({
     rgba,
     kind: kind || "",
@@ -1121,7 +1121,7 @@ function nodeGraphGlGraphPushWire(wires, from, to, color, toColor, zoom, wire, s
     xy: nodeGraphGlGraphShape(from, to, wire, zoom),
     dots: [
       { x: ax, y: ay, rgba, square: squareFrom === true },
-      { x: bx, y: by, rgba: endRgba, square: squareTo === true },
+      { x: bx, y: by, rgba, square: squareTo === true },
     ],
   });
 }
@@ -1149,7 +1149,7 @@ function nodeGraphGlGraphRebuild(options = {}) {
       const to = nodeGraphPortCenter(connection.destinationNode, connection.destinationPort, "input");
       const fromColor = colorOf(connection.sourceNode, connection.sourcePort, "output");
       nodeGraphGlGraphPushWire(
-        wires, from, to, fromColor, fromColor, zoom, connection,
+        wires, from, to, fromColor, zoom, connection,
         square(connection.sourceNode, connection.sourcePort, "output"),
         square(connection.destinationNode, connection.destinationPort, "input"),
         "signal",
@@ -1169,9 +1169,7 @@ function nodeGraphGlGraphRebuild(options = {}) {
         : null;
       const fromColor = colorOf(modulation.sourceNode, modulation.sourcePort, "output");
       nodeGraphGlGraphPushWire(
-        wires, from, to, fromColor,
-        colorOf(modulation.destinationNode, modulation.destinationParam, "modulation") || fromColor,
-        zoom, modulation,
+        wires, from, to, fromColor, zoom, modulation,
         square(modulation.sourceNode, modulation.sourcePort, "output"),
         square(modulation.destinationNode, modulation.destinationParam, "modulation"),
         "modulation",
@@ -1187,7 +1185,7 @@ function nodeGraphGlGraphRebuild(options = {}) {
         : null;
       const fromColor = colorOf(graphConnection.sourceNode, graphConnection.sourcePort, "output") || "#e6d36a";
       nodeGraphGlGraphPushWire(
-        wires, from, to, fromColor, fromColor, zoom, graphConnection,
+        wires, from, to, fromColor, zoom, graphConnection,
         square(graphConnection.sourceNode, graphConnection.sourcePort, "output"),
         false,
         "graph",
@@ -1207,7 +1205,6 @@ function nodeGraphGlGraphRebuild(options = {}) {
         nodeGraphGlGraphDragFrom(drag.from, drag.endpoint),
         drag.cursorPoint,
         dragColor,
-        dragColor,
         zoom,
         null,
         false,
@@ -1223,7 +1220,6 @@ function nodeGraphGlGraphRebuild(options = {}) {
             wires,
             nodeGraphGlGraphDragFrom(entry.from, entry.endpoint),
             mode.cursorPoint,
-            modeColor,
             modeColor,
             zoom,
             null,
