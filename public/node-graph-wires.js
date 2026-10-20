@@ -572,7 +572,10 @@
       setHoveredPatchPoint(null);
     }
 
-    function animateDestroyedWire() {
+    function animateDestroyedWire(from, to) {
+      if (typeof nodeGraphAnimateDestroyedWire === "function") {
+        nodeGraphAnimateDestroyedWire(from, to);
+      }
     }
 
     function endpointKey(endpoint) {

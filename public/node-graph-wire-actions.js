@@ -2134,9 +2134,60 @@ function connectNodeGraphModulation(sourceNode, sourcePort, destinationNode, des
   return true;
 }
 
+function nodeGraphWireBreakOverlay() {
+  const workspace = document.getElementById("nodeGraphWorkspace");
+  if (!workspace) return null;
+  let layer = document.getElementById("nodeWireBreakOverlay");
+  if (!layer) {
+    layer = document.createElement("div");
+    layer.id = "nodeWireBreakOverlay";
+    layer.className = "node-wire-break-overlay";
+    layer.setAttribute("aria-hidden", "true");
+    workspace.append(layer);
+  }
+  return layer;
+}
+
+/** World layout px → workspace screen px, matching module CSS zoom + pan. */
+function nodeGraphWireBreakWorkspacePoint(point) {
+  if (!point || !Number.isFinite(point.x) || !Number.isFinite(point.y)) return null;
+  const workspace = document.getElementById("nodeGraphWorkspace");
+  const zoom = Math.max(
+    0.0001,
+    typeof nodeGraphZoom === "function" ? nodeGraphZoom() : (nodeGraphMvp?.zoom || 1),
+  );
+  const pan = nodeGraphMvp?.pan || { x: 0, y: 0 };
+  const origin = typeof nodeGraphRenderedOriginOffset === "function" && workspace
+    ? nodeGraphRenderedOriginOffset(pan, workspace)
+    : pan;
+  return {
+    x: point.x * zoom + (Number(origin?.x) || 0),
+    y: point.y * zoom + (Number(origin?.y) || 0),
+  };
+}
+
+function nodeGraphAnimateDestroyedWire(from, to) {
+  const layer = nodeGraphWireBreakOverlay();
+  const a = nodeGraphWireBreakWorkspacePoint(from);
+  const b = nodeGraphWireBreakWorkspacePoint(to);
+  if (!layer || !a || !b) return;
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("class", "node-wire-break-svg");
+  const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+  line.setAttribute("x1", String(a.x));
+  line.setAttribute("y1", String(a.y));
+  line.setAttribute("x2", String(b.x));
+  line.setAttribute("y2", String(b.y));
+  line.setAttribute("class", "node-wire-break-line");
+  svg.append(line);
+  line.addEventListener("animationend", () => svg.remove(), { once: true });
+  layer.append(svg);
+}
+
 function burstNodeGraphZap(point) {
-  const surface = nodeGraphZoomSurface();
-  if (!surface || !point) {
+  const layer = nodeGraphWireBreakOverlay();
+  const at = nodeGraphWireBreakWorkspacePoint(point);
+  if (!layer || !at) {
     return;
   }
   const colors = [
@@ -2149,8 +2200,8 @@ function burstNodeGraphZap(point) {
     const particle = document.createElement("span");
     particle.className = "node-zap-particle";
     particle.textContent = "\u2301";
-    particle.style.left = `${point.x}px`;
-    particle.style.top = `${point.y}px`;
+    particle.style.left = `${at.x}px`;
+    particle.style.top = `${at.y}px`;
     particle.style.setProperty("--zap-color", color);
     particle.style.setProperty("--zap-glow", glow);
     particle.style.setProperty("--zap-x", `${(index % 4 - 1.5) * 30}px`);
@@ -2159,6 +2210,6 @@ function burstNodeGraphZap(point) {
     particle.style.setProperty("--zap-scale", `${1 + (index % 5) * 0.24}`);
     particle.style.animationDelay = `${index * 14}ms`;
     particle.addEventListener("animationend", () => particle.remove(), { once: true });
-    surface.append(particle);
+    layer.append(particle);
   }
 }
