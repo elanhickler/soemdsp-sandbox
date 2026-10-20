@@ -1027,6 +1027,13 @@ function normalizeNodeGraphWaterfallSettings(settings = {}) {
       if (raw === false || raw === 0 || raw === "0" || raw === "false") return false;
       return defaults.resetSync === true;
     })(),
+    // 1D Onset: min..max of the shown samples fills the face height.
+    autoRange: (() => {
+      const raw = source.autoRange;
+      if (raw === true || raw === 1 || raw === "1" || raw === "true") return true;
+      if (raw === false || raw === 0 || raw === "0" || raw === "false") return false;
+      return defaults.autoRange !== false;
+    })(),
     smoothLines: (() => {
       const raw = source.smoothLines;
       if (raw === true || raw === 1 || raw === "1" || raw === "true") return true;

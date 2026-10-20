@@ -47,6 +47,31 @@ function nodeGraphWaterfallHistorySeconds(settings) {
   return 0.25;
 }
 
+/** 1D Onset Auto Range: on unless explicitly off. */
+function nodeGraphOnsetAutoRangeOn(settings) {
+  const raw = settings?.autoRange;
+  return !(raw === false || raw === 0 || raw === "0" || raw === "false");
+}
+
+/** Min..max of every stored sample on the face, or null when there are none. */
+function nodeGraphOnsetTraceRange(onset) {
+  const traces = onset?.traces;
+  if (!traces) return null;
+  let lo = Infinity;
+  let hi = -Infinity;
+  const keys = Object.keys(traces);
+  for (let i = 0; i < keys.length; i += 1) {
+    const cols = traces[keys[i]]?.columns || [];
+    for (let c = 0; c < cols.length; c += 1) {
+      const col = cols[c];
+      if (!col?.first) continue;
+      if (col.min.raw < lo) lo = col.min.raw;
+      if (col.max.raw > hi) hi = col.max.raw;
+    }
+  }
+  return hi >= lo ? { lo, hi } : null;
+}
+
 function nodeGraphOnsetResetSyncOn(settings) {
   const raw = settings?.resetSync;
   return raw === true || raw === 1 || raw === "1" || raw === "true";
@@ -94,7 +119,15 @@ function nodeGraphOnsetTraceX(frame, origin, faceSamples, width, startPx) {
   return { u, x };
 }
 
-function nodeGraphOnsetTraceY(raw, buffer, slot, settings, height, strokePx) {
+// range { lo, hi }: Auto Range maps lo..hi to the full face height.
+function nodeGraphOnsetTraceY(raw, buffer, slot, settings, height, strokePx, range = null) {
+  if (range) {
+    const pad = Math.min(height * 0.5, Math.max(0, strokePx) * 0.5);
+    const span = range.hi - range.lo;
+    const t = span > 0 ? (raw - range.lo) / span : 0.5;
+    const ry = height - pad - t * (height - pad * 2);
+    return Number.isFinite(ry) ? ry : null;
+  }
   const live = nodeGraphWaterfallPrepare(buffer, settings) || buffer;
   const amp = nodeGraphWaterfallAmp(live, slot);
   const midY = height * 0.5;
@@ -195,7 +228,7 @@ function nodeGraphOnsetEmitTrace(canvas, onset, key, trace, slot, settings, heig
     pen = null;
     const before = begin > 0 ? nodeGraphOnsetColumnPoints(cols[begin - 1]) : [];
     for (let i = before.length - 1; i >= 0 && !pen; i -= 1) {
-      const y = nodeGraphOnsetTraceY(before[i].raw, trace.buffer, slot, settings, height, strokePx);
+      const y = nodeGraphOnsetTraceY(before[i].raw, trace.buffer, slot, settings, height, strokePx, onset.range);
       if (y == null) continue;
       const loc = nodeGraphOnsetTraceX(before[i].frame, origin, faceSamples, width, startPx);
       pen = { x: loc.x, y, u: loc.u, frame: before[i].frame };
@@ -210,7 +243,7 @@ function nodeGraphOnsetEmitTrace(canvas, onset, key, trace, slot, settings, heig
   for (let c = begin; c < end; c += 1) {
     const pts = nodeGraphOnsetColumnPoints(cols[c]);
     for (let i = 0; i < pts.length; i += 1) {
-      const y = nodeGraphOnsetTraceY(pts[i].raw, trace.buffer, slot, settings, height, strokePx);
+      const y = nodeGraphOnsetTraceY(pts[i].raw, trace.buffer, slot, settings, height, strokePx, onset.range);
       if (y == null) continue;
       const loc = nodeGraphOnsetTraceX(pts[i].frame, origin, faceSamples, width, startPx);
       const wrap = Number.isFinite(prevU) && Math.floor(loc.u / width) !== Math.floor(prevU / width);
@@ -336,6 +369,10 @@ function nodeGraphOnsetPaint(spec, live) {
   const scaleChanged = Number.isFinite(onset.paintScale)
     && Math.abs(onset.paintScale - ampScale) > 1e-5;
   onset.paintScale = ampScale;
+  const autoRange = node?.type === "onset" && nodeGraphOnsetAutoRangeOn(settings);
+  const autoToggled = typeof onset.autoRange === "boolean" && onset.autoRange !== autoRange;
+  onset.autoRange = autoRange;
+  if (!autoRange) onset.range = null;
   if (!onset.live || !Number.isFinite(onset.origin)) {
     present();
     return true;
@@ -368,7 +405,8 @@ function nodeGraphOnsetPaint(spec, live) {
   }
   onset.latchedSamples = faceSamples;
   const startPx = Math.floor(position * width) % width;
-  if (scaleChanged && nodeGraphOnsetTraceHasSamples(onset)) {
+  if ((scaleChanged || autoToggled) && nodeGraphOnsetTraceHasSamples(onset)) {
+    if (autoRange) onset.range = nodeGraphOnsetTraceRange(onset);
     // The ring has usually moved past the parked pass. Replay every stored
     // sample at the new Scale so the line follows the buffer.
     if (typeof nodeGraphWaterfallGlReset === "function") nodeGraphWaterfallGlReset(canvas, plateBg);
@@ -436,7 +474,18 @@ function nodeGraphOnsetPaint(spec, live) {
       endAll = Math.max(endAll, endCol);
     }
   }
-  if (endAll >= beginAll) {
+  // Auto Range: a new min or max moves every stored point, so replay the face.
+  const range = autoRange ? nodeGraphOnsetTraceRange(onset) : null;
+  const prevRange = onset.range;
+  onset.range = range;
+  const rangeMoved = Boolean(range)
+    && (!prevRange || prevRange.lo !== range.lo || prevRange.hi !== range.hi);
+  if (rangeMoved) {
+    if (typeof nodeGraphWaterfallGlReset === "function") nodeGraphWaterfallGlReset(canvas, plateBg);
+    nodeGraphOnsetRedrawTraces(
+      canvas, onset, spec.slot, settings, height, width, onset.origin, faceSamples, startPx,
+    );
+  } else if (endAll >= beginAll) {
     const strokePx = typeof nodeGraphOnsetStrokeCanvasPx === "function"
       ? nodeGraphOnsetStrokeCanvasPx(canvas, settings)
       : 1;

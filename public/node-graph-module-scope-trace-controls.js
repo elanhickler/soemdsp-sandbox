@@ -300,7 +300,7 @@ const nodeGraphTraceDisplayActiveControlsByType = Object.freeze({
       "strokeThickness",
     ]),
     colors: Object.freeze(["dot1Color", "secondaryColor", "tertiaryColor", "backgroundColor", "strokeColor", "strokeLeftColor", "strokeRightColor"]),
-    toggles: Object.freeze(["skipDiscontinuities", "resetSync", "pauseOnSilence", "smoothLines"]),
+    toggles: Object.freeze(["skipDiscontinuities", "resetSync", "autoRange", "pauseOnSilence", "smoothLines"]),
     choices: Object.freeze(["barInk", "facePolarity", "stereoBlend"]),
   }),
   // Phosphor energy faces: color via shared Gradient editor (not single swatches).
@@ -1871,6 +1871,10 @@ const nodeGraphDisplaySettingsToggleMeta = Object.freeze({
     id: "nodeTraceDisplayPauseOnSilence",
     title:
       "While on, Instant Waterfall stops scrolling when every enabled channel is at or below Planck amplitude. Off (default) keeps scrolling. History at 0 is the current bar either way.",
+  }),
+  autoRange: Object.freeze({
+    label: "Auto Range",
+    id: "nodeTraceDisplayAutoRange",
   }),
   resetSync: Object.freeze({
     label: "Sync",

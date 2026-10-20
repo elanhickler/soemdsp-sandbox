@@ -1612,6 +1612,10 @@ function buildNodeGraphInstantTraceDisplaySettingsBodyHtml(type, node, allowKey)
     rows.push(nodeGraphDisplaySettingsBuildToggleRowHtml("resetSync"));
   }
   usedToggles.add("resetSync");
+  if (node?.type === "onset" && toggleKeys.includes("autoRange")) {
+    rows.push(nodeGraphDisplaySettingsBuildToggleRowHtml("autoRange"));
+  }
+  usedToggles.add("autoRange");
   const isOnsetFace = node?.type === "onset" || node?.type === "onset2d";
   if (!isOnsetFace) {
     pushStackField("detail");

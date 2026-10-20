@@ -176,6 +176,8 @@ const nodeGraphWaterfallSettingsDefaults = Object.freeze({
   // 1D Onset only. On: face width is History (percent) of the Reset gap.
   // History (seconds) is the fallback until two edges have been measured.
   resetSync: false,
+  // 1D Onset only. On: the face height spans the min..max of the shown samples.
+  autoRange: true,
   // On: sloped column edges get slope-aware AA (waterfall GL bar shader).
   smoothLines: true,
   // Bipolar: −1 bottom, 0 center, +1 top. Unipolar: 0 bottom, +1 top.
