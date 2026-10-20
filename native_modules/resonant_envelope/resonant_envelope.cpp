@@ -7,7 +7,8 @@
 // Decay sets the dominant time constant. Resonance sets damping
 // zeta = 4 * 200^(-Resonance). Tracking scales attack, decay, and ring
 // from the f input around 440 Hz. Impulse blends a rising-edge ping
-// with the gate step. The input is read as a gate (high when > 0). Output Range Fit scales the peak to Amplitude
+// with the gate step. App Gate contract (gate_on / gate_hit, docs/GATES_TRIGGERS.md):
+// on = leaves Planck silence in either sign; Peak = input height latched on the hit. Output Range Fit scales the peak to Amplitude
 // and clips below 0. Raw is the filter output.
 
 #include <soemdsp/soemdsp.hpp>
@@ -31,6 +32,7 @@ static const double kE = 2.718281828459045;
 struct State {
   TptSvfState filt;
   double lastGate;
+  double velocity;
   double shotAttack;
   double shotDecay;
   double shotResonance;
@@ -164,6 +166,7 @@ extern "C" int soemdsp_resonant_envelope_create() {
       State& s = gPool[i];
       tpt_svf_reset(s.filt);
       s.lastGate = 0.0;
+      s.velocity = 1.0;
       s.shotAttack = 0.01;
       s.shotDecay = 0.3;
       s.shotResonance = 0.0;
@@ -218,8 +221,9 @@ extern "C" double soemdsp_resonant_envelope_sample(
   if (!(sr >= 1.0)) sr = 44100.0;
   double gate = safe(input);
   if (!(gate * 0.0 == 0.0)) gate = 0.0;
-  const bool high = gate > 0.0;
-  const bool rising = high && !(s.lastGate > 0.0);
+  const bool rising = gate_hit(gate, &s.lastGate);
+  const bool high = gate_on(gate);
+  if (rising) s.velocity = gate;
   const bool latch = clamp01_param(recalculateOnTrigger, 1.0) >= 0.5;
   if (rising && latch) {
     s.shotAttack = safe(attackSec);
@@ -269,12 +273,9 @@ extern "C" double soemdsp_resonant_envelope_sample(
     s.cScale = scale;
     s.cSr = sr;
   }
-  // The input is a gate: only its sign matters. Using the raw level made a
-  // saw or any rising ramp ping on every sample of the ramp (edge > 0 all the
-  // way up), so the hit landed at the end of the ramp instead of the trigger.
-  const double gateLevel = high ? 1.0 : 0.0;
-  const double edge = rising ? 1.0 : 0.0;
-  s.lastGate = gate;
+  // Step holds the velocity latched on the hit; the ping fires on the hit sample only.
+  const double gateLevel = high ? s.velocity : 0.0;
+  const double edge = rising ? s.velocity : 0.0;
   const double drive = (1.0 - imp) * gateLevel * amp + imp * edge * s.kImpulse * amp;
   if (!(s.filt.z1 * 0.0 == 0.0) || !(s.filt.z2 * 0.0 == 0.0)) tpt_svf_reset(s.filt);
   double y = tpt_svf_tick(s.filt, s.coeff, drive);
