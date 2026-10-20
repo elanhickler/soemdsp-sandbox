@@ -1621,19 +1621,19 @@ const nodeGraphDisplaySettingsFieldMeta = Object.freeze({
     label: "Line thickness",
     inputmode: "decimal",
     id: "nodeTraceDisplaySinCos4RayThickness",
-    title: "SinCos4: width of the phase rays, % of the face square (0..5, default 1.2). Tap A is drawn 1.35x.",
+    title: "SinCos4: width of the phase rays, % of the face square (0..50, default 1.2). Tap A is drawn 1.35x.",
   }),
   sinCos4RingThickness: Object.freeze({
     label: "Ring thickness",
     inputmode: "decimal",
     id: "nodeTraceDisplaySinCos4RingThickness",
-    title: "SinCos4: width of the circle, % of the face square (0..5, default 1.2).",
+    title: "SinCos4: width of the circle, % of the face square (0..50, default 1.2).",
   }),
   sinCos4HubSize: Object.freeze({
     label: "Hub size",
     inputmode: "decimal",
     id: "nodeTraceDisplaySinCos4HubSize",
-    title: "SinCos4: centre dot radius as a multiple of the tip dot radius (0..2, default 0.7).",
+    title: "SinCos4: centre dot radius as a multiple of the tip dot radius (0..10, default 0.7).",
   }),
   torchHue: Object.freeze({
     label: "Hue",
