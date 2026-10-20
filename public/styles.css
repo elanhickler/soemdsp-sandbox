@@ -25841,41 +25841,7 @@ html.soemdsp-whole-module .node-layout-canvas-grip {
   width: var(--node-mod-rail-width);
   min-width: var(--node-mod-rail-width);
 }
-/* Rail tags (soundemote-dev wiring look): dark strip with a #3d4555 edge,
-   each tag a 16 px box inset 3 px, 1 px border, radius 2, mono 650 9px.
-   Neutral ink; cable/jack type colors are untouched. */
-.dsp-node[data-face-layout="spawn"] .node-param-port.parameter-output {
-  background: #080a0e;
-  box-shadow: inset 1px 0 0 #3d4555;
-}
-.dsp-node[data-face-layout="spawn"].mod-rail-open .node-param-port.modulation-input {
-  background: #080a0e;
-  box-shadow: inset -1px 0 0 #3d4555;
-}
-/* Tags only for params in use: one pair (inlet + thru) per used param. */
-.dsp-node[data-face-layout="spawn"].mod-rail-open .node-param-port.parameter-output.rail-patched::after,
-.dsp-node[data-face-layout="spawn"].mod-rail-open .node-param-port.modulation-input.rail-patched::after {
-  content: attr(data-rail-label);
-  position: absolute;
-  left: 3px;
-  right: 3px;
-  top: 50%;
-  height: 16px;
-  transform: translateY(-50%);
-  box-sizing: border-box;
-  border: 1px solid #889;
-  border-radius: 2px;
-  background: #111;
-  color: #dde;
-  font: 650 9px/14px var(--node-mono, Consolas, monospace);
-  letter-spacing: 0.04em;
-  text-align: center;
-  text-indent: 0;
-  white-space: nowrap;
-  overflow: hidden;
-  pointer-events: none;
-}
-
+/* Rail strips and tags are drawn in WebGL (nodeGraphModuleRailsDrawGl). */
 /* Hand-written module face (rails plan PP-5, node-graph-module-face.js).
    WebGL paints the face; .node-face is the single pointer target. Param rows
    stay for their inputs and rail jacks; the jacks stack per face row. */

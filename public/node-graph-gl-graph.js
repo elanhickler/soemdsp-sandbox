@@ -1623,6 +1623,9 @@ function nodeGraphGlGraphPresent(options = {}) {
   if (typeof nodeGraphModuleFaceDrawAllGl === "function") {
     nodeGraphModuleFaceDrawAllGl(batch, nodeGraphGlGraphState.plates, toX, toY, layoutZoom, cssW, cssH);
   }
+  if (typeof nodeGraphModuleRailsDrawGl === "function") {
+    nodeGraphModuleRailsDrawGl(batch, nodeGraphGlGraphState.plates, toX, toY, layoutZoom, cssW, cssH);
+  }
   const pixelated = zoom > 2.5;
   for (let i = 0; i < nodeGraphGlGraphState.displays.length; i += 1) {
     const face = nodeGraphGlGraphState.displays[i];

@@ -157,3 +157,77 @@ function nodeGraphCanvasDisplayBox(tileW, tileH, aspect = 0) {
   const fh = fw / aspect;
   return { x: (w - fw) * 0.5, y: (h - fh) * 0.5, w: fw, h: fh };
 }
+
+// ---- Rail drawing (WebGL only; the rail DOM is hit/geometry, never painted) ----
+// Look from soundemote-dev wiring: dark strip with a #3d4555 inner edge; each
+// used param gets a 16 px tag inset 3 px, 1 px #889 border, #111 fill, 9 px
+// weight-650 mono #dde short label.
+const NodeGraphRailInk = Object.freeze({
+  strip: "#080a0e",
+  edge: "#3d4555",
+  tagBorder: "#889",
+  tagFill: "#111111",
+  tagText: "#dde",
+});
+const NODE_GRAPH_RAIL_TAG_HEIGHT_PX = 16;
+const NODE_GRAPH_RAIL_TAG_INSET_PX = 3;
+const NODE_GRAPH_RAIL_TAG_FONT_PX = 9;
+
+const nodeGraphRailRgbaCache = new Map();
+function nodeGraphRailRgba(css) {
+  let rgba = nodeGraphRailRgbaCache.get(css);
+  if (!rgba) {
+    let hex = css;
+    if (/^#[0-9a-f]{3}$/i.test(hex)) hex = `#${[...hex.slice(1)].map((c) => c + c).join("")}`;
+    rgba = typeof nodeGraphGlGraphParseCssColor === "function" ? nodeGraphGlGraphParseCssColor(hex, [1, 1, 1, 1]) : [1, 1, 1, 1];
+    nodeGraphRailRgbaCache.set(css, rgba);
+  }
+  return rgba;
+}
+
+/** Draw open rails (strips + used-param tags) for every visible module. */
+function nodeGraphModuleRailsDrawGl(batch, plates, toX, toY, zoom, cssW, cssH) {
+  if (typeof nodeGraphGlLinesRect !== "function" || typeof nodeGraphModuleLayoutBox !== "function") return;
+  const rect = (x, y, w, h, css) => nodeGraphGlLinesRect(batch, x, y, w, h, nodeGraphRailRgba(css));
+  for (let i = 0; i < plates.length; i += 1) {
+    const el = typeof nodeGraphNodeElement === "function" ? nodeGraphNodeElement(plates[i].id) : null;
+    if (!el?.classList.contains("mod-rail-open") || el.dataset.faceLayout !== NodeGraphFaceLayout.spawn) continue;
+    const body = el.querySelector(":scope > .dsp-node-body");
+    const laid = body ? nodeGraphModuleLayoutBox(body, el) : null;
+    if (!laid) continue;
+    const x0 = toX(plates[i].x + laid.x);
+    const y0 = toY(plates[i].y + laid.y);
+    const w = laid.w * zoom;
+    const h = laid.h * zoom;
+    if (x0 > cssW || y0 > cssH || x0 + w < 0 || y0 + h < 0) continue;
+    const rw = NODE_GRAPH_RAIL_WIDTH_PX * zoom;
+    const edge = Math.max(1, zoom);
+    batch._over = true;
+    rect(x0, y0, rw, h, NodeGraphRailInk.strip);
+    rect(x0 + rw - edge, y0, edge, h, NodeGraphRailInk.edge);
+    rect(x0 + w - rw, y0, rw, h, NodeGraphRailInk.strip);
+    rect(x0 + w - rw, y0, edge, h, NodeGraphRailInk.edge);
+    const tags = [];
+    for (const port of body.querySelectorAll(".node-param-port.rail-patched")) {
+      const box = nodeGraphModuleLayoutBox(port, el);
+      if (!box) continue;
+      const tx = toX(plates[i].x + box.x) + NODE_GRAPH_RAIL_TAG_INSET_PX * zoom;
+      const tw = (box.w - NODE_GRAPH_RAIL_TAG_INSET_PX * 2) * zoom;
+      const th = NODE_GRAPH_RAIL_TAG_HEIGHT_PX * zoom;
+      const ty = toY(plates[i].y + box.y + box.h / 2) - th / 2;
+      if (!(tw > 1)) continue;
+      rect(tx, ty, tw, th, NodeGraphRailInk.tagBorder);
+      rect(tx + edge, ty + edge, tw - edge * 2, th - edge * 2, NodeGraphRailInk.tagFill);
+      tags.push({ text: port.dataset.railLabel || "", x: tx + tw / 2, y: ty + th / 2, w: tw - edge * 4 });
+    }
+    batch._over = false;
+    if (typeof nodeGraphGlLinesText !== "function") continue;
+    for (const tag of tags) {
+      const o = {
+        px: Math.max(4, NODE_GRAPH_RAIL_TAG_FONT_PX * zoom), rgba: nodeGraphRailRgba(NodeGraphRailInk.tagText),
+        align: "center", baseline: "middle", weight: 650, maxWidth: tag.w,
+      };
+      nodeGraphGlLinesText(batch, tag.text, tag.x, tag.y, typeof nodeGraphGlGraphTextOpts === "function" ? nodeGraphGlGraphTextOpts(o) : o);
+    }
+  }
+}

@@ -76,10 +76,16 @@ const snap = () => page.evaluate(() => {
     thruLabel: thru.dataset.railLabel,
     thruTags: [...pp.querySelectorAll(".node-param-port.parameter-output")]
       .filter((el) => !el.closest(".node-parameter-row")?.hidden).every((el) => el.getBoundingClientRect().width > 0),
-    // Params with a drawn tag, per rail (tag = ::after with the short label).
+    // Params the GL rail painter tags, per rail (open rail + rail-patched jack).
     tagged: ["modulation-input", "parameter-output"].map((cls) => [...pp.querySelectorAll(`.node-param-port.${cls}`)]
-      .filter((el) => { const c = getComputedStyle(el, "::after").content; return c && c !== "none" && c !== "normal"; })
+      .filter((el) => pp.classList.contains("mod-rail-open") && el.classList.contains("rail-patched"))
       .map((el) => el.dataset.param).sort().join(",")),
+    // Rails are GPU-only: no CSS paint on rail jacks.
+    railCss: [...pp.querySelectorAll(".node-param-port")].some((el) => {
+      const cs = getComputedStyle(el);
+      const after = getComputedStyle(el, "::after").content;
+      return (after && after !== "none" && after !== "normal") || cs.backgroundColor === "rgb(8, 10, 14)";
+    }),
     inletCount: pp.querySelectorAll('.node-param-port.modulation-input[data-param="feedback"]').length,
   };
 });
@@ -113,6 +119,7 @@ await page.waitForTimeout(300);
 const one = await snap();
 check("first cable: mod rail open", one.open && Math.abs(one.modW - RAIL * z) < 1.5, JSON.stringify(one));
 check("first cable: inlet tag on the patched param", one.modPatched);
+check("rails painted by GL only (no CSS tag/strip)", !one.railCss);
 check("first cable: thru rail appears with the mod rail", Math.abs(one.thruW - RAIL * z) < 1.5, one.thruW);
 check("first cable: exactly one tag pair (inlet + thru) for the used param", one.tagged.join("|") === "feedback|feedback", JSON.stringify(one.tagged));
 check("module width unchanged", Math.abs(one.width - rest.width) < 0.5, `${rest.width} -> ${one.width}`);
