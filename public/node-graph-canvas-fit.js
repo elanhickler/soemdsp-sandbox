@@ -26,13 +26,6 @@ function nodeGraphWholeModuleFitBox(tw, th, natW, natH) {
   return { s, ox: (tw - natW * s) / 2, oy: (th - natH * s) / 2, pad };
 }
 
-/** Contain fit with no padding (display faces in the mini view). */
-function nodeGraphContainFitBox(tw, th, w, h) {
-  if (!(tw > 0 && th > 0 && w > 0 && h > 0)) return null;
-  const s = Math.min(tw / w, th / h);
-  return { s, ox: (tw - w * s) / 2, oy: (th - h * s) / 2 };
-}
-
 /** Tile rect (stage fractions) to stage px. Same numbers F writes into the tile's style. */
 function nodeGraphCanvasTileRectPx(rect, stageW, stageH) {
   const r = typeof SoemMath !== "undefined" && typeof SoemMath.normalizeCanvasTileRect === "function"

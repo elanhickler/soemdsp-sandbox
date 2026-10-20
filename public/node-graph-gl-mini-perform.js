@@ -367,32 +367,29 @@ function nodeGraphGlMiniPerformPresent() {
       nodeGraphGlMiniPerformModuleTile(view, tile, el, frame, i);
       continue;
     }
-    let x0 = Infinity;
-    let y0 = Infinity;
-    let x1 = -Infinity;
-    let y1 = -Infinity;
-    for (const d of displays) {
-      x0 = Math.min(x0, d.x);
-      y0 = Math.min(y0, d.y);
-      x1 = Math.max(x1, d.x + d.w);
-      y1 = Math.max(y1, d.y + d.h);
-    }
-    const fit = nodeGraphContainFitBox(tile.w, tile.h, x1 - x0, y1 - y0);
-    if (!fit) continue;
-    view._miniMaps.push({
-      nodeId: tile.nodeId,
-      x: tile.x + fit.ox,
-      y: tile.y + fit.oy,
-      w: (x1 - x0) * fit.s,
-      h: (y1 - y0) * fit.s,
-      scale: fit.s,
-      layoutX: x0,
-      layoutY: y0,
-    });
-    for (const d of displays) {
-      const w = d.w * fit.s;
-      const h = d.h * fit.s;
-      nodeGraphGlLinesImage(batch, d.canvas, tile.x + fit.ox + (d.x - x0) * fit.s, tile.y + fit.oy + (d.y - y0) * fit.s, w, h, {
+    // PP-10: the display takes its tile's box (or contain-fits a declared
+    // displayAspect). The workspace display box has no say; several displays
+    // split the tile evenly top to bottom.
+    const box = nodeGraphCanvasDisplayBox(tile.w, tile.h, nodeGraphDisplayAspect(patchNode?.type));
+    const sliceH = box.h / displays.length;
+    for (let k = 0; k < displays.length; k += 1) {
+      const d = displays[k];
+      const w = box.w;
+      const h = sliceH;
+      const x = tile.x + box.x;
+      const y = tile.y + box.y + k * sliceH;
+      view._miniMaps.push({
+        nodeId: tile.nodeId,
+        x,
+        y,
+        w,
+        h,
+        scale: w / d.w,
+        scaleY: h / d.h,
+        layoutX: d.x,
+        layoutY: d.y,
+      });
+      nodeGraphGlLinesImage(batch, d.canvas, x, y, w, h, {
         // Nearest neighbour once a face pixel covers more than 2.5 screen pixels.
         nearest: w / d.canvas.width > 2.5,
         alpha: 1,

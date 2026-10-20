@@ -7756,13 +7756,14 @@ body.keyboard-debug-hidden .node-midi-keyboard-signal-bar {
   --node-selection-hit-trail-color: rgb(0 208 255);
   --node-selection-hit-trail-alpha: 0.95;
   --node-choice-divider-padding: 3px;
-  --node-module-fill: #171a1f;
+  /* Frame from soundemote-dev condensed faces. */
+  --node-module-fill: #0b0c10;
   --node-module-title-fill: #030113;
   /* I/O strip is see-through like the plate — jacks are stroke-only. */
   --node-module-io-fill: transparent;
   --node-module-stroke: #f3f1ec;
   --node-module-idle-stroke-width: 1px;
-  --node-module-idle-stroke: rgb(161 155 155 / 0.9);
+  --node-module-idle-stroke: #3d4555;
   --node-module-selected-stroke: rgb(226 168 109 / 1);
   --node-module-title-padding: 0px;
   --node-module-drag-stroke: #e2a86d;
@@ -13405,6 +13406,7 @@ body.node-screen-solo-fit-fill .node-screen-solo-face {
    in F solo they must drop that calc and fill the cell so the circle can scale. */
 body.node-screen-solo-active .node-screen-solo-face.node-sincos4-display,
 body.node-screen-solo-active .node-screen-solo-face.node-filter-curve-display.node-sincos4-display {
+  width: var(--node-screen-solo-item-w, 100%) !important;
   height: var(--node-screen-solo-item-h, 100%) !important;
   min-height: 0 !important;
   display: block !important;
@@ -25839,30 +25841,38 @@ html.soemdsp-whole-module .node-layout-canvas-grip {
   width: var(--node-rail-width, 40px);
   min-width: var(--node-rail-width, 40px);
 }
-/* Static short labels: every thru tag, and an inlet tag per patched param. */
+/* Rail tags (soundemote-dev wiring look): dark strip with a #3d4555 edge,
+   each tag a 16 px box inset 3 px, 1 px border, radius 2, mono 650 9px.
+   Neutral ink; cable/jack type colors are untouched. */
+.dsp-node[data-face-layout="spawn"] .node-param-port.parameter-output {
+  background: #080a0e;
+  box-shadow: inset 1px 0 0 #3d4555;
+}
+.dsp-node[data-face-layout="spawn"].mod-rail-open .node-param-port.modulation-input {
+  background: #080a0e;
+  box-shadow: inset -1px 0 0 #3d4555;
+}
 .dsp-node[data-face-layout="spawn"] .node-param-port.parameter-output::after,
 .dsp-node[data-face-layout="spawn"].mod-rail-open .node-param-port.modulation-input.rail-patched::after {
   content: attr(data-rail-label);
   position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  left: 3px;
+  right: 3px;
+  top: 50%;
+  height: 16px;
+  transform: translateY(-50%);
+  box-sizing: border-box;
+  border: 1px solid #889;
+  border-radius: 2px;
+  background: #111;
+  color: #dde;
+  font: 650 9px/14px var(--node-mono, Consolas, monospace);
+  letter-spacing: 0.04em;
+  text-align: center;
   text-indent: 0;
   white-space: nowrap;
   overflow: hidden;
-  font-family: "JetBrains Mono", Consolas, monospace;
-  font-size: 9px;
-  line-height: 1;
-  color: var(--muted);
   pointer-events: none;
-}
-/* Rail columns read as one strip each (border only, no color cue). */
-.dsp-node[data-face-layout="spawn"] .node-param-port.parameter-output {
-  box-shadow: inset 1px 0 0 var(--line);
-}
-.dsp-node[data-face-layout="spawn"].mod-rail-open .node-param-port.modulation-input {
-  box-shadow: inset -1px 0 0 var(--line);
 }
 
 /* Layout 3 (railsOnly) uses the shared IO label type; labels are short (rails.js). */

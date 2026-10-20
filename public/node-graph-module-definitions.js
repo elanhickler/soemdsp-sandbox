@@ -1120,6 +1120,8 @@ const nodeGraphModuleDefinitions = (
   sineWavetable: {
     planRole: "source",
     layout: "sinCos4",
+    // Canvas view: unit-square face, contain-fitted to its tile (rails plan Q23).
+    displayAspect: 1,
     chrome: "LayoutA",
     customDisplayArea: true,
     displayType: "sinCos4Face",
@@ -3149,6 +3151,7 @@ const nodeGraphModuleDefinitions = (
   ellipsoid: {
     planRole: "source",
     layout: "roundShape",
+    displayAspect: 1,
     chrome: "LayoutA",
     customDisplayArea: true,
     displayType: "roundShapeFace",
@@ -3256,6 +3259,7 @@ const nodeGraphModuleDefinitions = (
     planRole: "source",
     planFreeRun: true,
     layout: "roundShape",
+    displayAspect: 1,
     chrome: "LayoutA",
     customDisplayArea: true,
     displayType: "roundShapeFace",

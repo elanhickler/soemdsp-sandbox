@@ -52,8 +52,6 @@ function nodeGraphScreenSoloSession() {
       parent: null,
       placeholder: null,
       fit: "",
-      sourceWidth: 0,
-      sourceHeight: 0,
       cols: 0,
       rows: 0,
     };
@@ -416,13 +414,6 @@ function nodeGraphScreenSoloFacePrefersFill(face) {
 }
 
 /** Circle / unit-square faces: contain should fit a square in the cell, not the short module band. */
-function nodeGraphScreenSoloFacePrefersSquareContain(face) {
-  return Boolean(
-    face?.classList?.contains("node-sincos4-display")
-    || face?.classList?.contains("node-round-shape-display"),
-  );
-}
-
 function nodeGraphScreenSoloInitialFit(items) {
   if (items.length === 1 && nodeGraphScreenSoloFacePrefersFill(items[0]?.face)) {
     return "fill";
@@ -548,14 +539,12 @@ function applyNodeGraphScreenSoloFit(mode) {
     for (let c = 0; c < countInRow && itemIndex < items.length; c += 1) {
       const item = items[itemIndex];
       itemIndex += 1;
+      // PP-10: a display's size comes only from its cell (fill), or from a
+      // declared displayAspect contain-fitted to the cell. Never the workspace box.
       if (fit === "contain") {
-        const srcW = Math.max(1, nodeGraphFiniteNumber(item.sourceWidth, 1));
-        const srcH = Math.max(1, nodeGraphFiniteNumber(item.sourceHeight, 1));
-        const scale = Math.min(cellW / srcW, cellH / srcH);
-        const w = Math.max(1, Math.round(srcW * scale));
-        const h = Math.max(1, Math.round(srcH * scale));
-        item.face?.style.setProperty("--node-screen-solo-item-w", `${w}px`);
-        item.face?.style.setProperty("--node-screen-solo-item-h", `${h}px`);
+        const box = nodeGraphCanvasDisplayBox(cellW, cellH, item.aspect);
+        item.face?.style.setProperty("--node-screen-solo-item-w", `${Math.max(1, Math.round(box.w))}px`);
+        item.face?.style.setProperty("--node-screen-solo-item-h", `${Math.max(1, Math.round(box.h))}px`);
         item.face?.setAttribute("data-solo-fit", "contain");
       } else {
         item.face?.style.removeProperty("--node-screen-solo-item-w");
@@ -1046,19 +1035,10 @@ function beginNodeGraphScreenSoloGrid(nodeIds) {
     }
     entry.host?.classList.add("node-screen-solo-host");
     entry.face.classList.add("node-screen-solo-face");
-    let sourceWidth = Math.max(1, sourceBox.width || entry.face.clientWidth || 1);
-    let sourceHeight = Math.max(1, sourceBox.height || entry.face.clientHeight || 1);
     if (typeof nodeGraphTextBoxCaptureCanvasScaleSource === "function") {
       nodeGraphTextBoxCaptureCanvasScaleSource(entry.face, sourceBox);
     }
-    // SinCos4 (and round orbit faces) author a centered unit square. Preserve a
-    // square contain aspect so F fit uses the full cell instead of the short
-    // filter-curve band (which looked top-aligned with empty space below).
-    if (nodeGraphScreenSoloFacePrefersSquareContain(entry.face)) {
-      const side = Math.max(sourceWidth, sourceHeight);
-      sourceWidth = side;
-      sourceHeight = side;
-    }
+    const aspect = nodeGraphDisplayAspect(nodeGraphPatchNode(entry.id)?.type);
     items.push({
       nodeId: entry.id,
       face: entry.face,
@@ -1069,8 +1049,7 @@ function beginNodeGraphScreenSoloGrid(nodeIds) {
       savedLayout,
       savedFaceDom: entry.savedFaceDom,
       hostWasOscilloscopeHidden: entry.hostWasOscilloscopeHidden,
-      sourceWidth,
-      sourceHeight,
+      aspect,
     });
   }
   if (!items.length) {
@@ -1082,8 +1061,6 @@ function beginNodeGraphScreenSoloGrid(nodeIds) {
   session.host = items[0].host;
   session.parent = items[0].parent;
   session.placeholder = items[0].placeholder;
-  session.sourceWidth = items[0].sourceWidth;
-  session.sourceHeight = items[0].sourceHeight;
   nodeGraphMvp.screenSoloNodeId = items[0].nodeId;
   document.body.classList.add("node-screen-solo-active");
   stage.hidden = false;
@@ -1159,8 +1136,6 @@ function endNodeGraphScreenSolo(options = {}) {
   document.body.classList.remove("node-layout-canvas-active", "node-layout-canvas-edit");
   session.nodeId = "";
   session.fit = "";
-  session.sourceWidth = 0;
-  session.sourceHeight = 0;
   session.cols = 0;
   session.rows = 0;
   const hostsToRelayout = [];

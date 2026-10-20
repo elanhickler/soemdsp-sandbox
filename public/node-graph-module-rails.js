@@ -123,3 +123,24 @@ function nodeGraphRailPortLabel(type, label) {
     ? nodeGraphRailShortLabel(label)
     : label;
 }
+
+/** Canvas display sizing (PP-10): a display's declared aspect (w/h), or 0 = fill its tile. */
+function nodeGraphDisplayAspect(type) {
+  const definition = typeof nodeGraphModuleDefinitions === "object"
+    ? nodeGraphModuleDefinitions[type]
+    : null;
+  const aspect = Number(definition?.displayAspect);
+  return Number.isFinite(aspect) && aspect > 0 ? aspect : 0;
+}
+
+/** Display box inside a canvas tile: fill it, or contain-fit a declared aspect. */
+function nodeGraphCanvasDisplayBox(tileW, tileH, aspect = 0) {
+  const w = Math.max(1, tileW);
+  const h = Math.max(1, tileH);
+  if (!(aspect > 0)) {
+    return { x: 0, y: 0, w, h };
+  }
+  const fw = Math.min(w, h * aspect);
+  const fh = fw / aspect;
+  return { x: (w - fw) * 0.5, y: (h - fh) * 0.5, w: fw, h: fh };
+}

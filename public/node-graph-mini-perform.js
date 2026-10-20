@@ -591,7 +591,7 @@ function nodeGraphMiniPerformLayoutAt(clientX, clientY) {
     return {
       nodeId: map.nodeId,
       x: map.layoutX + (x - map.x) / map.scale,
-      y: map.layoutY + (y - map.y) / map.scale,
+      y: map.layoutY + (y - map.y) / (map.scaleY || map.scale),
     };
   }
   return null;

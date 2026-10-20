@@ -48,8 +48,6 @@ for (const key of aspects.filter((name) => name !== "window")) {
 
 const fit = r("nodeGraphWholeModuleFitBox(400, 300, 200, 100)");
 ok(fit && fit.s > 0 && fit.ox >= fit.pad - 1e-9 && fit.oy >= fit.pad - 1e-9, "whole-module fit stays inside pad");
-const contain = r("nodeGraphContainFitBox(100, 100, 50, 25)");
-ok(near(contain.s, 2) && near(contain.oy, 25) && near(contain.ox, 0), "contain fit");
 const tile = r("nodeGraphCanvasTileRectPx({ x: 0.25, y: 0.5, w: 0.5, h: 0.25, z: 3 }, 800, 400)");
 ok(near(tile.x, 200) && near(tile.y, 200) && near(tile.w, 400) && near(tile.h, 100), "tile rect px");
 
