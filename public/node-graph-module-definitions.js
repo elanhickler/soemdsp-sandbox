@@ -4827,6 +4827,7 @@ const nodeGraphModuleDefinitions = (
   dsfOscillator: {
     planRole: "source",
     // One detailed cycle from the DSF closed form + phase dot (sinCosFace renderer).
+    layout: "sinCos",
     chrome: "LayoutA",
     customDisplayArea: true,
     displayType: "sinCosFace",
