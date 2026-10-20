@@ -75,6 +75,15 @@ void main() {
   float capsOut = caps;
   vec2 localOut = local;
   float halfOut = halfPx;
+  float lenOut = segLen;
+  // Analytic ring (caps 10): local = offset from the centre, segLen = radius.
+  // Camera: radius / half are zoom-1 world px, feather is screen px (as dots).
+  if (uPixel > 0.5 && caps > 9.75) {
+    float z = max(uCam.z, 0.0001);
+    localOut = local * z;
+    halfOut = halfPx * z;
+    lenOut = segLen * z;
+  } else
   // Camera: halfPx is zoom-1 world px, feather is screen px. Reach uses the
   // live zoom so a retained mesh does not pulse when the camera changes.
   if (uPixel > 0.5 && caps > 5.5 && caps < 9.5) {
@@ -118,7 +127,7 @@ void main() {
     gl_Position = vec4(position, 0.0, 1.0);
   }
   vLocal = localOut;
-  vLen = segLen;
+  vLen = lenOut;
   vHalf = halfOut;
   vFeather = feather;
   vCaps = capsOut;
@@ -144,7 +153,12 @@ void main() {
   float u = vLocal.x;
   float across = abs(vLocal.y);
   float a;
-  if (vCaps > 5.5 && vCaps < 6.5) {
+  if (vCaps > 9.75) {
+    // Analytic ring: distance to the circle of radius vLen, same solid core +
+    // shared feather smoothstep as the capsule / dot primitives.
+    float d = abs(length(vLocal) - vLen);
+    a = 1.0 - smoothstep(vHalf, vHalf + max(vFeather, 1e-4), d);
+  } else if (vCaps > 5.5 && vCaps < 6.5) {
     // One stadium per dash. Arc length is zoom-1 px, so the pattern stays
     // put while the camera moves. Caps and the body share this coverage.
     float z = max(uCam.z, 0.0001);
@@ -767,6 +781,29 @@ void main() {
     const c = corner(-alongPad, r);
     const d = corner(len + alongPad, r);
     for (const v of [a, b, c, b, d, c]) push(batch, v[0], v[1], v[2], v[3], len, halfPx, feather, rgba, capFlag);
+  }
+
+  /**
+   * Analytic ring (distance field, no segments): circle of radius r centred at
+   * (x,y), solid core halfPx either side of r, then `feather` px of smoothstep
+   * fade - the same edge as nodeGraphGlLinesSegment / nodeGraphGlLinesDot.
+   */
+  function nodeGraphGlLinesRing(batch, x, y, r, halfPx, feather, rgba) {
+    if (!batch) return;
+    let R = Math.max(0, r);
+    let half = Math.max(0, halfPx);
+    let fade = Math.max(0, feather);
+    if (!batch.camera) {
+      const k = batch.scale || 1;
+      if (k !== 1) { x *= k; y *= k; R *= k; half *= k; fade *= k; }
+    }
+    const e = R + half + fade + 1;
+    const corner = (sx, sy) => [x + sx * e, y + sy * e, sx * e, sy * e];
+    const quad = [corner(-1, -1), corner(1, -1), corner(-1, 1), corner(1, -1), corner(1, 1), corner(-1, 1)];
+    for (let i = 0; i < quad.length; i += 1) {
+      const v = quad[i];
+      push(batch, v[0], v[1], v[2], v[3], R, half, fade, rgba, 10);
+    }
   }
 
   /** Round dot (zero-length capsule) of radius r. */
@@ -2287,6 +2324,7 @@ void main() {
     nodeGraphGlLinesFillUnder,
     nodeGraphGlLinesSegment,
     nodeGraphGlLinesDot,
+    nodeGraphGlLinesRing,
     nodeGraphGlLinesPolyline,
     nodeGraphGlLinesRibbon,
     nodeGraphGlLinesDash,

@@ -272,13 +272,8 @@ function drawNodeGraphSinCos4DisplayInner(section) {
   const hubR = look.hub;
   const halfOf = (unitW) => Math.max(0, unitW * side * 0.5 - feather * 0.5);
 
-  const ring = [];
-  const n = 96;
-  for (let i = 0; i <= n; i += 1) {
-    const a = (i / n) * Math.PI * 2;
-    ring.push(X(cx + Math.cos(a) * radius), Y(cy - Math.sin(a) * radius));
-  }
-  nodeGraphGlLinesPolyline(batch, ring, halfOf(look.ringStroke), feather, [160 / 255, 190 / 255, 210 / 255, 0.35]);
+  // Analytic shader ring (distance field, same feather as the dots).
+  nodeGraphGlLinesRing(batch, X(cx), Y(cy), X(cx + radius) - X(cx), halfOf(look.ringStroke), feather, [160 / 255, 190 / 255, 210 / 255, 0.35]);
 
   // Rays; position shown by round dots.
   for (let i = 0; i < offsets.length; i += 1) {

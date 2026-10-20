@@ -23,7 +23,7 @@ const r = await page.evaluate(async () => {
   // Capture what the face hands the WebGL line batch.
   let calls = [];
   const wrap = (name) => { const real = globalThis[name]; globalThis[name] = (...a) => { calls.push([name, ...a.slice(1).map((v) => (Array.isArray(v) ? (typeof v[0] === "number" && v.length <= 4 ? v.map((x) => +(+x).toFixed(4)) : v.length) : (typeof v === "number" ? +v.toFixed(4) : v)))]); return real(...a); }; };
-  ["nodeGraphGlLinesPolyline", "nodeGraphGlLinesSegment", "nodeGraphGlLinesDot"].forEach(wrap);
+  ["nodeGraphGlLinesPolyline", "nodeGraphGlLinesRing", "nodeGraphGlLinesSegment", "nodeGraphGlLinesDot"].forEach(wrap);
   const grab = () => { calls = []; sec._sinCos4ForceDraw = true; sec._sinCos4LaidOut = false; drawNodeGraphSinCos4Display(sec); const c = calls.slice(); return c; };
   out.side = Math.min(sec.clientWidth, sec.clientHeight);
   out.def = grab();
@@ -43,7 +43,7 @@ const r = await page.evaluate(async () => {
   try { mountNodeGraphDisplaySettingsBody(pop, "sinCos4Face", node); out.formHas = ["nodeTraceDisplaySinCos4OuterDotSize", "nodeTraceDisplaySinCos4HubDotSize", "nodeTraceDisplaySinCos4RayThickness", "nodeTraceDisplaySinCos4RingThickness", "nodeTraceDisplaySinCos4HubSize"].filter((k) => pop.innerHTML.includes(k)); out.formDot1 = pop.innerHTML.includes("nodeTraceDisplayDot1Size"); out.formColour = /hbs|Color/i.test(pop.innerHTML.replace(/class="[^"]*"/g, "")); } catch (e) { out.formErr = String(e); }
   return out;
 });
-const widths = (calls) => ({ ring: calls.find((c) => c[0] === "nodeGraphGlLinesPolyline")?.[2], rays: calls.filter((c) => c[0] === "nodeGraphGlLinesSegment").map((c) => c[5]), dots: calls.filter((c) => c[0] === "nodeGraphGlLinesDot").map((c) => c[3]), colours: calls.map((c) => JSON.stringify(c.at(-1))) });
+const widths = (calls) => ({ ring: calls.find((c) => c[0] === "nodeGraphGlLinesRing")?.[4], ringR: calls.find((c) => c[0] === "nodeGraphGlLinesRing")?.[3], poly: calls.filter((c) => c[0] === "nodeGraphGlLinesPolyline").length, rays: calls.filter((c) => c[0] === "nodeGraphGlLinesSegment").map((c) => c[5]), dots: calls.filter((c) => c[0] === "nodeGraphGlLinesDot").map((c) => c[3]), colours: calls.map((c) => JSON.stringify(c.at(-1))) });
 const d = widths(r.def), c = widths(r.chg), e = r.expect;
 console.log("side", r.side, "expected old", JSON.stringify(e));
 console.log("default", JSON.stringify({ ring: d.ring, rays: d.rays, dots: d.dots }));
@@ -55,6 +55,7 @@ console.log("dots base/outer/hub/legacy", JSON.stringify([r.base, r.outerOnly, r
 gate(r.outerOnly[0] > r.base[0] && r.outerOnly[1] > r.base[1] && near(r.outerOnly.at(-1), r.base.at(-1)), "Outer dot size grows only the ring dots");
 gate(r.hubOnly.at(-1) > r.base.at(-1) && near(r.hubOnly[0], r.base[0]), "Hub dot size grows only the centre dot");
 gate(JSON.stringify(r.legacy) === JSON.stringify(r.both), "old saved Size (dot1Size) draws as Outer = Hub = Size");
+gate(d.poly === 0 && near(d.ringR, 0.38 * r.side), `ring is one analytic nodeGraphGlLinesRing (r ${d.ringR}), no polyline`);
 gate(JSON.stringify(c.colours) === JSON.stringify(d.colours), "colours unchanged by the size controls");
 gate(r.formHas?.length === 5 && !r.formDot1, `form shows Outer / Hub dot size + the three thickness rows (${r.formHas} ${r.formErr || ""})`);
 gate(errors.length === 0, `no page errors ${errors.slice(0, 3).join(" | ")}`);
