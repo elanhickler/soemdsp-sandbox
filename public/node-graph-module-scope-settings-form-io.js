@@ -617,6 +617,9 @@ if (type === "portalFace") {
   if (type === "torchFace") {
     return normalizeNodeGraphTorchFaceSettings();
   }
+  if (type === "sinCos4Face" && typeof normalizeNodeGraphSinCos4FaceSettings === "function") {
+    return normalizeNodeGraphSinCos4FaceSettings();
+  }
   return {};
 }
 
@@ -852,6 +855,9 @@ if (type === "portalFace") {
   }
   if (type === "torchFace") {
     return normalizeNodeGraphTorchFaceSettings(settings);
+  }
+  if (type === "sinCos4Face" && typeof normalizeNodeGraphSinCos4FaceSettings === "function") {
+    return normalizeNodeGraphSinCos4FaceSettings(settings);
   }
   return {};
 }

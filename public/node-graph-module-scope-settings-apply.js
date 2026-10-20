@@ -390,6 +390,13 @@ function assignNodeGraphTypedDisplaySettingsToNode(node, displayType, settings) 
     node.traceDisplaySettings = normalizeNodeGraphTorchFaceSettings(settings);
     return node.traceDisplaySettings;
   }
+  if (displayType === "sinCos4Face" && typeof normalizeNodeGraphSinCos4FaceSettings === "function") {
+    node.traceDisplaySettings = normalizeNodeGraphSinCos4FaceSettings(settings);
+    if (typeof applyNodeGraphSinCos4DisplaySettingsToFace === "function") {
+      applyNodeGraphSinCos4DisplaySettingsToFace(node);
+    }
+    return node.traceDisplaySettings;
+  }
   return null;
 }
 

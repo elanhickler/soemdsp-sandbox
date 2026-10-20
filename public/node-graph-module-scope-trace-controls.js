@@ -917,7 +917,7 @@ const nodeGraphTraceDisplayActiveControlsByType = Object.freeze({
   }),
   // Size (dot1Size) is 0…1 of the centered face square — F-fullscreen scales with it.
   sinCos4Face: Object.freeze({
-    fields: Object.freeze(["dot1Size", "pixelDensity"]),
+    fields: Object.freeze(["dot1Size", "sinCos4RayThickness", "sinCos4RingThickness", "sinCos4HubSize", "pixelDensity"]),
     colors: Object.freeze([]),
     toggles: Object.freeze([]),
     choices: Object.freeze([]),
@@ -1028,6 +1028,9 @@ const nodeGraphTraceDisplaySectionControls = Object.freeze({
     fields: Object.freeze([
       "dot1Brightness",
       "dot1Size",
+      "sinCos4RayThickness",
+      "sinCos4RingThickness",
+      "sinCos4HubSize",
       "lineThickness",
       "shapeParam",
       "ghostBrightness",
@@ -1613,6 +1616,24 @@ const nodeGraphDisplaySettingsFieldMeta = Object.freeze({
     inputmode: "decimal",
     id: "nodeTraceDisplayHue",
     title: "LED lamp hue in degrees (0–360).",
+  }),
+  sinCos4RayThickness: Object.freeze({
+    label: "Line thickness",
+    inputmode: "decimal",
+    id: "nodeTraceDisplaySinCos4RayThickness",
+    title: "SinCos4: width of the phase rays, % of the face square (0..5, default 1.2). Tap A is drawn 1.35x.",
+  }),
+  sinCos4RingThickness: Object.freeze({
+    label: "Ring thickness",
+    inputmode: "decimal",
+    id: "nodeTraceDisplaySinCos4RingThickness",
+    title: "SinCos4: width of the circle, % of the face square (0..5, default 1.2).",
+  }),
+  sinCos4HubSize: Object.freeze({
+    label: "Hub size",
+    inputmode: "decimal",
+    id: "nodeTraceDisplaySinCos4HubSize",
+    title: "SinCos4: centre dot radius as a multiple of the tip dot radius (0..2, default 0.7).",
   }),
   torchHue: Object.freeze({
     label: "Hue",

@@ -67,20 +67,54 @@ const NODE_GRAPH_SINCOS4_COLORS = Object.freeze([
   "rgb(240, 210, 120)",
 ]);
 
-/** Face look in 0…1 of the centered square (F-safe). */
+// Display Settings schema `sinCos4Face`: sizes only (tap colours and plate fixed).
+//   dot1Size        tip dots, 0..1 (tip radius = 0.01 + 0.04 * size of the square)
+//   sinCos4RayThickness   ray width, % of the face square (tap A drawn 1.35x)
+//   sinCos4RingThickness  ring width, % of the face square
+//   sinCos4HubSize        centre hub radius, x the tip radius
+// Defaults = the original fixed look (ray / ring 1.2 %, hub 0.7 x tip).
+const nodeGraphSinCos4FaceDisplaySettingsDefaults = Object.freeze({
+  dot1Size: 0.08,
+  sinCos4RayThickness: 1.2,
+  sinCos4RingThickness: 1.2,
+  sinCos4HubSize: 0.7,
+  pixelDensity: 1,
+});
+
+function normalizeNodeGraphSinCos4FaceSettings(settings = {}) {
+  const s = settings && typeof settings === "object" ? settings : {};
+  const d = nodeGraphSinCos4FaceDisplaySettingsDefaults;
+  const num = (v, fb, lo, hi) => { const n = Number(v); return Number.isFinite(n) ? Math.max(lo, Math.min(hi, n)) : fb; };
+  return {
+    ...s,
+    dot1Size: num(s.dot1Size, d.dot1Size, 0, 1),
+    sinCos4RayThickness: num(s.sinCos4RayThickness, d.sinCos4RayThickness, 0, 5),
+    sinCos4RingThickness: num(s.sinCos4RingThickness, d.sinCos4RingThickness, 0, 5),
+    sinCos4HubSize: num(s.sinCos4HubSize, d.sinCos4HubSize, 0, 2),
+    pixelDensity: num(s.pixelDensity, d.pixelDensity, 0, 1),
+  };
+}
+
+function applyNodeGraphSinCos4DisplaySettingsToFace(node) {
+  if (!node?.id || typeof document === "undefined") return;
+  const el = document.querySelector?.(`.node-sincos4-display[data-node="${CSS.escape(String(node.id))}"]`);
+  if (!el) return;
+  el._sinCos4ForceDraw = true;
+  el._sinCos4LaidOut = false;
+  drawNodeGraphSinCos4Display(el);
+}
+
+/** Face look in 0..1 of the centered square (F-safe). */
 function nodeGraphSinCos4FaceNorm(node) {
-  const td = node?.traceDisplaySettings && typeof node.traceDisplaySettings === "object"
-    ? node.traceDisplaySettings
-    : {};
-  const clamp01 = (v, fb) => globalThis.SoemMath.clamp01(v, fb);
-  // dot1Size 0…1 → tip radius in unit square (default ~2.2% of side).
-  const tip = 0.01 + clamp01(td.dot1Size, 0.08) * 0.04;
+  const td = normalizeNodeGraphSinCos4FaceSettings(node?.traceDisplaySettings);
+  const tip = 0.01 + td.dot1Size * 0.04;
   return {
     radius: 0.38,
-    stroke: 0.012,
+    stroke: td.sinCos4RayThickness / 100,
+    ringStroke: td.sinCos4RingThickness / 100,
     tip,
-    hub: tip * 0.7,
-    pixelDensity: clamp01(td.pixelDensity, 1) || 1,
+    hub: tip * td.sinCos4HubSize,
+    pixelDensity: td.pixelDensity || 1,
   };
 }
 
@@ -235,7 +269,7 @@ function drawNodeGraphSinCos4DisplayInner(section) {
     const a = (i / n) * Math.PI * 2;
     ring.push(X(cx + Math.cos(a) * radius), Y(cy - Math.sin(a) * radius));
   }
-  nodeGraphGlLinesPolyline(batch, ring, halfOf(stroke), feather, [160 / 255, 190 / 255, 210 / 255, 0.35]);
+  nodeGraphGlLinesPolyline(batch, ring, halfOf(look.ringStroke), feather, [160 / 255, 190 / 255, 210 / 255, 0.35]);
 
   // Rays; position shown by round dots.
   for (let i = 0; i < offsets.length; i += 1) {
