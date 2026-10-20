@@ -181,6 +181,16 @@ function Sync-Dir([string]$SrcDir, [string]$DstDir, [string[]]$ExcludeNames = @(
 
 Sync-Dir -SrcDir $srcPublic -DstDir $dstPublic -ExcludeNames $excludeTop
 
+# Excluded names are also skipped by the stale sweep, so remove strays that
+# should never exist: public/index.html (index ships at the root) and a root
+# perform.html (perform.html ships only under public/).
+foreach ($stray in @((Join-Path $dstPublic "index.html"), (Join-Path $dst "perform.html"))) {
+  if (Test-Path -LiteralPath $stray) {
+    Remove-Item -LiteralPath $stray -Force
+    Write-Host "  removed stray $($stray.Substring($dst.Length + 1))"
+  }
+}
+
 # Page patches live at repo-root patches/ and ship next to the embed so URLs
 # are /soemdsp-sandbox/patches/{slug}.json (same path locally and on soundemote.io).
 $srcPatches = Join-Path $root "patches"
