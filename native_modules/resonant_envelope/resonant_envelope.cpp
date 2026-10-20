@@ -8,12 +8,14 @@
 // zeta = 4 * 200^(-Resonance). Tracking scales attack, decay, and ring
 // from the f input around 440 Hz. Impulse blends a rising-edge ping
 // with the gate step. App Gate contract (gate_on / gate_hit, docs/GATES_TRIGGERS.md):
-// on = leaves Planck silence in either sign; Peak = input height latched on the hit. Output Range Fit scales the peak to Amplitude
+// on = x > 0; hit = first sample > 0 after <= 0; Peak = input height latched on the hit. Output Range Fit scales the peak to Amplitude
 // and clips below 0. Raw is the filter output.
 //
-// Follow (optional jack): |Follow| * Amplitude is fed straight into the SVF as
-// its target (no gate, no ping) -> resonant envelope follower. Attack timing is
-// used while the target is above the filter output, Decay timing while below.
+// Follow (optional jack): smooth "every rising sample triggers". Each sample
+// where Follow rises (x > previous and x > 0) re-latches the step target to x;
+// x <= 0 drops the target to 0; otherwise the target holds. Target * Amplitude
+// is the SVF step drive only (no ping / Impulse). Attack timing while the
+// target is above the filter output, Decay timing while below.
 // If Trigger and Follow are both wired their drives add (one SVF, one sum).
 // Follow unwired (followWired < 0.5 or NaN from old callers) = old behaviour.
 
@@ -40,6 +42,8 @@ struct State {
   double lastGate;
   double velocity;
   double lastY;
+  double lastFollow;
+  double followTarget;
   double shotAttack;
   double shotDecay;
   double shotResonance;
@@ -175,6 +179,8 @@ extern "C" int soemdsp_resonant_envelope_create() {
       s.lastGate = 0.0;
       s.velocity = 1.0;
       s.lastY = 0.0;
+      s.lastFollow = 0.0;
+      s.followTarget = 0.0;
       s.shotAttack = 0.01;
       s.shotDecay = 0.3;
       s.shotResonance = 0.0;
@@ -266,8 +272,12 @@ extern "C" double soemdsp_resonant_envelope_sample(
     if (scale > kTrackMax) scale = kTrackMax;
   }
   const bool hasFollow = safe(followWired) >= 0.5;
-  double fol = hasFollow ? dsp_fabs(safe(follow)) : 0.0;
-  if (!(fol * 0.0 == 0.0)) fol = 0.0;
+  double fx = hasFollow ? safe(follow) : 0.0;
+  if (!(fx * 0.0 == 0.0)) fx = 0.0;
+  if (!(fx > 0.0)) s.followTarget = 0.0;
+  else if (fx > s.lastFollow) s.followTarget = fx;  // every rising sample re-strikes the step
+  s.lastFollow = fx;
+  const double fol = s.followTarget;
   const double folDrive = fol * amp;
   // Attack while gated, or while the Follow target is above the filter output.
   const bool attackPhase = high || (hasFollow && folDrive > s.lastY);
@@ -317,7 +327,7 @@ extern "C" double soemdsp_resonant_envelope_sample(
 }
 
 extern "C" int soemdsp_resonant_envelope_version() {
-  return 2;  // 2: Follow input (envelope follower). 1: initial
+  return 3;  // 3: shared gate_hit is x > 0 again; Follow = rising-sample step latch. 2: Follow input (envelope follower). 1: initial
 }
 
 extern "C" const char* soemdsp_resonant_envelope_metadata_json() {

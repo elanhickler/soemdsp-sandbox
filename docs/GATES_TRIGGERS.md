@@ -37,23 +37,27 @@ Nominal bus: **0 rest, +1 full on.** Height **is** velocity. Negative is allowed
 
 ## 3. Detector (one law)
 
-Do not classify “this cable is a gate vs a trigger” over several samples. Rest is **Planck silence**. Leaving silence in **either sign** is the hit.
+Do not classify "this cable is a gate vs a trigger" over several samples. The **first sample > 0 after a sample <= 0** is the hit.
 
 C++ (`soemdsp::math`, `trigger.h`):
 
 ```c
-on  = !silent_planck(now);                 // |x| >= kPlanck (1e-7)
-hit = silent_planck(last) && on;           // gate_hit(now, &last)
+on  = now > 0;                    // gate_on(now)
+hit = !(last > 0) && now > 0;     // gate_hit(now, &last); height = now
 ```
 
-- `silent_planck(x)` is `fabs(x) < kPlanck` (open ball; strict `<`).
-- Exact 0 is rest. `|x| == 1e-7` is on.
-- **0.4 → 0.8 while already on is not a hit.** Swell / thru level, not a new strike.
-- Negative is a hit when leaving silence (`0 → −1`). Height is the signed sample.
-- Re-arm only by returning inside the ball (`|x| < 1e-7`).
-- Hits are the **edge sample**. No 0.5 Schmitt.
+- **> 0 is on.** Anything <= 0 is rest and **re-arms**.
+- No second hit until a sample **<= 0** has been seen.
+- **0.4 -> 0.8 while already on is not a hit.** Swell / thru level, not a new strike.
+- Negative is not a hit. It re-arms. The next rise through 0 is a new strike.
+- Hits are the **edge sample**. Height = that sample (velocity). No 0.5 Schmitt.
+- A bipolar audio / LFO cable therefore strikes once per upward zero crossing.
 
-`rising_edge(…, 0.0)` / `rising_edge(…, 0.5)` stay for clocks or modules with a **Threshold** knob. Gate, Trigger, and **Reset** inlets use `gate_hit` / `gate_on`.
+**Chatter:** noise flipping around 0 will retrigger. No extra Schmitt until we see it in the field.
+
+History: 2026-10-01 (`f2357e10`) switched this to a Planck-silence law (`|x| < 1e-7` rest, either sign hits). 2026-10-20 restored the original law above (Argi): continuous audio never re-armed under the Planck law.
+
+`rising_edge(..., 0.0)` / `rising_edge(..., 0.5)` stay for modules with a **Threshold** knob. Gate, Trigger, and **Reset** inlets use `gate_hit` / `gate_on`.
 
 ---
 
@@ -63,18 +67,18 @@ Same detector. Two publications:
 
 | Jack | While | Voltage |
 |------|--------|---------|
-| **Trigger** | the hit sample only | strike height (signed), then **0** (one engine sample) |
-| **Gate** | every sample with `gate_on(current)` | **live** `current`. **0** when silent |
+| **Trigger** | the hit sample only | strike height, then **0** (one engine sample) |
+| **Gate** | every sample with `gate_on(current)` (`current > 0`) | **live** `current`. **0** when `current <= 0` |
 | **Reset** | the hit sample only | action pulse (same as Trigger). Height ignored — fire or don’t |
 
-Trigger never holds. Gate is the hold. “Stop holding” is only **Planck silence**.
+Trigger never holds. Gate is the hold. “Stop holding” is only **`current <= 0`**.
 
 Keyboard keys go 0 → velocity in one sample, so Trigger height and Gate height match on the strike, then Gate holds that velocity until key-up.
 
 Analog ramp `0, 0.01, 0.2, 0.8`:
 
 - Trigger / Reset = **0.01** on the first sample, then 0 (Reset fires that sample)
-- Gate = 0.01, then 0.2, then 0.8, until Planck silence
+- Gate = 0.01, then 0.2, then 0.8, until <= 0
 
 Envelopes that fire from **Trigger** latch attack from the strike sample. Envelopes that follow **Gate** track live height.
 
@@ -105,7 +109,7 @@ Then the detector / publication above applies to what you **emit**, and to what 
 ## 6. Consumers
 
 - **Trigger / Reset inlets:** `gate_hit`. Trigger uses height as velocity. Reset ignores height (zero phasors / rewind).
-- **Gate-follow inlets** (envelope Gate, VCA): `gate_on` live voltage; off when silent.
+- **Gate-follow inlets** (envelope Gate, VCA): `gate_on` live voltage; off when <= 0.
 - **Pluck Envelope:** Trigger height = velocity. No Velocity knob.
 - Do not wait to see if the cable will stay high. First `hit` is enough to start an attack.
 
@@ -120,10 +124,10 @@ if (gate_hit(resetIn, &lastReset)) { /* zero phasors / rewind */ }
 ```
 
 - White round, stamp **↺**, port key `Reset`.
-- **Action, not velocity.** The hit sample fires once; held Reset does not retrigger until silence (`|x| < 1e-7`).
-- `0 → −1` **does** reset (leave silence). Crumbs inside Planck do not.
+- **Action, not velocity.** The hit sample fires once; held Reset does not retrigger until a sample <= 0.
+- `0 → −1` does **not** reset (negative is rest).
 - No thru-sum unless the module has Reset in **and** Reset out; then `clamp(internal + in, -1, +1)` like Gate/Trigger.
-- Unplugged Reset is silence (`lastReset = 0`) so the next cable-in can hit.
+- Unplugged Reset is 0 (`lastReset = 0`) so the next cable-in can hit.
 
 ---
 
@@ -143,7 +147,7 @@ Gate falling to ≤ 0 is enough. No extra note-off Trigger unless a module asks 
 
 ## 10. Implementation
 
-1. Done: `gate_hit` / `gate_on` in `trigger.h`; `nodeGraphSilentPlanck` / `nodeGraphGateOn` in `node-graph-semath.js`.
+1. Done: `gate_hit` / `gate_on` in `trigger.h`; `nodeGraphGateOn` in `node-graph-semath.js` (x > 0).
 2. Done: Keyboard / Grid Keyboard `Gate` + `Trigger` in, add to key outs, clamp −1…+1.
 3. Any other Gate/Trigger thru uses the same add+clamp.
 4. Envelope Trigger: Pluck Envelope / Curve AR use `gate_hit`. Remaining envelopes still on mixed `rising_edge`.

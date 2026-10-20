@@ -23,8 +23,10 @@ function nodeGraphSilentPlanck(x) {
   return n < nodeGraphPlanck() && n > -nodeGraphPlanck();
 }
 
+// Gate/Trigger on = x > 0 (docs/GATES_TRIGGERS.md section 3; mirrors trigger.h gate_on).
 function nodeGraphGateOn(x) {
-  return !nodeGraphSilentPlanck(x);
+  const n = Number(x);
+  return Number.isFinite(n) && n > 0;
 }
 
 function nodeGraphAboveUnity(peak) {

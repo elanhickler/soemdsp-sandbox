@@ -45,18 +45,18 @@ static inline bool rising_edge_bool(bool high, bool* wasHigh) {
   return edge;
 }
 
-// App-wide Gate/Trigger: rest is |x| < kPlanck (open ball). Leave silence
-// in either sign is a hit. Height is `now` (signed). Updates *prev to now.
-// See docs/GATES_TRIGGERS.md.
+// App-wide Gate/Trigger (docs/GATES_TRIGGERS.md section 3, original law):
+// on = x > 0. Hit = first sample > 0 after a sample <= 0 (armed by <= 0).
+// Height (velocity) is `now`. Negative is rest and re-arms. Updates *prev.
 static inline bool gate_on(double x) {
-  return !silent_planck(soemdsp::debug::safe(x));
+  return soemdsp::debug::safe(x) > 0.0;
 }
 
 static inline bool gate_hit(double now, double* prev) {
   if (!prev) return false;
   const double x = soemdsp::debug::safe(now);
   const double p = soemdsp::debug::safe(*prev);
-  const bool hit = silent_planck(p) && !silent_planck(x);
+  const bool hit = !(p > 0.0) && x > 0.0;
   *prev = x;
   return hit;
 }
