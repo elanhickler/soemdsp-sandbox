@@ -24,15 +24,15 @@ function nodeGraphDisplaySettingsBuildStepperRowHtml(key, formType = null, optio
   } else if ((key === "historyHz" || key === "historyCycles" || key === "zoomSeconds" || key === "historySeconds") && (
     formType === "gradientVectorscopeFace"
   )) {
-    label = key === "historyCycles" ? "Cycles" : "History (Hz)";
-    title = "Live history window (Hz when free-run; Cycles when synced).";
+    label = key === "historyCycles" ? "History (cycles)" : "History (Hz)";
+    title = "Live history window (Hz when free-run; History (cycles) when synced).";
   }
   if (key === "sweepHz" || key === "sweepCycles") {
     const syncOn = options.syncOn === true || key === "sweepCycles";
-    label = syncOn ? "Sweep (c)" : "Sweep (Hz)";
+    label = syncOn ? "Sweep (cycles)" : "Sweep (Hz)";
     title = syncOn
       ? "Cycles in view (smooth — e.g. 1.5 = 1½ periods). Pass restarts on the next rising zero-crossing."
-      : "Left→right passes per second (0.01–100). 0 = collapsed full-width burn.";
+      : "Left→right passes per second (0.01–100). 0 = pause (bottom detent).";
   }
   if (key === "cloudSpeed" && formType === "ensembleCloud") {
     label = "Speed";
@@ -1216,7 +1216,7 @@ function paintNodeGraphStampPreview(root, settings = {}) {
 
 /** Hide Shape param for Circle; retitle Stretch/Corners/Sides/… from live Shape. */
 /**
- * Sweep (Hz) ↔ Sweep (c) when 1D Burn Sync is toggled.
+ * Sweep (Hz) ↔ Sweep (cycles) when 1D Burn Sync is toggled.
  * Retargets the stepper to sweepHz or sweepCycles so both values stay stored.
  */
 function syncNodeGraphLineBurnSweepLabel(root, settings = {}) {
@@ -1238,10 +1238,10 @@ function syncNodeGraphLineBurnSweepLabel(root, settings = {}) {
     ? nodeGraphDisplaySettingsToggleIsOn(settings?.sourceSync ?? settings?.sync)
     : Boolean(settings?.sourceSync);
   const key = syncOn ? "sweepCycles" : "sweepHz";
-  const label = syncOn ? "Sweep (c)" : "Sweep (Hz)";
+  const label = syncOn ? "Sweep (cycles)" : "Sweep (Hz)";
   const title = syncOn
     ? "Cycles in view (smooth — e.g. 1.5 = 1½ periods). Pass restarts on the next rising zero-crossing."
-    : "Left→right passes per second (0.01–100). 0 = collapsed full-width burn.";
+    : "Left→right passes per second (0.01–100). 0 = pause (bottom detent).";
   if (titleSpan) {
     titleSpan.textContent = label;
   }

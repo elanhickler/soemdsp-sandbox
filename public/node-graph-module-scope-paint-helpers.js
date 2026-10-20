@@ -67,7 +67,7 @@ const nodeGraphLineBurnResetThreshold = 0.5;
  * Sweep 0 Hz = collapsed sweep: each sample burns one solid full-width horizontal
  * at its Y. Fuse spacing is preserved; under Dot Budget we skip samples, never
  * thin a line into dots. Reset (≥ 0.5) still snaps state.
- * Sync on: Sweep (c) = cycles-in-view (separate dial from free-run Hz).
+ * Sync on: Sweep (cycles) = cycles-in-view (separate dial from free-run Hz).
  * Mid-sweep rising edges only retune period. When the pen finishes that window
  * it parks and restarts on the next rising zero-crossing. Reset jack still
  * snaps left immediately. Sync Off: Sweep (Hz).
@@ -290,7 +290,7 @@ function nodeGraphOneDimensionalBurnFramePoints(canvas, buffer, settings, resetB
   const start = Math.max(0, buffer.length - count);
   const sampleRate = Math.max(1, nodeGraphFiniteNumber(nodeGraphScopeSampleRate(buffer), 44100));
   // Sync off: Sweep (Hz) = left→right passes per second.
-  // Sync on: Sweep (c) = cycles in view (separate dial — see sweepCycles).
+  // Sync on: Sweep (cycles) = cycles in view (separate dial — see sweepCycles).
   // 0 Hz = collapsed sweep: solid full-width horizontal per sample at fuse density.
   const sweepPair = typeof normalizeNodeGraphLineBurnSweepPair === "function"
     ? normalizeNodeGraphLineBurnSweepPair(settings, nodeGraphLineBurnSettingsDefaults)
@@ -349,7 +349,7 @@ function nodeGraphOneDimensionalBurnFramePoints(canvas, buffer, settings, resetB
     samplesSinceSync = 0;
   }
   let syncAwaitingRestart = canvas._lineBurnSyncAwaitingRestart === true;
-  // Sync uses its own Sweep (c) dial — not the free-run Hz value.
+  // Sync uses its own Sweep (cycles) dial — not the free-run Hz value.
   const syncCyclesInView = (() => {
     if (horizontalBurn) {
       return 1;

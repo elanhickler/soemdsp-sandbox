@@ -1409,10 +1409,10 @@ const nodeGraphDisplaySettingsFieldMeta = Object.freeze({
     label: "Sweep (Hz)",
     inputmode: "decimal",
     id: "nodeTraceDisplaySweepHz",
-    title: "Sync Off: left→right passes per second (0.01–100). 0 = collapsed full-width burn. Sync On uses Sweep (c) instead.",
+    title: "Sync Off: left→right passes per second (0.01–100). 0 = pause (bottom detent). Sync On uses Sweep (cycles) instead.",
   }),
   sweepCycles: Object.freeze({
-    label: "Sweep (c)",
+    label: "Sweep (cycles)",
     inputmode: "decimal",
     id: "nodeTraceDisplaySweepCycles",
     title: "Sync On: cycles in view (smooth — e.g. 1.5 = 1½ periods). Pass restarts on the next rising zero-crossing.",
@@ -1427,10 +1427,10 @@ const nodeGraphDisplaySettingsFieldMeta = Object.freeze({
     label: "History (Hz)",
     inputmode: "decimal",
     id: "nodeTraceDisplayHistoryHz",
-    title: "Sync Off: history window rate in Hz (seconds = 1/Hz). 0 = pause (freeze plate). Sync On uses Cycles instead.",
+    title: "Sync Off: history window rate in Hz (seconds = 1/Hz). 0 = pause (freeze plate). Sync On uses History (cycles) instead.",
   }),
   historyCycles: Object.freeze({
-    label: "Cycles",
+    label: "History (cycles)",
     inputmode: "decimal",
     id: "nodeTraceDisplayHistoryCycles",
     title: "Sync On: cycles in view across the face. Rising zero-crossing locks phase.",
@@ -1839,7 +1839,7 @@ const nodeGraphDisplaySettingsToggleMeta = Object.freeze({
     label: "Sync",
     id: "nodeTraceDisplaySourceSync",
     title:
-      "1D Phosphor / 1D Trace: Sync Off = Sweep (Hz). Sync On = Sweep (c) cycles in view, restart each pass on a rising zero-crossing. Reset jack still snaps. Not used on Instant Waterfall.",
+      "1D Phosphor / 1D Trace: Sync Off = Sweep (Hz). Sync On = Sweep (cycles) cycles in view, restart each pass on a rising zero-crossing. Reset jack still snaps. Not used on Instant Waterfall.",
   }),
   showDot: Object.freeze({
     label: "Show Dot",
