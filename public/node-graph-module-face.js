@@ -377,7 +377,8 @@ function nodeGraphModuleFaceDrawAllGl(batch, plates, toX, toY, zoom, cssW, cssH)
     if (!laid || !(laid.w > 1)) continue;
     const ox = toX(plates[i].x + laid.x);
     const oy = toY(plates[i].y + laid.y);
-    if (ox > cssW || oy > cssH || ox + laid.w * zoom < 0 || oy + laid.h * zoom < 0) continue;
+    // Camera batches are in world px: the screen cull only applies without one.
+    if (!batch.camera && (ox > cssW || oy > cssH || ox + laid.w * zoom < 0 || oy + laid.h * zoom < 0)) continue;
     // Over layer: above the plate fill and chrome, below text.
     batch._over = true;
     nodeGraphModuleFaceDrawGl(batch, el, laid.w, ox, oy, zoom);

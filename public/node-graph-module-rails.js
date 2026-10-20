@@ -199,7 +199,7 @@ function nodeGraphModuleRailsDrawGl(batch, plates, toX, toY, zoom, cssW, cssH) {
     const y0 = toY(plates[i].y + laid.y);
     const w = laid.w * zoom;
     const h = laid.h * zoom;
-    if (x0 > cssW || y0 > cssH || x0 + w < 0 || y0 + h < 0) continue;
+    if (!batch.camera && (x0 > cssW || y0 > cssH || x0 + w < 0 || y0 + h < 0)) continue;
     const rw = NODE_GRAPH_RAIL_WIDTH_PX * zoom;
     const edge = Math.max(1, zoom);
     batch._over = true;
