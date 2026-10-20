@@ -190,7 +190,7 @@ function createNodeGraphIoColumn(node, type, ports, io) {
     row.dataset.port = port;
     row.dataset.io = io;
     row.dataset.alias = nodeGraphLabel(node, port);
-    const portLabel = nodeGraphPatchNodePortDisplayLabel(node, type, port, io);
+    const portLabel = nodeGraphRailPortLabel(type, nodeGraphPatchNodePortDisplayLabel(node, type, port, io));
     maxLabelChars = Math.max(maxLabelChars, String(portLabel || "").length);
     const spoken = (typeof nodeGraphGateTriggerPortSpokenName === "function"
       && nodeGraphGateTriggerPortSpokenName(type, port))
@@ -290,6 +290,7 @@ function createNodeParameterModulationPort(node, type, parameter) {
   button.dataset.port = parameter.key;
   button.dataset.io = "modulation";
   button.dataset.alias = `${nodeGraphNodeDisplayName(node)}.${parameter.key} mod`;
+  button.dataset.railLabel = nodeGraphRailShortLabel(parameter.label || parameter.key, parameter.shortName);
   if (parameter?.setup === true) {
     button.classList.add("node-port-square");
     button.dataset.portType = "setup";
@@ -312,6 +313,7 @@ function createNodeParameterOutputPort(node, type, parameter) {
   button.dataset.port = parameter.key;
   button.dataset.io = "output";
   button.dataset.alias = `${nodeGraphNodeDisplayName(node)}.${parameter.key} slider`;
+  button.dataset.railLabel = nodeGraphRailShortLabel(parameter.label || parameter.key, parameter.shortName);
   if (parameter?.setup === true) {
     button.classList.add("node-port-square");
     button.dataset.portType = "setup";
@@ -335,7 +337,10 @@ function syncNodeGraphModulePortLabels(element, patchNode) {
     if (io !== "input" && io !== "output") {
       continue;
     }
-    const portLabel = nodeGraphPatchNodePortDisplayLabel(patchNode, patchNode.type, port, io);
+    const portLabel = nodeGraphRailPortLabel(
+      patchNode.type,
+      nodeGraphPatchNodePortDisplayLabel(patchNode, patchNode.type, port, io),
+    );
     const label = row.querySelector(".node-io-label");
     if (label) {
       if (typeof nodeGraphPaintRgbaPortLabel === "function" && String(port) === "rgba") {

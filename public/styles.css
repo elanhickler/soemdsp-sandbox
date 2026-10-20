@@ -25816,3 +25816,53 @@ html.soemdsp-whole-module .node-layout-canvas-grip {
   align-items: center;
   justify-content: center;
 }
+
+/* ---- Module rails (docs/MODULE_RAILS_PLAN.md, node-graph-module-rails.js) ----
+   Layout 1 (spawn): param band = [mod rail | params | thru rail]. Thru rail
+   always shows; the mod rail opens with the first param cable (or "Mod rail"
+   always-on) and closes with the last. Module width never changes, the params
+   shrink between the rails. Sizes are zoom-1.0 CSS px (--node-rail-width). */
+.dsp-node[data-face-layout="spawn"] {
+  --node-mod-rail-width: 0px;
+}
+.dsp-node[data-face-layout="spawn"].mod-rail-open {
+  --node-mod-rail-width: var(--node-rail-width, 40px);
+}
+.dsp-node[data-face-layout="spawn"] .node-parameter-row {
+  grid-template-columns: var(--node-mod-rail-width) minmax(0, 1fr) var(--node-rail-width, 40px);
+}
+.dsp-node[data-face-layout="spawn"] .node-param-port.modulation-input {
+  width: var(--node-mod-rail-width);
+  min-width: var(--node-mod-rail-width);
+}
+.dsp-node[data-face-layout="spawn"] .node-param-port.parameter-output {
+  width: var(--node-rail-width, 40px);
+  min-width: var(--node-rail-width, 40px);
+}
+/* Static short labels: every thru tag, and an inlet tag per patched param. */
+.dsp-node[data-face-layout="spawn"] .node-param-port.parameter-output::after,
+.dsp-node[data-face-layout="spawn"].mod-rail-open .node-param-port.modulation-input.rail-patched::after {
+  content: attr(data-rail-label);
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-indent: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  font-family: "JetBrains Mono", Consolas, monospace;
+  font-size: 9px;
+  line-height: 1;
+  color: var(--muted);
+  pointer-events: none;
+}
+/* Rail columns read as one strip each (border only, no color cue). */
+.dsp-node[data-face-layout="spawn"] .node-param-port.parameter-output {
+  box-shadow: inset 1px 0 0 var(--line);
+}
+.dsp-node[data-face-layout="spawn"].mod-rail-open .node-param-port.modulation-input {
+  box-shadow: inset -1px 0 0 var(--line);
+}
+
+/* Layout 3 (railsOnly) uses the shared IO label type; labels are short (rails.js). */

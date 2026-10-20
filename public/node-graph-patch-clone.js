@@ -75,6 +75,8 @@ function normalizeNodeGraphPatchNodeUi(ui = {}, type = "") {
     ioHidden: Boolean(source.ioHidden),
     // Hide unconnected I/O jacks (and mute unused param ports) on this module.
     hideUnused: Boolean(source.hideUnused || source.unusedHidden),
+    // Keep the mod rail column open with no param cables (rails plan; off by default).
+    modRailAlwaysOn: Boolean(source.modRailAlwaysOn),
     interfaceControlsHidden: Boolean(source.interfaceControlsHidden),
     interfaceControlsForceShow: Boolean(
       source.interfaceControlsForceShow || source.interfaceControlsShown,
@@ -836,7 +838,7 @@ function cloneNodeGraphPatch(patch) {
               },
           }
           : {}),
-        ...(ui.buttonsHidden || ui.buttonsForceShow || ui.ioHidden || ui.hideUnused || ui.interfaceControlsHidden || ui.interfaceControlsForceShow || ui.movementLocked || ui.titleHidden || ui.oscilloscopeHidden || ui.oscilloscopeForceShow || ui.slidersHidden || ui.slidersForceShow || ui.displayHeightOffsetGu || ui.displayHeightGu || ui.showInCanvas || ui.canvasWholeModule ? { ui } : {}),
+        ...(ui.buttonsHidden || ui.buttonsForceShow || ui.ioHidden || ui.hideUnused || ui.modRailAlwaysOn || ui.interfaceControlsHidden || ui.interfaceControlsForceShow || ui.movementLocked || ui.titleHidden || ui.oscilloscopeHidden || ui.oscilloscopeForceShow || ui.slidersHidden || ui.slidersForceShow || ui.displayHeightOffsetGu || ui.displayHeightGu || ui.showInCanvas || ui.canvasWholeModule ? { ui } : {}),
       };
     }),
     requiredAssets: typeof nodeGraphRequiredAssetsForPatch === "function"

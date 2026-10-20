@@ -3182,6 +3182,7 @@ function applyNodeGraphPatchNodeUi(targetNode, ui) {
     || normalizedUi.buttonsForceShow
     || normalizedUi.ioHidden
     || normalizedUi.hideUnused
+    || normalizedUi.modRailAlwaysOn
     || normalizedUi.interfaceControlsHidden
     || normalizedUi.interfaceControlsForceShow
     || normalizedUi.titleHidden
@@ -3311,6 +3312,39 @@ function toggleNodeGraphModuleHideUnusedFromContext() {
     }));
   }
   syncNodeGraphReadyPanelChrome();
+  configureNodeSceneContextMenu("module");
+}
+
+/** "Mod rail" (always on): keep the mod rail column open with no param cables. */
+function toggleNodeGraphModuleModRailFromContext() {
+  const targetNodeIds = nodeGraphModuleActionTargetNodeIds();
+  if (!targetNodeIds.length) {
+    return;
+  }
+  const sources = targetNodeIds.map((id) => nodeGraphPatchNode(id)).filter(Boolean);
+  if (!sources.length) {
+    return;
+  }
+  const wantOn = !sources.every((node) => Boolean(node.ui?.modRailAlwaysOn));
+  const patch = cloneNodeGraphPatch(nodeGraphMvp.patch);
+  let changedCount = 0;
+  for (const targetNode of patch.nodes) {
+    if (!targetNodeIds.includes(targetNode.id)) {
+      continue;
+    }
+    const ui = normalizeNodeGraphPatchNodeUi(targetNode.ui, targetNode.type);
+    if (Boolean(ui.modRailAlwaysOn) === wantOn) {
+      continue;
+    }
+    ui.modRailAlwaysOn = wantOn;
+    applyNodeGraphPatchNodeUi(targetNode, ui);
+    changedCount += 1;
+  }
+  if (changedCount) {
+    commitNodeGraphPatch(patch, nodeGraphChromeCommitOptions(targetNodeIds, {
+      status: wantOn ? "mod rail on" : "mod rail off",
+    }));
+  }
   configureNodeSceneContextMenu("module");
 }
 

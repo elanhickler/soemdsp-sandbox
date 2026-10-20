@@ -654,13 +654,10 @@ function createNodeGraphModuleElement(type, node) {
   article.className = nodeGraphModuleLayoutClassNames(type, definition, layout);
   article.dataset.node = node;
   article.dataset.nodeType = type;
-  // Browser tooltip on module hover: short use-case from module store catalog.
-  const storeEntry = typeof nodeGraphModuleStoreCatalog === "object"
-    ? nodeGraphModuleStoreCatalog[type]
-    : null;
-  if (storeEntry?.description) {
-    const name = nodeGraphNodeLabels?.[type] || storeEntry.label || type;
-    article.title = `${name}: ${storeEntry.description}`;
+  // No hover text on modules (APP_POLICY). Face layout: docs/MODULE_RAILS_PLAN.md.
+  article.dataset.faceLayout = nodeGraphModuleFaceLayout(type);
+  if (typeof invalidateNodeGraphModuleRails === "function") {
+    invalidateNodeGraphModuleRails();
   }
   const chrome = typeof nodeGraphModuleChrome === "function"
     ? nodeGraphModuleChrome(type)

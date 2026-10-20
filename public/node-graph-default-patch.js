@@ -197,6 +197,7 @@ function createNodeGraphPatchNode(type, options = {}, creation = {}) {
     || ui.oscilloscopeForceShow
     || ui.ioHidden
     || ui.hideUnused
+    || ui.modRailAlwaysOn
     || ui.slidersHidden
     || ui.slidersForceShow
     || ui.interfaceControlsHidden

@@ -13859,7 +13859,7 @@ const nodeGraphModuleDefinitions = (
         defaultValue: "0",
         displayChoices: true,
         divideChoicesVisibly: true,
-        key: "lfoStyle",
+        key: "lfoStyle", shortName: "Styl",
         label: "LFO Style",
         linearSmoothing: false,
         max: "2",
@@ -13871,7 +13871,7 @@ const nodeGraphModuleDefinitions = (
           "Shape of the built-in delay-time modulator. Parabol / Random Walk / FBM." },
       {
         defaultValue: "0.35",
-        key: "lfoRate",
+        key: "lfoRate", shortName: "Rate",
         label: "LFO Rate",
         max: "20",
         mid: "0.35",
@@ -13884,7 +13884,7 @@ const nodeGraphModuleDefinitions = (
           + "Gold LFO L/R outs move whenever Rate > 0, even if Amp is 0." },
       {
         defaultValue: "25",
-        key: "lfoAmp",
+        key: "lfoAmp", shortName: "Amp",
         kind: "time",
         label: "LFO Amp",
         max: "500",
@@ -13900,7 +13900,7 @@ const nodeGraphModuleDefinitions = (
           + "Unlike Delay Mod (fraction of delay time), this depth is absolute milliseconds." },
       {
         defaultValue: "0.25",
-        key: "lfoVariation",
+        key: "lfoVariation", shortName: "Vary",
         label: "LFO Vary",
         max: "1",
         mid: "0.25",
@@ -13909,7 +13909,7 @@ const nodeGraphModuleDefinitions = (
         tooltip: "Detunes L vs R LFO rates so the two delays don’t lock together." },
       {
         defaultValue: "8000",
-        key: "lpfFrequency",
+        key: "lpfFrequency", shortName: "LPF",
         kind: "frequency",
         label: "LPF Freq",
         max: "20000",
@@ -13921,7 +13921,7 @@ const nodeGraphModuleDefinitions = (
         tooltip: "Passive one-pole lowpass in the feedback loop (darkens repeats). 0 Hz holds (closed); DSP caps at Nyquist. Slider min/max are guides only." },
       {
         defaultValue: "20",
-        key: "hpfFrequency",
+        key: "hpfFrequency", shortName: "HPF",
         kind: "frequency",
         label: "HPF Freq",
         max: "2000",

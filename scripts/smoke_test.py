@@ -97,6 +97,7 @@ PUBLIC_SCRIPT_PATHS = (
     "./public/node-graph-phosphor-draw-sample.js",
     "./public/node-graph-color-standards.js",
     "./public/node-graph-chromeless-module-registry.js",
+    "./public/node-graph-module-rails.js",
     "./public/node-graph-module-chrome.js",
     "./public/modules/led/led-register.js",
     "./public/modules/lcdDot/lcd-dot-register.js",

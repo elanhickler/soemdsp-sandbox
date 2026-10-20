@@ -174,9 +174,12 @@ function finalizeNodeGraphModuleDefinitionsChrome(entries = {}) {
   const out = {};
   for (const type of Object.keys(source)) {
     const def = source[type] && typeof source[type] === "object" ? source[type] : {};
-    const chrome = normalizeNodeGraphModuleChromeLayout(def.chrome)
-      || NodeGraphModuleChromeLayout.LayoutA;
-    out[type] = Object.freeze({ ...def, chrome });
+    const faceLayout = nodeGraphResolveFaceLayout(def);
+    // Layout 3 (rails only): title bar + input rail | output rail, no face.
+    const chrome = faceLayout === NodeGraphFaceLayout.railsOnly
+      ? NodeGraphModuleChromeLayout.InletOutletLayout
+      : (normalizeNodeGraphModuleChromeLayout(def.chrome) || NodeGraphModuleChromeLayout.LayoutA);
+    out[type] = Object.freeze({ ...def, chrome, faceLayout });
   }
   return Object.freeze(out);
 }

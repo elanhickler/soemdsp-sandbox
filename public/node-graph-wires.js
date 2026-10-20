@@ -291,7 +291,10 @@
       return boxes;
     }
 
-    function parameterWidgetHalfDrop(clientX, clientY) {
+    // Drop on a param control (rails plan): a cable from an output always lands
+    // on the param's mod inlet (mod rail); a cable from an input lands on its
+    // thru. Without a known source the old left/right half rule applies.
+    function parameterWidgetHalfDrop(clientX, clientY, sourceIo = "") {
       let best = null;
       let bestDistance = Infinity;
       // The widget sits inside its module, so only the module under the
@@ -301,6 +304,17 @@
         node = hit.closest?.('.dsp-node') || null;
         if (node) {
           break;
+        }
+      }
+      if (!node) {
+        // GL graph: the DOM modules sit under the GL canvas and are not hit
+        // targets, so find the module whose box holds the point (topmost wins).
+        const modules = document.querySelectorAll(".dsp-node[data-node]");
+        for (let i = modules.length - 1; i >= 0 && !node; i -= 1) {
+          const rect = modules[i].getBoundingClientRect();
+          if (clientX >= rect.left && clientX <= rect.right && clientY >= rect.top && clientY <= rect.bottom) {
+            node = modules[i];
+          }
         }
       }
       if (!node) {
@@ -324,14 +338,17 @@
         return { claimed: false, port: null };
       }
       const mid = best.left + (best.right - best.left) * 0.5;
-      const port = clientX < mid
+      const wantsInlet = sourceIo
+        ? sourceIo === "output"
+        : clientX < mid;
+      const port = wantsInlet
         ? best.row.querySelector(':scope > .node-param-port.modulation-input')
         : best.row.querySelector(':scope > .node-param-port.parameter-output');
       return { claimed: true, port: port || null };
     }
 
-    function patchPointTargetFromPoint(clientX, clientY) {
-      const parameterDrop = parameterWidgetHalfDrop(clientX, clientY);
+    function patchPointTargetFromPoint(clientX, clientY, sourceIo = "") {
+      const parameterDrop = parameterWidgetHalfDrop(clientX, clientY, sourceIo);
       if (parameterDrop.claimed) {
         return parameterDrop.port;
       }
@@ -1292,7 +1309,11 @@
         ) {
           // not our pointer
         } else if (movePtr.active && state.portConnectionMode?.movingWires) {
-          const target = helpers.patchPointTargetFromPoint(event.clientX, event.clientY);
+          const target = helpers.patchPointTargetFromPoint(
+            event.clientX,
+            event.clientY,
+            state.portConnectionMode?.direction || "",
+          );
           const targetHitbox = target?.closest?.(".node-io-row") || target;
           const targetEndpoint = targetHitbox ? helpers.endpointFromElement(targetHitbox) : null;
           // Swallow the trailing click after a real drag-move (drop or cancel).
@@ -1331,7 +1352,11 @@
         deps.drawWires();
         return;
       }
-      const target = helpers.patchPointTargetFromPoint(event.clientX, event.clientY);
+      const target = helpers.patchPointTargetFromPoint(
+        event.clientX,
+        event.clientY,
+        portDirectionFromIo(drag.endpoint?.io),
+      );
       const targetHitbox = target?.closest?.(".node-io-row") || target;
       const targetEndpoint = targetHitbox ? helpers.endpointFromElement(targetHitbox) : null;
       if (targetEndpoint) {
@@ -1387,7 +1412,13 @@
         return;
       }
       setHoveredPatchPoint(
-        helpers.patchPointTargetFromPoint(event.clientX, event.clientY),
+        helpers.patchPointTargetFromPoint(
+          event.clientX,
+          event.clientY,
+          state.wireDragging
+            ? portDirectionFromIo(state.wireDragging.endpoint?.io)
+            : (state.portConnectionMode?.direction || ""),
+        ),
       );
     }
 

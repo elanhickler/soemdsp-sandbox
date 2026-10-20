@@ -742,6 +742,7 @@ function validateNodeGraphPatch(patch) {
       || ui.buttonsForceShow
       || ui.ioHidden
       || ui.hideUnused
+      || ui.modRailAlwaysOn
       || ui.interfaceControlsHidden
       || ui.interfaceControlsForceShow
       || ui.movementLocked

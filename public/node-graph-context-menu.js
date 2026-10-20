@@ -1197,6 +1197,7 @@ function configureNodeSceneContextMenu(mode) {
   const toggleSlidersButton = document.getElementById("nodeSceneToggleSliders");
   const toggleIoButton = document.getElementById("nodeSceneToggleIo");
   const toggleHideUnusedButton = document.getElementById("nodeSceneToggleHideUnused");
+  const toggleModRailButton = document.getElementById("nodeSceneToggleModRail");
   const toggleCollapsedButton = document.getElementById("nodeSceneToggleCollapsed");
   const toggleTitleButton = document.getElementById("nodeSceneToggleTitle");
   const imageControls = document.getElementById("nodeSceneImageControls");
@@ -1578,6 +1579,12 @@ function configureNodeSceneContextMenu(mode) {
     )
   );
   toggleIoButton.hidden = !showInletOutletVisibilityChrome || (multiModuleMode && !multiCanButtons);
+  if (toggleModRailButton) {
+    const railNodes = multiModuleMode ? selectedNodes : (targetNode ? [targetNode] : []);
+    const railCapable = railNodes.some((node) => nodeGraphModuleFaceLayout(node.type) === NodeGraphFaceLayout.spawn);
+    toggleModRailButton.hidden = !moduleMode || !railCapable;
+    toggleModRailButton.disabled = !railCapable;
+  }
   if (toggleHideUnusedButton) {
     toggleHideUnusedButton.hidden = !showInletOutletVisibilityChrome || (multiModuleMode && !selectedNodes.length);
   }
@@ -2117,6 +2124,14 @@ function configureNodeSceneContextMenu(mode) {
       : (ioHidden
         ? "Show this module's input and output ports."
         : "Hide this module's input and output ports.");
+    if (toggleModRailButton) {
+      const railNodes = multiModuleMode ? selectedNodes : (targetNode ? [targetNode] : []);
+      setVisLines(
+        toggleModRailButton,
+        !(railNodes.length && railNodes.every((node) => Boolean(node.ui?.modRailAlwaysOn))),
+        "Mod rail",
+      );
+    }
     if (toggleHideUnusedButton) {
       toggleHideUnusedButton.disabled = multiModuleMode ? !selectedNodes.length : !targetNode;
       toggleHideUnusedButton.removeAttribute("aria-disabled");

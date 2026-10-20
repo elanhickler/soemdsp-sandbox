@@ -325,6 +325,11 @@ function drawNodeGraphWires(options = {}) {
   if (options.skipHeatmap !== true && typeof updateNodeGraphGridHeatmap === "function") {
     updateNodeGraphGridHeatmap();
   }
+  // Mod rails open/close with param cables; moved jacks need fresh geometry.
+  if (typeof syncNodeGraphModuleRails === "function" && syncNodeGraphModuleRails()
+    && typeof nodeGraphModuleGeometryInvalidateAll === "function") {
+    nodeGraphModuleGeometryInvalidateAll();
+  }
   // Ensure published geometry exists (layout owners write; bootstrap if empty).
   if (
     typeof nodeGraphModuleGeometryPublishVisible === "function"
