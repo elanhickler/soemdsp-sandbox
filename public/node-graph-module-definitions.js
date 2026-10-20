@@ -4826,6 +4826,20 @@ const nodeGraphModuleDefinitions = (
   },
   dsfOscillator: {
     planRole: "source",
+    // One detailed cycle from the DSF closed form + phase dot (sinCosFace renderer).
+    chrome: "LayoutA",
+    customDisplayArea: true,
+    displayType: "sinCosFace",
+    displayHeightGu: 4,
+    spectrumCompanion: false,
+    displayModes: [
+      {
+        key: "face",
+        label: "Face",
+        renderer: "sinCosFace",
+        settingsSchema: "sinCosFace" },
+    ],
+    defaultDisplayMode: "face",
     // Morph / Phase / Amplitude are parameters (+ MOD) only — no twin CV jacks.
     // Frequency is Hz (ƒ jack = absolute Hz). See MODULE_PATTERN_REFERENCE
     // "Three control surfaces".

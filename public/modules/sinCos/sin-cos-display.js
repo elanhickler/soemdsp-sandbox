@@ -111,7 +111,9 @@ function nodeGraphSinCosReadPhase(nodeId, node, section) {
   }
   if (typeof nodeGraphRoundShapeLivePlaying === "function" && nodeGraphRoundShapeLivePlaying()) {
     const now = (typeof performance !== "undefined" ? performance.now() : Date.now()) / 1000;
-    const freq = nodeGraphFiniteNumber(nodeGraphSinCosLiveParam(node, "freq", 1));
+    const freq = nodeGraphFiniteNumber(node?.type === "dsfOscillator"
+      ? nodeGraphSinCosLiveParam(node, "frequency", 100)
+      : nodeGraphSinCosLiveParam(node, "freq", 1));
     const offset = nodeGraphFiniteNumber(nodeGraphSinCosLiveParam(node, "phase", 0));
     const speed = Number(nodeGraphMvp?.live?.speedMultiplier);
     const mul = Number.isFinite(speed) ? speed : 1;
@@ -195,6 +197,96 @@ function drawNodeGraphSinCosDisplay(section) {
   }
 }
 
+// DSF Oscillator face: one steady-state cycle built from the same closed form
+// as native_modules/dsf_oscillator (SineSaw kernel, n = floor(Nyquist/f) - 1).
+// The engine leaky-integrates the kernel; at steady state that is the running
+// integral over one cycle minus its mean. Sampled finely so Gibbs ringing shows.
+function nodeGraphDsfSampleRate() {
+  const live = typeof nodeGraphMvp !== "undefined" ? nodeGraphMvp?.live : null;
+  const sr = Number(live?.context?.sampleRate ?? live?.audioContext?.sampleRate);
+  return Number.isFinite(sr) && sr > 1 ? sr : 48000;
+}
+
+function nodeGraphDsfCycle(params, count) {
+  const waveform = Math.max(0, Math.min(4, Math.round(nodeGraphFiniteNumber(params.waveform))));
+  const amp = Number.isFinite(params.amplitude) ? params.amplitude : 1;
+  const out = new Float64Array(count);
+  if (waveform === 0) {
+    for (let i = 0; i < count; i += 1) out[i] = Math.max(-1.5, Math.min(1.5, Math.sin(2 * Math.PI * i / count))) * amp;
+    return out;
+  }
+  const sr = nodeGraphDsfSampleRate();
+  const f = Math.max(1e-6, Math.abs(nodeGraphFiniteNumber(params.frequency)));
+  let n = Math.floor((sr * 0.5) / f) - 1;
+  n = Math.max(1, Math.min(4096, n));
+  const m = Math.max(0, Math.min(1, nodeGraphFiniteNumber(params.morph)));
+  const k = Math.max(1e-6, (1 - (m > 0 ? Math.pow(m, 0.14) : 0)) * 4);
+  const k2 = k * k;
+  const k42 = Math.pow(2, 2 * k2);
+  const eightK2 = Math.pow(8, k2);
+  const decay = Math.pow(2, -k2 * (n + 1));
+  const twoK2 = Math.pow(2, k2);
+  const denCos = Math.pow(2, 1 + k2);
+  const kernel = (turns) => {
+    const t = turns - Math.floor(turns);
+    const x = 2 * Math.PI * t;
+    const cx = Math.cos(x);
+    const sx = Math.sin(x);
+    const cxn = Math.cos(x * n);
+    const sxn = Math.sin(x * n);
+    const num = (k42 * cxn - eightK2 * (cxn * cx - sxn * sx)) * decay + cx * k42 - twoK2;
+    const den = 1 - denCos * cx + k42;
+    return Math.abs(den) < 1e-12 ? 0 : num / den;
+  };
+  // Engine accumulator: acc = acc*exp(-0.23026*dt) + raw*dt per sample. In
+  // turns that is dy/dt = -a*y + raw(t), a = 0.23026. Its periodic steady state
+  // is y0 = I/(1 - e^-a), with I = one cycle from y = 0. Resolution-free.
+  const leak = 0.23026;
+  const integrateArr = (rawAt) => {
+    const acc = new Float64Array(count);
+    const h = 1 / count;
+    const r = Math.exp(-leak * h);
+    let y = 0;
+    for (let i = 0; i < count; i += 1) { y = y * r + rawAt(i) * h; acc[i] = y; }
+    const y0 = y / (1 - Math.exp(-leak));
+    let carry = y0;
+    for (let i = 0; i < count; i += 1) { carry *= r; acc[i] += carry; }
+    return acc;
+  };
+  // Midpoints: t = 0 is the closed form's 0/0 point and would drop the spike.
+  const integrate = (raw) => integrateArr((i) => raw((i + 0.5) / count));
+  const saw = integrate(kernel);
+  const pw = Math.max(0.01, Math.min(0.99, nodeGraphFiniteNumber(params.pulseWidth)));
+  let shape = saw;
+  if (waveform === 4) {
+    const sq = integrate((t) => kernel(t) - kernel(t - 0.5));
+    const b = Math.max(0, Math.min(1, nodeGraphFiniteNumber(params.blend)));
+    shape = saw.map((v, i) => v * (1 - b) + sq[i] * b);
+  } else if (waveform === 2 || waveform === 3) {
+    const sq = integrate((t) => kernel(t) - kernel(t - pw));
+    shape = sq;
+    if (waveform === 3) {
+      const tri = integrateArr((i) => sq[i] * 4);
+      const comp = 1 / Math.max(0.05, Math.min(1, Math.abs(Math.sin(Math.PI * pw))));
+      let absMean = 0;
+      for (let i = 0; i < count; i += 1) { tri[i] *= comp; absMean += Math.abs(tri[i]); }
+      const peak = Math.max(1, absMean / count);
+      for (let i = 0; i < count; i += 1) tri[i] /= peak;
+      shape = tri;
+    }
+  }
+  for (let i = 0; i < count; i += 1) out[i] = Math.max(-1.5, Math.min(1.5, shape[i])) * amp;
+  return out;
+}
+
+function nodeGraphDsfCyclePointCount(node) {
+  const sr = nodeGraphDsfSampleRate();
+  const f = Math.max(1e-6, Math.abs(nodeGraphFiniteNumber(nodeGraphSinCosLiveParam(node, "frequency", 100))));
+  const n = Math.max(1, Math.min(4096, Math.floor((sr * 0.5) / f) - 1));
+  // ~12 points per ripple of the highest partial, 2048..8192.
+  return Math.max(2048, Math.min(8192, Math.ceil(n * 12)));
+}
+
 function drawNodeGraphSinCosDisplayInner(section) {
   const nodeId = section?.dataset?.node
     || section?.closest?.(".dsp-node")?.dataset?.node
@@ -205,11 +297,21 @@ function drawNodeGraphSinCosDisplayInner(section) {
   if (!node || !canvas) {
     return;
   }
-  const amplitude = nodeGraphSinCosLiveParam(node, "amp", 1);
-  const polarity = Math.round(nodeGraphFiniteNumber(nodeGraphSinCosLiveParam(node, "polarity", 0))) >= 1 ? 1 : 0;
+  const isDsf = node.type === "dsfOscillator";
+  const amplitude = isDsf ? nodeGraphSinCosLiveParam(node, "amplitude", 1) : nodeGraphSinCosLiveParam(node, "amp", 1);
+  const dsfParams = isDsf ? {
+    waveform: nodeGraphSinCosLiveParam(node, "waveform", 1),
+    frequency: nodeGraphSinCosLiveParam(node, "frequency", 100),
+    morph: nodeGraphSinCosLiveParam(node, "morph", 1),
+    pulseWidth: nodeGraphSinCosLiveParam(node, "pulseWidth", 0.5),
+    blend: nodeGraphSinCosLiveParam(node, "blend", 0.5),
+    amplitude,
+  } : null;
+  const polarity = isDsf ? 0 : Math.round(nodeGraphFiniteNumber(nodeGraphSinCosLiveParam(node, "polarity", 0))) >= 1 ? 1 : 0;
   const phaseParam = nodeGraphFiniteNumber(nodeGraphSinCosLiveParam(node, "phase", 0));
-  const drawSin = nodeGraphSinCosOutputHasWire(nodeId, "sin");
-  const drawCos = nodeGraphSinCosOutputHasWire(nodeId, "cos");
+  // DSF has one output: its cycle is always drawn.
+  const drawSin = isDsf ? false : nodeGraphSinCosOutputHasWire(nodeId, "sin");
+  const drawCos = isDsf ? false : nodeGraphSinCosOutputHasWire(nodeId, "cos");
   const look = nodeGraphSinCosFaceSettingsForNode(node);
   const strokeW = look.lineThickness;
   const dotW = look.dotThickness;
@@ -227,6 +329,7 @@ function drawNodeGraphSinCosDisplayInner(section) {
     String(nodeId),
     drawSin ? "sin" : "",
     drawCos ? "cos" : "",
+    dsfParams ? JSON.stringify(dsfParams) + "@" + nodeGraphDsfSampleRate() : "",
     String(Number(amplitude).toFixed(4)),
     polarity ? "uni" : "bi",
     String((phaseParam - Math.floor(phaseParam)).toFixed(4)),
@@ -300,6 +403,21 @@ function drawNodeGraphSinCosDisplayInner(section) {
   // Red sine only if a wire leaves the sin jack. Blue cosine only for cos.
   if (drawSin) pushLine("sin", look.strokePaint);
   if (drawCos) pushLine("cos", nodeGraphSinCosCosPaint(look));
+  let dsfCycle = null;
+  if (isDsf) {
+    if (section._dsfCycleKey !== signature) {
+      section._dsfCycle = nodeGraphDsfCycle(dsfParams, nodeGraphDsfCyclePointCount(node));
+      section._dsfCycleKey = signature;
+    }
+    dsfCycle = section._dsfCycle;
+    const count = dsfCycle.length;
+    const shift = Math.floor(phaseOff * count) % count;
+    const points = [];
+    for (let i = 0; i <= count; i += 1) {
+      points.push({ x: mapX(i / count), y: mapY(dsfCycle[(i + shift) % count]) });
+    }
+    lines.push({ points, color: look.strokePaint, width: strokeW, blur: 0 });
+  }
 
   let play = nodeGraphSinCosReadPhase(nodeId, node, section);
   if (!Number.isFinite(play)) {
@@ -318,6 +436,12 @@ function drawNodeGraphSinCosDisplayInner(section) {
   };
   if (drawSin) pushDot("sin");
   if (drawCos) pushDot("cos");
+  if (dsfCycle) {
+    // Line starts at the Phase offset; dot x is play - offset, value is cycle(play).
+    const idx = Math.min(dsfCycle.length - 1, Math.floor(play * dsfCycle.length));
+    const py = mapY(dsfCycle[idx]);
+    if (Number.isFinite(px) && Number.isFinite(py)) dots.push({ x: px, y: py, color: look.dotPaint, radius: dotR });
+  }
   nodeGraphCycleLineGlPresent(canvas, {
     cssWidth: drawW,
     cssHeight: drawH,

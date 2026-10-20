@@ -203,6 +203,7 @@ struct DsfOscillatorState {
   double triAcc;       // Trimorph's second-stage leaky-integrator accumulator
   double triPeak;      // Trimorph's adaptive peak-follower
   double out;
+  double renderPhase;  // face playhead: free-running t + Phase offset, 0..1
   DsfKernelCoeffs kernel;
 };
 
@@ -269,7 +270,8 @@ extern "C" void soemdsp_dsf_oscillator_sample(
   double sample;
   if (waveform == 0) {
     s.t = wrap01(s.t + dt);
-    sample = sinApprox(wrap01(s.t + phaseOffset) * kPi * 2.0);
+    s.renderPhase = wrap01(s.t + phaseOffset);
+    sample = sinApprox(s.renderPhase * kPi * 2.0);
   } else {
     const double nyquist = safeSampleRate * 0.5;
     const double nSaw = static_cast<double>(sawPartials(nyquist, safeAbsFrequency));
@@ -278,6 +280,7 @@ extern "C" void soemdsp_dsf_oscillator_sample(
     // original guard against the closed form sitting exactly on a sample.
     s.t = wrap01(s.t + dt * 0.9999);
     const double renderT = wrap01(s.t + phaseOffset);
+    s.renderPhase = renderT;
 
     const double retention = adaptiveRetention(dt);
     const double rawSaw = sineSawKernel(renderT, s.kernel);
@@ -340,6 +343,12 @@ extern "C" double soemdsp_dsf_oscillator_out(int handle) {
   return gPool[handle - 1].out;
 }
 
+// Face playhead (DSF display phase dot). Includes the Phase offset.
+extern "C" double soemdsp_dsf_oscillator_phase(int handle) {
+  if (handle < 1 || handle > kMaxInstances) return 0.0;
+  return gPool[handle - 1].renderPhase;
+}
+
 extern "C" int soemdsp_dsf_oscillator_version() {
-  return 13;
+  return 14;
 }

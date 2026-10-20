@@ -818,7 +818,7 @@ NodeLiveAudioProcessor.prototype.mapNativeGraphSrcPortId = function mapNativeGra
       return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_PHASE01;
     }
   }
-  if ((t === "ellipsoid" || t === "ellipsoidOsc") && (p === "__phase" || p === "phase01")) {
+  if ((t === "ellipsoid" || t === "ellipsoidOsc" || t === "dsfOscillator") && (p === "__phase" || p === "phase01")) {
     return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_PHASE01;
   }
   if ((t === "sineWavetable" || t === "sinCos") && (p === "cos" || p === "cosine")) {
@@ -9337,7 +9337,7 @@ NodeLiveAudioProcessor.prototype.nativeGraphPortNames = function nativeGraphPort
     if (type === "acidSequencer") return ["__AcidStep"];
     // Face playhead — not a patchable jack.
     if (type === "basicShape" || type === "sineWavetable" || type === "sinCos"
-      || type === "ellipsoid" || type === "ellipsoidOsc") {
+      || type === "ellipsoid" || type === "ellipsoidOsc" || type === "dsfOscillator") {
       return ["__Phase"];
     }
     // Smooth/Step Graph purple ghost (syncNodeGraphGraphLivePlayheads).
@@ -9434,7 +9434,7 @@ NodeLiveAudioProcessor.prototype.publishNativeGraphScopeTaps = function publishN
       )
       : (type === "sineWavetable" || type === "sinCos" || type === "smoothGraph" || type === "stepGraph"
         || type === "acidSequencer" || type === "fbmField"
-        || type === "ellipsoid" || type === "ellipsoidOsc"
+        || type === "ellipsoid" || type === "ellipsoidOsc" || type === "dsfOscillator"
         ? audioPorts.concat(P.NATIVE_GRAPH_PORT_PHASE01)
         : audioPorts);
     for (let pi = 0; pi < ports.length; pi += 1) {
@@ -9598,7 +9598,7 @@ NodeLiveAudioProcessor.prototype.publishNativeGraphScopeTaps = function publishN
         type === "basicShape" || type === "sineWavetable" || type === "sinCos"
         || type === "smoothGraph" || type === "stepGraph"
         || type === "acidSequencer"
-        || type === "ellipsoid" || type === "ellipsoidOsc"
+        || type === "ellipsoid" || type === "ellipsoidOsc" || type === "dsfOscillator"
       ) {
         ports = facePorts.concat(P.NATIVE_GRAPH_PORT_PHASE01);
       } else if (type === "polyBlep" || type === "blit") {
