@@ -275,6 +275,7 @@ function nodeGraphModuleDisplayTypeHasLocalSettings(displayType) {
     "roundShapeFace",
     "basicShapeFace",
     "softwaveOscFace",
+    "sinCosFace",
     "sinCos4Face",
     // Lone t Torch: hue shift of the torch pixels.
     "torchFace",
