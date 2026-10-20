@@ -687,8 +687,8 @@ function buildNodeGraphSampleWaveformDisplaySettingsBodyHtml() {
         <input id="nodeSampleWaveformRecursiveSearch" type="checkbox">
       </label>
       <div class="node-led-settings-row node-sample-waveform-settings-row node-sample-waveform-playlist-actions node-sample-waveform-load-actions" role="group" aria-label="Load path">
-        <button id="nodeSampleWaveformLoadPlaylist" type="button" title="List audio from a pasted folder path (or the parent folder of a pasted file). Online with an empty path: Browse.">Load Folder</button>
         <button id="nodeSampleWaveformLoadFile" type="button" title="Pick one audio file (native browser), or load a pasted audio file path.">Load File</button>
+        <button id="nodeSampleWaveformLoadPlaylist" type="button" title="List audio from a pasted folder path (or the parent folder of a pasted file). Online with an empty path: Browse.">Load Folder</button>
       </div>
       <div class="node-led-settings-row node-sample-waveform-settings-row node-sample-waveform-formats-row" role="group" aria-label="Audio formats">
         <div id="nodeSampleWaveformFormatChecks" class="node-sample-waveform-format-checks"></div>
