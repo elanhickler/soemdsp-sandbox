@@ -2025,10 +2025,6 @@ button.scw-label:hover,
   background: transparent;
   outline: none;
 }
-.node-music-player-pl-ram.is-hog {
-  color: var(--sample-waveform-hud-color-hot);
-  background: transparent;
-}
 .node-music-player-page-playinfo .node-music-player-pl-ram-panel {
   flex: 1 1 0%;
   max-height: none;
@@ -2082,10 +2078,6 @@ button.scw-label:hover,
 .node-music-player-pl-ram-summary {
   margin-bottom: 3px;
   opacity: 1;
-}
-.node-music-player-pl-ram-summary .is-hog {
-  color: var(--sample-waveform-hud-color-hot);
-  font-weight: 600;
 }
 .node-music-player-pl-ram-table {
   width: 100%;

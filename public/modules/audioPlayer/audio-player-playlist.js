@@ -416,7 +416,6 @@ function nodeGraphAudioPlayerPlaylistRamSummary(nodeId) {
     tracks: pl.items.length,
     loaded,
     label: `${pl.items.length} track${pl.items.length === 1 ? "" : "s"}`,
-    hog: bytes >= 64 * 1024 * 1024,
   };
 }
 
@@ -2703,8 +2702,7 @@ function nodeGraphAudioPlayerPlaylistRefreshRamDebug(nodeId) {
   summary.className = "node-music-player-pl-ram-summary";
   summary.innerHTML = `<strong>${ram.label}</strong>`
     + ` · loaded ${ram.loaded}/${ram.tracks}`
-    + ` · ${ram.frames.toLocaleString()} frames`
-    + (ram.hog ? ` · <span class="is-hog">HOG ≥64MB</span>` : "");
+    + ` · ${ram.frames.toLocaleString()} frames`;
   body.append(summary);
 
   const table = document.createElement("table");
