@@ -106,12 +106,12 @@ function nodeGraphImageBurnToPatch(settings) {
   };
 }
 
-/** Bright knob plus normal parameter modulation, clamped to the knob range. */
-function nodeGraphImageBurnEffectiveBrightness(nodeId) {
-  const base = nodeGraphImageBurnReadParam(nodeId, "brightness", 1);
+/** Knob value + every modulation patched into `key` (face reads it live). */
+function nodeGraphImageBurnModulatedParam(nodeId, key, fallback, metaFallback) {
+  const base = nodeGraphImageBurnReadParam(nodeId, key, fallback);
   const metadata = typeof nodeGraphReadPatchParameterMetadata === "function"
-    ? (nodeGraphReadPatchParameterMetadata(nodeId, "brightness") || { min: 0, max: 1 })
-    : { min: 0, max: 1 };
+    ? (nodeGraphReadPatchParameterMetadata(nodeId, key) || metaFallback)
+    : metaFallback;
   const id = String(nodeId || "");
   const list = nodeGraphMvp?.patch?.modulations || [];
   let mod = 0;
@@ -120,7 +120,7 @@ function nodeGraphImageBurnEffectiveBrightness(nodeId) {
     if (String(entry?.destinationNode || "") !== id) {
       continue;
     }
-    if (String(entry?.destinationParam || "") !== "brightness") {
+    if (String(entry?.destinationParam || "") !== key) {
       continue;
     }
     const sample = typeof nodeGraphModuleScopeLatestOutputValue === "function"
@@ -133,7 +133,12 @@ function nodeGraphImageBurnEffectiveBrightness(nodeId) {
   const mixed = typeof nodeGraphApplyParameterModulation === "function"
     ? nodeGraphApplyParameterModulation(base, mod, metadata)
     : base + mod;
-  const n = Number(mixed);
+  return Number(mixed);
+}
+
+/** Bright knob plus modulation, clamped to 0..1. */
+function nodeGraphImageBurnEffectiveBrightness(nodeId) {
+  const n = nodeGraphImageBurnModulatedParam(nodeId, "brightness", 1, { min: 0, max: 1 });
   if (!Number.isFinite(n)) {
     return 0;
   }
@@ -412,7 +417,7 @@ function drawNodeGraphImageBurnFaceItem(renderer, item, pixelRatio) {
   const settings = nodeGraphImageBurnSettingsForNode(node);
   const nodeId = slot.nodeId;
   const size = clampNodeGraphImageBurnSize(
-    nodeGraphImageBurnReadParam(nodeId, "size", 1),
+    nodeGraphImageBurnModulatedParam(nodeId, "size", 1, { min: 0, max: 2 }),
     1,
   );
 
