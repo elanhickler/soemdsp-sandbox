@@ -76,6 +76,10 @@ const snap = () => page.evaluate(() => {
     thruLabel: thru.dataset.railLabel,
     thruTags: [...pp.querySelectorAll(".node-param-port.parameter-output")]
       .filter((el) => !el.closest(".node-parameter-row")?.hidden).every((el) => el.getBoundingClientRect().width > 0),
+    // Params with a drawn tag, per rail (tag = ::after with the short label).
+    tagged: ["modulation-input", "parameter-output"].map((cls) => [...pp.querySelectorAll(`.node-param-port.${cls}`)]
+      .filter((el) => { const c = getComputedStyle(el, "::after").content; return c && c !== "none" && c !== "normal"; })
+      .map((el) => el.dataset.param).sort().join(",")),
     inletCount: pp.querySelectorAll('.node-param-port.modulation-input[data-param="feedback"]').length,
   };
 });
@@ -97,7 +101,8 @@ const z = rest.zoom;
 check("pingPong resolves to spawn", rest.layout === "spawn", rest.layout);
 check("rest: mod rail closed", !rest.open && rest.modW < 1, JSON.stringify(rest));
 check("rest: thru rail = rail width", Math.abs(rest.thruW - RAIL * z) < 1.5, rest.thruW);
-check("rest: every visible param has a thru tag", rest.thruTags);
+check("rest: thru rail present for every visible param", rest.thruTags);
+check("rest: no param tags when nothing is patched", rest.tagged.join("|") === "|", JSON.stringify(rest.tagged));
 check("thru tag short label", rest.thruLabel && rest.thruLabel.length <= 6, rest.thruLabel);
 await shot("pingpong-rest", 'article[data-node="pp-1"]');
 
@@ -108,12 +113,14 @@ await page.waitForTimeout(300);
 const one = await snap();
 check("first cable: mod rail open", one.open && Math.abs(one.modW - RAIL * z) < 1.5, JSON.stringify(one));
 check("first cable: inlet tag on the patched param", one.modPatched);
+check("first cable: exactly one tag pair (inlet + thru) for the used param", one.tagged.join("|") === "feedback|feedback", JSON.stringify(one.tagged));
 check("module width unchanged", Math.abs(one.width - rest.width) < 0.5, `${rest.width} -> ${one.width}`);
 check("display width unchanged", rest.displayW === null || Math.abs(one.displayW - rest.displayW) < 0.5, `${rest.displayW} -> ${one.displayW}`);
 check("IO band unchanged", JSON.stringify(one.ioRect) === JSON.stringify(rest.ioRect), `${rest.ioRect} -> ${one.ioRect}`);
 check("params shrink by one rail", Math.abs((rest.ctlW - one.ctlW) - RAIL * z) < 1.5, `${rest.ctlW} -> ${one.ctlW}`);
 check("rails sit under the display", rest.displayBottom === null || one.rowTop >= rest.displayBottom - 0.5, `${one.rowTop} vs ${rest.displayBottom}`);
 await shot("pingpong-patched", 'article[data-node="pp-1"]');
+if (SHOT) await page.locator('article[data-node="pp-1"]').screenshot({ path: path.join(SHOT, "rails3-used-only.png") });
 if (SHOT) await page.screenshot({ path: path.join(SHOT, "rails-workspace-patched.png") });
 
 // Second cable to the same param shares the one inlet.
@@ -127,6 +134,7 @@ await page.waitForTimeout(300);
 const gone = await snap();
 check("last unplug: mod rail closed", !gone.open && gone.modW < 1);
 check("last unplug: thru rail stays", Math.abs(gone.thruW - RAIL * z) < 1.5);
+check("last unplug: no param tags", gone.tagged.join("|") === "|", JSON.stringify(gone.tagged));
 
 // "Mod rail" always on: open with no cables, saved with the patch.
 await page.evaluate(() => {

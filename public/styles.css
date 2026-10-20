@@ -25852,7 +25852,8 @@ html.soemdsp-whole-module .node-layout-canvas-grip {
   background: #080a0e;
   box-shadow: inset -1px 0 0 #3d4555;
 }
-.dsp-node[data-face-layout="spawn"] .node-param-port.parameter-output::after,
+/* Tags only for params in use: one pair (inlet + thru) per used param. */
+.dsp-node[data-face-layout="spawn"].mod-rail-open .node-param-port.parameter-output.rail-patched::after,
 .dsp-node[data-face-layout="spawn"].mod-rail-open .node-param-port.modulation-input.rail-patched::after {
   content: attr(data-rail-label);
   position: absolute;

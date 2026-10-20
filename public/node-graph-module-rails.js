@@ -79,13 +79,26 @@ function syncNodeGraphModuleRails() {
     return false;
   }
   const patch = nodeGraphMvp.patch || {};
+  // A param is "in use" when a cable lands on its mod inlet or leaves its thru.
+  // Each used param shows one tag pair (mod rail + thru rail); nothing else.
   const patched = new Map();
-  for (const wire of patch.modulations || []) {
-    const id = wire?.destinationNode;
-    const param = wire?.destinationParam;
-    if (!id || !param) continue;
+  const use = (id, param) => {
+    if (!id || !param) return;
     if (!patched.has(id)) patched.set(id, new Set());
     patched.get(id).add(param);
+  };
+  for (const wire of patch.modulations || []) use(wire?.destinationNode, wire?.destinationParam);
+  const paramKeys = new Map();
+  const keysOf = (id) => {
+    if (!paramKeys.has(id)) {
+      const node = (patch.nodes || []).find((n) => n?.id === id);
+      const def = node && typeof nodeGraphModuleDefinitions === "object" ? nodeGraphModuleDefinitions[node.type] : null;
+      paramKeys.set(id, new Set((def?.parameters || []).map((p) => p.key)));
+    }
+    return paramKeys.get(id);
+  };
+  for (const wire of [...(patch.modulations || []), ...(patch.connections || [])]) {
+    if (wire?.sourceNode && keysOf(wire.sourceNode).has(wire.sourcePort)) use(wire.sourceNode, wire.sourcePort);
   }
   const alwaysOn = new Set(
     (patch.nodes || []).filter((node) => node?.ui?.modRailAlwaysOn).map((node) => node.id),
@@ -101,7 +114,7 @@ function syncNodeGraphModuleRails() {
     const id = article.dataset.node;
     const params = patched.get(id);
     article.classList.toggle("mod-rail-open", Boolean(params?.size) || alwaysOn.has(id));
-    for (const jack of article.querySelectorAll(".node-param-port.modulation-input")) {
+    for (const jack of article.querySelectorAll(".node-param-port.modulation-input, .node-param-port.parameter-output")) {
       jack.classList.toggle("rail-patched", Boolean(params?.has(jack.dataset.param)));
     }
   }
