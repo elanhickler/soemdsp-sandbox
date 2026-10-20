@@ -71,7 +71,7 @@ const NODE_GRAPH_SINCOS4_COLORS = Object.freeze([
 //   sinCos4OuterDotSize   outer (ring) position dots, 0..10 (radius = 0.01 + 0.04 * size of the square)
 //   sinCos4HubDotSize     centre hub base, 0..10 (same formula; x Hub size below)
 //   (Legacy `dot1Size` "Size" scaled both; old patches map it onto both.)
-//   sinCos4RayThickness   ray width, % of the face square, 0..50 (tap A drawn 1.35x)
+//   sinCos4RayThickness   ray width, % of the face square, 0..50 (all four rays drawn equal)
 //   sinCos4RingThickness  ring width, % of the face square, 0..50
 //   sinCos4HubSize        centre hub radius, x the hub base radius, 0..10
 // Defaults = the original fixed look (ray / ring 1.2 %, hub 0.7 x tip).
@@ -281,8 +281,8 @@ function drawNodeGraphSinCos4DisplayInner(section) {
     const x = cx + Math.cos(ang) * radius;
     const y = cy - Math.sin(ang) * radius;
     const color = nodeGraphGlLinesCss(NODE_GRAPH_SINCOS4_COLORS[i] || NODE_GRAPH_SINCOS4_COLORS[3]);
-    nodeGraphGlLinesSegment(batch, X(cx), Y(cy), X(x), Y(y), halfOf(stroke * (i === 0 ? 1.35 : 1)), feather, color);
-    drawNodeGraphSinCos4FillDot(batch, X(x), Y(y), Math.max(0, tipR * (i === 0 ? 1.15 : 1) * side - feather * 0.5), feather, color);
+    nodeGraphGlLinesSegment(batch, X(cx), Y(cy), X(x), Y(y), halfOf(stroke), feather, color);
+    drawNodeGraphSinCos4FillDot(batch, X(x), Y(y), Math.max(0, tipR * side - feather * 0.5), feather, color);
   }
   drawNodeGraphSinCos4FillDot(batch, X(cx), Y(cy), Math.max(0, hubR * side - feather * 0.5), feather, [220 / 255, 230 / 255, 240 / 255, 0.9]);
   if (!nodeGraphGlLinesEnd(batch) && typeof nodeGraphGlLinesFillBlack === "function") nodeGraphGlLinesFillBlack(canvas);
