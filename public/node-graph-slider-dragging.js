@@ -654,9 +654,10 @@ function nodeSliderKeyboardStep(slider, event) {
 // input). Native Display Settings ranges cannot reuse that surface, but they
 // MUST share the same modifier vocabulary:
 //
-//   ctrl/cmd + click          reset to default
+//   ctrl/cmd + click          reset to default (nodeGraphNumericResetClickModifier)
 //   alt + click               jump to pointer and snap smoother
 //   then drag                 same as a normal click-drag (smoothing on)
+//   travel                    NODE_GRAPH_DISPLAY_SETTINGS_TRAVEL_PX per full range
 //   shift / ctrl / cmd        fine   (nodeGraphNumericDragMultiplier)
 //
 // Range drag is relative (like beginNodeSliderDrag), not browser thumb-jump,
@@ -751,9 +752,13 @@ function bindNodeGraphNativeSliderModifiers(input, defaultValue) {
     if (event?.pointerId !== undefined && input.hasPointerCapture?.(event.pointerId)) {
       try { input.releasePointerCapture(event.pointerId); } catch (_error) { /* ignore */ }
     }
+    nodeGraphNativeRangeDrag = null;
+    if (drag.resetClick && event?.type !== "pointercancel") {
+      emit(clamp(drag.resetValue));
+      return;
+    }
     // Final change event for commit-on-change listeners.
     input.dispatchEvent(new Event("change", { bubbles: true }));
-    nodeGraphNativeRangeDrag = null;
   };
   const reanchorDrag = (drag, event) => {
     drag.startX = event.clientX;
@@ -771,29 +776,27 @@ function bindNodeGraphNativeSliderModifiers(input, defaultValue) {
       event.stopPropagation();
       return;
     }
-    // Ctrl/Cmd click = reset (same as module face sliders).
-    if ((event.ctrlKey || event.metaKey) && !event.altKey && !event.shiftKey) {
-      const reset = typeof nodeSliderCtrlClickDefaultValue === "function"
-        ? nodeSliderCtrlClickDefaultValue(input)
-        : Number(input.dataset.paramDefault ?? input.dataset.default);
-      if (Number.isFinite(reset)) {
-        emit(clamp(reset));
+    const resetValue = typeof nodeSliderCtrlClickDefaultValue === "function"
+      ? nodeSliderCtrlClickDefaultValue(input)
+      : Number(input.dataset.paramDefault ?? input.dataset.default);
+    const resetClick = nodeGraphNumericResetClickModifier(event) && Number.isFinite(resetValue);
+    // Number fields keep native caret / select behavior; Ctrl/Cmd+click resets at once.
+    if (input.type !== "range") {
+      if (resetClick) {
+        emit(clamp(resetValue));
         event.preventDefault();
         event.stopPropagation();
       }
       return;
     }
-    // Number fields keep native caret / select behavior.
-    if (input.type !== "range") {
-      return;
-    }
     const { min, max, span } = nodeGraphNativeRangeSpan(input);
     const rect = input.getBoundingClientRect();
-    const travelWidth = Math.max(48, rect.width || 0);
+    // Same travel as Display Settings number fields: 220 screen px per full range.
+    const travelWidth = NODE_GRAPH_DISPLAY_SETTINGS_TRAVEL_PX;
     // Alt click = jump to pointer and snap smoother (same as module face sliders).
     const jumpToPointer = event.altKey && !(event.shiftKey && (event.ctrlKey || event.metaKey));
     if (jumpToPointer && travelWidth > 0) {
-      const t = Math.max(0, Math.min(1, (event.clientX - rect.left) / travelWidth));
+      const t = Math.max(0, Math.min(1, (event.clientX - rect.left) / Math.max(1, rect.width || 0)));
       emit(clamp(min + t * span), { inputOnly: true });
       const nodeId = input.closest?.(".dsp-node")?.dataset?.node;
       const paramKey = input.dataset?.param;
@@ -811,6 +814,10 @@ function bindNodeGraphNativeSliderModifiers(input, defaultValue) {
       travelWidth,
       span,
       min,
+      // Ctrl/Cmd press: release without moving = reset (shared rule with
+      // Display Settings fields); moving turns it into a fine drag.
+      resetClick,
+      resetValue,
     };
     try {
       input.focus({ preventScroll: true });
@@ -836,6 +843,13 @@ function bindNodeGraphNativeSliderModifiers(input, defaultValue) {
       && drag.pointerId !== event.pointerId
     ) {
       return;
+    }
+    if (drag.resetClick) {
+      if (!nodeGraphPointerDragExceededMoveThreshold(drag.startX, drag.startY, event.clientX, event.clientY, 2)) {
+        event.preventDefault();
+        return;
+      }
+      drag.resetClick = false;
     }
     const scale = fineScale(event);
     if (scale !== drag.fineScale) {
