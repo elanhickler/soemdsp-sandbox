@@ -237,6 +237,73 @@ const results = await page.evaluate(() => {
 });
 for (const r of results) check(r.ok, r.label, r.detail);
 
+// 12. DS-8 order (APP_POLICY §21b), Sync off and on: rate row within the first
+// 3 numeric rows after Sync/Scale; nothing but colors / image slots after the
+// first color widget.
+const order = await page.evaluate(() => {
+  const TYPES = [
+    "dot", "gradientVectorscopeFace", "graphFace", "hypersawBurn", "imageBurnFace", "knobFace", "lcd",
+    "lcdDot", "led", "lineBurn", "numberReadout", "oscilloscopeBankBurn", "output", "phosphorLight",
+    "pulseDot", "rasterRgbFace", "roundShapeFace", "basicShapeFace", "scope2d", "scope2dTrace",
+    "softwaveOscFace", "spectrogramBurn", "trace", "traceRgb", "traceXyz", "value", "valueLcd",
+    "vectorDot", "vectorRgbFace", "videoscopeBurn", "xyPad",
+  ];
+  const RATE = new Set(["sweepHz", "sweepCycles", "historyHz", "historyCycles", "historySeconds", "zoomSeconds"]);
+  const COLOR = "[data-trace-display-color-row], [data-hue-title-stepper], [data-gradient-selector-host], input[type=color], [data-sound-color-widget]";
+  const IMAGE = "[data-image-asset-row], [data-image-asset], [data-knob-face-layer]";
+  const CONTROL = "[data-trace-display-field], [data-trace-display-choice], [data-trace-display-toggle], button, select";
+  const out = [];
+  let pop = document.getElementById("nodeTraceDisplaySettingsPopover");
+  const created = !pop;
+  if (!pop) {
+    pop = document.createElement("div");
+    pop.id = "nodeTraceDisplaySettingsPopover";
+    document.body.appendChild(pop);
+  }
+  const savedType = pop.dataset.displaySettingsType;
+  for (const type of TYPES) {
+    pop.dataset.displaySettingsType = type;
+    let html = "";
+    try {
+      html = window.buildNodeGraphDisplaySettingsBodyHtml(type, null) || "";
+    } catch (err) {
+      out.push({ type, error: String(err.message || err) });
+      continue;
+    }
+    const host = document.createElement("div");
+    host.innerHTML = html;
+    const all = [...host.querySelectorAll("*")];
+    const firstColor = all.findIndex((el) => el.matches(COLOR));
+    const late = firstColor < 0 ? [] : all.slice(firstColor).filter((el) => el.matches(CONTROL)
+      && !el.closest(COLOR) && !el.closest(IMAGE));
+    const numeric = [...host.querySelectorAll("[data-trace-display-field]")]
+      .map((el) => el.getAttribute("data-trace-display-field"))
+      .filter((k, i, a) => a.indexOf(k) === i && k !== "scale");
+    const rateIdx = numeric.findIndex((k) => RATE.has(k));
+    out.push({
+      type,
+      rateIdx,
+      hasRate: rateIdx >= 0,
+      late: late.map((el) => el.getAttribute("data-trace-display-field")
+        || el.getAttribute("data-trace-display-choice") || el.getAttribute("data-trace-display-toggle")
+        || el.textContent.trim().slice(0, 20) || el.tagName),
+    });
+  }
+  pop.dataset.displaySettingsType = savedType || "";
+  if (created) pop.remove();
+  return out;
+});
+for (const r of order) {
+  if (r.error) {
+    check(false, `order ${r.type}: build error`, r.error);
+    continue;
+  }
+  if (r.hasRate) {
+    check(r.rateIdx < 3, `order ${r.type}: rate row in the first 3 numeric rows`, r.rateIdx);
+  }
+  check(r.late.length === 0, `order ${r.type}: nothing after the first color`, r.late.join(", "));
+}
+
 // 10. Native range panel: 220 px travel, Ctrl+click reset, wheel changes nothing.
 const native = await page.evaluate(() => {
   const input = document.createElement("input");

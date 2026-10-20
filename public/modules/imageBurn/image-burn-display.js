@@ -655,6 +655,11 @@ function buildNodeGraphImageBurnDisplaySettingsBodyHtml() {
       </div>
       <div class="metadata-field-section">
         <div class="metadata-section-title">PLATE</div>
+        <div class="metadata-field-section node-trace-display-xy-pad-actions">
+          <button type="button" data-image-burn-clear-residual class="node-xy-pad-reset-canvas-button">
+            Clear
+          </button>
+        </div>
         ${hueRow && typeof nodeGraphDisplaySettingsHbsRow === "function"
           ? nodeGraphDisplaySettingsHbsRow([hueRow({
             title: "Background",
@@ -674,11 +679,6 @@ function buildNodeGraphImageBurnDisplaySettingsBodyHtml() {
               titleAttr: "Plate brightness 0…1.",
             })
             : "")}
-        <div class="metadata-field-section node-trace-display-xy-pad-actions" style="margin-top:0.5rem">
-          <button type="button" data-image-burn-clear-residual class="node-xy-pad-reset-canvas-button">
-            Clear
-          </button>
-        </div>
       </div>
     </div>
   `;
