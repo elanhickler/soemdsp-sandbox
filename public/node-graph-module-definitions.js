@@ -788,6 +788,19 @@ function nodeGraphControllerButtonBiasParameter() {
     tooltip: "Bias. Off/On choices by default. Min, max, reverse, curve, and smooth time are Parameter Settings." };
 }
 
+// Toggle / Momentary spawn with Bias smoothing Off (a press is a step; a
+// smoothed ramp makes Trigger inlets strike at the first tiny sample). Spawn
+// only: stamped into paramMeta by createNodeGraphPatchNode, so the user can
+// turn it back on in Parameter Settings and saved patches keep their own meta.
+const NODE_GRAPH_CONTROLLER_BUTTON_SPAWN_PARAM_META = Object.freeze({
+  offset: Object.freeze({
+    linearSmoothing: false,
+    smoothingMode: "off",
+    smoothingSeconds: 0,
+    smoothingType: "linear",  // Off as app-wide: type stays Linear so turning the mode back on ramps
+  }),
+});
+
 function nodeGraphControllerButtonModuleParameters() {
   return [
     nodeGraphControllerButtonBiasParameter(),
@@ -8414,6 +8427,7 @@ const nodeGraphModuleDefinitions = (
       Bias: "Bias: the Off/On value set by Parameter Settings min/max.",
       Gate: "1 while the toggle is on, 0 otherwise.",
       Trigger: "Short 0→1 pulse (one audio block) when the toggle turns on." },
+    spawnParamMeta: NODE_GRAPH_CONTROLLER_BUTTON_SPAWN_PARAM_META,
     parameters: nodeGraphControllerButtonModuleParameters() },
   momentaryButton: {
     planRole: "source",
@@ -8446,6 +8460,7 @@ const nodeGraphModuleDefinitions = (
       Bias: "Bias: the Off/On value set by Parameter Settings min/max.",
       Gate: "1 while the button is held, 0 otherwise.",
       Trigger: "Short 0→1 pulse (one audio block) when the button is pressed." },
+    spawnParamMeta: NODE_GRAPH_CONTROLLER_BUTTON_SPAWN_PARAM_META,
     parameters: nodeGraphControllerButtonModuleParameters() },
   passiveFilter: {
     planRole: "processor",

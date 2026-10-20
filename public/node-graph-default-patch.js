@@ -113,6 +113,17 @@ function createNodeGraphPatchNode(type, options = {}, creation = {}) {
     params: nodeGraphDefaultParamsForType(resolvedType),
     type: resolvedType,
   };
+  // definition.spawnParamMeta: spawn-time meta (e.g. Toggle / Momentary Bias
+  // smoothing Off). New nodes only -- loaded patches never pass through here;
+  // the Save-to-Default override and opts.paramMeta below still win.
+  const spawnMeta = nodeGraphModuleDefinitions[resolvedType]?.spawnParamMeta;
+  if (spawnMeta && typeof spawnMeta === "object") {
+    for (const key of Object.keys(spawnMeta)) {
+      if (node.paramMeta[key] && spawnMeta[key] && typeof spawnMeta[key] === "object") {
+        node.paramMeta[key] = { ...node.paramMeta[key], ...spawnMeta[key] };
+      }
+    }
+  }
   const paramsOverride = opts.params && typeof opts.params === "object" ? opts.params : null;
   if (paramsOverride) {
     for (const key of Object.keys(node.params)) {
