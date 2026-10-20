@@ -2471,19 +2471,19 @@ function buildNodeGraphDisplaySettingsBodyHtml(formType, node = null) {
     parts.push(`<div class="metadata-field-section node-trace-display-${section}-section">${rows.join("")}</div>`);
   }
 
-  if (collectedColorCells.length) {
-    parts.push(
-      `<div class="metadata-field-section node-trace-display-colors-section">${
-        nodeGraphDisplaySettingsColorRows(collectedColorCells)
-      }</div>`,
-    );
-  }
-
-  // Scan Grid: Clear packing row (wipe rolling W×H plate + re-arm ingest).
+  // Scan Grid: Clear packing row, above the colors (APP_POLICY §21b) (wipe rolling W×H plate + re-arm ingest).
   if (type === "rasterRgbFace") {
     parts.push(
       `<div class="metadata-field-section node-trace-display-packing-section">${
         nodeGraphDisplaySettingsBuildPackingToggleRowHtml([])
+      }</div>`,
+    );
+  }
+
+  if (collectedColorCells.length) {
+    parts.push(
+      `<div class="metadata-field-section node-trace-display-colors-section">${
+        nodeGraphDisplaySettingsColorRows(collectedColorCells)
       }</div>`,
     );
   }

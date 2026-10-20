@@ -249,7 +249,7 @@ const order = await page.evaluate(() => {
     "vectorDot", "vectorRgbFace", "videoscopeBurn", "xyPad",
   ];
   const RATE = new Set(["sweepHz", "sweepCycles", "historyHz", "historyCycles", "historySeconds", "zoomSeconds"]);
-  const COLOR = "[data-trace-display-color-row], [data-hue-title-stepper], [data-gradient-selector-host], input[type=color], [data-sound-color-widget]";
+  const COLOR = "[data-trace-display-color-row], [data-hue-title-stepper], [data-gradient-selector-host], input[type=color], [data-sound-color-widget], .node-trace-display-hbs-row, .node-trace-display-colors-section";
   const IMAGE = "[data-image-asset-row], [data-image-asset], [data-knob-face-layer]";
   const CONTROL = "[data-trace-display-field], [data-trace-display-choice], [data-trace-display-toggle], button, select";
   const out = [];
@@ -312,15 +312,16 @@ const native = await page.evaluate(() => {
   input.max = "1";
   input.step = "0.01";
   input.value = "0.2";
-  input.style.cssText = "position:fixed;left:10px;top:10px;width:80px;z-index:2147483647";
+  input.id = "dsSmokeNativeRange"; input.style.cssText = "position:fixed;left:10px;top:10px;width:80px;z-index:2147483647";
   document.body.appendChild(input);
   window.bindNodeGraphNativeSliderModifiers(input, 0.5);
-  return true;
+  const r = input.getBoundingClientRect();
+  return { x: r.x, y: r.y, width: r.width, height: r.height };
 });
-const box = await page.locator('input[type="range"][data-native-slider-modifiers-bound="true"]').last().boundingBox();
+const box = native;
 const cx = box.x + box.width / 2;
 const cy = box.y + box.height / 2;
-const val = () => page.evaluate(() => Number([...document.querySelectorAll('input[type="range"][data-native-slider-modifiers-bound="true"]')].pop().value));
+const val = () => page.evaluate(() => Number([...document.querySelectorAll('#dsSmokeNativeRange')].pop().value));
 await page.mouse.move(cx, cy);
 await page.mouse.down();
 await page.mouse.move(cx + 44, cy, { steps: 4 });
