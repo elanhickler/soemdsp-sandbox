@@ -25820,10 +25820,10 @@ html.soemdsp-whole-module .node-layout-canvas-grip {
 }
 
 /* ---- Module rails (docs/MODULE_RAILS_PLAN.md, node-graph-module-rails.js) ----
-   Layout 1 (spawn): param band = [mod rail | params | thru rail]. Thru rail
-   always shows; the mod rail opens with the first param cable (or "Mod rail"
-   always-on) and closes with the last. Module width never changes, the params
-   shrink between the rails. Sizes are zoom-1.0 CSS px (--node-rail-width). */
+   Layout 1 (spawn): param band = [mod rail | params | thru rail]. Both rails
+   are hidden (no width) until a param is patched (or "Mod rail" always-on),
+   appear together on the first param cable and hide on the last. Module width
+   never changes; the params shrink between the rails. Sizes are zoom-1.0 CSS px (--node-rail-width). */
 .dsp-node[data-face-layout="spawn"] {
   --node-mod-rail-width: 0px;
 }
@@ -25831,15 +25831,15 @@ html.soemdsp-whole-module .node-layout-canvas-grip {
   --node-mod-rail-width: var(--node-rail-width, 40px);
 }
 .dsp-node[data-face-layout="spawn"] .node-parameter-row {
-  grid-template-columns: var(--node-mod-rail-width) minmax(0, 1fr) var(--node-rail-width, 40px);
+  grid-template-columns: var(--node-mod-rail-width) minmax(0, 1fr) var(--node-mod-rail-width);
 }
 .dsp-node[data-face-layout="spawn"] .node-param-port.modulation-input {
   width: var(--node-mod-rail-width);
   min-width: var(--node-mod-rail-width);
 }
 .dsp-node[data-face-layout="spawn"] .node-param-port.parameter-output {
-  width: var(--node-rail-width, 40px);
-  min-width: var(--node-rail-width, 40px);
+  width: var(--node-mod-rail-width);
+  min-width: var(--node-mod-rail-width);
 }
 /* Rail tags (soundemote-dev wiring look): dark strip with a #3d4555 edge,
    each tag a 16 px box inset 3 px, 1 px border, radius 2, mono 650 9px.
@@ -25910,7 +25910,7 @@ html.soemdsp-whole-module .node-layout-canvas-grip {
   position: absolute;
   top: 0;
   left: var(--node-mod-rail-width, 0px);
-  right: var(--node-rail-width, 40px);
+  right: var(--node-mod-rail-width);
   pointer-events: auto;
   touch-action: none;
 }
