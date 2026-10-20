@@ -312,7 +312,7 @@ function nodeGraphJackStereoChannel(value) {
   const tokens = raw.split(/[\s/_-]+/).filter(Boolean);
   const first = tokens[0] || raw;
   const last = tokens[tokens.length - 1] || raw;
-  if (raw === "l" || /^l\d+$/.test(raw) || raw === "left" || first === "left" || last === "left" || raw === "tonel") {
+  if (raw === "l" || /^l\d+$/.test(raw) || raw === "left" || first === "left" || last === "left" || last === "l" || raw === "tonel") {
     return "red";
   }
   if (raw === "m" || raw === "mono" || first === "mono" || last === "mono") {
@@ -320,7 +320,7 @@ function nodeGraphJackStereoChannel(value) {
   }
   // Bare In/Out/Input/Output = generic analog â†’ uncolored (gold). Not purple.
   // Explicit Mono (name or label) is green above; Left/Right are red/blue.
-  if (/^r\d+$/.test(raw) || raw === "right" || first === "right" || last === "right" || raw === "toner") {
+  if (/^r\d+$/.test(raw) || raw === "r" || raw === "right" || first === "right" || last === "right" || last === "r" || raw === "toner") {
     return "blue";
   }
   return "";

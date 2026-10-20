@@ -111,7 +111,9 @@ extern "C" double soemdsp_clock_sample(
   const double analog = clock_analog_whip_sample(phase, safeLevel);
 
   const double nextRawPhase = wrap01(rawPhase + safeRate / rateHz);
-  const bool wrapped = safeRate > 0.0 && s.hasStarted && nextRawPhase < rawPhase;
+  // T follows the offset phase. Two clocks at one rate with Phase 0 and 0.5
+  // must tick half a cycle apart. Wrapping the raw phase made every T simultaneous.
+  const bool wrapped = safeRate > 0.0 && s.hasStarted && (phase + safeRate / rateHz) >= 1.0;
   const double pulse = (resetRise || wrapped) ? safeLevel : 0.0;
 
   s.phase = nextRawPhase;
@@ -134,5 +136,5 @@ extern "C" double soemdsp_clock_pulse(int handle) {
 }
 
 extern "C" int soemdsp_clock_version() {
-  return 3;
+  return 4; // 4: T pulse follows Phase offset
 }
