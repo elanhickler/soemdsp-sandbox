@@ -13428,20 +13428,16 @@ def require_node_graph_mvp_contract() -> None:
         and "const activeToggles = nodeGraphTraceDisplayActiveControlSet(\"toggles\", formType)" in node_graph_source
         and "normalizeNodeGraphTraceDisplaySettingValueForKey(key, value)" in node_graph_source
         and "function nodeGraphTraceDisplaySizeControlField(key)" in node_graph_source
-        and "function nodeGraphTraceDisplaySensitiveControlField(key)" in node_graph_source
+        and "function nodeGraphDisplaySettingsFieldSpec(key, formType = null)" in node_graph_source
+        and "function nodeGraphDisplaySettingsValueToControl(spec, value)" in node_graph_source
+        and "function nodeGraphDisplaySettingsControlToValue(spec, control)" in node_graph_source
+        and "NODE_GRAPH_DISPLAY_SETTINGS_TRAVEL_PX" in node_graph_source
         and "[\"dot1Size\", \"secondarySize\", \"capSize\"].includes(key)" in node_graph_source
         and "[\"dot1Brightness\", \"secondaryBrightness\"].includes(key)" in node_graph_source
         and "const nodeGraphTraceDisplaySensitiveControlExponent = 3;" in node_graph_source
-        and "function nodeGraphTraceDisplaySizeToControlValue(value, max = 1)" in node_graph_source
-        and "1 / nodeGraphTraceDisplaySensitiveControlExponent" in node_graph_source
-        and "function nodeGraphTraceDisplayControlToSizeValue(value, max = 1)" in node_graph_source
-        and "return Math.pow(control, nodeGraphTraceDisplaySensitiveControlExponent) * max;" in node_graph_source
-        and "if (!nodeGraphTraceDisplaySensitiveControlField(key))" in node_graph_source
         # historySeconds is linear seconds (0–5 spectrogram); must NOT use the 0–1
         # sensitive fader or History + snaps 2→1 and cannot go above 1.
         and 'key === "historySeconds" ||' not in node_graph_source
-        and "adjustNodeGraphTraceDisplaySettingByControlDelta(drag.key, startValue, controlDelta)" in node_graph_source
-        and "adjustNodeGraphTraceDisplaySettingByControlDelta(key, baseValue, direction * quantum)" in node_graph_source
         and "for (const key of activeColors)" in node_graph_source
         and "0D Burn brightness mode | Off: only 0..1 lights up | On: -1 and +1 are equally bright" in tooltip_source
         and "zeroDBurnSettings: normalizeNodeGraphZeroDBurnSettings(migrate(node.zeroDBurnSettings, false))" in node_graph_source
