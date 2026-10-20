@@ -102,10 +102,10 @@ const cells = await page.evaluate(() => {
   const kx = r.width / face.offsetWidth;
   const ky = r.height / face.offsetHeight;
   const widgets = nodeGraphModuleFaceWidgets(nodeGraphModuleFaceSpec("pingPongDelay"), face.offsetWidth);
-  return { kx, ky, n: widgets.length, minW: Math.min(...widgets.map((w) => w.w)) };
+  return { kx, ky, n: widgets.length, minW: Math.min(...widgets.filter((w) => w.type !== "slash").map((w) => w.w)) };
 });
 check("face cells scale uniformly (kx = ky)", Math.abs(cells.kx - cells.ky) < 0.01, JSON.stringify(cells));
-check("face cells reflow to the narrower width (no cell < 10 px)", cells.minW >= 10, JSON.stringify(cells));
+check("face controls reflow to the narrower width (no control < 18 px)", cells.minW >= 18, JSON.stringify(cells));
 // Face + rails must draw for a module far from the world origin (B: screen cull on camera batches).
 await load(["pingPongDelay"], true, { gx: 260, gy: -70 });
 await page.waitForTimeout(900);

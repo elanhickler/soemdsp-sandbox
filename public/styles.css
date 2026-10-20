@@ -25828,10 +25828,11 @@ html.soemdsp-whole-module .node-layout-canvas-grip {
   --node-mod-rail-width: 0px;
 }
 .dsp-node[data-face-layout="spawn"].mod-rail-open {
-  --node-mod-rail-width: var(--node-rail-width, 40px);
+  --node-mod-rail-width: var(--node-rail-width, 26px);
 }
 .dsp-node[data-face-layout="spawn"] .node-parameter-row {
   grid-template-columns: var(--node-mod-rail-width) minmax(0, 1fr) var(--node-mod-rail-width);
+  column-gap: 0;
 }
 .dsp-node[data-face-layout="spawn"] .node-param-port.modulation-input {
   width: var(--node-mod-rail-width);

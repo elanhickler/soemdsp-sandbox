@@ -87,15 +87,17 @@ function nodeGraphModuleFaceWidgets(spec, w) {
         ...base, type: row.kind === "choices" ? "choice" : "lfoStyle", param: row.param, index: i, label: row.labels[i], x, w: cw,
       }));
     } else if (row.kind === "fraction") {
-      const side = 46;
-      const cellW = 50;
-      const numW = Math.max(10, (w - side - cellW - 10) / 2);
+      // Proportional so the row reads at any width (rails take width, never add it).
+      const slash = 8;
+      const side = Math.round(Math.min(46, w * 0.27));
+      const cellW = Math.round(Math.min(50, w * 0.29));
+      const numW = Math.max(10, (w - side - cellW - slash) / 2);
       out.push({ ...base, type: "step", param: row.num, x: 0, w: numW });
-      out.push({ ...base, type: "slash", x: numW, w: 10 });
-      out.push({ ...base, type: "step", param: row.den, x: numW + 10, w: numW });
+      out.push({ ...base, type: "slash", x: numW, w: slash });
+      out.push({ ...base, type: "step", param: row.den, x: numW + slash, w: numW });
       split(y, h, row.modeLabels.length).forEach(([sy, sh], i) => out.push({
         row, type: "subChoice", param: row.mode, index: i, label: row.modeLabels[i],
-        x: numW * 2 + 10, w: side, y: sy, h: sh,
+        x: numW * 2 + slash, w: side, y: sy, h: sh,
       }));
       out.push({ ...base, type: "cell", param: row.cell[0], label: row.cell[1], bipolar: true, x: w - cellW, w: cellW });
     } else if (row.kind === "cells") {
@@ -105,7 +107,7 @@ function nodeGraphModuleFaceWidgets(spec, w) {
     } else if (row.kind === "filter") {
       out.push({ ...base, type: "filter", hpf: row.hpf, lpf: row.lpf, x: 0, w, param: "" });
     } else if (row.kind === "seed") {
-      const bw = 28;
+      const bw = Math.round(Math.min(28, w * 0.15));
       out.push({ ...base, type: "seedNumber", param: row.param, x: 0, w: w - bw * 3 });
       ["dice", "plus", "minus"].forEach((action, i) => out.push({
         ...base, type: "seedButton", action, param: row.param, x: w - bw * (3 - i), w: bw,

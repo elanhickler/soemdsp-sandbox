@@ -15,7 +15,7 @@ const { chromium } = await import(process.env.PW_MODULE || "playwright");
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const BASE = process.env.SANDBOX_URL || "http://127.0.0.1:8765/";
 const SHOT = process.env.SHOT_DIR || "";
-const RAIL = 40;
+const RAIL = 26;
 
 const failures = [];
 const check = (label, ok, detail = "") => {

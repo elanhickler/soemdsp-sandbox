@@ -13,7 +13,7 @@
 // Each tunable is one constant here.
 
 /** Rail column width at workspace zoom 1.0 (Q25). */
-const NODE_GRAPH_RAIL_WIDTH_PX = 40;
+const NODE_GRAPH_RAIL_WIDTH_PX = 26;
 /** Shared short-label rule: first N characters, keeping a trailing " L" / " R" (Q5). */
 const NODE_GRAPH_RAIL_SHORT_LABEL_CHARS = 4;
 
@@ -159,19 +159,19 @@ function nodeGraphCanvasDisplayBox(tileW, tileH, aspect = 0) {
 }
 
 // ---- Rail drawing (WebGL only; the rail DOM is hit/geometry, never painted) ----
-// Look from soundemote-dev wiring: dark strip with a #3d4555 inner edge; each
-// used param gets a 16 px tag inset 3 px, 1 px #889 border, #111 fill, 9 px
-// weight-650 mono #dde short label.
+// Dark strip with a #3d4555 inner edge. Each used param's tag is one box that
+// fills its whole rail slot (rail width x the param's row height), flush with
+// its neighbours, a thin dim divider between slots, the jack's semicircle
+// redrawn on the box, and the short label inside with a tiny inner pad.
 const NodeGraphRailInk = Object.freeze({
   strip: "#080a0e",
   edge: "#3d4555",
-  tagBorder: "#889",
-  tagFill: "#111111",
-  tagText: "#dde",
+  divider: "#262c38",
+  tagFill: "#14171d",
+  text: "#dde",
 });
-const NODE_GRAPH_RAIL_TAG_HEIGHT_PX = 16;
-const NODE_GRAPH_RAIL_TAG_INSET_PX = 3;
-const NODE_GRAPH_RAIL_TAG_FONT_PX = 9;
+const NODE_GRAPH_RAIL_TEXT_PAD_PX = 1.5;
+const NODE_GRAPH_RAIL_FONT_PX = 8;
 
 const nodeGraphRailRgbaCache = new Map();
 function nodeGraphRailRgba(css) {
@@ -208,24 +208,50 @@ function nodeGraphModuleRailsDrawGl(batch, plates, toX, toY, zoom, cssW, cssH) {
     rect(x0 + w - rw, y0, rw, h, NodeGraphRailInk.strip);
     rect(x0 + w - rw, y0, edge, h, NodeGraphRailInk.edge);
     const tags = [];
-    for (const port of body.querySelectorAll(".node-param-port.rail-patched")) {
+    const hair = Math.max(0.5, zoom * 0.5);
+    const jacks = (nodeGraphGlGraphState?.chrome?.jacks || []).filter((j) => j.id === plates[i].id);
+    for (const port of body.querySelectorAll(".node-param-port.modulation-input, .node-param-port.parameter-output")) {
+      if (!port.offsetParent) continue;
       const box = nodeGraphModuleLayoutBox(port, el);
-      if (!box) continue;
-      const tx = toX(plates[i].x + box.x) + NODE_GRAPH_RAIL_TAG_INSET_PX * zoom;
-      const tw = (box.w - NODE_GRAPH_RAIL_TAG_INSET_PX * 2) * zoom;
-      const th = NODE_GRAPH_RAIL_TAG_HEIGHT_PX * zoom;
-      const ty = toY(plates[i].y + box.y + box.h / 2) - th / 2;
-      if (!(tw > 1)) continue;
-      rect(tx, ty, tw, th, NodeGraphRailInk.tagBorder);
-      rect(tx + edge, ty + edge, tw - edge * 2, th - edge * 2, NodeGraphRailInk.tagFill);
-      tags.push({ text: port.dataset.railLabel || "", x: tx + tw / 2, y: ty + th / 2, w: tw - edge * 4 });
+      if (!box || !(box.w > 1)) continue;
+      const left = port.classList.contains("modulation-input");
+      const bx = toX(plates[i].x + box.x);
+      const by = toY(plates[i].y + box.y);
+      const bw = box.w * zoom;
+      const bh = box.h * zoom;
+      if (port.classList.contains("rail-patched")) {
+        rect(bx, by, bw, bh, NodeGraphRailInk.tagFill);
+        const key = port.closest(".node-parameter-row")?.dataset.param || "";
+        const jack = jacks.find((j) => j.port === key && (j.io === "output") === !left);
+        if (jack && typeof nodeGraphGlLinesPolyline === "function") {
+          const cx = toX(jack.x);
+          const cy = toY(jack.y);
+          const r = jack.r * zoom;
+          const pts = [];
+          for (let k = 0; k <= 12; k += 1) {
+            const t = -Math.PI / 2 + (Math.PI * k) / 12;
+            pts.push(cx + (left ? 1 : -1) * Math.cos(t) * r, cy + Math.sin(t) * r);
+          }
+          nodeGraphGlLinesPolyline(batch, pts, edge * 0.6, Math.max(0.5, zoom * 0.5), jack.rgba);
+        }
+        const pad = NODE_GRAPH_RAIL_TEXT_PAD_PX * zoom;
+        const clear = (jack ? jack.r * zoom : 0) + pad;
+        tags.push({
+          text: port.dataset.railLabel || "",
+          x: left ? bx + clear : bx + bw - clear,
+          y: by + bh / 2,
+          w: bw - clear - pad,
+          align: left ? "left" : "right",
+        });
+      }
+      if (box.y > laid.y + 0.5) rect(bx, by, bw, hair, NodeGraphRailInk.divider);
     }
     batch._over = false;
     if (typeof nodeGraphGlLinesText !== "function") continue;
     for (const tag of tags) {
       const o = {
-        px: Math.max(4, NODE_GRAPH_RAIL_TAG_FONT_PX * zoom), rgba: nodeGraphRailRgba(NodeGraphRailInk.tagText),
-        align: "center", baseline: "middle", weight: 650, maxWidth: tag.w,
+        px: Math.max(4, NODE_GRAPH_RAIL_FONT_PX * zoom), rgba: nodeGraphRailRgba(NodeGraphRailInk.text),
+        align: tag.align, baseline: "middle", weight: 600, maxWidth: tag.w,
       };
       nodeGraphGlLinesText(batch, tag.text, tag.x, tag.y, typeof nodeGraphGlGraphTextOpts === "function" ? nodeGraphGlGraphTextOpts(o) : o);
     }
