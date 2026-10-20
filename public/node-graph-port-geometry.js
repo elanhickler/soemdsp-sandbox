@@ -212,6 +212,15 @@ function nodeGraphPortCenterCacheEnd() {
   nodeGraphMvp._portCenterSurfaceScale = null;
 }
 
+/** Painted jack radius in zoom-surface px. The disk is centered on the wall. */
+function nodeGraphJackHitRadiusPx() {
+  const host = document.getElementById("nodeGraphWorkspace");
+  const raw = host ? getComputedStyle(host).getPropertyValue("--node-port-diameter") : "";
+  const diameter = Number.parseFloat(raw);
+  if (Number.isFinite(diameter) && diameter > 0) return diameter * 0.5;
+  return 8;
+}
+
 function nodeGraphPortCenter(node, port, io) {
   const cache = typeof nodeGraphMvp === "object" ? nodeGraphMvp?._portCenterFrameCache : null;
   const cacheKey = cache ? `${node}\0${port}\0${io}` : "";

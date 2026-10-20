@@ -162,6 +162,13 @@ function nodeGraphModuleScopeDisposeBurnFaceCanvas(canvas, nodeId) {
     } catch (_error) { /* ignore */ }
     canvas._phosphorEnergyGl = null;
   }
+  if (typeof nodeGraphPhosphorEnergyGlDestroy === "function" && canvas?._phosphorLiveEnergyGl) {
+    try {
+      nodeGraphPhosphorEnergyGlDestroy(canvas._phosphorLiveEnergyGl);
+    } catch (_error) { /* ignore */ }
+    canvas._phosphorLiveEnergyGl = null;
+    canvas._phosphorLiveEnergyGlOwner = null;
+  }
   try {
     canvas?.remove?.();
   } catch (_error) { /* ignore */ }

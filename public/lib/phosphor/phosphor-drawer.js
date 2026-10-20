@@ -17,7 +17,9 @@
   const DEFAULT_TRAIL = global.PhosphorResidual?.DEFAULT_TRAIL ?? 0.3;
   const DEFAULT_GHOST = global.PhosphorResidual?.DEFAULT_GHOST ?? 0.25;
   const DEFAULT_EXPOSURE = 2.9;
-  const DEPOSIT_SCALE = 0.1;
+  // Deposit = Bright (0..1): energy deposits MAX-blend, so this IS the
+  // stored peak; no size or overlap gain.
+  const DEPOSIT_SCALE = 1;
 
   function clamp01(value, fallback = 0) {
     return globalThis.SoemMath.clamp01(value, fallback);
@@ -43,7 +45,7 @@
   function depositGain(brightness, size01 = 0) {
     const br = Math.max(0, nodeGraphFiniteNumber(brightness));
     void size01;
-    return Math.max(0, br * DEPOSIT_SCALE);
+    return Math.min(1, br * DEPOSIT_SCALE);
   }
 
   function exposure() {

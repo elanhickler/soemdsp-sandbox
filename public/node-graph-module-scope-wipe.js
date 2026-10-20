@@ -161,7 +161,7 @@ function wipeNodeGraphModuleScopeScreensToColdBoot() {
     }
     el.dataset.lightStrength = "0";
   }
-  const phosphorKeys = ["_phosphorEnergyGl", "_xyPadPhosphorEnergyGl"];
+  const phosphorKeys = ["_phosphorEnergyGl", "_phosphorLiveEnergyGl", "_xyPadPhosphorEnergyGl"];
   const canvases = new Set();
   for (const canvas of document.querySelectorAll(
     "canvas.node-module-scope-local-fallback-canvas, canvas.node-xy-pad-canvas, canvas.node-spectrogram-canvas, canvas.node-sample-waveform-canvas, canvas.node-fbm-field-canvas, canvas.node-raster-rgb-canvas",
@@ -276,7 +276,7 @@ function nodeGraphModuleScopeWipePhosphorCanvas(canvas, bg) {
   if ("_nodeGraphOneDimensionalBurnLastDrawnFrame" in canvas) {
     delete canvas._nodeGraphOneDimensionalBurnLastDrawnFrame;
   }
-  const phosphorKeys = ["_phosphorEnergyGl", "_xyPadPhosphorEnergyGl"];
+  const phosphorKeys = ["_phosphorEnergyGl", "_phosphorLiveEnergyGl", "_xyPadPhosphorEnergyGl"];
   for (const key of phosphorKeys) {
     const face = canvas[key];
     if (face && typeof nodeGraphPhosphorEnergyGlDestroy === "function") {
@@ -507,7 +507,7 @@ function clearNodeGraphDisplaySettingsPhosphor(nodeIdOrIds = null, options = {})
     return false;
   }
   const scheduleDraw = options?.scheduleDraw !== false;
-  const phosphorKeys = ["_phosphorEnergyGl", "_xyPadPhosphorEnergyGl"];
+  const phosphorKeys = ["_phosphorEnergyGl", "_phosphorLiveEnergyGl", "_xyPadPhosphorEnergyGl"];
   let anyCanvas = false;
 
   for (const id of ids) {

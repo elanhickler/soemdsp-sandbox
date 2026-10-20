@@ -487,6 +487,28 @@ function nodeGraphModuleScopeScreenItems(workspace, canvas, pixelRatio) {
             }, pixelRatio);
           }
         } else if (
+          nodeGraphModuleDisplayRendererForSlot(slot) === "aberrationFace"
+          || slot?.type === "aberration"
+        ) {
+          if (typeof drawNodeGraphAberrationFaceItem === "function") {
+            drawNodeGraphAberrationFaceItem(null, {
+              buffer: null,
+              screenElement: slot.scopeElement,
+              slot,
+            }, pixelRatio);
+          }
+        } else if (
+          nodeGraphModuleDisplayRendererForSlot(slot) === "screenBendFace"
+          || slot?.type === "screenBend"
+        ) {
+          if (typeof drawNodeGraphScreenBendFaceItem === "function") {
+            drawNodeGraphScreenBendFaceItem(null, {
+              buffer: null,
+              screenElement: slot.scopeElement,
+              slot,
+            }, pixelRatio);
+          }
+        } else if (
           nodeGraphModuleDisplayRendererForSlot(slot) === "videoFeedbackFace"
           || slot?.type === "videoFeedback"
         ) {

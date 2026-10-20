@@ -111,6 +111,14 @@ PUBLIC_SCRIPT_PATHS = (
     "./public/modules/videoDelay/video-delay-ui.js",
     "./public/modules/videoDelay/video-delay-gl.js",
     "./public/modules/videoDelay/video-delay-display.js",
+    "./public/modules/aberration/aberration-register.js",
+    "./public/modules/aberration/aberration-ui.js",
+    "./public/modules/aberration/aberration-gl.js",
+    "./public/modules/aberration/aberration-display.js",
+    "./public/modules/screenBend/screen-bend-register.js",
+    "./public/modules/screenBend/screen-bend-ui.js",
+    "./public/modules/screenBend/screen-bend-gl.js",
+    "./public/modules/screenBend/screen-bend-display.js",
     "./public/modules/rgbFractal/rgb-fractal-register.js",
     "./public/modules/evolveField/evolve-field-register.js",
     "./public/modules/fbmField/fbm-field-register.js",
@@ -247,6 +255,7 @@ PUBLIC_SCRIPT_PATHS = (
     "./public/node-graph-module-scope-graph-query.js",
     "./public/node-graph-module-scope-settings.js",
     "./public/node-graph-module-scope-lifecycle.js",
+    "./public/node-graph-video-graph.js",
     "./public/node-graph-module-scope-paint-gate.js",
     "./public/node-graph-module-scope-canvas.js",
     "./public/node-graph-module-scope-waterfall-gl.js",
@@ -290,6 +299,8 @@ PUBLIC_SCRIPT_PATHS = (
     "./public/lib/visual/color-widget-plane-gl.js",
     "./public/modules/imageBurn/image-burn-gl.js",
     "./public/modules/imageBurn/image-burn-display.js",
+    "./public/modules/tSeries/torch-face-display.js",
+    "./public/modules/tSeries/t-series-crossfade-display.js",
     "./public/modules/rgbFractal/rgb-fractal-gl.js",
     "./public/modules/rgbFractal/rgb-fractal-ui.js",
     "./public/modules/rgbFractal/rgb-fractal-display.js",
@@ -2576,6 +2587,8 @@ def require_chromeless_module_registry_contract() -> None:
             discovered_types.add(module_type)
 
     expected_types = {
+        "aberration",
+        "screenBend",
         "bugButton",
         "evolveField",
         "fbmField",
@@ -3722,16 +3735,18 @@ def require_node_graph_mvp_contract() -> None:
     )
     require(
         "t: nodeGraphTSeriesSingleModuleDefinition()" in script_sources["./public/node-graph-module-definitions.js"]
-        and 't2: nodeGraphTSeriesModuleDefinition(1, { adFirst: true, inLabel: "→" })' in script_sources["./public/node-graph-module-definitions.js"]
+        and 't2: nodeGraphTSeriesModuleDefinition(1),' in script_sources["./public/node-graph-module-definitions.js"]
+        and 'inputLabels: { Analog: "A", Digital: "D", In: "→" },\n    inputs: ["In", "Analog", "Digital"],' in script_sources["./public/node-graph-module-definitions.js"].replace("\r\n", "\n")
         and "t11: nodeGraphTSeriesModuleDefinition(10)" in script_sources["./public/node-graph-module-definitions.js"]
-        and '"2t": nodeGraphTSeriesMuxModuleDefinition(1, { adFirst: true, outLabel: "←" })' in script_sources["./public/node-graph-module-definitions.js"]
+        and '"2t": nodeGraphTSeriesMuxModuleDefinition(1),' in script_sources["./public/node-graph-module-definitions.js"]
+        and 'inputs: [...numbered, "Analog", "Digital"],\n    outputAliases: { Mono: "Out" },\n    outputLabels: { Out: "←" },' in script_sources["./public/node-graph-module-definitions.js"].replace("\r\n", "\n")
         and '"4t": nodeGraphTSeriesMuxModuleDefinition(3)' in script_sources["./public/node-graph-module-definitions.js"]
         and '"11t": nodeGraphTSeriesMuxModuleDefinition(10)' in script_sources["./public/node-graph-module-definitions.js"]
         and 't: "t"' in script_sources["./public/node-graph-module-definitions.js"]
         and 't2: "t2"' in script_sources["./public/node-graph-module-definitions.js"]
         and 't11: "t11"' in script_sources["./public/node-graph-module-definitions.js"]
         and '"4t": "4t"' in script_sources["./public/node-graph-module-definitions.js"]
-        and 'displayType: "value"' in script_sources["./public/node-graph-module-definitions.js"][
+        and 'displayType: "tSeriesFace"' in script_sources["./public/node-graph-module-definitions.js"][
             script_sources["./public/node-graph-module-definitions.js"].index("function nodeGraphTSeriesModuleDefinition"):
             script_sources["./public/node-graph-module-definitions.js"].index("const nodeGraphModuleDefinitions")
         ]
@@ -16455,17 +16470,12 @@ def require_readme_scheduler_contract() -> None:
     readme_source = (ROOT / "README.md").read_text(encoding="utf-8")
     readme_text = " ".join(readme_source.split())
     # Keep this list aligned with the current lean README (not the old essay).
+    # Clone / smoke-test steps and Boundaries live in docs/SANDBOX_REFERENCE.md.
     for snippet in [
-        "git clone https://github.com/elanhickler/soemdsp-sandbox.git",
-        "cd soemdsp-sandbox",
         "python server.py",
         "http://127.0.0.1:8765",
-        "python scripts\\smoke_test.py",
+        "docs/SANDBOX_REFERENCE.md",
         "no package install for the sandbox itself",
-        "Browser path is not the production soemdsp scheduler",
-        "Server writes only via explicit save / settings / audio helper routes",
-        "Open Path is restricted to Downloads",
-        "Browser patch graph is demo-scoped state",
         "soundemote.io/sandbox",
         "BEAMING_RADAR_SIGNAL_TO_JEROBEAM.md",
         "POWER_ENGINE_SYNTHESIS.md",
@@ -16474,6 +16484,17 @@ def require_readme_scheduler_contract() -> None:
         "Render Sample",
     ]:
         require(snippet in readme_text, f"README scheduler contract missing {snippet}")
+    reference_text = " ".join((ROOT / "docs" / "SANDBOX_REFERENCE.md").read_text(encoding="utf-8").split())
+    for snippet in [
+        "git clone https://github.com/elanhickler/soemdsp-sandbox.git",
+        "cd soemdsp-sandbox",
+        "python scripts\\smoke_test.py",
+        "The server only writes through explicit save / settings / audio helper routes",
+        "Open Path is restricted to Downloads",
+        "The browser patch graph is demo-scoped state",
+        "The browser path is not the production soemdsp scheduler",
+    ]:
+        require(snippet in reference_text, f"SANDBOX_REFERENCE setup contract missing {snippet}")
     for snippet in [
         "Feedback routing remains blocked",
         "acyclic browser patches",
@@ -17092,6 +17113,46 @@ def require_native_module_contract(base_url: str) -> None:
             "soemdsp_ellipsoid_decay_metadata_json",
             "soemdsp_ellipsoid_decay_metadata_json_size",
         ],
+        "electro_snare": [
+            "soemdsp_electro_snare_create",
+            "soemdsp_electro_snare_destroy",
+            "soemdsp_electro_snare_sample",
+            "soemdsp_electro_snare_env",
+        "soemdsp_electro_snare_right",
+            "soemdsp_electro_snare_version",
+            "soemdsp_electro_snare_metadata_json",
+            "soemdsp_electro_snare_metadata_json_size",
+        ],
+        "electro_hat": [
+            "soemdsp_electro_hat_create",
+            "soemdsp_electro_hat_destroy",
+            "soemdsp_electro_hat_sample",
+            "soemdsp_electro_hat_env",
+            "soemdsp_electro_hat_right",
+            "soemdsp_electro_hat_version",
+            "soemdsp_electro_hat_metadata_json",
+            "soemdsp_electro_hat_metadata_json_size",
+        ],
+        "electro_tom": [
+            "soemdsp_electro_tom_create",
+            "soemdsp_electro_tom_destroy",
+            "soemdsp_electro_tom_sample",
+            "soemdsp_electro_tom_env",
+            "soemdsp_electro_tom_right",
+            "soemdsp_electro_tom_version",
+            "soemdsp_electro_tom_metadata_json",
+            "soemdsp_electro_tom_metadata_json_size",
+        ],
+        "electro_kick": [
+            "soemdsp_electro_kick_create",
+            "soemdsp_electro_kick_destroy",
+            "soemdsp_electro_kick_sample",
+            "soemdsp_electro_kick_env",
+            "soemdsp_electro_kick_right",
+            "soemdsp_electro_kick_version",
+            "soemdsp_electro_kick_metadata_json",
+            "soemdsp_electro_kick_metadata_json_size",
+        ],
         "robin_sinepulse": [
             "soemdsp_robin_sinepulse_create",
             "soemdsp_robin_sinepulse_destroy",
@@ -17140,7 +17201,7 @@ def require_native_module_contract(base_url: str) -> None:
             "soemdsp_formula_noise_index",
         ],
         "lorenz_attractor": ["soemdsp_lorenz_attractor_create", "soemdsp_lorenz_attractor_destroy", "soemdsp_lorenz_attractor_sample", "soemdsp_lorenz_attractor_x", "soemdsp_lorenz_attractor_y", "soemdsp_lorenz_attractor_z"],
-        "bradley_2a": ["soemdsp_bradley_2a_create", "soemdsp_bradley_2a_destroy", "soemdsp_bradley_2a_sample"],
+        "bradley_2a": ["soemdsp_bradley_2a_create", "soemdsp_bradley_2a_destroy", "soemdsp_bradley_2a_sample", "soemdsp_bradley_2a_right"],
         "antisaw": ["soemdsp_antisaw_create", "soemdsp_antisaw_destroy", "soemdsp_antisaw_sample"],
         "sine_warp": [
             "soemdsp_sine_warp_create",

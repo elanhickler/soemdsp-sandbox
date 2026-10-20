@@ -5,7 +5,11 @@
 //
 // Native-only (the JS twin was removed in C-001):
 // — look-ahead delay + threshold/ratio GR,
-// optional sidechain detect, Env out. No hard ceiling / no autogain.
+// optional sidechain detect, Env out. No autogain.
+// Look-ahead: the detector uses the loudest sample from the one about to
+// play through the newest sample, so gain is already down when that hit
+// reaches the output. Attack 0 snaps, then a ceiling holds the output at
+// Threshold (ratio alone still sits a little over it).
 // Hold (ms): while GR deepens or stays put the countdown reloads to Hold;
 // once the target gain rises (release would begin) the gain is held for
 // Hold ms worth of samples, then the release coefficient applies. A new
@@ -24,11 +28,16 @@ struct State {
   bool active;
   float delayL[kMaxSamples];
   float delayR[kMaxSamples];
+  float delayD[kMaxSamples];
   int pos;
   int cap;
   double gain;
   double holdLeft;  // samples left before release may start
   double meanSquare;
+  bool attacking;
+  double attackLeft;
+  double attackGoal;
+  double attackStep;
   double env;
   double lastOut;
   double lastLeft;
@@ -56,12 +65,17 @@ extern "C" int soemdsp_pumping_limiter_create() {
       for (int n = 0; n < kMaxSamples; n += 1) {
         s.delayL[n] = 0.0f;
         s.delayR[n] = 0.0f;
+        s.delayD[n] = 0.0f;
       }
       s.pos = 0;
       s.cap = kMaxSamples;
       s.gain = 1.0;
       s.holdLeft = 0.0;
       s.meanSquare = 0.0;
+      s.attacking = false;
+      s.attackLeft = 0.0;
+      s.attackGoal = 1.0;
+      s.attackStep = 0.0;
       s.env = 0.0;
       s.lastOut = 0.0;
       s.lastLeft = 0.0;
@@ -126,7 +140,30 @@ extern "C" double soemdsp_pumping_limiter_sample(
   const double attCoeff = ms_detector_attack_coeff(attMs, rate);
   const double relCoeff = ms_detector_release_coeff(relMs, rate);
 
-  const double env = ms_detector_step(st.meanSquare, detectPeak, attCoeff, relCoeff);
+  const int pos = st.pos;
+  const int cap = st.cap;
+  st.delayL[pos] = (float)lIn;
+  st.delayR[pos] = (float)rIn;
+  int readPos = pos - la;
+  readPos %= cap;
+  if (readPos < 0) readPos += cap;
+  // Loudest detect value from the sample about to play through the newest
+  // one. Look-ahead off is exactly this sample (double, no float round trip).
+  double windowPeak = detectPeak;
+  if (la > 0) {
+    st.delayD[pos] = (float)detectPeak;
+    windowPeak = 0.0;
+    int idx = readPos;
+    const int nWin = la + 1;
+    for (int n = 0; n < nWin; n += 1) {
+      const double p = (double)st.delayD[idx];
+      if (p > windowPeak) windowPeak = p;
+      idx += 1;
+      if (idx >= cap) idx = 0;
+    }
+  }
+
+  const double env = ms_detector_step(st.meanSquare, windowPeak, attCoeff, relCoeff);
   st.env = env;
 
   double thresh = db_to_amp(safe(thresholdDb));
@@ -135,7 +172,16 @@ extern "C" double soemdsp_pumping_limiter_sample(
   if (!(r * 0.0 == 0.0) || r < 1.0) r = 8.0;
   if (r > 100.0) r = 100.0;
 
-  const double targetGain = hard_knee_target_gain(env, thresh, r);
+  double targetGain = hard_knee_target_gain(env, thresh, r);
+  // Attack fits in the look-ahead: drop by the whole overshoot and stay
+  // there. The soft ratio target sits above that, and releasing toward it
+  // is the level jumping back up after the clamp.
+  const double attSamples = attMs * 0.001 * rate;
+  const bool holdCeiling = attSamples <= double(la) + 0.5;
+  if (holdCeiling && env > thresh) {
+    const double brick = thresh / env;
+    if (brick < targetGain) targetGain = brick;
+  }
 
   const double hMs = maxd(0.0, safe(holdMs));
   if (targetGain <= st.gain) {
@@ -150,22 +196,29 @@ extern "C" double soemdsp_pumping_limiter_sample(
   if (!(st.gain * 0.0 == 0.0) || st.gain < 0.0) st.gain = 0.0;
   if (st.gain > 1.0) st.gain = 1.0;
 
-  const int pos = st.pos;
-  st.delayL[pos] = (float)lIn;
-  st.delayR[pos] = (float)rIn;
-  int readPos = pos - la;
-  const int cap = st.cap;
-  readPos %= cap;
-  if (readPos < 0) readPos += cap;
   double dL = (double)st.delayL[readPos];
   double dR = (double)st.delayR[readPos];
   st.pos = (pos + 1) % cap;
 
   double amp = safe(amplitude);
   if (!(amp * 0.0 == 0.0) || amp < 0.0) amp = 1.0;
-  const double g = st.gain;
-  dL *= g * amp;
-  dR *= g * amp;
+  double g = st.gain;
+  dL *= g;
+  dR *= g;
+  // Same drop, remembered. Otherwise the next sample still has the old
+  // higher gain and the level jumps back up above the sample just clamped.
+  if (holdCeiling) {
+    const double peakOut = maxd(dsp_fabs(dL), dsp_fabs(dR));
+    if (peakOut > thresh && peakOut > 0.0) {
+      const double cut = thresh / peakOut;
+      dL *= cut;
+      dR *= cut;
+      g *= cut;
+      st.gain = g;
+    }
+  }
+  dL *= amp;
+  dR *= amp;
   if (!(dL * 0.0 == 0.0)) dL = 0.0;
   if (!(dR * 0.0 == 0.0)) dR = 0.0;
 
@@ -197,6 +250,6 @@ extern "C" double soemdsp_pumping_limiter_env(int handle) {
   return gPool[handle - 1].lastEnv;
 }
 
-extern "C" int soemdsp_pumping_limiter_version() { return 2; } // 2: Hold (ms) before release
+extern "C" int soemdsp_pumping_limiter_version() { return 4; } // 4: attack finishes inside the look-ahead
 extern "C" const char* soemdsp_pumping_limiter_metadata_json() { return kMetadataJson; }
 extern "C" int soemdsp_pumping_limiter_metadata_json_size() { return sizeof(kMetadataJson) - 1; }

@@ -534,7 +534,7 @@ async function sendNodeGraphLiveNativeModule(liveNode, entry) {
 // Chrome caps wasm memories per process (~100); many standalone instances
 // hit that cap. Slim is for small used-sets when per-module files exist;
 // huge patches / site deploys should use combined.
-const nodeGraphLiveCombinedNativeModuleUrl = "native_modules/combined/soemdsp_combined.wasm?v=sc-polarity-1";
+const nodeGraphLiveCombinedNativeModuleUrl = "native_modules/combined/soemdsp_combined.wasm?v=stereo-lr-3";
 
 /** @type {null|"slim"|"combined"} */
 let nodeGraphLiveNativeWasmLoadModeResolved = null;
@@ -3395,7 +3395,7 @@ const nodeGraphLiveWorkletSourceFilesEfficient = [
   "./public/node-graph-stdlib/node-graph-seeded-rng-helpers.js?v=stdlib-batch3-20260715",
   "./public/node-graph-parameter-smoother-filters.js?v=smooth-gpu-3p-1",
   // Bypass passthrough maps + frame eval (shared with main thread).
-  "./public/node-graph-module-bypass.js?v=softpop2-1",
+  "./public/node-graph-module-bypass.js?v=stereo-lr-3",
   "./public/node-graph-efficient-product.js?v=emo-1",
   "./public/node-live-audio-worklet-core.js?v=softpop-ship-1",
   // Phase D: class methods extracted from core (must follow class definition).
@@ -3412,10 +3412,10 @@ const nodeGraphLiveWorkletSourceFilesEfficient = [
   "./public/modules/sequencer/sequencer-math.js?v=seq-23",
   "./public/node-live-audio-worklet-events.js?v=rclick-sweep-2",
   "./public/node-live-audio-worklet-visual.js?v=perf-20261015",
-  "./public/node-live-audio-worklet-scope-io.js?v=output-face-postvol-1",
+  "./public/node-live-audio-worklet-scope-io.js?v=stereo-lr-3",
   "./public/node-live-audio-worklet-native-load.js?v=emo-shader-1",
   "./public/node-live-audio-worklet-native-exports.js?v=emo-1",
-  "./public/node-live-audio-worklet-native-graph.js?v=sc-polarity-1",
+  "./public/node-live-audio-worklet-native-graph.js?v=stereo-lr-3",
   "./public/node-live-audio-worklet-meta-view.js?v=voice-preview-1",
   "./public/node-live-audio-worklet-set-plan.js?v=emo-1",
   "./public/node-live-audio-worklet-clear-plan.js?v=kbd-trig-1samp-20261013",

@@ -3,12 +3,14 @@
 // nodeGraphSharedGlDevice (picture-device.js) and display-canvas.js at draw
 // time.
 //
-// Each face keeps its picture in two RGBA8 textures on the shared device
-// (ping-pong, premultiplied). A frame is:
-//   decay    one full-plate pass read -> write, swap (Ghost / Trail fade)
+// Each face keeps its picture in two float energy textures on the shared
+// device (SoemGl.energyTarget: RGBA32F, RGBA16F, rgba8 last resort;
+// ping-pong, premultiplied energy above the face background). A frame is:
+//   decay    one full-plate pass read -> write, swap: the shared time-based
+//            residual model (PhosphorResidual keeps, per texel on alpha)
 //   deposit  batched quads blended into the read plate
-//   present  plate over the face background into the device present region,
-//            then one blit into the face canvas (nodeGraphDisplayCanvasBlit).
+//   present  plate over the face background (8x8 dither, exact k/255) into
+//            the device present region, then one blit into the face canvas.
 // The plate is the face's backing size (layout x dpr x workspace zoom x
 // density), so everything scales with canvas zoom. There is no 2D drawing
 // path: no device / program / FBO -> nodeGraphDisplayGlFailed (black plus one
@@ -24,31 +26,38 @@ const NODE_GRAPH_RESIDUAL_FACE_DECAY_FS = `
   #endif
   uniform sampler2D uSrc;
   uniform vec2 uSize;
-  uniform float uKeep255;
-  uniform vec4 uToward;
-  uniform float uTowardAmt;
+  uniform float uKeepFast;
+  uniform float uKeepSlow;
+  uniform float uFrames;
+  uniform float uFloor8;
   void main() {
     vec4 t = texture2D(uSrc, gl_FragCoord.xy / uSize);
-    if (uKeep255 >= 0.0) {
-      // 2D destination-out maths in 8 bit: round(in8 * (255 - erase8) / 255).
-      vec4 d = floor(t * 255.0 + 0.5);
-      gl_FragColor = floor(d * uKeep255 / 255.0 + 0.5) / 255.0;
+    // PhosphorResidual.applyResidual per texel (energy = alpha).
+    float k = pow(mix(uKeepSlow, uKeepFast, pow(clamp(t.a, 0.0, 1.0), 12.0)), uFrames);
+    if (uFloor8 > 0.5) {
+      // rgba8 last resort: round toward 0 so dim texels never stall.
+      gl_FragColor = floor(floor(t * 255.0 + 0.5) * k) / 255.0;
     } else {
-      // Source-over fill of uToward at alpha uTowardAmt (fade toward plate).
-      gl_FragColor = t * (1.0 - uTowardAmt) + uToward * uTowardAmt;
+      gl_FragColor = t * k;
     }
   }
 `;
 
 const NODE_GRAPH_RESIDUAL_FACE_PRESENT_FS = `
+  #ifdef GL_FRAGMENT_PRECISION_HIGH
+  precision highp float;
+  #else
   precision mediump float;
+  #endif
   uniform sampler2D uSrc;
   uniform vec2 uSize;
   uniform vec3 uBg;
+  ${SoemGl.GLSL_DITHER}
   void main() {
     vec4 p = texture2D(uSrc, gl_FragCoord.xy / uSize);
     // Premultiplied plate over the opaque face background.
-    gl_FragColor = vec4(min(vec3(1.0), p.rgb + uBg * (1.0 - p.a)), 1.0);
+    vec3 c = p.rgb + uBg * (1.0 - clamp(p.a, 0.0, 1.0));
+    gl_FragColor = vec4(soemDitherRgb(c, gl_FragCoord.xy), 1.0);
   }
 `;
 
@@ -144,35 +153,11 @@ const NODE_GRAPH_RESIDUAL_FACE_DOT_FS = `
 
 const nodeGraphResidualFaceGlStats = { frames: 0, decays: 0, quads: 0, presents: 0 };
 
-function nodeGraphResidualFaceGlTexParams(gl) {
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-}
-
+// Float energy target, blendable (deposits are additive / source-over).
 function nodeGraphResidualFaceGlTarget(gl, w, h) {
-  const tex = gl.createTexture();
-  gl.bindTexture(gl.TEXTURE_2D, tex);
-  nodeGraphResidualFaceGlTexParams(gl);
-  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
-  gl.bindTexture(gl.TEXTURE_2D, null);
-  const fbo = gl.createFramebuffer();
-  gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
-  gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
-  const ok = gl.checkFramebufferStatus(gl.FRAMEBUFFER) === gl.FRAMEBUFFER_COMPLETE;
-  if (ok) {
-    gl.disable(gl.SCISSOR_TEST);
-    gl.clearColor(0, 0, 0, 0);
-    gl.clear(gl.COLOR_BUFFER_BIT);
-  }
+  const t = SoemGl.energyTarget(gl, w, h, { blend: true, filter: gl.NEAREST });
   gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-  if (!ok) {
-    gl.deleteFramebuffer(fbo);
-    gl.deleteTexture(tex);
-    return null;
-  }
-  return { tex, fbo };
+  return t || null;
 }
 
 /** Drop a face's GPU plate (wipe / resize / context change). */
@@ -259,36 +244,35 @@ function nodeGraphResidualFaceGlSwap(st) {
   nodeGraphResidualFaceGlStats.decays += 1;
 }
 
-/** Decay toward transparent: 8-bit destination-out maths at erase01. */
-function nodeGraphResidualFaceGlDecay(st, erase01) {
+/**
+ * Decay on the shared time-based residual model: keeps =
+ * PhosphorResidual.residualKeeps(trail, ghost), frames = 60 fps frames
+ * elapsed. Trail freeze (keepFast 1) or 0 frames: no pass.
+ */
+function nodeGraphResidualFaceGlDecay(st, keeps, frames) {
   const gl = st.gl;
   nodeGraphResidualFaceGlReset(gl);
-  const erase8 = Math.max(0, Math.min(255, Math.round(Number(erase01) * 255)));
-  if (erase8 <= 0) return true;
+  const keepFast = Math.max(0, Math.min(1, Number(keeps?.keepFast)));
+  const keepSlow = Math.max(keepFast, Math.min(1, Number(keeps?.keepSlow)));
+  if (!(keepFast < 1) || !(frames > 0)) return true;
   const ok = nodeGraphResidualFaceGlFullPass(st, st.write.fbo, NODE_GRAPH_RESIDUAL_FACE_DECAY_FS, "residual-face-decay", (g, p) => {
-    g.uniform1f(g.getUniformLocation(p, "uKeep255"), 255 - erase8);
-    g.uniform4f(g.getUniformLocation(p, "uToward"), 0, 0, 0, 0);
-    g.uniform1f(g.getUniformLocation(p, "uTowardAmt"), 0);
+    g.uniform1f(g.getUniformLocation(p, "uKeepFast"), keepFast);
+    g.uniform1f(g.getUniformLocation(p, "uKeepSlow"), keepSlow);
+    g.uniform1f(g.getUniformLocation(p, "uFrames"), frames);
+    g.uniform1f(g.getUniformLocation(p, "uFloor8"), st.write.quantizeBits === 8 ? 1 : 0);
   });
   gl.bindFramebuffer(gl.FRAMEBUFFER, null);
   if (ok) nodeGraphResidualFaceGlSwap(st);
   return ok;
 }
 
-/** Decay toward an opaque colour: source-over fill of rgb at alpha amt01. */
-function nodeGraphResidualFaceGlDecayToward(st, rgb, amt01) {
-  const gl = st.gl;
-  nodeGraphResidualFaceGlReset(gl);
-  const amt = Math.max(0, Math.min(1, Number(amt01) || 0));
-  if (amt <= 0) return true;
-  const ok = nodeGraphResidualFaceGlFullPass(st, st.write.fbo, NODE_GRAPH_RESIDUAL_FACE_DECAY_FS, "residual-face-decay", (g, p) => {
-    g.uniform1f(g.getUniformLocation(p, "uKeep255"), -1);
-    g.uniform4f(g.getUniformLocation(p, "uToward"), rgb[0], rgb[1], rgb[2], 1);
-    g.uniform1f(g.getUniformLocation(p, "uTowardAmt"), amt);
-  });
-  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-  if (ok) nodeGraphResidualFaceGlSwap(st);
-  return ok;
+/** Decay step for a face draw: time-based, paused time not counted. */
+function nodeGraphResidualFaceGlStep(st, trail, ghost, frozen) {
+  if (frozen) {
+    st.residualStepMs = 0;
+    return true;
+  }
+  return nodeGraphResidualFaceGlDecay(st, PhosphorResidual.residualKeeps(trail, ghost), PhosphorResidual.stepFrames(st));
 }
 
 /**
@@ -472,12 +456,9 @@ function drawNodeGraphPhosphorDotGlItem(renderer, item, pixelRatio) {
   const amount = Math.max(0, Math.min(1, energy * lampBright));
   const frozen = typeof nodeGraphModuleScopePhosphorFrozen === "function"
     && nodeGraphModuleScopePhosphorFrozen();
-  let ok = true;
+  let ok = nodeGraphResidualFaceGlStep(st, trail, ghost, frozen);
   if (!frozen) {
-    const keeps = Residual?.residualKeeps ? Residual.residualKeeps(trail, ghost) : { fade: 0.25 };
-    const fade = Math.max(0.04, Math.min(1, Number(keeps.fade)));
-    ok = nodeGraphResidualFaceGlDecay(st, fade);
-    if (ok && amount > 0.001 && radius > 0.05) {
+    if (ok && amount > 0 && radius > 0.05) {
       const io = typeof TraceDotSprite !== "undefined" && TraceDotSprite.innerOuter
         ? TraceDotSprite.innerOuter(radius, blur)
         : { inner: radius * 0.9, outer: radius * 1.1 + 1 };
@@ -573,9 +554,10 @@ function drawNodeGraphHypersawBurnGlItem(renderer, item, pixelRatio) {
     return;
   }
   const bgRgb = nodeGraphResidualFaceHexRgb01(bgHex);
-  const keep = Math.max(0, Math.min(0.995, trail * 0.97 + ghost * 0.02));
-  const fade = 1 - keep;
-  let ok = fade > 0.0005 ? nodeGraphResidualFaceGlDecayToward(st, bgRgb, fade) : true;
+  const frozen = typeof nodeGraphModuleScopePhosphorFrozen === "function"
+    && nodeGraphModuleScopePhosphorFrozen();
+  // Stems are energy above the face background: same residual model.
+  let ok = nodeGraphResidualFaceGlStep(st, trail, ghost, frozen);
   const faceSettings = typeof nodeGraphHypersawBurnSettingsForNode === "function"
     ? nodeGraphHypersawBurnSettingsForNode(patchNode)
     : (typeof normalizeNodeGraphHypersawBurnSettings === "function"

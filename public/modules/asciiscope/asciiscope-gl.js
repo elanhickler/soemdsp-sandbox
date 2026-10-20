@@ -44,8 +44,11 @@ uniform vec2 uAtlasSize;
 uniform float uBrightness;
 uniform float uMode;
 uniform vec3 uPlate;
+uniform float uBackground;
 
-// Film present (energy → mono) then brightness, then LUT — brightness is present-only.
+// Film present (energy → mono), then LUT. Bright scales live glyphs only;
+// residual is stored energy (deposited at Bright x Burn) and is never rescaled
+// here, so changing Bright never brightens or dims hung trails.
 float filmEnergy(float raw) {
   float lifted = max(raw, 0.0) + 0.04 * pow(max(raw, 0.0), 0.42);
   float e = 1.0 - exp(-lifted * 2.35);
@@ -53,9 +56,11 @@ float filmEnergy(float raw) {
 }
 
 vec3 gradientOf(float mono) {
-  float t = clamp(mono * uBrightness, 0.0, 1.0);
-  return texture2D(uLut, vec2(t, 0.5)).rgb;
+  float t = clamp(mono, 0.0, 1.0);
+  // Texel-centre coord: no dead zone below half a LUT texel.
+  return texture2D(uLut, vec2((t * 255.0 + 0.5) / 256.0, 0.5)).rgb;
 }
+${SoemGl.GLSL_DITHER}
 
 float sampleGlyph(float glyphIndex, vec2 localUv) {
   float gi = floor(glyphIndex + 0.5);
@@ -102,29 +107,31 @@ void main() {
 
   if (uMode < 0.5) {
     // Info / Serial: residual = film(energy); live = hard (t=1)
-    if (energy > 0.001 && resIdx > spaceIdx + 0.5) {
+    if (energy > 0.0 && resIdx > spaceIdx + 0.5) {
       float cov = sampleGlyph(resIdx, local);
       mono = max(mono, cov * filmEnergy(energy) * 0.85);
     }
     if (liveIdx > spaceIdx + 0.5) {
       float cov = sampleGlyph(liveIdx, local);
-      mono = max(mono, cov * 1.0);
+      mono = max(mono, cov * uBrightness);
     }
   } else {
     // Waterfall: live tip = full Bright; residual = film(energy) (drawer model).
     float gi = liveIdx > spaceIdx + 0.5 ? liveIdx : resIdx;
     float tip = d.a;
-    if (gi > spaceIdx + 0.5 && (energy > 0.001 || tip > 0.5)) {
+    if (gi > spaceIdx + 0.5 && (energy > 0.0 || tip > 0.5)) {
       float cov = sampleGlyph(gi, local);
-      float body = tip > 0.5 ? 1.0 : filmEnergy(energy);
+      float body = tip > 0.5 ? uBrightness : filmEnergy(energy);
       mono = max(mono, cov * body);
     }
   }
 
   // Plate residual ghosts (Info/Serial already set mono). Film already applied for rain.
-  // Brightness is only here via gradientOf — never baked into energy deposits.
-  vec3 color = mono < 0.001 ? uPlate : gradientOf(mono);
-  gl_FragColor = vec4(clamp(color, 0.0, 1.0), 1.0);
+  // Bright reaches residual only via its deposit (Bright x Burn), never here.
+  // Background Brightness: present = LUT(max(stored, background)), as on
+  // 2D Phosphor. No threshold; ordered dither keeps sub-LSB levels.
+  vec3 color = gradientOf(max(mono, clamp(uBackground, 0.0, 1.0)));
+  gl_FragColor = vec4(soemDitherRgb(color, gl_FragCoord.xy), 1.0);
 }
 `;
 
@@ -271,6 +278,7 @@ function matrixGlEnsure(canvas) {
       uBrightness: gl.getUniformLocation(program, "uBrightness"),
       uMode: gl.getUniformLocation(program, "uMode"),
       uPlate: gl.getUniformLocation(program, "uPlate"),
+      uBackground: gl.getUniformLocation(program, "uBackground"),
     };
 
     const buf = gl.createBuffer();
@@ -490,8 +498,10 @@ function matrixGlPackCells(state, glState) {
   const rows = state.bufRows || state.rows;
   const { energy, live, residual } = state;
   const n = columns * rows;
+  // Float cells (RGBA32F): 8-bit energy truncated anything under 1/255 to 0,
+  // so low Bright / long tails vanished. Glyph indices stay idx / 255.
   if (!glState.cellData || glState.cellCols !== columns || glState.cellRows !== rows) {
-    glState.cellData = new Uint8Array(n * 4);
+    glState.cellData = new Float32Array(n * 4);
     glState.cellCols = columns;
     glState.cellRows = rows;
   }
@@ -499,10 +509,10 @@ function matrixGlPackCells(state, glState) {
   const glyphIndex = typeof matrixGlyphIndex === "function" ? matrixGlyphIndex : (ch) => (ch === " " ? 0 : 1);
   for (let i = 0; i < n; i += 1) {
     const o = i << 2;
-    data[o] = glyphIndex(live[i] || " ") & 255;
-    data[o + 1] = glyphIndex(residual[i] || " ") & 255;
-    data[o + 2] = Math.min(255, Math.max(0, (energy[i] * 255) | 0));
-    data[o + 3] = state.tip?.[i] ? 255 : 0;
+    data[o] = (glyphIndex(live[i] || " ") & 255) / 255;
+    data[o + 1] = (glyphIndex(residual[i] || " ") & 255) / 255;
+    data[o + 2] = Math.min(1, Math.max(0, energy[i] || 0));
+    data[o + 3] = state.tip?.[i] ? 1 : 0;
   }
   return data;
 }
@@ -534,10 +544,12 @@ function matrixGlSyncLut(glState, stops) {
         data[o + 3] = 255;
       }
     }
-    // Force floor black so a bad gradient can't flash a white plate.
-    data[0] = 0;
-    data[1] = 0;
-    data[2] = 0;
+    // LUT t=0 = the plate floor colour (black if the gradient floor is
+    // near white), so dim glyphs and empty cells share one floor.
+    const f0 = matrixGlFloorRgb(safeStops);
+    data[0] = f0.r;
+    data[1] = f0.g;
+    data[2] = f0.b;
     data[3] = 255;
     gl.bindTexture(gl.TEXTURE_2D, glState.lutTex);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
@@ -545,7 +557,11 @@ function matrixGlSyncLut(glState, stops) {
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 256, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, data);
     glState.lutKey = key;
   }
-  // Plate = gradient floor (t=0), never pure white
+  return matrixGlFloorRgb(safeStops);
+}
+
+/** Plate = gradient floor (t=0), never pure white. */
+function matrixGlFloorRgb(safeStops) {
   let floor = { r: 0, g: 0, b: 0 };
   try {
     if (typeof matrixSampleGradientRgb === "function") {
@@ -616,17 +632,7 @@ function matrixGlDrawFace(canvas, state, params, mode) {
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, glState.cellTex);
     gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
-    gl.texImage2D(
-      gl.TEXTURE_2D,
-      0,
-      gl.RGBA,
-      columns,
-      rows,
-      0,
-      gl.RGBA,
-      gl.UNSIGNED_BYTE,
-      data,
-    );
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, columns, rows, 0, gl.RGBA, gl.FLOAT, data);
     gl.uniform1i(glState.uniforms.uCells, 0);
 
     // Atlas
@@ -647,6 +653,11 @@ function matrixGlDrawFace(canvas, state, params, mode) {
       gl.uniform1f(glState.uniforms.uBrightness, Number.isFinite(b) ? Math.max(0, b) : 1);
     }
     gl.uniform1f(glState.uniforms.uMode, mode === 1 ? 1 : 0);
+    {
+      const bg = Number(params?.backgroundBrightness);
+      glState.background = Number.isFinite(bg) ? Math.max(0, Math.min(1, bg)) : 0;
+      gl.uniform1f(glState.uniforms.uBackground, glState.background);
+    }
     gl.uniform3f(
       glState.uniforms.uPlate,
       (floor.r || 0) / 255,
@@ -728,6 +739,7 @@ function matrixGlDrawColdPlate(canvas, columns = 96, rows = 64, renderStyle = "v
   gl.uniform2f(glState.uniforms.uAtlasSize, glState.atlasCols, glState.atlasRows);
   gl.uniform1f(glState.uniforms.uBrightness, 1);
   gl.uniform1f(glState.uniforms.uMode, 0); // residual path for dim ENGINE OFF
+  gl.uniform1f(glState.uniforms.uBackground, glState.background || 0);
   gl.uniform3f(
     glState.uniforms.uPlate,
     (floor.r || 0) / 255,

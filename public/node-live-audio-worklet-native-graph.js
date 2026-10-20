@@ -166,6 +166,10 @@ NodeLiveAudioProcessor.NATIVE_GRAPH_TYPE_IDS = Object.freeze({
   ellipsoidDecay: 212,
   robinSinepulse: 205,
   robinSinepulseAllpass: 206,
+  electroSnare: 222,
+  electroHat: 223,
+  electroTom: 224,
+  electroKick: 225,
   curveAttackRelease: 166,
   pluckEnvelope: 198,
   acidSequencer: 199,
@@ -704,6 +708,24 @@ NodeLiveAudioProcessor.prototype.mapNativeGraphSrcPortId = function mapNativeGra
     if (p === "out1") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_LEFT;
     if (p === "out2") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_RIGHT;
   }
+  // Electro Snare: Snare L on Left, Snare R on Right, Env on Mono.
+  if (t === "electroSnare") {
+    if (p === "snare l") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_LEFT;
+    if (p === "snare r") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_RIGHT;
+    if (p === "env") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_MONO;
+  }
+  // Electro Hat / Tom / Kick: <name> L on Left, <name> R on Right, Env on Mono.
+  if (t === "electroHat" || t === "electroTom" || t === "electroKick") {
+    const nm = t === "electroHat" ? "hat" : (t === "electroTom" ? "tom" : "kick");
+    if (p === nm + " l") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_LEFT;
+    if (p === nm + " r") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_RIGHT;
+    if (p === "env") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_MONO;
+  }
+  // Bradley 2A stereo outs (graph 187): Out L keeps Mono, Out R on Right.
+  if (t === "bradley2a") {
+    if (p === "out l") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_MONO;
+    if (p === "out r") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_RIGHT;
+  }
   // Robin Sinepulse: Kick audio on Mono, sweep Hz (ƒ) on Left, 0–1 envelope on Right.
   if (t === "robinSinepulse") {
     if (p === "kick") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_MONO;
@@ -1198,6 +1220,10 @@ NodeLiveAudioProcessor.prototype.mapNativeGraphDstPortId = function mapNativeGra
     if (p === "dry r") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_DRY_R;
     if (p === "envelope" || p === "env") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_SQUARE;
     if (p === "sidechain" || p === "sc" || p === "key") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_MORPH;
+  }
+  // Electro Hat: Open hit jack on the Mono live bus (Trigger = Closed on the Trigger bus).
+  if (tDst === "electroHat" && p === "open") {
+    return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_MONO;
   }
   // Metronome BPM In: absolute BPM on the ƒ live bus (slider ignored when wired).
   if (tDst === "transport" && p === "bpm") {
@@ -5860,6 +5886,60 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
       push("amplitude", P.NATIVE_GRAPH_PARAM_AMPLITUDE, cont("amplitude", 1));
       continue;
     }
+    if (type === "electroSnare") {
+      // Electro Snare (docs/SNARE_PLAN.md): waveform = Algorithm choiceId
+      // (0 tr808 / 1 tr909 / 2 simmons / 3 modal / 4 fm; main thread resolves choiceKeys),
+      // frequency=tune, shape=tone, width=snappy, timeNumerator=bodyDecay,
+      // timeDenominator=snapDecay, center=bend, amplitude.
+      push("algorithm", P.NATIVE_GRAPH_PARAM_WAVEFORM, disc("algorithm", 0));
+      push("tune", P.NATIVE_GRAPH_PARAM_FREQUENCY, cont("tune", 180));
+      push("tone", P.NATIVE_GRAPH_PARAM_SHAPE, cont("tone", 0.5));
+      push("snappy", P.NATIVE_GRAPH_PARAM_WIDTH, cont("snappy", 0.5));
+      push("bodyDecay", P.NATIVE_GRAPH_PARAM_TIME_NUMERATOR, cont("bodyDecay", 0.25));
+      push("snapDecay", P.NATIVE_GRAPH_PARAM_TIME_DENOMINATOR, cont("snapDecay", 0.2));
+      push("bend", P.NATIVE_GRAPH_PARAM_CENTER, cont("bend", 0));
+      push("amplitude", P.NATIVE_GRAPH_PARAM_AMPLITUDE, cont("amplitude", 1));
+      continue;
+    }
+    if (type === "electroHat") {
+      // Electro Hat (docs/DRUM_PACK_PLAN.md): waveform = Algorithm choiceId
+      // (0 tr808 / 1 tr606 / 2 fm / 3 noise), frequency=tune x, shape=tone,
+      // timeNumerator=closedDecay, timeDenominator=openDecay, width=metal, amplitude.
+      push("algorithm", P.NATIVE_GRAPH_PARAM_WAVEFORM, disc("algorithm", 0));
+      push("tune", P.NATIVE_GRAPH_PARAM_FREQUENCY, cont("tune", 1));
+      push("tone", P.NATIVE_GRAPH_PARAM_SHAPE, cont("tone", 0.5));
+      push("closedDecay", P.NATIVE_GRAPH_PARAM_TIME_NUMERATOR, cont("closedDecay", 0.05));
+      push("openDecay", P.NATIVE_GRAPH_PARAM_TIME_DENOMINATOR, cont("openDecay", 0.5));
+      push("metal", P.NATIVE_GRAPH_PARAM_WIDTH, cont("metal", 1));
+      push("amplitude", P.NATIVE_GRAPH_PARAM_AMPLITUDE, cont("amplitude", 1));
+      continue;
+    }
+    if (type === "electroTom") {
+      // Electro Tom: waveform = Algorithm choiceId (0 tr808 / 1 tr909 / 2 simmons),
+      // frequency=tune, center=bend, shape=tone, timeNumerator=bodyDecay, width=noise, amplitude.
+      push("algorithm", P.NATIVE_GRAPH_PARAM_WAVEFORM, disc("algorithm", 0));
+      push("tune", P.NATIVE_GRAPH_PARAM_FREQUENCY, cont("tune", 135));
+      push("bend", P.NATIVE_GRAPH_PARAM_CENTER, cont("bend", 0.25));
+      push("tone", P.NATIVE_GRAPH_PARAM_SHAPE, cont("tone", 0.5));
+      push("bodyDecay", P.NATIVE_GRAPH_PARAM_TIME_NUMERATOR, cont("bodyDecay", 0.2));
+      push("noise", P.NATIVE_GRAPH_PARAM_WIDTH, cont("noise", 0.2));
+      push("amplitude", P.NATIVE_GRAPH_PARAM_AMPLITUDE, cont("amplitude", 1));
+      continue;
+    }
+    if (type === "electroKick") {
+      // Electro Kick: waveform = Algorithm choiceId (0 tr808 / 1 tr909 / 2 simmons),
+      // frequency=tune, center=bend, timeDenominator=bendTime, timeNumerator=decay,
+      // width=click, shape=tone, amplitude.
+      push("algorithm", P.NATIVE_GRAPH_PARAM_WAVEFORM, disc("algorithm", 0));
+      push("tune", P.NATIVE_GRAPH_PARAM_FREQUENCY, cont("tune", 52));
+      push("bend", P.NATIVE_GRAPH_PARAM_CENTER, cont("bend", 1.5));
+      push("bendTime", P.NATIVE_GRAPH_PARAM_TIME_DENOMINATOR, cont("bendTime", 0.005));
+      push("decay", P.NATIVE_GRAPH_PARAM_TIME_NUMERATOR, cont("decay", 0.6));
+      push("click", P.NATIVE_GRAPH_PARAM_WIDTH, cont("click", 0.3));
+      push("tone", P.NATIVE_GRAPH_PARAM_SHAPE, cont("tone", 0.5));
+      push("amplitude", P.NATIVE_GRAPH_PARAM_AMPLITUDE, cont("amplitude", 1));
+      continue;
+    }
     if (type === "robinSinepulseAllpass") {
       // Robin Schmidt's rsFlatZapper: stages, mode = choiceId (0 onePole /
       // 1 biquad; main thread resolves choiceKeys), center=lowFreq,
@@ -7032,7 +7112,7 @@ NodeLiveAudioProcessor.prototype.syncNativeEnsemblePublish =
  * Relayed on the data bus as EffectiveHz. No audio math here.
  */
 NodeLiveAudioProcessor.NATIVE_GRAPH_EFFECTIVE_HZ_TYPES = new Set([
-  "ladderFilter", "tb303Filter", "modeResonator", "cookbookFilter", "butterworth", "linkwitzRiley", "bessel", "chebyshev", "elliptic", "papoulisFilter", "bandpass", "allpass", "lowpass", "highpass", "eqFilter", "combResonator", "passiveFilter", "activeFilter", "flowerChildFilter",
+  "ladderFilter", "tb303Filter", "modeResonator", "cookbookFilter", "butterworth", "linkwitzRiley", "bessel", "chebyshev", "elliptic", "papoulisFilter", "bandpass", "allpass", "lowpass", "highpass", "eqFilter", "combResonator", "passiveFilter", "activeFilter",
 ]);
 // Multi-cutoff types also publish HPF as EffectiveLoHz (EffectiveHz = LPF).
 NodeLiveAudioProcessor.NATIVE_GRAPH_EFFECTIVE_LO_HZ_TYPES = new Set(["passiveFilter", "activeFilter"]);
@@ -8977,6 +9057,7 @@ NodeLiveAudioProcessor.prototype.nativeGraphPortNames = function nativeGraphPort
     if (type === "snowflake") return ["Out", "Mono"];
     if (type === "clock") return ["Digital Out", "Out", "Digital"];
     if (type === "randomClock") return ["Trigger"];
+    if (type === "bradley2a") return ["Out L"];
     if (type === "triggerCounter") return ["Pulse"];
     if (type === "metallicRatio") return ["Ratio"];
     if (type === "harmonicSeries") return ["f", "Out", "Mono", "ƒ"];
@@ -9001,11 +9082,17 @@ NodeLiveAudioProcessor.prototype.nativeGraphPortNames = function nativeGraphPort
     if (type === "theremin") return ["Wave", "Out", "Mono"];
     if (type === "vibratoGenerator") return ["Wave", "Out", "Mono"];
     if (type === "robinSinepulse") return ["Kick"];
+    if (type === "electroSnare") return ["Env"];
+    if (type === "electroHat" || type === "electroTom" || type === "electroKick") return ["Env"];
     return ["Out", "Mono", "In"];
   }
   if (portId === P.NATIVE_GRAPH_PORT_LEFT) {
     if (type === "acidSequencer") return ["Trigger"];
     if (type === "robinSinepulse") return ["f", "ƒ"];
+    if (type === "electroSnare") return ["Snare L"];
+    if (type === "electroHat") return ["Hat L"];
+    if (type === "electroTom") return ["Tom L"];
+    if (type === "electroKick") return ["Kick L"];
     if (type === "sampleHold") return ["Left"];
     if (type === "rasterRgb") return ["G"];
     if (type === "fractalBrownianNoise") {
@@ -9077,10 +9164,15 @@ NodeLiveAudioProcessor.prototype.nativeGraphPortNames = function nativeGraphPort
     if (type === "acidSequencer") return ["pitch", "\u266f/\u266d"];
     if (type === "helmholtzPitch") return ["Fidelity", "fid"];
     if (type === "sampleHold") return ["Right"];
+    if (type === "electroSnare") return ["Snare R"];
+    if (type === "electroHat") return ["Hat R"];
+    if (type === "electroTom") return ["Tom R"];
+    if (type === "electroKick") return ["Kick R"];
     if (type === "rasterRgb") return ["B"];
     if (type === "fractalBrownianNoise") {
       return ["Out Z", "Z", "Right"];
     }
+    if (type === "bradley2a") return ["Out R"];
     if (type === "fbmField") return ["Z", "Right"];
     if (type === "phoneTone") return ["ToneR", "Z"];
     if (type === "sineWavetable") return ["C"];

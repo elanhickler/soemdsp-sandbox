@@ -326,10 +326,9 @@ function createNodeGraphArpKeysDisplay(nodeIdOrEl, _type) {
     event.stopPropagation();
   });
 
+  // Shared Ghost tail (PhosphorResidual): Ghost 0 = gone at once, continuous.
   function ghostKeep01(g) {
-    const x = Math.max(0, Math.min(1, Number(g) || 0));
-    const fade = Math.pow(1 - x, 2.8) * 0.012;
-    return 1 - Math.min(0.08, Math.max(0.00025, fade));
+    return PhosphorResidual.ghostKeep(Math.max(0, Math.min(1, Number(g) || 0)), 0);
   }
 
   function notePlayed(play, ghostHang) {
@@ -338,7 +337,7 @@ function createNodeGraphArpKeysDisplay(nodeIdOrEl, _type) {
       const g = Math.max(0, Math.min(1, Number(ghostHang) || 0));
       fadeAt.set(shownPlay, {
         trail: 1,
-        ghost: g > 0.001 ? 1 : 0,
+        ghost: g > 0 ? 1 : 0,
       });
     }
     if (play >= 0) fadeAt.delete(play);
@@ -366,12 +365,12 @@ function createNodeGraphArpKeysDisplay(nodeIdOrEl, _type) {
       ? Math.min(0.05, Math.max(0, (now - lastFadeNow) / 1000))
       : 0;
     lastFadeNow = now;
-    const drainPerSec = t <= 0.001 ? 1e6 : 1 / Math.max(1e-4, t * 4);
+    const drainPerSec = 1 / Math.max(1e-6, t * 4);
     const gMul = Math.pow(ghostKeep01(g), dt * 60);
     for (const [midi, e] of [...fadeAt.entries()]) {
       e.trail = Math.max(0, e.trail - drainPerSec * dt);
       e.ghost = Math.max(0, e.ghost * gMul);
-      if (e.trail <= 0.004 && e.ghost <= 0.004) fadeAt.delete(midi);
+      if (e.trail <= 0.0001 && e.ghost <= 0.0001) fadeAt.delete(midi);
     }
   }
 
@@ -444,7 +443,7 @@ function createNodeGraphArpKeysDisplay(nodeIdOrEl, _type) {
     stepFades(now, trailHang, ghostHang);
     let fading = false;
     for (const e of fadeAt.values()) {
-      if (e.trail > 0.004 || e.ghost > 0.004) {
+      if (e.trail > 0.0001 || e.ghost > 0.0001) {
         fading = true;
         break;
       }

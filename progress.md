@@ -1,6 +1,14 @@
+## 2026-10-19 - Drum pack plan (docs only)
+
+- Added `docs/DRUM_PACK_PLAN.md` (Argi via SandyModules; plan only, no code): Electro Hat (`electroHat`, replaces the placeholder; Closed/Open/Reset, choke, stereo Hat L/R + Env; 808/606/FM/Noise), Electro Tom (`electroTom`; 808/909/Simmons; Tom L/R + Env) and Electro Kick (`electroKick`; 808/909/Simmons; Kick L/R + Env), all on the Electro Snare template (type 222). Tracker DP-1..DP-9 with smoke/parity tests; Q2-Q16 resolved (no Hat Stereo Spread knob, 909 hat skipped), Q1 (library helpers) approved by Argi with Electro Snare kept bit-exact, so all questions resolved and ready to build; Stereo module seeded in `docs/FUTURE_PLANNING.md`; unseeded drums (cymbal, cowbell, clap, rimshot) listed only as suggestions. Pointer in `docs/FUTURE_PLANNING.md`. Not committed.
+
 ## 2026-10-19 - Deletable Output and Input (done locally)
 
 - Implemented `docs/DELETABLE_OUTPUT_PLAN.md` DO-1..DO-9 (Grok Bot executor, Argi via Librarian), local commits `db043232`..`23d546c4`, not pushed. Output and Input are deletable (one undo step, cables go too) and come back only via Undo or their lower-bar button turning on (`nodeGraphSpawnIoModuleIfMissing`; transport Play never spawns). On delete, settings and position go to `patch.ioModuleSettings` (saved with the patch, never erased); respawn restores them at the saved spot or the nearest free one. Toolbar volume / input level use the saved value while the module is gone. Input id forced to `audioInput` (one-shot migration: 0 of 103 repo patches needed it; script deleted). Must-have-Output boot checks and the legacy-default fingerprint removed. Smoke: `scripts/smoke_deletable_io.mjs`.
+
+## 2026-10-18 - Unused-code ownership policy (docs only)
+
+- Added APP_POLICY §10b (Argi, 2026-10-18): unused code is removed regardless of which agent owns the file (BugsFix files included); no keeping dead code for ownership reasons. Checklist row added. Not committed.
 
 ## 2026-10-18 - Zoom performance plan (docs only)
 

@@ -219,7 +219,10 @@ const nodeGraphNodeLabels = Object.freeze({
   softpop2: "Softpop 2",
   robinSinepulse: "Robin Sinepulse",
   robinSinepulseAllpass: "Robin Sinepulse Allpass",
-  electroHat: "ElectroHat",
+  electroSnare: "Electro Snare",
+  electroHat: "Electro Hat",
+  electroTom: "Electro Tom",
+  electroKick: "Electro Kick",
   formantFilter: "Formant Filter",
   binaryClock: "Binary Clock",
   osc: "Open Sound Control",
@@ -522,10 +525,8 @@ function nodeGraphTSeriesCrossfadeVisualInputs() {
   ];
 }
 
-function nodeGraphTSeriesModuleDefinition(lastIndex, options = {}) {
+function nodeGraphTSeriesModuleDefinition(lastIndex) {
   const last = Math.max(0, Math.min(10, Math.round(nodeGraphFiniteNumber(lastIndex))));
-  const adFirst = options.adFirst === true;
-  const inLabel = options.inLabel || "In";
   return {
     planRole: "processor",
     chrome: NodeGraphModuleChromeLayout.LayoutA,
@@ -538,8 +539,8 @@ function nodeGraphTSeriesModuleDefinition(lastIndex, options = {}) {
     visualInputs: nodeGraphTSeriesCrossfadeVisualInputs(),
     digitalInputs: ["Digital"],
     inputAliases: { A: "Analog", D: "Digital", Mono: "In" },
-    inputLabels: { Analog: "A", Digital: "D", In: inLabel },
-    inputs: adFirst ? ["Analog", "Digital", "In"] : ["In", "Analog", "Digital"],
+    inputLabels: { Analog: "A", Digital: "D", In: "→" },
+    inputs: ["In", "Analog", "Digital"],
     outputs: Array.from({ length: last + 1 }, (_, index) => String(index)),
     parameters: [],
     defaultWidthGu: last >= 10 ? 5 : last >= 1 ? 4 : 3,
@@ -550,11 +551,9 @@ function nodeGraphTSeriesModuleDefinition(lastIndex, options = {}) {
 }
 
 /** Nt mux: inputs 0…(N-1) + A/D → Out. Mirror of tN demux. Name digit = path count. */
-function nodeGraphTSeriesMuxModuleDefinition(lastIndex, options = {}) {
+function nodeGraphTSeriesMuxModuleDefinition(lastIndex) {
   const last = Math.max(1, Math.min(10, Math.round(nodeGraphFiniteNumber(lastIndex))));
   const numbered = Array.from({ length: last + 1 }, (_, index) => String(index));
-  const adFirst = options.adFirst === true;
-  const outLabel = options.outLabel || "Out";
   return {
     planRole: "processor",
     chrome: NodeGraphModuleChromeLayout.LayoutA,
@@ -568,9 +567,9 @@ function nodeGraphTSeriesMuxModuleDefinition(lastIndex, options = {}) {
     digitalInputs: ["Digital"],
     inputAliases: { A: "Analog", D: "Digital" },
     inputLabels: { Analog: "A", Digital: "D" },
-    inputs: adFirst ? ["Analog", "Digital", ...numbered] : [...numbered, "Analog", "Digital"],
+    inputs: [...numbered, "Analog", "Digital"],
     outputAliases: { Mono: "Out" },
-    outputLabels: { Out: outLabel },
+    outputLabels: { Out: "←" },
     outputs: ["Out"],
     parameters: [],
     defaultWidthGu: last >= 10 ? 5 : last >= 6 ? 4 : 3,
@@ -590,13 +589,15 @@ function nodeGraphTSeriesSingleModuleDefinition() {
     displayType: "torchFace",
     visualSink: true,
     visualInputs: nodeGraphTSeriesCrossfadeVisualInputs(),
+    // Sample-exact A/D rings (like LED Dot In): Open is averaged per drawn frame.
+    bufferedInputs: ["Analog", "Digital"],
     displayHeightGu: 1,
     displayModes: [
       {
         key: "torch",
         label: "Torch",
         renderer: "torchFace",
-        settingsSchema: "",
+        settingsSchema: "torchFace",
         source: { value: "Open" } },
     ],
     digitalInputs: ["Digital"],
@@ -1145,6 +1146,20 @@ const nodeGraphModuleDefinitions = (
     outputs: ["A", "B", "C", "D", "rgba"],
     parameters: [
       {
+        choices: ["Bipolar", "Unipolar"],
+        defaultValue: "0",
+        displayChoices: true,
+        divideChoicesVisibly: true,
+        key: "polarity",
+        label: "Polarity",
+        linearSmoothing: false,
+        max: "1",
+        mid: "0",
+        min: "0",
+        step: "1",
+        tooltip:
+          "Bipolar: outs swing -Amp..+Amp. Unipolar: 0.5*Amp*(v+1), so 0..Amp (0..1 at Amp 1; Amp 0 = 0). Applies to every active A..D tap; unused taps stay 0." },
+      {
         choices: ["sine", "cosine", "sincos", "antiphase", "3-phase", "4-phase"],
         defaultValue: "2",
         displayChoices: true,
@@ -1210,20 +1225,6 @@ const nodeGraphModuleDefinitions = (
         nonlinearSlider: false,
         step: "any"
       },
-      {
-        choices: ["Bipolar", "Unipolar"],
-        defaultValue: "0",
-        displayChoices: true,
-        divideChoicesVisibly: true,
-        key: "polarity",
-        label: "Polarity",
-        linearSmoothing: false,
-        max: "1",
-        mid: "0",
-        min: "0",
-        step: "1",
-        tooltip:
-          "Bipolar: outs swing -Amp..+Amp. Unipolar: 0.5*Amp*(v+1), so 0..Amp (0..1 at Amp 1; Amp 0 = 0). Applies to every active A..D tap; unused taps stay 0." },
     ]
   },
   sinCos: {
@@ -1251,6 +1252,20 @@ const nodeGraphModuleDefinitions = (
     outputLabels: {sin: "Sin",
       cos: "Cos" },
     parameters: [
+      {
+        choices: ["Bipolar", "Unipolar"],
+        defaultValue: "0",
+        displayChoices: true,
+        divideChoicesVisibly: true,
+        key: "polarity",
+        label: "Polarity",
+        linearSmoothing: false,
+        max: "1",
+        mid: "0",
+        min: "0",
+        step: "1",
+        tooltip:
+          "Bipolar: outs swing -Amp..+Amp. Unipolar: 0.5*Amp*(v+1), so 0..Amp (0..1 at Amp 1; Amp 0 = 0). Applies to sin and cos." },
       {
         choices: ["Polynomial", "Wavetable", "std::sin", "Taylor"],
         defaultValue: "1",
@@ -1302,20 +1317,6 @@ const nodeGraphModuleDefinitions = (
         nonlinearSlider: false,
         step: "any"
       },
-      {
-        choices: ["Bipolar", "Unipolar"],
-        defaultValue: "0",
-        displayChoices: true,
-        divideChoicesVisibly: true,
-        key: "polarity",
-        label: "Polarity",
-        linearSmoothing: false,
-        max: "1",
-        mid: "0",
-        min: "0",
-        step: "1",
-        tooltip:
-          "Bipolar: outs swing -Amp..+Amp. Unipolar: 0.5*Amp*(v+1), so 0..Amp (0..1 at Amp 1; Amp 0 = 0). Applies to sin and cos." },
     ]
   },
   archimedes: {
@@ -3631,7 +3632,9 @@ const nodeGraphModuleDefinitions = (
   },
   bradley2a: {
     planRole: "source",
-    outputs: ["Out"],
+    // Out L = original channel; Out R = own jitter / amp / interference LFO phases
+    // (quarter turn), hit clock (half period) and impulse noise; shared carrier.
+    outputs: ["Out L", "Out R"],
     parameters: [
       { key: "carrierFreq", label: "Carrier", kind: "frequency", defaultValue: "1004", min: "0", mid: "1000", max: "20000", step: "any", unit: "Hz" },
       { key: "freqOffset", label: "Freq Translate", kind: "frequency", defaultValue: "0", min: "-500", mid: "0", max: "500", step: "any", unit: "Hz" },
@@ -6926,7 +6929,7 @@ const nodeGraphModuleDefinitions = (
     ]
   },
   t: nodeGraphTSeriesSingleModuleDefinition(),
-  t2: nodeGraphTSeriesModuleDefinition(1, { adFirst: true, inLabel: "→" }),
+  t2: nodeGraphTSeriesModuleDefinition(1),
   t3: nodeGraphTSeriesModuleDefinition(2),
   t4: nodeGraphTSeriesModuleDefinition(3),
   t5: nodeGraphTSeriesModuleDefinition(4),
@@ -6936,7 +6939,7 @@ const nodeGraphModuleDefinitions = (
   t9: nodeGraphTSeriesModuleDefinition(8),
   t10: nodeGraphTSeriesModuleDefinition(9),
   t11: nodeGraphTSeriesModuleDefinition(10),
-  "2t": nodeGraphTSeriesMuxModuleDefinition(1, { adFirst: true, outLabel: "←" }),
+  "2t": nodeGraphTSeriesMuxModuleDefinition(1),
   "3t": nodeGraphTSeriesMuxModuleDefinition(2),
   "4t": nodeGraphTSeriesMuxModuleDefinition(3),
   "5t": nodeGraphTSeriesMuxModuleDefinition(4),
@@ -10346,7 +10349,7 @@ const nodeGraphModuleDefinitions = (
     outputTooltips: {
       Kick: "Kick audio: Amplitude x envelope x swept wave.",
       f: "Sweep frequency in Hz. White ƒ jack. Before the first hit this is Low Freq. After a hit it follows the sweep and stays where the sweep lands.",
-      env: "Sweep position, 0 to 1. Same curve as ƒ. High Freq is 1, Low Freq is 0. Sweep Time, Chirp, and Chirp Shape bend it. Add it to a 0–1 Cutoff with that knob at 0. Amplitude does not move it.",
+      env: "Sweep position, 0 to 1, on a log (pitch) scale: log(ƒ / Low) / log(High / Low), with Low floored at 20 Hz. High Freq is 1, Low Freq (or 20 Hz) is 0. Starts at 1 and falls. Sweep Time, Chirp, and Chirp Shape bend it. Add it to a 0–1 Cutoff with that knob at 0. Amplitude does not move it.",
     },
     parameters: [
       {
@@ -10623,66 +10626,515 @@ const nodeGraphModuleDefinitions = (
         step: "any",
         tooltip: "Output level." },
     ] },
-  // Under construction: electro drum voice suite (Drum shelf).
+  // Electro Snare (docs/SNARE_PLAN.md): one snare voice, Algorithm choice,
+  // one fixed shared param set. Native only: native_modules/electro_snare/electro_snare.cpp.
+  electroSnare: {
+    planRole: "source",
+    planFreeRun: true,
+    displayType: "lineBurn",
+    displayModes: [
+      { key: "lineBurn", renderer: "lineBurn", source: { value: "Snare L" } },
+    ],
+    displaySignals: [
+      { key: "Snare L", kind: "scalar" },
+    ],
+    inputs: ["Trigger", "Reset"],
+    inputTooltips: {
+      Trigger: "Each hit strikes the snare. Height is velocity (|height|, level only). 808 / Modal add the new ping onto the ringing body; 909 / Simmons / FM restart their oscillators.",
+      Reset: "Rewinds the hit: clears every resonator, filter, phase and envelope, reseeds the noise, then strikes again at the last Trigger velocity (exact repeat). Silent before the first Trigger. Height ignored." },
+    outputs: ["Snare L", "Snare R", "Env"],
+    outputTooltips: {
+      "Snare L": "Snare audio, left: Amplitude x (body + snare wires). Noise and noise-like parts are decorrelated from R; the clean tonal body is identical.",
+      "Snare R": "Snare audio, right: same body as L, its own noise (own seed and filters). Modal: odd membrane modes inverted; FM: inverted modulator.",
+      Env: "Overall amplitude envelope of the hit: peaks at the Trigger velocity, falls to exact 0. Not scaled by Amplitude." },
+    parameters: [
+      {
+        choices: ["808", "909", "Simmons", "Modal", "FM"],
+        choiceKeys: ["tr808", "tr909", "simmons", "modal", "fm"],
+        choiceIds: [0, 1, 2, 3, 4],
+        defaultValue: "tr808",
+        displayChoices: true,
+        divideChoicesVisibly: true,
+        key: "algorithm",
+        kind: "choice",
+        label: "Algorithm",
+        linearSmoothing: false,
+        smoothingType: "none",
+        max: "4",
+        mid: "2",
+        min: "0",
+        nonlinearSlider: false,
+        step: "1",
+        tooltip: "Snare design. 808: two pinged resonators + high-passed noise. 909: two phase-reset rounded triangles + two noise bands. Simmons: SDS-V style sine with bend + resonant-lowpassed noise + click. Modal: six membrane-mode resonators + band-passed wires. FM: Chowning 1:1.4 FM drum + noise. Knobs keep their values when you switch." },
+      {
+        defaultValue: "180",
+        key: "tune",
+        kind: "frequency",
+        label: "Tune",
+        max: "1000",
+        maxDigits: 4,
+        mid: "250",
+        min: "40",
+        step: "any",
+        unit: "Hz",
+        tooltip: "Rest pitch of the body. 808: low resonator (high = x1.93). 909: VCO1 (VCO2 = x1.72). Simmons: oscillator. Modal: fundamental (01) mode. FM: carrier (modulator = x1.4)." },
+      {
+        defaultValue: "0.5",
+        key: "tone",
+        label: "Tone",
+        max: "1",
+        mid: "0.5",
+        min: "0",
+        nonlinearSlider: false,
+        step: "any",
+        tooltip: "Timbre. 808: low <-> high resonator mix (panel Tone). 909: noise lowpass 2 -> 12 kHz (brighter). Simmons: noise resonant lowpass 300 Hz -> 12 kHz. Modal: strike position, centre -> edge. FM: peak FM index 0 -> 8." },
+      {
+        defaultValue: "0.5",
+        key: "snappy",
+        label: "Snappy",
+        max: "1",
+        mid: "0.5",
+        min: "0",
+        nonlinearSlider: false,
+        step: "any",
+        tooltip: "Snare-wire noise amount. 808: noise envelope level (panel Snappy). 909: level of both noise bands (panel Snappy). Simmons: noise <-> tone balance. Modal / FM: noise level." },
+      {
+        defaultValue: "0.25",
+        key: "bodyDecay",
+        kind: "time",
+        label: "Body Decay",
+        max: "2",
+        maxDigits: 5,
+        mid: "0.3",
+        min: "0.01",
+        step: "any",
+        unit: "s",
+        tooltip: "How long the tonal body rings: seconds to fall 60 dB (T60). 808: low resonator (high 0.31x). 909: VCO1 envelope (VCO2 0.6x). Simmons: shared VCA (noise and tone). Modal: 01 mode (mode k: / ratio). FM: carrier and FM index." },
+      {
+        defaultValue: "0.2",
+        key: "snapDecay",
+        kind: "time",
+        label: "Snap Decay",
+        max: "2",
+        maxDigits: 5,
+        mid: "0.3",
+        min: "0.01",
+        step: "any",
+        unit: "s",
+        tooltip: "How long the noise rings: seconds to fall 60 dB (T60). 808 / Modal / FM: noise envelope. 909: main noise band (this is the 909 panel's Tone). Simmons: extra noise envelope inside the VCA (at or above Body Decay = stock SDS-V)." },
+      {
+        defaultValue: "0",
+        key: "bend",
+        label: "Bend",
+        max: "4",
+        mid: "1",
+        min: "0",
+        nonlinearSlider: false,
+        step: "any",
+        unit: "oct",
+        tooltip: "Pitch drop at the hit: starts this many octaves above Tune and falls back. 0 = stock 808. 808 / 909 / FM: ~20 ms drop (909 ~0.5 oct). Simmons: falls over half the Body Decay (1-2 oct). Modal: ~30 ms tension drop." },
+      {
+        defaultValue: "1",
+        key: "amplitude",
+        label: "Amplitude",
+        max: "1",
+        mid: "0.5",
+        min: "0",
+        nonlinearSlider: false,
+        step: "any",
+        tooltip: "Output level. Does not scale Env." },
+    ] },
+  // Electro Hat (docs/DRUM_PACK_PLAN.md): one hi-hat voice, Closed / Open / choke,
+  // Algorithm choice, one fixed shared param set. Native only: native_modules/electro_hat/electro_hat.cpp.
   electroHat: {
     planRole: "source",
     planFreeRun: true,
     displayType: "lineBurn",
     displayModes: [
-      { key: "lineBurn", renderer: "lineBurn", source: { value: "Out" } },
+      {
+        key: "lineBurn",
+        renderer: "lineBurn",
+        source: {
+          value: "Hat L",
+        },
+      },
     ],
     displaySignals: [
-      { key: "Out", kind: "scalar" },
+      {
+        key: "Hat L",
+        kind: "scalar",
+      },
     ],
-    inputs: ["Trigger", "Accent"],
+    inputs: ["Trigger", "Open", "Reset"],
     inputLabels: {
-      Trigger: "Trig",
-      Accent: "Acc"
+      Trigger: "Closed",
     },
-    outputs: ["Out"],
+    inputTooltips: {
+      Trigger: "Closed hit (height = velocity). Chokes a ringing open hat with a 1 ms declick. Closed and Open on the same sample: Closed wins.",
+      Open: "Open hit (height = velocity), decays with Open Decay.",
+      Reset: "Rewinds the hit: clears every phase, filter and envelope, reseeds the noise, then strikes again at the last velocity (exact repeat). Silent before the first hit. Height ignored. Re-strikes the last hit type (closed or open).",
+    },
+    outputs: ["Hat L", "Hat R", "Env"],
+    outputTooltips: {
+      "Hat L": "Hat audio, left. The metal bank is identical L/R; the white noise is decorrelated per channel (own seed and filters).",
+      "Hat R": "Hat audio, right: same metal as L, its own noise. Metal 1 on 808 / 606 / FM gives L == R.",
+      Env: "Overall amplitude envelope of the hit: peaks at the hit velocity, falls to exact 0. Not scaled by Amplitude.",
+    },
     parameters: [
       {
-        defaultValue: "0.08",
-        key: "decay",
-        label: "Decay",
-        max: "2",
+        choices: ["808", "606", "FM", "Noise"],
+        choiceKeys: ["tr808", "tr606", "fm", "noise"],
+        choiceIds: [0, 1, 2, 3],
+        defaultValue: "tr808",
+        displayChoices: true,
+        divideChoicesVisibly: true,
+        key: "algorithm",
+        kind: "choice",
+        label: "Algorithm",
+        linearSmoothing: false,
+        smoothingType: "none",
+        max: "3",
+        mid: "1",
+        min: "0",
+        nonlinearSlider: false,
+        step: "1",
+        tooltip: "Hat design. 808: six PolyBLEP squares (205-800 Hz) through the 7.1 kHz band-pass and a high-pass. 606: six squares (606 tuning, by ear) into a resonant high-pass. FM: metallic FM carrier ring-modulated by a pulse pair, high-passed. Noise: band-passed white noise. Knobs keep their values when you switch.",
+      },
+      {
+        defaultValue: "1",
+        key: "tune",
+        label: "Tune",
+        max: "4",
+        mid: "1",
+        min: "0.25",
+        nonlinearSlider: true,
+        step: "any",
+        unit: "x",
+        tooltip: "Metal pitch scale, 1 = stock. 808 / 606: all six squares. FM: every operator. Noise: band-pass centre (8 kHz x Tune).",
+      },
+      {
+        defaultValue: "0.5",
+        key: "tone",
+        label: "Tone",
+        max: "1",
+        mid: "0.5",
+        min: "0",
+        nonlinearSlider: false,
+        step: "any",
+        tooltip: "Brightness. 808 / 606: band-pass and high-pass move together, one octave down (0) to one up (1). FM: modulation index 2 -> 12 and high-pass. Noise: band-pass Q 0.5 -> 5.",
+      },
+      {
+        defaultValue: "0.05",
+        key: "closedDecay",
+        kind: "time",
+        label: "Closed Decay",
+        max: "0.5",
+        maxDigits: 5,
         mid: "0.08",
         min: "0.005",
         step: "any",
         unit: "s",
-        tooltip: "Under construction — hat decay (closed short / open longer)."
+        tooltip: "Closed hit decay: seconds to fall 60 dB (T60).",
       },
       {
-        defaultValue: "0.7",
-        key: "tone",
-        label: "Tone",
-        max: "1",
-        mid: "0.7",
-        min: "0",
+        defaultValue: "0.5",
+        key: "openDecay",
+        kind: "time",
+        label: "Open Decay",
+        max: "4",
+        maxDigits: 5,
+        mid: "0.6",
+        min: "0.05",
         step: "any",
-        tooltip: "Under construction — brightness / metal tone."
-      },
-      {
-        defaultValue: "0",
-        key: "open",
-        label: "Open",
-        max: "1",
-        mid: "0.5",
-        min: "0",
-        step: "any",
-        tooltip: "Under construction — closed (0) ↔ open (1) character."
+        unit: "s",
+        tooltip: "Open hit decay: seconds to fall 60 dB (T60).",
       },
       {
         defaultValue: "1",
-        key: "level",
-        label: "Level",
+        key: "metal",
+        label: "Metal",
         max: "1",
+        mid: "0.5",
+        min: "0",
+        nonlinearSlider: false,
+        step: "any",
+        tooltip: "Metallic source <-> white noise; 1 = all metal (stock 808 / 606). Noise algorithm: band-passed (1) <-> raw (0) noise.",
+      },
+      {
+        defaultValue: "1",
+        key: "amplitude",
+        label: "Amplitude",
+        max: "1",
+        mid: "0.5",
+        min: "0",
+        nonlinearSlider: false,
+        step: "any",
+        tooltip: "Output level. Does not scale Env.",
+      },
+    ],
+  },
+  // Electro Tom (docs/DRUM_PACK_PLAN.md): one tom voice, Algorithm choice,
+  // one fixed shared param set. Native only: native_modules/electro_tom/electro_tom.cpp.
+  electroTom: {
+    planRole: "source",
+    planFreeRun: true,
+    displayType: "lineBurn",
+    displayModes: [
+      {
+        key: "lineBurn",
+        renderer: "lineBurn",
+        source: {
+          value: "Tom L",
+        },
+      },
+    ],
+    displaySignals: [
+      {
+        key: "Tom L",
+        kind: "scalar",
+      },
+    ],
+    inputs: ["Trigger", "Reset"],
+    inputTooltips: {
+      Trigger: "Each hit strikes the tom. Height is velocity (|height|, level only). 808 adds the new ping onto the ringing body; 909 / Simmons restart their oscillators.",
+      Reset: "Rewinds the hit: clears every phase, filter and envelope, reseeds the noise, then strikes again at the last velocity (exact repeat). Silent before the first hit. Height ignored.",
+    },
+    outputs: ["Tom L", "Tom R", "Env"],
+    outputTooltips: {
+      "Tom L": "Tom audio, left: body identical L/R, noise decorrelated per channel.",
+      "Tom R": "Tom audio, right: same body, its own noise. Noise 0 gives L == R.",
+      Env: "Overall amplitude envelope of the hit: peaks at the hit velocity, falls to exact 0. Not scaled by Amplitude.",
+    },
+    parameters: [
+      {
+        choices: ["808", "909", "Simmons"],
+        choiceKeys: ["tr808", "tr909", "simmons"],
+        choiceIds: [0, 1, 2],
+        defaultValue: "tr808",
+        displayChoices: true,
+        divideChoicesVisibly: true,
+        key: "algorithm",
+        kind: "choice",
+        label: "Algorithm",
+        linearSmoothing: false,
+        smoothingType: "none",
+        max: "2",
         mid: "1",
         min: "0",
-        step: "any",
-        tooltip: "Under construction — output level."
+        nonlinearSlider: false,
+        step: "1",
+        tooltip: "Tom design. 808: pinged resonator with a level-tied pitch drop + low-passed noise. 909: three phase-reset rounded triangles with a pitch sweep + tom noise. Simmons: SDS-V bending sine + resonant-lowpassed noise + click. Knobs keep their values when you switch.",
       },
-    ]
+      {
+        defaultValue: "135",
+        key: "tune",
+        kind: "frequency",
+        label: "Tune",
+        max: "400",
+        maxDigits: 4,
+        mid: "135",
+        min: "40",
+        step: "any",
+        unit: "Hz",
+        tooltip: "Rest pitch (808 mid tom ~135 Hz). 808: resonator. 909: VCO1 (others x1.5, x2.21). Simmons: oscillator.",
+      },
+      {
+        defaultValue: "0.25",
+        key: "bend",
+        label: "Bend",
+        max: "4",
+        mid: "1",
+        min: "0",
+        nonlinearSlider: false,
+        step: "any",
+        unit: "oct",
+        tooltip: "Pitch drop at the hit: starts this many octaves above Tune and falls back. 808: tied to the decaying body level. 909: ~50 ms sweep. Simmons: over half the Body Decay (1-2 oct for the classic sound).",
+      },
+      {
+        defaultValue: "0.5",
+        key: "tone",
+        label: "Tone",
+        max: "1",
+        mid: "0.5",
+        min: "0",
+        nonlinearSlider: false,
+        step: "any",
+        tooltip: "Timbre. 808: noise lowpass 300 Hz -> 8 kHz. 909: VCO1 clipper, sine (0) -> square (1). Simmons: noise resonant lowpass 300 Hz -> 12 kHz.",
+      },
+      {
+        defaultValue: "0.2",
+        key: "bodyDecay",
+        kind: "time",
+        label: "Body Decay",
+        max: "3",
+        maxDigits: 5,
+        mid: "0.3",
+        min: "0.02",
+        step: "any",
+        unit: "s",
+        tooltip: "How long the body rings: seconds to fall 60 dB (T60). 808: resonator (noise 1.3x). 909: VCO1 (VCO2 0.7x, VCO3 0.5x). Simmons: shared VCA.",
+      },
+      {
+        defaultValue: "0.2",
+        key: "noise",
+        label: "Noise",
+        max: "1",
+        mid: "0.5",
+        min: "0",
+        nonlinearSlider: false,
+        step: "any",
+        tooltip: "Attack noise amount (noise envelope fixed per algorithm). Simmons: noise <-> tone balance.",
+      },
+      {
+        defaultValue: "1",
+        key: "amplitude",
+        label: "Amplitude",
+        max: "1",
+        mid: "0.5",
+        min: "0",
+        nonlinearSlider: false,
+        step: "any",
+        tooltip: "Output level. Does not scale Env.",
+      },
+    ],
+  },
+  // Electro Kick (docs/DRUM_PACK_PLAN.md): the classic machine kicks, separate from
+  // Robin Sinepulse. Native only: native_modules/electro_kick/electro_kick.cpp.
+  electroKick: {
+    planRole: "source",
+    planFreeRun: true,
+    displayType: "lineBurn",
+    displayModes: [
+      {
+        key: "lineBurn",
+        renderer: "lineBurn",
+        source: {
+          value: "Kick L",
+        },
+      },
+    ],
+    displaySignals: [
+      {
+        key: "Kick L",
+        kind: "scalar",
+      },
+    ],
+    inputs: ["Trigger", "Reset"],
+    inputTooltips: {
+      Trigger: "Each hit strikes the kick. Height is velocity (|height|, level only). 808 adds the new ping onto the ringing body; 909 / Simmons restart the oscillator.",
+      Reset: "Rewinds the hit: clears every phase, filter and envelope, reseeds the noise, then strikes again at the last velocity (exact repeat). Silent before the first hit. Height ignored.",
+    },
+    outputs: ["Kick L", "Kick R", "Env"],
+    outputTooltips: {
+      "Kick L": "Kick audio, left: body identical L/R (mono low end); only 909 attack noise and Simmons noise are decorrelated.",
+      "Kick R": "Kick audio, right. 808 is always L == R; Click 0 and Tone 0 give L == R on every algorithm.",
+      Env: "Overall amplitude envelope of the hit: peaks at the hit velocity, falls to exact 0. Not scaled by Amplitude.",
+    },
+    parameters: [
+      {
+        choices: ["808", "909", "Simmons"],
+        choiceKeys: ["tr808", "tr909", "simmons"],
+        choiceIds: [0, 1, 2],
+        defaultValue: "tr808",
+        displayChoices: true,
+        divideChoicesVisibly: true,
+        key: "algorithm",
+        kind: "choice",
+        label: "Algorithm",
+        linearSmoothing: false,
+        smoothingType: "none",
+        max: "2",
+        mid: "1",
+        min: "0",
+        nonlinearSlider: false,
+        step: "1",
+        tooltip: "Kick design. 808: pinged resonator (bridged-T stand-in) with an attack pitch jump + click. 909: phase-reset soft-clipped triangle with a pitch sweep + pulse/noise attack. Simmons: bending sine + filtered noise + click. Knobs keep their values when you switch.",
+      },
+      {
+        defaultValue: "52",
+        key: "tune",
+        kind: "frequency",
+        label: "Tune",
+        max: "200",
+        maxDigits: 4,
+        mid: "60",
+        min: "30",
+        step: "any",
+        unit: "Hz",
+        tooltip: "Rest pitch (808 ~49-56 Hz).",
+      },
+      {
+        defaultValue: "1.5",
+        key: "bend",
+        label: "Bend",
+        max: "4",
+        mid: "1",
+        min: "0",
+        nonlinearSlider: false,
+        step: "any",
+        unit: "oct",
+        tooltip: "Pitch above Tune at the hit, in octaves, falling back with Bend Time.",
+      },
+      {
+        defaultValue: "0.005",
+        key: "bendTime",
+        kind: "time",
+        label: "Bend Time",
+        max: "0.3",
+        maxDigits: 5,
+        mid: "0.03",
+        min: "0.001",
+        step: "any",
+        unit: "s",
+        tooltip: "How fast the pitch falls: seconds to fall 60 dB (T60) of the bend.",
+      },
+      {
+        defaultValue: "0.6",
+        key: "decay",
+        kind: "time",
+        label: "Decay",
+        max: "4",
+        maxDigits: 5,
+        mid: "0.8",
+        min: "0.05",
+        step: "any",
+        unit: "s",
+        tooltip: "Body decay: seconds to fall 60 dB (T60).",
+      },
+      {
+        defaultValue: "0.3",
+        key: "click",
+        label: "Click",
+        max: "1",
+        mid: "0.5",
+        min: "0",
+        nonlinearSlider: false,
+        step: "any",
+        tooltip: "Attack transient level. 808: trigger pulse. 909: pulse + low-passed noise (909 Attack). Simmons: high-passed noise click.",
+      },
+      {
+        defaultValue: "0.5",
+        key: "tone",
+        label: "Tone",
+        max: "1",
+        mid: "0.5",
+        min: "0",
+        nonlinearSlider: false,
+        step: "any",
+        tooltip: "Timbre. 808: output lowpass 200 Hz -> 20 kHz. 909: clipper drive, sine (0) -> square (1). Simmons: tone (0) <-> noise (1) balance.",
+      },
+      {
+        defaultValue: "1",
+        key: "amplitude",
+        label: "Amplitude",
+        max: "1",
+        mid: "0.5",
+        min: "0",
+        nonlinearSlider: false,
+        step: "any",
+        tooltip: "Output level. Does not scale Env.",
+      },
+    ],
   },
   // Under construction
   formantFilter: {
@@ -12891,12 +13343,9 @@ const nodeGraphModuleDefinitions = (
       { key: "Left", kind: "scalar" },
       { key: "Right", kind: "scalar" },
     ],
-    inputAliases: { Mono: "In", Freq: "f", "ƒ": "f" },
-    inputLabels: { In: "Mono", f: "ƒ" },
-    inputs: ["In", "Left", "Right", "f"],
-    // ƒ = resonance pitch in Hz; when wired it replaces Cutoff per sample (resolve_osc_hz).
-    inputTooltips: {
-      f: "Hz cable: the resonance pitch you hear. When wired it replaces Cutoff, every sample. Exact on Clean, close on Dirty, approximate on Rev3 and Downsampled." },
+    inputAliases: { Mono: "In" },
+    inputLabels: { In: "Mono" },
+    inputs: ["In", "Left", "Right"],
     outputAliases: { Mono: "Out" },
     outputLabels: { Out: "Mono" },
     outputs: ["Out", "Left", "Right"],
@@ -14465,7 +14914,7 @@ const nodeGraphModuleDefinitions = (
         min: "0",
         nonlinearSlider: false,
         step: "1",
-        tooltip: "On = delay audio so GR can fall before hits (helps pump without zero-attack chatter)." },
+        tooltip: "How early the detector hears the hit. The audio is delayed by this much, and Attack uses that head start. Off = gain moves on the sample itself." },
       {
         defaultValue: "5",
         key: "lookaheadMs",
@@ -14500,7 +14949,7 @@ const nodeGraphModuleDefinitions = (
         min: "0",
         step: "any",
         unit: "ms",
-        tooltip: "How fast GR engages on a hit. A few ms keeps punch while still pumping." },
+        tooltip: "How long gain takes to finish falling after a hit is seen. If this is shorter than Look-ahead, the fall finishes before the hit plays and the output stays at Threshold. If this is longer, the hit can still poke through." },
       {
         defaultValue: "0",
         key: "hold",
@@ -17162,6 +17611,17 @@ const nodeGraphModuleDefinitions = (
           "Mid-stream die-off. 0 = never die (wrap forever). 0.5 = original rain death. 1 = heavy short streams (still spawn)."
       },
       {
+        key: "backgroundBrightness",
+        label: "Background",
+        defaultValue: "0",
+        min: "0",
+        mid: "0.5",
+        max: "1",
+        step: "any",
+        maxDigits: 4,
+        tooltip: "Background Brightness 0–1: empty cells show this level (present = max(stored, background), as on 2D Phosphor). Not a trail floor; stored light still fades fully."
+      },
+      {
         key: "brightness",
         label: "Bright",
         defaultValue: "1",
@@ -17170,7 +17630,7 @@ const nodeGraphModuleDefinitions = (
         max: "1",
         step: "any",
         maxDigits: 4,
-        tooltip: "Live tip / present gain 0–1 (1 = full). Hang is Ghost/Trail."
+        tooltip: "Live tip brightness (new residual deposits = Bright x Burn; hung trails never rescaled) 0–1 (1 = full). Hang is Ghost/Trail."
       },
       {
         key: "ghost",
@@ -17265,6 +17725,17 @@ const nodeGraphModuleDefinitions = (
         tooltip: "Glyph field density. Low = bigger characters; high = smaller. One character per cell. Density change remaps phosphor (does not wipe)."
       },
       {
+        key: "backgroundBrightness",
+        label: "Background",
+        defaultValue: "0",
+        min: "0",
+        mid: "0.5",
+        max: "1",
+        step: "any",
+        maxDigits: 4,
+        tooltip: "Background Brightness 0–1: empty cells show this level (present = max(stored, background), as on 2D Phosphor). Not a trail floor; stored light still fades fully."
+      },
+      {
         key: "brightness",
         label: "Bright",
         defaultValue: "1",
@@ -17273,7 +17744,7 @@ const nodeGraphModuleDefinitions = (
         max: "1",
         step: "any",
         maxDigits: 4,
-        tooltip: "Live / present gain 0–1 (1 = full). Hang is Ghost/Trail."
+        tooltip: "Live glyph brightness (new residual deposits = Bright x Burn; hung trails never rescaled) 0–1 (1 = full). Hang is Ghost/Trail."
       },
       {
         key: "ghost",
@@ -17408,7 +17879,7 @@ const nodeGraphModuleDefinitions = (
         max: "1",
         step: "any",
         maxDigits: 4,
-        tooltip: "Glyph field density. Low = bigger characters; high = smaller. One character per cell. Density change remaps ages (does not wipe)."
+        tooltip: "Glyph field density. Low = bigger characters; high = smaller. One character per cell. Density change remaps phosphor (does not wipe)."
       },
       {
         key: "trail",
@@ -17433,6 +17904,17 @@ const nodeGraphModuleDefinitions = (
         tooltip: "Extreme analog (super-exp) residual hang. Not brightness. Hang is Ghost/Trail only."
       },
       {
+        key: "backgroundBrightness",
+        label: "Background",
+        defaultValue: "0",
+        min: "0",
+        mid: "0.5",
+        max: "1",
+        step: "any",
+        maxDigits: 4,
+        tooltip: "Background Brightness 0–1: empty cells show this level (present = max(stored, background), as on 2D Phosphor). Not a trail floor; stored light still fades fully."
+      },
+      {
         key: "brightness",
         label: "Brightness",
         defaultValue: "1",
@@ -17441,18 +17923,18 @@ const nodeGraphModuleDefinitions = (
         max: "1",
         step: "any",
         maxDigits: 4,
-        tooltip: "Deposit + present gain 0–1 (1 = full). Residual hang is Ghost/Trail."
+        tooltip: "Live line brightness 0–1 (1 = full). New deposits = Bright × Burn; hung trails are never rescaled. Hang is Ghost/Trail."
       },
       {
-        key: "blackFloor",
-        label: "Black Floor",
-        defaultValue: "0",
+        key: "burnAmount",
+        label: "Burn ⨯",
+        defaultValue: "1",
         min: "0",
-        mid: "2",
-        max: "8",
-        nonlinearSlider: false,
-        step: "1",
-        tooltip: "Ages at or below this draw blank (hides cold trail dust)."
+        mid: "1",
+        max: "4",
+        step: "any",
+        maxDigits: 4,
+        tooltip: "Residual deposit gain vs Bright (default 1). Deposit peak = Bright × this. Live line stays Bright."
       },
       {
         choices: ["Off", "On"],

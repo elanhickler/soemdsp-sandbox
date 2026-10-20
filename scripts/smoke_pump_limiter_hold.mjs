@@ -85,5 +85,52 @@ for (const ms of [10, 37.5, 100]) {
   if (rh - rd !== Math.ceil(0.02 * SR)) throw new Error(`graph hold 20 ms: delay ${rh - rd}`);
   console.log(`ok graph: default Hold = 0; Hold 20 ms (param 106) delays release by ${rh - rd} samples`);
 }
+// Attack 0 + look-ahead: a hot spike must not leave the delay above Threshold.
+// Threshold 0 dB, ratio 8, 5 ms look-ahead, one sample at amplitude 4 (+12 dB).
+{
+  const h = create() | 0;
+  const n = Math.ceil(0.05 * SR);
+  let peak = 0;
+  let peakAt = -1;
+  const laSamples = Math.round(0.005 * SR);
+  for (let i = 0; i < n; i++) {
+    const x = i === 1000 ? 4 : 0.05;
+    const y = sample(h, x, x, 0, 0, 0, 0, 8, 5, 0, 0, 0, 250, SR, 1, 1);
+    const a = Math.abs(y);
+    if (a > peak) {
+      peak = a;
+      peakAt = i;
+    }
+  }
+  destroy(h);
+  if (peak > 1 + 1e-9) throw new Error(`attack 0 look-ahead: peak ${peak} at ${peakAt} exceeds 0 dB`);
+  const expectAt = 1000 + laSamples;
+  if (Math.abs(peakAt - expectAt) > 1) {
+    throw new Error(`attack 0 look-ahead: loudest sample at ${peakAt}, expected ${expectAt} (peak ${peak})`);
+  }
+  if (peak < 0.5) throw new Error(`attack 0 look-ahead: limited spike too quiet (${peak})`);
+  console.log(`ok attack 0 + 5 ms look-ahead: peak ${peak.toFixed(4)} at ${peakAt} (<= 0 dB)`);
+}
+// Attack shorter than look-ahead: the ramp finishes in the preview, so the
+// spike stays at Threshold. Attack longer than look-ahead: it has not finished.
+{
+  const runSpike = (attackMs) => {
+    const h = create() | 0;
+    const n = Math.ceil(0.05 * SR);
+    let peak = 0;
+    for (let i = 0; i < n; i++) {
+      const x = i === 1000 ? 4 : 0.05;
+      const y = sample(h, x, x, 0, 0, 0, 0, 8, 5, 0, attackMs, 0, 250, SR, 1, 1);
+      peak = Math.max(peak, Math.abs(y));
+    }
+    destroy(h);
+    return peak;
+  };
+  const fast = runSpike(2);
+  const slow = runSpike(20);
+  if (fast > 1 + 1e-9) throw new Error(`attack 2 ms < look-ahead 5 ms: peak ${fast} exceeds 0 dB`);
+  if (!(slow > 1.05)) throw new Error(`attack 20 ms > look-ahead 5 ms: expected the spike to poke through, peak ${slow}`);
+  console.log(`ok attack vs look-ahead: 2 ms peak ${fast.toFixed(4)} (<= 0 dB), 20 ms peak ${slow.toFixed(4)} (pokes through)`);
+}
 console.log("pump limiter hold smoke ok");
 

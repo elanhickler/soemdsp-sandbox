@@ -31,6 +31,12 @@ const kDestroy = must("soemdsp_robin_sinepulse_destroy");
 const kSample = must("soemdsp_robin_sinepulse_sample");
 const kEnv = must("soemdsp_robin_sinepulse_env");
 const kUnit = must("soemdsp_robin_sinepulse_unit");
+// 0–1 reference: u = ln(f/L)/ln(H/L), L = max(Low, 20 Hz), clamped 0..1.
+function unitRef(f, hi, lo) {
+  const L = Math.max(lo, 20);
+  if (!(hi > L) || !(f > L)) return 0;
+  return Math.min(1, Math.log(f / L) / Math.log(hi / L));
+}
 const kFreq = must("soemdsp_robin_sinepulse_freq");
 const kIdle = must("soemdsp_robin_sinepulse_is_idle");
 const SR = 48000;
@@ -57,8 +63,7 @@ function step(h, trig, p = DEF) {
     const [k, env, unit, freq] = step(h, 0);
     peakK = Math.max(peakK, Math.abs(k));
     if (Math.abs(k) > env + 1e-12) throw new Error("|Kick| > Env");
-    const span = 10000;
-    const expect = Math.max(0, Math.min(1, freq / span));
+    const expect = unitRef(freq, 10000, 0);
     if (Math.abs(unit - expect) > 1e-9) throw new Error(`0–1 ${unit} != sweep position ${expect}`);
     if (env === 0 && zeroAt < 0) zeroAt = n;
     if (zeroAt >= 0 && (env !== 0 || k !== 0)) throw new Error("Env/Kick not exact 0 at rest");
@@ -181,7 +186,7 @@ function runGraph({ wave = 0, waveShape = 0, blocks = 750 } = {}) {
   let peakEnv = 0;
   for (let n = 0; n < a.env.length; n++) {
     if (!(a.env[n] >= 0 && a.env[n] <= 1)) throw new Error(`0–1 output ${a.env[n]} outside 0..1`);
-    const expect = Math.max(0, Math.min(1, a.freq[n] / 10000));
+    const expect = unitRef(a.freq[n], 10000, 0);
     if (Math.abs(a.env[n] - expect) > 1e-6) throw new Error(`0–1 ${a.env[n]} != ƒ position ${expect} at ${n}`);
     peakEnv = Math.max(peakEnv, a.env[n]);
   }

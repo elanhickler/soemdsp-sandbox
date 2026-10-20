@@ -85,6 +85,15 @@
       "folder": "demo_patches"
     },
     {
+      "slug": "demo_patches/little_t",
+      "label": "little_t",
+      "name": "",
+      "url": "/soemdsp-sandbox/patches/demo_patches/little_t.json",
+      "author": "",
+      "emoji": "",
+      "folder": "demo_patches"
+    },
+    {
       "slug": "demo_patches/ping_vs_pluck",
       "label": "ping_vs_pluck",
       "name": "",
@@ -699,6 +708,14 @@
       "label": "linear_env_vactrol",
       "name": "",
       "url": "/soemdsp-sandbox/patches/linear_env_vactrol.json",
+      "author": "",
+      "emoji": ""
+    },
+    {
+      "slug": "little_t",
+      "label": "little_t",
+      "name": "",
+      "url": "/soemdsp-sandbox/patches/demo_patches/little_t.json",
       "author": "",
       "emoji": ""
     },

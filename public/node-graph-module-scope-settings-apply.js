@@ -379,6 +379,10 @@ function assignNodeGraphTypedDisplaySettingsToNode(node, displayType, settings) 
     }
     return node.traceDisplaySettings;
   }
+  if (displayType === "torchFace") {
+    node.traceDisplaySettings = normalizeNodeGraphTorchFaceSettings(settings);
+    return node.traceDisplaySettings;
+  }
   return null;
 }
 

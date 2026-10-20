@@ -186,6 +186,10 @@ Only these live-audio types exist in the efficient build:
 | `crossover4` | Stereo Linkwitz–Riley 4-way crossover |
 | `crossover5` | Stereo Linkwitz–Riley 5-way crossover |
 | `crossover6` | Stereo Linkwitz–Riley 6-way crossover |
+| `electroSnare` | Electro Snare: snare voice, Algorithm 808 / 909 / Simmons / Modal / FM (docs/SNARE_PLAN.md; Trigger + Reset → Snare L / Snare R / Env) |
+| `electroHat` | Electro Hat: hi-hat voice, Algorithm 808 / 606 / FM / Noise, Closed / Open choke (docs/DRUM_PACK_PLAN.md; Trigger (Closed) + Open + Reset → Hat L / Hat R / Env) |
+| `electroTom` | Electro Tom: tom voice, Algorithm 808 / 909 / Simmons (docs/DRUM_PACK_PLAN.md; Trigger + Reset → Tom L / Tom R / Env) |
+| `electroKick` | Electro Kick: classic machine kick, Algorithm 808 / 909 / Simmons (docs/DRUM_PACK_PLAN.md; Trigger + Reset → Kick L / Kick R / Env) |
 | `robinSinepulse` | Robin Sinepulse: sweep kick (port of Robin Schmidt's SweepKicker, RS-MET; Trigger → Kick / Env) |
 | `robinSinepulseAllpass` | Robin Sinepulse Allpass: 0–256 allpass zap / disperser (port of Robin Schmidt's FlatZapper, RS-MET; Trigger + In → Out) |
 | `output` | Sink (unique per patch, deletable; returns via Undo or the Output button) |
@@ -414,6 +418,16 @@ Plan and tracker: `docs/ENGINE_STATE_DISPLAY_PLAN.md`.
 
 ---
 
+## 10b. Unused code is removed regardless of ownership (Argi, 2026-10-18)
+
+**Unused code is removed no matter which agent owns the file.** Ownership (including BugsFix-owned files) is not a reason to keep dead code.
+
+- If a path, helper, branch, face, or export is unused, **delete it** — even when another agent “owns” that file.
+- Do **not** leave dead code “for the owner,” “until BugsFix touches it,” or “in case someone still needs it.” Ownership tracks who edits live code; it does not protect unused code.
+- Same spirit as §1 (no legacy helpers) and §10 (prefer delete over soft recovery): one path, no compatibility fossils.
+
+---
+
 ## 11. Naming
 
 - **No `inc` jacks.** Phase increment (cycles/sample) is internal (`ƒ / sr`). User-facing pitch rate is **ƒ** (Hz). Patches store `f`.
@@ -616,6 +630,7 @@ First consumers: Music Player, fbmField, Instant Waterfall compositor, RoundShap
 | Edit `library/include/soemdsp` without Architect OK | **No** — propose first (§19) |
 | Stack color widgets one per line, or put 5+ in one row | **No** — rows of 2 to 4 (§21) |
 | Auto-spawn / ensure Output or Input on load, Play, or anywhere but its lower-bar button turning on | **No** — deletable; Undo or its button only; settings live in `ioModuleSettings` |
+| Leave unused / dead code because another agent owns the file (incl. BugsFix) | **No** — remove unused code regardless of ownership (§10b) |
 
 ---
 

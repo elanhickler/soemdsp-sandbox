@@ -136,7 +136,7 @@
       const x = pad + i * cw + gap * 0.5;
       const bw = Math.max(1, cw - gap);
       nodeGraphGlLinesRect(batch, x, top, bw, cellH, CELL);
-      if (g > 0.002) {
+      if (g > 0) {
         const fh = cellH * g;
         const fill = mixRgb([0.16, 0.2, 0.24], hue, 0.35 + 0.65 * g);
         nodeGraphGlLinesRect(batch, x, top + cellH - fh, bw, fh, fill);

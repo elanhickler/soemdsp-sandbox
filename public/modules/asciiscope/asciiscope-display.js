@@ -240,7 +240,7 @@ function matrixResidualKeep(trail) {
  * energy-GL drawers — one apply per display frame. No kill floor: that
  * erased the dim Ghost hang (long + dim). Brightness is present-only.
  */
-function matrixDecayEnergy(state, params, _dtSec = 1 / 60) {
+function matrixDecayEnergy(state, params, dtSec = 1 / 60) {
   if (params.freeze) return;
   const Residual = typeof PhosphorResidual !== "undefined" ? PhosphorResidual : null;
   if (!Residual?.applyResidual) {
@@ -249,10 +249,12 @@ function matrixDecayEnergy(state, params, _dtSec = 1 / 60) {
   const trail = Number(params.trail);
   const t = Number.isFinite(trail) ? Math.max(0, Math.min(1, trail)) : (Residual.DEFAULT_TRAIL ?? 0.5);
   const ghostAmt = Math.max(0, Math.min(1, nodeGraphFiniteNumber(params.ghost)));
+  // Elapsed 60 fps frames: same decay time at any display rate.
+  const frames = Math.max(0, Math.min(4, nodeGraphFiniteNumber(dtSec, 1 / 60) * 60));
   const e = state.energy;
   for (let i = 0; i < e.length; i += 1) {
     if (e[i] <= 0) continue;
-    e[i] = Residual.applyResidual(e[i], t, ghostAmt);
+    e[i] = Residual.applyResidual(e[i], t, ghostAmt, frames);
   }
 }
 

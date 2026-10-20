@@ -4,11 +4,14 @@
 //   Size -> Blur -> Bright -> Ghost -> Trail -> Scale -> Antialiasing -> Dot Budget
 //
 // Axes (SSOT; high = more of the named quality):
-//   Bright      -> peak deposit / present light
-//   Trail       -> main residual length (1 ~ freeze-ish hot path)
-//   Ghost       -> dim scorched floor hang (screen burn-in, still dies)
-//   Burn Amount -> deposit gain multiplier vs Bright for residual (default 1)
-//   (sticky Burn / frozen-pixel floor stays removed)
+//   Bright      -> peak deposit / live light
+//   Trail       -> decay rate of bright residual (1 = freeze)
+//   Ghost       -> decay curve of the dim tail: as stored light dims its fade
+//                  eases from the Trail rate toward the (slower) Ghost rate.
+//                  Ghost only changes how fast stored light fades from now
+//                  on. No floor, no cap, no gain: it still fades to black.
+//   Burn Amount -> deposit gain multiplier vs Bright for new residual (default 1)
+//   Background  -> only the display's Background Brightness (not here).
 //
 // Used by energy-GL, drawer, matrix, asciiscope.
 
@@ -17,6 +20,16 @@
   const DEFAULT_GHOST = 0.25;
   const DEFAULT_BURN_AMOUNT = 1;
   const BURN_AMOUNT_MAX = 4;
+  // Ghost -> dim-tail time constant, continuous from 0: tau = MAX * g^2
+  // (g 0 = no tail, 0.001 = 60 us, 0.01 = 6 ms, 0.1 = 0.6 s, 0.5 = 15 s,
+  // 1 = 60 s). Added to the Trail time constant, so Ghost only lengthens.
+  const GHOST_TAIL_MAX_S = 60;
+  // DestFade ghost layer (Trace): same curve, its own (shorter) scale.
+  const DEST_GHOST_MAX_S = 3.3;
+  // Decay knee: keep = mix(keepSlow, keepFast, e^KNEE). Bright energy fades at
+  // the Trail rate; once dimmer it eases (smoothly, no threshold) onto the
+  // Ghost rate. A linear weight (e^1) made every Ghost reach 10% in ~0.6 s.
+  const RESIDUAL_KNEE_POWER = 12;
 
   function clamp01(value, fallback = 0) {
     return globalThis.SoemMath.clamp01(value, fallback);
@@ -28,10 +41,9 @@
   function trailFadeAmount(trail) {
     const t = clamp01(trail, DEFAULT_TRAIL);
     const d = 1 - t;
-    if (d <= 0.001) {
-      return 0;
-    }
-    return Math.max(0.006, Math.min(0.55, 0.006 + d * 0.11 + d * d * 0.32));
+    // Continuous to 0 at Trail 1 (freeze): the old 0.006 floor made Trail
+    // 0.999 a ~3 s hang and Trail 1 infinite.
+    return Math.min(0.55, d * 0.11 + d * d * 0.32 + 0.006 * (1 - Math.exp(-d / 0.02)));
   }
 
   /** keepFast from Trail (hot path). */
@@ -39,76 +51,97 @@
     return Math.max(0, 1 - trailFadeAmount(trail));
   }
 
+  /** Ghost dim-tail time constant in seconds (0 at Ghost 0). */
+  function ghostTailSeconds(ghost) {
+    const g = clamp01(ghost, 0);
+    return GHOST_TAIL_MAX_S * g * g;
+  }
+
+  /** Per-60fps-frame keep -> time constant (s), and back. */
+  function keepToSeconds(keep) {
+    const k = clamp01(keep, 0);
+    if (k >= 1) return Infinity;
+    if (!(k > 0)) return 0;
+    return -1 / (60 * Math.log(k));
+  }
+  function secondsToKeep(tau) {
+    if (!(tau > 0)) return 0;
+    if (!Number.isFinite(tau)) return 1;
+    return Math.exp(-1 / (60 * tau));
+  }
+
   /**
-   * keepSlow for Ghost floor (energy-GL dual path). Mid ghost already
-   * multi-second hang @60fps -- correct for energy residual, too sticky when
-   * reused as a DestFade plate wipe (see destFadeAmount).
+   * keepSlow (dim tail) for Ghost: tau = tau(baseKeep) + ghostTailSeconds.
+   * Ghost 0 = baseKeep exactly (no tail); rises smoothly, no switch.
    */
   function ghostKeep(ghost, baseKeep) {
-    const g = clamp01(ghost, 0);
     const k = clamp01(baseKeep, 0);
-    if (g <= 0.001) {
-      return k;
-    }
-    const fade = Math.pow(1 - g, 2.8) * 0.012;
-    const slow = 1 - Math.max(0.00025, fade);
-    return Math.min(0.99975, Math.max(k, slow));
+    return Math.max(k, secondsToKeep(keepToSeconds(k) + ghostTailSeconds(ghost)));
   }
 
   /**
    * Trail-only plate wipe for DestFade hot path. Ghost is a separate dim
-   * scorch layer (destGhostEraseAmount / deposit / present) -- mixing Ghost
-   * into this erase made Ghost feel identical to Trail.
+   * scorch layer (destGhostEraseAmount) -- mixing Ghost into this erase made
+   * Ghost feel identical to Trail.
    */
   function destFadeAmount(trail, _ghost = 0) {
-    const trailErase = trailFadeAmount(trail);
-    if (!(trailErase > 0)) {
-      return 0; // Trail ~ freeze
-    }
-    return Math.max(0.002, Math.min(0.55, trailErase));
+    return trailFadeAmount(trail);
   }
 
   /**
-   * Ghost-layer erase/frame (independent of Trail). Continuous from 0.
-   * Faster than the old feedback-inflated fog -- mid ~ 0.02 erase @60fps.
+   * Ghost-layer erase/frame (independent of Trail). Continuous from 0:
+   * Ghost 0 erases everything at once (no layer), tau = 3.3 s * g^2.
    */
   function destGhostEraseAmount(ghost) {
     const g = clamp01(ghost, 0);
-    return 0.005 + 0.07 * Math.pow(1 - g, 2.8);
-  }
-
-  /** How much of the hot image scorches into the Ghost layer each frame. */
-  function destGhostDeposit(ghost) {
-    const g = clamp01(ghost, 0);
-    // Modest pickup -- full-frame re-deposit of hot trails; keep below fog.
-    return g * 0.05 + g * g * 0.08;
-  }
-
-  /** Dim floor ceiling (readable scorch, never full peak). */
-  function ghostCap(ghost) {
-    const g = clamp01(ghost, 0);
-    return g * 0.1 + g * g * 0.22;
-  }
-
-  /** Present gain when blitting the Ghost scorch onto the hot face. */
-  function destGhostPresent(ghost) {
-    return ghostCap(ghost);
+    return 1 - secondsToKeep(DEST_GHOST_MAX_S * g * g);
   }
 
   /**
-   * One-frame residual: Trail hot path + Ghost dim floor.
+   * Keep factor (per 60 fps frame) for one stored energy level. Full energy
+   * keeps at the Trail rate; dimmer energy eases toward the Ghost tail rate.
+   * GPU steps use the same mix(keepSlow, keepFast, clamp(e, 0, 1)^KNEE).
    */
-  function applyResidual(energy01, trail, ghost = 0) {
+  function residualKeepAt(energy01, keepFast, keepSlow) {
+    const kf = clamp01(keepFast, 0);
+    const ks = Math.max(kf, clamp01(keepSlow, 0));
+    const level = Math.max(0, Math.min(1, nodeGraphFiniteNumber(energy01)));
+    return ks + (kf - ks) * Math.pow(level, RESIDUAL_KNEE_POWER);
+  }
+
+  /**
+   * Residual step: stored energy times the decay keep, over `frames` 60 fps
+   * frames (pass elapsed time so decay time is frame-rate independent).
+   * Never raises energy; Ghost/Trail only set the rate.
+   */
+  function applyResidual(energy01, trail, ghost = 0, frames = 1) {
     const e = Math.max(0, nodeGraphFiniteNumber(energy01));
-    const keepFast = trailKeep(trail);
-    const g = clamp01(ghost, 0);
-    if (g <= 0.001) {
-      return e * keepFast;
+    if (!(e > 0)) {
+      return 0;
     }
-    const keepSlow = ghostKeep(g, keepFast);
-    const eFast = e * keepFast;
-    const eGhost = Math.min(e * keepSlow, ghostCap(g));
-    return Math.max(eFast, eGhost);
+    const keepFast = trailKeep(trail);
+    if (keepFast >= 1) {
+      return e; // Trail freeze
+    }
+    const keep = residualKeepAt(e, keepFast, ghostKeep(ghost, keepFast));
+    const f = Math.max(0, Number.isFinite(Number(frames)) ? Number(frames) : 1);
+    return e * Math.pow(keep, f);
+  }
+
+  /**
+   * 60 fps frames since holder[key] was last stepped, capped at 4 so a
+   * stall fades a few frames, not the whole burn. First call = 1 frame.
+   */
+  function stepFrames(holder, key = "residualStepMs") {
+    const now = typeof performance !== "undefined" ? performance.now() : Date.now();
+    const last = holder ? Number(holder[key]) : 0;
+    if (holder) {
+      holder[key] = now;
+    }
+    if (!(last > 0)) {
+      return 1;
+    }
+    return Math.max(0, Math.min(4, (now - last) * 0.06));
   }
 
   /**
@@ -133,21 +166,16 @@
 
   /** Sleep frame budget so ghost hang is not killed early. */
   function residualSleepFrames(ghost) {
-    const g = clamp01(ghost, 0);
-    if (g <= 0.001) {
-      return 240;
-    }
-    return Math.round(1800 + g * g * 12000);
+    // 240 frames plus ~7 tail time constants (dim tail down to ~1e-3).
+    return Math.round(240 + 60 * 7 * ghostTailSeconds(ghost));
   }
 
   function residualKeeps(trail, ghost = 0, burnAmount = 1) {
     const keepFast = trailKeep(trail);
     const keepSlow = ghostKeep(ghost, keepFast);
-    const cap = ghostCap(ghost);
     return {
       keepFast,
       keepSlow,
-      ghostCap: cap,
       fade: trailFadeAmount(trail),
       keep: keepFast,
       trail: clamp01(trail, DEFAULT_TRAIL),
@@ -190,12 +218,16 @@
     trailFadeAmount,
     trailKeep,
     ghostKeep,
+    ghostTailSeconds,
+    keepToSeconds,
+    secondsToKeep,
+    GHOST_TAIL_MAX_S,
+    RESIDUAL_KNEE_POWER,
     destFadeAmount,
     destGhostEraseAmount,
-    destGhostDeposit,
-    destGhostPresent,
-    ghostCap,
     applyResidual,
+    residualKeepAt,
+    stepFrames,
     residualKeeps,
     migrateTrail,
     migrateGhost,

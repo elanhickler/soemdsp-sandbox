@@ -6,6 +6,8 @@
 // Every frame is one WebGL texture on the shared picture device, uploaded once
 // per image load; frames share one pixel grid (the largest frame) and each is
 // centred in it, so trimmed and padded frames line up.
+// Hue (Display Settings torchHue, 0..1 cycle, clamped) rotates the final colour in HSL;
+// 0 skips the rotation so the image is bit-identical, greys stay grey.
 
 (function initNodeGraphTorchFace(global) {
   const IMAGE_TOKEN = "torch-0123-20261019";
@@ -41,6 +43,7 @@
 
   const FS = `
     precision mediump float;
+${SoemGl.GLSL_HSL}
     varying vec2 vUv;
     uniform sampler2D uA;
     uniform sampler2D uB;
@@ -49,6 +52,7 @@
     uniform vec2 uSizeA; // frame A size in pixels (centred in the grid)
     uniform vec2 uSizeB;
     uniform float uMix;  // 0 = frame A, 1 = frame B
+    uniform float uHue;  // hue rotation, cycles (0 = off)
     vec4 frame(sampler2D tex, vec2 gridPx, vec2 size) {
       vec2 uv = (gridPx - (uGrid - size) * 0.5) / size;
       if (uv.x < 0.0 || uv.y < 0.0 || uv.x > 1.0 || uv.y > 1.0) return vec4(0.0);
@@ -64,7 +68,13 @@
       vec4 a = frame(uA, gridPx, uSizeA);
       vec4 b = frame(uB, gridPx, uSizeB);
       // Each frame over the black plate, then a linear mix between them.
-      gl_FragColor = vec4(mix(a.rgb * a.a, b.rgb * b.a, uMix), 1.0);
+      vec3 c = mix(a.rgb * a.a, b.rgb * b.a, uMix);
+      if (uHue != 0.0) {
+        vec3 hsl = soemRgbToHsl(c);
+        hsl.x = fract(hsl.x + uHue);
+        c = soemHslToRgb(hsl);
+      }
+      gl_FragColor = vec4(c, 1.0);
     }
   `;
 
@@ -93,6 +103,7 @@
       uSizeA: u("uSizeA"),
       uSizeB: u("uSizeB"),
       uMix: u("uMix"),
+      uHue: u("uHue"),
       frames: FRAME_FILES.map(() => null),
     };
     return kit;
@@ -131,39 +142,53 @@
     return true;
   }
 
-  function latestInput(nodeId, port) {
+  function inputRing(nodeId, port) {
     const buffer = typeof nodeGraphModuleScopeState !== "undefined"
       ? nodeGraphModuleScopeState?.buffers?.get?.(`${nodeId}:${port}`)
       : null;
-    if (!buffer?.length) return null;
-    for (let i = buffer.length - 1; i >= 0; i -= 1) {
-      const v = Number(buffer[i]);
-      if (Number.isFinite(v)) return v;
-    }
-    return null;
+    return buffer?.length ? buffer : null;
   }
 
   /**
-   * Open (0..1) from the A/D input rings with the engine's lone-t law
-   * (graph_engine.cpp, process_transistor, lastIndex 0): Digital > 0 opens
-   * fully, Analog opens by clamp(A, 0, 1); the larger wins.
+   * Open (0..1) from the buffered A/D input rings, once per drawn frame, the
+   * Clock Blink way: the window is this frame's new samples
+   * (nodeGraphScopeFrameSampleStart) and Open is their peak (max), so fast
+   * signals light the torch as brightly as slow ones (a mean dimmed them:
+   * a 200 Hz sine averaged to ~1/pi of its crest). Per sample the
+   * engine's lone-t law (graph_engine.cpp, process_transistor, lastIndex 0):
+   * Digital > 0 opens fully, Analog opens by clamp(A, 0, 1); the larger wins.
    */
-  function nodeGraphTorchFaceOpenFromInputs(nodeId) {
+  function nodeGraphTorchFaceOpenFromInputs(nodeId, holder) {
     if (!nodeId || typeof nodeGraphModuleScopeConnectionsTo !== "function") return null;
     const hasAnalog = nodeGraphModuleScopeConnectionsTo(nodeId, "Analog").length > 0;
     const hasDigital = nodeGraphModuleScopeConnectionsTo(nodeId, "Digital").length > 0;
     if (!hasAnalog && !hasDigital) return null;
-    const a = hasAnalog ? latestInput(nodeId, "Analog") : 0;
-    const d = hasDigital ? latestInput(nodeId, "Digital") : 0;
-    if (a == null && d == null) return null;
-    const analog = Math.max(0, Math.min(1, Number(a) || 0));
-    const digital = Number(d) > 0 ? 1 : 0;
-    return Math.max(analog, digital);
+    const a = hasAnalog ? inputRing(nodeId, "Analog") : null;
+    const d = hasDigital ? inputRing(nodeId, "Digital") : null;
+    const lead = a || d;
+    if (!lead) return null;
+    const start = nodeGraphScopeFrameSampleStart(lead, holder, "_torchFaceOpenAbs");
+    let n = lead.length - start;
+    if (a) n = Math.min(n, a.length);
+    if (d) n = Math.min(n, d.length);
+    let peak = 0;
+    let count = 0;
+    for (let k = 0; k < n; k += 1) {
+      const av = a ? Number(a[a.length - n + k]) : 0;
+      const dv = d ? Number(d[d.length - n + k]) : 0;
+      if (!Number.isFinite(av) && !Number.isFinite(dv)) continue;
+      const analog = Number.isFinite(av) ? Math.max(0, Math.min(1, av)) : 0;
+      const digital = dv > 0 ? 1 : 0;
+      // Unipolar law (clamp(A, 0, 1)): the peak of the value, not |A|.
+      peak = Math.max(peak, analog, digital);
+      count += 1;
+    }
+    return count > 0 ? peak : null;
   }
 
-  /** Latest Open (0..1) for the face. */
+  /** This frame's Open (0..1) for the face. */
   function nodeGraphTorchFaceOpen(item) {
-    const fromInputs = nodeGraphTorchFaceOpenFromInputs(item?.slot?.nodeId);
+    const fromInputs = nodeGraphTorchFaceOpenFromInputs(item?.slot?.nodeId, item?.screenElement || item?.slot?.scopeElement);
     if (fromInputs != null) return fromInputs;
     const buffer = item?.buffer;
     let value = null;
@@ -181,6 +206,19 @@
     }
     const n = Number(value);
     return Number.isFinite(n) ? Math.max(0, Math.min(1, n)) : 0;
+  }
+
+  /** Display Settings bag for the Torch face: { torchHue: 0..1 cycle }. */
+  function normalizeNodeGraphTorchFaceSettings(settings = {}) {
+    const n = Number(settings && typeof settings === "object" ? settings.torchHue : Number.NaN);
+    return { torchHue: Number.isFinite(n) ? Math.max(0, Math.min(1, n)) : 0 };
+  }
+
+  /** Torch hue shift (0..1 cycle) from the node's Display Settings. */
+  function nodeGraphTorchFaceHue(item) {
+    const node = item?.node
+      || (typeof nodeGraphModuleScopeNodeForSlot === "function" ? nodeGraphModuleScopeNodeForSlot(item?.slot) : null);
+    return normalizeNodeGraphTorchFaceSettings(node?.traceDisplaySettings).torchHue;
   }
 
   // Paint into the module's own face canvas (same as the crossfade face): the
@@ -284,6 +322,7 @@
     gl.uniform2f(k.uSizeA, fa.w, fa.h);
     gl.uniform2f(k.uSizeB, fb.w, fb.h);
     gl.uniform1f(k.uMix, Math.max(0, Math.min(1, pos - ia)));
+    gl.uniform1f(k.uHue, nodeGraphTorchFaceHue(item));
     SoemGl.drawQuad(gl, k.aPos);
     gl.bindTexture(gl.TEXTURE_2D, null);
     gl.activeTexture(gl.TEXTURE0);
@@ -302,6 +341,8 @@
 
   global.drawNodeGraphTorchFaceItem = drawNodeGraphTorchFaceItem;
   global.nodeGraphTorchFaceOpen = nodeGraphTorchFaceOpen;
+  global.nodeGraphTorchFaceHue = nodeGraphTorchFaceHue;
+  global.normalizeNodeGraphTorchFaceSettings = normalizeNodeGraphTorchFaceSettings;
   if (typeof nodeGraphModuleScopeCustomRenderers === "object" && nodeGraphModuleScopeCustomRenderers) {
     nodeGraphModuleScopeCustomRenderers.torchFace = drawNodeGraphTorchFaceItem;
   }

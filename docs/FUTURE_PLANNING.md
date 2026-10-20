@@ -271,15 +271,19 @@ Built as Robin Sinepulse Allpass (`robinSinepulseAllpass`, type 206), committed.
 
 ## Electro Kick
 
-Seed only, not final; separate from Kick. Moved to `docs/KICK_PLAN.md` §Electro Kick (2026-10-18).
+Seed only, not final; separate from Kick. Moved to `docs/KICK_PLAN.md` §Electro Kick (2026-10-18). Planned (2026-10-19): `docs/DRUM_PACK_PLAN.md`.
 
 ## Electro Hat
 
-Seed only, not final. Moved to `docs/SNARE_PLAN.md` §Electro Hat (2026-10-18).
+Seed only, not final. Moved to `docs/SNARE_PLAN.md` §Electro Hat (2026-10-18). Planned (2026-10-19): `docs/DRUM_PACK_PLAN.md`.
 
 ## Electro Tom
 
-Seed only, not final. Moved to `docs/SNARE_PLAN.md` §Electro Tom (2026-10-18).
+Seed only, not final. Moved to `docs/SNARE_PLAN.md` §Electro Tom (2026-10-18). Planned (2026-10-19): `docs/DRUM_PACK_PLAN.md`.
+
+## Stereo (module)
+
+Seed only, not final (Argi, 2026-10-19, from the drum pack plan). A separate stereo module (width / spread processing) so drum modules such as Electro Hat need no Stereo Spread knob; their stereo comes only from per-channel noise. Behaviour, params and ports not specified yet. Native C++ only. Context: `docs/DRUM_PACK_PLAN.md` (Q6).
 
 ## Softpop Oscillator (pure tone ↔ noise)
 

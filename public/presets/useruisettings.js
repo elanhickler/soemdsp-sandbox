@@ -239,7 +239,6 @@
         "rgbaHsla",
         "screenSpaceShader",
         "waveguide",
-        "electroHat",
         "flexGrid",
         "drummer",
         "ePiano",

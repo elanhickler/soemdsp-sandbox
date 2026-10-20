@@ -197,7 +197,34 @@
       return unionClientRect(jackRect, labelRect);
     }
 
+    function pointInEndpointJackCircle(endpoint, clientX, clientY) {
+      if (!endpoint || typeof nodeGraphClientToZoomSurfacePoint !== "function") return false;
+      const world = nodeGraphClientToZoomSurfacePoint(clientX, clientY);
+      if (!world || !Number.isFinite(world.x) || !Number.isFinite(world.y)) return false;
+      const portName = endpoint.port || endpoint.param || endpoint.graphInput || "";
+      let center = null;
+      if (endpoint.io === "modulation" && typeof nodeGraphModulationPortCenter === "function") {
+        center = nodeGraphModulationPortCenter(endpoint.node, endpoint.param || portName);
+      } else if (endpoint.io === "graph" && typeof nodeGraphGraphInputPortCenter === "function") {
+        center = nodeGraphGraphInputPortCenter(endpoint.node, endpoint.graphInput || portName);
+      } else if (typeof nodeGraphPortCenter === "function") {
+        center = nodeGraphPortCenter(endpoint.node, portName, endpoint.io);
+      }
+      if (!center || !Number.isFinite(center.x) || !Number.isFinite(center.y)) return false;
+      const radius = typeof nodeGraphJackHitRadiusPx === "function" ? nodeGraphJackHitRadiusPx() : 8;
+      const dx = world.x - center.x;
+      const dy = world.y - center.y;
+      const square = typeof nodeGraphWireJackIsSquare === "function"
+        && nodeGraphWireJackIsSquare(endpoint.node, portName, endpoint.io);
+      const dist = square ? Math.max(Math.abs(dx), Math.abs(dy)) : Math.hypot(dx, dy);
+      return dist <= radius;
+    }
+
     function pointInEndpointHitbox(endpoint, clientX, clientY, hitboxElement = null) {
+      // The painted jack is the full disk on the wall. The HTML port box is
+      // only the inward half and sits off that center, so a click on the
+      // outside semicircle used to miss.
+      if (pointInEndpointJackCircle(endpoint, clientX, clientY)) return true;
       const rect = endpointHitboxClientRect(endpoint, hitboxElement);
       if (!rect) {
         return false;

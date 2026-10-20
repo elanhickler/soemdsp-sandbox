@@ -1949,6 +1949,12 @@ function buildNodeGraphDisplaySettingsBodyHtml(formType, node = null) {
       nodeGraphDisplaySettingsBuildStepperRowHtml("cloudSpeed", "ensembleCloud")
     }</div>`;
   }
+  // Lone t Torch face: one Hue row (0..1 cycle).
+  if (type === "torchFace") {
+    return `<div class="metadata-field-section node-trace-display-trace-section">${
+      nodeGraphDisplaySettingsBuildStepperRowHtml("torchHue", "torchFace")
+    }</div>`;
+  }
   if (type === "softpopFace" && typeof buildNodeGraphSoftpopDisplaySettingsBodyHtml === "function") {
     return buildNodeGraphSoftpopDisplaySettingsBodyHtml();
   }

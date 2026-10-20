@@ -664,7 +664,12 @@ function nodeGraphLayoutCanvasOpen(mode = "perform", options = {}) {
     // Embed waits for Play on the module. Starting AudioContext here has no
     // user gesture, so Chrome suspends it and later Play stays silent.
     const embed = document.documentElement.classList.contains("soemdsp-embed");
-    if (!embed) {
+    // Auto-start only on a performance page (perform.html, ?mode/view=perform:
+    // perform-boot sets soemdspPerformPage) or the phone canvas, which have no
+    // transport controls. In a normal session, entering the view never plays.
+    const performPage = globalThis.soemdspPerformPage === true
+      || globalThis.soemdspMobileCanvasMode === true;
+    if (!embed && performPage) {
       if (typeof nodeGraphTransportHandleAction === "function") {
         nodeGraphTransportHandleAction("play");
       } else if (typeof nodeGraphExternalStartLiveOutput === "function") {

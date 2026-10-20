@@ -889,6 +889,9 @@ const nodeGraphTraceDisplayFormTypeValueClampOverrides = Object.freeze({
   sinCos4Face: Object.freeze({
     backgroundBrightness: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value), 0, 1),
   }),
+  torchFace: Object.freeze({
+    torchHue: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value), 0, 1),
+  }),
   // Instant Waterfall: Bright/Blur (filled bars); Size legacy only.
   // Column Detail is the shared `detail` clamp (not the removed phosphor Detail).
   waterfall: Object.freeze({

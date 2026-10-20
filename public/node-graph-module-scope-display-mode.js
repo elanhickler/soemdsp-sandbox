@@ -251,6 +251,8 @@ function nodeGraphModuleDisplayTypeHasLocalSettings(displayType) {
     "imageBurnFace",
     "videoFeedbackFace",
     "videoDelayFace",
+    "aberrationFace",
+    "screenBendFace",
     "keyboardControllerFace",
     // Knob module: macro dial colors, image layers, centered span, readout.
     "knobFace",
@@ -274,6 +276,8 @@ function nodeGraphModuleDisplayTypeHasLocalSettings(displayType) {
     "basicShapeFace",
     "softwaveOscFace",
     "sinCos4Face",
+    // Lone t Torch: hue shift of the torch pixels.
+    "torchFace",
     "harmonicCount",
     "harmonicLines",
     "additiveWaveform",

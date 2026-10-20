@@ -21,7 +21,8 @@
 //
 // Sandbox additions (docs/KICK_PLAN.md, Argi 2026-10-06; Reset removed 2026-10-06):
 //   - Decay: one-multiply T60 amplitude envelope e (scales Kick; not a jack).
-//   - 0–1 jack: sweep position of the same Hz as ƒ. High Freq is 1, Low Freq is 0.
+//   - 0–1 jack: log sweep position of the same Hz as ƒ:
+//     u = ln(f/L)/ln(H/L), L = max(Low, 20 Hz), clamped 0..1. High is 1.
 //   - Trigger only (gate_hit, height = velocity): latches High/Low/Sweep,
 //     zeroes the phase (Robin's hard-reset noteOn), restarts the sweep, and
 //     sets e = |height|. No Reset port.
@@ -41,6 +42,7 @@ static const double kLn2 = 0.6931471805599453;
 static const double kLn1000 = 6.907755278982137;  // T60: e falls by 1000 in `decay` s
 static const double kMinSweepTime = 1.0e-3;       // guard: sweepTime^p must stay > 0
 static const double kMinDecay = 1.0e-4;
+static const double kUnitFloorHz = 20.0;          // 0–1 jack log floor: L = max(Low, 20 Hz)
 
 // rsMorphWaveBipolar::WaveForm order.
 enum { kWaveSine = 0, kWaveSinFatSaw = 1, kWaveTriSaw = 2 };
@@ -210,12 +212,13 @@ extern "C" void soemdsp_robin_sinepulse_destroy(int handle) {
   gPool[handle - 1].active = false;
 }
 
-// 0–1 jack: position of freq along the latched High..Low span.
-// High is 1, Low is 0. A zero span (High == Low) is 1 after a hit, else 0.
-static double sweep_unit(double freq, double fHi, double fLo, bool swept) {
-  const double span = fHi - fLo;
-  if (!(span > 1.0e-12) && !(span < -1.0e-12)) return swept ? 1.0 : 0.0;
-  double u = (freq - fLo) / span;
+// 0–1 jack: log position of freq between the latched floor and High.
+// u = ln(f/L) / ln(H/L), L = max(Low, 20 Hz). High is 1, L and below are 0.
+// High <= L gives 0.
+static double sweep_unit(double freq, double fHi, double fLo) {
+  const double lo = maxd(fLo, kUnitFloorHz);
+  if (!(fHi > lo) || !(freq > lo)) return 0.0;
+  double u = dsp_ln(freq / lo) / dsp_ln(fHi / lo);
   if (u < 0.0) u = 0.0;
   if (u > 1.0) u = 1.0;
   return u;
@@ -262,7 +265,7 @@ extern "C" double soemdsp_robin_sinepulse_sample(
       s.unitOut = 0.0;
     } else {
       s.freqOut = s.instFreq;
-      s.unitOut = sweep_unit(s.freqOut, s.fHi, s.fLo, true);
+      s.unitOut = sweep_unit(s.freqOut, s.fHi, s.fLo);
     }
     return 0.0;
   }
@@ -281,7 +284,7 @@ extern "C" double soemdsp_robin_sinepulse_sample(
   if (s.dirty || ch != s.coeffChirp || sh != s.coeffShape) update_coeffs(s, ch, sh);
   s.sampleCount += 1.0;
   s.freqOut = s.instFreq;
-  s.unitOut = sweep_unit(s.freqOut, s.fHi, s.fLo, true);
+  s.unitOut = sweep_unit(s.freqOut, s.fHi, s.fLo);
   const double newFreq = inst_freq(s, s.sampleCount / sr);
   s.instPhase += (0.5 / sr) * (s.instFreq + newFreq);  // trapezoidal integration
   if (s.instPhase >= 1.0) s.instPhase -= 1.0;

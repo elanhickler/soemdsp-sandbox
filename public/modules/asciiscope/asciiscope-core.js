@@ -200,23 +200,30 @@ function matrixPhosphorDepositPeak(params = {}) {
   return Math.max(0, bright * Math.max(0, Math.min(4, amount)));
 }
 
-function matrixPhosphorResidualFromParams(p = {}, num) {
+/**
+ * Live (modulated) param value, clamped to the slider range [min, max].
+ * Reads the ghost-folded live domain value when a slider/modulation exists,
+ * else the stored param, else fallback.
+ */
+function matrixLiveParam(node, key, fallback, min, max) {
+  const stored = Number(node?.params?.[key]);
+  let v = Number.isFinite(stored) ? stored : fallback;
+  if (node && typeof nodeGraphFilterCurveLiveParam === "function") {
+    const live = Number(nodeGraphFilterCurveLiveParam(node, key, v));
+    if (Number.isFinite(live)) v = live;
+  }
+  return Math.max(min, Math.min(max, v));
+}
+
+/** Trail / Ghost (decay only) and Burn x (deposit gain), live + clamped. */
+function matrixPhosphorResidualFromParams(node) {
   const Residual = typeof PhosphorResidual !== "undefined" ? PhosphorResidual : null;
-  const trailFb = Residual?.DEFAULT_TRAIL ?? 0.5;
-  const ghostFb = Residual?.DEFAULT_GHOST ?? 0.45;
-  const amountFb = Residual?.DEFAULT_BURN_AMOUNT ?? 1;
-  const read = typeof num === "function"
-    ? num
-    : (key, fallback) => {
-      const v = Number(p[key]);
-      return Number.isFinite(v) ? v : fallback;
-    };
   return {
-    trail: Math.max(0, Math.min(1, read("trail", trailFb))),
-    ghost: Math.max(0, Math.min(1, read("ghost", ghostFb))),
-    burnAmount: Residual?.clampBurnAmount
-      ? Residual.clampBurnAmount(read("burnAmount", amountFb), amountFb)
-      : Math.max(0, Math.min(4, read("burnAmount", amountFb))),
+    trail: matrixLiveParam(node, "trail", Residual?.DEFAULT_TRAIL ?? 0.5, 0, 1),
+    ghost: matrixLiveParam(node, "ghost", Residual?.DEFAULT_GHOST ?? 0.45, 0, 1),
+    burnAmount: matrixLiveParam(
+      node, "burnAmount", Residual?.DEFAULT_BURN_AMOUNT ?? 1, 0, Residual?.BURN_AMOUNT_MAX ?? 4,
+    ),
   };
 }
 
@@ -604,10 +611,11 @@ function matrixWaterfallParamsFromNode(node) {
     speed: num("speed", 1),
     // Glyph flips per bin of travel (1 = once per bin; 0 = fixed for stream).
     charSpeed: Math.max(0, num("charSpeed", 1)),
-    ...matrixPhosphorResidualFromParams(p, num),
+    ...matrixPhosphorResidualFromParams(node),
     spawn,
     streamDeath,
-    brightness: Math.max(0, num("brightness", 1)),
+    backgroundBrightness: matrixLiveParam(node, "backgroundBrightness", 0, 0, 1),
+    brightness: matrixLiveParam(node, "brightness", 1, 0, 1),
     freeze: Math.round(num("freeze", 0)) > 0 ? 1 : 0,
   };
 }
@@ -634,11 +642,9 @@ function matrixPlateParamsFromNode(node) {
     stampY: grid.stampY,
     bufColumns: grid.bufColumns,
     bufRows: grid.bufRows,
-    ...matrixPhosphorResidualFromParams(p),
-    brightness: (() => {
-      const b = Number(p.brightness);
-      return Number.isFinite(b) ? Math.max(0, b) : 1;
-    })(),
+    ...matrixPhosphorResidualFromParams(node),
+    backgroundBrightness: matrixLiveParam(node, "backgroundBrightness", 0, 0, 1),
+    brightness: matrixLiveParam(node, "brightness", 1, 0, 1),
     freeze: Math.round(nodeGraphFiniteNumber(p.freeze)) > 0 ? 1 : 0,
   };
 }

@@ -128,7 +128,7 @@
         }
       }
       e *= max(uBrightness, 0.0);
-      if (e <= 0.001) discard;
+      if (e <= 0.0) discard;
       gl_FragColor = vec4(uColor * e, e);
     }
   `;
@@ -153,7 +153,7 @@
       vec4 o = traceMeet3(
         cov(texture2D(uA, vUv)), cov(texture2D(uB, vUv)), cov(texture2D(uC, vUv)),
         uColorA, uColorB, uColorC, uMeetAB, uMeetAC, uMeetBC, uMeetAll);
-      if (o.a <= 0.001) discard;
+      if (o.a <= 0.0) discard;
       gl_FragColor = o;
     }
   `;

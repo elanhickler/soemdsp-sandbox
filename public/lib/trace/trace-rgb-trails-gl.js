@@ -24,7 +24,7 @@
     uniform sampler2D uPrev;
     uniform float uKeepFast;
     uniform float uKeepSlow;
-    uniform float uGhostCap;
+    uniform float uFrames;
     uniform vec3 uPlate;
     void main() {
       vec3 prev = texture2D(uPrev, vUv).rgb;
@@ -32,10 +32,9 @@
       vec3 hot = max(prev - uPlate, 0.0);
       float keepFast = clamp(uKeepFast, 0.0, 1.0);
       float keepSlow = max(keepFast, clamp(uKeepSlow, 0.0, 0.9998));
-      float cap = max(uGhostCap, 0.0);
-      vec3 eFast = hot * keepFast;
-      vec3 eGhost = min(hot * keepSlow, vec3(cap));
-      vec3 e = max(eFast, eGhost);
+      // PhosphorResidual.residualKeepAt per channel; no floor or cap.
+      vec3 keep = mix(vec3(keepSlow), vec3(keepFast), pow(clamp(hot, 0.0, 1.0), vec3(12.0)));
+      vec3 e = hot * pow(keep, vec3(max(uFrames, 0.0)));
       gl_FragColor = vec4(uPlate + e, 1.0);
     }
   `;
@@ -103,29 +102,9 @@
   }
 
   function textureFormats(gl) {
-    if (gl._traceRgbTrailsFormats) return gl._traceRgbTrailsFormats;
-    const formats = [];
-    const halfFloat = gl.getExtension("OES_texture_half_float");
-    const colorBufferHalfFloat = gl.getExtension("EXT_color_buffer_half_float");
-    const halfFloatLinear = gl.getExtension("OES_texture_half_float_linear");
-    if (halfFloat && colorBufferHalfFloat) {
-      formats.push({
-        internal: gl.RGBA,
-        format: gl.RGBA,
-        type: halfFloat.HALF_FLOAT_OES,
-        filter: halfFloatLinear ? gl.LINEAR : gl.NEAREST,
-        label: "rgba16f",
-      });
-    }
-    formats.push({
-      internal: gl.RGBA,
-      format: gl.RGBA,
-      type: gl.UNSIGNED_BYTE,
-      filter: gl.LINEAR,
-      label: "rgba8",
-    });
-    gl._traceRgbTrailsFormats = formats;
-    return formats;
+    // WebGL2 float formats; the WebGL1 OES half-float extension is null on
+    // WebGL2, which left these trails rgba8 (sub-1/255 deposits lost).
+    return global.SoemGl.energyFormats(gl, { blend: true });
   }
 
   function createSurface(gl, w, h, fmt) {
@@ -172,7 +151,7 @@
         uPrev: gl.getUniformLocation(step, "uPrev"),
         uKeepFast: gl.getUniformLocation(step, "uKeepFast"),
         uKeepSlow: gl.getUniformLocation(step, "uKeepSlow"),
-        uGhostCap: gl.getUniformLocation(step, "uGhostCap"),
+        uFrames: gl.getUniformLocation(step, "uFrames"),
         uPlate: gl.getUniformLocation(step, "uPlate"),
       },
       copy: {
@@ -279,23 +258,11 @@
     state.write = t;
   }
 
-  function residualKeeps(trail, ghost) {
-    const Residual = global.PhosphorResidual;
-    if (Residual?.residualKeeps) return Residual.residualKeeps(trail, ghost);
-    const t = Math.max(0, Math.min(1, Number(trail) || 0.3));
-    const g = Math.max(0, Math.min(1, Number(ghost) || 0));
-    const fade = Math.max(0.006, Math.min(0.55, 0.006 + (1 - t) * 0.11 + (1 - t) * (1 - t) * 0.32));
-    const keepFast = Math.max(0, 1 - fade);
-    const keepSlow = g <= 0.001 ? keepFast : Math.min(0.99975, Math.max(keepFast, 1 - Math.pow(1 - g, 2.8) * 0.012));
-    const ghostCap = g * 0.1 + g * g * 0.22;
-    return { keepFast, keepSlow, ghostCap };
-  }
-
   function stepFade(host, trail, ghost, plateCss) {
     const state = host?.[KEY];
     if (!state?.alive) return false;
     const { gl, device } = { gl: state.device.gl, device: state.device };
-    const keeps = residualKeeps(trail, ghost);
+    const keeps = global.PhosphorResidual.residualKeeps(trail, ghost);
     const plate = hexToRgb01(plateCss);
     gl.bindFramebuffer(gl.FRAMEBUFFER, state.write.framebuffer);
     gl.viewport(0, 0, state.width, state.height);
@@ -307,7 +274,7 @@
     gl.uniform1i(device.step.uPrev, 0);
     gl.uniform1f(device.step.uKeepFast, keeps.keepFast);
     gl.uniform1f(device.step.uKeepSlow, keeps.keepSlow);
-    gl.uniform1f(device.step.uGhostCap, keeps.ghostCap);
+    gl.uniform1f(device.step.uFrames, global.PhosphorResidual.stepFrames(state));
     gl.uniform3f(device.step.uPlate, plate[0], plate[1], plate[2]);
     gl.drawArrays(gl.TRIANGLES, 0, 6);
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);

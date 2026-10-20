@@ -1,5 +1,6 @@
 // Smoke: Phase 3 Canvas2D -> shared WebGL2 ports (docs/WEBGL_DISPLAY_PLAN.md).
-// Wall Delay room, Matrix Display, RGB Picture draw through gl-line-renderer.js
+// Wall Delay room, RGB Picture draw through gl-line-renderer.js; Asciiscope is
+// GPU-only (shape gates here, GPU behaviour in probe_ghost_decay.mjs).
 // on a fake shared picture device; Ellipsoid goes through cycle-line-gl.js
 // (presenter stubbed: orbit tessellated once, dot rebuilt per frame).
 // Gates: GL draw happens, no 2D drawing on the face canvas, no canvas sizing
@@ -16,6 +17,9 @@ const gate = (ok, msg) => { console.log(`${ok ? "ok  " : "FAIL"} ${msg}`); if (!
 const glLog = { draws: 0, clear: null, tex: 0 };
 const fakeGl = new Proxy({
   isContextLost: () => false,
+  // Real WebGL returns numbers here; the text atlas sizes its sheet from
+  // MAX_TEXTURE_SIZE (an object made the sheet NaN wide: no text drawn).
+  getParameter: () => 4096,
   getShaderParameter: () => true,
   getProgramParameter: () => true,
   getAttribLocation: (_p, n) => ["position", "local", "segLen", "halfPx", "feather", "colour"].indexOf(n),
@@ -83,28 +87,6 @@ load("modules/wallDelay/wall-delay-room-display.js");
   glOn = true;
 }
 
-// ---- Matrix Display ---------------------------------------------------------
-ctx.MATRIX_DISPLAY_MAX_AGE = 32;
-ctx.matrixDisplayGlyphForAge = (_r, age) => (age > 2 ? "#" : " ");
-ctx.matrixDisplayColorForAge = (age) => `rgb(0,${Math.min(255, age * 8)},255)`;
-load("modules/matrixDisplay/matrix-display-display.js");
-{
-  const canvas = faceCanvas();
-  canvas.parentElement = {};
-  const ages = new Float32Array(8 * 4);
-  for (let i = 0; i < ages.length; i += 1) ages[i] = i;
-  glLog.draws = 0;
-  ctx.matrixDisplayDrawFace(canvas, { columns: 8, rows: 4, ages }, "#", { brightness: 1, blackFloor: 0 });
-  gate(glLog.draws > 0 && canvas.log.twoD === 0, `Matrix: glyphs drawn on GL (${glLog.draws} draws), no 2D fillText`);
-  gate(glLog.clear === "1,1,4,255", `Matrix: plate #010104 (got ${glLog.clear})`);
-  const cacheSize = vm.runInContext("matrixDisplayGlColourCache.size", ctx);
-  ctx.matrixDisplayDrawFace(canvas, { columns: 8, rows: 4, ages }, "#", { brightness: 1, blackFloor: 0 });
-  gate(vm.runInContext("matrixDisplayGlColourCache.size", ctx) === cacheSize && cacheSize > 0, "Matrix: colour cache reused across frames (no reparse)");
-  glLog.draws = 0;
-  ctx.matrixDisplayDrawFace(canvas, { columns: 8, rows: 4, ages }, "#", { brightness: 0 });
-  gate(glLog.clear === "1,1,4,255", "Matrix: brightness 0 = plate only");
-}
-
 // ---- RGB Picture -------------------------------------------------------------
 ctx.nodeGraphRgbPictureSettingsForNode = undefined;
 load("modules/rgbPicture/rgb-picture-display.js");
@@ -154,17 +136,6 @@ load("modules/rgbPicture/rgb-picture-display.js");
   gate(presents[0]?.bg === "#020609" && canvas.log.twoD === 0, "Ellipsoid: plate colour, no 2D drawing");
 }
 
-// ---- Matrix: all glyphs in one text draw (batched atlas run) ----------------
-{
-  const canvas = faceCanvas();
-  canvas.parentElement = {};
-  const ages = new Float32Array(8 * 4);
-  for (let i = 0; i < ages.length; i += 1) ages[i] = i;
-  glLog.draws = 0;
-  ctx.matrixDisplayDrawFace(canvas, { columns: 8, rows: 4, ages }, "#", { brightness: 1, blackFloor: 0 });
-  gate(glLog.draws === 1, `Matrix: one draw call for all glyphs (got ${glLog.draws})`);
-}
-
 // ---- RGB Shape: TraceDotSprite mask as a tinted, cached textured quad ---------
 {
   const spriteCanvas = { width: 41, height: 41 };
@@ -210,6 +181,33 @@ load("modules/rgbPicture/rgb-picture-display.js");
   gate(tris.length > 0 && area < 30 * 40 && area > 30 * 40 * 0.85, `Arp: first cell fill clipped by the rounded corner (area ${area.toFixed(1)})`);
   ctx.nodeGraphGlLinesTriangle = saveTri;
   vm.runInContext("nodeGraphGlLinesTriangle = globalThis.nodeGraphGlLinesTriangle", ctx);
+}
+
+// ---- Asciiscope (matrix-display-display.js): GPU phosphor -------------------
+// Real-GPU behaviour is gated in scripts/probe_ghost_decay.mjs; here: the
+// source is GPU-only (float ping-pong, deposit/decay/present passes, no
+// per-cell JS, no readback) and a non-WebGL2 device fails via
+// nodeGraphDisplayGlFailed instead of drawing in 2D.
+{
+  const src = moduleSrc("modules/matrixDisplay/matrix-display-display.js");
+  gate(/SoemGl\.energyTarget/.test(src) && /FS_STEP/.test(src) && /FS_PRESENT/.test(src) && /gl\.POINTS/.test(src),
+    "Asciiscope: float energy targets + point deposit + step + present passes");
+  gate(!/readPixels|\bages\b|fillText|nodeGraphGlLinesText/.test(src), "Asciiscope: no readback, no CPU age grid, no text batch");
+  let failedWhy = "";
+  const saved = { dev: ctx.nodeGraphSharedGlDevice, size: ctx.nodeGraphDisplayCanvasSize, failed: ctx.nodeGraphDisplayGlFailed };
+  ctx.WebGL2RenderingContext = class {};
+  ctx.nodeGraphSharedGlDevice = () => ({ gl: fakeGl, canvas: {} });
+  ctx.nodeGraphDisplayCanvasSize = () => ({ width: 400, height: 240 });
+  ctx.nodeGraphDisplayGlFailed = (_c, why) => { failedWhy = why; return false; };
+  load("lib/gl/soem-gl-util.js"); // shared dither GLSL used at load
+  load("modules/matrixDisplay/matrix-display-display.js");
+  const canvas = faceCanvas();
+  canvas.parentElement = {};
+  const drew = ctx.matrixDisplayDrawFace(canvas, "ascii-1", "#", { density: 0.5, brightness: 1, burnAmount: 1, backgroundBrightness: 0, trail: 0.5, ghost: 0.5 });
+  gate(drew === false && /WebGL2/.test(failedWhy) && canvas.log.twoD === 0, `Asciiscope: no WebGL2 -> nodeGraphDisplayGlFailed (${failedWhy})`);
+  ctx.nodeGraphSharedGlDevice = saved.dev;
+  ctx.nodeGraphDisplayCanvasSize = saved.size;
+  ctx.nodeGraphDisplayGlFailed = saved.failed;
 }
 
 if (failures) { console.error(`${failures} failure(s)`); process.exit(1); }

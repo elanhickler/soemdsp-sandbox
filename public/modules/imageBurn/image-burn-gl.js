@@ -225,57 +225,12 @@
     }
   `;
 
+  // Shared picker: RGBA32F first (16F rounds keep > ~0.9995 back to the same
+  // value, so high Hang stalled into a frozen floor), RGBA16F, rgba8 last.
+  // Deposit is prev+stamp in one pass, so no float blending is needed.
   function textureFormats(gl) {
     if (!gl) return [];
-    if (!gl._imageBurnTextureFormats) {
-      const halfFloat = gl.getExtension("OES_texture_half_float");
-      const halfFloatLinear = gl.getExtension("OES_texture_half_float_linear");
-      const colorBufferHalfFloat = gl.getExtension("EXT_color_buffer_half_float");
-      const floatTex = gl.getExtension("OES_texture_float");
-      const floatLinear = gl.getExtension("OES_texture_float_linear");
-      const colorBufferFloat = gl.getExtension("WEBGL_color_buffer_float")
-        || gl.getExtension("EXT_color_buffer_float");
-      // WebGL2 sized formats
-      const isWebGL2 = typeof WebGL2RenderingContext !== "undefined"
-        && gl instanceof WebGL2RenderingContext;
-      const formats = [];
-      if (isWebGL2) {
-        formats.push({
-          internal: gl.RGBA16F,
-          format: gl.RGBA,
-          type: gl.HALF_FLOAT,
-          filter: gl.LINEAR,
-          label: "rgba16f",
-        });
-      }
-      if (halfFloat && colorBufferHalfFloat) {
-        formats.push({
-          internal: gl.RGBA,
-          format: gl.RGBA,
-          type: halfFloat.HALF_FLOAT_OES,
-          filter: halfFloatLinear ? gl.LINEAR : gl.NEAREST,
-          label: "rgba16f",
-        });
-      }
-      if (floatTex && colorBufferFloat) {
-        formats.push({
-          internal: gl.RGBA,
-          format: gl.RGBA,
-          type: gl.FLOAT,
-          filter: floatLinear ? gl.LINEAR : gl.NEAREST,
-          label: "rgba32f",
-        });
-      }
-      formats.push({
-        internal: gl.RGBA,
-        format: gl.RGBA,
-        type: gl.UNSIGNED_BYTE,
-        filter: gl.LINEAR,
-        label: "rgba8",
-      });
-      gl._imageBurnTextureFormats = formats;
-    }
-    return gl._imageBurnTextureFormats;
+    return SoemGl.energyFormats(gl, { blend: false });
   }
 
   function createSurface(gl, w, h) {

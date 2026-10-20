@@ -622,6 +622,8 @@ function cloneNodeGraphTypedDisplaySettings(node) {
     case "waterfallXyz":
     case "waterfallRgb":
       return { traceDisplaySettings: normalizeNodeGraphWaterfallSettings(bag) };
+    case "torchFace":
+      return { traceDisplaySettings: normalizeNodeGraphTorchFaceSettings(bag) };
     case "keyboardControllerFace": {
       if (!bag || typeof bag !== "object") {
         return {};

@@ -611,6 +611,9 @@ if (type === "portalFace") {
       ? normalizeNodeGraphKeyboardControllerFaceSettings(nodeGraphMidiKeyboardLayoutDefaults || {})
       : { blackKeyWidth: 10, blackKeyHeight: 62, hideKeyboardInfo: true, keyLabels: "name" };
   }
+  if (type === "torchFace") {
+    return normalizeNodeGraphTorchFaceSettings();
+  }
   return {};
 }
 
@@ -840,6 +843,9 @@ if (type === "portalFace") {
     return typeof normalizeNodeGraphKeyboardControllerFaceSettings === "function"
       ? normalizeNodeGraphKeyboardControllerFaceSettings(settings)
       : (settings && typeof settings === "object" ? settings : {});
+  }
+  if (type === "torchFace") {
+    return normalizeNodeGraphTorchFaceSettings(settings);
   }
   return {};
 }

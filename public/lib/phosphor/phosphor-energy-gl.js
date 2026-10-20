@@ -61,7 +61,8 @@
   // Dual residual:
   //   uKeep / Trail → hot path (high Trail = high keep)
   //   uKeepSlow / Ghost → dim scorched floor (high Ghost = long low hang)
-  // Ghost is NOT peak brightness.
+  // Ghost is NOT brightness: it only sets uKeepSlow (decay curve of the dim
+  // tail). No floor or cap; background is the present's uPlate.
   const STEP_FRAG = `
     precision highp float;
     varying vec2 vUv;
@@ -69,7 +70,7 @@
     uniform sampler2D uMask;
     uniform float uKeep;
     uniform float uKeepSlow;
-    uniform float uGhost;
+    uniform float uFrames;
     uniform float uGain;
     uniform float uUseMask;
     uniform vec2 uTexel;
@@ -97,14 +98,14 @@
         float blur = (e0 * 4.0 + (e1 + e2 + e3 + e4) * 2.0 + (e5 + e6 + e7 + e8)) / 16.0;
         e = mix(e0, blur, bleed);
       }
-      // Trail = hot residual; Ghost = dim scorched floor under ghostCap.
-      float ghost = clamp(uGhost, 0.0, 1.0);
+      // Decay curve (PhosphorResidual.residualKeepAt): full energy keeps at
+      // the Trail rate, dimmer energy eases toward the Ghost rate. uFrames =
+      // elapsed 60 fps frames, so decay time is frame-rate independent.
       float keepFast = clamp(uKeep, 0.0, 1.0);
       float keepSlow = max(keepFast, clamp(uKeepSlow, 0.0, 0.9998));
-      float eFast = e * keepFast;
-      float ghostCap = ghost * 0.12 + ghost * ghost * 0.38;
-      float eGhost = min(e * keepSlow, ghostCap);
-      e = max(eFast, eGhost);
+      float e01 = clamp(e, 0.0, 1.0);
+      float keep = mix(keepSlow, keepFast, pow(e01, 12.0)); // RESIDUAL_KNEE_POWER
+      e = e01 * pow(keep, max(uFrames, 0.0));
       // Break 8-bit banding on long slow decays (1 LSB of UNORM8 ≈ 1/255).
       if (uQuantizeBits > 0.5) {
         float n = hash21(vUv * 1.017 + vec2(uFrame * 0.137, uFrame * 0.091));
@@ -119,6 +120,8 @@
         // No hard 1.0 clamp — HDR energy keeps soft skirts after long dwell.
         e = e + ink * uGain;
       }
+      // Stored energy is <= 1 (float formats must not pile up past it).
+      e = min(e, 1.0);
       gl_FragColor = vec4(e, e, e, 1.0);
     }
   `;
@@ -155,8 +158,8 @@
         e = pow(clamp(e, 0.0, 1.0), 0.88);
       }
       // Tiny dither in LUT domain so color doesn't stair-step with energy.
-      e = clamp(e + (n - 0.5) * (1.0 / 512.0), 0.0, 0.999);
-      vec3 c = texture2D(uLut, vec2(e, 0.5)).rgb;
+      e = clamp(e + (n - 0.5) * (1.0 / 512.0), 0.0, 1.0);
+      vec3 c = texture2D(uLut, vec2((e * 255.0 + 0.5) / 256.0, 0.5)).rgb;
       float a = clamp(e * uTrailGain, 0.0, 1.0);
       gl_FragColor = vec4(c * a, a);
     }
@@ -170,12 +173,13 @@
     uniform sampler2D uEnergy;
     uniform sampler2D uLut;
     uniform float uPlate;
+    ${global.SoemGl.GLSL_DITHER}
     void main() {
       float b = clamp(texture2D(uEnergy, vUv).r, 0.0, 1.0);
       b = max(b, clamp(uPlate, 0.0, 1.0));
-      b = clamp(b, 0.0, 0.999);
-      vec3 c = texture2D(uLut, vec2(b, 0.5)).rgb;
-      gl_FragColor = vec4(c, 1.0);
+      // Texel-centre LUT coord + ordered dither (no low-level dead zone).
+      vec3 c = texture2D(uLut, vec2((b * 255.0 + 0.5) / 256.0, 0.5)).rgb;
+      gl_FragColor = vec4(soemDitherRgb(c, gl_FragCoord.xy), 1.0);
     }
   `;
 
@@ -187,12 +191,12 @@
     uniform sampler2D uEnergy;
     uniform sampler2D uLut;
     uniform float uPlate;
+    ${global.SoemGl.GLSL_DITHER}
     void main() {
       float b = clamp(texture2D(uEnergy, vUv).r, 0.0, 1.0);
       b = max(b, clamp(uPlate, 0.0, 1.0));
-      b = clamp(b, 0.0, 0.999);
-      vec3 c = texture2D(uLut, vec2(b, 0.5)).rgb;
-      gl_FragColor = vec4(c, 1.0);
+      vec3 c = texture2D(uLut, vec2((b * 255.0 + 0.5) / 256.0, 0.5)).rgb;
+      gl_FragColor = vec4(soemDitherRgb(c, gl_FragCoord.xy), 1.0);
     }
   `;
 
@@ -279,7 +283,7 @@
       float softPeak = mix(0.78, 0.42, soft);
       float profile = mix(hard * hardPeak, softProfile * softPeak, softMix);
 
-      float e = max(profile, 0.0) * uBrightness;
+      float e = clamp(profile, 0.0, 1.0) * clamp(uBrightness, 0.0, 1.0);
       // Monochrome energy (R=G=B); additive blend accumulates trail.
       gl_FragColor = vec4(e, e, e, e);
     }
@@ -342,7 +346,7 @@
       }
       // Custom art (heart, …): the texture *is* the stamp.
       if (uStampCustom > 0.5) {
-        float e = max(tex, 0.0) * uBrightness;
+        float e = clamp(tex, 0.0, 1.0) * clamp(uBrightness, 0.0, 1.0);
         gl_FragColor = vec4(e, e, e, e);
         return;
       }
@@ -353,54 +357,17 @@
       float hard = 1.0 - smoothstep(R - aa, R + aa * 0.25, r);
       float softMix = pow(soft, 0.55);
       float profile = mix(hard * 0.92, tex * mix(0.78, 0.42, soft), softMix);
-      float e = max(profile, 0.0) * uBrightness;
+      float e = clamp(profile, 0.0, 1.0) * clamp(uBrightness, 0.0, 1.0);
       gl_FragColor = vec4(e, e, e, e);
     }
   `;
 
+  // WebGL2 float accumulation (see SoemGl.energyFormats: the WebGL1 OES
+  // float extensions are null on WebGL2, which left every surface rgba8).
   function energyTextureFormats(gl) {
-    if (!gl) {
-      return [];
-    }
-    if (!gl._phosphorEnergyTextureFormats) {
-      const halfFloat = gl.getExtension("OES_texture_half_float");
-      const halfFloatLinear = gl.getExtension("OES_texture_half_float_linear");
-      // Render-to-half-float needs EXT_color_buffer_half_float (not WEBGL_color_buffer_float).
-      const colorBufferHalfFloat = gl.getExtension("EXT_color_buffer_half_float");
-      const floatTex = gl.getExtension("OES_texture_float");
-      const floatLinear = gl.getExtension("OES_texture_float_linear");
-      // Full float render targets need WEBGL_color_buffer_float (or EXT on some drivers).
-      const colorBufferFloat = gl.getExtension("WEBGL_color_buffer_float")
-        || gl.getExtension("EXT_color_buffer_float");
-      const formats = [];
-      // HDR energy is critical: rgba8 quantizes e*=keep to 1/255 steps → visible decay jumps.
-      if (halfFloat && colorBufferHalfFloat) {
-        formats.push({
-          filter: halfFloatLinear ? gl.LINEAR : gl.NEAREST,
-          type: halfFloat.HALF_FLOAT_OES,
-          label: "rgba16f",
-          quantizeBits: 0,
-        });
-      }
-      if (floatTex && colorBufferFloat) {
-        formats.push({
-          filter: floatLinear ? gl.LINEAR : gl.NEAREST,
-          type: gl.FLOAT,
-          label: "rgba32f",
-          quantizeBits: 0,
-        });
-      }
-      // Last resort — enable temporal dither in STEP (quantizeBits=8).
-      formats.push({
-        filter: gl.LINEAR,
-        type: gl.UNSIGNED_BYTE,
-        label: "rgba8",
-        quantizeBits: 8,
-      });
-      gl._phosphorEnergyTextureFormats = formats;
-    }
-    return gl._phosphorEnergyTextureFormats;
+    return gl ? global.SoemGl.energyFormats(gl, { blend: true }) : [];
   }
+
 
   function createSurface(gl, w, h) {
     const width = Math.max(1, w);
@@ -415,11 +382,11 @@
       gl.texImage2D(
         gl.TEXTURE_2D,
         0,
-        gl.RGBA,
+        format.internal || gl.RGBA,
         width,
         height,
         0,
-        gl.RGBA,
+        format.format || gl.RGBA,
         format.type || gl.UNSIGNED_BYTE,
         null,
       );
@@ -512,30 +479,11 @@
   }
 
   function fadeAmountFromTrail(trail) {
-    if (global.PhosphorResidual?.trailFadeAmount) {
-      return global.PhosphorResidual.trailFadeAmount(trail);
-    }
-    // Fallback if residual lib not loaded: Trail high = long = low erase.
-    const t = Math.max(0, Math.min(1, Number(trail) || (global.PhosphorResidual?.DEFAULT_TRAIL ?? 0.3)));
-    const d = 1 - t;
-    if (d <= 0.001) {
-      return 0;
-    }
-    return Math.max(0.006, Math.min(0.55, 0.006 + d * 0.11 + d * d * 0.32));
+    return global.PhosphorResidual.trailFadeAmount(trail);
   }
 
   function ghostKeepAmount(ghost, baseKeep) {
-    if (global.PhosphorResidual?.ghostKeep) {
-      return global.PhosphorResidual.ghostKeep(ghost, baseKeep);
-    }
-    const g = Math.max(0, Math.min(1, nodeGraphFiniteNumber(ghost)));
-    const k = Math.max(0, Math.min(1, nodeGraphFiniteNumber(baseKeep)));
-    if (g <= 0.001) {
-      return k;
-    }
-    const fade = Math.pow(1 - g, 2.8) * 0.012;
-    const slow = 1 - Math.max(0.00025, fade);
-    return Math.min(0.99975, Math.max(k, slow));
+    return global.PhosphorResidual.ghostKeep(ghost, baseKeep);
   }
 
   function buildStops(peakRgb, backgroundHex) {
@@ -643,7 +591,7 @@
       uMask: gl.getUniformLocation(stepProgram, "uMask"),
       uKeep: gl.getUniformLocation(stepProgram, "uKeep"),
       uKeepSlow: gl.getUniformLocation(stepProgram, "uKeepSlow"),
-      uGhost: gl.getUniformLocation(stepProgram, "uGhost"),
+      uFrames: gl.getUniformLocation(stepProgram, "uFrames"),
       uGain: gl.getUniformLocation(stepProgram, "uGain"),
       uUseMask: gl.getUniformLocation(stepProgram, "uUseMask"),
       uTexel: gl.getUniformLocation(stepProgram, "uTexel"),
@@ -1117,6 +1065,9 @@
     gl.bindFramebuffer(gl.FRAMEBUFFER, renderer.read.framebuffer);
     gl.viewport(0, 0, renderer.width, renderer.height);
     gl.enable(gl.BLEND);
+    // MAX, not add: peak stored energy = stroke brightness (<= 1); packed
+    // overlapping stamps and re-strokes can't pile past it.
+    gl.blendEquation(gl.MAX);
     gl.blendFunc(gl.ONE, gl.ONE);
     gl.useProgram(renderer.beam.program);
     gl.bindBuffer(gl.ARRAY_BUFFER, renderer.beamBuffer);
@@ -1137,6 +1088,7 @@
     gl.uniform1f(renderer.beam.uBrightness, brightness);
     gl.uniform1f(renderer.beam.uBlur, blur);
     gl.drawArrays(gl.TRIANGLES, 0, vertexCount);
+    gl.blendEquation(gl.FUNC_ADD);
     gl.disable(gl.BLEND);
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     return vertexCount;
@@ -1175,6 +1127,7 @@
     gl.bindFramebuffer(gl.FRAMEBUFFER, renderer.read.framebuffer);
     gl.viewport(0, 0, renderer.width, renderer.height);
     gl.enable(gl.BLEND);
+    gl.blendEquation(gl.MAX); // see depositBeamSegments
     gl.blendFunc(gl.ONE, gl.ONE);
     gl.useProgram(renderer.dot.program);
     gl.bindBuffer(gl.ARRAY_BUFFER, renderer.beamBuffer);
@@ -1204,6 +1157,7 @@
     }
     gl.drawArrays(gl.TRIANGLES, 0, vertexCount);
     gl.bindTexture(gl.TEXTURE_2D, null);
+    gl.blendEquation(gl.FUNC_ADD);
     gl.disable(gl.BLEND);
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     return vertexCount;
@@ -1528,8 +1482,8 @@
     if (renderer.step.uKeepSlow) {
       gl.uniform1f(renderer.step.uKeepSlow, keepSlow);
     }
-    if (renderer.step.uGhost) {
-      gl.uniform1f(renderer.step.uGhost, ghostAmt);
+    if (renderer.step.uFrames) {
+      gl.uniform1f(renderer.step.uFrames, global.PhosphorResidual.stepFrames(renderer));
     }
     gl.uniform1f(renderer.step.uGain, useMask ? Math.max(0, Math.min(1.5, depositGain)) : 0);
     gl.uniform1f(renderer.step.uUseMask, useMask);
@@ -1559,11 +1513,9 @@
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     gl.bindTexture(gl.TEXTURE_2D, null);
     // Sleep only after ghost hang has had time to die.
-    if (fade > 0 || ghostAmt > 0.001) {
+    if (fade > 0 || ghostAmt > 0) {
       renderer.quietFrames = (renderer.quietFrames || 0) + 1;
-      const sleepAfter = global.PhosphorResidual?.residualSleepFrames
-        ? global.PhosphorResidual.residualSleepFrames(ghostAmt)
-        : (ghostAmt > 0.001 ? Math.round(1800 + ghostAmt * ghostAmt * 12000) : 240);
+      const sleepAfter = global.PhosphorResidual.residualSleepFrames(ghostAmt);
       if (renderer.quietFrames > sleepAfter) {
         renderer.energyActive = false;
       }

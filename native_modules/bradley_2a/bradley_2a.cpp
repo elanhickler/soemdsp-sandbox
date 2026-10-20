@@ -27,7 +27,7 @@ static const char kMetadataJson[] =
     "\"label\":\"Bradley 2A Jitter/Hit Synth\","
     "\"targetType\":\"bradley2a\","
     "\"kind\":\"oscillator\","
-    "\"outputs\":[\"Out\"],"
+    "\"outputs\":[\"Out L\",\"Out R\"],"
     "\"parameters\":["
       "{\"key\":\"carrierFreq\",\"label\":\"Carrier\",\"kind\":\"frequency\",\"defaultValue\":1004,\"min\":0,\"mid\":1000,\"max\":20000,\"step\":\"any\",\"unit\":\"Hz\"},"
       "{\"key\":\"freqOffset\",\"label\":\"Freq Translate\",\"kind\":\"frequency\",\"defaultValue\":0,\"min\":-500,\"mid\":0,\"max\":500,\"step\":\"any\",\"unit\":\"Hz\"},"
@@ -53,15 +53,23 @@ static double wrap_two_pi(double p) {
   return p - kTwoPi * dsp_floor(p / kTwoPi);
 }
 
-struct Bradley2AState {
-  double carrierPhase;
+// Per-channel impairments. L (c = 0) is the original single channel; R
+// starts its jitter / amp / interference LFOs a quarter turn later, its hit
+// clock half a period later, and draws impulse noise from its own stream.
+struct Bradley2AChan {
   double jitterLfoPhase;
   double ampLfoPhase;
-  double shiftPhase;
   double interfPhase;
   double hitClock;
   int    hitSamplesLeft;
   unsigned int noiseSeed;
+  double out;
+};
+
+struct Bradley2AState {
+  double carrierPhase;  // shared tonal core
+  double shiftPhase;    // shared frequency translation
+  Bradley2AChan ch[2];
   bool   active;
 };
 
@@ -69,13 +77,72 @@ static Bradley2AState gPool[kMaxInstances];
 
 // Fixed seed components (never reorder; append new parts at the end).
 enum : unsigned int {
-  kSeedImpulseNoise = 1u,  // hit / impulse noise LCG
+  kSeedImpulseNoise = 1u,   // L hit / impulse noise LCG
+  kSeedImpulseNoiseR = 2u,  // R hit / impulse noise LCG
 };
 
+static const double kQuarterTurn = 1.5707963267948966;
+
 // deterministic LCG noise in [-1, 1] (swap for pi-noise later)
-static double next_noise(Bradley2AState& s) {
-  s.noiseSeed = (unsigned int)(1664525u * s.noiseSeed + 1013904223u);
-  return ((double)s.noiseSeed / 4294967295.0) * 2.0 - 1.0;
+static double next_noise(Bradley2AChan& c) {
+  c.noiseSeed = (unsigned int)(1664525u * c.noiseSeed + 1013904223u);
+  return ((double)c.noiseSeed / 4294967295.0) * 2.0 - 1.0;
+}
+
+static void reset_chan(Bradley2AChan& c, int ch, unsigned int seed) {
+  const double lfo0 = ch == 0 ? 0.0 : kQuarterTurn;
+  c.jitterLfoPhase = lfo0;
+  c.ampLfoPhase = lfo0;
+  c.interfPhase = lfo0;
+  c.hitClock = ch == 0 ? 0.0 : 0.5;
+  c.hitSamplesLeft = 0;
+  c.noiseSeed = seed_mix(seed, ch == 0 ? kSeedImpulseNoise : kSeedImpulseNoiseR);
+  c.out = 0.0;
+}
+
+// One channel: everything after the shared carrier / translation phases.
+static double render_chan(
+  Bradley2AChan& c, double carrierPhase, double shiftPhase, double rate,
+  double jitterDepth, double jitterRate, double ampDepth, double ampRate,
+  double interfLevel, double interfFreq, double harm2, double harm3,
+  double hitRate, double hitDuration, double hitGain, double hitPhase,
+  double impulseLevel, double level
+) {
+  // --- hit clock (sawtooth): trigger a hit when it wraps ---
+  c.hitClock += maxd(0.0, safe(hitRate)) / rate;
+  if (c.hitClock >= 1.0) {
+    c.hitClock -= 1.0;
+    c.hitSamplesLeft = (int)maxd(0.0, safe(hitDuration) * rate);
+  }
+  const bool hitActive = c.hitSamplesLeft > 0;
+  if (hitActive) c.hitSamplesLeft--;
+
+  // --- jitter lfos (slow sines) ---
+  c.jitterLfoPhase = wrap_two_pi(c.jitterLfoPhase + kTwoPi * safe(jitterRate) / rate);
+  const double phaseJitter = safe(jitterDepth) * dsp_sin(c.jitterLfoPhase);
+
+  c.ampLfoPhase = wrap_two_pi(c.ampLfoPhase + kTwoPi * safe(ampRate) / rate);
+  const double ampMod = 1.0 + safe(ampDepth) * dsp_sin(c.ampLfoPhase);
+
+  // --- impaired carrier ---
+  const double phaseHit = hitActive ? safe(hitPhase) : 0.0;
+  double sig = dsp_sin(carrierPhase + phaseJitter + shiftPhase + phaseHit) * ampMod;
+
+  // --- single frequency interference ---
+  c.interfPhase = wrap_two_pi(c.interfPhase + kTwoPi * safe(interfFreq) / rate);
+  sig += safe(interfLevel) * dsp_sin(c.interfPhase);
+
+  // --- harmonic distortion (naive, aliases by design) ---
+  sig = sig + safe(harm2) * sig * sig + safe(harm3) * sig * sig * sig;
+
+  // --- hits: gain / dropout / impulse ---
+  if (hitActive) {
+    sig *= safe(hitGain);
+    sig += next_noise(c) * safe(impulseLevel);
+  }
+
+  c.out = clamp11(sig * safe(level));
+  return c.out;
 }
 
 }  // namespace
@@ -85,13 +152,9 @@ extern "C" int soemdsp_bradley_2a_create() {
     if (!gPool[i].active) {
       Bradley2AState& s = gPool[i];
       s.carrierPhase = 0.0;
-      s.jitterLfoPhase = 0.0;
-      s.ampLfoPhase = 0.0;
       s.shiftPhase = 0.0;
-      s.interfPhase = 0.0;
-      s.hitClock = 0.0;
-      s.hitSamplesLeft = 0;
-      s.noiseSeed = seed_mix(0u, kSeedImpulseNoise);  // host Seed via _set_seed
+      reset_chan(s.ch[0], 0, 0u);  // host Seed via _set_seed
+      reset_chan(s.ch[1], 1, 0u);
       s.active = true;
       return i + 1;
     }
@@ -102,7 +165,9 @@ extern "C" int soemdsp_bradley_2a_create() {
 // Impulse-noise LCG state from the module Seed only (any u32 is a valid LCG state).
 extern "C" void soemdsp_bradley_2a_set_seed(int handle, double seed) {
   if (handle < 1 || handle > kMaxInstances) return;
-  gPool[handle - 1].noiseSeed = seed_mix(seed_param_u32(seed), kSeedImpulseNoise);
+  const unsigned int u = seed_param_u32(seed);
+  gPool[handle - 1].ch[0].noiseSeed = seed_mix(u, kSeedImpulseNoise);
+  gPool[handle - 1].ch[1].noiseSeed = seed_mix(u, kSeedImpulseNoiseR);
 }
 
 extern "C" void soemdsp_bradley_2a_destroy(int handle) {
@@ -135,48 +200,28 @@ extern "C" double soemdsp_bradley_2a_sample(
 
   const double rate = sampleRate < 1.0 ? 1.0 : sampleRate;
 
-  // --- hit clock (sawtooth): trigger a hit when it wraps ---
-  s.hitClock += maxd(0.0, safe(hitRate)) / rate;
-  if (s.hitClock >= 1.0) {
-    s.hitClock -= 1.0;
-    s.hitSamplesLeft = (int)maxd(0.0, safe(hitDuration) * rate);
-  }
-  const bool hitActive = s.hitSamplesLeft > 0;
-  if (hitActive) s.hitSamplesLeft--;
-
-  // --- jitter lfos (slow sines) ---
-  s.jitterLfoPhase = wrap_two_pi(s.jitterLfoPhase + kTwoPi * safe(jitterRate) / rate);
-  const double phaseJitter = safe(jitterDepth) * dsp_sin(s.jitterLfoPhase);
-
-  s.ampLfoPhase = wrap_two_pi(s.ampLfoPhase + kTwoPi * safe(ampRate) / rate);
-  const double ampMod = 1.0 + safe(ampDepth) * dsp_sin(s.ampLfoPhase);
-
-  // --- frequency translation (phase ramp) ---
+  // --- shared frequency translation (phase ramp) + carrier ---
   s.shiftPhase = wrap_two_pi(s.shiftPhase + kTwoPi * safe(freqOffset) / rate);
-
-  // --- impaired carrier ---
-  const double phaseHit = hitActive ? safe(hitPhase) : 0.0;
   s.carrierPhase = wrap_two_pi(s.carrierPhase + kTwoPi * safe(carrierFreq) / rate);
-  double sig = dsp_sin(s.carrierPhase + phaseJitter + s.shiftPhase + phaseHit) * ampMod;
 
-  // --- single frequency interference ---
-  s.interfPhase = wrap_two_pi(s.interfPhase + kTwoPi * safe(interfFreq) / rate);
-  sig += safe(interfLevel) * dsp_sin(s.interfPhase);
-
-  // --- harmonic distortion (naive, aliases by design) ---
-  sig = sig + safe(harm2) * sig * sig + safe(harm3) * sig * sig * sig;
-
-  // --- hits: gain / dropout / impulse ---
-  if (hitActive) {
-    sig *= safe(hitGain);
-    sig += next_noise(s) * safe(impulseLevel);
+  for (int c = 1; c >= 0; c--) {
+    render_chan(
+      s.ch[c], s.carrierPhase, s.shiftPhase, rate, jitterDepth, jitterRate,
+      ampDepth, ampRate, interfLevel, interfFreq, harm2, harm3, hitRate,
+      hitDuration, hitGain, hitPhase, impulseLevel, level
+    );
   }
+  return s.ch[0].out;
+}
 
-  return clamp11(sig * safe(level));
+// Out R of the last _sample call (Out L is its return value).
+extern "C" double soemdsp_bradley_2a_right(int handle) {
+  if (handle < 1 || handle > kMaxInstances) return 0.0;
+  return gPool[handle - 1].ch[1].out;
 }
 
 extern "C" int soemdsp_bradley_2a_version() {
-  return 1;
+  return 2;
 }
 
 extern "C" const char* soemdsp_bradley_2a_metadata_json() {

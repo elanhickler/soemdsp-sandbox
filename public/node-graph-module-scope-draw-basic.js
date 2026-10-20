@@ -210,7 +210,7 @@ function drawNodeGraphModuleScopeLightDisplay(batch, rect, buffer, pixelRatio, s
   } else {
     nodeGraphModuleScopeState.lightDisplayStates.delete(nodeId);
   }
-  if (brightness <= 0.002) {
+  if (!(brightness > 0)) {
     return false;
   }
 
@@ -517,7 +517,7 @@ function nodeGraphValueOscilloscopeStrokes(item, safeSettings, width, height, fa
   };
   const lineLength = finiteUnit(safeSettings.lineLength, 1);
   const brightness = finiteUnit(safeSettings.brightness ?? safeSettings.dot1Brightness, 0.72);
-  if (!(brightness > 0.001) || safeSettings.dot1Enabled === false) {
+  if (!(brightness > 0) || safeSettings.dot1Enabled === false) {
     return [];
   }
   const halfLine = width * 0.5 * lineLength;
@@ -567,7 +567,13 @@ function nodeGraphValueOscilloscopeStrokes(item, safeSettings, width, height, fa
 }
 
 
-function nodeGraphVectorDotFrameEnergy01(buffer, canvas) {
+/**
+ * Start index of this drawn frame's samples in a capture ring: the samples
+ * that arrived since `holder[field]` was last stamped (absolute sample
+ * counter), else the ring's last write chunk, else one 60 fps frame. Shared by
+ * the LED Dot / Clock Blink energy and the lone t Torch face.
+ */
+function nodeGraphScopeFrameSampleStart(buffer, holder, field = "_vectorDotEnergyAbs") {
   if (!buffer || !buffer.length) {
     return 0;
   }
@@ -575,7 +581,7 @@ function nodeGraphVectorDotFrameEnergy01(buffer, canvas) {
     0,
     Math.floor(nodeGraphFiniteNumber(buffer.nodeGraphScopeTotalSampleCount || buffer.nodeGraphScopeAbsoluteFrame)),
   );
-  const prevAbs = Number(canvas?._vectorDotEnergyAbs || 0);
+  const prevAbs = Number(holder?.[field] || 0);
   let n = 0;
   if (prevAbs > 0 && abs > prevAbs) {
     n = Math.min(buffer.length, abs - prevAbs);
@@ -591,12 +597,20 @@ function nodeGraphVectorDotFrameEnergy01(buffer, canvas) {
       : 44100;
     n = Math.min(buffer.length, Math.max(1, Math.ceil(Math.max(1, sr) / 60)));
   }
-  if (canvas) {
-    canvas._vectorDotEnergyAbs = abs || prevAbs;
+  if (holder) {
+    holder[field] = abs || prevAbs;
   }
+  return Math.max(0, buffer.length - n);
+}
+
+/** Clock Blink / LED Dot: mean of clamp(|x|, 0, 1) over this frame's samples. */
+function nodeGraphVectorDotFrameEnergy01(buffer, canvas) {
+  if (!buffer || !buffer.length) {
+    return 0;
+  }
+  const start = nodeGraphScopeFrameSampleStart(buffer, canvas);
   let sum = 0;
   let count = 0;
-  const start = Math.max(0, buffer.length - n);
   for (let i = start; i < buffer.length; i += 1) {
     const sample = Number(buffer[i]);
     if (!Number.isFinite(sample)) {
@@ -774,7 +788,7 @@ function drawNodeGraphVectorDotItem(renderer, item, pixelRatio) {
       const [gr, gg, gb] = nodeGraphHueBrightnessRgb01(hueDeg, ghostBright, sat);
       ghostCss = `rgb(${Math.round(gr * 255)} ${Math.round(gg * 255)} ${Math.round(gb * 255)})`;
     }
-    if (ghostAmt > 0.001 && radius > 0.05) {
+    if (ghostAmt > 0 && radius > 0.05) {
       stamp({ ...shape, color: ghostCss, amount: 1 }, ghostAmt, false);
     }
     // Digital In: on = opaque live ink. Do not fade live with energy (that

@@ -2,8 +2,9 @@
 // is two ping-pong textures (per frame: one fade pass, no upload); deposits
 // are GL glyph quads drawn straight into the plate. Each face draws into its
 // own GL target (rects + atlas glyphs batched, premultiplied source-over),
-// then presents through nodeGraphDisplayCanvasBlit. Fade maths mirrors 2D
-// destination-out (round(in * (255 - round(erase * 255)) / 255), measured in Chrome).
+// then presents through nodeGraphDisplayCanvasBlit. Plate and face are float
+// energy targets (SoemGl.energyTarget); the fade is the shared time-based
+// residual model (PhosphorResidual.residualKeeps + stepFrames).
 import fs from "node:fs";
 import path from "node:path";
 import vm from "node:vm";
@@ -37,7 +38,14 @@ const ctx = {
   console, Math, Number, Float32Array, Uint8Array, Uint8ClampedArray, Object, String, Array, JSON, Boolean, Map, WeakMap, Set, Promise, RegExp, Error,
   document: { createElement: () => mkCanvas(), fonts: null },
   window: {},
-  SoemGl: { program: (_g, key, _vs, fs) => { programs.push([key, fs]); return { key }; }, drawQuad: () => { log.push(["drawArrays", ["quad"]]); }, GLSL_FULLSCREEN_VS: "" },
+  SoemGl: {
+    program: (_g, key, _vs, fs) => { programs.push([key, fs]); return { key }; },
+    drawQuad: () => { log.push(["drawArrays", ["quad"]]); },
+    energyTarget: (_g, w, h, o) => { log.push(["energyTarget", [w, h, o]]); return { tex: { kind: "tex" }, fbo: { kind: "fbo" }, width: w, height: h, label: "rgba32f", quantizeBits: 0, linear: true }; },
+    GLSL_FULLSCREEN_VS: "",
+    GLSL_DITHER: "float soemDither(vec2 p) { return 0.0; }",
+    DITHER_INVISIBLE_LSB: 0.5 / 64,
+  },
 };
 ctx.nodeGraphSharedGlDevice = () => ({ gl, canvas: { width: 4096, height: 4096 } });
 ctx.nodeGraphSharedGlBindPresent = () => {};
@@ -52,14 +60,19 @@ const plate = mkCanvas(240, 90);
 const st = ctx.nodeGraphNumberReadoutGlPlateEnsure(host, plate);
 gate(Boolean(st && st.read && st.write && st.read !== st.write), "GPU plate: two ping-pong targets on the shared device");
 gate(ctx.nodeGraphNumberReadoutGlPlateEnsure(host, plate) === st, "same size: same plate (no re-create per frame)");
+gate(st.read.label === "rgba32f" && log.some(([k, a]) => k === "energyTarget" && a[2]?.blend === true), "plate targets: SoemGl.energyTarget (float, blendable)");
 log.length = 0;
-for (let f = 0; f < 60; f += 1) ctx.nodeGraphNumberReadoutGlPlateFade(st, 0.2);
+for (let f = 0; f < 60; f += 1) ctx.nodeGraphNumberReadoutGlPlateFade(st, { keepFast: 0.8, keepSlow: 0.95 }, 1.5);
 gate(count("texImage2D") === 0 && count("texSubImage2D") === 0, "60 fade frames upload nothing");
 gate(count("drawArrays") === 60, "one full-plate pass per fade frame");
-const k255 = log.filter(([k, a]) => k === "uniform1f" && a[0]?.n === "uKeep255").map(([, a]) => a[1]);
-gate(k255.length === 60 && k255.every((v) => v === 255 - 51), "fade keep = 255 - round(0.2 * 255) = 204 (2D destination-out maths)");
+const u1 = (n) => log.filter(([k, a]) => k === "uniform1f" && a[0]?.n === n).map(([, a]) => a[1]);
+gate(u1("uResidual").length === 60 && u1("uResidual").every((v) => v === 1)
+  && u1("uKeepFast").every((v) => v === 0.8) && u1("uKeepSlow").every((v) => v === 0.95)
+  && u1("uFrames").every((v) => v === 1.5) && u1("uFloor8").every((v) => v === 0),
+  "fade: residual model uniforms (keepFast / keepSlow / frames), float target (no 8-bit floor)");
 const plateFs = programs.find(([k]) => k === "number-readout-burn-plate")?.[1] || "";
-gate(/floor\(d \* uKeep255 \/ 255\.0 \+ 0\.5\) \/ 255\.0/.test(plateFs) && /floor\(t \* 255\.0 \+ 0\.5\)/.test(plateFs), "shader rounds like the 8-bit 2D path");
+gate(/pow\(mix\(uKeepSlow, uKeepFast, pow\(clamp\(t\.a, 0\.0, 1\.0\), 12\.0\)\), uFrames\)/.test(plateFs), "plate shader = PhosphorResidual.applyResidual per texel");
+gate(/floor\(floor\(t \* 255\.0 \+ 0\.5\) \* k\) \/ 255\.0/.test(plateFs), "rgba8 last resort rounds toward 0 (no stalled floor)");
 // Face pipeline: rects + glyphs batch into one draw, present blits once.
 const bakes = [];
 ctx.nodeGraphDisplayCanvasBakeGlyphAtlas = (o) => {
@@ -123,7 +136,13 @@ ctx.nodeGraphNumberReadoutClearBurnPlate(host);
 gate(count("clear") === 2, "ClearBurnPlate clears both GPU targets");
 // Draw path wiring.
 const nr = src("node-graph-module-scope-number-readout.js");
-gate(/nodeGraphNumberReadoutGlPlateFade\(plateGl, Number\(erase\.toFixed\(4\)\)\)/.test(nr), "draw path fades on the GPU when the plate is up");
+gate(/PhosphorResidual\.residualKeeps\(trailHang, ghostHang\);\s*const frames = PhosphorResidual\.stepFrames\(plateGl\);[\s\S]{0,120}nodeGraphNumberReadoutGlPlateFade\(plateGl, keeps, frames\)/.test(nr), "draw path fades on the GPU with the shared time-based residual model");
+gate(!/BurnEraseAlpha|uKeep255|depositBright > 0\.0|trailHang > 0\.001|alpha > 0\.001/.test(nr), "no 8-bit erase maths, no deposit / hang / live-digit epsilons");
+{
+  const tintFs = programs.find(([k]) => k === "number-readout-burn-tint-face")?.[1] || "";
+  gate(/float a = clamp\(p\.a, 0\.0, 1\.0\);\s*if \(a <= 0\.0\)/.test(tintFs) && !/floor\(p\.a/.test(tintFs), "tint: float energy, any energy > 0 tints (no byte rounding)");
+}
+gate(!/depositEnergy <= 0\.008|depositEnergy > 0\.008/.test(nr), "no 0.008 hard clear: the burn plate fades out naturally");
 {
   const twoD = [...nr.matchAll(/getContext\("2d"|getContext\('2d'/g)].length;
   gate(twoD === 0 && !/DrawLcdInnerShadow/.test(nr), `no 2D context left; LCD shadow is the GL pen (${twoD})`);

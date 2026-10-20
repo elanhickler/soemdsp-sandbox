@@ -4,13 +4,7 @@
 function createNodeGraphMatrixDisplayFace(node) {
   const type = "asciiscope";
   const patchNode = typeof nodeGraphPatchNode === "function" ? nodeGraphPatchNode(node) : null;
-  // Prefer asciiscope.glyphRamp; fall back to matrixDisplay.glyphRamp from early builds.
-  const rawStore = patchNode?.asciiscope?.glyphRamp != null
-    ? patchNode.asciiscope
-    : (patchNode?.matrixDisplay?.glyphRamp != null ? patchNode.matrixDisplay : patchNode?.asciiscope);
-  const store = typeof normalizeNodeGraphMatrixDisplay === "function"
-    ? normalizeNodeGraphMatrixDisplay(rawStore)
-    : { glyphRamp: MATRIX_DISPLAY_DEFAULT_GLYPH_RAMP };
+  const store = normalizeNodeGraphMatrixDisplay(patchNode?.asciiscope);
 
   const face = document.createElement("div");
   face.className = "node-matrix-display-face node-light-source";
@@ -67,14 +61,11 @@ function createNodeGraphMatrixDisplayFace(node) {
   clearBtn.type = "button";
   clearBtn.className = "node-matrix-display-tool";
   clearBtn.textContent = "Clear trails";
-  clearBtn.title = "Zero the age grid";
+  clearBtn.title = "Zero the phosphor (stored trails)";
   clearBtn.addEventListener("click", (event) => {
     event.preventDefault();
     event.stopPropagation();
-    const sim = matrixDisplaySimStates?.get?.(node);
-    if (sim?.ages) {
-      sim.ages.fill(0);
-    }
+    matrixDisplayClearTrails(node);
   });
   tools.append(resetBtn, clearBtn);
 

@@ -309,37 +309,6 @@ function nodeGraphNumberReadoutClearBurnPlate(canvas) {
   canvas._numberReadoutResidualEnergy = 0;
 }
 
-/**
- * Per-frame destination-out erase for the burn plate (previous-digit deposits).
- * App-wide Trail + Ghost residual policy (PhosphorResidual): pure hang/decay.
- * Ghost does NOT set brightness — only how long deposited energy sticks.
- * Trail 0 + Ghost 0 = wipe deposits immediately.
-  */
-function nodeGraphNumberReadoutBurnEraseAlpha(trailHang, ghostHang = 0) {
-  const trail = clampNodeSliderValue(nodeGraphFiniteNumber(trailHang), 0, 1);
-  const ghost = clampNodeSliderValue(nodeGraphFiniteNumber(ghostHang), 0, 1);
-  if (trail <= 0.001 && ghost <= 0.001) {
-    return 1;
-  }
-  const Residual = typeof PhosphorResidual !== "undefined" ? PhosphorResidual : null;
-  const trailErase = Residual && typeof Residual.destFadeAmount === "function"
-    ? clampNodeSliderValue(Number(Residual.destFadeAmount(trail)), 0, 1)
-    : (Residual && typeof Residual.trailFadeAmount === "function"
-      ? clampNodeSliderValue(Number(Residual.trailFadeAmount(trail)), 0, 1)
-      : Math.exp(-9 * trail) * 0.52);
-  const ghostErase = Residual && typeof Residual.destGhostEraseAmount === "function"
-    ? clampNodeSliderValue(Number(Residual.destGhostEraseAmount(ghost)), 0, 1)
-    : Math.exp(-9 * ghost) * 0.12;
-  if (ghost <= 0.001) {
-    return Number.isFinite(trailErase) ? trailErase : 1;
-  }
-  if (trail <= 0.001) {
-    return Number.isFinite(ghostErase) ? ghostErase : 1;
-  }
-  const a = Number.isFinite(trailErase) ? trailErase : 1;
-  const b = Number.isFinite(ghostErase) ? ghostErase : 1;
-  return Math.min(a, b);
-}
 
 
 /** LED (phosphor light) vs LCD (reflective ink) face style for a slot/node. */
@@ -566,22 +535,27 @@ function nodeGraphNumberReadoutGhostLut256(stops, peakHex) {
   return lut;
 }
 
-// Burn-plate tint into the face target: plate alpha (energy byte) indexes the
-// 256-entry ghost LUT per pixel; output premultiplied (texel row = canvas row).
+// Burn-plate tint into the face target: plate alpha (float energy) indexes
+// the 256-entry ghost LUT per pixel (texel centres, linear between entries);
+// output premultiplied (texel row = canvas row). Any energy > 0 tints.
 const NODE_GRAPH_NUMBER_READOUT_TINT_FS = `
+  #ifdef GL_FRAGMENT_PRECISION_HIGH
+  precision highp float;
+  #else
   precision mediump float;
+  #endif
   varying vec2 vUv;
   uniform sampler2D uPlate;
   uniform sampler2D uLut;
   uniform vec2 uSize;
   void main() {
     vec4 p = texture2D(uPlate, gl_FragCoord.xy / uSize);
-    float e = floor(p.a * 255.0 + 0.5);
-    if (e < 0.5) {
+    float a = clamp(p.a, 0.0, 1.0);
+    if (a <= 0.0) {
       discard;
     }
-    vec3 c = texture2D(uLut, vec2((e + 0.5) / 256.0, 0.5)).rgb;
-    gl_FragColor = vec4(c * p.a, p.a);
+    vec3 c = texture2D(uLut, vec2((a * 255.0 + 0.5) / 256.0, 0.5)).rgb;
+    gl_FragColor = vec4(c * a, a);
   }
 `;
 const nodeGraphNumberReadoutTintGl = { gl: null, lut: null, lutKey: "" };
@@ -607,7 +581,7 @@ function nodeGraphNumberReadoutPresentBurnPlateGl(pen, lut, lutKey, plateGl) {
   if (!st.lut) {
     st.lut = gl.createTexture();
     gl.bindTexture(gl.TEXTURE_2D, st.lut);
-    nodeGraphNumberReadoutGlPlateTexParams(gl, gl.NEAREST);
+    nodeGraphNumberReadoutGlPlateTexParams(gl, gl.LINEAR);
   }
   gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
   gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
@@ -642,19 +616,21 @@ function nodeGraphNumberReadoutPresentBurnPlateGl(pen, lut, lutKey, plateGl) {
 }
 
 /*
- * GPU burn plate. The residual energy plate lives in two RGBA8 textures on the
- * shared GL device (ping-pong): the per-frame Trail/Ghost fade is one
- * full-plate draw (read * (1 - erase) -> write, swap), exactly the old 2D
- * destination-out fill (8-bit quantisation included, per frame as before).
+ * GPU burn plate. The residual energy plate lives in two float energy targets
+ * (SoemGl.energyTarget: RGBA32F, then RGBA16F, rgba8 last resort) on the
+ * shared GL device (ping-pong). The per-frame fade is one full-plate draw of
+ * the shared time-based residual model (PhosphorResidual.applyResidual per
+ * texel: bright energy keeps at Trail's rate, dim energy at Ghost's slow
+ * tail, over the 60 fps frames elapsed), read -> write, swap.
  * Deposits are GL glyph quads drawn straight into the plate (premultiplied
  * source-over), so nothing is uploaded per frame. Texel row y = canvas row y
  * in every pass; the tint pass samples the plate at gl_FragCoord.
  * No shared device: nodeGraphDisplayGlFailed (black + one console.error);
  * there is no 2D plate path.
  */
-// uKeep255 >= 0: the 2D canvas destination-out maths, bit for bit:
-// out8 = round(in8 * (255 - erase8) / 255) with erase8 = round(erase * 255)
-// (measured against Chrome's 2D canvas). Otherwise plain src * uKeep.
+// uResidual > 0.5: k = pow(mix(keepSlow, keepFast, e^12), frames) per texel.
+// Otherwise plain src * uKeep (resize copy). uFloor8: rgba8 last resort,
+// round toward 0 so dim texels never stall into a floor.
 const NODE_GRAPH_NUMBER_READOUT_PLATE_FS = `
   #ifdef GL_FRAGMENT_PRECISION_HIGH
   precision highp float;
@@ -664,14 +640,21 @@ const NODE_GRAPH_NUMBER_READOUT_PLATE_FS = `
   uniform sampler2D uSrc;
   uniform vec2 uSize;
   uniform float uKeep;
-  uniform float uKeep255;
+  uniform float uResidual;
+  uniform float uKeepFast;
+  uniform float uKeepSlow;
+  uniform float uFrames;
+  uniform float uFloor8;
   void main() {
     vec4 t = texture2D(uSrc, gl_FragCoord.xy / uSize);
-    if (uKeep255 >= 0.0) {
-      vec4 d = floor(t * 255.0 + 0.5);
-      gl_FragColor = floor(d * uKeep255 / 255.0 + 0.5) / 255.0;
+    float k = uKeep;
+    if (uResidual > 0.5) {
+      k = pow(mix(uKeepSlow, uKeepFast, pow(clamp(t.a, 0.0, 1.0), 12.0)), uFrames);
+    }
+    if (uFloor8 > 0.5) {
+      gl_FragColor = floor(floor(t * 255.0 + 0.5) * k) / 255.0;
     } else {
-      gl_FragColor = t * uKeep;
+      gl_FragColor = t * k;
     }
   }
 `;
@@ -685,28 +668,12 @@ function nodeGraphNumberReadoutGlPlateTexParams(gl, filter) {
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
 }
 
+// Float energy target (blendable: deposits and face draws are source-over).
+// A Burn 0.0001 deposit stores as 0.0001 instead of rounding to 0.
 function nodeGraphNumberReadoutGlPlateTarget(gl, w, h) {
-  const tex = gl.createTexture();
-  gl.bindTexture(gl.TEXTURE_2D, tex);
-  nodeGraphNumberReadoutGlPlateTexParams(gl, gl.NEAREST);
-  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
-  gl.bindTexture(gl.TEXTURE_2D, null);
-  const fbo = gl.createFramebuffer();
-  gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
-  gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
-  const ok = gl.checkFramebufferStatus(gl.FRAMEBUFFER) === gl.FRAMEBUFFER_COMPLETE;
-  if (ok) {
-    gl.disable(gl.SCISSOR_TEST);
-    gl.clearColor(0, 0, 0, 0);
-    gl.clear(gl.COLOR_BUFFER_BIT);
-  }
+  const t = SoemGl.energyTarget(gl, w, h, { blend: true, filter: gl.NEAREST });
   gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-  if (!ok) {
-    gl.deleteFramebuffer(fbo);
-    gl.deleteTexture(tex);
-    return null;
-  }
-  return { tex, fbo };
+  return t || null;
 }
 
 function nodeGraphNumberReadoutGlPlateDrop(gl, st) {
@@ -717,21 +684,28 @@ function nodeGraphNumberReadoutGlPlateDrop(gl, st) {
   }
 }
 
-// One full-plate pass: dst = src(scaled to the plate) * keep.
-function nodeGraphNumberReadoutGlPlatePass(st, dst, srcTex, keep, linear, keep255 = -1) {
+// One full-plate pass: dst = src(scaled to the plate) * keep, or the
+// residual model when residual = { keepFast, keepSlow, frames }.
+function nodeGraphNumberReadoutGlPlatePass(st, dst, src, keep, linear, residual = null) {
   const gl = st.gl;
   const prog = SoemGl.program(gl, "number-readout-burn-plate", SoemGl.GLSL_FULLSCREEN_VS, NODE_GRAPH_NUMBER_READOUT_PLATE_FS);
   if (!prog) return false;
+  // 32F without OES_texture_float_linear cannot filter: copy nearest.
+  linear = Boolean(linear && src.linear);
   gl.bindFramebuffer(gl.FRAMEBUFFER, dst.fbo);
   gl.viewport(0, 0, st.w, st.h);
   gl.useProgram(prog);
   gl.activeTexture(gl.TEXTURE0);
-  gl.bindTexture(gl.TEXTURE_2D, srcTex);
+  gl.bindTexture(gl.TEXTURE_2D, src.tex);
   if (linear) nodeGraphNumberReadoutGlPlateTexParams(gl, gl.LINEAR);
   gl.uniform1i(gl.getUniformLocation(prog, "uSrc"), 0);
   gl.uniform2f(gl.getUniformLocation(prog, "uSize"), st.w, st.h);
   gl.uniform1f(gl.getUniformLocation(prog, "uKeep"), keep);
-  gl.uniform1f(gl.getUniformLocation(prog, "uKeep255"), keep255);
+  gl.uniform1f(gl.getUniformLocation(prog, "uResidual"), residual ? 1 : 0);
+  gl.uniform1f(gl.getUniformLocation(prog, "uKeepFast"), residual ? residual.keepFast : 1);
+  gl.uniform1f(gl.getUniformLocation(prog, "uKeepSlow"), residual ? residual.keepSlow : 1);
+  gl.uniform1f(gl.getUniformLocation(prog, "uFrames"), residual ? residual.frames : 0);
+  gl.uniform1f(gl.getUniformLocation(prog, "uFloor8"), dst.quantizeBits === 8 ? 1 : 0);
   SoemGl.drawQuad(gl, gl.getAttribLocation(prog, "aPos"));
   if (linear) nodeGraphNumberReadoutGlPlateTexParams(gl, gl.NEAREST);
   gl.bindTexture(gl.TEXTURE_2D, null);
@@ -770,20 +744,21 @@ function nodeGraphNumberReadoutGlPlateEnsure(canvas, burnPlate) {
   gl.disable(gl.SCISSOR_TEST);
   if (prev) {
     // Resize: scale-preserve deposits (the 2D path's smoothed drawImage).
-    nodeGraphNumberReadoutGlPlatePass(st, st.read, prev.read.tex, 1, true);
+    nodeGraphNumberReadoutGlPlatePass(st, st.read, prev.read, 1, true);
     nodeGraphNumberReadoutGlPlateDrop(gl, prev);
   }
   canvas._numberReadoutGlPlate = st;
   return st;
 }
 
-// erase: the alpha the 2D path filled with (already toFixed(4)-rounded).
-function nodeGraphNumberReadoutGlPlateFade(st, erase) {
+// keeps: PhosphorResidual.residualKeeps(trail, ghost); frames: 60 fps frames
+// elapsed (PhosphorResidual.stepFrames).
+function nodeGraphNumberReadoutGlPlateFade(st, keeps, frames) {
   const gl = st.gl;
   gl.disable(gl.BLEND);
   gl.disable(gl.SCISSOR_TEST);
-  const erase8 = Math.max(0, Math.min(255, Math.round(Number(erase) * 255)));
-  if (!nodeGraphNumberReadoutGlPlatePass(st, st.write, st.read.tex, 1, false, 255 - erase8)) return;
+  const residual = { keepFast: keeps.keepFast, keepSlow: Math.max(keeps.keepFast, keeps.keepSlow), frames };
+  if (!nodeGraphNumberReadoutGlPlatePass(st, st.write, st.read, 1, false, residual)) return;
   const tmp = st.read;
   st.read = st.write;
   st.write = tmp;
@@ -2303,7 +2278,7 @@ function drawNodeGraphNumberReadoutItem(renderer, item, pixelRatio) {
     ? clampNodeSliderValue(Number(settings.brightness), 0, 1)
     : 1;
   // Hang when Ghost/Trail on.
-  const hangOn = trailHang > 0.001 || ghostHang > 0.001;
+  const hangOn = trailHang > 0 || ghostHang > 0;
 
   const left = 0;
   const top = 0;
@@ -2354,24 +2329,27 @@ function drawNodeGraphNumberReadoutItem(renderer, item, pixelRatio) {
   }
   const burnOn = Boolean(plateGl);
 
-  // 1) Fade deposit plate (Trail; Ghost hang tracked on residual energy).
+  // 1) Fade deposit plate: shared time-based residual model (Trail = fast
+  //    keep for bright energy, Ghost = slow tail for dim energy).
   if (burnOn && hangOn && !frozen && burnPlate.width > 0) {
-    const erase = nodeGraphNumberReadoutBurnEraseAlpha(trailHang, ghostHang);
-    if (erase > 0.00005) {
-      nodeGraphNumberReadoutGlPlateFade(plateGl, Number(erase.toFixed(4)));
+    const keeps = PhosphorResidual.residualKeeps(trailHang, ghostHang);
+    const frames = PhosphorResidual.stepFrames(plateGl);
+    if (keeps.keepFast < 1 && frames > 0) {
+      nodeGraphNumberReadoutGlPlateFade(plateGl, keeps, frames);
+      // Upper bound of every plate texel: no texel keeps more than keepSlow.
+      const keepMax = Math.max(keeps.keepFast, keeps.keepSlow);
+      canvas._numberReadoutResidualEnergy = nodeGraphFiniteNumber(canvas._numberReadoutResidualEnergy) * Math.pow(keepMax, frames);
     }
-    const prevE = nodeGraphFiniteNumber(canvas._numberReadoutResidualEnergy);
-    const Residual = typeof PhosphorResidual !== "undefined" ? PhosphorResidual : null;
-    if (Residual && typeof Residual.applyResidual === "function") {
-      canvas._numberReadoutResidualEnergy = Residual.applyResidual(
-        prevE,
-        trailHang,
-        ghostHang,
-      );
-    } else {
-      const eraseGhost = nodeGraphNumberReadoutBurnEraseAlpha(trailHang, ghostHang);
-      canvas._numberReadoutResidualEnergy = prevE * Math.max(0, 1 - eraseGhost);
+    // Once no texel can move an 8-bit output pixel any more (below the
+    // dither's reach, so not a visible floor), clear the plate and sleep.
+    if (canvas._numberReadoutResidualEnergy * 255 < SoemGl.DITHER_INVISIBLE_LSB
+      && canvas._numberReadoutResidualEnergy > 0) {
+      nodeGraphNumberReadoutGlPlateClear(plateGl);
+      canvas._numberReadoutResidualEnergy = 0;
     }
+  } else if (plateGl) {
+    // Paused: resume without fading the paused time.
+    plateGl.residualStepMs = 0;
   }
 
   // 2) On change: stamp ONLY digits that changed (per-cell deposit).
@@ -2382,9 +2360,8 @@ function drawNodeGraphNumberReadoutItem(renderer, item, pixelRatio) {
   //    in/out of lock blinks live ink with no residual stamp.
   //    Geometry: prefer the last live layout snapshot so ghost matches the
   //    LED pixels 1:1 (recomputing pad/fit can be 1px larger).
-  const depositPeak = burnAmountHang;
   // Plate alpha is energy 0…1 → present LUT t (1.0 = last Ghost Gradient stop).
-  const depositBright = depositPeak;
+  const depositBright = burnAmountHang;
   if (
     burnOn
     && hangOn
@@ -2394,7 +2371,7 @@ function drawNodeGraphNumberReadoutItem(renderer, item, pixelRatio) {
     && previousValueText !== valueText
     && !nodeGraphNumberReadoutIsEmptyPlaceholder(previousValueText)
     && burnPlate.width > 0
-    && depositBright > 0.005
+    && depositBright > 0
   ) {
     // Empty / dash / skeleton current → deposit the whole previous reading.
     // GhostDepositText already returns prev when curr is empty or width shifts.
@@ -2498,30 +2475,15 @@ function drawNodeGraphNumberReadoutItem(renderer, item, pixelRatio) {
       }
       nodeGraphNumberReadoutGlPenFlush(depositPen);
       nodeGraphNumberReadoutPlateGlStats.stamps += 1;
-      canvas._numberReadoutResidualEnergy = Math.max(
-        nodeGraphFiniteNumber(canvas._numberReadoutResidualEnergy),
-        depositPeak,
-      );
+      // Source-over stacking bound: a' = d + a (1 - d).
+      const prevEnergy = nodeGraphFiniteNumber(canvas._numberReadoutResidualEnergy);
+      canvas._numberReadoutResidualEnergy = depositBright + prevEnergy * (1 - depositBright);
       canvas._numberReadoutLastTextChangeAt = now;
     }
   }
 
   const depositEnergy = nodeGraphFiniteNumber(canvas._numberReadoutResidualEnergy);
-  if (depositEnergy <= 0.008) {
-    canvas._numberReadoutResidualEnergy = 0;
-    // Hard-clear plate crumbs when residual energy is gone (Trail 0 wipes).
-    if (
-      depositEnergy > 0
-      && hangOn
-      && trailHang > 0.001
-      && burnOn
-      && burnPlate?.width > 0
-      && !frozen
-    ) {
-      nodeGraphNumberReadoutGlPlateClear(plateGl);
-    }
-  }
-  const depositActive = hangOn && depositEnergy > 0.008;
+  const depositActive = hangOn && depositEnergy > 0;
   // Hanging deposits need continuous present (no static Ghost floor).
   const needsContinuous = !frozen && depositActive;
   // Room dimmer punches the canvas (not only the face). Set BOTH + notify the
@@ -2615,7 +2577,7 @@ function drawNodeGraphNumberReadoutItem(renderer, item, pixelRatio) {
   const pitchNoLockGlyph = slot?.type === "helmholtzPitch"
     && typeof nodeGraphPitchDetectorZeroDisplay === "function"
     && String(valueText) === String(nodeGraphPitchDetectorZeroDisplay(pitchMode, decimals));
-  const drawLiveDigits = alpha > 0.001
+  const drawLiveDigits = alpha > 0
     && (pitchNoLockGlyph || !nodeGraphNumberReadoutIsEmptyPlaceholder(valueText));
   nodeGraphNumberReadoutGlPenRect(pen, left, top, width, height, nodeGraphNumberReadoutCssRgb(bg), 1);
   const ghostBlendAmt = clampNodeSliderValue(Number(settings.ghostBlend), 0, 1);
@@ -2787,12 +2749,19 @@ const NODE_GRAPH_NUMBER_READOUT_SHADOW_FS = `
     gl_FragColor = vec4(0.0, 0.0, 0.0, a);
   }
 `;
+// Float face -> 8-bit canvas with ordered dither (sub-LSB burn still shows).
 const NODE_GRAPH_NUMBER_READOUT_PRESENT_FS = `
+  #ifdef GL_FRAGMENT_PRECISION_HIGH
+  precision highp float;
+  #else
   precision mediump float;
+  #endif
   varying vec2 vUv;
   uniform sampler2D uSrc;
+  ${SoemGl.GLSL_DITHER}
   void main() {
-    gl_FragColor = texture2D(uSrc, vec2(vUv.x, 1.0 - vUv.y));
+    vec4 c = texture2D(uSrc, vec2(vUv.x, 1.0 - vUv.y));
+    gl_FragColor = vec4(soemDitherRgb(c.rgb, gl_FragCoord.xy), c.a);
   }
 `;
 
@@ -2967,7 +2936,7 @@ function nodeGraphNumberReadoutGlFaceTarget(canvas) {
     // Resize: scale the last face so a paused readout keeps its pixels.
     gl.disable(gl.BLEND);
     gl.disable(gl.SCISSOR_TEST);
-    nodeGraphNumberReadoutGlPlatePass(face, target, prev.target.tex, 1, true);
+    nodeGraphNumberReadoutGlPlatePass(face, target, prev.target, 1, true);
     gl.deleteFramebuffer(prev.target.fbo);
     gl.deleteTexture(prev.target.tex);
   }

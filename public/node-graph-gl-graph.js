@@ -333,12 +333,14 @@ function nodeGraphGlGraphRebuildChrome() {
       jacks.push({
         key,
         id,
+        port,
+        io,
+        kind: pin.kind || "",
+        signal: Boolean(pin.port),
         x: px,
         y: py,
         r: radius,
         square: squareJack,
-        // Invisible hit box: one port-diameter out from the pin on each side.
-        hit: diameter,
         inwardRight: io !== "output",
         inlet: true,
         rgba,
@@ -1031,15 +1033,17 @@ function nodeGraphGlGraphDrawButtonCaptions(batch, toX, toY, zoom, cssW, cssH) {
   }
 }
 
-function nodeGraphGlGraphCubic(ax, ay, bx, by, steps) {
+function nodeGraphGlGraphCubic(ax, ay, bx, by, steps, departSign = 1) {
   const curve = typeof nodeGraphWireCurve === "function" ? nodeGraphWireCurve() : 1;
   const span = Math.min(
     96,
     (Math.abs(bx - ax) * 0.48 + Math.abs(by - ay) * 0.12) * (Number(curve) || 1),
   );
-  const c1x = ax + span;
+  // Outlets leave to the right. Inlets leave to the left, out of the module.
+  const sign = departSign < 0 ? -1 : 1;
+  const c1x = ax + sign * span;
   const c1y = ay;
-  const c2x = bx - span;
+  const c2x = bx - sign * span;
   const c2y = by;
   const n = Math.max(1, steps | 0);
   const xy = new Float32Array((n + 1) * 2);
@@ -1083,7 +1087,17 @@ function nodeGraphGlGraphShape(from, to, wire, zoom) {
   }
   const screenLen = Math.hypot((bx - ax) * zoom, (by - ay) * zoom);
   const steps = Math.max(8, Math.min(32, Math.ceil(screenLen / 8)));
-  return nodeGraphGlGraphCubic(ax, ay, bx, by, steps);
+  const depart = Number(from?.departSign) < 0 ? -1 : 1;
+  return nodeGraphGlGraphCubic(ax, ay, bx, by, steps, depart);
+}
+
+function nodeGraphGlGraphDragFrom(point, endpoint) {
+  if (!point) return point;
+  const io = endpoint?.io;
+  if (io && io !== "output") {
+    return { x: point.x, y: point.y, departSign: -1 };
+  }
+  return point;
 }
 
 function nodeGraphGlGraphPushWire(wires, from, to, color, toColor, zoom, wire, squareFrom, squareTo, kind, index) {
@@ -1188,14 +1202,34 @@ function nodeGraphGlGraphRebuild(options = {}) {
     const drag = nodeGraphMvp.wireDragging;
     if (drag?.active && drag.from && drag.cursorPoint) {
       const dragColor = endpointColor(drag.endpoint);
-      nodeGraphGlGraphPushWire(wires, drag.from, drag.cursorPoint, dragColor, dragColor, zoom, null, false, false);
+      nodeGraphGlGraphPushWire(
+        wires,
+        nodeGraphGlGraphDragFrom(drag.from, drag.endpoint),
+        drag.cursorPoint,
+        dragColor,
+        dragColor,
+        zoom,
+        null,
+        false,
+        false,
+      );
     }
     const mode = nodeGraphMvp.portConnectionMode;
     if (mode?.cursorPoint && mode.selected && typeof mode.selected.values === "function") {
       for (const entry of mode.selected.values()) {
         if (entry?.from) {
           const modeColor = mode.interactColor || endpointColor(entry.endpoint);
-          nodeGraphGlGraphPushWire(wires, entry.from, mode.cursorPoint, modeColor, modeColor, zoom, null, false, false);
+          nodeGraphGlGraphPushWire(
+            wires,
+            nodeGraphGlGraphDragFrom(entry.from, entry.endpoint),
+            mode.cursorPoint,
+            modeColor,
+            modeColor,
+            zoom,
+            null,
+            false,
+            false,
+          );
         }
       }
     }
@@ -2061,19 +2095,22 @@ function nodeGraphGlHitTest(x, y) {
   const jacks = chrome.jacks || [];
   let jackHit = null;
   let jackDist = Infinity;
+  const jackRadius = typeof nodeGraphJackHitRadiusPx === "function"
+    ? nodeGraphJackHitRadiusPx()
+    : 8;
   for (let i = 0; i < jacks.length; i += 1) {
     const jack = jacks[i];
-    const reach = Math.max(jack.hit || 0, jack.r * 2, 8);
+    const reach = Math.max(jack.r || 0, jackRadius);
     const dx = jack.x - x;
     const dy = jack.y - y;
-    if (Math.abs(dx) > reach || Math.abs(dy) > reach) continue;
-    const dist = dx * dx + dy * dy;
-    if (dist < jackDist) {
-      jackDist = dist;
-      jackHit = jack;
-    }
+    const dist = jack.square
+      ? Math.max(Math.abs(dx), Math.abs(dy))
+      : Math.hypot(dx, dy);
+    if (dist > reach || dist >= jackDist) continue;
+    jackDist = dist;
+    jackHit = jack;
   }
-  if (jackHit) return { kind: "jack", x: jackHit.x, y: jackHit.y };
+  if (jackHit) return { kind: "jack", x: jackHit.x, y: jackHit.y, jack: jackHit };
   const labels = chrome.labels || [];
   for (let i = labels.length - 1; i >= 0; i -= 1) {
     const label = labels[i];
@@ -2128,6 +2165,31 @@ function nodeGraphGlHitRetarget(event, element) {
       return typeof value === "function" ? value.bind(source) : value;
     },
   });
+}
+
+function nodeGraphGlHitJackElement(jack) {
+  const moduleEl = jack && typeof nodeGraphNodeElement === "function"
+    ? nodeGraphNodeElement(jack.id)
+    : null;
+  if (!moduleEl) return null;
+  const name = String(jack.port || "");
+  if (!name || typeof CSS === "undefined" || !CSS.escape) {
+    return nodeGraphGlHitPortElement(moduleEl, jack.x, jack.y);
+  }
+  const esc = CSS.escape(name);
+  if (jack.kind === "modulation" || jack.io === "modulation") {
+    return moduleEl.querySelector(`.node-param-port.modulation-input[data-param="${esc}"]`);
+  }
+  if (jack.kind === "graph" || jack.io === "graph") {
+    return moduleEl.querySelector(`.node-param-port.graph-input[data-graph-input="${esc}"]`);
+  }
+  if (!jack.signal && jack.kind === "output") {
+    return moduleEl.querySelector(`.node-param-port.parameter-output[data-param="${esc}"], .node-param-port.parameter-output[data-port="${esc}"]`)
+      || moduleEl.querySelector(`.node-port.output[data-port="${esc}"]`);
+  }
+  const io = jack.io === "output" ? "output" : "input";
+  return moduleEl.querySelector(`.node-port.${io}[data-port="${esc}"]`)
+    || nodeGraphGlHitPortElement(moduleEl, jack.x, jack.y);
 }
 
 function nodeGraphGlHitPortElement(moduleEl, x, y) {
@@ -2193,18 +2255,7 @@ function nodeGraphGlHitPointerDown(event) {
     return;
   }
   if (hit.kind === "jack") {
-    const plates = nodeGraphGlGraphState.plates || [];
-    let moduleEl = null;
-    for (let i = plates.length - 1; i >= 0; i -= 1) {
-      const plate = plates[i];
-      const pad = 14;
-      if (point.x >= plate.x - pad && point.x <= plate.x + plate.w + pad
-        && point.y >= plate.y - pad && point.y <= plate.y + plate.h + pad) {
-        moduleEl = typeof nodeGraphNodeElement === "function" ? nodeGraphNodeElement(plate.id) : null;
-        break;
-      }
-    }
-    const port = nodeGraphGlHitPortElement(moduleEl, hit.x, hit.y);
+    const port = nodeGraphGlHitJackElement(hit.jack);
     const handler = nodeGraphWireInteractions?.handlePortPointerDown;
     if (port && typeof handler === "function") {
       event.preventDefault();
@@ -2267,15 +2318,7 @@ function nodeGraphGlHitContextElement(point) {
   if (hit.kind === "label" && hit.el) return nodeGraphGlHitLabelPort(hit.el) || hit.el;
   if (hit.kind === "title" && hit.el) return hit.el;
   if (hit.kind === "jack") {
-    const plates = nodeGraphGlGraphState.plates || [];
-    for (let i = plates.length - 1; i >= 0; i -= 1) {
-      const plate = plates[i];
-      const pad = 14;
-      if (point.x < plate.x - pad || point.x > plate.x + plate.w + pad
-        || point.y < plate.y - pad || point.y > plate.y + plate.h + pad) continue;
-      const moduleEl = typeof nodeGraphNodeElement === "function" ? nodeGraphNodeElement(plate.id) : null;
-      return nodeGraphGlHitPortElement(moduleEl, hit.x, hit.y) || moduleEl;
-    }
+    return nodeGraphGlHitJackElement(hit.jack);
   }
   if (hit.kind === "plate") {
     const moduleEl = typeof nodeGraphNodeElement === "function" ? nodeGraphNodeElement(hit.id) : null;

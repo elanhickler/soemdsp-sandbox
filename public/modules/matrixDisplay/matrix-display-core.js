@@ -1,17 +1,11 @@
-// Matrix Display — XY character-grid phosphor (asciiscope ConsoleRenderer model).
+// Asciiscope — XY character-grid phosphor (GPU; see matrix-display-display.js).
 //
-// Each cell stores an "age" energy. New X/Y samples plot intensity (burn).
-// Each frame ages cells down (decay). Glyphs come from a ramp string:
-//   low age → early characters (dim tail), high age → late characters (hot tip).
-// Matches asciiscope project: plot(x,y,intensity) + fade + glyphFor(age).
+// New X/Y samples deposit Bright x Burn into a per-cell energy grid; energy
+// decays on the shared PhosphorResidual curve (Ghost / Trail = decay only).
+// Each cell shows a glyph from the ramp string picked by its level: early
+// characters for the dim tail, late characters for the hot tip.
 
 const MATRIX_DISPLAY_DEFAULT_GLYPH_RAMP = " .:-=+*#%@";
-
-const MATRIX_DISPLAY_MIN_COLUMNS = 16;
-const MATRIX_DISPLAY_MAX_COLUMNS = 160;
-const MATRIX_DISPLAY_MIN_ROWS = 10;
-const MATRIX_DISPLAY_MAX_ROWS = 96;
-const MATRIX_DISPLAY_MAX_AGE = 32;
 
 function normalizeNodeGraphMatrixDisplay(raw = null) {
   const source = raw && typeof raw === "object" ? raw : {};
@@ -29,118 +23,48 @@ function normalizeNodeGraphMatrixDisplay(raw = null) {
   };
 }
 
-function matrixDisplayClampColumns(n) {
-  const v = Math.round(Number(n));
-  if (!Number.isFinite(v)) return 64;
-  return Math.max(MATRIX_DISPLAY_MIN_COLUMNS, Math.min(MATRIX_DISPLAY_MAX_COLUMNS, v));
-}
-
-function matrixDisplayClampRows(n) {
-  const v = Math.round(Number(n));
-  if (!Number.isFinite(v)) return 36;
-  return Math.max(MATRIX_DISPLAY_MIN_ROWS, Math.min(MATRIX_DISPLAY_MAX_ROWS, v));
-}
-
-function matrixDisplayClamp01(v, fallback = 0) {
-  const n = Number(v);
-  if (!Number.isFinite(n)) return fallback;
-  return Math.max(0, Math.min(1, n));
-}
-
+/** Live (modulated) params, clamped to the slider ranges in the defs. */
 function matrixDisplayParamsFromNode(node) {
-  const p = node?.params || {};
-  // Density = glyph field resolution (shared asciiscope model). Prefer shared helper.
-  let density = p.density != null ? Number(p.density) : null;
-  if (density == null || !Number.isFinite(density)) {
-    if (p.columns != null) {
-      const cols = matrixDisplayClampColumns(p.columns ?? 64);
-      density = Math.max(0, Math.min(1, (cols - MATRIX_DISPLAY_MIN_COLUMNS)
-        / Math.max(1, MATRIX_DISPLAY_MAX_COLUMNS - MATRIX_DISPLAY_MIN_COLUMNS)));
-    } else {
-      density = 0.7;
-    }
-  }
-  density = Math.max(0, density);
-  const grid = typeof matrixResolveDensityGrid === "function"
-    ? matrixResolveDensityGrid(density)
-    : null;
-  const columns = grid ? grid.columns : matrixDisplayClampColumns(p.columns ?? 64);
-  const rows = grid ? grid.rows : matrixDisplayClampRows(p.rows ?? 36);
-  const stamp = grid ? grid.stamp : 1;
-  const bufColumns = grid ? grid.bufColumns : columns;
-  const bufRows = grid ? grid.bufRows : rows;
+  const Residual = typeof PhosphorResidual !== "undefined" ? PhosphorResidual : null;
   return {
-    density,
-    columns,
-    rows,
-    stamp,
-    stampX: stamp,
-    stampY: stamp,
-    bufColumns,
-    bufRows,
-    // trail: linear residual blend (0 = pure Ghost path; 1 ≈ freeze).
-    trail: matrixDisplayClamp01(p.trail, 0.78),
-    // ghost: extreme analog (super-exp) hang
-    ghost: matrixDisplayClamp01(p.ghost ?? 0.35, 0.35),
-    // brightness: deposit + present
-    brightness: (() => {
-      const b = Number(p.brightness);
-      return Number.isFinite(b) ? Math.max(0, b) : 1;
-    })(),
-    // blackFloor: ages at or below this draw as blank (asciiscope blackFloor)
-    blackFloor: Math.max(0, Math.min(8, Math.round(nodeGraphFiniteNumber(p.blackFloor)))),
-    freeze: Math.round(nodeGraphFiniteNumber(p.freeze)) >= 1,
+    density: matrixLiveParam(node, "density", 0.7, 0, 1),
+    trail: matrixLiveParam(node, "trail", 0.78, 0, 1),
+    ghost: matrixLiveParam(node, "ghost", 0.35, 0, 1),
+    backgroundBrightness: matrixLiveParam(node, "backgroundBrightness", 0, 0, 1),
+    brightness: matrixLiveParam(node, "brightness", 1, 0, 1),
+    burnAmount: matrixLiveParam(node, "burnAmount", 1, 0, Residual?.BURN_AMOUNT_MAX ?? 4),
+    freeze: matrixLiveParam(node, "freeze", 0, 0, 1) >= 0.5,
   };
 }
 
-function matrixDisplayGlyphForAge(ramp, age, maxAge) {
-  const r = ramp && ramp.length ? ramp : MATRIX_DISPLAY_DEFAULT_GLYPH_RAMP;
-  const a = Math.max(0, Math.min(maxAge, Math.round(nodeGraphFiniteNumber(age))));
-  if (a <= 0) return " ";
-  const scaled = Math.max(0, Math.min(r.length - 1, Math.round((a * (r.length - 1)) / maxAge)));
-  return r.charAt(scaled) || " ";
+/** Asciiscope neon palette (cyan / violet), u 0..1 -> [r, g, b] 0..255. */
+function matrixDisplayPaletteRgb(u) {
+  const t = Math.max(0, Math.min(1, u));
+  if (t < 0.25) {
+    const k = t / 0.25;
+    return [18 * k, 0, 34 * k];
+  }
+  if (t < 0.55) {
+    const k = (t - 0.25) / 0.3;
+    return [18 + (110 - 18) * k, 18 * k, 34 + (152 - 34) * k];
+  }
+  if (t < 0.82) {
+    const k = (t - 0.55) / 0.27;
+    return [110 + (42 - 110) * k, 18 + (220 - 18) * k, 152 + (235 - 152) * k];
+  }
+  const k = (t - 0.82) / 0.18;
+  return [42 + (255 - 42) * k, 220 + (255 - 220) * k, 235 + (255 - 235) * k];
 }
 
-/** Phosphor cyan/violet age coloring (asciiscope neon palette). */
-function matrixDisplayColorForAge(age, maxAge, brightness) {
-  // Age = energy; film curve then brightness (brightness is present-only).
-  const raw = Math.max(0, Math.min(1, age / Math.max(1, maxAge)));
-  const t = typeof matrixPhosphorFilm === "function"
-    ? matrixPhosphorFilm(raw)
-    : Math.pow(raw, 1.05);
-  const bRaw = Number(brightness);
-  const b = Number.isFinite(bRaw) ? Math.max(0, bRaw) : 1;
-  if (b <= 0 || t < 0.004) {
-    return "rgb(0,0,0)";
+/** 256-entry RGBA LUT of the palette (level -> colour). */
+function matrixDisplayPaletteLutRgba() {
+  const data = new Uint8Array(256 * 4);
+  for (let i = 0; i < 256; i += 1) {
+    const rgb = matrixDisplayPaletteRgb(Math.pow(i / 255, 1.05));
+    data[i * 4] = Math.round(rgb[0]);
+    data[i * 4 + 1] = Math.round(rgb[1]);
+    data[i * 4 + 2] = Math.round(rgb[2]);
+    data[i * 4 + 3] = 255;
   }
-  // Hue ramp from energy film; brightness scales RGB only (not trail length).
-  const u = Math.pow(Math.min(1, t), 1.05);
-  let r;
-  let g;
-  let bl;
-  if (u < 0.25) {
-    const k = u / 0.25;
-    r = 18 * k;
-    g = 0;
-    bl = 34 * k;
-  } else if (u < 0.55) {
-    const k = (u - 0.25) / 0.3;
-    r = 18 + (110 - 18) * k;
-    g = 0 + 18 * k;
-    bl = 34 + (152 - 34) * k;
-  } else if (u < 0.82) {
-    const k = (u - 0.55) / 0.27;
-    r = 110 + (42 - 110) * k;
-    g = 18 + (220 - 18) * k;
-    bl = 152 + (235 - 152) * k;
-  } else {
-    const k = (u - 0.82) / 0.18;
-    r = 42 + (255 - 42) * k;
-    g = 220 + (255 - 220) * k;
-    bl = 235 + (255 - 235) * k;
-  }
-  r = Math.round(Math.min(255, r * b));
-  g = Math.round(Math.min(255, g * b));
-  bl = Math.round(Math.min(255, bl * b));
-  return `rgb(${r},${g},${bl})`;
+  return data;
 }

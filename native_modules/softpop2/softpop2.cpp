@@ -33,8 +33,10 @@ struct Chan {
 struct State {
   bool active;
   Chan ch[2];
-  Noise pitch;  // sine Pitch Mod only (shared L/R phasor)
+  Noise pitch;   // L sine Pitch Mod (channel 0 stream)
+  Noise pitchR;  // R sine Pitch Mod (channel 1 stream)
   double phase;
+  double phaseR;
   unsigned int seed;
   bool seeded;
   double lastWidth, lastSr;
@@ -63,7 +65,9 @@ static void reseed(State& s) {
     ch.out = 0.0;
   }
   noise_reset(s.pitch, s.seed, 0);
+  noise_reset(s.pitchR, s.seed, 1);
   s.phase = 0.0;
+  s.phaseR = 0.0;
   s.seeded = true;
 }
 
@@ -172,6 +176,14 @@ extern "C" double soemdsp_softpop2_sample(
   const double next = ph + inc;
   s.phase = next - dsp_floor(next);
   const double sine = dsp_sin_turns(ph);
+  // R: same Frequency, its own Pitch Mod stream and phasor (identical to L at Pitch Mod 0).
+  double fSineR = noise_step(s.pitchR, kColorWhite, f, cents);
+  if (fSineR > nyq) fSineR = nyq;
+  if (fSineR < -nyq) fSineR = -nyq;
+  const double phR = s.phaseR;
+  const double nextR = phR + fSineR / sr;
+  s.phaseR = nextR - dsp_floor(nextR);
+  const double sineR = dsp_sin_turns(phR);
 
   const double nL = noise_band(s, s.ch[0], c, fc, sr);
   const double nR = noise_band(s, s.ch[1], c, fc, sr);
@@ -180,7 +192,7 @@ extern "C" double soemdsp_softpop2_sample(
   const double fade = 1.0 - ao * xf;
   const double env = amp * fade * fade;
   s.ch[0].out = safety_limit((cw * sine + sw * nL) * env);
-  s.ch[1].out = safety_limit((cw * sine + sw * nR) * env);
+  s.ch[1].out = safety_limit((cw * sineR + sw * nR) * env);
 
   const double envAbs = env < 0.0 ? -env : env;
   const double dispHz = s.disp.armed > 0.0 && cents != 0.0
@@ -216,6 +228,6 @@ extern "C" double soemdsp_softpop2_display_info(int handle, int which) {
   return display_info(gPool[handle - 1].disp, which);
 }
 
-extern "C" int soemdsp_softpop2_version() { return 6; }
+extern "C" int soemdsp_softpop2_version() { return 7; }
 extern "C" const char* soemdsp_softpop2_metadata_json() { return kMetadataJson; }
 extern "C" int soemdsp_softpop2_metadata_json_size() { return sizeof(kMetadataJson) - 1; }

@@ -149,7 +149,7 @@ void main (void) {
         // 1D/2D Trace: this fragment is brightness only (0 black .. 1 white).
         // Not an alpha, and not rgb * brightness. The present pass looks up
         // the gradient for every pixel of the drawable, including unstroked.
-        if (beamE <= 0.001) discard;
+        // No threshold: any Bright > 0 deposits (float targets keep it).
         gl_FragColor = vec4(beamE, beamE, beamE, 1.0);
         return;
     }
@@ -449,18 +449,22 @@ uniform sampler2D uBright;
 uniform sampler2D uGhost;
 uniform sampler2D uLut;
 uniform float uPlate;
-uniform float uGhostGain;
 uniform sampler2D uLive;
+${global.SoemGl.GLSL_DITHER}
 void main() {
     float hot = texture2D(uBright, vUv).r;
-    float ghost = texture2D(uGhost, vUv).r * clamp(uGhostGain, 0.0, 1.0);
+    // Stored ghost light as-is. Ghost only sets its fade (FS_TRACE_GHOST
+    // uErase); scaling it here made Ghost re-brighten old burns.
+    float ghost = texture2D(uGhost, vUv).r;
     // uLive is this frame's pen at Bright. uBright is hung ink (Bright × Burn).
     float live = texture2D(uLive, vUv).r;
     float b = max(live, max(hot, ghost));
     b = max(b, clamp(uPlate, 0.0, 1.0));
-    b = clamp(b, 0.0, 0.999);
-    vec3 c = texture2D(uLut, vec2(b, 0.5)).rgb;
-    gl_FragColor = vec4(c, 1.0);
+    b = clamp(b, 0.0, 1.0);
+    // Texel-centre LUT coord (no dead zone below half a texel), then an
+    // ordered dither so levels under one 8-bit step still average in.
+    vec3 c = texture2D(uLut, vec2((b * ${LUT_WIDTH - 1}.0 + 0.5) / ${LUT_WIDTH}.0, 0.5)).rgb;
+    gl_FragColor = vec4(soemDitherRgb(c, gl_FragCoord.xy), 1.0);
 }
 `;
 
@@ -512,34 +516,32 @@ void main() {
         uGhost: gl.getUniformLocation(present, "uGhost"),
         uLut: gl.getUniformLocation(present, "uLut"),
         uPlate: gl.getUniformLocation(present, "uPlate"),
-        uGhostGain: gl.getUniformLocation(present, "uGhostGain"),
         uLive: gl.getUniformLocation(present, "uLive"),
       },
     };
     return glDevice.tracePresent;
   }
 
-  function allocBrightTarget(gl, w, h) {
-    const tex = gl.createTexture();
-    gl.bindTexture(gl.TEXTURE_2D, tex);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
-    const fbo = gl.createFramebuffer();
-    gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
-    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
-    gl.viewport(0, 0, w, h);
-    gl.clearColor(0, 0, 0, 1);
-    gl.clear(gl.COLOR_BUFFER_BIT);
-    return { tex, fbo };
+  // Float brightness targets (SoemGl.energyFormats). rgba8 rounded any
+  // deposit under 0.5/255 to 0, so low Bright printed nothing until a jump.
+  // Hung buffers are only copied (no blend); the live pen blends additively.
+  function allocBrightTarget(gl, w, h, blend = false) {
+    return global.SoemGl.energyTarget(gl, w, h, { blend, filter: gl.NEAREST });
+  }
+
+  function freeTraceState(gl, st) {
+    for (const t of [st?.read, st?.write, st?.ghostRead, st?.ghostWrite, st?.live]) {
+      if (!t) continue;
+      gl.deleteFramebuffer(t.fbo);
+      gl.deleteTexture(t.tex);
+    }
   }
 
   function traceStateFor(glDevice, dest, w, h) {
     const gl = glDevice.gl;
     let st = traceByDest.get(dest);
     if (!st || st.gl !== gl || st.w !== w || st.h !== h) {
+      if (st && st.gl === gl) freeTraceState(gl, st);
       st = {
         gl,
         w,
@@ -548,8 +550,13 @@ void main() {
         write: allocBrightTarget(gl, w, h),
         ghostRead: allocBrightTarget(gl, w, h),
         ghostWrite: allocBrightTarget(gl, w, h),
-        live: allocBrightTarget(gl, w, h),
+        live: allocBrightTarget(gl, w, h, true),
       };
+      if (!st.read || !st.write || !st.ghostRead || !st.ghostWrite || !st.live) {
+        freeTraceState(gl, st);
+        traceByDest.delete(dest);
+        return null;
+      }
       traceByDest.set(dest, st);
     }
     return st;
@@ -653,6 +660,23 @@ void main() {
     }
   }
 
+  // 60 fps frames since this target last faded. Erase amounts are per 60 fps
+  // frame; scaling by elapsed time keeps decay time the same at any frame
+  // rate. Capped so a long stall fades a few frames, not the whole burn.
+  function traceFadeFrames(st) {
+    const now = typeof performance !== "undefined" ? performance.now() : Date.now();
+    const last = st.lastFadeMs;
+    st.lastFadeMs = now;
+    if (!(last > 0)) return 1;
+    return Math.max(0, Math.min(4, (now - last) * 0.06));
+  }
+
+  function traceEraseForFrames(erase, frames) {
+    const e = traceUnit(erase, 0);
+    if (e >= 1) return 1;
+    return 1 - Math.pow(1 - e, Math.max(0, Number(frames) || 0));
+  }
+
   function traceTrailErase(options) {
     const trail = Number(options.trail);
     const t = Number.isFinite(trail) ? trail : 0;
@@ -703,6 +727,12 @@ void main() {
       uploadLut(glDevice, options.gradientStops, options.sampleRgb, options.lutKey);
     }
     const st = traceStateFor(glDevice, dest, width, height);
+    if (!st) {
+      if (typeof nodeGraphDisplayGlFailed === "function") {
+        nodeGraphDisplayGlFailed(dest, "Trace brightness targets unavailable");
+      }
+      return 0;
+    }
     const cont = options.traceContinue === true;
     gl.disable(gl.DEPTH_TEST);
     gl.disable(gl.CULL_FACE);
@@ -715,15 +745,14 @@ void main() {
       gl.activeTexture(gl.TEXTURE0);
       gl.bindTexture(gl.TEXTURE_2D, st.read.tex);
       gl.uniform1i(presentApi.fade.uSrc, 0);
-      gl.uniform1f(presentApi.fade.uErase, traceTrailErase(options));
+      st.fadeFrames = traceFadeFrames(st);
+      gl.uniform1f(presentApi.fade.uErase, traceEraseForFrames(traceTrailErase(options), st.fadeFrames));
       gl.bindBuffer(gl.ARRAY_BUFFER, presentApi.quad);
       gl.enableVertexAttribArray(presentApi.fade.aPos);
       gl.vertexAttribPointer(presentApi.fade.aPos, 2, gl.FLOAT, false, 0, 0);
       gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
-      if (!st.live) st.live = allocBrightTarget(gl, width, height);
       clearTraceTarget(gl, st.live, width, height);
     }
-    if (!st.live) st.live = allocBrightTarget(gl, width, height);
     if (segCount >= 1 && diameter > 0) {
       // Pen stays at Bright. Burn scales the copy into the hung buffer
       // after this frame's segments have summed (see FS_TRACE_DEPOSIT).
@@ -756,12 +785,12 @@ void main() {
       const ghostAmt = Number(options.ghost);
       const ghostOn = Number.isFinite(ghostAmt) && ghostAmt > 0;
       const Residual = typeof PhosphorResidual !== "undefined" ? PhosphorResidual : null;
-      // Erase rate is the Ghost knob (slow hang). Deposit the hot brightness
-      // itself. destGhostDeposit / destGhostPresent are canvas alphas (~0.02)
-      // and would collapse this brightness to the plate stop of the LUT.
-      const gErase = ghostOn && Residual?.destGhostEraseAmount ? Residual.destGhostEraseAmount(ghostAmt) : 1;
+      // Ghost is only the erase rate (slow hang). Deposit the hot brightness
+      // itself and present it unscaled, so Ghost never changes brightness.
+      const gErase = ghostOn && Residual?.destGhostEraseAmount
+        ? traceEraseForFrames(Residual.destGhostEraseAmount(ghostAmt), st.fadeFrames ?? 1)
+        : 1;
       const gDeposit = ghostOn ? 1 : 0;
-      const gGain = ghostOn ? traceUnit(ghostAmt, 0) : 0;
       gl.disable(gl.BLEND);
       gl.bindFramebuffer(gl.FRAMEBUFFER, st.ghostWrite.fbo);
       gl.useProgram(presentApi.ghost.program);
@@ -794,7 +823,6 @@ void main() {
       gl.uniform1i(presentApi.present.uLut, 2);
       const plate = traceUnit(options.plateBrightness, 0);
       gl.uniform1f(presentApi.present.uPlate, plate);
-      gl.uniform1f(presentApi.present.uGhostGain, ghostOn ? Math.max(0, Number(gGain) || 0) : 0);
       gl.activeTexture(gl.TEXTURE3);
       gl.bindTexture(gl.TEXTURE_2D, st.live.tex);
       gl.uniform1i(presentApi.present.uLive, 3);

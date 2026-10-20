@@ -160,6 +160,10 @@ $modules = @(
   @{ Name = "hyperbolic_decay"; Simd = $false; Exports = @("soemdsp_hyperbolic_decay_create", "soemdsp_hyperbolic_decay_destroy", "soemdsp_hyperbolic_decay_sample", "soemdsp_hyperbolic_decay_is_idle", "soemdsp_hyperbolic_decay_version", "soemdsp_hyperbolic_decay_metadata_json", "soemdsp_hyperbolic_decay_metadata_json_size") }
   @{ Name = "exponential_mix"; Simd = $false; Exports = @("soemdsp_exponential_mix_create", "soemdsp_exponential_mix_destroy", "soemdsp_exponential_mix_sample", "soemdsp_exponential_mix_is_idle", "soemdsp_exponential_mix_version", "soemdsp_exponential_mix_metadata_json", "soemdsp_exponential_mix_metadata_json_size") }
   @{ Name = "ellipsoid_decay"; Simd = $false; Exports = @("soemdsp_ellipsoid_decay_create", "soemdsp_ellipsoid_decay_destroy", "soemdsp_ellipsoid_decay_sample", "soemdsp_ellipsoid_decay_is_idle", "soemdsp_ellipsoid_decay_version", "soemdsp_ellipsoid_decay_metadata_json", "soemdsp_ellipsoid_decay_metadata_json_size") }
+  @{ Name = "electro_snare"; Simd = $false; Exports = @("soemdsp_electro_snare_create", "soemdsp_electro_snare_destroy", "soemdsp_electro_snare_sample", "soemdsp_electro_snare_env", "soemdsp_electro_snare_right", "soemdsp_electro_snare_version", "soemdsp_electro_snare_metadata_json", "soemdsp_electro_snare_metadata_json_size") }
+  @{ Name = "electro_hat"; Simd = $false; Exports = @("soemdsp_electro_hat_create", "soemdsp_electro_hat_destroy", "soemdsp_electro_hat_sample", "soemdsp_electro_hat_env", "soemdsp_electro_hat_right", "soemdsp_electro_hat_version", "soemdsp_electro_hat_metadata_json", "soemdsp_electro_hat_metadata_json_size") }
+  @{ Name = "electro_tom"; Simd = $false; Exports = @("soemdsp_electro_tom_create", "soemdsp_electro_tom_destroy", "soemdsp_electro_tom_sample", "soemdsp_electro_tom_env", "soemdsp_electro_tom_right", "soemdsp_electro_tom_version", "soemdsp_electro_tom_metadata_json", "soemdsp_electro_tom_metadata_json_size") }
+  @{ Name = "electro_kick"; Simd = $false; Exports = @("soemdsp_electro_kick_create", "soemdsp_electro_kick_destroy", "soemdsp_electro_kick_sample", "soemdsp_electro_kick_env", "soemdsp_electro_kick_right", "soemdsp_electro_kick_version", "soemdsp_electro_kick_metadata_json", "soemdsp_electro_kick_metadata_json_size") }
   @{ Name = "robin_sinepulse"; Simd = $false; Exports = @("soemdsp_robin_sinepulse_create", "soemdsp_robin_sinepulse_destroy", "soemdsp_robin_sinepulse_sample", "soemdsp_robin_sinepulse_env", "soemdsp_robin_sinepulse_unit", "soemdsp_robin_sinepulse_freq", "soemdsp_robin_sinepulse_is_idle", "soemdsp_robin_sinepulse_version", "soemdsp_robin_sinepulse_metadata_json", "soemdsp_robin_sinepulse_metadata_json_size") }
   @{ Name = "robin_sinepulse_allpass"; Simd = $false; Exports = @("soemdsp_robin_sinepulse_allpass_create", "soemdsp_robin_sinepulse_allpass_destroy", "soemdsp_robin_sinepulse_allpass_set_params", "soemdsp_robin_sinepulse_allpass_process_chain", "soemdsp_robin_sinepulse_allpass_dry", "soemdsp_robin_sinepulse_allpass_out", "soemdsp_robin_sinepulse_allpass_sample", "soemdsp_robin_sinepulse_allpass_is_idle", "soemdsp_robin_sinepulse_allpass_num_stages", "soemdsp_robin_sinepulse_allpass_update_count", "soemdsp_robin_sinepulse_allpass_version", "soemdsp_robin_sinepulse_allpass_metadata_json", "soemdsp_robin_sinepulse_allpass_metadata_json_size") }
   @{ Name = "vactrol_envelope"; Simd = $false; Exports = @("soemdsp_vactrol_envelope_create", "soemdsp_vactrol_envelope_destroy", "soemdsp_vactrol_envelope_sample", "soemdsp_vactrol_envelope_version", "soemdsp_vactrol_envelope_metadata_json", "soemdsp_vactrol_envelope_metadata_json_size") }
@@ -206,7 +210,7 @@ $modules = @(
   @{ Name = "inv"; Simd = $false; Exports = @("soemdsp_inv_sample", "soemdsp_inv_version", "soemdsp_inv_metadata_json", "soemdsp_inv_metadata_json_size") }
   @{ Name = "ring_mod"; Simd = $false; Exports = @("soemdsp_ring_mod_sample", "soemdsp_ring_mod_version", "soemdsp_ring_mod_metadata_json", "soemdsp_ring_mod_metadata_json_size") }
   @{ Name = "crossfade"; Simd = $false; Exports = @("soemdsp_crossfade_sample", "soemdsp_crossfade_version", "soemdsp_crossfade_metadata_json", "soemdsp_crossfade_metadata_json_size") }
-  @{ Name = "bradley_2a"; Simd = $false; Exports = @("soemdsp_bradley_2a_create", "soemdsp_bradley_2a_set_seed", "soemdsp_bradley_2a_destroy", "soemdsp_bradley_2a_sample", "soemdsp_bradley_2a_version", "soemdsp_bradley_2a_metadata_json", "soemdsp_bradley_2a_metadata_json_size") }
+  @{ Name = "bradley_2a"; Simd = $false; Exports = @("soemdsp_bradley_2a_create", "soemdsp_bradley_2a_set_seed", "soemdsp_bradley_2a_destroy", "soemdsp_bradley_2a_sample", "soemdsp_bradley_2a_right", "soemdsp_bradley_2a_version", "soemdsp_bradley_2a_metadata_json", "soemdsp_bradley_2a_metadata_json_size") }
   @{ Name = "antisaw"; Simd = $false; Exports = @("soemdsp_antisaw_create", "soemdsp_antisaw_destroy", "soemdsp_antisaw_sample", "soemdsp_antisaw_version", "soemdsp_antisaw_metadata_json", "soemdsp_antisaw_metadata_json_size") }
   @{ Name = "sinc"; Simd = $false; Exports = @("soemdsp_sinc_create", "soemdsp_sinc_destroy", "soemdsp_sinc_sample", "soemdsp_sinc_version", "soemdsp_sinc_metadata_json", "soemdsp_sinc_metadata_json_size") }
   @{ Name = "softwave"; Simd = $false; Exports = @("soemdsp_softwave_create", "soemdsp_softwave_destroy", "soemdsp_softwave_reset", "soemdsp_softwave_sample", "soemdsp_softwave_version", "soemdsp_softwave_metadata_json", "soemdsp_softwave_metadata_json_size") }
@@ -780,10 +784,6 @@ if ($node) {
   if ($LASTEXITCODE -ne 0) {
     throw "Combined build: pitch quantizer face smoke FAILED"
   }
-  & $node.Source "$root\scripts\smoke_flower_child_f.mjs"
-  if ($LASTEXITCODE -ne 0) {
-    throw "Combined build: flower child f smoke FAILED"
-  }
   & $node.Source "$root\scripts\smoke_robin_supersaw_pitch_jitter.mjs"
   if ($LASTEXITCODE -ne 0) {
     throw "Combined build: robin supersaw pitch jitter smoke FAILED"
@@ -796,6 +796,31 @@ if ($node) {
   & $node.Source "$root\scripts\smoke_graph_sidechain.mjs"
   if ($LASTEXITCODE -ne 0) {
     throw "Combined build: Sidechain smoke FAILED"
+  }
+  # Electro Snare (docs/SNARE_PLAN.md): per-algorithm direct + graph Trigger/Reset/Env.
+  & $node.Source "$root\scripts\smoke_graph_electro_snare.mjs"
+  if ($LASTEXITCODE -ne 0) {
+    throw "Combined build: Electro Snare smoke FAILED"
+  }
+  # Electro Hat (docs/DRUM_PACK_PLAN.md): per-algorithm direct + graph + choice + live path.
+  & $node.Source "$root\scripts\smoke_graph_electro_hat.mjs"
+  if ($LASTEXITCODE -ne 0) {
+    throw "Combined build: Electro Hat smoke FAILED"
+  }
+  # Electro Tom (docs/DRUM_PACK_PLAN.md): per-algorithm direct + graph + choice + live path.
+  & $node.Source "$root\scripts\smoke_graph_electro_tom.mjs"
+  if ($LASTEXITCODE -ne 0) {
+    throw "Combined build: Electro Tom smoke FAILED"
+  }
+  # Electro Kick (docs/DRUM_PACK_PLAN.md): per-algorithm direct + graph + choice + live path.
+  & $node.Source "$root\scripts\smoke_graph_electro_kick.mjs"
+  if ($LASTEXITCODE -ne 0) {
+    throw "Combined build: Electro Kick smoke FAILED"
+  }
+  # Stereo L/R outs: Bradley 2A, Mode Resonator, Random Clock, Turing Machine, Degree Turing, Softpop 2.
+  & $node.Source "$root\scripts\smoke_graph_stereo_lr.mjs"
+  if ($LASTEXITCODE -ne 0) {
+    throw "Combined build: Stereo L/R smoke FAILED"
   }
   # Robin Sinepulse (Robin Schmidt's SweepKicker): direct export + graph Trigger/Env.
   & $node.Source "$root\scripts\smoke_graph_robin_sinepulse.mjs"

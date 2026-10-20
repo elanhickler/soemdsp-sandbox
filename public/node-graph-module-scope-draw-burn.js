@@ -44,26 +44,9 @@ function nodeGraphScope2dBurnTextureFormats(gl) {
   if (!gl) {
     return [];
   }
-  if (!gl._nodeGraphScope2dBurnTextureFormats) {
-    const halfFloat = gl.getExtension("OES_texture_half_float");
-    const halfFloatLinear = gl.getExtension("OES_texture_half_float_linear");
-    const colorBufferHalfFloat = gl.getExtension("EXT_color_buffer_half_float");
-    const formats = [];
-    if (halfFloat && colorBufferHalfFloat) {
-      formats.push({
-        filter: halfFloatLinear ? gl.LINEAR : gl.NEAREST,
-        label: "rgba16f",
-        type: halfFloat.HALF_FLOAT_OES,
-      });
-    }
-    formats.push({
-      filter: gl.LINEAR,
-      label: "rgba8",
-      type: gl.UNSIGNED_BYTE,
-    });
-    gl._nodeGraphScope2dBurnTextureFormats = formats;
-  }
-  return gl._nodeGraphScope2dBurnTextureFormats;
+  // WebGL2 float formats (SoemGl.energyFormats); the WebGL1 OES half-float
+  // extension is null on WebGL2, which left these surfaces rgba8.
+  return SoemGl.energyFormats(gl, { blend: true });
 }
 
 
@@ -77,11 +60,11 @@ function createNodeGraphScope2dBurnTexture(gl, width, height, format = {}) {
   gl.texImage2D(
     gl.TEXTURE_2D,
     0,
-    gl.RGBA,
+    format.internal || gl.RGBA,
     Math.max(1, width),
     Math.max(1, height),
     0,
-    gl.RGBA,
+    format.format || gl.RGBA,
     format.type || gl.UNSIGNED_BYTE,
     null,
   );
@@ -633,6 +616,7 @@ function drawNodeGraphScope2dEnergyBurnPath(item, pixelRatio, pathPoints, settin
   if (!energyGl) {
     return false;
   }
+  const liveGl = nodeGraphBurnFaceLiveLayer(canvas, energyGl, width, height);
 
   const trail = typeof PhosphorResidual !== "undefined" && PhosphorResidual.migrateTrail
     ? PhosphorResidual.migrateTrail(settings || {}, PhosphorResidual.DEFAULT_TRAIL ?? 0.3)
@@ -663,6 +647,9 @@ function drawNodeGraphScope2dEnergyBurnPath(item, pixelRatio, pathPoints, settin
     nodeGraphFacePlateApplyCss(screenElement, plateCss);
   }
   nodeGraphPhosphorApplyGradientLut(energyGl, settings, "#75ebff");
+  if (liveGl) {
+    nodeGraphPhosphorApplyGradientLut(liveGl, settings, "#75ebff");
+  }
 
   // Engine speed 0 (and other pause paths): never step energy — hold FBO as-is.
   const frozen = nodeGraphModuleScopePhosphorFrozen();
@@ -673,11 +660,18 @@ function drawNodeGraphScope2dEnergyBurnPath(item, pixelRatio, pathPoints, settin
     // samples (c1091b4 / 8bc05d90). Dots Only / Full Dot Economy are retired —
     // they produced beads or over-fat solid mush; ignore sticky patch flags.
     const sizeForGain = Math.max(0, Math.min(1, nodeGraphFiniteNumber(settings?.dot1Size) / 32));
+    // Live trace = Bright (independent of Burn), Trail decay only.
+    // Burn layer deposit = Bright x Burn (new strokes only; stored energy is
+    // never rescaled). Ghost/Trail only set the decay in the step.
+    const burnAmount = typeof PhosphorResidual !== "undefined" && PhosphorResidual.clampBurnAmount
+      ? PhosphorResidual.clampBurnAmount(settings?.burnAmount, 1)
+      : 1;
+    const liveBrightness = nodeGraphScope2dEnergyBurnDepositGain(layer.brightness, sizeForGain);
     const beamBrightness = nodeGraphScope2dEnergyBurnDepositGain(
-      layer.brightness,
+      layer.brightness * burnAmount,
       sizeForGain,
     );
-    const stepped = nodeGraphPhosphorEnergyGlStepBeams(energyGl, {
+    const beamOptions = {
       trail,
       ghost,
       pathPoints: points,
@@ -702,8 +696,12 @@ function drawNodeGraphScope2dEnergyBurnPath(item, pixelRatio, pathPoints, settin
       samplesOnly: String(settings?.drawMode || "") === "dots",
       verticesOnly: false,
       coverLength: String(settings?.drawMode || "budget") === "length",
-    });
+    };
+    const stepped = nodeGraphPhosphorEnergyGlStepBeams(energyGl, beamOptions);
     void stepped;
+    if (liveGl) {
+      nodeGraphPhosphorEnergyGlStepBeams(liveGl, { ...beamOptions, ghost: 0, brightness: liveBrightness });
+    }
     if (!frozen && Number.isFinite(endFrame)) {
       const stats = energyGl.lastPathStats;
       let cursor = endFrame;
@@ -728,6 +726,9 @@ function drawNodeGraphScope2dEnergyBurnPath(item, pixelRatio, pathPoints, settin
   } else if (typeof nodeGraphPhosphorEnergyGlStep === "function") {
     // Fade + bleed when no drawable layer (trail still softens outward).
     nodeGraphPhosphorEnergyGlStep(energyGl, { trail, ghost, depositGain: 0, bleed: 0.1 });
+    if (liveGl) {
+      nodeGraphPhosphorEnergyGlStep(liveGl, { trail, ghost: 0, depositGain: 0, bleed: 0.1 });
+    }
   }
 
   if (!frozen) {
@@ -740,9 +741,11 @@ function drawNodeGraphScope2dEnergyBurnPath(item, pixelRatio, pathPoints, settin
   // Opaque brightness then LUT. No hue fill, no lighter, no alpha fade.
   // 2D Phosphor keeps scope2dOpaque. 1D line burn uses its own program.
   context.setTransform(1, 0, 0, 1, 0, 0);
+  // Present max(live, burn); burn layer alone only if the live layer is unavailable.
+  const presentGl = (liveGl && nodeGraphBurnFaceMaxComposite(liveGl, energyGl)) || energyGl;
   const presented = options.lineBurnOpaque === true
-    ? nodeGraphPhosphorEnergyGlPresent(energyGl, 1, { lineBurnOpaque: true, plate: plate01 })
-    : nodeGraphPhosphorEnergyGlPresent(energyGl, 1, { scope2dOpaque: true, plate: plate01 });
+    ? nodeGraphPhosphorEnergyGlPresent(presentGl, 1, { lineBurnOpaque: true, plate: plate01 })
+    : nodeGraphPhosphorEnergyGlPresent(presentGl, 1, { scope2dOpaque: true, plate: plate01 });
   // Same-size copy from the shared device into the face (no 2D fallback).
   if (presented) {
     context.globalCompositeOperation = "source-over";
@@ -752,6 +755,84 @@ function drawNodeGraphScope2dEnergyBurnPath(item, pixelRatio, pathPoints, settin
     }
   }
   return true;
+}
+
+
+// Live trace layer (Bright only) for burn faces. The main energy renderer
+// (canvas._phosphorEnergyGl) is the burn / ghost layer: new strokes deposit
+// Bright x Burn and decay with Trail + Ghost. The live layer gets the same
+// strokes at Bright, decays with Trail only (no Ghost hang), and is presented
+// as max(live, burn) so Burn 0 still shows the trace at Bright and the two
+// layers never add (no double-brightening). Owner-tracked: when the burn
+// renderer is replaced (wipe / context loss) the live layer is rebuilt too.
+function nodeGraphBurnFaceLiveLayer(canvas, energyGl, width, height) {
+  if (!canvas || !energyGl || typeof nodeGraphPhosphorEnergyGlEnsure !== "function") {
+    return null;
+  }
+  if (canvas._phosphorLiveEnergyGlOwner !== energyGl && canvas._phosphorLiveEnergyGl) {
+    if (typeof nodeGraphPhosphorEnergyGlDestroy === "function") {
+      try {
+        nodeGraphPhosphorEnergyGlDestroy(canvas._phosphorLiveEnergyGl);
+      } catch (_error) { /* ignore */ }
+    }
+    canvas._phosphorLiveEnergyGl = null;
+  }
+  canvas._phosphorLiveEnergyGlOwner = energyGl;
+  return nodeGraphPhosphorEnergyGlEnsure(canvas, width, height, "_phosphorLiveEnergyGl");
+}
+
+// max(live, burn) into live.write (scratch: every live step fully rewrites
+// write before swapping), returned as a present view whose read = that scratch.
+function nodeGraphBurnFaceMaxComposite(live, burn) {
+  const gl = live?.gl;
+  if (!gl || gl !== burn?.gl || !live.read || !live.write || !burn.read
+    || live.width !== burn.width || live.height !== burn.height) {
+    return null;
+  }
+  let prog = gl._nodeGraphBurnFaceMaxProgram;
+  if (!prog) {
+    const vs = gl.createShader(gl.VERTEX_SHADER);
+    gl.shaderSource(vs, "#version 300 es\nvoid main(){vec2 p=vec2(float((gl_VertexID<<1)&2),float(gl_VertexID&2));gl_Position=vec4(p*2.0-1.0,0.0,1.0);}");
+    gl.compileShader(vs);
+    const fs = gl.createShader(gl.FRAGMENT_SHADER);
+    gl.shaderSource(fs, "#version 300 es\nprecision highp float;uniform sampler2D uSrc;out vec4 o;void main(){o=texelFetch(uSrc,ivec2(gl_FragCoord.xy),0);}");
+    gl.compileShader(fs);
+    const program = gl.createProgram();
+    gl.attachShader(program, vs);
+    gl.attachShader(program, fs);
+    gl.linkProgram(program);
+    gl.deleteShader(vs);
+    gl.deleteShader(fs);
+    if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+      gl.deleteProgram(program);
+      return null;
+    }
+    prog = { program, uSrc: gl.getUniformLocation(program, "uSrc") };
+    gl._nodeGraphBurnFaceMaxProgram = prog;
+  }
+  const w = live.width;
+  const h = live.height;
+  gl.bindFramebuffer(gl.READ_FRAMEBUFFER, live.read.framebuffer);
+  gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, live.write.framebuffer);
+  gl.blitFramebuffer(0, 0, w, h, 0, 0, w, h, gl.COLOR_BUFFER_BIT, gl.NEAREST);
+  gl.bindFramebuffer(gl.READ_FRAMEBUFFER, null);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, live.write.framebuffer);
+  gl.viewport(0, 0, w, h);
+  gl.useProgram(prog.program);
+  gl.activeTexture(gl.TEXTURE0);
+  gl.bindTexture(gl.TEXTURE_2D, burn.read.texture);
+  gl.uniform1i(prog.uSrc, 0);
+  gl.enable(gl.BLEND);
+  gl.blendEquation(gl.MAX);
+  gl.blendFunc(gl.ONE, gl.ONE);
+  gl.drawArrays(gl.TRIANGLES, 0, 3);
+  gl.blendEquation(gl.FUNC_ADD);
+  gl.disable(gl.BLEND);
+  gl.bindTexture(gl.TEXTURE_2D, null);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  const view = Object.create(live);
+  view.read = live.write;
+  return view;
 }
 
 

@@ -623,6 +623,18 @@ const nodeGraphTraceDisplayActiveControlsByType = Object.freeze({
     toggles: Object.freeze([]),
     choices: Object.freeze([]),
   }),
+  aberrationFace: Object.freeze({
+    fields: Object.freeze([]),
+    colors: Object.freeze([]),
+    toggles: Object.freeze([]),
+    choices: Object.freeze([]),
+  }),
+  screenBendFace: Object.freeze({
+    fields: Object.freeze([]),
+    colors: Object.freeze([]),
+    toggles: Object.freeze([]),
+    choices: Object.freeze([]),
+  }),
   videoFeedbackFace: Object.freeze({
     fields: Object.freeze([]),
     colors: Object.freeze(["dot1Color"]),
@@ -893,6 +905,13 @@ const nodeGraphTraceDisplayActiveControlsByType = Object.freeze({
   // Size (dot1Size) is 0…1 of the centered face square — F-fullscreen scales with it.
   sinCos4Face: Object.freeze({
     fields: Object.freeze(["dot1Size", "pixelDensity"]),
+    colors: Object.freeze([]),
+    toggles: Object.freeze([]),
+    choices: Object.freeze([]),
+  }),
+  // Lone t Torch face: hue shift 0..1 of the torch pixels (greys stay grey).
+  torchFace: Object.freeze({
+    fields: Object.freeze(["torchHue"]),
     colors: Object.freeze([]),
     toggles: Object.freeze([]),
     choices: Object.freeze([]),
@@ -1581,6 +1600,12 @@ const nodeGraphDisplaySettingsFieldMeta = Object.freeze({
     inputmode: "decimal",
     id: "nodeTraceDisplayHue",
     title: "LED lamp hue in degrees (0–360).",
+  }),
+  torchHue: Object.freeze({
+    label: "Hue",
+    inputmode: "decimal",
+    id: "nodeTraceDisplayTorchHue",
+    title: "Torch face: rotate the hue of the drawn torch (0..1 cycle). 0 = unchanged, 0.5 = half turn. Greys stay grey.",
   }),
   rounding: Object.freeze({
     label: "Rounding",
@@ -2526,6 +2551,8 @@ const nodeGraphDisplaySettingsFormTypeTitles = Object.freeze({
   rgbShapeFace: "Shape",
   rgbPictureFace: "Picture",
   imageBurnFace: "Image Ghost",
+  aberrationFace: "Aberration",
+  screenBendFace: "Screen Bend",
   videoFeedbackFace: "Spectrum Circle",
   rgbFractalFace: "Soft Fractal",
   evolveFieldFace: "Evolve Field",
