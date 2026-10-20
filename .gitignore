@@ -43,3 +43,8 @@ graphify-out/
 # Local Visual Studio / CMake IDE tree (generate_vs_project.bat)
 build_vs/
 CMakeUserPresets.json
+
+# Scratch / backups / probe output
+/mp_probe.png
+*~
+scripts/out/
