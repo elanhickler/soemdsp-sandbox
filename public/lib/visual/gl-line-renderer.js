@@ -1367,24 +1367,28 @@ void main() {
     }
     let squeeze = 1;
     const maxW = Number(options.maxWidth) * k;
+    // Too wide for maxWidth: shrink the whole run uniformly (x and y), never
+    // squeeze glyphs horizontally — controls keep their proportions.
     if (maxW > 0 && width > maxW) { squeeze = maxW / width; width = maxW; }
+    const gy = g * squeeze;
+    const pxRun = px * squeeze;
     const align = options.align || "center";
     const base = options.baseline || "middle";
     let pen = Math.round(x * k - (align === "center" ? width * 0.5 : (align === "right" ? width : 0)));
     let baseline = Math.round(y * k);
-    if (base === "middle") baseline += px * (TEXT_ASCENT - 0.5);
-    else if (base === "top") baseline += px * TEXT_ASCENT;
-    else if (base === "bottom") baseline -= px * (1 - TEXT_ASCENT);
+    if (base === "middle") baseline += pxRun * (TEXT_ASCENT - 0.5);
+    else if (base === "top") baseline += pxRun * TEXT_ASCENT;
+    else if (base === "bottom") baseline -= pxRun * (1 - TEXT_ASCENT);
     const sx = g * squeeze;
     const c = options.rgba || TEXT_WHITE;
     const cr = c[0]; const cg = c[1]; const cb = c[2]; const ca = c.length > 3 ? c[3] : 1;
     if (!hasEmoji) {
-      pen = pushGlyphs(batch, atlas, str, pen, baseline, g, sx, cr, cg, cb, ca);
+      pen = pushGlyphs(batch, atlas, str, pen, baseline, gy, sx, cr, cg, cb, ca);
       return;
     }
     for (const seg of segs) {
       if (!seg.emoji) {
-        pen = pushGlyphs(batch, atlas, seg.text, pen, baseline, g, sx, cr, cg, cb, ca);
+        pen = pushGlyphs(batch, atlas, seg.text, pen, baseline, gy, sx, cr, cg, cb, ca);
         continue;
       }
       const entry = emojiEntry(batch.s, seg.text, emojiPx);
@@ -1394,8 +1398,8 @@ void main() {
         const run = textRun(batch, entry.page.texture, true);
         // Whole device px so NEAREST samples the bake texel-for-pixel.
         const x0 = Math.round(pen - EMOJI_PAD * squeeze * emojiScale);
-        const y0 = Math.round(baseline - (EMOJI_PAD + Math.ceil(entry.px * 0.45) + entry.px * TEXT_ASCENT) * emojiScale);
-        pushTextQuad(batch, x0, y0, x0 + entry.w * squeeze * emojiScale, y0 + entry.h * emojiScale,
+        const y0 = Math.round(baseline - (EMOJI_PAD + Math.ceil(entry.px * 0.45) + entry.px * TEXT_ASCENT) * squeeze * emojiScale);
+        pushTextQuad(batch, x0, y0, x0 + entry.w * squeeze * emojiScale, y0 + entry.h * squeeze * emojiScale,
           entry.u0, entry.v0, entry.u1, entry.v1, 1, 1, 1, ca);
         run.end = batch.tn;
       }
@@ -1413,7 +1417,19 @@ void main() {
     return run;
   }
 
+  // Glyph aspect watch (smoke_text_aspect.mjs): x scale / y scale of every glyph quad.
+  const textAspect = { quads: 0, minRatio: 1, maxRatio: 1 };
+  function nodeGraphGlLinesTextAspectStats(reset = false) {
+    const out = { ...textAspect };
+    if (reset) { textAspect.quads = 0; textAspect.minRatio = 1; textAspect.maxRatio = 1; }
+    return out;
+  }
+
   function pushGlyphs(batch, atlas, str, pen, baseline, g, sx, cr, cg, cb, ca) {
+    const ratio = sx / Math.max(1e-9, g);
+    textAspect.quads += 1;
+    if (ratio < textAspect.minRatio) textAspect.minRatio = ratio;
+    if (ratio > textAspect.maxRatio) textAspect.maxRatio = ratio;
     const run = textRun(batch, atlas.texture, false);
     for (const ch of str) {
       const gl = atlas.glyphs.get(ch);
@@ -2338,6 +2354,7 @@ void main() {
     nodeGraphGlLinesTextAtlas,
     nodeGraphGlLinesTextSegments,
     nodeGraphGlLinesEmojiStats,
+    nodeGraphGlLinesTextAspectStats,
     nodeGraphGlLinesCss,
     nodeGraphGlLinesHsl,
     nodeGraphGlLinesEnd,
