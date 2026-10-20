@@ -360,6 +360,8 @@ function beginNodeGraphTraceDisplayFieldDrag(event) {
     startY: event.clientY,
     // Live-updated on move; re-anchor when Shift/Ctrl scale changes.
     multiplier: nodeGraphTraceDisplayNumberDragMultiplier(event),
+    // Ctrl/Cmd press: a click resets to default on release; moving = fine drag.
+    resetClick: nodeGraphNumericResetClickModifier(event),
   };
   input.classList.add("value-dragging");
   input.setPointerCapture?.(event.pointerId);
@@ -380,6 +382,14 @@ function dragNodeGraphTraceDisplayField(event) {
     (drag.pointerId !== null && event.pointerId !== undefined && drag.pointerId !== event.pointerId)
   ) {
     return;
+  }
+  if (drag.resetClick) {
+    if (!nodeGraphPointerDragExceededMoveThreshold(drag.startX, drag.startY, event.clientX, event.clientY, 2)) {
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
+    drag.resetClick = false;
   }
   // Re-anchor when fine modifiers change mid-drag so releasing Shift
   // does not jump as if the whole drag used the new scale.
@@ -441,6 +451,12 @@ function endNodeGraphTraceDisplayFieldDrag(event) {
   }
   if (drag.key === "zoomSeconds") {
     setNodeGraphTraceDisplayZoomEditActive(false);
+  }
+  if (drag.resetClick && event.type !== "pointercancel") {
+    // Ctrl/Cmd+click: the form's real default, committed as one undo step below.
+    drag.input.value = formatNodeGraphTraceDisplaySetting(
+      normalizeNodeGraphTraceDisplaySettingValueForKey(drag.key, nodeGraphDisplaySettingsDefaultValue(drag.key)),
+    );
   }
   if (typeof markNodeGraphTraceDisplaySettingsDirty === "function") {
     markNodeGraphTraceDisplaySettingsDirty(drag.key);

@@ -50,6 +50,15 @@ function nodeGraphNumericModifierReserved() {
   return false;
 }
 
+/**
+ * Ctrl/Cmd+click (no Shift, no Alt) = reset to default. App-wide test shared by
+ * Display Settings number fields and native range panels. A press that then
+ * moves past nodeGraphPointerDragExceededMoveThreshold is a fine drag instead.
+ */
+function nodeGraphNumericResetClickModifier(event) {
+  return Boolean((event?.ctrlKey || event?.metaKey) && !event?.shiftKey && !event?.altKey);
+}
+
 function nodeGraphNumericDragMultiplier(event) {
   // Alt is snap-to-value on click, not a drag-speed multiplier. After an
   // alt-jump, holding Alt and dragging must match a normal click-drag.
