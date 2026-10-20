@@ -691,6 +691,23 @@ That ban applies only when all three are true: there is no consequence for leavi
 - Panels with exactly one color are an open question (`docs/COLOR_ROW_PLAN.md`).
 - Plan, inventory and smoke test: `docs/COLOR_ROW_PLAN.md` (CR-1..CR-7).
 
+## 21b. Display Settings order: sweep near the top, colors last (Argi, 2026-10-19)
+
+**In every display's settings, the sweep and history rate pair sits near the top, and color widgets come after every other setting.**
+
+- The sweep pair is Sweep (Hz) / Sweep (cycles) and the history pair is History (Hz) / History (cycles). The pair sits right after any Sync toggle and Scale, ahead of brightness, size and other look settings.
+- Color widgets (§21 list, plus gradient selectors) come after all steppers, choices, toggles and action buttons such as Clear. The only thing allowed after the colors is an image slot.
+- Order comes only from `nodeGraphDisplaySettingsSharedStackOrder` and each display's field lists. No per-display ordering hacks in the form builders.
+- Plan and violation inventory: `docs/DISPLAY_SETTINGS_NUMBERS_PLAN.md` (DS-8).
+
+## 21c. The mouse wheel never changes a parameter (Argi, 2026-10-19)
+
+**The mouse wheel is for zooming only. It never changes a parameter value, anywhere in the app:** module sliders and knobs, Display Settings, native `<input type=range/number>` panels, UI Settings, the UI dev helper, and every other window.
+
+- Values change by drag (with the fine modifiers), −/+ steppers, Ctrl/Cmd+click reset, or typed text. Never by the wheel.
+- Allowed wheel uses: workspace and view zoom (including Sample Waveform Shift+wheel), and scrolling lists or panels. Don't add `wheel` listeners that step values, and delete any you find (§10b).
+- Plan and handler inventory: `docs/DISPLAY_SETTINGS_NUMBERS_PLAN.md` (DS-9).
+
 ## Public links (Argi, 2026-10-17)
 
 - The soundemote GitHub org is banned: code, docs and plugin metadata must never link to `github.com/soundemote`. Public links go to `github.com/elanhickler`.

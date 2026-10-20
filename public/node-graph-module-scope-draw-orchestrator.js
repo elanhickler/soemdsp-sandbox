@@ -537,7 +537,9 @@ function drawNodeGraphModuleScopes(options = {}) {
     || nodeGraphModuleDisplayRendererForSlot(it?.slot) === "aberrationFace"
     || it?.slot?.type === "aberration"
     || nodeGraphModuleDisplayRendererForSlot(it?.slot) === "screenBendFace"
-    || it?.slot?.type === "screenBend",
+    || it?.slot?.type === "screenBend"
+    || nodeGraphModuleDisplayRendererForSlot(it?.slot) === "placeFace"
+    || it?.slot?.type === "place",
   );
   if (!force && allowTraceSkip && !feedbackLive && nodeGraphModuleScopeTraceDisplayFrameUnchanged(visibleItems)) {
     setNodeGraphModuleScopeDebugPhase("trace-unchanged");

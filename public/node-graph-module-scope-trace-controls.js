@@ -629,6 +629,12 @@ const nodeGraphTraceDisplayActiveControlsByType = Object.freeze({
     toggles: Object.freeze([]),
     choices: Object.freeze([]),
   }),
+  placeFace: Object.freeze({
+    fields: Object.freeze([]),
+    colors: Object.freeze([]),
+    toggles: Object.freeze([]),
+    choices: Object.freeze([]),
+  }),
   screenBendFace: Object.freeze({
     fields: Object.freeze([]),
     colors: Object.freeze([]),
@@ -2594,6 +2600,7 @@ const nodeGraphDisplaySettingsFormTypeTitles = Object.freeze({
   imageBurnFace: "Image Ghost",
   aberrationFace: "Aberration",
   screenBendFace: "Screen Bend",
+  placeFace: "Place",
   videoFeedbackFace: "Spectrum Circle",
   rgbFractalFace: "Soft Fractal",
   evolveFieldFace: "Evolve Field",

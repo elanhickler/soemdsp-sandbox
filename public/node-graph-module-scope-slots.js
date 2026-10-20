@@ -315,6 +315,7 @@ function nodeGraphModuleScopeHasModelDisplay() {
       renderer === "videoDelayFace" ||
       renderer === "aberrationFace" ||
       renderer === "screenBendFace" ||
+      renderer === "placeFace" ||
       nodeGraphModuleScopeIsOscillatorType(slot.type) ||
       (["waterfall", "dotOscilloscope", "valueOscilloscope", "lineBurnOscilloscope", "scope1dTrace", "led"].includes(slot.type) &&
         nodeGraphModuleScopeConnectionsTo(slot.nodeId, "In").length > 0) ||

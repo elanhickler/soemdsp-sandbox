@@ -119,6 +119,10 @@ PUBLIC_SCRIPT_PATHS = (
     "./public/modules/screenBend/screen-bend-ui.js",
     "./public/modules/screenBend/screen-bend-gl.js",
     "./public/modules/screenBend/screen-bend-display.js",
+    "./public/modules/place/place-register.js",
+    "./public/modules/place/place-ui.js",
+    "./public/modules/place/place-gl.js",
+    "./public/modules/place/place-display.js",
     "./public/modules/rgbFractal/rgb-fractal-register.js",
     "./public/modules/evolveField/evolve-field-register.js",
     "./public/modules/fbmField/fbm-field-register.js",
@@ -2588,6 +2592,7 @@ def require_chromeless_module_registry_contract() -> None:
 
     expected_types = {
         "aberration",
+        "place",
         "screenBend",
         "bugButton",
         "evolveField",

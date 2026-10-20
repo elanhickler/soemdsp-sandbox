@@ -1,3 +1,7 @@
+## 2026-10-19 - Display Settings numbers plan (docs only)
+
+- Added `docs/DISPLAY_SETTINGS_NUMBERS_PLAN.md` (Argi via Librarian; plan only, no code): Ctrl/Cmd+click reset, app-wide fine-drag modifiers (no Alt+click), wheel, one shared drag law via `nodeGraphPointerDragTravelDelta`. Root cause of Sweep (Hz)/Cycles 5 to 100 in ~5 px: `nodeGraphTraceDisplayStepperQuantum` keys special cases on unset `dataset.waterfallField`, so magnitude quantum (1) is added in 0-1 control space at /8 px. Tracker DS-1..DS-7, Q1-Q7 with proposed defaults. Pointer in `docs/FUTURE_PLANNING.md`. Not committed.
+
 ## 2026-10-19 - Drum pack plan (docs only)
 
 - Added `docs/DRUM_PACK_PLAN.md` (Argi via SandyModules; plan only, no code): Electro Hat (`electroHat`, replaces the placeholder; Closed/Open/Reset, choke, stereo Hat L/R + Env; 808/606/FM/Noise), Electro Tom (`electroTom`; 808/909/Simmons; Tom L/R + Env) and Electro Kick (`electroKick`; 808/909/Simmons; Kick L/R + Env), all on the Electro Snare template (type 222). Tracker DP-1..DP-9 with smoke/parity tests; Q2-Q16 resolved (no Hat Stereo Spread knob, 909 hat skipped), Q1 (library helpers) approved by Argi with Electro Snare kept bit-exact, so all questions resolved and ready to build; Stereo module seeded in `docs/FUTURE_PLANNING.md`; unseeded drums (cymbal, cowbell, clap, rimshot) listed only as suggestions. Pointer in `docs/FUTURE_PLANNING.md`. Not committed.

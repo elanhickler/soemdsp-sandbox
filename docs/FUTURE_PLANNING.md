@@ -2,6 +2,10 @@
 
 This file collects project-shaping ideas that should survive day-to-day implementation without becoming immediate scope.
 
+## Display Settings numbers (2026-10-19)
+
+Plan only (DS-1..DS-7, not started). Display Settings number fields get Ctrl/Cmd+click reset, app-wide fine-drag modifiers (Shift/Ctrl x0.1, both x0.01, no Alt jump), wheel, and one shared drag law. Fixes Sweep (Hz)/Cycles jumping 5 to 100 in ~5 px (dead `waterfallField` quanta + magnitude quantum in control space). Plan: `docs/DISPLAY_SETTINGS_NUMBERS_PLAN.md`.
+
 ## Deletable Output and Input (2026-10-19)
 
 Done locally (DO-1..DO-9, not pushed). Output and Input are deletable; each returns only via Undo or its lower-bar button turning on, which respawns it with its saved settings and position (`patch.ioModuleSettings`). Play never spawns. Plan and deviations: `docs/DELETABLE_OUTPUT_PLAN.md`.

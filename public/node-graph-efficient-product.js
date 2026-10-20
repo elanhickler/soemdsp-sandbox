@@ -301,6 +301,7 @@ const NODE_GRAPH_EFFICIENT_PRODUCT_OBSERVER_TYPES = Object.freeze([
   "lcdDot",
   "vectorRgb",
   "aberration",
+  "place",
   "screenBend",
   "videoDelay",
   "videoFeedback",
