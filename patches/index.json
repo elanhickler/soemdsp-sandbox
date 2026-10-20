@@ -85,6 +85,15 @@
       "folder": "demo_patches"
     },
     {
+      "slug": "demo_patches/kick_and_snare",
+      "label": "kick_and_snare",
+      "name": "",
+      "url": "/soemdsp-sandbox/patches/demo_patches/kick_and_snare.json",
+      "author": "",
+      "emoji": "",
+      "folder": "demo_patches"
+    },
+    {
       "slug": "demo_patches/little_t",
       "label": "little_t",
       "name": "",
@@ -660,6 +669,14 @@
       "label": "kick using fcf",
       "name": "",
       "url": "/soemdsp-sandbox/patches/drums/kick%20using%20fcf.json",
+      "author": "",
+      "emoji": ""
+    },
+    {
+      "slug": "kick_and_snare",
+      "label": "kick_and_snare",
+      "name": "",
+      "url": "/soemdsp-sandbox/patches/demo_patches/kick_and_snare.json",
       "author": "",
       "emoji": ""
     },
