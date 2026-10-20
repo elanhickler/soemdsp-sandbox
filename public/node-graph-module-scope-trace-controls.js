@@ -915,9 +915,9 @@ const nodeGraphTraceDisplayActiveControlsByType = Object.freeze({
     toggles: Object.freeze([]),
     choices: Object.freeze([]),
   }),
-  // Size (dot1Size) is 0…1 of the centered face square — F-fullscreen scales with it.
+  // Outer / Hub dot size (were one "Size") are in the centered face square; F-fullscreen scales with it.
   sinCos4Face: Object.freeze({
-    fields: Object.freeze(["dot1Size", "sinCos4RayThickness", "sinCos4RingThickness", "sinCos4HubSize", "pixelDensity"]),
+    fields: Object.freeze(["sinCos4OuterDotSize", "sinCos4HubDotSize", "sinCos4RayThickness", "sinCos4RingThickness", "sinCos4HubSize", "pixelDensity"]),
     colors: Object.freeze([]),
     toggles: Object.freeze([]),
     choices: Object.freeze([]),
@@ -1028,6 +1028,8 @@ const nodeGraphTraceDisplaySectionControls = Object.freeze({
     fields: Object.freeze([
       "dot1Brightness",
       "dot1Size",
+      "sinCos4OuterDotSize",
+      "sinCos4HubDotSize",
       "sinCos4RayThickness",
       "sinCos4RingThickness",
       "sinCos4HubSize",
@@ -1617,6 +1619,18 @@ const nodeGraphDisplaySettingsFieldMeta = Object.freeze({
     id: "nodeTraceDisplayHue",
     title: "LED lamp hue in degrees (0–360).",
   }),
+  sinCos4OuterDotSize: Object.freeze({
+    label: "Outer dot size",
+    inputmode: "decimal",
+    id: "nodeTraceDisplaySinCos4OuterDotSize",
+    title: "SinCos4: the position dots on the ring (0..10, default 0.08; radius = 1% + 4% x value of the face square). Tap A is drawn 1.15x.",
+  }),
+  sinCos4HubDotSize: Object.freeze({
+    label: "Hub dot size",
+    inputmode: "decimal",
+    id: "nodeTraceDisplaySinCos4HubDotSize",
+    title: "SinCos4: base size of the centre dot (0..10, default 0.08; same formula as Outer dot size, then x Hub size).",
+  }),
   sinCos4RayThickness: Object.freeze({
     label: "Line thickness",
     inputmode: "decimal",
@@ -1633,7 +1647,7 @@ const nodeGraphDisplaySettingsFieldMeta = Object.freeze({
     label: "Hub size",
     inputmode: "decimal",
     id: "nodeTraceDisplaySinCos4HubSize",
-    title: "SinCos4: centre dot radius as a multiple of the tip dot radius (0..10, default 0.7).",
+    title: "SinCos4: centre dot radius as a multiple of the Hub dot size radius (0..10, default 0.7).",
   }),
   torchHue: Object.freeze({
     label: "Hue",

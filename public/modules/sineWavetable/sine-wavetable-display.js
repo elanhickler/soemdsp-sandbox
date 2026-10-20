@@ -68,13 +68,16 @@ const NODE_GRAPH_SINCOS4_COLORS = Object.freeze([
 ]);
 
 // Display Settings schema `sinCos4Face`: sizes only (tap colours and plate fixed).
-//   dot1Size        tip dots, 0..10 (tip radius = 0.01 + 0.04 * size of the square)
+//   sinCos4OuterDotSize   outer (ring) position dots, 0..10 (radius = 0.01 + 0.04 * size of the square)
+//   sinCos4HubDotSize     centre hub base, 0..10 (same formula; x Hub size below)
+//   (Legacy `dot1Size` "Size" scaled both; old patches map it onto both.)
 //   sinCos4RayThickness   ray width, % of the face square, 0..50 (tap A drawn 1.35x)
 //   sinCos4RingThickness  ring width, % of the face square, 0..50
-//   sinCos4HubSize        centre hub radius, x the tip radius, 0..10
+//   sinCos4HubSize        centre hub radius, x the hub base radius, 0..10
 // Defaults = the original fixed look (ray / ring 1.2 %, hub 0.7 x tip).
 const nodeGraphSinCos4FaceDisplaySettingsDefaults = Object.freeze({
-  dot1Size: 0.08,
+  sinCos4OuterDotSize: 0.08,
+  sinCos4HubDotSize: 0.08,
   sinCos4RayThickness: 1.2,
   sinCos4RingThickness: 1.2,
   sinCos4HubSize: 0.7,
@@ -87,7 +90,8 @@ function normalizeNodeGraphSinCos4FaceSettings(settings = {}) {
   const num = (v, fb, lo, hi) => { const n = Number(v); return Number.isFinite(n) ? Math.max(lo, Math.min(hi, n)) : fb; };
   return {
     ...s,
-    dot1Size: num(s.dot1Size, d.dot1Size, 0, 10),
+    sinCos4OuterDotSize: num(s.sinCos4OuterDotSize ?? s.dot1Size, d.sinCos4OuterDotSize, 0, 10),
+    sinCos4HubDotSize: num(s.sinCos4HubDotSize ?? s.dot1Size, d.sinCos4HubDotSize, 0, 10),
     sinCos4RayThickness: num(s.sinCos4RayThickness, d.sinCos4RayThickness, 0, 50),
     sinCos4RingThickness: num(s.sinCos4RingThickness, d.sinCos4RingThickness, 0, 50),
     sinCos4HubSize: num(s.sinCos4HubSize, d.sinCos4HubSize, 0, 10),
@@ -107,13 +111,14 @@ function applyNodeGraphSinCos4DisplaySettingsToFace(node) {
 /** Face look in 0..1 of the centered square (F-safe). */
 function nodeGraphSinCos4FaceNorm(node) {
   const td = normalizeNodeGraphSinCos4FaceSettings(node?.traceDisplaySettings);
-  const tip = 0.01 + td.dot1Size * 0.04;
+  const tip = 0.01 + td.sinCos4OuterDotSize * 0.04;
+  const hubBase = 0.01 + td.sinCos4HubDotSize * 0.04;
   return {
     radius: 0.38,
     stroke: td.sinCos4RayThickness / 100,
     ringStroke: td.sinCos4RingThickness / 100,
     tip,
-    hub: tip * td.sinCos4HubSize,
+    hub: hubBase * td.sinCos4HubSize,
     pixelDensity: td.pixelDensity || 1,
   };
 }

@@ -312,7 +312,7 @@ function nodeGraphTraceDisplayUnitDragRange(key) {
   if (key === "sinCos4RayThickness" || key === "sinCos4RingThickness") {
     return { min: 0, max: 50 };
   }
-  if (key === "sinCos4HubSize") {
+  if (key === "sinCos4HubSize" || key === "sinCos4OuterDotSize" || key === "sinCos4HubDotSize") {
     return { min: 0, max: 10 };
   }
   return { min: 0, max: 1 };
@@ -903,7 +903,8 @@ const nodeGraphTraceDisplayFormTypeValueClampOverrides = Object.freeze({
   sinCos4Face: Object.freeze({
     backgroundBrightness: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value), 0, 1),
     sinCos4RayThickness: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, 1.2), 0, 50),
-    dot1Size: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, 0.08), 0, 10),
+    sinCos4OuterDotSize: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, 0.08), 0, 10),
+    sinCos4HubDotSize: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, 0.08), 0, 10),
     sinCos4RingThickness: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, 1.2), 0, 50),
     sinCos4HubSize: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, 0.7), 0, 10),
   }),

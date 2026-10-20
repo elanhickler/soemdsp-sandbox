@@ -1,5 +1,5 @@
 ﻿// Probe: SinCos4 face Display Settings — size-only controls (ray / ring / hub
-// thickness + Size + Pixel density); colours stay fixed; defaults = old look.
+// thickness + Outer / Hub dot size + Pixel density); colours stay fixed; defaults = old look.
 // Usage: node scripts/probe_sincos4_display_settings.mjs (server on :8090 or SANDBOX_URL).
 import { chromium } from "playwright";
 const BASE = process.env.SANDBOX_URL || "http://127.0.0.1:8090/";
@@ -30,11 +30,17 @@ const r = await page.evaluate(async () => {
   // Old fixed look, same formulas as before this change.
   const side = out.side, f = 0.7, half = (u) => Math.max(0, u * side * 0.5 - f * 0.5), tip = 0.01 + 0.08 * 0.04;
   out.expect = { ring: +half(0.012).toFixed(4), ray0: +half(0.012 * 1.35).toFixed(4), ray: +half(0.012).toFixed(4), tip0: +Math.max(0, tip * 1.15 * side - f * 0.5).toFixed(4), tip: +Math.max(0, tip * side - f * 0.5).toFixed(4), hub: +Math.max(0, tip * 0.7 * side - f * 0.5).toFixed(4) };
-  assignNodeGraphTypedDisplaySettingsToNode(node, "sinCos4Face", { sinCos4RayThickness: 3, sinCos4RingThickness: 0.5, sinCos4HubSize: 1.5, dot1Size: 0.08 });
+  assignNodeGraphTypedDisplaySettingsToNode(node, "sinCos4Face", { sinCos4RayThickness: 3, sinCos4RingThickness: 0.5, sinCos4HubSize: 1.5, sinCos4OuterDotSize: 0.08, sinCos4HubDotSize: 0.08 });
   out.chg = grab();
   out.stored = node.traceDisplaySettings;
+  const dots = (cs) => cs.filter((x) => x[0] === "nodeGraphGlLinesDot").map((x) => x[3]);
+  node.traceDisplaySettings = { sinCos4OuterDotSize: 3 }; out.outerOnly = dots(grab());
+  node.traceDisplaySettings = { sinCos4HubDotSize: 3 }; out.hubOnly = dots(grab());
+  node.traceDisplaySettings = { dot1Size: 3 }; out.legacy = dots(grab());
+  node.traceDisplaySettings = { sinCos4OuterDotSize: 3, sinCos4HubDotSize: 3 }; out.both = dots(grab());
+  node.traceDisplaySettings = {}; out.base = dots(grab());
   const pop = document.createElement("div"); pop.id = "probePop4"; pop.innerHTML = "<div data-display-settings-body></div>"; document.body.append(pop);
-  try { mountNodeGraphDisplaySettingsBody(pop, "sinCos4Face", node); out.formHas = ["nodeTraceDisplayDot1Size", "nodeTraceDisplaySinCos4RayThickness", "nodeTraceDisplaySinCos4RingThickness", "nodeTraceDisplaySinCos4HubSize"].filter((k) => pop.innerHTML.includes(k)); out.formColour = /hbs|Color/i.test(pop.innerHTML.replace(/class="[^"]*"/g, "")); } catch (e) { out.formErr = String(e); }
+  try { mountNodeGraphDisplaySettingsBody(pop, "sinCos4Face", node); out.formHas = ["nodeTraceDisplaySinCos4OuterDotSize", "nodeTraceDisplaySinCos4HubDotSize", "nodeTraceDisplaySinCos4RayThickness", "nodeTraceDisplaySinCos4RingThickness", "nodeTraceDisplaySinCos4HubSize"].filter((k) => pop.innerHTML.includes(k)); out.formDot1 = pop.innerHTML.includes("nodeTraceDisplayDot1Size"); out.formColour = /hbs|Color/i.test(pop.innerHTML.replace(/class="[^"]*"/g, "")); } catch (e) { out.formErr = String(e); }
   return out;
 });
 const widths = (calls) => ({ ring: calls.find((c) => c[0] === "nodeGraphGlLinesPolyline")?.[2], rays: calls.filter((c) => c[0] === "nodeGraphGlLinesSegment").map((c) => c[5]), dots: calls.filter((c) => c[0] === "nodeGraphGlLinesDot").map((c) => c[3]), colours: calls.map((c) => JSON.stringify(c.at(-1))) });
@@ -45,7 +51,11 @@ console.log("changed", JSON.stringify({ ring: c.ring, rays: c.rays, dots: c.dots
 const near = (a, b) => Math.abs(a - b) < 1e-3;
 gate(near(d.ring, e.ring) && near(d.rays[0], e.ray0) && d.rays.slice(1).every((w) => near(w, e.ray)) && near(d.dots[0], e.tip0) && near(d.dots.at(-1), e.hub), "defaults draw the old ring / ray / tip / hub widths");
 gate(c.ring < d.ring && c.rays[0] > d.rays[0] && c.dots.at(-1) > d.dots.at(-1), "ring / line thickness and hub size drive the WebGL draw");
+console.log("dots base/outer/hub/legacy", JSON.stringify([r.base, r.outerOnly, r.hubOnly, r.legacy]));
+gate(r.outerOnly[0] > r.base[0] && r.outerOnly[1] > r.base[1] && near(r.outerOnly.at(-1), r.base.at(-1)), "Outer dot size grows only the ring dots");
+gate(r.hubOnly.at(-1) > r.base.at(-1) && near(r.hubOnly[0], r.base[0]), "Hub dot size grows only the centre dot");
+gate(JSON.stringify(r.legacy) === JSON.stringify(r.both), "old saved Size (dot1Size) draws as Outer = Hub = Size");
 gate(JSON.stringify(c.colours) === JSON.stringify(d.colours), "colours unchanged by the size controls");
-gate(r.formHas?.length === 4, `form shows Size + the three thickness rows (${r.formHas} ${r.formErr || ""})`);
+gate(r.formHas?.length === 5 && !r.formDot1, `form shows Outer / Hub dot size + the three thickness rows (${r.formHas} ${r.formErr || ""})`);
 gate(errors.length === 0, `no page errors ${errors.slice(0, 3).join(" | ")}`);
 await browser.close(); console.log(failures ? `${failures} FAIL` : "all ok"); process.exit(failures ? 1 : 0);

@@ -13,9 +13,11 @@ await page.waitForFunction(() => typeof openNodeGraphTraceDisplaySettings === "f
 await page.waitForTimeout(2500);
 const types = process.argv[3] ? process.argv[3].split(",") : ["sinCos", "sineWavetable"];
 for (const type of types) {
-  const r = await page.evaluate(async (type) => {
+  const r = await page.evaluate(async ([type, oldSize]) => {
     const node = nodeGraphMvp.patch.nodes.find((n) => n.type === type);
     if (!node) return { type, missing: true };
+    // OLD_SIZE=<v>: seed a pre-split saved SinCos4 look ({ dot1Size }) to check migration.
+    if (oldSize != null && type === "sineWavetable") node.traceDisplaySettings = { ...(node.traceDisplaySettings || {}), dot1Size: oldSize, sinCos4OuterDotSize: undefined, sinCos4HubDotSize: undefined };
     nodeGraphMvp.sceneContextTargetNode = node.id; nodeGraphMvp.lastModuleActionTargetNode = node.id;
     const opened = openNodeGraphTraceDisplaySettings(node.id, { clientX: 700, clientY: 300 });
     await new Promise((res) => setTimeout(res, 600));
@@ -25,7 +27,7 @@ for (const type of types) {
       hbs: [...(pop?.querySelectorAll("[data-hbs-label]") || [])].map((el) => el.getAttribute("data-hbs-label")),
       text: (pop?.innerText || "").replace(/\s+/g, " ").slice(0, 400),
       // Type big values into the real form fields and commit like the user does.
-      typed: await (async () => { const want = { sinCos4RayThickness: 30, sinCos4RingThickness: 40, sinCos4HubSize: 8, dot1Size: 5, lineThickness: 9, dotThickness: 20 };
+      typed: await (async () => { const want = { sinCos4RayThickness: 30, sinCos4RingThickness: 40, sinCos4HubSize: 8, sinCos4OuterDotSize: 6, sinCos4HubDotSize: 4, lineThickness: 9, dotThickness: 20 };
         const done = {};
         for (const [k, v] of Object.entries(want)) { const el = pop?.querySelector(`[data-trace-display-field="${k}"]`); if (!el) continue;
           el.readOnly = false; el.focus(); el.value = String(v); el.dispatchEvent(new Event("input", { bubbles: true })); el.dispatchEvent(new Event("change", { bubbles: true }));
@@ -33,7 +35,7 @@ for (const type of types) {
         await new Promise((res) => setTimeout(res, 400));
         const td = nodeGraphMvp.patch.nodes.find((n) => n.id === node.id)?.traceDisplaySettings || {};
         return Object.fromEntries(Object.keys(done).map((k) => [k, td[k]])); })() };
-  }, type);
+  }, [type, process.env.OLD_SIZE != null ? Number(process.env.OLD_SIZE) : null]);
   console.log(JSON.stringify(r));
   if (!r.missing) { await page.locator("#nodeTraceDisplaySettingsPopover").screenshot({ path: `scripts/out/ds_${type}.png` }).catch(() => {}); }
 }
