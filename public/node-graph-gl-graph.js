@@ -1620,6 +1620,9 @@ function nodeGraphGlGraphPresent(options = {}) {
   }
   batch.textPixelated = zoom > 2.5;
   nodeGraphGlGraphDrawChrome(batch, toX, toY, layoutZoom, cssW, cssH);
+  if (typeof nodeGraphModuleFaceDrawAllGl === "function") {
+    nodeGraphModuleFaceDrawAllGl(batch, nodeGraphGlGraphState.plates, toX, toY, layoutZoom, cssW, cssH);
+  }
   const pixelated = zoom > 2.5;
   for (let i = 0; i < nodeGraphGlGraphState.displays.length; i += 1) {
     const face = nodeGraphGlGraphState.displays[i];
@@ -2044,7 +2047,7 @@ function nodeGraphGlHitIsLiveHtml(target) {
 function nodeGraphGlHitKeepsNativeTarget(target) {
   if (!(target instanceof Element)) return false;
   return Boolean(target.closest(
-    ".node-module-graph-face, .node-module-graph-display, .node-keypad-face, .node-knob-face, .node-xy-pad-canvas, .node-sequencer-roll, .acid-seq-face, .node-arp-keys-face, .node-plugin-toggle-button, .node-plugin-momentary-button, .node-sample-waveform-display, .node-midi-keyboard-surface, .node-midi-keyboard-module, .node-grid-keyboard-surface, .node-grid-keyboard-pad, [data-key-index]",
+    ".node-face, .node-module-graph-face, .node-module-graph-display, .node-keypad-face, .node-knob-face, .node-xy-pad-canvas, .node-sequencer-roll, .acid-seq-face, .node-arp-keys-face, .node-plugin-toggle-button, .node-plugin-momentary-button, .node-sample-waveform-display, .node-midi-keyboard-surface, .node-midi-keyboard-module, .node-grid-keyboard-surface, .node-grid-keyboard-pad, [data-key-index]",
   ));
 }
 

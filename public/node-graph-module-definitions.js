@@ -13744,6 +13744,18 @@ const nodeGraphModuleDefinitions = (
   // Ping Pong: Mix L/R = audio; LFO L/R = gold CV (raw bipolar LFO before Amp).
   pingPongDelay: {
     planRole: "processor",
+    // Hand-written face (rails plan PP-5), soundemote-dev "Condensed 5" look.
+    face: [
+      { kind: "choices", param: "pingPong", labels: ["Off", "LR", "LMR"], h: 26 },
+      { kind: "fraction", num: "timeNumerator", den: "timeDenominator", mode: "timingMode",
+        modeLabels: ["Normal", "Dotted", "Triplet"], cell: ["offset", "Offset"], h: 52 },
+      { kind: "lfoStyles", param: "lfoStyle", labels: ["Parabol", "Walk", "FBM"], seedParam: "seed", h: 48 },
+      { kind: "cells", params: [["lfoAmp", "Amp"], ["lfoRate", "Hz"], ["lfoVariation", "Vary"]], h: 54 },
+      { kind: "filter", hpf: "hpfFrequency", lpf: "lpfFrequency", h: 92 },
+      { kind: "cells", params: [["feedback", "Feedback"], ["saturate", "Saturate"]], h: 54 },
+      { kind: "cells", params: [["mix", "Mix"], ["amplitude", "Amplitude"]], h: 54 },
+      { kind: "seed", param: "seed", h: 28 },
+    ],
     // Instant Waterfall (Blur only; full-face waveform, no amplitude law) — stereo Mix Out (not LFO CV).
     displayType: "waterfall",
     spectrumCompanion: false,

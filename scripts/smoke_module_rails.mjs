@@ -53,7 +53,8 @@ const snap = () => page.evaluate(() => {
   const pp = document.querySelector('article[data-node="pp-1"]');
   const r = (el) => (el ? el.getBoundingClientRect() : null);
   const row = pp.querySelector('.node-parameter-row[data-param="feedback"]');
-  const ctl = row?.querySelector(".node-parameter-control");
+  // Ping Pong has a hand-written face (PP-5): the face is the param area.
+  const ctl = pp.querySelector(".node-face") || row?.querySelector(".node-parameter-control");
   const mod = row?.querySelector(".node-param-port.modulation-input");
   const thru = row?.querySelector(".node-param-port.parameter-output");
   const display = pp.querySelector("canvas");
@@ -70,7 +71,7 @@ const snap = () => page.evaluate(() => {
     ctlW: r(ctl).width,
     modW: r(mod).width,
     thruW: r(thru).width,
-    rowTop: r(row).top,
+    rowTop: r(ctl).top,
     modPatched: mod.classList.contains("rail-patched"),
     thruLabel: thru.dataset.railLabel,
     thruTags: [...pp.querySelectorAll(".node-param-port.parameter-output")]
@@ -158,8 +159,9 @@ const out = await page.evaluate(() => {
   const row = document.querySelector('article[data-node="sw-1"] .node-io-row.output');
   const jack = row.querySelector(".node-port") || row;
   const a = jack.getBoundingClientRect();
-  const ctl = document.querySelector('article[data-node="pp-1"] .node-parameter-row[data-param="feedback"] .node-parameter-control').getBoundingClientRect();
-  return { port: row.dataset.port, ax: a.left + a.width / 2, ay: a.top + a.height / 2, bx: ctl.left + ctl.width * 0.75, by: ctl.top + ctl.height / 2 };
+  const box = nodeGraphModuleFaceHitBoxes(document.querySelector('article[data-node="pp-1"]'))
+    .find((b) => b.row.dataset.param === "feedback");
+  return { port: row.dataset.port, ax: a.left + a.width / 2, ay: a.top + a.height / 2, bx: box.left + (box.right - box.left) * 0.75, by: (box.top + box.bottom) / 2 };
 });
 await page.mouse.move(out.ax, out.ay);
 await page.mouse.down();
@@ -170,7 +172,7 @@ await page.waitForTimeout(400);
 if (process.env.DEBUG) console.log("drag", JSON.stringify(out), JSON.stringify(await page.evaluate(() => ({ mods: nodeGraphMvp.patch.modulations, conns: nodeGraphMvp.patch.connections, at: document.elementFromPoint(0, 0) && null }))));
 const dropped = await page.evaluate(() => (nodeGraphMvp.patch.modulations || [])
   .filter((m) => m.destinationNode === "pp-1").map((m) => `${m.sourcePort}->${m.destinationParam}`));
-check("drop on the control (right half) lands on the mod inlet", dropped.length === 1 && /->feedback$/.test(dropped[0]), JSON.stringify(dropped));
+check("drop on the Feedback face cell lands on the mod inlet", dropped.length === 1 && /->feedback$/.test(dropped[0]), JSON.stringify(dropped));
 const afterDrop = await snap();
 check("drop opens the mod rail", afterDrop.open);
 await shot("pingpong-dropped", 'article[data-node="pp-1"]');

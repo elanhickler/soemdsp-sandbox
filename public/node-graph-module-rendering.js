@@ -1629,6 +1629,9 @@ function createNodeGraphModuleElement(type, node) {
       body.append(createNodeGraphParameter(node, type, parameter));
     }
     article.append(body);
+    if (typeof mountNodeGraphModuleFace === "function") {
+      mountNodeGraphModuleFace(article, type);
+    }
   }
 
   // Lip is a painted plate band with no other child. Without a hit target,

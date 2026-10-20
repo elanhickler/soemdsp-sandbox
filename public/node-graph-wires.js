@@ -287,6 +287,9 @@
           midY: rowRect.top + rowRect.height * 0.5,
         });
       }
+      if (typeof nodeGraphModuleFaceHitBoxes === "function") {
+        boxes.push(...nodeGraphModuleFaceHitBoxes(node));
+      }
       parameterRowHitCache = token ? { token, node, epoch, boxes } : null;
       return boxes;
     }

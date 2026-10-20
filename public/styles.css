@@ -25875,4 +25875,43 @@ html.soemdsp-whole-module .node-layout-canvas-grip {
   pointer-events: none;
 }
 
+/* Hand-written module face (rails plan PP-5, node-graph-module-face.js).
+   WebGL paints the face; .node-face is the single pointer target. Param rows
+   stay for their inputs and rail jacks; the jacks stack per face row. */
+.dsp-node.has-module-face > .dsp-node-body {
+  position: relative;
+  display: block;
+  padding: 0;
+}
+.dsp-node.has-module-face > .dsp-node-body > .node-parameter-row:not([hidden]) {
+  display: contents;
+}
+.dsp-node.has-module-face .node-parameter-row > .node-parameter-control {
+  display: none;
+}
+.dsp-node.has-module-face .node-parameter-row > .node-param-port {
+  position: absolute;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  box-sizing: border-box;
+}
+.dsp-node.has-module-face .node-parameter-row > .node-param-port.modulation-input {
+  left: 0;
+}
+.dsp-node.has-module-face .node-parameter-row > .node-param-port.parameter-output {
+  right: 0;
+}
+.dsp-node.has-module-face .node-parameter-row.node-face-unplaced > .node-param-port {
+  display: none;
+}
+.dsp-node.has-module-face .node-face {
+  position: absolute;
+  top: 0;
+  left: var(--node-mod-rail-width, 0px);
+  right: var(--node-rail-width, 40px);
+  pointer-events: auto;
+  touch-action: none;
+}
+
 /* Layout 3 (railsOnly) uses the shared IO label type; labels are short (rails.js). */

@@ -676,6 +676,11 @@ function normalizeNodeGraphTextBoxHeightUnits(heightGu, ui = {}) {
  * Pass ui to honor sliders-hidden / effective UI; omit ui for raw definition rows.
  */
 function nodeGraphModuleSliderBodyHeightGu(type, ui = null, node = null) {
+  // Hand-written face: its rows set the body height (node-graph-module-face.js).
+  const facePx = typeof nodeGraphModuleFaceHeightPx === "function" ? nodeGraphModuleFaceHeightPx(type) : 0;
+  if (facePx > 0) {
+    return facePx / nodeGraphGrid.heightPx;
+  }
   const rows = ui != null
     ? nodeGraphModuleVisibleSliderRowCountForUi(type, ui, node)
     : nodeGraphModuleVisibleBodyRowCount(type, node);
