@@ -128,9 +128,10 @@ function nodeGraphGridRectsOverlap(a, b) {
 
 function nodeGraphFindCopiedModuleGridPoint(sourceNode, nodes = nodeGraphMvp.patch.nodes) {
   const sourceRect = nodeGraphPatchNodeGridRect(sourceNode);
+  // Flush below the source (edge to edge, no grid gap).
   const candidate = {
     gx: sourceNode.gx,
-    gy: sourceRect.bottom + 1,
+    gy: sourceRect.bottom,
   };
   const maxSearchRows = 200;
 
