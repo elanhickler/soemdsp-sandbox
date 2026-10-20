@@ -917,7 +917,7 @@ const nodeGraphTraceDisplayActiveControlsByType = Object.freeze({
   }),
   // Outer / Hub dot size (were one "Size") are in the centered face square; F-fullscreen scales with it.
   sinCos4Face: Object.freeze({
-    fields: Object.freeze(["sinCos4OuterDotSize", "sinCos4HubDotSize", "sinCos4RayThickness", "sinCos4RingThickness", "sinCos4HubSize", "pixelDensity"]),
+    fields: Object.freeze(["sinCos4OuterDotSize", "sinCos4HubDotSize", "sinCos4RayThickness", "sinCos4RingThickness", "pixelDensity"]),
     colors: Object.freeze([]),
     toggles: Object.freeze([]),
     choices: Object.freeze([]),
@@ -1032,7 +1032,6 @@ const nodeGraphTraceDisplaySectionControls = Object.freeze({
       "sinCos4HubDotSize",
       "sinCos4RayThickness",
       "sinCos4RingThickness",
-      "sinCos4HubSize",
       "lineThickness",
       "shapeParam",
       "ghostBrightness",
@@ -1623,31 +1622,25 @@ const nodeGraphDisplaySettingsFieldMeta = Object.freeze({
     label: "Outer dot size",
     inputmode: "decimal",
     id: "nodeTraceDisplaySinCos4OuterDotSize",
-    title: "SinCos4: the position dots on the ring (0..10, default 0.08; radius = 1% + 4% x value of the face square). Tap A is drawn 1.15x.",
+    title: "SinCos4: the position dots on the ring (0..20, default 0.08; radius = 1% + 4% x value of the face square). All four dots drawn equal.",
   }),
   sinCos4HubDotSize: Object.freeze({
     label: "Hub dot size",
     inputmode: "decimal",
     id: "nodeTraceDisplaySinCos4HubDotSize",
-    title: "SinCos4: base size of the centre dot (0..10, default 0.08; same formula as Outer dot size, then x Hub size).",
+    title: "SinCos4: size of the centre dot (0..20, default 0.08; same formula as Outer dot size, so equal numbers draw equal dots).",
   }),
   sinCos4RayThickness: Object.freeze({
     label: "Line thickness",
     inputmode: "decimal",
     id: "nodeTraceDisplaySinCos4RayThickness",
-    title: "SinCos4: width of the phase rays, % of the face square (0..50, default 1.2). Tap A is drawn 1.35x.",
+    title: "SinCos4: width of the phase rays, % of the face square (0..100, default 1.2). All four rays drawn equal.",
   }),
   sinCos4RingThickness: Object.freeze({
     label: "Ring thickness",
     inputmode: "decimal",
     id: "nodeTraceDisplaySinCos4RingThickness",
-    title: "SinCos4: width of the circle, % of the face square (0..50, default 1.2).",
-  }),
-  sinCos4HubSize: Object.freeze({
-    label: "Hub size",
-    inputmode: "decimal",
-    id: "nodeTraceDisplaySinCos4HubSize",
-    title: "SinCos4: centre dot radius as a multiple of the Hub dot size radius (0..10, default 0.7).",
+    title: "SinCos4: width of the circle, % of the face square (0..100, default 1.2).",
   }),
   torchHue: Object.freeze({
     label: "Hue",

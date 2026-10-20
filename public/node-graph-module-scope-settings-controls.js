@@ -203,10 +203,10 @@ function nodeGraphTraceDisplayUnitDragRange(key) {
   }
   // SinCos4 sizes: ray / ring width in % of the face square, hub x tip radius.
   if (key === "sinCos4RayThickness" || key === "sinCos4RingThickness") {
-    return { min: 0, max: 50 };
+    return { min: 0, max: 100 };
   }
-  if (key === "sinCos4HubSize" || key === "sinCos4OuterDotSize" || key === "sinCos4HubDotSize") {
-    return { min: 0, max: 10 };
+  if (key === "sinCos4OuterDotSize" || key === "sinCos4HubDotSize") {
+    return { min: 0, max: 20 };
   }
   return { min: 0, max: 1 };
 }
@@ -853,11 +853,10 @@ const nodeGraphTraceDisplayFormTypeValueClampOverrides = Object.freeze({
   }),
   sinCos4Face: Object.freeze({
     backgroundBrightness: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value), 0, 1),
-    sinCos4RayThickness: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, 1.2), 0, 50),
-    sinCos4OuterDotSize: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, 0.08), 0, 10),
-    sinCos4HubDotSize: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, 0.08), 0, 10),
-    sinCos4RingThickness: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, 1.2), 0, 50),
-    sinCos4HubSize: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, 0.7), 0, 10),
+    sinCos4RayThickness: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, 1.2), 0, 100),
+    sinCos4OuterDotSize: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, 0.08), 0, 20),
+    sinCos4HubDotSize: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, 0.08), 0, 20),
+    sinCos4RingThickness: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, 1.2), 0, 100),
   }),
   torchFace: Object.freeze({
     torchHue: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value), 0, 1),

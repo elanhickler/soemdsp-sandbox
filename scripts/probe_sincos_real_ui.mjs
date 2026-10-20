@@ -27,7 +27,7 @@ for (const type of types) {
       hbs: [...(pop?.querySelectorAll("[data-hbs-label]") || [])].map((el) => el.getAttribute("data-hbs-label")),
       text: (pop?.innerText || "").replace(/\s+/g, " ").slice(0, 400),
       // Type big values into the real form fields and commit like the user does.
-      typed: await (async () => { const want = { sinCos4RayThickness: 30, sinCos4RingThickness: 40, sinCos4HubSize: 8, sinCos4OuterDotSize: 6, sinCos4HubDotSize: 4, lineThickness: 9, dotThickness: 20 };
+      typed: await (async () => { const want = { sinCos4RayThickness: 30, sinCos4RingThickness: 40, sinCos4OuterDotSize: 6, sinCos4HubDotSize: 4, lineThickness: 9, dotThickness: 20 };
         const done = {};
         for (const [k, v] of Object.entries(want)) { const el = pop?.querySelector(`[data-trace-display-field="${k}"]`); if (!el) continue;
           el.readOnly = false; el.focus(); el.value = String(v); el.dispatchEvent(new Event("input", { bubbles: true })); el.dispatchEvent(new Event("change", { bubbles: true }));
