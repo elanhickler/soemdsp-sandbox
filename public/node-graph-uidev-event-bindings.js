@@ -214,7 +214,7 @@ async function bindNodeGraphUiDevSettingsEvents() {
   if (typeof syncNodeUserUiSettingsViewControls === "function") {
     syncNodeUserUiSettingsViewControls();
   }
-  // Same modifier drag/wheel/arrows as Display Settings + module face sliders.
+  // Same modifier drag/arrows as Display Settings + module face sliders (no wheel, APP_POLICY §21c).
   if (typeof bindNodeGraphNativeSliderModifiersIn === "function") {
     bindNodeGraphNativeSliderModifiersIn(document.getElementById("nodeUiDevHelper"));
   }

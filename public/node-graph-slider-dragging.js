@@ -659,6 +659,7 @@ function nodeSliderKeyboardStep(slider, event) {
 //   then drag                 same as a normal click-drag (smoothing on)
 //   travel                    NODE_GRAPH_DISPLAY_SETTINGS_TRAVEL_PX per full range
 //   shift / ctrl / cmd        fine   (nodeGraphNumericDragMultiplier)
+//   wheel                     never changes the value (APP_POLICY §21c)
 //
 // Range drag is relative (like beginNodeSliderDrag), not browser thumb-jump,
 // so holding Ctrl while dragging fine-tunes instead of resetting / snapping.
@@ -884,16 +885,6 @@ function bindNodeGraphNativeSliderModifiers(input, defaultValue) {
       nodeGraphNativeRangeDrag = null;
     }
   });
-
-  input.addEventListener("wheel", (event) => {
-    const delta = event.deltaY || event.deltaX;
-    if (!delta) {
-      return;
-    }
-    event.preventDefault();
-    event.stopPropagation();
-    nudge(event, delta < 0 ? 1 : -1);
-  }, { passive: false });
 
   input.addEventListener("keydown", (event) => {
     if (event.key === "ArrowUp" || event.key === "ArrowRight"
