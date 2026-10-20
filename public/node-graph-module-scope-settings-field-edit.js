@@ -2,10 +2,14 @@
 // Peeled from node-graph-module-scope-settings-ui.js (graphify community peel).
 // Load after settings-form-io.js, before settings-apply.js.
 
+/** Fine scale for Display Settings numbers: Shift or Ctrl/Cmd ×0.1, both ×0.01. Alt is ignored. */
 function nodeGraphTraceDisplayNumberDragMultiplier(event) {
-  return typeof nodeGraphNumericDragMultiplier === "function"
-    ? nodeGraphNumericDragMultiplier(event)
-    : 1;
+  return nodeGraphNumericDragMultiplier({
+    shiftKey: Boolean(event?.shiftKey),
+    ctrlKey: Boolean(event?.ctrlKey),
+    metaKey: Boolean(event?.metaKey),
+    altKey: false,
+  });
 }
 
 function setNodeGraphTraceDisplayZoomEditActive(active) {
@@ -221,9 +225,7 @@ function beginNodeGraphUnitStepperDrag(event) {
     startValue: Number.isFinite(startValue) ? startValue : 0,
     startX: event.clientX,
     startY: event.clientY,
-    multiplier: typeof nodeGraphNumericDragMultiplier === "function"
-      ? nodeGraphNumericDragMultiplier(event)
-      : 1,
+    multiplier: nodeGraphTraceDisplayNumberDragMultiplier(event),
     min: Number.isFinite(min) ? min : 0,
     max: Number.isFinite(max) ? max : 1,
   };
@@ -245,9 +247,7 @@ function dragNodeGraphUnitStepper(event) {
   ) {
     return;
   }
-  const mult = typeof nodeGraphNumericDragMultiplier === "function"
-    ? nodeGraphNumericDragMultiplier(event)
-    : 1;
+  const mult = nodeGraphTraceDisplayNumberDragMultiplier(event);
   if (mult !== drag.multiplier) {
     const live = Number(drag.input.value);
     drag.startValue = Number.isFinite(live) ? live : drag.startValue;
@@ -258,13 +258,15 @@ function dragNodeGraphUnitStepper(event) {
     event.stopPropagation();
     return;
   }
-  const axes = typeof nodeGraphPointerDragScreenDelta === "function"
-    ? nodeGraphPointerDragScreenDelta(drag.startX, drag.startY, event.clientX, event.clientY)
-    : { combined: (event.clientX - drag.startX) + (drag.startY - event.clientY) };
-  const unitPx = typeof nodeGraphTraceDisplayUnitDragPixels === "number"
-    ? nodeGraphTraceDisplayUnitDragPixels
-    : 220;
-  let next = drag.startValue + (axes.combined / unitPx) * drag.multiplier;
+  const span = drag.max - drag.min;
+  let next = drag.startValue + nodeGraphPointerDragTravelDelta(
+    drag.startX,
+    drag.startY,
+    event.clientX,
+    event.clientY,
+    NODE_GRAPH_DISPLAY_SETTINGS_TRAVEL_PX,
+    drag.multiplier,
+  ) * (Number.isFinite(span) && span > 0 ? span : 1);
   next = Math.max(drag.min, Math.min(drag.max, next));
   if (!Number.isFinite(next)) {
     next = drag.startValue;
@@ -345,26 +347,19 @@ function beginNodeGraphTraceDisplayFieldDrag(event) {
   if (key === "zoomSeconds") {
     setNodeGraphTraceDisplayZoomEditActive(true);
   }
-  const startValue = Number(input.value);
-  const unitDrag = typeof nodeGraphTraceDisplayUnitDragField === "function"
-    && nodeGraphTraceDisplayUnitDragField(key);
-  const integerPixelDrag = typeof nodeGraphTraceDisplayIntegerPixelDragField === "function"
-    && nodeGraphTraceDisplayIntegerPixelDragField(key);
+  const spec = nodeGraphDisplaySettingsFieldSpec(key);
+  const parsed = Number(input.value);
+  const startValue = Number.isFinite(parsed) ? parsed : nodeGraphDisplaySettingsDefaultValue(key);
   nodeGraphMvp.waterfallFieldDragging = {
     input,
     key,
+    spec,
     pointerId: event.pointerId ?? null,
-    startValue: Number.isFinite(startValue) ? startValue : 0,
+    startControl: nodeGraphDisplaySettingsValueToControl(spec, startValue),
     startX: event.clientX,
     startY: event.clientY,
-    // Live-updated on move; re-anchor when Shift/Ctrl/Alt scale changes (RS-MET).
+    // Live-updated on move; re-anchor when Shift/Ctrl scale changes.
     multiplier: nodeGraphTraceDisplayNumberDragMultiplier(event),
-    // Unit 0…1 fields: fixed gain (px → value). Others: stepper quantum × /8.
-    unitDrag,
-    integerPixelDrag,
-    quantum: unitDrag
-      ? 1
-      : nodeGraphTraceDisplayStepperQuantum(input, startValue),
   };
   input.classList.add("value-dragging");
   input.setPointerCapture?.(event.pointerId);
@@ -372,6 +367,12 @@ function beginNodeGraphTraceDisplayFieldDrag(event) {
   event.stopPropagation();
 }
 
+/**
+ * One drag law for every Display Settings number: the app-wide diagonal travel
+ * (right/up increase) over NODE_GRAPH_DISPLAY_SETTINGS_TRAVEL_PX per full
+ * control range, fine ×0.1 (Shift or Ctrl/Cmd) / ×0.01 (both). The spec taper
+ * maps control ↔ value; screen px, so canvas zoom does not change the gain.
+ */
 function dragNodeGraphTraceDisplayField(event) {
   const drag = nodeGraphMvp.waterfallFieldDragging;
   if (
@@ -380,12 +381,14 @@ function dragNodeGraphTraceDisplayField(event) {
   ) {
     return;
   }
-  // Re-anchor when fine/coarse modifiers change mid-drag so releasing Shift
+  // Re-anchor when fine modifiers change mid-drag so releasing Shift
   // does not jump as if the whole drag used the new scale.
   const currentMult = nodeGraphTraceDisplayNumberDragMultiplier(event);
   if (currentMult !== drag.multiplier) {
     const live = Number(drag.input.value);
-    drag.startValue = Number.isFinite(live) ? live : drag.startValue;
+    if (Number.isFinite(live)) {
+      drag.startControl = nodeGraphDisplaySettingsValueToControl(drag.spec, live);
+    }
     drag.startX = event.clientX;
     drag.startY = event.clientY;
     drag.multiplier = currentMult;
@@ -393,58 +396,15 @@ function dragNodeGraphTraceDisplayField(event) {
     event.stopPropagation();
     return;
   }
-  const axes = typeof nodeGraphPointerDragScreenDelta === "function"
-    ? nodeGraphPointerDragScreenDelta(drag.startX, drag.startY, event.clientX, event.clientY)
-    : { combined: (event.clientX - drag.startX) + (drag.startY - event.clientY) };
-  const startValue = Number.isFinite(drag.startValue)
-    ? drag.startValue
-    : nodeGraphDisplaySettingsDefaultValue(drag.key);
-  // Bright / Ghost Bright / Residual: same linear sensitivity (~220 px = full 0…1).
-  // Value Line length spans the whole face, so give it a longer throw.
-  const unitPx = drag.key === "lineLength"
-    ? 480
-    : (typeof nodeGraphTraceDisplayUnitDragPixels === "number"
-      ? nodeGraphTraceDisplayUnitDragPixels
-      : 220);
-  // Stamp Size (dot1/secondary): control-space drag with dedicated gain (exp map).
-  const sizeDrag = typeof nodeGraphTraceDisplaySizeControlField === "function"
-    && nodeGraphTraceDisplaySizeControlField(drag.key)
-    && !drag.unitDrag;
-  const blurDrag = (
-    (typeof nodeGraphWaterfallBlurField === "function"
-      && nodeGraphWaterfallBlurField(drag.key))
-    || (typeof nodeGraphTraceDisplayImageBurnBlurField === "function"
-      && nodeGraphTraceDisplayImageBurnBlurField(drag.key))
-  ) && !drag.unitDrag;
-  const sizePx = typeof nodeGraphTraceDisplaySizeDragPixels === "number"
-    ? nodeGraphTraceDisplaySizeDragPixels
-    : 520;
-  const blurPx = typeof nodeGraphTraceDisplayBlurDragPixels === "number"
-    ? nodeGraphTraceDisplayBlurDragPixels
-    : 640;
-  const controlDelta = drag.key === "historyPercent"
-    ? (axes.combined / unitPx) * 100 * drag.multiplier
-    : drag.unitDrag
-    ? (axes.combined / unitPx) * drag.multiplier
-    : drag.integerPixelDrag
-      ? axes.combined * drag.quantum * drag.multiplier
-      : sizeDrag
-        ? (axes.combined / sizePx) * drag.multiplier
-        : blurDrag
-          ? (axes.combined / blurPx) * drag.multiplier
-          : (axes.combined / 8) * drag.quantum * drag.multiplier;
-  let rawValue = adjustNodeGraphTraceDisplaySettingByControlDelta(drag.key, startValue, controlDelta);
-  // Unit fields: hard clamp before format (never wrap / never NaN→1).
-  // Most are 0…1; shadow offset X/Y are bipolar −1…1.
-  if (drag.unitDrag) {
-    const n = Number(rawValue);
-    const range = typeof nodeGraphTraceDisplayUnitDragRange === "function"
-      ? nodeGraphTraceDisplayUnitDragRange(drag.key)
-      : { min: 0, max: 1 };
-    const lo = Number.isFinite(range?.min) ? range.min : 0;
-    const hi = Number.isFinite(range?.max) ? range.max : 1;
-    rawValue = Number.isFinite(n) ? Math.max(lo, Math.min(hi, n)) : startValue;
-  }
+  const controlDelta = nodeGraphPointerDragTravelDelta(
+    drag.startX,
+    drag.startY,
+    event.clientX,
+    event.clientY,
+    NODE_GRAPH_DISPLAY_SETTINGS_TRAVEL_PX,
+    drag.multiplier,
+  );
+  const rawValue = nodeGraphDisplaySettingsControlToValue(drag.spec, drag.startControl + controlDelta);
   const nextValue = normalizeNodeGraphTraceDisplaySettingValueForKey(drag.key, rawValue);
   drag.input.value = formatNodeGraphTraceDisplaySetting(nextValue);
   if (typeof markNodeGraphTraceDisplaySettingsDirty === "function") {
@@ -491,6 +451,31 @@ function endNodeGraphTraceDisplayFieldDrag(event) {
   event.stopPropagation();
 }
 
+/**
+ * One −/+ step on the field spec: control units for log/power tapers, value
+ * units for linear; integers stay whole; FFT walks its size table.
+ */
+function nodeGraphDisplaySettingsStepValue(spec, value, direction, fineScale = 1) {
+  if (spec.table && typeof nodeGraphSpectrogramStepFftSize === "function") {
+    return nodeGraphSpectrogramStepFftSize(value, direction);
+  }
+  if (spec.integer) {
+    return Math.round(value) + direction * spec.step;
+  }
+  const step = spec.step * fineScale;
+  if (spec.taper === "linear") {
+    let next = value + direction * step;
+    // Keep the step grid clean (0.9, not 0.8999…).
+    next = Math.round(next / step) * step;
+    next = Number(next.toFixed(10));
+    return spec.wrap ? ((next - spec.min) % (spec.max - spec.min) + (spec.max - spec.min)) % (spec.max - spec.min) + spec.min : next;
+  }
+  return nodeGraphDisplaySettingsControlToValue(
+    spec,
+    nodeGraphDisplaySettingsValueToControl(spec, value) + direction * step,
+  );
+}
+
 function stepNodeGraphTraceDisplaySetting(event) {
   if (nodeGraphSettingsTextGestureShouldIgnoreClick(event)) {
     event.preventDefault();
@@ -513,65 +498,10 @@ function stepNodeGraphTraceDisplaySetting(event) {
   const direction = Number(button.dataset.traceDisplayStepDirection) < 0 ? -1 : 1;
   const current = Number(input.value);
   const baseValue = Number.isFinite(current) ? current : nodeGraphDisplaySettingsDefaultValue(key);
-  let nextValue;
-  // Spectrogram: FFT steps the size table.
-  if (
-    key === "fftSize" &&
-    (nodeGraphTraceDisplaySettingsFormType() === "spectrogramBurn"
-      || nodeGraphTraceDisplaySettingsFormType() === "spectrumLine") &&
-    typeof nodeGraphSpectrogramStepFftSize === "function"
-  ) {
-    nextValue = nodeGraphSpectrogramStepFftSize(baseValue, direction);
-  } else if (
-    key === "historySeconds"
-    || key === "zoomSeconds"
-    || key === "historyHz"
-    || key === "historyCycles"
-    || key === "sweepHz"
-    || key === "sweepCycles"
-  ) {
-    // Exponential control-space steps (fine near short/slow, coarser at long/fast).
-    const quantum = nodeGraphTraceDisplayStepperQuantum(input, baseValue, direction);
-    nextValue = normalizeNodeGraphTraceDisplaySettingValueForKey(
-      key,
-      adjustNodeGraphTraceDisplaySettingByControlDelta(key, baseValue, direction * quantum),
-    );
-  } else if (
-    (typeof nodeGraphWaterfallBlurField === "function"
-      && nodeGraphWaterfallBlurField(key))
-    || (typeof nodeGraphTraceDisplayImageBurnBlurField === "function"
-      && nodeGraphTraceDisplayImageBurnBlurField(key))
-  ) {
-    const quantum = nodeGraphTraceDisplayStepperQuantum(input, baseValue, direction);
-    nextValue = normalizeNodeGraphTraceDisplaySettingValueForKey(
-      key,
-      adjustNodeGraphTraceDisplaySettingByControlDelta(key, baseValue, direction * quantum),
-    );
-  } else if (
-    typeof nodeGraphTraceDisplaySizeControlField === "function"
-    && nodeGraphTraceDisplaySizeControlField(key)
-  ) {
-    // Stamp Size / Image Size: exp control-space (fine near 0, like zoom).
-    const quantum = nodeGraphTraceDisplayStepperQuantum(input, baseValue, direction);
-    nextValue = normalizeNodeGraphTraceDisplaySettingValueForKey(
-      key,
-      adjustNodeGraphTraceDisplaySettingByControlDelta(key, baseValue, direction * quantum),
-    );
-  } else {
-    // Magnitude −/+ with down-from-boundary refinement (1→0.9, not 1→0).
-    // Pass direction so decade edges use the next finer quantum when decreasing.
-    const quantum = nodeGraphTraceDisplayStepperQuantum(input, baseValue, direction);
-    let stepped = baseValue + direction * quantum;
-    // Snap large whole-unit steps onto the quantum grid (270+100 → 370, not float dust).
-    // Skip snap for sub-unit quanta (0.1) so 1−0.1 stays 0.9.
-    if (quantum >= 1 - 1e-12) {
-      stepped = Math.round(stepped / quantum) * quantum;
-    } else {
-      // Keep one decimal clean for 0.1 steps (float dust).
-      stepped = Math.round(stepped * 10) / 10;
-    }
-    nextValue = normalizeNodeGraphTraceDisplaySettingValueForKey(key, stepped);
-  }
+  const nextValue = normalizeNodeGraphTraceDisplaySettingValueForKey(
+    key,
+    nodeGraphDisplaySettingsStepValue(nodeGraphDisplaySettingsFieldSpec(key), baseValue, direction, 1),
+  );
   input.value = formatNodeGraphTraceDisplaySetting(nextValue);
   if (typeof markNodeGraphTraceDisplaySettingsDirty === "function") {
     markNodeGraphTraceDisplaySettingsDirty(key);

@@ -139,11 +139,6 @@ function nodeGraphTraceDisplayStepperQuantum(input, currentValue = null, directi
   return nodeGraphMagnitudeStepperQuantum(value, direction);
 }
 
-/** Integer fields: 1 screen pixel of drag → 1 quantum (Dot Budget = 1). */
-function nodeGraphTraceDisplayIntegerPixelDragField(key) {
-  return key === "dotBudget";
-}
-
 function nodeGraphTraceDisplaySizeControlField(key) {
   // imageSize: Image Burn zoom (domain 0…4) — same exp feel as stamp Size.
   return ["dot1Size", "secondarySize", "capSize", "imageSize"].includes(key);
@@ -322,29 +317,6 @@ function nodeGraphTraceDisplayClampBipolarUnit(value) {
   return Number.isFinite(n) ? clampNodeSliderValue(n, -1, 1) : 0;
 }
 
-/** Pixels of drag for a full 0→1 sweep on unit fields (higher = less sensitive). */
-const nodeGraphTraceDisplayUnitDragPixels = 220;
-
-/**
- * Pixels for a full 0→1 *control-space* sweep on stamp Size (exp-mapped).
- * Higher = less sensitive. Separate from unit fields: size sits in exp space
- * so the old quantum×/8 gain made phosphor/trace Size feel far too hot.
- */
-const nodeGraphTraceDisplaySizeDragPixels = 520;
-
-/** Instant Waterfall Blur: longer travel than Bright (visual halo is hot near 0). */
-const nodeGraphTraceDisplayBlurDragPixels = 640;
-
-function nodeGraphTraceDisplaySensitiveControlField(key) {
-  // Brightness / residual are linear unit drags — not size-style exp maps.
-  // Exp remains for stamp size, Instant Waterfall blur, Image Burn blur, pixel density, history.
-  return nodeGraphTraceDisplaySizeControlField(key) ||
-    nodeGraphTraceDisplayHistoryControlField(key) ||
-    nodeGraphWaterfallBlurField(key) ||
-    nodeGraphTraceDisplayImageBurnBlurField(key) ||
-    key === "pixelDensity";
-}
-
 /** Exp curve for stamp size — higher = more of the travel near small sizes. */
 const nodeGraphTraceDisplaySensitiveControlExponent = 3;
 /** History fallback when the field has no parameter skew. Higher = more travel near 0. */
@@ -500,7 +472,7 @@ function nodeGraphDisplaySettingsFieldSpec(key, formType = null) {
     const { min, max } = nodeGraphTraceDisplayHistoryControlRange(key, type);
     return min > 0
       ? { key, min, max, taper: "log", step: 0.025 }
-      : { key, min, max, taper: "power", exponent: nodeGraphTraceDisplayHistoryControlExponent, step: 0.025 };
+      : { key, min, max, taper: "power", exponent: nodeGraphTraceDisplayHistoryCurveExponent(key), step: 0.025 };
   }
   if (nodeGraphTraceDisplaySizeControlField(key) && key !== "capSize") {
     return { key, min: 0, max: nodeGraphTraceDisplaySensitiveControlMax(key), taper: "power", exponent: nodeGraphTraceDisplaySensitiveControlExponent, step: 0.04 };
@@ -584,72 +556,6 @@ function nodeGraphDisplaySettingsControlToValue(spec, control) {
   return spec.integer ? Math.round(value) : value;
 }
 
-/**
- * Map stored seconds → 0…1 control. Exponential so short windows have fine drag.
- * min≤0: t = (s/max)^(1/exp); min>0: t = log(s/min)/log(max/min).
- */
-function nodeGraphTraceDisplaySecondsToControlValue(seconds, min, max, key = "") {
-  const lo = Math.max(0, nodeGraphFiniteNumber(min));
-  const hi = Math.max(lo + 1e-9, nodeGraphFiniteNumber(max, 10));
-  const s = clampNodeSliderValue(nodeGraphFiniteNumber(seconds), lo, hi);
-  const exp = nodeGraphTraceDisplayHistoryCurveExponent(key);
-  if (lo <= 0) {
-    if (s <= 0) {
-      return 0;
-    }
-    return Math.pow(s / hi, 1 / exp);
-  }
-  return Math.log(Math.max(lo, s) / lo) / Math.log(hi / lo);
-}
-
-/** Map 0…1 control → stored seconds (inverse of SecondsToControl). */
-function nodeGraphTraceDisplayControlToSecondsValue(control, min, max, key = "") {
-  const t = clampNodeSliderValue(nodeGraphFiniteNumber(control), 0, 1);
-  const lo = Math.max(0, nodeGraphFiniteNumber(min));
-  const hi = Math.max(lo + 1e-9, nodeGraphFiniteNumber(max, 10));
-  const exp = nodeGraphTraceDisplayHistoryCurveExponent(key);
-  if (lo <= 0) {
-    return Math.pow(t, exp) * hi;
-  }
-  return lo * Math.pow(hi / lo, t);
-}
-
-function nodeGraphTraceDisplaySizeToControlValue(value, max = 1) {
-  return Math.pow(
-    clampNodeSliderValue(nodeGraphFiniteNumber(value), 0, max) / max,
-    1 / nodeGraphTraceDisplaySensitiveControlExponent,
-  );
-}
-
-function nodeGraphTraceDisplayControlToSizeValue(value, max = 1) {
-  const control = clampNodeSliderValue(nodeGraphFiniteNumber(value), 0, 1);
-  return Math.pow(control, nodeGraphTraceDisplaySensitiveControlExponent) * max;
-}
-
-function adjustNodeGraphTraceDisplaySettingByControlDelta(key, startValue, delta) {
-  // History/Sweep dials: exp control-space in the key's own units (s, Hz, or cycles).
-  if (nodeGraphTraceDisplayHistoryControlField(key)) {
-    const { min, max } = nodeGraphTraceDisplayHistoryControlRange(key);
-    return nodeGraphTraceDisplayControlToSecondsValue(
-      nodeGraphTraceDisplaySecondsToControlValue(startValue, min, max, key) + delta,
-      min,
-      max,
-      key,
-    );
-  }
-  // Linear 0…1 unit fields (Bright / Ghost Bright / Residual share one gain).
-  if (nodeGraphTraceDisplayUnitDragField(key)) {
-    return Number(startValue) + delta;
-  }
-  if (!nodeGraphTraceDisplaySensitiveControlField(key)) {
-    return startValue + delta;
-  }
-  const max = nodeGraphTraceDisplaySensitiveControlMax(key);
-  return nodeGraphTraceDisplayControlToSizeValue(
-    nodeGraphTraceDisplaySizeToControlValue(startValue, max) + delta,
-    max,
-  );
-}
 function nodeGraphTraceDisplayClampUnit(value) {
   const n = nodeGraphFiniteNumber(value);
   if (typeof clampNodeSliderValue === "function") {
