@@ -83,7 +83,8 @@ function nodeGraphCycleLineGlParseColor(value) {
   }
   const match = s.match(/rgba?\(([^)]+)\)/i);
   if (match) {
-    const parts = match[1].split(",").map((part) => Number(part.trim()));
+    // Comma or CSS Color 4 space syntax: "rgb(2, 6, 9)", "rgb(2 6 9)", "rgb(2 6 9 / 0.5)".
+    const parts = match[1].trim().split(/[\s,\/]+/).map(Number);
     return [
       (Number.isFinite(parts[0]) ? parts[0] : 0) / 255,
       (Number.isFinite(parts[1]) ? parts[1] : 0) / 255,
