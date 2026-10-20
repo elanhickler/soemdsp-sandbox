@@ -150,25 +150,25 @@ function nodeGraphTraceDisplaySizeControlField(key) {
 }
 
 /** Instant Waterfall Blur (not phosphor stamp blur). */
-function nodeGraphWaterfallBlurField(key) {
+function nodeGraphWaterfallBlurField(key, formType = null) {
   if (key !== "lineThickness" && key !== "secondaryLineThickness") {
     return false;
   }
-  const type = typeof nodeGraphTraceDisplaySettingsFormType === "function"
+  const type = formType ?? (typeof nodeGraphTraceDisplaySettingsFormType === "function"
     ? nodeGraphTraceDisplaySettingsFormType()
-    : "";
+    : "");
   return typeof nodeGraphDisplaySettingsIsVectorTraceFormType === "function"
     && nodeGraphDisplaySettingsIsVectorTraceFormType(type);
 }
 
 /** Image Burn Blur — exp control-space (fine near 0 for anti-pixelation). */
-function nodeGraphTraceDisplayImageBurnBlurField(key) {
+function nodeGraphTraceDisplayImageBurnBlurField(key, formType = null) {
   if (key !== "blur") {
     return false;
   }
-  const type = typeof nodeGraphTraceDisplaySettingsFormType === "function"
+  const type = formType ?? (typeof nodeGraphTraceDisplaySettingsFormType === "function"
     ? nodeGraphTraceDisplaySettingsFormType()
-    : "";
+    : "");
   return type === "imageBurnFace";
 }
 
@@ -187,23 +187,22 @@ function nodeGraphTraceDisplayHistoryControlField(key) {
  * 0…1 unit sliders (Bright, Ghost Bright, Residual, …).
  * Linear drag — same pixel→value gain for all (no exp curve mismatch).
  */
-function nodeGraphPluginButtonInkPxField(key) {
+function nodeGraphPluginButtonInkPxField(key, formType = null) {
   if (key !== "fontSize" && key !== "labelSize") {
     return false;
   }
-  const type = typeof nodeGraphTraceDisplaySettingsFormType === "function"
+  const type = formType ?? (typeof nodeGraphTraceDisplaySettingsFormType === "function"
     ? nodeGraphTraceDisplaySettingsFormType()
-    : "";
+    : "");
   return type === "toggleButtonFace" || type === "momentaryButtonFace";
 }
 
-function nodeGraphTraceDisplayUnitDragField(key) {
+function nodeGraphTraceDisplayUnitDragField(key, formType = null) {
   // Image Burn Blur uses exp control-space (not linear unit drag).
-  if (typeof nodeGraphTraceDisplayImageBurnBlurField === "function"
-    && nodeGraphTraceDisplayImageBurnBlurField(key)) {
+  if (nodeGraphTraceDisplayImageBurnBlurField(key, formType)) {
     return false;
   }
-  if (nodeGraphPluginButtonInkPxField(key)) {
+  if (nodeGraphPluginButtonInkPxField(key, formType)) {
     return false;
   }
   if (String(key).endsWith("Saturation")) {
@@ -404,10 +403,10 @@ function nodeGraphTraceDisplaySensitiveControlMax(key) {
 }
 
 /** Seconds range for History (s) by form type. */
-function nodeGraphTraceDisplayHistoryControlRange(key) {
-  const formType = typeof nodeGraphTraceDisplaySettingsFormType === "function"
+function nodeGraphTraceDisplayHistoryControlRange(key, type = null) {
+  const formType = type ?? (typeof nodeGraphTraceDisplaySettingsFormType === "function"
     ? nodeGraphTraceDisplaySettingsFormType()
-    : "";
+    : "");
   // Waterfall Detail shares History's control-space skew (field meta), not a private mapper.
   if (key === "detail") {
     const lo = typeof NODE_GRAPH_WATERFALL_DETAIL_MIN === "number" ? NODE_GRAPH_WATERFALL_DETAIL_MIN : 0;
@@ -438,6 +437,151 @@ function nodeGraphTraceDisplayHistoryControlRange(key) {
     ? nodeGraphTraceDisplayMaxZoomSeconds
     : 10);
   return { min: 0, max: Number.isFinite(maxZ) ? maxZ : 10 };
+}
+
+// ---------------------------------------------------------------------------
+// Display Settings number field spec (single source for range / taper / step).
+//
+//   min, max   control range ends (drag/stepper travel; typed values still use
+//              the key's clamp in normalizeNodeGraphTraceDisplaySettingValueForKey)
+//   taper      "linear" | "log" | "power" (with exponent)
+//   logMin     log taper only: value at the bottom of the log span when min is a
+//              detent below it (Hz fields: 0 = pause, then 0.01…100)
+//   zeroDetent log taper only: control fraction at the bottom that stays at min
+//   step       −/+ step: control units for log/power, value units for linear
+//   integer    round after mapping (steps stay whole)
+//   wrap       control wraps 1→0 (hue)
+// ---------------------------------------------------------------------------
+
+/** Screen px of unmodified drag for a full min→max control sweep (every field). */
+const NODE_GRAPH_DISPLAY_SETTINGS_TRAVEL_PX = 220;
+
+/** Hz pause detent: the first ~4 px of travel stay at 0 Hz. */
+const NODE_GRAPH_DISPLAY_SETTINGS_ZERO_DETENT = 4 / NODE_GRAPH_DISPLAY_SETTINGS_TRAVEL_PX;
+
+/** Keys whose spec does not follow from a classifier or a finite clamp. */
+const nodeGraphDisplaySettingsFieldSpecOverrides = Object.freeze({
+  sweepHz: { min: 0, max: 100, taper: "log", logMin: 0.01, zeroDetent: NODE_GRAPH_DISPLAY_SETTINGS_ZERO_DETENT, step: 0.025 },
+  historyHz: { min: 0, max: 100, taper: "log", logMin: 0.01, zeroDetent: NODE_GRAPH_DISPLAY_SETTINGS_ZERO_DETENT, step: 0.025 },
+  sweepCycles: { min: 0.05, max: 100, taper: "log", step: 0.025 },
+  historyCycles: { min: 0.05, max: 100, taper: "log", step: 0.025 },
+  cycles: { min: 1, max: 64, taper: "linear", step: 1, integer: true },
+  decimals: { min: 0, max: 8, taper: "linear", step: 1, integer: true },
+  digits: { min: 1, max: 12, taper: "linear", step: 1, integer: true },
+  dotBudget: { min: 1, max: 8192, taper: "log", step: 1, integer: true },
+  textWeight: { min: 100, max: 900, taper: "linear", step: 100, integer: true },
+  fftSize: { min: 128, max: 16384, taper: "log", step: 1, integer: true, table: true },
+  hue: { min: 0, max: 360, taper: "linear", step: 1, wrap: true },
+  backgroundHue: { min: 0, max: 360, taper: "linear", step: 1, wrap: true },
+  rotationDegrees: { min: 0, max: 1440, taper: "linear", step: 1 },
+  scale: { min: 0.1, max: 100, taper: "log", step: 0.025 },
+  minFreq: { min: 1, max: 24000, taper: "log", step: 0.025 },
+  maxFreq: { min: 1, max: 24000, taper: "log", step: 0.025 },
+});
+
+/** Linear stepper size for a value span: 1/10 of a decade below span/10 (0…1 → 0.1). */
+function nodeGraphDisplaySettingsLinearStep(span) {
+  const s = Math.abs(Number(span));
+  if (!Number.isFinite(s) || s <= 0) {
+    return 0.1;
+  }
+  return Math.pow(10, Math.floor(Math.log10(s)) - 1);
+}
+
+function nodeGraphDisplaySettingsFieldSpec(key, formType = null) {
+  const type = formType ?? (typeof nodeGraphTraceDisplaySettingsFormType === "function"
+    ? nodeGraphTraceDisplaySettingsFormType()
+    : "");
+  const override = nodeGraphDisplaySettingsFieldSpecOverrides[key];
+  if (override) {
+    return { key, ...override };
+  }
+  if (key === "historySeconds" || key === "zoomSeconds" || key === "detail") {
+    const { min, max } = nodeGraphTraceDisplayHistoryControlRange(key, type);
+    return min > 0
+      ? { key, min, max, taper: "log", step: 0.025 }
+      : { key, min, max, taper: "power", exponent: nodeGraphTraceDisplayHistoryControlExponent, step: 0.025 };
+  }
+  if (nodeGraphTraceDisplaySizeControlField(key) && key !== "capSize") {
+    return { key, min: 0, max: nodeGraphTraceDisplaySensitiveControlMax(key), taper: "power", exponent: nodeGraphTraceDisplaySensitiveControlExponent, step: 0.04 };
+  }
+  if (nodeGraphWaterfallBlurField(key, type)) {
+    return { key, min: 0, max: 1, taper: "power", exponent: nodeGraphTraceDisplaySensitiveControlExponent, step: 0.03 };
+  }
+  if (nodeGraphTraceDisplayImageBurnBlurField(key, type)) {
+    return { key, min: 0, max: 1, taper: "power", exponent: nodeGraphTraceDisplaySensitiveControlExponent, step: 0.025 };
+  }
+  if (key === "pixelDensity") {
+    return { key, min: 0, max: 1, taper: "power", exponent: nodeGraphTraceDisplaySensitiveControlExponent, step: 0.05 };
+  }
+  if (key === "stampDensity") {
+    return { key, min: 0, max: 1, taper: "linear", step: 0.05 };
+  }
+  if (nodeGraphTraceDisplayUnitDragField(key, type)) {
+    const { min, max } = nodeGraphTraceDisplayUnitDragRange(key);
+    return { key, min, max, taper: "linear", step: 0.1 };
+  }
+  // Everything else: the key's own clamp gives the range.
+  const clamp = nodeGraphTraceDisplayFormTypeValueClampOverrides[type]?.[key]
+    || nodeGraphTraceDisplaySharedValueClamps[key];
+  const finite = (v) => Number.isFinite(Number(v)) && Math.abs(Number(v)) < 1e8;
+  let min = clamp ? Number(clamp(-1e9)) : NaN;
+  let max = clamp ? Number(clamp(1e9)) : NaN;
+  if (!finite(min)) {
+    min = 0;
+  }
+  if (!finite(max) || max <= min) {
+    // Unbounded clamp (e.g. non-negative line width): a 0…1 control span.
+    max = min + 1;
+  }
+  return { key, min, max, taper: "linear", step: nodeGraphDisplaySettingsLinearStep(max - min) };
+}
+
+/** Stored value → 0…1 control through the spec taper. */
+function nodeGraphDisplaySettingsValueToControl(spec, value) {
+  const { min, max } = spec;
+  const v = Number(value);
+  if (!Number.isFinite(v)) {
+    return 0;
+  }
+  if (spec.taper === "log") {
+    const detent = Number(spec.zeroDetent) || 0;
+    const lo = spec.logMin ?? min;
+    if (detent > 0 && v <= min) {
+      return 0;
+    }
+    const t = Math.log(Math.max(lo, Math.min(max, v)) / lo) / Math.log(max / lo);
+    return detent + (1 - detent) * t;
+  }
+  const u = (Math.max(min, Math.min(max, v)) - min) / (max - min);
+  if (spec.taper === "power") {
+    return Math.pow(u, 1 / (spec.exponent || 1));
+  }
+  return u;
+}
+
+/** 0…1 control → stored value (inverse of ValueToControl). */
+function nodeGraphDisplaySettingsControlToValue(spec, control) {
+  const { min, max } = spec;
+  let t = Number(control);
+  if (!Number.isFinite(t)) {
+    t = 0;
+  }
+  t = spec.wrap ? ((t % 1) + 1) % 1 : Math.max(0, Math.min(1, t));
+  let value;
+  if (spec.taper === "log") {
+    const detent = Number(spec.zeroDetent) || 0;
+    const lo = spec.logMin ?? min;
+    if (detent > 0 && t <= detent) {
+      return min;
+    }
+    value = lo * Math.pow(max / lo, (t - detent) / (1 - detent));
+  } else if (spec.taper === "power") {
+    value = min + Math.pow(t, spec.exponent || 1) * (max - min);
+  } else {
+    value = min + t * (max - min);
+  }
+  return spec.integer ? Math.round(value) : value;
 }
 
 /**
