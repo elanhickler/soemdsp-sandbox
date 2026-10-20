@@ -7,7 +7,7 @@
 // Decay sets the dominant time constant. Resonance sets damping
 // zeta = 4 * 200^(-Resonance). Tracking scales attack, decay, and ring
 // from the f input around 440 Hz. Impulse blends a rising-edge ping
-// with the gate step. Output Range Fit scales the peak to Amplitude
+// with the gate step. The input is read as a gate (high when > 0). Output Range Fit scales the peak to Amplitude
 // and clips below 0. Raw is the filter output.
 
 #include <soemdsp/soemdsp.hpp>
@@ -269,10 +269,13 @@ extern "C" double soemdsp_resonant_envelope_sample(
     s.cScale = scale;
     s.cSr = sr;
   }
-  double edge = gate - s.lastGate;
-  if (!(edge > 0.0)) edge = 0.0;
+  // The input is a gate: only its sign matters. Using the raw level made a
+  // saw or any rising ramp ping on every sample of the ramp (edge > 0 all the
+  // way up), so the hit landed at the end of the ramp instead of the trigger.
+  const double gateLevel = high ? 1.0 : 0.0;
+  const double edge = rising ? 1.0 : 0.0;
   s.lastGate = gate;
-  const double drive = (1.0 - imp) * gate * amp + imp * edge * s.kImpulse * amp;
+  const double drive = (1.0 - imp) * gateLevel * amp + imp * edge * s.kImpulse * amp;
   if (!(s.filt.z1 * 0.0 == 0.0) || !(s.filt.z2 * 0.0 == 0.0)) tpt_svf_reset(s.filt);
   double y = tpt_svf_tick(s.filt, s.coeff, drive);
   flush_denorm(s.filt);
