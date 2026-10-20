@@ -669,7 +669,7 @@ if ($LASTEXITCODE -ne 0) {
 
 $node = Get-Command node -ErrorAction SilentlyContinue
 if ($node) {
-  $emoPreload = "$root\scripts\emo_instantiate_preload.cjs"
+  $emoPreload = ("$root\scripts\emo_instantiate_preload.cjs" -replace '\\','/')
   $env:NODE_OPTIONS = "--require `"$emoPreload`""
   & $node.Source "$root\scripts\smoke_native_param_ids.mjs"
   if ($LASTEXITCODE -ne 0) {
