@@ -126,7 +126,7 @@ extern "C" void soemdsp_delay_effect_sample(
   // No hardcoded 0.95 ceiling — parameter min/max own the range.
   const double feedback_ = safe(feedback);
   const double mix_ = clamp(safe(mix), 0.0, 1.0);
-  const double level_ = clamp(safe(level), 0.0, 2.0);
+  const double level_ = safe(level);  // Level range governs (APP_POLICY: no hidden clamp)
   const double modAmount_ = clamp(safe(modAmount), 0.0, 0.5);
   const double modRate_ = clamp(safe(modRate), 0.0, 90.0);
   const double modVariation_ = clamp(safe(modVariation), 0.0, 1.0);
@@ -175,7 +175,7 @@ extern "C" double soemdsp_delay_effect_wet(int handle) {
 }
 
 extern "C" int soemdsp_delay_effect_version() {
-  return 6; // Send removed; effect path takes full input
+  return 7; // 7: Level unclamped (was 0..2). 6: Send removed; effect path takes full input
 }
 
 extern "C" const char* soemdsp_delay_effect_metadata_json() {

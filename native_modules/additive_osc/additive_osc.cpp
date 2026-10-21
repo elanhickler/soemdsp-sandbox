@@ -225,7 +225,7 @@ extern "C" double soemdsp_additive_osc_sample(
   const double safeMorph = clamp(safe(morph), 0.0, 1.0);
   const double safeHarmonicPhaseAdd = clamp(safe(harmonicPhaseAdd), 0.0, 1.0);
   const double safeHarmonicPhaseMultiply = clamp(safe(harmonicPhaseMultiply), 0.0, 4.0);
-  const double safeLevel = clamp(safe(level), 0.0, 1.0);
+  const double safeLevel = safe(level);  // Level range governs (APP_POLICY: no hidden clamp)
   const double nyquist = maxd(1.0, rate * 0.5);
   const double safeDampingFilterFrequency = clamp(default_if_zero(safe(dampingFilterFrequency), 20000.0), 1.0, nyquist);
 
@@ -256,11 +256,11 @@ extern "C" double soemdsp_additive_osc_sample(
   if (norm <= 0.0) {
     return 0.0;
   }
-  return clamp11((total / maxd(1.0, norm * 0.72)) * safeLevel);
+  return safe((total / maxd(1.0, norm * 0.72)) * safeLevel);  // no +-1 output clamp: Level scales past 1
 }
 
 extern "C" int soemdsp_additive_osc_version() {
-  return 3; // morph param key/label (was modA / Mod A)
+  return 4; // 4: Level unclamped, no +-1 output clamp. 3: morph param key/label (was modA / Mod A)
 }
 
 extern "C" const char* soemdsp_additive_osc_metadata_json() {

@@ -185,7 +185,7 @@ extern "C" double soemdsp_transport_sample(
   const double frequency = transport_frequency_hz(
     tempoBpm, timeNumerator, timeDenominator, timingMode
   );
-  const double safeAmplitude = clamp(safe(amplitude), 0.0, 1.0);
+  const double safeAmplitude = safe(amplitude);  // Amplitude range governs (APP_POLICY: no hidden clamp)
   const double pw = clamp(safe(pulseWidth), 0.01, 0.99);
   const int freeRun = dsp_floor(safe(mode) + 0.5) == 0.0 ? 1 : 0;
   s.lastFrequencyHz = frequency;
@@ -275,5 +275,5 @@ extern "C" double soemdsp_transport_click(int handle, double sampleRate) {
 }
 
 extern "C" int soemdsp_transport_version() {
-  return 10; // metronome: Sync (continuous re-anchor) / Free accumulator
+  return 11; // 11: Amplitude unclamped (was 0..1). 10: metronome: Sync (continuous re-anchor) / Free accumulator
 }
