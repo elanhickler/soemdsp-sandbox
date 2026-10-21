@@ -103,9 +103,22 @@ function nodeGraphClockFaceGeometry(w, h, pulseStart, pulseEnd, amp, stroke) {
   return { x0, x1, xs: at(pulseStart), xe: at(pulseEnd), high: h * 0.5 - half, low: h * 0.5 + half, at };
 }
 
+/**
+ * True when the gate never falls: the native clock rounds Start / End to whole
+ * samples of the period (floor(v * period + 0.5)), so it stays high every
+ * sample when Start rounds to 0 and End rounds to the full period. Rate 0
+ * holds the gate low in the DSP, so it is never endless there.
+ */
+function nodeGraphClockFaceGateEndless(pulseStart, pulseEnd, rate, sampleRate) {
+  const period = rate > 0 ? Math.max(1, sampleRate) / rate : 0;
+  if (!(period > 0)) return false;
+  return Math.floor(pulseStart * period + 0.5) <= 0 && Math.floor(pulseEnd * period + 0.5) >= period;
+}
+
 /** Fill spans [x, x] from Pulse Start up to the playhead, only while the playhead is in the gate. */
-function nodeGraphClockFaceFillSpans(g, pulseStart, pulseEnd, phase) {
+function nodeGraphClockFaceFillSpans(g, pulseStart, pulseEnd, phase, endless = false) {
   const xp = g.at(phase);
+  if (endless) return [[g.x0, xp]];
   if (pulseEnd >= pulseStart) return phase >= pulseStart && phase < pulseEnd ? [[g.xs, xp]] : [];
   if (phase >= pulseStart) return [[g.xs, xp]];
   if (phase < pulseEnd) return [[g.xs, g.x1], [g.x0, xp]];
@@ -144,13 +157,19 @@ function drawNodeGraphClockFace(section) {
   const halfPx = stroke * 0.5;
   const g = nodeGraphClockFaceGeometry(w, h, pulseStart, pulseEnd, amp, stroke);
   const { x0, x1, xs, xe, high, low } = g;
+  const sampleRate = Number(nodeGraphMvp?.live?.context?.sampleRate) || 48000;
+  const endless = nodeGraphClockFaceGateEndless(pulseStart, pulseEnd, Math.max(0, nodeGraphClockFaceParam(node, "rate", 2)), sampleRate);
   const fill = rgba(look.fillPaint);
-  for (const [a, b] of nodeGraphClockFaceFillSpans(g, pulseStart, pulseEnd, phase)) {
+  for (const [a, b] of nodeGraphClockFaceFillSpans(g, pulseStart, pulseEnd, phase, endless)) {
     if (b > a) nodeGraphGlLinesRect(batch, a, high, b - a, low - high, fill);
   }
   // Gate: a closed rectangle. End before Start wraps it across the cycle edge.
+  // A gate that never falls has no edges: top and bottom only.
   const pulse = rgba(look.strokePaint);
-  if (pulseEnd >= pulseStart) {
+  if (endless) {
+    nodeGraphGlLinesSegment(batch, x0, high, x1, high, halfPx, fine, pulse);
+    nodeGraphGlLinesSegment(batch, x0, low, x1, low, halfPx, fine, pulse);
+  } else if (pulseEnd >= pulseStart) {
     const mid = (xs + xe) * 0.5;
     nodeGraphGlLinesPolyline(batch, [mid, low, xs, low, xs, high, xe, high, xe, low, mid, low], halfPx, fine, pulse);
   } else {
