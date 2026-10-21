@@ -2429,13 +2429,14 @@ function buildNodeGraphDisplaySettingsBodyHtml(formType, node = null) {
       rows.push(nodeGraphDisplaySettingsBuildStepperRowHtml(key, type));
     }
     if ((type === "roundShapeFace" || type === "basicShapeFace" || type === "softwaveOscFace" || type === "sinCosFace") && section === "waterfall") {
+      // Background first, then Line, then Dot (same order as every other display).
       const lamps = [
+        ["background", "Background", "backgroundHue", "backgroundBrightness", "backgroundSaturation"],
         ["line", "Line", "lineHue", "lineBrightness", "lineSaturation"],
       ];
       if (type !== "softwaveOscFace") {
         lamps.push(["dot", "Dot", "dotHue", "dotBrightness", "dotSaturation"]);
       }
-      lamps.push(["background", "Background", "backgroundHue", "backgroundBrightness", "backgroundSaturation"]);
       hbsCells.push(...lamps.map(([id, label, hue, bright, sat]) => `
           <div class="node-trace-display-hsl-lamp node-trace-display-color-widget-host" data-hsl-lamp="${id}" data-hsl-label="${label}">
             <input type="hidden" data-trace-display-field="${hue}" value="">
