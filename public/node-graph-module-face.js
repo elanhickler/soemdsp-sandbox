@@ -639,9 +639,9 @@ function nodeGraphModuleFaceDrawFilterGl(batch, el, wd, ox, oy, z, rect, line) {
       edge.push(ox + t * w * z, oy + yOf(nodeGraphModuleFaceRolloff(f, fcH, true, nH) * nodeGraphModuleFaceRolloff(f, fcL, false, nL)) * z);
     }
     stroke(edge, 1, ink.curveFill);
-    stroke(pass, 1.5, ink.passCurve);
-    stroke(hp, 2.5, ink.hpfCurve);
-    stroke(lp, 2.5, ink.lpfCurve);
+    stroke(pass, 1.2, ink.passCurve);
+    stroke(hp, 1.6, ink.hpfCurve);
+    stroke(lp, 1.6, ink.lpfCurve);
   }
   // Vertical handles (soundemote-dev Condensed 5 drawFilterCurve): a faint
   // full-height bar at each cutoff and the 4 pole stops (1-4 poles = 6/12/18/24
