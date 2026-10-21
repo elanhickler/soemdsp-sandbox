@@ -325,6 +325,17 @@ function beginNodeGraphModuleFaceGesture(article, face, spec, event) {
   event.preventDefault();
   event.stopPropagation();
   const input = wd.param ? nodeGraphModuleFaceInput(article, wd.param) : null;
+  // Same modifiers as every slider (nodeGraphNumericResetClickModifier): Ctrl/Cmd+click resets to default.
+  if (wd.type !== "seedButton" && wd.type !== "seedNumber" && typeof nodeGraphNumericResetClickModifier === "function"
+    && nodeGraphNumericResetClickModifier(event)) {
+    const keys = wd.type === "filter" ? [wd.hpf, wd.lpf] : [wd.param];
+    for (const key of keys) {
+      const target = key ? nodeGraphModuleFaceInput(article, key) : null;
+      const def = target && typeof nodeSliderCtrlClickDefaultValue === "function" ? nodeSliderCtrlClickDefaultValue(target) : NaN;
+      if (Number.isFinite(def)) setNodeGraphModuleFaceValue(target, def, false);
+    }
+    return;
+  }
   if (wd.type === "choice" || wd.type === "lfoStyle" || wd.type === "subChoice") {
     setNodeGraphModuleFaceValue(input, Number(input?.min || 0) + wd.index, false);
     return;
@@ -343,25 +354,35 @@ function beginNodeGraphModuleFaceGesture(article, face, spec, event) {
       nodeGraphSeedDragValue(input, v0, (ev.clientX - x0) * p.sx, (ev.clientY - y0) * p.sy), drag));
     return;
   }
+  // Drag travel scaled per move by the shared fine/coarse law (nodeGraphNumericDragMultiplier).
+  let lx = event.clientX;
+  let ly = event.clientY;
+  let ax = 0;
+  let ay = 0;
+  const travel = (ev) => {
+    const k = typeof nodeGraphNumericDragMultiplier === "function" ? nodeGraphNumericDragMultiplier(ev) : 1;
+    ax += (ev.clientX - lx) * p.sx * k;
+    ay += (ev.clientY - ly) * p.sy * k;
+    lx = ev.clientX;
+    ly = ev.clientY;
+    return { dx: ax, dy: ay };
+  };
   let move = null;
   if (wd.type === "cell") {
     const t0 = nodeGraphModuleFaceTravel(input);
-    const x0 = event.clientX;
-    const y0 = event.clientY;
     // Like every slider: up or right raises, down or left lowers.
     move = (ev) => {
-      const d = (y0 - ev.clientY) * p.sy + (ev.clientX - x0) * p.sx;
+      const { dx, dy } = travel(ev);
+      const d = dx - dy;
       const t = Math.max(0, Math.min(1, t0 + d / NODE_GRAPH_FACE_CELL_DRAG_PX));
       return typeof nodeSliderValueFromTravel === "function" ? nodeSliderValueFromTravel(input, t) : t;
     };
   } else if (wd.type === "step") {
     const v0 = Math.round(nodeGraphModuleFaceValue(input));
-    const x0 = event.clientX;
-    const y0 = event.clientY;
     const px = NODE_GRAPH_FACE_STEP_DRAG_PX;
     move = (ev) => {
-      const step = ev.ctrlKey ? 10 : 1;
-      const v = v0 + Math.trunc(((y0 - ev.clientY) * p.sy + (ev.clientX - x0) * p.sx) / px) * step;
+      const { dx, dy } = travel(ev);
+      const v = v0 + Math.trunc((dx - dy) / px);
       return Math.max(Number(input.min), Math.min(Number(input.max), v));
     };
   } else if (wd.type === "filter") {
@@ -374,9 +395,8 @@ function beginNodeGraphModuleFaceGesture(article, face, spec, event) {
     const lo = Math.min(th, tl);
     const hi = Math.max(th, tl);
     const mode = u0 > lo + edge && u0 < hi - edge ? "span" : (Math.abs(u0 - th) <= Math.abs(u0 - tl) ? "hpf" : "lpf");
-    const x0 = event.clientX;
     const onMove = (ev, drag) => {
-      const du = ((ev.clientX - x0) * p.sx) / Math.max(1, wd.w);
+      const du = travel(ev).dx / Math.max(1, wd.w);
       if (mode !== "lpf") setNodeGraphModuleFaceValue(hpf, nodeGraphModuleFaceFromLogT(th + du), drag);
       if (mode !== "hpf") setNodeGraphModuleFaceValue(lpf, nodeGraphModuleFaceFromLogT(tl + du), drag);
     };
