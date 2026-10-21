@@ -10,7 +10,8 @@ const P = { nodes: [
   { id: "re", type: "resonantEnvelope", gx: 0, gy: 30 },
   { id: "a3", type: "attenuverter", gx: 20, gy: 8 },
   { id: "k1", type: "attenuverter", gx: 20, gy: 22 },
-  { id: "ad", type: "expAdsr", gx: 40, gy: 8 }],
+  { id: "ad", type: "expAdsr", gx: 40, gy: 8 },
+  { id: "pb", type: "polyBlep", gx: 40, gy: 30 }],
   connections: [], modulations: [{ sourceNode: "k1", sourcePort: "Out", destinationNode: "sg", destinationParam: "tension" }] };
 const b = await chromium.launch({ channel: "chrome", headless: true });
 const page = await (await b.newContext({ viewport: { width: 1600, height: 1000 } })).newPage();
@@ -83,6 +84,20 @@ for (const src of sources) {
     await page.mouse.up(); await page.waitForTimeout(300);
     const added = JSON.parse(await mods()).filter((m) => m.destinationNode === "re" && m.sourceNode === "ad");
     check(added.length === 1 && added[0].destinationParam === "frequency", "ad.Out drag -> re.frequency", JSON.stringify(added));
+  }
+}
+// Self-patch: a module's own outlet dropped on its own param slider lands
+// (PolyBLEP Wave -> its Frequency is Argi's repro; Attenuverter Out -> its Offset is the generic case).
+for (const [node, jack, key] of [["pb", "Wave", "frequency"], ["k1", "Out", "offset"]]) {
+  const a = await pointOf({ node, jack });
+  const t = await pointOf({ node, sel: `.node-slider-readout[data-param="${key}"], [data-slider-target="node-${node}-${key}"]` });
+  check(Boolean(a && t), `${node}.${jack} jack and own ${key} slider found`, JSON.stringify({ a, t }));
+  if (a && t) {
+    await page.mouse.move(...a); await page.mouse.down();
+    for (let i = 1; i <= 12; i++) await page.mouse.move(a[0] + (t[0] - a[0]) * i / 12, a[1] + (t[1] - a[1]) * i / 12);
+    await page.mouse.up(); await page.waitForTimeout(300);
+    const added = JSON.parse(await mods()).filter((m) => m.destinationNode === node && m.sourceNode === node && m.destinationParam === key);
+    check(added.length === 1, `${node}.${jack} drag -> own ${key} (self-patch)`, await mods());
   }
 }
 check(errs.length === 0, "no page errors", JSON.stringify(errs.slice(0, 3)));
