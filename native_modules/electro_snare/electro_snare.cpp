@@ -68,9 +68,9 @@ static const double k909NoiseHp = 2500.0;
 static const double k909Env5T60 = 0.015;
 static const double k909BendT60 = 0.02;
 static const double k909Wires = 0.9;
-static const double kSimQ = 2.0;
+static const double kSimQMin = 0.5;  // Simmons Noise Q range (gentle; default 2 = original)
+static const double kSimQMax = 4.0;
 static const double kSimClickT60 = 0.002;
-static const double kSimClick = 0.4;
 static const double kSimWires = 1.2;
 static const double kFmRatio = 1.4;
 static const double kFmIndexMax = 8.0;
@@ -181,6 +181,8 @@ extern "C" double soemdsp_electro_snare_sample(
   double snapDecay,
   double bend,
   double amplitude,
+  double simNoiseQ,   // Simmons only: noise SVF Q (default 2 = original)
+  double simClick,    // Simmons only: click level (default 0.4 = original)
   double sampleRate
 ) {
   if (handle < 1 || handle > kMaxInstances || !gPool[handle - 1].active) return 0.0;
@@ -273,12 +275,12 @@ extern "C" double soemdsp_electro_snare_sample(
     s.ph1 = phase_advance(s.ph1, f, sr);
     TptSvfCoeffs k;
     const double lpHz = mind(300.0 * dsp_exp2(tn * 5.321928094887363), 0.45 * sr);  // 300 Hz -> 12 kHz
-    tpt_svf_setup(k, (2.0 * kPi) * lpHz / sr, 1.0 / kSimQ, 1.0, 0.0, 0.0, 1.0);
+    tpt_svf_setup(k, (2.0 * kPi) * lpHz / sr, 1.0 / clamp(safe(simNoiseQ), kSimQMin, kSimQMax), 1.0, 0.0, 0.0, 1.0);
     const double nShare = s.eN / vRef;  // inner noise envelope, 1 -> 0
     const double e = s.eA;              // shared VCA
     body = e * (1.0 - sn) * osc;
     const double n0 = hash_noise_at(s.white, hash_noise_seed(kNoiseSeed, 0));
-    const double click = kSimClick * (n0 - one_pole_lp_tick(s.lpC, n0, 3000.0, sr)) * s.eClick;  // shared L/R
+    const double click = safe(simClick) * (n0 - one_pole_lp_tick(s.lpC, n0, 3000.0, sr)) * s.eClick;  // shared L/R
     for (int c = 0; c < 2; c++) {
       const double nz = tpt_svf_tick(s.svf[c], k, (c == 0 ? n0 : hash_noise_at(s.white, hash_noise_seed(kNoiseSeed, 1))));
       s.svf[c].z1 = planck_snap(s.svf[c].z1);
@@ -345,6 +347,6 @@ extern "C" double soemdsp_electro_snare_env(int handle) {
   return gPool[handle - 1].envOut;
 }
 
-extern "C" int soemdsp_electro_snare_version() { return 3; }  // 3: Modal removed (-> Modal Snare), Amplitude unclamped
+extern "C" int soemdsp_electro_snare_version() { return 4; }  // 4: Simmons Noise Q + Click params. 3: Modal removed (-> Modal Snare), Amplitude unclamped
 extern "C" const char* soemdsp_electro_snare_metadata_json() { return kMetadataJson; }
 extern "C" int soemdsp_electro_snare_metadata_json_size() { return sizeof(kMetadataJson) - 1; }

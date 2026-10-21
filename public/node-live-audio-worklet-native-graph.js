@@ -5939,6 +5939,8 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
       push("snapDecay", P.NATIVE_GRAPH_PARAM_TIME_DENOMINATOR, cont("snapDecay", 0.2));
       push("bend", P.NATIVE_GRAPH_PARAM_CENTER, cont("bend", 0));
       push("amplitude", P.NATIVE_GRAPH_PARAM_AMPLITUDE, cont("amplitude", 1));
+      push("simNoiseQ", P.NATIVE_GRAPH_PARAM_RESONANCE, cont("simNoiseQ", 2));
+      push("simClick", P.NATIVE_GRAPH_PARAM_LEVEL, cont("simClick", 0.4));
       continue;
     }
     if (type === "modalSnare") {

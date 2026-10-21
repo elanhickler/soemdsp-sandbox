@@ -10686,12 +10686,12 @@ const nodeGraphModuleDefinitions = (
     ],
     inputs: ["Trigger", "Reset"],
     inputTooltips: {
-      Trigger: "Each hit strikes the snare. Height is velocity (|height|, level only). 808 / Modal add the new ping onto the ringing body; 909 / Simmons / FM restart their oscillators.",
+      Trigger: "Each hit strikes the snare. Height is velocity (|height|, level only). 808 adds the new ping onto the ringing body; 909 / Simmons / FM restart their oscillators.",
       Reset: "Rewinds the hit: clears every resonator, filter, phase and envelope, reseeds the noise, then strikes again at the last Trigger velocity (exact repeat). Silent before the first Trigger. Height ignored." },
     outputs: ["Snare L", "Snare R", "Env"],
     outputTooltips: {
       "Snare L": "Snare audio, left: Amplitude x (body + snare wires). Noise and noise-like parts are decorrelated from R; the clean tonal body is identical.",
-      "Snare R": "Snare audio, right: same body as L, its own noise (own seed and filters). Modal: odd membrane modes inverted; FM: inverted modulator.",
+      "Snare R": "Snare audio, right: same body as L, its own noise (own seed and filters). FM: inverted modulator.",
       Env: "Overall amplitude envelope of the hit: peaks at the Trigger velocity, falls to exact 0. Not scaled by Amplitude." },
     parameters: [
       {
@@ -10723,7 +10723,7 @@ const nodeGraphModuleDefinitions = (
         min: "40",
         step: "any",
         unit: "Hz",
-        tooltip: "Rest pitch of the body. 808: low resonator (high = x1.93). 909: VCO1 (VCO2 = x1.72). Simmons: oscillator. Modal: fundamental (01) mode. FM: carrier (modulator = x1.4)." },
+        tooltip: "Rest pitch of the body. 808: low resonator (high = x1.93). 909: VCO1 (VCO2 = x1.72). Simmons: oscillator. FM: carrier (modulator = x1.4)." },
       {
         defaultValue: "0.5",
         key: "tone",
@@ -10733,7 +10733,7 @@ const nodeGraphModuleDefinitions = (
         min: "0",
         nonlinearSlider: false,
         step: "any",
-        tooltip: "Timbre. 808: low <-> high resonator mix (panel Tone). 909: noise lowpass 2 -> 12 kHz (brighter). Simmons: noise resonant lowpass 300 Hz -> 12 kHz. Modal: strike position, centre -> edge. FM: peak FM index 0 -> 8." },
+        tooltip: "Timbre. 808: low <-> high resonator mix (panel Tone). 909: noise lowpass 2 -> 12 kHz (brighter). Simmons: noise resonant lowpass 300 Hz -> 12 kHz. FM: peak FM index 0 -> 8." },
       {
         defaultValue: "0.5",
         key: "snappy",
@@ -10743,7 +10743,7 @@ const nodeGraphModuleDefinitions = (
         min: "0",
         nonlinearSlider: false,
         step: "any",
-        tooltip: "Snare-wire noise amount. 808: noise envelope level (panel Snappy). 909: level of both noise bands (panel Snappy). Simmons: noise <-> tone balance. Modal / FM: noise level." },
+        tooltip: "Snare-wire noise amount. 808: noise envelope level (panel Snappy). 909: level of both noise bands (panel Snappy). Simmons: noise <-> tone balance. FM: noise level." },
       {
         defaultValue: "0.25",
         key: "bodyDecay",
@@ -10755,7 +10755,7 @@ const nodeGraphModuleDefinitions = (
         min: "0.01",
         step: "any",
         unit: "s",
-        tooltip: "How long the tonal body rings: seconds to fall 60 dB (T60). 808: low resonator (high 0.31x). 909: VCO1 envelope (VCO2 0.6x). Simmons: shared VCA (noise and tone). Modal: 01 mode (mode k: / ratio). FM: carrier and FM index." },
+        tooltip: "How long the tonal body rings: seconds to fall 60 dB (T60). 808: low resonator (high 0.31x). 909: VCO1 envelope (VCO2 0.6x). Simmons: shared VCA (noise and tone). FM: carrier and FM index." },
       {
         defaultValue: "0.2",
         key: "snapDecay",
@@ -10767,7 +10767,7 @@ const nodeGraphModuleDefinitions = (
         min: "0.01",
         step: "any",
         unit: "s",
-        tooltip: "How long the noise rings: seconds to fall 60 dB (T60). 808 / Modal / FM: noise envelope. 909: main noise band (this is the 909 panel's Tone). Simmons: extra noise envelope inside the VCA (at or above Body Decay = stock SDS-V)." },
+        tooltip: "How long the noise rings: seconds to fall 60 dB (T60). 808 / FM: noise envelope. 909: main noise band (this is the 909 panel's Tone). Simmons: extra noise envelope inside the VCA (at or above Body Decay = stock SDS-V)." },
       {
         defaultValue: "0",
         key: "bend",
@@ -10778,7 +10778,7 @@ const nodeGraphModuleDefinitions = (
         nonlinearSlider: false,
         step: "any",
         unit: "oct",
-        tooltip: "Pitch drop at the hit: starts this many octaves above Tune and falls back. 0 = stock 808. 808 / 909 / FM: ~20 ms drop (909 ~0.5 oct). Simmons: falls over half the Body Decay (1-2 oct). Modal: ~30 ms tension drop." },
+        tooltip: "Pitch drop at the hit: starts this many octaves above Tune and falls back. 0 = stock 808. 808 / 909 / FM: ~20 ms drop (909 ~0.5 oct). Simmons: falls over half the Body Decay (1-2 oct)." },
       {
         defaultValue: "1",
         key: "amplitude",
@@ -10789,6 +10789,24 @@ const nodeGraphModuleDefinitions = (
         nonlinearSlider: false,
         step: "any",
         tooltip: "Output level. Does not scale Env." },
+      {
+        defaultValue: "2",
+        key: "simNoiseQ",
+        label: "Simmons Noise Q",
+        max: "4",
+        mid: "2",
+        min: "0.5",
+        nonlinearSlider: false,
+        step: "any" },
+      {
+        defaultValue: "0.4",
+        key: "simClick",
+        label: "Simmons Click",
+        max: "1",
+        mid: "0.4",
+        min: "0",
+        nonlinearSlider: false,
+        step: "any" },
     ] },
   // Modal Snare (Argi 2026-10-20): Electro Snare's Modal algorithm as its own module,
   // plus a tunable noise profile. Native only: native_modules/modal_snare/modal_snare.cpp.
