@@ -125,6 +125,10 @@ function syncNodeGraphModuleRails() {
     for (const jack of article.querySelectorAll(".node-param-port.modulation-input, .node-param-port.parameter-output")) {
       jack.classList.toggle("rail-patched", Boolean(params?.has(jack.dataset.param)));
     }
+    // Only rows beside a gutter (a patched param) are inset; the rest keep the full width.
+    for (const row of article.querySelectorAll(".node-parameter-row")) {
+      row.classList.toggle("rail-inset", Boolean(row.querySelector(".node-param-port.rail-patched")));
+    }
   }
   return true;
 }
@@ -233,7 +237,7 @@ function nodeGraphModuleRailsDrawGl(batch, plates, toX, toY, zoom, cssW, cssH) {
     const face = el.classList.contains("has-module-face") ? body.querySelector(":scope > .node-face") : null;
     const faceBox = face ? nodeGraphModuleLayoutBox(face, el) : null;
     const spec = faceBox && typeof nodeGraphModuleFaceSpecForElement === "function" ? nodeGraphModuleFaceSpecForElement(el) : null;
-    const widgets = spec && typeof nodeGraphModuleFaceWidgets === "function" ? nodeGraphModuleFaceWidgets(spec, face.offsetWidth) : [];
+    const widgets = spec && typeof nodeGraphModuleFaceWidgets === "function" ? nodeGraphModuleFaceWidgets(spec, face.offsetWidth, el) : [];
     const section = (port) => {
       const key = port.dataset.param;
       const wd = widgets.find((x) => x.param === key || x.hpf === key || x.lpf === key);
