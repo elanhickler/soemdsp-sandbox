@@ -8,7 +8,8 @@
 // of eight shared params every algorithm reads (no per-algorithm params):
 //   tune (Hz), tone (0..1), snappy (0..1), bodyDecay (s T60),
 //   snapDecay (s T60), bend (oct), amplitude (0..1).
-// Algorithms (choiceIds): 0 tr808, 1 tr909, 2 simmons, 3 modal, 4 fm.
+// Algorithms (choiceIds): 0 tr808, 1 tr909, 2 simmons, 4 fm. Id 3 (Modal) moved to
+// its own module, Modal Snare (Argi 2026-10-20); ids stay stable and a stray 3 plays as 808.
 //
 // Hit model: Trigger (gate_hit) latches v = |height| and strikes. 808 / Modal
 // add the new ping onto the ringing resonators; 909 / Simmons / FM reset the
@@ -71,11 +72,6 @@ static const double kSimQ = 2.0;
 static const double kSimClickT60 = 0.002;
 static const double kSimClick = 0.4;
 static const double kSimWires = 1.2;
-static const double kModalBp = 3000.0;
-static const double kModalBendT60 = 0.03;
-static const double kModalClickT60 = 0.002;
-static const double kModalClick = 0.3;
-static const double kModalWires = 1.6;
 static const double kFmRatio = 1.4;
 static const double kFmIndexMax = 8.0;
 static const double kFmNoiseHp = 1000.0;
@@ -192,6 +188,7 @@ extern "C" double soemdsp_electro_snare_sample(
   const double sr = sampleRate < 1.0 ? 44100.0 : sampleRate;
   int alg = (int)(safe(algorithm) + 0.5);
   alg = alg < kAlg808 ? kAlg808 : (alg > kAlgFm ? kAlgFm : alg);
+  if (alg == kAlgModal) alg = kAlg808;  // Modal moved to Modal Snare
 
   const bool resetHit = gate_hit(safe(reset), &s.lastReset);
   const double trig = safe(trigger);
@@ -218,7 +215,7 @@ extern "C" double soemdsp_electro_snare_sample(
   const double bd = clamp(safe(bodyDecay), 0.001, 10.0);
   const double nd = clamp(safe(snapDecay), 0.001, 10.0);
   const double bendOct = clamp(safe(bend), 0.0, 8.0);
-  const double amp = clamp(safe(amplitude), 0.0, 1.0);
+  const double amp = safe(amplitude);  // no hidden clamp: the param range governs (APP_POLICY)
   const double pv = ping ? s.v : 0.0;
   const double bendMul = (s.p != 0.0 && bendOct != 0.0) ? dsp_exp2(bendOct * s.p) : 1.0;
   const double f = f0 * bendMul;
@@ -292,38 +289,6 @@ extern "C" double soemdsp_electro_snare_sample(
     s.eA = planck_snap(s.eA * t60_coeff(bd, sr));
     s.eN = planck_snap(s.eN * t60_coeff(nd, sr));
     s.eClick = planck_snap(s.eClick * t60_coeff(kSimClickT60, sr));
-  } else if (alg == kAlgModal) {
-    bendT60 = kModalBendT60;
-    s.eA = s.eB = s.eC = 0.0;
-    double wSum = 0.0;
-    double eSum = 0.0;
-    for (int m = 0; m < kModes; m++) {
-      const double w = kModeAxisym[m] ? 1.0 : tn;
-      const double rr = t60_coeff(bd / kModeRatio[m], sr);
-      const double y = ring2_tick(s.mode[m], f * kModeRatio[m], rr, pv, sr);
-      body += w * y;
-      bodyR += kModeOdd[m] ? -w * y : w * y;
-      wSum += w;
-      eSum += w * s.eMode[m];
-      s.eMode[m] = planck_snap(s.eMode[m] * rr);
-    }
-    body /= wSum;
-    bodyR /= wSum;
-    bodyStereo = true;
-    eSum /= wSum;
-    TptSvfCoeffs k;
-    tpt_svf_setup_bandpass_const_peak(k, (2.0 * kPi) * mind(kModalBp, 0.45 * sr) / sr, 1.0);
-    const double n0 = hash_noise_at(s.white, hash_noise_seed(kNoiseSeed, 0));
-    const double click = kModalClick * (n0 - one_pole_lp_tick(s.lpC, n0, 3000.0, sr)) * s.eClick;  // shared L/R
-    for (int c = 0; c < 2; c++) {
-      const double bp = tpt_svf_tick(s.svf[c], k, (c == 0 ? n0 : hash_noise_at(s.white, hash_noise_seed(kNoiseSeed, 1))));
-      s.svf[c].z1 = planck_snap(s.svf[c].z1);
-      s.svf[c].z2 = planck_snap(s.svf[c].z2);
-      wires[c] = kModalWires * bp * s.eN * sn + click;
-    }
-    env = (eSum + sn * s.eN) / (1.0 + sn);
-    s.eN = planck_snap(s.eN * t60_coeff(nd, sr));
-    s.eClick = planck_snap(s.eClick * t60_coeff(kModalClickT60, sr));
   } else {
     bendT60 = kFmBendT60;
     s.eB = s.eC = s.eClick = 0.0;
@@ -380,6 +345,6 @@ extern "C" double soemdsp_electro_snare_env(int handle) {
   return gPool[handle - 1].envOut;
 }
 
-extern "C" int soemdsp_electro_snare_version() { return 2; }  // 2: stereo Snare L / Snare R
+extern "C" int soemdsp_electro_snare_version() { return 3; }  // 3: Modal removed (-> Modal Snare), Amplitude unclamped
 extern "C" const char* soemdsp_electro_snare_metadata_json() { return kMetadataJson; }
 extern "C" int soemdsp_electro_snare_metadata_json_size() { return sizeof(kMetadataJson) - 1; }

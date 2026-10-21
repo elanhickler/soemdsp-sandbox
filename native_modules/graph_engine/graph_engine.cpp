@@ -1259,6 +1259,15 @@ extern "C" double soemdsp_robin_sinepulse_sample(
   double phase, double decay, double amplitude, double sampleRate
 );
 
+extern "C" int soemdsp_modal_snare_create();
+extern "C" void soemdsp_modal_snare_destroy(int handle);
+extern "C" double soemdsp_modal_snare_env(int handle);
+extern "C" double soemdsp_modal_snare_right(int handle);
+extern "C" double soemdsp_modal_snare_sample(
+  int handle, double trigger, double reset, double tune, double tone,
+  double snappy, double bodyDecay, double snapDecay, double bend, double amplitude,
+  double noiseFreq, double noiseQ, double click, double clickDecayMs, double noiseTilt,
+  double sampleRate);
 extern "C" int soemdsp_electro_snare_create();
 extern "C" void soemdsp_electro_snare_destroy(int handle);
 extern "C" double soemdsp_electro_snare_env(int handle);
@@ -2149,12 +2158,13 @@ static const int kTypePingEnvelope = 165;
 static const int kTypePowerDecay = 204; // PowerDecay: height * amp * pow(1 - t/decay, power)
 static const int kTypeRobinSinepulse = 205; // Robin Sinepulse: Robin Schmidt's SweepKicker (RS-MET) + Decay T60 env
 static const int kTypeRobinSinepulseAllpass = 206; // Robin Sinepulse Allpass: Robin Schmidt's rsFlatZapper (RS-MET)
-static const int kTypeElectroSnare = 222; // Electro Snare: 808 / 909 / Simmons / Modal / FM snare voice (docs/SNARE_PLAN.md)
+static const int kTypeElectroSnare = 222; // Electro Snare: 808 / 909 / Simmons / FM snare voice (Modal -> Modal Snare) (docs/SNARE_PLAN.md)
 static const int kTypeElectroHat = 223; // Electro Hat: 808 / 606 / FM / Noise hi-hat, Closed + Open + choke (docs/DRUM_PACK_PLAN.md)
 static const int kTypeElectroTom = 224; // Electro Tom: 808 / 909 / Simmons tom voice (docs/DRUM_PACK_PLAN.md)
 static const int kTypeElectroKick = 225; // Electro Kick: 808 / 909 / Simmons kick voice (docs/DRUM_PACK_PLAN.md)
 static const int kTypeElectroClap = 226; // Electro Clap: 808 / 909 / Simple hand-clap voice (docs/DRUM_PACK_PLAN.md)
 static const int kTypeRmsMeter = 227; // RMS Meter: one-pole mean square, RMS / dB / Env Inverted
+static const int kTypeModalSnare = 228; // Modal Snare: six membrane modes + tunable noise wires (split from Electro Snare Modal)
 static const int kTypeCurveAttackRelease = 166;
 // 167 retired (thumpEnvelope).
 static const int kTypePluckEnvelopeFb = 198;
@@ -2875,6 +2885,8 @@ static void destroy_native_kind_handle(int kind, int handle) {
     soemdsp_robin_sinepulse_destroy(handle);
   } else if (kind == kTypeElectroSnare) {
     soemdsp_electro_snare_destroy(handle);
+  } else if (kind == kTypeModalSnare) {
+    soemdsp_modal_snare_destroy(handle);
   } else if (kind == kTypeElectroHat) {
     soemdsp_electro_hat_destroy(handle);
   } else if (kind == kTypeElectroTom) {
@@ -3245,7 +3257,7 @@ static void init_node_defaults(Node& n, int typeId) {
       : (typeId == kTypeCombResonator) ? 110.0
       : (typeId == kTypeInertialFilter) ? 20000.0 // attack Hz
       : (typeId == kTypeRobinSinepulse) ? 10000.0 // highFreq Hz
-      : (typeId == kTypeElectroSnare) ? 180.0 // tune Hz
+      : (typeId == kTypeElectroSnare || typeId == kTypeModalSnare) ? 180.0 // tune Hz
       : (typeId == kTypeElectroHat) ? 1.0 // tune x
       : (typeId == kTypeElectroTom) ? 135.0 // tune Hz
       : (typeId == kTypeElectroKick) ? 52.0 // tune Hz
@@ -3398,7 +3410,7 @@ static void init_node_defaults(Node& n, int typeId) {
       : (typeId == kTypeExponentialSkew || typeId == kTypeHyperbolicDecay) ? 0.0 // Shape w
       : (typeId == kTypeEllipsoidDecay) ? 0.0 // Morph
       : (typeId == kTypeRobinSinepulse) ? 0.0 // chirp
-      : (typeId == kTypeElectroSnare) ? 0.5 // tone
+      : (typeId == kTypeElectroSnare || typeId == kTypeModalSnare) ? 0.5 // tone
       : (typeId == kTypeElectroHat || typeId == kTypeElectroTom || typeId == kTypeElectroKick) ? 0.5 // tone
       : (typeId == kTypeElectroClap) ? 0.5 // tone
       : (typeId == kTypeRobinSinepulseAllpass) ? 0.0 // freqShape
@@ -3439,6 +3451,7 @@ static void init_node_defaults(Node& n, int typeId) {
   );
   init_control(
     n.resonance,
+    (typeId == kTypeModalSnare) ? 1.0 : // noiseQ (Modal Snare)
     (typeId == kTypeAdditiveBlaster) ? -0.2 // curve bend (PoC)
       : (typeId == kTypeAdditiveGenerator) ? 1.0 // skew
       : (typeId == kTypeHypersaw2) ? 0.0 // vibratoDistance
@@ -3701,7 +3714,7 @@ static void init_node_defaults(Node& n, int typeId) {
       : (typeId == kTypeSoftClipper) ? 0.5 // knee
       : (typeId == kTypeRobinOscillator) ? 0.5 // morph (WIDTH slot)
       : (typeId == kTypeRobinSinepulse) ? 0.0 // chirpShape
-      : (typeId == kTypeElectroSnare) ? 0.5 // snappy
+      : (typeId == kTypeElectroSnare || typeId == kTypeModalSnare) ? 0.5 // snappy
       : (typeId == kTypeElectroHat) ? 1.0 // metal
       : (typeId == kTypeElectroTom) ? 0.2 // noise
       : (typeId == kTypeElectroKick) ? 0.3 // click
@@ -3869,6 +3882,7 @@ static void init_node_defaults(Node& n, int typeId) {
   );
   init_control(
     n.level,
+    (typeId == kTypeModalSnare) ? 0.3 : // click (Modal Snare)
     (typeId == kTypeChorus) ? 0.0 // randomAmp
       : 1.0,
     false
@@ -3902,7 +3916,7 @@ static void init_node_defaults(Node& n, int typeId) {
       : (typeId == kTypeRobinSupersaw) ? 0.0 // portaTimeMin s
       : (typeId == kTypeAcidSequencer) ? 0.06 // slide time s
       : (typeId == kTypeRobinSinepulse) ? 0.2 // sweepTime s
-      : (typeId == kTypeElectroSnare) ? 0.25 // bodyDecay s (T60)
+      : (typeId == kTypeElectroSnare || typeId == kTypeModalSnare) ? 0.25 // bodyDecay s (T60)
       : (typeId == kTypeElectroHat) ? 0.05 // closedDecay s (T60)
       : (typeId == kTypeElectroTom) ? 0.2 // bodyDecay s (T60)
       : (typeId == kTypeElectroKick) ? 0.6 // decay s (T60)
@@ -3927,7 +3941,7 @@ static void init_node_defaults(Node& n, int typeId) {
       : (typeId == kTypeExponentialSkew || typeId == kTypeHyperbolicDecay
           || typeId == kTypeExponentialMix || typeId == kTypeEllipsoidDecay) ? 2.0 // Duration / Decay Time s
       : (typeId == kTypeRobinSinepulse) ? 0.5 // decay s (T60)
-      : (typeId == kTypeElectroSnare) ? 0.2 // snapDecay s (T60)
+      : (typeId == kTypeElectroSnare || typeId == kTypeModalSnare) ? 0.2 // snapDecay s (T60)
       : (typeId == kTypeElectroHat) ? 0.5 // openDecay s (T60)
       : (typeId == kTypeElectroKick) ? 0.005 // bendTime s (T60)
       : (typeId == kTypeFlowerChildEnvelopeFollower) ? 0.001 // hold
@@ -3955,6 +3969,7 @@ static void init_node_defaults(Node& n, int typeId) {
   ); // pingPong timing; lookaheadLimiter / activeFilter = gainCompensation
   init_control(
     n.offsetMs,
+    (typeId == kTypeModalSnare) ? 2.0 : // clickDecay ms (Modal Snare)
     (typeId == kTypeRandomClock) ? 0.01
       : (typeId == kTypeLookaheadLimiter) ? 0.2 // attack ms
       : (typeId == kTypePumpLimiter || typeId == kTypeSidechain) ? 5.0 // attack ms
@@ -3991,12 +4006,14 @@ static void init_node_defaults(Node& n, int typeId) {
   );
   init_control(
     n.saturate,
+    (typeId == kTypeModalSnare) ? 0.0 : // noiseTilt (Modal Snare)
     (typeId == kTypeHypersaw2) ? 0.0 // vibratoDistanceTilt
       : 1.0,
     false
   );
   init_control(
     n.lpfFrequency,
+    (typeId == kTypeModalSnare) ? 3000.0 : // noiseFreq Hz (Modal Snare)
     (typeId == kTypePll) ? 10.0 // Smoothing Hz
       : (typeId == kTypeAdditiveOsc) ? 20000.0 // dampingFilterFrequency
       : (typeId == kTypeBradley2a) ? 2600.0 // interfFreq
@@ -4985,6 +5002,7 @@ static int create_native_for_type(int typeId, float sampleRate) {
   if (typeId == kTypeEllipsoidDecay) return soemdsp_ellipsoid_decay_create();
   if (typeId == kTypeRobinSinepulse) return soemdsp_robin_sinepulse_create();
   if (typeId == kTypeElectroSnare) return soemdsp_electro_snare_create();
+  if (typeId == kTypeModalSnare) return soemdsp_modal_snare_create();
   if (typeId == kTypeElectroHat) return soemdsp_electro_hat_create();
   if (typeId == kTypeElectroTom) return soemdsp_electro_tom_create();
   if (typeId == kTypeElectroKick) return soemdsp_electro_kick_create();
@@ -10260,6 +10278,42 @@ static void process_electro_snare(Circuit& g, Node& node, int frames) {
   }
 }
 
+// Modal Snare (modalSnare, type 228): Trigger + Reset in. frequency=tune Hz,
+// shape=tone, width=snappy, timeNumerator=bodyDecay s, timeDenominator=snapDecay s,
+// center=bend oct, amplitude, lpfFrequency=noiseFreq Hz, resonance=noiseQ,
+// level=click, offsetMs=clickDecay ms, saturate=noiseTilt.
+// Out: Snare L -> Left, Snare R -> Right, Env -> Mono.
+static void process_modal_snare(Circuit& g, Node& node, int frames) {
+  if (node.nativeHandle <= 0) return;
+  const bool hasTrig = mix_live_port(g, node, kPortTrigger, frames, g.mixTrigger);
+  const bool hasReset = mix_live_port(g, node, kPortReset, frames, g.mixReset);
+  const double sr = g.sampleRate < 1.0f ? 44100.0 : (double)g.sampleRate;
+  for (int f = 0; f < frames; f++) {
+    control_frame(g, node, f);
+    const double out = soemdsp_modal_snare_sample(
+      node.nativeHandle,
+      hasTrig ? g.mixTrigger[f] : 0.0,
+      hasReset ? g.mixReset[f] : 0.0,
+      control_audio(g, node.frequency, f),
+      control_audio(g, node.shape, f),
+      control_audio(g, node.width, f),
+      control_audio(g, node.timeNumerator, f),
+      control_audio(g, node.timeDenominator, f),
+      control_audio(g, node.center, f),
+      control_audio(g, node.amplitude, f),
+      control_audio(g, node.lpfFrequency, f),
+      control_audio(g, node.resonance, f),
+      control_audio(g, node.level, f),
+      control_audio(g, node.offsetMs, f),
+      control_audio(g, node.saturate, f),
+      sr
+    );
+    node.buf[kPortLeft][f] = out;
+    node.buf[kPortRight][f] = soemdsp_modal_snare_right(node.nativeHandle);
+    node.buf[kPortMono][f] = soemdsp_modal_snare_env(node.nativeHandle);
+  }
+}
+
 // Electro Hat (electroHat, docs/DRUM_PACK_PLAN.md): Trigger (= Closed) and Open
 // (Mono live bus) strike, height = velocity; Reset re-strikes the last hit.
 // Controls: waveform=algorithm (0 tr808 / 1 tr606 / 2 fm / 3 noise),
@@ -14323,6 +14377,7 @@ extern "C" int soemdsp_graph_add_node(int handle, unsigned int nodeIdHash, int t
     || typeId == kTypeExponentialMix
     || typeId == kTypeEllipsoidDecay
     || typeId == kTypeElectroSnare
+    || typeId == kTypeModalSnare
     || typeId == kTypeElectroHat
     || typeId == kTypeElectroTom
     || typeId == kTypeElectroKick
@@ -15892,6 +15947,10 @@ static void dispatch_process_node(Circuit& g, Node& node, int frames) {
       process_electro_snare(g, node, frames);
       return;
     }
+    if (node.typeId == kTypeModalSnare) {
+      process_modal_snare(g, node, frames);
+      return;
+    }
     if (node.typeId == kTypeElectroHat) {
       process_electro_hat(g, node, frames);
       return;
@@ -16548,5 +16607,5 @@ extern "C" int soemdsp_graph_version() {
   // 170: EQ Filter ZDF ƒ input (resolve_osc_hz)
   // 171: ƒ on Ladder/303/Mode/Cookbook/IIR/Papoulis/ZDF filters + soemdsp_graph_node_effective_hz
   // 174: live add/remove/connect/disconnect keep compiled and other nodes' native handles
-  return 205; // 205: Ping Pong Delay Amplitude unclamped (was hidden clamp 0..2 in DSP). was 204: Ping Pong Delay separate HPF Poles (stages slot) and LPF Poles (waveform slot), 1..4 each. was 203: Resonant Envelope experiment switches (Trigger Detect 0..5 local, Velocity diffusionSize, Follow Source diffusionAmount, Follow Detect lfoVariation). was 202: Ping Pong Delay feedback filter Poles 1..4 (stages slot; 1 = original one-pole, 2..4 cascaded TPT). was 201: 201: EXPERIMENT gate_hit = every absolute positive change (|x| rises; velocity = |x[n]|-|x[n-1]|). was 200: RMS Meter stereo: L (id In) + R inputs, R outs (RMS R Right, dB R Square, Env Inverted R Tri), nativeHandleR meters R when wired. was 199: RMS Meter (227): one-pole mean square; RMS / dB (-120 floor) / Env Inverted. was 198: Resonant Envelope Mode (Envelope / Filter, waveform slot) + Trigger detect (Cross 0 / Saw reset, lfoStyle slot). was 197: Amp <-> dB reads |amp| in Amp->dB mode (bipolar audio no longer floors to -120). was 196: Resonant Envelope SC out (kPortSaw, clamp(1 - Out/Amplitude, 0, 1)). was 195: gate_hit / gate_on back to the original law (hit = first sample > 0 after <= 0; on = x > 0); Resonant Envelope Follow = rising-sample step latch. was 194: Resonant Envelope Follow input (Morph live bus, |x| is the SVF target). was 193: DSF Oscillator face playhead (__Phase on kPortPhase01). was 192: Resonant Envelope Frequency knob (unwired f uses it for Tracking). was 191: Electro Clap (226). was 190: Mode Resonator / Random Clock / Turing Machine / Degree Turing back to their original mono outs (stereo R removed). was 189: fBm back to its 3 outs Out X / Out Y / Out Z (stereo R axes removed). was 188: Electro Hat (223) / Electro Tom (224) / Electro Kick (225). was 187: stereo L/R outs: Bradley 2A, fBm (X/Y/Z R on Tri/Sine/Trisaw), Mode Resonator (R quadrature), Random Clock / Turing Machine / Degree Turing (R Seed lane), Softpop 2 R Pitch Mod. was 186: Electro Snare stereo (Snare L -> Left, Snare R -> Right, Env -> Mono). was 185: Electro Snare (type 222). was 184: Robin Sinepulse 0–1 jack is log sweep position (L = max(Low, 20 Hz)). was 183: Flower Child ƒ input removed (Cutoff knob only again). was 182: SinCos / SinCos4 Polarity (center 0 Bipolar / 1 Unipolar). was 181: Flower Child ƒ in (resonance-pitch Hz replaces Cutoff). was 180: Robin Sinepulse 0–1 jack is sweep position (High=1, Low=0). was 179: Resonant Envelope (221)
+  return 206; // 206: Modal Snare (228) split from Electro Snare Modal, + Noise Freq (lpfFrequency) / Noise Q (resonance) / Click (level) / Click Decay ms (offsetMs) / Noise Tilt (saturate); Electro Snare Modal option removed (id 3 plays as 808). was 205: Ping Pong Delay Amplitude unclamped (was hidden clamp 0..2 in DSP). was 204: Ping Pong Delay separate HPF Poles (stages slot) and LPF Poles (waveform slot), 1..4 each. was 203: Resonant Envelope experiment switches (Trigger Detect 0..5 local, Velocity diffusionSize, Follow Source diffusionAmount, Follow Detect lfoVariation). was 202: Ping Pong Delay feedback filter Poles 1..4 (stages slot; 1 = original one-pole, 2..4 cascaded TPT). was 201: 201: EXPERIMENT gate_hit = every absolute positive change (|x| rises; velocity = |x[n]|-|x[n-1]|). was 200: RMS Meter stereo: L (id In) + R inputs, R outs (RMS R Right, dB R Square, Env Inverted R Tri), nativeHandleR meters R when wired. was 199: RMS Meter (227): one-pole mean square; RMS / dB (-120 floor) / Env Inverted. was 198: Resonant Envelope Mode (Envelope / Filter, waveform slot) + Trigger detect (Cross 0 / Saw reset, lfoStyle slot). was 197: Amp <-> dB reads |amp| in Amp->dB mode (bipolar audio no longer floors to -120). was 196: Resonant Envelope SC out (kPortSaw, clamp(1 - Out/Amplitude, 0, 1)). was 195: gate_hit / gate_on back to the original law (hit = first sample > 0 after <= 0; on = x > 0); Resonant Envelope Follow = rising-sample step latch. was 194: Resonant Envelope Follow input (Morph live bus, |x| is the SVF target). was 193: DSF Oscillator face playhead (__Phase on kPortPhase01). was 192: Resonant Envelope Frequency knob (unwired f uses it for Tracking). was 191: Electro Clap (226). was 190: Mode Resonator / Random Clock / Turing Machine / Degree Turing back to their original mono outs (stereo R removed). was 189: fBm back to its 3 outs Out X / Out Y / Out Z (stereo R axes removed). was 188: Electro Hat (223) / Electro Tom (224) / Electro Kick (225). was 187: stereo L/R outs: Bradley 2A, fBm (X/Y/Z R on Tri/Sine/Trisaw), Mode Resonator (R quadrature), Random Clock / Turing Machine / Degree Turing (R Seed lane), Softpop 2 R Pitch Mod. was 186: Electro Snare stereo (Snare L -> Left, Snare R -> Right, Env -> Mono). was 185: Electro Snare (type 222). was 184: Robin Sinepulse 0–1 jack is log sweep position (L = max(Low, 20 Hz)). was 183: Flower Child ƒ input removed (Cutoff knob only again). was 182: SinCos / SinCos4 Polarity (center 0 Bipolar / 1 Unipolar). was 181: Flower Child ƒ in (resonance-pitch Hz replaces Cutoff). was 180: Robin Sinepulse 0–1 jack is sweep position (High=1, Low=0). was 179: Resonant Envelope (221)
 }

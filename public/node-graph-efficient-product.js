@@ -212,6 +212,7 @@ const NODE_GRAPH_EFFICIENT_PRODUCT_AUDIO_TYPES = Object.freeze([
   "robinSinepulse",
   "robinSinepulseAllpass",
   "electroSnare",
+  "modalSnare",
   "electroHat",
   "electroTom",
   "electroKick",

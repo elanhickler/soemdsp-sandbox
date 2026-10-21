@@ -32,7 +32,7 @@ const kSample = must("soemdsp_electro_snare_sample");
 const kEnv = must("soemdsp_electro_snare_env");
 const kRight = must("soemdsp_electro_snare_right");
 const SR = 48000;
-const ALGS = ["tr808", "tr909", "simmons", "modal", "fm"];
+const ALGS = ["tr808", "tr909", "simmons", null, "fm"];  // id 3 (Modal) moved to Modal Snare
 const DEF = { tune: 180, tone: 0.5, snappy: 0.5, bodyDecay: 0.25, snapDecay: 0.2, bend: 0, amplitude: 1 };
 const KNOB = { tune: 300, tone: 0.9, snappy: 0.1, bodyDecay: 0.6, snapDecay: 0.05, bend: 1, amplitude: 0.5 };
 const PLANCK = 1e-7;
@@ -62,6 +62,7 @@ function clean(name, a) {
 const rows = [];
 const stereo = [];
 for (let alg = 0; alg < ALGS.length; alg++) {
+  if (!ALGS[alg]) continue;
   const name = ALGS[alg];
   const V = 0.7;
   // Silent before Trigger, Reset alone is silent.
@@ -188,6 +189,7 @@ function runGraph(alg, { reset = false } = {}) {
   return { sig, sigR, env, hits };
 }
 for (let alg = 0; alg < ALGS.length; alg++) {
+  if (!ALGS[alg]) continue;
   const r = runGraph(alg);
   let pk = 0, pkR = 0, pe = 0, dLR = 0;
   for (let n = 0; n < r.sig.length; n++) {
@@ -229,11 +231,12 @@ console.log(`ok electroSnare graph type=${TYPE_SNARE} version=${ver}: Trigger + 
   const algP = def.parameters[0];
   if (algP.defaultValue !== "tr808") throw new Error("algorithm default must be 'tr808'");
   ALGS.forEach((nm, id) => {
+    if (!nm) return;
     const saved = JSON.parse(JSON.stringify({ type: "electroSnare", params: { algorithm: nm } }));
     const got = ctx.idFor("electroSnare", "algorithm", saved.params.algorithm);
     if (got !== id) throw new Error(`algorithm ${nm} -> ${got}, expected ${id}`);
   });
-  console.log("ok electroSnare Algorithm persists by name (tr808 tr909 simmons modal fm); inputs [Trigger, Reset], outputs [Snare L, Snare R, Env]");
+  console.log("ok electroSnare Algorithm persists by name (tr808 tr909 simmons fm); inputs [Trigger, Reset], outputs [Snare L, Snare R, Env]");
 }
 
 // --- 4) live path (real efficient worklet + combined wasm) ---
@@ -253,6 +256,7 @@ console.log(`ok electroSnare graph type=${TYPE_SNARE} version=${ver}: Trigger + 
   vm.runInContext("globalThis.NODE_GRAPH_APP_FONTS = [];\n" + src, ctx, { filename: "worklet-efficient.js" });
   const rows4 = [];
   for (let alg = 0; alg < ALGS.length; alg++) {
+  if (!ALGS[alg]) continue;
     const p = new Proc({ processorOptions: {} });
     const bytes = vm.runInContext(`new ArrayBuffer(${wasm.length})`, ctx);
     new Uint8Array(bytes).set(wasm);

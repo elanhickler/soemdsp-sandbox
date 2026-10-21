@@ -172,6 +172,7 @@ NodeLiveAudioProcessor.NATIVE_GRAPH_TYPE_IDS = Object.freeze({
   electroKick: 225,
   electroClap: 226,
   rmsMeter: 227,
+  modalSnare: 228,
   curveAttackRelease: 166,
   pluckEnvelope: 198,
   acidSequencer: 199,
@@ -722,7 +723,7 @@ NodeLiveAudioProcessor.prototype.mapNativeGraphSrcPortId = function mapNativeGra
     if (p === "env inverted r") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_TRI;
   }
   // Electro Snare: Snare L on Left, Snare R on Right, Env on Mono.
-  if (t === "electroSnare") {
+  if (t === "electroSnare" || t === "modalSnare") {
     if (p === "snare l") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_LEFT;
     if (p === "snare r") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_RIGHT;
     if (p === "env") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_MONO;
@@ -5940,6 +5941,24 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
       push("amplitude", P.NATIVE_GRAPH_PARAM_AMPLITUDE, cont("amplitude", 1));
       continue;
     }
+    if (type === "modalSnare") {
+      // Modal Snare: frequency=tune, shape=tone, width=snappy, timeNumerator=bodyDecay,
+      // timeDenominator=snapDecay, center=bend, amplitude, lpfFrequency=noiseFreq,
+      // resonance=noiseQ, level=click, offsetMs=clickDecay (ms), saturate=noiseTilt.
+      push("tune", P.NATIVE_GRAPH_PARAM_FREQUENCY, cont("tune", 180));
+      push("tone", P.NATIVE_GRAPH_PARAM_SHAPE, cont("tone", 0.5));
+      push("snappy", P.NATIVE_GRAPH_PARAM_WIDTH, cont("snappy", 0.5));
+      push("bodyDecay", P.NATIVE_GRAPH_PARAM_TIME_NUMERATOR, cont("bodyDecay", 0.25));
+      push("snapDecay", P.NATIVE_GRAPH_PARAM_TIME_DENOMINATOR, cont("snapDecay", 0.2));
+      push("bend", P.NATIVE_GRAPH_PARAM_CENTER, cont("bend", 0));
+      push("amplitude", P.NATIVE_GRAPH_PARAM_AMPLITUDE, cont("amplitude", 1));
+      push("noiseFreq", P.NATIVE_GRAPH_PARAM_LPF_FREQUENCY, cont("noiseFreq", 3000));
+      push("noiseQ", P.NATIVE_GRAPH_PARAM_RESONANCE, cont("noiseQ", 1));
+      push("click", P.NATIVE_GRAPH_PARAM_LEVEL, cont("click", 0.3));
+      push("clickDecay", P.NATIVE_GRAPH_PARAM_OFFSET_MS, cont("clickDecay", 2));
+      push("noiseTilt", P.NATIVE_GRAPH_PARAM_SATURATE, cont("noiseTilt", 0));
+      continue;
+    }
     if (type === "electroHat") {
       // Electro Hat (docs/DRUM_PACK_PLAN.md): waveform = Algorithm choiceId
       // (0 tr808 / 1 tr606 / 2 fm / 3 noise), frequency=tune x, shape=tone,
@@ -9133,14 +9152,14 @@ NodeLiveAudioProcessor.prototype.nativeGraphPortNames = function nativeGraphPort
     if (type === "theremin") return ["Wave", "Out", "Mono"];
     if (type === "vibratoGenerator") return ["Wave", "Out", "Mono"];
     if (type === "robinSinepulse") return ["Kick"];
-    if (type === "electroSnare") return ["Env"];
+    if (type === "electroSnare" || type === "modalSnare") return ["Env"];
     if (type === "electroHat" || type === "electroTom" || type === "electroKick" || type === "electroClap") return ["Env"];
     return ["Out", "Mono", "In"];
   }
   if (portId === P.NATIVE_GRAPH_PORT_LEFT) {
     if (type === "acidSequencer") return ["Trigger"];
     if (type === "robinSinepulse") return ["f", "ƒ"];
-    if (type === "electroSnare") return ["Snare L"];
+    if (type === "electroSnare" || type === "modalSnare") return ["Snare L"];
     if (type === "electroHat") return ["Hat L"];
     if (type === "electroTom") return ["Tom L"];
     if (type === "electroKick") return ["Kick L"];
@@ -9217,7 +9236,7 @@ NodeLiveAudioProcessor.prototype.nativeGraphPortNames = function nativeGraphPort
     if (type === "acidSequencer") return ["pitch", "\u266f/\u266d"];
     if (type === "helmholtzPitch") return ["Fidelity", "fid"];
     if (type === "sampleHold") return ["Right"];
-    if (type === "electroSnare") return ["Snare R"];
+    if (type === "electroSnare" || type === "modalSnare") return ["Snare R"];
     if (type === "electroHat") return ["Hat R"];
     if (type === "electroTom") return ["Tom R"];
     if (type === "electroKick") return ["Kick R"];

@@ -36,14 +36,14 @@
     {
       "destinationNode": "limiter-1",
       "destinationPort": "Left",
-      "sourceNode": "electroSnare-1",
+      "sourceNode": "modalSnare-1",
       "sourcePort": "Snare L",
       "tracePoints": []
     },
     {
       "destinationNode": "limiter-1",
       "destinationPort": "Right",
-      "sourceNode": "electroSnare-1",
+      "sourceNode": "modalSnare-1",
       "sourcePort": "Snare R",
       "tracePoints": []
     },
@@ -71,7 +71,7 @@
     {
       "destinationNode": "resonantEnvelope-1",
       "destinationPort": "Trigger",
-      "sourceNode": "electroSnare-1",
+      "sourceNode": "modalSnare-1",
       "sourcePort": "Snare L",
       "tracePoints": []
     },
@@ -90,7 +90,7 @@
       "tracePoints": []
     },
     {
-      "destinationNode": "electroSnare-1",
+      "destinationNode": "modalSnare-1",
       "destinationPort": "Trigger",
       "sourceNode": "clock-2",
       "sourcePort": "T",
@@ -569,49 +569,8 @@
     {
       "gx": 80,
       "gy": -27,
-      "id": "electroSnare-1",
+      "id": "modalSnare-1",
       "paramMeta": {
-        "algorithm": {
-          "alias": "",
-          "choices": [
-            "808",
-            "909",
-            "Simmons",
-            "Modal",
-            "FM"
-          ],
-          "choiceOriginMin": 0,
-          "curveAmount": 0,
-          "def": 0,
-          "displayChoices": true,
-          "divideChoicesVisibly": true,
-          "kind": "choice",
-          "bipolar": false,
-          "max": 4,
-          "maxDigits": 3,
-          "mid": 2,
-          "min": 0,
-          "reverse": false,
-          "nonlinearSlider": false,
-          "sliderCurve": "linear",
-          "showSign": false,
-          "removeTrailingZeros": false,
-          "smoothingMode": "global",
-          "smoothingSeconds": null,
-          "smoothingType": "none",
-          "step": 1,
-          "tooltip": "Snare design. 808: two pinged resonators + high-passed noise. 909: two phase-reset rounded triangles + two noise bands. Simmons: SDS-V style sine with bend + resonant-lowpassed noise + click. Modal: six membrane-mode resonators + band-passed wires. FM: Chowning 1:1.4 FM drum + noise. Knobs keep their values when you switch.",
-          "hardClamp": false,
-          "modMultiply": false,
-          "vca": false,
-          "constraint": "",
-          "unit": "",
-          "wraparound": false,
-          "visible": true,
-          "linearSmoothing": false,
-          "outputDomain": false,
-          "domainOffset": 0
-        },
         "tune": {
           "alias": "",
           "choices": [],
@@ -852,7 +811,6 @@
         }
       },
       "params": {
-        "algorithm": "modal",
         "tune": 191.74462715045627,
         "tone": 0.5453499344788764,
         "snappy": 0.6774584798355369,
@@ -861,7 +819,7 @@
         "bend": 0,
         "amplitude": 10
       },
-      "type": "electroSnare",
+      "type": "modalSnare",
       "alias": "Electro🥁Snare",
       "widthGu": 7,
       "traceDisplaySettings": {

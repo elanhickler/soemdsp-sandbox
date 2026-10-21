@@ -1144,6 +1144,17 @@
   "customFolder": ""
  },
  {
+  "type": "modalSnare",
+  "faceLayout": "spawn",
+  "chrome": "LayoutA",
+  "layout": "",
+  "display": true,
+  "visibleParams": 12,
+  "inputs": 2,
+  "outputs": 3,
+  "customFolder": ""
+ },
+ {
   "type": "electroTom",
   "faceLayout": "spawn",
   "chrome": "LayoutA",

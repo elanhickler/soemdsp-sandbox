@@ -1802,6 +1802,24 @@
       "noticeUrl": "https://github.com/elanhickler/soemdsp-sandbox/blob/master/docs/THIRD_PARTY.md"
     },
     {
+      "name": "modal_snare",
+      "label": "Modal Snare",
+      "targetType": "modalSnare",
+      "kind": "drum",
+      "source": "native_modules/modal_snare/modal_snare.cpp",
+      "sourceUrl": "https://github.com/elanhickler/soemdsp-sandbox/blob/master/native_modules/modal_snare/modal_snare.cpp",
+      "localSourceUrl": "/native_modules/modal_snare/modal_snare.cpp",
+      "libUrl": "",
+      "wasm": "native_modules/modal_snare/modal_snare.wasm",
+      "wasmUrl": "native_modules/modal_snare/modal_snare.wasm",
+      "wasmAvailable": true,
+      "license": "Soundemote Noncommercial",
+      "licenseUrl": "https://github.com/elanhickler/soemdsp-sandbox/blob/master/LICENSE",
+      "upstreamLicense": "",
+      "upstreamLicenseUrl": "",
+      "noticeUrl": "https://github.com/elanhickler/soemdsp-sandbox/blob/master/docs/THIRD_PARTY.md"
+    },
+    {
       "name": "mode_resonator",
       "label": "Mode Resonator",
       "targetType": "modeResonator",
@@ -2334,7 +2352,7 @@
       "libUrl": "",
       "wasm": "native_modules/rms_meter/rms_meter.wasm",
       "wasmUrl": "native_modules/rms_meter/rms_meter.wasm",
-      "wasmAvailable": false,
+      "wasmAvailable": true,
       "license": "Soundemote Noncommercial",
       "licenseUrl": "https://github.com/elanhickler/soemdsp-sandbox/blob/master/LICENSE",
       "upstreamLicense": "",

@@ -1755,7 +1755,7 @@ const nodeGraphModuleStoreCatalog = Object.freeze({
   },
   electroSnare: {
     category: "drum",
-    description: "Snare drum voice with five designs on one knob set: 808 (two pinged resonators + noise), 909 (two rounded triangles + two noise bands), Simmons (bending sine + resonant noise + click), Modal (six membrane modes + wires) and FM (Chowning drum). Trigger (height = velocity) strikes; Reset re-strikes exactly; Env out.",
+    description: "Snare drum voice with four designs on one knob set: 808 (two pinged resonators + noise), 909 (two rounded triangles + two noise bands), Simmons (bending sine + resonant noise + click) and FM (Chowning drum). The Modal design is now Modal Snare. Trigger (height = velocity) strikes; Reset re-strikes exactly; Env out.",
     label: "Electro Snare",
     notes: [
       "snare",
@@ -1771,6 +1771,21 @@ const nodeGraphModuleStoreCatalog = Object.freeze({
       "drum",
       "percussion",
       "electro",
+      "Trigger",
+      "native",
+    ],
+  },
+  modalSnare: {
+    category: "drum",
+    description: "Modal snare: six pinged circular-membrane modes plus band-passed snare wires and a noise click, with a tunable noise profile (Noise Freq, Noise Q, Click, Click Decay, Noise Tilt). Trigger (height = velocity) strikes; Reset re-strikes exactly; Env out.",
+    label: "Modal Snare",
+    notes: [
+      "snare",
+      "snare drum",
+      "modal",
+      "membrane",
+      "physical",
+      "drum",
       "Trigger",
       "native",
     ],
@@ -3732,6 +3747,10 @@ const nodeGraphJsSourceEntriesByType = Object.freeze({
   electroSnare: {
     source: "native_modules/electro_snare/electro_snare.cpp",
     sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/native_modules/electro_snare/electro_snare.cpp",
+  },
+  modalSnare: {
+    source: "native_modules/modal_snare/modal_snare.cpp",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/native_modules/modal_snare/modal_snare.cpp",
   },
   electroHat: {
     source: "native_modules/electro_hat/electro_hat.cpp",
