@@ -709,6 +709,8 @@ NodeLiveAudioProcessor.prototype.mapNativeGraphSrcPortId = function mapNativeGra
     if (p === "out1") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_LEFT;
     if (p === "out2") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_RIGHT;
   }
+  // Resonant Envelope SC (sidechain duck) on the Saw slot.
+  if (t === "resonantEnvelope" && p === "sc") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_SAW;
   // Electro Snare: Snare L on Left, Snare R on Right, Env on Mono.
   if (t === "electroSnare") {
     if (p === "snare l") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_LEFT;
@@ -9236,6 +9238,7 @@ NodeLiveAudioProcessor.prototype.nativeGraphPortNames = function nativeGraphPort
     return ["Right"];
   }
   if (portId === P.NATIVE_GRAPH_PORT_SAW) {
+    if (type === "resonantEnvelope") return ["SC"];
     if (type === "acidSequencer") return ["f", "\u0192"];
     if (type === "pitchQuantizer") return ["f", "\u0192"];
     if (type === "helmholtzPitch") return ["Gate", "g"];

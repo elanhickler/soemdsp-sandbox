@@ -16717,10 +16717,10 @@ const nodeGraphModuleDefinitions = (
     inputs: ["Trigger", "Follow", "f"],
     inputAliases: { Gate: "Trigger", In: "Trigger", Trig: "Trigger", "ƒ": "f" },
     inputLabels: { Trigger: "Trigger", Follow: "Follow", f: "ƒ" },
-    outputs: ["Out", "isIdle"],
+    outputs: ["Out", "isIdle", "SC"],
     outputChannels: { isIdle: "black" },
-    outputLabels: { isIdle: "isIdle" },
-    outputAliases: { Env: "Out", Idle: "isIdle" },
+    outputLabels: { isIdle: "isIdle", SC: "SC" },
+    outputAliases: { Env: "Out", Idle: "isIdle", Sidechain: "SC", Duck: "SC" },
     parameters: [
       {
         choices: ["Fit", "Raw"],

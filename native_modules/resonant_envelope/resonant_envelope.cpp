@@ -18,6 +18,9 @@
 // target is above the filter output, Decay timing while below.
 // If Trigger and Follow are both wired their drives add (one SVF, one sum).
 // Follow unwired (followWired < 0.5 or NaN from old callers) = old behaviour.
+//
+// SC out (soemdsp_resonant_envelope_sc): clamp(1 - Out / Amplitude, 0, 1),
+// Out after the Output Range stage; Amplitude 0 -> 1. Ducking / volume pump.
 
 #include <soemdsp/soemdsp.hpp>
 #include <soemdsp/filter/tpt_svf.h>
@@ -43,6 +46,7 @@ struct State {
   double velocity;
   double lastY;
   double lastFollow;
+  double scOut;
   double followTarget;
   double shotAttack;
   double shotDecay;
@@ -180,6 +184,7 @@ extern "C" int soemdsp_resonant_envelope_create() {
       s.velocity = 1.0;
       s.lastY = 0.0;
       s.lastFollow = 0.0;
+      s.scOut = 1.0;
       s.followTarget = 0.0;
       s.shotAttack = 0.01;
       s.shotDecay = 0.3;
@@ -323,11 +328,17 @@ extern "C" double soemdsp_resonant_envelope_sample(
     && dsp_fabs(s.filt.z1) < 1e-5
     && dsp_fabs(s.filt.z2) < 1e-5;
   s.idle = quiet && !high && !(fol >= 1e-5);
+  {
+    double sc = 1.0;
+    if (amp != 0.0) sc = 1.0 - out / amp;
+    if (!(sc * 0.0 == 0.0)) sc = 1.0;
+    s.scOut = sc < 0.0 ? 0.0 : (sc > 1.0 ? 1.0 : sc);
+  }
   return out;
 }
 
 extern "C" int soemdsp_resonant_envelope_version() {
-  return 3;  // 3: shared gate_hit is x > 0 again; Follow = rising-sample step latch. 2: Follow input (envelope follower). 1: initial
+  return 4;  // 4: SC (sidechain duck) out. 3: shared gate_hit is x > 0 again; Follow = rising-sample step latch. 2: Follow input (envelope follower). 1: initial
 }
 
 extern "C" const char* soemdsp_resonant_envelope_metadata_json() {
@@ -336,4 +347,9 @@ extern "C" const char* soemdsp_resonant_envelope_metadata_json() {
 
 extern "C" int soemdsp_resonant_envelope_metadata_json_size() {
   return (int)sizeof(kMetadataJson);
+}
+
+extern "C" double soemdsp_resonant_envelope_sc(int handle) {
+  if (handle < 1 || handle > kMaxInstances || !gPool[handle - 1].active) return 1.0;
+  return gPool[handle - 1].scOut;
 }
