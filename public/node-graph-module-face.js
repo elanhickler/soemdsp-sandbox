@@ -606,19 +606,26 @@ function nodeGraphModuleFaceDrawFilterGl(batch, el, wd, ox, oy, z, rect, line) {
     stroke(lp, 2.5, ink.lpfCurve);
   }
   // Vertical handles (soundemote-dev Condensed 5 drawFilterCurve): a faint
-  // full-height bar at each cutoff and the 4 slope stops (6/12/18/24 dB, bottom
-  // to top) as dots, the current slope bigger and brighter.
-  const stops = [6, 12, 18, 24];
-  const on = stops.indexOf(NODE_GRAPH_FACE_FILTER_SLOPE_DB);
-  for (const [fc, css] of [[fcH, ink.hpfCurve], [fcL, ink.lpfCurve]]) {
+  // full-height bar at each cutoff and the 4 pole stops (1-4 poles = 6/12/18/24
+  // dB, bottom to top) as dots, the current one bigger and brighter.
+  // Hook: a face filter row may name pole params (hpfPoles / lpfPoles, 1-4);
+  // without them the fixed slope is shown.
+  const stops = 4;
+  const poles = (key) => {
+    const input = key ? nodeGraphModuleFaceInput(el, key) : null;
+    const n = input ? Math.round(nodeGraphModuleFaceValue(input)) : NODE_GRAPH_FACE_FILTER_SLOPE_DB / 6;
+    return Math.max(1, Math.min(stops, n));
+  };
+  for (const [fc, css, key] of [[fcH, ink.hpfCurve, wd.row?.hpfPoles], [fcL, ink.lpfCurve, wd.row?.lpfPoles]]) {
+    const on = poles(key) - 1;
     const hx = ox + nodeGraphModuleFaceLogT(fc) * w * z;
     const c = nodeGraphModuleFaceRgba(css);
     const tint = (a) => [c[0], c[1], c[2], c[3] * a];
     nodeGraphGlLinesRect(batch, hx - z, oy + top * z, 2 * z, ch * z, tint(0.14));
     if (typeof nodeGraphGlLinesDot !== "function") continue;
     const pad = 5;
-    for (let k = 0; k < stops.length; k += 1) {
-      const py = top + pad + ((stops.length - 1 - k) / (stops.length - 1)) * (ch - pad * 2);
+    for (let k = 0; k < stops; k += 1) {
+      const py = top + pad + ((stops - 1 - k) / (stops - 1)) * (ch - pad * 2);
       nodeGraphGlLinesDot(batch, hx, oy + py * z, (k === on ? 3.4 : 2.2) * z, Math.max(0.8, z), tint(k === on ? 0.75 : 0.18));
     }
   }
