@@ -376,6 +376,10 @@ uniform vec4 uJackColor[24];
 // [y0, y1); the box is drawn through the gap by the rail quads.
 uniform int uCutCount;
 uniform highp vec4 uCut[16];
+// Inlet notch (UIDev, shared with nodeGraphGlLinesNotchedRect): radius and
+// cut strength. The socket fill fades to clear toward the jack centre:
+// alpha * (1 - cut * (1 - dist / radius)), the same linear radial falloff.
+uniform vec2 uNotch;
 uniform highp float uPixel;
 uniform highp vec3 uCam;
 uniform highp float uDevice;
@@ -414,6 +418,7 @@ void main() {
   float edgeAa = max(fwidth(sdRect), 1e-4);
   vec4 strokeCol = uPlateColor;
   float inletA = 0.0;
+  float holeA = 0.0;
   float inMouth = 0.0;
   float arc = 0.0;
   for (int i = 0; i < 24; i++) {
@@ -451,7 +456,10 @@ void main() {
       else if (dt <= dl && dt <= dr && dt <= db) inward = vec2(0.0, 1.0);
       else if (db <= dl && db <= dr && db <= dt) inward = vec2(0.0, -1.0);
       float cut = smoothstep(gap - aa, gap + aa, dot(px - jack, inward));
-      inletA = max(inletA, hole * cut);
+      float nr = uNotch.x * (uPixel > 0.5 ? z * devScale : 1.0);
+      float soft = nr > 0.0 ? 1.0 - clamp(uNotch.y, 0.0, 1.0) * (1.0 - clamp(length(px - jack) / nr, 0.0, 1.0)) : 1.0;
+      holeA = max(holeA, hole * cut);
+      inletA = max(inletA, hole * cut * soft);
     }
   }
   // Whole screen pixels outside the plate. Camera mode already rounded
@@ -471,9 +479,9 @@ void main() {
     if (wall && px.y >= cy0 && px.y < cy1) fat = 0.0;
   }
   float strokeA = max(fat * (1.0 - inMouth), arc) * strokeCol.a;
-  float plateA = sd <= 0.0 ? uFill.a * (1.0 - inletA) : 0.0;
+  float plateA = sd <= 0.0 ? uFill.a * (1.0 - holeA) : 0.0;
   float underA = inletA + plateA;
-  vec3 underRgb = inletA > 0.5 ? vec3(0.055, 0.063, 0.078) : uFill.rgb;
+  vec3 underRgb = holeA > 0.5 ? vec3(0.055, 0.063, 0.078) : uFill.rgb;
   float a = strokeA + underA * (1.0 - strokeA);
   // Discard on geometry only (outside stroke, plate and inlets), never on
   // colour alpha, so a faint fill or stroke still draws.
@@ -541,6 +549,7 @@ void main() {
         outInletGap: gl.getUniformLocation(outProgram, "uInletGap"),
         outCount: gl.getUniformLocation(outProgram, "uCount"),
         outCutCount: gl.getUniformLocation(outProgram, "uCutCount"),
+        outNotch: gl.getUniformLocation(outProgram, "uNotch"),
         outCut: gl.getUniformLocation(outProgram, "uCut[0]"),
         outJack: gl.getUniformLocation(outProgram, "uJack[0]"),
         outJackColor: gl.getUniformLocation(outProgram, "uJackColor[0]"),
@@ -695,24 +704,41 @@ void main() {
   }
 
   /**
-   * Half disc with a radial fade: rgbaIn at the centre to rgbaOut on the rim,
-   * spanning the half plane on side dir (+1 = +x, -1 = -x) of the vertical
-   * line through the centre. Per-vertex colour, so the fade is on the GPU.
+   * Solid axis-aligned rect with a soft semicircle cut out of one vertical
+   * edge: centre (cx, cy) on that edge, radius r, opening toward dir (+1 =
+   * +x). Inside the half disc alpha runs from rgba[3] * (1 - cut) at the
+   * centre to rgba[3] on the rim, so whatever is under shows through. Exact
+   * shared edges, no AA seams: rect pieces + arc-to-square ring + fade fan.
    */
-  function nodeGraphGlLinesHalfDiscFade(batch, cx, cy, r, dir, rgbaIn, rgbaOut, steps = 24) {
-    if (!batch || !(r > 0)) return;
+  function nodeGraphGlLinesNotchedRect(batch, x, y, w, h, cx, cy, r, dir, rgba, cut, steps = 24) {
+    if (!batch || !(w > 0) || !(h > 0)) return;
+    const side = dir < 0 ? -1 : 1;
+    r = Math.max(0, Math.min(r, h / 2, w));
+    if (!(r > 0) || !(cut > 0)) { nodeGraphGlLinesRect(batch, x, y, w, h, rgba); return; }
+    const sx0 = side > 0 ? cx : cx - r;
+    const sy0 = cy - r;
+    // Everything outside the notch's r x 2r square.
+    nodeGraphGlLinesRect(batch, x, y, w, sy0 - y, rgba);
+    nodeGraphGlLinesRect(batch, x, cy + r, w, y + h - cy - r, rgba);
+    if (sx0 > x) nodeGraphGlLinesRect(batch, x, sy0, sx0 - x, 2 * r, rgba);
+    if (sx0 + r < x + w) nodeGraphGlLinesRect(batch, sx0 + r, sy0, x + w - sx0 - r, 2 * r, rgba);
     const k = batch.camera ? 1 : (batch.scale || 1);
     const big = 1e6;
-    const x = cx * k;
-    const y = cy * k;
-    const rr = r * k;
-    const side = dir < 0 ? -1 : 1;
+    const p = (px, py, c) => push(batch, px * k, py * k, 0, 0, 0, big, 0, c);
+    const hole = [rgba[0], rgba[1], rgba[2], rgba[3] * (1 - Math.min(1, cut))];
+    const arc = (a) => [cx + side * Math.cos(a) * r, cy + Math.sin(a) * r];
+    const sq = (a) => {
+      const c = Math.cos(a); const sn = Math.sin(a); const m = Math.max(Math.abs(c), Math.abs(sn));
+      return [cx + side * (c / m) * r, cy + (sn / m) * r];
+    };
     for (let i = 0; i < steps; i += 1) {
       const a0 = -Math.PI / 2 + (Math.PI * i) / steps;
       const a1 = -Math.PI / 2 + (Math.PI * (i + 1)) / steps;
-      push(batch, x, y, 0, 0, 0, big, 0, rgbaIn);
-      push(batch, x + side * Math.cos(a0) * rr, y + Math.sin(a0) * rr, 0, 0, 0, big, 0, rgbaOut);
-      push(batch, x + side * Math.cos(a1) * rr, y + Math.sin(a1) * rr, 0, 0, 0, big, 0, rgbaOut);
+      const [ax0, ay0] = arc(a0); const [ax1, ay1] = arc(a1);
+      const [qx0, qy0] = sq(a0); const [qx1, qy1] = sq(a1);
+      p(ax0, ay0, rgba); p(qx0, qy0, rgba); p(qx1, qy1, rgba);
+      p(ax0, ay0, rgba); p(qx1, qy1, rgba); p(ax1, ay1, rgba);
+      p(cx, cy, hole); p(ax0, ay0, rgba); p(ax1, ay1, rgba);
     }
   }
 
@@ -2011,7 +2037,7 @@ void main() {
     gl.enable(gl.BLEND);
   }
 
-  function nodeGraphGlLinesModuleOutline(batch, x, y, w, h, stroke, rgba, jacks, fill, inletGap, cuts) {
+  function nodeGraphGlLinesModuleOutline(batch, x, y, w, h, stroke, rgba, jacks, fill, inletGap, cuts, notch) {
     if (!batch || !(w > 0) || !(h > 0)) return;
     const k = batch.camera ? 1 : (batch.scale || 1);
     const sx = x * k;
@@ -2035,6 +2061,7 @@ void main() {
       fill: fill || [0.09, 0.1, 0.12, 1],
       inletGap: Math.max(0, Number(inletGap) || 0) * k,
       jacks: list,
+      notch: notch && notch.r > 0 && notch.cut > 0 ? [notch.r * k, Math.min(1, notch.cut)] : [0, 0],
       cuts: (Array.isArray(cuts) ? cuts : []).slice(0, CUT_MAX).map((c) => [c.y0 * k, c.y1 * k, c.side < 0 ? -1 : 1, 0]),
     });
   }
@@ -2081,6 +2108,7 @@ void main() {
       if (s.outFill) gl.uniform4f(s.outFill, fill[0], fill[1], fill[2], fill.length > 3 ? fill[3] : 1);
       gl.uniform1f(s.outStroke, shape.stroke);
       if (s.outInletGap) gl.uniform1f(s.outInletGap, shape.inletGap || 0);
+      if (s.outNotch) gl.uniform2f(s.outNotch, shape.notch[0], shape.notch[1]);
       jackData.fill(0);
       colorData.fill(0);
       const count = Math.min(OUT_MAX, shape.jacks.length);
@@ -2428,7 +2456,7 @@ void main() {
     nodeGraphGlLinesModuleOutline,
     nodeGraphGlLinesVeil,
     nodeGraphGlLinesTriangle,
-    nodeGraphGlLinesHalfDiscFade,
+    nodeGraphGlLinesNotchedRect,
     nodeGraphGlLinesFillUnder,
     nodeGraphGlLinesSegment,
     nodeGraphGlLinesDot,

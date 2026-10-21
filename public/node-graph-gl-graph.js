@@ -681,7 +681,9 @@ function nodeGraphGlGraphDrawPlate(batch, plate, toX, toY, zoom, cssW, cssH, pla
   if (typeof nodeGraphGlLinesModuleOutline === "function") {
     // The border stops at each rail IO box's top and bottom edges.
     const cuts = typeof nodeGraphModuleRailBorderCuts === "function" ? nodeGraphModuleRailBorderCuts(batch, plate, toX, toY, zoom) : null;
-    nodeGraphGlLinesModuleOutline(batch, x0, y0, w0, h0, edge, color, plateJacks, plate.fill, 0, cuts);
+    // IO-section inlet sockets take the same soft notch cut-out as rail IO boxes.
+    const notch = typeof nodeGraphRailNotch === "function" ? nodeGraphRailNotch() : null;
+    nodeGraphGlLinesModuleOutline(batch, x0, y0, w0, h0, edge, color, plateJacks, plate.fill, 0, cuts, notch && { r: notch.radius * zoom, cut: notch.opacity });
   }
 }
 
@@ -1551,6 +1553,12 @@ function nodeGraphGlGraphPresent(options = {}) {
   const toY = frameCamera ? (y) => y : screenY;
   const layoutZoom = frameCamera ? 1 : zoom;
 
+  // Param wires on an open rail end on the drawn IO box's outer edge (same
+  // boxes the rail painter draws), snapped here so the two never disagree.
+  const railEnds = typeof nodeGraphModuleRailWireEnds === "function"
+    ? nodeGraphModuleRailWireEnds(batch, nodeGraphGlGraphState.plates, toX, toY, layoutZoom) : [];
+  const railTol = 3 * layoutZoom;
+  const railEnd = (x, y) => railEnds.find((e) => Math.abs(e.x - x) <= railTol && Math.abs(e.y - y) <= railTol) || null;
   const pad = 120;
   for (let i = 0; i < nodeGraphGlGraphState.wires.length; i += 1) {
     const wire = nodeGraphGlGraphState.wires[i];
@@ -1602,7 +1610,14 @@ function nodeGraphGlGraphPresent(options = {}) {
       }
     }
     const stroke = frameCamera ? strokeWorld : strokeWorld * zoom;
-    const pts = frameCamera ? src : screen.subarray(0, src.length);
+    let pts = frameCamera ? src : screen.subarray(0, src.length);
+    if (wire.param && railEnds.length) {
+      pts = Float32Array.from(pts);
+      for (const ix of [0, pts.length - 2]) {
+        const e = railEnd(pts[ix], pts[ix + 1]);
+        if (e) { pts[ix] = e.x; pts[ix + 1] = e.y; }
+      }
+    }
     if (style === "trace") {
       nodeGraphGlLinesPolyline(wireBatch, pts, stroke, feather, rgba, "ortho");
     } else if (typeof nodeGraphGlLinesRibbon !== "function") {
@@ -1616,8 +1631,10 @@ function nodeGraphGlGraphPresent(options = {}) {
       const dot = dots[d];
       const dx = screenX(dot.x);
       const dy = screenY(dot.y);
-      const dotX = frameCamera ? dot.x : dx;
-      const dotY = frameCamera ? dot.y : dy;
+      let dotX = frameCamera ? dot.x : dx;
+      let dotY = frameCamera ? dot.y : dy;
+      const snapEnd = dot.param && railEnds.length ? railEnd(dotX, dotY) : null;
+      if (snapEnd) { dotX = snapEnd.x; dotY = snapEnd.y; }
       const dotHalf = dot.param ? paramDotWorld : dotWorld;
       if (!(dotHalf > 0)) continue;
       const dotReach = frameCamera ? dotHalf : dotHalf * zoom;

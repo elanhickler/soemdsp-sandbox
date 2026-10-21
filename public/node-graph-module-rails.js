@@ -264,6 +264,7 @@ function nodeGraphModuleRailBoxes(batch, plate, toX, toY, zoom) {
   const left = grid.wall(toX(plate.x));
   const right = grid.wall(toX(plate.x)) + Math.max(1, Math.round(plate.w * zoom));
   const wallR = batch?.camera ? grid.wall(toX(plate.x + plate.w)) : right;
+  const border = grid.border(nodeGraphRailBorderCss(), zoom);
   const ports = [...body.querySelectorAll(".node-param-port.rail-patched")].filter((port) => port.offsetParent);
   const boxes = [];
   for (const port of ports) {
@@ -276,9 +277,24 @@ function nodeGraphModuleRailBoxes(batch, plate, toX, toY, zoom) {
     // The outward edge sits on the module wall, the inward edge on the grid.
     const x = side < 0 ? left : grid.x(toX(plate.x + box.x));
     const x1 = side < 0 ? grid.x(toX(plate.x + box.x + box.w)) : wallR;
-    boxes.push({ port, x, y, w: x1 - x, h: y1 - y, t, side });
+    // ox: the outer edge (through the border band), where the wire ends.
+    boxes.push({ port, x, y, w: x1 - x, h: y1 - y, t, side, border, ox: side < 0 ? x - border : x1 + border });
   }
   return { el, body, laid, boxes, t, grid, left, right: wallR };
+}
+
+/**
+ * Param wire ends on open rails, in the coords the boxes are drawn in: the
+ * box's outer edge, vertically centred. The wire renderer snaps rail param
+ * wire ends to these, so wire end == drawn box edge at every zoom / DPR.
+ */
+function nodeGraphModuleRailWireEnds(batch, plates, toX, toY, zoom) {
+  const out = [];
+  for (const plate of plates || []) {
+    const rail = nodeGraphModuleRailBoxes(batch, plate, toX, toY, zoom);
+    for (const b of rail?.boxes || []) out.push({ x: b.ox, y: b.y + b.h / 2 });
+  }
+  return out;
 }
 
 /** Module-border gaps for the outline shader: one per IO box, on the wall it faces. */
@@ -331,23 +347,19 @@ function nodeGraphModuleRailsDrawGl(batch, plates, toX, toY, zoom, cssW, cssH) {
       rect(inR, sy, right - inR, sh, NodeGraphRailInk.gutter);
       rect(inR, sy, t, sh, NodeGraphRailInk.gutterEdge);
     }
-    const border = grid.border(nodeGraphRailBorderCss(), zoom);
     const notch = nodeGraphRailNotch();
     for (const b of boxes) {
-      // Through the border band: fill plus the top / bottom strokes.
-      const bx = b.side < 0 ? b.x - border : b.x + b.w;
-      rect(bx, b.y, border, b.h, NodeGraphRailInk.inletFill);
-      rect(b.x, b.y, b.w, b.h, NodeGraphRailInk.inletFill);
-      // Inlet notch: a half disc on the open edge in the inlet's jack colour
-      // (nodeGraphPortWireColor: mod inlet purple, Additive cyan, ...), full
-      // at the edge fading to clear inward; under the strokes and the label.
-      const r = Math.min(notch.radius * zoom, b.h / 2);
-      if (r > 0 && notch.opacity > 0 && typeof nodeGraphGlLinesHalfDiscFade === "function") {
-        const io = b.port.classList.contains("parameter-output") ? "output" : "modulation";
-        const css = typeof nodeGraphPortWireColor === "function" ? nodeGraphPortWireColor(plates[i].id, b.port.dataset.param, io) : "";
-        const ink = nodeGraphRailRgba(css || "#b184ff");
-        nodeGraphGlLinesHalfDiscFade(batch, b.side < 0 ? b.x : b.x + b.w, b.y + b.h / 2, r, -b.side, [ink[0], ink[1], ink[2], notch.opacity], [ink[0], ink[1], ink[2], 0]);
-      }
+      const border = b.border;
+      // One fill from the outer edge (through the border band) to the inner
+      // stroke, with the inlet notch cut out of the open edge: a soft
+      // semicircle where the fill fades to clear, so what is under shows.
+      const fx = Math.min(b.x, b.ox);
+      const fw = b.w + border;
+      const fill = nodeGraphRailRgba(NodeGraphRailInk.inletFill);
+      if (typeof nodeGraphGlLinesNotchedRect === "function") {
+        nodeGraphGlLinesNotchedRect(batch, fx, b.y, fw, b.h, b.ox, b.y + b.h / 2, notch.radius * zoom, -b.side, fill, notch.opacity);
+      } else rect(fx, b.y, fw, b.h, NodeGraphRailInk.inletFill);
+      const bx = b.side < 0 ? b.ox : b.x + b.w;
       rect(bx, b.y, border, t, NodeGraphRailInk.inletStroke);
       rect(bx, b.y + b.h - t, border, t, NodeGraphRailInk.inletStroke);
       rect(b.x, b.y, b.w, t, NodeGraphRailInk.inletStroke);
