@@ -70,7 +70,9 @@ function nodeGraphModuleGeometryAttach(nodeId, port, io) {
     const hit = geo.paramJacks.find((j) => j.key === wantPort && j.kind === wantIo && j.visible);
     return hit ? { x: hit.x, y: hit.y } : null;
   }
-  const hit = geo.ports.find((p) => p.port === wantPort && p.io === wantIo && p.visible);
+  const hit = geo.ports.find((p) => p.port === wantPort && p.io === wantIo && p.visible)
+    // A param thru (rail outlet) is published as a param jack, not a signal port.
+    || (wantIo === "output" ? geo.paramJacks.find((j) => j.key === wantPort && j.kind === "output" && j.visible) : null);
   return hit ? { x: hit.x, y: hit.y } : null;
 }
 

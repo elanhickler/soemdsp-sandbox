@@ -18448,6 +18448,8 @@ def check_display_draws_live(manifest: Path) -> None:
         env = {**os.environ, "SANDBOX_URL": f"http://127.0.0.1:{port}/"}
         unit = subprocess.run(["node", str(ROOT / "scripts" / "smoke_display_draws_live.mjs")], capture_output=True, text=True, env=env)
         require(unit.returncode == 0, f"display draws live: {unit.stdout}{unit.stderr}")
+        unit = subprocess.run(["node", str(ROOT / "scripts" / "smoke_wire_ends_on_modules.mjs")], capture_output=True, text=True, env=env)
+        require(unit.returncode == 0, f"wire ends on modules: {unit.stdout}{unit.stderr}")
     finally:
         stop_server(process)
 
