@@ -27,12 +27,17 @@ static const char kMetadataJson[] =
 
 extern "C" double soemdsp_amp_db_sample(double input, double mode) {
   const double in = safe(input);
-  if (safe(mode) >= 0.5) return amp_to_db(in);
+  // Amp->dB reads |amp| so bipolar audio gives its level, not the -120 floor.
+  // Silence floor: |amp| <= 1e-6 (-120 dB) -> -120, same as amp_to_db(0).
+  if (safe(mode) >= 0.5) {
+    const double mag = in < 0.0 ? -in : in;
+    return mag <= 1e-6 ? -120.0 : amp_to_db(mag);
+  }
   return db_to_amp(in);
 }
 
 extern "C" int soemdsp_amp_db_version() {
-  return 1;
+  return 2;
 }
 
 extern "C" const char* soemdsp_amp_db_metadata_json() {

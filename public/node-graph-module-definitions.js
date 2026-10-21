@@ -7706,14 +7706,17 @@ const nodeGraphModuleDefinitions = (
     defaultUi: {
       buttonsHidden: true,
       oscilloscopeHidden: true },
-    inputLabels: { In: "→" },
-    outputLabels: { Out: "←" },
+    // In = linear amplitude (gold analog). Out = literal dB number (white digital).
+    // Port ids stay In / Out so old patches load.
+    inputLabels: { In: "amp" },
+    outputLabels: { Out: "dB" },
+    digitalOutputs: ["Out"],
     inputs: ["In"],
     outputs: ["Out"],
     parameters: [
       {
         choices: ["dB→Amp", "Amp→dB"],
-        defaultValue: "0",
+        defaultValue: "1",
         displayChoices: true,
         divideChoicesVisibly: true,
         key: "mode",
@@ -7723,7 +7726,7 @@ const nodeGraphModuleDefinitions = (
         mid: "0",
         min: "0",
         step: "1",
-        tooltip: "dB→Amp: 10^(dB/20), 0 dB = 1. Amp→dB: 20·log10(amp). Mute floor −140 dB / −120 dB." },
+        tooltip: "dB→Amp: 10^(dB/20), 0 dB = 1. Amp→dB: 20·log10(|amp|), default. Mute floor −140 dB / −120 dB." },
     ] },
 
   b2u: {
