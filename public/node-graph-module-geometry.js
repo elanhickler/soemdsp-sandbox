@@ -13,7 +13,6 @@ let nodeGraphModuleGeometryEpoch = 0;
  *   box: { x: number, y: number, w: number, h: number },
  *   ports: Array<{ port: string, io: string, x: number, y: number, visible: boolean }>,
  *   paramJacks: Array<{ key: string, kind: string, x: number, y: number, visible: boolean }>,
- *   displays: Array<{ key: string, x: number, y: number, w: number, h: number }>,
  * }} ModuleGeometry
  */
 
@@ -51,9 +50,6 @@ function nodeGraphModuleGeometryTranslate(nodeId, dx, dy) {
     : list);
   geo.ports = shift(geo.ports);
   geo.paramJacks = shift(geo.paramJacks);
-  if (Array.isArray(geo.displays)) {
-    geo.displays = geo.displays.map((d) => ({ ...d, x: d.x + dx, y: d.y + dy }));
-  }
   nodeGraphModuleGeometryEpoch += 1;
   geo.epoch = nodeGraphModuleGeometryEpoch;
   if (typeof nodeGraphMvp === "object" && nodeGraphMvp?._portCenterFrameCache?.clear) {
@@ -252,39 +248,6 @@ function nodeGraphModuleGeometryPublishFromDom(nodeId, options = {}) {
     paramJacks.push({ key, kind, x: pt.x, y: pt.y, visible: true });
   }
 
-  // DB-3: screen rects (display band, not the canvas). A hidden display or a
-  // 0 GU band has no laid-out face, so it gets no rect (never a square).
-  // A face presented elsewhere leaves a placeholder: the slot keeps its rect.
-  const displays = [];
-  const patchNode = typeof nodeGraphPatchNode === "function" ? nodeGraphPatchNode(id) : null;
-  for (const face of el.querySelectorAll(".node-module-face, .node-screen-solo-placeholder")) {
-    if (face.parentElement?.closest?.(".node-module-face, .node-screen-solo-placeholder")) continue;
-    if (face.closest("[hidden]") && face.closest("[hidden]") !== el) continue;
-    let rect = null;
-    if (useLayout) {
-      // Offsets miss in-module transforms/scroll (softpop faces sat ~90 layout
-      // px off), so measure client rects relative to the module and unscale.
-      const er = el.getBoundingClientRect();
-      const fr = face.getBoundingClientRect();
-      const k = el.offsetWidth > 0 && er.width > 0 ? el.offsetWidth / er.width : 0;
-      if (k > 0 && fr.width > 1 && fr.height > 1) {
-        rect = { x: box.x + (fr.left - er.left) * k, y: box.y + (fr.top - er.top) * k, w: fr.width * k, h: fr.height * k };
-      }
-    } else {
-      const r = face.getBoundingClientRect();
-      if (r.width > 1 && r.height > 1) {
-        const tl = toSurface(r.left, r.top);
-        const br = toSurface(r.right, r.bottom);
-        rect = { x: tl.x, y: tl.y, w: br.x - tl.x, h: br.y - tl.y };
-      }
-    }
-    if (!rect || !(rect.w > 1) || !(rect.h > 1)) continue;
-    const key = typeof nodeGraphDisplayBackgroundKeyForFace === "function"
-      ? nodeGraphDisplayBackgroundKeyForFace(patchNode, face.classList.contains("node-screen-solo-placeholder") ? null : face)
-      : "";
-    displays.push({ key, x: rect.x, y: rect.y, w: rect.w, h: rect.h });
-  }
-
   /** @type {ModuleGeometry} */
   const geo = {
     nodeId: id,
@@ -292,7 +255,6 @@ function nodeGraphModuleGeometryPublishFromDom(nodeId, options = {}) {
     box,
     ports,
     paramJacks,
-    displays,
   };
   if (options.store !== false) nodeGraphModuleGeometryById.set(id, geo);
   return geo;

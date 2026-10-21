@@ -344,7 +344,6 @@ PUBLIC_SCRIPT_PATHS = (
     "./public/node-graph-node-accessors.js",
     "./public/node-graph-selection.js",
     "./public/node-graph-module-geometry.js",
-    "./public/node-graph-display-background.js",
     "./public/node-graph-port-geometry.js",
     "./public/node-graph-jack-chrome.js",
     "./public/node-graph-port-types.js",
@@ -18439,6 +18438,20 @@ def check_page_patch_index_covers_all_patches() -> None:
             require(path.stem in slugs, f"patches/index.json missing bare patch route /{path.stem}")
 
 
+def check_display_draws_live(manifest: Path) -> None:
+    """Displays paint more than their background and take a live bg colour
+    change (scripts/smoke_display_draws_live.mjs, headless system Chrome)."""
+    port = find_free_port()
+    process = start_server(port, manifest)
+    try:
+        wait_for_server(f"http://127.0.0.1:{port}", process)
+        env = {**os.environ, "SANDBOX_URL": f"http://127.0.0.1:{port}/"}
+        unit = subprocess.run(["node", str(ROOT / "scripts" / "smoke_display_draws_live.mjs")], capture_output=True, text=True, env=env)
+        require(unit.returncode == 0, f"display draws live: {unit.stdout}{unit.stderr}")
+    finally:
+        stop_server(process)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -18456,6 +18469,7 @@ def main() -> None:
     check_mini_perform_view()
     check_color_rows()
     run_smoke(args.port, Path(args.manifest).resolve())
+    check_display_draws_live(Path(args.manifest).resolve())
     print("soemdsp-sandbox smoke test passed")
 
 

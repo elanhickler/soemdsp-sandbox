@@ -49,66 +49,7 @@ for (const [label, settle] of [["slow", 600], ["quick", 30], ["instant", 0]]) {
   if (a.asleepInView.length || a.noFace.length || a.noPlate.length) failures++;
   console.log(label, "after50", JSON.stringify(a50), "after850", JSON.stringify(a), "toggles", await page.evaluate(() => __toggles));
 }
-// DB: background square pixel check. Pick in-view color squares, sample the
-// screenshot at each square centre (a 3px inset avoids the face border).
-async function squareCheck(label, forceAsleep) {
-  const picks = await page.evaluate((forceAsleep) => {
-    const ws = document.getElementById("nodeGraphWorkspace").getBoundingClientRect();
-    const out = [];
-    for (const back of nodeGraphGlGraphState.displayBacks || []) {
-      const el = document.querySelector(`.dsp-node[data-node="${back.id}"]`);
-      if (!el || el.hidden) continue;
-      const face = [...el.querySelectorAll(".node-module-face")].find((f) => !f.closest("[hidden]"));
-      if (!face) continue;
-      const r = face.getBoundingClientRect();
-      if (r.width < 12 || r.height < 12 || r.left < ws.left || r.top < ws.top || r.right > ws.right || r.bottom > ws.bottom) continue;
-      out.push({ id: back.id, key: back.key, x: r.left + r.width / 2, y: r.top + r.height / 2, rgba: back.rgba });
-      if (out.length >= 4) break;
-    }
-    // Faces draw over the square; drop the picked faces from this frame so
-    // the sample sees the body-pass square itself.
-    const ids = new Set(out.map((p) => p.id));
-    if (forceAsleep) for (const p of out) document.querySelector(`.dsp-node[data-node="${p.id}"]`).classList.add("viewport-asleep");
-    window.__skipFaces = ids;
-    if (!window.__presentWrapped) {
-      window.__presentWrapped = true;
-      const orig = nodeGraphGlGraphPresent;
-      window.nodeGraphGlGraphPresent = function (...a) {
-        const st = nodeGraphGlGraphState; const keep = st.displays;
-        if (window.__skipFaces?.size && Array.isArray(keep)) st.displays = keep.filter((d) => !window.__skipFaces.has(d.id));
-        try { return orig.apply(this, a); } finally { if (st.displays !== keep && Array.isArray(keep)) st.displays = keep; }
-      };
-    }
-    nodeGraphGlGraphPresent();
-    return out;
-  }, forceAsleep);
-  // Sample the composited page (1x1 screenshot, decoded in the page so no
-  // image deps are needed). Faces of the picks are skipped by the wrapper.
-  await page.evaluate(() => nodeGraphGlGraphPresent()); await wait(50);
-  const samples = [];
-  for (const p of picks) {
-    const b64 = (await page.screenshot({ clip: { x: Math.round(p.x), y: Math.round(p.y), width: 1, height: 1 } })).toString("base64");
-    samples.push(await page.evaluate(async (b64) => {
-      const bmp = await createImageBitmap(await (await fetch(`data:image/png;base64,${b64}`)).blob());
-      const c = new OffscreenCanvas(1, 1); const g = c.getContext("2d"); g.drawImage(bmp, 0, 0);
-      return [...g.getImageData(0, 0, 1, 1).data].slice(0, 3);
-    }, b64));
-  }
-  const bad = [];
-  if (!picks.length) bad.push("no in-view squares");
-  picks.forEach((p, i) => {
-    const px = samples[i];
-    const want = p.rgba.slice(0, 3).map((v) => Math.round(v * 255));
-    if (px.some((v, k) => Math.abs(v - want[k]) > 24)) bad.push(`${p.id}(${p.key}) px=${px} want=${want}`);
-  });
-  await page.evaluate(() => { window.__skipFaces = null; nodeGraphGlGraphPresent(); });
-  if (forceAsleep) await page.evaluate((ids) => { for (const id of ids) document.querySelector(`.dsp-node[data-node="${id}"]`)?.classList.remove("viewport-asleep"); nodeGraphViewportCullRefresh?.(); }, picks.map((p) => p.id));
-  if (bad.length) failures++;
-  console.log(bad.length ? "FAIL" : "ok  ", `square pixel ${label} (${picks.length})`, bad.join("; "));
-}
-await squareCheck("asleep", true);
 await page.evaluate(() => __pan(-200, 0, 4, 16));
-await squareCheck("mid-pan", false);
 await page.evaluate(() => __pan(200, 0, 4, 16)); await wait(800);
 // wheel zoom out/in
 await page.evaluate(() => { window.__toggles = 0; });

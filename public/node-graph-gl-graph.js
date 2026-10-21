@@ -112,7 +112,6 @@ function nodeGraphGlGraphLayoutBox(el, moduleEl) {
 function nodeGraphGlGraphRebuildPlates() {
   const plates = [];
   const displays = [];
-  const displayBacks = [];
   const nodes = Array.isArray(nodeGraphMvp?.patch?.nodes) ? nodeGraphMvp.patch.nodes : [];
   for (let i = 0; i < nodes.length; i += 1) {
     const id = String(nodes[i]?.id || "");
@@ -122,16 +121,6 @@ function nodeGraphGlGraphRebuildPlates() {
     if (!box || !(box.w > 1) || !(box.h > 1)) continue;
     const el = typeof nodeGraphNodeElement === "function" ? nodeGraphNodeElement(id) : null;
     if (!el || !el.isConnected || el.hidden || el.classList.contains("removed")) continue;
-    // DB-3: screen squares from saved geometry Î“Ã‡Ã¶ painted even while the face
-    // is asleep / undrawn / mid-pan (TV screen: never fully unrendered).
-    if (Array.isArray(geo.displays) && typeof nodeGraphDisplayBackgroundFor === "function") {
-      for (let d = 0; d < geo.displays.length; d += 1) {
-        const rect = geo.displays[d];
-        const bg = nodeGraphDisplayBackgroundFor(nodes[i], rect.key);
-        if (bg.kind !== "color") continue;
-        displayBacks.push({ id, key: rect.key, x: rect.x, y: rect.y, w: rect.w, h: rect.h, rgba: bg.rgba });
-      }
-    }
     if (el.getAttribute("data-hide-module-frame") === "1") continue;
     const textBody = el.querySelector(":scope > .node-text-box-body");
     const style = getComputedStyle(el);
@@ -187,7 +176,6 @@ function nodeGraphGlGraphRebuildPlates() {
   }
   nodeGraphGlGraphState.plates = plates;
   nodeGraphGlGraphState.displays = displays;
-  nodeGraphGlGraphState.displayBacks = displayBacks;
   nodeGraphGlGraphRebuildChrome();
 }
 
@@ -229,18 +217,6 @@ function nodeGraphGlGraphWorldBox(el) {
 }
 
 // Project a layout box and snap any edge that sits on the plate to the plate's pixel.
-function nodeGraphGlGraphDrawDisplayBacks(batch, toX, toY, layoutZoom, cssW, cssH, frameCamera, layoutOwned) {
-  const backs = nodeGraphGlGraphState.displayBacks || [];
-  for (let i = 0; i < backs.length; i += 1) {
-    const back = backs[i];
-    if (String(back.key).startsWith("layoutOwned:") !== layoutOwned) continue;
-    const rect = nodeGraphGlGraphScreenRect(back.id, back, toX, toY, layoutZoom);
-    if (!(rect.w > 0) || !(rect.h > 0)) continue;
-    if (!frameCamera && (rect.x + rect.w < 0 || rect.y + rect.h < 0 || rect.x > cssW || rect.y > cssH)) continue;
-    nodeGraphGlLinesRect(batch, rect.x, rect.y, rect.w, rect.h, back.rgba);
-  }
-}
-
 function nodeGraphGlGraphScreenRect(id, world, toX, toY, zoom) {
   let x = toX(world.x);
   let y = toY(world.y);
@@ -1638,8 +1614,6 @@ function nodeGraphGlGraphPresent(options = {}) {
     if (plate.onTop) continue;
     nodeGraphGlGraphDrawPlate(batch, plate, toX, toY, layoutZoom, cssW, cssH, plateStyle, borderOn, borderIdle);
   }
-  // DB-3: layoutOwned squares sit under the GL face pass that paints them.
-  nodeGraphGlGraphDrawDisplayBacks(batch, toX, toY, layoutZoom, cssW, cssH, frameCamera, true);
   batch.textPixelated = zoom > 2.5;
   nodeGraphGlGraphDrawChrome(batch, toX, toY, layoutZoom, cssW, cssH);
   if (typeof nodeGraphModuleFaceDrawAllGl === "function") {
@@ -1648,9 +1622,6 @@ function nodeGraphGlGraphPresent(options = {}) {
   if (typeof nodeGraphModuleRailsDrawGl === "function") {
     nodeGraphModuleRailsDrawGl(batch, nodeGraphGlGraphState.plates, toX, toY, layoutZoom, cssW, cssH);
   }
-  // DB-3: canvas faces' squares go above chrome/face panels (which fill the
-  // body in plate colour) and under the face canvases.
-  nodeGraphGlGraphDrawDisplayBacks(dotBatch, toX, toY, layoutZoom, cssW, cssH, frameCamera, false);
   const pixelated = zoom > 2.5;
   for (let i = 0; i < nodeGraphGlGraphState.displays.length; i += 1) {
     const face = nodeGraphGlGraphState.displays[i];
