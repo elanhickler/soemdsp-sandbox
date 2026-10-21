@@ -13981,6 +13981,14 @@ const nodeGraphModuleDefinitions = (
         unit: "Hz",
         tooltip: "Passive one-pole highpass in the feedback loop (thins mud / DC). Slider min/max are guides only; DSP caps at Nyquist." },
       {
+        defaultValue: "1",
+        key: "poles", shortName: "Poles",
+        kind: "integer",
+        label: "Poles",
+        max: "4",
+        min: "1",
+        step: "1" },
+      {
         defaultValue: "0.35",
         key: "feedback",
         label: "Feedback",

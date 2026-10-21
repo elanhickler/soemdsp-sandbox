@@ -15,12 +15,20 @@
 //  - Gold LFO L/R outs: raw bipolar LFO (−1…+1), not scaled by Amp
 //  - Feedback: soft clip → one-pole HPF → one-pole LPF
 //
+//  - Poles (1..4, default 1): 1 = the original exp one-pole HPF + LPF above
+//    (bit-identical for old patches). 2..4 = that many cascaded one-pole TPT
+//    highpass sections, then that many one-pole TPT lowpass sections, all at
+//    the HPF / LPF cutoffs: a passive RC-ladder slope (-6 dB/oct per pole, no
+//    resonance, -3 dB per pole at the cutoff). Per-channel state; TPT is
+//    stable at every cutoff (g = tan(pi f / sr), f capped below Nyquist).
+//
 // Instance state (LFO + soft-clip + feedback filter coeffs) is plain fields on
 // the pool slot so a written param stays put across set_params / buffer grow
 // (APP_POLICY stickiness). Block I/O buffers are separate static arrays.
 
 
 #include <soemdsp/soemdsp.hpp>
+#include <soemdsp/math/analog_filter_trig.h>
 
 #include <stddef.h>
 #include <stdint.h>
@@ -91,6 +99,26 @@ static double one_pole_hp_run(
   x0 = input;
   y0 = y;
   return y;
+}
+
+// One-pole TPT section gain G = g / (1 + g), g = tan(pi f / sr).
+// f <= 0 -> 0 (lowpass holds, highpass passes); f capped at 0.49 sr.
+static double tpt_one_pole_G(double freqHz, double sr) {
+  const double rate = maxd(1.0, sr);
+  double f = maxd(0.0, safe(freqHz));
+  if (f > 0.49 * rate) f = 0.49 * rate;
+  const double w = kPi * f / rate;
+  const double g = dsp_sin(w) / maxd(1e-12, dsp_cos(w));
+  const double G = g / (1.0 + g);
+  return (G >= 0.0 && G < 1.0) ? G : 0.0;
+}
+// Returns the lowpass tap; hp = x - lp.
+static double tpt_one_pole_lp(double& z, double G, double x) {
+  const double v = (x - z) * G;
+  const double lp = v + z;
+  z = lp + v;
+  if (dsp_fabs(z) < 1e-20) z = 0.0;
+  return lp;
 }
 
 static double lfo_parabol_bipolar(double phase01) {
@@ -274,6 +302,11 @@ struct PingPongDelayState {
   double lpL_z, lpL_a1, lpR_z, lpR_a1;
   double hpL_x0, hpL_y0, hpL_a1, hpL_b0, hpL_b1;
   double hpR_x0, hpR_y0, hpR_a1, hpR_b0, hpR_b1;
+  // Poles 2..4: cascaded TPT one-pole sections (state per channel / stage).
+  int poles;
+  double tptGLp, tptGHp;     // G = g / (1 + g) for the LPF / HPF cutoffs
+  double tptLpL[4], tptLpR[4];
+  double tptHpL[4], tptHpR[4];
   // Cached Control last-values
   bool controlsValid;
   double lastSaturate;
@@ -342,6 +375,10 @@ static void reset_delay_dsp(PingPongDelayState& s) {
   s.lfoSeedL = seed_mix(s.seed, kSeedLfoLeft);
   s.lfoSeedR = seed_mix(s.seed, kSeedLfoRight);
   s.lpL_z = s.lpR_z = 0.0;
+  for (int k = 0; k < 4; k++) {
+    s.tptLpL[k] = s.tptLpR[k] = 0.0;
+    s.tptHpL[k] = s.tptHpR[k] = 0.0;
+  }
   s.hpL_x0 = s.hpL_y0 = s.hpR_x0 = s.hpR_y0 = 0.0;
   soft_clip_set(1.0, s.clipScaleX, s.clipScaleY, s.clipShiftX, s.clipShiftY);
   s.controlsValid = false;
@@ -407,6 +444,8 @@ static void sync_ping_pong_controls(
     one_pole_hp_coeffs(hpf, rate, s.hpL_a1, s.hpL_b0, s.hpL_b1);
     one_pole_hp_coeffs(hpf, rate, s.hpR_a1, s.hpR_b0, s.hpR_b1);
     s.lastLpfHz = lpf;
+    s.tptGLp = tpt_one_pole_G(lpf, rate);
+    s.tptGHp = tpt_one_pole_G(hpf, rate);
     s.lastHpfHz = hpf;
   }
   if (!s.controlsValid || num != s.lastNum || den != s.lastDen || mode != s.lastTimingMode
@@ -421,6 +460,15 @@ static void sync_ping_pong_controls(
   }
   s.lastSampleRate = rate;
   s.controlsValid = true;
+}
+
+// Poles 2..4: N TPT one-pole highpass sections, then N lowpass sections.
+static double feedback_tpt_ladder(PingPongDelayState& s, double* hpZ, double* lpZ, double x) {
+  const int n = s.poles < 1 ? 1 : (s.poles > 4 ? 4 : s.poles);
+  double y = x;
+  for (int k = 0; k < n; k++) y = y - tpt_one_pole_lp(hpZ[k], s.tptGHp, y);
+  for (int k = 0; k < n; k++) y = tpt_one_pole_lp(lpZ[k], s.tptGLp, y);
+  return y;
 }
 
 static double interpolate_linear(const float* buffer, int length, double where) {
@@ -457,6 +505,9 @@ extern "C" int soemdsp_ping_pong_delay_create() {
       s.livePingPong = 1.0;
       s.liveSampleRate = 44100.0;
       s.seed = 0u;  // host Seed applied via _set_seed
+      s.poles = 1;  // feedback filter Poles (set_poles)
+      s.tptGLp = 0.0;
+      s.tptGHp = 0.0;
       reset_delay_dsp(s);
       s.active = true;
       return i + 1;
@@ -647,12 +698,18 @@ static void process_one(PingPongDelayState& s, double inputL, double inputR) {
     fbInL, s.clipScaleX, s.clipScaleY, s.clipShiftX, s.clipShiftY);
   const double clippedR = soft_clip_run(
     fbInR, s.clipScaleX, s.clipScaleY, s.clipShiftX, s.clipShiftY);
-  const double hpL = one_pole_hp_run(
-    s.hpL_x0, s.hpL_y0, s.hpL_a1, s.hpL_b0, s.hpL_b1, clippedL);
-  const double hpR = one_pole_hp_run(
-    s.hpR_x0, s.hpR_y0, s.hpR_a1, s.hpR_b0, s.hpR_b1, clippedR);
-  const double writeL = one_pole_lp_run(s.lpL_z, s.lpL_a1, hpL);
-  const double writeR = one_pole_lp_run(s.lpR_z, s.lpR_a1, hpR);
+  double writeL, writeR;
+  if (s.poles <= 1) {
+    const double hpL = one_pole_hp_run(
+      s.hpL_x0, s.hpL_y0, s.hpL_a1, s.hpL_b0, s.hpL_b1, clippedL);
+    const double hpR = one_pole_hp_run(
+      s.hpR_x0, s.hpR_y0, s.hpR_a1, s.hpR_b0, s.hpR_b1, clippedR);
+    writeL = one_pole_lp_run(s.lpL_z, s.lpL_a1, hpL);
+    writeR = one_pole_lp_run(s.lpR_z, s.lpR_a1, hpR);
+  } else {
+    writeL = feedback_tpt_ladder(s, s.tptHpL, s.tptLpL, clippedL);
+    writeR = feedback_tpt_ladder(s, s.tptHpR, s.tptLpR, clippedR);
+  }
 
   s.bufferL[s.position] = (float)clamp(writeL, -8.0, 8.0);
   s.bufferR[s.position] = (float)clamp(writeR, -8.0, 8.0);
@@ -661,6 +718,25 @@ static void process_one(PingPongDelayState& s, double inputL, double inputR) {
 
   s.outLeft = (dryL * (1.0 - safeMix) + s.wetL * safeMix) * safeAmp;
   s.outRight = (dryR * (1.0 - safeMix) + s.wetR * safeMix) * safeAmp;
+}
+
+// Poles 1..4 for the feedback filter (rounded, clamped). Changing the count
+// clears the TPT stage states so a new stage starts from silence.
+extern "C" void soemdsp_ping_pong_delay_set_poles(int handle, double poles) {
+  if (handle < 1 || handle > kMaxInstances) return;
+  PingPongDelayState& s = gPool[handle - 1];
+  double p = safe(poles);
+  if (!(p * 0.0 == 0.0)) p = 1.0;
+  int n = (int)(p + 0.5);
+  if (n < 1) n = 1;
+  if (n > 4) n = 4;
+  if (n != s.poles) {
+    for (int k = 0; k < 4; k++) {
+      s.tptLpL[k] = s.tptLpR[k] = 0.0;
+      s.tptHpL[k] = s.tptHpR[k] = 0.0;
+    }
+    s.poles = n;
+  }
 }
 
 // Latch Control + Live params once per quantum (or when knobs move).
@@ -836,5 +912,5 @@ extern "C" int soemdsp_ping_pong_delay_memory_generation() {
 }
 
 extern "C" int soemdsp_ping_pong_delay_version() {
-  return 18; // Mode: Off / Left Right / Left Middle Right
+  return 19; // 19: Poles 1..4 feedback filter (set_poles; 1 = original). 18: Mode: Off / Left Right / Left Middle Right
 }
