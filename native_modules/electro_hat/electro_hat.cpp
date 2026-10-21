@@ -60,6 +60,9 @@ struct Chan {
 };
 
 struct State {
+  double latchA;  // Recalculate On Trigger: decay params latched on the last hit
+  double latchB;
+  bool latchHas;
   bool active;
   double lastClosed, lastOpen, lastReset;
   double v;
@@ -184,6 +187,7 @@ extern "C" int soemdsp_electro_hat_create() {
   for (int i = 0; i < kMaxInstances; i++) {
     if (!gPool[i].active) {
       init_state(gPool[i]);
+      gPool[i].latchHas = false;
       gPool[i].active = true;
       return i + 1;
     }
@@ -209,7 +213,8 @@ extern "C" double soemdsp_electro_hat_sample(
   double openDecay,
   double metal,
   double amplitude,
-  double sampleRate
+  double sampleRate,
+  double recalculateOnTrigger  // 0 Off (live) / 1 On: closedDecay / openDecay latched on each hit
 ) {
   if (handle < 1 || handle > kMaxInstances || !gPool[handle - 1].active) return 0.0;
   State& s = gPool[handle - 1];
@@ -236,6 +241,10 @@ extern "C" double soemdsp_electro_hat_sample(
     strike(s, sr);
     hit = true;
   }
+  // Recalculate On Trigger: On latches closedDecay and openDecay on each hit, so a ringing
+  // hit keeps its decay; Off (default) reads them live (unchanged behaviour).
+  if (hit) { s.latchA = closedDecay; s.latchB = openDecay; s.latchHas = true; }
+  if (safe(recalculateOnTrigger) >= 0.5 && s.latchHas) { closedDecay = s.latchA; openDecay = s.latchB; }
   if (!hit && s.vca == 0.0) {
     s.envOut = s.rightOut = 0.0;
     return 0.0;
@@ -295,6 +304,6 @@ extern "C" double soemdsp_electro_hat_env(int handle) {
   return gPool[handle - 1].envOut;
 }
 
-extern "C" int soemdsp_electro_hat_version() { return 1; }
+extern "C" int soemdsp_electro_hat_version() { return 2; }  // 2: Recalculate On Trigger (closedDecay / openDecay latched on hit)
 extern "C" const char* soemdsp_electro_hat_metadata_json() { return kMetadataJson; }
 extern "C" int soemdsp_electro_hat_metadata_json_size() { return sizeof(kMetadataJson) - 1; }

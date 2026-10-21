@@ -804,6 +804,11 @@ if ($node) {
   if ($LASTEXITCODE -ne 0) {
     throw "Combined build: Sidechain smoke FAILED"
   }
+  # Drum Recalculate On Trigger: Off == no-arg call, On keeps the ringing hit, next hit applies.
+  & $node.Source "$root\scripts\smoke_graph_drum_recalculate.mjs"
+  if ($LASTEXITCODE -ne 0) {
+    throw "Combined build: drum Recalculate On Trigger smoke FAILED"
+  }
   # Resonant Compressor: Gain == Resonant Envelope SC (max diff 0), drums get quieter.
   & $node.Source "$root\scripts\smoke_graph_resonant_compressor.mjs"
   if ($LASTEXITCODE -ne 0) {

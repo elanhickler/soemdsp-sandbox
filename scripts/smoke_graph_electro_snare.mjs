@@ -222,7 +222,7 @@ console.log(`ok electroSnare graph type=${TYPE_SNARE} version=${ver}: Trigger + 
   if (JSON.stringify(def.inputs) !== JSON.stringify(["Trigger", "Reset"])) throw new Error(`inputs ${JSON.stringify(def.inputs)}`);
   if (JSON.stringify(def.outputs) !== JSON.stringify(["Snare L", "Snare R", "Env"])) throw new Error(`outputs ${JSON.stringify(def.outputs)}`);
   const keys = def.parameters.map((x) => x.key);
-  if (JSON.stringify(keys) !== JSON.stringify(["algorithm", "tune", "tone", "snappy", "bodyDecay", "snapDecay", "bend", "amplitude", "simNoiseQ", "simClick"])) throw new Error(`params ${keys}`);
+  if (JSON.stringify(keys) !== JSON.stringify(["algorithm", "tune", "tone", "snappy", "bodyDecay", "snapDecay", "bend", "amplitude", "simNoiseQ", "simClick", "recalculateOnTrigger"])) throw new Error(`params ${keys}`);
   const metaSrc = fs.readFileSync(path.join(root, "public", "node-graph-slider-metadata.js"), "utf8");
   const a = metaSrc.indexOf("function nodeGraphParameterByKey");
   const z = metaSrc.indexOf("function nodeGraphChoiceSliderValueForKey");

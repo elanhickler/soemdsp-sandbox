@@ -80,6 +80,9 @@ static const double kFmWires = 0.8;
 static const double kMixTrim = 0.6;     // output trim per unit Snappy (808 / 909 / Modal / FM)
 
 struct State {
+  double latchA;  // Recalculate On Trigger: decay params latched on the last hit
+  double latchB;
+  bool latchHas;
   bool active;
   double lastTrigger, lastReset;
   double v;            // latched velocity
@@ -155,6 +158,7 @@ extern "C" int soemdsp_electro_snare_create() {
   for (int i = 0; i < kMaxInstances; i++) {
     if (!gPool[i].active) {
       init_state(gPool[i]);
+      gPool[i].latchHas = false;
       gPool[i].active = true;
       return i + 1;
     }
@@ -183,7 +187,8 @@ extern "C" double soemdsp_electro_snare_sample(
   double amplitude,
   double simNoiseQ,   // Simmons only: noise SVF Q (default 2 = original)
   double simClick,    // Simmons only: click level (default 0.4 = original)
-  double sampleRate
+  double sampleRate,
+  double recalculateOnTrigger  // 0 Off (live) / 1 On: bodyDecay / snapDecay latched on each hit
 ) {
   if (handle < 1 || handle > kMaxInstances || !gPool[handle - 1].active) return 0.0;
   State& s = gPool[handle - 1];
@@ -205,6 +210,10 @@ extern "C" double soemdsp_electro_snare_sample(
     strike(s, alg);
     ping = true;
   }
+  // Recalculate On Trigger: On latches bodyDecay and snapDecay on each hit, so a ringing
+  // hit keeps its decay; Off (default) reads them live (unchanged behaviour).
+  if (ping) { s.latchA = bodyDecay; s.latchB = snapDecay; s.latchHas = true; }
+  if (safe(recalculateOnTrigger) >= 0.5 && s.latchHas) { bodyDecay = s.latchA; snapDecay = s.latchB; }
   if (!ping && resting(s)) {
     s.envOut = 0.0;
     s.rightOut = 0.0;
@@ -347,6 +356,6 @@ extern "C" double soemdsp_electro_snare_env(int handle) {
   return gPool[handle - 1].envOut;
 }
 
-extern "C" int soemdsp_electro_snare_version() { return 4; }  // 4: Simmons Noise Q + Click params. 3: Modal removed (-> Modal Snare), Amplitude unclamped
+extern "C" int soemdsp_electro_snare_version() { return 5; }  // 5: Recalculate On Trigger (bodyDecay / snapDecay latched on hit)  // 4: Simmons Noise Q + Click params. 3: Modal removed (-> Modal Snare), Amplitude unclamped
 extern "C" const char* soemdsp_electro_snare_metadata_json() { return kMetadataJson; }
 extern "C" int soemdsp_electro_snare_metadata_json_size() { return sizeof(kMetadataJson) - 1; }

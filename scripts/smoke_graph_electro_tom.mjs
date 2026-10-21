@@ -254,8 +254,8 @@ const def = (() => {
   if (JSON.stringify(def.inputs) !== JSON.stringify(["Trigger", "Reset"])) throw new Error(`inputs ${JSON.stringify(def.inputs)}`);
   if (JSON.stringify(def.outputs) !== JSON.stringify([`${NAME} L`, `${NAME} R`, "Env"])) throw new Error(`outputs ${JSON.stringify(def.outputs)}`);
   const keys = def.parameters.map((x) => x.key);
-  if (JSON.stringify(keys) !== JSON.stringify(["algorithm", ...["tune", "bend", "tone", "bodyDecay", "noise", "amplitude"]])) throw new Error(`params ${keys}`);
-  for (const prm of def.parameters.slice(1)) {
+  if (JSON.stringify(keys) !== JSON.stringify(["algorithm", ...["tune", "bend", "tone", "bodyDecay", "noise", "amplitude"], "recalculateOnTrigger"])) throw new Error(`params ${keys}`);
+  for (const prm of def.parameters.slice(1).filter((q) => q.key !== "recalculateOnTrigger")) {
     if (String(DEF[prm.key]) !== prm.defaultValue) throw new Error(`default ${prm.key} ${prm.defaultValue} != smoke ${DEF[prm.key]}`);
     if (String(MIN[prm.key]) !== prm.min || String(MAX[prm.key]) !== prm.max) throw new Error(`range ${prm.key}`);
   }

@@ -48,6 +48,9 @@ static const double kUnitFloorHz = 20.0;          // 0–1 jack log floor: L = m
 enum { kWaveSine = 0, kWaveSinFatSaw = 1, kWaveTriSaw = 2 };
 
 struct State {
+  double latchA;  // Recalculate On Trigger: decay params latched on the last hit
+  double latchB;
+  bool latchHas;
   // Latched at a Trigger (Robin's noteOn).
   double fHi;
   double fLo;
@@ -200,6 +203,7 @@ extern "C" int soemdsp_robin_sinepulse_create() {
   for (int i = 0; i < kMaxInstances; i++) {
     if (!gPool[i].active) {
       init_state(gPool[i]);
+      gPool[i].latchHas = false;
       gPool[i].active = true;
       return i + 1;
     }
@@ -239,7 +243,8 @@ extern "C" double soemdsp_robin_sinepulse_sample(
   double phase,
   double decay,
   double amplitude,
-  double sampleRate
+  double sampleRate,
+  double recalculateOnTrigger  // 0 Off (live) / 1 On: decay latched on each hit
 ) {
   if (handle < 1 || handle > kMaxInstances || !gPool[handle - 1].active) return 0.0;
   State& s = gPool[handle - 1];
@@ -256,6 +261,10 @@ extern "C" double soemdsp_robin_sinepulse_sample(
     s.swept = true;
   }
 
+  // Recalculate On Trigger: On latches decay on each hit, so a ringing
+  // hit keeps its decay; Off (default) reads them live (unchanged behaviour).
+  if (triggerHit) { s.latchA = decay; s.latchHas = true; }
+  if (safe(recalculateOnTrigger) >= 0.5 && s.latchHas) { decay = s.latchA; }
   if (s.env < kPlanck) {  // rest: exact 0, phase kept, no sweep maths
     s.env = 0.0;
     s.envOut = 0.0;
@@ -324,6 +333,6 @@ extern "C" int soemdsp_robin_sinepulse_is_idle(int handle) {
   return (!s.active || s.env < kPlanck) ? 1 : 0;
 }
 
-extern "C" int soemdsp_robin_sinepulse_version() { return 4; }
+extern "C" int soemdsp_robin_sinepulse_version() { return 5; }  // 5: Recalculate On Trigger (decay latched on hit)
 extern "C" const char* soemdsp_robin_sinepulse_metadata_json() { return kMetadataJson; }
 extern "C" int soemdsp_robin_sinepulse_metadata_json_size() { return sizeof(kMetadataJson) - 1; }

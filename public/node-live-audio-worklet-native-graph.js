@@ -5979,6 +5979,7 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
       push("phase", P.NATIVE_GRAPH_PARAM_PHASE, cont("phase", 0));
       push("decay", P.NATIVE_GRAPH_PARAM_TIME_DENOMINATOR, cont("decay", 0.5));
       push("amplitude", P.NATIVE_GRAPH_PARAM_AMPLITUDE, cont("amplitude", 1));
+      push("recalculateOnTrigger", P.NATIVE_GRAPH_PARAM_TIMING_MODE, disc("recalculateOnTrigger", 0));
       continue;
     }
     if (type === "electroSnare") {
@@ -5996,6 +5997,7 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
       push("amplitude", P.NATIVE_GRAPH_PARAM_AMPLITUDE, cont("amplitude", 1));
       push("simNoiseQ", P.NATIVE_GRAPH_PARAM_RESONANCE, cont("simNoiseQ", 2));
       push("simClick", P.NATIVE_GRAPH_PARAM_LEVEL, cont("simClick", 0.4));
+      push("recalculateOnTrigger", P.NATIVE_GRAPH_PARAM_TIMING_MODE, disc("recalculateOnTrigger", 0));
       continue;
     }
     if (type === "modalSnare") {
@@ -6014,6 +6016,7 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
       push("click", P.NATIVE_GRAPH_PARAM_LEVEL, cont("click", 0.3));
       push("clickDecay", P.NATIVE_GRAPH_PARAM_OFFSET_MS, cont("clickDecay", 2));
       push("noiseTilt", P.NATIVE_GRAPH_PARAM_SATURATE, cont("noiseTilt", 0));
+      push("recalculateOnTrigger", P.NATIVE_GRAPH_PARAM_TIMING_MODE, disc("recalculateOnTrigger", 0));
       continue;
     }
     if (type === "electroHat") {
@@ -6027,6 +6030,7 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
       push("openDecay", P.NATIVE_GRAPH_PARAM_TIME_DENOMINATOR, cont("openDecay", 0.5));
       push("metal", P.NATIVE_GRAPH_PARAM_WIDTH, cont("metal", 1));
       push("amplitude", P.NATIVE_GRAPH_PARAM_AMPLITUDE, cont("amplitude", 1));
+      push("recalculateOnTrigger", P.NATIVE_GRAPH_PARAM_TIMING_MODE, disc("recalculateOnTrigger", 0));
       continue;
     }
     if (type === "electroTom") {
@@ -6039,6 +6043,7 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
       push("bodyDecay", P.NATIVE_GRAPH_PARAM_TIME_NUMERATOR, cont("bodyDecay", 0.2));
       push("noise", P.NATIVE_GRAPH_PARAM_WIDTH, cont("noise", 0.2));
       push("amplitude", P.NATIVE_GRAPH_PARAM_AMPLITUDE, cont("amplitude", 1));
+      push("recalculateOnTrigger", P.NATIVE_GRAPH_PARAM_TIMING_MODE, disc("recalculateOnTrigger", 0));
       continue;
     }
     if (type === "electroKick") {
@@ -6053,6 +6058,7 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
       push("click", P.NATIVE_GRAPH_PARAM_WIDTH, cont("click", 0.3));
       push("tone", P.NATIVE_GRAPH_PARAM_SHAPE, cont("tone", 0.5));
       push("amplitude", P.NATIVE_GRAPH_PARAM_AMPLITUDE, cont("amplitude", 1));
+      push("recalculateOnTrigger", P.NATIVE_GRAPH_PARAM_TIMING_MODE, disc("recalculateOnTrigger", 0));
       continue;
     }
     if (type === "electroClap") {
@@ -6064,6 +6070,7 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
       push("decay", P.NATIVE_GRAPH_PARAM_TIME_NUMERATOR, cont("decay", 0.3));
       push("snappy", P.NATIVE_GRAPH_PARAM_WIDTH, cont("snappy", 0.6));
       push("amplitude", P.NATIVE_GRAPH_PARAM_AMPLITUDE, cont("amplitude", 1));
+      push("recalculateOnTrigger", P.NATIVE_GRAPH_PARAM_TIMING_MODE, disc("recalculateOnTrigger", 0));
       continue;
     }
     if (type === "robinSinepulseAllpass") {

@@ -58,6 +58,9 @@ static const double kSimNoise = 0.55;
 static const double kMixTrim = 0.5;
 
 struct State {
+  double latchA;  // Recalculate On Trigger: decay params latched on the last hit
+  double latchB;
+  bool latchHas;
   bool active;
   double lastTrigger, lastReset;
   double v;
@@ -119,6 +122,7 @@ extern "C" int soemdsp_electro_tom_create() {
   for (int i = 0; i < kMaxInstances; i++) {
     if (!gPool[i].active) {
       init_state(gPool[i]);
+      gPool[i].latchHas = false;
       gPool[i].active = true;
       return i + 1;
     }
@@ -143,7 +147,8 @@ extern "C" double soemdsp_electro_tom_sample(
   double bodyDecay,
   double noise,
   double amplitude,
-  double sampleRate
+  double sampleRate,
+  double recalculateOnTrigger  // 0 Off (live) / 1 On: bodyDecay latched on each hit
 ) {
   if (handle < 1 || handle > kMaxInstances || !gPool[handle - 1].active) return 0.0;
   State& s = gPool[handle - 1];
@@ -164,6 +169,10 @@ extern "C" double soemdsp_electro_tom_sample(
     strike(s, alg);
     ping = true;
   }
+  // Recalculate On Trigger: On latches bodyDecay on each hit, so a ringing
+  // hit keeps its decay; Off (default) reads them live (unchanged behaviour).
+  if (ping) { s.latchA = bodyDecay; s.latchHas = true; }
+  if (safe(recalculateOnTrigger) >= 0.5 && s.latchHas) { bodyDecay = s.latchA; }
   if (!ping && resting(s)) {
     s.envOut = s.rightOut = 0.0;
     return 0.0;
@@ -271,6 +280,6 @@ extern "C" double soemdsp_electro_tom_env(int handle) {
   return gPool[handle - 1].envOut;
 }
 
-extern "C" int soemdsp_electro_tom_version() { return 1; }
+extern "C" int soemdsp_electro_tom_version() { return 2; }  // 2: Recalculate On Trigger (bodyDecay latched on hit)
 extern "C" const char* soemdsp_electro_tom_metadata_json() { return kMetadataJson; }
 extern "C" int soemdsp_electro_tom_metadata_json_size() { return sizeof(kMetadataJson) - 1; }

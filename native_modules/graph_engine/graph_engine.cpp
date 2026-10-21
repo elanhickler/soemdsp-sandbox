@@ -1275,7 +1275,7 @@ extern "C" double soemdsp_robin_sinepulse_freq(int handle);
 extern "C" double soemdsp_robin_sinepulse_sample(
   int handle, double trigger, double highFreq, double lowFreq,
   double sweepTime, double chirp, double chirpShape, double wave, double waveShape,
-  double phase, double decay, double amplitude, double sampleRate
+  double phase, double decay, double amplitude, double sampleRate, double recalculateOnTrigger
 );
 
 extern "C" int soemdsp_modal_snare_create();
@@ -1286,7 +1286,7 @@ extern "C" double soemdsp_modal_snare_sample(
   int handle, double trigger, double reset, double tune, double tone,
   double snappy, double bodyDecay, double snapDecay, double bend, double amplitude,
   double noiseFreq, double noiseQ, double click, double clickDecayMs, double noiseTilt,
-  double sampleRate);
+  double sampleRate, double recalculateOnTrigger);
 extern "C" int soemdsp_electro_snare_create();
 extern "C" void soemdsp_electro_snare_destroy(int handle);
 extern "C" double soemdsp_electro_snare_env(int handle);
@@ -1294,7 +1294,7 @@ extern "C" double soemdsp_electro_snare_right(int handle);
 extern "C" double soemdsp_electro_snare_sample(
   int handle, double trigger, double reset, double algorithm, double tune, double tone,
   double snappy, double bodyDecay, double snapDecay, double bend, double amplitude,
-  double simNoiseQ, double simClick, double sampleRate);
+  double simNoiseQ, double simClick, double sampleRate, double recalculateOnTrigger);
 extern "C" int soemdsp_electro_hat_create();
 extern "C" void soemdsp_electro_hat_destroy(int handle);
 extern "C" double soemdsp_electro_hat_env(int handle);
@@ -1302,14 +1302,14 @@ extern "C" double soemdsp_electro_hat_right(int handle);
 extern "C" double soemdsp_electro_hat_sample(
   int handle, double closed, double open, double reset, double algorithm, double tune,
   double tone, double closedDecay, double openDecay, double metal,
-  double amplitude, double sampleRate);
+  double amplitude, double sampleRate, double recalculateOnTrigger);
 extern "C" int soemdsp_electro_tom_create();
 extern "C" void soemdsp_electro_tom_destroy(int handle);
 extern "C" double soemdsp_electro_tom_env(int handle);
 extern "C" double soemdsp_electro_tom_right(int handle);
 extern "C" double soemdsp_electro_tom_sample(
   int handle, double trigger, double reset, double algorithm, double tune, double bend,
-  double tone, double bodyDecay, double noise, double amplitude, double sampleRate);
+  double tone, double bodyDecay, double noise, double amplitude, double sampleRate, double recalculateOnTrigger);
 extern "C" int soemdsp_electro_kick_create();
 extern "C" void soemdsp_electro_kick_destroy(int handle);
 extern "C" double soemdsp_electro_kick_env(int handle);
@@ -1317,14 +1317,14 @@ extern "C" double soemdsp_electro_kick_right(int handle);
 extern "C" double soemdsp_electro_kick_sample(
   int handle, double trigger, double reset, double algorithm, double tune, double bend,
   double bendTime, double decay, double click, double tone, double amplitude,
-  double sampleRate);
+  double sampleRate, double recalculateOnTrigger);
 extern "C" int soemdsp_electro_clap_create();
 extern "C" void soemdsp_electro_clap_destroy(int handle);
 extern "C" double soemdsp_electro_clap_env(int handle);
 extern "C" double soemdsp_electro_clap_right(int handle);
 extern "C" double soemdsp_electro_clap_sample(
   int handle, double trigger, double reset, double algorithm, double tone, double spread,
-  double decay, double snappy, double amplitude, double sampleRate);
+  double decay, double snappy, double amplitude, double sampleRate, double recalculateOnTrigger);
 extern "C" int soemdsp_robin_sinepulse_allpass_create();
 extern "C" void soemdsp_robin_sinepulse_allpass_destroy(int handle);
 extern "C" int soemdsp_robin_sinepulse_allpass_set_params(
@@ -3994,6 +3994,7 @@ static void init_node_defaults(Node& n, int typeId) {
   );
   init_control(
     n.timingMode,
+    (typeId == kTypeElectroSnare || typeId == kTypeModalSnare || typeId == kTypeElectroHat || typeId == kTypeElectroTom || typeId == kTypeElectroKick || typeId == kTypeElectroClap || typeId == kTypeRobinSinepulse) ? 0.0 : // Recalculate On Trigger Off (drums)
     (typeId == kTypeVibratoGenerator) ? 2.0 // releaseShape Exp
       : (typeId == kTypeHypersaw2) ? 0.0 // vibratoSpeedTiltSource Freq
       : (typeId == kTypeActiveFilter) ? 1.0 // gainCompensation On
@@ -10358,7 +10359,8 @@ static void process_robin_sinepulse(Circuit& g, Node& node, int frames) {
       control_audio(g, node.phaseParam, f),
       control_audio(g, node.timeDenominator, f),
       control_audio(g, node.amplitude, f),
-      sr
+      sr,
+      control_effective(node.timingMode)  // Recalculate On Trigger (0 Off / 1 On)
     );
     node.buf[kPortMono][f] = out;
     node.buf[kPortLeft][f] = soemdsp_robin_sinepulse_freq(node.nativeHandle);
@@ -10394,7 +10396,8 @@ static void process_electro_snare(Circuit& g, Node& node, int frames) {
       control_audio(g, node.amplitude, f),
       control_audio(g, node.resonance, f), // Simmons Noise Q
       control_audio(g, node.level, f),     // Simmons Click
-      sr
+      sr,
+      control_effective(node.timingMode)  // Recalculate On Trigger (0 Off / 1 On)
     );
     node.buf[kPortLeft][f] = out;
     node.buf[kPortRight][f] = soemdsp_electro_snare_right(node.nativeHandle);
@@ -10430,7 +10433,8 @@ static void process_modal_snare(Circuit& g, Node& node, int frames) {
       control_audio(g, node.level, f),
       control_audio(g, node.offsetMs, f),
       control_audio(g, node.saturate, f),
-      sr
+      sr,
+      control_effective(node.timingMode)  // Recalculate On Trigger (0 Off / 1 On)
     );
     node.buf[kPortLeft][f] = out;
     node.buf[kPortRight][f] = soemdsp_modal_snare_right(node.nativeHandle);
@@ -10464,7 +10468,8 @@ static void process_electro_hat(Circuit& g, Node& node, int frames) {
       control_audio(g, node.timeDenominator, f),
       control_audio(g, node.width, f),
       control_audio(g, node.amplitude, f),
-      sr
+      sr,
+      control_effective(node.timingMode)  // Recalculate On Trigger (0 Off / 1 On)
     );
     node.buf[kPortLeft][f] = out;
     node.buf[kPortRight][f] = soemdsp_electro_hat_right(node.nativeHandle);
@@ -10495,7 +10500,8 @@ static void process_electro_tom(Circuit& g, Node& node, int frames) {
       control_audio(g, node.timeNumerator, f),
       control_audio(g, node.width, f),
       control_audio(g, node.amplitude, f),
-      sr
+      sr,
+      control_effective(node.timingMode)  // Recalculate On Trigger (0 Off / 1 On)
     );
     node.buf[kPortLeft][f] = out;
     node.buf[kPortRight][f] = soemdsp_electro_tom_right(node.nativeHandle);
@@ -10527,7 +10533,8 @@ static void process_electro_kick(Circuit& g, Node& node, int frames) {
       control_audio(g, node.width, f),
       control_audio(g, node.shape, f),
       control_audio(g, node.amplitude, f),
-      sr
+      sr,
+      control_effective(node.timingMode)  // Recalculate On Trigger (0 Off / 1 On)
     );
     node.buf[kPortLeft][f] = out;
     node.buf[kPortRight][f] = soemdsp_electro_kick_right(node.nativeHandle);
@@ -10556,7 +10563,8 @@ static void process_electro_clap(Circuit& g, Node& node, int frames) {
       control_audio(g, node.timeNumerator, f),
       control_audio(g, node.width, f),
       control_audio(g, node.amplitude, f),
-      sr
+      sr,
+      control_effective(node.timingMode)  // Recalculate On Trigger (0 Off / 1 On)
     );
     node.buf[kPortLeft][f] = out;
     node.buf[kPortRight][f] = soemdsp_electro_clap_right(node.nativeHandle);
@@ -16741,5 +16749,5 @@ extern "C" int soemdsp_graph_version() {
   // 170: EQ Filter ZDF ƒ input (resolve_osc_hz)
   // 171: ƒ on Ladder/303/Mode/Cookbook/IIR/Papoulis/ZDF filters + soemdsp_graph_node_effective_hz
   // 174: live add/remove/connect/disconnect keep compiled and other nodes' native handles
-  return 212; // 212: Resonant Compressor (230): Resonant Envelope Abs-rise detector, SC as gain; In L/R + Sidechain (Morph), outs Out L/R, Gain (Saw), Env (Square). was 211: Resonant Follower (229) split from Resonant Envelope Follow (In on Morph bus; Follow Source diffusionAmount, Follow Detect lfoVariation); Resonant Envelope Follow jack / switches removed (Trigger path bit-identical). was 210: Ping Pong Delay HPF / LPF Shelf (center / shape slots, 0..100 %, 100 = full filter). was 209: Resonant Envelope Hold (lfoAmplitude slot; 0 Input above 0 / 1 Follows detect: Shared/Rise/Abs rise hold only while their detect is true). was 208: Clock Pulse Start (center) / Pulse End (shape) replace duty; clock __Phase on kPortPhase01. was 207: Electro Snare Simmons Noise Q (resonance, 0.5..4, default 2) + Simmons Click (level, default 0.4); defaults bit-identical. was 206: Modal Snare (228) split from Electro Snare Modal, + Noise Freq (lpfFrequency) / Noise Q (resonance) / Click (level) / Click Decay ms (offsetMs) / Noise Tilt (saturate); Electro Snare Modal option removed (id 3 plays as 808). was 205: Ping Pong Delay Amplitude unclamped (was hidden clamp 0..2 in DSP). was 204: Ping Pong Delay separate HPF Poles (stages slot) and LPF Poles (waveform slot), 1..4 each. was 203: Resonant Envelope experiment switches (Trigger Detect 0..5 local, Velocity diffusionSize, Follow Source diffusionAmount, Follow Detect lfoVariation). was 202: Ping Pong Delay feedback filter Poles 1..4 (stages slot; 1 = original one-pole, 2..4 cascaded TPT). was 201: 201: EXPERIMENT gate_hit = every absolute positive change (|x| rises; velocity = |x[n]|-|x[n-1]|). was 200: RMS Meter stereo: L (id In) + R inputs, R outs (RMS R Right, dB R Square, Env Inverted R Tri), nativeHandleR meters R when wired. was 199: RMS Meter (227): one-pole mean square; RMS / dB (-120 floor) / Env Inverted. was 198: Resonant Envelope Mode (Envelope / Filter, waveform slot) + Trigger detect (Cross 0 / Saw reset, lfoStyle slot). was 197: Amp <-> dB reads |amp| in Amp->dB mode (bipolar audio no longer floors to -120). was 196: Resonant Envelope SC out (kPortSaw, clamp(1 - Out/Amplitude, 0, 1)). was 195: gate_hit / gate_on back to the original law (hit = first sample > 0 after <= 0; on = x > 0); Resonant Envelope Follow = rising-sample step latch. was 194: Resonant Envelope Follow input (Morph live bus, |x| is the SVF target). was 193: DSF Oscillator face playhead (__Phase on kPortPhase01). was 192: Resonant Envelope Frequency knob (unwired f uses it for Tracking). was 191: Electro Clap (226). was 190: Mode Resonator / Random Clock / Turing Machine / Degree Turing back to their original mono outs (stereo R removed). was 189: fBm back to its 3 outs Out X / Out Y / Out Z (stereo R axes removed). was 188: Electro Hat (223) / Electro Tom (224) / Electro Kick (225). was 187: stereo L/R outs: Bradley 2A, fBm (X/Y/Z R on Tri/Sine/Trisaw), Mode Resonator (R quadrature), Random Clock / Turing Machine / Degree Turing (R Seed lane), Softpop 2 R Pitch Mod. was 186: Electro Snare stereo (Snare L -> Left, Snare R -> Right, Env -> Mono). was 185: Electro Snare (type 222). was 184: Robin Sinepulse 0–1 jack is log sweep position (L = max(Low, 20 Hz)). was 183: Flower Child ƒ input removed (Cutoff knob only again). was 182: SinCos / SinCos4 Polarity (center 0 Bipolar / 1 Unipolar). was 181: Flower Child ƒ in (resonance-pitch Hz replaces Cutoff). was 180: Robin Sinepulse 0–1 jack is sweep position (High=1, Low=0). was 179: Resonant Envelope (221)
+  return 213; // 213: Recalculate On Trigger (timingMode slot, 0 Off default) on Electro Kick / Snare / Tom / Hat / Clap, Modal Snare, Robin Sinepulse: On latches the decay params on each hit. was 212: Resonant Compressor (230): Resonant Envelope Abs-rise detector, SC as gain; In L/R + Sidechain (Morph), outs Out L/R, Gain (Saw), Env (Square). was 211: Resonant Follower (229) split from Resonant Envelope Follow (In on Morph bus; Follow Source diffusionAmount, Follow Detect lfoVariation); Resonant Envelope Follow jack / switches removed (Trigger path bit-identical). was 210: Ping Pong Delay HPF / LPF Shelf (center / shape slots, 0..100 %, 100 = full filter). was 209: Resonant Envelope Hold (lfoAmplitude slot; 0 Input above 0 / 1 Follows detect: Shared/Rise/Abs rise hold only while their detect is true). was 208: Clock Pulse Start (center) / Pulse End (shape) replace duty; clock __Phase on kPortPhase01. was 207: Electro Snare Simmons Noise Q (resonance, 0.5..4, default 2) + Simmons Click (level, default 0.4); defaults bit-identical. was 206: Modal Snare (228) split from Electro Snare Modal, + Noise Freq (lpfFrequency) / Noise Q (resonance) / Click (level) / Click Decay ms (offsetMs) / Noise Tilt (saturate); Electro Snare Modal option removed (id 3 plays as 808). was 205: Ping Pong Delay Amplitude unclamped (was hidden clamp 0..2 in DSP). was 204: Ping Pong Delay separate HPF Poles (stages slot) and LPF Poles (waveform slot), 1..4 each. was 203: Resonant Envelope experiment switches (Trigger Detect 0..5 local, Velocity diffusionSize, Follow Source diffusionAmount, Follow Detect lfoVariation). was 202: Ping Pong Delay feedback filter Poles 1..4 (stages slot; 1 = original one-pole, 2..4 cascaded TPT). was 201: 201: EXPERIMENT gate_hit = every absolute positive change (|x| rises; velocity = |x[n]|-|x[n-1]|). was 200: RMS Meter stereo: L (id In) + R inputs, R outs (RMS R Right, dB R Square, Env Inverted R Tri), nativeHandleR meters R when wired. was 199: RMS Meter (227): one-pole mean square; RMS / dB (-120 floor) / Env Inverted. was 198: Resonant Envelope Mode (Envelope / Filter, waveform slot) + Trigger detect (Cross 0 / Saw reset, lfoStyle slot). was 197: Amp <-> dB reads |amp| in Amp->dB mode (bipolar audio no longer floors to -120). was 196: Resonant Envelope SC out (kPortSaw, clamp(1 - Out/Amplitude, 0, 1)). was 195: gate_hit / gate_on back to the original law (hit = first sample > 0 after <= 0; on = x > 0); Resonant Envelope Follow = rising-sample step latch. was 194: Resonant Envelope Follow input (Morph live bus, |x| is the SVF target). was 193: DSF Oscillator face playhead (__Phase on kPortPhase01). was 192: Resonant Envelope Frequency knob (unwired f uses it for Tracking). was 191: Electro Clap (226). was 190: Mode Resonator / Random Clock / Turing Machine / Degree Turing back to their original mono outs (stereo R removed). was 189: fBm back to its 3 outs Out X / Out Y / Out Z (stereo R axes removed). was 188: Electro Hat (223) / Electro Tom (224) / Electro Kick (225). was 187: stereo L/R outs: Bradley 2A, fBm (X/Y/Z R on Tri/Sine/Trisaw), Mode Resonator (R quadrature), Random Clock / Turing Machine / Degree Turing (R Seed lane), Softpop 2 R Pitch Mod. was 186: Electro Snare stereo (Snare L -> Left, Snare R -> Right, Env -> Mono). was 185: Electro Snare (type 222). was 184: Robin Sinepulse 0–1 jack is log sweep position (L = max(Low, 20 Hz)). was 183: Flower Child ƒ input removed (Cutoff knob only again). was 182: SinCos / SinCos4 Polarity (center 0 Bipolar / 1 Unipolar). was 181: Flower Child ƒ in (resonance-pitch Hz replaces Cutoff). was 180: Robin Sinepulse 0–1 jack is sweep position (High=1, Low=0). was 179: Resonant Envelope (221)
 }
