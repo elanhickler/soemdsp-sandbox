@@ -6336,10 +6336,11 @@ const nodeGraphModuleDefinitions = (
       { key: "face", label: "Face", renderer: "clockFace" },
     ],
     defaultDisplayMode: "face",
-    // Hand-written face (node-graph-module-face.js): value cells, then one band for the gate.
+    // Hand-written face (node-graph-module-face.js): the gate band, Phase full width, then Rate | Amp.
     face: [
-      { kind: "cells", params: [["rate", "Rate"], ["phase", "Phase"], ["amplitude", "Amp"]], h: 40 },
       { kind: "band", lo: "pulseStart", hi: "pulseEnd", label: "Pulse Width", h: 32 },
+      { kind: "cells", params: [["phase", "Phase"]], h: 40 },
+      { kind: "cells", params: [["rate", "Rate"], ["amplitude", "Amp"]], h: 40 },
     ],
     inputs: ["Reset"],
     inputLabels: { f: "ƒ" },
