@@ -86,9 +86,17 @@ function nodeGraphModuleFaceHeightPx(type, node = null) {
   return spec ? spec.reduce((sum, row) => sum + nodeGraphModuleFaceRowHeight(row), 0) : 0;
 }
 
-/** Face-local widget boxes for width w (layout px, zoom 1). */
-function nodeGraphModuleFaceWidgets(spec, w) {
+/** Rail inset (px) for a face row of moduleEl: the rail width when the row holds a patched param, else 0. */
+function nodeGraphModuleFaceRowInset(moduleEl) {
+  if (!moduleEl?.classList.contains("mod-rail-open") || typeof NODE_GRAPH_RAIL_WIDTH_PX === "undefined") return () => 0;
+  const patched = new Set([...moduleEl.querySelectorAll(".node-param-port.rail-patched")].map((port) => port.dataset.param));
+  return (row) => (nodeGraphModuleFaceRowParams(row).some((key) => patched.has(key)) ? NODE_GRAPH_RAIL_WIDTH_PX : 0);
+}
+
+/** Face-local widget boxes for face width fw (layout px, zoom 1). Rows beside a rail gutter are inset. */
+function nodeGraphModuleFaceWidgets(spec, fw, moduleEl = null) {
   const out = [];
+  const insetOf = nodeGraphModuleFaceRowInset(moduleEl);
   let y = 0;
   const split = (x0, width, n) => Array.from({ length: n }, (_, i) => {
     const a = Math.round(x0 + (width * i) / n);
@@ -97,6 +105,9 @@ function nodeGraphModuleFaceWidgets(spec, w) {
   });
   for (const row of spec) {
     const h = nodeGraphModuleFaceRowHeight(row);
+    const ins = insetOf(row);
+    const w = fw - ins * 2;
+    const first = out.length;
     const base = { row, y, h };
     if (row.kind === "choices" || row.kind === "lfoStyles") {
       split(0, w, row.labels.length).forEach(([x, cw], i) => out.push({
@@ -129,6 +140,7 @@ function nodeGraphModuleFaceWidgets(spec, w) {
         ...base, type: "seedButton", action, param: row.param, x: w - bw * (3 - i), w: bw,
       }));
     }
+    for (let k = first; k < out.length; k += 1) out[k].x += ins;
     y += h;
   }
   return out;
@@ -273,7 +285,7 @@ function nodeGraphModuleFaceLocalPoint(face, event) {
 }
 
 function nodeGraphModuleFaceWidgetAt(spec, face, x, y) {
-  return nodeGraphModuleFaceWidgets(spec, face.offsetWidth)
+  return nodeGraphModuleFaceWidgets(spec, face.offsetWidth, face.closest(".dsp-node"))
     .find((wd) => wd.type !== "slash" && x >= wd.x && x < wd.x + wd.w && y >= wd.y && y < wd.y + wd.h) || null;
 }
 
@@ -286,7 +298,7 @@ function nodeGraphModuleFaceHitBoxes(moduleEl) {
   const kx = rect.width / Math.max(1, face.offsetWidth);
   const ky = rect.height / Math.max(1, face.offsetHeight);
   const boxes = [];
-  for (const wd of nodeGraphModuleFaceWidgets(spec, face.offsetWidth)) {
+  for (const wd of nodeGraphModuleFaceWidgets(spec, face.offsetWidth, moduleEl)) {
     const keys = wd.type === "filter" ? [wd.hpf, wd.lpf] : [wd.param];
     keys.forEach((key, i) => {
       const row = key && moduleEl.querySelector(`.node-parameter-row[data-param="${CSS.escape(key)}"]`);
@@ -455,7 +467,7 @@ function nodeGraphModuleFaceDrawGl(batch, el, w, ox, oy, z) {
   const rect = (x, y, rw, rh, css) => nodeGraphGlLinesRect(batch, ox + x * z, oy + y * z, rw * z, rh * z, nodeGraphModuleFaceRgba(css));
   const line = (x, y, rw, rh, css) => nodeGraphGlLinesRect(batch, ox + x * z, oy + y * z, Math.max(1, rw * z), Math.max(1, rh * z), nodeGraphModuleFaceRgba(css));
   const fit = (text, bw, bh, hRatio, wRatio) => Math.min((bh - 2) * hRatio, (bw - 4) / (Math.max(1, String(text).length) * wRatio));
-  const widgets = nodeGraphModuleFaceWidgets(spec, w);
+  const widgets = nodeGraphModuleFaceWidgets(spec, w, el);
   let rowY = -1;
   for (const wd of widgets) {
     if (wd.row && wd.y !== rowY && wd.type !== "subChoice") {

@@ -25781,7 +25781,7 @@ html.soemdsp-whole-module .node-layout-canvas-grip {
    Layout 1 (spawn): param band = [mod rail | params | thru rail]. Both rails
    are hidden (no width) until a param is patched (or "Mod rail" always-on),
    appear together on the first param cable and hide on the last. Module width
-   never changes; the params shrink between the rails. Sizes are zoom-1.0 CSS px (--node-rail-width). */
+   never changes; only rows beside a gutter (.rail-inset) shrink between the rails. Sizes are zoom-1.0 CSS px (--node-rail-width). */
 .dsp-node[data-face-layout="spawn"] {
   --node-mod-rail-width: 0px;
 }
@@ -25789,8 +25789,11 @@ html.soemdsp-whole-module .node-layout-canvas-grip {
   --node-mod-rail-width: var(--node-rail-width, 26px);
 }
 .dsp-node[data-face-layout="spawn"] .node-parameter-row {
-  grid-template-columns: var(--node-mod-rail-width) minmax(0, 1fr) var(--node-mod-rail-width);
+  grid-template-columns: 0 minmax(0, 1fr) 0;
   column-gap: 0;
+}
+.dsp-node[data-face-layout="spawn"] .node-parameter-row.rail-inset {
+  grid-template-columns: var(--node-mod-rail-width) minmax(0, 1fr) var(--node-mod-rail-width);
 }
 .dsp-node[data-face-layout="spawn"] .node-param-port.modulation-input {
   width: var(--node-mod-rail-width);
@@ -25834,8 +25837,8 @@ html.soemdsp-whole-module .node-layout-canvas-grip {
 .dsp-node.has-module-face .node-face {
   position: absolute;
   top: 0;
-  left: var(--node-mod-rail-width, 0px);
-  right: var(--node-mod-rail-width);
+  left: 0;
+  right: 0;
   pointer-events: auto;
   touch-action: none;
 }
