@@ -812,7 +812,9 @@ void main() {
   }
 
   /**
-   * Polyline. caps "butt" ends each segment flat.
+   * Polyline: the app-wide antialiased line. Default (round) is one joined
+   * strip (nodeGraphGlLinesRibbon), so joints never double-blend; `feather` is
+   * the soft edge (pass ~1 device px). caps "butt" ends each segment flat.
    * caps "ortho" is for axis-aligned traces: at each corner the segment runs
    * to the far edge of the crossing stroke, so the corner square is covered
    * by overlap. No diagonal.
@@ -821,6 +823,15 @@ void main() {
     if (!batch || !points || points.length < 4) return;
     const square = caps === "square" || caps === "butt" || caps === "ortho" || caps === 1;
     const ortho = caps === "ortho";
+    if (!square) {
+      const joined = [points[0], points[1]];
+      for (let i = 2; i < points.length; i += 2) {
+        if (points[i] === joined[joined.length - 2] && points[i + 1] === joined[joined.length - 1]) continue;
+        joined.push(points[i], points[i + 1]);
+      }
+      if (joined.length >= 4) nodeGraphGlLinesRibbon(batch, joined, halfPx, feather, rgba);
+      return;
+    }
     const reachScale = batch.camera ? (batch.camera.zoom > 0 ? batch.camera.zoom : 1) : 1;
     const reach = (Math.max(0, halfPx) + Math.max(0, feather)) / reachScale;
     const segs = [];
