@@ -80,6 +80,13 @@ function assignNodeGraphTypedDisplaySettingsToNode(node, displayType, settings) 
     }
     return node.traceDisplaySettings;
   }
+  if (displayType === "pulseExplosionFace" && typeof normalizeNodeGraphPulseExplosionFaceSettings === "function") {
+    node.traceDisplaySettings = normalizeNodeGraphPulseExplosionFaceSettings(settings);
+    if (typeof applyNodeGraphPulseExplosionDisplaySettingsToFace === "function") {
+      applyNodeGraphPulseExplosionDisplaySettingsToFace(node);
+    }
+    return node.traceDisplaySettings;
+  }
   if (displayType === "sinCosFace" && typeof normalizeNodeGraphSinCosFaceSettings === "function") {
     node.traceDisplaySettings = normalizeNodeGraphSinCosFaceSettings(settings);
     if (typeof applyNodeGraphSinCosDisplaySettingsToFace === "function") {

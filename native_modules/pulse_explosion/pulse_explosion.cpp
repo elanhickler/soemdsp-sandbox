@@ -317,6 +317,14 @@ extern "C" double soemdsp_pulse_explosion_curve(int handle) {
   return gPool[handle - 1].lastCurve;
 }
 
+// Display playhead: seconds since the last trigger while a burst is playing
+// (pulses with time < elapsed have fired), -1 when idle.
+extern "C" double soemdsp_pulse_explosion_elapsed(int handle) {
+  if (handle < 1 || handle > kMaxInstances) return -1.0;
+  const PulseExplosionState& s = gPool[handle - 1];
+  return s.exploding ? s.elapsed : -1.0;
+}
+
 // Display preview: the exact schedule (times in seconds after the trigger,
 // sorted, and amplitudes) a trigger with these params would play. Same
 // argument meaning and safety as _sample. Returns the pulse count.
@@ -347,5 +355,5 @@ extern "C" double soemdsp_pulse_explosion_preview_amplitude(int i) {
 }
 
 extern "C" int soemdsp_pulse_explosion_version() {
-  return 2;  // 2: Timing (0 Random default / 1 Exp / 2 Log / 3 Lin) + preview exports
+  return 3;  // 3: _elapsed (display playhead). 2: Timing (0 Random default / 1 Exp / 2 Log / 3 Lin) + preview exports
 }

@@ -1173,6 +1173,7 @@ NodeLiveAudioProcessor.prototype.mapNativeGraphSrcPortId = function mapNativeGra
     if (p === "index") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_SAW;
   }
   if (t === "pulseExplosion") {
+    if (p === "__elapsed") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_PHASE01;
     if (p === "out") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_MONO;
     if (p === "curve") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_LEFT;
   }
@@ -9483,6 +9484,10 @@ NodeLiveAudioProcessor.prototype.nativeGraphPortNames = function nativeGraphPort
     if (type === "fbmField") {
       return ["__DomainTime"];
     }
+    // Pulse Explosion face playhead: seconds since trigger, -1 idle.
+    if (type === "pulseExplosion") {
+      return ["__Elapsed"];
+    }
     return [];
   }
   return [];
@@ -9569,7 +9574,7 @@ NodeLiveAudioProcessor.prototype.publishNativeGraphScopeTaps = function publishN
         P.NATIVE_GRAPH_PORT_PHASE01,
       )
       : (type === "sineWavetable" || type === "sinCos" || type === "smoothGraph" || type === "stepGraph"
-        || type === "acidSequencer" || type === "fbmField" || type === "clock"
+        || type === "acidSequencer" || type === "fbmField" || type === "clock" || type === "pulseExplosion"
         || type === "ellipsoid" || type === "ellipsoidOsc" || type === "dsfOscillator"
         ? audioPorts.concat(P.NATIVE_GRAPH_PORT_PHASE01)
         : audioPorts);
@@ -9733,7 +9738,7 @@ NodeLiveAudioProcessor.prototype.publishNativeGraphScopeTaps = function publishN
       } else if (
         type === "basicShape" || type === "sineWavetable" || type === "sinCos"
         || type === "smoothGraph" || type === "stepGraph"
-        || type === "acidSequencer" || type === "clock"
+        || type === "acidSequencer" || type === "clock" || type === "pulseExplosion"
         || type === "ellipsoid" || type === "ellipsoidOsc" || type === "dsfOscillator"
       ) {
         ports = facePorts.concat(P.NATIVE_GRAPH_PORT_PHASE01);

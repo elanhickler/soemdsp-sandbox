@@ -13752,6 +13752,13 @@ const nodeGraphModuleDefinitions = (
     inputs: ["Trigger"],
     outputs: ["Out", "Curve"],
     layout: "pulseCurve",
+    // Face: the exact schedule a trigger plays (engine preview), playhead from __Elapsed (node-graph-pulse-explosion-display.js).
+    displayType: "pulseExplosionFace",
+    spectrumCompanion: false,
+    displayModes: [
+      { key: "face", label: "Face", renderer: "pulseExplosionFace", settingsSchema: "pulseExplosionFace" },
+    ],
+    defaultDisplayMode: "face",
     parameters: [
       { defaultValue: "0", key: "startTime", label: "Start Time", max: "10", mid: "1", min: "0", nonlinearSlider: false, step: "any", unit: "s" },
       { defaultValue: "0.5", key: "centerTime", label: "Center Time", max: "10", mid: "1", min: "0", nonlinearSlider: false, step: "any", unit: "s" },

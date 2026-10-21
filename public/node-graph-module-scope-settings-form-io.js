@@ -401,6 +401,9 @@ if (type === "portalFace") {
   if (type === "clockFace" && typeof normalizeNodeGraphClockFaceSettings === "function") {
     return normalizeNodeGraphClockFaceSettings();
   }
+  if (type === "pulseExplosionFace" && typeof normalizeNodeGraphPulseExplosionFaceSettings === "function") {
+    return normalizeNodeGraphPulseExplosionFaceSettings();
+  }
   if (type === "softwaveOscFace") {
     return typeof normalizeNodeGraphSoftwaveOscFaceSettings === "function"
       ? normalizeNodeGraphSoftwaveOscFaceSettings()
@@ -723,6 +726,9 @@ if (type === "portalFace") {
   if (type === "clockFace" && typeof normalizeNodeGraphClockFaceSettings === "function") {
     return normalizeNodeGraphClockFaceSettings(settings);
   }
+  if (type === "pulseExplosionFace" && typeof normalizeNodeGraphPulseExplosionFaceSettings === "function") {
+    return normalizeNodeGraphPulseExplosionFaceSettings(settings);
+  }
   if (type === "softwaveOscFace") {
     return typeof normalizeNodeGraphSoftwaveOscFaceSettings === "function"
       ? normalizeNodeGraphSoftwaveOscFaceSettings(settings)
@@ -945,6 +951,9 @@ if (settingsSchema === "portalFace") {
   }
   if (settingsSchema === "clockFace" && typeof nodeGraphClockFaceSettingsForNode === "function") {
     return nodeGraphClockFaceSettingsForNode(node);
+  }
+  if (settingsSchema === "pulseExplosionFace" && typeof nodeGraphPulseExplosionFaceSettingsForNode === "function") {
+    return nodeGraphPulseExplosionFaceSettingsForNode(node);
   }
   if (settingsSchema === "softwaveOscFace") {
     return typeof nodeGraphSoftwaveOscFaceSettingsForNode === "function"
@@ -2288,13 +2297,15 @@ const NODE_GRAPH_HSL_LAMPS = Object.freeze({
   fill: ["fillHue", "fillBrightness", "fillSaturation"],
   start: ["startHue", "startBrightness", "startSaturation"],
   blink: ["blinkHue", "blinkBrightness", "blinkSaturation"],
+  playhead: ["playheadHue", "playheadBrightness", "playheadSaturation"],
+  lit: ["litHue", "litBrightness", "litSaturation"],
 });
 
 function syncNodeGraphHslLampWidgets(popover = document.getElementById("nodeTraceDisplaySettingsPopover")) {
   const formType = typeof nodeGraphTraceDisplaySettingsFormType === "function"
     ? nodeGraphTraceDisplaySettingsFormType()
     : "";
-  const shape = formType === "roundShapeFace" || formType === "basicShapeFace" || formType === "softwaveOscFace" || formType === "sinCosFace" || formType === "clockFace";
+  const shape = formType === "roundShapeFace" || formType === "basicShapeFace" || formType === "softwaveOscFace" || formType === "sinCosFace" || formType === "clockFace" || formType === "pulseExplosionFace";
   if (!popover || !shape) {
     return;
   }
@@ -2308,6 +2319,8 @@ function syncNodeGraphHslLampWidgets(popover = document.getElementById("nodeTrac
       : {};
     const look = formType === "clockFace" && typeof normalizeNodeGraphClockFaceSettings === "function"
       ? normalizeNodeGraphClockFaceSettings(current)
+      : formType === "pulseExplosionFace" && typeof normalizeNodeGraphPulseExplosionFaceSettings === "function"
+      ? normalizeNodeGraphPulseExplosionFaceSettings(current)
       : (typeof normalizeNodeGraphRoundShapeFaceSettings === "function"
         ? normalizeNodeGraphRoundShapeFaceSettings(current)
         : current);
