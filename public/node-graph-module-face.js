@@ -626,7 +626,6 @@ function nodeGraphModuleFaceDrawGl(batch, el, w, ox, oy, z) {
       const a = Math.min(tl, th);
       const b = Math.max(tl, th);
       rect(wd.x + a * wd.w, wd.y + 1, (b - a) * wd.w, wd.h - 1, ink.bandSpan);
-      for (const t of [tl, th]) rect(wd.x + t * wd.w - 1, wd.y + 4, 3, wd.h - 8, ink.bandHandle);
       const loText = nodeGraphModuleFaceValueText(lo);
       const hiText = nodeGraphModuleFaceValueText(hi);
       nodeGraphModuleFaceText(batch, loText, ox + (wd.x + 6) * z, oy + cy * z, 12 * z, ink.bandText, { align: "left" });
@@ -637,6 +636,20 @@ function nodeGraphModuleFaceDrawGl(batch, el, w, ox, oy, z) {
       const room = wd.w - 12 - measure(loText, 12) - measure(hiText, 12) - 10;
       const labelPx = Math.min(12.6, 12.6 * Math.max(0, room) / Math.max(1, measure(wd.label, 12.6)));
       nodeGraphModuleFaceText(batch, wd.label, ox + cx * z, oy + cy * z, labelPx * z, ink.label);
+      // Handles break around the label so it never draws through one.
+      const labelHalfW = measure(wd.label, labelPx) * 0.5 + 3;
+      const gapHalf = labelPx * 0.6;
+      for (const t of [tl, th]) {
+        const hx = wd.x + t * wd.w - 1;
+        const top = wd.y + 4;
+        const bottom = wd.y + wd.h - 4;
+        if (hx + 3 > cx - labelHalfW && hx < cx + labelHalfW) {
+          rect(hx, top, 3, Math.max(0, cy - gapHalf - top), ink.bandHandle);
+          rect(hx, cy + gapHalf, 3, Math.max(0, bottom - cy - gapHalf), ink.bandHandle);
+        } else {
+          rect(hx, top, 3, bottom - top, ink.bandHandle);
+        }
+      }
     } else if (wd.type === "seedNumber" && typeof nodeGraphGlGraphDrawSeedWidget === "function") {
       // The app-wide seed widget ([code][die][+][-]); its buttons are this row's seedButton cells.
       const bw = (w - wd.w) / 3;
