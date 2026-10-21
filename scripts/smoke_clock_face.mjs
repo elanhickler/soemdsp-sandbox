@@ -63,7 +63,7 @@ const gp = polys[0]?.pts || [];
 gate(polys.length === 1 && gp[0] === gp[gp.length - 2] && gp[1] === gp[gp.length - 1], "gate is one closed rectangle (bottom stroke present)");
 const ys = gp.filter((_, i) => i % 2 === 1);
 const top = Math.min(...ys); const bot = Math.max(...ys);
-gate(Math.abs(top - (80 - bot)) < 1e-9, `vertical margins equal at Amp 0.5 (${top.toFixed(2)} / ${(80 - bot).toFixed(2)})`);
+gate(Math.abs(top - (80 - bot)) < 1e-9 && Math.abs(top - (80 * 0.16 + 1.5)) < 1e-9, `vertical margins equal, Amp 0.5 does not shrink the gate (${top.toFixed(2)} / ${(80 - bot).toFixed(2)})`);
 gate(polys[0].rgba === look.strokePaint && polys[0].half === 1.5, "gate stroke = Pulse HBS, half of Line thickness");
 const head = segs[segs.length - 1];
 gate(head.half === polys[0].half && head.rgba === look.dotPaint && head.y0 === top && head.y1 === bot, "playhead = Playhead HBS, same thickness and height as the gate");
@@ -132,7 +132,10 @@ gate(Math.abs((hBot - hTop + 2) - 40) < 1e-9 && Math.abs(hTop - (80 - hBot)) < 1
 const ph = segs[segs.length - 1];
 gate(ph.y0 === hTop && ph.y1 === hBot && rects.every((r) => r.y === hTop && Math.abs(r.y + r.h - hBot) < 1e-9), "playhead + fill follow Height");
 Object.assign(node.traceDisplaySettings, { gateHeight: 68 });
-draw({}, 0.3);
+draw({ amplitude: 0.061 }, 0.3);
+const ay = polys[0].pts.filter((_, i) => i % 2 === 1);
+gate(Math.abs(Math.min(...ay) - (80 * 0.16 + 1)) < 1e-9, "Amp 0.061 (Argi's runaway triggers patch) keeps the full Height");
+draw({ amplitude: 1 }, 0.3);
 const oy = polys[0].pts.filter((_, i) => i % 2 === 1);
 gate(Math.abs(Math.min(...oy) - (80 * 0.16 + 1)) < 1e-9, "Height 68 % matches the old 0.16 h + half-stroke margin");
 

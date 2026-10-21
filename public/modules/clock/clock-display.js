@@ -110,13 +110,14 @@ function nodeGraphClockFacePhase(section, node) {
 /**
  * Gate geometry in face px: x0..x1 the cycle, xs/xe the gate ends, high/low
  * the gate top and bottom with equal margins above and below. heightPct is
- * the share of the face height the gate spans at Amp 1 (stroke included).
+ * the share of the face height the gate spans (stroke included). Amp is the
+ * output level, not a face size: a quiet clock still fills its display.
  */
-function nodeGraphClockFaceGeometry(w, h, pulseStart, pulseEnd, amp, stroke, heightPct) {
+function nodeGraphClockFaceGeometry(w, h, pulseStart, pulseEnd, stroke, heightPct) {
   const padX = Math.max(6, w * 0.06) + stroke * 0.5;
   const x0 = padX;
   const x1 = w - padX;
-  const half = Math.max(0, h * heightPct / 200 - stroke * 0.5) * amp;
+  const half = Math.max(0, h * heightPct / 200 - stroke * 0.5);
   const at = (v) => x0 + (x1 - x0) * v;
   return { x0, x1, xs: at(pulseStart), xe: at(pulseEnd), high: h * 0.5 - half, low: h * 0.5 + half, at };
 }
@@ -181,10 +182,9 @@ function drawNodeGraphClockFace(section) {
     return;
   }
   const fine = 1 / Math.max(1, pixelRatio);
-  const amp = clamp01(nodeGraphClockFaceParam(node, "amplitude", 1));
   const stroke = look.lineThickness;
   const halfPx = stroke * 0.5;
-  const g = nodeGraphClockFaceGeometry(w, h, pulseStart, pulseEnd, amp, stroke, look.gateHeight);
+  const g = nodeGraphClockFaceGeometry(w, h, pulseStart, pulseEnd, stroke, look.gateHeight);
   const { x0, x1, xs, xe, high, low } = g;
   const fill = rgba(look.fillPaint);
   for (const [a, b] of nodeGraphClockFaceFillSpans(g, pulseStart, pulseEnd, phase, endless)) {

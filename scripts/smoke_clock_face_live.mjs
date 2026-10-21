@@ -11,7 +11,7 @@ const swap = (v) => (v === "dsfOscillator-1" ? "clock-1" : v);
 const walk = (o) => {
   if (Array.isArray(o)) return o.map(walk);
   if (o && typeof o === "object") {
-    if (o.id === "dsfOscillator-1") return { ...o, id: "clock-1", type: "clock", params: { rate: "1", phase: "0", pulseStart: "0.1", pulseEnd: "0.6", amplitude: "1" }, paramMeta: {}, traceDisplaySettings: {} };
+    if (o.id === "dsfOscillator-1") return { ...o, id: "clock-1", type: "clock", params: { rate: "1", phase: "0", pulseStart: "0.1", pulseEnd: "0.6", amplitude: "0.061" }, paramMeta: {}, traceDisplaySettings: {} };
     return Object.fromEntries(Object.entries(o).map(([k, v]) => [swap(k), walk(v)]));
   }
   return swap(o);
@@ -42,6 +42,19 @@ async function stats(id) {
     return { drawn: 1 - Math.max(...counts.values()) / n, mean: mean.map((v) => Math.round(v / n)) };
   }, b64);
 }
+// Rendered gate height: pulse-blue rows span Height (68 %) of the face, even at Amp 0.061.
+const span = await (async () => {
+  const r = await page.evaluate(() => { const f = document.querySelector('article[data-node="clock-1"] .node-clock-face'); const bb = f.getBoundingClientRect(); return { x: bb.left, y: bb.top, width: bb.width, height: bb.height }; });
+  const b64 = (await page.screenshot({ clip: r })).toString("base64");
+  return page.evaluate(async (b64) => {
+    const bmp = await createImageBitmap(await (await fetch(`data:image/png;base64,${b64}`)).blob());
+    const c = new OffscreenCanvas(bmp.width, bmp.height); const g = c.getContext("2d"); g.drawImage(bmp, 0, 0);
+    const d = g.getImageData(0, 0, bmp.width, bmp.height).data; let top = -1; let bot = -1;
+    for (let y = 0; y < bmp.height; y += 1) for (let x = 0; x < bmp.width; x += 1) { const i = (y * bmp.width + x) * 4; if (d[i + 2] > 150 && d[i] < 120) { if (top < 0) top = y; bot = y; } }
+    return { frac: (bot - top + 1) / bmp.height, top, bot, h: bmp.height };
+  }, b64);
+})();
+check(span.frac > 0.6 && span.frac < 0.76 && Math.abs(span.top - (span.h - 1 - span.bot)) <= 2, "rendered gate spans ~68 % of the face, centred, at Amp 0.061", JSON.stringify(span));
 const before = await stats("clock-1");
 check(Boolean(before) && before.drawn > 0.01, "clock face draws more than its background", JSON.stringify(before));
 await page.evaluate(() => openNodeGraphTraceDisplaySettings("clock-1", {}));
