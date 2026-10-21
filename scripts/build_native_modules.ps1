@@ -809,6 +809,11 @@ if ($node) {
   if ($LASTEXITCODE -ne 0) {
     throw "Combined build: drum Recalculate On Trigger smoke FAILED"
   }
+  # PolyBLEP Cycle: Free run unchanged, Single trigger plays one cycle per Reset.
+  & $node.Source "$root\scripts\smoke_graph_polyblep_single.mjs"
+  if ($LASTEXITCODE -ne 0) {
+    throw "Combined build: polyBlep Single trigger smoke FAILED"
+  }
   # Resonant Compressor: Gain == Resonant Envelope SC (max diff 0), drums get quieter.
   & $node.Source "$root\scripts\smoke_graph_resonant_compressor.mjs"
   if ($LASTEXITCODE -ne 0) {

@@ -4825,6 +4825,8 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
       push("amplitude", P.NATIVE_GRAPH_PARAM_AMPLITUDE, cont("amplitude", 1));
       push("morph", P.NATIVE_GRAPH_PARAM_SHAPE, cont("morph", 0.5));
       push("phase", P.NATIVE_GRAPH_PARAM_PHASE, cont("phase", 0));
+      // Cycle: 0 Free run / 1 Single trigger (one cycle per Reset hit), timingMode slot.
+      push("cycleMode", P.NATIVE_GRAPH_PARAM_TIMING_MODE, disc("cycleMode", 0));
       continue;
     }
     if (type === "ladderFilter") {

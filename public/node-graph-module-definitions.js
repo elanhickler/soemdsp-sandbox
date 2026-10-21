@@ -1062,6 +1062,20 @@ const nodeGraphModuleDefinitions = (
         tooltip:
           "Output level. Slider 0…1 = full-scale bipolar wave. Post-MOD stays in min…max (Gate+Toggle cannot boost past Amp max)."
       },
+      {
+        choices: ["Free run", "Single trigger"],
+        defaultValue: "0",
+        displayChoices: true,
+        divideChoicesVisibly: true,
+        key: "cycleMode",
+        label: "Cycle",
+        linearSmoothing: false,
+        smoothingType: "none",
+        max: "1",
+        mid: "0",
+        min: "0",
+        nonlinearSlider: false,
+        step: "1" },
     ]
   },
   blit: {
