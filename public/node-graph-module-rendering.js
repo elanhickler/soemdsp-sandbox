@@ -138,25 +138,8 @@ function attachNodeGraphNodeEvents(node) {
     node.addEventListener("pointerdown", beginNodeGraphNodeDrag);
   }
   node.addEventListener("lostpointercapture", endNodeGraphNodeDrag);
-  for (const port of node.querySelectorAll(".node-port")) {
-    if (port.closest(".node-io-row")) {
-      continue;
-    }
-    port.addEventListener("pointerdown", nodeGraphWireInteractions.handlePortPointerDown);
-    port.addEventListener("click", nodeGraphWireInteractions.handlePortClick);
-  }
-  for (const port of node.querySelectorAll(".node-param-port.modulation-input")) {
-    port.addEventListener("pointerdown", nodeGraphWireInteractions.handlePortPointerDown);
-    port.addEventListener("click", nodeGraphWireInteractions.handlePortClick);
-  }
-  for (const port of node.querySelectorAll(".node-param-port.graph-input")) {
-    port.addEventListener("pointerdown", nodeGraphWireInteractions.handlePortPointerDown);
-    port.addEventListener("click", nodeGraphWireInteractions.handlePortClick);
-  }
-  for (const row of node.querySelectorAll(".node-io-row")) {
-    row.addEventListener("pointerdown", nodeGraphWireInteractions.handlePortPointerDown);
-    row.addEventListener("click", nodeGraphWireInteractions.handlePortClick);
-  }
+  // Jacks have no DOM listeners: the GL graph's hit test is the one path for
+  // every inlet/outlet (nodeGraphGlHitPointerDown / nodeGraphGlHitPointerUp).
   for (const slider of node.querySelectorAll('input[type="range"]')) {
     createNodeSliderReadout(slider);
     slider.addEventListener("input", () => {

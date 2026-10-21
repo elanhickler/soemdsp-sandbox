@@ -2386,6 +2386,16 @@ function nodeGraphGlHitContextMenu(event) {
 
 function nodeGraphGlHitPointerUp(event) {
   if (event.button !== 0) return;
+  if (event.ctrlKey || event.metaKey) {
+    // Ctrl/Cmd+click on a jack toggles its module's selection (handlePortClick).
+    const point = nodeGraphGlHitPoint(event);
+    const hit = point ? nodeGraphGlHitTest(point.x, point.y) : null;
+    const port = hit?.kind === "jack" ? nodeGraphGlHitJackElement(hit.jack) : null;
+    if (port && typeof nodeGraphWireInteractions?.handlePortClick === "function") {
+      nodeGraphWireInteractions.handlePortClick(nodeGraphGlHitRetarget(event, port));
+    }
+    return;
+  }
   const drag = nodeGraphMvp?.wireDragging;
   if (!drag || drag.active) return;
   const hitbox = drag.element;
