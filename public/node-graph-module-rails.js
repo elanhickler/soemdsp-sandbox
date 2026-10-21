@@ -168,9 +168,9 @@ function nodeGraphCanvasDisplayBox(tileW, tileH, aspect = 0) {
 
 // ---- Rail drawing (WebGL only; the rail DOM is hit/geometry, never painted) ----
 // soundemote-dev Spawn IO (experiments/wiring): each rail is a #080a0e gutter
-// with a #3d4555 1px border on its outer, top and bottom sides. Each patched
-// param gets one inlet box filling its whole rail slot (no padding): #111 fill,
-// 1px #889 stroke, short label centred in #dde. Wires end at the rail's outer
+// with one full-height #3d4555 1px separator on its slider side. Each patched
+// param gets one inlet box the full rail width (no padding) and 16 px tall (the
+// label height), centred on its row: #111 fill, 1px #889 stroke, #dde label. Wires end at the rail's outer
 // edge with no end dot; there are no jack half circles on rail params.
 const NodeGraphRailInk = Object.freeze({
   gutter: "#080a0e",
@@ -180,6 +180,7 @@ const NodeGraphRailInk = Object.freeze({
   text: "#dde",
 });
 const NODE_GRAPH_RAIL_FONT_PX = 9;
+const NODE_GRAPH_RAIL_INLET_H_PX = 16;
 
 const nodeGraphRailRgbaCache = new Map();
 function nodeGraphRailRgba(css) {
@@ -229,17 +230,17 @@ function nodeGraphModuleRailsDrawGl(batch, plates, toX, toY, zoom, cssW, cssH) {
     const tags = [];
     batch._over = true;
     rect(x0, y0, rw, h, NodeGraphRailInk.gutter);
-    frame(x0, y0, rw, h, t, NodeGraphRailInk.gutterEdge, { top: true, bottom: true, left: true });
+    rect(x0 + rw - t, y0, t, h, NodeGraphRailInk.gutterEdge);
     rect(x0 + w - rw, y0, rw, h, NodeGraphRailInk.gutter);
-    frame(x0 + w - rw, y0, rw, h, t, NodeGraphRailInk.gutterEdge, { top: true, bottom: true, right: true });
+    rect(x0 + w - rw, y0, t, h, NodeGraphRailInk.gutterEdge);
     for (const port of body.querySelectorAll(".node-param-port.rail-patched")) {
       if (!port.offsetParent) continue;
       const box = nodeGraphModuleLayoutBox(port, el);
       if (!box || !(box.w > 1)) continue;
       const bx = toX(plates[i].x + box.x);
-      const by = toY(plates[i].y + box.y);
       const bw = box.w * zoom;
-      const bh = box.h * zoom;
+      const bh = Math.min(box.h, NODE_GRAPH_RAIL_INLET_H_PX) * zoom;
+      const by = toY(plates[i].y + box.y) + (box.h * zoom - bh) / 2;
       rect(bx, by, bw, bh, NodeGraphRailInk.inletFill);
       frame(bx, by, bw, bh, t, NodeGraphRailInk.inletStroke, all);
       tags.push({ text: port.dataset.railLabel || "", x: bx + bw / 2, y: by + bh / 2, w: bw - 2 * t });
