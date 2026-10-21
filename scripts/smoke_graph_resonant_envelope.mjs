@@ -6,7 +6,7 @@ import { fileURLToPath } from "url";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const wasmPath = path.join(root, "native_modules", "combined", "soemdsp_combined.wasm");
-const { instance } = await WebAssembly.instantiate(fs.readFileSync(wasmPath), {});
+const { instance } = await WebAssembly.instantiate(fs.readFileSync(wasmPath), { env: { emo_process_block: () => 0 } });
 const e = instance.exports;
 
 function must(name) {
@@ -42,6 +42,10 @@ function run(opts, n) {
       opts.range ?? 0,
       opts.recalc ?? 1,
       SR,
+      0, 0, 0,
+      opts.detect ?? 0,
+      0, 0, 0,
+      opts.hold ?? 0,
     ));
   }
   const wasIdle = idle(h) | 0;
@@ -92,4 +96,14 @@ function energyAfter(hz) {
 const e440 = energyAfter(440);
 const e880 = energyAfter(880);
 if (!(e880 < e440 * 0.85)) throw new Error(`tracking 880 not faster (${e880} vs ${e440})`);
+// Hold = Follows detect: a long flat gate falls after its first sample for Shared / Rise / Abs rise.
+for (const detect of [0, 4, 5]) {
+  const hn = Math.round(0.5 * SR);
+  const gHold = (i) => (i >= 10 && i < 10 + hn ? 1 : 0);
+  const a = run({ gate: gHold, detect, hold: 0 }, hn + 20).ys[hn];
+  const b = run({ gate: gHold, detect, hold: 1 }, hn + 20).ys[hn];
+  if (!(a > 0.9)) throw new Error(`hold 0 detect ${detect} should stay high (${a})`);
+  if (!(b < 0.01)) throw new Error(`hold 1 detect ${detect} should fall (${b})`);
+}
+console.log("ok resonant hold follows detect");
 console.log(`ok resonant tracking 440=${e440.toExponential(2)} 880=${e880.toExponential(2)} version=${ver}`);

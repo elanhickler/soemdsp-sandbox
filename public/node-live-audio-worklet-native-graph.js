@@ -5874,6 +5874,7 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
       push("velocityMode", P.NATIVE_GRAPH_PARAM_DIFFUSION_SIZE, disc("velocityMode", 0));
       push("followSource", P.NATIVE_GRAPH_PARAM_DIFFUSION_AMOUNT, disc("followSource", 0));
       push("followDetect", P.NATIVE_GRAPH_PARAM_LFO_VARIATION, disc("followDetect", 0));
+      push("holdMode", P.NATIVE_GRAPH_PARAM_LFO_AMPLITUDE, disc("holdMode", 0));
       continue;
     }
     if (type === "rmsMeter") {

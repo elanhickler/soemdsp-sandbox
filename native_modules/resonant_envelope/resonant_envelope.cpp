@@ -289,7 +289,8 @@ extern "C" double soemdsp_resonant_envelope_sample(
   double triggerDetect,
   double velocityMode,
   double followSource,
-  double followDetect
+  double followDetect,
+  double holdMode
 ) {
   if (handle < 1 || handle > kMaxInstances || !gPool[handle - 1].active) return 0.0;
   State& s = gPool[handle - 1];
@@ -358,6 +359,9 @@ extern "C" double soemdsp_resonant_envelope_sample(
     return y;
   }
   bool high = det == 3 ? ax >= 1e-7 : gate_on(gate);
+  // Hold 1 (Follows detect): Shared / Rise / Abs rise hold only on samples where
+  // their detect condition is true, so a flat gate decays after its first sample.
+  if (choice_of(holdMode, 1) == 1 && (det == 0 || det == 4 || det == 5)) high = rising;
   if (sawDetect) {
     if (rising) {
       double holdSec = safe(attackSec);
@@ -467,7 +471,7 @@ extern "C" double soemdsp_resonant_envelope_sample(
 }
 
 extern "C" int soemdsp_resonant_envelope_version() {
-  return 6; // 6: Trigger Detect 6 local modes, Velocity, Follow Source, Follow Detect  // 5: Mode (Envelope / Filter) + Trigger detect (Cross 0 / Saw reset). 4: SC (sidechain duck) out. 3: shared gate_hit is x > 0 again; Follow = rising-sample step latch. 2: Follow input (envelope follower). 1: initial
+  return 7; // 7: Hold (0 Input above 0 / 1 Follows detect). 6: Trigger Detect 6 local modes, Velocity, Follow Source, Follow Detect  // 5: Mode (Envelope / Filter) + Trigger detect (Cross 0 / Saw reset). 4: SC (sidechain duck) out. 3: shared gate_hit is x > 0 again; Follow = rising-sample step latch. 2: Follow input (envelope follower). 1: initial
 }
 
 extern "C" const char* soemdsp_resonant_envelope_metadata_json() {
