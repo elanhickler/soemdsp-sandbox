@@ -46,12 +46,6 @@
   function characterPlace(e) {
     return Math.max(0, 3 - modifierCount(e));
   }
-  function dragStep(_value, e) {
-    let step = 1;
-    const mods = (e.shiftKey ? 1 : 0) + (e.ctrlKey ? 1 : 0) + (e.altKey ? 1 : 0);
-    step = Math.floor(step / Math.pow(2, mods));
-    return Math.max(1, step);
-  }
   function wrap(v, min, max) {
     const span = max - min + 1;
     return min + ((((v - min) % span) + span) % span);
@@ -203,7 +197,7 @@
     while (Math.abs(drag.acc) >= PX_PER_STEP) {
       const dir = drag.acc > 0 ? 1 : -1;
       drag.acc -= dir * PX_PER_STEP;
-      const nv = clamp(v + dir * dragStep(v, e), min, max);
+      const nv = clamp(v + dir, min, max);
       if (nv !== v) { v = nv; changed = true; }
     }
     if (changed) {
