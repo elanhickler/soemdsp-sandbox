@@ -604,7 +604,7 @@ static void process_one(PingPongDelayState& s, double inputL, double inputR) {
   const double effectR = dryR;
   const double safeFeedback = safe(s.liveFeedback);
   const double safeMix = clamp(safe(s.liveMix), 0.0, 1.0);
-  const double safeAmp = clamp(safe(s.liveAmplitude), 0.0, 2.0);
+  const double safeAmp = safe(s.liveAmplitude);  // Amplitude range governs (APP_POLICY: no hidden clamp)
   // Modulation of the tempo base (same idea as Delay's time + mod).
   const double offsetSec = safe(s.liveOffsetMs) / 1000.0;
   // Amp = milliseconds of delay modulation (never treat as Hz).
@@ -923,5 +923,5 @@ extern "C" int soemdsp_ping_pong_delay_memory_generation() {
 }
 
 extern "C" int soemdsp_ping_pong_delay_version() {
-  return 20; // 20: separate HPF / LPF Poles (set_poles(h, l)). 19: Poles 1..4 feedback filter (set_poles; 1 = original). 18: Mode: Off / Left Right / Left Middle Right
+  return 21; // 21: Amplitude no longer clamped to 0..2 (param range governs). 20: 20: separate HPF / LPF Poles (set_poles(h, l)). 19: Poles 1..4 feedback filter (set_poles; 1 = original). 18: Mode: Off / Left Right / Left Middle Right
 }
