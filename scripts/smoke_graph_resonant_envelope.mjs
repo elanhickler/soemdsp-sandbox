@@ -1,4 +1,5 @@
 // Resonant Envelope (type 221). Fit step settles near Amplitude.
+// Resonant Follower (type 229): Rise target follows a rising ramp and falls to 0 after it.
 // Impulse 1 peaks near Amplitude. Tracking 1 at 880 Hz decays faster than 440.
 import fs from "fs";
 import path from "path";
@@ -42,9 +43,9 @@ function run(opts, n) {
       opts.range ?? 0,
       opts.recalc ?? 1,
       SR,
-      0, 0, 0,
+      0,
       opts.detect ?? 0,
-      0, 0, 0,
+      0,
       opts.hold ?? 0,
     ));
   }
@@ -107,3 +108,28 @@ for (const detect of [0, 4, 5]) {
 }
 console.log("ok resonant hold follows detect");
 console.log(`ok resonant tracking 440=${e440.toExponential(2)} 880=${e880.toExponential(2)} version=${ver}`);
+
+// Resonant Follower (229): split from Resonant Envelope's Follow jack.
+{
+  const fc = must("soemdsp_resonant_follower_create");
+  const fd = must("soemdsp_resonant_follower_destroy");
+  const fs_ = must("soemdsp_resonant_follower_sample");
+  const fi = must("soemdsp_resonant_follower_is_idle");
+  if (ver < 211) throw new Error(`graph version ${ver} < 211 (Resonant Follower)`);
+  const h = fc() | 0;
+  if (!(h > 0)) throw new Error("follower create");
+  const up = Math.round(0.2 * SR);
+  const total = Math.round(6 * SR);
+  let atTop = 0;
+  let last = 0;
+  for (let i = 0; i < total; i++) {
+    const x = i < up ? i / up : 0;
+    last = fs_(h, x, 440, 0.01, 0.3, 0, 0, 1, 0, SR, 0, 0);
+    if (i === up - 1) atTop = last;
+  }
+  if (!(atTop > 0.9)) throw new Error(`follower should track the ramp (${atTop})`);
+  if (!(last < 1e-3)) throw new Error(`follower should fall after the ramp (${last})`);
+  if (!(fi(h) | 0)) throw new Error("follower should be idle");
+  fd(h);
+  console.log(`ok resonant follower top ${atTop.toFixed(4)} tail ${last.toExponential(2)}`);
+}

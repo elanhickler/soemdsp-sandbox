@@ -159,6 +159,7 @@ NodeLiveAudioProcessor.NATIVE_GRAPH_TYPE_IDS = Object.freeze({
   linearAttackRelease: 164,
   pingEnvelope: 165,
   resonantEnvelope: 221,
+  resonantFollower: 229,
   powerDecay: 204,
   exponentialSkew: 208,
   hyperbolicDecay: 209,
@@ -712,7 +713,7 @@ NodeLiveAudioProcessor.prototype.mapNativeGraphSrcPortId = function mapNativeGra
     if (p === "out2") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_RIGHT;
   }
   // Resonant Envelope SC (sidechain duck) on the Saw slot.
-  if (t === "resonantEnvelope" && p === "sc") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_SAW;
+  if ((t === "resonantEnvelope" || t === "resonantFollower") && p === "sc") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_SAW;
   // RMS Meter: RMS on Mono, dB on Saw, Env Inverted on Ramp.
   if (t === "rmsMeter") {
     if (p === "rms" || p === "rms l") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_MONO;
@@ -1235,8 +1236,8 @@ NodeLiveAudioProcessor.prototype.mapNativeGraphDstPortId = function mapNativeGra
     if (p === "envelope" || p === "env") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_SQUARE;
     if (p === "sidechain" || p === "sc" || p === "key") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_MORPH;
   }
-  // Resonant Envelope Follow: envelope-follower input on the Morph live bus.
-  if (tDst === "resonantEnvelope" && p === "follow") {
+  // Resonant Follower In (old Resonant Envelope Follow jack): Morph live bus.
+  if (tDst === "resonantFollower" && (p === "in" || p === "follow")) {
     return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_MORPH;
   }
   // RMS Meter: L (jack id In) on Mono, R on Right (R wired = stereo).
@@ -5872,11 +5873,31 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
       // waveform=Mode (0 Envelope / 1 Filter), lfoStyle=Trigger detect (0 Cross 0 / 1 Saw reset).
       push("mode", P.NATIVE_GRAPH_PARAM_WAVEFORM, disc("mode", 0));
       push("triggerDetect", P.NATIVE_GRAPH_PARAM_LFO_STYLE, disc("triggerDetect", 0));
-      // Experiment switches: Velocity (diffusionSize), Follow Source (diffusionAmount), Follow Detect (lfoVariation).
+      // Experiment switches: Velocity (diffusionSize), Hold (lfoAmplitude). Follow moved to resonantFollower.
       push("velocityMode", P.NATIVE_GRAPH_PARAM_DIFFUSION_SIZE, disc("velocityMode", 0));
+      push("holdMode", P.NATIVE_GRAPH_PARAM_LFO_AMPLITUDE, disc("holdMode", 0));
+      continue;
+    }
+    if (type === "resonantFollower") {
+      // Same slots as Resonant Envelope: timeDen=attack, width=decay, resonance,
+      // mix=tracking, mode=output range (0 Fit / 1 Raw), frequency,
+      // diffusionAmount=Follow Source, lfoVariation=Follow Detect.
+      let rangeId = disc("outputRange", 0);
+      const rawRange = node?.params?.outputRange;
+      if (typeof rawRange === "string") {
+        const s = rawRange.trim().toLowerCase();
+        if (s === "raw") rangeId = 1;
+        else if (s === "fit") rangeId = 0;
+      }
+      push("attack", P.NATIVE_GRAPH_PARAM_TIME_DENOMINATOR, cont("attack", 0.01));
+      push("decay", P.NATIVE_GRAPH_PARAM_WIDTH, cont("decay", 0.3));
+      push("resonance", P.NATIVE_GRAPH_PARAM_RESONANCE, cont("resonance", 0));
+      push("tracking", P.NATIVE_GRAPH_PARAM_MIX, cont("tracking", 0));
+      push("frequency", P.NATIVE_GRAPH_PARAM_FREQUENCY, cont("frequency", 440));
+      push("amplitude", P.NATIVE_GRAPH_PARAM_AMPLITUDE, cont("amplitude", 1));
+      push("outputRange", P.NATIVE_GRAPH_PARAM_MODE, rangeId);
       push("followSource", P.NATIVE_GRAPH_PARAM_DIFFUSION_AMOUNT, disc("followSource", 0));
       push("followDetect", P.NATIVE_GRAPH_PARAM_LFO_VARIATION, disc("followDetect", 0));
-      push("holdMode", P.NATIVE_GRAPH_PARAM_LFO_AMPLITUDE, disc("holdMode", 0));
       continue;
     }
     if (type === "rmsMeter") {
@@ -9296,7 +9317,7 @@ NodeLiveAudioProcessor.prototype.nativeGraphPortNames = function nativeGraphPort
     return ["Right"];
   }
   if (portId === P.NATIVE_GRAPH_PORT_SAW) {
-    if (type === "resonantEnvelope") return ["SC"];
+    if (type === "resonantEnvelope" || type === "resonantFollower") return ["SC"];
     if (type === "rmsMeter") return ["dB"];
     if (type === "acidSequencer") return ["f", "\u0192"];
     if (type === "pitchQuantizer") return ["f", "\u0192"];

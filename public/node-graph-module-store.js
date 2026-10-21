@@ -2425,6 +2425,23 @@ const nodeGraphModuleStoreCatalog = Object.freeze({
       "native",
     ],
   },
+  resonantFollower: {
+    category: "envelope",
+    description: "Resonant Follower: the In signal sets the target of a two-pole envelope. Follow Source picks raw or rectified input, Follow Detect picks rise target or plain smooth. Attack while rising, Decay while falling, Resonance adds bounce.",
+    label: "Resonant Follower",
+    notes: [
+      "follower",
+      "envelope follower",
+      "In",
+      "ƒ",
+      "Attack",
+      "Decay",
+      "Resonance",
+      "Tracking",
+      "Output Range",
+      "native",
+    ],
+  },
   pingEnvelope: {
     category: "envelope",
     description: "Ping Envelope: inertial rise toward Trigger. Model Short/Long feedback sets. Recalc On Trig latches knobs on rise.",

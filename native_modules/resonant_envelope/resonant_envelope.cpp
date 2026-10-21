@@ -11,13 +11,9 @@
 // on = x > 0; hit = first sample > 0 after <= 0; Peak = input height latched on the hit. Output Range Fit scales the peak to Amplitude
 // and clips below 0. Raw is the filter output.
 //
-// Follow (optional jack): smooth "every rising sample triggers". Each sample
-// where Follow rises (x > previous and x > 0) re-latches the step target to x;
-// x <= 0 drops the target to 0; otherwise the target holds. Target * Amplitude
-// is the SVF step drive only (no ping / Impulse). Attack timing while the
-// target is above the filter output, Decay timing while below.
-// If Trigger and Follow are both wired their drives add (one SVF, one sum).
-// Follow unwired (followWired < 0.5 or NaN from old callers) = old behaviour.
+// Follow (v8): moved to its own module, Resonant Follower
+// (native_modules/resonant_follower). This module is the Trigger path only;
+// its output is bit-identical to v7 with Follow unwired.
 //
 // SC out (soemdsp_resonant_envelope_sc): clamp(1 - Out / Amplitude, 0, 1),
 // Out after the Output Range stage; Amplitude 0 -> 1. Ducking / volume pump.
@@ -46,10 +42,6 @@
 // Velocity: 0 As detected / 1 Fixed 1 / 2 Peak until re-arm (Cross 0 and
 //   Leave silence only: the held level climbs to the peak while the gate
 //   stays up; other detects behave as As detected).
-// Follow Source: 0 Raw (default) / 1 Rectified |x|.
-// Follow Detect: 0 Rise target (default: a rise re-latches target = level,
-//   x <= 0 drops it to 0) / 1 Plain smooth (target = level every sample,
-//   Attack while above the output, Decay while below: the classic follower).
 
 #include <soemdsp/soemdsp.hpp>
 #include <soemdsp/filter/tpt_svf.h>
@@ -74,7 +66,6 @@ struct State {
   double lastGate;
   double velocity;
   double lastY;
-  double lastFollow;
   double lastIn;
   double lastDet;
   double sawHold;
@@ -83,7 +74,6 @@ struct State {
   double fAmp;
   bool fHasShot;
   double scOut;
-  double followTarget;
   double shotAttack;
   double shotDecay;
   double shotResonance;
@@ -226,7 +216,6 @@ extern "C" int soemdsp_resonant_envelope_create() {
       s.lastGate = 0.0;
       s.velocity = 1.0;
       s.lastY = 0.0;
-      s.lastFollow = 0.0;
       s.lastIn = 0.0;
       s.lastDet = 0.0;
       s.sawHold = 0.0;
@@ -235,7 +224,6 @@ extern "C" int soemdsp_resonant_envelope_create() {
       s.fAmp = 1.0;
       s.fHasShot = false;
       s.scOut = 1.0;
-      s.followTarget = 0.0;
       s.shotAttack = 0.01;
       s.shotDecay = 0.3;
       s.shotResonance = 0.0;
@@ -283,13 +271,9 @@ extern "C" double soemdsp_resonant_envelope_sample(
   double outputRange,
   double recalculateOnTrigger,
   double sampleRate,
-  double follow,
-  double followWired,
   double mode,
   double triggerDetect,
   double velocityMode,
-  double followSource,
-  double followDetect,
   double holdMode
 ) {
   if (handle < 1 || handle > kMaxInstances || !gPool[handle - 1].active) return 0.0;
@@ -348,8 +332,6 @@ extern "C" double soemdsp_resonant_envelope_sample(
       y = 0.0;
     }
     s.lastY = y;
-    s.followTarget = 0.0;
-    s.lastFollow = 0.0;
     s.idle = dsp_fabs(y) < 1e-5 && dsp_fabs(s.filt.z1) < 1e-5 && dsp_fabs(s.filt.z2) < 1e-5
       && dsp_fabs(gate) < 1e-5;
     double sc = 1.0;
@@ -407,18 +389,8 @@ extern "C" double soemdsp_resonant_envelope_sample(
     if (scale < kTrackMin) scale = kTrackMin;
     if (scale > kTrackMax) scale = kTrackMax;
   }
-  const bool hasFollow = safe(followWired) >= 0.5;
-  double fx = hasFollow ? safe(follow) : 0.0;
-  if (!(fx * 0.0 == 0.0)) fx = 0.0;
-  if (choice_of(followSource, 1) == 1) fx = dsp_fabs(fx);
-  if (choice_of(followDetect, 1) == 1) s.followTarget = fx;  // plain smooth
-  else if (!(fx > 0.0)) s.followTarget = 0.0;
-  else if (fx > s.lastFollow) s.followTarget = fx;  // every rising sample re-strikes the step
-  s.lastFollow = fx;
-  const double fol = s.followTarget;
-  const double folDrive = fol * amp;
-  // Attack while gated, or while the Follow target is above the filter output.
-  const bool attackPhase = high || (hasFollow && folDrive > s.lastY);
+  // Attack while gated.
+  const bool attackPhase = high;
   const double tau = attackPhase ? attack : decay;
   if (!s.coeffValid
       || s.gateHigh != attackPhase
@@ -440,7 +412,7 @@ extern "C" double soemdsp_resonant_envelope_sample(
   // Step holds the velocity latched on the hit; the ping fires on the hit sample only.
   const double gateLevel = high ? s.velocity : 0.0;
   const double edge = rising ? s.velocity : 0.0;
-  const double drive = (1.0 - imp) * gateLevel * amp + imp * edge * s.kImpulse * amp + folDrive;
+  const double drive = (1.0 - imp) * gateLevel * amp + imp * edge * s.kImpulse * amp;
   if (!(s.filt.z1 * 0.0 == 0.0) || !(s.filt.z2 * 0.0 == 0.0)) tpt_svf_reset(s.filt);
   double y = tpt_svf_tick(s.filt, s.coeff, drive);
   flush_denorm(s.filt);
@@ -460,7 +432,7 @@ extern "C" double soemdsp_resonant_envelope_sample(
   const bool quiet = dsp_fabs(out) < 1e-5
     && dsp_fabs(s.filt.z1) < 1e-5
     && dsp_fabs(s.filt.z2) < 1e-5;
-  s.idle = quiet && !high && !(fol >= 1e-5);
+  s.idle = quiet && !high;
   {
     double sc = 1.0;
     if (amp != 0.0) sc = 1.0 - out / amp;
@@ -471,7 +443,7 @@ extern "C" double soemdsp_resonant_envelope_sample(
 }
 
 extern "C" int soemdsp_resonant_envelope_version() {
-  return 7; // 7: Hold (0 Input above 0 / 1 Follows detect). 6: Trigger Detect 6 local modes, Velocity, Follow Source, Follow Detect  // 5: Mode (Envelope / Filter) + Trigger detect (Cross 0 / Saw reset). 4: SC (sidechain duck) out. 3: shared gate_hit is x > 0 again; Follow = rising-sample step latch. 2: Follow input (envelope follower). 1: initial
+  return 8; // 8: Follow input / Follow Source / Follow Detect moved to Resonant Follower (Trigger path bit-identical). 7: Hold (0 Input above 0 / 1 Follows detect). 6: Trigger Detect 6 local modes, Velocity, Follow Source, Follow Detect  // 5: Mode (Envelope / Filter) + Trigger detect (Cross 0 / Saw reset). 4: SC (sidechain duck) out. 3: shared gate_hit is x > 0 again; Follow = rising-sample step latch. 2: Follow input (envelope follower). 1: initial
 }
 
 extern "C" const char* soemdsp_resonant_envelope_metadata_json() {

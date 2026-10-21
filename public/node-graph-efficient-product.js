@@ -202,6 +202,7 @@ const NODE_GRAPH_EFFICIENT_PRODUCT_AUDIO_TYPES = Object.freeze([
   "pluckEnvelope",
   "pingEnvelope",
   "resonantEnvelope",
+  "resonantFollower",
   "powerDecay",
   "rmsMeter",
   "exponentialSkew",

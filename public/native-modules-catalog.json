@@ -2306,6 +2306,24 @@
       "noticeUrl": "https://github.com/elanhickler/soemdsp-sandbox/blob/master/docs/THIRD_PARTY.md"
     },
     {
+      "name": "resonant_follower",
+      "label": "Resonant Follower",
+      "targetType": "resonantFollower",
+      "kind": "envelope",
+      "source": "native_modules/resonant_follower/resonant_follower.cpp",
+      "sourceUrl": "https://github.com/elanhickler/soemdsp-sandbox/blob/master/native_modules/resonant_follower/resonant_follower.cpp",
+      "localSourceUrl": "/native_modules/resonant_follower/resonant_follower.cpp",
+      "libUrl": "",
+      "wasm": "native_modules/resonant_follower/resonant_follower.wasm",
+      "wasmUrl": "native_modules/resonant_follower/resonant_follower.wasm",
+      "wasmAvailable": true,
+      "license": "Soundemote Noncommercial",
+      "licenseUrl": "https://github.com/elanhickler/soemdsp-sandbox/blob/master/LICENSE",
+      "upstreamLicense": "",
+      "upstreamLicenseUrl": "",
+      "noticeUrl": "https://github.com/elanhickler/soemdsp-sandbox/blob/master/docs/THIRD_PARTY.md"
+    },
+    {
       "name": "resonator_filter",
       "label": "Shaped Resonator Filter",
       "targetType": "resonatorFilter",
