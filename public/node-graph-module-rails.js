@@ -142,9 +142,12 @@ if (typeof document !== "undefined" && document.documentElement) {
   document.documentElement.style.setProperty("--node-rail-width", `${NODE_GRAPH_RAIL_WIDTH_PX}px`);
 }
 
-/** Layout 3 rail ports show the short label; Layout 1 IO band labels are unchanged. */
-function nodeGraphRailPortLabel(type, label) {
-  return nodeGraphModuleFaceLayout(type) === NodeGraphFaceLayout.railsOnly
+/** Layout 3 rail ports show the short label unless the module names that port
+ * (inputLabels / outputLabels); Layout 1 IO band labels are unchanged. */
+function nodeGraphRailPortLabel(type, label, port = "", io = "") {
+  const def = typeof nodeGraphModuleDefinitions === "object" ? nodeGraphModuleDefinitions[type] : null;
+  const named = (io === "output" ? def?.outputLabels : def?.inputLabels)?.[port];
+  return nodeGraphModuleFaceLayout(type) === NodeGraphFaceLayout.railsOnly && !named
     ? nodeGraphRailShortLabel(label)
     : label;
 }
