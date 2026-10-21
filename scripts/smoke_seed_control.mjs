@@ -85,34 +85,53 @@ const setv = (v) => page.evaluate(([s, v]) => { const sl = document.querySelecto
 const max = await page.evaluate((s) => Number(document.querySelector(s).querySelector('input[type="range"]').max), sel);
 gate(max === 16777215, `max ${max}`);
 
-await setv(0);
-await page.click(`${sel} .node-seed-btn-minus`);
-gate(await val() === max, "0 − 1 wraps to max");
-await page.click(`${sel} .node-seed-btn-plus`);
-gate(await val() === 0, "max + 1 wraps to 0");
-await page.click(`${sel} .node-seed-btn-plus`, { modifiers: ["Control"] });
-gate(await val() === 10, "Ctrl+ = 10");
-await page.click(`${sel} .node-seed-btn-plus`, { modifiers: ["Control", "Shift"] });
-gate(await val() === 110, "Ctrl+Shift+ = 100");
-await page.click(`${sel} .node-seed-btn-plus`, { modifiers: ["Control", "Shift", "Alt"] });
-gate(await val() === 1110, "Ctrl+Alt+Shift+ = 1000");
+// Buttons step one character of the 4-char code (84877a07): + / - = last
+// character, Ctrl = 3rd, Ctrl+Shift = 2nd, Ctrl+Shift+Alt = 1st; Alt alone = random.
+const code = (v) => page.evaluate((v) => window.formatNodeGraphSeedCode(v), v);
+const ALPHA = await page.evaluate(() => window.NODE_GRAPH_SEED_ALPHA);
+const shift = (c, place, dir) => { const a = c.split(""); a[place] = ALPHA[(ALPHA.indexOf(a[place]) + dir + 64) % 64]; return a.join(""); };
+const press = async (btn, modifiers, place, dir, label) => {
+  const c0 = await code(await val());
+  await page.click(`${sel} .node-seed-btn-${btn}`, { modifiers });
+  const c1 = await code(await val());
+  gate(c1 === shift(c0, place, dir), `${label}: ${c0} -> ${c1}`);
+};
+await setv(8762440);
+await press("plus", [], 3, 1, "+ steps last character");
+await press("minus", [], 3, -1, "- steps last character back");
+await press("plus", ["Control"], 2, 1, "Ctrl+ steps 3rd character");
+await press("plus", ["Control", "Shift"], 1, 1, "Ctrl+Shift+ steps 2nd character");
+await press("minus", ["Control", "Shift", "Alt"], 0, -1, "Ctrl+Shift+Alt- steps 1st character");
+// Wrap: the stepped character walks the 64-letter alphabet both ways.
+const wrapAt = (ch) => page.evaluate((ch) => { for (let n = 0; n < 1 << 24; n += 4099) if (window.formatNodeGraphSeedCode(n)[3] === ch) return n; return -1; }, ch);
+await setv(await wrapAt("_"));
+await press("plus", [], 3, 1, "+ wraps _ to A");
+await setv(await wrapAt("A"));
+await press("minus", [], 3, -1, "- wraps A to _");
+const vr = await val();
+await page.click(`${sel} .node-seed-btn-plus`, { modifiers: ["Alt"] });
+const ra = await val();
+gate(ra !== vr && ra >= 0 && ra <= max, `Alt+ is random ${ra}`);
 await page.click(`${sel} .node-seed-btn-dice`);
 const r = await val();
-gate(r !== 1110 && r >= 0 && r <= max, `dice random ${r}`);
+gate(r !== ra && r >= 0 && r <= max, `dice random ${r}`);
 
-// Drag: 8762440 → step 100000, 4px/step.
+// Drag on the number: 4 px per step of 1, right and up raise (same law as nodeGraphSeedDragValue).
 await setv(8762440);
 const box = await page.locator(`${sel} .node-slider-readout`).boundingBox();
 const cx = box.x + box.width / 2, cy = box.y + box.height / 2;
 await page.mouse.move(cx, cy); await page.mouse.down();
 await page.mouse.move(cx + 8, cy, { steps: 4 }); await page.mouse.up();
-gate(await val() === 8962440, `drag +8px = +2×100000 (${await val()})`);
+gate(await val() === 8762442, `drag right 8px = +2 (${await val()})`);
 await page.waitForTimeout(500);
-await page.keyboard.down("Shift");
 await page.mouse.move(cx, cy); await page.mouse.down();
-await page.mouse.move(cx + 4, cy, { steps: 2 }); await page.mouse.up();
-await page.keyboard.up("Shift");
-gate(await val() === 9012440, `Shift drag halves step (${await val()})`);
+await page.mouse.move(cx, cy - 12, { steps: 4 }); await page.mouse.up();
+gate(await val() === 8762445, `drag up 12px = +3 (${await val()})`);
+await page.waitForTimeout(500);
+await page.mouse.move(cx, cy); await page.mouse.down();
+await page.mouse.move(cx - 20, cy, { steps: 5 }); await page.mouse.up();
+gate(await val() === 8762440, `drag left 20px = -5 (${await val()})`);
+gate(await page.evaluate(() => [[0, 8, 0], [0, 0, -8], [10, 3, 0], [0, -6, 0]].map(([v, dx, dy]) => window.nodeGraphSeedDragValue({ min: "0", max: "16777215", dataset: {} }, v, dx, dy)).join()) === "2,2,10,0", "nodeGraphSeedDragValue law (4 px/step, right/up raise, clamps at 0)");
 await page.waitForTimeout(500);
 await page.mouse.move(cx, cy);
 const beforeWheel = await val();
@@ -125,11 +144,21 @@ await page.waitForTimeout(500);
 const before = await val();
 await page.click(`${sel} .node-slider-readout`, { modifiers: ["Alt"] });
 gate(await val() === before, "Alt click on number does nothing");
-const fs = (v) => setv(v).then(() => page.waitForTimeout(120)).then(() => page.evaluate((s) => parseFloat(getComputedStyle(document.querySelector(s).querySelector(".node-slider-readout-value")).fontSize), sel));
-const small = await fs(42), big = await fs(16777215);
-gate(small > big * 1.5, `number fills box: 42 → ${small}px, 16777215 → ${big}px`);
-const fits = await page.evaluate((s) => { const r = document.querySelector(s).querySelector(".node-slider-readout"); const v = r.querySelector(".node-slider-readout-value"); return v.scrollWidth <= r.clientWidth + 1; }, sel);
-gate(fits, "8 digits fit inside the number box");
+
+// GL die: the shared widget draws this row (die, +, -) with the row's code.
+const gl = await page.evaluate(async (s) => {
+  const calls = [];
+  const orig = window.nodeGraphGlGraphDrawSeedWidget;
+  window.nodeGraphGlGraphDrawSeedWidget = function (batch, rects, text, ...rest) { calls.push({ text, keys: Object.keys(rects || {}).sort().join() }); return orig.call(this, batch, rects, text, ...rest); };
+  try {
+    if (typeof markNodeGraphRenderPending === "function") markNodeGraphRenderPending();
+    if (typeof nodeGraphGlGraphPresentSoon === "function") nodeGraphGlGraphPresentSoon();
+    await new Promise((r) => setTimeout(r, 400));
+  } finally { window.nodeGraphGlGraphDrawSeedWidget = orig; }
+  const sl = document.querySelector(s).querySelector('input[type="range"]');
+  return { calls, want: window.formatNodeGraphSeedCode(Number(sl.dataset.domainValue)) };
+}, sel);
+gate(gl.calls.some((c) => c.text === gl.want && /dice/.test(c.keys) && /plus/.test(c.keys) && /minus/.test(c.keys)), `GL die drawn for this row (${gl.want}; ${gl.calls.length} widget draws)`);
 await setv(8762440);
 await page.waitForTimeout(120);
 if (shot) await page.locator(`${sel} .node-seed-control`).screenshot({ path: shot });
