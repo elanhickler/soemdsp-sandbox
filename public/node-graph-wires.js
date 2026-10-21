@@ -733,13 +733,7 @@
           deps.triggerWireBreak?.("port-click");
         }
       }
-      // Keep a one-shot suppressClick arm if the caller set one (drag-drop),
-      // so the trailing click does not start a new wire.
-      const suppressClick = Boolean(state.portMovePointer?.suppressClick);
       clearPortConnectionMode();
-      if (suppressClick) {
-        state.portMovePointer = { suppressClick: true, active: false, pointerId: null };
-      }
       deps.drawWires();
     }
 
@@ -1080,12 +1074,6 @@
         : hitboxElement;
       const mode = state.portConnectionMode;
 
-      // Swallow the synthetic click after a selected-wire drag (drop or cancel)
-      // so we don't also start a brand-new wire on the same gesture.
-      if (state.portMovePointer?.suppressClick) {
-        state.portMovePointer = null;
-        return true;
-      }
 
       if (!mode) {
         // Normal click-to-start (or multi-select) a new wire from this jack.
@@ -1273,7 +1261,6 @@
           startClientY: event.clientY,
           endpoint,
           active: false,
-          suppressClick: false,
         };
         event.stopPropagation();
         return;
@@ -1318,7 +1305,6 @@
               )
             ) {
               movePtr.active = true;
-              movePtr.suppressClick = true;
             } else {
               // Selection no longer valid; fall back to normal new-wire drag.
               state.portMovePointer = null;
@@ -1369,12 +1355,9 @@
           );
           const targetHitbox = target?.closest?.(".node-io-row") || target;
           const targetEndpoint = targetHitbox ? helpers.endpointFromElement(targetHitbox) : null;
-          // Swallow the trailing click after a real drag-move (drop or cancel).
-          state.portMovePointer = {
-            pointerId: movePtr.pointerId,
-            suppressClick: true,
-            active: false,
-          };
+          // The drag-move ends here (drop or cancel). GL pointerup never turns
+          // it into a jack click, so no arm may outlive the gesture.
+          state.portMovePointer = null;
           if (
             targetEndpoint &&
             isCompatibleTarget(state.portConnectionMode, targetEndpoint)
@@ -1383,10 +1366,7 @@
             return;
           }
           // Dropped on empty / invalid: cancel move (wires snap back).
-          // Keep suppressClick arm so click does not start a new wire.
-          const suppress = state.portMovePointer;
           cancelPortConnectionMode();
-          state.portMovePointer = suppress;
           return;
         } else if (!movePtr.active) {
           // Never dragged — clear arm so click can start a normal new wire.

@@ -100,6 +100,28 @@ for (const [node, jack, key] of [["pb", "Wave", "frequency"], ["k1", "Out", "off
     check(added.length === 1, `${node}.${jack} drag -> own ${key} (self-patch)`, await mods());
   }
 }
+// Drag a selected wire's end off into empty space (it snaps back), then a new
+// wire still lands: the move gesture must not leave an arm that eats later drags.
+{
+  const i = await page.evaluate(() => nodeGraphMvp.patch.modulations.findIndex((m) => m.destinationNode === "pb" && m.sourceNode === "pb"));
+  check(i >= 0, "pb self-patch wire present for the move-off case");
+  await page.evaluate((i) => setNodeGraphSelection({ type: "wire", kind: "modulation", index: i }), i);
+  const a = await pointOf({ node: "pb", jack: "Wave" });
+  await page.mouse.move(...a); await page.mouse.down();
+  for (let k = 1; k <= 12; k++) await page.mouse.move(a[0] + 200 * k / 12, a[1] + 300 * k / 12);
+  await page.mouse.up(); await page.waitForTimeout(300);
+  await page.evaluate(() => setNodeGraphSelection(null));
+  await page.evaluate(() => { nodeGraphMvp.patch.modulations = nodeGraphMvp.patch.modulations.filter((m) => m.destinationNode !== "a3"); });
+  for (const [node, jack, key] of [["re", "Out", "offset"], ["sg", "Out", "amplitude"]]) {
+    const s = await pointOf({ node, jack });
+    const t = await pointOf({ node: "a3", sel: `.node-slider-readout[data-param="${key}"], [data-slider-target="node-a3-${key}"]` });
+    await page.mouse.move(...s); await page.mouse.down();
+    for (let k = 1; k <= 12; k++) await page.mouse.move(s[0] + (t[0] - s[0]) * k / 12, s[1] + (t[1] - s[1]) * k / 12);
+    await page.mouse.up(); await page.waitForTimeout(300);
+    const ok = JSON.parse(await mods()).some((m) => m.sourceNode === node && m.destinationNode === "a3" && m.destinationParam === key);
+    check(ok, `after a selected wire is dragged off, ${node}.${jack} drag -> a3.${key} still lands`);
+  }
+}
 check(errs.length === 0, "no page errors", JSON.stringify(errs.slice(0, 3)));
 await b.close();
 console.log(failures ? `FAIL ${failures}` : "ok jack one path"); process.exit(failures ? 1 : 0);
