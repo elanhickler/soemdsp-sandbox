@@ -91,7 +91,7 @@ gate(ctx.nodeGraphClockFaceGateEndless(0, 1, 2, 44100) && !ctx.nodeGraphClockFac
 
 // Every element has a control: Start marker and Blink use their own HBS, thickness and time.
 const look2 = ctx.normalizeNodeGraphClockFaceSettings();
-gate(look2.startPaint === "rgb(116 99 51)" && look2.blinkPaint === "rgb(254 215 102)" && look2.startThickness === 1.5 && look2.blinkTime === 0.12, `defaults keep the old start marker + gold blink (${look2.startPaint}, ${look2.blinkPaint})`);
+gate(look2.startPaint === "rgb(116 99 51)" && look2.blinkPaint === "rgb(254 215 102)" && look2.startThickness === 1.5 && look2.blinkTime === 0, `defaults: old start marker, gold blink color, blink off (${look2.startPaint}, ${look2.blinkPaint})`);
 Object.assign(node.traceDisplaySettings, { startHue: 120, startBrightness: 0.5, startSaturation: 1, startThickness: 4, blinkHue: 240, blinkBrightness: 0.5, blinkSaturation: 1, blinkTime: 0.5 });
 draw({ pulseStart: 0.1, pulseEnd: 0.6, rate: 1, phase: 0.3 }, 0.9);
 const mark = segs.find((s) => s.rgba === "rgb(0 255 0)");

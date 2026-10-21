@@ -29,7 +29,7 @@ const nodeGraphClockFaceDisplaySettingsDefaults = Object.freeze({
   blinkHue: 49,
   blinkBrightness: 0.61,
   blinkSaturation: 0.97,
-  blinkTime: 0.12,
+  blinkTime: 0,
 });
 /** HBS lamps the RoundShape model does not carry (it owns background / line / dot). */
 const NODE_GRAPH_CLOCK_FACE_EXTRA_LAMPS = Object.freeze(["fill", "start", "blink"]);
