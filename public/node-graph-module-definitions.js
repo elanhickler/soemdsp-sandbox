@@ -6767,7 +6767,7 @@ const nodeGraphModuleDefinitions = (
     planRole: "processor",
     // Edge detector: 1-sample history of In. Pulses are digital (exact 0/1).
     // Steady / Sign are continuous digital levels; Thru is the raw passthrough.
-    digitalInputs: ["In"],
+    // In is the gold analog audio inlet, labelled "->".
     digitalOutputs: ["Up", "Down", "Change", "Steady", "Sign"],
     inputs: ["In"],
     inputLabels: { In: "->" },
