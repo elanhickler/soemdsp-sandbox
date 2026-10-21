@@ -5868,6 +5868,10 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
       // waveform=Mode (0 Envelope / 1 Filter), lfoStyle=Trigger detect (0 Cross 0 / 1 Saw reset).
       push("mode", P.NATIVE_GRAPH_PARAM_WAVEFORM, disc("mode", 0));
       push("triggerDetect", P.NATIVE_GRAPH_PARAM_LFO_STYLE, disc("triggerDetect", 0));
+      // Experiment switches: Velocity (diffusionSize), Follow Source (diffusionAmount), Follow Detect (lfoVariation).
+      push("velocityMode", P.NATIVE_GRAPH_PARAM_DIFFUSION_SIZE, disc("velocityMode", 0));
+      push("followSource", P.NATIVE_GRAPH_PARAM_DIFFUSION_AMOUNT, disc("followSource", 0));
+      push("followDetect", P.NATIVE_GRAPH_PARAM_LFO_VARIATION, disc("followDetect", 0));
       continue;
     }
     if (type === "rmsMeter") {
