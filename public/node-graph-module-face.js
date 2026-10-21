@@ -236,6 +236,7 @@ function mountNodeGraphModuleFace(article, type) {
   body.append(face);
   layoutNodeGraphModuleFace(article);
   face.addEventListener("pointerdown", (event) => beginNodeGraphModuleFaceGesture(article, face, nodeGraphModuleFaceSpecForElement(article), event));
+  face.addEventListener("contextmenu", (event) => openNodeGraphModuleFaceParamOptions(article, face, event));
 }
 
 /** Size the face to its visible rows and stack each row's rail jacks (rerun when params hide/show). */
@@ -369,6 +370,24 @@ function beginNodeGraphModuleFaceGesture(article, face, spec, event) {
   }
   if (!move || !input) return;
   nodeGraphModuleFaceCapture(face, event, (ev, drag) => setNodeGraphModuleFaceValue(input, move(ev), drag));
+}
+
+/** Right-click on a face widget opens that param's options, like a normal slider. */
+function openNodeGraphModuleFaceParamOptions(article, face, event) {
+  const spec = nodeGraphModuleFaceSpecForElement(article);
+  const p = nodeGraphModuleFaceLocalPoint(face, event);
+  const wd = spec ? nodeGraphModuleFaceWidgetAt(spec, face, p.x, p.y) : null;
+  if (!wd) return;
+  let key = wd.param;
+  if (wd.type === "filter") {
+    const u = p.x / Math.max(1, wd.w);
+    const th = nodeGraphModuleFaceLogT(nodeGraphModuleFaceValue(nodeGraphModuleFaceInput(article, wd.hpf)));
+    const tl = nodeGraphModuleFaceLogT(nodeGraphModuleFaceValue(nodeGraphModuleFaceInput(article, wd.lpf)));
+    key = Math.abs(u - th) <= Math.abs(u - tl) ? wd.hpf : wd.lpf;
+  }
+  const readout = key && article.querySelector(`.node-parameter-row[data-param="${CSS.escape(key)}"] [data-slider-target]`);
+  if (!readout || typeof openNodeMetadataPopover !== "function") return;
+  openNodeMetadataPopover(event, readout);
 }
 
 function nodeGraphModuleFaceCapture(face, event, onMove) {
