@@ -6,6 +6,9 @@
 // Free-running phasor. Rising Reset (edge only): emit Pulse as if a cycle just
 // finished, then restart phase and keep advancing (do not freeze while Reset
 // stays high — that stretched the first Digital gate).
+// Amplitude is latched, never read mid-pulse: Digital at its gate rise, Analog
+// at each cycle start (tick / Reset), T at its tick. A moving slider shows on
+// the next pulse and never adds a rising edge inside a held gate.
 
 #include <soemdsp/soemdsp.hpp>
 
@@ -24,6 +27,11 @@ struct ClockState {
   double lastDigital;
   double lastPulse;
   double lastPhase;
+  bool levelInit;     // first sample latches every level
+  bool cycleLatch;    // T fired last sample: latch the Analog level now
+  bool digitalWasHigh;
+  double digitalLevel;  // latched at the Digital gate rise
+  double cycleLevel;    // latched at the cycle start (Analog)
 };
 
 static ClockState gPool[kMaxInstances];
@@ -58,6 +66,11 @@ extern "C" int soemdsp_clock_create() {
       s.lastDigital = 0.0;
       s.lastPulse = 0.0;
       s.lastPhase = 0.0;
+      s.levelInit = false;
+      s.cycleLatch = false;
+      s.digitalWasHigh = false;
+      s.digitalLevel = 0.0;
+      s.cycleLevel = 0.0;
       s.active = true;
       return i + 1;
     }
@@ -102,6 +115,12 @@ extern "C" double soemdsp_clock_sample(
     s.phase = 0.0;
     s.hasStarted = true;
   }
+  if (!s.levelInit || resetRise || s.cycleLatch) {
+    s.cycleLevel = safeLevel;
+    if (!s.levelInit) s.digitalLevel = safeLevel;
+    s.levelInit = true;
+  }
+  s.cycleLatch = false;
 
   const double rawPhase = wrap01(s.phase);
   const double phase = wrap01(rawPhase + safePhaseOffset);
@@ -115,15 +134,20 @@ extern "C" double soemdsp_clock_sample(
     const bool high = endSamples >= startSamples
       ? (phaseSamples >= startSamples && phaseSamples < endSamples)
       : (phaseSamples >= startSamples || phaseSamples < endSamples);
-    digital = high ? safeLevel : 0.0;
+    if (high && !s.digitalWasHigh) s.digitalLevel = safeLevel;
+    s.digitalWasHigh = high;
+    digital = high ? s.digitalLevel : 0.0;
+  } else {
+    s.digitalWasHigh = false;
   }
-  const double analog = clock_analog_whip_sample(phase, safeLevel);
+  const double analog = clock_analog_whip_sample(phase, s.cycleLevel);
 
   const double nextRawPhase = wrap01(rawPhase + safeRate / rateHz);
   // T follows the offset phase. Two clocks at one rate with Phase 0 and 0.5
   // must tick half a cycle apart. Wrapping the raw phase made every T simultaneous.
   const bool wrapped = safeRate > 0.0 && s.hasStarted && (phase + safeRate / rateHz) >= 1.0;
-  const double pulse = (resetRise || wrapped) ? safeLevel : 0.0;
+  const double pulse = (resetRise || wrapped) ? safeLevel : 0.0;  // one sample: the tick's level
+  if (wrapped) s.cycleLatch = true;
 
   s.phase = nextRawPhase;
   s.hasStarted = true;
@@ -151,5 +175,5 @@ extern "C" double soemdsp_clock_phase(int handle) {
 }
 
 extern "C" int soemdsp_clock_version() {
-  return 5; // 5: Pulse Start / Pulse End replace duty; phase published. 4: T pulse follows Phase offset
+  return 6; // 6: Amplitude latched per pulse (Digital at gate rise, Analog at cycle start, T at tick). 5: Pulse Start / Pulse End replace duty; phase published. 4: T pulse follows Phase offset
 }

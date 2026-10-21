@@ -819,6 +819,11 @@ if ($node) {
   if ($LASTEXITCODE -ne 0) {
     throw "Combined build: drum Ring2 retrigger smoke FAILED"
   }
+  # Clock ƒ: unwired unchanged, wired ticks at ƒ (Rate ignored).
+  & $node.Source "$root\scripts\smoke_graph_clock_f.mjs"
+  if ($LASTEXITCODE -ne 0) {
+    throw "Combined build: clock ƒ smoke FAILED"
+  }
   # Resonant Compressor: Gain == Resonant Envelope SC (max diff 0), drums get quieter.
   & $node.Source "$root\scripts\smoke_graph_resonant_compressor.mjs"
   if ($LASTEXITCODE -ne 0) {

@@ -6358,7 +6358,9 @@ const nodeGraphModuleDefinitions = (
       { kind: "cells", params: [["phase", "Phase"]], horizontal: true, h: 32 },
       { kind: "cells", params: [["rate", "Rate"], ["amplitude", "Amp"]], h: 40 },
     ],
-    inputs: ["Reset"],
+    // ƒ: absolute Hz; wired, it replaces Rate (Rate row striped as owned by the jack).
+    inputs: ["Reset", "f"],
+    fJackParam: "rate",
     inputLabels: { f: "ƒ" },
     inputAliases: { "ƒ": "f" },
     outputAliases: {

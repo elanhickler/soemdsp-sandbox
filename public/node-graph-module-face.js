@@ -538,6 +538,19 @@ function nodeGraphModuleFaceText(batch, text, x, y, px, css, opts = {}) {
   nodeGraphGlLinesText(batch, String(text), x, y, typeof nodeGraphGlGraphTextOpts === "function" ? nodeGraphGlGraphTextOpts(o) : o);
 }
 
+/** 135deg stripes (7 px band / 14 px period, as the CSS gradient) clipped to a screen-px box. */
+function nodeGraphModuleFaceDrawOwnedStripes(batch, x, y, w, h, z) {
+  const rgba = nodeGraphModuleFaceRgba("rgba(226, 168, 109, 0.16)");
+  const period = 14 * Math.SQRT2 * z;
+  const half = 3.5 * z;
+  for (let s = -h; s < w; s += period) {
+    const t0 = Math.max(0, -s);
+    const t1 = Math.min(h, w - s);
+    if (t1 <= t0) continue;
+    nodeGraphGlLinesSegment(batch, x + s + t0, y + h - t0, x + s + t1, y + h - t1, half, 0.6, rgba, 0);
+  }
+}
+
 function nodeGraphModuleFaceDrawGl(batch, el, w, ox, oy, z) {
   const spec = nodeGraphModuleFaceSpecForElement(el);
   if (!spec) return;
@@ -610,6 +623,11 @@ function nodeGraphModuleFaceDrawGl(batch, el, w, ox, oy, z) {
       rect(wd.x + gap, top, cw, ch, ink.cellFill);
       if (wd.bipolar) line(wd.x, wd.y, 1, wd.h, ink.cellLine);
       const t = nodeGraphModuleFaceTravel(input);
+      // Jack-owned param (wired ƒ replaces it): the same 135deg stripes as the
+      // .node-parameter-row.f-jack-owns-frequency row (styles.css).
+      if (wd.param && el.querySelector(`.node-parameter-row.f-jack-owns-frequency[data-param="${CSS.escape(wd.param)}"]`)) {
+        nodeGraphModuleFaceDrawOwnedStripes(batch, ox + (wd.x + gap) * z, oy + top * z, cw * z, ch * z, z);
+      }
       if (wd.horizontal) {
         // Horizontal slider: fills left to right, label left, value right.
         rect(wd.x + gap, top, t * cw, ch, ink.cellValueFill);

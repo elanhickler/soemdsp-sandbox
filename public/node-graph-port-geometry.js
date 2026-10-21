@@ -147,8 +147,14 @@ function nodeGraphPortElementIsLayoutVisible(element) {
 function nodeGraphFrequencyRowOwnedByFJack(nodeId) {
   const node = typeof nodeGraphNodeElement === "function" ? nodeGraphNodeElement(nodeId) : null;
   if (!node) return;
-  for (const row of node.querySelectorAll('.node-parameter-row[data-param="frequency"]')) {
-    row.classList.add("f-jack-owns-frequency");
+  // Definition fJackParam names a non-"frequency" param the jack replaces (Clock: rate).
+  const def = typeof nodeGraphModuleDefinition === "function" ? nodeGraphModuleDefinition(node.dataset?.nodeType) : null;
+  const keys = ["frequency"];
+  if (def?.fJackParam && def.fJackParam !== "frequency") keys.push(String(def.fJackParam));
+  for (const key of keys) {
+    for (const row of node.querySelectorAll(`.node-parameter-row[data-param="${key}"]`)) {
+      row.classList.add("f-jack-owns-frequency");
+    }
   }
 }
 

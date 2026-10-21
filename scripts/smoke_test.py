@@ -6834,7 +6834,7 @@ def require_node_graph_mvp_contract() -> None:
         'label: "Down Slew"',
         "clock: \"Clock\"",
         "clock: {",
-        'inputs: ["Reset"]',
+        'inputs: ["Reset", "f"]',
         'Out: "Digital Out"',
         '"Analog Out": "\\u223F"',
         '"Digital Out": "\\u25AE"',
