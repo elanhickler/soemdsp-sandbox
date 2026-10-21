@@ -69,3 +69,32 @@ for (const m of M) {
 }
 console.table(rows);
 console.log("ok drum Recalculate On Trigger");
+
+// Modal Snare: Body / Noise is latched too (On), live (Off). Change 0 -> -1 at
+// sample 3000 (mid first hit, hits every 12000): On keeps the first hit, the
+// next hit plays body only; Off changes mid-hit; On without a change == Off.
+{
+  const base = [0, 0, 180, 0.5, 0.5, 0.25, 0.2, 0, 1, 3000, 1, 0.3, 2, 0];
+  const runBn = (E, recalc, at, n = 30000) => {
+    const h = E.soemdsp_modal_snare_create();
+    const out = [];
+    for (let i = 0; i < n; i++) {
+      const a = base.slice();
+      a[0] = i % 12000 < 8 ? 1 : 0;
+      out.push(E.soemdsp_modal_snare_sample(h, ...a, SR, recalc, i >= at ? -1 : 0), E.soemdsp_modal_snare_right(h), E.soemdsp_modal_snare_env(h));
+    }
+    E.soemdsp_modal_snare_destroy(h);
+    return out;
+  };
+  const hit = 12000 * 3;
+  const onChanged = runBn(N, 1, 3000), onSteady = runBn(N, 1, 1e9), offChanged = runBn(N, 0, 3000), offSteady = runBn(N, 0, 1e9);
+  const first = md(onChanged.slice(0, hit), onSteady.slice(0, hit));
+  const next = md(onChanged.slice(hit, 2 * hit), onSteady.slice(hit, 2 * hit));
+  const offMid = md(offChanged.slice(0, hit), offSteady.slice(0, hit));
+  const nextIsBodyOnly = md(onChanged.slice(hit + 3, 2 * hit), offChanged.slice(hit + 3, 2 * hit));
+  if (md(onSteady, offSteady) !== 0) throw new Error("modal_snare bodyNoise: On without a change differs from Off");
+  if (first !== 0) throw new Error(`modal_snare bodyNoise: On changed the ringing hit (${first})`);
+  if (!(next > 0)) throw new Error("modal_snare bodyNoise: On did not apply the change on the next hit");
+  if (!(offMid > 0)) throw new Error("modal_snare bodyNoise: Off had no mid-hit effect (test is blind)");
+  console.log(`ok modal_snare Body / Noise latch: On first hit diff 0, next hit diff ${next.toExponential(2)} (next hit vs Off body-only ${nextIsBodyOnly.toExponential(2)}), Off mid-hit diff ${offMid.toExponential(2)}`);
+}

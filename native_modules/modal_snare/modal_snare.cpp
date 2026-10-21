@@ -47,6 +47,7 @@ static const double kMixTrim = 0.6;
 struct State {
   double latchA;  // Recalculate On Trigger: decay params latched on the last hit
   double latchB;
+  double latchC;  // Body / Noise latched on the last hit
   bool latchHas;
   bool active;
   double lastTrigger, lastReset;
@@ -144,7 +145,7 @@ extern "C" double soemdsp_modal_snare_sample(
   double clickDecayMs,
   double noiseTilt,
   double sampleRate,
-  double recalculateOnTrigger,  // 0 Off (live) / 1 On: bodyDecay / snapDecay latched on each hit
+  double recalculateOnTrigger,  // 0 Off (live) / 1 On: bodyDecay / snapDecay / bodyNoise latched on each hit
   double bodyNoise  // Body / Noise: -1 body only, 0 both (unchanged), +1 noise (wires + click) only
 ) {
   if (handle < 1 || handle > kMaxInstances || !gPool[handle - 1].active) return 0.0;
@@ -163,10 +164,10 @@ extern "C" double soemdsp_modal_snare_sample(
     strike(s);
     ping = true;
   }
-  // Recalculate On Trigger: On latches bodyDecay and snapDecay on each hit, so a ringing
+  // Recalculate On Trigger: On latches bodyDecay, snapDecay and bodyNoise on each hit, so a ringing
   // hit keeps its decay; Off (default) reads them live (unchanged behaviour).
-  if (ping) { s.latchA = bodyDecay; s.latchB = snapDecay; s.latchHas = true; }
-  if (safe(recalculateOnTrigger) >= 0.5 && s.latchHas) { bodyDecay = s.latchA; snapDecay = s.latchB; }
+  if (ping) { s.latchA = bodyDecay; s.latchB = snapDecay; s.latchC = bodyNoise; s.latchHas = true; }
+  if (safe(recalculateOnTrigger) >= 0.5 && s.latchHas) { bodyDecay = s.latchA; snapDecay = s.latchB; bodyNoise = s.latchC; }
   if (!ping && resting(s)) {
     s.envOut = 0.0;
     s.rightOut = 0.0;
@@ -250,6 +251,6 @@ extern "C" double soemdsp_modal_snare_env(int handle) {
   return gPool[handle - 1].envOut;
 }
 
-extern "C" int soemdsp_modal_snare_version() { return 4; } // 4: Body / Noise balance (bodyNoise, last arg). 3: Ring2 rotating phasor (no energy pumped by bend retriggers). 2: Recalculate On Trigger (bodyDecay / snapDecay latched on hit)
+extern "C" int soemdsp_modal_snare_version() { return 5; } // 5: Recalculate On Trigger also latches Body / Noise. 4: Body / Noise balance (bodyNoise, last arg). 3: Ring2 rotating phasor (no energy pumped by bend retriggers). 2: Recalculate On Trigger (bodyDecay / snapDecay latched on hit)
 extern "C" const char* soemdsp_modal_snare_metadata_json() { return kMetadataJson; }
 extern "C" int soemdsp_modal_snare_metadata_json_size() { return sizeof(kMetadataJson) - 1; }
