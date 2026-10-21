@@ -334,19 +334,23 @@ function beginNodeGraphModuleFaceGesture(article, face, spec, event) {
   let move = null;
   if (wd.type === "cell") {
     const t0 = nodeGraphModuleFaceTravel(input);
+    const x0 = event.clientX;
     const y0 = event.clientY;
+    // Like every slider: up or right raises, down or left lowers.
     move = (ev) => {
-      const t = Math.max(0, Math.min(1, t0 + ((y0 - ev.clientY) * p.sy) / NODE_GRAPH_FACE_CELL_DRAG_PX));
+      const d = (y0 - ev.clientY) * p.sy + (ev.clientX - x0) * p.sx;
+      const t = Math.max(0, Math.min(1, t0 + d / NODE_GRAPH_FACE_CELL_DRAG_PX));
       return typeof nodeSliderValueFromTravel === "function" ? nodeSliderValueFromTravel(input, t) : t;
     };
   } else if (wd.type === "step" || wd.type === "seedNumber") {
     const v0 = Math.round(nodeGraphModuleFaceValue(input));
+    const x0 = event.clientX;
     const y0 = event.clientY;
     const px = wd.type === "seedNumber" ? NODE_GRAPH_FACE_SEED_DRAG_PX : NODE_GRAPH_FACE_STEP_DRAG_PX;
     move = (ev) => {
       const digits = String(Math.abs(v0)).length;
       const step = wd.type === "seedNumber" ? Math.max(1, 10 ** Math.max(0, digits - 2)) : (ev.ctrlKey ? 10 : 1);
-      const v = v0 + Math.trunc(((y0 - ev.clientY) * p.sy) / px) * step;
+      const v = v0 + Math.trunc(((y0 - ev.clientY) * p.sy + (ev.clientX - x0) * p.sx) / px) * step;
       return Math.max(Number(input.min), Math.min(Number(input.max), v));
     };
   } else if (wd.type === "filter") {
