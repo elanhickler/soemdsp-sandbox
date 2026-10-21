@@ -528,6 +528,7 @@ const nodeGraphFacePaintKindTable = Object.assign(Object.create(null), {
   // Parameter-driven pictures (curves, shapes, keys, digits from params).
   basicShapeFace: "param",
   sinCosFace: "param",
+  clockFace: "param",
   sinCos4Face: "param",
   softwaveOscFace: "param",
   rgbShapeFace: "param",

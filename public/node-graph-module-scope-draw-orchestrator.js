@@ -90,6 +90,7 @@ const nodeGraphModuleScopeCustomRenderers = {
   roundShapeFace: () => {},
   basicShapeFace: () => {},
   sinCosFace: () => {},
+  clockFace: () => {},
   softwaveOscFace: () => {},
   sinCos4Face: () => {},
   // Shape paints its own canvas on rAF (rgb-shape-ui.js). Orchestrator no-op

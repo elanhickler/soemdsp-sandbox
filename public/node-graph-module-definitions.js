@@ -6324,12 +6324,17 @@ const nodeGraphModuleDefinitions = (
   },
   clock: {
     planRole: "source",
-    displayType: "vectorDot",
-    displayRenderer: "vectorDot",
+    // Face: one pulse cycle, sweeping playhead + fill, flashing rising-edge tick (clock-display.js).
+    layout: "sinCos",
+    chrome: "LayoutA",
+    customDisplayArea: true,
+    displayType: "clockFace",
+    displayHeightGu: 4,
+    spectrumCompanion: false,
     displayModes: [
-      { key: "vectorDot", label: "LED Dot", renderer: "vectorDot", settingsSchema: "vectorDot", source: { value: "Digital Out" } },
-      { key: "lcdDot", label: "LCD Dot", renderer: "lcdDot", settingsSchema: "lcdDot", source: { value: "Digital Out" } },
+      { key: "face", label: "Face", renderer: "clockFace" },
     ],
+    defaultDisplayMode: "face",
     inputs: ["Reset"],
     inputLabels: { f: "ƒ" },
     inputAliases: { "ƒ": "f" },
