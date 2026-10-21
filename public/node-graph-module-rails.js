@@ -228,13 +228,36 @@ function nodeGraphModuleRailsDrawGl(batch, plates, toX, toY, zoom, cssW, cssH) {
     const rw = NODE_GRAPH_RAIL_WIDTH_PX * zoom;
     const t = Math.max(1, zoom);
     const tags = [];
+    // Gutters run only beside the sections (face rows / param rows) that hold a
+    // patched param: one short segment per merged run of sections.
+    const face = el.classList.contains("has-module-face") ? body.querySelector(":scope > .node-face") : null;
+    const faceBox = face ? nodeGraphModuleLayoutBox(face, el) : null;
+    const spec = faceBox && typeof nodeGraphModuleFaceSpecForElement === "function" ? nodeGraphModuleFaceSpecForElement(el) : null;
+    const widgets = spec && typeof nodeGraphModuleFaceWidgets === "function" ? nodeGraphModuleFaceWidgets(spec, face.offsetWidth) : [];
+    const section = (port) => {
+      const key = port.dataset.param;
+      const wd = widgets.find((x) => x.param === key || x.hpf === key || x.lpf === key);
+      if (wd) return [faceBox.y + wd.y, faceBox.y + wd.y + wd.h];
+      const row = nodeGraphModuleLayoutBox(port.closest(".node-parameter-row") || port, el);
+      return row ? [row.y, row.y + row.h] : null;
+    };
+    const ports = [...body.querySelectorAll(".node-param-port.rail-patched")].filter((port) => port.offsetParent);
+    const runs = ports.map(section).filter(Boolean).sort((a, b) => a[0] - b[0]).reduce((out, r) => {
+      const last = out[out.length - 1];
+      if (last && r[0] <= last[1] + 0.5) last[1] = Math.max(last[1], r[1]);
+      else out.push([...r]);
+      return out;
+    }, []);
     batch._over = true;
-    rect(x0, y0, rw, h, NodeGraphRailInk.gutter);
-    rect(x0 + rw - t, y0, t, h, NodeGraphRailInk.gutterEdge);
-    rect(x0 + w - rw, y0, rw, h, NodeGraphRailInk.gutter);
-    rect(x0 + w - rw, y0, t, h, NodeGraphRailInk.gutterEdge);
-    for (const port of body.querySelectorAll(".node-param-port.rail-patched")) {
-      if (!port.offsetParent) continue;
+    for (const [a, b] of runs) {
+      const sy = toY(plates[i].y + a);
+      const sh = (b - a) * zoom;
+      rect(x0, sy, rw, sh, NodeGraphRailInk.gutter);
+      rect(x0 + rw - t, sy, t, sh, NodeGraphRailInk.gutterEdge);
+      rect(x0 + w - rw, sy, rw, sh, NodeGraphRailInk.gutter);
+      rect(x0 + w - rw, sy, t, sh, NodeGraphRailInk.gutterEdge);
+    }
+    for (const port of ports) {
       const box = nodeGraphModuleLayoutBox(port, el);
       if (!box || !(box.w > 1)) continue;
       const bx = toX(plates[i].x + box.x);
