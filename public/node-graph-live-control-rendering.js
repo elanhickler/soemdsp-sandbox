@@ -410,6 +410,7 @@ function syncNodeGraphTransportPlayButtons({ playing = false, paused = false, st
     if (tp.id === "nodeRenderedPlayerPlay") continue;
 
     tp.classList.add("node-transport-play");
+    const wasState = tp.dataset.transportState;
     tp.classList.remove("is-playing", "is-paused", "is-keep-playing");
     nodeGraphTransportSetPlayGlyph(tp, keepPlaying);
     if (isPlaying) {
@@ -434,6 +435,8 @@ function syncNodeGraphTransportPlayButtons({ playing = false, paused = false, st
       if (keepPlaying) tp.classList.add("is-keep-playing");
       tp.dataset.transportState = isPaused ? "paused" : "stopped";
     }
+    // Faces that draw only while playing (Ping Pong LFO style waveforms) repaint on the edge.
+    if (tp.dataset.transportState !== wasState && typeof markNodeGraphRenderPending === "function") markNodeGraphRenderPending();
   }
 
   for (const pause of document.querySelectorAll('[data-transport-action="pause"], #nodeTransportPause, button.node-transport-pause')) {

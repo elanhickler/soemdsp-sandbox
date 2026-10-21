@@ -473,6 +473,8 @@ function nodeGraphModuleFaceDrawGl(batch, el, w, ox, oy, z) {
       const on = index === wd.index;
       if (on) rect(wd.x, wd.y + 1, wd.w, wd.h - 1, ink.subOn);
       if (wd.x > 0) line(wd.x, wd.y, 1, wd.h, ink.rowLine);
+      // Condensed 5 waveform snips, drawn only while the project plays.
+      const live = typeof scopePaintIsDrawingLive === "function" && scopePaintIsDrawingLive();
       const seed = nodeGraphModuleFaceValue(nodeGraphModuleFaceInput(el, wd.row.seedParam || "seed"));
       const n = 48;
       const shape = nodeGraphModuleFaceLfoShape(wd.index, seed, n);
@@ -485,7 +487,7 @@ function nodeGraphModuleFaceDrawGl(batch, el, w, ox, oy, z) {
         pts[i * 2] = ox + (px0 + (pw * i) / (n - 1)) * z;
         pts[i * 2 + 1] = oy + (py + ph * 0.5 - shape[i] * 0.92 * ph * 0.5) * z;
       }
-      if (typeof nodeGraphGlLinesPolyline === "function") {
+      if (live && typeof nodeGraphGlLinesPolyline === "function") {
         nodeGraphGlLinesPolyline(batch, pts, Math.max(1, z), 0.8, nodeGraphModuleFaceRgba(on ? ink.lfoOn : ink.lfoOff), "round");
       }
       nodeGraphModuleFaceText(batch, wd.label, ox + cx * z, oy + (wd.y + wd.h - 9) * z, Math.min(12.6, fit(wd.label, wd.w, 40, 1, 0.6)) * z, on ? ink.subOnText : ink.offText);
