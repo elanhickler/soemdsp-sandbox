@@ -545,8 +545,21 @@ function positionNodeGraphNode(node, point, options = {}) {
   const y = options.clamp === false
     ? positionedPoint.y
     : Math.max(0, Math.min(maxY, positionedPoint.y));
+  // B-100: this is the only module-position writer, so it also moves the
+  // published geometry (plate, jacks, displays, wire ends) in the same call.
+  // Before, the GL paint read last move's geometry while titles/labels/sliders
+  // read the live DOM, so half the module drew one grid step behind.
+  const prevX = Number.parseFloat(node.style.getPropertyValue("--node-x"));
+  const prevY = Number.parseFloat(node.style.getPropertyValue("--node-y"));
   node.style.setProperty("--node-x", `${x}px`);
   node.style.setProperty("--node-y", `${y}px`);
+  if (
+    Number.isFinite(prevX) && Number.isFinite(prevY)
+    && (x !== prevX || y !== prevY)
+    && typeof nodeGraphModuleGeometryTranslate === "function"
+  ) {
+    nodeGraphModuleGeometryTranslate(node.dataset?.node, x - prevX, y - prevY);
+  }
 }
 
 function nodeGraphRectFromPoints(a, b) {

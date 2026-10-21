@@ -213,12 +213,29 @@ function nodeGraphPortCenterCacheEnd() {
 }
 
 /** Painted jack radius in zoom-surface px. The disk is centered on the wall. */
+// Half-side of the square jack hit box (world px), B-099. The box is a
+// square centered on the wall that covers the whole painted disk plus its
+// crescent stroke. --node-port-diameter is a calc() token, so getComputedStyle
+// returns the unresolved string (parseFloat -> NaN) and this used to fall back
+// to a fixed 8px circle. Resolve it with a probe instead; cache per style.
+let nodeGraphJackHitRadiusCache = { key: null, value: 8 };
 function nodeGraphJackHitRadiusPx() {
   const host = document.getElementById("nodeGraphWorkspace");
-  const raw = host ? getComputedStyle(host).getPropertyValue("--node-port-diameter") : "";
-  const diameter = Number.parseFloat(raw);
-  if (Number.isFinite(diameter) && diameter > 0) return diameter * 0.5;
-  return 8;
+  if (!host) return 8;
+  const key = `${host.getAttribute("style") || ""}\u0000${document.documentElement.getAttribute("style") || ""}\u0000${document.body?.className || ""}`;
+  if (nodeGraphJackHitRadiusCache.key === key) return nodeGraphJackHitRadiusCache.value;
+  const probe = document.createElement("div");
+  probe.style.cssText = "position:absolute;left:0;top:0;visibility:hidden;pointer-events:none;height:0;"
+    + "width:var(--node-port-diameter);padding-left:var(--node-port-crescent-stroke-width, 1.25px);box-sizing:content-box;";
+  host.append(probe);
+  const diameter = Number.parseFloat(getComputedStyle(probe).width);
+  const stroke = Number.parseFloat(getComputedStyle(probe).paddingLeft);
+  probe.remove();
+  const value = Number.isFinite(diameter) && diameter > 0
+    ? diameter * 0.5 + (Number.isFinite(stroke) && stroke > 0 ? stroke : 0)
+    : 8;
+  nodeGraphJackHitRadiusCache = { key, value };
+  return value;
 }
 
 function nodeGraphPortCenter(node, port, io) {

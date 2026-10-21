@@ -344,6 +344,7 @@ PUBLIC_SCRIPT_PATHS = (
     "./public/node-graph-node-accessors.js",
     "./public/node-graph-selection.js",
     "./public/node-graph-module-geometry.js",
+    "./public/node-graph-display-background.js",
     "./public/node-graph-port-geometry.js",
     "./public/node-graph-jack-chrome.js",
     "./public/node-graph-port-types.js",

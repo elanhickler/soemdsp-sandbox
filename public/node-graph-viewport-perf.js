@@ -590,6 +590,11 @@ function flushNodeGraphViewportHeavyChrome(options = {}) {
     // Pause module lights / wires mid-gesture. Grid position already updated.
     return;
   }
+  // B-101: reconcile sleep/wake for the final camera BEFORE the GL rebuild.
+  // The cull used to be a queued rAF that ran after this pass, so the GL
+  // rebuild below skipped faces of modules that were still asleep (display:none
+  // has no layout box) and nothing rebuilt them once they woke.
+  nodeGraphViewportCullFlushNow();
   // Republish modules that are on screen. Offscreen modules stay display:none
   // and keep the attaches they already have, so their cables still have ends.
   if (typeof nodeGraphModuleGeometryPublishVisible === "function") {
@@ -1106,6 +1111,46 @@ function scheduleNodeGraphViewportGestureHeatmapPhase() {
   });
 }
 
+/** B-101: run the geometric cull now (live camera), dropping any queued one. */
+function nodeGraphViewportCullFlushNow() {
+  if (nodeGraphViewportPerf.cullRaf) {
+    window.cancelAnimationFrame(nodeGraphViewportPerf.cullRaf);
+    nodeGraphViewportPerf.cullRaf = 0;
+  }
+  if (nodeGraphViewportPerf.cullTrailingTimer) {
+    window.clearTimeout(nodeGraphViewportPerf.cullTrailingTimer);
+    nodeGraphViewportPerf.cullTrailingTimer = 0;
+  }
+  nodeGraphViewportPerf.cullPendingOptions = null;
+  nodeGraphViewportPerf.cullLastAt = performance.now?.() || Date.now();
+  nodeGraphViewportCullFlushing = true;
+  try {
+    nodeGraphViewportCullRefresh();
+  } finally {
+    nodeGraphViewportCullFlushing = false;
+  }
+}
+
+// B-101: a module woken outside a full chrome pass (observer, selection,
+// metamodule, trailing cull) needs its GL plate + display faces rebuilt —
+// the last rebuild skipped it while it was display:none. One rAF, coalesced.
+let nodeGraphViewportCullFlushing = false;
+let nodeGraphViewportWakeRebuildRaf = 0;
+function scheduleNodeGraphViewportWakeRebuild() {
+  if (nodeGraphViewportCullFlushing || nodeGraphViewportWakeRebuildRaf) return;
+  if (typeof nodeGraphGlGraphRebuildPlates !== "function") return;
+  nodeGraphViewportWakeRebuildRaf = window.requestAnimationFrame(() => {
+    nodeGraphViewportWakeRebuildRaf = 0;
+    // Mid-gesture the settle pass rebuilds everything once.
+    if (nodeGraphViewportGestureActive()) return;
+    if (typeof nodeGraphModuleGeometryPublishVisible === "function") {
+      nodeGraphModuleGeometryPublishVisible();
+    }
+    nodeGraphGlGraphRebuildPlates();
+    if (typeof nodeGraphGlGraphPresent === "function") nodeGraphGlGraphPresent();
+  });
+}
+
 function scheduleNodeGraphViewportCullRefresh(options = {}) {
   const cacheSizesOnly = Boolean(options.cacheSizesOnly);
   const minIntervalMs = Math.max(0, nodeGraphFiniteNumber(options.minIntervalMs));
@@ -1257,6 +1302,7 @@ function nodeGraphViewportCullApply(element, intersecting) {
   }
   if (awake) {
     nodeGraphViewportCullWakePainters(element);
+    scheduleNodeGraphViewportWakeRebuild();
   } else {
     nodeGraphViewportCullSleepPainters(element);
   }
@@ -1287,20 +1333,26 @@ function ensureNodeGraphViewportModuleCull() {
     if (nodeGraphViewportPerf.htmlFrozen) {
       return;
     }
+    // B-101: the observer may only WAKE. Its entries arrive async and can
+    // describe an older camera: pan out (geometric cull sleeps the module,
+    // queuing a "not intersecting" entry), pan back fast (geometric cull
+    // wakes it), then the stale entry lands and sleeps it again. display:none
+    // never changes intersection again, so the module stayed bodiless. A
+    // non-intersect now asks the geometric cull (live camera) to decide.
+    let needsGeometricCull = false;
     for (const entry of entries) {
       const node = entry.target?.classList?.contains("dsp-node")
         ? entry.target
         : entry.target?.closest?.(".dsp-node");
-      if (node) {
-        // Text Boxes: a false non-intersect (camera still at 0, nodes at
-        // negative gx) sets display:none and this observer never retries.
-        // Geometric refresh owns sleep/wake for the annotation host.
-        const annotations = document.getElementById("nodeGraphAnnotationNodes");
-        if (annotations?.contains(node) && !entry.isIntersecting) {
-          continue;
-        }
-        nodeGraphViewportCullApply(node, entry.isIntersecting);
+      if (!node) continue;
+      if (entry.isIntersecting) {
+        nodeGraphViewportCullApply(node, true);
+      } else {
+        needsGeometricCull = true;
       }
+    }
+    if (needsGeometricCull) {
+      scheduleNodeGraphViewportCullRefresh();
     }
   }, {
     root,

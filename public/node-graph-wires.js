@@ -214,10 +214,9 @@
       const radius = typeof nodeGraphJackHitRadiusPx === "function" ? nodeGraphJackHitRadiusPx() : 8;
       const dx = world.x - center.x;
       const dy = world.y - center.y;
-      const square = typeof nodeGraphWireJackIsSquare === "function"
-        && nodeGraphWireJackIsSquare(endpoint.node, portName, endpoint.io);
-      const dist = square ? Math.max(Math.abs(dx), Math.abs(dy)) : Math.hypot(dx, dy);
-      return dist <= radius;
+      // B-099: every jack hit box is a square over the half-circle jack
+      // (round and square jacks alike), not a disk that misses the corners.
+      return Math.max(Math.abs(dx), Math.abs(dy)) <= radius;
     }
 
     function pointInEndpointHitbox(endpoint, clientX, clientY, hitboxElement = null) {
@@ -350,7 +349,26 @@
       return { claimed: true, port: port || null };
     }
 
+    // B-103: an input never links to a parameter's mod inlet (input-to-input).
+    // From an input, a parameter mod jack stands for that parameter's outlet;
+    // a parameter without an outlet is no target.
+    function parameterOutletForModulationJack(element) {
+      if (!element?.classList?.contains("modulation-input")) return element;
+      const node = element.dataset.node;
+      const param = element.dataset.param;
+      if (!node || !param) return null;
+      const esc = (v) => (typeof CSS === "object" && CSS.escape ? CSS.escape(v) : String(v).replace(/"/g, '\\"'));
+      return element.parentElement?.querySelector(`:scope > .node-param-port.parameter-output[data-param="${esc(param)}"]`)
+        || document.querySelector(`.node-param-port.parameter-output[data-node="${esc(node)}"][data-param="${esc(param)}"]`)
+        || null;
+    }
+
     function patchPointTargetFromPoint(clientX, clientY, sourceIo = "") {
+      const target = patchPointTargetFromPointRaw(clientX, clientY, sourceIo);
+      return sourceIo === "input" ? parameterOutletForModulationJack(target) : target;
+    }
+
+    function patchPointTargetFromPointRaw(clientX, clientY, sourceIo = "") {
       const parameterDrop = parameterWidgetHalfDrop(clientX, clientY, sourceIo);
       if (parameterDrop.claimed) {
         return parameterDrop.port;
@@ -418,6 +436,17 @@
       }
       if (a.io === "modulation" && b.io === "output") {
         return deps.connectModulation(b.node, b.port, a.node, a.param, reversedOptions());
+      }
+      // B-103: dragged from an input onto a parameter mod jack -> that
+      // parameter's outlet into the input.
+      if (a.io === "input" && b.io === "modulation") {
+        const input = a;
+        const mod = b;
+        const outlet = parameterOutletForModulationJack(
+          document.querySelector(`.node-param-port.modulation-input[data-node="${CSS.escape(String(mod.node))}"][data-param="${CSS.escape(String(mod.param))}"]`),
+        );
+        if (!outlet) return false;
+        return deps.connectPorts(mod.node, outlet.dataset.port, input.node, input.port, reversedOptions());
       }
       if (a.io === "output" && b.io === "graph") {
         return deps.connectGraphInput(a.node, a.port, b.node, b.graphInput || b.port, options);
@@ -565,6 +594,7 @@
       endpointPoint,
       endpointsMatch,
       endpointsShouldBurst,
+      parameterOutletForModulationJack,
       patchPointTargetFromPoint,
       pointInEndpointHitbox,
     };
@@ -604,6 +634,17 @@
 
     function portDirectionFromIo(io) {
       return io === "output" ? "output" : "input";
+    }
+
+    // "input" only when every fixed end is a plain input (B-103 outlet swap).
+    function moveModeSourceIo() {
+      const mode = state.portConnectionMode;
+      if (!mode) return "";
+      if (mode.direction !== "input") return mode.direction || "";
+      for (const { endpoint } of mode.selected.values()) {
+        if (endpoint?.io !== "input") return "modulation";
+      }
+      return "input";
     }
 
     function isCompatibleTarget(mode, endpoint) {
@@ -1062,6 +1103,15 @@
         deps.drawWires();
         return true;
       }
+      // B-103: pending input(s) + click a parameter mod jack -> use its outlet.
+      if (endpoint.io === "modulation" && moveModeSourceIo() === "input") {
+        const outlet = helpers.parameterOutletForModulationJack(hitboxElement);
+        const outletEndpoint = outlet ? helpers.endpointFromElement(outlet) : null;
+        if (outletEndpoint) {
+          commitPortConnectionMode(outletEndpoint, outlet);
+          return true;
+        }
+      }
       if (isCompatibleTarget(mode, endpoint)) {
         commitPortConnectionMode(endpoint, hitboxElement);
         return true;
@@ -1315,7 +1365,7 @@
           const target = helpers.patchPointTargetFromPoint(
             event.clientX,
             event.clientY,
-            state.portConnectionMode?.direction || "",
+            moveModeSourceIo(),
           );
           const targetHitbox = target?.closest?.(".node-io-row") || target;
           const targetEndpoint = targetHitbox ? helpers.endpointFromElement(targetHitbox) : null;
@@ -1358,7 +1408,7 @@
       const target = helpers.patchPointTargetFromPoint(
         event.clientX,
         event.clientY,
-        portDirectionFromIo(drag.endpoint?.io),
+        drag.endpoint?.io === "output" ? "output" : (drag.endpoint?.io || "input"),
       );
       const targetHitbox = target?.closest?.(".node-io-row") || target;
       const targetEndpoint = targetHitbox ? helpers.endpointFromElement(targetHitbox) : null;
@@ -1419,8 +1469,8 @@
           event.clientX,
           event.clientY,
           state.wireDragging
-            ? portDirectionFromIo(state.wireDragging.endpoint?.io)
-            : (state.portConnectionMode?.direction || ""),
+            ? (state.wireDragging.endpoint?.io === "output" ? "output" : (state.wireDragging.endpoint?.io || "input"))
+            : moveModeSourceIo(),
         ),
       );
     }

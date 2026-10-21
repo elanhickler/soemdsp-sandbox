@@ -1241,6 +1241,41 @@ ative_modules/polyblep/polyblep.cpp; library/include/soemdsp/math/analog_filter_
 - Expected: Write defaults writes defaults for choice sliders (and all other params) on the selected modules.
 - Fix shape: Not started. Logged only; not investigated. Docs-only; no code fix in this report.
 
+### B-099 — Jack hit boxes are not a square over the half-circle jack (too small)
+- Status: fixed (local, uncommitted)
+- Severity: see
+- Source: user 2026-10-20 (Argi)
+- Files: `public/node-graph-port-geometry.js` (`nodeGraphJackHitRadiusPx`), `public/node-graph-wires.js` (`pointInEndpointJackCircle`), `public/node-graph-gl-graph.js` (`nodeGraphGlHitTest`).
+- What: On Knob (and every module) the I/O jack hit area was smaller than the drawn half circle. Clicking near the jack's corners or tips missed.
+- Repro: Knob module, click or start a wire just inside the corner of the square around a half-circle jack. It misses.
+- Root cause: The jack test was a disk (`Math.hypot`) for round jacks, so it missed the corners of the square. Its radius came from `parseFloat(getComputedStyle(workspace).getPropertyValue("--node-port-diameter"))`, but that var is an unresolved `calc()` string, so it gave NaN and fell back to a fixed 8px that ignored jack size and stroke.
+- Fix: The radius now comes from a probe-resolved `--node-port-diameter` / 2 plus the crescent stroke, cached per style. The DOM and GL jack tests are both Chebyshev squares centered on the wall for all jacks. The nearest center still wins, so neighbors that touch stay unambiguous. Visuals are unchanged.
+
+### B-100 — Module drag: parts of the module draw one grid step out of sync
+- Status: fixed (local, uncommitted)
+- Severity: see
+- Source: user 2026-10-20 (Argi)
+- Files: `public/node-graph-workspace-geometry.js` (`positionNodeGraphNode`), `public/node-graph-module-geometry.js` (new `nodeGraphModuleGeometryTranslate`).
+- What: Dragging a module (e.g. Output) by its title made parts of the GL-drawn module land one grid step apart. Some parts used the new position and some still used the old one. It happened on every module.
+- Repro: Drag any module by its title in steps. The plate, jacks, displays, and wire ends trail the title, I/O labels, and slider text by one snap step.
+- Root cause: There were two position sources in one GL paint. Titles, labels, sliders, seeds, keys, and graph faces were measured from the live DOM (`--node-x/y`). The plate, displays, jacks, jack hit tests, and wire ends came from the published geometry store (`nodeGraphModuleGeometryById`). During a drag, `drawNodeGraphWires` painted GL **before** `nodeGraphModuleGeometryPublishVisible()` republished the store, so the store was always one move old.
+- Fix: `positionNodeGraphNode` is the only module-position writer. When it changes `--node-x/y`, it now shifts that module's published geometry (box, ports, param jacks) by the same delta and clears the per-frame port-center cache. Every reader sees the same snapped position in the same frame. It does no extra layout reads, so drag cost is unchanged.
+
+### B-101 — Pan out then quickly back: modules/displays stay without body/face
+- Status: fixed (local, uncommitted) — second pass 2026-10-20; the first pass was wrong
+- Severity: see
+- Source: user 2026-10-20 (Argi)
+- Files: `public/node-graph-viewport-perf.js`; new `scripts/smoke_cull_pan_return.mjs`.
+- What: After panning modules out of view and quickly back, their display faces (and sometimes their bodies) were not drawn and stayed missing.
+- How culling works (map):
+  - Geometric cull `nodeGraphViewportCullRefresh` is the SSOT. It compares the live camera, with a 96px margin, against `--node-x/y` and cached sizes, then calls `nodeGraphViewportCullApply`. That toggles `.viewport-asleep` (display:none) and wakes or sleeps the painter loops. It is scheduled by `scheduleNodeGraphViewportCullRefresh` (rAF, plus a 48ms trailing timer mid-gesture). When the HTML camera is frozen mid-gesture, it is skipped and settle culls once.
+  - IntersectionObserver (`ensureNodeGraphViewportModuleCull`, rootMargin 160) gives async per-module reports. It is ignored while frozen.
+  - Forced awake: selected modules, Mini Perform / screen-solo / presented faces, and pinned Layout Canvas modules (`nodeGraphViewportCullMustStayAwake`). `[hidden]` interior modules are always asleep. During boot, or with a zero-size workspace, everything is woken.
+  - GL graph: plates come from published geometry (kept while asleep). Display faces come from `.node-display-canvas` layout boxes, which an asleep module does not have. Both are rebuilt only on a full (non-lite) paint, i.e. the settle pass `flushNodeGraphViewportHeavyChrome`.
+  - Settle entry points: pointer-up (`flushNodeGraphViewportOnPointerUp`), the wheel settle timer, the immediate flush, and pageshow/pointerdown rescue. These call `clearNodeGraphViewportGestureClass` (thaw + queue cull), then the heavy chrome pass.
+- Root cause: At settle, the cull was only queued for the next rAF, but the GL rebuild ran right away. Modules that were asleep at that moment got a plate but no display faces. When the cull woke them a frame later, nothing rebuilt the GL faces, so the displays stayed blank until some unrelated full redraw. The first B-101 pass (observer can only wake) left this ordering untouched, which is why it did not help.
+- Fix: `flushNodeGraphViewportHeavyChrome` (full) now runs the geometric cull synchronously (`nodeGraphViewportCullFlushNow`) before it republishes geometry and rebuilds GL, and drops any queued cull. Any wake outside that pass (observer, selection, metamodule) schedules one coalesced rAF `nodeGraphGlGraphRebuildPlates` + present, skipped mid-gesture. The observer stays wake-only (non-intersect schedules a geometric cull), so a late async report cannot hide a visible module. Mid-gesture work is unchanged.
+- Verify: `node scripts/smoke_cull_pan_return.mjs`. Before the fix, 13 of 22 in-view softpop modules had no GL face after a quick or instant out-and-back. After the fix there are none, there is no sleep/wake activity at idle, and wheel zoom is clean.
 ---
 
 ### B-083 — Tube Saturation TraceWoscope face blank (demo Bright=0)
@@ -1563,3 +1598,22 @@ Add `require_no_js_dsp()` to `scripts/smoke_test.py` (or `scripts/check_no_js_ds
 - Hunt date: 2026-08-12. Branch at the time: `master` @ `0df9e86` plus uncommitted scope/runtime files.
 - Do not file “module grouping is under construction” (early return in save-as-group) unless that contract changes.
 - Site `/patch/*` slim-wasm silence was addressed in `0df9e86` (default combined + slim fallback). Reopen only if showcase is still silent.
+
+### B-102 - Page error "nodeGraphPulseExplosionDensity is not defined"
+
+- Status: open (pre-existing, seen while spawning every display type in `scripts/smoke_display_background_registry.mjs`, which ignores it for now).
+- Next: find the caller and the missing definition.
+
+### DB - Display background squares (DISPLAY_BACKGROUND_PLAN.md)
+
+- Each display registers its background; the GL body draws a square under the face from published geometry, so a screen keeps its color while asleep / mid-pan.
+- Found while verifying: squares in the plate batch were drawn under the plate fill (invisible); canvas-face squares now draw in the face batch. Display rects measured by offsets were off for some faces (in-module transforms); now client rects relative to the module, unscaled.
+- Verify: `node scripts/smoke_display_background_registry.mjs`, `node scripts/smoke_cull_pan_return.mjs` (square pixel asleep / mid-pan).
+
+### B-103 - Wire dragged from an input onto a parameter mod jack
+
+- Symptom: dragging from an input jack onto a parameter's mod inlet targeted that inlet (input-to-input), which is not a valid link.
+- Root cause: `patchPointTargetFromPoint` (node-graph-wires.js) returns the mod inlet jack whenever it is hit directly; only the widget-half drop knew to offer the parameter outlet to an input. `connectEndpoints` had no input + modulation case, and click mode treated a mod jack as "same direction" (multi-select) for a pending input.
+- Fix: from a plain input, a parameter mod jack stands for that parameter's outlet (`parameterOutletForModulationJack`), in drop, hover, move mode and click mode; `connectEndpoints(input, modulation)` connects outlet -> input. A parameter with no outlet is no target. Raw input-to-input is never made. Drags from a mod jack are unchanged.
+- Verify: `node scripts/smoke_input_to_param_drop.mjs`.
+
