@@ -303,6 +303,7 @@ struct PingPongDelayState {
   double hpR_x0, hpR_y0, hpR_a1, hpR_b0, hpR_b1;
   // Poles 2..4: cascaded TPT one-pole sections (state per channel / stage).
   int hpPoles, lpPoles;
+  double hpShelf, lpShelf;
   double tptGLp, tptGHp;     // G = g / (1 + g) for the LPF / HPF cutoffs
   double tptLpL[4], tptLpR[4];
   double tptHpL[4], tptHpR[4];
@@ -509,6 +510,8 @@ extern "C" int soemdsp_ping_pong_delay_create() {
       s.seed = 0u;  // host Seed applied via _set_seed
       s.hpPoles = 1;  // HPF / LPF Poles (set_poles)
       s.lpPoles = 1;
+      s.hpShelf = 1.0;  // HPF / LPF Shelf (set_shelves): 1 = full filter
+      s.lpShelf = 1.0;
       s.tptGLp = 0.0;
       s.tptGHp = 0.0;
       reset_delay_dsp(s);
@@ -709,6 +712,9 @@ static void process_one(PingPongDelayState& s, double inputL, double inputR) {
     hpL = feedback_tpt_hp(s, s.tptHpL, clippedL);
     hpR = feedback_tpt_hp(s, s.tptHpR, clippedR);
   }
+  // Shelf: out = dry + g * (filtered - dry); g = 1 is the full filter.
+  hpL = clippedL + s.hpShelf * (hpL - clippedL);
+  hpR = clippedR + s.hpShelf * (hpR - clippedR);
   if (s.lpPoles <= 1) {
     writeL = one_pole_lp_run(s.lpL_z, s.lpL_a1, hpL);
     writeR = one_pole_lp_run(s.lpR_z, s.lpR_a1, hpR);
@@ -716,6 +722,8 @@ static void process_one(PingPongDelayState& s, double inputL, double inputR) {
     writeL = feedback_tpt_lp(s, s.tptLpL, hpL);
     writeR = feedback_tpt_lp(s, s.tptLpR, hpR);
   }
+  writeL = hpL + s.lpShelf * (writeL - hpL);
+  writeR = hpR + s.lpShelf * (writeR - hpR);
 
   s.bufferL[s.position] = (float)clamp(writeL, -8.0, 8.0);
   s.bufferR[s.position] = (float)clamp(writeR, -8.0, 8.0);
@@ -748,6 +756,14 @@ extern "C" void soemdsp_ping_pong_delay_set_poles(int handle, double hpfPoles, d
     for (int k = 0; k < 4; k++) s.tptLpL[k] = s.tptLpR[k] = 0.0;
     s.lpPoles = l;
   }
+}
+
+// HPF / LPF Shelf, percent 0..100 (100 = full filter, 0 = filter bypassed).
+extern "C" void soemdsp_ping_pong_delay_set_shelves(int handle, double hpfShelf, double lpfShelf) {
+  if (handle < 1 || handle > kMaxInstances) return;
+  PingPongDelayState& s = gPool[handle - 1];
+  s.hpShelf = clamp(safe(hpfShelf), 0.0, 100.0) * 0.01;
+  s.lpShelf = clamp(safe(lpfShelf), 0.0, 100.0) * 0.01;
 }
 
 // Latch Control + Live params once per quantum (or when knobs move).
@@ -923,5 +939,5 @@ extern "C" int soemdsp_ping_pong_delay_memory_generation() {
 }
 
 extern "C" int soemdsp_ping_pong_delay_version() {
-  return 21; // 21: Amplitude no longer clamped to 0..2 (param range governs). 20: 20: separate HPF / LPF Poles (set_poles(h, l)). 19: Poles 1..4 feedback filter (set_poles; 1 = original). 18: Mode: Off / Left Right / Left Middle Right
+  return 22; // 22: HPF / LPF Shelf (set_shelves; 100% = full filter). 21: 21: Amplitude no longer clamped to 0..2 (param range governs). 20: 20: separate HPF / LPF Poles (set_poles(h, l)). 19: Poles 1..4 feedback filter (set_poles; 1 = original). 18: Mode: Off / Left Right / Left Middle Right
 }

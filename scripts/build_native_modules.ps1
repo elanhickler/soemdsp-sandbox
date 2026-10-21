@@ -298,6 +298,7 @@ $modules = @(
     "soemdsp_ping_pong_delay_create", "soemdsp_ping_pong_delay_destroy",
     "soemdsp_ping_pong_delay_reset", "soemdsp_ping_pong_delay_set_seed",
     "soemdsp_ping_pong_delay_set_poles",
+    "soemdsp_ping_pong_delay_set_shelves",
     "soemdsp_ping_pong_delay_sample", "soemdsp_ping_pong_delay_right",
     "soemdsp_ping_pong_delay_mod_left", "soemdsp_ping_pong_delay_mod_right",
     "soemdsp_ping_pong_delay_set_params", "soemdsp_ping_pong_delay_process_block",

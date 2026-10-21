@@ -4879,6 +4879,8 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
       push("seed", P.NATIVE_GRAPH_PARAM_SEED, disc("seed", 0));
       push("hpfPoles", P.NATIVE_GRAPH_PARAM_STAGES, disc("hpfPoles", 1));
       push("lpfPoles", P.NATIVE_GRAPH_PARAM_WAVEFORM, disc("lpfPoles", 1));
+      push("hpfShelf", P.NATIVE_GRAPH_PARAM_CENTER, cont("hpfShelf", 100));
+      push("lpfShelf", P.NATIVE_GRAPH_PARAM_SHAPE, cont("lpfShelf", 100));
       const bpm = Number(this.timing?.tempoBpm);
       push(
         "tempoBpm",

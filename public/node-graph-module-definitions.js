@@ -13960,6 +13960,7 @@ const nodeGraphModuleDefinitions = (
       { kind: "cells", params: [["lfoAmp", "Amp"], ["lfoRate", "Hz"], ["lfoVariation", "Vary"]], h: 54 },
       // Each filter handle: drag sideways = cutoff, up/down = that side's poles (1-4).
       { kind: "filter", hpf: "hpfFrequency", lpf: "lpfFrequency", hpfPoles: "hpfPoles", lpfPoles: "lpfPoles", h: 92 },
+      { kind: "cells", params: [["hpfShelf", "HP Shelf"], ["lpfShelf", "LP Shelf"]], h: 54 },
       { kind: "cells", params: [["feedback", "Feedback"], ["saturate", "Saturate"]], h: 54 },
       { kind: "cells", params: [["mix", "Mix"], ["amplitude", "Amplitude"]], h: 54 },
       { kind: "seed", param: "seed", h: 28 },
@@ -14171,6 +14172,10 @@ const nodeGraphModuleDefinitions = (
         max: "4",
         min: "1",
         step: "1" },
+      { defaultValue: "100", key: "hpfShelf", label: "HP Shelf", max: "100", mid: "50", min: "0", nonlinearSlider: false, step: "any", unit: "%",
+        tooltip: "Feedback HPF mix: dry + Shelf x (filtered - dry). 100% = full filter." },
+      { defaultValue: "100", key: "lpfShelf", label: "LP Shelf", max: "100", mid: "50", min: "0", nonlinearSlider: false, step: "any", unit: "%",
+        tooltip: "Feedback LPF mix: dry + Shelf x (filtered - dry). 100% = full filter." },
       {
         defaultValue: "0.35",
         key: "feedback",
