@@ -4,7 +4,8 @@
 // phase the clock starts from (Phase). The playhead follows the engine's own
 // phase (__Phase), shifted to the time the speakers play it, and flashes when
 // T fires. Display Settings `clockFace`: Background, Pulse (line), Playhead
-// (dot), Fill HBS, and one line thickness for the gate and the playhead.
+// (dot), Fill, Start (phase-start marker), Blink (playhead flash on T) HBS;
+// Line thickness (gate + playhead), Start thickness, Blink time (0 = off).
 // GPU only, drawn with the shared antialiased line drawer (gl-line-renderer).
 
 const nodeGraphClockFaceDisplaySettingsDefaults = Object.freeze({
@@ -21,10 +22,17 @@ const nodeGraphClockFaceDisplaySettingsDefaults = Object.freeze({
   fillHue: 191.5,
   fillBrightness: 0.075,
   fillSaturation: 0.67,
+  startHue: 44.5,
+  startBrightness: 0.16,
+  startSaturation: 0.49,
+  startThickness: 1.5,
+  blinkHue: 49,
+  blinkBrightness: 0.61,
+  blinkSaturation: 0.97,
+  blinkTime: 0.12,
 });
-const NODE_GRAPH_CLOCK_FACE_START = [1, 214 / 255, 102 / 255, 0.45];
-const NODE_GRAPH_CLOCK_FACE_FLASH = [1, 214 / 255, 102 / 255, 1];
-const NODE_GRAPH_CLOCK_FACE_FLASH_S = 0.12;
+/** HBS lamps the RoundShape model does not carry (it owns background / line / dot). */
+const NODE_GRAPH_CLOCK_FACE_EXTRA_LAMPS = Object.freeze(["fill", "start", "blink"]);
 
 function normalizeNodeGraphClockFaceSettings(settings = {}) {
   const source = settings && typeof settings === "object" ? settings : {};
@@ -35,17 +43,24 @@ function normalizeNodeGraphClockFaceSettings(settings = {}) {
     const n = Number(v);
     return Number.isFinite(n) ? Math.max(0, Math.min(1, n)) : fallback;
   };
-  const hue = Number(merged.fillHue);
-  const fillHue = Number.isFinite(hue) ? ((hue % 360) + 360) % 360 : d.fillHue;
-  const fillBrightness = unit(merged.fillBrightness, d.fillBrightness);
-  const fillSaturation = unit(merged.fillSaturation, d.fillSaturation);
-  return {
-    ...look,
-    fillHue,
-    fillBrightness,
-    fillSaturation,
-    fillPaint: nodeGraphHueBrightnessCss(fillHue, fillBrightness, 1, fillSaturation),
+  const out = { ...look };
+  for (const id of NODE_GRAPH_CLOCK_FACE_EXTRA_LAMPS) {
+    const raw = Number(merged[`${id}Hue`]);
+    const hue = Number.isFinite(raw) ? ((raw % 360) + 360) % 360 : d[`${id}Hue`];
+    const bright = unit(merged[`${id}Brightness`], d[`${id}Brightness`]);
+    const sat = unit(merged[`${id}Saturation`], d[`${id}Saturation`]);
+    out[`${id}Hue`] = hue;
+    out[`${id}Brightness`] = bright;
+    out[`${id}Saturation`] = sat;
+    out[`${id}Paint`] = nodeGraphHueBrightnessCss(hue, bright, 1, sat);
+  }
+  const span = (v, lo, hi, fallback) => {
+    const n = Number(v);
+    return Number.isFinite(n) ? Math.max(lo, Math.min(hi, n)) : fallback;
   };
+  out.startThickness = span(merged.startThickness, 0, 16, d.startThickness);
+  out.blinkTime = span(merged.blinkTime, 0, 1, d.blinkTime);
+  return out;
 }
 
 function nodeGraphClockFaceSettingsForNode(node) {
@@ -140,8 +155,8 @@ function drawNodeGraphClockFace(section) {
   // Wrapped since the last frame: the clock fired (T).
   if (Number.isFinite(heard) && Number.isFinite(section._clockLast) && heard < section._clockLast - 0.5) section._clockFlash = now;
   section._clockLast = heard;
-  const flashing = Number.isFinite(section._clockFlash) && now - section._clockFlash < NODE_GRAPH_CLOCK_FACE_FLASH_S;
   const look = nodeGraphClockFaceSettingsForNode(node);
+  const flashing = look.blinkTime > 0 && Number.isFinite(section._clockFlash) && now - section._clockFlash < look.blinkTime;
   const rgba = (css) => nodeGraphGlGraphParseCssColor(css, [1, 1, 1, 1]);
   const batch = nodeGraphGlLinesBegin(canvas, rgba(look.backgroundPaint), { scale: pixelRatio });
   if (!batch) {
@@ -178,10 +193,10 @@ function drawNodeGraphClockFace(section) {
   }
   // Phase start marker: where the clock starts (Phase).
   const xm = g.at(startPhase);
-  nodeGraphGlLinesSegment(batch, xm, high, xm, low, 0.75, fine, NODE_GRAPH_CLOCK_FACE_START);
+  if (look.startThickness > 0) nodeGraphGlLinesSegment(batch, xm, high, xm, low, look.startThickness * 0.5, fine, rgba(look.startPaint));
   // Playhead: the gate's height and stroke; flashes when the clock fires.
   const xp = g.at(phase);
-  nodeGraphGlLinesSegment(batch, xp, high, xp, low, halfPx, fine, flashing ? NODE_GRAPH_CLOCK_FACE_FLASH : rgba(look.dotPaint));
+  nodeGraphGlLinesSegment(batch, xp, high, xp, low, halfPx, fine, rgba(flashing ? look.blinkPaint : look.dotPaint));
   if (!nodeGraphGlLinesEnd(batch, "alpha")) nodeGraphDisplayGlFailed(canvas, "clock face: GL present failed");
 }
 

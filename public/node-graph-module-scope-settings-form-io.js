@@ -2286,6 +2286,8 @@ const NODE_GRAPH_HSL_LAMPS = Object.freeze({
   dot: ["dotHue", "dotBrightness", "dotSaturation"],
   background: ["backgroundHue", "backgroundBrightness", "backgroundSaturation"],
   fill: ["fillHue", "fillBrightness", "fillSaturation"],
+  start: ["startHue", "startBrightness", "startSaturation"],
+  blink: ["blinkHue", "blinkBrightness", "blinkSaturation"],
 });
 
 function syncNodeGraphHslLampWidgets(popover = document.getElementById("nodeTraceDisplaySettingsPopover")) {

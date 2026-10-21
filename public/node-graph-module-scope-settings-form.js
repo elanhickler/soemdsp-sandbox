@@ -156,7 +156,7 @@ function nodeGraphDisplaySettingsBuildStepperRowHtml(key, formType = null, optio
   }
   if ((formType === "roundShapeFace" || formType === "basicShapeFace" || formType === "softwaveOscFace" || formType === "sinCosFace" || formType === "clockFace") && key === "lineThickness") {
     label = "Line thickness";
-    title = formType === "roundShapeFace"
+    title = formType === "clockFace" ? "" : formType === "roundShapeFace"
       ? "Orbit stroke width in CSS pixels (0.25–16)."
       : "Wave stroke width in CSS pixels (0.25–16).";
   }
@@ -2115,6 +2115,7 @@ function buildNodeGraphDisplaySettingsBodyHtml(formType, node = null) {
     if ((type === "roundShapeFace" || type === "basicShapeFace" || type === "sinCosFace" || type === "clockFace") && section === "waterfall") {
       fieldKeys = [
         "lineThickness",
+        ...(type === "clockFace" ? ["startThickness", "blinkTime"] : []),
         "dotThickness",
         "pixelDensity",
       ].filter((key) => activeFields.has(key) && allowKey("fields", key));
@@ -2430,7 +2431,7 @@ function buildNodeGraphDisplaySettingsBodyHtml(formType, node = null) {
     }
     if ((type === "roundShapeFace" || type === "basicShapeFace" || type === "softwaveOscFace" || type === "sinCosFace" || type === "clockFace") && section === "waterfall") {
       // Background first, then Line, then Dot (same order as every other display).
-      // Clock: Background, Pulse (line), Playhead (dot), Fill.
+      // Clock: Background, Pulse (line), Playhead (dot), Fill, Start, Blink.
       const clock = type === "clockFace";
       const lamps = [
         ["background", "Background", "backgroundHue", "backgroundBrightness", "backgroundSaturation"],
@@ -2441,6 +2442,8 @@ function buildNodeGraphDisplaySettingsBodyHtml(formType, node = null) {
       }
       if (clock) {
         lamps.push(["fill", "Fill", "fillHue", "fillBrightness", "fillSaturation"]);
+        lamps.push(["start", "Start", "startHue", "startBrightness", "startSaturation"]);
+        lamps.push(["blink", "Blink", "blinkHue", "blinkBrightness", "blinkSaturation"]);
       }
       hbsCells.push(...lamps.map(([id, label, hue, bright, sat]) => `
           <div class="node-trace-display-hsl-lamp node-trace-display-color-widget-host" data-hsl-lamp="${id}" data-hsl-label="${label}">

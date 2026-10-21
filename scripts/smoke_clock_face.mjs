@@ -89,12 +89,30 @@ draw({ pulseStart: 0, pulseEnd: 1, rate: 0 }, 0.5);
 gate(polys.length === 1, "Rate 0 (DSP holds the gate low): closed rectangle");
 gate(ctx.nodeGraphClockFaceGateEndless(0, 1, 2, 44100) && !ctx.nodeGraphClockFaceGateEndless(0.01, 1, 2, 44100), "endless test matches DSP rounding");
 
+// Every element has a control: Start marker and Blink use their own HBS, thickness and time.
+const look2 = ctx.normalizeNodeGraphClockFaceSettings();
+gate(look2.startPaint === "rgb(116 99 51)" && look2.blinkPaint === "rgb(254 215 102)" && look2.startThickness === 1.5 && look2.blinkTime === 0.12, `defaults keep the old start marker + gold blink (${look2.startPaint}, ${look2.blinkPaint})`);
+Object.assign(node.traceDisplaySettings, { startHue: 120, startBrightness: 0.5, startSaturation: 1, startThickness: 4, blinkHue: 240, blinkBrightness: 0.5, blinkSaturation: 1, blinkTime: 0.5 });
+draw({ pulseStart: 0.1, pulseEnd: 0.6, rate: 1, phase: 0.3 }, 0.9);
+const mark = segs.find((s) => s.rgba === "rgb(0 255 0)");
+gate(Boolean(mark) && mark.half === 2, "Start marker uses Start HBS and Start thickness");
+section._clockLast = 0.95; ctx.performance.now = () => 1000;
+draw({}, 0.05);
+gate(segs[segs.length - 1].rgba === "rgb(0 0 255)", "blink uses Blink HBS when T fires");
+ctx.performance.now = () => 1000 + 400; draw({}, 0.1);
+gate(segs[segs.length - 1].rgba === "rgb(0 0 255)", "blink lasts Blink time (still on at 0.4 s of 0.5 s)");
+ctx.performance.now = () => 1000 + 600; draw({}, 0.15);
+gate(segs[segs.length - 1].rgba !== "rgb(0 0 255)", "blink over after Blink time");
+Object.assign(node.traceDisplaySettings, { blinkTime: 0, startThickness: 0 });
+section._clockLast = 0.95; ctx.performance.now = () => 5000; draw({}, 0.05);
+gate(segs[segs.length - 1].rgba !== "rgb(0 0 255)" && !segs.some((s) => s.rgba === "rgb(0 255 0)"), "Blink time 0 = no blink; Start thickness 0 = no marker");
+
 const defs = src("node-graph-module-definitions.js");
 gate(/\["phase", "Phase"\]\], horizontal: true/.test(defs), "Clock Phase face row is a horizontal slider");
 gate(/renderer: "clockFace", settingsSchema: "clockFace"/.test(defs), "Clock face has the clockFace Display Settings schema");
 const face = src("node-graph-module-face.js");
 gate(face.includes("horizontal: !!row.horizontal") && face.includes("if (wd.horizontal)"), "face cells draw horizontal sliders");
 const form = src("node-graph-module-scope-settings-form.js");
-gate(/\["fill", "Fill", "fillHue"/.test(form) && /clock \? "Playhead"/.test(form), "Display Settings lamps: Background, Pulse, Playhead, Fill");
+gate(/\["fill", "Fill", "fillHue"/.test(form) && /\["start", "Start"/.test(form) && /\["blink", "Blink"/.test(form) && /clock \? "Playhead"/.test(form), "Display Settings lamps: Background, Pulse, Playhead, Fill, Start, Blink");
 console.log(failures ? `FAILED ${failures}` : "smoke_clock_face ok");
 process.exit(failures ? 1 : 0);

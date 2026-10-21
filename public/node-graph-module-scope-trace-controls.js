@@ -921,9 +921,9 @@ const nodeGraphTraceDisplayActiveControlsByType = Object.freeze({
     toggles: Object.freeze([]),
     choices: Object.freeze([]),
   }),
-  // Clock: Background / Pulse / Playhead / Fill HBS lamps + one thickness.
+  // Clock: Background / Pulse / Playhead / Fill / Start / Blink HBS lamps + thicknesses, blink time.
   clockFace: Object.freeze({
-    fields: Object.freeze(["lineThickness"]),
+    fields: Object.freeze(["lineThickness", "startThickness", "blinkTime"]),
     colors: Object.freeze([]),
     toggles: Object.freeze([]),
     choices: Object.freeze([]),
@@ -1655,6 +1655,8 @@ const nodeGraphDisplaySettingsFieldMeta = Object.freeze({
     id: "nodeTraceDisplaySinCos4RingThickness",
     title: "SinCos4: width of the circle, % of the face square (0..100, default 1.2).",
   }),
+  startThickness: Object.freeze({ label: "Start thickness", inputmode: "decimal" }),
+  blinkTime: Object.freeze({ label: "Blink time", inputmode: "decimal" }),
   torchHue: Object.freeze({
     label: "Hue",
     inputmode: "decimal",

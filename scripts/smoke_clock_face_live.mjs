@@ -47,9 +47,11 @@ check(Boolean(before) && before.drawn > 0.01, "clock face draws more than its ba
 await page.evaluate(() => openNodeGraphTraceDisplaySettings("clock-1", {}));
 await page.waitForTimeout(800);
 const labels = await page.evaluate(() => [...document.querySelectorAll("#nodeTraceDisplaySettingsPopover [data-hsl-lamp]")].map((e) => e.getAttribute("data-hsl-label")));
-check(JSON.stringify(labels) === JSON.stringify(["Background", "Pulse", "Playhead", "Fill"]), "HBS rows Background, Pulse, Playhead, Fill", JSON.stringify(labels));
+check(JSON.stringify(labels) === JSON.stringify(["Background", "Pulse", "Playhead", "Fill", "Start", "Blink"]), "HBS rows Background, Pulse, Playhead, Fill, Start, Blink", JSON.stringify(labels));
 const thick = await page.evaluate(() => Boolean(document.querySelector('#nodeTraceDisplaySettingsPopover [data-trace-display-field="lineThickness"]')));
 check(thick, "Line thickness control present");
+const extra = await page.evaluate(() => ["startThickness", "blinkTime"].every((k) => document.querySelector(`#nodeTraceDisplaySettingsPopover [data-trace-display-field="${k}"]`)));
+check(extra, "Start thickness + Blink time controls present");
 const hex = await page.evaluateHandle(() => document.querySelector('[data-hsl-lamp="background"]')?.querySelector(".scw-hex") || null);
 const set = Boolean(await hex.evaluate((e) => Boolean(e && e.offsetParent)));
 if (set) { await hex.click({ clickCount: 3 }); await page.keyboard.type("#ff0000"); await page.keyboard.press("Enter"); }
