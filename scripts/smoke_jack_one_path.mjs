@@ -9,7 +9,8 @@ const P = { nodes: [
   { id: "sg", type: "smoothGraph", gx: 0, gy: 8 },
   { id: "re", type: "resonantEnvelope", gx: 0, gy: 30 },
   { id: "a3", type: "attenuverter", gx: 20, gy: 8 },
-  { id: "k1", type: "attenuverter", gx: 20, gy: 22 }],
+  { id: "k1", type: "attenuverter", gx: 20, gy: 22 },
+  { id: "ad", type: "expAdsr", gx: 40, gy: 8 }],
   connections: [], modulations: [{ sourceNode: "k1", sourcePort: "Out", destinationNode: "sg", destinationParam: "tension" }] };
 const b = await chromium.launch({ channel: "chrome", headless: true });
 const page = await (await b.newContext({ viewport: { width: 1600, height: 1000 } })).newPage();
@@ -70,6 +71,19 @@ for (const src of sources) {
     }
   }
   await clear();
+}
+// Curve ADSR Out dropped on Resonant Envelope's Frequency param slider (Argi's repro).
+{
+  const a = await pointOf({ node: "ad", jack: "Out" });
+  const t = await pointOf({ node: "re", sel: `.node-slider-readout[data-param="frequency"], [data-slider-target="node-re-frequency"]` });
+  check(Boolean(a && t), "ad.Out jack and re.frequency slider found");
+  if (a && t) {
+    await page.mouse.move(...a); await page.mouse.down();
+    for (let i = 1; i <= 12; i++) await page.mouse.move(a[0] + (t[0] - a[0]) * i / 12, a[1] + (t[1] - a[1]) * i / 12);
+    await page.mouse.up(); await page.waitForTimeout(300);
+    const added = JSON.parse(await mods()).filter((m) => m.destinationNode === "re" && m.sourceNode === "ad");
+    check(added.length === 1 && added[0].destinationParam === "frequency", "ad.Out drag -> re.frequency", JSON.stringify(added));
+  }
 }
 check(errs.length === 0, "no page errors", JSON.stringify(errs.slice(0, 3)));
 await b.close();
