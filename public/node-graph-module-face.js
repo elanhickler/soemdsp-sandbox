@@ -11,6 +11,8 @@ const NODE_GRAPH_FACE_STEP_DRAG_PX = 6;
 const NODE_GRAPH_FACE_FILTER_HZ = Object.freeze({ min: 20, max: 20000 });
 const NODE_GRAPH_FACE_FILTER_DB_MIN = -18;
 const NODE_GRAPH_FACE_FILTER_HANDLE_PX = 10;
+const NODE_GRAPH_FACE_FILTER_LABEL_PX = 20;
+const NODE_GRAPH_FACE_FILTER_TICK_PX = 16;
 
 const NodeGraphFaceInk = Object.freeze({
   rowFill: "#10131a",
@@ -395,10 +397,17 @@ function beginNodeGraphModuleFaceGesture(article, face, spec, event) {
     const lo = Math.min(th, tl);
     const hi = Math.max(th, tl);
     const mode = u0 > lo + edge && u0 < hi - edge ? "span" : (Math.abs(u0 - th) <= Math.abs(u0 - tl) ? "hpf" : "lpf");
+    // A single handle's up/down sets that side's poles (1-4), one dot stop per step.
+    const polesKey = mode === "hpf" ? wd.row?.hpfPoles : (mode === "lpf" ? wd.row?.lpfPoles : "");
+    const polesIn = polesKey ? nodeGraphModuleFaceInput(article, polesKey) : null;
+    const n0 = polesIn ? Math.round(nodeGraphModuleFaceValue(polesIn)) : 0;
+    const stopPx = Math.max(4, (wd.h - NODE_GRAPH_FACE_FILTER_LABEL_PX - NODE_GRAPH_FACE_FILTER_TICK_PX - 10) / 3);
     const onMove = (ev, drag) => {
-      const du = travel(ev).dx / Math.max(1, wd.w);
+      const { dx, dy } = travel(ev);
+      const du = dx / Math.max(1, wd.w);
       if (mode !== "lpf") setNodeGraphModuleFaceValue(hpf, nodeGraphModuleFaceFromLogT(th + du), drag);
       if (mode !== "hpf") setNodeGraphModuleFaceValue(lpf, nodeGraphModuleFaceFromLogT(tl + du), drag);
+      if (polesIn) setNodeGraphModuleFaceValue(polesIn, Math.max(1, Math.min(4, n0 + Math.round(-dy / stopPx))), drag);
     };
     nodeGraphModuleFaceCapture(face, event, onMove);
     return;
@@ -573,14 +582,14 @@ function nodeGraphModuleFaceDrawFilterGl(batch, el, wd, ox, oy, z, rect, line) {
   const lpfInput = nodeGraphModuleFaceInput(el, wd.lpf);
   const fcH = Math.max(1, nodeGraphModuleFaceValue(hpfInput));
   const fcL = Math.max(1, nodeGraphModuleFaceValue(lpfInput));
-  const labH = 20;
-  const tickH = 16;
+  const labH = NODE_GRAPH_FACE_FILTER_LABEL_PX;
+  const tickH = NODE_GRAPH_FACE_FILTER_TICK_PX;
   const top = wd.y + labH;
   const ch = wd.h - labH - tickH;
   const w = wd.w;
   line(0, top, w, 1, ink.rowLine);
   line(0, top + ch, w, 1, ink.tickLine);
-  // Pole params (wd.row.hpfPoles / lpfPoles, 1-4); none = 2 poles.
+  // Pole params per side (wd.row.hpfPoles / lpfPoles, 1-4); none = 2 poles.
   const stops = 4;
   const poles = (key) => {
     const input = key ? nodeGraphModuleFaceInput(el, key) : null;
