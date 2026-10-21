@@ -679,7 +679,9 @@ function nodeGraphGlGraphDrawPlate(batch, plate, toX, toY, zoom, cssW, cssH, pla
     });
   }
   if (typeof nodeGraphGlLinesModuleOutline === "function") {
-    nodeGraphGlLinesModuleOutline(batch, x0, y0, w0, h0, edge, color, plateJacks, plate.fill, 0);
+    // The border stops at each rail IO box's top and bottom edges.
+    const cuts = typeof nodeGraphModuleRailBorderCuts === "function" ? nodeGraphModuleRailBorderCuts(batch, plate, toX, toY, zoom) : null;
+    nodeGraphGlLinesModuleOutline(batch, x0, y0, w0, h0, edge, color, plateJacks, plate.fill, 0, cuts);
   }
 }
 
@@ -1114,7 +1116,7 @@ function nodeGraphGlGraphDragFrom(point, endpoint) {
   return point;
 }
 
-function nodeGraphGlGraphPushWire(wires, from, to, color, zoom, wire, squareFrom, squareTo, kind, index, railFrom = false, railTo = false) {
+function nodeGraphGlGraphPushWire(wires, from, to, color, zoom, wire, squareFrom, squareTo, kind, index, railFrom = false, railTo = false, toColor = "") {
   if (!from || !to) return;
   const ax = Number(from.x);
   const ay = Number(from.y);
@@ -1125,19 +1127,27 @@ function nodeGraphGlGraphPushWire(wires, from, to, color, zoom, wire, squareFrom
   }
   // Both end dots take the wire's own (source outlet) colour.
   const rgba = nodeGraphGlGraphCssColor(color);
+  // A param wire (an end on a rail) crossfades along its length from the
+  // source outlet colour to the destination jack colour, both from
+  // nodeGraphPortWireColor (mod inlet purple, Additive CMYK cyan, ...).
+  const rgbaFrom = rgba;
+  const rgbaTo = (railFrom || railTo) && toColor ? nodeGraphGlGraphCssColor(toColor) : rgba;
   wires.push({
-    rgba,
+    rgba: rgbaFrom,
+    rgbaEnd: railFrom || railTo ? rgbaTo : null,
     kind: kind || "",
     style: typeof normalizeNodeGraphWireType === "function"
       ? normalizeNodeGraphWireType(wire?.wireType)
       : "ribbon",
     index: Number.isInteger(index) ? index : -1,
     xy: nodeGraphGlGraphShape(from, to, wire, zoom),
-    // A wire end on a rail has no dot (the rail inlet box is the end).
+    // A param wire (an end on a rail IO box) has its own width and a tiny
+    // round end dot where it meets the box.
+    param: railFrom === true || railTo === true,
     dots: [
-      railFrom ? null : { x: ax, y: ay, rgba, square: squareFrom === true },
-      railTo ? null : { x: bx, y: by, rgba, square: squareTo === true },
-    ].filter(Boolean),
+      { x: ax, y: ay, rgba: rgbaFrom, square: !railFrom && squareFrom === true, param: railFrom === true },
+      { x: bx, y: by, rgba: rgbaTo, square: !railTo && squareTo === true, param: railTo === true },
+    ],
   });
 }
 
@@ -1172,6 +1182,8 @@ function nodeGraphGlGraphRebuild(options = {}) {
         "signal",
         i,
         rail(connection.sourceNode, connection.sourcePort),
+        false,
+        colorOf(connection.destinationNode, connection.destinationPort, "input"),
       );
     }
     const modulationWires = nodeGraphMvp.modulations || [];
@@ -1194,6 +1206,7 @@ function nodeGraphGlGraphRebuild(options = {}) {
         i,
         rail(modulation.sourceNode, modulation.sourcePort),
         rail(modulation.destinationNode, modulation.destinationParam),
+        colorOf(modulation.destinationNode, modulation.destinationParam, "modulation"),
       );
     }
     const graphWires = nodeGraphMvp.graphConnections || [];
@@ -1519,12 +1532,17 @@ function nodeGraphGlGraphPresent(options = {}) {
     nodeGraphGlGraphState.thick = thick;
     nodeGraphGlGraphState.dotSize = dotSize;
     nodeGraphGlGraphState.traceThick = Number.parseFloat(style.getPropertyValue("--node-trace-wire-thickness")) || 1;
+    nodeGraphGlGraphState.paramThick = Number.parseFloat(style.getPropertyValue("--node-param-wire-thickness")) || 0.5;
+    const paramDot = Number.parseFloat(style.getPropertyValue("--node-param-wire-dot-size"));
+    nodeGraphGlGraphState.paramDot = Number.isFinite(paramDot) ? paramDot : 1.61;
   }
   // Widths are zoom-1 px. The line shader scales them by the live camera,
   // and the cable fade stays 2 screen px. Traces are a 2px stroke that scales.
   const halfWorld = Math.max(0, thick * 0.5);
   const traceHalf = 1;
   const dotWorld = Math.max(0, dotSize * 0.5);
+  const paramHalf = Math.max(0, (nodeGraphGlGraphState.paramThick || 0.5) * 0.5);
+  const paramDotWorld = Math.max(0, (nodeGraphGlGraphState.paramDot ?? 1.61) * 0.5);
   const wireFeather = 2;
   const screenX = (x) => (x - cam.x) * zoom;
   const screenY = (y) => (y - cam.y) * zoom;
@@ -1570,7 +1588,7 @@ function nodeGraphGlGraphPresent(options = {}) {
     }
     if (!visible) continue;
     const style = wire.style === "trace" ? "trace" : "ribbon";
-    let strokeWorld = style === "trace" ? traceHalf : halfWorld;
+    let strokeWorld = style === "trace" ? traceHalf : (wire.param ? paramHalf : halfWorld);
     const feather = style === "trace" ? 0 : wireFeather;
     let rgba = wire.rgba;
     let picked = false;
@@ -1590,7 +1608,7 @@ function nodeGraphGlGraphPresent(options = {}) {
     } else if (typeof nodeGraphGlLinesRibbon !== "function") {
       nodeGraphGlLinesPolyline(wireBatch, pts, stroke, feather, rgba, "butt");
     } else {
-      nodeGraphGlLinesRibbon(wireBatch, pts, stroke, feather, rgba);
+      nodeGraphGlLinesRibbon(wireBatch, pts, stroke, feather, rgba, picked ? null : wire.rgbaEnd);
     }
     const dots = wire.dots || [];
     const selectedRgba = [0.95, 0.86, 0.45, 1];
@@ -1600,7 +1618,9 @@ function nodeGraphGlGraphPresent(options = {}) {
       const dy = screenY(dot.y);
       const dotX = frameCamera ? dot.x : dx;
       const dotY = frameCamera ? dot.y : dy;
-      const dotReach = frameCamera ? dotWorld : dotWorld * zoom;
+      const dotHalf = dot.param ? paramDotWorld : dotWorld;
+      if (!(dotHalf > 0)) continue;
+      const dotReach = frameCamera ? dotHalf : dotHalf * zoom;
       if (dx < -dotReach || dy < -dotReach || dx > cssW + dotReach || dy > cssH + dotReach) continue;
       const dotColor = picked ? selectedRgba : dot.rgba;
       if (dot.square) {

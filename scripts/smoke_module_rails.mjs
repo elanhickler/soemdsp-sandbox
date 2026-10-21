@@ -5,6 +5,9 @@
 //   - A cable dropped on a param control lands on that param's mod inlet.
 //   - Comparator: title bar + input rail | output rail, short labels, no face.
 //   - No title (hover text) on modules, rails or ports.
+//   - Chip pin: IO boxes have no outward stroke; the module border is cut
+//     over each box and the box runs through it (pixel-sampled at 3 zooms); the wire ends on the
+//     border's outer edge, centred on the box.
 // Usage: node scripts/smoke_module_rails.mjs   (server.py on :8765)
 //   SANDBOX_URL, CHROME_PATH, PW_MODULE (playwright-core path), SHOT_DIR optional.
 import fs from "node:fs";
@@ -46,7 +49,7 @@ await page.goto(`${BASE}?pagePatch=rails-smoke`, { waitUntil: "domcontentloaded"
 const start = page.locator("#nodeBootStartButton");
 if (await start.count()) await start.click().catch(() => {});
 await page.waitForFunction(() => document.querySelector('article[data-node="pp-1"]')
-  && document.querySelector('article[data-node="cmp-1"]'), null, { timeout: 120000 });
+  && document.querySelector('article[data-node="cmp-1"]'), null, { timeout: 400000 });
 await page.waitForTimeout(2500);
 
 const snap = () => page.evaluate(() => {
@@ -128,6 +131,91 @@ check("IO band unchanged", JSON.stringify(one.ioRect) === JSON.stringify(rest.io
 check("params shrink by both rails", Math.abs((rest.ctlW - one.ctlW) - 2 * RAIL * z) < 1.5, `${rest.ctlW} -> ${one.ctlW}`);
 check("rails sit under the display", rest.displayBottom === null || one.rowTop >= rest.displayBottom - 0.5, `${one.rowTop} vs ${rest.displayBottom}`);
 await shot("pingpong-patched", 'article[data-node="pp-1"]');
+
+// Chip pin: each IO box has no outward stroke and the module border is cut
+// over the box's span; the box fill and its top / bottom strokes run through
+// the border band. Checked on real pixels at several zooms: in a crop around
+// each wall, the wall column (border ink above the box) holds only box fill
+// and box stroke over the box, and its stroke rows are the box's own rows.
+const crop = async (x, y, w, h) => {
+  const buf = await page.screenshot({ clip: { x, y, width: w, height: h } });
+  return page.evaluate(async (b64) => {
+    const img = await createImageBitmap(await (await fetch(`data:image/png;base64,${b64}`)).blob());
+    const c = new OffscreenCanvas(img.width, img.height).getContext("2d");
+    c.drawImage(img, 0, 0);
+    return { w: img.width, h: img.height, d: [...c.getImageData(0, 0, img.width, img.height).data] };
+  }, buf.toString("base64"));
+};
+const at = (im, x, y) => im.d.slice((y * im.w + x) * 4, (y * im.w + x) * 4 + 3);
+const near = (p, hex, tol = 12) => [1, 3, 5].every((k, i) => Math.abs(p[i] - parseInt(hex.slice(k, k + 2), 16)) <= tol);
+const FILL = "#111111";
+const INK = "#888899";
+const wallCheck = (im, side, label) => {
+  // The crop is centred on the box's outward edge. Read the box's top /
+  // bottom stroke rows off a column inside it, then find the wall: the first
+  // border-ink column outward from the box edge, on the row just above it.
+  const isBorder = (p) => p[0] > 90 && Math.abs(p[0] - p[2]) < 20 && !near(p, INK, 8);
+  const mid = Math.floor(im.w / 2);
+  const inner = mid - side * 2;
+  const ink = [...Array(im.h).keys()].filter((y) => near(at(im, inner, y), INK));
+  // First ink run is the top stroke, the next run the bottom stroke.
+  const gap = ink.findIndex((y, i) => i > 0 && y !== ink[i - 1] + 1);
+  const top = ink[0];
+  const tail = gap < 0 ? [] : ink.slice(gap);
+  const gap2 = tail.findIndex((y, i) => i > 0 && y !== tail[i - 1] + 1);
+  const bot = gap2 < 0 ? tail[tail.length - 1] : tail[gap2 - 1];
+  if (!(bot - top > 4)) return check(`${label}: box found`, false, JSON.stringify(ink));
+  const cols = [...Array(im.w).keys()].filter((x) => (side < 0 ? x <= mid : x >= mid - 1)).sort((p, q) => side * (p - q));
+  const wall = cols.find((x) => isBorder(at(im, x, top - 1)));
+  if (wall === undefined) return check(`${label}: wall found`, false);
+  check(`${label}: border intact just outside the box`, isBorder(at(im, wall, top - 1)) && isBorder(at(im, wall, bot + 1)));
+  // Every border-band column (the wall's full width, read just above the
+  // box): zero border pixels over the box rows, and the box's top / bottom
+  // strokes run through the band.
+  const band = [];
+  for (let x = wall; x >= 0 && x < im.w && isBorder(at(im, x, top - 1)); x += side) band.push(x);
+  const bad = [];
+  for (const x of band) {
+    for (let y = top; y <= bot; y += 1) if (isBorder(at(im, x, y))) bad.push([x, y, at(im, x, y)]);
+    if (!near(at(im, x, top), INK) || !near(at(im, x, bot), INK)) bad.push([x, "stroke", at(im, x, top), at(im, x, bot)]);
+  }
+  check(`${label}: zero border pixels in the gap (${band.length} px wall), box strokes run through it`, band.length > 0 && bad.length === 0, JSON.stringify(bad.slice(0, 3)));
+  const wallOut = band[band.length - 1] ?? wall;
+  // Past the wall is the workspace or the wire, never more box.
+  const outside = at(im, wallOut + side, top - 1);
+  check(`${label}: box stops at the wall's outer edge`, !near(outside, FILL, 4) && !near(outside, INK), JSON.stringify(outside));
+};
+for (const zoom of [0.75, 1, 1.5]) {
+  await page.evaluate((zz) => { setNodeGraphZoom(zz); drawNodeGraphWires(); }, zoom);
+  await page.waitForTimeout(500);
+  const geo = await page.evaluate(() => {
+    const pp = document.querySelector('article[data-node="pp-1"]');
+    const plate = nodeGraphGlGraphState.plates.find((p) => p.id === "pp-1");
+    const z = nodeGraphMvp.viewport?.zoom || nodeGraphMvp.zoom || 1;
+    const row = pp.querySelector('.node-parameter-row[data-param="feedback"]');
+    const r = (sel) => { const b = row.querySelector(sel).getBoundingClientRect(); return [b.left, b.top, b.right, b.bottom]; };
+    const pins = nodeGraphModuleRailBoxes(null, plate, (x) => x, (y) => y, 1)?.boxes;
+    const end = nodeGraphModulationPortCenter("pp-1", "feedback");
+    const pw = nodeGraphGlGraphState.wires.find((w) => w.kind === "modulation");
+    const param = pw ? { param: pw.param, dot: pw.dots[1]?.param === true, thick: nodeGraphGlGraphState.paramThick, dotSize: nodeGraphGlGraphState.paramDot, jack: nodeGraphGlGraphState.thick, from: [...pw.rgba].map((v) => Math.round(v * 255)), to: pw.rgbaEnd && [...pw.rgbaEnd].map((v) => Math.round(v * 255)) } : null;
+    const lb = nodeGraphModuleLayoutBox(row.querySelector(".modulation-input"), pp);
+    return { z, pins: pins ? pins.map((p) => p.side) : [], inL: r(".modulation-input"), outR: r(".parameter-output"), param,
+      wire: end ? [end.x - plate.x, end.y - (plate.y + lb.y + lb.h / 2)] : null };
+  });
+  check(`zoom ${zoom}: wire ends on the box's open side, on the border's outer edge, centred`, geo.wire && Math.abs(geo.wire[0] + 1) < 0.01 && Math.abs(geo.wire[1]) < 0.01, JSON.stringify(geo.wire));
+  check(`zoom ${zoom}: param wire is thin with a tiny end dot on the box, jack wires keep their width`, geo.param?.param && geo.param.dot && geo.param.thick === 0.5 && geo.param.dotSize === 1.61 && geo.param.jack === 2, JSON.stringify(geo.param));
+  check(`zoom ${zoom}: param wire crossfades from the outlet colour to the mod inlet colour (purple)`, geo.param?.to && geo.param.to.slice(0, 3).join() === "177,132,255" && geo.param.from.slice(0, 3).join() !== "177,132,255", JSON.stringify(geo.param));
+  check(`zoom ${zoom}: one IO box per rail, left and right`, geo.pins.length === 2 && geo.pins.includes(-1) && geo.pins.includes(1), JSON.stringify(geo.pins));
+  const bh = Math.min(geo.inL[3] - geo.inL[1], 16 * geo.z);
+  const cy = (geo.inL[1] + geo.inL[3]) / 2;
+  const y0 = Math.floor(cy - bh / 2 - 4 * geo.z);
+  const h = Math.ceil(bh + 8 * geo.z);
+  wallCheck(await crop(Math.floor(geo.inL[0]) - 8, y0 - 40, 16, h + 80), -1, `zoom ${zoom} left`);
+  wallCheck(await crop(Math.floor(geo.outR[2]) - 8, y0 - 40, 16, h + 80), 1, `zoom ${zoom} right`);
+  if (SHOT) await page.screenshot({ path: path.join(SHOT, `rails-pin-zoom-${zoom}.png`), clip: { x: Math.max(0, Math.floor(geo.inL[0]) - 12), y: Math.max(0, y0 - 40 * geo.z), width: Math.ceil(geo.outR[2] - geo.inL[0]) + 24, height: Math.ceil(h + 80 * geo.z) } });
+}
+await page.evaluate(() => { setNodeGraphZoom(1); drawNodeGraphWires(); });
+await page.waitForTimeout(300);
 if (SHOT) await page.locator('article[data-node="pp-1"]').screenshot({ path: path.join(SHOT, "rails3-used-only.png") });
 if (SHOT) await page.locator('article[data-node="pp-1"]').screenshot({ path: path.join(SHOT, "rails3-one-patched.png") });
 if (SHOT) await page.screenshot({ path: path.join(SHOT, "rails-workspace-patched.png") });

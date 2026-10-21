@@ -7729,6 +7729,12 @@ body.keyboard-debug-hidden .node-midi-keyboard-signal-bar {
   /* Zoom-1 cable and trace widths. Both scale with the camera. */
   --node-wire-thickness: 2px;
   --node-trace-wire-thickness: 1px;
+  /* Param wires (ending on a rail IO box): UIDEV param wire thickness / end dot. */
+  --node-param-wire-thickness: 0.5px;
+  --node-param-wire-dot-size: 1.61px;
+  /* Rail IO box inlet notch (UIDev): half-disc fade on the box's open edge. */
+  --node-rail-notch-radius: 5px;
+  --node-rail-notch-opacity: 0.5;
   /*
    * Signal jack cell:
    *   width  = half-slot (inward half fits)

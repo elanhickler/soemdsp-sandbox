@@ -125,6 +125,12 @@ function nodeGraphModuleLayoutPatchPoint(el, moduleEl, origin, io) {
     localX = side === "right" ? laid.x + laid.w
       : side === "left" ? laid.x
         : laid.x + laid.w * 0.5;
+    // Rail IO box (chip pin): the box runs through the module border, so the
+    // wire meets its open side on the border's outer edge.
+    if (el.classList.contains("rail-patched") && moduleEl.classList.contains("mod-rail-open") && side) {
+      const border = Number.parseFloat(getComputedStyle(moduleEl).getPropertyValue("--node-module-idle-stroke-width")) || 1;
+      localX += side === "right" ? border : -border;
+    }
   } else {
     const cssX = getComputedStyle(el).getPropertyValue("--node-patch-point-x").trim();
     const percentMatch = cssX.match(/^(-?\d+(?:\.\d+)?)%$/);

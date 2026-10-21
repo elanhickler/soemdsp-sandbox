@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Big+Shoulders:wght@100..900&family=JetBrains+Mono:wght@400;500;600;700&family=Poiret+One&family=Tenor+Sans&family=Thasadith:ital,wght@0,400;0,700;1,400;1,700&family=Zen+Loop&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="./public/styles.css?v=gutter-rows-1">
+  <link rel="stylesheet" href="./public/styles.css?v=rail-notch-1">
   <link rel="stylesheet" href="./public/perform.css?v=perform-param-io-1">
   <link rel="stylesheet" href="./public/modules/portal/portal-ui.css?v=portal-thru-1">
   <link rel="stylesheet" href="./public/modules/keypad/keypad-ui.css?v=keypad-press-once-1">
@@ -1424,6 +1424,34 @@
               checked
               title="Cable ends use jack RGB. Dual-color gradient still matches inlet and outlet.">
             <span>wires follow port colors</span>
+          </label>
+          <label class="node-ui-dev-control">
+            <span>param wire thickness</span>
+            <div class="node-ui-dev-control-row">
+              <input id="nodeUiDevParamWireThickness" type="range" min="0.5" max="6" step="0.5" value="0.5">
+              <output id="nodeUiDevParamWireThicknessValue" for="nodeUiDevParamWireThickness">0.5px</output>
+            </div>
+          </label>
+          <label class="node-ui-dev-control">
+            <span>param wire end dot</span>
+            <div class="node-ui-dev-control-row">
+              <input id="nodeUiDevParamWireDotSize" type="range" min="0" max="12" step="0.01" value="1.61">
+              <output id="nodeUiDevParamWireDotSizeValue" for="nodeUiDevParamWireDotSize">1.61px</output>
+            </div>
+          </label>
+          <label class="node-ui-dev-control">
+            <span>param inlet notch radius</span>
+            <div class="node-ui-dev-control-row">
+              <input id="nodeUiDevRailNotchRadius" type="range" min="0" max="8" step="0.25" value="5">
+              <output id="nodeUiDevRailNotchRadiusValue" for="nodeUiDevRailNotchRadius">5px</output>
+            </div>
+          </label>
+          <label class="node-ui-dev-control">
+            <span>param inlet notch opacity</span>
+            <div class="node-ui-dev-control-row">
+              <input id="nodeUiDevRailNotchOpacity" type="range" min="0" max="100" step="1" value="50">
+              <output id="nodeUiDevRailNotchOpacityValue" for="nodeUiDevRailNotchOpacity">50%</output>
+            </div>
           </label>
           <label class="node-ui-dev-check">
             <input
@@ -3087,7 +3115,7 @@
   <script data-boot-defer type="text/plain" src="./public/node-graph-phosphor-draw-sample.js?v=phosphor-draw-sample-1"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-color-standards.js?v=color-standards-1"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-chromeless-module-registry.js?v=unique-in-patch-1"></script>
-  <script data-boot-defer type="text/plain" src="./public/node-graph-module-rails.js?v=merge-1"></script>
+  <script data-boot-defer type="text/plain" src="./public/node-graph-module-rails.js?v=rail-notch-1"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-module-face.js?v=clock-hslider-1"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-module-chrome.js?v=rails-1"></script>
   <script data-boot-defer type="text/plain" src="./public/modules/led/led-register.js?v=rename-value-led-1"></script>
@@ -3280,7 +3308,7 @@
   <script data-boot-defer type="text/plain" src="./public/modules/place/place-ui.js?v=place-1"></script>
   <script data-boot-defer type="text/plain" src="./public/lib/visual/picture-device.js?v=vg-8-sg"></script>
   <script data-boot-defer type="text/plain" src="./public/lib/visual/display-canvas.js?v=vg-8"></script>
-  <script data-boot-defer type="text/plain" src="./public/lib/visual/gl-line-renderer.js?v=text-head-1"></script>
+  <script data-boot-defer type="text/plain" src="./public/lib/visual/gl-line-renderer.js?v=rail-notch-1"></script>
   <script data-boot-defer type="text/plain" src="./public/modules/reverbEffect/sabrina-reverb-gl.js?v=sabrina-clap-port-1"></script>
   <script data-boot-defer type="text/plain" src="./public/lib/visual/glyph-sdf-atlas.js?v=sdf-atlas-1"></script>
   <script data-boot-defer type="text/plain" src="./public/lib/visual/color-widget-plane-gl.js?v=allow-gl-20261016d"></script>
@@ -3336,7 +3364,7 @@
   <script data-boot-defer type="text/plain" src="./public/node-graph-slider-dragging.js?v=ds-numbers-1"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-node-accessors.js?v=perf4-20261015"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-selection.js?v=do-2"></script>
-  <script data-boot-defer type="text/plain" src="./public/node-graph-module-geometry.js?v=thru-end-1"></script>
+  <script data-boot-defer type="text/plain" src="./public/node-graph-module-geometry.js?v=rail-pin-1"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-port-geometry.js?v=jack-disk-1"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-jack-chrome.js?v=snare-lr-1"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-port-types.js?v=picture-io-1"></script>
@@ -3367,19 +3395,19 @@
   <script data-boot-defer type="text/plain" src="./public/node-graph-trace-router.js?v=no-self-burst-1780321400000"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-wire-rendering.js?v=rails-1"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-stroke-builder.js?v=snake-gl-1"></script>
-  <script data-boot-defer type="text/plain" src="./public/node-graph-gl-graph.js?v=one-jack-path-1"></script>
+  <script data-boot-defer type="text/plain" src="./public/node-graph-gl-graph.js?v=rail-notch-1"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-render-output.js?v=dbgpanel-rm-1"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-debug-copy.js?v=dbgpanel-rm-1"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-execution-debug-api.js?v=dbgpanel-rm-1"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-tooltips.js?v=do-2"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-interaction-help.js?v=mini-round2-1"></script>
   <script data-boot-defer type="text/plain" src="./public/presets/useruisettings.js?v=wire-2px-1"></script>
-  <script data-boot-defer type="text/plain" src="./public/node-graph-ui-settings-definitions.js?v=wire-2px-1"></script>
+  <script data-boot-defer type="text/plain" src="./public/node-graph-ui-settings-definitions.js?v=rail-notch-1"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-ui-settings-utils.js?v=slider-unit-color-1780307400000"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-user-ui-settings-controls.js?v=color-row-1"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-ui-settings-panels.js?v=uidev-page-1"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-ui-settings-persistence.js?v=mini-perform-1"></script>
-  <script data-boot-defer type="text/plain" src="./public/node-graph-ui-settings-sync.js?v=wire-2px-1"></script>
+  <script data-boot-defer type="text/plain" src="./public/node-graph-ui-settings-sync.js?v=rail-notch-1"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-keyboard-shortcuts.js?v=mini-round2-1"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-live-status-text.js?v=live-plan-preserve-20260634"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-live-status-controls.js?v=slider-unit-color-1780307400000"></script>
@@ -3524,7 +3552,7 @@
   <script data-boot-defer type="text/plain" src="./public/node-graph-header-event-bindings.js?v=mini-round2-1"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-help-event-bindings.js?v=remove-workspace-view-0002"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-scene-menu-event-bindings.js?v=rails-1"></script>
-  <script data-boot-defer type="text/plain" src="./public/node-graph-uidev-event-bindings.js?v=ds-numbers-1"></script>
+  <script data-boot-defer type="text/plain" src="./public/node-graph-uidev-event-bindings.js?v=rail-notch-1"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-settings-event-bindings.js?v=book-ui-script-1"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-slider-event-bindings.js?v=node-graph-slider-event-bindings-refactor-1780369200000"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-event-bindings.js?v=perform-hotkeys-1"></script>

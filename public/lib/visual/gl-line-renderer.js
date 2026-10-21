@@ -351,12 +351,17 @@ void main() {
   } else {
     gl_Position = vec4(position, 0.0, 1.0);
   }
-  vPx = pixel;
+  // vPx moves with the grown quad. Interpolating the unmoved corner pixel
+  // over the grown quad skewed the shader's pixel grid against the window,
+  // so the plate border sat up to a device px off every quad drawn beside it.
+  vPx = pixel + (pos - position);
 }
 `;
   const OUT_FS = `
 precision mediump float;
-varying vec2 vPx;
+// highp: world-space pixel coords near 1000 lose half-pixels in mediump, which
+// walked the plate border a device row off the quads drawn beside it.
+varying highp vec2 vPx;
 // Shared with the vertex shader, whose floats are highp. An unqualified
 // float here is mediump and the program fails to link.
 uniform highp vec4 uPlate;
@@ -367,6 +372,10 @@ uniform float uInletGap;
 uniform int uCount;
 uniform vec4 uJack[24];
 uniform vec4 uJackColor[24];
+// Border cuts: (y0, y1, side, 0) per rail IO box. No stroke on that wall over
+// [y0, y1); the box is drawn through the gap by the rail quads.
+uniform int uCutCount;
+uniform highp vec4 uCut[16];
 uniform highp float uPixel;
 uniform highp vec3 uCam;
 uniform highp float uDevice;
@@ -383,8 +392,10 @@ void main() {
     // border and the body across the pixel grid. Stroke is at least 1 px.
     vec2 origin = uCam.xy;
     px = (vPx - origin) * z * devScale;
-    plateMin = floor((uPlate.xy - origin) * z * devScale + 0.5);
-    plateMax = floor((uPlate.xy + uPlate.zw - origin) * z * devScale + 0.5);
+    // ceil(v - 0.5): the first pixel a quad edge at v covers (centre >= v),
+    // so a half-pixel edge snaps the same way the face / rail quads rasterize.
+    plateMin = ceil((uPlate.xy - origin) * z * devScale - 0.5);
+    plateMax = ceil((uPlate.xy + uPlate.zw - origin) * z * devScale - 0.5);
     plateMax = max(plateMax, plateMin + vec2(1.0));
     strokeW = max(1.0, floor(max(uStroke, 0.0) * z * devScale + 0.5));
     gap = max(uInletGap, 0.0) * z * devScale;
@@ -447,6 +458,18 @@ void main() {
   // strokeW to an integer of at least 1. Jacks keep a 1px AA ring.
   float strokePx = uPixel > 0.5 ? strokeW : max(1.0, floor(strokeW + 0.5));
   float fat = (sdRect > 0.0 && sdRect <= strokePx) ? 1.0 : 0.0;
+  for (int i = 0; i < 16; i++) {
+    if (i >= uCutCount) break;
+    highp vec4 cut = uCut[i];
+    highp float cy0 = cut.x;
+    highp float cy1 = cut.y;
+    if (uPixel > 0.5) {
+      cy0 = (cut.x - uCam.y) * z * devScale;
+      cy1 = (cut.y - uCam.y) * z * devScale;
+    }
+    bool wall = cut.z < 0.0 ? px.x < plateMin.x : px.x >= plateMax.x;
+    if (wall && px.y >= cy0 && px.y < cy1) fat = 0.0;
+  }
   float strokeA = max(fat * (1.0 - inMouth), arc) * strokeCol.a;
   float plateA = sd <= 0.0 ? uFill.a * (1.0 - inletA) : 0.0;
   float underA = inletA + plateA;
@@ -517,6 +540,8 @@ void main() {
         outStroke: gl.getUniformLocation(outProgram, "uStroke"),
         outInletGap: gl.getUniformLocation(outProgram, "uInletGap"),
         outCount: gl.getUniformLocation(outProgram, "uCount"),
+        outCutCount: gl.getUniformLocation(outProgram, "uCutCount"),
+        outCut: gl.getUniformLocation(outProgram, "uCut[0]"),
         outJack: gl.getUniformLocation(outProgram, "uJack[0]"),
         outJackColor: gl.getUniformLocation(outProgram, "uJackColor[0]"),
         outCamPixel: gl.getUniformLocation(outProgram, "uPixel"),
@@ -667,6 +692,28 @@ void main() {
     const big = 1e6;
     const q = [[x, y], [x + w, y], [x, y + h], [x + w, y], [x + w, y + h], [x, y + h]];
     for (const [px, py] of q) push(batch, px, py, 0, 0, 0, big, 0, rgba);
+  }
+
+  /**
+   * Half disc with a radial fade: rgbaIn at the centre to rgbaOut on the rim,
+   * spanning the half plane on side dir (+1 = +x, -1 = -x) of the vertical
+   * line through the centre. Per-vertex colour, so the fade is on the GPU.
+   */
+  function nodeGraphGlLinesHalfDiscFade(batch, cx, cy, r, dir, rgbaIn, rgbaOut, steps = 24) {
+    if (!batch || !(r > 0)) return;
+    const k = batch.camera ? 1 : (batch.scale || 1);
+    const big = 1e6;
+    const x = cx * k;
+    const y = cy * k;
+    const rr = r * k;
+    const side = dir < 0 ? -1 : 1;
+    for (let i = 0; i < steps; i += 1) {
+      const a0 = -Math.PI / 2 + (Math.PI * i) / steps;
+      const a1 = -Math.PI / 2 + (Math.PI * (i + 1)) / steps;
+      push(batch, x, y, 0, 0, 0, big, 0, rgbaIn);
+      push(batch, x + side * Math.cos(a0) * rr, y + Math.sin(a0) * rr, 0, 0, 0, big, 0, rgbaOut);
+      push(batch, x + side * Math.cos(a1) * rr, y + Math.sin(a1) * rr, 0, 0, 0, big, 0, rgbaOut);
+    }
   }
 
   /** Solid triangle (fills, areas). */
@@ -860,7 +907,9 @@ void main() {
 
   // One continuous ribbon. Neighboring pieces share the edge points, so a bend
   // has no end cap and no gap. `across` is the distance from the centerline.
-  function nodeGraphGlLinesRibbon(batch, points, halfPx, feather, rgba) {
+  // rgbaEnd set: per-vertex crossfade from rgba (first point) to rgbaEnd
+  // (last point) by arc length.
+  function nodeGraphGlLinesRibbon(batch, points, halfPx, feather, rgba, rgbaEnd) {
     if (!batch || !points || points.length < 4) return;
     const k = batch.camera ? 1 : (batch.scale || 1);
     const r = Math.max(0, halfPx) + Math.max(0, feather);
@@ -898,6 +947,22 @@ void main() {
     };
     const edge = [];
     for (let i = 0; i < count; i += 1) edge.push(miter(i));
+    let ink = null;
+    if (rgbaEnd) {
+      const arc = new Float32Array(count);
+      for (let i = 1; i < count; i += 1) {
+        arc[i] = arc[i - 1] + Math.hypot(points[i * 2] - points[(i - 1) * 2], points[i * 2 + 1] - points[(i - 1) * 2 + 1]);
+      }
+      const total = arc[count - 1] > 0 ? arc[count - 1] : 1;
+      ink = [];
+      for (let i = 0; i < count; i += 1) {
+        const t = arc[i] / total;
+        ink.push([0, 1, 2, 3].map((c) => {
+          const a = rgba[c] ?? 1;
+          return a + ((rgbaEnd[c] ?? 1) - a) * t;
+        }));
+      }
+    }
     for (let i = 0; i < count - 1; i += 1) {
       const x0 = points[i * 2] * k;
       const y0 = points[i * 2 + 1] * k;
@@ -909,9 +974,11 @@ void main() {
       const half = Math.max(0, halfPx) * (batch.camera ? 1 : k);
       const fade = Math.max(0, feather) * (batch.camera ? 1 : k);
       if (batch.camera) {
-        const end = (x, y, n, side) => push(batch, x, y, n[0], n[1], 0, half, fade, rgba, side > 0 ? 3 : 3.5);
-        end(x0, y0, n0, 1); end(x0, y0, n0, -1); end(x1, y1, n1, 1);
-        end(x0, y0, n0, -1); end(x1, y1, n1, -1); end(x1, y1, n1, 1);
+        const c0 = ink ? ink[i] : rgba;
+        const c1 = ink ? ink[i + 1] : rgba;
+        const end = (x, y, n, side, c) => push(batch, x, y, n[0], n[1], 0, half, fade, c, side > 0 ? 3 : 3.5);
+        end(x0, y0, n0, 1, c0); end(x0, y0, n0, -1, c0); end(x1, y1, n1, 1, c1);
+        end(x0, y0, n0, -1, c0); end(x1, y1, n1, -1, c1); end(x1, y1, n1, 1, c1);
         continue;
       }
       const rk = r * k;
@@ -924,7 +991,7 @@ void main() {
       const tri = [0, 1, 2, 1, 3, 2];
       for (let t = 0; t < tri.length; t += 1) {
         const v = quad[tri[t]];
-        push(batch, v[0], v[1], 0, v[2], 0, half, fade, rgba, 1);
+        push(batch, v[0], v[1], 0, v[2], 0, half, fade, ink ? ink[tri[t] < 2 ? i : i + 1] : rgba, 1);
       }
     }
   }
@@ -1893,6 +1960,7 @@ void main() {
   }
 
   const OUT_MAX = 24;
+  const CUT_MAX = 16;
   function nodeGraphGlLinesVeil(batch, x, y, w, h, period) {
     if (!batch || !(w > 0) || !(h > 0)) return;
     const k = batch.camera ? 1 : (batch.scale || 1);
@@ -1943,7 +2011,7 @@ void main() {
     gl.enable(gl.BLEND);
   }
 
-  function nodeGraphGlLinesModuleOutline(batch, x, y, w, h, stroke, rgba, jacks, fill, inletGap) {
+  function nodeGraphGlLinesModuleOutline(batch, x, y, w, h, stroke, rgba, jacks, fill, inletGap, cuts) {
     if (!batch || !(w > 0) || !(h > 0)) return;
     const k = batch.camera ? 1 : (batch.scale || 1);
     const sx = x * k;
@@ -1967,6 +2035,7 @@ void main() {
       fill: fill || [0.09, 0.1, 0.12, 1],
       inletGap: Math.max(0, Number(inletGap) || 0) * k,
       jacks: list,
+      cuts: (Array.isArray(cuts) ? cuts : []).slice(0, CUT_MAX).map((c) => [c.y0 * k, c.y1 * k, c.side < 0 ? -1 : 1, 0]),
     });
   }
 
@@ -2028,6 +2097,13 @@ void main() {
         colorData[i * 4 + 3] = jc.length > 3 ? jc[3] : 1;
       }
       gl.uniform1i(s.outCount, count);
+      const cuts = shape.cuts || [];
+      if (s.outCutCount) gl.uniform1i(s.outCutCount, cuts.length);
+      if (cuts.length && s.outCut) {
+        const cutData = new Float32Array(CUT_MAX * 4);
+        cuts.forEach((c, i) => cutData.set(c, i * 4));
+        gl.uniform4fv(s.outCut, cutData);
+      }
       if (s.outJack) gl.uniform4fv(s.outJack, jackData);
       if (s.outJackColor) gl.uniform4fv(s.outJackColor, colorData);
       gl.drawArrays(gl.TRIANGLES, 0, 6);
@@ -2352,6 +2428,7 @@ void main() {
     nodeGraphGlLinesModuleOutline,
     nodeGraphGlLinesVeil,
     nodeGraphGlLinesTriangle,
+    nodeGraphGlLinesHalfDiscFade,
     nodeGraphGlLinesFillUnder,
     nodeGraphGlLinesSegment,
     nodeGraphGlLinesDot,

@@ -949,6 +949,27 @@ function syncNodeUiDevSettingsHeaderControls() {
   if (sliderTextSizeValue) sliderTextSizeValue.textContent = `${sliderTextSize}px`;
   if (sliderTextLineValue) sliderTextLineValue.textContent = String(sliderTextLine);
   if (sliderTextPadValue) sliderTextPadValue.textContent = `${sliderTextPad}px`;
+  // Param wires (ending on a rail IO box) keep their own width and end dot.
+  const paramWireThick = Math.max(0.5, Math.min(6, nodeGraphFiniteNumber(document.getElementById("nodeUiDevParamWireThickness")?.value, 0.5)));
+  const paramWireDot = Math.max(0, Math.min(12, nodeGraphFiniteNumber(document.getElementById("nodeUiDevParamWireDotSize")?.value, 1.61)));
+  sliderTextHost?.style.setProperty("--node-param-wire-thickness", `${paramWireThick}px`);
+  sliderTextHost?.style.setProperty("--node-param-wire-dot-size", `${paramWireDot}px`);
+  const paramWireThickValue = document.getElementById("nodeUiDevParamWireThicknessValue");
+  const paramWireDotValue = document.getElementById("nodeUiDevParamWireDotSizeValue");
+  if (paramWireThickValue) paramWireThickValue.textContent = `${paramWireThick}px`;
+  if (paramWireDotValue) paramWireDotValue.textContent = `${paramWireDot}px`;
+  const notchRadius = Math.max(0, Math.min(8, nodeGraphFiniteNumber(document.getElementById("nodeUiDevRailNotchRadius")?.value, 5)));
+  const notchOpacity = Math.max(0, Math.min(100, nodeGraphFiniteNumber(document.getElementById("nodeUiDevRailNotchOpacity")?.value, 50)));
+  sliderTextHost?.style.setProperty("--node-rail-notch-radius", `${notchRadius}px`);
+  sliderTextHost?.style.setProperty("--node-rail-notch-opacity", String(notchOpacity / 100));
+  const notchRadiusValue = document.getElementById("nodeUiDevRailNotchRadiusValue");
+  const notchOpacityValue = document.getElementById("nodeUiDevRailNotchOpacityValue");
+  if (notchRadiusValue) notchRadiusValue.textContent = `${notchRadius}px`;
+  if (notchOpacityValue) notchOpacityValue.textContent = `${notchOpacity}%`;
+  if (typeof nodeGraphGlGraphState === "object") {
+    nodeGraphGlGraphState.thick = 0;
+    nodeGraphGlGraphState.railNotch = null;
+  }
   if (choiceSlideEmptyBorderValue) choiceSlideEmptyBorderValue.textContent = `${choiceSlideEmptyBorderPx}px`;
   bypassIconSizeValue.textContent = `${bypassIconSizePercent}%`;
   bypassIconGlowSpreadValue.textContent = `${bypassIconGlowSpreadPercent}%`;

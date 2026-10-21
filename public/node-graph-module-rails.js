@@ -176,9 +176,12 @@ function nodeGraphCanvasDisplayBox(tileW, tileH, aspect = 0) {
 // ---- Rail drawing (WebGL only; the rail DOM is hit/geometry, never painted) ----
 // soundemote-dev Spawn IO (experiments/wiring): each rail is a #080a0e gutter
 // with one full-height #3d4555 1px separator on its slider side. Each patched
-// param gets one inlet box the full rail width (no padding) and 16 px tall (the
-// label height), centred on its row: #111 fill, 1px #889 stroke, #dde label. Wires end at the rail's outer
-// edge with no end dot; there are no jack half circles on rail params.
+// param gets one IO box the full rail width (no padding) and 16 px tall (the
+// label height), centred on its row: #111 fill, #889 label. Chip pin: the box
+// has three strokes (top, bottom, slider side) and no outward edge, and runs
+// through the module border (drawn over it, same quads, so its rows are exact),
+// and the plate border is cut over exactly the box's span (nodeGraphModuleRailBorderCuts). Param wires end on
+// the border's outer edge, centred on the box, with a tiny end dot (UIDev).
 const NodeGraphRailInk = Object.freeze({
   gutter: "#080a0e",
   gutterEdge: "#3d4555",
@@ -210,79 +213,151 @@ function nodeGraphModuleRailOwnsParam(nodeId, param) {
   return Boolean(def?.parameters?.some((p) => p.key === param));
 }
 
-/** Draw open rails (gutters + patched-param inlet boxes + labels) in one pass. */
+/**
+ * Device-pixel grid of a GL batch. Rail edges land on whole device pixels, and
+ * the module wall and border width are placed the way the outline shader
+ * places them, so the box meets the wall and covers the border band exactly.
+ */
+function nodeGraphRailGrid(batch) {
+  const cam = batch?.camera;
+  const s = cam ? (cam.zoom > 0 ? cam.zoom : 1) * (batch.scale > 0 ? batch.scale : 1) : (batch?.scale > 0 ? batch.scale : 1);
+  const ox = cam ? cam.x || 0 : 0;
+  const oy = cam ? cam.y || 0 : 0;
+  return {
+    x: (v) => Math.ceil((v - ox) * s - 0.5) / s + ox,
+    y: (v) => Math.ceil((v - oy) * s - 0.5) / s + oy,
+    t: (v) => Math.max(1, Math.floor(v * s + 0.5)) / s,
+    // Plate walls and border band as nodeGraphGlGraphDrawPlate / the outline shader place them.
+    wall: (v) => (cam ? Math.ceil((v - ox) * s - 0.5) / s + ox : Math.round(v)),
+    border: (css, zoom) => Math.max(1, Math.floor(css * zoom * s + 0.5)) / s,
+  };
+}
+
+/** Inlet notch (UIDev): radius in css px and opacity 0..1, read once per GL rebuild. */
+function nodeGraphRailNotch() {
+  const state = typeof nodeGraphGlGraphState === "object" ? nodeGraphGlGraphState : null;
+  if (state && state.railNotchGen === state.gen && state.railNotch) return state.railNotch;
+  const host = document.getElementById("nodeGraphWorkspace") || document.documentElement;
+  const cs = getComputedStyle(host);
+  const radius = Number.parseFloat(cs.getPropertyValue("--node-rail-notch-radius"));
+  const opacity = Number.parseFloat(cs.getPropertyValue("--node-rail-notch-opacity"));
+  const notch = { radius: Number.isFinite(radius) ? radius : 5, opacity: Number.isFinite(opacity) ? opacity : 0.5 };
+  if (state) { state.railNotch = notch; state.railNotchGen = state.gen; }
+  return notch;
+}
+
+/** Module border width (css px), the value the plate outline is drawn with. */
+function nodeGraphRailBorderCss() {
+  const style = typeof nodeGraphGlGraphState === "object" ? nodeGraphGlGraphState.plateStyle : null;
+  return Number.parseFloat(style?.getPropertyValue("--node-module-idle-stroke-width")) || 1;
+}
+
+/** Patched-param IO boxes of an open spawn rail, snapped to the batch's pixel grid. */
+function nodeGraphModuleRailBoxes(batch, plate, toX, toY, zoom) {
+  const el = typeof nodeGraphNodeElement === "function" ? nodeGraphNodeElement(plate.id) : null;
+  if (!el?.classList.contains("mod-rail-open") || el.dataset.faceLayout !== NodeGraphFaceLayout.spawn) return null;
+  const body = el.querySelector(":scope > .dsp-node-body");
+  const laid = body && typeof nodeGraphModuleLayoutBox === "function" ? nodeGraphModuleLayoutBox(body, el) : null;
+  if (!laid) return null;
+  const grid = nodeGraphRailGrid(batch);
+  const t = grid.t(Math.max(1, zoom));
+  const left = grid.wall(toX(plate.x));
+  const right = grid.wall(toX(plate.x)) + Math.max(1, Math.round(plate.w * zoom));
+  const wallR = batch?.camera ? grid.wall(toX(plate.x + plate.w)) : right;
+  const ports = [...body.querySelectorAll(".node-param-port.rail-patched")].filter((port) => port.offsetParent);
+  const boxes = [];
+  for (const port of ports) {
+    const box = nodeGraphModuleLayoutBox(port, el);
+    if (!box || !(box.w > 1)) continue;
+    const side = box.x + box.w / 2 < laid.x + laid.w / 2 ? -1 : 1;
+    const bh = Math.min(box.h, NODE_GRAPH_RAIL_INLET_H_PX) * zoom;
+    const y = grid.y(toY(plate.y + box.y) + (box.h * zoom - bh) / 2);
+    const y1 = Math.max(y + 3 * t, grid.y(toY(plate.y + box.y) + (box.h * zoom + bh) / 2));
+    // The outward edge sits on the module wall, the inward edge on the grid.
+    const x = side < 0 ? left : grid.x(toX(plate.x + box.x));
+    const x1 = side < 0 ? grid.x(toX(plate.x + box.x + box.w)) : wallR;
+    boxes.push({ port, x, y, w: x1 - x, h: y1 - y, t, side });
+  }
+  return { el, body, laid, boxes, t, grid, left, right: wallR };
+}
+
+/** Module-border gaps for the outline shader: one per IO box, on the wall it faces. */
+function nodeGraphModuleRailBorderCuts(batch, plate, toX, toY, zoom) {
+  const rail = nodeGraphModuleRailBoxes(batch, plate, toX, toY, zoom);
+  return rail?.boxes.length ? rail.boxes.map((b) => ({ y0: b.y, y1: b.y + b.h, side: b.side })) : null;
+}
+
+/** Draw open rails (gutters + patched-param IO boxes + labels) in one pass. */
 function nodeGraphModuleRailsDrawGl(batch, plates, toX, toY, zoom, cssW, cssH) {
   if (typeof nodeGraphGlLinesRect !== "function" || typeof nodeGraphModuleLayoutBox !== "function") return;
   const rect = (x, y, w, h, css) => nodeGraphGlLinesRect(batch, x, y, w, h, nodeGraphRailRgba(css));
-  const frame = (x, y, w, h, t, css, sides) => {
-    if (sides.top) rect(x, y, w, t, css);
-    if (sides.bottom) rect(x, y + h - t, w, t, css);
-    if (sides.left) rect(x, y, t, h, css);
-    if (sides.right) rect(x + w - t, y, t, h, css);
-  };
-  const all = { top: true, bottom: true, left: true, right: true };
   for (let i = 0; i < plates.length; i += 1) {
-    const el = typeof nodeGraphNodeElement === "function" ? nodeGraphNodeElement(plates[i].id) : null;
-    if (!el?.classList.contains("mod-rail-open") || el.dataset.faceLayout !== NodeGraphFaceLayout.spawn) continue;
-    const body = el.querySelector(":scope > .dsp-node-body");
-    const laid = body ? nodeGraphModuleLayoutBox(body, el) : null;
-    if (!laid) continue;
+    const rail = nodeGraphModuleRailBoxes(batch, plates[i], toX, toY, zoom);
+    if (!rail) continue;
+    const { el, body, laid, boxes, t, grid, left, right } = rail;
     const x0 = toX(plates[i].x + laid.x);
     const y0 = toY(plates[i].y + laid.y);
     const w = laid.w * zoom;
     const h = laid.h * zoom;
     if (!batch.camera && (x0 > cssW || y0 > cssH || x0 + w < 0 || y0 + h < 0)) continue;
-    const rw = NODE_GRAPH_RAIL_WIDTH_PX * zoom;
-    const t = Math.max(1, zoom);
-    const tags = [];
     // Gutters run only beside the sections (face rows / param rows) that hold a
     // patched param: one short segment per merged run of sections.
     const face = el.classList.contains("has-module-face") ? body.querySelector(":scope > .node-face") : null;
     const faceBox = face ? nodeGraphModuleLayoutBox(face, el) : null;
     const spec = faceBox && typeof nodeGraphModuleFaceSpecForElement === "function" ? nodeGraphModuleFaceSpecForElement(el) : null;
     const widgets = spec && typeof nodeGraphModuleFaceWidgets === "function" ? nodeGraphModuleFaceWidgets(spec, face.offsetWidth, el) : [];
-    const section = (port) => {
+    const section = ({ port }) => {
       const key = port.dataset.param;
       const wd = widgets.find((x) => x.param === key || x.hpf === key || x.lpf === key);
       if (wd) return [faceBox.y + wd.y, faceBox.y + wd.y + wd.h];
       const row = nodeGraphModuleLayoutBox(port.closest(".node-parameter-row") || port, el);
       return row ? [row.y, row.y + row.h] : null;
     };
-    const ports = [...body.querySelectorAll(".node-param-port.rail-patched")].filter((port) => port.offsetParent);
-    const runs = ports.map(section).filter(Boolean).sort((a, b) => a[0] - b[0]).reduce((out, r) => {
+    const runs = boxes.map(section).filter(Boolean).sort((a, b) => a[0] - b[0]).reduce((out, r) => {
       const last = out[out.length - 1];
       if (last && r[0] <= last[1] + 0.5) last[1] = Math.max(last[1], r[1]);
       else out.push([...r]);
       return out;
     }, []);
     batch._over = true;
+    // Gutters span wall to separator; the separator is the rail's inner edge.
+    const inL = grid.x(x0 + NODE_GRAPH_RAIL_WIDTH_PX * zoom);
+    const inR = grid.x(x0 + w - NODE_GRAPH_RAIL_WIDTH_PX * zoom);
     for (const [a, b] of runs) {
-      const sy = toY(plates[i].y + a);
-      const sh = (b - a) * zoom;
-      rect(x0, sy, rw, sh, NodeGraphRailInk.gutter);
-      rect(x0 + rw - t, sy, t, sh, NodeGraphRailInk.gutterEdge);
-      rect(x0 + w - rw, sy, rw, sh, NodeGraphRailInk.gutter);
-      rect(x0 + w - rw, sy, t, sh, NodeGraphRailInk.gutterEdge);
+      const sy = grid.y(toY(plates[i].y + a));
+      const sh = grid.y(toY(plates[i].y + b)) - sy;
+      rect(left, sy, inL - left, sh, NodeGraphRailInk.gutter);
+      rect(inL - t, sy, t, sh, NodeGraphRailInk.gutterEdge);
+      rect(inR, sy, right - inR, sh, NodeGraphRailInk.gutter);
+      rect(inR, sy, t, sh, NodeGraphRailInk.gutterEdge);
     }
-    for (const port of ports) {
-      const box = nodeGraphModuleLayoutBox(port, el);
-      if (!box || !(box.w > 1)) continue;
-      const bx = toX(plates[i].x + box.x);
-      const bw = box.w * zoom;
-      const bh = Math.min(box.h, NODE_GRAPH_RAIL_INLET_H_PX) * zoom;
-      const by = toY(plates[i].y + box.y) + (box.h * zoom - bh) / 2;
-      rect(bx, by, bw, bh, NodeGraphRailInk.inletFill);
-      frame(bx, by, bw, bh, t, NodeGraphRailInk.inletStroke, all);
-      tags.push({ text: port.dataset.railLabel || "", x: bx + bw / 2, y: by + bh / 2, w: bw - 2 * t });
+    const border = grid.border(nodeGraphRailBorderCss(), zoom);
+    const notch = nodeGraphRailNotch();
+    for (const b of boxes) {
+      // Through the border band: fill plus the top / bottom strokes.
+      const bx = b.side < 0 ? b.x - border : b.x + b.w;
+      rect(bx, b.y, border, b.h, NodeGraphRailInk.inletFill);
+      rect(bx, b.y, border, t, NodeGraphRailInk.inletStroke);
+      rect(bx, b.y + b.h - t, border, t, NodeGraphRailInk.inletStroke);
+      rect(b.x, b.y, b.w, b.h, NodeGraphRailInk.inletFill);
+      rect(b.x, b.y, b.w, t, NodeGraphRailInk.inletStroke);
+      rect(b.x, b.y + b.h - t, b.w, t, NodeGraphRailInk.inletStroke);
+      rect(b.side < 0 ? b.x + b.w - t : b.x, b.y, t, b.h, NodeGraphRailInk.inletStroke);
+      // Inlet notch: a half disc on the open edge, dark at the edge fading to
+      // clear inward, kept inside the box's top / bottom strokes.
+      const r = Math.min(notch.radius * zoom, b.h / 2 - t);
+      if (r > 0 && notch.opacity > 0 && typeof nodeGraphGlLinesHalfDiscFade === "function") {
+        nodeGraphGlLinesHalfDiscFade(batch, b.side < 0 ? b.x : b.x + b.w, b.y + b.h / 2, r, -b.side, [0, 0, 0, notch.opacity], [0, 0, 0, 0]);
+      }
     }
     batch._over = false;
     if (typeof nodeGraphGlLinesText !== "function") continue;
-    for (const tag of tags) {
+    for (const b of boxes) {
       const o = {
         px: Math.max(4, NODE_GRAPH_RAIL_FONT_PX * zoom), rgba: nodeGraphRailRgba(NodeGraphRailInk.text),
-        align: "center", baseline: "middle", weight: 650, maxWidth: tag.w,
+        align: "center", baseline: "middle", weight: 650, maxWidth: b.w - 2 * t,
       };
-      nodeGraphGlLinesText(batch, tag.text, tag.x, tag.y, typeof nodeGraphGlGraphTextOpts === "function" ? nodeGraphGlGraphTextOpts(o) : o);
+      nodeGraphGlLinesText(batch, b.port.dataset.railLabel || "", b.x + b.w / 2, b.y + b.h / 2, typeof nodeGraphGlGraphTextOpts === "function" ? nodeGraphGlGraphTextOpts(o) : o);
     }
   }
 }
