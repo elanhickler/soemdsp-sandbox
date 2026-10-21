@@ -43,8 +43,8 @@ for (const id of ["dsfOscillator-1", "resonantEnvelope-1"]) {
 const before = await stats("dsfOscillator-1");
 await page.evaluate(() => openNodeGraphTraceDisplaySettings("dsfOscillator-1", {}));
 await page.waitForTimeout(800);
-// DSF colour rows: Line, Dot, Background; Background is the last one.
-const hex = await page.evaluateHandle(() => [...document.querySelectorAll(".scw-hex")].filter((e) => e.offsetParent).pop() || null);
+// DSF colour rows: Background, Line, Dot. Pick Background by its label, not its position.
+const hex = await page.evaluateHandle(() => document.querySelector('[data-hsl-lamp="background"][data-hsl-label="Background"]')?.querySelector(".scw-hex") || null);
 const set = Boolean(await hex.evaluate((e) => Boolean(e && e.offsetParent)));
 if (set) { await hex.click({ clickCount: 3 }); await page.keyboard.type("#ff0000"); await page.keyboard.press("Enter"); }
 await page.waitForTimeout(500);
