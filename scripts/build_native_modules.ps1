@@ -292,7 +292,7 @@ $modules = @(
   @{ Name = "trigger_divider"; Simd = $false; Exports = @("soemdsp_trigger_divider_create", "soemdsp_trigger_divider_destroy", "soemdsp_trigger_divider_sample", "soemdsp_trigger_divider_sample_clock", "soemdsp_trigger_divider_version") }
   @{ Name = "trigger_counter"; Simd = $false; Exports = @("soemdsp_trigger_counter_create", "soemdsp_trigger_counter_destroy", "soemdsp_trigger_counter_sample", "soemdsp_trigger_counter_count", "soemdsp_trigger_counter_version") }
   @{ Name = "delayed_trigger"; Simd = $false; Exports = @("soemdsp_delayed_trigger_create", "soemdsp_delayed_trigger_destroy", "soemdsp_delayed_trigger_sample", "soemdsp_delayed_trigger_version") }
-  @{ Name = "clock"; Simd = $false; Exports = @("soemdsp_clock_create", "soemdsp_clock_destroy", "soemdsp_clock_sample", "soemdsp_clock_analog_out", "soemdsp_clock_pulse", "soemdsp_clock_version") }
+  @{ Name = "clock"; Simd = $false; Exports = @("soemdsp_clock_create", "soemdsp_clock_destroy", "soemdsp_clock_sample", "soemdsp_clock_analog_out", "soemdsp_clock_pulse", "soemdsp_clock_phase", "soemdsp_clock_version") }
   @{ Name = "random_clock"; Simd = $false; Exports = @("soemdsp_random_clock_create", "soemdsp_random_clock_destroy", "soemdsp_random_clock_sample", "soemdsp_random_clock_gate", "soemdsp_random_clock_version") },
   @{ Name = "ping_pong_delay"; Simd = $false; Exports = @(
     "soemdsp_ping_pong_delay_create", "soemdsp_ping_pong_delay_destroy",

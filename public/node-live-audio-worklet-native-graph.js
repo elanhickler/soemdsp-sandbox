@@ -6602,10 +6602,11 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
       continue;
     }
     if (type === "clock") {
-      // frequency=rate, phaseParam=phase, shape=duty, amplitude=level
+      // frequency=rate, phaseParam=phase, center=pulseStart, shape=pulseEnd, amplitude=level
       push("rate", P.NATIVE_GRAPH_PARAM_FREQUENCY, cont("rate", 2));
       push("phase", P.NATIVE_GRAPH_PARAM_PHASE, cont("phase", 0));
-      push("duty", P.NATIVE_GRAPH_PARAM_SHAPE, cont("duty", 0.5));
+      push("pulseStart", P.NATIVE_GRAPH_PARAM_CENTER, cont("pulseStart", 0));
+      push("pulseEnd", P.NATIVE_GRAPH_PARAM_SHAPE, cont("pulseEnd", 0.5));
       push("amplitude", P.NATIVE_GRAPH_PARAM_AMPLITUDE, cont("amplitude", 1));
       continue;
     }
@@ -9402,7 +9403,7 @@ NodeLiveAudioProcessor.prototype.nativeGraphPortNames = function nativeGraphPort
   if (portId === P.NATIVE_GRAPH_PORT_PHASE01) {
     if (type === "acidSequencer") return ["__AcidStep"];
     // Face playhead — not a patchable jack.
-    if (type === "basicShape" || type === "sineWavetable" || type === "sinCos"
+    if (type === "basicShape" || type === "sineWavetable" || type === "sinCos" || type === "clock"
       || type === "ellipsoid" || type === "ellipsoidOsc" || type === "dsfOscillator") {
       return ["__Phase"];
     }
@@ -9499,7 +9500,7 @@ NodeLiveAudioProcessor.prototype.publishNativeGraphScopeTaps = function publishN
         P.NATIVE_GRAPH_PORT_PHASE01,
       )
       : (type === "sineWavetable" || type === "sinCos" || type === "smoothGraph" || type === "stepGraph"
-        || type === "acidSequencer" || type === "fbmField"
+        || type === "acidSequencer" || type === "fbmField" || type === "clock"
         || type === "ellipsoid" || type === "ellipsoidOsc" || type === "dsfOscillator"
         ? audioPorts.concat(P.NATIVE_GRAPH_PORT_PHASE01)
         : audioPorts);
@@ -9663,7 +9664,7 @@ NodeLiveAudioProcessor.prototype.publishNativeGraphScopeTaps = function publishN
       } else if (
         type === "basicShape" || type === "sineWavetable" || type === "sinCos"
         || type === "smoothGraph" || type === "stepGraph"
-        || type === "acidSequencer"
+        || type === "acidSequencer" || type === "clock"
         || type === "ellipsoid" || type === "ellipsoidOsc" || type === "dsfOscillator"
       ) {
         ports = facePorts.concat(P.NATIVE_GRAPH_PORT_PHASE01);

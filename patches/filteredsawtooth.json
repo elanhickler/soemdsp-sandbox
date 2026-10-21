@@ -643,14 +643,15 @@
       },
       "type": "clock",
       "params": {
-        "duty": 0.0350423612829959,
+        "pulseEnd": 0.0350423612829959,
+        "pulseStart": 0,
         "rate": 2,
         "phase": 0,
         "amplitude": 1
       },
       "widthGu": 6,
       "paramMeta": {
-        "duty": {
+        "pulseEnd": {
           "def": 0.5,
           "max": 1,
           "mid": 0.5,

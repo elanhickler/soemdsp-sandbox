@@ -354,10 +354,11 @@ extern "C" double soemdsp_rotate_3d_to_2d_sample(
 extern "C" int soemdsp_clock_create();
 extern "C" void soemdsp_clock_destroy(int handle);
 extern "C" double soemdsp_clock_sample(
-  int handle, double reset, double phaseOffset, double rate, double duty,
-  double level, double sampleRate
+  int handle, double reset, double phaseOffset, double rate, double pulseStart,
+  double pulseEnd, double level, double sampleRate
 );
 extern "C" double soemdsp_clock_analog_out(int handle);
+extern "C" double soemdsp_clock_phase(int handle);
 extern "C" double soemdsp_clock_pulse(int handle);
 
 extern "C" int soemdsp_trigger_divider_create();
@@ -6380,16 +6381,18 @@ static void process_clock(Circuit& g, Node& node, int frames) {
   const double sr = g.sampleRate < 1.0f ? 44100.0 : (double)g.sampleRate;
   const double rateKnob = control_effective(node.frequency);
   const double phaseOff = control_effective(node.phaseParam);
-  const double duty = control_effective(node.shape);
+  const double pulseStart = control_effective(node.center);
+  const double pulseEnd = control_effective(node.shape);
   const double level = control_effective(node.amplitude);
   for (int f = 0; f < frames; f++) {
     control_frame(g, node, f);
     const double reset = hasReset ? g.mixReset[f] : 0.0;
     const double rate = /*ƒ retired*/ rateKnob;
     const double digital = soemdsp_clock_sample(
-      node.nativeHandle, reset, phaseOff, rate, duty, level, sr
+      node.nativeHandle, reset, phaseOff, rate, pulseStart, pulseEnd, level, sr
     );
     node.buf[kPortMono][f] = digital;
+    node.buf[kPortPhase01][f] = soemdsp_clock_phase(node.nativeHandle);
     node.buf[kPortLeft][f] = soemdsp_clock_analog_out(node.nativeHandle);
     node.buf[kPortRight][f] = soemdsp_clock_pulse(node.nativeHandle);
   }
@@ -16614,5 +16617,5 @@ extern "C" int soemdsp_graph_version() {
   // 170: EQ Filter ZDF ƒ input (resolve_osc_hz)
   // 171: ƒ on Ladder/303/Mode/Cookbook/IIR/Papoulis/ZDF filters + soemdsp_graph_node_effective_hz
   // 174: live add/remove/connect/disconnect keep compiled and other nodes' native handles
-  return 209; // 209: Resonant Envelope Hold (lfoAmplitude slot; 0 Input above 0 / 1 Follows detect: Shared/Rise/Abs rise hold only while their detect is true). (208 reserved: Clock Pulse Start/End, in progress.) was 207: Electro Snare Simmons Noise Q (resonance, 0.5..4, default 2) + Simmons Click (level, default 0.4); defaults bit-identical. was 206: Modal Snare (228) split from Electro Snare Modal, + Noise Freq (lpfFrequency) / Noise Q (resonance) / Click (level) / Click Decay ms (offsetMs) / Noise Tilt (saturate); Electro Snare Modal option removed (id 3 plays as 808). was 205: Ping Pong Delay Amplitude unclamped (was hidden clamp 0..2 in DSP). was 204: Ping Pong Delay separate HPF Poles (stages slot) and LPF Poles (waveform slot), 1..4 each. was 203: Resonant Envelope experiment switches (Trigger Detect 0..5 local, Velocity diffusionSize, Follow Source diffusionAmount, Follow Detect lfoVariation). was 202: Ping Pong Delay feedback filter Poles 1..4 (stages slot; 1 = original one-pole, 2..4 cascaded TPT). was 201: 201: EXPERIMENT gate_hit = every absolute positive change (|x| rises; velocity = |x[n]|-|x[n-1]|). was 200: RMS Meter stereo: L (id In) + R inputs, R outs (RMS R Right, dB R Square, Env Inverted R Tri), nativeHandleR meters R when wired. was 199: RMS Meter (227): one-pole mean square; RMS / dB (-120 floor) / Env Inverted. was 198: Resonant Envelope Mode (Envelope / Filter, waveform slot) + Trigger detect (Cross 0 / Saw reset, lfoStyle slot). was 197: Amp <-> dB reads |amp| in Amp->dB mode (bipolar audio no longer floors to -120). was 196: Resonant Envelope SC out (kPortSaw, clamp(1 - Out/Amplitude, 0, 1)). was 195: gate_hit / gate_on back to the original law (hit = first sample > 0 after <= 0; on = x > 0); Resonant Envelope Follow = rising-sample step latch. was 194: Resonant Envelope Follow input (Morph live bus, |x| is the SVF target). was 193: DSF Oscillator face playhead (__Phase on kPortPhase01). was 192: Resonant Envelope Frequency knob (unwired f uses it for Tracking). was 191: Electro Clap (226). was 190: Mode Resonator / Random Clock / Turing Machine / Degree Turing back to their original mono outs (stereo R removed). was 189: fBm back to its 3 outs Out X / Out Y / Out Z (stereo R axes removed). was 188: Electro Hat (223) / Electro Tom (224) / Electro Kick (225). was 187: stereo L/R outs: Bradley 2A, fBm (X/Y/Z R on Tri/Sine/Trisaw), Mode Resonator (R quadrature), Random Clock / Turing Machine / Degree Turing (R Seed lane), Softpop 2 R Pitch Mod. was 186: Electro Snare stereo (Snare L -> Left, Snare R -> Right, Env -> Mono). was 185: Electro Snare (type 222). was 184: Robin Sinepulse 0–1 jack is log sweep position (L = max(Low, 20 Hz)). was 183: Flower Child ƒ input removed (Cutoff knob only again). was 182: SinCos / SinCos4 Polarity (center 0 Bipolar / 1 Unipolar). was 181: Flower Child ƒ in (resonance-pitch Hz replaces Cutoff). was 180: Robin Sinepulse 0–1 jack is sweep position (High=1, Low=0). was 179: Resonant Envelope (221)
+  return 209; // 209: Resonant Envelope Hold (lfoAmplitude slot; 0 Input above 0 / 1 Follows detect: Shared/Rise/Abs rise hold only while their detect is true). was 208: Clock Pulse Start (center) / Pulse End (shape) replace duty; clock __Phase on kPortPhase01. was 207: Electro Snare Simmons Noise Q (resonance, 0.5..4, default 2) + Simmons Click (level, default 0.4); defaults bit-identical. was 206: Modal Snare (228) split from Electro Snare Modal, + Noise Freq (lpfFrequency) / Noise Q (resonance) / Click (level) / Click Decay ms (offsetMs) / Noise Tilt (saturate); Electro Snare Modal option removed (id 3 plays as 808). was 205: Ping Pong Delay Amplitude unclamped (was hidden clamp 0..2 in DSP). was 204: Ping Pong Delay separate HPF Poles (stages slot) and LPF Poles (waveform slot), 1..4 each. was 203: Resonant Envelope experiment switches (Trigger Detect 0..5 local, Velocity diffusionSize, Follow Source diffusionAmount, Follow Detect lfoVariation). was 202: Ping Pong Delay feedback filter Poles 1..4 (stages slot; 1 = original one-pole, 2..4 cascaded TPT). was 201: 201: EXPERIMENT gate_hit = every absolute positive change (|x| rises; velocity = |x[n]|-|x[n-1]|). was 200: RMS Meter stereo: L (id In) + R inputs, R outs (RMS R Right, dB R Square, Env Inverted R Tri), nativeHandleR meters R when wired. was 199: RMS Meter (227): one-pole mean square; RMS / dB (-120 floor) / Env Inverted. was 198: Resonant Envelope Mode (Envelope / Filter, waveform slot) + Trigger detect (Cross 0 / Saw reset, lfoStyle slot). was 197: Amp <-> dB reads |amp| in Amp->dB mode (bipolar audio no longer floors to -120). was 196: Resonant Envelope SC out (kPortSaw, clamp(1 - Out/Amplitude, 0, 1)). was 195: gate_hit / gate_on back to the original law (hit = first sample > 0 after <= 0; on = x > 0); Resonant Envelope Follow = rising-sample step latch. was 194: Resonant Envelope Follow input (Morph live bus, |x| is the SVF target). was 193: DSF Oscillator face playhead (__Phase on kPortPhase01). was 192: Resonant Envelope Frequency knob (unwired f uses it for Tracking). was 191: Electro Clap (226). was 190: Mode Resonator / Random Clock / Turing Machine / Degree Turing back to their original mono outs (stereo R removed). was 189: fBm back to its 3 outs Out X / Out Y / Out Z (stereo R axes removed). was 188: Electro Hat (223) / Electro Tom (224) / Electro Kick (225). was 187: stereo L/R outs: Bradley 2A, fBm (X/Y/Z R on Tri/Sine/Trisaw), Mode Resonator (R quadrature), Random Clock / Turing Machine / Degree Turing (R Seed lane), Softpop 2 R Pitch Mod. was 186: Electro Snare stereo (Snare L -> Left, Snare R -> Right, Env -> Mono). was 185: Electro Snare (type 222). was 184: Robin Sinepulse 0–1 jack is log sweep position (L = max(Low, 20 Hz)). was 183: Flower Child ƒ input removed (Cutoff knob only again). was 182: SinCos / SinCos4 Polarity (center 0 Bipolar / 1 Unipolar). was 181: Flower Child ƒ in (resonance-pitch Hz replaces Cutoff). was 180: Robin Sinepulse 0–1 jack is sweep position (High=1, Low=0). was 179: Resonant Envelope (221)
 }

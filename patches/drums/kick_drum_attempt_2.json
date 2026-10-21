@@ -719,7 +719,7 @@
           "linearSmoothing": true,
           "outputDomain": false
         },
-        "duty": {
+        "pulseEnd": {
           "alias": "",
           "choices": [],
           "curveAmount": 0.3,
@@ -789,7 +789,8 @@
       "params": {
         "rate": 1,
         "phase": 0.4092600590064175,
-        "duty": 0.00011893804495845095,
+        "pulseEnd": 0.00011893804495845095,
+        "pulseStart": 0,
         "amplitude": 1
       },
       "type": "clock",

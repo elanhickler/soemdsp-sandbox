@@ -13,6 +13,7 @@ const NODE_GRAPH_FACE_FILTER_DB_MIN = -18;
 const NODE_GRAPH_FACE_FILTER_HANDLE_PX = 10;
 const NODE_GRAPH_FACE_FILTER_LABEL_PX = 20;
 const NODE_GRAPH_FACE_FILTER_TICK_PX = 16;
+const NODE_GRAPH_FACE_BAND_HANDLE_PX = 8;
 
 const NodeGraphFaceInk = Object.freeze({
   rowFill: "#10131a",
@@ -39,6 +40,9 @@ const NodeGraphFaceInk = Object.freeze({
   lpfCurve: "rgb(110 170 255)",
   passCurve: "rgb(142 197 255 / 0.7)",
   tick: "#6fa3b4",
+  bandSpan: "#1e3a58",
+  bandHandle: "#8ec5ff",
+  bandText: "#dce6f5",
   lfoOn: "#c8e4ff",
   lfoOff: "#6a7a90",
 });
@@ -73,6 +77,7 @@ function nodeGraphModuleFaceRowParams(row) {
     case "fraction": return [row.num, row.den, row.mode, row.cell?.[0]].filter(Boolean);
     case "cells": return row.params.map((cell) => cell[0]);
     case "filter": return [row.hpf, row.lpf];
+    case "band": return [row.lo, row.hi];
     default: return [row.param];
   }
 }
@@ -134,6 +139,8 @@ function nodeGraphModuleFaceWidgets(spec, fw, moduleEl = null) {
       }));
     } else if (row.kind === "filter") {
       out.push({ ...base, type: "filter", hpf: row.hpf, lpf: row.lpf, x: 0, w, param: "" });
+    } else if (row.kind === "band") {
+      out.push({ ...base, type: "band", lo: row.lo, hi: row.hi, label: row.label, x: 0, w, param: "" });
     } else if (row.kind === "seed") {
       const bw = Math.round(Math.min(28, w * 0.15));
       out.push({ ...base, type: "seedNumber", param: row.param, x: 0, w: w - bw * 3 });
@@ -300,7 +307,7 @@ function nodeGraphModuleFaceHitBoxes(moduleEl) {
   const ky = rect.height / Math.max(1, face.offsetHeight);
   const boxes = [];
   for (const wd of nodeGraphModuleFaceWidgets(spec, face.offsetWidth, moduleEl)) {
-    const keys = wd.type === "filter" ? [wd.hpf, wd.lpf] : [wd.param];
+    const keys = nodeGraphModuleFaceWidgetKeys(wd);
     keys.forEach((key, i) => {
       const row = key && moduleEl.querySelector(`.node-parameter-row[data-param="${CSS.escape(key)}"]`);
       if (!row) return;
@@ -311,6 +318,27 @@ function nodeGraphModuleFaceHitBoxes(moduleEl) {
     });
   }
   return boxes;
+}
+
+/** Params a widget sets (two-ended widgets own both ends). */
+function nodeGraphModuleFaceWidgetKeys(wd) {
+  if (wd.type === "filter") return [wd.hpf, wd.lpf];
+  if (wd.type === "band") return [wd.lo, wd.hi];
+  return [wd.param];
+}
+
+/** Band end positions 0..1 across the widget (travel of each end's input). */
+function nodeGraphModuleFaceBandEnds(article, wd) {
+  const lo = nodeGraphModuleFaceInput(article, wd.lo);
+  const hi = nodeGraphModuleFaceInput(article, wd.hi);
+  return { lo, hi, tl: nodeGraphModuleFaceTravel(lo), th: nodeGraphModuleFaceTravel(hi) };
+}
+
+/** Which end a band press at u (0..1) grabs: inside the span moves both. */
+function nodeGraphModuleFaceBandMode(u, tl, th, w) {
+  const edge = NODE_GRAPH_FACE_BAND_HANDLE_PX / Math.max(1, w);
+  if (u > Math.min(tl, th) + edge && u < Math.max(tl, th) - edge) return "span";
+  return Math.abs(u - tl) <= Math.abs(u - th) ? "lo" : "hi";
 }
 
 function setNodeGraphModuleFaceValue(input, value, drag) {
@@ -330,8 +358,7 @@ function beginNodeGraphModuleFaceGesture(article, face, spec, event) {
   // Same modifiers as every slider (nodeGraphNumericResetClickModifier): Ctrl/Cmd+click resets to default.
   if (wd.type !== "seedButton" && wd.type !== "seedNumber" && typeof nodeGraphNumericResetClickModifier === "function"
     && nodeGraphNumericResetClickModifier(event)) {
-    const keys = wd.type === "filter" ? [wd.hpf, wd.lpf] : [wd.param];
-    for (const key of keys) {
+    for (const key of nodeGraphModuleFaceWidgetKeys(wd)) {
       const target = key ? nodeGraphModuleFaceInput(article, key) : null;
       const def = target && typeof nodeSliderCtrlClickDefaultValue === "function" ? nodeSliderCtrlClickDefaultValue(target) : NaN;
       if (Number.isFinite(def)) setNodeGraphModuleFaceValue(target, def, false);
@@ -412,6 +439,22 @@ function beginNodeGraphModuleFaceGesture(article, face, spec, event) {
     nodeGraphModuleFaceCapture(face, event, onMove);
     return;
   }
+  if (wd.type === "band") {
+    // Two-ended range (soundemote-dev Condensed band): drag an end, or the span to move both.
+    // Like every slider: right or up raises.
+    const { lo, hi, tl, th } = nodeGraphModuleFaceBandEnds(article, wd);
+    const mode = nodeGraphModuleFaceBandMode((p.x - wd.x) / Math.max(1, wd.w), tl, th, wd.w);
+    const set = (input, t, drag) => setNodeGraphModuleFaceValue(input,
+      typeof nodeSliderValueFromTravel === "function" ? nodeSliderValueFromTravel(input, t) : t, drag);
+    nodeGraphModuleFaceCapture(face, event, (ev, drag) => {
+      const { dx, dy } = travel(ev);
+      let du = (dx - dy) / Math.max(1, wd.w);
+      if (mode === "span") du = Math.max(-Math.min(tl, th), Math.min(1 - Math.max(tl, th), du));
+      if (mode !== "hi") set(lo, Math.max(0, Math.min(1, tl + du)), drag);
+      if (mode !== "lo") set(hi, Math.max(0, Math.min(1, th + du)), drag);
+    });
+    return;
+  }
   if (!move || !input) return;
   nodeGraphModuleFaceCapture(face, event, (ev, drag) => setNodeGraphModuleFaceValue(input, move(ev), drag));
 }
@@ -423,6 +466,11 @@ function openNodeGraphModuleFaceParamOptions(article, face, event) {
   const wd = spec ? nodeGraphModuleFaceWidgetAt(spec, face, p.x, p.y) : null;
   if (!wd) return;
   let key = wd.param;
+  if (wd.type === "band") {
+    const { tl, th } = nodeGraphModuleFaceBandEnds(article, wd);
+    const u = (p.x - wd.x) / Math.max(1, wd.w);
+    key = Math.abs(u - tl) <= Math.abs(u - th) ? wd.lo : wd.hi;
+  }
   if (wd.type === "filter") {
     const u = p.x / Math.max(1, wd.w);
     const th = nodeGraphModuleFaceLogT(nodeGraphModuleFaceValue(nodeGraphModuleFaceInput(article, wd.hpf)));
@@ -564,6 +612,23 @@ function nodeGraphModuleFaceDrawGl(batch, el, w, ox, oy, z) {
       nodeGraphModuleFaceText(batch, nodeGraphModuleFaceValueText(input), ox + cx * z, oy + (cy + 7) * z, 13.8 * z, ink.value, { maxWidth: (cw - 4) * z });
     } else if (wd.type === "filter") {
       nodeGraphModuleFaceDrawFilterGl(batch, el, wd, ox, oy, z, rect, line);
+    } else if (wd.type === "band") {
+      // Condensed band: span fill between the two ends, a 3 px handle at each, label inside.
+      const { lo, hi, tl, th } = nodeGraphModuleFaceBandEnds(el, wd);
+      const a = Math.min(tl, th);
+      const b = Math.max(tl, th);
+      rect(wd.x + a * wd.w, wd.y + 1, (b - a) * wd.w, wd.h - 1, ink.bandSpan);
+      for (const t of [tl, th]) rect(wd.x + t * wd.w - 1, wd.y + 4, 3, wd.h - 8, ink.bandHandle);
+      const loText = nodeGraphModuleFaceValueText(lo);
+      const hiText = nodeGraphModuleFaceValueText(hi);
+      nodeGraphModuleFaceText(batch, loText, ox + (wd.x + 6) * z, oy + cy * z, 12 * z, ink.bandText, { align: "left" });
+      nodeGraphModuleFaceText(batch, hiText, ox + (wd.x + wd.w - 6) * z, oy + cy * z, 12 * z, ink.bandText, { align: "right" });
+      // Label shrinks to fit between the two values (one uniform px, no squeeze).
+      const family = typeof nodeGraphGlGraphTextOpts === "function" ? nodeGraphGlGraphTextOpts({ px: 12 }).family : undefined;
+      const measure = (text, px) => nodeGraphGlLinesMeasureText(text, px, family, 400);
+      const room = wd.w - 12 - measure(loText, 12) - measure(hiText, 12) - 10;
+      const labelPx = Math.min(12.6, 12.6 * Math.max(0, room) / Math.max(1, measure(wd.label, 12.6)));
+      nodeGraphModuleFaceText(batch, wd.label, ox + cx * z, oy + cy * z, labelPx * z, ink.label);
     } else if (wd.type === "seedNumber" && typeof nodeGraphGlGraphDrawSeedWidget === "function") {
       // The app-wide seed widget ([code][die][+][-]); its buttons are this row's seedButton cells.
       const bw = (w - wd.w) / 3;

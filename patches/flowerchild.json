@@ -590,13 +590,14 @@
       "id": "clock-2",
       "type": "clock",
       "params": {
-        "duty": 0.5,
+        "pulseEnd": 0.5,
+        "pulseStart": 0,
         "rate": 2.5,
         "phase": 0,
         "amplitude": 1
       },
       "paramMeta": {
-        "duty": {
+        "pulseEnd": {
           "def": 0.5,
           "max": 1,
           "mid": 0.5,

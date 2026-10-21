@@ -1901,7 +1901,7 @@
           "outputDomain": false,
           "domainOffset": 0
         },
-        "duty": {
+        "pulseEnd": {
           "alias": "",
           "choices": [],
           "curveAmount": 0.3,
@@ -1973,7 +1973,8 @@
       "params": {
         "rate": 0,
         "phase": 0,
-        "duty": 0.5,
+        "pulseEnd": 0.5,
+        "pulseStart": 0,
         "amplitude": 1
       },
       "type": "clock",
@@ -2090,7 +2091,7 @@
           "outputDomain": false,
           "domainOffset": 0
         },
-        "duty": {
+        "pulseEnd": {
           "alias": "",
           "choices": [],
           "curveAmount": 0.3,
@@ -2162,7 +2163,8 @@
       "params": {
         "rate": 0,
         "phase": 0.5,
-        "duty": 0.5,
+        "pulseEnd": 0.5,
+        "pulseStart": 0,
         "amplitude": 1
       },
       "type": "clock",

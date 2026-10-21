@@ -191,7 +191,8 @@ function nodeGraphModuleScopeOfflineSignalSample(context, nodeId, localTime, sam
   }
   if (node.type === "clock") {
     const rate = Math.max(0, nodeGraphModuleScopeNodeParam(node, "rate", 0));
-    const duty = clampNodeSliderValue(nodeGraphModuleScopeNodeParam(node, "duty", 0.5), 0, 1);
+    const pulseStart = clampNodeSliderValue(nodeGraphModuleScopeNodeParam(node, "pulseStart", 0), 0, 1);
+    const pulseEnd = clampNodeSliderValue(nodeGraphModuleScopeNodeParam(node, "pulseEnd", 0.5), 0, 1);
     const level = clampNodeSliderValue(nodeGraphModuleScopeNodeParam(node, "level", 1), 0, 1);
     const sampleRate = nodeGraphFiniteNumber(nodeGraphModuleScopeState.sampleRate, nodeGraphFiniteNumber(nodeGraphMvp.sampleRate, 44100));
     const phase = nodeGraphModuleScopeClockPhaseAt(context, node.id, rate, localTime);
@@ -201,7 +202,7 @@ function nodeGraphModuleScopeOfflineSignalSample(context, nodeId, localTime, sam
     if (port === "Pulse" || port === "T") {
       return rate > 0 && phase < Math.min(1, rate / Math.max(1, sampleRate)) ? level : 0;
     }
-    return duty > 0 && level > 0 && phase < duty ? level : 0;
+    return level > 0 && nodeGraphModuleScopeClockAtPhaseHigh(phase, pulseStart, pulseEnd) ? level : 0;
   }
   const input = nodeGraphModuleScopeConnectionsTo(node.id, "In")
     .reduce((sum, connection) => sum + nodeGraphModuleScopeOfflineSignalSample(
@@ -716,7 +717,7 @@ function nodeGraphModuleScopeClockAnalogMonitorSample(phase, level) {
   return (body + sheen) * snapEnvelope * level;
 }
 
-function nodeGraphModuleScopeClockMonitorTargetAtPhase(slot, node, phase, duty, level) {
+function nodeGraphModuleScopeClockMonitorTargetAtPhase(slot, node, phase, start, end, level) {
   const port = nodeGraphModuleScopeShaderOutputPortForSlot(slot) || "Digital Out";
   const safePhase = clampNodeSliderValue(nodeGraphFiniteNumber(phase), 0, 1);
   const safeLevel = clampNodeSliderValue(nodeGraphFiniteNumber(level), 0, 1);
@@ -728,38 +729,47 @@ function nodeGraphModuleScopeClockMonitorTargetAtPhase(slot, node, phase, duty, 
     const frameWindow = Math.max(1 / 120, nodeGraphFiniteNumber(nodeGraphModuleScopeState.animationDeltaSeconds, (1 / 60)));
     return rate > 0 && safePhase < Math.min(1, rate * frameWindow) ? safeLevel : 0;
   }
-  return duty > 0 && safeLevel > 0 && safePhase < duty ? safeLevel : 0;
+  return safeLevel > 0 && nodeGraphModuleScopeClockAtPhaseHigh(safePhase, start, end) ? safeLevel : 0;
 }
 
-function nodeGraphModuleScopeClockGateFrameBrightness(previousPhase, turns, duty, level) {
-  const safeDuty = clampNodeSliderValue(nodeGraphFiniteNumber(duty), 0, 1);
+function nodeGraphModuleScopeClockAtPhaseHigh(phase, start, end) {
+  return end >= start ? (phase >= start && phase < end) : (phase >= start || phase < end);
+}
+
+function nodeGraphModuleScopeClockGateOn(a, b, start, end) {
+  const span = (lo, hi) => Math.max(0, Math.min(b, hi) - Math.max(a, lo));
+  return end >= start ? span(start, end) : span(0, end) + span(start, 1);
+}
+
+function nodeGraphModuleScopeClockGateFrameBrightness(previousPhase, turns, start, end, level) {
+  const onFraction = nodeGraphModuleScopeClockGateOn(0, 1, start, end);
   const safeLevel = clampNodeSliderValue(nodeGraphFiniteNumber(level), 0, 1);
-  if (safeDuty <= 0 || safeLevel <= 0) {
+  if (onFraction <= 0 || safeLevel <= 0) {
     return 0;
   }
-  if (safeDuty >= 1) {
+  if (onFraction >= 1) {
     return safeLevel;
   }
-  const start = wrapNodeSliderValue(nodeGraphFiniteNumber(previousPhase), 0, 1);
+  const phase0 = wrapNodeSliderValue(nodeGraphFiniteNumber(previousPhase), 0, 1);
   const span = Math.max(0, nodeGraphFiniteNumber(turns));
   if (span <= 0) {
-    return start < safeDuty ? safeLevel : 0;
+    return nodeGraphModuleScopeClockAtPhaseHigh(phase0, start, end) ? safeLevel : 0;
   }
   let remaining = span;
-  let phase = start;
+  let phase = phase0;
   let onDuration = 0;
   let guard = 0;
   while (remaining > 1e-9 && guard < 8) {
     guard += 1;
     if (phase <= 1e-9 && remaining >= 1) {
       const fullCycles = Math.floor(remaining);
-      onDuration += fullCycles * safeDuty;
+      onDuration += fullCycles * onFraction;
       remaining -= fullCycles;
       continue;
     }
     const segmentDuration = Math.min(remaining, 1 - phase);
     const segmentEnd = phase + segmentDuration;
-    onDuration += Math.max(0, Math.min(segmentEnd, safeDuty) - Math.max(phase, 0));
+    onDuration += nodeGraphModuleScopeClockGateOn(phase, segmentEnd, start, end);
     remaining -= segmentDuration;
     phase = 0;
   }
@@ -807,14 +817,14 @@ function nodeGraphModuleScopeClockAnalogFrameBrightness(previousPhase, turns, le
   return clampNodeSliderValue(sum / samples, 0, 1);
 }
 
-function nodeGraphModuleScopeClockMonitorTarget(slot, node, phasor, duty, level) {
+function nodeGraphModuleScopeClockMonitorTarget(slot, node, phasor, start, end, level) {
   const port = nodeGraphModuleScopeShaderOutputPortForSlot(slot) || "Digital Out";
   const previousPhase = Number(phasor?.previousPhase);
   const fallbackPhase = nodeGraphFiniteNumber(phasor?.phase);
   const frameStartPhase = Number.isFinite(previousPhase) ? previousPhase : fallbackPhase;
   const turns = Math.max(0, nodeGraphFiniteNumber(phasor?.turns));
   if (turns <= 0) {
-    return nodeGraphModuleScopeClockMonitorTargetAtPhase(slot, node, fallbackPhase, duty, level);
+    return nodeGraphModuleScopeClockMonitorTargetAtPhase(slot, node, fallbackPhase, start, end, level);
   }
   if (port === "Analog Out") {
     return nodeGraphModuleScopeClockAnalogFrameBrightness(frameStartPhase, turns, level);
@@ -822,7 +832,7 @@ function nodeGraphModuleScopeClockMonitorTarget(slot, node, phasor, duty, level)
   if (port === "Pulse" || port === "T") {
     return nodeGraphModuleScopeClockPulseFrameBrightness(frameStartPhase, turns, nodeGraphModuleScopeNodeParam(node, "rate", 0), level);
   }
-  return nodeGraphModuleScopeClockGateFrameBrightness(frameStartPhase, turns, duty, level);
+  return nodeGraphModuleScopeClockGateFrameBrightness(frameStartPhase, turns, start, end, level);
 }
 
 function nodeGraphModuleScopeOfflineClockBlinkBuffer(slot, capturedBuffer = null) {
@@ -834,14 +844,15 @@ function nodeGraphModuleScopeOfflineClockBlinkBuffer(slot, capturedBuffer = null
     return null;
   }
   const rate = Math.max(0, nodeGraphModuleScopeNodeParam(node, "rate", 0));
-  const duty = clampNodeSliderValue(nodeGraphModuleScopeNodeParam(node, "duty", 0.5), 0, 1);
+  const start = clampNodeSliderValue(nodeGraphModuleScopeNodeParam(node, "pulseStart", 0), 0, 1);
+  const end = clampNodeSliderValue(nodeGraphModuleScopeNodeParam(node, "pulseEnd", 0.5), 0, 1);
   const level = clampNodeSliderValue(nodeGraphModuleScopeNodeParam(node, "level", 1), 0, 1);
   const phasor = nodeGraphModuleScopeClockPhasor(
     slot,
     rate,
     nodeGraphModuleScopeModelFrameTime(slot),
   );
-  const modelTarget = nodeGraphModuleScopeClockMonitorTarget(slot, node, phasor, duty, level);
+  const modelTarget = nodeGraphModuleScopeClockMonitorTarget(slot, node, phasor, start, end, level);
   const capturedTarget = nodeGraphModuleScopeClockCapturedLightTarget(slot, capturedBuffer);
   return {
     length: 1,

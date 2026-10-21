@@ -993,7 +993,7 @@
           "outputDomain": false,
           "domainOffset": 0
         },
-        "duty": {
+        "pulseEnd": {
           "alias": "",
           "choices": [],
           "curveAmount": 0.3,
@@ -1067,7 +1067,8 @@
       "params": {
         "rate": 1,
         "phase": 0,
-        "duty": 0.5,
+        "pulseStart": 0,
+        "pulseEnd": 0.5,
         "amplitude": 0.592592926785481
       },
       "type": "clock",

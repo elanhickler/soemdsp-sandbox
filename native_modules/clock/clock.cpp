@@ -23,6 +23,7 @@ struct ClockState {
   double lastAnalog;
   double lastDigital;
   double lastPulse;
+  double lastPhase;
 };
 
 static ClockState gPool[kMaxInstances];
@@ -56,6 +57,7 @@ extern "C" int soemdsp_clock_create() {
       s.lastAnalog = 0.0;
       s.lastDigital = 0.0;
       s.lastPulse = 0.0;
+      s.lastPhase = 0.0;
       s.active = true;
       return i + 1;
     }
@@ -73,7 +75,8 @@ extern "C" double soemdsp_clock_sample(
   double reset,
   double phaseOffset,
   double rate,
-  double duty,
+  double pulseStart,
+  double pulseEnd,
   double level,
   double sampleRate
 ) {
@@ -83,7 +86,8 @@ extern "C" double soemdsp_clock_sample(
   const double safeReset = safe(reset);
   const double safePhaseOffset = wrap01(safe(phaseOffset));
   const double safeRate = maxd(0.0, safe(rate));
-  const double safeDuty = clamp(safe(duty), 0.0, 1.0);
+  const double safeStart = clamp(safe(pulseStart), 0.0, 1.0);
+  const double safeEnd = clamp(safe(pulseEnd), 0.0, 1.0);
   const double safeLevel = safe(level);
   const double rateHz = maxd(1.0, safe(sampleRate));
 
@@ -104,9 +108,14 @@ extern "C" double soemdsp_clock_sample(
   const double periodSamples = safeRate > 0.0 ? rateHz / safeRate : 0.0;
   double digital = 0.0;
   if (periodSamples > 0.0) {
-    const double dutySamples = dsp_floor(safeDuty * periodSamples + 0.5);
+    // High from Pulse Start to Pulse End; End before Start wraps through the cycle end.
+    const double startSamples = dsp_floor(safeStart * periodSamples + 0.5);
+    const double endSamples = dsp_floor(safeEnd * periodSamples + 0.5);
     const double phaseSamples = phase * periodSamples;
-    digital = phaseSamples < dutySamples ? safeLevel : 0.0;
+    const bool high = endSamples >= startSamples
+      ? (phaseSamples >= startSamples && phaseSamples < endSamples)
+      : (phaseSamples >= startSamples || phaseSamples < endSamples);
+    digital = high ? safeLevel : 0.0;
   }
   const double analog = clock_analog_whip_sample(phase, safeLevel);
 
@@ -122,6 +131,7 @@ extern "C" double soemdsp_clock_sample(
   s.lastAnalog = analog;
   s.lastDigital = digital;
   s.lastPulse = pulse;
+  s.lastPhase = phase;
   return digital;
 }
 
@@ -135,6 +145,11 @@ extern "C" double soemdsp_clock_pulse(int handle) {
   return gPool[handle - 1].lastPulse;
 }
 
+extern "C" double soemdsp_clock_phase(int handle) {
+  if (handle < 1 || handle > kMaxInstances) return 0.0;
+  return gPool[handle - 1].lastPhase;
+}
+
 extern "C" int soemdsp_clock_version() {
-  return 4; // 4: T pulse follows Phase offset
+  return 5; // 5: Pulse Start / Pulse End replace duty; phase published. 4: T pulse follows Phase offset
 }
