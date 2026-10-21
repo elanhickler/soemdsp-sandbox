@@ -1419,6 +1419,19 @@ function nodeGraphStereoWaterfallBuffers(nodeId, type) {
     }
     return { left, right };
   }
+  // Stereo only while a named input is wired (RMS Meter: R). Otherwise the
+  // face stays on its mono source. Taps are this node's own face signals.
+  if (def?.stereoWaterfallRequires) {
+    if (!nodeGraphStereoTracePortWired(id, String(def.stereoWaterfallRequires))) {
+      return null;
+    }
+    const left = nodeGraphModuleScopeState.buffers.get(`${id}:${ports.left}`);
+    const right = nodeGraphModuleScopeState.buffers.get(`${id}:${ports.right}`);
+    if (!left?.length && !right?.length) {
+      return null;
+    }
+    return { left, right };
+  }
   // Mono-only graphs (SinCos → Output Mono) must not use empty L/R rings.
   if (!nodeGraphStereoTraceLrWired(id, type)) {
     return null;

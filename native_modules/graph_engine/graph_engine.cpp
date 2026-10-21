@@ -10016,28 +10016,41 @@ static void process_resonant_envelope(Circuit& g, Node& node, int frames) {
 }
 
 // RMS Meter (rmsMeter, type 227): timeDenominator=Attack ms, width=Release ms,
-// amplitude=Env Inverted scale. In on Mono(+L/R). Outs: RMS -> Mono/Left/Right,
-// dB -> Saw slot, Env Inverted -> Ramp slot.
+// amplitude=Env Inverted scale. L (jack id In) on Mono(+Left), R on Right.
+// Mono (R unwired): every out is L; the R outs mirror L. Stereo (R wired):
+// second native handle (nativeHandleR) meters R.
+// Outs: RMS L -> Mono + Left, RMS R -> Right, dB L -> Saw, dB R -> Square,
+// Env Inverted L -> Ramp, Env Inverted R -> Tri.
 static void process_rms_meter(Circuit& g, Node& node, int frames) {
   if (node.nativeHandle <= 0) return;
+  bool hasMonoIn = false, hasLeftIn = false, hasRightIn = false, monoOutWired = false;
+  probe_mlr_cables(g, node, &hasMonoIn, &hasLeftIn, &hasRightIn, &monoOutWired);
   mix_node_inputs(g, node, frames);
+  const bool stereo = hasRightIn && node.nativeHandleR > 0;
   const double sr = g.sampleRate < 1.0f ? 44100.0 : (double)g.sampleRate;
   for (int f = 0; f < frames; f++) {
     control_frame(g, node, f);
-    const double in = g.mixMono[f] + g.mixLeft[f] + g.mixRight[f];
-    const double rms = soemdsp_rms_meter_sample(
-      node.nativeHandle,
-      in,
-      control_audio(g, node.timeDenominator, f),
-      control_audio(g, node.width, f),
-      control_audio(g, node.amplitude, f),
-      sr
-    );
-    node.buf[kPortMono][f] = rms;
-    node.buf[kPortLeft][f] = rms;
-    node.buf[kPortRight][f] = rms;
-    node.buf[kPortSaw][f] = soemdsp_rms_meter_db(node.nativeHandle);
-    node.buf[kPortRamp][f] = soemdsp_rms_meter_inverted(node.nativeHandle);
+    const double att = control_audio(g, node.timeDenominator, f);
+    const double rel = control_audio(g, node.width, f);
+    const double amp = control_audio(g, node.amplitude, f);
+    const double inL = stereo ? g.mixMono[f] + g.mixLeft[f]
+                              : g.mixMono[f] + g.mixLeft[f] + g.mixRight[f];
+    const double rmsL = soemdsp_rms_meter_sample(node.nativeHandle, inL, att, rel, amp, sr);
+    const double dbL = soemdsp_rms_meter_db(node.nativeHandle);
+    const double invL = soemdsp_rms_meter_inverted(node.nativeHandle);
+    double rmsR = rmsL, dbR = dbL, invR = invL;
+    if (stereo) {
+      rmsR = soemdsp_rms_meter_sample(node.nativeHandleR, g.mixRight[f], att, rel, amp, sr);
+      dbR = soemdsp_rms_meter_db(node.nativeHandleR);
+      invR = soemdsp_rms_meter_inverted(node.nativeHandleR);
+    }
+    node.buf[kPortMono][f] = rmsL;
+    node.buf[kPortLeft][f] = rmsL;
+    node.buf[kPortRight][f] = rmsR;
+    node.buf[kPortSaw][f] = dbL;
+    node.buf[kPortSquare][f] = dbR;
+    node.buf[kPortRamp][f] = invL;
+    node.buf[kPortTri][f] = invR;
   }
 }
 
@@ -14362,7 +14375,7 @@ extern "C" int soemdsp_graph_add_node(int handle, unsigned int nodeIdHash, int t
       }
     }
     // Random Walk: second instance for independent Right lane.
-    if (typeId == kTypeRandomWalk) {
+    if (typeId == kTypeRandomWalk || typeId == kTypeRmsMeter) {
       n.nativeHandleR = create_native_for_type(typeId, g->sampleRate);
       if (n.nativeHandleR <= 0) {
         destroy_node_native(n);
@@ -16523,5 +16536,5 @@ extern "C" int soemdsp_graph_version() {
   // 170: EQ Filter ZDF ƒ input (resolve_osc_hz)
   // 171: ƒ on Ladder/303/Mode/Cookbook/IIR/Papoulis/ZDF filters + soemdsp_graph_node_effective_hz
   // 174: live add/remove/connect/disconnect keep compiled and other nodes' native handles
-  return 199; // 199: RMS Meter (227): one-pole mean square; RMS / dB (-120 floor) / Env Inverted. was 198: Resonant Envelope Mode (Envelope / Filter, waveform slot) + Trigger detect (Cross 0 / Saw reset, lfoStyle slot). was 197: Amp <-> dB reads |amp| in Amp->dB mode (bipolar audio no longer floors to -120). was 196: Resonant Envelope SC out (kPortSaw, clamp(1 - Out/Amplitude, 0, 1)). was 195: gate_hit / gate_on back to the original law (hit = first sample > 0 after <= 0; on = x > 0); Resonant Envelope Follow = rising-sample step latch. was 194: Resonant Envelope Follow input (Morph live bus, |x| is the SVF target). was 193: DSF Oscillator face playhead (__Phase on kPortPhase01). was 192: Resonant Envelope Frequency knob (unwired f uses it for Tracking). was 191: Electro Clap (226). was 190: Mode Resonator / Random Clock / Turing Machine / Degree Turing back to their original mono outs (stereo R removed). was 189: fBm back to its 3 outs Out X / Out Y / Out Z (stereo R axes removed). was 188: Electro Hat (223) / Electro Tom (224) / Electro Kick (225). was 187: stereo L/R outs: Bradley 2A, fBm (X/Y/Z R on Tri/Sine/Trisaw), Mode Resonator (R quadrature), Random Clock / Turing Machine / Degree Turing (R Seed lane), Softpop 2 R Pitch Mod. was 186: Electro Snare stereo (Snare L -> Left, Snare R -> Right, Env -> Mono). was 185: Electro Snare (type 222). was 184: Robin Sinepulse 0–1 jack is log sweep position (L = max(Low, 20 Hz)). was 183: Flower Child ƒ input removed (Cutoff knob only again). was 182: SinCos / SinCos4 Polarity (center 0 Bipolar / 1 Unipolar). was 181: Flower Child ƒ in (resonance-pitch Hz replaces Cutoff). was 180: Robin Sinepulse 0–1 jack is sweep position (High=1, Low=0). was 179: Resonant Envelope (221)
+  return 200; // 200: RMS Meter stereo: L (id In) + R inputs, R outs (RMS R Right, dB R Square, Env Inverted R Tri), nativeHandleR meters R when wired. was 199: RMS Meter (227): one-pole mean square; RMS / dB (-120 floor) / Env Inverted. was 198: Resonant Envelope Mode (Envelope / Filter, waveform slot) + Trigger detect (Cross 0 / Saw reset, lfoStyle slot). was 197: Amp <-> dB reads |amp| in Amp->dB mode (bipolar audio no longer floors to -120). was 196: Resonant Envelope SC out (kPortSaw, clamp(1 - Out/Amplitude, 0, 1)). was 195: gate_hit / gate_on back to the original law (hit = first sample > 0 after <= 0; on = x > 0); Resonant Envelope Follow = rising-sample step latch. was 194: Resonant Envelope Follow input (Morph live bus, |x| is the SVF target). was 193: DSF Oscillator face playhead (__Phase on kPortPhase01). was 192: Resonant Envelope Frequency knob (unwired f uses it for Tracking). was 191: Electro Clap (226). was 190: Mode Resonator / Random Clock / Turing Machine / Degree Turing back to their original mono outs (stereo R removed). was 189: fBm back to its 3 outs Out X / Out Y / Out Z (stereo R axes removed). was 188: Electro Hat (223) / Electro Tom (224) / Electro Kick (225). was 187: stereo L/R outs: Bradley 2A, fBm (X/Y/Z R on Tri/Sine/Trisaw), Mode Resonator (R quadrature), Random Clock / Turing Machine / Degree Turing (R Seed lane), Softpop 2 R Pitch Mod. was 186: Electro Snare stereo (Snare L -> Left, Snare R -> Right, Env -> Mono). was 185: Electro Snare (type 222). was 184: Robin Sinepulse 0–1 jack is log sweep position (L = max(Low, 20 Hz)). was 183: Flower Child ƒ input removed (Cutoff knob only again). was 182: SinCos / SinCos4 Polarity (center 0 Bipolar / 1 Unipolar). was 181: Flower Child ƒ in (resonance-pitch Hz replaces Cutoff). was 180: Robin Sinepulse 0–1 jack is sweep position (High=1, Low=0). was 179: Resonant Envelope (221)
 }

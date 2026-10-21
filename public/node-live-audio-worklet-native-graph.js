@@ -714,9 +714,12 @@ NodeLiveAudioProcessor.prototype.mapNativeGraphSrcPortId = function mapNativeGra
   if (t === "resonantEnvelope" && p === "sc") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_SAW;
   // RMS Meter: RMS on Mono, dB on Saw, Env Inverted on Ramp.
   if (t === "rmsMeter") {
-    if (p === "rms") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_MONO;
-    if (p === "db") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_SAW;
-    if (p === "env inverted") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_RAMP;
+    if (p === "rms" || p === "rms l") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_MONO;
+    if (p === "rms r") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_RIGHT;
+    if (p === "db" || p === "db l") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_SAW;
+    if (p === "db r") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_SQUARE;
+    if (p === "env inverted" || p === "env inverted l") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_RAMP;
+    if (p === "env inverted r") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_TRI;
   }
   // Electro Snare: Snare L on Left, Snare R on Right, Env on Mono.
   if (t === "electroSnare") {
@@ -1234,6 +1237,11 @@ NodeLiveAudioProcessor.prototype.mapNativeGraphDstPortId = function mapNativeGra
   // Resonant Envelope Follow: envelope-follower input on the Morph live bus.
   if (tDst === "resonantEnvelope" && p === "follow") {
     return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_MORPH;
+  }
+  // RMS Meter: L (jack id In) on Mono, R on Right (R wired = stereo).
+  if (tDst === "rmsMeter") {
+    if (p === "in" || p === "l" || p === "left" || p === "mono") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_MONO;
+    if (p === "r" || p === "right") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_RIGHT;
   }
   // Electro Hat: Open hit jack on the Mono live bus (Trigger = Closed on the Trigger bus).
   if (tDst === "electroHat" && p === "open") {
@@ -9038,7 +9046,7 @@ NodeLiveAudioProcessor.prototype.nativeGraphPortNames = function nativeGraphPort
     return ["isIdle", "Idle"];
   }
   if (portId === P.NATIVE_GRAPH_PORT_MONO) {
-    if (type === "rmsMeter") return ["RMS"];
+    if (type === "rmsMeter") return ["RMS", "RMS L Tap"];
     if (type === "acidSequencer") return ["Gate"];
     if (type === "mixStereo4" || type === "mixStereo2" || type === "mixStereo" || type === "crossfade2" || type === "crossfade3" || type === "crossfade4") {
       return []; // stereo-only — no Mono I/O
@@ -9198,6 +9206,7 @@ NodeLiveAudioProcessor.prototype.nativeGraphPortNames = function nativeGraphPort
     return ["Left"];
   }
   if (portId === P.NATIVE_GRAPH_PORT_RIGHT) {
+    if (type === "rmsMeter") return ["RMS R", "RMS R Tap"];
     if (type === "robinSinepulse") return ["env", "0-1", "0\u20131", "0..1"];
     if (type === "acidSequencer") return ["pitch", "\u266f/\u266d"];
     if (type === "helmholtzPitch") return ["Fidelity", "fid"];
@@ -9327,6 +9336,7 @@ NodeLiveAudioProcessor.prototype.nativeGraphPortNames = function nativeGraphPort
     return ["Ramp"];
   }
   if (portId === P.NATIVE_GRAPH_PORT_SQUARE) {
+    if (type === "rmsMeter") return ["dB R"];
     if (type === "acidSequencer") return ["CV"];
     if (type === "arp") return ["f", "ƒ", "Frequency", "Freq", "Square"];
     if (type === "transport") return ["Click", "Click L", "Click Left"];
@@ -9340,6 +9350,7 @@ NodeLiveAudioProcessor.prototype.nativeGraphPortNames = function nativeGraphPort
     return ["Square"];
   }
   if (portId === P.NATIVE_GRAPH_PORT_TRI) {
+    if (type === "rmsMeter") return ["Env Inverted R"];
     if (type === "transport") return ["Click R", "Click Right"];
     if (type === "phoneTone") return ["Digital Thru"];
     if (type === "comparator") return ["Steady"];

@@ -16821,6 +16821,9 @@ const nodeGraphModuleDefinitions = (
     ] },
   // RMS Meter (native rms_meter): one-pole mean square, RMS = sqrt(ms).
   // Face = the shared Instant Waterfall fed with RMS (linear, unipolar).
+  // Stereo-aware: L (jack id In, kept for old patches) alone = mono, every out
+  // from L and a mono waterfall. R wired = stereo: R outs meter R and the face
+  // switches to the stereo L/R waterfall (stereoWaterfallRequires: "R").
   rmsMeter: {
     planRole: "processor",
     planFreeRun: true,
@@ -16835,11 +16838,20 @@ const nodeGraphModuleDefinitions = (
         source: { value: "RMS" },
       },
     ],
-    displaySignals: [{ key: "RMS", kind: "scalar" }],
-    inputs: ["In"],
-    outputs: ["RMS", "dB", "Env Inverted"],
-    digitalOutputs: ["dB"],
-    outputLabels: { RMS: "RMS", dB: "dB", "Env Inverted": "Env Inverted" },
+    displaySignals: [
+      { key: "RMS", kind: "scalar" },
+      { key: "RMS L Tap", kind: "scalar" },
+      { key: "RMS R Tap", kind: "scalar" },
+    ],
+    stereoWaterfallPorts: { left: "RMS L Tap", right: "RMS R Tap" },
+    stereoWaterfallRequires: "R",
+    inputs: ["In", "R"],
+    inputLabels: { In: "L", R: "R" },
+    inputChannels: { In: "red", R: "blue" },
+    inputAliases: { L: "In", Left: "In", Mono: "In", Right: "R" },
+    outputs: ["RMS", "dB", "Env Inverted", "RMS R", "dB R", "Env Inverted R"],
+    digitalOutputs: ["dB", "dB R"],
+    outputLabels: { RMS: "RMS", dB: "dB", "Env Inverted": "Env Inverted", "RMS R": "RMS R", "dB R": "dB R", "Env Inverted R": "Env Inverted R" },
     outputAliases: { Out: "RMS", Env: "RMS", Inverted: "Env Inverted", Duck: "Env Inverted" },
     parameters: [
       {
