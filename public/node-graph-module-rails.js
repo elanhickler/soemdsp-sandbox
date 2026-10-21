@@ -82,8 +82,16 @@ function syncNodeGraphModuleRails() {
   // A param is "in use" when a cable lands on its mod inlet or leaves its thru.
   // Each used param shows one tag pair (mod rail + thru rail); nothing else.
   const patched = new Map();
+  // A hidden param has no row, so it gets no rail tag and never opens the rails.
+  const hidden = (id, param) => {
+    const node = (patch.nodes || []).find((n) => n?.id === id);
+    const def = node && typeof nodeGraphModuleDefinitions === "object" ? nodeGraphModuleDefinitions[node.type] : null;
+    const parameter = def?.parameters?.find((p) => p.key === param);
+    return Boolean(parameter) && typeof nodeGraphParameterEffectiveVisible === "function"
+      && !nodeGraphParameterEffectiveVisible(parameter, node.paramMeta?.[param]);
+  };
   const use = (id, param) => {
-    if (!id || !param) return;
+    if (!id || !param || hidden(id, param)) return;
     if (!patched.has(id)) patched.set(id, new Set());
     patched.get(id).add(param);
   };

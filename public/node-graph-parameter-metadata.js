@@ -307,10 +307,24 @@ function refreshNodeGraphModuleParameterVisibilityBody(element, patchNode) {
   if (typeof syncNodeGraphLayoutBNoParamsClass === "function") {
     syncNodeGraphLayoutBNoParamsClass(element, patchNode.type, patchNode.ui);
   }
+  if (typeof layoutNodeGraphModuleFace === "function") {
+    layoutNodeGraphModuleFace(element);
+  }
   if (typeof syncNodeGraphModuleChromeElement === "function") {
     syncNodeGraphModuleChromeElement(element, patchNode);
   } else if (typeof nodeGraphApplyModuleShellHeightCssVars === "function") {
     nodeGraphApplyModuleShellHeightCssVars(element, patchNode);
+  }
+  // The GL plate, chrome, face and wire ends read published geometry: republish
+  // now so the hidden row's space closes on screen, not on the next rebuild.
+  if (typeof nodeGraphModuleGeometryPublishFromDom === "function") {
+    nodeGraphModuleGeometryPublishFromDom(patchNode.id);
+  }
+  if (typeof nodeGraphGlGraphRebuildPlates === "function") {
+    nodeGraphGlGraphRebuildPlates();
+  }
+  if (typeof nodeGraphGlGraphPresent === "function") {
+    nodeGraphGlGraphPresent();
   }
   if (typeof markNodeGraphRenderPending === "function") {
     markNodeGraphRenderPending();

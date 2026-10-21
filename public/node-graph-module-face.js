@@ -45,9 +45,28 @@ const NodeGraphFaceInk = Object.freeze({
   seedButton: "#c5ccd8",
 });
 
-function nodeGraphModuleFaceSpec(type) {
+/** Face rows for a type. With a patch node, hidden params drop out and their rows close up. */
+function nodeGraphModuleFaceSpec(type, node = null) {
   const face = nodeGraphModuleDefinitions?.[type]?.face;
-  return Array.isArray(face) && face.length ? face : null;
+  if (!Array.isArray(face) || !face.length) return null;
+  if (!node || typeof nodeGraphParameterEffectiveVisible !== "function") return face;
+  const defs = nodeGraphModuleDefinitions[type]?.parameters || [];
+  const shown = (key) => nodeGraphParameterEffectiveVisible(defs.find((p) => p.key === key), node.paramMeta?.[key]);
+  const rows = [];
+  for (const row of face) {
+    if (row.kind === "cells") {
+      const params = row.params.filter((cell) => shown(cell[0]));
+      if (params.length) rows.push(params.length === row.params.length ? row : { ...row, params });
+    } else if (nodeGraphModuleFaceRowParams(row).some(shown)) {
+      rows.push(row);
+    }
+  }
+  return rows;
+}
+
+function nodeGraphModuleFaceSpecForElement(el) {
+  const node = typeof nodeGraphPatchNode === "function" ? nodeGraphPatchNode(el?.dataset?.node) : null;
+  return nodeGraphModuleFaceSpec(el?.dataset?.nodeType, node);
 }
 
 /** Params a face row owns, in rail order (top to bottom). */
@@ -65,8 +84,8 @@ function nodeGraphModuleFaceRowHeight(row) {
   return Math.max(row.h, nodeGraphModuleFaceRowParams(row).length * NODE_GRAPH_FACE_JACK_SLOT_PX);
 }
 
-function nodeGraphModuleFaceHeightPx(type) {
-  const spec = nodeGraphModuleFaceSpec(type);
+function nodeGraphModuleFaceHeightPx(type, node = null) {
+  const spec = nodeGraphModuleFaceSpec(type, node);
   return spec ? spec.reduce((sum, row) => sum + nodeGraphModuleFaceRowHeight(row), 0) : 0;
 }
 
@@ -212,12 +231,22 @@ function mountNodeGraphModuleFace(article, type) {
   const body = article?.querySelector(":scope > .dsp-node-body");
   if (!spec || !body) return;
   article.classList.add("has-module-face");
-  const total = nodeGraphModuleFaceHeightPx(type);
-  body.style.height = `${total}px`;
   const face = document.createElement("div");
   face.className = "node-face";
-  face.style.height = `${total}px`;
   body.append(face);
+  layoutNodeGraphModuleFace(article);
+  face.addEventListener("pointerdown", (event) => beginNodeGraphModuleFaceGesture(article, face, nodeGraphModuleFaceSpecForElement(article), event));
+}
+
+/** Size the face to its visible rows and stack each row's rail jacks (rerun when params hide/show). */
+function layoutNodeGraphModuleFace(article) {
+  const body = article?.querySelector(":scope > .dsp-node-body");
+  const face = body?.querySelector(":scope > .node-face");
+  const spec = face ? nodeGraphModuleFaceSpecForElement(article) : null;
+  if (!spec) return;
+  const total = spec.reduce((sum, row) => sum + nodeGraphModuleFaceRowHeight(row), 0);
+  body.style.height = `${total}px`;
+  face.style.height = `${total}px`;
   const placed = new Set();
   let y = 0;
   for (const row of spec) {
@@ -234,9 +263,8 @@ function mountNodeGraphModuleFace(article, type) {
     y += h;
   }
   for (const row of body.querySelectorAll(".node-parameter-row")) {
-    if (!placed.has(row.dataset.param)) row.classList.add("node-face-unplaced");
+    row.classList.toggle("node-face-unplaced", !placed.has(row.dataset.param));
   }
-  face.addEventListener("pointerdown", (event) => beginNodeGraphModuleFaceGesture(article, face, spec, event));
 }
 
 function nodeGraphModuleFaceLocalPoint(face, event) {
@@ -254,7 +282,7 @@ function nodeGraphModuleFaceWidgetAt(spec, face, x, y) {
 /** Wire-drop hit boxes (client px) so a cable dropped on a widget finds its param row. */
 function nodeGraphModuleFaceHitBoxes(moduleEl) {
   const face = moduleEl?.querySelector(":scope > .dsp-node-body > .node-face");
-  const spec = face ? nodeGraphModuleFaceSpec(moduleEl.dataset.nodeType) : null;
+  const spec = face ? nodeGraphModuleFaceSpecForElement(moduleEl) : null;
   if (!spec) return [];
   const rect = face.getBoundingClientRect();
   const kx = rect.width / Math.max(1, face.offsetWidth);
@@ -398,7 +426,7 @@ function nodeGraphModuleFaceText(batch, text, x, y, px, css, opts = {}) {
 }
 
 function nodeGraphModuleFaceDrawGl(batch, el, w, ox, oy, z) {
-  const spec = nodeGraphModuleFaceSpec(el.dataset.nodeType);
+  const spec = nodeGraphModuleFaceSpecForElement(el);
   if (!spec) return;
   const ink = NodeGraphFaceInk;
   const rect = (x, y, rw, rh, css) => nodeGraphGlLinesRect(batch, ox + x * z, oy + y * z, rw * z, rh * z, nodeGraphModuleFaceRgba(css));

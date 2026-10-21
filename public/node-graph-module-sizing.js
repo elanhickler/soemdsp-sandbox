@@ -677,7 +677,7 @@ function normalizeNodeGraphTextBoxHeightUnits(heightGu, ui = {}) {
  */
 function nodeGraphModuleSliderBodyHeightGu(type, ui = null, node = null) {
   // Hand-written face: its rows set the body height (node-graph-module-face.js).
-  const facePx = typeof nodeGraphModuleFaceHeightPx === "function" ? nodeGraphModuleFaceHeightPx(type) : 0;
+  const facePx = typeof nodeGraphModuleFaceHeightPx === "function" ? nodeGraphModuleFaceHeightPx(type, node) : 0;
   if (facePx > 0) {
     return facePx / nodeGraphGrid.heightPx;
   }
