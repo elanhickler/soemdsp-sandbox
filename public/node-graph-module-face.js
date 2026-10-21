@@ -13,6 +13,8 @@ const NODE_GRAPH_FACE_FILTER_DB_MIN = -18;
 const NODE_GRAPH_FACE_FILTER_HANDLE_PX = 10;
 const NODE_GRAPH_FACE_FILTER_LABEL_PX = 20;
 const NODE_GRAPH_FACE_FILTER_TICK_PX = 16;
+// LFO style snip stroke half width (face px): about 1 px wide.
+const NODE_GRAPH_FACE_LFO_HALF_PX = 0.5;
 const NODE_GRAPH_FACE_BAND_HANDLE_PX = 8;
 
 const NodeGraphFaceInk = Object.freeze({
@@ -579,8 +581,14 @@ function nodeGraphModuleFaceDrawGl(batch, el, w, ox, oy, z) {
         pts[i * 2] = ox + (px0 + (pw * i) / (n - 1)) * z;
         pts[i * 2 + 1] = oy + (py + ph * 0.5 - shape[i] * 0.92 * ph * 0.5) * z;
       }
-      if (live && typeof nodeGraphGlLinesPolyline === "function") {
-        nodeGraphGlLinesPolyline(batch, pts, Math.max(1, z), 0.8, nodeGraphModuleFaceRgba(on ? ink.lfoOn : ink.lfoOff), "round");
+      if (live) {
+        // One thin stroke of constant width: round-capped pieces of an opaque
+        // ink meet as round joins, so the sharp Walk / FBM turns do not bulge
+        // the way mitered ribbon joins do.
+        const rgba = nodeGraphModuleFaceRgba(on ? ink.lfoOn : ink.lfoOff);
+        for (let i = 2; i < pts.length; i += 2) {
+          nodeGraphGlLinesSegment(batch, pts[i - 2], pts[i - 1], pts[i], pts[i + 1], NODE_GRAPH_FACE_LFO_HALF_PX * z, 0.6, rgba, 0);
+        }
       }
       nodeGraphModuleFaceText(batch, wd.label, ox + cx * z, oy + (wd.y + wd.h - 9) * z, Math.min(12.6, fit(wd.label, wd.w, 40, 1, 0.6)) * z, on ? ink.subOnText : ink.offText);
     } else if (wd.type === "step") {
