@@ -559,7 +559,8 @@ function nodeGraphModuleFaceDrawFilterGl(batch, el, wd, ox, oy, z, rect, line) {
   const labPx = Math.min(12.6, ((w - 14) / 2 - 4) / (Math.max(hpText.length, lpText.length) * 0.6));
   nodeGraphModuleFaceText(batch, hpText, ox + 7 * z, oy + (wd.y + labH / 2) * z, labPx * z, ink.hpf, { align: "left" });
   nodeGraphModuleFaceText(batch, lpText, ox + (w - 7) * z, oy + (wd.y + labH / 2) * z, labPx * z, ink.lpf, { align: "right" });
-  const steps = Math.max(16, Math.round(w / 2));
+  // One sample per screen pixel: smooth at any zoom.
+  const steps = Math.max(32, Math.round(w * z));
   const yOf = (m) => {
     const db = 20 * Math.log10(Math.max(1e-12, m));
     return top + 2 + Math.min(1, -db / -NODE_GRAPH_FACE_FILTER_DB_MIN) * (ch - 2);
@@ -574,7 +575,7 @@ function nodeGraphModuleFaceDrawFilterGl(batch, el, wd, ox, oy, z, rect, line) {
     const l = nodeGraphModuleFaceButterworth(f, fcL, false);
     const x = t * w;
     const y = yOf(h * l);
-    if (i < steps) rect(x, y, w / steps + 0.5, top + ch - y, ink.curveFill);
+    if (i < steps) nodeGraphGlLinesRect(batch, ox + x * z, oy + y * z, (w / steps) * z + 0.5, (top + ch - y) * z, nodeGraphModuleFaceRgba(ink.curveFill));
     const sx = ox + x * z;
     // Skirts stop at the floor (no flat line along the bottom).
     const floor = 10 ** (NODE_GRAPH_FACE_FILTER_DB_MIN / 20);
@@ -584,17 +585,35 @@ function nodeGraphModuleFaceDrawFilterGl(batch, el, wd, ox, oy, z, rect, line) {
   }
   if (typeof nodeGraphGlLinesPolyline === "function") {
     const stroke = (pts, width, css) => {
-      if (pts.length >= 4) nodeGraphGlLinesPolyline(batch, new Float32Array(pts), width * z, 0.8, nodeGraphModuleFaceRgba(css), "round");
+      if (pts.length >= 4) nodeGraphGlLinesPolyline(batch, new Float32Array(pts), width * z, Math.max(1, z), nodeGraphModuleFaceRgba(css), "round");
     };
+    // Antialiased edge over the pixel-column fill across the whole width.
+    const edge = [];
+    for (let i = 0; i <= steps; i += 1) {
+      const t = i / steps;
+      const f = nodeGraphModuleFaceFromLogT(t);
+      edge.push(ox + t * w * z, oy + yOf(nodeGraphModuleFaceButterworth(f, fcH, true) * nodeGraphModuleFaceButterworth(f, fcL, false)) * z);
+    }
+    stroke(edge, 1, ink.curveFill);
     stroke(pass, 1.5, ink.passCurve);
     stroke(hp, 2.5, ink.hpfCurve);
     stroke(lp, 2.5, ink.lpfCurve);
   }
+  // Vertical handles (soundemote-dev Condensed 5 drawFilterCurve): a faint
+  // full-height bar at each cutoff and the 4 slope stops (6/12/18/24 dB, bottom
+  // to top) as dots, the current slope bigger and brighter.
+  const stops = [6, 12, 18, 24];
+  const on = stops.indexOf(NODE_GRAPH_FACE_FILTER_SLOPE_DB);
   for (const [fc, css] of [[fcH, ink.hpfCurve], [fcL, ink.lpfCurve]]) {
-    const t = nodeGraphModuleFaceLogT(fc);
-    const m = nodeGraphModuleFaceButterworth(fc, fcH, true) * nodeGraphModuleFaceButterworth(fc, fcL, false);
-    if (typeof nodeGraphGlLinesDot === "function") {
-      nodeGraphGlLinesDot(batch, ox + t * w * z, oy + yOf(m) * z, 3 * z, 0.8, nodeGraphModuleFaceRgba(css));
+    const hx = ox + nodeGraphModuleFaceLogT(fc) * w * z;
+    const c = nodeGraphModuleFaceRgba(css);
+    const tint = (a) => [c[0], c[1], c[2], c[3] * a];
+    nodeGraphGlLinesRect(batch, hx - z, oy + top * z, 2 * z, ch * z, tint(0.14));
+    if (typeof nodeGraphGlLinesDot !== "function") continue;
+    const pad = 5;
+    for (let k = 0; k < stops.length; k += 1) {
+      const py = top + pad + ((stops.length - 1 - k) / (stops.length - 1)) * (ch - pad * 2);
+      nodeGraphGlLinesDot(batch, hx, oy + py * z, (k === on ? 3.4 : 2.2) * z, Math.max(0.8, z), tint(k === on ? 0.75 : 0.18));
     }
   }
   // Tick strip spaced evenly (soundemote-dev look), labels at the 4 decades.
