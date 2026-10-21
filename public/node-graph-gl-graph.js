@@ -722,10 +722,7 @@ function nodeGraphGlGraphDrawSeedDie(batch, cell, ink) {
 function nodeGraphGlGraphDrawSeeds(batch, toX, toY, zoom, cssW, cssH) {
   const seeds = nodeGraphGlGraphState.chrome?.seeds || [];
   if (!seeds.length) return;
-  const ink = [0.98, 0.992, 1, 0.92];
-  const well = [0.031, 0.043, 0.051, 1];
   const line = nodeGraphGlGraphState.chrome?.seedLine || [0.23, 0.26, 0.28, 1];
-  const hover = [1, 1, 1, 0.08];
   // World boxes come from the rebuild (no layout reads per present).
   const cell = (box) => (box ? { x: toX(box.x), y: toY(box.y), w: box.w * zoom, h: box.h * zoom } : null);
   for (let i = 0; i < seeds.length; i += 1) {
@@ -738,58 +735,73 @@ function nodeGraphGlGraphDrawSeeds(batch, toX, toY, zoom, cssW, cssH) {
     const diceCell = cell(seed.diceBox);
     const plusCell = cell(seed.plusBox);
     const minusCell = cell(seed.minusBox);
-    nodeGraphGlGraphDrawOver(batch, () => {
-      nodeGraphGlLinesRect(batch, host.x, host.y, host.w, host.h, well);
-      const stroke = Math.max(1, zoom);
-      nodeGraphGlLinesRect(batch, host.x, host.y, host.w, stroke, line);
-      nodeGraphGlLinesRect(batch, host.x, host.y + host.h - stroke, host.w, stroke, line);
-      nodeGraphGlLinesRect(batch, host.x, host.y, stroke, host.h, line);
-      nodeGraphGlLinesRect(batch, host.x + host.w - stroke, host.y, stroke, host.h, line);
-      const split = (cell) => {
-        if (!cell) return;
-        nodeGraphGlLinesRect(batch, cell.x, cell.y, stroke, cell.h, line);
-      };
-      split(diceCell);
-      split(plusCell);
-      split(minusCell);
-      const hoverCell = (dice?.matches?.(":hover") && diceCell)
-        || (plus?.matches?.(":hover") && plusCell)
-        || (minus?.matches?.(":hover") && minusCell)
-        || null;
-      if (hoverCell) {
-        nodeGraphGlLinesRect(batch, hoverCell.x, hoverCell.y, hoverCell.w, hoverCell.h, hover);
-      }
-      if (diceCell) nodeGraphGlGraphDrawSeedDie(batch, diceCell, ink);
-      const bar = (cell, cross) => {
-        if (!cell) return;
-        const t = Math.max(1, Math.min(cell.w, cell.h) * 0.09);
-        const len = Math.min(cell.w, cell.h) * 0.62;
-        const cx = cell.x + cell.w * 0.5;
-        const cy = cell.y + cell.h * 0.5;
-        nodeGraphGlGraphDrawSeedBar(batch, cx, cy, len, t, ink);
-        if (cross) nodeGraphGlGraphDrawSeedBar(batch, cx, cy, t, len, ink);
-      };
-      bar(minusCell, false);
-      bar(plusCell, true);
-    });
+    const hoverCell = (dice?.matches?.(":hover") && diceCell)
+      || (plus?.matches?.(":hover") && plusCell)
+      || (minus?.matches?.(":hover") && minusCell)
+      || null;
     const text = String(valueEl?.textContent || "").replace(/\s+/g, " ").trim();
-    if (text && valueCell && typeof nodeGraphGlLinesText === "function") {
-      // The seed fit writes an inline size per value; else the rebuild's computed size.
-      const cssPx = Number.parseFloat(valueEl?.style?.fontSize || "") || seed.valuePx || 0;
-      const pad = Math.max(2, valueCell.h * 0.12) + 4 * zoom;
-      const fillPx = Math.max(
-        6,
-        Math.min((valueCell.h - pad * 2) / 0.78, (valueCell.w - pad * 2) / Math.max(1, text.length) / 0.58),
-      );
-      nodeGraphGlLinesText(batch, text, valueCell.x + valueCell.w * 0.5, valueCell.y + valueCell.h * 0.5, nodeGraphGlGraphTextOpts({
-        px: Math.max(6, Math.min(cssPx > 4 ? cssPx * zoom : fillPx, fillPx)),
-        rgba: ink,
-        align: "center",
-        baseline: "middle",
-        weight: 600,
-        family: "Consolas, \"Courier New\", monospace",
-      }));
+    // The seed fit writes an inline size per value; else the rebuild's computed size.
+    const cssPx = Number.parseFloat(valueEl?.style?.fontSize || "") || seed.valuePx || 0;
+    nodeGraphGlGraphDrawSeedWidget(batch, { host, value: valueCell, dice: diceCell, plus: plusCell, minus: minusCell }, text, zoom, { hoverCell, cssPx, line });
+  }
+}
+
+/**
+ * The one seed widget: [code][die][+][-] (screen px cells). Every seed /
+ * random control draws through this (param rows and hand-written faces).
+ */
+function nodeGraphGlGraphDrawSeedWidget(batch, cells, text, zoom, opts = {}) {
+  const ink = [0.98, 0.992, 1, 0.92];
+  const well = [0.031, 0.043, 0.051, 1];
+  const line = opts.line || nodeGraphGlGraphState.chrome?.seedLine || [0.23, 0.26, 0.28, 1];
+  const hover = [1, 1, 1, 0.08];
+  const { host, value: valueCell, dice: diceCell, plus: plusCell, minus: minusCell } = cells;
+  const hoverCell = opts.hoverCell || null;
+  const cssPx = opts.cssPx || 0;
+  nodeGraphGlGraphDrawOver(batch, () => {
+    nodeGraphGlLinesRect(batch, host.x, host.y, host.w, host.h, well);
+    const stroke = Math.max(1, zoom);
+    nodeGraphGlLinesRect(batch, host.x, host.y, host.w, stroke, line);
+    nodeGraphGlLinesRect(batch, host.x, host.y + host.h - stroke, host.w, stroke, line);
+    nodeGraphGlLinesRect(batch, host.x, host.y, stroke, host.h, line);
+    nodeGraphGlLinesRect(batch, host.x + host.w - stroke, host.y, stroke, host.h, line);
+    const split = (cell) => {
+      if (!cell) return;
+      nodeGraphGlLinesRect(batch, cell.x, cell.y, stroke, cell.h, line);
+    };
+    split(diceCell);
+    split(plusCell);
+    split(minusCell);
+    if (hoverCell) {
+      nodeGraphGlLinesRect(batch, hoverCell.x, hoverCell.y, hoverCell.w, hoverCell.h, hover);
     }
+    if (diceCell) nodeGraphGlGraphDrawSeedDie(batch, diceCell, ink);
+    const bar = (cell, cross) => {
+      if (!cell) return;
+      const t = Math.max(1, Math.min(cell.w, cell.h) * 0.09);
+      const len = Math.min(cell.w, cell.h) * 0.62;
+      const cx = cell.x + cell.w * 0.5;
+      const cy = cell.y + cell.h * 0.5;
+      nodeGraphGlGraphDrawSeedBar(batch, cx, cy, len, t, ink);
+      if (cross) nodeGraphGlGraphDrawSeedBar(batch, cx, cy, t, len, ink);
+    };
+    bar(minusCell, false);
+    bar(plusCell, true);
+  });
+  if (text && valueCell && typeof nodeGraphGlLinesText === "function") {
+    const pad = Math.max(2, valueCell.h * 0.12) + 4 * zoom;
+    const fillPx = Math.max(
+      6,
+      Math.min((valueCell.h - pad * 2) / 0.78, (valueCell.w - pad * 2) / Math.max(1, text.length) / 0.58),
+    );
+    nodeGraphGlLinesText(batch, text, valueCell.x + valueCell.w * 0.5, valueCell.y + valueCell.h * 0.5, nodeGraphGlGraphTextOpts({
+      px: Math.max(6, Math.min(cssPx > 4 ? cssPx * zoom : fillPx, fillPx)),
+      rgba: ink,
+      align: "center",
+      baseline: "middle",
+      weight: 600,
+      family: "Consolas, \"Courier New\", monospace",
+    }));
   }
 }
 

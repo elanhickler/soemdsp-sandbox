@@ -25752,27 +25752,6 @@ html.soemdsp-whole-module .node-layout-canvas-grip {
   padding: 0 !important;
   color: #fafdff;
 }
-.node-seed-btn-plus::before,
-.node-seed-btn-minus::before,
-.node-seed-btn-plus::after {
-  content: "";
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  background: transparent;
-  pointer-events: none;
-  border-radius: 0;
-}
-.node-seed-btn-plus::before,
-.node-seed-btn-minus::before {
-  width: calc(var(--node-slider-readout-height) * 0.62);
-  height: max(1px, calc(var(--node-slider-readout-height) * 0.09));
-}
-.node-seed-btn-plus::after {
-  width: max(1px, calc(var(--node-slider-readout-height) * 0.09));
-  height: calc(var(--node-slider-readout-height) * 0.62);
-}
 .node-seed-btn-dice {
   overflow: hidden;
   padding: 0 !important;
@@ -25780,28 +25759,7 @@ html.soemdsp-whole-module .node-layout-canvas-grip {
   font-size: 0;
   container-type: size;
 }
-.node-seed-die {
-  position: relative;
-  width: 62cqmin;
-  height: 62cqmin;
-  box-sizing: border-box;
-  border: max(1px, calc(var(--node-slider-readout-height) * 0.07)) solid transparent;
-  border-radius: 18%;
-  pointer-events: none;
-}
-.node-seed-die-pip {
-  position: absolute;
-  width: 16%;
-  height: 16%;
-  border-radius: 50%;
-  background: transparent;
-}
-/* Standard 5: four corners and the center. */
-.node-seed-die-pip:nth-child(1) { top: 16%; left: 16%; }
-.node-seed-die-pip:nth-child(2) { top: 16%; right: 16%; }
-.node-seed-die-pip:nth-child(3) { top: 50%; left: 50%; transform: translate(-50%, -50%); }
-.node-seed-die-pip:nth-child(4) { bottom: 16%; left: 16%; }
-.node-seed-die-pip:nth-child(5) { bottom: 16%; right: 16%; }
+/* The die, + and - are drawn in WebGL (nodeGraphGlGraphDrawSeedWidget). */
 
 /* seed-btn-height: buttons/number exactly fill the control height (no global button min-height) */
 .node-seed-control > .node-seed-btn,

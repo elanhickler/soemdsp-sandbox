@@ -81,17 +81,7 @@
     b.type = "button";
     b.className = `node-seed-btn node-seed-btn-${kind}`;
     b.dataset.seedAction = kind;
-    if (kind === "dice") {
-      // Drawn die (five pips), matching the Sabrina plugin face.
-      const die = document.createElement("span");
-      die.className = "node-seed-die";
-      for (let i = 0; i < 5; i += 1) {
-        const pip = document.createElement("span");
-        pip.className = "node-seed-die-pip";
-        die.append(pip);
-      }
-      b.append(die);
-    }
+    // Hit target only: the die / + / - are drawn in WebGL (nodeGraphGlGraphDrawSeedWidget).
     b.setAttribute("aria-label", kind === "dice" ? "Random seed" : kind === "plus" ? "Increase seed" : "Decrease seed");
     b.title = title;
     b.tabIndex = -1;
@@ -143,6 +133,26 @@
     scan();
   }
 
+  // The one seed button law (dice = random; +/- step a code character).
+  function seedAction(slider, action, e) {
+    const { min, max } = bounds(slider);
+    if (action === "dice" || (e.altKey && !e.ctrlKey && !e.shiftKey)) {
+      write(slider, randomIn(slider), false);
+      return;
+    }
+    const dir = action === "minus" ? -1 : 1;
+    const next = typeof stepNodeGraphSeedCode === "function"
+      ? stepNodeGraphSeedCode(current(slider), characterPlace(e), dir)
+      : wrap(current(slider) + dir, min, max);
+    write(slider, wrap(next, min, max), false);
+  }
+  window.nodeGraphSeedAction = seedAction;
+  // The one seed drag law: right/up raises, 4 px per step of 1.
+  window.nodeGraphSeedDragValue = (slider, v0, dx, dy) => {
+    const { min, max } = bounds(slider);
+    return clamp(v0 + Math.trunc((dx - dy) / PX_PER_STEP), min, max);
+  };
+
   let drag = null;
   let lastDown = null;
 
@@ -160,19 +170,8 @@
     e.preventDefault();
     const slider = rowSlider(row);
     if (!slider || locked()) return;
-    const { min, max } = bounds(slider);
     if (btn) {
-      const action = btn.dataset.seedAction;
-      if (action === "dice" || (e.altKey && !e.ctrlKey && !e.shiftKey)) {
-        write(slider, randomIn(slider), false);
-        return;
-      }
-      const place = characterPlace(e);
-      const dir = action === "minus" ? -1 : 1;
-      const next = typeof stepNodeGraphSeedCode === "function"
-        ? stepNodeGraphSeedCode(current(slider), place, dir)
-        : wrap(current(slider) + dir, min, max);
-      write(slider, wrap(next, min, max), false);
+      seedAction(slider, btn.dataset.seedAction, e);
       return;
     }
     const now = performance.now();
