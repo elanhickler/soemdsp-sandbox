@@ -324,7 +324,7 @@ extern "C" double soemdsp_resonant_envelope_sample(
     if (s.sawHold > 0.0) s.sawHold -= 1.0;
     if (rising) s.velocity = 1.0;
   } else if (rising) {
-    s.velocity = gate;
+    s.velocity = gate_hit_velocity();
   }
   if (rising && latch) {
     s.shotAttack = safe(attackSec);

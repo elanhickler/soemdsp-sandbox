@@ -249,7 +249,7 @@ extern "C" double soemdsp_robin_sinepulse_sample(
   const bool triggerHit = gate_hit(trig, &s.lastTrigger);
   if (triggerHit) {
     latch_hit(s, highFreq, lowFreq, sweepTime, sr);
-    s.velocity = dsp_fabs(trig);
+    s.velocity = gate_hit_velocity();
     s.instPhase = 0.0;  // Robin's hard-reset noteOn (Trigger alone)
     restart_sweep(s);
     s.env = s.velocity;

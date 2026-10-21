@@ -45,18 +45,35 @@ static inline bool rising_edge_bool(bool high, bool* wasHigh) {
   return edge;
 }
 
-// App-wide Gate/Trigger (docs/GATES_TRIGGERS.md section 3, original law):
-// on = x > 0. Hit = first sample > 0 after a sample <= 0 (armed by <= 0).
-// Height (velocity) is `now`. Negative is rest and re-arms. Updates *prev.
+// EXPERIMENT (revert the EXPERIMENT commit to restore the original law:
+// hit = first sample > 0 after <= 0, height = now).
+// App-wide Gate/Trigger, "every absolute positive change":
+// hit on any sample where |x[n]| > |x[n-1]|; velocity = |x[n]| - |x[n-1]|
+// (read with gate_hit_velocity() right after gate_hit). Examples:
+// 0.1 -> 0.2 hits with 0.1; -0.1 -> 0 no hit; -0.1 -> -0.2 hits with 0.1.
+// on (held / step parts) stays x > 0. Updates *prev.
 static inline bool gate_on(double x) {
   return soemdsp::debug::safe(x) > 0.0;
+}
+
+// Velocity of the latest gate_hit in this translation unit (one module).
+static inline double& gate_hit_velocity_slot() {
+  static double v = 0.0;
+  return v;
+}
+
+static inline double gate_hit_velocity() {
+  return gate_hit_velocity_slot();
 }
 
 static inline bool gate_hit(double now, double* prev) {
   if (!prev) return false;
   const double x = soemdsp::debug::safe(now);
   const double p = soemdsp::debug::safe(*prev);
-  const bool hit = !(p > 0.0) && x > 0.0;
+  const double ax = x < 0.0 ? -x : x;
+  const double ap = p < 0.0 ? -p : p;
+  const bool hit = ax > ap;
+  gate_hit_velocity_slot() = hit ? ax - ap : 0.0;
   *prev = x;
   return hit;
 }
@@ -77,4 +94,5 @@ static inline bool change_edge(double now, double* prev, double threshold = 0.0)
 using soemdsp::math::rising_edge_bool;
 using soemdsp::math::gate_on;
 using soemdsp::math::gate_hit;
+using soemdsp::math::gate_hit_velocity;
 }  // namespace soemdsp_maths

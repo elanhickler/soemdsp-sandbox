@@ -72,7 +72,7 @@ extern "C" double soemdsp_power_decay_sample(
   const double in = safe(trigger);
   if (gate_hit(in, &s.lastIn)) {
     s.t = 0.0;
-    s.height = in;
+    s.height = gate_hit_velocity();
     s.running = true;
   }
   if (!s.running) return 0.0;

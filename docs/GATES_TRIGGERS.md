@@ -1,3 +1,5 @@
+> EXPERIMENTAL (see the EXPERIMENT commit): native gate_hit currently fires on every absolute positive change (|x[n]| > |x[n-1]|, velocity = the rise). Revert that commit to return to the law below.
+
 # Gates, Triggers & Reset (app-wide)
 
 **Status:** binding spec. Implement toward this; do not invent a second detector.  

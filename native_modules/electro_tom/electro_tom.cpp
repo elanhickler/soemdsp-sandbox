@@ -160,7 +160,7 @@ extern "C" double soemdsp_electro_tom_sample(
     if (s.v > 0.0) { strike(s, alg); ping = true; }
   }
   if (triggerHit) {
-    s.v = dsp_fabs(trig);
+    s.v = gate_hit_velocity();
     strike(s, alg);
     ping = true;
   }

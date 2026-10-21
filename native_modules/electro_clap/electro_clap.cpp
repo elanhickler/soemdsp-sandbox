@@ -179,7 +179,7 @@ extern "C" double soemdsp_electro_clap_sample(
     if (!trigHit && s.everHit && s.v > 0.0) { strike(s); hit = true; }
   }
   if (trigHit) {
-    s.v = dsp_fabs(tr);
+    s.v = gate_hit_velocity();
     s.everHit = true;
     strike(s);
     hit = true;

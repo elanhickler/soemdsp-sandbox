@@ -92,7 +92,7 @@ extern "C" double soemdsp_attack_decay_sample(
   const bool rising = gate_hit(g, &s.lastGate);
   const bool gateOn = gate_on(g);
   const bool falling = wasOn && !gateOn;
-  if (rising) s.velocity = g;
+  if (rising) s.velocity = gate_hit_velocity();
 
   const bool pureFollower = (mode == 0 && cyc == 0);
   double target = 0.0;
