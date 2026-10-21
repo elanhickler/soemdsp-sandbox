@@ -6770,6 +6770,7 @@ const nodeGraphModuleDefinitions = (
     digitalInputs: ["In"],
     digitalOutputs: ["Up", "Down", "Change", "Steady", "Sign"],
     inputs: ["In"],
+    inputLabels: { In: "->" },
     outputs: ["Up", "Down", "Change", "Steady", "Sign", "Thru"],
     outputLabels: { Up: "Up", Down: "Down", Change: "Change", Steady: "Steady", Sign: "Sign", Thru: "<-" },
     parameters: []
