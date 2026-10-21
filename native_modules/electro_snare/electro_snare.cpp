@@ -356,6 +356,6 @@ extern "C" double soemdsp_electro_snare_env(int handle) {
   return gPool[handle - 1].envOut;
 }
 
-extern "C" int soemdsp_electro_snare_version() { return 5; }  // 5: Recalculate On Trigger (bodyDecay / snapDecay latched on hit)  // 4: Simmons Noise Q + Click params. 3: Modal removed (-> Modal Snare), Amplitude unclamped
+extern "C" int soemdsp_electro_snare_version() { return 6; } // 6: Ring2 rotating phasor (no energy pumped by bend retriggers). 5: Recalculate On Trigger (bodyDecay / snapDecay latched on hit)  // 4: Simmons Noise Q + Click params. 3: Modal removed (-> Modal Snare), Amplitude unclamped
 extern "C" const char* soemdsp_electro_snare_metadata_json() { return kMetadataJson; }
 extern "C" int soemdsp_electro_snare_metadata_json_size() { return sizeof(kMetadataJson) - 1; }

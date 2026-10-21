@@ -242,6 +242,6 @@ extern "C" double soemdsp_modal_snare_env(int handle) {
   return gPool[handle - 1].envOut;
 }
 
-extern "C" int soemdsp_modal_snare_version() { return 2; }  // 2: Recalculate On Trigger (bodyDecay / snapDecay latched on hit)
+extern "C" int soemdsp_modal_snare_version() { return 3; } // 3: Ring2 rotating phasor (no energy pumped by bend retriggers). 2: Recalculate On Trigger (bodyDecay / snapDecay latched on hit)
 extern "C" const char* soemdsp_modal_snare_metadata_json() { return kMetadataJson; }
 extern "C" int soemdsp_modal_snare_metadata_json_size() { return sizeof(kMetadataJson) - 1; }

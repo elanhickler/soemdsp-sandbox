@@ -1,7 +1,7 @@
 // Shared drum voice parts (docs/DRUM_PACK_PLAN.md Q1, Argi 2026-10-19: approved
 // for the Electro drum pack). Header-only, freestanding, opt-in (not pulled in
-// by soemdsp.hpp). Used by Electro Snare / Hat / Tom / Kick.
-//   Ring2       2-pole pinged resonator: y = 2 r cos(w) y1 - r^2 y2 + ping sin(w)
+// by soemdsp.hpp). Used by Electro Snare / Hat / Tom / Kick, Modal Snare (Ring2: Snare / Tom / Kick / Modal Snare).
+//   Ring2       pinged resonator, rotating phasor (no energy pumped by pitch changes)
 //   HashNoise   counter-indexed hash white noise (one counter, seed per channel)
 //   BlepSquare  PolyBLEP band-limited pulse/square oscillator
 //   t60_coeff / planck_snap / one_pole_lp_tick / tri_wave / phase_advance
@@ -24,20 +24,32 @@ static inline double t60_coeff(double t60, double sr) {
   return soemdsp_maths::dsp_exp(-kLn1000 / (soemdsp_maths::maxd(t60, 1.0e-4) * sr));
 }
 
-// --- Ring2: 2-pole pinged resonator. A ping x = v sin(w) rings as a sine of
-// amplitude ~v. hz is clamped to 0.49 sr; rr = per-sample radius (t60_coeff).
+// --- Ring2: pinged resonator as a rotating phasor z = (y1, y2) = (re, im).
+// Each sample z = rr * e^{iw} z + ping * sqrt(sin w) * e^{iw}; output
+// y = Im(z) / sqrt(sin w). The rotation keeps |z| exactly (only rr decays it),
+// so changing hz while ringing neither adds nor removes energy: |z| is the
+// oscillator's action, the quantity a real oscillator keeps under a pitch glide.
+// Output amplitude follows ~1/sqrt(sin w) (louder as the pitch falls), the same
+// level the old direct-form y = 2 r cos(w) y1 - r^2 y2 + ping sin(w) had for a
+// single hit; at fixed hz the output equals the old one (ping v rings as a sine
+// of amplitude ~v). The old form pumped energy on every retrigger during a bend
+// (runaway). hz is clamped to [1e-6, 0.49] sr; rr = per-sample radius (t60_coeff).
 struct Ring2 {
-  double y1, y2;
+  double y1, y2;  // phasor re / im
 };
 static inline void ring2_reset(Ring2& r) { r.y1 = r.y2 = 0.0; }
 static inline bool ring2_resting(const Ring2& r) { return r.y1 == 0.0 && r.y2 == 0.0; }
 static inline double ring2_tick(Ring2& r, double hz, double rr, double ping, double sr) {
-  const double turns = soemdsp_maths::clamp(hz / sr, 0.0, 0.49);
-  const double x = ping != 0.0 ? ping * soemdsp_maths::dsp_sin_turns_lut(turns) : 0.0;
-  const double y = 2.0 * rr * soemdsp_maths::dsp_cos_turns_lut(turns) * r.y1 - rr * rr * r.y2 + x;
-  r.y2 = planck_snap(r.y1);
-  r.y1 = planck_snap(y);
-  return r.y1;
+  const double turns = soemdsp_maths::clamp(hz / sr, 1.0e-6, 0.49);
+  const double c = soemdsp_maths::dsp_cos_turns_lut(turns);
+  const double sn = soemdsp_maths::dsp_sin_turns_lut(turns);
+  const double rs = __builtin_sqrt(sn);
+  const double x = ping != 0.0 ? ping * rs : 0.0;
+  const double re = rr * (c * r.y1 - sn * r.y2) + x * c;
+  const double im = rr * (sn * r.y1 + c * r.y2) + x * sn;
+  r.y1 = planck_snap(re);
+  r.y2 = planck_snap(im);
+  return r.y2 / rs;
 }
 
 // --- HashNoise: white noise in [-1, 1] = hash_bipolar(counter, seed). One

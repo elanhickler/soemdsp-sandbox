@@ -814,6 +814,11 @@ if ($node) {
   if ($LASTEXITCODE -ne 0) {
     throw "Combined build: polyBlep Single trigger smoke FAILED"
   }
+  # Drum Ring2: fast retriggers with Bend stay bounded (no energy pumping).
+  & $node.Source "$root\scripts\smoke_drum_ring_retrigger.mjs"
+  if ($LASTEXITCODE -ne 0) {
+    throw "Combined build: drum Ring2 retrigger smoke FAILED"
+  }
   # Resonant Compressor: Gain == Resonant Envelope SC (max diff 0), drums get quieter.
   & $node.Source "$root\scripts\smoke_graph_resonant_compressor.mjs"
   if ($LASTEXITCODE -ne 0) {
