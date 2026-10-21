@@ -9,7 +9,6 @@ const NODE_GRAPH_FACE_JACK_SLOT_PX = 17;
 const NODE_GRAPH_FACE_CELL_DRAG_PX = 220;
 const NODE_GRAPH_FACE_STEP_DRAG_PX = 6;
 const NODE_GRAPH_FACE_FILTER_HZ = Object.freeze({ min: 20, max: 20000 });
-const NODE_GRAPH_FACE_FILTER_SLOPE_DB = 12;
 const NODE_GRAPH_FACE_FILTER_DB_MIN = -18;
 const NODE_GRAPH_FACE_FILTER_HANDLE_PX = 10;
 
@@ -214,10 +213,10 @@ function nodeGraphModuleFaceLfoShape(style, seed, n) {
   return pts;
 }
 
-function nodeGraphModuleFaceButterworth(f, fc, highPass) {
-  const order = NODE_GRAPH_FACE_FILTER_SLOPE_DB / 6;
+/** n cascaded one-pole sections (6 dB/oct each), as the Ping Pong DSP runs them. */
+function nodeGraphModuleFaceRolloff(f, fc, highPass, n) {
   const r = highPass ? fc / Math.max(f, 1e-3) : f / Math.max(fc, 1e-3);
-  return 1 / Math.sqrt(1 + r ** (2 * order));
+  return (1 + r * r) ** (-n / 2);
 }
 
 // ---------------------------------------------------------------- DOM -----
@@ -549,9 +548,17 @@ function nodeGraphModuleFaceDrawFilterGl(batch, el, wd, ox, oy, z, rect, line) {
   const w = wd.w;
   line(0, top, w, 1, ink.rowLine);
   line(0, top + ch, w, 1, ink.tickLine);
-  const slope = `${NODE_GRAPH_FACE_FILTER_SLOPE_DB} dB`;
-  const hpText = `${nodeGraphModuleFaceHzText(fcH)} ${slope}`;
-  const lpText = `${nodeGraphModuleFaceHzText(fcL)} ${slope}`;
+  // Pole params (wd.row.hpfPoles / lpfPoles, 1-4); none = 2 poles.
+  const stops = 4;
+  const poles = (key) => {
+    const input = key ? nodeGraphModuleFaceInput(el, key) : null;
+    const n = input ? Math.round(nodeGraphModuleFaceValue(input)) : 2;
+    return Math.max(1, Math.min(stops, n));
+  };
+  const nH = poles(wd.row?.hpfPoles);
+  const nL = poles(wd.row?.lpfPoles);
+  const hpText = `${nodeGraphModuleFaceHzText(fcH)} ${nH * 6} dB`;
+  const lpText = `${nodeGraphModuleFaceHzText(fcL)} ${nL * 6} dB`;
   const labPx = Math.min(12.6, ((w - 14) / 2 - 4) / (Math.max(hpText.length, lpText.length) * 0.6));
   nodeGraphModuleFaceText(batch, hpText, ox + 7 * z, oy + (wd.y + labH / 2) * z, labPx * z, ink.hpf, { align: "left" });
   nodeGraphModuleFaceText(batch, lpText, ox + (w - 7) * z, oy + (wd.y + labH / 2) * z, labPx * z, ink.lpf, { align: "right" });
@@ -567,8 +574,8 @@ function nodeGraphModuleFaceDrawFilterGl(batch, el, wd, ox, oy, z, rect, line) {
   for (let i = 0; i <= steps; i += 1) {
     const t = i / steps;
     const f = nodeGraphModuleFaceFromLogT(t);
-    const h = nodeGraphModuleFaceButterworth(f, fcH, true);
-    const l = nodeGraphModuleFaceButterworth(f, fcL, false);
+    const h = nodeGraphModuleFaceRolloff(f, fcH, true, nH);
+    const l = nodeGraphModuleFaceRolloff(f, fcL, false, nL);
     const x = t * w;
     const y = yOf(h * l);
     if (i < steps) nodeGraphGlLinesRect(batch, ox + x * z, oy + y * z, (w / steps) * z + 0.5, (top + ch - y) * z, nodeGraphModuleFaceRgba(ink.curveFill));
@@ -588,7 +595,7 @@ function nodeGraphModuleFaceDrawFilterGl(batch, el, wd, ox, oy, z, rect, line) {
     for (let i = 0; i <= steps; i += 1) {
       const t = i / steps;
       const f = nodeGraphModuleFaceFromLogT(t);
-      edge.push(ox + t * w * z, oy + yOf(nodeGraphModuleFaceButterworth(f, fcH, true) * nodeGraphModuleFaceButterworth(f, fcL, false)) * z);
+      edge.push(ox + t * w * z, oy + yOf(nodeGraphModuleFaceRolloff(f, fcH, true, nH) * nodeGraphModuleFaceRolloff(f, fcL, false, nL)) * z);
     }
     stroke(edge, 1, ink.curveFill);
     stroke(pass, 1.5, ink.passCurve);
@@ -598,16 +605,8 @@ function nodeGraphModuleFaceDrawFilterGl(batch, el, wd, ox, oy, z, rect, line) {
   // Vertical handles (soundemote-dev Condensed 5 drawFilterCurve): a faint
   // full-height bar at each cutoff and the 4 pole stops (1-4 poles = 6/12/18/24
   // dB, bottom to top) as dots, the current one bigger and brighter.
-  // Hook: a face filter row may name pole params (hpfPoles / lpfPoles, 1-4);
-  // without them the fixed slope is shown.
-  const stops = 4;
-  const poles = (key) => {
-    const input = key ? nodeGraphModuleFaceInput(el, key) : null;
-    const n = input ? Math.round(nodeGraphModuleFaceValue(input)) : NODE_GRAPH_FACE_FILTER_SLOPE_DB / 6;
-    return Math.max(1, Math.min(stops, n));
-  };
-  for (const [fc, css, key] of [[fcH, ink.hpfCurve, wd.row?.hpfPoles], [fcL, ink.lpfCurve, wd.row?.lpfPoles]]) {
-    const on = poles(key) - 1;
+  for (const [fc, css, n] of [[fcH, ink.hpfCurve, nH], [fcL, ink.lpfCurve, nL]]) {
+    const on = n - 1;
     const hx = ox + nodeGraphModuleFaceLogT(fc) * w * z;
     const c = nodeGraphModuleFaceRgba(css);
     const tint = (a) => [c[0], c[1], c[2], c[3] * a];
