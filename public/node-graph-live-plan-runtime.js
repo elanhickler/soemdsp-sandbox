@@ -740,7 +740,7 @@ function createNodeGraphLiveRuntime(plan, previousRuntime = null) {
       noiseDetectorStates.set(node.id, createNodeGraphNoiseDetectorState());
     }
     if (
-      (node.type === "rms" || node.type === "rmsStereo")
+      node.type === "rmsStereo"
       && typeof createNodeGraphRmsState === "function"
     ) {
       rmsStates.set(node.id, createNodeGraphRmsState());
@@ -1613,7 +1613,7 @@ function updateNodeGraphLiveRuntimePlan(runtime, plan) {
       runtime.noiseDetectorStates.set(node.id, createNodeGraphNoiseDetectorState());
     }
     if (
-      (node.type === "rms" || node.type === "rmsStereo")
+      node.type === "rmsStereo"
       && typeof createNodeGraphRmsState === "function"
       && !runtime.rmsStates.has(node.id)
     ) {

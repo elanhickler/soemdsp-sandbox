@@ -22,8 +22,8 @@ const PATCHES = process.argv.slice(2).length ? process.argv.slice(2) : ["softpop
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 function rmsInkPatch() {
   const d = JSON.parse(fs.readFileSync(path.join(root, "patches/livedemos/softpop.json"), "utf8"));
-  d.nodes.push({ gx: 9, gy: 16, id: "rms-ink", type: "rms" });
-  d.connections.push({ destinationNode: "rms-ink", destinationPort: "In", sourceNode: "passiveFilter-1", sourcePort: "Left", tracePoints: [] });
+  d.nodes.push({ gx: 9, gy: 16, id: "rms-ink", type: "rmsStereo" });
+  d.connections.push({ destinationNode: "rms-ink", destinationPort: "Left", sourceNode: "passiveFilter-1", sourcePort: "Left", tracePoints: [] });
   return JSON.stringify(d);
 }
 const APPROVED = /^(audioPlayer|sequencer|transport)/i;

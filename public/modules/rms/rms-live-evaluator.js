@@ -13,29 +13,6 @@ function nodeGraphRmsReadLiveOptions(runtime, node, frame, frames, frameValues) 
   };
 }
 
-nodeGraphLiveModuleEvaluators.rms = ({
-  runtime,
-  node,
-  nodeId,
-  frame,
-  frames,
-  frameValues,
-  mixInput,
-  hasInput,
-  sampleRate,
-}) => {
-  if (!runtime.rmsStates) runtime.rmsStates = new Map();
-  const state = runtime.rmsStates.get(nodeId) || createNodeGraphRmsState();
-  runtime.rmsStates.set(nodeId, state);
-  return nodeGraphRmsSample(
-    state,
-    mixInput(nodeId, "In"),
-    nodeGraphRmsReadLiveOptions(runtime, node, frame, frames, frameValues),
-    sampleRate,
-    hasInput(nodeId, "In"),
-  );
-};
-
 nodeGraphLiveModuleEvaluators.rmsStereo = ({
   runtime,
   node,

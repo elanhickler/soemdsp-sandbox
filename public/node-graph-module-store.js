@@ -2238,22 +2238,6 @@ const nodeGraphModuleStoreCatalog = Object.freeze({
     label: "Noise Detector",
     notes: ["multimeter", "fidelity", "nsdf", "mcleod", "noise", "gate", "threshold"],
   },
-  rms: {
-    category: "multimeter",
-    description: "Mono RMS meter with Window/Attack/Release, peak hold, and absolute-dBFS waterfall.",
-    label: "RMS Mono",
-    notes: [
-      "multimeter",
-      "rms",
-      "mono",
-      "level",
-      "meter",
-      "gate",
-      "threshold",
-      "dB",
-      "waterfall",
-    ],
-  },
   rmsStereo: {
     category: "multimeter",
     description: "Stereo RMS: Left/Right in, music RMS ((L+R)/2 or lone side) on RMS A/D. Face follows RMS A.",
@@ -3636,10 +3620,6 @@ const nodeGraphJsSourceEntriesByType = Object.freeze({
   nextPatch: {
     source: "public/modules/nextPatch/next-patch-worklet-evaluator.js",
     sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/nextPatch/next-patch-worklet-evaluator.js",
-  },
-  rms: {
-    source: "public/modules/rms/rms-math.js",
-    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/rms/rms-math.js",
   },
   rmsStereo: {
     source: "public/modules/rms/rms-math.js",

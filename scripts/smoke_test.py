@@ -3537,7 +3537,7 @@ def require_node_graph_mvp_contract() -> None:
         "Helmholtz Pitch should clamp analysis windows to 128–4096 and wire native exports",
     )
     noise_detector_definition_start = node_graph_module_definitions_source.index("  noiseDetector: {")
-    noise_detector_definition_end = node_graph_module_definitions_source.index("  rms: {", noise_detector_definition_start)
+    noise_detector_definition_end = node_graph_module_definitions_source.index("  rmsStereo: {", noise_detector_definition_start)
     noise_detector_definition_source = node_graph_module_definitions_source[
         noise_detector_definition_start:noise_detector_definition_end
     ]
@@ -3551,9 +3551,6 @@ def require_node_graph_mvp_contract() -> None:
         and "nodeGraphLiveModuleEvaluators.noiseDetector" in script_sources["./public/modules/noiseDetector/noise-detector-live-evaluator.js"],
         "Noise Detector should be a stereo thru analyzer with NSDF fidelity + threshold gate",
     )
-    rms_definition_start = node_graph_module_definitions_source.index("  rms: {")
-    rms_definition_end = node_graph_module_definitions_source.index("  rmsStereo: {", rms_definition_start)
-    rms_definition_source = node_graph_module_definitions_source[rms_definition_start:rms_definition_end]
     rms_stereo_definition_start = node_graph_module_definitions_source.index("  rmsStereo: {")
     rms_stereo_definition_end = node_graph_module_definitions_source.index("  lufs: {", rms_stereo_definition_start)
     rms_stereo_definition_source = node_graph_module_definitions_source[
@@ -3562,14 +3559,9 @@ def require_node_graph_mvp_contract() -> None:
     rms_math_source = (PUBLIC / "modules" / "rms" / "rms-math.js").read_text(encoding="utf-8")
     rms_live_source = script_sources["./public/modules/rms/rms-live-evaluator.js"]
     require(
-        'rms: "RMS Mono"' in node_graph_module_definitions_source
+        'rms: "RMS Mono"' not in node_graph_module_definitions_source
         and 'rmsStereo: "RMS Stereo"' in node_graph_module_definitions_source
-        and 'inputs: ["In"]' in rms_definition_source
-        and 'outputs: ["RMS A", "RMS D", "Gate"]' in rms_definition_source
-        and 'digitalOutputs: ["RMS D", "Gate"]' in rms_definition_source
-        and 'source: { value: "RMS A" }' in rms_definition_source
-        and "xyzWaterfallPorts" not in rms_definition_source
-        and "rmsDbGuides: true" in rms_definition_source
+        and "rmsDbGuides: true" in rms_stereo_definition_source
         and 'key: "ballistics"' not in node_graph_module_definitions_source
         and 'key: "refDb"' not in node_graph_module_definitions_source
         and 'key: "window"' in node_graph_module_definitions_source
@@ -3604,14 +3596,14 @@ def require_node_graph_mvp_contract() -> None:
         and '"RMS A": avgCh.amp' in rms_math_source
         and '"RMS D": avgCh.db' in rms_math_source
         and "0.5 * (lIn + rIn)" in rms_math_source
-        and "nodeGraphLiveModuleEvaluators.rms" in rms_live_source
+        and "nodeGraphLiveModuleEvaluators.rms = " not in rms_live_source
         and "nodeGraphLiveModuleEvaluators.rmsStereo" in rms_live_source
         and "RMS A" in (PUBLIC / "node-graph-module-scope-capture.js").read_text(encoding="utf-8")
         and "nodeGraphRmsDbGuideLabel" in (PUBLIC / "node-graph-module-scope-paint-helpers.js").read_text(encoding="utf-8")
         and "nodeGraphDeepCloneModuleField" in script_sources["./public/node-graph-module-actions.js"]
         and "defaultWidthGu: 13" in node_graph_module_definitions_source
         and "defaultHeightGu: 21" in node_graph_module_definitions_source,
-        "RMS Mono/Stereo share Window/Attack/Release; absolute dBFS; Stereo visible outs are RMS A/D",
+        "RMS Mono removed (RMS Meter replaces it); RMS Stereo keeps Window/Attack/Release, absolute dBFS, visible outs RMS A/D",
     )
     lufs_definition_start = node_graph_module_definitions_source.index("  lufs: {")
     lufs_definition_end = node_graph_module_definitions_source.index("  slewLimiter: {", lufs_definition_start)

@@ -249,7 +249,6 @@ const nodeGraphNodeLabels = Object.freeze({
   pll: "PLL",
   helmholtzPitch: "Pitch Detector",
   noiseDetector: "Noise Detector",
-  rms: "RMS Mono",
   rmsStereo: "RMS Stereo",
   lufs: "LUFS",
   speedColorInertia: "Speed Color Inertia",
@@ -616,7 +615,7 @@ function nodeGraphTSeriesSingleModuleDefinition() {
       titleHidden: false } };
 }
 
-/** Shared params for RMS Mono / RMS Stereo (definitions load before rms-math.js). */
+/** Params for RMS Stereo (definitions load before rms-math.js). */
 const nodeGraphRmsModuleParameterDefs = Object.freeze([
   {
     defaultValue: "0.05",
@@ -14545,53 +14544,6 @@ const nodeGraphModuleDefinitions = (
         step: "any",
         tooltip: "Gate goes high when fidelity ≥ threshold. Mid of the slider sits at 0.9 (Helmholtz lock is ~0.93)." },
     ] },
-  // RMS Mono — Window/Attack/Release meter. Face = waterfall of RMS A.
-  rms: {
-    planRole: "processor",
-    planFreeRun: true,
-    monitorSink: true,
-    displayType: "waterfall",
-    spectrumCompanion: false,
-    displayModes: [
-      {
-        key: "waterfall",
-        label: "Waterfall",
-        renderer: "waterfall",
-        settingsSchema: "waterfall",
-        source: { value: "RMS A" } },
-    ],
-    defaultDisplayMode: "waterfall",
-    displaySignals: [
-      { key: "RMS A", kind: "scalar" },
-      { key: "RMS D", kind: "scalar" },
-      { key: "Gate", kind: "scalar" },
-    ],
-    rmsDbGuides: true,
-    digitalOutputs: ["RMS D", "Gate"],
-    inputAliases: { Mono: "In", L: "In", R: "In", M: "In", Left: "In", Right: "In" },
-    inputLabels: { In: "In" },
-    inputTooltips: {
-      In: "Audio to measure. Mono input for the RMS meter and waterfall." },
-    inputs: ["In"],
-    outputAliases: {
-      Out: "RMS A",
-      Mono: "RMS A",
-      A: "RMS A",
-      Ana: "RMS A",
-      D: "RMS D",
-      Dig: "RMS D",
-      rms: "RMS A",
-      g: "Gate" },
-    outputLabels: {
-      "RMS A": "RMS A",
-      "RMS D": "RMS D",
-      Gate: "Gate" },
-    outputTooltips: {
-      "RMS A": "Analog RMS amplitude (gold). 0 = silence, 1 = 0 dB FS, >1 = above full scale.",
-      "RMS D": "Digital RMS level in absolute dBFS (white). Use for readouts / automation.",
-      Gate: "1 while measured RMS (absolute dBFS) is at or above Threshold." },
-    outputs: ["RMS A", "RMS D", "Gate"],
-    parameters: nodeGraphRmsModuleParameterDefs },
   // RMS Stereo — Left/Right in, music RMS = (L+R)/2 (or the lone side). Face = RMS A.
   // Per-channel outs still computed in DSP; listed in hiddenOutputs until port show/hide ships.
   rmsStereo: {
