@@ -341,6 +341,8 @@ function nodeGraphGlGraphRebuildChrome() {
         y: py,
         r: radius,
         square: squareJack,
+        rail: !pin.port && typeof nodeGraphModuleRailOwnsParam === "function"
+          && nodeGraphModuleRailOwnsParam(id, pin.key),
         inwardRight: io !== "output",
         inlet: true,
         rgba,
@@ -666,7 +668,7 @@ function nodeGraphGlGraphDrawPlate(batch, plate, toX, toY, zoom, cssW, cssH, pla
   const allJacks = nodeGraphGlGraphState.chrome?.jacks || [];
   for (let j = 0; j < allJacks.length; j += 1) {
     const jack = allJacks[j];
-    if (jack.id !== plate.id) continue;
+    if (jack.id !== plate.id || jack.rail) continue;
     plateJacks.push({
       x: toX(jack.x),
       y: toY(jack.y),
@@ -1100,7 +1102,7 @@ function nodeGraphGlGraphDragFrom(point, endpoint) {
   return point;
 }
 
-function nodeGraphGlGraphPushWire(wires, from, to, color, zoom, wire, squareFrom, squareTo, kind, index) {
+function nodeGraphGlGraphPushWire(wires, from, to, color, zoom, wire, squareFrom, squareTo, kind, index, railFrom = false, railTo = false) {
   if (!from || !to) return;
   const ax = Number(from.x);
   const ay = Number(from.y);
@@ -1119,10 +1121,11 @@ function nodeGraphGlGraphPushWire(wires, from, to, color, zoom, wire, squareFrom
       : "ribbon",
     index: Number.isInteger(index) ? index : -1,
     xy: nodeGraphGlGraphShape(from, to, wire, zoom),
+    // A wire end on a rail has no dot (the rail inlet box is the end).
     dots: [
-      { x: ax, y: ay, rgba, square: squareFrom === true },
-      { x: bx, y: by, rgba, square: squareTo === true },
-    ],
+      railFrom ? null : { x: ax, y: ay, rgba, square: squareFrom === true },
+      railTo ? null : { x: bx, y: by, rgba, square: squareTo === true },
+    ].filter(Boolean),
   });
 }
 
@@ -1131,6 +1134,8 @@ function nodeGraphGlGraphRebuild(options = {}) {
   const lite = options.lite === true;
   const wires = [];
   const zoom = typeof nodeGraphZoom === "function" ? nodeGraphZoom() : 1;
+  const rail = (node, param) => typeof nodeGraphModuleRailOwnsParam === "function"
+    && nodeGraphModuleRailOwnsParam(node, param);
   const colorOf = (node, port, io) => (
     typeof nodeGraphPortWireColor === "function" ? nodeGraphPortWireColor(node, port, io) : ""
   );
@@ -1154,6 +1159,7 @@ function nodeGraphGlGraphRebuild(options = {}) {
         square(connection.destinationNode, connection.destinationPort, "input"),
         "signal",
         i,
+        rail(connection.sourceNode, connection.sourcePort),
       );
     }
     const modulationWires = nodeGraphMvp.modulations || [];
@@ -1174,6 +1180,8 @@ function nodeGraphGlGraphRebuild(options = {}) {
         square(modulation.destinationNode, modulation.destinationParam, "modulation"),
         "modulation",
         i,
+        rail(modulation.sourceNode, modulation.sourcePort),
+        rail(modulation.destinationNode, modulation.destinationParam),
       );
     }
     const graphWires = nodeGraphMvp.graphConnections || [];

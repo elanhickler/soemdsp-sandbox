@@ -167,19 +167,19 @@ function nodeGraphCanvasDisplayBox(tileW, tileH, aspect = 0) {
 }
 
 // ---- Rail drawing (WebGL only; the rail DOM is hit/geometry, never painted) ----
-// Dark strip with a #3d4555 inner edge. Each used param's tag is one box that
-// fills its whole rail slot (rail width x the param's row height), flush with
-// its neighbours, a thin dim divider between slots, inset beside the edge jacks'
-// semicircles so they stay fully visible, and the short label inside with a tiny inner pad.
+// soundemote-dev Spawn IO (experiments/wiring): each rail is a #080a0e gutter
+// with a #3d4555 1px border on its outer, top and bottom sides. Each patched
+// param gets one inlet box filling its whole rail slot (no padding): #111 fill,
+// 1px #889 stroke, short label centred in #dde. Wires end at the rail's outer
+// edge with no end dot; there are no jack half circles on rail params.
 const NodeGraphRailInk = Object.freeze({
-  strip: "#080a0e",
-  edge: "#3d4555",
-  divider: "#262c38",
-  tagFill: "#14171d",
+  gutter: "#080a0e",
+  gutterEdge: "#3d4555",
+  inletFill: "#111",
+  inletStroke: "#889",
   text: "#dde",
 });
-const NODE_GRAPH_RAIL_TEXT_PAD_PX = 1.5;
-const NODE_GRAPH_RAIL_FONT_PX = 8;
+const NODE_GRAPH_RAIL_FONT_PX = 9;
 
 const nodeGraphRailRgbaCache = new Map();
 function nodeGraphRailRgba(css) {
@@ -193,10 +193,26 @@ function nodeGraphRailRgba(css) {
   return rgba;
 }
 
-/** Draw open rails (strips + used-param tags) for every visible module. */
+/** True when a param's wire end sits on a rail (spawn face): no jack, no end dot. */
+function nodeGraphModuleRailOwnsParam(nodeId, param) {
+  const el = typeof nodeGraphNodeElement === "function" ? nodeGraphNodeElement(nodeId) : null;
+  if (el?.dataset.faceLayout !== NodeGraphFaceLayout.spawn) return false;
+  const node = typeof nodeGraphPatchNode === "function" ? nodeGraphPatchNode(nodeId) : null;
+  const def = node && typeof nodeGraphModuleDefinitions === "object" ? nodeGraphModuleDefinitions[node.type] : null;
+  return Boolean(def?.parameters?.some((p) => p.key === param));
+}
+
+/** Draw open rails (gutters + patched-param inlet boxes + labels) in one pass. */
 function nodeGraphModuleRailsDrawGl(batch, plates, toX, toY, zoom, cssW, cssH) {
   if (typeof nodeGraphGlLinesRect !== "function" || typeof nodeGraphModuleLayoutBox !== "function") return;
   const rect = (x, y, w, h, css) => nodeGraphGlLinesRect(batch, x, y, w, h, nodeGraphRailRgba(css));
+  const frame = (x, y, w, h, t, css, sides) => {
+    if (sides.top) rect(x, y, w, t, css);
+    if (sides.bottom) rect(x, y + h - t, w, t, css);
+    if (sides.left) rect(x, y, t, h, css);
+    if (sides.right) rect(x + w - t, y, t, h, css);
+  };
+  const all = { top: true, bottom: true, left: true, right: true };
   for (let i = 0; i < plates.length; i += 1) {
     const el = typeof nodeGraphNodeElement === "function" ? nodeGraphNodeElement(plates[i].id) : null;
     if (!el?.classList.contains("mod-rail-open") || el.dataset.faceLayout !== NodeGraphFaceLayout.spawn) continue;
@@ -208,47 +224,32 @@ function nodeGraphModuleRailsDrawGl(batch, plates, toX, toY, zoom, cssW, cssH) {
     const w = laid.w * zoom;
     const h = laid.h * zoom;
     if (!batch.camera && (x0 > cssW || y0 > cssH || x0 + w < 0 || y0 + h < 0)) continue;
-    const edge = Math.max(1, zoom);
-    const jacks = (nodeGraphGlGraphState?.chrome?.jacks || []).filter((j) => j.id === plates[i].id);
-    // The rails start beside the edge jacks' semicircles, so the jacks stay fully visible.
-    const inset = (jacks[0]?.r || 0) * zoom;
-    const rw = NODE_GRAPH_RAIL_WIDTH_PX * zoom - inset;
-    batch._over = true;
-    rect(x0 + inset, y0, rw, h, NodeGraphRailInk.strip);
-    rect(x0 + inset + rw - edge, y0, edge, h, NodeGraphRailInk.edge);
-    rect(x0 + w - inset - rw, y0, rw, h, NodeGraphRailInk.strip);
-    rect(x0 + w - inset - rw, y0, edge, h, NodeGraphRailInk.edge);
+    const rw = NODE_GRAPH_RAIL_WIDTH_PX * zoom;
+    const t = Math.max(1, zoom);
     const tags = [];
-    const hair = Math.max(0.5, zoom * 0.5);
-    for (const port of body.querySelectorAll(".node-param-port.modulation-input, .node-param-port.parameter-output")) {
+    batch._over = true;
+    rect(x0, y0, rw, h, NodeGraphRailInk.gutter);
+    frame(x0, y0, rw, h, t, NodeGraphRailInk.gutterEdge, { top: true, bottom: true, left: true });
+    rect(x0 + w - rw, y0, rw, h, NodeGraphRailInk.gutter);
+    frame(x0 + w - rw, y0, rw, h, t, NodeGraphRailInk.gutterEdge, { top: true, bottom: true, right: true });
+    for (const port of body.querySelectorAll(".node-param-port.rail-patched")) {
       if (!port.offsetParent) continue;
       const box = nodeGraphModuleLayoutBox(port, el);
       if (!box || !(box.w > 1)) continue;
-      const left = port.classList.contains("modulation-input");
-      const bx = toX(plates[i].x + box.x) + (left ? inset : 0);
+      const bx = toX(plates[i].x + box.x);
       const by = toY(plates[i].y + box.y);
-      const bw = box.w * zoom - inset;
+      const bw = box.w * zoom;
       const bh = box.h * zoom;
-      if (port.classList.contains("rail-patched")) {
-        rect(bx, by, bw, bh, NodeGraphRailInk.tagFill);
-        const pad = NODE_GRAPH_RAIL_TEXT_PAD_PX * zoom;
-        const clear = pad;
-        tags.push({
-          text: port.dataset.railLabel || "",
-          x: left ? bx + clear : bx + bw - clear,
-          y: by + bh / 2,
-          w: bw - clear - pad,
-          align: left ? "left" : "right",
-        });
-      }
-      if (box.y > laid.y + 0.5) rect(bx, by, bw, hair, NodeGraphRailInk.divider);
+      rect(bx, by, bw, bh, NodeGraphRailInk.inletFill);
+      frame(bx, by, bw, bh, t, NodeGraphRailInk.inletStroke, all);
+      tags.push({ text: port.dataset.railLabel || "", x: bx + bw / 2, y: by + bh / 2, w: bw - 2 * t });
     }
     batch._over = false;
     if (typeof nodeGraphGlLinesText !== "function") continue;
     for (const tag of tags) {
       const o = {
         px: Math.max(4, NODE_GRAPH_RAIL_FONT_PX * zoom), rgba: nodeGraphRailRgba(NodeGraphRailInk.text),
-        align: tag.align, baseline: "middle", weight: 600, maxWidth: tag.w,
+        align: "center", baseline: "middle", weight: 650, maxWidth: tag.w,
       };
       nodeGraphGlLinesText(batch, tag.text, tag.x, tag.y, typeof nodeGraphGlGraphTextOpts === "function" ? nodeGraphGlGraphTextOpts(o) : o);
     }
