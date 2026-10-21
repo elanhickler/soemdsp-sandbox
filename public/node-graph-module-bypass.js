@@ -108,6 +108,7 @@ const NODE_GRAPH_BYPASS_TYPE_OVERRIDES = Object.freeze({
   pingEnvelope: "silence",
   resonantEnvelope: "silence",
   powerDecay: "silence",
+  rmsMeter: "silence",
   exponentialSkew: "silence",
   hyperbolicDecay: "silence",
   exponentialMix: "silence",

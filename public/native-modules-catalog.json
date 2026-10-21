@@ -2324,6 +2324,24 @@
       "noticeUrl": "https://github.com/elanhickler/soemdsp-sandbox/blob/master/docs/THIRD_PARTY.md"
     },
     {
+      "name": "rms_meter",
+      "label": "RMS Meter",
+      "targetType": "rmsMeter",
+      "kind": "utility",
+      "source": "native_modules/rms_meter/rms_meter.cpp",
+      "sourceUrl": "https://github.com/elanhickler/soemdsp-sandbox/blob/master/native_modules/rms_meter/rms_meter.cpp",
+      "localSourceUrl": "/native_modules/rms_meter/rms_meter.cpp",
+      "libUrl": "",
+      "wasm": "native_modules/rms_meter/rms_meter.wasm",
+      "wasmUrl": "native_modules/rms_meter/rms_meter.wasm",
+      "wasmAvailable": false,
+      "license": "Soundemote Noncommercial",
+      "licenseUrl": "https://github.com/elanhickler/soemdsp-sandbox/blob/master/LICENSE",
+      "upstreamLicense": "",
+      "upstreamLicenseUrl": "",
+      "noticeUrl": "https://github.com/elanhickler/soemdsp-sandbox/blob/master/docs/THIRD_PARTY.md"
+    },
+    {
       "name": "robin_oscillator",
       "label": "RobinOscillator",
       "targetType": "robinOscillator",

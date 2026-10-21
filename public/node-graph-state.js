@@ -327,6 +327,7 @@ var nodeGraphMvp = {
     curveAttackRelease: 0,
     pingEnvelope: 0,
     powerDecay: 0,
+    rmsMeter: 0,
     exponentialSkew: 0,
     hyperbolicDecay: 0,
     exponentialMix: 0,

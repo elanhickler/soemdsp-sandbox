@@ -17072,6 +17072,16 @@ def require_native_module_contract(base_url: str) -> None:
             "soemdsp_resonant_envelope_metadata_json",
             "soemdsp_resonant_envelope_metadata_json_size",
         ],
+        "rms_meter": [
+            "soemdsp_rms_meter_create",
+            "soemdsp_rms_meter_destroy",
+            "soemdsp_rms_meter_sample",
+            "soemdsp_rms_meter_db",
+            "soemdsp_rms_meter_inverted",
+            "soemdsp_rms_meter_version",
+            "soemdsp_rms_meter_metadata_json",
+            "soemdsp_rms_meter_metadata_json_size",
+        ],
         "power_decay": [
             "soemdsp_power_decay_create",
             "soemdsp_power_decay_destroy",

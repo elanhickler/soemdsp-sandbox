@@ -1193,6 +1193,14 @@ extern "C" int soemdsp_resonant_envelope_version();
 extern "C" const char* soemdsp_resonant_envelope_metadata_json();
 extern "C" int soemdsp_resonant_envelope_metadata_json_size();
 
+extern "C" int soemdsp_rms_meter_create();
+extern "C" void soemdsp_rms_meter_destroy(int handle);
+extern "C" double soemdsp_rms_meter_sample(
+  int handle, double input, double attackMs, double releaseMs,
+  double amplitude, double sampleRate
+);
+extern "C" double soemdsp_rms_meter_db(int handle);
+extern "C" double soemdsp_rms_meter_inverted(int handle);
 extern "C" int soemdsp_power_decay_create();
 extern "C" void soemdsp_power_decay_destroy(int handle);
 extern "C" int soemdsp_power_decay_is_idle(int handle);
@@ -2144,6 +2152,7 @@ static const int kTypeElectroHat = 223; // Electro Hat: 808 / 606 / FM / Noise h
 static const int kTypeElectroTom = 224; // Electro Tom: 808 / 909 / Simmons tom voice (docs/DRUM_PACK_PLAN.md)
 static const int kTypeElectroKick = 225; // Electro Kick: 808 / 909 / Simmons kick voice (docs/DRUM_PACK_PLAN.md)
 static const int kTypeElectroClap = 226; // Electro Clap: 808 / 909 / Simple hand-clap voice (docs/DRUM_PACK_PLAN.md)
+static const int kTypeRmsMeter = 227; // RMS Meter: one-pole mean square, RMS / dB / Env Inverted
 static const int kTypeCurveAttackRelease = 166;
 // 167 retired (thumpEnvelope).
 static const int kTypePluckEnvelopeFb = 198;
@@ -2872,6 +2881,8 @@ static void destroy_native_kind_handle(int kind, int handle) {
     soemdsp_electro_kick_destroy(handle);
   } else if (kind == kTypeElectroClap) {
     soemdsp_electro_clap_destroy(handle);
+  } else if (kind == kTypeRmsMeter) {
+    soemdsp_rms_meter_destroy(handle);
   } else if (kind == kTypeRobinSinepulseAllpass) {
     soemdsp_robin_sinepulse_allpass_destroy(handle);
   } else if (kind == kTypeFlowerChildEnvelopeFollower) {
@@ -4971,6 +4982,7 @@ static int create_native_for_type(int typeId, float sampleRate) {
   if (typeId == kTypeElectroTom) return soemdsp_electro_tom_create();
   if (typeId == kTypeElectroKick) return soemdsp_electro_kick_create();
   if (typeId == kTypeElectroClap) return soemdsp_electro_clap_create();
+  if (typeId == kTypeRmsMeter) return soemdsp_rms_meter_create();
   if (typeId == kTypeRobinSinepulseAllpass) return soemdsp_robin_sinepulse_allpass_create();
   if (typeId == kTypeFlowerChildEnvelopeFollower) {
     return soemdsp_flower_child_envelope_follower_create();
@@ -10003,6 +10015,32 @@ static void process_resonant_envelope(Circuit& g, Node& node, int frames) {
   }
 }
 
+// RMS Meter (rmsMeter, type 227): timeDenominator=Attack ms, width=Release ms,
+// amplitude=Env Inverted scale. In on Mono(+L/R). Outs: RMS -> Mono/Left/Right,
+// dB -> Saw slot, Env Inverted -> Ramp slot.
+static void process_rms_meter(Circuit& g, Node& node, int frames) {
+  if (node.nativeHandle <= 0) return;
+  mix_node_inputs(g, node, frames);
+  const double sr = g.sampleRate < 1.0f ? 44100.0 : (double)g.sampleRate;
+  for (int f = 0; f < frames; f++) {
+    control_frame(g, node, f);
+    const double in = g.mixMono[f] + g.mixLeft[f] + g.mixRight[f];
+    const double rms = soemdsp_rms_meter_sample(
+      node.nativeHandle,
+      in,
+      control_audio(g, node.timeDenominator, f),
+      control_audio(g, node.width, f),
+      control_audio(g, node.amplitude, f),
+      sr
+    );
+    node.buf[kPortMono][f] = rms;
+    node.buf[kPortLeft][f] = rms;
+    node.buf[kPortRight][f] = rms;
+    node.buf[kPortSaw][f] = soemdsp_rms_meter_db(node.nativeHandle);
+    node.buf[kPortRamp][f] = soemdsp_rms_meter_inverted(node.nativeHandle);
+  }
+}
+
 // PowerDecay (powerDecay): timeDenominator=decayTime s, shape=power, amplitude.
 // Trigger/Gate on Mono(+L/R) and the Trigger bus; each hit restarts t = 0.
 // Out = height * amplitude * pow(1 - t / decayTime, power), 0 once t >= decayTime.
@@ -14264,6 +14302,7 @@ extern "C" int soemdsp_graph_add_node(int handle, unsigned int nodeIdHash, int t
     || typeId == kTypeElectroTom
     || typeId == kTypeElectroKick
     || typeId == kTypeElectroClap
+    || typeId == kTypeRmsMeter
     || typeId == kTypeRobinSinepulse
     || typeId == kTypeRobinSinepulseAllpass
     || typeId == kTypeFlowerChildEnvelopeFollower
@@ -15796,6 +15835,10 @@ static void dispatch_process_node(Circuit& g, Node& node, int frames) {
       process_resonant_envelope(g, node, frames);
       return;
     }
+    if (node.typeId == kTypeRmsMeter) {
+      process_rms_meter(g, node, frames);
+      return;
+    }
     if (node.typeId == kTypePowerDecay) {
       process_power_decay(g, node, frames);
       return;
@@ -16480,5 +16523,5 @@ extern "C" int soemdsp_graph_version() {
   // 170: EQ Filter ZDF ƒ input (resolve_osc_hz)
   // 171: ƒ on Ladder/303/Mode/Cookbook/IIR/Papoulis/ZDF filters + soemdsp_graph_node_effective_hz
   // 174: live add/remove/connect/disconnect keep compiled and other nodes' native handles
-  return 198; // 198: Resonant Envelope Mode (Envelope / Filter, waveform slot) + Trigger detect (Cross 0 / Saw reset, lfoStyle slot). was 197: Amp <-> dB reads |amp| in Amp->dB mode (bipolar audio no longer floors to -120). was 196: Resonant Envelope SC out (kPortSaw, clamp(1 - Out/Amplitude, 0, 1)). was 195: gate_hit / gate_on back to the original law (hit = first sample > 0 after <= 0; on = x > 0); Resonant Envelope Follow = rising-sample step latch. was 194: Resonant Envelope Follow input (Morph live bus, |x| is the SVF target). was 193: DSF Oscillator face playhead (__Phase on kPortPhase01). was 192: Resonant Envelope Frequency knob (unwired f uses it for Tracking). was 191: Electro Clap (226). was 190: Mode Resonator / Random Clock / Turing Machine / Degree Turing back to their original mono outs (stereo R removed). was 189: fBm back to its 3 outs Out X / Out Y / Out Z (stereo R axes removed). was 188: Electro Hat (223) / Electro Tom (224) / Electro Kick (225). was 187: stereo L/R outs: Bradley 2A, fBm (X/Y/Z R on Tri/Sine/Trisaw), Mode Resonator (R quadrature), Random Clock / Turing Machine / Degree Turing (R Seed lane), Softpop 2 R Pitch Mod. was 186: Electro Snare stereo (Snare L -> Left, Snare R -> Right, Env -> Mono). was 185: Electro Snare (type 222). was 184: Robin Sinepulse 0–1 jack is log sweep position (L = max(Low, 20 Hz)). was 183: Flower Child ƒ input removed (Cutoff knob only again). was 182: SinCos / SinCos4 Polarity (center 0 Bipolar / 1 Unipolar). was 181: Flower Child ƒ in (resonance-pitch Hz replaces Cutoff). was 180: Robin Sinepulse 0–1 jack is sweep position (High=1, Low=0). was 179: Resonant Envelope (221)
+  return 199; // 199: RMS Meter (227): one-pole mean square; RMS / dB (-120 floor) / Env Inverted. was 198: Resonant Envelope Mode (Envelope / Filter, waveform slot) + Trigger detect (Cross 0 / Saw reset, lfoStyle slot). was 197: Amp <-> dB reads |amp| in Amp->dB mode (bipolar audio no longer floors to -120). was 196: Resonant Envelope SC out (kPortSaw, clamp(1 - Out/Amplitude, 0, 1)). was 195: gate_hit / gate_on back to the original law (hit = first sample > 0 after <= 0; on = x > 0); Resonant Envelope Follow = rising-sample step latch. was 194: Resonant Envelope Follow input (Morph live bus, |x| is the SVF target). was 193: DSF Oscillator face playhead (__Phase on kPortPhase01). was 192: Resonant Envelope Frequency knob (unwired f uses it for Tracking). was 191: Electro Clap (226). was 190: Mode Resonator / Random Clock / Turing Machine / Degree Turing back to their original mono outs (stereo R removed). was 189: fBm back to its 3 outs Out X / Out Y / Out Z (stereo R axes removed). was 188: Electro Hat (223) / Electro Tom (224) / Electro Kick (225). was 187: stereo L/R outs: Bradley 2A, fBm (X/Y/Z R on Tri/Sine/Trisaw), Mode Resonator (R quadrature), Random Clock / Turing Machine / Degree Turing (R Seed lane), Softpop 2 R Pitch Mod. was 186: Electro Snare stereo (Snare L -> Left, Snare R -> Right, Env -> Mono). was 185: Electro Snare (type 222). was 184: Robin Sinepulse 0–1 jack is log sweep position (L = max(Low, 20 Hz)). was 183: Flower Child ƒ input removed (Cutoff knob only again). was 182: SinCos / SinCos4 Polarity (center 0 Bipolar / 1 Unipolar). was 181: Flower Child ƒ in (resonance-pitch Hz replaces Cutoff). was 180: Robin Sinepulse 0–1 jack is sweep position (High=1, Low=0). was 179: Resonant Envelope (221)
 }

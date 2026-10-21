@@ -171,6 +171,7 @@ NodeLiveAudioProcessor.NATIVE_GRAPH_TYPE_IDS = Object.freeze({
   electroTom: 224,
   electroKick: 225,
   electroClap: 226,
+  rmsMeter: 227,
   curveAttackRelease: 166,
   pluckEnvelope: 198,
   acidSequencer: 199,
@@ -711,6 +712,12 @@ NodeLiveAudioProcessor.prototype.mapNativeGraphSrcPortId = function mapNativeGra
   }
   // Resonant Envelope SC (sidechain duck) on the Saw slot.
   if (t === "resonantEnvelope" && p === "sc") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_SAW;
+  // RMS Meter: RMS on Mono, dB on Saw, Env Inverted on Ramp.
+  if (t === "rmsMeter") {
+    if (p === "rms") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_MONO;
+    if (p === "db") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_SAW;
+    if (p === "env inverted") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_RAMP;
+  }
   // Electro Snare: Snare L on Left, Snare R on Right, Env on Mono.
   if (t === "electroSnare") {
     if (p === "snare l") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_LEFT;
@@ -5854,6 +5861,13 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
       push("triggerDetect", P.NATIVE_GRAPH_PARAM_LFO_STYLE, disc("triggerDetect", 0));
       continue;
     }
+    if (type === "rmsMeter") {
+      // timeDenominator=Attack ms, width=Release ms, amplitude=Env Inverted scale.
+      push("attack", P.NATIVE_GRAPH_PARAM_TIME_DENOMINATOR, cont("attack", 300));
+      push("release", P.NATIVE_GRAPH_PARAM_WIDTH, cont("release", 300));
+      push("amplitude", P.NATIVE_GRAPH_PARAM_AMPLITUDE, cont("amplitude", 1));
+      continue;
+    }
     if (type === "powerDecay") {
       // timeDenominator=decayTime s, shape=power, amplitude.
       push("decayTime", P.NATIVE_GRAPH_PARAM_TIME_DENOMINATOR, cont("decayTime", 1));
@@ -9024,6 +9038,7 @@ NodeLiveAudioProcessor.prototype.nativeGraphPortNames = function nativeGraphPort
     return ["isIdle", "Idle"];
   }
   if (portId === P.NATIVE_GRAPH_PORT_MONO) {
+    if (type === "rmsMeter") return ["RMS"];
     if (type === "acidSequencer") return ["Gate"];
     if (type === "mixStereo4" || type === "mixStereo2" || type === "mixStereo" || type === "crossfade2" || type === "crossfade3" || type === "crossfade4") {
       return []; // stereo-only — no Mono I/O
@@ -9242,6 +9257,7 @@ NodeLiveAudioProcessor.prototype.nativeGraphPortNames = function nativeGraphPort
   }
   if (portId === P.NATIVE_GRAPH_PORT_SAW) {
     if (type === "resonantEnvelope") return ["SC"];
+    if (type === "rmsMeter") return ["dB"];
     if (type === "acidSequencer") return ["f", "\u0192"];
     if (type === "pitchQuantizer") return ["f", "\u0192"];
     if (type === "helmholtzPitch") return ["Gate", "g"];
@@ -9285,6 +9301,7 @@ NodeLiveAudioProcessor.prototype.nativeGraphPortNames = function nativeGraphPort
     return ["Saw"];
   }
   if (portId === P.NATIVE_GRAPH_PORT_RAMP) {
+    if (type === "rmsMeter") return ["Env Inverted"];
     if (type === "helmholtzPitch") return ["Detune"];
     // Pre-level Right hold for face rings (distinct from audio Right).
     if (type === "sampleHold") return ["Right Raw"];

@@ -2440,6 +2440,12 @@ const nodeGraphModuleStoreCatalog = Object.freeze({
       "native",
     ],
   },
+  rmsMeter: {
+    category: "dynamics",
+    description: "RMS Meter: one-pole running mean square, RMS = sqrt(ms). Outs RMS (linear), dB (20*log10, -120 floor), Env Inverted (1 - RMS*Amplitude, 0..1) for ducking.",
+    label: "RMS Meter",
+    notes: ["rms", "meter", "level", "loudness", "db", "duck", "sidechain", "native"],
+  },
   powerDecay: {
     category: "envelope",
     description: "PowerDecay: each Trigger restarts a power-curve fall. env = height * Amplitude * pow(1 - t / Decay Time, Power). Power 1 = linear, 0 = hold then cut.",
@@ -3714,6 +3720,10 @@ const nodeGraphJsSourceEntriesByType = Object.freeze({
   pingEnvelope: {
     source: "public/modules/pingEnvelope/ping-envelope-math.js",
     sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/pingEnvelope/ping-envelope-math.js",
+  },
+  rmsMeter: {
+    source: "native_modules/rms_meter/rms_meter.cpp",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/native_modules/rms_meter/rms_meter.cpp",
   },
   powerDecay: {
     source: "native_modules/power_decay/power_decay.cpp",
