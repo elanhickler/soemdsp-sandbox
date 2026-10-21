@@ -213,10 +213,6 @@ function drawNodeGraphTransportBpmItem(renderer, item, pixelRatio) {
   if (!canvas || !syncNodeGraphModuleScopeLocalFallbackCanvas(canvas, screenElement, pixelRatio)) {
     return;
   }
-  const ctx = canvas.getContext("2d");
-  if (!ctx) {
-    return;
-  }
 
   const node = typeof nodeGraphModuleScopeNodeForSlot === "function"
     ? nodeGraphModuleScopeNodeForSlot(item.slot)
@@ -262,58 +258,41 @@ function drawNodeGraphTransportBpmItem(renderer, item, pixelRatio) {
   canvas._nodeGraphTransportBpmHeight = canvas.height;
   canvas._nodeGraphTransportGateDrawn = drawGate;
 
-  ctx.save();
-  ctx.setTransform(1, 0, 0, 1, 0, 0);
-  ctx.globalCompositeOperation = "source-over";
-  ctx.globalAlpha = 1;
-  ctx.fillStyle = "#020a06";
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-  const digitFontFamily = nodeGraphTransportBpmFontReady
-    ? '"DSEG7 Classic", "Consolas", monospace'
-    : '"Consolas", "Courier New", monospace';
-  const labelHeight = canvas.height * 0.22;
-  const digitAreaHeight = canvas.height - labelHeight;
-  // Fit digits inside the plate, then draw at an explicit centered x so 1–3
-  // digit tempos (and DSEG side bearings) stay optically centered every frame.
-  const digitPadX = Math.max(2, canvas.width * 0.06);
-  const maxDigitWidth = Math.max(1, canvas.width - digitPadX * 2);
-  let digitFontSize = Math.max(1, digitAreaHeight * 0.82);
-  ctx.font = `${digitFontSize}px ${digitFontFamily}`;
-  let digitWidth = nodeGraphFiniteNumber(ctx.measureText(digits).width);
-  if (digitWidth > maxDigitWidth && digitWidth > 0) {
-    digitFontSize = Math.max(1, digitFontSize * (maxDigitWidth / digitWidth));
-    ctx.font = `${digitFontSize}px ${digitFontFamily}`;
+  // GPU: digits, unit and lamp through the shared line/text drawer.
+  const batch = typeof nodeGraphGlLinesBegin === "function"
+    ? nodeGraphGlLinesBegin(canvas, [2 / 255, 10 / 255, 6 / 255, 1])
+    : null;
+  if (!batch) {
+    canvas._nodeGraphTransportBpmDigits = null;
+    return;
   }
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  ctx.fillStyle = "rgba(120, 255, 170, 0.92)";
-  ctx.fillText(digits, canvas.width * 0.5, digitAreaHeight * 0.5);
-
-  const labelFontSize = Math.max(1, Math.min(labelHeight * 0.7, canvas.width * 0.14));
-  ctx.font = `${labelFontSize}px "Consolas", "Courier New", monospace`;
-  ctx.fillStyle = "rgba(120, 255, 170, 0.55)";
-  ctx.fillText("BPM", canvas.width * 0.5, digitAreaHeight + labelHeight * 0.5);
-
+  const W = canvas.width;
+  const H = canvas.height;
+  const ink = [120 / 255, 1, 170 / 255];
+  const family = nodeGraphTransportBpmFontReady ? '"DSEG7 Classic", "Consolas", monospace' : '"Consolas", "Courier New", monospace';
+  const labelHeight = H * 0.22;
+  const digitAreaHeight = H - labelHeight;
+  const digitPadX = Math.max(2, W * 0.06);
+  // Uniform fit: one px for both axes (no maxWidth squeeze), so digits never stretch.
+  let digitPx = Math.max(1, digitAreaHeight * 0.7);
+  const digitW = typeof nodeGraphGlLinesMeasureText === "function" ? nodeGraphGlLinesMeasureText(digits, digitPx, family, 700) : 0;
+  const maxDigitW = Math.max(1, W - digitPadX * 2);
+  if (digitW > maxDigitW) digitPx *= maxDigitW / digitW;
+  nodeGraphGlLinesText(batch, digits, W * 0.5, digitAreaHeight * 0.5, {
+    px: digitPx, rgba: [...ink, 0.92], align: "center", baseline: "middle", family, weight: 700,
+  });
+  nodeGraphGlLinesText(batch, "BPM", W * 0.5, digitAreaHeight + labelHeight * 0.5, {
+    px: Math.max(1, Math.min(labelHeight * 0.7, W * 0.14)), rgba: [...ink, 0.55], align: "center", baseline: "middle",
+    family: '"Consolas", "Courier New", monospace', weight: 400,
+  });
   if (gateBlinkOn) {
-    // Beat lamp — copies this metronome's native Gate 0-1.
-    const lampR = Math.max(2, Math.min(canvas.width, canvas.height) * 0.07);
-    const lampX = canvas.width - lampR * 1.6;
+    const lampR = Math.max(2, Math.min(W, H) * 0.07);
+    const lampX = W - lampR * 1.6;
     const lampY = lampR * 1.4;
-    ctx.beginPath();
-    ctx.arc(lampX, lampY, lampR, 0, Math.PI * 2);
-    if (drawGate) {
-      ctx.fillStyle = "rgba(120, 255, 170, 0.95)";
-      ctx.shadowColor = "rgba(120, 255, 170, 0.85)";
-      ctx.shadowBlur = lampR * 1.8;
-    } else {
-      ctx.fillStyle = "rgba(120, 255, 170, 0.12)";
-      ctx.shadowBlur = 0;
-    }
-    ctx.fill();
-    ctx.shadowBlur = 0;
+    if (drawGate) nodeGraphGlLinesDot(batch, lampX, lampY, lampR, lampR * 1.8, [...ink, 0.35]);
+    nodeGraphGlLinesDot(batch, lampX, lampY, lampR, 1, [...ink, drawGate ? 0.95 : 0.12]);
   }
-  ctx.restore();
+  if (!nodeGraphGlLinesEnd(batch)) canvas._nodeGraphTransportBpmDigits = null;
 }
 
 if (typeof nodeGraphModuleScopeCustomRenderers === "object" && nodeGraphModuleScopeCustomRenderers) {

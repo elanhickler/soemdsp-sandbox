@@ -1097,10 +1097,14 @@ void main() {
     let glyphs = new Map();
     let sheetH = 0;
     let cellH = 0;
+    let head = 0;
     while (bakePx >= 16) {
       const fontTry = `${weight} ${bakePx}px ${family}`;
       cx.font = fontTry;
-      cellH = Math.ceil(bakePx * 1.25) + TEXT_PAD * 2;
+      // Room above the em ascent for fonts whose glyphs rise higher (DSEG7 digits).
+      head = 0;
+      for (const ch of list) head = Math.max(head, Math.ceil((cx.measureText(ch).actualBoundingBoxAscent || 0) - bakePx * TEXT_ASCENT));
+      cellH = Math.ceil(bakePx * 1.25) + head + TEXT_PAD * 2;
       glyphs = new Map();
       let x = 0;
       let y = 0;
@@ -1132,7 +1136,7 @@ void main() {
     cx.fillStyle = "#fff";
     cx.clearRect(0, 0, sheetW, sheetH);
     for (const [ch, g] of glyphs) {
-      cx.fillText(ch, g.x + TEXT_PAD, g.y + TEXT_PAD + bakePx * TEXT_ASCENT);
+      cx.fillText(ch, g.x + TEXT_PAD, g.y + TEXT_PAD + head + bakePx * TEXT_ASCENT);
     }
     const gl = s.gl;
     const texture = gl.createTexture();
@@ -1146,7 +1150,7 @@ void main() {
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
     gl.bindTexture(gl.TEXTURE_2D, null);
-    return { texture, glyphs, sheetW, sheetH, chars: list.join("") };
+    return { texture, glyphs, sheetW, sheetH, head: head / bakePx, chars: list.join("") };
   }
 
   /** Shared glyph atlas for a font (grows when new characters show up). */
@@ -1446,7 +1450,7 @@ void main() {
       const gl = atlas.glyphs.get(ch);
       if (!gl) continue;
       const x0 = Math.round(pen - TEXT_PAD * sx);
-      const y0 = Math.round(baseline - (TEXT_PAD + glyphBakePx * TEXT_ASCENT) * g);
+      const y0 = Math.round(baseline - (TEXT_PAD + glyphBakePx * ((atlas.head || 0) + TEXT_ASCENT)) * g);
       const x1 = Math.round(x0 + gl.w * sx);
       const y1 = Math.round(y0 + gl.h * g);
       const u0 = gl.x / atlas.sheetW; const u1 = (gl.x + gl.w) / atlas.sheetW;

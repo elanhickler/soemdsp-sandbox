@@ -1,4 +1,4 @@
-﻿// Displays draw live: DSF Oscillator + Resonant Envelope faces must paint more
+﻿// Displays draw live: DSF Oscillator, Resonant Envelope + Metronome (BPM digits) faces must paint more
 // than their background (the "black / background-only display" regression),
 // and a Display Settings background colour change must show without refresh.
 // Server on :8090 or SANDBOX_URL. Uses system Chrome (playwright-core).
@@ -35,7 +35,7 @@ async function stats(id) {
     return { drawn: 1 - top / n, mean: mean.map((v) => Math.round(v / n)) };
   }, b64);
 }
-for (const id of ["dsfOscillator-1", "resonantEnvelope-1"]) {
+for (const id of ["dsfOscillator-1", "resonantEnvelope-1", "transport-1"]) {
   const s = await stats(id);
   check(Boolean(s) && s.drawn > 0.01, `${id} face draws more than its background`, JSON.stringify(s));
 }

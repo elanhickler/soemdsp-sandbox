@@ -1163,6 +1163,12 @@
         "slidersForceShow": false,
         "titleHidden": false
       }
+    },
+    {
+      "id": "transport-1",
+      "type": "transport",
+      "gx": 130,
+      "gy": -27
     }
   ],
   "requiredAssets": [],
