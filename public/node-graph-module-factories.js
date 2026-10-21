@@ -190,7 +190,7 @@ function createNodeGraphIoColumn(node, type, ports, io) {
     row.dataset.port = port;
     row.dataset.io = io;
     row.dataset.alias = nodeGraphLabel(node, port);
-    const portLabel = nodeGraphRailPortLabel(type, nodeGraphPatchNodePortDisplayLabel(node, type, port, io));
+    const portLabel = nodeGraphRailPortLabel(type, nodeGraphPatchNodePortDisplayLabel(node, type, port, io), port, io);
     maxLabelChars = Math.max(maxLabelChars, String(portLabel || "").length);
     const spoken = (typeof nodeGraphGateTriggerPortSpokenName === "function"
       && nodeGraphGateTriggerPortSpokenName(type, port))
@@ -340,6 +340,8 @@ function syncNodeGraphModulePortLabels(element, patchNode) {
     const portLabel = nodeGraphRailPortLabel(
       patchNode.type,
       nodeGraphPatchNodePortDisplayLabel(patchNode, patchNode.type, port, io),
+      port,
+      io,
     );
     const label = row.querySelector(".node-io-label");
     if (label) {
