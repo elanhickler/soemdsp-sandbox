@@ -169,8 +169,8 @@ function nodeGraphCanvasDisplayBox(tileW, tileH, aspect = 0) {
 // ---- Rail drawing (WebGL only; the rail DOM is hit/geometry, never painted) ----
 // Dark strip with a #3d4555 inner edge. Each used param's tag is one box that
 // fills its whole rail slot (rail width x the param's row height), flush with
-// its neighbours, a thin dim divider between slots, the jack's semicircle
-// redrawn on the box, and the short label inside with a tiny inner pad.
+// its neighbours, a thin dim divider between slots, inset beside the edge jacks'
+// semicircles so they stay fully visible, and the short label inside with a tiny inner pad.
 const NodeGraphRailInk = Object.freeze({
   strip: "#080a0e",
   edge: "#3d4555",
@@ -208,42 +208,31 @@ function nodeGraphModuleRailsDrawGl(batch, plates, toX, toY, zoom, cssW, cssH) {
     const w = laid.w * zoom;
     const h = laid.h * zoom;
     if (!batch.camera && (x0 > cssW || y0 > cssH || x0 + w < 0 || y0 + h < 0)) continue;
-    const rw = NODE_GRAPH_RAIL_WIDTH_PX * zoom;
     const edge = Math.max(1, zoom);
+    const jacks = (nodeGraphGlGraphState?.chrome?.jacks || []).filter((j) => j.id === plates[i].id);
+    // The rails start beside the edge jacks' semicircles, so the jacks stay fully visible.
+    const inset = (jacks[0]?.r || 0) * zoom;
+    const rw = NODE_GRAPH_RAIL_WIDTH_PX * zoom - inset;
     batch._over = true;
-    rect(x0, y0, rw, h, NodeGraphRailInk.strip);
-    rect(x0 + rw - edge, y0, edge, h, NodeGraphRailInk.edge);
-    rect(x0 + w - rw, y0, rw, h, NodeGraphRailInk.strip);
-    rect(x0 + w - rw, y0, edge, h, NodeGraphRailInk.edge);
+    rect(x0 + inset, y0, rw, h, NodeGraphRailInk.strip);
+    rect(x0 + inset + rw - edge, y0, edge, h, NodeGraphRailInk.edge);
+    rect(x0 + w - inset - rw, y0, rw, h, NodeGraphRailInk.strip);
+    rect(x0 + w - inset - rw, y0, edge, h, NodeGraphRailInk.edge);
     const tags = [];
     const hair = Math.max(0.5, zoom * 0.5);
-    const jacks = (nodeGraphGlGraphState?.chrome?.jacks || []).filter((j) => j.id === plates[i].id);
     for (const port of body.querySelectorAll(".node-param-port.modulation-input, .node-param-port.parameter-output")) {
       if (!port.offsetParent) continue;
       const box = nodeGraphModuleLayoutBox(port, el);
       if (!box || !(box.w > 1)) continue;
       const left = port.classList.contains("modulation-input");
-      const bx = toX(plates[i].x + box.x);
+      const bx = toX(plates[i].x + box.x) + (left ? inset : 0);
       const by = toY(plates[i].y + box.y);
-      const bw = box.w * zoom;
+      const bw = box.w * zoom - inset;
       const bh = box.h * zoom;
       if (port.classList.contains("rail-patched")) {
         rect(bx, by, bw, bh, NodeGraphRailInk.tagFill);
-        const key = port.closest(".node-parameter-row")?.dataset.param || "";
-        const jack = jacks.find((j) => j.port === key && (j.io === "output") === !left);
-        if (jack && typeof nodeGraphGlLinesPolyline === "function") {
-          const cx = toX(jack.x);
-          const cy = toY(jack.y);
-          const r = jack.r * zoom;
-          const pts = [];
-          for (let k = 0; k <= 12; k += 1) {
-            const t = -Math.PI / 2 + (Math.PI * k) / 12;
-            pts.push(cx + (left ? 1 : -1) * Math.cos(t) * r, cy + Math.sin(t) * r);
-          }
-          nodeGraphGlLinesPolyline(batch, pts, edge * 0.6, Math.max(0.5, zoom * 0.5), jack.rgba);
-        }
         const pad = NODE_GRAPH_RAIL_TEXT_PAD_PX * zoom;
-        const clear = (jack ? jack.r * zoom : 0) + pad;
+        const clear = pad;
         tags.push({
           text: port.dataset.railLabel || "",
           x: left ? bx + clear : bx + bw - clear,
