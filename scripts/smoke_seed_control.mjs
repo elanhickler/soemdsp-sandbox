@@ -48,7 +48,7 @@ const order = await page.evaluate((s) => {
     .map((c) => c.dataset.seedAction || (c.classList.contains("node-slider-readout") ? "number" : c.tagName));
 }, sel);
 gate(JSON.stringify(order) === JSON.stringify(["number", "dice", "plus", "minus"]), `layout ${JSON.stringify(order)}`);
-gate(await page.locator(`${sel} .node-seed-btn-dice .node-seed-die-pip`).count() === 5, "dice is the drawn 5-pip die");
+gate(await page.locator(`${sel} .node-seed-die, ${sel} .node-seed-die-pip`).count() === 0 && await page.evaluate(() => typeof window.nodeGraphGlGraphDrawSeedWidget === "function"), "dice is the shared GL widget (no DOM die)");
 
 
 async function measureGlyphs(label) {
@@ -56,36 +56,16 @@ async function measureGlyphs(label) {
     const row = document.querySelector(s);
     const out = {};
     const center = (r) => [r.left + r.width / 2, r.top + r.height / 2];
-    for (const k of ["plus", "minus"]) {
-      const b = row.querySelector(`.node-seed-btn-${k}`);
-      const br = b.getBoundingClientRect();
-      const [bx, by] = center(br);
-      const scale = br.width / b.offsetWidth || 1;
-      for (const pe of ["::before", "::after"]) {
-        if (k === "minus" && pe === "::after") continue;
-        const cs = getComputedStyle(b, pe);
-        const mt = new DOMMatrix(cs.transform === "none" ? undefined : cs.transform);
-        const w = parseFloat(cs.width), h = parseFloat(cs.height);
-        const cx = br.left + (b.clientLeft + parseFloat(cs.left) + mt.e + w / 2) * scale;
-        const cy = br.top + (b.clientTop + parseFloat(cs.top) + mt.f + h / 2) * scale;
-        out[`${k}${pe}`] = { dx: +(cx - bx).toFixed(2), dy: +(cy - by).toFixed(2), w, h };
-      }
-    }
     const ctl = row.querySelector(".node-seed-control").getBoundingClientRect();
     const ccy = ctl.top + ctl.height / 2;
     for (const el of row.querySelectorAll(".node-seed-btn, .node-slider-readout, .node-slider-readout-value")) {
       const r = el.getBoundingClientRect();
       out[`vs-control:${el.className.split(" ").pop()}`] = { dx: 0, dy: +((r.top + r.height / 2) - ccy).toFixed(2), w: r.width, h: r.height, inside: r.top >= ctl.top - 0.5 && r.bottom <= ctl.bottom + 0.5 };
     }
-    const db = row.querySelector(".node-seed-btn-dice").getBoundingClientRect();
-    const g = row.querySelector(".node-seed-die").getBoundingClientRect();
-    out.dice = { l: +(g.left - db.left).toFixed(2), r: +(db.right - g.right).toFixed(2), t: +(g.top - db.top).toFixed(2), b: +(db.bottom - g.bottom).toFixed(2), dx: +((g.left + g.width / 2) - (db.left + db.width / 2)).toFixed(2), dy: +((g.top + g.height / 2) - (db.top + db.height / 2)).toFixed(2) };
     return out;
   }, sel);
   for (const [k, v] of Object.entries(m)) {
-    if (k === "dice") {
-      gate(Math.min(v.l, v.r, v.t, v.b) >= 1, `${label} dice inside button, margins L${v.l} R${v.r} T${v.t} B${v.b} (center off ${v.dx},${v.dy})`);
-    } else if (k.startsWith("vs-control")) {
+    if (k.startsWith("vs-control")) {
       gate(Math.abs(v.dy) <= 1 && v.inside, `${label} ${k} vertical center vs control ${v.dy} (h ${v.h.toFixed(1)})`);
     } else {
       gate(Math.abs(v.dx) <= 1 && Math.abs(v.dy) <= 1 && v.w > 0 && v.h > 0, `${label} ${k} centered off (${v.dx}, ${v.dy}) size ${v.w}x${v.h}`);

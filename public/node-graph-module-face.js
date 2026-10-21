@@ -8,7 +8,6 @@
 const NODE_GRAPH_FACE_JACK_SLOT_PX = 17;
 const NODE_GRAPH_FACE_CELL_DRAG_PX = 220;
 const NODE_GRAPH_FACE_STEP_DRAG_PX = 6;
-const NODE_GRAPH_FACE_SEED_DRAG_PX = 4;
 const NODE_GRAPH_FACE_FILTER_HZ = Object.freeze({ min: 20, max: 20000 });
 const NODE_GRAPH_FACE_FILTER_SLOPE_DB = 12;
 const NODE_GRAPH_FACE_FILTER_DB_MIN = -18;
@@ -41,8 +40,6 @@ const NodeGraphFaceInk = Object.freeze({
   tick: "#6fa3b4",
   lfoOn: "#c8e4ff",
   lfoOff: "#6a7a90",
-  seedText: "#e8eaef",
-  seedButton: "#c5ccd8",
 });
 
 /** Face rows for a type. With a patch node, hidden params drop out and their rows close up. */
@@ -322,13 +319,17 @@ function beginNodeGraphModuleFaceGesture(article, face, spec, event) {
     return;
   }
   if (wd.type === "seedButton") {
-    const max = Number(input?.max) || 16777215;
-    const now = Math.round(nodeGraphModuleFaceValue(input));
-    const step = event.ctrlKey && event.shiftKey ? 100 : event.ctrlKey ? 10 : 1;
-    const next = wd.action === "dice"
-      ? Math.floor(Math.random() * (max + 1))
-      : (((now + (wd.action === "plus" ? step : -step)) % (max + 1)) + max + 1) % (max + 1);
-    setNodeGraphModuleFaceValue(input, next, false);
+    if (input && typeof nodeGraphSeedAction === "function") nodeGraphSeedAction(input, wd.action, event);
+    if (typeof markNodeGraphRenderPending === "function") markNodeGraphRenderPending();
+    return;
+  }
+  if (wd.type === "seedNumber") {
+    const v0 = Math.round(nodeGraphModuleFaceValue(input));
+    const x0 = event.clientX;
+    const y0 = event.clientY;
+    if (!input || typeof nodeGraphSeedDragValue !== "function") return;
+    nodeGraphModuleFaceCapture(face, event, (ev, drag) => setNodeGraphModuleFaceValue(input,
+      nodeGraphSeedDragValue(input, v0, (ev.clientX - x0) * p.sx, (ev.clientY - y0) * p.sy), drag));
     return;
   }
   let move = null;
@@ -342,14 +343,13 @@ function beginNodeGraphModuleFaceGesture(article, face, spec, event) {
       const t = Math.max(0, Math.min(1, t0 + d / NODE_GRAPH_FACE_CELL_DRAG_PX));
       return typeof nodeSliderValueFromTravel === "function" ? nodeSliderValueFromTravel(input, t) : t;
     };
-  } else if (wd.type === "step" || wd.type === "seedNumber") {
+  } else if (wd.type === "step") {
     const v0 = Math.round(nodeGraphModuleFaceValue(input));
     const x0 = event.clientX;
     const y0 = event.clientY;
-    const px = wd.type === "seedNumber" ? NODE_GRAPH_FACE_SEED_DRAG_PX : NODE_GRAPH_FACE_STEP_DRAG_PX;
+    const px = NODE_GRAPH_FACE_STEP_DRAG_PX;
     move = (ev) => {
-      const digits = String(Math.abs(v0)).length;
-      const step = wd.type === "seedNumber" ? Math.max(1, 10 ** Math.max(0, digits - 2)) : (ev.ctrlKey ? 10 : 1);
+      const step = ev.ctrlKey ? 10 : 1;
       const v = v0 + Math.trunc(((y0 - ev.clientY) * p.sy + (ev.clientX - x0) * p.sx) / px) * step;
       return Math.max(Number(input.min), Math.min(Number(input.max), v));
     };
@@ -522,24 +522,14 @@ function nodeGraphModuleFaceDrawGl(batch, el, w, ox, oy, z) {
       nodeGraphModuleFaceText(batch, nodeGraphModuleFaceValueText(input), ox + cx * z, oy + (cy + 7) * z, 13.8 * z, ink.value, { maxWidth: (cw - 4) * z });
     } else if (wd.type === "filter") {
       nodeGraphModuleFaceDrawFilterGl(batch, el, wd, ox, oy, z, rect, line);
-    } else if (wd.type === "seedNumber") {
-      const text = String(Math.round(nodeGraphModuleFaceValue(input)));
-      nodeGraphModuleFaceText(batch, text, ox + cx * z, oy + cy * z, fit(text, wd.w, wd.h, 0.62, 0.52) * z, ink.seedText);
-    } else if (wd.type === "seedButton") {
-      line(wd.x, wd.y, 1, wd.h, ink.rowLine);
-      const c = nodeGraphModuleFaceRgba(ink.seedButton);
-      const bx = ox + wd.x * z;
-      const by = oy + wd.y * z;
-      const bw = wd.w * z;
-      const bh = wd.h * z;
-      if (wd.action === "dice" && typeof nodeGraphGlGraphDrawSeedDie === "function") {
-        nodeGraphGlGraphDrawSeedDie(batch, { x: bx, y: by, w: bw, h: bh }, c);
-      } else {
-        const s = Math.min(bw, bh) * 0.4;
-        const k = Math.max(1, Math.min(bw, bh) * 0.08);
-        nodeGraphGlLinesRect(batch, bx + (bw - s) / 2, by + (bh - k) / 2, s, k, c);
-        if (wd.action === "plus") nodeGraphGlLinesRect(batch, bx + (bw - k) / 2, by + (bh - s) / 2, k, s, c);
-      }
+    } else if (wd.type === "seedNumber" && typeof nodeGraphGlGraphDrawSeedWidget === "function") {
+      // The app-wide seed widget ([code][die][+][-]); its buttons are this row's seedButton cells.
+      const bw = (w - wd.w) / 3;
+      const cell = (x, cw) => ({ x: ox + x * z, y: oy + wd.y * z, w: cw * z, h: wd.h * z });
+      const text = typeof formatNodeGraphSeedCode === "function" ? formatNodeGraphSeedCode(nodeGraphModuleFaceValue(input)) : "";
+      nodeGraphGlGraphDrawSeedWidget(batch, {
+        host: cell(0, w), value: cell(0, wd.w), dice: cell(wd.w, bw), plus: cell(wd.w + bw, bw), minus: cell(wd.w + bw * 2, bw),
+      }, text, z);
     }
   }
 }
