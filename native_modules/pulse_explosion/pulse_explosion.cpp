@@ -34,22 +34,12 @@
 // burst, so the same Seed + same other parameters always produces the same
 // pulse schedule. Nothing depends on the engine slot or creation order.
 //
-// Timing (choice, append-only ids): 0 Random = the rejection-sampled schedule
-// above (unchanged). 1 Exp / 2 Log / 3 Lin are deterministic placements over
-// [startTime, endTime] (Center Time / Time Spread unused), with
-// u_i = i / (N - 1), i = 0..N-1 (N = 1: one pulse at Center Time) and
-// E(u) = (e^(3u) - 1) / (e^3 - 1), the Early Reflections tap spacing (k = 3):
-//   Exp: t_i = start + (end - start) * E(u_i)          dense near Start
-//   Log: t_i = start + (end - start) * (1 - E(1 - u_i))  mirror, dense near End
-//   Lin: t_i = start + (end - start) * u_i              even
-// Amplitudes stay seeded random in [low, high] (one draw per pulse, in order).
 // soemdsp_pulse_explosion_preview() fills the schedule a trigger with the
 // given params would play (for displays), read with _preview_time/_amplitude.
 
 #include <soemdsp/math/scalar_helpers.h>
 #include <soemdsp/math/seed.h>
 #include <soemdsp/trigger/trigger.h>
-#include <soemdsp/math/exp_log.h>
 using soemdsp_maths::clamp;
 using soemdsp_maths::rational_curve01;
 using soemdsp_maths::rising_edge_bool;
@@ -155,66 +145,30 @@ static void insertSorted(ScheduledPulse* pulses, int count, ScheduledPulse toIns
   pulses[i] = toInsert;
 }
 
-enum : int { kTimingRandom = 0, kTimingExp = 1, kTimingLog = 2, kTimingLin = 3 };
-static const double kExpK = 3.0;  // Early Reflections tap spacing
-
-static inline double expShape(double u) {
-  return (soemdsp_maths::dsp_exp(kExpK * u) - 1.0) / (soemdsp_maths::dsp_exp(kExpK) - 1.0);
-}
-
-// Safe params -> sorted schedule. Random path is the original code verbatim.
+// Safe params -> sorted, rejection-sampled schedule.
 static int buildSchedule(
-  ScheduledPulse* pulses, unsigned int* rng, int timing,
+  ScheduledPulse* pulses, unsigned int* rng,
   double safeStart, double safeCenter, double safeEnd, double skew,
   int safeCount, double lo, double hi
 ) {
   int count = 0;
-  if (timing == kTimingRandom) {
-    for (int i = 0; i < safeCount; i++) {
-      double chosenTime = safeCenter;
-      bool accepted = false;
-      for (int attempt = 0; attempt < kMaxRejectionAttempts; attempt++) {
-        double candidate = safeStart + (safeEnd - safeStart) * nextUniform01(rng);
-        double roll = nextUniform01(rng);
-        double density = pulseDensity(candidate, safeStart, safeCenter, safeEnd, skew);
-        if (roll < density) {
-          chosenTime = candidate;
-          accepted = true;
-          break;
-        }
-      }
-      (void)accepted;  // falls back to safeCenter if rejection sampling ran dry
-
-      ScheduledPulse pulse;
-      pulse.time = chosenTime;
-      pulse.amplitude = lo + (hi - lo) * nextUniform01(rng);
-      insertSorted(pulses, count, pulse);
-      count++;
-    }
-    return count;
-  }
-  const double span = safeEnd - safeStart;
   for (int i = 0; i < safeCount; i++) {
-    double t = safeCenter;
-    if (safeCount > 1) {
-      const double u = (double)i / (double)(safeCount - 1);
-      const double shape = timing == kTimingExp ? expShape(u)
-        : (timing == kTimingLog ? 1.0 - expShape(1.0 - u) : u);
-      t = safeStart + span * shape;
+    double chosenTime = safeCenter;  // falls back to Center if rejection sampling runs dry
+    for (int attempt = 0; attempt < kMaxRejectionAttempts; attempt++) {
+      double candidate = safeStart + (safeEnd - safeStart) * nextUniform01(rng);
+      double roll = nextUniform01(rng);
+      if (roll < pulseDensity(candidate, safeStart, safeCenter, safeEnd, skew)) {
+        chosenTime = candidate;
+        break;
+      }
     }
     ScheduledPulse pulse;
-    pulse.time = t;
+    pulse.time = chosenTime;
     pulse.amplitude = lo + (hi - lo) * nextUniform01(rng);
     insertSorted(pulses, count, pulse);
     count++;
   }
   return count;
-}
-
-static inline int safeTiming(double timing) {
-  // NaN / missing / out of range -> Random (checked before the int cast).
-  if (!(timing >= 0.0 && timing < 3.5)) return kTimingRandom;
-  return (int)(timing + 0.5);
 }
 
 static ScheduledPulse gPreview[kMaxPulses];
@@ -256,8 +210,7 @@ extern "C" double soemdsp_pulse_explosion_sample(
   double lowAmplitude,
   double highAmplitude,
   double seed,          // module Seed; every burst re-seeds from it (0 is a normal seed)
-  double sampleRate,
-  double timing         // 0 Random (default, unchanged) / 1 Exp / 2 Log / 3 Lin
+  double sampleRate
 ) {
   if (handle < 1 || handle > kMaxInstances) return 0.0;
   PulseExplosionState& s = gPool[handle - 1];
@@ -283,7 +236,7 @@ extern "C" double soemdsp_pulse_explosion_sample(
     s.elapsed = 0.0;
     s.exploding = true;
     s.rngState = burstRngState(seed);
-    s.pulseCount = buildSchedule(s.pulses, &s.rngState, safeTiming(timing),
+    s.pulseCount = buildSchedule(s.pulses, &s.rngState,
       safeStart, safeCenter, safeEnd, skew, safeCount, lo, hi);
   }
 
@@ -330,7 +283,7 @@ extern "C" double soemdsp_pulse_explosion_elapsed(int handle) {
 // argument meaning and safety as _sample. Returns the pulse count.
 extern "C" int soemdsp_pulse_explosion_preview(
   double startTime, double centerTime, double endTime, double timeSpread,
-  int numberOfPulses, double lowAmplitude, double highAmplitude, double seed, double timing
+  int numberOfPulses, double lowAmplitude, double highAmplitude, double seed
 ) {
   const double safeStart = startTime < 0.0 ? 0.0 : startTime;
   double safeCenter = clamp(centerTime, safeStart, endTime > safeStart ? endTime : safeStart + 0.001);
@@ -342,7 +295,7 @@ extern "C" int soemdsp_pulse_explosion_preview(
   const double lo = lowAmplitude < highAmplitude ? lowAmplitude : highAmplitude;
   const double hi = lowAmplitude < highAmplitude ? highAmplitude : lowAmplitude;
   unsigned int rng = burstRngState(seed);
-  gPreviewCount = buildSchedule(gPreview, &rng, safeTiming(timing), safeStart, safeCenter, safeEnd, skew, safeCount, lo, hi);
+  gPreviewCount = buildSchedule(gPreview, &rng, safeStart, safeCenter, safeEnd, skew, safeCount, lo, hi);
   return gPreviewCount;
 }
 
@@ -355,5 +308,5 @@ extern "C" double soemdsp_pulse_explosion_preview_amplitude(int i) {
 }
 
 extern "C" int soemdsp_pulse_explosion_version() {
-  return 3;  // 3: _elapsed (display playhead). 2: Timing (0 Random default / 1 Exp / 2 Log / 3 Lin) + preview exports
+  return 4;  // 4: Timing removed (Random only; _sample / _preview lose the timing arg). 3: _elapsed (display playhead). 2: preview exports
 }

@@ -829,10 +829,10 @@ if ($node) {
   if ($LASTEXITCODE -ne 0) {
     throw "Combined build: Modal Snare Body / Noise smoke FAILED"
   }
-  # Pulse Explosion Timing: Random unchanged, Exp / Log / Lin placements, preview == played.
-  & $node.Source "$root\scripts\smoke_pulse_explosion_timing.mjs"
+  # Pulse Explosion: preview == played schedule, Random by Seed.
+  & $node.Source "$root\scripts\smoke_pulse_explosion_preview.mjs"
   if ($LASTEXITCODE -ne 0) {
-    throw "Combined build: Pulse Explosion Timing smoke FAILED"
+    throw "Combined build: Pulse Explosion preview smoke FAILED"
   }
   # Resonant Compressor: Gain == Resonant Envelope SC (max diff 0), drums get quieter.
   & $node.Source "$root\scripts\smoke_graph_resonant_compressor.mjs"

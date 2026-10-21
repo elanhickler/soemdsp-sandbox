@@ -1,6 +1,6 @@
 // Headless: Pulse Explosion face draws the engine's exact schedule (stems at
 // each pulse time, height = amplitude, dot on top) on a 0..End axis, follows
-// Timing / Seed, lights fired pulses behind the playhead, Display Settings HBS.
+// Seed, lights fired pulses behind the playhead, Display Settings HBS.
 // Non-GET requests are aborted so nothing is saved server-side.
 // Usage: node scripts/smoke_pulse_explosion_face.mjs [screenshot.png]
 import { chromium } from "playwright";
@@ -17,7 +17,7 @@ const gate = (ok, msg) => { console.log(`${ok ? "ok  " : "FAIL"} ${msg}`); if (!
 {
   const E = (await WebAssembly.instantiate(fs.readFileSync(path.join(root, "native_modules", "combined", "soemdsp_combined.wasm")), { env: { emo_process_block: () => 0 } })).instance.exports;
   const h = E.soemdsp_pulse_explosion_create();
-  const run = (n, trig) => { for (let i = 0; i < n; i += 1) E.soemdsp_pulse_explosion_sample(h, trig && i < 2 ? 1 : 0, 0, 0.5, 1, 0.3, 4, 1, 1, 0, 1000, 3); return E.soemdsp_pulse_explosion_elapsed(h); };
+  const run = (n, trig) => { for (let i = 0; i < n; i += 1) E.soemdsp_pulse_explosion_sample(h, trig && i < 2 ? 1 : 0, 0, 0.5, 1, 0.3, 4, 1, 1, 0, 1000); return E.soemdsp_pulse_explosion_elapsed(h); };
   const idle = E.soemdsp_pulse_explosion_elapsed(h);
   const mid = run(500, true);
   const done = run(700, false);
@@ -95,17 +95,17 @@ const colMax = (img, G, x, y0, y1) => {
   return m;
 };
 
-// 1) Lin, 6 pulses, full amplitude: six stems at the engine times, evenly spaced, full height.
-await setParams({ startTime: 0, centerTime: 0.5, endTime: 1, timeSpread: 0.3, numberOfPulses: 6, lowAmplitude: 1, highAmplitude: 1, seed: 0, timing: 3 });
+// 1) Random, 6 pulses, full amplitude: six stems at the engine times, full height.
+await setParams({ startTime: 0, centerTime: 0.5, endTime: 1, timeSpread: 0.3, numberOfPulses: 6, lowAmplitude: 1, highAmplitude: 1, seed: 0 });
 let G = await geom(); let img = await grab();
-gate(G.times.length === 6 && G.times.every((t, i) => Math.abs(t - i / 5) < 1e-9), `Lin: engine schedule ${G.times.map((t) => t.toFixed(2)).join(" ")}`);
+gate(G.times.length === 6 && G.times.every((t) => t >= 0 && t <= 1), `Random: engine schedule ${G.times.map((t) => t.toFixed(2)).join(" ")}`);
 const bg = lum(px(img, 2, 2));
 const midStem = (G.base + G.top) / 2;
 gate(G.xs.every((x) => colMax(img, G, x, midStem - 2, midStem + 2) > bg + 60), "a stem is drawn at every pulse time");
-const gaps = G.xs.slice(1).map((x, i) => (x + G.xs[i]) / 2);
+const gaps = G.xs.slice(1).map((x, i) => [x, G.xs[i]]).filter(([x, y]) => x - y > 10).map(([x, y]) => (x + y) / 2);
 gate(gaps.every((x) => colMax(img, G, x, midStem - 2, midStem + 2) < bg + 25), "nothing between stems (no density curve, no stray dots)");
 gate(G.xs.every((x) => colMax(img, G, x, G.top - 1, G.top + 1) > bg + 120), "full-amplitude dots sit at the top");
-gate(Math.abs(G.xs[0] - Math.max(6, G.cw * 0.04) - 2.5) < 1e-6 && G.end === 1, "axis runs 0 .. End Time (first stem at x0)");
+gate(G.end === 1 && G.xs.every((x, i) => Math.abs(x - (Math.max(6, G.cw * 0.04) + 2.5 + (G.cw - 2 * (Math.max(6, G.cw * 0.04) + 2.5)) * G.times[i])) < 1e-6), "axis runs 0 .. End Time");
 if (shot) await page.screenshot({ clip: await faceClip(), path: shot.replace(/\.png$/, "-lin.png") });
 
 // 2) Amplitude sets height: low 0.25 high 0.25 -> dots a quarter up.
@@ -114,13 +114,10 @@ G = await geom(); img = await grab();
 const qy = G.base - 0.25 * (G.base - G.top);
 gate(G.xs.every((x) => colMax(img, G, x, qy - 1, qy + 1) > bg + 120) && G.xs.every((x) => colMax(img, G, x, G.top - 1, G.top + 2) < bg + 25), "stem height = amplitude (0.25 -> quarter height, nothing above)");
 
-// 3) Exp crowds the start; Random follows the Seed (engine schedule, not a JS copy).
-await setParams({ lowAmplitude: 0.3, highAmplitude: 1, numberOfPulses: 12, timing: 1 });
-G = await geom();
-gate(G.xs[1] - G.xs[0] < G.xs[11] - G.xs[10], "Exp: stems crowd the start");
-await setParams({ timing: 0, seed: 1234 });
+// 3) Random follows the Seed (engine schedule, not a JS copy).
+await setParams({ lowAmplitude: 0.3, highAmplitude: 1, numberOfPulses: 12, seed: 1234 });
 const ga = await geom(); img = await grab();
-const want = await page.evaluate(() => { const w = nodeGraphPulseExplosionPreviewWasm.exports; const n = w.soemdsp_pulse_explosion_preview(0, 0.5, 1, 0.3, 12, 0.3, 1, 1234, 0); return Array.from({ length: n }, (_, i) => w.soemdsp_pulse_explosion_preview_time(i)); });
+const want = await page.evaluate(() => { const w = nodeGraphPulseExplosionPreviewWasm.exports; const n = w.soemdsp_pulse_explosion_preview(0, 0.5, 1, 0.3, 12, 0.3, 1, 1234); return Array.from({ length: n }, (_, i) => w.soemdsp_pulse_explosion_preview_time(i)); });
 gate(JSON.stringify(ga.times) === JSON.stringify(want), "Random: face uses the engine preview for this Seed exactly");
 gate(ga.xs.every((x, i) => colMax(img, ga, x, ga.base - ga.amps[i] * (ga.base - ga.top) - 1, ga.base - ga.amps[i] * (ga.base - ga.top) + 1) > bg + 100), "Random: a dot at every scheduled (time, amplitude)");
 await setParams({ seed: 99 });
@@ -128,14 +125,14 @@ const gb = await geom();
 gate(JSON.stringify(gb.times) !== JSON.stringify(ga.times), "a new Seed moves the pulses");
 if (shot) await page.screenshot({ clip: await faceClip(), path: shot });
 
-// 4) Playhead: fake a running engine reporting 0.5 s since trigger; fired stems turn Lit.
-await setParams({ timing: 3, numberOfPulses: 6, lowAmplitude: 1, highAmplitude: 1, seed: 0 });
+// 4) Playhead: fake a running engine reporting 0.4 s since trigger; fired stems turn Lit.
+await setParams({ numberOfPulses: 6, lowAmplitude: 1, highAmplitude: 1, seed: 0 });
 await page.evaluate(() => {
   window.__peFake = { t0: performance.now() };
   const ctx = { state: "running", get currentTime() { return (performance.now() - window.__peFake.t0) / 1000; }, getOutputTimestamp() { return { contextTime: (performance.now() - window.__peFake.t0) / 1000, performanceTime: performance.now() }; } };
   window.__peOrig = { mvpLive: window.nodeGraphMvp.live, latest: window.nodeGraphModuleScopeLatestOutputValue };
   window.nodeGraphMvp.live = { ...(window.nodeGraphMvp.live || {}), context: ctx };
-  window.nodeGraphModuleScopeLatestOutputValue = (nid, port, fb) => (port === "__Elapsed" ? 0.5 : window.__peOrig.latest(nid, port, fb));
+  window.nodeGraphModuleScopeLatestOutputValue = (nid, port, fb) => (port === "__Elapsed" ? 0.4 : window.__peOrig.latest(nid, port, fb));
 });
 await setParams({});
 G = await geom();
@@ -147,13 +144,14 @@ const litC = parse(look.litPaint), dotC = parse(look.dotPaint);
 const dist = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
 const sx = img.w / G.cw, sy = img.h / G.ch;
 const dotAt = (x) => px(img, x * sx, G.top * sy);
-const fired = G.times.map((t) => t < 0.5);
+const fired = G.times.map((t) => t < 0.4);
 gate(G.xs.every((x, i) => (fired[i] ? dist(dotAt(x), litC) < dist(dotAt(x), dotC) : dist(dotAt(x), dotC) < dist(dotAt(x), litC))), `pulses before the playhead are Lit, later ones keep Dot (${fired.map((f) => (f ? "L" : "d")).join("")})`);
-const xp = (G.xs[0] + (G.xs[5] - G.xs[0]) * 0.5);
+const padX = Math.max(6, G.cw * 0.04) + 2.5;
+const xp = padX + (G.cw - 2 * padX) * 0.4;
 const xpPx = Math.round(xp * sx);
 let headHits = 0;
 for (let dx = -2; dx <= 2; dx += 1) if (lum(px(img, xpPx + dx, ((G.top + G.base) / 2) * sy)) > bg + 150) headHits += 1;
-gate(headHits > 0, "playhead line at 0.5 s");
+gate(headHits > 0, "playhead line at 0.4 s");
 if (shot) await page.screenshot({ clip: await faceClip(), path: shot.replace(/\.png$/, "-playing.png") });
 
 // 5) Display Settings colors: Background HBS repaints the face.
@@ -179,6 +177,7 @@ if (shot) await page.screenshot({ path: shot.replace(/\.png$/, "-settings.png") 
 const form = await page.evaluate(() => [typeof window.nodeGraphPulseExplosionFaceSettingsForNode, nodeGraphModuleDefinitions?.pulseExplosion?.displayModes?.[0]?.settingsSchema]);
 gate(form[0] === "function" && form[1] === "pulseExplosionFace", "pulseExplosionFace Display Settings schema");
 gate(await page.evaluate(() => typeof window.nodeGraphPulseExplosionComputeSchedule === "undefined" && typeof window.nodeGraphPulseExplosionRandomFn === "undefined" && typeof window.nodeGraphPulseExplosionDensity === "undefined"), "no JS schedule / density twins");
+gate(await page.evaluate(() => !nodeGraphModuleDefinitions.pulseExplosion.parameters.some((p) => p.key === "timing") && !document.querySelector('[data-node="pe-1"] [data-param="timing"]')), "no Timing control (Random only)");
 gate(errors.length === 0, `no page errors ${errors.slice(0, 3).join(" | ")}`);
 await browser.close();
 console.log(failures ? `${failures} FAIL` : "smoke_pulse_explosion_face ok");

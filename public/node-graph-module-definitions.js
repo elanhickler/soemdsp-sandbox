@@ -13769,9 +13769,6 @@ const nodeGraphModuleDefinitions = (
       { defaultValue: "1", key: "highAmplitude", label: "High Amplitude", max: "1", mid: "0.5", min: "0", nonlinearSlider: false, step: "any" },
       { defaultValue: "0", key: "seed", kind: "seed",
         maxDigits: 0, label: "Seed", max: "16777215", mid: "1", min: "0", nonlinearSlider: false, step: "1" },
-      // Timing ids are append-only: 0 Random (rejection-sampled, original) / 1 Exp / 2 Log / 3 Lin.
-      { choices: ["Random", "Exp", "Log", "Lin"], defaultValue: "0", displayChoices: true, divideChoicesVisibly: true,
-        key: "timing", label: "Timing", linearSmoothing: false, max: "3", mid: "0", min: "0", nonlinearSlider: false, smoothingType: "none", step: "1" },
     ]
   },
   flowerChildFilter: {

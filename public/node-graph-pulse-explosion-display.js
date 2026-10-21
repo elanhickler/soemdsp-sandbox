@@ -2,7 +2,7 @@
 // its time after the trigger, stem height = amplitude, a dot on top. The time
 // axis runs from 0 to the end of the window (End Time). The schedule comes
 // from the engine itself (soemdsp_pulse_explosion_preview in
-// pulse_explosion.wasm), so every Timing mode, Random with its Seed included,
+// pulse_explosion.wasm), so the Random schedule for the node's Seed
 // shows exactly what a trigger plays; there is no JS copy of the math.
 // Playhead: the engine's seconds-since-trigger (__Elapsed, -1 idle), shifted to
 // the time the speakers play it; stems light up as their pulse fires.
@@ -78,7 +78,7 @@ function nodeGraphPulseExplosionPreviewLoad() {
   if (nodeGraphPulseExplosionPreviewWasm.promise || typeof fetch !== "function" || typeof WebAssembly === "undefined") {
     return nodeGraphPulseExplosionPreviewWasm.promise;
   }
-  nodeGraphPulseExplosionPreviewWasm.promise = fetch("/native_modules/pulse_explosion/pulse_explosion.wasm?v=pulse-face-1")
+  nodeGraphPulseExplosionPreviewWasm.promise = fetch("/native_modules/pulse_explosion/pulse_explosion.wasm?v=pulse-random-1")
     .then((response) => {
       if (!response.ok) throw new Error(`pulse_explosion wasm HTTP ${response.status}`);
       return response.arrayBuffer();
@@ -118,7 +118,7 @@ function nodeGraphPulseExplosionSchedule(section, node) {
   const args = [
     p("startTime", 0), p("centerTime", 0.5), p("endTime", 1), p("timeSpread", 0.3),
     Math.round(p("numberOfPulses", 20)), p("lowAmplitude", 0.3), p("highAmplitude", 1),
-    p("seed", 0), p("timing", 0),
+    p("seed", 0),
   ];
   const key = args.join(",");
   if (section._pulseScheduleKey === key && section._pulseSchedule) return section._pulseSchedule;

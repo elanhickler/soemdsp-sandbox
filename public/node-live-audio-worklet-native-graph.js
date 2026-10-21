@@ -6334,7 +6334,6 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
       push("lowAmplitude", P.NATIVE_GRAPH_PARAM_IN_LOW, cont("lowAmplitude", 0.3));
       push("highAmplitude", P.NATIVE_GRAPH_PARAM_IN_HIGH, cont("highAmplitude", 1));
       push("seed", P.NATIVE_GRAPH_PARAM_SEED, disc("seed", 0));
-      push("timing", P.NATIVE_GRAPH_PARAM_TIMING_MODE, disc("timing", 0)); // 0 Random / 1 Exp / 2 Log / 3 Lin
       continue;
     }
     if (type === "spiral") {
