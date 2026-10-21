@@ -6325,7 +6325,7 @@ const nodeGraphModuleDefinitions = (
   },
   clock: {
     planRole: "source",
-    // Face: one pulse cycle, sweeping playhead + fill, flashing rising-edge tick (clock-display.js).
+    // Face: one pulse cycle as a closed gate, playhead fill inside the gate, flash on T (clock-display.js).
     layout: "sinCos",
     chrome: "LayoutA",
     customDisplayArea: true,
@@ -6333,13 +6333,13 @@ const nodeGraphModuleDefinitions = (
     displayHeightGu: 4,
     spectrumCompanion: false,
     displayModes: [
-      { key: "face", label: "Face", renderer: "clockFace" },
+      { key: "face", label: "Face", renderer: "clockFace", settingsSchema: "clockFace" },
     ],
     defaultDisplayMode: "face",
-    // Hand-written face (node-graph-module-face.js): the gate band, Phase full width, then Rate | Amp.
+    // Hand-written face (node-graph-module-face.js): the gate band, Phase horizontal slider, then Rate | Amp.
     face: [
       { kind: "band", lo: "pulseStart", hi: "pulseEnd", label: "Pulse Width", h: 32 },
-      { kind: "cells", params: [["phase", "Phase"]], h: 40 },
+      { kind: "cells", params: [["phase", "Phase"]], horizontal: true, h: 32 },
       { kind: "cells", params: [["rate", "Rate"], ["amplitude", "Amp"]], h: 40 },
     ],
     inputs: ["Reset"],

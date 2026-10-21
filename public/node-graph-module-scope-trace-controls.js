@@ -921,6 +921,13 @@ const nodeGraphTraceDisplayActiveControlsByType = Object.freeze({
     toggles: Object.freeze([]),
     choices: Object.freeze([]),
   }),
+  // Clock: Background / Pulse / Playhead / Fill HBS lamps + one thickness.
+  clockFace: Object.freeze({
+    fields: Object.freeze(["lineThickness"]),
+    colors: Object.freeze([]),
+    toggles: Object.freeze([]),
+    choices: Object.freeze([]),
+  }),
   // Outer / Hub dot size (were one "Size") are in the centered face square; F-fullscreen scales with it.
   sinCos4Face: Object.freeze({
     fields: Object.freeze(["sinCos4OuterDotSize", "sinCos4HubDotSize", "sinCos4RayThickness", "sinCos4RingThickness", "pixelDensity"]),
@@ -2628,6 +2635,7 @@ const nodeGraphDisplaySettingsFormTypeTitles = Object.freeze({
   roundShapeFace: "RoundShape",
   sinCos4Face: "SinCos4",
   sinCosFace: "SinCos",
+  clockFace: "Clock",
   textBoxFace: "Text Box",
   keyboardControllerFace: "MIDI Keyboard",
   toggleButtonFace: "Toggle",

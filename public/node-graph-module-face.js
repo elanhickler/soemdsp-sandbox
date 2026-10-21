@@ -137,7 +137,7 @@ function nodeGraphModuleFaceWidgets(spec, fw, moduleEl = null) {
       out.push({ ...base, type: "cell", param: row.cell[0], label: row.cell[1], bipolar: true, x: w - cellW, w: cellW });
     } else if (row.kind === "cells") {
       split(0, w, row.params.length).forEach(([x, cw], i) => out.push({
-        ...base, type: "cell", param: row.params[i][0], label: row.params[i][1], x, w: cw,
+        ...base, type: "cell", param: row.params[i][0], label: row.params[i][1], horizontal: !!row.horizontal, x, w: cw,
       }));
     } else if (row.kind === "filter") {
       out.push({ ...base, type: "filter", hpf: row.hpf, lpf: row.lpf, x: 0, w, param: "" });
@@ -610,14 +610,21 @@ function nodeGraphModuleFaceDrawGl(batch, el, w, ox, oy, z) {
       rect(wd.x + gap, top, cw, ch, ink.cellFill);
       if (wd.bipolar) line(wd.x, wd.y, 1, wd.h, ink.cellLine);
       const t = nodeGraphModuleFaceTravel(input);
-      if (wd.bipolar) {
-        const a = Math.min(0.5, 1 - t);
-        rect(wd.x + gap, top + a * ch, cw, Math.abs(0.5 - t) * ch, ink.cellValueFill);
+      if (wd.horizontal) {
+        // Horizontal slider: fills left to right, label left, value right.
+        rect(wd.x + gap, top, t * cw, ch, ink.cellValueFill);
+        nodeGraphModuleFaceText(batch, wd.label, ox + (wd.x + gap + 6) * z, oy + cy * z, 12.6 * z, ink.label, { align: "left" });
+        nodeGraphModuleFaceText(batch, nodeGraphModuleFaceValueText(input), ox + (wd.x + wd.w - 6) * z, oy + cy * z, 13.8 * z, ink.value, { align: "right" });
       } else {
-        rect(wd.x + gap, top + (1 - t) * ch, cw, t * ch, ink.cellValueFill);
+        if (wd.bipolar) {
+          const a = Math.min(0.5, 1 - t);
+          rect(wd.x + gap, top + a * ch, cw, Math.abs(0.5 - t) * ch, ink.cellValueFill);
+        } else {
+          rect(wd.x + gap, top + (1 - t) * ch, cw, t * ch, ink.cellValueFill);
+        }
+        nodeGraphModuleFaceText(batch, wd.label, ox + cx * z, oy + (cy - 7) * z, 12.6 * z, ink.label, { maxWidth: (cw - 4) * z });
+        nodeGraphModuleFaceText(batch, nodeGraphModuleFaceValueText(input), ox + cx * z, oy + (cy + 7) * z, 13.8 * z, ink.value, { maxWidth: (cw - 4) * z });
       }
-      nodeGraphModuleFaceText(batch, wd.label, ox + cx * z, oy + (cy - 7) * z, 12.6 * z, ink.label, { maxWidth: (cw - 4) * z });
-      nodeGraphModuleFaceText(batch, nodeGraphModuleFaceValueText(input), ox + cx * z, oy + (cy + 7) * z, 13.8 * z, ink.value, { maxWidth: (cw - 4) * z });
     } else if (wd.type === "filter") {
       nodeGraphModuleFaceDrawFilterGl(batch, el, wd, ox, oy, z, rect, line);
     } else if (wd.type === "band") {

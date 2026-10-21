@@ -851,6 +851,9 @@ const nodeGraphTraceDisplayFormTypeValueClampOverrides = Object.freeze({
     dotBrightness: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value), 0, 1),
     backgroundBrightness: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value), 0, 1),
   }),
+  clockFace: Object.freeze({
+    lineThickness: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, 2), 0.25, 16),
+  }),
   sinCos4Face: Object.freeze({
     backgroundBrightness: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value), 0, 1),
     sinCos4RayThickness: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, 1.2), 0, 100),

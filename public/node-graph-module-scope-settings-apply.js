@@ -73,6 +73,13 @@ function assignNodeGraphTypedDisplaySettingsToNode(node, displayType, settings) 
     }
     return { channel };
   }
+  if (displayType === "clockFace" && typeof normalizeNodeGraphClockFaceSettings === "function") {
+    node.traceDisplaySettings = normalizeNodeGraphClockFaceSettings(settings);
+    if (typeof applyNodeGraphClockDisplaySettingsToFace === "function") {
+      applyNodeGraphClockDisplaySettingsToFace(node);
+    }
+    return node.traceDisplaySettings;
+  }
   if (displayType === "sinCosFace" && typeof normalizeNodeGraphSinCosFaceSettings === "function") {
     node.traceDisplaySettings = normalizeNodeGraphSinCosFaceSettings(settings);
     if (typeof applyNodeGraphSinCosDisplaySettingsToFace === "function") {

@@ -398,6 +398,9 @@ if (type === "portalFace") {
   if (type === "sinCosFace" && typeof normalizeNodeGraphSinCosFaceSettings === "function") {
     return normalizeNodeGraphSinCosFaceSettings();
   }
+  if (type === "clockFace" && typeof normalizeNodeGraphClockFaceSettings === "function") {
+    return normalizeNodeGraphClockFaceSettings();
+  }
   if (type === "softwaveOscFace") {
     return typeof normalizeNodeGraphSoftwaveOscFaceSettings === "function"
       ? normalizeNodeGraphSoftwaveOscFaceSettings()
@@ -717,6 +720,9 @@ if (type === "portalFace") {
   if (type === "sinCosFace" && typeof normalizeNodeGraphSinCosFaceSettings === "function") {
     return normalizeNodeGraphSinCosFaceSettings(settings);
   }
+  if (type === "clockFace" && typeof normalizeNodeGraphClockFaceSettings === "function") {
+    return normalizeNodeGraphClockFaceSettings(settings);
+  }
   if (type === "softwaveOscFace") {
     return typeof normalizeNodeGraphSoftwaveOscFaceSettings === "function"
       ? normalizeNodeGraphSoftwaveOscFaceSettings(settings)
@@ -936,6 +942,9 @@ if (settingsSchema === "portalFace") {
   }
   if (settingsSchema === "sinCosFace" && typeof nodeGraphSinCosFaceSettingsForNode === "function") {
     return nodeGraphSinCosFaceSettingsForNode(node);
+  }
+  if (settingsSchema === "clockFace" && typeof nodeGraphClockFaceSettingsForNode === "function") {
+    return nodeGraphClockFaceSettingsForNode(node);
   }
   if (settingsSchema === "softwaveOscFace") {
     return typeof nodeGraphSoftwaveOscFaceSettingsForNode === "function"
@@ -2276,13 +2285,14 @@ const NODE_GRAPH_HSL_LAMPS = Object.freeze({
   line: ["lineHue", "lineBrightness", "lineSaturation"],
   dot: ["dotHue", "dotBrightness", "dotSaturation"],
   background: ["backgroundHue", "backgroundBrightness", "backgroundSaturation"],
+  fill: ["fillHue", "fillBrightness", "fillSaturation"],
 });
 
 function syncNodeGraphHslLampWidgets(popover = document.getElementById("nodeTraceDisplaySettingsPopover")) {
   const formType = typeof nodeGraphTraceDisplaySettingsFormType === "function"
     ? nodeGraphTraceDisplaySettingsFormType()
     : "";
-  const shape = formType === "roundShapeFace" || formType === "basicShapeFace" || formType === "softwaveOscFace" || formType === "sinCosFace";
+  const shape = formType === "roundShapeFace" || formType === "basicShapeFace" || formType === "softwaveOscFace" || formType === "sinCosFace" || formType === "clockFace";
   if (!popover || !shape) {
     return;
   }
@@ -2294,9 +2304,11 @@ function syncNodeGraphHslLampWidgets(popover = document.getElementById("nodeTrac
     const current = typeof nodeGraphTraceDisplayCurrentSettingsForFormType === "function"
       ? nodeGraphTraceDisplayCurrentSettingsForFormType(formType)
       : {};
-    const look = typeof normalizeNodeGraphRoundShapeFaceSettings === "function"
-      ? normalizeNodeGraphRoundShapeFaceSettings(current)
-      : current;
+    const look = formType === "clockFace" && typeof normalizeNodeGraphClockFaceSettings === "function"
+      ? normalizeNodeGraphClockFaceSettings(current)
+      : (typeof normalizeNodeGraphRoundShapeFaceSettings === "function"
+        ? normalizeNodeGraphRoundShapeFaceSettings(current)
+        : current);
     for (const host of live.querySelectorAll("[data-hsl-lamp]")) {
       const id = host.getAttribute("data-hsl-lamp");
       const keys = NODE_GRAPH_HSL_LAMPS[id];

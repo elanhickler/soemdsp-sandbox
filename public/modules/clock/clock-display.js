@@ -1,17 +1,64 @@
-// Clock face: one clock cycle. The gate shows its left edge, top shelf and
-// right edge (Pulse Start to Pulse End). A dim marker sits at the phase the
-// clock starts from (Phase). The playhead follows the engine's own phase
-// (__Phase), shifted to the time the speakers play it, and flashes when T fires.
+// Clock face: one clock cycle. The gate is a closed rectangle (Pulse Start to
+// Pulse End), centered vertically. While the playhead is inside the gate the
+// gate fills from Pulse Start up to the playhead. A dim marker sits at the
+// phase the clock starts from (Phase). The playhead follows the engine's own
+// phase (__Phase), shifted to the time the speakers play it, and flashes when
+// T fires. Display Settings `clockFace`: Background, Pulse (line), Playhead
+// (dot), Fill HBS, and one line thickness for the gate and the playhead.
 // GPU only, drawn with the shared antialiased line drawer (gl-line-renderer).
 
-const NODE_GRAPH_CLOCK_FACE_INK = Object.freeze({
-  background: [2 / 255, 6 / 255, 9 / 255, 1],
-  pulse: [61 / 255, 224 / 255, 1, 0.95],
-  playhead: [1, 1, 1, 0.9],
-  start: [1, 214 / 255, 102 / 255, 0.45],
-  flash: [1, 214 / 255, 102 / 255, 1],
+const nodeGraphClockFaceDisplaySettingsDefaults = Object.freeze({
+  backgroundHue: 205.714,
+  backgroundBrightness: 0.009,
+  backgroundSaturation: 0.59,
+  lineHue: 187.5,
+  lineBrightness: 0.56,
+  lineSaturation: 0.99,
+  lineThickness: 2,
+  dotHue: 0,
+  dotBrightness: 1,
+  dotSaturation: 0,
+  fillHue: 191.5,
+  fillBrightness: 0.075,
+  fillSaturation: 0.67,
 });
+const NODE_GRAPH_CLOCK_FACE_START = [1, 214 / 255, 102 / 255, 0.45];
+const NODE_GRAPH_CLOCK_FACE_FLASH = [1, 214 / 255, 102 / 255, 1];
 const NODE_GRAPH_CLOCK_FACE_FLASH_S = 0.12;
+
+function normalizeNodeGraphClockFaceSettings(settings = {}) {
+  const source = settings && typeof settings === "object" ? settings : {};
+  const d = nodeGraphClockFaceDisplaySettingsDefaults;
+  const merged = { ...d, ...source };
+  const look = normalizeNodeGraphRoundShapeFaceSettings(merged);
+  const unit = (v, fallback) => {
+    const n = Number(v);
+    return Number.isFinite(n) ? Math.max(0, Math.min(1, n)) : fallback;
+  };
+  const hue = Number(merged.fillHue);
+  const fillHue = Number.isFinite(hue) ? ((hue % 360) + 360) % 360 : d.fillHue;
+  const fillBrightness = unit(merged.fillBrightness, d.fillBrightness);
+  const fillSaturation = unit(merged.fillSaturation, d.fillSaturation);
+  return {
+    ...look,
+    fillHue,
+    fillBrightness,
+    fillSaturation,
+    fillPaint: nodeGraphHueBrightnessCss(fillHue, fillBrightness, 1, fillSaturation),
+  };
+}
+
+function nodeGraphClockFaceSettingsForNode(node) {
+  return normalizeNodeGraphClockFaceSettings(node?.traceDisplaySettings);
+}
+
+function applyNodeGraphClockDisplaySettingsToFace(node) {
+  if (!node?.id) return;
+  const el = document.querySelector?.(`.node-clock-face[data-node="${CSS.escape(String(node.id))}"]`);
+  if (!el) return;
+  el._clockForceDraw = true;
+  drawNodeGraphClockFace(el);
+}
 
 function nodeGraphClockFaceParam(node, key, fallback) {
   const live = typeof nodeGraphSinCosLiveParam === "function" ? nodeGraphSinCosLiveParam(node, key, fallback) : node?.params?.[key];
@@ -42,6 +89,29 @@ function nodeGraphClockFacePhase(section, node) {
   return p - Math.floor(p);
 }
 
+/**
+ * Gate geometry in face px: x0..x1 the cycle, xs/xe the gate ends, high/low
+ * the gate top and bottom with equal margins above and below.
+ */
+function nodeGraphClockFaceGeometry(w, h, pulseStart, pulseEnd, amp, stroke) {
+  const padX = Math.max(6, w * 0.06) + stroke * 0.5;
+  const padY = Math.max(6, h * 0.16) + stroke * 0.5;
+  const x0 = padX;
+  const x1 = w - padX;
+  const half = Math.max(0, h * 0.5 - padY) * amp;
+  const at = (v) => x0 + (x1 - x0) * v;
+  return { x0, x1, xs: at(pulseStart), xe: at(pulseEnd), high: h * 0.5 - half, low: h * 0.5 + half, at };
+}
+
+/** Fill spans [x, x] from Pulse Start up to the playhead, only while the playhead is in the gate. */
+function nodeGraphClockFaceFillSpans(g, pulseStart, pulseEnd, phase) {
+  const xp = g.at(phase);
+  if (pulseEnd >= pulseStart) return phase >= pulseStart && phase < pulseEnd ? [[g.xs, xp]] : [];
+  if (phase >= pulseStart) return [[g.xs, xp]];
+  if (phase < pulseEnd) return [[g.xs, g.x1], [g.x0, xp]];
+  return [];
+}
+
 function drawNodeGraphClockFace(section) {
   const node = typeof nodeGraphPatchNode === "function" ? nodeGraphPatchNode(section?.dataset?.node || "") : null;
   const canvas = section?.querySelector?.("canvas");
@@ -58,8 +128,9 @@ function drawNodeGraphClockFace(section) {
   if (Number.isFinite(heard) && Number.isFinite(section._clockLast) && heard < section._clockLast - 0.5) section._clockFlash = now;
   section._clockLast = heard;
   const flashing = Number.isFinite(section._clockFlash) && now - section._clockFlash < NODE_GRAPH_CLOCK_FACE_FLASH_S;
-  const ink = NODE_GRAPH_CLOCK_FACE_INK;
-  const batch = nodeGraphGlLinesBegin(canvas, ink.background, { scale: pixelRatio });
+  const look = nodeGraphClockFaceSettingsForNode(node);
+  const rgba = (css) => nodeGraphGlGraphParseCssColor(css, [1, 1, 1, 1]);
+  const batch = nodeGraphGlLinesBegin(canvas, rgba(look.backgroundPaint), { scale: pixelRatio });
   if (!batch) {
     nodeGraphDisplayGlFailed(canvas, "clock face: no shared GL device");
     return;
@@ -69,28 +140,29 @@ function drawNodeGraphClockFace(section) {
   const pulseStart = clamp01(nodeGraphClockFaceParam(node, "pulseStart", 0));
   const pulseEnd = clamp01(nodeGraphClockFaceParam(node, "pulseEnd", 0.5));
   const amp = clamp01(nodeGraphClockFaceParam(node, "amplitude", 1));
-  const padX = Math.max(6, w * 0.06);
-  const padY = Math.max(6, h * 0.16);
-  const x0 = padX;
-  const x1 = w - padX;
-  const low = h - padY;
-  const high = low - (h - padY * 2) * amp;
-  const at = (v) => x0 + (x1 - x0) * v;
-  const xs = at(pulseStart);
-  const xe = at(pulseEnd);
-  // Gate: left edge, top shelf, right edge. End before Start wraps the shelf.
+  const stroke = look.lineThickness;
+  const halfPx = stroke * 0.5;
+  const g = nodeGraphClockFaceGeometry(w, h, pulseStart, pulseEnd, amp, stroke);
+  const { x0, x1, xs, xe, high, low } = g;
+  const fill = rgba(look.fillPaint);
+  for (const [a, b] of nodeGraphClockFaceFillSpans(g, pulseStart, pulseEnd, phase)) {
+    if (b > a) nodeGraphGlLinesRect(batch, a, high, b - a, low - high, fill);
+  }
+  // Gate: a closed rectangle. End before Start wraps it across the cycle edge.
+  const pulse = rgba(look.strokePaint);
   if (pulseEnd >= pulseStart) {
-    nodeGraphGlLinesPolyline(batch, [xs, low, xs, high, xe, high, xe, low], 1, fine, ink.pulse);
+    const mid = (xs + xe) * 0.5;
+    nodeGraphGlLinesPolyline(batch, [mid, low, xs, low, xs, high, xe, high, xe, low, mid, low], halfPx, fine, pulse);
   } else {
-    nodeGraphGlLinesPolyline(batch, [xs, low, xs, high, x1, high], 1, fine, ink.pulse);
-    nodeGraphGlLinesPolyline(batch, [x0, high, xe, high, xe, low], 1, fine, ink.pulse);
+    nodeGraphGlLinesPolyline(batch, [x1, low, xs, low, xs, high, x1, high], halfPx, fine, pulse);
+    nodeGraphGlLinesPolyline(batch, [x0, high, xe, high, xe, low, x0, low], halfPx, fine, pulse);
   }
   // Phase start marker: where the clock starts (Phase).
-  const xm = at(startPhase);
-  nodeGraphGlLinesSegment(batch, xm, high, xm, low, 0.75, fine, ink.start);
-  // Playhead, the same height as the gate; flashes when the clock fires.
-  const xp = at(phase);
-  nodeGraphGlLinesSegment(batch, xp, high, xp, low, flashing ? 1.5 : 0.75, fine, flashing ? ink.flash : ink.playhead);
+  const xm = g.at(startPhase);
+  nodeGraphGlLinesSegment(batch, xm, high, xm, low, 0.75, fine, NODE_GRAPH_CLOCK_FACE_START);
+  // Playhead: the gate's height and stroke; flashes when the clock fires.
+  const xp = g.at(phase);
+  nodeGraphGlLinesSegment(batch, xp, high, xp, low, halfPx, fine, flashing ? NODE_GRAPH_CLOCK_FACE_FLASH : rgba(look.dotPaint));
   if (!nodeGraphGlLinesEnd(batch, "alpha")) nodeGraphDisplayGlFailed(canvas, "clock face: GL present failed");
 }
 
