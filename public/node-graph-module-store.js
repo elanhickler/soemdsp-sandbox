@@ -2456,6 +2456,22 @@ const nodeGraphModuleStoreCatalog = Object.freeze({
       "native",
     ],
   },
+  resonantCompressor: {
+    category: "dynamics",
+    description: "Resonant Compressor: Resonant Envelope listens to the audio (Abs rise: every rise of |x| is a hit sized by the rise) and its inverted output turns the level down. Reacts to transients and bright sounds. Stereo when In R is wired; Sidechain replaces the detector input.",
+    label: "Resonant Compressor",
+    notes: [
+      "compressor",
+      "transient",
+      "ducking",
+      "Sidechain",
+      "Sensitivity",
+      "Depth",
+      "Mix",
+      "Makeup",
+      "native",
+    ],
+  },
   rmsMeter: {
     category: "dynamics",
     description: "RMS Meter: one-pole running mean square, RMS = sqrt(ms). Outs RMS (linear), dB (20*log10, -120 floor), Env Inverted (1 - RMS*Amplitude, 0..1) for ducking.",
@@ -3732,6 +3748,10 @@ const nodeGraphJsSourceEntriesByType = Object.freeze({
   pingEnvelope: {
     source: "public/modules/pingEnvelope/ping-envelope-math.js",
     sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/pingEnvelope/ping-envelope-math.js",
+  },
+  resonantCompressor: {
+    source: "native_modules/resonant_compressor/resonant_compressor.cpp",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/native_modules/resonant_compressor/resonant_compressor.cpp",
   },
   rmsMeter: {
     source: "native_modules/rms_meter/rms_meter.cpp",

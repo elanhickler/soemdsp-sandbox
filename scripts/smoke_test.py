@@ -17076,6 +17076,17 @@ def require_native_module_contract(base_url: str) -> None:
             "soemdsp_resonant_follower_metadata_json",
             "soemdsp_resonant_follower_metadata_json_size",
         ],
+        "resonant_compressor": [
+            "soemdsp_resonant_compressor_create",
+            "soemdsp_resonant_compressor_destroy",
+            "soemdsp_resonant_compressor_sample",
+            "soemdsp_resonant_compressor_right",
+            "soemdsp_resonant_compressor_gain",
+            "soemdsp_resonant_compressor_env",
+            "soemdsp_resonant_compressor_version",
+            "soemdsp_resonant_compressor_metadata_json",
+            "soemdsp_resonant_compressor_metadata_json_size",
+        ],
         "rms_meter": [
             "soemdsp_rms_meter_create",
             "soemdsp_rms_meter_destroy",

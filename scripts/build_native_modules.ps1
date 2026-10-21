@@ -189,6 +189,7 @@ $modules = @(
   ) }
   @{ Name = "resonant_envelope"; Simd = $false; Exports = @("soemdsp_resonant_envelope_create", "soemdsp_resonant_envelope_destroy", "soemdsp_resonant_envelope_sample", "soemdsp_resonant_envelope_is_idle", "soemdsp_resonant_envelope_sc", "soemdsp_resonant_envelope_version", "soemdsp_resonant_envelope_metadata_json", "soemdsp_resonant_envelope_metadata_json_size") }
   @{ Name = "resonant_follower"; Simd = $false; Exports = @("soemdsp_resonant_follower_create", "soemdsp_resonant_follower_destroy", "soemdsp_resonant_follower_sample", "soemdsp_resonant_follower_is_idle", "soemdsp_resonant_follower_sc", "soemdsp_resonant_follower_version", "soemdsp_resonant_follower_metadata_json", "soemdsp_resonant_follower_metadata_json_size") }
+  @{ Name = "resonant_compressor"; Simd = $false; Exports = @("soemdsp_resonant_compressor_create", "soemdsp_resonant_compressor_destroy", "soemdsp_resonant_compressor_sample", "soemdsp_resonant_compressor_right", "soemdsp_resonant_compressor_gain", "soemdsp_resonant_compressor_env", "soemdsp_resonant_compressor_version", "soemdsp_resonant_compressor_metadata_json", "soemdsp_resonant_compressor_metadata_json_size") }
   @{ Name = "lorenz_attractor"; Simd = $false; Exports = @("soemdsp_lorenz_attractor_create", "soemdsp_lorenz_attractor_destroy", "soemdsp_lorenz_attractor_sample", "soemdsp_lorenz_attractor_x", "soemdsp_lorenz_attractor_y", "soemdsp_lorenz_attractor_z", "soemdsp_lorenz_attractor_version", "soemdsp_lorenz_attractor_metadata_json", "soemdsp_lorenz_attractor_metadata_json_size") }
   @{ Name = "sine_wavetable"; Simd = $false; Exports = @("soemdsp_sine_wavetable_create", "soemdsp_sine_wavetable_destroy", "soemdsp_sine_wavetable_reset", "soemdsp_sine_wavetable_set_method", "soemdsp_sine_wavetable_sample", "soemdsp_sine_wavetable_sin", "soemdsp_sine_wavetable_cos", "soemdsp_sine_wavetable_phase", "soemdsp_sine_wavetable_version", "soemdsp_sine_wavetable_metadata_json", "soemdsp_sine_wavetable_metadata_json_size") }
   @{ Name = "log_spiral"; Simd = $false; Exports = @("soemdsp_log_spiral_create", "soemdsp_log_spiral_destroy", "soemdsp_log_spiral_sample", "soemdsp_log_spiral_x", "soemdsp_log_spiral_y", "soemdsp_log_spiral_z", "soemdsp_log_spiral_version", "soemdsp_log_spiral_metadata_json", "soemdsp_log_spiral_metadata_json_size") }
@@ -573,8 +574,8 @@ foreach ($module in $modules) {
   } else {
     $clangArgs += "-Wl,--max-memory=50331648"
   }
-  # graph_engine / pluck_envelope_fb / softpop_oscillator (Robin dither from ellipsoid) call other natives (resolved in combined link).
-  if ($module.Name -in @("graph_engine", "pluck_envelope_fb", "softpop_oscillator")) {
+  # graph_engine / pluck_envelope_fb / softpop_oscillator (Robin dither from ellipsoid) / resonant_compressor (resonant_envelope) call other natives (resolved in combined link).
+  if ($module.Name -in @("graph_engine", "pluck_envelope_fb", "softpop_oscillator", "resonant_compressor")) {
     $clangArgs += "-Wl,--allow-undefined"
   }
   $clangArgs += "-o"
@@ -802,6 +803,11 @@ if ($node) {
   & $node.Source "$root\scripts\smoke_graph_sidechain.mjs"
   if ($LASTEXITCODE -ne 0) {
     throw "Combined build: Sidechain smoke FAILED"
+  }
+  # Resonant Compressor: Gain == Resonant Envelope SC (max diff 0), drums get quieter.
+  & $node.Source "$root\scripts\smoke_graph_resonant_compressor.mjs"
+  if ($LASTEXITCODE -ne 0) {
+    throw "Combined build: Resonant Compressor smoke FAILED"
   }
   # Electro Snare (docs/SNARE_PLAN.md): per-algorithm direct + graph Trigger/Reset/Env.
   & $node.Source "$root\scripts\smoke_graph_electro_snare.mjs"

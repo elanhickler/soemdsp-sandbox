@@ -2324,6 +2324,24 @@
       "noticeUrl": "https://github.com/elanhickler/soemdsp-sandbox/blob/master/docs/THIRD_PARTY.md"
     },
     {
+      "name": "resonant_compressor",
+      "label": "Resonant Compressor",
+      "targetType": "resonantCompressor",
+      "kind": "dynamics",
+      "source": "native_modules/resonant_compressor/resonant_compressor.cpp",
+      "sourceUrl": "https://github.com/elanhickler/soemdsp-sandbox/blob/master/native_modules/resonant_compressor/resonant_compressor.cpp",
+      "localSourceUrl": "/native_modules/resonant_compressor/resonant_compressor.cpp",
+      "libUrl": "",
+      "wasm": "native_modules/resonant_compressor/resonant_compressor.wasm",
+      "wasmUrl": "native_modules/resonant_compressor/resonant_compressor.wasm",
+      "wasmAvailable": true,
+      "license": "Soundemote Noncommercial",
+      "licenseUrl": "https://github.com/elanhickler/soemdsp-sandbox/blob/master/LICENSE",
+      "upstreamLicense": "",
+      "upstreamLicenseUrl": "",
+      "noticeUrl": "https://github.com/elanhickler/soemdsp-sandbox/blob/master/docs/THIRD_PARTY.md"
+    },
+    {
       "name": "resonator_filter",
       "label": "Shaped Resonator Filter",
       "targetType": "resonatorFilter",

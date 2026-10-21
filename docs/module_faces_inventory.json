@@ -2684,6 +2684,17 @@
   "customFolder": ""
  },
  {
+  "type": "resonantCompressor",
+  "faceLayout": "spawn",
+  "chrome": "LayoutA",
+  "layout": "",
+  "display": true,
+  "visibleParams": 12,
+  "inputs": 4,
+  "outputs": 4,
+  "customFolder": ""
+ },
+ {
   "type": "resonatorFilter",
   "faceLayout": "spawn",
   "chrome": "LayoutA",

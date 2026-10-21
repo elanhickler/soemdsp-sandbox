@@ -160,6 +160,7 @@ NodeLiveAudioProcessor.NATIVE_GRAPH_TYPE_IDS = Object.freeze({
   pingEnvelope: 165,
   resonantEnvelope: 221,
   resonantFollower: 229,
+  resonantCompressor: 230,
   powerDecay: 204,
   exponentialSkew: 208,
   hyperbolicDecay: 209,
@@ -714,6 +715,13 @@ NodeLiveAudioProcessor.prototype.mapNativeGraphSrcPortId = function mapNativeGra
   }
   // Resonant Envelope SC (sidechain duck) on the Saw slot.
   if ((t === "resonantEnvelope" || t === "resonantFollower") && p === "sc") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_SAW;
+  // Resonant Compressor: Out L on Mono (+Left), Out R on Right, Gain on Saw, Env on Square.
+  if (t === "resonantCompressor") {
+    if (p === "out l" || p === "out" || p === "l" || p === "left") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_MONO;
+    if (p === "out r" || p === "r" || p === "right") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_RIGHT;
+    if (p === "gain") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_SAW;
+    if (p === "env") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_SQUARE;
+  }
   // RMS Meter: RMS on Mono, dB on Saw, Env Inverted on Ramp.
   if (t === "rmsMeter") {
     if (p === "rms" || p === "rms l") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_MONO;
@@ -1239,6 +1247,12 @@ NodeLiveAudioProcessor.prototype.mapNativeGraphDstPortId = function mapNativeGra
   // Resonant Follower In (old Resonant Envelope Follow jack): Morph live bus.
   if (tDst === "resonantFollower" && (p === "in" || p === "follow")) {
     return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_MORPH;
+  }
+  // Resonant Compressor: In L on Mono, In R on Right (wired = stereo), Sidechain on Morph.
+  if (tDst === "resonantCompressor") {
+    if (p === "in l" || p === "in" || p === "l" || p === "left" || p === "mono") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_MONO;
+    if (p === "in r" || p === "r" || p === "right") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_RIGHT;
+    if (p === "sidechain" || p === "sc" || p === "key") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_MORPH;
   }
   // RMS Meter: L (jack id In) on Mono, R on Right (R wired = stereo).
   if (tDst === "rmsMeter") {
@@ -5900,6 +5914,23 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
       push("followDetect", P.NATIVE_GRAPH_PARAM_LFO_VARIATION, disc("followDetect", 0));
       continue;
     }
+    if (type === "resonantCompressor") {
+      // frequency, center=tracking, resonance, timeDen=attack, width=decay, shape=impulse,
+      // level=sensitivity, saturate=depth, mix, amplitude=makeup, lfoStyle=Trigger Detect, lfoAmplitude=Hold.
+      push("frequency", P.NATIVE_GRAPH_PARAM_FREQUENCY, cont("frequency", 440));
+      push("tracking", P.NATIVE_GRAPH_PARAM_CENTER, cont("tracking", 0));
+      push("resonance", P.NATIVE_GRAPH_PARAM_RESONANCE, cont("resonance", 0));
+      push("attack", P.NATIVE_GRAPH_PARAM_TIME_DENOMINATOR, cont("attack", 0.01));
+      push("decay", P.NATIVE_GRAPH_PARAM_WIDTH, cont("decay", 0.3));
+      push("impulse", P.NATIVE_GRAPH_PARAM_SHAPE, cont("impulse", 0));
+      push("sensitivity", P.NATIVE_GRAPH_PARAM_LEVEL, cont("sensitivity", 8));
+      push("depth", P.NATIVE_GRAPH_PARAM_SATURATE, cont("depth", 1));
+      push("mix", P.NATIVE_GRAPH_PARAM_MIX, cont("mix", 1));
+      push("makeup", P.NATIVE_GRAPH_PARAM_AMPLITUDE, cont("makeup", 1));
+      push("triggerDetect", P.NATIVE_GRAPH_PARAM_LFO_STYLE, disc("triggerDetect", 5));
+      push("holdMode", P.NATIVE_GRAPH_PARAM_LFO_AMPLITUDE, disc("holdMode", 0));
+      continue;
+    }
     if (type === "rmsMeter") {
       // timeDenominator=Attack ms, width=Release ms, amplitude=Env Inverted scale.
       push("attack", P.NATIVE_GRAPH_PARAM_TIME_DENOMINATOR, cont("attack", 300));
@@ -9098,6 +9129,7 @@ NodeLiveAudioProcessor.prototype.nativeGraphPortNames = function nativeGraphPort
     return ["isIdle", "Idle"];
   }
   if (portId === P.NATIVE_GRAPH_PORT_MONO) {
+    if (type === "resonantCompressor") return ["Out L"];
     if (type === "rmsMeter") return ["RMS", "RMS L Tap"];
     if (type === "acidSequencer") return ["Gate"];
     if (type === "mixStereo4" || type === "mixStereo2" || type === "mixStereo" || type === "crossfade2" || type === "crossfade3" || type === "crossfade4") {
@@ -9258,6 +9290,7 @@ NodeLiveAudioProcessor.prototype.nativeGraphPortNames = function nativeGraphPort
     return ["Left"];
   }
   if (portId === P.NATIVE_GRAPH_PORT_RIGHT) {
+    if (type === "resonantCompressor") return ["Out R"];
     if (type === "rmsMeter") return ["RMS R", "RMS R Tap"];
     if (type === "robinSinepulse") return ["env", "0-1", "0\u20131", "0..1"];
     if (type === "acidSequencer") return ["pitch", "\u266f/\u266d"];
@@ -9318,6 +9351,7 @@ NodeLiveAudioProcessor.prototype.nativeGraphPortNames = function nativeGraphPort
   }
   if (portId === P.NATIVE_GRAPH_PORT_SAW) {
     if (type === "resonantEnvelope" || type === "resonantFollower") return ["SC"];
+    if (type === "resonantCompressor") return ["Gain"];
     if (type === "rmsMeter") return ["dB"];
     if (type === "acidSequencer") return ["f", "\u0192"];
     if (type === "pitchQuantizer") return ["f", "\u0192"];
@@ -9388,6 +9422,7 @@ NodeLiveAudioProcessor.prototype.nativeGraphPortNames = function nativeGraphPort
     return ["Ramp"];
   }
   if (portId === P.NATIVE_GRAPH_PORT_SQUARE) {
+    if (type === "resonantCompressor") return ["Env"];
     if (type === "rmsMeter") return ["dB R"];
     if (type === "acidSequencer") return ["CV"];
     if (type === "arp") return ["f", "ƒ", "Frequency", "Freq", "Square"];
