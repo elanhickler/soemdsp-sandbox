@@ -3,9 +3,10 @@
 // gate fills from Pulse Start up to the playhead. A dim marker sits at the
 // phase the clock starts from (Phase). The playhead follows the engine's own
 // phase (__Phase), shifted to the time the speakers play it, and flashes when
-// T fires. Display Settings `clockFace`: Background, Pulse (line), Playhead
+// the gate goes high (playhead crosses Pulse Start). Display Settings `clockFace`: Background, Pulse (line), Playhead
 // (dot), Fill, Start (phase-start marker), Blink (playhead flash on T) HBS;
-// Line thickness (gate + playhead), Start thickness, Blink time (0 = off).
+// Line thickness (gate + playhead), Start thickness, Blink time (0 = off),
+// Height (% of the face height the gate spans, centered).
 // GPU only, drawn with the shared antialiased line drawer (gl-line-renderer).
 
 const nodeGraphClockFaceDisplaySettingsDefaults = Object.freeze({
@@ -30,6 +31,7 @@ const nodeGraphClockFaceDisplaySettingsDefaults = Object.freeze({
   blinkBrightness: 0.61,
   blinkSaturation: 0.97,
   blinkTime: 0,
+  gateHeight: 68,
 });
 /** HBS lamps the RoundShape model does not carry (it owns background / line / dot). */
 const NODE_GRAPH_CLOCK_FACE_EXTRA_LAMPS = Object.freeze(["fill", "start", "blink"]);
@@ -60,6 +62,7 @@ function normalizeNodeGraphClockFaceSettings(settings = {}) {
   };
   out.startThickness = span(merged.startThickness, 0, 16, d.startThickness);
   out.blinkTime = span(merged.blinkTime, 0, 1, d.blinkTime);
+  out.gateHeight = span(merged.gateHeight, 0, 100, d.gateHeight);
   return out;
 }
 
@@ -106,14 +109,14 @@ function nodeGraphClockFacePhase(section, node) {
 
 /**
  * Gate geometry in face px: x0..x1 the cycle, xs/xe the gate ends, high/low
- * the gate top and bottom with equal margins above and below.
+ * the gate top and bottom with equal margins above and below. heightPct is
+ * the share of the face height the gate spans at Amp 1 (stroke included).
  */
-function nodeGraphClockFaceGeometry(w, h, pulseStart, pulseEnd, amp, stroke) {
+function nodeGraphClockFaceGeometry(w, h, pulseStart, pulseEnd, amp, stroke, heightPct) {
   const padX = Math.max(6, w * 0.06) + stroke * 0.5;
-  const padY = Math.max(6, h * 0.16) + stroke * 0.5;
   const x0 = padX;
   const x1 = w - padX;
-  const half = Math.max(0, h * 0.5 - padY) * amp;
+  const half = Math.max(0, h * heightPct / 200 - stroke * 0.5) * amp;
   const at = (v) => x0 + (x1 - x0) * v;
   return { x0, x1, xs: at(pulseStart), xe: at(pulseEnd), high: h * 0.5 - half, low: h * 0.5 + half, at };
 }
@@ -128,6 +131,15 @@ function nodeGraphClockFaceGateEndless(pulseStart, pulseEnd, rate, sampleRate) {
   const period = rate > 0 ? Math.max(1, sampleRate) / rate : 0;
   if (!(period > 0)) return false;
   return Math.floor(pulseStart * period + 0.5) <= 0 && Math.floor(pulseEnd * period + 0.5) >= period;
+}
+
+/** True when phase moved forward from last to now (under half a cycle, wrap allowed) past edge. */
+function nodeGraphClockFaceCrossed(last, now, edge) {
+  if (!Number.isFinite(last) || !Number.isFinite(now)) return false;
+  const wrap = (v) => v - Math.floor(v);
+  const d = wrap(now - last);
+  const u = wrap(edge - last);
+  return d > 0 && d < 0.5 && u > 0 && u <= d;
 }
 
 /** Fill spans [x, x] from Pulse Start up to the playhead, only while the playhead is in the gate. */
@@ -152,8 +164,13 @@ function drawNodeGraphClockFace(section) {
   const startPhase = offset - Math.floor(offset);
   const heard = nodeGraphClockFacePhase(section, node);
   const phase = Number.isFinite(heard) ? heard : startPhase;
-  // Wrapped since the last frame: the clock fired (T).
-  if (Number.isFinite(heard) && Number.isFinite(section._clockLast) && heard < section._clockLast - 0.5) section._clockFlash = now;
+  const clamp01 = (v) => Math.max(0, Math.min(1, v));
+  const pulseStart = clamp01(nodeGraphClockFaceParam(node, "pulseStart", 0));
+  const pulseEnd = clamp01(nodeGraphClockFaceParam(node, "pulseEnd", 0.5));
+  const sampleRate = Number(nodeGraphMvp?.live?.context?.sampleRate) || 48000;
+  const endless = nodeGraphClockFaceGateEndless(pulseStart, pulseEnd, Math.max(0, nodeGraphClockFaceParam(node, "rate", 2)), sampleRate);
+  // Blink on gate start: the playhead crossed Pulse Start since the last frame.
+  if (!endless && Number.isFinite(heard) && nodeGraphClockFaceCrossed(section._clockLast, heard, pulseStart)) section._clockFlash = now;
   section._clockLast = heard;
   const look = nodeGraphClockFaceSettingsForNode(node);
   const flashing = look.blinkTime > 0 && Number.isFinite(section._clockFlash) && now - section._clockFlash < look.blinkTime;
@@ -164,16 +181,11 @@ function drawNodeGraphClockFace(section) {
     return;
   }
   const fine = 1 / Math.max(1, pixelRatio);
-  const clamp01 = (v) => Math.max(0, Math.min(1, v));
-  const pulseStart = clamp01(nodeGraphClockFaceParam(node, "pulseStart", 0));
-  const pulseEnd = clamp01(nodeGraphClockFaceParam(node, "pulseEnd", 0.5));
   const amp = clamp01(nodeGraphClockFaceParam(node, "amplitude", 1));
   const stroke = look.lineThickness;
   const halfPx = stroke * 0.5;
-  const g = nodeGraphClockFaceGeometry(w, h, pulseStart, pulseEnd, amp, stroke);
+  const g = nodeGraphClockFaceGeometry(w, h, pulseStart, pulseEnd, amp, stroke, look.gateHeight);
   const { x0, x1, xs, xe, high, low } = g;
-  const sampleRate = Number(nodeGraphMvp?.live?.context?.sampleRate) || 48000;
-  const endless = nodeGraphClockFaceGateEndless(pulseStart, pulseEnd, Math.max(0, nodeGraphClockFaceParam(node, "rate", 2)), sampleRate);
   const fill = rgba(look.fillPaint);
   for (const [a, b] of nodeGraphClockFaceFillSpans(g, pulseStart, pulseEnd, phase, endless)) {
     if (b > a) nodeGraphGlLinesRect(batch, a, high, b - a, low - high, fill);

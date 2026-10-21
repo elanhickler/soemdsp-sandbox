@@ -50,8 +50,8 @@ const labels = await page.evaluate(() => [...document.querySelectorAll("#nodeTra
 check(JSON.stringify(labels) === JSON.stringify(["Background", "Pulse", "Playhead", "Fill", "Start", "Blink"]), "HBS rows Background, Pulse, Playhead, Fill, Start, Blink", JSON.stringify(labels));
 const thick = await page.evaluate(() => Boolean(document.querySelector('#nodeTraceDisplaySettingsPopover [data-trace-display-field="lineThickness"]')));
 check(thick, "Line thickness control present");
-const extra = await page.evaluate(() => ["startThickness", "blinkTime"].every((k) => document.querySelector(`#nodeTraceDisplaySettingsPopover [data-trace-display-field="${k}"]`)));
-check(extra, "Start thickness + Blink time controls present");
+const extra = await page.evaluate(() => ["startThickness", "blinkTime", "gateHeight"].every((k) => document.querySelector(`#nodeTraceDisplaySettingsPopover [data-trace-display-field="${k}"]`)));
+check(extra, "Start thickness, Blink time, Height controls present");
 const hex = await page.evaluateHandle(() => document.querySelector('[data-hsl-lamp="background"]')?.querySelector(".scw-hex") || null);
 const set = Boolean(await hex.evaluate((e) => Boolean(e && e.offsetParent)));
 if (set) { await hex.click({ clickCount: 3 }); await page.keyboard.type("#ff0000"); await page.keyboard.press("Enter"); }

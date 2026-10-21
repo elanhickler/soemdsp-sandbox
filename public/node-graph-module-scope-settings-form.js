@@ -2115,7 +2115,7 @@ function buildNodeGraphDisplaySettingsBodyHtml(formType, node = null) {
     if ((type === "roundShapeFace" || type === "basicShapeFace" || type === "sinCosFace" || type === "clockFace") && section === "waterfall") {
       fieldKeys = [
         "lineThickness",
-        ...(type === "clockFace" ? ["startThickness", "blinkTime"] : []),
+        ...(type === "clockFace" ? ["startThickness", "blinkTime", "gateHeight"] : []),
         "dotThickness",
         "pixelDensity",
       ].filter((key) => activeFields.has(key) && allowKey("fields", key));

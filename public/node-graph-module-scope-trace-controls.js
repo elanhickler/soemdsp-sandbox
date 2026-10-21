@@ -923,7 +923,7 @@ const nodeGraphTraceDisplayActiveControlsByType = Object.freeze({
   }),
   // Clock: Background / Pulse / Playhead / Fill / Start / Blink HBS lamps + thicknesses, blink time.
   clockFace: Object.freeze({
-    fields: Object.freeze(["lineThickness", "startThickness", "blinkTime"]),
+    fields: Object.freeze(["lineThickness", "startThickness", "blinkTime", "gateHeight"]),
     colors: Object.freeze([]),
     toggles: Object.freeze([]),
     choices: Object.freeze([]),
@@ -1657,6 +1657,7 @@ const nodeGraphDisplaySettingsFieldMeta = Object.freeze({
   }),
   startThickness: Object.freeze({ label: "Start thickness", inputmode: "decimal" }),
   blinkTime: Object.freeze({ label: "Blink time", inputmode: "decimal" }),
+  gateHeight: Object.freeze({ label: "Height", inputmode: "decimal" }),
   torchHue: Object.freeze({
     label: "Hue",
     inputmode: "decimal",

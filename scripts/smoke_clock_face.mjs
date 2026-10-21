@@ -96,8 +96,8 @@ Object.assign(node.traceDisplaySettings, { startHue: 120, startBrightness: 0.5, 
 draw({ pulseStart: 0.1, pulseEnd: 0.6, rate: 1, phase: 0.3 }, 0.9);
 const mark = segs.find((s) => s.rgba === "rgb(0 255 0)");
 gate(Boolean(mark) && mark.half === 2, "Start marker uses Start HBS and Start thickness");
-section._clockLast = 0.95; ctx.performance.now = () => 1000;
-draw({}, 0.05);
+section._clockLast = 0.05; ctx.performance.now = () => 1000;
+draw({}, 0.12);
 gate(segs[segs.length - 1].rgba === "rgb(0 0 255)", "blink uses Blink HBS when T fires");
 ctx.performance.now = () => 1000 + 400; draw({}, 0.1);
 gate(segs[segs.length - 1].rgba === "rgb(0 0 255)", "blink lasts Blink time (still on at 0.4 s of 0.5 s)");
@@ -106,6 +106,35 @@ gate(segs[segs.length - 1].rgba !== "rgb(0 0 255)", "blink over after Blink time
 Object.assign(node.traceDisplaySettings, { blinkTime: 0, startThickness: 0 });
 section._clockLast = 0.95; ctx.performance.now = () => 5000; draw({}, 0.05);
 gate(segs[segs.length - 1].rgba !== "rgb(0 0 255)" && !segs.some((s) => s.rgba === "rgb(0 255 0)"), "Blink time 0 = no blink; Start thickness 0 = no marker");
+
+// Blink fires on gate start (crossing Pulse Start), not on the phase wrap.
+Object.assign(node.traceDisplaySettings, { blinkTime: 0.5 });
+section._clockFlash = undefined; section._clockLast = 0.95; ctx.performance.now = () => 9000;
+draw({ pulseStart: 0.1, pulseEnd: 0.6 }, 0.02);
+gate(segs[segs.length - 1].rgba !== "rgb(0 0 255)", "no blink on the phase wrap (gate not started yet)");
+section._clockLast = 0.08; draw({}, 0.11);
+gate(segs[segs.length - 1].rgba === "rgb(0 0 255)", "blink when the playhead crosses Pulse Start");
+section._clockFlash = undefined; section._clockLast = 0.95; ctx.performance.now = () => 20000;
+draw({ pulseStart: 0 }, 0.02);
+gate(segs[segs.length - 1].rgba === "rgb(0 0 255)", "Pulse Start 0: gate start is the wrap, blinks there");
+section._clockFlash = undefined; section._clockLast = 0.4; ctx.performance.now = () => 30000;
+draw({ pulseStart: 0, pulseEnd: 1 }, 0.6);
+section._clockLast = 0.95; draw({}, 0.02);
+gate(segs[segs.length - 1].rgba !== "rgb(0 0 255)", "endless gate never re-triggers: no blink");
+Object.assign(node.traceDisplaySettings, { blinkTime: 0 });
+// Height: % of the face height the gate spans, centered; default 68 = the old 0.16 h margins.
+gate(look2.gateHeight === 68, "Height defaults to 68 %");
+Object.assign(node.traceDisplaySettings, { gateHeight: 50, lineThickness: 2 });
+draw({ pulseStart: 0.1, pulseEnd: 0.6, rate: 1, amplitude: 1 }, 0.3);
+const hy = polys[0].pts.filter((_, i) => i % 2 === 1);
+const hTop = Math.min(...hy); const hBot = Math.max(...hy);
+gate(Math.abs((hBot - hTop + 2) - 40) < 1e-9 && Math.abs(hTop - (80 - hBot)) < 1e-9, `Height 50 % spans half the face, centered (${hTop}..${hBot})`);
+const ph = segs[segs.length - 1];
+gate(ph.y0 === hTop && ph.y1 === hBot && rects.every((r) => r.y === hTop && Math.abs(r.y + r.h - hBot) < 1e-9), "playhead + fill follow Height");
+Object.assign(node.traceDisplaySettings, { gateHeight: 68 });
+draw({}, 0.3);
+const oy = polys[0].pts.filter((_, i) => i % 2 === 1);
+gate(Math.abs(Math.min(...oy) - (80 * 0.16 + 1)) < 1e-9, "Height 68 % matches the old 0.16 h + half-stroke margin");
 
 const defs = src("node-graph-module-definitions.js");
 gate(/\["phase", "Phase"\]\], horizontal: true/.test(defs), "Clock Phase face row is a horizontal slider");
