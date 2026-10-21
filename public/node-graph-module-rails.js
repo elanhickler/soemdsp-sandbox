@@ -337,18 +337,22 @@ function nodeGraphModuleRailsDrawGl(batch, plates, toX, toY, zoom, cssW, cssH) {
       // Through the border band: fill plus the top / bottom strokes.
       const bx = b.side < 0 ? b.x - border : b.x + b.w;
       rect(bx, b.y, border, b.h, NodeGraphRailInk.inletFill);
+      rect(b.x, b.y, b.w, b.h, NodeGraphRailInk.inletFill);
+      // Inlet notch: a half disc on the open edge in the inlet's jack colour
+      // (nodeGraphPortWireColor: mod inlet purple, Additive cyan, ...), full
+      // at the edge fading to clear inward; under the strokes and the label.
+      const r = Math.min(notch.radius * zoom, b.h / 2);
+      if (r > 0 && notch.opacity > 0 && typeof nodeGraphGlLinesHalfDiscFade === "function") {
+        const io = b.port.classList.contains("parameter-output") ? "output" : "modulation";
+        const css = typeof nodeGraphPortWireColor === "function" ? nodeGraphPortWireColor(plates[i].id, b.port.dataset.param, io) : "";
+        const ink = nodeGraphRailRgba(css || "#b184ff");
+        nodeGraphGlLinesHalfDiscFade(batch, b.side < 0 ? b.x : b.x + b.w, b.y + b.h / 2, r, -b.side, [ink[0], ink[1], ink[2], notch.opacity], [ink[0], ink[1], ink[2], 0]);
+      }
       rect(bx, b.y, border, t, NodeGraphRailInk.inletStroke);
       rect(bx, b.y + b.h - t, border, t, NodeGraphRailInk.inletStroke);
-      rect(b.x, b.y, b.w, b.h, NodeGraphRailInk.inletFill);
       rect(b.x, b.y, b.w, t, NodeGraphRailInk.inletStroke);
       rect(b.x, b.y + b.h - t, b.w, t, NodeGraphRailInk.inletStroke);
       rect(b.side < 0 ? b.x + b.w - t : b.x, b.y, t, b.h, NodeGraphRailInk.inletStroke);
-      // Inlet notch: a half disc on the open edge, dark at the edge fading to
-      // clear inward, kept inside the box's top / bottom strokes.
-      const r = Math.min(notch.radius * zoom, b.h / 2 - t);
-      if (r > 0 && notch.opacity > 0 && typeof nodeGraphGlLinesHalfDiscFade === "function") {
-        nodeGraphGlLinesHalfDiscFade(batch, b.side < 0 ? b.x : b.x + b.w, b.y + b.h / 2, r, -b.side, [0, 0, 0, notch.opacity], [0, 0, 0, 0]);
-      }
     }
     batch._over = false;
     if (typeof nodeGraphGlLinesText !== "function") continue;

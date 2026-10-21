@@ -198,7 +198,7 @@ const nodeUiDevSettingControls = Object.freeze([
   { defaultValue: true, id: "nodeUiDevWiresFollowPortColors", key: "wiresFollowPortColors", type: "boolean" },
   { defaultValue: false, id: "nodeUiDevFullyOpaqueWires", key: "fullyOpaqueWires", type: "boolean" },
   { defaultValue: 0.5, id: "nodeUiDevParamWireThickness", key: "paramWireThickness", max: 6, min: 0.5, step: 0.5, type: "number" },
-  { defaultValue: 5, id: "nodeUiDevRailNotchRadius", key: "railNotchRadius", max: 8, min: 0, step: 0.25, type: "number" },
+  { defaultValue: 5, id: "nodeUiDevRailNotchRadius", key: "railNotchRadius", max: 12, min: 0, step: 0.25, type: "number" },
   { defaultValue: 50, id: "nodeUiDevRailNotchOpacity", key: "railNotchOpacity", max: 100, min: 0, step: 1, type: "number" },
   { defaultValue: 1.61, id: "nodeUiDevParamWireDotSize", key: "paramWireDotSize", max: 12, min: 0, step: 0.01, type: "number" },
   { defaultValue: 36, id: "nodeUiDevBypassIconSize", key: "bypassIconSize", max: 100, min: 0, type: "number" },

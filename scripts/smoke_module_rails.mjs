@@ -150,7 +150,7 @@ const at = (im, x, y) => im.d.slice((y * im.w + x) * 4, (y * im.w + x) * 4 + 3);
 const near = (p, hex, tol = 12) => [1, 3, 5].every((k, i) => Math.abs(p[i] - parseInt(hex.slice(k, k + 2), 16)) <= tol);
 const FILL = "#111111";
 const INK = "#888899";
-const wallCheck = (im, side, label) => {
+const wallCheck = (im, side, label, boxPx) => {
   // The crop is centred on the box's outward edge. Read the box's top /
   // bottom stroke rows off a column inside it, then find the wall: the first
   // border-ink column outward from the box edge, on the row just above it.
@@ -158,12 +158,9 @@ const wallCheck = (im, side, label) => {
   const mid = Math.floor(im.w / 2);
   const inner = mid - side * 2;
   const ink = [...Array(im.h).keys()].filter((y) => near(at(im, inner, y), INK));
-  // First ink run is the top stroke, the next run the bottom stroke.
-  const gap = ink.findIndex((y, i) => i > 0 && y !== ink[i - 1] + 1);
   const top = ink[0];
-  const tail = gap < 0 ? [] : ink.slice(gap);
-  const gap2 = tail.findIndex((y, i) => i > 0 && y !== tail[i - 1] + 1);
-  const bot = gap2 < 0 ? tail[tail.length - 1] : tail[gap2 - 1];
+  // Label glyphs can sit in the inner column: the bottom stroke is the last ink row within one box height.
+  const bot = Math.max(...ink.filter((y) => y - top <= boxPx + 1));
   if (!(bot - top > 4)) return check(`${label}: box found`, false, JSON.stringify(ink));
   const cols = [...Array(im.w).keys()].filter((x) => (side < 0 ? x <= mid : x >= mid - 1)).sort((p, q) => side * (p - q));
   const wall = cols.find((x) => isBorder(at(im, x, top - 1)));
@@ -210,12 +207,38 @@ for (const zoom of [0.75, 1, 1.5]) {
   const cy = (geo.inL[1] + geo.inL[3]) / 2;
   const y0 = Math.floor(cy - bh / 2 - 4 * geo.z);
   const h = Math.ceil(bh + 8 * geo.z);
-  wallCheck(await crop(Math.floor(geo.inL[0]) - 8, y0 - 40, 16, h + 80), -1, `zoom ${zoom} left`);
-  wallCheck(await crop(Math.floor(geo.outR[2]) - 8, y0 - 40, 16, h + 80), 1, `zoom ${zoom} right`);
+  wallCheck(await crop(Math.floor(geo.inL[0]) - 8, y0 - 40, 16, h + 80), -1, `zoom ${zoom} left`, Math.ceil(bh));
+  wallCheck(await crop(Math.floor(geo.outR[2]) - 8, y0 - 40, 16, h + 80), 1, `zoom ${zoom} right`, Math.ceil(bh));
   if (SHOT) await page.screenshot({ path: path.join(SHOT, `rails-pin-zoom-${zoom}.png`), clip: { x: Math.max(0, Math.floor(geo.inL[0]) - 12), y: Math.max(0, y0 - 40 * geo.z), width: Math.ceil(geo.outR[2] - geo.inL[0]) + 24, height: Math.ceil(h + 80 * geo.z) } });
 }
 await page.evaluate(() => { setNodeGraphZoom(1); drawNodeGraphWires(); });
 await page.waitForTimeout(300);
+
+// Inlet notch follows the UIDev controls live: opacity 100 / radius 10 puts
+// the inlet colour on the box's open edge; opacity 0 leaves the #111 fill.
+const notchAt = async (radius, opacity) => {
+  await page.evaluate(([r, o]) => {
+    for (const [id, v] of [["nodeUiDevRailNotchRadius", r], ["nodeUiDevRailNotchOpacity", o]]) {
+      const el = document.getElementById(id);
+      el.value = String(v);
+      el.dispatchEvent(new Event("input", { bubbles: true }));
+    }
+  }, [radius, opacity]);
+  await page.waitForTimeout(400);
+  const box = await page.evaluate(() => {
+    const b = document.querySelector('article[data-node="pp-1"] .node-parameter-row[data-param="feedback"] .modulation-input').getBoundingClientRect();
+    return { x: b.left, y: (b.top + b.bottom) / 2 };
+  });
+  const im = await crop(Math.floor(box.x), Math.floor(box.y) - 1, 3, 3);
+  return at(im, 1, 1);
+};
+const notchOn = await notchAt(10, 100);
+const notchOff = await notchAt(10, 0);
+check("notch: opacity 100 / radius 10 tints the open edge with the inlet colour", notchOn[2] > notchOn[1] + 40 && notchOn[2] > 120, JSON.stringify(notchOn));
+check("notch: opacity 0 leaves the edge untinted", Math.abs(notchOff[2] - notchOff[0]) < 8 && Math.abs(notchOff[1] - notchOff[0]) < 8, JSON.stringify([notchOn, notchOff]));
+await notchAt(10, 100);
+if (SHOT) await page.screenshot({ path: path.join(SHOT, "rails-notch-r10-o100.png"), clip: await page.evaluate(() => { const row = document.querySelector('article[data-node="pp-1"] .node-parameter-row[data-param="feedback"]'); const a = row.querySelector(".modulation-input").getBoundingClientRect(); const b = row.querySelector(".parameter-output").getBoundingClientRect(); return { x: Math.max(0, Math.floor(a.left) - 12), y: Math.max(0, Math.floor(a.top) - 30), width: Math.ceil(b.right - a.left) + 24, height: Math.ceil(a.height) + 60 }; }) });
+await notchAt(5, 50);
 if (SHOT) await page.locator('article[data-node="pp-1"]').screenshot({ path: path.join(SHOT, "rails3-used-only.png") });
 if (SHOT) await page.locator('article[data-node="pp-1"]').screenshot({ path: path.join(SHOT, "rails3-one-patched.png") });
 if (SHOT) await page.screenshot({ path: path.join(SHOT, "rails-workspace-patched.png") });

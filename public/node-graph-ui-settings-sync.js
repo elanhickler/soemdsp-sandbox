@@ -958,7 +958,7 @@ function syncNodeUiDevSettingsHeaderControls() {
   const paramWireDotValue = document.getElementById("nodeUiDevParamWireDotSizeValue");
   if (paramWireThickValue) paramWireThickValue.textContent = `${paramWireThick}px`;
   if (paramWireDotValue) paramWireDotValue.textContent = `${paramWireDot}px`;
-  const notchRadius = Math.max(0, Math.min(8, nodeGraphFiniteNumber(document.getElementById("nodeUiDevRailNotchRadius")?.value, 5)));
+  const notchRadius = Math.max(0, Math.min(12, nodeGraphFiniteNumber(document.getElementById("nodeUiDevRailNotchRadius")?.value, 5)));
   const notchOpacity = Math.max(0, Math.min(100, nodeGraphFiniteNumber(document.getElementById("nodeUiDevRailNotchOpacity")?.value, 50)));
   sliderTextHost?.style.setProperty("--node-rail-notch-radius", `${notchRadius}px`);
   sliderTextHost?.style.setProperty("--node-rail-notch-opacity", String(notchOpacity / 100));
@@ -970,6 +970,8 @@ function syncNodeUiDevSettingsHeaderControls() {
     nodeGraphGlGraphState.thick = 0;
     nodeGraphGlGraphState.railNotch = null;
   }
+  // Param wire / notch values are read by the GL rebuild: redraw now.
+  if (typeof drawNodeGraphWires === "function") drawNodeGraphWires();
   if (choiceSlideEmptyBorderValue) choiceSlideEmptyBorderValue.textContent = `${choiceSlideEmptyBorderPx}px`;
   bypassIconSizeValue.textContent = `${bypassIconSizePercent}%`;
   bypassIconGlowSpreadValue.textContent = `${bypassIconGlowSpreadPercent}%`;
