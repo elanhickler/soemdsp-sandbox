@@ -21,6 +21,18 @@
 //
 // SC out (soemdsp_resonant_envelope_sc): clamp(1 - Out / Amplitude, 0, 1),
 // Out after the Output Range stage; Amplitude 0 -> 1. Ducking / volume pump.
+//
+// Mode (v5): 0 Envelope (above, default) / 1 Filter. Filter runs the Trigger
+// input audio straight through the same TPT SVF lowpass at audio rate:
+// cutoff = Frequency knob or wired f (Hz, Tracking ignored), damping 2*zeta
+// from Resonance, gain Amplitude, Output Range ignored (raw audio), no Follow.
+// Recalculate On Trigger On latches cutoff / Resonance / Amplitude only on a
+// Trigger-detect hit on that same input, so sweeps step once per cycle.
+//
+// Trigger detect (v5, Trigger jack only, never Follow): 0 Cross 0 (shared
+// gate_hit, default) / 1 Saw reset: hit when x[n-1] - x[n] > 0.5. Saw-reset
+// hit strength is a fixed 1 (not the pre-drop peak), and the step holds high
+// for Attack seconds after each hit, then Decay (an AD shot per cycle).
 
 #include <soemdsp/soemdsp.hpp>
 #include <soemdsp/filter/tpt_svf.h>
@@ -46,6 +58,12 @@ struct State {
   double velocity;
   double lastY;
   double lastFollow;
+  double lastIn;
+  double sawHold;
+  double fHz;
+  double fRes;
+  double fAmp;
+  bool fHasShot;
   double scOut;
   double followTarget;
   double shotAttack;
@@ -184,6 +202,12 @@ extern "C" int soemdsp_resonant_envelope_create() {
       s.velocity = 1.0;
       s.lastY = 0.0;
       s.lastFollow = 0.0;
+      s.lastIn = 0.0;
+      s.sawHold = 0.0;
+      s.fHz = 440.0;
+      s.fRes = 0.0;
+      s.fAmp = 1.0;
+      s.fHasShot = false;
       s.scOut = 1.0;
       s.followTarget = 0.0;
       s.shotAttack = 0.01;
@@ -234,7 +258,9 @@ extern "C" double soemdsp_resonant_envelope_sample(
   double recalculateOnTrigger,
   double sampleRate,
   double follow,
-  double followWired
+  double followWired,
+  double mode,
+  double triggerDetect
 ) {
   if (handle < 1 || handle > kMaxInstances || !gPool[handle - 1].active) return 0.0;
   State& s = gPool[handle - 1];
@@ -242,10 +268,64 @@ extern "C" double soemdsp_resonant_envelope_sample(
   if (!(sr >= 1.0)) sr = 44100.0;
   double gate = safe(input);
   if (!(gate * 0.0 == 0.0)) gate = 0.0;
-  const bool rising = gate_hit(gate, &s.lastGate);
-  const bool high = gate_on(gate);
-  if (rising) s.velocity = gate;
+  const bool filterMode = clamp01_param(mode, 0.0) >= 0.5;
+  const bool sawDetect = clamp01_param(triggerDetect, 0.0) >= 0.5;
+  const bool crossHit = gate_hit(gate, &s.lastGate);
+  const bool sawHit = (s.lastIn - gate) > 0.5;
+  s.lastIn = gate;
+  const bool rising = sawDetect ? sawHit : crossHit;
   const bool latch = clamp01_param(recalculateOnTrigger, 1.0) >= 0.5;
+  if (filterMode) {
+    double hzLive = safe(freqHz);
+    double resLive = safe(resonance);
+    double ampLive = safe(amplitude);
+    if (rising && latch) {
+      s.fHz = hzLive;
+      s.fRes = resLive;
+      s.fAmp = ampLive;
+      s.fHasShot = true;
+    }
+    const bool useF = latch && s.fHasShot;
+    double hz = useF ? s.fHz : hzLive;
+    double fr = useF ? s.fRes : resLive;
+    double fa = useF ? s.fAmp : ampLive;
+    if (!(hz * 0.0 == 0.0) || hz < 1.0) hz = 1.0;
+    if (hz > 0.45 * sr) hz = 0.45 * sr;
+    if (!(fa * 0.0 == 0.0)) fa = 0.0;
+    const double z = zeta_of(fr);
+    tpt_svf_setup(s.coeff, kTwoPi * hz / sr, 2.0 * z, 1.0, 0.0, 0.0, 1.0);
+    s.coeffValid = false;  // envelope coeffs must be rebuilt if Mode flips back
+    if (!(s.filt.z1 * 0.0 == 0.0) || !(s.filt.z2 * 0.0 == 0.0)) tpt_svf_reset(s.filt);
+    double y = tpt_svf_tick(s.filt, s.coeff, gate) * fa;
+    flush_denorm(s.filt);
+    if (!(y * 0.0 == 0.0)) {
+      tpt_svf_reset(s.filt);
+      y = 0.0;
+    }
+    s.lastY = y;
+    s.followTarget = 0.0;
+    s.lastFollow = 0.0;
+    s.idle = dsp_fabs(y) < 1e-5 && dsp_fabs(s.filt.z1) < 1e-5 && dsp_fabs(s.filt.z2) < 1e-5
+      && dsp_fabs(gate) < 1e-5;
+    double sc = 1.0;
+    if (fa != 0.0) sc = 1.0 - y / fa;
+    if (!(sc * 0.0 == 0.0)) sc = 1.0;
+    s.scOut = sc < 0.0 ? 0.0 : (sc > 1.0 ? 1.0 : sc);
+    return y;
+  }
+  bool high = gate_on(gate);
+  if (sawDetect) {
+    if (rising) {
+      double holdSec = safe(attackSec);
+      if (!(holdSec * 0.0 == 0.0) || holdSec < kAttackFloor) holdSec = kAttackFloor;
+      s.sawHold = holdSec * sr;
+    }
+    high = s.sawHold > 0.0;
+    if (s.sawHold > 0.0) s.sawHold -= 1.0;
+    if (rising) s.velocity = 1.0;
+  } else if (rising) {
+    s.velocity = gate;
+  }
   if (rising && latch) {
     s.shotAttack = safe(attackSec);
     s.shotDecay = safe(decaySec);
@@ -338,7 +418,7 @@ extern "C" double soemdsp_resonant_envelope_sample(
 }
 
 extern "C" int soemdsp_resonant_envelope_version() {
-  return 4;  // 4: SC (sidechain duck) out. 3: shared gate_hit is x > 0 again; Follow = rising-sample step latch. 2: Follow input (envelope follower). 1: initial
+  return 5;  // 5: Mode (Envelope / Filter) + Trigger detect (Cross 0 / Saw reset). 4: SC (sidechain duck) out. 3: shared gate_hit is x > 0 again; Follow = rising-sample step latch. 2: Follow input (envelope follower). 1: initial
 }
 
 extern "C" const char* soemdsp_resonant_envelope_metadata_json() {

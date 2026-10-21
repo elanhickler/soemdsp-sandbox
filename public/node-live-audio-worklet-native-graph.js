@@ -5849,6 +5849,9 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
       push("amplitude", P.NATIVE_GRAPH_PARAM_AMPLITUDE, cont("amplitude", 1));
       push("outputRange", P.NATIVE_GRAPH_PARAM_MODE, rangeId);
       push("recalculateOnTrigger", P.NATIVE_GRAPH_PARAM_TIMING_MODE, disc("recalculateOnTrigger", 1));
+      // waveform=Mode (0 Envelope / 1 Filter), lfoStyle=Trigger detect (0 Cross 0 / 1 Saw reset).
+      push("mode", P.NATIVE_GRAPH_PARAM_WAVEFORM, disc("mode", 0));
+      push("triggerDetect", P.NATIVE_GRAPH_PARAM_LFO_STYLE, disc("triggerDetect", 0));
       continue;
     }
     if (type === "powerDecay") {
