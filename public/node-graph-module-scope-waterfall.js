@@ -265,17 +265,64 @@ function nodeGraphOnsetEmitTrace(canvas, onset, key, trace, slot, settings, heig
   }
 }
 
+// Fill bar for one stored column: min..max, Auto Range aware, Bottom fill aware.
+function nodeGraphOnsetColumnBarYs(col, trace, slot, settings, height, range) {
+  if (!col?.first) return null;
+  if (!range) {
+    return nodeGraphWaterfallAccBarYs(
+      { has: true, min: col.min.raw, max: col.max.raw }, trace.buffer, slot, settings, height,
+    );
+  }
+  const a = nodeGraphOnsetTraceY(col.min.raw, trace.buffer, slot, settings, height, 0, range);
+  const b = nodeGraphOnsetTraceY(col.max.raw, trace.buffer, slot, settings, height, 0, range);
+  if (a == null || b == null) return null;
+  let y0 = Math.min(a, b);
+  let y1 = nodeGraphWaterfallIsBottomFill(settings) ? height : Math.max(a, b);
+  if (y1 - y0 < 1) {
+    const mid = (y0 + y1) * 0.5;
+    y0 = mid - 0.5;
+    y1 = mid + 0.5;
+  }
+  return { y0, y1 };
+}
+
+/** Ink = fill or both: stamp filled columns begin..end-1 for every trace, in channel order. */
+function nodeGraphOnsetStampFills(canvas, onset, keys, slot, settings, height, width, startPx, begin, end) {
+  if (!nodeGraphWaterfallBarsFilled(settings) || !(end > begin)) return;
+  const mode = nodeGraphWaterfallBlendMode(settings, { rgbGuns: false });
+  let stampComposite = "source-over";
+  if (mode === "lighter" || mode === "screen" || mode === "multiply") stampComposite = mode;
+  else if (mode === "combine" || mode === "meet") stampComposite = "lighter";
+  const connect = nodeGraphWaterfallDetailConnects(settings)
+    && nodeGraphWaterfallBarThickness(settings) >= 0.999;
+  for (let c = begin; c < end; c += 1) {
+    const x = (startPx + c) % width;
+    const seam = c > 0 && x === 0;
+    const spans = [];
+    for (let i = 0; i < keys.length; i += 1) {
+      const trace = onset.traces?.[keys[i]];
+      if (!trace) continue;
+      const ys = nodeGraphOnsetColumnBarYs(trace.columns[c], trace, slot, settings, height, onset.range);
+      const prev = connect && !seam && c > 0
+        ? nodeGraphOnsetColumnBarYs(trace.columns[c - 1], trace, slot, settings, height, onset.range)
+        : null;
+      spans.push({ key: keys[i], ys, prevEdge: prev, rgb: trace.rgb || [255, 255, 255, 1] });
+    }
+    nodeGraphWaterfallStampColumnFills(canvas, x, spans, mode, stampComposite, true);
+  }
+}
+
 function nodeGraphOnsetRedrawTraces(canvas, onset, slot, settings, height, width, origin, faceSamples, startPx) {
   onset.pens = Object.create(null);
   const traces = onset.traces;
   if (!traces) return;
-  const keys = Object.keys(traces);
+  const keys = Object.keys(traces).filter((k) => traces[k]?.columns?.length);
+  nodeGraphOnsetStampFills(canvas, onset, keys, slot, settings, height, width, startPx, 0, width);
+  if (!nodeGraphWaterfallDrawStroke(settings)) return;
   for (let i = 0; i < keys.length; i += 1) {
     const key = keys[i];
-    const trace = traces[key];
-    if (!trace?.columns?.length) continue;
     nodeGraphOnsetEmitTrace(
-      canvas, onset, key, trace, slot, settings, height, width, origin, faceSamples, startPx, 0, trace.columns.length,
+      canvas, onset, key, traces[key], slot, settings, height, width, origin, faceSamples, startPx, 0, traces[key].columns.length,
     );
   }
 }
@@ -497,7 +544,10 @@ function nodeGraphOnsetPaint(spec, live) {
         nodeGraphWaterfallGlClearColumn(canvas, (startPx + c) % width, 1, plateBg);
       }
     }
-    for (let i = 0; i < traces.length; i += 1) {
+    nodeGraphOnsetStampFills(
+      canvas, onset, traces.map((t) => t.key), spec.slot, settings, height, width, startPx, c0, endAll + 1,
+    );
+    for (let i = 0; nodeGraphWaterfallDrawStroke(settings) && i < traces.length; i += 1) {
       nodeGraphOnsetEmitTrace(
         canvas, onset, traces[i].key, traces[i].trace, spec.slot, settings, height, width, onset.origin, faceSamples, startPx,
         c0, endAll + 1, true,

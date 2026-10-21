@@ -52,7 +52,7 @@ const samples = new Float32Array(n);
 for (let i = 0; i < n; i += 1) samples[i] = 0.25 + 0.25 * (i / (n - 1));
 samples.nodeGraphScopeAbsoluteFrame = n;
 const canvas = { width, height, _wfGlSession: { smooth: true } };
-const settings = { scale: 1, historySeconds: n / 1000, polarity: "bipolar", barInk: "fill" };
+const settings = { scale: 1, historySeconds: n / 1000, polarity: "bipolar", barInk: "stroke" };
 const spec = {
   canvas,
   settings,
