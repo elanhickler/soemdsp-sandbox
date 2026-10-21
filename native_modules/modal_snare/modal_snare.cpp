@@ -14,7 +14,9 @@
 //   amplitude (no hidden clamp: the param range governs),
 //   noiseFreq (Hz wires band-pass centre), noiseQ (band-pass Q), click (click
 //   level), clickDecay (ms T60), noiseTilt (-1 dark .. +1 bright one-pole tilt
-//   pivoting at noiseFreq). Noise defaults 3000 / 1 / 0.3 / 2 / 0 = the old
+//   pivoting at noiseFreq), bodyNoise (Body / Noise: -1 body only, 0 both at
+//   full level = the original sound, +1 noise only; noise = wires + click;
+//   linear balance: only the far side fades). Noise defaults 3000 / 1 / 0.3 / 2 / 0 = the old
 //   fixed Electro Snare Modal constants.
 // Hit model: Trigger (gate_hit) latches v = |height| and adds a new ping onto
 // the ringing modes. Reset rewinds everything (noise reseeded) and strikes again
@@ -142,7 +144,8 @@ extern "C" double soemdsp_modal_snare_sample(
   double clickDecayMs,
   double noiseTilt,
   double sampleRate,
-  double recalculateOnTrigger  // 0 Off (live) / 1 On: bodyDecay / snapDecay latched on each hit
+  double recalculateOnTrigger,  // 0 Off (live) / 1 On: bodyDecay / snapDecay latched on each hit
+  double bodyNoise  // Body / Noise: -1 body only, 0 both (unchanged), +1 noise (wires + click) only
 ) {
   if (handle < 1 || handle > kMaxInstances || !gPool[handle - 1].active) return 0.0;
   State& s = gPool[handle - 1];
@@ -182,6 +185,9 @@ extern "C" double soemdsp_modal_snare_sample(
   const double clk = safe(click);
   const double clkT60 = clamp(safe(clickDecayMs), 0.01, 1000.0) / 1000.0;
   const double tilt = clamp(safe(noiseTilt), -1.0, 1.0);
+  const double bn = clamp(safe(bodyNoise), -1.0, 1.0);
+  const double gBody = bn > 0.0 ? 1.0 - bn : 1.0;
+  const double gNoise = bn < 0.0 ? 1.0 + bn : 1.0;
   const double pv = ping ? s.v : 0.0;
   const double bendMul = (s.p != 0.0 && bendOct != 0.0) ? dsp_exp2(bendOct * s.p) : 1.0;
   const double f = f0 * bendMul;
@@ -215,6 +221,8 @@ extern "C" double soemdsp_modal_snare_sample(
     wires[c] = kWires * bpT * s.eN * sn + clickV;
   }
   const double env = (eSum + sn * s.eN) / (1.0 + sn);
+  // Liveness keeps the full env (a faded side still rings); Env out follows the balance.
+  const double envMix = (gBody * eSum + gNoise * sn * s.eN) / (1.0 + sn);
   s.eN = planck_snap(s.eN * t60_coeff(nd, sr));
   s.eClick = planck_snap(s.eClick * t60_coeff(clkT60, sr));
 
@@ -224,10 +232,10 @@ extern "C" double soemdsp_modal_snare_sample(
     clear_voice(s);
     return 0.0;
   }
-  s.envOut = planck_snap(env);
+  s.envOut = planck_snap(envMix);
   const double trim = 1.0 / (1.0 + kMixTrim * sn);
-  const double outL = planck_snap(amp * trim * (body + wires[0]));
-  const double outR = planck_snap(amp * trim * (bodyR + wires[1]));
+  const double outL = planck_snap(amp * trim * (gBody * body + gNoise * wires[0]));
+  const double outR = planck_snap(amp * trim * (gBody * bodyR + gNoise * wires[1]));
   s.rightOut = (outR * 0.0 == 0.0) ? outR : 0.0;
   return (outL * 0.0 == 0.0) ? outL : 0.0;
 }
@@ -242,6 +250,6 @@ extern "C" double soemdsp_modal_snare_env(int handle) {
   return gPool[handle - 1].envOut;
 }
 
-extern "C" int soemdsp_modal_snare_version() { return 3; } // 3: Ring2 rotating phasor (no energy pumped by bend retriggers). 2: Recalculate On Trigger (bodyDecay / snapDecay latched on hit)
+extern "C" int soemdsp_modal_snare_version() { return 4; } // 4: Body / Noise balance (bodyNoise, last arg). 3: Ring2 rotating phasor (no energy pumped by bend retriggers). 2: Recalculate On Trigger (bodyDecay / snapDecay latched on hit)
 extern "C" const char* soemdsp_modal_snare_metadata_json() { return kMetadataJson; }
 extern "C" int soemdsp_modal_snare_metadata_json_size() { return sizeof(kMetadataJson) - 1; }

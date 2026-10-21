@@ -6019,6 +6019,7 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
       push("clickDecay", P.NATIVE_GRAPH_PARAM_OFFSET_MS, cont("clickDecay", 2));
       push("noiseTilt", P.NATIVE_GRAPH_PARAM_SATURATE, cont("noiseTilt", 0));
       push("recalculateOnTrigger", P.NATIVE_GRAPH_PARAM_TIMING_MODE, disc("recalculateOnTrigger", 0));
+      push("bodyNoise", P.NATIVE_GRAPH_PARAM_MIX, cont("bodyNoise", 0)); // Body / Noise (mix slot)
       continue;
     }
     if (type === "electroHat") {

@@ -824,6 +824,11 @@ if ($node) {
   if ($LASTEXITCODE -ne 0) {
     throw "Combined build: clock ƒ smoke FAILED"
   }
+  # Modal Snare Body / Noise: 0 unchanged, -1 body only, +1 noise only, sum = default.
+  & $node.Source "$root\scripts\smoke_modal_snare_body_noise.mjs"
+  if ($LASTEXITCODE -ne 0) {
+    throw "Combined build: Modal Snare Body / Noise smoke FAILED"
+  }
   # Resonant Compressor: Gain == Resonant Envelope SC (max diff 0), drums get quieter.
   & $node.Source "$root\scripts\smoke_graph_resonant_compressor.mjs"
   if ($LASTEXITCODE -ne 0) {

@@ -10913,6 +10913,16 @@ const nodeGraphModuleDefinitions = (
         min: "0",
         step: "any" },
       {
+        // -1 body only, 0 both at full level (original sound), +1 noise (wires + click) only.
+        defaultValue: "0",
+        key: "bodyNoise",
+        nonlinearSlider: false,
+        label: "Body / Noise",
+        max: "1",
+        mid: "0",
+        min: "-1",
+        step: "any" },
+      {
         defaultValue: "0.25",
         key: "bodyDecay",
         kind: "time",
