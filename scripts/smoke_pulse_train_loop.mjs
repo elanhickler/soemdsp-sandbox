@@ -3,7 +3,8 @@
 // past 12 s now plays as set (no hidden cap). Loop (1) free-runs with no
 // trigger: cycle = Time samples ceil(Time*sr), u_i = i/N so the last pulse
 // lands before the cycle end (no seam double), End fires once per cycle,
-// params re-latch each cycle, Trigger / Reset restart the cycle (velocity kept),
+// params re-latch each cycle, a Trigger hit restarts the cycle (velocity kept;
+// single Trigger input since v4, no Reset),
 // graph path free-runs with nothing wired and follows Æ’.
 import fs from "fs";
 import path from "path";
@@ -17,11 +18,12 @@ const SR = 48000;
 const E = (k, u) => (Math.abs(k) <= 1e-6 ? u : (Math.exp(k * u) - 1) / (Math.exp(k) - 1));
 // count, time, curve, ampStart, ampEnd, ampCurve, amplitude
 const SETS = [[12, 3, 3, 1, 0.2, 0, 1], [40, 12, 6, 1, 0, 2, 0.8], [7, 0.5, 0, 0.3, 0.9, -3, 1], [1, 2, 3, 1, 1, 0, 1], [128, 1, 10, 1, 0.1, 5, 1]];
-function play(E2, setFn, trigFn, resetFn, n, mode) {
+function play(E2, setFn, trigFn, n, mode) {
   const h = E2.soemdsp_pulse_train_create();
   const out = new Float64Array(n), endo = new Float64Array(n), el = new Float64Array(n);
   for (let i = 0; i < n; i++) {
-    const args = [h, trigFn(i), resetFn(i), ...setFn(i), SR];
+    // Old build (argv[2], no mode arg) still has the removed Reset arg: pass 0.
+    const args = mode === undefined ? [h, trigFn(i), 0, ...setFn(i), SR] : [h, trigFn(i), ...setFn(i), SR];
     if (mode !== undefined) args.push(mode, 1); // Recalculate On (the latched behavior this smoke covers)
     out[i] = E2.soemdsp_pulse_train_sample(...args);
     endo[i] = E2.soemdsp_pulse_train_end(h);
@@ -37,15 +39,15 @@ if (O) {
   for (const set of SETS) {
     const n = Math.ceil((set[1] + 0.5) * SR);
     const trig = (i) => (i >= 11 && i < 30000 ? 1 : i >= 40000 ? 0.7 : 0);
-    const a = play(N, () => set, trig, (i) => (i === 20000 ? 1 : 0), n, 0);
-    const b = play(O, () => set, trig, (i) => (i === 20000 ? 1 : 0), n);
+    const a = play(N, () => set, trig, n, 0);
+    const b = play(O, () => set, trig, n);
     worst = Math.max(worst, md(a.out, b.out), md(a.endo, b.endo), md(a.el, b.el));
   }
   if (worst !== 0) throw new Error(`One shot differs from the previous build (${worst})`);
-  console.log(`ok pulseTrain One shot (Mode 0) == previous build: ${SETS.length} sets with trigger / reset / retrigger, Out / End / __Elapsed max diff 0`);
+  console.log(`ok pulseTrain One shot (Mode 0) == previous build: ${SETS.length} sets with trigger / retrigger, Out / End / __Elapsed max diff 0`);
 }
 {
-  const r = play(N, () => [5, 20, 2, 1, 1, 0, 1], (i) => (i >= 1 ? 1 : 0), () => 0, Math.ceil(20.1 * SR), 0);
+  const r = play(N, () => [5, 20, 2, 1, 1, 0, 1], (i) => (i >= 1 ? 1 : 0), Math.ceil(20.1 * SR), 0);
   const endAt = r.endo.indexOf(1);
   if (endAt - 1 !== 20 * SR) throw new Error(`Time 20: End at ${(endAt - 1) / SR} s`);
   console.log("ok pulseTrain Time 20 s (past the 12 s slider range): last pulse at 20.00000 s, no hidden cap");
@@ -55,7 +57,7 @@ for (const [k, set] of SETS.entries()) {
   const [count, T] = set;
   const cyc = Math.ceil(T * SR - 1e-9);
   const cycles = 3, n = cyc * cycles + 5;
-  const r = play(N, () => set, () => 0, () => 0, n, 1);
+  const r = play(N, () => set, () => 0, n, 1);
   const pc = N.soemdsp_pulse_train_preview(...set, 1);
   const pt = [], pa = [];
   for (let i = 0; i < pc; i++) { pt.push(N.soemdsp_pulse_train_preview_time(i)); pa.push(N.soemdsp_pulse_train_preview_amplitude(i)); }
@@ -82,18 +84,18 @@ for (const [k, set] of SETS.entries()) {
   if (r.el[cyc - 1] >= T || r.el[cyc] !== 0) throw new Error(`loop set ${k}: elapsed wrap ${r.el[cyc - 1]} -> ${r.el[cyc]}`);
 }
 console.log(`ok pulseTrain Loop free-run (no trigger): ${SETS.length} sets x 3 cycles, cycle = ceil(Time*sr) samples, t_i = Time*E(i/N) < Time (no seam double), Out == preview per cycle, End once per cycle, __Elapsed wraps to 0`);
-// 3) Loop re-latches params each cycle; Trigger / Reset restart the cycle; Trigger velocity kept.
+// 3) Loop re-latches params each cycle; a Trigger hit restarts the cycle; Trigger velocity kept.
 {
   const T = 0.25, cyc = T * SR;
-  const r = play(N, (i) => [i < cyc ? 4 : 8, T, 0, 1, 1, 0, 1], () => 0, () => 0, 2 * cyc, 1);
+  const r = play(N, (i) => [i < cyc ? 4 : 8, T, 0, 1, 1, 0, 1], () => 0, 2 * cyc, 1);
   const c0 = r.out.slice(0, cyc).filter((v) => v !== 0).length, c1 = r.out.slice(cyc, 2 * cyc).filter((v) => v !== 0).length;
   if (c0 !== 4 || c1 !== 8) throw new Error(`relatch: ${c0} then ${c1} pulses`);
   const at = 5000, rs = 20000;
-  const t = play(N, () => [4, T, 0, 1, 1, 0, 1], (i) => (i >= at ? 0.5 : 0), (i) => (i === rs ? 1 : 0), rs + 2 * cyc, 1);
+  const t = play(N, () => [4, T, 0, 1, 1, 0, 1], (i) => (i >= rs ? 0.8 : i >= at ? 0.5 : 0), rs + 2 * cyc, 1);
   if (t.el[at] !== 0 || t.out[at] !== 0.5) throw new Error(`trigger resync: el ${t.el[at]} out ${t.out[at]}`);
   if (t.el[at + cyc] !== 0 || t.out[at + cyc] !== 0.5) throw new Error(`velocity kept: ${t.out[at + cyc]}`);
-  if (t.el[rs] !== 0 || t.out[rs] !== 0.5) throw new Error(`reset resync: el ${t.el[rs]} out ${t.out[rs]}`);
-  console.log("ok pulseTrain Loop re-latches Count per cycle (4 -> 8), Trigger restarts the cycle (velocity 0.5 kept for later cycles), Reset restarts it");
+  if (t.el[rs] !== 0 || Math.abs(t.out[rs] - 0.3) > 1e-12) throw new Error(`retrigger resync (abs-rise 0.5 -> 0.8, velocity 0.3): el ${t.el[rs]} out ${t.out[rs]}`);
+  console.log("ok pulseTrain Loop re-latches Count per cycle (4 -> 8), Trigger restarts the cycle (velocity 0.5 kept for later cycles), a second rise 0.5 -> 0.8 restarts it with velocity 0.3");
 }
 // 4) Graph: Loop free-runs with nothing wired; Æ’ = 2 Hz -> 0.5 s cycles.
 {

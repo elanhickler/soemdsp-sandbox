@@ -13751,7 +13751,7 @@ const nodeGraphModuleDefinitions = (
   pulseTrain: {
     planRole: "processor",
     // ƒ: absolute Hz; wired and > 0, Time = 1/ƒ s (Time row striped as owned by the jack).
-    inputs: ["Trigger", "Reset", "f"],
+    inputs: ["Trigger", "f"],
     fJackParam: "endTime",
     outputs: ["Out", "End"],
     layout: "pulseCurve",

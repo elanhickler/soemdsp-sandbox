@@ -1,7 +1,7 @@
 // Pulse Train: schedule t_i = End * E_k(u_i) (E_k(u) = (e^(k u) - 1) / (e^k - 1),
 // k = 0 linear), first pulse 0, last pulse == End (no cap past 12 s), gaps grow for
 // Curve > 0 (even at 0, shrink below 0), amplitude curve, preview == played
-// sample-exact (velocity scales), End out, Reset stops, graph path == direct.
+// sample-exact (velocity scales), End out, retrigger restarts, graph path == direct.
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -54,11 +54,11 @@ for (const [k, set] of SETS.entries()) {
 }
 console.log(`ok pulseTrain schedule: ${SETS.length} sets, t_i = End*E_k(u_i), first 0, last == End (End 20 plays at 20 s, no hidden cap), gaps grow / even / shrink by Curve sign, amp curve, standalone == combined`);
 // 2) Playback == preview sample-exact, velocity scales, End out, elapsed.
-function play(E2, set, trigFn, resetFn, n) {
+function play(E2, set, trigFn, n) {
   const h = E2.soemdsp_pulse_train_create();
   const out = new Float64Array(n), endo = new Float64Array(n), el = new Float64Array(n);
   for (let i = 0; i < n; i++) {
-    out[i] = E2.soemdsp_pulse_train_sample(h, trigFn(i), resetFn(i), ...set, SR);
+    out[i] = E2.soemdsp_pulse_train_sample(h, trigFn(i), ...set, SR);
     endo[i] = E2.soemdsp_pulse_train_end(h);
     el[i] = E2.soemdsp_pulse_train_elapsed(h);
   }
@@ -78,7 +78,7 @@ function expected(set, vel, at, n) {
 for (const [k, set] of SETS.entries()) {
   for (const vel of [1, 0.5]) {
     const at = 37, n = at + Math.ceil((Math.max(12, set[1]) + 0.01) * SR);
-    const r = play(N, set, (i) => (i >= at ? vel : 0), () => 0, n);
+    const r = play(N, set, (i) => (i >= at ? vel : 0), n);
     const { y, last } = expected(set, vel, at, n);
     for (let i = 0; i < n; i++) if (Math.abs(r.out[i] - y[i]) > 1e-12) throw new Error(`set ${k} vel ${vel}: sample ${i} out ${r.out[i]} expected ${y[i]}`);
     for (let i = 0; i < n; i++) if (r.endo[i] !== (i === last ? 1 : 0)) throw new Error(`set ${k}: End at ${i} = ${r.endo[i]} (last pulse ${last})`);
@@ -86,17 +86,15 @@ for (const [k, set] of SETS.entries()) {
   }
 }
 console.log(`ok pulseTrain playback == preview sample-exact (${SETS.length} sets x velocity 1 / 0.5), End = 1 on the last pulse sample only, __Elapsed -1 idle / 0 at trigger`);
-// 3) Reset stops (no End); retrigger restarts.
+// 3) A Trigger hit mid-train restarts it (no Reset input since v4).
 {
-  const set = SETS[0], n = 4 * SR, rs = SR;
-  const r = play(N, set, (i) => (i >= 10 ? 1 : 0), (i) => (i >= rs ? 1 : 0), n);
-  for (let i = rs; i < n; i++) if (r.out[i] !== 0 || r.endo[i] !== 0) throw new Error(`reset: sound at ${i}`);
-  if (r.el[rs] !== -1) throw new Error("reset: still running");
-  const re = play(N, set, (i) => (i < 10 ? 0 : i < 2 * SR ? 1 : i < 2 * SR + 5 ? 0 : 1), () => 0, 6 * SR);
+  const set = SETS[0];
+  const re = play(N, set, (i) => (i < 10 ? 0 : i < 2 * SR ? 1 : i < 2 * SR + 5 ? 0 : 1), 6 * SR);
   const second = expected(set, 1, 2 * SR + 5, 6 * SR).y;
   for (let i = 2 * SR + 5; i < 6 * SR; i++) if (Math.abs(re.out[i] - second[i]) > 1e-12) throw new Error(`retrigger: ${i}`);
+  if (re.el[2 * SR + 5] !== 0) throw new Error("retrigger: elapsed not reset");
 }
-console.log("ok pulseTrain Reset stops the train (no End), a new Trigger restarts it");
+console.log("ok pulseTrain a new Trigger hit mid-train restarts it (single Trigger input)");
 // 4) Graph path: Clock -> Trigger; engine Out / End / __Elapsed == direct module on the same trigger.
 {
   const TYPE_CLOCK = 28, TYPE_PT = 231, PORT_MONO = 0, PORT_LEFT = 1, PORT_PHASE01 = 10, PORT_TRIGGER = 20;
@@ -121,7 +119,7 @@ console.log("ok pulseTrain Reset stops the train (no End), a new Trigger restart
     trig.push(...rd(hC, PORT_MONO)); out.push(...rd(hP, PORT_MONO)); endo.push(...rd(hP, PORT_LEFT)); el.push(...rd(hP, PORT_PHASE01));
   }
   N.soemdsp_graph_destroy(g);
-  const d = play(N, set, (i) => trig[i], () => 0, trig.length);
+  const d = play(N, set, (i) => trig[i], trig.length);
   let pulses = 0, peak = 0;
   for (let i = 0; i < trig.length; i++) {
     if (out[i] !== d.out[i] || endo[i] !== d.endo[i] || el[i] !== d.el[i]) throw new Error(`graph != direct at ${i}: ${out[i]} vs ${d.out[i]}`);

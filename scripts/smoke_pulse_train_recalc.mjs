@@ -17,7 +17,7 @@ function play(setFn, trigFn, n, mode, recalc) {
   const h = N.soemdsp_pulse_train_create();
   const out = new Float64Array(n), endo = new Float64Array(n), el = new Float64Array(n), eff = [];
   for (let i = 0; i < n; i++) {
-    out[i] = N.soemdsp_pulse_train_sample(h, trigFn(i), 0, ...setFn(i), SR, mode, recalc);
+    out[i] = N.soemdsp_pulse_train_sample(h, trigFn(i), ...setFn(i), SR, mode, recalc);
     endo[i] = N.soemdsp_pulse_train_end(h);
     el[i] = N.soemdsp_pulse_train_elapsed(h);
     if (i % 1000 === 0) eff.push([i, ...[0, 1, 2, 3, 4, 5, 6].map((k) => N.soemdsp_pulse_train_effective(h, k))]);

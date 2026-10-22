@@ -19,7 +19,7 @@
 // the cycle is Time seconds and repeats, params re-latched at each cycle
 // start; u_i = i / N so the schedule spans [0, Time) and the last pulse
 // (Time * E(u_{N-1})) never lands on the next cycle's first pulse at 0.
-// Trigger / Reset hits restart the cycle at 0 (Trigger velocity is kept for
+// Trigger hits restart the cycle at 0 (Trigger velocity is kept for
 // later cycles; free-run velocity is 1). End fires on each cycle's last pulse.
 // Time 0 in Loop: a 1-sample cycle (all pulses every sample).
 // Kept guards (everything else is limited only by the param definitions):
@@ -28,12 +28,12 @@
 // Curve gives NaN; rounding), sampleRate < 1 -> 44100 (divide by zero). Velocity = shared gate_hit velocity of the
 // Trigger hit. Pulse i plays on the first sample n (counted from the trigger
 // sample, n = 0) with n / sampleRate >= t_i; pulses landing on one sample add.
-// End output: 1 on the sample the last pulse plays. Reset hit: stops the
-// train (no End). A new Trigger hit restarts it. Amplitude is not clamped.
+// End output: 1 on the sample the last pulse plays. A Trigger hit (shared
+// abs-rise rule) mid-train restarts it; there is no Reset input (v4). Amplitude is not clamped.
 // soemdsp_pulse_train_preview() builds the same schedule for displays.
 // Recalculate On Trigger (recalc > 0.5, default On = the behavior above): all
 // schedule params (Count, Time, Curve, Amp Start / End / Curve, Amplitude) are
-// latched at each Trigger / Reset hit and Loop cycle start. Off: the schedule
+// latched at each Trigger hit and Loop cycle start. Off: the schedule
 // follows the live params every sample (rebuilt when any changes); pulses
 // already played are never replayed (the next index only moves forward), and
 // pulses whose new time is already behind the playhead are skipped, so a Time
@@ -59,7 +59,6 @@ struct PulseTrainState {
   bool active;
   bool running;
   double prevTrig;
-  double prevReset;
   long long n;  // samples since trigger
   int count;
   int next;
@@ -104,7 +103,7 @@ static int buildSchedule(
 
 }  // namespace
 
-extern "C" int soemdsp_pulse_train_version() { return 3; }
+extern "C" int soemdsp_pulse_train_version() { return 4; }
 
 extern "C" int soemdsp_pulse_train_create() {
   for (int i = 0; i < kMaxInstances; i++) {
@@ -112,7 +111,6 @@ extern "C" int soemdsp_pulse_train_create() {
       PulseTrainState& s = gPool[i];
       s.running = false;
       s.prevTrig = 0.0;
-      s.prevReset = 0.0;
       s.n = 0;
       s.count = 0;
       s.next = 0;
@@ -136,7 +134,7 @@ extern "C" void soemdsp_pulse_train_destroy(int handle) {
 }
 
 extern "C" double soemdsp_pulse_train_sample(
-  int handle, double trigger, double reset, double count, double endTime, double curve,
+  int handle, double trigger, double count, double endTime, double curve,
   double ampStart, double ampEnd, double ampCurve, double amplitude, double sampleRate, double mode,
   double recalc
 ) {
@@ -147,13 +145,11 @@ extern "C" double soemdsp_pulse_train_sample(
   const double sr = sampleRate < 1.0 ? 44100.0 : sampleRate;
   const double live[7] = { count, endTime, curve, ampStart, ampEnd, ampCurve, amplitude };
   s.endOut = 0.0;
-  const bool resetHit = gate_hit(reset, &s.prevReset);
-  if (resetHit && !loop) s.running = false;
   const bool trigHit = gate_hit(trigger, &s.prevTrig);
   if (trigHit) s.velocity = gate_hit_velocity();
-  // Loop: start (free-run), restart on Trigger / Reset, or wrap at the cycle end.
+  // Loop: start (free-run), restart on Trigger, or wrap at the cycle end.
   const double cycleNow = latch ? s.cycle : (endTime > 0.0 ? endTime : 0.0);
-  const bool loopStart = loop && (!s.running || trigHit || resetHit
+  const bool loopStart = loop && (!s.running || trigHit
     || (s.n > 0 && (double)s.n / sr >= cycleNow));
   if (trigHit || loopStart) {
     const double v = trigHit ? gate_hit_velocity() : s.velocity;
