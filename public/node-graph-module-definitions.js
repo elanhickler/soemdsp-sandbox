@@ -10582,6 +10582,28 @@ const nodeGraphModuleDefinitions = (
         min: "0",
         nonlinearSlider: false,
         step: "1" },
+      {
+        defaultValue: "1",
+        key: "voices",
+        label: "Voices",
+        linearSmoothing: false,
+        smoothingType: "none",
+        max: "8",
+        mid: "4",
+        min: "1",
+        nonlinearSlider: false,
+        step: "1" },
+      {
+        defaultValue: "2",
+        key: "fadeTime",
+        kind: "time",
+        label: "Fade Time",
+        max: "20",
+        maxDigits: 4,
+        mid: "4",
+        min: "0",
+        step: "any",
+        unit: "ms" },
     ] },
   // Robin Sinepulse Allpass: Robin Schmidt's rsFlatZapper (RS-MET), used with
   // Robin's permission (docs/KICK_PLAN.md). Native only:

@@ -6002,6 +6002,8 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
       push("decay", P.NATIVE_GRAPH_PARAM_TIME_DENOMINATOR, cont("decay", 0.5));
       push("amplitude", P.NATIVE_GRAPH_PARAM_AMPLITUDE, cont("amplitude", 1));
       push("recalculateOnTrigger", P.NATIVE_GRAPH_PARAM_TIMING_MODE, disc("recalculateOnTrigger", 0));
+      push("voices", P.NATIVE_GRAPH_PARAM_STAGES, disc("voices", 1));
+      push("fadeTime", P.NATIVE_GRAPH_PARAM_OFFSET_MS, cont("fadeTime", 2));
       continue;
     }
     if (type === "electroSnare") {

@@ -20,12 +20,17 @@
 // (Sine, SinFatSaw, TriSaw with triSawParamMap 0.60).
 //
 // Sandbox additions (docs/KICK_PLAN.md, Argi 2026-10-06; Reset removed 2026-10-06):
-//   - Decay: one-multiply T60 amplitude envelope e (scales Kick; not a jack).
-//   - 0–1 jack: log sweep position of the same Hz as ƒ:
-//     u = ln(f/L)/ln(H/L), L = max(Low, 20 Hz), clamped 0..1. High is 1.
-//   - Trigger only (gate_hit, height = velocity): latches High/Low/Sweep,
-//     zeroes the phase (Robin's hard-reset noteOn), restarts the sweep, and
-//     sets e = |height|. No Reset port.
+//   - Decay: one-multiply T60 amplitude envelope e per voice (scales Kick; not a jack).
+//     No floor on Decay (the param sets the range); Decay <= 0 = instant silence.
+//   - 0-1 jack: log sweep position of the newest hit: u = ln(f/L)/ln(H/L),
+//     L = max(Low, 20 Hz), clamped 0..1. High is 1.
+//   - Trigger only (gate_hit abs-rise rule, height = velocity, shared by all
+//     voices): starts a new voice that latches High/Low/Sweep, starts at phase 0
+//     (Robin's hard-reset noteOn), restarts the sweep, and sets e = |height|.
+//   - Voices (1..8): hits ring out with their own Decay until Voices are busy;
+//     then the oldest is stolen and plays on as a fading copy over Fade Time
+//     (ms, linear gain 1 -> 0), so a retrigger never cuts a tail (no click,
+//     even at Voices 1). Fade Time 0 = hard cut (pre-Voices behaviour).
 //   - fHi clamped to [50 Hz, fs/2] (fHi < 50 Hz makes c < 0: upward sweep and
 //     a singularity), fLo to [0, fs/2]. TriSaw guard at P = +1.
 //   - No key / velocity frequency tracking, no FadeOut / PassThrough / stereo.
@@ -37,45 +42,43 @@ namespace {
 using namespace soemdsp_maths;
 
 static const int kMaxInstances = 64;
+static const int kMaxVoices = 8;    // Voices choice 1..8
+static const int kSlots = 16;       // voices + fading copies of stolen voices
 static const double kRefFreq = 50.0;              // rsFreqSweeper::refFreq
 static const double kLn2 = 0.6931471805599453;
 static const double kLn1000 = 6.907755278982137;  // T60: e falls by 1000 in `decay` s
 static const double kMinSweepTime = 1.0e-3;       // guard: sweepTime^p must stay > 0
-static const double kMinDecay = 1.0e-4;
-static const double kUnitFloorHz = 20.0;          // 0–1 jack log floor: L = max(Low, 20 Hz)
+static const double kUnitFloorHz = 20.0;          // 0-1 jack log floor: L = max(Low, 20 Hz)
 
 // rsMorphWaveBipolar::WaveForm order.
 enum { kWaveSine = 0, kWaveSinFatSaw = 1, kWaveTriSaw = 2 };
 
-struct State {
-  double latchA;  // Recalculate On Trigger: decay params latched on the last hit
-  double latchB;
-  bool latchHas;
-  // Latched at a Trigger (Robin's noteOn).
-  double fHi;
-  double fLo;
-  double sweepTime;
-  double velocity;
-  // rsFreqSweeper formula coefficients and the chirp values they were made with.
+// One hit: Robin's rsFreqSweeper state plus its Decay envelope.
+struct Voice {
+  bool on;        // sounding (env > 0 and not fully faded)
+  bool fading;    // stolen: gain falls to 0 over Fade Time, then the slot frees
+  double gain;    // fade gain (1 while not fading)
+  double gainStep;
+  double age;     // hit order (larger = newer)
+  double fHi, fLo, sweepTime;
   double a, b, c, p, q;
-  double coeffChirp;
-  double coeffShape;
-  bool dirty;
-  bool powFree;  // chirp = shape = 0: p = q = 1, f = (a + b*t) / (1 + c*t)
-  // rsFreqSweeper state.
-  double sampleCount;
-  double instPhase;
-  double instFreq;
-  // Decay envelope (Kick only). unitOut is the 0–1 sweep jack.
+  double coeffChirp, coeffShape;
+  bool dirty, powFree;
+  double sampleCount, instPhase, instFreq;
   double env;
-  double envOut;
-  double unitOut;
-  double freqOut;
+  double decayLatched;
+  double decayCached, srCached, r;
+};
+
+struct State {
+  Voice v[kSlots];
+  double hitCount;
+  int newest;      // slot of the last hit (drives f / 0-1 / env outs), -1 none
+  double velocity;
+  double fHi, fLo; // of the newest hit (0-1 jack)
+  double lastFreq; // newest voice's sweep Hz (kept after it ends)
+  double envOut, unitOut, freqOut;
   bool swept;
-  double decayCached;
-  double srCached;
-  double r;
-  // Gate memory.
   double lastTrigger;
   bool active;
 };
@@ -90,33 +93,39 @@ static const char kMetadataJson[] =
     "\"kind\":\"drum\""
   "}";
 
+static void init_voice(Voice& v) {
+  v.on = false;
+  v.fading = false;
+  v.gain = 1.0;
+  v.gainStep = 0.0;
+  v.age = 0.0;
+  v.fHi = 10000.0; v.fLo = 0.0; v.sweepTime = 0.2;
+  v.a = v.b = v.c = 0.0; v.p = v.q = 1.0;
+  v.coeffChirp = v.coeffShape = 0.0;
+  v.dirty = true; v.powFree = true;
+  v.sampleCount = 0.0; v.instPhase = 0.0; v.instFreq = v.fHi;
+  v.env = 0.0;
+  v.decayLatched = 0.5;
+  v.decayCached = -1.0; v.srCached = -1.0; v.r = 0.0;
+}
+
 static void init_state(State& s) {
+  for (int i = 0; i < kSlots; i++) init_voice(s.v[i]);
+  s.hitCount = 0.0;
+  s.newest = -1;
+  s.velocity = 0.0;
   s.fHi = 10000.0;
   s.fLo = 0.0;
-  s.sweepTime = 0.2;
-  s.velocity = 0.0;
-  s.a = s.b = s.c = 0.0;
-  s.p = s.q = 1.0;
-  s.coeffChirp = 0.0;
-  s.coeffShape = 0.0;
-  s.dirty = true;
-  s.powFree = true;
-  s.sampleCount = 0.0;
-  s.instPhase = 0.0;
-  s.instFreq = s.fHi;
-  s.env = 0.0;
+  s.lastFreq = 0.0;
   s.envOut = 0.0;
   s.unitOut = 0.0;
-  s.freqOut = s.fLo;
+  s.freqOut = 0.0;
   s.swept = false;
-  s.decayCached = -1.0;
-  s.srCached = -1.0;
-  s.r = 0.0;
   s.lastTrigger = 0.0;
 }
 
 // rsFreqSweeper::updateCoeffs (rosic_MiscUnfinished.cpp).
-static void update_coeffs(State& s, double chirp, double shape) {
+static void update_coeffs(Voice& s, double chirp, double shape) {
   s.coeffChirp = chirp;
   s.coeffShape = shape;
   s.dirty = false;
@@ -140,7 +149,7 @@ static void update_coeffs(State& s, double chirp, double shape) {
 }
 
 // rsFreqSweeper::getInstFreq: (a + b*t^(p*q)) / (1 + c*t^p)^q.
-static double inst_freq(const State& s, double t) {
+static double inst_freq(const Voice& s, double t) {
   if (s.powFree) return (s.a + s.b * t) / (1.0 + s.c * t);
   if (!(t > 0.0)) return s.a;
   const double lnT = dsp_ln(t);  // one ln(t) shared by t^p and t^(p*q)
@@ -175,13 +184,6 @@ static double wave_value(int wave, double pos, double waveShape) {
   return tri;
 }
 
-// rsFreqSweeper::reset without the phase; Trigger zeroes phase separately.
-static void restart_sweep(State& s) {
-  s.sampleCount = 0.0;
-  s.instFreq = s.fHi;
-  s.dirty = true;
-}
-
 // Live control in: NaN/inf -> 0, |x| < kPlanck -> exact 0 (keeps subnormal
 // modulation values out of the wave position and the output product).
 static double clean_control(double x) {
@@ -189,12 +191,79 @@ static double clean_control(double x) {
   return silent_planck(v) ? 0.0 : v;
 }
 
-// rsSweepKicker::noteOn latching, no key / velocity tracking.
-static void latch_hit(State& s, double highFreq, double lowFreq, double sweepTime, double sr) {
-  const double nyquist = 0.5 * sr;
-  s.fHi = maxd(mind(safe(highFreq), nyquist), kRefFreq);
-  s.fLo = clamp(safe(lowFreq), 0.0, nyquist);
-  s.sweepTime = maxd(safe(sweepTime), kMinSweepTime);
+// 0-1 jack: log position of freq between the latched floor and High.
+// u = ln(f/L) / ln(H/L), L = max(Low, 20 Hz). High is 1, L and below are 0.
+static double sweep_unit(double freq, double fHi, double fLo) {
+  const double lo = maxd(fLo, kUnitFloorHz);
+  if (!(fHi > lo) || !(freq > lo)) return 0.0;
+  double u = dsp_ln(freq / lo) / dsp_ln(fHi / lo);
+  if (u < 0.0) u = 0.0;
+  if (u > 1.0) u = 1.0;
+  return u;
+}
+
+// Voice allocation on a hit. Up to `count` voices ring out with their own
+// Decay; when all are busy the oldest is stolen: it keeps sounding as a fading
+// copy (gain 1 -> 0 over Fade Time) while the new hit starts clean at phase 0.
+// Fade Time 0 = hard cut (the pre-Voices behaviour at Voices 1).
+static int start_voice(State& s, int count, double fadeSamples) {
+  int busy = 0, oldest = -1;
+  for (int i = 0; i < kSlots; i++) {
+    const Voice& v = s.v[i];
+    if (!v.on || v.fading) continue;
+    busy++;
+    if (oldest < 0 || v.age < s.v[oldest].age) oldest = i;
+  }
+  if (busy >= count && oldest >= 0) {
+    Voice& o = s.v[oldest];
+    if (fadeSamples > 0.0) {
+      o.fading = true;
+      o.gainStep = 1.0 / fadeSamples;
+    } else {
+      o.on = false;
+    }
+  }
+  int slot = -1;
+  for (int i = 0; i < kSlots; i++) if (!s.v[i].on) { slot = i; break; }
+  if (slot < 0) {
+    // Every slot holds a fading copy (hits faster than Fade Time): reuse the
+    // quietest one.
+    slot = 0;
+    for (int i = 1; i < kSlots; i++) if (s.v[i].gain < s.v[slot].gain) slot = i;
+  }
+  return slot;
+}
+
+// One voice, one sample: Robin's output-before-update order. Returns the
+// faded voice output (without Amplitude).
+static double run_voice(Voice& v, int w, double phase, double waveShape,
+                        double ch, double sh, double decay, double sr) {
+  const double y = wave_value(w, v.instPhase + phase, waveShape);
+  const double out = v.env * v.gain * y;
+
+  // State update (rsFreqSweeper::getSampleFrameStereo order).
+  if (v.dirty || ch != v.coeffChirp || sh != v.coeffShape) update_coeffs(v, ch, sh);
+  v.sampleCount += 1.0;
+  const double newFreq = inst_freq(v, v.sampleCount / sr);
+  v.instPhase += (0.5 / sr) * (v.instFreq + newFreq);  // trapezoidal integration
+  if (v.instPhase >= 1.0) v.instPhase -= 1.0;
+  v.instFreq = newFreq;
+
+  // Decay envelope: e *= r, r = exp(-ln(1000) / (decay * fs)). No floor: the
+  // Decay param sets the range. Guard only: decay <= 0 (or NaN) would divide
+  // by zero / make e grow, so it means instant silence (r = 0).
+  if (decay != v.decayCached || sr != v.srCached) {
+    v.decayCached = decay;
+    v.srCached = sr;
+    v.r = (decay > 0.0) ? dsp_exp(-kLn1000 / (decay * sr)) : 0.0;
+  }
+  v.env *= v.r;
+  if (v.env < kPlanck) { v.env = 0.0; v.on = false; }
+  if (v.fading) {
+    v.gain -= v.gainStep;
+    if (!(v.gain > 0.0)) { v.gain = 0.0; v.on = false; }
+  }
+  return out;
 }
 
 }  // namespace
@@ -203,7 +272,6 @@ extern "C" int soemdsp_robin_sinepulse_create() {
   for (int i = 0; i < kMaxInstances; i++) {
     if (!gPool[i].active) {
       init_state(gPool[i]);
-      gPool[i].latchHas = false;
       gPool[i].active = true;
       return i + 1;
     }
@@ -216,20 +284,8 @@ extern "C" void soemdsp_robin_sinepulse_destroy(int handle) {
   gPool[handle - 1].active = false;
 }
 
-// 0–1 jack: log position of freq between the latched floor and High.
-// u = ln(f/L) / ln(H/L), L = max(Low, 20 Hz). High is 1, L and below are 0.
-// High <= L gives 0.
-static double sweep_unit(double freq, double fHi, double fLo) {
-  const double lo = maxd(fLo, kUnitFloorHz);
-  if (!(fHi > lo) || !(freq > lo)) return 0.0;
-  double u = dsp_ln(freq / lo) / dsp_ln(fHi / lo);
-  if (u < 0.0) u = 0.0;
-  if (u > 1.0) u = 1.0;
-  return u;
-}
-
-// Returns Kick. soemdsp_robin_sinepulse_env() is the T60 envelope (Kick gain).
-// soemdsp_robin_sinepulse_unit() is the 0–1 sweep jack.
+// Returns Kick (sum of all voices). soemdsp_robin_sinepulse_env() is the
+// newest hit's T60 envelope; soemdsp_robin_sinepulse_unit() its 0-1 sweep jack.
 extern "C" double soemdsp_robin_sinepulse_sample(
   int handle,
   double trigger,
@@ -244,71 +300,71 @@ extern "C" double soemdsp_robin_sinepulse_sample(
   double decay,
   double amplitude,
   double sampleRate,
-  double recalculateOnTrigger  // 0 Off (live) / 1 On: decay latched on each hit
+  double recalculateOnTrigger,  // 0 Off (live) / 1 On: decay latched on each hit
+  double voices,                // 1..8 voices before the oldest is stolen
+  double fadeMs                 // stolen-voice fade, ms (0 = hard cut)
 ) {
   if (handle < 1 || handle > kMaxInstances || !gPool[handle - 1].active) return 0.0;
   State& s = gPool[handle - 1];
   const double sr = sampleRate < 1.0 ? 44100.0 : sampleRate;
 
+  // Shared abs-rise Trigger rule (gate_hit) and velocity for every voice.
   const double trig = safe(trigger);
-  const bool triggerHit = gate_hit(trig, &s.lastTrigger);
-  if (triggerHit) {
-    latch_hit(s, highFreq, lowFreq, sweepTime, sr);
+  if (gate_hit(trig, &s.lastTrigger)) {
+    // Voices is a slot index into a fixed array: rounded to 1..8 (bounds guard).
+    int count = (int)(safe(voices) + 0.5);
+    count = count < 1 ? 1 : (count > kMaxVoices ? kMaxVoices : count);
+    const double fadeSamples = safe(fadeMs) * 0.001 * sr;  // <= 0: hard cut
+    const int slot = start_voice(s, count, fadeSamples);
+    Voice& v = s.v[slot];
+    init_voice(v);
+    // rsSweepKicker::noteOn latching, no key / velocity tracking.
+    const double nyquist = 0.5 * sr;
+    v.fHi = maxd(mind(safe(highFreq), nyquist), kRefFreq);
+    v.fLo = clamp(safe(lowFreq), 0.0, nyquist);
+    v.sweepTime = maxd(safe(sweepTime), kMinSweepTime);
+    v.instFreq = v.fHi;
+    v.instPhase = 0.0;  // Robin's hard-reset noteOn
     s.velocity = gate_hit_velocity();
-    s.instPhase = 0.0;  // Robin's hard-reset noteOn (Trigger alone)
-    restart_sweep(s);
-    s.env = s.velocity;
+    v.env = s.velocity;
+    v.decayLatched = decay;
+    v.on = v.env >= kPlanck;
+    s.hitCount += 1.0;
+    v.age = s.hitCount;
+    s.newest = slot;
+    s.fHi = v.fHi;
+    s.fLo = v.fLo;
+    s.lastFreq = v.instFreq;
     s.swept = true;
   }
 
-  // Recalculate On Trigger: On latches decay on each hit, so a ringing
-  // hit keeps its decay; Off (default) reads them live (unchanged behaviour).
-  if (triggerHit) { s.latchA = decay; s.latchHas = true; }
-  if (safe(recalculateOnTrigger) >= 0.5 && s.latchHas) { decay = s.latchA; }
-  if (s.env < kPlanck) {  // rest: exact 0, phase kept, no sweep maths
-    s.env = 0.0;
-    s.envOut = 0.0;
-    if (!s.swept) {
-      const double nyquist = 0.5 * sr;
-      s.freqOut = clamp(safe(lowFreq), 0.0, nyquist);
-      s.unitOut = 0.0;
-    } else {
-      s.freqOut = s.instFreq;
-      s.unitOut = sweep_unit(s.freqOut, s.fHi, s.fLo);
-    }
-    return 0.0;
-  }
-
-  // Output (Robin: wave(instPhase + phase) before the state update).
+  const bool latch = safe(recalculateOnTrigger) >= 0.5;
   int w = (int)(safe(wave) + 0.5);
   w = w < kWaveSine ? kWaveSine : (w > kWaveTriSaw ? kWaveTriSaw : w);
-  const double y = wave_value(w, s.instPhase + clean_control(phase), clean_control(waveShape));
-  const double e = s.env;
-  s.envOut = e;
-  const double out = clean_control(amplitude) * e * y;
-
-  // State update (rsFreqSweeper::getSampleFrameStereo order).
+  const double ph = clean_control(phase);
+  const double ws = clean_control(waveShape);
   const double ch = clamp(safe(chirp), -1.0, 1.0);
   const double sh = clamp(safe(chirpShape), -1.0, 1.0);
-  if (s.dirty || ch != s.coeffChirp || sh != s.coeffShape) update_coeffs(s, ch, sh);
-  s.sampleCount += 1.0;
-  s.freqOut = s.instFreq;
-  s.unitOut = sweep_unit(s.freqOut, s.fHi, s.fLo);
-  const double newFreq = inst_freq(s, s.sampleCount / sr);
-  s.instPhase += (0.5 / sr) * (s.instFreq + newFreq);  // trapezoidal integration
-  if (s.instPhase >= 1.0) s.instPhase -= 1.0;
-  s.instFreq = newFreq;
+  const double liveDecay = safe(decay);
 
-  // Decay envelope: e *= r, r = exp(-ln(1000) / (decay * fs)).
-  const double dc = maxd(safe(decay), kMinDecay);
-  if (dc != s.decayCached || sr != s.srCached) {
-    s.decayCached = dc;
-    s.srCached = sr;
-    s.r = dsp_exp(-kLn1000 / (dc * sr));
+  double sum = 0.0;
+  s.envOut = 0.0;
+  for (int i = 0; i < kSlots; i++) {
+    Voice& v = s.v[i];
+    if (!v.on) continue;
+    if (i == s.newest) { s.envOut = v.env; s.lastFreq = v.instFreq; }
+    sum += run_voice(v, w, ph, ws, ch, sh, latch ? v.decayLatched : liveDecay, sr);
+    if (i == s.newest && !v.on) s.lastFreq = v.instFreq;  // rest: f stays where the sweep landed
   }
-  s.env *= s.r;
-  if (s.env < kPlanck) s.env = 0.0;
 
+  if (!s.swept) {
+    s.freqOut = clamp(safe(lowFreq), 0.0, 0.5 * sr);
+    s.unitOut = 0.0;
+  } else {
+    s.freqOut = s.lastFreq;
+    s.unitOut = sweep_unit(s.freqOut, s.fHi, s.fLo);
+  }
+  const double out = clean_control(amplitude) * sum;
   return (out * 0.0 == 0.0) ? out : 0.0;
 }
 
@@ -330,9 +386,11 @@ extern "C" double soemdsp_robin_sinepulse_unit(int handle) {
 extern "C" int soemdsp_robin_sinepulse_is_idle(int handle) {
   if (handle < 1 || handle > kMaxInstances) return 1;
   const State& s = gPool[handle - 1];
-  return (!s.active || s.env < kPlanck) ? 1 : 0;
+  if (!s.active) return 1;
+  for (int i = 0; i < kSlots; i++) if (s.v[i].on) return 0;
+  return 1;
 }
 
-extern "C" int soemdsp_robin_sinepulse_version() { return 5; }  // 5: Recalculate On Trigger (decay latched on hit)
+extern "C" int soemdsp_robin_sinepulse_version() { return 7; }  // 7: Voices (1..8) + Fade Time (stolen voice fades out; 0 = hard cut). 6: no Decay floor (was 0.1 ms). 5: Recalculate On Trigger (decay latched on hit)
 extern "C" const char* soemdsp_robin_sinepulse_metadata_json() { return kMetadataJson; }
 extern "C" int soemdsp_robin_sinepulse_metadata_json_size() { return sizeof(kMetadataJson) - 1; }

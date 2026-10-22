@@ -39,7 +39,8 @@ void soemdsp_robin_sinepulse_destroy(int handle);
 double soemdsp_robin_sinepulse_sample(int handle, double trigger, double highFreq,
                            double lowFreq, double sweepTime, double chirp, double chirpShape,
                            double wave, double waveShape, double phase, double decay,
-                           double amplitude, double sampleRate);
+                           double amplitude, double sampleRate, double recalculateOnTrigger,
+                           double voices, double fadeMs);
 double soemdsp_robin_sinepulse_env(int handle);
 int soemdsp_robin_sinepulse_is_idle(int handle);
 double sinepulse_probe_inst_phase(int h);
@@ -134,7 +135,7 @@ Result run_case(const Case& c) {
 
     const double hit = (n == 0 || n == c.retrigAt) ? 1.0 : 0.0;
     const double sig = soemdsp_robin_sinepulse_sample(h, hit, c.fHi, c.fLo, sweepTime, chirp, c.shape,
-                                            (double)c.wave, c.waveParam, phase, 4.0, 1.0, c.fs);
+                                            (double)c.wave, c.waveParam, phase, 4.0, 1.0, c.fs, 0.0, 1.0, 0.0);
     const double env = soemdsp_robin_sinepulse_env(h);
     const double y = sig / env;
     const double pPhase = sinepulse_probe_inst_phase(h);
@@ -163,7 +164,7 @@ struct Params {
 
 double step(int h, const Params& p, double trig) {
   return soemdsp_robin_sinepulse_sample(h, trig, p.fHi, p.fLo, p.sweep, p.chirp, p.shape, p.wave,
-                             p.waveShape, p.phase, p.decay, p.amp, p.fs);
+                             p.waveShape, p.phase, p.decay, p.amp, p.fs, 0.0, 1.0, 0.0);
 }
 
 Hit render(int h, const Params& p, int N, const std::vector<int>& trigAt,

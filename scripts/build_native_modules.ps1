@@ -900,6 +900,11 @@ if ($node) {
   if ($LASTEXITCODE -ne 0) {
     throw "Combined build: Robin Sinepulse smoke FAILED"
   }
+  # Robin Sinepulse Voices / Fade Time: retrigger step, overlap sum, Fade 0 = hard reset.
+  & $node.Source "$root\scripts\smoke_robin_sinepulse_voices.mjs"
+  if ($LASTEXITCODE -ne 0) {
+    throw "Combined build: Robin Sinepulse Voices smoke FAILED"
+  }
   # Robin Sinepulse Allpass (Robin Schmidt's FlatZapper): direct export + graph Trigger/In/Out.
   & $node.Source "$root\scripts\smoke_graph_robin_sinepulse_allpass.mjs"
   if ($LASTEXITCODE -ne 0) {
