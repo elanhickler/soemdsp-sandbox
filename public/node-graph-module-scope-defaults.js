@@ -154,8 +154,6 @@ const nodeGraphWaterfallSettingsDefaults = Object.freeze({
   // Sync off: History window duration in seconds (0 = pause). Sync on: cycles in view.
   // Stored separately so toggling Sync keeps both dials. Instant Waterfall only — no Hz.
   historySeconds: 0.25,
-  // 1D Onset Sync. 100 = the whole Reset gap. 10 = first 10% across the face.
-  historyPercent: 100,
   // 1 = ±1 fills the face. Higher enlarges the signal.
   scale: 1,
   historyCycles: 4,
@@ -173,8 +171,7 @@ const nodeGraphWaterfallSettingsDefaults = Object.freeze({
   strokeThickness: 1,
   // Off: keep scrolling. On: silence (linear amp at or below Planck) holds the plate.
   pauseOnSilence: false,
-  // 1D Onset only. On: face width is History (percent) of the Reset gap.
-  // History (seconds) is the fallback until two edges have been measured.
+  // 1D Onset only. On: every Reset edge restarts the sweep at x = 0.
   resetSync: false,
   // 1D Onset only. On: the face height spans the min..max of the shown samples.
   autoRange: true,

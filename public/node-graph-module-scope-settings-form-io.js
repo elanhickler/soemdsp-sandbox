@@ -1384,7 +1384,7 @@ function readNodeGraphTraceDisplaySettingsForm() {
   // Sync retargets History/Sweep to *Cycles in the live DOM while schema still
   // lists *Hz — always include whichever key is actually on the dial.
   const fieldKeysToRead = new Set(activeFields);
-  for (const liveKey of ["historySeconds", "historyPercent", "historyCycles", "historyHz", "sweepHz", "sweepCycles"]) {
+  for (const liveKey of ["historySeconds", "historyCycles", "historyHz", "sweepHz", "sweepCycles"]) {
     if (root?.querySelector?.(`[data-trace-display-field="${liveKey}"]`)) {
       fieldKeysToRead.add(liveKey);
     }
@@ -1787,7 +1787,6 @@ function nodeGraphWriteTraceDisplaySettingsFormInner(settings) {
     if (activeFields.has("historySeconds")) fieldKeysToWrite.add("historySeconds");
     if (activeFields.has("historyHz")) fieldKeysToWrite.add("historyHz");
     fieldKeysToWrite.add("historyCycles");
-    fieldKeysToWrite.add("historyPercent");
   }
   if (activeFields.has("sweepHz") || activeFields.has("sweepCycles")) {
     fieldKeysToWrite.add("sweepHz");

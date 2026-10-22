@@ -340,7 +340,6 @@ const nodeGraphDisplaySettingsFieldSpecOverrides = Object.freeze({
   decimals: { min: 0, max: 8, taper: "linear", step: 1, integer: true },
   digits: { min: 1, max: 12, taper: "linear", step: 1, integer: true },
   maxDigits: { min: 1, max: 12, taper: "linear", step: 1, integer: true },
-  historyPercent: { min: 0, max: 100, taper: "linear", step: 1 },
   dotBudget: { min: 1, max: 8192, taper: "log", step: 1, integer: true },
   textWeight: { min: 100, max: 900, taper: "linear", step: 100, integer: true },
   fftSize: { min: 128, max: 16384, taper: "log", step: 1, integer: true, table: true },
@@ -611,9 +610,6 @@ const nodeGraphTraceDisplaySharedValueClamps = Object.freeze({
   historySeconds: (value) => (typeof nodeGraphWaterfallClampHistorySeconds === "function"
     ? nodeGraphWaterfallClampHistorySeconds(value, 0.25)
     : nodeGraphTraceDisplayClampHistorySeconds(value)),
-  historyPercent: (value) => (typeof nodeGraphOnsetClampHistoryPercent === "function"
-    ? nodeGraphOnsetClampHistoryPercent(value, 100)
-    : Math.max(0, Math.min(100, Number.isFinite(Number(value)) ? Number(value) : 100))),
   lineLength: nodeGraphTraceDisplayClampUnit,
   lineThickness: nodeGraphTraceDisplayClampNonNegative,
   faceBlur: nodeGraphTraceDisplayClampUnit,

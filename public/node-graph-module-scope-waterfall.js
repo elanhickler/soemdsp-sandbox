@@ -10,9 +10,11 @@
 // face — only scroll existing pixels and fill the new column(s) on the right.
 // History (seconds) = freerun window across the face. Shorter = faster scroll. At 0 the same scale is one current bar.
 // No source sync. A zero-crossing lock fights the scroll+stamp strip.
-// 1D Onset Sync is separate: while on, each Reset edge starts a fresh live trace
-// at its exact sample, History % of the previous Reset gap long; when several
-// edges land between paints the face shows the latest complete pass instead.
+// 1D Onset is a sweep: each pass restarts the write cursor at x = 0 on its
+// exact start sample and overwrites column by column; the previous trace stays
+// visible ahead of the cursor. The face is History seconds wide, always, so a
+// Reset-aligned impulse lands at the same x every pass. Sync: every Reset edge
+// starts a pass, in sample order, even several between two paints.
 // WebGL history texture. Instant Waterfall only — no Hz dual-path.
 
 function nodeGraphWaterfallNowMs() {
@@ -77,14 +79,6 @@ function nodeGraphOnsetTraceRange(onset) {
 function nodeGraphOnsetResetSyncOn(settings) {
   const raw = settings?.resetSync;
   return raw === true || raw === 1 || raw === "1" || raw === "true";
-}
-
-/** Sync: note a Reset edge at its exact sample, the gap from the previous one, and how many arrived this paint. */
-function nodeGraphOnsetNoteReset(onset, frame) {
-  const prev = onset.resetAt;
-  if (Number.isFinite(prev) && frame > prev) onset.gap = frame - prev;
-  onset.resetAt = frame;
-  onset.newEdges += 1;
 }
 
 function nodeGraphOnsetScanEdges(buffer, fromAbs, toAbs, planck, latch, kind, onHit) {
@@ -155,6 +149,7 @@ function nodeGraphOnsetTraceHasSamples(onset) {
   return false;
 }
 
+/** Each stored column keeps its own pass start, so ink ahead of the cursor stays where it was drawn. */
 function nodeGraphOnsetTraceEnsure(onset, key, rgb, buffer, width) {
   if (!onset.traces) onset.traces = Object.create(null);
   let trace = onset.traces[key];
@@ -209,123 +204,155 @@ function nodeGraphOnsetColumnPoints(col) {
 }
 
 /**
- * Draw stored column points. begin/end are column indexes.
- * reopen: redraw from column `begin` after a strip clear. The line starts at
- * column begin-1's last point (not the stored pen) and is scissored to the
- * strip, so the finished columns left of it are never inked twice.
+ * Face points for columns begin..end-1 of one trace, at sub-pixel x from each
+ * sample's own frame. Runs break where the pass changes (the new sweep meets
+ * the old trace ahead of the cursor) and where the pass wraps at Position.
  */
-function nodeGraphOnsetEmitTrace(canvas, onset, key, trace, slot, settings, height, width, origin, faceSamples, startPx, begin, end, reopen = false) {
-  if (typeof nodeGraphOnsetGlStrokePolyline !== "function") return;
-  if (!(end > begin)) return;
-  if (!onset.pens) onset.pens = Object.create(null);
-  const strokePx = typeof nodeGraphOnsetStrokeCanvasPx === "function"
-    ? nodeGraphOnsetStrokeCanvasPx(canvas, settings)
-    : 1;
+function nodeGraphOnsetTraceRuns(onset, trace, slot, settings, height, width, faceSamples, startPx, begin, end, strokePx) {
   const runs = [];
   let run = [];
+  let prevOrigin = NaN;
+  let prevU = NaN;
   const cols = trace.columns || [];
-  let pen = onset.pens[key];
-  if (reopen) {
-    pen = null;
-    const before = begin > 0 ? nodeGraphOnsetColumnPoints(cols[begin - 1]) : [];
-    for (let i = before.length - 1; i >= 0 && !pen; i -= 1) {
-      const y = nodeGraphOnsetTraceY(before[i].raw, trace.buffer, slot, settings, height, strokePx, onset.range);
-      if (y == null) continue;
-      const loc = nodeGraphOnsetTraceX(before[i].frame, origin, faceSamples, width, startPx);
-      pen = { x: loc.x, y, u: loc.u, frame: before[i].frame };
-    }
-  }
-  let prevU = pen ? pen.u : NaN;
-  if (pen) run.push({ x: pen.x, y: pen.y });
-  // The strip's left edge on screen: only the run holding it can reach back
-  // into finished history (later runs start after a wrap, at x = 0).
-  const clipX0 = reopen ? (startPx + begin) % width : null;
-  let clipRun = reopen ? 0 : -1;
   for (let c = begin; c < end; c += 1) {
-    const pts = nodeGraphOnsetColumnPoints(cols[c]);
+    const col = cols[c];
+    const pts = nodeGraphOnsetColumnPoints(col);
+    if (pts.length && col.origin !== prevOrigin) {
+      if (run.length) runs.push(run);
+      run = [];
+      prevOrigin = col.origin;
+      prevU = NaN;
+    }
     for (let i = 0; i < pts.length; i += 1) {
       const y = nodeGraphOnsetTraceY(pts[i].raw, trace.buffer, slot, settings, height, strokePx, onset.range);
       if (y == null) continue;
-      const loc = nodeGraphOnsetTraceX(pts[i].frame, origin, faceSamples, width, startPx);
-      const wrap = Number.isFinite(prevU) && Math.floor(loc.u / width) !== Math.floor(prevU / width);
-      if (wrap) {
-        if (run.length >= 2) runs.push(run);
-        else if (clipRun === runs.length) clipRun = -1;
+      const loc = nodeGraphOnsetTraceX(pts[i].frame, col.origin, faceSamples, width, startPx);
+      if (Number.isFinite(prevU) && Math.floor(loc.u / width) !== Math.floor(prevU / width)) {
+        if (run.length) runs.push(run);
         run = [];
       }
       run.push({ x: loc.x, y });
       prevU = loc.u;
-      onset.pens[key] = { x: loc.x, y, u: loc.u, frame: pts[i].frame };
     }
   }
-  if (run.length >= 2) runs.push(run);
-  else if (run.length === 1) runs.push([run[0], { x: run[0].x + 1e-3, y: run[0].y }]);
-  const color = trace.rgb || [255, 255, 255, 1];
-  for (let r = 0; r < runs.length; r += 1) {
-    nodeGraphOnsetGlStrokePolyline(canvas, runs[r], strokePx, color, r === clipRun ? clipX0 : null);
-  }
+  if (run.length) runs.push(run);
+  return runs;
 }
 
-// Fill bar for one stored column: min..max, Auto Range aware, Bottom fill aware.
-function nodeGraphOnsetColumnBarYs(col, trace, slot, settings, height, range) {
-  if (!col?.first) return null;
-  if (!range) {
-    return nodeGraphWaterfallAccBarYs(
-      { has: true, min: col.min.raw, max: col.max.raw }, trace.buffer, slot, settings, height,
-    );
+/**
+ * Zoomed in (samples more than a pixel apart): a monotone cubic through the
+ * samples, stepped every pixel, so the stroke is a smooth curve with no
+ * overshoot past a sample. Zoomed out, the points are already the per-column
+ * first / min / max / last envelope at their own x, so peaks never vanish.
+ * Returns flat [x0, y0, x1, y1, ...].
+ */
+function nodeGraphOnsetSmoothRun(run) {
+  const n = run.length;
+  const out = [];
+  if (!n) return out;
+  const slope = new Array(Math.max(0, n - 1));
+  for (let i = 0; i < n - 1; i += 1) {
+    const dx = run[i + 1].x - run[i].x;
+    slope[i] = dx > 1e-9 ? (run[i + 1].y - run[i].y) / dx : 0;
   }
-  const a = nodeGraphOnsetTraceY(col.min.raw, trace.buffer, slot, settings, height, 0, range);
-  const b = nodeGraphOnsetTraceY(col.max.raw, trace.buffer, slot, settings, height, 0, range);
-  if (a == null || b == null) return null;
-  let y0 = Math.min(a, b);
-  let y1 = nodeGraphWaterfallIsBottomFill(settings) ? height : Math.max(a, b);
-  if (y1 - y0 < 1) {
-    const mid = (y0 + y1) * 0.5;
-    y0 = mid - 0.5;
-    y1 = mid + 0.5;
+  const tan = new Array(n);
+  for (let i = 0; i < n; i += 1) {
+    if (i === 0) tan[i] = n > 1 ? slope[0] : 0;
+    else if (i === n - 1) tan[i] = slope[n - 2];
+    else tan[i] = slope[i - 1] * slope[i] <= 0 ? 0 : 2 / (1 / slope[i - 1] + 1 / slope[i]);
   }
-  return { y0, y1 };
-}
-
-/** Ink = fill or both: stamp filled columns begin..end-1 for every trace, in channel order. */
-function nodeGraphOnsetStampFills(canvas, onset, keys, slot, settings, height, width, startPx, begin, end) {
-  if (!nodeGraphWaterfallBarsFilled(settings) || !(end > begin)) return;
-  const mode = nodeGraphWaterfallBlendMode(settings, { rgbGuns: false });
-  let stampComposite = "source-over";
-  if (mode === "lighter" || mode === "screen" || mode === "multiply") stampComposite = mode;
-  else if (mode === "combine" || mode === "meet") stampComposite = "lighter";
-  const connect = nodeGraphWaterfallDetailConnects(settings)
-    && nodeGraphWaterfallBarThickness(settings) >= 0.999;
-  for (let c = begin; c < end; c += 1) {
-    const x = (startPx + c) % width;
-    const seam = c > 0 && x === 0;
-    const spans = [];
-    for (let i = 0; i < keys.length; i += 1) {
-      const trace = onset.traces?.[keys[i]];
-      if (!trace) continue;
-      const ys = nodeGraphOnsetColumnBarYs(trace.columns[c], trace, slot, settings, height, onset.range);
-      const prev = connect && !seam && c > 0
-        ? nodeGraphOnsetColumnBarYs(trace.columns[c - 1], trace, slot, settings, height, onset.range)
-        : null;
-      spans.push({ key: keys[i], ys, prevEdge: prev, rgb: trace.rgb || [255, 255, 255, 1] });
+  out.push(run[0].x, run[0].y);
+  for (let i = 0; i < n - 1; i += 1) {
+    const a = run[i];
+    const b = run[i + 1];
+    const dx = b.x - a.x;
+    const steps = dx > 1 ? Math.ceil(dx) : 1;
+    for (let k = 1; k <= steps; k += 1) {
+      const t = k / steps;
+      const t2 = t * t;
+      const t3 = t2 * t;
+      const y = (2 * t3 - 3 * t2 + 1) * a.y + (t3 - 2 * t2 + t) * dx * tan[i]
+        + (-2 * t3 + 3 * t2) * b.y + (t3 - t2) * dx * tan[i + 1];
+      out.push(a.x + dx * t, y);
     }
-    nodeGraphWaterfallStampColumnFills(canvas, x, spans, mode, stampComposite, true);
   }
+  return out;
 }
 
-function nodeGraphOnsetRedrawTraces(canvas, onset, slot, settings, height, width, origin, faceSamples, startPx) {
-  onset.pens = Object.create(null);
+/**
+ * Draw columns begin..end-1 of every trace into the face texture with the
+ * shared antialiased GL line drawer: fill first (outline to the zero line, or
+ * to the bottom with Bottom fill), then the stroke, channels in order.
+ * clipX0 (canvas px): ink only at x >= clipX0. The strip then starts two
+ * finished columns early so the curve enters it with the right slope.
+ */
+function nodeGraphOnsetDrawStrip(canvas, onset, keys, slot, settings, height, width, faceSamples, startPx, begin, end, clipX0 = null) {
+  const s = canvas?._wfGlSession;
+  const fill = nodeGraphWaterfallBarsFilled(settings);
+  const stroke = nodeGraphWaterfallDrawStroke(settings);
+  if (!s?.gl || !s.read?.fbo || !(end > begin) || (!fill && !stroke)) return;
+  const batch = typeof nodeGraphGlLinesBegin === "function"
+    ? nodeGraphGlLinesBegin(canvas, [0, 0, 0, 0], { publishNodeId: "" })
+    : null;
+  if (!batch || typeof nodeGraphGlLinesDrawInto !== "function") {
+    nodeGraphDisplayGlFailed(canvas, "1D Onset: no shared GL device");
+    return;
+  }
+  const strokePx = nodeGraphOnsetStrokeCanvasPx(canvas, settings);
+  const from = clipX0 == null ? begin : Math.max(0, begin - 2);
+  const curves = [];
+  for (let i = 0; i < keys.length; i += 1) {
+    const trace = onset.traces?.[keys[i]];
+    if (!trace) continue;
+    const rgb = trace.rgb || [255, 255, 255, 1];
+    const rgba = [rgb[0] / 255, rgb[1] / 255, rgb[2] / 255, rgb.length > 3 ? rgb[3] : 1];
+    const runs = nodeGraphOnsetTraceRuns(onset, trace, slot, settings, height, width, faceSamples, startPx, from, end, strokePx)
+      .map(nodeGraphOnsetSmoothRun);
+    let base = height;
+    if (!nodeGraphWaterfallIsBottomFill(settings)) {
+      const zero = nodeGraphOnsetTraceY(0, trace.buffer, slot, settings, height, 0, onset.range);
+      base = zero == null ? height * 0.5 : Math.max(0, Math.min(height, zero));
+    }
+    curves.push({ rgba, runs, base });
+  }
+  for (let i = 0; fill && i < curves.length; i += 1) {
+    const { rgba, runs, base } = curves[i];
+    for (const flat of runs) {
+      if (flat.length >= 4) nodeGraphGlLinesFillUnder(batch, flat, base, rgba);
+      // Fill alone: a hairline feather along the outline antialiases its edge.
+      if (!stroke && flat.length >= 4) nodeGraphGlLinesPolyline(batch, flat, 0, 0.75, rgba);
+    }
+  }
+  const half = Math.max(0, strokePx * 0.5 - 0.5);
+  for (let i = 0; stroke && i < curves.length; i += 1) {
+    const { rgba, runs } = curves[i];
+    for (const flat of runs) {
+      if (flat.length >= 4) nodeGraphGlLinesPolyline(batch, flat, half, 1, rgba);
+      else if (flat.length === 2) nodeGraphGlLinesDot(batch, flat[0], flat[1], half, 1, rgba);
+    }
+  }
+  nodeGraphWaterfallGlFlush(s);
+  const gl = s.gl;
+  gl.bindFramebuffer(gl.FRAMEBUFFER, s.read.fbo);
+  gl.viewport(0, 0, s.w, s.h);
+  const clip = clipX0 == null ? null : Math.max(0, Math.min(s.w, Math.floor(clipX0)));
+  if (clip !== null) {
+    gl.enable(gl.SCISSOR_TEST);
+    gl.scissor(clip, 0, s.w - clip, s.h);
+  } else {
+    gl.disable(gl.SCISSOR_TEST);
+  }
+  const ok = nodeGraphGlLinesDrawInto(batch);
+  gl.disable(gl.SCISSOR_TEST);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  if (!ok) nodeGraphDisplayGlFailed(canvas, "1D Onset: GL draw failed");
+}
+
+function nodeGraphOnsetRedrawTraces(canvas, onset, slot, settings, height, width, faceSamples, startPx) {
   const traces = onset.traces;
   if (!traces) return;
   const keys = Object.keys(traces).filter((k) => traces[k]?.columns?.length);
-  nodeGraphOnsetStampFills(canvas, onset, keys, slot, settings, height, width, startPx, 0, width);
-  if (!nodeGraphWaterfallDrawStroke(settings)) return;
-  for (let i = 0; i < keys.length; i += 1) {
-    const key = keys[i];
-    nodeGraphOnsetEmitTrace(
-      canvas, onset, key, traces[key], slot, settings, height, width, origin, faceSamples, startPx, 0, traces[key].columns.length,
-    );
-  }
+  nodeGraphOnsetDrawStrip(canvas, onset, keys, slot, settings, height, width, faceSamples, startPx, 0, width);
 }
 
 function nodeGraphOnsetPaint(spec, live) {
@@ -359,16 +386,10 @@ function nodeGraphOnsetPaint(spec, live) {
   const node = typeof nodeGraphModuleScopeNodeForSlot === "function"
     ? nodeGraphModuleScopeNodeForSlot(spec.slot)
     : null;
-  // 1D Onset only. 2D Onset keeps the History stepper. Off clears the clock so
-  // the next enable waits for two new Reset edges.
+  // 1D Onset only (2D Onset keeps its own History).
   const resetSync = node?.type === "onset" && nodeGraphOnsetResetSyncOn(settings);
   const hz = nodeGraphWaterfallVisualHz(live);
-  if (!resetSync) {
-    onset.gap = NaN;
-    onset.passLength = NaN;
-    onset.resetAt = NaN;
-  }
-  onset.newEdges = 0;
+  const resetEdges = [];
   const resetHit = nodeGraphOnsetScanEdges(
     resetBuf,
     scanFrom,
@@ -376,7 +397,7 @@ function nodeGraphOnsetPaint(spec, live) {
     planck,
     onset,
     "reset",
-    resetSync ? (frame) => nodeGraphOnsetNoteReset(onset, frame) : null,
+    resetSync ? (frame) => resetEdges.push(frame) : null,
   );
   let signalHit = nodeGraphOnsetScanEdges(live, scanFrom, absEnd, planck, onset, "signal");
   const right = spec.stereoBuffers?.right;
@@ -385,36 +406,16 @@ function nodeGraphOnsetPaint(spec, live) {
     if (rightHit >= 0 && (signalHit < 0 || rightHit > signalHit)) signalHit = rightHit;
   }
   onset.scanned = absEnd;
-  // Sync: one new Reset edge starts a live trace at that sample, History % of
-  // the previous gap long (the current gap is not known yet; the previous one
-  // keeps regular triggers at a steady scale; before two edges, History
-  // seconds). Several edges this paint: the newest pass would only flash, so
-  // the face shows the latest complete pass, exactly its own gap. Passes in
-  // between are skipped, never merged. Sync waits for Resets once it has one;
-  // otherwise a Reset / signal edge arms.
-  const syncArm = !resetSync || onset.newEdges === 0 ? null
-    : (onset.newEdges >= 2
-      ? { at: onset.resetAt - onset.gap, length: onset.gap }
-      : { at: onset.resetAt, length: onset.gap });
-  const armAt = syncArm
-    ? syncArm.at
-    : (resetSync && Number.isFinite(onset.resetAt) ? -1 : (resetHit >= 0
-      ? resetHit
-      : (signalHit >= 0 && (onset.parked || !onset.live) ? signalHit : -1)));
-  if (syncArm) {
-    onset.passLength = syncArm.length;
-    onset.wipe = true;
-  }
-  if (armAt >= 0) {
-    onset.origin = armAt;
-    onset.drawn = armAt;
-    onset.parked = false;
-    onset.live = true;
-    onset.lastPixel = -1;
-    onset.edge = Object.create(null);
-    onset.strokePts = Object.create(null);
-    onset.traces = Object.create(null);
-    onset.pens = Object.create(null);
+  // Pass starts this paint. Sync: every Reset edge, nothing else (a signal
+  // edge would put the impulse at x = 0). Off: the newest Reset, else a
+  // signal edge once the pass is done.
+  let starts;
+  if (resetSync) {
+    starts = resetEdges;
+  } else if (resetHit >= 0) {
+    starts = [resetHit];
+  } else {
+    starts = signalHit >= 0 && (onset.parked || !onset.live) ? [signalHit] : [];
   }
   let position = typeof nodeGraphModuleScopeNodeParam === "function"
     ? nodeGraphModuleScopeNodeParam(node, "position", 0)
@@ -440,56 +441,35 @@ function nodeGraphOnsetPaint(spec, live) {
   const autoToggled = typeof onset.autoRange === "boolean" && onset.autoRange !== autoRange;
   onset.autoRange = autoRange;
   if (!autoRange) onset.range = null;
-  if (!onset.live || !Number.isFinite(onset.origin)) {
+  if (!starts.length && (!onset.live || !Number.isFinite(onset.origin))) {
     present();
     return true;
   }
-  const history = nodeGraphWaterfallHistorySeconds(settings);
-  const pct = typeof nodeGraphOnsetClampHistoryPercent === "function"
-    ? nodeGraphOnsetClampHistoryPercent(settings?.historyPercent, 100)
-    : 100;
-  // Sync: a Reset gap in samples (exact, no seconds round trip).
-  const faceSamples = resetSync && onset.passLength > 0
-    ? Math.max(1, Math.round(onset.passLength * (pct / 100)))
-    : Math.max(1, Math.round(hz * Math.max(history, 0)));
-  const endDraw = Math.min(absEnd, onset.origin + faceSamples);
+  // One fixed x scale: History seconds across the face, every pass. A
+  // Reset-gap scale moves impulses whenever the gap changes.
+  const faceSamples = Math.max(1, Math.round(hz * Math.max(nodeGraphWaterfallHistorySeconds(settings), 0)));
   const blendMode = nodeGraphWaterfallBlendMode(settings, { rgbGuns: Boolean(spec?.rgbBuffers) });
   const plateBg = blendMode === "multiply" ? "#ffffff" : (spec.bg || "#000000");
-  if (
-    onset.live
-    && ((Number.isFinite(onset.latchedSamples) && onset.latchedSamples !== faceSamples) || onset.wipe)
-  ) {
-    // Percent or seconds changed, or a new Sync pass: replay from the pass
-    // start on a clean face so no earlier pass shows through.
-    onset.wipe = false;
+  const startPx = Math.floor(position * width) % width;
+  if (typeof nodeGraphWaterfallGlEnsure === "function") {
+    nodeGraphWaterfallGlEnsure(canvas, plateBg);
+  }
+  if (Number.isFinite(onset.latchedSamples) && onset.latchedSamples !== faceSamples && Number.isFinite(onset.origin)) {
+    // History changed: the old ink is on another scale. Replay the current
+    // pass from its start on a clean face.
     onset.drawn = onset.origin;
     onset.lastPixel = -1;
     onset.parked = false;
-    onset.edge = Object.create(null);
-    onset.strokePts = Object.create(null);
     onset.traces = Object.create(null);
-    onset.pens = Object.create(null);
     if (typeof nodeGraphWaterfallGlReset === "function") nodeGraphWaterfallGlReset(canvas, plateBg);
   }
   onset.latchedSamples = faceSamples;
-  const startPx = Math.floor(position * width) % width;
   if ((scaleChanged || autoToggled) && nodeGraphOnsetTraceHasSamples(onset)) {
     if (autoRange) onset.range = nodeGraphOnsetTraceRange(onset);
     // The ring has usually moved past the parked pass. Replay every stored
     // sample at the new Scale so the line follows the buffer.
     if (typeof nodeGraphWaterfallGlReset === "function") nodeGraphWaterfallGlReset(canvas, plateBg);
-    else if (typeof nodeGraphWaterfallGlEnsure === "function") nodeGraphWaterfallGlEnsure(canvas, plateBg);
-    nodeGraphOnsetRedrawTraces(
-      canvas, onset, spec.slot, settings, height, width, onset.origin, faceSamples, startPx,
-    );
-  }
-  if (!(endDraw > onset.drawn)) {
-    if (endDraw >= onset.origin + faceSamples) onset.parked = true;
-    present();
-    return true;
-  }
-  if (typeof nodeGraphWaterfallGlEnsure === "function") {
-    nodeGraphWaterfallGlEnsure(canvas, plateBg);
+    nodeGraphOnsetRedrawTraces(canvas, onset, spec.slot, settings, height, width, faceSamples, startPx);
   }
   if (canvas._wfGlSession) canvas._wfGlSession.smooth = nodeGraphWaterfallSmoothLines(settings);
   const channels = nodeGraphWaterfallChannelList({
@@ -498,65 +478,59 @@ function nodeGraphOnsetPaint(spec, live) {
     buffer: live,
     stereoBuffers: spec.stereoBuffers,
   }, settings).filter((ch) => ch.enabled !== false);
-  const p1 = Math.max(0, Math.min(width, Math.floor(((endDraw - onset.origin) / faceSamples) * width)));
-  let p = Number.isFinite(onset.lastPixel) ? onset.lastPixel + 1 : 0;
-  while (p < p1) {
-    const screenX = (startPx + p) % width;
-    if (typeof nodeGraphWaterfallGlClearColumn === "function") {
-      nodeGraphWaterfallGlClearColumn(canvas, screenX, 1, plateBg);
+  const strokePx = typeof nodeGraphOnsetStrokeCanvasPx === "function"
+    ? nodeGraphOnsetStrokeCanvasPx(canvas, settings)
+    : 1;
+  // Advance the write cursor of the current pass to `to` (exclusive). Columns
+  // it reaches are cleared and take this pass's samples; columns ahead keep
+  // the previous ink.
+  const sweepTo = (to) => {
+    const endDraw = Math.min(to, onset.origin + faceSamples);
+    if (endDraw >= onset.origin + faceSamples) onset.parked = true;
+    if (!(endDraw > onset.drawn)) return;
+    const p1 = Math.max(0, Math.min(width, Math.floor(((endDraw - onset.origin) / faceSamples) * width)));
+    for (let p = onset.lastPixel + 1; p < p1; p += 1) {
+      if (typeof nodeGraphWaterfallGlClearColumn === "function") {
+        nodeGraphWaterfallGlClearColumn(canvas, (startPx + p) % width, 1, plateBg);
+      }
     }
-    p += 1;
-  }
-  onset.lastPixel = p1 - 1;
-  const fromFrame = onset.drawn;
-  // Note every channel's new samples first, then redraw one open strip for
-  // all of them in channel order: L, then R on top. Stroked channel by
-  // channel with a clear each, R's clear erased L's ink in the open column
-  // and the next frame's L covered R where they cross (the order flipped
-  // along the line). The strip starts `reach` columns before the first new
-  // one, so a thick line's spill into its neighbours is redrawn, not cut.
-  const traces = [];
-  let beginAll = width;
-  let endAll = -1;
-  for (let i = 0; i < channels.length; i += 1) {
-    const ch = channels[i];
-    const key = ch.lastYKey || String(i);
-    const rgb = [...nodeGraphWaterfallParseInkRgb(ch.color), nodeGraphWaterfallClamp01(ch.bright ?? 1, 1)];
-    const trace = nodeGraphOnsetTraceEnsure(onset, key, rgb, ch.buffer, width);
-    traces.push({ key, trace });
-    let beginCol = width;
-    let endCol = -1;
-    for (let s = fromFrame; s < endDraw; s += 1) {
-      const v = typeof nodeGraphScopeBufferSampleAtAbsoluteFrame === "function"
-        ? nodeGraphScopeBufferSampleAtAbsoluteFrame(ch.buffer, s)
-        : null;
-      if (v == null || !Number.isFinite(v)) continue;
-      const col = nodeGraphOnsetTraceColumn(s, onset.origin, faceSamples, width);
-      if (!trace.columns[col]) trace.columns[col] = {};
-      nodeGraphOnsetColumnNote(trace.columns[col], s, v);
-      if (col < beginCol) beginCol = col;
-      if (col > endCol) endCol = col;
+    onset.lastPixel = Math.max(onset.lastPixel, p1 - 1);
+    // Note every channel's new samples first, then redraw one open strip for
+    // all of them in channel order: L, then R on top. The strip starts
+    // `reach` columns before the first new one, so a thick line's spill into
+    // its neighbours is redrawn, not cut.
+    const keys = [];
+    let beginAll = width;
+    let endAll = -1;
+    for (let i = 0; i < channels.length; i += 1) {
+      const ch = channels[i];
+      const key = ch.lastYKey || String(i);
+      const rgb = [...nodeGraphWaterfallParseInkRgb(ch.color), nodeGraphWaterfallClamp01(ch.bright ?? 1, 1)];
+      const trace = nodeGraphOnsetTraceEnsure(onset, key, rgb, ch.buffer, width);
+      keys.push(key);
+      for (let s = onset.drawn; s < endDraw; s += 1) {
+        const v = typeof nodeGraphScopeBufferSampleAtAbsoluteFrame === "function"
+          ? nodeGraphScopeBufferSampleAtAbsoluteFrame(ch.buffer, s)
+          : null;
+        if (v == null || !Number.isFinite(v)) continue;
+        const c = nodeGraphOnsetTraceColumn(s, onset.origin, faceSamples, width);
+        if (trace.columns[c]?.origin !== onset.origin) trace.columns[c] = { origin: onset.origin };
+        nodeGraphOnsetColumnNote(trace.columns[c], s, v);
+        if (c < beginAll) beginAll = c;
+        if (c > endAll) endAll = c;
+      }
     }
-    if (endCol >= beginCol) {
-      beginAll = Math.min(beginAll, beginCol);
-      endAll = Math.max(endAll, endCol);
+    onset.drawn = endDraw;
+    // Auto Range: a new min or max moves every stored point, so replay the face.
+    const range = autoRange ? nodeGraphOnsetTraceRange(onset) : null;
+    const prevRange = onset.range;
+    onset.range = range;
+    if (range && (!prevRange || prevRange.lo !== range.lo || prevRange.hi !== range.hi)) {
+      if (typeof nodeGraphWaterfallGlReset === "function") nodeGraphWaterfallGlReset(canvas, plateBg);
+      nodeGraphOnsetRedrawTraces(canvas, onset, spec.slot, settings, height, width, faceSamples, startPx);
+      return;
     }
-  }
-  // Auto Range: a new min or max moves every stored point, so replay the face.
-  const range = autoRange ? nodeGraphOnsetTraceRange(onset) : null;
-  const prevRange = onset.range;
-  onset.range = range;
-  const rangeMoved = Boolean(range)
-    && (!prevRange || prevRange.lo !== range.lo || prevRange.hi !== range.hi);
-  if (rangeMoved) {
-    if (typeof nodeGraphWaterfallGlReset === "function") nodeGraphWaterfallGlReset(canvas, plateBg);
-    nodeGraphOnsetRedrawTraces(
-      canvas, onset, spec.slot, settings, height, width, onset.origin, faceSamples, startPx,
-    );
-  } else if (endAll >= beginAll) {
-    const strokePx = typeof nodeGraphOnsetStrokeCanvasPx === "function"
-      ? nodeGraphOnsetStrokeCanvasPx(canvas, settings)
-      : 1;
+    if (!(endAll >= beginAll)) return;
     const c0 = Math.max(0, beginAll - Math.ceil(strokePx * 0.5 + 1.5));
     // The open column can gain a new peak after it was drawn: it is cleared
     // and drawn again with the rest of the strip.
@@ -565,18 +539,24 @@ function nodeGraphOnsetPaint(spec, live) {
         nodeGraphWaterfallGlClearColumn(canvas, (startPx + c) % width, 1, plateBg);
       }
     }
-    nodeGraphOnsetStampFills(
-      canvas, onset, traces.map((t) => t.key), spec.slot, settings, height, width, startPx, c0, endAll + 1,
+    // A strip across the Position seam draws unclipped from c0.
+    const wraps = startPx + c0 < width && startPx + endAll >= width;
+    nodeGraphOnsetDrawStrip(
+      canvas, onset, keys, spec.slot, settings, height, width, faceSamples, startPx,
+      c0, endAll + 1, wraps ? null : (startPx + c0) % width,
     );
-    for (let i = 0; nodeGraphWaterfallDrawStroke(settings) && i < traces.length; i += 1) {
-      nodeGraphOnsetEmitTrace(
-        canvas, onset, traces[i].key, traces[i].trace, spec.slot, settings, height, width, onset.origin, faceSamples, startPx,
-        c0, endAll + 1, true,
-      );
-    }
+  };
+  // Finish the current pass up to each new start, then restart the cursor at
+  // x = 0 on that exact sample. Nothing is cleared at a restart.
+  for (let i = 0; i < starts.length; i += 1) {
+    if (onset.live && Number.isFinite(onset.origin)) sweepTo(starts[i]);
+    onset.origin = starts[i];
+    onset.drawn = starts[i];
+    onset.parked = false;
+    onset.live = true;
+    onset.lastPixel = -1;
   }
-  onset.drawn = endDraw;
-  if (endDraw >= onset.origin + faceSamples) onset.parked = true;
+  sweepTo(absEnd);
   present();
   return true;
 }

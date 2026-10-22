@@ -719,24 +719,11 @@ function normalizeNodeGraphWaterfallHistory(source, defaults = {}) {
   }
   const historySeconds = nodeGraphWaterfallClampHistorySeconds(sec, defSec);
   const historyCycles = nodeGraphTraceDisplayClampHistoryCycles(cycles, defCycles);
-  const historyPercent = nodeGraphOnsetClampHistoryPercent(
-    source?.historyPercent,
-    defaults?.historyPercent ?? 100,
-  );
   return {
     historySeconds,
     historyCycles,
-    historyPercent,
     zoomSeconds: historySeconds,
   };
-}
-
-/** 1D Onset Sync window. 0 = one bar. 100 = the whole Reset gap. */
-function nodeGraphOnsetClampHistoryPercent(value, fallback = 100) {
-  const n = Number(value);
-  const fb = Number(fallback);
-  const use = Number.isFinite(n) ? n : (Number.isFinite(fb) ? fb : 100);
-  return Math.max(0, Math.min(100, use));
 }
 
 

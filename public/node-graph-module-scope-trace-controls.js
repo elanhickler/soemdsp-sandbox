@@ -1461,13 +1461,6 @@ const nodeGraphDisplaySettingsFieldMeta = Object.freeze({
     id: "nodeTraceDisplayHistoryCycles",
     title: "Sync On: cycles in view across the face. Rising zero-crossing locks phase.",
   }),
-  historyPercent: Object.freeze({
-    label: "History (percent)",
-    inputmode: "decimal",
-    id: "nodeTraceDisplayHistoryPercent",
-    title:
-      "1D Onset Sync: percent of the time between Reset pulses. 10 fills the face with the first 10% of that interval. 100 is the whole interval. 0 is the current bar.",
-  }),
   cycles: Object.freeze({ label: "Cycles", inputmode: "decimal", id: "nodeTraceDisplayCycles" }),
   digits: Object.freeze({
     label: "Digits",
