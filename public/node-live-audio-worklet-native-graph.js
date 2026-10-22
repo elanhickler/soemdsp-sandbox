@@ -5152,6 +5152,8 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
       push("morph", P.NATIVE_GRAPH_PARAM_SHAPE, cont("morph", 1));
       push("pulseWidth", P.NATIVE_GRAPH_PARAM_WIDTH, cont("pulseWidth", 0.5));
       push("blend", P.NATIVE_GRAPH_PARAM_MIX, cont("blend", 0.5));
+      push("spacing", P.NATIVE_GRAPH_PARAM_CENTER, cont("spacing", 1));
+      push("oddEven", P.NATIVE_GRAPH_PARAM_RESONANCE, cont("oddEven", 0));
       push("amplitude", P.NATIVE_GRAPH_PARAM_AMPLITUDE, cont("amplitude", 1));
       continue;
     }

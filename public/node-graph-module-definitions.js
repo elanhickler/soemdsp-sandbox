@@ -4937,6 +4937,8 @@ const nodeGraphModuleDefinitions = (
       },
       { key: "pulseWidth", label: "Pulse Width", defaultValue: "0.5", min: "0.01", mid: "0.5", max: "0.99", step: "0.01" },
       { key: "blend", label: "SquSaw", defaultValue: "0.5", min: "0", mid: "0.5", max: "1", step: "0.01" },
+      { key: "spacing", label: "Spacing", defaultValue: "1", min: "0.1", mid: "1", max: "4", nonlinearSlider: true, step: "any" },
+      { key: "oddEven", label: "Odd/Even", defaultValue: "0", min: "0", mid: "0.5", max: "1", nonlinearSlider: false, step: "any" },
       {
         defaultValue: "1",
         key: "amplitude",

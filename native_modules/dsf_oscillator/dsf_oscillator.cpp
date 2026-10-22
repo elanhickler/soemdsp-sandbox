@@ -170,6 +170,75 @@ double sineSawKernel(double turns, const DsfKernelCoeffs& c) {
   return num / den;
 }
 
+// Same coefficients with k2 scaled: mult 2 squares A = 2^k2 (even series).
+void prepareSawCoeffsMul(DsfKernelCoeffs& c, double morph, double n, double mult) {
+  if (c.ready && c.morph == morph && c.n == n) return;
+  const double m = clamp(morph, 0.0, 1.0);
+  double k = (1.0 - dsfPow(m, 0.14)) * 4.0;
+  if (k < 1.0e-6) k = 1.0e-6;
+  const double k2 = k * k * mult;
+  c.morph = morph;
+  c.n = n;
+  c.k42 = dsp_exp2(2.0 * k2);
+  c.eightK2 = dsfPow(8.0, k2);
+  c.decay = dsp_exp2(-k2 * (n + 1.0));
+  c.twoK2 = dsp_exp2(k2);
+  c.denCos = dsp_exp2(1.0 + k2);
+  c.ready = 1;
+}
+
+// The kernel is sum_{k=1..n} A^(1-k) cos(k x), A = 2^k2. Cos and sine parts
+// of that sum (the sine part has the same closed form with sin in place of cos).
+// Polynomial sin/cos (not the LUT): at Morph 1 the pole sits on the unit
+// circle and trig error near it, integrated, became low-frequency drift.
+void sineSawKernelCS(double turns, const DsfKernelCoeffs& c, double& C, double& S) {
+  double sinx = 0.0, cosx = 0.0, sinxn = 0.0, cosxn = 0.0;
+  dsp_sin_cos_turns(turns, &sinx, &cosx);
+  dsp_sin_cos_turns(turns * c.n, &sinxn, &cosxn);
+  const double cos1 = cosxn * cosx - sinxn * sinx;
+  const double sin1 = sinxn * cosx + cosxn * sinx;
+  const double den = 1.0 - c.denCos * cosx + c.k42;
+  if (den < 1.0e-2) {
+    // Near the pole (all partials in phase) the closed form is 0/0 and its
+    // rounding error, rotated by the carrier and integrated, drifts the
+    // output. Sum the partials directly there (a small arc of each cycle).
+    const double r = 1.0 / c.twoK2;
+    double tr = cosx, ti = sinx, sr = 0.0, si = 0.0;
+    const int n = static_cast<int>(c.n);
+    for (int k = 0; k < n; k++) {
+      sr += tr;
+      si += ti;
+      const double nr = (tr * cosx - ti * sinx) * r;
+      ti = (tr * sinx + ti * cosx) * r;
+      tr = nr;
+    }
+    C = sr;
+    S = si;
+    return;
+  }
+  C = ((c.k42 * cosxn - c.eightK2 * cos1) * c.decay + cosx * c.k42 - c.twoK2) / den;
+  S = ((c.k42 * sinxn - c.eightK2 * sin1) * c.decay + sinx * c.k42) / den;
+}
+
+// Moorer general form: partial k (1..n) at carrier + (k-1)*modulator, weight
+// A^(1-k). Spacing s puts partial k at f*(1 + (k-1)*s); s = 1 is harmonic.
+// Odd/Even subtracts oddEven times the even-numbered partials (k = 2, 4, ..),
+// which are the same series at twice the spacing with A squared.
+double spacedKernel(double ct, double mt, const DsfKernelCoeffs& c,
+                    const DsfKernelCoeffs& ce, double oddEven) {
+  double sind = 0.0, cosd = 0.0;
+  dsp_sin_cos_turns(wrap01(ct - mt), &sind, &cosd);
+  double C = 0.0, S = 0.0;
+  sineSawKernelCS(mt, c, C, S);
+  double y = cosd * C - sind * S;
+  if (oddEven != 0.0 && ce.n >= 1.0) {
+    double Ce = 0.0, Se = 0.0;
+    sineSawKernelCS(wrap01(2.0 * mt), ce, Ce, Se);
+    y -= oddEven * (cosd * Ce - sind * Se) / c.twoK2;
+  }
+  return y;
+}
+
 // exp(x) for small negative x (here always in roughly [-0.12, 0], since
 // dt = frequency/sampleRate is bounded and scaled down before use) -- a
 // short Taylor series around 0 is accurate to ~4e-9 over that range, no
@@ -209,7 +278,19 @@ struct DsfOscillatorState {
   DsfKernelCoeffs kernelLo;  // n0 - 1 partials (top partial faded out)
   DsfKernelCoeffs kernelHi;  // n0 partials (top partial fully in)
   double frac;               // fade of the top partial, 0..1
+  double tm;                 // modulator phase (Spacing x frequency), 0..1
+  double spacing;            // partial ratio, 1 = harmonic
+  double oddEven;            // 0 all partials, 1 odd only
+  DsfKernelCoeffs evenLo;    // even-only series matching kernelLo
+  DsfKernelCoeffs evenHi;    // even-only series matching kernelHi
 };
+
+double spacedFaded(double ct, double mt, const DsfOscillatorState& s) {
+  const double lo = spacedKernel(ct, mt, s.kernelLo, s.evenLo, s.oddEven);
+  if (s.frac <= 0.0) return lo;
+  const double hi = spacedKernel(ct, mt, s.kernelHi, s.evenHi, s.oddEven);
+  return lo + (hi - lo) * s.frac;
+}
 
 // Crossfade of the two integer-count kernels. Both stay under Nyquist.
 double fadedKernel(double turns, const DsfOscillatorState& s) {
@@ -229,6 +310,7 @@ extern "C" int soemdsp_dsf_oscillator_create() {
       gPool[i] = DsfOscillatorState{};
       gPool[i].active = true;
       gPool[i].triPeak = 1.0;
+      gPool[i].spacing = 1.0;
       return i + 1;
     }
   }
@@ -244,11 +326,19 @@ extern "C" void soemdsp_dsf_oscillator_reset(int handle) {
   if (handle < 1 || handle > kMaxInstances) return;
   DsfOscillatorState& s = gPool[handle - 1];
   s.t = 0.0;
+  s.tm = 0.0;
   s.sawAcc = 0.0;
   s.sqAcc = 0.0;
   s.blendSqAcc = 0.0;
   s.triAcc = 0.0;
   s.triPeak = 1.0;
+}
+
+// Spacing (partial ratio, 1 harmonic) and Odd/Even (0 all, 1 odd only).
+extern "C" void soemdsp_dsf_oscillator_set_spectrum(int handle, double spacing, double oddEven) {
+  if (handle < 1 || handle > kMaxInstances) return;
+  gPool[handle - 1].spacing = spacing;
+  gPool[handle - 1].oddEven = oddEven;
 }
 
 // waveform: 0=Sine, 1=Saw, 2=Square (PWM), 3=Trimorph, 4=SquSaw
@@ -286,20 +376,42 @@ extern "C" void soemdsp_dsf_oscillator_sample(
     sample = sinApprox(s.renderPhase * kPi * 2.0);
   } else {
     const double nyquist = safeSampleRate * 0.5;
-    const double nf = sawPartials(nyquist, safeAbsFrequency);
+    const bool harmonic = s.spacing == 1.0 && s.oddEven == 0.0;
+    double nf;
+    if (harmonic) {
+      nf = sawPartials(nyquist, safeAbsFrequency);
+    } else {
+      // Highest partial f*(1 + (n-1)*|s|) stays one f under Nyquist, as in
+      // the harmonic count. |s| floor only guards the divide.
+      double absS = s.spacing < 0.0 ? -s.spacing : s.spacing;
+      if (absS < 1.0e-9) absS = 1.0e-9;
+      nf = (nyquist / safeAbsFrequency - 2.0) / absS + 1.0;
+      if (nf < 1.0) nf = 1.0;
+      if (nf > 4096.0) nf = 4096.0;
+    }
     const double n0 = static_cast<double>(static_cast<int>(nf));
     const double nLo = n0 > 1.0 ? n0 - 1.0 : 1.0;
     s.frac = n0 > 1.0 ? nf - n0 : 0.0;
     prepareSawCoeffs(s.kernelLo, morph, nLo);
     prepareSawCoeffs(s.kernelHi, morph, n0);
+    if (!harmonic) {
+      prepareSawCoeffsMul(s.evenLo, morph, static_cast<double>(static_cast<int>(nLo * 0.5)), 2.0);
+      prepareSawCoeffsMul(s.evenHi, morph, static_cast<double>(static_cast<int>(n0 * 0.5)), 2.0);
+    }
     // Signed dt runs the phase backward through zero. The 0.9999 is the
     // original guard against the closed form sitting exactly on a sample.
     s.t = wrap01(s.t + dt * 0.9999);
+    s.tm = wrap01(s.tm + dt * s.spacing * 0.9999);
     const double renderT = wrap01(s.t + phaseOffset);
+    const double renderM = wrap01(s.tm + phaseOffset * s.spacing);
+    auto kern = [&](double back) {
+      if (harmonic) return fadedKernel(wrap01(renderT - back), s);
+      return spacedFaded(wrap01(renderT - back), wrap01(renderM - back * s.spacing), s);
+    };
     s.renderPhase = renderT;
 
     const double retention = adaptiveRetention(dt);
-    const double rawSaw = fadedKernel(renderT, s);
+    const double rawSaw = harmonic ? fadedKernel(renderT, s) : kern(0.0);
     s.sawAcc = s.sawAcc * retention + rawSaw * dt;
 
     if (waveform == 1) {
@@ -310,13 +422,13 @@ extern "C" void soemdsp_dsf_oscillator_sample(
       // to the very first Saw/Square crossfade this module had, which
       // just mixed two cleanly-shaped waveforms rather than inheriting
       // PWM's variable-duty shape.
-      const double rawBlendSquare = rawSaw - fadedKernel(wrap01(renderT - 0.5), s);
+      const double rawBlendSquare = rawSaw - kern(0.5);
       s.blendSqAcc = s.blendSqAcc * retention + rawBlendSquare * dt;
       const double b = clamp(blend, 0.0, 1.0);
       sample = s.sawAcc * (1.0 - b) + s.blendSqAcc * b;
     } else {
       const double pw = clamp(pulseWidth, 0.01, 0.99);
-      const double rawShiftedSaw = fadedKernel(wrap01(renderT - pw), s);
+      const double rawShiftedSaw = kern(pw);
       const double rawSquare = rawSaw - rawShiftedSaw;
       s.sqAcc = s.sqAcc * retention + rawSquare * dt;
 
@@ -366,5 +478,5 @@ extern "C" double soemdsp_dsf_oscillator_phase(int handle) {
 }
 
 extern "C" int soemdsp_dsf_oscillator_version() {
-  return 15;
+  return 16;
 }
