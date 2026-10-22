@@ -56,17 +56,12 @@ function commitNodeSliderReadoutEdit(input) {
     nodeSliderReadoutEditRefreshChrome();
     return;
   }
-  const readout = document.createElement("button");
-  readout.type = "button";
-  readout.className = "node-slider-readout";
-  readout.dataset.sliderTarget = input.dataset.sliderTarget;
-  readout.dataset.paramLabel = input.dataset.paramLabel || "";
-  readout.dataset.control = slider?.dataset?.control || "";
-  readout.classList.toggle("number-only", slider?.dataset?.control === "number");
-  readout.setAttribute("aria-label", input.getAttribute("aria-label"));
-  populateNodeSliderReadoutShell(readout);
+  const readout = createNodeSliderReadoutButton(input.dataset.sliderTarget, slider, {
+    paramLabel: input.dataset.paramLabel || "",
+    ariaLabel: input.getAttribute("aria-label"),
+    mirror: input.dataset.mirror === "true",
+  });
   input.replaceWith(readout);
-  attachNodeSliderReadoutEvents(readout);
   syncNodeSliderReadout(slider);
   nodeSliderReadoutEditRefreshChrome();
 }
@@ -85,17 +80,12 @@ function cancelNodeSliderReadoutEdit(input) {
     nodeSliderReadoutEditRefreshChrome();
     return;
   }
-  const readout = document.createElement("button");
-  readout.type = "button";
-  readout.className = "node-slider-readout";
-  readout.dataset.sliderTarget = input.dataset.sliderTarget;
-  readout.dataset.paramLabel = input.dataset.paramLabel || "";
-  readout.dataset.control = slider?.dataset?.control || "";
-  readout.classList.toggle("number-only", slider?.dataset?.control === "number");
-  readout.setAttribute("aria-label", input.getAttribute("aria-label"));
-  populateNodeSliderReadoutShell(readout);
+  const readout = createNodeSliderReadoutButton(input.dataset.sliderTarget, slider, {
+    paramLabel: input.dataset.paramLabel || "",
+    ariaLabel: input.getAttribute("aria-label"),
+    mirror: input.dataset.mirror === "true",
+  });
   input.replaceWith(readout);
-  attachNodeSliderReadoutEvents(readout);
   syncNodeSliderReadout(slider);
   nodeSliderReadoutEditRefreshChrome();
 }
@@ -212,6 +202,7 @@ function beginNodeSliderReadoutEdit(readout) {
   input.type = "text";
   input.className = "node-slider-readout-input";
   input.inputMode = "text";
+  input.dataset.mirror = readout.dataset.mirror || "false";
   // Prefer domainValue (may exceed HTML thumb min/max); slider.value is clamped.
   const domainRaw = Number(slider.dataset?.domainValue);
   const editValue = Number.isFinite(domainRaw) ? domainRaw : Number(slider.value);
@@ -316,16 +307,29 @@ function createNodeSliderReadout(slider) {
   slider.dataset.showSign ??= "false";
   slider.dataset.wraparound ??= "false";
 
+  label.append(createNodeSliderReadoutButton(slider.id, slider, {
+    paramLabel: label.dataset.paramLabel || nodeSliderLabelText(slider),
+    ariaLabel: `${slider.id} current value`,
+  }));
+  syncNodeSliderReadout(slider);
+}
+
+// One readout builder for module rows, type-in restore and Command Center
+// mirrors. A mirror drives the same slider input as the module row.
+function createNodeSliderReadoutButton(sliderId, slider, options = {}) {
   const readout = document.createElement("button");
   readout.type = "button";
   readout.className = "node-slider-readout";
-  readout.dataset.sliderTarget = slider.id;
-  readout.dataset.paramLabel = label.dataset.paramLabel || nodeSliderLabelText(slider);
-  readout.dataset.control = slider.dataset.control || "";
-  readout.classList.toggle("number-only", slider.dataset.control === "number");
-  readout.setAttribute("aria-label", `${slider.id} current value`);
+  readout.dataset.sliderTarget = sliderId;
+  readout.dataset.paramLabel = options.paramLabel || "";
+  readout.dataset.control = slider?.dataset?.control || "";
+  readout.classList.toggle("number-only", slider?.dataset?.control === "number");
+  readout.setAttribute("aria-label", options.ariaLabel || "");
   populateNodeSliderReadoutShell(readout);
   attachNodeSliderReadoutEvents(readout);
-  label.append(readout);
-  syncNodeSliderReadout(slider);
+  if (options.mirror) {
+    readout.dataset.mirror = "true";
+    registerNodeSliderMirrorReadout(readout);
+  }
+  return readout;
 }

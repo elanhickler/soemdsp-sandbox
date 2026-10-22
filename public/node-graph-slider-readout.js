@@ -379,6 +379,8 @@ function syncNodeSliderReadout(slider) {
   if (typeof syncNodeGraphKnobFaceFromSlider === "function") {
     syncNodeGraphKnobFaceFromSlider(slider);
   }
+  // Command Center rows paint even when the module row is hidden or collapsed.
+  paintNodeSliderMirrorReadouts(slider);
   if (
     typeof nodeGraphElementInSkippedContentVisibility === "function"
     && nodeGraphElementInSkippedContentVisibility(slider)
@@ -389,7 +391,46 @@ function syncNodeSliderReadout(slider) {
   if (!readout) {
     return;
   }
+  paintNodeSliderReadout(slider, readout);
+  syncNodeSliderMetadataTooltip(slider);
+  if (typeof nodeGraphGlGraphPresentSoon === "function") nodeGraphGlGraphPresentSoon();
+}
 
+// Extra readouts bound to a module slider input (Command Center rows).
+// One input, one value mapping: every readout paints from the same slider.
+const nodeSliderMirrorReadouts = new Map();
+
+function registerNodeSliderMirrorReadout(readout) {
+  const id = String(readout?.dataset?.sliderTarget || "");
+  if (!id) {
+    return;
+  }
+  let set = nodeSliderMirrorReadouts.get(id);
+  if (!set) {
+    set = new Set();
+    nodeSliderMirrorReadouts.set(id, set);
+  }
+  set.add(readout);
+}
+
+function paintNodeSliderMirrorReadouts(slider) {
+  const set = nodeSliderMirrorReadouts.get(slider?.id);
+  if (!set) {
+    return;
+  }
+  for (const readout of set) {
+    if (readout.isConnected) {
+      paintNodeSliderReadout(slider, readout);
+    } else {
+      set.delete(readout);
+    }
+  }
+  if (!set.size) {
+    nodeSliderMirrorReadouts.delete(slider.id);
+  }
+}
+
+function paintNodeSliderReadout(slider, readout) {
   if (!readout.querySelector(".node-slider-readout-value")) {
     readout.textContent = "";
     populateNodeSliderReadoutShell(readout);
@@ -537,8 +578,6 @@ function syncNodeSliderReadout(slider) {
     syncNodeSliderChoiceDebugSquares(readout, choices, false);
     syncNodeSliderPortalHandle(readout, slider, position, usesPortalWrap);
   }
-  syncNodeSliderMetadataTooltip(slider);
-  if (typeof nodeGraphGlGraphPresentSoon === "function") nodeGraphGlGraphPresentSoon();
 }
 
 function nodeSliderLabelText(slider) {

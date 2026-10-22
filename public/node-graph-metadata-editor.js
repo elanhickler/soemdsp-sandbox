@@ -1612,6 +1612,9 @@ function setNodeMetadataPopoverBlankState(blank = true, message = "Right-click o
   if (grid) {
     grid.hidden = Boolean(blank);
   }
+  if (blank) {
+    renderNodeMetadataParameterSliders(null);
+  }
   popover.dataset.inspectorBlank = blank ? "true" : "false";
 }
 
@@ -1657,6 +1660,7 @@ function fillNodeMetadataPopover(slider) {
   document.getElementById("metadataAliasValue").placeholder = sliderLabel;
   writeNodeMetadataEditorValues(metadata);
   populateNodeMetadataParameterPicker(slider);
+  renderNodeMetadataParameterSliders(slider);
   setMetadataScriptSourceText(formatNodeMetadataScript(slider, metadata));
   setNodeMetadataScriptDirty(false, "script ready", false);
   setNodeMetadataAdvancedScriptVisible(false);
@@ -3347,6 +3351,29 @@ function populateNodeMetadataParameterPicker(slider) {
   if (currentKey && [...select.options].some((option) => option.value === currentKey)) {
     select.value = currentKey;
   }
+}
+
+// One slider per module parameter, hidden rows and collapsed modules
+// included. Each row is a mirror readout on the module's own slider input.
+function renderNodeMetadataParameterSliders(slider) {
+  const list = document.getElementById("metadataParameterSliders");
+  if (!list) {
+    return;
+  }
+  const nodeElement = slider?.closest?.(".dsp-node");
+  const inputs = nodeElement
+    ? [...nodeElement.querySelectorAll('.node-parameter-row input[type="range"][data-param]')]
+      .filter((input) => input.closest(".dsp-node") === nodeElement)
+    : [];
+  list.replaceChildren(...inputs.map((input) => createNodeSliderReadoutButton(input.id, input, {
+    paramLabel: nodeSliderLabelText(input),
+    ariaLabel: nodeSliderLabelText(input),
+    mirror: true,
+  })));
+  list.hidden = inputs.length <= 0;
+  const paint = () => inputs.forEach((input) => paintNodeSliderMirrorReadouts(input));
+  paint();
+  window.requestAnimationFrame(paint);
 }
 
 function handleNodeMetadataParameterPickerChange(event) {

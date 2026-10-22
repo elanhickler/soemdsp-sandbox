@@ -18491,6 +18491,8 @@ def check_display_draws_live(manifest: Path) -> None:
         require(unit.returncode == 0, f"display choices filled: {unit.stdout}{unit.stderr}")
         unit = subprocess.run(["node", str(ROOT / "scripts" / "smoke_screen_fx_browser.mjs")], capture_output=True, text=True, env=env)
         require(unit.returncode == 0, f"screen fx (compile, draw, chain, feedback): {unit.stdout}{unit.stderr}")
+        unit = subprocess.run(["node", str(ROOT / "scripts" / "smoke_param_sliders_browser.mjs")], capture_output=True, text=True, env=env)
+        require(unit.returncode == 0, f"param sliders (collapsed module, both ways): {unit.stdout}{unit.stderr}")
     finally:
         stop_server(process)
 

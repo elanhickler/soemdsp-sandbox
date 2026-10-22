@@ -25884,3 +25884,45 @@ html.soemdsp-whole-module .node-layout-canvas-grip {
 [data-screen-space-shader-status].is-error {
   color: #ff6b6b;
 }
+
+/* Parameter Settings: one slider per parameter (mirror readouts).
+   Module readouts are painted by the GL graph; this window is DOM, so the
+   same readout paints its own text and position handle here. */
+.metadata-parameter-sliders {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.metadata-parameter-sliders[hidden] {
+  display: none;
+}
+
+#nodeParameterMetadataPopover #metadataParameterSliders > .node-slider-readout {
+  width: 100%;
+  height: var(--node-slider-readout-height, 30px);
+  min-height: var(--node-slider-readout-height, 30px);
+  max-height: none;
+  padding: 0 6px;
+  border: 0;
+  border-radius: 0;
+  background:
+    linear-gradient(to right,
+      transparent var(--value-start, 0px),
+      var(--node-slider-position-color, rgb(68 164 255 / 0.37)) var(--value-start, 0px),
+      var(--node-slider-position-color, rgb(68 164 255 / 0.37)) var(--value-end, 0px),
+      transparent var(--value-end, 0px)),
+    var(--node-slider-amount-color, hsl(200 31% 15% / 0.55));
+}
+
+#nodeParameterMetadataPopover #metadataParameterSliders > .node-slider-readout .node-slider-readout-label {
+  color: var(--node-slider-label-color, #cfdde5);
+}
+
+#nodeParameterMetadataPopover #metadataParameterSliders > .node-slider-readout .node-slider-readout-value {
+  color: var(--node-slider-value-color, #ffffff);
+}
+
+#nodeParameterMetadataPopover #metadataParameterSliders > .node-slider-readout .node-slider-readout-unit {
+  color: var(--node-slider-unit-color, #7fc7d9);
+}
