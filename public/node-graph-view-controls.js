@@ -970,7 +970,8 @@ function renderNodeGraphModularViewModeButtons() {
   computerBtn?.setAttribute("aria-pressed", String(!canvasOn));
   phoneBtn?.classList.toggle("active", canvasOn);
   phoneBtn?.setAttribute("aria-pressed", String(canvasOn));
-  if (phoneBtn) phoneBtn.title = nodeGraphPerformanceViewButtonTitle();
+  // Top-bar button is the phone icon only; no hover title (UI policy). Mode in aria-label.
+  if (phoneBtn) phoneBtn.setAttribute("aria-label", nodeGraphPerformanceViewButtonTitle());
   const sceneComputer = document.getElementById("nodeSceneToggleModularInfiniteView");
   sceneComputer?.classList.toggle("active", !canvasOn);
   sceneComputer?.setAttribute("aria-pressed", String(!canvasOn));
