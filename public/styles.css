@@ -7315,6 +7315,19 @@ body.keyboard-debug-hidden .node-midi-keyboard-signal-bar {
   overflow: hidden;
 }
 
+/* Phone / narrow window: the fixed desktop height (tooltipEmbedHeight) clips a
+   wrapped tip to a few words. Let the embedded tip grow to fit, capped and
+   scrollable, with the text size capped so it reads at phone width. */
+@media (max-width: 720px) {
+  .node-interaction-help.is-embedded {
+    height: auto;
+    max-height: min(40vh, 220px);
+    overflow-y: auto;
+    padding: 4px 8px;
+    font-size: min(var(--node-tooltip-text-size, 14px), 12px);
+    line-height: 1.2;
+  }
+}
 .node-constraint-color-guide {
   display: flex;
   align-items: flex-start;
