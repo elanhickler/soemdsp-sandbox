@@ -4722,8 +4722,10 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
     // Use node.type here — `type` from the caller loop is not in this closure.
     const discreteKey = Boolean(P.NATIVE_GRAPH_DISCRETE_PARAMS[key]);
     const nodeType = String(node?.type || "");
+    // Pulse Train Curve is continuous too (E_k exponent); without this its
+    // smoothing settings never reached native and Curve jumped.
     const continuousCurveOverride = key === "curve"
-      && (nodeType === "additiveBlaster" || nodeType === "attackDecay");
+      && (nodeType === "additiveBlaster" || nodeType === "attackDecay" || nodeType === "pulseTrain");
     // Hypersaw Oscillators is continuous (Decimal ceil + trailing frac amp).
     const continuousVoicesOverride = key === "voices"
       && nodeType === "hypersaw2";
