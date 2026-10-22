@@ -47,7 +47,7 @@ const stubGl = {
   disable(k) { if (k === 2) glCalls.scissor = null; },
   scissor(x) { glCalls.scissor = x; },
 };
-const glSession = (w, h) => ({ smooth: true, gl: stubGl, read: { fbo: {} }, w, h });
+const glSession = (w, h) => ({ gl: stubGl, read: { fbo: {} }, w, h });
 let resets = 0;
 ctx.nodeGraphWaterfallGlReset = () => { resets += 1; return true; };
 ctx.nodeGraphWaterfallGlEnsure = () => true;

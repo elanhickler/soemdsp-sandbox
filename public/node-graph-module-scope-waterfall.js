@@ -134,21 +134,6 @@ function nodeGraphOnsetTraceY(raw, buffer, slot, settings, height, strokePx, ran
   return y;
 }
 
-function nodeGraphOnsetTraceHasSamples(onset) {
-  const traces = onset?.traces;
-  if (!traces) return false;
-  const keys = Object.keys(traces);
-  for (let i = 0; i < keys.length; i += 1) {
-    const cols = traces[keys[i]]?.columns;
-    if (cols) {
-      for (let c = 0; c < cols.length; c += 1) {
-        if (cols[c]) return true;
-      }
-    }
-  }
-  return false;
-}
-
 /** Each stored column keeps its own pass start, so ink ahead of the cursor stays where it was drawn. */
 function nodeGraphOnsetTraceEnsure(onset, key, rgb, buffer, width) {
   if (!onset.traces) onset.traces = Object.create(null);
@@ -406,17 +391,24 @@ function nodeGraphOnsetPaint(spec, live) {
     if (rightHit >= 0 && (signalHit < 0 || rightHit > signalHit)) signalHit = rightHit;
   }
   onset.scanned = absEnd;
-  // Pass starts this paint. Sync: every Reset edge, nothing else (a signal
-  // edge would put the impulse at x = 0). Off: the newest Reset, else a
-  // signal edge once the pass is done.
+  // Pause at end off (default): the sweep runs continuously, wrapping at the
+  // end of the window and overwriting the old trace. On: it holds at the end
+  // until the next pass start.
+  const pauseAtEnd = settings?.pauseAtEnd === true;
+  // Pass starts this paint. Sync: every Reset edge (a signal edge would put
+  // the impulse at x = 0). Off: the newest Reset, else (Pause at end) a
+  // signal edge once the pass is done. Continuous with no pass yet: start now.
   let starts;
   if (resetSync) {
     starts = resetEdges;
   } else if (resetHit >= 0) {
     starts = [resetHit];
-  } else {
+  } else if (pauseAtEnd) {
     starts = signalHit >= 0 && (onset.parked || !onset.live) ? [signalHit] : [];
+  } else {
+    starts = [];
   }
+  if (!pauseAtEnd && !starts.length && !onset.live) starts = [scanFrom];
   let position = typeof nodeGraphModuleScopeNodeParam === "function"
     ? nodeGraphModuleScopeNodeParam(node, "position", 0)
     : 0;
@@ -433,18 +425,8 @@ function nodeGraphOnsetPaint(spec, live) {
       rememberNodeGraphTraceDisplaySignature(spec.slot, spec.item, live, settings);
     }
   };
-  const ampScale = nodeGraphWaterfallDisplayScale(settings);
-  const scaleChanged = Number.isFinite(onset.paintScale)
-    && Math.abs(onset.paintScale - ampScale) > 1e-5;
-  onset.paintScale = ampScale;
   const autoRange = node?.type === "onset" && nodeGraphOnsetAutoRangeOn(settings);
-  const autoToggled = typeof onset.autoRange === "boolean" && onset.autoRange !== autoRange;
-  onset.autoRange = autoRange;
   if (!autoRange) onset.range = null;
-  if (!starts.length && (!onset.live || !Number.isFinite(onset.origin))) {
-    present();
-    return true;
-  }
   // One fixed x scale: History seconds across the face, every pass. A
   // Reset-gap scale moves impulses whenever the gap changes.
   const faceSamples = Math.max(1, Math.round(hz * Math.max(nodeGraphWaterfallHistorySeconds(settings), 0)));
@@ -453,6 +435,21 @@ function nodeGraphOnsetPaint(spec, live) {
   const startPx = Math.floor(position * width) % width;
   if (typeof nodeGraphWaterfallGlEnsure === "function") {
     nodeGraphWaterfallGlEnsure(canvas, plateBg);
+  }
+  // Any look setting (Background, colours, Ink, Scale, Auto Range, Stroke,
+  // Position...) repaints the face now: plate in the new colour, every stored
+  // column redrawn. History is handled below (it changes the x scale).
+  const look = `${JSON.stringify({ ...settings, historySeconds: 0, zoomSeconds: 0 })}|${plateBg}|${startPx}|${width}x${height}`;
+  const lookChanged = typeof onset.look === "string" && onset.look !== look;
+  onset.look = look;
+  if (lookChanged) {
+    if (autoRange) onset.range = nodeGraphOnsetTraceRange(onset);
+    if (typeof nodeGraphWaterfallGlReset === "function") nodeGraphWaterfallGlReset(canvas, plateBg);
+    nodeGraphOnsetRedrawTraces(canvas, onset, spec.slot, settings, height, width, faceSamples, startPx);
+  }
+  if (!starts.length && (!onset.live || !Number.isFinite(onset.origin))) {
+    present();
+    return true;
   }
   if (Number.isFinite(onset.latchedSamples) && onset.latchedSamples !== faceSamples && Number.isFinite(onset.origin)) {
     // History changed: the old ink is on another scale. Replay the current
@@ -464,14 +461,6 @@ function nodeGraphOnsetPaint(spec, live) {
     if (typeof nodeGraphWaterfallGlReset === "function") nodeGraphWaterfallGlReset(canvas, plateBg);
   }
   onset.latchedSamples = faceSamples;
-  if ((scaleChanged || autoToggled) && nodeGraphOnsetTraceHasSamples(onset)) {
-    if (autoRange) onset.range = nodeGraphOnsetTraceRange(onset);
-    // The ring has usually moved past the parked pass. Replay every stored
-    // sample at the new Scale so the line follows the buffer.
-    if (typeof nodeGraphWaterfallGlReset === "function") nodeGraphWaterfallGlReset(canvas, plateBg);
-    nodeGraphOnsetRedrawTraces(canvas, onset, spec.slot, settings, height, width, faceSamples, startPx);
-  }
-  if (canvas._wfGlSession) canvas._wfGlSession.smooth = nodeGraphWaterfallSmoothLines(settings);
   const channels = nodeGraphWaterfallChannelList({
     slot: spec.slot,
     settings,
@@ -546,17 +535,35 @@ function nodeGraphOnsetPaint(spec, live) {
       c0, endAll + 1, wraps ? null : (startPx + c0) % width,
     );
   };
-  // Finish the current pass up to each new start, then restart the cursor at
-  // x = 0 on that exact sample. Nothing is cleared at a restart.
-  for (let i = 0; i < starts.length; i += 1) {
-    if (onset.live && Number.isFinite(onset.origin)) sweepTo(starts[i]);
-    onset.origin = starts[i];
-    onset.drawn = starts[i];
+  const restart = (at) => {
+    onset.origin = at;
+    onset.drawn = at;
     onset.parked = false;
     onset.live = true;
     onset.lastPixel = -1;
+  };
+  // Sweep the current pass up to `stop`. Continuous: at the end of the window
+  // the cursor wraps to x = 0 on the next sample and keeps overwriting.
+  const sweepUntil = (stop) => {
+    if (!onset.live || !Number.isFinite(onset.origin)) return;
+    if (!pauseAtEnd) {
+      // Whole windows older than the last one would be overwritten anyway.
+      const behind = Math.floor((stop - onset.origin) / faceSamples) - 1;
+      if (behind > 0) restart(onset.origin + behind * faceSamples);
+      while (onset.origin + faceSamples <= stop) {
+        sweepTo(onset.origin + faceSamples);
+        restart(onset.origin + faceSamples);
+      }
+    }
+    sweepTo(stop);
+  };
+  // Each new start restarts the cursor at x = 0 on that exact sample.
+  // Nothing is cleared at a restart.
+  for (let i = 0; i < starts.length; i += 1) {
+    sweepUntil(starts[i]);
+    restart(starts[i]);
   }
-  sweepTo(absEnd);
+  sweepUntil(absEnd);
   present();
   return true;
 }
@@ -1492,12 +1499,6 @@ function nodeGraphWaterfallBarsFilled(settings) {
 function nodeGraphWaterfallDrawStroke(settings) {
   const ink = nodeGraphWaterfallBarInk(settings);
   return ink === "stroke" || ink === "both";
-}
-
-/** Smooth lines (default on): slope-aware edge AA in the GL stamps. */
-function nodeGraphWaterfallSmoothLines(settings) {
-  const raw = settings?.smoothLines;
-  return !(raw === false || raw === 0 || raw === "0" || raw === "false");
 }
 
 function nodeGraphWaterfallStrokePx(settings) {

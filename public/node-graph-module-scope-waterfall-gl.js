@@ -175,9 +175,7 @@ void main() {
   float uBlendKind = vMisc.x;
   // Ink alpha (channel Brightness), same as the canvas rgba() fill it replaces.
   float inkA = vMisc.w;
-  // Mode + 8 = Smooth lines on (slope-aware edge coverage).
-  float smoothOn = step(7.5, vMisc.y);
-  float uMode = vMisc.y - 8.0 * smoothOn;
+  float uMode = vMisc.y;
   float uStrokePx = vMisc.z;
   // uMode 2 = queued column clear: opaque plate colour (source-over with
   // alpha 1 replaces, same pixels/colour as the old scissored gl.clear).
@@ -196,13 +194,12 @@ void main() {
   float yBot = mix(uEdge.z, uEdge.w, t);
   float lo = min(yTop, yBot);
   float hi = max(yTop, yBot);
-  // Each edge ramps over 1 + |slope| rows (1 row when smoothing is off, which
-  // is the same box overlap as before). Top and bottom combine as an
-  // intersection: cTop + cBot - 1.
+  // Each edge ramps over 1 + |slope| rows (slope-aware antialiasing). Top and
+  // bottom combine as an intersection: cTop + cBot - 1.
   float mTop = abs(uEdge.y - uEdge.x) / span;
   float mBot = abs(uEdge.w - uEdge.z) / span;
-  float wLo = 1.0 + smoothOn * (yTop <= yBot ? mTop : mBot);
-  float wHi = 1.0 + smoothOn * (yTop <= yBot ? mBot : mTop);
+  float wLo = 1.0 + (yTop <= yBot ? mTop : mBot);
+  float wHi = 1.0 + (yTop <= yBot ? mBot : mTop);
   float cTop = clamp((y - lo) / wLo + 0.5, 0.0, 1.0);
   float cBot = clamp((hi - y) / wHi + 0.5, 0.0, 1.0);
   float body = clamp(cTop + cBot - 1.0, 0.0, 1.0);
@@ -874,7 +871,7 @@ function nodeGraphWaterfallGlDrawBar(s, verts, rgb, blend, edge, mode, strokePx)
   nodeGraphWaterfallGlQueueBar(
     s, verts, s.read.fbo, String(blend || "source-over"), c, edge.x0, edge.x1,
     [edge.top0, edge.top1, edge.bot0, edge.bot1],
-    nodeGraphWaterfallGlBlendKind(blend), (mode > 0 ? 1 : 0) + (s.smooth !== false ? 8 : 0), Math.max(0.5, Number(strokePx) || 1),
+    nodeGraphWaterfallGlBlendKind(blend), mode > 0 ? 1 : 0, Math.max(0.5, Number(strokePx) || 1),
     Number.isFinite(Number(rgb?.[3])) ? Math.max(0, Math.min(1, Number(rgb[3]))) : 1,
   );
 }
@@ -885,17 +882,14 @@ function nodeGraphWaterfallGlClip(x, y, w, h) {
 
 function nodeGraphWaterfallGlStampQuad(s, x0, wid, top0, top1, bot0, bot1, fringe, rgb, blend, mode, strokePx) {
   const clip = (px, py) => nodeGraphWaterfallGlClip(px, py, s.w, s.h);
-  // Smooth lines: a steep edge's coverage ramp reaches past the slanted quad
-  // side, so the quad is the column's bounding rows (+fringe) instead.
-  const smooth = s.smooth !== false;
-  const qt0 = smooth ? Math.min(top0, top1) : top0;
-  const qt1 = smooth ? qt0 : top1;
-  const qb0 = smooth ? Math.max(bot0, bot1) : bot0;
-  const qb1 = smooth ? qb0 : bot1;
-  const a = clip(x0, qt0 - fringe);
-  const b = clip(x0 + wid, qt1 - fringe);
-  const c = clip(x0, qb0 + fringe);
-  const d = clip(x0 + wid, qb1 + fringe);
+  // A steep edge's coverage ramp reaches past the slanted quad side, so the
+  // quad is the column's bounding rows (+fringe).
+  const qt = Math.min(top0, top1);
+  const qb = Math.max(bot0, bot1);
+  const a = clip(x0, qt - fringe);
+  const b = clip(x0 + wid, qt - fringe);
+  const c = clip(x0, qb + fringe);
+  const d = clip(x0 + wid, qb + fringe);
   const verts = [a[0], a[1], b[0], b[1], c[0], c[1], c[0], c[1], b[0], b[1], d[0], d[1]];
   nodeGraphWaterfallGlDrawBar(s, verts, rgb, blend, {
     x0,
@@ -972,21 +966,20 @@ varying vec3 uColorR;
 varying vec3 uColorM;
 ${spanGlsl}
 ${meetGlsl}
-// Smooth lines: same slope-aware edge coverage as the bar shader.
-float wfSlopeCover(float y, float yTop, float yBot, float mTop, float mBot, float smoothOn) {
+// Same slope-aware edge coverage as the bar shader.
+float wfSlopeCover(float y, float yTop, float yBot, float mTop, float mBot) {
   float lo = min(yTop, yBot);
   float hi = max(yTop, yBot);
-  float wLo = 1.0 + smoothOn * (yTop <= yBot ? mTop : mBot);
-  float wHi = 1.0 + smoothOn * (yTop <= yBot ? mBot : mTop);
+  float wLo = 1.0 + (yTop <= yBot ? mTop : mBot);
+  float wHi = 1.0 + (yTop <= yBot ? mBot : mTop);
   float cTop = clamp((y - lo) / wLo + 0.5, 0.0, 1.0);
   float cBot = clamp((hi - y) / wHi + 0.5, 0.0, 1.0);
   return clamp(cTop + cBot - 1.0, 0.0, 1.0);
 }
 void main() {
-  // vOF.z + 8 = Smooth lines on. Then 2 = queued column clear (see the bar
-  // shader's uMode 2), 1 = Trace coverage formula.
-  float smoothOn = step(7.5, vOF.z);
-  float flag = vOF.z - 8.0 * smoothOn;
+  // vOF.z: 2 = queued column clear (see the bar shader's uMode 2), 1 = Trace
+  // coverage formula.
+  float flag = vOF.z;
   if (flag > 1.5) {
     gl_FragColor = vec4(uColorL, 1.0);
     return;
@@ -998,9 +991,7 @@ void main() {
   float t = clamp((gl_FragCoord.x - uSpan.x) / span, 0.0, 1.0);
   float yTop = mix(uEdgeL.x, uEdgeL.y, t);
   float yBot = mix(uEdgeL.z, uEdgeL.w, t);
-  float cL = smoothOn > 0.5
-    ? wfSlopeCover(y, yTop, yBot, abs(uEdgeL.y - uEdgeL.x) / span, abs(uEdgeL.w - uEdgeL.z) / span, 1.0)
-    : traceBoxCover(y, min(yTop, yBot), max(yTop, yBot));
+  float cL = wfSlopeCover(y, yTop, yBot, abs(uEdgeL.y - uEdgeL.x) / span, abs(uEdgeL.w - uEdgeL.z) / span);
   float cRa = traceBoxCover(y, vRaRb.x, vRaRb.y);
   float cRb = traceBoxCover(y, vRaRb.z, vRaRb.w);
   float cO = traceBoxCover(y, vOF.x, vOF.y);
@@ -1124,7 +1115,7 @@ function nodeGraphWaterfallGlStampMeetColumn(canvas, x, leftYs, leftPrevEdge, pa
   const c = clip(x0, hi);
   const d = clip(x1, hi);
   const corners = [a, b, c, c, b, d];
-  const fm = (Number(formula) > 0.5 ? 1 : 0) + (s.smooth !== false ? 8 : 0);
+  const fm = Number(formula) > 0.5 ? 1 : 0;
   const mq = nodeGraphWaterfallGlQueueFor(s, "meet", "source-over", s.read.fbo, NODE_GRAPH_WF_GL_MEET_FLOATS * 6);
   const dd = mq.data;
   let o = mq.n;

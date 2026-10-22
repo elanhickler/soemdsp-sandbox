@@ -1554,7 +1554,10 @@ function buildNodeGraphInstantTraceDisplaySettingsBodyHtml(type, node, allowKey)
     }
     rows.push(nodeGraphDisplaySettingsBuildStepperRowHtml(key, type, { syncOn: syncOnForStack }));
   };
-  pushStackField("scale");
+  // One Scale row (a second one read back empty and reset Scale).
+  if (orderedPrimary.includes("scale") || (isInstantWaterfall && activeFields.has("scale"))) {
+    rows.push(nodeGraphDisplaySettingsBuildStepperRowHtml("scale", type, { syncOn: syncOnForStack }));
+  }
   if (isInstantWaterfall && choiceKeys.includes("facePolarity")) {
     rows.push(nodeGraphDisplaySettingsBuildChoiceRowHtml("facePolarity"));
     usedChoices.add("facePolarity");
@@ -1562,9 +1565,6 @@ function buildNodeGraphInstantTraceDisplaySettingsBodyHtml(type, node, allowKey)
   if (choiceKeys.includes("stereoBlend")) {
     rows.push(nodeGraphDisplaySettingsBuildChoiceRowHtml("stereoBlend"));
     usedChoices.add("stereoBlend");
-  }
-  if (isInstantWaterfall && (orderedPrimary.includes("scale") || activeFields.has("scale"))) {
-    rows.push(nodeGraphDisplaySettingsBuildStepperRowHtml("scale", type));
   }
   // Instant Waterfall: History (seconds). Other faces may still swap to Cycles.
   if (orderedPrimary.includes("historySeconds") || orderedPrimary.includes("historyCycles")
@@ -1607,10 +1607,10 @@ function buildNodeGraphInstantTraceDisplaySettingsBodyHtml(type, node, allowKey)
     rows.push(nodeGraphDisplaySettingsBuildToggleRowHtml("pauseOnSilence"));
     usedToggles.add("pauseOnSilence");
   }
-  if (isInstantWaterfall && toggleKeys.includes("smoothLines")) {
-    rows.push(nodeGraphDisplaySettingsBuildToggleRowHtml("smoothLines"));
-    usedToggles.add("smoothLines");
+  if (node?.type === "onset" && toggleKeys.includes("pauseAtEnd")) {
+    rows.push(nodeGraphDisplaySettingsBuildToggleRowHtml("pauseAtEnd"));
   }
+  usedToggles.add("pauseAtEnd");
   pushStackField("backgroundBrightness");
   pushStackField("backgroundHue");
   const inkPrimary = orderedPrimary.filter((key) => !stackHead.has(key));

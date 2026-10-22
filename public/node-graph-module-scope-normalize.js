@@ -1007,7 +1007,14 @@ function normalizeNodeGraphWaterfallSettings(settings = {}) {
       if (raw === false || raw === 0 || raw === "0" || raw === "false") return false;
       return defaults.pauseOnSilence === true;
     })(),
-    // 1D Onset face width follows Reset spacing. Other waterfalls ignore it.
+    // 1D Onset: hold at the end of the window until the next Reset.
+    pauseAtEnd: (() => {
+      const raw = source.pauseAtEnd;
+      if (raw === true || raw === 1 || raw === "1" || raw === "true") return true;
+      if (raw === false || raw === 0 || raw === "0" || raw === "false") return false;
+      return defaults.pauseAtEnd === true;
+    })(),
+    // 1D Onset: every Reset restarts the sweep. Other waterfalls ignore it.
     resetSync: (() => {
       const raw = source.resetSync;
       if (raw === true || raw === 1 || raw === "1" || raw === "true") return true;
@@ -1020,12 +1027,6 @@ function normalizeNodeGraphWaterfallSettings(settings = {}) {
       if (raw === true || raw === 1 || raw === "1" || raw === "true") return true;
       if (raw === false || raw === 0 || raw === "0" || raw === "false") return false;
       return defaults.autoRange !== false;
-    })(),
-    smoothLines: (() => {
-      const raw = source.smoothLines;
-      if (raw === true || raw === 1 || raw === "1" || raw === "true") return true;
-      if (raw === false || raw === 0 || raw === "0" || raw === "false") return false;
-      return defaults.smoothLines !== false;
     })(),
     // Mirror Bright for form field key (Display Settings edits dot1Brightness).
     dot1Brightness: normalizeNodeGraphTraceDisplayBrightness(

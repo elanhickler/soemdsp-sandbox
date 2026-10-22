@@ -65,7 +65,7 @@ const stubGl = {
   disable(k) { if (k === 2) glCalls.scissor = null; },
   scissor(x) { glCalls.scissor = x; },
 };
-const glSession = (w, h) => ({ smooth: true, gl: stubGl, read: { fbo: {} }, w, h });
+const glSession = (w, h) => ({ gl: stubGl, read: { fbo: {} }, w, h });
 let peaks = [];
 let peakY = Infinity;
 const notePeaks = () => {
@@ -91,11 +91,15 @@ const W = canvas.width;
 const colOf = (rel) => Math.min(W - 1, Math.floor((rel / FACE) * W));
 // Sample-accurate reference: every sample, in order, written into its pass's
 // column; a Reset restarts at column 0 and overwrites only what it reaches.
+// Pause at end off: the pass wraps to x = 0 every FACE samples, from the
+// first sample until the first Reset too.
 const reference = (abs) => {
   const cols = new Array(W).fill(null);
-  let r = -1;
+  const pause = settings.pauseAtEnd === true;
+  let r = pause ? -1 : 0;
   for (let f = 0; f < abs; f += 1) {
     if (resetBuf[f] === 1) r = f;
+    if (!pause && r >= 0 && f - r >= FACE) r += FACE * Math.floor((f - r) / FACE);
     if (r < 0 || f - r >= FACE) continue;
     const c = colOf(f - r);
     if (!cols[c] || cols[c].origin !== r) cols[c] = { origin: r, frames: [] };
@@ -148,13 +152,81 @@ const runSteps = (steps, label) => {
 };
 const wantX = `${colOf(OFFSET)}:${OFFSET}`;
 const peakWant = ((OFFSET / FACE) * W).toFixed(6);
-for (const [label, steps] of [["fast", [37, 512, 23, 1500, 90, 333, 2048, 61]], ["slow", [7, 11, 5, 13]]]) {
-  const r = runSteps(steps, label);
-  gate(r.bad === 0, `${label} Resets: after every paint the face equals a sample-accurate sweep (${r.paints} paints, ${r.multi} with several Resets, ${r.bad} bad columns)`);
-  gate(r.wipes === 0, `${label} Resets: a Reset never clears the face (${r.wipes} full clears)`);
-  gate(r.aheadOld > 0, `${label} Resets: old ink stays ahead of the cursor (${r.aheadOld} paints)`);
-  gate(r.impulseX.length === 1 && r.impulseX[0] === wantX, `${label} Resets: every impulse in the same column, ${OFFSET} samples after its Reset (${r.impulseX.join(" ")})`);
-  gate(r.peakX.length === 1 && r.peakX[0] === peakWant, `${label} Resets: every drawn impulse peak at the same x (${r.peakX.join(" ")})`);
+for (const pause of [false, true]) {
+  settings.pauseAtEnd = pause;
+  const mode = pause ? "Pause at end" : "continuous";
+  for (const [label, steps] of [["fast", [37, 512, 23, 1500, 90, 333, 2048, 61]], ["slow", [7, 11, 5, 13]]]) {
+    const r = runSteps(steps, label);
+    gate(r.bad === 0, `${mode}, ${label} Resets: after every paint the face equals a sample-accurate sweep (${r.paints} paints, ${r.multi} with several Resets, ${r.bad} bad columns)`);
+    gate(r.wipes === 0, `${mode}, ${label} Resets: a Reset never clears the face (${r.wipes} full clears)`);
+    gate(r.aheadOld > 0, `${mode}, ${label} Resets: old ink stays ahead of the cursor (${r.aheadOld} paints)`);
+    gate(r.impulseX.length === 1 && r.impulseX[0] === wantX, `${mode}, ${label} Resets: every impulse in the same column, ${OFFSET} samples after its Reset (${r.impulseX.join(" ")})`);
+    gate(r.peakX.length === 1 && r.peakX[0] === peakWant, `${mode}, ${label} Resets: every drawn impulse peak at the same x (${r.peakX.join(" ")})`);
+  }
+}
+settings.pauseAtEnd = false;
+
+// Continuous with no Reset at all: every paint draws new samples.
+{
+  const quiet = new Float32Array(total);
+  quiet.abs = 0;
+  ctx.nodeGraphModuleScopeState.buffers.set("onset-test:Reset", quiet);
+  canvas._onset = null;
+  glCalls.draws = [];
+  let idle = 0;
+  let paints = 0;
+  for (let abs = 0; abs < 20 * FACE; abs += 97) {
+    inBuf.abs = quiet.abs = abs;
+    const n0 = glCalls.draws.length;
+    ctx.nodeGraphWaterfallPaint(spec);
+    paints += 1;
+    if (abs > 0 && glCalls.draws.length === n0) idle += 1;
+  }
+  gate(idle === 0, `no Reset: the sweep draws on every paint, wrapping (${paints - idle}/${paints} paints drew)`);
+  settings.pauseAtEnd = true;
+  quiet[50] = 1;
+  canvas._onset = null;
+  let early = 0;
+  let late = 0;
+  for (let abs = 0; abs < 20 * FACE; abs += 97) {
+    inBuf.abs = quiet.abs = abs;
+    const n0 = glCalls.draws.length;
+    ctx.nodeGraphWaterfallPaint(spec);
+    if (glCalls.draws.length > n0) { if (abs <= 50 + FACE + 97) early += 1; else late += 1; }
+  }
+  gate(early > 0 && late === 0, `Pause at end: draws one window from the Reset, then holds (${early} paints drew, ${late} after the end)`);
+  settings.pauseAtEnd = false;
+  ctx.nodeGraphModuleScopeState.buffers.set("onset-test:Reset", resetBuf);
+}
+
+// Look settings repaint at once, with no Reset and no new audio: plate in
+// the new colour, stored columns redrawn in the new look.
+{
+  canvas._onset = null;
+  inBuf.abs = resetBuf.abs = resets[5] + 120;
+  ctx.nodeGraphWaterfallPaint(spec);
+  const still = () => { glCalls.draws = []; const w0 = wipes; ctx.nodeGraphWaterfallPaint(spec); return { wipes: wipes - w0, draws: glCalls.draws }; };
+  const idle = still();
+  gate(idle.wipes === 0 && idle.draws.length === 0, "no change, no new audio: nothing redrawn");
+  spec.bg = "#203040";
+  const bg = still();
+  gate(bg.wipes === 1 && bg.draws.length === 1, `Background change: plate cleared to the new colour and the trace redrawn (${bg.wipes} clears, ${bg.draws.length} draws)`);
+  spec.bg = "#000000";
+  const yTop = (d) => Math.min(...d.flatMap((b) => b.strokes.flatMap((st) => st.pts.map((p) => p.y))));
+  const before = yTop(still().draws);
+  settings.scale = 0.5;
+  const sc = still();
+  const after = yTop(sc.draws);
+  gate(sc.wipes === 1 && after > before + 5, `Scale change: the trace redraws at the new Scale right away (top y ${before.toFixed(1)} -> ${after.toFixed(1)})`);
+  settings.scale = 1;
+  settings.color = "#00ff00";
+  const col = still();
+  gate(col.wipes === 1 && col.draws.length === 1, "colour change: redrawn at once");
+  settings.barInk = "stroke";
+  const ink = still();
+  gate(ink.wipes === 1 && ink.draws[0].fills.length === 0 && ink.draws[0].strokes.length > 0, "Ink change: redrawn at once as stroke only");
+  settings.barInk = "both";
+  delete settings.color;
 }
 
 // First Reset: the same x scale as every later pass (no fallback window).
@@ -189,7 +261,7 @@ gate(canvas._onset.latchedSamples === FACE && canvas._onset.origin === resets[3]
   rs[100] = 1;
   sine.abs = rs.abs = 100 + 8;
   ctx.nodeGraphModuleScopeState.buffers.set("onset-test:Reset", rs);
-  const s2 = { scale: 1, polarity: "bipolar", barInk: "both", resetSync: true, autoRange: false, historySeconds: 7 / SR };
+  const s2 = { scale: 1, polarity: "bipolar", barInk: "both", resetSync: true, autoRange: false, historySeconds: 7 / SR, pauseAtEnd: true };
   const c2 = { width: 64, height: 100, _wfGlSession: glSession(64, 100) };
   const sp2 = { canvas: c2, settings: s2, buffer: sine, slot: spec.slot, bg: "#000000" };
   glCalls.draws = [];

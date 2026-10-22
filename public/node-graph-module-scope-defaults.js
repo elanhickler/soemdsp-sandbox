@@ -171,12 +171,13 @@ const nodeGraphWaterfallSettingsDefaults = Object.freeze({
   strokeThickness: 1,
   // Off: keep scrolling. On: silence (linear amp at or below Planck) holds the plate.
   pauseOnSilence: false,
+  // 1D Onset only. Off: the sweep wraps and keeps drawing. On: it holds at the
+  // end of the window until the next Reset.
+  pauseAtEnd: false,
   // 1D Onset only. On: every Reset edge restarts the sweep at x = 0.
   resetSync: false,
   // 1D Onset only. On: the face height spans the min..max of the shown samples.
   autoRange: true,
-  // On: sloped column edges get slope-aware AA (waterfall GL bar shader).
-  smoothLines: true,
   // Bipolar: −1 bottom, 0 center, +1 top. Unipolar: 0 bottom, +1 top.
   polarity: "bipolar",
   // XYZ: stack all three on one plot, or split the face into three bands.

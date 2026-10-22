@@ -300,7 +300,7 @@ const nodeGraphTraceDisplayActiveControlsByType = Object.freeze({
       "strokeThickness",
     ]),
     colors: Object.freeze(["dot1Color", "secondaryColor", "tertiaryColor", "backgroundColor", "strokeColor", "strokeLeftColor", "strokeRightColor"]),
-    toggles: Object.freeze(["skipDiscontinuities", "resetSync", "autoRange", "pauseOnSilence", "smoothLines"]),
+    toggles: Object.freeze(["skipDiscontinuities", "resetSync", "autoRange", "pauseOnSilence", "pauseAtEnd"]),
     choices: Object.freeze(["barInk", "facePolarity", "stereoBlend"]),
   }),
   // Phosphor energy faces: color via shared Gradient editor (not single swatches).
@@ -498,7 +498,7 @@ const nodeGraphTraceDisplayActiveControlsByType = Object.freeze({
       "faceBlur",
     ]),
     colors: Object.freeze(["backgroundColor", "strokeColor"]),
-    toggles: Object.freeze(["pauseOnSilence", "smoothLines"]),
+    toggles: Object.freeze(["pauseOnSilence"]),
     choices: Object.freeze(["barInk", "facePolarity", "stereoBlend", "xyzLayout"]),
   }),
   // 1D Waterfall RGB — Size / Blur / Dot density / Bright; RGB Add or CMY Multiply.
@@ -515,7 +515,7 @@ const nodeGraphTraceDisplayActiveControlsByType = Object.freeze({
       "faceBlur",
     ]),
     colors: Object.freeze(["backgroundColor", "strokeColor"]),
-    toggles: Object.freeze(["cmyMode", "skipDiscontinuities", "pauseOnSilence", "smoothLines"]),
+    toggles: Object.freeze(["cmyMode", "skipDiscontinuities", "pauseOnSilence"]),
     choices: Object.freeze(["barInk", "facePolarity"]),
   }),
   numberReadout: Object.freeze({
@@ -1879,16 +1879,15 @@ const nodeGraphDisplaySettingsToggleMeta = Object.freeze({
     id: "nodeTraceDisplayDrawStroke",
     title: "Stroke the top and bottom of each bar. Off by default. Does not draw a vertical line between them.",
   }),
-  smoothLines: Object.freeze({
-    label: "Smooth lines",
-    id: "nodeTraceDisplaySmoothLines",
-    title: "Antialias sloped waveform edges (on by default). Off: hard 1px column edges. Applies to new columns; history already drawn keeps its look.",
-  }),
   pauseOnSilence: Object.freeze({
     label: "Pause on silence",
     id: "nodeTraceDisplayPauseOnSilence",
     title:
       "While on, Instant Waterfall stops scrolling when every enabled channel is at or below Planck amplitude. Off (default) keeps scrolling. History at 0 is the current bar either way.",
+  }),
+  pauseAtEnd: Object.freeze({
+    label: "Pause at end",
+    id: "nodeTraceDisplayPauseAtEnd",
   }),
   autoRange: Object.freeze({
     label: "Auto Range",
@@ -1898,7 +1897,7 @@ const nodeGraphDisplaySettingsToggleMeta = Object.freeze({
     label: "Sync",
     id: "nodeTraceDisplayResetSync",
     title:
-      "1D Onset: On sets the face to a percent of the time between Reset pulses. History (seconds) returns when Sync is off, and is used until two Reset edges have been measured.",
+      "1D Onset: every Reset edge restarts the sweep at the left edge on its exact sample.",
   }),
   skipDiscontinuities: Object.freeze({
     label: "Skip Discontinuity",

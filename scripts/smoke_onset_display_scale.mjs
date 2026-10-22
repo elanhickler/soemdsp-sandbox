@@ -48,7 +48,7 @@ const stubGl = {
   disable(k) { if (k === 2) glCalls.scissor = null; },
   scissor(x) { glCalls.scissor = x; },
 };
-const glSession = (w, h) => ({ smooth: true, gl: stubGl, read: { fbo: {} }, w, h });
+const glSession = (w, h) => ({ gl: stubGl, read: { fbo: {} }, w, h });
 let resets = 0;
 ctx.nodeGraphWaterfallGlReset = () => { resets += 1; return true; };
 ctx.nodeGraphWaterfallGlEnsure = () => true;
@@ -63,7 +63,7 @@ const samples = new Float32Array(n);
 for (let i = 0; i < n; i += 1) samples[i] = 0.25 + 0.25 * (i / (n - 1));
 samples.nodeGraphScopeAbsoluteFrame = n;
 const canvas = { width, height, _wfGlSession: glSession(width, height) };
-const settings = { scale: 1, historySeconds: n / 1000, polarity: "bipolar", barInk: "stroke" };
+const settings = { scale: 1, historySeconds: n / 1000, polarity: "bipolar", barInk: "stroke", pauseAtEnd: true };
 const spec = { canvas, settings, buffer: samples, slot: { type: "onset", nodeId: "onset-test" }, bg: "#000000" };
 const lines = () => glCalls.draws.flatMap((d) => d.strokes).map((s) => s.pts);
 const paint = () => ctx.nodeGraphWaterfallPaint(spec);
