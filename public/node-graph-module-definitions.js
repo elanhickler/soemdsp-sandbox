@@ -13756,11 +13756,11 @@ const nodeGraphModuleDefinitions = (
     outputs: ["Out", "End"],
     layout: "pulseCurve",
     // Face: pulse_train.wasm preview stems + __Elapsed playhead (node-graph-pulse-train-display.js).
-    // Shares the pulseExplosionFace Display Settings (Background / Line / Dot / Playhead / Lit).
-    displayType: "pulseExplosionFace",
+    // Display Settings pulseTrainFace: the Pulse Explosion set plus Ghost (next pattern).
+    displayType: "pulseTrainFace",
     spectrumCompanion: false,
     displayModes: [
-      { key: "face", label: "Face", renderer: "pulseExplosionFace", settingsSchema: "pulseExplosionFace" },
+      { key: "face", label: "Face", renderer: "pulseTrainFace", settingsSchema: "pulseTrainFace" },
     ],
     defaultDisplayMode: "face",
     parameters: [

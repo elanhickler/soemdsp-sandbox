@@ -714,6 +714,11 @@ const nodeGraphTraceDisplaySharedValueClamps = Object.freeze({
 // Per-formType overrides, only for the (formType, field) pairs that diverge
 // from the shared table above. Isolated per formType so a new override can't
 // leak into unrelated display types.
+/** Pulse Explosion / Pulse Train face: stem + dot size (Pulse Train adds Ghost opacity). */
+const nodeGraphPulseFaceValueClamps = Object.freeze({
+  lineThickness: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, 1.5), 0.25, 16),
+  dotThickness: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, 5), 0.25, 32),
+});
 const nodeGraphTraceDisplayFormTypeValueClampOverrides = Object.freeze({
   // Spectrogram: History (s) 0…30 (waterfall scroll rate; longer = slower).
   spectrogramBurn: Object.freeze({
@@ -857,9 +862,9 @@ const nodeGraphTraceDisplayFormTypeValueClampOverrides = Object.freeze({
     blinkTime: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, 0), 0, 1),
     gateHeight: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, 68), 0, 100),
   }),
-  pulseExplosionFace: Object.freeze({
-    lineThickness: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, 1.5), 0.25, 16),
-    dotThickness: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, 5), 0.25, 32),
+  pulseExplosionFace: nodeGraphPulseFaceValueClamps,
+  pulseTrainFace: Object.freeze({
+    ...nodeGraphPulseFaceValueClamps,
     ghostOpacity: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, 0.35), 0, 1),
   }),
   sinCos4Face: Object.freeze({

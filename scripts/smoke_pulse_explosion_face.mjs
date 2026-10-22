@@ -168,11 +168,14 @@ const lamps = await page.evaluate(async (nid) => {
   window.openNodeGraphTraceDisplaySettings(nid, { clientX: 500, clientY: 300 });
   await new Promise((r) => setTimeout(r, 500));
   const pop = document.getElementById("nodeTraceDisplaySettingsPopover");
-  const out = { lamps: [...(pop?.querySelectorAll("[data-hsl-lamp]") || [])].map((el) => el.getAttribute("data-hsl-label")), fields: [...(pop?.querySelectorAll("[data-trace-display-field]") || [])].map((el) => el.getAttribute("data-trace-display-field")).filter((k) => /Thickness$/.test(k)) };
+  const out = { lamps: [...(pop?.querySelectorAll("[data-hsl-lamp]") || [])].map((el) => el.getAttribute("data-hsl-label")), fields: [...(pop?.querySelectorAll("[data-trace-display-field]") || [])].map((el) => el.getAttribute("data-trace-display-field")).filter((k) => /Thickness$/.test(k)), ghost: Boolean(pop?.querySelector('[data-trace-display-field="ghostOpacity"], [data-hsl-lamp="ghost"]')) };
   return out;
 }, id);
 gate(JSON.stringify(lamps.lamps) === JSON.stringify(["Background", "Line", "Dot", "Playhead", "Lit"]), `Display Settings HBS order ${JSON.stringify(lamps.lamps)}`);
 gate(lamps.fields.includes("lineThickness") && lamps.fields.includes("dotThickness"), `Display Settings thickness controls ${JSON.stringify(lamps.fields)}`);
+gate(!lamps.ghost, "no Ghost colour / opacity in Pulse Explosion Display Settings (Pulse Train only)");
+const saved = await page.evaluate(() => normalizeNodeGraphPulseExplosionFaceSettings({ lineHue: 42, litHue: 10, ghostOpacity: 0.7 }));
+gate(saved.lineHue === 42 && saved.litHue === 10 && !("ghostOpacity" in saved) && !("ghostHue" in saved), `saved Pulse Explosion settings load, no ghost keys ${JSON.stringify(saved)}`);
 if (shot) await page.screenshot({ path: shot.replace(/\.png$/, "-settings.png") });
 const form = await page.evaluate(() => [typeof window.nodeGraphPulseExplosionFaceSettingsForNode, nodeGraphModuleDefinitions?.pulseExplosion?.displayModes?.[0]?.settingsSchema]);
 gate(form[0] === "function" && form[1] === "pulseExplosionFace", "pulseExplosionFace Display Settings schema");

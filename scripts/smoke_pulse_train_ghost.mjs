@@ -6,6 +6,8 @@
 //     schedule carries a ghost equal to the live preview; drawn in the Ghost
 //     colour; no ghost when the live params match what plays; Ghost opacity 0
 //     hides it.
+//  3. Display Settings: Pulse Train has its own schema (pulseTrainFace) with
+//     the Ghost lamp (after Lit) and Ghost opacity; saved settings load.
 // Usage: node scripts/smoke_pulse_train_ghost.mjs   (server.py on :8765)
 //   SANDBOX_URL, CHROME_PATH, PW_MODULE, SHOT_DIR (default scripts/out/pulse-train-ghost).
 import fs from "node:fs";
@@ -117,6 +119,27 @@ await face(oldP, { ...look, ghostOpacity: 0 });
 check("face: Ghost opacity 0 hides it", (await magenta()) === 0);
 const match = await face(newP, look);
 check("face: no ghost when the live params match what plays", match && match.ghost === null && (await magenta()) === 0, JSON.stringify(match));
+// 3. Own Display Settings.
+const schema = await page.evaluate(() => [nodeGraphModuleDefinitions.pulseTrain.displayType, nodeGraphModuleDefinitions.pulseTrain.displayModes[0].settingsSchema, nodeGraphModuleDefinitions.pulseTrain.displayModes[0].renderer]);
+check("schema: pulseTrainFace (type, settings, renderer)", schema.every((s) => s === "pulseTrainFace"), JSON.stringify(schema));
+const pop = await page.evaluate(async () => {
+  const node = nodeGraphPatchNode("pt-1");
+  node.traceDisplaySettings = {};
+  window.openNodeGraphTraceDisplaySettings("pt-1", { clientX: 500, clientY: 300 });
+  await new Promise((r) => setTimeout(r, 500));
+  const p = document.getElementById("nodeTraceDisplaySettingsPopover");
+  return { lamps: [...(p?.querySelectorAll("[data-hsl-lamp]") || [])].map((el) => el.getAttribute("data-hsl-label")), opacity: Boolean(p?.querySelector('[data-trace-display-field="ghostOpacity"]')) };
+});
+check("settings: Background, Line, Dot, Playhead, Lit, Ghost", JSON.stringify(pop.lamps) === JSON.stringify(["Background", "Line", "Dot", "Playhead", "Lit", "Ghost"]), JSON.stringify(pop.lamps));
+check("settings: Ghost opacity field", pop.opacity);
+const saved = await page.evaluate(() => {
+  const node = nodeGraphPatchNode("pt-1");
+  node.traceDisplaySettings = { lineHue: 42, litHue: 10, dotThickness: 7, ghostHue: 300, ghostOpacity: 0.7 };
+  const s = nodeGraphPulseTrainFaceSettingsForNode(node);
+  const d = normalizeNodeGraphPulseTrainFaceSettings({ lineHue: 42 });
+  return [s.lineHue, s.litHue, s.dotThickness, s.ghostHue, s.ghostOpacity, d.ghostOpacity];
+});
+check("saved Pulse Train settings load (shared keys + ghost); ghost defaults fill old patches", JSON.stringify(saved) === JSON.stringify([42, 10, 7, 300, 0.7, 0.35]), JSON.stringify(saved));
 await browser.close();
 if (errors.length) console.log("page errors:", errors.slice(0, 5));
 check("no page errors", errors.length === 0, errors.slice(0, 3).join(" | "));

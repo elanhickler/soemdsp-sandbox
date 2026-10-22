@@ -6,9 +6,27 @@
 // trigger with velocity 1 plays; with audio running it uses the engine's params in effect (__Count .. __Amp). Playhead: __Elapsed (seconds since trigger,
 // -1 idle) shifted to the heard time; fired pulses light up.
 // Ghost: the next pattern (live params) drawn dim behind the playing one.
-// Display Settings: the pulseExplosionFace schema (Background, Line, Dot,
-// Playhead, Lit, Line thickness, Dot size). GPU only (gl-line-renderer);
-// canvas size comes from the tile.
+// Display Settings `pulseTrainFace`: Background, Line, Dot, Playhead, Lit,
+// Ghost HBS; Line thickness, Dot size, Ghost opacity (the Pulse Explosion
+// set plus Ghost, one normalizer: nodeGraphPulseFaceNormalize). GPU only
+// (gl-line-renderer); canvas size comes from the tile.
+
+const nodeGraphPulseTrainFaceDisplaySettingsDefaults = Object.freeze({
+  ...nodeGraphPulseExplosionFaceDisplaySettingsDefaults,
+  ghostHue: 187.5,
+  ghostBrightness: 0.55,
+  ghostSaturation: 0.5,
+  ghostOpacity: 0.35,
+});
+const NODE_GRAPH_PULSE_TRAIN_FACE_EXTRA_LAMPS = Object.freeze([...NODE_GRAPH_PULSE_EXPLOSION_FACE_EXTRA_LAMPS, "ghost"]);
+
+function normalizeNodeGraphPulseTrainFaceSettings(settings = {}) {
+  return nodeGraphPulseFaceNormalize(settings, nodeGraphPulseTrainFaceDisplaySettingsDefaults, NODE_GRAPH_PULSE_TRAIN_FACE_EXTRA_LAMPS);
+}
+
+function nodeGraphPulseTrainFaceSettingsForNode(node) {
+  return normalizeNodeGraphPulseTrainFaceSettings(node?.traceDisplaySettings);
+}
 
 const nodeGraphPulseTrainPreviewWasm = { promise: null, exports: null, failed: false };
 
@@ -135,10 +153,7 @@ function drawNodeGraphPulseTrainDisplay(section) {
   const metrics = nodeGraphCycleLineGlMetrics(section, canvas, 1);
   if (!metrics) return;
   const { cssWidth: w, cssHeight: h, pixelRatio } = metrics;
-  const look = typeof nodeGraphPulseExplosionFaceSettingsForNode === "function"
-    ? nodeGraphPulseExplosionFaceSettingsForNode(node)
-    : null;
-  if (!look) return;
+  const look = nodeGraphPulseTrainFaceSettingsForNode(node);
   const rgba = (css) => nodeGraphGlGraphParseCssColor(css, [1, 1, 1, 1]);
   const batch = nodeGraphGlLinesBegin(canvas, rgba(look.backgroundPaint), { scale: pixelRatio });
   if (!batch) {
@@ -232,4 +247,8 @@ function createNodeGraphPulseTrainDisplay(nodeId, type = "pulseTrain") {
     section._startFaceLoop?.();
   }));
   return section;
+}
+
+if (typeof nodeGraphModuleScopeCustomRenderers === "object" && nodeGraphModuleScopeCustomRenderers) {
+  nodeGraphModuleScopeCustomRenderers.pulseTrainFace = () => {};
 }

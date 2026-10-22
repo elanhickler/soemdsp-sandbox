@@ -7,8 +7,8 @@
 // Playhead: the engine's seconds-since-trigger (__Elapsed, -1 idle), shifted to
 // the time the speakers play it; stems light up as their pulse fires.
 // Display Settings `pulseExplosionFace`: Background, Line (stems), Dot (tops),
-// Playhead, Lit (fired pulses), Ghost (Pulse Train's next pattern) HBS; Line
-// thickness, Dot size, Ghost opacity.
+// Playhead, Lit (fired pulses) HBS; Line thickness, Dot size.
+// nodeGraphPulseFaceNormalize is shared with the Pulse Train face.
 // GPU only, drawn with the shared antialiased line drawer (gl-line-renderer).
 
 const nodeGraphPulseExplosionFaceDisplaySettingsDefaults = Object.freeze({
@@ -29,24 +29,28 @@ const nodeGraphPulseExplosionFaceDisplaySettingsDefaults = Object.freeze({
   litHue: 49,
   litBrightness: 0.61,
   litSaturation: 0.97,
-  ghostHue: 187.5,
-  ghostBrightness: 0.55,
-  ghostSaturation: 0.5,
-  ghostOpacity: 0.35,
 });
 /** HBS lamps the RoundShape model does not carry (it owns background / line / dot). */
-const NODE_GRAPH_PULSE_EXPLOSION_FACE_EXTRA_LAMPS = Object.freeze(["playhead", "lit", "ghost"]);
+const NODE_GRAPH_PULSE_EXPLOSION_FACE_EXTRA_LAMPS = Object.freeze(["playhead", "lit"]);
 
 function normalizeNodeGraphPulseExplosionFaceSettings(settings = {}) {
+  return nodeGraphPulseFaceNormalize(settings, nodeGraphPulseExplosionFaceDisplaySettingsDefaults, NODE_GRAPH_PULSE_EXPLOSION_FACE_EXTRA_LAMPS);
+}
+
+/**
+ * Pulse face settings (Pulse Explosion, Pulse Train): RoundShape background /
+ * line / dot, the extra HBS lamps, Line thickness, Dot size, and Ghost
+ * opacity when the defaults carry it.
+ */
+function nodeGraphPulseFaceNormalize(settings, d, lamps) {
   const source = settings && typeof settings === "object" ? settings : {};
-  const d = nodeGraphPulseExplosionFaceDisplaySettingsDefaults;
   const merged = { ...d, ...source };
   const out = { ...normalizeNodeGraphRoundShapeFaceSettings(merged) };
   const unit = (v, fallback) => {
     const n = Number(v);
     return Number.isFinite(n) ? Math.max(0, Math.min(1, n)) : fallback;
   };
-  for (const id of NODE_GRAPH_PULSE_EXPLOSION_FACE_EXTRA_LAMPS) {
+  for (const id of lamps) {
     const raw = Number(merged[`${id}Hue`]);
     const hue = Number.isFinite(raw) ? ((raw % 360) + 360) % 360 : d[`${id}Hue`];
     out[`${id}Hue`] = hue;
@@ -60,7 +64,7 @@ function normalizeNodeGraphPulseExplosionFaceSettings(settings = {}) {
   };
   out.lineThickness = span(merged.lineThickness, 0.25, 16, d.lineThickness);
   out.dotThickness = span(merged.dotThickness, 0.25, 32, d.dotThickness);
-  out.ghostOpacity = span(merged.ghostOpacity, 0, 1, d.ghostOpacity);
+  if ("ghostOpacity" in d) out.ghostOpacity = span(merged.ghostOpacity, 0, 1, d.ghostOpacity);
   return out;
 }
 

@@ -85,6 +85,10 @@ function assignNodeGraphTypedDisplaySettingsToNode(node, displayType, settings) 
     if (typeof applyNodeGraphPulseExplosionDisplaySettingsToFace === "function") {
       applyNodeGraphPulseExplosionDisplaySettingsToFace(node);
     }
+    return node.traceDisplaySettings;
+  }
+  if (displayType === "pulseTrainFace" && typeof normalizeNodeGraphPulseTrainFaceSettings === "function") {
+    node.traceDisplaySettings = normalizeNodeGraphPulseTrainFaceSettings(settings);
     if (typeof applyNodeGraphPulseTrainDisplaySettingsToFace === "function") {
       applyNodeGraphPulseTrainDisplaySettingsToFace(node);
     }
