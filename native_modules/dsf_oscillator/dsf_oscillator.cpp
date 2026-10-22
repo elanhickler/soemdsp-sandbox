@@ -114,11 +114,13 @@ double dsfPow(double base, double exponent) {
 
 // SineSaw.cxx. The closed form contains cos(x*(n+1)), so n+1 must sit at
 // or under Nyquist. floor(Nyquist/f) leaves that partial one step over.
-int sawPartials(double nyquist, double freq) {
-  int n = static_cast<int>(nyquist / freq) - 1;
-  if (n < 1) n = 1;
-  // Below a few hertz the uncapped count makes n·phase lose its fraction.
-  if (n > 4096) n = 4096;
+// Continuous count: the integer part picks the kernels, the fraction fades
+// the top partial in and out so pitch moves never switch it in one sample.
+double sawPartials(double nyquist, double freq) {
+  double n = nyquist / freq - 1.0;
+  if (n < 1.0) n = 1.0;
+  // Below a few hertz the uncapped count makes n*phase lose its fraction.
+  if (n > 4096.0) n = 4096.0;
   return n;
 }
 
@@ -204,8 +206,18 @@ struct DsfOscillatorState {
   double triPeak;      // Trimorph's adaptive peak-follower
   double out;
   double renderPhase;  // face playhead: free-running t + Phase offset, 0..1
-  DsfKernelCoeffs kernel;
+  DsfKernelCoeffs kernelLo;  // n0 - 1 partials (top partial faded out)
+  DsfKernelCoeffs kernelHi;  // n0 partials (top partial fully in)
+  double frac;               // fade of the top partial, 0..1
 };
+
+// Crossfade of the two integer-count kernels. Both stay under Nyquist.
+double fadedKernel(double turns, const DsfOscillatorState& s) {
+  const double lo = sineSawKernel(turns, s.kernelLo);
+  if (s.frac <= 0.0) return lo;
+  const double hi = sineSawKernel(turns, s.kernelHi);
+  return lo + (hi - lo) * s.frac;
+}
 
 static DsfOscillatorState gPool[kMaxInstances];
 
@@ -274,8 +286,12 @@ extern "C" void soemdsp_dsf_oscillator_sample(
     sample = sinApprox(s.renderPhase * kPi * 2.0);
   } else {
     const double nyquist = safeSampleRate * 0.5;
-    const double nSaw = static_cast<double>(sawPartials(nyquist, safeAbsFrequency));
-    prepareSawCoeffs(s.kernel, morph, nSaw);
+    const double nf = sawPartials(nyquist, safeAbsFrequency);
+    const double n0 = static_cast<double>(static_cast<int>(nf));
+    const double nLo = n0 > 1.0 ? n0 - 1.0 : 1.0;
+    s.frac = n0 > 1.0 ? nf - n0 : 0.0;
+    prepareSawCoeffs(s.kernelLo, morph, nLo);
+    prepareSawCoeffs(s.kernelHi, morph, n0);
     // Signed dt runs the phase backward through zero. The 0.9999 is the
     // original guard against the closed form sitting exactly on a sample.
     s.t = wrap01(s.t + dt * 0.9999);
@@ -283,7 +299,7 @@ extern "C" void soemdsp_dsf_oscillator_sample(
     s.renderPhase = renderT;
 
     const double retention = adaptiveRetention(dt);
-    const double rawSaw = sineSawKernel(renderT, s.kernel);
+    const double rawSaw = fadedKernel(renderT, s);
     s.sawAcc = s.sawAcc * retention + rawSaw * dt;
 
     if (waveform == 1) {
@@ -294,13 +310,13 @@ extern "C" void soemdsp_dsf_oscillator_sample(
       // to the very first Saw/Square crossfade this module had, which
       // just mixed two cleanly-shaped waveforms rather than inheriting
       // PWM's variable-duty shape.
-      const double rawBlendSquare = rawSaw - sineSawKernel(wrap01(renderT - 0.5), s.kernel);
+      const double rawBlendSquare = rawSaw - fadedKernel(wrap01(renderT - 0.5), s);
       s.blendSqAcc = s.blendSqAcc * retention + rawBlendSquare * dt;
       const double b = clamp(blend, 0.0, 1.0);
       sample = s.sawAcc * (1.0 - b) + s.blendSqAcc * b;
     } else {
       const double pw = clamp(pulseWidth, 0.01, 0.99);
-      const double rawShiftedSaw = sineSawKernel(wrap01(renderT - pw), s.kernel);
+      const double rawShiftedSaw = fadedKernel(wrap01(renderT - pw), s);
       const double rawSquare = rawSaw - rawShiftedSaw;
       s.sqAcc = s.sqAcc * retention + rawSquare * dt;
 
@@ -350,5 +366,5 @@ extern "C" double soemdsp_dsf_oscillator_phase(int handle) {
 }
 
 extern "C" int soemdsp_dsf_oscillator_version() {
-  return 14;
+  return 15;
 }

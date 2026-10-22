@@ -7,7 +7,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, "..");
 const wasmPath = path.join(root, "native_modules", "combined", "soemdsp_combined.wasm");
 
-const { instance } = await WebAssembly.instantiate(fs.readFileSync(wasmPath), {});
+const { instance } = await WebAssembly.instantiate(fs.readFileSync(wasmPath), { env: { emo_process_block: () => 0 } });
 const e = instance.exports;
 const mem = e.memory;
 if (!mem) throw new Error("wasm memory export missing");
@@ -75,6 +75,17 @@ function view(ptr, n) {
   if (!(peak > 0.05 && peak <= 1.6)) throw new Error(`dsfOscillator peak=${peak}`);
   if (!(rms > 0.01)) throw new Error(`dsfOscillator rms=${rms}`);
   console.log(`dsfOscillator ok peak=${peak.toFixed(4)} rms=${rms.toFixed(4)}`);
+}
+
+// Top partial fades in/out with pitch (dsf v15): a slow sweep at Morph 1
+// leaves no click burst near Nyquist (old build peaked at 12.2 Saw / 49 Square; v15 4.4 both).
+{
+  const { dsfClickMetric } = await import("./measure_dsf_click.mjs");
+  for (const [name, w] of [["Saw", 1], ["Square", 2]]) {
+    const m = await dsfClickMetric(wasmPath, w);
+    if (!(m.peakEnergy < 6.0)) throw new Error(`dsf ${name} sweep click: peak top-band energy ${m.peakEnergy}`);
+    console.log(`dsf ${name} sweep ok: peak top-band energy ${m.peakEnergy.toFixed(3)}`);
+  }
 }
 
 if ((version() | 0) < 41) throw new Error(`graph version ${version()} expected >= 41`);
