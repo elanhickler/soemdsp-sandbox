@@ -42,9 +42,17 @@ function nodeGraphTraceDisplaySettingsElement() {
       <label class="node-layout-canvas-pin-label node-display-settings-canvas-pin" for="nodeLayoutCanvasShowInCanvas">
         <input
           id="nodeLayoutCanvasShowInCanvas"
+          class="node-layout-canvas-pin-input"
           type="checkbox"
           data-tooltip-key="displaySettings.showInCanvas">
         <span>Show in performance view</span>
+      </label>
+      <label class="node-layout-canvas-pin-label node-display-settings-canvas-pin" for="nodeLayoutCanvasShowModule">
+        <input
+          id="nodeLayoutCanvasShowModule"
+          class="node-layout-canvas-pin-input"
+          type="checkbox">
+        <span>Show module</span>
       </label>
       <div data-display-settings-body class="node-trace-display-settings-body"></div>
     </div>

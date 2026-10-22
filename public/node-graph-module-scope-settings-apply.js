@@ -1312,7 +1312,7 @@ function nodeGraphTraceDisplaySettingsDirtyKeysFromEvent(event) {
     return ["gradientStops", "background", "backgroundColor"];
   }
   // Show in canvas is a layout pin, not a display-settings bag field.
-  if (t.id === "nodeLayoutCanvasShowInCanvas" || t.closest?.("#nodeLayoutCanvasShowInCanvas")) {
+  if (t.closest?.(".node-layout-canvas-pin-input")) {
     return [];
   }
   const named = nodeGraphTraceDisplaySettingsNamedKeyFromTarget(t);
@@ -1382,7 +1382,7 @@ function nodeGraphTraceDisplaySettingsNamedKeyFromTarget(target) {
 function nodeGraphTraceDisplaySettingsEventIsShowInCanvas(event) {
   const t = event?.target;
   if (!t) return false;
-  return t.id === "nodeLayoutCanvasShowInCanvas" || Boolean(t.closest?.("#nodeLayoutCanvasShowInCanvas"));
+  return Boolean(t.closest?.(".node-layout-canvas-pin-input"));
 }
 
 function updateNodeGraphTraceDisplaySettingsLive(event) {

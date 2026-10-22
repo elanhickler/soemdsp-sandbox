@@ -1613,7 +1613,7 @@ function setNodeMetadataPopoverBlankState(blank = true, message = "Right-click o
     grid.hidden = Boolean(blank);
   }
   if (blank) {
-    renderNodeMetadataParameterSliders(null);
+    renderNodeMetadataParameterSlider(null);
   }
   popover.dataset.inspectorBlank = blank ? "true" : "false";
 }
@@ -1660,7 +1660,7 @@ function fillNodeMetadataPopover(slider) {
   document.getElementById("metadataAliasValue").placeholder = sliderLabel;
   writeNodeMetadataEditorValues(metadata);
   populateNodeMetadataParameterPicker(slider);
-  renderNodeMetadataParameterSliders(slider);
+  renderNodeMetadataParameterSlider(slider);
   setMetadataScriptSourceText(formatNodeMetadataScript(slider, metadata));
   setNodeMetadataScriptDirty(false, "script ready", false);
   setNodeMetadataAdvancedScriptVisible(false);
@@ -3353,27 +3353,24 @@ function populateNodeMetadataParameterPicker(slider) {
   }
 }
 
-// One slider per module parameter, hidden rows and collapsed modules
-// included. Each row is a mirror readout on the module's own slider input.
-function renderNodeMetadataParameterSliders(slider) {
-  const list = document.getElementById("metadataParameterSliders");
-  if (!list) {
+// The selected parameter's slider: a mirror readout on the module's own
+// slider input, so it works for hidden rows and collapsed modules too.
+function renderNodeMetadataParameterSlider(slider) {
+  const host = document.getElementById("metadataParameterSlider");
+  if (!host) {
     return;
   }
-  const nodeElement = slider?.closest?.(".dsp-node");
-  const inputs = nodeElement
-    ? [...nodeElement.querySelectorAll('.node-parameter-row input[type="range"][data-param]')]
-      .filter((input) => input.closest(".dsp-node") === nodeElement)
-    : [];
-  list.replaceChildren(...inputs.map((input) => createNodeSliderReadoutButton(input.id, input, {
+  const input = slider?.closest?.(".dsp-node") ? slider : null;
+  host.replaceChildren(...(input ? [createNodeSliderReadoutButton(input.id, input, {
     paramLabel: nodeSliderLabelText(input),
     ariaLabel: nodeSliderLabelText(input),
     mirror: true,
-  })));
-  list.hidden = inputs.length <= 0;
-  const paint = () => inputs.forEach((input) => paintNodeSliderMirrorReadouts(input));
-  paint();
-  window.requestAnimationFrame(paint);
+  })] : []));
+  host.hidden = !input;
+  if (input) {
+    paintNodeSliderMirrorReadouts(input);
+    window.requestAnimationFrame(() => paintNodeSliderMirrorReadouts(input));
+  }
 }
 
 function handleNodeMetadataParameterPickerChange(event) {

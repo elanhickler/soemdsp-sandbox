@@ -213,6 +213,14 @@ function nodeGraphLayoutCanvasSetPinned(nodeId, pinned, options = {}) {
       node.ui = {};
     }
     node.ui.showInCanvas = on;
+    // Show module: the tile is the whole module instead of its display.
+    if (Object.prototype.hasOwnProperty.call(options, "wholeModule")) {
+      if (on && options.wholeModule) {
+        node.ui.canvasWholeModule = true;
+      } else {
+        delete node.ui.canvasWholeModule;
+      }
+    }
   }
   if (on) {
     if (idx >= 0) {
@@ -815,18 +823,32 @@ function nodeGraphLayoutCanvasSelectionIds() {
   return ordered.map((id) => String(id || "").trim()).filter(Boolean);
 }
 
+// Performance view pins: Show display (the module's display) and Show module
+// (the whole module). One pin per module; the flag picks what the tile shows.
+const NODE_GRAPH_LAYOUT_CANVAS_PIN_INPUTS = Object.freeze({
+  nodeLayoutCanvasShowInCanvas: false,
+  nodeLayoutCanvasShowModule: true,
+});
+
+function nodeGraphLayoutCanvasPinShows(nodeId, wholeModule) {
+  const node = typeof nodeGraphPatchNode === "function" ? nodeGraphPatchNode(nodeId) : null;
+  return nodeGraphLayoutCanvasIsPinned(nodeId) && Boolean(node?.ui?.canvasWholeModule) === wholeModule;
+}
+
 function syncNodeGraphLayoutCanvasSettingsControl() {
-  const input = document.getElementById("nodeLayoutCanvasShowInCanvas");
-  if (!(input instanceof HTMLInputElement)) {
-    return;
-  }
   const ids = nodeGraphLayoutCanvasSelectionIds();
-  input.disabled = !ids.length;
-  input.checked = ids.length > 0 && ids.every((id) => nodeGraphLayoutCanvasIsPinned(id));
-  const row = input.closest("label") || input.parentElement;
-  if (row) {
-    row.hidden = false;
-    row.classList.toggle("is-disabled", !ids.length);
+  for (const [inputId, wholeModule] of Object.entries(NODE_GRAPH_LAYOUT_CANVAS_PIN_INPUTS)) {
+    const input = document.getElementById(inputId);
+    if (!(input instanceof HTMLInputElement)) {
+      continue;
+    }
+    input.disabled = !ids.length;
+    input.checked = ids.length > 0 && ids.every((id) => nodeGraphLayoutCanvasPinShows(id, wholeModule));
+    const row = input.closest("label") || input.parentElement;
+    if (row) {
+      row.hidden = false;
+      row.classList.toggle("is-disabled", !ids.length);
+    }
   }
 }
 
@@ -983,7 +1005,12 @@ function handleNodeGraphLayoutCanvasFullscreenChange() {
 }
 
 function bindNodeGraphLayoutCanvasSettingsControl() {
-  const input = document.getElementById("nodeLayoutCanvasShowInCanvas");
+  for (const [inputId, wholeModule] of Object.entries(NODE_GRAPH_LAYOUT_CANVAS_PIN_INPUTS)) {
+    bindNodeGraphLayoutCanvasPinInput(document.getElementById(inputId), wholeModule);
+  }
+}
+
+function bindNodeGraphLayoutCanvasPinInput(input, wholeModule) {
   if (!(input instanceof HTMLInputElement) || input.dataset.bound === "true") {
     return;
   }
@@ -1002,9 +1029,10 @@ function bindNodeGraphLayoutCanvasSettingsControl() {
       nodeGraphLayoutCanvasSetPinned(id, pinned, {
         persist: false,
         refresh: index === ids.length - 1,
+        wholeModule,
       });
     });
-    input.checked = ids.every((id) => nodeGraphLayoutCanvasIsPinned(id));
+    syncNodeGraphLayoutCanvasSettingsControl();
     if (typeof markNodeGraphPatchDirty === "function") {
       markNodeGraphPatchDirty();
     }

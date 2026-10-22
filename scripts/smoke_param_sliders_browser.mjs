@@ -1,6 +1,6 @@
-// Real-browser smoke for Parameter Settings sliders (one per parameter, mirror readouts on the module's own input).
-// Covers a collapsed module: mouse drag and touch drag in the page change the param and the module input,
-// a module-side write repaints the page, ctrl+click resets to default, undo flows back.
+// Real-browser smoke for the Parameter Settings slider: one slider, the selected parameter (mirror readout on the
+// module's own input). Covers a collapsed module: the slider follows the PARAMETER picker, mouse and touch drag change
+// the param and the module input, a module-side write repaints the page, ctrl+click resets to default, undo flows back.
 // Run: node scripts/smoke_param_sliders_browser.mjs   (env: SANDBOX_URL, OUT=dir, HEADED=1)
 import fs from "node:fs";
 import { chromium } from "playwright-core";
@@ -32,12 +32,13 @@ const setup = await page.evaluate((id) => {
 await page.waitForTimeout(600);
 
 const state = () => page.evaluate((id) => {
-  const list = document.getElementById("metadataParameterSliders");
+  const list = document.getElementById("metadataParameterSlider");
   const rows = [...(list?.querySelectorAll(".node-slider-readout") || [])];
   const article = document.querySelector(`article[data-node="${id}"]`);
   return {
     collapsed: article?.classList.contains("module-collapsed"),
     listVisible: Boolean(list && !list.hidden && list.offsetHeight > 0),
+    picker: document.getElementById("metadataParameterPicker")?.value,
     rows: rows.map((r) => {
       const input = document.getElementById(r.dataset.sliderTarget);
       return {
@@ -54,16 +55,22 @@ const state = () => page.evaluate((id) => {
   };
 }, NODE);
 
+const first = await state();
+console.log("setup", JSON.stringify(setup), "rows", first.rows.length, "picker", first.picker, "collapsed", first.collapsed);
+if (!setup.collapsed || !first.collapsed) fail.push("module did not collapse");
+if (!first.listVisible) fail.push("slider not visible");
+if (first.rows.length !== 1) fail.push(`expected one slider, got ${first.rows.length}`);
+if (first.rows[0]?.param !== first.picker) fail.push(`slider ${first.rows[0]?.param} != picker ${first.picker}`);
+if (first.rows.some((r) => r.moduleRowVisible)) fail.push("module rows should be hidden while collapsed");
+// Follows the PARAMETER picker.
+await page.selectOption("#metadataParameterPicker", "frequency");
+await page.waitForTimeout(400);
 const s0 = await state();
-console.log("setup", JSON.stringify(setup), "rows", s0.rows.length, "collapsed", s0.collapsed);
-if (!setup.collapsed || !s0.collapsed) fail.push("module did not collapse");
-if (!s0.listVisible) fail.push("slider list not visible");
-const paramCount = await page.evaluate((id) => nodeGraphPatchNodeParameterDefinitions(nodeGraphPatchNode(id)).length, NODE);
-if (s0.rows.length !== paramCount) fail.push(`rows ${s0.rows.length} != params ${paramCount}`);
-if (s0.rows.some((r) => r.moduleRowVisible)) fail.push("module rows should be hidden while collapsed");
-const idx = s0.rows.findIndex((r) => !r.choices);
+console.log("picker -> frequency", JSON.stringify(s0.rows));
+if (s0.rows.length !== 1 || s0.rows[0].param !== "frequency") fail.push("slider did not follow the picker");
+const idx = 0;
 const key = s0.rows[idx]?.param;
-const row = page.locator("#metadataParameterSliders .node-slider-readout").nth(idx);
+const row = page.locator("#metadataParameterSlider .node-slider-readout").first();
 const box = await row.boundingBox();
 const at = (r) => ({ x: box.x + box.width * r, y: box.y + box.height / 2 });
 
@@ -122,10 +129,10 @@ console.log("touch drag", JSON.stringify(s5));
 if (s5.patch === s4.patch) fail.push("touch drag did not change the patch");
 if (Math.abs(s5.patch - s5.domain) > 1e-9) fail.push("module input does not match patch after touch drag");
 
-await page.locator("#nodeParameterMetadataPopover").screenshot({ path: `${OUT}/sliders.png` }).catch(async () => page.screenshot({ path: `${OUT}/sliders.png` }));
+await page.locator("#nodeParameterMetadataPopover").screenshot({ path: `${OUT}/single-slider.png` }).catch(async () => page.screenshot({ path: `${OUT}/single-slider.png` }));
 await b.close();
 if (fail.length) {
   console.log("FAIL\n" + fail.join("\n"));
   process.exit(1);
 }
-console.log("param sliders smoke ok");
+console.log("param slider smoke ok");

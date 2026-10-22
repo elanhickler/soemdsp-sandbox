@@ -25885,20 +25885,14 @@ html.soemdsp-whole-module .node-layout-canvas-grip {
   color: #ff6b6b;
 }
 
-/* Parameter Settings: one slider per parameter (mirror readouts).
+/* Parameter Settings: the selected parameter's slider (mirror readout).
    Module readouts are painted by the GL graph; this window is DOM, so the
    same readout paints its own text and position handle here. */
-.metadata-parameter-sliders {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.metadata-parameter-sliders[hidden] {
+.metadata-parameter-slider[hidden] {
   display: none;
 }
 
-#nodeParameterMetadataPopover #metadataParameterSliders > .node-slider-readout {
+#nodeParameterMetadataPopover #metadataParameterSlider > .node-slider-readout {
   width: 100%;
   height: var(--node-slider-readout-height, 30px);
   min-height: var(--node-slider-readout-height, 30px);
@@ -25915,14 +25909,14 @@ html.soemdsp-whole-module .node-layout-canvas-grip {
     var(--node-slider-amount-color, hsl(200 31% 15% / 0.55));
 }
 
-#nodeParameterMetadataPopover #metadataParameterSliders > .node-slider-readout .node-slider-readout-label {
+#nodeParameterMetadataPopover #metadataParameterSlider > .node-slider-readout .node-slider-readout-label {
   color: var(--node-slider-label-color, #cfdde5);
 }
 
-#nodeParameterMetadataPopover #metadataParameterSliders > .node-slider-readout .node-slider-readout-value {
+#nodeParameterMetadataPopover #metadataParameterSlider > .node-slider-readout .node-slider-readout-value {
   color: var(--node-slider-value-color, #ffffff);
 }
 
-#nodeParameterMetadataPopover #metadataParameterSliders > .node-slider-readout .node-slider-readout-unit {
+#nodeParameterMetadataPopover #metadataParameterSlider > .node-slider-readout .node-slider-readout-unit {
   color: var(--node-slider-unit-color, #7fc7d9);
 }
