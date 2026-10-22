@@ -237,7 +237,6 @@
         "chromaColor",
         "image",
         "rgbaHsla",
-        "screenSpaceShader",
         "waveguide",
         "flexGrid",
         "drummer",

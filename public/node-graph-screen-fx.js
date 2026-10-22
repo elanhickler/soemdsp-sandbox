@@ -1,11 +1,12 @@
-// Screen Space Shader host and View Feedback (one GPU pass chain over the
-// whole circuit area). The GL graph's workspace canvases (plates, cables,
-// dots and faces) keep their pictures as face textures on the shared picture
-// device; this composites them into one scene texture, runs every enabled
-// Screen Space Shader over it in patch order (ping-pong), and shows the result
-// on #nodeScreenFxCanvas. View Feedback publishes the previous frame's final
-// picture on its 📺 out (its own ping-pong pair, never read and written in the
-// same frame).
+// Circuit view on the 📺 picture pipeline (one path):
+//   View Out     source: last frame's on-screen circuit view on its 📺 out.
+//   Screen Out   sink: its 📺 in replaces the circuit area on screen.
+//   Screen Space Shader  picture effect: 📺 in -> GLSL -> 📺 out, like Aberration.
+// Each frame: the GL graph's workspace canvases (plates, cables, dots, faces)
+// composite into one scene texture; the screen is Screen Out's picture, or the
+// scene when there is none; that final picture lands on #nodeScreenFxCanvas and
+// is copied into View Out's ping-pong pair for the next frame. Every texture is
+// double-buffered: nothing is read and written in the same frame.
 
 const NODE_GRAPH_SCREEN_FX_MAX = 4096;
 
@@ -13,8 +14,8 @@ const nodeGraphScreenFxState = {
   active: false,
   kit: null,
   scene: null,
-  passes: [null, null],
   views: [null, null],
+  outputs: new Map(), // Screen Space Shader nodeId -> [surface, surface]
   viewIndex: 0,
   programs: new Map(), // nodeId -> { source, program, uniforms, error }
   status: new Map(), // nodeId -> label text
@@ -57,6 +58,7 @@ out vec4 fxColor;
 uniform sampler2D uScene;
 uniform vec2 uResolution;
 uniform float uTime;
+// scene() reads the module's 📺 in (black when nothing is wired).
 vec4 scene(vec2 uv) { return texture(uScene, uv); }
 #line 1
 `;
@@ -130,8 +132,8 @@ function nodeGraphScreenFxKit(gl) {
   if (st.kit?.gl === gl && !gl.isContextLost()) return st.kit;
   st.programs.clear();
   st.scene = null;
-  st.passes = [null, null];
   st.views = [null, null];
+  st.outputs.clear();
   const layer = nodeGraphScreenFxLink(gl, NODE_GRAPH_SCREEN_FX_VS, NODE_GRAPH_SCREEN_FX_LAYER_FS);
   const copy = nodeGraphScreenFxLink(gl, NODE_GRAPH_SCREEN_FX_VS, NODE_GRAPH_SCREEN_FX_COPY_FS);
   if (!layer.program || !copy.program) {
@@ -205,19 +207,34 @@ function nodeGraphScreenFxStatusFor(nodeId, script) {
 function nodeGraphScreenFxNodes() {
   const nodes = nodeGraphMvp?.patch?.nodes;
   const shaders = [];
-  const feedback = [];
-  if (!Array.isArray(nodes)) return { shaders, feedback };
+  const viewOuts = [];
+  const screenOuts = [];
+  if (!Array.isArray(nodes)) return { shaders, viewOuts, screenOuts };
   const bypassed = new Set(nodeGraphMvp?.patch?.bypassedNodes || []);
   for (const node of nodes) {
     if (!node?.id || bypassed.has(node.id) || node.bypass === true) continue;
+    const id = String(node.id);
     if (node.type === "screenSpaceShader") {
       const script = normalizeNodeGraphScreenSpaceShader(node.screenSpaceShader);
-      if (script.enabled) shaders.push({ id: String(node.id), script });
-    } else if (node.type === "viewFeedback") {
-      feedback.push(String(node.id));
-    }
+      if (script.enabled) shaders.push({ id, script });
+    } else if (node.type === "viewOut") viewOuts.push(id);
+    else if (node.type === "screenOut") screenOuts.push(id);
   }
-  return { shaders, feedback };
+  // Shaders feeding shaders run upstream first (patch order otherwise).
+  const ids = new Set(shaders.map((s) => s.id));
+  const upstream = typeof nodeGraphPictureEdges === "function" ? nodeGraphPictureEdges().upstream : new Map();
+  const ordered = [];
+  const seen = new Set();
+  const visit = (entry, depth) => {
+    if (seen.has(entry.id) || depth > 64) return;
+    seen.add(entry.id);
+    for (const src of upstream.get(entry.id) || []) {
+      if (ids.has(src)) visit(shaders.find((s) => s.id === src), depth + 1);
+    }
+    ordered.push(entry);
+  };
+  shaders.forEach((entry) => visit(entry, 0));
+  return { shaders: ordered, viewOuts, screenOuts };
 }
 
 function nodeGraphScreenFxSources() {
@@ -283,8 +300,46 @@ function nodeGraphScreenFxDraw(kit, target, program, textures) {
   gl.bindVertexArray(null);
 }
 
-/** One frame of the chain. Returns the final surface, or null. */
-function nodeGraphScreenFxRender(host, shaders, feedback) {
+function nodeGraphScreenFxRunShader(kit, id, script, w, h, now) {
+  const st = nodeGraphScreenFxState;
+  const gl = kit.gl;
+  const entry = nodeGraphScreenFxProgram(gl, id, script);
+  if (!entry.program) {
+    nodeGraphScreenFxSetStatus(id, entry.error);
+    return;
+  }
+  nodeGraphScreenFxSetStatus(id, `ok · ${script.inputs.length} in`);
+  const input = typeof nodeGraphPictureRead === "function" ? nodeGraphPictureRead(id, "rgba") : null;
+  const pair = st.outputs.get(id) || [null, null];
+  pair[0] = nodeGraphScreenFxSurface(gl, w, h, pair[0]);
+  pair[1] = nodeGraphScreenFxSurface(gl, w, h, pair[1]);
+  st.outputs.set(id, pair);
+  // pair[0] is published (read by consumers); draw into pair[1], then swap.
+  const target = pair[1];
+  gl.useProgram(entry.program);
+  gl.uniform1i(entry.uScene, 0);
+  gl.uniform2f(entry.uResolution, w, h);
+  gl.uniform1f(entry.uTime, now);
+  for (const [name, loc] of entry.floats) {
+    const v = typeof nodeGraphVideoGraphAudioLatest === "function" ? nodeGraphVideoGraphAudioLatest(id, name) : 0;
+    gl.uniform1f(loc, Number.isFinite(v) ? v : 0);
+  }
+  const textures = [input?.texture || kit.black];
+  entry.samplers.forEach(([name, loc], i) => {
+    const pic = typeof nodeGraphPictureRead === "function" ? nodeGraphPictureRead(id, name) : null;
+    gl.uniform1i(loc, i + 1);
+    textures.push(pic?.texture || kit.black);
+  });
+  nodeGraphScreenFxDraw(kit, target, entry.program, textures);
+  pair[1] = pair[0];
+  pair[0] = target;
+  if (typeof nodeGraphPicturePublish === "function") {
+    nodeGraphPicturePublish(id, target.texture, w, h, { byReference: true });
+  }
+}
+
+/** One frame. Returns the surface to show, or null when the screen is not involved. */
+function nodeGraphScreenFxRender(host, nodes, onScreen) {
   const st = nodeGraphScreenFxState;
   const dev = typeof nodeGraphPictureDevice === "function" ? nodeGraphPictureDevice() : null;
   const gl = dev?.gl;
@@ -293,78 +348,61 @@ function nodeGraphScreenFxRender(host, shaders, feedback) {
   if (!kit) return null;
   const sources = nodeGraphScreenFxSources();
   const base = sources[0];
-  if (!base) return null;
-  const w = Math.max(1, Math.min(NODE_GRAPH_SCREEN_FX_MAX, base.width | 0));
-  const h = Math.max(1, Math.min(NODE_GRAPH_SCREEN_FX_MAX, base.height | 0));
-  st.scene = nodeGraphScreenFxSurface(gl, w, h, st.scene);
-  st.passes[0] = nodeGraphScreenFxSurface(gl, w, h, st.passes[0]);
-  st.passes[1] = nodeGraphScreenFxSurface(gl, w, h, st.passes[1]);
-  if (feedback.length) {
-    st.views[0] = nodeGraphScreenFxSurface(gl, w, h, st.views[0]);
-    st.views[1] = nodeGraphScreenFxSurface(gl, w, h, st.views[1]);
-  }
+  const w = Math.max(1, Math.min(NODE_GRAPH_SCREEN_FX_MAX, (base?.width | 0) || 512));
+  const h = Math.max(1, Math.min(NODE_GRAPH_SCREEN_FX_MAX, (base?.height | 0) || 512));
   const prevProgram = gl.getParameter(gl.CURRENT_PROGRAM);
   const prevActive = gl.getParameter(gl.ACTIVE_TEXTURE);
   gl.disable(gl.SCISSOR_TEST);
   gl.disable(gl.DEPTH_TEST);
-  // 1. Scene: workspace background, then each layer in z order (straight alpha, like drawImage).
-  const bg = nodeGraphScreenFxBackground(host);
-  gl.bindFramebuffer(gl.FRAMEBUFFER, st.scene.fbo);
-  gl.viewport(0, 0, w, h);
-  gl.clearColor(bg[0], bg[1], bg[2], 1);
-  gl.clear(gl.COLOR_BUFFER_BIT);
-  gl.enable(gl.BLEND);
-  gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ZERO, gl.ONE);
-  gl.useProgram(kit.layer);
-  gl.uniform1i(kit.layerTex, 0);
-  for (const canvas of sources) {
-    const face = typeof nodeGraphSharedGlFaceTexture === "function" ? nodeGraphSharedGlFaceTexture(canvas) : null;
-    if (!face?.texture) continue;
-    nodeGraphScreenFxDraw(kit, st.scene, kit.layer, [face.texture]);
-  }
   gl.disable(gl.BLEND);
-  // 2. Screen Space Shaders in patch order, ping-pong.
-  let input = st.scene;
-  let out = 0;
+  // 1. Picture effects (Screen Space Shaders), upstream first.
   const now = performance.now() / 1000;
-  for (const { id, script } of shaders) {
-    const entry = nodeGraphScreenFxProgram(gl, id, script);
-    if (!entry.program) {
-      nodeGraphScreenFxSetStatus(id, entry.error);
-      continue;
+  for (const { id, script } of nodes.shaders) nodeGraphScreenFxRunShader(kit, id, script, w, h, now);
+  let final = null;
+  if (onScreen && base) {
+    // 2. Scene: workspace background, then each layer in z order (straight alpha, like drawImage).
+    st.scene = nodeGraphScreenFxSurface(gl, w, h, st.scene);
+    const bg = nodeGraphScreenFxBackground(host);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, st.scene.fbo);
+    gl.viewport(0, 0, w, h);
+    gl.clearColor(bg[0], bg[1], bg[2], 1);
+    gl.clear(gl.COLOR_BUFFER_BIT);
+    gl.enable(gl.BLEND);
+    gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ZERO, gl.ONE);
+    gl.useProgram(kit.layer);
+    gl.uniform1i(kit.layerTex, 0);
+    for (const canvas of sources) {
+      const face = typeof nodeGraphSharedGlFaceTexture === "function" ? nodeGraphSharedGlFaceTexture(canvas) : null;
+      if (face?.texture) nodeGraphScreenFxDraw(kit, st.scene, kit.layer, [face.texture]);
     }
-    nodeGraphScreenFxSetStatus(id, `ok · ${script.inputs.length} in`);
-    const target = st.passes[out];
-    gl.useProgram(entry.program);
-    gl.uniform1i(entry.uScene, 0);
-    gl.uniform2f(entry.uResolution, w, h);
-    gl.uniform1f(entry.uTime, now);
-    for (const [name, loc] of entry.floats) {
-      const v = typeof nodeGraphVideoGraphAudioLatest === "function" ? nodeGraphVideoGraphAudioLatest(id, name) : 0;
-      gl.uniform1f(loc, Number.isFinite(v) ? v : 0);
+    gl.disable(gl.BLEND);
+    // 3. Screen: Screen Out's picture, else the plain scene.
+    let screen = null;
+    for (const id of nodes.screenOuts) {
+      screen = typeof nodeGraphPictureRead === "function" ? nodeGraphPictureRead(id, "rgba") : null;
+      if (screen?.texture) break;
     }
-    const textures = [input.texture];
-    entry.samplers.forEach(([name, loc], i) => {
-      const pic = typeof nodeGraphPictureRead === "function" ? nodeGraphPictureRead(id, name) : null;
-      gl.uniform1i(loc, i + 1);
-      textures.push(pic?.texture || kit.black);
-    });
-    nodeGraphScreenFxDraw(kit, target, entry.program, textures);
-    input = target;
-    out ^= 1;
-  }
-  // 3. View Feedback: this frame's picture into the view texture nobody reads
-  //    this frame, published for the next one.
-  if (feedback.length) {
-    const view = st.views[st.viewIndex];
-    nodeGraphScreenFxDraw(kit, view, kit.copy, [input.texture]);
-    gl.useProgram(kit.copy);
-    for (const id of feedback) {
-      if (typeof nodeGraphPicturePublish === "function") {
-        nodeGraphPicturePublish(id, view.texture, w, h, { byReference: true });
+    final = st.scene;
+    if (screen?.texture) {
+      st.screen = nodeGraphScreenFxSurface(gl, w, h, st.screen);
+      gl.useProgram(kit.copy);
+      gl.uniform1i(kit.copyTex, 0);
+      nodeGraphScreenFxDraw(kit, st.screen, kit.copy, [screen.texture]);
+      final = st.screen;
+    }
+    // 4. View Out: this frame's screen into the view texture nobody reads now, published for the next frame.
+    if (nodes.viewOuts.length) {
+      st.views[0] = nodeGraphScreenFxSurface(gl, w, h, st.views[0]);
+      st.views[1] = nodeGraphScreenFxSurface(gl, w, h, st.views[1]);
+      const view = st.views[st.viewIndex];
+      gl.useProgram(kit.copy);
+      gl.uniform1i(kit.copyTex, 0);
+      nodeGraphScreenFxDraw(kit, view, kit.copy, [final.texture]);
+      for (const id of nodes.viewOuts) {
+        if (typeof nodeGraphPicturePublish === "function") nodeGraphPicturePublish(id, view.texture, w, h, { byReference: true });
       }
+      st.viewIndex ^= 1;
     }
-    st.viewIndex ^= 1;
   }
   for (let i = 0; i < 5; i += 1) {
     gl.activeTexture(gl.TEXTURE0 + i);
@@ -373,7 +411,7 @@ function nodeGraphScreenFxRender(host, shaders, feedback) {
   gl.bindFramebuffer(gl.FRAMEBUFFER, null);
   gl.activeTexture(prevActive);
   gl.useProgram(prevProgram);
-  return input;
+  return final;
 }
 
 function nodeGraphScreenFxTick() {
@@ -381,21 +419,29 @@ function nodeGraphScreenFxTick() {
   st.raf = requestAnimationFrame(nodeGraphScreenFxTick);
   const host = document.getElementById("nodeGraphWorkspace");
   if (!host) return;
-  const { shaders, feedback } = nodeGraphScreenFxNodes();
-  const want = (shaders.length > 0 || feedback.length > 0) && host.classList.contains("gl-graph-on") && host.clientWidth > 0;
-  nodeGraphScreenFxSetActive(host, want);
-  if (!want) return;
-  // The GL graph can recreate its canvases: keep every source on face textures.
-  for (const canvas of nodeGraphScreenFxSources()) {
-    if (canvas.dataset.screenFxSource !== "1") {
-      canvas.dataset.screenFxSource = "1";
-      if (typeof nodeGraphGlGraphPresentSoon === "function") nodeGraphGlGraphPresentSoon();
+  const nodes = nodeGraphScreenFxNodes();
+  // The circuit view is a picture only while View Out or Screen Out is in the patch.
+  const onScreen = (nodes.viewOuts.length > 0 || nodes.screenOuts.length > 0)
+    && host.classList.contains("gl-graph-on") && host.clientWidth > 0;
+  nodeGraphScreenFxSetActive(host, onScreen);
+  for (const id of st.programs.keys()) {
+    if (!nodes.shaders.some((s) => s.id === id)) st.programs.delete(id);
+  }
+  for (const id of st.outputs.keys()) {
+    if (!nodes.shaders.some((s) => s.id === id)) st.outputs.delete(id);
+  }
+  if (!onScreen && !nodes.shaders.length) return;
+  if (onScreen) {
+    // The GL graph can recreate its canvases: keep every source on face textures.
+    for (const canvas of nodeGraphScreenFxSources()) {
+      if (canvas.dataset.screenFxSource !== "1") {
+        canvas.dataset.screenFxSource = "1";
+        if (typeof nodeGraphGlGraphPresentSoon === "function") nodeGraphGlGraphPresentSoon();
+      }
     }
   }
-  for (const id of st.programs.keys()) {
-    if (!shaders.some((s) => s.id === id)) st.programs.delete(id);
-  }
-  const final = nodeGraphScreenFxRender(host, shaders, feedback);
+  const final = nodeGraphScreenFxRender(host, nodes, onScreen);
+  st.frames += 1;
   if (!final) return;
   const overlay = nodeGraphScreenFxOverlay(host);
   if (overlay.width !== final.w || overlay.height !== final.h) {
@@ -405,7 +451,6 @@ function nodeGraphScreenFxTick() {
   if (typeof nodeGraphPicturePresent === "function") {
     nodeGraphPicturePresent(final.texture, final.w, final.h, overlay, final.w, final.h);
   }
-  st.frames += 1;
 }
 
 if (typeof window !== "undefined" && !nodeGraphScreenFxState.raf) {

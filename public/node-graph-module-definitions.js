@@ -293,7 +293,8 @@ const nodeGraphNodeLabels = Object.freeze({
   vactrol: "Vactrol",
   sandboxVisuals: "Screen Visuals",
   screenSpaceShader: "Screen Space Shader",
-  viewFeedback: "View Feedback",
+  viewOut: "View Out",
+  screenOut: "Screen Out",
   bloomGlow: "Bloom & Glow",
   rgbaHsla: "RGBA / HSLA",
   chromaColor: "Chroma Color",
@@ -18013,21 +18014,32 @@ const nodeGraphModuleDefinitions = (
     ],
     visualSink: true
   },
-  // Inputs come from the node's GLSL uniforms (normalizeNodeGraphScreenSpaceShader).
+  // Picture effect. Inputs beyond 📺 come from the node's GLSL uniforms (normalizeNodeGraphScreenSpaceShader).
   screenSpaceShader: {
     planRole: "monitor",
-    inputs: ["Shake"],
+    inputs: ["rgba", "Shake"],
+    inputLabels: { rgba: "📺" },
     layout: "screenSpaceShader",
-    outputs: [],
+    outputs: ["rgba"],
+    outputLabels: { rgba: "📺" },
     parameters: [],
     visualSink: true
   },
-  // Last frame of the circuit view (node-graph-screen-fx.js publishes it).
-  viewFeedback: {
+  // Last frame of the on-screen circuit view on 📺 (node-graph-screen-fx.js).
+  viewOut: {
     planRole: "monitor",
     inputs: [],
     outputs: ["rgba"],
     outputLabels: { rgba: "📺" },
+    parameters: [],
+    visualSink: true
+  },
+  // Its 📺 in replaces the circuit area on screen (node-graph-screen-fx.js).
+  screenOut: {
+    planRole: "monitor",
+    inputs: ["rgba"],
+    inputLabels: { rgba: "📺" },
+    outputs: [],
     parameters: [],
     visualSink: true
   },

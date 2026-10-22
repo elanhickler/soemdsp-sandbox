@@ -289,6 +289,8 @@ const NODE_GRAPH_EFFICIENT_PRODUCT_OBSERVER_TYPES = Object.freeze([
   "scope1dTrace",
   "scope1dTraceStereo",
   "screenSpaceShader",
+  "screenOut",
+  "viewOut",
   "spectrogram",
   "speedColorInertia",
   "spectrum1d",

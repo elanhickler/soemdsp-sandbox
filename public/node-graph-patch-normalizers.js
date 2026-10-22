@@ -541,16 +541,16 @@ function parseNodeGraphCanvasScriptInputs(source = "") {
   return normalizeNodeGraphBufferedInputList(names);
 }
 
-// Screen Space Shader: GLSL ES 3.00 run over the whole circuit area.
-// `uniform float Name;` declares a signal input; `uniform sampler2D Name;`
-// declares a picture (📺) input. The source defines vec4 effect(vec2 uv).
+// Screen Space Shader: a picture effect. GLSL ES 3.00 over its 📺 in (scene(uv)),
+// result on its 📺 out. `uniform float Name;` adds a signal inlet;
+// `uniform sampler2D Name;` adds another 📺 inlet. Defines vec4 effect(vec2 uv).
 function parseNodeGraphScreenSpaceShaderUniforms(source = "") {
   const floats = [];
   const samplers = [];
   const text = String(source || "").replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "");
   for (const match of text.matchAll(/(?:^|[;\n])\s*uniform\s+(float|sampler2D)\s+([A-Za-z][A-Za-z0-9_]*)\s*;/g)) {
     const name = match[2];
-    if (/^(uScene|uTime|uResolution|gl_)/.test(name)) continue;
+    if (/^(uScene|uTime|uResolution|gl_)/.test(name) || name === "rgba") continue;
     if (floats.includes(name) || samplers.includes(name)) continue;
     (match[1] === "float" ? floats : samplers).push(name);
   }
@@ -570,7 +570,7 @@ function normalizeNodeGraphScreenSpaceShader(screenSpaceShader = {}) {
     bufferedInputs: floats.slice(),
     enabled: screenSpaceShader?.enabled !== false,
     floats,
-    inputs: [...floats, ...samplers],
+    inputs: ["rgba", ...floats, ...samplers],
     kind: "screenSpaceShader",
     language: "glsl",
     samplers,

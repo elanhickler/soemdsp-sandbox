@@ -151,6 +151,7 @@ const nodeGraphModuleCatalogUnderConstructionSort = Object.freeze([
 // from persisted underconstructionsort so old UI settings do not keep the
 // construction plate over a working face (Output meter/trace).
 const nodeGraphModuleCatalogRetiredFromUnderConstruction = Object.freeze([
+  "screenSpaceShader",
   "output",
   "audioInput",
   "rms",
@@ -2532,13 +2533,18 @@ const nodeGraphModuleStoreCatalog = Object.freeze({
   },
   screenSpaceShader: {
     category: "rgba",
-    description: "GLSL over the whole circuit area. uniform float = signal in, uniform sampler2D = 📺 in. Chains in patch order.",
-    notes: ["screen space", "glsl", "post", "shake", "feedback"],
+    description: "GLSL picture effect: 📺 in, 📺 out. uniform float = signal in, uniform sampler2D = extra 📺 in.",
+    notes: ["screen space", "glsl", "picture", "shake", "feedback"],
   },
-  viewFeedback: {
+  viewOut: {
     category: "rgba",
-    description: "The last frame of the circuit view on 📺. Feed a Screen Space Shader for Droste feedback.",
-    notes: ["screen space", "feedback", "droste", "picture"],
+    description: "The circuit view as a picture on 📺 (last frame on screen). Into effects, then Screen Out for feedback.",
+    notes: ["screen space", "view", "feedback", "picture"],
+  },
+  screenOut: {
+    category: "rgba",
+    description: "Its 📺 in replaces the circuit area on screen. Remove it for the normal view.",
+    notes: ["screen space", "screen", "feedback", "picture"],
   },
   bloomGlow: {
     category: "rgba",
@@ -3918,7 +3924,11 @@ const nodeGraphJsSourceEntriesByType = Object.freeze({
     source: "public/node-graph-screen-fx.js",
     sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/node-graph-screen-fx.js",
   },
-  viewFeedback: {
+  viewOut: {
+    source: "public/node-graph-screen-fx.js",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/node-graph-screen-fx.js",
+  },
+  screenOut: {
     source: "public/node-graph-screen-fx.js",
     sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/node-graph-screen-fx.js",
   },

@@ -1,130 +1,133 @@
-// Real-browser Screen Space Shader smoke: compile, draw over the whole circuit area, chain order, View Feedback.
-// Run: node scripts/smoke_screen_fx_browser.mjs   (env: OUT=dir HEADED=1)
-// Fixture: scripts/fixtures/screen_fx_view_feedback.json (View Feedback -> Screen Space Shader that zooms and fades).
+// Real-browser smoke for the circuit view on the 📺 pipeline:
+// spawn View Out / Screen Out / Screen Space Shader, View Out -> Aberration -> Screen Out changes the screen,
+// feedback accumulates, removing Screen Out restores the normal view, shaders chain (📺 in -> 📺 out), compile errors label.
+// Run: node scripts/smoke_screen_fx_browser.mjs   (env: SANDBOX_URL, OUT=dir, HEADED=1)
+// Fixture: scripts/fixtures/screen_fx_aberration_feedback.json
 import fs from "node:fs";
 import { chromium } from "playwright-core";
 
 const BASE = (process.env.SANDBOX_URL || "http://127.0.0.1:8765/").replace(/\/?$/, "/");
 const OUT = process.env.OUT || "scripts/out/screen-fx";
 fs.mkdirSync(OUT, { recursive: true });
-const feedbackPatch = JSON.parse(fs.readFileSync(new URL("./fixtures/screen_fx_view_feedback.json", import.meta.url), "utf8"));
+const fixture = JSON.parse(fs.readFileSync(new URL("./fixtures/screen_fx_aberration_feedback.json", import.meta.url), "utf8"));
 const fail = [];
-
-function shakePatch() {
-  const d = JSON.parse(JSON.stringify(feedbackPatch));
-  d.nodes = d.nodes.filter((n) => n.type !== "viewFeedback" && n.type !== "screenSpaceShader");
-  d.connections = d.connections.filter((c) => !/^(viewFeedback|screenSpaceShader)-/.test(c.sourceNode) && !/^(viewFeedback|screenSpaceShader)-/.test(c.destinationNode));
-  // Default source = the built-in shake example.
-  d.nodes.push({ id: "screenSpaceShader-1", type: "screenSpaceShader", gx: 30, gy: -60 });
-  return d;
-}
-
 const b = await chromium.launch({ channel: "chrome", headless: !process.env.HEADED, args: ["--ignore-gpu-blocklist"] });
 
-async function open(patch) {
+async function open(patch, waitNode, waitFrames = true) {
   const page = await (await b.newContext({ viewport: { width: 1400, height: 900 }, deviceScaleFactor: 1 })).newPage();
   page.on("pageerror", (e) => console.log("pageerror:", e.message.slice(0, 200)));
-  page.on("console", (m) => { if (/error|fail/i.test(m.text())) console.log("console:", m.text().slice(0, 200)); });
   await page.route("**/screenfx.json*", (r) => r.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(patch) }));
   await page.goto(`${BASE}?pagePatch=screenfx`, { waitUntil: "domcontentloaded", timeout: 120000 });
   const start = page.locator("#nodeBootStartButton");
   if (await start.count()) await start.click().catch(() => {});
-  await page.waitForFunction(() => document.querySelector('article[data-node="screenSpaceShader-1"]') && !document.body.classList.contains("node-boot-loading"), null, { timeout: 180000 });
-  await page.waitForFunction(() => typeof nodeGraphScreenFxState !== "undefined" && nodeGraphScreenFxState.frames > 10, null, { timeout: 30000 });
-  await page.waitForTimeout(500);
+  await page.waitForFunction((id) => document.querySelector(`article[data-node="${id}"]`) && !document.body.classList.contains("node-boot-loading"), waitNode, { timeout: 180000 });
+  await page.waitForFunction((waitFrames) => typeof nodeGraphScreenFxState !== "undefined" && (waitFrames === false || nodeGraphScreenFxState.frames > 10), waitFrames, { timeout: 30000 });
+  // Picture effects (Aberration) step only while the circuit plays.
+  if (waitFrames) await page.locator('button[aria-label="Play"]:visible').first().click();
+  await page.waitForTimeout(1200);
   return page;
 }
 
-// Overlay pixels: mean luma and a coarse hash, read from the 2D overlay canvas.
 const sample = (page) => page.evaluate(() => {
+  const st = nodeGraphScreenFxState;
+  const sources = [...document.querySelectorAll("#nodeGraphWorkspace > canvas.node-gl-graph-canvas, #nodeGraphWorkspace > canvas.node-gl-graph-dots")];
+  const out = { active: st.active, frames: st.frames, visible: sources.map((x) => getComputedStyle(x).visibility) };
   const c = document.getElementById("nodeScreenFxCanvas");
-  if (!c) return null;
-  const ctx = c.getContext("2d");
-  const { data, width, height } = ctx.getImageData(0, 0, c.width, c.height);
-  let sum = 0; let lit = 0; let hash = 0;
+  if (!c || !st.active) return out;
+  const { data } = c.getContext("2d").getImageData(0, 0, c.width, c.height);
+  let sum = 0; let lit = 0; let hash = 0; let chroma = 0;
   for (let i = 0; i < data.length; i += 4 * 7) {
     const l = data[i] + data[i + 1] + data[i + 2];
     sum += l; if (l > 120) lit += 1;
+    chroma += Math.max(data[i], data[i + 1], data[i + 2]) - Math.min(data[i], data[i + 1], data[i + 2]);
     hash = (hash * 31 + (l >> 3)) >>> 0;
   }
-  const st = nodeGraphScreenFxState;
-  const hidden = [...document.querySelectorAll("#nodeGraphWorkspace > canvas[data-screen-fx-source]")].map((x) => getComputedStyle(x).visibility);
-  return { width, height, mean: sum / (data.length / 28), lit, hash, active: st.active, frames: st.frames, status: [...st.status.entries()], hidden };
+  const n = data.length / 28;
+  const luma = [];
+  for (let i = 0; i < data.length; i += 4 * 53) luma.push(data[i] + data[i + 1] + data[i + 2]);
+  return { ...out, mean: sum / n, lit, chroma: chroma / n, hash, luma };
 });
 
-// 1. Shake: compiles, draws the whole circuit area, moves over time.
+const lumaDiff = (a, b) => { let d = 0; const n = Math.min(a.luma?.length || 0, b.luma?.length || 0); for (let i = 0; i < n; i += 1) d += Math.abs(a.luma[i] - b.luma[i]); return n ? d / n : 0; };
+const brief = (x) => { const { luma, ...rest } = x; return rest; };
+const edit = (page, fn) => page.evaluate(`(() => { const patch = cloneNodeGraphPatch(nodeGraphMvp.patch); (${fn})(patch); commitNodeGraphPatch(patch, { status: "smoke" }); })()`);
+
+// 1. Spawn from the browser: none of the three is under construction, even with a stale persisted UC list.
 {
-  const page = await open(shakePatch());
-  const a = await sample(page);
-  await page.waitForTimeout(37);
-  const c = await sample(page);
-  console.log("shake", JSON.stringify({ a, c }));
-  if (!a?.active) fail.push("shake: host not active");
-  if (!(a?.width > 100 && a?.height > 100)) fail.push("shake: overlay not sized to the workspace");
-  if (!(a?.lit > 50)) fail.push("shake: overlay shows no circuit");
-  if (!a?.hidden.length || a.hidden.some((v) => v !== "hidden")) fail.push("shake: source canvases still visible");
-  if (!String(a?.status?.[0]?.[1] || "").startsWith("ok")) fail.push(`shake: status ${JSON.stringify(a?.status)}`);
-  if (a?.hash === c?.hash) fail.push("shake: picture did not move between frames");
-  await page.screenshot({ path: `${OUT}/shake.png` });
-  // 2. Compile error: plain label, no throw, previous picture keeps drawing.
-  await page.evaluate(() => {
-    const patch = cloneNodeGraphPatch(nodeGraphMvp.patch);
-    patch.nodes.find((n) => n.id === "screenSpaceShader-1").screenSpaceShader = { source: "vec4 effect(vec2 uv) { return nope(uv); }" };
-    commitNodeGraphPatch(patch, { status: "smoke" });
+  const base = JSON.parse(JSON.stringify(fixture));
+  base.nodes = base.nodes.filter((n) => !["viewOut", "screenOut", "aberration"].includes(n.type));
+  base.connections = base.connections.filter((c) => !/^(viewOut|screenOut|aberration)-/.test(c.sourceNode));
+  const page = await open(base, base.nodes[0].id, false);
+  const r = await page.evaluate(() => {
+    const types = ["viewOut", "screenOut", "screenSpaceShader", "aberration"];
+    const uc = Object.fromEntries(types.map((t) => [t, nodeGraphModuleTypeIsUnderConstruction(t)]));
+    return { uc, ids: {} };
   });
-  await page.waitForTimeout(400);
-  const e = await page.evaluate(() => ({
-    status: nodeGraphScreenFxState.status.get("screenSpaceShader-1"),
-    label: document.querySelector('.node-screen-space-shader-body[data-node="screenSpaceShader-1"] [data-screen-space-shader-status]')?.textContent || "",
-    frames: nodeGraphScreenFxState.frames,
-    popups: document.querySelectorAll("dialog[open], .node-toast:not([hidden])").length,
-  }));
-  console.log("error", JSON.stringify(e));
-  if (!/^line \d+:/.test(e.status || "")) fail.push(`error: status ${e.status}`);
-  if (e.label && e.label !== e.status) fail.push(`error: face label ${e.label}`);
-  // 3. Chain: two shaders run in patch order (red-only, then invert -> cyan-ish).
-  await page.evaluate(() => {
-    const patch = cloneNodeGraphPatch(nodeGraphMvp.patch);
-    patch.nodes.find((n) => n.id === "screenSpaceShader-1").screenSpaceShader = { source: "vec4 effect(vec2 uv) { vec4 c = scene(uv); return vec4(1.0, 0.0, 0.0, 1.0); }" };
-    patch.nodes.push({ id: "screenSpaceShader-2", type: "screenSpaceShader", gx: 30, gy: -40, screenSpaceShader: { source: "vec4 effect(vec2 uv) { vec4 c = scene(uv); return vec4(1.0 - c.rgb, 1.0); }" } });
-    commitNodeGraphPatch(patch, { status: "smoke" });
-  });
-  await page.waitForTimeout(500);
-  const ch = await page.evaluate(() => {
-    const c = document.getElementById("nodeScreenFxCanvas");
-    const p = c.getContext("2d").getImageData(c.width >> 1, c.height >> 1, 1, 1).data;
-    return { px: [...p], programs: [...nodeGraphScreenFxState.programs.keys()] };
-  });
-  console.log("chain", JSON.stringify(ch));
-  if (!(ch.px[0] < 30 && ch.px[1] > 220 && ch.px[2] > 220)) fail.push(`chain: expected cyan (red then invert), got ${ch.px}`);
+  for (const t of ["viewOut", "screenOut", "screenSpaceShader", "aberration"]) {
+    r.ids[t] = await page.evaluate((type) => showNodeGraphModule(type) || "", t);
+    await page.waitForTimeout(600);
+  }
+  await page.waitForTimeout(800);
+  r.nodes = await page.evaluate(() => nodeGraphMvp.patch.nodes.map((n) => n.type));
+  console.log("spawn", JSON.stringify(r));
+  for (const [t, v] of Object.entries(r.uc)) if (v) fail.push(`spawn: ${t} is under construction`);
+  for (const t of ["viewOut", "screenOut", "screenSpaceShader"]) if (!r.nodes.includes(t)) fail.push(`spawn: ${t} did not spawn`);
   await page.context().close();
 }
 
-// 4. View Feedback: previous frame on the 📺 out, shader zooms and fades it.
+// 2. View Out -> Aberration -> Screen Out.
 {
-  const page = await open(feedbackPatch);
-  const info = await page.evaluate(() => ({
-    read: Boolean(nodeGraphPictureRead("screenSpaceShader-1", "Feedback")),
-    views: nodeGraphScreenFxState.views.filter(Boolean).length,
-    status: nodeGraphScreenFxState.status.get("screenSpaceShader-1"),
-  }));
-  const f = await sample(page);
-  console.log("feedback", JSON.stringify({ info, f }));
-  if (!info.read) fail.push("feedback: no picture on the Feedback inlet");
-  if (info.views !== 2) fail.push("feedback: ping-pong views missing");
-  if (!String(info.status || "").startsWith("ok")) fail.push(`feedback: status ${info.status}`);
-  await page.screenshot({ path: `${OUT}/feedback.png` });
-  // Feedback on vs the same frame without it: the trails add light.
-  const off = await page.evaluate(async () => {
-    const patch = cloneNodeGraphPatch(nodeGraphMvp.patch);
-    patch.connections = patch.connections.filter((c) => c.sourceNode !== "viewFeedback-1");
-    commitNodeGraphPatch(patch, { status: "smoke" });
-    await new Promise((r) => setTimeout(r, 600));
-    return true;
-  });
-  const g = await sample(page);
-  console.log("feedback off", JSON.stringify(g));
-  if (off && !(f.mean > g.mean)) fail.push(`feedback: trails add no light (${f.mean} vs ${g.mean})`);
+  const page = await open(fixture, "screenOut-1");
+  const a = await sample(page);
+  await page.waitForTimeout(2500);
+  const c = await sample(page);
+  console.log("chain t0", JSON.stringify(brief(a)));
+  console.log("chain t2.5", JSON.stringify(brief(c)));
+  await page.screenshot({ path: `${OUT}/aberration-feedback.png` });
+  if (!c.active) fail.push("chain: host not active");
+  if (c.visible.some((v) => v !== "hidden")) fail.push("chain: source layers still visible");
+  if (a.hash === c.hash) fail.push("chain: feedback did not move (same picture 2.5 s apart)");
+  // Remove Screen Out: the plain circuit view again, steady frame to frame.
+  await edit(page, (p) => { p.nodes = p.nodes.filter((n) => n.id !== "screenOut-1"); p.connections = p.connections.filter((x) => x.destinationNode !== "screenOut-1"); });
+  await page.waitForTimeout(700);
+  const n0 = await sample(page);
+  await page.waitForTimeout(400);
+  const n1 = await sample(page);
+  console.log("no screen out", JSON.stringify({ n0: brief(n0), n1: brief(n1), chainVsNormal: lumaDiff(c, n1), steady: lumaDiff(n0, n1) }));
+  await page.screenshot({ path: `${OUT}/normal-view.png` });
+  if (lumaDiff(n0, n1) > 1) fail.push(`normal: picture still moving without Screen Out (${lumaDiff(n0, n1)})`);
+  if (!(lumaDiff(c, n1) > 3 * Math.max(0.5, lumaDiff(n0, n1)))) fail.push(`chain: aberration did not change pixels (${lumaDiff(c, n1)})`);
+  // Remove View Out too: host off, GL layers visible again.
+  await edit(page, (p) => { p.nodes = p.nodes.filter((n) => n.id !== "viewOut-1"); p.connections = p.connections.filter((x) => x.sourceNode !== "viewOut-1"); });
+  await page.waitForTimeout(500);
+  const off = await sample(page);
+  console.log("off", JSON.stringify(off));
+  if (off.active || off.visible.some((v) => v === "hidden")) fail.push("off: host still owns the screen");
+  await page.context().close();
+}
+
+// 3. Screen Space Shader is a picture effect: View Out -> red -> invert -> Screen Out = cyan. Compile error = label.
+{
+  const p = JSON.parse(JSON.stringify(fixture));
+  p.nodes = p.nodes.filter((n) => n.type !== "aberration");
+  p.connections = p.connections.filter((c) => c.sourceNode !== "aberration-1" && c.destinationNode !== "aberration-1");
+  p.nodes.push({ id: "screenSpaceShader-1", type: "screenSpaceShader", gx: 20, gy: -60, screenSpaceShader: { source: "vec4 effect(vec2 uv) { vec4 c = scene(uv); return vec4(1.0, 0.0, 0.0, 1.0); }" } });
+  p.nodes.push({ id: "screenSpaceShader-2", type: "screenSpaceShader", gx: 30, gy: -60, screenSpaceShader: { source: "vec4 effect(vec2 uv) { vec4 c = scene(uv); return vec4(1.0 - c.rgb, 1.0); }" } });
+  p.connections.push(
+    { sourceNode: "screenSpaceShader-2", sourcePort: "rgba", destinationNode: "screenOut-1", destinationPort: "rgba", tracePoints: [] },
+    { sourceNode: "screenSpaceShader-1", sourcePort: "rgba", destinationNode: "screenSpaceShader-2", destinationPort: "rgba", tracePoints: [] },
+    { sourceNode: "viewOut-1", sourcePort: "rgba", destinationNode: "screenSpaceShader-1", destinationPort: "rgba", tracePoints: [] },
+  );
+  const page = await open(p, "screenSpaceShader-2");
+  const px = await page.evaluate(() => { const c = document.getElementById("nodeScreenFxCanvas"); return [...c.getContext("2d").getImageData(c.width >> 1, c.height >> 1, 1, 1).data]; });
+  console.log("shader chain", JSON.stringify(px));
+  await page.screenshot({ path: `${OUT}/shader-chain.png` });
+  if (!(px[0] < 30 && px[1] > 220 && px[2] > 220)) fail.push(`shader chain: expected cyan, got ${px}`);
+  await edit(page, (q) => { q.nodes.find((n) => n.id === "screenSpaceShader-1").screenSpaceShader = { source: "vec4 effect(vec2 uv) { return nope(uv); }" }; });
+  await page.waitForTimeout(400);
+  const status = await page.evaluate(() => nodeGraphScreenFxState.status.get("screenSpaceShader-1"));
+  console.log("error", status);
+  if (!/^line \d+:/.test(status || "")) fail.push(`error label: ${status}`);
   await page.context().close();
 }
 
