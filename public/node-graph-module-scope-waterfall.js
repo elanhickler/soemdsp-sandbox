@@ -10,7 +10,8 @@
 // face — only scroll existing pixels and fill the new column(s) on the right.
 // History (seconds) = freerun window across the face. Shorter = faster scroll. At 0 the same scale is one current bar.
 // No source sync. A zero-crossing lock fights the scroll+stamp strip.
-// 1D Onset Sync is separate: while on, History seconds is the time between Reset rising edges.
+// 1D Onset Sync is separate: while on, the face shows the latest complete pass,
+// exactly the samples from one Reset edge to the next (History % of that gap).
 // WebGL history texture. Instant Waterfall only — no Hz dual-path.
 
 function nodeGraphWaterfallNowMs() {
@@ -77,12 +78,14 @@ function nodeGraphOnsetResetSyncOn(settings) {
   return raw === true || raw === 1 || raw === "1" || raw === "true";
 }
 
-/** Seconds from the previous Reset rising edge to this one. The first edge only arms the clock. */
-function nodeGraphOnsetNoteResetGap(onset, frame, hz) {
+/**
+ * Sync: note a Reset edge at its exact sample. Two edges close a pass
+ * [a, b): the latest complete pass is what the face shows. The first edge
+ * only opens one.
+ */
+function nodeGraphOnsetNoteReset(onset, frame) {
   const prev = onset.resetAt;
-  if (Number.isFinite(prev) && frame > prev && hz > 0) {
-    onset.syncSeconds = (frame - prev) / hz;
-  }
+  if (Number.isFinite(prev) && frame > prev) onset.pass = { a: prev, b: frame };
   onset.resetAt = frame;
 }
 
@@ -363,7 +366,8 @@ function nodeGraphOnsetPaint(spec, live) {
   const resetSync = node?.type === "onset" && nodeGraphOnsetResetSyncOn(settings);
   const hz = nodeGraphWaterfallVisualHz(live);
   if (!resetSync) {
-    onset.syncSeconds = 0;
+    onset.pass = null;
+    onset.passShown = NaN;
     onset.resetAt = NaN;
   }
   const resetHit = nodeGraphOnsetScanEdges(
@@ -373,7 +377,7 @@ function nodeGraphOnsetPaint(spec, live) {
     planck,
     onset,
     "reset",
-    resetSync ? (frame) => nodeGraphOnsetNoteResetGap(onset, frame, hz) : null,
+    resetSync ? (frame) => nodeGraphOnsetNoteReset(onset, frame) : null,
   );
   let signalHit = nodeGraphOnsetScanEdges(live, scanFrom, absEnd, planck, onset, "signal");
   const right = spec.stereoBuffers?.right;
@@ -382,9 +386,20 @@ function nodeGraphOnsetPaint(spec, live) {
     if (rightHit >= 0 && (signalHit < 0 || rightHit > signalHit)) signalHit = rightHit;
   }
   onset.scanned = absEnd;
-  const armAt = resetHit >= 0
-    ? resetHit
-    : (signalHit >= 0 && (onset.parked || !onset.live) ? signalHit : -1);
+  // Sync with a complete pass: only a newer complete pass re-arms (at its
+  // first sample, length = its own gap); passes that closed between paints
+  // are skipped, never merged. Otherwise a Reset / signal edge arms.
+  const newPass = resetSync && onset.pass && onset.pass.b !== onset.passShown ? onset.pass : null;
+  const armAt = newPass
+    ? newPass.a
+    : (resetSync && onset.pass ? -1 : (resetHit >= 0
+      ? resetHit
+      : (signalHit >= 0 && (onset.parked || !onset.live) ? signalHit : -1)));
+  if (newPass) {
+    onset.passShown = newPass.b;
+    onset.passLength = newPass.b - newPass.a;
+    onset.wipe = true;
+  }
   if (armAt >= 0) {
     onset.origin = armAt;
     onset.drawn = armAt;
@@ -424,23 +439,24 @@ function nodeGraphOnsetPaint(spec, live) {
     present();
     return true;
   }
-  let history = nodeGraphWaterfallHistorySeconds(settings);
-  if (resetSync && onset.syncSeconds > 0) {
-    const pct = typeof nodeGraphOnsetClampHistoryPercent === "function"
-      ? nodeGraphOnsetClampHistoryPercent(settings?.historyPercent, 100)
-      : 100;
-    history = onset.syncSeconds * (pct / 100);
-  }
-  const faceSamples = Math.max(1, Math.round(hz * Math.max(history, 0)));
+  const history = nodeGraphWaterfallHistorySeconds(settings);
+  const pct = typeof nodeGraphOnsetClampHistoryPercent === "function"
+    ? nodeGraphOnsetClampHistoryPercent(settings?.historyPercent, 100)
+    : 100;
+  // Sync: the pass's own sample gap (exact, no seconds round trip).
+  const faceSamples = resetSync && onset.pass
+    ? Math.max(1, Math.round(onset.passLength * (pct / 100)))
+    : Math.max(1, Math.round(hz * Math.max(history, 0)));
   const endDraw = Math.min(absEnd, onset.origin + faceSamples);
   const blendMode = nodeGraphWaterfallBlendMode(settings, { rgbGuns: Boolean(spec?.rgbBuffers) });
   const plateBg = blendMode === "multiply" ? "#ffffff" : (spec.bg || "#000000");
   if (
     onset.live
-    && Number.isFinite(onset.latchedSamples)
-    && onset.latchedSamples !== faceSamples
+    && ((Number.isFinite(onset.latchedSamples) && onset.latchedSamples !== faceSamples) || onset.wipe)
   ) {
-    // Percent or seconds changed. Replay this pass so 10% zooms the start.
+    // Percent or seconds changed, or a new Sync pass: replay from the pass
+    // start on a clean face so no earlier pass shows through.
+    onset.wipe = false;
     onset.drawn = onset.origin;
     onset.lastPixel = -1;
     onset.parked = false;
