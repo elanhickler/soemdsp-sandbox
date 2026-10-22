@@ -195,6 +195,7 @@ const nodeGraphNodeLabels = Object.freeze({
   stftBlur: "STFT Blur",
   humanFilter: "Human Filter",
   pulseExplosion: "Pulse Explosion",
+  pulseTrain: "Pulse Train",
   ladderFilter: "Ladder Filter",
   tb303Filter: "TB-303 Filter",
   papoulisFilter: "Papoulis Filter",
@@ -13745,6 +13746,29 @@ const nodeGraphModuleDefinitions = (
       { defaultValue: "0.2", key: "resonance", label: "Resonance", max: "1", mid: "0.2", min: "0", nonlinearSlider: false, step: "any" },
       { defaultValue: "0", key: "chaos", label: "Chaos", max: "1", mid: "0.1", min: "0", nonlinearSlider: false, step: "any" },
         nodeGraphOutputAmplitudeParam,
+    ]
+  },
+  pulseTrain: {
+    planRole: "processor",
+    inputs: ["Trigger", "Reset"],
+    outputs: ["Out", "End"],
+    layout: "pulseCurve",
+    // Face: pulse_train.wasm preview stems + __Elapsed playhead (node-graph-pulse-train-display.js).
+    // Shares the pulseExplosionFace Display Settings (Background / Line / Dot / Playhead / Lit).
+    displayType: "pulseExplosionFace",
+    spectrumCompanion: false,
+    displayModes: [
+      { key: "face", label: "Face", renderer: "pulseExplosionFace", settingsSchema: "pulseExplosionFace" },
+    ],
+    defaultDisplayMode: "face",
+    parameters: [
+      { constraint: "cpu", defaultValue: "12", key: "count", label: "Count", max: "128", mid: "12", min: "1", nonlinearSlider: false, step: "1" },
+      { defaultValue: "3", key: "endTime", label: "End Time", max: "12", mid: "3", min: "0", nonlinearSlider: false, step: "any", unit: "s" },
+      { defaultValue: "3", key: "curve", label: "Curve", max: "10", mid: "0", min: "-10", nonlinearSlider: false, step: "any" },
+      { defaultValue: "1", key: "ampStart", label: "Amp Start", max: "1", mid: "0.5", min: "0", nonlinearSlider: false, step: "any" },
+      { defaultValue: "0.2", key: "ampEnd", label: "Amp End", max: "1", mid: "0.5", min: "0", nonlinearSlider: false, step: "any" },
+      { defaultValue: "0", key: "ampCurve", label: "Amp Curve", max: "10", mid: "0", min: "-10", nonlinearSlider: false, step: "any" },
+      { defaultValue: "1", key: "amplitude", label: "Amplitude", max: "2", mid: "1", min: "0", nonlinearSlider: false, step: "any" },
     ]
   },
   pulseExplosion: {

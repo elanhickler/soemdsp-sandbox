@@ -522,6 +522,7 @@ PUBLIC_SCRIPT_PATHS = (
     "./public/modules/harmonicLines/harmonic-lines-display.js",
     "./public/modules/additiveGenerator/additive-waveform-display.js",
     "./public/node-graph-pulse-explosion-display.js",
+    "./public/node-graph-pulse-train-display.js",
     "./public/node-graph-live-runtime.js",
     "./public/node-graph-wire-controller-bootstrap.js",
     "./public/node-graph-canvas-fit.js",
@@ -17474,6 +17475,7 @@ def require_native_module_contract(base_url: str) -> None:
         "resonator_filter": ["soemdsp_resonator_filter_create", "soemdsp_resonator_filter_destroy", "soemdsp_resonator_filter_sample"],
         "human_filter": ["soemdsp_human_filter_create", "soemdsp_human_filter_destroy", "soemdsp_human_filter_sample"],
         "pulse_explosion": ["soemdsp_pulse_explosion_create", "soemdsp_pulse_explosion_destroy", "soemdsp_pulse_explosion_sample"],
+        "pulse_train": ["soemdsp_pulse_train_create", "soemdsp_pulse_train_destroy", "soemdsp_pulse_train_sample", "soemdsp_pulse_train_preview"],
         "comparator": [
             "soemdsp_comparator_create",
             "soemdsp_comparator_destroy",

@@ -317,6 +317,7 @@ var nodeGraphMvp = {
     humanFilter: 0,
     vocoder: 0,
     pulseExplosion: 0,
+    pulseTrain: 0,
     smoothGraph: 0,
     stepGraph: 0,
     highpass: 0,

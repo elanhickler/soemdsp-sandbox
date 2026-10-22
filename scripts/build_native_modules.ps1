@@ -116,6 +116,7 @@ $modules = @(
   @{ Name = "resonator_filter"; Simd = $false; Exports = @("soemdsp_resonator_filter_create", "soemdsp_resonator_filter_destroy", "soemdsp_resonator_filter_sample", "soemdsp_resonator_filter_version") }
   @{ Name = "human_filter"; Simd = $false; Exports = @("soemdsp_human_filter_create", "soemdsp_human_filter_destroy", "soemdsp_human_filter_sample", "soemdsp_human_filter_version") }
   @{ Name = "pulse_explosion"; Simd = $false; Exports = @("soemdsp_pulse_explosion_create", "soemdsp_pulse_explosion_destroy", "soemdsp_pulse_explosion_sample", "soemdsp_pulse_explosion_curve", "soemdsp_pulse_explosion_elapsed", "soemdsp_pulse_explosion_preview", "soemdsp_pulse_explosion_preview_time", "soemdsp_pulse_explosion_preview_amplitude", "soemdsp_pulse_explosion_version") }
+  @{ Name = "pulse_train"; Simd = $false; Exports = @("soemdsp_pulse_train_create", "soemdsp_pulse_train_destroy", "soemdsp_pulse_train_sample", "soemdsp_pulse_train_end", "soemdsp_pulse_train_elapsed", "soemdsp_pulse_train_preview", "soemdsp_pulse_train_preview_time", "soemdsp_pulse_train_preview_amplitude", "soemdsp_pulse_train_version") }
   @{ Name = "tb303_filter"; Simd = $false; Exports = @("soemdsp_tb303_filter_create", "soemdsp_tb303_filter_destroy", "soemdsp_tb303_filter_sample", "soemdsp_tb303_filter_version", "soemdsp_tb303_filter_metadata_json", "soemdsp_tb303_filter_metadata_json_size") }
   @{ Name = "passive_filter"; Simd = $false; Exports = @("soemdsp_passive_filter_create", "soemdsp_passive_filter_destroy", "soemdsp_passive_filter_sample", "soemdsp_passive_filter_sample_ex", "soemdsp_passive_filter_version", "soemdsp_passive_filter_metadata_json", "soemdsp_passive_filter_metadata_json_size") }
   @{ Name = "shooting_star_explosion"; Simd = $false; Exports = @("soemdsp_shooting_star_explosion_power", "soemdsp_shooting_star_explosion_version", "soemdsp_shooting_star_explosion_metadata_json", "soemdsp_shooting_star_explosion_metadata_json_size") }
@@ -833,6 +834,11 @@ if ($node) {
   & $node.Source "$root\scripts\smoke_pulse_explosion_preview.mjs"
   if ($LASTEXITCODE -ne 0) {
     throw "Combined build: Pulse Explosion preview smoke FAILED"
+  }
+  # Pulse Train: schedule formulas, last pulse == End <= 12 s, growing gaps, amp curve, preview == played, graph path.
+  & $node.Source "$root\scripts\smoke_pulse_train.mjs"
+  if ($LASTEXITCODE -ne 0) {
+    throw "Combined build: Pulse Train smoke FAILED"
   }
   # Resonant Compressor: Gain == Resonant Envelope SC (max diff 0), drums get quieter.
   & $node.Source "$root\scripts\smoke_graph_resonant_compressor.mjs"

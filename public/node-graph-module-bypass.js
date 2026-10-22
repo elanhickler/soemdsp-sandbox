@@ -192,6 +192,7 @@ const NODE_GRAPH_BYPASS_TYPE_OVERRIDES = Object.freeze({
   electroKick: "silence",
   electroClap: "silence",
   pulseExplosion: "silence",
+  pulseTrain: "silence",
   clock: "silence",
   randomClock: "silence",
   clockDivider: "silence",

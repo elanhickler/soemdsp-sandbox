@@ -238,6 +238,7 @@ const NODE_GRAPH_EFFICIENT_PRODUCT_AUDIO_TYPES = Object.freeze([
   "randomWalk",
   "cheapWalk",
   "pulseExplosion",
+  "pulseTrain",
   "spiral",
   "fractalSpiral",
   "logSpiral",

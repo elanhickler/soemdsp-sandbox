@@ -2324,6 +2324,24 @@
       "noticeUrl": "https://github.com/elanhickler/soemdsp-sandbox/blob/master/docs/THIRD_PARTY.md"
     },
     {
+      "name": "pulse_train",
+      "label": "Pulse Train",
+      "targetType": "pulseTrain",
+      "kind": "generator",
+      "source": "native_modules/pulse_train/pulse_train.cpp",
+      "sourceUrl": "https://github.com/elanhickler/soemdsp-sandbox/blob/master/native_modules/pulse_train/pulse_train.cpp",
+      "localSourceUrl": "/native_modules/pulse_train/pulse_train.cpp",
+      "libUrl": "",
+      "wasm": "native_modules/pulse_train/pulse_train.wasm",
+      "wasmUrl": "native_modules/pulse_train/pulse_train.wasm",
+      "wasmAvailable": true,
+      "license": "Soundemote Noncommercial",
+      "licenseUrl": "https://github.com/elanhickler/soemdsp-sandbox/blob/master/LICENSE",
+      "upstreamLicense": "",
+      "upstreamLicenseUrl": "",
+      "noticeUrl": "https://github.com/elanhickler/soemdsp-sandbox/blob/master/docs/THIRD_PARTY.md"
+    },
+    {
       "name": "resonant_compressor",
       "label": "Resonant Compressor",
       "targetType": "resonantCompressor",

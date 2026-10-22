@@ -1474,7 +1474,9 @@ function createNodeGraphModuleElement(type, node) {
       ? nodeGraphModuleShouldMountDisplayFace(type, patchNode.ui)
       : !patchNodeUi.oscilloscopeHidden)
       && typeof createNodeGraphPulseCurveDisplay === "function") {
-      article.append(createNodeGraphPulseCurveDisplay(node, type));
+      article.append(type === "pulseTrain" && typeof createNodeGraphPulseTrainDisplay === "function"
+        ? createNodeGraphPulseTrainDisplay(node, type)
+        : createNodeGraphPulseCurveDisplay(node, type));
     }
     appendNodeGraphModuleIoSection(
       article,

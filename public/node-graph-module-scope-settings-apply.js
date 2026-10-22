@@ -85,6 +85,9 @@ function assignNodeGraphTypedDisplaySettingsToNode(node, displayType, settings) 
     if (typeof applyNodeGraphPulseExplosionDisplaySettingsToFace === "function") {
       applyNodeGraphPulseExplosionDisplaySettingsToFace(node);
     }
+    if (typeof applyNodeGraphPulseTrainDisplaySettingsToFace === "function") {
+      applyNodeGraphPulseTrainDisplaySettingsToFace(node);
+    }
     return node.traceDisplaySettings;
   }
   if (displayType === "sinCosFace" && typeof normalizeNodeGraphSinCosFaceSettings === "function") {

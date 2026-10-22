@@ -2037,6 +2037,12 @@ const nodeGraphModuleStoreCatalog = Object.freeze({
     label: "Flower Child Filter",
     notes: ["self-oscillating", "4 modes", "feedback FM", "analog"],
   },
+  pulseTrain: {
+    category: "clock",
+    description: "On trigger, a train of pulses that starts fast and stretches out, like something slowing down. Curve sets how fast the gaps grow (0 even, below 0 the gaps shrink like a bouncing ball). Last pulse at End Time (up to 12 s).",
+    label: "Pulse Train",
+    notes: ["trigger", "pulse train", "slowing down", "growing gaps", "bouncing ball", "End", "native"],
+  },
   pulseExplosion: {
     category: "clock",
     description: "On trigger, spray many micro-pulses over time—glitch rain and density hits.",
@@ -3752,6 +3758,10 @@ const nodeGraphJsSourceEntriesByType = Object.freeze({
   resonantCompressor: {
     source: "native_modules/resonant_compressor/resonant_compressor.cpp",
     sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/native_modules/resonant_compressor/resonant_compressor.cpp",
+  },
+  pulseTrain: {
+    source: "native_modules/pulse_train/pulse_train.cpp",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/native_modules/pulse_train/pulse_train.cpp",
   },
   rmsMeter: {
     source: "native_modules/rms_meter/rms_meter.cpp",
