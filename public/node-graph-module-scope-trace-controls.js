@@ -928,9 +928,9 @@ const nodeGraphTraceDisplayActiveControlsByType = Object.freeze({
     toggles: Object.freeze([]),
     choices: Object.freeze([]),
   }),
-  // Pulse Explosion: Background / Line (stems) / Dot (tops) / Playhead / Lit HBS lamps, stem + dot size.
+  // Pulse Explosion / Pulse Train: Background / Line (stems) / Dot (tops) / Playhead / Lit / Ghost HBS lamps, stem + dot size, ghost opacity.
   pulseExplosionFace: Object.freeze({
-    fields: Object.freeze(["lineThickness", "dotThickness"]),
+    fields: Object.freeze(["lineThickness", "dotThickness", "ghostOpacity"]),
     colors: Object.freeze([]),
     toggles: Object.freeze([]),
     choices: Object.freeze([]),
@@ -1665,6 +1665,7 @@ const nodeGraphDisplaySettingsFieldMeta = Object.freeze({
   startThickness: Object.freeze({ label: "Start thickness", inputmode: "decimal" }),
   blinkTime: Object.freeze({ label: "Blink time", inputmode: "decimal" }),
   gateHeight: Object.freeze({ label: "Height", inputmode: "decimal" }),
+  ghostOpacity: Object.freeze({ label: "Ghost opacity", inputmode: "decimal" }),
   torchHue: Object.freeze({
     label: "Hue",
     inputmode: "decimal",

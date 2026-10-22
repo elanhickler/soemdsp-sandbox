@@ -7,7 +7,8 @@
 // Playhead: the engine's seconds-since-trigger (__Elapsed, -1 idle), shifted to
 // the time the speakers play it; stems light up as their pulse fires.
 // Display Settings `pulseExplosionFace`: Background, Line (stems), Dot (tops),
-// Playhead, Lit (fired pulses) HBS; Line thickness, Dot size.
+// Playhead, Lit (fired pulses), Ghost (Pulse Train's next pattern) HBS; Line
+// thickness, Dot size, Ghost opacity.
 // GPU only, drawn with the shared antialiased line drawer (gl-line-renderer).
 
 const nodeGraphPulseExplosionFaceDisplaySettingsDefaults = Object.freeze({
@@ -28,9 +29,13 @@ const nodeGraphPulseExplosionFaceDisplaySettingsDefaults = Object.freeze({
   litHue: 49,
   litBrightness: 0.61,
   litSaturation: 0.97,
+  ghostHue: 187.5,
+  ghostBrightness: 0.55,
+  ghostSaturation: 0.5,
+  ghostOpacity: 0.35,
 });
 /** HBS lamps the RoundShape model does not carry (it owns background / line / dot). */
-const NODE_GRAPH_PULSE_EXPLOSION_FACE_EXTRA_LAMPS = Object.freeze(["playhead", "lit"]);
+const NODE_GRAPH_PULSE_EXPLOSION_FACE_EXTRA_LAMPS = Object.freeze(["playhead", "lit", "ghost"]);
 
 function normalizeNodeGraphPulseExplosionFaceSettings(settings = {}) {
   const source = settings && typeof settings === "object" ? settings : {};
@@ -55,6 +60,7 @@ function normalizeNodeGraphPulseExplosionFaceSettings(settings = {}) {
   };
   out.lineThickness = span(merged.lineThickness, 0.25, 16, d.lineThickness);
   out.dotThickness = span(merged.dotThickness, 0.25, 32, d.dotThickness);
+  out.ghostOpacity = span(merged.ghostOpacity, 0, 1, d.ghostOpacity);
   return out;
 }
 

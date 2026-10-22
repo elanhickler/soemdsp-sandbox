@@ -860,6 +860,7 @@ const nodeGraphTraceDisplayFormTypeValueClampOverrides = Object.freeze({
   pulseExplosionFace: Object.freeze({
     lineThickness: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, 1.5), 0.25, 16),
     dotThickness: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, 5), 0.25, 32),
+    ghostOpacity: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, 0.35), 0, 1),
   }),
   sinCos4Face: Object.freeze({
     backgroundBrightness: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value), 0, 1),

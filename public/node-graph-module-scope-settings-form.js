@@ -2117,6 +2117,7 @@ function buildNodeGraphDisplaySettingsBodyHtml(formType, node = null) {
         "lineThickness",
         ...(type === "clockFace" ? ["startThickness", "blinkTime", "gateHeight"] : []),
         "dotThickness",
+        ...(type === "pulseExplosionFace" ? ["ghostOpacity"] : []),
         "pixelDensity",
       ].filter((key) => activeFields.has(key) && allowKey("fields", key));
     }
@@ -2443,6 +2444,7 @@ function buildNodeGraphDisplaySettingsBodyHtml(formType, node = null) {
       if (type === "pulseExplosionFace") {
         lamps.push(["playhead", "Playhead", "playheadHue", "playheadBrightness", "playheadSaturation"]);
         lamps.push(["lit", "Lit", "litHue", "litBrightness", "litSaturation"]);
+        lamps.push(["ghost", "Ghost", "ghostHue", "ghostBrightness", "ghostSaturation"]);
       }
       if (clock) {
         lamps.push(["fill", "Fill", "fillHue", "fillBrightness", "fillSaturation"]);
