@@ -278,6 +278,7 @@ function nodeGraphModuleDisplayTypeHasLocalSettings(displayType) {
     "softwaveOscFace",
     "sinCosFace",
     "clockFace",
+    "clockDividerFace",
     "pulseExplosionFace",
     "pulseTrainFace",
     "sinCos4Face",

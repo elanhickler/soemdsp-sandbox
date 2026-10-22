@@ -365,6 +365,7 @@ extern "C" double soemdsp_clock_pulse(int handle);
 
 extern "C" int soemdsp_trigger_divider_create();
 extern "C" void soemdsp_trigger_divider_destroy(int handle);
+extern "C" int soemdsp_trigger_divider_count(int handle);
 extern "C" double soemdsp_trigger_divider_sample_clock(
   int handle, double clock, double reset, double threshold, double division,
   double duty, double level, double sampleRate
@@ -6587,6 +6588,8 @@ static void process_clock_divider(Circuit& g, Node& node, int frames) {
     node.buf[kPortMono][f] = out;
     node.buf[kPortLeft][f] = out;
     node.buf[kPortRight][f] = out;
+    // __Count: edges toward the next fire (Clock Divider face).
+    node.buf[kPortPhase01][f] = (double)soemdsp_trigger_divider_count(node.nativeHandle);
   }
 }
 

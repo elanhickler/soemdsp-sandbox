@@ -160,6 +160,12 @@ extern "C" double soemdsp_trigger_divider_sample_clock(
   return safe(output);
 }
 
+// Edges counted toward the next fire (0 = just fired / reset). Face tap.
+extern "C" int soemdsp_trigger_divider_count(int handle) {
+  if (handle < 1 || handle > kMaxInstances) return 0;
+  return gPool[handle - 1].count;
+}
+
 extern "C" int soemdsp_trigger_divider_version() {
-  return 2;
+  return 3;
 }

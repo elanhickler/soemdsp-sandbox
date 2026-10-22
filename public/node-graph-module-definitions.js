@@ -6754,9 +6754,14 @@ const nodeGraphModuleDefinitions = (
   clockDivider: {
     planRole: "processor",
     planFreeRun: true,
-    // Trigger-rate module: the dot display reads far better than a trace
-    // for something that is mostly flat with an occasional pulse.
-    displayType: "dot",
+    // Face: engine count (__Count) as step dots, Out bar, tick / fire flashes
+    // (modules/clockDivider/clock-divider-display.js).
+    displayType: "clockDividerFace",
+    spectrumCompanion: false,
+    displayModes: [
+      { key: "face", label: "Face", renderer: "clockDividerFace", settingsSchema: "clockDividerFace" },
+    ],
+    defaultDisplayMode: "face",
     inputs: ["Clock", "Reset"],
     outputs: ["Out"],
     parameters: [

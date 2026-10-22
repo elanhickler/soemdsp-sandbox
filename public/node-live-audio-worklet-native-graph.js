@@ -9548,6 +9548,10 @@ NodeLiveAudioProcessor.prototype.nativeGraphPortNames = function nativeGraphPort
     if (type === "fbmField") {
       return ["__DomainTime"];
     }
+    // Clock Divider face: edges counted toward the next fire.
+    if (type === "clockDivider") {
+      return ["__Count"];
+    }
     // Pulse Explosion face playhead: seconds since trigger, -1 idle.
     if (type === "pulseExplosion" || type === "pulseTrain") {
       return ["__Elapsed"];
@@ -9642,6 +9646,7 @@ NodeLiveAudioProcessor.prototype.publishNativeGraphScopeTaps = function publishN
       : (type === "sineWavetable" || type === "sinCos" || type === "smoothGraph" || type === "stepGraph"
         || type === "acidSequencer" || type === "fbmField" || type === "clock" || type === "pulseExplosion"
         || type === "ellipsoid" || type === "ellipsoidOsc" || type === "dsfOscillator" || type === "dsfMorphingOsc"
+        || type === "clockDivider"
         ? audioPorts.concat(P.NATIVE_GRAPH_PORT_PHASE01)
         : audioPorts);
     for (let pi = 0; pi < ports.length; pi += 1) {
@@ -9808,6 +9813,7 @@ NodeLiveAudioProcessor.prototype.publishNativeGraphScopeTaps = function publishN
         || type === "smoothGraph" || type === "stepGraph"
         || type === "acidSequencer" || type === "clock" || type === "pulseExplosion" || type === "pulseTrain"
         || type === "ellipsoid" || type === "ellipsoidOsc" || type === "dsfOscillator" || type === "dsfMorphingOsc"
+        || type === "clockDivider"
       ) {
         ports = facePorts.concat(P.NATIVE_GRAPH_PORT_PHASE01);
       } else if (type === "polyBlep" || type === "blit") {

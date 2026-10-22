@@ -933,6 +933,13 @@ const nodeGraphTraceDisplayActiveControlsByType = Object.freeze({
     toggles: Object.freeze([]),
     choices: Object.freeze([]),
   }),
+  // Clock Divider: Background / Ring / Count / Out / Tick / Fire HBS lamps, ring thickness, blink time.
+  clockDividerFace: Object.freeze({
+    fields: Object.freeze(["lineThickness", "lineSmoothing", "blinkTime"]),
+    colors: Object.freeze([]),
+    toggles: Object.freeze([]),
+    choices: Object.freeze([]),
+  }),
   // Pulse Explosion: Background / Line (stems) / Dot (tops) / Playhead / Lit HBS lamps, stem + dot size.
   pulseExplosionFace: Object.freeze({
     fields: Object.freeze(["lineThickness", "lineSmoothing", "dotThickness"]),
@@ -2665,6 +2672,7 @@ const nodeGraphDisplaySettingsFormTypeTitles = Object.freeze({
   sinCos4Face: "SinCos4",
   sinCosFace: "SinCos",
   clockFace: "Clock",
+  clockDividerFace: "Clock Divider",
   pulseExplosionFace: "Pulse Explosion",
   pulseTrainFace: "Pulse Train",
   textBoxFace: "Text Box",

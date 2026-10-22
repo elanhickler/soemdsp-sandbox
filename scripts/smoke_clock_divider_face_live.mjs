@@ -1,0 +1,102 @@
+// Clock Divider face live (headless Chrome, fixture clock_divider_clock_in.json:
+// a 4 Hz Clock into a divide-by-4). While playing: the engine publishes
+// __Count, it steps through 0..3, Out is high right after it wraps to 0, the
+// face draws, Display Settings shows Background, Ring, Count, Out, Tick, Fire
+// + Line thickness / Blink time, and a settings change repaints at once.
+// Run: node scripts/smoke_clock_divider_face_live.mjs  (env: SANDBOX_URL, OUT=dir)
+import fs from "node:fs";
+import { chromium } from "playwright-core";
+
+const BASE = (process.env.SANDBOX_URL || "http://127.0.0.1:8765/").replace(/\/?$/, "/");
+const OUT = process.env.OUT || "scripts/out/clock-divider";
+fs.mkdirSync(OUT, { recursive: true });
+const fixture = fs.readFileSync(new URL("./fixtures/clock_divider_clock_in.json", import.meta.url), "utf8");
+const ID = "clockDivider-1";
+let failures = 0;
+const check = (ok, label, extra = "") => { if (!ok) failures++; console.log(ok ? "ok  " : "FAIL", label, extra); };
+const b = await chromium.launch({ channel: "chrome", headless: !process.env.HEADED, args: ["--ignore-gpu-blocklist", "--autoplay-policy=no-user-gesture-required"] });
+const page = await (await b.newContext({ viewport: { width: 1400, height: 900 }, deviceScaleFactor: 2 })).newPage();
+const errs = []; page.on("pageerror", (e) => errs.push(e.message));
+await page.route("**/clock-divider-smoke.json*", (r) => r.fulfill({ status: 200, contentType: "application/json", body: fixture }));
+await page.goto(`${BASE}?pagePatch=clock-divider-smoke`, { waitUntil: "domcontentloaded", timeout: 120000 });
+const start = page.locator("#nodeBootStartButton"); if (await start.count()) await start.click().catch(() => {});
+await page.waitForFunction((id) => document.querySelector(`article[data-node="${id}"]`) && !document.body.classList.contains("node-boot-loading"), ID, { timeout: 180000 });
+const faceSel = `article[data-node="${ID}"] .node-clock-divider-face`;
+check(await page.locator(faceSel).count() === 1, "Clock Divider mounts its own face");
+await page.locator('button[aria-label="Play"]:visible').first().click();
+await page.waitForTimeout(2000);
+// Sample engine state at frame rate for 3 s (4 Hz clock / 4 = one fire per second).
+const samples = await page.evaluate(async (id) => {
+  const out = [];
+  const t0 = performance.now();
+  while (performance.now() - t0 < 3000) {
+    await new Promise((r) => requestAnimationFrame(r));
+    out.push([Number(nodeGraphModuleScopeLatestOutputValue(id, "__Count", NaN)), Number(nodeGraphModuleScopeLatestOutputValue(id, "Out", NaN))]);
+  }
+  return out;
+}, ID);
+const counts = new Set(samples.map((s) => s[0]));
+check([0, 1, 2, 3].every((c) => counts.has(c)) && [...counts].every((c) => c >= 0 && c <= 3), "engine __Count steps through 0..3", JSON.stringify([...counts].sort()));
+// Out (duty 0.5 of 4 clock periods = 0.5 s) is high only while the count is 0 or 1.
+const outHigh = samples.filter((s) => s[1] > 0.5);
+check(outHigh.length > 0 && outHigh.every((s) => s[0] === 0 || s[0] === 1), "Out is high only right after the count wraps", `${outHigh.length} high samples`);
+// The face paints into its shared-GL face texture (what the GL graph composites);
+// read that texture back: pixel stats, dot-row brightness (above the Out bar) + a PNG.
+const faceTexture = (name) => page.evaluate(async ([id, name]) => {
+  const canvas = document.querySelector(`article[data-node="${id}"] .node-clock-divider-face canvas`);
+  const px = nodeGraphSharedGlFacePixels(canvas);
+  if (!px) return null;
+  const { width: w, height: h, data } = px;
+  const img = new ImageData(w, h);
+  img.data.set(data);
+  const counts = new Map(); const mean = [0, 0, 0];
+  for (let i = 0; i < img.data.length; i += 4) { const d = img.data; const k = (d[i] >> 3) << 10 | (d[i + 1] >> 3) << 5 | d[i + 2] >> 3; counts.set(k, (counts.get(k) || 0) + 1); mean[0] += d[i]; mean[1] += d[i + 1]; mean[2] += d[i + 2]; }
+  const n = w * h;
+  let dots = 0; for (let i = 0; i < w * Math.floor(h * 0.7) * 4; i += 4) dots += img.data[i] + img.data[i + 1] + img.data[i + 2];
+  const c = new OffscreenCanvas(w, h); c.getContext("2d").putImageData(img, 0, 0);
+  const blob = await c.convertToBlob({ type: "image/png" });
+  const bytes = new Uint8Array(await blob.arrayBuffer()); let bin = ""; for (const b of bytes) bin += String.fromCharCode(b);
+  return { name, dots: Math.round(dots / (w * Math.floor(h * 0.7))), drawn: 1 - Math.max(...counts.values()) / n, mean: mean.map((v) => Math.round(v / n)), png: btoa(bin) };
+}, [ID, name]);
+const saveTexture = async (name) => {
+  const t = await faceTexture(name);
+  if (t) fs.writeFileSync(`${OUT}/${name}.png`, Buffer.from(t.png, "base64"));
+  return t;
+};
+// Face texture at each count while playing: lit area grows with the engine count.
+const byCount = {};
+for (const want of [1, 2, 3, 0]) {
+  await page.waitForFunction(([id, c]) => Number(nodeGraphModuleScopeLatestOutputValue(id, "__Count", NaN)) === c
+    && document.querySelector(`article[data-node="${id}"] .node-clock-divider-face`)._clockDividerLastCount === c, [ID, want], { timeout: 4000 }).catch(() => {});
+  await page.waitForTimeout(140);
+  byCount[want] = await saveTexture(`playing-count-${want}`);
+}
+const before = byCount[1];
+check(Boolean(before) && before.drawn > 0.02, "face draws more than its background", JSON.stringify(before && { drawn: before.drawn, mean: before.mean }));
+const lum = (t) => (t ? t.dots : 0);
+check(lum(byCount[1]) < lum(byCount[2]) && lum(byCount[2]) < lum(byCount[3]), "more lit dots as the engine count climbs 1 -> 2 -> 3", JSON.stringify([1, 2, 3].map((c) => lum(byCount[c]))));
+await page.evaluate(() => openNodeGraphTraceDisplaySettings("clockDivider-1", {}));
+await page.waitForTimeout(800);
+const labels = await page.evaluate(() => [...document.querySelectorAll("#nodeTraceDisplaySettingsPopover [data-hsl-lamp]")].map((e) => e.getAttribute("data-hsl-label")));
+check(JSON.stringify(labels) === JSON.stringify(["Background", "Ring", "Count", "Out", "Tick", "Fire"]), "HBS rows Background, Ring, Count, Out, Tick, Fire", JSON.stringify(labels));
+const fields = await page.evaluate(() => ["lineThickness", "lineSmoothing", "blinkTime"].map((k) => Boolean(document.querySelector(`#nodeTraceDisplaySettingsPopover [data-trace-display-field="${k}"]`))));
+check(fields.every(Boolean), "Line thickness, Line smoothing, Blink time controls present", JSON.stringify(fields));
+await page.locator("#nodeTraceDisplaySettingsPopover").screenshot({ path: `${OUT}/settings.png` }).catch(() => {});
+await page.evaluate(() => closeNodeGraphTraceDisplaySettings());
+// Settings repaint immediately: apply a red background through the shared settings path, read the next frame.
+const red = await page.evaluate((id) => {
+  const node = nodeGraphPatchNode(id);
+  const face = document.querySelector(`article[data-node="${id}"] .node-clock-divider-face`);
+  assignNodeGraphTypedDisplaySettingsToNode(node, "clockDividerFace", { ...node.traceDisplaySettings, backgroundHue: 0, backgroundBrightness: 0.5, backgroundSaturation: 1 });
+  return Boolean(face) && node.traceDisplaySettings.backgroundHue === 0;
+}, ID);
+const after = await saveTexture("settings-red-background");
+check(red && after && after.mean[0] - before.mean[0] > 40, "background change repaints at once (same task, no frame wait)", JSON.stringify(after && after.mean));
+await page.evaluate((id) => { const node = nodeGraphPatchNode(id); assignNodeGraphTypedDisplaySettingsToNode(node, "clockDividerFace", { ...node.traceDisplaySettings, backgroundHue: 205.714, backgroundBrightness: 0.009, backgroundSaturation: 0.59 }); }, ID);
+await page.waitForTimeout(600);
+await page.locator(`article[data-node="${ID}"]`).screenshot({ path: `${OUT}/module-playing.png` });
+await page.locator(`article[data-node="clock-1"]`).screenshot({ path: `${OUT}/clock-source.png` }).catch(() => {});
+await page.screenshot({ path: `${OUT}/patch-playing.png` });
+check(errs.length === 0, "no page errors", JSON.stringify(errs.slice(0, 3)));
+await b.close();
+console.log(failures ? `FAIL ${failures}` : "ok clock divider face live"); process.exit(failures ? 1 : 0);
