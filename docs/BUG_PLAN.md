@@ -1617,3 +1617,22 @@ Add `require_no_js_dsp()` to `scripts/smoke_test.py` (or `scripts/check_no_js_ds
 - Fix: from a plain input, a parameter mod jack stands for that parameter's outlet (`parameterOutletForModulationJack`), in drop, hover, move mode and click mode; `connectEndpoints(input, modulation)` connects outlet -> input. A parameter with no outlet is no target. Raw input-to-input is never made. Drags from a mod jack are unchanged.
 - Verify: `node scripts/smoke_input_to_param_drop.mjs`.
 
+### B-104 - Clock face: 100% open gate shows its side strokes at some rates (e.g. 74.2 Hz)
+
+- Root cause: `nodeGraphClockFaceGateEndless` (clock-display.js) compared the rounded End sample `floor(End * period + 0.5)` against the fractional period (`sampleRate / rate`). With End = 1 that is `round(period)`, which is below the period whenever its fraction is under 0.5 (44100 / 74.2 = 594.34 -> 594), so the face flipped between endless and closed as the rate moved.
+- Fix: compare in whole samples (`round(period)`). Start 0 / End 1 is endless at every rate; End more than half a sample short of 1 still re-triggers.
+- Note (not changed): the native clock (clock.cpp) uses the same rounding, so at such rates the DSP gate drops for the last fractional sample of a cycle. The face now shows the intended 100% gate; changing the DSP needs a wasm rebuild.
+- Verify: `node scripts/smoke_clock_face.mjs` (sweep 0.1..2000 Hz at 44.1/48/96 kHz, 74.2 Hz draw).
+
+### B-105 - Face widgets (Clock and every module with a `face` spec): double-click type-in did nothing
+
+- Root cause: the face engine (node-graph-module-face.js) handles its own pointerdown and never ran the slider double-click rule, so the old inline type-in (`beginNodeSliderFaceValueEdit`) was never reached.
+- Fix: same double-click rule as the old sliders (second press on the same widget within 400 ms / 6 px, or detail > 1; not Alt or touch). Opens the old inline editor over the widget part under the pointer (two-ended widgets: the end on that half). Enter commits, Escape cancels, click outside commits. Choice, seed and button widgets keep no type-in.
+- Verify: `node scripts/smoke_module_face_type_in.mjs`.
+
+### B-106 - Face widgets ignore the param's Max Digits
+
+- Root cause: `nodeGraphModuleFaceValueText` used its own fixed rounding (toFixed 0..2).
+- Fix: shown digits use the slider readout formatter (`nodeSliderReadoutValueText`), so Max Digits, sign and display transforms match the old sliders.
+- Verify: `node scripts/smoke_module_face_type_in.mjs`.
+

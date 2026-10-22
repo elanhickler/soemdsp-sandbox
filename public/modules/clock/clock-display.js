@@ -131,7 +131,12 @@ function nodeGraphClockFaceGeometry(w, h, pulseStart, pulseEnd, stroke, heightPc
 function nodeGraphClockFaceGateEndless(pulseStart, pulseEnd, rate, sampleRate) {
   const period = rate > 0 ? Math.max(1, sampleRate) / rate : 0;
   if (!(period > 0)) return false;
-  return Math.floor(pulseStart * period + 0.5) <= 0 && Math.floor(pulseEnd * period + 0.5) >= period;
+  // B-104: compare whole samples. The period is fractional (48000 / 74.2 =
+  // 646.9), so a fully open End (1) rounds to round(period), which is below
+  // the fractional period about half the time: the old `>= period` test
+  // flipped with the rate. Fully open = Start 0 and End 1 in sample terms.
+  const whole = Math.max(1, Math.floor(period + 0.5));
+  return Math.floor(pulseStart * period + 0.5) <= 0 && Math.floor(pulseEnd * period + 0.5) >= whole;
 }
 
 /** True when phase moved forward from last to now (under half a cycle, wrap allowed) past edge. */

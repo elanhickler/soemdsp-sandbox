@@ -165,9 +165,14 @@ function nodeGraphModuleFaceValue(input) {
   return Number.isFinite(domain) ? domain : Number(input?.value) || 0;
 }
 
-/** Compact shown value (modulated when sent) + unit, as the Condensed 5 cells read. */
+/** Shown value (modulated when sent) + unit. B-106: same formatter as the slider readout, so the param's Max Digits applies. */
 function nodeGraphModuleFaceValueText(input) {
   if (!input) return "";
+  if (typeof nodeSliderReadoutValueText === "function") {
+    const text = String(nodeSliderReadoutValueText(input)).trim();
+    const unit = String(input.dataset.unit || "");
+    return unit && !(typeof nodeSliderChoiceLabel === "function" && nodeSliderChoiceLabel(input)) ? `${text} ${unit}` : text;
+  }
   const sent = Number(input.dataset.sentDomainValue);
   const v = Number.isFinite(sent) ? sent : nodeGraphModuleFaceValue(input);
   const a = Math.abs(v);
@@ -356,6 +361,11 @@ function beginNodeGraphModuleFaceGesture(article, face, spec, event) {
   if (!wd) return;
   event.preventDefault();
   event.stopPropagation();
+  // B-105: double-click types a value, same rule as every slider surface.
+  if (nodeGraphModuleFaceDoubleClick(face, wd, event)) {
+    beginNodeGraphModuleFaceValueEdit(article, face, wd, p);
+    return;
+  }
   const input = wd.param ? nodeGraphModuleFaceInput(article, wd.param) : null;
   // Same modifiers as every slider (nodeGraphNumericResetClickModifier): Ctrl/Cmd+click resets to default.
   if (wd.type !== "seedButton" && wd.type !== "seedNumber" && typeof nodeGraphNumericResetClickModifier === "function"
@@ -459,6 +469,60 @@ function beginNodeGraphModuleFaceGesture(article, face, spec, event) {
   }
   if (!move || !input) return;
   nodeGraphModuleFaceCapture(face, event, (ev, drag) => setNodeGraphModuleFaceValue(input, move(ev), drag));
+}
+
+// B-105: a second press on the same widget within 400 ms / 6 px (or detail > 1)
+// is a double-click, as beginNodeSliderDrag decides for the old sliders.
+function nodeGraphModuleFaceDoubleClick(face, wd, event) {
+  if (event.altKey || (typeof nodeGraphTouchGestureIsTouch === "function" && nodeGraphTouchGestureIsTouch(event))) return false;
+  if (!nodeGraphModuleFaceTypesValue(wd)) return false;
+  const now = performance.now();
+  const last = face._faceLastDown;
+  const id = `${wd.type}:${wd.x}:${wd.y}`;
+  face._faceLastDown = { id, time: now, x: event.clientX, y: event.clientY };
+  const hit = event.detail > 1 || Boolean(last && last.id === id && now - last.time < 400
+    && Math.abs(event.clientX - last.x) < 6 && Math.abs(event.clientY - last.y) < 6);
+  if (hit) face._faceLastDown = null;
+  return hit;
+}
+
+/** Widgets with a typed value (choices, seeds and buttons have none). */
+function nodeGraphModuleFaceTypesValue(wd) {
+  return wd.type === "cell" || wd.type === "step" || wd.type === "band" || wd.type === "filter";
+}
+
+/** Inline type-in over the widget part under the pointer (the old slider face editor). */
+function beginNodeGraphModuleFaceValueEdit(article, face, wd, p) {
+  if (typeof beginNodeSliderFaceValueEdit !== "function") return false;
+  const keys = nodeGraphModuleFaceWidgetKeys(wd).filter(Boolean);
+  if (!keys.length) return false;
+  const i = Math.max(0, Math.min(keys.length - 1, Math.floor(((p.x - wd.x) / Math.max(1, wd.w)) * keys.length)));
+  const input = nodeGraphModuleFaceInput(article, keys[i]);
+  if (!input?.id) return false;
+  for (const old of face.querySelectorAll(":scope > .node-face-value-edit")) old.remove();
+  const part = wd.w / keys.length;
+  const host = document.createElement("div");
+  host.className = "node-face-value-edit";
+  host.dataset.sliderTarget = input.id;
+  Object.assign(host.style, {
+    position: "absolute", left: `${wd.x + part * i}px`, top: `${wd.y}px`,
+    width: `${part}px`, height: `${wd.h}px`, pointerEvents: "auto",
+  });
+  if (getComputedStyle(face).position === "static") face.style.position = "relative";
+  face.append(host);
+  if (!beginNodeSliderFaceValueEdit(host)) {
+    host.remove();
+    return false;
+  }
+  // The host lives only while its input does.
+  const observer = new MutationObserver(() => {
+    if (!host.querySelector("input")) {
+      observer.disconnect();
+      host.remove();
+    }
+  });
+  observer.observe(host, { childList: true });
+  return true;
 }
 
 /** Right-click on a face widget opens that param's options, like a normal slider. */

@@ -88,6 +88,25 @@ gate(polys.length === 1, "End more than half a sample short of 1 re-triggers: cl
 draw({ pulseStart: 0, pulseEnd: 1, rate: 0 }, 0.5);
 gate(polys.length === 1, "Rate 0 (DSP holds the gate low): closed rectangle");
 gate(ctx.nodeGraphClockFaceGateEndless(0, 1, 2, 44100) && !ctx.nodeGraphClockFaceGateEndless(0.01, 1, 2, 44100), "endless test matches DSP rounding");
+// B-104: fully open stays endless at every rate (fractional periods like 48000 / 74.2).
+{
+  const miss = [];
+  for (const sr of [44100, 48000, 96000]) {
+    for (let r10 = 1; r10 <= 20000; r10 += 1) {
+      const rate = r10 / 10;
+      if (!ctx.nodeGraphClockFaceGateEndless(0, 1, rate, sr)) miss.push(`${rate}@${sr}`);
+    }
+    for (const rate of [74.2, 74.21, 33.3, 0.7, 1999.9]) if (!ctx.nodeGraphClockFaceGateEndless(0, 1, rate, sr)) miss.push(`${rate}@${sr}`);
+  }
+  gate(miss.length === 0, `Start 0 / End 1 endless across 0.1..2000 Hz sweep (misses: ${miss.slice(0, 5).join(", ") || "none"})`);
+  ctx.nodeGraphMvp.live.context.sampleRate = 44100;
+  draw({ pulseStart: 0, pulseEnd: 1, rate: 74.2 }, 0.5);
+  gate(polys.length === 0, "rate 74.2 @ 44.1 kHz at 100% open: no side strokes");
+  ctx.nodeGraphMvp.live.context.sampleRate = 48000;
+  const half = [];
+  for (let r10 = 1; r10 <= 20000; r10 += 7) if (ctx.nodeGraphClockFaceGateEndless(0, 0.5, r10 / 10, 48000)) half.push(r10 / 10);
+  gate(half.length === 0, "a half-open gate is never endless across the sweep");
+}
 
 // Every element has a control: Start marker and Blink use their own HBS, thickness and time.
 const look2 = ctx.normalizeNodeGraphClockFaceSettings();
