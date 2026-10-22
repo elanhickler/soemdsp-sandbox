@@ -1179,6 +1179,13 @@ NodeLiveAudioProcessor.prototype.mapNativeGraphSrcPortId = function mapNativeGra
     if (p === "out") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_MONO;
     if (p === "end") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_LEFT;
     if (p === "__end") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_RAMP;
+    // Params in effect (latched while running with Recalculate On, else live).
+    if (p === "__count") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_SAW;
+    if (p === "__curve") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_SQUARE;
+    if (p === "__ampstart") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_TRI;
+    if (p === "__ampend") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_SINE;
+    if (p === "__ampcurve") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_TRISAW;
+    if (p === "__amp") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_CENTER_SQUARE;
   }
   if (t === "pulseExplosion") {
     if (p === "__elapsed") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_PHASE01;
@@ -6342,6 +6349,7 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
       push("ampCurve", P.NATIVE_GRAPH_PARAM_WIDTH, cont("ampCurve", 0));
       push("amplitude", P.NATIVE_GRAPH_PARAM_AMPLITUDE, cont("amplitude", 1));
       push("mode", P.NATIVE_GRAPH_PARAM_TIMING_MODE, disc("mode", 0)); // 0 One shot / 1 Loop
+      push("recalculateOnTrigger", P.NATIVE_GRAPH_PARAM_MODE, disc("recalculateOnTrigger", 1)); // 0 Off live / 1 On latched
       continue;
     }
     if (type === "pulseExplosion") {
@@ -9155,6 +9163,15 @@ NodeLiveAudioProcessor.prototype.bindNativeGraphBlockViews = function bindNative
 /** Map native audio port id → face port name(s) for nodeOutputs / scopes. */
 NodeLiveAudioProcessor.prototype.nativeGraphPortNames = function nativeGraphPortNames(type, portId) {
   const P = NodeLiveAudioProcessor;
+  // Pulse Train face: params in effect (latched while running with Recalculate On, else live).
+  if (type === "pulseTrain") {
+    if (type === "pulseTrain" && portId === P.NATIVE_GRAPH_PORT_SAW) return ["__Count"];
+    if (type === "pulseTrain" && portId === P.NATIVE_GRAPH_PORT_SQUARE) return ["__Curve"];
+    if (type === "pulseTrain" && portId === P.NATIVE_GRAPH_PORT_TRI) return ["__AmpStart"];
+    if (type === "pulseTrain" && portId === P.NATIVE_GRAPH_PORT_SINE) return ["__AmpEnd"];
+    if (type === "pulseTrain" && portId === P.NATIVE_GRAPH_PORT_TRISAW) return ["__AmpCurve"];
+    if (type === "pulseTrain" && portId === P.NATIVE_GRAPH_PORT_CENTER_SQUARE) return ["__Amp"];
+  }
   if (portId === P.NATIVE_GRAPH_PORT_IS_IDLE) {
     return ["isIdle", "Idle"];
   }
@@ -9593,7 +9610,7 @@ NodeLiveAudioProcessor.prototype.publishNativeGraphScopeTaps = function publishN
         P.NATIVE_GRAPH_PORT_PHASE01,
       )
       : type === "pulseTrain"
-        ? audioPorts.concat(P.NATIVE_GRAPH_PORT_PHASE01, P.NATIVE_GRAPH_PORT_RAMP)
+        ? audioPorts.concat(P.NATIVE_GRAPH_PORT_PHASE01, P.NATIVE_GRAPH_PORT_RAMP, P.NATIVE_GRAPH_PORT_SAW, P.NATIVE_GRAPH_PORT_SQUARE, P.NATIVE_GRAPH_PORT_TRI, P.NATIVE_GRAPH_PORT_SINE, P.NATIVE_GRAPH_PORT_TRISAW, P.NATIVE_GRAPH_PORT_CENTER_SQUARE)
       : (type === "sineWavetable" || type === "sinCos" || type === "smoothGraph" || type === "stepGraph"
         || type === "acidSequencer" || type === "fbmField" || type === "clock" || type === "pulseExplosion"
         || type === "ellipsoid" || type === "ellipsoidOsc" || type === "dsfOscillator"
@@ -9757,7 +9774,7 @@ NodeLiveAudioProcessor.prototype.publishNativeGraphScopeTaps = function publishN
       } else if (type === "sampleHold") {
         ports = facePorts.concat(P.NATIVE_GRAPH_PORT_SAW, P.NATIVE_GRAPH_PORT_RAMP);
       } else if (type === "pulseTrain") {
-        ports = facePorts.concat(P.NATIVE_GRAPH_PORT_PHASE01, P.NATIVE_GRAPH_PORT_RAMP);
+        ports = facePorts.concat(P.NATIVE_GRAPH_PORT_PHASE01, P.NATIVE_GRAPH_PORT_RAMP, P.NATIVE_GRAPH_PORT_SAW, P.NATIVE_GRAPH_PORT_SQUARE, P.NATIVE_GRAPH_PORT_TRI, P.NATIVE_GRAPH_PORT_SINE, P.NATIVE_GRAPH_PORT_TRISAW, P.NATIVE_GRAPH_PORT_CENTER_SQUARE);
       } else if (
         type === "basicShape" || type === "sineWavetable" || type === "sinCos"
         || type === "smoothGraph" || type === "stepGraph"

@@ -121,6 +121,15 @@
       "folder": "demo_patches"
     },
     {
+      "slug": "demo_patches/sawtooth_into_resonant_envelope",
+      "label": "sawtooth_into_resonant_envelope",
+      "name": "",
+      "url": "/soemdsp-sandbox/patches/demo_patches/sawtooth_into_resonant_envelope.json",
+      "author": "",
+      "emoji": "",
+      "folder": "demo_patches"
+    },
+    {
       "slug": "demo_patches/triangle_comparison",
       "label": "triangle_comparison",
       "name": "",
@@ -197,6 +206,15 @@
       "label": "sine_kick_attempt_2",
       "name": "",
       "url": "/soemdsp-sandbox/patches/drums/sine_kick_attempt_2.json",
+      "author": "",
+      "emoji": "",
+      "folder": "drums"
+    },
+    {
+      "slug": "drums/soft clip toms",
+      "label": "soft clip toms",
+      "name": "",
+      "url": "/soemdsp-sandbox/patches/drums/soft%20clip%20toms.json",
       "author": "",
       "emoji": "",
       "folder": "drums"
@@ -977,6 +995,14 @@
       "emoji": ""
     },
     {
+      "slug": "sawtooth_into_resonant_envelope",
+      "label": "sawtooth_into_resonant_envelope",
+      "name": "",
+      "url": "/soemdsp-sandbox/patches/demo_patches/sawtooth_into_resonant_envelope.json",
+      "author": "",
+      "emoji": ""
+    },
+    {
       "slug": "sawtoothalarm",
       "label": "sawtoothalarm",
       "name": "",
@@ -1045,6 +1071,14 @@
       "label": "soemreverb",
       "name": "",
       "url": "/soemdsp-sandbox/patches/livedemos/soemreverb.json",
+      "author": "",
+      "emoji": ""
+    },
+    {
+      "slug": "soft clip toms",
+      "label": "soft clip toms",
+      "name": "",
+      "url": "/soemdsp-sandbox/patches/drums/soft%20clip%20toms.json",
       "author": "",
       "emoji": ""
     },

@@ -3,7 +3,7 @@
 // One stem per pulse at its time after the trigger, height = amplitude, dot
 // on top, time axis 0 .. Time (Loop: the whole cycle; the playhead wraps). The schedule comes from the engine
 // (soemdsp_pulse_train_preview in pulse_train.wasm), so it is exactly what a
-// trigger with velocity 1 plays. Playhead: __Elapsed (seconds since trigger,
+// trigger with velocity 1 plays; with audio running it uses the engine's params in effect (__Count .. __Amp). Playhead: __Elapsed (seconds since trigger,
 // -1 idle) shifted to the heard time; fired pulses light up.
 // Display Settings: the pulseExplosionFace schema (Background, Line, Dot,
 // Playhead, Lit, Line thickness, Dot size). GPU only (gl-line-renderer);
@@ -15,7 +15,7 @@ function nodeGraphPulseTrainPreviewLoad() {
   if (nodeGraphPulseTrainPreviewWasm.promise || typeof fetch !== "function" || typeof WebAssembly === "undefined") {
     return nodeGraphPulseTrainPreviewWasm.promise;
   }
-  nodeGraphPulseTrainPreviewWasm.promise = fetch("/native_modules/pulse_train/pulse_train.wasm?v=pulse-train-loop-2")
+  nodeGraphPulseTrainPreviewWasm.promise = fetch("/native_modules/pulse_train/pulse_train.wasm?v=pulse-train-recalc-1")
     .then((response) => {
       if (!response.ok) throw new Error(`pulse_train wasm HTTP ${response.status}`);
       return response.arrayBuffer();
@@ -60,6 +60,19 @@ function nodeGraphPulseTrainSchedule(section, node) {
     p("ampStart", 1), p("ampEnd", 0.2), p("ampCurve", 0), p("amplitude", 1),
     Math.round(p("mode", 0)),
   ];
+  // Audio running: draw the params the engine is playing with (latched at the
+  // trigger / cycle start with Recalculate On, live with it Off; idle = what
+  // the next trigger latches), so the face always matches what is heard.
+  // __Amp is Amplitude * trigger velocity.
+  const ctx = nodeGraphMvp?.live?.context;
+  if (ctx?.state === "running" && typeof nodeGraphModuleScopeLatestOutputValue === "function") {
+    const eng = ["__Count", "__End", "__Curve", "__AmpStart", "__AmpEnd", "__AmpCurve", "__Amp"]
+      .map((name) => Number(nodeGraphModuleScopeLatestOutputValue(section.dataset.node, name, Number.NaN)));
+    if (eng.every(Number.isFinite)) {
+      for (let i = 0; i < 7; i += 1) args[i] = eng[i];
+      endTime = eng[1];
+    }
+  }
   const key = args.join(",");
   if (section._pulseTrainKey === key && section._pulseTrainSchedule) return section._pulseTrainSchedule;
   const count = wasm.soemdsp_pulse_train_preview(...args);

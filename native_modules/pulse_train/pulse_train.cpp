@@ -31,6 +31,18 @@
 // End output: 1 on the sample the last pulse plays. Reset hit: stops the
 // train (no End). A new Trigger hit restarts it. Amplitude is not clamped.
 // soemdsp_pulse_train_preview() builds the same schedule for displays.
+// Recalculate On Trigger (recalc > 0.5, default On = the behavior above): all
+// schedule params (Count, Time, Curve, Amp Start / End / Curve, Amplitude) are
+// latched at each Trigger / Reset hit and Loop cycle start. Off: the schedule
+// follows the live params every sample (rebuilt when any changes); pulses
+// already played are never replayed (the next index only moves forward), and
+// pulses whose new time is already behind the playhead are skipped, so a Time
+// cut below the elapsed time ends the train (One shot: End fires). Loop Off:
+// the cycle length is the live Time. Mode itself is always live.
+// soemdsp_pulse_train_effective(handle, i) exposes the params in effect (the
+// latched ones while running with Recalculate On; otherwise the live ones) so
+// the face shows exactly what plays. i: 0 Count, 1 Time, 2 Curve, 3 Amp Start,
+// 4 Amp End, 5 Amp Curve, 6 Amplitude * velocity.
 
 #include <soemdsp/math/scalar_helpers.h>
 #include <soemdsp/trigger/trigger.h>
@@ -58,6 +70,8 @@ struct PulseTrainState {
   double cycle;     // Loop: latched Time of this cycle (s)
   double velocity;  // Loop: velocity of the last Trigger hit (1 free-run)
   bool endFired;    // Loop: End already sent this cycle
+  double eff[7];    // params in effect (schedule built from these)
+  double effVel;    // velocity the schedule was built with
 };
 
 static PulseTrainState gPool[kMaxInstances];
@@ -90,7 +104,7 @@ static int buildSchedule(
 
 }  // namespace
 
-extern "C" int soemdsp_pulse_train_version() { return 2; }
+extern "C" int soemdsp_pulse_train_version() { return 3; }
 
 extern "C" int soemdsp_pulse_train_create() {
   for (int i = 0; i < kMaxInstances; i++) {
@@ -107,6 +121,8 @@ extern "C" int soemdsp_pulse_train_create() {
       s.cycle = 0.0;
       s.velocity = 1.0;
       s.endFired = false;
+      for (int k = 0; k < 7; k++) s.eff[k] = 0.0;
+      s.effVel = 1.0;
       s.active = true;
       return i + 1;
     }
@@ -121,30 +137,56 @@ extern "C" void soemdsp_pulse_train_destroy(int handle) {
 
 extern "C" double soemdsp_pulse_train_sample(
   int handle, double trigger, double reset, double count, double endTime, double curve,
-  double ampStart, double ampEnd, double ampCurve, double amplitude, double sampleRate, double mode
+  double ampStart, double ampEnd, double ampCurve, double amplitude, double sampleRate, double mode,
+  double recalc
 ) {
   if (handle < 1 || handle > kMaxInstances) return 0.0;
   const bool loop = mode > 0.5;
+  const bool latch = recalc > 0.5;
   PulseTrainState& s = gPool[handle - 1];
   const double sr = sampleRate < 1.0 ? 44100.0 : sampleRate;
+  const double live[7] = { count, endTime, curve, ampStart, ampEnd, ampCurve, amplitude };
   s.endOut = 0.0;
   const bool resetHit = gate_hit(reset, &s.prevReset);
   if (resetHit && !loop) s.running = false;
   const bool trigHit = gate_hit(trigger, &s.prevTrig);
   if (trigHit) s.velocity = gate_hit_velocity();
   // Loop: start (free-run), restart on Trigger / Reset, or wrap at the cycle end.
+  const double cycleNow = latch ? s.cycle : (endTime > 0.0 ? endTime : 0.0);
   const bool loopStart = loop && (!s.running || trigHit || resetHit
-    || (s.n > 0 && (double)s.n / sr >= s.cycle));
+    || (s.n > 0 && (double)s.n / sr >= cycleNow));
   if (trigHit || loopStart) {
     const double v = trigHit ? gate_hit_velocity() : s.velocity;
     s.count = buildSchedule(s.times, s.amps, count, endTime, curve, ampStart, ampEnd, ampCurve, amplitude, v, loop);
+    for (int k = 0; k < 7; k++) s.eff[k] = live[k];
+    s.effVel = v;
     s.cycle = endTime > 0.0 ? endTime : 0.0;
     s.next = 0;
     s.n = 0;
     s.endFired = false;
     s.running = true;
+  } else if (s.running && !latch) {
+    // Recalculate Off: follow the live params mid-train.
+    bool changed = false;
+    for (int k = 0; k < 7; k++) {
+      if (!(s.eff[k] == live[k])) { changed = true; break; }
+    }
+    if (changed) {
+      s.count = buildSchedule(s.times, s.amps, count, endTime, curve, ampStart, ampEnd, ampCurve, amplitude, s.effVel, loop);
+      for (int k = 0; k < 7; k++) s.eff[k] = live[k];
+      s.cycle = endTime > 0.0 ? endTime : 0.0;
+      // Skip pulses now behind the playhead (already-played indices never replay).
+      const double ePrev = s.n > 0 ? (double)(s.n - 1) / sr : -1.0;
+      int k = 0;
+      while (k < s.count && s.times[k] <= ePrev) k++;
+      if (k > s.next) s.next = k;
+      if (s.next > s.count) s.next = s.count;
+    }
   }
   if (!s.running) {
+    // Idle: the face shows what the next trigger latches (the live params).
+    for (int k = 0; k < 7; k++) s.eff[k] = live[k];
+    s.effVel = 1.0;
     s.elapsed = -1.0;
     return 0.0;
   }
@@ -167,6 +209,13 @@ extern "C" double soemdsp_pulse_train_sample(
   }
   s.n++;
   return out;
+}
+
+// Params in effect (see header): 0 Count .. 5 Amp Curve, 6 Amplitude * velocity.
+extern "C" double soemdsp_pulse_train_effective(int handle, int i) {
+  if (handle < 1 || handle > kMaxInstances || i < 0 || i > 6) return 0.0;
+  const PulseTrainState& s = gPool[handle - 1];
+  return i == 6 ? s.eff[6] * s.effVel : s.eff[i];
 }
 
 extern "C" double soemdsp_pulse_train_end(int handle) {

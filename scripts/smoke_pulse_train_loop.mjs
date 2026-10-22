@@ -22,7 +22,7 @@ function play(E2, setFn, trigFn, resetFn, n, mode) {
   const out = new Float64Array(n), endo = new Float64Array(n), el = new Float64Array(n);
   for (let i = 0; i < n; i++) {
     const args = [h, trigFn(i), resetFn(i), ...setFn(i), SR];
-    if (mode !== undefined) args.push(mode);
+    if (mode !== undefined) args.push(mode, 1); // Recalculate On (the latched behavior this smoke covers)
     out[i] = E2.soemdsp_pulse_train_sample(...args);
     endo[i] = E2.soemdsp_pulse_train_end(h);
     el[i] = E2.soemdsp_pulse_train_elapsed(h);
