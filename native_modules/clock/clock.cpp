@@ -127,13 +127,15 @@ extern "C" double soemdsp_clock_sample(
   const double periodSamples = safeRate > 0.0 ? rateHz / safeRate : 0.0;
   double digital = 0.0;
   if (periodSamples > 0.0) {
-    // High from Pulse Start to Pulse End; End before Start wraps through the cycle end.
-    const double startSamples = dsp_floor(safeStart * periodSamples + 0.5);
-    const double endSamples = dsp_floor(safeEnd * periodSamples + 0.5);
-    const double phaseSamples = phase * periodSamples;
-    const bool high = endSamples >= startSamples
-      ? (phaseSamples >= startSamples && phaseSamples < endSamples)
-      : (phaseSamples >= startSamples || phaseSamples < endSamples);
+    // High while the phase is in [Pulse Start, Pulse End); End before Start
+    // wraps through the cycle end. Compared in fractional phase, not rounded
+    // samples: the period is fractional (48000 / 74.2 = 646.9), and rounding
+    // End * period could land below the last sample's phase, so a full-width
+    // gate (Start 0, End 1) dropped low for a sample each cycle. Phase is in
+    // [0, 1), so Start 0 / End 1 is high on every sample (never re-triggers).
+    const bool high = safeEnd >= safeStart
+      ? (phase >= safeStart && phase < safeEnd)
+      : (phase >= safeStart || phase < safeEnd);
     if (high && !s.digitalWasHigh) s.digitalLevel = safeLevel;
     s.digitalWasHigh = high;
     digital = high ? s.digitalLevel : 0.0;
@@ -175,5 +177,5 @@ extern "C" double soemdsp_clock_phase(int handle) {
 }
 
 extern "C" int soemdsp_clock_version() {
-  return 6; // 6: Amplitude latched per pulse (Digital at gate rise, Analog at cycle start, T at tick). 5: Pulse Start / Pulse End replace duty; phase published. 4: T pulse follows Phase offset
+  return 7; // 7: gate compared in fractional phase (Start 0 / End 1 never drops at fractional periods). 6: Amplitude latched per pulse (Digital at gate rise, Analog at cycle start, T at tick). 5: Pulse Start / Pulse End replace duty; phase published. 4: T pulse follows Phase offset
 }

@@ -123,20 +123,13 @@ function nodeGraphClockFaceGeometry(w, h, pulseStart, pulseEnd, stroke, heightPc
 }
 
 /**
- * True when the gate never falls: the native clock rounds Start / End to whole
- * samples of the period (floor(v * period + 0.5)), so it stays high every
- * sample when Start rounds to 0 and End rounds to the full period. Rate 0
+ * True when the gate never falls. Same rule as native clock.cpp (v7): the gate
+ * is high while phase is in [Start, End) with phase in [0, 1), so it is high on
+ * every sample exactly when Start is 0 and End is 1, at any rate. Rate 0
  * holds the gate low in the DSP, so it is never endless there.
  */
-function nodeGraphClockFaceGateEndless(pulseStart, pulseEnd, rate, sampleRate) {
-  const period = rate > 0 ? Math.max(1, sampleRate) / rate : 0;
-  if (!(period > 0)) return false;
-  // B-104: compare whole samples. The period is fractional (48000 / 74.2 =
-  // 646.9), so a fully open End (1) rounds to round(period), which is below
-  // the fractional period about half the time: the old `>= period` test
-  // flipped with the rate. Fully open = Start 0 and End 1 in sample terms.
-  const whole = Math.max(1, Math.floor(period + 0.5));
-  return Math.floor(pulseStart * period + 0.5) <= 0 && Math.floor(pulseEnd * period + 0.5) >= whole;
+function nodeGraphClockFaceGateEndless(pulseStart, pulseEnd, rate) {
+  return rate > 0 && pulseStart <= 0 && pulseEnd >= 1;
 }
 
 /** True when phase moved forward from last to now (under half a cycle, wrap allowed) past edge. */
@@ -173,8 +166,7 @@ function drawNodeGraphClockFace(section) {
   const clamp01 = (v) => Math.max(0, Math.min(1, v));
   const pulseStart = clamp01(nodeGraphClockFaceParam(node, "pulseStart", 0));
   const pulseEnd = clamp01(nodeGraphClockFaceParam(node, "pulseEnd", 0.5));
-  const sampleRate = Number(nodeGraphMvp?.live?.context?.sampleRate) || 48000;
-  const endless = nodeGraphClockFaceGateEndless(pulseStart, pulseEnd, Math.max(0, nodeGraphClockFaceParam(node, "rate", 2)), sampleRate);
+  const endless = nodeGraphClockFaceGateEndless(pulseStart, pulseEnd, Math.max(0, nodeGraphClockFaceParam(node, "rate", 2)));
   // Blink on gate start: the playhead crossed Pulse Start since the last frame.
   if (!endless && Number.isFinite(heard) && nodeGraphClockFaceCrossed(section._clockLast, heard, pulseStart)) section._clockFlash = now;
   section._clockLast = heard;

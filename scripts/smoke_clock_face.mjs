@@ -75,19 +75,19 @@ gate(polys.length === 2 && rects.length === 2, "wrapped gate: two closed pieces,
 draw({}, 0.5);
 gate(rects.length === 0, "wrapped gate: no fill outside");
 
-// Endless gate: Start 0 / End 1 (within the DSP's half-sample rounding) never falls.
+// Endless gate: Start 0 / End 1 never falls (native clock v7 compares fractional phase in [0, 1)).
 ctx.nodeGraphMvp.live.context.sampleRate = 48000;
 draw({ pulseStart: 0, pulseEnd: 1, rate: 1 }, 0.7);
 const horiz = segs.filter((s) => s.y0 === s.y1);
 gate(polys.length === 0 && horiz.length === 2, "100% gate: top and bottom only, no side strokes");
 gate(rects.length === 1 && Math.abs(rects[0].x + rects[0].w - segs[segs.length - 1].x0) < 1e-9, "100% gate: fill from cycle start to the playhead");
-draw({ pulseStart: 0.4 / 48000, pulseEnd: 1 - 0.4 / 48000, rate: 1 }, 0.5);
-gate(polys.length === 0, "within half a sample of 0 / 1 is still endless");
-draw({ pulseStart: 0, pulseEnd: 1 - 0.6 / 48000, rate: 1 }, 0.5);
-gate(polys.length === 1, "End more than half a sample short of 1 re-triggers: closed rectangle");
+draw({ pulseStart: 0, pulseEnd: 0.999, rate: 1 }, 0.5);
+gate(polys.length === 1, "End short of 1 re-triggers: closed rectangle");
+draw({ pulseStart: 0.001, pulseEnd: 1, rate: 1 }, 0.5);
+gate(polys.length === 1, "Start past 0 re-triggers: closed rectangle");
 draw({ pulseStart: 0, pulseEnd: 1, rate: 0 }, 0.5);
 gate(polys.length === 1, "Rate 0 (DSP holds the gate low): closed rectangle");
-gate(ctx.nodeGraphClockFaceGateEndless(0, 1, 2, 44100) && !ctx.nodeGraphClockFaceGateEndless(0.01, 1, 2, 44100), "endless test matches DSP rounding");
+gate(ctx.nodeGraphClockFaceGateEndless(0, 1, 2) && !ctx.nodeGraphClockFaceGateEndless(0.01, 1, 2) && !ctx.nodeGraphClockFaceGateEndless(0, 1, 0), "endless rule matches native: Start 0, End 1, Rate > 0");
 // B-104: fully open stays endless at every rate (fractional periods like 48000 / 74.2).
 {
   const miss = [];
