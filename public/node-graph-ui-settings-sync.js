@@ -958,14 +958,18 @@ function syncNodeUiDevSettingsHeaderControls() {
   const paramWireDotValue = document.getElementById("nodeUiDevParamWireDotSizeValue");
   if (paramWireThickValue) paramWireThickValue.textContent = `${paramWireThick}px`;
   if (paramWireDotValue) paramWireDotValue.textContent = `${paramWireDot}px`;
-  const notchRadius = Math.max(0, Math.min(12, nodeGraphFiniteNumber(document.getElementById("nodeUiDevRailNotchRadius")?.value, 5)));
-  const notchOpacity = Math.max(0, Math.min(100, nodeGraphFiniteNumber(document.getElementById("nodeUiDevRailNotchOpacity")?.value, 50)));
-  sliderTextHost?.style.setProperty("--node-rail-notch-radius", `${notchRadius}px`);
-  sliderTextHost?.style.setProperty("--node-rail-notch-opacity", String(notchOpacity / 100));
-  const notchRadiusValue = document.getElementById("nodeUiDevRailNotchRadiusValue");
-  const notchOpacityValue = document.getElementById("nodeUiDevRailNotchOpacityValue");
-  if (notchRadiusValue) notchRadiusValue.textContent = `${notchRadius}px`;
-  if (notchOpacityValue) notchOpacityValue.textContent = `${notchOpacity}%`;
+  // IO notch: param (rail boxes) and signal (IO-section sockets).
+  for (const [id, cssVar, max, def, unit] of [
+    ["nodeUiDevRailNotchRadius", "--node-rail-notch-radius", 12, 5, "px"],
+    ["nodeUiDevRailNotchSoft", "--node-rail-notch-soft", 100, 35, "%"],
+    ["nodeUiDevIoNotchRadius", "--node-io-notch-radius", 16, 6, "px"],
+    ["nodeUiDevIoNotchSoft", "--node-io-notch-soft", 100, 50, "%"],
+  ]) {
+    const v = Math.max(0, Math.min(max, nodeGraphFiniteNumber(document.getElementById(id)?.value, def)));
+    sliderTextHost?.style.setProperty(cssVar, unit === "%" ? String(v / 100) : `${v}px`);
+    const out = document.getElementById(`${id}Value`);
+    if (out) out.textContent = `${v}${unit}`;
+  }
   if (typeof nodeGraphGlGraphState === "object") {
     nodeGraphGlGraphState.thick = 0;
     nodeGraphGlGraphState.railNotch = null;

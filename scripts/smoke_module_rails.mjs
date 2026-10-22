@@ -223,18 +223,19 @@ for (const zoom of [0.75, 1, 1.5]) {
 await page.evaluate(() => { setNodeGraphZoom(1); drawNodeGraphWires(); });
 await page.waitForTimeout(300);
 
-// Inlet notch follows the UIDev controls live: a soft semicircle cut out of
-// the box fill on the open edge. Opacity 100 / radius 10: the band column
-// (outside the wall) shows the workspace under it and the box interior goes
-// toward the gutter under it; opacity 0 leaves the solid #111 fill.
-const notchAt = async (radius, opacity) => {
+// IO notch follows the UIDev controls live: a shader semicircle cut out of
+// the box fill on the open edge (param) and of the IO-section sockets
+// (signal). Radius 10 / soft 0: the band column (outside the wall) shows the
+// workspace under it and the box interior goes toward the gutter under it;
+// radius 0 leaves the solid #111 fill.
+const notchAt = async (radius, soft) => {
   await page.evaluate(([r, o]) => {
-    for (const [id, v] of [["nodeUiDevRailNotchRadius", r], ["nodeUiDevRailNotchOpacity", o]]) {
+    for (const [id, v] of [["nodeUiDevRailNotchRadius", r], ["nodeUiDevRailNotchSoft", o], ["nodeUiDevIoNotchRadius", r], ["nodeUiDevIoNotchSoft", o]]) {
       const el = document.getElementById(id);
       el.value = String(v);
       el.dispatchEvent(new Event("input", { bubbles: true }));
     }
-  }, [radius, opacity]);
+  }, [radius, soft]);
   await page.waitForTimeout(400);
   const box = await page.evaluate(() => {
     const b = document.querySelector('article[data-node="pp-1"] .node-parameter-row[data-param="feedback"] .modulation-input').getBoundingClientRect();
@@ -258,17 +259,17 @@ const notchAt = async (radius, opacity) => {
   const js = await crop(Math.floor(jack.x) + 1, Math.floor(jack.y), 1, 1);
   return { band: bright(quiet(0)), bandMin: dark(quiet(0)), inner: dark(quiet(2)), socket: at(js, 0, 0) };
 };
-const notchOn = await notchAt(10, 100);
-const notchOff = await notchAt(10, 0);
+const notchOn = await notchAt(10, 0);
+const notchOff = await notchAt(0, 0);
 const sum = (p) => p[0] + p[1] + p[2];
-check("notch: opacity 0 is the solid box fill", near(notchOff.bandMin, FILL, 3) && near(notchOff.inner, FILL, 3), JSON.stringify(notchOff));
-check("notch: opacity 100 / radius 10 cuts the fill out: the workspace shows in the band column", sum(notchOn.band) > sum(FILL_RGB) + 25 && Math.abs(notchOn.band[2] - notchOn.band[1]) < 12, JSON.stringify(notchOn));
-check("notch: inside the box the cut-out shows the gutter (darker than the fill)", sum(notchOn.inner) < sum(notchOff.inner) - 3, JSON.stringify([notchOn.inner, notchOff.inner]));
+check("notch: radius 0 is the solid box fill", near(notchOff.bandMin, FILL, 3) && near(notchOff.inner, FILL, 3), JSON.stringify(notchOff));
+check("notch: radius 10 / soft 0 cuts the fill out: the workspace shows in the band column", sum(notchOn.band) > sum(FILL_RGB) + 25 && Math.abs(notchOn.band[2] - notchOn.band[1]) < 12, JSON.stringify(notchOn));
+check("notch: inside the box the cut-out shows the workspace through gutter and plate", sum(notchOn.inner) > sum(notchOff.inner) + 20, JSON.stringify([notchOn.inner, notchOff.inner]));
 check("notch: IO-section inlet socket shares the cut-out (workspace shows at the jack centre)", sum(notchOn.socket) > sum(notchOff.socket) + 20, JSON.stringify([notchOn.socket, notchOff.socket]));
-await notchAt(10, 100);
-if (SHOT) await page.screenshot({ path: path.join(SHOT, "io-notch-r10-o100.png"), clip: await page.evaluate(() => { const r = document.querySelector('article[data-node="pp-1"] .dsp-node-io-section').getBoundingClientRect(); return { x: Math.max(0, r.left - 12), y: r.top, width: r.width + 24, height: r.height }; }) });
-if (SHOT) await page.screenshot({ path: path.join(SHOT, "rails-notch-r10-o100.png"), clip: await page.evaluate(() => { const row = document.querySelector('article[data-node="pp-1"] .node-parameter-row[data-param="feedback"]'); const a = row.querySelector(".modulation-input").getBoundingClientRect(); const b = row.querySelector(".parameter-output").getBoundingClientRect(); return { x: Math.max(0, Math.floor(a.left) - 12), y: Math.max(0, Math.floor(a.top) - 30), width: Math.ceil(b.right - a.left) + 24, height: Math.ceil(a.height) + 60 }; }) });
-await notchAt(5, 50);
+await notchAt(10, 0);
+if (SHOT) await page.screenshot({ path: path.join(SHOT, "io-notch-r10-s0.png"), clip: await page.evaluate(() => { const r = document.querySelector('article[data-node="pp-1"] .dsp-node-io-section').getBoundingClientRect(); return { x: Math.max(0, r.left - 12), y: r.top, width: r.width + 24, height: r.height }; }) });
+if (SHOT) await page.screenshot({ path: path.join(SHOT, "rails-notch-r10-s0.png"), clip: await page.evaluate(() => { const row = document.querySelector('article[data-node="pp-1"] .node-parameter-row[data-param="feedback"]'); const a = row.querySelector(".modulation-input").getBoundingClientRect(); const b = row.querySelector(".parameter-output").getBoundingClientRect(); return { x: Math.max(0, Math.floor(a.left) - 12), y: Math.max(0, Math.floor(a.top) - 30), width: Math.ceil(b.right - a.left) + 24, height: Math.ceil(a.height) + 60 }; }) });
+await notchAt(5, 35);
 if (SHOT) await page.locator('article[data-node="pp-1"]').screenshot({ path: path.join(SHOT, "rails3-used-only.png") });
 if (SHOT) await page.locator('article[data-node="pp-1"]').screenshot({ path: path.join(SHOT, "rails3-one-patched.png") });
 if (SHOT) await page.screenshot({ path: path.join(SHOT, "rails-workspace-patched.png") });

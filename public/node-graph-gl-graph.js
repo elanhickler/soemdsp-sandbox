@@ -679,11 +679,12 @@ function nodeGraphGlGraphDrawPlate(batch, plate, toX, toY, zoom, cssW, cssH, pla
     });
   }
   if (typeof nodeGraphGlLinesModuleOutline === "function") {
-    // The border stops at each rail IO box's top and bottom edges.
+    // The border stops at each rail IO box's top and bottom edges; the plate
+    // takes the param notch at each box's outer edge.
     const cuts = typeof nodeGraphModuleRailBorderCuts === "function" ? nodeGraphModuleRailBorderCuts(batch, plate, toX, toY, zoom) : null;
-    // IO-section inlet sockets take the same soft notch cut-out as rail IO boxes.
+    // IO-section sockets (inlets and outlets) take the shared notch, signal params.
     const notch = typeof nodeGraphRailNotch === "function" ? nodeGraphRailNotch() : null;
-    nodeGraphGlLinesModuleOutline(batch, x0, y0, w0, h0, edge, color, plateJacks, plate.fill, 0, cuts, notch && { r: notch.radius * zoom, cut: notch.opacity });
+    nodeGraphGlLinesModuleOutline(batch, x0, y0, w0, h0, edge, color, plateJacks, plate.fill, 0, cuts, notch && { r: notch.signal.radius * zoom, soft: notch.signal.soft * zoom }, notch && { r: notch.param.radius * zoom, soft: notch.param.soft * zoom });
   }
 }
 

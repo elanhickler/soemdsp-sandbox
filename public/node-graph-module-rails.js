@@ -233,15 +233,19 @@ function nodeGraphRailGrid(batch) {
   };
 }
 
-/** Inlet notch (UIDev): radius in css px and opacity 0..1, read once per GL rebuild. */
+/**
+ * IO notch (UIDev), read once per GL rebuild: param = rail IO boxes, signal =
+ * IO-section sockets. radius css px, soft = smoothstep edge width css px
+ * (the softness % of the radius).
+ */
 function nodeGraphRailNotch() {
   const state = typeof nodeGraphGlGraphState === "object" ? nodeGraphGlGraphState : null;
   if (state && state.railNotchGen === state.gen && state.railNotch) return state.railNotch;
   const host = document.getElementById("nodeGraphWorkspace") || document.documentElement;
   const cs = getComputedStyle(host);
-  const radius = Number.parseFloat(cs.getPropertyValue("--node-rail-notch-radius"));
-  const opacity = Number.parseFloat(cs.getPropertyValue("--node-rail-notch-opacity"));
-  const notch = { radius: Number.isFinite(radius) ? radius : 5, opacity: Number.isFinite(opacity) ? opacity : 0.5 };
+  const num = (name, d) => { const v = Number.parseFloat(cs.getPropertyValue(name)); return Number.isFinite(v) ? v : d; };
+  const read = (kind, r, s) => { const radius = num(`--node-${kind}-notch-radius`, r); return { radius, soft: radius * num(`--node-${kind}-notch-soft`, s) }; };
+  const notch = { param: read("rail", 5, 0.35), signal: read("io", 6, 0.5) };
   if (state) { state.railNotch = notch; state.railNotchGen = state.gen; }
   return notch;
 }
@@ -339,15 +343,27 @@ function nodeGraphModuleRailsDrawGl(batch, plates, toX, toY, zoom, cssW, cssH) {
     // Gutters span wall to separator; the separator is the rail's inner edge.
     const inL = grid.x(x0 + NODE_GRAPH_RAIL_WIDTH_PX * zoom);
     const inR = grid.x(x0 + w - NODE_GRAPH_RAIL_WIDTH_PX * zoom);
+    const notch = nodeGraphRailNotch();
+    const gutterRgba = nodeGraphRailRgba(NodeGraphRailInk.gutter);
+    // Gutter segment, with the param notch cut at each of its side's boxes so
+    // the box's notch shows the workspace through every layer under it.
+    const gutter = (gx, gy, gw, gh, side) => {
+      let at = gy;
+      for (const b of boxes.filter((q) => q.side === side && q.y >= gy && q.y + q.h <= gy + gh).sort((p, q) => p.y - q.y)) {
+        rect(gx, at, gw, b.y - at, NodeGraphRailInk.gutter);
+        nodeGraphGlLinesNotchFill(batch, gx, b.y, gw, b.h, b.ox, b.y + b.h / 2, notch.param.radius * zoom, notch.param.soft * zoom, gutterRgba);
+        at = b.y + b.h;
+      }
+      rect(gx, at, gw, gy + gh - at, NodeGraphRailInk.gutter);
+    };
     for (const [a, b] of runs) {
       const sy = grid.y(toY(plates[i].y + a));
       const sh = grid.y(toY(plates[i].y + b)) - sy;
-      rect(left, sy, inL - left, sh, NodeGraphRailInk.gutter);
+      gutter(left, sy, inL - left, sh, -1);
       rect(inL - t, sy, t, sh, NodeGraphRailInk.gutterEdge);
-      rect(inR, sy, right - inR, sh, NodeGraphRailInk.gutter);
+      gutter(inR, sy, right - inR, sh, 1);
       rect(inR, sy, t, sh, NodeGraphRailInk.gutterEdge);
     }
-    const notch = nodeGraphRailNotch();
     for (const b of boxes) {
       const border = b.border;
       // One fill from the outer edge (through the border band) to the inner
@@ -356,9 +372,7 @@ function nodeGraphModuleRailsDrawGl(batch, plates, toX, toY, zoom, cssW, cssH) {
       const fx = Math.min(b.x, b.ox);
       const fw = b.w + border;
       const fill = nodeGraphRailRgba(NodeGraphRailInk.inletFill);
-      if (typeof nodeGraphGlLinesNotchedRect === "function") {
-        nodeGraphGlLinesNotchedRect(batch, fx, b.y, fw, b.h, b.ox, b.y + b.h / 2, notch.radius * zoom, -b.side, fill, notch.opacity);
-      } else rect(fx, b.y, fw, b.h, NodeGraphRailInk.inletFill);
+      nodeGraphGlLinesNotchFill(batch, fx, b.y, fw, b.h, b.ox, b.y + b.h / 2, notch.param.radius * zoom, notch.param.soft * zoom, fill);
       const bx = b.side < 0 ? b.ox : b.x + b.w;
       rect(bx, b.y, border, t, NodeGraphRailInk.inletStroke);
       rect(bx, b.y + b.h - t, border, t, NodeGraphRailInk.inletStroke);
