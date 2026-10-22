@@ -931,7 +931,10 @@ function normalizeNodeGraphWaterfallSettings(settings = {}) {
     // the History (seconds) scroll+stamp strip. Ignore saved sourceSync.
     sourceSync: false,
     polarity: (function () {
-      const raw = String(source.facePolarity || source.polarity || defaults.polarity || "bipolar")
+      // polarity is the stored field. facePolarity is the form key / legacy
+      // alias; module defaultDisplaySettings carry it too, so preferring it
+      // let the default override a saved Polarity on every reopen.
+      const raw = String(source.polarity || source.facePolarity || defaults.polarity || "bipolar")
         .trim()
         .toLowerCase();
       if (raw === "unipolar" || raw === "uni" || raw === "unsigned") return "unipolar";

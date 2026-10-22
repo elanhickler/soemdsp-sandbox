@@ -1519,6 +1519,10 @@ function readNodeGraphTraceDisplaySettingsForm() {
     const input = root?.querySelector?.(`[data-trace-display-choice="${key}"]`);
     if (input) {
       next[key] = input.value;
+      // Polarity select is keyed facePolarity; polarity is the stored field.
+      if (key === "facePolarity") {
+        next.polarity = input.value;
+      }
     }
   }
   // Shared gradient stops — always from the single active selector instance.
@@ -1566,6 +1570,11 @@ function nodeGraphDisplaySettingsFormValue(settings, key) {
   }
   if (key === "dot1Brightness") {
     return settings.dot1Brightness ?? settings.brightness;
+  }
+  // Waterfall Polarity select is keyed facePolarity, but the normalizer
+  // stores the canonical value as polarity (facePolarity is input-only).
+  if (key === "facePolarity") {
+    return settings.polarity ?? settings.facePolarity;
   }
   // Value LED/LCD: Trail hang + Ghost floor (legacy residual / ghostBrightness).
   if (key === "trail") {
