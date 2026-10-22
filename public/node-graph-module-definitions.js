@@ -13750,7 +13750,7 @@ const nodeGraphModuleDefinitions = (
   },
   pulseTrain: {
     planRole: "processor",
-    // ƒ: absolute Hz; wired and > 0, End Time = 1/ƒ s (End Time row striped as owned by the jack).
+    // ƒ: absolute Hz; wired and > 0, Time = 1/ƒ s (Time row striped as owned by the jack).
     inputs: ["Trigger", "Reset", "f"],
     fJackParam: "endTime",
     outputs: ["Out", "End"],
@@ -13764,13 +13764,27 @@ const nodeGraphModuleDefinitions = (
     ],
     defaultDisplayMode: "face",
     parameters: [
+      {
+        choices: ["One shot", "Loop"],
+        defaultValue: "0",
+        displayChoices: true,
+        divideChoicesVisibly: true,
+        key: "mode",
+        label: "Mode",
+        linearSmoothing: false,
+        max: "1",
+        mid: "0",
+        min: "0",
+        nonlinearSlider: false,
+        step: "1"
+      },
       { constraint: "cpu", defaultValue: "12", key: "count", label: "Count", max: "128", mid: "12", min: "1", nonlinearSlider: false, step: "1" },
-      { defaultValue: "3", key: "endTime", label: "End Time", max: "12", mid: "3", min: "0", nonlinearSlider: false, step: "any", unit: "s" },
+      { defaultValue: "3", key: "endTime", label: "Time", max: "12", mid: "3", min: "0", nonlinearSlider: false, step: "any", unit: "s" },
       { defaultValue: "3", key: "curve", label: "Curve", max: "10", mid: "0", min: "-10", nonlinearSlider: false, step: "any" },
       { defaultValue: "1", key: "ampStart", label: "Amp Start", max: "1", mid: "0.5", min: "0", nonlinearSlider: false, step: "any" },
       { defaultValue: "0.2", key: "ampEnd", label: "Amp End", max: "1", mid: "0.5", min: "0", nonlinearSlider: false, step: "any" },
       { defaultValue: "0", key: "ampCurve", label: "Amp Curve", max: "10", mid: "0", min: "-10", nonlinearSlider: false, step: "any" },
-      { defaultValue: "1", key: "amplitude", label: "Amplitude", max: "2", mid: "1", min: "0", nonlinearSlider: false, step: "any" },
+      { defaultValue: "1", key: "amplitude", label: "Amplitude", max: "1", mid: "1", min: "0", nonlinearSlider: false, step: "any" },
     ]
   },
   pulseExplosion: {

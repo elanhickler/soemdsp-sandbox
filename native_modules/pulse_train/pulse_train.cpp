@@ -13,7 +13,19 @@
 // Curve > 0: gaps grow (fast first, stretching out); 0: even; < 0: gaps
 // shrink (a real bouncing ball settling speeds up). First pulse at t = 0,
 // last pulse at exactly End (End 0..12 s). E_k is the Early Reflections tap
-// spacing family (k = 3 there). Velocity = shared gate_hit velocity of the
+// spacing family (k = 3 there).
+// Mode (append-only ids): 0 One shot (default): as above, u_i = i/(N-1), last
+// pulse exactly at Time. 1 Loop: free-runs from module start with no trigger;
+// the cycle is Time seconds and repeats, params re-latched at each cycle
+// start; u_i = i / N so the schedule spans [0, Time) and the last pulse
+// (Time * E(u_{N-1})) never lands on the next cycle's first pulse at 0.
+// Trigger / Reset hits restart the cycle at 0 (Trigger velocity is kept for
+// later cycles; free-run velocity is 1). End fires on each cycle's last pulse.
+// Time 0 in Loop: a 1-sample cycle (all pulses every sample).
+// Kept guards (everything else is limited only by the param definitions):
+// Count 1..128 (pulse buffer size; NaN -> 1), Time < 0 / NaN -> 0 (no pulses
+// before the trigger), t_i kept in [0, Time] (dsp_exp overflow at extreme
+// Curve gives NaN; rounding), sampleRate < 1 -> 44100 (divide by zero). Velocity = shared gate_hit velocity of the
 // Trigger hit. Pulse i plays on the first sample n (counted from the trigger
 // sample, n = 0) with n / sampleRate >= t_i; pulses landing on one sample add.
 // End output: 1 on the sample the last pulse plays. Reset hit: stops the
@@ -30,7 +42,6 @@ namespace {
 
 static const int kMaxInstances = 32;
 static const int kMaxPulses = 128;
-static const double kMaxEnd = 12.0;
 
 struct PulseTrainState {
   bool active;
@@ -44,6 +55,9 @@ struct PulseTrainState {
   double amps[kMaxPulses];
   double endOut;
   double elapsed;
+  double cycle;     // Loop: latched Time of this cycle (s)
+  double velocity;  // Loop: velocity of the last Trigger hit (1 free-run)
+  bool endFired;    // Loop: End already sent this cycle
 };
 
 static PulseTrainState gPool[kMaxInstances];
@@ -58,16 +72,15 @@ static inline double curveShape(double k, double u) {
 
 static int buildSchedule(
   double* times, double* amps, double count, double endTime, double curve,
-  double ampStart, double ampEnd, double ampCurve, double amplitude, double velocity
+  double ampStart, double ampEnd, double ampCurve, double amplitude, double velocity, bool loop
 ) {
   int n = 1;
   if (count >= 1.0) n = count >= (double)kMaxPulses ? kMaxPulses : (int)(count + 0.5);
-  double end = endTime > 0.0 ? endTime : 0.0;  // NaN -> 0
-  if (end > kMaxEnd) end = kMaxEnd;
+  const double end = endTime > 0.0 ? endTime : 0.0;  // NaN / negative -> 0
   for (int i = 0; i < n; i++) {
-    const double u = n > 1 ? (double)i / (double)(n - 1) : 0.0;
-    double t = i == n - 1 && n > 1 ? end : end * curveShape(curve, u);
-    if (t < 0.0) t = 0.0;
+    const double u = loop ? (double)i / (double)n : (n > 1 ? (double)i / (double)(n - 1) : 0.0);
+    double t = !loop && i == n - 1 && n > 1 ? end : end * curveShape(curve, u);
+    if (!(t >= 0.0)) t = 0.0;
     if (t > end) t = end;
     times[i] = t;
     amps[i] = (ampStart + (ampEnd - ampStart) * curveShape(ampCurve, u)) * amplitude * velocity;
@@ -77,7 +90,7 @@ static int buildSchedule(
 
 }  // namespace
 
-extern "C" int soemdsp_pulse_train_version() { return 1; }
+extern "C" int soemdsp_pulse_train_version() { return 2; }
 
 extern "C" int soemdsp_pulse_train_create() {
   for (int i = 0; i < kMaxInstances; i++) {
@@ -91,6 +104,9 @@ extern "C" int soemdsp_pulse_train_create() {
       s.next = 0;
       s.endOut = 0.0;
       s.elapsed = -1.0;
+      s.cycle = 0.0;
+      s.velocity = 1.0;
+      s.endFired = false;
       s.active = true;
       return i + 1;
     }
@@ -105,18 +121,27 @@ extern "C" void soemdsp_pulse_train_destroy(int handle) {
 
 extern "C" double soemdsp_pulse_train_sample(
   int handle, double trigger, double reset, double count, double endTime, double curve,
-  double ampStart, double ampEnd, double ampCurve, double amplitude, double sampleRate
+  double ampStart, double ampEnd, double ampCurve, double amplitude, double sampleRate, double mode
 ) {
   if (handle < 1 || handle > kMaxInstances) return 0.0;
+  const bool loop = mode > 0.5;
   PulseTrainState& s = gPool[handle - 1];
   const double sr = sampleRate < 1.0 ? 44100.0 : sampleRate;
   s.endOut = 0.0;
-  if (gate_hit(reset, &s.prevReset)) s.running = false;
-  if (gate_hit(trigger, &s.prevTrig)) {
-    const double v = gate_hit_velocity();
-    s.count = buildSchedule(s.times, s.amps, count, endTime, curve, ampStart, ampEnd, ampCurve, amplitude, v);
+  const bool resetHit = gate_hit(reset, &s.prevReset);
+  if (resetHit && !loop) s.running = false;
+  const bool trigHit = gate_hit(trigger, &s.prevTrig);
+  if (trigHit) s.velocity = gate_hit_velocity();
+  // Loop: start (free-run), restart on Trigger / Reset, or wrap at the cycle end.
+  const bool loopStart = loop && (!s.running || trigHit || resetHit
+    || (s.n > 0 && (double)s.n / sr >= s.cycle));
+  if (trigHit || loopStart) {
+    const double v = trigHit ? gate_hit_velocity() : s.velocity;
+    s.count = buildSchedule(s.times, s.amps, count, endTime, curve, ampStart, ampEnd, ampCurve, amplitude, v, loop);
+    s.cycle = endTime > 0.0 ? endTime : 0.0;
     s.next = 0;
     s.n = 0;
+    s.endFired = false;
     s.running = true;
   }
   if (!s.running) {
@@ -130,9 +155,15 @@ extern "C" double soemdsp_pulse_train_sample(
     out += s.amps[s.next];
     s.next++;
   }
-  if (s.next >= s.count) {
+  if (!loop) {
+    if (s.next >= s.count) {
+      s.endOut = 1.0;
+      s.running = false;
+    }
+  } else if (s.next >= s.count && !s.endFired) {
+    // Loop: End once per cycle, on the sample the last pulse plays.
     s.endOut = 1.0;
-    s.running = false;
+    s.endFired = true;
   }
   s.n++;
   return out;
@@ -151,10 +182,10 @@ extern "C" double soemdsp_pulse_train_elapsed(int handle) {
 
 extern "C" int soemdsp_pulse_train_preview(
   double count, double endTime, double curve, double ampStart, double ampEnd,
-  double ampCurve, double amplitude
+  double ampCurve, double amplitude, double mode
 ) {
   gPreviewCount = buildSchedule(gPreviewTimes, gPreviewAmps, count, endTime, curve,
-    ampStart, ampEnd, ampCurve, amplitude, 1.0);
+    ampStart, ampEnd, ampCurve, amplitude, 1.0, mode > 0.5);
   return gPreviewCount;
 }
 

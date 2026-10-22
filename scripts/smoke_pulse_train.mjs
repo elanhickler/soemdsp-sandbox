@@ -1,5 +1,5 @@
 // Pulse Train: schedule t_i = End * E_k(u_i) (E_k(u) = (e^(k u) - 1) / (e^k - 1),
-// k = 0 linear), first pulse 0, last pulse == End <= 12 s, gaps grow for
+// k = 0 linear), first pulse 0, last pulse == End (no cap past 12 s), gaps grow for
 // Curve > 0 (even at 0, shrink below 0), amplitude curve, preview == played
 // sample-exact (velocity scales), End out, Reset stops, graph path == direct.
 import fs from "fs";
@@ -31,14 +31,13 @@ function preview(E2, set) {
 // 1) Schedule formulas
 for (const [k, set] of SETS.entries()) {
   const [count, end0, curve, aS, aE, aC, amp] = set;
-  const end = Math.min(12, Math.max(0, end0));
+  const end = Math.max(0, end0);
   const { t, a } = preview(N, set);
   const s2 = preview(S, set);
   if (JSON.stringify(s2) !== JSON.stringify({ t, a })) throw new Error(`set ${k}: standalone preview != combined`);
   if (t.length !== count) throw new Error(`set ${k}: count ${t.length}`);
   if (t[0] !== 0) throw new Error(`set ${k}: first pulse ${t[0]}`);
   if (count > 1 && t[count - 1] !== end) throw new Error(`set ${k}: last ${t[count - 1]} != End ${end}`);
-  if (t[count - 1] > 12) throw new Error(`set ${k}: past 12 s`);
   let worst = 0, worstA = 0;
   for (let i = 0; i < count; i++) {
     const u = count > 1 ? i / (count - 1) : 0;
@@ -53,7 +52,7 @@ for (const [k, set] of SETS.entries()) {
     if (!ok) throw new Error(`set ${k}: gap ${i} ${g0} -> ${g1} (curve ${curve})`);
   }
 }
-console.log(`ok pulseTrain schedule: ${SETS.length} sets, t_i = End*E_k(u_i), first 0, last == End (End 20 -> 12), gaps grow / even / shrink by Curve sign, amp curve, standalone == combined`);
+console.log(`ok pulseTrain schedule: ${SETS.length} sets, t_i = End*E_k(u_i), first 0, last == End (End 20 plays at 20 s, no hidden cap), gaps grow / even / shrink by Curve sign, amp curve, standalone == combined`);
 // 2) Playback == preview sample-exact, velocity scales, End out, elapsed.
 function play(E2, set, trigFn, resetFn, n) {
   const h = E2.soemdsp_pulse_train_create();
@@ -78,7 +77,7 @@ function expected(set, vel, at, n) {
 }
 for (const [k, set] of SETS.entries()) {
   for (const vel of [1, 0.5]) {
-    const at = 37, n = at + Math.ceil(12.01 * SR);
+    const at = 37, n = at + Math.ceil((Math.max(12, set[1]) + 0.01) * SR);
     const r = play(N, set, (i) => (i >= at ? vel : 0), () => 0, n);
     const { y, last } = expected(set, vel, at, n);
     for (let i = 0; i < n; i++) if (Math.abs(r.out[i] - y[i]) > 1e-12) throw new Error(`set ${k} vel ${vel}: sample ${i} out ${r.out[i]} expected ${y[i]}`);

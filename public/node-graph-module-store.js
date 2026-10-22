@@ -2039,7 +2039,7 @@ const nodeGraphModuleStoreCatalog = Object.freeze({
   },
   pulseTrain: {
     category: "clock",
-    description: "On trigger, a train of pulses that starts fast and stretches out, like something slowing down. Curve sets how fast the gaps grow (0 even, below 0 the gaps shrink like a bouncing ball). Last pulse at End Time (up to 12 s).",
+    description: "On trigger, a train of pulses that starts fast and stretches out, like something slowing down. Curve sets how fast the gaps grow (0 even, below 0 the gaps shrink like a bouncing ball). Last pulse at Time. Mode Loop repeats the train every Time seconds with no trigger needed; Trigger / Reset restart it.",
     label: "Pulse Train",
     notes: ["trigger", "pulse train", "slowing down", "growing gaps", "bouncing ball", "End", "native"],
   },

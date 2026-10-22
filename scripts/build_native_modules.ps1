@@ -845,6 +845,11 @@ if ($node) {
   if ($LASTEXITCODE -ne 0) {
     throw "Combined build: Pulse Train ƒ smoke FAILED"
   }
+  # Pulse Train Mode: One shot unchanged, no 12 s cap, Loop free-run cycles / seam / End / re-sync.
+  & $node.Source "$root\scripts\smoke_pulse_train_loop.mjs"
+  if ($LASTEXITCODE -ne 0) {
+    throw "Combined build: Pulse Train Loop smoke FAILED"
+  }
   # Resonant Compressor: Gain == Resonant Envelope SC (max diff 0), drums get quieter.
   & $node.Source "$root\scripts\smoke_graph_resonant_compressor.mjs"
   if ($LASTEXITCODE -ne 0) {

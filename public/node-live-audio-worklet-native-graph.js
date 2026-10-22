@@ -6341,6 +6341,7 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
       push("ampEnd", P.NATIVE_GRAPH_PARAM_IN_HIGH, cont("ampEnd", 0.2));
       push("ampCurve", P.NATIVE_GRAPH_PARAM_WIDTH, cont("ampCurve", 0));
       push("amplitude", P.NATIVE_GRAPH_PARAM_AMPLITUDE, cont("amplitude", 1));
+      push("mode", P.NATIVE_GRAPH_PARAM_TIMING_MODE, disc("mode", 0)); // 0 One shot / 1 Loop
       continue;
     }
     if (type === "pulseExplosion") {

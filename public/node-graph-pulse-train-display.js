@@ -1,7 +1,7 @@
 // Pulse Train face: where the pulses land, adapted from the Pulse Explosion
 // face (node-graph-pulse-explosion-display.js) without sharing its state.
 // One stem per pulse at its time after the trigger, height = amplitude, dot
-// on top, time axis 0 .. End Time. The schedule comes from the engine
+// on top, time axis 0 .. Time (Loop: the whole cycle; the playhead wraps). The schedule comes from the engine
 // (soemdsp_pulse_train_preview in pulse_train.wasm), so it is exactly what a
 // trigger with velocity 1 plays. Playhead: __Elapsed (seconds since trigger,
 // -1 idle) shifted to the heard time; fired pulses light up.
@@ -15,7 +15,7 @@ function nodeGraphPulseTrainPreviewLoad() {
   if (nodeGraphPulseTrainPreviewWasm.promise || typeof fetch !== "function" || typeof WebAssembly === "undefined") {
     return nodeGraphPulseTrainPreviewWasm.promise;
   }
-  nodeGraphPulseTrainPreviewWasm.promise = fetch("/native_modules/pulse_train/pulse_train.wasm?v=pulse-train-f-1")
+  nodeGraphPulseTrainPreviewWasm.promise = fetch("/native_modules/pulse_train/pulse_train.wasm?v=pulse-train-loop-2")
     .then((response) => {
       if (!response.ok) throw new Error(`pulse_train wasm HTTP ${response.status}`);
       return response.arrayBuffer();
@@ -48,7 +48,7 @@ function nodeGraphPulseTrainSchedule(section, node) {
     return null;
   }
   const p = (key, fallback) => nodeGraphPulseTrainFaceParam(node, key, fallback);
-  // ƒ wired (End Time row owned by the jack): the engine's effective End Time (__End = 1/ƒ).
+  // ƒ wired (Time row owned by the jack): the engine's effective Time (__End = 1/ƒ).
   let endTime = p("endTime", 3);
   const owned = section.closest?.(".node, article")?.querySelector?.('.node-parameter-row.f-jack-owns-frequency[data-param="endTime"]');
   if (owned && typeof nodeGraphModuleScopeLatestOutputValue === "function") {
@@ -58,6 +58,7 @@ function nodeGraphPulseTrainSchedule(section, node) {
   const args = [
     Math.round(p("count", 12)), endTime, p("curve", 3),
     p("ampStart", 1), p("ampEnd", 0.2), p("ampCurve", 0), p("amplitude", 1),
+    Math.round(p("mode", 0)),
   ];
   const key = args.join(",");
   if (section._pulseTrainKey === key && section._pulseTrainSchedule) return section._pulseTrainSchedule;
@@ -70,9 +71,11 @@ function nodeGraphPulseTrainSchedule(section, node) {
     amps[i] = wasm.soemdsp_pulse_train_preview_amplitude(i);
     peak = Math.max(peak, Math.abs(amps[i]));
   }
-  const end = count ? Math.max(0.001, times[count - 1]) : 0.001;
+  // Axis: 0 .. Time (One shot: the last pulse; Loop: the whole cycle, last pulse before it).
+  const loop = args[7] > 0.5;
+  const end = loop ? Math.max(0.001, Number(endTime) || 0) : (count ? Math.max(0.001, times[count - 1]) : 0.001);
   section._pulseTrainKey = key;
-  section._pulseTrainSchedule = { times, amps, end, peak };
+  section._pulseTrainSchedule = { times, amps, end, peak, loop };
   return section._pulseTrainSchedule;
 }
 
@@ -136,7 +139,9 @@ function drawNodeGraphPulseTrainDisplay(section) {
   const dim = (c, a) => [c[0], c[1], c[2], c[3] * a];
   nodeGraphGlLinesSegment(batch, x0, base, x1, base, Math.max(0.5, halfPx * 0.5), fine, dim(line, 0.6));
   for (const x of [x0, x1]) nodeGraphGlLinesSegment(batch, x, base - 3, x, base + 3, 0.5, fine, dim(line, 0.6));
-  const elapsed = schedule ? nodeGraphPulseTrainHeardElapsed(section, end) : Number.NaN;
+  let elapsed = schedule ? nodeGraphPulseTrainHeardElapsed(section, schedule.loop ? Infinity : end) : Number.NaN;
+  // Loop: the heard playhead wraps every cycle (the engine restarts __Elapsed at 0).
+  if (schedule?.loop && Number.isFinite(elapsed)) elapsed %= end;
   const playing = Number.isFinite(elapsed);
   if (schedule) {
     const { times, amps } = schedule;
