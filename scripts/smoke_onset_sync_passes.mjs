@@ -91,15 +91,28 @@ const W = canvas.width;
 const colOf = (rel) => Math.min(W - 1, Math.floor((rel / FACE) * W));
 // Sample-accurate reference: every sample, in order, written into its pass's
 // column; a Reset restarts at column 0 and overwrites only what it reaches.
-// Pause at end off: the pass wraps to x = 0 every FACE samples, from the
-// first sample until the first Reset too.
+// Pause at end off: the pass wraps every FACE samples, from the first sample
+// until the first Reset too, but holds when the next Reset (last gap) would
+// cut the wrapped window short.
 const reference = (abs) => {
   const cols = new Array(W).fill(null);
   const pause = settings.pauseAtEnd === true;
   let r = pause ? -1 : 0;
+  let last = -1;
+  let gap = 0;
   for (let f = 0; f < abs; f += 1) {
-    if (resetBuf[f] === 1) r = f;
-    if (!pause && r >= 0 && f - r >= FACE) r += FACE * Math.floor((f - r) / FACE);
+    if (resetBuf[f] === 1) {
+      if (last >= 0) gap = f - last;
+      last = f;
+      r = f;
+    }
+    // A wrap needs a whole window before the next expected Reset.
+    const next = gap > 0 ? last + gap : -Infinity;
+    while (!pause && r >= 0 && f - r >= FACE) {
+      const at = r + FACE;
+      if (!(f > next + FACE || at >= next || at + FACE <= next)) break;
+      r = at;
+    }
     if (r < 0 || f - r >= FACE) continue;
     const c = colOf(f - r);
     if (!cols[c] || cols[c].origin !== r) cols[c] = { origin: r, frames: [] };

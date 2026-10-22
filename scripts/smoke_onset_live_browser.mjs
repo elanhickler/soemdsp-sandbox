@@ -1,6 +1,6 @@
 // Real-browser Onset smoke: loads the patch in PATCH (default runaway triggers.json), plays through the worklet, asserts the sweep draws every frame with new audio and settings repaint.
 // Asserts every Reset edge restarts the sweep at Position on that sample, and the mod rail is closed with no param wires.
-// Run: node scripts/smoke_onset_live_browser.mjs  (env: SYNC=1 RESET_OUT=1 SETTINGS=1 FRAMES=30 NEED_RESET=1)
+// Run: node scripts/smoke_onset_live_browser.mjs  (env: SYNC=1 RESET_OUT=1 SETTINGS=1 FRAMES=30 NEED_RESET=1 STABLE=1 PATCH=... HISTORY=s)
 // Per-frame trace of the real 1D Onset pipeline on Argi's patch.
 import fs from "node:fs";
 import { chromium } from "playwright-core";
@@ -8,6 +8,7 @@ const d = JSON.parse(fs.readFileSync(process.env.PATCH || new URL("./fixtures/on
 const on = d.nodes.find((n) => n.type === "onset");
 if (process.env.SYNC) on.traceDisplaySettings.resetSync = true;
 if (process.env.RESET_OUT) for (const c of d.connections) if (c.destinationNode === on.id && c.destinationPort === "Reset") c.sourcePort = "Out";
+if (process.env.HISTORY) on.traceDisplaySettings.historySeconds = on.traceDisplaySettings.zoomSeconds = Number(process.env.HISTORY);
 const body = JSON.stringify(d);
 const OUT = process.env.OUT || "scripts/out/onset-live";
 fs.mkdirSync(OUT, { recursive: true });
@@ -33,6 +34,15 @@ await page.evaluate((id) => {
     const st0 = L.strips.length;
     const r = op(spec, live);
     const p = spec.canvas._onset || {};
+    if (p.origin !== pre.origin && L.rs.length && L.rs[L.rs.length - 1].hits.length) {
+      const S = spec.canvas._wfGlSession; const gl = S.gl; const t = { width: S.w, height: S.h };
+      const px = new Uint8Array(S.w * S.h * 4); gl.bindFramebuffer(gl.FRAMEBUFFER, S.read.fbo); gl.readPixels(0, 0, S.w, S.h, gl.RGBA, gl.UNSIGNED_BYTE, px); gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+      const pos = Number(nodeGraphPatchNode(spec.slot.nodeId)?.params?.position || 0);
+      const x0 = Math.floor(pos * t.width), band = Math.ceil(((p.drawn - p.origin) / p.latchedSamples) * t.width) + 4;
+      const cols = new Array(t.width).fill(0); let ink = 0;
+      for (let y = 0; y < t.height; y += 1) for (let x = 0; x < t.width; x += 1) { const v = px[(y * t.width + x) * 4]; cols[x] = (cols[x] * 31 + v * (y + 1)) >>> 0; ink += v > 64 ? 1 : 0; }
+      (L.snaps || (L.snaps = [])).push({ origin: p.origin, x0, band, ink, cols });
+    }
     L.paints.push({ t: performance.now() | 0, raf: L.raf, abs, avail, w: spec.canvas.width, pre, post: { origin: p.origin, drawn: p.drawn, lp: p.lastPixel, parked: p.parked, face: p.latchedSamples }, strips: L.strips.length - st0, r });
     return r;
   };
@@ -97,7 +107,7 @@ fs.writeFileSync(`${OUT}/${process.env.TAG || "f"}-log.json`, JSON.stringify(L))
 const p = L.paints;
 let gaps = 0, back = 0, maxGap = 0;
 for (let i = 1; i < p.length; i += 1) { const dt = p[i].t - p[i - 1].t; if (dt > 50) gaps += 1; maxGap = Math.max(maxGap, dt); if (p[i].abs < p[i - 1].abs) back += 1; }
-const idle = p.filter((x, i) => i > 5 && x.strips === 0 && x.abs > p[i - 1].abs).length;
+const idle = p.filter((x, i) => i > 5 && x.strips === 0 && x.abs > p[i - 1].abs && x.post.drawn - x.post.origin < x.post.face).length;
 console.log(JSON.stringify({ idlePaintsWithNewAudio: idle, paints: p.length, wf: L.wf, wfOnset: L.wfOnset, strips: L.strips.length, gaps, maxGap, absBack: back, first: p.slice(0, 3), sample: p.filter((_, i) => i % 25 === 0).slice(0, 12) }));
 await b.close();
 const fail = [];
@@ -106,6 +116,16 @@ if (process.env.NEED_RESET && !hits.length) fail.push("no Reset edge seen");
 for (const h of hits) { const at = L.paints.find((x) => x.abs > h); if (!at || at.post.origin !== h) fail.push(`Reset at ${h} did not restart (origin ${at?.post.origin})`); }
 if (rail.open !== rail.wired) fail.push(`mod rail open=${rail.open} but param wires=${rail.wired}`);
 console.log("reset edges", JSON.stringify(hits));
+if (process.env.STABLE) {
+  // The first two Resets only learn the Reset gap; passes from the third on must match.
+  const sn = (L.snaps || []).slice(3);
+  const band = Math.max(0, ...sn.map((x) => x.band));
+  const diff = sn.map((x) => x.cols.filter((v, c) => (c - x.x0 + x.cols.length) % x.cols.length >= band && v !== sn[0].cols[c]).length);
+  console.log("pass diffs (columns)", JSON.stringify(diff), "band", band, "ink", JSON.stringify(sn.map((x) => x.ink)));
+  if (sn.length < 2) fail.push("not enough passes to compare");
+  if (sn.some((x) => x.ink === 0)) fail.push("blank snapshot");
+  if (diff.some((n) => n > 0)) fail.push("consecutive passes differ");
+}
 if (idle > 0) fail.push(`idle paints with new audio: ${idle}`);
 if (L.strips.length < p.length / 2) fail.push(`too few strips ${L.strips.length}/${p.length}`);
 if (back > 0) fail.push(`abs went back ${back}`);

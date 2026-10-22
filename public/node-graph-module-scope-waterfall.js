@@ -268,7 +268,7 @@ function nodeGraphOnsetSmoothRun(run) {
  * Draw columns begin..end-1 of every trace into the face texture with the
  * shared antialiased GL line drawer: fill first (outline to the zero line, or
  * to the bottom with Bottom fill), then the stroke, channels in order.
- * clipX0 (canvas px): ink only at x >= clipX0. The strip then starts two
+ * clipX0 (canvas px): ink only at x >= clipX0. The strip then starts a few
  * finished columns early so the curve enters it with the right slope.
  */
 function nodeGraphOnsetDrawStrip(canvas, onset, keys, slot, settings, height, width, faceSamples, startPx, begin, end, clipX0 = null) {
@@ -284,7 +284,8 @@ function nodeGraphOnsetDrawStrip(canvas, onset, keys, slot, settings, height, wi
     return;
   }
   const strokePx = nodeGraphOnsetStrokeCanvasPx(canvas, settings);
-  const from = clipX0 == null ? begin : Math.max(0, begin - 2);
+  // Enough finished columns that every segment reaching the clip is redrawn.
+  const from = clipX0 == null ? begin : Math.max(0, begin - 2 - Math.ceil(strokePx));
   const curves = [];
   for (let i = 0; i < keys.length; i += 1) {
     const trace = onset.traces?.[keys[i]];
@@ -382,7 +383,7 @@ function nodeGraphOnsetPaint(spec, live) {
     planck,
     onset,
     "reset",
-    resetSync ? (frame) => resetEdges.push(frame) : null,
+    (frame) => resetEdges.push(frame),
   );
   let signalHit = nodeGraphOnsetScanEdges(live, scanFrom, absEnd, planck, onset, "signal");
   const right = spec.stereoBuffers?.right;
@@ -528,12 +529,24 @@ function nodeGraphOnsetPaint(spec, live) {
         nodeGraphWaterfallGlClearColumn(canvas, (startPx + c) % width, 1, plateBg);
       }
     }
-    // A strip across the Position seam draws unclipped from c0.
-    const wraps = startPx + c0 < width && startPx + endAll >= width;
-    nodeGraphOnsetDrawStrip(
-      canvas, onset, keys, spec.slot, settings, height, width, faceSamples, startPx,
-      c0, endAll + 1, wraps ? null : (startPx + c0) % width,
-    );
+    // A strip across the right edge (x wraps to 0) draws in two parts, each
+    // only over its own cleared columns: no ink lands twice.
+    const edge = width - startPx;
+    if (c0 < edge && endAll >= edge) {
+      nodeGraphOnsetDrawStrip(
+        canvas, onset, keys, spec.slot, settings, height, width, faceSamples, startPx,
+        c0, edge, startPx + c0,
+      );
+      nodeGraphOnsetDrawStrip(
+        canvas, onset, keys, spec.slot, settings, height, width, faceSamples, startPx,
+        edge, endAll + 1,
+      );
+    } else {
+      nodeGraphOnsetDrawStrip(
+        canvas, onset, keys, spec.slot, settings, height, width, faceSamples, startPx,
+        c0, endAll + 1, (startPx + c0) % width,
+      );
+    }
   };
   const restart = (at) => {
     onset.origin = at;
@@ -542,27 +555,57 @@ function nodeGraphOnsetPaint(spec, live) {
     onset.live = true;
     onset.lastPixel = -1;
   };
+  // A wrapped pass starts at Position on the next sample after the window. It
+  // only starts when a whole window fits before the next Reset expected from
+  // the last Reset gap; otherwise the sweep holds at the end so that Reset
+  // (not a wrap at another phase) starts the next pass. Without Reset it
+  // always wraps; a Reset overdue by a window (stopped or unplugged) no
+  // longer holds it.
+  const nextReset = () => (onset.resetGap > 0 && Number.isFinite(onset.lastReset)
+    ? onset.lastReset + onset.resetGap
+    : -Infinity);
+  // `stop` is exclusive: the newest swept sample is stop - 1.
+  const wrapFits = (at, stop) => stop - 1 > nextReset() + faceSamples
+    || at >= nextReset() || at + faceSamples <= nextReset();
   // Sweep the current pass up to `stop`. Continuous: at the end of the window
-  // the cursor wraps to x = 0 on the next sample and keeps overwriting.
+  // the cursor wraps to x = Position and keeps overwriting.
   const sweepUntil = (stop) => {
     if (!onset.live || !Number.isFinite(onset.origin)) return;
     if (!pauseAtEnd) {
-      // Whole windows older than the last one would be overwritten anyway.
-      const behind = Math.floor((stop - onset.origin) / faceSamples) - 1;
-      if (behind > 0) restart(onset.origin + behind * faceSamples);
-      while (onset.origin + faceSamples <= stop) {
+      while (onset.origin + faceSamples <= stop && wrapFits(onset.origin + faceSamples, stop)) {
+        // Whole windows older than the last one would be overwritten anyway.
+        const skip = Math.floor((stop - onset.origin) / faceSamples) - 1;
+        if (skip > 0 && wrapFits(onset.origin + skip * faceSamples, stop)) {
+          restart(onset.origin + skip * faceSamples);
+          continue;
+        }
         sweepTo(onset.origin + faceSamples);
         restart(onset.origin + faceSamples);
       }
     }
     sweepTo(stop);
   };
-  // Each new start restarts the cursor at x = 0 on that exact sample.
+  // Reset edges in sample order: each one updates the expected next Reset
+  // once the sweep reaches it.
+  let edge = 0;
+  const noteResets = (upTo) => {
+    for (; edge < resetEdges.length && resetEdges[edge] <= upTo; edge += 1) {
+      sweepUntil(resetEdges[edge]);
+      if (Number.isFinite(onset.lastReset) && resetEdges[edge] > onset.lastReset) {
+        onset.resetGap = resetEdges[edge] - onset.lastReset;
+      }
+      onset.lastReset = resetEdges[edge];
+    }
+  };
+  // Each new start restarts the cursor at x = Position on that exact sample.
   // Nothing is cleared at a restart.
   for (let i = 0; i < starts.length; i += 1) {
+    noteResets(starts[i] - 1);
     sweepUntil(starts[i]);
     restart(starts[i]);
+    noteResets(starts[i]);
   }
+  noteResets(absEnd);
   sweepUntil(absEnd);
   present();
   return true;
