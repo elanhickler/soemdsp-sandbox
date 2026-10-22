@@ -2277,6 +2277,50 @@ function nodeGraphGlHitLabelPort(label) {
   return row?.querySelector?.(".node-port, .node-param-port") || null;
 }
 
+/** Parameter row under a client point, using the same world box that scrubs the slider. */
+function nodeGraphGlParamRowAtClient(clientX, clientY) {
+  if (typeof nodeGraphClientToZoomSurfacePoint !== "function") return null;
+  const point = nodeGraphClientToZoomSurfacePoint(clientX, clientY);
+  if (!point) return null;
+  const sliders = nodeGraphGlGraphState.chrome?.sliders || [];
+  for (let i = sliders.length - 1; i >= 0; i -= 1) {
+    const slider = sliders[i];
+    const sx = slider.hitX ?? slider.x;
+    const sy = slider.hitY ?? slider.y;
+    const sw = slider.hitW ?? slider.w;
+    const sh = slider.hitH ?? slider.h;
+    if (point.x < sx || point.x > sx + sw || point.y < sy || point.y > sy + sh) continue;
+    let readout = slider.readout;
+    if (readout && !readout.isConnected && typeof nodeSliderResolveLiveReadout === "function") {
+      readout = nodeSliderResolveLiveReadout(readout);
+    }
+    const row = readout?.closest?.(".node-parameter-row")
+      || slider.input?.closest?.(".node-parameter-row")
+      || null;
+    if (row) return row;
+  }
+  return null;
+}
+
+/**
+ * An armed wire lands on the parameter control (mod inlet, or the thru when
+ * the pending end is an input). The mod jack itself has no box until the
+ * rail opens, so the jack hit test cannot take this click.
+ * Returns true when the gesture was a wire completion.
+ */
+function nodeGraphFinishArmedWireOnParamRow(row, event) {
+  const mode = nodeGraphMvp?.portConnectionMode;
+  if (!row || !mode || mode.movingWires) return false;
+  if (event?.ctrlKey || event?.metaKey || (event?.button !== undefined && event.button !== 0)) return false;
+  const port = row.querySelector(":scope > .node-param-port.modulation-input")
+    || row.querySelector(":scope > .node-param-port.parameter-output");
+  const handler = nodeGraphWireInteractions?.handlePortClick;
+  if (!port || typeof handler !== "function") return false;
+  event.glParamDrop = true;
+  handler(nodeGraphGlHitRetarget(event, port));
+  return true;
+}
+
 function nodeGraphGlHitPointerDown(event) {
   if (event.button !== 0 && event.button !== 2) return;
   if (nodeGraphGlHitIsLiveHtml(event.target) || nodeGraphGlHitKeepsNativeTarget(event.target)) return;
@@ -2294,6 +2338,13 @@ function nodeGraphGlHitPointerDown(event) {
     return;
   }
   if (hit.kind === "slider" && hit.readout) {
+    const row = hit.readout.closest?.(".node-parameter-row")
+      || hit.readout.closest?.("label")?.closest?.(".node-parameter-row");
+    if (row && nodeGraphFinishArmedWireOnParamRow(row, event)) {
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
     event.preventDefault();
     event.stopPropagation();
     if (event.button === 0 && typeof beginNodeSliderDrag === "function") {

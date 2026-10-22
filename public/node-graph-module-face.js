@@ -361,6 +361,17 @@ function beginNodeGraphModuleFaceGesture(article, face, spec, event) {
   if (!wd) return;
   event.preventDefault();
   event.stopPropagation();
+  // Armed wire: the face control is the patch point, same as a slider row.
+  if (nodeGraphMvp?.portConnectionMode && !nodeGraphMvp.portConnectionMode.movingWires
+    && typeof nodeGraphFinishArmedWireOnParamRow === "function") {
+    const keys = nodeGraphModuleFaceWidgetKeys(wd).filter(Boolean);
+    const u = (p.x - wd.x) / Math.max(1, wd.w);
+    const key = keys[Math.max(0, Math.min(keys.length - 1, Math.floor(u * keys.length)))] || "";
+    const row = key
+      ? article.querySelector(`.node-parameter-row[data-param="${CSS.escape(key)}"]`)
+      : null;
+    if (row && nodeGraphFinishArmedWireOnParamRow(row, event)) return;
+  }
   // B-105: double-click types a value, same rule as every slider surface.
   if (nodeGraphModuleFaceDoubleClick(face, wd, event)) {
     beginNodeGraphModuleFaceValueEdit(article, face, wd, p);

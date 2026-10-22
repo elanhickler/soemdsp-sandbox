@@ -296,7 +296,28 @@
     // Drop on a param control (rails plan): a cable from an output always lands
     // on the param's mod inlet (mod rail); a cable from an input lands on its
     // thru. Without a known source the old left/right half rule applies.
+    function parameterPortForRow(row, sourceIo, clientX = null) {
+      if (!row) return null;
+      let wantsInlet = sourceIo === "output";
+      if (!sourceIo) {
+        const widget = row.querySelector(":scope > .node-parameter-control") || row;
+        const rect = widget.getBoundingClientRect();
+        wantsInlet = clientX == null || clientX < rect.left + rect.width * 0.5;
+      }
+      return wantsInlet
+        ? row.querySelector(":scope > .node-param-port.modulation-input")
+        : row.querySelector(":scope > .node-param-port.parameter-output");
+    }
+
     function parameterWidgetHalfDrop(clientX, clientY, sourceIo = "") {
+      // The painted slider is the picture the user aims at. Its hit box is in
+      // world layout px (same test that scrubs the slider), not the HTML rect.
+      if (typeof nodeGraphGlParamRowAtClient === "function") {
+        const glRow = nodeGraphGlParamRowAtClient(clientX, clientY);
+        if (glRow && !glRow.hidden && !glRow.classList.contains("node-parameter-row-hidden")) {
+          return { claimed: true, port: parameterPortForRow(glRow, sourceIo, clientX) };
+        }
+      }
       let best = null;
       let bestDistance = Infinity;
       // The widget sits inside its module, so only the module under the
@@ -1060,13 +1081,15 @@
       return true;
     }
 
-    function handlePortClickFromElement(portElement, clientX, clientY, _clickDetail = 1) {
+    function handlePortClickFromElement(portElement, clientX, clientY, _clickDetail = 1, skipHitbox = false) {
       const hitboxElement = portElement.closest?.(".node-io-row") || portElement;
       const endpoint = helpers.endpointFromElement(hitboxElement);
       if (!endpoint) {
         return false;
       }
-      if (!helpers.pointInEndpointHitbox(endpoint, clientX, clientY, hitboxElement)) {
+      // A param control is the patch point (rails). Its mod jack is zero-width
+      // until a cable exists, so the jack square cannot be the hit test.
+      if (!skipHitbox && !helpers.pointInEndpointHitbox(endpoint, clientX, clientY, hitboxElement)) {
         return false;
       }
       const visualElement = hitboxElement.classList.contains("node-io-row")
@@ -1180,7 +1203,7 @@
         }
       }
       const detail = nodeGraphFiniteNumber(event.detail, 1);
-      if (handlePortClickFromElement(port, event.clientX, event.clientY, detail)) {
+      if (handlePortClickFromElement(port, event.clientX, event.clientY, detail, event.glParamDrop === true)) {
         if (event.glArmClick && state.portConnectionMode && !state.portConnectionMode.movingWires) {
           state.portConnectionMode.justArmed = true;
         }

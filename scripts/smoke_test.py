@@ -508,7 +508,6 @@ PUBLIC_SCRIPT_PATHS = (
     "./public/modules/basicShape/basic-shape-display.js",
     "./public/modules/sinCos/sin-cos-display.js",
     "./public/modules/clock/clock-display.js",
-    "./public/modules/clock/clock-display.js",
     "./public/modules/slewLimiter/slew-shape-display.js",
     "./public/modules/sineWavetable/sine-wavetable-display.js",
     "./public/modules/ellipsoid/ellipsoid-settings.js",

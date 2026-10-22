@@ -122,6 +122,44 @@ for (const [node, jack, key] of [["pb", "Wave", "frequency"], ["k1", "Out", "off
     check(ok, `after a selected wire is dragged off, ${node}.${jack} drag -> a3.${key} still lands`);
   }
 }
+// Click an outlet (arms the wire), then click the painted param slider.
+// The mod jack has no box until the rail opens, so this must not scrub the slider.
+{
+  await clear();
+  const a = await pointOf({ node: "re", jack: "Out" });
+  const t = await page.evaluate(() => {
+    const w0 = nodeGraphGlGraphToWorld(0, 0);
+    const w1 = nodeGraphGlGraphToWorld(100, 100);
+    const cl = (x, y) => [(x - w0.x) * 100 / (w1.x - w0.x), (y - w0.y) * 100 / (w1.y - w0.y)];
+    const slider = (nodeGraphGlGraphState.chrome?.sliders || []).find((s) => s.id === "a3" && s.input?.dataset?.param === "offset");
+    if (!slider) return null;
+    const x = slider.hitX ?? slider.x;
+    const y = slider.hitY ?? slider.y;
+    const w = slider.hitW ?? slider.w;
+    const h = slider.hitH ?? slider.h;
+    return cl(x + w * 0.5, y + h * 0.5);
+  });
+  check(Boolean(a && t), "re.Out jack and a3.offset painted slider found", JSON.stringify({ a, t }));
+  if (a && t) {
+    const before = await page.evaluate(() => {
+      const input = document.querySelector('article[data-node="a3"] input[data-param="offset"]');
+      return input ? Number(input.value) : null;
+    });
+    await page.mouse.click(...a);
+    await page.waitForTimeout(200);
+    const armed = await page.evaluate(() => Boolean(nodeGraphMvp.portConnectionMode));
+    check(armed, "re.Out click arms before the param click");
+    await page.mouse.click(...t);
+    await page.waitForTimeout(300);
+    const added = JSON.parse(await mods()).filter((m) => m.sourceNode === "re" && m.destinationNode === "a3" && m.destinationParam === "offset");
+    const after = await page.evaluate(() => {
+      const input = document.querySelector('article[data-node="a3"] input[data-param="offset"]');
+      return input ? Number(input.value) : null;
+    });
+    check(added.length === 1, "re.Out click -> a3.offset slider (armed wire, not a scrub)", JSON.stringify(added));
+    check(before === after, "param click while a wire is armed does not move the slider", JSON.stringify({ before, after }));
+  }
+}
 check(errs.length === 0, "no page errors", JSON.stringify(errs.slice(0, 3)));
 await b.close();
 console.log(failures ? `FAIL ${failures}` : "ok jack one path"); process.exit(failures ? 1 : 0);
