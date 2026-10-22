@@ -840,6 +840,11 @@ if ($node) {
   if ($LASTEXITCODE -ne 0) {
     throw "Combined build: Pulse Train smoke FAILED"
   }
+  # Pulse Train ƒ: wired End = 1/ƒ (latched), ƒ <= 0 uses End Time.
+  & $node.Source "$root\scripts\smoke_pulse_train_f.mjs"
+  if ($LASTEXITCODE -ne 0) {
+    throw "Combined build: Pulse Train ƒ smoke FAILED"
+  }
   # Resonant Compressor: Gain == Resonant Envelope SC (max diff 0), drums get quieter.
   & $node.Source "$root\scripts\smoke_graph_resonant_compressor.mjs"
   if ($LASTEXITCODE -ne 0) {

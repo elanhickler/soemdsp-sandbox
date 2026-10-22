@@ -1178,6 +1178,7 @@ NodeLiveAudioProcessor.prototype.mapNativeGraphSrcPortId = function mapNativeGra
     if (p === "__elapsed") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_PHASE01;
     if (p === "out") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_MONO;
     if (p === "end") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_LEFT;
+    if (p === "__end") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_RAMP;
   }
   if (t === "pulseExplosion") {
     if (p === "__elapsed") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_PHASE01;
@@ -9428,6 +9429,7 @@ NodeLiveAudioProcessor.prototype.nativeGraphPortNames = function nativeGraphPort
     if (type === "helmholtzPitch") return ["Detune"];
     // Pre-level Right hold for face rings (distinct from audio Right).
     if (type === "sampleHold") return ["Right Raw"];
+    if (type === "pulseTrain") return ["__End"];
     if (type === "fractalBrownianNoise") return ["Out Y Raw"];
     if (type === "fbmField") return ["Y Raw"];
     if (type === "phoneTone") return ["ƒ2", "f2", "Df2"];
@@ -9589,8 +9591,10 @@ NodeLiveAudioProcessor.prototype.publishNativeGraphScopeTaps = function publishN
         P.NATIVE_GRAPH_PORT_CENTER_SQUARE,
         P.NATIVE_GRAPH_PORT_PHASE01,
       )
+      : type === "pulseTrain"
+        ? audioPorts.concat(P.NATIVE_GRAPH_PORT_PHASE01, P.NATIVE_GRAPH_PORT_RAMP)
       : (type === "sineWavetable" || type === "sinCos" || type === "smoothGraph" || type === "stepGraph"
-        || type === "acidSequencer" || type === "fbmField" || type === "clock" || type === "pulseExplosion" || type === "pulseTrain"
+        || type === "acidSequencer" || type === "fbmField" || type === "clock" || type === "pulseExplosion"
         || type === "ellipsoid" || type === "ellipsoidOsc" || type === "dsfOscillator"
         ? audioPorts.concat(P.NATIVE_GRAPH_PORT_PHASE01)
         : audioPorts);
@@ -9751,6 +9755,8 @@ NodeLiveAudioProcessor.prototype.publishNativeGraphScopeTaps = function publishN
         ports = facePorts.concat(P.NATIVE_GRAPH_PORT_SAW);
       } else if (type === "sampleHold") {
         ports = facePorts.concat(P.NATIVE_GRAPH_PORT_SAW, P.NATIVE_GRAPH_PORT_RAMP);
+      } else if (type === "pulseTrain") {
+        ports = facePorts.concat(P.NATIVE_GRAPH_PORT_PHASE01, P.NATIVE_GRAPH_PORT_RAMP);
       } else if (
         type === "basicShape" || type === "sineWavetable" || type === "sinCos"
         || type === "smoothGraph" || type === "stepGraph"

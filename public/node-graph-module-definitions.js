@@ -13750,7 +13750,9 @@ const nodeGraphModuleDefinitions = (
   },
   pulseTrain: {
     planRole: "processor",
-    inputs: ["Trigger", "Reset"],
+    // ƒ: absolute Hz; wired and > 0, End Time = 1/ƒ s (End Time row striped as owned by the jack).
+    inputs: ["Trigger", "Reset", "f"],
+    fJackParam: "endTime",
     outputs: ["Out", "End"],
     layout: "pulseCurve",
     // Face: pulse_train.wasm preview stems + __Elapsed playhead (node-graph-pulse-train-display.js).

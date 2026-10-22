@@ -15,7 +15,7 @@ function nodeGraphPulseTrainPreviewLoad() {
   if (nodeGraphPulseTrainPreviewWasm.promise || typeof fetch !== "function" || typeof WebAssembly === "undefined") {
     return nodeGraphPulseTrainPreviewWasm.promise;
   }
-  nodeGraphPulseTrainPreviewWasm.promise = fetch("/native_modules/pulse_train/pulse_train.wasm?v=pulse-train-3")
+  nodeGraphPulseTrainPreviewWasm.promise = fetch("/native_modules/pulse_train/pulse_train.wasm?v=pulse-train-f-1")
     .then((response) => {
       if (!response.ok) throw new Error(`pulse_train wasm HTTP ${response.status}`);
       return response.arrayBuffer();
@@ -48,8 +48,15 @@ function nodeGraphPulseTrainSchedule(section, node) {
     return null;
   }
   const p = (key, fallback) => nodeGraphPulseTrainFaceParam(node, key, fallback);
+  // ƒ wired (End Time row owned by the jack): the engine's effective End Time (__End = 1/ƒ).
+  let endTime = p("endTime", 3);
+  const owned = section.closest?.(".node, article")?.querySelector?.('.node-parameter-row.f-jack-owns-frequency[data-param="endTime"]');
+  if (owned && typeof nodeGraphModuleScopeLatestOutputValue === "function") {
+    const live = Number(nodeGraphModuleScopeLatestOutputValue(section.dataset.node, "__End", Number.NaN));
+    if (Number.isFinite(live) && live > 0) endTime = live;
+  }
   const args = [
-    Math.round(p("count", 12)), p("endTime", 3), p("curve", 3),
+    Math.round(p("count", 12)), endTime, p("curve", 3),
     p("ampStart", 1), p("ampEnd", 0.2), p("ampCurve", 0), p("amplitude", 1),
   ];
   const key = args.join(",");
