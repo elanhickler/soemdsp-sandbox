@@ -121,7 +121,7 @@ $modules = @(
   @{ Name = "passive_filter"; Simd = $false; Exports = @("soemdsp_passive_filter_create", "soemdsp_passive_filter_destroy", "soemdsp_passive_filter_sample", "soemdsp_passive_filter_sample_ex", "soemdsp_passive_filter_version", "soemdsp_passive_filter_metadata_json", "soemdsp_passive_filter_metadata_json_size") }
   @{ Name = "shooting_star_explosion"; Simd = $false; Exports = @("soemdsp_shooting_star_explosion_power", "soemdsp_shooting_star_explosion_version", "soemdsp_shooting_star_explosion_metadata_json", "soemdsp_shooting_star_explosion_metadata_json_size") }
   @{ Name = "polyblep"; Simd = $false; Exports = @(
-    "soemdsp_polyblep_create", "soemdsp_polyblep_destroy", "soemdsp_polyblep_reset",
+    "soemdsp_polyblep_create", "soemdsp_polyblep_destroy", "soemdsp_polyblep_reset", "soemdsp_polyblep_set_antialias",
     "soemdsp_polyblep_sample", "soemdsp_polyblep_sample_masked",
     "soemdsp_polyblep_process_block", "soemdsp_polyblep_block_out_ptr", "soemdsp_polyblep_max_block_frames",
     "soemdsp_polyblep_out", "soemdsp_polyblep_saw", "soemdsp_polyblep_ramp",
@@ -814,6 +814,11 @@ if ($node) {
   & $node.Source "$root\scripts\smoke_graph_polyblep_single.mjs"
   if ($LASTEXITCODE -ne 0) {
     throw "Combined build: polyBlep Single trigger smoke FAILED"
+  }
+  # PolyBLEP Antialiasing: PolyBLEP unchanged, Off = naive waveforms.
+  & $node.Source "$root\scripts\smoke_graph_polyblep_antialias.mjs"
+  if ($LASTEXITCODE -ne 0) {
+    throw "Combined build: polyBlep Antialiasing smoke FAILED"
   }
   # Drum Ring2: fast retriggers with Bend stay bounded (no energy pumping).
   & $node.Source "$root\scripts\smoke_drum_ring_retrigger.mjs"

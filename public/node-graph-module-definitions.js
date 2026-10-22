@@ -1077,6 +1077,20 @@ const nodeGraphModuleDefinitions = (
         min: "0",
         nonlinearSlider: false,
         step: "1" },
+      {
+        choices: ["Off", "PolyBLEP"],
+        defaultValue: "1",
+        displayChoices: true,
+        divideChoicesVisibly: true,
+        key: "antialiasing",
+        label: "Antialiasing",
+        linearSmoothing: false,
+        smoothingType: "none",
+        max: "1",
+        mid: "0",
+        min: "0",
+        nonlinearSlider: false,
+        step: "1" },
     ]
   },
   blit: {

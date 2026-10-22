@@ -37,6 +37,8 @@ constexpr int kTapAll = kTapOut | kTapSaw | kTapRamp | kTapSquare | kTapTri | kT
 
 struct PolyBlepState {
   bool active;
+  // Antialiasing: false = PolyBLEP (default), true = Off (naive waveforms, no BLEP/BLAMP).
+  bool naive;
   SlotState slots[kSlotCount];
   double out;
   double saw;
@@ -163,7 +165,42 @@ double polyBlepTrisawCenter(double t, double incrementAbs, double morph) {
   return y;
 }
 
-double oscillatorSample(SlotState& slot, double phase, double phaseIncrement, int waveform, double morph) {
+// Antialiasing Off: the raw (naive) body of every waveform, same phase / morph
+// geometry as the PolyBLEP versions, with no BLEP / BLAMP residuals or smoothing.
+double naiveSample(double phase, double phaseCycle, int waveform, double morph, double m) {
+  switch (waveform) {
+    case 1: return 1.0 - phaseCycle * 2.0;              // Saw
+    case 2: return -1.0 + phaseCycle * 2.0;             // Ramp
+    case 3: return phaseCycle < 0.5 ? 1.0 : -1.0;       // Square
+    case 4: {                                           // Triangle (-1 at 0, +1 at 0.5)
+      const double t = phaseCycle < 0.5 ? (0.5 - phaseCycle) : (phaseCycle - 0.5);
+      return 1.0 - 4.0 * t;
+    }
+    case 5: return dsp_sin_turns_lut(phase * (1.0 / kTwoPi));
+    case 6: {                                           // Center Square
+      double w = (!is_nan(morph)) ? morph : 0.5;
+      if (w < 0.0) w = 0.0;
+      if (w > 1.0) w = 1.0;
+      if (w <= 0.0) return -1.0;
+      if (w >= 1.0) return 1.0;
+      const double t0 = wrap01(phaseCycle - 0.5 * (1.0 - w));
+      return (t0 < w) ? 1.0 : -1.0;
+    }
+    case 7: return (phaseCycle < m ? 2.0 : 0.0) - 2.0 * m; // Pulse
+    case 8: return naive_analog_square(phaseCycle, morph);
+    case 9: return naive_trisaw_center(phaseCycle, morph);
+    default: {                                          // 0 Trisaw
+      const double pw = m;
+      double y = phaseCycle * 2.0;
+      if (y >= 2.0 - pw) y = (y - 2.0) / pw;
+      else if (y >= pw) y = 1.0 - (y - pw) / (1.0 - pw);
+      else y /= pw;
+      return y;
+    }
+  }
+}
+
+double oscillatorSample(SlotState& slot, double phase, double phaseIncrement, int waveform, double morph, bool naive) {
   const double phaseDelta = phaseIncrement;
   const double absDelta = phaseDelta < 0.0 ? -phaseDelta : phaseDelta;
   const bool phaseStopped = absDelta <= 1.0e-12;
@@ -173,6 +210,11 @@ double oscillatorSample(SlotState& slot, double phase, double phaseIncrement, in
   const double phaseCycle = wrap01(phase / kTwoPi);
   // Morph 0..1 = width/duty for Trisaw / Analog Square / Trisaw Center / Center Square / Pulse. Others ignore it.
   const double m = morph_width01(morph);
+  if (naive) {
+    slot.triangleIntegrator = 0.0;
+    if (!phaseStopped) slot.lastPhaseIncrement = phaseDelta;
+    return naiveSample(phase, phaseCycle, waveform, morph, m);
+  }
   double sample = 0.0;
   // Order matches UI choices:
   // 0 Trisaw, 1 Saw, 2 Ramp, 3 Square, 4 Triangle, 5 Sine,
@@ -247,6 +289,12 @@ extern "C" int soemdsp_polyblep_create() {
   return 0;
 }
 
+// Antialiasing: 1 = PolyBLEP (default), 0 = Off (naive). Persists until set again.
+extern "C" void soemdsp_polyblep_set_antialias(int handle, int on) {
+  if (handle < 1 || handle > kMaxInstances) return;
+  gPool[handle - 1].naive = (on == 0);
+}
+
 extern "C" void soemdsp_polyblep_destroy(int handle) {
   if (handle < 1 || handle > kMaxInstances) return;
   gPool[handle - 1].active = false;
@@ -280,32 +328,32 @@ static void render_taps(
   const double safeMorph = (!is_nan(morph)) ? morph : 0.5;
   const int mask = tapMask == 0 ? kTapAll : tapMask;
   if (mask & kTapOut) {
-    s.out = oscillatorSample(s.slots[0], phase, phaseIncrement, safeWaveform, safeMorph) * level;
+    s.out = oscillatorSample(s.slots[0], phase, phaseIncrement, safeWaveform, safeMorph, s.naive) * level;
   } else {
     s.out = 0.0;
   }
   if (mask & kTapSaw) {
-    s.saw = oscillatorSample(s.slots[1], phase, phaseIncrement, 1, 0.5) * level;
+    s.saw = oscillatorSample(s.slots[1], phase, phaseIncrement, 1, 0.5, s.naive) * level;
   } else {
     s.saw = 0.0;
   }
   if (mask & kTapRamp) {
-    s.ramp = oscillatorSample(s.slots[2], phase, phaseIncrement, 2, 0.5) * level;
+    s.ramp = oscillatorSample(s.slots[2], phase, phaseIncrement, 2, 0.5, s.naive) * level;
   } else {
     s.ramp = 0.0;
   }
   if (mask & kTapSquare) {
-    s.square = oscillatorSample(s.slots[3], phase, phaseIncrement, 3, 0.5) * level;
+    s.square = oscillatorSample(s.slots[3], phase, phaseIncrement, 3, 0.5, s.naive) * level;
   } else {
     s.square = 0.0;
   }
   if (mask & kTapTri) {
-    s.tri = oscillatorSample(s.slots[4], phase, phaseIncrement, 4, 0.5) * level;
+    s.tri = oscillatorSample(s.slots[4], phase, phaseIncrement, 4, 0.5, s.naive) * level;
   } else {
     s.tri = 0.0;
   }
   if (mask & kTapSine) {
-    s.sine = oscillatorSample(s.slots[5], phase, phaseIncrement, 5, 0.5) * level;
+    s.sine = oscillatorSample(s.slots[5], phase, phaseIncrement, 5, 0.5, s.naive) * level;
   } else {
     s.sine = 0.0;
   }
@@ -417,5 +465,5 @@ extern "C" double soemdsp_polyblep_sine(int handle) {
 }
 
 extern "C" int soemdsp_polyblep_version() {
-  return 8; // Sine tap = shared half-sine wavetable LUT (no Â±Ï€ Taylor click)
+  return 9; // 9: soemdsp_polyblep_set_antialias (0 Off naive / 1 PolyBLEP). 8: Sine tap = shared half-sine wavetable LUT (no Â±Ï€ Taylor click)
 }

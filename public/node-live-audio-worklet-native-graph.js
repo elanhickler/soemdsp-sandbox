@@ -4843,6 +4843,8 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
       push("phase", P.NATIVE_GRAPH_PARAM_PHASE, cont("phase", 0));
       // Cycle: 0 Free run / 1 Single trigger (one cycle per Reset hit), timingMode slot.
       push("cycleMode", P.NATIVE_GRAPH_PARAM_TIMING_MODE, disc("cycleMode", 0));
+      // Antialiasing: 0 Off (naive) / 1 PolyBLEP (default), lfoStyle slot.
+      push("antialiasing", P.NATIVE_GRAPH_PARAM_LFO_STYLE, disc("antialiasing", 1));
       continue;
     }
     if (type === "ladderFilter") {
