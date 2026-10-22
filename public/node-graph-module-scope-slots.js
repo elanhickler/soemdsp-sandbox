@@ -45,12 +45,22 @@ function registerNodeGraphModuleScopeSlot(moduleElement, options = {}) {
   if (slot.type === "rasterRgb" && typeof scheduleNodeGraphRasterRgbPump === "function") {
     scheduleNodeGraphRasterRgbPump();
   }
+  // A new module element (spawned or re-rendered) has a blank face canvas.
+  const freshFace = !prior || prior.element !== moduleElement;
   // Patch load registers many slots; don't queue a full scope pass while
   // stopped (each schedule used to reflow every face via HasModelDisplay).
-  if (typeof nodeGraphModuleScopePaused !== "function" || !nodeGraphModuleScopePaused()) {
+  const livePlaying = typeof nodeGraphModuleScopePaused !== "function" || !nodeGraphModuleScopePaused();
+  if (livePlaying) {
     scheduleNodeGraphModuleScopeDraw();
-  } else if (
-    typeof scopePaintEnsureColdPlate === "function"
+  }
+  // Spawned while playing: the live pass only paints faces that have a
+  // capture frame (and idle-hold / unchanged-trace skips can hold it off), so
+  // a face dropped in during Play stayed blank with no plate. Give a fresh
+  // face its plate now, exactly like Stop / Pause spawn; the live loop draws
+  // over it on its next frame.
+  if (
+    (!livePlaying || freshFace)
+    && typeof scopePaintEnsureColdPlate === "function"
     && typeof scopePaintEngineState === "function"
     && typeof requestAnimationFrame === "function"
   ) {
@@ -73,7 +83,8 @@ function registerNodeGraphModuleScopeSlot(moduleElement, options = {}) {
         // Retry for up to ~1.5 s while the face is still laying out.
         let tries = 0;
         const plate = () => {
-          if (nodeGraphModuleScopeState.slots.get(nodeId) !== slot || scopePaintEngineState() === "playing") return;
+          if (nodeGraphModuleScopeState.slots.get(nodeId) !== slot) return;
+          if (!livePlaying && scopePaintEngineState() === "playing") return;
           const ok = scopePaintEnsureColdPlate(slot, { create: true, force: true, assumeStopped: true });
           if (!ok && tries < 30) {
             tries += 1;

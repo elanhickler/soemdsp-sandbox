@@ -18484,6 +18484,8 @@ def check_display_draws_live(manifest: Path) -> None:
         require(unit.returncode == 0, f"display draws live: {unit.stdout}{unit.stderr}")
         unit = subprocess.run(["node", str(ROOT / "scripts" / "smoke_wire_ends_on_modules.mjs")], capture_output=True, text=True, env=env)
         require(unit.returncode == 0, f"wire ends on modules: {unit.stdout}{unit.stderr}")
+        unit = subprocess.run(["node", str(ROOT / "scripts" / "smoke_spawn_face_plate_live.mjs")], capture_output=True, text=True, env=env)
+        require(unit.returncode == 0, f"spawn face plate live: {unit.stdout}{unit.stderr}")
     finally:
         stop_server(process)
 
