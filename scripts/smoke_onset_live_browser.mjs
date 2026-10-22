@@ -1,5 +1,6 @@
 // Real-browser Onset smoke: loads the patch in PATCH (default runaway triggers.json), plays through the worklet, asserts the sweep draws every frame with new audio and settings repaint.
-// Run: node scripts/smoke_onset_live_browser.mjs  (env: SYNC=1 RESET_OUT=1 SETTINGS=1)
+// Asserts every Reset edge restarts the sweep at Position on that sample, and the mod rail is closed with no param wires.
+// Run: node scripts/smoke_onset_live_browser.mjs  (env: SYNC=1 RESET_OUT=1 SETTINGS=1 FRAMES=30 NEED_RESET=1)
 // Per-frame trace of the real 1D Onset pipeline on Argi's patch.
 import fs from "node:fs";
 import { chromium } from "playwright-core";
@@ -39,6 +40,14 @@ await page.evaluate((id) => {
   window.nodeGraphOnsetDrawStrip = function (canvas, onset, keys, slot, settings, h, w, face, sp, begin, end, clip) {
     L.strips.push({ begin, end, clip, keys: keys.length, s: Boolean(canvas._wfGlSession?.read?.fbo) });
     return ds.apply(this, arguments);
+  };
+  L.rs = []; const se = nodeGraphOnsetScanEdges;
+  window.nodeGraphOnsetScanEdges = function (buf, from, to, planck, latch, kind, onHit) {
+    if (kind !== "reset") return se.apply(this, arguments);
+    let mx = 0, n = 0; if (buf) for (let f = Math.floor(from); f < Math.floor(to); f += 1) { const v = nodeGraphScopeBufferSampleAtAbsoluteFrame(buf, f); if (v != null && Math.abs(v) > mx) mx = Math.abs(v); if (v != null && Math.abs(v) > planck) n += 1; }
+    const hits = []; const h = se.call(this, buf, from, to, planck, latch, kind, (f) => { hits.push(f); if (onHit) onHit(f); });
+    L.rs.push({ buf: Boolean(buf), from: Math.floor(from), to: Math.floor(to), babs: buf ? nodeGraphScopeBufferAbsoluteFrame(buf) : null, mx, n, hits, h, planck });
+    return h;
   };
   const wp = nodeGraphWaterfallPaint;
   L.wf = 0; L.wfOnset = 0;
@@ -83,6 +92,7 @@ if (process.env.SETTINGS) {
   console.log("after settings", JSON.stringify(st)); globalThis.__st = st;
 }
 const L = await page.evaluate(() => window.__L);
+const rail = await page.evaluate((id) => { const p = nodeGraphMvp.patch; const wired = (p.modulations || []).some((w) => w.destinationNode === id || w.sourceNode === id) || nodeGraphPatchNode(id)?.ui?.modRailAlwaysOn; return { open: document.querySelector(`article[data-node="${id}"]`).classList.contains("mod-rail-open"), wired: Boolean(wired) }; }, on.id);
 fs.writeFileSync(`${OUT}/${process.env.TAG || "f"}-log.json`, JSON.stringify(L));
 const p = L.paints;
 let gaps = 0, back = 0, maxGap = 0;
@@ -91,6 +101,11 @@ const idle = p.filter((x, i) => i > 5 && x.strips === 0 && x.abs > p[i - 1].abs)
 console.log(JSON.stringify({ idlePaintsWithNewAudio: idle, paints: p.length, wf: L.wf, wfOnset: L.wfOnset, strips: L.strips.length, gaps, maxGap, absBack: back, first: p.slice(0, 3), sample: p.filter((_, i) => i % 25 === 0).slice(0, 12) }));
 await b.close();
 const fail = [];
+const hits = L.rs.flatMap((r) => r.hits);
+if (process.env.NEED_RESET && !hits.length) fail.push("no Reset edge seen");
+for (const h of hits) { const at = L.paints.find((x) => x.abs > h); if (!at || at.post.origin !== h) fail.push(`Reset at ${h} did not restart (origin ${at?.post.origin})`); }
+if (rail.open !== rail.wired) fail.push(`mod rail open=${rail.open} but param wires=${rail.wired}`);
+console.log("reset edges", JSON.stringify(hits));
 if (idle > 0) fail.push(`idle paints with new audio: ${idle}`);
 if (L.strips.length < p.length / 2) fail.push(`too few strips ${L.strips.length}/${p.length}`);
 if (back > 0) fail.push(`abs went back ${back}`);
