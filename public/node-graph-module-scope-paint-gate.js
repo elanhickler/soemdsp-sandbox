@@ -562,6 +562,7 @@ const nodeGraphFacePaintKindTable = Object.assign(Object.create(null), {
   basicShape: "param",
   sinCos: "param",
   dsfOscillator: "param",
+  dsfMorphingOsc: "param",
   softwaveOsc: "param",
   slewLimiter: "param",
 });

@@ -116,6 +116,7 @@ const nodeGraphNodeLabels = Object.freeze({
   curveOsc: "Curve Oscillator",
   snowflake: "Snowflake",
   dsfOscillator: "DSF Oscillator",
+  dsfMorphingOsc: "DSF Morphing Osc",
   robinSupersaw: "Robin Supersaw",
   hyperpluck: "Hyperpluck",
   hypersaw2: "Hypersaw",
@@ -4938,9 +4939,116 @@ const nodeGraphModuleDefinitions = (
           "Morph / DSF harmonic richness. Nonlinear slider: more sensitivity near 0 (where most of the useful range is)."
       },
       { key: "pulseWidth", label: "Pulse Width", defaultValue: "0.5", min: "0.01", mid: "0.5", max: "0.99", step: "0.01" },
-      { key: "blend", label: "SquSaw", defaultValue: "0.5", min: "0", mid: "0.5", max: "1", step: "0.01" },
-      { key: "spacing", label: "Spacing", defaultValue: "1", min: "0.1", mid: "1", max: "4", nonlinearSlider: true, step: "any" },
-      { key: "oddEven", label: "Odd/Even", defaultValue: "0", min: "0", mid: "0.5", max: "1", nonlinearSlider: false, step: "any" },
+      { key: "blend", label: "Square↔Saw", defaultValue: "0.5", min: "0", mid: "0.5", max: "1", step: "0.01" },
+      {
+        defaultValue: "1",
+        key: "amplitude",
+        label: "Amplitude",
+        max: "1",
+        mid: "1",
+        min: "0",
+        nonlinearSlider: false,
+        step: "any",
+      },
+    ]
+  },
+  dsfMorphingOsc: {
+    planRole: "source",
+    layout: "sinCos",
+    chrome: "LayoutA",
+    customDisplayArea: true,
+    displayType: "sinCosFace",
+    displayHeightGu: 4,
+    spectrumCompanion: false,
+    displayModes: [
+      {
+        key: "face",
+        label: "Face",
+        renderer: "sinCosFace",
+        settingsSchema: "sinCosFace" },
+    ],
+    defaultDisplayMode: "face",
+    inputs: ["f"],
+    inputLabels: { f: "ƒ" },
+    inputAliases: { "ƒ": "f" },
+    outputChannels: { Out: "green" },
+    outputs: ["Out"],
+    parameters: [
+      { key: "frequency", label: "Frequency", kind: "frequency", defaultValue: "100", min: "0", mid: "220", max: "20000", step: "any", unit: "Hz", tooltip: "Default slider 0…20 kHz. Pitch MOD can run down through 0. Thru-zero: enable Bipolar on Frequency (domain-add MOD). Domain min/max are slider guides." },
+      {
+        defaultValue: "0",
+        key: "phase",
+        kind: "phase",
+        label: "Phase",
+        max: "1",
+        mid: "0.5",
+        min: "0",
+        step: "0.01",
+        unit: "cycle",
+        wraparound: true
+      },
+      {
+        key: "morph",
+        label: "Morph",
+        defaultValue: "1",
+        min: "0",
+        mid: "0.12",
+        max: "1",
+        nonlinearSlider: true,
+        step: "0.001",
+        tooltip:
+          "Geometric decay of the same band-limited series. 0 = sine (fundamental only). 1 = bright. Nonlinear slider: more sensitivity near 0."
+      },
+      {
+        key: "symmetry",
+        label: "Symmetry",
+        defaultValue: "0",
+        min: "0",
+        mid: "0.5",
+        max: "1",
+        nonlinearSlider: false,
+        step: "0.001",
+        tooltip:
+          "Mix of +a and −a on the same partials. 0 = saw family. 1 = alternating pulse. 0.5 keeps even harmonics."
+      },
+      {
+        key: "width",
+        label: "Width",
+        defaultValue: "0",
+        min: "0",
+        mid: "0.5",
+        max: "1",
+        nonlinearSlider: false,
+        step: "0.001",
+        tooltip:
+          "All harmonics → odd-only square-to-sine DSF. 0 = saw family. 1 = band-limited square / pulse (no PWM)."
+      },
+      {
+        key: "rotate",
+        label: "Rotate",
+        defaultValue: "0",
+        min: "0",
+        mid: "0.5",
+        max: "1",
+        nonlinearSlider: false,
+        step: "0.001",
+        wraparound: true,
+        unit: "cycle",
+        tooltip:
+          "Common phase on every partial. Sweeps pulse / folded shapes of the same spectrum."
+      },
+      {
+        key: "slice",
+        label: "Slice",
+        defaultValue: "0",
+        min: "0",
+        mid: "0.2",
+        max: "1",
+        nonlinearSlider: true,
+        step: "0.001",
+        tooltip:
+          "Start partial of the closed-form brick. 0 = from the fundamental. Higher = formant band that cannot alias."
+      },
       {
         defaultValue: "1",
         key: "amplitude",
@@ -10594,7 +10702,24 @@ const nodeGraphModuleDefinitions = (
         mid: "4",
         min: "1",
         nonlinearSlider: false,
-        step: "1" },
+        step: "1",
+        tooltip: "How many stolen tails can fade at once. Only one kick is live; a retrigger fades the previous over Fade Time. Decay does not stretch Fade Time." },
+      {
+        choices: ["Off", "On"],
+        defaultValue: "1",
+        displayChoices: true,
+        divideChoicesVisibly: true,
+        key: "voiceFade",
+        label: "Voice Fade",
+        linearSmoothing: false,
+        smoothingType: "none",
+        max: "1",
+        mid: "1",
+        min: "0",
+        nonlinearSlider: false,
+        step: "1",
+        tooltip: "On: a stolen voice fades out over Fade Time instead of cutting (no retrigger click, including Voices 1). Off: hard cut."
+      },
       {
         defaultValue: "2",
         key: "fadeTime",
@@ -13790,12 +13915,14 @@ const nodeGraphModuleDefinitions = (
   },
   pulseTrain: {
     planRole: "processor",
-    // ƒ: absolute Hz; wired and > 0, Time = 1/ƒ s (Time row striped as owned by the jack).
+    // ƒ: absolute Hz; wired and > 0, Loop wrap = 1/ƒ (pitch, live). Time stays the grain window.
     inputs: ["Trigger", "f"],
-    fJackParam: "endTime",
-    outputs: ["Out", "End"],
+    outputAliases: { Out: "Shape", Mono: "Shape" },
+    outputChannels: { Shape: "green" },
+    digitalOutputs: ["Trigger", "End"],
+    outputs: ["Shape", "Trigger", "End"],
     layout: "pulseCurve",
-    // Face: pulse_train.wasm preview stems + __Elapsed playhead (node-graph-pulse-train-display.js).
+    // Face: instanced E_k stems/dots (Count 1..16384) + __Elapsed playhead (node-graph-pulse-train-display.js).
     // Display Settings pulseTrainFace: the Pulse Explosion set plus Ghost (next pattern).
     displayType: "pulseTrainFace",
     spectrumCompanion: false,
@@ -13832,8 +13959,58 @@ const nodeGraphModuleDefinitions = (
         nonlinearSlider: false,
         step: "1"
       },
-      { constraint: "cpu", defaultValue: "12", key: "count", label: "Count", max: "128", mid: "12", min: "1", nonlinearSlider: false, step: "1" },
-      { defaultValue: "3", key: "endTime", label: "Time", max: "12", mid: "3", min: "0", nonlinearSlider: false, step: "any", unit: "s" },
+      {
+        choices: ["Forward", "Forward-Reverse", "Reverse"],
+        defaultValue: "0",
+        displayChoices: true,
+        divideChoicesVisibly: true,
+        key: "pulseMode",
+        label: "Pulse Mode",
+        linearSmoothing: false,
+        smoothingType: "none",
+        max: "2",
+        mid: "1",
+        min: "0",
+        nonlinearSlider: false,
+        step: "1",
+        tooltip: "Forward: one-way schedule (Time). Forward-Reverse: that schedule then its time-mirror, peak once. Reverse: only the return trip. Count is the one-way pulse count."
+      },
+      {
+        choices: ["Off", "Fixed", "Dither", "Robin1", "Robin2"],
+        defaultValue: "0",
+        displayChoices: true,
+        divideChoicesVisibly: true,
+        key: "antialiasing",
+        label: "Antialiasing",
+        linearSmoothing: false,
+        smoothingType: "none",
+        max: "4",
+        mid: "0",
+        min: "0",
+        nonlinearSlider: false,
+        step: "1",
+        tooltip: "Off: first sample at or after each time. Fixed: seed-locked 0/+1 on stacked pulses. Dither: the same 0/+1, re-rolled every Trigger / Loop. Robin1: ±1 around the true time. Robin2: ±2 (second ±1 around the first pick). End Delay uses the same land."
+      },
+      {
+        choices: ["Trigger", "Gate", "Saw", "Ramp", "Tri", "Sine"],
+        defaultValue: "0",
+        displayChoices: true,
+        divideChoicesVisibly: true,
+        key: "wave",
+        label: "Shape",
+        linearSmoothing: false,
+        smoothingType: "none",
+        max: "5",
+        mid: "0",
+        min: "0",
+        nonlinearSlider: false,
+        step: "1",
+        tooltip: "Trigger: single-sample pulses. Gate: 50% high between pulses. Saw/Ramp: naive ramp from one pulse to the next. Tri/Sine: one cycle starting and ending at 0. Each grain starts at a pulse and ends at the next."
+      },
+      { defaultValue: "0", key: "seed", kind: "seed", label: "Seed", linearSmoothing: false, max: "16777215", maxDigits: 0, mid: "0", min: "0", nonlinearSlider: false, smoothingType: "none", step: "1", tooltip: "Locks the antialiasing pattern. Same Seed = same offsets on every trigger. Change Seed for a different noise texture." },
+      { defaultValue: "12", key: "count", label: "Count", max: "128", mid: "8", min: "1", nonlinearSlider: true, step: "1", tooltip: "Pulses in the train (one-way). Slider 1–128; type above the slider for denser trains (DSP up to 16384)." },
+      { defaultValue: "3", key: "endTime", label: "Time", max: "12", mid: "0.1", min: "0", nonlinearSlider: true, step: "any", unit: "s", tooltip: "Duration of the pulse schedule (E_k span). Wired ƒ sets the Loop period to 1/ƒ; Time stays this window inside that period (pulses at t ≥ 1/ƒ are dropped)." },
+      { defaultValue: "0", key: "endDelay", label: "End Delay", max: "12", mid: "0", min: "-12", nonlinearSlider: true, step: "any", unit: "s", tooltip: "Seconds after the last pulse. Positive: silence after. Negative: end early and drop the tail. One shot: End fires at last pulse + this (not before 0). Loop: cycle is Time (Forward-Reverse: 2×Time) plus this. Wired ƒ: wrap stays 1/ƒ; this still cuts or pads the train inside the period." },
       { defaultValue: "3", key: "curve", label: "Curve", max: "10", mid: "0", min: "-10", nonlinearSlider: false, step: "any" },
       { defaultValue: "1", key: "ampStart", label: "Amp Start", max: "1", mid: "0.5", min: "0", nonlinearSlider: false, step: "any" },
       { defaultValue: "0.2", key: "ampEnd", label: "Amp End", max: "1", mid: "0.5", min: "0", nonlinearSlider: false, step: "any" },

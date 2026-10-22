@@ -117,6 +117,7 @@ const NODE_GRAPH_EFFICIENT_PRODUCT_AUDIO_TYPES = Object.freeze([
   "softpop2",
   "script",
   "dsfOscillator",
+  "dsfMorphingOsc",
   "hypersaw2",
   "vibratoGenerator",
   "wowAndFlutter",

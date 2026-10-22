@@ -105,6 +105,7 @@ Only these live-audio types exist in the efficient build:
 | `surgeOscillator` | Hard-sync PolyBLEP osc (internal or external Sync) |
 | `softwaveOsc` | Soft-shaped multi-wave morph oscillator |
 | `dsfOscillator` | Discrete Summation Formula oscillator |
+| `dsfMorphingOsc` | DSF Oscillator + Spacing / Odd-Even |
 | `hypersaw2` | Stereo PolyBLEP saw bank (spread / random / drift) |
 | `sinc` | Repeating sinc kernel (Ideal / Band Limit) |
 | `bradley2a` | Bradley Telcom jitter/hit impairment synth |
@@ -207,7 +208,7 @@ polyBlep → ladderFilter → softClipper → reverbEffect → pingPongDelay →
    clock / binaryClock / triggerDivider / clockDivider / delayedTrigger / randomClock / triggerCounter /
    metallicRatio / lutCell / lookaheadLimiter / limiter / sequencer / acidSequencer / transport /
    aliasSine / blit / sineWavetable / sinCos / antisaw / archimedes /
-   additiveOsc / surgeOscillator / softwaveOsc / dsfOscillator / hypersaw2 / sinc /
+   additiveOsc / surgeOscillator / softwaveOsc / dsfOscillator / dsfMorphingOsc / hypersaw2 / sinc /
    bradley2a / phoneTone / ellipsoid / snowflake /
    butterworth / linkwitzRiley / bessel / papoulisFilter /
    speakerProtection / speakerProtector2 /
@@ -325,7 +326,9 @@ This app is a **C++ DSP engine with a JS interface** (§0). JS authors and obser
 
 ## 3. Module displays: WebGL2 + shaders only
 
-- **Every module display draws with WebGL2 + shaders** through the one interface `public/lib/visual/gl-line-renderer.js` (begin / rect / segment / polyline / end) on the shared WebGL2 context of `picture-device.js`. Preferred primitive: shader-expanded quads with smoothstep edges (`halfPx` / `feather`).
+- **Every module display draws with WebGL2 + shaders** through the one interface `public/lib/visual/gl-line-renderer.js` (begin / rect / segment / polyline / end) on the shared WebGL2 context of `picture-device.js`. Preferred primitive: shader-expanded quads with **smootherstep** edges (`halfPx` / `feather`): `a = 1 - smootherstep(halfPx, halfPx + feather, dist)` (Perlin quintic `6t⁵−15t⁴+10t³`). Same one-SDF cost as Hermite `smoothstep`; C2 at the skirt ends.
+- Faces that draw **general lines** expose Display Settings `lineSmoothing`: CSS pixels of that skirt (0–8, default 1). Different faces need different amounts.
+- Node-graph **cables** share the kernel and keep a **fixed 2 CSS-pixel fade** (no per-module cable control). **Phosphor / TraceWoscope** keep gaussian/erf. Jack notches keep Hermite `smoothstep`.
 - **No canvas 2D fallback.** If GL fails the display is black. Modules never create their own canvas context; they use the shared display-canvas helper (marker class, automatic >2.5x zoom pixelation).
 - Exceptions only where a shader truly is not worth it, listed explicitly in `docs/WEBGL_DISPLAY_PLAN.md` section 5. Migration table and smoke-test allowlist (shrink-only) live there too.
 - **How to write a display (enforced by `check_display_gl_contract` in `scripts/smoke_test.py`):** get the canvas from `nodeGraphDisplayCanvasCreate(className)` and size it with `nodeGraphDisplayCanvasSize(section, canvas)` (`public/lib/visual/display-canvas.js`; adds `node-display-canvas`, backing = CSS x dpr, never zoom). Draw with `nodeGraphGlLinesBegin(canvas, clear, { scale: m.pixelRatio })` -> rect / segment / polyline / image -> `nodeGraphGlLinesEnd`; on `null`/`false` call `nodeGraphGlLinesFillBlack`. Files under `public/modules/**` must not contain `getContext("2d")`, `createElement("canvas")`, `canvas.width =`, `imageSmoothing`, `image-rendering` or `devicePixelRatio`. Existing offenders sit on the shrink-only `scripts/display_gl_allowlist.txt`; never add to it, delete your line when you convert a file.

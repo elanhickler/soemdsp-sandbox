@@ -43,6 +43,8 @@ const NODE_GRAPH_EMPTY_CANVAS_LINE = "Canvas is empty. Turn on Show in performan
 /**
  * Aspect ratios for the mini view. `window` is the live window size.
  * Every other entry is width / height. Height is the window height.
+ * `free` is not in this table (0 would collide with window); ReferenceSize
+ * treats it as the stored frame size so the GL pass can keep one scale `s`.
  */
 const NODE_GRAPH_MINI_PERFORM_ASPECTS = Object.freeze({
   window: 0,
@@ -58,10 +60,18 @@ const NODE_GRAPH_MINI_PERFORM_ASPECTS = Object.freeze({
  * Performance screen size the mini view reads the layout at.
  * "window": the size the F stage has on this window. Other aspects keep the
  * window height and take their ratio from NODE_GRAPH_MINI_PERFORM_ASPECTS.
+ * "free": the stored frame {width, height} (zoom-1 world px) is the stage.
  */
-function nodeGraphMiniPerformReferenceSize(aspect, winW, winH) {
+function nodeGraphMiniPerformReferenceSize(aspect, winW, winH, size) {
   const w = Math.max(1, Number(winW) || 1);
   const h = Math.max(1, Number(winH) || 1);
+  if (String(aspect) === "free") {
+    const rw = Math.max(120, Math.min(1600, Number(size?.width ?? size?.w) || 360));
+    let rh = Number(size?.height ?? size?.h);
+    if (!Number.isFinite(rh)) rh = rw * (h / w);
+    rh = Math.max(80, Math.min(1600, rh));
+    return { w: rw, h: rh };
+  }
   const ratio = NODE_GRAPH_MINI_PERFORM_ASPECTS[aspect];
   if (!(ratio > 0)) return { w, h };
   return { w: h * ratio, h };
@@ -132,6 +142,30 @@ function nodeGraphMiniPerformResizeDelta(dx, dy, corner, refW, refH) {
   const ax = Math.abs(Number(dx) || 0);
   const ay = Math.abs(Number(dy) || 0) * aspect;
   return ax >= ay ? signX * (Number(dx) || 0) : signY * (Number(dy) || 0) * aspect;
+}
+
+/**
+ * Corner drag with the opposite corner fixed and width/height independent.
+ * Units match dx / dy (host px or zoom-1 world px). Used when aspect is Free.
+ */
+function nodeGraphMiniPerformResizeFreeRect(x, y, w, h, dx, dy, corner, minW, minH, maxW, maxH) {
+  const name = String(corner || "bottomRight");
+  const right = (Number(x) || 0) + (Number(w) || 0);
+  const bottom = (Number(y) || 0) + (Number(h) || 0);
+  const loW = Number.isFinite(Number(minW)) ? Number(minW) : 120;
+  const loH = Number.isFinite(Number(minH)) ? Number(minH) : 80;
+  const hiW = Number.isFinite(Number(maxW)) ? Number(maxW) : 1600;
+  const hiH = Number.isFinite(Number(maxH)) ? Number(maxH) : 1600;
+  let nw = (Number(w) || 0) + (name.endsWith("Right") ? Number(dx) || 0 : -(Number(dx) || 0));
+  let nh = (Number(h) || 0) + (name.startsWith("bottom") ? Number(dy) || 0 : -(Number(dy) || 0));
+  nw = Math.max(loW, Math.min(hiW, nw));
+  nh = Math.max(loH, Math.min(hiH, nh));
+  return {
+    x: name.endsWith("Left") ? right - nw : Number(x) || 0,
+    y: name.startsWith("top") ? bottom - nh : Number(y) || 0,
+    w: nw,
+    h: nh,
+  };
 }
 
 /**

@@ -1152,7 +1152,7 @@ NodeLiveAudioProcessor.prototype.applyNativeModuleExports = function applyNative
         });
         return;
       }
-      if (name === "dsf_oscillator" || targetType === "dsfOscillator") {
+      if (name === "dsf_oscillator" || targetType === "dsfOscillator" || targetType === "dsfMorphingOsc") {
         for (const state of this.dsfOscillatorStates.values()) {
           this.destroyDsfOscillatorNativeState(state);
         }

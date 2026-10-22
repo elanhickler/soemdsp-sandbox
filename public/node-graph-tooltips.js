@@ -180,8 +180,18 @@ function nodeGraphElementTooltipText(element) {
   if (!element) {
     return "";
   }
-  const key = element.dataset.tooltipKey;
-  return key ? nodeGraphTooltipText(key) : "";
+  const key = element.dataset?.tooltipKey;
+  if (key) {
+    const fromKey = nodeGraphTooltipText(key);
+    if (fromKey) {
+      return fromKey;
+    }
+  }
+  const stored = element.getAttribute?.(sandboxNativeTitleStorageAttribute) || "";
+  if (stored) {
+    return stored;
+  }
+  return String(element.dataset?.tooltip || "").trim();
 }
 
 function applyNodeGraphStaticTooltips(root = document) {
@@ -221,7 +231,9 @@ let nodeGraphTouchTipEl = null;
 let nodeGraphTouchTipTimer = 0;
 
 function nodeGraphTooltipShowTouch(target, event) {
-  const source = target instanceof Element ? target : event?.target;
+  const source = typeof nodeGraphInteractionHelpEventTarget === "function"
+    ? nodeGraphInteractionHelpEventTarget(event)
+    : (target instanceof Element ? target : event?.target);
   if (!(source instanceof Element)) {
     return;
   }

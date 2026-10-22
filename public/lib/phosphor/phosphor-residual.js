@@ -110,6 +110,22 @@
   }
 
   /**
+   * Continuous-time form of the residual exponential: energy * e^(-age / tau).
+   * Same keep as secondsToKeep: pow(keep, age * 60) == exp(-age / tau).
+   * tauSeconds <= 0 holds (fade time 0 = stay until retrigger).
+   */
+  function energyAfterSeconds(energy01, tauSeconds, ageSeconds) {
+    const e = Math.max(0, nodeGraphFiniteNumber(energy01));
+    if (!(e > 0)) return 0;
+    const tau = Number(tauSeconds);
+    if (!(tau > 0) || !Number.isFinite(tau)) return e;
+    const age = Math.max(0, Number(ageSeconds) || 0);
+    const keep = secondsToKeep(tau);
+    if (!(keep > 0)) return 0;
+    return e * Math.pow(keep, age * 60);
+  }
+
+  /**
    * Residual step: stored energy times the decay keep, over `frames` 60 fps
    * frames (pass elapsed time so decay time is frame-rate independent).
    * Never raises energy; Ghost/Trail only set the rate.
@@ -225,6 +241,7 @@
     RESIDUAL_KNEE_POWER,
     destFadeAmount,
     destGhostEraseAmount,
+    energyAfterSeconds,
     applyResidual,
     residualKeepAt,
     stepFrames,

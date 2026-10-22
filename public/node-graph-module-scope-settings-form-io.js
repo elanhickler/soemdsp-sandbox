@@ -414,6 +414,7 @@ if (type === "portalFace") {
         lineHue: 165,
         lineBrightness: 0.5,
         lineThickness: 3,
+        lineSmoothing: 1,
         lineBlur: 0,
         dotHue: 165,
         dotBrightness: 1,
@@ -434,6 +435,7 @@ if (type === "portalFace") {
         lineHue: 165,
         lineBrightness: 0.5,
         lineThickness: 2,
+        lineSmoothing: 1,
         lineBlur: 0,
         dotHue: 165,
         dotBrightness: 1,
@@ -1026,7 +1028,7 @@ if (settingsSchema === "portalFace") {
       ? nodeGraphHarmonicLinesSettingsForNode(node)
       : (typeof normalizeNodeGraphHarmonicLinesSettings === "function"
         ? normalizeNodeGraphHarmonicLinesSettings(node?.harmonicLinesSettings)
-        : (node?.harmonicLinesSettings || { lineWidth: 2 }));
+        : (node?.harmonicLinesSettings || { lineWidth: 2, lineSmoothing: 1 }));
   }
   if (settingsSchema === "softpopFace" && typeof nodeGraphSoftpopFaceSettingsForNode === "function") {
     return nodeGraphSoftpopFaceSettingsForNode(node);
@@ -1249,8 +1251,10 @@ function readNodeGraphTraceDisplaySettingsForm() {
   if (formType === "harmonicLines") {
     const panel = root?.querySelector?.("[data-harmonic-lines-display-settings-panel]") || root;
     const next = { ...current };
-    const input = panel?.querySelector?.(`[data-harmonic-lines-field="lineWidth"]`);
-    if (input) next.lineWidth = Number(input.value);
+    for (const key of ["lineWidth", "lineSmoothing"]) {
+      const input = panel?.querySelector?.(`[data-harmonic-lines-field="${key}"]`);
+      if (input) next[key] = Number(input.value);
+    }
     return normalizeNodeGraphDisplaySettingsForFormType(next, formType);
   }
   if (formType === "softpopFace" && typeof readNodeGraphSoftpopDisplaySettingsForm === "function") {

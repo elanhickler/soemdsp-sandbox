@@ -7,7 +7,7 @@ function nodeGraphDsfOscillatorLoadWasm() {
   if (nodeGraphDsfOscillatorWasm.promise || typeof fetch !== "function" || typeof WebAssembly === "undefined") {
     return;
   }
-  nodeGraphDsfOscillatorWasm.promise = fetch("/native_modules/dsf_oscillator/dsf_oscillator.wasm?v=dsf-tz-1")
+  nodeGraphDsfOscillatorWasm.promise = fetch("/native_modules/dsf_oscillator/dsf_oscillator.wasm?v=dsf-morphing-osc-1")
     .then((response) => {
       if (!response.ok) throw new Error(`dsf_oscillator wasm HTTP ${response.status}`);
       return response.arrayBuffer();
@@ -34,6 +34,7 @@ function destroyNodeGraphDsfOscillatorNativeState(state) {
 }
 
 // options: { frequencyHz, sampleRate, waveform, morph, pulseWidth, blend, phase, level }
+// morphing: { morphing, symmetry, width, rotate, slice }
 function nodeGraphDsfOscillatorSample(state, options = {}) {
   nodeGraphDsfOscillatorLoadWasm();
   const wasm = nodeGraphDsfOscillatorWasm.exports;
@@ -46,16 +47,32 @@ function nodeGraphDsfOscillatorSample(state, options = {}) {
   if (!state.nativeHandle) {
     return { Out: 0 };
   }
-  wasm.soemdsp_dsf_oscillator_sample(
-    state.nativeHandle,
-    nodeGraphFiniteNumber(options.frequencyHz),
-    Number(options.sampleRate) > 1 ? Number(options.sampleRate) : 48000,
-    Math.round(nodeGraphFiniteNumber(options.waveform)),
-    nodeGraphFiniteNumber(options.morph),
-    Number(options.pulseWidth) ?? 0.5,
-    Number(options.blend) ?? 0.5,
-    nodeGraphFiniteNumber(options.phase),
-    nodeGraphFiniteNumber(options.level),
-  );
+  const sr = Number(options.sampleRate) > 1 ? Number(options.sampleRate) : 48000;
+  if (options.morphing && typeof wasm.soemdsp_dsf_oscillator_sample_morph === "function") {
+    wasm.soemdsp_dsf_oscillator_sample_morph(
+      state.nativeHandle,
+      nodeGraphFiniteNumber(options.frequencyHz),
+      sr,
+      nodeGraphFiniteNumber(options.morph),
+      nodeGraphFiniteNumber(options.symmetry),
+      nodeGraphFiniteNumber(options.width),
+      nodeGraphFiniteNumber(options.rotate),
+      nodeGraphFiniteNumber(options.slice),
+      nodeGraphFiniteNumber(options.phase),
+      nodeGraphFiniteNumber(options.level),
+    );
+  } else {
+    wasm.soemdsp_dsf_oscillator_sample(
+      state.nativeHandle,
+      nodeGraphFiniteNumber(options.frequencyHz),
+      sr,
+      Math.round(nodeGraphFiniteNumber(options.waveform)),
+      nodeGraphFiniteNumber(options.morph),
+      Number(options.pulseWidth) ?? 0.5,
+      Number(options.blend) ?? 0.5,
+      nodeGraphFiniteNumber(options.phase),
+      nodeGraphFiniteNumber(options.level),
+    );
+  }
   return { Out: nodeGraphFiniteNumber(wasm.soemdsp_dsf_oscillator_out(state.nativeHandle)) };
 }

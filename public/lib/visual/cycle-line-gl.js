@@ -1,7 +1,8 @@
 // Shared presenter for one-cycle line + phase-dot faces (SinCos, DSF, Basic
 // Shape, Ellipsoid, Softwave). Drawn with the app-wide antialiased line drawer
-// (gl-line-renderer.js): each line is one joined strip with a ~1 device-px
-// soft edge. Coordinates are CSS pixels, origin top-left, y down.
+// (gl-line-renderer.js): each line is one joined strip with a smootherstep
+// skirt (`line.feather` or `frame.smoothing` CSS px, default 1). Coordinates
+// are CSS pixels, origin top-left, y down.
 
 function nodeGraphCycleLineGlMetrics(section, canvas, pixelDensity) {
   if (!section || !canvas) return null;
@@ -92,23 +93,30 @@ function nodeGraphCycleLineGlPresent(canvas, frame = {}) {
     nodeGraphDisplayGlFailed(canvas, "cycle line: no shared GL device");
     return false;
   }
-  const fine = 1 / scale;
+  const smoothing = Number.isFinite(Number(frame.smoothing))
+    ? Math.max(0, Number(frame.smoothing))
+    : (typeof nodeGraphLineSmoothingPx === "function" ? nodeGraphLineSmoothingPx(frame, 1) : 1);
   for (const line of Array.isArray(frame.lines) ? frame.lines : []) {
     const rgba = nodeGraphGlLinesCss(line?.color || "#ffffff");
-    const half = Math.max(0.125, (Number(line?.width) || 1) * 0.5);
+    const half = Number.isFinite(Number(line?.half))
+      ? Math.max(0, Number(line.half))
+      : Math.max(0.125, (Number(line?.width) || 1) * 0.5);
+    const feather = Number.isFinite(Number(line?.feather))
+      ? Math.max(0, Number(line.feather))
+      : smoothing;
     const taps = nodeGraphCycleLineGlBlurTaps(line?.blur);
     for (const strip of nodeGraphCycleLineGlStrips(line?.points)) {
       if (strip.length < 2) continue;
       for (const tap of taps) {
         const pts = [];
         for (const pt of strip) pts.push(pt.x + tap.x, pt.y + tap.y);
-        nodeGraphGlLinesPolyline(batch, pts, half, fine, [rgba[0], rgba[1], rgba[2], rgba[3] * tap.w]);
+        nodeGraphGlLinesPolyline(batch, pts, half, feather, [rgba[0], rgba[1], rgba[2], rgba[3] * tap.w]);
       }
     }
   }
   for (const dot of Array.isArray(frame.dots) ? frame.dots : []) {
     if (!dot || !Number.isFinite(dot.x) || !Number.isFinite(dot.y)) continue;
-    nodeGraphGlLinesDot(batch, dot.x, dot.y, Math.max(0.5, Number(dot.radius) || 0.5), fine, nodeGraphGlLinesCss(dot.color || "#ffffff"));
+    nodeGraphGlLinesDot(batch, dot.x, dot.y, Math.max(0.5, Number(dot.radius) || 0.5), Number.isFinite(Number(dot.feather)) ? Math.max(0, Number(dot.feather)) : smoothing, nodeGraphGlLinesCss(dot.color || "#ffffff"));
   }
   state.waveKey = `${frame.waveKey || ""}|${canvas.width}x${canvas.height}`;
   if (!nodeGraphGlLinesEnd(batch, "alpha")) {

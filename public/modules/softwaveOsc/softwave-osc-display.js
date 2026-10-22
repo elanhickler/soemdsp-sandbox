@@ -84,6 +84,7 @@ function nodeGraphSoftwaveOscFaceLook(node) {
     strokePaint: String(face.strokePaint || face.strokeColor || "rgba(120, 220, 200, 0.92)"),
     dotPaint: String(face.dotPaint || face.dotColor || "#ffffff"),
     lineThickness: Math.max(0.25, nodeGraphFiniteNumber(face.lineThickness, 3)),
+    lineSmoothing: Math.max(0, nodeGraphFiniteNumber(face.lineSmoothing, 1)),
     dotThickness: Math.max(0.25, nodeGraphFiniteNumber(face.dotThickness, 5)),
     lineBlur: Math.max(0, nodeGraphFiniteNumber(face.lineBlur)),
     pixelDensity: Number.isFinite(Number(face.pixelDensity)) ? Number(face.pixelDensity) : 1,
@@ -127,6 +128,9 @@ function drawNodeGraphSoftwaveOscDisplayInner(section) {
   const strokeW = look.lineThickness;
   const dotW = look.dotThickness;
   const lineBlur = look.lineBlur;
+  const lineSmoothing = typeof nodeGraphLineSmoothingPx === "function"
+    ? nodeGraphLineSmoothingPx(look, 1)
+    : Math.max(0, Number(look.lineSmoothing) || 1);
   const pixelDensity = look.pixelDensity;
   let rawW = nodeGraphFiniteNumber(section.clientWidth || section.offsetWidth);
   let rawH = nodeGraphFiniteNumber(section.clientHeight || section.offsetHeight);
@@ -147,6 +151,7 @@ function drawNodeGraphSoftwaveOscDisplayInner(section) {
     look.backgroundPaint,
     String(strokeW),
     String(lineBlur),
+    String(lineSmoothing),
     String(pixelDensity),
     String(dotW),
     look.dotPaint || "",
@@ -248,11 +253,13 @@ function drawNodeGraphSoftwaveOscDisplayInner(section) {
     cssHeight: drawH,
     background: look.backgroundPaint || look.background || "#020609",
     waveKey: signature,
+    smoothing: lineSmoothing,
     lines: [{
       points,
       color: look.strokePaint || look.strokeColor || "#78dcc8",
       width: strokeW,
       blur: lineBlur,
+      feather: lineSmoothing,
     }],
     dots,
   });

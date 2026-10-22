@@ -190,6 +190,7 @@ var sandbox = {
     antisaw: { outputs: ["Out"], outputChannels: { Out: "green" } },
     sinc: { outputs: ["Out"], outputChannels: { Out: "green" } },
     dsfOscillator: { outputs: ["Out"], outputChannels: { Out: "green" } },
+    dsfMorphingOsc: { outputs: ["Out"], outputChannels: { Out: "green" } },
     softwaveOsc: {
       inputs: ["Reset", "0.1V/Oct", "f"],
       outputs: ["Out"],
@@ -322,6 +323,7 @@ assert(ch("robinSinusoid", "Out", "output") === "green", "RobinSinusoid Out is g
 assert(ch("antisaw", "Out", "output") === "green", "Antisaw Out is green");
 assert(ch("sinc", "Out", "output") === "green", "Sinc Out is green");
 assert(ch("dsfOscillator", "Out", "output") === "green", "DSF Out is green");
+assert(ch("dsfMorphingOsc", "Out", "output") === "green", "DSF Morphing Osc Out is green");
 assert(ch("range", "In", "input") === "", "Range In stays gold (uncolored)");
 assert(ch("range", "Out", "output") === "", "Range Out stays gold (uncolored)");
 assert(!sandbox.nodeGraphModuleDefinitions.range.inputAliases, "Range has no inputAliases");

@@ -651,7 +651,7 @@ function createNodeGraphLiveRuntime(plan, previousRuntime = null) {
     if (node.type === "textStream" && typeof createNodeGraphTextStreamState === "function") {
       textStreamStates.set(node.id, createNodeGraphTextStreamState());
     }
-    if (node.type === "dsfOscillator") {
+    if (node.type === "dsfOscillator" || node.type === "dsfMorphingOsc") {
       dsfOscillatorStates.set(node.id, createNodeGraphDsfOscillatorState());
     }
     if (node.type === "robinSupersaw") {
@@ -1512,7 +1512,7 @@ function updateNodeGraphLiveRuntimePlan(runtime, plan) {
     if (node.type === "textStream" && !runtime.textStreamStates.has(node.id) && typeof createNodeGraphTextStreamState === "function") {
       runtime.textStreamStates.set(node.id, createNodeGraphTextStreamState());
     }
-    if (node.type === "dsfOscillator" && !runtime.dsfOscillatorStates.has(node.id)) {
+    if ((node.type === "dsfOscillator" || node.type === "dsfMorphingOsc") && !runtime.dsfOscillatorStates.has(node.id)) {
       runtime.dsfOscillatorStates.set(node.id, createNodeGraphDsfOscillatorState());
     }
     if (node.type === "robinSupersaw" && !runtime.robinSupersawStates.has(node.id)) {

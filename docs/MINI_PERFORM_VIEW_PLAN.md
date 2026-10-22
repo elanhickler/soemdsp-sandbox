@@ -193,6 +193,7 @@ After PE-4, Pencil layers with **Show in performance mode** draw in the mini vie
 
 | Button | Key | Reference size (stage the layout is read at) |
 |---|---|---|
+| Free | `free` | stored `width × height` (zoom-1 world px). Corner handles drag independently; the opposite corner stays put. |
 | Window | `window` | `innerWidth × innerHeight` (what F shows on this window) |
 | 16:9 | `16:9` | height = window height, width = height × 16/9 |
 | 4:3 | `4:3` | same rule, 4/3 |
@@ -420,7 +421,7 @@ No migration: stored `margin`, `pointer`, `reference` and `show` are dropped by 
 ### Open questions (defaults chosen so work can start)
 
 1. **Resize cursors at the corners?** Default: no, the default arrow everywhere, with the GL corner marks on hover for findability. Alternative: diagonal resize arrows at the corners only, default arrow everywhere else.
-2. **Free resize?** Default: corner drag keeps the selected ratio locked. Alternative: free resize that unpresses the ratio buttons and shows a "Custom" shape (the reference stage would then follow the frame shape).
+2. **Free resize?** Settled: explicit **Free** aspect button (first in the row). Locked ratios still keep corner drag aspect-locked. Free stores `height` (80..1600) and uses the stored rectangle as the reference stage so the GL pass keeps one scale `s`. Switching Window / 16:9 / … → Free seeds `height` from the current derived height.
 3. **Ratio set.** Default: the seven buttons above. Drop 9:16 since Phone portrait (9:19.5) covers phones? Add 21:9?
 4. **Reset position and size button?** Default: add it.
 5. **No click-through at all?** Default: clicks over the frame always go to the mini view. Alternative: hold a key (for example Alt) to click through to the workspace under it.

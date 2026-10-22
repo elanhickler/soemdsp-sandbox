@@ -1,14 +1,19 @@
 // Pulse Train face: where the pulses land, adapted from the Pulse Explosion
 // face (node-graph-pulse-explosion-display.js) without sharing its state.
 // One stem per pulse at its time after the trigger, height = amplitude, dot
-// on top, time axis 0 .. Time (Loop: the whole cycle; the playhead wraps). The schedule comes from the engine
-// (soemdsp_pulse_train_preview in pulse_train.wasm), so it is exactly what a
-// trigger with velocity 1 plays; with audio running it uses the engine's params in effect (__Count .. __Amp). Playhead: __Elapsed (seconds since trigger,
-// -1 idle) shifted to the heard time; fired pulses light up.
+// on top, time axis 0 .. Time (Loop: the whole cycle; the playhead wraps).
+// The schedule is the same E_k closed form as pulse_train.cpp
+// (t_i = End * E_curve(u_i)); Count goes to 16384 for acoustic-dispersion
+// tap trains. Stems/dots are an instanced GL pass (nodeGraphGlLinesPulseTrain)
+// so the vertex shader evaluates the formula from gl_InstanceID. With audio
+// running it uses the engine's params in effect (__Count .. __Amp). Playhead:
+// __Elapsed (seconds since trigger, -1 idle) shifted to the heard time; fired
+// pulses light up.
 // Ghost: the next pattern (live params) drawn dim behind the playing one.
 // Display Settings `pulseTrainFace`: Background, Line, Dot, Playhead, Lit,
-// Ghost HBS; Line thickness, Dot size, Ghost opacity (the Pulse Explosion
-// set plus Ghost, one normalizer: nodeGraphPulseFaceNormalize). GPU only
+// Ghost HBS; Line thickness, Dot size, Ghost opacity, Fade time (s). Fade 0
+// holds the lit dots until retrigger; >0 is PhosphorResidual.energyAfterSeconds.
+// GPU only
 // (gl-line-renderer); canvas size comes from the tile.
 
 const nodeGraphPulseTrainFaceDisplaySettingsDefaults = Object.freeze({
@@ -17,6 +22,7 @@ const nodeGraphPulseTrainFaceDisplaySettingsDefaults = Object.freeze({
   ghostBrightness: 0.55,
   ghostSaturation: 0.5,
   ghostOpacity: 0.35,
+  fadeTime: 0,
 });
 const NODE_GRAPH_PULSE_TRAIN_FACE_EXTRA_LAMPS = Object.freeze([...NODE_GRAPH_PULSE_EXPLOSION_FACE_EXTRA_LAMPS, "ghost"]);
 
@@ -34,7 +40,7 @@ function nodeGraphPulseTrainPreviewLoad() {
   if (nodeGraphPulseTrainPreviewWasm.promise || typeof fetch !== "function" || typeof WebAssembly === "undefined") {
     return nodeGraphPulseTrainPreviewWasm.promise;
   }
-  nodeGraphPulseTrainPreviewWasm.promise = fetch("/native_modules/pulse_train/pulse_train.wasm?v=pulse-train-ghost-1")
+  nodeGraphPulseTrainPreviewWasm.promise = fetch("/native_modules/pulse_train/pulse_train.wasm?v=pulse-train-f-period-1")
     .then((response) => {
       if (!response.ok) throw new Error(`pulse_train wasm HTTP ${response.status}`);
       return response.arrayBuffer();
@@ -59,25 +65,29 @@ function nodeGraphPulseTrainFaceParam(node, key, fallback) {
   return Number.isFinite(n) ? n : fallback;
 }
 
-/** { times, amps, end, peak } from the engine preview, or null until pulse_train.wasm is ready. */
+const NODE_GRAPH_PULSE_TRAIN_MAX = 16384;
+
+function nodeGraphPulseTrainCurveShape(k, u) {
+  if (!(Math.abs(k) > 1e-6)) return u;
+  return (Math.exp(k * u) - 1) / (Math.exp(k) - 1);
+}
+
+function nodeGraphPulseTrainClampCount(count) {
+  const n = Math.round(Number(count));
+  if (!(n >= 1)) return 1;
+  return n > NODE_GRAPH_PULSE_TRAIN_MAX ? NODE_GRAPH_PULSE_TRAIN_MAX : n;
+}
+
+/** { times, amps, end, peak } from the E_k formula (same as pulse_train.cpp). */
 function nodeGraphPulseTrainSchedule(section, node) {
-  const wasm = nodeGraphPulseTrainPreviewWasm.exports;
-  if (!wasm?.soemdsp_pulse_train_preview) {
-    nodeGraphPulseTrainPreviewLoad();
-    return null;
-  }
+  nodeGraphPulseTrainPreviewLoad();
   const p = (key, fallback) => nodeGraphPulseTrainFaceParam(node, key, fallback);
-  // ƒ wired (Time row owned by the jack): the engine's effective Time (__End = 1/ƒ).
+  // Time is the E_k window. Wired ƒ does not replace it (wrap is 1/ƒ; axis uses that).
   let endTime = p("endTime", 3);
-  const owned = section.closest?.(".node, article")?.querySelector?.('.node-parameter-row.f-jack-owns-frequency[data-param="endTime"]');
-  if (owned && typeof nodeGraphModuleScopeLatestOutputValue === "function") {
-    const live = Number(nodeGraphModuleScopeLatestOutputValue(section.dataset.node, "__End", Number.NaN));
-    if (Number.isFinite(live) && live > 0) endTime = live;
-  }
   const args = [
-    Math.round(p("count", 12)), endTime, p("curve", 3),
+    nodeGraphPulseTrainClampCount(p("count", 12)), endTime, p("curve", 3),
     p("ampStart", 1), p("ampEnd", 0.2), p("ampCurve", 0), p("amplitude", 1),
-    Math.round(p("mode", 0)),
+    Math.round(p("mode", 0)), nodeGraphPulseTrainPulseMode(p("pulseMode", 0)), p("endDelay", 0),
   ];
   const live = [...args];
   // Audio running: draw the params the engine is playing with (latched at the
@@ -89,36 +99,104 @@ function nodeGraphPulseTrainSchedule(section, node) {
     const eng = ["__Count", "__End", "__Curve", "__AmpStart", "__AmpEnd", "__AmpCurve", "__Amp"]
       .map((name) => Number(nodeGraphModuleScopeLatestOutputValue(section.dataset.node, name, Number.NaN)));
     if (eng.every(Number.isFinite)) {
-      for (let i = 0; i < 7; i += 1) args[i] = eng[i];
+      args[0] = nodeGraphPulseTrainClampCount(eng[0]);
+      for (let i = 1; i < 7; i += 1) args[i] = eng[i];
       endTime = eng[1];
     }
+    const pulseModeLive = Number(nodeGraphModuleScopeLatestOutputValue(section.dataset.node, "__Dual", Number.NaN));
+    if (Number.isFinite(pulseModeLive)) args[8] = nodeGraphPulseTrainPulseMode(pulseModeLive);
   }
-  const key = `${args.join(",")}|${live.join(",")}`;
+  const period = nodeGraphPulseTrainFPeriod(node);
+  const key = `${args.join(",")}|${live.join(",")}|${Number.isFinite(period) ? period : ""}`;
   if (section._pulseTrainKey === key && section._pulseTrainSchedule) return section._pulseTrainSchedule;
-  const sched = nodeGraphPulseTrainPreview(wasm, args, endTime);
+  const sched = nodeGraphPulseTrainPreviewJs(args, endTime);
   // Ghost: the pattern the next trigger / cycle latches (the live params),
   // shown only while it differs from what is playing (Recalculate On).
-  sched.ghost = live.slice(0, 7).join(",") !== args.slice(0, 7).join(",") ? nodeGraphPulseTrainPreview(wasm, live, live[1]) : null;
+  sched.ghost = live.join(",") !== args.join(",") ? nodeGraphPulseTrainPreviewJs(live, live[1]) : null;
   section._pulseTrainKey = key;
   section._pulseTrainSchedule = sched;
   return sched;
 }
 
-/** Engine preview schedule for args [count, time, curve, ampStart, ampEnd, ampCurve, amplitude, mode]. */
-function nodeGraphPulseTrainPreview(wasm, args, endTime) {
-  const count = wasm.soemdsp_pulse_train_preview(...args);
+/** 1/ƒ seconds when the ƒ jack is wired and > 0, else NaN. */
+function nodeGraphPulseTrainFPeriod(node) {
+  const id = String(node?.id || "");
+  if (!id || typeof nodeGraphModuleScopeConnectionsTo !== "function") return Number.NaN;
+  const wire = nodeGraphModuleScopeConnectionsTo(id, "f")
+    .find((c) => c?.sourceNode && c?.sourcePort);
+  if (!wire) return Number.NaN;
+  const hz = typeof nodeGraphModuleScopeLatestOutputValue === "function"
+    ? Number(nodeGraphModuleScopeLatestOutputValue(wire.sourceNode, wire.sourcePort, Number.NaN))
+    : Number.NaN;
+  if (!(hz > 0)) return Number.NaN;
+  return 1 / hz;
+}
+
+function nodeGraphPulseTrainPulseMode(v) {
+  const m = Math.round(Number(v) || 0);
+  if (m < 0) return 0;
+  if (m > 2) return 2;
+  return m;
+}
+
+/** Schedule for args [count, time, curve, ampStart, ampEnd, ampCurve, amplitude, mode, pulseMode, endDelay]. */
+function nodeGraphPulseTrainPreviewJs(args, endTime) {
+  const pulseMode = nodeGraphPulseTrainPulseMode(args[8]);
+  const nFwd = nodeGraphPulseTrainClampCount(args[0]);
+  const loop = args[7] > 0.5;
+  const fwdCap = pulseMode === 1 ? Math.min(nFwd, 8192) : nFwd;
+  const count = pulseMode !== 1 || fwdCap <= 1 ? fwdCap : (loop ? 2 * fwdCap - 2 : 2 * fwdCap - 1);
+  const duration = Number(endTime) > 0 ? Number(endTime) : 0;
+  const delayRaw = Number(args[9]);
+  const delay = Number.isFinite(delayRaw) ? delayRaw : 0;
+  const curve = Number(args[2]) || 0;
+  const ampStart = Number(args[3]) || 0;
+  const ampEnd = Number(args[4]) || 0;
+  const ampCurve = Number(args[5]) || 0;
+  const amplitude = Number(args[6]) || 0;
   const times = new Float64Array(count);
   const amps = new Float64Array(count);
   let peak = 0;
-  for (let i = 0; i < count; i += 1) {
-    times[i] = wasm.soemdsp_pulse_train_preview_time(i);
-    amps[i] = wasm.soemdsp_pulse_train_preview_amplitude(i);
-    peak = Math.max(peak, Math.abs(amps[i]));
+  const wasm = nodeGraphPulseTrainPreviewWasm.exports;
+  if (wasm?.soemdsp_pulse_train_preview && count <= 256) {
+    const n = wasm.soemdsp_pulse_train_preview(...args);
+    const used = Math.min(count, n);
+    for (let i = 0; i < used; i += 1) {
+      times[i] = wasm.soemdsp_pulse_train_preview_time(i);
+      amps[i] = wasm.soemdsp_pulse_train_preview_amplitude(i);
+      peak = Math.max(peak, Math.abs(amps[i]));
+    }
+  } else {
+    for (let j = 0; j < count; j += 1) {
+      let i = j;
+      if (pulseMode === 1) {
+        if (j >= fwdCap) i = 2 * fwdCap - 2 - j;
+      } else if (pulseMode === 2 && fwdCap > 1) {
+        i = loop ? (j === 0 ? 0 : fwdCap - j) : fwdCap - 1 - j;
+      }
+      const u = loop ? i / fwdCap : (fwdCap > 1 ? i / (fwdCap - 1) : 0);
+      let t = !loop && i === fwdCap - 1 && fwdCap > 1 ? duration : duration * nodeGraphPulseTrainCurveShape(curve, u);
+      if (!(t >= 0)) t = 0;
+      if (t > duration) t = duration;
+      if (pulseMode === 1 && j >= fwdCap) t = 2 * duration - t;
+      else if (pulseMode === 2 && fwdCap > 1) {
+        if (loop && j === 0) t = 0;
+        else t = duration - t;
+      }
+      times[j] = t;
+      const a = (ampStart + (ampEnd - ampStart) * nodeGraphPulseTrainCurveShape(ampCurve, u)) * amplitude;
+      amps[j] = a;
+      peak = Math.max(peak, Math.abs(a));
+    }
   }
-  // Axis: 0 .. Time (One shot: the last pulse; Loop: the whole cycle, last pulse before it).
-  const loop = args[7] > 0.5;
-  const end = loop ? Math.max(0.001, Number(endTime) || 0) : (count ? Math.max(0.001, times[count - 1]) : 0.001);
-  return { times, amps, end, peak, loop };
+  const span = (pulseMode === 1 ? 2 : 1) * duration;
+  const last = count ? times[count - 1] : 0;
+  const cutoff = loop ? span + delay : last + delay;
+  const end = Math.max(0.001, loop || delay !== 0 ? Math.max(0, cutoff) : last || 0.001);
+  return {
+    times, amps, end, duration, peak, loop, pulseMode, delay,
+    count, nFwd: fwdCap, curve, ampStart, ampEnd, ampCurve, amplitude,
+  };
 }
 
 /** Heard seconds since the last trigger, or NaN when no train is playing. */
@@ -160,12 +238,17 @@ function drawNodeGraphPulseTrainDisplay(section) {
     nodeGraphDisplayGlFailed(canvas, "pulse train face: no shared GL device");
     return;
   }
-  const fine = 1 / Math.max(1, pixelRatio);
+  const smoothing = typeof nodeGraphLineSmoothingPx === "function"
+    ? nodeGraphLineSmoothingPx(look, 1)
+    : Math.max(0, Number(look.lineSmoothing) || 1);
   const halfPx = look.lineThickness * 0.5;
   const dotR = look.dotThickness * 0.5;
   const schedule = nodeGraphPulseTrainSchedule(section, node);
   const ghost = schedule?.ghost || null;
-  const end = schedule ? Math.max(schedule.end, ghost ? ghost.end : 0) : Math.max(0.001, nodeGraphPulseTrainFaceParam(node, "endTime", 3));
+  const period = nodeGraphPulseTrainFPeriod(node);
+  const end = Number.isFinite(period) && period > 0
+    ? period
+    : (schedule ? Math.max(schedule.end, ghost ? ghost.end : 0) : Math.max(0.001, nodeGraphPulseTrainFaceParam(node, "endTime", 3)));
   const padX = Math.max(6, w * 0.04) + dotR;
   const padTop = Math.max(5, h * 0.08) + dotR;
   const base = h - Math.max(5, h * 0.08);
@@ -177,42 +260,49 @@ function drawNodeGraphPulseTrainDisplay(section) {
   const dot = rgba(look.dotPaint);
   const lit = rgba(look.litPaint);
   const dim = (c, a) => [c[0], c[1], c[2], c[3] * a];
-  nodeGraphGlLinesSegment(batch, x0, base, x1, base, Math.max(0.5, halfPx * 0.5), fine, dim(line, 0.6));
-  for (const x of [x0, x1]) nodeGraphGlLinesSegment(batch, x, base - 3, x, base + 3, 0.5, fine, dim(line, 0.6));
-  let elapsed = schedule ? nodeGraphPulseTrainHeardElapsed(section, schedule.loop ? Infinity : schedule.end) : Number.NaN;
+  nodeGraphGlLinesSegment(batch, x0, base, x1, base, Math.max(0.5, halfPx * 0.5), smoothing, dim(line, 0.6));
+  for (const x of [x0, x1]) nodeGraphGlLinesSegment(batch, x, base - 3, x, base + 3, 0.5, smoothing, dim(line, 0.6));
+  let elapsed = schedule ? nodeGraphPulseTrainHeardElapsed(section, schedule.loop ? Infinity : end) : Number.NaN;
   // Loop: the heard playhead wraps every cycle (the engine restarts __Elapsed at 0).
-  if (schedule?.loop && Number.isFinite(elapsed)) elapsed %= schedule.end;
+  if (schedule?.loop && Number.isFinite(elapsed)) elapsed %= end;
   const playing = Number.isFinite(elapsed);
   if (schedule) {
-    const { times, amps } = schedule;
     // Height = amplitude; the plot top is 1, or the loudest pulse when Amplitude goes past 1 (no clamp).
     const scale = Math.max(1, schedule.peak, ghost ? ghost.peak : 0);
-    const height = base - top;
+    const forest = (sched, lineC, dotC, litC, elapsedVal) => {
+      if (typeof nodeGraphGlLinesPulseTrain !== "function") return false;
+      nodeGraphGlLinesPulseTrain(batch, {
+        count: sched.nFwd || sched.count,
+        total: sched.count,
+        pulseMode: sched.pulseMode,
+        duration: sched.duration,
+        axisEnd: end,
+        curve: sched.curve,
+        ampStart: sched.ampStart,
+        ampEnd: sched.ampEnd,
+        ampCurve: sched.ampCurve,
+        amplitude: sched.amplitude,
+        loop: sched.loop,
+        x0, x1, base, top,
+        peak: scale,
+        halfPx, feather: smoothing, dotR,
+        elapsed: elapsedVal,
+        fadeTau: Number(look.fadeTime) || 0,
+        line: lineC, dot: dotC, lit: litC,
+      });
+      return true;
+    };
     if (ghost && look.ghostOpacity > 0) {
-      // Next pattern, dim, behind the live pulses.
       const g = dim(rgba(look.ghostPaint), look.ghostOpacity);
-      for (let i = 0; i < ghost.times.length; i += 1) {
-        const x = at(ghost.times[i]);
-        const y = base - (Math.abs(ghost.amps[i]) / scale) * height;
-        if (base - y > 0.5) nodeGraphGlLinesSegment(batch, x, base, x, y, halfPx, fine, g);
-        if (dotR > 0) nodeGraphGlLinesDot(batch, x, y, dotR, fine, g);
-      }
+      forest(ghost, g, g, g, Number.NaN);
     }
-    for (let i = 0; i < times.length; i += 1) {
-      const x = at(times[i]);
-      const y = base - (Math.abs(amps[i]) / scale) * height;
-      const fired = playing && times[i] <= elapsed;
-      if (base - y > 0.5) nodeGraphGlLinesSegment(batch, x, base, x, y, halfPx, fine, fired ? lit : line);
-      if (dotR > 0) {
-        const age = fired ? elapsed - times[i] : Infinity;
-        if (age < 0.12) nodeGraphGlLinesDot(batch, x, y, dotR * 2.2, fine, dim(lit, 0.35 * (1 - age / 0.12)));
-        nodeGraphGlLinesDot(batch, x, y, dotR, fine, fired ? lit : dot);
-      }
-    }
+    forest(schedule, line, dot, lit, playing ? elapsed : Number.NaN);
   }
   if (playing) {
     const x = at(elapsed);
-    nodeGraphGlLinesSegment(batch, x, top - dotR, x, base, Math.max(0.5, halfPx), fine, rgba(look.playheadPaint));
+    batch._over = true;
+    nodeGraphGlLinesSegment(batch, x, top - dotR, x, base, Math.max(0.5, halfPx), smoothing, rgba(look.playheadPaint));
+    batch._over = false;
   }
   if (!nodeGraphGlLinesEnd(batch, "alpha")) nodeGraphDisplayGlFailed(canvas, "pulse train face: GL present failed");
 }

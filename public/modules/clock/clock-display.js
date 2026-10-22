@@ -178,7 +178,9 @@ function drawNodeGraphClockFace(section) {
     nodeGraphDisplayGlFailed(canvas, "clock face: no shared GL device");
     return;
   }
-  const fine = 1 / Math.max(1, pixelRatio);
+  const smoothing = typeof nodeGraphLineSmoothingPx === "function"
+    ? nodeGraphLineSmoothingPx(look, 1)
+    : Math.max(0, Number(look.lineSmoothing) || 1);
   const stroke = look.lineThickness;
   const halfPx = stroke * 0.5;
   const g = nodeGraphClockFaceGeometry(w, h, pulseStart, pulseEnd, stroke, look.gateHeight);
@@ -191,21 +193,21 @@ function drawNodeGraphClockFace(section) {
   // A gate that never falls has no edges: top and bottom only.
   const pulse = rgba(look.strokePaint);
   if (endless) {
-    nodeGraphGlLinesSegment(batch, x0, high, x1, high, halfPx, fine, pulse);
-    nodeGraphGlLinesSegment(batch, x0, low, x1, low, halfPx, fine, pulse);
+    nodeGraphGlLinesSegment(batch, x0, high, x1, high, halfPx, smoothing, pulse);
+    nodeGraphGlLinesSegment(batch, x0, low, x1, low, halfPx, smoothing, pulse);
   } else if (pulseEnd >= pulseStart) {
     const mid = (xs + xe) * 0.5;
-    nodeGraphGlLinesPolyline(batch, [mid, low, xs, low, xs, high, xe, high, xe, low, mid, low], halfPx, fine, pulse);
+    nodeGraphGlLinesPolyline(batch, [mid, low, xs, low, xs, high, xe, high, xe, low, mid, low], halfPx, smoothing, pulse);
   } else {
-    nodeGraphGlLinesPolyline(batch, [x1, low, xs, low, xs, high, x1, high], halfPx, fine, pulse);
-    nodeGraphGlLinesPolyline(batch, [x0, high, xe, high, xe, low, x0, low], halfPx, fine, pulse);
+    nodeGraphGlLinesPolyline(batch, [x1, low, xs, low, xs, high, x1, high], halfPx, smoothing, pulse);
+    nodeGraphGlLinesPolyline(batch, [x0, high, xe, high, xe, low, x0, low], halfPx, smoothing, pulse);
   }
   // Phase start marker: where the clock starts (Phase).
   const xm = g.at(startPhase);
-  if (look.startThickness > 0) nodeGraphGlLinesSegment(batch, xm, high, xm, low, look.startThickness * 0.5, fine, rgba(look.startPaint));
+  if (look.startThickness > 0) nodeGraphGlLinesSegment(batch, xm, high, xm, low, look.startThickness * 0.5, smoothing, rgba(look.startPaint));
   // Playhead: the gate's height and stroke; flashes when the clock fires.
   const xp = g.at(phase);
-  nodeGraphGlLinesSegment(batch, xp, high, xp, low, halfPx, fine, rgba(flashing ? look.blinkPaint : look.dotPaint));
+  nodeGraphGlLinesSegment(batch, xp, high, xp, low, halfPx, smoothing, rgba(flashing ? look.blinkPaint : look.dotPaint));
   if (!nodeGraphGlLinesEnd(batch, "alpha")) nodeGraphDisplayGlFailed(canvas, "clock face: GL present failed");
 }
 

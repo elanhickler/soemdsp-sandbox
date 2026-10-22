@@ -874,6 +874,7 @@ const nodeGraphTraceDisplayActiveControlsByType = Object.freeze({
   roundShapeFace: Object.freeze({
     fields: Object.freeze([
       "lineThickness",
+      "lineSmoothing",
       "lineBrightness",
       "dotThickness",
       "dotBrightness",
@@ -887,6 +888,7 @@ const nodeGraphTraceDisplayActiveControlsByType = Object.freeze({
   basicShapeFace: Object.freeze({
     fields: Object.freeze([
       "lineThickness",
+      "lineSmoothing",
       "lineBrightness",
       "dotThickness",
       "dotBrightness",
@@ -900,6 +902,7 @@ const nodeGraphTraceDisplayActiveControlsByType = Object.freeze({
   softwaveOscFace: Object.freeze({
     fields: Object.freeze([
       "lineThickness",
+      "lineSmoothing",
       "lineBrightness",
       "dotThickness",
       "backgroundBrightness",
@@ -912,10 +915,12 @@ const nodeGraphTraceDisplayActiveControlsByType = Object.freeze({
   sinCosFace: Object.freeze({
     fields: Object.freeze([
       "lineThickness",
+      "lineSmoothing",
       "lineBrightness",
       "dotThickness",
       "dotBrightness",
       "backgroundBrightness",
+      "padExtra",
     ]),
     colors: Object.freeze(["strokeColor", "dotColor", "backgroundColor"]),
     toggles: Object.freeze([]),
@@ -923,21 +928,21 @@ const nodeGraphTraceDisplayActiveControlsByType = Object.freeze({
   }),
   // Clock: Background / Pulse / Playhead / Fill / Start / Blink HBS lamps + thicknesses, blink time.
   clockFace: Object.freeze({
-    fields: Object.freeze(["lineThickness", "startThickness", "blinkTime", "gateHeight"]),
+    fields: Object.freeze(["lineThickness", "lineSmoothing", "startThickness", "blinkTime", "gateHeight"]),
     colors: Object.freeze([]),
     toggles: Object.freeze([]),
     choices: Object.freeze([]),
   }),
   // Pulse Explosion: Background / Line (stems) / Dot (tops) / Playhead / Lit HBS lamps, stem + dot size.
   pulseExplosionFace: Object.freeze({
-    fields: Object.freeze(["lineThickness", "dotThickness"]),
+    fields: Object.freeze(["lineThickness", "lineSmoothing", "dotThickness"]),
     colors: Object.freeze([]),
     toggles: Object.freeze([]),
     choices: Object.freeze([]),
   }),
   // Pulse Train: the Pulse Explosion set plus the Ghost lamp and Ghost opacity.
   pulseTrainFace: Object.freeze({
-    fields: Object.freeze(["lineThickness", "dotThickness", "ghostOpacity"]),
+    fields: Object.freeze(["lineThickness", "lineSmoothing", "dotThickness", "ghostOpacity", "fadeTime"]),
     colors: Object.freeze([]),
     toggles: Object.freeze([]),
     choices: Object.freeze([]),
@@ -1122,6 +1127,7 @@ const nodeGraphTraceDisplaySectionControls = Object.freeze({
       "backgroundBrightness",
       "backgroundHue",
       "lineBlur",
+      "lineSmoothing",
       "pill",
       "squircle",
     ]),
@@ -1412,6 +1418,12 @@ const nodeGraphDisplaySettingsFieldMeta = Object.freeze({
     id: "nodeTraceDisplayScale",
     title: "Amplitude zoom (1 = full-scale ±1 fills the face). Raise to enlarge quieter signals.",
   }),
+  padExtra: Object.freeze({
+    label: "Extra padding",
+    inputmode: "decimal",
+    id: "nodeTraceDisplayPadExtra",
+    title: "Extra CSS pixels inside the plate after the automatic line/dot inset (0 = flush, no clip).",
+  }),
   pixelDensity: Object.freeze({
     label: "Pixel density",
     inputmode: "decimal",
@@ -1666,6 +1678,12 @@ const nodeGraphDisplaySettingsFieldMeta = Object.freeze({
   blinkTime: Object.freeze({ label: "Blink time", inputmode: "decimal" }),
   gateHeight: Object.freeze({ label: "Height", inputmode: "decimal" }),
   ghostOpacity: Object.freeze({ label: "Ghost opacity", inputmode: "decimal" }),
+  fadeTime: Object.freeze({
+    label: "Fade time (s)",
+    inputmode: "decimal",
+    id: "nodeTraceDisplayFadeTime",
+    title: "Lit-dot hang after each pulse. 0 = stay lit until the next trigger. Small values drop immediately. Exponential residual (PhosphorResidual.energyAfterSeconds), the same analog decay as phosphor / woscope.",
+  }),
   torchHue: Object.freeze({
     label: "Hue",
     inputmode: "decimal",
@@ -1754,6 +1772,13 @@ const nodeGraphDisplaySettingsFieldMeta = Object.freeze({
     id: "nodeTraceDisplayLineBlur",
     title:
       "Vector restroke blur in CSS pixels (0 = hard). Diamond tent kernel: the path is redrawn at center + 4 cardinal + 4 diagonal offsets. Cheap, no extra canvas.",
+  }),
+  lineSmoothing: Object.freeze({
+    label: "Line smoothing",
+    inputmode: "decimal",
+    id: "nodeTraceDisplayLineSmoothing",
+    title:
+      "Smootherstep antialiasing skirt in CSS pixels (0–8, default 1). 0 = hard core; larger values fade the edge over more pixels. Different faces need different amounts.",
   }),
   lineBrightness: Object.freeze({
     label: "Line",

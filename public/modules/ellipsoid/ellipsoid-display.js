@@ -131,6 +131,7 @@ function nodeGraphRoundShapeFaceLook(node) {
     dotColor: String(face.dotColor || "#ffffff"),
     dotPaint: String(face.dotPaint || face.dotColor || "#ffffff"),
     lineThickness: Math.max(0.25, nodeGraphFiniteNumber(face.lineThickness, 2)),
+    lineSmoothing: Math.max(0, nodeGraphFiniteNumber(face.lineSmoothing, 1)),
     dotThickness: Math.max(0.25, nodeGraphFiniteNumber(face.dotThickness, 5)),
     lineBlur: Math.max(0, nodeGraphFiniteNumber(face.lineBlur)),
     pixelDensity: Number.isFinite(Number(face.pixelDensity)) ? Number(face.pixelDensity) : 1,
@@ -214,6 +215,9 @@ function drawNodeGraphRoundShapeDisplayInner(section) {
   const strokeW = look.lineThickness;
   const dotW = Number.isFinite(Number(look.dotThickness)) ? Number(look.dotThickness) : 5;
   const lineBlur = look.lineBlur;
+  const lineSmoothing = typeof nodeGraphLineSmoothingPx === "function"
+    ? nodeGraphLineSmoothingPx(look, 1)
+    : Math.max(0, Number(look.lineSmoothing) || 1);
   const pixelDensity = look.pixelDensity;
   const faceMetrics = typeof ensureFaceMetrics === "function"
     ? ensureFaceMetrics(section, { observe: true })
@@ -238,6 +242,7 @@ function drawNodeGraphRoundShapeDisplayInner(section) {
     strokeW.toFixed(2),
     dotW.toFixed(2),
     lineBlur.toFixed(2),
+    lineSmoothing.toFixed(2),
     pixelDensity.toFixed(3),
     Number(look.lineHue || 0).toFixed(1),
     Number(look.lineBrightness || 0).toFixed(3),
@@ -294,7 +299,7 @@ function drawNodeGraphRoundShapeDisplayInner(section) {
   section._roundShapeLaidOut = true;
 
   const samples = 256;
-  const strokeInset = strokeW * 0.5 + 1 / Math.max(pixelRatio, 1);
+  const strokeInset = strokeW * 0.5 + lineSmoothing;
   const pad = Math.max(6, Math.min(drawW, drawH) * 0.08) + strokeInset;
   const cx = drawW * 0.5;
   const cy = drawH * 0.5;
@@ -324,7 +329,7 @@ function drawNodeGraphRoundShapeDisplayInner(section) {
       }
     }
     if (points.length) points.push(points[0]);
-    lines = [{ points, color: strokeColor, width: strokeW, blur: lineBlur }];
+    lines = [{ points, color: strokeColor, width: strokeW, blur: lineBlur, feather: lineSmoothing }];
     section._roundShapeOrbitSig = glKey;
   }
 
@@ -400,6 +405,7 @@ function drawNodeGraphRoundShapeDisplayInner(section) {
     cssHeight: drawH,
     background: plateBg,
     waveKey: signature,
+    smoothing: lineSmoothing,
     lines: lines || [],
     dots: Number.isFinite(px) && Number.isFinite(py) ? dots : [],
   });

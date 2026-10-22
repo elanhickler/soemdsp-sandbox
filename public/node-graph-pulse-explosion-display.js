@@ -65,6 +65,7 @@ function nodeGraphPulseFaceNormalize(settings, d, lamps) {
   out.lineThickness = span(merged.lineThickness, 0.25, 16, d.lineThickness);
   out.dotThickness = span(merged.dotThickness, 0.25, 32, d.dotThickness);
   if ("ghostOpacity" in d) out.ghostOpacity = span(merged.ghostOpacity, 0, 1, d.ghostOpacity);
+  if ("fadeTime" in d) out.fadeTime = span(merged.fadeTime, 0, 60, d.fadeTime);
   return out;
 }
 
@@ -206,7 +207,9 @@ function drawNodeGraphPulseCurveDisplay(section) {
     nodeGraphDisplayGlFailed(canvas, "pulse explosion face: no shared GL device");
     return;
   }
-  const fine = 1 / Math.max(1, pixelRatio);
+  const smoothing = typeof nodeGraphLineSmoothingPx === "function"
+    ? nodeGraphLineSmoothingPx(look, 1)
+    : Math.max(0, Number(look.lineSmoothing) || 1);
   const halfPx = look.lineThickness * 0.5;
   const dotR = look.dotThickness * 0.5;
   const schedule = nodeGraphPulseExplosionSchedule(section, node);
@@ -217,9 +220,9 @@ function drawNodeGraphPulseCurveDisplay(section) {
   const lit = rgba(look.litPaint);
   const dim = (c, a) => [c[0], c[1], c[2], c[3] * a];
   // Time axis: 0 .. window end, with a faint tick at 0 and at the end.
-  nodeGraphGlLinesSegment(batch, g.x0, g.base, g.x1, g.base, Math.max(0.5, halfPx * 0.5), fine, dim(line, 0.6));
+  nodeGraphGlLinesSegment(batch, g.x0, g.base, g.x1, g.base, Math.max(0.5, halfPx * 0.5), smoothing, dim(line, 0.6));
   for (const x of [g.x0, g.x1]) {
-    nodeGraphGlLinesSegment(batch, x, g.base - 3, x, g.base + 3, 0.5, fine, dim(line, 0.6));
+    nodeGraphGlLinesSegment(batch, x, g.base - 3, x, g.base + 3, 0.5, smoothing, dim(line, 0.6));
   }
   const elapsed = schedule ? nodeGraphPulseExplosionHeardElapsed(section, end) : Number.NaN;
   const playing = Number.isFinite(elapsed);
@@ -230,18 +233,18 @@ function drawNodeGraphPulseCurveDisplay(section) {
       const x = g.at(times[i]);
       const y = g.base - Math.max(0, Math.min(1, amps[i])) * height;
       const fired = playing && times[i] < elapsed;
-      if (g.base - y > 0.5) nodeGraphGlLinesSegment(batch, x, g.base, x, y, halfPx, fine, fired ? lit : line);
+      if (g.base - y > 0.5) nodeGraphGlLinesSegment(batch, x, g.base, x, y, halfPx, smoothing, fired ? lit : line);
       if (dotR > 0) {
         // A fresh hit glows for 120 ms around its dot.
         const age = fired ? elapsed - times[i] : Infinity;
-        if (age < 0.12) nodeGraphGlLinesDot(batch, x, y, dotR * 2.2, fine, dim(lit, 0.35 * (1 - age / 0.12)));
-        nodeGraphGlLinesDot(batch, x, y, dotR, fine, fired ? lit : dot);
+        if (age < 0.12) nodeGraphGlLinesDot(batch, x, y, dotR * 2.2, smoothing, dim(lit, 0.35 * (1 - age / 0.12)));
+        nodeGraphGlLinesDot(batch, x, y, dotR, smoothing, fired ? lit : dot);
       }
     }
   }
   if (playing) {
     const x = g.at(elapsed);
-    nodeGraphGlLinesSegment(batch, x, g.top - dotR, x, g.base, Math.max(0.5, halfPx), fine, rgba(look.playheadPaint));
+    nodeGraphGlLinesSegment(batch, x, g.top - dotR, x, g.base, Math.max(0.5, halfPx), smoothing, rgba(look.playheadPaint));
   }
   if (!nodeGraphGlLinesEnd(batch, "alpha")) nodeGraphDisplayGlFailed(canvas, "pulse explosion face: GL present failed");
 }

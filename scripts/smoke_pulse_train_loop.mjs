@@ -100,7 +100,7 @@ console.log(`ok pulseTrain Loop free-run (no trigger): ${SETS.length} sets x 3 c
 // 4) Graph: Loop free-runs with nothing wired; Æ’ = 2 Hz -> 0.5 s cycles.
 {
   const TYPE_PT = 231, TYPE_HOST_BPM = 192, PORT_MONO = 0, PORT_LEFT = 1, PORT_F = 16;
-  const PR = { AMP: 12, SHAPE: 13, STAGES: 22, TDEN: 53, MODE: 54 };
+  const PR = { AMP: 12, SHAPE: 13, STAGES: 22, TDEN: 53, MODE: 54, LFO_STYLE: 56 };
   for (const fHz of [null, 2]) {
     const g = N.soemdsp_graph_create() | 0;
     N.soemdsp_graph_set_sample_rate(g, SR);
@@ -111,7 +111,7 @@ console.log(`ok pulseTrain Loop free-run (no trigger): ${SETS.length} sets x 3 c
       N.soemdsp_graph_connect(g, hF, PORT_MONO, hP, PORT_F);
       N.soemdsp_graph_set_host_transport(g, fHz, 0, 0);
     }
-    for (const [p, v] of [[PR.STAGES, 6], [PR.TDEN, 0.3], [PR.SHAPE, 3], [PR.MODE, 1]]) N.soemdsp_graph_set_param(g, hP, p, v);
+    for (const [p, v] of [[PR.STAGES, 6], [PR.TDEN, 0.3], [PR.SHAPE, 3], [PR.MODE, 1], [PR.LFO_STYLE, 0]]) N.soemdsp_graph_set_param(g, hP, p, v);
     if (N.soemdsp_graph_compile(g) | 0) throw new Error("compile");
     N.soemdsp_graph_snap_controls(g);
     const out = [], ends = [];

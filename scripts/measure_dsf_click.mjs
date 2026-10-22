@@ -63,6 +63,6 @@ export async function dsfClickMetric(wasmFile, waveform) {
 if (process.argv[1] && process.argv[1].endsWith("measure_dsf_click.mjs")) {
   for (const [name, w] of [["Saw", 1], ["Square", 2]]) {
     const m = await dsfClickMetric(wasmPath, w);
-    console.log(`${name}: top-partial band flux max=${m.maxFlux.toFixed(3)} median=${m.medFlux.toFixed(3)} max/median=${m.ratio.toFixed(2)} peak 22.9-24 kHz band energy=${m.peakEnergy.toFixed(3)}`);
+    console.log(`${name}: top-partial band flux max=${m.maxFlux.toFixed(3)} median=${m.medFlux.toFixed(3)} max/median=${m.ratio.toFixed(2)} peak 22.9-24 kHz band energy=${m.peakEnergy.toFixed(3)} energyStep=${m.maxEnergyStep.toFixed(4)}`);
   }
 }

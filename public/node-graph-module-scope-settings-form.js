@@ -164,6 +164,18 @@ function nodeGraphDisplaySettingsBuildStepperRowHtml(key, formType = null, optio
     label = "Dot size";
     title = "Phase-dot diameter in CSS pixels (0.25–32).";
   }
+  if (formType === "sinCosFace" && key === "padExtra") {
+    label = "Extra padding";
+    title = "Extra CSS pixels inside the plate after the automatic line/dot inset (0 = flush, no clip).";
+  }
+  if (formType === "pulseTrainFace" && key === "fadeTime") {
+    label = "Fade time (s)";
+    title = "Lit-dot hang after each pulse. 0 = stay lit until the next trigger. Small values drop immediately. Same exponential residual as phosphor / woscope.";
+  }
+  if ((formType === "roundShapeFace" || formType === "basicShapeFace" || formType === "softwaveOscFace" || formType === "sinCosFace" || formType === "clockFace" || formType === "pulseExplosionFace" || formType === "pulseTrainFace") && key === "lineSmoothing") {
+    label = "Line smoothing";
+    title = "Smootherstep antialiasing skirt in CSS pixels (0–8, default 1). 0 = hard core.";
+  }
   if ((formType === "roundShapeFace" || formType === "basicShapeFace") && key === "lineBlur") {
     label = "Line blur";
     title = "Diamond restroke blur in CSS pixels (0 = hard). Path is redrawn at 9 tent-weighted offsets — cheap, no extra canvas.";
@@ -2083,15 +2095,18 @@ function buildNodeGraphDisplaySettingsBodyHtml(formType, node = null) {
     if ((type === "roundShapeFace" || type === "basicShapeFace" || type === "sinCosFace" || type === "clockFace" || type === "pulseExplosionFace" || type === "pulseTrainFace") && section === "waterfall") {
       fieldKeys = [
         "lineThickness",
+        "lineSmoothing",
         ...(type === "clockFace" ? ["startThickness", "blinkTime", "gateHeight"] : []),
         "dotThickness",
-        ...(type === "pulseTrainFace" ? ["ghostOpacity"] : []),
+        ...(type === "sinCosFace" ? ["padExtra"] : []),
+        ...(type === "pulseTrainFace" ? ["ghostOpacity", "fadeTime"] : []),
         "pixelDensity",
       ].filter((key) => activeFields.has(key) && allowKey("fields", key));
     }
     if (type === "softwaveOscFace" && section === "waterfall") {
       fieldKeys = [
         "lineThickness",
+        "lineSmoothing",
         "lineBrightness",
         "backgroundBrightness",
         "dotThickness",

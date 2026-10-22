@@ -27,10 +27,12 @@
 //   - Trigger only (gate_hit abs-rise rule, height = velocity, shared by all
 //     voices): starts a new voice that latches High/Low/Sweep, starts at phase 0
 //     (Robin's hard-reset noteOn), restarts the sweep, and sets e = |height|.
-//   - Voices (1..8): hits ring out with their own Decay until Voices are busy;
-//     then the oldest is stolen and plays on as a fading copy over Fade Time
-//     (ms, linear gain 1 -> 0), so a retrigger never cuts a tail (no click,
-//     even at Voices 1). Fade Time 0 = hard cut (pre-Voices behaviour).
+//   - Voices (1..8): click-helper fade stack, not polyphony. Only one kick is
+//     live. A retrigger always steals it: the previous hit plays on as a fading
+//     copy over Fade Time (ms, linear gain 1 -> 0, independent of Decay), so
+//     the cut is not a click. Voices is how many of those fading copies can
+//     pile up on fast retriggers; extra oldest fades are dropped. Fade Time 0
+//     = hard cut (pre-Voices behaviour).
 //   - fHi clamped to [50 Hz, fs/2] (fHi < 50 Hz makes c < 0: upward sweep and
 //     a singularity), fLo to [0, fs/2]. TriSaw guard at P = +1.
 //   - No key / velocity frequency tracking, no FadeOut / PassThrough / stereo.
@@ -202,20 +204,15 @@ static double sweep_unit(double freq, double fHi, double fLo) {
   return u;
 }
 
-// Voice allocation on a hit. Up to `count` voices ring out with their own
-// Decay; when all are busy the oldest is stolen: it keeps sounding as a fading
-// copy (gain 1 -> 0 over Fade Time) while the new hit starts clean at phase 0.
-// Fade Time 0 = hard cut (the pre-Voices behaviour at Voices 1).
-static int start_voice(State& s, int count, double fadeSamples) {
-  int busy = 0, oldest = -1;
+// Voice allocation on a hit. One live kick; a retrigger always steals it
+// (fade 1 -> 0 over Fade Time, or hard cut). `fadeSlots` is how many stolen
+// copies may keep fading (fast retriggers). Decay does not scale Fade Time.
+static int start_voice(State& s, int fadeSlots, double fadeSamples) {
+  if (fadeSlots < 1) fadeSlots = 1;
+  if (fadeSlots > kMaxVoices) fadeSlots = kMaxVoices;
   for (int i = 0; i < kSlots; i++) {
-    const Voice& v = s.v[i];
-    if (!v.on || v.fading) continue;
-    busy++;
-    if (oldest < 0 || v.age < s.v[oldest].age) oldest = i;
-  }
-  if (busy >= count && oldest >= 0) {
-    Voice& o = s.v[oldest];
+    Voice& o = s.v[i];
+    if (!o.on || o.fading) continue;
     if (fadeSamples > 0.0) {
       o.fading = true;
       o.gainStep = 1.0 / fadeSamples;
@@ -223,11 +220,20 @@ static int start_voice(State& s, int count, double fadeSamples) {
       o.on = false;
     }
   }
+  for (;;) {
+    int fading = 0, oldest = -1;
+    for (int i = 0; i < kSlots; i++) {
+      const Voice& v = s.v[i];
+      if (!v.on || !v.fading) continue;
+      fading++;
+      if (oldest < 0 || v.age < s.v[oldest].age) oldest = i;
+    }
+    if (fading <= fadeSlots || oldest < 0) break;
+    s.v[oldest].on = false;
+  }
   int slot = -1;
   for (int i = 0; i < kSlots; i++) if (!s.v[i].on) { slot = i; break; }
   if (slot < 0) {
-    // Every slot holds a fading copy (hits faster than Fade Time): reuse the
-    // quietest one.
     slot = 0;
     for (int i = 1; i < kSlots; i++) if (s.v[i].gain < s.v[slot].gain) slot = i;
   }
@@ -301,7 +307,7 @@ extern "C" double soemdsp_robin_sinepulse_sample(
   double amplitude,
   double sampleRate,
   double recalculateOnTrigger,  // 0 Off (live) / 1 On: decay latched on each hit
-  double voices,                // 1..8 voices before the oldest is stolen
+  double voices,                // 1..8 fading copies (one live kick)
   double fadeMs                 // stolen-voice fade, ms (0 = hard cut)
 ) {
   if (handle < 1 || handle > kMaxInstances || !gPool[handle - 1].active) return 0.0;
@@ -311,11 +317,11 @@ extern "C" double soemdsp_robin_sinepulse_sample(
   // Shared abs-rise Trigger rule (gate_hit) and velocity for every voice.
   const double trig = safe(trigger);
   if (gate_hit(trig, &s.lastTrigger)) {
-    // Voices is a slot index into a fixed array: rounded to 1..8 (bounds guard).
-    int count = (int)(safe(voices) + 0.5);
-    count = count < 1 ? 1 : (count > kMaxVoices ? kMaxVoices : count);
+    // Voices is fade-stack depth (1..8), not how many kicks ring together.
+    int fadeSlots = (int)(safe(voices) + 0.5);
+    fadeSlots = fadeSlots < 1 ? 1 : (fadeSlots > kMaxVoices ? kMaxVoices : fadeSlots);
     const double fadeSamples = safe(fadeMs) * 0.001 * sr;  // <= 0: hard cut
-    const int slot = start_voice(s, count, fadeSamples);
+    const int slot = start_voice(s, fadeSlots, fadeSamples);
     Voice& v = s.v[slot];
     init_voice(v);
     // rsSweepKicker::noteOn latching, no key / velocity tracking.
@@ -391,6 +397,6 @@ extern "C" int soemdsp_robin_sinepulse_is_idle(int handle) {
   return 1;
 }
 
-extern "C" int soemdsp_robin_sinepulse_version() { return 7; }  // 7: Voices (1..8) + Fade Time (stolen voice fades out; 0 = hard cut). 6: no Decay floor (was 0.1 ms). 5: Recalculate On Trigger (decay latched on hit)
+extern "C" int soemdsp_robin_sinepulse_version() { return 8; }  // 8: Voices = fading copies (one live kick; Decay does not scale Fade Time). 7: Voices (1..8) + Fade Time (stolen voice fades out; 0 = hard cut). 6: no Decay floor (was 0.1 ms). 5: Recalculate On Trigger (decay latched on hit)
 extern "C" const char* soemdsp_robin_sinepulse_metadata_json() { return kMetadataJson; }
 extern "C" int soemdsp_robin_sinepulse_metadata_json_size() { return sizeof(kMetadataJson) - 1; }

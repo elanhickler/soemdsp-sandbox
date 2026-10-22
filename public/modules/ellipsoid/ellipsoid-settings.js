@@ -7,6 +7,7 @@ const nodeGraphRoundShapeFaceDisplaySettingsDefaults = Object.freeze({
   lineBrightness: 0.5,
   lineSaturation: 1,
   lineThickness: 2,
+  lineSmoothing: 1,
   lineBlur: 0,
   dotHue: 165,
   dotBrightness: 1,
@@ -100,6 +101,7 @@ function normalizeNodeGraphRoundShapeFaceSettings(settings = {}) {
     d.backgroundSaturation,
   );
   const thicknessRaw = Number(source.lineThickness);
+  const smoothingRaw = Number(source.lineSmoothing);
   const dotThickRaw = Number(source.dotThickness);
   const blurRaw = Number(source.lineBlur ?? source.blur);
   const densityRaw = Number(source.pixelDensity);
@@ -122,6 +124,9 @@ function normalizeNodeGraphRoundShapeFaceSettings(settings = {}) {
     lineThickness: Number.isFinite(thicknessRaw)
       ? Math.max(0.25, Math.min(16, thicknessRaw))
       : d.lineThickness,
+    lineSmoothing: Number.isFinite(smoothingRaw)
+      ? Math.max(0, Math.min(8, smoothingRaw))
+      : d.lineSmoothing,
     lineBlur: Number.isFinite(blurRaw) ? Math.max(0, Math.min(8, blurRaw)) : d.lineBlur,
     dotHue,
     dotBrightness,
@@ -151,11 +156,18 @@ function nodeGraphRoundShapeFaceSettingsForNode(node) {
   return normalizeNodeGraphRoundShapeFaceSettings(node?.traceDisplaySettings);
 }
 
+/** CSS px of smootherstep skirt past the solid core (0–8). Default 1. */
+function nodeGraphLineSmoothingPx(look, fallback = 1) {
+  const n = Number(look?.lineSmoothing);
+  return Number.isFinite(n) ? Math.max(0, Math.min(8, n)) : fallback;
+}
+
 /** Softwave face — same hue/brightness model; thicker line, no playhead by default. */
 const nodeGraphSoftwaveOscFaceDisplaySettingsDefaults = Object.freeze({
   lineHue: 165,
   lineBrightness: 0.5,
   lineThickness: 3,
+  lineSmoothing: 1,
   lineBlur: 0,
   dotHue: 165,
   dotBrightness: 1,

@@ -901,6 +901,12 @@ const nodeGraphModuleStoreCatalog = Object.freeze({
     label: "DSF Oscillator",
     notes: ["oscillator", "dsf", "discrete summation formula", "anti-aliasing", "0.1V/Oct", "phase CV", "amplitude CV", "native"],
   },
+  dsfMorphingOsc: {
+    category: "oscillator",
+    description: "Alias-free morphing oscillator: Morph, Symmetry, Width, Rotate, and Slice of one band-limited DSF object (sine / saw / square / pulse / formant).",
+    label: "DSF Morphing Osc",
+    notes: ["oscillator", "dsf", "discrete summation formula", "anti-aliasing", "morph", "formant", "native"],
+  },
   robinSupersaw: {
     category: "oscillator",
     description: "Pitch-dithered supersaw (frequency detune, not phase mod). Waveform Saw / Squircle (sine to square Morph) / Trisaw / Center, Left, and Right pulses / Ramp. Fractional voices, Reset, Random Phase, Portamento, detune-face lines (±0.5 oct).",
@@ -2038,7 +2044,7 @@ const nodeGraphModuleStoreCatalog = Object.freeze({
   },
   pulseTrain: {
     category: "clock",
-    description: "On trigger, a train of pulses that starts fast and stretches out, like something slowing down. Curve sets how fast the gaps grow (0 even, below 0 the gaps shrink like a bouncing ball). Last pulse at Time. Mode Loop repeats the train every Time seconds with no trigger needed; Trigger / Reset restart it.",
+    description: "On trigger, a train of pulses (or grains: Gate/Saw/Ramp/Tri/Sine from one pulse to the next) that starts fast and stretches out. Shape out is the grain, Trigger out is always impulses, End fires at the last pulse. Pulse Mode Forward / Forward-Reverse / Reverse. Antialiasing Off/Fixed/Dither/Robin1/Robin2.",
     label: "Pulse Train",
     notes: ["trigger", "pulse train", "slowing down", "growing gaps", "bouncing ball", "End", "native"],
   },
@@ -3430,8 +3436,12 @@ const nodeGraphJsSourceEntriesByType = Object.freeze({
     sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/native_modules/delayed_trigger/delayed_trigger.cpp",
   },
   dsfOscillator: {
-    source: "public/modules/dsfOscillator/dsf-oscillator-worklet-evaluator.js",
-    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/dsfOscillator/dsf-oscillator-worklet-evaluator.js",
+    source: "native_modules/dsf_oscillator/dsf_oscillator.cpp",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/native_modules/dsf_oscillator/dsf_oscillator.cpp",
+  },
+  dsfMorphingOsc: {
+    source: "native_modules/dsf_oscillator/dsf_oscillator.cpp",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/native_modules/dsf_oscillator/dsf_oscillator.cpp",
   },
   ellipsoid: {
     source: "public/modules/ellipsoid/ellipsoid-worklet-evaluator.js",

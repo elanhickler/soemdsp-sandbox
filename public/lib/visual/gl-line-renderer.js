@@ -14,12 +14,13 @@
 //
 // Lines are shader-expanded quads (capsules): each vertex carries its local
 // position along/across the segment, the fragment shader takes the distance
-// to the segment and fades it over `feather` px past `halfPx`, exactly like
-// the Sabrina Reverb CLAP plugin's kLineFrag:
-//   a = 1 - smoothstep(halfPx, halfPx + feather, dist)
+// to the segment and fades it over `feather` px past `halfPx` with Perlin
+// smootherstep (docs/APP_POLICY.md):
+//   a = 1 - smootherstep(halfPx, halfPx + feather, dist)
 // so thickness never depends on fractional pixel position. Fills are the
 // same quads with an infinite halfPx (solid). A zero-length segment is a
-// round dot of radius halfPx.
+// round dot of radius halfPx. Phosphor beams keep gaussian/erf. Jack
+// notches keep Hermite smoothstep.
 //
 // Draw order per frame: images (under), quads, text (over).
 //
@@ -52,6 +53,7 @@
 (function initNodeGraphGlLineRenderer(global) {
   const MAX_DIM = 4096;
   const FLOATS = 12; // pos2, local2, len1, half1, feather1, caps1, rgba4
+  const PULSE_TRAIN_MAX = 16384;
   // IO notch cut-out, shared by the rail box fill (caps 12) and the IO-section
   // sockets (outline shader). d = distance from the notch centre, r = radius,
   // soft = smoothstep edge width (same units), aa = pixel floor so soft 0 is
@@ -61,6 +63,15 @@ float nodeGraphNotchAlpha(float d, float r, float soft, float aa) {
   if (r <= 0.0) return 1.0;
   float e = max(soft, aa);
   return smoothstep(r - e, r, d);
+}
+`;
+  // Perlin quintic. Same one-SDF cost as Hermite smoothstep; C2 at the
+  // skirt ends. Built-in smoothstep stays on jack notches.
+  const COVERAGE_GLSL = `
+float coverageSmoother(float halfPx, float feather, float dist) {
+  float w = max(feather, 1e-4);
+  float t = clamp((dist - halfPx) / w, 0.0, 1.0);
+  return 1.0 - t * t * t * (t * (t * 6.0 - 15.0) + 10.0);
 }
 `;
   const VS = `
@@ -160,7 +171,7 @@ varying vec4 vColour;
 uniform float uCoverage;
 uniform vec3 uCam;
 uniform vec2 uDash;
-${NOTCH_GLSL}
+${NOTCH_GLSL}${COVERAGE_GLSL}
 void main() {
   float u = vLocal.x;
   float across = abs(vLocal.y);
@@ -172,9 +183,9 @@ void main() {
     a = nodeGraphNotchAlpha(dn, vLen, vHalf, max(fwidth(dn), 1e-4));
   } else if (vCaps > 9.75) {
     // Analytic ring: distance to the circle of radius vLen, same solid core +
-    // shared feather smoothstep as the capsule / dot primitives.
+    // shared feather smootherstep as the capsule / dot primitives.
     float d = abs(length(vLocal) - vLen);
-    a = 1.0 - smoothstep(vHalf, vHalf + max(vFeather, 1e-4), d);
+    a = coverageSmoother(vHalf, vFeather, d);
   } else if (vCaps > 5.5 && vCaps < 6.5) {
     // One stadium per dash. Arc length is zoom-1 px, so the pattern stays
     // put while the camera moves. Caps and the body share this coverage.
@@ -199,7 +210,7 @@ void main() {
     float dScreen = length(vec2(best, gap)) * z;
     float halfScreen = max(vHalf, 0.0) * z;
     float fw = max(fwidth(dScreen), 0.6);
-    a = 1.0 - smoothstep(halfScreen, halfScreen + fw, dScreen);
+    a = coverageSmoother(halfScreen, fw, dScreen);
   } else if (vCaps > 1.5) {
     // Phosphor beam. erf integrates the gaussian along the segment so
     // overlapping ends add to one continuous brightness.
@@ -229,7 +240,7 @@ void main() {
     } else {
       d = u < 0.0 ? length(vLocal) : (u > vLen ? length(vec2(u - vLen, vLocal.y)) : across);
     }
-    a = 1.0 - smoothstep(vHalf, vHalf + max(vFeather, 1e-4), d);
+    a = coverageSmoother(vHalf, vFeather, d);
   }
   float cov = vColour.a * a;
   // Coverage pass stores straight alpha. Zero-coverage corners must be
@@ -798,7 +809,7 @@ void main() {
 
   /**
    * Capsule segment (x0,y0)-(x1,y1): solid core halfPx, then `feather` px of
-   * smoothstep fade (Sabrina kLineFrag). Round ends/joins.
+   * smootherstep fade. Round ends/joins.
    */
   function nodeGraphGlLinesSegment(batch, x0, y0, x1, y1, halfPx, feather, rgba, caps) {
     if (!batch) return;
@@ -864,7 +875,7 @@ void main() {
 
   /**
    * Analytic ring (distance field, no segments): circle of radius r centred at
-   * (x,y), solid core halfPx either side of r, then `feather` px of smoothstep
+   * (x,y), solid core halfPx either side of r, then `feather` px of smootherstep
    * fade - the same edge as nodeGraphGlLinesSegment / nodeGraphGlLinesDot.
    */
   function nodeGraphGlLinesRing(batch, x, y, r, halfPx, feather, rgba) {
@@ -888,6 +899,55 @@ void main() {
   /** Round dot (zero-length capsule) of radius r. */
   function nodeGraphGlLinesDot(batch, x, y, r, feather, rgba) {
     nodeGraphGlLinesSegment(batch, x, y, x, y, r, feather, rgba);
+  }
+
+  /**
+   * Instanced Pulse Train stems + dots. The vertex shader evaluates the same
+   * E_k schedule as pulse_train.cpp (t_i = End * E_curve(u_i)) from
+   * gl_InstanceID, so Count can be 16384 without a CPU vertex per pulse.
+   * spec: count, duration (Time s), axisEnd (x-axis s), curve, ampStart,
+   * ampEnd, ampCurve, amplitude, loop, x0, x1, base, top, peak, halfPx,
+   * feather, dotR, elapsed (NaN idle), fadeTau (s, 0 = hold), line/dot/lit rgba.
+   */
+  function nodeGraphGlLinesPulseTrain(batch, spec) {
+    if (!batch || !spec) return;
+    const nFwd = Math.max(0, Math.min(PULSE_TRAIN_MAX, spec.count | 0));
+    const total = Math.max(nFwd, Math.min(PULSE_TRAIN_MAX, spec.total | 0 || nFwd));
+    const pulseMode = spec.pulseMode | 0;
+    const n = pulseMode === 1 ? total : nFwd;
+    if (!(n > 0)) return;
+    if (!batch.pulseTrains) batch.pulseTrains = [];
+    const k = batch.camera ? 1 : (batch.scale || 1);
+    const rgba = (c) => {
+      const a = c && c.length > 3 ? c[3] : 1;
+      return [c?.[0] || 0, c?.[1] || 0, c?.[2] || 0, Number.isFinite(a) ? a : 1];
+    };
+    batch.pulseTrains.push({
+      count: n,
+      nFwd: nFwd,
+      pulseMode: pulseMode < 0 ? 0 : (pulseMode > 2 ? 2 : pulseMode),
+      duration: Number(spec.duration) || 0,
+      axisEnd: Math.max(1e-6, Number(spec.axisEnd) || 0.001),
+      curve: Number(spec.curve) || 0,
+      ampStart: Number(spec.ampStart) || 0,
+      ampEnd: Number(spec.ampEnd) || 0,
+      ampCurve: Number(spec.ampCurve) || 0,
+      amplitude: Number(spec.amplitude) || 0,
+      loop: spec.loop ? 1 : 0,
+      x0: (Number(spec.x0) || 0) * k,
+      x1: (Number(spec.x1) || 0) * k,
+      base: (Number(spec.base) || 0) * k,
+      top: (Number(spec.top) || 0) * k,
+      peak: Math.max(1e-12, Number(spec.peak) || 1),
+      half: Math.max(0, Number(spec.halfPx) || 0) * k,
+      feather: Math.max(0, Number(spec.feather) || 0) * k,
+      dotR: Math.max(0, Number(spec.dotR) || 0) * k,
+      elapsed: Number.isFinite(spec.elapsed) ? spec.elapsed : -1,
+      fadeTau: Math.max(0, Number(spec.fadeTau) || 0),
+      line: rgba(spec.line),
+      dot: rgba(spec.dot),
+      lit: rgba(spec.lit),
+    });
   }
 
   /**
@@ -1763,6 +1823,267 @@ void main() {
     }
   }
 
+  // Pulse Train forest: one instance per pulse. Stem is a vertical capsule,
+  // dot is the same disc recolored when lit (no extra halo circle).
+  const PT_VS = `#version 300 es
+precision highp float;
+layout(location = 0) in vec2 aCorner;
+uniform vec2 uVp;
+uniform float uCount;
+uniform float uDuration;
+uniform float uAxis;
+uniform float uCurve;
+uniform float uAmpStart;
+uniform float uAmpEnd;
+uniform float uAmpCurve;
+uniform float uAmp;
+uniform float uLoop;
+uniform float uPulseMode;
+uniform float uX0;
+uniform float uX1;
+uniform float uBase;
+uniform float uTop;
+uniform float uPeak;
+uniform float uElapsed;
+uniform float uFadeTau;
+uniform float uHalf;
+uniform float uFeather;
+uniform float uDotR;
+uniform float uMode;
+uniform vec4 uLine;
+uniform vec4 uDotCol;
+uniform vec4 uLit;
+out vec2 vLocal;
+out float vLen;
+out float vHalf;
+out float vFeather;
+out float vMode;
+out vec4 vColour;
+float curveShape(float k, float u) {
+  if (!(abs(k) > 1e-6)) return u;
+  float den = exp(k) - 1.0;
+  if (abs(den) < 1e-12) return u;
+  return (exp(k * u) - 1.0) / den;
+}
+void main() {
+  int id = gl_InstanceID;
+  float n = max(uCount, 1.0);
+  int ni = int(n + 0.5);
+  int mode = int(uPulseMode + 0.5);
+  int i = id;
+  if (mode == 1 && id >= ni) i = 2 * ni - 2 - id;
+  if (mode == 2 && ni > 1) i = uLoop > 0.5 ? (id == 0 ? 0 : ni - id) : ni - 1 - id;
+  float uu = uLoop > 0.5 ? float(i) / n : (n > 1.0 ? float(i) / (n - 1.0) : 0.0);
+  float t;
+  if (uLoop < 0.5 && i == ni - 1 && n > 1.0) t = uDuration;
+  else t = uDuration * curveShape(uCurve, uu);
+  if (!(t >= 0.0)) t = 0.0;
+  if (t > uDuration) t = uDuration;
+  if (mode == 1 && id >= ni) t = 2.0 * uDuration - t;
+  if (mode == 2 && ni > 1) t = (uLoop > 0.5 && id == 0) ? 0.0 : uDuration - t;
+  if (t > uAxis) {
+    gl_Position = vec4(2.0, 2.0, 0.0, 1.0);
+    vLocal = vec2(0.0);
+    vLen = 0.0;
+    vHalf = 0.0;
+    vColour = vec4(0.0);
+    return;
+  }
+  float amp = abs((uAmpStart + (uAmpEnd - uAmpStart) * curveShape(uAmpCurve, uu)) * uAmp);
+  float x = mix(uX0, uX1, clamp(t / uAxis, 0.0, 1.0));
+  float y = uBase - (amp / uPeak) * (uBase - uTop);
+  bool fired = uElapsed >= 0.0 && t <= uElapsed;
+  float age = fired ? uElapsed - t : 1e9;
+  // PhosphorResidual.energyAfterSeconds: exp(-age / tau). tau 0 = hold.
+  float litAmt = 0.0;
+  if (fired) litAmt = uFadeTau > 0.0 ? exp(-age / uFadeTau) : 1.0;
+  vMode = uMode;
+  vFeather = max(uFeather, 1e-4);
+  vec2 pos;
+  if (uMode < 0.5) {
+    float len = max(0.0, uBase - y);
+    if (len <= 0.5) {
+      gl_Position = vec4(2.0, 2.0, 0.0, 1.0);
+      vLocal = vec2(0.0);
+      vLen = 0.0;
+      vHalf = 0.0;
+      vColour = vec4(0.0);
+      return;
+    }
+    float r = uHalf + vFeather;
+    float along = -r + aCorner.x * (len + 2.0 * r);
+    float across = mix(-r, r, aCorner.y);
+    pos = vec2(x + across, uBase - along);
+    vLocal = vec2(along, across);
+    vLen = len;
+    vHalf = uHalf;
+    vColour = mix(uLine, uLit, litAmt);
+  } else {
+    float rad = max(uDotR, 0.0);
+    float r = rad + vFeather;
+    if (r <= 0.0) {
+      gl_Position = vec4(2.0, 2.0, 0.0, 1.0);
+      vLocal = vec2(0.0);
+      vLen = 0.0;
+      vHalf = 0.0;
+      vColour = vec4(0.0);
+      return;
+    }
+    vec2 off = (aCorner * 2.0 - 1.0) * r;
+    pos = vec2(x, y) + off;
+    vLocal = off;
+    vLen = 0.0;
+    vHalf = rad;
+    vColour = mix(uDotCol, uLit, litAmt);
+  }
+  gl_Position = vec4(pos.x / uVp.x * 2.0 - 1.0, 1.0 - pos.y / uVp.y * 2.0, 0.0, 1.0);
+}
+`;
+  const PT_FS = `#version 300 es
+precision highp float;
+in vec2 vLocal;
+in float vLen;
+in float vHalf;
+in float vFeather;
+in float vMode;
+in vec4 vColour;
+out vec4 fragColor;
+float coverageSmoother(float halfPx, float feather, float dist) {
+  float w = max(feather, 1e-4);
+  float t = clamp((dist - halfPx) / w, 0.0, 1.0);
+  return 1.0 - t * t * t * (t * (t * 6.0 - 15.0) + 10.0);
+}
+void main() {
+  float a;
+  if (vMode < 0.5) {
+    float u = vLocal.x;
+    float across = abs(vLocal.y);
+    float outside = u < 0.0 ? -u : (u > vLen ? u - vLen : 0.0);
+    float d = outside > 0.0 ? length(vec2(outside, vLocal.y)) : across;
+    a = coverageSmoother(vHalf, vFeather, d);
+  } else {
+    float d = length(vLocal);
+    a = coverageSmoother(vHalf, vFeather, d);
+  }
+  if (a < 0.004) discard;
+  fragColor = vec4(vColour.rgb, vColour.a * a);
+}
+`;
+
+  function ensurePulseTrain(s) {
+    if (!s || s.pulseTrainFailed) return null;
+    if (s.pulseTrain) return s.pulseTrain;
+    const gl = s.gl;
+    if (!gl || typeof gl.drawArraysInstanced !== "function") {
+      s.pulseTrainFailed = true;
+      return null;
+    }
+    try {
+      const vs = compile(gl, gl.VERTEX_SHADER, PT_VS, "pulseTrain vertex");
+      const fs = compile(gl, gl.FRAGMENT_SHADER, PT_FS, "pulseTrain fragment");
+      const program = gl.createProgram();
+      gl.attachShader(program, vs);
+      gl.attachShader(program, fs);
+      gl.bindAttribLocation(program, 0, "aCorner");
+      gl.linkProgram(program);
+      gl.deleteShader(vs);
+      gl.deleteShader(fs);
+      if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+        const log = gl.getProgramInfoLog(program) || "link failed";
+        gl.deleteProgram(program);
+        throw new Error(log);
+      }
+      const buf = gl.createBuffer();
+      gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+      gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
+        0, 0, 1, 0, 0, 1,
+        1, 0, 1, 1, 0, 1,
+      ]), gl.STATIC_DRAW);
+      gl.bindBuffer(gl.ARRAY_BUFFER, null);
+      const u = (name) => gl.getUniformLocation(program, name);
+      s.pulseTrain = {
+        program,
+        buf,
+        uVp: u("uVp"),
+        uCount: u("uCount"),
+        uDuration: u("uDuration"),
+        uAxis: u("uAxis"),
+        uCurve: u("uCurve"),
+        uAmpStart: u("uAmpStart"),
+        uAmpEnd: u("uAmpEnd"),
+        uAmpCurve: u("uAmpCurve"),
+        uAmp: u("uAmp"),
+        uLoop: u("uLoop"),
+        uPulseMode: u("uPulseMode"),
+        uX0: u("uX0"),
+        uX1: u("uX1"),
+        uBase: u("uBase"),
+        uTop: u("uTop"),
+        uPeak: u("uPeak"),
+        uElapsed: u("uElapsed"),
+        uFadeTau: u("uFadeTau"),
+        uHalf: u("uHalf"),
+        uFeather: u("uFeather"),
+        uDotR: u("uDotR"),
+        uMode: u("uMode"),
+        uLine: u("uLine"),
+        uDotCol: u("uDotCol"),
+        uLit: u("uLit"),
+      };
+      return s.pulseTrain;
+    } catch (error) {
+      s.pulseTrainFailed = true;
+      console.error("[gl-line-renderer] pulse train shader failed: " + String(error?.message || error));
+      return null;
+    }
+  }
+
+  function drawPulseTrains(batch) {
+    const pt = ensurePulseTrain(batch.s);
+    if (!pt || !batch.pulseTrains?.length) return;
+    const gl = batch.s.gl;
+    const { w, h } = batch;
+    gl.useProgram(pt.program);
+    gl.bindBuffer(gl.ARRAY_BUFFER, pt.buf);
+    gl.enableVertexAttribArray(0);
+    gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+    gl.vertexAttribDivisor(0, 0);
+    gl.uniform2f(pt.uVp, w, h);
+    for (const spec of batch.pulseTrains) {
+      gl.uniform1f(pt.uCount, spec.nFwd || spec.count);
+      gl.uniform1f(pt.uPulseMode, spec.pulseMode || 0);
+      gl.uniform1f(pt.uDuration, spec.duration);
+      gl.uniform1f(pt.uAxis, spec.axisEnd);
+      gl.uniform1f(pt.uCurve, spec.curve);
+      gl.uniform1f(pt.uAmpStart, spec.ampStart);
+      gl.uniform1f(pt.uAmpEnd, spec.ampEnd);
+      gl.uniform1f(pt.uAmpCurve, spec.ampCurve);
+      gl.uniform1f(pt.uAmp, spec.amplitude);
+      gl.uniform1f(pt.uLoop, spec.loop);
+      gl.uniform1f(pt.uX0, spec.x0);
+      gl.uniform1f(pt.uX1, spec.x1);
+      gl.uniform1f(pt.uBase, spec.base);
+      gl.uniform1f(pt.uTop, spec.top);
+      gl.uniform1f(pt.uPeak, spec.peak);
+      gl.uniform1f(pt.uElapsed, spec.elapsed);
+      gl.uniform1f(pt.uFadeTau, spec.fadeTau);
+      gl.uniform1f(pt.uHalf, spec.half);
+      gl.uniform1f(pt.uFeather, spec.feather);
+      gl.uniform1f(pt.uDotR, spec.dotR);
+      gl.uniform4f(pt.uLine, spec.line[0], spec.line[1], spec.line[2], spec.line[3]);
+      gl.uniform4f(pt.uDotCol, spec.dot[0], spec.dot[1], spec.dot[2], spec.dot[3]);
+      gl.uniform4f(pt.uLit, spec.lit[0], spec.lit[1], spec.lit[2], spec.lit[3]);
+      gl.uniform1f(pt.uMode, 0);
+      gl.drawArraysInstanced(gl.TRIANGLES, 0, 6, spec.count);
+      if (spec.dotR > 0) {
+        gl.uniform1f(pt.uMode, 1);
+        gl.drawArraysInstanced(gl.TRIANGLES, 0, 6, spec.count);
+      }
+    }
+    gl.disableVertexAttribArray(0);
+    gl.bindBuffer(gl.ARRAY_BUFFER, null);
+  }
+
   /** Draw images, quads, text into the bound framebuffer with the given blend funcs. */
   function drawContent(batch, blend, alphaDst) {
     const { s } = batch;
@@ -1808,6 +2129,10 @@ void main() {
       gl.blendFuncSeparate(gl.SRC_ALPHA, colourDst, gl.ONE, alphaDst);
     }
     drawQuads(batch.data, batch.n);
+    if (batch.pulseTrains?.length) {
+      gl.blendFuncSeparate(gl.SRC_ALPHA, colourDst, gl.ONE, alphaDst);
+      drawPulseTrains(batch);
+    }
     if (batch.outlines?.length) drawOutlines(batch);
     drawQuads(batch.over, batch.on);
     if (batch.texts.length) {
@@ -2468,6 +2793,7 @@ void main() {
     nodeGraphGlLinesFillUnder,
     nodeGraphGlLinesSegment,
     nodeGraphGlLinesDot,
+    nodeGraphGlLinesPulseTrain,
     nodeGraphGlLinesRing,
     nodeGraphGlLinesPolyline,
     nodeGraphGlLinesRibbon,

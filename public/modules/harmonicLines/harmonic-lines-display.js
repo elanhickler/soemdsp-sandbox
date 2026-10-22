@@ -6,14 +6,19 @@
 
 const nodeGraphHarmonicLinesSettingsDefaults = Object.freeze({
   lineWidth: 2,
+  lineSmoothing: 1,
 });
 
 function normalizeNodeGraphHarmonicLinesSettings(settings = {}) {
   const source = settings && typeof settings === "object" ? settings : {};
   const raw = Number(source.lineWidth);
   const ink = clampAuthoredInkPx(raw, 2);
+  const smoothingRaw = Number(source.lineSmoothing);
   return {
     lineWidth: Math.max(0.5, Math.min(8, ink)),
+    lineSmoothing: Number.isFinite(smoothingRaw)
+      ? Math.max(0, Math.min(8, smoothingRaw))
+      : nodeGraphHarmonicLinesSettingsDefaults.lineSmoothing,
   };
 }
 
@@ -29,14 +34,21 @@ function buildNodeGraphHarmonicLinesDisplaySettingsBodyHtml() {
         <input type="range" min="0.5" max="8" step="0.25" data-harmonic-lines-field="lineWidth" aria-label="Harmonic line width in pixels">
         <span>px</span>
       </label>
+      <label class="node-led-settings-row">
+        <span>Line smoothing</span>
+        <input type="range" min="0" max="8" step="0.1" data-harmonic-lines-field="lineSmoothing" aria-label="Smootherstep antialiasing skirt in CSS pixels">
+        <span>px</span>
+      </label>
     </div>`;
 }
 
 function syncNodeGraphHarmonicLinesDisplaySettingsControls(root, settings) {
   if (!root || !settings) return;
-  const el = root.querySelector?.(`[data-harmonic-lines-field="lineWidth"]`);
-  if (el && document.activeElement !== el) {
-    el.value = String(settings.lineWidth);
+  for (const key of ["lineWidth", "lineSmoothing"]) {
+    const el = root.querySelector?.(`[data-harmonic-lines-field="${key}"]`);
+    if (el && document.activeElement !== el) {
+      el.value = String(settings[key]);
+    }
   }
 }
 
@@ -47,7 +59,7 @@ function bindNodeGraphHarmonicLinesDisplaySettingsBody(host) {
   host.dataset.harmonicLinesSettingsBound = "true";
   const apply = (persist) => {
     if (typeof markNodeGraphTraceDisplaySettingsDirty === "function") {
-      markNodeGraphTraceDisplaySettingsDirty(["lineWidth"]);
+      markNodeGraphTraceDisplaySettingsDirty(["lineWidth", "lineSmoothing"]);
     }
     if (typeof applyNodeGraphTraceDisplaySettingsForm === "function") {
       applyNodeGraphTraceDisplaySettingsForm({ persist, record: persist === "immediate" });
@@ -60,9 +72,11 @@ function bindNodeGraphHarmonicLinesDisplaySettingsBody(host) {
     if (event.target?.closest?.("[data-harmonic-lines-field]")) apply("immediate");
   });
   if (typeof bindNodeGraphNativeSliderModifiers === "function") {
-    const input = host.querySelector(`[data-harmonic-lines-field="lineWidth"]`);
-    if (input) {
-      bindNodeGraphNativeSliderModifiers(input, nodeGraphHarmonicLinesSettingsDefaults.lineWidth);
+    for (const key of ["lineWidth", "lineSmoothing"]) {
+      const input = host.querySelector(`[data-harmonic-lines-field="${key}"]`);
+      if (input) {
+        bindNodeGraphNativeSliderModifiers(input, nodeGraphHarmonicLinesSettingsDefaults[key]);
+      }
     }
   }
 }
@@ -315,17 +329,16 @@ function drawNodeGraphHarmonicLinesDisplay(section) {
   const pad = Math.max(2, w * 0.02);
   const span = Math.max(1, w - pad * 2);
   const faceMin = faceMinSide(w, h);
-  const lineW = faceInkPx(
-    typeof nodeGraphHarmonicLinesSettingsForNode === "function"
-      ? nodeGraphHarmonicLinesSettingsForNode(node).lineWidth
-      : 2,
-    faceMin,
-  );
+  const hlLook = typeof nodeGraphHarmonicLinesSettingsForNode === "function"
+    ? nodeGraphHarmonicLinesSettingsForNode(node)
+    : nodeGraphHarmonicLinesSettingsDefaults;
+  const lineW = faceInkPx(hlLook.lineWidth, faceMin);
 
   // Dim mid line — Left above, Right below.
-  // Capsule half-width for a CSS stroke width: core = w/2 - 0.35, 0.7 px feather.
+  // Capsule half-width for a CSS stroke width: core = w/2 - 0.35, smootherstep skirt.
+  const smoothing = Math.max(0, Number(hlLook.lineSmoothing) || 1);
   const half = (lw) => Math.max(0, lw * 0.5 - 0.35);
-  nodeGraphGlLinesSegment(batch, pad, midY, pad + span, midY, half(faceInkPx(1, faceMin)), 0.7, [1, 1, 1, 0.18]);
+  nodeGraphGlLinesSegment(batch, pad, midY, pad + span, midY, half(faceInkPx(1, faceMin)), smoothing, [1, 1, 1, 0.18]);
 
   const ampRef = maxAmp;
   const ampToHeight = (amp) => {
@@ -366,7 +379,7 @@ function drawNodeGraphHarmonicLinesDisplay(section) {
       const x = pad + t * span;
       pts.push(x, y);
     }
-    nodeGraphGlLinesPolyline(batch, pts, half(faceInkPx(1.5, faceMin)), 0.7, [1, 1, 1, 0.85]);
+    nodeGraphGlLinesPolyline(batch, pts, half(faceInkPx(1.5, faceMin)), smoothing, [1, 1, 1, 0.85]);
   }
   if (!nodeGraphGlLinesEnd(batch) && typeof nodeGraphGlLinesFillBlack === "function") nodeGraphGlLinesFillBlack(canvas);
   section._forceDraw = false;

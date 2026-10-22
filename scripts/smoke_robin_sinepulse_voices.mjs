@@ -1,10 +1,13 @@
-// Headless: Robin Sinepulse Voices + Fade Time (robin_sinepulse v7).
+// Headless: Robin Sinepulse Voices + Fade Time (robin_sinepulse v8).
 // Uses the standalone robin_sinepulse.wasm (no imports).
+// Voices is a click-helper fade stack: one live kick. A retrigger always steals
+// it. Fade Time is linear gain 1 -> 0 in ms (Decay does not scale it).
 // 1) Voices 1, Fade 0 = old hard-reset behaviour: after a retrigger the output
 //    equals a fresh instance hit at the same sample.
 // 2) Fade > 0: the stolen voice plays on as old * (1 - k/F) next to the new hit
 //    (exact), and the step at the retrigger is about the normal tail step.
-// 3) Voices 3: overlapping hits sum exactly to independent single hits.
+// 3) Voices 8 + Decay 100 s: two spaced hits still steal; after Fade Time only
+//    the new kick is live (not two full decays).
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -15,7 +18,7 @@ const wasm = fs.readFileSync(path.join(root, "native_modules", "robin_sinepulse"
 const { instance } = await WebAssembly.instantiate(wasm, {});
 const e = instance.exports;
 const ver = e.soemdsp_robin_sinepulse_version();
-if (ver < 7) throw new Error(`robin_sinepulse version ${ver} < 7`);
+if (ver < 8) throw new Error(`robin_sinepulse version ${ver} < 8`);
 const SR = 48000;
 const BASE = { hi: 10000, lo: 40, sweep: 0.05, decay: 0.5, phase: 0, wave: 0, voices: 1, fade: 0 };
 
@@ -79,27 +82,55 @@ for (const c of cases) {
   lines.push(`${c.name}: step hard ${jumpHard.toFixed(4)} soft ${jumpSoft.toFixed(4)} (new hit's own first sample ${own.toFixed(4)}), normal tail step ${normal.toFixed(4)}`);
 }
 
-// 3) Voices 3: three overlapping hits (different heights) sum exactly.
+// 3) Voices 8, Decay 100 s: a retrigger still steals (one live kick). After
+//    Fade Time the old hit is gone; Decay does not stretch the fade.
 {
-  const p3 = { ...BASE, voices: 3, fade: 2, decay: 1 };
-  const hits = [[0, 1], [3000, 0.6], [6000, 0.8]];
-  const sum = render(p3, hits, N);
+  const fadeMs = 2, F = fadeMs * 0.001 * SR;
+  const p8 = { ...BASE, voices: 8, fade: fadeMs, decay: 100 };
+  const n2 = Math.round(0.5 * SR);
+  const two = render(p8, [[0, 1], [n2, 1]], N);
+  const old = render(p8, [[0, 1]], N);
+  const neu = shift(render(p8, [[0, 1]], N), n2, N);
   const ref = new Float64Array(N);
-  for (const [at, v] of hits) { const one = shift(render(p3, [[0, v]], N), at, N); for (let i = 0; i < N; i++) ref[i] += one[i]; }
-  const d3 = maxAbsDiff(sum, ref);
-  if (d3 > 1e-12) throw new Error(`Voices 3 overlap differs from summed single hits by ${d3}`);
-  // 4th hit steals the oldest (hit at 0) with a fade.
-  const hits4 = [...hits, [9000, 1]];
-  const s4 = render(p3, hits4, N);
-  const F = 0.002 * SR;
-  const r4 = new Float64Array(N);
-  for (const [at, v] of hits4) {
-    const one = shift(render(p3, [[0, v]], N), at, N);
-    for (let i = 0; i < N; i++) r4[i] += one[i] * (at === 0 && i >= 9000 ? Math.max(0, 1 - (i - 9000) / F) : 1);
+  for (let i = 0; i < N; i++) {
+    const g = i < n2 ? 1 : Math.max(0, 1 - (i - n2) / F);
+    ref[i] = old[i] * g + neu[i];
   }
-  const d4 = maxAbsDiff(s4, r4);
-  if (d4 > 1e-12) throw new Error(`Voices 3 steal differs by ${d4}`);
-  lines.push(`Voices 3: overlap sum err ${d3.toExponential(1)}, 4th-hit steal err ${d4.toExponential(1)}`);
+  const d3 = maxAbsDiff(two, ref);
+  if (d3 > 1e-12) throw new Error(`Voices 8 Decay 100s steal differs from new + faded old by ${d3}`);
+  const after = Math.ceil(n2 + F + 2);
+  const dLive = maxAbsDiff(two.subarray(after), neu.subarray(after));
+  if (dLive > 1e-12) throw new Error(`Voices 8 Decay 100s: old kick still live after fade (${dLive})`);
+  lines.push(`Voices 8 Decay 100s: steal err ${d3.toExponential(1)}, after-fade leftover ${dLive.toExponential(1)}`);
+}
+// 4) Voices 1 vs 2 on hits closer than Fade Time: Voices 1 drops the oldest fade.
+{
+  const fadeMs = 5, F = fadeMs * 0.001 * SR;
+  const t1 = 40, t2 = 80;
+  const p1 = { ...BASE, voices: 1, fade: fadeMs, decay: 1 };
+  const p2 = { ...BASE, voices: 2, fade: fadeMs, decay: 1 };
+  const hits = [[0, 1], [t1, 1], [t2, 1]];
+  const y1 = render(p1, hits, N);
+  const y2 = render(p2, hits, N);
+  const a = render(p1, [[0, 1]], N);
+  const b = shift(render(p1, [[0, 1]], N), t1, N);
+  const c = shift(render(p1, [[0, 1]], N), t2, N);
+  const ref1 = new Float64Array(N), ref2 = new Float64Array(N);
+  for (let i = 0; i < N; i++) {
+    const gA1 = i < t1 ? 1 : Math.max(0, 1 - (i - t1) / F);
+    const gB1 = i < t2 ? 1 : Math.max(0, 1 - (i - t2) / F);
+    // Voices 1: A fades at t1, then is dropped at t2 (only B's fade remains).
+    const a1 = i < t2 ? a[i] * gA1 : 0;
+    ref1[i] = a1 + b[i] * (i < t2 ? 1 : gB1) + c[i];
+    // Voices 2: A keeps fading through t2, B starts fading at t2, C is live.
+    const gA2 = i < t1 ? 1 : Math.max(0, 1 - (i - t1) / F);
+    ref2[i] = a[i] * gA2 + b[i] * (i < t2 ? 1 : gB1) + c[i];
+  }
+  const d1 = maxAbsDiff(y1, ref1);
+  const d2 = maxAbsDiff(y2, ref2);
+  if (d1 > 1e-12) throw new Error(`Voices 1 fast stack differs by ${d1}`);
+  if (d2 > 1e-12) throw new Error(`Voices 2 fast stack differs by ${d2}`);
+  lines.push(`Voices 1/2 fast stack err ${d1.toExponential(1)} / ${d2.toExponential(1)}`);
 }
 for (const l of lines) console.log("ok   " + l);
 console.log(`smoke_robin_sinepulse_voices ok: version=${ver}`);

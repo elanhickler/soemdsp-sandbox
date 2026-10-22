@@ -16,6 +16,7 @@ const nodeGraphMiniPerformDefaults = Object.freeze({
   worldX: null,
   worldY: null,
   width: 360,
+  height: 225,
   aspect: "window",
   opacity: 1,
   refresh: 30,
@@ -27,6 +28,7 @@ const nodeGraphMiniPerformChoices = Object.freeze({
   anchor: [["screen", "Screen"], ["workspace", "Workspace"]],
   corner: [["topLeft", "Top left"], ["topRight", "Top right"], ["bottomLeft", "Bottom left"], ["bottomRight", "Bottom right"]],
   aspect: [
+    ["free", "Free"],
     ["window", "Window"],
     ["16:9", "16:9"],
     ["4:3", "4:3"],
@@ -81,6 +83,7 @@ function normalizeNodeGraphMiniPerformSettings(raw, options = {}) {
     worldX: src.worldX == null || !Number.isFinite(worldX) ? null : worldX,
     worldY: src.worldY == null || !Number.isFinite(worldY) ? null : worldY,
     width: Math.round(nodeGraphMiniPerformClamp(src.width, 120, 1600, d.width)),
+    height: Math.round(nodeGraphMiniPerformClamp(src.height, 80, 1600, d.height)),
     aspect: nodeGraphMiniPerformChoice("aspect", src.aspect, d.aspect),
     opacity: nodeGraphMiniPerformClamp(src.opacity, 0.1, 1, d.opacity),
     refresh: Number(nodeGraphMiniPerformChoice("refresh", src.refresh, String(d.refresh))),
@@ -110,7 +113,12 @@ function saveNodeGraphMiniPerformSettings() {
 }
 
 function setNodeGraphMiniPerformSettings(patch = {}, options = {}) {
-  const next = normalizeNodeGraphMiniPerformSettings({ ...nodeGraphMiniPerformSettings(), ...patch });
+  const prev = nodeGraphMiniPerformSettings();
+  const merged = { ...prev, ...patch };
+  if (merged.aspect === "free" && prev.aspect !== "free" && patch.height == null) {
+    merged.height = nodeGraphMiniPerformDerivedHeight(prev);
+  }
+  const next = normalizeNodeGraphMiniPerformSettings(merged);
   const wasShown = nodeGraphMiniPerformShown();
   if (next.anchor === "workspace" && (next.worldX == null || next.worldY == null)) {
     const spot = nodeGraphMiniPerformViewCentreWorld(next);
@@ -277,8 +285,22 @@ function nodeGraphMiniPerformCamera() {
   };
 }
 
+function nodeGraphMiniPerformDerivedHeight(settings) {
+  const width = Math.max(120, Math.min(1600, Number(settings?.width) || 360));
+  const aspect = settings?.aspect === "free" ? "window" : settings?.aspect;
+  const winW = typeof window !== "undefined" ? window.innerWidth : 1600;
+  const winH = typeof window !== "undefined" ? window.innerHeight : 1000;
+  const ref = nodeGraphMiniPerformReferenceSize(aspect, winW, winH);
+  return Math.round(width * (ref.h / ref.w));
+}
+
 function nodeGraphMiniPerformReference(settings = nodeGraphMiniPerformSettings()) {
-  return nodeGraphMiniPerformReferenceSize(settings.aspect, window.innerWidth, window.innerHeight);
+  return nodeGraphMiniPerformReferenceSize(
+    settings.aspect,
+    window.innerWidth,
+    window.innerHeight,
+    settings,
+  );
 }
 
 function nodeGraphMiniPerformViewCentreWorld(settings) {
@@ -462,10 +484,12 @@ function nodeGraphMiniPerformApplyHostRect(rect, options = {}) {
   const settings = nodeGraphMiniPerformSettings();
   const zoom = settings.anchor === "workspace" ? nodeGraphMiniPerformCamera().zoom : 1;
   const width = Math.round(nodeGraphMiniPerformClamp(rect.w / zoom, 120, 1600, settings.width));
+  const height = Math.round(nodeGraphMiniPerformClamp(rect.h / zoom, 80, 1600, settings.height));
   if (settings.anchor === "workspace") {
     const cam = nodeGraphMiniPerformCamera();
     setNodeGraphMiniPerformSettings({
       width,
+      height,
       worldX: (rect.x - cam.originX) / zoom,
       worldY: (rect.y - cam.originY) / zoom,
     }, options);
@@ -475,30 +499,51 @@ function nodeGraphMiniPerformApplyHostRect(rect, options = {}) {
   const placed = nodeGraphMiniPerformCornerFromRect(
     rect.x, rect.y, rect.w, rect.h, host?.clientWidth || rect.w, host?.clientHeight || rect.h,
   );
-  setNodeGraphMiniPerformSettings({ width, ...placed }, options);
+  setNodeGraphMiniPerformSettings({ width, height, ...placed }, options);
 }
 
 function nodeGraphMiniPerformResizeHostRect(start, dx, dy, corner) {
   const settings = nodeGraphMiniPerformSettings();
   const enlarged = nodeGraphMiniPerformEnlarged.on;
   const zoom = !enlarged && settings.anchor === "workspace" ? nodeGraphMiniPerformCamera().zoom : 1;
-  const ref = nodeGraphMiniPerformReference(settings);
-  const delta = nodeGraphMiniPerformResizeDelta(dx / zoom, dy / zoom, corner, ref.w, ref.h);
-  let stored = (start.w / zoom) + delta;
-  if (!enlarged) stored = nodeGraphMiniPerformClamp(stored, 120, 1600, start.w / zoom);
-  let w = Math.max(1, stored * zoom);
-  let h = w * (ref.h / ref.w);
   const host = document.getElementById("nodeGraphWorkspace");
+  const free = settings.aspect === "free";
+  let w;
+  let h;
+  if (free) {
+    const minW = enlarged ? 1 : 120 * zoom;
+    const minH = enlarged ? 1 : 80 * zoom;
+    const maxW = enlarged ? 1e9 : 1600 * zoom;
+    const maxH = enlarged ? 1e9 : 1600 * zoom;
+    const next = nodeGraphMiniPerformResizeFreeRect(
+      start.x, start.y, start.w, start.h, dx, dy, corner, minW, minH, maxW, maxH,
+    );
+    w = next.w;
+    h = next.h;
+  } else {
+    const ref = nodeGraphMiniPerformReference(settings);
+    const delta = nodeGraphMiniPerformResizeDelta(dx / zoom, dy / zoom, corner, ref.w, ref.h);
+    let stored = (start.w / zoom) + delta;
+    if (!enlarged) stored = nodeGraphMiniPerformClamp(stored, 120, 1600, start.w / zoom);
+    w = Math.max(1, stored * zoom);
+    h = w * (ref.h / ref.w);
+  }
   const hw = host?.clientWidth || w;
   const hh = host?.clientHeight || h;
   if (enlarged || settings.anchor !== "workspace") {
-    if (w > hw) {
-      w = hw;
-      h = w * (ref.h / ref.w);
-    }
-    if (h > hh) {
-      h = hh;
-      w = h * (ref.w / ref.h);
+    if (free) {
+      if (w > hw) w = hw;
+      if (h > hh) h = hh;
+    } else {
+      const ref = nodeGraphMiniPerformReference(settings);
+      if (w > hw) {
+        w = hw;
+        h = w * (ref.h / ref.w);
+      }
+      if (h > hh) {
+        h = hh;
+        w = h * (ref.w / ref.h);
+      }
     }
   }
   const right = start.x + start.w;
@@ -742,14 +787,16 @@ function beginNodeGraphMiniPerformPointer(event) {
 
 function nodeGraphMiniPerformResetPlacement() {
   const settings = nodeGraphMiniPerformSettings();
+  const d = nodeGraphMiniPerformDefaults;
   nodeGraphMiniPerformExitEnlarged();
   if (settings.anchor === "workspace") {
-    const spot = nodeGraphMiniPerformViewCentreWorld({ ...settings, width: 360 });
-    setNodeGraphMiniPerformSettings({ width: 360, worldX: spot.x, worldY: spot.y });
+    const spot = nodeGraphMiniPerformViewCentreWorld({ ...settings, width: d.width, height: d.height });
+    setNodeGraphMiniPerformSettings({ width: d.width, height: d.height, worldX: spot.x, worldY: spot.y });
     return;
   }
   setNodeGraphMiniPerformSettings({
-    width: 360,
+    width: d.width,
+    height: d.height,
     corner: "bottomRight",
     offsetX: 16,
     offsetY: 16,

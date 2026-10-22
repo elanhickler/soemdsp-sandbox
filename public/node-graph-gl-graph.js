@@ -265,6 +265,7 @@ function nodeGraphGlGraphRebuildChrome() {
   const seeds = [];
   const keys = [];
   const graphs = [];
+  const headerButtons = [];
   const host = document.getElementById("nodeGraphWorkspace");
   const diameter = Number.parseFloat(
     host ? getComputedStyle(host).getPropertyValue("--node-port-diameter") : "",
@@ -441,11 +442,18 @@ function nodeGraphGlGraphRebuildChrome() {
     if (graphBox) {
       graphs.push({ id, x: graphBox.x, y: graphBox.y, w: graphBox.w, h: graphBox.h });
     }
+    const headerEls = el.querySelectorAll(
+      ".node-drag-handle, .node-display-settings-button, .node-metaparameter-button, .node-action-button, .node-bypass-button, .node-execution-order-badge",
+    );
+    for (let h = 0; h < headerEls.length; h += 1) {
+      const box = nodeGraphGlGraphWorldBox(headerEls[h]);
+      if (box) headerButtons.push({ el: headerEls[h], box });
+    }
   }
   const root = document.documentElement;
   const ghostHost = host || root;
   nodeGraphGlGraphState.chrome = {
-    titles, labels, jacks, sliders, seeds, keys, graphs,
+    titles, labels, jacks, sliders, seeds, keys, graphs, headerButtons,
     // Read once per rebuild, not per present.
     seedLine: typeof nodeGraphGlLinesCss === "function"
       ? nodeGraphGlLinesCss(getComputedStyle(root).getPropertyValue("--line") || "#3a4248")
@@ -2104,7 +2112,7 @@ function nodeGraphGlHitIsLiveHtml(target) {
 function nodeGraphGlHitKeepsNativeTarget(target) {
   if (!(target instanceof Element)) return false;
   return Boolean(target.closest(
-    ".node-face, .node-module-graph-face, .node-module-graph-display, .node-keypad-face, .node-knob-face, .node-xy-pad-canvas, .node-sequencer-roll, .acid-seq-face, .node-arp-keys-face, .node-plugin-toggle-button, .node-plugin-momentary-button, .node-sample-waveform-display, .node-midi-keyboard-surface, .node-midi-keyboard-module, .node-grid-keyboard-surface, .node-grid-keyboard-pad, [data-key-index]",
+    ".node-face, .node-module-graph-face, .node-module-graph-display, .node-keypad-face, .node-knob-face, .node-xy-pad-canvas, .node-sequencer-roll, .acid-seq-face, .node-arp-keys-face, .node-plugin-toggle-button, .node-plugin-momentary-button, .node-sample-waveform-display, .node-midi-keyboard-surface, .node-midi-keyboard-module, .node-grid-keyboard-surface, .node-grid-keyboard-pad, .node-seed-control, [data-key-index]",
   ));
 }
 
@@ -2406,6 +2414,38 @@ function nodeGraphGlHitPointerDown(event) {
 
 function nodeGraphGlHitInside(x, y, box) {
   return Boolean(box) && x >= box.x && x <= box.x + box.w && y >= box.y && y <= box.y + box.h;
+}
+
+function nodeGraphGlHitChromeBoxes(point, list, pick) {
+  if (!point || !list || !list.length) return null;
+  for (let i = list.length - 1; i >= 0; i -= 1) {
+    const item = list[i];
+    const box = item.box || item;
+    if (!nodeGraphGlHitInside(point.x, point.y, box)) continue;
+    const el = typeof pick === "function" ? pick(item) : (item.el || item.control || null);
+    if (el) return el;
+  }
+  return null;
+}
+
+function nodeGraphGlHitHoverElement(event) {
+  const point = nodeGraphGlHitPoint(event);
+  if (!point) return null;
+  const chrome = nodeGraphGlGraphState.chrome || {};
+  const header = nodeGraphGlHitChromeBoxes(point, chrome.headerButtons);
+  if (header) return header;
+  const seed = nodeGraphGlHitChromeBoxes(point, chrome.seeds, (item) => item.control);
+  if (seed) return seed;
+  const context = nodeGraphGlHitContextElement(point);
+  if (context) return context;
+  const wire = nodeGraphGlHitWireAt(point.x, point.y);
+  if (!wire) return null;
+  if (!nodeGraphGlHitState.wireHoverEl) {
+    const el = document.createElement("div");
+    el.className = "node-wire-path";
+    nodeGraphGlHitState.wireHoverEl = el;
+  }
+  return nodeGraphGlHitState.wireHoverEl;
 }
 
 function nodeGraphGlHitContextElement(point) {

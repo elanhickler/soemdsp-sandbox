@@ -484,7 +484,7 @@ function cloneNodeGraphTypedDisplaySettings(node) {
       return {
         harmonicLinesSettings: typeof normalizeNodeGraphHarmonicLinesSettings === "function"
           ? normalizeNodeGraphHarmonicLinesSettings(node.harmonicLinesSettings)
-          : (node.harmonicLinesSettings || { lineWidth: 2 }),
+          : (node.harmonicLinesSettings || { lineWidth: 2, lineSmoothing: 1 }),
       };
     case "knobFace":
       return {

@@ -177,7 +177,7 @@ function assignNodeGraphTypedDisplaySettingsToNode(node, displayType, settings) 
   if (displayType === "harmonicLines") {
     node.harmonicLinesSettings = typeof normalizeNodeGraphHarmonicLinesSettings === "function"
       ? normalizeNodeGraphHarmonicLinesSettings(settings)
-      : (settings || { lineWidth: 2 });
+      : (settings || { lineWidth: 2, lineSmoothing: 1 });
     return node.harmonicLinesSettings;
   }
   if (displayType === "textBoxFace") {

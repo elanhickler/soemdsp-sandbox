@@ -10147,6 +10147,9 @@ def require_node_graph_mvp_contract() -> None:
         "const composedText = composeNodeInteractionHelpText(text)",
         "if (help.textContent === composedText)",
         "function handleNodeInteractionHelp(event)",
+        "function nodeGraphInteractionHelpEventTarget(event)",
+        "function nodeGraphGlHitHoverElement(event)",
+        "nodeGraphControlAuthoredTooltip(element)",
         "function attachNodeInteractionHelpTarget(element)",
         "function normalizeNodeUiDevColor(value",
         "function nodeUiDevHexColorToRgbTriplet(value",
@@ -18417,6 +18420,8 @@ def check_mini_perform_view() -> None:
     require("keep: true" not in (public / "node-graph-gl-graph.js").read_text(encoding="utf-8").split("nodeGlGraphSnake")[1][:500], "snake canvas clears each frame")
     require("nodeGraphMiniPerformForwardControl" in mini, "perform mode forwards knob drags")
     require("Reset position and size" in mini and "Aspect ratio" in mini, "page has aspect and reset")
+    require('["free", "Free"]' in mini, "page has Free aspect")
+    require("nodeGraphMiniPerformResizeFreeRect" in texts["node-graph-canvas-fit.js"], "free resize lives in canvas-fit")
     for gone in ("Mini view mode (Shift+F)",):
         require(gone in mini, "page mode row is present")
     for gone in ('"Corner"', "Margin (px)", "Width (px)", "Reference screen", "Click-through"):
@@ -18451,6 +18456,28 @@ def check_color_rows() -> None:
     """Color widgets sit in rows of 2 to 4 (docs/COLOR_ROW_PLAN.md CR-6)."""
     unit = subprocess.run(["node", str(ROOT / "scripts" / "smoke_color_rows.cjs")], capture_output=True, text=True)
     require(unit.returncode == 0, f"color rows: {unit.stdout}{unit.stderr}")
+
+
+def check_pulse_train_fade() -> None:
+    """Pulse Train lit dots fade with PhosphorResidual.energyAfterSeconds."""
+    residual = (PUBLIC / "lib" / "phosphor" / "phosphor-residual.js").read_text(encoding="utf-8")
+    require("energyAfterSeconds" in residual, "PhosphorResidual has energyAfterSeconds")
+    unit = subprocess.run(["node", str(ROOT / "scripts" / "smoke_pulse_train_fade.cjs")], capture_output=True, text=True)
+    require(unit.returncode == 0, f"pulse train fade: {unit.stdout}{unit.stderr}")
+
+
+def check_dsf_face_spectrum() -> None:
+    """DSF Oscillator face follows Spacing and Odd/Even."""
+    face = (PUBLIC / "modules" / "sinCos" / "sin-cos-display.js").read_text(encoding="utf-8")
+    require("nodeGraphDsfSpacedKernel" in face, "DSF face has the spaced kernel")
+    require("nodeGraphDsfSubMean" in face, "DSF face removes cycle DC")
+    require("nodeGraphSinCosFacePadPx" in face and "padExtra: 0" in face, "DSF face auto-pads from line/dot")
+    require("Math.ceil(innerW) * 2" in face, "DSF stroke is pixel-stepped, not one vertex per kernel sample")
+    require('spacing: nodeGraphSinCosLiveParam(node, "spacing", 1)' in face, "DSF face reads Spacing")
+    require('oddEven: nodeGraphSinCosLiveParam(node, "oddEven", 0)' in face, "DSF face reads Odd/Even")
+    unit = subprocess.run(["node", str(ROOT / "scripts" / "smoke_dsf_display_unit.cjs")], capture_output=True, text=True)
+    require(unit.returncode == 0, f"dsf display unit: {unit.stdout}{unit.stderr}")
+
 
 def check_page_patch_index_covers_all_patches() -> None:
     """Every patches/**/*.json must be in patches/index.json, and every live
@@ -18515,6 +18542,8 @@ def main() -> None:
     check_snake_trail_gl()
     check_mini_perform_view()
     check_color_rows()
+    check_dsf_face_spectrum()
+    check_pulse_train_fade()
     run_smoke(args.port, Path(args.manifest).resolve())
     check_display_draws_live(Path(args.manifest).resolve())
     print("soemdsp-sandbox smoke test passed")

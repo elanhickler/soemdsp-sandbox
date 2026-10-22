@@ -148,6 +148,7 @@ NodeLiveAudioProcessor.NATIVE_GRAPH_TYPE_IDS = Object.freeze({
   surgeOscillator: 44,
   softwaveOsc: 45,
   dsfOscillator: 46,
+  dsfMorphingOsc: 232,
   hypersaw2: 158,
   fm: 169,
   pitchHz: 170,
@@ -489,6 +490,7 @@ NodeLiveAudioProcessor.prototype.mapNativeGraphParamId = function mapNativeGraph
     if (k === "octave" || k === "octaveOffset") return P.NATIVE_GRAPH_PARAM_ATT_OFFSET;
     if (k === "semitones" || k === "semitoneOffset") return P.NATIVE_GRAPH_PARAM_CENTER;
   }
+  if (t === "pulseTrain" && k === "pulseMode") return P.NATIVE_GRAPH_PARAM_LFO_STYLE;
   if (t === "exponentialMix" && k === "rate") return P.NATIVE_GRAPH_PARAM_WIDTH;
   if (t === "logisticMap" && k === "antialias") return P.NATIVE_GRAPH_PARAM_MODE;
   if (k === "morph") {
@@ -841,7 +843,7 @@ NodeLiveAudioProcessor.prototype.mapNativeGraphSrcPortId = function mapNativeGra
       return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_PHASE01;
     }
   }
-  if ((t === "ellipsoid" || t === "ellipsoidOsc" || t === "dsfOscillator") && (p === "__phase" || p === "phase01")) {
+  if ((t === "ellipsoid" || t === "ellipsoidOsc" || t === "dsfOscillator" || t === "dsfMorphingOsc") && (p === "__phase" || p === "phase01")) {
     return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_PHASE01;
   }
   if ((t === "sineWavetable" || t === "sinCos") && (p === "cos" || p === "cosine")) {
@@ -1173,10 +1175,11 @@ NodeLiveAudioProcessor.prototype.mapNativeGraphSrcPortId = function mapNativeGra
     if (p === "trigger") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_RIGHT;
     if (p === "index") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_SAW;
   }
-  // Pulse Train: Out on Mono, End on Left, face playhead on Phase01.
+  // Pulse Train: Shape on Mono, Trigger impulses on Right, End on Left, face playhead on Phase01.
   if (t === "pulseTrain") {
     if (p === "__elapsed") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_PHASE01;
-    if (p === "out") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_MONO;
+    if (p === "shape" || p === "out") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_MONO;
+    if (p === "trigger") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_RIGHT;
     if (p === "end") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_LEFT;
     if (p === "__end") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_RAMP;
     // Params in effect (latched while running with Recalculate On, else live).
@@ -2869,6 +2872,7 @@ NodeLiveAudioProcessor.NATIVE_GRAPH_DISCRETE_PARAMS = Object.freeze({
   affectFundamental: true,
   transport: true,
   antialias: true,
+  antialiasing: true,
   monoSum: true,
   reflections: true,
   profile: true,
@@ -2899,6 +2903,9 @@ NodeLiveAudioProcessor.NATIVE_GRAPH_DISCRETE_PARAMS = Object.freeze({
   jitterSteps: true,
   phaseCollapse: true,
   delayMode: true,
+  dither: true,
+  dual: true,
+  voiceFade: true,
   stepLength: true,
   semitoneOffset: true,
   wave: true, // Robin Sinepulse Wave (choiceId)
@@ -5146,16 +5153,19 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
       push("seed", P.NATIVE_GRAPH_PARAM_SEED, disc("seed", 1));
       continue;
     }
-    if (type === "dsfOscillator") {
-      // shape=morph/harmonics, width=PWM, mix=SquSaw blend.
+    if (type === "dsfOscillator" || type === "dsfMorphingOsc") {
+      // shape=morph/harmonics, width=PWM, mix=Square↔Saw blend.
+      // Spacing / Odd-Even only on DSF Morphing Osc.
       push("frequency", P.NATIVE_GRAPH_PARAM_FREQUENCY, cont("frequency", 100));
       push("waveform", P.NATIVE_GRAPH_PARAM_WAVEFORM, disc("waveform", 1));
       push("phase", P.NATIVE_GRAPH_PARAM_PHASE, cont("phase", 0));
       push("morph", P.NATIVE_GRAPH_PARAM_SHAPE, cont("morph", 1));
       push("pulseWidth", P.NATIVE_GRAPH_PARAM_WIDTH, cont("pulseWidth", 0.5));
       push("blend", P.NATIVE_GRAPH_PARAM_MIX, cont("blend", 0.5));
-      push("spacing", P.NATIVE_GRAPH_PARAM_CENTER, cont("spacing", 1));
-      push("oddEven", P.NATIVE_GRAPH_PARAM_RESONANCE, cont("oddEven", 0));
+      if (type === "dsfMorphingOsc") {
+        push("spacing", P.NATIVE_GRAPH_PARAM_CENTER, cont("spacing", 1));
+        push("oddEven", P.NATIVE_GRAPH_PARAM_RESONANCE, cont("oddEven", 0));
+      }
       push("amplitude", P.NATIVE_GRAPH_PARAM_AMPLITUDE, cont("amplitude", 1));
       continue;
     }
@@ -6005,6 +6015,7 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
       push("amplitude", P.NATIVE_GRAPH_PARAM_AMPLITUDE, cont("amplitude", 1));
       push("recalculateOnTrigger", P.NATIVE_GRAPH_PARAM_TIMING_MODE, disc("recalculateOnTrigger", 0));
       push("voices", P.NATIVE_GRAPH_PARAM_STAGES, disc("voices", 1));
+      push("voiceFade", P.NATIVE_GRAPH_PARAM_LFO_STYLE, disc("voiceFade", 1));
       push("fadeTime", P.NATIVE_GRAPH_PARAM_OFFSET_MS, cont("fadeTime", 2));
       continue;
     }
@@ -6358,6 +6369,11 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
       push("amplitude", P.NATIVE_GRAPH_PARAM_AMPLITUDE, cont("amplitude", 1));
       push("mode", P.NATIVE_GRAPH_PARAM_TIMING_MODE, disc("mode", 0)); // 0 One shot / 1 Loop
       push("recalculateOnTrigger", P.NATIVE_GRAPH_PARAM_MODE, disc("recalculateOnTrigger", 1)); // 0 Off live / 1 On latched
+      push("pulseMode", P.NATIVE_GRAPH_PARAM_LFO_STYLE, disc("pulseMode", 0)); // 0 Forward / 1 Forward-Reverse / 2 Reverse
+      push("endDelay", P.NATIVE_GRAPH_PARAM_TIME_NUMERATOR, cont("endDelay", 0));
+      push("antialiasing", P.NATIVE_GRAPH_PARAM_WAVEFORM, disc("antialiasing", 0)); // 0 Off / 1 Fixed / 2 Dither / 3 Robin1 / 4 Robin2
+      push("seed", P.NATIVE_GRAPH_PARAM_SEED, disc("seed", 0));
+      push("wave", P.NATIVE_GRAPH_PARAM_OVERSAMPLE, disc("wave", 0)); // 0 Trigger / 1 Gate / 2 Saw / 3 Ramp / 4 Tri / 5 Sine
       continue;
     }
     if (type === "pulseExplosion") {
@@ -9179,11 +9195,13 @@ NodeLiveAudioProcessor.prototype.nativeGraphPortNames = function nativeGraphPort
     if (type === "pulseTrain" && portId === P.NATIVE_GRAPH_PORT_SINE) return ["__AmpEnd"];
     if (type === "pulseTrain" && portId === P.NATIVE_GRAPH_PORT_TRISAW) return ["__AmpCurve"];
     if (type === "pulseTrain" && portId === P.NATIVE_GRAPH_PORT_CENTER_SQUARE) return ["__Amp"];
+    if (type === "pulseTrain" && portId === P.NATIVE_GRAPH_PORT_IS_IDLE) return ["__Dual"];
   }
   if (portId === P.NATIVE_GRAPH_PORT_IS_IDLE) {
     return ["isIdle", "Idle"];
   }
   if (portId === P.NATIVE_GRAPH_PORT_MONO) {
+    if (type === "pulseTrain") return ["Shape", "Out", "Mono"];
     if (type === "resonantCompressor") return ["Out L"];
     if (type === "rmsMeter") return ["RMS", "RMS L Tap"];
     if (type === "acidSequencer") return ["Gate"];
@@ -9271,6 +9289,7 @@ NodeLiveAudioProcessor.prototype.nativeGraphPortNames = function nativeGraphPort
     return ["Out", "Mono", "In"];
   }
   if (portId === P.NATIVE_GRAPH_PORT_LEFT) {
+    if (type === "pulseTrain") return ["End"];
     if (type === "acidSequencer") return ["Trigger"];
     if (type === "robinSinepulse") return ["f", "ƒ"];
     if (type === "electroSnare" || type === "modalSnare") return ["Snare L"];
@@ -9345,6 +9364,7 @@ NodeLiveAudioProcessor.prototype.nativeGraphPortNames = function nativeGraphPort
     return ["Left"];
   }
   if (portId === P.NATIVE_GRAPH_PORT_RIGHT) {
+    if (type === "pulseTrain") return ["Trigger"];
     if (type === "resonantCompressor") return ["Out R"];
     if (type === "rmsMeter") return ["RMS R", "RMS R Tap"];
     if (type === "robinSinepulse") return ["env", "0-1", "0\u20131", "0..1"];
@@ -9518,7 +9538,7 @@ NodeLiveAudioProcessor.prototype.nativeGraphPortNames = function nativeGraphPort
     if (type === "acidSequencer") return ["__AcidStep"];
     // Face playhead — not a patchable jack.
     if (type === "basicShape" || type === "sineWavetable" || type === "sinCos" || type === "clock"
-      || type === "ellipsoid" || type === "ellipsoidOsc" || type === "dsfOscillator") {
+      || type === "ellipsoid" || type === "ellipsoidOsc" || type === "dsfOscillator" || type === "dsfMorphingOsc") {
       return ["__Phase"];
     }
     // Smooth/Step Graph purple ghost (syncNodeGraphGraphLivePlayheads).
@@ -9618,10 +9638,10 @@ NodeLiveAudioProcessor.prototype.publishNativeGraphScopeTaps = function publishN
         P.NATIVE_GRAPH_PORT_PHASE01,
       )
       : type === "pulseTrain"
-        ? audioPorts.concat(P.NATIVE_GRAPH_PORT_PHASE01, P.NATIVE_GRAPH_PORT_RAMP, P.NATIVE_GRAPH_PORT_SAW, P.NATIVE_GRAPH_PORT_SQUARE, P.NATIVE_GRAPH_PORT_TRI, P.NATIVE_GRAPH_PORT_SINE, P.NATIVE_GRAPH_PORT_TRISAW, P.NATIVE_GRAPH_PORT_CENTER_SQUARE)
+        ? audioPorts.concat(P.NATIVE_GRAPH_PORT_PHASE01, P.NATIVE_GRAPH_PORT_RAMP, P.NATIVE_GRAPH_PORT_SAW, P.NATIVE_GRAPH_PORT_SQUARE, P.NATIVE_GRAPH_PORT_TRI, P.NATIVE_GRAPH_PORT_SINE, P.NATIVE_GRAPH_PORT_TRISAW, P.NATIVE_GRAPH_PORT_CENTER_SQUARE, P.NATIVE_GRAPH_PORT_IS_IDLE)
       : (type === "sineWavetable" || type === "sinCos" || type === "smoothGraph" || type === "stepGraph"
         || type === "acidSequencer" || type === "fbmField" || type === "clock" || type === "pulseExplosion"
-        || type === "ellipsoid" || type === "ellipsoidOsc" || type === "dsfOscillator"
+        || type === "ellipsoid" || type === "ellipsoidOsc" || type === "dsfOscillator" || type === "dsfMorphingOsc"
         ? audioPorts.concat(P.NATIVE_GRAPH_PORT_PHASE01)
         : audioPorts);
     for (let pi = 0; pi < ports.length; pi += 1) {
@@ -9782,12 +9802,12 @@ NodeLiveAudioProcessor.prototype.publishNativeGraphScopeTaps = function publishN
       } else if (type === "sampleHold") {
         ports = facePorts.concat(P.NATIVE_GRAPH_PORT_SAW, P.NATIVE_GRAPH_PORT_RAMP);
       } else if (type === "pulseTrain") {
-        ports = facePorts.concat(P.NATIVE_GRAPH_PORT_PHASE01, P.NATIVE_GRAPH_PORT_RAMP, P.NATIVE_GRAPH_PORT_SAW, P.NATIVE_GRAPH_PORT_SQUARE, P.NATIVE_GRAPH_PORT_TRI, P.NATIVE_GRAPH_PORT_SINE, P.NATIVE_GRAPH_PORT_TRISAW, P.NATIVE_GRAPH_PORT_CENTER_SQUARE);
+        ports = facePorts.concat(P.NATIVE_GRAPH_PORT_PHASE01, P.NATIVE_GRAPH_PORT_RAMP, P.NATIVE_GRAPH_PORT_SAW, P.NATIVE_GRAPH_PORT_SQUARE, P.NATIVE_GRAPH_PORT_TRI, P.NATIVE_GRAPH_PORT_SINE, P.NATIVE_GRAPH_PORT_TRISAW, P.NATIVE_GRAPH_PORT_CENTER_SQUARE, P.NATIVE_GRAPH_PORT_IS_IDLE);
       } else if (
         type === "basicShape" || type === "sineWavetable" || type === "sinCos"
         || type === "smoothGraph" || type === "stepGraph"
         || type === "acidSequencer" || type === "clock" || type === "pulseExplosion" || type === "pulseTrain"
-        || type === "ellipsoid" || type === "ellipsoidOsc" || type === "dsfOscillator"
+        || type === "ellipsoid" || type === "ellipsoidOsc" || type === "dsfOscillator" || type === "dsfMorphingOsc"
       ) {
         ports = facePorts.concat(P.NATIVE_GRAPH_PORT_PHASE01);
       } else if (type === "polyBlep" || type === "blit") {

@@ -3,12 +3,36 @@ function nodeInteractionHelpText(target) {
     return "";
   }
   const helpTarget = target.closest(
-    "[data-interaction-help], [data-tooltip-key], button, input, textarea, select, .node-slider-readout, .node-port, .node-io-row, .node-param-port, .node-wire-hit-path, .node-wire-path, .node-execution-order-badge, .node-execution-order li[data-node], .dsp-node, #nodeGraphZoomSurface, #nodeGraphWorldLayer, #nodeGraphWorkspace",
+    "[data-interaction-help], [data-tooltip-key], [data-native-title-disabled], button, input, textarea, select, .node-slider-readout, .node-knob-face, .node-plugin-slider-face, .node-transport-bpm-face, .node-port, .node-io-row, .node-param-port, .node-wire-hit-path, .node-wire-path, .node-execution-order-badge, .node-execution-order li[data-node], .dsp-node, #nodeGraphZoomSurface, #nodeGraphWorldLayer, #nodeGraphWorkspace",
   );
   if (!helpTarget) {
     return "";
   }
   return nodeInteractionMouseHint(helpTarget);
+}
+
+function nodeGraphInteractionHelpEventTarget(event) {
+  const native = event?.target;
+  if (!(native instanceof Element)) {
+    return native;
+  }
+  const workspace = document.getElementById("nodeGraphWorkspace");
+  if (!workspace || !workspace.classList.contains("gl-graph-on") || !workspace.contains(native)) {
+    return native;
+  }
+  if (typeof nodeGraphGlHitIsLiveHtml === "function" && nodeGraphGlHitIsLiveHtml(native)) {
+    return native;
+  }
+  if (typeof nodeGraphGlHitKeepsNativeTarget === "function" && nodeGraphGlHitKeepsNativeTarget(native)) {
+    return native;
+  }
+  if (typeof nodeGraphGlHitHoverElement === "function") {
+    const hit = nodeGraphGlHitHoverElement(event);
+    if (hit) {
+      return hit;
+    }
+  }
+  return native;
 }
 
 function nodeGraphSelectionHelpText() {
@@ -36,9 +60,39 @@ function nodeInteractionButtonLabel(button) {
   return normalizeNodeInteractionButtonLabel(
     button.getAttribute("aria-label") ||
       button.getAttribute("title") ||
+      button.title ||
       button.textContent ||
       "",
   );
+}
+
+function nodeGraphControlAuthoredTooltip(element) {
+  if (!element) {
+    return "";
+  }
+  const own = String(element.dataset?.tooltip || "").trim();
+  if (own) {
+    return own;
+  }
+  const sliderId = element.dataset?.sliderTarget;
+  if (!sliderId) {
+    return "";
+  }
+  const slider = document.getElementById(sliderId);
+  return String(slider?.dataset?.tooltip || "").trim();
+}
+
+function nodeGraphControlGestureHelp(element, slider) {
+  if (element.classList.contains("node-knob-face") && !element.classList.contains("is-slider-look")) {
+    return nodeGraphTooltipText("slider.knob");
+  }
+  if (slider && typeof nodeSliderShouldDisplayChoices === "function"
+    && nodeSliderShouldDisplayChoices(slider)
+    && typeof nodeSliderShouldDivideChoicesVisibly === "function"
+    && nodeSliderShouldDivideChoicesVisibly(slider)) {
+    return nodeGraphTooltipText("slider.choices");
+  }
+  return nodeGraphTooltipText("slider.numeric");
 }
 
 function nodeInteractionMouseHint(element) {
@@ -86,12 +140,19 @@ function nodeInteractionMouseHint(element) {
     const nodeName = nodeGraphNodeDisplayName(element.dataset.node);
     return nodeGraphTooltipText("module.executionListItem", { order, nodeName });
   }
-  if (element.classList.contains("node-slider-readout")) {
+  if (
+    element.classList.contains("node-slider-readout")
+    || element.classList.contains("node-knob-face")
+    || element.classList.contains("node-plugin-slider-face")
+    || element.classList.contains("node-transport-bpm-face")
+  ) {
     const slider = document.getElementById(element.dataset.sliderTarget);
-    if (slider && nodeSliderShouldDisplayChoices(slider) && nodeSliderShouldDivideChoicesVisibly(slider)) {
-      return nodeGraphTooltipText("slider.choices");
+    const authored = nodeGraphControlAuthoredTooltip(element);
+    const gesture = nodeGraphControlGestureHelp(element, slider);
+    if (authored && gesture) {
+      return `${authored} | ${gesture}`;
     }
-    return nodeGraphTooltipText("slider.numeric");
+    return authored || gesture;
   }
   if (element.classList.contains("node-port")) {
     const action = element.classList.contains("parameter-output")
@@ -213,7 +274,7 @@ function setNodeInteractionHelp(text = "") {
 }
 
 function handleNodeInteractionHelp(event) {
-  setNodeInteractionHelp(nodeInteractionHelpText(event.target));
+  setNodeInteractionHelp(nodeInteractionHelpText(nodeGraphInteractionHelpEventTarget(event)));
 }
 
 function attachNodeInteractionHelpTarget(element) {

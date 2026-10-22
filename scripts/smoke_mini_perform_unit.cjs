@@ -39,12 +39,18 @@ const r = (src) => vm.runInContext(src, ctx);
 const aspects = ["window", "16:9", "4:3", "1:1", "9:16", "phonePortrait", "phoneLandscape"];
 const table = r("NODE_GRAPH_MINI_PERFORM_ASPECTS");
 for (const key of aspects) ok(Object.prototype.hasOwnProperty.call(table, key), `aspect table has ${key}`);
+ok(!Object.prototype.hasOwnProperty.call(table, "free"), "free is not a ratio table entry");
 const win = r("nodeGraphMiniPerformReferenceSize('window', 1600, 1000)");
 ok(win.w === 1600 && win.h === 1000, "window stage = window size");
 for (const key of aspects.filter((name) => name !== "window")) {
   const size = r(`nodeGraphMiniPerformReferenceSize(${JSON.stringify(key)}, 1600, 1000)`);
   ok(near(size.h, 1000) && near(size.w / size.h, table[key]), `${key} keeps window height`);
 }
+const freeRef = r("nodeGraphMiniPerformReferenceSize('free', 1600, 1000, { width: 480, height: 200 })");
+ok(near(freeRef.w, 480) && near(freeRef.h, 200), "free stage is the stored size");
+const freeFallback = r("nodeGraphMiniPerformReferenceSize('free', 1600, 1000, { width: 360 })");
+ok(near(freeFallback.w, 360) && near(freeFallback.h, 360 * 1000 / 1600), "free without height uses window aspect");
+ok(r("nodeGraphMiniPerformChoices.aspect[0][0]") === "free", "Free is the first aspect choice");
 
 const fit = r("nodeGraphWholeModuleFitBox(400, 300, 200, 100)");
 ok(fit && fit.s > 0 && fit.ox >= fit.pad - 1e-9 && fit.oy >= fit.pad - 1e-9, "whole-module fit stays inside pad");
@@ -100,6 +106,19 @@ ok(near(r(`nodeGraphMiniPerformDragFraction(${dx}, 0, ${refW}, ${refH}, 2, 0.5).
 
 ok(r("nodeGraphMiniPerformResizeDelta(40, 1, 'bottomRight', 16, 9)") > 0, "outward corner drag grows");
 ok(r("nodeGraphMiniPerformResizeDelta(-40, -1, 'bottomRight', 16, 9)") < 0, "inward corner drag shrinks");
+const freeGrow = r("nodeGraphMiniPerformResizeFreeRect(10, 20, 400, 200, 40, 10, 'bottomRight', 120, 80, 1600, 1600)");
+ok(near(freeGrow.x, 10) && near(freeGrow.y, 20) && near(freeGrow.w, 440) && near(freeGrow.h, 210), "free bottom-right moves each axis");
+const freeOut = r("nodeGraphMiniPerformResizeFreeRect(100, 80, 400, 200, -50, -30, 'topLeft', 120, 80, 1600, 1600)");
+ok(near(freeOut.w, 450) && near(freeOut.h, 230) && near(freeOut.x, 50) && near(freeOut.y, 50), "free top-left keeps opposite corner");
+const freeClamp = r("nodeGraphMiniPerformResizeFreeRect(0, 0, 400, 200, -500, -500, 'bottomRight', 120, 80, 1600, 1600)");
+ok(near(freeClamp.w, 120) && near(freeClamp.h, 80) && near(freeClamp.x, 0) && near(freeClamp.y, 0), "free resize clamps independently");
+const freeFrame = r("nodeGraphMiniPerformFrameRect({ anchor: 'screen', corner: 'bottomRight', offsetX: 16, offsetY: 16, width: 480, height: 200, aspect: 'free' }, { w: 480, h: 200 }, 1600, 1000)");
+ok(near(freeFrame.w, 480) && near(freeFrame.h, 200) && near(freeFrame.s, 1), "free frame uses stored width and height");
+
+r("setNodeGraphMiniPerformSettings({ mode: 'perform', width: 400, aspect: '1:1' }, { sync: false })");
+r("setNodeGraphMiniPerformSettings({ aspect: 'free' }, { sync: false })");
+ok(r("nodeGraphMiniPerformSettings().aspect") === "free" && r("nodeGraphMiniPerformSettings().height") === 400, "switching to free seeds the current height");
+ok(r("normalizeNodeGraphMiniPerformSettings({ aspect: 'free', width: 500, height: 180 }).height") === 180, "stored free height is kept");
 
 const line = "Canvas is empty. Turn on Show in performance view on a module.";
 for (const cssW of [200, 360, 800, 1280]) {
