@@ -499,7 +499,14 @@ function nodeGraphPortIsTrigger(port, type) {
   if (kind === "clock" && (lower === "t" || lower === "pulse")) {
     return true;
   }
+  // Pulse Train: Out is the pulse train, End fires once per pattern.
+  if (kind === "pulseTrain" && (raw === "Out" || raw === "End")) return true;
   return false;
+}
+
+/** Pulse Train End keeps its name next to the trigger symbol. */
+function nodeGraphPulseTrainEndPort(type, port) {
+  return String(type || "").trim() === "pulseTrain" && String(port || "").trim() === "End";
 }
 
 function nodeGraphGateTriggerPortDisplayLabel(type, port) {
@@ -507,7 +514,7 @@ function nodeGraphGateTriggerPortDisplayLabel(type, port) {
     return NODE_GRAPH_RESET_GLYPH;
   }
   if (nodeGraphPortIsTrigger(port, type)) {
-    return NODE_GRAPH_TRIGGER_GLYPH;
+    return nodeGraphPulseTrainEndPort(type, port) ? `End${NODE_GRAPH_TRIGGER_GLYPH}` : NODE_GRAPH_TRIGGER_GLYPH;
   }
   if (nodeGraphPortIsGate(port, type)) {
     return NODE_GRAPH_GATE_GLYPH;
@@ -517,7 +524,7 @@ function nodeGraphGateTriggerPortDisplayLabel(type, port) {
 
 function nodeGraphGateTriggerPortSpokenName(type, port) {
   if (nodeGraphPortIsReset(port)) return "Reset";
-  if (nodeGraphPortIsTrigger(port, type)) return "Trigger";
+  if (nodeGraphPortIsTrigger(port, type)) return nodeGraphPulseTrainEndPort(type, port) ? "End trigger" : "Trigger";
   if (nodeGraphPortIsGate(port, type)) return "Gate";
   return "";
 }
