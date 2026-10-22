@@ -1502,7 +1502,6 @@ function buildNodeGraphInstantTraceDisplaySettingsBodyHtml(type, node, allowKey)
   }
   if (isInstantWaterfall) {
     // Scroll+stamp history cannot lock to a zero-crossing. sourceSync stays hidden.
-    // 1D Onset Sync (resetSync) is the Reset-spacing window, added after History.
     if (choiceKeys.includes("syncChannel")) usedChoices.add("syncChannel");
     if (toggleKeys.includes("sourceSync")) usedToggles.add("sourceSync");
   } else if (toggleKeys.includes("sourceSync")) {
@@ -1581,12 +1580,6 @@ function buildNodeGraphInstantTraceDisplaySettingsBodyHtml(type, node, allowKey)
     pushStackField("historySeconds");
     pushStackField("zoomSeconds");
   }
-  // 1D Onset only. Mark the key used either way so other waterfalls do not
-  // pick it up from the leftover toggle loop. 2D Onset stays on History.
-  if (node?.type === "onset" && toggleKeys.includes("resetSync")) {
-    rows.push(nodeGraphDisplaySettingsBuildToggleRowHtml("resetSync"));
-  }
-  usedToggles.add("resetSync");
   if (node?.type === "onset" && toggleKeys.includes("autoRange")) {
     rows.push(nodeGraphDisplaySettingsBuildToggleRowHtml("autoRange"));
   }

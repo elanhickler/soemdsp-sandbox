@@ -1,12 +1,11 @@
 // Real-browser Onset smoke: loads the patch in PATCH (default runaway triggers.json), plays through the worklet, asserts the sweep draws every frame with new audio and settings repaint.
 // Asserts every Reset edge restarts the sweep at Position on that sample, and the mod rail is closed with no param wires.
-// Run: node scripts/smoke_onset_live_browser.mjs  (env: SYNC=1 RESET_OUT=1 SETTINGS=1 FRAMES=30 NEED_RESET=1 STABLE=1 PATCH=... HISTORY=s)
+// Run: node scripts/smoke_onset_live_browser.mjs  (env: RESET_OUT=1 SETTINGS=1 FRAMES=30 NEED_RESET=1 STABLE=1 PATCH=... HISTORY=s)
 // Per-frame trace of the real 1D Onset pipeline on Argi's patch.
 import fs from "node:fs";
 import { chromium } from "playwright-core";
 const d = JSON.parse(fs.readFileSync(process.env.PATCH || new URL("./fixtures/onset_runaway_triggers.json", import.meta.url), "utf8"));
 const on = d.nodes.find((n) => n.type === "onset");
-if (process.env.SYNC) on.traceDisplaySettings.resetSync = true;
 if (process.env.RESET_OUT) for (const c of d.connections) if (c.destinationNode === on.id && c.destinationPort === "Reset") c.sourcePort = "Out";
 if (process.env.HISTORY) on.traceDisplaySettings.historySeconds = on.traceDisplaySettings.zoomSeconds = Number(process.env.HISTORY);
 const body = JSON.stringify(d);
@@ -113,9 +112,13 @@ await b.close();
 const fail = [];
 const hits = L.rs.flatMap((r) => r.hits);
 if (process.env.NEED_RESET && !hits.length) fail.push("no Reset edge seen");
-for (const h of hits) { const at = L.paints.find((x) => x.abs > h); if (!at || at.post.origin !== h) fail.push(`Reset at ${h} did not restart (origin ${at?.post.origin})`); }
+// Each paint ends on its newest Reset (an earlier one in the same paint drew
+// its short pass first, which the newest then overwrites from Position).
+for (const h of hits) { const at = L.paints.find((x) => x.abs > h); const newest = Math.max(...hits.filter((x) => x < at.abs)); if (h === newest && at.post.origin !== h) fail.push(`Reset at ${h} did not restart (origin ${at.post.origin})`); }
+const hot = L.rs.reduce((a, r) => a + r.n, 0);
+if (hits.length !== hot) fail.push(`${hot} one-sample pulses on the Reset wire but ${hits.length} edges`);
 if (rail.open !== rail.wired) fail.push(`mod rail open=${rail.open} but param wires=${rail.wired}`);
-console.log("reset edges", JSON.stringify(hits));
+console.log("reset edges", hits.length, "hot samples on the wire", L.rs.reduce((a, r) => a + r.n, 0), "max", Math.max(0, ...L.rs.map((r) => r.mx)), JSON.stringify(hits.slice(0, 12)));
 if (process.env.STABLE) {
   // The first two Resets only learn the Reset gap; passes from the third on must match.
   const sn = (L.snaps || []).slice(3);

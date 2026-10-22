@@ -1,4 +1,4 @@
-// 1D Onset sweep, synthetic In / Reset rings at 88.2 kHz, Sync on.
+// 1D Onset sweep, synthetic In / Reset rings at 88.2 kHz. Every Reset edge starts a pass.
 // Each Reset restarts the write cursor at x = 0 on its exact sample and
 // overwrites column by column; old ink stays ahead of the cursor, nothing is
 // cleared at a Reset. Fast Resets (several per paint) and slow ones must both
@@ -83,7 +83,7 @@ ctx.nodeGraphWaterfallGlStampBar = () => true;
 ctx.nodeGraphDisplayGlFailed = () => {};
 
 const canvas = { width: 64, height: 100, _wfGlSession: glSession(64, 100) };
-const settings = { scale: 1, polarity: "bipolar", barInk: "both", resetSync: true, autoRange: false, historySeconds: FACE / SR };
+const settings = { scale: 1, polarity: "bipolar", barInk: "both", autoRange: false, historySeconds: FACE / SR };
 const spec = { canvas, settings, buffer: inBuf, slot: { type: "onset", nodeId: "onset-test" }, bg: "#000000" };
 
 
@@ -256,12 +256,11 @@ ctx.nodeGraphWaterfallPaint(spec);
 gate(wipes - w0 === 1 && canvas._onset.latchedSamples === FACE / 2, "History change: one clear, new scale");
 settings.historySeconds = FACE / SR;
 
-// Sync off: History seconds sets the pass; a Reset still starts it.
-settings.resetSync = false;
+// History seconds sets the pass; a Reset starts it.
 canvas._onset = null;
 inBuf.abs = resetBuf.abs = resets[3] + 5;
 ctx.nodeGraphWaterfallPaint(spec);
-gate(canvas._onset.latchedSamples === FACE && canvas._onset.origin === resets[3], "Sync off: History seconds sets the pass");
+gate(canvas._onset.latchedSamples === FACE && canvas._onset.origin === resets[3], "History seconds sets the pass");
 
 // Zoomed in (a sample every ~9 px): the stroke is a smooth curve through the
 // samples at sub-pixel x, stepped at most a pixel, never a stair (no flat run
@@ -274,7 +273,7 @@ gate(canvas._onset.latchedSamples === FACE && canvas._onset.origin === resets[3]
   rs[100] = 1;
   sine.abs = rs.abs = 100 + 8;
   ctx.nodeGraphModuleScopeState.buffers.set("onset-test:Reset", rs);
-  const s2 = { scale: 1, polarity: "bipolar", barInk: "both", resetSync: true, autoRange: false, historySeconds: 7 / SR, pauseAtEnd: true };
+  const s2 = { scale: 1, polarity: "bipolar", barInk: "both", autoRange: false, historySeconds: 7 / SR, pauseAtEnd: true };
   const c2 = { width: 64, height: 100, _wfGlSession: glSession(64, 100) };
   const sp2 = { canvas: c2, settings: s2, buffer: sine, slot: spec.slot, bg: "#000000" };
   glCalls.draws = [];

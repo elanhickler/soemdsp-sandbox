@@ -10,10 +10,10 @@
 // face — only scroll existing pixels and fill the new column(s) on the right.
 // History (seconds) = freerun window across the face. Shorter = faster scroll. At 0 the same scale is one current bar.
 // No source sync. A zero-crossing lock fights the scroll+stamp strip.
-// 1D Onset is a sweep: each pass restarts the write cursor at x = 0 on its
-// exact start sample and overwrites column by column; the previous trace stays
+// 1D Onset is a sweep: each pass restarts the write cursor at x = Position on
+// its exact start sample and overwrites column by column; the previous trace stays
 // visible ahead of the cursor. The face is History seconds wide, always, so a
-// Reset-aligned impulse lands at the same x every pass. Sync: every Reset edge
+// Reset-aligned impulse lands at the same x every pass. Every Reset edge
 // starts a pass, in sample order, even several between two paints.
 // WebGL history texture. Instant Waterfall only — no Hz dual-path.
 
@@ -74,11 +74,6 @@ function nodeGraphOnsetTraceRange(onset) {
     }
   }
   return hi >= lo ? { lo, hi } : null;
-}
-
-function nodeGraphOnsetResetSyncOn(settings) {
-  const raw = settings?.resetSync;
-  return raw === true || raw === 1 || raw === "1" || raw === "true";
 }
 
 function nodeGraphOnsetScanEdges(buffer, fromAbs, toAbs, planck, latch, kind, onHit) {
@@ -372,11 +367,9 @@ function nodeGraphOnsetPaint(spec, live) {
   const node = typeof nodeGraphModuleScopeNodeForSlot === "function"
     ? nodeGraphModuleScopeNodeForSlot(spec.slot)
     : null;
-  // 1D Onset only (2D Onset keeps its own History).
-  const resetSync = node?.type === "onset" && nodeGraphOnsetResetSyncOn(settings);
   const hz = nodeGraphWaterfallVisualHz(live);
   const resetEdges = [];
-  const resetHit = nodeGraphOnsetScanEdges(
+  nodeGraphOnsetScanEdges(
     resetBuf,
     scanFrom,
     absEnd,
@@ -396,18 +389,12 @@ function nodeGraphOnsetPaint(spec, live) {
   // end of the window and overwriting the old trace. On: it holds at the end
   // until the next pass start.
   const pauseAtEnd = settings?.pauseAtEnd === true;
-  // Pass starts this paint. Sync: every Reset edge (a signal edge would put
-  // the impulse at x = 0). Off: the newest Reset, else (Pause at end) a
-  // signal edge once the pass is done. Continuous with no pass yet: start now.
-  let starts;
-  if (resetSync) {
-    starts = resetEdges;
-  } else if (resetHit >= 0) {
-    starts = [resetHit];
-  } else if (pauseAtEnd) {
+  // Pass starts this paint: every Reset edge, in sample order, even several
+  // in one paint. Pause at end with Reset unplugged: a signal edge once the
+  // pass is done. Continuous with no pass yet: start now.
+  let starts = resetEdges;
+  if (!starts.length && pauseAtEnd && !resetBuf) {
     starts = signalHit >= 0 && (onset.parked || !onset.live) ? [signalHit] : [];
-  } else {
-    starts = [];
   }
   if (!pauseAtEnd && !starts.length && !onset.live) starts = [scanFrom];
   let position = typeof nodeGraphModuleScopeNodeParam === "function"

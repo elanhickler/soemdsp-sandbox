@@ -300,7 +300,7 @@ const nodeGraphTraceDisplayActiveControlsByType = Object.freeze({
       "strokeThickness",
     ]),
     colors: Object.freeze(["dot1Color", "secondaryColor", "tertiaryColor", "backgroundColor", "strokeColor", "strokeLeftColor", "strokeRightColor"]),
-    toggles: Object.freeze(["skipDiscontinuities", "resetSync", "autoRange", "pauseOnSilence", "pauseAtEnd"]),
+    toggles: Object.freeze(["skipDiscontinuities", "autoRange", "pauseOnSilence", "pauseAtEnd"]),
     choices: Object.freeze(["barInk", "facePolarity", "stereoBlend"]),
   }),
   // Phosphor energy faces: color via shared Gradient editor (not single swatches).
@@ -1892,12 +1892,6 @@ const nodeGraphDisplaySettingsToggleMeta = Object.freeze({
   autoRange: Object.freeze({
     label: "Auto Range",
     id: "nodeTraceDisplayAutoRange",
-  }),
-  resetSync: Object.freeze({
-    label: "Sync",
-    id: "nodeTraceDisplayResetSync",
-    title:
-      "1D Onset: every Reset edge restarts the sweep at the left edge on its exact sample.",
   }),
   skipDiscontinuities: Object.freeze({
     label: "Skip Discontinuity",
