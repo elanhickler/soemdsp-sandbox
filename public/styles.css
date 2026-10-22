@@ -25866,3 +25866,21 @@ html.soemdsp-whole-module .node-layout-canvas-grip {
 }
 
 /* Layout 3 (railsOnly) uses the shared IO label type; labels are short (rails.js). */
+
+/* Screen Space Shader host: the composited circuit view, under live HTML. */
+.node-screen-fx-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.node-graph-workspace.screen-fx-on > canvas[data-screen-fx-source] {
+  visibility: hidden;
+}
+
+[data-screen-space-shader-status].is-error {
+  color: #ff6b6b;
+}

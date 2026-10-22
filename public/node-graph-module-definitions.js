@@ -293,6 +293,7 @@ const nodeGraphNodeLabels = Object.freeze({
   vactrol: "Vactrol",
   sandboxVisuals: "Screen Visuals",
   screenSpaceShader: "Screen Space Shader",
+  viewFeedback: "View Feedback",
   bloomGlow: "Bloom & Glow",
   rgbaHsla: "RGBA / HSLA",
   chromaColor: "Chroma Color",
@@ -18012,11 +18013,21 @@ const nodeGraphModuleDefinitions = (
     ],
     visualSink: true
   },
+  // Inputs come from the node's GLSL uniforms (normalizeNodeGraphScreenSpaceShader).
   screenSpaceShader: {
     planRole: "monitor",
-    inputs: ["Shake", "X", "Y", "Dim", "Red", "Green", "Blue", "Scope Off", "Pause", "Trace Image"],
+    inputs: ["Shake"],
     layout: "screenSpaceShader",
     outputs: [],
+    parameters: [],
+    visualSink: true
+  },
+  // Last frame of the circuit view (node-graph-screen-fx.js publishes it).
+  viewFeedback: {
+    planRole: "monitor",
+    inputs: [],
+    outputs: ["rgba"],
+    outputLabels: { rgba: "📺" },
     parameters: [],
     visualSink: true
   },

@@ -350,6 +350,7 @@ var nodeGraphMvp = {
     sampleHold: 0,
     sandboxVisuals: 0,
     screenSpaceShader: 0,
+    viewFeedback: 0,
     slewLimiter: 0,
     spiral: 0,
     sequencer: 0,

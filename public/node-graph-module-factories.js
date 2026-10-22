@@ -565,7 +565,7 @@ function createNodeGraphScreenSpaceShaderBody(node) {
   footer.className = "node-screen-space-shader-footer";
   const status = document.createElement("span");
   status.dataset.screenSpaceShaderStatus = "true";
-  status.textContent = `${script.inputs.length} inputs / ${script.visualInputs.length} controls`;
+  status.textContent = nodeGraphScreenFxStatusFor(node, script);
   const apply = document.createElement("button");
   apply.type = "button";
   apply.dataset.screenSpaceShaderApply = "true";
@@ -582,7 +582,7 @@ function refreshNodeGraphScreenSpaceShaderBodyStatus(body) {
     return;
   }
   const script = normalizeNodeGraphScreenSpaceShader({ source });
-  status.textContent = `${script.inputs.length} inputs / ${script.visualInputs.length} controls`;
+  status.textContent = `${script.inputs.length} in`;
 }
 
 function nodeGraphPerformanceWheelSpecs() {

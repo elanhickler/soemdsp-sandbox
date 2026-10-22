@@ -372,6 +372,7 @@ PUBLIC_SCRIPT_PATHS = (
     "./public/node-graph-wire-actions.js",
     "./public/node-graph-stroke-builder.js",
     "./public/node-graph-gl-graph.js",
+    "./public/node-graph-screen-fx.js",
     "./public/node-graph-seed-code.js",
     "./public/node-graph-seed-control.js",
     "./public/node-graph-trace-router.js",
@@ -18488,6 +18489,8 @@ def check_display_draws_live(manifest: Path) -> None:
         require(unit.returncode == 0, f"spawn face plate live: {unit.stdout}{unit.stderr}")
         unit = subprocess.run(["node", str(ROOT / "scripts" / "smoke_display_choices_filled.mjs")], capture_output=True, text=True, env=env)
         require(unit.returncode == 0, f"display choices filled: {unit.stdout}{unit.stderr}")
+        unit = subprocess.run(["node", str(ROOT / "scripts" / "smoke_screen_fx_browser.mjs")], capture_output=True, text=True, env=env)
+        require(unit.returncode == 0, f"screen fx (compile, draw, chain, feedback): {unit.stdout}{unit.stderr}")
     finally:
         stop_server(process)
 

@@ -236,24 +236,15 @@ layer("a_buffer").opacity = 1.0;
 
 output = canvas;`;
 
-const nodeGraphScreenSpaceShaderDefaultSource = `input("Shake");
-input("Dim");
-input("Red");
-input("Green");
-input("Blue");
-input("X");
-input("Y");
-input("Scope Off");
-input("Pause");
-input("Trace Image");
+const nodeGraphScreenSpaceShaderDefaultSource = `// Screen shake. Shake adds to a small base wobble.
+uniform float Shake;
 
-screen.shake = Shake;
-screen.dim = Dim;
-screen.color = zrgba(Red, Green, Blue, 1);
-screen.offset = vec2(X, Y);
-screen.scopeOff = Scope Off;
-screen.pause = Pause;
-screen.traceImage = Trace Image;`;
+vec4 effect(vec2 uv) {
+  float amount = 0.004 + 0.04 * abs(Shake);
+  float t = uTime * 6.2831853 * 9.0;
+  vec2 offset = vec2(sin(t * 1.31), cos(t * 1.73)) * amount;
+  return scene(uv + offset);
+}`;
 
 const nodeGraphScopeShaderModes = Object.freeze(["1d_full", "1d_scan", "x_y", "one_value"]);
 const nodeGraphScopeShaderBlendModes = Object.freeze(["laser", "led", "light", "paint", "solid", "heatmap"]);
@@ -550,124 +541,20 @@ function parseNodeGraphCanvasScriptInputs(source = "") {
   return normalizeNodeGraphBufferedInputList(names);
 }
 
-function parseNodeGraphScreenSpaceShaderInputs(source = "") {
-  return parseNodeGraphCanvasScriptInputs(source);
-}
-
-function parseNodeGraphScreenSpaceShaderBufferedInputs(source = "", allowedPorts = []) {
-  return parseNodeGraphCanvasScriptBufferedInputs(source, allowedPorts);
-}
-
-const nodeGraphScreenSpaceShaderPropertyMap = Object.freeze({
-  blue: { key: "blue", mode: "intensity" },
-  b: { key: "blue", mode: "intensity" },
-  brightness: { key: "visualBrightness", mode: "intensity" },
-  bloom: { key: "visualBloom", mode: "intensity" },
-  dim: { key: "screenDim", mode: "intensity" },
-  glow: { key: "visualGlow", mode: "intensity" },
-  green: { key: "green", mode: "intensity" },
-  g: { key: "green", mode: "intensity" },
-  pause: { key: "scopePaused", mode: "intensity" },
-  red: { key: "red", mode: "intensity" },
-  r: { key: "red", mode: "intensity" },
-  scopeoff: { key: "scopeTracesOff", mode: "intensity" },
-  scopepaused: { key: "scopePaused", mode: "intensity" },
-  scopetracesoff: { key: "scopeTracesOff", mode: "intensity" },
-  screendim: { key: "screenDim", mode: "intensity" },
-  shake: { key: "screenShake", mode: "intensity" },
-  screenshake: { key: "screenShake", mode: "intensity" },
-  traceimage: { key: "traceImage", mode: "raw" },
-  tracetexture: { key: "traceImage", mode: "raw" },
-  visualbloom: { key: "visualBloom", mode: "intensity" },
-  visualbrightness: { key: "visualBrightness", mode: "intensity" },
-  visualglow: { key: "visualGlow", mode: "intensity" },
-  x: { key: "x", mode: "signed" },
-  y: { key: "y", mode: "signed" },
-});
-
-function normalizeNodeGraphScreenSpaceShaderSourceToken(value = "") {
-  return normalizeNodeGraphCanvasScriptToken(value, "").replace(/[^A-Za-z0-9_ .-]/g, "").trim();
-}
-
-function normalizeNodeGraphScreenSpaceShaderInputReference(value = "", allowedInputs = []) {
-  const token = normalizeNodeGraphScreenSpaceShaderSourceToken(value);
-  const lower = token.toLowerCase();
-  return allowedInputs.find((input) => input.toLowerCase() === lower) || "";
-}
-
-function nodeGraphScreenSpaceShaderLabelForProperty(property = "") {
-  const text = String(property || "").trim();
-  if (!text) {
-    return "";
+// Screen Space Shader: GLSL ES 3.00 run over the whole circuit area.
+// `uniform float Name;` declares a signal input; `uniform sampler2D Name;`
+// declares a picture (📺) input. The source defines vec4 effect(vec2 uv).
+function parseNodeGraphScreenSpaceShaderUniforms(source = "") {
+  const floats = [];
+  const samplers = [];
+  const text = String(source || "").replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "");
+  for (const match of text.matchAll(/(?:^|[;\n])\s*uniform\s+(float|sampler2D)\s+([A-Za-z][A-Za-z0-9_]*)\s*;/g)) {
+    const name = match[2];
+    if (/^(uScene|uTime|uResolution|gl_)/.test(name)) continue;
+    if (floats.includes(name) || samplers.includes(name)) continue;
+    (match[1] === "float" ? floats : samplers).push(name);
   }
-  const lower = text.toLowerCase();
-  if (lower === "scopeoff" || lower === "scopetracesoff") {
-    return "Scope Off";
-  }
-  if (lower === "scopepaused") {
-    return "Pause";
-  }
-  if (lower === "screendim") {
-    return "Dim";
-  }
-  if (lower === "screenshake") {
-    return "Shake";
-  }
-  if (lower === "traceimage" || lower === "tracetexture") {
-    return "Trace Image";
-  }
-  if (lower.startsWith("visual")) {
-    return nodeGraphScreenSpaceShaderLabelForProperty(text.slice(6));
-  }
-  return `${text.charAt(0).toUpperCase()}${text.slice(1)}`;
-}
-
-function parseNodeGraphScreenSpaceShaderVisualInputs(source = "", inputs = []) {
-  const visualInputs = new Map();
-  const addMapping = (key, label, port, mode = "intensity") => {
-    if (!key || !port || !inputs.includes(port)) {
-      return;
-    }
-    visualInputs.set(key, {
-      key,
-      label: label || port,
-      mode,
-      port,
-    });
-  };
-  const text = String(source || "");
-  for (const match of text.matchAll(/(?:^|\n)\s*screen\.([A-Za-z][A-Za-z0-9_]*)\s*=\s*([^;\n]+)\s*;/gi)) {
-    const property = String(match[1] || "").trim().toLowerCase();
-    const expression = String(match[2] || "").trim();
-    if (property === "color") {
-      const colorMatch = expression.match(/z?rgba\s*\(\s*([^,\n]+)\s*,\s*([^,\n]+)\s*,\s*([^,\n]+)(?:\s*,\s*([^,\n]+))?\s*\)/i);
-      if (colorMatch) {
-        addMapping("red", "Red", normalizeNodeGraphScreenSpaceShaderInputReference(colorMatch[1], inputs), "intensity");
-        addMapping("green", "Green", normalizeNodeGraphScreenSpaceShaderInputReference(colorMatch[2], inputs), "intensity");
-        addMapping("blue", "Blue", normalizeNodeGraphScreenSpaceShaderInputReference(colorMatch[3], inputs), "intensity");
-      }
-      continue;
-    }
-    if (property === "offset") {
-      const offsetMatch = expression.match(/vec2\s*\(\s*([^,\n]+)\s*,\s*([^,\n]+)\s*\)/i);
-      if (offsetMatch) {
-        addMapping("x", "X", normalizeNodeGraphScreenSpaceShaderInputReference(offsetMatch[1], inputs), "signed");
-        addMapping("y", "Y", normalizeNodeGraphScreenSpaceShaderInputReference(offsetMatch[2], inputs), "signed");
-      }
-      continue;
-    }
-    const spec = nodeGraphScreenSpaceShaderPropertyMap[property];
-    if (!spec) {
-      continue;
-    }
-    addMapping(
-      spec.key,
-      nodeGraphScreenSpaceShaderLabelForProperty(property),
-      normalizeNodeGraphScreenSpaceShaderInputReference(expression, inputs),
-      spec.mode,
-    );
-  }
-  return Array.from(visualInputs.values()).slice(0, 32);
+  return { floats: floats.slice(0, 16), samplers: samplers.slice(0, 4) };
 }
 
 function normalizeNodeGraphScreenSpaceShader(screenSpaceShader = {}) {
@@ -677,16 +564,18 @@ function normalizeNodeGraphScreenSpaceShader(screenSpaceShader = {}) {
       ? screenSpaceShader.source
       : "";
   const normalizedSource = String(source || "").trim().slice(0, 100000) || nodeGraphScreenSpaceShaderDefaultSource;
-  const inputs = parseNodeGraphScreenSpaceShaderInputs(normalizedSource);
+  const { floats, samplers } = parseNodeGraphScreenSpaceShaderUniforms(normalizedSource);
   return {
     bufferSampleLimit: nodeGraphBufferedInputSampleLimit,
-    bufferedInputs: parseNodeGraphScreenSpaceShaderBufferedInputs(normalizedSource, inputs),
+    bufferedInputs: floats.slice(),
     enabled: screenSpaceShader?.enabled !== false,
-    inputs,
+    floats,
+    inputs: [...floats, ...samplers],
     kind: "screenSpaceShader",
-    language: String(screenSpaceShader?.language || "screen-space-js").trim().slice(0, 32) || "screen-space-js",
+    language: "glsl",
+    samplers,
     source: normalizedSource,
-    visualInputs: parseNodeGraphScreenSpaceShaderVisualInputs(normalizedSource, inputs),
+    visualInputs: floats.map((port) => ({ key: `screen:${port}`, label: port, port })),
   };
 }
 

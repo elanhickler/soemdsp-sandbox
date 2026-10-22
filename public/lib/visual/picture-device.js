@@ -468,8 +468,13 @@
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
   }
 
-  /** True when the GL graph composites this canvas and CSS hides its bitmap. */
+  /**
+   * True when a GPU pass composites this canvas and CSS hides its bitmap: a
+   * face inside the GL graph, or a workspace layer the Screen Space Shader
+   * host reads (data-screen-fx-source).
+   */
   function nodeGraphSharedGlFaceTextureOnly(canvas) {
+    if (canvas?.dataset?.screenFxSource === "1") return true;
     return Boolean(canvas?.classList?.contains("node-display-canvas")
       && canvas.closest?.("#nodeGraphWorkspace.gl-graph-on"));
   }
@@ -571,7 +576,7 @@
     const glY = srcCanvas.height - ((sy | 0) + h);
     if (glX < 0 || glY < 0 || glX + w > srcCanvas.width || glY + h > srcCanvas.height) return false;
     const textureOnly = nodeGraphSharedGlFaceTextureOnly(canvas);
-    const wantsTexture = canvas.classList?.contains("node-display-canvas");
+    const wantsTexture = textureOnly || canvas.classList?.contains("node-display-canvas");
     if (!textureOnly) {
       // On-screen 2D canvas: the browser's canvas blit (HEAD path, upright).
       destCtx.imageSmoothingEnabled = Boolean(smooth);

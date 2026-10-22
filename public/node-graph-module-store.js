@@ -110,7 +110,6 @@ const nodeGraphModuleCatalogUnderConstructionSort = Object.freeze([
   "chromaColor",
   "image",
   "rgbaHsla",
-  "screenSpaceShader",
   "waveguide",
   "vocoder",
   "flexGrid",
@@ -197,7 +196,6 @@ const nodeGraphModuleConstructionPlans = Object.freeze({
   bloomGlow: "Screen bloom/glow/dim from CV. Parked until the shader wash stack is live.",
   gradientVectorscope: "Woscope XY beam with gradient-along-length and dest persist. Parked until that face is finished.",
   canvas: "Composite images, scopes, and shaders. Parked until the shader stack ships.",
-  screenSpaceShader: "Scripted screen FX from declared inputs. Parked until shader host lands.",
   rgbaHsla: "RGB/HSL screen wash. Parked until shader color controls land.",
   chromaColor: "Drifting chroma wash. Parked until shader lighting lands.",
   image: "Patch image asset for textures. Parked until file storage ships.",
@@ -2534,8 +2532,13 @@ const nodeGraphModuleStoreCatalog = Object.freeze({
   },
   screenSpaceShader: {
     category: "rgba",
-    description: "Script custom screen effects from declared inputs.",
-    notes: ["under construction", "scripted visual sink", "custom inputs", "screen shader controls"],
+    description: "GLSL over the whole circuit area. uniform float = signal in, uniform sampler2D = 📺 in. Chains in patch order.",
+    notes: ["screen space", "glsl", "post", "shake", "feedback"],
+  },
+  viewFeedback: {
+    category: "rgba",
+    description: "The last frame of the circuit view on 📺. Feed a Screen Space Shader for Droste feedback.",
+    notes: ["screen space", "feedback", "droste", "picture"],
   },
   bloomGlow: {
     category: "rgba",
@@ -3912,8 +3915,12 @@ const nodeGraphJsSourceEntriesByType = Object.freeze({
     sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/scientificIir/scientific-iir-math.js",
   },
   screenSpaceShader: {
-    source: "public/modules/screenSpaceShader/screen-space-shader-worklet-evaluator.js",
-    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/screenSpaceShader/screen-space-shader-worklet-evaluator.js",
+    source: "public/node-graph-screen-fx.js",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/node-graph-screen-fx.js",
+  },
+  viewFeedback: {
+    source: "public/node-graph-screen-fx.js",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/node-graph-screen-fx.js",
   },
   shootingStarExplosion: {
     source: "public/modules/shootingStarExplosion/shooting-star-explosion-live-evaluator.js",
