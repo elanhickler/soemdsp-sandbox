@@ -1848,6 +1848,15 @@ function nodeGraphGlGraphPresentSoon() {
   });
 }
 
+/** One displays-only stamp next frame (face textures repainted, nothing else changed). */
+function nodeGraphGlGraphPresentDisplaysSoon() {
+  if (nodeGraphGlGraphPresentDisplaysSoon._frame) return;
+  nodeGraphGlGraphPresentDisplaysSoon._frame = window.requestAnimationFrame(() => {
+    nodeGraphGlGraphPresentDisplaysSoon._frame = 0;
+    nodeGraphGlGraphPresent({ displaysOnly: true });
+  });
+}
+
 // Unit-orbit step longer than this is a jump, not a side. It is not stroked.
 const NODE_GRAPH_ROUND_ORBIT_JUMP = 0.45;
 

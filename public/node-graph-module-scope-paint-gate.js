@@ -122,6 +122,19 @@ function scopePaintFaceShouldAnimate(faceOrNode) {
 }
 
 /**
+ * A face paint only fills its GPU face texture; the GL graph shows it once it
+ * stamps the face quads again. The scope loop stamps while buffer scopes run,
+ * but a patch of param faces only (Clock, Clock Divider) has no scope loop, so
+ * every drawing-face paint asks for one displays-only stamp next frame.
+ */
+function nodeGraphDrawingFacePaintAndStamp(paint) {
+  return (host) => {
+    paint(host);
+    if (typeof nodeGraphGlGraphPresentDisplaysSoon === "function") nodeGraphGlGraphPresentDisplaysSoon();
+  };
+}
+
+/**
  * Shared rAF pump for drawing faces. Keeps the loop alive while animate;
  * paints only when Simulation FPS says so (or host force flag is set).
  * Prefer immediate paint() from syncFromParameters / resize / slider drag,
@@ -131,10 +144,10 @@ function nodeGraphArmDrawingFaceLoop(host, options = {}) {
   if (!host) {
     return;
   }
-  const paint = options.paint;
-  if (typeof paint !== "function") {
+  if (typeof options.paint !== "function") {
     return;
   }
+  const paint = nodeGraphDrawingFacePaintAndStamp(options.paint);
   const rafKey = options.rafKey || "_raf";
   const forceKey = options.forceKey || "_forceDraw";
   if (host[rafKey]) {
@@ -208,7 +221,7 @@ function nodeGraphInstallDrawingFacePump(section, options = {}) {
   if (!section || typeof options.paint !== "function") {
     return () => {};
   }
-  const paint = options.paint;
+  const paint = nodeGraphDrawingFacePaintAndStamp(options.paint);
   const forceKey = options.forceKey || "_forceDraw";
   // ES-1: the face declares its paint kind (param / buffer / modulation).
   if (options.paintKind && typeof nodeGraphDeclareFacePaintKind === "function") {
