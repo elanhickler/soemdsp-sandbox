@@ -20457,8 +20457,10 @@ const nodeGraphModuleLayout = Object.freeze({
   fitCushionGu: 2 / 28,
   headerHeightGu: 88 / 28,
   headerTitleRowHeightGu: 34 / 28,
-  /* IO strip hugs jack rows. Extra air is only UIDEV io-to-screen / io-to-sliders. */
-  ioPaddingYGu: 0,
+  /* IO strip hugs jack rows, plus room under the last row for the jack's outside stroke
+     (diameter = row pitch, stroke drawn outside the circle): without it the bottom
+     jack ran ~1-2 px into the display, which composites over the plate pass and clipped it. */
+  ioPaddingYGu: 2 / 28,
   ioRowGapGu: 0,
   /* Match --node-signal-port-height = --node-port-diameter at size ratio 0.52. */
   ioRowHeightGu: 0.52,

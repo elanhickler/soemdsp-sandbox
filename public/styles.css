@@ -16916,7 +16916,9 @@ body.node-screen-solo-active .node-screen-solo-face.node-text-box-body > .node-t
   align-items: stretch;
   min-width: 0;
   min-height: var(--node-io-section-min-height);
-  padding: 0;
+  /* Room under the last jack row for the jack's outside stroke (= nodeGraphModuleLayout.ioPaddingYGu):
+     the display composites over the plate pass, so a jack reaching into it was clipped. */
+  padding: 0 0 2px;
   background: transparent;
 }
 
