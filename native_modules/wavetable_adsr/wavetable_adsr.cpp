@@ -40,7 +40,6 @@ static const char kMetadataJson[] =
   "}";
 
 static const int kMaxInstances = 128;
-static const double kGateOn = 1.0e-4;
 static const double kIdleEps = 1.0e-5;
 static const double kArriveEps = 1.0e-4;
 
@@ -104,6 +103,8 @@ static double onePoleCoeff(double seconds, double period) {
   const double a = 1.0 - dsp_exp(-period / maxd(tau, period));
   return clamp(a, 0.0, 1.0);
 }
+
+static inline double absd(double x) { return x < 0.0 ? -x : x; }
 
 static void forceIdle(WavetableAdsrState& s) {
   s.out = 0.0;
@@ -171,8 +172,13 @@ extern "C" double soemdsp_wavetable_adsr_sample(
 
   // Recalc On Trig: latch every knob on rising Gate (On) or copy every sample (Off).
   const bool latch = safe(recalculateOnTrigger) >= 0.5;
-  const bool gateRiseNow = !(s.lastGate > kGateOn) && gIn > kGateOn;
-  if (!latch || gateRiseNow || !s.hasShot) {
+  // App Gate contract (shared trigger.h): gate_hit = |x| rose (fires on negative
+  // too); gate_on = held (> 0) for sustain; velocity = raw Gate height at the hit.
+  const bool wasOn = gate_on(s.lastGate);
+  const bool gateRise = gate_hit(gIn, &s.lastGate);
+  const bool gateOn = gate_on(gIn);
+  const bool gateFall = wasOn && !gateOn;
+  if (!latch || gateRise || !s.hasShot) {
     s.shotShape = shapeParam;
     s.shotAttack = attack;
     s.shotDecay = decay;
@@ -191,29 +197,25 @@ extern "C" double soemdsp_wavetable_adsr_sample(
   s.shape = shape;
 
   // Reset rising edge → idle (hard).
-  if (rising_edge(rIn, &s.lastReset, kGateOn)) {
+  if (gate_hit(rIn, &s.lastReset)) {
     forceIdle(s);
   }
 
 
-  const bool gateOn = gIn > kGateOn;
-  const double prevGate = s.lastGate;
-  const bool gateRise = rising_edge(gIn, &s.lastGate, kGateOn);
-  const bool gateFall = prevGate > kGateOn && gIn <= kGateOn;
 
   if (gateRise) {
     // Velocity = Gate amplitude at note-on (clamped).
-    s.velocity = clamp(gIn, 0.0, 1.0);
+    s.velocity = gIn;
     const double peak = s.velocity;
     // Analog: do NOT restart from 0 — attack from current level toward peak.
     s.stage = STAGE_ATTACK;
     s.segPos = 0.0;
     s.segStart = s.out;
     s.segTarget = peak;
-    if (peak <= kIdleEps) {
+    if (absd(peak) <= kIdleEps) {
       // Zero velocity → stay/go idle
       forceIdle(s);
-    } else if (s.out >= peak - kArriveEps) {
+    } else if (absd(s.out - peak) <= kArriveEps) {
       s.out = peak;
       s.stage = STAGE_DECAY;
       s.segPos = 0.0;
@@ -236,7 +238,7 @@ extern "C" double soemdsp_wavetable_adsr_sample(
       if (shape == SHAPE_ANALOG) {
         const double ka = onePoleCoeff(atk, period);
         s.out += ka * (peak - s.out);
-        if (s.out >= peak - kArriveEps || atk <= period) {
+        if (absd(s.out - peak) <= kArriveEps || atk <= period) {
           s.out = peak;
           s.stage = STAGE_DECAY;
           s.segPos = 0.0;
@@ -263,7 +265,7 @@ extern "C" double soemdsp_wavetable_adsr_sample(
       if (shape == SHAPE_ANALOG) {
         const double kd = onePoleCoeff(dec, period);
         s.out += kd * (susLevel - s.out);
-        if (s.out <= susLevel + kArriveEps || dec <= period) {
+        if (absd(s.out - susLevel) <= kArriveEps || dec <= period) {
           s.out = susLevel;
           s.stage = STAGE_SUSTAIN;
         }
@@ -288,7 +290,7 @@ extern "C" double soemdsp_wavetable_adsr_sample(
       if (shape == SHAPE_ANALOG) {
         const double kr = onePoleCoeff(rel, period);
         s.out += kr * (0.0 - s.out);
-        if (s.out <= kIdleEps || rel <= period) {
+        if (absd(s.out) <= kIdleEps || rel <= period) {
           forceIdle(s);
         }
       } else {
@@ -299,7 +301,6 @@ extern "C" double soemdsp_wavetable_adsr_sample(
         } else {
           const double w = shapeWarp(shape, s.segPos, true);
           s.out = s.segStart + (s.segTarget - s.segStart) * w;
-          if (s.out < 0.0) s.out = 0.0;
         }
       }
       break;
@@ -310,8 +311,6 @@ extern "C" double soemdsp_wavetable_adsr_sample(
       break;
   }
 
-  if (s.out < 0.0) s.out = 0.0;
-  if (s.out > 1.0) s.out = 1.0;
   return safe(s.out * lev);
 }
 
@@ -323,7 +322,7 @@ extern "C" int soemdsp_wavetable_adsr_is_idle(int handle) {
 }
 
 extern "C" int soemdsp_wavetable_adsr_version() {
-  return 2; // 2: Recalc On Trig; Shape 0-3 (Log); no DSP re-clamp of Sustain/Level/Shape
+  return 3; // 3: shared gate_hit/gate_on, signed velocity, no output clamp. 2: Recalc On Trig; Shape 0-3 (Log); no DSP re-clamp of Sustain/Level/Shape
 }
 
 extern "C" const char* soemdsp_wavetable_adsr_metadata_json() {

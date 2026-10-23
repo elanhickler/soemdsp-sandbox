@@ -503,6 +503,8 @@ function nodeGraphPortIsTrigger(port, type) {
   if (kind === "clockDivider" && (raw === "Clock" || lower === "clock")) {
     return true;
   }
+  // Wavetable ADSR Reset is a Trigger consumer (gate_hit); Gate stays the held Gate.
+  if (kind === "wavetableAdsr" && raw === "Reset") return true;
   // Pulse Train: Trigger is the impulse train, End fires once per pattern.
   // Shape is analog (green) even when the Shape knob is Trigger.
   if (kind === "pulseTrain" && (raw === "End" || raw === "Trigger")) return true;
@@ -515,11 +517,11 @@ function nodeGraphPulseTrainEndPort(type, port) {
 }
 
 function nodeGraphGateTriggerPortDisplayLabel(type, port) {
-  if (nodeGraphPortIsReset(port)) {
-    return NODE_GRAPH_RESET_GLYPH;
-  }
   if (nodeGraphPortIsTrigger(port, type)) {
     return nodeGraphPulseTrainEndPort(type, port) ? `End${NODE_GRAPH_TRIGGER_GLYPH}` : NODE_GRAPH_TRIGGER_GLYPH;
+  }
+  if (nodeGraphPortIsReset(port)) {
+    return NODE_GRAPH_RESET_GLYPH;
   }
   if (nodeGraphPortIsGate(port, type)) {
     return NODE_GRAPH_GATE_GLYPH;
@@ -528,8 +530,8 @@ function nodeGraphGateTriggerPortDisplayLabel(type, port) {
 }
 
 function nodeGraphGateTriggerPortSpokenName(type, port) {
-  if (nodeGraphPortIsReset(port)) return "Reset";
   if (nodeGraphPortIsTrigger(port, type)) return nodeGraphPulseTrainEndPort(type, port) ? "End trigger" : "Trigger";
+  if (nodeGraphPortIsReset(port)) return "Reset";
   if (nodeGraphPortIsGate(port, type)) return "Gate";
   return "";
 }
