@@ -6,6 +6,42 @@ async function bindNodeGraphUiDevSettingsEvents() {
     syncNodeUserUiSettingsPageChrome();
   }
   document.getElementById("saveNodeUiDevSettingsButton")?.addEventListener("click", saveNodeUiDevSettingsFile);
+  // Factory: two taps (first arms "Sure?" for 3 s), restores every UI Dev
+  // control to its nodeUiDevSettingControls defaultValue and autosaves.
+  const factoryButton = document.getElementById("factoryNodeUiDevSettingsButton");
+  let factoryArmTimer = 0;
+  factoryButton?.addEventListener("click", () => {
+    if (!factoryButton.dataset.armed) {
+      factoryButton.dataset.armed = "1";
+      factoryButton.textContent = "Sure?";
+      factoryArmTimer = setTimeout(() => { delete factoryButton.dataset.armed; factoryButton.textContent = "Factory"; }, 3000);
+      return;
+    }
+    clearTimeout(factoryArmTimer);
+    delete factoryButton.dataset.armed;
+    factoryButton.textContent = "Factory";
+    resetNodeUiDevControlsToDeclaredDefaults();
+    if (typeof scheduleNodeUiDevSettingsAutosave === "function") scheduleNodeUiDevSettingsAutosave();
+  });
+  // Copy: current UI Dev control values as { key: value } JSON.
+  const copyButton = document.getElementById("copyNodeUiDevSettingsButton");
+  copyButton?.addEventListener("click", async () => {
+    const out = {};
+    for (const definition of nodeUiDevSettingControls) {
+      const input = document.getElementById(definition.id);
+      if (!input) continue;
+      out[definition.key] = definition.type === "boolean" ? input.checked
+        : (definition.type === "number" && Number.isFinite(Number(input.value)) ? Number(input.value) : input.value);
+    }
+    const text = JSON.stringify(out, null, 2);
+    try {
+      await navigator.clipboard.writeText(text);
+      copyButton.textContent = "Copied";
+    } catch {
+      copyButton.textContent = "Copy failed";
+    }
+    setTimeout(() => { copyButton.textContent = "Copy"; }, 1500);
+  });
   document.getElementById("nodeUserUiSettingsCopy")?.addEventListener("click", copyNodeUiDevSettingsToClipboard);
   document.getElementById("nodeUserUiSettingsPaste")?.addEventListener("click", pasteNodeUiDevSettingsFromClipboard);
   document.getElementById("loadNodeUiDevSettingsButton").addEventListener("click", loadNodeUiDevSettingsFile);
@@ -156,6 +192,10 @@ async function bindNodeGraphUiDevSettingsEvents() {
     "nodeUiDevWireGradientSpan",
     "nodeUiDevWireDip",
     "nodeUiDevWireDipWidth",
+    "nodeUiDevWireThickStart",
+    "nodeUiDevWireThickEnd",
+    "nodeUiDevWireThickDip",
+    "nodeUiDevWireThickWidth",
     "nodeUiDevParamWireThickness",
     "nodeUiDevParamWireDotSize",
   ]) {
