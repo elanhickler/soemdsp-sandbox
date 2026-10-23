@@ -1097,6 +1097,11 @@ const nodeGraphModuleDefinitions = (
     ]
   },
   blit: {
+    // Hand-written face (node-graph-module-face.js): waveform, Freq | Phase | Amp.
+    face: [
+      { kind: "choices", param: "waveform", labels: ["Saw", "Ramp", "Sqr", "Tri", "Sine"], h: 26 },
+      { kind: "cells", params: [["frequency", "Freq"], ["phase", "Phase"], ["amplitude", "Amp"]], h: 52 },
+    ],
     planRole: "source",
     displayType: "lineBurn",
     displayModes: [
@@ -4350,6 +4355,11 @@ const nodeGraphModuleDefinitions = (
     ]
   },
   surgeOscillator: {
+    // Hand-written face (node-graph-module-face.js): waveform, Freq | Sync | Amp.
+    face: [
+      { kind: "choices", param: "waveform", labels: ["Saw", "Sqr", "Tri", "Sine"], h: 26 },
+      { kind: "cells", params: [["frequency", "Freq"], ["syncFrequency", "Sync"], ["amplitude", "Amp"]], h: 52 },
+    ],
     planRole: "source",
     inputs: ["f", "Sync"],
     inputLabels: { f: "ƒ" },
@@ -4615,6 +4625,12 @@ const nodeGraphModuleDefinitions = (
     ] },
   // Live antialiased cousin of Wavetable2D rectified-sine + rational phasewarp.
   sineWarp: {
+    // Hand-written face (node-graph-module-face.js): Sine / Rect, Freq | Phase, Warp | Amp.
+    face: [
+      { kind: "choices", param: "mode", labels: ["Sine", "Rect"], h: 26 },
+      { kind: "cells", params: [["frequency", "Freq"], ["phase", "Phase"]], h: 40 },
+      { kind: "cells", params: [["warp", "Warp", "bipolar"], ["amplitude", "Amp"]], h: 40 },
+    ],
     planRole: "source",
     displayType: "lineBurn",
     defaultDisplaySettings: {
@@ -6256,6 +6272,12 @@ const nodeGraphModuleDefinitions = (
         linearSmoothing: false },
     ] },
   randomWalk: {
+    // Hand-written face (node-graph-module-face.js): method, Freq | Jitter | Amp, seed.
+    face: [
+      { kind: "choices", param: "method", labels: ["White", "Filt", "Rand", "Fixed"], h: 26 },
+      { kind: "cells", params: [["frequency", "Freq"], ["jitter", "Jitter"], ["amplitude", "Amp"]], h: 52 },
+      { kind: "seed", param: "seed", h: 28 },
+    ],
     planRole: "source",
     displayType: "waterfall",
     spectrumCompanion: false,
@@ -7848,6 +7870,11 @@ const nodeGraphModuleDefinitions = (
     parameters: [] },
 
   pitchHz: {
+    // Hand-written face (node-graph-module-face.js): direction, Tuning.
+    face: [
+      { kind: "choices", param: "mode", labels: ["P→Hz", "Hz→P"], h: 26 },
+      { kind: "cells", params: [["tuning", "Tuning"]], h: 40 },
+    ],
     planRole: "processor",
     planFreeRun: true,
     defaultWidthGu: 4,
@@ -7970,6 +7997,10 @@ const nodeGraphModuleDefinitions = (
     ] },
 
   ampDb: {
+    // Hand-written face (node-graph-module-face.js): direction.
+    face: [
+      { kind: "choices", param: "mode", labels: ["dB→Amp", "Amp→dB"], h: 26 },
+    ],
     planRole: "processor",
     planFreeRun: true,
     defaultWidthGu: 4,
@@ -8135,6 +8166,10 @@ const nodeGraphModuleDefinitions = (
     outputs: ["Out"],
     parameters: [] },
   ampCurve: {
+    // Hand-written face (node-graph-module-face.js): Lin / Exp.
+    face: [
+      { kind: "choices", param: "mode", labels: ["Lin", "Exp"], h: 26 },
+    ],
     planRole: "processor",
     // Gold analog CV (uncolored). Do not alias Left/Right — those paint red/blue
     // via jack-chrome even when the real port is Env/Curve.
@@ -12850,6 +12885,12 @@ const nodeGraphModuleDefinitions = (
     ]
   },
   superloveFilter: {
+    // Hand-written face (node-graph-module-face.js): mode, Cutoff | Res | Chaos | Amp, seed.
+    face: [
+      { kind: "choices", param: "mode", labels: ["LP18", "LP24", "HP6", "BP6"], h: 26 },
+      { kind: "cells", params: [["frequency", "Cutoff"], ["resonance", "Res"], ["chaos", "Chaos"], ["amplitude", "Amp"]], h: 52 },
+      { kind: "seed", param: "seed", h: 28 },
+    ],
     planRole: "processor",
     inputAliases: { Mono: "In" },
     inputLabels: { In: "Mono" },
@@ -13090,6 +13131,11 @@ const nodeGraphModuleDefinitions = (
   },
   // Complex 2-pole ring: ping-stable, decay in seconds, rings at Frequency. Not Shaped Resonator Filter.
   modeResonator: {
+    // Hand-written face (node-graph-module-face.js): Freq | Decay | Amp, Hold.
+    face: [
+      { kind: "cells", params: [["frequency", "Freq"], ["decay", "Decay"], ["amplitude", "Amp"]], h: 52 },
+      { kind: "choices", param: "hold", labels: ["Hold Off", "Hold On"], h: 26 },
+    ],
     planRole: "processor",
     inputAliases: { Freq: "f", "ƒ": "f" },
     inputs: ["In", "Trigger", "f"],
@@ -14038,6 +14084,11 @@ const nodeGraphModuleDefinitions = (
     ]
   },
   resonatorFilter: {
+    // Hand-written face (node-graph-module-face.js): mode, Cutoff | Res | Chaos | Amp.
+    face: [
+      { kind: "choices", param: "mode", labels: ["Sine", "Tri", "Saw"], h: 26 },
+      { kind: "cells", params: [["frequency", "Cutoff"], ["resonance", "Res"], ["chaos", "Chaos"], ["amplitude", "Amp"]], h: 52 },
+    ],
     planRole: "processor",
     inputAliases: { Mono: "In" },
     inputLabels: { In: "Mono" },
@@ -14067,6 +14118,11 @@ const nodeGraphModuleDefinitions = (
     ]
   },
   humanFilter: {
+    // Hand-written face (node-graph-module-face.js): mode, Cutoff | Res | Chaos | Amp.
+    face: [
+      { kind: "choices", param: "mode", labels: ["BP6", "LP6", "LP12"], h: 26 },
+      { kind: "cells", params: [["frequency", "Cutoff"], ["resonance", "Res"], ["chaos", "Chaos"], ["amplitude", "Amp"]], h: 52 },
+    ],
     planRole: "processor",
     inputAliases: { Mono: "In" },
     inputLabels: { In: "Mono" },
@@ -14453,6 +14509,15 @@ const nodeGraphModuleDefinitions = (
     ]
   },
   delayEffect: {
+    // Hand-written face (node-graph-module-face.js): Time | Fdbk | Mix, mod style, Mod | Rate | Var, interp, Out, seed.
+    face: [
+      { kind: "cells", params: [["time", "Time"], ["feedback", "Fdbk"], ["mix", "Mix"]], h: 52 },
+      { kind: "choices", param: "modStyle", labels: ["Parabol", "Walk", "FBM"], h: 26 },
+      { kind: "cells", params: [["modAmount", "Mod"], ["modRate", "Rate"], ["modVariation", "Var"]], h: 52 },
+      { kind: "choices", param: "interpolation", labels: ["Linear", "Hermite"], h: 26 },
+      { kind: "cells", params: [["outLevel", "Out"]], h: 40 },
+      { kind: "seed", param: "seed", h: 28 },
+    ],
     planRole: "processor",
     // Instant Waterfall (Blur only; full-face waveform, no amplitude law) — stereo Mix Out.
     displayType: "waterfall",
@@ -15187,6 +15252,11 @@ const nodeGraphModuleDefinitions = (
     ]
   },
   pll: {
+    // Hand-written face (node-graph-module-face.js): detector type, Freq | Range | Smooth.
+    face: [
+      { kind: "choices", param: "type", labels: ["XOR", "RS", "PFD"], h: 26 },
+      { kind: "cells", params: [["frequency", "Freq"], ["range", "Range"], ["smoothing", "Smooth"]], h: 52 },
+    ],
     planRole: "processor",
     displaySignals: [
       { key: "VCO Out", kind: "scalar" },
@@ -15596,6 +15666,11 @@ const nodeGraphModuleDefinitions = (
   },
   // Mono Hilbert: +90°, −90°, or 0° (I of the IIR quadrature pair). One in, one out.
   hilbert: {
+    // Hand-written face (node-graph-module-face.js): shift, Amp.
+    face: [
+      { kind: "choices", param: "shift", labels: ["+90", "-90", "0"], h: 26 },
+      { kind: "cells", params: [["amplitude", "Amp"]], h: 40 },
+    ],
     planRole: "processor",
     inputAliases: { Mono: "In" },
     inputLabels: { In: "\u2192" },
@@ -16031,6 +16106,11 @@ const nodeGraphModuleDefinitions = (
   // Exponential approach: out += (in − out) * k with separate rise/fall k (0…1).
   // Same family as Speed Color Inertia; compare with Up/Down Slew for hard ramps.
   inertialFilter: {
+    // Hand-written face (node-graph-module-face.js): Smooth Attack, Attack | Release.
+    face: [
+      { kind: "choices", param: "smoothAttack", labels: ["Smooth Off", "Smooth On"], h: 26 },
+      { kind: "cells", params: [["attack", "Attack"], ["release", "Release"]], h: 52 },
+    ],
     planRole: "processor",
     inputAliases: { Mono: "In" },
     // Lone In/Out: arrow labels; channels keep the green (mono) jack color the Mono label gave.
@@ -16212,6 +16292,12 @@ const nodeGraphModuleDefinitions = (
   // Time Quantizer: changes of In only land on the project-tempo grid
   // (project/host BPM, aligned to the transport position). Native time_quantizer.cpp.
   timeQuantizer: {
+    // Hand-written face (node-graph-module-face.js): division, Normal / Dotted / Triplet, Change.
+    face: [
+      { kind: "choices", param: "division", labels: ["1/1", "1/2", "1/4", "1/8", "1/16", "1/32"], h: 26 },
+      { kind: "choices", param: "timing", labels: ["Normal", "Dotted", "Triplet"], h: 26 },
+      { kind: "cells", params: [["changeThreshold", "Change"]], h: 40 },
+    ],
     planRole: "processor",
     displayType: "waterfall",
     defaultDisplayMode: "waterfall",
@@ -17221,6 +17307,13 @@ const nodeGraphModuleDefinitions = (
     ] },
   // Roll-your-own optical-lag envelope (formerly vactrolEnvelopeCustom).
   vactrol: {
+    // Hand-written face (node-graph-module-face.js): model, Attack | Release | Curve, Sens | Amp, recalc.
+    face: [
+      { kind: "choices", param: "model", labels: ["A", "B"], h: 26 },
+      { kind: "cells", params: [["attack", "Attack"], ["release", "Release"], ["curve", "Curve"]], h: 52 },
+      { kind: "cells", params: [["sensitivity", "Sens"], ["amplitude", "Amp"]], h: 40 },
+      { kind: "choices", param: "recalculateOnTrigger", labels: ["Recalc Off", "Recalc On"], h: 26 },
+    ],
     planRole: "processor",
     planFreeRun: true,
     inputs: ["Light", "Retrigger"],
@@ -17366,6 +17459,12 @@ const nodeGraphModuleDefinitions = (
       { key: "amplitude", label: "Amplitude", defaultValue: "1", min: "0", mid: "1", max: "1", step: "0.01" },
     ] },
   pingEnvelope: {
+    // Hand-written face (node-graph-module-face.js): Lin / Exp, Attack | Decay | Amp, recalc.
+    face: [
+      { kind: "choices", param: "model", labels: ["Lin", "Exp"], h: 26 },
+      { kind: "cells", params: [["attack", "Attack"], ["decay", "Decay"], ["amplitude", "Amp"]], h: 52 },
+      { kind: "choices", param: "recalculateOnTrigger", labels: ["Recalc Off", "Recalc On"], h: 26 },
+    ],
     planRole: "processor",
     planFreeRun: true,
     displayType: "waterfall",
@@ -19886,6 +19985,11 @@ const nodeGraphModuleDefinitions = (
     ]
   },
   sinc: {
+    // Hand-written face (node-graph-module-face.js): kernel, Freq | Phase | Lobes | Amp.
+    face: [
+      { kind: "choices", param: "bandLimit", labels: ["Ideal", "Band Limit"], h: 26 },
+      { kind: "cells", params: [["freq", "Freq"], ["phase", "Phase"], ["lobes", "Lobes"], ["amplitude", "Amp"]], h: 52 },
+    ],
     planRole: "processor",
     displayType: "waterfall",
     inputs: ["f"],
