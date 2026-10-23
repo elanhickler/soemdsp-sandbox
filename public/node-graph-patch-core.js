@@ -873,6 +873,10 @@ function validateNodeGraphPatch(patch) {
       sourcePort = normalizeNodeGraphPitchPortName(sourcePort);
     }
     sourcePort = nodeGraphCanonicalOutputPort(sourceType, sourcePort);
+    // Softpop Filter RGBA out removed: its old cables drop silently.
+    if (sourceType === "softpopFilter" && sourcePort === "rgba") {
+      return [];
+    }
     if (!nodeGraphPatchNodeOutputPorts(nodeById.get(sourceNode)).includes(sourcePort)) {
       loadWarnings.push(`connection source port invalid: ${sourceNode}.${sourcePort}`);
       return [];

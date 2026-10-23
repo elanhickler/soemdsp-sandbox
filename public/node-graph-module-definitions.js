@@ -10646,8 +10646,7 @@ const nodeGraphModuleDefinitions = (
       Left: "Left audio in. Alone it counts as mono (both channels); with Right wired, Left channel = Left + Mono.",
       Right: "Right audio in. Alone it counts as mono (both channels); with Left wired, Right channel = Right + Mono.",
     },
-    outputs: ["Mono", "Left", "Right", "Noise L", "Noise R", "CV L", "CV R", "rgba"],
-    outputLabels: { rgba: "📺" },
+    outputs: ["Mono", "Left", "Right", "Noise L", "Noise R", "CV L", "CV R"],
     outputTooltips: {
       Mono: "The Left channel render on its own: one complete voice, same level as Left or Right.",
       Left: "Left channel (its own noise generators).",
