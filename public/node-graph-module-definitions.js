@@ -10637,6 +10637,17 @@ const nodeGraphModuleDefinitions = (
   // Robin's permission (docs/KICK_PLAN.md). Native only:
   // native_modules/robin_sinepulse/robin_sinepulse.cpp.
   robinSinepulse: {
+    // Hand-written face (node-graph-module-face.js): wave buttons, sweep (High | Low | Time), Chirp | Shape | Wave shape,
+    // Phase | Decay | Amp, voices (Voices | Fade time, Fade Off / On), recalc.
+    face: [
+      { kind: "choices", param: "wave", labels: ["Sine", "SinFatSaw", "TriSaw"], h: 26 },
+      { kind: "cells", params: [["highFreq", "High"], ["lowFreq", "Low"], ["sweepTime", "Time"]], h: 52 },
+      { kind: "cells", params: [["chirp", "Chirp", "bipolar"], ["chirpShape", "Shape", "bipolar"], ["waveShape", "Wave", "bipolar"]], h: 52 },
+      { kind: "cells", params: [["phase", "Phase", "bipolar"], ["decay", "Decay"], ["amplitude", "Amp"]], h: 52 },
+      { kind: "cells", params: [["voices", "Voices"], ["fadeTime", "Fade"]], h: 40 },
+      { kind: "choices", param: "voiceFade", labels: ["Fade Off", "Fade On"], h: 26 },
+      { kind: "choices", param: "recalculateOnTrigger", labels: ["Recalc Off", "Recalc On"], h: 26 },
+    ],
     planRole: "source",
     planFreeRun: true,
     displayType: "lineBurn",
@@ -10836,6 +10847,15 @@ const nodeGraphModuleDefinitions = (
   // Robin's permission (docs/KICK_PLAN.md). Native only:
   // native_modules/robin_sinepulse_allpass/robin_sinepulse_allpass.cpp.
   robinSinepulseAllpass: {
+    // Hand-written face (node-graph-module-face.js): mode buttons, Stages | Mix | Amp, tuning (Low | High | Shape),
+    // Q (Low Q | High Q | Q Shape), Impulse | Input.
+    face: [
+      { kind: "choices", param: "mode", labels: ["One-Pole", "Biquad"], h: 26 },
+      { kind: "cells", params: [["stages", "Stages"], ["mix", "Mix"], ["amplitude", "Amp"]], h: 52 },
+      { kind: "cells", params: [["lowFreq", "Low"], ["highFreq", "High"], ["freqShape", "Shape", "bipolar"]], h: 52 },
+      { kind: "cells", params: [["lowQ", "Low Q"], ["highQ", "High Q"], ["qShape", "Q Shape", "bipolar"]], h: 52 },
+      { kind: "cells", params: [["impulse", "Impulse", "bipolar"], ["input", "Input", "bipolar"]], h: 40 },
+    ],
     planRole: "processor",
     planFreeRun: true,
     displayType: "lineBurn",

@@ -1,5 +1,6 @@
 // Percussion faces (node-graph-module-face.js): Electro Kick / Snare / Hat /
-// Tom / Clap, Modal Snare, Drummer, Percussion. Per module: the face replaces the
+// Tom / Clap, Modal Snare, Sweep Kick (robinSinepulse), Allpass Zap
+// (robinSinepulseAllpass), Drummer, Percussion. Per module: the face replaces the
 // slider rows, places every visible param exactly once and sets the body height.
 // Then every model button selects its own choice (the readout label matches the
 // button), dragging the first cell up raises it, a bipolar cell fills from the
@@ -14,7 +15,7 @@ const { chromium } = await import(process.env.PW_MODULE || "playwright");
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const BASE = process.env.SANDBOX_URL || "http://127.0.0.1:8765/";
 const SHOT = process.env.SHOT_DIR || "";
-const TYPES = ["electroKick", "electroSnare", "electroHat", "electroTom", "electroClap", "modalSnare", "drummer", "percussion"];
+const TYPES = ["electroKick", "electroSnare", "electroHat", "electroTom", "electroClap", "modalSnare", "robinSinepulse", "robinSinepulseAllpass", "drummer", "percussion"];
 const failures = [];
 const check = (label, ok, detail = "") => {
   console.log(`${ok ? "ok  " : "FAIL"} ${label}${ok ? "" : ` ${detail}`}`);
@@ -29,14 +30,14 @@ function patchJson() {
   d.modulations = [];
   const params = {};
   // Three columns, two rows: every face stays on screen (off-screen modules are culled).
-  TYPES.forEach((type, i) => d.nodes.push({ gx: 2 + (i % 3) * 11, gy: 1 + Math.floor(i / 3) * 24, id: `m-${i}`, type, params: params[type] || {} }));
+  TYPES.forEach((type, i) => d.nodes.push({ gx: 2 + (i % 3) * 11, gy: 1 + Math.floor(i / 3) * 26, id: `m-${i}`, type, params: params[type] || {} }));
   return JSON.stringify(d);
 }
 
 const launch = { headless: true };
 if (process.env.CHROME_PATH) launch.executablePath = process.env.CHROME_PATH;
 const browser = await chromium.launch(launch);
-const page = await (await browser.newContext({ viewport: { width: 2400, height: 3800 } })).newPage();
+const page = await (await browser.newContext({ viewport: { width: 2400, height: 5200 } })).newPage();
 const errors = [];
 page.on("pageerror", (e) => errors.push(String(e.message || e)));
 await page.route("**/batch-smoke.json*", (r) => r.fulfill({ status: 200, contentType: "application/json", body: patchJson() }));
@@ -101,15 +102,17 @@ const click = async (wd) => { await page.mouse.click(wd.x + wd.w / 2, wd.y); awa
 for (let i = 0; i < TYPES.length; i += 1) {
   const id = `m-${i}`;
   const ws = await widgets(id, TYPES[i]);
-  const models = ws.filter((w) => w.type === "choice" && w.keys[0] === "algorithm");
-  const labels = await page.evaluate(({ id }) => {
-    const row = nodeGraphModuleFaceSpec(nodeGraphPatchNode(id).type).find((r) => r.param === "algorithm");
-    return row ? row.labels : [];
+  // Model buttons: the first choices row that is not Recalc.
+  const modelRow = await page.evaluate(({ id }) => {
+    const row = nodeGraphModuleFaceSpec(nodeGraphPatchNode(id).type).find((r) => r.kind === "choices" && r.param !== "recalculateOnTrigger");
+    return row ? { param: row.param, labels: row.labels } : { param: "", labels: [] };
   }, { id });
+  const labels = modelRow.labels;
+  const models = ws.filter((w) => w.type === "choice" && w.keys[0] === modelRow.param);
   for (let k = models.length - 1; k >= 0; k -= 1) {
     await click(models[k]);
-    const shown = await choiceLabel(id, "algorithm");
-    check(`${TYPES[i]}: model button ${labels[k]} selects ${labels[k]}`, shown === labels[k], `shown "${shown}", stored ${JSON.stringify(await raw(id, "algorithm"))}`);
+    const shown = await choiceLabel(id, modelRow.param);
+    check(`${TYPES[i]}: model button ${labels[k]} selects ${labels[k]}`, shown === labels[k], `shown "${shown}", stored ${JSON.stringify(await raw(id, modelRow.param))}`);
   }
   const cell = ws.find((w) => w.type === "cell");
   const key = cell.keys[0];
@@ -118,6 +121,7 @@ for (let i = 0; i < TYPES.length; i += 1) {
   const c1 = await val(id, key);
   check(`${TYPES[i]}: dragging ${key} up raises it`, c1 > c0, `${c0} -> ${c1}`);
   if (TYPES[i] === "percussion") check("Percussion Channel stays a whole number", Number.isInteger(c1), c1);
+  if (TYPES[i] === "robinSinepulseAllpass") check("Allpass Zap Stages stays a whole number", Number.isInteger(c1), c1);
   const recalc = ws.filter((w) => w.type === "choice" && w.keys[0] === "recalculateOnTrigger");
   if (recalc.length) {
     await click(recalc[1]);
