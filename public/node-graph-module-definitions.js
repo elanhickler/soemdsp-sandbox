@@ -1399,7 +1399,7 @@ const nodeGraphModuleDefinitions = (
   archimedes: {
     planRole: "source",
     displayType: "waterfall",
-    inputs: ["f", "Reset"]"],
+    inputs: ["Reset", "f"],
     inputLabels: { f: "ƒ" },
     inputAliases: { "ƒ": "f" },
     outputs: ["Sine", "Cosine", "Pi", "Noise Below", "Noise Above"],
@@ -4542,7 +4542,7 @@ const nodeGraphModuleDefinitions = (
     displaySignals: [
       { key: "Wave", kind: "scalar" },
     ],
-    inputs: ["Reset", "f"],
+    inputs: ["f", "Reset"],
     inputLabels: { f: "ƒ" },
     inputAliases: { "ƒ": "f" },
     inputTooltips: {
