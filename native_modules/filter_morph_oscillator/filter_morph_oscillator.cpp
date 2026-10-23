@@ -10,6 +10,10 @@
 // Then pitch-tracking Passive-style one-pole cascade (Poles 1…4) + makeup.
 // Morph 0 = dark (fc ≈ 0.5×f0). Morph 1 = open (fc ≈ 100×f0, Nyquist clamp).
 // Asym Sine is 2× per wrap so the phasor runs at ƒ/2; filter/makeup use user ƒ.
+// Knee Tri is the triangle with a parabolic knee within w = 0.121/4 turns of each
+// peak (C1), peak scaled to 1. Its 4 curvature steps per cycle get a 2-sample
+// BLEP-integrated-twice residual (d^4/24, -a^4/24) plus the kernel's c/12 offset
+// inside the knees, so the corrected signal is the B1-smoothed shape.
 // Sine is sin(2πφ) at user ƒ (no BLEP; continuous).
 
 #include <stdint.h>
@@ -127,6 +131,29 @@ static double naive_triangle(double t) {
   return 1.0 - 4.0 * d;
 }
 
+// Knee Tri constants (Knee 0.121): w, peak A = 1 - 2w, parabola 2/w, scale 1/(1-2w).
+constexpr double kKneeW = 0.121 * 0.25;
+constexpr double kKneeA = 1.0 - 2.0 * kKneeW;
+constexpr double kKneeB = 2.0 / kKneeW;
+constexpr double kKneeS = 1.0 / (1.0 - 2.0 * kKneeW);
+constexpr double kKneeCurv = 2.0 * kKneeB * kKneeS;  // |d2y/dphase2| inside a knee
+
+static double naive_knee_triangle(double t) {
+  const double x = naive_triangle(t);
+  const double ax = x < 0.0 ? -x : x;
+  const double d = 0.25 * (1.0 - ax);
+  const double v = (d < kKneeW ? kKneeA - kKneeB * d * d : 1.0 - 4.0 * d) * kKneeS;
+  return x < 0.0 ? -v : v;
+}
+
+// Knee Tri curvature (output per turn^2) at phase p: -K in the peak knee, +K in the trough knee.
+static double knee_curvature(double t) {
+  const double p = wrap01_phase(t);
+  if (p < kKneeW || p > 1.0 - kKneeW) return kKneeCurv;
+  if (p > 0.5 - kKneeW && p < 0.5 + kKneeW) return -kKneeCurv;
+  return 0.0;
+}
+
 static double naive_pulse(double t, double morph) {
   const double pw = morph_width01(morph);
   return (wrap01_phase(t) < pw) ? (2.0 - 2.0 * pw) : (-2.0 * pw);
@@ -218,7 +245,7 @@ static double source_wave(double ph, int wave) {
   switch (wave) {
     case 1: return naive_ramp(ph);
     case 2: return naive_trisaw(ph, 0.5);
-    case 3: return naive_triangle(ph);
+    case 3: return naive_knee_triangle(ph);
     case 4: return naive_center_square(ph, 0.5);
     case 5: return naive_pulse(ph, 0.5);
     case 6: return naive_asym_sine(ph);
@@ -228,15 +255,21 @@ static double source_wave(double ph, int wave) {
 }
 
 // Discontinuities per waveform in its own phase (turns): location, value jump
-// (after - before) and slope change in output units per turn.
-struct Edge { double at, jump, kink; };
+// (after - before), slope change in output units per turn, and curvature change
+// in output units per turn^2.
+struct Edge { double at, jump, kink, curv; };
 
 static int wave_edges(int wave, Edge* e) {
   const double k8pi = 8.0 * 3.14159265358979323846;
   switch (wave) {
     case 1: e[0] = {0.0, -2.0, 0.0}; return 1;                         // Ramp
     case 2: e[0] = {0.25, 0.0, -8.0}; e[1] = {0.75, 0.0, 8.0}; return 2; // Trisaw (0.5)
-    case 3: e[0] = {0.0, 0.0, 8.0}; e[1] = {0.5, 0.0, -8.0}; return 2;  // Triangle
+    case 3:                                                            // Knee Tri
+      e[0] = {kKneeW, 0.0, 0.0, -kKneeCurv};
+      e[1] = {0.5 - kKneeW, 0.0, 0.0, -kKneeCurv};
+      e[2] = {0.5 + kKneeW, 0.0, 0.0, kKneeCurv};
+      e[3] = {1.0 - kKneeW, 0.0, 0.0, kKneeCurv};
+      return 4;
     case 4: e[0] = {0.25, 2.0, 0.0}; e[1] = {0.75, -2.0, 0.0}; return 2; // Center Square
     case 5: {
       const double pw = morph_width01(0.5);
@@ -261,7 +294,7 @@ static double process_one(
   double startHz,
   double fullHz,
   double amount,
-  bool doReset
+  double resetH
 ) {
   const double rate = sampleRate > 1.0 ? sampleRate : 44100.0;
   const double f = (frequencyHz * 0.0 == 0.0) ? frequencyHz : 0.0;
@@ -272,10 +305,15 @@ static double process_one(
   const int nPoles = clamp_poles(poles);
   const bool ditherOn = dither >= 0.5;
 
+  // Reset trigger height resetH (-1..1, 0 = no hit): |h| = 1 hard reset,
+  // otherwise the phasor moves |h| of the way to 0 (h < 0 the long way).
+  const bool doReset = resetH >= 1.0 || resetH <= -1.0;
   if (doReset) {
     s.phase = 0.0;
     clear_noise(s);
     clear_lp(s);
+  } else if (resetH != 0.0) {
+    s.phase = soemdsp::math::partial_reset_phase(s.phase, 0.0, resetH);
   }
 
   const double absInc = increment < 0.0 ? -increment : increment;
@@ -286,6 +324,11 @@ static double process_one(
   const double off = po;
   const double ph = wrap01_phase(s.phase + off);
   double y = source_wave(ph, wave);
+  // Knee Tri: B1 kernel lifts a parabola by c*dt^2/12 (dt = phase step per sample).
+  if (wave == 3) {
+    double dq0 = increment;
+    y += knee_curvature(ph) * dq0 * dq0 * (1.0 / 12.0);
+  }
 
   if (!s.primed || doReset) {
     s.primed = 1;
@@ -296,7 +339,7 @@ static double process_one(
     const double dq = increment + dOff;
     const double adq = dq < 0.0 ? -dq : dq;
     if (adq > 1.0e-12) {
-      Edge e[2];
+      Edge e[4];
       const int ne = wave_edges(wave, e);
       const double q0 = s.lastQ;
       for (int i = 0; i < ne; i++) {
@@ -308,8 +351,10 @@ static double process_one(
           const double h = dq > 0.0 ? e[i].jump : -e[i].jump;
           const double m = e[i].kink * adq;
           const double a = 1.0 - d;
-          s.held += h * (d * d * 0.5) + m * (d * d * d) * (1.0 / 6.0);
-          y += -h * (a * a * 0.5) + m * (a * a * a) * (1.0 / 6.0);
+          const double cv = e[i].curv * adq * adq;
+          const double d4 = d * d * d * d, a4 = a * a * a * a;
+          s.held += h * (d * d * 0.5) + m * (d * d * d) * (1.0 / 6.0) + cv * d4 * (1.0 / 24.0);
+          y += -h * (a * a * 0.5) + m * (a * a * a) * (1.0 / 6.0) - cv * a4 * (1.0 / 24.0);
         }
       }
     }
@@ -406,6 +451,15 @@ extern "C" void soemdsp_filter_morph_oscillator_reset(int handle, double phaseOf
   clear_lp(s);
 }
 
+// Reset trigger below full height: move the phasor |h| of the way to 0 (h < 0
+// the long way round); dither, noise and filter state keep running.
+extern "C" void soemdsp_filter_morph_oscillator_partial_reset(int handle, double h) {
+  if (handle < 1 || handle > kMaxInstances) return;
+  FilterMorphState& s = gPool[handle - 1];
+  if (!s.active) return;
+  s.phase = soemdsp::math::partial_reset_phase(s.phase, 0.0, h);
+}
+
 // Seed change (or first Seed after create): restart the dither stream from it.
 extern "C" void soemdsp_filter_morph_oscillator_set_seed(int handle, double seed) {
   if (handle < 1 || handle > kMaxInstances) return;
@@ -435,14 +489,14 @@ extern "C" double soemdsp_filter_morph_oscillator_sample(
   FilterMorphState& s = gPool[handle - 1];
   if (!s.active) return 0.0;
   const double rv = (reset * 0.0 == 0.0) ? reset : 0.0;
-  const bool hit = rv > 0.0 && s.lastReset <= 0.0;
-  s.lastReset = rv;
+  const bool hit = soemdsp::math::gate_hit(rv, &s.lastReset);
+  const double resetH = hit ? soemdsp::math::gate_hit_height(rv) : 0.0;
   return process_one(
     s, frequencyHz, sampleRate, morph, poles, waveform, phaseOffset, amplitude, dither,
-    startHz, fullHz, amount, hit
+    startHz, fullHz, amount, resetH
   );
 }
 
 extern "C" int soemdsp_filter_morph_oscillator_version() {
-  return 9;
+  return 13;
 }

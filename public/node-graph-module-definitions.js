@@ -4555,6 +4555,7 @@ const nodeGraphModuleDefinitions = (
     displaySignals: [
       { key: "Wave", kind: "scalar" },
     ],
+    resetTrigger: true,
     inputs: ["f", "Reset"],
     inputLabels: { f: "ƒ" },
     inputAliases: { "ƒ": "f" },
@@ -4566,7 +4567,7 @@ const nodeGraphModuleDefinitions = (
     outputs: ["Wave"],
     parameters: [
       {
-        choices: ["Saw", "Ramp", "Trisaw", "Triangle", "Center Square", "Pulse", "Asym Sine", "Sine"],
+        choices: ["Saw", "Ramp", "Trisaw", "Knee Tri", "Center Square", "Pulse", "Asym Sine", "Sine"],
         defaultValue: "0",
         displayChoices: true,
         divideChoicesVisibly: true,
