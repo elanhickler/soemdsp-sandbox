@@ -397,12 +397,13 @@ const nodeGraphOutputAmplitudeParam = Object.freeze({
   tooltip: "Output scale." });
 
 const nodeGraphActiveFilterDefinition = {
-  // Hand-written face (node-graph-module-face.js): HP slope, LP slope, HPF | LPF | Res | Amp, feedback, gain comp.
+  // Hand-written face (node-graph-module-face.js): HP, LP, HPF | LPF, Res | Amp, FB, Comp Off / Comp On.
   face: [
-    { kind: "choices", param: "hpSlope", labels: ["HP Off", "6", "12", "18", "24"], h: 26 },
-    { kind: "choices", param: "lpSlope", labels: ["LP Off", "6", "12", "18", "24"], h: 26 },
-    { kind: "cells", params: [["lowFrequency", "HPF"], ["highFrequency", "LPF"], ["resonance", "Res"], ["amplitude", "Amp"]], h: 52 },
-    { kind: "choices", param: "feedbackCircuit", labels: ["FB Off", "Res", "Clip", "Res+Clip"], h: 26 },
+    { kind: "cells", params: [["hpSlope", "HP"]], horizontal: true, h: 26 },
+    { kind: "cells", params: [["lpSlope", "LP"]], horizontal: true, h: 26 },
+    { kind: "cells", params: [["lowFrequency", "HPF"], ["highFrequency", "LPF"]], h: 40 },
+    { kind: "cells", params: [["resonance", "Res"], ["amplitude", "Amp"]], h: 40 },
+    { kind: "cells", params: [["feedbackCircuit", "FB"]], horizontal: true, h: 26 },
     { kind: "choices", param: "gainCompensation", labels: ["Comp Off", "Comp On"], h: 26 },
   ],
   planRole: "processor",
@@ -1107,10 +1108,11 @@ const nodeGraphModuleDefinitions = (
     ]
   },
   blit: {
-    // Hand-written face (node-graph-module-face.js): waveform, Freq | Phase | Amp.
+    // Hand-written face (node-graph-module-face.js): Saw / Ramp / Sqr / Tri / Sine, Freq | Phase, Amp.
     face: [
       { kind: "choices", param: "waveform", labels: ["Saw", "Ramp", "Sqr", "Tri", "Sine"], h: 26 },
-      { kind: "cells", params: [["frequency", "Freq"], ["phase", "Phase"], ["amplitude", "Amp"]], h: 52 },
+      { kind: "cells", params: [["frequency", "Freq"], ["phase", "Phase"]], h: 40 },
+      { kind: "cells", params: [["amplitude", "Amp"]], h: 40 },
     ],
     planRole: "source",
     displayType: "lineBurn",
@@ -1183,12 +1185,13 @@ const nodeGraphModuleDefinitions = (
     ]
   },
   sineWavetable: {
-    // Hand-written face (node-graph-module-face.js): polarity, mode, method, Freq | Phase | Amp.
+    // Hand-written face (node-graph-module-face.js): Bi / Uni, Mode, Method, Freq | Phase, Amp.
     face: [
       { kind: "choices", param: "polarity", labels: ["Bi", "Uni"], h: 26 },
-      { kind: "choices", param: "mode", labels: ["sin", "cos", "sincos", "anti", "3-ph", "4-ph"], h: 26 },
-      { kind: "choices", param: "method", labels: ["Poly", "Table", "sin", "Taylor"], h: 26 },
-      { kind: "cells", params: [["freq", "Freq"], ["phase", "Phase"], ["amp", "Amp"]], h: 52 },
+      { kind: "cells", params: [["mode", "Mode"]], horizontal: true, h: 26 },
+      { kind: "cells", params: [["method", "Method"]], horizontal: true, h: 26 },
+      { kind: "cells", params: [["freq", "Freq"], ["phase", "Phase"]], h: 40 },
+      { kind: "cells", params: [["amp", "Amp"]], h: 40 },
     ],
     planRole: "source",
     layout: "sinCos4",
@@ -1304,11 +1307,12 @@ const nodeGraphModuleDefinitions = (
     ]
   },
   sinCos: {
-    // Hand-written face (node-graph-module-face.js): polarity, method, Freq | Phase | Amp.
+    // Hand-written face (node-graph-module-face.js): Bi / Uni, Method, Freq | Phase, Amp.
     face: [
       { kind: "choices", param: "polarity", labels: ["Bi", "Uni"], h: 26 },
-      { kind: "choices", param: "method", labels: ["Poly", "Table", "sin", "Taylor"], h: 26 },
-      { kind: "cells", params: [["freq", "Freq"], ["phase", "Phase"], ["amp", "Amp"]], h: 52 },
+      { kind: "cells", params: [["method", "Method"]], horizontal: true, h: 26 },
+      { kind: "cells", params: [["freq", "Freq"], ["phase", "Phase"]], h: 40 },
+      { kind: "cells", params: [["amp", "Amp"]], h: 40 },
     ],
     planRole: "source",
     // Cheap 1D one-cycle sine/cosine + one phase dot per drawn line (BasicShape family).
@@ -2998,9 +3002,10 @@ const nodeGraphModuleDefinitions = (
     parameters: [] },
   // Block-rate Curve Envelope for Additive CV (cyan Out). Not audio-rate.
   curveEnvelopeMod: {
-    // Hand-written face (node-graph-module-face.js): Delay | A | D | S | R, curves, delay mode, loop / recalc, Amp.
+    // Hand-written face (node-graph-module-face.js): Dly | A | D, S | R, A Crv | R Crv | Amp, Dly Start / Dly All, Loop Off / Loop On, Recalc Off / Recalc On.
     face: [
-      { kind: "cells", params: [["delay", "Dly"], ["attack", "A"], ["decay", "D"], ["sustain", "S"], ["release", "R"]], h: 52 },
+      { kind: "cells", params: [["delay", "Dly"], ["attack", "A"], ["decay", "D"]], h: 52 },
+      { kind: "cells", params: [["sustain", "S"], ["release", "R"]], h: 40 },
       { kind: "cells", params: [["attackShape", "A Crv", "bipolar"], ["releaseShape", "R Crv", "bipolar"], ["level", "Amp"]], h: 52 },
       { kind: "choices", param: "delayTrigger", labels: ["Dly Start", "Dly All"], h: 26 },
       { kind: "choices", param: "loop", labels: ["Loop Off", "Loop On"], h: 26 },
@@ -3238,10 +3243,11 @@ const nodeGraphModuleDefinitions = (
   // RoundShape — sine→square modulator (getSineToSquare). Separate from full Ellipsoid osc.
   // Face: cheap static orbit outline (filter-curve family), not phosphor trace.
   ellipsoid: {
-    // Hand-written face (node-graph-module-face.js): motion, Freq | Phase | Morph | Amp, AA / dither.
+    // Hand-written face (node-graph-module-face.js): Motion, Freq | Phase, Morph | Amp, AA Off / AA Limit, Dith Off / Dith On.
     face: [
-      { kind: "choices", param: "motion", labels: ["CW Ph", "CCW Ph", "CW T", "CCW T"], h: 26 },
-      { kind: "cells", params: [["frequency", "Freq"], ["phase", "Phase"], ["morph", "Morph"], ["amplitude", "Amp"]], h: 52 },
+      { kind: "cells", params: [["motion", "Motion"]], horizontal: true, h: 26 },
+      { kind: "cells", params: [["frequency", "Freq"], ["phase", "Phase"]], h: 40 },
+      { kind: "cells", params: [["morph", "Morph"], ["amplitude", "Amp"]], h: 40 },
       { kind: "choices", param: "antialias", labels: ["AA Off", "AA Limit"], h: 26 },
       { kind: "choices", param: "dither", labels: ["Dith Off", "Dith On"], h: 26 },
     ],
@@ -3354,10 +3360,11 @@ const nodeGraphModuleDefinitions = (
   },
   // soemdsp Ellipsoid::getEllipsoid (A=offset, B=shape, C=scale). AA Off|Limit as RoundShape.
   ellipsoidOsc: {
-    // Hand-written face (node-graph-module-face.js): AA, Freq | Phase | Offset, Shape | Scale | Amp.
+    // Hand-written face (node-graph-module-face.js): Off / Limit / Dither, Freq | Phase, Offset, Shape | Scale | Amp.
     face: [
       { kind: "choices", param: "antialias", labels: ["Off", "Limit", "Dither"], h: 26 },
-      { kind: "cells", params: [["frequency", "Freq"], ["phase", "Phase"], ["offset", "Offset", "bipolar"]], h: 52 },
+      { kind: "cells", params: [["frequency", "Freq"], ["phase", "Phase"]], h: 40 },
+      { kind: "cells", params: [["offset", "Offset", "bipolar"]], h: 40 },
       { kind: "cells", params: [["shape", "Shape", "bipolar"], ["scale", "Scale"], ["amplitude", "Amp"]], h: 52 },
     ],
     planRole: "source",
@@ -3448,11 +3455,12 @@ const nodeGraphModuleDefinitions = (
   // because `osc` is already the Open Sound Control module.
   // Face: cheap 1D one-cycle + phase dot (RoundShape family, not phosphor).
   basicShape: {
-    // Hand-written face (node-graph-module-face.js): waveform, motion, Freq | Phase | Morph | Amp, polarity.
+    // Hand-written face (node-graph-module-face.js): Wave, Motion, Freq | Phase, Morph | Amp, Bi / Uni.
     face: [
-      { kind: "choices", param: "waveform", labels: ["Sine", "Tri", "Saw", "Ramp", "Trisaw", "Sqr", "CSqr"], h: 26 },
-      { kind: "choices", param: "motion", labels: ["CW Ph", "CCW Ph", "CW T", "CCW T"], h: 26 },
-      { kind: "cells", params: [["frequency", "Freq"], ["phase", "Phase"], ["morph", "Morph"], ["amplitude", "Amp"]], h: 52 },
+      { kind: "cells", params: [["waveform", "Wave"]], horizontal: true, h: 26 },
+      { kind: "cells", params: [["motion", "Motion"]], horizontal: true, h: 26 },
+      { kind: "cells", params: [["frequency", "Freq"], ["phase", "Phase"]], h: 40 },
+      { kind: "cells", params: [["morph", "Morph"], ["amplitude", "Amp"]], h: 40 },
       { kind: "choices", param: "polarity", labels: ["Bi", "Uni"], h: 26 },
     ],
     planRole: "source",
@@ -4416,10 +4424,11 @@ const nodeGraphModuleDefinitions = (
     ]
   },
   surgeOscillator: {
-    // Hand-written face (node-graph-module-face.js): waveform, Freq | Sync | Amp.
+    // Hand-written face (node-graph-module-face.js): Saw / Sqr / Tri / Sine, Freq | Amp, Sync.
     face: [
       { kind: "choices", param: "waveform", labels: ["Saw", "Sqr", "Tri", "Sine"], h: 26 },
-      { kind: "cells", params: [["frequency", "Freq"], ["syncFrequency", "Sync"], ["amplitude", "Amp"]], h: 52 },
+      { kind: "cells", params: [["frequency", "Freq"], ["amplitude", "Amp"]], h: 40 },
+      { kind: "cells", params: [["syncFrequency", "Sync"]], h: 40 },
     ],
     planRole: "source",
     inputs: ["f", "Sync"],
@@ -4999,10 +5008,11 @@ const nodeGraphModuleDefinitions = (
     ]
   },
   dsfOscillator: {
-    // Hand-written face (node-graph-module-face.js): waveform, Freq | Phase | Morph, PW | Blend | Amp.
+    // Hand-written face (node-graph-module-face.js): Wave, Freq | Phase, Morph, PW | Blend | Amp.
     face: [
-      { kind: "choices", param: "waveform", labels: ["Sine", "Saw", "PWM", "Trimorph", "SquSaw"], h: 26 },
-      { kind: "cells", params: [["frequency", "Freq"], ["phase", "Phase"], ["morph", "Morph"]], h: 52 },
+      { kind: "cells", params: [["waveform", "Wave"]], horizontal: true, h: 26 },
+      { kind: "cells", params: [["frequency", "Freq"], ["phase", "Phase"]], h: 40 },
+      { kind: "cells", params: [["morph", "Morph"]], h: 40 },
       { kind: "cells", params: [["pulseWidth", "PW"], ["blend", "Blend"], ["amplitude", "Amp"]], h: 52 },
     ],
     planRole: "source",
@@ -5085,10 +5095,12 @@ const nodeGraphModuleDefinitions = (
     ]
   },
   dsfMorphingOsc: {
-    // Hand-written face (node-graph-module-face.js): Freq | Phase | Morph | Sym | Width, Rotate | Slice | Space | O/E | Amp.
+    // Hand-written face (node-graph-module-face.js): Freq | Phase, Morph | Sym | Width, Rotate | Slice | Space, Odd | Amp.
     face: [
-      { kind: "cells", params: [["frequency", "Freq"], ["phase", "Phase"], ["morph", "Morph"], ["symmetry", "Sym"], ["width", "Width"]], h: 52 },
-      { kind: "cells", params: [["rotate", "Rotate"], ["slice", "Slice"], ["spacing", "Space"], ["oddEven", "O/E"], ["amplitude", "Amp"]], h: 52 },
+      { kind: "cells", params: [["frequency", "Freq"], ["phase", "Phase"]], h: 40 },
+      { kind: "cells", params: [["morph", "Morph"], ["symmetry", "Sym"], ["width", "Width"]], h: 52 },
+      { kind: "cells", params: [["rotate", "Rotate"], ["slice", "Slice"], ["spacing", "Space"]], h: 52 },
+      { kind: "cells", params: [["oddEven", "Odd"], ["amplitude", "Amp"]], h: 40 },
     ],
     planRole: "source",
     layout: "sinCos",
@@ -6350,10 +6362,11 @@ const nodeGraphModuleDefinitions = (
         linearSmoothing: false },
     ] },
   randomWalk: {
-    // Hand-written face (node-graph-module-face.js): method, Freq | Jitter | Amp, seed.
+    // Hand-written face (node-graph-module-face.js): White / Filt / Rand / Fixed, Freq | Jitter, Amp, seed.
     face: [
       { kind: "choices", param: "method", labels: ["White", "Filt", "Rand", "Fixed"], h: 26 },
-      { kind: "cells", params: [["frequency", "Freq"], ["jitter", "Jitter"], ["amplitude", "Amp"]], h: 52 },
+      { kind: "cells", params: [["frequency", "Freq"], ["jitter", "Jitter"]], h: 40 },
+      { kind: "cells", params: [["amplitude", "Amp"]], h: 40 },
       { kind: "seed", param: "seed", h: 28 },
     ],
     planRole: "source",
@@ -8859,11 +8872,12 @@ const nodeGraphModuleDefinitions = (
     spawnParamMeta: NODE_GRAPH_CONTROLLER_BUTTON_SPAWN_PARAM_META,
     parameters: nodeGraphControllerButtonModuleParameters() },
   passiveFilter: {
-    // Hand-written face (node-graph-module-face.js): mode, slope, HPF | LPF | Stagger | Amp, gain comp.
+    // Hand-written face (node-graph-module-face.js): Byp / LP / BP / HP, 6 / 12 / 18 / 24, HPF | LPF, Stagger | Amp, Comp Off / Comp On.
     face: [
       { kind: "choices", param: "mode", labels: ["Byp", "LP", "BP", "HP"], h: 26 },
       { kind: "choices", param: "slope", labels: ["6", "12", "18", "24"], h: 26 },
-      { kind: "cells", params: [["lowFrequency", "HPF"], ["highFrequency", "LPF"], ["stagger", "Stagger"], ["amplitude", "Amp"]], h: 52 },
+      { kind: "cells", params: [["lowFrequency", "HPF"], ["highFrequency", "LPF"]], h: 40 },
+      { kind: "cells", params: [["stagger", "Stagger"], ["amplitude", "Amp"]], h: 40 },
       { kind: "choices", param: "gainCompensation", labels: ["Comp Off", "Comp On"], h: 26 },
     ],
     planRole: "processor",
@@ -9064,10 +9078,11 @@ const nodeGraphModuleDefinitions = (
     ] },
   // ZDF SVF multi-mode EQ. Credit: Robin Schmidt / RS-MET rsStateVariableFilter.
   eqFilter: {
-    // Hand-written face (node-graph-module-face.js): mode, Freq | Q | Gain | Amp.
+    // Hand-written face (node-graph-module-face.js): Mode, Freq | Q, Gain | Amp.
     face: [
-      { kind: "choices", param: "mode", labels: ["Byp", "LP", "HP", "BP", "Peak", "Iso", "LoSh", "HiSh", "Notch", "AP", "Skirt"], h: 26 },
-      { kind: "cells", params: [["frequency", "Freq"], ["q", "Q"], ["gain", "Gain", "bipolar"], ["amplitude", "Amp"]], h: 52 },
+      { kind: "cells", params: [["mode", "Mode"]], horizontal: true, h: 26 },
+      { kind: "cells", params: [["frequency", "Freq"], ["q", "Q"]], h: 40 },
+      { kind: "cells", params: [["gain", "Gain", "bipolar"], ["amplitude", "Amp"]], h: 40 },
     ],
     planRole: "processor",
     // ƒ = absolute Hz; when wired it replaces Frequency per sample (as Comb Resonator).
@@ -9184,11 +9199,11 @@ const nodeGraphModuleDefinitions = (
   },
   // Classical multipoles — shared scientific_iir cascade (native + JS).
   butterworth: {
-    // Hand-written face (node-graph-module-face.js): LP / HP / BP / BR, Freq | Order | Width, Amp.
+    // Hand-written face (node-graph-module-face.js): LP / HP / BP / BR, Freq | Order, Width | Amp.
     face: [
       { kind: "choices", param: "mode", labels: ["LP", "HP", "BP", "BR"], h: 26 },
-      { kind: "cells", params: [["frequency", "Freq"], ["order", "Order"], ["bandwidth", "Width"]], h: 52 },
-      { kind: "cells", params: [["amplitude", "Amp"]], h: 40 },
+      { kind: "cells", params: [["frequency", "Freq"], ["order", "Order"]], h: 40 },
+      { kind: "cells", params: [["bandwidth", "Width"], ["amplitude", "Amp"]], h: 40 },
     ],
     planRole: "processor",
     inputAliases: { Mono: "In", Freq: "f", "ƒ": "f" },
@@ -9260,11 +9275,11 @@ const nodeGraphModuleDefinitions = (
     ]
   },
   linkwitzRiley: {
-    // Hand-written face (node-graph-module-face.js): LP / HP / BP / BR, Freq | Order | Width, Amp.
+    // Hand-written face (node-graph-module-face.js): LP / HP / BP / BR, Freq | Order, Width | Amp.
     face: [
       { kind: "choices", param: "mode", labels: ["LP", "HP", "BP", "BR"], h: 26 },
-      { kind: "cells", params: [["frequency", "Freq"], ["order", "Order"], ["bandwidth", "Width"]], h: 52 },
-      { kind: "cells", params: [["amplitude", "Amp"]], h: 40 },
+      { kind: "cells", params: [["frequency", "Freq"], ["order", "Order"]], h: 40 },
+      { kind: "cells", params: [["bandwidth", "Width"], ["amplitude", "Amp"]], h: 40 },
     ],
     planRole: "processor",
     inputAliases: { Mono: "In", Freq: "f", "ƒ": "f" },
@@ -9334,11 +9349,11 @@ const nodeGraphModuleDefinitions = (
     ]
   },
   bessel: {
-    // Hand-written face (node-graph-module-face.js): LP / HP / BP / BR, Freq | Order | Width, Amp.
+    // Hand-written face (node-graph-module-face.js): LP / HP / BP / BR, Freq | Order, Width | Amp.
     face: [
       { kind: "choices", param: "mode", labels: ["LP", "HP", "BP", "BR"], h: 26 },
-      { kind: "cells", params: [["frequency", "Freq"], ["order", "Order"], ["bandwidth", "Width"]], h: 52 },
-      { kind: "cells", params: [["amplitude", "Amp"]], h: 40 },
+      { kind: "cells", params: [["frequency", "Freq"], ["order", "Order"]], h: 40 },
+      { kind: "cells", params: [["bandwidth", "Width"], ["amplitude", "Amp"]], h: 40 },
     ],
     planRole: "processor",
     inputAliases: { Mono: "In", Freq: "f", "ƒ": "f" },
@@ -9407,11 +9422,11 @@ const nodeGraphModuleDefinitions = (
     ]
   },
   chebyshev: {
-    // Hand-written face (node-graph-module-face.js): LP / HP / BP / BR, Freq | Order | Width, Ripple | Amp.
+    // Hand-written face (node-graph-module-face.js): LP / HP / BP / BR, Freq | Order, Width | Ripple | Amp.
     face: [
       { kind: "choices", param: "mode", labels: ["LP", "HP", "BP", "BR"], h: 26 },
-      { kind: "cells", params: [["frequency", "Freq"], ["order", "Order"], ["bandwidth", "Width"]], h: 52 },
-      { kind: "cells", params: [["ripple", "Ripple"], ["amplitude", "Amp"]], h: 40 },
+      { kind: "cells", params: [["frequency", "Freq"], ["order", "Order"]], h: 40 },
+      { kind: "cells", params: [["bandwidth", "Width"], ["ripple", "Ripple"], ["amplitude", "Amp"]], h: 52 },
     ],
     planRole: "processor",
     inputAliases: { Mono: "In", Freq: "f", "ƒ": "f" },
@@ -9492,11 +9507,11 @@ const nodeGraphModuleDefinitions = (
     ]
   },
   elliptic: {
-    // Hand-written face (node-graph-module-face.js): LP / HP / BP / BR, Freq | Order | Width, Ripple | Amp.
+    // Hand-written face (node-graph-module-face.js): LP / HP / BP / BR, Freq | Order, Width | Ripple | Amp.
     face: [
       { kind: "choices", param: "mode", labels: ["LP", "HP", "BP", "BR"], h: 26 },
-      { kind: "cells", params: [["frequency", "Freq"], ["order", "Order"], ["bandwidth", "Width"]], h: 52 },
-      { kind: "cells", params: [["ripple", "Ripple"], ["amplitude", "Amp"]], h: 40 },
+      { kind: "cells", params: [["frequency", "Freq"], ["order", "Order"]], h: 40 },
+      { kind: "cells", params: [["bandwidth", "Width"], ["ripple", "Ripple"], ["amplitude", "Amp"]], h: 52 },
     ],
     planRole: "processor",
     inputAliases: { Mono: "In", Freq: "f", "ƒ": "f" },
@@ -9578,10 +9593,11 @@ const nodeGraphModuleDefinitions = (
   },
   // True resonant 2nd-order BP — reuses EQ ZDF SVF Bandpass (Robin Schmidt).
   bandpass: {
-    // Hand-written face (node-graph-module-face.js): slope, Freq | Q | Amp.
+    // Hand-written face (node-graph-module-face.js): 12 / 24 / 36 / 48, Freq | Q, Amp.
     face: [
       { kind: "choices", param: "slope", labels: ["12", "24", "36", "48"], h: 26 },
-      { kind: "cells", params: [["frequency", "Freq"], ["q", "Q"], ["amplitude", "Amp"]], h: 52 },
+      { kind: "cells", params: [["frequency", "Freq"], ["q", "Q"]], h: 40 },
+      { kind: "cells", params: [["amplitude", "Amp"]], h: 40 },
     ],
     planRole: "processor",
     inputAliases: { Mono: "In", Freq: "f", "ƒ": "f" },
@@ -9625,10 +9641,11 @@ const nodeGraphModuleDefinitions = (
   },
   // True 2-pole allpass — EQ ZDF SVF Allpass (Robin Schmidt). Phase tool, not a delay line.
   allpass: {
-    // Hand-written face (node-graph-module-face.js): slope, Freq | Q | Amp.
+    // Hand-written face (node-graph-module-face.js): 12 / 24 / 36 / 48, Freq | Q, Amp.
     face: [
       { kind: "choices", param: "slope", labels: ["12", "24", "36", "48"], h: 26 },
-      { kind: "cells", params: [["frequency", "Freq"], ["q", "Q"], ["amplitude", "Amp"]], h: 52 },
+      { kind: "cells", params: [["frequency", "Freq"], ["q", "Q"]], h: 40 },
+      { kind: "cells", params: [["amplitude", "Amp"]], h: 40 },
     ],
     planRole: "processor",
     inputAliases: { Mono: "In", Freq: "f", "ƒ": "f" },
@@ -9671,10 +9688,11 @@ const nodeGraphModuleDefinitions = (
     ]
   },
   lowpass: {
-    // Hand-written face (node-graph-module-face.js): slope, Freq | Q | Amp.
+    // Hand-written face (node-graph-module-face.js): 12 / 24 / 36 / 48, Freq | Q, Amp.
     face: [
       { kind: "choices", param: "slope", labels: ["12", "24", "36", "48"], h: 26 },
-      { kind: "cells", params: [["frequency", "Freq"], ["q", "Q"], ["amplitude", "Amp"]], h: 52 },
+      { kind: "cells", params: [["frequency", "Freq"], ["q", "Q"]], h: 40 },
+      { kind: "cells", params: [["amplitude", "Amp"]], h: 40 },
     ],
     planRole: "processor",
     inputAliases: { Mono: "In", Freq: "f", "ƒ": "f" },
@@ -9717,10 +9735,11 @@ const nodeGraphModuleDefinitions = (
     ]
   },
   highpass: {
-    // Hand-written face (node-graph-module-face.js): slope, Freq | Q | Amp.
+    // Hand-written face (node-graph-module-face.js): 12 / 24 / 36 / 48, Freq | Q, Amp.
     face: [
       { kind: "choices", param: "slope", labels: ["12", "24", "36", "48"], h: 26 },
-      { kind: "cells", params: [["frequency", "Freq"], ["q", "Q"], ["amplitude", "Amp"]], h: 52 },
+      { kind: "cells", params: [["frequency", "Freq"], ["q", "Q"]], h: 40 },
+      { kind: "cells", params: [["amplitude", "Amp"]], h: 40 },
     ],
     planRole: "processor",
     inputAliases: { Mono: "In", Freq: "f", "ƒ": "f" },
@@ -9763,9 +9782,10 @@ const nodeGraphModuleDefinitions = (
     ]
   },
   crossover2: {
-    // Hand-written face (node-graph-module-face.js): Slope | Freq | Amp.
+    // Hand-written face (node-graph-module-face.js): Freq | Slope, Amp.
     face: [
-      { kind: "cells", params: [["order", "Slope"], ["frequency", "Freq"], ["amplitude", "Amp"]], h: 52 },
+      { kind: "cells", params: [["frequency", "Freq"], ["order", "Slope"]], h: 40 },
+      { kind: "cells", params: [["amplitude", "Amp"]], h: 40 },
     ],
     planRole: "processor",
     layout: "filterCurve",
@@ -10445,11 +10465,12 @@ const nodeGraphModuleDefinitions = (
     ]
   },
   softpopOscillator: {
-    // Hand-written face (node-graph-module-face.js): source, Freq | Morph | Pitch | AmpM, color, Amp, seed.
+    // Hand-written face (node-graph-module-face.js): Osc, Freq | Morph, Pitch | AmpM, Color, Amp, seed.
     face: [
-      { kind: "choices", param: "source", labels: ["Sine", "DSine", "DTrisaw", "SSqr", "STri", "Trisaw"], h: 26 },
-      { kind: "cells", params: [["frequency", "Freq"], ["morph", "Morph"], ["pitchMod", "Pitch"], ["ampMod", "AmpM"]], h: 52 },
-      { kind: "choices", param: "color", labels: ["White", "Gauss", "Avg", "Pink", "Brown", "Blue", "Violet"], h: 26 },
+      { kind: "cells", params: [["source", "Osc"]], horizontal: true, h: 26 },
+      { kind: "cells", params: [["frequency", "Freq"], ["morph", "Morph"]], h: 40 },
+      { kind: "cells", params: [["pitchMod", "Pitch"], ["ampMod", "AmpM"]], h: 40 },
+      { kind: "cells", params: [["color", "Color"]], horizontal: true, h: 26 },
       { kind: "cells", params: [["amplitude", "Amp"]], h: 40 },
       { kind: "seed", param: "seed", h: 28 },
     ],
@@ -10596,10 +10617,11 @@ const nodeGraphModuleDefinitions = (
     ]
   },
   softpopFilter: {
-    // Hand-written face (node-graph-module-face.js): Freq | Width | Pitch | AmpM, color, Amp, seed.
+    // Hand-written face (node-graph-module-face.js): Freq | Width, Pitch | AmpM, Color, Amp, seed.
     face: [
-      { kind: "cells", params: [["frequency", "Freq"], ["width", "Width"], ["pitchMod", "Pitch"], ["ampMod", "AmpM"]], h: 52 },
-      { kind: "choices", param: "color", labels: ["White", "Gauss", "Avg", "Pink", "Brown", "Blue", "Violet"], h: 26 },
+      { kind: "cells", params: [["frequency", "Freq"], ["width", "Width"]], h: 40 },
+      { kind: "cells", params: [["pitchMod", "Pitch"], ["ampMod", "AmpM"]], h: 40 },
+      { kind: "cells", params: [["color", "Color"]], horizontal: true, h: 26 },
       { kind: "cells", params: [["amplitude", "Amp"]], h: 40 },
       { kind: "seed", param: "seed", h: 28 },
     ],
@@ -10734,11 +10756,11 @@ const nodeGraphModuleDefinitions = (
     ]
   },
   softpop2: {
-    // Hand-written face (node-graph-module-face.js): Freq | XFade, Amp / BW / Pitch over XFade, color, Amp, seed.
+    // Hand-written face (node-graph-module-face.js): Freq | XFade, AmpX | BWX | PitchX, Color, Amp, seed.
     face: [
       { kind: "cells", params: [["frequency", "Freq"], ["crossfade", "XFade"]], h: 40 },
       { kind: "cells", params: [["ampOverCrossfade", "AmpX"], ["bandwidthOverCrossfade", "BWX"], ["pitchModOverCrossfade", "PitchX"]], h: 52 },
-      { kind: "choices", param: "color", labels: ["White", "Gauss", "Avg", "Pink", "Brown", "Blue", "Violet"], h: 26 },
+      { kind: "cells", params: [["color", "Color"]], horizontal: true, h: 26 },
       { kind: "cells", params: [["amplitude", "Amp"]], h: 40 },
       { kind: "seed", param: "seed", h: 28 },
     ],
@@ -11248,9 +11270,9 @@ const nodeGraphModuleDefinitions = (
   // Electro Snare (docs/SNARE_PLAN.md): one snare voice, Algorithm choice,
   // one fixed shared param set (Modal moved to Modal Snare). Native only: native_modules/electro_snare/electro_snare.cpp.
   electroSnare: {
-    // Hand-written face (node-graph-module-face.js): model, Tune | Tone | Snappy, Body | Snap decays | Bend, Simmons Q | Click | Amp, recalc.
+    // Hand-written face (node-graph-module-face.js): Model, Tune | Tone | Snappy, Body | Snap | Bend, Noise Q | Click | Amp, Recalc Off / Recalc On.
     face: [
-      { kind: "choices", param: "algorithm", labels: ["808", "909", "Simmons", "FM"], h: 26 },
+      { kind: "cells", params: [["algorithm", "Model"]], horizontal: true, h: 26 },
       { kind: "cells", params: [["tune", "Tune"], ["tone", "Tone"], ["snappy", "Snappy"]], h: 52 },
       { kind: "cells", params: [["bodyDecay", "Body"], ["snapDecay", "Snap"], ["bend", "Bend"]], h: 52 },
       { kind: "cells", params: [["simNoiseQ", "Noise Q"], ["simClick", "Click"], ["amplitude", "Amp"]], h: 52 },
@@ -13089,10 +13111,11 @@ const nodeGraphModuleDefinitions = (
     ]
   },
   superloveFilter: {
-    // Hand-written face (node-graph-module-face.js): mode, Cutoff | Res | Chaos | Amp, seed.
+    // Hand-written face (node-graph-module-face.js): LP18 / LP24 / HP6 / BP6, Cutoff | Res, Chaos | Amp, seed.
     face: [
       { kind: "choices", param: "mode", labels: ["LP18", "LP24", "HP6", "BP6"], h: 26 },
-      { kind: "cells", params: [["frequency", "Cutoff"], ["resonance", "Res"], ["chaos", "Chaos"], ["amplitude", "Amp"]], h: 52 },
+      { kind: "cells", params: [["frequency", "Cutoff"], ["resonance", "Res"]], h: 40 },
+      { kind: "cells", params: [["chaos", "Chaos"], ["amplitude", "Amp"]], h: 40 },
       { kind: "seed", param: "seed", h: 28 },
     ],
     planRole: "processor",
@@ -13335,9 +13358,10 @@ const nodeGraphModuleDefinitions = (
   },
   // Complex 2-pole ring: ping-stable, decay in seconds, rings at Frequency. Not Shaped Resonator Filter.
   modeResonator: {
-    // Hand-written face (node-graph-module-face.js): Freq | Decay | Amp, Hold.
+    // Hand-written face (node-graph-module-face.js): Freq | Decay, Amp, Hold Off / Hold On.
     face: [
-      { kind: "cells", params: [["frequency", "Freq"], ["decay", "Decay"], ["amplitude", "Amp"]], h: 52 },
+      { kind: "cells", params: [["frequency", "Freq"], ["decay", "Decay"]], h: 40 },
+      { kind: "cells", params: [["amplitude", "Amp"]], h: 40 },
       { kind: "choices", param: "hold", labels: ["Hold Off", "Hold On"], h: 26 },
     ],
     planRole: "processor",
@@ -13538,11 +13562,12 @@ const nodeGraphModuleDefinitions = (
     ]
   },
   phaser: {
-    // Hand-written face (node-graph-module-face.js): slope, BP / AP, Bands | Freq | Spread | Stereo, Q | Rate | Depth | Fdbk, Mix | Amp.
+    // Hand-written face (node-graph-module-face.js): 12 / 24 / 36 / 48, BP / AP, Freq | Bands, Spread | Stereo, Q | Rate | Depth | Fdbk, Mix | Amp.
     face: [
       { kind: "choices", param: "slope", labels: ["12", "24", "36", "48"], h: 26 },
       { kind: "choices", param: "mode", labels: ["BP", "AP"], h: 26 },
-      { kind: "cells", params: [["stages", "Bands"], ["frequency", "Freq"], ["spread", "Spread"], ["stereoSpread", "Stereo"]], h: 52 },
+      { kind: "cells", params: [["frequency", "Freq"], ["stages", "Bands"]], h: 40 },
+      { kind: "cells", params: [["spread", "Spread"], ["stereoSpread", "Stereo"]], h: 40 },
       { kind: "cells", params: [["q", "Q"], ["rate", "Rate"], ["depth", "Depth"], ["feedback", "Fdbk", "bipolar"]], h: 52 },
       { kind: "cells", params: [["mix", "Mix"], ["amplitude", "Amp"]], h: 40 },
     ],
@@ -14296,10 +14321,11 @@ const nodeGraphModuleDefinitions = (
     ]
   },
   resonatorFilter: {
-    // Hand-written face (node-graph-module-face.js): mode, Cutoff | Res | Chaos | Amp.
+    // Hand-written face (node-graph-module-face.js): Sine / Tri / Saw, Cutoff | Res, Chaos | Amp.
     face: [
       { kind: "choices", param: "mode", labels: ["Sine", "Tri", "Saw"], h: 26 },
-      { kind: "cells", params: [["frequency", "Cutoff"], ["resonance", "Res"], ["chaos", "Chaos"], ["amplitude", "Amp"]], h: 52 },
+      { kind: "cells", params: [["frequency", "Cutoff"], ["resonance", "Res"]], h: 40 },
+      { kind: "cells", params: [["chaos", "Chaos"], ["amplitude", "Amp"]], h: 40 },
     ],
     planRole: "processor",
     inputAliases: { Mono: "In" },
@@ -14330,10 +14356,11 @@ const nodeGraphModuleDefinitions = (
     ]
   },
   humanFilter: {
-    // Hand-written face (node-graph-module-face.js): mode, Cutoff | Res | Chaos | Amp.
+    // Hand-written face (node-graph-module-face.js): BP6 / LP6 / LP12, Cutoff | Res, Chaos | Amp.
     face: [
       { kind: "choices", param: "mode", labels: ["BP6", "LP6", "LP12"], h: 26 },
-      { kind: "cells", params: [["frequency", "Cutoff"], ["resonance", "Res"], ["chaos", "Chaos"], ["amplitude", "Amp"]], h: 52 },
+      { kind: "cells", params: [["frequency", "Cutoff"], ["resonance", "Res"]], h: 40 },
+      { kind: "cells", params: [["chaos", "Chaos"], ["amplitude", "Amp"]], h: 40 },
     ],
     planRole: "processor",
     inputAliases: { Mono: "In" },
@@ -14590,10 +14617,11 @@ const nodeGraphModuleDefinitions = (
     ]
   },
   ladderFilter: {
-    // Hand-written face (node-graph-module-face.js): mode, Freq | Res | Stages | Amp.
+    // Hand-written face (node-graph-module-face.js): Flat / LP / HP / BP, Freq | Res, Stages | Amp.
     face: [
       { kind: "choices", param: "mode", labels: ["Flat", "LP", "HP", "BP"], h: 26 },
-      { kind: "cells", params: [["frequency", "Freq"], ["resonance", "Res"], ["stages", "Stages"], ["amplitude", "Amp"]], h: 52 },
+      { kind: "cells", params: [["frequency", "Freq"], ["resonance", "Res"]], h: 40 },
+      { kind: "cells", params: [["stages", "Stages"], ["amplitude", "Amp"]], h: 40 },
     ],
     planRole: "processor",
     inputAliases: { Mono: "In", Freq: "f", "ƒ": "f" },
@@ -14660,9 +14688,11 @@ const nodeGraphModuleDefinitions = (
     ]
   },
   tb303Filter: {
-    // Hand-written face (node-graph-module-face.js): Mode (15, drag) | Cutoff | Res | Drive | Amp.
+    // Hand-written face (node-graph-module-face.js): Mode, Cutoff | Res, Drive | Amp.
     face: [
-      { kind: "cells", params: [["mode", "Mode"], ["cutoff", "Cutoff"], ["resonance", "Res"], ["drive", "Drive"], ["amplitude", "Amp"]], h: 52 },
+      { kind: "cells", params: [["mode", "Mode"]], horizontal: true, h: 26 },
+      { kind: "cells", params: [["cutoff", "Cutoff"], ["resonance", "Res"]], h: 40 },
+      { kind: "cells", params: [["drive", "Drive"], ["amplitude", "Amp"]], h: 40 },
     ],
     planRole: "processor",
     inputAliases: { Mono: "In", Freq: "f", "ƒ": "f" },
@@ -15113,11 +15143,13 @@ const nodeGraphModuleDefinitions = (
     outputs: [],
     parameters: [] },
   wallDelay: {
-    // Hand-written face (node-graph-module-face.js): room preset, W | H | Scale | Round | Ears, Rays | Bounce | Refl | Mix | Level, room seed.
+    // Hand-written face (node-graph-module-face.js): Room, W | H | Scale, Round | Ears, Rays | Bounce | Refl, Mix | Level, seed.
     face: [
-      { kind: "choices", param: "roomPreset", labels: ["Squircle", "Random", "Fractal"], h: 26 },
-      { kind: "cells", params: [["roomWidth", "W"], ["roomHeight", "H"], ["roomScale", "Scale"], ["roomRoundness", "Round"], ["earDistance", "Ears"]], h: 52 },
-      { kind: "cells", params: [["rayCount", "Rays"], ["bounceCount", "Bounce"], ["reflectivity", "Refl"], ["mix", "Mix"], ["level", "Level"]], h: 52 },
+      { kind: "cells", params: [["roomPreset", "Room"]], horizontal: true, h: 26 },
+      { kind: "cells", params: [["roomWidth", "W"], ["roomHeight", "H"], ["roomScale", "Scale"]], h: 52 },
+      { kind: "cells", params: [["roomRoundness", "Round"], ["earDistance", "Ears"]], h: 40 },
+      { kind: "cells", params: [["rayCount", "Rays"], ["bounceCount", "Bounce"], ["reflectivity", "Refl"]], h: 52 },
+      { kind: "cells", params: [["mix", "Mix"], ["level", "Level"]], h: 40 },
       { kind: "seed", param: "roomSeed", h: 28 },
     ],
     planRole: "processor",
@@ -15143,9 +15175,10 @@ const nodeGraphModuleDefinitions = (
     ]
   },
   reverbEffect: {
-    // Hand-written face (node-graph-module-face.js): Mix | Diff Size | Diff Amt | Delay | Recycle, mod Amp | Speed | Vary | Tap, LFO style, Amp, seed.
+    // Hand-written face (node-graph-module-face.js): Mix | DSize | DAmt, Delay | Recyc, ModA | ModS | ModV | Tap, Parabol / FBM, Amp, seed.
     face: [
-      { kind: "cells", params: [["mix", "Mix"], ["diffusionSize", "DSize"], ["diffusionAmount", "DAmt"], ["delaySize", "Delay"], ["recycle", "Recyc"]], h: 52 },
+      { kind: "cells", params: [["mix", "Mix"], ["diffusionSize", "DSize"], ["diffusionAmount", "DAmt"]], h: 52 },
+      { kind: "cells", params: [["delaySize", "Delay"], ["recycle", "Recyc"]], h: 40 },
       { kind: "cells", params: [["lfoAmplitude", "ModA"], ["lfoBaseSpeed", "ModS"], ["lfoVariation", "ModV"], ["delayTapMod", "Tap"]], h: 52 },
       { kind: "choices", param: "lfoStyle", labels: ["Parabol", "FBM"], h: 26 },
       { kind: "cells", params: [["amplitude", "Amp"]], h: 40 },
@@ -15236,9 +15269,10 @@ const nodeGraphModuleDefinitions = (
   // FROZEN: Sabrina Reverb (key sabrinaReverbOriginal) == plugin 0.1.7 sound. Bug fixes only,
   // no sound changes; new work goes on reverbEffect. Same native DSP, Walter Speed variant.
   sabrinaReverbOriginal: {
-    // Hand-written face (node-graph-module-face.js): Mix | Diff Size | Diff Amt | Delay | Recycle, mod Amp | Speed | Vary | Tap, LFO style, Amp, seed.
+    // Hand-written face (node-graph-module-face.js): Mix | DSize | DAmt, Delay | Recyc, ModA | ModS | ModV | Tap, Parabol / FBM, Amp, seed.
     face: [
-      { kind: "cells", params: [["mix", "Mix"], ["diffusionSize", "DSize"], ["diffusionAmount", "DAmt"], ["delaySize", "Delay"], ["recycle", "Recyc"]], h: 52 },
+      { kind: "cells", params: [["mix", "Mix"], ["diffusionSize", "DSize"], ["diffusionAmount", "DAmt"]], h: 52 },
+      { kind: "cells", params: [["delaySize", "Delay"], ["recycle", "Recyc"]], h: 40 },
       { kind: "cells", params: [["lfoAmplitude", "ModA"], ["lfoBaseSpeed", "ModS"], ["lfoVariation", "ModV"], ["delayTapMod", "Tap"]], h: 52 },
       { kind: "choices", param: "lfoStyle", labels: ["Parabol", "FBM"], h: 26 },
       { kind: "cells", params: [["amplitude", "Amp"]], h: 40 },
@@ -15327,7 +15361,7 @@ const nodeGraphModuleDefinitions = (
     ]
   },
   soemReverb: {
-    // Hand-written face (node-graph-module-face.js): Mix | Recycle | Delays | Offset, echo sync, musical division, Echo Time, echo mode, ping-pong / mod echo, diffusion, LFO, filters, band, ducking, Amp, seed.
+    // Hand-written face (node-graph-module-face.js): Mix | Recyc | Delays | Offset, Free / Sync, musical division, Post / Pre / Slap, Ping Off / Ping On, Mod Off / Mod On, DSize | DAmt | Sat, LFO A | LFO S | LFO V, Parabol / Walk / FBM, HPF | LPF | LPF St, Band | dB, Q | St, Duck | D Rel | Amp, seed.
     face: [
       { kind: "cells", params: [["mix", "Mix"], ["recycle", "Recyc"], ["numDelays", "Delays"], ["offsetMs", "Offset", "bipolar"]], h: 52 },
       { kind: "choices", param: "echoTempoSync", labels: ["Free", "Sync"], h: 26 },
@@ -15339,7 +15373,8 @@ const nodeGraphModuleDefinitions = (
       { kind: "cells", params: [["lfoAmp", "LFO A"], ["lfoFrequency", "LFO S"], ["lfoVariation", "LFO V"]], h: 52 },
       { kind: "choices", param: "lfoStyle", labels: ["Parabol", "Walk", "FBM"], h: 26 },
       { kind: "cells", params: [["hpfFrequency", "HPF"], ["lpfFrequency", "LPF"], ["lpfStages", "LPF St"]], h: 52 },
-      { kind: "cells", params: [["bandFrequency", "Band"], ["bandDecibels", "dB", "bipolar"], ["bandQ", "Q"], ["bandStages", "St"]], h: 52 },
+      { kind: "cells", params: [["bandFrequency", "Band"], ["bandDecibels", "dB", "bipolar"]], h: 40 },
+      { kind: "cells", params: [["bandQ", "Q"], ["bandStages", "St"]], h: 40 },
       { kind: "cells", params: [["duckLimit", "Duck"], ["duckRelease", "D Rel"], ["amplitude", "Amp"]], h: 52 },
       { kind: "seed", param: "seed", h: 28 },
     ],
@@ -15514,10 +15549,11 @@ const nodeGraphModuleDefinitions = (
     ]
   },
   pll: {
-    // Hand-written face (node-graph-module-face.js): detector type, Freq | Range | Smooth.
+    // Hand-written face (node-graph-module-face.js): XOR / RS / PFD, Freq | Range, Smooth.
     face: [
       { kind: "choices", param: "type", labels: ["XOR", "RS", "PFD"], h: 26 },
-      { kind: "cells", params: [["frequency", "Freq"], ["range", "Range"], ["smoothing", "Smooth"]], h: 52 },
+      { kind: "cells", params: [["frequency", "Freq"], ["range", "Range"]], h: 40 },
+      { kind: "cells", params: [["smoothing", "Smooth"]], h: 40 },
     ],
     planRole: "processor",
     displaySignals: [
@@ -16428,10 +16464,11 @@ const nodeGraphModuleDefinitions = (
     ]
   },
   sampleHold: {
-    // Hand-written face (node-graph-module-face.js): Rate | Smooth | Phase | Thresh, interp, polarity, Amp, seed.
+    // Hand-written face (node-graph-module-face.js): Rate | Smooth, Phase | Thresh, Interp, Bi / Uni, Amp, seed.
     face: [
-      { kind: "cells", params: [["sampleFrequency", "Rate"], ["smoothing", "Smooth"], ["phaseOffset", "Phase"], ["threshold", "Thresh", "bipolar"]], h: 52 },
-      { kind: "choices", param: "interpolate", labels: ["Hold", "Lin", "Smooth", "QOut", "QIn", "Cos"], h: 26 },
+      { kind: "cells", params: [["sampleFrequency", "Rate"], ["smoothing", "Smooth"]], h: 40 },
+      { kind: "cells", params: [["phaseOffset", "Phase"], ["threshold", "Thresh", "bipolar"]], h: 40 },
+      { kind: "cells", params: [["interpolate", "Interp"]], horizontal: true, h: 26 },
       { kind: "choices", param: "polarity", labels: ["Bi", "Uni"], h: 26 },
       { kind: "cells", params: [["amplitude", "Amp"]], h: 40 },
       { kind: "seed", param: "seed", h: 28 },
@@ -16565,9 +16602,9 @@ const nodeGraphModuleDefinitions = (
   // Time Quantizer: changes of In only land on the project-tempo grid
   // (project/host BPM, aligned to the transport position). Native time_quantizer.cpp.
   timeQuantizer: {
-    // Hand-written face (node-graph-module-face.js): division, Normal / Dotted / Triplet, Change.
+    // Hand-written face (node-graph-module-face.js): Div, Normal / Dotted / Triplet, Change.
     face: [
-      { kind: "choices", param: "division", labels: ["1/1", "1/2", "1/4", "1/8", "1/16", "1/32"], h: 26 },
+      { kind: "cells", params: [["division", "Div"]], horizontal: true, h: 26 },
       { kind: "choices", param: "timing", labels: ["Normal", "Dotted", "Triplet"], h: 26 },
       { kind: "cells", params: [["changeThreshold", "Change"]], h: 40 },
     ],
@@ -16851,9 +16888,9 @@ const nodeGraphModuleDefinitions = (
         step: "any" },
     ] },
   samplePlayer: {
-    // Hand-written face (node-graph-module-face.js): mode, Start / End span, Speed.
+    // Hand-written face (node-graph-module-face.js): Mode, start / end span, Speed.
     face: [
-      { kind: "choices", param: "mode", labels: ["One-shot", "Hold", "Loop"], h: 26 },
+      { kind: "cells", params: [["mode", "Mode"]], horizontal: true, h: 26 },
       { kind: "span", handles: ["start", "end"], h: 40 },
       { kind: "cells", params: [["speed", "Speed", "bipolar"]], h: 40 },
     ],
@@ -16982,9 +17019,9 @@ const nodeGraphModuleDefinitions = (
     ]
   },
   audioPlayer: {
-    // Hand-written face (node-graph-module-face.js): transport, Start / End span, Speed | Dir | Scratch | Amp, Playlist, Hermite.
+    // Hand-written face (node-graph-module-face.js): Play, start / end span, Speed | Dir | Scratch | Amp, Playlist, AA Off / Hermite.
     face: [
-      { kind: "choices", param: "transport", labels: ["Off", "Stop", "Pause", "Loop", "Play", "All"], h: 26 },
+      { kind: "cells", params: [["transport", "Play"]], horizontal: true, h: 26 },
       { kind: "span", handles: ["start", "end"], h: 40 },
       { kind: "cells", params: [["speed", "Speed"], ["direction", "Dir", "bipolar"], ["phase", "Scratch", "bipolar"], ["amplitude", "Amp"]], h: 52 },
       { kind: "cells", params: [["playlistScrub", "Playlist", "bipolar"]], h: 40 },
@@ -17121,10 +17158,11 @@ const nodeGraphModuleDefinitions = (
   // Cheap poly ADSR: Analog (one-pole) / Linear / Smoothstep. Velocity from Gate
   // amplitude. Gate↑ does not restart from 0. Reset → idle. A/D/S/R/Level MOD live.
   wavetableAdsr: {
-    // Hand-written face (node-graph-module-face.js): shape, A | D | S | R | Level, recalc.
+    // Hand-written face (node-graph-module-face.js): Shape, A | D | S, R | Level, Recalc Off / Recalc On.
     face: [
-      { kind: "choices", param: "shape", labels: ["Analog", "Lin", "Smooth", "Log"], h: 26 },
-      { kind: "cells", params: [["attack", "A"], ["decay", "D"], ["sustain", "S"], ["release", "R"], ["level", "Level"]], h: 52 },
+      { kind: "cells", params: [["shape", "Shape"]], horizontal: true, h: 26 },
+      { kind: "cells", params: [["attack", "A"], ["decay", "D"], ["sustain", "S"]], h: 52 },
+      { kind: "cells", params: [["release", "R"], ["level", "Level"]], h: 40 },
       { kind: "choices", param: "recalculateOnTrigger", labels: ["Recalc Off", "Recalc On"], h: 26 },
     ],
     planRole: "processor",
@@ -17221,9 +17259,10 @@ const nodeGraphModuleDefinitions = (
     ] },
   // Full shapeable DADSR with bipolar Attack/Fall curves (0=linear, +=exp, −=log).
   expAdsr: {
-    // Hand-written face (node-graph-module-face.js): Delay | A | D | S | R, curves, loop / recalc, Amp.
+    // Hand-written face (node-graph-module-face.js): Dly | A | D, S | R, A Crv | R Crv | Amp, Loop Off / Loop On, Recalc Off / Recalc On.
     face: [
-      { kind: "cells", params: [["delay", "Dly"], ["attack", "A"], ["decay", "D"], ["sustain", "S"], ["release", "R"]], h: 52 },
+      { kind: "cells", params: [["delay", "Dly"], ["attack", "A"], ["decay", "D"]], h: 52 },
+      { kind: "cells", params: [["sustain", "S"], ["release", "R"]], h: 40 },
       { kind: "cells", params: [["attackShape", "A Crv", "bipolar"], ["releaseShape", "R Crv", "bipolar"], ["level", "Amp"]], h: 52 },
       { kind: "choices", param: "loop", labels: ["Loop Off", "Loop On"], h: 26 },
       { kind: "choices", param: "updateOnTrigger", labels: ["Recalc Off", "Recalc On"], h: 26 },
@@ -17452,9 +17491,10 @@ const nodeGraphModuleDefinitions = (
     ]
   },
   linearEnvelope: {
-    // Hand-written face (node-graph-module-face.js): Delay | A | D | S | R, loop, Amp.
+    // Hand-written face (node-graph-module-face.js): Dly | A | D, S | R, Loop Off / Loop On, Amp.
     face: [
-      { kind: "cells", params: [["delay", "Dly"], ["attack", "A"], ["decay", "D"], ["sustain", "S"], ["release", "R"]], h: 52 },
+      { kind: "cells", params: [["delay", "Dly"], ["attack", "A"], ["decay", "D"]], h: 52 },
+      { kind: "cells", params: [["sustain", "S"], ["release", "R"]], h: 40 },
       { kind: "choices", param: "loop", labels: ["Loop Off", "Loop On"], h: 26 },
       { kind: "cells", params: [["level", "Amp"]], h: 40 },
     ],
@@ -20324,10 +20364,11 @@ const nodeGraphModuleDefinitions = (
     ]
   },
   sinc: {
-    // Hand-written face (node-graph-module-face.js): kernel, Freq | Phase | Lobes | Amp.
+    // Hand-written face (node-graph-module-face.js): Ideal / Band Limit, Freq | Phase, Lobes | Amp.
     face: [
       { kind: "choices", param: "bandLimit", labels: ["Ideal", "Band Limit"], h: 26 },
-      { kind: "cells", params: [["freq", "Freq"], ["phase", "Phase"], ["lobes", "Lobes"], ["amplitude", "Amp"]], h: 52 },
+      { kind: "cells", params: [["freq", "Freq"], ["phase", "Phase"]], h: 40 },
+      { kind: "cells", params: [["lobes", "Lobes"], ["amplitude", "Amp"]], h: 40 },
     ],
     planRole: "processor",
     displayType: "waterfall",

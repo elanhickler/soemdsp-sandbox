@@ -2,7 +2,7 @@
 // envelopes, Delay. Per module: the face replaces the slider rows, places every
 // visible param exactly once and sets the body height. Every choice button stores
 // its own index, dragging the first cell up raises it (whole steps stay whole),
-// and undo restores it.
+// and undo restores it. Switch sliders (horizontal cells on a choice param) drag to another choice and undo restores it.
 // Usage: node scripts/smoke_module_face_batch2.mjs   (server.py on :8765)
 //   SANDBOX_URL, CHROME_PATH, PW_MODULE, SHOT_DIR optional.
 import fs from "node:fs";
@@ -79,7 +79,7 @@ const widgets = (id, type) => page.evaluate(({ id, type }) => {
   return nodeGraphModuleFaceWidgets(nodeGraphModuleFaceSpec(type, nodeGraphPatchNode(id)), face.offsetWidth, el).map((wd) => {
     const keys = nodeGraphModuleFaceWidgetKeys(wd);
     const t = wd.type === "band" ? keys.map((key) => nodeGraphModuleFaceTravel(nodeGraphModuleFaceInput(el, key))) : [];
-    return { type: wd.type, keys, x: r.left + wd.x * k, y: r.top + (wd.y + wd.h / 2) * k, w: wd.w * k, t };
+    return { type: wd.type, horizontal: !!wd.horizontal, keys, x: r.left + wd.x * k, y: r.top + (wd.y + wd.h / 2) * k, w: wd.w * k, t };
   });
 }, { id, type });
 const drag = async (x, y, dx, dy) => {
@@ -106,7 +106,18 @@ for (let i = 0; i < TYPES.length; i += 1) {
       check(`${TYPES[i]}: ${key} button ${k} selects ${want}`, shown === want, `shown "${shown}"`);
     }
   }
-  const cell = ws.find((w) => w.type === "cell");
+  for (const sw of ws.filter((w) => w.type === "cell" && w.horizontal)) {
+    const k0 = sw.keys[0];
+    const l0 = await choiceLabel(id, k0);
+    const swMax = await page.evaluate(({ id, k0 }) => { const n = nodeGraphModuleFaceInput(document.querySelector(`article[data-node="${id}"]`), k0); return Number(n.value) >= Number(n.max); }, { id, k0 });
+    await drag(sw.x + sw.w * (swMax ? 0.9 : 0.1), sw.y, sw.w * (swMax ? -0.8 : 0.8), 0);
+    const l1 = await choiceLabel(id, k0);
+    check(`${TYPES[i]}: switch ${k0} drag changes choice`, l1 !== l0 && l1 !== "", `${l0} -> ${l1}`);
+    await page.evaluate(() => undoNodeGraphPatch());
+    await page.waitForFunction(({ id, k0, l0 }) => String(nodeSliderChoiceLabel(nodeGraphModuleFaceInput(document.querySelector(`article[data-node="${id}"]`), k0))) === l0, { id, k0, l0 }, { timeout: 5000 }).catch(() => {});
+    check(`${TYPES[i]}: undo restores ${k0}`, (await choiceLabel(id, k0)) === l0, await choiceLabel(id, k0));
+  }
+  const cell = ws.find((w) => w.type === "cell" && !w.horizontal);
   if (!cell) continue;
   const key = cell.keys[0];
   const c0 = await val(id, key);
