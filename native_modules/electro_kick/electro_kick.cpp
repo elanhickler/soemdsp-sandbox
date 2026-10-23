@@ -56,6 +56,7 @@ static const double kSimClick = 0.5;
 static const double kMixTrim = 0.4;
 
 struct State {
+  double fOut;  // f out (Hz), this sample
   double latchA;  // Recalculate On Trigger: decay params latched on the last hit
   double latchB;
   bool latchHas;
@@ -174,6 +175,7 @@ extern "C" double soemdsp_electro_kick_sample(
   // hit keeps its decay; Off (default) reads them live (unchanged behaviour).
   if (ping) { s.latchA = decay; s.latchHas = true; }
   if (safe(recalculateOnTrigger) >= 0.5 && s.latchHas) { decay = s.latchA; }
+  s.fOut = mind(safe(tune), 0.45 * sr);  // f out at rest = Tune (no bend)
   if (!ping && resting(s)) {
     s.envOut = s.rightOut = 0.0;
     return 0.0;
@@ -197,6 +199,7 @@ extern "C" double soemdsp_electro_kick_sample(
     s.eN = 0.0;
     const double r = t60_coeff(dc, sr);
     const double f = mind(f0 * bendMul * (1.0 + k808Sigh * (s.eBody / vRef)), nyq);
+    s.fOut = f;
     if (ping) s.fHit = f;
     const double body = ring2_tick(s.ring, f, r, pv, sr) * (f / s.fHit);
     const double pulse = k808Click * ck * s.eClick;
@@ -208,6 +211,7 @@ extern "C" double soemdsp_electro_kick_sample(
     s.eClick = planck_snap(s.eClick * t60_coeff(k808ClickT60, sr));
   } else if (alg == kAlg909) {
     const double f = mind(f0 * bendMul, nyq);
+    s.fOut = f;
     const double drive = 1.2 + 6.0 * tn;
     const double body = s.eBody * tanh_approx(drive * tri_wave(s.ph)) / tanh_approx(drive);
     s.ph = phase_advance(s.ph, f, sr);
@@ -224,6 +228,7 @@ extern "C" double soemdsp_electro_kick_sample(
   } else {
     s.eN = 0.0;
     const double f = mind(f0 * bendMul, nyq);
+    s.fOut = f;
     const double osc = dsp_sin_turns_lut(s.ph);
     s.ph = phase_advance(s.ph, f, sr);
     const double e = s.eBody;
@@ -267,6 +272,12 @@ extern "C" double soemdsp_electro_kick_env(int handle) {
   return gPool[handle - 1].envOut;
 }
 
-extern "C" int soemdsp_electro_kick_version() { return 3; } // 3: Ring2 rotating phasor (no energy pumped by bend retriggers). 2: Recalculate On Trigger (decay latched on hit)
+// f out (white jack, Hz): body pitch in Hz (Tune x Bend sweep, 808 sigh included, as played).
+extern "C" double soemdsp_electro_kick_f(int handle) {
+  if (handle < 1 || handle > kMaxInstances || !gPool[handle - 1].active) return 0.0;
+  return gPool[handle - 1].fOut;
+}
+
+extern "C" int soemdsp_electro_kick_version() { return 4; } // 4: f out (soemdsp_electro_kick_f, Hz: body pitch in Hz (Tune x Bend sweep, 808 sigh included, as played)). // 3: Ring2 rotating phasor (no energy pumped by bend retriggers). 2: Recalculate On Trigger (decay latched on hit)
 extern "C" const char* soemdsp_electro_kick_metadata_json() { return kMetadataJson; }
 extern "C" int soemdsp_electro_kick_metadata_json_size() { return sizeof(kMetadataJson) - 1; }

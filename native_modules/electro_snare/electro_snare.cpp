@@ -103,6 +103,7 @@ static const double kFmWires = 0.8;
 static const double kMixTrim = 0.6;     // output trim per unit Snappy (808 / 909 / Modal / FM)
 
 struct State {
+  double fOut;  // f out (Hz), this sample
   double latchA;  // Recalculate On Trigger: decay params latched on the last hit
   double latchB;
   bool latchHas;
@@ -255,6 +256,7 @@ extern "C" double soemdsp_electro_snare_sample(
   // hit keeps its decay; Off (default) reads them live (unchanged behaviour).
   if (ping) { s.latchA = bodyDecay; s.latchB = snapDecay; s.latchHas = true; }
   if (safe(recalculateOnTrigger) >= 0.5 && s.latchHas) { bodyDecay = s.latchA; snapDecay = s.latchB; }
+  s.fOut = clamp(safe(tune), 1.0, 0.45 * sr);  // f out at rest = Tune (no bend)
   if (!ping && resting(s)) {
     s.envOut = 0.0;
     s.rightOut = 0.0;
@@ -271,6 +273,7 @@ extern "C" double soemdsp_electro_snare_sample(
   const double pv = ping ? s.v : 0.0;
   const double bendMul = (s.p != 0.0 && bendOct != 0.0) ? dsp_exp2(bendOct * s.p) : 1.0;
   const double f = f0 * bendMul;
+  s.fOut = f;
   const double vRef = s.v > 0.0 ? s.v : 1.0;
   // Noise Q: no range clamp (param range governs); tpt_svf_setup floors R at 1e-9
   // and a non-positive Q is treated as tiny (guard against 1/0 and negative damping).
@@ -424,6 +427,12 @@ extern "C" double soemdsp_electro_snare_env(int handle) {
   return gPool[handle - 1].envOut;
 }
 
-extern "C" int soemdsp_electro_snare_version() { return 7; } // 7: Noise Q + Click on every algorithm (808 / 909 / FM too; defaults bit-identical). 6: Ring2 rotating phasor (no energy pumped by bend retriggers). 5: Recalculate On Trigger (bodyDecay / snapDecay latched on hit)  // 4: Simmons Noise Q + Click params. 3: Modal removed (-> Modal Snare), Amplitude unclamped
+// f out (white jack, Hz): body pitch in Hz (Tune x Bend sweep, as played).
+extern "C" double soemdsp_electro_snare_f(int handle) {
+  if (handle < 1 || handle > kMaxInstances || !gPool[handle - 1].active) return 0.0;
+  return gPool[handle - 1].fOut;
+}
+
+extern "C" int soemdsp_electro_snare_version() { return 8; } // 8: f out (soemdsp_electro_snare_f, Hz: body pitch in Hz (Tune x Bend sweep, as played)). // 7: Noise Q + Click on every algorithm (808 / 909 / FM too; defaults bit-identical). 6: Ring2 rotating phasor (no energy pumped by bend retriggers). 5: Recalculate On Trigger (bodyDecay / snapDecay latched on hit)  // 4: Simmons Noise Q + Click params. 3: Modal removed (-> Modal Snare), Amplitude unclamped
 extern "C" const char* soemdsp_electro_snare_metadata_json() { return kMetadataJson; }
 extern "C" int soemdsp_electro_snare_metadata_json_size() { return sizeof(kMetadataJson) - 1; }

@@ -59,6 +59,7 @@ struct Chan {
 };
 
 struct State {
+  double fOut;  // f out (Hz), this sample
   double latchA;  // Recalculate On Trigger: decay params latched on the last hit
   double latchB;
   bool latchHas;
@@ -136,6 +137,13 @@ static double channel_tick(State& s, int c, int alg, double sh, double wB, doubl
   return (alg == kAlg808 ? kGain808 : kGainSimple) * (wB + wT) * y;
 }
 
+// f out: the burst band-pass centre (808 1 kHz, 909 1.14 kHz, Simple 1.2 kHz)
+// x Tone shift (0.5x .. 2x), Nyquist-limited as played. Clap is noise only.
+static inline double clap_center_hz(int alg, double tone, double sr) {
+  const double fc = alg == kAlg808 ? k808Bp : (alg == kAlg909 ? k909Bp : kSimpleBp);
+  return mind(fc * dsp_exp2(2.0 * tone - 1.0), 0.45 * sr);
+}
+
 }  // namespace
 
 extern "C" int soemdsp_electro_clap_create() {
@@ -193,6 +201,7 @@ extern "C" double soemdsp_electro_clap_sample(
   // hit keeps its decay; Off (default) reads them live (unchanged behaviour).
   if (hit) { s.latchA = decay; s.latchHas = true; }
   if (safe(recalculateOnTrigger) >= 0.5 && s.latchHas) { decay = s.latchA; }
+  s.fOut = clap_center_hz(alg, safe(tone), sr);  // f out: burst band-pass centre
   if (!hit && s.eBurst == 0.0 && s.eTail == 0.0) {
     s.envOut = s.rightOut = 0.0;
     return 0.0;
@@ -249,6 +258,12 @@ extern "C" double soemdsp_electro_clap_env(int handle) {
   return gPool[handle - 1].envOut;
 }
 
-extern "C" int soemdsp_electro_clap_version() { return 2; }  // 2: Recalculate On Trigger (decay latched on hit)
+// f out (white jack, Hz): burst band-pass centre in Hz (Tone shifts it 0.5x..2x).
+extern "C" double soemdsp_electro_clap_f(int handle) {
+  if (handle < 1 || handle > kMaxInstances || !gPool[handle - 1].active) return 0.0;
+  return gPool[handle - 1].fOut;
+}
+
+extern "C" int soemdsp_electro_clap_version() { return 3; } // 3: f out (soemdsp_electro_clap_f, Hz: burst band-pass centre in Hz (Tone shifts it 0.5x..2x)).  // 2: Recalculate On Trigger (decay latched on hit)
 extern "C" const char* soemdsp_electro_clap_metadata_json() { return kMetadataJson; }
 extern "C" int soemdsp_electro_clap_metadata_json_size() { return sizeof(kMetadataJson) - 1; }

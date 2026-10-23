@@ -60,6 +60,7 @@ struct Chan {
 };
 
 struct State {
+  double fOut;  // f out (Hz), this sample
   double latchA;  // Recalculate On Trigger: decay params latched on the last hit
   double latchB;
   bool latchHas;
@@ -125,6 +126,17 @@ static void strike(State& s, double sr) {
 }
 
 static inline double octave_shift(double tone) { return dsp_exp2(2.0 * tone - 1.0); }  // 0.5x .. 2x
+
+// f out: the main filter centre each algorithm plays (the voice has no single
+// pitch): 808 / 606 band-pass centre x Tone shift, FM high-pass corner x Tone
+// shift, Noise band-pass centre (Tune x 8 kHz). Nyquist-limited as played.
+static inline double hat_center_hz(int alg, double tune, double tone, double sr) {
+  const double nyq = 0.45 * sr;
+  if (alg == kAlg808) return mind(k808Bp * octave_shift(tone), nyq);
+  if (alg == kAlg606) return mind(k606Bp * octave_shift(tone), nyq);
+  if (alg == kAlgFm) return mind(kFmHp * octave_shift(tone), nyq);
+  return mind(kNoiseBp * tune, nyq);
+}
 
 // Shared tonal source (metal bank / FM), identical L/R.
 static double metal_tick(State& s, int alg, double tune, double tone, double sr) {
@@ -245,6 +257,7 @@ extern "C" double soemdsp_electro_hat_sample(
   // hit keeps its decay; Off (default) reads them live (unchanged behaviour).
   if (hit) { s.latchA = closedDecay; s.latchB = openDecay; s.latchHas = true; }
   if (safe(recalculateOnTrigger) >= 0.5 && s.latchHas) { closedDecay = s.latchA; openDecay = s.latchB; }
+  s.fOut = hat_center_hz(alg, safe(tune), safe(tone), sr);  // f out: main filter centre
   if (!hit && s.vca == 0.0) {
     s.envOut = s.rightOut = 0.0;
     return 0.0;
@@ -304,6 +317,12 @@ extern "C" double soemdsp_electro_hat_env(int handle) {
   return gPool[handle - 1].envOut;
 }
 
-extern "C" int soemdsp_electro_hat_version() { return 2; }  // 2: Recalculate On Trigger (closedDecay / openDecay latched on hit)
+// f out (white jack, Hz): main filter centre in Hz (808 / 606 band-pass, FM high-pass, Noise band-pass).
+extern "C" double soemdsp_electro_hat_f(int handle) {
+  if (handle < 1 || handle > kMaxInstances || !gPool[handle - 1].active) return 0.0;
+  return gPool[handle - 1].fOut;
+}
+
+extern "C" int soemdsp_electro_hat_version() { return 3; } // 3: f out (soemdsp_electro_hat_f, Hz: main filter centre in Hz (808 / 606 band-pass, FM high-pass, Noise band-pass)).  // 2: Recalculate On Trigger (closedDecay / openDecay latched on hit)
 extern "C" const char* soemdsp_electro_hat_metadata_json() { return kMetadataJson; }
 extern "C" int soemdsp_electro_hat_metadata_json_size() { return sizeof(kMetadataJson) - 1; }

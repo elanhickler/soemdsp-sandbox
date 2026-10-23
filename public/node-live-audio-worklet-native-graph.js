@@ -756,6 +756,7 @@ NodeLiveAudioProcessor.prototype.mapNativeGraphSrcPortId = function mapNativeGra
     if (p === "snare l") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_LEFT;
     if (p === "snare r") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_RIGHT;
     if (p === "env") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_MONO;
+    if (p === "f" || p === "\u0192") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_SAW;
   }
   // Electro Hat / Tom / Kick: <name> L on Left, <name> R on Right, Env on Mono.
   if (t === "electroHat" || t === "electroTom" || t === "electroKick" || t === "electroClap") {
@@ -763,6 +764,7 @@ NodeLiveAudioProcessor.prototype.mapNativeGraphSrcPortId = function mapNativeGra
     if (p === nm + " l") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_LEFT;
     if (p === nm + " r") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_RIGHT;
     if (p === "env") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_MONO;
+    if (p === "f" || p === "\u0192") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_SAW;
   }
   // Bradley 2A stereo outs (graph 187): Out L keeps Mono, Out R on Right.
   if (t === "bradley2a") {
@@ -9464,6 +9466,7 @@ NodeLiveAudioProcessor.prototype.nativeGraphPortNames = function nativeGraphPort
     return ["Right"];
   }
   if (portId === P.NATIVE_GRAPH_PORT_SAW) {
+    if (type === "electroSnare" || type === "modalSnare" || type === "electroHat" || type === "electroTom" || type === "electroKick" || type === "electroClap") return ["f", "\u0192"];
     if (type === "resonantEnvelope" || type === "resonantFollower") return ["SC"];
     if (type === "resonantCompressor") return ["Gain"];
     if (type === "rmsMeter") return ["dB"];

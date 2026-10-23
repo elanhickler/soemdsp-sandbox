@@ -45,6 +45,7 @@ static const double kWires = 1.6;
 static const double kMixTrim = 0.6;
 
 struct State {
+  double fOut;  // f out (Hz), this sample
   double latchA;  // Recalculate On Trigger: decay params latched on the last hit
   double latchB;
   double latchC;  // Body / Noise latched on the last hit
@@ -169,6 +170,7 @@ extern "C" double soemdsp_modal_snare_sample(
   // hit keeps its decay; Off (default) reads them live (unchanged behaviour).
   if (ping) { s.latchA = bodyDecay; s.latchB = snapDecay; s.latchC = bodyNoise; s.latchTune = tune; s.latchTone = tone; s.latchSnappy = snappy; s.latchHas = true; }
   if (safe(recalculateOnTrigger) >= 0.5 && s.latchHas) { bodyDecay = s.latchA; snapDecay = s.latchB; bodyNoise = s.latchC; tune = s.latchTune; tone = s.latchTone; snappy = s.latchSnappy; }
+  s.fOut = clamp(safe(tune), 1.0, 0.45 * sr);  // f out at rest = Tune (no bend)
   if (!ping && resting(s)) {
     s.envOut = 0.0;
     s.rightOut = 0.0;
@@ -193,6 +195,7 @@ extern "C" double soemdsp_modal_snare_sample(
   const double pv = ping ? s.v : 0.0;
   const double bendMul = (s.p != 0.0 && bendOct != 0.0) ? dsp_exp2(bendOct * s.p) : 1.0;
   const double f = f0 * bendMul;
+  s.fOut = f;
 
   double body = 0.0, bodyR = 0.0, wSum = 0.0, eSum = 0.0;
   for (int m = 0; m < kModes; m++) {
@@ -252,6 +255,12 @@ extern "C" double soemdsp_modal_snare_env(int handle) {
   return gPool[handle - 1].envOut;
 }
 
-extern "C" int soemdsp_modal_snare_version() { return 6; } // 6: Recalculate On Trigger also latches Tune / Tone / Snappy. 5: Recalculate On Trigger also latches Body / Noise. 4: Body / Noise balance (bodyNoise, last arg). 3: Ring2 rotating phasor (no energy pumped by bend retriggers). 2: Recalculate On Trigger (bodyDecay / snapDecay latched on hit)
+// f out (white jack, Hz): fundamental mode pitch in Hz (Tune x Bend sweep, as played).
+extern "C" double soemdsp_modal_snare_f(int handle) {
+  if (handle < 1 || handle > kMaxInstances || !gPool[handle - 1].active) return 0.0;
+  return gPool[handle - 1].fOut;
+}
+
+extern "C" int soemdsp_modal_snare_version() { return 7; } // 7: f out (soemdsp_modal_snare_f, Hz: fundamental mode pitch in Hz (Tune x Bend sweep, as played)). // 6: Recalculate On Trigger also latches Tune / Tone / Snappy. 5: Recalculate On Trigger also latches Body / Noise. 4: Body / Noise balance (bodyNoise, last arg). 3: Ring2 rotating phasor (no energy pumped by bend retriggers). 2: Recalculate On Trigger (bodyDecay / snapDecay latched on hit)
 extern "C" const char* soemdsp_modal_snare_metadata_json() { return kMetadataJson; }
 extern "C" int soemdsp_modal_snare_metadata_json_size() { return sizeof(kMetadataJson) - 1; }

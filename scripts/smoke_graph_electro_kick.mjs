@@ -16,7 +16,7 @@ import { fileURLToPath } from "url";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, "..");
 const wasmPath = path.join(root, "native_modules", "combined", "soemdsp_combined.wasm");
-const { instance } = await WebAssembly.instantiate(fs.readFileSync(wasmPath), {});
+const { instance } = await WebAssembly.instantiate(fs.readFileSync(wasmPath), { env: { emo_process_block: () => 0 } });
 const e = instance.exports;
 const mem = e.memory;
 function must(name) {
@@ -252,7 +252,7 @@ const def = (() => {
 })();
 {
   if (JSON.stringify(def.inputs) !== JSON.stringify(["Trigger", "Reset"])) throw new Error(`inputs ${JSON.stringify(def.inputs)}`);
-  if (JSON.stringify(def.outputs) !== JSON.stringify([`${NAME} L`, `${NAME} R`, "Env"])) throw new Error(`outputs ${JSON.stringify(def.outputs)}`);
+  if (JSON.stringify(def.outputs) !== JSON.stringify([`${NAME} L`, `${NAME} R`, "Env", "f"])) throw new Error(`outputs ${JSON.stringify(def.outputs)}`);
   const keys = def.parameters.map((x) => x.key);
   if (JSON.stringify(keys) !== JSON.stringify(["algorithm", ...["tune", "bend", "bendTime", "decay", "click", "tone", "amplitude"], "recalculateOnTrigger"])) throw new Error(`params ${keys}`);
   for (const prm of def.parameters.slice(1).filter((q) => q.key !== "recalculateOnTrigger")) {

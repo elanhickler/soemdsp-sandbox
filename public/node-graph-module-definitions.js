@@ -11249,7 +11249,8 @@ const nodeGraphModuleDefinitions = (
     inputTooltips: {
       Trigger: "Each hit strikes the snare. Height is velocity (|height|, level only). 808 adds the new ping onto the ringing body; 909 / Simmons / FM restart their oscillators.",
       Reset: "Rewinds the hit: clears every resonator, filter, phase and envelope, reseeds the noise, then strikes again at the last Trigger velocity (exact repeat). Silent before the first Trigger. Height ignored." },
-    outputs: ["Snare L", "Snare R", "Env"],
+    outputs: ["Snare L", "Snare R", "Env", "f"],
+    outputLabels: { f: "\u0192" },
     outputTooltips: {
       "Snare L": "Snare audio, left: Amplitude x (body + snare wires). Noise and noise-like parts are decorrelated from R; the clean tonal body is identical.",
       "Snare R": "Snare audio, right: same body as L, its own noise (own seed and filters). FM: inverted modulator.",
@@ -11405,7 +11406,8 @@ const nodeGraphModuleDefinitions = (
       { key: "Snare L", kind: "scalar" },
     ],
     inputs: ["Trigger", "Reset"],
-    outputs: ["Snare L", "Snare R", "Env"],
+    outputs: ["Snare L", "Snare R", "Env", "f"],
+    outputLabels: { f: "\u0192" },
     parameters: [
       {
         choices: ["Off", "On"],
@@ -11587,7 +11589,8 @@ const nodeGraphModuleDefinitions = (
       Open: "Open hit (height = velocity), decays with Open Decay.",
       Reset: "Rewinds the hit: clears every phase, filter and envelope, reseeds the noise, then strikes again at the last velocity (exact repeat). Silent before the first hit. Height ignored. Re-strikes the last hit type (closed or open).",
     },
-    outputs: ["Hat L", "Hat R", "Env"],
+    outputs: ["Hat L", "Hat R", "Env", "f"],
+    outputLabels: { f: "\u0192" },
     outputTooltips: {
       "Hat L": "Hat audio, left. The metal bank is identical L/R; the white noise is decorrelated per channel (own seed and filters).",
       "Hat R": "Hat audio, right: same metal as L, its own noise. Metal 1 on 808 / 606 / FM gives L == R.",
@@ -11733,7 +11736,8 @@ const nodeGraphModuleDefinitions = (
       Trigger: "Each hit strikes the tom. Height is velocity (|height|, level only). 808 adds the new ping onto the ringing body; 909 / Simmons restart their oscillators.",
       Reset: "Rewinds the hit: clears every phase, filter and envelope, reseeds the noise, then strikes again at the last velocity (exact repeat). Silent before the first hit. Height ignored.",
     },
-    outputs: ["Tom L", "Tom R", "Env"],
+    outputs: ["Tom L", "Tom R", "Env", "f"],
+    outputLabels: { f: "\u0192" },
     outputTooltips: {
       "Tom L": "Tom audio, left: body identical L/R, noise decorrelated per channel.",
       "Tom R": "Tom audio, right: same body, its own noise. Noise 0 gives L == R.",
@@ -11879,7 +11883,8 @@ const nodeGraphModuleDefinitions = (
       Trigger: "Each hit restarts the clap (burst train and tail) at the hit velocity (|height|, level only).",
       Reset: "Rewinds the hit: clears every filter and envelope, reseeds the noise, then strikes again at the last velocity (exact repeat). Silent before the first hit. Height ignored.",
     },
-    outputs: ["Clap L", "Clap R", "Env"],
+    outputs: ["Clap L", "Clap R", "Env", "f"],
+    outputLabels: { f: "\u0192" },
     outputTooltips: {
       "Clap L": "Clap audio, left. Envelopes are shared; only the noise is per channel.",
       "Clap R": "Clap audio, right: own noise seed and filter state, so L and R are decorrelated.",
@@ -12012,7 +12017,8 @@ const nodeGraphModuleDefinitions = (
       Trigger: "Each hit strikes the kick. Height is velocity (|height|, level only). 808 adds the new ping onto the ringing body; 909 / Simmons restart the oscillator.",
       Reset: "Rewinds the hit: clears every phase, filter and envelope, reseeds the noise, then strikes again at the last velocity (exact repeat). Silent before the first hit. Height ignored.",
     },
-    outputs: ["Kick L", "Kick R", "Env"],
+    outputs: ["Kick L", "Kick R", "Env", "f"],
+    outputLabels: { f: "\u0192" },
     outputTooltips: {
       "Kick L": "Kick audio, left: body identical L/R (mono low end); only 909 attack noise and Simmons noise are decorrelated.",
       "Kick R": "Kick audio, right. 808 is always L == R; Click 0 and Tone 0 give L == R on every algorithm.",
