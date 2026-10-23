@@ -2,10 +2,11 @@
 //
 // Layout 1 "spawn" (default): IO band above the display as before; the param
 // band under the display is  [mod rail | params | thru rail].
-//   - Thru rail: always shown when the module has params (no option).
-//   - Mod rail: appears with the module's first param cable and goes away with
-//     the last one, unless ui.modRailAlwaysOn (saved with the patch).
-//   - Module width never changes; the params shrink between the rails.
+//   - Each side opens only when needed: the mod rail (left) with a cable on a
+//     param's mod inlet (or ui.modRailAlwaysOn, saved with the patch), the
+//     thru rail (right) with a cable leaving a param's thru.
+//   - Module width never changes; only rows beside an open rail shrink, on
+//     that side only.
 // Layout 3 "railsOnly": modules with ports and neither params nor a display
 //   (Comparator ...): title bar plus rails (inputs left, outputs right).
 // Layout 2 "sideRails" is reserved and not built (§10b).
@@ -79,9 +80,10 @@ function syncNodeGraphModuleRails() {
     return false;
   }
   const patch = nodeGraphMvp.patch || {};
-  // A param is "in use" when a cable lands on its mod inlet or leaves its thru.
-  // Each used param shows one tag pair (mod rail + thru rail); nothing else.
-  const patched = new Map();
+  // A param is "in use" on the mod rail when a cable lands on its mod inlet,
+  // on the thru rail when a cable leaves its thru. Each side tags only its own.
+  const modUsed = new Map();
+  const thruUsed = new Map();
   // A hidden param has no row, so it gets no rail tag and never opens the rails.
   const hidden = (id, param) => {
     const node = (patch.nodes || []).find((n) => n?.id === id);
@@ -90,12 +92,12 @@ function syncNodeGraphModuleRails() {
     return Boolean(parameter) && typeof nodeGraphParameterEffectiveVisible === "function"
       && !nodeGraphParameterEffectiveVisible(parameter, node.paramMeta?.[param]);
   };
-  const use = (id, param) => {
+  const use = (used, id, param) => {
     if (!id || !param || hidden(id, param)) return;
-    if (!patched.has(id)) patched.set(id, new Set());
-    patched.get(id).add(param);
+    if (!used.has(id)) used.set(id, new Set());
+    used.get(id).add(param);
   };
-  for (const wire of patch.modulations || []) use(wire?.destinationNode, wire?.destinationParam);
+  for (const wire of patch.modulations || []) use(modUsed, wire?.destinationNode, wire?.destinationParam);
   const paramKeys = new Map();
   const keysOf = (id) => {
     if (!paramKeys.has(id)) {
@@ -106,13 +108,15 @@ function syncNodeGraphModuleRails() {
     return paramKeys.get(id);
   };
   for (const wire of [...(patch.modulations || []), ...(patch.connections || [])]) {
-    if (wire?.sourceNode && keysOf(wire.sourceNode).has(wire.sourcePort)) use(wire.sourceNode, wire.sourcePort);
+    if (wire?.sourceNode && keysOf(wire.sourceNode).has(wire.sourcePort)) use(thruUsed, wire.sourceNode, wire.sourcePort);
   }
   const alwaysOn = new Set(
     (patch.nodes || []).filter((node) => node?.ui?.modRailAlwaysOn).map((node) => node.id),
   );
   const parts = [];
-  for (const [id, params] of patched) parts.push(`${id}:${[...params].sort().join(",")}`);
+  for (const [tag, used] of [["m", modUsed], ["t", thruUsed]]) {
+    for (const [id, params] of used) parts.push(`${tag}${id}:${[...params].sort().join(",")}`);
+  }
   const signature = `${parts.sort().join("|")}#${[...alwaysOn].sort().join(",")}`;
   if (signature === nodeGraphModuleRailsSignature) {
     return false;
@@ -120,14 +124,20 @@ function syncNodeGraphModuleRails() {
   nodeGraphModuleRailsSignature = signature;
   for (const article of document.querySelectorAll(".dsp-node[data-node]")) {
     const id = article.dataset.node;
-    const params = patched.get(id);
-    article.classList.toggle("mod-rail-open", Boolean(params?.size) || alwaysOn.has(id));
-    for (const jack of article.querySelectorAll(".node-param-port.modulation-input, .node-param-port.parameter-output")) {
-      jack.classList.toggle("rail-patched", Boolean(params?.has(jack.dataset.param)));
+    const mod = modUsed.get(id);
+    const thru = thruUsed.get(id);
+    article.classList.toggle("mod-rail-open", Boolean(mod?.size) || alwaysOn.has(id));
+    article.classList.toggle("thru-rail-open", Boolean(thru?.size));
+    for (const jack of article.querySelectorAll(".node-param-port.modulation-input")) {
+      jack.classList.toggle("rail-patched", Boolean(mod?.has(jack.dataset.param)));
     }
-    // Only rows beside a gutter (a patched param) are inset; the rest keep the full width.
+    for (const jack of article.querySelectorAll(".node-param-port.parameter-output")) {
+      jack.classList.toggle("rail-patched", Boolean(thru?.has(jack.dataset.param)));
+    }
+    // Only rows beside a gutter (a patched param) are inset, on that side only.
     for (const row of article.querySelectorAll(".node-parameter-row")) {
-      row.classList.toggle("rail-inset", Boolean(row.querySelector(".node-param-port.rail-patched")));
+      row.classList.toggle("rail-inset-mod", Boolean(row.querySelector(".node-param-port.modulation-input.rail-patched")));
+      row.classList.toggle("rail-inset-thru", Boolean(row.querySelector(".node-param-port.parameter-output.rail-patched")));
     }
   }
   return true;
@@ -240,10 +250,15 @@ function nodeGraphRailBorderCss() {
   return Number.parseFloat(style?.getPropertyValue("--node-module-idle-stroke-width")) || 1;
 }
 
+/** True when either side's rail of a module element is open. */
+function nodeGraphModuleRailOpen(el) {
+  return Boolean(el?.classList.contains("mod-rail-open") || el?.classList.contains("thru-rail-open"));
+}
+
 /** Patched-param IO boxes of an open spawn rail, snapped to the batch's pixel grid. */
 function nodeGraphModuleRailBoxes(batch, plate, toX, toY, zoom) {
   const el = typeof nodeGraphNodeElement === "function" ? nodeGraphNodeElement(plate.id) : null;
-  if (!el?.classList.contains("mod-rail-open") || el.dataset.faceLayout !== NodeGraphFaceLayout.spawn) return null;
+  if (!nodeGraphModuleRailOpen(el) || el.dataset.faceLayout !== NodeGraphFaceLayout.spawn) return null;
   const body = el.querySelector(":scope > .dsp-node-body");
   const laid = body && typeof nodeGraphModuleLayoutBox === "function" ? nodeGraphModuleLayoutBox(body, el) : null;
   if (!laid) return null;
@@ -310,19 +325,20 @@ function nodeGraphModuleRailsDrawGl(batch, plates, toX, toY, zoom, cssW, cssH) {
     const faceBox = face ? nodeGraphModuleLayoutBox(face, el) : null;
     const spec = faceBox && typeof nodeGraphModuleFaceSpecForElement === "function" ? nodeGraphModuleFaceSpecForElement(el) : null;
     const widgets = spec && typeof nodeGraphModuleFaceWidgets === "function" ? nodeGraphModuleFaceWidgets(spec, face.offsetWidth, el) : [];
-    const section = ({ port }) => {
+    const section = (port) => {
       const key = port.dataset.param;
       const wd = widgets.find((x) => x.param === key || x.hpf === key || x.lpf === key);
       if (wd) return [faceBox.y + wd.y, faceBox.y + wd.y + wd.h];
       const row = nodeGraphModuleLayoutBox(port.closest(".node-parameter-row") || port, el);
       return row ? [row.y, row.y + row.h] : null;
     };
-    const runs = boxes.map(section).filter(Boolean).sort((a, b) => a[0] - b[0]).reduce((out, r) => {
-      const last = out[out.length - 1];
-      if (last && r[0] <= last[1] + 0.5) last[1] = Math.max(last[1], r[1]);
-      else out.push([...r]);
-      return out;
-    }, []);
+    const runsOf = (side) => boxes.filter((b) => b.side === side).map((b) => section(b.port)).filter(Boolean)
+      .sort((a, b) => a[0] - b[0]).reduce((out, r) => {
+        const last = out[out.length - 1];
+        if (last && r[0] <= last[1] + 0.5) last[1] = Math.max(last[1], r[1]);
+        else out.push([...r]);
+        return out;
+      }, []);
     batch._over = true;
     // Gutters span wall to separator; the separator is the rail's inner edge.
     const inL = grid.x(x0 + NODE_GRAPH_RAIL_WIDTH_PX * zoom);
@@ -335,13 +351,19 @@ function nodeGraphModuleRailsDrawGl(batch, plates, toX, toY, zoom, cssW, cssH) {
       }
       rect(gx, at, gw, gy + gh - at, NodeGraphRailInk.gutter);
     };
-    for (const [a, b] of runs) {
-      const sy = grid.y(toY(plates[i].y + a));
-      const sh = grid.y(toY(plates[i].y + b)) - sy;
-      gutter(left, sy, inL - left, sh, -1);
-      rect(inL - t, sy, t, sh, NodeGraphRailInk.gutterEdge);
-      gutter(inR, sy, right - inR, sh, 1);
-      rect(inR, sy, t, sh, NodeGraphRailInk.gutterEdge);
+    // Each side's gutter runs only beside its own patched params.
+    for (const side of [-1, 1]) {
+      for (const [a, b] of runsOf(side)) {
+        const sy = grid.y(toY(plates[i].y + a));
+        const sh = grid.y(toY(plates[i].y + b)) - sy;
+        if (side < 0) {
+          gutter(left, sy, inL - left, sh, -1);
+          rect(inL - t, sy, t, sh, NodeGraphRailInk.gutterEdge);
+        } else {
+          gutter(inR, sy, right - inR, sh, 1);
+          rect(inR, sy, t, sh, NodeGraphRailInk.gutterEdge);
+        }
+      }
     }
     for (const b of boxes) {
       const border = b.border;

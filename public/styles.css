@@ -25795,30 +25795,40 @@ html.soemdsp-whole-module .node-layout-canvas-grip {
 }
 
 /* ---- Module rails (docs/MODULE_RAILS_PLAN.md, node-graph-module-rails.js) ----
-   Layout 1 (spawn): param band = [mod rail | params | thru rail]. Both rails
-   are hidden (no width) until a param is patched (or "Mod rail" always-on),
-   appear together on the first param cable and hide on the last. Module width
-   never changes; only rows beside a gutter (.rail-inset) shrink between the rails. Sizes are zoom-1.0 CSS px (--node-rail-width). */
+   Layout 1 (spawn): param band = [mod rail | params | thru rail]. Each rail
+   is hidden (no width) until that side is needed: the mod rail on a cable into
+   a param (or "Mod rail" always-on), the thru rail on a cable out of a thru.
+   Module width never changes; only rows beside a gutter shrink, on that side
+   (.rail-inset-mod left, .rail-inset-thru right). Sizes are zoom-1.0 CSS px (--node-rail-width). */
 .dsp-node[data-face-layout="spawn"] {
   --node-mod-rail-width: 0px;
+  --node-thru-rail-width: 0px;
 }
 .dsp-node[data-face-layout="spawn"].mod-rail-open {
   --node-mod-rail-width: var(--node-rail-width, 26px);
 }
+.dsp-node[data-face-layout="spawn"].thru-rail-open {
+  --node-thru-rail-width: var(--node-rail-width, 26px);
+}
 .dsp-node[data-face-layout="spawn"] .node-parameter-row {
-  grid-template-columns: 0 minmax(0, 1fr) 0;
+  --row-mod-w: 0px;
+  --row-thru-w: 0px;
+  grid-template-columns: var(--row-mod-w) minmax(0, 1fr) var(--row-thru-w);
   column-gap: 0;
 }
-.dsp-node[data-face-layout="spawn"] .node-parameter-row.rail-inset {
-  grid-template-columns: var(--node-mod-rail-width) minmax(0, 1fr) var(--node-mod-rail-width);
+.dsp-node[data-face-layout="spawn"] .node-parameter-row.rail-inset-mod {
+  --row-mod-w: var(--node-mod-rail-width);
+}
+.dsp-node[data-face-layout="spawn"] .node-parameter-row.rail-inset-thru {
+  --row-thru-w: var(--node-thru-rail-width);
 }
 .dsp-node[data-face-layout="spawn"] .node-param-port.modulation-input {
   width: var(--node-mod-rail-width);
   min-width: var(--node-mod-rail-width);
 }
 .dsp-node[data-face-layout="spawn"] .node-param-port.parameter-output {
-  width: var(--node-mod-rail-width);
-  min-width: var(--node-mod-rail-width);
+  width: var(--node-thru-rail-width);
+  min-width: var(--node-thru-rail-width);
 }
 /* Rail strips and tags are drawn in WebGL (nodeGraphModuleRailsDrawGl). */
 /* Hand-written module face (rails plan PP-5, node-graph-module-face.js).

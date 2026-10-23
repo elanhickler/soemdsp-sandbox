@@ -1,7 +1,8 @@
 // Module rails smoke (docs/MODULE_RAILS_PLAN.md): Layout 1 "spawn" param band
 // [mod rail | params | thru rail] and Layout 3 "railsOnly" (Comparator).
-//   - Thru rail always shows; mod rail opens on the first param cable, closes
-//     on the last; "Mod rail" always-on keeps it; module width never changes.
+//   - Each rail opens only when needed: mod rail (left) on a cable into a
+//     param, thru rail (right) on a cable out of a thru; "Mod rail" always-on
+//     keeps the mod rail; module width never changes.
 //   - A cable dropped on a param control lands on that param's mod inlet.
 //   - Comparator: title bar + input rail | output rail, short labels, no face.
 //   - No title (hover text) on modules, rails or ports.
@@ -67,11 +68,19 @@ const snap = () => page.evaluate(() => {
     zoom: z,
     layout: pp.dataset.faceLayout,
     open: pp.classList.contains("mod-rail-open"),
+    thruOpen: pp.classList.contains("thru-rail-open"),
     width: r(pp).width,
     displayW: r(display)?.width ?? null,
     displayBottom: r(display)?.bottom ?? null,
     ioRect: io ? [r(io).left - r(pp).left, r(io).top - r(pp).top, r(io).width, r(io).height].map((v) => Math.round(v * 10) / 10) : null,
-    ctlW: r(ctl).width,
+    // Face modules inset the widgets of rows beside a rail (the face element keeps its width).
+    ctlW: (() => {
+      const face = pp.querySelector(".node-face");
+      if (!face) return r(ctl).width;
+      const spec = nodeGraphModuleFaceSpecForElement(pp);
+      const ws = nodeGraphModuleFaceWidgets(spec, face.offsetWidth, pp).filter((w) => nodeGraphModuleFaceRowParams(w.row).includes("feedback"));
+      return (Math.max(...ws.map((w) => w.x + w.w)) - Math.min(...ws.map((w) => w.x))) * z;
+    })(),
     modW: r(mod).width,
     thruW: r(thru).width,
     rowTop: r(ctl).top,
@@ -81,7 +90,7 @@ const snap = () => page.evaluate(() => {
       .filter((el) => !el.closest(".node-parameter-row")?.hidden).every((el) => el.getBoundingClientRect().width > 0),
     // Params the GL rail painter tags, per rail (open rail + rail-patched jack).
     tagged: ["modulation-input", "parameter-output"].map((cls) => [...pp.querySelectorAll(`.node-param-port.${cls}`)]
-      .filter((el) => pp.classList.contains("mod-rail-open") && el.classList.contains("rail-patched"))
+      .filter((el) => pp.classList.contains(cls === "modulation-input" ? "mod-rail-open" : "thru-rail-open") && el.classList.contains("rail-patched"))
       .map((el) => el.dataset.param).sort().join(",")),
     // Rails are GPU-only: no CSS paint on rail jacks.
     railCss: [...pp.querySelectorAll(".node-param-port")].some((el) => {
@@ -123,14 +132,29 @@ const one = await snap();
 check("first cable: mod rail open", one.open && Math.abs(one.modW - RAIL * z) < 1.5, JSON.stringify(one));
 check("first cable: inlet tag on the patched param", one.modPatched);
 check("rails painted by GL only (no CSS tag/strip)", !one.railCss);
-check("first cable: thru rail appears with the mod rail", Math.abs(one.thruW - RAIL * z) < 1.5, one.thruW);
-check("first cable: exactly one tag pair (inlet + thru) for the used param", one.tagged.join("|") === "feedback|feedback", JSON.stringify(one.tagged));
+check("first cable: thru rail stays hidden (not needed)", !one.thruOpen && one.thruW < 1, one.thruW);
+check("first cable: one inlet tag, no thru tag", one.tagged.join("|") === "feedback|", JSON.stringify(one.tagged));
 check("module width unchanged", Math.abs(one.width - rest.width) < 0.5, `${rest.width} -> ${one.width}`);
 check("display width unchanged", rest.displayW === null || Math.abs(one.displayW - rest.displayW) < 0.5, `${rest.displayW} -> ${one.displayW}`);
 check("IO band unchanged", JSON.stringify(one.ioRect) === JSON.stringify(rest.ioRect), `${rest.ioRect} -> ${one.ioRect}`);
-check("params shrink by both rails", Math.abs((rest.ctlW - one.ctlW) - 2 * RAIL * z) < 1.5, `${rest.ctlW} -> ${one.ctlW}`);
+check("params shrink by the mod rail only", Math.abs((rest.ctlW - one.ctlW) - RAIL * z) < 1.5, `${rest.ctlW} -> ${one.ctlW}`);
 check("rails sit under the display", rest.displayBottom === null || one.rowTop >= rest.displayBottom - 0.5, `${one.rowTop} vs ${rest.displayBottom}`);
 await shot("pingpong-patched", 'article[data-node="pp-1"]');
+
+// A cable out of the thru alone opens only the thru rail (right).
+const T = { sourceNode: "pp-1", sourcePort: "feedback", destinationNode: "sw-1", destinationParam: "amp" };
+await commit([T]);
+await page.waitForTimeout(300);
+const thruOnly = await snap();
+check("thru cable: thru rail open, mod rail closed", thruOnly.thruOpen && !thruOnly.open && thruOnly.modW < 1 && Math.abs(thruOnly.thruW - RAIL * z) < 1.5, JSON.stringify(thruOnly));
+check("thru cable: one thru tag, no inlet tag", thruOnly.tagged.join("|") === "|feedback", JSON.stringify(thruOnly.tagged));
+await shot("pingpong-thru-only", 'article[data-node="pp-1"]');
+await commit([A, T]);
+await page.waitForTimeout(300);
+const both = await snap();
+check("in + thru cables: both rails open", both.open && both.thruOpen && both.tagged.join("|") === "feedback|feedback", JSON.stringify(both.tagged));
+check("in + thru cables: params shrink by both rails", Math.abs((rest.ctlW - both.ctlW) - 2 * RAIL * z) < 1.5, `${rest.ctlW} -> ${both.ctlW}`);
+await shot("pingpong-both", 'article[data-node="pp-1"]');
 
 // Chip pin: each IO box has no outward stroke and the module border is cut
 // over the box's span; the box fill and its top / bottom strokes run through
@@ -209,7 +233,7 @@ for (const zoom of [0.75, 1, 1.5]) {
       wire: end ? [end.x - plate.x, end.y - (plate.y + lb.y + lb.h / 2)] : null };
   });
   check(`zoom ${zoom}: wire ends on the box's open side, on the border's outer edge, centred`, geo.wire && Math.abs(geo.wire[0] + 1) < 0.01 && Math.abs(geo.wire[1]) < 0.01, JSON.stringify(geo.wire));
-  check(`zoom ${zoom}: param wire is thin with a tiny end dot on the box, jack wires keep their width`, geo.param?.param && geo.param.dot && geo.param.thick === 0.5 && geo.param.dotSize === 1.61 && geo.param.jack === 2, JSON.stringify(geo.param));
+  check(`zoom ${zoom}: param wire is thin with a tiny end dot on the box, jack wires keep their width`, geo.param?.param && geo.param.dot && geo.param.thick === 0.5 && Math.abs(geo.param.dotSize - 0.267) < 0.01 && geo.param.jack === 2, JSON.stringify(geo.param));
   check(`zoom ${zoom}: param wire crossfades from the outlet colour to the mod inlet colour (purple)`, geo.param?.to && geo.param.to.slice(0, 3).join() === "177,132,255" && geo.param.from.slice(0, 3).join() !== "177,132,255", JSON.stringify(geo.param));
   check(`zoom ${zoom}: one IO box per rail, left and right`, geo.pins.length === 2 && geo.pins.includes(-1) && geo.pins.includes(1), JSON.stringify(geo.pins));
   const bh = Math.min(geo.inL[3] - geo.inL[1], 16 * geo.z);
@@ -237,7 +261,7 @@ await commit([]);
 await page.waitForTimeout(300);
 const gone = await snap();
 check("last unplug: mod rail closed", !gone.open && gone.modW < 1);
-check("last unplug: thru rail hides too", gone.thruW < 1, gone.thruW);
+check("last unplug: thru rail hides too", !gone.thruOpen && gone.thruW < 1, gone.thruW);
 check("last unplug: no param tags", gone.tagged.join("|") === "|", JSON.stringify(gone.tagged));
 
 // "Mod rail" always on: open with no cables, saved with the patch.

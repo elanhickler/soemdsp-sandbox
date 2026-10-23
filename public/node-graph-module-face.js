@@ -114,11 +114,19 @@ function nodeGraphModuleFaceHeightPx(type, node = null) {
   return spec ? spec.reduce((sum, row) => sum + nodeGraphModuleFaceRowHeight(row), 0) : 0;
 }
 
-/** Rail inset (px) for a face row of moduleEl: the rail width when the row holds a patched param, else 0. */
+/** Rail insets (px) { l, r } for a face row of moduleEl: the rail width on each side whose rail holds a patched param of the row, else 0. */
 function nodeGraphModuleFaceRowInset(moduleEl) {
-  if (!moduleEl?.classList.contains("mod-rail-open") || typeof NODE_GRAPH_RAIL_WIDTH_PX === "undefined") return () => 0;
-  const patched = new Set([...moduleEl.querySelectorAll(".node-param-port.rail-patched")].map((port) => port.dataset.param));
-  return (row) => (nodeGraphModuleFaceRowParams(row).some((key) => patched.has(key)) ? NODE_GRAPH_RAIL_WIDTH_PX : 0);
+  if (!moduleEl || typeof NODE_GRAPH_RAIL_WIDTH_PX === "undefined") return () => ({ l: 0, r: 0 });
+  const keys = (sel) => new Set([...moduleEl.querySelectorAll(sel)].map((port) => port.dataset.param));
+  const mod = keys(".node-param-port.modulation-input.rail-patched");
+  const thru = keys(".node-param-port.parameter-output.rail-patched");
+  return (row) => {
+    const params = nodeGraphModuleFaceRowParams(row);
+    return {
+      l: params.some((key) => mod.has(key)) ? NODE_GRAPH_RAIL_WIDTH_PX : 0,
+      r: params.some((key) => thru.has(key)) ? NODE_GRAPH_RAIL_WIDTH_PX : 0,
+    };
+  };
 }
 
 /** Face-local widget boxes for face width fw (layout px, zoom 1). Rows beside a rail gutter are inset. */
@@ -134,7 +142,7 @@ function nodeGraphModuleFaceWidgets(spec, fw, moduleEl = null) {
   for (const row of spec) {
     const h = nodeGraphModuleFaceRowHeight(row);
     const ins = insetOf(row);
-    const w = fw - ins * 2;
+    const w = fw - ins.l - ins.r;
     const first = out.length;
     const base = { row, y, h };
     if (row.kind === "choices" || row.kind === "lfoStyles") {
@@ -173,7 +181,7 @@ function nodeGraphModuleFaceWidgets(spec, fw, moduleEl = null) {
         ...base, type: "seedButton", action, param: row.param, x: w - bw * (3 - i), w: bw,
       }));
     }
-    for (let k = first; k < out.length; k += 1) out[k].x += ins;
+    for (let k = first; k < out.length; k += 1) out[k].x += ins.l;
     y += h;
   }
   return out;
