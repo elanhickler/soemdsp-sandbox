@@ -15,7 +15,7 @@ const { chromium } = await import(process.env.PW_MODULE || "playwright");
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const BASE = process.env.SANDBOX_URL || "http://127.0.0.1:8765/";
 const SHOT = process.env.SHOT_DIR || "";
-const TYPES = ["electroKick", "electroSnare", "electroHat", "electroTom", "electroClap", "modalSnare", "robinSinepulse", "robinSinepulseAllpass", "drummer", "percussion"];
+const TYPES = (process.env.FACE_TYPES || "electroKick,electroSnare,electroHat,electroTom,electroClap,modalSnare,robinSinepulse,robinSinepulseAllpass,drummer,percussion").split(",");
 const failures = [];
 const check = (label, ok, detail = "") => {
   console.log(`${ok ? "ok  " : "FAIL"} ${label}${ok ? "" : ` ${detail}`}`);
@@ -127,6 +127,11 @@ for (let i = 0; i < TYPES.length; i += 1) {
     await click(recalc[1]);
     check(`${TYPES[i]}: Recalc On`, (await choiceLabel(id, "recalculateOnTrigger")) === "On", await choiceLabel(id, "recalculateOnTrigger"));
   }
+}
+const rIdx = TYPES.indexOf("robinSinepulse");
+if (rIdx >= 0) {
+  const t = await page.evaluate((id) => nodeGraphModuleFaceValueText(nodeGraphModuleFaceInput(document.querySelector(`article[data-node="${id}"]`), "sweepTime")), `m-${rIdx}`);
+  check("Sweep Kick Time shows its display unit (ms)", /ms$/.test(t), t);
 }
 const mIdx = TYPES.indexOf("modalSnare");
 const tilt = (await widgets(`m-${mIdx}`, "modalSnare")).find((w) => w.keys[0] === "noiseTilt");

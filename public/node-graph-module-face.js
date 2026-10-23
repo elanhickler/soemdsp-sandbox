@@ -193,7 +193,16 @@ function nodeGraphModuleFaceValueText(input) {
   if (!input) return "";
   if (typeof nodeSliderReadoutValueText === "function") {
     const text = String(nodeSliderReadoutValueText(input)).trim();
-    const unit = String(input.dataset.unit || "");
+    // A param's displayTransform may show another unit (Sweep Time: s stored, ms shown).
+    let shown = null;
+    if (typeof input.displayTransform === "function") {
+      try {
+        shown = input.displayTransform(nodeGraphModuleFaceValue(input), input);
+      } catch (_error) {
+        shown = null;
+      }
+    }
+    const unit = String((shown && typeof shown === "object" && shown.unit) || input.dataset.unit || "");
     return unit && !(typeof nodeSliderChoiceLabel === "function" && nodeSliderChoiceLabel(input)) ? `${text} ${unit}` : text;
   }
   const sent = Number(input.dataset.sentDomainValue);
