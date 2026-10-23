@@ -919,8 +919,9 @@ void main() {
   // One continuous ribbon. Neighboring pieces share the edge points, so a bend
   // has no end cap and no gap. `across` is the distance from the centerline.
   // rgbaEnd set: per-vertex crossfade from rgba (first point) to rgbaEnd
-  // (last point) by arc length.
-  function nodeGraphGlLinesRibbon(batch, points, halfPx, feather, rgba, rgbaEnd) {
+  // (last point) by arc length. span (0..1) is the share of the length the
+  // crossfade covers, centered on the middle: 1 = whole wire, 0 = hard switch.
+  function nodeGraphGlLinesRibbon(batch, points, halfPx, feather, rgba, rgbaEnd, span = 1) {
     if (!batch || !points || points.length < 4) return;
     const k = batch.camera ? 1 : (batch.scale || 1);
     const r = Math.max(0, halfPx) + Math.max(0, feather);
@@ -967,7 +968,8 @@ void main() {
       const total = arc[count - 1] > 0 ? arc[count - 1] : 1;
       ink = [];
       for (let i = 0; i < count; i += 1) {
-        const t = arc[i] / total;
+        const u = arc[i] / total;
+        const t = span > 0 ? Math.min(1, Math.max(0, (u - 0.5) / span + 0.5)) : (u < 0.5 ? 0 : 1);
         ink.push([0, 1, 2, 3].map((c) => {
           const a = rgba[c] ?? 1;
           return a + ((rgbaEnd[c] ?? 1) - a) * t;

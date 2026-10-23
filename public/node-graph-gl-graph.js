@@ -1542,6 +1542,8 @@ function nodeGraphGlGraphPresent(options = {}) {
     nodeGraphGlGraphState.paramThick = Number.parseFloat(style.getPropertyValue("--node-param-wire-thickness")) || 0.5;
     const paramDot = Number.parseFloat(style.getPropertyValue("--node-param-wire-dot-size"));
     nodeGraphGlGraphState.paramDot = Number.isFinite(paramDot) ? paramDot : 0.267;
+    const gradSpan = Number.parseFloat(style.getPropertyValue("--node-wire-gradient-span"));
+    nodeGraphGlGraphState.gradSpan = Number.isFinite(gradSpan) ? Math.min(1, Math.max(0, gradSpan)) : 1;
   }
   // Widths are zoom-1 px. The line shader scales them by the live camera,
   // and the cable fade stays 2 screen px. Traces are a 2px stroke that scales.
@@ -1627,7 +1629,7 @@ function nodeGraphGlGraphPresent(options = {}) {
     } else if (typeof nodeGraphGlLinesRibbon !== "function") {
       nodeGraphGlLinesPolyline(wireBatch, pts, stroke, feather, rgba, "butt");
     } else {
-      nodeGraphGlLinesRibbon(wireBatch, pts, stroke, feather, rgba, picked ? null : wire.rgbaEnd);
+      nodeGraphGlLinesRibbon(wireBatch, pts, stroke, feather, rgba, picked ? null : wire.rgbaEnd, nodeGraphGlGraphState.gradSpan ?? 1);
     }
     const dots = wire.dots || [];
     const selectedRgba = [0.95, 0.86, 0.45, 1];
