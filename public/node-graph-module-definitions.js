@@ -1399,7 +1399,7 @@ const nodeGraphModuleDefinitions = (
   archimedes: {
     planRole: "source",
     displayType: "waterfall",
-    inputs: ["Reset", "f"],
+    inputs: ["f", "Reset"]"],
     inputLabels: { f: "ƒ" },
     inputAliases: { "ƒ": "f" },
     outputs: ["Sine", "Cosine", "Pi", "Noise Below", "Noise Above"],
