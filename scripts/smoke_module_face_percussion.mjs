@@ -117,6 +117,7 @@ for (let i = 0; i < TYPES.length; i += 1) {
   await drag(cell.x + cell.w / 2, cell.y, 0, -40);
   const c1 = await val(id, key);
   check(`${TYPES[i]}: dragging ${key} up raises it`, c1 > c0, `${c0} -> ${c1}`);
+  if (TYPES[i] === "percussion") check("Percussion Channel stays a whole number", Number.isInteger(c1), c1);
   const recalc = ws.filter((w) => w.type === "choice" && w.keys[0] === "recalculateOnTrigger");
   if (recalc.length) {
     await click(recalc[1]);

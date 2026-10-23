@@ -487,7 +487,9 @@ function beginNodeGraphModuleFaceGesture(article, face, spec, event) {
       const { dx, dy } = travel(ev);
       const d = dx - dy;
       const t = Math.max(0, Math.min(1, t0 + d / NODE_GRAPH_FACE_CELL_DRAG_PX));
-      return typeof nodeSliderValueFromTravel === "function" ? nodeSliderValueFromTravel(input, t) : t;
+      const v = typeof nodeSliderValueFromTravel === "function" ? nodeSliderValueFromTravel(input, t) : t;
+      // Whole-number params (step >= 1) land on whole numbers, as the slider row does.
+      return Number(input.step) >= 1 ? Math.round(v) : v;
     };
   } else if (wd.type === "step") {
     const v0 = Math.round(nodeGraphModuleFaceValue(input));
