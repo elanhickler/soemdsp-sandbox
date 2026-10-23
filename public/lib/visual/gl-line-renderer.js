@@ -921,8 +921,26 @@ void main() {
   // rgbaEnd set: per-vertex crossfade from rgba (first point) to rgbaEnd
   // (last point) by arc length. span (0..1) is the share of the length the
   // crossfade covers, centered on the middle: 1 = whole wire, 0 = hard switch.
-  function nodeGraphGlLinesRibbon(batch, points, halfPx, feather, rgba, rgbaEnd, span = 1) {
+  function nodeGraphGlLinesRibbon(batch, points, halfPx, feather, rgba, rgbaEnd, span = 1, dip = 0, dipWidth = 0.5) {
     if (!batch || !points || points.length < 4) return;
+    // Gradient dip: colour is per vertex, so subdivide the polyline (straight
+    // splits, shape unchanged) until there are >= ~128 vertices along it,
+    // enough for the dip bell to read smooth.
+    if (rgbaEnd && dip > 0 && points.length / 2 < 128) {
+      const segs = points.length / 2 - 1;
+      const sub = Math.ceil(128 / segs);
+      const dense = [];
+      for (let i = 0; i < segs; i += 1) {
+        const ax = points[i * 2]; const ay = points[i * 2 + 1];
+        const bx = points[i * 2 + 2]; const by = points[i * 2 + 3];
+        for (let j = 0; j < sub; j += 1) {
+          const f = j / sub;
+          dense.push(ax + (bx - ax) * f, ay + (by - ay) * f);
+        }
+      }
+      dense.push(points[points.length - 2], points[points.length - 1]);
+      points = dense;
+    }
     const k = batch.camera ? 1 : (batch.scale || 1);
     const r = Math.max(0, halfPx) + Math.max(0, feather);
     const count = points.length / 2;
@@ -974,6 +992,18 @@ void main() {
           const a = rgba[c] ?? 1;
           return a + ((rgbaEnd[c] ?? 1) - a) * t;
         }));
+        // Dip: darken RGB around the gradient midpoint (u = 0.5) with a
+        // cosine bell over half-width dipWidth / 2 (1 at centre, 0 and flat
+        // at the edges). Alpha unchanged.
+        const hw = dipWidth / 2;
+        if (dip > 0 && hw > 0) {
+          const d = Math.abs(u - 0.5) / hw;
+          if (d < 1) {
+            const m = 1 - dip * (0.5 + 0.5 * Math.cos(Math.PI * d));
+            const c = ink[ink.length - 1];
+            c[0] *= m; c[1] *= m; c[2] *= m;
+          }
+        }
       }
     }
     for (let i = 0; i < count - 1; i += 1) {

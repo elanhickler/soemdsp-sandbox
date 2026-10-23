@@ -7742,6 +7742,8 @@ body.keyboard-debug-hidden .node-midi-keyboard-signal-bar {
   /* Zoom-1 cable and trace widths. Both scale with the camera. */
   --node-wire-thickness: 2px;
   --node-wire-gradient-span: 1;
+  --node-wire-dip: 0.5;
+  --node-wire-dip-width: 0.5;
   --node-trace-wire-thickness: 1px;
   /* Param wires (ending on a rail IO box): UIDEV param wire thickness / end dot. */
   --node-param-wire-thickness: 0.5px;

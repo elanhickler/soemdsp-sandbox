@@ -959,6 +959,13 @@ function syncNodeUiDevSettingsHeaderControls() {
   sliderTextHost?.style.setProperty("--node-wire-gradient-span", String(wireGradSpan));
   const wireGradSpanValue = document.getElementById("nodeUiDevWireGradientSpanValue");
   if (wireGradSpanValue) wireGradSpanValue.textContent = String(wireGradSpan);
+  // Param wire gradient dip: darkening depth / width at the crossfade midpoint.
+  for (const [id, cssVar] of [["nodeUiDevWireDip", "--node-wire-dip"], ["nodeUiDevWireDipWidth", "--node-wire-dip-width"]]) {
+    const v = Math.max(0, Math.min(1, nodeGraphFiniteNumber(document.getElementById(id)?.value, 0.5)));
+    sliderTextHost?.style.setProperty(cssVar, String(v));
+    const out = document.getElementById(id + "Value");
+    if (out) out.textContent = String(v);
+  }
   // Param wires (ending on a rail IO box) keep their own width and end dot.
   const paramWireThick = Math.max(0.5, Math.min(6, nodeGraphFiniteNumber(document.getElementById("nodeUiDevParamWireThickness")?.value, 0.5)));
   const paramWireDot = Math.max(0, Math.min(12, nodeGraphFiniteNumber(document.getElementById("nodeUiDevParamWireDotSize")?.value, 0.267)));
