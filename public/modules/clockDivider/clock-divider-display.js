@@ -4,7 +4,8 @@
 // Tick dot and the last dot is the fire step. While the engine's Gate output
 // is high (its duty-cycle high time) every dot shows Fire.
 // Display Settings `clockDividerFace`: Background, Ring (line), Count (dot),
-// Tick (start), Fire (blink) HBS; Line thickness (rings).
+// Tick (start), Fire (blink) HBS; Line thickness (rings), Line smoothing
+// (smootherstep skirt, 0–8 CSS px).
 // GPU only, drawn with the shared antialiased line drawer (gl-line-renderer).
 
 const nodeGraphClockDividerFaceDisplaySettingsDefaults = Object.freeze({
@@ -28,15 +29,12 @@ const nodeGraphClockDividerFaceDisplaySettingsDefaults = Object.freeze({
 /** HBS lamps the RoundShape model does not carry (it owns background / line / dot). */
 const NODE_GRAPH_CLOCK_DIVIDER_FACE_EXTRA_LAMPS = Object.freeze(["start", "blink"]);
 const NODE_GRAPH_CLOCK_DIVIDER_FACE_MAX_COLS = 16;
-/** Antialiasing skirt in CSS px: always smooth, not a setting. */
-const NODE_GRAPH_CLOCK_DIVIDER_FACE_FEATHER_PX = 1;
 
 function normalizeNodeGraphClockDividerFaceSettings(settings = {}) {
   const source = settings && typeof settings === "object" ? settings : {};
   const d = nodeGraphClockDividerFaceDisplaySettingsDefaults;
   const merged = { ...d, ...source };
   const out = { ...normalizeNodeGraphRoundShapeFaceSettings(merged) };
-  delete out.lineSmoothing;
   const unit = (v, fallback) => {
     const n = Number(v);
     return Number.isFinite(n) ? Math.max(0, Math.min(1, n)) : fallback;
@@ -91,10 +89,10 @@ function nodeGraphClockDividerFaceEngineState(nodeId, division) {
  * Dot grid in face px: centers for `division` dots in rows of <= 16, centred.
  * A partial last row sits centred under the full rows, same spacing.
  */
-function nodeGraphClockDividerFaceGeometry(w, h, division, stroke) {
+function nodeGraphClockDividerFaceGeometry(w, h, division, stroke, smoothing = 0) {
   const cols = Math.min(division, NODE_GRAPH_CLOCK_DIVIDER_FACE_MAX_COLS);
   const rows = Math.ceil(division / cols);
-  const pad = Math.max(5, Math.min(w, h) * 0.06) + stroke * 0.5;
+  const pad = Math.max(5, Math.min(w, h) * 0.06) + stroke * 0.5 + Math.max(0, smoothing);
   const cell = Math.min(Math.max(1, w - pad * 2) / cols, Math.max(1, h - pad * 2) / rows);
   const r = Math.max(1, cell * 0.36);
   const x0 = (w - cell * cols) * 0.5;
@@ -128,9 +126,11 @@ function drawNodeGraphClockDividerFace(section) {
     nodeGraphDisplayGlFailed(canvas, "clock divider face: no shared GL device");
     return;
   }
-  const feather = NODE_GRAPH_CLOCK_DIVIDER_FACE_FEATHER_PX;
+  const smoothing = typeof nodeGraphLineSmoothingPx === "function"
+    ? nodeGraphLineSmoothingPx(look, 1)
+    : Math.max(0, Number(look.lineSmoothing) || 1);
   const stroke = look.lineThickness;
-  const g = nodeGraphClockDividerFaceGeometry(w, h, division, stroke);
+  const g = nodeGraphClockDividerFaceGeometry(w, h, division, stroke, smoothing);
   const ring = rgba(look.strokePaint);
   const lit = rgba(look.dotPaint);
   const tick = rgba(look.startPaint);
@@ -139,13 +139,13 @@ function drawNodeGraphClockDividerFace(section) {
   // The last dot is the fire step (the count is back at 0 then).
   g.dots.forEach(([x, y], i) => {
     if (state?.gate) {
-      nodeGraphGlLinesDot(batch, x, y, g.r, feather, fire);
+      nodeGraphGlLinesDot(batch, x, y, g.r, smoothing, fire);
     } else if (i < count) {
-      nodeGraphGlLinesDot(batch, x, y, g.r, feather, i === count - 1 ? tick : lit);
+      nodeGraphGlLinesDot(batch, x, y, g.r, smoothing, i === count - 1 ? tick : lit);
     } else {
-      nodeGraphGlLinesDot(batch, x, y, g.r, feather, ring);
+      nodeGraphGlLinesDot(batch, x, y, g.r, smoothing, ring);
       const inner = g.r - Math.max(0.5, stroke);
-      if (inner > 0.5) nodeGraphGlLinesDot(batch, x, y, inner, feather, bg);
+      if (inner > 0.5) nodeGraphGlLinesDot(batch, x, y, inner, smoothing, bg);
     }
   });
   if (!nodeGraphGlLinesEnd(batch, "alpha")) nodeGraphDisplayGlFailed(canvas, "clock divider face: GL present failed");

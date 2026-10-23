@@ -83,7 +83,7 @@ Only these live-audio types exist in the efficient build:
 | `vectorscopeTransform` | L/R → X/Y vectorscope axes |
 | `rotate3dTo2d` | X/Y/Z rotate → X/Y project |
 | `clock` | Free-running clock (Digital / Analog / Pulse) |
-| `triggerDivider` | Divide trigger edges |
+| `triggerDivider` | Trigger Counter: every Nth hit → pulse; LED count / division |
 | `clockDivider` | Divide Clock edges (duty × measured period) |
 | `delayedTrigger` | Delay then pulse on trigger |
 | `randomClock` | Random-interval Trigger + Gate |
@@ -169,7 +169,7 @@ Only these live-audio types exist in the efficient build:
 | `fractalBrownianNoise` | fBm noise CV (X/Y/Z) |
 | `piNoise` | Pi Noise: stepped noise from the stored decimal digits of pi (2,097,152 digits), one digit per step at Speed: Bipolar/Unipolar with 10 smoothing modes, Trigger, Index; Start/Reset/Loop/Quantize |
 | `randomWalk` | Seeded random-walk CV |
-| `pulseExplosion` | Triggered pulse burst + density curve |
+| `pulseExplosion` | Triggered XY firework burst (Left=X Right=Y Out=(L+R)/2) |
 | `spiral` | Jerobeam spiral XY(Z) oscillator |
 | `fractalSpiral` | Fractal spiral XY(Z) |
 | `logSpiral` | Log spiral XY(Z) |

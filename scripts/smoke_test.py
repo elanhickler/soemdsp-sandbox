@@ -6858,7 +6858,7 @@ def require_node_graph_mvp_contract() -> None:
         "triggerCounter: \"Trigger Counter\"",
         "triggerCounter: {",
         "key: \"countMax\"",
-        "triggerDivider: \"Trigger Divider\"",
+        "triggerDivider: \"Trigger Counter\"",
         "triggerDivider: {",
         "key: \"division\"",
         "key: \"pulseTime\"",

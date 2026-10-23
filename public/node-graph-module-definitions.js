@@ -57,7 +57,7 @@ const nodeGraphNodeLabels = Object.freeze({
   shootingStarExplosion: "Shooting Star Explosion",
   randomClock: "Random Clock",
   triggerCounter: "Trigger Counter",
-  triggerDivider: "Trigger Divider",
+  triggerDivider: "Trigger Counter",
   comparator: "Comparator",
   sampleDelay: "Sample Delay",
   earlyReflections: "Early Reflections",
@@ -4494,19 +4494,19 @@ const nodeGraphModuleDefinitions = (
     outputs: ["Wave"],
     parameters: [
       {
-        choices: ["Saw", "Ramp", "Trisaw", "Triangle", "Center Square", "Pulse", "Asym Sine"],
+        choices: ["Saw", "Ramp", "Trisaw", "Triangle", "Center Square", "Pulse", "Asym Sine", "Sine"],
         defaultValue: "0",
         displayChoices: true,
         divideChoicesVisibly: true,
         key: "waveform",
         label: "Waveform",
         linearSmoothing: false,
-        max: "6",
+        max: "7",
         mid: "0",
         min: "0",
         nonlinearSlider: false,
         step: "1",
-        tooltip: "Naive source into Morph. Dither mixes a noise band from ƒ to 4ƒ (no period grain). Asym Sine is 2× per wrap; phasor runs at ƒ/2."
+        tooltip: "Naive source into Morph. Dither mixes a noise band from ƒ to 4ƒ (no period grain). Asym Sine is 2× per wrap; phasor runs at ƒ/2. Sine is sin(2πφ) at ƒ."
       },
       {
         defaultValue: "1",
@@ -6848,7 +6848,10 @@ const nodeGraphModuleDefinitions = (
     ],
     defaultDisplayMode: "face",
     inputs: ["Clock", "Reset"],
-    // Gate (▮) holds high for duty x division clock periods; Trigger (⎍) is one sample per fire.
+    digitalInputs: ["Clock", "Reset"],
+    digitalOutputs: ["Gate", "Trigger"],
+    // Clock in is a Trigger jack (white ⎍). Gate (▮) holds for duty×division
+    // clock periods; Trigger (⎍) is one sample per fire.
     outputs: ["Gate", "Trigger"],
     outputAliases: { Out: "Gate" },
     parameters: [
@@ -7005,14 +7008,19 @@ const nodeGraphModuleDefinitions = (
   triggerDivider: {
     planRole: "processor",
     planFreeRun: true,
-    // Trigger-rate module: the dot display reads far better than a trace
-    // for something that is mostly flat with an occasional pulse.
-    displayType: "dot",
+    // LED face: engine count | division (modules/triggerDivider/trigger-divider-display.js).
+    displayType: "triggerDividerFace",
+    spectrumCompanion: false,
+    displayHeightGu: 4,
+    displayModes: [
+      { key: "face", label: "Face", renderer: "triggerDividerFace", settingsSchema: "clockDividerFace" },
+    ],
+    defaultDisplayMode: "face",
+    digitalInputs: ["Trigger", "Reset"],
     inputs: ["Trigger", "Reset"],
     outputs: ["Out"],
     parameters: [
-      { defaultValue: "0", key: "threshold", label: "Threshold", max: "1", mid: "0", min: "-1", nonlinearSlider: false, step: "any" },
-      { defaultValue: "2", key: "division", label: "Division", max: "64", maxDigits: 3, mid: "2", min: "1", nonlinearSlider: false, step: "1" },
+      { defaultValue: "2", key: "division", label: "Division", max: "64", maxDigits: 3, mid: "2", min: "1", nonlinearSlider: false, step: "1", tooltip: "Hits before Out pulses. Face shows count | Division." },
       { defaultValue: "0.01", key: "pulseTime", kind: "time", label: "Pulse", max: "1", maxDigits: 5, mid: "0.01", min: "0", step: "any", unit: "s" },
       { defaultValue: "1", key: "level", label: "Level", max: "1", mid: "0.5", min: "0", nonlinearSlider: false, step: "any" },
     ]
@@ -7027,12 +7035,12 @@ const nodeGraphModuleDefinitions = (
     planRole: "processor",
     // Edge detector: 1-sample history of In. Pulses are digital (exact 0/1).
     // Steady / Sign are continuous digital levels; Thru is the raw passthrough.
-    // In is the gold analog audio inlet, labelled "->".
+    // In is the gold analog audio inlet (app-wide inward →). Thru is inward ←.
     digitalOutputs: ["Up", "Down", "Change", "Steady", "Sign"],
     inputs: ["In"],
-    inputLabels: { In: "->" },
+    inputLabels: { In: "→" },
     outputs: ["Up", "Down", "Change", "Steady", "Sign", "Thru"],
-    outputLabels: { Up: "Up", Down: "Down", Change: "Change", Steady: "Steady", Sign: "Sign", Thru: "<-" },
+    outputLabels: { Up: "Up", Down: "Down", Change: "Change", Steady: "Steady", Sign: "Sign", Thru: "←" },
     parameters: []
   },
   earlyReflections: {
@@ -14195,30 +14203,35 @@ const nodeGraphModuleDefinitions = (
   pulseExplosion: {
     planRole: "processor",
     inputs: ["Trigger"],
-    outputs: ["Out", "Curve"],
+    digitalInputs: ["Trigger"],
+    outputs: ["Out", "Left", "Right"],
+    outputLabels: { Out: "Mono" },
     layout: "pulseCurve",
-    // Face: the exact schedule a trigger plays (engine preview), playhead from __Elapsed (node-graph-pulse-explosion-display.js).
+    displayAspect: 1,
+    // Face: XY sparks (engine preview), lit from __Elapsed (node-graph-pulse-explosion-display.js).
     displayType: "pulseExplosionFace",
     spectrumCompanion: false,
     displayModes: [
       { key: "face", label: "Face", renderer: "pulseExplosionFace", settingsSchema: "pulseExplosionFace" },
     ],
     defaultDisplayMode: "face",
-    // Hand-written face (node-graph-module-face.js): Start / Center / End span, Spread | Pulses, the Amp band, seed.
     face: [
       { kind: "span", handles: ["startTime", "centerTime", "endTime"], h: 52 },
-      { kind: "cells", params: [["timeSpread", "Spread"], ["numberOfPulses", "Pulses"]], h: 40 },
-      { kind: "band", lo: "lowAmplitude", hi: "highAmplitude", label: "Amp", h: 34 },
+      { kind: "cells", params: [["timeSpread", "Time"], ["spread", "Spread"]], h: 40 },
+      { kind: "cells", params: [["x0", "X0"], ["y0", "Y0"]], h: 40 },
+      { kind: "cells", params: [["numberOfPulses", "Sparks"], ["hold", "Hold"]], h: 40 },
       { kind: "seed", param: "seed", h: 28 },
     ],
     parameters: [
       { defaultValue: "0", key: "startTime", label: "Start Time", max: "10", mid: "1", min: "0", nonlinearSlider: false, step: "any", unit: "s" },
       { defaultValue: "0.5", key: "centerTime", label: "Center Time", max: "10", mid: "1", min: "0", nonlinearSlider: false, step: "any", unit: "s" },
       { defaultValue: "1", key: "endTime", label: "End Time", max: "10", mid: "1", min: "0", nonlinearSlider: false, step: "any", unit: "s" },
-      { defaultValue: "0.3", key: "timeSpread", label: "Time Spread", max: "1", mid: "0.5", min: "0", nonlinearSlider: false, step: "any" },
-      { constraint: "cpu", defaultValue: "20", key: "numberOfPulses", label: "Number of Pulses", max: "128", mid: "20", min: "1", nonlinearSlider: false, step: "1" },
-      { defaultValue: "0.3", key: "lowAmplitude", label: "Low Amplitude", max: "1", mid: "0.5", min: "0", nonlinearSlider: false, step: "any" },
-      { defaultValue: "1", key: "highAmplitude", label: "High Amplitude", max: "1", mid: "0.5", min: "0", nonlinearSlider: false, step: "any" },
+      { defaultValue: "0.3", key: "timeSpread", label: "Time Spread", max: "1", mid: "0.5", min: "0", nonlinearSlider: false, step: "any", tooltip: "0 piles sparks at Center Time. 1 fills Start→End." },
+      { defaultValue: "0.5", key: "spread", label: "Spread", max: "1", mid: "0.5", min: "0", nonlinearSlider: false, step: "any", tooltip: "Disk radius around X0/Y0. 0 = every spark on the pivot." },
+      { defaultValue: "0", key: "x0", label: "X0", max: "1", mid: "0", min: "-1", nonlinearSlider: false, step: "any", tooltip: "Explosion pivot X (Left)." },
+      { defaultValue: "0", key: "y0", label: "Y0", max: "1", mid: "0", min: "-1", nonlinearSlider: false, step: "any", tooltip: "Explosion pivot Y (Right)." },
+      { constraint: "cpu", defaultValue: "20", key: "numberOfPulses", label: "Sparks", max: "128", mid: "20", min: "1", nonlinearSlider: false, step: "1" },
+      { defaultValue: "0.002", key: "hold", kind: "time", label: "Hold", max: "0.25", maxDigits: 5, mid: "0.002", min: "0", step: "any", unit: "s", tooltip: "Dwell at each spark so a 2D scope burns a dot. 0 is still one sample. Beam parks at X0/Y0 between sparks." },
       { defaultValue: "0", key: "seed", kind: "seed",
         maxDigits: 0, label: "Seed", max: "16777215", mid: "1", min: "0", nonlinearSlider: false, step: "1" },
     ]

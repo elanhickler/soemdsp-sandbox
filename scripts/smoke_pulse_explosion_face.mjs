@@ -17,7 +17,7 @@ const gate = (ok, msg) => { console.log(`${ok ? "ok  " : "FAIL"} ${msg}`); if (!
 {
   const E = (await WebAssembly.instantiate(fs.readFileSync(path.join(root, "native_modules", "combined", "soemdsp_combined.wasm")), { env: { emo_process_block: () => 0 } })).instance.exports;
   const h = E.soemdsp_pulse_explosion_create();
-  const run = (n, trig) => { for (let i = 0; i < n; i += 1) E.soemdsp_pulse_explosion_sample(h, trig && i < 2 ? 1 : 0, 0, 0.5, 1, 0.3, 4, 1, 1, 0, 1000); return E.soemdsp_pulse_explosion_elapsed(h); };
+  const run = (n, trig) => { for (let i = 0; i < n; i += 1) E.soemdsp_pulse_explosion_sample(h, trig && i < 2 ? 1 : 0, 0, 0.5, 1, 0.3, 4, 0.5, 0, 0, 0, 0, 1000); return E.soemdsp_pulse_explosion_elapsed(h); };
   const idle = E.soemdsp_pulse_explosion_elapsed(h);
   const mid = run(500, true);
   const done = run(700, false);
@@ -85,8 +85,15 @@ const geom = () => page.evaluate((s) => {
   const node = window.nodeGraphPatchNode(el.dataset.node);
   const look = window.nodeGraphPulseExplosionFaceSettingsForNode(node);
   const sch = el._pulseSchedule;
-  const g = window.nodeGraphPulseExplosionFaceGeometry(cv.width, cv.height, sch.end, look.dotThickness / 2);
-  return { cw: cv.width, ch: cv.height, xs: Array.from(sch.times, (t) => g.at(t)), amps: Array.from(sch.amps), times: Array.from(sch.times), base: g.base, top: g.top, end: sch.end };
+  const g = window.nodeGraphPulseExplosionFaceGeometry(cv.width, cv.height, look.dotThickness / 2);
+  const pts = Array.from(sch.times, (_, i) => g.at(sch.xs[i], sch.ys[i]));
+  return {
+    cw: cv.width, ch: cv.height,
+    xs: pts.map((p) => p.x), ys: pts.map((p) => p.y),
+    times: Array.from(sch.times),
+    sparkX: Array.from(sch.xs), sparkY: Array.from(sch.ys),
+    end: sch.end, spread: sch.spread, x0: sch.x0, y0: sch.y0,
+  };
 }, sel);
 // Brightest pixel in a column band, rows y0..y1 (CSS px scaled to image px).
 const colMax = (img, G, x, y0, y1) => {
@@ -95,38 +102,39 @@ const colMax = (img, G, x, y0, y1) => {
   return m;
 };
 
-// 1) Random, 6 pulses, full amplitude: six stems at the engine times, full height.
-await setParams({ startTime: 0, centerTime: 0.5, endTime: 1, timeSpread: 0.3, numberOfPulses: 6, lowAmplitude: 1, highAmplitude: 1, seed: 0 });
+const near = (img, G, x, y) => {
+  const sx = img.w / G.cw, sy = img.h / G.ch; let m = 0;
+  for (let dy = -2; dy <= 2; dy += 1) for (let dx = -2; dx <= 2; dx += 1) m = Math.max(m, lum(px(img, x * sx + dx, y * sy + dy)));
+  return m;
+};
+
+await setParams({ startTime: 0, centerTime: 0.5, endTime: 1, timeSpread: 0.3, numberOfPulses: 6, spread: 0.6, x0: 0, y0: 0, seed: 0 });
 let G = await geom(); let img = await grab();
 gate(G.times.length === 6 && G.times.every((t) => t >= 0 && t <= 1), `Random: engine schedule ${G.times.map((t) => t.toFixed(2)).join(" ")}`);
 const bg = lum(px(img, 2, 2));
-const midStem = (G.base + G.top) / 2;
-gate(G.xs.every((x) => colMax(img, G, x, midStem - 2, midStem + 2) > bg + 60), "a stem is drawn at every pulse time");
-const gaps = G.xs.slice(1).map((x, i) => [x, G.xs[i]]).filter(([x, y]) => x - y > 10).map(([x, y]) => (x + y) / 2);
-gate(gaps.every((x) => colMax(img, G, x, midStem - 2, midStem + 2) < bg + 25), "nothing between stems (no density curve, no stray dots)");
-gate(G.xs.every((x) => colMax(img, G, x, G.top - 1, G.top + 1) > bg + 120), "full-amplitude dots sit at the top");
-gate(G.end === 1 && G.xs.every((x, i) => Math.abs(x - (Math.max(6, G.cw * 0.04) + 2.5 + (G.cw - 2 * (Math.max(6, G.cw * 0.04) + 2.5)) * G.times[i])) < 1e-6), "axis runs 0 .. End Time");
-if (shot) await page.screenshot({ clip: await faceClip(), path: shot.replace(/\.png$/, "-lin.png") });
+gate(G.sparkX.every((x, i) => Math.hypot(x - G.x0, G.sparkY[i] - G.y0) <= G.spread + 1e-9), "sparks sit inside the spread disk");
+gate(G.xs.every((x, i) => near(img, G, x, G.ys[i]) > bg + 40), "a dot is drawn at every spark");
+if (shot) await page.screenshot({ clip: await faceClip(), path: shot.replace(/\.png$/, "-xy.png") });
 
-// 2) Amplitude sets height: low 0.25 high 0.25 -> dots a quarter up.
-await setParams({ lowAmplitude: 0.25, highAmplitude: 0.25 });
-G = await geom(); img = await grab();
-const qy = G.base - 0.25 * (G.base - G.top);
-gate(G.xs.every((x) => colMax(img, G, x, qy - 1, qy + 1) > bg + 120) && G.xs.every((x) => colMax(img, G, x, G.top - 1, G.top + 2) < bg + 25), "stem height = amplitude (0.25 -> quarter height, nothing above)");
+await setParams({ spread: 0, x0: 0.4, y0: -0.2, numberOfPulses: 8, seed: 1 });
+G = await geom();
+gate(G.sparkX.every((x) => Math.abs(x - 0.4) < 1e-9) && G.sparkY.every((y) => Math.abs(y + 0.2) < 1e-9), "spread 0 collapses every spark onto X0/Y0");
 
-// 3) Random follows the Seed (engine schedule, not a JS copy).
-await setParams({ lowAmplitude: 0.3, highAmplitude: 1, numberOfPulses: 12, seed: 1234 });
+await setParams({ spread: 0.5, x0: 0, y0: 0, numberOfPulses: 12, seed: 1234 });
 const ga = await geom(); img = await grab();
-const want = await page.evaluate(() => { const w = nodeGraphPulseExplosionPreviewWasm.exports; const n = w.soemdsp_pulse_explosion_preview(0, 0.5, 1, 0.3, 12, 0.3, 1, 1234); return Array.from({ length: n }, (_, i) => w.soemdsp_pulse_explosion_preview_time(i)); });
-gate(JSON.stringify(ga.times) === JSON.stringify(want), "Random: face uses the engine preview for this Seed exactly");
-gate(ga.xs.every((x, i) => colMax(img, ga, x, ga.base - ga.amps[i] * (ga.base - ga.top) - 1, ga.base - ga.amps[i] * (ga.base - ga.top) + 1) > bg + 100), "Random: a dot at every scheduled (time, amplitude)");
+const want = await page.evaluate(() => {
+  const w = nodeGraphPulseExplosionPreviewWasm.exports;
+  const n = w.soemdsp_pulse_explosion_preview(0, 0.5, 1, 0.3, 12, 0.5, 0, 0, 1234);
+  return Array.from({ length: n }, (_, i) => w.soemdsp_pulse_explosion_preview_time(i));
+});
+gate(JSON.stringify(ga.times) === JSON.stringify(want), "face uses the engine preview for this Seed exactly");
+gate(ga.xs.every((x, i) => near(img, ga, x, ga.ys[i]) > bg + 40), "a dot at every scheduled XY");
 await setParams({ seed: 99 });
 const gb = await geom();
-gate(JSON.stringify(gb.times) !== JSON.stringify(ga.times), "a new Seed moves the pulses");
+gate(JSON.stringify(gb.times) !== JSON.stringify(ga.times), "a new Seed moves the sparks");
 if (shot) await page.screenshot({ clip: await faceClip(), path: shot });
 
-// 4) Playhead: fake a running engine reporting 0.4 s since trigger; fired stems turn Lit.
-await setParams({ numberOfPulses: 6, lowAmplitude: 1, highAmplitude: 1, seed: 0 });
+await setParams({ numberOfPulses: 6, spread: 0.6, seed: 0 });
 await page.evaluate(() => {
   window.__peFake = { t0: performance.now() };
   const ctx = { state: "running", get currentTime() { return (performance.now() - window.__peFake.t0) / 1000; }, getOutputTimestamp() { return { contextTime: (performance.now() - window.__peFake.t0) / 1000, performanceTime: performance.now() }; } };
@@ -143,15 +151,9 @@ const parse = (css) => css.match(/\d+/g).slice(0, 3).map(Number);
 const litC = parse(look.litPaint), dotC = parse(look.dotPaint);
 const dist = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
 const sx = img.w / G.cw, sy = img.h / G.ch;
-const dotAt = (x) => px(img, x * sx, G.top * sy);
-const fired = G.times.map((t) => t < 0.4);
-gate(G.xs.every((x, i) => (fired[i] ? dist(dotAt(x), litC) < dist(dotAt(x), dotC) : dist(dotAt(x), dotC) < dist(dotAt(x), litC))), `pulses before the playhead are Lit, later ones keep Dot (${fired.map((f) => (f ? "L" : "d")).join("")})`);
-const padX = Math.max(6, G.cw * 0.04) + 2.5;
-const xp = padX + (G.cw - 2 * padX) * 0.4;
-const xpPx = Math.round(xp * sx);
-let headHits = 0;
-for (let dx = -2; dx <= 2; dx += 1) if (lum(px(img, xpPx + dx, ((G.top + G.base) / 2) * sy)) > bg + 150) headHits += 1;
-gate(headHits > 0, "playhead line at 0.4 s");
+const dotAt = (x, y) => px(img, x * sx, y * sy);
+const fired = G.times.map((t) => t <= 0.4);
+gate(G.xs.every((x, i) => (fired[i] ? dist(dotAt(x, G.ys[i]), litC) < dist(dotAt(x, G.ys[i]), dotC) : dist(dotAt(x, G.ys[i]), dotC) < dist(dotAt(x, G.ys[i]), litC))), `sparks at or before 0.4 s are Lit (${fired.map((f) => (f ? "L" : "d")).join("")})`);
 if (shot) await page.screenshot({ clip: await faceClip(), path: shot.replace(/\.png$/, "-playing.png") });
 
 // 5) Display Settings colors: Background HBS repaints the face.

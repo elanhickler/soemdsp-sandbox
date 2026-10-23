@@ -20,15 +20,15 @@ function createNodeGraphTriggerDividerState() {
 function nodeGraphTriggerDividerSample(state, trigger, reset, params, sampleRate, runtime = null, nodeId = "") {
   const safeTrigger = nodeGraphSafeFilterNumber(trigger, runtime, nodeId, null, "trigger divider trigger");
   const safeReset = nodeGraphSafeFilterNumber(reset, runtime, nodeId, null, "trigger divider reset");
-  const threshold = nodeGraphSafeFilterNumber(params.threshold, runtime, nodeId, null, "trigger divider threshold");
   const division = Math.max(1, Math.min(64, Math.round(nodeGraphSafeFilterNumber(params.division, runtime, nodeId, null, "trigger divider division"))));
   const pulseTime = Math.max(0, nodeGraphSafeFilterNumber(params.pulseTime, runtime, nodeId, null, "trigger divider pulse"));
   const level = nodeGraphSafeFilterNumber(params.level, runtime, nodeId, null, "trigger divider level");
-  if (state.lastReset <= threshold && safeReset > threshold) {
+  const absHit = (now, prev) => Math.abs(now) > Math.abs(prev);
+  if (absHit(safeReset, state.lastReset)) {
     state.count = 0;
     state.remainingSamples = 0;
   }
-  if (state.lastTrigger <= threshold && safeTrigger > threshold) {
+  if (absHit(safeTrigger, state.lastTrigger)) {
     state.count = (state.count + 1) % division;
     if (state.count === 0) {
       state.remainingSamples = Math.max(1, Math.round(pulseTime * Math.max(1, sampleRate)));

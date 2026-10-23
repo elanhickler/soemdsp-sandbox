@@ -644,8 +644,9 @@ const nodeGraphModuleStoreCatalog = Object.freeze({
   },
   triggerDivider: {
     category: "clock",
-    description: "Divide incoming triggers into slower clocks for sequences and envelopes.",
-    notes: ["trigger division", "reset input", "pulse width"],
+    description: "Count Trigger hits and pulse Out every Division. LED shows count | Division.",
+    label: "Trigger Counter",
+    notes: ["trigger counter", "gate_hit", "reset input", "pulse width", "LED"],
   },
   minMax: {
     category: "dynamics",
@@ -2050,9 +2051,9 @@ const nodeGraphModuleStoreCatalog = Object.freeze({
   },
   pulseExplosion: {
     category: "clock",
-    description: "On trigger, spray many micro-pulses over time—glitch rain and density hits.",
+    description: "On trigger, spray XY sparks around X0/Y0 for 2D-scope fireworks. Left=X, Right=Y, Out=(L+R)/2.",
     label: "Pulse Explosion",
-    notes: ["trigger burst", "skewed distribution", "randomized amplitude"],
+    notes: ["xy fireworks", "spread", "pivot", "stereo", "oscilloscope"],
   },
   tb303Filter: {
     category: "analogFilter",

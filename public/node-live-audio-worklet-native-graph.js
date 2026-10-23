@@ -1215,7 +1215,8 @@ NodeLiveAudioProcessor.prototype.mapNativeGraphSrcPortId = function mapNativeGra
   if (t === "pulseExplosion") {
     if (p === "__elapsed") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_PHASE01;
     if (p === "out") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_MONO;
-    if (p === "curve") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_LEFT;
+    if (p === "left") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_LEFT;
+    if (p === "right") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_RIGHT;
   }
   // crossover2..6: sequential band L/R (band0=0/1, band1=2/3, …).
   if (
@@ -6418,8 +6419,10 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
       push("endTime", P.NATIVE_GRAPH_PARAM_TIME_DENOMINATOR, cont("endTime", 1));
       push("timeSpread", P.NATIVE_GRAPH_PARAM_MIX, cont("timeSpread", 0.3));
       push("numberOfPulses", P.NATIVE_GRAPH_PARAM_STAGES, disc("numberOfPulses", 20));
-      push("lowAmplitude", P.NATIVE_GRAPH_PARAM_IN_LOW, cont("lowAmplitude", 0.3));
-      push("highAmplitude", P.NATIVE_GRAPH_PARAM_IN_HIGH, cont("highAmplitude", 1));
+      push("spread", P.NATIVE_GRAPH_PARAM_WIDTH, cont("spread", 0.5));
+      push("x0", P.NATIVE_GRAPH_PARAM_IN_LOW, cont("x0", 0));
+      push("y0", P.NATIVE_GRAPH_PARAM_IN_HIGH, cont("y0", 0));
+      push("hold", P.NATIVE_GRAPH_PARAM_OFFSET_MS, cont("hold", 0.002));
       push("seed", P.NATIVE_GRAPH_PARAM_SEED, disc("seed", 0));
       continue;
     }
@@ -6763,7 +6766,6 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
       continue;
     }
     if (type === "triggerDivider") {
-      push("threshold", P.NATIVE_GRAPH_PARAM_CENTER, cont("threshold", 0));
       push("division", P.NATIVE_GRAPH_PARAM_STAGES, disc("division", 2));
       push("pulseTime", P.NATIVE_GRAPH_PARAM_TIME_NUMERATOR, cont("pulseTime", 0.01));
       push("level", P.NATIVE_GRAPH_PARAM_AMPLITUDE, cont("level", 1));
@@ -9586,7 +9588,7 @@ NodeLiveAudioProcessor.prototype.nativeGraphPortNames = function nativeGraphPort
       return ["__DomainTime"];
     }
     // Clock Divider face: edges counted toward the next fire.
-    if (type === "clockDivider") {
+    if (type === "clockDivider" || type === "triggerDivider") {
       return ["__Count"];
     }
     // Pulse Explosion face playhead: seconds since trigger, -1 idle.
@@ -9683,7 +9685,7 @@ NodeLiveAudioProcessor.prototype.publishNativeGraphScopeTaps = function publishN
       : (type === "sineWavetable" || type === "sinCos" || type === "smoothGraph" || type === "stepGraph"
         || type === "acidSequencer" || type === "fbmField" || type === "clock" || type === "pulseExplosion"
         || type === "ellipsoid" || type === "ellipsoidOsc" || type === "dsfOscillator" || type === "dsfMorphingOsc"
-        || type === "clockDivider"
+        || type === "clockDivider" || type === "triggerDivider"
         ? audioPorts.concat(P.NATIVE_GRAPH_PORT_PHASE01)
         : audioPorts);
     for (let pi = 0; pi < ports.length; pi += 1) {
@@ -9850,7 +9852,7 @@ NodeLiveAudioProcessor.prototype.publishNativeGraphScopeTaps = function publishN
         || type === "smoothGraph" || type === "stepGraph"
         || type === "acidSequencer" || type === "clock" || type === "pulseExplosion" || type === "pulseTrain"
         || type === "ellipsoid" || type === "ellipsoidOsc" || type === "dsfOscillator" || type === "dsfMorphingOsc"
-        || type === "clockDivider"
+        || type === "clockDivider" || type === "triggerDivider"
       ) {
         ports = facePorts.concat(P.NATIVE_GRAPH_PORT_PHASE01);
       } else if (type === "polyBlep" || type === "blit") {

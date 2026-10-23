@@ -10,6 +10,7 @@
 // Then pitch-tracking Passive-style one-pole cascade (Poles 1…4) + makeup.
 // Morph 0 = dark (fc ≈ 0.5×f0). Morph 1 = open (fc ≈ 100×f0, Nyquist clamp).
 // Asym Sine is 2× per wrap so the phasor runs at ƒ/2; filter/makeup use user ƒ.
+// Sine is sin(2πφ) at user ƒ (no BLEP; continuous).
 
 #include <stdint.h>
 
@@ -149,6 +150,10 @@ static double naive_asym_sine(double t) {
   return sabs * 2.0 - 1.0;
 }
 
+static double naive_sine(double t) {
+  return dsp_sin_turns_lut(wrap01_phase(t));
+}
+
 static double one_pole_lp(double& y, double x, double freqHz, double rate) {
   const double maxW = kTAU * 0.45;
   double f = freqHz;
@@ -201,7 +206,7 @@ static int clamp_poles(double poles) {
 static int clamp_wave(double waveform) {
   int w = (int)(waveform + (waveform >= 0.0 ? 0.5 : -0.5));
   if (w < 0) w = 0;
-  if (w > 6) w = 6;
+  if (w > 7) w = 7;
   return w;
 }
 
@@ -217,6 +222,7 @@ static double source_wave(double ph, int wave) {
     case 4: return naive_center_square(ph, 0.5);
     case 5: return naive_pulse(ph, 0.5);
     case 6: return naive_asym_sine(ph);
+    case 7: return naive_sine(ph);
     default: return naive_saw(ph);
   }
 }
@@ -237,6 +243,7 @@ static int wave_edges(int wave, Edge* e) {
       e[0] = {0.0, 2.0, 0.0}; e[1] = {pw, -2.0, 0.0}; return 2;         // Pulse
     }
     case 6: e[0] = {0.0, 0.0, k8pi}; e[1] = {0.5, 0.0, k8pi}; return 2; // Asym Sine
+    case 7: return 0;                                                  // Sine
     default: e[0] = {0.0, 2.0, 0.0}; return 1;                          // Saw
   }
 }
@@ -437,5 +444,5 @@ extern "C" double soemdsp_filter_morph_oscillator_sample(
 }
 
 extern "C" int soemdsp_filter_morph_oscillator_version() {
-  return 8;
+  return 9;
 }

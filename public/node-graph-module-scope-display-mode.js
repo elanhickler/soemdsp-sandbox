@@ -279,6 +279,7 @@ function nodeGraphModuleDisplayTypeHasLocalSettings(displayType) {
     "sinCosFace",
     "clockFace",
     "clockDividerFace",
+    "triggerDividerFace",
     "pulseExplosionFace",
     "pulseTrainFace",
     "sinCos4Face",

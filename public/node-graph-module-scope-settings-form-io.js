@@ -401,7 +401,7 @@ if (type === "portalFace") {
   if (type === "clockFace" && typeof normalizeNodeGraphClockFaceSettings === "function") {
     return normalizeNodeGraphClockFaceSettings();
   }
-  if (type === "clockDividerFace" && typeof normalizeNodeGraphClockDividerFaceSettings === "function") {
+  if ((type === "clockDividerFace" || type === "triggerDividerFace") && typeof normalizeNodeGraphClockDividerFaceSettings === "function") {
     return normalizeNodeGraphClockDividerFaceSettings();
   }
   if (type === "pulseExplosionFace" && typeof normalizeNodeGraphPulseExplosionFaceSettings === "function") {
@@ -734,7 +734,7 @@ if (type === "portalFace") {
   if (type === "clockFace" && typeof normalizeNodeGraphClockFaceSettings === "function") {
     return normalizeNodeGraphClockFaceSettings(settings);
   }
-  if (type === "clockDividerFace" && typeof normalizeNodeGraphClockDividerFaceSettings === "function") {
+  if ((type === "clockDividerFace" || type === "triggerDividerFace") && typeof normalizeNodeGraphClockDividerFaceSettings === "function") {
     return normalizeNodeGraphClockDividerFaceSettings(settings);
   }
   if (type === "pulseExplosionFace" && typeof normalizeNodeGraphPulseExplosionFaceSettings === "function") {

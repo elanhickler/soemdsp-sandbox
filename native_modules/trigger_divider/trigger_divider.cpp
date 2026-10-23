@@ -3,10 +3,10 @@
 // soemdsp-native-target: triggerDivider
 // soemdsp-native-kind: utility
 //
-// Counts trigger rising edges (crossing above threshold), firing a
-// pulseTime-length output pulse every `division`-th edge. Reset zeroes the
-// count. Shared by triggerDivider (fixed pulseTime) and clockDivider
-// (pulseTime = duty × division × measured Clock period).
+// Counts trigger hits (gate_hit), firing a pulseTime-length output pulse every
+// `division`-th edge. Reset zeroes the count. Shared by triggerDivider
+// (Trigger Counter: fixed pulseTime) and clockDivider (pulseTime = duty ×
+// division × measured Clock period).
 
 #include <soemdsp/soemdsp.hpp>
 
@@ -76,18 +76,18 @@ extern "C" double soemdsp_trigger_divider_sample(
 
   const double safeTrigger = safe(trigger);
   const double safeReset = safe(reset);
-  const double safeThreshold = safe(threshold);
+  (void)threshold;
   const long long divisionSteps = clamp_division_steps(division);
   const double safePulseTime = maxd(0.0, safe(pulseTime));
   const double safeLevel = safe(level);
   const double rate = maxd(1.0, safe(sampleRate));
 
-  if (rising_edge(safeReset, &s.lastReset, safeThreshold)) {
+  if (gate_hit(safeReset, &s.lastReset)) {
     s.count = 0;
     s.remainingSamples = 0.0;
   }
 
-  if (rising_edge(safeTrigger, &s.lastTrigger, safeThreshold)) {
+  if (gate_hit(safeTrigger, &s.lastTrigger)) {
     s.count = (s.count + 1) % (int)divisionSteps;
     if (s.count == 0) {
       s.remainingSamples = maxd(1.0, dsp_floor(safePulseTime * rate + 0.5));
@@ -102,9 +102,9 @@ extern "C" double soemdsp_trigger_divider_sample(
   return safe(output);
 }
 
-// clockDivider: rising edges of Clock above kClockEdgeThreshold. Gate pulse
-// = duty x division x measured period; a one-sample trigger on each fire.
-static const double kClockEdgeThreshold = 0.0;
+// clockDivider: Clock / Reset use gate_hit (same Trigger/Reset law as the rest
+// of the app). Gate pulse = duty x division x measured period; one-sample
+// Trigger on each fire.
 
 extern "C" double soemdsp_trigger_divider_sample_clock(
   int    handle,
@@ -128,14 +128,14 @@ extern "C" double soemdsp_trigger_divider_sample_clock(
   const double rate = maxd(1.0, safe(sampleRate));
   s.fired = false;
 
-  if (rising_edge(safeReset, &s.lastReset, kClockEdgeThreshold)) {
+  if (gate_hit(safeReset, &s.lastReset)) {
     s.count = 0;
     s.remainingSamples = 0.0;
     s.samplesSinceEdge = 0.0;
     s.measuredPeriodSamples = 0.0;
   }
 
-  const bool rising = rising_edge(safeClock, &s.lastTrigger, kClockEdgeThreshold);
+  const bool rising = gate_hit(safeClock, &s.lastTrigger);
   if (rising) {
     if (s.samplesSinceEdge > 0.0) {
       s.measuredPeriodSamples = s.samplesSinceEdge;
@@ -175,5 +175,5 @@ extern "C" int soemdsp_trigger_divider_count(int handle) {
 }
 
 extern "C" int soemdsp_trigger_divider_version() {
-  return 4;
+  return 6;
 }

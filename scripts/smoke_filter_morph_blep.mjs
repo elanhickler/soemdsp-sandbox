@@ -5,7 +5,7 @@ const stub = new Proxy({}, { get: () => new Proxy({}, { get: () => () => 0 }) })
 const { instance } = await WebAssembly.instantiate(wasm, stub);
 const e = instance.exports;
 const fail = (m) => { console.error("FAIL " + m); process.exit(1); };
-if ((e.soemdsp_filter_morph_oscillator_version() | 0) < 8) fail("version < 8");
+if ((e.soemdsp_filter_morph_oscillator_version() | 0) < 9) fail("version < 9");
 const SR = 48000;
 const render = (f, wave, dither, n = 8192, start = 2000, full = 7000, amount = 1) => {
   const h = e.soemdsp_filter_morph_oscillator_create();
@@ -27,7 +27,7 @@ const mag = (a, f) => {
   }
   return Math.hypot(re, im);
 };
-for (const wave of [0, 1, 2, 3, 4, 5, 6]) for (const d of [0, 1]) for (const f of [110, 5000, 9700]) {
+for (const wave of [0, 1, 2, 3, 4, 5, 6, 7]) for (const d of [0, 1]) for (const f of [110, 5000, 9700]) {
   const a = render(f, wave, d);
   if (!a.every(Number.isFinite)) fail(`non-finite wave ${wave} dither ${d} f ${f}`);
   if (Math.max(...a.map(Math.abs)) > 4) fail(`runaway wave ${wave} dither ${d} f ${f}`);
@@ -39,6 +39,8 @@ if (!(rel < -18)) fail(`saw 9700 alias at 18900 Hz is ${rel.toFixed(1)} dB (want
 // Low pitch Dither Off stays a saw (BLEP only touches the samples at the wrap).
 const low = render(110, 0, 0);
 if (!(mag(low, 110) > 10 * mag(low, 330) / 3 * 0.5)) fail("110 Hz saw lost its fundamental");
+const sine = render(110, 7, 0);
+if (!(mag(sine, 110) > 20 * mag(sine, 330))) fail("110 Hz Sine should be almost only fundamental");
 const corr = (a, b) => {
   let dot = 0, da = 0, db = 0;
   for (let i = 1024; i < a.length; i++) {

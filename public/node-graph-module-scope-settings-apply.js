@@ -80,6 +80,13 @@ function assignNodeGraphTypedDisplaySettingsToNode(node, displayType, settings) 
     }
     return node.traceDisplaySettings;
   }
+  if (displayType === "triggerDividerFace" && typeof normalizeNodeGraphClockDividerFaceSettings === "function") {
+    node.traceDisplaySettings = normalizeNodeGraphClockDividerFaceSettings(settings);
+    if (typeof applyNodeGraphTriggerDividerDisplaySettingsToFace === "function") {
+      applyNodeGraphTriggerDividerDisplaySettingsToFace(node);
+    }
+    return node.traceDisplaySettings;
+  }
   if (displayType === "clockFace" && typeof normalizeNodeGraphClockFaceSettings === "function") {
     node.traceDisplaySettings = normalizeNodeGraphClockFaceSettings(settings);
     if (typeof applyNodeGraphClockDisplaySettingsToFace === "function") {

@@ -104,7 +104,7 @@ await page.waitForTimeout(800);
 const labels = await page.evaluate(() => [...document.querySelectorAll("#nodeTraceDisplaySettingsPopover [data-hsl-lamp]")].map((e) => e.getAttribute("data-hsl-label")));
 check(JSON.stringify(labels) === JSON.stringify(["Background", "Ring", "Count", "Tick", "Fire"]), "HBS rows Background, Ring, Count, Tick, Fire", JSON.stringify(labels));
 const fields = await page.evaluate(() => ["lineThickness", "lineSmoothing", "blinkTime"].map((k) => Boolean(document.querySelector(`#nodeTraceDisplaySettingsPopover [data-trace-display-field="${k}"]`))));
-check(JSON.stringify(fields) === "[true,false,false]", "Line thickness only (no Line smoothing, no Blink time)", JSON.stringify(fields));
+check(JSON.stringify(fields) === "[true,true,false]", "Line thickness and Line smoothing (no Blink time)", JSON.stringify(fields));
 await page.locator("#nodeTraceDisplaySettingsPopover").screenshot({ path: `${OUT}/simple-settings.png` }).catch(() => {});
 await page.evaluate(() => closeNodeGraphTraceDisplaySettings());
 // Settings repaint immediately: apply a red background through the shared settings path, read the next frame.

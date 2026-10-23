@@ -499,6 +499,10 @@ function nodeGraphPortIsTrigger(port, type) {
   if (kind === "clock" && (lower === "t" || lower === "pulse")) {
     return true;
   }
+  // Clock Divider Clock in is a Trigger consumer (white ⎍).
+  if (kind === "clockDivider" && (raw === "Clock" || lower === "clock")) {
+    return true;
+  }
   // Pulse Train: Trigger is the impulse train, End fires once per pattern.
   // Shape is analog (green) even when the Shape knob is Trigger.
   if (kind === "pulseTrain" && (raw === "End" || raw === "Trigger")) return true;

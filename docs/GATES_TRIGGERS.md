@@ -153,7 +153,7 @@ Gate falling to ≤ 0 is enough. No extra note-off Trigger unless a module asks 
 2. Done: Keyboard / Grid Keyboard `Gate` + `Trigger` in, add to key outs, clamp −1…+1.
 3. Any other Gate/Trigger thru uses the same add+clamp.
 4. Envelope Trigger: Pluck Envelope / Curve AR use `gate_hit`. Remaining envelopes still on mixed `rising_edge`.
-5. Reset inlets: graph_engine osc Reset + Hyperpluck / Robin / wavetable / etc. use `gate_hit`. Modules with a **Threshold** knob (`delayed_trigger`, `trigger_divider`, …) keep `rising_edge(…, threshold)`.
+5. Reset inlets: graph_engine osc Reset + Hyperpluck / Robin / wavetable / etc. use `gate_hit`. Clock Divider Clock + Reset and Trigger Divider (Trigger Counter) Trigger + Reset use `gate_hit` (no Threshold). Modules with a **Threshold** knob (`delayed_trigger`, …) keep `rising_edge(…, threshold)`.
 6. Clock Pulse/Digital Out: align if they still use 0.5.
 
 Do not special-case a patch. Do not invent a second edge law for analog vs digital — analog is the same voltage, slower.

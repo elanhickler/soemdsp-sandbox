@@ -489,6 +489,10 @@ function validateNodeGraphPatch(patch) {
         }
       }
       // Clock Divider: Level renamed Amplitude; Threshold removed (fixed edge level).
+      if (type === "triggerDivider" && node.params) {
+        delete node.params.threshold;
+        if (node.paramMeta) delete node.paramMeta.threshold;
+      }
       if (type === "clockDivider" && node.params) {
         if (Object.prototype.hasOwnProperty.call(node.params, "level") && !Object.prototype.hasOwnProperty.call(node.params, "amplitude")) {
           node.params.amplitude = node.params.level;

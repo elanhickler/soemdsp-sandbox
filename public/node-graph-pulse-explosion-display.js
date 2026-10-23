@@ -1,15 +1,10 @@
-// Pulse Explosion face: where the pulses land. One vertical stem per pulse at
-// its time after the trigger, stem height = amplitude, a dot on top. The time
-// axis runs from 0 to the end of the window (End Time). The schedule comes
-// from the engine itself (soemdsp_pulse_explosion_preview in
-// pulse_explosion.wasm), so the Random schedule for the node's Seed
-// shows exactly what a trigger plays; there is no JS copy of the math.
-// Playhead: the engine's seconds-since-trigger (__Elapsed, -1 idle), shifted to
-// the time the speakers play it; stems light up as their pulse fires.
-// Display Settings `pulseExplosionFace`: Background, Line (stems), Dot (tops),
-// Playhead, Lit (fired pulses) HBS; Line thickness, Dot size.
-// nodeGraphPulseFaceNormalize is shared with the Pulse Train face.
-// GPU only, drawn with the shared antialiased line drawer (gl-line-renderer).
+// Pulse Explosion face: XY sparks the engine will play. Dim dots at each
+// scheduled (x, y); they light when __Elapsed passes their time. Pivot (X0,Y0)
+// and the Spread disk are the Line/Playhead lamps. Schedule comes from
+// soemdsp_pulse_explosion_preview (pulse_explosion.wasm) — same Seed as audio.
+// Display Settings `pulseExplosionFace`: Background, Line (disk), Dot (unlit),
+// Playhead (pivot), Lit (fired). nodeGraphPulseFaceNormalize is shared with
+// the Pulse Train face. GPU only (gl-line-renderer).
 
 const nodeGraphPulseExplosionFaceDisplaySettingsDefaults = Object.freeze({
   backgroundHue: 205.714,
@@ -89,7 +84,7 @@ function nodeGraphPulseExplosionPreviewLoad() {
   if (nodeGraphPulseExplosionPreviewWasm.promise || typeof fetch !== "function" || typeof WebAssembly === "undefined") {
     return nodeGraphPulseExplosionPreviewWasm.promise;
   }
-  nodeGraphPulseExplosionPreviewWasm.promise = fetch("/native_modules/pulse_explosion/pulse_explosion.wasm?v=pulse-random-1")
+  nodeGraphPulseExplosionPreviewWasm.promise = fetch("/native_modules/pulse_explosion/pulse_explosion.wasm?v=pulse-xy-1")
     .then((response) => {
       if (!response.ok) throw new Error(`pulse_explosion wasm HTTP ${response.status}`);
       return response.arrayBuffer();
@@ -116,7 +111,7 @@ function nodeGraphPulseExplosionFaceParam(node, key, fallback) {
 
 /**
  * The schedule a trigger with these params plays, from the engine:
- * { times, amps, end } (seconds after trigger, sorted; end = window end), or
+ * { times, xs, ys, end, spread, x0, y0 } (seconds after trigger, sorted), or
  * null until pulse_explosion.wasm is ready. Cached per parameter set.
  */
 function nodeGraphPulseExplosionSchedule(section, node) {
@@ -128,24 +123,26 @@ function nodeGraphPulseExplosionSchedule(section, node) {
   const p = (key, fallback) => nodeGraphPulseExplosionFaceParam(node, key, fallback);
   const args = [
     p("startTime", 0), p("centerTime", 0.5), p("endTime", 1), p("timeSpread", 0.3),
-    Math.round(p("numberOfPulses", 20)), p("lowAmplitude", 0.3), p("highAmplitude", 1),
+    Math.round(p("numberOfPulses", 20)), p("spread", 0.5), p("x0", 0), p("y0", 0),
     p("seed", 0),
   ];
   const key = args.join(",");
   if (section._pulseScheduleKey === key && section._pulseSchedule) return section._pulseSchedule;
+  if (typeof wasm.soemdsp_pulse_explosion_preview_x !== "function") return null;
   const count = wasm.soemdsp_pulse_explosion_preview(...args);
   const times = new Float64Array(count);
-  const amps = new Float64Array(count);
+  const xs = new Float64Array(count);
+  const ys = new Float64Array(count);
   for (let i = 0; i < count; i += 1) {
     times[i] = wasm.soemdsp_pulse_explosion_preview_time(i);
-    amps[i] = wasm.soemdsp_pulse_explosion_preview_amplitude(i);
+    xs[i] = wasm.soemdsp_pulse_explosion_preview_x(i);
+    ys[i] = wasm.soemdsp_pulse_explosion_preview_y(i);
   }
-  // Window end as the engine sees it (End Time, at least just past Start).
   const start = Math.max(0, args[0]);
   let end = args[2] > start ? args[2] : start + 0.001;
   if (count) end = Math.max(end, times[count - 1]);
   section._pulseScheduleKey = key;
-  section._pulseSchedule = { times, amps, end };
+  section._pulseSchedule = { times, xs, ys, end, spread: args[5], x0: args[6], y0: args[7] };
   return section._pulseSchedule;
 }
 
@@ -180,17 +177,19 @@ function nodeGraphPulseExplosionHeardElapsed(section, end) {
   return Math.max(0, e);
 }
 
-/** Plot geometry in face px: x0..x1 is 0..end seconds, base is amplitude 0, top is amplitude 1. */
-function nodeGraphPulseExplosionFaceGeometry(w, h, end, dotR) {
-  const padX = Math.max(6, w * 0.04) + dotR;
-  const padTop = Math.max(5, h * 0.08) + dotR;
-  const padBottom = Math.max(5, h * 0.08);
-  const x0 = padX;
-  const x1 = Math.max(x0 + 1, w - padX);
-  const base = h - padBottom;
-  const top = Math.min(base - 1, padTop);
-  const safeEnd = end > 0 ? end : 1;
-  return { x0, x1, base, top, at: (t) => x0 + (x1 - x0) * Math.max(0, Math.min(1, t / safeEnd)) };
+/** Plot geometry: bipolar XY (−1…1) in a square inset. y-up (scope). */
+function nodeGraphPulseExplosionFaceGeometry(w, h, dotR) {
+  const pad = Math.max(6, Math.min(w, h) * 0.06) + dotR;
+  const side = Math.max(1, Math.min(w, h) - pad * 2);
+  const ox = (w - side) * 0.5;
+  const oy = (h - side) * 0.5;
+  return {
+    ox, oy, side,
+    at: (x, y) => ({
+      x: ox + (Math.max(-1.5, Math.min(1.5, x)) + 1) * 0.5 * side,
+      y: oy + (1 - Math.max(-1.5, Math.min(1.5, y))) * 0.5 * side,
+    }),
+  };
 }
 
 function drawNodeGraphPulseCurveDisplay(section) {
@@ -214,37 +213,42 @@ function drawNodeGraphPulseCurveDisplay(section) {
   const dotR = look.dotThickness * 0.5;
   const schedule = nodeGraphPulseExplosionSchedule(section, node);
   const end = schedule ? schedule.end : Math.max(0.001, nodeGraphPulseExplosionFaceParam(node, "endTime", 1));
-  const g = nodeGraphPulseExplosionFaceGeometry(w, h, end, dotR);
+  const g = nodeGraphPulseExplosionFaceGeometry(w, h, dotR);
   const line = rgba(look.strokePaint);
   const dot = rgba(look.dotPaint);
   const lit = rgba(look.litPaint);
-  const dim = (c, a) => [c[0], c[1], c[2], c[3] * a];
-  // Time axis: 0 .. window end, with a faint tick at 0 and at the end.
-  nodeGraphGlLinesSegment(batch, g.x0, g.base, g.x1, g.base, Math.max(0.5, halfPx * 0.5), smoothing, dim(line, 0.6));
-  for (const x of [g.x0, g.x1]) {
-    nodeGraphGlLinesSegment(batch, x, g.base - 3, x, g.base + 3, 0.5, smoothing, dim(line, 0.6));
+  const pivotPaint = rgba(look.playheadPaint);
+  const dim = (c, a) => [c[0], c[1], c[2], (c[3] == null ? 1 : c[3]) * a];
+  const x0 = schedule ? schedule.x0 : nodeGraphPulseExplosionFaceParam(node, "x0", 0);
+  const y0 = schedule ? schedule.y0 : nodeGraphPulseExplosionFaceParam(node, "y0", 0);
+  const spread = schedule ? schedule.spread : nodeGraphPulseExplosionFaceParam(node, "spread", 0.5);
+  const origin = g.at(x0, y0);
+  if (spread > 0.002) {
+    const segs = 48;
+    const ring = [];
+    for (let i = 0; i <= segs; i += 1) {
+      const a = (i / segs) * Math.PI * 2;
+      const p = g.at(x0 + spread * Math.cos(a), y0 + spread * Math.sin(a));
+      ring.push(p.x, p.y);
+    }
+    nodeGraphGlLinesPolyline(batch, ring, Math.max(0.4, halfPx * 0.55), smoothing, dim(line, 0.45));
   }
+  const tick = Math.max(4, g.side * 0.03);
+  nodeGraphGlLinesSegment(batch, origin.x - tick, origin.y, origin.x + tick, origin.y, halfPx, smoothing, pivotPaint);
+  nodeGraphGlLinesSegment(batch, origin.x, origin.y - tick, origin.x, origin.y + tick, halfPx, smoothing, pivotPaint);
   const elapsed = schedule ? nodeGraphPulseExplosionHeardElapsed(section, end) : Number.NaN;
   const playing = Number.isFinite(elapsed);
   if (schedule) {
-    const { times, amps } = schedule;
-    const height = g.base - g.top;
+    const { times, xs, ys } = schedule;
     for (let i = 0; i < times.length; i += 1) {
-      const x = g.at(times[i]);
-      const y = g.base - Math.max(0, Math.min(1, amps[i])) * height;
-      const fired = playing && times[i] < elapsed;
-      if (g.base - y > 0.5) nodeGraphGlLinesSegment(batch, x, g.base, x, y, halfPx, smoothing, fired ? lit : line);
+      const p = g.at(xs[i], ys[i]);
+      const fired = playing && times[i] <= elapsed;
       if (dotR > 0) {
-        // A fresh hit glows for 120 ms around its dot.
         const age = fired ? elapsed - times[i] : Infinity;
-        if (age < 0.12) nodeGraphGlLinesDot(batch, x, y, dotR * 2.2, smoothing, dim(lit, 0.35 * (1 - age / 0.12)));
-        nodeGraphGlLinesDot(batch, x, y, dotR, smoothing, fired ? lit : dot);
+        if (age < 0.12) nodeGraphGlLinesDot(batch, p.x, p.y, dotR * 2.2, smoothing, dim(lit, 0.35 * (1 - age / 0.12)));
+        nodeGraphGlLinesDot(batch, p.x, p.y, dotR, smoothing, fired ? lit : dim(dot, 0.55));
       }
     }
-  }
-  if (playing) {
-    const x = g.at(elapsed);
-    nodeGraphGlLinesSegment(batch, x, g.top - dotR, x, g.base, Math.max(0.5, halfPx), smoothing, rgba(look.playheadPaint));
   }
   if (!nodeGraphGlLinesEnd(batch, "alpha")) nodeGraphDisplayGlFailed(canvas, "pulse explosion face: GL present failed");
 }
