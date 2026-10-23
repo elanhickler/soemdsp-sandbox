@@ -1029,7 +1029,7 @@
     },
     {
       "name": "filter_morph_oscillator",
-      "label": "FilterMorph Oscillator",
+      "label": "Filter Morph Osc",
       "targetType": "filterMorphOscillator",
       "kind": "oscillator",
       "source": "native_modules/filter_morph_oscillator/filter_morph_oscillator.cpp",

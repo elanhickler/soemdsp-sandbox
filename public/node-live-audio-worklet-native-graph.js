@@ -5116,6 +5116,7 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
       push("waveform", P.NATIVE_GRAPH_PARAM_WAVEFORM, disc("waveform", 0));
       push("morph", P.NATIVE_GRAPH_PARAM_SHAPE, cont("morph", 1));
       push("poles", P.NATIVE_GRAPH_PARAM_STAGES, disc("poles", 1));
+      push("dither", P.NATIVE_GRAPH_PARAM_LFO_STYLE, disc("dither", 1));
       push("phase", P.NATIVE_GRAPH_PARAM_PHASE, cont("phase", 0));
       push("amplitude", P.NATIVE_GRAPH_PARAM_AMPLITUDE, cont("amplitude", 1));
       push("seed", P.NATIVE_GRAPH_PARAM_SEED, disc("seed", 0));

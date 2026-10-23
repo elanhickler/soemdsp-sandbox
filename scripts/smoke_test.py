@@ -18480,6 +18480,12 @@ def check_dsf_face_spectrum() -> None:
     require(unit.returncode == 0, f"dsf display unit: {unit.stdout}{unit.stderr}")
 
 
+def check_filter_morph_blep() -> None:
+    """Filter Morph Osc PolyBLEP/BLAMP + Dither (scripts/smoke_filter_morph_blep.mjs)."""
+    unit = subprocess.run(["node", str(ROOT / "scripts" / "smoke_filter_morph_blep.mjs")], capture_output=True, text=True)
+    require(unit.returncode == 0, f"filter morph blep: {unit.stdout}{unit.stderr}")
+
+
 def check_page_patch_index_covers_all_patches() -> None:
     """Every patches/**/*.json must be in patches/index.json, and every live
     demo must have its bare /<name> route, or the site 404s it."""
@@ -18544,6 +18550,7 @@ def main() -> None:
     check_mini_perform_view()
     check_color_rows()
     check_dsf_face_spectrum()
+    check_filter_morph_blep()
     check_pulse_train_fade()
     run_smoke(args.port, Path(args.manifest).resolve())
     check_display_draws_live(Path(args.manifest).resolve())

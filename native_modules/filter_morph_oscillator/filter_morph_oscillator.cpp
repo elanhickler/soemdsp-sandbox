@@ -1,9 +1,10 @@
 // soemdsp-native-module: filter_morph_oscillator
-// soemdsp-native-label: FilterMorph Oscillator
+// soemdsp-native-label: Filter Morph Osc
 // soemdsp-native-target: filterMorphOscillator
 // soemdsp-native-kind: oscillator
 //
-// Naive source waves + Robin Schmidt ±1-sample cycle dither (same short/mid/long
+// PolyBLEP on jumps / PolyBLAMP on corners (one-sample latency, events located
+// on the true effective phase incl. dither + Phase offset, v5). Naive source waves + Robin Schmidt ±1-sample cycle dither (same short/mid/long
 // pick as Ellipsoid / Supersaw Square AA). Then pitch-tracking Passive-style
 // one-pole cascade (Poles 1…4) + fundamental makeup.
 // Morph 0 = dark (fc ≈ 0.5×f0). Morph 1 = open (fc ≈ 100×f0, Nyquist clamp).
@@ -31,6 +32,10 @@ struct FilterMorphState {
   int ditherWasOn;
   unsigned int rng;
   unsigned int seed;  // module Seed (seed_param_u32)
+  double lastQ;       // previous effective phase (wrapped)
+  double lastOff;     // previous dither + phase offset
+  double held;        // sample n-1 awaiting its BLEP/BLAMP share
+  int primed;
 };
 
 static FilterMorphState gPool[kMaxInstances];
@@ -202,6 +207,26 @@ static double source_wave(double ph, int wave) {
   }
 }
 
+// Discontinuities per waveform in its own phase (turns): location, value jump
+// (after - before) and slope change in output units per turn.
+struct Edge { double at, jump, kink; };
+
+static int wave_edges(int wave, Edge* e) {
+  const double k8pi = 8.0 * 3.14159265358979323846;
+  switch (wave) {
+    case 1: e[0] = {0.0, -2.0, 0.0}; return 1;                         // Ramp
+    case 2: e[0] = {0.25, 0.0, -8.0}; e[1] = {0.75, 0.0, 8.0}; return 2; // Trisaw (0.5)
+    case 3: e[0] = {0.0, 0.0, 8.0}; e[1] = {0.5, 0.0, -8.0}; return 2;  // Triangle
+    case 4: e[0] = {0.25, 2.0, 0.0}; e[1] = {0.75, -2.0, 0.0}; return 2; // Center Square
+    case 5: {
+      const double pw = morph_width01(0.5);
+      e[0] = {0.0, 2.0, 0.0}; e[1] = {pw, -2.0, 0.0}; return 2;         // Pulse
+    }
+    case 6: e[0] = {0.0, 0.0, k8pi}; e[1] = {0.5, 0.0, k8pi}; return 2; // Asym Sine
+    default: e[0] = {0.0, 2.0, 0.0}; return 1;                          // Saw
+  }
+}
+
 static double process_one(
   FilterMorphState& s,
   double frequencyHz,
@@ -211,6 +236,7 @@ static double process_one(
   double waveform,
   double phaseOffset,
   double amplitude,
+  double dither,
   bool doReset
 ) {
   const double rate = sampleRate > 1.0 ? sampleRate : 44100.0;
@@ -220,6 +246,7 @@ static double process_one(
   if (wave == 6) increment *= 0.5;
   const double po = wrap01_phase(phaseOffset);
   const int nPoles = clamp_poles(poles);
+  const bool ditherOn = dither >= 0.5;
 
   if (doReset) {
     s.phase = 0.0;
@@ -234,7 +261,7 @@ static double process_one(
   s.phase = wrap01_phase(next);
 
   const double absInc = increment < 0.0 ? -increment : increment;
-  if (!(absInc > 1.0e-15)) {
+  if (!ditherOn || !(absInc > 1.0e-15)) {
     s.ditherOffset = 0.0;
     s.ditherWasOn = 0;
   } else if (doReset || s.ditherWasOn == 0 || wrap) {
@@ -242,8 +269,44 @@ static double process_one(
     s.ditherWasOn = 1;
   }
 
-  const double ph = wrap01_phase(s.phase + po + s.ditherOffset);
+  // Effective phase actually played this sample, and the true distance it
+  // moved since the last one (increment + dither step + Phase offset step).
+  const double off = po + s.ditherOffset;
+  const double ph = wrap01_phase(s.phase + off);
   double y = source_wave(ph, wave);
+
+  if (!s.primed || doReset) {
+    s.primed = 1;
+    s.held = y;
+  } else {
+    double dOff = off - s.lastOff;
+    dOff -= dsp_floor(dOff + 0.5);
+    const double dq = increment + dOff;
+    const double adq = dq < 0.0 ? -dq : dq;
+    if (adq > 1.0e-12) {
+      Edge e[2];
+      const int ne = wave_edges(wave, e);
+      const double q0 = s.lastQ;
+      for (int i = 0; i < ne; i++) {
+        // Crossings of e[i].at between q0 and q0 + dq (either direction).
+        double c = dq > 0.0 ? wrap01_phase(e[i].at - q0) : wrap01_phase(q0 - e[i].at);
+        if (c <= 0.0) c = 1.0;
+        for (; c <= adq; c += 1.0) {
+          const double d = (adq - c) / adq;  // fraction of this sample since the edge
+          const double h = dq > 0.0 ? e[i].jump : -e[i].jump;
+          const double m = e[i].kink * adq;
+          const double a = 1.0 - d;
+          s.held += h * (d * d * 0.5) + m * (d * d * d) * (1.0 / 6.0);
+          y += -h * (a * a * 0.5) + m * (a * a * a) * (1.0 / 6.0);
+        }
+      }
+    }
+    const double out = s.held;
+    s.held = y;
+    y = out;
+  }
+  s.lastQ = ph;
+  s.lastOff = off;
 
   double m = morph;
   if (!(m == m) || m < 0.0) m = 0.0;
@@ -289,6 +352,10 @@ extern "C" int soemdsp_filter_morph_oscillator_create() {
       // Seed 0 until the host's Seed arrives via soemdsp_filter_morph_oscillator_set_seed.
       s.seed = 0u;
       s.rng = dither_rng_from_seed(0u);
+      s.lastQ = 0.0;
+      s.lastOff = 0.0;
+      s.held = 0.0;
+      s.primed = 0;
       s.active = true;
       return i + 1;
     }
@@ -310,6 +377,7 @@ extern "C" void soemdsp_filter_morph_oscillator_reset(int handle, double phaseOf
   s.ditherOffset = 0.0;
   s.ditherWasOn = 0;
   s.rng = dither_rng_from_seed(s.seed);
+  s.primed = 0;
   clear_lp(s);
 }
 
@@ -331,7 +399,8 @@ extern "C" double soemdsp_filter_morph_oscillator_sample(
   double waveform,
   double phaseOffset,
   double amplitude,
-  double reset
+  double reset,
+  double dither
 ) {
   if (handle < 1 || handle > kMaxInstances) return 0.0;
   FilterMorphState& s = gPool[handle - 1];
@@ -340,10 +409,10 @@ extern "C" double soemdsp_filter_morph_oscillator_sample(
   const bool hit = rv > 0.0 && s.lastReset <= 0.0;
   s.lastReset = rv;
   return process_one(
-    s, frequencyHz, sampleRate, morph, poles, waveform, phaseOffset, amplitude, hit
+    s, frequencyHz, sampleRate, morph, poles, waveform, phaseOffset, amplitude, dither, hit
   );
 }
 
 extern "C" int soemdsp_filter_morph_oscillator_version() {
-  return 4;
+  return 5;
 }
