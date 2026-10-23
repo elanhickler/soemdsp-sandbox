@@ -1134,15 +1134,11 @@ function nodeGraphGlGraphPushWire(wires, from, to, color, zoom, wire, squareFrom
   }
   // Wire colour (single source): the IN (destination) jack decides it, via
   // nodeGraphPortWireColor (mod inlet purple, ...); source colour only when
-  // there is no destination colour (drag / port-connection previews). Param
-  // wires keep the start/end pair (both the destination colour) so the
-  // gradient dip still darkens their middle.
+  // there is no destination colour (drag / port-connection previews). One
+  // solid colour per wire, end dots included.
   const rgba = nodeGraphGlGraphCssColor(toColor || color);
-  const rgbaFrom = rgba;
-  const rgbaTo = rgba;
   wires.push({
-    rgba: rgbaFrom,
-    rgbaEnd: railFrom || railTo ? rgbaTo : null,
+    rgba,
     kind: kind || "",
     style: typeof normalizeNodeGraphWireType === "function"
       ? normalizeNodeGraphWireType(wire?.wireType)
@@ -1153,8 +1149,8 @@ function nodeGraphGlGraphPushWire(wires, from, to, color, zoom, wire, squareFrom
     // round end dot where it meets the box.
     param: railFrom === true || railTo === true,
     dots: [
-      { x: ax, y: ay, rgba: rgbaFrom, square: !railFrom && squareFrom === true, param: railFrom === true },
-      { x: bx, y: by, rgba: rgbaTo, square: !railTo && squareTo === true, param: railTo === true },
+      { x: ax, y: ay, rgba, square: !railFrom && squareFrom === true, param: railFrom === true },
+      { x: bx, y: by, rgba, square: !railTo && squareTo === true, param: railTo === true },
     ],
   });
 }
@@ -1543,8 +1539,6 @@ function nodeGraphGlGraphPresent(options = {}) {
     nodeGraphGlGraphState.paramThick = Number.parseFloat(style.getPropertyValue("--node-param-wire-thickness")) || 0.5;
     const paramDot = Number.parseFloat(style.getPropertyValue("--node-param-wire-dot-size"));
     nodeGraphGlGraphState.paramDot = Number.isFinite(paramDot) ? paramDot : 2.012454;
-    const gradSpan = Number.parseFloat(style.getPropertyValue("--node-wire-gradient-span"));
-    nodeGraphGlGraphState.gradSpan = Number.isFinite(gradSpan) ? Math.min(1, Math.max(0, gradSpan)) : 1;
     const wireDip = Number.parseFloat(style.getPropertyValue("--node-wire-dip"));
     nodeGraphGlGraphState.wireDip = Number.isFinite(wireDip) ? Math.min(1, Math.max(0, wireDip)) : 0.35;
     const wireDipWidth = Number.parseFloat(style.getPropertyValue("--node-wire-dip-width"));
@@ -1634,7 +1628,8 @@ function nodeGraphGlGraphPresent(options = {}) {
     } else if (typeof nodeGraphGlLinesRibbon !== "function") {
       nodeGraphGlLinesPolyline(wireBatch, pts, stroke, feather, rgba, "butt");
     } else {
-      nodeGraphGlLinesRibbon(wireBatch, pts, stroke, feather, rgba, picked ? null : wire.rgbaEnd, nodeGraphGlGraphState.gradSpan ?? 1, nodeGraphGlGraphState.wireDip ?? 0.35, nodeGraphGlGraphState.wireDipWidth ?? 0.5);
+      // Param wires dip-darken their middle; selected wires stay plain.
+      nodeGraphGlLinesRibbon(wireBatch, pts, stroke, feather, rgba, wire.param && !picked ? (nodeGraphGlGraphState.wireDip ?? 0.35) : 0, nodeGraphGlGraphState.wireDipWidth ?? 0.5);
     }
     const dots = wire.dots || [];
     const selectedRgba = [0.95, 0.86, 0.45, 1];

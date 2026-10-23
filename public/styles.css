@@ -7741,7 +7741,6 @@ body.keyboard-debug-hidden .node-midi-keyboard-signal-bar {
   );
   /* Zoom-1 cable and trace widths. Both scale with the camera. */
   --node-wire-thickness: 2px;
-  --node-wire-gradient-span: 1;
   --node-wire-dip: 0.35;
   --node-wire-dip-width: 0.5;
   --node-trace-wire-thickness: 1px;

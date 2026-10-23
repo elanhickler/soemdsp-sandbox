@@ -954,11 +954,6 @@ function syncNodeUiDevSettingsHeaderControls() {
   sliderTextHost?.style.setProperty("--node-wire-thickness", `${wireThick}px`);
   const wireThickValue = document.getElementById("nodeUiDevWireThicknessValue");
   if (wireThickValue) wireThickValue.textContent = `${wireThick}px`;
-  // Param wire colour crossfade: share of the wire length it covers.
-  const wireGradSpan = Math.max(0, Math.min(1, nodeGraphFiniteNumber(document.getElementById("nodeUiDevWireGradientSpan")?.value, 1)));
-  sliderTextHost?.style.setProperty("--node-wire-gradient-span", String(wireGradSpan));
-  const wireGradSpanValue = document.getElementById("nodeUiDevWireGradientSpanValue");
-  if (wireGradSpanValue) wireGradSpanValue.textContent = String(wireGradSpan);
   // Param wire gradient dip: darkening depth / width at the crossfade midpoint.
   for (const [id, cssVar] of [["nodeUiDevWireDip", "--node-wire-dip"], ["nodeUiDevWireDipWidth", "--node-wire-dip-width"]]) {
     const v = Math.max(0, Math.min(1, nodeGraphFiniteNumber(document.getElementById(id)?.value, id === "nodeUiDevWireDip" ? 0.35 : 0.5)));

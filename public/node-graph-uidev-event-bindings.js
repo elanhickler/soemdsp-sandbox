@@ -189,7 +189,6 @@ async function bindNodeGraphUiDevSettingsEvents() {
     "nodeUiDevSliderTextLineHeight",
     "nodeUiDevSliderTextPadding",
     "nodeUiDevWireThickness",
-    "nodeUiDevWireGradientSpan",
     "nodeUiDevWireDip",
     "nodeUiDevWireDipWidth",
     "nodeUiDevParamWireThickness",

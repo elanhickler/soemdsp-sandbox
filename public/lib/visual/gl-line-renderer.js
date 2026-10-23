@@ -918,15 +918,16 @@ void main() {
 
   // One continuous ribbon. Neighboring pieces share the edge points, so a bend
   // has no end cap and no gap. `across` is the distance from the centerline.
-  // rgbaEnd set: per-vertex crossfade from rgba (first point) to rgbaEnd
-  // (last point) by arc length. span (0..1) is the share of the length the
-  // crossfade covers, centered on the middle: 1 = whole wire, 0 = hard switch.
-  function nodeGraphGlLinesRibbon(batch, points, halfPx, feather, rgba, rgbaEnd, span = 1, dip = 0, dipWidth = 0.5) {
+  // Solid rgba. dip > 0: per-vertex darkening of RGB around the middle of the
+  // arc length (cosine bell over half-width dipWidth / 2), alpha unchanged.
+  function nodeGraphGlLinesRibbon(batch, points, halfPx, feather, rgba, dip = 0, dipWidth = 0.5) {
     if (!batch || !points || points.length < 4) return;
-    // Gradient dip: colour is per vertex, so subdivide the polyline (straight
+    // Dip: colour is per vertex, so subdivide the polyline (straight
     // splits, shape unchanged) until there are >= ~128 vertices along it,
     // enough for the dip bell to read smooth.
-    if (rgbaEnd && dip > 0 && points.length / 2 < 128) {
+    const hw = dipWidth / 2;
+    const dipping = dip > 0 && hw > 0;
+    if (dipping && points.length / 2 < 128) {
       const segs = points.length / 2 - 1;
       const sub = Math.ceil(128 / segs);
       const dense = [];
@@ -978,7 +979,7 @@ void main() {
     const edge = [];
     for (let i = 0; i < count; i += 1) edge.push(miter(i));
     let ink = null;
-    if (rgbaEnd) {
+    if (dipping) {
       const arc = new Float32Array(count);
       for (let i = 1; i < count; i += 1) {
         arc[i] = arc[i - 1] + Math.hypot(points[i * 2] - points[(i - 1) * 2], points[i * 2 + 1] - points[(i - 1) * 2 + 1]);
@@ -986,24 +987,9 @@ void main() {
       const total = arc[count - 1] > 0 ? arc[count - 1] : 1;
       ink = [];
       for (let i = 0; i < count; i += 1) {
-        const u = arc[i] / total;
-        const t = span > 0 ? Math.min(1, Math.max(0, (u - 0.5) / span + 0.5)) : (u < 0.5 ? 0 : 1);
-        ink.push([0, 1, 2, 3].map((c) => {
-          const a = rgba[c] ?? 1;
-          return a + ((rgbaEnd[c] ?? 1) - a) * t;
-        }));
-        // Dip: darken RGB around the gradient midpoint (u = 0.5) with a
-        // cosine bell over half-width dipWidth / 2 (1 at centre, 0 and flat
-        // at the edges). Alpha unchanged.
-        const hw = dipWidth / 2;
-        if (dip > 0 && hw > 0) {
-          const d = Math.abs(u - 0.5) / hw;
-          if (d < 1) {
-            const m = 1 - dip * (0.5 + 0.5 * Math.cos(Math.PI * d));
-            const c = ink[ink.length - 1];
-            c[0] *= m; c[1] *= m; c[2] *= m;
-          }
-        }
+        const d = Math.abs(arc[i] / total - 0.5) / hw;
+        const m = d < 1 ? 1 - dip * (0.5 + 0.5 * Math.cos(Math.PI * d)) : 1;
+        ink.push([(rgba[0] ?? 1) * m, (rgba[1] ?? 1) * m, (rgba[2] ?? 1) * m, rgba[3] ?? 1]);
       }
     }
     for (let i = 0; i < count - 1; i += 1) {
