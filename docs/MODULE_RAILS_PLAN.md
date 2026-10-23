@@ -25,6 +25,7 @@ Source plan: Badger / Librarian "Ping Pong Delay Interface Plan" (2026-10-20), c
 - **No hover text**: the module `title` tooltip (store description) is removed.
 - Ping Pong Delay: explicit `shortName`s for the LFO / filter params (Styl, Rate, Amp, Vary, LPF, HPF).
 - Smoke: `scripts/smoke_module_rails.mjs` (all checks pass headless).
+- **Face row `span`** (Start / Center / End, 2026-10-22): kind `span` { lo, mid, hi } in `node-graph-module-face.js` (row kinds are listed in its header). Values on top, bar below; a press grabs the nearest handle, so it works by finger. An edge moves its end and pushes Center along; Center moves all three. First used by Pulse Explosion (with a `band` for Low / High Amplitude). Face releases record one undo step for every row kind. Smoke: `scripts/smoke_module_face_span.mjs`.
 
 ## Not yet built
 

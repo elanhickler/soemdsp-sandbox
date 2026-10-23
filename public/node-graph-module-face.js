@@ -7,7 +7,7 @@
 //
 // Row kinds (any module opts in with a `face` list in its definition):
 //   choices   { param, labels }                 inline buttons
-//   fraction  { num, den, mode, modeLabels, cell } musical division: n / d + Normal/Dotted/Triplet + one cell
+//   fraction  { num, den, mode, modeLabels, cell? } musical division: n / d + Normal/Dotted/Triplet (+ optional cell)
 //   lfoStyles { param, labels, seedParam }      buttons with waveform snips
 //   cells     { params: [[key, label]...], horizontal } vertical (or horizontal) fill sliders
 //   filter    { hpf, lpf, hpfPoles, lpfPoles }  HPF/LPF handles over the response curve
@@ -141,7 +141,7 @@ function nodeGraphModuleFaceWidgets(spec, fw, moduleEl = null) {
       // Proportional so the row reads at any width (rails take width, never add it).
       const slash = 8;
       const side = Math.round(Math.min(46, w * 0.27));
-      const cellW = Math.round(Math.min(50, w * 0.29));
+      const cellW = row.cell ? Math.round(Math.min(50, w * 0.29)) : 0;
       const numW = Math.max(10, (w - side - cellW - slash) / 2);
       out.push({ ...base, type: "step", param: row.num, x: 0, w: numW });
       out.push({ ...base, type: "slash", x: numW, w: slash });
@@ -150,7 +150,7 @@ function nodeGraphModuleFaceWidgets(spec, fw, moduleEl = null) {
         row, type: "subChoice", param: row.mode, index: i, label: row.modeLabels[i],
         x: numW * 2 + slash, w: side, y: sy, h: sh,
       }));
-      out.push({ ...base, type: "cell", param: row.cell[0], label: row.cell[1], bipolar: true, x: w - cellW, w: cellW });
+      if (row.cell) out.push({ ...base, type: "cell", param: row.cell[0], label: row.cell[1], bipolar: true, x: w - cellW, w: cellW });
     } else if (row.kind === "cells") {
       split(0, w, row.params.length).forEach(([x, cw], i) => out.push({
         ...base, type: "cell", param: row.params[i][0], label: row.params[i][1], horizontal: !!row.horizontal, x, w: cw,

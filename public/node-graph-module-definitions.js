@@ -6585,6 +6585,14 @@ const nodeGraphModuleDefinitions = (
 
   // Metronome: Mode Sync (master playhead, continuous on BPM change) / Free. BPM is this node only.
   transport: {
+    // Hand-written face (node-graph-module-face.js): Free / Sync, BPM | Beats, the musical division, Width | Amp.
+    face: [
+      { kind: "choices", param: "mode", labels: ["Free", "Sync"], h: 26 },
+      { kind: "cells", params: [["bpm", "BPM"], ["beats", "Beats"]], h: 40 },
+      { kind: "fraction", num: "timeNumerator", den: "timeDenominator", mode: "timingMode",
+        modeLabels: ["Normal", "Dotted", "Triplet"], h: 52 },
+      { kind: "cells", params: [["pulseWidth", "Width"], ["amplitude", "Amp"]], h: 40 },
+    ],
     planRole: "source",
     planFreeRun: true,
     displayModes: [
@@ -6747,6 +6755,13 @@ const nodeGraphModuleDefinitions = (
     ]
   },
   randomClock: {
+    // Hand-written face (node-graph-module-face.js): the Min / Max wait band, Duty | Trig, Level | Reset, seed.
+    face: [
+      { kind: "band", lo: "minSeconds", hi: "maxSeconds", label: "Wait", h: 34 },
+      { kind: "cells", params: [["duty", "Duty"], ["triggerTime", "Trig"]], h: 40 },
+      { kind: "cells", params: [["level", "Level"], ["threshold", "Reset"]], h: 40 },
+      { kind: "seed", param: "seed", h: 28 },
+    ],
     planRole: "processor",
     planFreeRun: true,
     // Trigger-rate module: the dot display reads far better than a trace
@@ -6836,6 +6851,10 @@ const nodeGraphModuleDefinitions = (
     parameters: []
   },
   shootingStarExplosion: {
+    // Hand-written face (node-graph-module-face.js): the Low / High amplitude band.
+    face: [
+      { kind: "band", lo: "lowRange", hi: "highRange", label: "Range", h: 34 },
+    ],
     planRole: "source",
     inputs: [],
     outputs: ["Pulse"],
@@ -8153,6 +8172,11 @@ const nodeGraphModuleDefinitions = (
     ]
   },
   range: {
+    // Hand-written face (node-graph-module-face.js): In and Out bands (ends may cross to invert).
+    face: [
+      { kind: "band", lo: "inLow", hi: "inHigh", label: "In", h: 34 },
+      { kind: "band", lo: "outLow", hi: "outHigh", label: "Out", h: 34 },
+    ],
     planRole: "processor",
     label: "Range",
     // Face shows the sent/effective Out value (not Trace). Ranges own the
@@ -15173,6 +15197,13 @@ const nodeGraphModuleDefinitions = (
   // RMS Stereo — Left/Right in, music RMS = (L+R)/2 (or the lone side). Face = RMS A.
   // Per-channel outs still computed in DSP; listed in hiddenOutputs until port show/hide ships.
   rmsStereo: {
+    // Hand-written face (node-graph-module-face.js): Window | Hold, Atk | Rel, the Min / Max dB zoom band, Threshold.
+    face: [
+      { kind: "cells", params: [["window", "Window"], ["peakHold", "Hold"]], h: 40 },
+      { kind: "cells", params: [["attack", "Atk"], ["release", "Rel"]], h: 40 },
+      { kind: "band", lo: "minDb", hi: "maxDb", label: "Zoom", h: 34 },
+      { kind: "cells", params: [["thresholdDb", "Threshold"]], horizontal: true, h: 32 },
+    ],
     planRole: "processor",
     planFreeRun: true,
     monitorSink: true,
