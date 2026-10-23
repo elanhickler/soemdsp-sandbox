@@ -135,7 +135,9 @@ extern "C" double soemdsp_basic_shape_sample(
 
   const bool resetEdge = gate_hit(rv, &s.lastReset);
   s.lastReset = rv;
-  if (resetEdge) s.phase = 0.0;
+  // Reset trigger: height h moves the phase |h| of the way to 0 (h < 0 the
+  // long way; |h| = 1 hard reset).
+  if (resetEdge) s.phase = soemdsp::math::partial_reset_phase(s.phase, 0.0, soemdsp::math::gate_hit_height(rv));
 
   const bool clockWise = (motionI == 0 || motionI == 2);
   const bool useSimTime = motionI >= 2;

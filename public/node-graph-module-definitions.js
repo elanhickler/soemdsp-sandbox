@@ -3470,6 +3470,7 @@ const nodeGraphModuleDefinitions = (
         settingsSchema: "basicShapeFace" },
     ],
     defaultDisplayMode: "face",
+    resetTrigger: true,
     inputs: ["Reset", "f"],
     inputLabels: {
       f: "ƒ" },
@@ -4703,6 +4704,7 @@ const nodeGraphModuleDefinitions = (
       { key: "Out", kind: "scalar" },
     ],
     // Warp / Phase / Amplitude are parameters (+ MOD) only — no twin CV jacks.
+    resetTrigger: true,
     inputs: ["Reset", "f"],
     inputLabels: { f: "ƒ" },
     inputAliases: { "ƒ": "f" },

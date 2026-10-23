@@ -153,9 +153,10 @@ extern "C" double soemdsp_sine_warp_sample(
   s.lastReset = rv;
 
   if (rising) {
-    // Hard Reset: zero carrier, PolyBLEP the output value jump.
+    // Reset trigger: height h moves the carrier |h| of the way to 0 (h < 0 the
+    // long way; |h| = 1 hard reset), PolyBLEP the output value jump.
     const double yBefore = s.lastY;
-    s.phase = 0.0;
+    s.phase = soemdsp::math::partial_reset_phase(s.phase, 0.0, soemdsp::math::gate_hit_height(rv));
     const double po = wrap01(phaseOffset);
     const double yNew = eval_wave(wrap01(s.phase + po), warp, waveMode, dt);
     s.syncJump = yNew - yBefore;
