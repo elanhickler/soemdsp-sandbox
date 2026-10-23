@@ -16409,7 +16409,7 @@ const nodeGraphModuleDefinitions = (
     // Hand-written face (node-graph-module-face.js): Rate | Smooth | Phase | Thresh, interp, polarity, Amp, seed.
     face: [
       { kind: "cells", params: [["sampleFrequency", "Rate"], ["smoothing", "Smooth"], ["phaseOffset", "Phase"], ["threshold", "Thresh", "bipolar"]], h: 52 },
-      { kind: "choices", param: "interpolate", labels: ["Lin", "Smooth", "QOut", "QIn", "Cos", "Hold"], h: 26 },
+      { kind: "choices", param: "interpolate", labels: ["Hold", "Lin", "Smooth", "QOut", "QIn", "Cos"], h: 26 },
       { kind: "choices", param: "polarity", labels: ["Bi", "Uni"], h: 26 },
       { kind: "cells", params: [["amplitude", "Amp"]], h: 40 },
       { kind: "seed", param: "seed", h: 28 },
@@ -16426,7 +16426,7 @@ const nodeGraphModuleDefinitions = (
     ],
     defaultDisplayMode: "waterfall",
     defaultDisplaySettings: {
-      barInk: "stroke" },
+      barInk: "stroke", historySeconds: 8 },
     stereoWaterfallPorts: { left: "Left Raw", right: "Right Raw" },
     displaySignals: [
       { key: "Left Raw", kind: "scalar" },
@@ -16447,7 +16447,7 @@ const nodeGraphModuleDefinitions = (
     outputLabels: { "Ext Out": "Ext Out" },
     outputs: ["Ext Out", "Left", "Right", "Trigger"],
     outputTooltips: {
-      Trigger: "1-sample pulse (0/1) on the exact sample a new value latches (Clock edge or Sample Freq tick).",
+      Trigger: "1-sample pulse on the exact sample a new value latches (Clock edge or Sample Freq tick). Level = the newly latched value (Ext Out if Ext In is wired, else Left), signed, after Polarity and Amplitude.",
     },
     digitalOutputs: ["Trigger"],
     parameters: [
@@ -16464,9 +16464,12 @@ const nodeGraphModuleDefinitions = (
         unit: "Hz" },
       {
         // Values match native sample_hold.cpp (v6): 0 Linear / 1 Smoothstep / 2 Quadratic Out / 3 Quadratic In / 4 Cosine / 5 Hold.
-        // Classic hold = Smoothing 0 (any curve) or Hold.
-        choices: ["Linear", "Smoothstep", "Quadratic Out", "Quadratic In", "Cosine", "Hold"],
-        defaultValue: "0",
+        // Classic hold = Smoothing 0 (any curve) or Hold. Display order Hold first;
+        // persisted by key, native ids unchanged (old numeric saves remap in patch-core).
+        choices: ["Hold", "Linear", "Smoothstep", "Quadratic Out", "Quadratic In", "Cosine"],
+        choiceKeys: ["hold", "linear", "smoothstep", "quadOut", "quadIn", "cosine"],
+        choiceIds: [5, 0, 1, 2, 3, 4],
+        defaultValue: "linear",
         displayChoices: true,
         divideChoicesVisibly: true,
         key: "interpolate",

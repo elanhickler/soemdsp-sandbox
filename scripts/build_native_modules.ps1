@@ -288,7 +288,7 @@ $modules = @(
     "soemdsp_slew_limiter_block_input_ptr", "soemdsp_slew_limiter_block_output_ptr",
     "soemdsp_slew_limiter_max_block_frames", "soemdsp_slew_limiter_version"
   ) }
-  @{ Name = "sample_hold"; Simd = $false; Exports = @("soemdsp_sample_hold_create", "soemdsp_sample_hold_destroy", "soemdsp_sample_hold_sample", "soemdsp_sample_hold_fired", "soemdsp_sample_hold_version") }
+  @{ Name = "sample_hold"; Simd = $false; Exports = @("soemdsp_sample_hold_create", "soemdsp_sample_hold_destroy", "soemdsp_sample_hold_sample", "soemdsp_sample_hold_fired", "soemdsp_sample_hold_held", "soemdsp_sample_hold_version") }
   @{ Name = "chord_memory"; Simd = $false; Exports = @("soemdsp_chord_memory_create", "soemdsp_chord_memory_destroy", "soemdsp_chord_memory_sample", "soemdsp_chord_memory_note2", "soemdsp_chord_memory_note3", "soemdsp_chord_memory_note4", "soemdsp_chord_memory_arp", "soemdsp_chord_memory_gate", "soemdsp_chord_memory_version") }
   @{ Name = "turing_machine"; Simd = $false; Exports = @("soemdsp_turing_machine_create", "soemdsp_turing_machine_destroy", "soemdsp_turing_machine_sample", "soemdsp_turing_machine_scale", "soemdsp_turing_machine_gate", "soemdsp_turing_machine_version") }
   @{ Name = "flower_child_envelope_follower"; Simd = $false; Exports = @("soemdsp_flower_child_envelope_follower_create", "soemdsp_flower_child_envelope_follower_destroy", "soemdsp_flower_child_envelope_follower_sample", "soemdsp_flower_child_envelope_follower_version") }

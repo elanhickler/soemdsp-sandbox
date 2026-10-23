@@ -74,6 +74,12 @@ function normalizeNodeGraphPatchParameter(type, key, value, metadata = null) {
       if (index >= 0 && index < legacy.length) value = legacy[index];
     }
   }
+  // Sample & Hold Interpolate persists by key (Hold listed first). Old patches stored the native id.
+  if (type === "sampleHold" && key === "interpolate") {
+    const rawInterp = String(value ?? "").trim();
+    const byId = ["linear", "smoothstep", "quadOut", "quadIn", "cosine", "hold"];
+    if (/^\d+$/.test(rawInterp) && Number(rawInterp) < byId.length) value = byId[Number(rawInterp)];
+  }
   // Robin Supersaw renamed Square -> Squircle. Old patches stored the key square.
   if (type === "robinSupersaw" && key === "waveform" && String(value ?? "").trim() === "square") {
     value = "squircle";

@@ -254,6 +254,13 @@ extern "C" double soemdsp_sample_hold_fired(int handle) {
   return gPool[handle - 1].fired;
 }
 
+// Bipolar target value latched by the most recent fire (the hold's peak:
+// the value the output reaches/glides to), before polarity/amplitude.
+extern "C" double soemdsp_sample_hold_held(int handle) {
+  if (handle < 1 || handle > kMaxInstances) return 0.0;
+  return gPool[handle - 1].held;
+}
+
 extern "C" int soemdsp_sample_hold_version() {
-  return 6; // Interpolate + Cosine, Hold (shared two_point_curves.h). was 5: external-Clock phase offset uses edge interval (offset lane latches)
+  return 7; // held() export for signed Trigger level. was 6: // Interpolate + Cosine, Hold (shared two_point_curves.h). was 5: external-Clock phase offset uses edge interval (offset lane latches)
 }

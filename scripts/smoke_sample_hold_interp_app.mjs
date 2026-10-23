@@ -59,7 +59,8 @@ function run({ interpolate, smoothing, external }) {
   const nodes = [sh, { id: "output", type: "output", params: {} }];
   const connections = [{ sourceNode: "sh", sourcePort: "Left", destinationNode: "output", destinationPort: "Mono" }];
   if (external) {
-    nodes.push({ id: "clk", type: "sampleHold", params: { sampleFrequency: 480 } });
+    // Uni: Trigger level = latched value (>= 0), so every pulse clears Clock Thresh 0.
+    nodes.push({ id: "clk", type: "sampleHold", params: { sampleFrequency: 480, polarity: 1 } });
     connections.push({ sourceNode: "clk", sourcePort: "Trigger", destinationNode: "sh", destinationPort: "Clock" });
   }
   p.setPlan({ nodes, connections, modulations: [], outputNode: "output" },
@@ -107,7 +108,7 @@ function glideStarts(arr) {
   for (let i = 2; i < arr.length; i += 1) if (arr[i] !== arr[i - 1] && arr[i - 1] === arr[i - 2]) s.push(i);
   return s;
 }
-const trigIdx = (T) => T.flatMap((v, i) => (v === 1 ? [i] : []));
+const trigIdx = (T) => T.flatMap((v, i) => (v !== 0 ? [i] : []));
 
 for (const external of [false, true]) {
   const clk = external ? "external Clock" : "internal Sample Freq";

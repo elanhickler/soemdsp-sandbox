@@ -73,17 +73,17 @@ for (let q = 0; q < 40; q += 1) {
 const analyse = (arr, label) => {
   let bad = 0, wide = 0, pulses = 0, missed = 0;
   for (let i = 0; i < arr.length; i += 1) {
-    if (arr[i] !== 0 && arr[i] !== 1) bad += 1;
-    if (arr[i] === 1) { pulses += 1; if (i && arr[i - 1] === 1) wide += 1; }
-    if (i && raw[i] !== raw[i - 1] && arr[i] !== 1) missed += 1;
+    if (!Number.isFinite(arr[i])) bad += 1;
+    if (arr[i] !== 0) { pulses += 1; if (i && arr[i - 1] !== 0) wide += 1; }
+    if (i && raw[i] !== raw[i - 1] && arr[i] === 0) missed += 1;
   }
   check(!bad && !wide && !missed && pulses >= 50 && pulses <= 52,
-    `${label}: 1-sample 0/1 pulses on every latch (pulses=${pulses} wide=${wide} bad=${bad} missed=${missed})`);
+    `${label}: 1-sample pulses on every latch (level = latched value) (pulses=${pulses} wide=${wide} bad=${bad} missed=${missed})`);
 };
 analyse(trig, "S&H Trigger port");
 // Gain has its own level, so compare its output against Trigger * (gain level):
-// non-zero exactly on the latch samples, one sample wide, same height every pulse.
-const gNorm = (() => { const k = gOut.find((v) => v !== 0) || 1; return gOut.map((v) => v / k); })();
+// non-zero exactly on the latch samples, one sample wide, level follows the latched value.
+const gNorm = gOut;
 console.log(`     Gain pulse height ${(gOut.find((v) => v !== 0) || 0).toFixed(6)}`);
 analyse(gNorm, "Gain fed by S&H Trigger (normalised by Gain level)");
 console.log(failures ? `\n${failures} FAILED` : "\nsmoke_sample_hold_trigger_app ok");
