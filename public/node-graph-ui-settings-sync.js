@@ -961,26 +961,14 @@ function syncNodeUiDevSettingsHeaderControls() {
   if (wireGradSpanValue) wireGradSpanValue.textContent = String(wireGradSpan);
   // Param wire gradient dip: darkening depth / width at the crossfade midpoint.
   for (const [id, cssVar] of [["nodeUiDevWireDip", "--node-wire-dip"], ["nodeUiDevWireDipWidth", "--node-wire-dip-width"]]) {
-    const v = Math.max(0, Math.min(1, nodeGraphFiniteNumber(document.getElementById(id)?.value, 0.5)));
-    sliderTextHost?.style.setProperty(cssVar, String(v));
-    const out = document.getElementById(id + "Value");
-    if (out) out.textContent = String(v);
-  }
-  // Param wire thickness taper: start / end multipliers + middle bulge/pinch.
-  for (const [id, cssVar, lo, hi, fb] of [
-    ["nodeUiDevWireThickStart", "--node-wire-thick-start", 0, 4, 1],
-    ["nodeUiDevWireThickEnd", "--node-wire-thick-end", 0, 4, 1],
-    ["nodeUiDevWireThickDip", "--node-wire-thick-dip", -1, 1, 0],
-    ["nodeUiDevWireThickWidth", "--node-wire-thick-width", 0, 1, 0.5],
-  ]) {
-    const v = Math.max(lo, Math.min(hi, nodeGraphFiniteNumber(document.getElementById(id)?.value, fb)));
+    const v = Math.max(0, Math.min(1, nodeGraphFiniteNumber(document.getElementById(id)?.value, id === "nodeUiDevWireDip" ? 0.35 : 0.5)));
     sliderTextHost?.style.setProperty(cssVar, String(v));
     const out = document.getElementById(id + "Value");
     if (out) out.textContent = String(v);
   }
   // Param wires (ending on a rail IO box) keep their own width and end dot.
   const paramWireThick = Math.max(0.5, Math.min(6, nodeGraphFiniteNumber(document.getElementById("nodeUiDevParamWireThickness")?.value, 0.5)));
-  const paramWireDot = Math.max(0, Math.min(12, nodeGraphFiniteNumber(document.getElementById("nodeUiDevParamWireDotSize")?.value, 0.267)));
+  const paramWireDot = Math.max(0, Math.min(12, nodeGraphFiniteNumber(document.getElementById("nodeUiDevParamWireDotSize")?.value, 2.012454)));
   sliderTextHost?.style.setProperty("--node-param-wire-thickness", `${paramWireThick}px`);
   sliderTextHost?.style.setProperty("--node-param-wire-dot-size", `${paramWireDot}px`);
   const paramWireThickValue = document.getElementById("nodeUiDevParamWireThicknessValue");

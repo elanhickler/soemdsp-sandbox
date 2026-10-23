@@ -7742,16 +7742,12 @@ body.keyboard-debug-hidden .node-midi-keyboard-signal-bar {
   /* Zoom-1 cable and trace widths. Both scale with the camera. */
   --node-wire-thickness: 2px;
   --node-wire-gradient-span: 1;
-  --node-wire-dip: 0.5;
+  --node-wire-dip: 0.35;
   --node-wire-dip-width: 0.5;
-  --node-wire-thick-start: 1;
-  --node-wire-thick-end: 1;
-  --node-wire-thick-dip: 0;
-  --node-wire-thick-width: 0.5;
   --node-trace-wire-thickness: 1px;
   /* Param wires (ending on a rail IO box): UIDEV param wire thickness / end dot. */
   --node-param-wire-thickness: 0.5px;
-  --node-param-wire-dot-size: 0.267px;
+  --node-param-wire-dot-size: 2.012454px;
   /*
    * Signal jack cell:
    *   width  = half-slot (inward half fits)

@@ -1132,13 +1132,14 @@ function nodeGraphGlGraphPushWire(wires, from, to, color, zoom, wire, squareFrom
   if (!Number.isFinite(ax) || !Number.isFinite(ay) || !Number.isFinite(bx) || !Number.isFinite(by)) {
     return;
   }
-  // Both end dots take the wire's own (source outlet) colour.
-  const rgba = nodeGraphGlGraphCssColor(color);
-  // A param wire (an end on a rail) crossfades along its length from the
-  // source outlet colour to the destination jack colour, both from
-  // nodeGraphPortWireColor (mod inlet purple, Additive CMYK cyan, ...).
+  // Wire colour (single source): the IN (destination) jack decides it, via
+  // nodeGraphPortWireColor (mod inlet purple, ...); source colour only when
+  // there is no destination colour (drag / port-connection previews). Param
+  // wires keep the start/end pair (both the destination colour) so the
+  // gradient dip still darkens their middle.
+  const rgba = nodeGraphGlGraphCssColor(toColor || color);
   const rgbaFrom = rgba;
-  const rgbaTo = (railFrom || railTo) && toColor ? nodeGraphGlGraphCssColor(toColor) : rgba;
+  const rgbaTo = rgba;
   wires.push({
     rgba: rgbaFrom,
     rgbaEnd: railFrom || railTo ? rgbaTo : null,
@@ -1541,23 +1542,13 @@ function nodeGraphGlGraphPresent(options = {}) {
     nodeGraphGlGraphState.traceThick = Number.parseFloat(style.getPropertyValue("--node-trace-wire-thickness")) || 1;
     nodeGraphGlGraphState.paramThick = Number.parseFloat(style.getPropertyValue("--node-param-wire-thickness")) || 0.5;
     const paramDot = Number.parseFloat(style.getPropertyValue("--node-param-wire-dot-size"));
-    nodeGraphGlGraphState.paramDot = Number.isFinite(paramDot) ? paramDot : 0.267;
+    nodeGraphGlGraphState.paramDot = Number.isFinite(paramDot) ? paramDot : 2.012454;
     const gradSpan = Number.parseFloat(style.getPropertyValue("--node-wire-gradient-span"));
     nodeGraphGlGraphState.gradSpan = Number.isFinite(gradSpan) ? Math.min(1, Math.max(0, gradSpan)) : 1;
     const wireDip = Number.parseFloat(style.getPropertyValue("--node-wire-dip"));
-    nodeGraphGlGraphState.wireDip = Number.isFinite(wireDip) ? Math.min(1, Math.max(0, wireDip)) : 0.5;
+    nodeGraphGlGraphState.wireDip = Number.isFinite(wireDip) ? Math.min(1, Math.max(0, wireDip)) : 0.35;
     const wireDipWidth = Number.parseFloat(style.getPropertyValue("--node-wire-dip-width"));
     nodeGraphGlGraphState.wireDipWidth = Number.isFinite(wireDipWidth) ? Math.min(1, Math.max(0, wireDipWidth)) : 0.5;
-    const cssNum = (name, fallback, lo, hi) => {
-      const v = Number.parseFloat(style.getPropertyValue(name));
-      return Number.isFinite(v) ? Math.min(hi, Math.max(lo, v)) : fallback;
-    };
-    nodeGraphGlGraphState.wireThick = {
-      start: cssNum("--node-wire-thick-start", 1, 0, 4),
-      end: cssNum("--node-wire-thick-end", 1, 0, 4),
-      dip: cssNum("--node-wire-thick-dip", 0, -1, 1),
-      width: cssNum("--node-wire-thick-width", 0.5, 0, 1),
-    };
   }
   // Widths are zoom-1 px. The line shader scales them by the live camera,
   // and the cable fade stays 2 screen px. Traces are a 2px stroke that scales.
@@ -1643,7 +1634,7 @@ function nodeGraphGlGraphPresent(options = {}) {
     } else if (typeof nodeGraphGlLinesRibbon !== "function") {
       nodeGraphGlLinesPolyline(wireBatch, pts, stroke, feather, rgba, "butt");
     } else {
-      nodeGraphGlLinesRibbon(wireBatch, pts, stroke, feather, rgba, picked ? null : wire.rgbaEnd, nodeGraphGlGraphState.gradSpan ?? 1, nodeGraphGlGraphState.wireDip ?? 0.5, nodeGraphGlGraphState.wireDipWidth ?? 0.5, wire.param ? nodeGraphGlGraphState.wireThick : null);
+      nodeGraphGlLinesRibbon(wireBatch, pts, stroke, feather, rgba, picked ? null : wire.rgbaEnd, nodeGraphGlGraphState.gradSpan ?? 1, nodeGraphGlGraphState.wireDip ?? 0.35, nodeGraphGlGraphState.wireDipWidth ?? 0.5);
     }
     const dots = wire.dots || [];
     const selectedRgba = [0.95, 0.86, 0.45, 1];

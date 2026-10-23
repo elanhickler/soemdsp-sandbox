@@ -921,15 +921,12 @@ void main() {
   // rgbaEnd set: per-vertex crossfade from rgba (first point) to rgbaEnd
   // (last point) by arc length. span (0..1) is the share of the length the
   // crossfade covers, centered on the middle: 1 = whole wire, 0 = hard switch.
-  function nodeGraphGlLinesRibbon(batch, points, halfPx, feather, rgba, rgbaEnd, span = 1, dip = 0, dipWidth = 0.5, thick = null) {
+  function nodeGraphGlLinesRibbon(batch, points, halfPx, feather, rgba, rgbaEnd, span = 1, dip = 0, dipWidth = 0.5) {
     if (!batch || !points || points.length < 4) return;
     // Gradient dip: colour is per vertex, so subdivide the polyline (straight
     // splits, shape unchanged) until there are >= ~128 vertices along it,
     // enough for the dip bell to read smooth.
-    // thick: { start, end, dip, width } half-width multipliers along the wire
-    // (start..end lerp, times 1 + dip * cosine bell at u = 0.5).
-    const taper = thick && (thick.start !== 1 || thick.end !== 1 || (thick.dip && thick.width > 0)) ? thick : null;
-    if (((rgbaEnd && dip > 0) || taper) && points.length / 2 < 128) {
+    if (rgbaEnd && dip > 0 && points.length / 2 < 128) {
       const segs = points.length / 2 - 1;
       const sub = Math.ceil(128 / segs);
       const dense = [];
@@ -981,25 +978,6 @@ void main() {
     const edge = [];
     for (let i = 0; i < count; i += 1) edge.push(miter(i));
     let ink = null;
-    let widthAt = null;
-    if (taper) {
-      const arcT = new Float32Array(count);
-      for (let i = 1; i < count; i += 1) {
-        arcT[i] = arcT[i - 1] + Math.hypot(points[i * 2] - points[(i - 1) * 2], points[i * 2 + 1] - points[(i - 1) * 2 + 1]);
-      }
-      const totalT = arcT[count - 1] > 0 ? arcT[count - 1] : 1;
-      const hwT = (taper.width || 0) / 2;
-      widthAt = new Float32Array(count);
-      for (let i = 0; i < count; i += 1) {
-        const u = arcT[i] / totalT;
-        let w = taper.start + (taper.end - taper.start) * u;
-        if (taper.dip && hwT > 0) {
-          const d = Math.abs(u - 0.5) / hwT;
-          if (d < 1) w *= 1 + taper.dip * (0.5 + 0.5 * Math.cos(Math.PI * d));
-        }
-        widthAt[i] = Math.max(0.02, w);
-      }
-    }
     if (rgbaEnd) {
       const arc = new Float32Array(count);
       for (let i = 1; i < count; i += 1) {
@@ -1036,30 +1014,27 @@ void main() {
       if (x0 === x1 && y0 === y1) continue;
       const n0 = edge[i];
       const n1 = edge[i + 1];
-      const w0 = widthAt ? widthAt[i] : 1;
-      const w1 = widthAt ? widthAt[i + 1] : 1;
       const half = Math.max(0, halfPx) * (batch.camera ? 1 : k);
       const fade = Math.max(0, feather) * (batch.camera ? 1 : k);
       if (batch.camera) {
         const c0 = ink ? ink[i] : rgba;
         const c1 = ink ? ink[i + 1] : rgba;
-        const end = (x, y, n, side, c, w) => push(batch, x, y, n[0], n[1], 0, half * w, fade, c, side > 0 ? 3 : 3.5);
-        end(x0, y0, n0, 1, c0, w0); end(x0, y0, n0, -1, c0, w0); end(x1, y1, n1, 1, c1, w1);
-        end(x0, y0, n0, -1, c0, w0); end(x1, y1, n1, -1, c1, w1); end(x1, y1, n1, 1, c1, w1);
+        const end = (x, y, n, side, c) => push(batch, x, y, n[0], n[1], 0, half, fade, c, side > 0 ? 3 : 3.5);
+        end(x0, y0, n0, 1, c0); end(x0, y0, n0, -1, c0); end(x1, y1, n1, 1, c1);
+        end(x0, y0, n0, -1, c0); end(x1, y1, n1, -1, c1); end(x1, y1, n1, 1, c1);
         continue;
       }
-      const rk0 = (Math.max(0, halfPx) * w0 + Math.max(0, feather)) * k;
-      const rk1 = (Math.max(0, halfPx) * w1 + Math.max(0, feather)) * k;
+      const rk = r * k;
       const quad = [
-        [x0 + n0[0] * rk0, y0 + n0[1] * rk0, rk0, w0],
-        [x0 - n0[0] * rk0, y0 - n0[1] * rk0, -rk0, w0],
-        [x1 + n1[0] * rk1, y1 + n1[1] * rk1, rk1, w1],
-        [x1 - n1[0] * rk1, y1 - n1[1] * rk1, -rk1, w1],
+        [x0 + n0[0] * rk, y0 + n0[1] * rk, rk],
+        [x0 - n0[0] * rk, y0 - n0[1] * rk, -rk],
+        [x1 + n1[0] * rk, y1 + n1[1] * rk, rk],
+        [x1 - n1[0] * rk, y1 - n1[1] * rk, -rk],
       ];
       const tri = [0, 1, 2, 1, 3, 2];
       for (let t = 0; t < tri.length; t += 1) {
         const v = quad[tri[t]];
-        push(batch, v[0], v[1], 0, v[2], 0, half * v[3], fade, ink ? ink[tri[t] < 2 ? i : i + 1] : rgba, 1);
+        push(batch, v[0], v[1], 0, v[2], 0, half, fade, ink ? ink[tri[t] < 2 ? i : i + 1] : rgba, 1);
       }
     }
   }

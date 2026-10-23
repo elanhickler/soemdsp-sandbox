@@ -192,10 +192,6 @@ async function bindNodeGraphUiDevSettingsEvents() {
     "nodeUiDevWireGradientSpan",
     "nodeUiDevWireDip",
     "nodeUiDevWireDipWidth",
-    "nodeUiDevWireThickStart",
-    "nodeUiDevWireThickEnd",
-    "nodeUiDevWireThickDip",
-    "nodeUiDevWireThickWidth",
     "nodeUiDevParamWireThickness",
     "nodeUiDevParamWireDotSize",
   ]) {
