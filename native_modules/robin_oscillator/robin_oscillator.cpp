@@ -591,3 +591,12 @@ extern "C" const char* soemdsp_robin_oscillator_metadata_json() {
 extern "C" int soemdsp_robin_oscillator_metadata_json_size() {
   return sizeof(kMetadataJson) - 1;
 }
+
+// Reset trigger below full height: move the phase |h| of the way to where a
+// full Reset puts it (h < 0 the long way round); the cycle-length dither keeps its stream.
+// Full-height hits (|h| = 1) use the full reset above.
+extern "C" void soemdsp_robin_oscillator_partial_reset(int handle, double h) {
+  RobinOscState* state = stateForHandle(handle);
+  if (!state) return;
+  state->phase = soemdsp::math::partial_reset_phase(state->phase, 0.0, h);
+}

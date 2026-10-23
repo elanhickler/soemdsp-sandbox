@@ -160,3 +160,12 @@ extern "C" double soemdsp_wow_and_flutter_out(int handle) {
 extern "C" int soemdsp_wow_and_flutter_version() {
   return 2;
 }
+
+// Reset trigger below full height: move the phase |h| of the way to where a
+// full Reset puts it (h < 0 the long way round); nothing else is cleared.
+// Full-height hits (|h| = 1) use the full reset above.
+extern "C" void soemdsp_wow_and_flutter_partial_reset(int handle, double h, double phaseOffset) {
+  if (handle < 1 || handle > kMaxInstances) return;
+  WowAndFlutterState& s = gPool[handle - 1];
+  s.wowPhase = soemdsp::math::partial_reset_phase(s.wowPhase, wrap01(safe(phaseOffset)), h);
+}

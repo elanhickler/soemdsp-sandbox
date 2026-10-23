@@ -231,3 +231,13 @@ extern "C" double soemdsp_softpop2_display_info(int handle, int which) {
 extern "C" int soemdsp_softpop2_version() { return 7; }
 extern "C" const char* soemdsp_softpop2_metadata_json() { return kMetadataJson; }
 extern "C" int soemdsp_softpop2_metadata_json_size() { return sizeof(kMetadataJson) - 1; }
+
+// Reset trigger below full height: move the phase |h| of the way to where a
+// full Reset puts it (h < 0 the long way round); nothing else is cleared.
+// Full-height hits (|h| = 1) use the full reset above.
+extern "C" void soemdsp_softpop2_partial_reset(int handle, double h) {
+  if (State* s = live(handle)) {
+    s->phase = soemdsp::math::partial_reset_phase(s->phase, 0.0, h);
+    s->phaseR = soemdsp::math::partial_reset_phase(s->phaseR, 0.0, h);
+  }
+}

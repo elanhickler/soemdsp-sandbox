@@ -552,3 +552,13 @@ extern "C" int soemdsp_hypersaw2_max_voices() {
 extern "C" int soemdsp_hypersaw2_version() {
   return 51; // Distance source defaults; random steps ×2 so Speed Hz matches Fixed
 }
+
+// Reset trigger below full height: move the phase |h| of the way to where a
+// full Reset puts it (h < 0 the long way round); voice streams keep running (no reseed).
+// Full-height hits (|h| = 1) use the full reset above.
+extern "C" void soemdsp_hypersaw2_partial_reset(int handle, double h) {
+  if (handle < 1 || handle > kMaxInstances) return;
+  Hypersaw2State& s = gPool[handle - 1];
+  s.masterPhase = soemdsp::math::partial_reset_phase(s.masterPhase, 0.0, h);
+  s.vibOscPhase = soemdsp::math::partial_reset_phase(s.vibOscPhase, 0.0, h);
+}

@@ -1215,6 +1215,7 @@ const nodeGraphModuleDefinitions = (
     ],
     defaultDisplayMode: "face",
     // Phase is the parameter (+ MOD) only — no Phase CV jack twin.
+    resetTrigger: true,
     inputs: ["Reset", "f"],
     inputLabels: {
       f: "ƒ" },
@@ -1326,6 +1327,7 @@ const nodeGraphModuleDefinitions = (
         settingsSchema: "sinCosFace" },
     ],
     defaultDisplayMode: "face",
+    resetTrigger: true,
     inputs: ["Reset", "f"],
     inputLabels: {
       f: "ƒ" },
@@ -1484,6 +1486,7 @@ const nodeGraphModuleDefinitions = (
     displaySignals: [
       { key: "Wave", kind: "scalar" },
     ],
+    resetTrigger: true,
     inputs: ["Reset", "f"],
     inputLabels: { f: "ƒ" },
     inputAliases: { "ƒ": "f" },
@@ -4469,6 +4472,7 @@ const nodeGraphModuleDefinitions = (
       sourceSync: true,
     },
     // Morph / Phase are parameters (+ MOD), not SIGNAL IN jacks.
+    resetTrigger: true,
     inputs: ["Reset", "f"],
     inputLabels: { f: "ƒ" },
     inputAliases: { "ƒ": "f" },
@@ -5571,6 +5575,7 @@ const nodeGraphModuleDefinitions = (
     displaySignals: [
       { key: "Left", kind: "scalar" },
     ],
+    resetTrigger: true,
     inputs: ["Reset", "f"],
     inputLabels: { f: "ƒ" },
     inputAliases: { "ƒ": "f" },
@@ -5855,6 +5860,7 @@ const nodeGraphModuleDefinitions = (
       { key: "Wave Raw", label: "Wave", kind: "scalar" },
     ],
     digitalOutputs: ["isIdle"],
+    resetTrigger: true,
     inputs: ["Gate", "Reset"],
     outputChannels: { Wave: "green", isIdle: "black" },
     outputLabels: { isIdle: "isIdle" },
@@ -6041,6 +6047,7 @@ const nodeGraphModuleDefinitions = (
     displaySignals: [
       { key: "Out", kind: "scalar" },
     ],
+    resetTrigger: true,
     inputs: ["Reset"],
     outputs: ["Out", "Left", "Right"],
     parameters: [
@@ -10450,6 +10457,7 @@ const nodeGraphModuleDefinitions = (
       { key: "softpopFace", label: "Softpop", renderer: "softpopFace", settingsSchema: "softpopFace" },
     ],
     defaultDisplayMode: "softpopFace",
+    resetTrigger: true,
     inputs: ["Reset", "f"],
     inputLabels: { f: "ƒ" },
     inputAliases: { "ƒ": "f" },
@@ -10738,6 +10746,7 @@ const nodeGraphModuleDefinitions = (
       { key: "softpopFace", label: "Softpop", renderer: "softpopFace", settingsSchema: "softpopFace" },
     ],
     defaultDisplayMode: "softpopFace",
+    resetTrigger: true,
     inputs: ["Reset", "f"],
     inputLabels: { f: "ƒ" },
     inputAliases: { "ƒ": "f" },

@@ -171,3 +171,11 @@ extern "C" const char* soemdsp_sine_wavetable_metadata_json() {
 extern "C" int soemdsp_sine_wavetable_metadata_json_size() {
   return sizeof(kMetadataJson) - 1;
 }
+
+// Reset trigger below full height: move the phase |h| of the way to where a
+// full Reset puts it (h < 0 the long way round); nothing else is cleared.
+// Full-height hits (|h| = 1) use the full reset above.
+extern "C" void soemdsp_sine_wavetable_partial_reset(int handle, double h) {
+  if (handle < 1 || handle > kMaxInstances) return;
+  gPool[handle - 1].phase = soemdsp::math::partial_reset_phase(gPool[handle - 1].phase, 0.0, h, kTwoPi);
+}

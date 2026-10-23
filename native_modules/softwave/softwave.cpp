@@ -213,3 +213,13 @@ extern "C" const char* soemdsp_softwave_metadata_json() {
 extern "C" int soemdsp_softwave_metadata_json_size() {
   return (int)(sizeof(kMetadataJson) - 1);
 }
+
+// Reset trigger below full height: move the phase |h| of the way to where a
+// full Reset puts it (h < 0 the long way round); nothing else is cleared.
+// Full-height hits (|h| = 1) use the full reset above.
+extern "C" void soemdsp_softwave_partial_reset(int handle, double h) {
+  if (handle < 1 || handle > kMaxInstances) return;
+  SoftwaveState& s = gPool[handle - 1];
+  if (!s.active) return;
+  s.phase = soemdsp::math::partial_reset_phase(s.phase, 0.0, h);
+}

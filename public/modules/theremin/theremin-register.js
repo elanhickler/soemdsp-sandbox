@@ -24,6 +24,7 @@ registerNodeGraphChromelessModule("theremin", {
         source: { value: "Wave" } },
     ],
     // Oscillator convention (polyBlep / Softwave): Reset + ƒ left; Wave green out.
+    resetTrigger: true,
     inputs: ["Reset", "f"],
     inputLabels: {
       f: "ƒ" },

@@ -527,3 +527,12 @@ extern "C" double soemdsp_softpop_oscillator_display_info(int handle, int which)
 extern "C" int soemdsp_softpop_oscillator_version() { return 5; } // 5: PolyBLEP Trisaw (source 5); Dithered Trisaw renamed Dithered Trisaw
 extern "C" const char* soemdsp_softpop_oscillator_metadata_json() { return kMetadataJson; }
 extern "C" int soemdsp_softpop_oscillator_metadata_json_size() { return sizeof(kMetadataJson) - 1; }
+
+// Reset trigger below full height: move the phase |h| of the way to where a
+// full Reset puts it (h < 0 the long way round); nothing else is cleared.
+// Full-height hits (|h| = 1) use the full reset above.
+extern "C" void soemdsp_softpop_oscillator_partial_reset(int handle, double h) {
+  if (State* s = live(handle)) {
+    for (int c = 0; c < 2; c += 1) s->ch[c].phase = soemdsp::math::partial_reset_phase(s->ch[c].phase, 0.0, h);
+  }
+}

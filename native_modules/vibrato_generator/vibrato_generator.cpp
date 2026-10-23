@@ -335,3 +335,13 @@ extern "C" int soemdsp_vibrato_generator_is_idle(int handle) {
 extern "C" int soemdsp_vibrato_generator_version() {
   return 14;
 }
+
+// Reset trigger below full height: move the phase |h| of the way to where a
+// full Reset puts it (h < 0 the long way round); nothing else is cleared.
+// Full-height hits (|h| = 1) use the full reset above.
+extern "C" void soemdsp_vibrato_generator_partial_reset(int handle, double h, double phaseOffset) {
+  if (handle < 1 || handle > kMaxInstances) return;
+  VibratoModuleState& s = gPool[handle - 1];
+  s.gen.phase = soemdsp::math::partial_reset_phase(s.gen.phase, wrap01(safe(phaseOffset)), h);
+  s.phaseTurns = soemdsp::math::partial_reset_phase(s.phaseTurns, 0.0, h);
+}
