@@ -949,6 +949,11 @@ function syncNodeUiDevSettingsHeaderControls() {
   if (sliderTextSizeValue) sliderTextSizeValue.textContent = `${sliderTextSize}px`;
   if (sliderTextLineValue) sliderTextLineValue.textContent = String(sliderTextLine);
   if (sliderTextPadValue) sliderTextPadValue.textContent = `${sliderTextPad}px`;
+  // Signal wires (jack to jack) width.
+  const wireThick = Math.max(0.5, Math.min(12, nodeGraphFiniteNumber(document.getElementById("nodeUiDevWireThickness")?.value, 2)));
+  sliderTextHost?.style.setProperty("--node-wire-thickness", `${wireThick}px`);
+  const wireThickValue = document.getElementById("nodeUiDevWireThicknessValue");
+  if (wireThickValue) wireThickValue.textContent = `${wireThick}px`;
   // Param wires (ending on a rail IO box) keep their own width and end dot.
   const paramWireThick = Math.max(0.5, Math.min(6, nodeGraphFiniteNumber(document.getElementById("nodeUiDevParamWireThickness")?.value, 0.5)));
   const paramWireDot = Math.max(0, Math.min(12, nodeGraphFiniteNumber(document.getElementById("nodeUiDevParamWireDotSize")?.value, 0.267)));

@@ -1601,7 +1601,7 @@ function nodeGraphGlGraphPresent(options = {}) {
     }
     if (!visible) continue;
     const style = wire.style === "trace" ? "trace" : "ribbon";
-    let strokeWorld = style === "trace" ? traceHalf : (wire.param ? paramHalf : halfWorld);
+    const strokeWorld = style === "trace" ? traceHalf : (wire.param ? paramHalf : halfWorld);
     const feather = style === "trace" ? 0 : wireFeather;
     let rgba = wire.rgba;
     let picked = false;
@@ -1611,7 +1611,6 @@ function nodeGraphGlGraphPresent(options = {}) {
       );
       if (picked) {
         rgba = [0.95, 0.86, 0.45, 1];
-        strokeWorld += style === "trace" ? 0.5 : 0.8;
       }
     }
     const stroke = frameCamera ? strokeWorld : strokeWorld * zoom;

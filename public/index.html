@@ -1428,6 +1428,13 @@
             <span>wires follow port colors</span>
           </label>
           <label class="node-ui-dev-control">
+            <span>signal wire thickness</span>
+            <div class="node-ui-dev-control-row">
+              <input id="nodeUiDevWireThickness" type="range" min="0.5" max="12" step="0.5" value="2">
+              <output id="nodeUiDevWireThicknessValue" for="nodeUiDevWireThickness">2px</output>
+            </div>
+          </label>
+          <label class="node-ui-dev-control">
             <span>param wire thickness</span>
             <div class="node-ui-dev-control-row">
               <input id="nodeUiDevParamWireThickness" type="range" min="0.5" max="6" step="0.5" value="0.5">
@@ -3389,7 +3396,7 @@
   <script data-boot-defer type="text/plain" src="./public/node-graph-trace-router.js?v=no-self-burst-1780321400000"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-wire-rendering.js?v=rails-1"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-stroke-builder.js?v=snake-gl-1"></script>
-  <script data-boot-defer type="text/plain" src="./public/node-graph-gl-graph.js?v=param-dot-1"></script>
+  <script data-boot-defer type="text/plain" src="./public/node-graph-gl-graph.js?v=signal-wire-1"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-screen-fx.js?v=screen-out-1"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-render-output.js?v=dbgpanel-rm-1"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-debug-copy.js?v=dbgpanel-rm-1"></script>
@@ -3397,12 +3404,12 @@
   <script data-boot-defer type="text/plain" src="./public/node-graph-tooltips.js?v=tip-gpu-1"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-interaction-help.js?v=tip-gpu-1"></script>
   <script data-boot-defer type="text/plain" src="./public/presets/useruisettings.js?v=screen-out-1"></script>
-  <script data-boot-defer type="text/plain" src="./public/node-graph-ui-settings-definitions.js?v=param-dot-1"></script>
+  <script data-boot-defer type="text/plain" src="./public/node-graph-ui-settings-definitions.js?v=signal-wire-1"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-ui-settings-utils.js?v=slider-unit-color-1780307400000"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-user-ui-settings-controls.js?v=color-row-1"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-ui-settings-panels.js?v=uidev-page-1"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-ui-settings-persistence.js?v=mini-perform-1"></script>
-  <script data-boot-defer type="text/plain" src="./public/node-graph-ui-settings-sync.js?v=param-dot-1"></script>
+  <script data-boot-defer type="text/plain" src="./public/node-graph-ui-settings-sync.js?v=signal-wire-1"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-keyboard-shortcuts.js?v=mini-round2-1"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-live-status-text.js?v=live-plan-preserve-20260634"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-live-status-controls.js?v=slider-unit-color-1780307400000"></script>
@@ -3555,7 +3562,7 @@
   <script data-boot-defer type="text/plain" src="./public/node-graph-header-event-bindings.js?v=mini-round2-1"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-help-event-bindings.js?v=remove-workspace-view-0002"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-scene-menu-event-bindings.js?v=rails-1"></script>
-  <script data-boot-defer type="text/plain" src="./public/node-graph-uidev-event-bindings.js?v=all-sync-1"></script>
+  <script data-boot-defer type="text/plain" src="./public/node-graph-uidev-event-bindings.js?v=signal-wire-1"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-settings-event-bindings.js?v=book-ui-script-1"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-slider-event-bindings.js?v=node-graph-slider-event-bindings-refactor-1780369200000"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-event-bindings.js?v=perform-hotkeys-1"></script>
