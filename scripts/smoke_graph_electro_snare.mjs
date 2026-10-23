@@ -34,7 +34,7 @@ const kRight = must("soemdsp_electro_snare_right");
 const SR = 48000;
 const ALGS = ["tr808", "tr909", "simmons", null, "fm"];  // id 3 (Modal) moved to Modal Snare
 const DEF = { tune: 180, tone: 0.5, snappy: 0.5, bodyDecay: 0.25, snapDecay: 0.2, bend: 0, amplitude: 1 };
-const KNOB = { tune: 300, tone: 0.9, snappy: 0.1, bodyDecay: 0.6, snapDecay: 0.05, bend: 1, amplitude: 0.5 };
+const KNOB = { tune: 300, tone: 0.9, snappy: 0.1, bodyDecay: 0.6, snapDecay: 0.05, bend: 1, amplitude: 0.5, simNoiseQ: 4, simClick: 1 };  // Noise Q / Click live on every algorithm (v7)
 const PLANCK = 1e-7;
 
 function render(alg, p, n, events) {
@@ -127,6 +127,24 @@ for (let alg = 0; alg < ALGS.length; alg++) {
   if ((alg === 3 || alg === 4) ? !(dTone > 1e-3) : dTone !== 0) throw new Error(`${name}: Snappy 0 Tone 0.9 L/R diff ${dTone}`);
   stereo.push(`${name} L/R diff ${dLR.toFixed(3)} R/L ${dB.toFixed(2)} dB tone0.9 diff ${dTone.toFixed(3)}`);
   rows.push(`${name}: peak ${peakOut.toFixed(3)} restAt ${(zeroAt / SR).toFixed(2)}s knobs ${Object.entries(knobs).map(([k, d]) => `${k}=${d.toFixed(3)}`).join(" ")}`);
+}
+// Noise Q / Click mapping (electro_snare v7): Q 0.5 also changes every algorithm;
+// 808 / FM have no stock click, so Click 0 .. 0.4 is identical (0.4 = none);
+// 909 Click 0 removes its stock click; Simmons Click 0 removes its click.
+{
+  const L = Math.round(0.4 * SR);
+  const ev = {}; ev[100] = { t: 0.7 }; ev[101] = { t: 0 };
+  for (let alg = 0; alg < ALGS.length; alg++) {
+    if (!ALGS[alg]) continue;
+    const base = render(alg, DEF, L, ev);
+    const diff = (b) => { let d = 0; for (let i = 0; i < L; i++) d = Math.max(d, Math.abs(b.out[i] - base.out[i]), Math.abs(b.outR[i] - base.outR[i])); return d; };
+    const dLoQ = diff(render(alg, { ...DEF, simNoiseQ: 0.5 }, L, ev));
+    if (!(dLoQ > 1e-3)) throw new Error(`${ALGS[alg]}: Noise Q 0.5 dead (${dLoQ})`);
+    const dC0 = diff(render(alg, { ...DEF, simClick: 0 }, L, ev));
+    if (alg === 0 || alg === 4) { if (dC0 !== 0) throw new Error(`${ALGS[alg]}: Click 0 should equal 0.4 (no stock click), diff ${dC0}`); }
+    else if (!(dC0 > 1e-4)) throw new Error(`${ALGS[alg]}: Click 0 did not remove the stock click (${dC0})`);
+    rows.push(`${ALGS[alg]} NoiseQ0.5 diff ${dLoQ.toFixed(3)} Click0 diff ${dC0.toFixed(4)}`);
+  }
 }
 for (const r of rows) console.log(`ok ${r}`);
 for (const r of stereo) console.log(`ok stereo ${r}`);

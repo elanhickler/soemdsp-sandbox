@@ -11020,7 +11020,7 @@ const nodeGraphModuleDefinitions = (
       { kind: "choices", param: "algorithm", labels: ["808", "909", "Simmons", "FM"], h: 26 },
       { kind: "cells", params: [["tune", "Tune"], ["tone", "Tone"], ["snappy", "Snappy"]], h: 52 },
       { kind: "cells", params: [["bodyDecay", "Body"], ["snapDecay", "Snap"], ["bend", "Bend"]], h: 52 },
-      { kind: "cells", params: [["simNoiseQ", "Sim Q"], ["simClick", "Sim Clk"], ["amplitude", "Amp"]], h: 52 },
+      { kind: "cells", params: [["simNoiseQ", "Noise Q"], ["simClick", "Click"], ["amplitude", "Amp"]], h: 52 },
       { kind: "choices", param: "recalculateOnTrigger", labels: ["Recalc Off", "Recalc On"], h: 26 },
     ],
     planRole: "source",
@@ -11140,7 +11140,7 @@ const nodeGraphModuleDefinitions = (
       {
         defaultValue: "2",
         key: "simNoiseQ",
-        label: "Simmons Noise Q",
+        label: "Noise Q",
         max: "4",
         mid: "2",
         min: "0.5",
@@ -11149,7 +11149,7 @@ const nodeGraphModuleDefinitions = (
       {
         defaultValue: "0.4",
         key: "simClick",
-        label: "Simmons Click",
+        label: "Click",
         max: "1",
         mid: "0.4",
         min: "0",

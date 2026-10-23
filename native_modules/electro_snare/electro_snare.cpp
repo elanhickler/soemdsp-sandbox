@@ -25,7 +25,27 @@
 // on R, like two pickups on opposite sides of the head; their level is Tone,
 // so Tone 0 is identical L/R. FM: R's modulator is inverted (index sign), so
 // the high-index noisy sidebands decorrelate; Tone 0 (index 0) is identical.
-// Click transients (Simmons / Modal) are one shared click, identical L/R.
+// Click transients (Simmons, and 808 / FM when Click > 0.4) are one shared click, identical L/R.
+//
+// Noise Q / Click on every algorithm (Argi 2026-10-23, "just let 808 and 909
+// and FM have noise"; electro_snare v7). Keys stay simNoiseQ / simClick (patch
+// compat); labels are "Noise Q" / "Click". Defaults Q 2 / Click 0.4 reproduce
+// each algorithm's previous sound bit-exactly:
+//   Noise Q (q, default 2):
+//     Simmons: the noise SVF lowpass Q itself (unchanged, R = 1/q).
+//     808 / 909 / FM: their one-pole noise path is followed by a bell made from
+//       the constant-peak SVF bandpass (R = 1/q) at the noise band centre:
+//       nz += (q/2 - 1) * bp(nz). q = 2 adds nothing (exactly the old path);
+//       q > 2 rings (centre gain q/2, narrower), q < 2 scoops (centre gain q/2,
+//       wider). Centres: 808 sqrt(1k*8k) = 2828 Hz, 909 sqrt(2.5k*Tone LP),
+//       FM 4 kHz.
+//   Click (c, default 0.4):
+//     Simmons: absolute click level (unchanged).
+//     909: scales its own Env5 noise click by c/0.4 (0.4 = stock, 0 = none).
+//     808 / FM: no stock click, so 0.4 = none; above 0.4 they get the Simmons
+//       click (3 kHz HP noise, 2 ms T60) at level (c - 0.4)/0.6 (c = 1 -> 1.0).
+//       Below 0.4 there is nothing left to remove, so it stays 0 (the only
+//       floor, a mapping floor, not a range clamp).
 // Reset reseeds both generators (bit-exact restart).
 // Env = overall amplitude envelope (mix-weighted component envelopes,
 // peaks at v, excludes Amplitude). T60 everywhere: r = exp(-ln(1000)/(T60 sr)).
@@ -68,8 +88,11 @@ static const double k909NoiseHp = 2500.0;
 static const double k909Env5T60 = 0.015;
 static const double k909BendT60 = 0.02;
 static const double k909Wires = 0.9;
-static const double kSimQMin = 0.5;  // Simmons Noise Q range (gentle; default 2 = original)
-static const double kSimQMax = 4.0;
+static const double kNoiseQRef = 2.0;   // Noise Q neutral / default (Simmons original Q)
+static const double kClickRef = 0.4;    // Click default (Simmons original level; 909 stock; 808 / FM none)
+static const double k808NoiseCenter = 2828.42712474619;  // sqrt(k808NoiseHp * k808NoiseLp)
+static const double kFmNoiseCenter = 4000.0;
+static const double kClickHp = 3000.0;
 static const double kSimClickT60 = 0.002;
 static const double kSimWires = 1.2;
 static const double kFmRatio = 1.4;
@@ -143,6 +166,24 @@ static void strike(State& s, int alg) {
   }
 }
 
+// Noise Q bell for 808 / 909 / FM: x + amt * constPeakBP(x), amt = q/2 - 1.
+// The SVF always runs (state stays continuous while Q moves); at amt 0 the
+// input is returned untouched, so the default is bit-identical to the old path.
+static double noise_bell(TptSvfState& st, double x, double hz, double q, double amt, double sr) {
+  TptSvfCoeffs k;
+  tpt_svf_setup_bandpass_const_peak(k, (2.0 * kPi) * hz / sr, q);
+  const double bp = tpt_svf_tick(st, k, x);
+  st.z1 = planck_snap(st.z1);
+  st.z2 = planck_snap(st.z2);
+  return amt != 0.0 ? x + amt * bp : x;
+}
+
+// Simmons-style shared click (L noise, 3 kHz HP, eClick envelope) at level lvl.
+static double shared_click(State& s, double lvl, double sr) {
+  const double n0 = hash_noise_at(s.white, hash_noise_seed(kNoiseSeed, 0));
+  return lvl * (n0 - one_pole_lp_tick(s.lpC, n0, kClickHp, sr)) * s.eClick;
+}
+
 static bool resting(const State& s) {
   if (s.eA != 0.0 || s.eB != 0.0 || s.eC != 0.0 || s.eN != 0.0 || s.eClick != 0.0) return false;
   if (s.ringL.y1 != 0.0 || s.ringL.y2 != 0.0 || s.ringH.y1 != 0.0 || s.ringH.y2 != 0.0) return false;
@@ -185,8 +226,8 @@ extern "C" double soemdsp_electro_snare_sample(
   double snapDecay,
   double bend,
   double amplitude,
-  double simNoiseQ,   // Simmons only: noise SVF Q (default 2 = original)
-  double simClick,    // Simmons only: click level (default 0.4 = original)
+  double simNoiseQ,   // Noise Q, every algorithm (default 2 = original; see header)
+  double simClick,    // Click, every algorithm (default 0.4 = original; see header)
   double sampleRate,
   double recalculateOnTrigger  // 0 Off (live) / 1 On: bodyDecay / snapDecay latched on each hit
 ) {
@@ -231,6 +272,14 @@ extern "C" double soemdsp_electro_snare_sample(
   const double bendMul = (s.p != 0.0 && bendOct != 0.0) ? dsp_exp2(bendOct * s.p) : 1.0;
   const double f = f0 * bendMul;
   const double vRef = s.v > 0.0 ? s.v : 1.0;
+  // Noise Q: no range clamp (param range governs); tpt_svf_setup floors R at 1e-9
+  // and a non-positive Q is treated as tiny (guard against 1/0 and negative damping).
+  const double nq = safe(simNoiseQ);
+  const double noiseQ = nq > 1e-9 ? nq : 1e-9;
+  const double bellAmt = noiseQ / kNoiseQRef - 1.0;  // 808 / 909 / FM bell amount (0 at default)
+  const double clickIn = safe(simClick);
+  // 808 / FM added click level (0 at and below the default 0.4).
+  const double clickAdd = clickIn > kClickRef ? (clickIn - kClickRef) / (1.0 - kClickRef) : 0.0;
 
   double body = 0.0;
   double bodyR = 0.0;  // R body where it differs (Modal / FM noise-like parts)
@@ -240,7 +289,8 @@ extern "C" double soemdsp_electro_snare_sample(
   double bendT60 = k808BendT60;
 
   if (alg == kAlg808) {
-    s.eC = s.eClick = 0.0;
+    s.eC = 0.0;
+    if (clickAdd == 0.0) s.eClick = 0.0;
     const double rL = t60_coeff(bd, sr);
     const double rH = t60_coeff(k808DecayRatio * bd, sr);
     const double yL = ring2_tick(s.ringL, f, rL, pv, sr);
@@ -249,13 +299,20 @@ extern "C" double soemdsp_electro_snare_sample(
     for (int c = 0; c < 2; c++) {
       const double n = hash_noise_at(s.white, hash_noise_seed(kNoiseSeed, c));
       const double hp = n - one_pole_lp_tick(s.lpA[c], n, k808NoiseHp, sr);
-      const double nz = one_pole_lp_tick(s.lpB[c], hp, k808NoiseLp, sr);
+      double nz = one_pole_lp_tick(s.lpB[c], hp, k808NoiseLp, sr);
+      nz = noise_bell(s.svf[c], nz, k808NoiseCenter, noiseQ, bellAmt, sr);
       wires[c] = k808Wires * nz * s.eN * sn;
+    }
+    if (clickAdd != 0.0) {
+      const double cl = shared_click(s, clickAdd, sr);
+      wires[0] += cl;
+      wires[1] += cl;
     }
     env = ((1.0 - tn) * s.eA + tn * s.eB + sn * s.eN) / (1.0 + sn);
     s.eA = planck_snap(s.eA * rL);
     s.eB = planck_snap(s.eB * rH);
     s.eN = planck_snap(s.eN * t60_coeff(nd, sr));
+    if (clickAdd != 0.0) s.eClick = planck_snap(s.eClick * t60_coeff(kSimClickT60, sr));
   } else if (alg == kAlg909) {
     bendT60 = k909BendT60;
     s.eC = 0.0;
@@ -266,11 +323,14 @@ extern "C" double soemdsp_electro_snare_sample(
     s.ph2 = phase_advance(s.ph2, f * k909Ratio, sr);
     body = 0.5 * (o1 * s.eA + o2 * s.eB);
     const double lpHz = 2000.0 * dsp_exp2(tn * 2.584962500721156);  // 2 kHz -> 12 kHz
+    const double clickScale = clickIn / kClickRef;  // 1 at default (exact)
+    const double center909 = __builtin_sqrt(k909NoiseHp * lpHz);
     for (int c = 0; c < 2; c++) {
       const double n = hash_noise_at(s.white, hash_noise_seed(kNoiseSeed, c));
-      const double lp = one_pole_lp_tick(s.lpA[c], n, lpHz, sr);
+      double lp = one_pole_lp_tick(s.lpA[c], n, lpHz, sr);
       const double hp = lp - one_pole_lp_tick(s.lpB[c], lp, k909NoiseHp, sr);
-      wires[c] = k909Wires * sn * (lp * s.eN + hp * s.eClick);
+      lp = noise_bell(s.svf[c], lp, center909, noiseQ, bellAmt, sr);  // body noise only; click path untouched
+      wires[c] = k909Wires * sn * (lp * s.eN + hp * s.eClick * clickScale);
     }
     env = (s.eA + s.eB + sn * s.eN) / (2.0 + sn);
     s.eA = planck_snap(s.eA * t60_coeff(bd, sr));
@@ -284,12 +344,12 @@ extern "C" double soemdsp_electro_snare_sample(
     s.ph1 = phase_advance(s.ph1, f, sr);
     TptSvfCoeffs k;
     const double lpHz = mind(300.0 * dsp_exp2(tn * 5.321928094887363), 0.45 * sr);  // 300 Hz -> 12 kHz
-    tpt_svf_setup(k, (2.0 * kPi) * lpHz / sr, 1.0 / clamp(safe(simNoiseQ), kSimQMin, kSimQMax), 1.0, 0.0, 0.0, 1.0);
+    tpt_svf_setup(k, (2.0 * kPi) * lpHz / sr, 1.0 / noiseQ, 1.0, 0.0, 0.0, 1.0);
     const double nShare = s.eN / vRef;  // inner noise envelope, 1 -> 0
     const double e = s.eA;              // shared VCA
     body = e * (1.0 - sn) * osc;
     const double n0 = hash_noise_at(s.white, hash_noise_seed(kNoiseSeed, 0));
-    const double click = safe(simClick) * (n0 - one_pole_lp_tick(s.lpC, n0, 3000.0, sr)) * s.eClick;  // shared L/R
+    const double click = clickIn * (n0 - one_pole_lp_tick(s.lpC, n0, kClickHp, sr)) * s.eClick;  // shared L/R
     for (int c = 0; c < 2; c++) {
       const double nz = tpt_svf_tick(s.svf[c], k, (c == 0 ? n0 : hash_noise_at(s.white, hash_noise_seed(kNoiseSeed, 1))));
       s.svf[c].z1 = planck_snap(s.svf[c].z1);
@@ -302,7 +362,8 @@ extern "C" double soemdsp_electro_snare_sample(
     s.eClick = planck_snap(s.eClick * t60_coeff(kSimClickT60, sr));
   } else {
     bendT60 = kFmBendT60;
-    s.eB = s.eC = s.eClick = 0.0;
+    s.eB = s.eC = 0.0;
+    if (clickAdd == 0.0) s.eClick = 0.0;
     const double ec = s.eA / vRef;  // index follows the body envelope
     const double index = kFmIndexMax * tn * ec;
     const double modv = dsp_sin_turns_lut(s.ph2);
@@ -317,12 +378,19 @@ extern "C" double soemdsp_electro_snare_sample(
     bodyStereo = true;
     for (int c = 0; c < 2; c++) {
       const double n = hash_noise_at(s.white, hash_noise_seed(kNoiseSeed, c));
-      const double hp = n - one_pole_lp_tick(s.lpA[c], n, kFmNoiseHp, sr);
+      double hp = n - one_pole_lp_tick(s.lpA[c], n, kFmNoiseHp, sr);
+      hp = noise_bell(s.svf[c], hp, kFmNoiseCenter, noiseQ, bellAmt, sr);
       wires[c] = kFmWires * hp * s.eN * sn;
+    }
+    if (clickAdd != 0.0) {
+      const double cl = shared_click(s, clickAdd, sr);
+      wires[0] += cl;
+      wires[1] += cl;
     }
     env = (s.eA + sn * s.eN) / (1.0 + sn);
     s.eA = planck_snap(s.eA * t60_coeff(bd, sr));
     s.eN = planck_snap(s.eN * t60_coeff(nd, sr));
+    if (clickAdd != 0.0) s.eClick = planck_snap(s.eClick * t60_coeff(kSimClickT60, sr));
   }
 
   hash_noise_advance(s.white);
@@ -356,6 +424,6 @@ extern "C" double soemdsp_electro_snare_env(int handle) {
   return gPool[handle - 1].envOut;
 }
 
-extern "C" int soemdsp_electro_snare_version() { return 6; } // 6: Ring2 rotating phasor (no energy pumped by bend retriggers). 5: Recalculate On Trigger (bodyDecay / snapDecay latched on hit)  // 4: Simmons Noise Q + Click params. 3: Modal removed (-> Modal Snare), Amplitude unclamped
+extern "C" int soemdsp_electro_snare_version() { return 7; } // 7: Noise Q + Click on every algorithm (808 / 909 / FM too; defaults bit-identical). 6: Ring2 rotating phasor (no energy pumped by bend retriggers). 5: Recalculate On Trigger (bodyDecay / snapDecay latched on hit)  // 4: Simmons Noise Q + Click params. 3: Modal removed (-> Modal Snare), Amplitude unclamped
 extern "C" const char* soemdsp_electro_snare_metadata_json() { return kMetadataJson; }
 extern "C" int soemdsp_electro_snare_metadata_json_size() { return sizeof(kMetadataJson) - 1; }
