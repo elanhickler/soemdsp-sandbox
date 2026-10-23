@@ -20,7 +20,7 @@
 // so thickness never depends on fractional pixel position. Fills are the
 // same quads with an infinite halfPx (solid). A zero-length segment is a
 // round dot of radius halfPx. Phosphor beams keep gaussian/erf. Jack
-// notches keep Hermite smoothstep.
+// rings keep a 1px AA skirt.
 //
 // Draw order per frame: images (under), quads, text (over).
 //
@@ -54,19 +54,8 @@
   const MAX_DIM = 4096;
   const FLOATS = 12; // pos2, local2, len1, half1, feather1, caps1, rgba4
   const PULSE_TRAIN_MAX = 16384;
-  // IO notch cut-out, shared by the rail box fill (caps 12) and the IO-section
-  // sockets (outline shader). d = distance from the notch centre, r = radius,
-  // soft = smoothstep edge width (same units), aa = pixel floor so soft 0 is
-  // a crisp antialiased rim. 0 inside (transparent), 1 at the rim and beyond.
-  const NOTCH_GLSL = `
-float nodeGraphNotchAlpha(float d, float r, float soft, float aa) {
-  if (r <= 0.0) return 1.0;
-  float e = max(soft, aa);
-  return smoothstep(r - e, r, d);
-}
-`;
   // Perlin quintic. Same one-SDF cost as Hermite smoothstep; C2 at the
-  // skirt ends. Built-in smoothstep stays on jack notches.
+  // skirt ends.
   const COVERAGE_GLSL = `
 float coverageSmoother(float halfPx, float feather, float dist) {
   float w = max(feather, 1e-4);
@@ -171,17 +160,12 @@ varying vec4 vColour;
 uniform float uCoverage;
 uniform vec3 uCam;
 uniform vec2 uDash;
-${NOTCH_GLSL}${COVERAGE_GLSL}
+${COVERAGE_GLSL}
 void main() {
   float u = vLocal.x;
   float across = abs(vLocal.y);
   float a;
-  if (vCaps > 11.5) {
-    // IO notch fill: vLocal = offset from the notch centre, vLen = radius,
-    // vHalf = smoothstep edge width.
-    float dn = length(vLocal);
-    a = nodeGraphNotchAlpha(dn, vLen, vHalf, max(fwidth(dn), 1e-4));
-  } else if (vCaps > 9.75) {
+  if (vCaps > 9.75) {
     // Analytic ring: distance to the circle of radius vLen, same solid core +
     // shared feather smootherstep as the capsule / dot primitives.
     float d = abs(length(vLocal) - vLen);
@@ -404,14 +388,6 @@ uniform vec4 uJackColor[24];
 // [y0, y1); the box is drawn through the gap by the rail quads.
 uniform int uCutCount;
 uniform highp vec4 uCut[16];
-// Param notch (UIDev): radius and smoothstep edge width, world px. Each rail
-// IO box cuts it out of the plate fill, centred on the box's outer edge, so
-// the workspace shows through the box's notch.
-uniform vec2 uCutNotch;
-// Socket notch (UIDev signal notch): radius and smoothstep edge width, both
-// world px. Same nodeGraphNotchAlpha as the rail box fill.
-uniform vec2 uNotch;
-${NOTCH_GLSL}
 uniform highp float uPixel;
 uniform highp vec3 uCam;
 uniform highp float uDevice;
@@ -449,7 +425,6 @@ void main() {
   float nearest = halfRing + 2.0;
   float edgeAa = max(fwidth(sdRect), 1e-4);
   vec4 strokeCol = uPlateColor;
-  float inletA = 0.0;
   float holeA = 0.0;
   float inMouth = 0.0;
   float arc = 0.0;
@@ -476,7 +451,6 @@ void main() {
       arc = ring;
     }
     inMouth = max(inMouth, 1.0 - smoothstep(-aa, aa, d));
-    // Socket fill: the hole, off the ring, with a straight cut in from the wall.
     if (radius > 0.0 && sdRect <= 0.75) {
       float hole = 1.0 - smoothstep(-halfRing - aa, -halfRing + aa, d);
       float dl = jack.x - plateMin.x;
@@ -488,17 +462,13 @@ void main() {
       else if (dt <= dl && dt <= dr && dt <= db) inward = vec2(0.0, 1.0);
       else if (db <= dl && db <= dr && db <= dt) inward = vec2(0.0, -1.0);
       float cut = smoothstep(gap - aa, gap + aa, dot(px - jack, inward));
-      float ns = uPixel > 0.5 ? z * devScale : 1.0;
-      float soft = nodeGraphNotchAlpha(length(px - jack), uNotch.x * ns, uNotch.y * ns, aa);
       holeA = max(holeA, hole * cut);
-      inletA = max(inletA, hole * cut * soft);
     }
   }
   // Whole screen pixels outside the plate. Camera mode already rounded
   // strokeW to an integer of at least 1. Jacks keep a 1px AA ring.
   float strokePx = uPixel > 0.5 ? strokeW : max(1.0, floor(strokeW + 0.5));
   float fat = (sdRect > 0.0 && sdRect <= strokePx) ? 1.0 : 0.0;
-  float plateCut = 1.0;
   for (int i = 0; i < 16; i++) {
     if (i >= uCutCount) break;
     highp vec4 cut = uCut[i];
@@ -510,23 +480,13 @@ void main() {
     }
     bool wall = cut.z < 0.0 ? px.x < plateMin.x : px.x >= plateMax.x;
     if (wall && px.y >= cy0 && px.y < cy1) fat = 0.0;
-    if (uCutNotch.x > 0.0) {
-      float cns = uPixel > 0.5 ? z * devScale : 1.0;
-      float cx = cut.z < 0.0 ? plateMin.x - strokePx : plateMax.x + strokePx;
-      float dn = length(px - vec2(cx, 0.5 * (cy0 + cy1)));
-      plateCut = min(plateCut, nodeGraphNotchAlpha(dn, uCutNotch.x * cns, uCutNotch.y * cns, edgeAa));
-    }
   }
   float strokeA = max(fat * (1.0 - inMouth), arc) * strokeCol.a;
-  float plateA = sd <= 0.0 ? uFill.a * (1.0 - holeA) * plateCut : 0.0;
-  float underA = inletA + plateA;
-  vec3 underRgb = holeA > 0.5 ? vec3(0.055, 0.063, 0.078) : uFill.rgb;
-  float a = strokeA + underA * (1.0 - strokeA);
-  // Discard on geometry only (outside stroke, plate and inlets), never on
-  // colour alpha, so a faint fill or stroke still draws.
-  float geomA = max(max(fat * (1.0 - inMouth), arc), max(sd <= 0.0 ? 1.0 : 0.0, inletA));
+  float plateA = sd <= 0.0 ? uFill.a * (1.0 - holeA) : 0.0;
+  float a = strokeA + plateA * (1.0 - strokeA);
+  float geomA = max(max(fat * (1.0 - inMouth), arc), sd <= 0.0 ? (1.0 - holeA) : 0.0);
   if (geomA < 0.01 || a <= 0.0) discard;
-  vec3 rgb = (strokeCol.rgb * strokeA + underRgb * underA * (1.0 - strokeA)) / a;
+  vec3 rgb = (strokeCol.rgb * strokeA + uFill.rgb * plateA * (1.0 - strokeA)) / a;
   gl_FragColor = vec4(rgb, a);
 }
 `;
@@ -588,9 +548,7 @@ void main() {
         outInletGap: gl.getUniformLocation(outProgram, "uInletGap"),
         outCount: gl.getUniformLocation(outProgram, "uCount"),
         outCutCount: gl.getUniformLocation(outProgram, "uCutCount"),
-        outNotch: gl.getUniformLocation(outProgram, "uNotch"),
         outCut: gl.getUniformLocation(outProgram, "uCut[0]"),
-        outCutNotch: gl.getUniformLocation(outProgram, "uCutNotch"),
         outJack: gl.getUniformLocation(outProgram, "uJack[0]"),
         outJackColor: gl.getUniformLocation(outProgram, "uJackColor[0]"),
         outCamPixel: gl.getUniformLocation(outProgram, "uPixel"),
@@ -741,22 +699,6 @@ void main() {
     const big = 1e6;
     const q = [[x, y], [x + w, y], [x, y + h], [x + w, y], [x + w, y + h], [x, y + h]];
     for (const [px, py] of q) push(batch, px, py, 0, 0, 0, big, 0, rgba);
-  }
-
-  /**
-   * Solid axis-aligned rect with the IO notch cut out by the fragment shader
-   * (caps 12, nodeGraphNotchAlpha): a disc of radius r centred at (cx, cy)
-   * on the open edge, clear inside and fading into rgba over the smoothstep
-   * edge width soft. The rect clips the disc to a semicircle.
-   */
-  function nodeGraphGlLinesNotchFill(batch, x, y, w, h, cx, cy, r, soft, rgba) {
-    if (!batch || !(w > 0) || !(h > 0)) return;
-    if (!(r > 0)) { nodeGraphGlLinesRect(batch, x, y, w, h, rgba); return; }
-    const k = batch.camera ? 1 : (batch.scale || 1);
-    const e = Math.max(0, soft || 0);
-    const p = (px, py) => push(batch, px * k, py * k, (px - cx) * k, (py - cy) * k, r * k, e * k, 0, rgba, 12);
-    p(x, y); p(x + w, y); p(x, y + h);
-    p(x + w, y); p(x + w, y + h); p(x, y + h);
   }
 
   /** Solid triangle (fills, areas). */
@@ -2368,7 +2310,7 @@ void main() {
     gl.enable(gl.BLEND);
   }
 
-  function nodeGraphGlLinesModuleOutline(batch, x, y, w, h, stroke, rgba, jacks, fill, inletGap, cuts, notch, cutNotch) {
+  function nodeGraphGlLinesModuleOutline(batch, x, y, w, h, stroke, rgba, jacks, fill, inletGap, cuts) {
     if (!batch || !(w > 0) || !(h > 0)) return;
     const k = batch.camera ? 1 : (batch.scale || 1);
     const sx = x * k;
@@ -2392,8 +2334,6 @@ void main() {
       fill: fill || [0.09, 0.1, 0.12, 1],
       inletGap: Math.max(0, Number(inletGap) || 0) * k,
       jacks: list,
-      notch: notch && notch.r > 0 ? [notch.r * k, Math.max(0, notch.soft || 0) * k] : [0, 0],
-      cutNotch: cutNotch && cutNotch.r > 0 ? [cutNotch.r * k, Math.max(0, cutNotch.soft || 0) * k] : [0, 0],
       cuts: (Array.isArray(cuts) ? cuts : []).slice(0, CUT_MAX).map((c) => [c.y0 * k, c.y1 * k, c.side < 0 ? -1 : 1, 0]),
     });
   }
@@ -2440,8 +2380,6 @@ void main() {
       if (s.outFill) gl.uniform4f(s.outFill, fill[0], fill[1], fill[2], fill.length > 3 ? fill[3] : 1);
       gl.uniform1f(s.outStroke, shape.stroke);
       if (s.outInletGap) gl.uniform1f(s.outInletGap, shape.inletGap || 0);
-      if (s.outNotch) gl.uniform2f(s.outNotch, shape.notch[0], shape.notch[1]);
-      if (s.outCutNotch) gl.uniform2f(s.outCutNotch, shape.cutNotch[0], shape.cutNotch[1]);
       jackData.fill(0);
       colorData.fill(0);
       const count = Math.min(OUT_MAX, shape.jacks.length);
@@ -2789,7 +2727,6 @@ void main() {
     nodeGraphGlLinesModuleOutline,
     nodeGraphGlLinesVeil,
     nodeGraphGlLinesTriangle,
-    nodeGraphGlLinesNotchFill,
     nodeGraphGlLinesFillUnder,
     nodeGraphGlLinesSegment,
     nodeGraphGlLinesDot,

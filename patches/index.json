@@ -76,6 +76,15 @@
       "folder": "demo_patches"
     },
     {
+      "slug": "demo_patches/impulse_train_melody_and_kick",
+      "label": "impulse_train_melody_and_kick",
+      "name": "",
+      "url": "/soemdsp-sandbox/patches/demo_patches/impulse_train_melody_and_kick.json",
+      "author": "",
+      "emoji": "",
+      "folder": "demo_patches"
+    },
+    {
       "slug": "demo_patches/journey_to_the_hypersaw",
       "label": "journey_to_the_hypersaw",
       "name": "",
@@ -639,6 +648,14 @@
       "label": "hyperpluck_breadboard",
       "name": "",
       "url": "/soemdsp-sandbox/patches/voice_breadboards/hyperpluck_breadboard.json",
+      "author": "",
+      "emoji": ""
+    },
+    {
+      "slug": "impulse_train_melody_and_kick",
+      "label": "impulse_train_melody_and_kick",
+      "name": "",
+      "url": "/soemdsp-sandbox/patches/demo_patches/impulse_train_melody_and_kick.json",
       "author": "",
       "emoji": ""
     },

@@ -22,36 +22,38 @@
 // ends early (drop pulses with t > lastPulse+Delay). One-shot End fires at
 // max(0, lastPulse+Delay) (Count 1 last pulse is t=0). Loop cycle is
 // Time*(Fwd-Rev?2:1)+Delay; pulses with t >= cycle are skipped.
-// ƒ (freqHz, live even with Recalculate On): when > 0, Loop wrap is 1/ƒ
-// (pitch). Time stays the E_k grain window; pulses with t >= 1/ƒ are
-// dropped. End Delay still cuts or pads inside that period and does not
-// change wrap. Forward-Reverse does not 2× the ƒ period. One-shot extra
-// cutoff is min(lastPulse+Delay, 1/ƒ). ƒ <= 0 / omitted: wrap is the
-// schedule cycle as above. Never ƒ × Time.
-// Mode (append-only ids): 0 One shot (default): u_i = i/(N-1), last one-way
-// pulse exactly at Time. 1 Loop: free-runs from module start with no trigger;
+// ƒ (freqHz, live even with Recalculate On): when > 0, the whole sequence
+// (Time, Pulse Mode span, End Delay) is one oscillator cycle scaled into
+// 1/ƒ. Pitch is ƒ; Time/Delay/Count/Curve are the waveshape. ƒ <= 0 /
+// omitted: wrap is the schedule cycle as above. Never ƒ × Time.
+// Mode (append-only ids): 0 One shot: u_i = i/(N-1), last one-way
+// pulse exactly at Time. 1 Loop (default): free-runs from module start with no trigger;
 // u_i = i / N so the one-way schedule spans [0, Time) and the last one-way
 // pulse never lands on Time. Trigger hits restart the cycle at 0 (Trigger
 // velocity is kept for later cycles; free-run velocity is 1).
 // Time 0: every pulse on sample 0 of the cycle (allAmp cached); Delay still
 // stretches or shortens the cycle. sampleRate < 1 -> 44100.
 // Pulse j plays on the first sample n with n / sampleRate >= t_j (Antialiasing
-// Off). Fixed: stacked pulses pick a seed-locked 0 or +1 sample delay. Dither:
-// the same 0/+1 stack, re-rolled on Trigger / Loop. Robin1: Schmidt ±1 around
-// round(t_j*sr). Robin2: that pick, then a second ±1 around the integer (range
-// ±2), same mean. Shape (live): 0 Trigger (impulses), 1 Gate 50%, 2 Saw, 3 Ramp,
-// 4 Tri, 5 Sine. Non-trigger shapes are one naive cycle from pulse j to j+1
-// (Loop last grain runs to the wrap; One-shot last grain to lastPulse+Delay).
+// Off), after ƒ-scale when tracking. Fixed: stacked pulses pick a seed-locked
+// 0 or +1 sample delay. Dither: the same 0/+1 stack, re-rolled on Trigger /
+// Loop. Robin1: Schmidt ±1 around round(t_j*sr). Robin2: that pick, then a
+// second ±1 around the integer (range ±2), same mean. Shape (live, default Saw
+// on new nodes): 0 Trigger (impulses), 1 Gate 50%, 2 Saw, 3 Ramp, 4 Tri, 5 Sine.
+// Omitted wasm waveShape is 0 Trigger. Non-trigger shapes are one naive cycle
+// from pulse j to j+1
+// (Loop last grain runs to the end of the pulse span, then End Delay is silent
+// (v19; Delay <= 0: to the wrap); One-shot last grain to lastPulse+Delay).
 // Sine/Tri start and end at 0. Preview Off.
 // Shape out (sample()): the selected grain. Trigger out
 // (soemdsp_pulse_train_trigger): always the impulse train. End out: 1 on the
 // sample the last pulse plays (Loop), or after End Delay (One shot). No Reset
 // input (v4). Amplitude is not clamped.
 // soemdsp_pulse_train_preview() builds the same schedule for displays.
-// Recalculate On Trigger (recalc > 0.5, default On): schedule params (Count,
+// Recalculate On Trigger (recalc > 0.5, default Off): schedule params (Count,
 // Time, Curve, Amp Start / End / Curve, Amplitude, Pulse Mode, End Delay)
 // latch at each Trigger / Loop cycle start. Off: live every sample; next
-// index only moves forward. Mode, Antialiasing, and Seed are always live.
+// index only moves forward. Mode, Antialiasing, Seed, and Shape are always live.
+// ƒ period is always live.
 // soemdsp_pulse_train_effective i: 0 Count (one-way), 1 Time, 2 Curve,
 // 3 Amp Start, 4 Amp End, 5 Amp Curve, 6 Amplitude * velocity, 7 Pulse Mode,
 // 8 End Delay, 9 wrap (1/ƒ when tracking, else schedule cycle).
@@ -225,11 +227,14 @@ static inline double trackPeriodOf(double freqHz, double sr) {
 }
 
 // Loop: skip t >= schedCycle (Time*(Fwd-Rev?2:1)+Delay). One-shot: skip t > tE.
-// Wired ƒ: also skip t >= 1/ƒ so pitch wrap is the period, not the Time window.
-static inline bool pulseAfterCutoff(double t, bool loop, double cycle, double tE, double periodLock) {
-  if (periodLock > 0.0 && t >= periodLock) return true;
+// Wired ƒ scales that whole cycle into 1/ƒ (cutoff stays in unscaled Time).
+static inline bool pulseAfterCutoff(double t, bool loop, double cycle, double tE) {
   if (loop) return cycle > 0.0 ? t >= cycle : t > 0.0;
   return t > tE;
+}
+
+static inline double playT(double t, double scale) {
+  return t * scale;
 }
 
 static const unsigned int kSeedAa = 1u;
@@ -429,21 +434,23 @@ static void applySchedule(PulseTrainState& s, const double live[9], double v, bo
 
 static inline long long landPulse(
   int j, int total, int nFwd, double end, double curve, bool loop, int pulseMode,
-  double sr, unsigned int seed, int aaMode
+  double sr, unsigned int seed, int aaMode, double scale
 ) {
-  const double t = pulseTime(j, nFwd, end, curve, loop, pulseMode);
+  const double tU = pulseTime(j, nFwd, end, curve, loop, pulseMode);
+  const double t = playT(tU, scale);
   if (aaMode >= 4) return robinLand2(t, sr, seed, (unsigned int)j);
   if (aaMode >= 3) return robinLand(t, sr, seed, (unsigned int)j);
   if (aaMode >= 1) {
-    const double tPrev = j > 0 ? pulseTime(j - 1, nFwd, end, curve, loop, pulseMode) : 0.0;
-    const double tNext = j + 1 < total ? pulseTime(j + 1, nFwd, end, curve, loop, pulseMode) : t;
+    const double tPrev = playT(j > 0 ? pulseTime(j - 1, nFwd, end, curve, loop, pulseMode) : 0.0, scale);
+    const double tNext = playT(j + 1 < total ? pulseTime(j + 1, nFwd, end, curve, loop, pulseMode) : tU, scale);
     return pulseLand(j, total, t, tPrev, tNext, sr, seed, true);
   }
   return ceilLand(t, sr);
 }
 
 static int firstPulseAfter(
-  long long nPrev, int nFwd, int total, double end, double curve, bool loop, int pulseMode, double sr, int aaMode
+  long long nPrev, int nFwd, int total, double end, double curve, bool loop, int pulseMode, double sr, int aaMode,
+  double scale
 ) {
   if (total <= 0) return 0;
   if (!(end > 0.0)) return nPrev >= 0 ? total : 0;
@@ -451,7 +458,7 @@ static int firstPulseAfter(
   int hi = total;
   while (lo < hi) {
     const int mid = lo + ((hi - lo) >> 1);
-    const double t = pulseTime(mid, nFwd, end, curve, loop, pulseMode);
+    const double t = playT(pulseTime(mid, nFwd, end, curve, loop, pulseMode), scale);
     const int rad = aaMode >= 4 ? 2 : 1;
     const long long latest = aaMode >= 3 ? robinLatest(t, sr, rad) : ceilLand(t, sr);
     if (latest <= nPrev) lo = mid + 1;
@@ -462,7 +469,7 @@ static int firstPulseAfter(
 
 }  // namespace
 
-extern "C" int soemdsp_pulse_train_version() { return 17; }
+extern "C" int soemdsp_pulse_train_version() { return 19; }
 
 extern "C" int soemdsp_pulse_train_create() {
   for (int i = 0; i < kMaxInstances; i++) {
@@ -534,6 +541,7 @@ extern "C" double soemdsp_pulse_train_sample(
   double schedNow = runningLatch ? s.cycle : ((modeNow == kPulseFwdRev ? 2.0 : 1.0) * timeNow + delayNow);
   if (!(schedNow == schedNow)) schedNow = 0.0;
   const double periodLock = trackPeriodOf(freqHz, sr);
+  const double scale = (periodLock > 0.0 && schedNow > 0.0) ? (periodLock / schedNow) : 1.0;
   const double wrapNow = periodLock > 0.0 ? periodLock : (schedNow > 0.0 ? schedNow : (1.0 / sr));
   s.periodLock = periodLock;
   s.wrapCycle = wrapNow;
@@ -564,7 +572,7 @@ extern "C" double soemdsp_pulse_train_sample(
       s.cycleN = eventLand(wrapNow, sr, streamLive, (unsigned int)s.count + 1u, aaMode, aaMode == 2);
       const long long nPrev = s.n > 0 ? s.n - 1 : -1;
       const int k = firstPulseAfter(
-        nPrev, s.nFwd, s.count, s.timeSpan, s.eff[2], s.loopSched, s.pulseMode, sr, aaMode
+        nPrev, s.nFwd, s.count, s.timeSpan, s.eff[2], s.loopSched, s.pulseMode, sr, aaMode, scale
       );
       if (k > s.next) s.next = k;
       if (s.next > s.count) s.next = s.count;
@@ -573,9 +581,9 @@ extern "C" double soemdsp_pulse_train_sample(
   if (s.running && periodLock > 0.0 && !trigHit && !loopStart) {
     const long long nPrev = s.n > 0 ? s.n - 1 : -1;
     const int k = firstPulseAfter(
-      nPrev, s.nFwd, s.count, s.timeSpan, s.eff[2], s.loopSched, s.pulseMode, sr, aaMode
+      nPrev, s.nFwd, s.count, s.timeSpan, s.eff[2], s.loopSched, s.pulseMode, sr, aaMode, scale
     );
-    if (k < s.next) s.next = k;
+    s.next = k;
     if (s.next > s.count) s.next = s.count;
   }
   if (!s.running) {
@@ -597,7 +605,7 @@ extern "C" double soemdsp_pulse_train_sample(
   const int nFwd = s.nFwd;
   const double delay = clampDelay(s.eff[8]);
   double tE = oneShotEndTime(total, nFwd, endT, kCurve, lp, du, delay);
-  if (periodLock > 0.0 && tE > periodLock) tE = periodLock;
+  const double tEPlay = playT(tE, scale);
   if (shape == kShapeTrigger) {
     out = takeSpill(s);
     if (s.allAtZero) {
@@ -608,11 +616,12 @@ extern "C" double soemdsp_pulse_train_sample(
     } else {
       const int rad = aaMode >= 4 ? 2 : 1;
       while (s.next < total) {
-        const double t = pulseTime(s.next, nFwd, endT, kCurve, lp, du);
-        if (pulseAfterCutoff(t, lp, s.cycle, tE, periodLock)) {
+        const double tU = pulseTime(s.next, nFwd, endT, kCurve, lp, du);
+        if (pulseAfterCutoff(tU, lp, s.cycle, tE)) {
           s.next = total;
           break;
         }
+        const double t = playT(tU, scale);
         if (aaMode >= 3) {
           if (robinEarliest(t, sr, rad) > s.n) break;
           const long long land = aaMode >= 4
@@ -625,8 +634,8 @@ extern "C" double soemdsp_pulse_train_sample(
           if (c > s.n) break;
           const double amp = pulseAmp(s.next, nFwd, s.eff[3], s.eff[4], s.eff[5], s.eff[6], s.effVel, lp, du);
           if (aaMode >= 1) {
-            const double tPrev = s.next > 0 ? pulseTime(s.next - 1, nFwd, endT, kCurve, lp, du) : 0.0;
-            const double tNext = s.next + 1 < total ? pulseTime(s.next + 1, nFwd, endT, kCurve, lp, du) : t;
+            const double tPrev = playT(s.next > 0 ? pulseTime(s.next - 1, nFwd, endT, kCurve, lp, du) : 0.0, scale);
+            const double tNext = playT(s.next + 1 < total ? pulseTime(s.next + 1, nFwd, endT, kCurve, lp, du) : tU, scale);
             const long long land = pulseLand(s.next, total, t, tPrev, tNext, sr, stream, true);
             addAt(s, land, s.n, amp, &out);
           } else {
@@ -640,26 +649,36 @@ extern "C" double soemdsp_pulse_train_sample(
   } else if (!s.allAtZero && total > 0) {
     while (s.next < total) {
       const double t0 = pulseTime(s.next, nFwd, endT, kCurve, lp, du);
-      if (pulseAfterCutoff(t0, lp, s.cycle, tE, periodLock)) {
+      if (pulseAfterCutoff(t0, lp, s.cycle, tE)) {
         s.next = total;
         break;
       }
-      const long long n0 = landPulse(s.next, total, nFwd, endT, kCurve, lp, du, sr, stream, aaMode);
+      const long long n0 = landPulse(s.next, total, nFwd, endT, kCurve, lp, du, sr, stream, aaMode, scale);
       long long n1;
       if (s.next + 1 < total) {
         const double tNext = pulseTime(s.next + 1, nFwd, endT, kCurve, lp, du);
-        if (pulseAfterCutoff(tNext, lp, s.cycle, tE, periodLock)) {
+        if (pulseAfterCutoff(tNext, lp, s.cycle, tE)) {
           n1 = lp
             ? (s.cycleN > 0 ? s.cycleN : ceilLand(s.wrapCycle > 0.0 ? s.wrapCycle : 1.0 / sr, sr))
-            : eventLand(tE, sr, stream, (unsigned int)total, aaMode, false);
+            : eventLand(tEPlay, sr, stream, (unsigned int)total, aaMode, false);
         } else {
-          n1 = landPulse(s.next + 1, total, nFwd, endT, kCurve, lp, du, sr, stream, aaMode);
+          n1 = landPulse(s.next + 1, total, nFwd, endT, kCurve, lp, du, sr, stream, aaMode, scale);
         }
       } else if (lp) {
-        n1 = s.cycleN > 0 ? s.cycleN : ceilLand(s.wrapCycle > 0.0 ? s.wrapCycle : 1.0 / sr, sr);
+        // Loop last grain: ends where the pulse region ends (span = Time, or
+        // 2*Time Forward-Reverse) so a positive End Delay (graph: 1-Duty of
+        // the cycle) is silent. Delay <= 0: runs to the wrap as before.
+        const long long nWrap = s.cycleN > 0 ? s.cycleN : ceilLand(s.wrapCycle > 0.0 ? s.wrapCycle : 1.0 / sr, sr);
+        if (delay > 0.0) {
+          const double spanT = (du == kPulseFwdRev ? 2.0 : 1.0) * endT;
+          const long long nSpan = eventLand(playT(spanT, scale), sr, stream, (unsigned int)total, aaMode, false);
+          n1 = nSpan < nWrap ? nSpan : nWrap;
+        } else {
+          n1 = nWrap;
+        }
       } else {
-        const double lastT = pulseTime(total - 1, nFwd, endT, kCurve, lp, du);
-        n1 = eventLand(tE, sr, stream, (unsigned int)total, aaMode, delay > 0.0 && ceilLand(tE, sr) == ceilLand(lastT, sr));
+        const double lastT = playT(pulseTime(total - 1, nFwd, endT, kCurve, lp, du), scale);
+        n1 = eventLand(tEPlay, sr, stream, (unsigned int)total, aaMode, delay > 0.0 && ceilLand(tEPlay, sr) == ceilLand(lastT, sr));
       }
       if (n1 <= n0) {
         // One-shot delay 0: last pulse is the end of the previous grain, not a
@@ -691,13 +710,13 @@ extern "C" double soemdsp_pulse_train_sample(
     if (s.next >= s.count) {
       const double lastT = s.allAtZero || s.count <= 0 ? 0.0
         : pulseTime(s.count - 1, s.nFwd, s.timeSpan, s.eff[2], s.loopSched, s.pulseMode);
+      const double lastPlay = playT(lastT, scale);
       bool fireEnd = false;
-      const bool waitPeriod = periodLock > 0.0 && tE > 0.0;
-      if (!waitPeriod && !(delay > 0.0) && !(delay < 0.0)) {
+      if (!(delay > 0.0) && !(delay < 0.0)) {
         fireEnd = shape == kShapeTrigger ? !spillPending(s) : true;
       } else {
-        const bool stackedEnd = delay > 0.0 && ceilLand(tE, sr) == ceilLand(lastT, sr);
-        const long long eLand = eventLand(tE, sr, stream, (unsigned int)s.count, aaMode, stackedEnd);
+        const bool stackedEnd = delay > 0.0 && ceilLand(tEPlay, sr) == ceilLand(lastPlay, sr);
+        const long long eLand = eventLand(tEPlay, sr, stream, (unsigned int)s.count, aaMode, stackedEnd);
         fireEnd = (shape == kShapeTrigger ? !spillPending(s) : true) && s.n >= eLand;
       }
       if (fireEnd) {
@@ -714,7 +733,7 @@ extern "C" double soemdsp_pulse_train_sample(
     bool lastKept = s.next >= s.count - 1;
     if (!lastKept && s.next >= 0 && s.next + 1 < s.count) {
       const double tNext = pulseTime(s.next + 1, nFwd, endT, kCurve, lp, du);
-      lastKept = pulseAfterCutoff(tNext, true, s.cycle, tE, periodLock);
+      lastKept = pulseAfterCutoff(tNext, true, s.cycle, tE);
     }
     if (lastKept) {
       s.endOut = 1.0;

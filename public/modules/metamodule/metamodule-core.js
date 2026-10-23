@@ -1219,6 +1219,22 @@ function nodeGraphMetamodulePortalizeCrossing(metaNode, crossing, children, patc
   };
 
   for (const entry of crossing.inbound || []) {
+    if (entry.kind === "modulation") {
+      const childId = String(entry.destinationNode || "");
+      const paramKey = String(entry.destinationPort || "");
+      if (childId && paramKey && typeof nodeGraphMetamoduleSetParamExposed === "function") {
+        nodeGraphMetamoduleSetParamExposed(metaNode, childId, paramKey, true);
+        const synth = nodeGraphMetamoduleExposeParamKey(childId, paramKey);
+        const c = entry.connection;
+        if (c && synth) {
+          c.destinationNode = metaId;
+          c.destinationParam = synth;
+          if (c.targetNode) c.targetNode = metaId;
+          if (c.targetParam) c.targetParam = synth;
+        }
+      }
+      continue;
+    }
     if (entry.kind !== "signal") {
       boundary.push({
         direction: "in",
@@ -1571,6 +1587,9 @@ function groupNodeGraphSelectionIntoMetamodule() {
 
   nodeGraphMetamodulePortalizeCrossing(metaNode, crossing, children, patch);
   nodeGraphMetamoduleEnsureInterior(metaId, patch);
+  if (typeof nodeGraphMetamoduleSeedExposedParamsFromChildren === "function") {
+    nodeGraphMetamoduleSeedExposedParamsFromChildren(metaNode, patch);
+  }
 
   // Stay on Root — user enters with a double-click on the Metamodule face.
   nodeGraphMvp.metamoduleViewStack = [];
@@ -1675,6 +1694,9 @@ function groupNodeGraphSelectionIntoGroup() {
   }
 
   nodeGraphMetamodulePortalizeCrossing(groupNode, crossing, children, patch);
+  if (typeof nodeGraphMetamoduleSeedExposedParamsFromChildren === "function") {
+    nodeGraphMetamoduleSeedExposedParamsFromChildren(groupNode, patch);
+  }
 
   nodeGraphMvp.metamoduleViewStack = [];
   if (typeof updateNodeGraphMetamoduleBreadcrumb === "function") {

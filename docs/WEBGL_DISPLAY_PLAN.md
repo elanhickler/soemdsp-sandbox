@@ -7,7 +7,7 @@
 ## 1. Policy
 - Every module display draws with **WebGL2 + shaders**. No canvas 2D drawing, no CPU pixel loops for the picture.
 - **Preferred primitive:** shader-expanded quads with smootherstep edges. Each line/rect/dot is a quad; the fragment shader takes the distance to the shape and fades it over `feather` px past `halfPx`:
-  `a = 1 - smootherstep(halfPx, halfPx + feather, dist)` (Perlin quintic). Thickness never depends on fractional pixel position. Fills are the same quads with an infinite `halfPx`. Jack notches keep Hermite `smoothstep`. Phosphor keeps gaussian/erf. General-line faces expose Display Settings `lineSmoothing` (CSS px of `feather`, 0–8, default 1). Cables keep a fixed 2 CSS-px fade.
+  `a = 1 - smootherstep(halfPx, halfPx + feather, dist)` (Perlin quintic). Thickness never depends on fractional pixel position. Fills are the same quads with an infinite `halfPx`. Phosphor keeps gaussian/erf. General-line faces expose Display Settings `lineSmoothing` (CSS px of `feather`, 0–8, default 1). Cables keep a fixed 2 CSS-px fade.
 - **One drawing interface:** `public/lib/visual/gl-line-renderer.js`
   - `nodeGraphGlLinesBegin(canvas, clearRgba)` -> batch (or `null`)
   - `nodeGraphGlLinesRect(batch, x, y, w, h, rgba)`

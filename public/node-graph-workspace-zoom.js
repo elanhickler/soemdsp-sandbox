@@ -182,6 +182,34 @@ function preserveNodeGraphEditorZoomOnPatch(patch = nodeGraphMvp.patch) {
   patch.view = { ...view, zoom: clampNodeGraphZoom(nodeGraphMvp.zoom) };
 }
 
+/** Init / Clear Startup: zoom 1 and pan 0 so the Output module is in view. */
+function resetNodeGraphEditorViewToOrigin(options = {}) {
+  if (!nodeGraphMvp) {
+    return;
+  }
+  nodeGraphMvp.pan = { x: 0, y: 0 };
+  nodeGraphMvp.zoom = 1;
+  if (nodeGraphMvp.patch) {
+    syncNodeGraphPatchViewZoom(1);
+  }
+  if (options.apply === false) {
+    return;
+  }
+  if (typeof applyNodeGraphZoom === "function") {
+    applyNodeGraphZoom({ immediate: true, forceLayout: true, persist: false });
+  }
+  if (typeof applyNodeGraphPan === "function") {
+    applyNodeGraphPan({ immediate: true, persist: false });
+  }
+  if (options.persist !== false) {
+    if (typeof saveNodeGraphWorkspaceViewToUserSettings === "function") {
+      saveNodeGraphWorkspaceViewToUserSettings({ status: false });
+    } else if (typeof scheduleNodeGraphWorkspaceViewPersist === "function") {
+      scheduleNodeGraphWorkspaceViewPersist();
+    }
+  }
+}
+
 function nodeGraphCollectViewTargetNodes(options = {}) {
   const workspace = document.getElementById("nodeGraphWorkspace");
   const surface = typeof nodeGraphZoomSurface === "function" ? nodeGraphZoomSurface() : null;

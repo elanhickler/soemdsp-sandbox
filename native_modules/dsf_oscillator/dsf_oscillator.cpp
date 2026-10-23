@@ -13,13 +13,15 @@
 // Phase step is increment * 0.9999 so the 0/0 pole at t=0 is skipped.
 // Square / Trimorph / SquSaw are PWM / extra integration of this saw kernel.
 //
-// DSF Morphing Osc (type 232): one band-limited object, five shapes.
+// DSF Morphing Osc (type 232): one band-limited object.
 //   Morph     geometric |a| (sine → bright)
 //   Symmetry  mix of +a and −a (saw → alternating pulse)
 //   Width     all harmonics → odd-only square-to-sine DSF
 //   Rotate    common phase on every partial
 //   Slice     start partial (compositional brick / formant)
-// One leaky integrator. No PWM, no Spacing, no Odd/Even.
+//   Spacing   Moorer ratio: partial k at f*(1+(k-1)*Spacing); 1 = harmonic
+//   Odd/Even  0 = all partials of that series, 1 = drop even-numbered terms
+// One leaky integrator. No PWM. Type 46 never applies Spacing / Odd/Even.
 
 #include <soemdsp/soemdsp.hpp>
 
@@ -127,11 +129,20 @@ double sineSawKernel(double turns, const DsfKernelCoeffs& c) {
   return num / den;
 }
 
+int seriesCount(double start, double step, double end) {
+  const double absStep = step < 0.0 ? -step : step;
+  if (absStep < 1.0e-12) return 0;
+  double n = (end - start) / absStep + 1.0;
+  if (n < 1.0) return 0;
+  if (n > 4096.0) n = 4096.0;
+  return static_cast<int>(dsp_floor(n + 1.0e-12));
+}
+
 // Geometric sum_{k=0}^{count-1} r^k exp(i 2π (start + k·step) turns + i 2π rot)
 void geoSeriesCS(
   double r,
-  int start,
-  int step,
+  double start,
+  double step,
   int count,
   double turns,
   double rotTurns,
@@ -144,14 +155,14 @@ void geoSeriesCS(
     return;
   }
   double sinA = 0.0, cosA = 0.0;
-  kernelSinCosTurns(turns * static_cast<double>(start) + rotTurns, &sinA, &cosA);
+  kernelSinCosTurns(turns * start + rotTurns, &sinA, &cosA);
   if (count == 1) {
     C = cosA;
     S = sinA;
     return;
   }
   double sinZ = 0.0, cosZ = 0.0;
-  kernelSinCosTurns(turns * static_cast<double>(step), &sinZ, &cosZ);
+  kernelSinCosTurns(turns * step, &sinZ, &cosZ);
   const double zr = r * cosZ;
   const double zi = r * sinZ;
   const double denr = 1.0 - zr;
@@ -177,7 +188,7 @@ void geoSeriesCS(
   double rm = count == 0 ? 1.0 : dsfPow(mag, static_cast<double>(count));
   if (r < 0.0 && (count & 1)) rm = -rm;
   double sinM = 0.0, cosM = 0.0;
-  kernelSinCosTurns(turns * static_cast<double>(step * count), &sinM, &cosM);
+  kernelSinCosTurns(turns * step * static_cast<double>(count), &sinM, &cosM);
   const double zmr = rm * cosM;
   const double zmi = rm * sinM;
   const double numr = 1.0 - zmr;
@@ -196,32 +207,94 @@ double morphImpulse(
   int end,
   double rotTurns,
   double width,
-  double symmetry
+  double symmetry,
+  double spacing,
+  double oddEven
 ) {
   if (end < start) return 0.0;
   const double w = clamp(width, 0.0, 1.0);
-  const double s = clamp(symmetry, 0.0, 1.0);
+  const double sym = clamp(symmetry, 0.0, 1.0);
+  const double oe = clamp(oddEven, 0.0, 1.0);
+  double sp = spacing;
+  if (!(sp > 1.0e-9) && !(sp < -1.0e-9)) sp = 1.0;
+  const double startD = static_cast<double>(start);
+  const double endD = static_cast<double>(end);
   auto kernelR = [&](double r) {
-    double Call = 0.0, Sall = 0.0, Codd = 0.0, Sodd = 0.0;
+    double Call = 0.0, Sall = 0.0, Codd = 0.0, Sodd = 0.0, Ceven = 0.0, Seven = 0.0;
     if (w < 1.0) {
-      geoSeriesCS(r, start, 1, end - start + 1, turns, rotTurns, Call, Sall);
+      geoSeriesCS(r, startD, sp, seriesCount(startD, sp, endD), turns, rotTurns, Call, Sall);
+      if (oe > 0.0) {
+        const double evenStart = startD + sp;
+        const int nEven = seriesCount(evenStart, 2.0 * sp, endD);
+        if (nEven > 0) {
+          geoSeriesCS(r * r, evenStart, 2.0 * sp, nEven, turns, rotTurns, Ceven, Seven);
+          Call -= oe * r * Ceven;
+        }
+      }
     }
     if (w > 0.0) {
       int oddStart = start;
       if ((oddStart & 1) == 0) oddStart += 1;
       if (oddStart <= end) {
-        const int oddCount = (end - oddStart) / 2 + 1;
-        geoSeriesCS(r, oddStart, 2, oddCount, turns, rotTurns, Codd, Sodd);
+        const double oddStartD = static_cast<double>(oddStart);
+        geoSeriesCS(r, oddStartD, 2.0, seriesCount(oddStartD, 2.0, endD), turns, rotTurns, Codd, Sodd);
       }
     }
     return Call * (1.0 - w) + Codd * w;
   };
-  if (s <= 0.0) return kernelR(a);
-  if (s >= 1.0) return kernelR(-a);
-  return kernelR(a) * (1.0 - s) + kernelR(-a) * s;
+  if (sym <= 0.0) return kernelR(a);
+  if (sym >= 1.0) return kernelR(-a);
+  return kernelR(a) * (1.0 - sym) + kernelR(-a) * sym;
 }
 
 constexpr int kMaxInstances = 16;
+
+void prepareSawCoeffsMul(DsfKernelCoeffs& c, double morph, double n, double mult) {
+  if (c.ready && c.morph == morph && c.n == n) return;
+  const double m = clamp(morph, 0.0, 1.0);
+  const double k = (1.0 - dsfPow(m, 0.14)) * 4.0;
+  const double k2 = k * k * mult;
+  c.morph = morph;
+  c.n = n;
+  c.k42 = dsp_exp2(2.0 * k2);
+  c.eightK2 = dsp_exp2(3.0 * k2);
+  c.decay = dsp_exp2(-k2 * (n + 1.0));
+  c.twoK2 = dsp_exp2(k2);
+  c.denCos = dsp_exp2(1.0 + k2);
+  c.ampAdjust = m * (2.7 - 3.15) + 3.15;
+  c.ready = 1;
+}
+
+void sineSawKernelCS(double turns, const DsfKernelCoeffs& c, double& C, double& S) {
+  double sinx = 0.0, cosx = 0.0, sinxn = 0.0, cosxn = 0.0;
+  kernelSinCosTurns(turns, &sinx, &cosx);
+  kernelSinCosTurns(turns * c.n, &sinxn, &cosxn);
+  const double den = 1.0 - c.denCos * cosx + c.k42;
+  if (den > -1.0e-2 && den < 1.0e-2) {
+    sumPartialsCS(sinx, cosx, c, C, S);
+    return;
+  }
+  const double cos1 = cosxn * cosx - sinxn * sinx;
+  const double sin1 = sinxn * cosx + cosxn * sinx;
+  C = ((c.k42 * cosxn - c.eightK2 * cos1) * c.decay + cosx * c.k42 - c.twoK2) / den;
+  S = ((c.k42 * sinxn - c.eightK2 * sin1) * c.decay + sinx * c.k42) / den;
+}
+
+// Moorer: partial k at f*(1+(k-1)*spacing). Odd/Even subtracts the even series.
+double spacedKernel(double ct, double mt, const DsfKernelCoeffs& c,
+                    const DsfKernelCoeffs& ce, double oddEven) {
+  double sind = 0.0, cosd = 0.0;
+  kernelSinCosTurns(wrap01(ct - mt), &sind, &cosd);
+  double C = 0.0, S = 0.0;
+  sineSawKernelCS(mt, c, C, S);
+  double y = cosd * C - sind * S;
+  if (oddEven != 0.0 && ce.n >= 1.0) {
+    double Ce = 0.0, Se = 0.0;
+    sineSawKernelCS(wrap01(2.0 * mt), ce, Ce, Se);
+    y -= oddEven * (cosd * Ce - sind * Se) / c.twoK2;
+  }
+  return y;
+}
 
 struct DsfOscillatorState {
   bool active;
@@ -236,7 +309,11 @@ struct DsfOscillatorState {
   double renderPhase;
   DsfKernelCoeffs kernelLo;
   DsfKernelCoeffs kernelHi;
+  DsfKernelCoeffs evenLo;
+  DsfKernelCoeffs evenHi;
   double frac;
+  double tm;
+  double oddEven;
 };
 
 double fadedKernel(double turns, const DsfOscillatorState& s) {
@@ -254,20 +331,30 @@ double fadedMorph(
   int startHi,
   double rotTurns,
   double width,
-  double symmetry
+  double symmetry,
+  double spacing,
+  double oddEven
 ) {
   const int endLo = static_cast<int>(s.kernelLo.n);
-  const double lo = morphImpulse(turns, a, startLo, endLo, rotTurns, width, symmetry);
+  const double lo = morphImpulse(turns, a, startLo, endLo, rotTurns, width, symmetry, spacing, oddEven);
   if (s.frac <= 0.0) return lo;
   const int endHi = static_cast<int>(s.kernelHi.n);
-  const double hi = morphImpulse(turns, a, startHi, endHi, rotTurns, width, symmetry);
+  const double hi = morphImpulse(turns, a, startHi, endHi, rotTurns, width, symmetry, spacing, oddEven);
   return lo + (hi - lo) * s.frac;
 }
 
 static DsfOscillatorState gPool[kMaxInstances];
 
-void preparePartials(DsfOscillatorState& s, double morph, double nyquist, double freq) {
-  const double nf = sawPartials(nyquist, freq);
+void preparePartials(DsfOscillatorState& s, double morph, double nyquist, double freq, double spacing = 1.0) {
+  double nf;
+  double absS = spacing < 0.0 ? -spacing : spacing;
+  if (absS < 1.0e-9 || (absS > 0.999999 && absS < 1.000001)) {
+    nf = sawPartials(nyquist, freq);
+  } else {
+    nf = (nyquist / freq - 2.0) / absS + 1.0;
+    if (nf < 1.0) nf = 1.0;
+    if (nf > 4096.0) nf = 4096.0;
+  }
   double nLo = dsp_floor(nf);
   if (nLo < 1.0) nLo = 1.0;
   const double nHi = nLo < 4096.0 ? nLo + 1.0 : nLo;
@@ -309,6 +396,7 @@ extern "C" void soemdsp_dsf_oscillator_reset(int handle) {
   if (handle < 1 || handle > kMaxInstances) return;
   DsfOscillatorState& s = gPool[handle - 1];
   s.t = 0.0;
+  s.tm = 0.0;
   s.leak = 1.0;
   s.sawAcc = 0.0;
   s.sqAcc = 0.0;
@@ -408,7 +496,9 @@ extern "C" void soemdsp_dsf_oscillator_sample_morph(
   double rotate,
   double slice,
   double phase,
-  double level
+  double level,
+  double spacing,
+  double oddEven
 ) {
   if (handle < 1 || handle > kMaxInstances) return;
   DsfOscillatorState& s = gPool[handle - 1];
@@ -419,7 +509,9 @@ extern "C" void soemdsp_dsf_oscillator_sample_morph(
   const double dt = clamp(frequencyHz / safeSampleRate, -0.5, 0.5);
   const double phaseOffset = wrap01(phase);
   const double nyquist = safeSampleRate * 0.5;
-  preparePartials(s, morph, nyquist, safeAbsFrequency);
+  double sp = spacing;
+  if (!(sp > 1.0e-9) && !(sp < -1.0e-9)) sp = 1.0;
+  preparePartials(s, morph, nyquist, safeAbsFrequency, sp);
 
   const double m = clamp(morph, 0.0, 1.0);
   const double k = (1.0 - dsfPow(m, 0.14)) * 4.0;
@@ -427,14 +519,32 @@ extern "C" void soemdsp_dsf_oscillator_sample_morph(
   const int startLo = sliceStart(slice, s.kernelLo.n);
   const int startHi = s.frac > 0.0 ? sliceStart(slice, s.kernelHi.n) : startLo;
   const double rotTurns = wrap01(rotate);
+  const double oe = clamp(oddEven, 0.0, 1.0);
+  const bool harmonic = (sp > 0.999999 && sp < 1.000001);
 
   s.t = wrap01(s.t + dt * 0.9999);
-  const double renderT = wrap01(s.t + phaseOffset);
-  s.renderPhase = renderT;
+  const double renderT = wrap01(s.t + phaseOffset + rotTurns);
+  s.renderPhase = wrap01(s.t + phaseOffset);
+  double raw;
+  if (harmonic) {
+    raw = fadedMorph(wrap01(s.t + phaseOffset), s, a, startLo, startHi, rotTurns, width, symmetry, 1.0, oe);
+  } else {
+    prepareSawCoeffsMul(s.evenLo, morph, dsp_floor(s.kernelLo.n * 0.5), 2.0);
+    if (s.frac > 0.0) prepareSawCoeffsMul(s.evenHi, morph, dsp_floor(s.kernelHi.n * 0.5), 2.0);
+    s.tm = wrap01(s.tm + dt * sp * 0.9999);
+    const double renderM = wrap01(s.tm + (phaseOffset + rotTurns) * sp);
+    const double ct = renderT;
+    const double lo = spacedKernel(ct, renderM, s.kernelLo, s.evenLo, oe);
+    if (s.frac <= 0.0) {
+      raw = lo;
+    } else {
+      const double hi = spacedKernel(ct, renderM, s.kernelHi, s.evenHi, oe);
+      raw = lo + (hi - lo) * s.frac;
+    }
+  }
 
   s.leak = s.leak * 0.99 + 0.000005;
   const double retention = 1.0 - s.leak;
-  const double raw = fadedMorph(renderT, s, a, startLo, startHi, rotTurns, width, symmetry);
   s.sawAcc = s.sawAcc * retention + raw * dt;
   double sample = s.sawAcc * s.kernelLo.ampAdjust;
 
@@ -454,5 +564,5 @@ extern "C" double soemdsp_dsf_oscillator_phase(int handle) {
 }
 
 extern "C" int soemdsp_dsf_oscillator_version() {
-  return 21;
+  return 22;
 }

@@ -194,13 +194,38 @@ function clearNodeGraphWorkingPatchFromUserSettings() {
   const persist = typeof persistSession === "function"
     ? () => persistSession({ reason: "session" })
     : (typeof persistNodeGraphUserSession === "function" ? persistNodeGraphUserSession : null);
+  if (nodeGraphMvp) {
+    nodeGraphMvp.workingPatch = null;
+    nodeGraphMvp.currentSavedPatchFilename = "";
+    nodeGraphMvp.loadedPatchSlug = "";
+    nodeGraphMvp.selectedSavedPatchFilename = "";
+    nodeGraphMvp.patchDirtyState = "untouched";
+    if (nodeGraphMvp.filePicker && typeof nodeGraphMvp.filePicker === "object") {
+      nodeGraphMvp.filePicker = {
+        ...nodeGraphMvp.filePicker,
+        lastPatchName: "",
+      };
+    }
+  }
+  if (typeof nodeGraphClearPatchFileTabState === "function") {
+    nodeGraphClearPatchFileTabState();
+  }
   if (!persist) {
     return false;
   }
-  nodeGraphMvp.workingPatch = null;
-  nodeGraphMvp.currentSavedPatchFilename = "";
-  nodeGraphMvp.patchDirtyState = "untouched";
   return persist();
+}
+
+function nodeGraphUntitledInitPatch(patch) {
+  const next = typeof cloneNodeGraphPatch === "function"
+    ? cloneNodeGraphPatch(patch)
+    : patch;
+  if (!next || typeof next !== "object") {
+    return next;
+  }
+  const info = next.info && typeof next.info === "object" ? next.info : {};
+  next.info = { ...info, name: "" };
+  return next;
 }
 
 async function loadNodeGraphInitPatchFromFile() {
@@ -214,25 +239,35 @@ async function loadNodeGraphInitPatchFromFile() {
     return;
   }
   clearNodeGraphWorkingPatchFromUserSettings();
-  if (nodeGraphMvp) nodeGraphMvp.defaultPatch = cloneNodeGraphPatch(patch);
-  commitNodeGraphPatch(cloneNodeGraphPatch(patch), {
+  const untitled = nodeGraphUntitledInitPatch(patch);
+  if (nodeGraphMvp) nodeGraphMvp.defaultPatch = cloneNodeGraphPatch(untitled);
+  commitNodeGraphPatch(cloneNodeGraphPatch(untitled), {
     autosaveWorkingPatch: false,
     record: true,
     patchDirtyState: "untouched",
+    resetEditorView: true,
     status: "init patch loaded",
   });
   setNodeGraphCurrentSavedPatch("");
+  if (typeof syncNodeGraphHeaderPatchTitle === "function") {
+    syncNodeGraphHeaderPatchTitle();
+  }
 }
 
 function initNodeGraphPatchFromDefault() {
   clearNodeGraphWorkingPatchFromUserSettings();
-  commitNodeGraphPatch(cloneNodeGraphPatch(nodeGraphMvp.defaultPatch || nodeGraphDefaultPatch), {
+  const untitled = nodeGraphUntitledInitPatch(nodeGraphMvp.defaultPatch || nodeGraphDefaultPatch);
+  commitNodeGraphPatch(untitled, {
     autosaveWorkingPatch: false,
     record: true,
     patchDirtyState: "untouched",
+    resetEditorView: true,
     status: "init patch loaded",
   });
   setNodeGraphCurrentSavedPatch("");
+  if (typeof syncNodeGraphHeaderPatchTitle === "function") {
+    syncNodeGraphHeaderPatchTitle();
+  }
 }
 
 function confirmAndInitNodeGraphPatchFromDefault(event) {

@@ -111,7 +111,7 @@ console.log(`ok pulseTrain Loop free-run (no trigger): ${SETS.length} sets x 3 c
       N.soemdsp_graph_connect(g, hF, PORT_MONO, hP, PORT_F);
       N.soemdsp_graph_set_host_transport(g, fHz, 0, 0);
     }
-    for (const [p, v] of [[PR.STAGES, 6], [PR.TDEN, 0.3], [PR.SHAPE, 3], [PR.MODE, 1], [PR.LFO_STYLE, 0]]) N.soemdsp_graph_set_param(g, hP, p, v);
+    for (const [p, v] of [[PR.STAGES, 6], [PR.TDEN, 1 / 0.3], [52, 1], [PR.SHAPE, 3], [PR.MODE, 1], [PR.LFO_STYLE, 0], [32, 0]]) N.soemdsp_graph_set_param(g, hP, p, v);
     if (N.soemdsp_graph_compile(g) | 0) throw new Error("compile");
     N.soemdsp_graph_snap_controls(g);
     const out = [], ends = [];

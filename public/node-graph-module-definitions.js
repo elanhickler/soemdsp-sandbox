@@ -4506,7 +4506,7 @@ const nodeGraphModuleDefinitions = (
         min: "0",
         nonlinearSlider: false,
         step: "1",
-        tooltip: "Naive source into Morph with Robin ±1-sample cycle dither. Asym Sine is 2× per wrap; phasor runs at ƒ/2."
+        tooltip: "Naive source into Morph. Dither mixes a noise band from ƒ to 4ƒ (no period grain). Asym Sine is 2× per wrap; phasor runs at ƒ/2."
       },
       {
         defaultValue: "1",
@@ -4541,7 +4541,40 @@ const nodeGraphModuleDefinitions = (
         mid: "0.5",
         min: "0",
         nonlinearSlider: false,
-        step: "1" },
+        step: "1",
+        tooltip: "Off = clean PolyBLEP. On = mix in a noise band highpassed at ƒ and lowpassed at 4ƒ. Pitch stays locked (no ±1-sample grain). Start / Full / Amount set the mix." },
+      {
+        defaultValue: "2000",
+        key: "start",
+        kind: "frequency",
+        label: "Start",
+        max: "20000",
+        mid: "2000",
+        min: "20",
+        step: "any",
+        unit: "Hz",
+        tooltip: "ƒ where the noise-band mix begins. Below this the oscillator stays a clean PolyBLEP." },
+      {
+        defaultValue: "7000",
+        key: "full",
+        kind: "frequency",
+        label: "Full",
+        max: "20000",
+        mid: "7000",
+        min: "20",
+        step: "any",
+        unit: "Hz",
+        tooltip: "ƒ where the noise-band mix reaches Amount. Log ramp between Start and Full." },
+      {
+        defaultValue: "1",
+        key: "amount",
+        label: "Amount",
+        max: "1",
+        mid: "0.5",
+        min: "0",
+        nonlinearSlider: false,
+        step: "any",
+        tooltip: "Noise-band mix at Full. 0 = still the PolyBLEP. 1 = replace with the ƒ…4ƒ band." },
       {
         defaultValue: "100",
         key: "frequency",
@@ -5061,6 +5094,30 @@ const nodeGraphModuleDefinitions = (
         step: "0.001",
         tooltip:
           "Start partial of the closed-form brick. 0 = from the fundamental. Higher = formant band that cannot alias."
+      },
+      {
+        key: "spacing",
+        label: "Spacing",
+        defaultValue: "1",
+        min: "0.1",
+        mid: "1",
+        max: "4",
+        nonlinearSlider: true,
+        step: "any",
+        tooltip:
+          "Moorer partial ratio. Partial k sits at f·(1+(k−1)·Spacing). 1 = harmonic. Below 1 packs partials; above 1 stretches them (inharmonic, still Nyquist-capped)."
+      },
+      {
+        key: "oddEven",
+        label: "Odd/Even",
+        defaultValue: "0",
+        min: "0",
+        mid: "0.5",
+        max: "1",
+        nonlinearSlider: false,
+        step: "any",
+        tooltip:
+          "0 = all partials of the Spacing series. 1 = odd-numbered terms only (drops the even-numbered partials of that series)."
       },
       {
         defaultValue: "1",
@@ -13958,7 +14015,7 @@ const nodeGraphModuleDefinitions = (
   },
   pulseTrain: {
     planRole: "processor",
-    // ƒ: absolute Hz; wired and > 0, Loop wrap = 1/ƒ (pitch, live). Time stays the grain window.
+    // ƒ: absolute Hz; wired and > 0 replaces Frequency. Cycle = 1/ƒ; Duty of it pulses, the rest is silent.
     inputs: ["Trigger", "f"],
     outputAliases: { Out: "Shape", Mono: "Shape" },
     outputChannels: { Shape: "green" },
@@ -13976,7 +14033,7 @@ const nodeGraphModuleDefinitions = (
     parameters: [
       {
         choices: ["Off", "On"],
-        defaultValue: "1",
+        defaultValue: "0",
         displayChoices: true,
         divideChoicesVisibly: true,
         key: "recalculateOnTrigger",
@@ -13990,14 +14047,14 @@ const nodeGraphModuleDefinitions = (
         step: "1" },
       {
         choices: ["One shot", "Loop"],
-        defaultValue: "0",
+        defaultValue: "1",
         displayChoices: true,
         divideChoicesVisibly: true,
         key: "mode",
         label: "Mode",
         linearSmoothing: false,
         max: "1",
-        mid: "0",
+        mid: "0.5",
         min: "0",
         nonlinearSlider: false,
         step: "1"
@@ -14036,7 +14093,7 @@ const nodeGraphModuleDefinitions = (
       },
       {
         choices: ["Trigger", "Gate", "Saw", "Ramp", "Tri", "Sine"],
-        defaultValue: "0",
+        defaultValue: "2",
         displayChoices: true,
         divideChoicesVisibly: true,
         key: "wave",
@@ -14044,7 +14101,7 @@ const nodeGraphModuleDefinitions = (
         linearSmoothing: false,
         smoothingType: "none",
         max: "5",
-        mid: "0",
+        mid: "2",
         min: "0",
         nonlinearSlider: false,
         step: "1",
@@ -14052,9 +14109,9 @@ const nodeGraphModuleDefinitions = (
       },
       { defaultValue: "0", key: "seed", kind: "seed", label: "Seed", linearSmoothing: false, max: "16777215", maxDigits: 0, mid: "0", min: "0", nonlinearSlider: false, smoothingType: "none", step: "1", tooltip: "Locks the antialiasing pattern. Same Seed = same offsets on every trigger. Change Seed for a different noise texture." },
       { defaultValue: "12", key: "count", label: "Count", max: "128", mid: "8", min: "1", nonlinearSlider: true, step: "1", tooltip: "Pulses in the train (one-way). Slider 1–128; type above the slider for denser trains (DSP up to 16384)." },
-      { defaultValue: "3", key: "endTime", label: "Time", max: "12", mid: "0.1", min: "0", nonlinearSlider: true, step: "any", unit: "s", tooltip: "Duration of the pulse schedule (E_k span). Wired ƒ sets the Loop period to 1/ƒ; Time stays this window inside that period (pulses at t ≥ 1/ƒ are dropped)." },
-      { defaultValue: "0", key: "endDelay", label: "End Delay", max: "12", mid: "0", min: "-12", nonlinearSlider: true, step: "any", unit: "s", tooltip: "Seconds after the last pulse. Positive: silence after. Negative: end early and drop the tail. One shot: End fires at last pulse + this (not before 0). Loop: cycle is Time (Forward-Reverse: 2×Time) plus this. Wired ƒ: wrap stays 1/ƒ; this still cuts or pads the train inside the period." },
-      { defaultValue: "3", key: "curve", label: "Curve", max: "10", mid: "0", min: "-10", nonlinearSlider: false, step: "any" },
+      { defaultValue: "1", key: "frequency", label: "Frequency", max: "20000", mid: "10", min: "0.01", nonlinearSlider: true, step: "any", unit: "Hz" },
+      { defaultValue: "0.5", key: "duty", label: "Pulse Duty", max: "1", mid: "0.25", min: "0", nonlinearSlider: true, step: "any" },
+      { defaultValue: "3", key: "curve", label: "Time Curve", max: "10", mid: "0", min: "-10", nonlinearSlider: false, step: "any" },
       { defaultValue: "1", key: "ampStart", label: "Amp Start", max: "1", mid: "0.5", min: "0", nonlinearSlider: false, step: "any" },
       { defaultValue: "0.2", key: "ampEnd", label: "Amp End", max: "1", mid: "0.5", min: "0", nonlinearSlider: false, step: "any" },
       { defaultValue: "0", key: "ampCurve", label: "Amp Curve", max: "10", mid: "0", min: "-10", nonlinearSlider: false, step: "any" },

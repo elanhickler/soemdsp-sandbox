@@ -98,6 +98,74 @@ function registerNodeGraphModuleScopeSlot(moduleElement, options = {}) {
   return slot;
 }
 
+/**
+ * Init / full patch load during Play: reused Output (same id, same element)
+ * never hits the freshFace plate above, and live draw waits on capture rings,
+ * so the GPU workspace had no display quad — not even a black square.
+ * Wipe leftover tapes, plate every visible buffer face, then rebuild GL.
+ */
+function nodeGraphPlateFacesAfterPatchLoad() {
+  const plate = () => {
+    const liveIds = new Set(
+      (nodeGraphMvp?.patch?.nodes || []).map((node) => String(node?.id || "")).filter(Boolean),
+    );
+    if (typeof nodeGraphModuleScopePersistentCanvases !== "undefined" && nodeGraphModuleScopePersistentCanvases?.forEach) {
+      for (const [id, canvas] of [...nodeGraphModuleScopePersistentCanvases.entries()]) {
+        if (typeof nodeGraphWaterfallWipeHistory === "function") {
+          nodeGraphWaterfallWipeHistory(canvas);
+        }
+        if (!liveIds.has(String(id))) {
+          nodeGraphModuleScopePersistentCanvases.delete(id);
+        }
+      }
+    }
+    if (typeof scopePaintEnsureColdPlates === "function") {
+      scopePaintEnsureColdPlates({ create: true, force: true, assumeStopped: true, replaceTape: true });
+    }
+    if (typeof nodeGraphVisibleModuleScopeSlots === "function") {
+      const ratio = typeof window !== "undefined" ? Math.max(1, window.devicePixelRatio || 1) : 1;
+      for (const slot of nodeGraphVisibleModuleScopeSlots()) {
+        const face = slot?.scopeElement;
+        const canvas = face?.querySelector?.("canvas");
+        if (!canvas) continue;
+        if ((!(canvas.width > 1) || !(canvas.height > 1))
+          && typeof syncNodeGraphModuleScopeLocalFallbackCanvas === "function") {
+          syncNodeGraphModuleScopeLocalFallbackCanvas(canvas, face, ratio);
+        }
+        if (canvas.width > 1 && canvas.height > 1) continue;
+        if (typeof nodeGraphGlLinesFillBlack === "function") {
+          nodeGraphGlLinesFillBlack(canvas);
+        }
+      }
+    }
+    if (typeof nodeGraphViewportCullFlushNow === "function") {
+      nodeGraphViewportCullFlushNow();
+    }
+    if (typeof nodeGraphModuleGeometryPublishVisible === "function") {
+      nodeGraphModuleGeometryPublishVisible();
+    }
+    if (typeof nodeGraphGlGraphRebuildPlates === "function") {
+      nodeGraphGlGraphRebuildPlates();
+    }
+    if (typeof nodeGraphGlGraphPresent === "function") {
+      nodeGraphGlGraphPresent();
+    }
+    if (typeof scheduleNodeGraphModuleScopeDraw === "function") {
+      scheduleNodeGraphModuleScopeDraw();
+    }
+    if (typeof scopePaintNotifyFaceLoops === "function") {
+      scopePaintNotifyFaceLoops({ force: true });
+    }
+  };
+  plate();
+  if (typeof requestAnimationFrame === "function") {
+    requestAnimationFrame(() => {
+      plate();
+      requestAnimationFrame(plate);
+    });
+  }
+}
+
 function unregisterNodeGraphModuleScopeSlot(nodeId) {
   const slot = nodeGraphModuleScopeState.slots.get(nodeId);
   const burnCanvas = slot?.scopeElement?.querySelector?.(

@@ -154,10 +154,6 @@ async function bindNodeGraphUiDevSettingsEvents() {
     "nodeUiDevSliderTextPadding",
     "nodeUiDevParamWireThickness",
     "nodeUiDevParamWireDotSize",
-    "nodeUiDevRailNotchRadius",
-    "nodeUiDevRailNotchSoft",
-    "nodeUiDevIoNotchRadius",
-    "nodeUiDevIoNotchSoft",
   ]) {
     const sliderTextInput = document.getElementById(sliderTextId);
     sliderTextInput?.addEventListener("input", syncNodeUiDevSettingsHeaderControls);

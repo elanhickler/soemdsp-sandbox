@@ -1891,7 +1891,9 @@ function commitNodeGraphPatch(patch, options = {}) {
     }
     nodeGraphMvp.patch = validated;
   }
-  if (typeof preserveNodeGraphEditorZoomOnPatch === "function") {
+  if (options.resetEditorView && typeof resetNodeGraphEditorViewToOrigin === "function") {
+    resetNodeGraphEditorViewToOrigin({ apply: true, persist: false });
+  } else if (typeof preserveNodeGraphEditorZoomOnPatch === "function") {
     preserveNodeGraphEditorZoomOnPatch(nodeGraphMvp.patch);
   }
   if (!isChromeEdit) {
@@ -1922,10 +1924,15 @@ function commitNodeGraphPatch(patch, options = {}) {
       skipExistingSync: isTopologyEdit,
       paramSyncIds: options.paramSyncIds,
     });
-    if (!isTopologyEdit && typeof applyNodeGraphZoom === "function") {
+    if (options.resetEditorView && typeof resetNodeGraphEditorViewToOrigin === "function") {
+      resetNodeGraphEditorViewToOrigin({ apply: true });
+    } else if (!isTopologyEdit && typeof applyNodeGraphZoom === "function") {
       applyNodeGraphZoom();
     }
     pruneNodeGraphSelectionAfterPatch();
+  }
+  if (options.resetEditorView && typeof nodeGraphPlateFacesAfterPatchLoad === "function") {
+    nodeGraphPlateFacesAfterPatchLoad();
   }
   // Positions / face cosmetics / chrome size do not change offline render output.
   if (options.markPending !== false && !isLayoutEdit && !isSoftDom && !isChromeEdit) {

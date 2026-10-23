@@ -5,6 +5,10 @@
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
+// Graph Pulse Train is Frequency (timeDenominator) + Duty (timeNumerator):
+// Time = Duty/ƒ/(Fwd-Rev?2:1), End Delay = (1-Duty)/ƒ (graph 255). ptFD maps an
+// old Time / End Delay pair to the same schedule.
+const ptFD = (T, D, m) => { const k = m === 1 ? 2 : 1; const c = k * T + D; const f = 1 / c; const duty = (k * T) / c; const P = 1 / f; return { f, duty, T: duty * P / k, D: (1 - duty) * P }; };
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const imp = { env: { emo_process_block: () => 0 } };
 const load = async (p) => (await WebAssembly.instantiate(fs.readFileSync(p), imp)).instance.exports;
@@ -117,7 +121,7 @@ console.log("ok pulseTrain a new Trigger hit mid-train restarts it (single Trigg
 // 4) Graph path: Clock -> Trigger; engine Out / End / __Elapsed == direct module on the same trigger.
 {
   const TYPE_CLOCK = 28, TYPE_PT = 231, PORT_MONO = 0, PORT_LEFT = 1, PORT_PHASE01 = 10, PORT_TRIGGER = 20;
-  const PR = { RATE: 10, AMP: 12, SHAPE: 13, STAGES: 22, WIDTH: 31, TDEN: 53, IN_LOW: 80, IN_HIGH: 81, LFO_STYLE: 56 };
+  const PR = { RATE: 10, AMP: 12, SHAPE: 13, STAGES: 22, WIDTH: 31, TDEN: 53, TMODE: 54, IN_LOW: 80, IN_HIGH: 81, LFO_STYLE: 56, OVERSAMPLE: 32 };
   const g = N.soemdsp_graph_create() | 0;
   N.soemdsp_graph_set_sample_rate(g, SR);
   const hC = 0x7301, hP = 0x7302;
@@ -129,7 +133,10 @@ console.log("ok pulseTrain a new Trigger hit mid-train restarts it (single Trigg
   const set = [20, 2, 4, 1, 0.1, 1, 1.5];
   const keys = [PR.STAGES, PR.TDEN, PR.SHAPE, PR.IN_LOW, PR.IN_HIGH, PR.WIDTH, PR.AMP];
   keys.forEach((p, i) => N.soemdsp_graph_set_param(g, hP, p, set[i]));
+  { const fd = ptFD(set[1], 0, 0); N.soemdsp_graph_set_param(g, hP, 53, fd.f); N.soemdsp_graph_set_param(g, hP, 52, fd.duty); set[1] = fd.T; }
   N.soemdsp_graph_set_param(g, hP, PR.LFO_STYLE, 0); // Pulse Mode Forward
+  N.soemdsp_graph_set_param(g, hP, PR.TMODE, 0); // One shot
+  N.soemdsp_graph_set_param(g, hP, PR.OVERSAMPLE, 0); // Trigger (impulse Shape)
   if (N.soemdsp_graph_compile(g) | 0) throw new Error("compile");
   N.soemdsp_graph_snap_controls(g);
   const trig = [], out = [], endo = [], el = [];
@@ -152,7 +159,7 @@ console.log("ok pulseTrain a new Trigger hit mid-train restarts it (single Trigg
 // 4b) Graph Forward-Reverse + End Delay 0 == direct Pulse Mode 1.
 {
   const TYPE_CLOCK = 28, TYPE_PT = 231, PORT_MONO = 0, PORT_LEFT = 1, PORT_PHASE01 = 10, PORT_TRIGGER = 20;
-  const PR = { RATE: 10, AMP: 12, SHAPE: 13, STAGES: 22, WIDTH: 31, TNUM: 52, TDEN: 53, IN_LOW: 80, IN_HIGH: 81, LFO_STYLE: 56 };
+  const PR = { RATE: 10, AMP: 12, SHAPE: 13, STAGES: 22, WIDTH: 31, TNUM: 52, TDEN: 53, TMODE: 54, IN_LOW: 80, IN_HIGH: 81, LFO_STYLE: 56, OVERSAMPLE: 32 };
   const g = N.soemdsp_graph_create() | 0;
   N.soemdsp_graph_set_sample_rate(g, SR);
   const hC = 0x7311, hP = 0x7312;
@@ -164,8 +171,10 @@ console.log("ok pulseTrain a new Trigger hit mid-train restarts it (single Trigg
   const set = [6, 0.15, 4, 1, 0.2, 0, 1];
   const keys = [PR.STAGES, PR.TDEN, PR.SHAPE, PR.IN_LOW, PR.IN_HIGH, PR.WIDTH, PR.AMP];
   keys.forEach((p, i) => N.soemdsp_graph_set_param(g, hP, p, set[i]));
+  { const fd = ptFD(set[1], 0, 1); N.soemdsp_graph_set_param(g, hP, 53, fd.f); N.soemdsp_graph_set_param(g, hP, 52, fd.duty); set[1] = fd.T; }
   N.soemdsp_graph_set_param(g, hP, PR.LFO_STYLE, 1);
-  N.soemdsp_graph_set_param(g, hP, PR.TNUM, 0);
+  N.soemdsp_graph_set_param(g, hP, PR.TMODE, 0);
+  N.soemdsp_graph_set_param(g, hP, PR.OVERSAMPLE, 0);
   if (N.soemdsp_graph_compile(g) | 0) throw new Error("dual graph compile");
   N.soemdsp_graph_snap_controls(g);
   const trig = [], out = [], endo = [], el = [];
@@ -274,7 +283,7 @@ console.log("ok pulseTrain a new Trigger hit mid-train restarts it (single Trigg
   const f1 = preview(N, [1, 0.2, 0, 1, 1, 0, 1, 0, 0, 0]);
   if (JSON.stringify(r1) !== JSON.stringify(f1)) throw new Error("reverse N=1 != Forward");
   const TYPE_CLOCK = 28, TYPE_PT = 231, PORT_MONO = 0, PORT_LEFT = 1, PORT_PHASE01 = 10, PORT_TRIGGER = 20;
-  const PR = { RATE: 10, AMP: 12, SHAPE: 13, STAGES: 22, WIDTH: 31, TNUM: 52, TDEN: 53, IN_LOW: 80, IN_HIGH: 81, LFO_STYLE: 56 };
+  const PR = { RATE: 10, AMP: 12, SHAPE: 13, STAGES: 22, WIDTH: 31, TNUM: 52, TDEN: 53, TMODE: 54, IN_LOW: 80, IN_HIGH: 81, LFO_STYLE: 56, OVERSAMPLE: 32 };
   const g = N.soemdsp_graph_create() | 0;
   N.soemdsp_graph_set_sample_rate(g, SR);
   const hC = 0x7331, hP = 0x7332;
@@ -286,8 +295,10 @@ console.log("ok pulseTrain a new Trigger hit mid-train restarts it (single Trigg
   const gSet = [6, 0.15, 4, 1, 0.2, 0, 1];
   const keys = [PR.STAGES, PR.TDEN, PR.SHAPE, PR.IN_LOW, PR.IN_HIGH, PR.WIDTH, PR.AMP];
   keys.forEach((p, i) => N.soemdsp_graph_set_param(g, hP, p, gSet[i]));
+  { const fd = ptFD(gSet[1], 0, 2); N.soemdsp_graph_set_param(g, hP, 53, fd.f); N.soemdsp_graph_set_param(g, hP, 52, fd.duty); gSet[1] = fd.T; }
   N.soemdsp_graph_set_param(g, hP, PR.LFO_STYLE, 2);
-  N.soemdsp_graph_set_param(g, hP, PR.TNUM, 0);
+  N.soemdsp_graph_set_param(g, hP, PR.TMODE, 0);
+  N.soemdsp_graph_set_param(g, hP, PR.OVERSAMPLE, 0);
   if (N.soemdsp_graph_compile(g) | 0) throw new Error("reverse graph compile");
   N.soemdsp_graph_snap_controls(g);
   const trig = [], gout = [], endo = [], el = [];
@@ -785,6 +796,7 @@ function grainWave(shape, u) {
   const set = [4, 0.01, 0, 1, 1, 0, 1];
   const keys = [PR.STAGES, PR.TDEN, PR.SHAPE, PR.IN_LOW, PR.IN_HIGH, PR.WIDTH, PR.AMP];
   keys.forEach((p, i) => N.soemdsp_graph_set_param(g, hP, p, set[i]));
+  { const fd = ptFD(set[1], 0, 0); N.soemdsp_graph_set_param(g, hP, 53, fd.f); N.soemdsp_graph_set_param(g, hP, 52, fd.duty); set[1] = fd.T; }
   N.soemdsp_graph_set_param(g, hP, PR.TIMING, 1); // Loop
   N.soemdsp_graph_set_param(g, hP, PR.OVERSAMPLE, 2); // Saw
   if (N.soemdsp_graph_compile(g) | 0) throw new Error("grain graph compile");
@@ -832,6 +844,6 @@ function grainWave(shape, u) {
   if (sameShape === n) throw new Error("Saw Shape identical to Trigger out");
   console.log(`ok pulseTrain Trigger out always impulses (${hits} hits) while Shape is Saw`);
 }
-if ((N.soemdsp_graph_version() | 0) < 251) throw new Error(`graph version ${N.soemdsp_graph_version()}`);
-if ((N.soemdsp_pulse_train_version() | 0) !== 17) throw new Error(`pulse_train v${N.soemdsp_pulse_train_version()}`);
+if ((N.soemdsp_graph_version() | 0) < 252) throw new Error(`graph version ${N.soemdsp_graph_version()}`);
+if ((N.soemdsp_pulse_train_version() | 0) < 18) throw new Error(`pulse_train v${N.soemdsp_pulse_train_version()}`);
 console.log(`ok graph version ${N.soemdsp_graph_version()}, pulse_train v${N.soemdsp_pulse_train_version()}`);

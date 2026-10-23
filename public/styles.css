@@ -7745,12 +7745,6 @@ body.keyboard-debug-hidden .node-midi-keyboard-signal-bar {
   /* Param wires (ending on a rail IO box): UIDEV param wire thickness / end dot. */
   --node-param-wire-thickness: 0.5px;
   --node-param-wire-dot-size: 1.61px;
-  /* IO notch (UIDev): shader half-disc cut-out, smoothstep edge = soft x radius.
-     rail = param IO boxes, io = IO-section signal sockets. */
-  --node-rail-notch-radius: 5px;
-  --node-rail-notch-soft: 0.35;
-  --node-io-notch-radius: 6px;
-  --node-io-notch-soft: 0.5;
   /*
    * Signal jack cell:
    *   width  = half-slot (inward half fits)

@@ -873,9 +873,9 @@ const nodeGraphModuleStoreCatalog = Object.freeze({
   },
   filterMorphOscillator: {
     category: "oscillator",
-    description: "Robin-dithered naive shapes through a pitch-tracking one-pole Morph (1…4 poles) toward sine-ish, with constant-fundamental makeup.",
+    description: "PolyBLEP naive shapes through a pitch-tracking one-pole Morph (1…4 poles) toward sine-ish. Dither mixes a grain-free noise band from ƒ to 4ƒ.",
     label: "Filter Morph Osc",
-    notes: ["robin dither", "filter morph", "one-pole", "poles", "native", "oscillator"],
+    notes: ["polyblep", "filter morph", "one-pole", "poles", "hp noise fm", "native", "oscillator"],
   },
   sineWarp: {
     category: "oscillator",
@@ -903,7 +903,7 @@ const nodeGraphModuleStoreCatalog = Object.freeze({
   },
   dsfMorphingOsc: {
     category: "oscillator",
-    description: "Alias-free morphing oscillator: Morph, Symmetry, Width, Rotate, and Slice of one band-limited DSF object (sine / saw / square / pulse / formant).",
+    description: "Alias-free morphing oscillator: Morph, Symmetry, Width, Rotate, Slice, Spacing, and Odd/Even of one band-limited DSF object.",
     label: "DSF Morphing Osc",
     notes: ["oscillator", "dsf", "discrete summation formula", "anti-aliasing", "morph", "formant", "native"],
   },

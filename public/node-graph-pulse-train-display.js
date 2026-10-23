@@ -40,7 +40,7 @@ function nodeGraphPulseTrainPreviewLoad() {
   if (nodeGraphPulseTrainPreviewWasm.promise || typeof fetch !== "function" || typeof WebAssembly === "undefined") {
     return nodeGraphPulseTrainPreviewWasm.promise;
   }
-  nodeGraphPulseTrainPreviewWasm.promise = fetch("/native_modules/pulse_train/pulse_train.wasm?v=pulse-train-f-period-1")
+  nodeGraphPulseTrainPreviewWasm.promise = fetch("/native_modules/pulse_train/pulse_train.wasm?v=pulse-train-freq-duty-1")
     .then((response) => {
       if (!response.ok) throw new Error(`pulse_train wasm HTTP ${response.status}`);
       return response.arrayBuffer();
@@ -82,12 +82,18 @@ function nodeGraphPulseTrainClampCount(count) {
 function nodeGraphPulseTrainSchedule(section, node) {
   nodeGraphPulseTrainPreviewLoad();
   const p = (key, fallback) => nodeGraphPulseTrainFaceParam(node, key, fallback);
-  // Time is the E_k window. Wired ƒ does not replace it (wrap is 1/ƒ; axis uses that).
-  let endTime = p("endTime", 3);
+  // Time is the E_k window. Wired ƒ scales the whole Count→End Delay cycle into 1/ƒ.
+  // Frequency (or wired ƒ) + Duty -> Time / End Delay seconds, same as process_pulse_train.
+  const fPeriod = nodeGraphPulseTrainFPeriod(node);
+  const fKnob = p("frequency", 1);
+  const periodS = Number.isFinite(fPeriod) && fPeriod > 0 ? fPeriod : (fKnob > 0 ? 1 / fKnob : 0);
+  const duty = p("duty", 0.5);
+  const pulseModeKnob = nodeGraphPulseTrainPulseMode(p("pulseMode", 0));
+  let endTime = duty * periodS / (pulseModeKnob === 1 ? 2 : 1);
   const args = [
     nodeGraphPulseTrainClampCount(p("count", 12)), endTime, p("curve", 3),
     p("ampStart", 1), p("ampEnd", 0.2), p("ampCurve", 0), p("amplitude", 1),
-    Math.round(p("mode", 0)), nodeGraphPulseTrainPulseMode(p("pulseMode", 0)), p("endDelay", 0),
+    Math.round(p("mode", 1)), pulseModeKnob, (1 - duty) * periodS,
   ];
   const live = [...args];
   // Audio running: draw the params the engine is playing with (latched at the
@@ -99,12 +105,15 @@ function nodeGraphPulseTrainSchedule(section, node) {
     const eng = ["__Count", "__End", "__Curve", "__AmpStart", "__AmpEnd", "__AmpCurve", "__Amp"]
       .map((name) => Number(nodeGraphModuleScopeLatestOutputValue(section.dataset.node, name, Number.NaN)));
     if (eng.every(Number.isFinite)) {
-      args[0] = nodeGraphPulseTrainClampCount(eng[0]);
+      // __Count = count + Pulse Mode / 4 (both latched).
+      const countIn = Math.floor(eng[0] + 1e-9);
+      args[0] = nodeGraphPulseTrainClampCount(countIn);
+      args[8] = nodeGraphPulseTrainPulseMode(Math.round((eng[0] - countIn) * 4));
       for (let i = 1; i < 7; i += 1) args[i] = eng[i];
       endTime = eng[1];
     }
-    const pulseModeLive = Number(nodeGraphModuleScopeLatestOutputValue(section.dataset.node, "__Dual", Number.NaN));
-    if (Number.isFinite(pulseModeLive)) args[8] = nodeGraphPulseTrainPulseMode(pulseModeLive);
+    const delayLive = Number(nodeGraphModuleScopeLatestOutputValue(section.dataset.node, "__Delay", Number.NaN));
+    if (Number.isFinite(delayLive)) args[9] = delayLive;
   }
   const period = nodeGraphPulseTrainFPeriod(node);
   const key = `${args.join(",")}|${live.join(",")}|${Number.isFinite(period) ? period : ""}`;
@@ -246,9 +255,12 @@ function drawNodeGraphPulseTrainDisplay(section) {
   const schedule = nodeGraphPulseTrainSchedule(section, node);
   const ghost = schedule?.ghost || null;
   const period = nodeGraphPulseTrainFPeriod(node);
-  const end = Number.isFinite(period) && period > 0
-    ? period
-    : (schedule ? Math.max(schedule.end, ghost ? ghost.end : 0) : Math.max(0.001, nodeGraphPulseTrainFaceParam(node, "endTime", 3)));
+  const span = schedule ? ((schedule.pulseMode === 1 ? 2 : 1) * schedule.duration) : 0;
+  const schedCycle = schedule ? span + schedule.delay : 0;
+  const timeScale = 1; // Time + End Delay already span the 1/ƒ cycle
+  const fKnobFace = nodeGraphPulseTrainFaceParam(node, "frequency", 1);
+  const end = schedule ? Math.max(schedule.end, ghost ? ghost.end : 0)
+    : (Number.isFinite(period) && period > 0 ? period : Math.max(0.001, fKnobFace > 0 ? 1 / fKnobFace : 1));
   const padX = Math.max(6, w * 0.04) + dotR;
   const padTop = Math.max(5, h * 0.08) + dotR;
   const base = h - Math.max(5, h * 0.08);
@@ -275,7 +287,7 @@ function drawNodeGraphPulseTrainDisplay(section) {
         count: sched.nFwd || sched.count,
         total: sched.count,
         pulseMode: sched.pulseMode,
-        duration: sched.duration,
+        duration: sched.duration * timeScale,
         axisEnd: end,
         curve: sched.curve,
         ampStart: sched.ampStart,

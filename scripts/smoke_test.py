@@ -18459,12 +18459,37 @@ def check_color_rows() -> None:
     require(unit.returncode == 0, f"color rows: {unit.stdout}{unit.stderr}")
 
 
+def check_metamodule_enter_and_expose() -> None:
+    """Double-click plate enters a Metamodule; grouping auto-exposes inbound param cables."""
+    gl = (PUBLIC / "node-graph-gl-graph.js").read_text(encoding="utf-8")
+    require("lastMetaDown" in gl, "GL hit tracks Metamodule plate double-click")
+    require("enterNodeGraphMetamoduleView(hit.id)" in gl, "GL plate double-click enters the Metamodule")
+    core = (PUBLIC / "modules" / "metamodule" / "metamodule-core.js").read_text(encoding="utf-8")
+    require('entry.kind === "modulation"' in core, "grouping portalize handles inbound modulations")
+    require("nodeGraphMetamoduleSetParamExposed(metaNode, childId, paramKey, true)" in core, "inbound param cables auto Show on metamodule")
+    unit = subprocess.run(["node", str(ROOT / "scripts" / "smoke_metamodule_group_expose.cjs")], capture_output=True, text=True)
+    require(unit.returncode == 0, f"metamodule group expose: {unit.stdout}{unit.stderr}")
+
+
 def check_pulse_train_fade() -> None:
     """Pulse Train lit dots fade with PhosphorResidual.energyAfterSeconds."""
     residual = (PUBLIC / "lib" / "phosphor" / "phosphor-residual.js").read_text(encoding="utf-8")
     require("energyAfterSeconds" in residual, "PhosphorResidual has energyAfterSeconds")
     unit = subprocess.run(["node", str(ROOT / "scripts" / "smoke_pulse_train_fade.cjs")], capture_output=True, text=True)
     require(unit.returncode == 0, f"pulse train fade: {unit.stdout}{unit.stderr}")
+
+
+def check_init_patch_view() -> None:
+    """Init Patch resets camera, wipes the title, and plates faces during Play."""
+    actions = (PUBLIC / "node-graph-file-actions.js").read_text(encoding="utf-8")
+    require("loadedPatchSlug = \"\"" in actions, "Init clears loadedPatchSlug so the header is Untitled")
+    require("resetEditorView: true" in actions, "Init commit resets the editor view")
+    zoom = (PUBLIC / "node-graph-workspace-zoom.js").read_text(encoding="utf-8")
+    require("function resetNodeGraphEditorViewToOrigin" in zoom, "origin camera helper exists")
+    slots = (PUBLIC / "node-graph-module-scope-slots.js").read_text(encoding="utf-8")
+    require("function nodeGraphPlateFacesAfterPatchLoad" in slots, "Init plates faces during Play")
+    unit = subprocess.run(["node", str(ROOT / "scripts" / "smoke_init_patch_view.cjs")], capture_output=True, text=True)
+    require(unit.returncode == 0, f"init patch view: {unit.stdout}{unit.stderr}")
 
 
 def check_dsf_face_spectrum() -> None:
@@ -18551,7 +18576,9 @@ def main() -> None:
     check_color_rows()
     check_dsf_face_spectrum()
     check_filter_morph_blep()
+    check_metamodule_enter_and_expose()
     check_pulse_train_fade()
+    check_init_patch_view()
     run_smoke(args.port, Path(args.manifest).resolve())
     check_display_draws_live(Path(args.manifest).resolve())
     print("soemdsp-sandbox smoke test passed")

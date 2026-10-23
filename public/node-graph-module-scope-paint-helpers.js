@@ -1851,8 +1851,17 @@ function paintNodeGraphTraceDisplayColdPlate(slot, pixelRatio = window.devicePix
     }
     return true;
   }
-  // Waterfall dest is history. Never repaint a started tape.
-  if ((canvas._waterfall?.started || canvas._traceScroll?.started) && canvas.width > 1 && canvas.height > 1) {
+  // Waterfall dest is history. Never repaint a started tape — unless this is
+  // a patch-load / Init plate, which must drop the previous patch's tape so
+  // Play-mode Init still shows a black square until the new capture lands.
+  if (options.replaceTape && typeof nodeGraphWaterfallWipeHistory === "function") {
+    nodeGraphWaterfallWipeHistory(canvas);
+  }
+  if (
+    !options.replaceTape
+    && (canvas._waterfall?.started || canvas._traceScroll?.started)
+    && canvas.width > 1 && canvas.height > 1
+  ) {
     const holdBg = wfRenderer === "waterfall" && typeof nodeGraphWaterfallPlateCss === "function"
       ? nodeGraphWaterfallPlateCss(settings)
       : nodeGraphFacePlateBackground(settings);

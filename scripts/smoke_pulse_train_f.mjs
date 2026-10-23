@@ -1,10 +1,14 @@
 // Pulse Train ƒ input (kPortF, absolute Hz): unwired is bit-identical to the
-// previous build (old combined wasm as argv[2]). Wired and > 0, Loop wrap /
-// one-shot cutoff = 1/ƒ (pitch, live every sample). Time stays the E_k grain
-// window; pulses with t >= 1/ƒ are dropped. ƒ <= 0 uses the Time knob for wrap.
+// previous build (old combined wasm as argv[2]). Wired and > 0, the whole
+// Count→End Delay sequence is one oscillator cycle scaled into 1/ƒ (pitch,
+// live every sample). Pulses are not dropped at 1/ƒ. ƒ <= 0 uses Time+Delay wrap.
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
+// Graph Pulse Train is Frequency (timeDenominator) + Duty (timeNumerator):
+// Time = Duty/ƒ/(Fwd-Rev?2:1), End Delay = (1-Duty)/ƒ (graph 255). ptFD maps an
+// old Time / End Delay pair to the same schedule.
+const ptFD = (T, D, m) => { const k = m === 1 ? 2 : 1; const c = k * T + D; const f = 1 / c; const duty = (k * T) / c; const P = 1 / f; return { f, duty, T: duty * P / k, D: (1 - duty) * P }; };
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const imp = { env: { emo_process_block: () => 0 } };
 const load = async (p) => (await WebAssembly.instantiate(fs.readFileSync(p), imp)).instance.exports;
@@ -12,8 +16,8 @@ const N = await load(path.join(root, "native_modules", "combined", "soemdsp_comb
 const O = process.argv[2] ? await load(process.argv[2]) : null;
 const SR = 48000, TYPE_CLOCK = 28, TYPE_HOST_BPM = 192, TYPE_PT = 231;
 const PORT_MONO = 0, PORT_LEFT = 1, PORT_RAMP = 4, PORT_PHASE01 = 10, PORT_F = 16, PORT_TRIGGER = 20;
-const PR = { RATE: 10, AMP: 12, SHAPE: 13, STAGES: 22, WIDTH: 31, TDEN: 53, TMODE: 54, IN_LOW: 80, IN_HIGH: 81, LFO_STYLE: 56 };
-function run(E, { fHz = null, end = 3, count = 10, curve = 3, rate = 0.3, seconds = 7, mode = 0, delay = 0, pulseMode = 0 } = {}) {
+const PR = { RATE: 10, AMP: 12, SHAPE: 13, STAGES: 22, WIDTH: 31, TDEN: 53, TMODE: 54, IN_LOW: 80, IN_HIGH: 81, LFO_STYLE: 56, OVERSAMPLE: 32 };
+function run(E, { fHz = null, end = 3, count = 10, curve = 3, rate = 0.3, seconds = 7, mode = 0, delay = 0, pulseMode = 0, wave = 0 } = {}) {
   const g = E.soemdsp_graph_create() | 0;
   E.soemdsp_graph_set_sample_rate(g, SR);
   const hC = 0x7401, hP = 0x7402, hF = 0x7403;
@@ -26,11 +30,13 @@ function run(E, { fHz = null, end = 3, count = 10, curve = 3, rate = 0.3, second
     E.soemdsp_graph_set_host_transport(g, fHz, 0, 0);
   }
   E.soemdsp_graph_set_param(g, hC, PR.RATE, rate);
-  const vals = [[PR.STAGES, count], [PR.TDEN, end], [PR.SHAPE, curve], [PR.IN_LOW, 1], [PR.IN_HIGH, 0.3], [PR.WIDTH, 1], [PR.AMP, 1]];
+  const fd = ptFD(end, delay, pulseMode);
+  const vals = [[PR.STAGES, count], [PR.TDEN, fd.f], [PR.SHAPE, curve], [PR.IN_LOW, 1], [PR.IN_HIGH, 0.3], [PR.WIDTH, 1], [PR.AMP, 1]];
   for (const [p, v] of vals) E.soemdsp_graph_set_param(g, hP, p, v);
   E.soemdsp_graph_set_param(g, hP, PR.LFO_STYLE, pulseMode);
   E.soemdsp_graph_set_param(g, hP, PR.TMODE, mode);
-  E.soemdsp_graph_set_param(g, hP, 52, delay); // timeNumerator End Delay
+  E.soemdsp_graph_set_param(g, hP, 52, fd.duty);
+  E.soemdsp_graph_set_param(g, hP, PR.OVERSAMPLE, wave);
   if (E.soemdsp_graph_compile(g) | 0) throw new Error("compile");
   E.soemdsp_graph_snap_controls(g);
   const r = { trig: [], out: [], end: [], el: [], ramp: [] };
@@ -50,7 +56,8 @@ function runLoop(E, { fHz, end = 3, count = 10, curve = 0, seconds = 1.2, delay 
   if (E.soemdsp_graph_add_node(g, hF, TYPE_HOST_BPM) | 0) throw new Error("bpm add");
   if (E.soemdsp_graph_connect(g, hF, PORT_MONO, hP, PORT_F) | 0) throw new Error("bpm->f");
   E.soemdsp_graph_set_host_transport(g, fHz, 0, 0);
-  const vals = [[PR.STAGES, count], [PR.TDEN, end], [PR.SHAPE, curve], [PR.IN_LOW, 1], [PR.IN_HIGH, 1], [PR.WIDTH, 0], [PR.AMP, 1], [PR.TMODE, 1], [PR.LFO_STYLE, pulseMode], [52, delay]];
+  const fd = ptFD(end, delay, pulseMode);
+  const vals = [[PR.STAGES, count], [PR.TDEN, fd.f], [PR.SHAPE, curve], [PR.IN_LOW, 1], [PR.IN_HIGH, 1], [PR.WIDTH, 0], [PR.AMP, 1], [PR.TMODE, 1], [PR.LFO_STYLE, pulseMode], [52, fd.duty], [PR.OVERSAMPLE, 0]];
   for (const [p, v] of vals) E.soemdsp_graph_set_param(g, hP, p, v);
   if (E.soemdsp_graph_compile(g) | 0) throw new Error("compile");
   E.soemdsp_graph_snap_controls(g);
@@ -64,7 +71,6 @@ function runLoop(E, { fHz, end = 3, count = 10, curve = 0, seconds = 1.2, delay 
   return r;
 }
 const md = (a, b) => a.reduce((m, v, i) => Math.max(m, v === b[i] ? 0 : Math.abs(v - b[i]) || Infinity), 0);
-// 1) Unwired == previous build (Out / End / __Elapsed).
 if (O) {
   let worst = 0, cases = 0;
   for (const end of [0.5, 3, 12]) for (const count of [1, 10, 128]) for (const curve of [-4, 0, 3]) {
@@ -90,47 +96,54 @@ function previewTimes(count, time, curve) {
   for (let i = 0; i < n; i++) t.push(N.soemdsp_pulse_train_preview_time(i));
   return t;
 }
-// 2) Wired ƒ: Time knob is the schedule; End / wrap at 1/ƒ; pulses with t >= 1/ƒ dropped.
+function lastImpulseInWindow(out, t0, n) {
+  let last = -1;
+  for (let i = t0; i < t0 + n && i < out.length; i++) if (out[i] !== 0) last = i;
+  return last;
+}
+// 2) Wired ƒ: full schedule scaled into 1/ƒ; every pulse plays; End / wrap at 1/ƒ.
 for (const fHz of [2, 4, 1.5, 8]) {
   const time = 3;
   const r = run(N, { fHz, end: time });
   const d = lastPulseDelays(r);
   if (d.length < 2) throw new Error(`ƒ ${fHz}: ${d.length} trains`);
   for (const x of d) if (Math.abs(x - 1 / fHz) > 1 / SR) throw new Error(`ƒ ${fHz}: End at ${x} s, expected period ${1 / fHz}`);
-  if (Math.abs(r.ramp[r.ramp.length - 1] - time) > 1e-12) throw new Error(`ƒ ${fHz}: __End ${r.ramp[r.ramp.length - 1]} (Time knob, not 1/ƒ)`);
+  if (Math.abs(r.ramp[r.ramp.length - 1] - 1 / fHz) > 1e-12) throw new Error(`ƒ ${fHz}: __End ${r.ramp[r.ramp.length - 1]} (Duty 1: Time = 1/ƒ)`);
   const times = previewTimes(10, time, 3);
   const period = 1 / fHz;
+  const scale = period / time;
   let t0 = r.el.indexOf(0);
   for (let i = 0; i < times.length; i++) {
-    const s = t0 + Math.ceil(times[i] * SR - 1e-9);
-    if (times[i] >= period) {
-      if (s < r.out.length && r.out[s] !== 0 && Math.abs((s - t0) / SR - times[i]) < 2 / SR) {
-        throw new Error(`ƒ ${fHz}: pulse ${i} at t=${times[i]} should be dropped (>= period ${period})`);
-      }
-    } else if (r.out[s] === 0) {
-      throw new Error(`ƒ ${fHz}: pulse ${i} missing at sample ${s} (t=${times[i]} < period ${period})`);
-    }
+    const s = t0 + Math.ceil(times[i] * scale * SR - 1e-9);
+    if (r.out[s] === 0) throw new Error(`ƒ ${fHz}: pulse ${i} missing at sample ${s} (scaled t=${times[i] * scale})`);
   }
-  console.log(`ok pulseTrain ƒ ${fHz} Hz: End ${d.map((x) => x.toFixed(5)).join(", ")} s (period 1/ƒ), Time window ${time} s, __End = Time`);
+  console.log(`ok pulseTrain ƒ ${fHz} Hz: End ${d.map((x) => x.toFixed(5)).join(", ")} s (period 1/ƒ), all ${times.length} pulses scaled into 1/ƒ, __End = Duty/ƒ`);
 }
-// Time still changes density inside a fixed period.
+// Delay 0 + ƒ: Time cancels (linear curve fills the period). Delay pads silence.
 {
-  const fHz = 2, period = 0.5;
-  const sparse = run(N, { fHz, end: 0.2, count: 8, curve: 0, seconds: 2 });
-  const dense = run(N, { fHz, end: 3, count: 8, curve: 0, seconds: 2 });
-  const t0s = sparse.el.indexOf(0), t0d = dense.el.indexOf(0);
-  const nSparse = sparse.out.slice(t0s, t0s + Math.ceil(period * SR)).filter((v) => v !== 0).length;
-  const nDense = dense.out.slice(t0d, t0d + Math.ceil(period * SR)).filter((v) => v !== 0).length;
-  if (!(nSparse > nDense)) throw new Error(`Time window: Time 0.2 → ${nSparse} pulses, Time 3 → ${nDense} (shorter Time packs more of Count into 1/ƒ)`);
-  console.log(`ok pulseTrain ƒ 2 Hz Time window: Time 0.2 → ${nSparse} pulses/period, Time 3 → ${nDense} pulses/period`);
+  const fHz = 2, period = 0.5, count = 8;
+  const a = run(N, { fHz, end: 0.2, count, curve: 0, seconds: 2, delay: 0 });
+  const b = run(N, { fHz, end: 3, count, curve: 0, seconds: 2, delay: 0 });
+  const t0a = a.el.indexOf(0), t0b = b.el.indexOf(0);
+  const nWin = Math.ceil(period * SR) + 2;
+  const hitsA = a.out.slice(t0a, t0a + nWin).filter((v) => v !== 0).length;
+  const hitsB = b.out.slice(t0b, t0b + nWin).filter((v) => v !== 0).length;
+  if (hitsA !== count || hitsB !== count) throw new Error(`delay 0: Time 0.2 → ${hitsA} pulses, Time 3 → ${hitsB} (want ${count})`);
+  const pad = run(N, { fHz, end: 0.2, count, curve: 0, seconds: 2, delay: 0.2 });
+  const t0p = pad.el.indexOf(0);
+  const lastFill = (lastImpulseInWindow(a.out, t0a, nWin) - t0a) / SR;
+  const lastPad = (lastImpulseInWindow(pad.out, t0p, nWin) - t0p) / SR;
+  if (Math.abs(lastFill - period) > 2 / SR) throw new Error(`delay 0 last pulse ${lastFill} s, want period ${period}`);
+  if (!(lastPad < lastFill - 0.1)) throw new Error(`delay 0.2 last pulse ${lastPad} s should be earlier than delay 0 (${lastFill})`);
+  console.log(`ok pulseTrain ƒ 2 Hz scale: delay 0 Time 0.2/3 both ${count} pulses fill the period; delay 0.2 last pulse ${lastPad.toFixed(5)} s`);
 }
 // 3) ƒ <= 0 (Host BPM at tempo <= 1 outputs 0): Time knob is used.
 {
   const r = run(N, { fHz: 1, end: 0.8 });
   const d = lastPulseDelays(r);
   if (!d.length || d.some((x) => Math.abs(x - 0.8) > 1 / SR)) throw new Error(`ƒ 0: delays ${d}`);
-  if (r.ramp[r.ramp.length - 1] !== 0.8) throw new Error(`ƒ 0: __End ${r.ramp[r.ramp.length - 1]}`);
-  console.log(`ok pulseTrain ƒ 0: Time knob (0.8 s) used, last pulse ${d[0].toFixed(5)} s`);
+  if (Math.abs(r.ramp[r.ramp.length - 1] - 0.8) > 1e-12) throw new Error(`ƒ 0: __End ${r.ramp[r.ramp.length - 1]}`);
+  console.log(`ok pulseTrain ƒ 0: Frequency knob (1/0.8 Hz) used, last pulse ${d[0].toFixed(5)} s`);
 }
 // 4) ƒ is live (even Recalculate On): 2 → 5 Hz mid-train, End tracks 1/5.
 {
@@ -141,6 +154,8 @@ for (const fHz of [2, 4, 1.5, 8]) {
   N.soemdsp_graph_connect(g, hC, PORT_MONO, hP, PORT_TRIGGER); N.soemdsp_graph_connect(g, hF, PORT_MONO, hP, PORT_F);
   N.soemdsp_graph_set_param(g, hC, PR.RATE, 0.1);
   N.soemdsp_graph_set_param(g, hP, PR.LFO_STYLE, 0);
+  N.soemdsp_graph_set_param(g, hP, PR.TMODE, 0);
+  N.soemdsp_graph_set_param(g, hP, PR.OVERSAMPLE, 0);
   N.soemdsp_graph_set_host_transport(g, 2, 0, 0);
   if (N.soemdsp_graph_compile(g) | 0) throw new Error("compile");
   N.soemdsp_graph_snap_controls(g);
@@ -189,4 +204,21 @@ for (const fHz of [2, 4, 1.5, 8]) {
   if (worst !== 0) throw new Error(`omitted freqHz differs from 0 (${worst})`);
   console.log("ok pulseTrain omitted freqHz == 0: Time wrap, max diff 0");
 }
-console.log("ok pulseTrain ƒ is period lock, Time is grain window");
+// 7) New graph node defaults: Shape Saw (oversample 2).
+{
+  const g = N.soemdsp_graph_create() | 0;
+  N.soemdsp_graph_set_sample_rate(g, SR);
+  const hP = 0x7701;
+  if (N.soemdsp_graph_add_node(g, hP, TYPE_PT) | 0) throw new Error("default add");
+  if (N.soemdsp_graph_compile(g) | 0) throw new Error("default compile");
+  N.soemdsp_graph_snap_controls(g);
+  N.soemdsp_graph_process_block(g, 128);
+  const out = new Float64Array(N.memory.buffer, N.soemdsp_graph_node_port_ptr(g, hP, PORT_MONO) | 0, 128);
+  const nonzero = [...out].filter((v) => v !== 0).length;
+  N.soemdsp_graph_destroy(g);
+  if (nonzero < 64) throw new Error(`default Shape Saw: only ${nonzero} nonzero samples in first block (Loop saw grain)`);
+  console.log(`ok pulseTrain default Shape Saw: ${nonzero} nonzero samples in first Loop block`);
+}
+if ((N.soemdsp_graph_version() | 0) < 252) throw new Error(`graph version ${N.soemdsp_graph_version()}`);
+if ((N.soemdsp_pulse_train_version() | 0) < 18) throw new Error(`pulse_train v${N.soemdsp_pulse_train_version()}`);
+console.log("ok pulseTrain ƒ scales Count→End Delay into 1/ƒ");

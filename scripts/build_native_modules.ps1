@@ -860,6 +860,11 @@ if ($node) {
   if ($LASTEXITCODE -ne 0) {
     throw "Combined build: Pulse Train Recalc smoke FAILED"
   }
+  # Pulse Train Frequency + Duty (graph 255): cycle = 1/f, Duty = pulsing fraction, latch, face ports.
+  & $node.Source "$root\scripts\smoke_pulse_train_freq_duty.mjs"
+  if ($LASTEXITCODE -ne 0) {
+    throw "Combined build: Pulse Train Frequency/Duty smoke FAILED"
+  }
   # Resonant Compressor: Gain == Resonant Envelope SC (max diff 0), drums get quieter.
   & $node.Source "$root\scripts\smoke_graph_resonant_compressor.mjs"
   if ($LASTEXITCODE -ne 0) {

@@ -732,7 +732,10 @@ function scopePaintEnsureColdPlate(slot, options = {}) {
       nodeGraphModuleScopeWipeCanvas(canvas, { nodeId, displayType });
     }
     try {
-      return Boolean(paintNodeGraphTraceDisplayColdPlate(slot, ratio, { force: true }));
+      return Boolean(paintNodeGraphTraceDisplayColdPlate(slot, ratio, {
+        force: true,
+        replaceTape: options.assumeStopped === true || options.replaceTape === true,
+      }));
     } catch (_error) {
       return false;
     }

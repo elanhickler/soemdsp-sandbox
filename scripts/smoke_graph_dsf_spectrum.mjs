@@ -1,6 +1,7 @@
-// DSF Morphing Osc (type 232) Morph / Symmetry / Width / Rotate / Slice (dsf v21).
+// DSF Morphing Osc (type 232) Morph / Symmetry / Width / Rotate / Slice / Spacing / Odd-Even (dsf v22).
 // DSF Oscillator (type 46) is the harmonic SineSaw kit (no morphing knobs).
 // Width 1 is odd-only square-to-sine DSF. Slice raises the start partial.
+// Spacing is Moorer ratio (1 = harmonic). Odd/Even 1 drops even-numbered partials.
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -46,7 +47,7 @@ function spectrum(y, N) {
 const N = 16384, binHz = SR / N;
 const peakNear = (m, hz) => { const b = Math.round(hz / binHz); let p = 0; for (let k = b - 2; k <= b + 2; k++) if (k > 0 && k < m.length) p = Math.max(p, m[k]); return p; };
 const dB = (x) => 20 * Math.log10(x + 1e-30);
-const P = { FREQ: 10, WAVE: 11, AMP: 12, MORPH: 13, ROTATE: 20, SLICE: 30, WIDTH: 31, SYMMETRY: 40 };
+const P = { FREQ: 10, WAVE: 11, AMP: 12, MORPH: 13, ROTATE: 20, SPACING: 22, SLICE: 30, WIDTH: 31, SYMMETRY: 40, ODD_EVEN: 50 };
 
 // 0. DSF Oscillator (type 46) ignores morphing slots (harmonic-only).
 {
@@ -125,4 +126,40 @@ for (const f of [30, 440, 1500]) {
   if (!(Math.abs(mean) < 0.01 && pk <= 1.5)) throw new Error(`Morph 1 drift at ${f} Hz: mean ${mean} peak ${pk}`);
 }
 console.log("Morph 1: no drift (30/440/1500 Hz)");
+
+// 6. Odd/Even 1 at Spacing 1 suppresses even integer harmonics.
+{
+  const f = 187.5;
+  const m = spectrum(await render(wasmPath, { [P.FREQ]: f, [P.AMP]: 1, [P.MORPH]: 0.6, [P.ODD_EVEN]: 1 }, 48000), N);
+  const m0 = spectrum(await render(wasmPath, { [P.FREQ]: f, [P.AMP]: 1, [P.MORPH]: 0.6, [P.ODD_EVEN]: 0 }, 48000), N);
+  let worst = -999;
+  for (let k = 2; k <= 20; k += 2) worst = Math.max(worst, dB(peakNear(m, k * f)) - dB(peakNear(m0, k * f)));
+  const odd3 = dB(peakNear(m, 3 * f)) - dB(peakNear(m0, 3 * f));
+  if (!(worst < -40)) throw new Error(`Odd/Even 1: even partials only ${worst.toFixed(1)} dB down`);
+  if (!(odd3 > -8)) throw new Error(`Odd/Even 1: 3rd partial dropped ${odd3.toFixed(2)} dB`);
+  console.log(`Odd/Even 1: even partials ${worst.toFixed(1)} dB down (worst of 2..20), odd 3rd ${odd3.toFixed(2)} dB`);
+}
+
+// 7. Spacing 1.5 puts energy at f*(1+(k-1)*1.5), not at 2f.
+{
+  const f = 187.5;
+  const m = spectrum(await render(wasmPath, { [P.FREQ]: f, [P.AMP]: 1, [P.MORPH]: 0.6, [P.SPACING]: 1.5 }, 48000), N);
+  const m1 = spectrum(await render(wasmPath, { [P.FREQ]: f, [P.AMP]: 1, [P.MORPH]: 0.6, [P.SPACING]: 1 }, 48000), N);
+  const inharm = dB(peakNear(m, f * 2.5)) - dB(Math.max(...m));
+  const even2 = dB(peakNear(m, 2 * f)) - dB(peakNear(m1, 2 * f));
+  if (!(inharm > -12)) throw new Error(`Spacing 1.5: missing 2.5f (${inharm.toFixed(1)} dB)`);
+  if (!(even2 < -12)) throw new Error(`Spacing 1.5: 2f still strong (${even2.toFixed(1)} dB vs harmonic)`);
+  console.log(`Spacing 1.5: 2.5f ${inharm.toFixed(1)} dB, 2f delta ${even2.toFixed(1)} dB`);
+}
+
+// 8. DSF Oscillator (type 46) ignores Spacing / Odd-Even slots.
+{
+  const f = 187.5;
+  const m = spectrum(await render(wasmPath, { [P.FREQ]: f, [P.WAVE]: 1, [P.AMP]: 1, [P.MORPH]: 0.6, [P.SPACING]: 1.5, [P.ODD_EVEN]: 1 }, 48000, TYPE_DSF), N);
+  const m0 = spectrum(await render(wasmPath, { [P.FREQ]: f, [P.WAVE]: 1, [P.AMP]: 1, [P.MORPH]: 0.6 }, 48000, TYPE_DSF), N);
+  const even2 = dB(peakNear(m, 2 * f)) - dB(peakNear(m0, 2 * f));
+  if (!(even2 > -6)) throw new Error(`DSF Oscillator type 46 still applies Spacing/Odd-Even (${even2.toFixed(1)} dB at 2f)`);
+  console.log(`DSF Oscillator (46) ignores Spacing/Odd-Even: 2f delta ${even2.toFixed(1)} dB`);
+}
+
 console.log("smoke_graph_dsf_spectrum ok");

@@ -95,12 +95,12 @@ console.log(`ok pulseTrain static params: Recalculate On == Off bit-identical (O
     N.soemdsp_graph_set_sample_rate(g, SR);
     const hP = 0x7701;
     N.soemdsp_graph_add_node(g, hP, 231);
-    for (const [p, v] of [[PR.STAGES, 6], [PR.TDEN, 1], [PR.TIMING, 1], [PR.MODE, rec]]) N.soemdsp_graph_set_param(g, hP, p, v);
+    for (const [p, v] of [[PR.STAGES, 6], [PR.TDEN, 1], [52, 1], [PR.TIMING, 1], [PR.MODE, rec]]) N.soemdsp_graph_set_param(g, hP, p, v);
     if (N.soemdsp_graph_compile(g) | 0) throw new Error("compile");
     N.soemdsp_graph_snap_controls(g);
     const read = () => PORTS.map((p) => new Float64Array(N.memory.buffer, N.soemdsp_graph_node_port_ptr(g, hP, p) | 0, 128)[127]);
     for (let q = 0; q < 100; q++) N.soemdsp_graph_process_block(g, 128);
-    N.soemdsp_graph_set_param(g, hP, PR.TDEN, 2);
+    N.soemdsp_graph_set_param(g, hP, PR.TDEN, 0.5); // Frequency 1 -> 0.5 Hz, Duty 1: Time 1 -> 2 s
     N.soemdsp_graph_snap_controls(g);
     for (let q = 0; q < 20; q++) N.soemdsp_graph_process_block(g, 128);
     const mid = read();

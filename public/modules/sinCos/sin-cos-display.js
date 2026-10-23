@@ -217,9 +217,9 @@ function drawNodeGraphSinCosDisplay(section) {
 
 // DSF Oscillator face: one steady-state cycle from the original SineSaw closed
 // form (n = floor(Nyquist/f), extra partial faded by the fractional part).
-// DSF Morphing Osc draws Morph / Symmetry / Width / Rotate / Slice of the same
-// geometric series. The engine leaky-integrates (leak → 0.0005); at steady
-// state that is the running integral over one cycle minus its mean.
+// DSF Morphing Osc draws Morph / Symmetry / Width / Rotate / Slice / Spacing /
+// Odd-Even of the same object. The engine leaky-integrates (leak → 0.0005); at
+// steady state that is the running integral over one cycle minus its mean.
 function nodeGraphDsfSampleRate() {
   const live = typeof nodeGraphMvp !== "undefined" ? nodeGraphMvp?.live : null;
   const sr = Number(live?.context?.sampleRate ?? live?.audioContext?.sampleRate);
@@ -315,20 +315,40 @@ function nodeGraphDsfGeoSeries(r, start, step, count, turns, rotTurns) {
   return cosA * qr - sinA * qi;
 }
 
-function nodeGraphDsfMorphImpulse(turns, a, start, end, rotTurns, width, symmetry) {
+function nodeGraphDsfSeriesCount(start, step, end) {
+  const absStep = Math.abs(step);
+  if (!(absStep > 1e-12)) return 0;
+  let n = (end - start) / absStep + 1;
+  if (n < 1) return 0;
+  if (n > 4096) n = 4096;
+  return Math.floor(n + 1e-12);
+}
+
+function nodeGraphDsfMorphImpulse(turns, a, start, end, rotTurns, width, symmetry, spacing, oddEven) {
   if (end < start) return 0;
   const w = Math.max(0, Math.min(1, width));
   const s = Math.max(0, Math.min(1, symmetry));
+  const oe = Math.max(0, Math.min(1, oddEven));
+  let sp = spacing;
+  if (!(sp > 1e-9) && !(sp < -1e-9)) sp = 1;
   const kernelR = (r) => {
     let all = 0;
     let odd = 0;
-    if (w < 1) all = nodeGraphDsfGeoSeries(r, start, 1, end - start + 1, turns, rotTurns);
+    if (w < 1) {
+      all = nodeGraphDsfGeoSeries(r, start, sp, nodeGraphDsfSeriesCount(start, sp, end), turns, rotTurns);
+      if (oe > 0) {
+        const evenStart = start + sp;
+        const nEven = nodeGraphDsfSeriesCount(evenStart, 2 * sp, end);
+        if (nEven > 0) {
+          all -= oe * r * nodeGraphDsfGeoSeries(r * r, evenStart, 2 * sp, nEven, turns, rotTurns);
+        }
+      }
+    }
     if (w > 0) {
       let oddStart = start;
       if ((oddStart & 1) === 0) oddStart += 1;
       if (oddStart <= end) {
-        const oddCount = Math.floor((end - oddStart) / 2) + 1;
-        odd = nodeGraphDsfGeoSeries(r, oddStart, 2, oddCount, turns, rotTurns);
+        odd = nodeGraphDsfGeoSeries(r, oddStart, 2, nodeGraphDsfSeriesCount(oddStart, 2, end), turns, rotTurns);
       }
     }
     return all * (1 - w) + odd * w;
@@ -343,8 +363,15 @@ function nodeGraphDsfSliceStart(slice, n) {
   return Math.max(1, Math.min(Math.max(1, n), Math.floor(a + 1e-12)));
 }
 
-function nodeGraphDsfPartials(sr, f) {
-  let nf = (sr * 0.5) / f - 1;
+function nodeGraphDsfPartials(sr, f, spacing = 1) {
+  let absS = Math.abs(spacing);
+  if (!(absS > 1e-9)) absS = 1;
+  let nf;
+  if (absS > 0.999999 && absS < 1.000001) {
+    nf = (sr * 0.5) / f - 1;
+  } else {
+    nf = ((sr * 0.5) / f - 2) / absS + 1;
+  }
   nf = Math.max(1, Math.min(4096, nf));
   const nLo = Math.max(1, Math.floor(nf));
   const nHi = Math.min(4096, nLo + 1);
@@ -363,7 +390,7 @@ function nodeGraphDsfCycle(params, count) {
   }
   const sr = nodeGraphDsfSampleRate();
   const f = Math.max(1e-6, Math.abs(nodeGraphFiniteNumber(params.frequency)));
-  const { nLo, nHi, frac } = nodeGraphDsfPartials(sr, f);
+  const { nLo, nHi, frac } = nodeGraphDsfPartials(sr, f, morphing ? nodeGraphFiniteNumber(params.spacing) : 1);
   const m = Math.max(0, Math.min(1, nodeGraphFiniteNumber(params.morph)));
   const k = (1 - (m > 0 ? Math.pow(m, 0.14) : 0)) * 4;
   const k2 = k * k;
@@ -376,11 +403,34 @@ function nodeGraphDsfCycle(params, count) {
       const width = nodeGraphFiniteNumber(params.width);
       const symmetry = nodeGraphFiniteNumber(params.symmetry);
       const slice = nodeGraphFiniteNumber(params.slice);
+      let spacing = nodeGraphFiniteNumber(params.spacing);
+      if (!(spacing > 1e-9) && !(spacing < -1e-9)) spacing = 1;
+      const oddEven = Math.max(0, Math.min(1, nodeGraphFiniteNumber(params.oddEven)));
+      const harmonic = spacing > 0.999999 && spacing < 1.000001;
+      if (!harmonic) {
+        const ct = nodeGraphDsfWrap01(turns + rot);
+        const mt = nodeGraphDsfWrap01(ct * spacing);
+        const spaced = (c) => {
+          const m = nodeGraphDsfKernelCS(mt, c);
+          const ang = 2 * Math.PI * nodeGraphDsfWrap01(ct - mt);
+          let y = Math.cos(ang) * m.C - Math.sin(ang) * m.S;
+          if (oddEven > 0) {
+            const nEven = Math.max(1, Math.floor(c.n * 0.5));
+            const ce = nodeGraphDsfMakeCoeffs(nEven, k2 * 2);
+            const me = nodeGraphDsfKernelCS(nodeGraphDsfWrap01(2 * mt), ce);
+            y -= oddEven * (Math.cos(ang) * me.C - Math.sin(ang) * me.S) / c.twoK2;
+          }
+          return y;
+        };
+        const lo = spaced(cLo);
+        if (frac <= 0) return lo;
+        return lo + (spaced(cHi) - lo) * frac;
+      }
       const startLo = nodeGraphDsfSliceStart(slice, nLo);
-      const lo = nodeGraphDsfMorphImpulse(turns, a, startLo, nLo, rot, width, symmetry);
+      const lo = nodeGraphDsfMorphImpulse(turns, a, startLo, nLo, rot, width, symmetry, 1, oddEven);
       if (frac <= 0) return lo;
       const startHi = nodeGraphDsfSliceStart(slice, nHi);
-      return lo + (nodeGraphDsfMorphImpulse(turns, a, startHi, nHi, rot, width, symmetry) - lo) * frac;
+      return lo + (nodeGraphDsfMorphImpulse(turns, a, startHi, nHi, rot, width, symmetry, 1, oddEven) - lo) * frac;
     }
     : (turns) => {
       const ct = nodeGraphDsfWrap01(turns);
@@ -470,6 +520,8 @@ function drawNodeGraphSinCosDisplayInner(section) {
     width: nodeGraphSinCosLiveParam(node, "width", 0),
     rotate: nodeGraphSinCosLiveParam(node, "rotate", 0),
     slice: nodeGraphSinCosLiveParam(node, "slice", 0),
+    spacing: nodeGraphSinCosLiveParam(node, "spacing", 1),
+    oddEven: nodeGraphSinCosLiveParam(node, "oddEven", 0),
     amplitude,
   } : null;
   const polarity = isDsf ? 0 : Math.round(nodeGraphFiniteNumber(nodeGraphSinCosLiveParam(node, "polarity", 0))) >= 1 ? 1 : 0;

@@ -687,12 +687,8 @@ function nodeGraphGlGraphDrawPlate(batch, plate, toX, toY, zoom, cssW, cssH, pla
     });
   }
   if (typeof nodeGraphGlLinesModuleOutline === "function") {
-    // The border stops at each rail IO box's top and bottom edges; the plate
-    // takes the param notch at each box's outer edge.
     const cuts = typeof nodeGraphModuleRailBorderCuts === "function" ? nodeGraphModuleRailBorderCuts(batch, plate, toX, toY, zoom) : null;
-    // IO-section sockets (inlets and outlets) take the shared notch, signal params.
-    const notch = typeof nodeGraphRailNotch === "function" ? nodeGraphRailNotch() : null;
-    nodeGraphGlLinesModuleOutline(batch, x0, y0, w0, h0, edge, color, plateJacks, plate.fill, 0, cuts, notch && { r: notch.signal.radius * zoom, soft: notch.signal.soft * zoom }, notch && { r: notch.param.radius * zoom, soft: notch.param.soft * zoom });
+    nodeGraphGlLinesModuleOutline(batch, x0, y0, w0, h0, edge, color, plateJacks, plate.fill, 0, cuts);
   }
 }
 
@@ -2279,7 +2275,7 @@ function nodeGraphGlHitPortElement(moduleEl, x, y) {
   return best;
 }
 
-const nodeGraphGlHitState = { lastTitleDown: null };
+const nodeGraphGlHitState = { lastTitleDown: null, lastMetaDown: null };
 
 function nodeGraphGlHitLabelPort(label) {
   const row = label?.closest?.(".node-io-row, .node-io-column, .node-parameter-row");
@@ -2404,6 +2400,32 @@ function nodeGraphGlHitPointerDown(event) {
   }
   if (hit.kind === "plate" && typeof beginNodeGraphNodeDrag === "function") {
     const moduleEl = typeof nodeGraphNodeElement === "function" ? nodeGraphNodeElement(hit.id) : null;
+    const patchNode = typeof nodeGraphPatchNode === "function" ? nodeGraphPatchNode(hit.id) : null;
+    // Overlay pointerdown preventDefault kills native dblclick. Same 400ms
+    // repeat as title-edit: second plate hit on a Metamodule/Group enters it.
+    if (typeof nodeGraphIsContainerShellType === "function" && nodeGraphIsContainerShellType(patchNode?.type)) {
+      const now = performance.now();
+      const last = nodeGraphGlHitState.lastMetaDown;
+      const repeat = last && last.id === hit.id && now - last.time < 400;
+      nodeGraphGlHitState.lastMetaDown = { id: hit.id, time: now };
+      if (repeat) {
+        event.preventDefault();
+        event.stopPropagation();
+        const drag = typeof nodeGraphMvp !== "undefined" ? nodeGraphMvp.nodeDragging : null;
+        if (drag) {
+          for (const dragged of drag.draggedNodes || []) {
+            dragged.element?.classList?.remove("dragging");
+          }
+          drag.handle?.classList?.remove("dragging");
+          nodeGraphMvp.nodeDragging = null;
+        }
+        if (typeof enterNodeGraphMetamoduleView === "function") {
+          enterNodeGraphMetamoduleView(hit.id);
+        }
+        nodeGraphGlHitState.lastMetaDown = null;
+        return;
+      }
+    }
     const shell = moduleEl?.querySelector(".node-solid-module-shell, .node-module-chrome-layout-b-shell, .node-header-title-row") || moduleEl;
     if (!shell) return;
     event.preventDefault();
