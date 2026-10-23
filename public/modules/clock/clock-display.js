@@ -4,7 +4,7 @@
 // phase the clock starts from (Phase). The playhead follows the engine's own
 // phase (__Phase), shifted to the time the speakers play it, and flashes when
 // the gate goes high (playhead crosses Pulse Start). Display Settings `clockFace`: Background, Pulse (line), Playhead
-// (dot), Fill, Start (phase-start marker), Blink (playhead flash on T) HBS;
+// (dot), Fill, Start (phase-start marker), Blink (playhead + start marker flash on gate rise) HBS;
 // Line thickness (gate + playhead), Start thickness, Blink time (0 = off),
 // Height (% of the face height the gate spans, centered).
 // GPU only, drawn with the shared antialiased line drawer (gl-line-renderer).
@@ -202,9 +202,10 @@ function drawNodeGraphClockFace(section) {
     nodeGraphGlLinesPolyline(batch, [x1, low, xs, low, xs, high, x1, high], halfPx, smoothing, pulse);
     nodeGraphGlLinesPolyline(batch, [x0, high, xe, high, xe, low, x0, low], halfPx, smoothing, pulse);
   }
-  // Phase start marker: where the clock starts (Phase).
+  // Phase start marker: where the playhead lands on Reset (Phase offset). The
+  // gate box is Pulse Start..End and does not move with Phase. Blinks with the playhead.
   const xm = g.at(startPhase);
-  if (look.startThickness > 0) nodeGraphGlLinesSegment(batch, xm, high, xm, low, look.startThickness * 0.5, smoothing, rgba(look.startPaint));
+  if (look.startThickness > 0) nodeGraphGlLinesSegment(batch, xm, high, xm, low, look.startThickness * 0.5, smoothing, rgba(flashing ? look.blinkPaint : look.startPaint));
   // Playhead: the gate's height and stroke; flashes when the clock fires.
   const xp = g.at(phase);
   nodeGraphGlLinesSegment(batch, xp, high, xp, low, halfPx, smoothing, rgba(flashing ? look.blinkPaint : look.dotPaint));
