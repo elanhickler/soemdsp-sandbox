@@ -28,14 +28,14 @@ function patchJson() {
   d.modulations = [];
   const params = {};
   // Five columns: every face stays on screen (off-screen modules are culled).
-  TYPES.forEach((type, i) => d.nodes.push({ gx: 2 + (i % 5) * 11, gy: 1 + Math.floor(i / 5) * 26, id: `m-${i}`, type, params: params[type] || {} }));
+  TYPES.forEach((type, i) => d.nodes.push({ gx: 2 + (i % 5) * 13, gy: 1 + Math.floor(i / 5) * 26, id: `m-${i}`, type, params: params[type] || {} }));
   return JSON.stringify(d);
 }
 
 const launch = { headless: true };
 if (process.env.CHROME_PATH) launch.executablePath = process.env.CHROME_PATH;
 const browser = await chromium.launch(launch);
-const page = await (await browser.newContext({ viewport: { width: 2400, height: 5200 } })).newPage();
+const page = await (await browser.newContext({ viewport: { width: 3600, height: 9000 } })).newPage();
 const errors = [];
 page.on("pageerror", (e) => errors.push(String(e.message || e)));
 await page.route("**/batch-smoke.json*", (r) => r.fulfill({ status: 200, contentType: "application/json", body: patchJson() }));
@@ -92,7 +92,7 @@ const drag = async (x, y, dx, dy) => {
 };
 
 const choiceLabel = (id, key) => page.evaluate(({ id, key }) => String(nodeSliderChoiceLabel(nodeGraphModuleFaceInput(document.querySelector(`article[data-node="${id}"]`), key))), { id, key });
-const click = async (wd) => { await page.mouse.click(wd.x + wd.w / 2, wd.y); await page.waitForTimeout(150); };
+const click = async (wd) => { await page.mouse.click(wd.x + wd.w / 2, wd.y); await page.waitForTimeout(500); };
 for (let i = 0; i < TYPES.length; i += 1) {
   const id = `m-${i}`;
   const ws = await widgets(id, TYPES[i]);
@@ -117,7 +117,7 @@ for (let i = 0; i < TYPES.length; i += 1) {
   const step = await page.evaluate(({ t, key }) => Number(nodeGraphModuleDefinitions[t].parameters.find((p) => p.key === key).step), { t: TYPES[i], key });
   if (step >= 1) check(`${TYPES[i]}: ${key} stays whole`, Number.isInteger(c1), c1);
   await page.evaluate(() => undoNodeGraphPatch());
-  await page.waitForTimeout(300);
+  await page.waitForFunction(({ id, key, c0 }) => Math.abs(Number(nodeGraphMvp.patch.nodes.find((n) => n.id === id).params[key]) - c0) < 1e-6, { id, key, c0 }, { timeout: 5000 }).catch(() => {});
   check(`${TYPES[i]}: undo restores ${key}`, Math.abs((await val(id, key)) - c0) < 1e-6, await val(id, key));
 }
 check("no page errors", errors.length === 0, errors.slice(0, 3).join(" | "));
