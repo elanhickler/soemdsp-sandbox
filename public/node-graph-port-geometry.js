@@ -492,6 +492,7 @@ function nodeGraphPortIsTrigger(port, type) {
   const raw = String(port || "").trim();
   if (!raw) return false;
   if (raw === "T") return true;
+  if (nodeGraphPortIsTriggerReset(type, raw)) return true;
   const lower = raw.toLowerCase();
   if (lower === "trigger" || lower === "trig" || lower === "pulse") return true;
   if (lower.startsWith("trig ") || lower.startsWith("trigger ")) return true;
@@ -516,6 +517,15 @@ function nodeGraphPulseTrainEndPort(type, port) {
   return String(type || "").trim() === "pulseTrain" && String(port || "").trim() === "End";
 }
 
+/** Oscillator Reset that takes trigger height (definition.resetTrigger). */
+function nodeGraphPortIsTriggerReset(type, port) {
+  if (!nodeGraphPortIsReset(port)) return false;
+  const def = typeof nodeGraphModuleDefinitions !== "undefined"
+    ? nodeGraphModuleDefinitions[String(type || "").trim()]
+    : null;
+  return def?.resetTrigger === true;
+}
+
 function nodeGraphGateTriggerPortDisplayLabel(type, port) {
   if (nodeGraphPortIsTrigger(port, type)) {
     return nodeGraphPulseTrainEndPort(type, port) ? `End${NODE_GRAPH_TRIGGER_GLYPH}` : NODE_GRAPH_TRIGGER_GLYPH;
@@ -530,6 +540,7 @@ function nodeGraphGateTriggerPortDisplayLabel(type, port) {
 }
 
 function nodeGraphGateTriggerPortSpokenName(type, port) {
+  if (nodeGraphPortIsTriggerReset(type, port)) return "Reset trigger";
   if (nodeGraphPortIsTrigger(port, type)) return nodeGraphPulseTrainEndPort(type, port) ? "End trigger" : "Trigger";
   if (nodeGraphPortIsReset(port)) return "Reset";
   if (nodeGraphPortIsGate(port, type)) return "Gate";

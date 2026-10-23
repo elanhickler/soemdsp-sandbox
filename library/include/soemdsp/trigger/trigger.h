@@ -78,6 +78,44 @@ static inline bool gate_hit(double now, double* prev) {
   return hit;
 }
 
+// Trigger-height partial reset (oscillator Reset trigger inputs).
+// Signed height of the gate_hit just reported for `now`: sign(now) * velocity,
+// clamped to -1..1. A 0 -> 1 gate is 1 (full reset), 0 -> 0.5 is 0.5,
+// 0 -> -1 is -1.
+static inline double gate_hit_height(double now) {
+  const double x = soemdsp::debug::safe(now);
+  double h = gate_hit_velocity_slot();
+  if (x < 0.0) h = -h;
+  if (h > 1.0) h = 1.0;
+  if (h < -1.0) h = -1.0;
+  return h;
+}
+
+// Move `phase` toward `target` by fraction |h| of the way. h > 0 takes the
+// shortest wrapped path, h < 0 the long way around (the complementary path).
+// |h| = 1 lands exactly on target (hard reset), h = 0 leaves phase alone.
+// `period` is the phase cycle (1 for cycles, 2*pi for radians); the result is
+// wrapped into [0, period).
+static inline double partial_reset_phase(double phase, double target, double h, double period = 1.0) {
+  if (!(h == h) || !(period > 0.0)) return phase;
+  if (h > 1.0) h = 1.0;
+  if (h < -1.0) h = -1.0;
+  if (h == 0.0) return phase;
+  auto wrap = [period](double p) {
+    p /= period;
+    p -= __builtin_floor(p);
+    return p * period;
+  };
+  if (h == 1.0 || h == -1.0) return wrap(target);
+  double d = (target - phase) / period;
+  d -= __builtin_floor(d + 0.5);  // shortest signed distance, [-0.5, 0.5)
+  if (h < 0.0) {
+    d = (d >= 0.0) ? d - 1.0 : d + 1.0;  // long way around
+    h = -h;
+  }
+  return wrap(phase + h * d * period);
+}
+
 }  // namespace soemdsp::math
 
 namespace soemdsp_maths {
@@ -95,4 +133,6 @@ using soemdsp::math::rising_edge_bool;
 using soemdsp::math::gate_on;
 using soemdsp::math::gate_hit;
 using soemdsp::math::gate_hit_velocity;
+using soemdsp::math::gate_hit_height;
+using soemdsp::math::partial_reset_phase;
 }  // namespace soemdsp_maths

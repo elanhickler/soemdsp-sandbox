@@ -993,6 +993,8 @@ const nodeGraphModuleDefinitions = (
       { key: "Wave", kind: "scalar" },
     ],
     // ƒ absolute-Hz last among signal inlets. Morph is the parameter (+ MOD), not a jack.
+    // Reset is a trigger: height h (-1..1) moves the phase |h| of the way to the reset point (h<0 the long way; 1 = hard reset). Port id stays "Reset".
+    resetTrigger: true,
     inputs: ["Reset", "f"],
     inputLabels: {
       f: "ƒ"},
@@ -1118,6 +1120,8 @@ const nodeGraphModuleDefinitions = (
     displaySignals: [
       { key: "Wave", kind: "scalar" },
     ],
+    // Reset is a trigger: height h (-1..1) moves the phase |h| of the way to the reset point (h<0 the long way; 1 = hard reset). Port id stays "Reset".
+    resetTrigger: true,
     inputs: ["Reset", "f"],
     inputLabels: {
       f: "ƒ"},
@@ -3247,6 +3251,8 @@ const nodeGraphModuleDefinitions = (
     displayHeightGu: 4,
     spectrumCompanion: false,
     // ƒ absolute-Hz last among signal inlets. Morph is the parameter (+ MOD), not a jack.
+    // Reset is a trigger: height h (-1..1) moves the phase |h| of the way to the reset point (h<0 the long way; 1 = hard reset). Port id stays "Reset".
+    resetTrigger: true,
     inputs: ["Reset", "f"],
     inputLabels: {
       f: "ƒ"},
@@ -3373,6 +3379,8 @@ const nodeGraphModuleDefinitions = (
       { key: "Left", kind: "scalar" },
       { key: "Right", kind: "scalar" },
     ],
+    // Reset is a trigger: height h (-1..1) moves the phase |h| of the way to the reset point (h<0 the long way; 1 = hard reset). Port id stays "Reset".
+    resetTrigger: true,
     inputs: ["Reset", "f"],
     inputLabels: {
       f: "ƒ"},
