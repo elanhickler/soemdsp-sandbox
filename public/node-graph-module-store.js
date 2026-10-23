@@ -433,7 +433,7 @@ const nodeGraphModuleStoreCatalog = Object.freeze({
     category: "controller",
     description: "Open Sound Control bridge (UDP send/receive ↔ patch CV). Under construction.",
     label: "Open Sound Control",
-    notes: ["open sound control", "OSC", "UDP", "network", "controller", "under construction"],
+    notes: ["open sound control", "osc protocol", "UDP", "network", "controller", "under construction"],
   },
   aliasSine: {
     category: "oscillator",
@@ -664,7 +664,7 @@ const nodeGraphModuleStoreCatalog = Object.freeze({
     category: "utility",
     description: "Precise dry/wet delay in time or samples for comb, predelay, or synced echos.",
     label: "Sample Delay",
-    notes: ["delay", "samples", "time", "thru", "delayed", "native"],
+    notes: ["delay", "samples", "time", "thru", "delayed", "native", "s&h", "predelay"],
   },
   earlyReflections: {
     category: "space",
@@ -1070,7 +1070,7 @@ const nodeGraphModuleStoreCatalog = Object.freeze({
     category: "modulator",
     description: "Quantizes changes of a signal in time: Out holds and only takes the latest In value on the next grid line of the project tempo (Division 1/1 to 1/32, Normal/Dotted/Triplet), sample accurate and aligned to the transport. Trigger pulses only when Out changed. Gate edges both quantized.",
     label: "Time Quantizer",
-    notes: ["quantize", "time", "grid", "tempo", "bpm", "sync", "gate", "trigger", "native"],
+    notes: ["quantize", "time", "grid", "tempo", "bpm", "sync", "gate", "trigger", "native", "s&h"],
   },
   codeBox: {
     category: "text",
@@ -1598,7 +1598,7 @@ const nodeGraphModuleStoreCatalog = Object.freeze({
     category: "scientificFilter",
     description: "ZDF SVF lowpass. Slope stacks identical 12 dB stages (12/24/36/48).",
     label: "Lowpass Filter ZDF",
-    notes: ["lowpass", "SVF", "ZDF", "scientific", "Robin Schmidt", "RS-MET"],
+    notes: ["lowpass", "lp", "lpf", "low pass", "SVF", "ZDF", "scientific", "Robin Schmidt", "RS-MET"],
   },
   highpass: {
     category: "scientificFilter",
@@ -2316,7 +2316,7 @@ const nodeGraphModuleStoreCatalog = Object.freeze({
   sampleHold: {
     category: "modulator",
     description: "Grab on Clock: Ext In→Ext Out plus internal noise on Left/Right. Phase Offset desyncs Right. Interpolate Off/Linear/Smoothstep.",
-    notes: ["clock capture", "ext in out", "internal noise", "left right", "interpolate", "phase offset"],
+    notes: ["s&h", "sample and hold", "track and hold", "clock capture", "ext in out", "internal noise", "left right", "interpolate", "phase offset"],
   },
   expAdsr: {
     category: "envelope",
@@ -2774,7 +2774,7 @@ const nodeGraphModuleStoreCatalog = Object.freeze({
     category: "oscilloscope",
     description: "Instant X/Y vector history without phosphor—crisp 2D traces.",
     label: "2D Trace",
-    notes: ["xy trace", "sample history", "2D oscilloscope"],
+    notes: ["xy trace", "history", "2D oscilloscope", "lissajous"],
   },
   scope2dTraceStereo: {
     category: "oscilloscope",
@@ -4280,88 +4280,98 @@ function nodeGraphNormalizeModuleDepartmentSearch(value = "") {
   return String(value || "").trim().toLowerCase();
 }
 
-function nodeGraphModuleStoreEntryMatchesSearch(entry, query) {
-  const needle = nodeGraphNormalizeModuleDepartmentSearch(query);
-  if (!needle) {
-    return true;
-  }
-  // Include department display name (e.g. "Scientific Filter") so shelf labels match.
-  const depId = String(entry.category || "");
-  const dep = nodeGraphModuleStoreDepartmentById[depId] || {};
-  const depLabel = dep.label || dep.title || "";
-  const haystack = [
-    entry.label,
-    entry.type,
-    entry.category,
-    depLabel,
-    dep.emoji,
-    entry.description,
-    ...(entry.notes || []),
-  ]
-    .filter(Boolean)
-    .join(" ")
-    .toLowerCase();
-  // All whitespace-separated tokens must appear (order-independent).
-  const tokens = needle.split(/\s+/).filter(Boolean);
-  if (!tokens.length) {
-    return true;
-  }
-  return tokens.every((token) => haystack.includes(token));
+/** Collapse "S&H", "s and h", "S+H", "s-h" → "sh" for alias/abbreviation compares. */
+function nodeGraphCompactModuleSearch(value = "") {
+  return String(value || "").toLowerCase()
+    .replace(/\band\b|&|\+/g, "")
+    .replace(/[^a-z0-9]/g, "");
 }
 
-/** Lower score = better match (label/type prefix beats loose substring). */
+function nodeGraphModuleSearchWords(value = "") {
+  // Split camelCase types too ("sampleHold" → sample, hold).
+  return String(value || "")
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter(Boolean);
+}
+
+/**
+ * Rank-based module search (lower = better, 0 = no match).
+ * Rules: exact name/type -100 > compact name ("S&H") -95 > name prefix -92
+ * > alias exact -90 (short abbreviations <= 3 chars: -93, above name prefix) > type prefix -80
+ * > every token a name word-prefix -70 > alias/keyword word-prefix -60
+ * > token inside a name word (len>=3) -50 > shelf (department) word-prefix -30.
+ * Descriptions are NOT searched (they caused "sample" → Flower Child "downsample").
+ * No fuzzy subsequence matching.
+ */
 function nodeGraphModuleStoreSearchRank(entry, query) {
   const needle = nodeGraphNormalizeModuleDepartmentSearch(query);
   if (!needle) {
     return 0;
   }
-  const label = String(entry?.label || "").toLowerCase();
+  const label = String(entry?.label || "").toLowerCase().trim();
   const type = String(entry?.type || "").toLowerCase();
   const notes = (Array.isArray(entry?.notes) ? entry.notes : [])
     .map((note) => String(note || "").toLowerCase().trim())
     .filter(Boolean);
+  const compact = nodeGraphCompactModuleSearch(needle);
+  if (label === needle || type === needle) {
+    return -100;
+  }
+  if (compact && nodeGraphCompactModuleSearch(label) === compact) {
+    return -95;
+  }
+  // Catalog notes as aliases/abbreviations ("s&h", "lp", "fbm"). Short
+  // abbreviations (<= 3 chars, e.g. "sh") outrank name prefixes ("Shaper").
+  const aliasExact = compact && notes.some((n) => n === needle || nodeGraphCompactModuleSearch(n) === compact);
+  if (aliasExact && compact.length <= 3) {
+    return -93;
+  }
+  if (label.startsWith(needle)) {
+    return -92;
+  }
+  if (aliasExact) {
+    return -90;
+  }
+  if (type.startsWith(needle)) {
+    return -80;
+  }
   const tokens = needle.split(/\s+/).filter(Boolean);
   if (!tokens.length) {
     return 0;
   }
-  // Exact label / type
-  if (label === needle || type === needle) {
-    return -100;
+  const nameWords = [...nodeGraphModuleSearchWords(entry?.label), ...nodeGraphModuleSearchWords(entry?.type)];
+  const noteWords = notes.flatMap((n) => nodeGraphModuleSearchWords(n));
+  const prefixIn = (words, t) => words.some((w) => w.startsWith(t));
+  if (tokens.every((t) => prefixIn(nameWords, t))) {
+    return -70;
   }
-  // Catalog notes used as search aliases (e.g. "fbf" → Field, "fbm" → Motion).
-  // Rank above type-prefix so "fbm" prefers Motion over fbmField.
-  if (tokens.every((t) => notes.some((n) => n === t))) {
-    return -90;
-  }
-  const depEmoji = String(nodeGraphModuleStoreDepartmentById[entry?.category]?.emoji || "");
-  if (depEmoji && tokens.every((t) => t === depEmoji || t === depEmoji.toLowerCase())) {
-    return -90;
-  }
-  // Label starts with full query ("eq" → "eq filter")
-  if (label.startsWith(needle) || type.startsWith(needle)) {
-    return -80;
-  }
-  if (tokens.every((t) => notes.some((n) => {
-    const words = n.split(/[^a-z0-9]+/).filter(Boolean);
-    return words.some((w) => w === t || w.startsWith(t));
-  }))) {
-    return -65;
-  }
-  // Every token is a word-start in the label (e.g. "eq" in "EQ Filter")
-  const labelWords = label.split(/[^a-z0-9]+/).filter(Boolean);
-  if (tokens.every((t) => labelWords.some((w) => w.startsWith(t)))) {
+  if (tokens.every((t) => prefixIn(nameWords, t) || prefixIn(noteWords, t))) {
     return -60;
   }
-  // Token sits inside a label/type word ("pad" → Keypad)
-  if (tokens.every((t) => label.includes(t) || type.includes(t)
-    || labelWords.some((w) => w.includes(t)))) {
+  const insideName = (t) => t.length >= 3 && nameWords.some((w) => w.includes(t));
+  if (tokens.every((t) => prefixIn(nameWords, t) || prefixIn(noteWords, t) || insideName(t))) {
     return -50;
   }
-  // Type camelCase starts (eqFilter)
-  if (tokens.every((t) => type.includes(t))) {
-    return -40;
+  const dep = nodeGraphModuleStoreDepartmentById[entry?.category] || {};
+  const depEmoji = String(dep.emoji || "");
+  const depWords = [
+    ...nodeGraphModuleSearchWords(dep.label || dep.title || ""),
+    ...nodeGraphModuleSearchWords(entry?.category || ""),
+  ];
+  if (tokens.every((t) => (depEmoji && t === depEmoji.toLowerCase())
+    || prefixIn(nameWords, t) || prefixIn(noteWords, t) || insideName(t) || prefixIn(depWords, t))) {
+    return -30;
   }
   return 0;
+}
+
+function nodeGraphModuleStoreEntryMatchesSearch(entry, query) {
+  if (!nodeGraphNormalizeModuleDepartmentSearch(query)) {
+    return true;
+  }
+  return nodeGraphModuleStoreSearchRank(entry, query) < 0;
 }
 
 function nodeGraphModuleStoreDepartmentMatchesSearch(department, entries, query) {
@@ -4372,21 +4382,9 @@ function nodeGraphModuleStoreDepartmentMatchesSearch(department, entries, query)
   const dep = nodeGraphModuleStoreDepartmentById[
     normalizeNodeGraphModuleStoreDepartment(department)
   ] || {};
-  const haystack = [
-    department,
-    dep.emoji,
-    dep.label,
-    ...(entries || []).flatMap((entry) => [
-      entry.label,
-      entry.type,
-      entry.description,
-      ...(entry.notes || []),
-    ]),
-  ]
-    .filter(Boolean)
-    .join(" ")
-    .toLowerCase();
-  return haystack.includes(needle);
+  const depText = [department, dep.emoji, dep.label].filter(Boolean).join(" ").toLowerCase();
+  return depText.includes(needle)
+    || (entries || []).some((entry) => nodeGraphModuleStoreEntryMatchesSearch(entry, query));
 }
 
 function nodeGraphModuleStoreSearchResultOrder(a, b, query = "") {
