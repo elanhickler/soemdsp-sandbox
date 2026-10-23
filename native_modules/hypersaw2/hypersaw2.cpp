@@ -20,6 +20,7 @@
 // Display: soemdsp_hypersaw2_voice_phase → wrap01(center + walk + vib + randomize).
 
 #include <soemdsp/soemdsp.hpp>
+#include <soemdsp/math/rect_sine.h>
 
 namespace {
 
@@ -105,7 +106,7 @@ double polyBlepPulseCenter(double t, double dt, double morph) {
 double polyBlepRectSin(double t, double dt) {
   const double t1 = wrap01(t + 0.25);
   // 2·sin(π·t1) − 4/π  (soemdsp PolyBLEP::rectSinFull)
-  double y = 2.0 * dsp_sin(kPi * t1) - k4zPI;
+  double y = rect_sine_hump01(t1); // shared: soemdsp/math/rect_sine.h
   y += kTwoPi * dt * poly_blamp(t1, dt);
   return y;
 }

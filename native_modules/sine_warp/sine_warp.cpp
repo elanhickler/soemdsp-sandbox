@@ -8,6 +8,7 @@
 // optional hard Reset → PolyBLEP on the output value jump. No wavetable bake.
 
 #include <soemdsp/soemdsp.hpp>
+#include <soemdsp/math/rect_sine.h>
 
 namespace {
 
@@ -84,7 +85,7 @@ static inline double eval_wave(double carrierPhase, double warp, int mode, doubl
   // BLAMP at the knee in playback phase; scale by local warp' so the slope
   // jump tracks compression/expansion (do NOT BLAMP then warp).
   const double t1 = wrap01(u + 0.25);
-  double y = 2.0 * dsp_sin(kPi * t1) - k4zPI;
+  double y = rect_sine_hump01(t1); // shared: soemdsp/math/rect_sine.h
   const double wp = warp_prime(carrierPhase, warp);
   double dt1 = wp * dt;
   if (!(dt1 > 0.0)) dt1 = 0.0;

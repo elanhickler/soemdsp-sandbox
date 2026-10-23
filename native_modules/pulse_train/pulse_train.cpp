@@ -38,7 +38,18 @@
 // 0 or +1 sample delay. Dither: the same 0/+1 stack, re-rolled on Trigger /
 // Loop. Robin1: Schmidt ±1 around round(t_j*sr). Robin2: that pick, then a
 // second ±1 around the integer (range ±2), same mean. Shape (live, default Saw
-// on new nodes): 0 Trigger (impulses), 1 Gate 50%, 2 Saw, 3 Ramp, 4 Tri, 5 Sine.
+// on new nodes; append-only ids): 0 Trigger (impulses), 1 Gate 50%, 2 Saw, 3 Ramp,
+// 4 TriSaw (was Tri), 5 Sine, 6 Pulse Left, 7 Pulse Center, 8 Pulse Right,
+// 9 Rect Sine (v22). Morph (v22, default 0.5; omitted / NaN wasm arg = 0.5):
+// TriSaw peak position (0 = falling saw, 0.5 = the old Tri bit-identical, 1 =
+// rising saw; the grain still starts on the upward 0 crossing). Pulse Left /
+// Center / Right: bipolar -1/+1, Morph = high fraction (duty) of the grain,
+// high part at the start / centred / at the end; 0.5 = 50% square. Rect Sine:
+// soemdsp_maths::rect_sine_hump01 (math/rect_sine.h, the shared bipolar
+// zero-mean |sin| hump), one hump per grain; Morph ignored, as by Trigger /
+// Gate / Saw / Ramp / Sine. Morph outside 0..1 is not clamped (TriSaw
+// extrapolates, only a divide by zero is guarded). Recalculate On latches
+// Morph at each Trigger / Loop cycle start; Off: live.
 // Omitted wasm waveShape is 0 Trigger. Non-trigger shapes are one naive cycle
 // from pulse j to j+1
 // (Loop last grain runs to the end of the pulse span, then End Delay is silent
@@ -63,6 +74,8 @@
 #include <soemdsp/math/exp_log.h>
 #include <soemdsp/math/seed.h>
 #include <soemdsp/math/analog_filter_trig.h>
+#include <soemdsp/math/rect_sine.h>
+#include <soemdsp/math/rect_sine.h>
 using soemdsp_maths::gate_hit;
 using soemdsp_maths::gate_hit_velocity;
 
@@ -98,6 +111,7 @@ struct PulseTrainState {
   double spill[5]; // AA impulse energy delayed 1..4 samples
   unsigned int ditherEpoch;
   long long cycleN; // Loop wrap sample index this cycle (Dither/Robin)
+  double morphEff;  // Morph latched at Trigger / Loop start (Recalculate On)
 };
 
 struct PreviewSched {
@@ -288,8 +302,12 @@ enum {
   kShapeGate = 1,
   kShapeSaw = 2,
   kShapeRamp = 3,
-  kShapeTri = 4,
-  kShapeSine = 5
+  kShapeTriSaw = 4, // was Tri (Morph 0.5 = old Tri, bit-identical)
+  kShapeSine = 5,
+  kShapePulseLeft = 6,
+  kShapePulseCenter = 7,
+  kShapePulseRight = 8,
+  kShapeRectSine = 9
 };
 
 static inline int aaModeOf(double antialiasing) {
@@ -303,7 +321,7 @@ static inline int aaModeOf(double antialiasing) {
 static inline int shapeOf(double wave) {
   int s = (int)(wave + (wave >= 0.0 ? 0.5 : -0.5));
   if (s < 0) s = 0;
-  if (s > kShapeSine) s = kShapeSine;
+  if (s > kShapeRectSine) s = kShapeRectSine;
   return s;
 }
 
@@ -405,18 +423,32 @@ static inline long long eventLand(
   return c;
 }
 
-static inline double grainWave(int shape, double u) {
+static inline double grainWave(int shape, double u, double morph) {
   if (u < 0.0) u = 0.0;
   if (u > 1.0) u = 1.0;
   if (shape == kShapeGate) return u < 0.5 ? 1.0 : 0.0;
   if (shape == kShapeSaw) return 2.0 * u - 1.0;
   if (shape == kShapeRamp) return 1.0 - 2.0 * u;
-  if (shape == kShapeTri) {
-    if (u < 0.25) return 4.0 * u;
-    if (u < 0.75) return 2.0 - 4.0 * u;
-    return 4.0 * u - 4.0;
+  if (shape == kShapeTriSaw) {
+    // Peak at u = m/2 (+1), trough at 1 - m/2 (-1), start / end at 0. At m =
+    // 0.5 every op is the old Tri's times an exact power of two (bit-identical).
+    const double m = morph;
+    const double h = 0.5 * m;
+    if (u < h) return 2.0 * u / m;
+    if (u < 1.0 - h || !(m > 0.0)) {
+      const double d = 1.0 - m;
+      return d > 0.0 || d < 0.0 ? (1.0 - 2.0 * u) / d : -1.0;
+    }
+    return (2.0 * u - 2.0) / m;
   }
   if (shape == kShapeSine) return soemdsp_maths::dsp_sin_turns(u);
+  if (shape == kShapePulseLeft) return u < morph ? 1.0 : -1.0;
+  if (shape == kShapePulseCenter) {
+    const double hw = 0.5 * morph;
+    return (u >= 0.5 - hw && u < 0.5 + hw) ? 1.0 : -1.0;
+  }
+  if (shape == kShapePulseRight) return u >= 1.0 - morph ? 1.0 : -1.0;
+  if (shape == kShapeRectSine) return soemdsp_maths::rect_sine_hump01(u);
   return 0.0;
 }
 
@@ -511,7 +543,7 @@ static int firstPulseAfter(
 
 }  // namespace
 
-extern "C" int soemdsp_pulse_train_version() { return 21; }
+extern "C" int soemdsp_pulse_train_version() { return 22; }
 
 extern "C" int soemdsp_pulse_train_create() {
   for (int i = 0; i < kMaxInstances; i++) {
@@ -557,9 +589,10 @@ extern "C" double soemdsp_pulse_train_sample(
   int handle, double trigger, double count, double endTime, double curve,
   double ampStart, double ampEnd, double ampCurve, double amplitude, double sampleRate, double mode,
   double recalc, double pulseMode, double endDelay, double antialiasing, double seed, double waveShape,
-  double freqHz
+  double freqHz, double morph
 ) {
   if (handle < 1 || handle > kMaxInstances) return 0.0;
+  const double morphLive = morph == morph ? morph : 0.5; // omitted wasm arg (NaN) = 0.5
   const bool loop = mode > 0.5;
   const bool latch = recalc > 0.5;
   const int aaMode = aaModeOf(antialiasing);
@@ -598,6 +631,7 @@ extern "C" double soemdsp_pulse_train_sample(
     const bool needBuild = !s.running || trigHit || !paramsEqual(s.eff, live)
       || !(s.effVel == v) || s.loopSched != loop;
     if (needBuild) applySchedule(s, live, v, loop);
+    s.morphEff = morphLive;
     s.next = 0;
     s.n = 0;
     s.endFired = false;
@@ -631,6 +665,7 @@ extern "C" double soemdsp_pulse_train_sample(
   if (!s.running) {
     for (int k = 0; k < 9; k++) s.eff[k] = live[k];
     s.effVel = 1.0;
+    s.morphEff = morphLive;
     s.elapsed = -1.0;
     return 0.0;
   }
@@ -736,7 +771,7 @@ extern "C" double soemdsp_pulse_train_sample(
       if (s.n < n1) {
         const double u = (double)(s.n - n0) / (double)(n1 - n0);
         const double amp = pulseAmp(s.next, nFwd, s.eff[3], s.eff[4], s.eff[5], s.eff[6], s.effVel, lp, du);
-        out = grainWave(shape, u) * amp;
+        out = grainWave(shape, u, latch ? s.morphEff : morphLive) * amp;
         if (s.n == n0) trig += amp;
         break;
       }

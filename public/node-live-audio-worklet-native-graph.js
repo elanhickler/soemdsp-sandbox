@@ -493,6 +493,7 @@ NodeLiveAudioProcessor.prototype.mapNativeGraphParamId = function mapNativeGraph
     if (k === "semitones" || k === "semitoneOffset") return P.NATIVE_GRAPH_PARAM_CENTER;
   }
   if (t === "pulseTrain" && k === "pulseMode") return P.NATIVE_GRAPH_PARAM_LFO_STYLE;
+  if (t === "pulseTrain" && k === "morph") return P.NATIVE_GRAPH_PARAM_MIX;
   if (t === "filterMorphOscillator") {
     if (k === "start") return P.NATIVE_GRAPH_PARAM_HPF_FREQUENCY;
     if (k === "full") return P.NATIVE_GRAPH_PARAM_LPF_FREQUENCY;
@@ -6412,7 +6413,8 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
       push("duty", P.NATIVE_GRAPH_PARAM_TIME_NUMERATOR, cont("duty", 0.5)); // pulsing fraction of the cycle
       push("antialiasing", P.NATIVE_GRAPH_PARAM_WAVEFORM, disc("antialiasing", 0)); // 0 Off / 1 Fixed / 2 Dither / 3 Robin1 / 4 Robin2
       push("seed", P.NATIVE_GRAPH_PARAM_SEED, disc("seed", 0));
-      push("wave", P.NATIVE_GRAPH_PARAM_OVERSAMPLE, disc("wave", 2)); // 0 Trigger / 1 Gate / 2 Saw / 3 Ramp / 4 Tri / 5 Sine
+      push("wave", P.NATIVE_GRAPH_PARAM_OVERSAMPLE, disc("wave", 2)); // 0 Trigger / 1 Gate / 2 Saw / 3 Ramp / 4 TriSaw / 5 Sine / 6-8 Pulse Left/Center/Right / 9 Rect Sine
+      push("morph", P.NATIVE_GRAPH_PARAM_MIX, cont("morph", 0.5)); // TriSaw peak / Pulse duty
       continue;
     }
     if (type === "pulseExplosion") {

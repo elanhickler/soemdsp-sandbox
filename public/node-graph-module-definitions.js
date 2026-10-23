@@ -14441,7 +14441,7 @@ const nodeGraphModuleDefinitions = (
         tooltip: "Off: first sample at or after each time. Fixed: seed-locked 0/+1 on stacked pulses. Dither: the same 0/+1, re-rolled every Trigger / Loop. Robin1: ±1 around the true time. Robin2: ±2 (second ±1 around the first pick). End Delay uses the same land."
       },
       {
-        choices: ["Trigger", "Gate", "Saw", "Ramp", "Tri", "Sine"],
+        choices: ["Trigger", "Gate", "Saw", "Ramp", "TriSaw", "Sine", "Pulse Left", "Pulse Center", "Pulse Right", "Rect Sine"],
         defaultValue: "2",
         displayChoices: true,
         divideChoicesVisibly: true,
@@ -14449,13 +14449,15 @@ const nodeGraphModuleDefinitions = (
         label: "Shape",
         linearSmoothing: false,
         smoothingType: "none",
-        max: "5",
+        max: "9",
         mid: "2",
         min: "0",
         nonlinearSlider: false,
         step: "1",
-        tooltip: "Trigger: single-sample pulses. Gate: 50% high between pulses. Saw/Ramp: naive ramp from one pulse to the next. Tri/Sine: one cycle starting and ending at 0. Each grain starts at a pulse and ends at the next."
+        tooltip: "Trigger: single-sample pulses. Gate: 50% high between pulses. Saw/Ramp: naive ramp from one pulse to the next. TriSaw/Sine: one cycle starting and ending at 0. Pulse Left/Center/Right: -1/+1 pulse. Rect Sine: zero-mean |sin| hump. Each grain starts at a pulse and ends at the next."
       },
+      // Morph: TriSaw peak (0 falling saw, 0.5 triangle, 1 rising saw); Pulse Left/Center/Right duty (0.5 = square). Other shapes ignore it.
+      { defaultValue: "0.5", key: "morph", label: "Morph", max: "1", mid: "0.5", min: "0", nonlinearSlider: false, step: "any" },
       { defaultValue: "0", key: "seed", kind: "seed", label: "Seed", linearSmoothing: false, max: "16777215", maxDigits: 0, mid: "0", min: "0", nonlinearSlider: false, smoothingType: "none", step: "1", tooltip: "Locks the antialiasing pattern. Same Seed = same offsets on every trigger. Change Seed for a different noise texture." },
       { defaultValue: "12", key: "count", label: "Count", max: "128", mid: "8", min: "1", nonlinearSlider: true, step: "1", tooltip: "Pulses in the train (one-way). Slider 1–128; type above the slider for denser trains (DSP up to 16384)." },
       { defaultValue: "1", key: "frequency", label: "Frequency", max: "20000", mid: "10", min: "0.01", nonlinearSlider: true, step: "any", unit: "Hz" },
