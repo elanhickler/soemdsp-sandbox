@@ -87,7 +87,10 @@ function nodeGraphClockDividerFaceEngineState(nodeId, division) {
   return { count: Math.max(0, Math.round(count)) % division, gate: Number.isFinite(gate) && gate > 0 };
 }
 
-/** Dot grid in face px: centers for `division` dots in rows of <= 16, centred. */
+/**
+ * Dot grid in face px: centers for `division` dots in rows of <= 16, centred.
+ * A partial last row sits centred under the full rows, same spacing.
+ */
 function nodeGraphClockDividerFaceGeometry(w, h, division, stroke) {
   const cols = Math.min(division, NODE_GRAPH_CLOCK_DIVIDER_FACE_MAX_COLS);
   const rows = Math.ceil(division / cols);
@@ -97,8 +100,12 @@ function nodeGraphClockDividerFaceGeometry(w, h, division, stroke) {
   const x0 = (w - cell * cols) * 0.5;
   const y0 = (h - cell * rows) * 0.5;
   const dots = [];
+  const lastRow = rows - 1;
+  const lastShift = (cols * rows - division) * cell * 0.5;
   for (let i = 0; i < division; i += 1) {
-    dots.push([x0 + cell * ((i % cols) + 0.5), y0 + cell * (Math.floor(i / cols) + 0.5)]);
+    const row = Math.floor(i / cols);
+    const x = x0 + cell * ((i % cols) + 0.5) + (row === lastRow ? lastShift : 0);
+    dots.push([x, y0 + cell * (row + 0.5)]);
   }
   return { dots, r };
 }

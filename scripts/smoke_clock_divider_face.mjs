@@ -75,6 +75,17 @@ const rows = new Set(f.cells.map((p) => p.y.toFixed(2)));
 const cols = new Set(f.cells.map((p) => p.x.toFixed(2)));
 gate(f.cells.length === 40 && rows.size === 3 && cols.size === 16 && f.lit + f.tick === 5, `division 40 wraps to 3 rows of 16 (${rows.size}x${cols.size}), 5 counted`);
 gate(f.cells.every((p) => p.x - p.r >= 0 && p.x + p.r <= 240 && p.y - p.r >= 0 && p.y + p.r <= 90), "dots stay inside the face");
+node.params.division = 21;
+f = frame(0, 0);
+{
+  const byRow = new Map();
+  for (const p of f.cells) { const k = p.y.toFixed(2); if (!byRow.has(k)) byRow.set(k, []); byRow.get(k).push(p.x); }
+  const [full, part] = [...byRow.entries()].sort((a, b) => a[0] - b[0]).map(([, xs]) => xs.sort((a, b) => a - b));
+  const mid = (xs) => (xs[0] + xs[xs.length - 1]) / 2;
+  const step = (xs) => xs[1] - xs[0];
+  gate(full.length === 16 && part.length === 5 && Math.abs(mid(full) - mid(part)) < 1e-6 && Math.abs(step(full) - step(part)) < 1e-6 && part.every((x, i) => i === 0 || Math.abs(x - part[i - 1] - step(full)) < 1e-6),
+    `division 21: partial row of 5 centred under the 16, same spacing (mid ${mid(full).toFixed(2)} / ${mid(part).toFixed(2)})`);
+}
 node.params.division = 2.6; f = frame(7, 0);
 gate(f.cells.length === 3 && f.tick === 1, "division rounds like the engine (2.6 -> 3); count wraps into it (7 % 3 = 1)");
 gate(feathers.size === 1 && [...feathers][0] > 0, "lines always antialiased with one fixed skirt");
