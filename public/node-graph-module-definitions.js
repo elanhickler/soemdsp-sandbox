@@ -14132,7 +14132,7 @@ const nodeGraphModuleDefinitions = (
     defaultDisplayMode: "face",
     // Hand-written face (node-graph-module-face.js): Start / Center / End span, Spread | Pulses, the Amp band, seed.
     face: [
-      { kind: "span", lo: "startTime", mid: "centerTime", hi: "endTime", h: 52 },
+      { kind: "span", handles: ["startTime", "centerTime", "endTime"], h: 52 },
       { kind: "cells", params: [["timeSpread", "Spread"], ["numberOfPulses", "Pulses"]], h: 40 },
       { kind: "band", lo: "lowAmplitude", hi: "highAmplitude", label: "Amp", h: 34 },
       { kind: "seed", param: "seed", h: 28 },

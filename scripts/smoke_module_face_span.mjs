@@ -1,8 +1,9 @@
-// Start / Center / End span face row (node-graph-module-face.js kind "span"),
-// first used by Pulse Explosion. Checks the face places every visible param
-// once, sets the body height, and that the span drives its three params through
-// the shared slider setter: Center moves all three by the same amount, End moves
-// only End, Start pushes Center along, Ctrl+click resets, and undo restores.
+// Span face row (node-graph-module-face.js kind "span", N handles, superdot
+// falloff law), first used by Pulse Explosion (Start / Center / End). Checks the
+// face places every visible param once, sets the body height, and that the span
+// drives its params through the shared slider setter: a handle moves alone and
+// stops at its neighbour, a press between two handles moves that pair, the pair
+// stops at the next handle, Ctrl+click resets, and undo restores.
 // Usage: node scripts/smoke_module_face_span.mjs   (server.py on :8765)
 //   SANDBOX_URL, CHROME_PATH, PW_MODULE, SHOT_DIR optional.
 import fs from "node:fs";
@@ -25,7 +26,7 @@ function patchJson() {
   d.connections = [];
   d.graphConnections = [];
   d.modulations = [];
-  d.nodes.push({ gx: 2, gy: 1, id: "pe-1", type: "pulseExplosion", params: { startTime: 1, centerTime: 2, endTime: 4 } });
+  d.nodes.push({ gx: 2, gy: 1, id: "pe-1", type: "pulseExplosion", params: { startTime: 1, centerTime: 4, endTime: 7 } });
   return JSON.stringify(d);
 }
 
@@ -88,28 +89,36 @@ const drag = async (v, dx, mods = []) => {
 };
 const near = (a, b) => Math.abs(a - b) < 0.03;
 
+// Start 1, Center 4, End 7 (of 0..10 s).
 let v0 = await vals();
-await drag(v0.c, 30);
+await drag(v0.c, 25);
 let v1 = await vals();
-const shift = v1.c - v0.c;
-check("Center drag moves all three by the same amount", shift > 0.3 && near(v1.s - v0.s, shift) && near(v1.e - v0.e, shift), `${JSON.stringify(v0)} -> ${JSON.stringify(v1)}`);
+check("Center handle moves Center alone", v1.c > v0.c + 0.3 && near(v1.s, v0.s) && near(v1.e, v0.e), `${JSON.stringify(v0)} -> ${JSON.stringify(v1)}`);
 await page.evaluate(() => undoNodeGraphPatch());
-await page.waitForTimeout(300);
+await page.waitForTimeout(400);
 const vu = await vals();
-check("undo restores the whole span in one step", near(vu.s, v0.s) && near(vu.c, v0.c) && near(vu.e, v0.e), JSON.stringify(vu));
+check("undo restores Center", near(vu.c, v0.c), JSON.stringify(vu));
+v0 = await vals();
+await drag((v0.s + v0.c) / 2, 12);
+v1 = await vals();
+check("press between Start and Center moves that pair only", v1.s > v0.s + 0.1 && near(v1.c - v0.c, v1.s - v0.s) && near(v1.e, v0.e), `${JSON.stringify(v0)} -> ${JSON.stringify(v1)}`);
+v0 = await vals();
+await drag((v0.s + v0.c) / 2, (b) => (((v0.e - v0.c) / 10) * (b.w - 8) + 40) * b.k);
+v1 = await vals();
+check("the pair stops at End (no crossing, no pushing)", near(v1.c, v0.e) && near(v1.e, v0.e) && near(v1.c - v1.s, v0.c - v0.s), `${JSON.stringify(v0)} -> ${JSON.stringify(v1)}`);
 v0 = await vals();
 await drag(v0.e, 25);
 v1 = await vals();
-check("End drag moves End only", v1.e > v0.e + 0.3 && near(v1.s, v0.s) && near(v1.c, v0.c), `${JSON.stringify(v0)} -> ${JSON.stringify(v1)}`);
+check("End handle moves End alone", v1.e > v0.e + 0.3 && near(v1.s, v0.s) && near(v1.c, v0.c), `${JSON.stringify(v0)} -> ${JSON.stringify(v1)}`);
 v0 = await vals();
-await drag(v0.s, (b) => (((v0.c - v0.s) / 10) * (b.w - 8) + 15) * b.k);
+await drag(v0.s, (b) => (((v0.c - v0.s) / 10) * (b.w - 8) + 40) * b.k);
 v1 = await vals();
-check("Start dragged past Center pushes Center along", v1.s > v0.c && near(v1.c, v1.s) && near(v1.e, v0.e), `${JSON.stringify(v0)} -> ${JSON.stringify(v1)}`);
+check("Start handle stops at Center", near(v1.s, v0.c) && near(v1.c, v0.c) && near(v1.e, v0.e), `${JSON.stringify(v0)} -> ${JSON.stringify(v1)}`);
 const input = await page.evaluate(() => Number(document.querySelector('article[data-node="pe-1"] .node-parameter-row[data-param="startTime"] input[type="range"]').dataset.domainValue));
 check("hidden slider input follows the face (shared source)", near(input, v1.s), `${input} vs ${v1.s}`);
-await drag(v1.c, 0, [process.platform === "darwin" ? "Meta" : "Control"]);
+await drag(v1.e, 0, [process.platform === "darwin" ? "Meta" : "Control"]);
 const vr = await vals();
-check("Ctrl+click resets Start / Center / End to defaults", near(vr.s, 0) && near(vr.c, 0.5) && near(vr.e, 1), JSON.stringify(vr));
+check("Ctrl+click resets the span params to defaults", near(vr.s, 0) && near(vr.c, 0.5) && near(vr.e, 1), JSON.stringify(vr));
 check("no page errors", errors.length === 0, errors.slice(0, 3).join(" | "));
 if (SHOT) await page.locator('article[data-node="pe-1"]').screenshot({ path: path.join(SHOT, "pulse-explosion-span.png") });
 await browser.close();

@@ -12,7 +12,9 @@
 //   cells     { params: [[key, label]...], horizontal } vertical (or horizontal) fill sliders
 //   filter    { hpf, lpf, hpfPoles, lpfPoles }  HPF/LPF handles over the response curve
 //   band      { lo, hi, label }                 two-ended range; drag an end or the span
-//   span      { lo, mid, hi }                   Start / Center / End: drag Start or End, or Center to move all three
+//   span      { handles: [key...] }             N ordered handles on one bar (superdot falloff law): on a handle
+//                                               drags it alone, between two drags that pair; handles stop at
+//                                               their neighbours (no crossing, no pushing)
 //   seed      { param }                         [code][die][+][-]
 
 const NODE_GRAPH_FACE_JACK_SLOT_PX = 17;
@@ -26,7 +28,9 @@ const NODE_GRAPH_FACE_FILTER_TICK_PX = 16;
 // LFO style snip stroke half width (face px): about 1 px wide.
 const NODE_GRAPH_FACE_LFO_HALF_PX = 0.5;
 const NODE_GRAPH_FACE_BAND_HANDLE_PX = 8;
-// Span (Start / Center / End): value strip on top, bar below; handle widths in face px.
+// Span: value strip on top, bar below (inset SPAN_INSET_PX); handle widths and grab radius in face px.
+const NODE_GRAPH_FACE_SPAN_INSET_PX = 4;
+const NODE_GRAPH_FACE_SPAN_GRAB_PX = 9;
 const NODE_GRAPH_FACE_SPAN_TEXT_PX = 18;
 const NODE_GRAPH_FACE_SPAN_EDGE_PX = 3;
 const NODE_GRAPH_FACE_SPAN_MID_PX = 5;
@@ -95,7 +99,7 @@ function nodeGraphModuleFaceRowParams(row) {
     case "cells": return row.params.map((cell) => cell[0]);
     case "filter": return [row.hpf, row.lpf];
     case "band": return [row.lo, row.hi];
-    case "span": return [row.lo, row.mid, row.hi];
+    case "span": return [...row.handles];
     default: return [row.param];
   }
 }
@@ -160,7 +164,7 @@ function nodeGraphModuleFaceWidgets(spec, fw, moduleEl = null) {
     } else if (row.kind === "band") {
       out.push({ ...base, type: "band", lo: row.lo, hi: row.hi, label: row.label, x: 0, w, param: "" });
     } else if (row.kind === "span") {
-      out.push({ ...base, type: "span", lo: row.lo, mid: row.mid, hi: row.hi, x: 0, w, param: "" });
+      out.push({ ...base, type: "span", handles: row.handles, x: 0, w, param: "" });
     } else if (row.kind === "seed") {
       const bw = Math.round(Math.min(28, w * 0.15));
       out.push({ ...base, type: "seedNumber", param: row.param, x: 0, w: w - bw * 3 });
@@ -349,27 +353,42 @@ function nodeGraphModuleFaceHitBoxes(moduleEl) {
 function nodeGraphModuleFaceWidgetKeys(wd) {
   if (wd.type === "filter") return [wd.hpf, wd.lpf];
   if (wd.type === "band") return [wd.lo, wd.hi];
-  if (wd.type === "span") return [wd.lo, wd.mid, wd.hi];
+  if (wd.type === "span") return [...wd.handles];
   return [wd.param];
 }
 
-/** Span inputs and travels 0..1; Center is shown clamped between Start and End, as the engine plays it. */
-function nodeGraphModuleFaceSpanEnds(article, wd) {
-  const lo = nodeGraphModuleFaceInput(article, wd.lo);
-  const mid = nodeGraphModuleFaceInput(article, wd.mid);
-  const hi = nodeGraphModuleFaceInput(article, wd.hi);
-  const tl = nodeGraphModuleFaceTravel(lo);
-  const th = Math.max(tl, nodeGraphModuleFaceTravel(hi));
-  return { lo, mid, hi, tl, th, tm: Math.max(tl, Math.min(th, nodeGraphModuleFaceTravel(mid))) };
+/** Span inputs and handle travels 0..1, kept in order for display (the engine reads them in order). */
+function nodeGraphModuleFaceSpanStops(article, wd) {
+  const inputs = wd.handles.map((key) => nodeGraphModuleFaceInput(article, key));
+  const t = [];
+  inputs.forEach((input, i) => t.push(Math.max(i ? t[i - 1] : 0, nodeGraphModuleFaceTravel(input))));
+  return { inputs, t };
 }
 
-/** Span handle a press at u (0..1) grabs: the nearest one (no tiny hit zones, so it works by finger). */
-function nodeGraphModuleFaceSpanMode(u, tl, tm, th) {
-  const d = [["lo", Math.abs(u - tl)], ["mid", Math.abs(u - tm)], ["hi", Math.abs(u - th)]];
-  // Stacked handles: past the end grabs that end, between them grabs Center.
-  if (u < tl && tl === tm) return "lo";
-  if (u > th && th === tm) return "hi";
-  return d.reduce((a, b) => (b[1] < a[1] ? b : a))[0];
+/** Bar position 0..1 of face-local x. */
+function nodeGraphModuleFaceSpanU(wd, x) {
+  const inset = NODE_GRAPH_FACE_SPAN_INSET_PX;
+  return Math.max(0, Math.min(1, (x - wd.x - inset) / Math.max(1, wd.w - inset * 2)));
+}
+
+/**
+ * What a span press at u grabs (soundemote-dev superdot falloff strip):
+ * on or near a handle = that handle; between two handles = that pair; outside = the nearest end.
+ * Stacked handles: a press right of the stack takes the last of them, left takes the first.
+ */
+function nodeGraphModuleFaceSpanGrab(u, t, wPx) {
+  const grab = NODE_GRAPH_FACE_SPAN_GRAB_PX / Math.max(1, wPx - NODE_GRAPH_FACE_SPAN_INSET_PX * 2);
+  let best = 0;
+  for (let i = 1; i < t.length; i += 1) {
+    const d = Math.abs(u - t[i]);
+    const db = Math.abs(u - t[best]);
+    if (d < db || (d === db && u > t[i])) best = i;
+  }
+  if (Math.abs(u - t[best]) <= grab) return { single: best };
+  for (let j = 0; j + 1 < t.length; j += 1) {
+    if (u > t[j] && u < t[j + 1]) return { pair: j };
+  }
+  return { single: best };
 }
 
 /** Band end positions 0..1 across the widget (travel of each end's input). */
@@ -519,27 +538,25 @@ function beginNodeGraphModuleFaceGesture(article, face, spec, event) {
     return;
   }
   if (wd.type === "span") {
-    // Start / Center / End: an edge moves its end (pushing Center along), Center moves all three.
-    const { lo, mid, hi, tl, tm, th } = nodeGraphModuleFaceSpanEnds(article, wd);
-    const mode = nodeGraphModuleFaceSpanMode((p.x - wd.x) / Math.max(1, wd.w), tl, tm, th);
-    const set = (input, t, drag) => setNodeGraphModuleFaceValue(input,
-      typeof nodeSliderValueFromTravel === "function" ? nodeSliderValueFromTravel(input, t) : t, drag);
+    // One handle stops at its neighbours; a pair keeps its gap and stops at the outer neighbours or the ends.
+    const { inputs, t } = nodeGraphModuleFaceSpanStops(article, wd);
+    const g = nodeGraphModuleFaceSpanGrab(nodeGraphModuleFaceSpanU(wd, p.x), t, wd.w);
+    const bw = Math.max(1, wd.w - NODE_GRAPH_FACE_SPAN_INSET_PX * 2);
+    const set = (i, v, drag) => setNodeGraphModuleFaceValue(inputs[i],
+      typeof nodeSliderValueFromTravel === "function" ? nodeSliderValueFromTravel(inputs[i], v) : v, drag);
+    const below = (i) => (i > 0 ? t[i - 1] : 0);
+    const above = (i) => (i < t.length - 1 ? t[i + 1] : 1);
     nodeGraphModuleFaceCapture(face, event, (ev, drag) => {
       const { dx, dy } = travel(ev);
-      const du = (dx - dy) / Math.max(1, wd.w);
-      if (mode === "mid") {
-        const k = Math.max(-tl, Math.min(1 - th, du));
-        set(lo, tl + k, drag);
-        set(mid, tm + k, drag);
-        set(hi, th + k, drag);
-      } else if (mode === "lo") {
-        const a = Math.max(0, Math.min(th, tl + du));
-        set(lo, a, drag);
-        set(mid, Math.max(a, tm), drag);
+      const du = (dx - dy) / bw;
+      if (g.pair == null) {
+        const i = g.single;
+        set(i, Math.max(below(i), Math.min(above(i), t[i] + du)), drag);
       } else {
-        const b = Math.max(tl, Math.min(1, th + du));
-        set(hi, b, drag);
-        set(mid, Math.min(b, tm), drag);
+        const j = g.pair;
+        const k = Math.max(below(j) - t[j], Math.min(above(j + 1) - t[j + 1], du));
+        set(j, t[j] + k, drag);
+        set(j + 1, t[j + 1] + k, drag);
       }
     });
     return;
@@ -615,8 +632,11 @@ function openNodeGraphModuleFaceParamOptions(article, face, event) {
     key = Math.abs(u - tl) <= Math.abs(u - th) ? wd.lo : wd.hi;
   }
   if (wd.type === "span") {
-    const { tl, tm, th } = nodeGraphModuleFaceSpanEnds(article, wd);
-    key = wd[nodeGraphModuleFaceSpanMode((p.x - wd.x) / Math.max(1, wd.w), tl, tm, th)];
+    const { t } = nodeGraphModuleFaceSpanStops(article, wd);
+    const u = nodeGraphModuleFaceSpanU(wd, p.x);
+    const g = nodeGraphModuleFaceSpanGrab(u, t, wd.w);
+    const i = g.pair == null ? g.single : (u - t[g.pair] <= t[g.pair + 1] - u ? g.pair : g.pair + 1);
+    key = wd.handles[i];
   }
   if (wd.type === "filter") {
     const u = p.x / Math.max(1, wd.w);
@@ -821,24 +841,29 @@ function nodeGraphModuleFaceDrawGl(batch, el, w, ox, oy, z) {
         }
       }
     } else if (wd.type === "span") {
-      // Values on top (Start left, Center middle, End right), bar below: span fill, edge handles, wider Center.
-      const { lo, mid, hi, tl, tm, th } = nodeGraphModuleFaceSpanEnds(el, wd);
+      // Values on top (first left, last right, the rest spread between), bar below: fill from first to last
+      // handle, end handles thin, inner handles wider and white.
+      const { inputs, t } = nodeGraphModuleFaceSpanStops(el, wd);
+      const n = inputs.length;
       const ty = wd.y + NODE_GRAPH_FACE_SPAN_TEXT_PX * 0.5 + 1;
-      const third = (wd.w - 12) / 3;
-      nodeGraphModuleFaceText(batch, nodeGraphModuleFaceValueText(lo), ox + (wd.x + 6) * z, oy + ty * z, 12 * z, ink.bandText, { align: "left", maxWidth: third * z });
-      nodeGraphModuleFaceText(batch, nodeGraphModuleFaceValueText(mid), ox + cx * z, oy + ty * z, 12 * z, ink.value, { maxWidth: third * z });
-      nodeGraphModuleFaceText(batch, nodeGraphModuleFaceValueText(hi), ox + (wd.x + wd.w - 6) * z, oy + ty * z, 12 * z, ink.bandText, { align: "right", maxWidth: third * z });
+      const slot = (wd.w - 12) / n;
+      inputs.forEach((input, i) => {
+        const f = n > 1 ? i / (n - 1) : 0.5;
+        const align = i === 0 ? "left" : (i === n - 1 ? "right" : "center");
+        nodeGraphModuleFaceText(batch, nodeGraphModuleFaceValueText(input), ox + (wd.x + 6 + f * (wd.w - 12)) * z, oy + ty * z, 12 * z,
+          align === "center" ? ink.value : ink.bandText, { align, maxWidth: slot * z });
+      });
       const top = wd.y + NODE_GRAPH_FACE_SPAN_TEXT_PX + 2;
       const bottom = wd.y + wd.h - 4;
-      const x0 = wd.x + 4;
-      const bw = wd.w - 8;
+      const x0 = wd.x + NODE_GRAPH_FACE_SPAN_INSET_PX;
+      const bw = wd.w - NODE_GRAPH_FACE_SPAN_INSET_PX * 2;
       rect(x0, top, bw, bottom - top, ink.cellFill);
-      rect(x0 + tl * bw, top, (th - tl) * bw, bottom - top, ink.bandSpan);
-      const edge = NODE_GRAPH_FACE_SPAN_EDGE_PX;
-      const midW = NODE_GRAPH_FACE_SPAN_MID_PX;
-      rect(x0 + tl * bw - edge * 0.5, top, edge, bottom - top, ink.bandHandle);
-      rect(x0 + th * bw - edge * 0.5, top, edge, bottom - top, ink.bandHandle);
-      rect(x0 + tm * bw - midW * 0.5, top - 2, midW, bottom - top + 4, ink.spanMid);
+      rect(x0 + t[0] * bw, top, (t[n - 1] - t[0]) * bw, bottom - top, ink.bandSpan);
+      t.forEach((v, i) => {
+        const inner = i > 0 && i < n - 1;
+        const hw = inner ? NODE_GRAPH_FACE_SPAN_MID_PX : NODE_GRAPH_FACE_SPAN_EDGE_PX;
+        rect(x0 + v * bw - hw * 0.5, inner ? top - 2 : top, hw, bottom - top + (inner ? 4 : 0), inner ? ink.spanMid : ink.bandHandle);
+      });
     } else if (wd.type === "seedNumber" && typeof nodeGraphGlGraphDrawSeedWidget === "function") {
       // The app-wide seed widget ([code][die][+][-]); its buttons are this row's seedButton cells.
       const bw = (w - wd.w) / 3;
