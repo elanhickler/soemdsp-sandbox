@@ -951,7 +951,7 @@ function syncNodeUiDevSettingsHeaderControls() {
   if (sliderTextPadValue) sliderTextPadValue.textContent = `${sliderTextPad}px`;
   // Param wires (ending on a rail IO box) keep their own width and end dot.
   const paramWireThick = Math.max(0.5, Math.min(6, nodeGraphFiniteNumber(document.getElementById("nodeUiDevParamWireThickness")?.value, 0.5)));
-  const paramWireDot = Math.max(0, Math.min(12, nodeGraphFiniteNumber(document.getElementById("nodeUiDevParamWireDotSize")?.value, 1.61)));
+  const paramWireDot = Math.max(0, Math.min(12, nodeGraphFiniteNumber(document.getElementById("nodeUiDevParamWireDotSize")?.value, 0.267)));
   sliderTextHost?.style.setProperty("--node-param-wire-thickness", `${paramWireThick}px`);
   sliderTextHost?.style.setProperty("--node-param-wire-dot-size", `${paramWireDot}px`);
   const paramWireThickValue = document.getElementById("nodeUiDevParamWireThicknessValue");

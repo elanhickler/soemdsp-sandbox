@@ -198,7 +198,7 @@ const nodeUiDevSettingControls = Object.freeze([
   { defaultValue: true, id: "nodeUiDevWiresFollowPortColors", key: "wiresFollowPortColors", type: "boolean" },
   { defaultValue: false, id: "nodeUiDevFullyOpaqueWires", key: "fullyOpaqueWires", type: "boolean" },
   { defaultValue: 0.5, id: "nodeUiDevParamWireThickness", key: "paramWireThickness", max: 6, min: 0.5, step: 0.5, type: "number" },
-  { defaultValue: 1.61, id: "nodeUiDevParamWireDotSize", key: "paramWireDotSize", max: 12, min: 0, step: 0.01, type: "number" },
+  { defaultValue: 0.267, id: "nodeUiDevParamWireDotSize", key: "paramWireDotSize", max: 12, min: 0, step: 0.01, type: "number" },
   { defaultValue: 36, id: "nodeUiDevBypassIconSize", key: "bypassIconSize", max: 100, min: 0, type: "number" },
   { defaultValue: 40, id: "nodeUiDevBypassIconGlowSpread", key: "bypassIconGlowSpread", max: 200, min: 0, type: "number" },
   { defaultValue: "#f25d5d", id: "nodeUiDevBypassIconGlowColor", key: "bypassIconGlowColor", type: "color" },

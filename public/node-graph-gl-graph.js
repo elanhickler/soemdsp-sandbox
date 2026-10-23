@@ -1541,7 +1541,7 @@ function nodeGraphGlGraphPresent(options = {}) {
     nodeGraphGlGraphState.traceThick = Number.parseFloat(style.getPropertyValue("--node-trace-wire-thickness")) || 1;
     nodeGraphGlGraphState.paramThick = Number.parseFloat(style.getPropertyValue("--node-param-wire-thickness")) || 0.5;
     const paramDot = Number.parseFloat(style.getPropertyValue("--node-param-wire-dot-size"));
-    nodeGraphGlGraphState.paramDot = Number.isFinite(paramDot) ? paramDot : 1.61;
+    nodeGraphGlGraphState.paramDot = Number.isFinite(paramDot) ? paramDot : 0.267;
   }
   // Widths are zoom-1 px. The line shader scales them by the live camera,
   // and the cable fade stays 2 screen px. Traces are a 2px stroke that scales.
@@ -1549,7 +1549,7 @@ function nodeGraphGlGraphPresent(options = {}) {
   const traceHalf = 1;
   const dotWorld = Math.max(0, dotSize * 0.5);
   const paramHalf = Math.max(0, (nodeGraphGlGraphState.paramThick || 0.5) * 0.5);
-  const paramDotWorld = Math.max(0, (nodeGraphGlGraphState.paramDot ?? 1.61) * 0.5);
+  const paramDotWorld = Math.max(0, (nodeGraphGlGraphState.paramDot ?? 0.267) * 0.5);
   const wireFeather = 2;
   const screenX = (x) => (x - cam.x) * zoom;
   const screenY = (y) => (y - cam.y) * zoom;

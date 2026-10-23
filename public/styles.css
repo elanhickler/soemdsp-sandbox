@@ -7744,7 +7744,7 @@ body.keyboard-debug-hidden .node-midi-keyboard-signal-bar {
   --node-trace-wire-thickness: 1px;
   /* Param wires (ending on a rail IO box): UIDEV param wire thickness / end dot. */
   --node-param-wire-thickness: 0.5px;
-  --node-param-wire-dot-size: 1.61px;
+  --node-param-wire-dot-size: 0.267px;
   /*
    * Signal jack cell:
    *   width  = half-slot (inward half fits)
