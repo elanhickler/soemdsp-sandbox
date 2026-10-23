@@ -10987,6 +10987,14 @@ const nodeGraphModuleDefinitions = (
   // Electro Snare (docs/SNARE_PLAN.md): one snare voice, Algorithm choice,
   // one fixed shared param set (Modal moved to Modal Snare). Native only: native_modules/electro_snare/electro_snare.cpp.
   electroSnare: {
+    // Hand-written face (node-graph-module-face.js): model, Tune | Tone | Snappy, Body | Snap decays | Bend, Simmons Q | Click | Amp, recalc.
+    face: [
+      { kind: "choices", param: "algorithm", labels: ["808", "909", "Simmons", "FM"], h: 26 },
+      { kind: "cells", params: [["tune", "Tune"], ["tone", "Tone"], ["snappy", "Snappy"]], h: 52 },
+      { kind: "cells", params: [["bodyDecay", "Body"], ["snapDecay", "Snap"], ["bend", "Bend"]], h: 52 },
+      { kind: "cells", params: [["simNoiseQ", "Sim Q"], ["simClick", "Sim Clk"], ["amplitude", "Amp"]], h: 52 },
+      { kind: "choices", param: "recalculateOnTrigger", labels: ["Recalc Off", "Recalc On"], h: 26 },
+    ],
     planRole: "source",
     planFreeRun: true,
     displayType: "lineBurn",
@@ -11018,7 +11026,7 @@ const nodeGraphModuleDefinitions = (
         label: "Algorithm",
         linearSmoothing: false,
         smoothingType: "none",
-        max: "4",
+        max: "3",
         mid: "2",
         min: "0",
         nonlinearSlider: false,
@@ -11137,6 +11145,15 @@ const nodeGraphModuleDefinitions = (
   // Modal Snare (Argi 2026-10-20): Electro Snare's Modal algorithm as its own module,
   // plus a tunable noise profile. Native only: native_modules/modal_snare/modal_snare.cpp.
   modalSnare: {
+    // Hand-written face (node-graph-module-face.js): Tune | Tone | Snappy, Body | Snap decays | Bend, noise (Hz | Q | Tilt), Click | Click decay | Body/Noise mix, Amp, recalc.
+    face: [
+      { kind: "cells", params: [["tune", "Tune"], ["tone", "Tone"], ["snappy", "Snappy"]], h: 52 },
+      { kind: "cells", params: [["bodyDecay", "Body"], ["snapDecay", "Snap"], ["bend", "Bend"]], h: 52 },
+      { kind: "cells", params: [["noiseFreq", "Noise"], ["noiseQ", "Q"], ["noiseTilt", "Tilt", "bipolar"]], h: 52 },
+      { kind: "cells", params: [["click", "Click"], ["clickDecay", "Clk Dec"], ["bodyNoise", "Mix", "bipolar"]], h: 52 },
+      { kind: "cells", params: [["amplitude", "Amp"]], horizontal: true, h: 30 },
+      { kind: "choices", param: "recalculateOnTrigger", labels: ["Recalc Off", "Recalc On"], h: 26 },
+    ],
     planRole: "source",
     planFreeRun: true,
     displayType: "lineBurn",
@@ -11295,6 +11312,13 @@ const nodeGraphModuleDefinitions = (
   // Electro Hat (docs/DRUM_PACK_PLAN.md): one hi-hat voice, Closed / Open / choke,
   // Algorithm choice, one fixed shared param set. Native only: native_modules/electro_hat/electro_hat.cpp.
   electroHat: {
+    // Hand-written face (node-graph-module-face.js): model, Tune | Tone | Metal, Closed | Open decays | Amp, recalc.
+    face: [
+      { kind: "choices", param: "algorithm", labels: ["808", "606", "FM", "Noise"], h: 26 },
+      { kind: "cells", params: [["tune", "Tune"], ["tone", "Tone"], ["metal", "Metal"]], h: 52 },
+      { kind: "cells", params: [["closedDecay", "Closed"], ["openDecay", "Open"], ["amplitude", "Amp"]], h: 52 },
+      { kind: "choices", param: "recalculateOnTrigger", labels: ["Recalc Off", "Recalc On"], h: 26 },
+    ],
     planRole: "source",
     planFreeRun: true,
     displayType: "lineBurn",
@@ -11438,6 +11462,13 @@ const nodeGraphModuleDefinitions = (
   // Electro Tom (docs/DRUM_PACK_PLAN.md): one tom voice, Algorithm choice,
   // one fixed shared param set. Native only: native_modules/electro_tom/electro_tom.cpp.
   electroTom: {
+    // Hand-written face (node-graph-module-face.js): model, Tune | Bend | Tone, Decay | Noise | Amp, recalc.
+    face: [
+      { kind: "choices", param: "algorithm", labels: ["808", "909", "Simmons"], h: 26 },
+      { kind: "cells", params: [["tune", "Tune"], ["bend", "Bend"], ["tone", "Tone"]], h: 52 },
+      { kind: "cells", params: [["bodyDecay", "Decay"], ["noise", "Noise"], ["amplitude", "Amp"]], h: 52 },
+      { kind: "choices", param: "recalculateOnTrigger", labels: ["Recalc Off", "Recalc On"], h: 26 },
+    ],
     planRole: "source",
     planFreeRun: true,
     displayType: "lineBurn",
@@ -11577,6 +11608,13 @@ const nodeGraphModuleDefinitions = (
   // Electro Clap (docs/DRUM_PACK_PLAN.md): classic analog hand clap (white noise ->
   // band-pass -> burst + tail VCAs). Native only: native_modules/electro_clap/electro_clap.cpp.
   electroClap: {
+    // Hand-written face (node-graph-module-face.js): model, Tone | Spread | Snappy, Decay | Amp, recalc.
+    face: [
+      { kind: "choices", param: "algorithm", labels: ["808", "909", "Simple"], h: 26 },
+      { kind: "cells", params: [["tone", "Tone"], ["spread", "Spread"], ["snappy", "Snappy"]], h: 52 },
+      { kind: "cells", params: [["decay", "Decay"], ["amplitude", "Amp"]], h: 40 },
+      { kind: "choices", param: "recalculateOnTrigger", labels: ["Recalc Off", "Recalc On"], h: 26 },
+    ],
     planRole: "source",
     planFreeRun: true,
     displayType: "lineBurn",
@@ -11702,6 +11740,14 @@ const nodeGraphModuleDefinitions = (
   // Electro Kick (docs/DRUM_PACK_PLAN.md): the classic machine kicks, separate from
   // Robin Sinepulse. Native only: native_modules/electro_kick/electro_kick.cpp.
   electroKick: {
+    // Hand-written face (node-graph-module-face.js): model, Tune | Decay | Tone, pitch drop (Bend | Time), Click | Amp, recalc.
+    face: [
+      { kind: "choices", param: "algorithm", labels: ["808", "909", "Simmons"], h: 26 },
+      { kind: "cells", params: [["tune", "Tune"], ["decay", "Decay"], ["tone", "Tone"]], h: 52 },
+      { kind: "cells", params: [["bend", "Bend"], ["bendTime", "Time"]], h: 40 },
+      { kind: "cells", params: [["click", "Click"], ["amplitude", "Amp"]], h: 40 },
+      { kind: "choices", param: "recalculateOnTrigger", labels: ["Recalc Off", "Recalc On"], h: 26 },
+    ],
     planRole: "source",
     planFreeRun: true,
     displayType: "lineBurn",
@@ -12413,6 +12459,10 @@ const nodeGraphModuleDefinitions = (
   },
   // Under construction: Drummer (Sequence shelf).
   drummer: {
+    // Hand-written face (node-graph-module-face.js): Tempo | Swing | Density.
+    face: [
+      { kind: "cells", params: [["tempo", "Tempo"], ["swing", "Swing"], ["density", "Density"]], h: 52 },
+    ],
     planRole: "source",
     planFreeRun: true,
     displayType: "waterfall",
@@ -12636,6 +12686,10 @@ const nodeGraphModuleDefinitions = (
   },
   // Under construction: GM percussion = channel 10 (Sample Player).
   percussion: {
+    // Hand-written face (node-graph-module-face.js): Channel | Kit | Amp.
+    face: [
+      { kind: "cells", params: [["channel", "Channel"], ["kit", "Kit"], ["amplitude", "Amp"]], h: 52 },
+    ],
     planRole: "source",
     planFreeRun: true,
     displayType: "waterfall",

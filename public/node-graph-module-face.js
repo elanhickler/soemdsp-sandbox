@@ -9,7 +9,7 @@
 //   choices   { param, labels }                 inline buttons
 //   fraction  { num, den, mode, modeLabels, cell? } musical division: n / d + Normal/Dotted/Triplet (+ optional cell)
 //   lfoStyles { param, labels, seedParam }      buttons with waveform snips
-//   cells     { params: [[key, label]...], horizontal } vertical (or horizontal) fill sliders
+//   cells     { params: [[key, label, "bipolar"?]...], horizontal } fill sliders (bipolar fills from the middle)
 //   filter    { hpf, lpf, hpfPoles, lpfPoles }  HPF/LPF handles over the response curve
 //   band      { lo, hi, label }                 two-ended range; drag an end or the span
 //   span      { handles: [key...] }             N ordered handles on one bar (superdot falloff law): on a handle
@@ -157,7 +157,8 @@ function nodeGraphModuleFaceWidgets(spec, fw, moduleEl = null) {
       if (row.cell) out.push({ ...base, type: "cell", param: row.cell[0], label: row.cell[1], bipolar: true, x: w - cellW, w: cellW });
     } else if (row.kind === "cells") {
       split(0, w, row.params.length).forEach(([x, cw], i) => out.push({
-        ...base, type: "cell", param: row.params[i][0], label: row.params[i][1], horizontal: !!row.horizontal, x, w: cw,
+        ...base, type: "cell", param: row.params[i][0], label: row.params[i][1], horizontal: !!row.horizontal,
+        bipolar: row.params[i][2] === "bipolar", x, w: cw,
       }));
     } else if (row.kind === "filter") {
       out.push({ ...base, type: "filter", hpf: row.hpf, lpf: row.lpf, x: 0, w, param: "" });
