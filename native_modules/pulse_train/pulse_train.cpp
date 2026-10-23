@@ -120,29 +120,54 @@ static PreviewSched gPreview = {};
 enum {
   kPulseForward = 0,
   kPulseFwdRev = 1,
-  kPulseReverse = 2
+  kPulseReverse = 2,
+  kPulseRevFwd = 3
 };
+
+// Two-leg modes (out-and-back): Forward-Reverse and Reverse-Forward share the
+// 2N-1 / 2N-2 count, the 8192 one-way cap and the 2*Time span.
+static inline bool isDual(int m) { return m == kPulseFwdRev || m == kPulseRevFwd; }
+
+// Reverse-Forward = Forward-Reverse rotated by half a trip: pulse j plays
+// Forward-Reverse pulse k (the turnaround first, then the return leg, then the
+// out leg), so it reuses the forward one-way functions with no new schedule
+// math. One shot: j<N -> k=j+N-1, else k=j-N+1. Loop: k=(j+N-1) mod (2N-2).
+static inline int revFwdK(int j, int nFwd, bool loop, bool* wrapped) {
+  if (loop) {
+    const int L = 2 * nFwd - 2;
+    int k = j + nFwd - 1;
+    *wrapped = k >= L;
+    return *wrapped ? k - L : k;
+  }
+  *wrapped = j >= nFwd;
+  return *wrapped ? j - nFwd + 1 : j + nFwd - 1;
+}
 
 static inline int pulseModeOf(double v) {
   int m = (int)(v + (v >= 0.0 ? 0.5 : -0.5));
   if (m < 0) m = 0;
-  if (m > 2) m = 2;
+  if (m > 3) m = 3;
   return m;
 }
 
 static inline int clampFwd(double count, int pulseMode) {
   if (!(count >= 1.0)) return 1;
-  const int cap = pulseMode == kPulseFwdRev ? kMaxFwdDual : kMaxPulses;
+  const int cap = isDual(pulseMode) ? kMaxFwdDual : kMaxPulses;
   if (count >= (double)cap) return cap;
   return (int)(count + 0.5);
 }
 
 static inline int totalCount(int nFwd, int pulseMode, bool loop) {
-  if (pulseMode != kPulseFwdRev || nFwd <= 1) return nFwd;
+  if (!isDual(pulseMode) || nFwd <= 1) return nFwd;
   return loop ? (2 * nFwd - 2) : (2 * nFwd - 1);
 }
 
 static inline int fwdIndex(int j, int nFwd, int pulseMode, bool loop) {
+  if (pulseMode == kPulseRevFwd) {
+    if (nFwd <= 1) return 0;
+    bool w;
+    return fwdIndex(revFwdK(j, nFwd, loop, &w), nFwd, kPulseFwdRev, loop);
+  }
   if (pulseMode == kPulseFwdRev) {
     if (j < nFwd) return j;
     return 2 * nFwd - 2 - j;
@@ -173,6 +198,17 @@ static inline double oneWayTime(int i, int nFwd, double end, double curve, bool 
 }
 
 static inline double pulseTime(int j, int nFwd, double end, double curve, bool loop, int pulseMode) {
+  if (pulseMode == kPulseRevFwd) {
+    if (nFwd <= 1) return pulseTime(j, nFwd, end, curve, loop, kPulseFwdRev);
+    // Shift so the turnaround (Forward-Reverse pulse N-1) lands on t = 0;
+    // pulses before it in Forward-Reverse order move one cycle (2*Time) later.
+    bool w;
+    const int k = revFwdK(j, nFwd, loop, &w);
+    const double shift = oneWayTime(nFwd - 1, nFwd, end, curve, loop);
+    double t = pulseTime(k, nFwd, end, curve, loop, kPulseFwdRev) - shift + (w ? 2.0 * end : 0.0);
+    if (!(t >= 0.0)) t = 0.0;
+    return t;
+  }
   if (pulseMode == kPulseReverse && nFwd > 1 && loop) {
     // Loop Reverse: forward gaps in reverse order, first pulse at 0, exactly
     // nFwd pulses inside [0, end) (none at end, so nothing doubles at the wrap).
@@ -422,7 +458,7 @@ static void applySchedule(PulseTrainState& s, const double live[9], double v, bo
   s.effVel = v;
   s.timeSpan = live[1] > 0.0 ? live[1] : 0.0;
   const double delay = clampDelay(live[8]);
-  const double span = (s.pulseMode == kPulseFwdRev ? 2.0 : 1.0) * s.timeSpan;
+  const double span = (isDual(s.pulseMode) ? 2.0 : 1.0) * s.timeSpan;
   s.cycle = span + delay;
   if (!(s.cycle == s.cycle)) s.cycle = 0.0;
   s.loopSched = loop;
@@ -475,7 +511,7 @@ static int firstPulseAfter(
 
 }  // namespace
 
-extern "C" int soemdsp_pulse_train_version() { return 20; }
+extern "C" int soemdsp_pulse_train_version() { return 21; }
 
 extern "C" int soemdsp_pulse_train_create() {
   for (int i = 0; i < kMaxInstances; i++) {
@@ -544,7 +580,7 @@ extern "C" double soemdsp_pulse_train_sample(
   const int modeNow = runningLatch ? s.pulseMode : pulseModeLive;
   const double timeNow = runningLatch ? s.timeSpan : (endTime > 0.0 ? endTime : 0.0);
   const double delayNow = runningLatch ? clampDelay(s.eff[8]) : live[8];
-  double schedNow = runningLatch ? s.cycle : ((modeNow == kPulseFwdRev ? 2.0 : 1.0) * timeNow + delayNow);
+  double schedNow = runningLatch ? s.cycle : ((isDual(modeNow) ? 2.0 : 1.0) * timeNow + delayNow);
   if (!(schedNow == schedNow)) schedNow = 0.0;
   const double periodLock = trackPeriodOf(freqHz, sr);
   const double scale = (periodLock > 0.0 && schedNow > 0.0) ? (periodLock / schedNow) : 1.0;
@@ -676,7 +712,7 @@ extern "C" double soemdsp_pulse_train_sample(
         // the cycle) is silent. Delay <= 0: runs to the wrap as before.
         const long long nWrap = s.cycleN > 0 ? s.cycleN : ceilLand(s.wrapCycle > 0.0 ? s.wrapCycle : 1.0 / sr, sr);
         if (delay > 0.0) {
-          const double spanT = (du == kPulseFwdRev ? 2.0 : 1.0) * endT;
+          const double spanT = (isDual(du) ? 2.0 : 1.0) * endT;
           const long long nSpan = eventLand(playT(spanT, scale), sr, stream, (unsigned int)total, aaMode, false);
           n1 = nSpan < nWrap ? nSpan : nWrap;
         } else {

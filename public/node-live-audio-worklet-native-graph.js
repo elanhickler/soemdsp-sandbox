@@ -6408,7 +6408,7 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
       push("amplitude", P.NATIVE_GRAPH_PARAM_AMPLITUDE, cont("amplitude", 1));
       push("mode", P.NATIVE_GRAPH_PARAM_TIMING_MODE, disc("mode", 1)); // 0 One shot / 1 Loop
       push("recalculateOnTrigger", P.NATIVE_GRAPH_PARAM_MODE, disc("recalculateOnTrigger", 0)); // 0 Off live / 1 On latched
-      push("pulseMode", P.NATIVE_GRAPH_PARAM_LFO_STYLE, disc("pulseMode", 0)); // 0 Forward / 1 Forward-Reverse / 2 Reverse
+      push("pulseMode", P.NATIVE_GRAPH_PARAM_LFO_STYLE, disc("pulseMode", 0)); // 0 Forward / 1 Forward-Reverse / 2 Reverse / 3 Reverse-Forward
       push("duty", P.NATIVE_GRAPH_PARAM_TIME_NUMERATOR, cont("duty", 0.5)); // pulsing fraction of the cycle
       push("antialiasing", P.NATIVE_GRAPH_PARAM_WAVEFORM, disc("antialiasing", 0)); // 0 Off / 1 Fixed / 2 Dither / 3 Robin1 / 4 Robin2
       push("seed", P.NATIVE_GRAPH_PARAM_SEED, disc("seed", 0));

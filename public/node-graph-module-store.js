@@ -2045,7 +2045,7 @@ const nodeGraphModuleStoreCatalog = Object.freeze({
   },
   pulseTrain: {
     category: "clock",
-    description: "On trigger, a train of pulses (or grains: Gate/Saw/Ramp/Tri/Sine from one pulse to the next) that starts fast and stretches out. Shape out is the grain, Trigger out is always impulses, End fires at the last pulse. Pulse Mode Forward / Forward-Reverse / Reverse. Antialiasing Off/Fixed/Dither/Robin1/Robin2.",
+    description: "On trigger, a train of pulses (or grains: Gate/Saw/Ramp/Tri/Sine from one pulse to the next) that starts fast and stretches out. Shape out is the grain, Trigger out is always impulses, End fires at the last pulse. Pulse Mode Forward / Forward-Reverse / Reverse / Reverse-Forward. Antialiasing Off/Fixed/Dither/Robin1/Robin2.",
     label: "Pulse Train",
     notes: ["trigger", "pulse train", "slowing down", "growing gaps", "bouncing ball", "End", "native"],
   },

@@ -40,7 +40,7 @@ function nodeGraphPulseTrainPreviewLoad() {
   if (nodeGraphPulseTrainPreviewWasm.promise || typeof fetch !== "function" || typeof WebAssembly === "undefined") {
     return nodeGraphPulseTrainPreviewWasm.promise;
   }
-  nodeGraphPulseTrainPreviewWasm.promise = fetch("/native_modules/pulse_train/pulse_train.wasm?v=pulse-rev-wrap-1")
+  nodeGraphPulseTrainPreviewWasm.promise = fetch("/native_modules/pulse_train/pulse_train.wasm?v=pulse-revfwd-1")
     .then((response) => {
       if (!response.ok) throw new Error(`pulse_train wasm HTTP ${response.status}`);
       return response.arrayBuffer();
@@ -89,7 +89,7 @@ function nodeGraphPulseTrainSchedule(section, node) {
   const periodS = Number.isFinite(fPeriod) && fPeriod > 0 ? fPeriod : (fKnob > 0 ? 1 / fKnob : 0);
   const duty = p("duty", 0.5);
   const pulseModeKnob = nodeGraphPulseTrainPulseMode(p("pulseMode", 0));
-  let endTime = duty * periodS / (pulseModeKnob === 1 ? 2 : 1);
+  let endTime = duty * periodS / ((pulseModeKnob === 1 || pulseModeKnob === 3) ? 2 : 1);
   const args = [
     nodeGraphPulseTrainClampCount(p("count", 12)), endTime, p("curve", 3),
     p("ampStart", 1), p("ampEnd", 0.2), p("ampCurve", 0), p("amplitude", 1),
@@ -144,17 +144,19 @@ function nodeGraphPulseTrainFPeriod(node) {
 function nodeGraphPulseTrainPulseMode(v) {
   const m = Math.round(Number(v) || 0);
   if (m < 0) return 0;
-  if (m > 2) return 2;
+  if (m > 3) return 3;
   return m;
 }
+
+const nodeGraphPulseTrainIsDual = (m) => m === 1 || m === 3;
 
 /** Schedule for args [count, time, curve, ampStart, ampEnd, ampCurve, amplitude, mode, pulseMode, endDelay]. */
 function nodeGraphPulseTrainPreviewJs(args, endTime) {
   const pulseMode = nodeGraphPulseTrainPulseMode(args[8]);
   const nFwd = nodeGraphPulseTrainClampCount(args[0]);
   const loop = args[7] > 0.5;
-  const fwdCap = pulseMode === 1 ? Math.min(nFwd, 8192) : nFwd;
-  const count = pulseMode !== 1 || fwdCap <= 1 ? fwdCap : (loop ? 2 * fwdCap - 2 : 2 * fwdCap - 1);
+  const fwdCap = nodeGraphPulseTrainIsDual(pulseMode) ? Math.min(nFwd, 8192) : nFwd;
+  const count = !nodeGraphPulseTrainIsDual(pulseMode) || fwdCap <= 1 ? fwdCap : (loop ? 2 * fwdCap - 2 : 2 * fwdCap - 1);
   const duration = Number(endTime) > 0 ? Number(endTime) : 0;
   const delayRaw = Number(args[9]);
   const delay = Number.isFinite(delayRaw) ? delayRaw : 0;
@@ -176,9 +178,24 @@ function nodeGraphPulseTrainPreviewJs(args, endTime) {
       peak = Math.max(peak, Math.abs(amps[i]));
     }
   } else {
-    for (let j = 0; j < count; j += 1) {
+    // One forward-family pulse: Forward-Reverse index j (mode 1) or the other modes.
+    const fwdT = (i) => {
+      let t = !loop && i === fwdCap - 1 && fwdCap > 1 ? duration : duration * nodeGraphPulseTrainCurveShape(curve, loop ? i / fwdCap : (fwdCap > 1 ? i / (fwdCap - 1) : 0));
+      if (!(t >= 0)) t = 0;
+      if (t > duration) t = duration;
+      return t;
+    };
+    const L = 2 * fwdCap - 2;
+    for (let jj = 0; jj < count; jj += 1) {
+      // Reverse-Forward: Forward-Reverse rotated half a trip (same as the DSP).
+      let j = jj, wrapped = false;
+      if (pulseMode === 3 && fwdCap > 1) {
+        if (loop) { j = jj + fwdCap - 1; wrapped = j >= L; if (wrapped) j -= L; }
+        else { wrapped = jj >= fwdCap; j = wrapped ? jj - fwdCap + 1 : jj + fwdCap - 1; }
+      }
+      const dual = nodeGraphPulseTrainIsDual(pulseMode);
       let i = j;
-      if (pulseMode === 1) {
+      if (dual) {
         if (j >= fwdCap) i = 2 * fwdCap - 2 - j;
       } else if (pulseMode === 2 && fwdCap > 1) {
         i = fwdCap - 1 - j;
@@ -187,18 +204,22 @@ function nodeGraphPulseTrainPreviewJs(args, endTime) {
       let t = !loop && i === fwdCap - 1 && fwdCap > 1 ? duration : duration * nodeGraphPulseTrainCurveShape(curve, u);
       if (!(t >= 0)) t = 0;
       if (t > duration) t = duration;
-      if (pulseMode === 1 && j >= fwdCap) t = 2 * duration - t;
+      if (dual && j >= fwdCap) t = 2 * duration - t;
       else if (pulseMode === 2 && fwdCap > 1) {
         if (loop) t = j === 0 ? 0 : duration - Math.min(duration, Math.max(0, duration * nodeGraphPulseTrainCurveShape(curve, (fwdCap - j) / fwdCap)));
         else t = duration - t;
       }
-      times[j] = t;
+      if (pulseMode === 3 && fwdCap > 1) {
+        t = t - fwdT(fwdCap - 1) + (wrapped ? 2 * duration : 0);
+        if (!(t >= 0)) t = 0;
+      }
+      times[jj] = t;
       const a = (ampStart + (ampEnd - ampStart) * nodeGraphPulseTrainCurveShape(ampCurve, u)) * amplitude;
-      amps[j] = a;
+      amps[jj] = a;
       peak = Math.max(peak, Math.abs(a));
     }
   }
-  const span = (pulseMode === 1 ? 2 : 1) * duration;
+  const span = (nodeGraphPulseTrainIsDual(pulseMode) ? 2 : 1) * duration;
   const last = count ? times[count - 1] : 0;
   const cutoff = loop ? span + delay : last + delay;
   const end = Math.max(0.001, loop || delay !== 0 ? Math.max(0, cutoff) : last || 0.001);
@@ -255,7 +276,7 @@ function drawNodeGraphPulseTrainDisplay(section) {
   const schedule = nodeGraphPulseTrainSchedule(section, node);
   const ghost = schedule?.ghost || null;
   const period = nodeGraphPulseTrainFPeriod(node);
-  const span = schedule ? ((schedule.pulseMode === 1 ? 2 : 1) * schedule.duration) : 0;
+  const span = schedule ? ((nodeGraphPulseTrainIsDual(schedule.pulseMode) ? 2 : 1) * schedule.duration) : 0;
   const schedCycle = schedule ? span + schedule.delay : 0;
   const timeScale = 1; // Time + End Delay already span the 1/ƒ cycle
   const fKnobFace = nodeGraphPulseTrainFaceParam(node, "frequency", 1);

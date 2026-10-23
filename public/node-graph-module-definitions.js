@@ -14390,7 +14390,7 @@ const nodeGraphModuleDefinitions = (
         step: "1"
       },
       {
-        choices: ["Forward", "Forward-Reverse", "Reverse"],
+        choices: ["Forward", "Forward-Reverse", "Reverse", "Reverse-Forward"],
         defaultValue: "0",
         displayChoices: true,
         divideChoicesVisibly: true,
@@ -14398,12 +14398,12 @@ const nodeGraphModuleDefinitions = (
         label: "Pulse Mode",
         linearSmoothing: false,
         smoothingType: "none",
-        max: "2",
+        max: "3",
         mid: "1",
         min: "0",
         nonlinearSlider: false,
         step: "1",
-        tooltip: "Forward: one-way schedule (Time). Forward-Reverse: that schedule then its time-mirror, peak once. Reverse: only the return trip. Count is the one-way pulse count."
+        tooltip: "Forward: one-way schedule (Time). Forward-Reverse: that schedule then its time-mirror, peak once. Reverse: only the return trip. Reverse-Forward: the return trip then the forward trip (Forward-Reverse started at its turnaround). Count is the one-way pulse count."
       },
       {
         choices: ["Off", "Fixed", "Dither", "Robin1", "Robin2"],

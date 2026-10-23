@@ -5,7 +5,7 @@ import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const N = (await WebAssembly.instantiate(fs.readFileSync(path.join(root, "native_modules", "combined", "soemdsp_combined.wasm")), { env: { emo_process_block: () => 0 } })).instance.exports;
+const N = (await WebAssembly.instantiate(fs.readFileSync(process.env.PT_COMBINED || path.join(root, "native_modules", "combined", "soemdsp_combined.wasm")), { env: { emo_process_block: () => 0 } })).instance.exports;
 const SR = 48000, TYPE_PT = 231;
 const P = { AMP: 12, SHAPE: 13, STAGES: 22, TNUM: 52, TDEN: 53, TIMING: 54, MODE: 21, LFO_STYLE: 56, OVERSAMPLE: 32, WIDTH: 31, IN_LOW: 80, IN_HIGH: 81 };
 const PORT = { MONO: 0, LEFT: 1, SAW: 3, RAMP: 4, PHASE: 10, IDLE: 11 };
@@ -108,10 +108,10 @@ check((N.soemdsp_graph_version() | 0) >= 255, `graph version ${N.soemdsp_graph_v
 
 // 5) Loop: exactly Count pulses per cycle in every Pulse Mode, no doubled pulse at the
 // wrap, and Reverse amplitudes run Amp End -> Amp Start (no Amp Start spike at t = 0).
-for (const pulseMode of [0, 1, 2]) for (const count of [1, 2, 3, 4, 7]) for (const duty of [0.3, 0.5, 1]) {
+for (const pulseMode of (process.env.PT_PRINT_HASH ? [0, 1, 2] : [0, 1, 2, 3])) for (const count of [1, 2, 3, 4, 7]) for (const duty of [0.3, 0.5, 1]) {
   const r = run({ freq: 10, duty, count, pulseMode, seconds: 0.6 });
   const w = wraps(r);
-  const want = pulseMode === 1 && count > 1 ? 2 * count - 2 : count;
+  const want = (pulseMode === 1 || pulseMode === 3) && count > 1 ? 2 * count - 2 : count;
   for (let c = 0; c + 1 < w.length; c++) {
     const hits = []; for (let i = w[c]; i < w[c + 1]; i++) if (r.out[i] !== 0) hits.push(i - w[c]);
     if (hits.length !== want) throw new Error(`pulseMode ${pulseMode} Count ${count} Duty ${duty} cycle ${c}: ${hits.length} pulses (want ${want}) at ${hits}`);
@@ -122,3 +122,69 @@ for (const pulseMode of [0, 1, 2]) for (const count of [1, 2, 3, 4, 7]) for (con
   }
 }
 console.log("ok pulseTrain Loop: exactly Count pulses per cycle in Forward / Forward-Reverse (2N-2) / Reverse, no wrap double; Reverse amps rise");
+
+// 6) Reverse-Forward (Pulse Mode 3) = Forward-Reverse rotated half a trip: the
+// return leg then the out leg, turnaround pulse shared once, amps End -> Start -> End.
+const PV = (await WebAssembly.instantiate(fs.readFileSync(process.env.PT_SINGLE || path.join(root, "native_modules", "pulse_train", "pulse_train.wasm")), { env: {} })).instance.exports;
+const prev = (count, pulseMode, loop, time = 0.05, curve = 3, a0 = 1, a1 = 0.2, ac = 0) => {
+  const n = PV.soemdsp_pulse_train_preview(count, time, curve, a0, a1, ac, 1, loop, pulseMode, 0) | 0;
+  const t = [], a = [];
+  for (let i = 0; i < n; i++) { t.push(PV.soemdsp_pulse_train_preview_time(i)); a.push(PV.soemdsp_pulse_train_preview_amplitude(i)); }
+  return { n, t, a };
+};
+const fnv = (arr) => { let h = 0x811c9dc5; const b = new Uint8Array(Float64Array.from(arr).buffer); for (const x of b) { h ^= x; h = Math.imul(h, 0x01000193) >>> 0; } return h; };
+if (!process.env.PT_PRINT_HASH) {
+  const E = 0.05;
+  for (const curve of [3, 0, -2]) for (const count of [1, 2, 3, 5, 9]) {
+    // One shot: 2N-1 pulses, exact rotation of Forward-Reverse.
+    const fr = prev(count, 1, 0, E, curve), rf = prev(count, 3, 0, E, curve), N = count;
+    const want1 = N > 1 ? 2 * N - 1 : 1;
+    if (rf.n !== want1) throw new Error(`RevFwd one shot Count ${N}: ${rf.n} pulses (want ${want1})`);
+    for (let j = 0; j < rf.n && N > 1; j++) {
+      const k = j < N ? j + N - 1 : j - N + 1;
+      const tw = j < N ? fr.t[k] - E : fr.t[k] + E;
+      if (Math.abs(rf.t[j] - tw) > 1e-12 || rf.a[j] !== fr.a[k]) throw new Error(`RevFwd one shot Count ${N} curve ${curve} pulse ${j}: t ${rf.t[j]} a ${rf.a[j]} (want ${tw} / ${fr.a[k]})`);
+      // time-mirror symmetric around Time: return leg is the out leg reversed
+      if (Math.abs(rf.t[j] + rf.t[rf.n - 1 - j] - 2 * E) > 1e-12) throw new Error(`RevFwd one shot not mirror-symmetric at ${j}`);
+    }
+    if (N > 1) {
+      if (!(rf.t[0] === 0 && Math.abs(rf.t[N - 1] - E) < 1e-12 && Math.abs(rf.t[rf.n - 1] - 2 * E) < 1e-12)) throw new Error(`RevFwd one shot Count ${N} endpoints ${rf.t}`);
+      if (!(Math.abs(rf.a[0] - 0.2) < 1e-12 && Math.abs(rf.a[N - 1] - 1) < 1e-12 && Math.abs(rf.a[rf.n - 1] - 0.2) < 1e-12)) throw new Error(`RevFwd one shot amps ${rf.a}`);
+      for (let j = 1; j < rf.n; j++) {
+        if (!(rf.t[j] >= rf.t[j - 1])) throw new Error(`RevFwd one shot times not ordered ${rf.t}`);
+        if (j < N ? !(rf.a[j] >= rf.a[j - 1] - 1e-12) : !(rf.a[j] <= rf.a[j - 1] + 1e-12)) throw new Error(`RevFwd amps not End->Start->End ${rf.a}`);
+      }
+    }
+    // Loop: 2N-2 pulses in [0, 2*Time), cyclic gaps = Forward-Reverse gaps rotated N-1, no wrap duplicate.
+    const frL = prev(count, 1, 1, E, curve), rfL = prev(count, 3, 1, E, curve);
+    const wantL = N > 1 ? 2 * N - 2 : 1;
+    if (rfL.n !== wantL) throw new Error(`RevFwd Loop Count ${N}: ${rfL.n} pulses (want ${wantL})`);
+    if (N > 1) {
+      const gaps = (t) => t.map((x, i) => (i + 1 < t.length ? t[i + 1] : 2 * E) - x);
+      const gf = gaps(frL.t), gr = gaps(rfL.t), L = wantL;
+      for (let j = 0; j < L; j++) {
+        const k = (j + N - 1) % L;
+        if (Math.abs(gr[j] - gf[k]) > 1e-12 || rfL.a[j] !== frL.a[k]) throw new Error(`RevFwd Loop Count ${N} curve ${curve} gap ${j}: ${gr[j]} vs ${gf[k]}`);
+        if (!(gr[j] > 0)) throw new Error(`RevFwd Loop Count ${N}: zero gap (duplicate) at ${j}`);
+      }
+      if (!(rfL.t[0] === 0 && rfL.t[L - 1] < 2 * E)) throw new Error(`RevFwd Loop range ${rfL.t}`);
+      // (Loop amps follow Forward-Reverse Loop: the turnaround is u = (N-1)/N, as in Forward Loop.)
+    }
+  }
+  console.log("ok pulseTrain Reverse-Forward: One shot 2N-1 / Loop 2N-2 (no wrap duplicate), timing = Forward-Reverse rotated half a trip (mirror), amps Amp End -> Amp Start -> Amp End");
+  // Audio Loop: Reverse-Forward cycle = 1/f with Duty spanning both legs.
+  const r = run({ freq: 10, duty: 0.5, pulseMode: 3 });
+  const w = wraps(r);
+  check(w.length >= 2 && Math.abs(w[1] - w[0] - SR / 10) <= 1 && Math.abs(r.ramp[r.ramp.length - 1] - 0.025) < 1e-12, `Reverse-Forward Duty 0.5 at 10 Hz: cycle ${w[1] - w[0]} samples, Time per leg 0.025 s`);
+  const rc = run({ freq: 4, duty: 0.75, count: 6, pulseMode: 3 });
+  check(rc.saw[rc.saw.length - 1] === 6.75, `face __Count ${rc.saw[rc.saw.length - 1]} (6 + Reverse-Forward/4)`);
+}
+// 7) Forward / Forward-Reverse / Reverse bit-identical to pulse_train v20 / graph 265 (recorded fingerprints).
+{
+  const got = [];
+  for (const pulseMode of [0, 1, 2]) for (const loop of [0, 1]) for (const count of [1, 2, 5, 9]) { const p = prev(count, pulseMode, loop); got.push(fnv([...p.t, ...p.a])); }
+  for (const pulseMode of [0, 1, 2]) for (const wave of [0, 2]) got.push(fnv(run({ freq: 7, duty: 0.6, count: 5, pulseMode, wave, seconds: 0.4 }).out));
+  if (process.env.PT_PRINT_HASH) console.log(JSON.stringify(got));
+  const want = [2613946904,585445218,2660523023,591222594,2613946904,3606255894,692371551,651742738,2613946904,2451413586,4282807406,533559120,2613946904,3606255894,3814978235,3590162378,2613946904,1395206354,2848262314,2298171084,2613946904,2772506946,999691444,13131915,2589047096,761726603,4132730213,2352623202,2589047096,761726603];
+  if (want) check(got.every((h, i) => h === want[i]), `Forward / Forward-Reverse / Reverse bit-identical to v20 (${got.length} fingerprints)`);
+}
