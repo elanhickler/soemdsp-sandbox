@@ -14049,6 +14049,13 @@ const nodeGraphModuleDefinitions = (
       { key: "face", label: "Face", renderer: "pulseExplosionFace", settingsSchema: "pulseExplosionFace" },
     ],
     defaultDisplayMode: "face",
+    // Hand-written face (node-graph-module-face.js): Start / Center / End span, Spread | Pulses, the Amp band, seed.
+    face: [
+      { kind: "span", lo: "startTime", mid: "centerTime", hi: "endTime", h: 52 },
+      { kind: "cells", params: [["timeSpread", "Spread"], ["numberOfPulses", "Pulses"]], h: 40 },
+      { kind: "band", lo: "lowAmplitude", hi: "highAmplitude", label: "Amp", h: 34 },
+      { kind: "seed", param: "seed", h: 28 },
+    ],
     parameters: [
       { defaultValue: "0", key: "startTime", label: "Start Time", max: "10", mid: "1", min: "0", nonlinearSlider: false, step: "any", unit: "s" },
       { defaultValue: "0.5", key: "centerTime", label: "Center Time", max: "10", mid: "1", min: "0", nonlinearSlider: false, step: "any", unit: "s" },
