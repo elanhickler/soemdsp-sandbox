@@ -40,7 +40,7 @@ function nodeGraphPulseTrainPreviewLoad() {
   if (nodeGraphPulseTrainPreviewWasm.promise || typeof fetch !== "function" || typeof WebAssembly === "undefined") {
     return nodeGraphPulseTrainPreviewWasm.promise;
   }
-  nodeGraphPulseTrainPreviewWasm.promise = fetch("/native_modules/pulse_train/pulse_train.wasm?v=pulse-train-freq-duty-1")
+  nodeGraphPulseTrainPreviewWasm.promise = fetch("/native_modules/pulse_train/pulse_train.wasm?v=pulse-rev-wrap-1")
     .then((response) => {
       if (!response.ok) throw new Error(`pulse_train wasm HTTP ${response.status}`);
       return response.arrayBuffer();
@@ -181,7 +181,7 @@ function nodeGraphPulseTrainPreviewJs(args, endTime) {
       if (pulseMode === 1) {
         if (j >= fwdCap) i = 2 * fwdCap - 2 - j;
       } else if (pulseMode === 2 && fwdCap > 1) {
-        i = loop ? (j === 0 ? 0 : fwdCap - j) : fwdCap - 1 - j;
+        i = fwdCap - 1 - j;
       }
       const u = loop ? i / fwdCap : (fwdCap > 1 ? i / (fwdCap - 1) : 0);
       let t = !loop && i === fwdCap - 1 && fwdCap > 1 ? duration : duration * nodeGraphPulseTrainCurveShape(curve, u);
@@ -189,7 +189,7 @@ function nodeGraphPulseTrainPreviewJs(args, endTime) {
       if (t > duration) t = duration;
       if (pulseMode === 1 && j >= fwdCap) t = 2 * duration - t;
       else if (pulseMode === 2 && fwdCap > 1) {
-        if (loop && j === 0) t = 0;
+        if (loop) t = j === 0 ? 0 : duration - Math.min(duration, Math.max(0, duration * nodeGraphPulseTrainCurveShape(curve, (fwdCap - j) / fwdCap)));
         else t = duration - t;
       }
       times[j] = t;

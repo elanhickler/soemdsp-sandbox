@@ -15,7 +15,7 @@
 // shrink (a real bouncing ball settling speeds up). First pulse at t = 0,
 // last one-way pulse at exactly Time (Time 0..12 s). Pulse Mode: Forward
 // (one-way), Forward-Reverse (one-way then time-mirror 2*Time - t_i, peak
-// once), Reverse (the return trip alone: Time - t_{N-1-j}). One-shot
+// once), Reverse (the return trip alone: Time - t_{N-1-j}; Loop v20: gaps\n// reversed from 0, amps Amp End -> Amp Start, so the t=0 pulse is the quiet\n// one, not a stray Amp Start spike). One-shot
 // Forward-Reverse last pulse at 2*Time. Loop Forward-Reverse skips that
 // return so it does not stack on the next cycle's first pulse. End Delay is
 // bipolar seconds after the last pulse: positive is silence after, negative
@@ -149,7 +149,6 @@ static inline int fwdIndex(int j, int nFwd, int pulseMode, bool loop) {
   }
   if (pulseMode == kPulseReverse) {
     if (nFwd <= 1) return 0;
-    if (loop) return j == 0 ? 0 : nFwd - j;
     return nFwd - 1 - j;
   }
   return j;
@@ -174,6 +173,14 @@ static inline double oneWayTime(int i, int nFwd, double end, double curve, bool 
 }
 
 static inline double pulseTime(int j, int nFwd, double end, double curve, bool loop, int pulseMode) {
+  if (pulseMode == kPulseReverse && nFwd > 1 && loop) {
+    // Loop Reverse: forward gaps in reverse order, first pulse at 0, exactly
+    // nFwd pulses inside [0, end) (none at end, so nothing doubles at the wrap).
+    if (j == 0) return 0.0;
+    double t = end - oneWayTime(nFwd - j, nFwd, end, curve, loop);
+    if (!(t >= 0.0)) t = 0.0;
+    return t;
+  }
   const int i = fwdIndex(j, nFwd, pulseMode, loop);
   const double tf = oneWayTime(i, nFwd, end, curve, loop);
   if (pulseMode == kPulseFwdRev && j >= nFwd) {
@@ -182,7 +189,6 @@ static inline double pulseTime(int j, int nFwd, double end, double curve, bool l
     return t;
   }
   if (pulseMode == kPulseReverse && nFwd > 1) {
-    if (loop && j == 0) return 0.0;
     double t = end - tf;
     if (!(t >= 0.0)) t = 0.0;
     return t;
@@ -469,7 +475,7 @@ static int firstPulseAfter(
 
 }  // namespace
 
-extern "C" int soemdsp_pulse_train_version() { return 19; }
+extern "C" int soemdsp_pulse_train_version() { return 20; }
 
 extern "C" int soemdsp_pulse_train_create() {
   for (int i = 0; i < kMaxInstances; i++) {

@@ -105,3 +105,20 @@ for (const rec of [1, 0]) {
   check(Math.abs(w - SR) <= 1, `defaults Frequency 1 Hz / Duty 0.5: wrap at ${w} samples`);
 }
 check((N.soemdsp_graph_version() | 0) >= 255, `graph version ${N.soemdsp_graph_version()}`);
+
+// 5) Loop: exactly Count pulses per cycle in every Pulse Mode, no doubled pulse at the
+// wrap, and Reverse amplitudes run Amp End -> Amp Start (no Amp Start spike at t = 0).
+for (const pulseMode of [0, 1, 2]) for (const count of [1, 2, 3, 4, 7]) for (const duty of [0.3, 0.5, 1]) {
+  const r = run({ freq: 10, duty, count, pulseMode, seconds: 0.6 });
+  const w = wraps(r);
+  const want = pulseMode === 1 && count > 1 ? 2 * count - 2 : count;
+  for (let c = 0; c + 1 < w.length; c++) {
+    const hits = []; for (let i = w[c]; i < w[c + 1]; i++) if (r.out[i] !== 0) hits.push(i - w[c]);
+    if (hits.length !== want) throw new Error(`pulseMode ${pulseMode} Count ${count} Duty ${duty} cycle ${c}: ${hits.length} pulses (want ${want}) at ${hits}`);
+    if (pulseMode === 2 && count > 1) {
+      const a = hits.map((x) => r.out[w[c] + x]);
+      if (!a.every((v, k) => k === 0 || v >= a[k - 1] - 1e-12)) throw new Error(`Reverse Count ${count} Duty ${duty}: amps not rising ${a}`);
+    }
+  }
+}
+console.log("ok pulseTrain Loop: exactly Count pulses per cycle in Forward / Forward-Reverse (2N-2) / Reverse, no wrap double; Reverse amps rise");
