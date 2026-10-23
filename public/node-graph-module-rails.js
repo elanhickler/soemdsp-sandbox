@@ -178,7 +178,8 @@ function nodeGraphCanvasDisplayBox(tileW, tileH, aspect = 0) {
 // with one full-height #3d4555 1px separator on its slider side. Each patched
 // param gets one IO box the full rail width (no padding) and 16 px tall (the
 // label height), centred on its row: #111 fill, #889 label. Chip pin: the box
-// has three strokes (top, bottom, slider side) and no outward edge, and runs
+// has three strokes (top, bottom, slider side, all outside the box like the
+// plate stroke) and no outward edge, and runs
 // through the module border (drawn over it, same quads, so its rows are exact),
 // and the plate border is cut over exactly the box's span (nodeGraphModuleRailBorderCuts). Param wires end on
 // the border's outer edge, centred on the box, with a tiny end dot (UIDev).
@@ -347,12 +348,14 @@ function nodeGraphModuleRailsDrawGl(batch, plates, toX, toY, zoom, cssW, cssH) {
       const fx = Math.min(b.x, b.ox);
       const fw = b.w + border;
       rect(fx, b.y, fw, b.h, NodeGraphRailInk.inletFill);
-      const bx = b.side < 0 ? b.ox : b.x + b.w;
-      rect(bx, b.y, border, t, NodeGraphRailInk.inletStroke);
-      rect(bx, b.y + b.h - t, border, t, NodeGraphRailInk.inletStroke);
-      rect(b.x, b.y, b.w, t, NodeGraphRailInk.inletStroke);
-      rect(b.x, b.y + b.h - t, b.w, t, NodeGraphRailInk.inletStroke);
-      rect(b.side < 0 ? b.x + b.w - t : b.x, b.y, t, b.h, NodeGraphRailInk.inletStroke);
+      // Strokes sit outside the box, as the plate stroke sits outside the
+      // plate: top / bottom rows run from the inner stroke to the border's
+      // outer edge, so they meet the wall stroke square with no gap or overlap.
+      const sx = b.side < 0 ? b.ox : b.x - t;
+      const sw = (b.side < 0 ? b.x + b.w + t : b.ox) - sx;
+      rect(sx, b.y - t, sw, t, NodeGraphRailInk.inletStroke);
+      rect(sx, b.y + b.h, sw, t, NodeGraphRailInk.inletStroke);
+      rect(b.side < 0 ? b.x + b.w : b.x - t, b.y, t, b.h, NodeGraphRailInk.inletStroke);
     }
     batch._over = false;
     if (typeof nodeGraphGlLinesText !== "function") continue;

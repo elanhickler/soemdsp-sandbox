@@ -159,8 +159,9 @@ const wallCheck = (im, side, label, boxPx) => {
   const inner = mid - side * 2;
   const ink = [...Array(im.h).keys()].filter((y) => near(at(im, inner, y), INK));
   const top = ink[0];
-  // Label glyphs can sit in the inner column: the bottom stroke is the last ink row within one box height.
-  const bot = Math.max(...ink.filter((y) => y - top <= boxPx + 1));
+  // Label glyphs can sit in the inner column: the bottom stroke is the last ink row within one box height
+  // plus the two stroke rows outside the box (strokes sit outside, like the plate stroke).
+  const bot = Math.max(...ink.filter((y) => y - top <= boxPx + 1 + 2 * Math.ceil(boxPx / 16)));
   if (!(bot - top > 4)) return check(`${label}: box found`, false, JSON.stringify(ink));
   const cols = [...Array(im.w).keys()].filter((x) => (side < 0 ? x <= mid : x >= mid - 1)).sort((p, q) => side * (p - q));
   const wall = cols.find((x) => isBorder(at(im, x, top - 1)));

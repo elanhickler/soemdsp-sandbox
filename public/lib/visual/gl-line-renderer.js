@@ -380,7 +380,6 @@ uniform highp vec4 uPlate;
 uniform vec4 uPlateColor;
 uniform vec4 uFill;
 uniform float uStroke;
-uniform float uInletGap;
 uniform int uCount;
 uniform vec4 uJack[24];
 uniform vec4 uJackColor[24];
@@ -396,7 +395,6 @@ void main() {
   vec2 plateMax = uPlate.xy + uPlate.zw;
   vec2 px = vPx;
   float strokeW = max(uStroke, 0.0);
-  float gap = max(uInletGap, 0.0);
   float z = max(uCam.z, 0.0001);
   float devScale = max(uDevice, 0.0001);
   if (uPixel > 0.5) {
@@ -410,24 +408,16 @@ void main() {
     plateMax = ceil((uPlate.xy + uPlate.zw - origin) * z * devScale - 0.5);
     plateMax = max(plateMax, plateMin + vec2(1.0));
     strokeW = max(1.0, floor(max(uStroke, 0.0) * z * devScale + 0.5));
-    gap = max(uInletGap, 0.0) * z * devScale;
   }
   vec2 c = (plateMin + plateMax) * 0.5;
   vec2 halfSize = (plateMax - plateMin) * 0.5;
   vec2 q = abs(px - c) - halfSize;
   float sdRect = length(max(q, 0.0)) + min(max(q.x, q.y), 0.0);
-  // Cut each jack inward. A disk centered on the wall removes the inside
-  // semicircle; the outside half stays outside the rectangle.
+  // The plate is the rectangle minus the inside half of every jack (a disk,
+  // or a square for param jacks, centred on the wall). sd > 0 is outside it.
+  // Param and signal jacks take this one path.
   float sd = sdRect;
-  // fwidth keeps the jack fringe one screen pixel. The plate stroke itself
-  // is a whole-pixel band (see strokePx).
-  float halfRing = max(strokeW * 0.5, 0.5);
-  float nearest = halfRing + 2.0;
-  float edgeAa = max(fwidth(sdRect), 1e-4);
   vec4 strokeCol = uPlateColor;
-  float holeA = 0.0;
-  float inMouth = 0.0;
-  float arc = 0.0;
   for (int i = 0; i < 24; i++) {
     if (i >= uCount) break;
     vec2 jack = uJack[i].xy;
@@ -442,33 +432,21 @@ void main() {
     float d = square > 0.5
       ? max(abs(px.x - jack.x), abs(px.y - jack.y)) - radius
       : length(px - jack) - radius;
-    sd = max(sd, -d);
-    float aa = max(fwidth(d), edgeAa);
-    float ring = 1.0 - smoothstep(halfRing - aa, halfRing + aa, abs(d));
-    if (sdRect <= 0.85 && ring > arc) {
-      nearest = abs(d);
+    if (-d > sd) {
+      sd = -d;
       strokeCol = vec4(uJackColor[i].rgb, uPlateColor.a);
-      arc = ring;
-    }
-    inMouth = max(inMouth, 1.0 - smoothstep(-aa, aa, d));
-    if (radius > 0.0 && sdRect <= 0.75) {
-      float hole = 1.0 - smoothstep(-halfRing - aa, -halfRing + aa, d);
-      float dl = jack.x - plateMin.x;
-      float dr = plateMax.x - jack.x;
-      float dt = jack.y - plateMin.y;
-      float db = plateMax.y - jack.y;
-      vec2 inward = vec2(1.0, 0.0);
-      if (dr <= dl && dr <= dt && dr <= db) inward = vec2(-1.0, 0.0);
-      else if (dt <= dl && dt <= dr && dt <= db) inward = vec2(0.0, 1.0);
-      else if (db <= dl && db <= dr && db <= dt) inward = vec2(0.0, -1.0);
-      float cut = smoothstep(gap - aa, gap + aa, dot(px - jack, inward));
-      holeA = max(holeA, hole * cut);
     }
   }
-  // Whole screen pixels outside the plate. Camera mode already rounded
-  // strokeW to an integer of at least 1. Jacks keep a 1px AA ring.
+  // One stroke for wall and jack: the band 0 < sd <= strokePx outside the
+  // shape, where the plate stroke has always sat. A jack meets the wall in a
+  // square corner (the max of the two distances), so the strokes join with no
+  // gap and no doubled pixel. Camera mode: strokeW is whole screen pixels and
+  // the plate edges sit on pixel edges, so walls stay crisp and curves get a
+  // one-pixel ramp. Coverage is linear in sd over one pixel (SDF slope 1).
   float strokePx = uPixel > 0.5 ? strokeW : max(1.0, floor(strokeW + 0.5));
-  float fat = (sdRect > 0.0 && sdRect <= strokePx) ? 1.0 : 0.0;
+  float aa = uPixel > 0.5 ? 1.0 : max(fwidth(sd), 1e-4);
+  float inner = clamp(sd / aa + 0.5, 0.0, 1.0);
+  float band = inner - clamp((sd - strokePx) / aa + 0.5, 0.0, 1.0);
   for (int i = 0; i < 16; i++) {
     if (i >= uCutCount) break;
     highp vec4 cut = uCut[i];
@@ -479,14 +457,14 @@ void main() {
       cy1 = (cut.y - uCam.y) * z * devScale;
     }
     bool wall = cut.z < 0.0 ? px.x < plateMin.x : px.x >= plateMax.x;
-    if (wall && px.y >= cy0 && px.y < cy1) fat = 0.0;
+    if (wall && px.y >= cy0 && px.y < cy1) band = 0.0;
   }
-  float strokeA = max(fat * (1.0 - inMouth), arc) * strokeCol.a;
-  float plateA = sd <= 0.0 ? uFill.a * (1.0 - holeA) : 0.0;
-  float a = strokeA + plateA * (1.0 - strokeA);
-  float geomA = max(max(fat * (1.0 - inMouth), arc), sd <= 0.0 ? (1.0 - holeA) : 0.0);
-  if (geomA < 0.01 || a <= 0.0) discard;
-  vec3 rgb = (strokeCol.rgb * strokeA + uFill.rgb * plateA * (1.0 - strokeA)) / a;
+  // Stroke and fill cover disjoint parts of the pixel, so they add.
+  float strokeA = band * strokeCol.a;
+  float plateA = (1.0 - inner) * uFill.a;
+  float a = strokeA + plateA;
+  if (a < 0.004) discard;
+  vec3 rgb = (strokeCol.rgb * strokeA + uFill.rgb * plateA) / a;
   gl_FragColor = vec4(rgb, a);
 }
 `;
@@ -545,7 +523,6 @@ void main() {
         outPlateColor: gl.getUniformLocation(outProgram, "uPlateColor"),
         outFill: gl.getUniformLocation(outProgram, "uFill"),
         outStroke: gl.getUniformLocation(outProgram, "uStroke"),
-        outInletGap: gl.getUniformLocation(outProgram, "uInletGap"),
         outCount: gl.getUniformLocation(outProgram, "uCount"),
         outCutCount: gl.getUniformLocation(outProgram, "uCutCount"),
         outCut: gl.getUniformLocation(outProgram, "uCut[0]"),
@@ -2310,7 +2287,7 @@ void main() {
     gl.enable(gl.BLEND);
   }
 
-  function nodeGraphGlLinesModuleOutline(batch, x, y, w, h, stroke, rgba, jacks, fill, inletGap, cuts) {
+  function nodeGraphGlLinesModuleOutline(batch, x, y, w, h, stroke, rgba, jacks, fill, cuts) {
     if (!batch || !(w > 0) || !(h > 0)) return;
     const k = batch.camera ? 1 : (batch.scale || 1);
     const sx = x * k;
@@ -2332,7 +2309,6 @@ void main() {
     batch.outlines.push({
       x: sx, y: sy, w: sw, h: sh, stroke: ss, rgba,
       fill: fill || [0.09, 0.1, 0.12, 1],
-      inletGap: Math.max(0, Number(inletGap) || 0) * k,
       jacks: list,
       cuts: (Array.isArray(cuts) ? cuts : []).slice(0, CUT_MAX).map((c) => [c.y0 * k, c.y1 * k, c.side < 0 ? -1 : 1, 0]),
     });
@@ -2379,7 +2355,6 @@ void main() {
       const fill = shape.fill || [0, 0, 0, 0];
       if (s.outFill) gl.uniform4f(s.outFill, fill[0], fill[1], fill[2], fill.length > 3 ? fill[3] : 1);
       gl.uniform1f(s.outStroke, shape.stroke);
-      if (s.outInletGap) gl.uniform1f(s.outInletGap, shape.inletGap || 0);
       jackData.fill(0);
       colorData.fill(0);
       const count = Math.min(OUT_MAX, shape.jacks.length);
