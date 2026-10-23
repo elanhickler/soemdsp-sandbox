@@ -6776,12 +6776,13 @@ const nodeGraphModuleDefinitions = (
     ],
     defaultDisplayMode: "face",
     inputs: ["Clock", "Reset"],
-    outputs: ["Out"],
+    // Gate (▮) holds high for duty x division clock periods; Trigger (⎍) is one sample per fire.
+    outputs: ["Gate", "Trigger"],
+    outputAliases: { Out: "Gate" },
     parameters: [
-      { defaultValue: "0", key: "threshold", label: "Threshold", max: "1", mid: "0", min: "-1", nonlinearSlider: false, step: "any" },
       { defaultValue: "2", key: "division", label: "Division", max: "64", maxDigits: 3, mid: "2", min: "1", nonlinearSlider: false, step: "1" },
       { defaultValue: "0.5", key: "duty", label: "Duty", max: "1", mid: "0.5", min: "0.01", nonlinearSlider: true, sliderCurve: "edges", curveAmount: "0.3", step: "any" },
-      { defaultValue: "1", key: "level", label: "Level", max: "1", mid: "0.5", min: "0", nonlinearSlider: false, step: "any" },
+      { defaultValue: "1", key: "amplitude", label: "Amplitude", max: "1", mid: "0.5", min: "0", nonlinearSlider: false, step: "any" },
     ]
   },
   delayedTrigger: {

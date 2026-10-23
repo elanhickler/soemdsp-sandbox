@@ -488,6 +488,19 @@ function validateNodeGraphPatch(patch) {
             : (n <= 0 ? 0 : -44100 * Math.log(1 - n) / (2 * Math.PI));
         }
       }
+      // Clock Divider: Level renamed Amplitude; Threshold removed (fixed edge level).
+      if (type === "clockDivider" && node.params) {
+        if (Object.prototype.hasOwnProperty.call(node.params, "level") && !Object.prototype.hasOwnProperty.call(node.params, "amplitude")) {
+          node.params.amplitude = node.params.level;
+        }
+        delete node.params.level;
+        delete node.params.threshold;
+        if (node.paramMeta?.level && !node.paramMeta.amplitude) node.paramMeta.amplitude = node.paramMeta.level;
+        if (node.paramMeta) {
+          delete node.paramMeta.level;
+          delete node.paramMeta.threshold;
+        }
+      }
       if (type === "stepGraph" && node.params && Object.prototype.hasOwnProperty.call(node.params, "curveOffset") && !Object.prototype.hasOwnProperty.call(node.params, "skewOffset")) {
         node.params.skewOffset = node.params.curveOffset;
         delete node.params.curveOffset;

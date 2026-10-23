@@ -7,7 +7,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, "..");
 const wasmPath = path.join(root, "native_modules", "combined", "soemdsp_combined.wasm");
 
-const { instance } = await WebAssembly.instantiate(fs.readFileSync(wasmPath), {});
+const { instance } = await WebAssembly.instantiate(fs.readFileSync(wasmPath), { env: { emo_process_block: () => 0 } });
 const e = instance.exports;
 const mem = e.memory;
 if (!mem) throw new Error("wasm memory export missing");
@@ -141,27 +141,42 @@ function view(ptr, n) {
   setParam(g, hDiv, PARAM_STAGES, 2);
   setParam(g, hDiv, PARAM_SHAPE, 0.5); // duty
   setParam(g, hDiv, PARAM_AMP, 1);
-  setParam(g, hDiv, PARAM_CENTER, 0);
   setParam(g, hDiv, 54, 1); // PARAM_TIMING_MODE → clockDivider path
   if ((compile(g) | 0) !== 0) throw new Error("cdiv compile");
   snap(g);
   let clockPulses = 0;
   let divPulses = 0;
+  let gateRises = 0;
+  let triggers = 0;
+  let triggerAtRise = 0;
+  let lastGate = 0;
   for (let q = 0; q < 120; q++) {
     process(g, 128);
     const pul = view(portPtr(g, hClk, PORT_RIGHT) | 0, 128);
     const out = view(portPtr(g, hDiv, PORT_MONO) | 0, 128);
+    const trig = view(portPtr(g, hDiv, PORT_RIGHT) | 0, 128);
     for (let i = 0; i < 128; i++) {
       if (pul[i] > 0.5) clockPulses += 1;
       if (out[i] > 0.5) divPulses += 1;
+      const rise = out[i] > 0.5 && lastGate <= 0.5;
+      if (rise) gateRises += 1;
+      if (trig[i] > 0.5) {
+        triggers += 1;
+        if (rise) triggerAtRise += 1;
+      }
+      lastGate = out[i];
     }
+  }
+  // Trigger: one sample per fire, on the sample the Gate rises.
+  if (!(triggers > 2 && triggers === gateRises && triggerAtRise === triggers)) {
+    throw new Error(`cdiv trigger=${triggers} gateRises=${gateRises} atRise=${triggerAtRise}`);
   }
   if (!(clockPulses > 5)) throw new Error(`cdiv clockPulses=${clockPulses}`);
   // duty 0.5 × division 2 × ~20 ms period → ~20 ms pulses every 2 edges
   if (!(divPulses > 50)) {
     throw new Error(`cdiv out high=${divPulses} clockPulses=${clockPulses}`);
   }
-  console.log(`clockDivider ok clockPulses=${clockPulses} divHigh=${divPulses}`);
+  console.log(`clockDivider ok clockPulses=${clockPulses} divHigh=${divPulses} triggers=${triggers}`);
 }
 
 // delayedTrigger: fire from clock pulse with short delay

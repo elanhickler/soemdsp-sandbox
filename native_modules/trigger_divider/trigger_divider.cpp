@@ -24,6 +24,7 @@ struct TriggerDividerState {
   double remainingSamples;
   double samplesSinceEdge;
   double measuredPeriodSamples;
+  bool fired;
 };
 
 static TriggerDividerState gPool[kMaxInstances];
@@ -47,6 +48,7 @@ extern "C" int soemdsp_trigger_divider_create() {
       s.remainingSamples = 0.0;
       s.samplesSinceEdge = 0.0;
       s.measuredPeriodSamples = 0.0;
+      s.fired = false;
       s.active = true;
       return i + 1;
     }
@@ -100,15 +102,17 @@ extern "C" double soemdsp_trigger_divider_sample(
   return safe(output);
 }
 
-// clockDivider: measure Clock rising-edge period; pulse = duty×division×period.
+// clockDivider: rising edges of Clock above kClockEdgeThreshold. Gate pulse
+// = duty x division x measured period; a one-sample trigger on each fire.
+static const double kClockEdgeThreshold = 0.0;
+
 extern "C" double soemdsp_trigger_divider_sample_clock(
   int    handle,
   double clock,
   double reset,
-  double threshold,
   double division,
   double duty,
-  double level,
+  double amplitude,
   double sampleRate
 ) {
   if (handle < 1 || handle > kMaxInstances) return 0.0;
@@ -116,22 +120,22 @@ extern "C" double soemdsp_trigger_divider_sample_clock(
 
   const double safeClock = safe(clock);
   const double safeReset = safe(reset);
-  const double safeThreshold = safe(threshold);
   const long long divisionSteps = clamp_division_steps(division);
   double safeDuty = safe(duty);
   if (safeDuty < 0.01) safeDuty = 0.01;
   if (safeDuty > 1.0) safeDuty = 1.0;
-  const double safeLevel = safe(level);
+  const double safeAmplitude = safe(amplitude);
   const double rate = maxd(1.0, safe(sampleRate));
+  s.fired = false;
 
-  if (rising_edge(safeReset, &s.lastReset, safeThreshold)) {
+  if (rising_edge(safeReset, &s.lastReset, kClockEdgeThreshold)) {
     s.count = 0;
     s.remainingSamples = 0.0;
     s.samplesSinceEdge = 0.0;
     s.measuredPeriodSamples = 0.0;
   }
 
-  const bool rising = rising_edge(safeClock, &s.lastTrigger, safeThreshold);
+  const bool rising = rising_edge(safeClock, &s.lastTrigger, kClockEdgeThreshold);
   if (rising) {
     if (s.samplesSinceEdge > 0.0) {
       s.measuredPeriodSamples = s.samplesSinceEdge;
@@ -142,22 +146,26 @@ extern "C" double soemdsp_trigger_divider_sample_clock(
       const double periodSec = s.measuredPeriodSamples > 0.0
         ? s.measuredPeriodSamples / rate
         : 0.0;
-      // Match JS: duty * division / sourceRate (= duty * division * period).
+      // duty * division * period.
       const double pulseTime = periodSec > 0.0
         ? safeDuty * (double)divisionSteps * periodSec
         : 0.01;
       s.remainingSamples = maxd(1.0, dsp_floor(pulseTime * rate + 0.5));
+      s.fired = true;
     }
   } else {
     s.samplesSinceEdge += 1.0;
   }
 
-
-
-
-  const double output = s.remainingSamples > 0.0 ? safeLevel : 0.0;
+  const double output = s.remainingSamples > 0.0 ? safeAmplitude : 0.0;
   s.remainingSamples = maxd(0.0, s.remainingSamples - 1.0);
   return safe(output);
+}
+
+// 1 on the sample the last sample_clock call fired, else 0 (Trigger out).
+extern "C" double soemdsp_trigger_divider_trigger(int handle) {
+  if (handle < 1 || handle > kMaxInstances) return 0.0;
+  return gPool[handle - 1].fired ? 1.0 : 0.0;
 }
 
 // Edges counted toward the next fire (0 = just fired / reset). Face tap.
@@ -167,5 +175,5 @@ extern "C" int soemdsp_trigger_divider_count(int handle) {
 }
 
 extern "C" int soemdsp_trigger_divider_version() {
-  return 3;
+  return 4;
 }

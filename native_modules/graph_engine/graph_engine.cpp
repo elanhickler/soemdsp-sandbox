@@ -366,9 +366,10 @@ extern "C" double soemdsp_clock_pulse(int handle);
 extern "C" int soemdsp_trigger_divider_create();
 extern "C" void soemdsp_trigger_divider_destroy(int handle);
 extern "C" int soemdsp_trigger_divider_count(int handle);
+extern "C" double soemdsp_trigger_divider_trigger(int handle);
 extern "C" double soemdsp_trigger_divider_sample_clock(
-  int handle, double clock, double reset, double threshold, double division,
-  double duty, double level, double sampleRate
+  int handle, double clock, double reset, double division,
+  double duty, double amplitude, double sampleRate
 );
 extern "C" double soemdsp_trigger_divider_sample(
   int handle, double trigger, double reset, double threshold, double division,
@@ -6571,25 +6572,24 @@ static void process_clock_divider(Circuit& g, Node& node, int frames) {
   const bool hasClock = mix_live_port(g, node, kPortTrigger, frames, g.mixTrigger);
   const bool hasReset = mix_live_port(g, node, kPortReset, frames, g.mixReset);
   const double sr = g.sampleRate < 1.0f ? 44100.0 : (double)g.sampleRate;
-  const double threshold = control_effective(node.center);
   const double division = control_effective(node.stages);
   const double duty = control_effective(node.shape);
-  const double level = control_effective(node.amplitude);
+  const double amplitude = control_effective(node.amplitude);
   for (int f = 0; f < frames; f++) {
     control_frame(g, node, f);
-    const double out = soemdsp_trigger_divider_sample_clock(
+    const double gate = soemdsp_trigger_divider_sample_clock(
       node.nativeHandle,
       hasClock ? g.mixTrigger[f] : 0.0,
       hasReset ? g.mixReset[f] : 0.0,
-      threshold,
       division,
       duty,
-      level,
+      amplitude,
       sr
     );
-    node.buf[kPortMono][f] = out;
-    node.buf[kPortLeft][f] = out;
-    node.buf[kPortRight][f] = out;
+    // Gate on Mono / Left, Trigger (one sample per fire) on Right.
+    node.buf[kPortMono][f] = gate;
+    node.buf[kPortLeft][f] = gate;
+    node.buf[kPortRight][f] = soemdsp_trigger_divider_trigger(node.nativeHandle);
     // __Count: edges toward the next fire (Clock Divider face).
     node.buf[kPortPhase01][f] = (double)soemdsp_trigger_divider_count(node.nativeHandle);
   }

@@ -2097,7 +2097,6 @@ function buildNodeGraphDisplaySettingsBodyHtml(formType, node = null) {
         "lineThickness",
         "lineSmoothing",
         ...(type === "clockFace" ? ["startThickness", "blinkTime", "gateHeight"] : []),
-        ...(type === "clockDividerFace" ? ["blinkTime"] : []),
         "dotThickness",
         ...(type === "sinCosFace" ? ["padExtra"] : []),
         ...(type === "pulseTrainFace" ? ["ghostOpacity", "fadeTime"] : []),
@@ -2417,7 +2416,7 @@ function buildNodeGraphDisplaySettingsBodyHtml(formType, node = null) {
     if ((type === "roundShapeFace" || type === "basicShapeFace" || type === "softwaveOscFace" || type === "sinCosFace" || type === "clockFace" || type === "clockDividerFace" || type === "pulseExplosionFace" || type === "pulseTrainFace") && section === "waterfall") {
       // Background first, then Line, then Dot (same order as every other display).
       // Clock: Background, Pulse (line), Playhead (dot), Fill, Start, Blink.
-      // Clock Divider: Background, Ring (line), Count (dot), Out (fill), Tick (start), Fire (blink).
+      // Clock Divider: Background, Ring (line), Count (dot), Tick (start), Fire (blink).
       const clock = type === "clockFace";
       const divider = type === "clockDividerFace";
       const lamps = [
@@ -2440,7 +2439,6 @@ function buildNodeGraphDisplaySettingsBodyHtml(formType, node = null) {
         lamps.push(["blink", "Blink", "blinkHue", "blinkBrightness", "blinkSaturation"]);
       }
       if (divider) {
-        lamps.push(["fill", "Out", "fillHue", "fillBrightness", "fillSaturation"]);
         lamps.push(["start", "Tick", "startHue", "startBrightness", "startSaturation"]);
         lamps.push(["blink", "Fire", "blinkHue", "blinkBrightness", "blinkSaturation"]);
       }

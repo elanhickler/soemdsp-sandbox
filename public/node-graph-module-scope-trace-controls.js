@@ -933,9 +933,9 @@ const nodeGraphTraceDisplayActiveControlsByType = Object.freeze({
     toggles: Object.freeze([]),
     choices: Object.freeze([]),
   }),
-  // Clock Divider: Background / Ring / Count / Out / Tick / Fire HBS lamps, ring thickness, blink time.
+  // Clock Divider: Background / Ring / Count / Tick / Fire HBS lamps, ring thickness.
   clockDividerFace: Object.freeze({
-    fields: Object.freeze(["lineThickness", "lineSmoothing", "blinkTime"]),
+    fields: Object.freeze(["lineThickness"]),
     colors: Object.freeze([]),
     toggles: Object.freeze([]),
     choices: Object.freeze([]),

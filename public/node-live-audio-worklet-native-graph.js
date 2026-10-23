@@ -1190,6 +1190,11 @@ NodeLiveAudioProcessor.prototype.mapNativeGraphSrcPortId = function mapNativeGra
     if (p === "__ampcurve") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_TRISAW;
     if (p === "__amp") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_CENTER_SQUARE;
   }
+  // Clock Divider: Gate on Mono, Trigger (one sample per fire) on Right.
+  if (t === "clockDivider") {
+    if (p === "gate" || p === "out") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_MONO;
+    if (p === "trigger") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_RIGHT;
+  }
   if (t === "pulseExplosion") {
     if (p === "__elapsed") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_PHASE01;
     if (p === "out") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_MONO;
@@ -6737,10 +6742,9 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
     }
     if (type === "clockDivider") {
       // Clock→kPortTrigger; duty→shape; timingMode=1 selects process_clock_divider.
-      push("threshold", P.NATIVE_GRAPH_PARAM_CENTER, cont("threshold", 0));
       push("division", P.NATIVE_GRAPH_PARAM_STAGES, disc("division", 2));
       push("duty", P.NATIVE_GRAPH_PARAM_SHAPE, cont("duty", 0.5));
-      push("level", P.NATIVE_GRAPH_PARAM_AMPLITUDE, cont("level", 1));
+      push("amplitude", P.NATIVE_GRAPH_PARAM_AMPLITUDE, cont("amplitude", 1));
       push("timingMode", P.NATIVE_GRAPH_PARAM_TIMING_MODE, 1);
       continue;
     }
@@ -9206,6 +9210,7 @@ NodeLiveAudioProcessor.prototype.nativeGraphPortNames = function nativeGraphPort
     if (type === "resonantCompressor") return ["Out L"];
     if (type === "rmsMeter") return ["RMS", "RMS L Tap"];
     if (type === "acidSequencer") return ["Gate"];
+    if (type === "clockDivider") return ["Gate", "Out", "Mono"];
     if (type === "mixStereo4" || type === "mixStereo2" || type === "mixStereo" || type === "crossfade2" || type === "crossfade3" || type === "crossfade4") {
       return []; // stereo-only — no Mono I/O
     }
@@ -9368,6 +9373,7 @@ NodeLiveAudioProcessor.prototype.nativeGraphPortNames = function nativeGraphPort
     if (type === "pulseTrain") return ["Trigger"];
     if (type === "resonantCompressor") return ["Out R"];
     if (type === "rmsMeter") return ["RMS R", "RMS R Tap"];
+    if (type === "clockDivider") return ["Trigger"];
     if (type === "robinSinepulse") return ["env", "0-1", "0\u20131", "0..1"];
     if (type === "acidSequencer") return ["pitch", "\u266f/\u266d"];
     if (type === "helmholtzPitch") return ["Fidelity", "fid"];
