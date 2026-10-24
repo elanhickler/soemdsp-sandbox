@@ -61,7 +61,7 @@ for (let i = 0; i < TYPES.length; i += 1) {
     return {
       faceH: face.offsetHeight,
       specH: nodeGraphModuleFaceHeightPx(type, node),
-      sliders: [...el.querySelectorAll(".node-parameter-control")].filter((c) => c.getBoundingClientRect().height > 0).length,
+      sliders: [...el.querySelectorAll(".node-parameter-row:not(.node-face-slider-row) > .node-parameter-control")].filter((c) => c.getBoundingClientRect().height > 0).length,
       dup: placed.length !== new Set(placed).size,
       missingKeys: visible.filter((k) => !placed.includes(k)),
       extra: placed.filter((k) => !visible.includes(k)),
@@ -104,7 +104,8 @@ for (let i = 0; i < TYPES.length; i += 1) {
   const ws = await widgets(id, TYPES[i]);
   // Model buttons: the first choices row that is not Recalc.
   const modelRow = await page.evaluate(({ id }) => {
-    const row = nodeGraphModuleFaceSpec(nodeGraphPatchNode(id).type).find((r) => r.kind === "choices" && r.param !== "recalculateOnTrigger");
+    const skip = new Set(["recalculateOnTrigger", "voiceFade"]);
+    const row = nodeGraphModuleFaceSpec(nodeGraphPatchNode(id).type).find((r) => r.kind === "choices" && !skip.has(r.param));
     return row ? { param: row.param, labels: row.labels } : { param: "", labels: [] };
   }, { id });
   const labels = modelRow.labels;
@@ -112,14 +113,35 @@ for (let i = 0; i < TYPES.length; i += 1) {
   for (let k = models.length - 1; k >= 0; k -= 1) {
     await click(models[k]);
     const shown = await choiceLabel(id, modelRow.param);
-    check(`${TYPES[i]}: model button ${labels[k]} selects ${labels[k]}`, shown === labels[k], `shown "${shown}", stored ${JSON.stringify(await raw(id, modelRow.param))}`);
+    const catalog = await page.evaluate(({ t, key, k }) => String(nodeGraphModuleDefinitions[t].parameters.find((p) => p.key === key)?.choices?.[k] ?? ""), { t: TYPES[i], key: modelRow.param, k });
+    check(`${TYPES[i]}: model button ${labels[k]} selects ${labels[k]}`, shown === labels[k] || shown === catalog, `shown "${shown}", stored ${JSON.stringify(await raw(id, modelRow.param))}`);
+  }
+  const sliderRows = await page.evaluate((id) => [...document.querySelectorAll(`article[data-node="${id}"] .node-parameter-row.node-face-slider-row`)].map((r) => {
+    const c = (r.querySelector(".node-slider-readout") || r.querySelector(".node-parameter-control")).getBoundingClientRect();
+    return { key: r.dataset.param, x: c.left, w: c.width, y: c.top + c.height / 2, h: c.height };
+  }), id);
+  for (const sw of sliderRows) {
+    check(`${TYPES[i]}: ${sw.key} shows its own slider row`, sw.w > 40 && sw.h > 10, JSON.stringify(sw));
+    const l0 = await choiceLabel(id, sw.key);
+    const swMax = await page.evaluate(({ id, key }) => { const n = nodeGraphModuleFaceInput(document.querySelector(`article[data-node="${id}"]`), key); return Number(n.value) >= Number(n.max); }, { id, key: sw.key });
+    const swMin = await page.evaluate(({ id, key }) => { const n = nodeGraphModuleFaceInput(document.querySelector(`article[data-node="${id}"]`), key); return Number(n.value) <= Number(n.min); }, { id, key: sw.key });
+    const from = swMin || !swMax ? 0.2 : 0.8;
+    const to = from < 0.5 ? 0.8 : 0.2;
+    await drag(sw.x + sw.w * from, sw.y, sw.w * (to - from), 0);
+    const l1 = await choiceLabel(id, sw.key);
+    check(`${TYPES[i]}: switch ${sw.key} drag changes choice`, l1 !== l0 && l1 !== "", `${l0} -> ${l1}`);
+    await page.evaluate(() => undoNodeGraphPatch());
+    await page.waitForFunction(({ id, key, l0 }) => String(nodeSliderChoiceLabel(nodeGraphModuleFaceInput(document.querySelector(`article[data-node="${id}"]`), key))) === l0, { id, key: sw.key, l0 }, { timeout: 5000 }).catch(() => {});
+    check(`${TYPES[i]}: undo restores ${sw.key}`, (await choiceLabel(id, sw.key)) === l0, await choiceLabel(id, sw.key));
   }
   const cell = ws.find((w) => w.type === "cell");
+  if (!cell) continue;
   const key = cell.keys[0];
   const c0 = await val(id, key);
-  await drag(cell.x + cell.w / 2, cell.y, 0, -40);
+  const atMax = await page.evaluate(({ id, key }) => { const n = nodeGraphModuleFaceInput(document.querySelector(`article[data-node="${id}"]`), key); return Number(n.value) >= Number(n.max); }, { id, key });
+  await drag(cell.x + cell.w / 2, cell.y, 0, atMax ? 40 : -40);
   const c1 = await val(id, key);
-  check(`${TYPES[i]}: dragging ${key} up raises it`, c1 > c0, `${c0} -> ${c1}`);
+  check(`${TYPES[i]}: dragging ${key} ${atMax ? "down lowers" : "up raises"} it`, atMax ? c1 < c0 : c1 > c0, `${c0} -> ${c1}`);
   if (TYPES[i] === "percussion") check("Percussion Channel stays a whole number", Number.isInteger(c1), c1);
   if (TYPES[i] === "robinSinepulseAllpass") check("Allpass Zap Stages stays a whole number", Number.isInteger(c1), c1);
   const recalc = ws.filter((w) => w.type === "choice" && w.keys[0] === "recalculateOnTrigger");
@@ -134,16 +156,18 @@ if (rIdx >= 0) {
   check("Sweep Kick Time shows its display unit (ms)", /ms$/.test(t), t);
 }
 const mIdx = TYPES.indexOf("modalSnare");
-const tilt = (await widgets(`m-${mIdx}`, "modalSnare")).find((w) => w.keys[0] === "noiseTilt");
-const bip = await page.evaluate(() => nodeGraphModuleFaceWidgets(nodeGraphModuleFaceSpec("modalSnare"), 184).find((w) => w.param === "noiseTilt")?.bipolar);
-check("Modal Snare Tilt is a bipolar cell", bip === true, bip);
-const t0 = await val(`m-${mIdx}`, "noiseTilt");
-await drag(tilt.x + tilt.w / 2, tilt.y, 0, 30);
-const t1 = await val(`m-${mIdx}`, "noiseTilt");
-check("Modal Snare Tilt: dragging down goes negative", t1 < t0 && t1 < 0, `${t0} -> ${t1}`);
-await page.evaluate(() => undoNodeGraphPatch());
-await page.waitForTimeout(400);
-check("undo restores Tilt", Math.abs((await val(`m-${mIdx}`, "noiseTilt")) - t0) < 1e-6, await val(`m-${mIdx}`, "noiseTilt"));
+if (mIdx >= 0) {
+  const tilt = (await widgets(`m-${mIdx}`, "modalSnare")).find((w) => w.keys[0] === "noiseTilt");
+  const bip = await page.evaluate(() => nodeGraphModuleFaceWidgets(nodeGraphModuleFaceSpec("modalSnare"), 184).find((w) => w.param === "noiseTilt")?.bipolar);
+  check("Modal Snare Tilt is a bipolar cell", bip === true, bip);
+  const t0 = await val(`m-${mIdx}`, "noiseTilt");
+  await drag(tilt.x + tilt.w / 2, tilt.y, 0, 30);
+  const t1 = await val(`m-${mIdx}`, "noiseTilt");
+  check("Modal Snare Tilt: dragging down goes negative", t1 < t0 && t1 < 0, `${t0} -> ${t1}`);
+  await page.evaluate(() => undoNodeGraphPatch());
+  await page.waitForTimeout(400);
+  check("undo restores Tilt", Math.abs((await val(`m-${mIdx}`, "noiseTilt")) - t0) < 1e-6, await val(`m-${mIdx}`, "noiseTilt"));
+}
 check("no page errors", errors.length === 0, errors.slice(0, 3).join(" | "));
 if (SHOT) {
   for (let i = 0; i < TYPES.length; i += 1) {

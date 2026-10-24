@@ -13,7 +13,7 @@ const { chromium } = await import(process.env.PW_MODULE || "playwright");
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const BASE = process.env.SANDBOX_URL || "http://127.0.0.1:8765/";
 const SHOT = process.env.SHOT_DIR || "";
-const TYPES = (process.env.FACE_TYPES || "blit,sineWarp,surgeOscillator,superloveFilter,resonatorFilter,humanFilter,modeResonator,pll,hilbert,inertialFilter,vactrol,pingEnvelope,timeQuantizer,pitchHz,ampDb,ampCurve,randomWalk,sinc,delayEffect").split(",");
+const TYPES = (process.env.FACE_TYPES || "softpopOscillator,blit,sineWarp,surgeOscillator,superloveFilter,resonatorFilter,humanFilter,modeResonator,pll,hilbert,inertialFilter,vactrol,pingEnvelope,timeQuantizer,pitchHz,ampDb,ampCurve,randomWalk,sinc,delayEffect").split(",");
 const failures = [];
 const check = (label, ok, detail = "") => {
   console.log(`${ok ? "ok  " : "FAIL"} ${label}${ok ? "" : ` ${detail}`}`);
@@ -107,7 +107,7 @@ for (let i = 0; i < TYPES.length; i += 1) {
     }
   }
   const sliderRows = await page.evaluate((id) => [...document.querySelectorAll(`article[data-node="${id}"] .node-parameter-row.node-face-slider-row`)].map((r) => {
-    const c = r.querySelector(".node-parameter-control").getBoundingClientRect();
+    const c = (r.querySelector(".node-slider-readout") || r.querySelector(".node-parameter-control")).getBoundingClientRect();
     return { key: r.dataset.param, keys: [r.dataset.param], x: c.left, w: c.width, y: c.top + c.height / 2, h: c.height };
   }), id);
   for (const sw of sliderRows) {
@@ -118,7 +118,10 @@ for (let i = 0; i < TYPES.length; i += 1) {
     const l0 = await choiceLabel(id, k0);
     const swMax = await page.evaluate(({ id, k0 }) => { const n = nodeGraphModuleFaceInput(document.querySelector(`article[data-node="${id}"]`), k0); return Number(n.value) >= Number(n.max); }, { id, k0 });
     const swMin = await page.evaluate(({ id, k0 }) => { const n = nodeGraphModuleFaceInput(document.querySelector(`article[data-node="${id}"]`), k0); return Number(n.value) <= Number(n.min); }, { id, k0 });
-    await drag(sw.x + sw.w * 0.5, sw.y, sw.w * (swMin ? 0.4 : -0.4), 0);
+    // Drag on the readout track, from one choice cell into another (center ±40% can stay in the same cell).
+    const from = swMin || !swMax ? 0.2 : 0.8;
+    const to = from < 0.5 ? 0.8 : 0.2;
+    await drag(sw.x + sw.w * from, sw.y, sw.w * (to - from), 0);
     const l1 = await choiceLabel(id, k0);
     check(`${TYPES[i]}: switch ${k0} drag changes choice`, l1 !== l0 && l1 !== "", `${l0} -> ${l1}`);
     await page.evaluate(() => undoNodeGraphPatch());
