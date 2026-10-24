@@ -440,7 +440,6 @@
         min-height: var(--sge-bar-h);
         max-height: var(--sge-bar-h);
       }
-      .sge-stop-cell[data-active="true"] .sge-stop-swatch,
       .sge-stop-cell:hover .sge-stop-swatch,
       .sge-stop-cell:focus .sge-stop-swatch,
       .sge-stop-cell:focus-visible .sge-stop-swatch {
@@ -448,16 +447,28 @@
         box-shadow: none !important;
         filter: none !important;
       }
+      .sge-stop-cell[data-active="true"] .sge-stop-swatch {
+        outline: 1px solid #fff !important;
+        outline-offset: -2px;
+        box-shadow: inset 0 0 0 1px #000, 0 0 0 1px #000 !important;
+        filter: none !important;
+      }
       .sge-stop-pos {
         margin: 0;
-        padding: 0;
-        font-size: 0.68rem;
-        line-height: 1.15;
-        color: var(--sge-ink-dim);
+        padding: 4px 0 5px;
+        font-size: 0.92rem;
+        font-weight: 700;
+        line-height: 1.2;
+        letter-spacing: 0.01em;
+        color: rgba(248, 252, 255, 0.92);
         text-align: center;
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
+        touch-action: none;
+      }
+      .sge-stop-cell[data-locked="false"] .sge-stop-pos {
+        cursor: ew-resize;
       }
 
       /* Presets Ã¢â‚¬â€ flush 2-col tiles, black title on gradient */
@@ -560,8 +571,9 @@
         filter: none !important;
       }
       /* Hue spectrum from color-widget SSOT (padded track = half drag-dot). */
-      .sge-color-widget-host .scw-hue,
-      .sge-color-widget-host button.scw-control.scw-hue {
+      .sge-color-widget-host:not([data-channels="bw"]) .scw-hue,
+      .sge-color-widget-host:not([data-channels="bw"]) button.scw-control.scw-hue {
+        display: block !important;
         height: var(--sge-hue-h) !important;
         min-height: var(--sge-hue-h) !important;
         max-height: var(--sge-hue-h) !important;
@@ -573,6 +585,28 @@
         background-position: var(--scw-hue-pad, 5px) 0 !important;
         background-repeat: no-repeat !important;
         overflow: hidden;
+      }
+
+      .sge-root .title-stepper[data-sge-hue-row] {
+        display: flex;
+        align-items: stretch;
+        width: 100%;
+        min-width: 0;
+      }
+      .sge-root .title-stepper[data-sge-hue-row] .title-stepper-title {
+        flex: 0 0 auto;
+        display: flex;
+        align-items: center;
+        padding: 0 8px;
+        font-size: 0.72rem;
+        white-space: nowrap;
+      }
+      .sge-root .title-stepper[data-sge-hue-row] .metadata-stepper-control {
+        flex: 1 1 auto;
+        min-width: 0;
+      }
+      .sge-root[data-channels="bw"] [data-sge-hue-row] {
+        display: none;
       }
 
       .sge-actions {
@@ -828,23 +862,25 @@
 
     const root = document.createElement("div");
     root.className = "sge-root";
+    root.setAttribute("data-shared-gradient-editor", "");
+    root.dataset.channels = mono ? "bw" : "full";
     root.innerHTML = `
       <div class="sge-bar-wrap" data-sge-bar-wrap title="Click bar to add a stop at that position">
         <div class="sge-bar" data-sge-bar></div>
       </div>
       <div class="sge-stops" data-sge-stops aria-label="Gradient stops"></div>
       <div class="sge-color-widget-host" data-sge-color-widget></div>
-      <div class="title-stepper" data-sge-pos-row title="Stop position 0-1 along the gradient">
-        <span class="title-stepper-title">Pos</span>
+      <div class="title-stepper" data-sge-hue-row title="Rotate the gradient colors in degrees (0-360). 0 = authored stops.">
+        <span class="title-stepper-title">Hue Rotation</span>
         <span class="metadata-stepper-control">
-          <button type="button" data-sge-pos-step="-1" aria-label="Decrease stop position">-</button>
-          <input type="text" inputmode="decimal" data-sge-pos data-unit-stepper-drag data-unit-min="0" data-unit-max="1" readonly value="0" aria-label="Stop position 0-1" title="Stop position 0-1. Drag or -/+. Double-click to type.">
-          <button type="button" data-sge-pos-step="1" aria-label="Increase stop position">+</button>
+          <button type="button" data-trace-display-step-target="backgroundHue" data-trace-display-step-direction="-1" aria-label="Decrease hue rotation">-</button>
+          <input type="text" inputmode="decimal" data-trace-display-field="backgroundHue" data-sge-hue readonly value="0" aria-label="Hue rotation 0-360" title="Rotate the gradient colors in degrees (0-360). 0 = authored stops. Drag or -/+. Double-click to type.">
+          <button type="button" data-trace-display-step-target="backgroundHue" data-trace-display-step-direction="1" aria-label="Increase hue rotation">+</button>
         </span>
       </div>
       <div class="sge-actions">
-        <button type="button" data-sge-add aria-label="Add stop">+ Stop</button>
         <button type="button" data-sge-remove aria-label="Remove stop">- Stop</button>
+        <button type="button" data-sge-add aria-label="Add stop">+ Stop</button>
       </div>
       <textarea class="sge-hex" data-sge-list rows="2" spellcheck="false"
         aria-label="Gradient stops as hex and position percent"
