@@ -2505,6 +2505,10 @@ function nodeGraphGlHitContextElement(point) {
   if (hit.kind === "plate") {
     const moduleEl = typeof nodeGraphNodeElement === "function" ? nodeGraphNodeElement(hit.id) : null;
     if (!moduleEl) return null;
+    if (typeof nodeGraphModuleFaceHoverControlAtWorld === "function") {
+      const faceControl = nodeGraphModuleFaceHoverControlAtWorld(moduleEl, point.x, point.y);
+      if (faceControl) return faceControl;
+    }
     const knob = moduleEl.querySelector(".node-knob-face");
     const knobBox = nodeGraphGlGraphWorldBox(knob);
     if (nodeGraphGlHitInside(point.x, point.y, knobBox)) return knob;

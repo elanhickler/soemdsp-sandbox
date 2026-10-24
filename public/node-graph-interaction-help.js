@@ -23,6 +23,14 @@ function nodeGraphInteractionHelpEventTarget(event) {
   if (typeof nodeGraphGlHitIsLiveHtml === "function" && nodeGraphGlHitIsLiveHtml(native)) {
     return native;
   }
+  // Face widgets keep native pointer events, so GPU chrome never sees them.
+  // Map the widget under the cursor to the hidden param control (dataset.tooltip).
+  if (typeof nodeGraphModuleFaceHoverControl === "function") {
+    const faceControl = nodeGraphModuleFaceHoverControl(event);
+    if (faceControl) {
+      return faceControl;
+    }
+  }
   if (typeof nodeGraphGlHitKeepsNativeTarget === "function" && nodeGraphGlHitKeepsNativeTarget(native)) {
     return native;
   }
@@ -75,11 +83,18 @@ function nodeGraphControlAuthoredTooltip(element) {
     return own;
   }
   const sliderId = element.dataset?.sliderTarget;
-  if (!sliderId) {
-    return "";
+  if (sliderId) {
+    const slider = document.getElementById(sliderId);
+    const fromTarget = String(slider?.dataset?.tooltip || "").trim();
+    if (fromTarget) {
+      return fromTarget;
+    }
   }
-  const slider = document.getElementById(sliderId);
-  return String(slider?.dataset?.tooltip || "").trim();
+  const row = element.classList?.contains("node-parameter-row")
+    ? element
+    : element.closest?.(".node-parameter-row");
+  const range = row?.querySelector?.("input[type='range']");
+  return String(range?.dataset?.tooltip || "").trim();
 }
 
 function nodeGraphControlGestureHelp(element, slider) {
@@ -99,9 +114,17 @@ function nodeInteractionMouseHint(element) {
   if (element.dataset.interactionHelp) {
     return element.dataset.interactionHelp;
   }
-  const tooltipText = nodeGraphElementTooltipText(element);
-  if (tooltipText) {
-    return tooltipText;
+  const isParamControl = element.classList.contains("node-slider-readout")
+    || element.classList.contains("node-knob-face")
+    || element.classList.contains("node-plugin-slider-face")
+    || element.classList.contains("node-transport-bpm-face")
+    || element.classList.contains("node-parameter-row")
+    || element.matches?.("input[type='range']");
+  if (!isParamControl) {
+    const tooltipText = nodeGraphElementTooltipText(element);
+    if (tooltipText) {
+      return tooltipText;
+    }
   }
   const alias = element.dataset.alias || "";
   if (element.id === "nodeGraphWorkspace" || element.id === "nodeGraphZoomSurface" || element.id === "nodeGraphWorldLayer") {
@@ -140,13 +163,11 @@ function nodeInteractionMouseHint(element) {
     const nodeName = nodeGraphNodeDisplayName(element.dataset.node);
     return nodeGraphTooltipText("module.executionListItem", { order, nodeName });
   }
-  if (
-    element.classList.contains("node-slider-readout")
-    || element.classList.contains("node-knob-face")
-    || element.classList.contains("node-plugin-slider-face")
-    || element.classList.contains("node-transport-bpm-face")
-  ) {
-    const slider = document.getElementById(element.dataset.sliderTarget);
+  if (isParamControl) {
+    const slider = document.getElementById(element.dataset.sliderTarget)
+      || (element.matches?.("input[type='range']") ? element : null)
+      || element.querySelector?.("input[type='range']")
+      || element.closest?.(".node-parameter-row")?.querySelector?.("input[type='range']");
     const authored = nodeGraphControlAuthoredTooltip(element);
     const gesture = nodeGraphControlGestureHelp(element, slider);
     if (authored && gesture) {

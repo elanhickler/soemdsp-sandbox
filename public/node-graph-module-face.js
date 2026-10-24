@@ -392,6 +392,74 @@ function nodeGraphModuleFaceWidgetKeys(wd) {
   return [wd.param];
 }
 
+/** Param under a face-local x, using the same grab as the pointer gesture. */
+function nodeGraphModuleFaceHoverParamKey(article, wd, x) {
+  if (!wd) return "";
+  if (wd.type === "filter") {
+    const hpf = nodeGraphModuleFaceInput(article, wd.hpf);
+    const lpf = nodeGraphModuleFaceInput(article, wd.lpf);
+    const th = nodeGraphModuleFaceLogT(nodeGraphModuleFaceValue(hpf));
+    const tl = nodeGraphModuleFaceLogT(nodeGraphModuleFaceValue(lpf));
+    const u0 = (x - wd.x) / Math.max(1, wd.w);
+    const edge = NODE_GRAPH_FACE_FILTER_HANDLE_PX / Math.max(1, wd.w);
+    const lo = Math.min(th, tl);
+    const hi = Math.max(th, tl);
+    const mode = u0 > lo + edge && u0 < hi - edge ? "span"
+      : (Math.abs(u0 - th) <= Math.abs(u0 - tl) ? "hpf" : "lpf");
+    return mode === "lpf" ? wd.lpf : wd.hpf;
+  }
+  if (wd.type === "band") {
+    const { tl, th } = nodeGraphModuleFaceBandEnds(article, wd);
+    const mode = nodeGraphModuleFaceBandMode((x - wd.x) / Math.max(1, wd.w), tl, th, wd.w);
+    return mode === "hi" ? wd.hi : wd.lo;
+  }
+  if (wd.type === "span") {
+    const { t } = nodeGraphModuleFaceSpanStops(article, wd);
+    const g = nodeGraphModuleFaceSpanGrab(nodeGraphModuleFaceSpanU(wd, x), t, wd.w);
+    const i = g.pair != null ? g.pair : g.single;
+    return wd.handles[i] || "";
+  }
+  return wd.param || "";
+}
+
+function nodeGraphModuleFaceControlForParam(article, key) {
+  if (!article || !key) return null;
+  const row = article.querySelector(`.node-parameter-row[data-param="${CSS.escape(key)}"]`);
+  if (!row) return null;
+  return row.querySelector(".node-slider-readout")
+    || row.querySelector("input[type='range']")
+    || row;
+}
+
+/** Docked-help target for the face widget under a pointer event. */
+function nodeGraphModuleFaceHoverControl(event) {
+  const native = event?.target;
+  const face = native instanceof Element ? native.closest(".node-face") : null;
+  if (!face || !Number.isFinite(event?.clientX) || !Number.isFinite(event?.clientY)) return null;
+  const article = face.closest(".dsp-node");
+  const spec = nodeGraphModuleFaceSpecForElement(article);
+  if (!spec) return null;
+  const p = nodeGraphModuleFaceLocalPoint(face, event);
+  const wd = nodeGraphModuleFaceWidgetAt(spec, face, p.x, p.y);
+  if (!wd) return null;
+  return nodeGraphModuleFaceControlForParam(article, nodeGraphModuleFaceHoverParamKey(article, wd, p.x));
+}
+
+/** Same mapping from a graph-world point (GPU hover when .node-face is not the event target). */
+function nodeGraphModuleFaceHoverControlAtWorld(moduleEl, worldX, worldY) {
+  const face = moduleEl?.querySelector(":scope > .dsp-node-body > .node-face");
+  const spec = face ? nodeGraphModuleFaceSpecForElement(moduleEl) : null;
+  if (!spec) return null;
+  const box = typeof nodeGraphGlGraphWorldBox === "function" ? nodeGraphGlGraphWorldBox(face) : null;
+  if (!box || !(box.w > 0.5) || !(box.h > 0.5)) return null;
+  if (worldX < box.x || worldX > box.x + box.w || worldY < box.y || worldY > box.y + box.h) return null;
+  const x = ((worldX - box.x) / box.w) * face.offsetWidth;
+  const y = ((worldY - box.y) / box.h) * face.offsetHeight;
+  const wd = nodeGraphModuleFaceWidgetAt(spec, face, x, y);
+  if (!wd) return null;
+  return nodeGraphModuleFaceControlForParam(moduleEl, nodeGraphModuleFaceHoverParamKey(moduleEl, wd, x));
+}
+
 /** Span inputs and handle travels 0..1, kept in order for display (the engine reads them in order). */
 function nodeGraphModuleFaceSpanStops(article, wd) {
   const inputs = wd.handles.map((key) => nodeGraphModuleFaceInput(article, key));
