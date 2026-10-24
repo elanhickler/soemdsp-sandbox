@@ -34,13 +34,11 @@ constexpr double kDitherStartHz = 2000.0;
 constexpr double kDitherFullHz = 7000.0;
 constexpr double kNoiseHiRatio = 4.0;  // LP at 4ƒ, clamped to 0.45 sr
 
-struct FilterMorphState {
-  bool active;
+// One stereo lane. L and R share knobs; R is +1/4 turn and its own dither.
+struct FilterMorphVoice {
   double phase;
   double lpY[kMaxPoles];
-  double lastReset;
   unsigned int rng;
-  unsigned int seed;  // module Seed (seed_param_u32)
   double noiseHpZ[kNoiseHpPoles];
   double noiseLpZ[kNoiseLpPoles];
   double lastQ;       // previous effective phase (wrapped)
@@ -49,23 +47,34 @@ struct FilterMorphState {
   int primed;
 };
 
+struct FilterMorphState {
+  bool active;
+  double lastReset;
+  unsigned int seed;  // module Seed (seed_param_u32)
+  FilterMorphVoice L;
+  FilterMorphVoice R;
+};
+
 static FilterMorphState gPool[kMaxInstances];
 
 // Fixed seed components (never reorder; append new parts at the end).
 enum : unsigned int {
-  kSeedDither = 1u,  // pitch-tracked noise-band stream
+  kSeedDitherL = 1u,  // pitch-tracked noise-band stream (Wave L)
+  kSeedDitherR = 2u,  // Wave R
 };
 
+constexpr double kStereoPhase = 0.25;  // R = L + 90°
+
 // Dither stream from the module Seed only (create, Reset, Seed change).
-static unsigned int dither_rng_from_seed(unsigned int seed) {
-  return seed_to_rng_state(seed_mix(seed, kSeedDither));
+static unsigned int dither_rng_from_seed(unsigned int seed, unsigned int lane) {
+  return seed_to_rng_state(seed_mix(seed, lane));
 }
 
 static double wrap01_phase(double x) {
   return wrap01(x);
 }
 
-static double next_white(FilterMorphState& s) {
+static double next_white(FilterMorphVoice& s) {
   unsigned int state = s.rng;
   if (state == 0u) state = 1u;
   state = xorshift32(state);
@@ -74,7 +83,7 @@ static double next_white(FilterMorphState& s) {
   return u * 2.0 - 1.0;
 }
 
-static void clear_noise(FilterMorphState& s) {
+static void clear_noise(FilterMorphVoice& s) {
   for (int i = 0; i < kNoiseHpPoles; i++) s.noiseHpZ[i] = 0.0;
   for (int i = 0; i < kNoiseLpPoles; i++) s.noiseLpZ[i] = 0.0;
 }
@@ -82,7 +91,7 @@ static void clear_noise(FilterMorphState& s) {
 static double one_pole_lp(double& y, double x, double freqHz, double rate);
 
 // White → 2-pole HP at loHz → 2-pole LP at hiHz. Band sits on ƒ…4ƒ.
-static double noise_band(FilterMorphState& s, double loHz, double hiHz, double rate) {
+static double noise_band(FilterMorphVoice& s, double loHz, double hiHz, double rate) {
   double n = next_white(s);
   for (int i = 0; i < kNoiseHpPoles; i++) {
     const double lp = one_pole_lp(s.noiseHpZ[i], n, loHz, rate);
@@ -237,7 +246,7 @@ static int clamp_wave(double waveform) {
   return w;
 }
 
-static void clear_lp(FilterMorphState& s) {
+static void clear_lp(FilterMorphVoice& s) {
   for (int i = 0; i < kMaxPoles; i++) s.lpY[i] = 0.0;
 }
 
@@ -281,8 +290,19 @@ static int wave_edges(int wave, Edge* e) {
   }
 }
 
+static void init_voice(FilterMorphVoice& v, unsigned int seed, unsigned int lane) {
+  v.phase = 0.0;
+  clear_lp(v);
+  clear_noise(v);
+  v.rng = dither_rng_from_seed(seed, lane);
+  v.lastQ = 0.0;
+  v.lastOff = 0.0;
+  v.held = 0.0;
+  v.primed = 0;
+}
+
 static double process_one(
-  FilterMorphState& s,
+  FilterMorphVoice& s,
   double frequencyHz,
   double sampleRate,
   double morph,
@@ -416,17 +436,11 @@ extern "C" int soemdsp_filter_morph_oscillator_create() {
   for (int i = 0; i < kMaxInstances; i++) {
     if (!gPool[i].active) {
       FilterMorphState& s = gPool[i];
-      s.phase = 0.0;
-      clear_lp(s);
       s.lastReset = 0.0;
-      clear_noise(s);
       // Seed 0 until the host's Seed arrives via soemdsp_filter_morph_oscillator_set_seed.
       s.seed = 0u;
-      s.rng = dither_rng_from_seed(0u);
-      s.lastQ = 0.0;
-      s.lastOff = 0.0;
-      s.held = 0.0;
-      s.primed = 0;
+      init_voice(s.L, 0u, kSeedDitherL);
+      init_voice(s.R, 0u, kSeedDitherR);
       s.active = true;
       return i + 1;
     }
@@ -444,11 +458,16 @@ extern "C" void soemdsp_filter_morph_oscillator_reset(int handle, double phaseOf
   FilterMorphState& s = gPool[handle - 1];
   if (!s.active) return;
   (void)phaseOffset;
-  s.phase = 0.0;
-  clear_noise(s);
-  s.rng = dither_rng_from_seed(s.seed);
-  s.primed = 0;
-  clear_lp(s);
+  s.L.phase = 0.0;
+  s.R.phase = 0.0;
+  clear_noise(s.L);
+  clear_noise(s.R);
+  s.L.rng = dither_rng_from_seed(s.seed, kSeedDitherL);
+  s.R.rng = dither_rng_from_seed(s.seed, kSeedDitherR);
+  s.L.primed = 0;
+  s.R.primed = 0;
+  clear_lp(s.L);
+  clear_lp(s.R);
 }
 
 // Reset trigger below full height: move the phasor |h| of the way to 0 (h < 0
@@ -457,7 +476,8 @@ extern "C" void soemdsp_filter_morph_oscillator_partial_reset(int handle, double
   if (handle < 1 || handle > kMaxInstances) return;
   FilterMorphState& s = gPool[handle - 1];
   if (!s.active) return;
-  s.phase = soemdsp::math::partial_reset_phase(s.phase, 0.0, h);
+  s.L.phase = soemdsp::math::partial_reset_phase(s.L.phase, 0.0, h);
+  s.R.phase = soemdsp::math::partial_reset_phase(s.R.phase, 0.0, h);
 }
 
 // Seed change (or first Seed after create): restart the dither stream from it.
@@ -466,8 +486,47 @@ extern "C" void soemdsp_filter_morph_oscillator_set_seed(int handle, double seed
   FilterMorphState& s = gPool[handle - 1];
   if (!s.active) return;
   s.seed = seed_param_u32(seed);
-  s.rng = dither_rng_from_seed(s.seed);
-  clear_noise(s);
+  s.L.rng = dither_rng_from_seed(s.seed, kSeedDitherL);
+  s.R.rng = dither_rng_from_seed(s.seed, kSeedDitherR);
+  clear_noise(s.L);
+  clear_noise(s.R);
+}
+
+extern "C" void soemdsp_filter_morph_oscillator_sample_stereo(
+  int handle,
+  double frequencyHz,
+  double sampleRate,
+  double morph,
+  double poles,
+  double waveform,
+  double phaseOffset,
+  double amplitude,
+  double reset,
+  double dither,
+  double startHz,
+  double fullHz,
+  double amount,
+  double* outLeft,
+  double* outRight
+) {
+  if (outLeft) *outLeft = 0.0;
+  if (outRight) *outRight = 0.0;
+  if (handle < 1 || handle > kMaxInstances) return;
+  FilterMorphState& s = gPool[handle - 1];
+  if (!s.active) return;
+  const double rv = (reset * 0.0 == 0.0) ? reset : 0.0;
+  const bool hit = soemdsp::math::gate_hit(rv, &s.lastReset);
+  const double resetH = hit ? soemdsp::math::gate_hit_height(rv) : 0.0;
+  const double yL = process_one(
+    s.L, frequencyHz, sampleRate, morph, poles, waveform, phaseOffset, amplitude, dither,
+    startHz, fullHz, amount, resetH
+  );
+  const double yR = process_one(
+    s.R, frequencyHz, sampleRate, morph, poles, waveform, phaseOffset + kStereoPhase, amplitude, dither,
+    startHz, fullHz, amount, resetH
+  );
+  if (outLeft) *outLeft = yL;
+  if (outRight) *outRight = yR;
 }
 
 extern "C" double soemdsp_filter_morph_oscillator_sample(
@@ -485,18 +544,15 @@ extern "C" double soemdsp_filter_morph_oscillator_sample(
   double fullHz,
   double amount
 ) {
-  if (handle < 1 || handle > kMaxInstances) return 0.0;
-  FilterMorphState& s = gPool[handle - 1];
-  if (!s.active) return 0.0;
-  const double rv = (reset * 0.0 == 0.0) ? reset : 0.0;
-  const bool hit = soemdsp::math::gate_hit(rv, &s.lastReset);
-  const double resetH = hit ? soemdsp::math::gate_hit_height(rv) : 0.0;
-  return process_one(
-    s, frequencyHz, sampleRate, morph, poles, waveform, phaseOffset, amplitude, dither,
-    startHz, fullHz, amount, resetH
+  double left = 0.0;
+  double right = 0.0;
+  soemdsp_filter_morph_oscillator_sample_stereo(
+    handle, frequencyHz, sampleRate, morph, poles, waveform, phaseOffset, amplitude, reset,
+    dither, startHz, fullHz, amount, &left, &right
   );
+  return left;
 }
 
 extern "C" int soemdsp_filter_morph_oscillator_version() {
-  return 13;
+  return 14; // 14: Wave L / Wave R are two voices (R = L + 90°, own dither). 13: shared gate_hit Reset height
 }

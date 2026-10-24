@@ -1235,9 +1235,11 @@ NodeLiveAudioProcessor.prototype.mapNativeGraphSrcPortId = function mapNativeGra
     if (p === "left") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_LEFT;
     if (p === "right") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_RIGHT;
   }
-  // Filter Morph Osc: Wave on Mono, Wave L / Wave R on Left/Right (same voice).
+  // Filter Morph Osc: Wave L on Left (Wave/Out/Mono alias here), Wave R on Right.
   if (t === "filterMorphOscillator") {
-    if (p === "wave l" || p === "left") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_LEFT;
+    if (p === "wave l" || p === "wave" || p === "out" || p === "mono" || p === "left") {
+      return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_LEFT;
+    }
     if (p === "wave r" || p === "right") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_RIGHT;
   }
   // crossover2..6: sequential band L/R (band0=0/1, band1=2/3, …).
@@ -9297,7 +9299,7 @@ NodeLiveAudioProcessor.prototype.nativeGraphPortNames = function nativeGraphPort
     if (type === "sampleHold") return ["Ext Out", "Out", "Mono"];
     if (/^([2-9]|1[01])t$/.test(type)) return ["Out", "Mono"];
     if (type === "wavetable2d" || type === "sineWarp") return ["Out", "Mono"];
-    if (type === "filterMorphOscillator") return ["Wave", "Out", "Mono"];
+    if (type === "filterMorphOscillator") return [];
     if (type === "softpopOscillator" || type === "softpopFilter" || type === "softpop2") return ["Mono"];
     if (type === "minMax") return ["Max"];
     if (type === "mix4" || type === "mix" || type === "gainBiasMix") return ["Out1"];
@@ -9370,7 +9372,7 @@ NodeLiveAudioProcessor.prototype.nativeGraphPortNames = function nativeGraphPort
     if (type === "electroKick") return ["Kick L"];
     if (type === "electroClap") return ["Clap L"];
     if (type === "sampleHold") return ["Left"];
-    if (type === "filterMorphOscillator") return ["Wave L"];
+    if (type === "filterMorphOscillator") return ["Wave L", "Wave", "Out", "Mono", "Left"];
     if (type === "rasterRgb") return ["G"];
     if (type === "fractalBrownianNoise") {
       return ["Out Y", "Y", "Left"];

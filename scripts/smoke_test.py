@@ -17423,6 +17423,7 @@ def require_native_module_contract(base_url: str) -> None:
             "soemdsp_filter_morph_oscillator_destroy",
             "soemdsp_filter_morph_oscillator_reset",
             "soemdsp_filter_morph_oscillator_sample",
+            "soemdsp_filter_morph_oscillator_sample_stereo",
             "soemdsp_filter_morph_oscillator_version",
         ],
         "snowflake": [

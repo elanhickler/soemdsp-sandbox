@@ -4561,33 +4561,33 @@ const nodeGraphModuleDefinitions = (
     defaultDisplaySettings: {
       sourceSync: true },
     displayModes: [
-      { key: "lineBurn", renderer: "lineBurn", source: { value: "Wave" } },
+      { key: "lineBurn", renderer: "lineBurn", source: { value: "Wave L" } },
     ],
     displaySignals: [
-      { key: "Wave", kind: "scalar" },
+      { key: "Wave L", kind: "scalar" },
     ],
     resetTrigger: true,
     inputs: ["f", "Reset"],
     inputLabels: { f: "ƒ" },
     inputAliases: { "ƒ": "f" },
     inputTooltips: {
-      Reset: "Rising edge snaps the phasor so Wave sits at the Phase offset; clears the Morph filter state.",
+      Reset: "Rising edge snaps both phasors so Wave L sits at the Phase offset; Wave R stays a quarter-turn later. Clears Morph filter state.",
       f: "Absolute Hz. Replaces Frequency when wired." },
     outputAliases: {
-      Out: "Wave",
-      "Wave Out": "Wave",
-      Mono: "Wave",
+      Out: "Wave L",
+      Wave: "Wave L",
+      "Wave Out": "Wave L",
+      Mono: "Wave L",
       Left: "Wave L",
       Right: "Wave R",
       L: "Wave L",
       R: "Wave R",
     },
-    outputChannels: { Wave: "green", "Wave L": "red", "Wave R": "blue" },
-    outputs: ["Wave", "Wave L", "Wave R"],
+    outputChannels: { "Wave L": "red", "Wave R": "blue" },
+    outputs: ["Wave L", "Wave R"],
     outputTooltips: {
-      Wave: "Mono voice (same as Wave L / Wave R).",
-      "Wave L": "Left stereo out. Same voice as Wave.",
-      "Wave R": "Right stereo out. Same voice as Wave.",
+      "Wave L": "Left voice at the Phase offset. Use this jack for a single channel.",
+      "Wave R": "Right voice: same knobs, +90° phase, own dither stream.",
     },
     parameters: [
       {

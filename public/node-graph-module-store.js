@@ -885,7 +885,7 @@ const nodeGraphModuleStoreCatalog = Object.freeze({
   },
   filterMorphOscillator: {
     category: "oscillator",
-    description: "PolyBLEP naive shapes through a pitch-tracking one-pole Morph (1…4 poles) toward sine-ish. Dither mixes a grain-free noise band from ƒ to 4ƒ. Wave + Wave L / Wave R.",
+    description: "PolyBLEP naive shapes through a pitch-tracking one-pole Morph (1…4 poles) toward sine-ish. Dither mixes a grain-free noise band from ƒ to 4ƒ. Wave L / Wave R (R is +90°).",
     label: "Filter Morph Osc",
     notes: ["polyblep", "filter morph", "one-pole", "poles", "hp noise fm", "native", "oscillator"],
   },

@@ -1,4 +1,4 @@
-// Filter Morph Osc Wave L / Wave R: jacks map to native Left/Right, same voice as Wave.
+// Filter Morph Osc Wave L / Wave R: two voices (R = L + 90°). Wave jack is gone; Wave aliases to Wave L.
 import fs from "node:fs";
 import path from "node:path";
 import vm from "node:vm";
@@ -19,9 +19,9 @@ const check = (cond, msg) => {
   else { failures += 1; console.log(`FAIL ${msg}`); }
 };
 
-check(JSON.stringify(d.outputs) === JSON.stringify(["Wave", "Wave L", "Wave R"]), "outputs Wave + Wave L + Wave R");
+check(JSON.stringify(d.outputs) === JSON.stringify(["Wave L", "Wave R"]), "outputs Wave L + Wave R (no Wave)");
 check(d.outputChannels["Wave L"] === "red" && d.outputChannels["Wave R"] === "blue", "Wave L red / Wave R blue");
-check(d.outputAliases.Left === "Wave L" && d.outputAliases.Right === "Wave R", "Left/Right alias to Wave L/R");
+check(d.outputAliases.Wave === "Wave L" && d.outputAliases.Left === "Wave L" && d.outputAliases.Right === "Wave R", "Wave/Left/Right alias");
 
 const rt = fs.readFileSync(path.join(root, "public", "node-graph-live-runtime.js"), "utf8");
 const block = rt.slice(
@@ -49,11 +49,11 @@ new Uint8Array(bytes).set(wasm);
 await p.setNativeModuleWasm({ name: "combined", bytes, modules: [{ name: "graph_engine", targetType: "graphEngine" }] });
 p.speedMultiplier = 1;
 
-check(p.mapNativeGraphSrcPortId("Wave", "filterMorphOscillator") === 0, "Wave → Mono bus 0");
+check(p.mapNativeGraphSrcPortId("Wave", "filterMorphOscillator") === 1, "Wave → Left bus 1");
 check(p.mapNativeGraphSrcPortId("Wave L", "filterMorphOscillator") === 1, "Wave L → Left bus 1");
 check(p.mapNativeGraphSrcPortId("Wave R", "filterMorphOscillator") === 2, "Wave R → Right bus 2");
 check(
-  JSON.stringify(p.nativeGraphPortNames("filterMorphOscillator", 1)) === JSON.stringify(["Wave L"])
+  JSON.stringify(p.nativeGraphPortNames("filterMorphOscillator", 1)).includes("Wave L")
   && JSON.stringify(p.nativeGraphPortNames("filterMorphOscillator", 2)) === JSON.stringify(["Wave R"]),
   "nativeGraphPortNames Wave L / Wave R",
 );
@@ -76,14 +76,16 @@ const h = p.fnv1aHash32("osc");
 ctx.currentFrame = 0;
 p.process([[]], [[new Float32Array(128), new Float32Array(128)]], {});
 const rd = (port) => new Float64Array(ng.memory.buffer, ng.soemdsp_graph_node_port_ptr(p.nativeGraphHandle, h, port) | 0, 128);
-const W = rd(0), L = rd(1), R = rd(2);
-let same = true, peak = 0;
+const L = rd(1), R = rd(2);
+let peakL = 0, peakR = 0, differ = 0;
 for (let i = 0; i < 128; i += 1) {
-  if (W[i] !== L[i] || W[i] !== R[i]) same = false;
-  const a = Math.abs(W[i]);
-  if (a > peak) peak = a;
+  const aL = Math.abs(L[i]), aR = Math.abs(R[i]);
+  if (aL > peakL) peakL = aL;
+  if (aR > peakR) peakR = aR;
+  if (L[i] !== R[i]) differ += 1;
 }
-check(same && peak > 0.1, `Wave L/R match Wave and make sound (peak=${peak.toFixed(3)})`);
+check(peakL > 0.1 && peakR > 0.1, `Wave L/R make sound (peakL=${peakL.toFixed(3)} peakR=${peakR.toFixed(3)})`);
+check(differ > 8, `Wave L and Wave R differ (${differ}/128 samples)`);
 
 console.log(failures ? `FAILED ${failures}` : "smoke_filter_morph_stereo ok");
 process.exit(failures ? 1 : 0);
