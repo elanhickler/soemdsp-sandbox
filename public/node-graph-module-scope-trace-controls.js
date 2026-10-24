@@ -730,11 +730,11 @@ const nodeGraphTraceDisplayActiveControlsByType = Object.freeze({
     choices: Object.freeze(["drawMode"]),
   }),
   // Spectrogram: FFT + analysis choices. History / Min·Max Freq are module sliders.
-  // Gradient separate.
+  // Gradient separate. Pause on silence matches Instant Waterfall (default off).
   spectrogramBurn: Object.freeze({
     fields: Object.freeze([]),
     colors: Object.freeze([]),
-    toggles: Object.freeze([]),
+    toggles: Object.freeze(["pauseOnSilence"]),
     choices: Object.freeze(["fftSize", "window", "overlap", "freqOverlap", "freqScale"]),
   }),
   // 1D Spectrum: same FFT analysis choices as Spectrogram (shared keys) + its
@@ -1158,6 +1158,7 @@ const nodeGraphTraceDisplaySectionControls = Object.freeze({
       "showPlus",
       "rotate90",
       "squareRatio",
+      "pauseOnSilence",
     ]),
     // window/overlap/freqOverlap/freqScale = spectrogram; syncChannel/stereoBlend = Output.
     // cornerShape = LED / Raster RGB / Matrix Waterfall (square|squircle).
@@ -1922,7 +1923,7 @@ const nodeGraphDisplaySettingsToggleMeta = Object.freeze({
     label: "Pause on silence",
     id: "nodeTraceDisplayPauseOnSilence",
     title:
-      "While on, Instant Waterfall stops scrolling when every enabled channel is at or below Planck amplitude. Off (default) keeps scrolling. History at 0 is the current bar either way.",
+      "While on, Instant Waterfall and Spectrogram stop scrolling when the input is at or below Planck amplitude. Off (default) keeps scrolling. History at 0 is the current bar either way.",
   }),
   pauseAtEnd: Object.freeze({
     label: "Pause at end",

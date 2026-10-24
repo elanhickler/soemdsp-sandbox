@@ -571,6 +571,7 @@ function drawNodeGraphSpectrogramItem(renderer, item, pixelRatio) {
   // Same silence rule as Instant Waterfall: linear amp at or below
   // nodeGraphWaterfallPlanck() (nodeGraphPlanck / NODE_GRAPH_PLANCK) does not scroll.
   // Eat the silent window so it does not burst-scroll when sound returns.
+  // Pause on silence is opt-in (default off).
   const liveIn = nodeGraphModuleScopeState?.buffers?.get?.(`${nodeId}:In`) || null;
   if (!Number.isFinite(st.lastAbs) && typeof nodeGraphWaterfallUndrawn === "function") {
     const seed = nodeGraphWaterfallUndrawn(liveIn, st.lastAbs);
@@ -581,7 +582,11 @@ function drawNodeGraphSpectrogramItem(renderer, item, pixelRatio) {
   const undrawn = typeof nodeGraphWaterfallUndrawn === "function"
     ? nodeGraphWaterfallUndrawn(liveIn, st.lastAbs)
     : { count: 0, absEnd: Number.NaN };
-  const silentHold = typeof nodeGraphWaterfallIncomingIsSilent === "function"
+  const pauseOnSilence = typeof nodeGraphWaterfallPauseOnSilence === "function"
+    ? nodeGraphWaterfallPauseOnSilence(settings)
+    : settings?.pauseOnSilence === true;
+  const silentHold = pauseOnSilence
+    && typeof nodeGraphWaterfallIncomingIsSilent === "function"
     && nodeGraphWaterfallIncomingIsSilent(
       { buffer: liveIn, slot: item?.slot },
       settings,
