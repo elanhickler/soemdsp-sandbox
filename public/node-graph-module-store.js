@@ -4387,6 +4387,20 @@ function nodeGraphModuleStoreDepartmentMatchesSearch(department, entries, query)
     || (entries || []).some((entry) => nodeGraphModuleStoreEntryMatchesSearch(entry, query));
 }
 
+/** Filters and oscillators sort ahead of other shelves when search ranks tie. */
+function nodeGraphModuleStoreSearchFamilyPriority(entry) {
+  const cat = normalizeNodeGraphModuleStoreDepartment(entry?.category || "");
+  if (
+    cat === "scientificFilter"
+    || cat === "analogFilter"
+    || cat === "oscillator"
+    || cat === "oms"
+  ) {
+    return 0;
+  }
+  return 1;
+}
+
 function nodeGraphModuleStoreSearchResultOrder(a, b, query = "") {
   const implementedDelta = Number(Boolean(b?.implemented)) - Number(Boolean(a?.implemented));
   if (implementedDelta) {
@@ -4398,6 +4412,10 @@ function nodeGraphModuleStoreSearchResultOrder(a, b, query = "") {
   const rankDelta = nodeGraphModuleStoreSearchRank(a, q) - nodeGraphModuleStoreSearchRank(b, q);
   if (rankDelta) {
     return rankDelta;
+  }
+  const familyDelta = nodeGraphModuleStoreSearchFamilyPriority(a) - nodeGraphModuleStoreSearchFamilyPriority(b);
+  if (familyDelta) {
+    return familyDelta;
   }
   return String(a?.label || "").localeCompare(String(b?.label || ""));
 }

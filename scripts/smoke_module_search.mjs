@@ -20,20 +20,21 @@ const probe = vm.runInContext(`({
   catalog: typeof nodeGraphModuleStoreCatalog !== "undefined" ? nodeGraphModuleStoreCatalog : null,
   labels: typeof nodeGraphNodeLabels !== "undefined" ? nodeGraphNodeLabels : {},
   rank: typeof nodeGraphModuleStoreSearchRank === "function" ? nodeGraphModuleStoreSearchRank : null,
+  family: typeof nodeGraphModuleStoreSearchFamilyPriority === "function" ? nodeGraphModuleStoreSearchFamilyPriority : null,
   norm: typeof normalizeNodeGraphModuleStoreDepartment === "function" ? normalizeNodeGraphModuleStoreDepartment : (x) => x,
 })`, ctx);
-if (!probe.catalog || !probe.rank) {
+if (!probe.catalog || !probe.rank || !probe.family) {
   console.error("FAIL: could not load catalog/search functions");
   process.exit(1);
 }
 const entries = Object.entries(probe.catalog)
   .filter(([, e]) => !e.hidden && !e.developerOnly && e.category !== "invisible")
   .map(([type, e]) => ({ ...e, type, category: probe.norm(e.category || ""), label: e.label || probe.labels[type] || type }));
-const search = (q) => entries
+const searchHits = (q) => entries
   .map((e) => ({ e, r: probe.rank(e, q) }))
   .filter((x) => x.r < 0)
-  .sort((a, b) => a.r - b.r || a.e.label.localeCompare(b.e.label))
-  .map((x) => x.e.label);
+  .sort((a, b) => a.r - b.r || probe.family(a.e) - probe.family(b.e) || a.e.label.localeCompare(b.e.label));
+const search = (q) => searchHits(q).map((x) => x.e.label);
 
 let failures = 0;
 const check = (ok, msg) => { if (!ok) { failures++; console.error("FAIL:", msg); } else { console.log("ok:", msg); } };
@@ -58,6 +59,21 @@ for (const [q, re] of Object.entries(common)) {
 for (const [q, want] of [["lp", "Lowpass Filter ZDF"], ["osc", /oscillator|osc$/i]]) {
   const top5 = search(q).slice(0, 5);
   check(top5.some((l) => (typeof want === "string" ? l === want : want.test(l))), `'${q}' top5 = ${top5.join(" | ")}`);
+}
+for (const q of ["sine", "lp", "filter", "osc", "noise"]) {
+  let lastR = null;
+  let seenOther = false;
+  let ok = true;
+  for (const x of searchHits(q)) {
+    if (x.r !== lastR) {
+      lastR = x.r;
+      seenOther = false;
+    }
+    const isFO = probe.family(x.e) === 0;
+    if (!isFO) seenOther = true;
+    else if (seenOther) ok = false;
+  }
+  check(ok, `'${q}' filters/oscillators before others at the same rank`);
 }
 if (failures) { console.error(`${failures} failure(s)`); process.exit(1); }
 console.log("module search smoke: all passed");
