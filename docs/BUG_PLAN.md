@@ -1636,3 +1636,10 @@ Add `require_no_js_dsp()` to `scripts/smoke_test.py` (or `scripts/check_no_js_ds
 - Fix: shown digits use the slider readout formatter (`nodeSliderReadoutValueText`), so Max Digits, sign and display transforms match the old sliders.
 - Verify: `node scripts/smoke_module_face_type_in.mjs`.
 
+### B-107 - SinCos display doesn't reveal its waveform until it's plugged in
+
+- Status: **Deferred / fix not now** (2026-10-23).
+- Description: this is old behavior we're undoing; the app now runs efficiently enough that we can afford to draw it.
+- Notes (Argi, verbatim): "at this time I do expect displays to show anything if project is stopped or if the module enters and the project is paused, i do not want the rule 'audio only runs during play mode' broken, and im not sure which displays depend on some dsp to draw."
+- Constraint: the rule 'audio only runs during Play mode' must not be broken. Any fix must draw without running DSP outside Play, and first audit which displays depend on DSP to draw.
+
