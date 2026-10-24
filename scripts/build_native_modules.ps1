@@ -955,6 +955,10 @@ if ($node) {
   if ($LASTEXITCODE -ne 0) {
     throw "Combined build: Noise Gate hysteresis smoke FAILED"
   }
+  & $node.Source "$root\scripts\smoke_noise_generator_chase.mjs"
+  if ($LASTEXITCODE -ne 0) {
+    throw "Combined build: Noise Generator Mean/Amplitude chase smoke FAILED"
+  }
 } else {
   Write-Warning "node not found -- combined wasm smoke test SKIPPED. Install Node.js to enable it."
 }
