@@ -512,6 +512,7 @@ PUBLIC_SCRIPT_PATHS = (
     "./public/modules/clockDivider/clock-divider-display.js",
     "./public/modules/logic/logic-display.js",
     "./public/modules/robinSinepulse/robin-sinepulse-display.js",
+    "./public/modules/triggerDivider/trigger-divider-display.js",
     "./public/modules/slewLimiter/slew-shape-display.js",
     "./public/modules/sineWavetable/sine-wavetable-display.js",
     "./public/modules/ellipsoid/ellipsoid-settings.js",
@@ -17228,13 +17229,16 @@ def require_native_module_contract(base_url: str) -> None:
             "soemdsp_robin_sinepulse_destroy",
             "soemdsp_robin_sinepulse_sample",
             "soemdsp_robin_sinepulse_env",
+            "soemdsp_robin_sinepulse_unit",
+            "soemdsp_robin_sinepulse_freq",
             "soemdsp_robin_sinepulse_is_idle",
             "soemdsp_robin_sinepulse_elapsed",
             "soemdsp_robin_sinepulse_preview",
-            "soemdsp_robin_sinepulse_preview_y",
             "soemdsp_robin_sinepulse_preview_min",
             "soemdsp_robin_sinepulse_preview_max",
             "soemdsp_robin_sinepulse_preview_window",
+            "soemdsp_robin_sinepulse_preview_field",
+            "soemdsp_robin_sinepulse_preview_field_at",
             "soemdsp_robin_sinepulse_version",
             "soemdsp_robin_sinepulse_metadata_json",
             "soemdsp_robin_sinepulse_metadata_json_size",
@@ -18532,9 +18536,9 @@ def check_init_patch_view() -> None:
 
 
 def check_dsf_face_spectrum() -> None:
-    """DSF Oscillator face follows Spacing and Odd/Even."""
+    """DSF Morphing Osc face follows Spacing and Odd/Even."""
     face = (PUBLIC / "modules" / "sinCos" / "sin-cos-display.js").read_text(encoding="utf-8")
-    require("nodeGraphDsfSpacedKernel" in face, "DSF face has the spaced kernel")
+    require("nodeGraphDsfMorphImpulse" in face, "DSF face has the spaced kernel")
     require("nodeGraphDsfSubMean" in face, "DSF face removes cycle DC")
     require("nodeGraphSinCosFacePadPx" in face and "padExtra: 0" in face, "DSF face auto-pads from line/dot")
     require("Math.ceil(innerW) * 2" in face, "DSF stroke is pixel-stepped, not one vertex per kernel sample")

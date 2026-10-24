@@ -29,6 +29,7 @@ vm.runInContext(fs.readFileSync(file, "utf8"), ctx, { filename: "sin-cos-display
 let failures = 0;
 const ok = (cond, msg) => { if (!cond) { failures += 1; console.log(`FAIL ${msg}`); } };
 const cycle = (patch) => ctx.nodeGraphDsfCycle({
+  morphing: true,
   waveform: 1,
   frequency: 100,
   morph: 1,
@@ -60,7 +61,7 @@ for (let i = 0; i < 256; i += 1) {
 }
 ok(spaceDiff > 1, `spacing 2 changes the saw (diff ${spaceDiff.toFixed(3)})`);
 ok(oddDiff > 1, `odd/even 1 changes the saw (diff ${oddDiff.toFixed(3)})`);
-const sine = cycle({ waveform: 0, spacing: 2, oddEven: 1 });
+const sine = cycle({ morphing: false, waveform: 0, spacing: 2, oddEven: 1 });
 ok(Math.abs(sine[0] - 0) < 1e-9 && Math.abs(sine[64] - 1) < 1e-6, "sine waveform ignores spectrum");
 const near = (a, b) => Math.abs(a - b) < 1e-9;
 ok(near(ctx.nodeGraphSinCosFacePadPx({ lineThickness: 2, dotThickness: 5, padExtra: 0 }, 1), 3.5), "pad is max(line/2, dot/2) + 1px AA");
