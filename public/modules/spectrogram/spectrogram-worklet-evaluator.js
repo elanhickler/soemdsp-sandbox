@@ -7,7 +7,7 @@
 //   Spectrum     — Float32 linear mag bins (half FFT, DC..Nyquist) — last hop
 //   SpectrumBatch— concatenated hop columns this quantum (smooth scroll)
 //   FftSize      — [fftSize, halfN, spectrumBins, hopSize, sampleRate,
-//                   hopSerial, batchColumns, historyFlag]
+//                   hopSerial, batchColumns, windowSum]
 //   hopSerial > 0 and changing is required or the face never paints.
 //
 // Analysis knobs (from display settings, injected as node.params):
@@ -258,12 +258,12 @@ NodeLiveAudioProcessor.prototype.spectrogramCollectDisplayData = function spectr
     if (!state.rawOut || state.rawOut.length !== halfN) {
       state.rawOut = new Float32Array(halfN);
     }
-    if (state.windowSumFor !== state.analysisWindow) {
-      let sum = 0;
-      for (let j = 0; j < winSize; j++) sum += state.analysisWindow[j];
-      state.windowSum = sum;
-      state.windowSumFor = state.analysisWindow;
-    }
+  }
+  if (state.windowSumFor !== state.analysisWindow) {
+    let sum = 0;
+    for (let j = 0; j < winSize; j++) sum += state.analysisWindow[j];
+    state.windowSum = sum;
+    state.windowSumFor = state.analysisWindow;
   }
   const rawCol = wantRaw ? state.rawOut : null;
   // 1D Spectrum shows one curve: analyse at most ~60 hops/s (display rate)
@@ -370,7 +370,7 @@ NodeLiveAudioProcessor.prototype.spectrogramCollectDisplayData = function spectr
   }
   // [0]=fftLen (display bin count basis) [1]=halfN [2]=spectrumBins
   // [3]=hopSize (ONE hop — batch walks columns) [4]=sampleRate
-  // [5]=hopSerial [6]=batchColumns [7]=historyFlag
+  // [5]=hopSerial [6]=batchColumns [7]=windowSum (Hann/etc coherent gain)
   dataPorts.push([
     nodeId,
     "FftSize",
@@ -382,7 +382,7 @@ NodeLiveAudioProcessor.prototype.spectrogramCollectDisplayData = function spectr
       writeRate,
       state.hopSerial,
       batchCols,
-      0,
+      state.windowSum || 0,
     ]),
   ]);
 };

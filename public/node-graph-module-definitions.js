@@ -19387,7 +19387,7 @@ const nodeGraphModuleDefinitions = (
     outputLabels: { Thru: "←", rgba: "📺" },
     outputTooltips: {
       rgba: "TV tap — unimplemented. Reserved for a later video/raster send." },
-    // Face knobs: Scan Grid grade + view band + scroll window.
+    // Face knobs: dB-window grade + view band + scroll window.
     // Analysis look (FFT / window / overlap / freq scale / gradient) stays in Display Settings.
     parameters: [
       {
@@ -19400,10 +19400,10 @@ const nodeGraphModuleDefinitions = (
         min: "-4",
         nonlinearSlider: false,
         step: "any",
-        tooltip: "Same S-curve as Scan Grid. 1 = unity. Below 1 compresses highs so bins don’t clip as fast. 0 = mid grey. Negative inverts the curve." },
+        tooltip: "Gamma on an 80 dB window after dBFS. 1 = linear dB. Turn up to lift quiet harmonics. 0 = mid grey. Negative inverts." },
       {
         bipolar: true,
-        defaultValue: "0.2",
+        defaultValue: "1",
         key: "brightness",
         label: "Brightness",
         max: "4",
@@ -19411,7 +19411,7 @@ const nodeGraphModuleDefinitions = (
         min: "-4",
         nonlinearSlider: false,
         step: "any",
-        tooltip: "Same gain as Scan Grid, after contrast. 1 = unity. 0 = black. Default 0.2 stays dim. Negative is the same gain, then invert." },
+        tooltip: "Linear gain before the dB window. 1 = 0 dBFS at the top. 0 = black. Negative is the same gain, then invert." },
       {
         key: "minFreq",
         kind: "frequency",

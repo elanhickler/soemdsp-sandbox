@@ -23,7 +23,7 @@
 // GPU path (spectrogram-gl.js, display-shader plan M1): when the shared picture
 // device is usable, JS only keeps a ring of raw spectrum columns plus the
 // settings each column was painted with; the fragment shader does the row→Hz
-// mapping, bin lerp, fold, contrast/brightness and LUT per pixel. GL only:
+// mapping, bin lerp, dBFS window, contrast/brightness and LUT per pixel. GL only:
 // the Canvas2D bitmap + ring->2D rebuild fallback is gone (no ring -> plate).
 
 const spectrogramHistory = new Map();
@@ -231,10 +231,10 @@ function spectrogramHopMeta(settings, node) {
   const batchColumns = (fftMeta instanceof Float32Array && fftMeta.length >= 7)
     ? Math.max(0, Math.round(nodeGraphFiniteNumber(fftMeta[6])))
     : 0;
-  const historyFlag = (fftMeta instanceof Float32Array && fftMeta.length >= 8)
-    ? Math.round(nodeGraphFiniteNumber(fftMeta[7]))
+  const windowSum = (fftMeta instanceof Float32Array && fftMeta.length >= 8)
+    ? Math.max(0, nodeGraphFiniteNumber(fftMeta[7]))
     : 0;
-  return { hopSize, sampleRate, fftSize, hopSerial, batchColumns, historyFlag };
+  return { hopSize, sampleRate, fftSize, hopSerial, batchColumns, windowSum };
 }
 
 function spectrogramHzToMel(hz) {
@@ -519,7 +519,7 @@ function drawNodeGraphSpectrogramItem(renderer, item, pixelRatio) {
   const node = nodeGraphPatchNode(nodeId);
   const settings = spectrogramSettingsForNode(node);
   const brightnessRaw = Number(node?.params?.brightness);
-  const brightness = Number.isFinite(brightnessRaw) ? brightnessRaw : 0.2;
+  const brightness = Number.isFinite(brightnessRaw) ? brightnessRaw : 1;
   const contrastRaw = Number(node?.params?.contrast);
   const contrast = Number.isFinite(contrastRaw) ? contrastRaw : 1;
   const freqScaleIdx = Math.max(0, Math.min(2, Math.round(nodeGraphFiniteNumber(settings.freqScale))));
@@ -544,7 +544,9 @@ function drawNodeGraphSpectrogramItem(renderer, item, pixelRatio) {
     : null;
   const spectrumBins = (spectrum instanceof Float32Array) ? spectrum.length : 0;
 
-  const { hopSize, sampleRate, hopSerial, batchColumns } = spectrogramHopMeta(settings, node);
+  const { hopSize, sampleRate, hopSerial, batchColumns, windowSum, fftSize } = spectrogramHopMeta(settings, node);
+  const winSum = windowSum > 0 ? windowSum : Math.max(1, fftSize) / 2;
+  const fullMag = Math.max(1e-9, winSum / 2);
   const buf = spectrogramBufferSizeForFace(nodeId, faceW, faceH, screenElement);
   const st = spectrogramEnsureState(nodeId, buf.w, buf.h, historySeconds);
   st.lutRgb = lutRgb;
@@ -659,6 +661,7 @@ function drawNodeGraphSpectrogramItem(renderer, item, pixelRatio) {
       faceH,
       spectrogramScrollSubPx(st),
       plate,
+      fullMag,
     )) {
     st.hasFrame = true;
     return;

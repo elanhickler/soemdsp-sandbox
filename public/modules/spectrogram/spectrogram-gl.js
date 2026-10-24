@@ -10,9 +10,9 @@
 //     affects new columns, same as the Canvas2D waterfall.
 //   • Colour: 256-wide LUT rows (one per gradient that still has ink on face).
 //   • Shader per pixel: ring lookup → Linear / Mel / Bark row→Hz → bilinear
-//     bin lerp → x/(1+x) fold → contrast → brightness → LUT (the former CPU
-//     column/grade helpers are gone; colours match
-//     spectrogramCssAtBrightness in spectrogram-display.js).
+//     bin lerp → undo log10(1+mag·100) → dBFS → 80 dB window → contrast
+//     gamma → LUT. Contrast > 1 lifts quiet partials (harmonics). Brightness
+//     is linear gain before the dB window (1 = 0 dBFS at the top).
 //
 // Device: the shared picture device (public/lib/visual/picture-device.js).
 // Its hidden canvas never resizes; we draw into a bottom-left scissor rect and
@@ -47,6 +47,7 @@ uniform float uSub;        // leftover hop-time in buffer pixels [0,1)
 uniform vec3 uPlate;       // brightness-0 LUT (right sliver while uSub > 0)
 uniform float uRingTexW;   // texels per ring row
 uniform float uLutRows;
+uniform float uFullMag;    // windowSum/2: 1.0 in dBFS is a full-scale sine
 
 const float LN10 = 2.302585092994046;
 
@@ -71,27 +72,25 @@ float barkToHz(float bark) {
 
 float powPos(float x, float e) { return x <= 0.0 ? 0.0 : pow(x, e); }
 
-// spectrogramGrade01 → nodeGraphRasterRgbGradeChannel01 (invert 0).
+// Worklet stores c = log10(1 + ema·100). Recover linear mag, then dBFS.
+// 80 dB window. Contrast |c| > 1 uses gamma 1/|c| so turning Contrast up
+// lifts harmonics instead of crushing them into the floor (the old photo
+// S-curve around 0.5 did that). Brightness is gain on the linear amp.
 float grade01(float x, float contrast, float brightness) {
-  // Brightness 0 deposits the gradient at 0 (spectrogramScrollPaintPixels).
   if (brightness == 0.0) return 0.0;
-  float t = x > 0.0 ? x / (1.0 + x) : 0.0;
-  t = clamp(t, 0.0, 1.0);
-  float y;
   if (contrast == 0.0) {
-    y = 0.5;
-  } else {
-    float mag = abs(contrast);
-    y = t;
-    if (abs(mag - 1.0) >= 1e-4) {
-      y = t < 0.5
-        ? 0.5 * powPos(2.0 * t, mag)
-        : 1.0 - 0.5 * powPos(2.0 * (1.0 - t), mag);
-    }
-    if (contrast < 0.0) y = 1.0 - y;
+    float mid = 0.5;
+    if (brightness < 0.0) mid = 1.0 - mid;
+    return mid;
   }
-  y = clamp(y, 0.0, 1.0) * abs(brightness);
-  if (y > 1.0) y = 1.0;
+  float ema = max(0.0, (powPos(10.0, x) - 1.0) / 100.0);
+  float ref = max(uFullMag, 1e-9);
+  float amp = ema / ref * abs(brightness);
+  float db = 20.0 * log(max(amp, 1e-12)) / LN10;
+  float v = clamp((db + 80.0) / 80.0, 0.0, 1.0);
+  float gamma = 1.0 / max(abs(contrast), 0.05);
+  float y = powPos(v, gamma);
+  if (contrast < 0.0) y = 1.0 - y;
   if (brightness < 0.0) y = 1.0 - y;
   return clamp(y, 0.0, 1.0);
 }
@@ -233,6 +232,7 @@ void main() {
       uPlate: gl.getUniformLocation(program, "uPlate"),
       uRingTexW: gl.getUniformLocation(program, "uRingTexW"),
       uLutRows: gl.getUniformLocation(program, "uLutRows"),
+      uFullMag: gl.getUniformLocation(program, "uFullMag"),
     };
     return entry;
   }
@@ -388,7 +388,7 @@ void main() {
     const brightnessRaw = Number(p.brightness);
     // Missing / NaN only. Explicit 0 stays 0.
     const contrast = Number.isFinite(contrastRaw) ? contrastRaw : 1;
-    const brightness = Number.isFinite(brightnessRaw) ? brightnessRaw : 0;
+    const brightness = Number.isFinite(brightnessRaw) ? brightnessRaw : 1;
     const scale = SoemMath.clamp(Math.round(nodeGraphFiniteNumber(p.freqScale)), 0, 2);
     const lo = nodeGraphFiniteNumber(p.minFreq, 20);
     const hi = nodeGraphFiniteNumber(p.maxFreq, 20000);
@@ -561,7 +561,7 @@ void main() {
    * copy that rect onto the face. Returns false when GL cannot draw (the caller
    * logs once and fills black).
    */
-  function spectrogramGlRingPresent(ring, bufW, bufH, destCtx, destW, destH, subPx, plateRgb) {
+  function spectrogramGlRingPresent(ring, bufW, bufH, destCtx, destW, destH, subPx, plateRgb, fullMag) {
     if (!ring || !destCtx) return false;
     const w = bufW | 0;
     const h = bufH | 0;
@@ -604,6 +604,8 @@ void main() {
     );
     gl.uniform1f(entry.u.uRingTexW, ring.stride / 4);
     gl.uniform1f(entry.u.uLutRows, LUT_ROWS);
+    const magRef = nodeGraphFiniteNumber(fullMag);
+    gl.uniform1f(entry.u.uFullMag, magRef > 0 ? magRef : 1e-9);
     gl.drawArrays(gl.TRIANGLES, 0, 6);
     gl.disable(gl.SCISSOR_TEST);
     gl.activeTexture(gl.TEXTURE2);
@@ -626,8 +628,32 @@ void main() {
     releaseGpu(ring);
   }
 
+  // JS twin of grade01 (smoke + 1D-style dBFS checks). x is log10(1+ema·100).
+  const SPECTROGRAM_GRADE_WINDOW_DB = 80;
+  function spectrogramGrade01(x, contrast, brightness, fullMag) {
+    const c = Number(contrast);
+    const b = Number(brightness);
+    if (!(b > 0) && !(b < 0)) return 0;
+    if (!(c > 0) && !(c < 0)) {
+      return 0.5;
+    }
+    const powPos = (v, e) => (v <= 0 ? 0 : Math.pow(v, e));
+    const ema = Math.max(0, (powPos(10, Number(x)) - 1) / 100);
+    const ref = Math.max(Number(fullMag) || 0, 1e-9);
+    const amp = ema / ref * Math.abs(b);
+    const db = 20 * Math.log10(Math.max(amp, 1e-12));
+    const v = Math.min(1, Math.max(0, (db + SPECTROGRAM_GRADE_WINDOW_DB) / SPECTROGRAM_GRADE_WINDOW_DB));
+    const gamma = 1 / Math.max(Math.abs(c), 0.05);
+    let y = powPos(v, gamma);
+    if (c < 0) y = 1 - y;
+    if (b < 0) y = 1 - y;
+    return Math.min(1, Math.max(0, y));
+  }
+
   global.SPECTROGRAM_GL_LUT_ROWS = LUT_ROWS;
   global.SPECTROGRAM_GL_FRAGMENT_SHADER = FS;
+  global.SPECTROGRAM_GRADE_WINDOW_DB = SPECTROGRAM_GRADE_WINDOW_DB;
+  global.spectrogramGrade01 = spectrogramGrade01;
   global.spectrogramGlRingCreate = spectrogramGlRingCreate;
   global.spectrogramGlRingPool = spectrogramGlRingPool;
   global.spectrogramGlRingWrite = spectrogramGlRingWrite;
