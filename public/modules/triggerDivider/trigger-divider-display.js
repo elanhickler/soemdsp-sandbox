@@ -15,19 +15,18 @@ function nodeGraphTriggerDividerLedInk(px, family) {
   let ascent = px * NODE_GRAPH_TRIGGER_DIVIDER_LED_INK_OF_EM;
   let descent = 0;
   try {
-    const cx = (typeof OffscreenCanvas === "function"
-      ? new OffscreenCanvas(8, 8)
-      : (typeof document !== "undefined" ? document.createElement("canvas") : null)
-    )?.getContext?.("2d");
-    if (cx && typeof cx.measureText === "function") {
-      cx.font = `400 ${px}px ${family}`;
-      const m = cx.measureText("8");
-      const a = Number(m.actualBoundingBoxAscent);
-      const d = Number(m.actualBoundingBoxDescent);
-      if (Number.isFinite(a) && Number.isFinite(d) && a + d > 1) {
-        ascent = a;
-        descent = d;
-      }
+    const baked = typeof nodeGraphDisplayCanvasBakeGlyphAtlas === "function"
+      ? nodeGraphDisplayCanvasBakeGlyphAtlas({
+        glyphs: ["8"], cols: 1, cellW: 1, cellH: 1, fontPx: px, family, weight: 400,
+        transparent: true, metrics: true, skipDraw: true,
+      })
+      : null;
+    const m = baked?.glyphMetrics?.[0];
+    const a = Number(m?.ascent);
+    const d = Number(m?.descent);
+    if (Number.isFinite(a) && Number.isFinite(d) && a + d > 1) {
+      ascent = a;
+      descent = d;
     }
   } catch (_e) { /* headless smoke */ }
   nodeGraphTriggerDividerLedInkCache = { key, ascent, descent, height: ascent + descent };

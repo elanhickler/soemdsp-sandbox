@@ -478,18 +478,17 @@ function drawNodeGraphRobinSinepulseFace(section) {
   const density = typeof nodeGraphResolveDisplayPixelDensity === "function"
     ? nodeGraphResolveDisplayPixelDensity(look.pixelDensity)
     : (Number.isFinite(Number(look.pixelDensity)) && Number(look.pixelDensity) > 0 ? Number(look.pixelDensity) : 1);
-  const face = typeof ensureFaceMetrics === "function" ? ensureFaceMetrics(section, { observe: true }) : null;
-  const cssW = Math.max(1, face?.cssW || section.clientWidth || 1);
-  const cssH = Math.max(1, face?.cssH || section.clientHeight || 1);
-  const dpr = Math.max(1, face?.dpr || window.devicePixelRatio || 1);
-  const w = Math.max(1, Math.round(Math.round(cssW * dpr) * Math.max(density, 1e-6)));
-  const h = Math.max(1, Math.round(Math.round(cssH * dpr) * Math.max(density, 1e-6)));
-  if (typeof nodeGraphDisplayCanvasSetBacking === "function") nodeGraphDisplayCanvasSetBacking(canvas, w, h);
-  else {
-    if (canvas.width !== w) canvas.width = w;
-    if (canvas.height !== h) canvas.height = h;
+  const sized = typeof nodeGraphDisplayCanvasSize === "function"
+    ? nodeGraphDisplayCanvasSize(section, canvas, { pixelDensity: density })
+    : null;
+  if (!sized) return;
+  const cssW = Math.max(1, sized.cssWidth);
+  const cssH = Math.max(1, sized.cssHeight);
+  const w = Math.max(1, sized.width);
+  const h = Math.max(1, sized.height);
+  if (typeof nodeGraphDisplayCanvasPixelated === "function") {
+    nodeGraphDisplayCanvasPixelated(canvas, density < 0.999);
   }
-  canvas.style.imageRendering = density < 0.999 ? "pixelated" : "";
   const state = nodeGraphRobinSinepulseGlEnsure(canvas);
   if (state?.failed) {
     if (typeof nodeGraphDisplayGlFailed === "function") {
