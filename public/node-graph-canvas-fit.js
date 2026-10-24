@@ -2,7 +2,7 @@
 // Pure functions. Inputs and outputs are plain numbers, so both callers get
 // the same rects for the same reference size (MINI_PERFORM_VIEW_PLAN MP-2).
 
-/** Portrait phone aspect (width / height), same as the arrange-mode guides. */
+/** Portrait phone aspect (width / height), used by the phone frame presets. */
 const NODE_GRAPH_CANVAS_PHONE_ASPECT = 9 / 19.5;
 
 /** Whole-module fit margin: 4% of the smaller tile side, at least 12 px, never more than a quarter of it. */
@@ -197,25 +197,6 @@ function nodeGraphMiniPerformEnlargedRect(hostW, hostH, refW, refH) {
     w = h * aspect;
   }
   return { x: (hw - w) / 2, y: (hh - h) / 2, w, h, s: w / rw };
-}
-
-/** Phone-guide rect inside a frame. orientation: "vertical" | "horizontal". */
-function nodeGraphMiniPerformPhoneGuideRect(frameW, frameH, orientation) {
-  const fw = Math.max(1, Number(frameW) || 1);
-  const fh = Math.max(1, Number(frameH) || 1);
-  const aspect = orientation === "horizontal"
-    ? (1 / NODE_GRAPH_CANVAS_PHONE_ASPECT)
-    : NODE_GRAPH_CANVAS_PHONE_ASPECT;
-  let w;
-  let h;
-  if (fw / fh > aspect) {
-    h = fh;
-    w = h * aspect;
-  } else {
-    w = fw;
-    h = w / aspect;
-  }
-  return { x: (fw - w) / 2, y: (fh - h) / 2, w, h };
 }
 
 /**

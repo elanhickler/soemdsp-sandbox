@@ -13340,30 +13340,6 @@ body.node-layout-canvas-active .node-layout-canvas-stage.node-layout-canvas-edit
   opacity: 0.95;
 }
 
-/* Arrange-mode phone guides: thin white portrait/landscape frame (one at a time). */
-.node-layout-canvas-phone-guides {
-  display: none;
-  position: absolute;
-  inset: 0;
-  z-index: 100000;
-  pointer-events: none;
-  overflow: hidden;
-}
-
-.node-layout-canvas-stage.node-layout-canvas-edit > .node-layout-canvas-phone-guides,
-body.node-layout-canvas-active.node-layout-canvas-edit .node-layout-canvas-phone-guides {
-  display: block;
-}
-
-.node-layout-canvas-phone-guide-frame {
-  position: absolute;
-  box-sizing: border-box;
-  border: 1px solid rgba(255, 255, 255, 0.9);
-  background: transparent;
-  box-shadow: none;
-  pointer-events: none;
-}
-
 .node-screen-solo-stage[hidden] {
   display: none !important;
 }

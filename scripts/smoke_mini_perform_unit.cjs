@@ -138,8 +138,5 @@ ok(near(box.y, 80) && box.vy < 0, "dvd hits the bottom edge");
 box = r("nodeGraphEmptyCanvasDvdStep({ x: 10, y: 10, vx: 10, vy: 10, size: 80 }, 0, 100, 90)");
 ok(box.x >= 0 && box.y >= 0 && box.x + box.size <= 100 && box.y + box.size <= 90, "logo stays inside after a resize");
 
-const guide = r("nodeGraphMiniPerformPhoneGuideRect(400, 800, 'vertical')");
-ok(near(guide.w / guide.h, 9 / 19.5), "phone guide uses the phone aspect");
-
 console.log(failures ? `${failures} FAILED` : "mini perform unit ok");
 process.exit(failures ? 1 : 0);

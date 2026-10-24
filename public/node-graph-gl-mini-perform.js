@@ -262,18 +262,6 @@ function nodeGraphGlMiniPerformCornerMarks(batch, cssW, cssH) {
 }
 
 function nodeGraphGlMiniPerformArrangeChrome(batch, tiles, cssW, cssH, frame) {
-  const guide = nodeGraphMiniPerformPhoneGuideRect(
-    cssW,
-    cssH,
-    typeof nodeGraphLayoutCanvasPhoneGuideOrientation === "function"
-      ? nodeGraphLayoutCanvasPhoneGuideOrientation()
-      : "vertical",
-  );
-  const guideColor = [1, 1, 1, 0.35];
-  nodeGraphGlLinesRect(batch, guide.x, guide.y, guide.w, 1, guideColor);
-  nodeGraphGlLinesRect(batch, guide.x, guide.y + guide.h - 1, guide.w, 1, guideColor);
-  nodeGraphGlLinesRect(batch, guide.x, guide.y, 1, guide.h, guideColor);
-  nodeGraphGlLinesRect(batch, guide.x + guide.w - 1, guide.y, 1, guide.h, guideColor);
   const outline = [1, 1, 1, 0.55];
   const grip = Math.max(8, 12 * frame.s);
   for (let i = 0; i < tiles.length; i += 1) {
