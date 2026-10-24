@@ -104,6 +104,7 @@ $modules = @(
     "soemdsp_ladder_filter_metadata_json_size"
   ) }
   @{ Name = "flower_child_filter"; Simd = $false; Exports = @("soemdsp_flower_child_filter_create", "soemdsp_flower_child_filter_set_seed", "soemdsp_flower_child_filter_destroy", "soemdsp_flower_child_filter_sample", "soemdsp_flower_child_filter_version") }
+  @{ Name = "flower_child_filter_rev3"; Simd = $false; Exports = @("soemdsp_flower_child_filter_rev3_create", "soemdsp_flower_child_filter_rev3_set_seed", "soemdsp_flower_child_filter_rev3_destroy", "soemdsp_flower_child_filter_rev3_sample", "soemdsp_flower_child_filter_rev3_version") }
   @{ Name = "active_filter"; Simd = $false; Exports = @("soemdsp_active_filter_create", "soemdsp_active_filter_destroy", "soemdsp_active_filter_sample", "soemdsp_active_filter_version", "soemdsp_active_filter_metadata_json", "soemdsp_active_filter_metadata_json_size") }
   @{ Name = "yellowjacket_filter"; Simd = $false; Exports = @("soemdsp_yellowjacket_filter_create", "soemdsp_yellowjacket_filter_destroy", "soemdsp_yellowjacket_filter_sample", "soemdsp_yellowjacket_filter_version") }
   @{ Name = "superlove_filter"; Simd = $false; Exports = @("soemdsp_superlove_filter_create", "soemdsp_superlove_filter_set_seed", "soemdsp_superlove_filter_destroy", "soemdsp_superlove_filter_sample", "soemdsp_superlove_filter_version") }
@@ -871,6 +872,11 @@ if ($node) {
   if ($LASTEXITCODE -ne 0) {
     throw "Combined build: Pulse Train Frequency/Duty smoke FAILED"
   }
+  # Pulse Train Shape to Output: Loop/Saw/1Hz/Duty 0.5 speaker bus (bugs/pusle train not producing output).
+  & $node.Source "$root\scripts\smoke_pulse_train_output.mjs"
+  if ($LASTEXITCODE -ne 0) {
+    throw "Combined build: Pulse Train Shape/Output smoke FAILED"
+  }
   # Resonant Compressor: Gain == Resonant Envelope SC (max diff 0), drums get quieter.
   & $node.Source "$root\scripts\smoke_graph_resonant_compressor.mjs"
   if ($LASTEXITCODE -ne 0) {
@@ -954,6 +960,10 @@ if ($node) {
   & $node.Source "$root\scripts\smoke_graph_noise_gate.mjs"
   if ($LASTEXITCODE -ne 0) {
     throw "Combined build: Noise Gate hysteresis smoke FAILED"
+  }
+  & $node.Source "$root\scripts\smoke_graph_flower_child_filter_rev3.mjs"
+  if ($LASTEXITCODE -ne 0) {
+    throw "Combined build: Flower Child Filter Rev3 smoke FAILED"
   }
   & $node.Source "$root\scripts\smoke_noise_generator_chase.mjs"
   if ($LASTEXITCODE -ne 0) {

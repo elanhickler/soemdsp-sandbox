@@ -16836,6 +16836,12 @@ def require_native_module_contract(base_url: str) -> None:
         and "#include <soemdsp/routing/stereo_route.h>" in flower_child_host,
         "Flower Child Filter must route M/L/R through soemdsp/routing/stereo_route.h (process_stereo_route_filter)",
     )
+    require(
+        "static void process_flower_child_filter_rev3(Circuit" in flower_child_host
+        and "soemdsp_flower_child_filter_rev3_sample" in flower_child_host
+        and "kTypeFlowerChildFilterRev3 = 235" in flower_child_host,
+        "Flower Child Filter Rev3 (type 235) process + sample missing from graph_engine",
+    )
 
     expected_native_exports = {
         "rapt_elliptic_decimator": [
@@ -17489,6 +17495,7 @@ def require_native_module_contract(base_url: str) -> None:
             "soemdsp_helmholtz_fidelity",
         ],
         "flower_child_filter": ["soemdsp_flower_child_filter_create", "soemdsp_flower_child_filter_destroy", "soemdsp_flower_child_filter_sample"],
+        "flower_child_filter_rev3": ["soemdsp_flower_child_filter_rev3_create", "soemdsp_flower_child_filter_rev3_destroy", "soemdsp_flower_child_filter_rev3_sample"],
         "active_filter": ["soemdsp_active_filter_create", "soemdsp_active_filter_destroy", "soemdsp_active_filter_sample"],
         "yellowjacket_filter": ["soemdsp_yellowjacket_filter_create", "soemdsp_yellowjacket_filter_destroy", "soemdsp_yellowjacket_filter_sample"],
         "superlove_filter": ["soemdsp_superlove_filter_create", "soemdsp_superlove_filter_destroy", "soemdsp_superlove_filter_sample"],

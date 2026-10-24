@@ -277,9 +277,15 @@ function nodeGraphGlGraphRebuildChrome() {
     if (nodeGraphGlGraphState.view && !nodeGraphGlGraphState.view.ids.has(id)) continue;
     const el = id && typeof nodeGraphNodeElement === "function" ? nodeGraphNodeElement(id) : null;
     if (!el || !el.isConnected || el.hidden) continue;
-    const title = el.querySelector(".node-header-title");
-    const titleRow = el.querySelector(".node-header-title-row") || title;
-    const titleBox = nodeGraphGlGraphWorldBox(titleRow);
+    const title = el.classList.contains("title-hidden")
+      ? null
+      : el.querySelector(".node-header-title");
+    const titleRow = title
+      ? (el.querySelector(".node-header-title-row") || title)
+      : null;
+    const titleBox = titleRow && !titleRow.hidden && !titleRow.closest("[hidden]")
+      ? nodeGraphGlGraphWorldBox(titleRow)
+      : null;
     if (title && titleBox) {
       titles.push({
         id,

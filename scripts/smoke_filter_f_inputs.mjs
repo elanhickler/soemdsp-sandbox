@@ -26,6 +26,7 @@ const MODULES = {
   ladderFilter: 2, tb303Filter: 60, modeResonator: 67, cookbookFilter: 173, butterworth: 52,
   linkwitzRiley: 53, bessel: 54, chebyshev: 55, elliptic: 56, papoulisFilter: 133,
   bandpass: 137, allpass: 138, lowpass: 176, highpass: 177, eqFilter: 57, combResonator: 66,
+  flowerChildFilterRev3: 235,
 };
 
 function run(type, knobHz, fHz) {

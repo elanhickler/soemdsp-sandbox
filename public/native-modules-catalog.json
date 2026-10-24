@@ -1100,6 +1100,24 @@
       "noticeUrl": "https://github.com/elanhickler/soemdsp-sandbox/blob/master/docs/THIRD_PARTY.md"
     },
     {
+      "name": "flower_child_filter_rev3",
+      "label": "Flower Child Filter Rev3",
+      "targetType": "flowerChildFilterRev3",
+      "kind": "filter",
+      "source": "native_modules/flower_child_filter_rev3/flower_child_filter_rev3.cpp",
+      "sourceUrl": "https://github.com/elanhickler/soemdsp-sandbox/blob/master/native_modules/flower_child_filter_rev3/flower_child_filter_rev3.cpp",
+      "localSourceUrl": "/native_modules/flower_child_filter_rev3/flower_child_filter_rev3.cpp",
+      "libUrl": "https://github.com/elanhickler/soemdsp-sandbox/blob/master/native_modules/flower_child_filter/originalcode/FlowerChildFilterCore.h",
+      "wasm": "native_modules/flower_child_filter_rev3/flower_child_filter_rev3.wasm",
+      "wasmUrl": "native_modules/flower_child_filter_rev3/flower_child_filter_rev3.wasm",
+      "wasmAvailable": true,
+      "license": "Soundemote Noncommercial",
+      "licenseUrl": "https://github.com/elanhickler/soemdsp-sandbox/blob/master/LICENSE",
+      "upstreamLicense": "See notice",
+      "upstreamLicenseUrl": "https://github.com/elanhickler/soemdsp-sandbox/blob/master/docs/THIRD_PARTY.md#flower-child-filter-rev3",
+      "noticeUrl": "https://github.com/elanhickler/soemdsp-sandbox/blob/master/docs/THIRD_PARTY.md"
+    },
+    {
       "name": "formula_noise",
       "label": "Pi Noise",
       "targetType": "piNoise",

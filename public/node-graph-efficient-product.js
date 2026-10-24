@@ -186,6 +186,7 @@ const NODE_GRAPH_EFFICIENT_PRODUCT_AUDIO_TYPES = Object.freeze([
   "passiveFilter",
   "tb303Filter",
   "flowerChildFilter",
+  "flowerChildFilterRev3",
   "yellowjacketFilter",
   "superloveFilter",
   "superloveRev2",

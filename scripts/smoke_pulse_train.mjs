@@ -201,29 +201,23 @@ console.log("ok pulseTrain a new Trigger hit mid-train restarts it (single Trigg
   if (pulses < 10) throw new Error(`dual graph: only ${pulses} occupied samples`);
   console.log(`ok pulseTrain graph Forward-Reverse == direct (${pulses} occupied samples)`);
 }
-// 5) Forward-Reverse: one-way then time-mirror. Peak once. Loop skips the t=0 return.
+// 5) Fwd-Rev 0.5 + polarity: reverse-then-forward, amplitude peak at Time, last at 2T.
 {
   const set = [8, 0.2, 3, 1, 0.2, 0, 1];
   const fwd = preview(N, set);
-  const dual = preview(N, [...set, 0, 0.5, 0]); // mode One shot, Pulse Mode 0.5 Forward-Reverse, Delay 0
+  const dual = preview(N, [...set, 0, 0.5, 0]);
   const s2 = preview(S, [...set, 0, 0.5, 0]);
   if (JSON.stringify(s2) !== JSON.stringify(dual)) throw new Error("dual: standalone preview != combined");
   const Nf = set[0], T = set[1];
   if (dual.t.length !== 2 * Nf - 1) throw new Error(`dual: count ${dual.t.length} want ${2 * Nf - 1}`);
-  if (dual.t[Nf - 1] !== T) throw new Error(`dual: peak ${dual.t[Nf - 1]} != Time`);
+  const peakI = dual.a.indexOf(Math.max(...dual.a));
+  if (Math.abs(dual.t[peakI] - T) > 1e-12) throw new Error(`dual: peak t ${dual.t[peakI]} != Time`);
   if (dual.t[dual.t.length - 1] !== 2 * T) throw new Error(`dual: last ${dual.t[dual.t.length - 1]} != 2*Time`);
-  for (let i = 0; i < Nf; i++) {
-    if (Math.abs(dual.t[i] - fwd.t[i]) > 1e-12) throw new Error(`dual: fwd t[${i}]`);
-    if (Math.abs(dual.a[i] - fwd.a[i]) > 1e-12) throw new Error(`dual: fwd a[${i}]`);
-  }
-  for (let j = Nf; j < 2 * Nf - 1; j++) {
-    const i = 2 * Nf - 2 - j;
-    if (Math.abs(dual.t[j] - (2 * T - fwd.t[i])) > 1e-12) throw new Error(`dual: mirror t[${j}]`);
-    if (Math.abs(dual.a[j] - fwd.a[i]) > 1e-12) throw new Error(`dual: mirror a[${j}]`);
-  }
+  if (dual.t[0] !== 0) throw new Error("dual: attack should start at t=0");
+  if (!(dual.a[0] < dual.a[peakI] - 1e-9)) throw new Error("dual: first pulse should be the attack (quieter than the peak)");
   const eFwd = fwd.a.reduce((s, v) => s + v, 0);
   const eDual = dual.a.reduce((s, v) => s + v, 0);
-  if (Math.abs(eDual - (2 * eFwd - fwd.a[Nf - 1])) > 1e-9) throw new Error(`dual: energy ${eDual} vs ${2 * eFwd - fwd.a[Nf - 1]}`);
+  if (Math.abs(eDual - (2 * eFwd - fwd.a[0])) > 1e-9) throw new Error(`dual: energy ${eDual} vs ${2 * eFwd - fwd.a[0]}`);
   const at = 4, n = at + Math.ceil(0.42 * SR);
   const h = N.soemdsp_pulse_train_create();
   const out = new Float64Array(n);
@@ -237,15 +231,16 @@ console.log("ok pulseTrain a new Trigger hit mid-train restarts it (single Trigg
   }
   for (let i = 0; i < n; i++) if (Math.abs(out[i] - y[i]) > 1e-12) throw new Error(`dual play: sample ${i} ${out[i]} vs ${y[i]}`);
   const loopP = preview(N, [...set, 1, 0.5, 0]);
-  if (loopP.t.length !== 2 * Nf - 2) throw new Error(`dual loop: count ${loopP.t.length}`);
-  const loopLast = 2 * T - (T * E(set[2], 1 / Nf));
-  if (Math.abs(loopP.t[loopP.t.length - 1] - loopLast) > 1e-9) throw new Error(`dual loop last ${loopP.t[loopP.t.length - 1]} want ${loopLast}`);
+  if (loopP.t.length !== 2 * Nf - 1) throw new Error(`dual loop: count ${loopP.t.length}`);
+  if (loopP.t[0] !== 0) throw new Error("dual loop: attack should start at t=0");
+  const loopLast = T + T * E(set[2], (Nf - 1) / Nf);
+  if (Math.abs(loopP.t[loopP.t.length - 1] - loopLast) > 1e-6) throw new Error(`dual loop last ${loopP.t[loopP.t.length - 1]} want ${loopLast}`);
   const cap = preview(N, [16384, 0.01, 0, 1, 1, 0, 1, 0, 0.5, 0]);
-  if (cap.t.length !== 16383) throw new Error(`dual cap: count ${cap.t.length} want 16383 (nFwd 8192)`);
-  console.log(`ok pulseTrain Forward-Reverse: one-shot 2N-1 peak once last=2T, energy 2*fwd-peak, Loop 2N-2, Count 16384 clamps nFwd 8192, playback sample-exact, last pulse sample ${last}`);
+  if (cap.t.length !== 16383) throw new Error(`dual cap: count ${cap.t.length} want 16383 (nFwd 8192, prefix 2N-1)`);
+  console.log(`ok pulseTrain Fwd-Rev 0.5: reverse-then-forward peak at Time, last=2T, Loop 2N-1, playback sample-exact, last pulse sample ${last}`);
 }
-// 5b) Fwd-Rev 0.25 grows the return leg (span 1.5*Time, peak stays at Time).
-//     Fwd-Rev 1.0 is the 0.5 train rotated so the peak lands at t=0.
+// 5b) + polarity: 0.25 grows an attack prefix (peak walks right). 1.0 peak at the right.
+//     - polarity: old return-grow / peak-left (v25).
 {
   const set = [8, 0.2, 3, 1, 0.2, 0, 1];
   const Nf = set[0], T = set[1];
@@ -253,49 +248,27 @@ console.log("ok pulseTrain a new Trigger hit mid-train restarts it (single Trigg
   const sGrow = preview(S, [...set, 0, 0.25, 0]);
   if (JSON.stringify(sGrow) !== JSON.stringify(grow)) throw new Error("fwdrev 0.25: standalone preview != combined");
   if (grow.t.length !== 2 * Nf - 1) throw new Error(`fwdrev 0.25: count ${grow.t.length} want ${2 * Nf - 1}`);
-  if (grow.t[Nf - 1] !== T) throw new Error(`fwdrev 0.25: peak ${grow.t[Nf - 1]} != Time`);
+  const gPeak = grow.a.indexOf(Math.max(...grow.a));
+  if (grow.t[0] !== 0) throw new Error("fwdrev 0.25: attack should start at t=0");
+  if (Math.abs(grow.t[gPeak] - 0.5 * T) > 1e-12) throw new Error(`fwdrev 0.25: peak ${grow.t[gPeak]} != 0.5*Time`);
   if (Math.abs(grow.t[grow.t.length - 1] - 1.5 * T) > 1e-12) throw new Error(`fwdrev 0.25: last ${grow.t[grow.t.length - 1]} != 1.5*Time`);
-  const fwd = preview(N, set);
-  for (let i = 0; i < Nf; i++) {
-    if (Math.abs(grow.t[i] - fwd.t[i]) > 1e-12) throw new Error(`fwdrev 0.25: outbound t[${i}]`);
-  }
-  for (let j = Nf; j < 2 * Nf - 1; j++) {
-    const i = 2 * Nf - 2 - j;
-    const want = 1.5 * T - 0.5 * fwd.t[i];
-    if (Math.abs(grow.t[j] - want) > 1e-12) throw new Error(`fwdrev 0.25: return t[${j}] ${grow.t[j]} want ${want}`);
-  }
-  const fr = preview(N, [...set, 0, 0.5, 0]);
+  if (!(grow.a[0] < grow.a[gPeak] - 1e-9)) throw new Error("fwdrev 0.25: first pulse should be the attack");
   const rf = preview(N, [...set, 0, 1, 0]);
-  if (rf.t.length !== 2 * Nf - 1) throw new Error(`fwdrev 1.0: count ${rf.t.length}`);
-  if (rf.t[0] !== 0) throw new Error("fwdrev 1.0: peak not at t=0");
-  if (Math.abs(rf.a[0] - set[4]) > 1e-12) throw new Error(`fwdrev 1.0: first amp ${rf.a[0]} want Amp End`);
-  const shift = fr.t[Nf - 1];
-  const wrapped = fr.t.map((t, i) => {
-    let x = t - shift;
-    if (x < 0) x += 2 * T;
-    return { t: x, a: fr.a[i], i };
-  }).sort((a, b) => a.t - b.t || a.i - b.i);
-  for (let j = 0; j < rf.t.length; j++) {
-    if (Math.abs(rf.t[j] - wrapped[j].t) > 1e-12 || rf.a[j] !== wrapped[j].a) {
-      throw new Error(`fwdrev 1.0 pulse ${j}: t ${rf.t[j]} a ${rf.a[j]} want ${wrapped[j].t} / ${wrapped[j].a}`);
-    }
-    if (j > 0 && !(rf.t[j] >= rf.t[j - 1] - 1e-12)) throw new Error(`fwdrev 1.0 times not ordered at ${j}`);
-  }
-  const loopRf = preview(N, [...set, 1, 1, 0]);
-  const loopFr = preview(N, [...set, 1, 0.5, 0]);
-  const L = 2 * Nf - 2;
-  if (loopRf.t.length !== L) throw new Error(`fwdrev 1.0 loop: count ${loopRf.t.length}`);
-  const gaps = (t, span) => t.map((x, i) => (i + 1 < t.length ? t[i + 1] : span) - x);
-  const gf = gaps(loopFr.t, 2 * T), gr = gaps(loopRf.t, 2 * T);
-  for (let j = 0; j < L; j++) {
-    const k = (j + Nf - 1) % L;
-    if (Math.abs(gr[j] - gf[k]) > 1e-12 || loopRf.a[j] !== loopFr.a[k]) {
-      throw new Error(`fwdrev 1.0 loop gap ${j}: ${gr[j]} vs ${gf[k]}`);
-    }
+  if (rf.t.length !== 2 * Nf - 2) throw new Error(`fwdrev 1.0: count ${rf.t.length}`);
+  const rPeak = rf.a.indexOf(Math.max(...rf.a));
+  if (Math.abs(rf.t[rPeak] - 2 * T) > 1e-12) throw new Error(`fwdrev 1.0: peak ${rf.t[rPeak]} != 2*Time (right)`);
+  for (let j = 1; j < rf.t.length; j++) {
+    if (!(rf.t[j] >= rf.t[j - 1] - 1e-12)) throw new Error(`fwdrev 1.0 times not ordered at ${j}`);
   }
   const alias = preview(N, [...set, 0, 3, 0]);
   if (JSON.stringify(alias) !== JSON.stringify(rf)) throw new Error("old integer 3 does not alias to Fwd-Rev 1.0");
-  console.log("ok pulseTrain Fwd-Rev 0.25 grows the return leg; 1.0 is 0.5 rotated so the peak is at t=0 (Loop gaps = 0.5 rotated N-1)");
+  const oldGrow = preview(N, [...set, 0, 0.25, 0, 1]);
+  const oldS = preview(S, [...set, 0, 0.25, 0, 1]);
+  if (JSON.stringify(oldS) !== JSON.stringify(oldGrow)) throw new Error("polarity -: standalone != combined");
+  if (oldGrow.t.length !== 2 * Nf - 1) throw new Error(`polarity - 0.25: count ${oldGrow.t.length}`);
+  if (oldGrow.t[0] !== 0 || Math.abs(oldGrow.a[0] - 1) > 1e-12) throw new Error("polarity - 0.25: peak should stay at t=0");
+  if (Math.abs(oldGrow.t[oldGrow.t.length - 1] - 1.5 * T) > 1e-12) throw new Error("polarity - 0.25: last != 1.5*Time");
+  console.log("ok pulseTrain Fwd-Rev 0.25 adds attack and peak walks right; 1.0 peak at the right; polarity - is the old return-grow");
 }
 // 6) End Delay: One-shot End after last pulse + delay. Count 1 last pulse is t=0.
 {

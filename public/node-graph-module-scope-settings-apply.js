@@ -1329,6 +1329,9 @@ function nodeGraphTraceDisplaySettingsDirtyKeysFromEvent(event) {
   if (latch) {
     return [latch.getAttribute("data-trace-display-toggle") || latch.dataset?.waterfallToggle].filter(Boolean);
   }
+  if (t.closest?.("[data-sge-hue-row], [data-sge-hue]")) {
+    return ["backgroundHue"];
+  }
   // Gradient editor / hue title name their own keys.
   if (t.closest?.("[data-shared-gradient-editor], [data-hue-title-stepper], .node-shared-gradient-editor")) {
     return ["gradientStops", "background", "backgroundColor"];

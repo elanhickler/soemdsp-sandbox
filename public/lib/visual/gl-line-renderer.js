@@ -834,6 +834,7 @@ void main() {
     const total = Math.max(nFwd, Math.min(PULSE_TRAIN_MAX, spec.total | 0 || nFwd));
     const pulseMode = Number(spec.pulseMode);
     const p = !(pulseMode > 0) ? 0 : (pulseMode >= 1 ? 1 : pulseMode);
+    const polarity = Number(spec.polarity) > 0.5 ? 1 : 0;
     const n = p > 0 ? total : nFwd;
     if (!(n > 0)) return;
     if (!batch.pulseTrains) batch.pulseTrains = [];
@@ -846,6 +847,7 @@ void main() {
       count: n,
       nFwd: nFwd,
       pulseMode: p,
+      polarity,
       duration: Number(spec.duration) || 0,
       axisEnd: Math.max(1e-6, Number(spec.axisEnd) || 0.001),
       curve: Number(spec.curve) || 0,
@@ -1777,6 +1779,7 @@ uniform float uAmpCurve;
 uniform float uAmp;
 uniform float uLoop;
 uniform float uPulseMode;
+uniform float uPolarity;
 uniform float uX0;
 uniform float uX1;
 uniform float uBase;
@@ -1812,22 +1815,37 @@ void main() {
   if (p > 1.0) p = 1.0;
   float dualAmt = p <= 0.0 ? 0.0 : (p >= 0.5 ? 1.0 : p * 2.0);
   float rotAmt = p <= 0.5 ? 0.0 : (p >= 1.0 ? 1.0 : (p - 0.5) * 2.0);
-  int i = id < ni ? id : (2 * ni - 2 - id);
-  float uu = uLoop > 0.5 ? float(i) / n : (n > 1.0 ? float(i) / (n - 1.0) : 0.0);
+  bool prefix = !(uPolarity > 0.5);
+  bool rev = id >= ni;
+  bool prefixFull = prefix && !(rotAmt > 0.0);
+  int i = id < ni ? id : (prefixFull ? (2 * ni - 1 - id) : (2 * ni - 2 - id));
+  bool iLoop = uLoop > 0.5 && !(prefix && rev);
+  float uu = iLoop ? float(i) / n : (n > 1.0 ? float(i) / (n - 1.0) : 0.0);
   float tf;
-  if (uLoop < 0.5 && i == ni - 1 && n > 1.0) tf = uDuration;
+  if (!iLoop && i == ni - 1 && n > 1.0) tf = uDuration;
   else tf = uDuration * curveShape(uCurve, uu);
   if (!(tf >= 0.0)) tf = 0.0;
   if (tf > uDuration) tf = uDuration;
-  float t = id >= ni ? uDuration * (1.0 + dualAmt) - dualAmt * tf : tf;
+  float t;
+  if (id >= ni) {
+    t = prefix ? dualAmt * (uDuration - tf) : uDuration * (1.0 + dualAmt) - dualAmt * tf;
+  } else {
+    t = prefix ? dualAmt * uDuration + tf : tf;
+  }
   if (rotAmt > 0.0 && ni > 1) {
     float peakU = uLoop > 0.5 ? float(ni - 1) / n : 1.0;
     float peak = uLoop < 0.5 && n > 1.0 ? uDuration : uDuration * curveShape(uCurve, peakU);
     if (!(peak >= 0.0)) peak = 0.0;
     if (peak > uDuration) peak = uDuration;
-    t -= rotAmt * peak;
     float span = uDuration * (1.0 + dualAmt);
-    if (t < 0.0) t += span;
+    float shift = rotAmt * peak;
+    if (prefix) {
+      t += shift;
+      if (uLoop > 0.5 ? t >= span : t > span) t -= span;
+    } else {
+      t -= shift;
+      if (t < 0.0) t += span;
+    }
     if (!(t >= 0.0)) t = 0.0;
   }
   if (t > uAxis) {
@@ -1964,6 +1982,7 @@ void main() {
         uAmp: u("uAmp"),
         uLoop: u("uLoop"),
         uPulseMode: u("uPulseMode"),
+        uPolarity: u("uPolarity"),
         uX0: u("uX0"),
         uX1: u("uX1"),
         uBase: u("uBase"),
@@ -2001,6 +2020,7 @@ void main() {
     for (const spec of batch.pulseTrains) {
       gl.uniform1f(pt.uCount, spec.nFwd || spec.count);
       gl.uniform1f(pt.uPulseMode, spec.pulseMode || 0);
+      gl.uniform1f(pt.uPolarity, spec.polarity || 0);
       gl.uniform1f(pt.uDuration, spec.duration);
       gl.uniform1f(pt.uAxis, spec.axisEnd);
       gl.uniform1f(pt.uCurve, spec.curve);

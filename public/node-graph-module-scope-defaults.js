@@ -48,6 +48,9 @@ const nodeGraphModuleScopeUnipolarTypes = new Set([
   "linearEnvelope",
   "linearAttackRelease",
   "curveAttackRelease",
+  "pluckEnvelope",
+  "pingEnvelope",
+  "resonantEnvelope",
 
   "bloomGlow",
   "chromaColor",
@@ -161,9 +164,9 @@ const nodeGraphWaterfallSettingsDefaults = Object.freeze({
   zoomSeconds: 0.25,
   // Column start rate vs layout pixels. Range 0..1, default 1.
   // 1 = one bar per layout pixel (max). Lower holds a longer min/max stretch
-  // (fewer columns). Stored values above 1 clamp to 1. Not bar thickness.
+  // (fewer columns). Stored values above 1 clamp to 1.
   detail: 1,
-  // Filled-bar width inside the column. 1 = full column. 0 = gone.
+  // Retired waterfall gutter. Kept so old patches still load. Not drawn.
   barThickness: 1,
   // fill | stroke | both. One of them is always drawn.
   barInk: "fill",

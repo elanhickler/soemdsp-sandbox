@@ -119,6 +119,25 @@ function nodeGraphPortalLaneLetters(spec) {
   return labels;
 }
 
+// Spawn from patches/bugs/defaults for input output portals.json:
+//   LMR / LR — 2gu wide, title shown, emoji alias (🎤 in / 🔊 out)
+//   M / L / R — 2gu wide, title hidden, no alias (jack letter is the name)
+// Height stays content-sized (header + jack rows). Do not pin defaultHeightGu.
+function nodeGraphPortalLaneSpawnDefaults(kind, spec) {
+  const multi = Array.isArray(spec?.ports) && spec.ports.length > 1;
+  const spawn = {
+    defaultWidthGu: 2,
+    defaultUi: {
+      buttonsHidden: true,
+      titleHidden: !multi,
+    },
+  };
+  if (multi) {
+    spawn.defaultAlias = kind === "outlet" ? "\u{1F50A}" : "\u{1F3A4}";
+  }
+  return spawn;
+}
+
 function nodeGraphPortalLaneDefinition(kind, spec) {
   const ports = spec.ports.slice();
   const letters = nodeGraphPortalLaneLetters(spec);
@@ -159,8 +178,7 @@ function nodeGraphPortalLaneDefinition(kind, spec) {
     chrome: "InletOutletLayout",
     planRole: isInlet ? "source" : "sink",
     planFreeRun: true,
-    defaultWidthGu: 4,
-    defaultUi: { buttonsHidden: true, titleHidden: true },
+    ...nodeGraphPortalLaneSpawnDefaults(isInlet ? "inlet" : "outlet", spec),
     hasFace: false,
     inputAliases: aliases,
     inputLabels,

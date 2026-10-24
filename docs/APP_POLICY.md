@@ -142,6 +142,7 @@ Only these live-audio types exist in the efficient build:
 | `passiveFilter` | Passive real-pole LP/BP/HP (native 6 dB/oct) |
 | `tb303Filter` | TB-303 diode-ladder style |
 | `flowerChildFilter` | Flower Child character filter |
+| `flowerChildFilterRev3` | Flower Child experiment: Hz Frequency + ƒ, res 0.8 pitch ref, Filter Morph Start/Full noise-band dither |
 | `yellowjacketFilter` | Yellowjacket character filter |
 | `superloveFilter` | SuperLove character filter |
 | `humanFilter` | Human character filter |
@@ -219,7 +220,7 @@ polyBlep → ladderFilter → softClipper → reverbEffect → pingPongDelay →
    phaseDisperse / quadrature / arp / hilbert / binaryClock / sinCos /
    chebyshev / elliptic /
    eqFilter / activeFilter / passiveFilter / tb303Filter /
-   flowerChildFilter / yellowjacketFilter / superloveFilter / humanFilter /
+   flowerChildFilter / flowerChildFilterRev3 / yellowjacketFilter / superloveFilter / humanFilter /
    resonatorFilter / combResonator / modeResonator /
    chaoticPhaseLockingFilter / inertialFilter /
    expAdsr / linearEnvelope / pluckEnvelope /
@@ -447,6 +448,8 @@ Plan and tracker: `docs/ENGINE_STATE_DISPLAY_PLAN.md`.
 - No mouse-following tooltips / `title` hover clutter.
 - No layout jitter from changing labels.
 - Calm idle chrome; earn brightness with state.
+- **Face choice switch** is a horizontal cell: `{ kind: "cells", params: [[key, label]], horizontal: true }`. Label left, value right, selected-slot rectangle, no divider strokes. Do not use face `kind: "slider"` (retired DOM row) or invent another switch. Short names that fit stay `kind: "choices"` buttons.
+- **Free / Latch** is the app-wide Recalc-on-Trigger control (`recalculateOnTrigger` / `updateOnTrigger`). Face it like Pulse Train: `{ kind: "choices", param: "recalculateOnTrigger", labels: ["Free", "Latch"] }`. Docs: `docs/FACE_CHOICE_SWITCH.md`.
 
 ---
 

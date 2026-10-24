@@ -61,7 +61,7 @@ for (let i = 0; i < TYPES.length; i += 1) {
     return {
       faceH: face.offsetHeight,
       specH: nodeGraphModuleFaceHeightPx(type, node),
-      sliders: [...el.querySelectorAll(".node-parameter-row:not(.node-face-slider-row) > .node-parameter-control")].filter((c) => c.getBoundingClientRect().height > 0).length,
+      sliders: [...el.querySelectorAll(".node-parameter-row > .node-parameter-control")].filter((c) => c.getBoundingClientRect().height > 0).length,
       dup: placed.length !== new Set(placed).size,
       missingKeys: visible.filter((k) => !placed.includes(k)),
       extra: placed.filter((k) => !visible.includes(k)),
@@ -116,12 +116,17 @@ for (let i = 0; i < TYPES.length; i += 1) {
     const catalog = await page.evaluate(({ t, key, k }) => String(nodeGraphModuleDefinitions[t].parameters.find((p) => p.key === key)?.choices?.[k] ?? ""), { t: TYPES[i], key: modelRow.param, k });
     check(`${TYPES[i]}: model button ${labels[k]} selects ${labels[k]}`, shown === labels[k] || shown === catalog, `shown "${shown}", stored ${JSON.stringify(await raw(id, modelRow.param))}`);
   }
-  const sliderRows = await page.evaluate((id) => [...document.querySelectorAll(`article[data-node="${id}"] .node-parameter-row.node-face-slider-row`)].map((r) => {
-    const c = (r.querySelector(".node-slider-readout") || r.querySelector(".node-parameter-control")).getBoundingClientRect();
-    return { key: r.dataset.param, x: c.left, w: c.width, y: c.top + c.height / 2, h: c.height };
-  }), id);
+  const sliderRows = ws.filter((w) => w.type === "cell").map((w) => ({
+    key: w.keys[0], x: w.x, w: w.w, y: w.y, h: 20,
+  }));
   for (const sw of sliderRows) {
-    check(`${TYPES[i]}: ${sw.key} shows its own slider row`, sw.w > 40 && sw.h > 10, JSON.stringify(sw));
+    const nChoices = await page.evaluate(({ id, key }) => {
+      const input = nodeGraphModuleFaceInput(document.querySelector(`article[data-node="${id}"]`), key);
+      return typeof parseNodeMetadataChoices === "function" && input?.dataset?.choices
+        ? parseNodeMetadataChoices(input.dataset.choices).length : 0;
+    }, { id, key: sw.key });
+    if (nChoices < 2) continue;
+    check(`${TYPES[i]}: ${sw.key} shows a horizontal choice switch`, sw.w > 40, JSON.stringify(sw));
     const l0 = await choiceLabel(id, sw.key);
     const swMax = await page.evaluate(({ id, key }) => { const n = nodeGraphModuleFaceInput(document.querySelector(`article[data-node="${id}"]`), key); return Number(n.value) >= Number(n.max); }, { id, key: sw.key });
     const swMin = await page.evaluate(({ id, key }) => { const n = nodeGraphModuleFaceInput(document.querySelector(`article[data-node="${id}"]`), key); return Number(n.value) <= Number(n.min); }, { id, key: sw.key });

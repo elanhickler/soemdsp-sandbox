@@ -7,9 +7,9 @@ import { fileURLToPath } from "node:url";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const defs = fs.readFileSync(path.join(root, "public", "node-graph-module-definitions.js"), "utf8");
-const b0 = defs.indexOf("\n  pulseTrain: {\n");
+const b0 = defs.search(/\n  pulseTrain: \{\r?\n/);
 if (b0 < 0) throw new Error("pulseTrain def missing");
-const next = /\n  [A-Za-z0-9_]+: \{\n/g;
+const next = /\n  [A-Za-z0-9_]+: \{\r?\n/g;
 next.lastIndex = b0 + 2;
 const b1 = next.exec(defs).index;
 const d = vm.runInNewContext("(" + defs.slice(b0 + "\n  pulseTrain: ".length, defs.lastIndexOf("}", b1) + 1) + ")", {});
@@ -24,10 +24,11 @@ const keys = Object.fromEntries((d.parameters || []).map((p) => [p.key, p]));
 const want = [
   { kind: "cells", params: [["count", "Count"], ["frequency", "Freq"], ["duty", "Duty"]] },
   { kind: "cells", params: [["curve", "Curve", "bipolar"], ["ampStart", "A Start"], ["ampEnd", "A End"], ["ampCurve", "A Crv", "bipolar"]] },
-  { kind: "slider", param: "pulseMode" },
+  { kind: "cells", params: [["pulseMode", "Fwd-Rev"]], horizontal: true },
+  { kind: "choices", param: "curvePolarity", labels: ["+", "\u2212"] },
   { kind: "choices", param: "mode", labels: ["One shot", "Loop"] },
   { kind: "choices", param: "recalculateOnTrigger", labels: ["Free", "Latch"] },
-  { kind: "slider", param: "wave" },
+  { kind: "cells", params: [["wave", "Shape"]], horizontal: true },
   { kind: "cells", params: [["morph", "Morph"], ["amplitude", "Amp"]] },
   { kind: "choices", param: "antialiasing", labels: ["Off", "Random", "Dither"] },
   { kind: "seed", param: "seed" },
@@ -36,7 +37,7 @@ const want = [
 check(d.layout === "pulseCurve" && d.displayType === "pulseTrainFace" && d.defaultDisplayMode === "face", "GL pulse-curve plate stays (layout pulseCurve / pulseTrainFace)");
 check(JSON.stringify(d.inputs) === JSON.stringify(["Trigger", "f"]), "jacks: Trigger, ƒ");
 check(JSON.stringify(d.outputs) === JSON.stringify(["Shape", "Trigger", "End"]), "jacks: Shape, Trigger, End");
-check(Array.isArray(d.face) && d.face.length === 9, `face has 9 rows (got ${d.face?.length})`);
+check(Array.isArray(d.face) && d.face.length === 10, `face has 10 rows (got ${d.face?.length})`);
 
 for (let i = 0; i < want.length; i += 1) {
   const row = d.face?.[i] || {};
@@ -44,6 +45,7 @@ for (let i = 0; i < want.length; i += 1) {
   check(row.kind === spec.kind, `row ${i} kind ${spec.kind}`);
   if (spec.params) {
     check(JSON.stringify(row.params) === JSON.stringify(spec.params), `row ${i} cells ${spec.params.map((c) => c[1]).join(" | ")}`);
+    if (spec.horizontal) check(row.horizontal === true, `row ${i} horizontal cell`);
     for (const cell of spec.params) check(Boolean(keys[cell[0]]), `param ${cell[0]} exists`);
   } else {
     check(row.param === spec.param, `row ${i} param ${spec.param}`);
@@ -57,15 +59,16 @@ for (let i = 0; i < want.length; i += 1) {
 
 check(d.face.every((row) => !JSON.stringify(row).match(/time|endDelay|endTime/i)), "face has no Time / End Delay seconds widgets");
 check(!keys.time && !keys.endDelay && !keys.endTime, "parameters stay Frequency + Duty (no Time / End Delay keys)");
-check(d.face.find((r) => r.param === "wave")?.kind === "slider", "Shape is a slider (10 grains)");
+check(d.face.find((r) => r.params?.[0]?.[0] === "wave")?.horizontal === true, "Shape is a horizontal cell switch (10 grains)");
 check(keys.wave?.choices?.length === 10, "Shape has 10 grains");
 check(keys.frequency?.unit === "Hz" && keys.duty?.label === "Pulse Duty", "Freq is Hz, Duty is Pulse Duty");
 check(keys.pulseMode?.label === "Fwd-Rev" && keys.pulseMode?.max === "1" && keys.pulseMode?.step === "any" && !keys.pulseMode?.choices, "Fwd-Rev is a 0..1 slider");
+check(keys.curvePolarity?.choices?.[0] === "+" && keys.curvePolarity?.choices?.[1] === "\u2212" && keys.curvePolarity?.defaultValue === "0", "Curve polarity is + / \u2212, default +");
 
 for (const page of ["index.html", "perform.html"]) {
   const html = fs.readFileSync(path.join(root, "public", page), "utf8");
-  check(/node-graph-module-definitions\.js\?v=pt-fwdrev-1/.test(html), `${page} cache-bust pt-fwdrev-1`);
-  check(/node-graph-pulse-train-display\.js\?v=pt-fwdrev-1/.test(html), `${page} cache-bust pt-fwdrev-1`);
+  check(/node-graph-module-definitions\.js\?v=pt-polarity-1/.test(html), `${page} cache-bust pt-polarity-1`);
+  check(/node-graph-pulse-train-display\.js\?v=pt-polarity-1/.test(html), `${page} cache-bust pt-polarity-1`);
 }
 
 const display = fs.readFileSync(path.join(root, "public", "node-graph-pulse-train-display.js"), "utf8");

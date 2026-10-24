@@ -155,6 +155,7 @@ When fixing: mark `fixed`, one-line what changed, run `python scripts\smoke_test
 | B-111 | see | fixed | Face widgets reset to default on Ctrl+mousedown instead of mouse-up |
 | B-112 | see | fixed | Band widget handles draw past the left/right widget edges |
 | B-113 | see | fixed | Face grid divider lines flicker with zoom (no 1px floor) |
+| B-114 | see | open | Flower Child Rev3 1D Trace OOM: Array buffer allocation failed |
 ---
 
 ## Inbox (unnumbered user reports)
@@ -1693,5 +1694,14 @@ Add `require_no_js_dsp()` to `scripts/smoke_test.py` (or `scripts/check_no_js_ds
 - Files: `public/node-graph-module-face.js`
 - What: New grid faces (stacked vertical sliders in a row, choice rows, etc.) have divider lines that flicker in and out while zooming. 1 face-px gaps/rects were not floored to 1 device pixel or snapped.
 - Fix: Hairlines use `nodeGraphRailGrid` (`t` ≥ 1 device px, `x`/`y` snap). Cell stacks leave a `hairFace` gap and draw the same hairline. Cache-bust `b113-hairline-1`.
+
+### B-114 — Flower Child Rev3 1D Trace OOM: Array buffer allocation failed
+- Status: open
+- Severity: see
+- Source: user 2026-10-24 (Argi) Desktop `ingest.txt`
+- Files: `public/node-graph-module-scope-sync.js` (`nodeGraphTraceDisplayMonoSyncBuffer`), `public/node-graph-module-scope-buffer-io.js` (`nodeGraphScopeRingAdvance`), `public/node-graph-module-scope-graph-query.js`
+- What: ~8×/s `RangeError: Array buffer allocation failed` while drawing `flowerChildFilterRev3` 1D Trace. Audio/params keep running.
+- Repro: Rev3 with Sync on and both Left and Right inputs fed (stereo in). Heap climbs until the tab cannot allocate another ring-sized Float32Array.
+- Fix shape: `monoSyncScratch` is keyed by `nodeGraphScopeBufferObjectId` of live ring *subarray views*. `nodeGraphScopeRingAdvance` swaps a new view every scope post, so each draw allocates a fresh ~10 s Float32Array and never drops the old ones. Key scratch by stable `node:port` (or stamp rings with `nodeGraphScopeBufferKey`) and reuse one buffer. Writeup: `docs/B-114_TRACE_MONO_SYNC_OOM.md`.
 
 

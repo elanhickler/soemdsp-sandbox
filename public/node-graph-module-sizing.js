@@ -1421,6 +1421,10 @@ function applyNodeGraphModuleLayout(article, patchNodeOrBands) {
       // stuck Keyboard/Sequencer faces until a full remount (Hide unused).
       child.style.gridRow = "auto";
       child.hidden = false;
+    } else if (id === "header" && !article.classList.contains("title-hidden")) {
+      // Title is shown: keep the header even if band math dropped a 0gu track.
+      child.style.gridRow = "1";
+      child.hidden = false;
     } else {
       child.style.gridRow = "auto";
       child.hidden = true;

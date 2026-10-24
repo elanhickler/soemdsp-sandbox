@@ -518,7 +518,7 @@
         width: 100%;
         min-width: 0;
         min-height: var(--sge-stack-h);
-        overflow: hidden;
+        overflow: visible;
       }
       .sge-color-widget-host.scw-mount {
         display: grid;
@@ -893,55 +893,78 @@
     const barWrap = root.querySelector("[data-sge-bar-wrap]");
     const bar = root.querySelector("[data-sge-bar]");
     const stopsRow = root.querySelector("[data-sge-stops]");
-    const posRow = root.querySelector("[data-sge-pos-row]");
-    const posInput = root.querySelector("[data-sge-pos]");
-    const posStepMinus = root.querySelector('[data-sge-pos-step="-1"]');
-    const posStepPlus = root.querySelector('[data-sge-pos-step="1"]');
+    const hueRow = root.querySelector("[data-sge-hue-row]");
+    const hueInput = root.querySelector("[data-sge-hue]");
     const listArea = root.querySelector("[data-sge-list]");
     const presetsRow = root.querySelector("[data-sge-presets]");
     const colorHost = root.querySelector("[data-sge-color-widget]");
     const addBtn = root.querySelector("[data-sge-add]");
     const removeBtn = root.querySelector("[data-sge-remove]");
+    const wrapHueDeg = (value) => {
+      const n = Number(value);
+      if (!Number.isFinite(n)) return 0;
+      return ((n % 360) + 360) % 360;
+    };
+    const formatHue = (deg) => {
+      const n = wrapHueDeg(deg);
+      if (typeof formatNodeGraphTraceDisplaySetting === "function") {
+        return formatNodeGraphTraceDisplaySetting(n);
+      }
+      return String(Math.round(n * 10) / 10);
+    };
+    const seedHue = wrapHueDeg(options.hueRotation);
+    if (hueInput) hueInput.value = formatHue(seedHue);
+    if (hueRow) hueRow.hidden = mono;
 
     const emit = () => {
       options.onChange?.(normalizeStops(stops));
     };
 
-    const formatPos = (t) => {
-      const n = clamp01(t);
-      if (typeof formatNodeGraphTraceDisplaySetting === "function") {
-        return formatNodeGraphTraceDisplaySetting(n);
-      }
-      return String(Number(n.toFixed(4)));
-    };
-
     /** Apply stop position (middle stops only); keep neighbors ordered. */
-    const applyPosValue = (rawT, { emitChange = true } = {}) => {
-      if (activeIndex <= 0 || activeIndex >= stops.length - 1) {
+    const applyPosValue = (rawT, { emitChange = true, index = activeIndex, paintCells = true } = {}) => {
+      if (index <= 0 || index >= stops.length - 1) {
         return false;
       }
-      const minT = stops[activeIndex - 1].t + 0.001;
-      const maxT = stops[activeIndex + 1].t - 0.001;
+      const minT = stops[index - 1].t + 0.001;
+      const maxT = stops[index + 1].t - 0.001;
       const t = Math.max(minT, Math.min(maxT, clamp01(Number(rawT))));
       if (!Number.isFinite(t)) {
         return false;
       }
-      stops[activeIndex].t = t;
-      const moved = stops[activeIndex];
+      stops[index].t = t;
+      const moved = stops[index];
       stops.sort((a, b) => a.t - b.t);
       activeIndex = stops.indexOf(moved);
       if (activeIndex < 0) {
         activeIndex = 1;
       }
       activePresetId = "";
-      if (posInput) {
-        posInput.value = formatPos(stops[activeIndex].t);
+      if (paintCells) {
+        renderBar();
+      } else {
+        paintBarFill();
+        paintStopPosLabels();
       }
-      renderBar();
       if (emitChange) {
         emit();
       }
       return true;
+    };
+
+    const paintBarFill = () => {
+      bar.style.background = stopsToCss(stops);
+    };
+
+    const paintStopPosLabels = () => {
+      stopsRow.querySelectorAll(".sge-stop-cell").forEach((cell) => {
+        const i = Number(cell.dataset.index);
+        const stop = stops[i];
+        const pos = cell.querySelector(".sge-stop-pos");
+        if (!stop || !pos) return;
+        pos.textContent = Number(stop.t).toFixed(2);
+        cell.title = `${stop.color} @ ${stop.t.toFixed(3)}`;
+        cell.dataset.active = String(i === activeIndex);
+      });
     };
 
     const destroyColorWidget = () => {
@@ -1053,27 +1076,79 @@
     };
 
     const renderBar = () => {
-      bar.style.background = stopsToCss(stops);
+      paintBarFill();
       stopsRow.replaceChildren();
       stops.forEach((stop, index) => {
+        const locked = index === 0 || index === stops.length - 1;
         const cell = document.createElement("button");
         cell.type = "button";
         cell.className = "sge-stop-cell";
         cell.dataset.index = String(index);
         cell.dataset.active = String(index === activeIndex);
+        cell.dataset.locked = locked ? "true" : "false";
         cell.title = `${stop.color} @ ${stop.t.toFixed(3)}`;
         const swatch = document.createElement("span");
         swatch.className = "sge-stop-swatch";
         swatch.style.background = stop.color;
         const pos = document.createElement("span");
         pos.className = "sge-stop-pos";
-        pos.textContent = stop.t.toFixed(2);
+        pos.textContent = Number(stop.t).toFixed(2);
+        pos.title = locked
+          ? "End stop stays at this position"
+          : "Drag to move this stop along the gradient";
         cell.append(swatch, pos);
         cell.addEventListener("click", (event) => {
+          if (cell.dataset.didDrag === "1") {
+            cell.dataset.didDrag = "0";
+            event.preventDefault();
+            return;
+          }
           event.preventDefault();
           activeIndex = index;
           renderBar();
           renderControls();
+        });
+        pos.addEventListener("pointerdown", (event) => {
+          if (event.button > 0) return;
+          const dragIndex = index;
+          if (activeIndex !== dragIndex) {
+            activeIndex = dragIndex;
+            paintStopPosLabels();
+            renderControls();
+          }
+          if (locked) return;
+          event.preventDefault();
+          event.stopPropagation();
+          const rect = barWrap.getBoundingClientRect();
+          const width = Math.max(1, rect.width);
+          cell.dataset.didDrag = "0";
+          const onMove = (moveEvent) => {
+            if (moveEvent.pointerId !== event.pointerId) return;
+            cell.dataset.didDrag = "1";
+            const t = clamp01((moveEvent.clientX - rect.left) / width);
+            applyPosValue(t, { emitChange: false, index: dragIndex, paintCells: false });
+          };
+          const onUp = (upEvent) => {
+            if (upEvent.pointerId !== event.pointerId) return;
+            window.removeEventListener("pointermove", onMove);
+            window.removeEventListener("pointerup", onUp);
+            window.removeEventListener("pointercancel", onUp);
+            try {
+              pos.releasePointerCapture?.(event.pointerId);
+            } catch {
+              // ignore
+            }
+            paintStopPosLabels();
+            emit();
+          };
+          try {
+            pos.setPointerCapture?.(event.pointerId);
+          } catch {
+            // ignore
+          }
+          window.addEventListener("pointermove", onMove);
+          window.addEventListener("pointerup", onUp);
+          window.addEventListener("pointercancel", onUp);
         });
         stopsRow.appendChild(cell);
       });
@@ -1081,17 +1156,6 @@
 
     const renderControls = () => {
       activeIndex = Math.max(0, Math.min(stops.length - 1, activeIndex));
-      const stop = stops[activeIndex];
-      const locked = activeIndex === 0 || activeIndex === stops.length - 1;
-      if (posInput) {
-        posInput.value = formatPos(stop.t);
-        posInput.disabled = locked;
-        posInput.readOnly = true;
-        posInput.classList.remove("trace-display-field-editing");
-      }
-      if (posStepMinus) posStepMinus.disabled = locked;
-      if (posStepPlus) posStepPlus.disabled = locked;
-      if (posRow) posRow.classList.toggle("is-disabled", locked);
       removeBtn.disabled = stops.length <= 2;
       listArea.value = stopsToHexList(stops);
       renderPresets();
@@ -1111,80 +1175,6 @@
       renderControls();
       emit();
     });
-
-    // -/+ step (app-wide 0Ã¢â‚¬Â¦1 unit quantum 0.1).
-    root.addEventListener("click", (event) => {
-      const btn = event.target?.closest?.("[data-sge-pos-step]");
-      if (!btn || btn.disabled || !posInput || posInput.disabled) {
-        return;
-      }
-      event.preventDefault();
-      event.stopPropagation();
-      const direction = Number(btn.getAttribute("data-sge-pos-step")) < 0 ? -1 : 1;
-      const base = Number(posInput.value);
-      const baseValue = Number.isFinite(base) ? base : 0;
-      let quantum = 0.1;
-      if (typeof nodeGraphMagnitudeStepperQuantum === "function") {
-        quantum = nodeGraphMagnitudeStepperQuantum(baseValue, direction);
-      }
-      if (quantum >= 1 - 1e-12) {
-        quantum = 0.1;
-      }
-      let next = baseValue + direction * quantum;
-      next = Math.round(next * 10) / 10;
-      applyPosValue(next);
-      renderControls();
-    });
-
-    /*
-     * Drag is handled app-wide (capture on display-settings popover):
-     *   beginNodeGraphUnitStepperDrag Ã¢â€ â€™ data-unit-stepper-drag / data-sge-pos
-     * Local pointerdown on the input never fires (text-protection stopPropagation).
-     * We only consume the value via input/change.
-     */
-    posInput?.addEventListener("input", () => {
-      if (!posInput || posInput.disabled) {
-        return;
-      }
-      applyPosValue(posInput.value, { emitChange: true });
-    });
-
-    // Double-click to type (app-wide stepper field pattern).
-    posInput?.addEventListener("dblclick", (event) => {
-      if (posInput.disabled) {
-        return;
-      }
-      posInput.readOnly = false;
-      posInput.classList.add("trace-display-field-editing");
-      posInput.focus();
-      posInput.select?.();
-      event.preventDefault();
-      event.stopPropagation();
-    });
-    const commitPosEdit = () => {
-      if (!posInput || posInput.readOnly) {
-        return;
-      }
-      applyPosValue(posInput.value);
-      posInput.readOnly = true;
-      posInput.classList.remove("trace-display-field-editing");
-      renderControls();
-    };
-    posInput?.addEventListener("keydown", (event) => {
-      if (!posInput.readOnly && event.key === "Enter") {
-        event.preventDefault();
-        commitPosEdit();
-        posInput.blur();
-      } else if (!posInput.readOnly && event.key === "Escape") {
-        event.preventDefault();
-        posInput.readOnly = true;
-        posInput.classList.remove("trace-display-field-editing");
-        renderControls();
-        posInput.blur();
-      }
-    });
-    posInput?.addEventListener("change", commitPosEdit);
-    posInput?.addEventListener("blur", commitPosEdit);
 
     addBtn.addEventListener("click", () => {
       // Always copy the *selected* stop color. Insert between that stop and its
@@ -1272,14 +1262,23 @@
         host.replaceChildren();
       },
       setStops(next) {
+        const keepIndex = activeIndex;
         stops = mono ? forceStopsGrayscale(next) : normalizeStops(next);
-        activeIndex = Math.max(0, stops.length - 1);
+        activeIndex = Math.max(0, Math.min(stops.length - 1, keepIndex));
         activePresetId = "";
         renderBar();
         renderControls();
       },
       getStops() {
         return mono ? forceStopsGrayscale(stops) : normalizeStops(stops);
+      },
+      setHueRotation(deg) {
+        if (!hueInput) return;
+        if (hueInput.classList.contains("trace-display-field-editing")
+          || hueInput.classList.contains("value-dragging")) {
+          return;
+        }
+        hueInput.value = formatHue(deg);
       },
     };
   }
@@ -1615,6 +1614,9 @@
       && host.dataset.sgeChannels === channelKey
     ) {
       active.setStops(stops);
+      if (typeof active.setHueRotation === "function") {
+        active.setHueRotation(settings?.backgroundHue);
+      }
       return active;
     }
     if (active?.destroy) {
@@ -1626,6 +1628,7 @@
     host.dataset.sgeChannels = channelKey;
     const editor = mountSharedGradientEditor(host, {
       stops,
+      hueRotation: settings?.backgroundHue,
       mono: channels === "bw",
       channels: channels === "bw" ? "bw" : "full",
       hint: profile.hint,

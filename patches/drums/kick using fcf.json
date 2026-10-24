@@ -256,7 +256,7 @@
           "choices": [
             "Clean",
             "Dirty",
-            "Rev3",
+            "Hard",
             "Downsampled"
           ],
           "choiceOriginMin": 0,

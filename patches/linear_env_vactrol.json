@@ -509,7 +509,7 @@
           "choices": [
             "Clean",
             "Dirty",
-            "Rev3",
+            "Hard",
             "Downsampled"
           ],
           "curveAmount": 0,

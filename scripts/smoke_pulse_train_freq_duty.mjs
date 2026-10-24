@@ -142,16 +142,18 @@ check((N.soemdsp_graph_version() | 0) >= 255, `graph version ${N.soemdsp_graph_v
 for (const pulseMode of [0, 0.25, 0.5, 1]) for (const count of [1, 2, 3, 4, 7]) for (const duty of [0.3, 0.5, 1]) {
   const r = run({ freq: 10, duty, count, pulseMode, seconds: 0.6 });
   const w = wraps(r);
-  const want = pulseMode > 0 && count > 1 ? 2 * count - 2 : count;
+  const want = pulseMode > 0 && count > 1
+    ? (pulseMode > 0.5 ? 2 * count - 2 : 2 * count - 1)
+    : count;
   for (let c = 0; c + 1 < w.length; c++) {
     const hits = []; for (let i = w[c]; i < w[c + 1]; i++) if (r.out[i] !== 0) hits.push(i - w[c]);
     if (hits.length !== want) throw new Error(`pulseMode ${pulseMode} Count ${count} Duty ${duty} cycle ${c}: ${hits.length} pulses (want ${want}) at ${hits}`);
   }
 }
-console.log("ok pulseTrain Loop: exactly Count pulses per cycle in Forward / dual 2N-2 (0.25 / 0.5 / 1), no wrap double");
+console.log("ok pulseTrain Loop: exactly Count pulses per cycle in Forward / dual 2N-1 (0.25 / 0.5) / 2N-2 (1), no wrap double");
 
-// 6) Reverse-Forward (Pulse Mode 3) = Forward-Reverse rotated half a trip: the
-// return leg then the out leg, turnaround pulse shared once, amps End -> Start -> End.
+// 6) Fwd-Rev 1.0 + polarity: peak at the right of the dual window (2*Time).
+// Loop still 2N-2, Duty still spans both legs.
 const PV = (await WebAssembly.instantiate(fs.readFileSync(process.env.PT_SINGLE || path.join(root, "native_modules", "pulse_train", "pulse_train.wasm")), { env: {} })).instance.exports;
 const prev = (count, pulseMode, loop, time = 0.05, curve = 3, a0 = 1, a1 = 0.2, ac = 0) => {
   const n = PV.soemdsp_pulse_train_preview(count, time, curve, a0, a1, ac, 1, loop, pulseMode, 0) | 0;
@@ -163,56 +165,41 @@ const fnv = (arr) => { let h = 0x811c9dc5; const b = new Uint8Array(Float64Array
 if (!process.env.PT_PRINT_HASH) {
   const E = 0.05;
   for (const curve of [3, 0, -2]) for (const count of [1, 2, 3, 5, 9]) {
-    // One shot: 2N-1 pulses, Forward-Reverse times rotated by peakTime (circular wrap).
-    const fr = prev(count, 0.5, 0, E, curve), rf = prev(count, 1, 0, E, curve), N = count;
-    const want1 = N > 1 ? 2 * N - 1 : 1;
-    if (rf.n !== want1) throw new Error(`RevFwd one shot Count ${N}: ${rf.n} pulses (want ${want1})`);
+    const rf = prev(count, 1, 0, E, curve), N = count;
+    const want1 = N > 1 ? 2 * N - 2 : 1;
+    if (rf.n !== want1) throw new Error(`Fwd-Rev 1.0 one shot Count ${N}: ${rf.n} pulses (want ${want1})`);
     if (N > 1) {
-      const shift = fr.t[N - 1];
-      const wrapped = fr.t.map((t, i) => {
-        let x = t - shift;
-        if (x < 0) x += 2 * E;
-        return { t: x, a: fr.a[i], i };
-      }).sort((a, b) => a.t - b.t || a.i - b.i);
-      if (rf.t[0] !== 0) throw new Error(`RevFwd one shot Count ${N}: peak not at 0`);
-      if (Math.abs(rf.a[0] - 0.2) > 1e-12) throw new Error(`RevFwd one shot first amp ${rf.a[0]}`);
-      for (let j = 0; j < rf.n; j++) {
-        if (Math.abs(rf.t[j] - wrapped[j].t) > 1e-12 || rf.a[j] !== wrapped[j].a) {
-          throw new Error(`RevFwd one shot Count ${N} curve ${curve} pulse ${j}: t ${rf.t[j]} a ${rf.a[j]} (want ${wrapped[j].t} / ${wrapped[j].a})`);
-        }
-        if (j > 0 && !(rf.t[j] >= rf.t[j - 1] - 1e-12)) throw new Error(`RevFwd one shot times not ordered at ${j}`);
+      const peakI = rf.a.indexOf(Math.max(...rf.a));
+      if (Math.abs(rf.t[peakI] - 2 * E) > 1e-9) throw new Error(`Fwd-Rev 1.0 one shot Count ${N}: peak t ${rf.t[peakI]} want ${2 * E}`);
+      for (let j = 1; j < rf.n; j++) {
+        if (!(rf.t[j] >= rf.t[j - 1] - 1e-12)) throw new Error(`Fwd-Rev 1.0 one shot times not ordered at ${j}`);
       }
     }
-    // Loop: 2N-2 pulses in [0, 2*Time), cyclic gaps = Forward-Reverse gaps rotated N-1, no wrap duplicate.
-    const frL = prev(count, 0.5, 1, E, curve), rfL = prev(count, 1, 1, E, curve);
+    const rfL = prev(count, 1, 1, E, curve);
     const wantL = N > 1 ? 2 * N - 2 : 1;
-    if (rfL.n !== wantL) throw new Error(`RevFwd Loop Count ${N}: ${rfL.n} pulses (want ${wantL})`);
+    if (rfL.n !== wantL) throw new Error(`Fwd-Rev 1.0 Loop Count ${N}: ${rfL.n} pulses (want ${wantL})`);
     if (N > 1) {
       const gaps = (t) => t.map((x, i) => (i + 1 < t.length ? t[i + 1] : 2 * E) - x);
-      const gf = gaps(frL.t), gr = gaps(rfL.t), L = wantL;
+      const gr = gaps(rfL.t), L = wantL;
       for (let j = 0; j < L; j++) {
-        const k = (j + N - 1) % L;
-        if (Math.abs(gr[j] - gf[k]) > 1e-12 || rfL.a[j] !== frL.a[k]) throw new Error(`RevFwd Loop Count ${N} curve ${curve} gap ${j}: ${gr[j]} vs ${gf[k]}`);
-        if (!(gr[j] > 0)) throw new Error(`RevFwd Loop Count ${N}: zero gap (duplicate) at ${j}`);
+        if (!(gr[j] > 0)) throw new Error(`Fwd-Rev 1.0 Loop Count ${N}: zero gap (duplicate) at ${j}`);
       }
-      if (!(rfL.t[0] === 0 && rfL.t[L - 1] < 2 * E)) throw new Error(`RevFwd Loop range ${rfL.t}`);
-      // (Loop amps follow Forward-Reverse Loop: the turnaround is u = (N-1)/N, as in Forward Loop.)
+      if (!(rfL.t[0] >= 0 && rfL.t[L - 1] < 2 * E)) throw new Error(`Fwd-Rev 1.0 Loop range ${rfL.t}`);
     }
   }
-  console.log("ok pulseTrain Reverse-Forward: One shot 2N-1 / Loop 2N-2 (no wrap duplicate), timing = Forward-Reverse rotated by peakTime");
-  // Audio Loop: Reverse-Forward cycle = 1/f with Duty spanning both legs.
+  console.log("ok pulseTrain Fwd-Rev 1.0: One shot 2N-2 peak at 2*Time / Loop 2N-2 (no wrap duplicate)");
   const r = run({ freq: 10, duty: 0.5, pulseMode: 1 });
   const w = wraps(r);
-  check(w.length >= 2 && Math.abs(w[1] - w[0] - SR / 10) <= 1 && Math.abs(r.ramp[r.ramp.length - 1] - 0.025) < 1e-12, `Reverse-Forward Duty 0.5 at 10 Hz: cycle ${w[1] - w[0]} samples, Time per leg 0.025 s`);
+  check(w.length >= 2 && Math.abs(w[1] - w[0] - SR / 10) <= 1 && Math.abs(r.ramp[r.ramp.length - 1] - 0.025) < 1e-12, `Fwd-Rev 1.0 Duty 0.5 at 10 Hz: cycle ${w[1] - w[0]} samples, Time per leg 0.025 s`);
   const rc = run({ freq: 4, duty: 0.75, count: 6, pulseMode: 1 });
   check(rc.saw[rc.saw.length - 1] === 6.5, `face __Count ${rc.saw[rc.saw.length - 1]} (6 + 0.5*1)`);
 }
-// 7) Forward / Forward-Reverse bit-identical to pulse_train v20 / graph 265 (recorded fingerprints).
+// 7) Forward bit-identical to v20. Fwd-Rev 0.5 is prefix attack (v26).
 {
   const got = [];
   for (const pulseMode of [0, 0.5]) for (const loop of [0, 1]) for (const count of [1, 2, 5, 9]) { const p = prev(count, pulseMode, loop); got.push(fnv([...p.t, ...p.a])); }
   for (const pulseMode of [0, 0.5]) for (const wave of [0, 2]) got.push(fnv(run({ freq: 7, duty: 0.6, count: 5, pulseMode, wave, seconds: 0.4 }).out));
   if (process.env.PT_PRINT_HASH) console.log(JSON.stringify(got));
-  const want = [2613946904,585445218,2660523023,591222594,2613946904,3606255894,692371551,651742738,2613946904,2451413586,4282807406,533559120,2613946904,3606255894,3814978235,3590162378,2589047096,761726603,4132730213,2352623202];
-  if (want) check(got.every((h, i) => h === want[i]), `Forward / Forward-Reverse bit-identical to v20 (${got.length} fingerprints)`);
+  const want = [2613946904,585445218,2660523023,591222594,2613946904,3606255894,692371551,651742738,2613946904,3162934992,3207331138,3035951323,2613946904,84195473,545149962,222061623,2589047096,761726603,4035087320,3400310033];
+  if (want) check(got.every((h, i) => h === want[i]), `Forward / prefix Fwd-Rev fingerprints v26 (${got.length} fingerprints)`);
 }

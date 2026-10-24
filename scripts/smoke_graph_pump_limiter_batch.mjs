@@ -90,6 +90,99 @@ function view(ptr, n) {
   if (!(gainMin < 0.99)) throw new Error(`pumpLimiter gainMin=${gainMin} expected GR`);
   if (!(envMax > 0.01)) throw new Error(`pumpLimiter envMax=${envMax} expected env`);
   console.log(`pumpLimiter ok peak=${peak.toFixed(3)} gainMin=${gainMin.toFixed(3)} envMax=${envMax.toFixed(3)}`);
+  must("soemdsp_graph_destroy")(g);
+}
+
+{
+  const g = create() | 0;
+  setSr(g, 48000);
+  const hCar = 0x9211 >>> 0;
+  const hKey = 0x9212 >>> 0;
+  const hLim = 0x9213 >>> 0;
+  const hOut = 0x9214 >>> 0;
+  const PORT_MORPH = 22;
+  if ((add(g, hCar, TYPE_POLY) | 0) !== 0) throw new Error("sc car");
+  if ((add(g, hKey, TYPE_POLY) | 0) !== 0) throw new Error("sc key");
+  if ((add(g, hLim, TYPE_PUMP) | 0) !== 0) throw new Error("sc lim");
+  if ((add(g, hOut, TYPE_OUT) | 0) !== 0) throw new Error("sc out");
+  if ((connect(g, hCar, PORT_MONO, hLim, PORT_MONO) | 0) !== 0) throw new Error("sc in");
+  if ((connect(g, hKey, PORT_MONO, hLim, PORT_MORPH) | 0) !== 0) throw new Error("sc keyc");
+  if ((connect(g, hLim, PORT_MONO, hOut, PORT_MONO) | 0) !== 0) throw new Error("sc outc");
+  setParam(g, hCar, PARAM_FREQ, 220);
+  setParam(g, hCar, PARAM_AMP, 0.05);
+  setParam(g, hKey, PARAM_FREQ, 60);
+  setParam(g, hKey, PARAM_AMP, 1);
+  setParam(g, hLim, PARAM_GAIN_DB, 12);
+  setParam(g, hLim, PARAM_LANE_BIAS2, 0);
+  setParam(g, hLim, PARAM_WIDTH, 12);
+  setParam(g, hLim, PARAM_MODE, 0);
+  setParam(g, hLim, PARAM_OFFSET_MS, 0);
+  setParam(g, hLim, PARAM_LANE_BIAS1, 80);
+  setParam(g, hLim, PARAM_AMP, 1);
+  if ((compile(g) | 0) !== 0) throw new Error("sc compile");
+  snap(g);
+  let gainMin = 1;
+  let envMax = 0;
+  for (let q = 0; q < 80; q++) {
+    process(g, 128);
+    const gn = view(portPtr(g, hLim, PORT_GAIN) | 0, 128);
+    const en = view(portPtr(g, hLim, PORT_ENV) | 0, 128);
+    for (let i = 0; i < 128; i++) {
+      gainMin = Math.min(gainMin, gn[i]);
+      envMax = Math.max(envMax, en[i]);
+    }
+  }
+  if (!(envMax > 0.5)) throw new Error(`pumpLimiter SC envMax=${envMax} expected key`);
+  if (!(gainMin < 0.5)) throw new Error(`pumpLimiter SC gainMin=${gainMin} expected GR from Input Gain on Sidechain`);
+  console.log(`pumpLimiter sidechain ok gainMin=${gainMin.toFixed(3)} envMax=${envMax.toFixed(3)}`);
+  must("soemdsp_graph_destroy")(g);
+}
+
+{
+  // Wired silent key must not let a hot In move Env/Gain (audio ceiling).
+  const g = create() | 0;
+  setSr(g, 48000);
+  const hCar = 0x9221 >>> 0;
+  const hKey = 0x9222 >>> 0;
+  const hLim = 0x9223 >>> 0;
+  const hOut = 0x9224 >>> 0;
+  const PORT_MORPH = 22;
+  if ((add(g, hCar, TYPE_POLY) | 0) !== 0) throw new Error("sc2 car");
+  if ((add(g, hKey, TYPE_POLY) | 0) !== 0) throw new Error("sc2 key");
+  if ((add(g, hLim, TYPE_PUMP) | 0) !== 0) throw new Error("sc2 lim");
+  if ((add(g, hOut, TYPE_OUT) | 0) !== 0) throw new Error("sc2 out");
+  if ((connect(g, hCar, PORT_MONO, hLim, PORT_MONO) | 0) !== 0) throw new Error("sc2 in");
+  if ((connect(g, hKey, PORT_MONO, hLim, PORT_MORPH) | 0) !== 0) throw new Error("sc2 keyc");
+  if ((connect(g, hLim, PORT_MONO, hOut, PORT_MONO) | 0) !== 0) throw new Error("sc2 outc");
+  setParam(g, hCar, PARAM_FREQ, 220);
+  setParam(g, hCar, PARAM_AMP, 1);
+  setParam(g, hKey, PARAM_FREQ, 60);
+  setParam(g, hKey, PARAM_AMP, 0);
+  setParam(g, hLim, PARAM_GAIN_DB, 12);
+  setParam(g, hLim, PARAM_LANE_BIAS2, -18);
+  setParam(g, hLim, PARAM_WIDTH, 12);
+  setParam(g, hLim, PARAM_MODE, 1);
+  setParam(g, hLim, PARAM_TIME_NUM, 5);
+  setParam(g, hLim, PARAM_OFFSET_MS, 0);
+  setParam(g, hLim, PARAM_LANE_BIAS1, 80);
+  setParam(g, hLim, PARAM_AMP, 1);
+  if ((compile(g) | 0) !== 0) throw new Error("sc2 compile");
+  snap(g);
+  let gainMin = 1;
+  let envMax = 0;
+  for (let q = 0; q < 80; q++) {
+    process(g, 128);
+    const gn = view(portPtr(g, hLim, PORT_GAIN) | 0, 128);
+    const en = view(portPtr(g, hLim, PORT_ENV) | 0, 128);
+    for (let i = 0; i < 128; i++) {
+      gainMin = Math.min(gainMin, gn[i]);
+      envMax = Math.max(envMax, en[i]);
+    }
+  }
+  if (!(envMax < 0.05)) throw new Error(`pumpLimiter SC-only envMax=${envMax} expected silent key`);
+  if (!(gainMin > 0.9)) throw new Error(`pumpLimiter SC-only gainMin=${gainMin} In must not key GR`);
+  console.log(`pumpLimiter sidechain exclusive ok gainMin=${gainMin.toFixed(3)} envMax=${envMax.toFixed(3)}`);
+  must("soemdsp_graph_destroy")(g);
 }
 
 if ((version() | 0) < 61) throw new Error(`graph version ${version()} expected >= 61`);

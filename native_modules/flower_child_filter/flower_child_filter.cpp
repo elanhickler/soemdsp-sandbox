@@ -37,7 +37,7 @@
 //     Rev2 (unlike Rev1) samples this curve at the *frequency* slider
 //     position, not at resonance.
 //
-// mode 2 (Rev3): a different oscillator scheme entirely -- an "ellipsoid"
+// mode 2 (Hard): a different oscillator scheme entirely -- an "ellipsoid"
 //   waveshaper on a bipolar phasor value, driven by 5 independent 4-node
 //   resonance-shaping curves (phase-mod amount, sine amplitude, sine-to-
 //   square morph, clip level, noise reduction), through two cascaded
@@ -113,7 +113,7 @@ static inline double evalResonanceGraph(double x, double n0y, double breakpoint,
   return g.getValue(x);
 }
 
-// Rev3's shaping curves are literal soemdsp::utility::Graph node lists
+// Hard's shaping curves are literal soemdsp::utility::Graph node lists
 // (shape 1=RATIONAL, 2=EXPONENTIAL, else LINEAR, matching Graph::Shape's
 // enum ordinals) -- built directly as a Graph instead of a bespoke walker.
 struct GraphNode {
@@ -191,7 +191,7 @@ struct FlowerChildState {
   OnePoleStage stage2;
   double selfMod;
   unsigned int rngState;
-  // Rev3 (mode 2) only:
+  // Hard (mode 2) only:
   double rev3Feedback;
   double rev3Lpf1Y1, rev3Lpf2Y1;  // one-pole IIT stages
   // Downsampled (mode 3) only:
@@ -251,7 +251,7 @@ extern "C" double soemdsp_flower_child_filter_sample(
   double frequency,   // 0..1 normalized slider, matches original
   double resonance,   // 0..1
   double chaosAmount,  // 0..1
-  int mode,            // 0=Clean(Rev1), 1=Dirty(Rev2), 2=Rev3, 3=Downsampled
+  int mode,            // 0=Clean(Rev1), 1=Dirty(Rev2), 2=Hard, 3=Downsampled
   double sampleRate
 ) {
   if (handle < 1 || handle > kMaxInstances) return 0.0;
@@ -263,7 +263,7 @@ extern "C" double soemdsp_flower_child_filter_sample(
   const double chaos = clamp(chaosAmount, 0.0, 1.0);
 
   if (mode == 2) {
-    // Rev3
+    // Hard
     const double masterPitch = map01(freqNorm, -120.0, 105.0);
     const double masterFrequency = midi_to_hz(masterPitch);
     const double fmAmount = midi_to_hz(-48.377);

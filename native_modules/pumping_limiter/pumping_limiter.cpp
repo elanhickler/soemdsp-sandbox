@@ -130,8 +130,10 @@ extern "C" double soemdsp_pumping_limiter_sample(
   if (la < 0) la = 0;
   if (la > st.cap - 1) la = st.cap - 1;
 
+  // Input Gain is before detect (audio or Sidechain). A wired key used to
+  // skip it, so Threshold 0 dB + a 0 dBFS Sidechain never pumped.
   const double detectPeak = hasSidechain
-    ? dsp_fabs(safe(sidechain))
+    ? dsp_fabs(safe(sidechain) * inGain)
     : maxd(dsp_fabs(lIn), dsp_fabs(rIn));
   const double attMs = maxd(0.0, safe(attackMs));
   double relMs = safe(releaseMs);
@@ -207,7 +209,9 @@ extern "C" double soemdsp_pumping_limiter_sample(
   dR *= g;
   // Same drop, remembered. Otherwise the next sample still has the old
   // higher gain and the level jumps back up above the sample just clamped.
-  if (holdCeiling) {
+  // Attack 0 makes holdCeiling true even with 0 ms look-ahead, so this
+  // audio peak clamp used to duck Gain from In while Sidechain was wired.
+  if (holdCeiling && !hasSidechain) {
     const double peakOut = maxd(dsp_fabs(dL), dsp_fabs(dR));
     if (peakOut > thresh && peakOut > 0.0) {
       const double cut = thresh / peakOut;
@@ -250,6 +254,6 @@ extern "C" double soemdsp_pumping_limiter_env(int handle) {
   return gPool[handle - 1].lastEnv;
 }
 
-extern "C" int soemdsp_pumping_limiter_version() { return 4; } // 4: attack finishes inside the look-ahead
+extern "C" int soemdsp_pumping_limiter_version() { return 6; } // 6: SC wired: no audio-peak Gain ceiling
 extern "C" const char* soemdsp_pumping_limiter_metadata_json() { return kMetadataJson; }
 extern "C" int soemdsp_pumping_limiter_metadata_json_size() { return sizeof(kMetadataJson) - 1; }

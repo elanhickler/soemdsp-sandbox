@@ -2050,13 +2050,19 @@ const nodeGraphModuleStoreCatalog = Object.freeze({
   },
   flowerChildFilter: {
     category: "analogFilter",
-    description: "Character self-osc filter (clean/dirty/rev/downsample modes).",
+    description: "Character self-osc filter (clean/dirty/hard/downsample modes).",
     label: "Flower Child Filter",
     notes: ["self-oscillating", "4 modes", "feedback FM", "analog"],
   },
+  flowerChildFilterRev3: {
+    category: "analogFilter",
+    description: "Flower Child experiment: Hz Frequency, Resonance 0.8 pitch reference, Robin cycle-length dither on the inner FM phasor. Clean / Dirty / Hard / Downsampled.",
+    label: "Flower Child Filter Rev3",
+    notes: ["flower child", "rev3", "dither", "self-oscillating", "feedback FM", "analog", "native"],
+  },
   pulseTrain: {
     category: "clock",
-    description: "On trigger, a train of pulses (or grains: Gate/Saw/Ramp/Tri/Sine from one pulse to the next) that starts fast and stretches out. Shape out is the grain, Trigger out is always impulses, End fires at the last pulse. Fwd-Rev 0..1 walks the peak from Forward through out-and-back to Reverse-Forward. Antialiasing Off/Random/Dither.",
+    description: "On trigger, a train of pulses (or grains: Gate/Saw/Ramp/Tri/Sine from one pulse to the next) that starts fast and stretches out. Shape out is the grain, Trigger out is always impulses, End fires at the last pulse. Fwd-Rev 0..1 adds an attack and walks the peak right; Polarity flips that. Antialiasing Off/Random/Dither.",
     label: "Pulse Train",
     notes: ["trigger", "pulse train", "slowing down", "growing gaps", "bouncing ball", "End", "native"],
   },
@@ -3515,6 +3521,10 @@ const nodeGraphJsSourceEntriesByType = Object.freeze({
   flowerChildFilter: {
     source: "public/modules/flowerChildFilter/flower-child-filter-worklet-evaluator.js",
     sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/flowerChildFilter/flower-child-filter-worklet-evaluator.js",
+  },
+  flowerChildFilterRev3: {
+    source: "native_modules/flower_child_filter_rev3/flower_child_filter_rev3.cpp",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/native_modules/flower_child_filter_rev3/flower_child_filter_rev3.cpp",
   },
   fractalBrownianNoise: {
     source: "public/modules/fractalBrownianNoise/fractal-brownian-noise-worklet-evaluator.js",

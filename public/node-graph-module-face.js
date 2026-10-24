@@ -6,17 +6,19 @@
 // Look: soundemote-dev experiments/condensed-widgets "Condensed 5".
 //
 // Row kinds (any module opts in with a `face` list in its definition):
-//   choices   { param, labels }                 inline buttons
+//   choices   { param, labels }                 labeled button row (short names that fit)
 //   fraction  { num, den, mode, modeLabels, cell? } musical division: n / d + Normal/Dotted/Triplet (+ optional cell)
 //   lfoStyles { param, labels, seedParam }      buttons with waveform snips
 //   cells     { params: [[key, label, "bipolar"?]...], horizontal } fill sliders (bipolar fills from the middle)
+//     Choice switch (app-wide): { kind: "cells", params: [[key, label]], horizontal: true }
+//     Label left, value right, selected-slot rectangle, no divider strokes.
+//     Never use a DOM slider row for a face choice. leftover kind: "slider" is upgraded to this.
 //   filter    { hpf, lpf, hpfPoles, lpfPoles }  HPF/LPF handles over the response curve
 //   band      { lo, hi, label }                 two-ended range; drag an end or the span
 //   span      { handles: [key...] }             N ordered handles on one bar (superdot falloff law): on a handle
 //                                               drags it alone, between two drags that pair; handles stop at
 //                                               their neighbours (no crossing, no pushing)
 //   seed      { param }                         [code][die][+][-]
-//   slider    { param }                         the param's own slider row, in place (choices too many for buttons)
 
 const NODE_GRAPH_FACE_JACK_SLOT_PX = 17;
 const NODE_GRAPH_FACE_CELL_DRAG_PX = 220;
@@ -71,15 +73,33 @@ const NodeGraphFaceInk = Object.freeze({
   lfoOff: "#6a7a90",
 });
 
+/** Retired face kind "slider" (old DOM choice row) becomes the horizontal-cell switch. */
+function nodeGraphModuleFaceUpgradeSliderRow(row, type) {
+  if (row?.kind !== "slider" || !row.param) return row;
+  const p = (nodeGraphModuleDefinitions?.[type]?.parameters || []).find((item) => item.key === row.param);
+  return {
+    kind: "cells",
+    params: [[row.param, String(p?.label || row.param)]],
+    horizontal: true,
+    h: row.h,
+  };
+}
+
+function nodeGraphModuleFaceParamChoiceCount(input) {
+  if (!input?.dataset?.choices || typeof parseNodeMetadataChoices !== "function") return 0;
+  return parseNodeMetadataChoices(input.dataset.choices).length;
+}
+
 /** Face rows for a type. With a patch node, hidden params drop out and their rows close up. */
 function nodeGraphModuleFaceSpec(type, node = null) {
   const face = nodeGraphModuleDefinitions?.[type]?.face;
   if (!Array.isArray(face) || !face.length) return null;
-  if (!node || typeof nodeGraphParameterEffectiveVisible !== "function") return face;
+  const mapped = face.map((row) => nodeGraphModuleFaceUpgradeSliderRow(row, type));
+  if (!node || typeof nodeGraphParameterEffectiveVisible !== "function") return mapped;
   const defs = nodeGraphModuleDefinitions[type]?.parameters || [];
   const shown = (key) => nodeGraphParameterEffectiveVisible(defs.find((p) => p.key === key), node.paramMeta?.[key]);
   const rows = [];
-  for (const row of face) {
+  for (const row of mapped) {
     if (row.kind === "cells") {
       const params = row.params.filter((cell) => shown(cell[0]));
       if (params.length) rows.push(params.length === row.params.length ? row : { ...row, params });
@@ -320,20 +340,6 @@ function layoutNodeGraphModuleFace(article) {
   for (const row of spec) {
     const h = nodeGraphModuleFaceRowHeight(row);
     const keys = nodeGraphModuleFaceRowParams(row);
-    if (row.kind === "slider") {
-      // The original slider row, shown in place: it keeps its own control, jacks, drag and undo.
-      placed.add(row.param);
-      const ins = nodeGraphModuleFaceRowInset(article)(row);
-      for (const el of body.querySelectorAll(`.node-parameter-row[data-param="${CSS.escape(row.param)}"]`)) {
-        el.classList.add("node-face-slider-row");
-        el.style.top = `${y}px`;
-        el.style.height = `${h}px`;
-        el.style.left = `${ins.l}px`;
-        el.style.right = `${ins.r}px`;
-      }
-      y += h;
-      continue;
-    }
     keys.forEach((key, i) => {
       placed.add(key);
       const slot = h / keys.length;
@@ -593,7 +599,12 @@ function beginNodeGraphModuleFaceGesture(article, face, spec, event) {
   };
   let move = null;
   if (wd.type === "cell") {
-    const t0 = nodeGraphModuleFaceTravel(input);
+    const choiceN = nodeGraphModuleFaceParamChoiceCount(input);
+    const choiceSwitch = wd.horizontal && choiceN > 1;
+    // Choice switch: click the slot. Continuous cell: drag from the current value.
+    const t0 = choiceSwitch
+      ? Math.max(0, Math.min(1, (p.x - wd.x) / Math.max(1, wd.w)))
+      : nodeGraphModuleFaceTravel(input);
     // Like every slider: up or right raises, down or left lowers.
     move = (ev) => {
       const { dx, dy } = travel(ev);
@@ -966,8 +977,16 @@ function nodeGraphModuleFaceDrawGl(batch, el, w, ox, oy, z) {
         nodeGraphModuleFaceDrawOwnedStripes(batch, ox + (wd.x + gap) * z, oy + top * z, cw * z, ch * z, z);
       }
       if (wd.horizontal) {
-        // Horizontal slider: fills left to right, label left, value right.
-        rect(wd.x + gap, top, t * cw, ch, ink.cellValueFill);
+        // Horizontal cell: label left, value right. Choice switch: selected-slot
+        // rectangle, no divider strokes. Continuous params fill left to right.
+        const choiceN = nodeGraphModuleFaceParamChoiceCount(input);
+        if (choiceN > 1) {
+          const idx = Math.max(0, Math.min(choiceN - 1, Math.round(nodeGraphModuleFaceValue(input) - Number(input.min || 0))));
+          const slot = cw / choiceN;
+          rect(wd.x + gap + idx * slot, top, slot, ch, ink.cellValueFill);
+        } else {
+          rect(wd.x + gap, top, t * cw, ch, ink.cellValueFill);
+        }
         nodeGraphModuleFaceText(batch, wd.label, ox + (wd.x + gap + 6) * z, oy + cy * z, 12.6 * z, ink.label, { align: "left" });
         nodeGraphModuleFaceText(batch, nodeGraphModuleFaceValueText(input), ox + (wd.x + wd.w - 6) * z, oy + cy * z, 13.8 * z, ink.value, { align: "right" });
       } else {

@@ -17,13 +17,16 @@ const nodeGraphRobinSinepulseFaceDisplaySettingsDefaults = Object.freeze({
   dotSaturation: 0,
   dotThickness: 0,
   pixelDensity: 1,
-  faceView: "envelopeUnipolar",
+  faceView: "spectrogram",
 });
 
 function nodeGraphRobinSinepulseFaceView(look) {
-  const view = String(look?.faceView || "envelopeUnipolar");
-  if (view === "envelopeBipolar" || view === "spectrogram") return view;
-  return "envelopeUnipolar";
+  const view = String(look?.faceView || "");
+  if (view === "envelopeBipolar") return "envelopeBipolar";
+  if (view === "envelopeUnipolar" || view === "envelope" || view === "db" || view === "dbLog" || view === "pitch") {
+    return "envelopeUnipolar";
+  }
+  return "spectrogram";
 }
 
 function normalizeNodeGraphRobinSinepulseFaceSettings(settings = {}) {
@@ -245,14 +248,19 @@ const nodeGraphRobinSinepulseGlStates = new WeakMap();
 
 function nodeGraphRobinSinepulseGlEnsure(canvas) {
   if (!canvas) return null;
-  const picture = typeof nodeGraphPictureDevice === "function" ? nodeGraphPictureDevice() : null;
+  let picture = null;
+  try {
+    picture = typeof nodeGraphPictureDevice === "function" ? nodeGraphPictureDevice() : null;
+  } catch {
+    return null;
+  }
   let state = nodeGraphRobinSinepulseGlStates.get(canvas);
+  if (state?.failed) return state;
   if (state?.gl && !state.lost && !state.gl.isContextLost() && picture?.gl === state.gl && state.specProgram) {
     return state;
   }
   const gl = picture?.gl || null;
   if (!gl || typeof SoemGl === "undefined") {
-    nodeGraphRobinSinepulseGlStates.set(canvas, { failed: true });
     return null;
   }
   const program = SoemGl.link(gl, NODE_GRAPH_SINEPULSE_CURVE_VS, NODE_GRAPH_SINEPULSE_CURVE_FS, "robin-sinepulse-display.js:view-3");
@@ -483,12 +491,13 @@ function drawNodeGraphRobinSinepulseFace(section) {
   }
   canvas.style.imageRendering = density < 0.999 ? "pixelated" : "";
   const state = nodeGraphRobinSinepulseGlEnsure(canvas);
-  if (!state?.gl) {
+  if (state?.failed) {
     if (typeof nodeGraphDisplayGlFailed === "function") {
-      nodeGraphDisplayGlFailed(canvas, "robin sinepulse face: no shared GL device");
+      nodeGraphDisplayGlFailed(canvas, "robin sinepulse face: GL program failed");
     }
     return;
   }
+  if (!state?.gl) return;
   const field = nodeGraphRobinSinepulseField(section, node);
   if (!field) {
     nodeGraphRobinSinepulsePreviewLoad();

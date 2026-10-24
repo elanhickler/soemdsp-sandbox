@@ -14868,36 +14868,14 @@ body.node-screen-solo-active .node-screen-solo-face.node-sample-waveform-display
   display: none;
 }
 
-/* Portal inlet/outlet compact tiles. */
-.dsp-node.portal-inlet-layout > .dsp-node-header,
-.dsp-node.portal-outlet-layout > .dsp-node-header,
+/* InletOutletLayout portals: no param body. Title bar follows .title-hidden
+   like every other module — do not force-hide .dsp-node-header. Hide In/Out
+   still drops the IO strip. */
 .dsp-node.portal-inlet-layout > .dsp-node-body,
 .dsp-node.portal-outlet-layout > .dsp-node-body,
 .dsp-node[data-node-type^="portalInlet"].io-hidden > .dsp-node-io-section,
 .dsp-node[data-node-type^="portalOutlet"].io-hidden > .dsp-node-io-section {
   display: none;
-}
-
-.dsp-node[data-node-type="portalInletMono"],
-.dsp-node[data-node-type="portalInletLeft"],
-.dsp-node[data-node-type="portalInletRight"],
-.dsp-node[data-node-type="portalOutletMono"],
-.dsp-node[data-node-type="portalOutletLeft"],
-.dsp-node[data-node-type="portalOutletRight"] {
-  display: block;
-  width: calc((var(--node-grid-width) * var(--node-grid-width-units, 1)) - (var(--node-module-grid-inset) * 2));
-  min-width: calc((var(--node-grid-width) * var(--node-grid-width-units, 1)) - (var(--node-module-grid-inset) * 2));
-  height: calc(
-    (var(--node-grid-height) * var(--node-grid-height-units, 1))
-    - var(--node-module-grid-inset-y-total)
-  );
-  min-height: calc(
-    (var(--node-grid-height) * var(--node-grid-height-units, 1))
-    - var(--node-module-grid-inset-y-total)
-  );
-  border-radius: 0;
-  background: none;
-  box-shadow: none;
 }
 
 .dsp-node-header {
@@ -19679,6 +19657,7 @@ input[data-global-scope-number-drag="true"]:not([readonly]):focus,
 }
 
 .title-stepper input[data-sge-pos][readonly],
+.title-stepper input[data-sge-hue][readonly],
 .title-stepper input[data-unit-stepper-drag][readonly] {
   cursor: var(--node-dot-cursor, ew-resize);
   user-select: none;
@@ -23637,7 +23616,8 @@ body.node-slider-dragging .node-param-port {
   transform: translate(-50%, -50%);
   color: var(--zap-color, #ffec99);
   font-family: var(--node-electric-glyph-font, "Segoe UI Symbol", "Noto Sans Symbols 2", sans-serif);
-  font-size: calc(1.35rem * var(--zap-scale, 1));
+  /* Same size as the old ⌁ sparks (0.78rem, scale 0.82→1.12). New glyph only. */
+  font-size: 0.78rem;
   font-weight: 400;
   line-height: 1;
   text-rendering: geometricPrecision;
@@ -23649,11 +23629,11 @@ body.node-slider-dragging .node-param-port {
 @keyframes node-zap-burst {
   0% {
     opacity: 1;
-    transform: translate(-50%, -50%) rotate(var(--zap-rotate, 0deg)) scale(calc(0.9 * var(--zap-scale, 1)));
+    transform: translate(-50%, -50%) rotate(var(--zap-rotate, 0deg)) scale(0.82);
   }
   100% {
     opacity: 0;
-    transform: translate(calc(-50% + var(--zap-x, 0px)), calc(-50% + var(--zap-y, -42px))) rotate(calc(var(--zap-rotate, 0deg) + 118deg)) scale(calc(1.35 * var(--zap-scale, 1)));
+    transform: translate(calc(-50% + var(--zap-x, 0px)), calc(-50% + var(--zap-y, -42px))) rotate(calc(var(--zap-rotate, 0deg) + 118deg)) scale(1.12);
   }
 }
 
@@ -25834,50 +25814,23 @@ html.soemdsp-whole-module .node-layout-canvas-grip {
   display: block;
   padding: 0;
 }
-.dsp-node.has-module-face > .dsp-node-body > .node-parameter-row:not([hidden]):not(.node-face-slider-row) {
+.dsp-node.has-module-face > .dsp-node-body > .node-parameter-row:not([hidden]) {
   display: contents;
 }
-/* Face row kind "slider": the param's own row, placed at its face row (top / height / insets inline), above .node-face.
-   Fill the allocated face row so divided choice sliders match Wavetable ADSR Shape. */
-.dsp-node.has-module-face > .dsp-node-body > .node-parameter-row.node-face-slider-row {
-  position: absolute;
-  z-index: 1;
-  box-sizing: border-box;
-  min-height: 0;
-  margin-block: 0;
-  padding: 0;
-  grid-template-rows: minmax(0, 1fr);
-  overflow: hidden;
-}
-.dsp-node.has-module-face .node-face-slider-row > .node-parameter-control {
-  height: 100%;
-  min-height: 0;
-  transform: none;
-}
-.dsp-node.has-module-face .node-face-slider-row .node-slider-readout,
-.dsp-node.has-module-face .node-face-slider-row .node-slider-readout-input {
-  height: 100%;
-  min-height: 0;
-  max-height: none;
-}
-.dsp-node.has-module-face .node-face-slider-row > .node-parameter-control,
-.dsp-node.has-module-face .node-face-slider-row > .node-parameter-control input {
-  pointer-events: auto;
-}
-.dsp-node.has-module-face .node-parameter-row:not(.node-face-slider-row) > .node-parameter-control {
+.dsp-node.has-module-face .node-parameter-row > .node-parameter-control {
   display: none;
 }
-.dsp-node.has-module-face .node-parameter-row:not(.node-face-slider-row) > .node-param-port {
+.dsp-node.has-module-face .node-parameter-row > .node-param-port {
   position: absolute;
   margin: 0;
   padding: 0;
   border: 0;
   box-sizing: border-box;
 }
-.dsp-node.has-module-face .node-parameter-row:not(.node-face-slider-row) > .node-param-port.modulation-input {
+.dsp-node.has-module-face .node-parameter-row > .node-param-port.modulation-input {
   left: 0;
 }
-.dsp-node.has-module-face .node-parameter-row:not(.node-face-slider-row) > .node-param-port.parameter-output {
+.dsp-node.has-module-face .node-parameter-row > .node-param-port.parameter-output {
   right: 0;
 }
 .dsp-node.has-module-face .node-parameter-row.node-face-unplaced > .node-param-port {

@@ -755,6 +755,21 @@ function nodeGraphWaterfallAmp(buffer, slot) {
   const def = typeof nodeGraphModuleDefinitions === "object"
     ? nodeGraphModuleDefinitions[slot?.type]
     : null;
+  // Shop envelopes are 0…1 × Amplitude. Amplitude above 1 (patched paramMeta)
+  // would clip a unipolar 0…1 face to a solid bar; show shape × velocity.
+  if (
+    slot?.type === "pluckEnvelope"
+    || slot?.type === "pingEnvelope"
+    || slot?.type === "resonantEnvelope"
+  ) {
+    const node = typeof nodeGraphPatchNode === "function"
+      ? nodeGraphPatchNode(slot.nodeId)
+      : null;
+    const amp = Number(node?.params?.amplitude);
+    if (Number.isFinite(amp) && amp > 1) {
+      return { gain: 1 / amp, offset: 0 };
+    }
+  }
   if (def?.rmsDbGuides) {
     if (typeof nodeGraphRmsFaceRangeFromSlot === "function") {
       return nodeGraphRmsFaceRangeFromSlot(slot);
@@ -1292,6 +1307,32 @@ function nodeGraphWaterfallClamp01(n, fallback = 0) {
   return v < 0 ? 0 : v > 1 ? 1 : v;
 }
 
+function nodeGraphWaterfallRgbLuminance01(rgb) {
+  const r = nodeGraphFiniteNumber(rgb?.[0], 0);
+  const g = nodeGraphFiniteNumber(rgb?.[1], 0);
+  const b = nodeGraphFiniteNumber(rgb?.[2], 0);
+  return (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
+}
+
+/** Fill-only near-black ink on a black plate reads as an empty face. */
+function nodeGraphWaterfallFillTooCloseToPlate(fillRgb, bright01, plateCss) {
+  const scaled = nodeGraphWaterfallScaleRgb(fillRgb, bright01);
+  const plate = nodeGraphWaterfallParseInkRgb(plateCss || "#000000");
+  return Math.abs(nodeGraphWaterfallRgbLuminance01(scaled) - nodeGraphWaterfallRgbLuminance01(plate)) < 0.12;
+}
+
+/** Same hue, lifted so a filled bar still reads against the plate. */
+function nodeGraphWaterfallLiftFillRgb(fillRgb, bright01) {
+  const scaled = nodeGraphWaterfallScaleRgb(fillRgb, bright01);
+  const peak = Math.max(scaled[0], scaled[1], scaled[2], 1);
+  const k = 200 / peak;
+  return [
+    Math.max(0, Math.min(255, Math.round(scaled[0] * k))),
+    Math.max(0, Math.min(255, Math.round(scaled[1] * k))),
+    Math.max(0, Math.min(255, Math.round(scaled[2] * k))),
+  ];
+}
+
 function nodeGraphWaterfallScaleRgb(rgb, bright01) {
   const b = nodeGraphWaterfallClamp01(bright01, 1);
   if (b >= 0.999) return rgb;
@@ -1504,16 +1545,10 @@ function nodeGraphWaterfallPresentHold(destCtx, destCanvas, bg) {
   nodeGraphDisplayGlFailed(destCanvas, "Waterfall GL present failed");
 }
 
-function nodeGraphWaterfallBarThickness(settings) {
-  const n = Number(settings?.barThickness);
-  if (!Number.isFinite(n)) return 1;
-  return Math.max(0, Math.min(1, n));
-}
-
 /** Stamp solid filled peak-to-peak columns. No polyline, no Blur, no Stretch.
  * Detail 1 (edgeOpts.connect): each column is a trapezoid from the previous
  * column's edge to this column's edge, so a slow sine is a continuous fill.
- * Below detail 1, or when bar thickness opens a gutter, columns stay flat rects.
+ * Below detail 1, columns stay flat rects.
  */
 function nodeGraphWaterfallBarInk(settings) {
   const raw = String(settings?.barInk || settings?.ink || "").toLowerCase();
@@ -1696,7 +1731,6 @@ function nodeGraphWaterfallFinishOutputInk(spec, context, canvas, scrollPx) {
  * module-face plate density (0..1) that sizes the layout canvas.
  * Detail (0..1, default 1) scales that: columns = max(1, round(base * detail)).
  * 1 = one bar per layout pixel (max). barPx = backingStoreWidth / columns.
- * The bar fillRects that column times barThickness (1 = full, 0 = none).
  * At detail 1 the stamp interpolates between those column values.
  */
 function nodeGraphWaterfallDetail(settings) {
@@ -1836,15 +1870,18 @@ function nodeGraphWaterfallSmoothAdvance(destCtx, destCanvas, spec, options) {
   } else if (mode === "combine" || mode === "meet") {
     stampComposite = "lighter";
   }
-  const connectEdge = nodeGraphWaterfallDetailConnects(settings)
-    && nodeGraphWaterfallBarThickness(settings) >= 0.999;
+  const connectEdge = nodeGraphWaterfallDetailConnects(settings);
   const edgeMap = connectEdge
     ? (destCanvas._waterfall.edge || (destCanvas._waterfall.edge = Object.create(null)))
     : null;
   const sampleSpan = Math.max(0, sampleEnd - sampleStart);
   const pix0 = Math.max(0, width - paintPx);
   const useFill = nodeGraphWaterfallBarsFilled(settings);
+  const fillRgb0 = nodeGraphWaterfallParseInkRgb(settings.color || settings.dot1Color || "#ff0000");
+  const fillBright0 = nodeGraphWaterfallClamp01(settings.dot1Brightness ?? settings.brightness, 1);
+  const fillVanishes = useFill && nodeGraphWaterfallFillTooCloseToPlate(fillRgb0, fillBright0, plateBg);
   const useStroke = nodeGraphWaterfallDrawStroke(settings);
+  const liftedFillRgb = fillVanishes ? nodeGraphWaterfallLiftFillRgb(fillRgb0, fillBright0) : null;
   const bag = destCanvas._waterfall || (destCanvas._waterfall = {});
   // Stroke layering: a thick, antialiased stroke reaches past its column, and
   // channels were stroked column by column (L, R, L, R ...), so in each
@@ -1900,7 +1937,9 @@ function nodeGraphWaterfallSmoothAdvance(destCtx, destCanvas, spec, options) {
         prevEdge: connectEdge && edgeMap ? edgeMap[key] : null,
         strokeColor: ch.strokeColor,
         // Brightness = ink alpha (4th entry), like the bar path.
-        rgb: [...nodeGraphWaterfallParseInkRgb(ch.color), nodeGraphWaterfallClamp01(ch.bright ?? 1, 1)],
+        rgb: liftedFillRgb
+          ? [...liftedFillRgb, 1]
+          : [...nodeGraphWaterfallParseInkRgb(ch.color), nodeGraphWaterfallClamp01(ch.bright ?? 1, 1)],
       });
     }
     nodeGraphWaterfallStampColumnFills(

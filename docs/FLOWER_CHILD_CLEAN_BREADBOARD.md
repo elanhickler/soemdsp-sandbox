@@ -25,7 +25,7 @@ This is **not** the sealed `flowerChildFilter` module. It rebuilds a Clean-style
 ## Intentionally omitted (v1)
 
 - Live `moveNode` resonance morph / sample-rate soft-cap  
-- Dirty / Rev3  
+- Dirty / Hard  
 - Sealed `flowerChildFilter` in the path (keep it as a side A/B reference if you want)
 
 ## How to open

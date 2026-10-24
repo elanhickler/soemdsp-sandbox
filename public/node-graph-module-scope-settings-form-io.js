@@ -1411,6 +1411,13 @@ function readNodeGraphTraceDisplaySettingsForm() {
       fieldKeysToRead.add(liveKey);
     }
   }
+  if (
+    (typeof nodeGraphDisplaySettingsFormTypeUsesGradient === "function"
+      && nodeGraphDisplaySettingsFormTypeUsesGradient(formType))
+    || root?.querySelector?.("[data-sge-hue], [data-sge-hue-row] [data-trace-display-field='backgroundHue']")
+  ) {
+    fieldKeysToRead.add("backgroundHue");
+  }
   root?.querySelectorAll?.("[data-hsl-lamp] [data-trace-display-field], [data-hue-title-stepper] [data-trace-display-field]")?.forEach((input) => {
     const key = input.getAttribute("data-trace-display-field");
     if (key) fieldKeysToRead.add(key);
@@ -1450,7 +1457,9 @@ function readNodeGraphTraceDisplaySettingsForm() {
       }
       if (key === "backgroundHue") {
         const hueN = Number(sanitizedValue);
-        if (Number.isFinite(hueN) && typeof nodeGraphHueUnitHex === "function") {
+        const gradientOwnsHue = typeof nodeGraphDisplaySettingsFormTypeUsesGradient === "function"
+          && nodeGraphDisplaySettingsFormTypeUsesGradient(formType);
+        if (!gradientOwnsHue && Number.isFinite(hueN) && typeof nodeGraphHueUnitHex === "function") {
           const hueHex = nodeGraphHueUnitHex(hueN);
           next.background = hueHex;
           next.backgroundColor = hueHex;
@@ -1804,6 +1813,9 @@ function nodeGraphWriteTraceDisplaySettingsFormInner(settings) {
       if (editor && typeof editor.setStops === "function" && normalized.gradientStops) {
         editor.setStops(normalized.gradientStops);
       }
+      if (editor && typeof editor.setHueRotation === "function") {
+        editor.setHueRotation(normalized.backgroundHue);
+      }
     }
     return;
   }
@@ -1822,6 +1834,13 @@ function nodeGraphWriteTraceDisplaySettingsFormInner(settings) {
   if (activeFields.has("sweepHz") || activeFields.has("sweepCycles")) {
     fieldKeysToWrite.add("sweepHz");
     fieldKeysToWrite.add("sweepCycles");
+  }
+  if (
+    (typeof nodeGraphDisplaySettingsFormTypeUsesGradient === "function"
+      && nodeGraphDisplaySettingsFormTypeUsesGradient(formType))
+    || root?.querySelector?.("[data-sge-hue], [data-sge-hue-row] [data-trace-display-field='backgroundHue']")
+  ) {
+    fieldKeysToWrite.add("backgroundHue");
   }
   root?.querySelectorAll?.("[data-hsl-lamp] [data-trace-display-field], [data-hue-title-stepper] [data-trace-display-field]")?.forEach((input) => {
     const key = input.getAttribute("data-trace-display-field");
@@ -1879,6 +1898,9 @@ function nodeGraphWriteTraceDisplaySettingsFormInner(settings) {
         || nodeGraphMvp?.sharedGradientEditor);
     if (editor && typeof editor.setStops === "function" && normalized.gradientStops) {
       editor.setStops(normalized.gradientStops);
+    }
+    if (editor && typeof editor.setHueRotation === "function") {
+      editor.setHueRotation(normalized.backgroundHue);
     }
   }
   syncNodeGraphTraceDisplayColorWidgets(

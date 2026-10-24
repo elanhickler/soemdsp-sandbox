@@ -2135,9 +2135,8 @@ function configureNodeSceneContextMenu(mode) {
     if (toggleHideUnusedButton) {
       toggleHideUnusedButton.disabled = multiModuleMode ? !selectedNodes.length : !targetNode;
       toggleHideUnusedButton.removeAttribute("aria-disabled");
-      // Lit (on mark) only while Hide unused is active; this is an on/off
-      // option, not a section's visibility (same as Mod rail).
-      setVisLines(toggleHideUnusedButton, !multiHideUnused, "Hide unused");
+      // Same polarity as Title / In/Out: ⬛ while unused jacks are hidden.
+      setVisLines(toggleHideUnusedButton, multiHideUnused, "Hide unused");
       toggleHideUnusedButton.setAttribute("aria-pressed", multiHideUnused ? "true" : "false");
       toggleHideUnusedButton.setAttribute("aria-label", `Hide unused, ${multiHideUnused ? "on" : "off"}`);
       toggleHideUnusedButton.title = multiHideUnused

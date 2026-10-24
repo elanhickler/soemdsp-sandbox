@@ -2,7 +2,8 @@
 // envelopes, Delay. Per module: the face replaces the slider rows, places every
 // visible param exactly once and sets the body height. Every choice button stores
 // its own index, dragging the first cell up raises it (whole steps stay whole),
-// and undo restores it. Choice params with too many options keep their own slider row (face row kind slider): it shows, drags drag to another choice and undo restores it.
+// and undo restores it. Long choice names use the horizontal-cell switch
+// (label | value, selected-slot rectangle, no divider strokes).
 // Usage: node scripts/smoke_module_face_batch2.mjs   (server.py on :8765)
 //   SANDBOX_URL, CHROME_PATH, PW_MODULE, SHOT_DIR optional.
 import fs from "node:fs";
@@ -59,7 +60,7 @@ for (let i = 0; i < TYPES.length; i += 1) {
     return {
       faceH: face.offsetHeight,
       specH: nodeGraphModuleFaceHeightPx(type, node),
-      sliders: [...el.querySelectorAll(".node-parameter-row:not(.node-face-slider-row) > .node-parameter-control")].filter((c) => c.getBoundingClientRect().height > 0).length,
+      sliders: [...el.querySelectorAll(".node-parameter-row > .node-parameter-control")].filter((c) => c.getBoundingClientRect().height > 0).length,
       dup: placed.length !== new Set(placed).size,
       missingKeys: visible.filter((k) => !placed.includes(k)),
       extra: placed.filter((k) => !visible.includes(k)),
@@ -106,14 +107,17 @@ for (let i = 0; i < TYPES.length; i += 1) {
       check(`${TYPES[i]}: ${key} button ${k} selects ${want}`, shown === want, `shown "${shown}"`);
     }
   }
-  const sliderRows = await page.evaluate((id) => [...document.querySelectorAll(`article[data-node="${id}"] .node-parameter-row.node-face-slider-row`)].map((r) => {
-    const c = (r.querySelector(".node-slider-readout") || r.querySelector(".node-parameter-control")).getBoundingClientRect();
-    return { key: r.dataset.param, keys: [r.dataset.param], x: c.left, w: c.width, y: c.top + c.height / 2, h: c.height };
-  }), id);
+  const sliderRows = ws.filter((w) => w.type === "cell" && w.horizontal).map((w) => ({
+    key: w.keys[0], keys: w.keys, x: w.x, w: w.w, y: w.y, h: 20,
+  })).filter((sw) => sw.key);
   for (const sw of sliderRows) {
-    check(`${TYPES[i]}: ${sw.key} shows its own slider row`, sw.w > 40 && sw.h > 10, JSON.stringify(sw));
-  }
-  for (const sw of sliderRows) {
+    const nChoices = await page.evaluate(({ id, key }) => {
+      const input = nodeGraphModuleFaceInput(document.querySelector(`article[data-node="${id}"]`), key);
+      return typeof parseNodeMetadataChoices === "function" && input?.dataset?.choices
+        ? parseNodeMetadataChoices(input.dataset.choices).length : 0;
+    }, { id, key: sw.key });
+    if (nChoices < 2) continue;
+    check(`${TYPES[i]}: ${sw.key} shows a horizontal choice switch`, sw.w > 40, JSON.stringify(sw));
     const k0 = sw.keys[0];
     const l0 = await choiceLabel(id, k0);
     const swMax = await page.evaluate(({ id, k0 }) => { const n = nodeGraphModuleFaceInput(document.querySelector(`article[data-node="${id}"]`), k0); return Number(n.value) >= Number(n.max); }, { id, k0 });

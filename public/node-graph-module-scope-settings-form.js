@@ -127,14 +127,6 @@ function nodeGraphDisplaySettingsBuildStepperRowHtml(key, formType = null, optio
     label = "Pixel density";
     title = "1 = native face buffer. Below 1 = chunky lo-fi grid (nearest-neighbor).";
   }
-  if (key === "barThickness" && (
-    formType === "waterfall"
-    || formType === "waterfallRgb"
-    || formType === "waterfallXyz"
-  )) {
-    label = "Bar thickness";
-    title = "Width of each filled column. 1 = full column. 0 = the bar disappears. In between, that fraction of the column, centered.";
-  }
   if (key === "strokeThickness" && (
     formType === "waterfall"
     || formType === "waterfallRgb"
@@ -1540,7 +1532,6 @@ function buildNodeGraphInstantTraceDisplaySettingsBodyHtml(type, node, allowKey)
     "historySeconds",
     "zoomSeconds",
     "detail",
-    "barThickness",
     "strokeThickness",
     "sweepHz",
     "sweepCycles",
@@ -1615,7 +1606,6 @@ function buildNodeGraphInstantTraceDisplaySettingsBodyHtml(type, node, allowKey)
   const isOnsetFace = node?.type === "onset" || node?.type === "onset2d";
   if (!isOnsetFace) {
     pushStackField("detail");
-    pushStackField("barThickness");
   }
   if (isInstantWaterfall && choiceKeys.includes("barInk")) {
     rows.push(nodeGraphDisplaySettingsBuildChoiceRowHtml("barInk"));
@@ -1633,7 +1623,10 @@ function buildNodeGraphInstantTraceDisplaySettingsBodyHtml(type, node, allowKey)
   }
   usedToggles.add("pauseAtEnd");
   pushStackField("backgroundBrightness");
-  pushStackField("backgroundHue");
+  if (!(typeof nodeGraphDisplaySettingsFormTypeUsesGradient === "function"
+    && nodeGraphDisplaySettingsFormTypeUsesGradient(type))) {
+    pushStackField("backgroundHue");
+  }
   const inkPrimary = orderedPrimary.filter((key) => !stackHead.has(key));
   if (stereoInk) {
     rows.push(`
@@ -1679,6 +1672,11 @@ function buildNodeGraphInstantTraceDisplaySettingsBodyHtml(type, node, allowKey)
     pushPreview();
   }
   for (const key of leftover) {
+    if (key === "backgroundHue"
+      && typeof nodeGraphDisplaySettingsFormTypeUsesGradient === "function"
+      && nodeGraphDisplaySettingsFormTypeUsesGradient(type)) {
+      continue;
+    }
     rows.push(nodeGraphDisplaySettingsBuildStepperRowHtml(key, type));
   }
   for (const key of choiceKeys) {
@@ -1868,6 +1866,11 @@ function buildNodeGraphPhosphorDisplaySettingsBodyHtml(type, node, allowKey) {
     if (key === "sweepCycles") {
       continue;
     }
+    if (key === "backgroundHue"
+      && typeof nodeGraphDisplaySettingsFormTypeUsesGradient === "function"
+      && nodeGraphDisplaySettingsFormTypeUsesGradient(type)) {
+      continue;
+    }
     const rowKey = key === "sweepHz"
       ? (phosphorSyncOn ? "sweepCycles" : "sweepHz")
       : key;
@@ -1880,6 +1883,11 @@ function buildNodeGraphPhosphorDisplaySettingsBodyHtml(type, node, allowKey) {
     pushPreview();
   }
   for (const key of leftover) {
+    if (key === "backgroundHue"
+      && typeof nodeGraphDisplaySettingsFormTypeUsesGradient === "function"
+      && nodeGraphDisplaySettingsFormTypeUsesGradient(type)) {
+      continue;
+    }
     rows.push(nodeGraphDisplaySettingsBuildStepperRowHtml(key, type));
   }
   for (const key of toggleKeys) {
@@ -2351,6 +2359,11 @@ function buildNodeGraphDisplaySettingsBodyHtml(formType, node = null) {
       rows.push(nodeGraphDisplaySettingsBuildToggleRowHtml(key));
     }
     for (const key of fieldKeys) {
+      if (key === "backgroundHue"
+        && typeof nodeGraphDisplaySettingsFormTypeUsesGradient === "function"
+        && nodeGraphDisplaySettingsFormTypeUsesGradient(type)) {
+        continue;
+      }
       // Individual Sat steppers are redundant — hue-title row already has Sat.
       if ((type === "numberReadout" || type === "lcdDot" || type === "vectorDot" || type === "pulseDot")
         && (key === "backgroundSaturation" || key === "dot1Saturation" || key === "colorSaturation")) {
