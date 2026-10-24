@@ -2,7 +2,7 @@
 // envelopes, Delay. Per module: the face replaces the slider rows, places every
 // visible param exactly once and sets the body height. Every choice button stores
 // its own index, dragging the first cell up raises it (whole steps stay whole),
-// and undo restores it. Switch sliders (horizontal cells on a choice param) drag to another choice and undo restores it.
+// and undo restores it. Choice params with too many options keep their own slider row (face row kind slider): it shows, drags drag to another choice and undo restores it.
 // Usage: node scripts/smoke_module_face_batch2.mjs   (server.py on :8765)
 //   SANDBOX_URL, CHROME_PATH, PW_MODULE, SHOT_DIR optional.
 import fs from "node:fs";
@@ -59,7 +59,7 @@ for (let i = 0; i < TYPES.length; i += 1) {
     return {
       faceH: face.offsetHeight,
       specH: nodeGraphModuleFaceHeightPx(type, node),
-      sliders: [...el.querySelectorAll(".node-parameter-control")].filter((c) => c.getBoundingClientRect().height > 0).length,
+      sliders: [...el.querySelectorAll(".node-parameter-row:not(.node-face-slider-row) > .node-parameter-control")].filter((c) => c.getBoundingClientRect().height > 0).length,
       dup: placed.length !== new Set(placed).size,
       missingKeys: visible.filter((k) => !placed.includes(k)),
       extra: placed.filter((k) => !visible.includes(k)),
@@ -106,11 +106,19 @@ for (let i = 0; i < TYPES.length; i += 1) {
       check(`${TYPES[i]}: ${key} button ${k} selects ${want}`, shown === want, `shown "${shown}"`);
     }
   }
-  for (const sw of ws.filter((w) => w.type === "cell" && w.horizontal)) {
+  const sliderRows = await page.evaluate((id) => [...document.querySelectorAll(`article[data-node="${id}"] .node-parameter-row.node-face-slider-row`)].map((r) => {
+    const c = r.querySelector(".node-parameter-control").getBoundingClientRect();
+    return { key: r.dataset.param, keys: [r.dataset.param], x: c.left, w: c.width, y: c.top + c.height / 2, h: c.height };
+  }), id);
+  for (const sw of sliderRows) {
+    check(`${TYPES[i]}: ${sw.key} shows its own slider row`, sw.w > 40 && sw.h > 10, JSON.stringify(sw));
+  }
+  for (const sw of sliderRows) {
     const k0 = sw.keys[0];
     const l0 = await choiceLabel(id, k0);
     const swMax = await page.evaluate(({ id, k0 }) => { const n = nodeGraphModuleFaceInput(document.querySelector(`article[data-node="${id}"]`), k0); return Number(n.value) >= Number(n.max); }, { id, k0 });
-    await drag(sw.x + sw.w * (swMax ? 0.9 : 0.1), sw.y, sw.w * (swMax ? -0.8 : 0.8), 0);
+    const swMin = await page.evaluate(({ id, k0 }) => { const n = nodeGraphModuleFaceInput(document.querySelector(`article[data-node="${id}"]`), k0); return Number(n.value) <= Number(n.min); }, { id, k0 });
+    await drag(sw.x + sw.w * 0.5, sw.y, sw.w * (swMin ? 0.4 : -0.4), 0);
     const l1 = await choiceLabel(id, k0);
     check(`${TYPES[i]}: switch ${k0} drag changes choice`, l1 !== l0 && l1 !== "", `${l0} -> ${l1}`);
     await page.evaluate(() => undoNodeGraphPatch());

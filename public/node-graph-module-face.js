@@ -16,6 +16,7 @@
 //                                               drags it alone, between two drags that pair; handles stop at
 //                                               their neighbours (no crossing, no pushing)
 //   seed      { param }                         [code][die][+][-]
+//   slider    { param }                         the param's own slider row, in place (choices too many for buttons)
 
 const NODE_GRAPH_FACE_JACK_SLOT_PX = 17;
 const NODE_GRAPH_FACE_CELL_DRAG_PX = 220;
@@ -317,6 +318,20 @@ function layoutNodeGraphModuleFace(article) {
   for (const row of spec) {
     const h = nodeGraphModuleFaceRowHeight(row);
     const keys = nodeGraphModuleFaceRowParams(row);
+    if (row.kind === "slider") {
+      // The original slider row, shown in place: it keeps its own control, jacks, drag and undo.
+      placed.add(row.param);
+      const ins = nodeGraphModuleFaceRowInset(article)(row);
+      for (const el of body.querySelectorAll(`.node-parameter-row[data-param="${CSS.escape(row.param)}"]`)) {
+        el.classList.add("node-face-slider-row");
+        el.style.top = `${y}px`;
+        el.style.height = `${h}px`;
+        el.style.left = `${ins.l}px`;
+        el.style.right = `${ins.r}px`;
+      }
+      y += h;
+      continue;
+    }
     keys.forEach((key, i) => {
       placed.add(key);
       const slot = h / keys.length;

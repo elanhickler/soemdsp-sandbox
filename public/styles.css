@@ -25818,23 +25818,33 @@ html.soemdsp-whole-module .node-layout-canvas-grip {
   display: block;
   padding: 0;
 }
-.dsp-node.has-module-face > .dsp-node-body > .node-parameter-row:not([hidden]) {
+.dsp-node.has-module-face > .dsp-node-body > .node-parameter-row:not([hidden]):not(.node-face-slider-row) {
   display: contents;
 }
-.dsp-node.has-module-face .node-parameter-row > .node-parameter-control {
+/* Face row kind "slider": the param's own row, placed at its face row (top / height / insets inline), above .node-face. */
+.dsp-node.has-module-face > .dsp-node-body > .node-parameter-row.node-face-slider-row {
+  position: absolute;
+  z-index: 1;
+  box-sizing: border-box;
+}
+.dsp-node.has-module-face .node-face-slider-row > .node-parameter-control,
+.dsp-node.has-module-face .node-face-slider-row > .node-parameter-control input {
+  pointer-events: auto;
+}
+.dsp-node.has-module-face .node-parameter-row:not(.node-face-slider-row) > .node-parameter-control {
   display: none;
 }
-.dsp-node.has-module-face .node-parameter-row > .node-param-port {
+.dsp-node.has-module-face .node-parameter-row:not(.node-face-slider-row) > .node-param-port {
   position: absolute;
   margin: 0;
   padding: 0;
   border: 0;
   box-sizing: border-box;
 }
-.dsp-node.has-module-face .node-parameter-row > .node-param-port.modulation-input {
+.dsp-node.has-module-face .node-parameter-row:not(.node-face-slider-row) > .node-param-port.modulation-input {
   left: 0;
 }
-.dsp-node.has-module-face .node-parameter-row > .node-param-port.parameter-output {
+.dsp-node.has-module-face .node-parameter-row:not(.node-face-slider-row) > .node-param-port.parameter-output {
   right: 0;
 }
 .dsp-node.has-module-face .node-parameter-row.node-face-unplaced > .node-param-port {
