@@ -1927,6 +1927,8 @@ NodeLiveAudioProcessor.prototype.applyNativeModuleExports = function applyNative
       // Graph-engine-hosted / catalog natives: combined-wasm apply still calls
       // here for every entry. Accept common export shapes — e.g. quadrature
       // ships process_sample / process_mono (not bare _sample / _process).
+      // Graph-hosted types (Logic, Noise Gate, …) run through graph_engine
+      // even when incremental combined links omit their per-module exports.
       if (name && exports) {
         const prefix = `soemdsp_${name}_`;
         const hasEngine = typeof exports[`${prefix}sample`] === "function"
@@ -1935,7 +1937,14 @@ NodeLiveAudioProcessor.prototype.applyNativeModuleExports = function applyNative
           || typeof exports[`${prefix}process_mono`] === "function"
           || typeof exports[`${prefix}process_block`] === "function"
           || typeof exports[`${prefix}create`] === "function";
-        if (hasEngine) {
+        const graphHosted = typeof exports.soemdsp_graph_create === "function"
+          && targetType
+          && NodeLiveAudioProcessor.NATIVE_GRAPH_TYPE_IDS
+          && Object.prototype.hasOwnProperty.call(
+            NodeLiveAudioProcessor.NATIVE_GRAPH_TYPE_IDS,
+            targetType,
+          );
+        if (hasEngine || graphHosted) {
           this.port.postMessage({
             type: "nativeModuleStatus",
             name,
