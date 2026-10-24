@@ -480,7 +480,9 @@ function paintNodeGraphFbmFieldFace(canvas, face, nodeId, options = {}) {
   if (typeof nodeGraphFbmFieldGlPresentParams === "function") {
     ok = nodeGraphFbmFieldGlPresentParams(canvas, {
       ...fieldParams,
-      gradientStops: settings.gradientStops,
+      gradientStops: typeof nodeGraphApplyGradientHueRotation === "function"
+        ? nodeGraphApplyGradientHueRotation(settings.gradientStops, settings)
+        : settings.gradientStops,
       background: settings.background,
       nodeId,
     });

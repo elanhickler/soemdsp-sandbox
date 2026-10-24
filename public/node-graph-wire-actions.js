@@ -2199,7 +2199,9 @@ function burstNodeGraphZap(point) {
     const [color, glow] = colors[index % colors.length];
     const particle = document.createElement("span");
     particle.className = "node-zap-particle";
-    particle.textContent = "\u2301";
+    particle.textContent = typeof nodeGraphBypassGlyph === "function"
+      ? nodeGraphBypassGlyph()
+      : "\u{1F5F2}\uFE0E";
     particle.style.left = `${at.x}px`;
     particle.style.top = `${at.y}px`;
     particle.style.setProperty("--zap-color", color);

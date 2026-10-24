@@ -1528,10 +1528,10 @@ function buildNodeGraphInstantTraceDisplaySettingsBodyHtml(type, node, allowKey)
   } else if (toggleKeys.includes("sourceSync")) {
     rows.push(nodeGraphDisplaySettingsBuildToggleRowHtml("sourceSync"));
     usedToggles.add("sourceSync");
-    if (type === "scope1dTrace" && choiceKeys.includes("drawMode")) {
-      rows.push(nodeGraphDisplaySettingsBuildChoiceRowHtml("drawMode"));
-      usedChoices.add("drawMode");
-    }
+  }
+  if (choiceKeys.includes("drawMode")) {
+    rows.push(nodeGraphDisplaySettingsBuildChoiceRowHtml("drawMode"));
+    usedChoices.add("drawMode");
   }
   const stackHead = new Set([
     "scale",
@@ -1600,6 +1600,13 @@ function buildNodeGraphInstantTraceDisplaySettingsBodyHtml(type, node, allowKey)
   } else {
     pushStackField("historySeconds");
     pushStackField("zoomSeconds");
+  }
+  if (orderedPrimary.includes("sweepHz") || orderedPrimary.includes("sweepCycles")) {
+    rows.push(nodeGraphDisplaySettingsBuildStepperRowHtml(
+      syncOnForStack ? "sweepCycles" : "sweepHz",
+      type,
+      { syncOn: syncOnForStack },
+    ));
   }
   if (node?.type === "onset" && toggleKeys.includes("autoRange")) {
     rows.push(nodeGraphDisplaySettingsBuildToggleRowHtml("autoRange"));
@@ -2146,6 +2153,11 @@ function buildNodeGraphDisplaySettingsBodyHtml(formType, node = null) {
     let choiceKeys = (sectionControls.choices || []).filter(
       (key) => activeChoices.has(key) && allowKey("choices", key),
     );
+    if (type === "robinSinepulseFace" && section === "waterfall") {
+      choiceKeys = ["faceView"].filter(
+        (key) => activeChoices.has(key) && allowKey("choices", key),
+      );
+    }
     // Dot family: Shape lives in activeChoices; ensure it appears in the Dot section
     // even if an older section map omitted it.
     if (section === "dot1"

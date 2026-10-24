@@ -763,6 +763,7 @@ function nodeGraphMergeDisplaySettingsDirty(existing, form, dirtyKeys) {
     }
     if (formObj.backgroundHue !== undefined) {
       base.backgroundHue = formObj.backgroundHue;
+      base.hueRotationReady = true;
     }
   }
   if (dirtyKeys.has("gradientStops") || dirtyKeys.has("gradient")) {

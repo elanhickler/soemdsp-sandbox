@@ -20,7 +20,7 @@
  *   NodeGraphGradientSelector.setActive(editor) / clearActive() / getActive()
  *
  * Stop model: { t: 0..1, color: "#rrggbb" }
- * Channels:   "color" (full H/S/L) | "bw" (luma / blackÃ¢â‚¬â€œwhite only)
+ * Channels:   "color" (full H/S/L) | "bw" (luma / black-white only)
  *
  * Legacy aliases (deprecated Ã¢â‚¬â€ keep for old call sites):
  *   mountSharedGradientEditor / mountSpectrogramGradientEditor /
@@ -657,7 +657,7 @@
   }
 
   /**
-   * Export stops for copy/paste into art tools (Photoshop Location 0Ã¢â‚¬â€œ100%).
+   * Export stops for copy/paste into art tools (Photoshop Location 0-100%).
    * Always includes position so uneven gradients round-trip:
    *   #0a0a0a 0%, #00ff88 42%, #ffffff 100%
    * (Legacy color-only lists still parse Ã¢â‚¬â€ see parseHexList.)
@@ -678,7 +678,7 @@
    * Parse gradient list. Accepts:
    *   #rrggbb, #rrggbb, Ã¢â‚¬Â¦                 Ã¢â€ â€™ even spacing (legacy)
    *   #rrggbb 0%, #rrggbb 42%, Ã¢â‚¬Â¦          Ã¢â€ â€™ explicit % (Photoshop-style Location)
-   *   #rrggbb 0, #rrggbb 0.42, #rrggbb 1  Ã¢â€ â€™ 0Ã¢â‚¬â€œ1 floats
+   *   #rrggbb 0, #rrggbb 0.42, #rrggbb 1  Ã¢â€ â€™ 0-1 floats
    *   #rrggbb@0.42  /  #rrggbb:42%        Ã¢â€ â€™ compact forms
    */
   function parseHexList(text) {
@@ -713,7 +713,7 @@
         if (!Number.isFinite(v)) {
           t = null;
         } else if (posMatch[2] || v > 1) {
-          // Percent (or bare 0Ã¢â‚¬â€œ100 when >1): Location-style.
+          // Percent (or bare 0-100 when >1): Location-style.
           t = clamp01(v / 100);
         } else {
           t = clamp01(v);
@@ -834,21 +834,21 @@
       </div>
       <div class="sge-stops" data-sge-stops aria-label="Gradient stops"></div>
       <div class="sge-color-widget-host" data-sge-color-widget></div>
-      <div class="title-stepper" data-sge-pos-row title="Stop position 0Ã¢â‚¬â€œ1 along the gradient">
+      <div class="title-stepper" data-sge-pos-row title="Stop position 0-1 along the gradient">
         <span class="title-stepper-title">Pos</span>
         <span class="metadata-stepper-control">
           <button type="button" data-sge-pos-step="-1" aria-label="Decrease stop position">-</button>
-          <input type="text" inputmode="decimal" data-sge-pos data-unit-stepper-drag data-unit-min="0" data-unit-max="1" readonly value="0" aria-label="Stop position 0Ã¢â‚¬â€œ1" title="Stop position 0Ã¢â‚¬â€œ1. Drag or Ã¢Ë†â€™/+. Double-click to type.">
+          <input type="text" inputmode="decimal" data-sge-pos data-unit-stepper-drag data-unit-min="0" data-unit-max="1" readonly value="0" aria-label="Stop position 0-1" title="Stop position 0-1. Drag or -/+. Double-click to type.">
           <button type="button" data-sge-pos-step="1" aria-label="Increase stop position">+</button>
         </span>
       </div>
       <div class="sge-actions">
         <button type="button" data-sge-add aria-label="Add stop">+ Stop</button>
-        <button type="button" data-sge-remove aria-label="Remove stop">Ã¢Ë†â€™ Stop</button>
+        <button type="button" data-sge-remove aria-label="Remove stop">- Stop</button>
       </div>
       <textarea class="sge-hex" data-sge-list rows="2" spellcheck="false"
         aria-label="Gradient stops as hex and position percent"
-        title="Copy for art tools (Photoshop Location 0Ã¢â‚¬â€œ100%). Format: #hex 0%, #hex 42%, #hex 100%. Color-only lists still import with even spacing."
+        title="Copy for art tools (Photoshop Location 0-100%). Format: #hex 0%, #hex 42%, #hex 100%. Color-only lists still import with even spacing."
         placeholder="#000000 0%, #00ff88 42%, #ffffff 100%"></textarea>
       <div class="sge-presets" data-sge-presets aria-label="Gradient presets"></div>
     `;
@@ -1076,7 +1076,7 @@
       emit();
     });
 
-    // Ã¢Ë†â€™/+ step (app-wide 0Ã¢â‚¬Â¦1 unit quantum 0.1).
+    // -/+ step (app-wide 0Ã¢â‚¬Â¦1 unit quantum 0.1).
     root.addEventListener("click", (event) => {
       const btn = event.target?.closest?.("[data-sge-pos-step]");
       if (!btn || btn.disabled || !posInput || posInput.disabled) {
@@ -1416,7 +1416,7 @@
     robinSinepulseFace: Object.freeze({
       channels: "color",
       defaultStops: "phosphor",
-      hint: "Instantaneous Hz → color · T60 envelope masks the field",
+      hint: "View LUT: Envelope = Hz, Spectrogram = ridge energy",
     }),
   });
 

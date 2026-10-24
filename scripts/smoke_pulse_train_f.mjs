@@ -8,7 +8,8 @@ import { fileURLToPath } from "url";
 // Graph Pulse Train is Frequency (timeDenominator) + Duty (timeNumerator):
 // Time = Duty/ƒ/(Fwd-Rev?2:1), End Delay = (1-Duty)/ƒ (graph 255). ptFD maps an
 // old Time / End Delay pair to the same schedule.
-const ptFD = (T, D, m) => { const k = m === 1 ? 2 : 1; const c = k * T + D; const f = 1 / c; const duty = (k * T) / c; const P = 1 / f; return { f, duty, T: duty * P / k, D: (1 - duty) * P }; };
+const dualAmt = (m) => (m <= 0 ? 0 : m >= 0.5 ? 1 : m * 2);
+const ptFD = (T, D, m) => { const k = 1 + dualAmt(m); const c = k * T + D; const f = 1 / c; const duty = (k * T) / c; const P = 1 / f; return { f, duty, T: duty * P / k, D: (1 - duty) * P }; };
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const imp = { env: { emo_process_block: () => 0 } };
 const load = async (p) => (await WebAssembly.instantiate(fs.readFileSync(p), imp)).instance.exports;
@@ -176,7 +177,7 @@ for (const fHz of [2, 4, 1.5, 8]) {
   for (const [label, pulseMode, end, delay] of [
     ["Forward Time 1", 0, 1, 0],
     ["Forward Time 0.05", 0, 0.05, 0],
-    ["Fwd-Rev Time 1", 1, 1, 0],
+    ["Fwd-Rev Time 1", 0.5, 1, 0],
     ["Forward delay +0.1", 0, 0.05, 0.1],
   ]) {
     const r = runLoop(N, { fHz, end, count: 8, curve: 0, seconds: 1.05, delay, pulseMode });

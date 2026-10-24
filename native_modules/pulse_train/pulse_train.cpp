@@ -135,66 +135,43 @@ struct PreviewSched {
 static PulseTrainState gPool[kMaxInstances];
 static PreviewSched gPreview = {};
 
-enum {
-  kPulseForward = 0,
-  kPulseFwdRev = 1,
-  kPulseReverse = 2,
-  kPulseRevFwd = 3
-};
-
-// Two-leg modes (out-and-back): Forward-Reverse and Reverse-Forward share the
-// 2N-1 / 2N-2 count, the 8192 one-way cap and the 2*Time span.
-static inline bool isDual(int m) { return m == kPulseFwdRev || m == kPulseRevFwd; }
-
-// Reverse-Forward = Forward-Reverse rotated by half a trip: pulse j plays
-// Forward-Reverse pulse k (the turnaround first, then the return leg, then the
-// out leg), so it reuses the forward one-way functions with no new schedule
-// math. One shot: j<N -> k=j+N-1, else k=j-N+1. Loop: k=(j+N-1) mod (2N-2).
-static inline int revFwdK(int j, int nFwd, bool loop, bool* wrapped) {
-  if (loop) {
-    const int L = 2 * nFwd - 2;
-    int k = j + nFwd - 1;
-    *wrapped = k >= L;
-    return *wrapped ? k - L : k;
-  }
-  *wrapped = j >= nFwd;
-  return *wrapped ? j - nFwd + 1 : j + nFwd - 1;
+// Pulse Mode p in [0, 1]: 0 Forward; 0.5 Forward-Reverse; 1 Reverse-Forward.
+// Values > 1 (old integer Reverse / Rev-Fwd) clamp to 1.
+static inline double pulseBiasOf(double v) {
+  if (!(v == v) || v <= 0.0) return 0.0;
+  if (v >= 1.0) return 1.0;
+  return v;
 }
 
-static inline int pulseModeOf(double v) {
-  int m = (int)(v + (v >= 0.0 ? 0.5 : -0.5));
-  if (m < 0) m = 0;
-  if (m > 3) m = 3;
-  return m;
+static inline double dualAmtOf(double p) {
+  if (!(p > 0.0)) return 0.0;
+  if (p >= 0.5) return 1.0;
+  return p * 2.0;
 }
 
-static inline int clampFwd(double count, int pulseMode) {
+static inline double rotAmtOf(double p) {
+  if (!(p > 0.5)) return 0.0;
+  if (p >= 1.0) return 1.0;
+  return (p - 0.5) * 2.0;
+}
+
+static inline bool isDual(double p) { return dualAmtOf(p) > 0.0; }
+
+static inline int clampFwd(double count, double pulseBias) {
   if (!(count >= 1.0)) return 1;
-  const int cap = isDual(pulseMode) ? kMaxFwdDual : kMaxPulses;
+  const int cap = isDual(pulseBias) ? kMaxFwdDual : kMaxPulses;
   if (count >= (double)cap) return cap;
   return (int)(count + 0.5);
 }
 
-static inline int totalCount(int nFwd, int pulseMode, bool loop) {
-  if (!isDual(pulseMode) || nFwd <= 1) return nFwd;
+static inline int totalCount(int nFwd, double pulseBias, bool loop) {
+  if (!isDual(pulseBias) || nFwd <= 1) return nFwd;
   return loop ? (2 * nFwd - 2) : (2 * nFwd - 1);
 }
 
-static inline int fwdIndex(int j, int nFwd, int pulseMode, bool loop) {
-  if (pulseMode == kPulseRevFwd) {
-    if (nFwd <= 1) return 0;
-    bool w;
-    return fwdIndex(revFwdK(j, nFwd, loop, &w), nFwd, kPulseFwdRev, loop);
-  }
-  if (pulseMode == kPulseFwdRev) {
-    if (j < nFwd) return j;
-    return 2 * nFwd - 2 - j;
-  }
-  if (pulseMode == kPulseReverse) {
-    if (nFwd <= 1) return 0;
-    return nFwd - 1 - j;
-  }
-  return j;
+static inline int fwdRevIndex(int j, int nFwd) {
+  if (j < nFwd) return j;
+  return 2 * nFwd - 2 - j;
 }
 
 static inline double curveShape(double k, double u) {
@@ -215,46 +192,77 @@ static inline double oneWayTime(int i, int nFwd, double end, double curve, bool 
   return t;
 }
 
-static inline double pulseTime(int j, int nFwd, double end, double curve, bool loop, int pulseMode) {
-  if (pulseMode == kPulseRevFwd) {
-    if (nFwd <= 1) return pulseTime(j, nFwd, end, curve, loop, kPulseFwdRev);
-    // Shift so the turnaround (Forward-Reverse pulse N-1) lands on t = 0;
-    // pulses before it in Forward-Reverse order move one cycle (2*Time) later.
-    bool w;
-    const int k = revFwdK(j, nFwd, loop, &w);
-    const double shift = oneWayTime(nFwd - 1, nFwd, end, curve, loop);
-    double t = pulseTime(k, nFwd, end, curve, loop, kPulseFwdRev) - shift + (w ? 2.0 * end : 0.0);
-    if (!(t >= 0.0)) t = 0.0;
-    return t;
-  }
-  if (pulseMode == kPulseReverse && nFwd > 1 && loop) {
-    // Loop Reverse: forward gaps in reverse order, first pulse at 0, exactly
-    // nFwd pulses inside [0, end) (none at end, so nothing doubles at the wrap).
-    if (j == 0) return 0.0;
-    double t = end - oneWayTime(nFwd - j, nFwd, end, curve, loop);
-    if (!(t >= 0.0)) t = 0.0;
-    return t;
-  }
-  const int i = fwdIndex(j, nFwd, pulseMode, loop);
+static inline double fwdRevTime(int j, int nFwd, double end, double curve, bool loop, double dualAmt) {
+  const int i = fwdRevIndex(j, nFwd);
   const double tf = oneWayTime(i, nFwd, end, curve, loop);
-  if (pulseMode == kPulseFwdRev && j >= nFwd) {
-    double t = 2.0 * end - tf;
-    if (!(t >= 0.0)) t = 0.0;
-    return t;
-  }
-  if (pulseMode == kPulseReverse && nFwd > 1) {
-    double t = end - tf;
+  if (j >= nFwd) {
+    double t = end * (1.0 + dualAmt) - dualAmt * tf;
     if (!(t >= 0.0)) t = 0.0;
     return t;
   }
   return tf;
 }
 
-static inline double pulseAmp(
-  int j, int nFwd, double ampStart, double ampEnd, double ampCurve,
-  double amplitude, double velocity, bool loop, int pulseMode
+// First unrotated Fwd-Rev index whose time is >= shift, so pulseTime(j) stays
+// sorted after the wrap (binary search in firstPulseAfter).
+static inline int rotK0(
+  int nFwd, double end, double curve, bool loop, double dualAmt, double shift, int total
 ) {
-  const int i = fwdIndex(j, nFwd, pulseMode, loop);
+  if (!(shift > 0.0) || total <= 1) return 0;
+  int lo = 0;
+  int hi = total;
+  while (lo < hi) {
+    const int mid = lo + ((hi - lo) >> 1);
+    if (fwdRevTime(mid, nFwd, end, curve, loop, dualAmt) < shift) lo = mid + 1;
+    else hi = mid;
+  }
+  return lo >= total ? 0 : lo;
+}
+
+static inline int origK(
+  int j, int nFwd, double end, double curve, bool loop, double dualAmt, double shift, int total
+) {
+  if (total <= 1 || !(shift > 0.0)) return j;
+  const int k0 = rotK0(nFwd, end, curve, loop, dualAmt, shift, total);
+  int k = k0 + j;
+  if (k >= total) k -= total;
+  return k;
+}
+
+static inline double pulseTime(int j, int nFwd, double end, double curve, bool loop, double pulseBias) {
+  const double p = pulseBiasOf(pulseBias);
+  if (!isDual(p) || nFwd <= 1) return oneWayTime(j, nFwd, end, curve, loop);
+  const double r = dualAmtOf(p);
+  const double rot = rotAmtOf(p);
+  const int total = totalCount(nFwd, p, loop);
+  const double shift = rot * oneWayTime(nFwd - 1, nFwd, end, curve, loop);
+  const int k = origK(j, nFwd, end, curve, loop, r, shift, total);
+  double t = fwdRevTime(k, nFwd, end, curve, loop, r);
+  if (shift > 0.0) {
+    t -= shift;
+    if (t < 0.0) t += end * (1.0 + r);
+    if (!(t >= 0.0)) t = 0.0;
+  }
+  return t;
+}
+
+static inline double pulseAmp(
+  int j, int nFwd, double end, double curve,
+  double ampStart, double ampEnd, double ampCurve,
+  double amplitude, double velocity, bool loop, double pulseBias
+) {
+  const double p = pulseBiasOf(pulseBias);
+  int k = j;
+  if (isDual(p) && nFwd > 1) {
+    const double rot = rotAmtOf(p);
+    if (rot > 0.0) {
+      const double r = dualAmtOf(p);
+      const int total = totalCount(nFwd, p, loop);
+      const double shift = rot * oneWayTime(nFwd - 1, nFwd, end, curve, loop);
+      k = origK(j, nFwd, end, curve, loop, r, shift, total);
+    }
+  }
+  const int i = isDual(p) ? fwdRevIndex(k, nFwd) : k;
   return (ampStart + (ampEnd - ampStart) * curveShape(ampCurve, pulseU(i, nFwd, loop))) * amplitude * velocity;
 }
 
@@ -269,7 +277,7 @@ static inline double clampDelay(double d) {
 }
 
 static inline double oneShotEndTime(
-  int count, int nFwd, double end, double curve, bool loop, int pulseMode, double delay
+  int count, int nFwd, double end, double curve, bool loop, double pulseMode, double delay
 ) {
   const double lastT = count <= 0 ? 0.0
     : pulseTime(count - 1, nFwd, end, curve, loop, pulseMode);
@@ -489,14 +497,14 @@ static void addAt(PulseTrainState& s, long long land, long long n, double amp, d
 }
 
 static void applySchedule(PulseTrainState& s, const double live[9], double v, bool loop) {
-  s.pulseMode = pulseModeOf(live[7]);
+  s.pulseMode = pulseBiasOf(live[7]);
   s.nFwd = clampFwd(live[0], s.pulseMode);
   s.count = totalCount(s.nFwd, s.pulseMode, loop);
   for (int k = 0; k < 9; k++) s.eff[k] = live[k];
   s.effVel = v;
   s.timeSpan = live[1] > 0.0 ? live[1] : 0.0;
   const double delay = clampDelay(live[8]);
-  const double span = (isDual(s.pulseMode) ? 2.0 : 1.0) * s.timeSpan;
+  const double span = (1.0 + dualAmtOf(s.pulseMode)) * s.timeSpan;
   s.cycle = span + delay;
   if (!(s.cycle == s.cycle)) s.cycle = 0.0;
   s.loopSched = loop;
@@ -504,7 +512,7 @@ static void applySchedule(PulseTrainState& s, const double live[9], double v, bo
   if (s.allAtZero) {
     double sum = 0.0;
     for (int i = 0; i < s.count; i++) {
-      sum += pulseAmp(i, s.nFwd, live[3], live[4], live[5], live[6], v, loop, s.pulseMode);
+      sum += pulseAmp(i, s.nFwd, s.timeSpan, live[2], live[3], live[4], live[5], live[6], v, loop, s.pulseMode);
     }
     s.allAmp = sum;
   } else {
@@ -513,7 +521,7 @@ static void applySchedule(PulseTrainState& s, const double live[9], double v, bo
 }
 
 static inline long long landPulse(
-  int j, int total, int nFwd, double end, double curve, bool loop, int pulseMode,
+  int j, int total, int nFwd, double end, double curve, bool loop, double pulseMode,
   double sr, unsigned int seed, int aaMode, double scale
 ) {
   const double tU = pulseTime(j, nFwd, end, curve, loop, pulseMode);
@@ -529,7 +537,7 @@ static inline long long landPulse(
 }
 
 static int firstPulseAfter(
-  long long nPrev, int nFwd, int total, double end, double curve, bool loop, int pulseMode, double sr, int aaMode,
+  long long nPrev, int nFwd, int total, double end, double curve, bool loop, double pulseMode, double sr, int aaMode,
   double scale
 ) {
   if (total <= 0) return 0;
@@ -551,7 +559,7 @@ static int firstPulseAfter(
 // change. Trigger: first land at or after n (do not refire). Grain: the grain
 // that contains n (k-1), so a Frequency sweep does not skip-to-end then wrap.
 static inline int pulseIndexAt(
-  long long n, int nFwd, int total, double end, double curve, bool loop, int pulseMode,
+  long long n, int nFwd, int total, double end, double curve, bool loop, double pulseMode,
   double sr, int aaMode, double scale, int shape
 ) {
   const long long nPrev = n > 0 ? n - 1 : -1;
@@ -562,7 +570,7 @@ static inline int pulseIndexAt(
 
 }  // namespace
 
-extern "C" int soemdsp_pulse_train_version() { return 24; }
+extern "C" int soemdsp_pulse_train_version() { return 25; }
 
 extern "C" int soemdsp_pulse_train_create() {
   for (int i = 0; i < kMaxInstances; i++) {
@@ -586,7 +594,7 @@ extern "C" int soemdsp_pulse_train_create() {
       for (int k = 0; k < 9; k++) s.eff[k] = 0.0;
       s.effVel = 1.0;
       s.loopSched = false;
-      s.pulseMode = kPulseForward;
+      s.pulseMode = 0.0;
       s.allAtZero = false;
       s.allAmp = 0.0;
       s.spill[0] = s.spill[1] = s.spill[2] = s.spill[3] = s.spill[4] = 0.0;
@@ -619,20 +627,20 @@ extern "C" double soemdsp_pulse_train_sample(
   const unsigned int seedU = soemdsp_maths::seed_param_u32(seed);
   PulseTrainState& s = gPool[handle - 1];
   const double sr = sampleRate < 1.0 ? 44100.0 : sampleRate;
-  const int pulseModeLive = pulseModeOf(pulseMode);
+  const double pulseModeLive = pulseBiasOf(pulseMode);
   const double live[9] = {
     count, endTime, curve, ampStart, ampEnd, ampCurve, amplitude,
-    (double)pulseModeLive, clampDelay(endDelay)
+    pulseModeLive, clampDelay(endDelay)
   };
   s.endOut = 0.0;
   s.trigOut = 0.0;
   const bool trigHit = gate_hit(trigger, &s.prevTrig);
   if (trigHit) s.velocity = gate_hit_velocity();
   const bool runningLatch = latch && s.running;
-  const int modeNow = runningLatch ? s.pulseMode : pulseModeLive;
+  const double modeNow = runningLatch ? s.pulseMode : pulseModeLive;
   const double timeNow = runningLatch ? s.timeSpan : (endTime > 0.0 ? endTime : 0.0);
   const double delayNow = runningLatch ? clampDelay(s.eff[8]) : live[8];
-  double schedNow = runningLatch ? s.cycle : ((isDual(modeNow) ? 2.0 : 1.0) * timeNow + delayNow);
+  double schedNow = runningLatch ? s.cycle : ((1.0 + dualAmtOf(modeNow)) * timeNow + delayNow);
   if (!(schedNow == schedNow)) schedNow = 0.0;
   const double periodLock = trackPeriodOf(freqHz, sr);
   const double scale = (periodLock > 0.0 && schedNow > 0.0) ? (periodLock / schedNow) : 1.0;
@@ -722,7 +730,7 @@ extern "C" double soemdsp_pulse_train_sample(
   const double endT = s.timeSpan;
   const double kCurve = s.eff[2];
   const bool lp = s.loopSched;
-  const int du = s.pulseMode;
+  const double du = s.pulseMode;
   const int total = s.count;
   const int nFwd = s.nFwd;
   const double delay = clampDelay(s.eff[8]);
@@ -749,12 +757,12 @@ extern "C" double soemdsp_pulse_train_sample(
           const long long land = aaMode >= 4
             ? robinLand2(t, sr, stream, (unsigned int)s.next)
             : robinLand(t, sr, stream, (unsigned int)s.next);
-          const double amp = pulseAmp(s.next, nFwd, s.eff[3], s.eff[4], s.eff[5], s.eff[6], s.effVel, lp, du);
+          const double amp = pulseAmp(s.next, nFwd, endT, kCurve, s.eff[3], s.eff[4], s.eff[5], s.eff[6], s.effVel, lp, du);
           addAt(s, land, s.n, amp, &out);
         } else {
           const long long c = ceilLand(t, sr);
           if (c > s.n) break;
-          const double amp = pulseAmp(s.next, nFwd, s.eff[3], s.eff[4], s.eff[5], s.eff[6], s.effVel, lp, du);
+          const double amp = pulseAmp(s.next, nFwd, endT, kCurve, s.eff[3], s.eff[4], s.eff[5], s.eff[6], s.effVel, lp, du);
           if (aaMode >= 1) {
             const double tPrev = playT(s.next > 0 ? pulseTime(s.next - 1, nFwd, endT, kCurve, lp, du) : 0.0, scale);
             const double tNext = playT(s.next + 1 < total ? pulseTime(s.next + 1, nFwd, endT, kCurve, lp, du) : tU, scale);
@@ -792,7 +800,7 @@ extern "C" double soemdsp_pulse_train_sample(
         // the cycle) is silent. Delay <= 0: runs to the wrap as before.
         const long long nWrap = s.cycleN > 0 ? s.cycleN : ceilLand(s.wrapCycle > 0.0 ? s.wrapCycle : 1.0 / sr, sr);
         if (delay > 0.0) {
-          const double spanT = (isDual(du) ? 2.0 : 1.0) * endT;
+          const double spanT = (1.0 + dualAmtOf(du)) * endT;
           const long long nSpan = eventLand(playT(spanT, scale), sr, stream, (unsigned int)total, aaMode, false);
           n1 = nSpan < nWrap ? nSpan : nWrap;
         } else {
@@ -806,7 +814,7 @@ extern "C" double soemdsp_pulse_train_sample(
         // One-shot delay 0: last pulse is the end of the previous grain, not a
         // new 1-sample stub. End fires on that sample (same as Trigger).
         if (!lp && s.next + 1 >= total) {
-          trig += pulseAmp(s.next, nFwd, s.eff[3], s.eff[4], s.eff[5], s.eff[6], s.effVel, lp, du);
+          trig += pulseAmp(s.next, nFwd, endT, kCurve, s.eff[3], s.eff[4], s.eff[5], s.eff[6], s.effVel, lp, du);
           s.next = total;
           break;
         }
@@ -815,7 +823,7 @@ extern "C" double soemdsp_pulse_train_sample(
       if (s.n < n0) break;
       if (s.n < n1) {
         const double u = (double)(s.n - n0) / (double)(n1 - n0);
-        const double amp = pulseAmp(s.next, nFwd, s.eff[3], s.eff[4], s.eff[5], s.eff[6], s.effVel, lp, du);
+        const double amp = pulseAmp(s.next, nFwd, endT, kCurve, s.eff[3], s.eff[4], s.eff[5], s.eff[6], s.effVel, lp, du);
         out = grainWave(shape, u, latch ? s.morphEff : morphLive) * amp;
         if (s.n == n0) trig += amp;
         break;
@@ -892,7 +900,7 @@ extern "C" int soemdsp_pulse_train_preview(
   double count, double endTime, double curve, double ampStart, double ampEnd,
   double ampCurve, double amplitude, double mode, double pulseMode, double endDelay
 ) {
-  gPreview.pulseMode = pulseModeOf(pulseMode);
+  gPreview.pulseMode = pulseBiasOf(pulseMode);
   gPreview.nFwd = clampFwd(count, gPreview.pulseMode);
   gPreview.loop = mode > 0.5;
   gPreview.count = totalCount(gPreview.nFwd, gPreview.pulseMode, gPreview.loop);
@@ -914,7 +922,7 @@ extern "C" double soemdsp_pulse_train_preview_time(int i) {
 extern "C" double soemdsp_pulse_train_preview_amplitude(int i) {
   if (i < 0 || i >= gPreview.count) return 0.0;
   return pulseAmp(
-    i, gPreview.nFwd, gPreview.ampStart, gPreview.ampEnd, gPreview.ampCurve,
+    i, gPreview.nFwd, gPreview.end, gPreview.curve, gPreview.ampStart, gPreview.ampEnd, gPreview.ampCurve,
     gPreview.amplitude, 1.0, gPreview.loop, gPreview.pulseMode
   );
 }

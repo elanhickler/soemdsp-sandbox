@@ -56,7 +56,7 @@ function step(h, trig, p = DEF) {
   let [k0, e0, u0, f0] = step(h, 0.6);
   if (e0 !== 0.6) throw new Error(`Env on hit ${e0} != velocity 0.6`);
   if (u0 !== 1 || f0 !== 10000) throw new Error(`0–1 on hit ${u0} freq ${f0}, expected 1 at High Freq`);
-  if (k0 !== 0) throw new Error(`first sample of a fresh instance ${k0} != 0 (phase 0, Sine)`);
+  if (k0 !== 0) throw new Error(`first sample of a fresh instance ${k0} != 0 (phase 0, SawSine morph 0)`);
   let zeroAt = -1;
   let peakK = 0;
   for (let n = 1; n < 20000; n++) {
@@ -71,7 +71,7 @@ function step(h, trig, p = DEF) {
   if (!(zeroAt > 0 && zeroAt < 0.05 * SR * 3)) throw new Error(`Env never reached exact 0 (${zeroAt})`);
   if (!(peakK > 0.3)) throw new Error(`Kick too quiet ${peakK}`);
   if ((kIdle(h) | 0) !== 1) throw new Error("robinSinepulse should be idle after Decay");
-  // Trigger after silence hard-resets: first sample is 0 again (Sine, phase 0).
+  // Trigger after silence hard-resets: first sample is 0 again (SawSine morph 0, phase 0).
   [k0, e0, u0] = step(h, 1);
   if (e0 !== 1 || u0 !== 1 || k0 !== 0) throw new Error(`Trigger after silence should hard-reset phase (k0=${k0} u0=${u0})`);
   // Mid-hit retrigger also hard-resets. Amplitude does not move the 0–1 jack.
@@ -204,7 +204,7 @@ function runGraph({ wave = 0, waveShape = 0, blocks = 750 } = {}) {
   }
   if (!(a.env[a.hits[0] + 400] < 0.95)) throw new Error("0–1 did not follow the sweep down");
   if (!(peakEnv <= 1)) throw new Error(`0–1 peak ${peakEnv}`);
-  // Every Trigger hard-resets: first sample of each hit is 0 (Sine, phase 0).
+  // Every Trigger hard-resets: first sample of each hit is 0 (SawSine morph 0, phase 0).
   for (const n of a.hits) {
     if (a.sig[n] !== 0 || !(a.sig[n + 1] > 0)) throw new Error(`Trigger hit at ${n} not a zero-phase start`);
   }
@@ -218,8 +218,8 @@ function runGraph({ wave = 0, waveShape = 0, blocks = 750 } = {}) {
   const c = runGraph({ wave: 2, waveShape: 0.5 });
   let diff = 0;
   for (let n = 0; n < c.sig.length; n++) diff = Math.max(diff, Math.abs(c.sig[n] - a.sig[n]));
-  if (!(diff > 0.05)) throw new Error(`Wave TriSaw had no effect (${diff})`);
-  console.log(`ok robinSinepulse graph type=${TYPE_SINEPULSE} version=${ver} hits=${a.hits.length} freqPeak=${peakFreq.toFixed(1)} outPeak=${peakSig.toFixed(4)} triSawDiff=${diff.toFixed(3)}`);
+  if (!(diff > 0.05)) throw new Error(`Wave SawTri had no effect (${diff})`);
+  console.log(`ok robinSinepulse graph type=${TYPE_SINEPULSE} version=${ver} hits=${a.hits.length} freqPeak=${peakFreq.toFixed(1)} outPeak=${peakSig.toFixed(4)} sawTriDiff=${diff.toFixed(3)}`);
 }
 
 // --- 3) Wave choice persists by name; Trigger only (no Reset); outputs Kick / Env ---
@@ -246,9 +246,9 @@ function runGraph({ wave = 0, waveShape = 0, blocks = 750 } = {}) {
   const ctx = { nodeGraphModuleDefinitions: { robinSinepulse: def } };
   vm.runInNewContext(`${metaSrc.slice(a, z)}\nthis.idFor = nodeGraphChoiceIdForKey;`, ctx);
   const wave = def.parameters.find((x) => x.key === "wave");
-  if (JSON.stringify(wave.choiceKeys) !== JSON.stringify(["sine", "sinFatSaw", "triSaw"])) throw new Error("wave choiceKeys");
-  if (wave.defaultValue !== "sine") throw new Error("wave default must be the name 'sine'");
-  for (const [name, id] of [["sine", 0], ["sinFatSaw", 1], ["triSaw", 2]]) {
+  if (JSON.stringify(wave.choiceKeys) !== JSON.stringify(["sawSine", "triSine", "sawTri"])) throw new Error("wave choiceKeys");
+  if (wave.defaultValue !== "sawSine") throw new Error("wave default must be the name 'sawSine'");
+  for (const [name, id] of [["sawSine", 0], ["triSine", 1], ["sawTri", 2]]) {
     const saved = JSON.parse(JSON.stringify({ type: "robinSinepulse", params: { wave: name } }));
     if (saved.params.wave !== name) throw new Error("wave not stored by name");
     const got = ctx.idFor("robinSinepulse", "wave", saved.params.wave);

@@ -630,9 +630,11 @@ function drawNodeGraphScope2dEnergyBurnPath(item, pixelRatio, pathPoints, settin
   // Empty area is gradient(backgroundBrightness), not a hue plate.
   const plateRaw = Number(settings?.backgroundBrightness);
   const plate01 = Number.isFinite(plateRaw) ? Math.max(0, Math.min(1, plateRaw)) : 0;
-  const plateStops = typeof nodeGraphPhosphorGradientStopsFromSettings === "function"
-    ? nodeGraphPhosphorGradientStopsFromSettings(settings, "#75ebff")
-    : settings?.gradientStops;
+  const plateStops = typeof nodeGraphPhosphorGradientStopsForDraw === "function"
+    ? nodeGraphPhosphorGradientStopsForDraw(settings, "#75ebff")
+    : (typeof nodeGraphPhosphorGradientStopsFromSettings === "function"
+      ? nodeGraphPhosphorGradientStopsFromSettings(settings, "#75ebff")
+      : settings?.gradientStops);
   let plateCss = "#000000";
   if (typeof nodeGraphSampleGradientStopsRgb === "function") {
     const rgb = nodeGraphSampleGradientStopsRgb(plateStops, plate01, "#000000");
@@ -1293,6 +1295,7 @@ function drawNodeGraphScope2dTraceLayer(context, points, dotSpace, settings) {
         brightness: 1,
         intensity: 1,
         brightAlong: false,
+        samplesOnly: String(settings?.drawMode || "") === "dots",
         presentComposite: i === 0 ? "copy" : (settings.stereoBlend || "lighter"),
       }) || 0;
     }
@@ -1305,9 +1308,11 @@ function drawNodeGraphScope2dTraceLayer(context, points, dotSpace, settings) {
     const brightRaw = Number(settings.dot1Brightness ?? settings.brightness);
     const intensity = Number.isFinite(brightRaw) ? Math.max(0, brightRaw) : 1;
     const plateN = Number(settings.backgroundBrightness);
-    const stops = typeof nodeGraphPhosphorGradientStopsFromSettings === "function"
-      ? nodeGraphPhosphorGradientStopsFromSettings(settings, "#ffffff")
-      : settings.gradientStops;
+    const stops = typeof nodeGraphPhosphorGradientStopsForDraw === "function"
+      ? nodeGraphPhosphorGradientStopsForDraw(settings, "#ffffff")
+      : (typeof nodeGraphPhosphorGradientStopsFromSettings === "function"
+        ? nodeGraphPhosphorGradientStopsFromSettings(settings, "#ffffff")
+        : settings.gradientStops);
     const count = TraceWoscope.draw(context, points, {
       size: settings.dot1Size,
       color: [1, 1, 1],
@@ -1315,6 +1320,7 @@ function drawNodeGraphScope2dTraceLayer(context, points, dotSpace, settings) {
       brightness: intensity,
       intensity,
       brightAlong: true,
+      samplesOnly: String(settings?.drawMode || "") === "dots",
       gradientStops: stops,
       plateBrightness: Number.isFinite(plateN) ? Math.max(0, Math.min(1, plateN)) : 0,
       trail: settings.trail,

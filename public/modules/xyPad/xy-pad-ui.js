@@ -630,11 +630,14 @@ function drawNodeGraphXyPad(pad, options = {}) {
   const dpr = Math.max(1, (sized.pixelRatio || 1) / Math.max(density, 1e-6));
   const size = sized;
   // Floor / peak follow gradientStops (shared gradient editor).
-  const gradientStops = Array.isArray(display.gradientStops) && display.gradientStops.length >= 2
+  const gradientStopsRaw = Array.isArray(display.gradientStops) && display.gradientStops.length >= 2
     ? display.gradientStops
     : (typeof nodeGraphPhosphorGradientStopsFromSettings === "function"
       ? nodeGraphPhosphorGradientStopsFromSettings(display, "#7fc7d9")
       : null);
+  const gradientStops = typeof nodeGraphApplyGradientHueRotation === "function"
+    ? nodeGraphApplyGradientHueRotation(gradientStopsRaw, display)
+    : gradientStopsRaw;
   const phosphorHex = gradientStops?.[gradientStops.length - 1]?.color
     || display.dot1Color
     || "#75ebff";

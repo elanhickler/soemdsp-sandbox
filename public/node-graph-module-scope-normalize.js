@@ -60,6 +60,12 @@ function nodeGraphDisplaySettingsNormalizePlateLook(source = {}, defaults = {}) 
   } else {
     brightness = mapped.brightness;
   }
+  // One-time: old unused plate-hue default (240, black plate) → 0° gradient rotation.
+  if (!src.hueRotationReady) {
+    if (brightness <= 1e-6 && Number.isFinite(hue) && Math.abs(hue - 240) < 0.51) {
+      hue = 0;
+    }
+  }
   const hueHex = typeof nodeGraphHueUnitHex === "function"
     ? nodeGraphHueUnitHex(hue)
     : hex;
@@ -68,6 +74,7 @@ function nodeGraphDisplaySettingsNormalizePlateLook(source = {}, defaults = {}) 
     backgroundBrightness: brightness,
     background: hueHex,
     backgroundColor: hueHex,
+    hueRotationReady: true,
   };
 }
 
@@ -220,6 +227,26 @@ function nodeGraphPhosphorDefaultGradientStops(peakHex = "#75ebff", backgroundHe
 }
 
 
+function nodeGraphApplyGradientHueRotation(stops, settings) {
+  const list = Array.isArray(stops) ? stops : [];
+  if (!list.length) {
+    return list;
+  }
+  const deg = typeof nodeGraphGradientHueRotationDeg === "function"
+    ? nodeGraphGradientHueRotationDeg(settings)
+    : Number(settings?.backgroundHue);
+  if (!Number.isFinite(deg) || deg === 0) {
+    return list;
+  }
+  if (typeof nodeGraphHexHueRotate !== "function") {
+    return list;
+  }
+  return list.map((stop) => ({
+    t: stop?.t,
+    color: nodeGraphHexHueRotate(stop?.color, deg),
+  }));
+}
+
 function nodeGraphPhosphorGradientStopsFromSettings(settings = {}, peakFallback = "#75ebff", options = {}) {
   const source = settings && typeof settings === "object" ? settings : {};
   // Existing stops are kept as-is. Default ramps may sample peak/bg.
@@ -235,13 +262,27 @@ function nodeGraphPhosphorGradientStopsFromSettings(settings = {}, peakFallback 
     source.background ?? source.backgroundColor ?? "#000000",
     "#000000",
   );
+  let stops;
   if (source.gradientStops || source.gradient) {
-    return normalizeNodeGraphSharedGradientStops(
+    stops = normalizeNodeGraphSharedGradientStops(
       source.gradientStops ?? source.gradient,
       nodeGraphPhosphorDefaultGradientStops(peak, bg),
     );
+  } else {
+    stops = nodeGraphPhosphorDefaultGradientStops(peak, bg);
   }
-  return nodeGraphPhosphorDefaultGradientStops(peak, bg);
+  if (options.applyHueRotation) {
+    return nodeGraphApplyGradientHueRotation(stops, source);
+  }
+  return stops;
+}
+
+/** Authored stops with Hue Rotation applied — LUT / beam draw only, never persist. */
+function nodeGraphPhosphorGradientStopsForDraw(settings = {}, peakFallback = "#75ebff", options = {}) {
+  return nodeGraphPhosphorGradientStopsFromSettings(settings, peakFallback, {
+    ...options,
+    applyHueRotation: true,
+  });
 }
 
 
@@ -249,7 +290,7 @@ function nodeGraphPhosphorApplyGradientLut(faceOrEnergyGl, settings, peakFallbac
   if (!faceOrEnergyGl) {
     return false;
   }
-  const stops = nodeGraphPhosphorGradientStopsFromSettings(settings, peakFallback);
+  const stops = nodeGraphPhosphorGradientStopsForDraw(settings, peakFallback);
   if (typeof PhosphorDrawer !== "undefined" && PhosphorDrawer?.setLutStops) {
     return PhosphorDrawer.setLutStops(faceOrEnergyGl, stops);
   }
@@ -1716,6 +1757,9 @@ function normalizeNodeGraphScope2dTraceSettings(settings = {}, typeDefaults = nu
     trail: typeof PhosphorResidual !== "undefined" && PhosphorResidual.migrateTrail
       ? PhosphorResidual.migrateTrail(source, defaults.trail)
       : normalizeNodeGraphTraceDisplayNumber(source.trail, defaults.trail, 0, 1),
+    burnAmount: typeof PhosphorResidual !== "undefined" && PhosphorResidual.migrateBurnAmount
+      ? PhosphorResidual.migrateBurnAmount(source, defaults.burnAmount ?? 1)
+      : normalizeNodeGraphTraceDisplayNumber(source.burnAmount, defaults.burnAmount ?? 1, 0, 4),
     pixelDensity: normalizeNodeGraphTraceDisplayNumber(
       source.pixelDensity,
       defaults.pixelDensity,
@@ -1742,6 +1786,9 @@ function normalizeNodeGraphScope2dTraceSettings(settings = {}, typeDefaults = nu
       if (mode === "length" || mode === "dots" || mode === "lines") return mode;
       return "budget";
     }()),
+    rotate90: nodeGraphDisplaySettingsToggleIsOn(
+      source.rotate90 ?? defaults.rotate90,
+    ),
   };
 }
 

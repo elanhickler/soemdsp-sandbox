@@ -301,34 +301,45 @@ function nodeGraphModuleScopeIsAdditiveType(type) {
 
 function nodeGraphDefaultModuleScopeMonitors(patch = nodeGraphMvp?.patch) {
   return (Array.isArray(patch?.nodes) ? patch.nodes : [])
-    .map((node) => {
+    .flatMap((node) => {
+      const modeSource = typeof nodeGraphModuleSelectedDisplayMode === "function"
+        ? nodeGraphModuleSelectedDisplayMode(node)?.source
+        : null;
+      const xPort = String(modeSource?.x || "").trim();
+      const yPort = String(modeSource?.y || "").trim();
+      if (xPort && yPort) {
+        const pair = [{ io: "output", node: node.id, port: xPort }];
+        if (yPort !== xPort) {
+          pair.push({ io: "output", node: node.id, port: yPort });
+        }
+        return pair;
+      }
       if (nodeGraphModuleScopeIsOscillatorType(node?.type)) {
-        return {
+        return [{
           io: "output",
           node: node.id,
           port: nodeGraphOscillatorSelectedOutputPort(node),
-        };
+        }];
       }
       const inputs = nodeGraphPatchNodeInputPorts(node);
       if (inputs.length) {
-        return {
+        return [{
           io: "input",
           node: node.id,
           port: inputs[0],
-        };
+        }];
       }
       const outputs = nodeGraphPatchNodeOutputPorts(node);
       if (!outputs.length) {
-        return null;
+        return [];
       }
       const port = outputs.includes("Out") ? "Out" : outputs[0];
-      return {
+      return [{
         io: "output",
         node: node.id,
         port,
-      };
-    })
-    .filter(Boolean);
+      }];
+    });
 }
 
 /** Outgoing jack names from this node (patch cables only). */
@@ -368,6 +379,21 @@ function nodeGraphOscillatorSelectedOutputPort(node) {
   if (wavePort) {
     if (connected.size === 0 || connected.has(wavePort) || connected.has("Out")) {
       return wavePort;
+    }
+  }
+  // Stereo osc (Filter Morph): live cable, Left first, then Right.
+  if (outputs.includes("Wave L") || outputs.includes("Wave R")) {
+    const leftLive = connected.has("Wave L")
+      || connected.has("Left")
+      || connected.has("Out")
+      || connected.has("Wave")
+      || connected.has("Mono");
+    const rightLive = connected.has("Wave R") || connected.has("Right");
+    if (connected.size === 0 || leftLive || (!rightLive && outputs.includes("Wave L"))) {
+      return outputs.includes("Wave L") ? "Wave L" : "Wave R";
+    }
+    if (rightLive) {
+      return "Wave R";
     }
   }
   for (let i = 0; i < outputs.length; i += 1) {
@@ -410,9 +436,13 @@ function nodeGraphModuleScopeHasModelDisplay() {
           nodeGraphModuleScopeConnectionsTo(slot.nodeId, "X").length > 0 &&
           nodeGraphModuleScopeConnectionsTo(slot.nodeId, "Y").length > 0
         ) || (
-          // Generators (Lorenz, Chua, …): X/Y are real outs, not dry thrus.
+          // Generators (Lorenz, Chua, Filter Morph, …): declared XY outs, not dry thrus.
           outputs.includes("X")
           && outputs.includes("Y")
+          && nodeGraphModuleDefinitions[slot.type]?.visualSink !== true
+        ) || (
+          outputs.includes("Wave L")
+          && outputs.includes("Wave R")
           && nodeGraphModuleDefinitions[slot.type]?.visualSink !== true
         )
       )) ||

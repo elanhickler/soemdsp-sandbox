@@ -16,9 +16,11 @@ function nodeGraphScope1dTraceIsSlot(slot) {
 function nodeGraphScope1dTraceInkRgb01(settings = {}, role = "primary") {
   // Flat fallback only. The beam itself is brightness, then gradient lookup.
   const t = Math.max(0, Math.min(1, nodeGraphScope1dTraceBrightness01(settings, role)));
-  const stops = typeof nodeGraphPhosphorGradientStopsFromSettings === "function"
-    ? nodeGraphPhosphorGradientStopsFromSettings(settings, "#ffffff")
-    : settings?.gradientStops;
+  const stops = typeof nodeGraphPhosphorGradientStopsForDraw === "function"
+    ? nodeGraphPhosphorGradientStopsForDraw(settings, "#ffffff")
+    : (typeof nodeGraphPhosphorGradientStopsFromSettings === "function"
+      ? nodeGraphPhosphorGradientStopsFromSettings(settings, "#ffffff")
+      : settings?.gradientStops);
   if (typeof nodeGraphSampleGradientStopsRgb === "function") {
     const rgb = nodeGraphSampleGradientStopsRgb(stops, t, "#ffffff");
     const r = Number(rgb?.[0]);
@@ -359,9 +361,11 @@ function nodeGraphScope1dTraceDrawLayer(context, points, settings, role = "prima
   const faceMinSide = Math.max(1, Math.min(context.canvas.width, context.canvas.height));
   const plateN = Number(settings?.backgroundBrightness);
   if (typeof TraceWoscope !== "undefined" && typeof TraceWoscope.draw === "function") {
-    const stops = typeof nodeGraphPhosphorGradientStopsFromSettings === "function"
-      ? nodeGraphPhosphorGradientStopsFromSettings(settings, "#ffffff")
-      : settings?.gradientStops;
+    const stops = typeof nodeGraphPhosphorGradientStopsForDraw === "function"
+      ? nodeGraphPhosphorGradientStopsForDraw(settings, "#ffffff")
+      : (typeof nodeGraphPhosphorGradientStopsFromSettings === "function"
+        ? nodeGraphPhosphorGradientStopsFromSettings(settings, "#ffffff")
+        : settings?.gradientStops);
     const woscopeOpts = {
       size,
       color: [1, 1, 1],
@@ -371,6 +375,7 @@ function nodeGraphScope1dTraceDrawLayer(context, points, settings, role = "prima
       brightAlong: true,
       // solidCore is 1D stroke profile (not color). Leave it.
       solidCore: true,
+      samplesOnly: String(settings?.drawMode || "") === "dots",
       gradientStops: stops,
       plateBrightness: Number.isFinite(plateN) ? Math.max(0, Math.min(1, plateN)) : 0,
       trail: settings?.trail,

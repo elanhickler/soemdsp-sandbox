@@ -351,8 +351,11 @@ void main (void) {
     return device;
   }
 
-  function collectSegments(points) {
+  function collectSegments(points, options) {
     const segs = [];
+    const samplesOnly = options?.samplesOnly === true
+      || options?.dotsOnly === true
+      || options?.verticesOnly === true;
     let realTotal = 0;
     for (let i = 0; i < points.length; i += 1) {
       const p = points[i];
@@ -362,24 +365,42 @@ void main (void) {
     }
     let prev = null;
     let prevT = 0;
+    let prevConnected = false;
     let realIndex = 0;
+    const flushIsolated = () => {
+      if (prev && !prevConnected) {
+        segs.push(prev.x, prev.y, prev.x, prev.y, prevT, prevT);
+      }
+    };
     for (let i = 0; i < points.length; i += 1) {
       const p = points[i];
       if (!p || !Number.isFinite(p.x) || !Number.isFinite(p.y)) {
+        flushIsolated();
         prev = null;
+        prevConnected = false;
         continue;
       }
       const namedT = Number(p.t);
       const t = Number.isFinite(namedT)
         ? Math.max(0, Math.min(1, namedT))
         : (realTotal > 1 ? realIndex / (realTotal - 1) : 1);
-      if (prev) {
+      if (samplesOnly) {
+        segs.push(p.x, p.y, p.x, p.y, t, t);
+        prev = null;
+        prevConnected = false;
+      } else if (prev) {
         segs.push(prev.x, prev.y, p.x, p.y, prevT, t);
+        prev = p;
+        prevT = t;
+        prevConnected = true;
+      } else {
+        prev = p;
+        prevT = t;
+        prevConnected = false;
       }
-      prev = p;
-      prevT = t;
       realIndex += 1;
     }
+    flushIsolated();
     return segs;
   }
 
@@ -698,7 +719,7 @@ void main() {
       ? faceInkPx(options.size, face)
       : Math.max(0, Number(options.size) || 0);
     const intensity = Math.max(0, Number(options.intensity ?? options.brightness ?? 1));
-    const packed = collectSegments(Array.isArray(points) ? points : []);
+    const packed = collectSegments(Array.isArray(points) ? points : [], options);
     const packedStride = 6;
     const segCount = packed.length / packedStride;
     const glDevice = getDevice();
@@ -887,7 +908,7 @@ void main() {
     if (!(diameter > 0) || (!brightAlong && intensity <= 0)) {
       return 0;
     }
-    const packed = collectSegments(points);
+    const packed = collectSegments(points, options);
     const packedStride = 6;
     const segCount = packed.length / packedStride;
     if (segCount < 1) {
@@ -1036,7 +1057,7 @@ void main() {
     if (!(diameter > 0) || intensity <= 0) {
       return 0;
     }
-    const packed = collectSegments(points);
+    const packed = collectSegments(points, options);
     const packedStride = 6;
     const segCount = packed.length / packedStride;
     if (segCount < 1) {

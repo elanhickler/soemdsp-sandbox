@@ -16,8 +16,8 @@
 //   a = fHi, c = ((a/50)^(1/q) - 1) / sweepTime^p, b = fLo * c^q
 //   f(t) = (a + b*t^(p*q)) / (1 + c*t^p)^q,  t = n / fs
 // Phase: trapezoidal integration of f, wrapped once per sample
-// (rsFreqSweeper::getSampleFrameStereo). Waves: rsMorphWaveBipolar
-// (Sine, SinFatSaw, TriSaw with triSawParamMap 0.60).
+// (rsFreqSweeper::getSampleFrameStereo). Waves: SawSine, TriSine, SawTri.
+// Morph 1 = high-frequency end, 0 = low-frequency end (unipolar).
 //
 // Sandbox additions (docs/KICK_PLAN.md, Argi 2026-10-06; Reset removed 2026-10-06):
 //   - Decay: one-multiply T60 amplitude envelope e per voice (scales Kick; not a jack).
@@ -52,8 +52,7 @@ static const double kLn1000 = 6.907755278982137;  // T60: e falls by 1000 in `de
 static const double kMinSweepTime = 1.0e-3;       // guard: sweepTime^p must stay > 0
 static const double kUnitFloorHz = 20.0;          // 0-1 jack log floor: L = max(Low, 20 Hz)
 
-// rsMorphWaveBipolar::WaveForm order.
-enum { kWaveSine = 0, kWaveSinFatSaw = 1, kWaveTriSaw = 2 };
+enum { kWaveSawSine = 0, kWaveTriSine = 1, kWaveSawTri = 2 };
 
 // One hit: Robin's rsFreqSweeper state plus its Decay envelope.
 struct Voice {
@@ -175,19 +174,47 @@ static double tri_saw(double pos01, double m) {
   return 2.0 * (r2 - x) / d + 1.0;
 }
 
-// rsMorphWaveBipolar::triSawParamMap: sign(P) * rsRationalMap_01(|P|, 0.60).
+// Morph 0..1 → tri_saw m 0..1 (triangle → rising saw). Rational 0.60.
 static double tri_saw_param_map(double raw) {
-  const double P = clamp(raw, -1.0, 1.0);
-  const double m = rational_curve01(dsp_fabs(P), 0.60);
-  return P < 0.0 ? -m : (P > 0.0 ? m : 0.0);
+  return rational_curve01(clamp(raw, 0.0, 1.0), 0.60);
 }
 
-// rsMorphWaveBipolar::getWaveValue. Sine = dsp_sin_turns_lut (Sine SSOT).
-static double wave_value(int wave, double pos, double waveShape) {
-  if (wave == kWaveSine) return dsp_sin_turns_lut(pos);
-  const double tri = tri_saw(pos, tri_saw_param_map(waveShape));
-  if (wave == kWaveSinFatSaw) return dsp_sin_turns_lut(0.25 * tri);  // sin(pi/2 * tri)
+// Diroxe hyperbolic tent. k→0 linear tent; large k rounds toward sine.
+// k is floored so the peak rounding is at least ~2 samples at `freq`.
+static double tent_k(double morph, double freq, double sr) {
+  const double m = clamp(morph, 0.0, 1.0);
+  const double lnSharp = -13.815510557964274; // ln(1e-6)
+  double k = dsp_exp(m * lnSharp);
+  const double fs = sr > 1.0 ? sr : 44100.0;
+  const double f = freq > 1.0 ? freq : 1.0;
+  const double twoOverN = 2.0 * f / fs;
+  const double kMin = twoOverN * twoOverN;
+  if (k < kMin) k = kMin;
+  return k;
+}
+
+static double hyperbolic_tent(double pos, double k) {
+  const double u = wrap01(pos);
+  const double kk = k > 0.0 ? k : 0.0;
+  const double r = __builtin_sqrt(0.25 + kk);
+  const double g = 4.0 * (r + __builtin_sqrt(kk));
+  const double half = u < 0.5;
+  const double x = half ? u * 2.0 : (u - 0.5) * 2.0;
+  const double b = x - 0.5;
+  const double y = g * (r - __builtin_sqrt(b * b + kk));
+  return half ? y : -y;
+}
+
+static double wave_value(int wave, double pos, double waveShape, double freq, double sr) {
+  const double m = clamp(waveShape, 0.0, 1.0);
+  if (wave == kWaveTriSine) return hyperbolic_tent(pos, tent_k(m, freq, sr));
+  const double tri = tri_saw(pos, tri_saw_param_map(m));
+  if (wave == kWaveSawSine) return dsp_sin_turns_lut(0.25 * tri);
   return tri;
+}
+
+static double wave_value(int wave, double pos, double waveShape) {
+  return wave_value(wave, pos, waveShape, 100.0, 48000.0);
 }
 
 // Live control in: NaN/inf -> 0, |x| < kPlanck -> exact 0 (keeps subnormal
@@ -248,7 +275,7 @@ static int start_voice(State& s, int fadeSlots, double fadeSamples) {
 // faded voice output (without Amplitude).
 static double run_voice(Voice& v, int w, double phase, double waveShape,
                         double ch, double sh, double decay, double sr) {
-  const double y = wave_value(w, v.instPhase + phase, waveShape);
+  const double y = wave_value(w, v.instPhase + phase, waveShape, v.instFreq, sr);
   const double out = v.env * v.gain * y;
 
   // State update (rsFreqSweeper::getSampleFrameStereo order).
@@ -352,9 +379,9 @@ extern "C" double soemdsp_robin_sinepulse_sample(
 
   const bool latch = safe(recalculateOnTrigger) >= 0.5;
   int w = (int)(safe(wave) + 0.5);
-  w = w < kWaveSine ? kWaveSine : (w > kWaveTriSaw ? kWaveTriSaw : w);
+  w = w < kWaveSawSine ? kWaveSawSine : (w > kWaveSawTri ? kWaveSawTri : w);
   const double ph = clean_control(phase);
-  const double ws = clean_control(waveShape);
+  const double ws = clamp(clean_control(waveShape), 0.0, 1.0);
   const double ch = clamp(safe(chirp), -1.0, 1.0);
   const double sh = clamp(safe(chirpShape), -1.0, 1.0);
   const double liveDecay = safe(decay);
@@ -486,9 +513,9 @@ extern "C" int soemdsp_robin_sinepulse_preview(
     gPreviewMax[i] = -1.0e9f;
   }
   int w = (int)(safe(wave) + 0.5);
-  w = w < kWaveSine ? kWaveSine : (w > kWaveTriSaw ? kWaveTriSaw : w);
+  w = w < kWaveSawSine ? kWaveSawSine : (w > kWaveSawTri ? kWaveSawTri : w);
   const double ph = clean_control(phase);
-  const double ws = clean_control(waveShape);
+  const double ws = clamp(clean_control(waveShape), 0.0, 1.0);
   const double amp = clean_control(amplitude);
   int prevCol = -1;
   float prevY = 0.0f;
@@ -579,6 +606,6 @@ extern "C" double soemdsp_robin_sinepulse_preview_field_at(int i) {
   return (i >= 0 && i < 11) ? gFieldPack[i] : 0.0;
 }
 
-extern "C" int soemdsp_robin_sinepulse_version() { return 14; }  // 14: preview_field T60-to-1e-6 window. 13: field pack. 11: preview = connected min/max band per column (preview_y removed). 10: connected preview_y polyline. 9: face preview + elapsed. 8: Voices = fading copies (one live kick; Decay does not scale Fade Time). 7: Voices (1..8) + Fade Time (stolen voice fades out; 0 = hard cut). 6: no Decay floor (was 0.1 ms). 5: Recalculate On Trigger (decay latched on hit)
+extern "C" int soemdsp_robin_sinepulse_version() { return 15; }  // 15: SawSine/TriSine/SawTri, morph 1→0, tent k pitch floor. 14: preview_field T60-to-1e-6 window. 13: field pack. 11: preview = connected min/max band per column (preview_y removed). 10: connected preview_y polyline. 9: face preview + elapsed. 8: Voices = fading copies (one live kick; Decay does not scale Fade Time). 7: Voices (1..8) + Fade Time (stolen voice fades out; 0 = hard cut). 6: no Decay floor (was 0.1 ms). 5: Recalculate On Trigger (decay latched on hit)
 extern "C" const char* soemdsp_robin_sinepulse_metadata_json() { return kMetadataJson; }
 extern "C" int soemdsp_robin_sinepulse_metadata_json_size() { return sizeof(kMetadataJson) - 1; }

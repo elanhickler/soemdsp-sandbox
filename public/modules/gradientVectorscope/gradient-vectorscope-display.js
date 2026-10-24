@@ -217,14 +217,17 @@ function drawNodeGraphGradientVectorscopeFaceItem(_renderer, item, _pixelRatio) 
       lastPoint = point;
     }
     canvas._gvsLastPoint = lastPoint;
+    const drawStops = typeof nodeGraphApplyGradientHueRotation === "function"
+      ? nodeGraphApplyGradientHueRotation(settings.gradientStops, settings)
+      : settings.gradientStops;
     const sample = typeof nodeGraphSampleGradientStopsRgb === "function"
-      ? (t) => nodeGraphSampleGradientStopsRgb(settings.gradientStops, t, "#d8f4ff")
+      ? (t) => nodeGraphSampleGradientStopsRgb(drawStops, t, "#d8f4ff")
       : null;
     // Size is face-relative (faceInkPx: setting * minSide / 96, 0.5 px floor).
     const drawn = TraceWoscope.drawToFramebuffer(state.read.framebuffer, w, h, points, {
       size: settings.dot1Size,
       faceMinSide: side,
-      gradientStops: settings.gradientStops,
+      gradientStops: drawStops,
       sampleRgb: sample,
     });
     if (drawn < 0) {

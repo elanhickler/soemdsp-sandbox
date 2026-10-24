@@ -8,7 +8,8 @@ import { fileURLToPath } from "url";
 // Graph Pulse Train is Frequency (timeDenominator) + Duty (timeNumerator):
 // Time = Duty/ƒ/(Fwd-Rev?2:1), End Delay = (1-Duty)/ƒ (graph 255). ptFD maps an
 // old Time / End Delay pair to the same schedule.
-const ptFD = (T, D, m) => { const k = m === 1 ? 2 : 1; const c = k * T + D; const f = 1 / c; const duty = (k * T) / c; const P = 1 / f; return { f, duty, T: duty * P / k, D: (1 - duty) * P }; };
+const dualAmt = (m) => (m <= 0 ? 0 : m >= 0.5 ? 1 : m * 2);
+const ptFD = (T, D, m) => { const k = 1 + dualAmt(m); const c = k * T + D; const f = 1 / c; const duty = (k * T) / c; const P = 1 / f; return { f, duty, T: duty * P / k, D: (1 - duty) * P }; };
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const imp = { env: { emo_process_block: () => 0 } };
 const load = async (p) => (await WebAssembly.instantiate(fs.readFileSync(p), imp)).instance.exports;
@@ -171,8 +172,8 @@ console.log("ok pulseTrain a new Trigger hit mid-train restarts it (single Trigg
   const set = [6, 0.15, 4, 1, 0.2, 0, 1];
   const keys = [PR.STAGES, PR.TDEN, PR.SHAPE, PR.IN_LOW, PR.IN_HIGH, PR.WIDTH, PR.AMP];
   keys.forEach((p, i) => N.soemdsp_graph_set_param(g, hP, p, set[i]));
-  { const fd = ptFD(set[1], 0, 1); N.soemdsp_graph_set_param(g, hP, 53, fd.f); N.soemdsp_graph_set_param(g, hP, 52, fd.duty); set[1] = fd.T; }
-  N.soemdsp_graph_set_param(g, hP, PR.LFO_STYLE, 1);
+  { const fd = ptFD(set[1], 0, 0.5); N.soemdsp_graph_set_param(g, hP, 53, fd.f); N.soemdsp_graph_set_param(g, hP, 52, fd.duty); set[1] = fd.T; }
+  N.soemdsp_graph_set_param(g, hP, PR.LFO_STYLE, 0.5);
   N.soemdsp_graph_set_param(g, hP, PR.TMODE, 0);
   N.soemdsp_graph_set_param(g, hP, PR.OVERSAMPLE, 0);
   if (N.soemdsp_graph_compile(g) | 0) throw new Error("dual graph compile");
@@ -187,7 +188,7 @@ console.log("ok pulseTrain a new Trigger hit mid-train restarts it (single Trigg
   const h = N.soemdsp_pulse_train_create();
   const dOut = new Float64Array(trig.length), dEnd = new Float64Array(trig.length), dEl = new Float64Array(trig.length);
   for (let i = 0; i < trig.length; i++) {
-    dOut[i] = N.soemdsp_pulse_train_sample(h, trig[i], ...set, SR, 0, 1, 1, 0);
+    dOut[i] = N.soemdsp_pulse_train_sample(h, trig[i], ...set, SR, 0, 1, 0.5, 0);
     dEnd[i] = N.soemdsp_pulse_train_end(h);
     dEl[i] = N.soemdsp_pulse_train_elapsed(h);
   }
@@ -204,8 +205,8 @@ console.log("ok pulseTrain a new Trigger hit mid-train restarts it (single Trigg
 {
   const set = [8, 0.2, 3, 1, 0.2, 0, 1];
   const fwd = preview(N, set);
-  const dual = preview(N, [...set, 0, 1, 0]); // mode One shot, Pulse Mode Forward-Reverse, Delay 0
-  const s2 = preview(S, [...set, 0, 1, 0]);
+  const dual = preview(N, [...set, 0, 0.5, 0]); // mode One shot, Pulse Mode 0.5 Forward-Reverse, Delay 0
+  const s2 = preview(S, [...set, 0, 0.5, 0]);
   if (JSON.stringify(s2) !== JSON.stringify(dual)) throw new Error("dual: standalone preview != combined");
   const Nf = set[0], T = set[1];
   if (dual.t.length !== 2 * Nf - 1) throw new Error(`dual: count ${dual.t.length} want ${2 * Nf - 1}`);
@@ -226,7 +227,7 @@ console.log("ok pulseTrain a new Trigger hit mid-train restarts it (single Trigg
   const at = 4, n = at + Math.ceil(0.42 * SR);
   const h = N.soemdsp_pulse_train_create();
   const out = new Float64Array(n);
-  for (let i = 0; i < n; i++) out[i] = N.soemdsp_pulse_train_sample(h, i >= at ? 1 : 0, ...set, SR, 0, 0, 1, 0);
+  for (let i = 0; i < n; i++) out[i] = N.soemdsp_pulse_train_sample(h, i >= at ? 1 : 0, ...set, SR, 0, 0, 0.5, 0);
   N.soemdsp_pulse_train_destroy(h);
   const y = new Float64Array(n);
   let j = 0, last = -1;
@@ -235,94 +236,66 @@ console.log("ok pulseTrain a new Trigger hit mid-train restarts it (single Trigg
     while (j < dual.t.length && dual.t[j] <= e) { y[s] += dual.a[j]; j++; last = s; }
   }
   for (let i = 0; i < n; i++) if (Math.abs(out[i] - y[i]) > 1e-12) throw new Error(`dual play: sample ${i} ${out[i]} vs ${y[i]}`);
-  const loopP = preview(N, [...set, 1, 1, 0]);
+  const loopP = preview(N, [...set, 1, 0.5, 0]);
   if (loopP.t.length !== 2 * Nf - 2) throw new Error(`dual loop: count ${loopP.t.length}`);
   const loopLast = 2 * T - (T * E(set[2], 1 / Nf));
   if (Math.abs(loopP.t[loopP.t.length - 1] - loopLast) > 1e-9) throw new Error(`dual loop last ${loopP.t[loopP.t.length - 1]} want ${loopLast}`);
-  const cap = preview(N, [16384, 0.01, 0, 1, 1, 0, 1, 0, 1, 0]);
+  const cap = preview(N, [16384, 0.01, 0, 1, 1, 0, 1, 0, 0.5, 0]);
   if (cap.t.length !== 16383) throw new Error(`dual cap: count ${cap.t.length} want 16383 (nFwd 8192)`);
   console.log(`ok pulseTrain Forward-Reverse: one-shot 2N-1 peak once last=2T, energy 2*fwd-peak, Loop 2N-2, Count 16384 clamps nFwd 8192, playback sample-exact, last pulse sample ${last}`);
 }
-// 5b) Reverse: Dual's return trip as its own N-pulse train over Time.
+// 5b) Fwd-Rev 0.25 grows the return leg (span 1.5*Time, peak stays at Time).
+//     Fwd-Rev 1.0 is the 0.5 train rotated so the peak lands at t=0.
 {
   const set = [8, 0.2, 3, 1, 0.2, 0, 1];
-  const fwd = preview(N, set);
-  const rev = preview(N, [...set, 0, 2, 0]);
-  const s2 = preview(S, [...set, 0, 2, 0]);
-  if (JSON.stringify(s2) !== JSON.stringify(rev)) throw new Error("reverse: standalone preview != combined");
   const Nf = set[0], T = set[1];
-  if (rev.t.length !== Nf) throw new Error(`reverse: count ${rev.t.length} want ${Nf}`);
-  if (rev.t[0] !== 0) throw new Error(`reverse: first ${rev.t[0]} != 0`);
-  if (rev.t[Nf - 1] !== T) throw new Error(`reverse: last ${rev.t[Nf - 1]} != Time`);
-  for (let j = 0; j < Nf; j++) {
-    const i = Nf - 1 - j;
-    if (Math.abs(rev.t[j] - (T - fwd.t[i])) > 1e-12) throw new Error(`reverse: t[${j}]`);
-    if (Math.abs(rev.a[j] - fwd.a[i]) > 1e-12) throw new Error(`reverse: a[${j}]`);
+  const grow = preview(N, [...set, 0, 0.25, 0]);
+  const sGrow = preview(S, [...set, 0, 0.25, 0]);
+  if (JSON.stringify(sGrow) !== JSON.stringify(grow)) throw new Error("fwdrev 0.25: standalone preview != combined");
+  if (grow.t.length !== 2 * Nf - 1) throw new Error(`fwdrev 0.25: count ${grow.t.length} want ${2 * Nf - 1}`);
+  if (grow.t[Nf - 1] !== T) throw new Error(`fwdrev 0.25: peak ${grow.t[Nf - 1]} != Time`);
+  if (Math.abs(grow.t[grow.t.length - 1] - 1.5 * T) > 1e-12) throw new Error(`fwdrev 0.25: last ${grow.t[grow.t.length - 1]} != 1.5*Time`);
+  const fwd = preview(N, set);
+  for (let i = 0; i < Nf; i++) {
+    if (Math.abs(grow.t[i] - fwd.t[i]) > 1e-12) throw new Error(`fwdrev 0.25: outbound t[${i}]`);
   }
-  const at = 4, n = at + Math.ceil(0.22 * SR);
-  const h = N.soemdsp_pulse_train_create();
-  const out = new Float64Array(n);
-  for (let i = 0; i < n; i++) out[i] = N.soemdsp_pulse_train_sample(h, i >= at ? 1 : 0, ...set, SR, 0, 0, 2, 0);
-  N.soemdsp_pulse_train_destroy(h);
-  const y = new Float64Array(n);
-  let j = 0, last = -1;
-  for (let s = at; s < n && j < rev.t.length; s++) {
-    const e = (s - at) / SR;
-    while (j < rev.t.length && rev.t[j] <= e) { y[s] += rev.a[j]; j++; last = s; }
+  for (let j = Nf; j < 2 * Nf - 1; j++) {
+    const i = 2 * Nf - 2 - j;
+    const want = 1.5 * T - 0.5 * fwd.t[i];
+    if (Math.abs(grow.t[j] - want) > 1e-12) throw new Error(`fwdrev 0.25: return t[${j}] ${grow.t[j]} want ${want}`);
   }
-  for (let i = 0; i < n; i++) if (Math.abs(out[i] - y[i]) > 1e-12) throw new Error(`reverse play: sample ${i} ${out[i]} vs ${y[i]}`);
-  const loopR = preview(N, [...set, 1, 2, 0]);
-  if (loopR.t.length !== Nf) throw new Error(`reverse loop: count ${loopR.t.length}`);
-  if (loopR.t[0] !== 0) throw new Error("reverse loop: first != 0");
-  if (!(loopR.t[loopR.t.length - 1] < T)) throw new Error(`reverse loop last ${loopR.t[loopR.t.length - 1]} not < Time`);
-  const loopLast = T - (T * E(set[2], 1 / Nf));
-  if (Math.abs(loopR.t[loopR.t.length - 1] - loopLast) > 1e-9) throw new Error(`reverse loop last ${loopR.t[loopR.t.length - 1]} want ${loopLast}`);
-  const capR = preview(N, [16384, 0.01, 0, 1, 1, 0, 1, 0, 2, 0]);
-  if (capR.t.length !== 16384) throw new Error(`reverse cap: count ${capR.t.length} want 16384`);
-  const r1 = preview(N, [1, 0.2, 0, 1, 1, 0, 1, 0, 2, 0]);
-  const f1 = preview(N, [1, 0.2, 0, 1, 1, 0, 1, 0, 0, 0]);
-  if (JSON.stringify(r1) !== JSON.stringify(f1)) throw new Error("reverse N=1 != Forward");
-  const TYPE_CLOCK = 28, TYPE_PT = 231, PORT_MONO = 0, PORT_LEFT = 1, PORT_PHASE01 = 10, PORT_TRIGGER = 20;
-  const PR = { RATE: 10, AMP: 12, SHAPE: 13, STAGES: 22, WIDTH: 31, TNUM: 52, TDEN: 53, TMODE: 54, IN_LOW: 80, IN_HIGH: 81, LFO_STYLE: 56, OVERSAMPLE: 32 };
-  const g = N.soemdsp_graph_create() | 0;
-  N.soemdsp_graph_set_sample_rate(g, SR);
-  const hC = 0x7331, hP = 0x7332;
-  if (N.soemdsp_graph_add_node(g, hC, TYPE_CLOCK) | 0) throw new Error("reverse graph clock add");
-  if (N.soemdsp_graph_add_node(g, hP, TYPE_PT) | 0) throw new Error("reverse graph pt add");
-  if (N.soemdsp_graph_connect(g, hC, PORT_MONO, hP, PORT_TRIGGER) | 0) throw new Error("reverse graph connect");
-  N.soemdsp_graph_set_param(g, hC, PR.RATE, 0.5);
-  N.soemdsp_graph_set_param(g, hC, PR.AMP, 1);
-  const gSet = [6, 0.15, 4, 1, 0.2, 0, 1];
-  const keys = [PR.STAGES, PR.TDEN, PR.SHAPE, PR.IN_LOW, PR.IN_HIGH, PR.WIDTH, PR.AMP];
-  keys.forEach((p, i) => N.soemdsp_graph_set_param(g, hP, p, gSet[i]));
-  { const fd = ptFD(gSet[1], 0, 2); N.soemdsp_graph_set_param(g, hP, 53, fd.f); N.soemdsp_graph_set_param(g, hP, 52, fd.duty); gSet[1] = fd.T; }
-  N.soemdsp_graph_set_param(g, hP, PR.LFO_STYLE, 2);
-  N.soemdsp_graph_set_param(g, hP, PR.TMODE, 0);
-  N.soemdsp_graph_set_param(g, hP, PR.OVERSAMPLE, 0);
-  if (N.soemdsp_graph_compile(g) | 0) throw new Error("reverse graph compile");
-  N.soemdsp_graph_snap_controls(g);
-  const trig = [], gout = [], endo = [], el = [];
-  for (let q = 0; q < Math.ceil(1.2 * SR / 128); q++) {
-    N.soemdsp_graph_process_block(g, 128);
-    const rd = (h, port) => new Float64Array(N.memory.buffer, N.soemdsp_graph_node_port_ptr(g, h, port) | 0, 128);
-    trig.push(...rd(hC, PORT_MONO)); gout.push(...rd(hP, PORT_MONO)); endo.push(...rd(hP, PORT_LEFT)); el.push(...rd(hP, PORT_PHASE01));
+  const fr = preview(N, [...set, 0, 0.5, 0]);
+  const rf = preview(N, [...set, 0, 1, 0]);
+  if (rf.t.length !== 2 * Nf - 1) throw new Error(`fwdrev 1.0: count ${rf.t.length}`);
+  if (rf.t[0] !== 0) throw new Error("fwdrev 1.0: peak not at t=0");
+  if (Math.abs(rf.a[0] - set[4]) > 1e-12) throw new Error(`fwdrev 1.0: first amp ${rf.a[0]} want Amp End`);
+  const shift = fr.t[Nf - 1];
+  const wrapped = fr.t.map((t, i) => {
+    let x = t - shift;
+    if (x < 0) x += 2 * T;
+    return { t: x, a: fr.a[i], i };
+  }).sort((a, b) => a.t - b.t || a.i - b.i);
+  for (let j = 0; j < rf.t.length; j++) {
+    if (Math.abs(rf.t[j] - wrapped[j].t) > 1e-12 || rf.a[j] !== wrapped[j].a) {
+      throw new Error(`fwdrev 1.0 pulse ${j}: t ${rf.t[j]} a ${rf.a[j]} want ${wrapped[j].t} / ${wrapped[j].a}`);
+    }
+    if (j > 0 && !(rf.t[j] >= rf.t[j - 1] - 1e-12)) throw new Error(`fwdrev 1.0 times not ordered at ${j}`);
   }
-  N.soemdsp_graph_destroy(g);
-  const hD = N.soemdsp_pulse_train_create();
-  const dOut = new Float64Array(trig.length), dEnd = new Float64Array(trig.length), dEl = new Float64Array(trig.length);
-  for (let i = 0; i < trig.length; i++) {
-    dOut[i] = N.soemdsp_pulse_train_sample(hD, trig[i], ...gSet, SR, 0, 1, 2, 0);
-    dEnd[i] = N.soemdsp_pulse_train_end(hD);
-    dEl[i] = N.soemdsp_pulse_train_elapsed(hD);
+  const loopRf = preview(N, [...set, 1, 1, 0]);
+  const loopFr = preview(N, [...set, 1, 0.5, 0]);
+  const L = 2 * Nf - 2;
+  if (loopRf.t.length !== L) throw new Error(`fwdrev 1.0 loop: count ${loopRf.t.length}`);
+  const gaps = (t, span) => t.map((x, i) => (i + 1 < t.length ? t[i + 1] : span) - x);
+  const gf = gaps(loopFr.t, 2 * T), gr = gaps(loopRf.t, 2 * T);
+  for (let j = 0; j < L; j++) {
+    const k = (j + Nf - 1) % L;
+    if (Math.abs(gr[j] - gf[k]) > 1e-12 || loopRf.a[j] !== loopFr.a[k]) {
+      throw new Error(`fwdrev 1.0 loop gap ${j}: ${gr[j]} vs ${gf[k]}`);
+    }
   }
-  N.soemdsp_pulse_train_destroy(hD);
-  let pulses = 0;
-  for (let i = 0; i < trig.length; i++) {
-    if (gout[i] !== dOut[i] || endo[i] !== dEnd[i] || el[i] !== dEl[i]) throw new Error(`reverse graph != direct at ${i}: ${gout[i]} vs ${dOut[i]}`);
-    if (gout[i] !== 0) pulses++;
-  }
-  if (pulses < 6) throw new Error(`reverse graph: only ${pulses} occupied samples`);
-  console.log(`ok pulseTrain Reverse: one-shot N pulses peak at 0 origin at Time, Loop last < T, Count 16384, N=1 == Forward, graph == direct (${pulses} occupied, last sample ${last})`);
+  const alias = preview(N, [...set, 0, 3, 0]);
+  if (JSON.stringify(alias) !== JSON.stringify(rf)) throw new Error("old integer 3 does not alias to Fwd-Rev 1.0");
+  console.log("ok pulseTrain Fwd-Rev 0.25 grows the return leg; 1.0 is 0.5 rotated so the peak is at t=0 (Loop gaps = 0.5 rotated N-1)");
 }
 // 6) End Delay: One-shot End after last pulse + delay. Count 1 last pulse is t=0.
 {

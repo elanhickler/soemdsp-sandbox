@@ -200,6 +200,85 @@ function nodeGraphHueDegFromHex(hex) {
   );
 }
 
+/** Hue rotation in degrees for gradient LUTs (BG Hue control, 0 = authored stops). */
+function nodeGraphGradientHueRotationDeg(settings) {
+  const raw = Number(settings?.backgroundHue);
+  if (!Number.isFinite(raw)) {
+    return 0;
+  }
+  return ((raw % 360) + 360) % 360;
+}
+
+function nodeGraphHslToRgb01(hDeg, s, l) {
+  const sN = Math.max(0, Math.min(1, Number(s) || 0));
+  const lN = Math.max(0, Math.min(1, Number(l) || 0));
+  if (sN <= 1e-9) {
+    return [lN, lN, lN];
+  }
+  const h = (((Number(hDeg) % 360) + 360) % 360) / 360;
+  const q = lN < 0.5 ? lN * (1 + sN) : lN + sN - lN * sN;
+  const p = 2 * lN - q;
+  const hue2rgb = (t) => {
+    let u = t;
+    if (u < 0) u += 1;
+    if (u > 1) u -= 1;
+    if (u < 1 / 6) return p + (q - p) * 6 * u;
+    if (u < 1 / 2) return q;
+    if (u < 2 / 3) return p + (q - p) * (2 / 3 - u) * 6;
+    return p;
+  };
+  return [hue2rgb(h + 1 / 3), hue2rgb(h), hue2rgb(h - 1 / 3)];
+}
+
+function nodeGraphRgb01ToHsl(r, g, b) {
+  const rr = Math.max(0, Math.min(1, Number(r) || 0));
+  const gg = Math.max(0, Math.min(1, Number(g) || 0));
+  const bb = Math.max(0, Math.min(1, Number(b) || 0));
+  const max = Math.max(rr, gg, bb);
+  const min = Math.min(rr, gg, bb);
+  const l = (max + min) / 2;
+  const span = max - min;
+  if (span <= 1e-6) {
+    return { h: 0, s: 0, l };
+  }
+  const s = l <= 0.5 ? span / (max + min) : span / (2 - max - min);
+  return { h: nodeGraphHueDegFromRgb01(rr, gg, bb), s, l };
+}
+
+function nodeGraphHexHueRotate(hex, deg) {
+  const d = Number(deg);
+  if (!Number.isFinite(d) || d === 0) {
+    return hex;
+  }
+  const parsed = typeof SoemColor !== "undefined" && typeof SoemColor.parse === "function"
+    ? SoemColor.parse(hex)
+    : null;
+  let r;
+  let g;
+  let b;
+  if (parsed) {
+    r = parsed[0] / 255;
+    g = parsed[1] / 255;
+    b = parsed[2] / 255;
+  } else {
+    const m = /^#?([0-9a-f]{6})$/i.exec(String(hex || "").trim());
+    if (!m) {
+      return hex;
+    }
+    const n = Number.parseInt(m[1], 16);
+    r = ((n >> 16) & 255) / 255;
+    g = ((n >> 8) & 255) / 255;
+    b = (n & 255) / 255;
+  }
+  const hsl = nodeGraphRgb01ToHsl(r, g, b);
+  if (hsl.s <= 1e-6) {
+    return hex;
+  }
+  const rgb = nodeGraphHslToRgb01(hsl.h + d, hsl.s, hsl.l);
+  const to = (c) => Math.round(Math.max(0, Math.min(1, c)) * 255).toString(16).padStart(2, "0");
+  return `#${to(rgb[0])}${to(rgb[1])}${to(rgb[2])}`;
+}
+
 /** Invert hue-brightness so old hex plates migrate to hue + amount. */
 function nodeGraphHueBrightnessFromHex(hex, fallbackHue = 80, fallbackBright = 0.5) {
   const m = /^#?([0-9a-f]{6})$/i.exec(String(hex || "").trim());

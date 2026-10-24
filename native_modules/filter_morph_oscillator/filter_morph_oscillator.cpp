@@ -34,7 +34,7 @@ constexpr double kDitherStartHz = 2000.0;
 constexpr double kDitherFullHz = 7000.0;
 constexpr double kNoiseHiRatio = 4.0;  // LP at 4ƒ, clamped to 0.45 sr
 
-// One stereo lane. L and R share knobs; R is +1/4 turn and its own dither.
+// One stereo lane. L and R share knobs and Phase; each has its own dither.
 struct FilterMorphVoice {
   double phase;
   double lpY[kMaxPoles];
@@ -62,8 +62,6 @@ enum : unsigned int {
   kSeedDitherL = 1u,  // pitch-tracked noise-band stream (Wave L)
   kSeedDitherR = 2u,  // Wave R
 };
-
-constexpr double kStereoPhase = 0.25;  // R = L + 90°
 
 // Dither stream from the module Seed only (create, Reset, Seed change).
 static unsigned int dither_rng_from_seed(unsigned int seed, unsigned int lane) {
@@ -522,7 +520,7 @@ extern "C" void soemdsp_filter_morph_oscillator_sample_stereo(
     startHz, fullHz, amount, resetH
   );
   const double yR = process_one(
-    s.R, frequencyHz, sampleRate, morph, poles, waveform, phaseOffset + kStereoPhase, amplitude, dither,
+    s.R, frequencyHz, sampleRate, morph, poles, waveform, phaseOffset, amplitude, dither,
     startHz, fullHz, amount, resetH
   );
   if (outLeft) *outLeft = yL;
@@ -554,5 +552,5 @@ extern "C" double soemdsp_filter_morph_oscillator_sample(
 }
 
 extern "C" int soemdsp_filter_morph_oscillator_version() {
-  return 14; // 14: Wave L / Wave R are two voices (R = L + 90°, own dither). 13: shared gate_hit Reset height
+  return 15; // 15: Wave L / Wave R two voices, same Phase, own dither (no 90° offset). 14: R = L + 90°. 13: shared gate_hit Reset height
 }

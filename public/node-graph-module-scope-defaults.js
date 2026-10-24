@@ -67,7 +67,7 @@ const nodeGraphModuleScopeUnipolarTypes = new Set([
 const nodeGraphScopePhosphorLookDefaults = Object.freeze({
   // Face / gradient floor (stop 0). Plate hue+brightness default black.
   background: "#000004",
-  backgroundHue: 240,
+  backgroundHue: 0,
   backgroundBrightness: 0,
   // Peak / tip (stop 1 + dot1Color).
   peakColor: "#fcfdbf",
@@ -606,16 +606,23 @@ const nodeGraphScope2dTraceSettingsDefaults = Object.freeze({
   trail: typeof PhosphorResidual !== "undefined"
     ? PhosphorResidual.DEFAULT_TRAIL
     : nodeGraphScopePhosphorLookDefaults.trail,
+  burnAmount: 1,
   // Vector stroke; density scales face buffer for lo-fi/chunky look (default 1).
   pixelDensity: nodeGraphScopePhosphorLookDefaults.pixelDensity,
   scale: nodeGraphScopePhosphorLookDefaults.scale,
   skipDiscontinuities: false,
   dotBudget: 2048,
   drawMode: "budget",
+  rotate90: false,
 });
 
 /** Optional per-type 2D Trace defaults. */
-const nodeGraphModuleScope2dTraceDisplayDefaultOverrides = Object.freeze({});
+const nodeGraphModuleScope2dTraceDisplayDefaultOverrides = Object.freeze({
+  filterMorphOscillator: Object.freeze({
+    drawMode: "dots",
+    rotate90: true,
+  }),
+});
 
 function nodeGraphScope2dTraceSettingsDefaultsForModuleType(type) {
   const overrides = type

@@ -63,10 +63,12 @@ function nodeGraphModuleDefaultXyDisplaySource(type) {
   const x = outputs.find((port) => port === "X") ||
     outputs.find((port) => port === "Out X") ||
     outputs.find((port) => port === "Left") ||
+    outputs.find((port) => port === "Wave L") ||
     "";
   const y = outputs.find((port) => port === "Y") ||
     outputs.find((port) => port === "Out Y") ||
     outputs.find((port) => port === "Right") ||
+    outputs.find((port) => port === "Wave R") ||
     "";
   return x && y ? { x, y } : null;
 }

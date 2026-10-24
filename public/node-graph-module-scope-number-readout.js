@@ -2294,6 +2294,9 @@ function drawNodeGraphNumberReadoutItem(renderer, item, pixelRatio) {
       settings.color || nodeGraphNumberReadoutSettingsDefaults?.color || "#fcfdbf",
     );
   }
+  if (gradientStops && typeof nodeGraphApplyGradientHueRotation === "function") {
+    gradientStops = nodeGraphApplyGradientHueRotation(gradientStops, settings);
+  }
   if (!gradientStops && typeof nodeGraphPhosphorDefaultGradientStops === "function") {
     gradientStops = nodeGraphPhosphorDefaultGradientStops(
       settings.color || "#fcfdbf",

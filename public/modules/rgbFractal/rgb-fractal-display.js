@@ -737,7 +737,9 @@ function paintNodeGraphRgbFractalFace(canvas, face, nodeId, options = {}) {
       : 0,
     background: settings.background || "#000000",
     outerPlate: settings.outerPlate || "stop0",
-    gradientStops: settings.gradientStops,
+    gradientStops: typeof nodeGraphApplyGradientHueRotation === "function"
+      ? nodeGraphApplyGradientHueRotation(settings.gradientStops, settings)
+      : settings.gradientStops,
     depth,
     fold: 0,
     bands,

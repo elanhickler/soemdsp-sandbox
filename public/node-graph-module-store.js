@@ -885,7 +885,7 @@ const nodeGraphModuleStoreCatalog = Object.freeze({
   },
   filterMorphOscillator: {
     category: "oscillator",
-    description: "PolyBLEP naive shapes through a pitch-tracking one-pole Morph (1…4 poles) toward sine-ish. Dither mixes a grain-free noise band from ƒ to 4ƒ. Wave L / Wave R (R is +90°).",
+    description: "PolyBLEP naive shapes through a pitch-tracking one-pole Morph (1…4 poles) toward sine-ish. Dither mixes a grain-free noise band from ƒ to 4ƒ. Wave L / Wave R are two voices (same Phase, own dither).",
     label: "Filter Morph Osc",
     notes: ["polyblep", "filter morph", "one-pole", "poles", "hp noise fm", "native", "oscillator"],
   },
@@ -2056,7 +2056,7 @@ const nodeGraphModuleStoreCatalog = Object.freeze({
   },
   pulseTrain: {
     category: "clock",
-    description: "On trigger, a train of pulses (or grains: Gate/Saw/Ramp/Tri/Sine from one pulse to the next) that starts fast and stretches out. Shape out is the grain, Trigger out is always impulses, End fires at the last pulse. Pulse Mode Forward / Forward-Reverse / Reverse / Reverse-Forward. Antialiasing Off/Random/Dither.",
+    description: "On trigger, a train of pulses (or grains: Gate/Saw/Ramp/Tri/Sine from one pulse to the next) that starts fast and stretches out. Shape out is the grain, Trigger out is always impulses, End fires at the last pulse. Fwd-Rev 0..1 walks the peak from Forward through out-and-back to Reverse-Forward. Antialiasing Off/Random/Dither.",
     label: "Pulse Train",
     notes: ["trigger", "pulse train", "slowing down", "growing gaps", "bouncing ball", "End", "native"],
   },

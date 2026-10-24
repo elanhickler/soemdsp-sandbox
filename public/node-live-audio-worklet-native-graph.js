@@ -6065,14 +6065,14 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
       // Robin Schmidt's SweepKicker: frequency=highFreq, center=lowFreq,
       // timeNumerator=sweepTime, shape=chirp, width=chirpShape, mix=waveShape,
       // phase=phase (cycles), timeDenominator=decay, amplitude.
-      // waveform = Wave choiceId (0 sine / 1 sinFatSaw / 2 triSaw); main thread resolves choiceKeys.
+      // waveform = Wave choiceId (0 sawSine / 1 triSine / 2 sawTri); main thread resolves choiceKeys.
       push("highFreq", P.NATIVE_GRAPH_PARAM_FREQUENCY, cont("highFreq", 10000));
       push("lowFreq", P.NATIVE_GRAPH_PARAM_CENTER, cont("lowFreq", 0));
       push("sweepTime", P.NATIVE_GRAPH_PARAM_TIME_NUMERATOR, cont("sweepTime", 0.2));
       push("chirp", P.NATIVE_GRAPH_PARAM_SHAPE, cont("chirp", 0));
       push("chirpShape", P.NATIVE_GRAPH_PARAM_WIDTH, cont("chirpShape", 0));
       push("wave", P.NATIVE_GRAPH_PARAM_WAVEFORM, disc("wave", 0));
-      push("waveShape", P.NATIVE_GRAPH_PARAM_MIX, cont("waveShape", 0));
+      push("waveShape", P.NATIVE_GRAPH_PARAM_MIX, cont("waveShape", 1));
       push("phase", P.NATIVE_GRAPH_PARAM_PHASE, cont("phase", 0));
       push("decay", P.NATIVE_GRAPH_PARAM_TIME_DENOMINATOR, cont("decay", 0.5));
       push("amplitude", P.NATIVE_GRAPH_PARAM_AMPLITUDE, cont("amplitude", 1));
@@ -6432,7 +6432,7 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
       push("amplitude", P.NATIVE_GRAPH_PARAM_AMPLITUDE, cont("amplitude", 1));
       push("mode", P.NATIVE_GRAPH_PARAM_TIMING_MODE, disc("mode", 1)); // 0 One shot / 1 Loop
       push("recalculateOnTrigger", P.NATIVE_GRAPH_PARAM_MODE, disc("recalculateOnTrigger", 0)); // 0 Off live / 1 On latched
-      push("pulseMode", P.NATIVE_GRAPH_PARAM_LFO_STYLE, disc("pulseMode", 0)); // 0 Forward / 1 Forward-Reverse / 2 Reverse / 3 Reverse-Forward
+      push("pulseMode", P.NATIVE_GRAPH_PARAM_LFO_STYLE, cont("pulseMode", 0)); // 0 Forward / 0.5 Forward-Reverse / 1 Reverse-Forward
       push("duty", P.NATIVE_GRAPH_PARAM_TIME_NUMERATOR, cont("duty", 0.5)); // pulsing fraction of the cycle
       push("antialiasing", P.NATIVE_GRAPH_PARAM_WAVEFORM, disc("antialiasing", 0)); // 0 Off / 1 Random / 2 Dither (Robin1 ±1)
       push("seed", P.NATIVE_GRAPH_PARAM_SEED, disc("seed", 0));

@@ -1,4 +1,4 @@
-// Filter Morph Osc Wave L / Wave R: two voices (R = L + 90°). Wave jack is gone; Wave aliases to Wave L.
+// Filter Morph Osc Wave L / Wave R: two voices, same Phase, own dither. Wave jack is gone; Wave aliases to Wave L.
 import fs from "node:fs";
 import path from "node:path";
 import vm from "node:vm";
@@ -58,6 +58,12 @@ check(
   "nativeGraphPortNames Wave L / Wave R",
 );
 
+const ngPorts = () => {
+  const ng = p.nativeGraph;
+  const h = p.fnv1aHash32("osc");
+  return (port) => new Float64Array(ng.memory.buffer, ng.soemdsp_graph_node_port_ptr(p.nativeGraphHandle, h, port) | 0, 128);
+};
+
 p.setPlan({
   nodes: [
     { id: "osc", type: "filterMorphOscillator", params: { frequency: 220, dither: 0 } },
@@ -70,22 +76,45 @@ p.setPlan({
   modulations: [],
   outputNode: "output",
 }, { efficientProduct: true, sampleRate: 48000, planSerial: 1, sessionId: 1 });
-check(Boolean(p.nativeGraphCompiled), "native graph compiled");
-const ng = p.nativeGraph;
-const h = p.fnv1aHash32("osc");
+check(Boolean(p.nativeGraphCompiled), "native graph compiled (dither off)");
 ctx.currentFrame = 0;
 p.process([[]], [[new Float32Array(128), new Float32Array(128)]], {});
-const rd = (port) => new Float64Array(ng.memory.buffer, ng.soemdsp_graph_node_port_ptr(p.nativeGraphHandle, h, port) | 0, 128);
-const L = rd(1), R = rd(2);
-let peakL = 0, peakR = 0, differ = 0;
-for (let i = 0; i < 128; i += 1) {
-  const aL = Math.abs(L[i]), aR = Math.abs(R[i]);
-  if (aL > peakL) peakL = aL;
-  if (aR > peakR) peakR = aR;
-  if (L[i] !== R[i]) differ += 1;
+{
+  const rd = ngPorts();
+  const L0 = rd(1), R0 = rd(2);
+  let same = 0;
+  for (let i = 0; i < 128; i += 1) if (L0[i] === R0[i]) same += 1;
+  check(same === 128, `dither off: Wave L === Wave R (${same}/128)`);
 }
-check(peakL > 0.1 && peakR > 0.1, `Wave L/R make sound (peakL=${peakL.toFixed(3)} peakR=${peakR.toFixed(3)})`);
-check(differ > 8, `Wave L and Wave R differ (${differ}/128 samples)`);
+
+p.setPlan({
+  nodes: [
+    { id: "osc", type: "filterMorphOscillator", params: { frequency: 5000, dither: 1, start: 2000, full: 7000, amount: 1 } },
+    { id: "output", type: "output", params: {} },
+  ],
+  connections: [
+    { sourceNode: "osc", sourcePort: "Wave L", destinationNode: "output", destinationPort: "Left" },
+    { sourceNode: "osc", sourcePort: "Wave R", destinationNode: "output", destinationPort: "Right" },
+  ],
+  modulations: [],
+  outputNode: "output",
+}, { efficientProduct: true, sampleRate: 48000, planSerial: 2, sessionId: 1 });
+check(Boolean(p.nativeGraphCompiled), "native graph compiled (dither on)");
+ctx.currentFrame = 0;
+p.process([[]], [[new Float32Array(128), new Float32Array(128)]], {});
+{
+  const rd = ngPorts();
+  const L = rd(1), R = rd(2);
+  let peakL = 0, peakR = 0, differ = 0;
+  for (let i = 0; i < 128; i += 1) {
+    const aL = Math.abs(L[i]), aR = Math.abs(R[i]);
+    if (aL > peakL) peakL = aL;
+    if (aR > peakR) peakR = aR;
+    if (L[i] !== R[i]) differ += 1;
+  }
+  check(peakL > 0.1 && peakR > 0.1, `Wave L/R make sound (peakL=${peakL.toFixed(3)} peakR=${peakR.toFixed(3)})`);
+  check(differ > 8, `Wave L and Wave R differ with dither (${differ}/128 samples)`);
+}
 
 console.log(failures ? `FAILED ${failures}` : "smoke_filter_morph_stereo ok");
 process.exit(failures ? 1 : 0);

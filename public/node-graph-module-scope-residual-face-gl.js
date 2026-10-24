@@ -381,7 +381,10 @@ function nodeGraphResidualFaceHexRgb01(value, fallback = [0, 0, 0]) {
 /** Phosphor Dot LUT colour (nodeGraphPhosphorDotLutCss maths) as rgb 0..1. */
 function nodeGraphResidualFaceDotLutRgb(settings, amount01) {
   const t = Math.max(0, Math.min(0.999, nodeGraphFiniteNumber(amount01)));
-  const stops = Array.isArray(settings?.gradientStops) ? settings.gradientStops : null;
+  const rawStops = Array.isArray(settings?.gradientStops) ? settings.gradientStops : null;
+  const stops = rawStops && typeof nodeGraphApplyGradientHueRotation === "function"
+    ? nodeGraphApplyGradientHueRotation(rawStops, settings)
+    : rawStops;
   const peak = nodeGraphResidualFaceHexRgb01(settings?.dot1Color || "#75ebff", [0x75 / 255, 0xeb / 255, 1]);
   if (!(stops?.length >= 2)) return peak;
   let a = stops[0];

@@ -525,7 +525,10 @@ function drawNodeGraphSpectrogramItem(renderer, item, pixelRatio) {
   const freqScaleIdx = Math.max(0, Math.min(2, Math.round(nodeGraphFiniteNumber(settings.freqScale))));
   const minFreqHz = Number(settings.minFreq);
   const maxFreqHz = Number(settings.maxFreq);
-  const lutRgb = spectrogramLutRgbForStops(settings.gradientStops);
+  const lutStops = typeof nodeGraphApplyGradientHueRotation === "function"
+    ? nodeGraphApplyGradientHueRotation(settings.gradientStops, settings)
+    : settings.gradientStops;
+  const lutRgb = spectrogramLutRgbForStops(lutStops);
   const historySeconds = Math.max(
     SPECTROGRAM_MIN_HISTORY_SECONDS,
     Math.min(SPECTROGRAM_MAX_HISTORY_SECONDS, nodeGraphFiniteNumber(settings.historySeconds, 2)),

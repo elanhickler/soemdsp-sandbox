@@ -566,8 +566,16 @@ function nodeGraphModuleScopeCapturedScope2dBuffer(slot, options = {}) {
     : null;
   // Wired 2D Phosphor sinks: don't silently use a thin local ring when the
   // connected generator has a richer buffer (same data Lorenz face draws).
-  const xBuffer = nodeGraphScope2dPickRicherBuffer(localX, connX);
-  const yBuffer = nodeGraphScope2dPickRicherBuffer(localY, connY);
+  let xBuffer = nodeGraphScope2dPickRicherBuffer(localX, connX);
+  let yBuffer = nodeGraphScope2dPickRicherBuffer(localY, connY);
+  // One live channel: plot that channel on both axes (mono goniometer).
+  // Prefer X / Left when both exist; if only Y / Right is present, duplicate it.
+  if (!xBuffer && yBuffer) {
+    xBuffer = yBuffer;
+  }
+  if (!yBuffer && xBuffer) {
+    yBuffer = xBuffer;
+  }
   const length = Math.min(xBuffer?.length || 0, yBuffer?.length || 0);
   if (length <= 0) {
     return null;

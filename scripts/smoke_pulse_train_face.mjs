@@ -24,7 +24,7 @@ const keys = Object.fromEntries((d.parameters || []).map((p) => [p.key, p]));
 const want = [
   { kind: "cells", params: [["count", "Count"], ["frequency", "Freq"], ["duty", "Duty"]] },
   { kind: "cells", params: [["curve", "Curve", "bipolar"], ["ampStart", "A Start"], ["ampEnd", "A End"], ["ampCurve", "A Crv", "bipolar"]] },
-  { kind: "choices", param: "pulseMode", labels: ["Fwd", "Fwd-Rev", "Rev", "Rev-Fwd"] },
+  { kind: "slider", param: "pulseMode" },
   { kind: "choices", param: "mode", labels: ["One shot", "Loop"] },
   { kind: "choices", param: "recalculateOnTrigger", labels: ["Free", "Latch"] },
   { kind: "slider", param: "wave" },
@@ -60,11 +60,12 @@ check(!keys.time && !keys.endDelay && !keys.endTime, "parameters stay Frequency 
 check(d.face.find((r) => r.param === "wave")?.kind === "slider", "Shape is a slider (10 grains)");
 check(keys.wave?.choices?.length === 10, "Shape has 10 grains");
 check(keys.frequency?.unit === "Hz" && keys.duty?.label === "Pulse Duty", "Freq is Hz, Duty is Pulse Duty");
+check(keys.pulseMode?.label === "Fwd-Rev" && keys.pulseMode?.max === "1" && keys.pulseMode?.step === "any" && !keys.pulseMode?.choices, "Fwd-Rev is a 0..1 slider");
 
 for (const page of ["index.html", "perform.html"]) {
   const html = fs.readFileSync(path.join(root, "public", page), "utf8");
-  check(/node-graph-module-definitions\.js\?v=pt-free-1/.test(html), `${page} cache-bust pt-free-1`);
-  check(/node-graph-pulse-train-display\.js\?v=pt-sweep-1/.test(html), `${page} cache-bust pt-sweep-1`);
+  check(/node-graph-module-definitions\.js\?v=pt-fwdrev-1/.test(html), `${page} cache-bust pt-fwdrev-1`);
+  check(/node-graph-pulse-train-display\.js\?v=pt-fwdrev-1/.test(html), `${page} cache-bust pt-fwdrev-1`);
 }
 
 const display = fs.readFileSync(path.join(root, "public", "node-graph-pulse-train-display.js"), "utf8");

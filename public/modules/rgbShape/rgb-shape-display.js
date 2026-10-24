@@ -131,10 +131,13 @@ function paintNodeGraphRgbShapeFace(canvas, face, nodeId, buffer = null) {
       ? normalizeTraceStampShape(shape)
       : "circle");
 
-  const peak = settings.gradientStops?.[settings.gradientStops.length - 1]?.color || "#f0f4ff";
+  const drawStops = typeof nodeGraphApplyGradientHueRotation === "function"
+    ? nodeGraphApplyGradientHueRotation(settings.gradientStops, settings)
+    : settings.gradientStops;
+  const peak = drawStops?.[drawStops.length - 1]?.color || "#f0f4ff";
   let rgb = [240, 244, 255];
   if (typeof nodeGraphSampleGradientStopsRgb === "function") {
-    rgb = nodeGraphSampleGradientStopsRgb(settings.gradientStops, brightness, peak);
+    rgb = nodeGraphSampleGradientStopsRgb(drawStops, brightness, peak);
   }
   const tint = face._rgbShapeGlTint || (face._rgbShapeGlTint = [1, 1, 1, 1]);
   tint[0] = rgb[0] / 255;

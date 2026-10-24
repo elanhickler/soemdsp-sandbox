@@ -42,6 +42,8 @@
   --node-module-frame-radius: calc(var(--node-grid-size, 28px) * 2 * var(--node-module-roundness-ratio, 0.11));
   /* Module drag only — OS arrow for familiarity (not the app + / not “move”). */
   --node-module-move-cursor: default;
+  --node-electric-glyph-font: "Segoe UI Symbol", "Noto Sans Symbols 2", "Noto Sans Symbols", "Segoe UI Emoji", sans-serif;
+  --node-electric-glyph-em: 2.4;
 }
 
 * {
@@ -2332,6 +2334,9 @@ input[type="range"],
   --node-min-grid-brightness-alpha: 0;
   /* B-048: bypass chrome SSOT for module face + Module Settings (sibling under panel). */
   --node-bypass-icon-size-ratio: 0.36;
+  --node-electric-glyph-font: "Segoe UI Symbol", "Noto Sans Symbols 2", "Noto Sans Symbols", "Segoe UI Emoji", sans-serif;
+  /* 🗲's em-box is mostly padding; 2.4× makes the ink fill the button at the 36% UIDEV default. */
+  --node-electric-glyph-em: 2.4;
   --node-bypass-icon-glow-spread-ratio: 0.4;
   --node-bypass-icon-glow-color: #f25d5d;
   --node-bypass-icon-on-color: #f7b758;
@@ -12394,7 +12399,8 @@ body.node-graph-magnifying-active .node-graph-workspace * {
 .node-ui-dev-bypass-icon-preview {
   color: var(--node-ui-dev-bypass-preview-on-color, #f7b758);
   background: var(--node-ui-dev-bypass-preview-bg, rgba(92, 24, 24, 0.48));
-  font-size: calc(var(--node-ui-dev-bypass-preview-size, 0.36) * 28px);
+  font-family: var(--node-electric-glyph-font, "Segoe UI Symbol", "Noto Sans Symbols 2", sans-serif);
+  font-size: calc(var(--node-ui-dev-bypass-preview-size, 0.36) * var(--node-electric-glyph-em, 2.4) * 28px);
   text-shadow:
     0 0 calc(28px * var(--node-ui-dev-bypass-preview-glow-spread, 0.4) * 0.18) var(--node-ui-dev-bypass-preview-glow-color, rgba(242, 93, 93, 0.72)),
     0 0 calc(28px * var(--node-ui-dev-bypass-preview-glow-spread, 0.4) * 0.42) var(--node-ui-dev-bypass-preview-glow-color, rgba(242, 93, 93, 0.46));
@@ -17597,15 +17603,19 @@ body.node-screen-solo-active .node-screen-solo-face.node-text-box-body > .node-t
 }
 
 .node-bypass-button::before {
-  content: "\1F5F2";
+  content: "\1F5F2\FE0E";
   position: absolute;
   inset: 0;
   display: flex;
   align-items: center;
   justify-content: center;
+  padding: 0;
   color: rgba(160, 167, 176, 0.48);
-  font-size: calc(var(--node-bypass-icon-size-ratio, 0.36) * 100cqh);
+  font-family: var(--node-electric-glyph-font);
+  font-size: calc(var(--node-bypass-icon-size-ratio, 0.36) * var(--node-electric-glyph-em, 2.4) * 100cqh);
+  font-weight: 400;
   line-height: 1;
+  text-rendering: geometricPrecision;
 }
 
 .node-bypass-button[aria-pressed="true"] {
@@ -17629,9 +17639,9 @@ body.node-screen-solo-active .node-screen-solo-face.node-text-box-body > .node-t
 }
 
 .node-bypass-button[aria-pressed="true"]::before {
-  content: "\1F5F2";
+  content: "\1F5F2\FE0E";
   color: var(--node-bypass-icon-on-color, #f7b758);
-  font-size: calc(var(--node-bypass-icon-size-ratio, 0.36) * 100cqh);
+  font-size: calc(var(--node-bypass-icon-size-ratio, 0.36) * var(--node-electric-glyph-em, 2.4) * 100cqh);
   text-shadow:
     0 0 calc(100cqh * var(--node-bypass-icon-glow-spread-ratio, 0.4) * 0.18) color-mix(in srgb, var(--node-bypass-icon-glow-color, #f25d5d) 72%, transparent),
     0 0 calc(100cqh * var(--node-bypass-icon-glow-spread-ratio, 0.4) * 0.42) color-mix(in srgb, var(--node-bypass-icon-glow-color, #f25d5d) 46%, transparent);
@@ -22416,15 +22426,19 @@ button#nodeScenePasteModuleSettings.settings-paste-mismatch {
 .node-scene-context-menu .node-bypass-button::before,
 .node-module-actions-window .node-bypass-button::before,
 .scene-context-module-bypass-button::before {
-  content: "\1F5F2";
+  content: "\1F5F2\FE0E";
   position: absolute;
   inset: 0;
   display: flex;
   align-items: center;
   justify-content: center;
+  padding: 0;
   color: rgba(160, 167, 176, 0.48);
-  font-size: calc(var(--node-bypass-icon-size-ratio, 0.36) * 100cqh);
+  font-family: var(--node-electric-glyph-font);
+  font-size: calc(var(--node-bypass-icon-size-ratio, 0.36) * var(--node-electric-glyph-em, 2.4) * 100cqh);
+  font-weight: 400;
   line-height: 1;
+  text-rendering: geometricPrecision;
   text-shadow: none;
 }
 
@@ -22443,9 +22457,9 @@ button#nodeScenePasteModuleSettings.settings-paste-mismatch {
 .node-scene-context-menu .node-bypass-button[aria-pressed="true"]::before,
 .node-module-actions-window .node-bypass-button[aria-pressed="true"]::before,
 .scene-context-module-bypass-button[aria-pressed="true"]::before {
-  content: "\1F5F2";
+  content: "\1F5F2\FE0E";
   color: var(--node-bypass-icon-on-color, #f7b758);
-  font-size: calc(var(--node-bypass-icon-size-ratio, 0.36) * 100cqh);
+  font-size: calc(var(--node-bypass-icon-size-ratio, 0.36) * var(--node-electric-glyph-em, 2.4) * 100cqh);
   text-shadow:
     0 0 calc(100cqh * var(--node-bypass-icon-glow-spread-ratio, 0.4) * 0.18) color-mix(in srgb, var(--node-bypass-icon-glow-color, #f25d5d) 72%, transparent),
     0 0 calc(100cqh * var(--node-bypass-icon-glow-spread-ratio, 0.4) * 0.42) color-mix(in srgb, var(--node-bypass-icon-glow-color, #f25d5d) 46%, transparent);
@@ -23622,11 +23636,13 @@ body.node-slider-dragging .node-param-port {
   pointer-events: none;
   transform: translate(-50%, -50%);
   color: var(--zap-color, #ffec99);
-  font-family: Consolas, "Courier New", monospace;
-  font-size: calc(1rem * var(--zap-scale, 1));
-  font-weight: 700;
+  font-family: var(--node-electric-glyph-font, "Segoe UI Symbol", "Noto Sans Symbols 2", sans-serif);
+  font-size: calc(1.35rem * var(--zap-scale, 1));
+  font-weight: 400;
   line-height: 1;
-  text-shadow: 0 0 10px var(--zap-glow, rgba(247, 183, 88, 0.6));
+  text-rendering: geometricPrecision;
+  -webkit-font-smoothing: antialiased;
+  text-shadow: 0 0 5px var(--zap-glow, rgba(247, 183, 88, 0.55));
   animation: node-zap-burst 560ms ease-out forwards;
 }
 

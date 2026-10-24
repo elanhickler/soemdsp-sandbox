@@ -1,5 +1,7 @@
-function nodeGraphBypassGlyph(bypassed) {
-  return "\u{1F5F2}";
+// Lightning mood (U+1F5F2) in text presentation (VS15) so OS color-emoji
+// padding and soft bitmaps do not win. Same glyph as wire-trigger sparks.
+function nodeGraphBypassGlyph(_bypassed) {
+  return "\u{1F5F2}\uFE0E";
 }
 
 /**
@@ -14,7 +16,7 @@ function syncNodeGraphBypassButtonElement(button, options = {}) {
   const pressed = bypassed ? "true" : "false";
   const glyph = typeof nodeGraphBypassGlyph === "function"
     ? nodeGraphBypassGlyph(bypassed)
-    : "\u{1F5F2}";
+    : "\u{1F5F2}\uFE0E";
   if (options.disabled != null) {
     button.disabled = Boolean(options.disabled);
   }

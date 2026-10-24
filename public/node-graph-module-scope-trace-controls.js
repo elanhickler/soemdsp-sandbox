@@ -19,6 +19,7 @@ function nodeGraphDisplaySettingsIsVectorTraceFormType(type) {
  */
 const nodeGraphDisplaySettingsSharedStackOrder = Object.freeze([
   "scale",
+  "historyHz",
   "historySeconds",
   "historyCycles",
   "sweepHz",
@@ -39,6 +40,10 @@ const nodeGraphDisplaySettingsSharedStackOrder = Object.freeze([
 const nodeGraphInstantTraceDisplayFieldOrder = Object.freeze([
   "scale",
   "historyHz",
+  "historySeconds",
+  "historyCycles",
+  "sweepHz",
+  "sweepCycles",
   "backgroundBrightness",
   "backgroundHue",
   "dot1Size",
@@ -47,6 +52,7 @@ const nodeGraphInstantTraceDisplayFieldOrder = Object.freeze([
   "dot1Brightness",
   "ghost",
   "trail",
+  "burnAmount",
   "dotBudget",
   "pixelDensity",
   "fade",
@@ -174,6 +180,16 @@ function nodeGraphDisplaySettingsIsPhosphorFormType(type) {
 function nodeGraphPhosphorDisplayFieldsFor(keys) {
   const want = new Set(keys || []);
   return nodeGraphPhosphorDisplayFieldOrder.filter((key) => want.has(key));
+}
+
+/** Filter shared Trace + Phosphor stack down to keys active on this face. */
+function nodeGraphTraceDisplayFieldsFor(keys) {
+  const list = Array.isArray(keys) ? keys : [];
+  const want = new Set(list);
+  const order = nodeGraphDisplaySettingsSharedStackOrder;
+  const ordered = order.filter((key) => want.has(key));
+  const leftover = list.filter((key) => want.has(key) && !order.includes(key));
+  return leftover.length ? ordered.concat(leftover) : ordered;
 }
 
 const nodeGraphTraceDisplaySettingControlKeys = Object.freeze({
@@ -391,18 +407,18 @@ const nodeGraphTraceDisplayActiveControlsByType = Object.freeze({
     toggles: Object.freeze(["capEnabled"]),
     choices: Object.freeze([]),
   }),
-  // 2D Phosphor (Lorenz + friends): Bright → Size → Blur → Ghost → Trail → Dot Budget.
+  // 2D Phosphor (Lorenz + friends): shared stack Scale → BG → Size → Blur → Bright → Ghost → Trail → Burn x → Dot Budget → Pixel density.
   scope2d: Object.freeze({
     fields: Object.freeze(nodeGraphPhosphorDisplayFieldsFor([
-      "dot1Brightness",
-      "dot1Size",
-      "lineThickness",
-      "ghost",
-      "trail",
-      "burnAmount",
       "scale",
       "backgroundBrightness",
       "backgroundHue",
+      "dot1Size",
+      "lineThickness",
+      "dot1Brightness",
+      "ghost",
+      "trail",
+      "burnAmount",
       "pixelDensity",
       "dotBudget",
     ])),
@@ -415,49 +431,52 @@ const nodeGraphTraceDisplayActiveControlsByType = Object.freeze({
   // Color via shared Gradient editor → TraceWoscope LUT (not hue swatches).
   // 2D Trace uses the same brightness->LUT path; its two hues are the stops.
   scope1dTrace: Object.freeze({
-    fields: Object.freeze([
+    fields: Object.freeze(nodeGraphTraceDisplayFieldsFor([
       "scale",
       "sweepHz",
       "backgroundBrightness",
       "backgroundHue",
       "dot1Size",
-      "pixelDensity",
       "dot1Brightness",
       "ghost",
       "trail",
       "burnAmount",
       "dotBudget",
-    ]),
+      "pixelDensity",
+    ])),
     colors: Object.freeze([]),
     toggles: Object.freeze(["skipDiscontinuities", "sourceSync"]),
     choices: Object.freeze(["drawMode"]),
   }),
   // 2D Trace = woscope XY beam. Same gradient editor as 1D Trace.
-  // No History (live samples only). Ghost/Trail live in the brightness buffer.
+  // Shared stack minus Sweep (no time axis). Ghost/Trail/Burn live in the brightness buffer.
   scope2dTrace: Object.freeze({
-    fields: Object.freeze([
+    fields: Object.freeze(nodeGraphTraceDisplayFieldsFor([
       "scale",
       "backgroundBrightness",
       "backgroundHue",
       "dot1Size",
-      "pixelDensity",
       "dot1Brightness",
+      "ghost",
+      "trail",
+      "burnAmount",
       "dotBudget",
-    ]),
+      "pixelDensity",
+    ])),
     colors: Object.freeze([]),
-    toggles: Object.freeze(["skipDiscontinuities"]),
+    toggles: Object.freeze(["skipDiscontinuities", "rotate90"]),
     choices: Object.freeze(["drawMode"]),
   }),
   vectorRgbFace: Object.freeze({
     fields: Object.freeze(nodeGraphPhosphorDisplayFieldsFor([
+      "scale",
       "dot1Size",
       "lineThickness",
       "dot1Brightness",
-      "dotBudget",
       "ghost",
       "trail",
-      "scale",
       "pixelDensity",
+      "dotBudget",
     ])),
     colors: Object.freeze(["backgroundColor"]),
     toggles: Object.freeze([]),
@@ -470,7 +489,7 @@ const nodeGraphTraceDisplayActiveControlsByType = Object.freeze({
     choices: Object.freeze(["cornerShape"]),
   }),
   gradientVectorscopeFace: Object.freeze({
-    fields: Object.freeze([
+    fields: Object.freeze(nodeGraphTraceDisplayFieldsFor([
       "scale",
       "historyHz",
       "backgroundBrightness",
@@ -480,7 +499,7 @@ const nodeGraphTraceDisplayActiveControlsByType = Object.freeze({
       "trail",
       "burnAmount",
       "pixelDensity",
-    ]),
+    ])),
     colors: Object.freeze(["backgroundColor"]),
     toggles: Object.freeze(["rotate90"]),
     choices: Object.freeze([]),
@@ -713,15 +732,15 @@ const nodeGraphTraceDisplayActiveControlsByType = Object.freeze({
   // Same controls as scope2d — leftover formType="phosphorLight".
   phosphorLight: Object.freeze({
     fields: Object.freeze(nodeGraphPhosphorDisplayFieldsFor([
+      "scale",
+      "backgroundBrightness",
+      "backgroundHue",
       "dot1Size",
       "lineThickness",
       "dot1Brightness",
       "ghost",
       "trail",
       "burnAmount",
-      "scale",
-      "backgroundBrightness",
-      "backgroundHue",
       "pixelDensity",
       "dotBudget",
     ])),
@@ -762,6 +781,7 @@ const nodeGraphTraceDisplayActiveControlsByType = Object.freeze({
   // Videoscope Bright lives on the module face param — not in Display Settings.
   videoscopeBurn: Object.freeze({
     fields: Object.freeze(nodeGraphPhosphorDisplayFieldsFor([
+      "scale",
       "backgroundBrightness",
       "backgroundHue",
       "dot1Size",
@@ -769,7 +789,6 @@ const nodeGraphTraceDisplayActiveControlsByType = Object.freeze({
       "ghost",
       "trail",
       "burnAmount",
-      "scale",
       "pixelDensity",
       "dotBudget",
     ])),
@@ -954,12 +973,12 @@ const nodeGraphTraceDisplayActiveControlsByType = Object.freeze({
     toggles: Object.freeze([]),
     choices: Object.freeze([]),
   }),
-  // Robin Sinepulse: unipolar envelope fill. End padding / pixel density.
+  // Robin Sinepulse: Envelope Unipolar / Envelope Bipolar / Spectrogram + smoothing / pixel density.
   robinSinepulseFace: Object.freeze({
     fields: Object.freeze(["lineSmoothing", "pixelDensity"]),
     colors: Object.freeze([]),
     toggles: Object.freeze([]),
-    choices: Object.freeze([]),
+    choices: Object.freeze(["faceView"]),
   }),
   // Outer / Hub dot size (were one "Size") are in the centered face square; F-fullscreen scales with it.
   sinCos4Face: Object.freeze({
@@ -1165,6 +1184,7 @@ const nodeGraphTraceDisplaySectionControls = Object.freeze({
     choices: Object.freeze([
       "outerPlate",
       "lightBlend",
+      "faceView",
       "window",
       "overlap",
       "freqOverlap",
@@ -1832,10 +1852,10 @@ const nodeGraphDisplaySettingsFieldMeta = Object.freeze({
     title: "Color saturation 0…1 (0 = grey, 1 = full selected hue).",
   }),
   backgroundHue: Object.freeze({
-    label: "BG Hue",
+    label: "Hue Rotation",
     inputmode: "decimal",
     id: "nodeTraceDisplayBackgroundHue",
-    title: "Plate hue in degrees (0–360). Wraps through red.",
+    title: "Rotate the gradient colors in degrees (0–360). 0 = authored stops.",
   }),
   dot1Size: Object.freeze({
     label: "Size",
@@ -2408,6 +2428,17 @@ const nodeGraphDisplaySettingsChoiceMeta = Object.freeze({
       Object.freeze({ value: "left", label: "Left" }),
       Object.freeze({ value: "right", label: "Right" }),
       Object.freeze({ value: "mono", label: "Mono" }),
+    ]),
+  }),
+  faceView: Object.freeze({
+    label: "View",
+    aria: "Robin Sinepulse face view",
+    id: "nodeTraceDisplayRobinFaceView",
+    title: "Envelope Unipolar: T60 fill from the floor, log1p Hz color. Envelope Bipolar: same envelope mirrored about mid. Spectrogram: log2 Hz Y, fundamental ridge. Decay is playhead speed; the chirp layout follows Sweep Time.",
+    options: Object.freeze([
+      Object.freeze({ value: "envelopeUnipolar", label: "Envelope Unipolar" }),
+      Object.freeze({ value: "envelopeBipolar", label: "Envelope Bipolar" }),
+      Object.freeze({ value: "spectrogram", label: "Spectrogram" }),
     ]),
   }),
   facePolarity: Object.freeze({

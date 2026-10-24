@@ -832,8 +832,9 @@ void main() {
     if (!batch || !spec) return;
     const nFwd = Math.max(0, Math.min(PULSE_TRAIN_MAX, spec.count | 0));
     const total = Math.max(nFwd, Math.min(PULSE_TRAIN_MAX, spec.total | 0 || nFwd));
-    const pulseMode = spec.pulseMode | 0;
-    const n = pulseMode === 1 ? total : nFwd;
+    const pulseMode = Number(spec.pulseMode);
+    const p = !(pulseMode > 0) ? 0 : (pulseMode >= 1 ? 1 : pulseMode);
+    const n = p > 0 ? total : nFwd;
     if (!(n > 0)) return;
     if (!batch.pulseTrains) batch.pulseTrains = [];
     const k = batch.camera ? 1 : (batch.scale || 1);
@@ -844,7 +845,7 @@ void main() {
     batch.pulseTrains.push({
       count: n,
       nFwd: nFwd,
-      pulseMode: pulseMode < 0 ? 0 : (pulseMode > 2 ? 2 : pulseMode),
+      pulseMode: p,
       duration: Number(spec.duration) || 0,
       axisEnd: Math.max(1e-6, Number(spec.axisEnd) || 0.001),
       curve: Number(spec.curve) || 0,
@@ -1806,18 +1807,29 @@ void main() {
   int id = gl_InstanceID;
   float n = max(uCount, 1.0);
   int ni = int(n + 0.5);
-  int mode = int(uPulseMode + 0.5);
-  int i = id;
-  if (mode == 1 && id >= ni) i = 2 * ni - 2 - id;
-  if (mode == 2 && ni > 1) i = uLoop > 0.5 ? (id == 0 ? 0 : ni - id) : ni - 1 - id;
+  float p = uPulseMode;
+  if (!(p > 0.0)) p = 0.0;
+  if (p > 1.0) p = 1.0;
+  float dualAmt = p <= 0.0 ? 0.0 : (p >= 0.5 ? 1.0 : p * 2.0);
+  float rotAmt = p <= 0.5 ? 0.0 : (p >= 1.0 ? 1.0 : (p - 0.5) * 2.0);
+  int i = id < ni ? id : (2 * ni - 2 - id);
   float uu = uLoop > 0.5 ? float(i) / n : (n > 1.0 ? float(i) / (n - 1.0) : 0.0);
-  float t;
-  if (uLoop < 0.5 && i == ni - 1 && n > 1.0) t = uDuration;
-  else t = uDuration * curveShape(uCurve, uu);
-  if (!(t >= 0.0)) t = 0.0;
-  if (t > uDuration) t = uDuration;
-  if (mode == 1 && id >= ni) t = 2.0 * uDuration - t;
-  if (mode == 2 && ni > 1) t = (uLoop > 0.5 && id == 0) ? 0.0 : uDuration - t;
+  float tf;
+  if (uLoop < 0.5 && i == ni - 1 && n > 1.0) tf = uDuration;
+  else tf = uDuration * curveShape(uCurve, uu);
+  if (!(tf >= 0.0)) tf = 0.0;
+  if (tf > uDuration) tf = uDuration;
+  float t = id >= ni ? uDuration * (1.0 + dualAmt) - dualAmt * tf : tf;
+  if (rotAmt > 0.0 && ni > 1) {
+    float peakU = uLoop > 0.5 ? float(ni - 1) / n : 1.0;
+    float peak = uLoop < 0.5 && n > 1.0 ? uDuration : uDuration * curveShape(uCurve, peakU);
+    if (!(peak >= 0.0)) peak = 0.0;
+    if (peak > uDuration) peak = uDuration;
+    t -= rotAmt * peak;
+    float span = uDuration * (1.0 + dualAmt);
+    if (t < 0.0) t += span;
+    if (!(t >= 0.0)) t = 0.0;
+  }
   if (t > uAxis) {
     gl_Position = vec4(2.0, 2.0, 0.0, 1.0);
     vLocal = vec2(0.0);

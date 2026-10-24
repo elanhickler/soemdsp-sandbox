@@ -4555,23 +4555,32 @@ const nodeGraphModuleDefinitions = (
     ]
   },
   // PolyBLEP shapes + pitch-tracking one-pole Morph (Poles 1…4, fundamental makeup).
+  // Face is Rotate → 2D Trace (goniometer of Wave L / Wave R). Dots + 90°.
   filterMorphOscillator: {
     planRole: "source",
-    displayType: "lineBurn",
+    displayType: "scope2dTrace",
     defaultDisplaySettings: {
-      sourceSync: true },
+      drawMode: "dots",
+      rotate90: true },
     displayModes: [
-      { key: "lineBurn", renderer: "lineBurn", source: { value: "Wave L" } },
+      {
+        key: "xyTrace",
+        label: "Goniometer",
+        renderer: "scope2dTrace",
+        settingsSchema: "scope2dTrace",
+        source: { x: "Wave L", y: "Wave R" } },
     ],
     displaySignals: [
       { key: "Wave L", kind: "scalar" },
+      { key: "Wave R", kind: "scalar" },
+      { key: "X/Y", kind: "xy" },
     ],
     resetTrigger: true,
     inputs: ["f", "Reset"],
     inputLabels: { f: "ƒ" },
     inputAliases: { "ƒ": "f" },
     inputTooltips: {
-      Reset: "Rising edge snaps both phasors so Wave L sits at the Phase offset; Wave R stays a quarter-turn later. Clears Morph filter state.",
+      Reset: "Rising edge snaps both phasors to the Phase offset and clears Morph filter state.",
       f: "Absolute Hz. Replaces Frequency when wired." },
     outputAliases: {
       Out: "Wave L",
@@ -4587,7 +4596,7 @@ const nodeGraphModuleDefinitions = (
     outputs: ["Wave L", "Wave R"],
     outputTooltips: {
       "Wave L": "Left voice at the Phase offset. Use this jack for a single channel.",
-      "Wave R": "Right voice: same knobs, +90° phase, own dither stream.",
+      "Wave R": "Right voice: same Phase, own dither stream.",
     },
     parameters: [
       {
@@ -10937,7 +10946,7 @@ const nodeGraphModuleDefinitions = (
     face: [
       { kind: "slider", param: "wave", h: 30 },
       { kind: "cells", params: [["highFreq", "High"], ["lowFreq", "Low"], ["sweepTime", "Time"]], h: 52 },
-      { kind: "cells", params: [["chirp", "Chirp", "bipolar"], ["chirpShape", "Shape", "bipolar"], ["waveShape", "Wave", "bipolar"]], h: 52 },
+      { kind: "cells", params: [["chirp", "Chirp", "bipolar"], ["chirpShape", "Shape", "bipolar"], ["waveShape", "Morph"]], h: 52 },
       { kind: "cells", params: [["phase", "Phase", "bipolar"], ["decay", "Decay"], ["amplitude", "Amp"]], h: 52 },
       { kind: "cells", params: [["voices", "Voices"], ["fadeTime", "Fade"]], h: 40 },
       { kind: "choices", param: "voiceFade", labels: ["Fade Off", "Fade On"], h: 26 },
@@ -11026,10 +11035,10 @@ const nodeGraphModuleDefinitions = (
         step: "any",
         tooltip: "Attack knee vs decay at the same tail power. + keeps the start frequency a little longer, - rounds the knee. Acts at once. From Robin Schmidt's SweepKicker, RS-MET." },
       {
-        choices: ["Sine", "SinFatSaw", "TriSaw"],
-        choiceKeys: ["sine", "sinFatSaw", "triSaw"],
+        choices: ["SawSine", "TriSine", "SawTri"],
+        choiceKeys: ["sawSine", "triSine", "sawTri"],
         choiceIds: [0, 1, 2],
-        defaultValue: "sine",
+        defaultValue: "sawSine",
         displayChoices: true,
         divideChoicesVisibly: true,
         key: "wave",
@@ -11042,17 +11051,17 @@ const nodeGraphModuleDefinitions = (
         min: "0",
         nonlinearSlider: false,
         step: "1",
-        tooltip: "Waveform family. Sine. TriSaw = triangle that morphs to saws with Wave Shape. SinFatSaw = sine-shaped TriSaw (bulging fat saws). From Robin Schmidt's SweepKicker, RS-MET." },
+        tooltip: "SawSine: fat saw (Morph 1) to sine (0). TriSine: hyperbolic tent, triangle (1) to sine (0). SawTri: saw (1) to triangle (0). Morph 1 is high-frequency content." },
       {
-        defaultValue: "0",
+        defaultValue: "1",
         key: "waveShape",
-        label: "Wave Shape",
+        label: "Morph",
         max: "1",
-        mid: "0",
-        min: "-1",
+        mid: "0.5",
+        min: "0",
         nonlinearSlider: false,
         step: "any",
-        tooltip: "Saw-down (-1) ... symmetric (0) ... saw-up (+1). No effect on Sine. From Robin Schmidt's SweepKicker, RS-MET." },
+        tooltip: "1 = high-frequency end, 0 = low-frequency end. Modulate 1→0 as the kick falls. TriSine floors tent softness by pitch so the triangle end does not alias like a naive tent." },
       {
         defaultValue: "0",
         key: "phase",
@@ -14444,11 +14453,11 @@ const nodeGraphModuleDefinitions = (
     ],
     defaultDisplayMode: "face",
     // Hand-written face (node-graph-module-face.js): Count | Freq | Duty, Curve | A Start | A End | A Crv,
-    // Pulse Mode, One shot / Loop, Free / Latch, Shape slider, Morph | Amp, AA, seed.
+    // Fwd-Rev slider, One shot / Loop, Free / Latch, Shape slider, Morph | Amp, AA, seed.
     face: [
       { kind: "cells", params: [["count", "Count"], ["frequency", "Freq"], ["duty", "Duty"]], h: 52 },
       { kind: "cells", params: [["curve", "Curve", "bipolar"], ["ampStart", "A Start"], ["ampEnd", "A End"], ["ampCurve", "A Crv", "bipolar"]], h: 52 },
-      { kind: "choices", param: "pulseMode", labels: ["Fwd", "Fwd-Rev", "Rev", "Rev-Fwd"], h: 26 },
+      { kind: "slider", param: "pulseMode", h: 30 },
       { kind: "choices", param: "mode", labels: ["One shot", "Loop"], h: 26 },
       { kind: "choices", param: "recalculateOnTrigger", labels: ["Free", "Latch"], h: 26 },
       { kind: "slider", param: "wave", h: 30 },
@@ -14486,20 +14495,17 @@ const nodeGraphModuleDefinitions = (
         step: "1"
       },
       {
-        choices: ["Forward", "Forward-Reverse", "Reverse", "Reverse-Forward"],
         defaultValue: "0",
-        displayChoices: true,
-        divideChoicesVisibly: true,
         key: "pulseMode",
-        label: "Pulse Mode",
+        label: "Fwd-Rev",
         linearSmoothing: false,
         smoothingType: "none",
-        max: "3",
-        mid: "1",
+        max: "1",
+        mid: "0.5",
         min: "0",
         nonlinearSlider: false,
-        step: "1",
-        tooltip: "Forward: one-way schedule (Time). Forward-Reverse: that schedule then its time-mirror, peak once. Reverse: only the return trip. Reverse-Forward: the return trip then the forward trip (Forward-Reverse started at its turnaround). Count is the one-way pulse count."
+        step: "any",
+        tooltip: "0 Forward (one-way). 0.5 out-and-back, peak at 50% of the pulsing window. 1 Reverse-Forward (peak at the start). In between, the peak walks from the end of the window toward the start."
       },
       {
         choices: ["Off", "Random", "Dither"],

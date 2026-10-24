@@ -101,9 +101,11 @@ function nodeGraphSoftpopFacePerSample(brightness01) {
 
 // 256-entry RGB LUT from the shared gradient path (cached per stops).
 function nodeGraphSoftpopFaceLut(settings) {
-  const stops = typeof nodeGraphPhosphorGradientStopsFromSettings === "function"
-    ? nodeGraphPhosphorGradientStopsFromSettings(settings || {}, "#ffffff")
-    : settings?.gradientStops;
+  const stops = typeof nodeGraphPhosphorGradientStopsForDraw === "function"
+    ? nodeGraphPhosphorGradientStopsForDraw(settings || {}, "#ffffff")
+    : (typeof nodeGraphPhosphorGradientStopsFromSettings === "function"
+      ? nodeGraphPhosphorGradientStopsFromSettings(settings || {}, "#ffffff")
+      : settings?.gradientStops);
   const key = JSON.stringify(stops || null);
   if (nodeGraphSoftpopFaceLut._key === key && nodeGraphSoftpopFaceLut._lut) return nodeGraphSoftpopFaceLut._lut;
   const lut = new Uint8ClampedArray(256 * 3);
