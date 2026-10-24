@@ -13,9 +13,12 @@
 //   a_i = (Start + (End Amp - Start) * E_ampCurve(u_i)) * Amplitude * velocity
 // Curve > 0: gaps grow (fast first, stretching out); 0: even; < 0: gaps
 // shrink (a real bouncing ball settling speeds up). First pulse at t = 0,
-// last one-way pulse at exactly Time (Time 0..12 s). Pulse Mode: Forward
-// (one-way), Forward-Reverse (one-way then time-mirror 2*Time - t_i, peak
-// once), Reverse (the return trip alone: Time - t_{N-1-j}; Loop v20: gaps\n// reversed from 0, amps Amp End -> Amp Start, so the t=0 pulse is the quiet\n// one, not a stray Amp Start spike). One-shot
+// last one-way pulse at exactly Time (Time 0..12 s). Pulse Mode is a
+// continuous Fwd-Rev bias p in [0, 1]: 0 Forward (one-way over Time);
+// (0, 0.5] grows the return leg so span = Time*(1+2p) and the peak stays at
+// Time (0.5 = classic Forward-Reverse, peak at 50% of 2*Time); (0.5, 1]
+// keeps the dual 2*Time train and rotates it by (2p-1)*peakTime so the peak
+// walks toward t=0 (1 = Reverse-Forward). One-shot
 // Forward-Reverse last pulse at 2*Time. Loop Forward-Reverse skips that
 // return so it does not stack on the next cycle's first pulse. End Delay is
 // bipolar seconds after the last pulse: positive is silence after, negative
@@ -62,8 +65,8 @@
 // soemdsp_pulse_train_preview() builds the same schedule for displays.
 // Recalculate On Trigger (recalc > 0.5, default Off): schedule params (Count,
 // Time, Curve, Amp Start / End / Curve, Amplitude, Pulse Mode, End Delay)
-// latch at each Trigger / Loop cycle start. Off: live every sample; next
-// index only moves forward. Loop Off remaps elapsed into the new period so
+// latch at each Trigger / Loop cycle start. Free: live every sample. Loop
+// Free remaps elapsed into the new period and retargets the pulse index so
 // Frequency stays phase-continuous (raising ƒ does not wrap-reset). Mode,
 // Antialiasing, Seed, and Shape are always live. ƒ period is always live.
 // soemdsp_pulse_train_effective i: 0 Count (one-way), 1 Time, 2 Curve,
@@ -106,7 +109,7 @@ struct PulseTrainState {
   double eff[9];    // 0..6 schedule, 7 Pulse Mode, 8 End Delay
   double effVel;
   bool loopSched;
-  int pulseMode;
+  double pulseMode; // Fwd-Rev bias 0..1
   bool allAtZero;
   double allAmp;
   double spill[5]; // AA impulse energy delayed 1..4 samples
@@ -119,7 +122,7 @@ struct PreviewSched {
   int nFwd;
   int count;
   bool loop;
-  int pulseMode;
+  double pulseMode;
   double end;
   double delay;
   double curve;
@@ -544,9 +547,22 @@ static int firstPulseAfter(
   return lo;
 }
 
+// Loop + Free: the pulse index that belongs at sample n after a live period
+// change. Trigger: first land at or after n (do not refire). Grain: the grain
+// that contains n (k-1), so a Frequency sweep does not skip-to-end then wrap.
+static inline int pulseIndexAt(
+  long long n, int nFwd, int total, double end, double curve, bool loop, int pulseMode,
+  double sr, int aaMode, double scale, int shape
+) {
+  const long long nPrev = n > 0 ? n - 1 : -1;
+  const int k = firstPulseAfter(nPrev, nFwd, total, end, curve, loop, pulseMode, sr, aaMode, scale);
+  if (shape != kShapeTrigger && k > 0) return k - 1;
+  return k;
+}
+
 }  // namespace
 
-extern "C" int soemdsp_pulse_train_version() { return 23; }
+extern "C" int soemdsp_pulse_train_version() { return 24; }
 
 extern "C" int soemdsp_pulse_train_create() {
   for (int i = 0; i < kMaxInstances; i++) {
@@ -622,12 +638,12 @@ extern "C" double soemdsp_pulse_train_sample(
   const double scale = (periodLock > 0.0 && schedNow > 0.0) ? (periodLock / schedNow) : 1.0;
   const double wrapNow = periodLock > 0.0 ? periodLock : (schedNow > 0.0 ? schedNow : (1.0 / sr));
   const double prevWrap = s.wrapCycle;
-  // Recalc Off + Loop: wrap against the previous period, then remap n into the
-  // new period so a live Frequency jump keeps phase. Recalc On uses wrapNow
-  // (the latched cycle) and does not remap.
+  // Free + Loop: wrap against the previous period, then remap n into the new
+  // period so a live Frequency jump keeps phase. Latch uses wrapNow (the
+  // latched cycle) and does not remap.
   bool naturalWrap = false;
   if (s.running && s.n > 0) {
-    if (aaMode >= 2) {
+    if (aaMode >= 2 && (latch || prevWrap <= 0.0 || wrapNow == prevWrap)) {
       naturalWrap = s.n >= (s.cycleN > 0 ? s.cycleN : 1);
     } else {
       const double gate = (!latch && prevWrap > 0.0) ? prevWrap : wrapNow;
@@ -668,23 +684,25 @@ extern "C" double soemdsp_pulse_train_sample(
     const unsigned int stream0 = aaStream(seedU, s.ditherEpoch, aaMode);
     s.cycleN = eventLand(wrapNow, sr, stream0, (unsigned int)s.count + 1u, aaMode, aaMode == 2);
   } else if (s.running && !latch) {
-    if (!paramsEqual(s.eff, live)) {
+    const bool liveChange = !paramsEqual(s.eff, live);
+    if (liveChange) {
       applySchedule(s, live, s.effVel, loop);
       clearSpill(s);
       const unsigned int streamLive = aaStream(seedU, s.ditherEpoch, aaMode);
       s.cycleN = eventLand(wrapNow, sr, streamLive, (unsigned int)s.count + 1u, aaMode, aaMode == 2);
-      const long long nPrev = s.n > 0 ? s.n - 1 : -1;
-      const int k = firstPulseAfter(
-        nPrev, s.nFwd, s.count, s.timeSpan, s.eff[2], s.loopSched, s.pulseMode, sr, aaMode, scale
+    }
+    if (liveChange || remapLive) {
+      const int k = pulseIndexAt(
+        s.n, s.nFwd, s.count, s.timeSpan, s.eff[2], s.loopSched, s.pulseMode, sr, aaMode, scale, shape
       );
-      if (k > s.next) s.next = k;
+      if (loop) s.next = k;
+      else if (k > s.next) s.next = k;
       if (s.next > s.count) s.next = s.count;
     }
   }
   if (s.running && periodLock > 0.0 && !trigHit && !loopStart) {
-    const long long nPrev = s.n > 0 ? s.n - 1 : -1;
-    const int k = firstPulseAfter(
-      nPrev, s.nFwd, s.count, s.timeSpan, s.eff[2], s.loopSched, s.pulseMode, sr, aaMode, scale
+    const int k = pulseIndexAt(
+      s.n, s.nFwd, s.count, s.timeSpan, s.eff[2], s.loopSched, s.pulseMode, sr, aaMode, scale, shape
     );
     s.next = k;
     if (s.next > s.count) s.next = s.count;

@@ -954,9 +954,9 @@ const nodeGraphTraceDisplayActiveControlsByType = Object.freeze({
     toggles: Object.freeze([]),
     choices: Object.freeze([]),
   }),
-  // Robin Sinepulse: phosphor gradient field. Skirt / ridge / pixel density.
+  // Robin Sinepulse: unipolar envelope fill. End padding / pixel density.
   robinSinepulseFace: Object.freeze({
-    fields: Object.freeze(["lineSmoothing", "dotThickness", "pixelDensity"]),
+    fields: Object.freeze(["lineSmoothing", "pixelDensity"]),
     colors: Object.freeze([]),
     toggles: Object.freeze([]),
     choices: Object.freeze([]),

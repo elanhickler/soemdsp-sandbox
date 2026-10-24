@@ -775,7 +775,9 @@ NodeLiveAudioProcessor.prototype.mapNativeGraphSrcPortId = function mapNativeGra
     if (p === "out r") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_RIGHT;
   }
   // Robin Sinepulse: Kick audio on Mono, sweep Hz (ƒ) on Left, 0–1 envelope on Right.
+  // Face playhead (__Elapsed seconds, −1 idle) on Phase01.
   if (t === "robinSinepulse") {
+    if (p === "__elapsed") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_PHASE01;
     if (p === "kick") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_MONO;
     if (p === "f" || p === "\u0192") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_LEFT;
     if (p === "env" || p === "0-1" || p === "0\u20131" || p === "0..1") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_RIGHT;
@@ -9731,6 +9733,7 @@ NodeLiveAudioProcessor.prototype.publishNativeGraphScopeTaps = function publishN
         ? audioPorts.concat(P.NATIVE_GRAPH_PORT_PHASE01, P.NATIVE_GRAPH_PORT_RAMP, P.NATIVE_GRAPH_PORT_SAW, P.NATIVE_GRAPH_PORT_SQUARE, P.NATIVE_GRAPH_PORT_TRI, P.NATIVE_GRAPH_PORT_SINE, P.NATIVE_GRAPH_PORT_TRISAW, P.NATIVE_GRAPH_PORT_CENTER_SQUARE, P.NATIVE_GRAPH_PORT_IS_IDLE)
       : (type === "sineWavetable" || type === "sinCos" || type === "smoothGraph" || type === "stepGraph"
         || type === "acidSequencer" || type === "fbmField" || type === "clock" || type === "pulseExplosion"
+        || type === "robinSinepulse"
         || type === "ellipsoid" || type === "ellipsoidOsc" || type === "dsfOscillator" || type === "dsfMorphingOsc"
         || type === "clockDivider" || type === "triggerDivider"
         ? audioPorts.concat(P.NATIVE_GRAPH_PORT_PHASE01)
@@ -9898,6 +9901,7 @@ NodeLiveAudioProcessor.prototype.publishNativeGraphScopeTaps = function publishN
         type === "basicShape" || type === "sineWavetable" || type === "sinCos"
         || type === "smoothGraph" || type === "stepGraph"
         || type === "acidSequencer" || type === "clock" || type === "pulseExplosion" || type === "pulseTrain"
+        || type === "robinSinepulse"
         || type === "ellipsoid" || type === "ellipsoidOsc" || type === "dsfOscillator" || type === "dsfMorphingOsc"
         || type === "clockDivider" || type === "triggerDivider"
       ) {

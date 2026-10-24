@@ -4,7 +4,7 @@
 // slider rows, places every visible param exactly once and sets the body height.
 // Then every model button selects its own choice (the readout label matches the
 // button), dragging the first cell up raises it, a bipolar cell fills from the
-// middle, Recalc On sets the param, and undo restores.
+// middle, Latch sets the param, and undo restores.
 // Usage: node scripts/smoke_module_face_percussion.mjs   (server.py on :8765)
 //   SANDBOX_URL, CHROME_PATH, PW_MODULE, SHOT_DIR optional.
 import fs from "node:fs";
@@ -147,7 +147,7 @@ for (let i = 0; i < TYPES.length; i += 1) {
   const recalc = ws.filter((w) => w.type === "choice" && w.keys[0] === "recalculateOnTrigger");
   if (recalc.length) {
     await click(recalc[1]);
-    check(`${TYPES[i]}: Recalc On`, (await choiceLabel(id, "recalculateOnTrigger")) === "On", await choiceLabel(id, "recalculateOnTrigger"));
+    check(`${TYPES[i]}: Latch`, (await choiceLabel(id, "recalculateOnTrigger")) === "Latch", await choiceLabel(id, "recalculateOnTrigger"));
   }
 }
 const rIdx = TYPES.indexOf("robinSinepulse");

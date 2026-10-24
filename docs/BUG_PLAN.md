@@ -154,6 +154,7 @@ When fixing: mark `fixed`, one-line what changed, run `python scripts\smoke_test
 | B-110 | see | fixed | Waterfall blend-mode change wipes history instead of continuing |
 | B-111 | see | fixed | Face widgets reset to default on Ctrl+mousedown instead of mouse-up |
 | B-112 | see | fixed | Band widget handles draw past the left/right widget edges |
+| B-113 | see | fixed | Face grid divider lines flicker with zoom (no 1px floor) |
 ---
 
 ## Inbox (unnumbered user reports)
@@ -1684,5 +1685,13 @@ Add `require_no_js_dsp()` to `scripts/smoke_test.py` (or `scripts/check_no_js_ds
 - Files: `public/node-graph-module-face.js`
 - What: Two-handle band (Spectrogram Freq, Clock pulse, etc.): right handle clipped over the right edge; left handle also not limited to the widget.
 - Fix: `nodeGraphModuleFaceBandBarX` clamps the 3 px bar so travel 0/1 stay inside `[wd.x, wd.x+wd.w]`. Cache-bust `b112-band-handle-1`.
+
+### B-113 — Face grid divider lines flicker with zoom (no 1px floor)
+- Status: fixed (2026-10-24)
+- Severity: see
+- Source: user 2026-10-24 (Argi)
+- Files: `public/node-graph-module-face.js`
+- What: New grid faces (stacked vertical sliders in a row, choice rows, etc.) have divider lines that flicker in and out while zooming. 1 face-px gaps/rects were not floored to 1 device pixel or snapped.
+- Fix: Hairlines use `nodeGraphRailGrid` (`t` ≥ 1 device px, `x`/`y` snap). Cell stacks leave a `hairFace` gap and draw the same hairline. Cache-bust `b113-hairline-1`.
 
 

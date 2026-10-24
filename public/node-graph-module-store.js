@@ -2484,14 +2484,14 @@ const nodeGraphModuleStoreCatalog = Object.freeze({
   },
   pingEnvelope: {
     category: "envelope",
-    description: "Ping Envelope: inertial rise toward Trigger. Model Short/Long feedback sets. Recalc On Trig latches knobs on rise.",
+    description: "Ping Envelope: inertial rise toward Trigger. Model Short/Long feedback sets. Latch freezes knobs on rise.",
     label: "Ping Envelope",
     notes: [
       "Trigger",
       "Model",
       "Attack",
       "Decay",
-      "Recalc On Trig",
+      "Free / Latch",
       "Ping",
       "native",
     ],

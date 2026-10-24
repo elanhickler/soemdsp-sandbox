@@ -1,10 +1,9 @@
-// Robin Sinepulse face: T60 frequency/amplitude field on the shared picture
-// device. Native soemdsp_robin_sinepulse_preview_field packs rsFreqSweeper
-// coeffs; GLSL evaluates f(t) and paints log1p Hz through the phosphor LUT.
-// X is full designed-hit T60 (Decay to 1e-6 * 1.12, 8 ms floor). No oscillator
-// polyline. Playhead is __Elapsed. Display Settings `robinSinepulseFace`:
-// gradient phosphor; lineSmoothing (envelope/ridge skirt); Ridge (dotThickness);
-// pixelDensity. GPU only.
+// Robin Sinepulse face: unipolar T60 envelope filled as a triangle-strip
+// curve (bottom → Amp×T60(t)), colored by log1p Hz through the phosphor LUT.
+// C2 smootherstep fades both the baseline and the top edge (and collapses
+// thin horizontal bars). Zero sits one framebuffer pixel below the plate so
+// the bottom row is fade, not a hard line. X ends when the envelope is below
+// half a pixel — no extra black pad. Playhead is __Elapsed. GPU only.
 const nodeGraphRobinSinepulseFaceDisplaySettingsDefaults = Object.freeze({
   backgroundHue: 205.714,
   backgroundBrightness: 0.009,
@@ -17,7 +16,7 @@ const nodeGraphRobinSinepulseFaceDisplaySettingsDefaults = Object.freeze({
   dotHue: 0,
   dotBrightness: 0.85,
   dotSaturation: 0,
-  dotThickness: 5,
+  dotThickness: 0,
   pixelDensity: 1,
 });
 
@@ -25,6 +24,10 @@ function normalizeNodeGraphRobinSinepulseFaceSettings(settings = {}) {
   const source = settings && typeof settings === "object" ? settings : {};
   const d = nodeGraphRobinSinepulseFaceDisplaySettingsDefaults;
   const out = normalizeNodeGraphRoundShapeFaceSettings({ ...d, ...source });
+  const ridgeRaw = Number(source.dotThickness);
+  out.dotThickness = Number.isFinite(ridgeRaw)
+    ? Math.max(0, Math.min(32, ridgeRaw))
+    : d.dotThickness;
   if (typeof nodeGraphPhosphorGradientStopsFromSettings === "function") {
     out.gradientStops = nodeGraphPhosphorGradientStopsFromSettings(source, "#75ebff");
   } else if (Array.isArray(source.gradientStops) && source.gradientStops.length >= 2) {
@@ -77,74 +80,74 @@ function nodeGraphRobinSinepulseFaceParam(node, key, fallback) {
   return Number.isFinite(n) ? n : fallback;
 }
 
-const NODE_GRAPH_SINEPULSE_FIELD_FS = `
-precision mediump float;
-varying vec2 vUv;
-uniform sampler2D uLut;
-uniform vec4 uCoeff;   // a, b, c, p
-uniform vec4 uSweep;   // q, powFree, decay, amp
-uniform vec3 uHz;      // fHi, fLo, window
-uniform vec3 uLook;    // featherUv, ridgeUv, minHeight
-uniform vec2 uHead;    // elapsedSec, 1=haveHit
-uniform float uGhost;
-
-float instFreq(float t) {
-  float a = uCoeff.x;
-  float b = uCoeff.y;
-  float c = uCoeff.z;
-  float p = uCoeff.w;
-  float q = uSweep.x;
-  if (uSweep.y > 0.5) return (a + b * t) / (1.0 + c * t);
-  if (!(t > 0.0)) return a;
-  float lnT = log(max(t, 1e-12));
-  float tp = exp(p * lnT);
-  float tpq = exp(p * q * lnT);
-  return (a + b * tpq) / pow(max(1.0 + c * tp, 1e-12), q);
+const NODE_GRAPH_SINEPULSE_CURVE_VS = `
+attribute vec2 aPos;   // x 0..1 along the window, y 0..1 unipolar height
+attribute float aLutT;
+attribute float aEnv;
+varying float vX;
+varying float vY;
+varying float vLutT;
+varying float vEnv;
+uniform float uPx;     // one framebuffer pixel in clip Y
+void main() {
+  vX = aPos.x;
+  vY = aPos.y;
+  vLutT = aLutT;
+  vEnv = aEnv;
+  gl_Position = vec4(aPos.x * 2.0 - 1.0, aPos.y * 2.0 - 1.0 - uPx, 0.0, 1.0);
 }
+`;
+
+const NODE_GRAPH_SINEPULSE_CURVE_FS = `
+precision mediump float;
+varying float vX;
+varying float vY;
+varying float vLutT;
+varying float vEnv;
+uniform sampler2D uLut;
+uniform vec2 uHead;    // elapsedSec, 1=haveHit
+uniform float uWin;
+uniform float uGhost;
+uniform float uFade;   // C2 skirt in plate Y (0..1)
 
 float smoother(float e0, float e1, float x) {
   float t = clamp((x - e0) / max(e1 - e0, 1e-6), 0.0, 1.0);
   return t * t * t * (t * (t * 6.0 - 15.0) + 10.0);
 }
 
-vec3 lutOf(float t) {
-  float u = clamp(t, 0.0, 1.0);
-  return texture2D(uLut, vec2((u * 255.0 + 0.5) / 256.0, 0.5)).rgb;
-}
-
 void main() {
-  float win = max(uHz.z, 1e-6);
-  float tSec = vUv.x * win;
-  float f = max(instFreq(tSec), 0.0);
-  float lutT = log(1.0 + f) / log(1.0 + max(uHz.x, 1.0));
-  vec3 plate = lutOf(0.0);
-  vec3 field = lutOf(lutT);
-  vec3 ridgeC = lutOf(1.0);
-  float decay = uSweep.z;
-  float amp = max(uSweep.w, 0.0);
-  float env = 0.0;
-  if (decay > 0.0) {
-    env = amp * exp(-6.907755278982137 * tSec / decay);
-  }
-  if (env > 1e-6) env = max(env, uLook.z);
-  float y = abs(vUv.y * 2.0 - 1.0);
-  float mask = 1.0 - smoother(env, env + uLook.x, y);
-  float ridge = 1.0 - smoother(0.0, max(uLook.y, 1e-6), y);
+  vec3 field = texture2D(uLut, vec2((clamp(vLutT, 0.0, 1.0) * 255.0 + 0.5) / 256.0, 0.5)).rgb;
   float gain = 1.0;
   if (uHead.y > 0.5) {
     float head = uHead.x;
+    float win = max(uWin, 1e-6);
     float progress = head / win;
     float played = progress <= 1.0
-      ? (vUv.x <= progress ? 1.0 : uGhost)
-      : mix(1.0, vUv.x <= 1.0 ? 1.0 : uGhost, 1.0 - clamp((head - win) / 0.12, 0.0, 1.0));
+      ? (vX <= progress ? 1.0 : uGhost)
+      : mix(1.0, vX <= 1.0 ? 1.0 : uGhost, 1.0 - clamp((head - win) / 0.12, 0.0, 1.0));
     float idleMix = progress > 1.0 ? clamp((head - win) / 0.12, 0.0, 1.0) : 0.0;
     gain = mix(played, 1.0, idleMix);
   }
-  vec3 rgb = mix(plate, field, mask * gain);
-  rgb = mix(rgb, ridgeC * gain, ridge * mask * gain);
-  gl_FragColor = vec4(rgb, 1.0);
+  float fe = max(uFade, 1e-6);
+  float env = max(vEnv, 0.0);
+  float fromBot = smoother(0.0, fe, vY);
+  float fromTop = 1.0 - smoother(env, env + fe, vY);
+  float a = fromBot * fromTop;
+  gl_FragColor = vec4(field * gain, a);
 }
 `;
+
+function nodeGraphRobinSinepulseInstFreq(pack, t) {
+  const a = pack[0];
+  const b = pack[1];
+  const c = pack[2];
+  const p = pack[3];
+  const q = pack[4];
+  if (pack[5] > 0.5) return (a + b * t) / (1 + c * t);
+  if (!(t > 0)) return a;
+  const lnT = Math.log(Math.max(t, 1e-12));
+  return (a + b * Math.exp(p * q * lnT)) / Math.pow(Math.max(1 + c * Math.exp(p * lnT), 1e-12), q);
+}
 
 /** @type {WeakMap<HTMLCanvasElement, object>} */
 const nodeGraphRobinSinepulseGlStates = new WeakMap();
@@ -159,7 +162,7 @@ function nodeGraphRobinSinepulseGlEnsure(canvas) {
     nodeGraphRobinSinepulseGlStates.set(canvas, { failed: true });
     return null;
   }
-  const program = SoemGl.link(gl, SoemGl.GLSL_FULLSCREEN_VS, NODE_GRAPH_SINEPULSE_FIELD_FS, "robin-sinepulse-display.js");
+  const program = SoemGl.link(gl, NODE_GRAPH_SINEPULSE_CURVE_VS, NODE_GRAPH_SINEPULSE_CURVE_FS, "robin-sinepulse-display.js:uni-3");
   if (!program) {
     nodeGraphRobinSinepulseGlStates.set(canvas, { failed: true });
     return null;
@@ -192,11 +195,14 @@ function nodeGraphRobinSinepulseGlEnsure(canvas) {
   for (let i = 0; i < 256; i += 1) blank[i * 4 + 3] = 255;
   gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 256, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, blank);
   const u = (name) => gl.getUniformLocation(program, name);
+  const mesh = gl.createBuffer();
   state = {
     gl,
     program,
-    buf: picture.quad,
+    mesh,
     aPos: gl.getAttribLocation(program, "aPos"),
+    aLutT: gl.getAttribLocation(program, "aLutT"),
+    aEnv: gl.getAttribLocation(program, "aEnv"),
     colorTex,
     colorFbo,
     colorW: 4,
@@ -206,12 +212,11 @@ function nodeGraphRobinSinepulseGlEnsure(canvas) {
     lost: false,
     uniforms: {
       uLut: u("uLut"),
-      uCoeff: u("uCoeff"),
-      uSweep: u("uSweep"),
-      uHz: u("uHz"),
-      uLook: u("uLook"),
       uHead: u("uHead"),
+      uWin: u("uWin"),
       uGhost: u("uGhost"),
+      uFade: u("uFade"),
+      uPx: u("uPx"),
     },
   };
   nodeGraphRobinSinepulseGlStates.set(canvas, state);
@@ -241,6 +246,20 @@ function nodeGraphRobinSinepulseUploadLut(state, stops) {
   gl.bindTexture(gl.TEXTURE_2D, state.lutTex);
   gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
   gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 256, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, data);
+}
+
+/** Seconds on the face X axis: env hits half a pixel, then `smoothPx` (at least 1)
+ *  CSS pixels of black padding. */
+function nodeGraphRobinSinepulseFaceWindow(decay, amp, cssW, cssH, smoothPx) {
+  const thresh = 0.5 / Math.max(1, cssH);
+  const dec = Number(decay);
+  const a = Math.max(Number(amp), 0);
+  let tBlack = 0.008;
+  if (dec > 0 && a > thresh) {
+    tBlack = dec * Math.log(a / thresh) / Math.log(1000);
+    if (!(tBlack > 0) || !Number.isFinite(tBlack)) tBlack = 0.008;
+  }
+  return Math.max(0.008, tBlack);
 }
 
 function nodeGraphRobinSinepulseField(section, node) {
@@ -343,31 +362,70 @@ function drawNodeGraphRobinSinepulseFace(section) {
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
   }
   const pack = field.pack;
-  const windowSec = field.window;
+  const smoothPx = Math.max(0, Number(look.lineSmoothing) || 0);
+  const windowSec = nodeGraphRobinSinepulseFaceWindow(pack[6], pack[7], cssW, cssH, smoothPx);
   const elapsed = nodeGraphRobinSinepulseHeardElapsed(section, windowSec);
-  const feather = Math.max(0, Number(look.lineSmoothing) || 0) / Math.max(1, cssH);
-  const ridge = Math.max(0.25, Number(look.dotThickness) || 5) * 0.5 / Math.max(1, cssH);
-  const minH = Math.max(1.5 / Math.max(1, cssH), 1e-4);
+  const plate = typeof nodeGraphGlGraphParseCssColor === "function"
+    ? nodeGraphGlGraphParseCssColor(look.backgroundPaint || look.background || "#000000", [0, 0, 0, 1])
+    : [0, 0, 0, 1];
+  const cols = Math.max(2, w);
+  const decay = pack[6];
+  const amp = Math.max(pack[7], 0);
+  const fHi = Math.max(pack[8], 1);
+  const lnHi = Math.log(1 + fHi);
+  const pxY = 1 / Math.max(1, cssH);
+  const fade = Math.max(1, smoothPx) * pxY;
+  const samples = [];
+  for (let i = 0; i < cols; i += 1) {
+    const u = i / (cols - 1);
+    const tSec = u * windowSec;
+    const env = decay > 0 ? amp * Math.exp(-6.907755278982137 * tSec / decay) : 0;
+    const f = Math.max(nodeGraphRobinSinepulseInstFreq(pack, tSec), 0);
+    samples.push({ u, env: Math.max(env, 0), lutT: Math.log(1 + f) / lnHi });
+    if (env < 0.5 * pxY && i > 0) break;
+  }
+  const n = samples.length;
+  const mesh = new Float32Array(n * 2 * 4);
+  let o = 0;
+  for (let i = 0; i < n; i += 1) {
+    const s = samples[i];
+    const yTop = Math.min(1, s.env + fade);
+    mesh[o] = s.u; mesh[o + 1] = 0; mesh[o + 2] = s.lutT; mesh[o + 3] = s.env;
+    mesh[o + 4] = s.u; mesh[o + 5] = yTop; mesh[o + 6] = s.lutT; mesh[o + 7] = s.env;
+    o += 8;
+  }
   gl.bindFramebuffer(gl.FRAMEBUFFER, state.colorFbo);
   gl.viewport(0, 0, w, h);
   gl.scissor(0, 0, w, h);
   gl.enable(gl.SCISSOR_TEST);
   gl.disable(gl.DEPTH_TEST);
-  gl.disable(gl.BLEND);
+  gl.clearColor(plate[0], plate[1], plate[2], 1);
+  gl.clear(gl.COLOR_BUFFER_BIT);
   gl.useProgram(state.program);
-  gl.bindBuffer(gl.ARRAY_BUFFER, state.buf);
+  gl.bindBuffer(gl.ARRAY_BUFFER, state.mesh);
+  gl.bufferData(gl.ARRAY_BUFFER, mesh, gl.DYNAMIC_DRAW);
   gl.enableVertexAttribArray(state.aPos);
-  gl.vertexAttribPointer(state.aPos, 2, gl.FLOAT, false, 0, 0);
+  gl.vertexAttribPointer(state.aPos, 2, gl.FLOAT, false, 16, 0);
+  if (state.aLutT >= 0) {
+    gl.enableVertexAttribArray(state.aLutT);
+    gl.vertexAttribPointer(state.aLutT, 1, gl.FLOAT, false, 16, 8);
+  }
+  if (state.aEnv >= 0) {
+    gl.enableVertexAttribArray(state.aEnv);
+    gl.vertexAttribPointer(state.aEnv, 1, gl.FLOAT, false, 16, 12);
+  }
   gl.activeTexture(gl.TEXTURE0);
   gl.bindTexture(gl.TEXTURE_2D, state.lutTex);
   gl.uniform1i(state.uniforms.uLut, 0);
-  gl.uniform4f(state.uniforms.uCoeff, pack[0], pack[1], pack[2], pack[3]);
-  gl.uniform4f(state.uniforms.uSweep, pack[4], pack[5], pack[6], pack[7]);
-  gl.uniform3f(state.uniforms.uHz, pack[8], pack[9], windowSec);
-  gl.uniform3f(state.uniforms.uLook, Math.max(feather, 1e-4), ridge, minH);
   gl.uniform2f(state.uniforms.uHead, Number.isFinite(elapsed) ? elapsed : -1, Number.isFinite(elapsed) ? 1 : 0);
+  gl.uniform1f(state.uniforms.uWin, windowSec);
   gl.uniform1f(state.uniforms.uGhost, 0.22);
-  gl.drawArrays(gl.TRIANGLES, 0, 6);
+  gl.uniform1f(state.uniforms.uFade, fade);
+  gl.uniform1f(state.uniforms.uPx, 2 / Math.max(1, h));
+  gl.enable(gl.BLEND);
+  gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+  gl.drawArrays(gl.TRIANGLE_STRIP, 0, n * 2);
+  gl.disable(gl.BLEND);
   gl.bindFramebuffer(gl.FRAMEBUFFER, null);
   gl.disable(gl.SCISSOR_TEST);
   if (typeof nodeGraphPicturePresent !== "function"

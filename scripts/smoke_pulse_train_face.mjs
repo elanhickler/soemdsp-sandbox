@@ -26,7 +26,7 @@ const want = [
   { kind: "cells", params: [["curve", "Curve", "bipolar"], ["ampStart", "A Start"], ["ampEnd", "A End"], ["ampCurve", "A Crv", "bipolar"]] },
   { kind: "choices", param: "pulseMode", labels: ["Fwd", "Fwd-Rev", "Rev", "Rev-Fwd"] },
   { kind: "choices", param: "mode", labels: ["One shot", "Loop"] },
-  { kind: "choices", param: "recalculateOnTrigger", labels: ["Recalc Off", "Recalc On"] },
+  { kind: "choices", param: "recalculateOnTrigger", labels: ["Free", "Latch"] },
   { kind: "slider", param: "wave" },
   { kind: "cells", params: [["morph", "Morph"], ["amplitude", "Amp"]] },
   { kind: "choices", param: "antialiasing", labels: ["Off", "Random", "Dither"] },
@@ -63,13 +63,14 @@ check(keys.frequency?.unit === "Hz" && keys.duty?.label === "Pulse Duty", "Freq 
 
 for (const page of ["index.html", "perform.html"]) {
   const html = fs.readFileSync(path.join(root, "public", page), "utf8");
-  check(/node-graph-module-definitions\.js\?v=pt-face-2/.test(html), `${page} cache-bust pt-face-2`);
-  check(/node-graph-pulse-train-display\.js\?v=pt-ghost-2/.test(html), `${page} cache-bust pt-ghost-2`);
+  check(/node-graph-module-definitions\.js\?v=pt-free-1/.test(html), `${page} cache-bust pt-free-1`);
+  check(/node-graph-pulse-train-display\.js\?v=pt-sweep-1/.test(html), `${page} cache-bust pt-sweep-1`);
 }
 
 const display = fs.readFileSync(path.join(root, "public", "node-graph-pulse-train-display.js"), "utf8");
 check(!/sched\.ghost/.test(display) && !/ghostOpacity/.test(display), "face does not draw a next-pattern ghost");
-check(/in-effect \(latched\) cycle/.test(display), "face comment: plate follows the latched cycle with Recalc On");
+check(/in-effect \(latched\) cycle/.test(display), "face comment: plate follows the latched cycle with Latch");
+check(/phase-locked/.test(display) && !/elapsed %= end/.test(display), "Loop playhead is phase-locked (no elapsed % newEnd)");
 const form = fs.readFileSync(path.join(root, "public", "node-graph-module-scope-settings-form.js"), "utf8");
 const trace = fs.readFileSync(path.join(root, "public", "node-graph-module-scope-trace-controls.js"), "utf8");
 const trainFields = trace.slice(trace.indexOf("pulseTrainFace:"), trace.indexOf("robinSinepulseFace:"));

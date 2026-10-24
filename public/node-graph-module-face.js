@@ -805,8 +805,26 @@ function nodeGraphModuleFaceDrawGl(batch, el, w, ox, oy, z) {
   const spec = nodeGraphModuleFaceSpecForElement(el);
   if (!spec) return;
   const ink = NodeGraphFaceInk;
+  // Hairlines: at least 1 device pixel (same grid as module rails). A 1 face-px
+  // gap or rect vanishes between zoom steps if it is not snapped and thickened.
+  const grid = typeof nodeGraphRailGrid === "function" ? nodeGraphRailGrid(batch) : null;
+  const hair = grid ? grid.t(Math.max(1e-6, z)) : Math.max(1, z);
+  const hairFace = hair / Math.max(1e-6, z);
   const rect = (x, y, rw, rh, css) => nodeGraphGlLinesRect(batch, ox + x * z, oy + y * z, rw * z, rh * z, nodeGraphModuleFaceRgba(css));
-  const line = (x, y, rw, rh, css) => nodeGraphGlLinesRect(batch, ox + x * z, oy + y * z, Math.max(1, rw * z), Math.max(1, rh * z), nodeGraphModuleFaceRgba(css));
+  const line = (x, y, rw, rh, css) => {
+    let px = ox + x * z;
+    let py = oy + y * z;
+    let pw = rw * z;
+    let ph = rh * z;
+    if (rw <= rh) {
+      pw = Math.max(hair, pw);
+      if (grid) px = grid.x(px);
+    } else {
+      ph = Math.max(hair, ph);
+      if (grid) py = grid.y(py);
+    }
+    nodeGraphGlLinesRect(batch, px, py, pw, ph, nodeGraphModuleFaceRgba(css));
+  };
   const fit = (text, bw, bh, hRatio, wRatio) => Math.min((bh - 2) * hRatio, (bw - 4) / (Math.max(1, String(text).length) * wRatio));
   const widgets = nodeGraphModuleFaceWidgets(spec, w, el);
   let rowY = -1;
@@ -866,11 +884,12 @@ function nodeGraphModuleFaceDrawGl(batch, el, w, ox, oy, z) {
       if (wd.index > 0) line(wd.x, wd.y, wd.w, 1, ink.rowLine);
       nodeGraphModuleFaceText(batch, wd.label, ox + cx * z, oy + cy * z, 11.5 * z, on ? ink.subOnText : ink.offText);
     } else if (wd.type === "cell") {
-      const top = wd.row.kind === "cells" ? wd.y + 1 : wd.y + 1;
-      const gap = wd.row.kind === "cells" && wd.x > 0 ? 1 : 0;
+      const top = wd.y + hairFace;
+      const gap = wd.row.kind === "cells" && wd.x > 0 ? hairFace : 0;
       const cw = wd.w - gap;
-      const ch = wd.h - 1;
+      const ch = wd.h - hairFace;
       rect(wd.x + gap, top, cw, ch, ink.cellFill);
+      if (wd.row.kind === "cells" && wd.x > 0) line(wd.x, wd.y, 1, wd.h, ink.cellLine);
       if (wd.bipolar) line(wd.x, wd.y, 1, wd.h, ink.cellLine);
       const t = nodeGraphModuleFaceTravel(input);
       // Jack-owned param (wired ƒ replaces it): the same 135deg stripes as the

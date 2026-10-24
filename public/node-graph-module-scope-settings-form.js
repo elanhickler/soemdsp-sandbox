@@ -164,10 +164,7 @@ function nodeGraphDisplaySettingsBuildStepperRowHtml(key, formType = null, optio
     label = "Dot size";
     title = "Phase-dot diameter in CSS pixels (0.25–32).";
   }
-  if (formType === "robinSinepulseFace" && key === "dotThickness") {
-    label = "Ridge";
-    title = "Midline ridge width in CSS pixels (0.25–32). Peak LUT color.";
-  }
+
   if (formType === "sinCosFace" && key === "padExtra") {
     label = "Extra padding";
     title = "Extra CSS pixels inside the plate after the automatic line/dot inset (0 = flush, no clip).";
@@ -182,7 +179,7 @@ function nodeGraphDisplaySettingsBuildStepperRowHtml(key, formType = null, optio
   }
   if (formType === "robinSinepulseFace" && key === "lineSmoothing") {
     label = "Envelope smoothing";
-    title = "Smootherstep skirt on the T60 envelope and ridge (CSS pixels, 0–8, default 1). 0 = hard core.";
+    title = "Smootherstep fade on the baseline and top edge (CSS pixels, 0–8, default 1). Thin bars fade to 0 instead of a hard line.";
   }
   if (formType === "robinSinepulseFace" && key === "pixelDensity") {
     label = "Pixel density";
@@ -2105,7 +2102,7 @@ function buildNodeGraphDisplaySettingsBodyHtml(formType, node = null) {
       (key) => activeFields.has(key) && allowKey("fields", key),
     );
     if (type === "robinSinepulseFace" && section === "waterfall") {
-      fieldKeys = ["lineSmoothing", "dotThickness", "pixelDensity"].filter(
+      fieldKeys = ["lineSmoothing", "pixelDensity"].filter(
         (key) => activeFields.has(key) && allowKey("fields", key),
       );
     }

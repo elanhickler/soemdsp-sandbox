@@ -35,7 +35,7 @@ static const char kMetadataJson[] =
       "{\"key\":\"sustain\",\"label\":\"Sustain\",\"defaultValue\":0.7,\"min\":0,\"mid\":0.5,\"max\":1},"
       "{\"key\":\"release\",\"label\":\"Release\",\"kind\":\"time\",\"defaultValue\":0.3,\"min\":0,\"mid\":0.5,\"max\":10,\"unit\":\"s\"},"
       "{\"key\":\"level\",\"label\":\"Level\",\"defaultValue\":1,\"min\":0,\"mid\":0.5,\"max\":1},"
-      "{\"key\":\"recalculateOnTrigger\",\"label\":\"Recalc On Trig\",\"kind\":\"choice\",\"choices\":[\"Off\",\"On\"],\"defaultValue\":0}"
+      "{\"key\":\"recalculateOnTrigger\",\"label\":\"Free / Latch\",\"kind\":\"choice\",\"choices\":[\"Free\",\"Latch\"],\"defaultValue\":0}"
     "]"
   "}";
 

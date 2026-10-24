@@ -113,6 +113,29 @@ for (const rec of [1, 0]) {
   const w = el.findIndex((v, i) => i > 0 && v === 0 && el[i - 1] > 0);
   check(Math.abs(w - SR) <= 1, `defaults Frequency 1 Hz / Duty 0.5: wrap at ${w} samples`);
 }
+// 9) Free + Loop: sweeping Frequency keeps phase. Elapsed must not snap to 0
+// mid-cycle (that was the train restarting on every ƒ change).
+for (const wave of [0, 2]) {
+  const seconds = 0.4;
+  const r = run({
+    freq: 2, duty: 1, rec: 0, wave, count: 8, seconds,
+    onBlock: (q, set) => { set(P.TDEN, 2 + (q * 128 / SR) / seconds * 38); },
+  });
+  let falseRestarts = 0, realWraps = 0;
+  for (let i = 1; i < r.el.length; i++) {
+    if (!(r.el[i] === 0 && r.el[i - 1] > 0)) continue;
+    const period = r.ramp[i] > 0 ? r.ramp[i] : 0;
+    const prev = r.el[i - 1];
+    if (period > 0 && prev + 4 / SR >= period * 0.85) realWraps += 1;
+    else falseRestarts += 1;
+  }
+  check(falseRestarts === 0, `Free Frequency sweep Shape ${wave}: no mid-cycle restart (${falseRestarts} false, ${realWraps} wraps)`);
+  check(realWraps >= 1, `Free Frequency sweep Shape ${wave}: wrapped ${realWraps} times`);
+  let energy = 0;
+  for (let i = 0; i < r.out.length; i++) energy += r.out[i] * r.out[i];
+  check(energy > 1, `Free Frequency sweep Shape ${wave}: train stays alive (energy ${energy.toFixed(3)})`);
+}
+check((N.soemdsp_pulse_train_version() | 0) >= 24, `pulse_train v${N.soemdsp_pulse_train_version()}`);
 check((N.soemdsp_graph_version() | 0) >= 255, `graph version ${N.soemdsp_graph_version()}`);
 
 // 5) Loop: exactly Count pulses per cycle in every Pulse Mode, no doubled pulse at the

@@ -9,9 +9,10 @@
 // running it uses the engine's params in effect (__Count .. __Amp). Playhead:
 // __Elapsed (seconds since trigger, -1 idle) shifted to the heard time; fired
 // pulses light up.
-// Recalculate On: the plate is the in-effect (latched) cycle — Time, Duty,
-// Frequency, Pulse Mode, Count. Live knobs that have not latched yet do not
-// redraw or retime the playhead. Recalculate Off: the plate follows the knobs.
+// Latch: the plate is the in-effect (latched) cycle — Time, Duty, Frequency,
+// Pulse Mode, Count. Live knobs that have not latched yet do not redraw or
+// retime the playhead. Free: the plate follows the knobs; Loop playhead is
+// phase-locked so a Frequency sweep does not modulo-reset the stems.
 // Display Settings `pulseTrainFace`: Background, Line, Dot, Playhead, Lit;
 // Line thickness, Dot size, Fade time (s). Fade 0 holds the lit dots until
 // retrigger; >0 is PhosphorResidual.energyAfterSeconds.
@@ -94,9 +95,9 @@ function nodeGraphPulseTrainSchedule(section, node) {
     Math.round(p("mode", 1)), pulseModeKnob, (1 - duty) * periodS,
   ];
   // Audio running: draw the params the engine is playing with (latched at the
-  // trigger / cycle start with Recalculate On, live with it Off; idle = what
+  // trigger / cycle start with Latch, live with Free; idle = what
   // the next trigger latches), so the face always matches what is heard.
-  // Live Frequency / Duty knobs that have not latched must not retune the plate.
+  // Live Frequency / Duty knobs that have not latched (Latch mode) must not retune the plate.
   // __Amp is Amplitude * trigger velocity.
   const ctx = nodeGraphMvp?.live?.context;
   if (ctx?.state === "running" && typeof nodeGraphModuleScopeLatestOutputValue === "function") {
@@ -225,8 +226,10 @@ function nodeGraphPulseTrainPreviewJs(args, endTime) {
   };
 }
 
-/** Heard seconds since the last trigger, or NaN when no train is playing. */
-function nodeGraphPulseTrainHeardElapsed(section, end) {
+/** Heard seconds since the last trigger, or NaN when no train is playing.
+ *  Loop Free: keep phase against the axis captured with __Elapsed, then map
+ *  onto the current cycle so shrinking Frequency does not `e % newEnd` to 0. */
+function nodeGraphPulseTrainHeardElapsed(section, end, loop) {
   const ctx = nodeGraphMvp?.live?.context;
   const live = typeof nodeGraphModuleScopeLatestOutputValue === "function"
     ? Number(nodeGraphModuleScopeLatestOutputValue(section.dataset.node, "__Elapsed", Number.NaN))
@@ -238,11 +241,20 @@ function nodeGraphPulseTrainHeardElapsed(section, end) {
   if (Number.isFinite(live) && live >= 0 && live !== section._pulseTrainAnchorValue) {
     section._pulseTrainAnchorValue = live;
     section._pulseTrainAnchorTime = ctx.currentTime;
+    section._pulseTrainAnchorEnd = end;
   }
   if (!Number.isFinite(section._pulseTrainAnchorTime)) return Number.NaN;
   const stamp = ctx.getOutputTimestamp();
   const heard = stamp.contextTime + (performance.now() - stamp.performanceTime) / 1000;
-  const e = section._pulseTrainAnchorValue + (heard - section._pulseTrainAnchorTime);
+  const dt = heard - section._pulseTrainAnchorTime;
+  const axis = section._pulseTrainAnchorEnd > 0 ? section._pulseTrainAnchorEnd : end;
+  if (loop && axis > 0 && end > 0) {
+    let phase = (section._pulseTrainAnchorValue + dt) / axis;
+    phase -= Math.floor(phase);
+    if (!(phase >= 0) || phase >= 1) phase = 0;
+    return phase * end;
+  }
+  const e = section._pulseTrainAnchorValue + dt;
   if (e > end + 0.15) {
     if (!(live >= 0)) section._pulseTrainAnchorTime = Number.NaN;
     return Number.NaN;
@@ -288,9 +300,9 @@ function drawNodeGraphPulseTrainDisplay(section) {
   const dim = (c, a) => [c[0], c[1], c[2], c[3] * a];
   nodeGraphGlLinesSegment(batch, x0, base, x1, base, Math.max(0.5, halfPx * 0.5), smoothing, dim(line, 0.6));
   for (const x of [x0, x1]) nodeGraphGlLinesSegment(batch, x, base - 3, x, base + 3, 0.5, smoothing, dim(line, 0.6));
-  let elapsed = schedule ? nodeGraphPulseTrainHeardElapsed(section, schedule.loop ? Infinity : end) : Number.NaN;
-  // Loop: the heard playhead wraps every cycle (the engine restarts __Elapsed at 0).
-  if (schedule?.loop && Number.isFinite(elapsed)) elapsed %= end;
+  let elapsed = schedule
+    ? nodeGraphPulseTrainHeardElapsed(section, end, schedule.loop)
+    : Number.NaN;
   const playing = Number.isFinite(elapsed);
   if (schedule) {
     // Height = amplitude; the plot top is 1, or the loudest pulse when Amplitude goes past 1 (no clamp).
