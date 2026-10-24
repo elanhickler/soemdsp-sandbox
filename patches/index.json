@@ -31,6 +31,15 @@
       "folder": "Alarm"
     },
     {
+      "slug": "bugs/pump limiter sidechain not working",
+      "label": "pump limiter sidechain not working",
+      "name": "",
+      "url": "/soemdsp-sandbox/patches/bugs/pump%20limiter%20sidechain%20not%20working.json",
+      "author": "",
+      "emoji": "",
+      "folder": "bugs"
+    },
+    {
       "slug": "demo_patches/analogdream",
       "label": "analogdream",
       "name": "",
@@ -920,6 +929,14 @@
       "label": "prettyscope",
       "name": "",
       "url": "/soemdsp-sandbox/patches/prettyscope.json",
+      "author": "",
+      "emoji": ""
+    },
+    {
+      "slug": "pump limiter sidechain not working",
+      "label": "pump limiter sidechain not working",
+      "name": "",
+      "url": "/soemdsp-sandbox/patches/bugs/pump%20limiter%20sidechain%20not%20working.json",
       "author": "",
       "emoji": ""
     },
