@@ -1,6 +1,6 @@
 # Math category, Logic, and Noise Gate
 
-**Status:** implementing. Decisions in §0 are locked (Argi, 2026-10-23). M1 (Math shelf + recategorize) is in this commit. M2 Logic and M3 Noise Gate follow as separate commits. Remaining questions in §8.
+**Status:** implementing. Decisions in §0 are locked (Argi, 2026-10-23). M1 Math shelf and M2 Logic are in. M3 Noise Gate follows. Remaining questions in §8.
 **Date:** 2026-10-23.
 **Requested by:** Argi.
 **Related:** `docs/APP_POLICY.md` (native-only DSP §2 / §5, no shims, one source of truth, face rows §21-ish UI, library edits §19); `docs/GATES_TRIGGERS.md`; `docs/PORT_TYPES.md`; `docs/ADDING_HARDCODED_SANDBOX_MODULE.md`; `docs/SIDECHAIN_PLAN.md` (detector / Hold pattern); `public/node-graph-module-store.js` (departments + catalog).

@@ -92,6 +92,7 @@ const nodeGraphModuleScopeCustomRenderers = {
   sinCosFace: () => {},
   clockFace: () => {},
   clockDividerFace: () => {},
+  logicLampsFace: () => {},
   triggerDividerFace: () => {},
   pulseExplosionFace: () => {},
   pulseTrainFace: () => {},

@@ -33,6 +33,7 @@ NodeLiveAudioProcessor.NATIVE_GRAPH_TYPE_IDS = Object.freeze({
   script: 220,
   slewLimiter: 17,
   comparator: 18,
+  logic: 233,
   sampleDelay: 19,
   earlyReflections: 203,
   sampleHold: 20,
@@ -917,6 +918,18 @@ NodeLiveAudioProcessor.prototype.mapNativeGraphSrcPortId = function mapNativeGra
     if (p === "bit2") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_SAW;
     if (p === "bit3") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_RAMP;
     if (p === "gate") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_SQUARE;
+  }
+  // Logic named outs (reuse tap slots; Thru=Mono, AND=Left … NOT=Sine, __B=Trisaw).
+  if (t === "logic") {
+    if (p === "thru" || p === "a") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_MONO;
+    if (p === "and" || p === "b") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_LEFT;
+    if (p === "or") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_RIGHT;
+    if (p === "xor") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_SAW;
+    if (p === "nand") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_RAMP;
+    if (p === "nor") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_SQUARE;
+    if (p === "xnor") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_TRI;
+    if (p === "not") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_SINE;
+    if (p === "__b") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_TRISAW;
   }
   // Comparator named outs (reuse tap slots; see graph_engine kPortCmp*).
   if (p === "up") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_SAW;
@@ -9261,6 +9274,7 @@ NodeLiveAudioProcessor.prototype.nativeGraphPortNames = function nativeGraphPort
     if (type === "sinCos") return ["sin", "Sin", "Out", "Mono"];
     if (type === "archimedes") return ["Sine", "Out"];
     if (type === "comparator") return ["Thru"];
+    if (type === "logic") return ["Thru"];
     if (type === "sampleDelay") return ["Delayed", "Out", "Mono"];
     if (type === "earlyReflections") return ["Mono"];
     // Face jack is Ext Out (Out/Mono are aliases). MOD/scope must publish that name.
@@ -9351,6 +9365,7 @@ NodeLiveAudioProcessor.prototype.nativeGraphPortNames = function nativeGraphPort
     if (type === "sinCos") return ["cos", "Cos", "Left"];
     if (type === "archimedes") return ["Cosine"];
     if (type === "minMax") return ["Min"];
+    if (type === "logic") return ["AND"];
     if (type === "mix4" || type === "mix" || type === "gainBiasMix") return ["Out2"];
     if (type === "mix2") return ["Out1"];
     if (type === "midSideEncode") return ["Side"];
@@ -9465,6 +9480,7 @@ NodeLiveAudioProcessor.prototype.nativeGraphPortNames = function nativeGraphPort
       return ["Right", "Right Out"];
     }
     if (type === "xyPad") return ["Gate", "G", "Right"];
+    if (type === "logic") return ["OR"];
     return ["Right"];
   }
   if (portId === P.NATIVE_GRAPH_PORT_SAW) {
@@ -9492,6 +9508,7 @@ NodeLiveAudioProcessor.prototype.nativeGraphPortNames = function nativeGraphPort
     if (type === "archimedes") return ["Noise Below"];
     if (type === "ellipsoid") return ["Uni X"];
     if (type === "comparator") return ["Up"];
+    if (type === "logic") return ["XOR"];
     if (type === "sampleDelay") return ["Thru"];
     if (type === "mix4" || type === "mix" || type === "gainBiasMix") return ["Out4"];
     if (type === "mixStereo4" || type === "mixStereo2" || type === "mixStereo" || type === "crossfade2" || type === "crossfade3" || type === "crossfade4") return ["L2"];
@@ -9529,6 +9546,7 @@ NodeLiveAudioProcessor.prototype.nativeGraphPortNames = function nativeGraphPort
     if (type === "archimedes") return ["Noise Above"];
     if (type === "ellipsoid") return ["Uni Y"];
     if (type === "comparator") return ["Down"];
+    if (type === "logic") return ["NAND"];
     if (type === "mixStereo4" || type === "mixStereo2" || type === "mixStereo" || type === "crossfade2" || type === "crossfade3" || type === "crossfade4") return ["R2"];
     if (type === "transport") return ["f adj", "fadj", "f-adj", "beat f", "beatf", "beat ƒ"];
     if (type === "audioPlayer") return ["Trigger"];
@@ -9551,6 +9569,7 @@ NodeLiveAudioProcessor.prototype.nativeGraphPortNames = function nativeGraphPort
     if (type === "fbmField") return ["Z Raw"];
     if (type === "phoneTone") return ["Analog Thru"];
     if (type === "comparator") return ["Change"];
+    if (type === "logic") return ["NOR"];
     if (type === "mixStereo4" || type === "mixStereo" || type === "crossfade3" || type === "crossfade4") return ["L3"];
     if (type === "binaryClock") return ["Gate", "Square"];
     if (type === "chaosfly") return [];
@@ -9561,17 +9580,20 @@ NodeLiveAudioProcessor.prototype.nativeGraphPortNames = function nativeGraphPort
     if (type === "transport") return ["Click R", "Click Right"];
     if (type === "phoneTone") return ["Digital Thru"];
     if (type === "comparator") return ["Steady"];
+    if (type === "logic") return ["XNOR"];
     if (type === "sidechain") return ["Wet Gain"];
     if (type === "mixStereo4" || type === "mixStereo" || type === "crossfade3" || type === "crossfade4") return ["R3"];
     return ["Tri"];
   }
   if (portId === P.NATIVE_GRAPH_PORT_SINE) {
     if (type === "comparator") return ["Sign"];
+    if (type === "logic") return ["NOT"];
     if (type === "mixStereo4" || type === "mixStereo" || type === "crossfade4") return ["L4"];
     return ["Sine"];
   }
   if (portId === P.NATIVE_GRAPH_PORT_TRISAW) {
     if (type === "basicShape") return ["Trisaw"];
+    if (type === "logic") return ["__B"];
     return [];
   }
   if (portId === P.NATIVE_GRAPH_PORT_CENTER_SQUARE) {

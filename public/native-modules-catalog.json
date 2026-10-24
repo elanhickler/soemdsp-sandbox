@@ -1640,6 +1640,24 @@
       "noticeUrl": "https://github.com/elanhickler/soemdsp-sandbox/blob/master/docs/THIRD_PARTY.md"
     },
     {
+      "name": "logic",
+      "label": "Logic",
+      "targetType": "logic",
+      "kind": "utility",
+      "source": "native_modules/logic/logic.cpp",
+      "sourceUrl": "https://github.com/elanhickler/soemdsp-sandbox/blob/master/native_modules/logic/logic.cpp",
+      "localSourceUrl": "/native_modules/logic/logic.cpp",
+      "libUrl": "",
+      "wasm": "native_modules/logic/logic.wasm",
+      "wasmUrl": "native_modules/logic/logic.wasm",
+      "wasmAvailable": true,
+      "license": "Soundemote Noncommercial",
+      "licenseUrl": "https://github.com/elanhickler/soemdsp-sandbox/blob/master/LICENSE",
+      "upstreamLicense": "",
+      "upstreamLicenseUrl": "",
+      "noticeUrl": "https://github.com/elanhickler/soemdsp-sandbox/blob/master/docs/THIRD_PARTY.md"
+    },
+    {
       "name": "logistic_map",
       "label": "Logistic Map",
       "targetType": "logisticMap",

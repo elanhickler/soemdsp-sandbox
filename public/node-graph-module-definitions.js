@@ -59,6 +59,7 @@ const nodeGraphNodeLabels = Object.freeze({
   triggerCounter: "Trigger Counter",
   triggerDivider: "Trigger Counter",
   comparator: "Comparator",
+  logic: "Logic",
   sampleDelay: "Sample Delay",
   earlyReflections: "Early Reflections",
   bitConverter: "Bit Converter",
@@ -7154,6 +7155,23 @@ const nodeGraphModuleDefinitions = (
     inputLabels: { In: "→" },
     outputs: ["Up", "Down", "Change", "Steady", "Sign", "Thru"],
     outputLabels: { Up: "Up", Down: "Down", Change: "Change", Steady: "Steady", Sign: "Sign", Thru: "←" },
+    parameters: []
+  },
+  logic: {
+    planRole: "processor",
+    // Boolean pack. True = > 0 (gate_on). GPU lamps: A B AND / OR XOR NAND / NOR XNOR NOT.
+    customDisplayArea: true,
+    displayType: "logicLampsFace",
+    displayHeightGu: 3,
+    spectrumCompanion: false,
+    displayModes: [
+      { key: "face", label: "Lamps", renderer: "logicLampsFace", settingsSchema: "clockDividerFace" },
+    ],
+    defaultDisplayMode: "face",
+    bypassMap: [{ out: "Thru", in: "A" }],
+    digitalOutputs: ["AND", "OR", "XOR", "NAND", "NOR", "XNOR", "NOT"],
+    inputs: ["A", "B"],
+    outputs: ["AND", "OR", "XOR", "NAND", "NOR", "XNOR", "NOT", "Thru"],
     parameters: []
   },
   earlyReflections: {

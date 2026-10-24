@@ -665,6 +665,12 @@ const nodeGraphModuleStoreCatalog = Object.freeze({
     label: "Comparator",
     notes: ["edge detect", "up", "down", "change", "steady", "sign", "native"],
   },
+  logic: {
+    category: "math",
+    description: "Boolean combine: simultaneous AND, OR, XOR, NAND, NOR, XNOR, and NOT. True is > 0.",
+    label: "Logic",
+    notes: ["and", "or", "xor", "nand", "nor", "xnor", "not", "boolean", "logic", "gate", "native"],
+  },
   sampleDelay: {
     category: "space",
     description: "Precise dry/wet delay in time or samples for comb, predelay, or synced echos.",
@@ -3400,6 +3406,10 @@ const nodeGraphJsSourceEntriesByType = Object.freeze({
   comparator: {
     source: "native_modules/comparator/comparator.cpp",
     sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/native_modules/comparator/comparator.cpp",
+  },
+  logic: {
+    source: "native_modules/logic/logic.cpp",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/native_modules/logic/logic.cpp",
   },
   cookbookFilter: {
     source: "native_modules/cookbook_filter/cookbook_filter.cpp",

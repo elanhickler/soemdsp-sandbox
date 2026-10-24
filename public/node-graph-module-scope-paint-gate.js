@@ -543,6 +543,7 @@ const nodeGraphFacePaintKindTable = Object.assign(Object.create(null), {
   sinCosFace: "param",
   clockFace: "param",
   clockDividerFace: "param",
+  logicLampsFace: "signal",
   triggerDividerFace: "param",
   pulseExplosionFace: "param",
   pulseTrainFace: "param",
