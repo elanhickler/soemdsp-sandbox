@@ -119,6 +119,7 @@ const TYPE_SINEPULSE = 205;
 const PORT_MONO = 0;
 const PORT_LEFT = 1;
 const PORT_RIGHT = 2;
+const PORT_PHASE01 = 10;
 const PORT_TRIGGER = 20;
 const P = {
   FREQUENCY: 10, WAVEFORM: 11, AMPLITUDE: 12, SHAPE: 13, PHASE: 14,
@@ -155,12 +156,16 @@ function runGraph({ wave = 0, waveShape = 0, blocks = 750 } = {}) {
   const sig = [];
   const freq = [];
   const env = [];
+  const elapsed = [];
   for (let q = 0; q < blocks; q++) {
     process(g, 128);
     const kb = new Float64Array(mem.buffer, portPtr(g, hSp, PORT_MONO) | 0, 128);
     const fb = new Float64Array(mem.buffer, portPtr(g, hSp, PORT_LEFT) | 0, 128);
     const eb = new Float64Array(mem.buffer, portPtr(g, hSp, PORT_RIGHT) | 0, 128);
-    for (let i = 0; i < 128; i++) { sig.push(kb[i]); freq.push(fb[i]); env.push(eb[i]); }
+    const pb = new Float64Array(mem.buffer, portPtr(g, hSp, PORT_PHASE01) | 0, 128);
+    for (let i = 0; i < 128; i++) {
+      sig.push(kb[i]); freq.push(fb[i]); env.push(eb[i]); elapsed.push(pb[i]);
+    }
   }
   destroy(g);
   const hits = [];
@@ -168,7 +173,7 @@ function runGraph({ wave = 0, waveShape = 0, blocks = 750 } = {}) {
     if (freq[n - 1] < 1000 && freq[n] > 5000) hits.push(n);
   }
   if (freq[0] > 5000) hits.unshift(0);
-  return { sig, freq, env, hits };
+  return { sig, freq, env, elapsed, hits };
 }
 
 {
@@ -191,6 +196,12 @@ function runGraph({ wave = 0, waveShape = 0, blocks = 750 } = {}) {
     peakEnv = Math.max(peakEnv, a.env[n]);
   }
   if (!(a.env[a.hits[0]] > 0.99)) throw new Error(`0–1 peak at hit ${a.env[a.hits[0]]}`);
+  if (!(a.elapsed[a.hits[0]] >= 0 && a.elapsed[a.hits[0]] < 2 / SR)) {
+    throw new Error(`__Elapsed on hit ${a.elapsed[a.hits[0]]}`);
+  }
+  if (!(a.elapsed[a.hits[0] + 400] > a.elapsed[a.hits[0]])) {
+    throw new Error("__Elapsed did not advance after the hit");
+  }
   if (!(a.env[a.hits[0] + 400] < 0.95)) throw new Error("0–1 did not follow the sweep down");
   if (!(peakEnv <= 1)) throw new Error(`0–1 peak ${peakEnv}`);
   // Every Trigger hard-resets: first sample of each hit is 0 (Sine, phase 0).

@@ -82,6 +82,8 @@ struct State {
   double envOut, unitOut, freqOut;
   bool swept;
   double lastTrigger;
+  double sr;
+  double elapsedHold;
   bool active;
 };
 
@@ -124,6 +126,8 @@ static void init_state(State& s) {
   s.freqOut = 0.0;
   s.swept = false;
   s.lastTrigger = 0.0;
+  s.sr = 44100.0;
+  s.elapsedHold = -1.0;
 }
 
 // rsFreqSweeper::updateCoeffs (rosic_MiscUnfinished.cpp).
@@ -313,6 +317,7 @@ extern "C" double soemdsp_robin_sinepulse_sample(
   if (handle < 1 || handle > kMaxInstances || !gPool[handle - 1].active) return 0.0;
   State& s = gPool[handle - 1];
   const double sr = sampleRate < 1.0 ? 44100.0 : sampleRate;
+  s.sr = sr;
 
   // Shared abs-rise Trigger rule (gate_hit) and velocity for every voice.
   const double trig = safe(trigger);
@@ -342,6 +347,7 @@ extern "C" double soemdsp_robin_sinepulse_sample(
     s.fLo = v.fLo;
     s.lastFreq = v.instFreq;
     s.swept = true;
+    s.elapsedHold = 0.0;
   }
 
   const bool latch = safe(recalculateOnTrigger) >= 0.5;
@@ -360,7 +366,10 @@ extern "C" double soemdsp_robin_sinepulse_sample(
     if (!v.on) continue;
     if (i == s.newest) { s.envOut = v.env; s.lastFreq = v.instFreq; }
     sum += run_voice(v, w, ph, ws, ch, sh, latch ? v.decayLatched : liveDecay, sr);
-    if (i == s.newest && !v.on) s.lastFreq = v.instFreq;  // rest: f stays where the sweep landed
+    if (i == s.newest) {
+      s.elapsedHold = v.sampleCount / sr;
+      if (!v.on) s.lastFreq = v.instFreq;  // rest: f stays where the sweep landed
+    }
   }
 
   if (!s.swept) {
@@ -397,6 +406,135 @@ extern "C" int soemdsp_robin_sinepulse_is_idle(int handle) {
   return 1;
 }
 
-extern "C" int soemdsp_robin_sinepulse_version() { return 8; }  // 8: Voices = fading copies (one live kick; Decay does not scale Fade Time). 7: Voices (1..8) + Fade Time (stolen voice fades out; 0 = hard cut). 6: no Decay floor (was 0.1 ms). 5: Recalculate On Trigger (decay latched on hit)
+// Seconds since the newest hit, or -1 before the first Trigger.
+extern "C" double soemdsp_robin_sinepulse_elapsed(int handle) {
+  if (handle < 1 || handle > kMaxInstances || !gPool[handle - 1].active) return -1.0;
+  return gPool[handle - 1].elapsedHold;
+}
+
+// Face preview: one designed hit (velocity 1), cropped to the kick body.
+// Per column: min/max of every sample in that column's time slice, widened
+// to include the previous column's last sample so adjacent bands connect.
+static const int kPreviewMaxCols = 512;
+static const int kPreviewMaxSamples = 48000;
+static float gPreviewMin[kPreviewMaxCols];
+static float gPreviewMax[kPreviewMaxCols];
+static int gPreviewCount = 0;
+static double gPreviewWindow = 0.0;
+
+// Time until ƒ has fallen to Low+50 Hz (Sweep Time's landing), stretched by Chirp.
+static double preview_sweep_land_time(const Voice& v) {
+  const double fLand = v.fLo + kRefFreq;
+  if (!(v.fHi > fLand)) return 0.0;
+  double tHi = v.sweepTime * 8.0;
+  if (tHi < 0.05) tHi = 0.05;
+  if (tHi > 2.0) tHi = 2.0;
+  if (inst_freq(v, tHi) > fLand) return tHi;
+  double lo = 0.0, hi = tHi;
+  for (int i = 0; i < 24; i++) {
+    const double mid = 0.5 * (lo + hi);
+    if (inst_freq(v, mid) > fLand) lo = mid;
+    else hi = mid;
+  }
+  return hi;
+}
+
+// Crop: min(sweep land, env −24 dB), at least 3 body periods, 8 ms .. 2 s, +12% pad.
+static double preview_window_sec(const Voice& v, double decay) {
+  const double tSweep = preview_sweep_land_time(v);
+  const double tEnv = (decay > 0.0) ? decay * (24.0 / 60.0) : 0.0;
+  double t = tSweep;
+  if (tEnv > 0.0 && (t <= 0.0 || tEnv < t)) t = tEnv;
+  double fBody = v.fLo > kUnitFloorHz ? v.fLo : inst_freq(v, t > 0.0 ? t : v.sweepTime);
+  if (!(fBody > kUnitFloorHz)) fBody = kUnitFloorHz;
+  const double tFloor = 3.0 / fBody;
+  if (t < tFloor) t = tFloor;
+  t *= 1.12;
+  if (t < 0.008) t = 0.008;
+  if (t > 2.0) t = 2.0;
+  return t;
+}
+
+extern "C" int soemdsp_robin_sinepulse_preview(
+  double highFreq, double lowFreq, double sweepTime,
+  double chirp, double chirpShape, double wave, double waveShape,
+  double phase, double decay, double amplitude, double sampleRate,
+  int columns
+) {
+  const double sr = sampleRate < 1.0 ? 44100.0 : sampleRate;
+  const double nyquist = 0.5 * sr;
+  Voice v;
+  init_voice(v);
+  v.fHi = maxd(mind(safe(highFreq), nyquist), kRefFreq);
+  v.fLo = clamp(safe(lowFreq), 0.0, nyquist);
+  v.sweepTime = maxd(safe(sweepTime), kMinSweepTime);
+  v.instFreq = v.fHi;
+  v.instPhase = 0.0;
+  v.env = 1.0;
+  v.on = true;
+  const double ch = clamp(safe(chirp), -1.0, 1.0);
+  const double sh = clamp(safe(chirpShape), -1.0, 1.0);
+  update_coeffs(v, ch, sh);
+  const double dec = safe(decay);
+  gPreviewWindow = preview_window_sec(v, dec);
+  int cols = columns < 2 ? 2 : (columns > kPreviewMaxCols ? kPreviewMaxCols : columns);
+  int nSamples = (int)(gPreviewWindow * sr + 0.5);
+  if (nSamples < cols) nSamples = cols;
+  if (nSamples > kPreviewMaxSamples) nSamples = kPreviewMaxSamples;
+  for (int i = 0; i < cols; i++) {
+    gPreviewMin[i] = 1.0e9f;
+    gPreviewMax[i] = -1.0e9f;
+  }
+  int w = (int)(safe(wave) + 0.5);
+  w = w < kWaveSine ? kWaveSine : (w > kWaveTriSaw ? kWaveTriSaw : w);
+  const double ph = clean_control(phase);
+  const double ws = clean_control(waveShape);
+  const double amp = clean_control(amplitude);
+  int prevCol = -1;
+  float prevY = 0.0f;
+  for (int n = 0; n < nSamples; n++) {
+    const double y = amp * run_voice(v, w, ph, ws, ch, sh, dec, sr);
+    int col = (int)((double)n * (double)cols / (double)nSamples);
+    if (col >= cols) col = cols - 1;
+    const float f = (float)y;
+    if (col != prevCol && prevCol >= 0) {
+      gPreviewMin[col] = prevY;
+      gPreviewMax[col] = prevY;
+    }
+    prevCol = col;
+    prevY = f;
+    if (f < gPreviewMin[col]) gPreviewMin[col] = f;
+    if (f > gPreviewMax[col]) gPreviewMax[col] = f;
+    if (!v.on) {
+      for (int c = col + 1; c < cols; c++) {
+        gPreviewMin[c] = 0.0f;
+        gPreviewMax[c] = 0.0f;
+      }
+      break;
+    }
+  }
+  for (int i = 0; i < cols; i++) {
+    if (gPreviewMin[i] > gPreviewMax[i]) {
+      gPreviewMin[i] = 0.0f;
+      gPreviewMax[i] = 0.0f;
+    }
+  }
+  gPreviewCount = cols;
+  return cols;
+}
+
+extern "C" double soemdsp_robin_sinepulse_preview_min(int i) {
+  return (i >= 0 && i < gPreviewCount) ? (double)gPreviewMin[i] : 0.0;
+}
+
+extern "C" double soemdsp_robin_sinepulse_preview_max(int i) {
+  return (i >= 0 && i < gPreviewCount) ? (double)gPreviewMax[i] : 0.0;
+}
+
+extern "C" double soemdsp_robin_sinepulse_preview_window() {
+  return gPreviewWindow;
+}
+
+extern "C" int soemdsp_robin_sinepulse_version() { return 11; }  // 11: preview = connected min/max band per column (preview_y removed). 10: connected preview_y polyline. 9: face preview + elapsed. 8: Voices = fading copies (one live kick; Decay does not scale Fade Time). 7: Voices (1..8) + Fade Time (stolen voice fades out; 0 = hard cut). 6: no Decay floor (was 0.1 ms). 5: Recalculate On Trigger (decay latched on hit)
 extern "C" const char* soemdsp_robin_sinepulse_metadata_json() { return kMetadataJson; }
 extern "C" int soemdsp_robin_sinepulse_metadata_json_size() { return sizeof(kMetadataJson) - 1; }
