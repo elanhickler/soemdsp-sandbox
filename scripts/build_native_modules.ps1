@@ -959,6 +959,10 @@ if ($node) {
   if ($LASTEXITCODE -ne 0) {
     throw "Combined build: Noise Generator Mean/Amplitude chase smoke FAILED"
   }
+  & $node.Source "$root\scripts\smoke_zipper_chase_batch.mjs"
+  if ($LASTEXITCODE -ne 0) {
+    throw "Combined build: zipper chase batch smoke FAILED"
+  }
 } else {
   Write-Warning "node not found -- combined wasm smoke test SKIPPED. Install Node.js to enable it."
 }

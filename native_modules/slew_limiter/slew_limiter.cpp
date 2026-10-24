@@ -167,10 +167,21 @@ extern "C" double soemdsp_slew_limiter_sample(
   double input,
   double upTime,
   double downTime,
-  double sampleRate
+  double sampleRate,
+  double upShape,
+  double downShape,
+  double bias
 ) {
   if (handle < 1 || handle > kMaxInstances) return 0.0;
-  return chanSample(gPool[handle - 1], input, upTime, downTime, sampleRate, kShapeLin, kShapeLin);
+  return chanSample(
+    gPool[handle - 1],
+    input + safe(bias),
+    upTime,
+    downTime,
+    sampleRate,
+    normShape(upShape),
+    normShape(downShape)
+  );
 }
 
 extern "C" void soemdsp_slew_limiter_process_block(
@@ -209,5 +220,5 @@ extern "C" int soemdsp_slew_limiter_max_block_frames() {
 }
 
 extern "C" int soemdsp_slew_limiter_version() {
-  return 4; // mono process_block + separate up/down shape + bias
+  return 5; // sample() takes up/down shape + bias (missing args stay 0 = Lin / no bias)
 }
