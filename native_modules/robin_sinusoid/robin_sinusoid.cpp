@@ -62,6 +62,31 @@ double wrapOmega(double omega) {
   return wrapped - kPi;
 }
 
+// atan2(y, x) for the recursive phasor (x=cos, y=sin). Same polynomial as
+// yellow_atan2; kept here so this module does not pull the additive graph.
+double phasorAngle(double x, double y) {
+  if (x == 0.0 && y == 0.0) return 0.0;
+  const double ax = x < 0.0 ? -x : x;
+  const double ay = y < 0.0 ? -y : y;
+  const bool steep = ay > ax;
+  const double z = steep ? (ay > 0.0 ? ax / ay : 0.0) : (ax > 0.0 ? ay / ax : 0.0);
+  const double z2 = z * z;
+  double a = z * (0.99997726 + z2 * (-0.33262347 + z2 * (0.19354346
+    + z2 * (-0.11643287 + z2 * (0.05265332 + z2 * -0.01172120)))));
+  if (steep) a = kPi * 0.5 - a;
+  if (x < 0.0) a = kPi - a;
+  if (y < 0.0) a = -a;
+  return a;
+}
+
+void applyPartialReset(RobinSinusoidState& state, double h, double targetRadians) {
+  const double ang = phasorAngle(state.x, state.y);
+  const double next = soemdsp::math::partial_reset_phase(ang, targetRadians, h, kTwoPi);
+  state.x = dsp_cos(next);
+  state.y = dsp_sin(next);
+  state.primed = true;
+}
+
 void primeState(RobinSinusoidState& state, double omega, double phase) {
   state.omega = omega;
   state.cosW = dsp_cos(omega);
@@ -228,7 +253,17 @@ extern "C" int soemdsp_robin_sinusoid_max_block_frames() {
 }
 
 extern "C" int soemdsp_robin_sinusoid_version() {
-  return 1;
+  return 2; // 2: Reset trigger height (partial_reset_phase)
+}
+
+// Reset trigger below full height: move the phasor |h| of the way to Start
+// Phase (h < 0 the long way round). Full-height hits (|h| = 1) use the full
+// reset in robinSample (prime to Start Phase, then one rotation).
+extern "C" void soemdsp_robin_sinusoid_partial_reset(int handle, double h, double startPhaseRadians) {
+  RobinSinusoidState* state = stateForHandle(handle);
+  if (!state) return;
+  const double target = finiteValue(startPhaseRadians) ? startPhaseRadians : 0.0;
+  applyPartialReset(*state, h, target);
 }
 
 extern "C" const char* soemdsp_robin_sinusoid_metadata_json() {
