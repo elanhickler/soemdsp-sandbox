@@ -954,6 +954,13 @@ const nodeGraphTraceDisplayActiveControlsByType = Object.freeze({
     toggles: Object.freeze([]),
     choices: Object.freeze([]),
   }),
+  // Robin Sinepulse: Background / Line / Playhead HBS, line thickness, line smoothing.
+  robinSinepulseFace: Object.freeze({
+    fields: Object.freeze(["lineThickness", "lineSmoothing"]),
+    colors: Object.freeze([]),
+    toggles: Object.freeze([]),
+    choices: Object.freeze([]),
+  }),
   // Outer / Hub dot size (were one "Size") are in the centered face square; F-fullscreen scales with it.
   sinCos4Face: Object.freeze({
     fields: Object.freeze(["sinCos4OuterDotSize", "sinCos4HubDotSize", "sinCos4RayThickness", "sinCos4RingThickness", "pixelDensity"]),
@@ -2675,6 +2682,7 @@ const nodeGraphDisplaySettingsFormTypeTitles = Object.freeze({
   clockDividerFace: "Clock Divider",
   pulseExplosionFace: "Pulse Explosion",
   pulseTrainFace: "Pulse Train",
+  robinSinepulseFace: "Robin Sinepulse",
   textBoxFace: "Text Box",
   keyboardControllerFace: "MIDI Keyboard",
   toggleButtonFace: "Toggle",

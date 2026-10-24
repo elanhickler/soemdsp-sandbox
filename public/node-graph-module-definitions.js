@@ -10901,6 +10901,7 @@ const nodeGraphModuleDefinitions = (
   robinSinepulse: {
     // Hand-written face (node-graph-module-face.js): wave slider, sweep (High | Low | Time), Chirp | Shape | Wave shape,
     // Phase | Decay | Amp, voices (Voices | Fade time, Fade Off / On), recalc.
+    // Kick-body waveform: native preview + __Elapsed playhead (modules/robinSinepulse/robin-sinepulse-display.js).
     face: [
       { kind: "slider", param: "wave", h: 30 },
       { kind: "cells", params: [["highFreq", "High"], ["lowFreq", "Low"], ["sweepTime", "Time"]], h: 52 },
@@ -10912,10 +10913,14 @@ const nodeGraphModuleDefinitions = (
     ],
     planRole: "source",
     planFreeRun: true,
-    displayType: "lineBurn",
+    customDisplayArea: true,
+    displayType: "robinSinepulseFace",
+    displayHeightGu: 4,
+    spectrumCompanion: false,
     displayModes: [
-      { key: "lineBurn", renderer: "lineBurn", source: { value: "Kick" } },
+      { key: "face", label: "Face", renderer: "robinSinepulseFace", settingsSchema: "robinSinepulseFace" },
     ],
+    defaultDisplayMode: "face",
     displaySignals: [
       { key: "Kick", kind: "scalar" },
     ],

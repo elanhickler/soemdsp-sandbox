@@ -108,6 +108,13 @@ function assignNodeGraphTypedDisplaySettingsToNode(node, displayType, settings) 
     }
     return node.traceDisplaySettings;
   }
+  if (displayType === "robinSinepulseFace" && typeof normalizeNodeGraphRobinSinepulseFaceSettings === "function") {
+    node.traceDisplaySettings = normalizeNodeGraphRobinSinepulseFaceSettings(settings);
+    if (typeof applyNodeGraphRobinSinepulseDisplaySettingsToFace === "function") {
+      applyNodeGraphRobinSinepulseDisplaySettingsToFace(node);
+    }
+    return node.traceDisplaySettings;
+  }
   if (displayType === "sinCosFace" && typeof normalizeNodeGraphSinCosFaceSettings === "function") {
     node.traceDisplaySettings = normalizeNodeGraphSinCosFaceSettings(settings);
     if (typeof applyNodeGraphSinCosDisplaySettingsToFace === "function") {

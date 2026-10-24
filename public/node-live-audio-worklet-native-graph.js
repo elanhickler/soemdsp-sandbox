@@ -9597,7 +9597,7 @@ NodeLiveAudioProcessor.prototype.nativeGraphPortNames = function nativeGraphPort
       return ["__Count"];
     }
     // Pulse Explosion face playhead: seconds since trigger, -1 idle.
-    if (type === "pulseExplosion" || type === "pulseTrain") {
+    if (type === "pulseExplosion" || type === "pulseTrain" || type === "robinSinepulse") {
       return ["__Elapsed"];
     }
     return [];

@@ -6,22 +6,22 @@ async function bindNodeGraphUiDevSettingsEvents() {
     syncNodeUserUiSettingsPageChrome();
   }
   document.getElementById("saveNodeUiDevSettingsButton")?.addEventListener("click", saveNodeUiDevSettingsFile);
-  // Factory: two taps (first arms "Sure?" for 3 s), restores every UI Dev
-  // control to its nodeUiDevSettingControls defaultValue and autosaves.
-  const factoryButton = document.getElementById("factoryNodeUiDevSettingsButton");
-  let factoryArmTimer = 0;
-  factoryButton?.addEventListener("click", () => {
-    if (!factoryButton.dataset.armed) {
-      factoryButton.dataset.armed = "1";
-      factoryButton.textContent = "Sure?";
-      factoryArmTimer = setTimeout(() => { delete factoryButton.dataset.armed; factoryButton.textContent = "Factory"; }, 3000);
+  // Reset Settings: shared two-tap confirm (confirming-default), then restore
+  // every UI Dev control to its nodeUiDevSettingControls defaultValue and autosave.
+  document.getElementById("resetNodeUiDevSettingsButton")?.addEventListener("click", (event) => {
+    if (typeof confirmNodeGraphDefaultButtonClick !== "function") return;
+    if (!confirmNodeGraphDefaultButtonClick(
+      event.currentTarget,
+      null,
+      { confirmText: "Confirm Reset" },
+    )) {
       return;
     }
-    clearTimeout(factoryArmTimer);
-    delete factoryButton.dataset.armed;
-    factoryButton.textContent = "Factory";
     resetNodeUiDevControlsToDeclaredDefaults();
     if (typeof scheduleNodeUiDevSettingsAutosave === "function") scheduleNodeUiDevSettingsAutosave();
+    if (typeof flashNodeGraphDefaultButtonSaved === "function") {
+      flashNodeGraphDefaultButtonSaved(event.currentTarget, "Reset");
+    }
   });
   // Copy: current UI Dev control values as { key: value } JSON.
   const copyButton = document.getElementById("copyNodeUiDevSettingsButton");

@@ -1,3 +1,6 @@
+// Two-tap confirm for toolbar / UIDEV / script / pages buttons.
+// SSOT: confirmNodeGraphDefaultButtonClick + CSS `button.confirming-default`.
+// Success flash: flashNodeGraphDefaultButtonSaved.
 function clearNodeGraphConfirmDefaultButton(button = nodeGraphMvp.confirmDefaultButton) {
   if (!button) {
     return;

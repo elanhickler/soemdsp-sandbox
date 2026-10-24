@@ -876,6 +876,10 @@ const nodeGraphTraceDisplayFormTypeValueClampOverrides = Object.freeze({
     ghostOpacity: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, 0.35), 0, 1),
     fadeTime: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, 0), 0, 60),
   }),
+  robinSinepulseFace: Object.freeze({
+    lineThickness: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, 1.5), 0.25, 16),
+    lineSmoothing: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, 1), 0, 8),
+  }),
   sinCos4Face: Object.freeze({
     backgroundBrightness: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value), 0, 1),
     sinCos4RayThickness: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, 1.2), 0, 100),

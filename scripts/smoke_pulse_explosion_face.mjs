@@ -1,6 +1,5 @@
-// Headless: Pulse Explosion face draws the engine's exact schedule (stems at
-// each pulse time, height = amplitude, dot on top) on a 0..End axis, follows
-// Seed, lights fired pulses behind the playhead, Display Settings HBS.
+// Headless: Pulse Explosion XY face draws the engine schedule as dots around
+// X0/Y0, follows Seed, lights fired sparks behind the playhead, Display Settings HBS.
 // Non-GET requests are aborted so nothing is saved server-side.
 // Usage: node scripts/smoke_pulse_explosion_face.mjs [screenshot.png]
 import { chromium } from "playwright";
@@ -23,6 +22,60 @@ const gate = (ok, msg) => { console.log(`${ok ? "ok  " : "FAIL"} ${msg}`); if (!
   const done = run(700, false);
   E.soemdsp_pulse_explosion_destroy(h);
   gate(idle === -1 && Math.abs(mid - 0.5) < 1e-9 && done === -1, `engine elapsed: idle -1, 0.5 s after trigger ${mid}, -1 after the window`);
+}
+
+{
+  const vm = await import("node:vm");
+  const ctx = { console, Math, Number, Object, String, Array, JSON, Boolean, Infinity, NaN };
+  vm.createContext(ctx);
+  vm.runInContext(fs.readFileSync(path.join(root, "public/node-graph-pulse-explosion-display.js"), "utf8"), ctx);
+  const dots = [];
+  const polys = [];
+  ctx.nodeGraphGlGraphParseCssColor = (css) => [css];
+  ctx.nodeGraphHueBrightnessCss = (h) => (Number(h) === 49 ? "lit" : Number(h) === 0 ? "pivot" : "lamp");
+  ctx.normalizeNodeGraphRoundShapeFaceSettings = (s) => ({
+    strokePaint: "line",
+    dotPaint: "dot",
+    backgroundPaint: "bg",
+    lineThickness: Number(s.lineThickness) || 1.5,
+    dotThickness: Number(s.dotThickness) || 5,
+    lineSmoothing: 1,
+  });
+  ctx.nodeGraphCycleLineGlMetrics = () => ({ cssWidth: 200, cssHeight: 200, pixelRatio: 1 });
+  ctx.nodeGraphGlLinesBegin = () => ({});
+  ctx.nodeGraphGlLinesPolyline = (_b, ring) => { polys.push(ring); };
+  ctx.nodeGraphGlLinesSegment = () => {};
+  ctx.nodeGraphGlLinesDot = (_b, x, y, r, _s, rgba) => { dots.push({ x, y, r, rgba }); };
+  ctx.nodeGraphGlLinesEnd = () => true;
+  ctx.nodeGraphDisplayGlFailed = () => {};
+  ctx.nodeGraphLineSmoothingPx = () => 1;
+  ctx.nodeGraphPatchNode = () => ({
+    id: "pe-1",
+    params: { startTime: 0, centerTime: 0.5, endTime: 1, timeSpread: 0.3, numberOfPulses: 4, spread: 0.6, x0: 0, y0: 0, seed: 0 },
+    traceDisplaySettings: {},
+  });
+  const times = new Float64Array([0.1, 0.2, 0.5, 0.8]);
+  const xs = new Float64Array([0.3, -0.2, 0.1, 0]);
+  const ys = new Float64Array([0.1, 0.4, -0.3, 0.2]);
+  const section = {
+    dataset: { node: "pe-1" },
+    querySelector: () => ({}),
+    _pulseScheduleKey: "0,0.5,1,0.3,4,0.6,0,0,0",
+    _pulseSchedule: { times, xs, ys, end: 1, spread: 0.6, x0: 0, y0: 0 },
+  };
+  ctx.nodeGraphPulseExplosionHeardElapsed = () => 0.4;
+  ctx.nodeGraphPulseExplosionSchedule = () => section._pulseSchedule;
+  ctx.drawNodeGraphPulseCurveDisplay(section);
+  const colors = dots.filter((d) => d.r === 2.5).map((d) => d.rgba[0]);
+  gate(colors.length === 4, `xy face draws one plot dot per spark (${colors.length})`);
+  gate(colors[0] === "lit" && colors[1] === "lit" && colors[2] === "dot" && colors[3] === "dot",
+    `xy face lights sparks at/before 0.4 s (${colors.join(",")})`);
+  gate(polys.length === 1 && polys[0].length >= 6, "xy face draws the spread disk");
+}
+
+if (shot === "--draw-only") {
+  console.log(failures ? `${failures} FAIL` : "smoke_pulse_explosion_face draw-only ok");
+  process.exit(failures ? 1 : 0);
 }
 const launch = { headless: true };
 if (process.env.CHROME_PATH) launch.executablePath = process.env.CHROME_PATH;
@@ -136,16 +189,28 @@ if (shot) await page.screenshot({ clip: await faceClip(), path: shot });
 
 await setParams({ numberOfPulses: 6, spread: 0.6, seed: 0 });
 await page.evaluate(() => {
-  window.__peFake = { t0: performance.now() };
-  const ctx = { state: "running", get currentTime() { return (performance.now() - window.__peFake.t0) / 1000; }, getOutputTimestamp() { return { contextTime: (performance.now() - window.__peFake.t0) / 1000, performanceTime: performance.now() }; } };
-  window.__peOrig = { mvpLive: window.nodeGraphMvp.live, latest: window.nodeGraphModuleScopeLatestOutputValue };
+  window.__peOrig = {
+    mvpLive: window.nodeGraphMvp.live,
+    latest: window.nodeGraphModuleScopeLatestOutputValue,
+    heard: window.nodeGraphPulseExplosionHeardElapsed,
+  };
+  const ctx = {
+    state: "running",
+    currentTime: 0,
+    getOutputTimestamp() { return { contextTime: 0, performanceTime: performance.now() }; },
+  };
   window.nodeGraphMvp.live = { ...(window.nodeGraphMvp.live || {}), context: ctx };
   window.nodeGraphModuleScopeLatestOutputValue = (nid, port, fb) => (port === "__Elapsed" ? 0.4 : window.__peOrig.latest(nid, port, fb));
+  window.nodeGraphPulseExplosionHeardElapsed = () => 0.4;
 });
 await setParams({});
 G = await geom();
 img = await grab();
-await page.evaluate(() => { window.nodeGraphMvp.live = window.__peOrig.mvpLive; window.nodeGraphModuleScopeLatestOutputValue = window.__peOrig.latest; });
+await page.evaluate(() => {
+  window.nodeGraphMvp.live = window.__peOrig.mvpLive;
+  window.nodeGraphModuleScopeLatestOutputValue = window.__peOrig.latest;
+  window.nodeGraphPulseExplosionHeardElapsed = window.__peOrig.heard;
+});
 const look = await page.evaluate((nid) => window.nodeGraphPulseExplosionFaceSettingsForNode(window.nodeGraphPatchNode(nid)), id);
 const parse = (css) => css.match(/\d+/g).slice(0, 3).map(Number);
 const litC = parse(look.litPaint), dotC = parse(look.dotPaint);

@@ -179,15 +179,9 @@ function normalizeNodeGraphPatchTiming(timing = {}) {
 
 function normalizeNodeGraphPatchGrid(grid = {}) {
   const fallbackSize = Number(grid?.sizePx);
-  const gridDefault = (typeof nodeGraphGrid !== "undefined"
-    && nodeGraphGrid
-    && Number.isFinite(Number(nodeGraphGrid.sizePx))
-    && Number(nodeGraphGrid.sizePx) > 0)
-    ? Number(nodeGraphGrid.sizePx)
-    : 28;
   const fallback = Number.isFinite(fallbackSize) && fallbackSize > 0
     ? fallbackSize
-    : gridDefault;
+    : 28;
   const width = Number(grid?.widthPx);
   const height = Number(grid?.heightPx);
   const widthPx = Number.isFinite(width) && width > 0 ? width : fallback;
