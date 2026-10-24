@@ -29,6 +29,8 @@ const NODE_GRAPH_FACE_FILTER_TICK_PX = 16;
 // LFO style snip stroke half width (face px): about 1 px wide.
 const NODE_GRAPH_FACE_LFO_HALF_PX = 0.5;
 const NODE_GRAPH_FACE_BAND_HANDLE_PX = 8;
+// Drawn bar width. Travel 0 and 1 pin the bar fully inside the widget box.
+const NODE_GRAPH_FACE_BAND_BAR_PX = 3;
 // Span: value strip on top, bar below (inset SPAN_INSET_PX); handle widths and grab radius in face px.
 const NODE_GRAPH_FACE_SPAN_INSET_PX = 4;
 const NODE_GRAPH_FACE_SPAN_GRAB_PX = 9;
@@ -431,6 +433,14 @@ function nodeGraphModuleFaceBandEnds(article, wd) {
   return { lo, hi, tl: nodeGraphModuleFaceTravel(lo), th: nodeGraphModuleFaceTravel(hi) };
 }
 
+/** Left edge of a 3 px band handle, clamped so the bar stays inside the widget. */
+function nodeGraphModuleFaceBandBarX(wd, t) {
+  const hw = NODE_GRAPH_FACE_BAND_BAR_PX;
+  const xMin = wd.x;
+  const xMax = wd.x + wd.w - hw;
+  return Math.max(xMin, Math.min(xMax, Math.round(wd.x + t * wd.w - hw * 0.5)));
+}
+
 /** Which end a band press at u (0..1) grabs: inside the span moves both. */
 function nodeGraphModuleFaceBandMode(u, tl, th, w) {
   const edge = NODE_GRAPH_FACE_BAND_HANDLE_PX / Math.max(1, w);
@@ -470,17 +480,19 @@ function beginNodeGraphModuleFaceGesture(article, face, spec, event) {
     return;
   }
   const input = wd.param ? nodeGraphModuleFaceInput(article, wd.param) : null;
-  // Same modifiers as every slider (nodeGraphNumericResetClickModifier): Ctrl/Cmd+click resets to default.
-  if (wd.type !== "seedButton" && wd.type !== "seedNumber" && typeof nodeGraphNumericResetClickModifier === "function"
-    && nodeGraphNumericResetClickModifier(event)) {
-    for (const key of nodeGraphModuleFaceWidgetKeys(wd)) {
-      const target = key ? nodeGraphModuleFaceInput(article, key) : null;
-      const def = target && typeof nodeSliderCtrlClickDefaultValue === "function" ? nodeSliderCtrlClickDefaultValue(target) : NaN;
-      if (Number.isFinite(def)) setNodeGraphModuleFaceValue(target, def, false);
-    }
-    return;
-  }
+  // Same law as every slider: Ctrl/Cmd+click mouse-up resets; mouse-down+drag
+  // with Ctrl/Cmd is fine-tune (B-111). Never reset on pointerdown.
+  const resetOnClick = wd.type !== "seedButton" && wd.type !== "seedNumber"
+    && typeof nodeGraphNumericResetClickModifier === "function"
+    && nodeGraphNumericResetClickModifier(event);
+  const captureOpts = resetOnClick
+    ? { resetOnClick: true, onReset: () => nodeGraphModuleFaceResetWidget(article, wd) }
+    : {};
   if (wd.type === "choice" || wd.type === "lfoStyle" || wd.type === "subChoice") {
+    if (resetOnClick) {
+      nodeGraphModuleFaceCapture(face, event, () => {}, captureOpts);
+      return;
+    }
     setNodeGraphModuleFaceValue(input, Number(input?.min || 0) + wd.index, false);
     return;
   }
@@ -553,7 +565,7 @@ function beginNodeGraphModuleFaceGesture(article, face, spec, event) {
       if (mode !== "hpf") setNodeGraphModuleFaceValue(lpf, nodeGraphModuleFaceFromLogT(tl + du), drag);
       if (polesIn) setNodeGraphModuleFaceValue(polesIn, Math.max(1, Math.min(4, n0 + Math.round(-dy / stopPx))), drag);
     };
-    nodeGraphModuleFaceCapture(face, event, onMove);
+    nodeGraphModuleFaceCapture(face, event, onMove, captureOpts);
     return;
   }
   if (wd.type === "band") {
@@ -569,7 +581,7 @@ function beginNodeGraphModuleFaceGesture(article, face, spec, event) {
       if (mode === "span") du = Math.max(-Math.min(tl, th), Math.min(1 - Math.max(tl, th), du));
       if (mode !== "hi") set(lo, Math.max(0, Math.min(1, tl + du)), drag);
       if (mode !== "lo") set(hi, Math.max(0, Math.min(1, th + du)), drag);
-    });
+    }, captureOpts);
     return;
   }
   if (wd.type === "span") {
@@ -593,11 +605,11 @@ function beginNodeGraphModuleFaceGesture(article, face, spec, event) {
         set(j, t[j] + k, drag);
         set(j + 1, t[j + 1] + k, drag);
       }
-    });
+    }, captureOpts);
     return;
   }
   if (!move || !input) return;
-  nodeGraphModuleFaceCapture(face, event, (ev, drag) => setNodeGraphModuleFaceValue(input, move(ev), drag));
+  nodeGraphModuleFaceCapture(face, event, (ev, drag) => setNodeGraphModuleFaceValue(input, move(ev), drag), captureOpts);
 }
 
 // B-105: a second press on the same widget within 400 ms / 6 px (or detail > 1)
@@ -684,14 +696,52 @@ function openNodeGraphModuleFaceParamOptions(article, face, event) {
   openNodeMetadataPopover(event, readout);
 }
 
-function nodeGraphModuleFaceCapture(face, event, onMove) {
+function nodeGraphModuleFaceResetWidget(article, wd) {
+  for (const key of nodeGraphModuleFaceWidgetKeys(wd)) {
+    const target = key ? nodeGraphModuleFaceInput(article, key) : null;
+    const def = target && typeof nodeSliderCtrlClickDefaultValue === "function"
+      ? nodeSliderCtrlClickDefaultValue(target)
+      : NaN;
+    if (Number.isFinite(def)) setNodeGraphModuleFaceValue(target, def, false);
+  }
+}
+
+function nodeGraphModuleFaceCapture(face, event, onMove, options = {}) {
   face.setPointerCapture?.(event.pointerId);
-  const mv = (ev) => onMove(ev, true);
+  const startX = event.clientX;
+  const startY = event.clientY;
+  const resetOnClick = Boolean(options.resetOnClick);
+  let moved = false;
+  const mv = (ev) => {
+    if (!moved) {
+      moved = typeof nodeGraphPointerDragExceededMoveThreshold === "function"
+        ? nodeGraphPointerDragExceededMoveThreshold(startX, startY, ev.clientX, ev.clientY, 1)
+        : (Math.abs(ev.clientX - startX) > 1 || Math.abs(ev.clientY - startY) > 1);
+    }
+    if (resetOnClick && !moved) {
+      ev.preventDefault?.();
+      return;
+    }
+    onMove(ev, true);
+  };
   const up = (ev) => {
-    onMove(ev, false);
     face.removeEventListener("pointermove", mv);
     face.removeEventListener("pointerup", up);
     face.removeEventListener("pointercancel", up);
+    if (!moved) {
+      moved = typeof nodeGraphPointerDragExceededMoveThreshold === "function"
+        ? nodeGraphPointerDragExceededMoveThreshold(startX, startY, ev.clientX, ev.clientY, 1)
+        : (Math.abs(ev.clientX - startX) > 1 || Math.abs(ev.clientY - startY) > 1);
+    }
+    if (ev.type === "pointercancel") {
+      if (moved) onMove(ev, false);
+      return;
+    }
+    if (resetOnClick && !moved) {
+      options.onReset?.();
+      return;
+    }
+    onMove(ev, false);
   };
   face.addEventListener("pointermove", mv);
   face.addEventListener("pointerup", up);
@@ -864,15 +914,16 @@ function nodeGraphModuleFaceDrawGl(batch, el, w, ox, oy, z) {
       // Handles break around the label so it never draws through one.
       const labelHalfW = measure(wd.label, labelPx) * 0.5 + 3;
       const gapHalf = labelPx * 0.6;
+      const hw = NODE_GRAPH_FACE_BAND_BAR_PX;
       for (const t of [tl, th]) {
-        const hx = wd.x + t * wd.w - 1;
+        const hx = nodeGraphModuleFaceBandBarX(wd, t);
         const top = wd.y + 4;
         const bottom = wd.y + wd.h - 4;
-        if (hx + 3 > cx - labelHalfW && hx < cx + labelHalfW) {
-          rect(hx, top, 3, Math.max(0, cy - gapHalf - top), ink.bandHandle);
-          rect(hx, cy + gapHalf, 3, Math.max(0, bottom - cy - gapHalf), ink.bandHandle);
+        if (hx + hw > cx - labelHalfW && hx < cx + labelHalfW) {
+          rect(hx, top, hw, Math.max(0, cy - gapHalf - top), ink.bandHandle);
+          rect(hx, cy + gapHalf, hw, Math.max(0, bottom - cy - gapHalf), ink.bandHandle);
         } else {
-          rect(hx, top, 3, bottom - top, ink.bandHandle);
+          rect(hx, top, hw, bottom - top, ink.bandHandle);
         }
       }
     } else if (wd.type === "span") {

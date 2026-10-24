@@ -1,13 +1,12 @@
-// Pulse Train ghost: with Recalculate On, the face draws the next pattern
-// (live params, via the engine preview) dim behind the playing one.
+// Pulse Train Recalc On: the next trigger plays the live knobs, but the face
+// stays on the in-effect (latched) cycle until then. No next-pattern ghost.
 //  1. Engine: knobs moved mid-train (latched) -> the next trigger plays
-//     exactly soemdsp_pulse_train_preview(live params), the ghost's source.
+//     exactly soemdsp_pulse_train_preview(live params).
 //  2. Face: engine readouts stubbed as "playing with the old params": the
-//     schedule carries a ghost equal to the live preview; drawn in the Ghost
-//     colour; no ghost when the live params match what plays; Ghost opacity 0
-//     hides it.
-//  3. Display Settings: Pulse Train has its own schema (pulseTrainFace) with
-//     the Ghost lamp (after Lit) and Ghost opacity; saved settings load.
+//     schedule is the latched cycle (axis / playhead); live knobs do not add
+//     a second train.
+//  3. Display Settings: Pulse Train schema (pulseTrainFace) is Background,
+//     Line, Dot, Playhead, Lit + Fade time. No Ghost lamp / opacity.
 // Usage: node scripts/smoke_pulse_train_ghost.mjs   (server.py on :8765)
 //   SANDBOX_URL, CHROME_PATH, PW_MODULE, SHOT_DIR (default scripts/out/pulse-train-ghost).
 import fs from "node:fs";
@@ -91,34 +90,17 @@ const face = (eng, look) => page.evaluate(([e, l]) => {
   drawNodeGraphPulseTrainDisplay(el);
   if (typeof drawNodeGraphWires === "function") drawNodeGraphWires();
   const s = el._pulseTrainSchedule;
-  return s ? { n: s.times.length, ghost: s.ghost ? [...s.ghost.times] : null, ghostAmps: s.ghost ? [...s.ghost.amps] : null } : null;
+  return s ? { n: s.times.length, end: s.end, duration: s.duration, ghost: s.ghost || null } : null;
 }, [eng, look]);
-const look = { ghostHue: 300, ghostBrightness: 0.6, ghostSaturation: 1, ghostOpacity: 1 };
+const look = {};
 const latched = await face(oldP, look);
 check("face: playing old params -> schedule shows them", latched?.n === oldP[0], JSON.stringify(latched));
-check("face: ghost = engine preview of the live params", latched?.ghost?.length === want.length && latched.ghost.every((t, i) => Math.abs(t - want[i][0]) < 1e-12 && Math.abs(latched.ghostAmps[i] - want[i][1]) < 1e-12), JSON.stringify(latched?.ghost));
+check("face: no next-pattern ghost while knobs differ", latched && latched.ghost == null, JSON.stringify(latched));
+check("face: axis is the latched Time, not the live Frequency", latched && Math.abs(latched.duration - oldP[1]) < 1e-12, JSON.stringify(latched));
 const shotEl = page.locator('.node-pulse-train-display[data-node="pt-1"]');
-const magenta = async () => {
-  await page.waitForTimeout(300);
-  const buf = await shotEl.screenshot();
-  return page.evaluate(async (b64) => {
-    const img = await createImageBitmap(await (await fetch(`data:image/png;base64,${b64}`)).blob());
-    const c = new OffscreenCanvas(img.width, img.height).getContext("2d");
-    c.drawImage(img, 0, 0);
-    const d = c.getImageData(0, 0, img.width, img.height).data;
-    let k = 0;
-    for (let i = 0; i < d.length; i += 4) if (d[i] > 110 && d[i + 2] > 110 && d[i + 1] < d[i] * 0.6) k += 1;
-    return k;
-  }, buf.toString("base64"));
-};
-const on = await magenta();
-check("face: ghost drawn in the Ghost colour", on > 30, on);
-await face(oldP, { ghostHue: 187.5, ghostBrightness: 0.55, ghostSaturation: 0.5, ghostOpacity: 0.35 });
 await shotEl.screenshot({ path: path.join(SHOT, "pulse-train-ghost.png") });
-await face(oldP, { ...look, ghostOpacity: 0 });
-check("face: Ghost opacity 0 hides it", (await magenta()) === 0);
 const match = await face(newP, look);
-check("face: no ghost when the live params match what plays", match && match.ghost === null && (await magenta()) === 0, JSON.stringify(match));
+check("face: still no ghost when live params match what plays", match && match.ghost == null, JSON.stringify(match));
 // 3. Own Display Settings.
 const schema = await page.evaluate(() => [nodeGraphModuleDefinitions.pulseTrain.displayType, nodeGraphModuleDefinitions.pulseTrain.displayModes[0].settingsSchema, nodeGraphModuleDefinitions.pulseTrain.displayModes[0].renderer]);
 check("schema: pulseTrainFace (type, settings, renderer)", schema.every((s) => s === "pulseTrainFace"), JSON.stringify(schema));
@@ -130,16 +112,16 @@ const pop = await page.evaluate(async () => {
   const p = document.getElementById("nodeTraceDisplaySettingsPopover");
   return { lamps: [...(p?.querySelectorAll("[data-hsl-lamp]") || [])].map((el) => el.getAttribute("data-hsl-label")), opacity: Boolean(p?.querySelector('[data-trace-display-field="ghostOpacity"]')) };
 });
-check("settings: Background, Line, Dot, Playhead, Lit, Ghost", JSON.stringify(pop.lamps) === JSON.stringify(["Background", "Line", "Dot", "Playhead", "Lit", "Ghost"]), JSON.stringify(pop.lamps));
-check("settings: Ghost opacity field", pop.opacity);
+check("settings: Background, Line, Dot, Playhead, Lit", JSON.stringify(pop.lamps) === JSON.stringify(["Background", "Line", "Dot", "Playhead", "Lit"]), JSON.stringify(pop.lamps));
+check("settings: no Ghost opacity field", pop.opacity === false);
 const saved = await page.evaluate(() => {
   const node = nodeGraphPatchNode("pt-1");
-  node.traceDisplaySettings = { lineHue: 42, litHue: 10, dotThickness: 7, ghostHue: 300, ghostOpacity: 0.7 };
+  node.traceDisplaySettings = { lineHue: 42, litHue: 10, dotThickness: 7, fadeTime: 0.4 };
   const s = nodeGraphPulseTrainFaceSettingsForNode(node);
   const d = normalizeNodeGraphPulseTrainFaceSettings({ lineHue: 42 });
-  return [s.lineHue, s.litHue, s.dotThickness, s.ghostHue, s.ghostOpacity, d.ghostOpacity];
+  return [s.lineHue, s.litHue, s.dotThickness, s.fadeTime, d.fadeTime];
 });
-check("saved Pulse Train settings load (shared keys + ghost); ghost defaults fill old patches", JSON.stringify(saved) === JSON.stringify([42, 10, 7, 300, 0.7, 0.35]), JSON.stringify(saved));
+check("saved Pulse Train settings load (shared keys + fade); fade defaults fill old patches", JSON.stringify(saved) === JSON.stringify([42, 10, 7, 0.4, 0]), JSON.stringify(saved));
 await browser.close();
 if (errors.length) console.log("page errors:", errors.slice(0, 5));
 check("no page errors", errors.length === 0, errors.slice(0, 3).join(" | "));

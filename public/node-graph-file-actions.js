@@ -279,7 +279,13 @@ function confirmAndInitNodeGraphPatchFromDefault(event) {
   )) {
     return;
   }
-  flashNodeGraphDefaultButtonSaved(button);
+  if (typeof flashNodeGraphDefaultButtonSaved === "function") {
+    flashNodeGraphDefaultButtonSaved(button, "Init");
+  }
+  if (typeof loadNodeGraphInitPatchFromFile === "function") {
+    void loadNodeGraphInitPatchFromFile();
+    return;
+  }
   initNodeGraphPatchFromDefault();
 }
 

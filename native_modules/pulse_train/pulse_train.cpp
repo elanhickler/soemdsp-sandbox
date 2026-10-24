@@ -311,11 +311,13 @@ enum {
   kShapeRectSine = 9
 };
 
+// UI: 0 Off, 1 Random, 2 Dither. Dither is Robin1 ±1 (native 3).
+// Leftover numeric 3 stays Robin1; 3.5+ stays Robin2. Stack-dither native 2
+// is unreachable from the three-choice slider.
 static inline int aaModeOf(double antialiasing) {
-  if (antialiasing >= 3.5) return 4; // Robin2 ±2
-  if (antialiasing >= 2.5) return 3; // Robin1 ±1
-  if (antialiasing >= 1.5) return 2; // Dither (stack 0/+1, re-roll)
-  if (antialiasing >= 0.5) return 1; // Fixed
+  if (antialiasing >= 3.5) return 4; // leftover Robin2 patches
+  if (antialiasing >= 1.5) return 3; // Dither = Robin1 ±1 (UI 2; old 2/3)
+  if (antialiasing >= 0.5) return 1; // Random (was Fixed)
   return 0; // Off
 }
 

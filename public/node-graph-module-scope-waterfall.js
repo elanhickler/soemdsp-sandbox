@@ -1617,8 +1617,10 @@ function nodeGraphWaterfallState(canvas, width, height, nowLine, bg, context, bl
   canvas._traceScroll = st;
   const blend = String(blendMode || "");
   const resized = Math.abs((st.lastW || 0) - width) > 2 || Math.abs((st.lastH || 0) - height) > 2;
-  const modeChanged = st.nowLine !== nowLine || st.blend !== blend;
-  if (!st.started || modeChanged) {
+  const nowLineChanged = st.nowLine !== nowLine;
+  // B-110: blend change is not a cold start. New columns pick up the new
+  // mode; existing plate/tape/hold stay. Do not wipe or replay history.
+  if (!st.started || nowLineChanged) {
     if (typeof nodeGraphFacePlateFillCanvas === "function") {
       nodeGraphFacePlateFillCanvas(context, canvas, bg);
     }
@@ -1654,6 +1656,7 @@ function nodeGraphWaterfallState(canvas, width, height, nowLine, bg, context, bl
     // Scale-preserve hold + tapes.
     nodeGraphWaterfallEnsureHold(canvas, width, height, bg);
   }
+  st.blend = blend;
   return st;
 }
 

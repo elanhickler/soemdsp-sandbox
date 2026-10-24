@@ -535,6 +535,50 @@ extern "C" double soemdsp_robin_sinepulse_preview_window() {
   return gPreviewWindow;
 }
 
-extern "C" int soemdsp_robin_sinepulse_version() { return 11; }  // 11: preview = connected min/max band per column (preview_y removed). 10: connected preview_y polyline. 9: face preview + elapsed. 8: Voices = fading copies (one live kick; Decay does not scale Fade Time). 7: Voices (1..8) + Fade Time (stolen voice fades out; 0 = hard cut). 6: no Decay floor (was 0.1 ms). 5: Recalculate On Trigger (decay latched on hit)
+// Face-field pack (indices 0–10): a, b, c, p, q, powFree, decay, amp, fHi, fLo, window.
+// Window is T60-to-1e-6 * 1.12, floor 8 ms. Face GLSL evaluates f(t) from this pack.
+static double gFieldPack[11];
+
+extern "C" double soemdsp_robin_sinepulse_preview_field(
+  double highFreq, double lowFreq, double sweepTime,
+  double chirp, double chirpShape, double decay, double amplitude, double sampleRate
+) {
+  const double sr = sampleRate < 1.0 ? 44100.0 : sampleRate;
+  const double nyquist = 0.5 * sr;
+  Voice v;
+  init_voice(v);
+  v.fHi = maxd(mind(safe(highFreq), nyquist), kRefFreq);
+  v.fLo = clamp(safe(lowFreq), 0.0, nyquist);
+  v.sweepTime = maxd(safe(sweepTime), kMinSweepTime);
+  v.instFreq = v.fHi;
+  const double ch = clamp(safe(chirp), -1.0, 1.0);
+  const double sh = clamp(safe(chirpShape), -1.0, 1.0);
+  update_coeffs(v, ch, sh);
+  const double dec = safe(decay);
+  const double amp = maxd(safe(amplitude), 0.0);
+  double win = 0.008;
+  if (dec > 0.0) {
+    win = dec * (dsp_ln(maxd(amp, 1.0e-6) / 1.0e-6) / kLn1000) * 1.12;
+    if (win < 0.008) win = 0.008;
+  }
+  gFieldPack[0] = v.a;
+  gFieldPack[1] = v.b;
+  gFieldPack[2] = v.c;
+  gFieldPack[3] = v.p;
+  gFieldPack[4] = v.q;
+  gFieldPack[5] = v.powFree ? 1.0 : 0.0;
+  gFieldPack[6] = dec;
+  gFieldPack[7] = amp;
+  gFieldPack[8] = v.fHi;
+  gFieldPack[9] = v.fLo;
+  gFieldPack[10] = win;
+  return win;
+}
+
+extern "C" double soemdsp_robin_sinepulse_preview_field_at(int i) {
+  return (i >= 0 && i < 11) ? gFieldPack[i] : 0.0;
+}
+
+extern "C" int soemdsp_robin_sinepulse_version() { return 14; }  // 14: preview_field T60-to-1e-6 window. 13: field pack. 11: preview = connected min/max band per column (preview_y removed). 10: connected preview_y polyline. 9: face preview + elapsed. 8: Voices = fading copies (one live kick; Decay does not scale Fade Time). 7: Voices (1..8) + Fade Time (stolen voice fades out; 0 = hard cut). 6: no Decay floor (was 0.1 ms). 5: Recalculate On Trigger (decay latched on hit)
 extern "C" const char* soemdsp_robin_sinepulse_metadata_json() { return kMetadataJson; }
 extern "C" int soemdsp_robin_sinepulse_metadata_json_size() { return sizeof(kMetadataJson) - 1; }

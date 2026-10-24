@@ -67,6 +67,42 @@ check(await param("amplitude") === before, "Escape cancels the type-in");
 // Single click-drag still drags (no type-in on one press). Amp starts at max, so drag down.
 { const p = await point("amplitude"); await page.waitForTimeout(500); await page.mouse.move(p.x, p.y); await page.mouse.down(); await page.mouse.move(p.x - 30, p.y + 30, { steps: 5 }); await page.mouse.up(); await page.waitForTimeout(200); }
 check(await param("amplitude") !== before && !(await page.evaluate(() => document.querySelector('article[data-node="clock-1"] .node-face input'))), "single press still drags, no type-in", JSON.stringify({ before, after: await param("amplitude"), input: await page.evaluate(() => Boolean(document.querySelector('article[data-node="clock-1"] .node-face input'))) }));
+// B-111: Ctrl+click mouse-up resets; Ctrl+mousedown+drag fine-tunes (no snap on down).
+await page.keyboard.press("Escape");
+await page.waitForTimeout(500);
+const ampDefault = await page.evaluate(() => {
+  const input = nodeGraphModuleFaceInput(document.querySelector('article[data-node="clock-1"]'), "amplitude");
+  return Number(typeof nodeSliderCtrlClickDefaultValue === "function" ? nodeSliderCtrlClickDefaultValue(input) : input?.dataset?.paramDefault);
+});
+{
+  const p = await point("amplitude");
+  await page.keyboard.down("Control");
+  await page.mouse.click(p.x, p.y);
+  await page.keyboard.up("Control");
+  await page.waitForTimeout(200);
+}
+check(Math.abs(await param("amplitude") - ampDefault) < 1e-9, "Ctrl+click mouse-up resets Amplitude to default", JSON.stringify({ ampDefault, after: await param("amplitude") }));
+await page.waitForTimeout(500);
+await page.evaluate(() => {
+  const input = nodeGraphModuleFaceInput(document.querySelector('article[data-node="clock-1"]'), "amplitude");
+  setNodeSliderValue(input, 0.4, {});
+});
+await page.waitForTimeout(100);
+{
+  const p = await point("amplitude");
+  await page.keyboard.down("Control");
+  await page.mouse.move(p.x, p.y);
+  await page.mouse.down();
+  await page.waitForTimeout(50);
+  const mid = await param("amplitude");
+  check(Math.abs(mid - 0.4) < 1e-6, "Ctrl+mousedown does not reset before drag", String(mid));
+  await page.mouse.move(p.x - 80, p.y + 80, { steps: 10 });
+  await page.mouse.up();
+  await page.keyboard.up("Control");
+  await page.waitForTimeout(200);
+}
+const afterFine = await param("amplitude");
+check(Math.abs(afterFine - 0.4) > 1e-4 && Math.abs(afterFine - ampDefault) > 1e-4, "Ctrl+mousedown+drag fine-tunes instead of reset", JSON.stringify({ ampDefault, after: afterFine }));
 // Max Digits drives the face's shown digits (same formatter as the slider readout).
 const digits = await page.evaluate(() => {
   const input = nodeGraphModuleFaceInput(document.querySelector('article[data-node="clock-1"]'), "rate");

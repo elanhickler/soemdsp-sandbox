@@ -7993,6 +7993,7 @@ static void process_softwave_osc(Circuit& g, Node& node, int frames) {
 // FilterMorph: PolyBLEP naive shapes + pitch-tracked noise band (HP ƒ, LP 4ƒ) → one-pole cascade + makeup.
 // Morph/Poles/Waveform/Phase/Amplitude are params (+ MOD) only.
 // Reset → Wave at Phase offset (phasor 0 + offset; LP cleared).
+// Wave (Mono) / Wave L / Wave R are the same voice (stereo jacks for L/R chains).
 static void process_filter_morph_oscillator(Circuit& g, Node& node, int frames) {
   if (node.nativeHandle <= 0) return;
   {

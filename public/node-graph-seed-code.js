@@ -51,14 +51,16 @@
     return Number.isFinite(next) ? next : u24(n);
   }
 
+  // Any length of alphabet characters. Extra characters wrap in 24 bits
+  // (shift 6, keep MASK) so "baby" and "babys" are different seeds.
   function decodeNodeGraphSeedCode(text) {
     const s = String(text ?? "");
-    if (s.length !== 4) return NaN;
+    if (!s.length) return NaN;
     let x = 0;
-    for (let i = 0; i < 4; i += 1) {
+    for (let i = 0; i < s.length; i += 1) {
       const p = ALPHA.indexOf(s[i]);
       if (p < 0) return NaN;
-      x = (x << 6) | p;
+      x = ((x << 6) | p) & MASK;
     }
     return unscramble(x);
   }
@@ -74,15 +76,17 @@
     return parseInt(h, 16);
   }
 
-  // Typed text is always a 4-character seed code, including all-digit codes
-  // such as 1000. #rgb / #rrggbb is a color: the seed becomes that color.
-  // It is not a hex number entry. A leading "-" is a code character, not a minus.
+  // Typed text is a seed code, including all-digit codes such as 1000.
+  // #rgb / #rrggbb is a color: the seed becomes that color. It is not a
+  // hex number entry. A leading "-" is a code character, not a minus.
+  // Shorter than 4: right-pad with "_" (blank at entry only; "_" stays
+  // alphabet index 63). Longer than 4: wrap in 24 bits, do not drop.
   function parseNodeGraphSeedInput(text) {
     const s = String(text ?? "").trim().replace(/[, ]/g, "");
     if (!s) return NaN;
     if (s.charAt(0) === "#") return parseNodeGraphSeedHex(s);
-    if (s.length === 4) return decodeNodeGraphSeedCode(s);
-    return NaN;
+    const code = s.length < 4 ? s.padEnd(4, "_") : s;
+    return decodeNodeGraphSeedCode(code);
   }
 
   const api = {

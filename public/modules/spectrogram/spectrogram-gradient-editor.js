@@ -1413,6 +1413,11 @@
       defaultStops: "matrix",
       hint: "Energy Ã¢â€ â€™ color Ã‚Â· plate mono brightness mapped through the gradient",
     }),
+    robinSinepulseFace: Object.freeze({
+      channels: "color",
+      defaultStops: "phosphor",
+      hint: "Instantaneous Hz → color · T60 envelope masks the field",
+    }),
   });
 
   const DEFAULT_BW_STOPS = Object.freeze([

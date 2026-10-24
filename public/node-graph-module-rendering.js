@@ -437,6 +437,7 @@ function nodeGraphModuleLayoutClassNames(type, definition, layout) {
     softwaveOsc: "filter-curve-layout",
     sinCos4: "filter-curve-layout",
     sinCos: "filter-curve-layout",
+    pulseCurve: "filter-curve-layout",
     graph: "graph-node-layout",
     image: "image-node-layout",
     keyboardController: "keyboard-controller-layout",

@@ -298,6 +298,7 @@ function nodeGraphDisplaySettingsFormTypeUsesGradient(type) {
     "matrixWaterfallFace",
     "matrixDisplayFace",
     "softpopFace",
+    "robinSinepulseFace",
   ].includes(type));
 }
 

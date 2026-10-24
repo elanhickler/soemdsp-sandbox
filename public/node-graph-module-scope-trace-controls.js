@@ -947,16 +947,16 @@ const nodeGraphTraceDisplayActiveControlsByType = Object.freeze({
     toggles: Object.freeze([]),
     choices: Object.freeze([]),
   }),
-  // Pulse Train: the Pulse Explosion set plus the Ghost lamp and Ghost opacity.
+  // Pulse Train: the Pulse Explosion set plus Fade time (lit-dot hang).
   pulseTrainFace: Object.freeze({
-    fields: Object.freeze(["lineThickness", "lineSmoothing", "dotThickness", "ghostOpacity", "fadeTime"]),
+    fields: Object.freeze(["lineThickness", "lineSmoothing", "dotThickness", "fadeTime"]),
     colors: Object.freeze([]),
     toggles: Object.freeze([]),
     choices: Object.freeze([]),
   }),
-  // Robin Sinepulse: Background / Line / Playhead HBS, line thickness, line smoothing.
+  // Robin Sinepulse: phosphor gradient field. Skirt / ridge / pixel density.
   robinSinepulseFace: Object.freeze({
-    fields: Object.freeze(["lineThickness", "lineSmoothing"]),
+    fields: Object.freeze(["lineSmoothing", "dotThickness", "pixelDensity"]),
     colors: Object.freeze([]),
     toggles: Object.freeze([]),
     choices: Object.freeze([]),

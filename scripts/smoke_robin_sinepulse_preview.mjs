@@ -1,8 +1,9 @@
-// Headless: Robin Sinepulse face preview + elapsed (robin_sinepulse v11).
+// Headless: Robin Sinepulse face preview + elapsed + field pack (robin_sinepulse v14).
 // Uses the standalone robin_sinepulse.wasm (no imports).
 // 1) Preview window crops a long Decay to the kick body (sweep land vs env −24 dB).
 // 2) preview_min/max are connected per-column bands; the sweep start fills ~-A..A (no aliasing).
 // 3) Elapsed is −1 before the first Trigger, then seconds since the newest hit.
+// 4) preview_field window is T60-to-1e-6 * 1.12 (amp 1, decay 0.5 → 1.12 s).
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -13,12 +14,14 @@ const wasm = fs.readFileSync(path.join(root, "native_modules", "robin_sinepulse"
 const { instance } = await WebAssembly.instantiate(wasm, {});
 const e = instance.exports;
 const ver = e.soemdsp_robin_sinepulse_version();
-if (ver < 11) throw new Error(`robin_sinepulse version ${ver} < 11`);
+if (ver < 14) throw new Error(`robin_sinepulse version ${ver} < 14`);
 for (const name of [
   "soemdsp_robin_sinepulse_preview",
   "soemdsp_robin_sinepulse_preview_min",
   "soemdsp_robin_sinepulse_preview_max",
   "soemdsp_robin_sinepulse_preview_window",
+  "soemdsp_robin_sinepulse_preview_field",
+  "soemdsp_robin_sinepulse_preview_field_at",
   "soemdsp_robin_sinepulse_elapsed",
 ]) {
   if (typeof e[name] !== "function") throw new Error(`missing export ${name}`);
@@ -91,4 +94,15 @@ function preview(p, cols = 240) {
   e.soemdsp_robin_sinepulse_destroy(h);
 }
 
-console.log("ok robinSinepulse preview window crops long Decay; elapsed tracks the newest hit");
+{
+  const win = e.soemdsp_robin_sinepulse_preview_field(10000, 0, 0.2, 0, 0, 0.5, 1, SR);
+  const expect = 0.5 * Math.log(1e6) / Math.log(1000) * 1.12;
+  if (!(Math.abs(win - expect) < 1e-6)) throw new Error(`field window ${win} expected ${expect}`);
+  if (!(e.soemdsp_robin_sinepulse_preview_field_at(10) === win)) throw new Error("field pack window slot");
+  if (!(e.soemdsp_robin_sinepulse_preview_field_at(5) === 1)) throw new Error("powFree should be 1 at chirp=shape=0");
+  const long = e.soemdsp_robin_sinepulse_preview_field(10000, 0, 0.2, 0, 0, 4, 1, SR);
+  const longExpect = 4 * Math.log(1e6) / Math.log(1000) * 1.12;
+  if (!(Math.abs(long - longExpect) < 1e-6)) throw new Error(`long Decay field window ${long} expected ${longExpect}`);
+}
+
+console.log("ok robinSinepulse preview window crops long Decay; elapsed tracks the newest hit; field pack T60 window");

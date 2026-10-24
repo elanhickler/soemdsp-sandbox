@@ -440,8 +440,9 @@ console.log("ok pulseTrain a new Trigger hit mid-train restarts it (single Trigg
   if (Math.abs((ends[1] - ends[0]) - cycle) > 1) throw new Error(`neg delay loop: End spacing ${ends[1] - ends[0]} want ~${cycle}`);
   console.log(`ok pulseTrain End Delay negative: one-shot drops tail End at lastPulse+delay, Count 1 clamps to 0, Loop cycle Time+delay`);
 }
-// 7) Antialiasing: 0 Off, 1 Fixed (seed-locked), 2 Dither (re-roll on trigger).
-// Isolated pulses stay on the Off grid. Dense stacks become noise.
+// 7) Antialiasing: 0 Off, 1 Random (seed-locked stack 0/+1), 2 Dither (Robin1 ±1).
+// Isolated pulses stay on the Off grid for Random. Dither ±1 moves them.
+// Leftover numeric 3 is still Robin1; 4 is still Robin2.
 function seedAvalanche(x) {
   x >>>= 0;
   x = (x ^ (x >>> 16)) >>> 0;
@@ -503,24 +504,24 @@ function robinLand(seed, j, t, sr) {
   for (let i = 0; i < n; i++) out[i] = N.soemdsp_pulse_train_sample(h, i >= at ? 1 : 0, ...set, SR, 0, 0, 0, 0, 1, 0);
   N.soemdsp_pulse_train_destroy(h);
   const { y: yOff } = expected(set, 1, at, n);
-  for (let i = 0; i < n; i++) if (out[i] !== yOff[i]) throw new Error(`aa sparse: sample ${i} out ${out[i]} off ${yOff[i]}`);
+  for (let i = 0; i < n; i++) if (out[i] !== yOff[i]) throw new Error(`aa Random sparse: sample ${i} out ${out[i]} off ${yOff[i]}`);
   const h2 = N.soemdsp_pulse_train_create();
   const outD = new Float64Array(n);
   for (let i = 0; i < n; i++) outD[i] = N.soemdsp_pulse_train_sample(h2, i >= at ? 1 : 0, ...set, SR, 0, 0, 0, 0, 2, 0);
   N.soemdsp_pulse_train_destroy(h2);
-  for (let i = 0; i < n; i++) if (outD[i] !== yOff[i]) throw new Error(`aa Dither sparse: sample ${i}`);
+  let eD = 0, eOff = 0, dMoved = 0;
+  for (let i = 0; i < n; i++) {
+    eD += outD[i]; eOff += yOff[i];
+    if (outD[i] !== yOff[i]) dMoved++;
+  }
+  if (Math.abs(eD - eOff) > 1e-9) throw new Error(`aa Dither sparse: energy ${eD} vs ${eOff}`);
+  if (dMoved < 1) throw new Error("aa Dither sparse: identical to Off");
   const h3 = N.soemdsp_pulse_train_create();
   const outR = new Float64Array(n);
   for (let i = 0; i < n; i++) outR[i] = N.soemdsp_pulse_train_sample(h3, i >= at ? 1 : 0, ...set, SR, 0, 0, 0, 0, 3, 0);
   N.soemdsp_pulse_train_destroy(h3);
-  let eR = 0, eOff = 0, rMoved = 0;
-  for (let i = 0; i < n; i++) {
-    eR += outR[i]; eOff += yOff[i];
-    if (outR[i] !== yOff[i]) rMoved++;
-  }
-  if (Math.abs(eR - eOff) > 1e-9) throw new Error(`aa Robin sparse: energy ${eR} vs ${eOff}`);
-  if (rMoved < 1) throw new Error("aa Robin sparse: identical to Off");
-  console.log(`ok pulseTrain AA Fixed/Dither sparse == Off; Robin ±1 moves ${rMoved} samples, energy conserved`);
+  for (let i = 0; i < n; i++) if (outD[i] !== outR[i]) throw new Error(`aa Dither (2) != leftover Robin1 (3) at ${i}`);
+  console.log(`ok pulseTrain AA Random sparse == Off; Dither ±1 moves ${dMoved} samples, energy conserved, 2==3`);
 }
 {
   const set = [16384, 0.02, 3, 1, 0.1, 2, 1];
@@ -550,7 +551,7 @@ function robinLand(seed, j, t, sr) {
   }
   if (Math.abs(eOn - eOff) > 1e-6) throw new Error(`aa dense: energy ${eOn} vs ${eOff}`);
   if (differ < 10) throw new Error(`aa dense: only ${differ} samples differ`);
-  console.log(`ok pulseTrain Antialiasing Fixed Count 16384 / 20 ms: seed_mix(Seed,1,j) stack-gated, energy conserved, ${differ} samples differ, occupied ${occOff} -> ${occOn}`);
+  console.log(`ok pulseTrain Antialiasing Random Count 16384 / 20 ms: seed_mix(Seed,1,j) stack-gated, energy conserved, ${differ} samples differ, occupied ${occOff} -> ${occOn}`);
 }
 {
   const set = [16384, 0.02, 3, 1, 0.1, 2, 1];
@@ -568,9 +569,9 @@ function robinLand(seed, j, t, sr) {
     if (a[i] !== b[i]) same = false;
     if (a[i] !== c[i]) changed++;
   }
-  if (!same) throw new Error("aa Fixed: same Seed retrigger changed offsets");
-  if (changed < 1) throw new Error("aa Fixed: Seed 1 identical to Seed 0");
-  console.log(`ok pulseTrain Antialiasing Fixed: same Seed retrigger is identical, Seed 1 differs on ${changed} samples`);
+  if (!same) throw new Error("aa Random: same Seed retrigger changed offsets");
+  if (changed < 1) throw new Error("aa Random: Seed 1 identical to Seed 0");
+  console.log(`ok pulseTrain Antialiasing Random: same Seed retrigger is identical, Seed 1 differs on ${changed} samples`);
 }
 {
   const set = [16384, 0.02, 3, 1, 0.1, 2, 1];
@@ -591,15 +592,13 @@ function robinLand(seed, j, t, sr) {
   const stream = seedMix(0, 2, 1);
   const y = new Float64Array(nWin);
   for (let j = 0; j < t.length; j++) {
-    const tPrev = j > 0 ? t[j - 1] : 0;
-    const tNext = j + 1 < t.length ? t[j + 1] : t[j];
-    const k = ditherLand(stream, j, t[j], tPrev, tNext, SR, t.length);
+    const k = robinLand(stream, j, t[j], SR);
     if (k < nWin) y[k] += a[j];
   }
   for (let i = 0; i < nWin; i++) {
     if (Math.abs(out[5 + i] - y[i]) > 1e-12) throw new Error(`aa Dither hash: sample ${i} out ${out[5 + i]} expected ${y[i]}`);
   }
-  console.log(`ok pulseTrain Antialiasing Dither: stack 0/+1 retrigger re-rolls (${differ} samples differ)`);
+  console.log(`ok pulseTrain Antialiasing Dither: Robin1 ±1 retrigger re-rolls (${differ} samples differ)`);
 }
 {
   const set = [16384, 0.02, 3, 1, 0.1, 2, 1];

@@ -1070,9 +1070,6 @@
       const from = helpers.endpointPoint(endpoint, hitboxElement);
       if (from) {
         deps.burstZap(from);
-        // Tiny self-wire flash so the poke reads like a break spark.
-        const to = { x: from.x + 10, y: from.y - 8 };
-        animateDestroyedWire(from, to);
       }
       deps.triggerWireBreak?.("port-impulse");
       if (typeof triggerNodeGraphInputWireBreakPulse === "function") {

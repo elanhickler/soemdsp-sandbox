@@ -9,22 +9,20 @@
 // running it uses the engine's params in effect (__Count .. __Amp). Playhead:
 // __Elapsed (seconds since trigger, -1 idle) shifted to the heard time; fired
 // pulses light up.
-// Ghost: the next pattern (live params) drawn dim behind the playing one.
-// Display Settings `pulseTrainFace`: Background, Line, Dot, Playhead, Lit,
-// Ghost HBS; Line thickness, Dot size, Ghost opacity, Fade time (s). Fade 0
-// holds the lit dots until retrigger; >0 is PhosphorResidual.energyAfterSeconds.
+// Recalculate On: the plate is the in-effect (latched) cycle — Time, Duty,
+// Frequency, Pulse Mode, Count. Live knobs that have not latched yet do not
+// redraw or retime the playhead. Recalculate Off: the plate follows the knobs.
+// Display Settings `pulseTrainFace`: Background, Line, Dot, Playhead, Lit;
+// Line thickness, Dot size, Fade time (s). Fade 0 holds the lit dots until
+// retrigger; >0 is PhosphorResidual.energyAfterSeconds.
 // GPU only
 // (gl-line-renderer); canvas size comes from the tile.
 
 const nodeGraphPulseTrainFaceDisplaySettingsDefaults = Object.freeze({
   ...nodeGraphPulseExplosionFaceDisplaySettingsDefaults,
-  ghostHue: 187.5,
-  ghostBrightness: 0.55,
-  ghostSaturation: 0.5,
-  ghostOpacity: 0.35,
   fadeTime: 0,
 });
-const NODE_GRAPH_PULSE_TRAIN_FACE_EXTRA_LAMPS = Object.freeze([...NODE_GRAPH_PULSE_EXPLOSION_FACE_EXTRA_LAMPS, "ghost"]);
+const NODE_GRAPH_PULSE_TRAIN_FACE_EXTRA_LAMPS = NODE_GRAPH_PULSE_EXPLOSION_FACE_EXTRA_LAMPS;
 
 function normalizeNodeGraphPulseTrainFaceSettings(settings = {}) {
   return nodeGraphPulseFaceNormalize(settings, nodeGraphPulseTrainFaceDisplaySettingsDefaults, NODE_GRAPH_PULSE_TRAIN_FACE_EXTRA_LAMPS);
@@ -95,33 +93,31 @@ function nodeGraphPulseTrainSchedule(section, node) {
     p("ampStart", 1), p("ampEnd", 0.2), p("ampCurve", 0), p("amplitude", 1),
     Math.round(p("mode", 1)), pulseModeKnob, (1 - duty) * periodS,
   ];
-  const live = [...args];
   // Audio running: draw the params the engine is playing with (latched at the
   // trigger / cycle start with Recalculate On, live with it Off; idle = what
   // the next trigger latches), so the face always matches what is heard.
+  // Live Frequency / Duty knobs that have not latched must not retune the plate.
   // __Amp is Amplitude * trigger velocity.
   const ctx = nodeGraphMvp?.live?.context;
   if (ctx?.state === "running" && typeof nodeGraphModuleScopeLatestOutputValue === "function") {
     const eng = ["__Count", "__End", "__Curve", "__AmpStart", "__AmpEnd", "__AmpCurve", "__Amp"]
       .map((name) => Number(nodeGraphModuleScopeLatestOutputValue(section.dataset.node, name, Number.NaN)));
-    if (eng.every(Number.isFinite)) {
+    if (Number.isFinite(eng[1])) {
       // __Count = count + Pulse Mode / 4 (both latched).
-      const countIn = Math.floor(eng[0] + 1e-9);
-      args[0] = nodeGraphPulseTrainClampCount(countIn);
-      args[8] = nodeGraphPulseTrainPulseMode(Math.round((eng[0] - countIn) * 4));
-      for (let i = 1; i < 7; i += 1) args[i] = eng[i];
+      if (Number.isFinite(eng[0])) {
+        const countIn = Math.floor(eng[0] + 1e-9);
+        args[0] = nodeGraphPulseTrainClampCount(countIn);
+        args[8] = nodeGraphPulseTrainPulseMode(Math.round((eng[0] - countIn) * 4));
+      }
+      for (let i = 1; i < 7; i += 1) if (Number.isFinite(eng[i])) args[i] = eng[i];
       endTime = eng[1];
     }
     const delayLive = Number(nodeGraphModuleScopeLatestOutputValue(section.dataset.node, "__Delay", Number.NaN));
     if (Number.isFinite(delayLive)) args[9] = delayLive;
   }
-  const period = nodeGraphPulseTrainFPeriod(node);
-  const key = `${args.join(",")}|${live.join(",")}|${Number.isFinite(period) ? period : ""}`;
+  const key = args.join(",");
   if (section._pulseTrainKey === key && section._pulseTrainSchedule) return section._pulseTrainSchedule;
   const sched = nodeGraphPulseTrainPreviewJs(args, endTime);
-  // Ghost: the pattern the next trigger / cycle latches (the live params),
-  // shown only while it differs from what is playing (Recalculate On).
-  sched.ghost = live.join(",") !== args.join(",") ? nodeGraphPulseTrainPreviewJs(live, live[1]) : null;
   section._pulseTrainKey = key;
   section._pulseTrainSchedule = sched;
   return sched;
@@ -274,13 +270,10 @@ function drawNodeGraphPulseTrainDisplay(section) {
   const halfPx = look.lineThickness * 0.5;
   const dotR = look.dotThickness * 0.5;
   const schedule = nodeGraphPulseTrainSchedule(section, node);
-  const ghost = schedule?.ghost || null;
-  const period = nodeGraphPulseTrainFPeriod(node);
-  const span = schedule ? ((nodeGraphPulseTrainIsDual(schedule.pulseMode) ? 2 : 1) * schedule.duration) : 0;
-  const schedCycle = schedule ? span + schedule.delay : 0;
   const timeScale = 1; // Time + End Delay already span the 1/ƒ cycle
   const fKnobFace = nodeGraphPulseTrainFaceParam(node, "frequency", 1);
-  const end = schedule ? Math.max(schedule.end, ghost ? ghost.end : 0)
+  const period = nodeGraphPulseTrainFPeriod(node);
+  const end = schedule ? schedule.end
     : (Number.isFinite(period) && period > 0 ? period : Math.max(0.001, fKnobFace > 0 ? 1 / fKnobFace : 1));
   const padX = Math.max(6, w * 0.04) + dotR;
   const padTop = Math.max(5, h * 0.08) + dotR;
@@ -301,7 +294,7 @@ function drawNodeGraphPulseTrainDisplay(section) {
   const playing = Number.isFinite(elapsed);
   if (schedule) {
     // Height = amplitude; the plot top is 1, or the loudest pulse when Amplitude goes past 1 (no clamp).
-    const scale = Math.max(1, schedule.peak, ghost ? ghost.peak : 0);
+    const scale = Math.max(1, schedule.peak);
     const forest = (sched, lineC, dotC, litC, elapsedVal) => {
       if (typeof nodeGraphGlLinesPulseTrain !== "function") return false;
       nodeGraphGlLinesPulseTrain(batch, {
@@ -325,10 +318,6 @@ function drawNodeGraphPulseTrainDisplay(section) {
       });
       return true;
     };
-    if (ghost && look.ghostOpacity > 0) {
-      const g = dim(rgba(look.ghostPaint), look.ghostOpacity);
-      forest(ghost, g, g, g, Number.NaN);
-    }
     forest(schedule, line, dot, lit, playing ? elapsed : Number.NaN);
   }
   if (playing) {

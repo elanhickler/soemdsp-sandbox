@@ -29,8 +29,14 @@ gate(enc(1000) !== enc(1001), `neighbors scramble: ${enc(1000)} vs ${enc(1001)}`
 gate(parse("#3AC") === 0x33AACC, `color #3AC expands to #33AACC (got ${parse("#3AC")})`);
 gate(parse("#3ac") === 0x33AACC, `color #3ac case-insensitive`);
 gate(parse("#33AACC") === 0x33AACC, `color #33AACC is that color`);
-gate(Number.isNaN(parse("42")), `42 is not a seed code`);
-gate(Number.isNaN(parse("10000")), `10000 is not a seed code`);
+gate(parse("42") === dec("42__"), `42 pads with _ → 42__`);
+gate(parse("sex") === dec("sex_"), `sex pads with _ → sex_`);
+gate(parse("_") === dec("____"), `_ pads to ____`);
+gate(Number.isFinite(parse("10000")), `10000 wraps instead of reject`);
+gate(parse("baby") === dec("baby"), `baby is the 4-char code`);
+gate(parse("babys") === dec("babys"), `babys wraps all five characters`);
+gate(parse("baby") !== parse("babys"), `baby and babys are different seeds`);
+gate(Number.isNaN(parse("@@@")), `non-alphabet rejects`);
 const code1000 = enc(1000);
 gate(code1000.length === 4, `code length 4 (${code1000})`);
 gate(parse(code1000) === 1000, `code ${code1000} → 1000`);

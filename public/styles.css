@@ -25821,11 +25821,28 @@ html.soemdsp-whole-module .node-layout-canvas-grip {
 .dsp-node.has-module-face > .dsp-node-body > .node-parameter-row:not([hidden]):not(.node-face-slider-row) {
   display: contents;
 }
-/* Face row kind "slider": the param's own row, placed at its face row (top / height / insets inline), above .node-face. */
+/* Face row kind "slider": the param's own row, placed at its face row (top / height / insets inline), above .node-face.
+   Fill the allocated face row so divided choice sliders match Wavetable ADSR Shape. */
 .dsp-node.has-module-face > .dsp-node-body > .node-parameter-row.node-face-slider-row {
   position: absolute;
   z-index: 1;
   box-sizing: border-box;
+  min-height: 0;
+  margin-block: 0;
+  padding: 0;
+  grid-template-rows: minmax(0, 1fr);
+  overflow: hidden;
+}
+.dsp-node.has-module-face .node-face-slider-row > .node-parameter-control {
+  height: 100%;
+  min-height: 0;
+  transform: none;
+}
+.dsp-node.has-module-face .node-face-slider-row .node-slider-readout,
+.dsp-node.has-module-face .node-face-slider-row .node-slider-readout-input {
+  height: 100%;
+  min-height: 0;
+  max-height: none;
 }
 .dsp-node.has-module-face .node-face-slider-row > .node-parameter-control,
 .dsp-node.has-module-face .node-face-slider-row > .node-parameter-control input {

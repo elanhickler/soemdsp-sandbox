@@ -4573,9 +4573,22 @@ const nodeGraphModuleDefinitions = (
     inputTooltips: {
       Reset: "Rising edge snaps the phasor so Wave sits at the Phase offset; clears the Morph filter state.",
       f: "Absolute Hz. Replaces Frequency when wired." },
-    outputAliases: { Out: "Wave", "Wave Out": "Wave", Mono: "Wave" },
-    outputChannels: { Wave: "green" },
-    outputs: ["Wave"],
+    outputAliases: {
+      Out: "Wave",
+      "Wave Out": "Wave",
+      Mono: "Wave",
+      Left: "Wave L",
+      Right: "Wave R",
+      L: "Wave L",
+      R: "Wave R",
+    },
+    outputChannels: { Wave: "green", "Wave L": "red", "Wave R": "blue" },
+    outputs: ["Wave", "Wave L", "Wave R"],
+    outputTooltips: {
+      Wave: "Mono voice (same as Wave L / Wave R).",
+      "Wave L": "Left stereo out. Same voice as Wave.",
+      "Wave R": "Right stereo out. Same voice as Wave.",
+    },
     parameters: [
       {
         choices: ["Saw", "Ramp", "Trisaw", "Knee Tri", "Center Square", "Pulse", "Asym Sine", "Sine"],
@@ -10920,7 +10933,7 @@ const nodeGraphModuleDefinitions = (
   robinSinepulse: {
     // Hand-written face (node-graph-module-face.js): wave slider, sweep (High | Low | Time), Chirp | Shape | Wave shape,
     // Phase | Decay | Amp, voices (Voices | Fade time, Fade Off / On), recalc.
-    // Kick-body waveform: native preview + __Elapsed playhead (modules/robinSinepulse/robin-sinepulse-display.js).
+    // T60 frequency field (gradient phosphor) + __Elapsed playhead (modules/robinSinepulse/robin-sinepulse-display.js).
     face: [
       { kind: "slider", param: "wave", h: 30 },
       { kind: "cells", params: [["highFreq", "High"], ["lowFreq", "Low"], ["sweepTime", "Time"]], h: 52 },
@@ -14423,13 +14436,26 @@ const nodeGraphModuleDefinitions = (
     outputs: ["Shape", "Trigger", "End"],
     layout: "pulseCurve",
     // Face: instanced E_k stems/dots (Count 1..16384) + __Elapsed playhead (node-graph-pulse-train-display.js).
-    // Display Settings pulseTrainFace: the Pulse Explosion set plus Ghost (next pattern).
+    // Display Settings pulseTrainFace: the Pulse Explosion set plus Fade time.
     displayType: "pulseTrainFace",
     spectrumCompanion: false,
     displayModes: [
       { key: "face", label: "Face", renderer: "pulseTrainFace", settingsSchema: "pulseTrainFace" },
     ],
     defaultDisplayMode: "face",
+    // Hand-written face (node-graph-module-face.js): Count | Freq | Duty, Curve | A Start | A End | A Crv,
+    // Pulse Mode, One shot / Loop, Recalc, Shape slider, Morph | Amp, AA, seed.
+    face: [
+      { kind: "cells", params: [["count", "Count"], ["frequency", "Freq"], ["duty", "Duty"]], h: 52 },
+      { kind: "cells", params: [["curve", "Curve", "bipolar"], ["ampStart", "A Start"], ["ampEnd", "A End"], ["ampCurve", "A Crv", "bipolar"]], h: 52 },
+      { kind: "choices", param: "pulseMode", labels: ["Fwd", "Fwd-Rev", "Rev", "Rev-Fwd"], h: 26 },
+      { kind: "choices", param: "mode", labels: ["One shot", "Loop"], h: 26 },
+      { kind: "choices", param: "recalculateOnTrigger", labels: ["Recalc Off", "Recalc On"], h: 26 },
+      { kind: "slider", param: "wave", h: 30 },
+      { kind: "cells", params: [["morph", "Morph"], ["amplitude", "Amp"]], h: 40 },
+      { kind: "choices", param: "antialiasing", labels: ["Off", "Random", "Dither"], h: 26 },
+      { kind: "seed", param: "seed", h: 28 },
+    ],
     parameters: [
       {
         choices: ["Off", "On"],
@@ -14476,7 +14502,7 @@ const nodeGraphModuleDefinitions = (
         tooltip: "Forward: one-way schedule (Time). Forward-Reverse: that schedule then its time-mirror, peak once. Reverse: only the return trip. Reverse-Forward: the return trip then the forward trip (Forward-Reverse started at its turnaround). Count is the one-way pulse count."
       },
       {
-        choices: ["Off", "Fixed", "Dither", "Robin1", "Robin2"],
+        choices: ["Off", "Random", "Dither"],
         defaultValue: "0",
         displayChoices: true,
         divideChoicesVisibly: true,
@@ -14484,12 +14510,12 @@ const nodeGraphModuleDefinitions = (
         label: "Antialiasing",
         linearSmoothing: false,
         smoothingType: "none",
-        max: "4",
+        max: "2",
         mid: "0",
         min: "0",
         nonlinearSlider: false,
         step: "1",
-        tooltip: "Off: first sample at or after each time. Fixed: seed-locked 0/+1 on stacked pulses. Dither: the same 0/+1, re-rolled every Trigger / Loop. Robin1: ±1 around the true time. Robin2: ±2 (second ±1 around the first pick). End Delay uses the same land."
+        tooltip: "Off: first sample at or after each time. Random: seed-locked 0/+1 on stacked pulses. Dither: ±1 around the true time (Robin1)."
       },
       {
         choices: ["Trigger", "Gate", "Saw", "Ramp", "TriSaw", "Sine", "Pulse Left", "Pulse Center", "Pulse Right", "Rect Sine"],

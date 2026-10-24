@@ -149,6 +149,11 @@ When fixing: mark `fixed`, one-line what changed, run `python scripts\smoke_test
 | B-096 | see | fixed | Spectrogram: scroll is uneven (jittery tempo) after GPU shader port |
 | B-097 | see | open | Instant Waterfall: blank after WebGL context lost and restored |
 | B-098 | see | open | Write defaults does not write defaults for choice sliders |
+| B-108 | see | open | Whole-module canvas/mini Arrange tiles keep inset padding from the arrange box |
+| B-109 | see | fixed | Red dotted wire-break line on own-inlet poke (no real wire) |
+| B-110 | see | fixed | Waterfall blend-mode change wipes history instead of continuing |
+| B-111 | see | fixed | Face widgets reset to default on Ctrl+mousedown instead of mouse-up |
+| B-112 | see | fixed | Band widget handles draw past the left/right widget edges |
 ---
 
 ## Inbox (unnumbered user reports)
@@ -1642,4 +1647,42 @@ Add `require_no_js_dsp()` to `scripts/smoke_test.py` (or `scripts/check_no_js_ds
 - Description: this is old behavior we're undoing; the app now runs efficiently enough that we can afford to draw it.
 - Notes (Argi, verbatim): "at this time I do expect displays to show anything if project is stopped or if the module enters and the project is paused, i do not want the rule 'audio only runs during play mode' broken, and im not sure which displays depend on some dsp to draw."
 - Constraint: the rule 'audio only runs during Play mode' must not be broken. Any fix must draw without running DSP outside Play, and first audit which displays depend on DSP to draw.
+
+### B-108 — Whole-module canvas/mini Arrange tiles keep inset padding from the arrange box
+- Status: open
+- Severity: see
+- Source: user 2026-10-23 (Argi)
+- Writeup: `docs/B-108_WHOLE_MODULE_ARRANGE_INSET.md`
+
+### B-109 — Red dotted wire-break line on own-inlet poke (no real wire)
+- Status: fixed (2026-10-23)
+- Severity: see
+- Source: user 2026-10-23 (Argi)
+- What: Double-click / re-click of the same inlet flashed a fake red dotted break line (no cable).
+- Fix: `pokeInputPortImpulse` keeps zap + impulse; dropped the synthetic `animateDestroyedWire` 10×8 px stub. Cache-bust `b109-own-inlet-1`. Writeup: `docs/B-109_WIRE_BREAK_OWN_INLET.md`.
+
+### B-110 — Waterfall blend-mode change wipes history instead of continuing
+- Status: fixed (2026-10-23)
+- Severity: see
+- Source: user 2026-10-23 (Argi)
+- What: Changing blend mode wiped the waterfall (Sample & Hold and other shared faces).
+- Fix: Blend is no longer a cold start in `nodeGraphWaterfallState`. History stays; new columns use the new blend. Cache-bust `b110-blend-continue-1`. Writeup: `docs/B-110_WATERFALL_BLEND_WIPES_HISTORY.md`.
+
+### B-111 — Face widgets reset to default on Ctrl+mousedown instead of mouse-up
+- Status: fixed (2026-10-23)
+- Severity: see
+- Source: user 2026-10-23 (Argi)
+- Files: `public/node-graph-module-face.js`
+- What: After switching sliders to the new face widgets, Ctrl+click to fine-tune snapped to default because reset ran on pointerdown. Mouse-down and drag is not a reset gesture.
+- Expected: Ctrl/Cmd+click mouse-up resets. Ctrl/Cmd+click mouse-down and drag fine-tunes (same as old sliders / `beginNodeSliderDrag`).
+- Fix: Drop the pointerdown reset. `nodeGraphModuleFaceCapture` tracks move threshold; no move → reset on pointerup; move → fine drag via `nodeGraphNumericDragMultiplier`. Cache-bust `b111-ctrl-drag-1`. Writeup: `docs/B-111_FACE_CTRL_RESET_ON_MOUSEDOWN.md`.
+
+### B-112 — Band widget handles draw past the left/right widget edges
+- Status: fixed (2026-10-23)
+- Severity: see
+- Source: user 2026-10-23 (Argi)
+- Files: `public/node-graph-module-face.js`
+- What: Two-handle band (Spectrogram Freq, Clock pulse, etc.): right handle clipped over the right edge; left handle also not limited to the widget.
+- Fix: `nodeGraphModuleFaceBandBarX` clamps the 3 px bar so travel 0/1 stay inside `[wd.x, wd.x+wd.w]`. Cache-bust `b112-band-handle-1`.
+
 

@@ -74,3 +74,11 @@ Open question for the implementer: confirm where the new seed widget with the di
 - Labels: the parameter keeps the full-word label **Seed**; the code is a value readout, not a label abbreviation (APP_POLICY §11 L406).
 - Stored values (§18 "A stored 0 is a value"): seed 0 must show its own code, never be replaced by a default.
 - No legacy shims (§1): none needed, since storage is unchanged. Typed entry is the code. Decimal input is not supported.
+
+## Addendum: short pad and long wrap (Argi, 2026-10-23)
+
+Alphabet is unchanged: `_` stays index 63 (the end). `A` stays 0. Display is still always 4 characters.
+
+- **Shorter than 4:** right-pad with `_` at entry only (`sex` → `sex_`, `42` → `42__`). `_` is the blank glyph here; it is still the last alphabet character, not a new zero.
+- **Longer than 4:** do not reject. Fold every character as a 6-bit place and wrap to 24 bits (`(x << 6 | p) & 0xFFFFFF`), then unscramble. `baby` and `babys` are different seeds.
+- `#rgb` / `#rrggbb` is unchanged.

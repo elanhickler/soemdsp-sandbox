@@ -1235,6 +1235,11 @@ NodeLiveAudioProcessor.prototype.mapNativeGraphSrcPortId = function mapNativeGra
     if (p === "left") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_LEFT;
     if (p === "right") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_RIGHT;
   }
+  // Filter Morph Osc: Wave on Mono, Wave L / Wave R on Left/Right (same voice).
+  if (t === "filterMorphOscillator") {
+    if (p === "wave l" || p === "left") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_LEFT;
+    if (p === "wave r" || p === "right") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_RIGHT;
+  }
   // crossover2..6: sequential band L/R (band0=0/1, band1=2/3, …).
   if (
     t === "crossover2" || t === "crossover3" || t === "crossover4"
@@ -6425,7 +6430,7 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
       push("recalculateOnTrigger", P.NATIVE_GRAPH_PARAM_MODE, disc("recalculateOnTrigger", 0)); // 0 Off live / 1 On latched
       push("pulseMode", P.NATIVE_GRAPH_PARAM_LFO_STYLE, disc("pulseMode", 0)); // 0 Forward / 1 Forward-Reverse / 2 Reverse / 3 Reverse-Forward
       push("duty", P.NATIVE_GRAPH_PARAM_TIME_NUMERATOR, cont("duty", 0.5)); // pulsing fraction of the cycle
-      push("antialiasing", P.NATIVE_GRAPH_PARAM_WAVEFORM, disc("antialiasing", 0)); // 0 Off / 1 Fixed / 2 Dither / 3 Robin1 / 4 Robin2
+      push("antialiasing", P.NATIVE_GRAPH_PARAM_WAVEFORM, disc("antialiasing", 0)); // 0 Off / 1 Random / 2 Dither (Robin1 ±1)
       push("seed", P.NATIVE_GRAPH_PARAM_SEED, disc("seed", 0));
       push("wave", P.NATIVE_GRAPH_PARAM_OVERSAMPLE, disc("wave", 2)); // 0 Trigger / 1 Gate / 2 Saw / 3 Ramp / 4 TriSaw / 5 Sine / 6-8 Pulse Left/Center/Right / 9 Rect Sine
       push("morph", P.NATIVE_GRAPH_PARAM_MIX, cont("morph", 0.5)); // TriSaw peak / Pulse duty
@@ -9365,6 +9370,7 @@ NodeLiveAudioProcessor.prototype.nativeGraphPortNames = function nativeGraphPort
     if (type === "electroKick") return ["Kick L"];
     if (type === "electroClap") return ["Clap L"];
     if (type === "sampleHold") return ["Left"];
+    if (type === "filterMorphOscillator") return ["Wave L"];
     if (type === "rasterRgb") return ["G"];
     if (type === "fractalBrownianNoise") {
       return ["Out Y", "Y", "Left"];
@@ -9440,6 +9446,7 @@ NodeLiveAudioProcessor.prototype.nativeGraphPortNames = function nativeGraphPort
     if (type === "acidSequencer") return ["pitch", "\u266f/\u266d"];
     if (type === "helmholtzPitch") return ["Fidelity", "fid"];
     if (type === "sampleHold") return ["Right"];
+    if (type === "filterMorphOscillator") return ["Wave R"];
     if (type === "electroSnare" || type === "modalSnare") return ["Snare R"];
     if (type === "electroHat") return ["Hat R"];
     if (type === "electroTom") return ["Tom R"];

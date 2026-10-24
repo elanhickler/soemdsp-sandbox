@@ -34,8 +34,8 @@ function normalizeNodeGraphPulseExplosionFaceSettings(settings = {}) {
 
 /**
  * Pulse face settings (Pulse Explosion, Pulse Train): RoundShape background /
- * line / dot, the extra HBS lamps, Line thickness, Dot size, and Ghost
- * opacity when the defaults carry it.
+ * line / dot, the extra HBS lamps, Line thickness, Dot size, and Fade time /
+ * Ghost opacity when the defaults carry them.
  */
 function nodeGraphPulseFaceNormalize(settings, d, lamps) {
   const source = settings && typeof settings === "object" ? settings : {};
