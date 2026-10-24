@@ -1,6 +1,10 @@
-﻿# Future Planning Notes
+# Future Planning Notes
 
 This file collects project-shaping ideas that should survive day-to-day implementation without becoming immediate scope.
+
+## Math category, Logic, Noise Gate (2026-10-23)
+
+M1 (Math shelf + recategorize) shipping with this work. M2 Logic and M3 Noise Gate still to land. New Math shelf; Comparator / B2U / U2B / Bias / Divide / Inv / Min-Max / Range / Rotation 3D to 2D / AM Index / Amp↔dB on Math. Gain, RingMod, Vectorscope Rotation stay Dynamics. New Logic module (AND/OR/XOR outs) on Math. New Noise Gate (two thresholds, Attack/Hold/Release/Range) on Dynamics. Plan: `docs/MATH_CATEGORY_PLAN.md`.
 
 ## Display Settings numbers (2026-10-19)
 

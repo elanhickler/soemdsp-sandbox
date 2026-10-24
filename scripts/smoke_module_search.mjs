@@ -75,6 +75,27 @@ for (const q of ["sine", "lp", "filter", "osc", "noise"]) {
   }
   check(ok, `'${q}' filters/oscillators before others at the same rank`);
 }
+const mathTypes = [
+  "comparator", "b2u", "u2b", "bias", "divide", "inv", "minMax", "range",
+  "rotate3dTo2d", "attenumax", "ampDb",
+];
+for (const t of mathTypes) {
+  const cat = probe.norm(probe.catalog[t]?.category || "");
+  check(cat === "math", `${t} category = ${cat || "(missing)"}`);
+  const fam = probe.family({ category: cat });
+  check(fam === 1, `${t} family priority = ${fam} (math is not filter/osc boost)`);
+}
+check(probe.norm("utility") === "math", `utility alias = ${probe.norm("utility")}`);
+check(probe.norm("Math") === "math", `Math alias = ${probe.norm("Math")}`);
+check(probe.norm(probe.catalog.sampleDelay?.category || "") === "space",
+  `sampleDelay category = ${probe.norm(probe.catalog.sampleDelay?.category || "")}`);
+check(probe.norm(probe.catalog.gain?.category || "") === "dynamics",
+  `gain stays dynamics = ${probe.norm(probe.catalog.gain?.category || "")}`);
+check(probe.norm(probe.catalog.ringMod?.category || "") === "dynamics",
+  `ringMod stays dynamics = ${probe.norm(probe.catalog.ringMod?.category || "")}`);
+const mathHits = search("math");
+check(mathHits.includes("Comparator") || mathHits.includes("AM Index") || mathHits.includes("Range"),
+  `'math' hits include a math-shelf module: ${show("math")}`);
 if (failures) { console.error(`${failures} failure(s)`); process.exit(1); }
 console.log("module search smoke: all passed");
 
