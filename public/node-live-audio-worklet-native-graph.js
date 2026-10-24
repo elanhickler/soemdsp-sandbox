@@ -34,6 +34,7 @@ NodeLiveAudioProcessor.NATIVE_GRAPH_TYPE_IDS = Object.freeze({
   slewLimiter: 17,
   comparator: 18,
   logic: 233,
+  noiseGate: 234,
   sampleDelay: 19,
   earlyReflections: 203,
   sampleHold: 20,
@@ -1396,7 +1397,7 @@ NodeLiveAudioProcessor.prototype.mapNativeGraphDstPortId = function mapNativeGra
     return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_MORPH;
   }
   // Pump Limiter sidechain key — audio detect on Morph bus slot.
-  if ((p === "sidechain" || p === "sc" || p === "key") && type === "limiter") {
+  if ((p === "sidechain" || p === "sc" || p === "key") && (type === "limiter" || type === "noiseGate")) {
     return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_MORPH;
   }
   if (p === "clock" || (p === "trig" && type === "arp")) {
@@ -6892,6 +6893,16 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
       push("duckedMix", P.NATIVE_GRAPH_PARAM_DIFFUSION_AMOUNT, cont("duckedMix", 0));
       continue;
     }
+    if (type === "noiseGate") {
+      push("openThreshold", P.NATIVE_GRAPH_PARAM_GAIN_DB, cont("openThreshold", -32));
+      push("closeThreshold", P.NATIVE_GRAPH_PARAM_LANE_BIAS2, cont("closeThreshold", -44));
+      push("attack", P.NATIVE_GRAPH_PARAM_OFFSET_MS, cont("attack", 1));
+      push("hold", P.NATIVE_GRAPH_PARAM_LANE_BIAS3, cont("hold", 50));
+      push("release", P.NATIVE_GRAPH_PARAM_LANE_BIAS1, cont("release", 80));
+      push("range", P.NATIVE_GRAPH_PARAM_WIDTH, cont("range", -80));
+      push("amplitude", P.NATIVE_GRAPH_PARAM_AMPLITUDE, cont("amplitude", 1));
+      continue;
+    }
     if (type === "limiter") {
       push("inputGain", P.NATIVE_GRAPH_PARAM_GAIN_DB, cont("inputGain", 0));
       push("threshold", P.NATIVE_GRAPH_PARAM_LANE_BIAS2, cont("threshold", -18));
@@ -9512,7 +9523,7 @@ NodeLiveAudioProcessor.prototype.nativeGraphPortNames = function nativeGraphPort
     if (type === "sampleDelay") return ["Thru"];
     if (type === "mix4" || type === "mix" || type === "gainBiasMix") return ["Out4"];
     if (type === "mixStereo4" || type === "mixStereo2" || type === "mixStereo" || type === "crossfade2" || type === "crossfade3" || type === "crossfade4") return ["L2"];
-    if (type === "lookaheadLimiter" || type === "limiter") return ["Gain"];
+    if (type === "lookaheadLimiter" || type === "limiter" || type === "noiseGate") return ["Gain"];
     // Sidechain Envelope out (duck amount) rides the Saw tap.
     if (type === "sidechain") return ["Envelope", "Env"];
     if (type === "transport") return ["f"];
@@ -9540,7 +9551,7 @@ NodeLiveAudioProcessor.prototype.nativeGraphPortNames = function nativeGraphPort
     if (type === "fractalBrownianNoise") return ["Out Y Raw"];
     if (type === "fbmField") return ["Y Raw"];
     if (type === "phoneTone") return ["ƒ2", "f2", "Df2"];
-    if (type === "limiter") return ["Env"];
+    if (type === "limiter" || type === "noiseGate") return ["Env"];
     if (type === "sidechain") return ["Dry Gain"];
     if (type === "chaosfly") return [];
     if (type === "archimedes") return ["Noise Above"];
@@ -9904,7 +9915,7 @@ NodeLiveAudioProcessor.prototype.publishNativeGraphScopeTaps = function publishN
           P.NATIVE_GRAPH_PORT_LEFT,
           P.NATIVE_GRAPH_PORT_RIGHT,
         );
-      } else if (type === "limiter") {
+      } else if (type === "limiter" || type === "noiseGate") {
         ports = facePorts.concat(P.NATIVE_GRAPH_PORT_SAW, P.NATIVE_GRAPH_PORT_RAMP);
       } else if (type === "lookaheadLimiter") {
         ports = facePorts.concat(P.NATIVE_GRAPH_PORT_SAW);

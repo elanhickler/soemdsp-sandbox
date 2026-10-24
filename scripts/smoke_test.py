@@ -17512,6 +17512,13 @@ def require_native_module_contract(base_url: str) -> None:
             "soemdsp_logic_or",
             "soemdsp_logic_xor",
         ],
+        "noise_gate": [
+            "soemdsp_noise_gate_create",
+            "soemdsp_noise_gate_destroy",
+            "soemdsp_noise_gate_sample",
+            "soemdsp_noise_gate_gain",
+            "soemdsp_noise_gate_env",
+        ],
         "min_max": ["soemdsp_min_max_create", "soemdsp_min_max_destroy", "soemdsp_min_max_sample", "soemdsp_min_max_min"],
         "alias_sine": ["soemdsp_alias_sine_create", "soemdsp_alias_sine_destroy", "soemdsp_alias_sine_sample"],
         "ladder_filter": ["soemdsp_ladder_filter_create", "soemdsp_ladder_filter_destroy", "soemdsp_ladder_filter_sample"],

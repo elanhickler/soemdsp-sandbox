@@ -76,6 +76,7 @@ const NODE_GRAPH_EFFICIENT_PRODUCT_AUDIO_TYPES = Object.freeze([
   "lutCell",
   "lookaheadLimiter",
   "limiter",
+  "noiseGate",
   "sidechain",
   // Music Player / Sample Player — native PCM upload on the efficient path.
   "audioPlayer",

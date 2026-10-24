@@ -2148,6 +2148,23 @@ const nodeGraphModuleStoreCatalog = Object.freeze({
       "native",
     ],
   },
+  noiseGate: {
+    category: "dynamics",
+    description:
+      "Noise gate with Open/Close hysteresis, Attack, Hold, Release, and Range. Stereo-linked peak, optional sidechain, Gain and Env outs.",
+    label: "Noise Gate",
+    notes: [
+      "noise gate",
+      "gate",
+      "hysteresis",
+      "threshold",
+      "hold",
+      "expander",
+      "sidechain",
+      "dynamics",
+      "native",
+    ],
+  },
   limiter: {
     category: "dynamics",
     description:
@@ -3657,6 +3674,10 @@ const nodeGraphJsSourceEntriesByType = Object.freeze({
   limiter: {
     source: "native_modules/pumping_limiter/pumping_limiter.cpp",
     sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/native_modules/pumping_limiter/pumping_limiter.cpp",
+  },
+  noiseGate: {
+    source: "native_modules/noise_gate/noise_gate.cpp",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/native_modules/noise_gate/noise_gate.cpp",
   },
   sidechain: {
     source: "native_modules/sidechain/sidechain.cpp",

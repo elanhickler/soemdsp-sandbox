@@ -1856,6 +1856,24 @@
       "noticeUrl": "https://github.com/elanhickler/soemdsp-sandbox/blob/master/docs/THIRD_PARTY.md"
     },
     {
+      "name": "noise_gate",
+      "label": "Noise Gate",
+      "targetType": "noiseGate",
+      "kind": "dynamics",
+      "source": "native_modules/noise_gate/noise_gate.cpp",
+      "sourceUrl": "https://github.com/elanhickler/soemdsp-sandbox/blob/master/native_modules/noise_gate/noise_gate.cpp",
+      "localSourceUrl": "/native_modules/noise_gate/noise_gate.cpp",
+      "libUrl": "",
+      "wasm": "native_modules/noise_gate/noise_gate.wasm",
+      "wasmUrl": "native_modules/noise_gate/noise_gate.wasm",
+      "wasmAvailable": true,
+      "license": "Soundemote Noncommercial",
+      "licenseUrl": "https://github.com/elanhickler/soemdsp-sandbox/blob/master/LICENSE",
+      "upstreamLicense": "",
+      "upstreamLicenseUrl": "",
+      "noticeUrl": "https://github.com/elanhickler/soemdsp-sandbox/blob/master/docs/THIRD_PARTY.md"
+    },
+    {
       "name": "noise_generator",
       "label": "Noise Generator",
       "targetType": "noiseGenerator",
