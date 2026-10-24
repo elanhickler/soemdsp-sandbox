@@ -63,8 +63,9 @@
 // Recalculate On Trigger (recalc > 0.5, default Off): schedule params (Count,
 // Time, Curve, Amp Start / End / Curve, Amplitude, Pulse Mode, End Delay)
 // latch at each Trigger / Loop cycle start. Off: live every sample; next
-// index only moves forward. Mode, Antialiasing, Seed, and Shape are always live.
-// ƒ period is always live.
+// index only moves forward. Loop Off remaps elapsed into the new period so
+// Frequency stays phase-continuous (raising ƒ does not wrap-reset). Mode,
+// Antialiasing, Seed, and Shape are always live. ƒ period is always live.
 // soemdsp_pulse_train_effective i: 0 Count (one-way), 1 Time, 2 Curve,
 // 3 Amp Start, 4 Amp End, 5 Amp Curve, 6 Amplitude * velocity, 7 Pulse Mode,
 // 8 End Delay, 9 wrap (1/ƒ when tracking, else schedule cycle).
@@ -543,7 +544,7 @@ static int firstPulseAfter(
 
 }  // namespace
 
-extern "C" int soemdsp_pulse_train_version() { return 22; }
+extern "C" int soemdsp_pulse_train_version() { return 23; }
 
 extern "C" int soemdsp_pulse_train_create() {
   for (int i = 0; i < kMaxInstances; i++) {
@@ -618,14 +619,38 @@ extern "C" double soemdsp_pulse_train_sample(
   const double periodLock = trackPeriodOf(freqHz, sr);
   const double scale = (periodLock > 0.0 && schedNow > 0.0) ? (periodLock / schedNow) : 1.0;
   const double wrapNow = periodLock > 0.0 ? periodLock : (schedNow > 0.0 ? schedNow : (1.0 / sr));
+  const double prevWrap = s.wrapCycle;
+  // Recalc Off + Loop: wrap against the previous period, then remap n into the
+  // new period so a live Frequency jump keeps phase. Recalc On uses wrapNow
+  // (the latched cycle) and does not remap.
+  bool naturalWrap = false;
+  if (s.running && s.n > 0) {
+    if (aaMode >= 2) {
+      naturalWrap = s.n >= (s.cycleN > 0 ? s.cycleN : 1);
+    } else {
+      const double gate = (!latch && prevWrap > 0.0) ? prevWrap : wrapNow;
+      naturalWrap = ((double)s.n / sr) >= gate;
+    }
+  }
+  const bool remapLive = !latch && loop && s.running && !trigHit && !naturalWrap
+    && prevWrap > 0.0 && wrapNow > 0.0
+    && !(wrapNow == prevWrap);
+  if (remapLive) {
+    double phase = ((double)s.n / sr) / prevWrap;
+    if (!(phase >= 0.0)) phase = 0.0;
+    if (phase > 1.0) phase = 1.0;
+    s.n = (long long)(phase * wrapNow * sr);
+  }
   s.periodLock = periodLock;
   s.wrapCycle = wrapNow;
   if (s.running && periodLock > 0.0) {
     const unsigned int streamW = aaStream(seedU, s.ditherEpoch, aaMode);
     s.cycleN = eventLand(wrapNow, sr, streamW, (unsigned int)s.count + 1u, aaMode, aaMode == 2);
+  } else if (remapLive && aaMode >= 2) {
+    const unsigned int streamW = aaStream(seedU, s.ditherEpoch, aaMode);
+    s.cycleN = eventLand(wrapNow, sr, streamW, (unsigned int)s.count + 1u, aaMode, aaMode == 2);
   }
-  const bool loopStart = loop && (!s.running || trigHit
-    || (s.n > 0 && (aaMode >= 2 ? s.n >= (s.cycleN > 0 ? s.cycleN : 1) : (double)s.n / sr >= wrapNow)));
+  const bool loopStart = loop && (!s.running || trigHit || naturalWrap);
   if (trigHit || loopStart) {
     const double v = trigHit ? gate_hit_velocity() : s.velocity;
     const bool needBuild = !s.running || trigHit || !paramsEqual(s.eff, live)

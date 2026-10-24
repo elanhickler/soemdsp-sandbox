@@ -76,15 +76,30 @@ console.log(`ok pulseTrain static params: Recalculate On == Off bit-identical (O
   if (JSON.stringify(idleAfter) !== JSON.stringify(B)) throw new Error(`On after the train (idle) should show the live knobs: ${idleAfter}`);
   console.log("ok pulseTrain effective params (face): On = latched while running, Off = live, idle = live (what the next trigger latches)");
 }
-// 3) Loop, Time moved mid-cycle: On waits for the next cycle, Off changes the cycle now.
+// 3) Loop, Time moved mid-cycle: On waits for the next cycle, Off keeps phase.
 {
   const n = Math.ceil(2 * SR);
-  const set = (i) => [6, i < 10000 ? 0.5 : 0.3, 0, 1, 1, 0, 1];
+  const at = 10000;
+  const set = (i) => [6, i < at ? 0.5 : 0.3, 0, 1, 1, 0, 1];
   const on = play(set, () => 0, n, 1, 1), off = play(set, () => 0, n, 1, 0);
   const wrapOn = Array.from(on.el).findIndex((v, i) => i > 0 && v === 0);
   const wrapOff = Array.from(off.el).findIndex((v, i) => i > 0 && v === 0);
-  if (wrapOn !== 0.5 * SR || wrapOff !== 0.3 * SR) throw new Error(`Loop wrap On ${wrapOn} Off ${wrapOff}`);
-  console.log(`ok pulseTrain Loop: Time 0.5 -> 0.3 mid-cycle, On wraps at 0.5 s (next cycle uses 0.3), Off wraps at 0.3 s`);
+  const phase = at / (0.5 * SR);
+  const nRemap = Math.floor(phase * 0.3 * SR);
+  const wantOff = at + (0.3 * SR - nRemap);
+  if (wrapOn !== 0.5 * SR) throw new Error(`Loop wrap On ${wrapOn} want ${0.5 * SR}`);
+  if (wrapOff !== wantOff) throw new Error(`Loop wrap Off ${wrapOff} want ${wantOff} (phase-continuous)`);
+  console.log(`ok pulseTrain Loop: Time 0.5 -> 0.3 mid-cycle, On wraps at 0.5 s, Off keeps phase and wraps at ${wantOff / SR} s`);
+  // Raising Frequency so the new period is shorter than elapsed must not restart.
+  const atCut = Math.round(0.3 * SR);
+  const cut = play((i) => [6, i < atCut ? 0.5 : 0.1, 0, 1, 1, 0, 1], () => 0, Math.ceil(1 * SR), 1, 0);
+  if (cut.el[atCut] === 0) throw new Error("Off: Time shorter than elapsed restarted the cycle");
+  const pCut = (atCut / SR) / 0.5;
+  const wantEl = Math.floor(pCut * 0.1 * SR) / SR;
+  if (Math.abs(cut.el[atCut] - wantEl) > 1.5 / SR) {
+    throw new Error(`Off: elapsed ${cut.el[atCut]} want ~${wantEl} after Time 0.5 -> 0.1`);
+  }
+  console.log("ok pulseTrain Loop Off: Time 0.5 -> 0.1 below elapsed keeps phase (no wrap-reset)");
 }
 // 4) Graph: mode slot 21 switch + face params in effect on Saw/Ramp/Square/Tri/Sine/Trisaw/CenterSquare.
 {

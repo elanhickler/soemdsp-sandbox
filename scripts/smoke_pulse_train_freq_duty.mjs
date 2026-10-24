@@ -79,13 +79,22 @@ for (const duty of [0, 0.01, 0.25, 0.5, 1]) {
   const c = r.saw[r.saw.length - 1], d = r.idle[r.idle.length - 1];
   check(c === 6.5 && Math.abs(d - 0.0625) < 1e-12, `face __Count ${c} (6 + Reverse/4), __Delay ${d} s (= 0.25/4)`);
 }
-// 6) Recalculate On latches Frequency + Duty at the cycle start; Off follows live.
+// 6) Recalculate On latches Frequency + Duty at the cycle start; Off remaps
+// elapsed into the new period so Frequency stays phase-continuous.
 for (const rec of [1, 0]) {
-  const at = 10; // ~27 ms into a 0.5 s cycle
+  const at = 10; // block 10 = 1280 samples into a 0.5 s cycle
   const r = run({ freq: 2, duty: 1, rec, seconds: 1.2, onBlock: (q, set) => { if (q === at) set(P.TDEN, 4); } });
   const w = wraps(r);
   const first = w[0];
-  check(rec ? Math.abs(first - SR / 2) <= 1 : Math.abs(first - SR / 4) <= 1, `Recalculate ${rec ? "On" : "Off"}: Frequency 2 -> 4 Hz mid-cycle, first wrap at ${first} samples (${rec ? "latched 0.5 s" : "live 0.25 s"})`);
+  if (rec) {
+    check(Math.abs(first - SR / 2) <= 1, `Recalculate On: Frequency 2 -> 4 Hz mid-cycle, first wrap at ${first} samples (latched 0.5 s)`);
+  } else {
+    const atSamp = at * 128;
+    const phase = atSamp / (SR / 2);
+    const nRemap = Math.floor(phase * (SR / 4));
+    const want = atSamp + (SR / 4 - nRemap);
+    check(Math.abs(first - want) <= 1, `Recalculate Off: Frequency 2 -> 4 Hz mid-cycle, first wrap at ${first} samples (phase-continuous, want ${want})`);
+  }
 }
 // 7) Frequency <= 0 (divide-by-zero guard): silent, no NaN.
 {
