@@ -254,8 +254,19 @@
   var dirtyTimer = null;
 
   function isAutomaticCommit(options) {
-    var status = options && options.status;
-    return status === "boot" || status === "plugin loadPatch" || status === "host tempo" || status === "resend";
+    var status = String((options && options.status) || "");
+    if (status === "boot" || status === "plugin loadPatch" || status === "host tempo" || status === "resend") {
+      return true;
+    }
+    // Designer boot loads patches/init.json with these statuses. That is not a
+    // user edit; treating it as one overwrites a restored REAPER project chunk.
+    if (status === "script synced" || status === "startup default restored" || status === "startup patch reapplied") {
+      return true;
+    }
+    if (status.indexOf("init patch") === 0 || status.indexOf("page /") === 0) {
+      return true;
+    }
+    return false;
   }
 
   // Face values for the host project. The graph is already updated by param events.

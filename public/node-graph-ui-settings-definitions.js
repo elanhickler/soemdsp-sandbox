@@ -81,7 +81,7 @@ const nodeUiDevSettingControls = Object.freeze([
   },
   { defaultValue: false, id: "nodeUiDevShowOriginMarker", key: "showOriginMarker", type: "boolean" },
   // Floor for fit-to-box tip text. The fitter never goes below this; longer tips clip.
-  { defaultValue: 14, id: "nodeUiDevTooltipTextSize", key: "tooltipTextSize", max: 96, min: 12, type: "number" },
+  { defaultValue: 12, id: "nodeUiDevTooltipTextSize", key: "tooltipTextSize", max: 96, min: 12, type: "number" },
   { defaultValue: 100, id: "nodeUiDevModuleLightBrightness", key: "moduleLightBrightness", max: 100, min: 0, type: "number" },
   { defaultValue: 20, id: "nodeUiDevMinimumGridBrightness", key: "minimumGridBrightness", max: 100, min: 0, type: "number" },
   {

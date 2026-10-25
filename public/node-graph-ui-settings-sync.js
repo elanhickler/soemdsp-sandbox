@@ -810,7 +810,7 @@ function syncNodeUiDevSettingsHeaderControls() {
   const mouseLightEnabled = Boolean(mouseLightEnabledInput.checked);
   const showOriginMarker = Boolean(showOriginMarkerInput.checked);
   // UIDEV minimum tip size. fitNodeInteractionHelpText uses this as the floor.
-  const tooltipTextSizePx = Math.max(12, Math.min(96, nodeGraphFiniteNumber(tooltipTextSizeInput.value, 14)));
+  const tooltipTextSizePx = Math.max(12, Math.min(96, nodeGraphFiniteNumber(tooltipTextSizeInput.value, 12)));
   const minimumGridBrightnessPercent = Math.max(
     0,
     Math.min(100, nodeGraphFiniteNumber(minimumGridBrightnessInput.value)),

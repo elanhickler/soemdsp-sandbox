@@ -299,7 +299,7 @@ function nodeInteractionHelpMinFontPx(cs) {
   if (Number.isFinite(raw) && raw > 0) {
     return Math.max(8, Math.min(96, raw));
   }
-  return 14;
+  return 12;
 }
 
 function nodeInteractionHelpWrapHeightPx(ctx, text, contentW) {

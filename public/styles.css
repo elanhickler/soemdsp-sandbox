@@ -2339,7 +2339,7 @@ input[type="range"],
 
 .node-wiring-panel {
   --node-toolbar-button-bg-alpha: 1;
-  --node-tooltip-text-size: 14px; /* minimum tip font; fitter scales up to fill the box */
+  --node-tooltip-text-size: 12px; /* minimum tip font; fitter scales up to fill the box */
   --node-min-grid-brightness-alpha: 0;
   /* B-048: bypass chrome SSOT for module face + Module Settings (sibling under panel). */
   --node-bypass-icon-size-ratio: 0.36;
@@ -7277,7 +7277,7 @@ body.keyboard-debug-hidden .node-midi-keyboard-signal-bar {
   padding: 4px 10px 8px; /* bottom room for the SE resize grip */
   color: var(--muted);
   font-family: Consolas, "Courier New", monospace;
-  font-size: var(--node-tooltip-text-size, 14px);
+  font-size: var(--node-tooltip-text-size, 12px);
   line-height: 1.25;
   overflow: hidden;
   text-align: center;
@@ -7339,7 +7339,7 @@ body.keyboard-debug-hidden .node-midi-keyboard-signal-bar {
     max-height: min(40vh, 220px);
     overflow-y: auto;
     padding: 4px 8px;
-    font-size: var(--node-tooltip-text-size, 14px);
+    font-size: var(--node-tooltip-text-size, 12px);
     line-height: 1.2;
   }
 }

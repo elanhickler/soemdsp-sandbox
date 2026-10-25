@@ -5505,7 +5505,7 @@ def require_node_graph_mvp_contract() -> None:
         "nodeUiDevTooltipTextSize",
         "nodeUiDevTooltipTextSizeValue",
         "minimum tooltip text size",
-        "nodeUiDevTooltipTextSizeValue\" for=\"nodeUiDevTooltipTextSize\">14px",
+        "nodeUiDevTooltipTextSizeValue\" for=\"nodeUiDevTooltipTextSize\">12px",
         "nodeUiDevMinimumGridBrightness",
         "nodeUiDevMinimumGridBrightnessValue",
         "minimum grid brightness",
