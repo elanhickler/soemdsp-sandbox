@@ -406,8 +406,8 @@ function showNodeGraphPortalIoPair(point = null, options = {}) {
       : { gx: 8, gy: 8 });
   const off = NODE_GRAPH_PORTAL_IO_PAIR_OFFSET_GU;
   const portalUi = { buttonsHidden: true, titleHidden: true };
-  // Unique seed so SyncBusAlias only ties this fresh pair (not an existing "A" bus),
-  // then normalize both to defaultAlias "A" (or paint-aware Title later on rename).
+  // Unique seed so SyncBusAlias only ties this fresh pair (not an existing bus),
+  // then normalize both to defaultAlias "initname" (unique if that bus exists).
   const seedAlias = `__portal_io_${counts.namedPortalIn}`;
   const inNode = createNodeGraphPatchNode("namedPortalIn", {
     id: inId,
@@ -438,7 +438,7 @@ function showNodeGraphPortalIoPair(point = null, options = {}) {
   const defaultAlias = (
     typeof nodeGraphModuleDefinitions === "object"
     && nodeGraphModuleDefinitions?.namedPortalIn?.defaultAlias
-  ) || "A";
+  ) || (typeof nodeGraphNamedPortalDefaultAlias === "string" ? nodeGraphNamedPortalDefaultAlias : "initname");
   const universe = String(inNode.ownerMetamoduleId || "");
   const alias = typeof nodeGraphNamedPortalUniqueAlias === "function"
     ? nodeGraphNamedPortalUniqueAlias(patch, defaultAlias, universe)

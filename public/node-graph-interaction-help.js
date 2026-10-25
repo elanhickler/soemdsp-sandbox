@@ -270,16 +270,220 @@ function nodeInteractionMouseHint(element) {
   return nodeGraphTooltipText("common.interact");
 }
 
-// One font size for every tip. The box stays fixed so the page does not reflow,
-// and the text wraps inside it. --node-tooltip-text-size is that size.
-// Longer tips clip. fitNodeInteractionHelpText only clears an inline size left
-// by an older session so the stylesheet value shows.
+// Fit the tip to its box without live layout probes on hover.
+// The old binary search wrote font-size ~10 times per change and read
+// scrollHeight each time; that was the performance hit. This path:
+//   1. returns immediately when the composed text is unchanged (setNodeInteractionHelp)
+//   2. caches by text + box WxH + UIDEV minimum, so the same tip is free
+//   3. binary-searches with canvas measureText (no layout) on a cache miss
+//   4. applies one inline font-size; if CSS wrapping still overflows, one
+//      short live shrink from that size down to the minimum, then clip
+// UIDEV --node-tooltip-text-size is the floor. Short tips grow to fill the
+// box. Phone auto-height + scroll skips the search (overflow-y is auto).
+const nodeInteractionHelpAbsoluteMaxFontPx = 120;
+const nodeInteractionHelpLineHeight = 1.25;
+const nodeInteractionHelpFitCache = { key: "", sizePx: 0 };
+let nodeInteractionHelpMeasureCtx = null;
+let nodeInteractionHelpResizeObserver = null;
+let nodeInteractionHelpFitRaf = 0;
+
+function nodeInteractionHelpMeasureContext() {
+  if (!nodeInteractionHelpMeasureCtx) {
+    nodeInteractionHelpMeasureCtx = document.createElement("canvas").getContext("2d");
+  }
+  return nodeInteractionHelpMeasureCtx;
+}
+
+function nodeInteractionHelpMinFontPx(cs) {
+  const raw = Number.parseFloat(cs.getPropertyValue("--node-tooltip-text-size"));
+  if (Number.isFinite(raw) && raw > 0) {
+    return Math.max(8, Math.min(96, raw));
+  }
+  return 14;
+}
+
+function nodeInteractionHelpWrapHeightPx(ctx, text, contentW) {
+  const fontPx = Number.parseFloat(ctx.font);
+  const lineH = fontPx * nodeInteractionHelpLineHeight;
+  let lines = 0;
+  const paragraphs = String(text).split("\n");
+  for (let p = 0; p < paragraphs.length; p += 1) {
+    const para = paragraphs[p];
+    if (!para) {
+      lines += 1;
+      continue;
+    }
+    const words = para.split(" ");
+    let current = "";
+    for (let i = 0; i < words.length; i += 1) {
+      const word = words[i];
+      const trial = current ? `${current} ${word}` : word;
+      if (ctx.measureText(trial).width <= contentW) {
+        current = trial;
+        continue;
+      }
+      if (current) {
+        lines += 1;
+        current = "";
+      }
+      if (ctx.measureText(word).width <= contentW) {
+        current = word;
+        continue;
+      }
+      let rest = word;
+      while (rest) {
+        if (ctx.measureText(rest).width <= contentW) {
+          current = rest;
+          rest = "";
+          break;
+        }
+        let lo = 1;
+        let hi = rest.length;
+        while (lo < hi) {
+          const mid = Math.floor((lo + hi + 1) / 2);
+          if (ctx.measureText(rest.slice(0, mid)).width <= contentW) {
+            lo = mid;
+          } else {
+            hi = mid - 1;
+          }
+        }
+        if (lo < 1) {
+          return Number.POSITIVE_INFINITY;
+        }
+        lines += 1;
+        rest = rest.slice(lo);
+      }
+    }
+    if (current) {
+      lines += 1;
+    }
+  }
+  return lines * lineH;
+}
+
+function nodeInteractionHelpCanvasFits(ctx, text, fontPx, fontFamily, contentW, contentH) {
+  ctx.font = `${fontPx}px ${fontFamily}`;
+  return nodeInteractionHelpWrapHeightPx(ctx, text, contentW) <= contentH + 0.5;
+}
+
+function nodeInteractionHelpLiveOverflows(help) {
+  return help.scrollHeight > help.clientHeight + 0.5
+    || help.scrollWidth > help.clientWidth + 0.5;
+}
+
+function ensureNodeInteractionHelpResizeObserver(help) {
+  if (typeof ResizeObserver !== "function") {
+    return;
+  }
+  if (!nodeInteractionHelpResizeObserver) {
+    nodeInteractionHelpResizeObserver = new ResizeObserver(() => {
+      if (nodeInteractionHelpFitRaf) {
+        return;
+      }
+      nodeInteractionHelpFitRaf = requestAnimationFrame(() => {
+        nodeInteractionHelpFitRaf = 0;
+        const el = document.getElementById("nodeInteractionHelp");
+        if (el) {
+          fitNodeInteractionHelpText(el);
+        }
+      });
+    });
+  }
+  if (help.dataset.fitResizeObserved === "true") {
+    return;
+  }
+  nodeInteractionHelpResizeObserver.observe(help);
+  help.dataset.fitResizeObserved = "true";
+}
+
 function fitNodeInteractionHelpText(help = document.getElementById("nodeInteractionHelp")) {
   if (!help) {
     return;
   }
-  help.style.removeProperty("font-size");
-  help.style.removeProperty("align-items");
+  ensureNodeInteractionHelpResizeObserver(help);
+  const text = help.textContent || "";
+  if (!text) {
+    help.style.removeProperty("font-size");
+    help.style.removeProperty("align-items");
+    nodeInteractionHelpFitCache.key = "";
+    return;
+  }
+  const boxW = help.clientWidth;
+  const boxH = help.clientHeight;
+  if (boxW <= 0 || boxH <= 0) {
+    return;
+  }
+  const cs = window.getComputedStyle(help);
+  const minFont = nodeInteractionHelpMinFontPx(cs);
+  if (cs.overflowY === "auto" || cs.overflowY === "scroll") {
+    help.style.fontSize = `${minFont.toFixed(2)}px`;
+    help.style.removeProperty("align-items");
+    nodeInteractionHelpFitCache.key = "";
+    return;
+  }
+  const cacheKey = `${minFont}|${Math.round(boxW)}|${Math.round(boxH)}|${text}`;
+  if (nodeInteractionHelpFitCache.key === cacheKey) {
+    const cached = `${nodeInteractionHelpFitCache.sizePx.toFixed(2)}px`;
+    if (help.style.fontSize !== cached) {
+      help.style.fontSize = cached;
+    }
+    return;
+  }
+  const padX = (Number.parseFloat(cs.paddingLeft) || 0) + (Number.parseFloat(cs.paddingRight) || 0);
+  const padY = (Number.parseFloat(cs.paddingTop) || 0) + (Number.parseFloat(cs.paddingBottom) || 0);
+  const contentW = Math.max(1, boxW - padX);
+  const contentH = Math.max(1, boxH - padY);
+  const fontFamily = cs.fontFamily || "Consolas, monospace";
+  const maxFont = Math.max(
+    minFont,
+    Math.min(contentH / nodeInteractionHelpLineHeight, nodeInteractionHelpAbsoluteMaxFontPx),
+  );
+  const ctx = nodeInteractionHelpMeasureContext();
+  let low = minFont;
+  let high = maxFont;
+  let chosen = minFont;
+  if (nodeInteractionHelpCanvasFits(ctx, text, high, fontFamily, contentW, contentH)) {
+    chosen = high;
+  } else if (!nodeInteractionHelpCanvasFits(ctx, text, low, fontFamily, contentW, contentH)) {
+    chosen = minFont;
+  } else {
+    for (let i = 0; i < 10; i += 1) {
+      const mid = (low + high) * 0.5;
+      if (nodeInteractionHelpCanvasFits(ctx, text, mid, fontFamily, contentW, contentH)) {
+        low = mid;
+      } else {
+        high = mid;
+      }
+    }
+    chosen = low;
+  }
+  help.style.fontSize = `${chosen.toFixed(2)}px`;
+  if (chosen > minFont) {
+    const previousAlign = help.style.alignItems;
+    help.style.alignItems = "flex-start";
+    if (nodeInteractionHelpLiveOverflows(help)) {
+      low = minFont;
+      high = chosen;
+      for (let i = 0; i < 8; i += 1) {
+        const mid = (low + high) * 0.5;
+        help.style.fontSize = `${mid.toFixed(2)}px`;
+        if (nodeInteractionHelpLiveOverflows(help)) {
+          high = mid;
+        } else {
+          low = mid;
+        }
+      }
+      chosen = low;
+      help.style.fontSize = `${chosen.toFixed(2)}px`;
+    }
+    if (previousAlign) {
+      help.style.alignItems = previousAlign;
+    } else {
+      help.style.removeProperty("align-items");
+    }
+  }
+  nodeInteractionHelpFitCache.key = cacheKey;
+  nodeInteractionHelpFitCache.sizePx = chosen;
 }
 
 function setNodeInteractionHelp(text = "") {

@@ -84,6 +84,7 @@ NodeLiveAudioProcessor.prototype.process = function process(inputs, outputs) {
     this.externalInput = {
       left: input[0] ?? input[1] ?? null,
       right: input[1] ?? input[0] ?? null,
+      channels: input,
     };
     // App-wide oversampling: process at host*N, Rapt-elliptic decimate to host.
     const rawFactor = Math.round(Number(this.oversamplingRatio || this.oversamplingFactor || 1));

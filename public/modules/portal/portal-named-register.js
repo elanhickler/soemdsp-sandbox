@@ -1,4 +1,4 @@
-// Wireless named buses. Title (alias) matches In ↔ Out. Default title "A".
+// Wireless named buses. Title (alias) matches In ↔ Out. Default title "initname".
 // Jack I/O labels use effective Display (follows Title until overridden).
 // Jack color follows the cable into Portal In; Portal Out mirrors matched In
 // for title/bus, color, and wirelessRole (SyncBusAlias unchanged).
@@ -14,7 +14,7 @@ registerNodeGraphChromelessModule("namedPortalIn", {
     defaultWidthGu: 4,
     // InletOutletLayout: outer height = content (header+IO); do not pin defaultHeightGu (B-074).
     hasFace: false,
-    defaultAlias: "A",
+    defaultAlias: "initname",
     defaultUi: { buttonsHidden: true, titleHidden: true },
     inputChannels: { In: "gold" },
     inputs: ["In"],
@@ -47,7 +47,7 @@ registerNodeGraphChromelessModule("namedPortalOut", {
     planFreeRun: true,
     defaultWidthGu: 4,
     hasFace: false,
-    defaultAlias: "A",
+    defaultAlias: "initname",
     defaultUi: { buttonsHidden: true, titleHidden: true },
     outputChannels: { Out: "gold" },
     inputs: [],
@@ -82,7 +82,7 @@ registerNodeGraphChromelessModule("portalIo", {
     planFreeRun: true,
     defaultWidthGu: 4,
     hasFace: false,
-    defaultAlias: "A",
+    defaultAlias: "initname",
     defaultUi: { buttonsHidden: true, titleHidden: true },
     inputChannels: { In: "gold" },
     outputChannels: { Out: "gold" },

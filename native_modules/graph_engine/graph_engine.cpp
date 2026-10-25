@@ -477,6 +477,18 @@ extern "C" double soemdsp_pumping_limiter_left(int handle);
 extern "C" double soemdsp_pumping_limiter_right(int handle);
 extern "C" double soemdsp_pumping_limiter_gain(int handle);
 extern "C" double soemdsp_pumping_limiter_env(int handle);
+
+extern "C" int soemdsp_pump_curve_create();
+extern "C" void soemdsp_pump_curve_destroy(int handle);
+extern "C" double soemdsp_pump_curve_sample(
+  int handle, double inL, double inR, double trigger, double sampleRate,
+  double law, double ratio, double depthDb, double attackMs, double holdMs,
+  double releaseMs, double knee, double makeupDb, double mix, double trigMode
+);
+extern "C" double soemdsp_pump_curve_right(int handle);
+extern "C" double soemdsp_pump_curve_gain(int handle);
+extern "C" double soemdsp_pump_curve_env(int handle);
+
 // Sidechain (native_modules/sidechain): Pump Limiter detector/gain + Hold moves a Dry/Wet crossfade.
 extern "C" int soemdsp_sidechain_create();
 extern "C" void soemdsp_sidechain_destroy(int handle);
@@ -712,6 +724,28 @@ extern "C" void soemdsp_filter_morph_oscillator_sample_stereo(
   double* outLeft,
   double* outRight
 );
+
+extern "C" int soemdsp_fluv_noise_create();
+extern "C" void soemdsp_fluv_noise_destroy(int handle);
+extern "C" void soemdsp_fluv_noise_set_seed(int handle, double seed);
+extern "C" void soemdsp_fluv_noise_sample_stereo(
+  int handle,
+  double freqHz,
+  double sampleRate,
+  double startHz,
+  double fullHz,
+  double amount,
+  double spread,
+  double hpPoles,
+  double lpPoles,
+  double stereoOn,
+  double amplitude,
+  double* outLeft,
+  double* outRight
+);
+extern "C" double soemdsp_fluv_noise_left(int handle);
+extern "C" double soemdsp_fluv_noise_right(int handle);
+
 extern "C" double soemdsp_filter_morph_oscillator_sample(
   int handle,
   double frequencyHz,
@@ -1817,7 +1851,7 @@ extern "C" double soemdsp_pulse_train_sample(
   int handle, double trigger, double count, double endTime, double curve,
   double ampStart, double ampEnd, double ampCurve, double amplitude, double sampleRate, double mode,
   double recalc, double pulseMode, double endDelay, double antialiasing, double seed, double waveShape,
-  double freqHz, double morph, double curvePolarity
+  double freqHz, double morph, double curvePolarity, double spacing
 );
 extern "C" double soemdsp_pulse_train_end(int handle);
 extern "C" double soemdsp_pulse_train_trigger(int handle);
@@ -2180,6 +2214,8 @@ static const int kTypePassiveFilter = 59;
 static const int kTypeTb303Filter = 60;
 static const int kTypeFlowerChildFilter = 61;
 static const int kTypeFlowerChildFilterRev3 = 235; // Hz + Robin dither experiment
+static const int kTypeFluvNoise = 236; // Filter Morph noise band as a generator
+static const int kTypePumpCurve = 237; // triggered ideal compressor GR envelope
 static const int kTypeYellowjacketFilter = 62;
 static const int kTypeSuperloveFilter = 63;
 static const int kTypeHumanFilter = 64;
@@ -2344,7 +2380,7 @@ static const int kTypeCrossfade = 196; // Stereo pair crossfade (2/3/4 via stage
 static const int kTypeScript = 220; // emo script: WASM process_block via env import
 static const int kTypeResonantEnvelope = 221; // Resonant Envelope: TPT SVF lowpass at envelope rate
 static const int kTypeResonantFollower = 229; // Resonant Follower: Resonant Envelope Follow path split out
-static const int kTypePulseTrain = 231; // Pulse Train: trigger -> pulses with growing gaps (E_k curve), End out
+static const int kTypePulseTrain = 231; // Pulse Train: trigger -> pulses, Spacing Expo/Harmonic/Rational, End out
 static const int kTypeResonantCompressor = 230; // Resonant Compressor: Resonant Envelope (Abs rise) SC as gain
 
 static const int kPortMono = 0;
@@ -2725,6 +2761,7 @@ struct Circuit {
   int edgeCount;
   double outL[kMaxBlockFrames];
   double outR[kMaxBlockFrames];
+  double outAux[6][kMaxBlockFrames];
   int busEarProtectHandle;
   double busEarGain;
   double mixMono[kMaxBlockFrames];
@@ -2872,6 +2909,8 @@ static void destroy_native_kind_handle(int kind, int handle) {
     soemdsp_lookahead_limiter_destroy(handle);
   } else if (kind == kTypePumpLimiter) {
     soemdsp_pumping_limiter_destroy(handle);
+  } else if (kind == kTypePumpCurve) {
+    soemdsp_pump_curve_destroy(handle);
   } else if (kind == kTypeSidechain) {
     soemdsp_sidechain_destroy(handle);
   } else if (kind == kTypeAudioPlayer) {
@@ -2904,6 +2943,8 @@ static void destroy_native_kind_handle(int kind, int handle) {
     soemdsp_sine_warp_destroy(handle);
   } else if (kind == kTypeFilterMorphOscillator) {
     soemdsp_filter_morph_oscillator_destroy(handle);
+  } else if (kind == kTypeFluvNoise) {
+    soemdsp_fluv_noise_destroy(handle);
   } else if (kind == kTypeSoftpopOscillator) {
     soemdsp_softpop_oscillator_destroy(handle);
   } else if (kind == kTypeSoftpopFilter) {
@@ -3413,6 +3454,7 @@ static void init_node_defaults(Node& n, int typeId) {
       || typeId == kTypePapoulisFilter)
       ? 1000.0
       : (typeId == kTypeFlowerChildFilterRev3) ? 440.0
+      : (typeId == kTypeFluvNoise) ? 4000.0
       : (typeId == kTypeFlowerChildFilter || typeId == kTypeYellowjacketFilter
           || typeId == kTypeSuperloveFilter || typeId == kTypeSuperloveRev2
           || typeId == kTypeVcvrackSuperloveFilter || typeId == kTypeHumanFilter
@@ -3497,6 +3539,7 @@ static void init_node_defaults(Node& n, int typeId) {
     n.waveform,
     (typeId == kTypeAdditiveOsc || typeId == kTypeDsfOscillator || typeId == kTypeDsfMorphingOsc) ? 1.0
       : (typeId == kTypePingPongDelay) ? 1.0 // LPF Poles
+      : (typeId == kTypeFluvNoise) ? 2.0 // LP poles
       : (typeId == kTypePingEnvelope) ? 1.0 // Model Long (default, choiceId 1, "for Lin Amp")
       : (typeId == kTypeVactrol) ? 0.0 // Model ModelA (default, choiceId 0)
       : (typeId == kTypeTubeSaturation) ? 0.0 // Gain Compensation smallSignal (default, choiceId 0)
@@ -3716,6 +3759,8 @@ static void init_node_defaults(Node& n, int typeId) {
       : (typeId == kTypeLogisticMap) ? 0.0 // Antialias Off
       : (typeId == kTypeSoftClipper) ? 1.0 // AA ADAA1
       : (typeId == kTypePulseTrain) ? 0.0 // Recalculate On Trigger Off
+      : (typeId == kTypePumpCurve) ? 0.0 // Law Lin
+      : (typeId == kTypeFluvNoise) ? 1.0 // Stereo On
       : 1.0,
     // Freq Manager octave lives on mode and stays continuous (step is the snap).
     typeId != kTypePll && typeId != kTypeFm
@@ -3774,6 +3819,7 @@ static void init_node_defaults(Node& n, int typeId) {
       : (typeId == kTypeAcidSequencer) ? 16.0 // step length
       : (typeId == kTypeExponentialDelay) ? 7.0 // delay count
       : (typeId == kTypeFilterMorphOscillator) ? 1.0 // Poles
+      : (typeId == kTypeFluvNoise) ? 2.0 // HP poles
       : (typeId == kTypeSoftpopOscillator || typeId == kTypeSoftpopFilter) ? 1.0 // Color Gaussian
       : (typeId == kTypeSoftpop2) ? 0.0 // Color White
       : 4.0,
@@ -3787,6 +3833,8 @@ static void init_node_defaults(Node& n, int typeId) {
   );
   init_control(
     n.center,
+    (typeId == kTypePulseTrain) ? 0.0 : // Spacing Expo
+    (typeId == kTypePumpCurve) ? 12.0 : // Depth dB
     (typeId == kTypeDsfMorphingOsc) ? 0.0 : // Slice (DSF Morphing Osc)
     (typeId == kTypeResonantCompressor) ? 0.0 : // Tracking (Resonant Compressor)
     (typeId == kTypeFm) ? 0.0 // cents
@@ -3833,6 +3881,7 @@ static void init_node_defaults(Node& n, int typeId) {
     || typeId == kTypeEllipsoid || typeId == kTypeEllipsoidOsc
     || typeId == kTypeAcidSequencer // semitone offset
     || typeId == kTypePitchQuantizer // semitoneOffset
+    || typeId == kTypePulseTrain // Spacing Expo/Harmonic/Rational
   );
   // Soft-clipper knee default 0.5; noise = deviation; supersaw = detune;
   // triggerCounter = increment; archimedes = dither bits;
@@ -3856,7 +3905,8 @@ static void init_node_defaults(Node& n, int typeId) {
       : (typeId == kTypeRobinSupersaw) ? 30.0 // detuneCents
       : (typeId == kTypeHyperpluck) ? 5.0 // detuneHz
       : (typeId == kTypeTriggerCounter) ? 1.0
-      : (typeId == kTypePumpLimiter || typeId == kTypeSidechain) ? 8.0 // ratio
+      : (typeId == kTypePumpLimiter || typeId == kTypeSidechain || typeId == kTypePumpCurve) ? 8.0 // ratio
+      : (typeId == kTypeFluvNoise) ? 4.0 // spread (LP/HP)
       : (typeId == kTypeNoiseGate) ? -80.0 // range dB
       : (typeId == kTypeMetallicRatio) ? 1.0 // index n
       : (typeId == kTypeHarmonicSeries) ? 0.0 // harmonic
@@ -3937,7 +3987,8 @@ static void init_node_defaults(Node& n, int typeId) {
       : (typeId == kTypeExponentialDelay) ? 1.0 // Mix wet
       : (typeId == kTypePingPongDelay || typeId == kTypeDelayEffect) ? 0.35
       : (typeId == kTypeDsfMorphingOsc) ? 0.0 // Symmetry (+a/−a)
-      : (typeId == kTypeFilterMorphOscillator || typeId == kTypeFlowerChildFilterRev3) ? 1.0 // Amount (dither depth at Full)
+      : (typeId == kTypeFilterMorphOscillator || typeId == kTypeFlowerChildFilterRev3 || typeId == kTypeFluvNoise) ? 1.0 // Amount (dither depth at Full)
+      : (typeId == kTypePumpCurve) ? 1.0 // Mix wet
       : (typeId == kTypeDsfOscillator) ? 0.5 // Square↔Saw blend
       : (typeId == kTypeBradley2a) ? 0.0 // interfLevel
       : (typeId == kTypeExpAdsr || typeId == kTypeLinearEnvelope || typeId == kTypeWavetableAdsr) ? 0.55 // sustain
@@ -4035,7 +4086,7 @@ static void init_node_defaults(Node& n, int typeId) {
   );
   init_control(
     n.seed,
-    (typeId == kTypeNoiseGenerator || typeId == kTypeRandomClock) ? 1.0
+    (typeId == kTypeNoiseGenerator || typeId == kTypeRandomClock || typeId == kTypeFluvNoise) ? 1.0
       : (typeId == kTypeLutCell) ? 27030.0 // default truth table
       : (typeId == kTypeSoemReverb) ? 500.0
       : (typeId == kTypePitchQuantizer) ? 2741.0 // major scale mask
@@ -4177,7 +4228,7 @@ static void init_node_defaults(Node& n, int typeId) {
     (typeId == kTypeRobinSinepulse) ? 2.0 : // Fade Time ms (Robin Sinepulse)
     (typeId == kTypeRandomClock) ? 0.01
       : (typeId == kTypeLookaheadLimiter) ? 0.2 // attack ms
-      : (typeId == kTypePumpLimiter || typeId == kTypeSidechain) ? 5.0 // attack ms
+      : (typeId == kTypePumpLimiter || typeId == kTypeSidechain || typeId == kTypePumpCurve) ? 5.0 // attack ms
       : (typeId == kTypeNoiseGate) ? 1.0 // attack ms
       : (typeId == kTypeExpAdsr || typeId == kTypeLinearEnvelope || typeId == kTypeWavetableAdsr) ? 0.45 // release s
       : (typeId == kTypeCurveAttackRelease) ? 0.25 // release s
@@ -4236,7 +4287,7 @@ static void init_node_defaults(Node& n, int typeId) {
       : (typeId == kTypeChaosfly) ? 6.0 // Lowpass oct offset (open default)
       : (typeId == kTypeCrossover5) ? 8000.0
       : (typeId == kTypeCrossover6) ? 3000.0
-      : (typeId == kTypeFilterMorphOscillator || typeId == kTypeFlowerChildFilterRev3) ? 7000.0 // Full Hz (dither fully on)
+      : (typeId == kTypeFilterMorphOscillator || typeId == kTypeFlowerChildFilterRev3 || typeId == kTypeFluvNoise) ? 7000.0 // Full Hz (dither fully on)
       : 8000.0,
     false
   );
@@ -4247,7 +4298,7 @@ static void init_node_defaults(Node& n, int typeId) {
       : (typeId == kTypeChorus || typeId == kTypeEnsemble) ? 200.0 // HP
       : (typeId == kTypeChaosfly) ? -2.0 // Highpass oct offset (gentler default)
       : (typeId == kTypeCrossover6) ? 10000.0
-      : (typeId == kTypeFilterMorphOscillator || typeId == kTypeFlowerChildFilterRev3) ? 2000.0 // Start Hz (dither begins)
+      : (typeId == kTypeFilterMorphOscillator || typeId == kTypeFlowerChildFilterRev3 || typeId == kTypeFluvNoise) ? 2000.0 // Start Hz (dither begins)
       : 20.0,
     false
   );
@@ -4335,7 +4386,7 @@ static void init_node_defaults(Node& n, int typeId) {
     if (typeId == kTypeLookaheadLimiter) {
       if (i == 0) biasDef = 100.0;
       else if (i == 1) biasDef = 1.0;
-    } else if (typeId == kTypePumpLimiter || typeId == kTypeSidechain) {
+    } else if (typeId == kTypePumpLimiter || typeId == kTypeSidechain || typeId == kTypePumpCurve) {
       if (i == 0) biasDef = 250.0; // release ms
       else if (i == 1) biasDef = -18.0; // threshold dB
     } else if (typeId == kTypeNoiseGate) {
@@ -5134,6 +5185,7 @@ static int create_native_for_type(int typeId, float sampleRate) {
   if (typeId == kTypeLutCell) return soemdsp_lut_cell_create();
   if (typeId == kTypeLookaheadLimiter) return soemdsp_lookahead_limiter_create();
   if (typeId == kTypePumpLimiter) return soemdsp_pumping_limiter_create();
+  if (typeId == kTypePumpCurve) return soemdsp_pump_curve_create();
   if (typeId == kTypeSidechain) return soemdsp_sidechain_create();
   if (typeId == kTypeAudioPlayer) return soemdsp_audio_player_create();
   if (typeId == kTypeSamplePlayer) return soemdsp_sample_player_create();
@@ -5153,6 +5205,7 @@ static int create_native_for_type(int typeId, float sampleRate) {
   if (typeId == kTypeTheremin) return soemdsp_softwave_create();
   if (typeId == kTypeSineWarp) return soemdsp_sine_warp_create();
   if (typeId == kTypeFilterMorphOscillator) return soemdsp_filter_morph_oscillator_create();
+  if (typeId == kTypeFluvNoise) return soemdsp_fluv_noise_create();
   if (typeId == kTypeSoftpopOscillator) return soemdsp_softpop_oscillator_create();
   if (typeId == kTypeSoftpopFilter) return soemdsp_softpop_filter_create();
   if (typeId == kTypeSoftpop2) return soemdsp_softpop2_create();
@@ -5348,6 +5401,7 @@ static void clear_graph_contents(Circuit& g) {
   }
   zero_buf(g.outL, kMaxBlockFrames);
   zero_buf(g.outR, kMaxBlockFrames);
+  for (int i = 0; i < 6; i++) zero_buf(g.outAux[i], kMaxBlockFrames);
 }
 
 static Circuit* get(int handle) {
@@ -5419,9 +5473,11 @@ static void mix_node_inputs(Circuit& g, const Node& node, int frames) {
     if (find_node(g, c.srcHash) < 0) continue;
     const int sp = clamp_src_port(c.srcPort);
     if (is_graph_port(sp)) continue;
-    double* dstAcc = g.mixMono;
-    if (dp == kPortLeft) dstAcc = g.mixLeft;
+    double* dstAcc = nullptr;
+    if (dp == kPortMono) dstAcc = g.mixMono;
+    else if (dp == kPortLeft) dstAcc = g.mixLeft;
     else if (dp == kPortRight) dstAcc = g.mixRight;
+    else continue;
     for (int f = 0; f < frames; f++) {
       const int srcF = g.fbSampleMajor ? g.fbFrame : f;
       const int dstF = g.fbSampleMajor ? 0 : f;
@@ -5435,9 +5491,11 @@ static void mix_node_inputs(Circuit& g, const Node& node, int frames) {
     if (poke.dstHash != node.idHash) continue;
     const int dp = clamp_dst_port(poke.dstPort);
     if (is_live_dst_port(dp) || is_graph_port(dp)) continue;
-    double* dstAcc = g.mixMono;
-    if (dp == kPortLeft) dstAcc = g.mixLeft;
+    double* dstAcc = nullptr;
+    if (dp == kPortMono) dstAcc = g.mixMono;
+    else if (dp == kPortLeft) dstAcc = g.mixLeft;
     else if (dp == kPortRight) dstAcc = g.mixRight;
+    else continue;
     if (frames > 0) dstAcc[0] += poke.amp;
     poke.used = false;
   }
@@ -8144,6 +8202,47 @@ static void process_filter_morph_oscillator(Circuit& g, Node& node, int frames) 
     );
     node.buf[kPortLeft][f] = yL;
     node.buf[kPortRight][f] = yR;
+  }
+}
+
+// Fluv Noise: Filter Morph noise band as a stereo generator. ƒ via resolve_osc_hz.
+static void process_fluv_noise(Circuit& g, Node& node, int frames) {
+  if (node.nativeHandle <= 0) return;
+  {
+    unsigned int seedU = 0u;
+    if (node_take_seed(node, &seedU)) {
+      soemdsp_fluv_noise_set_seed(node.nativeHandle, (double)seedU);
+    }
+  }
+  const double sr = g.sampleRate < 1.0f ? 44100.0 : (double)g.sampleRate;
+  const bool liveF = mix_live_port(g, node, kPortF, frames, g.mixF);
+  const bool livePitch = mix_live_port(g, node, kPortPitchCv, frames, g.mixPitch);
+  const double referenceVoltage = circuit_pitch_ref_v(g);
+  for (int f = 0; f < frames; f++) {
+    control_frame(g, node, f);
+    double freq = resolve_osc_hz(
+      g, f, liveF, livePitch, node.frequency, referenceVoltage, sr
+    );
+    double yL = 0.0;
+    double yR = 0.0;
+    soemdsp_fluv_noise_sample_stereo(
+      node.nativeHandle,
+      freq,
+      sr,
+      control_audio(g, node.hpfFrequency, f),
+      control_audio(g, node.lpfFrequency, f),
+      control_audio(g, node.mix, f),
+      control_audio(g, node.width, f),
+      control_effective(node.stages),
+      control_effective(node.waveform),
+      control_effective(node.mode),
+      control_audio(g, node.amplitude, f),
+      &yL,
+      &yR
+    );
+    node.buf[kPortLeft][f] = yL;
+    node.buf[kPortRight][f] = yR;
+    node.buf[kPortMono][f] = 0.5 * (yL + yR);
   }
 }
 
@@ -12609,7 +12708,8 @@ static void process_pulse_train(Circuit& g, Node& node, int frames) {
       control_effective(node.oversample),  // Shape: 0 Trigger / 1 Gate / 2 Saw / 3 Ramp / 4 TriSaw / 5 Sine / 6-8 Pulse L/C/R / 9 Rect Sine
       freqHz,
       control_audio(g, node.mix, f),       // Morph (TriSaw peak, Pulse duty)
-      control_effective(node.feedback)     // Curve polarity: 0 + / 1 -
+      control_effective(node.feedback),    // Curve polarity: 0 + / 1 -
+      control_effective(node.center)       // Spacing: 0 Expo / 1 Harmonic / 2 Rational
     );
     node.buf[kPortMono][f] = out;
     node.buf[kPortLeft][f] = soemdsp_pulse_train_end(node.nativeHandle);
@@ -13033,6 +13133,42 @@ static void process_pump_limiter(Circuit& g, Node& node, int frames) {
     node.buf[kPortRight][f] = soemdsp_pumping_limiter_right(node.nativeHandle);
     node.buf[kPortSaw][f] = soemdsp_pumping_limiter_gain(node.nativeHandle);
     node.buf[kPortRamp][f] = soemdsp_pumping_limiter_env(node.nativeHandle);
+  }
+}
+
+// Pump Curve: triggered ideal compressor GR envelope. Trigger on kPortTrigger.
+static void process_pump_curve(Circuit& g, Node& node, int frames) {
+  if (node.nativeHandle <= 0) return;
+  mix_node_inputs(g, node, frames);
+  const bool hasTrig = mix_live_port(g, node, kPortTrigger, frames, g.mixTrigger);
+  const double sr = g.sampleRate < 1.0f ? 44100.0 : (double)g.sampleRate;
+  for (int f = 0; f < frames; f++) {
+    control_frame(g, node, f);
+    const double l = g.mixMono[f] + g.mixLeft[f];
+    const double r = g.mixMono[f] + g.mixRight[f];
+    const double trig = hasTrig ? g.mixTrigger[f] : 0.0;
+    const double monoOut = soemdsp_pump_curve_sample(
+      node.nativeHandle,
+      l,
+      r,
+      trig,
+      sr,
+      control_effective(node.mode),
+      control_audio(g, node.width, f),
+      control_audio(g, node.center, f),
+      control_audio(g, node.offsetMs, f),
+      control_audio(g, node.laneBias[2], f),
+      control_audio(g, node.laneBias[0], f),
+      control_audio(g, node.shape, f),
+      control_audio(g, node.gainDb, f),
+      control_audio(g, node.mix, f),
+      control_effective(node.timingMode)
+    );
+    node.buf[kPortMono][f] = monoOut;
+    node.buf[kPortLeft][f] = monoOut;
+    node.buf[kPortRight][f] = soemdsp_pump_curve_right(node.nativeHandle);
+    node.buf[kPortSaw][f] = soemdsp_pump_curve_gain(node.nativeHandle);
+    node.buf[kPortRamp][f] = soemdsp_pump_curve_env(node.nativeHandle);
   }
 }
 
@@ -14346,6 +14482,8 @@ static void process_gain(Circuit& g, Node& node, int frames) {
 
 static void process_output(Circuit& g, Node& node, int frames) {
   mix_node_inputs(g, node, frames);
+  double extraMix[6][kMaxBlockFrames];
+  for (int i = 0; i < 6; i++) mix_live_port(g, node, 3 + i, frames, extraMix[i]);
   for (int f = 0; f < frames; f++) {
     control_frame(g, node, f);
     float gL = 1.0f, gR = 1.0f;
@@ -14359,6 +14497,11 @@ static void process_output(Circuit& g, Node& node, int frames) {
     node.buf[kPortRight][f] = r;
     g.outL[f] += l;
     g.outR[f] += r;
+    for (int i = 0; i < 6; i++) {
+      const double y = extraMix[i][f] * (double)vol;
+      node.buf[3 + i][f] = y;
+      g.outAux[i][f] += y;
+    }
   }
 }
 
@@ -14486,6 +14629,7 @@ static void process_bypass(Circuit& g, Node& node, int frames) {
     || node.typeId == kTypeSoftwaveOsc
     || node.typeId == kTypeSineWarp
     || node.typeId == kTypeFilterMorphOscillator
+    || node.typeId == kTypeFluvNoise
     || node.typeId == kTypeSoftpopOscillator
     || node.typeId == kTypeSoftpop2
     || node.typeId == kTypeTheremin
@@ -15000,6 +15144,7 @@ extern "C" int soemdsp_graph_add_node(int handle, unsigned int nodeIdHash, int t
     || typeId == kTypeLutCell
     || typeId == kTypeLookaheadLimiter
     || typeId == kTypePumpLimiter
+    || typeId == kTypePumpCurve
     || typeId == kTypeSidechain
     || typeId == kTypeAudioPlayer
     || typeId == kTypeSamplePlayer
@@ -15016,6 +15161,7 @@ extern "C" int soemdsp_graph_add_node(int handle, unsigned int nodeIdHash, int t
     || typeId == kTypeSoftwaveOsc
     || typeId == kTypeSineWarp
     || typeId == kTypeFilterMorphOscillator
+    || typeId == kTypeFluvNoise
     || typeId == kTypeSoftpopOscillator
     || typeId == kTypeSoftpopFilter
     || typeId == kTypeSoftpop2
@@ -16295,6 +16441,10 @@ static void dispatch_process_node(Circuit& g, Node& node, int frames) {
       process_pump_limiter(g, node, frames);
       return;
     }
+    if (node.typeId == kTypePumpCurve) {
+      process_pump_curve(g, node, frames);
+      return;
+    }
     if (node.typeId == kTypeSidechain) {
       process_sidechain(g, node, frames);
       return;
@@ -16369,6 +16519,10 @@ static void dispatch_process_node(Circuit& g, Node& node, int frames) {
     }
     if (node.typeId == kTypeFilterMorphOscillator) {
       process_filter_morph_oscillator(g, node, frames);
+      return;
+    }
+    if (node.typeId == kTypeFluvNoise) {
+      process_fluv_noise(g, node, frames);
       return;
     }
     if (node.typeId == kTypeSoftpopOscillator) {
@@ -17049,6 +17203,7 @@ extern "C" int soemdsp_graph_process_block(int handle, int n) {
 
   zero_buf(g->outL, frames);
   zero_buf(g->outR, frames);
+  for (int i = 0; i < 6; i++) zero_buf(g->outAux[i], frames);
 
   // Block-rate Control: DSP reads current outs (start of quantum), then the
   // chase advances for the next quantum. Matches "JS is interface / per block."
@@ -17141,6 +17296,12 @@ extern "C" int soemdsp_graph_process_block(int handle, int n) {
   } else {
     g->busEarGain = 1.0;
   }
+  if (g->busEarGain != 1.0) {
+    const double eg = g->busEarGain;
+    for (int i = 0; i < 6; i++) {
+      for (int f = 0; f < frames; f++) g->outAux[i][f] *= eg;
+    }
+  }
 
   g->masterSamples += (double)frames;
   g->hostResetImpulse = 0;
@@ -17166,6 +17327,16 @@ extern "C" double* soemdsp_graph_block_output_left_ptr(int handle) {
 extern "C" double* soemdsp_graph_block_output_right_ptr(int handle) {
   Circuit* g = get(handle);
   return g ? g->outR : nullptr;
+}
+
+// Host channels: 0 = Left, 1 = Right, 2..7 = Output jacks 3..8.
+extern "C" double* soemdsp_graph_block_output_channel_ptr(int handle, int ch) {
+  Circuit* g = get(handle);
+  if (!g) return nullptr;
+  if (ch == 0) return g->outL;
+  if (ch == 1) return g->outR;
+  if (ch >= 2 && ch <= 7) return g->outAux[ch - 2];
+  return nullptr;
 }
 
 // Observe-only: pointer to last process_block's node.buf[port] (audio ports 0..7).
@@ -17347,5 +17518,5 @@ extern "C" int soemdsp_graph_version() {
   // 170: EQ Filter ZDF ƒ input (resolve_osc_hz)
   // 171: ƒ on Ladder/303/Mode/Cookbook/IIR/Papoulis/ZDF filters + soemdsp_graph_node_effective_hz
   // 174: live add/remove/connect/disconnect keep compiled and other nodes' native handles
-  return 285; // 285: Pulse Train Fwd-Rev + polarity (attack / peak right; - is the opposite). was 284: Flower Child Filter Rev3 always runs L/R cores with independent dither. was 283: Flower Child Filter Rev3 dither is Filter Morph noise band (Start/Full/Amount). was 282: Flower Child Filter Rev3 ƒ (kPortF) replaces Frequency via resolve_osc_hz. was 281: Flower Child Filter Rev3 (235) Hz Frequency + Robin phasor dither. was 280: Pulse Train Fwd-Rev is a continuous 0..1 bias (0 Forward, 0.5 out-and-back, 1 Rev-Fwd). was 279: Filter Morph Osc Wave L / Wave R are two voices (R = L + 90 deg, own dither; Wave jack removed). was 278: Attenuverter / Range / Slew / Sabrina mix-size-recycle-LFO / Pump / Noise Gate / Lookahead sample-accurate while chasing. was 277: Noise Generator Mean/Deviation/Shape/Amplitude sample-accurate while chasing. was 276: Noise Gate (234) Open/Close hysteresis, Attack/Hold/Release/Range, stereo-linked peak + optional SC. was 275: Logic (233) AND/OR/XOR/NAND/NOR/XNOR/NOT + Thru, gate_on. was 274: Robin Sinusoid Reset trigger height (partial_reset_phase; robin_sinusoid v2). was 273: Robin Sinepulse __Elapsed on kPortPhase01 (seconds since newest hit, -1 idle) for the kick-body face playhead (robin_sinepulse v9 preview). was 272: Filter Morph Osc Knee Tri (waveform 3, was Triangle; index unchanged) + Reset trigger height (partial_reset_phase; filter_morph_oscillator v13). was 271: Pulse Train Shape TriSaw (was Tri) / Pulse Left / Center / Right / Rect Sine + Morph (mix slot, default 0.5; Morph 0.5 = old shapes bit-identical; pulse_train v22); Rect Sine = shared soemdsp_maths::rect_sine (math/rect_sine.h). was 270: Reset trigger height on Basic Shape + Sine Warp (in-module gate_hit_height + partial_reset_phase; Sine Warp keeps its reset BLEP). was 269: Reset trigger height (partial_reset_phase) on SinCos4 / SinCos, Softwave, Theremin, Hypersaw2 (master + vibrato phase, voices not reseeded), Robin Oscillator, Vibrato Generator, Wow & Flutter, Softpop Oscillator, Softpop 2: |h|=1 full reset as before, else soemdsp_*_partial_reset. was 268: Oscillator Reset is a trigger input with height h (-1..1): phase moves |h| of the way to the reset point (shortest wrapped path, h<0 the long way; |h|=1 hard reset incl. native state clear, h=0 none) via soemdsp::math::partial_reset_phase + gate_hit_height (trigger.h) on PolyBLEP / BLIT / RoundShape / Ellipsoid. was 267: Sample & Hold Trigger level = latched value, signed (Ext if wired else Left; Polarity + Amplitude; sample_hold v7). was 266: Pulse Train Pulse Mode 3 Reverse-Forward (Forward-Reverse rotated half a trip: return leg then out leg, amps End->Start->End; pulse_train v21). was 265: Pulse Train Loop Reverse amps run Amp End -> Amp Start (t=0 pulse no longer an Amp Start spike; pulse_train v20). was 264: f out (kPortSaw, Hz) on Electro Kick / Snare / Tom / Hat / Clap and Modal Snare (kick/tom/snare = body pitch incl. Bend; hat = main filter centre; clap = burst band-pass centre). was 263: Electro Snare Noise Q (resonance) + Click (level) on every algorithm: 808 / 909 / FM get a Q bell (q/2-1)*constPeakBP on their noise and Click (909 scales its click by c/0.4; 808 / FM add the Simmons click above 0.4); defaults bit-identical (electro_snare v7). was 262: Pulse Explosion stereo XY fireworks (Left=X Right=Y Out=(L+R)/2; spread around x0/y0; hold; gate_hit; pulse_explosion v5). was 261: Filter Morph Osc waveform Sine (index 7; filter_morph_oscillator v9). was 260: Trigger Divider (Trigger Counter) drops Threshold, gate_hit, LED count|division via __Count. was 259: Clock Divider Clock/Reset use gate_hit (trigger_divider v5); Clock in is white Trigger chrome. was 258: Filter Morph Osc Dither is a pitch-tracked noise band (2-pole HP at ƒ, 2-pole LP at 4ƒ) mixed Start→Full; locked PolyBLEP phasor (filter_morph_oscillator v8). was 257: Filter Morph Osc Dither Start / Full / Amount (hpfFrequency / lpfFrequency / mix; log-Hz ramp; filter_morph_oscillator v7). was 256: Filter Morph Osc Dither is HP-noise FM (sizzle toward Nyquist; filter_morph_oscillator v6). was 255: Pulse Train Frequency (timeDenominator, Hz) + Duty (timeNumerator, pulsing fraction) replace Time / End Delay; cycle = 1/ƒ; __Count = count + Pulse Mode/4, __Delay on isIdle. was 254: DSF Morphing Osc Spacing (stages, default 1) + Odd/Even (feedback, 0 all / 1 odd); dsf v22. Type 46 stays harmonic-only. was 253: Filter Morph Osc PolyBLEP jumps / PolyBLAMP corners before the filter + Dither Off/On (lfoStyle, default On; filter_morph_oscillator v5). was 252: Pulse Train ƒ scales the Count→End Delay cycle into 1/ƒ; Loop / Recalc Off / Shape Saw defaults (pulse_train v18). was 251: Pulse Train ƒ is period lock (1/ƒ wrap), Time is the grain window (pulse_train v17). was 250: Pulse Train End Delay bipolar (negative ends early; pulse_train v16). was 249: Pulse Train Pulse Mode Forward / Forward-Reverse / Reverse (lfoStyle; pulse_train v15). was 248: DSF Morphing Osc Morph/Symmetry/Width/Rotate/Slice (dsf v21); DSF Oscillator harmonic SineSaw kit, no Spacing/Odd-Even. was 247: Pulse Train Shape (Mono green) + Trigger (Right) + End (Left); pulse_train v14. was 246: Pulse Train Shape Trigger/Gate/Saw/Ramp/Tri/Sine (oversample slot) + AA Robin1/Robin2 (waveform 3/4); pulse_train v13. was 245: Pulse Train AA Off/Fixed/Dither/Robin (waveform 0..3): Dither = stack 0/+1 re-roll; Robin = Schmidt ±1 re-roll; End Delay in both; pulse_train v12. was 244: Pulse Train Dither is Robin ±1 (short/mid/long around round(t*sr)); End Delay / Loop wrap use the same land; Fixed unchanged stack 0/+1; pulse_train v11. was 243: Pulse Train Antialiasing Off / Fixed / Dither (waveform 0/1/2): Fixed = seed-locked stack 0/+1; Dither = same but epoch bumps on Trigger/Loop; pulse_train v10. was 242: Pulse Train Antialiasing is stack-gated + Seed-locked (waveform + seed slots, default Off / Seed 0): only pulses that would share a sample are 2-level rounded; isolated pulses stay exact; retrigger keeps offsets until Seed changes; pulse_train v9. was 241: Pulse Train Antialiasing Off/On (waveform slot, default Off): unbiased 2-level stochastic rounding of t_i*sr; pulse_train v8. was 240: Robin Sinepulse Voices is fade-stack depth (one live kick; robin_sinepulse v8). was 239: Pulse Train Dual (lfoStyle) + End Delay (timeNumerator); antialiasing/dither removed; Robin Sinepulse Voice Fade On/Off (lfoStyle, default On; Off = Fade Time 0 hard cut). pulse_train v7. was 238: Robin Sinepulse Voices (stages slot, 1..8, default 1) + Fade Time (offsetMs slot, ms, default 2; 0 = hard cut): a retrigger steals the oldest voice and fades it out instead of cutting it (robin_sinepulse v7). was 237: Pulse Train Dither (lfoStyle slot, default On): unbiased 2-level stochastic rounding of t_i*sr so dense trains don't stack on the sample grid; pulse_train v6. was 236: DSF Morphing Osc (type 232) keeps Spacing/Odd-Even; DSF Oscillator is harmonic-only; Square↔Saw blend label; dsf v20. was 235: DSF Oscillator Spacing back to a pitch-tracking ratio (partial k at f*(1+(k-1)*Spacing)); dsf v19. was 234: DSF Oscillator Spacing frequency-compensated (ratio at 440 Hz); dsf v18. was 233: DSF Oscillator saw-to-sine restored from SineSaw.cxx (original leak/amp/kernel, floor(n) with top-partial fade); dsf v17. was 232: DSF Oscillator Spacing (center slot, partial k at f*(1+(k-1)*Spacing), 1 harmonic) + Odd/Even (resonance slot, 0 all / 1 odd only); dsf v16. was 231: DSF Oscillator top partial fades with a continuous partial count (no click when the count steps; dsf v15). was 230: PolyBLEP Antialiasing (lfoStyle slot): 0 Off (naive waveforms, no BLEP/BLAMP) / 1 PolyBLEP (default, unchanged). was 229: Pulse Train Reset input removed (single Trigger input restarts the train / Loop cycle, abs-rise velocity; pulse_train v4). was 228: Pulse Train Recalculate On Trigger (mode slot, 1 On default = old latch / 0 Off live schedule) + params in effect on Saw/Ramp/Square/Tri/Sine/Trisaw/CenterSquare for the face. was 227: combined rebuild with Modal Snare Recalculate On Trigger latching Tune / Tone / Snappy (3f7831f1). was 226: Pulse Train Mode (timingMode slot): 0 One shot (default) / 1 Loop (free-run, cycle = Time or 1/f, u_i = i/N); no 12 s Time cap. was 225: Pulse Train ƒ input (kPortF): wired and > 0, End Time = 1/ƒ s (latched at trigger, 12 s cap); ƒ <= 0 uses End Time; __End on kPortRamp. was 224: Pulse Train (231) lands (Trigger/Reset, gaps t_i = End*E_k(u_i), Out / End, __Elapsed; was reserved as 222). was 223: Clock gate compared in fractional phase (clock v7): Start 0 / End 1 never drops low at fractional periods (222 reserved: Pulse Train). was 221: Pulse Explosion Timing removed (Random only; timingMode slot unused). was 220: Pulse Explosion __Elapsed on kPortPhase01 (seconds since trigger, -1 idle) for the face playhead. was 219: Modal Snare Recalculate On Trigger also latches Body / Noise. was 218: Pulse Explosion Timing (timingMode slot): 0 Random (default, unchanged) / 1 Exp / 2 Log / 3 Lin. was 217: Modal Snare Body / Noise (mix slot, -1 body only .. 0 unchanged .. +1 noise = wires + click only). was 216: Clock ƒ input (kPortF, absolute Hz) replaces Rate while wired; Clock Amplitude latched per pulse (Digital at gate rise, Analog at cycle start, T at tick). was 215: drum Ring2 resonator is a rotating phasor (Electro Kick / Snare / Tom, Modal Snare): a pitch change (Bend) no longer pumps energy, fast retriggers with Bend no longer run away; single hits keep their level. was 214: PolyBLEP Cycle (timingMode slot): 0 Free run (default, unchanged) / 1 Single trigger (one cycle per Reset hit, silent otherwise). was 213: Recalculate On Trigger (timingMode slot, 0 Off default) on Electro Kick / Snare / Tom / Hat / Clap, Modal Snare, Robin Sinepulse: On latches the decay params on each hit. was 212: Resonant Compressor (230): Resonant Envelope Abs-rise detector, SC as gain; In L/R + Sidechain (Morph), outs Out L/R, Gain (Saw), Env (Square). was 211: Resonant Follower (229) split from Resonant Envelope Follow (In on Morph bus; Follow Source diffusionAmount, Follow Detect lfoVariation); Resonant Envelope Follow jack / switches removed (Trigger path bit-identical). was 210: Ping Pong Delay HPF / LPF Shelf (center / shape slots, 0..100 %, 100 = full filter). was 209: Resonant Envelope Hold (lfoAmplitude slot; 0 Input above 0 / 1 Follows detect: Shared/Rise/Abs rise hold only while their detect is true). was 208: Clock Pulse Start (center) / Pulse End (shape) replace duty; clock __Phase on kPortPhase01. was 207: Electro Snare Simmons Noise Q (resonance, 0.5..4, default 2) + Simmons Click (level, default 0.4); defaults bit-identical. was 206: Modal Snare (228) split from Electro Snare Modal, + Noise Freq (lpfFrequency) / Noise Q (resonance) / Click (level) / Click Decay ms (offsetMs) / Noise Tilt (saturate); Electro Snare Modal option removed (id 3 plays as 808). was 205: Ping Pong Delay Amplitude unclamped (was hidden clamp 0..2 in DSP). was 204: Ping Pong Delay separate HPF Poles (stages slot) and LPF Poles (waveform slot), 1..4 each. was 203: Resonant Envelope experiment switches (Trigger Detect 0..5 local, Velocity diffusionSize, Follow Source diffusionAmount, Follow Detect lfoVariation). was 202: Ping Pong Delay feedback filter Poles 1..4 (stages slot; 1 = original one-pole, 2..4 cascaded TPT). was 201: 201: EXPERIMENT gate_hit = every absolute positive change (|x| rises; velocity = |x[n]|-|x[n-1]|). was 200: RMS Meter stereo: L (id In) + R inputs, R outs (RMS R Right, dB R Square, Env Inverted R Tri), nativeHandleR meters R when wired. was 199: RMS Meter (227): one-pole mean square; RMS / dB (-120 floor) / Env Inverted. was 198: Resonant Envelope Mode (Envelope / Filter, waveform slot) + Trigger detect (Cross 0 / Saw reset, lfoStyle slot). was 197: Amp <-> dB reads |amp| in Amp->dB mode (bipolar audio no longer floors to -120). was 196: Resonant Envelope SC out (kPortSaw, clamp(1 - Out/Amplitude, 0, 1)). was 195: gate_hit / gate_on back to the original law (hit = first sample > 0 after <= 0; on = x > 0); Resonant Envelope Follow = rising-sample step latch. was 194: Resonant Envelope Follow input (Morph live bus, |x| is the SVF target). was 193: DSF Oscillator face playhead (__Phase on kPortPhase01). was 192: Resonant Envelope Frequency knob (unwired f uses it for Tracking). was 191: Electro Clap (226). was 190: Mode Resonator / Random Clock / Turing Machine / Degree Turing back to their original mono outs (stereo R removed). was 189: fBm back to its 3 outs Out X / Out Y / Out Z (stereo R axes removed). was 188: Electro Hat (223) / Electro Tom (224) / Electro Kick (225). was 187: stereo L/R outs: Bradley 2A, fBm (X/Y/Z R on Tri/Sine/Trisaw), Mode Resonator (R quadrature), Random Clock / Turing Machine / Degree Turing (R Seed lane), Softpop 2 R Pitch Mod. was 186: Electro Snare stereo (Snare L -> Left, Snare R -> Right, Env -> Mono). was 185: Electro Snare (type 222). was 184: Robin Sinepulse 0–1 jack is log sweep position (L = max(Low, 20 Hz)). was 183: Flower Child ƒ input removed (Cutoff knob only again). was 182: SinCos / SinCos4 Polarity (center 0 Bipolar / 1 Unipolar). was 181: Flower Child ƒ in (resonance-pitch Hz replaces Cutoff). was 180: Robin Sinepulse 0–1 jack is sweep position (High=1, Low=0). was 179: Resonant Envelope (221)
+  return 289; // 289: Pulse Train Spacing Expo/Harmonic/Rational (curve 0 = linear in every family). was 288: Output/Input host channels 3-8 (bus outAux). was 287: Fluv Noise (236) fluvNoise + Pump Curve (237). was 286: Fluv Noise (236) + Pump Curve (237). was 285: Pulse Train Fwd-Rev + polarity (attack / peak right; - is the opposite). was 284: Flower Child Filter Rev3 always runs L/R cores with independent dither. was 283: Flower Child Filter Rev3 dither is Filter Morph noise band (Start/Full/Amount). was 282: Flower Child Filter Rev3 ƒ (kPortF) replaces Frequency via resolve_osc_hz. was 281: Flower Child Filter Rev3 (235) Hz Frequency + Robin phasor dither. was 280: Pulse Train Fwd-Rev is a continuous 0..1 bias (0 Forward, 0.5 out-and-back, 1 Rev-Fwd). was 279: Filter Morph Osc Wave L / Wave R are two voices (R = L + 90 deg, own dither; Wave jack removed). was 278: Attenuverter / Range / Slew / Sabrina mix-size-recycle-LFO / Pump / Noise Gate / Lookahead sample-accurate while chasing. was 277: Noise Generator Mean/Deviation/Shape/Amplitude sample-accurate while chasing. was 276: Noise Gate (234) Open/Close hysteresis, Attack/Hold/Release/Range, stereo-linked peak + optional SC. was 275: Logic (233) AND/OR/XOR/NAND/NOR/XNOR/NOT + Thru, gate_on. was 274: Robin Sinusoid Reset trigger height (partial_reset_phase; robin_sinusoid v2). was 273: Robin Sinepulse __Elapsed on kPortPhase01 (seconds since newest hit, -1 idle) for the kick-body face playhead (robin_sinepulse v9 preview). was 272: Filter Morph Osc Knee Tri (waveform 3, was Triangle; index unchanged) + Reset trigger height (partial_reset_phase; filter_morph_oscillator v13). was 271: Pulse Train Shape TriSaw (was Tri) / Pulse Left / Center / Right / Rect Sine + Morph (mix slot, default 0.5; Morph 0.5 = old shapes bit-identical; pulse_train v22); Rect Sine = shared soemdsp_maths::rect_sine (math/rect_sine.h). was 270: Reset trigger height on Basic Shape + Sine Warp (in-module gate_hit_height + partial_reset_phase; Sine Warp keeps its reset BLEP). was 269: Reset trigger height (partial_reset_phase) on SinCos4 / SinCos, Softwave, Theremin, Hypersaw2 (master + vibrato phase, voices not reseeded), Robin Oscillator, Vibrato Generator, Wow & Flutter, Softpop Oscillator, Softpop 2: |h|=1 full reset as before, else soemdsp_*_partial_reset. was 268: Oscillator Reset is a trigger input with height h (-1..1): phase moves |h| of the way to the reset point (shortest wrapped path, h<0 the long way; |h|=1 hard reset incl. native state clear, h=0 none) via soemdsp::math::partial_reset_phase + gate_hit_height (trigger.h) on PolyBLEP / BLIT / RoundShape / Ellipsoid. was 267: Sample & Hold Trigger level = latched value, signed (Ext if wired else Left; Polarity + Amplitude; sample_hold v7). was 266: Pulse Train Pulse Mode 3 Reverse-Forward (Forward-Reverse rotated half a trip: return leg then out leg, amps End->Start->End; pulse_train v21). was 265: Pulse Train Loop Reverse amps run Amp End -> Amp Start (t=0 pulse no longer an Amp Start spike; pulse_train v20). was 264: f out (kPortSaw, Hz) on Electro Kick / Snare / Tom / Hat / Clap and Modal Snare (kick/tom/snare = body pitch incl. Bend; hat = main filter centre; clap = burst band-pass centre). was 263: Electro Snare Noise Q (resonance) + Click (level) on every algorithm: 808 / 909 / FM get a Q bell (q/2-1)*constPeakBP on their noise and Click (909 scales its click by c/0.4; 808 / FM add the Simmons click above 0.4); defaults bit-identical (electro_snare v7). was 262: Pulse Explosion stereo XY fireworks (Left=X Right=Y Out=(L+R)/2; spread around x0/y0; hold; gate_hit; pulse_explosion v5). was 261: Filter Morph Osc waveform Sine (index 7; filter_morph_oscillator v9). was 260: Trigger Divider (Trigger Counter) drops Threshold, gate_hit, LED count|division via __Count. was 259: Clock Divider Clock/Reset use gate_hit (trigger_divider v5); Clock in is white Trigger chrome. was 258: Filter Morph Osc Dither is a pitch-tracked noise band (2-pole HP at ƒ, 2-pole LP at 4ƒ) mixed Start→Full; locked PolyBLEP phasor (filter_morph_oscillator v8). was 257: Filter Morph Osc Dither Start / Full / Amount (hpfFrequency / lpfFrequency / mix; log-Hz ramp; filter_morph_oscillator v7). was 256: Filter Morph Osc Dither is HP-noise FM (sizzle toward Nyquist; filter_morph_oscillator v6). was 255: Pulse Train Frequency (timeDenominator, Hz) + Duty (timeNumerator, pulsing fraction) replace Time / End Delay; cycle = 1/ƒ; __Count = count + Pulse Mode/4, __Delay on isIdle. was 254: DSF Morphing Osc Spacing (stages, default 1) + Odd/Even (feedback, 0 all / 1 odd); dsf v22. Type 46 stays harmonic-only. was 253: Filter Morph Osc PolyBLEP jumps / PolyBLAMP corners before the filter + Dither Off/On (lfoStyle, default On; filter_morph_oscillator v5). was 252: Pulse Train ƒ scales the Count→End Delay cycle into 1/ƒ; Loop / Recalc Off / Shape Saw defaults (pulse_train v18). was 251: Pulse Train ƒ is period lock (1/ƒ wrap), Time is the grain window (pulse_train v17). was 250: Pulse Train End Delay bipolar (negative ends early; pulse_train v16). was 249: Pulse Train Pulse Mode Forward / Forward-Reverse / Reverse (lfoStyle; pulse_train v15). was 248: DSF Morphing Osc Morph/Symmetry/Width/Rotate/Slice (dsf v21); DSF Oscillator harmonic SineSaw kit, no Spacing/Odd-Even. was 247: Pulse Train Shape (Mono green) + Trigger (Right) + End (Left); pulse_train v14. was 246: Pulse Train Shape Trigger/Gate/Saw/Ramp/Tri/Sine (oversample slot) + AA Robin1/Robin2 (waveform 3/4); pulse_train v13. was 245: Pulse Train AA Off/Fixed/Dither/Robin (waveform 0..3): Dither = stack 0/+1 re-roll; Robin = Schmidt ±1 re-roll; End Delay in both; pulse_train v12. was 244: Pulse Train Dither is Robin ±1 (short/mid/long around round(t*sr)); End Delay / Loop wrap use the same land; Fixed unchanged stack 0/+1; pulse_train v11. was 243: Pulse Train Antialiasing Off / Fixed / Dither (waveform 0/1/2): Fixed = seed-locked stack 0/+1; Dither = same but epoch bumps on Trigger/Loop; pulse_train v10. was 242: Pulse Train Antialiasing is stack-gated + Seed-locked (waveform + seed slots, default Off / Seed 0): only pulses that would share a sample are 2-level rounded; isolated pulses stay exact; retrigger keeps offsets until Seed changes; pulse_train v9. was 241: Pulse Train Antialiasing Off/On (waveform slot, default Off): unbiased 2-level stochastic rounding of t_i*sr; pulse_train v8. was 240: Robin Sinepulse Voices is fade-stack depth (one live kick; robin_sinepulse v8). was 239: Pulse Train Dual (lfoStyle) + End Delay (timeNumerator); antialiasing/dither removed; Robin Sinepulse Voice Fade On/Off (lfoStyle, default On; Off = Fade Time 0 hard cut). pulse_train v7. was 238: Robin Sinepulse Voices (stages slot, 1..8, default 1) + Fade Time (offsetMs slot, ms, default 2; 0 = hard cut): a retrigger steals the oldest voice and fades it out instead of cutting it (robin_sinepulse v7). was 237: Pulse Train Dither (lfoStyle slot, default On): unbiased 2-level stochastic rounding of t_i*sr so dense trains don't stack on the sample grid; pulse_train v6. was 236: DSF Morphing Osc (type 232) keeps Spacing/Odd-Even; DSF Oscillator is harmonic-only; Square↔Saw blend label; dsf v20. was 235: DSF Oscillator Spacing back to a pitch-tracking ratio (partial k at f*(1+(k-1)*Spacing)); dsf v19. was 234: DSF Oscillator Spacing frequency-compensated (ratio at 440 Hz); dsf v18. was 233: DSF Oscillator saw-to-sine restored from SineSaw.cxx (original leak/amp/kernel, floor(n) with top-partial fade); dsf v17. was 232: DSF Oscillator Spacing (center slot, partial k at f*(1+(k-1)*Spacing), 1 harmonic) + Odd/Even (resonance slot, 0 all / 1 odd only); dsf v16. was 231: DSF Oscillator top partial fades with a continuous partial count (no click when the count steps; dsf v15). was 230: PolyBLEP Antialiasing (lfoStyle slot): 0 Off (naive waveforms, no BLEP/BLAMP) / 1 PolyBLEP (default, unchanged). was 229: Pulse Train Reset input removed (single Trigger input restarts the train / Loop cycle, abs-rise velocity; pulse_train v4). was 228: Pulse Train Recalculate On Trigger (mode slot, 1 On default = old latch / 0 Off live schedule) + params in effect on Saw/Ramp/Square/Tri/Sine/Trisaw/CenterSquare for the face. was 227: combined rebuild with Modal Snare Recalculate On Trigger latching Tune / Tone / Snappy (3f7831f1). was 226: Pulse Train Mode (timingMode slot): 0 One shot (default) / 1 Loop (free-run, cycle = Time or 1/f, u_i = i/N); no 12 s Time cap. was 225: Pulse Train ƒ input (kPortF): wired and > 0, End Time = 1/ƒ s (latched at trigger, 12 s cap); ƒ <= 0 uses End Time; __End on kPortRamp. was 224: Pulse Train (231) lands (Trigger/Reset, gaps t_i = End*E_k(u_i), Out / End, __Elapsed; was reserved as 222). was 223: Clock gate compared in fractional phase (clock v7): Start 0 / End 1 never drops low at fractional periods (222 reserved: Pulse Train). was 221: Pulse Explosion Timing removed (Random only; timingMode slot unused). was 220: Pulse Explosion __Elapsed on kPortPhase01 (seconds since trigger, -1 idle) for the face playhead. was 219: Modal Snare Recalculate On Trigger also latches Body / Noise. was 218: Pulse Explosion Timing (timingMode slot): 0 Random (default, unchanged) / 1 Exp / 2 Log / 3 Lin. was 217: Modal Snare Body / Noise (mix slot, -1 body only .. 0 unchanged .. +1 noise = wires + click only). was 216: Clock ƒ input (kPortF, absolute Hz) replaces Rate while wired; Clock Amplitude latched per pulse (Digital at gate rise, Analog at cycle start, T at tick). was 215: drum Ring2 resonator is a rotating phasor (Electro Kick / Snare / Tom, Modal Snare): a pitch change (Bend) no longer pumps energy, fast retriggers with Bend no longer run away; single hits keep their level. was 214: PolyBLEP Cycle (timingMode slot): 0 Free run (default, unchanged) / 1 Single trigger (one cycle per Reset hit, silent otherwise). was 213: Recalculate On Trigger (timingMode slot, 0 Off default) on Electro Kick / Snare / Tom / Hat / Clap, Modal Snare, Robin Sinepulse: On latches the decay params on each hit. was 212: Resonant Compressor (230): Resonant Envelope Abs-rise detector, SC as gain; In L/R + Sidechain (Morph), outs Out L/R, Gain (Saw), Env (Square). was 211: Resonant Follower (229) split from Resonant Envelope Follow (In on Morph bus; Follow Source diffusionAmount, Follow Detect lfoVariation); Resonant Envelope Follow jack / switches removed (Trigger path bit-identical). was 210: Ping Pong Delay HPF / LPF Shelf (center / shape slots, 0..100 %, 100 = full filter). was 209: Resonant Envelope Hold (lfoAmplitude slot; 0 Input above 0 / 1 Follows detect: Shared/Rise/Abs rise hold only while their detect is true). was 208: Clock Pulse Start (center) / Pulse End (shape) replace duty; clock __Phase on kPortPhase01. was 207: Electro Snare Simmons Noise Q (resonance, 0.5..4, default 2) + Simmons Click (level, default 0.4); defaults bit-identical. was 206: Modal Snare (228) split from Electro Snare Modal, + Noise Freq (lpfFrequency) / Noise Q (resonance) / Click (level) / Click Decay ms (offsetMs) / Noise Tilt (saturate); Electro Snare Modal option removed (id 3 plays as 808). was 205: Ping Pong Delay Amplitude unclamped (was hidden clamp 0..2 in DSP). was 204: Ping Pong Delay separate HPF Poles (stages slot) and LPF Poles (waveform slot), 1..4 each. was 203: Resonant Envelope experiment switches (Trigger Detect 0..5 local, Velocity diffusionSize, Follow Source diffusionAmount, Follow Detect lfoVariation). was 202: Ping Pong Delay feedback filter Poles 1..4 (stages slot; 1 = original one-pole, 2..4 cascaded TPT). was 201: 201: EXPERIMENT gate_hit = every absolute positive change (|x| rises; velocity = |x[n]|-|x[n-1]|). was 200: RMS Meter stereo: L (id In) + R inputs, R outs (RMS R Right, dB R Square, Env Inverted R Tri), nativeHandleR meters R when wired. was 199: RMS Meter (227): one-pole mean square; RMS / dB (-120 floor) / Env Inverted. was 198: Resonant Envelope Mode (Envelope / Filter, waveform slot) + Trigger detect (Cross 0 / Saw reset, lfoStyle slot). was 197: Amp <-> dB reads |amp| in Amp->dB mode (bipolar audio no longer floors to -120). was 196: Resonant Envelope SC out (kPortSaw, clamp(1 - Out/Amplitude, 0, 1)). was 195: gate_hit / gate_on back to the original law (hit = first sample > 0 after <= 0; on = x > 0); Resonant Envelope Follow = rising-sample step latch. was 194: Resonant Envelope Follow input (Morph live bus, |x| is the SVF target). was 193: DSF Oscillator face playhead (__Phase on kPortPhase01). was 192: Resonant Envelope Frequency knob (unwired f uses it for Tracking). was 191: Electro Clap (226). was 190: Mode Resonator / Random Clock / Turing Machine / Degree Turing back to their original mono outs (stereo R removed). was 189: fBm back to its 3 outs Out X / Out Y / Out Z (stereo R axes removed). was 188: Electro Hat (223) / Electro Tom (224) / Electro Kick (225). was 187: stereo L/R outs: Bradley 2A, fBm (X/Y/Z R on Tri/Sine/Trisaw), Mode Resonator (R quadrature), Random Clock / Turing Machine / Degree Turing (R Seed lane), Softpop 2 R Pitch Mod. was 186: Electro Snare stereo (Snare L -> Left, Snare R -> Right, Env -> Mono). was 185: Electro Snare (type 222). was 184: Robin Sinepulse 0–1 jack is log sweep position (L = max(Low, 20 Hz)). was 183: Flower Child ƒ input removed (Cutoff knob only again). was 182: SinCos / SinCos4 Polarity (center 0 Bipolar / 1 Unipolar). was 181: Flower Child ƒ in (resonance-pitch Hz replaces Cutoff). was 180: Robin Sinepulse 0–1 jack is sweep position (High=1, Low=0). was 179: Resonant Envelope (221)
 }

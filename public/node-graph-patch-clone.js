@@ -803,6 +803,14 @@ function cloneNodeGraphPatch(patch) {
         ...(node.type === "audioPlayer" && Number.isFinite(Number(node.samplePhase))
           ? { samplePhase: Math.max(0, Math.min(1, Number(node.samplePhase))) }
           : {}),
+        ...(node.type === "sabrinaReverbOriginal" && node.sabrinaPreset
+          && typeof normalizeNodeGraphSabrinaPreset === "function"
+          ? { sabrinaPreset: normalizeNodeGraphSabrinaPreset(node.sabrinaPreset) }
+          : {}),
+        ...(node.type === "pulseTrain" && node.pulseTrainPreset
+          && typeof normalizeNodeGraphPulseTrainPreset === "function"
+          ? { pulseTrainPreset: normalizeNodeGraphPulseTrainPreset(node.pulseTrainPreset) }
+          : {}),
         ...(node.type === "audioPlayer" && node.playlist && typeof nodeGraphAudioPlayerPlaylistNormalize === "function"
           ? { playlist: nodeGraphAudioPlayerPlaylistNormalize(node.playlist) }
           : {}),

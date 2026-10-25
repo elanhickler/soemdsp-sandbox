@@ -156,6 +156,7 @@ When fixing: mark `fixed`, one-line what changed, run `python scripts\smoke_test
 | B-112 | see | fixed | Band widget handles draw past the left/right widget edges |
 | B-113 | see | fixed | Face grid divider lines flicker with zoom (no 1px floor) |
 | B-114 | see | open | Flower Child Rev3 1D Trace OOM: Array buffer allocation failed |
+| B-115 | see | open | Deleted Text Box leaves glyphs and a draggable hit target |
 ---
 
 ## Inbox (unnumbered user reports)
@@ -1703,5 +1704,17 @@ Add `require_no_js_dsp()` to `scripts/smoke_test.py` (or `scripts/check_no_js_ds
 - What: ~8×/s `RangeError: Array buffer allocation failed` while drawing `flowerChildFilterRev3` 1D Trace. Audio/params keep running.
 - Repro: Rev3 with Sync on and both Left and Right inputs fed (stereo in). Heap climbs until the tab cannot allocate another ring-sized Float32Array.
 - Fix shape: `monoSyncScratch` is keyed by `nodeGraphScopeBufferObjectId` of live ring *subarray views*. `nodeGraphScopeRingAdvance` swaps a new view every scope post, so each draw allocates a fresh ~10 s Float32Array and never drops the old ones. Key scratch by stable `node:port` (or stamp rings with `nodeGraphScopeBufferKey`) and reuse one buffer. Writeup: `docs/B-114_TRACE_MONO_SYNC_OOM.md`.
+
+### B-115 — Deleted Text Box leaves glyphs and a draggable hit target
+- Status: open
+- Severity: see
+- Source: user 2026-10-25 (Argi), sandbox audioplugin
+- Related: B-055 (annotation mount); GPU text layers
+- Doc: `docs/B-115_TEXT_BOX_GHOST_AFTER_DELETE.md`
+- Files: `public/node-graph-viewport-perf.js` (`nodeGraphPositionGridHtml`); `public/node-graph-node-accessors.js` (`nodeGraphModuleMountContainers`); `public/node-graph-patch-core.js` (`applyNodeGraphPatchToDom`, `applyNodeGraphModuleElementFromPatch`)
+- What: After adding text and deleting the Text Box, the plate/body is gone but the glyphs remain and stay draggable.
+- Repro: Add Text Box, type, delete. Ghost text at the old position; no body; still draggable.
+- Root cause: GL present moves Text Box `.dsp-node` into `#nodeGraphTextFront` / `#nodeGraphTextBehind`. Delete only removes leftover nodes from `#nodeGraphNodes` and `#nodeGraphAnnotationNodes`, so the HTML field survives. GPU plates follow `patch.nodes`, so the body disappears. HTML text color stays visible; pointer-events stay on.
+- Fix shape: Sweep the GPU text layers on patch apply / delete; drop orphans in `nodeGraphPositionGridHtml`. Logged only; no code in this report.
 
 

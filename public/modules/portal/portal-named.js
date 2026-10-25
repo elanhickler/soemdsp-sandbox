@@ -23,12 +23,14 @@ function nodeGraphIsPortalIoCatalogType(type) {
  * Portal Title / bus name: C++ identifier [A-Za-z_][A-Za-z0-9_]*.
  * Display stays free-form (comment / jack override). Empty stays empty.
  */
-function normalizeNodeGraphNamedPortalAlias(value, fallback = "A") {
+const nodeGraphNamedPortalDefaultAlias = "initname";
+
+function normalizeNodeGraphNamedPortalAlias(value, fallback = nodeGraphNamedPortalDefaultAlias) {
   const raw = String(value ?? "").trim();
   if (!raw) {
     return "";
   }
-  const fb = fallback == null ? "A" : String(fallback);
+  const fb = fallback == null ? nodeGraphNamedPortalDefaultAlias : String(fallback);
   let s = raw.replace(/[^A-Za-z0-9_]+/g, "_").replace(/_+/g, "_");
   // Keep leading _; C++ allows _name. Drop trailing _ from punct collapse only.
   s = s.replace(/_+$/g, "");
@@ -65,7 +67,7 @@ function nodeGraphNamedPortalAliasIsTaken(patch, alias, universe = "") {
 }
 
 function nodeGraphNamedPortalUniqueAlias(patch, alias, universe = "") {
-  const base = String(alias || "A").trim() || "A";
+  const base = String(alias || nodeGraphNamedPortalDefaultAlias).trim() || nodeGraphNamedPortalDefaultAlias;
   if (!nodeGraphNamedPortalAliasIsTaken(patch, base, universe)) {
     return base;
   }
@@ -425,12 +427,12 @@ function nodeGraphNamedPortalAliasFromSourceOutlet(patch, sourceNodeId, sourcePo
     outletId = sanitize(port, "");
   }
   if (!titleId && !outletId) {
-    return "A";
+    return nodeGraphNamedPortalDefaultAlias;
   }
   if (titleId && outletId) {
-    return sanitize(`${titleId}_${outletId}`, "A") || "A";
+    return sanitize(`${titleId}_${outletId}`, nodeGraphNamedPortalDefaultAlias) || nodeGraphNamedPortalDefaultAlias;
   }
-  return titleId || outletId || "A";
+  return titleId || outletId || nodeGraphNamedPortalDefaultAlias;
 }
 
 /**

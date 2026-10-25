@@ -1737,6 +1737,21 @@ function nodeGraphAudioPlayerPlaylistCancelAdvanceTimer(nodeId) {
   }
 }
 
+function nodeGraphAudioPlayerPlaylistRefreshLoadUi(nodeId) {
+  if (typeof nodeGraphAudioPlayerPlaylistRefreshUi === "function") {
+    nodeGraphAudioPlayerPlaylistRefreshUi(nodeId);
+  }
+  const section = document.querySelector(
+    `.node-sample-waveform-display[data-node="${CSS.escape(String(nodeId || ""))}"]`,
+  );
+  if (section && typeof drawNodeGraphSampleWaveformDisplay === "function") {
+    drawNodeGraphSampleWaveformDisplay(section);
+  }
+  if (typeof nodeGraphGlGraphPresentSoon === "function") {
+    nodeGraphGlGraphPresentSoon();
+  }
+}
+
 function nodeGraphAudioPlayerPlaylistBeginLoad(nodeId) {
   const id = String(nodeId || "");
   nodeGraphAudioPlayerPlaylistCancelAdvanceTimer(id);
@@ -1744,6 +1759,7 @@ function nodeGraphAudioPlayerPlaylistBeginLoad(nodeId) {
   nodeGraphAudioPlayerPlaylistLoadBusy.set(id, true);
   nodeGraphAudioPlayerPlaylistAdvancePending.set(id, false);
   nodeGraphAudioPlayerPlaylistDebug(id, "begin-load");
+  nodeGraphAudioPlayerPlaylistRefreshLoadUi(id);
 }
 
 function nodeGraphAudioPlayerPlaylistSetLoadTarget(nodeId, item) {
@@ -1758,6 +1774,7 @@ function nodeGraphAudioPlayerPlaylistSetLoadTarget(nodeId, item) {
     name: item?.name || "",
     sampleId: item?.sampleId || "",
   });
+  nodeGraphAudioPlayerPlaylistRefreshLoadUi(id);
 }
 
 function nodeGraphAudioPlayerPlaylistEndLoad(nodeId) {
@@ -1766,6 +1783,7 @@ function nodeGraphAudioPlayerPlaylistEndLoad(nodeId) {
   nodeGraphAudioPlayerPlaylistLoadTarget.delete(id);
   nodeGraphAudioPlayerPlaylistAdvancePending.set(id, false);
   nodeGraphAudioPlayerPlaylistDebug(id, "end-load");
+  nodeGraphAudioPlayerPlaylistRefreshLoadUi(id);
 }
 
 function nodeGraphAudioPlayerPlaylistAutoAdvanceBlocked(nodeId) {
@@ -2247,9 +2265,13 @@ function nodeGraphAudioPlayerPlaylistPaintWaves(nodeId, { liveOnly = false } = {
   if (view && playingEntry && settings && typeof nodeGraphSampleWaveformContinuousView === "function") {
     const frames = Math.max(1, playingEntry.frames || 1);
     const rate = Math.max(1, nodeGraphFiniteNumber(playingEntry.sampleRate, 44100));
-    const windowFrames = settings.timeWindowSeconds <= 0
-      ? 1
-      : Math.max(1, Math.min(frames, Math.round(settings.timeWindowSeconds * rate)));
+    const windowFrames = typeof nodeGraphSampleWaveformSettingsWindowFrames === "function"
+      ? nodeGraphSampleWaveformSettingsWindowFrames(settings, frames, rate)
+      : (settings.timeWindowSeconds == null
+        ? frames
+        : (settings.timeWindowSeconds <= 0
+          ? 1
+          : Math.max(1, Math.min(frames, Math.round(settings.timeWindowSeconds * rate)))));
     const ratio = typeof nodeGraphSampleWaveformScrollLineRatio === "function"
       ? nodeGraphSampleWaveformScrollLineRatio(settings)
       : 0.5;
@@ -2531,7 +2553,8 @@ function nodeGraphAudioPlayerPlaylistPaintSlots(nodeId, list, { followPlaying = 
     );
     if (!item) {
       row.classList.add("is-empty");
-      row.classList.remove("is-played", "is-play-next");
+      row.classList.remove("is-played", "is-play-next", "is-loading");
+      row.dataset.loading = "false";
       row.dataset.slot = "empty";
       row.tabIndex = -1;
       row.setAttribute("aria-hidden", "true");
@@ -2559,7 +2582,13 @@ function nodeGraphAudioPlayerPlaylistPaintSlots(nodeId, list, { followPlaying = 
     const isPlaying = Boolean(itemKey) && itemKey === playingKey;
     const isPlayNext = Boolean(itemKey) && itemKey === playNextKey && !isPlaying;
     const isPlayed = Boolean(itemKey) && playedKeys.has(itemKey) && !isPlaying;
+    const loadingKey = nodeGraphAudioPlayerPlaylistLoadTarget.get(String(nodeId || "")) || "";
+    const isLoading = Boolean(nodeGraphAudioPlayerPlaylistLoadBusy.get(String(nodeId || "")))
+      && Boolean(itemKey)
+      && itemKey === loadingKey;
     row.dataset.playing = isPlaying ? "true" : "false";
+    row.dataset.loading = isLoading ? "true" : "false";
+    row.classList.toggle("is-loading", isLoading);
     row.dataset.queue = isPlaying ? "playing" : (isPlayNext ? "next" : (isPlayed ? "played" : "unplayed"));
     row.classList.toggle("is-played", isPlayed);
     row.classList.toggle("is-play-next", isPlayNext);

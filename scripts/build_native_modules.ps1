@@ -27,6 +27,8 @@ $modules = @(
   @{ Name = "comparator"; Simd = $false; Exports = @("soemdsp_comparator_create", "soemdsp_comparator_destroy", "soemdsp_comparator_sample", "soemdsp_comparator_up", "soemdsp_comparator_down", "soemdsp_comparator_change", "soemdsp_comparator_steady", "soemdsp_comparator_sign", "soemdsp_comparator_thru", "soemdsp_comparator_version") },
   @{ Name = "logic"; Simd = $false; Exports = @("soemdsp_logic_create", "soemdsp_logic_destroy", "soemdsp_logic_sample", "soemdsp_logic_and", "soemdsp_logic_or", "soemdsp_logic_xor", "soemdsp_logic_nand", "soemdsp_logic_nor", "soemdsp_logic_xnor", "soemdsp_logic_not", "soemdsp_logic_thru", "soemdsp_logic_b", "soemdsp_logic_version") },
   @{ Name = "noise_gate"; Simd = $false; Exports = @("soemdsp_noise_gate_create", "soemdsp_noise_gate_destroy", "soemdsp_noise_gate_sample", "soemdsp_noise_gate_left", "soemdsp_noise_gate_right", "soemdsp_noise_gate_gain", "soemdsp_noise_gate_env", "soemdsp_noise_gate_version") },
+  @{ Name = "fluv_noise"; Simd = $false; Exports = @("soemdsp_fluv_noise_create", "soemdsp_fluv_noise_destroy", "soemdsp_fluv_noise_set_seed", "soemdsp_fluv_noise_sample_stereo", "soemdsp_fluv_noise_left", "soemdsp_fluv_noise_right", "soemdsp_fluv_noise_version") },
+  @{ Name = "pump_curve"; Simd = $false; Exports = @("soemdsp_pump_curve_create", "soemdsp_pump_curve_destroy", "soemdsp_pump_curve_sample", "soemdsp_pump_curve_right", "soemdsp_pump_curve_gain", "soemdsp_pump_curve_env", "soemdsp_pump_curve_version") },
   @{ Name = "sample_delay"; Simd = $false; Exports = @("soemdsp_sample_delay_create", "soemdsp_sample_delay_destroy", "soemdsp_sample_delay_sample", "soemdsp_sample_delay_max_samples", "soemdsp_sample_delay_max_seconds", "soemdsp_sample_delay_version") },
   @{ Name = "exponential_delay"; Simd = $false; Exports = @("soemdsp_exponential_delay_create", "soemdsp_exponential_delay_destroy", "soemdsp_exponential_delay_sample", "soemdsp_exponential_delay_right", "soemdsp_exponential_delay_voice_count", "soemdsp_exponential_delay_voice_delay", "soemdsp_exponential_delay_voice_pan", "soemdsp_exponential_delay_max_samples", "soemdsp_exponential_delay_max_seconds", "soemdsp_exponential_delay_version") },
   @{ Name = "min_max"; Simd = $false; Exports = @("soemdsp_min_max_create", "soemdsp_min_max_destroy", "soemdsp_min_max_sample", "soemdsp_min_max_min", "soemdsp_min_max_version") }
@@ -79,6 +81,7 @@ $modules = @(
     "soemdsp_graph_snap_param",
     "soemdsp_graph_compile", "soemdsp_graph_process_block",
     "soemdsp_graph_block_output_left_ptr", "soemdsp_graph_block_output_right_ptr",
+    "soemdsp_graph_block_output_channel_ptr",
     "soemdsp_graph_ear_protect_gain",
     "soemdsp_graph_node_port_ptr",
     "soemdsp_graph_node_native_handle",
@@ -964,6 +967,18 @@ if ($node) {
   & $node.Source "$root\scripts\smoke_graph_flower_child_filter_rev3.mjs"
   if ($LASTEXITCODE -ne 0) {
     throw "Combined build: Flower Child Filter Rev3 smoke FAILED"
+  }
+  & $node.Source "$root\scripts\smoke_graph_fluv_noise.mjs"
+  if ($LASTEXITCODE -ne 0) {
+    throw "Combined build: Fluv Noise smoke FAILED"
+  }
+  & $node.Source "$root\scripts\smoke_graph_host_io8.mjs"
+  if ($LASTEXITCODE -ne 0) {
+    throw "Combined build: host 8-channel I/O smoke FAILED"
+  }
+  & $node.Source "$root\scripts\smoke_graph_pump_curve.mjs"
+  if ($LASTEXITCODE -ne 0) {
+    throw "Combined build: Pump Curve smoke FAILED"
   }
   & $node.Source "$root\scripts\smoke_noise_generator_chase.mjs"
   if ($LASTEXITCODE -ne 0) {

@@ -534,7 +534,7 @@ async function sendNodeGraphLiveNativeModule(liveNode, entry) {
 // Chrome caps wasm memories per process (~100); many standalone instances
 // hit that cap. Slim is for small used-sets when per-module files exist;
 // huge patches / site deploys should use combined.
-const nodeGraphLiveCombinedNativeModuleUrl = "native_modules/combined/soemdsp_combined.wasm?v=pt-polarity-1";
+const nodeGraphLiveCombinedNativeModuleUrl = "native_modules/combined/soemdsp_combined.wasm?v=pt-spacing-1";
 
 /** @type {null|"slim"|"combined"} */
 let nodeGraphLiveNativeWasmLoadModeResolved = null;
@@ -3415,7 +3415,7 @@ const nodeGraphLiveWorkletSourceFilesEfficient = [
   "./public/node-live-audio-worklet-scope-io.js?v=clap-1",
   "./public/node-live-audio-worklet-native-load.js?v=emo-shader-1",
   "./public/node-live-audio-worklet-native-exports.js?v=logic-ng-1",
-  "./public/node-live-audio-worklet-native-graph.js?v=pt-polarity-1",
+  "./public/node-live-audio-worklet-native-graph.js?v=pt-spacing-1",
   "./public/node-live-audio-worklet-meta-view.js?v=voice-preview-1",
   "./public/node-live-audio-worklet-set-plan.js?v=emo-1",
   "./public/node-live-audio-worklet-clear-plan.js?v=kbd-trig-1samp-20261013",
@@ -3430,7 +3430,7 @@ const nodeGraphLiveWorkletSourceFilesEfficient = [
   // Keypad slot math (host CV controller â€” used by sidecar publish + setKeypadInteraction).
   "./public/modules/keypad/keypad-math.js?v=keypad-hostcv-1",
   "./public/modules/_shared/controller-efficient-sidecar.js?v=kbd-trig-1samp-20261013",
-  "./public/node-live-audio-worklet-process.js?v=perf-20261015",
+  "./public/node-live-audio-worklet-process.js?v=io8-1",
 ];
 
 // Legacy JS DSP evaluators + evaluateFrame Ã¢â‚¬â€ RETIRED. Never load on any product.

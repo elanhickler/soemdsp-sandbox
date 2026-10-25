@@ -109,7 +109,7 @@ function nodeGraphPatchNodePortDisplayLabel(node, type, port, io) {
   }
   // Named portals: jack/IO label = effective Display (follows Title until override).
   // Bus identity stays on Title/alias (SyncBusAlias / wirelessRole unchanged).
-  // Empty alias falls back to defaultAlias ("A"), not the catalog type label.
+  // Empty alias falls back to defaultAlias ("initname"), not the catalog type label.
   if (
     typeof nodeGraphIsNamedPortalType === "function"
     && nodeGraphIsNamedPortalType(resolvedType)
@@ -127,7 +127,10 @@ function nodeGraphPatchNodePortDisplayLabel(node, type, port, io) {
       return title;
     }
     const defAlias = nodeGraphModuleDefinitions?.[resolvedType]?.defaultAlias;
-    return String(defAlias || "A").trim() || "A";
+    const fallback = typeof nodeGraphNamedPortalDefaultAlias === "string"
+      ? nodeGraphNamedPortalDefaultAlias
+      : "initname";
+    return String(defAlias || fallback).trim() || fallback;
   }
   // Metamodule shell: dynamic boundary names are the label (Left / ƒ / Poly).
   // Keep full Left/Right words — LayoutB stereo compaction would shrink to L/R.

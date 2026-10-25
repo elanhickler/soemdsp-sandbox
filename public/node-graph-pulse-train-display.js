@@ -39,7 +39,7 @@ function nodeGraphPulseTrainPreviewLoad() {
   if (nodeGraphPulseTrainPreviewWasm.promise || typeof fetch !== "function" || typeof WebAssembly === "undefined") {
     return nodeGraphPulseTrainPreviewWasm.promise;
   }
-  nodeGraphPulseTrainPreviewWasm.promise = fetch("/native_modules/pulse_train/pulse_train.wasm?v=pt-polarity-1")
+  nodeGraphPulseTrainPreviewWasm.promise = fetch("/native_modules/pulse_train/pulse_train.wasm?v=pt-spacing-1")
     .then((response) => {
       if (!response.ok) throw new Error(`pulse_train wasm HTTP ${response.status}`);
       return response.arrayBuffer();
@@ -71,6 +71,33 @@ function nodeGraphPulseTrainCurveShape(k, u) {
   return (Math.exp(k * u) - 1) / (Math.exp(k) - 1);
 }
 
+function nodeGraphPulseTrainTimeWarp(k, u, i, nFwd, loop, spacing) {
+  const fam = Math.round(Number(spacing) || 0);
+  if (!(u >= 0)) u = 0;
+  if (u > 1) u = 1;
+  if (fam === 1) {
+    const n = nFwd;
+    const h = loop
+      ? (n > 0 ? (i * (i + 1)) / (n * (n + 1)) : 0)
+      : (nFwd > 1 ? (i * (i + 1)) / ((n - 1) * n) : 0);
+    const w = Math.min(1, Math.abs(k) * 0.1);
+    if (!(k < 0)) return u + w * (h - u);
+    const hr = loop
+      ? (n > 0 ? (i * (2 * n - i + 1)) / (n * (n + 1)) : 0)
+      : (nFwd > 1 ? (i * (2 * n - i - 1)) / ((n - 1) * n) : 0);
+    return u + w * (hr - u);
+  }
+  if (fam === 2) {
+    let s = k * 0.1;
+    if (s > 0.99) s = 0.99;
+    if (s < -0.99) s = -0.99;
+    const den = 1 - s + 2 * s * u;
+    if (!(Math.abs(den) > 1e-12)) return u;
+    return ((1 + s) * u) / den;
+  }
+  return nodeGraphPulseTrainCurveShape(k, u);
+}
+
 function nodeGraphPulseTrainClampCount(count) {
   const n = Math.round(Number(count));
   if (!(n >= 1)) return 1;
@@ -94,6 +121,7 @@ function nodeGraphPulseTrainSchedule(section, node) {
     nodeGraphPulseTrainClampCount(p("count", 12)), endTime, p("curve", 3),
     p("ampStart", 1), p("ampEnd", 0.2), p("ampCurve", 0), p("amplitude", 1),
     Math.round(p("mode", 1)), pulseModeKnob, (1 - duty) * periodS, polarityKnob,
+    Math.round(p("spacing", 0)),
   ];
   // Audio running: draw the params the engine is playing with (latched at the
   // trigger / cycle start with Latch, live with Free; idle = what
@@ -164,10 +192,11 @@ function nodeGraphPulseTrainPolarity(v) {
 
 const nodeGraphPulseTrainIsDual = (p) => nodeGraphPulseTrainDualAmt(p) > 0;
 
-/** Schedule for args [count, time, curve, ampStart, ampEnd, ampCurve, amplitude, mode, pulseMode, endDelay, polarity]. */
+/** Schedule for args [count, time, curve, ampStart, ampEnd, ampCurve, amplitude, mode, pulseMode, endDelay, polarity, spacing]. */
 function nodeGraphPulseTrainPreviewJs(args, endTime) {
   const pulseMode = nodeGraphPulseTrainPulseMode(args[8]);
   const polarity = nodeGraphPulseTrainPolarity(args[10]);
+  const spacing = Math.round(Number(args[11]) || 0);
   const prefix = polarity < 0.5;
   const nFwd = nodeGraphPulseTrainClampCount(args[0]);
   const loop = args[7] > 0.5;
@@ -198,7 +227,8 @@ function nodeGraphPulseTrainPreviewJs(args, endTime) {
   } else {
     const dualAmt = nodeGraphPulseTrainDualAmt(pulseMode);
     const oneWay = (i, asLoop) => {
-      let t = !asLoop && i === fwdCap - 1 && fwdCap > 1 ? duration : duration * nodeGraphPulseTrainCurveShape(curve, asLoop ? i / fwdCap : (fwdCap > 1 ? i / (fwdCap - 1) : 0));
+      const u = asLoop ? i / fwdCap : (fwdCap > 1 ? i / (fwdCap - 1) : 0);
+      let t = !asLoop && i === fwdCap - 1 && fwdCap > 1 ? duration : duration * nodeGraphPulseTrainTimeWarp(curve, u, i, fwdCap, asLoop, spacing);
       if (!(t >= 0)) t = 0;
       if (t > duration) t = duration;
       return t;
@@ -275,7 +305,7 @@ function nodeGraphPulseTrainPreviewJs(args, endTime) {
   const end = Math.max(0.001, loop || delay !== 0 ? Math.max(0, cutoff) : last || 0.001);
   return {
     times, amps, end, duration, peak, loop, pulseMode, polarity, delay,
-    count, nFwd: fwdCap, curve, ampStart, ampEnd, ampCurve, amplitude,
+    count, nFwd: fwdCap, curve, spacing, ampStart, ampEnd, ampCurve, amplitude,
   };
 }
 
@@ -370,6 +400,7 @@ function drawNodeGraphPulseTrainDisplay(section) {
         duration: sched.duration * timeScale,
         axisEnd: end,
         curve: sched.curve,
+        spacing: sched.spacing,
         ampStart: sched.ampStart,
         ampEnd: sched.ampEnd,
         ampCurve: sched.ampCurve,

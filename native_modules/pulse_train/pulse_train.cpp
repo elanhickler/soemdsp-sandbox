@@ -8,8 +8,13 @@
 // The schedule is a closed form (no per-pulse buffer):
 //   N = Count (1..16384; Forward-Reverse: one-way max 8192 so 2N-1 fits),
 //   u_i = i / (N - 1) (N = 1: u = 0), i = 0..N-1
-//   E_k(u) = (e^(k u) - 1) / (e^k - 1)   (k = 0: E(u) = u, linear)
-//   t_i = Time * E_curve(u_i)             seconds after the trigger
+//   Spacing (time family; Amp Curve stays Expo):
+//     0 Expo (default): E_k(u) = (e^(k u) - 1) / (e^k - 1)  (k = 0: E(u) = u)
+//     1 Harmonic: mix even u with triangular multiples of a base τ
+//       (gaps 1τ, 2τ, 3τ, …). Curve 0 = linear; + = that mix; − = reverse
+//       (gaps Nτ, (N-1)τ, …). |Curve|/10 is the mix amount (10 = full).
+//     2 Rational: rational_curve01(u, Curve/10)  (0 = linear)
+//   t_i = Time * warp(u_i)                 seconds after the trigger
 //   a_i = (Start + (End Amp - Start) * E_ampCurve(u_i)) * Amplitude * velocity
 // Curve > 0: gaps grow (fast first, stretching out); 0: even; < 0: gaps
 // shrink (a real bouncing ball settling speeds up). First pulse at t = 0,
@@ -66,7 +71,7 @@
 // input (v4). Amplitude is not clamped.
 // soemdsp_pulse_train_preview() builds the same schedule for displays.
 // Recalculate On Trigger (recalc > 0.5, default Off): schedule params (Count,
-// Time, Curve, Amp Start / End / Curve, Amplitude, Pulse Mode, Curve polarity,
+// Time, Curve, Spacing, Amp Start / End / Curve, Amplitude, Pulse Mode, Curve polarity,
 // End Delay) latch at each Trigger / Loop cycle start. Free: live every sample. Loop
 // Free remaps elapsed into the new period and retargets the pulse index so
 // Frequency stays phase-continuous (raising ƒ does not wrap-reset). Mode,
@@ -113,6 +118,7 @@ struct PulseTrainState {
   bool loopSched;
   double pulseMode; // Fwd-Rev bias 0..1
   double polarity;  // 0 + (attack / peak right), 1 - (return / peak left)
+  int spacing;      // 0 Expo / 1 Harmonic / 2 Rational
   bool allAtZero;
   double allAmp;
   double spill[5]; // AA impulse energy delayed 1..4 samples
@@ -130,6 +136,7 @@ struct PreviewSched {
   double end;
   double delay;
   double curve;
+  int spacing;
   double ampStart;
   double ampEnd;
   double ampCurve;
@@ -193,14 +200,58 @@ static inline double curveShape(double k, double u) {
   return (soemdsp_maths::dsp_exp(k * u) - 1.0) / (soemdsp_maths::dsp_exp(k) - 1.0);
 }
 
+enum {
+  kSpacingExpo = 0,
+  kSpacingHarmonic = 1,
+  kSpacingRational = 2,
+};
+
+static int gTimeSpacing = 0;
+
+static inline int spacingOf(double v) {
+  if (!(v == v) || v < 0.5) return kSpacingExpo;
+  int n = (int)(v + 0.5);
+  if (n > kSpacingRational) n = kSpacingRational;
+  return n;
+}
+
 static inline double pulseU(int i, int n, bool loop) {
   if (loop) return (double)i / (double)n;
   return n > 1 ? (double)i / (double)(n - 1) : 0.0;
 }
 
+// Time warp. Curve 0 is even (linear) in every family.
+static inline double timeWarp(double k, double u, int i, int nFwd, bool loop) {
+  if (!(u >= 0.0)) u = 0.0;
+  if (u > 1.0) u = 1.0;
+  const int fam = gTimeSpacing;
+  if (fam == kSpacingHarmonic) {
+    const double n = (double)nFwd;
+    const double ii = (double)i;
+    double h;
+    if (loop) h = n > 0.0 ? (ii * (ii + 1.0)) / (n * (n + 1.0)) : 0.0;
+    else h = nFwd > 1 ? (ii * (ii + 1.0)) / ((n - 1.0) * n) : 0.0;
+    double w = k < 0.0 ? -k : k;
+    w *= 0.1;
+    if (w > 1.0) w = 1.0;
+    if (!(k < 0.0)) return u + w * (h - u);
+    double hr;
+    if (loop) hr = n > 0.0 ? (ii * (2.0 * n - ii + 1.0)) / (n * (n + 1.0)) : 0.0;
+    else hr = nFwd > 1 ? (ii * (2.0 * n - ii - 1.0)) / ((n - 1.0) * n) : 0.0;
+    return u + w * (hr - u);
+  }
+  if (fam == kSpacingRational) {
+    double s = k * 0.1;
+    if (s > 0.99) s = 0.99;
+    if (s < -0.99) s = -0.99;
+    return soemdsp_maths::rational_curve01(u, s);
+  }
+  return curveShape(k, u);
+}
+
 static inline double oneWayTime(int i, int nFwd, double end, double curve, bool loop) {
   if (!loop && i == nFwd - 1 && nFwd > 1) return end;
-  double t = end * curveShape(curve, pulseU(i, nFwd, loop));
+  double t = end * timeWarp(curve, pulseU(i, nFwd, loop), i, nFwd, loop);
   if (!(t >= 0.0)) t = 0.0;
   if (t > end) t = end;
   return t;
@@ -541,9 +592,11 @@ static void addAt(PulseTrainState& s, long long land, long long n, double amp, d
   s.spill[d - 1] += amp;
 }
 
-static void applySchedule(PulseTrainState& s, const double live[9], double v, bool loop, double polarity) {
+static void applySchedule(PulseTrainState& s, const double live[9], double v, bool loop, double polarity, int spacing) {
   s.pulseMode = pulseBiasOf(live[7]);
   s.polarity = polarityNeg(polarity) ? 1.0 : 0.0;
+  s.spacing = spacing;
+  gTimeSpacing = spacing;
   s.nFwd = clampFwd(live[0], s.pulseMode);
   s.count = totalCount(s.nFwd, s.pulseMode, loop, s.polarity);
   for (int k = 0; k < 9; k++) s.eff[k] = live[k];
@@ -616,7 +669,7 @@ static inline int pulseIndexAt(
 
 }  // namespace
 
-extern "C" int soemdsp_pulse_train_version() { return 26; }
+extern "C" int soemdsp_pulse_train_version() { return 27; }
 
 extern "C" int soemdsp_pulse_train_create() {
   for (int i = 0; i < kMaxInstances; i++) {
@@ -642,6 +695,7 @@ extern "C" int soemdsp_pulse_train_create() {
       s.loopSched = false;
       s.pulseMode = 0.0;
       s.polarity = 0.0;
+      s.spacing = kSpacingExpo;
       s.allAtZero = false;
       s.allAmp = 0.0;
       s.spill[0] = s.spill[1] = s.spill[2] = s.spill[3] = s.spill[4] = 0.0;
@@ -663,11 +717,12 @@ extern "C" double soemdsp_pulse_train_sample(
   int handle, double trigger, double count, double endTime, double curve,
   double ampStart, double ampEnd, double ampCurve, double amplitude, double sampleRate, double mode,
   double recalc, double pulseMode, double endDelay, double antialiasing, double seed, double waveShape,
-  double freqHz, double morph, double curvePolarity
+  double freqHz, double morph, double curvePolarity, double spacing
 ) {
   if (handle < 1 || handle > kMaxInstances) return 0.0;
   const double morphLive = morph == morph ? morph : 0.5; // omitted wasm arg (NaN) = 0.5
   const double polarityLive = polarityNeg(curvePolarity) ? 1.0 : 0.0;
+  const int spacingLive = spacingOf(spacing); // omitted wasm arg (NaN/0) = Expo
   const bool loop = mode > 0.5;
   const bool latch = recalc > 0.5;
   const int aaMode = aaModeOf(antialiasing);
@@ -686,6 +741,8 @@ extern "C" double soemdsp_pulse_train_sample(
   if (trigHit) s.velocity = gate_hit_velocity();
   const bool runningLatch = latch && s.running;
   const double pol = runningLatch ? s.polarity : polarityLive;
+  const int spacingNow = runningLatch ? s.spacing : spacingLive;
+  gTimeSpacing = spacingNow;
   const double modeNow = runningLatch ? s.pulseMode : pulseModeLive;
   const double timeNow = runningLatch ? s.timeSpan : (endTime > 0.0 ? endTime : 0.0);
   const double delayNow = runningLatch ? clampDelay(s.eff[8]) : live[8];
@@ -729,8 +786,9 @@ extern "C" double soemdsp_pulse_train_sample(
   if (trigHit || loopStart) {
     const double v = trigHit ? gate_hit_velocity() : s.velocity;
     const bool needBuild = !s.running || trigHit || !paramsEqual(s.eff, live)
-      || !(s.effVel == v) || s.loopSched != loop || s.polarity != polarityLive;
-    if (needBuild) applySchedule(s, live, v, loop, polarityLive);
+      || !(s.effVel == v) || s.loopSched != loop || s.polarity != polarityLive
+      || s.spacing != spacingLive;
+    if (needBuild) applySchedule(s, live, v, loop, polarityLive, spacingLive);
     s.morphEff = morphLive;
     s.next = 0;
     s.n = 0;
@@ -741,9 +799,10 @@ extern "C" double soemdsp_pulse_train_sample(
     const unsigned int stream0 = aaStream(seedU, s.ditherEpoch, aaMode);
     s.cycleN = eventLand(wrapNow, sr, stream0, (unsigned int)s.count + 1u, aaMode, aaMode == 2);
   } else if (s.running && !latch) {
-    const bool liveChange = !paramsEqual(s.eff, live) || s.polarity != polarityLive;
+    const bool liveChange = !paramsEqual(s.eff, live) || s.polarity != polarityLive
+      || s.spacing != spacingLive;
     if (liveChange) {
-      applySchedule(s, live, s.effVel, loop, polarityLive);
+      applySchedule(s, live, s.effVel, loop, polarityLive, spacingLive);
       clearSpill(s);
       const unsigned int streamLive = aaStream(seedU, s.ditherEpoch, aaMode);
       s.cycleN = eventLand(wrapNow, sr, streamLive, (unsigned int)s.count + 1u, aaMode, aaMode == 2);
@@ -768,6 +827,7 @@ extern "C" double soemdsp_pulse_train_sample(
     for (int k = 0; k < 9; k++) s.eff[k] = live[k];
     s.effVel = 1.0;
     s.polarity = polarityLive;
+    s.spacing = spacingLive;
     s.morphEff = morphLive;
     s.elapsed = -1.0;
     return 0.0;
@@ -949,10 +1009,12 @@ extern "C" double soemdsp_pulse_train_elapsed(int handle) {
 extern "C" int soemdsp_pulse_train_preview(
   double count, double endTime, double curve, double ampStart, double ampEnd,
   double ampCurve, double amplitude, double mode, double pulseMode, double endDelay,
-  double curvePolarity
+  double curvePolarity, double spacing
 ) {
   gPreview.pulseMode = pulseBiasOf(pulseMode);
   gPreview.polarity = polarityNeg(curvePolarity) ? 1.0 : 0.0;
+  gPreview.spacing = spacingOf(spacing);
+  gTimeSpacing = gPreview.spacing;
   gPreview.nFwd = clampFwd(count, gPreview.pulseMode);
   gPreview.loop = mode > 0.5;
   gPreview.count = totalCount(gPreview.nFwd, gPreview.pulseMode, gPreview.loop, gPreview.polarity);

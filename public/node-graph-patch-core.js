@@ -738,6 +738,14 @@ function validateNodeGraphPatch(patch) {
         normalizedNode.samplePhase = Math.max(0, Math.min(1, samplePhase));
       }
     }
+    if (type === "sabrinaReverbOriginal" && Object.hasOwn(node, "sabrinaPreset")
+      && typeof normalizeNodeGraphSabrinaPreset === "function") {
+      normalizedNode.sabrinaPreset = normalizeNodeGraphSabrinaPreset(node.sabrinaPreset);
+    }
+    if (type === "pulseTrain" && Object.hasOwn(node, "pulseTrainPreset")
+      && typeof normalizeNodeGraphPulseTrainPreset === "function") {
+      normalizedNode.pulseTrainPreset = normalizeNodeGraphPulseTrainPreset(node.pulseTrainPreset);
+    }
     if (type === "audioPlayer" && Object.hasOwn(node, "playlist") && typeof nodeGraphAudioPlayerPlaylistNormalize === "function") {
       normalizedNode.playlist = nodeGraphAudioPlayerPlaylistNormalize(node.playlist);
     }

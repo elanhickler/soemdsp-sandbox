@@ -18,8 +18,8 @@ const sandbox = {
   nodeGraphNodeType: (node) => (typeof node === "string" ? "" : node?.type) || "",
   nodeGraphPatchNode: (id) => sandbox.__nodes?.find((n) => n.id === id) || null,
   nodeGraphModuleDefinitions: {
-    namedPortalIn: { defaultAlias: "A" },
-    namedPortalOut: { defaultAlias: "A" },
+    namedPortalIn: { defaultAlias: "initname" },
+    namedPortalOut: { defaultAlias: "initname" },
   },
   nodeGraphIsNamedPortalType: (type) => type === "namedPortalIn" || type === "namedPortalOut",
   nodeGraphKnobFaceNormalizeLabelText: (v) => String(v ?? "").replace(/\s+/g, " ").trim().slice(0, 48),

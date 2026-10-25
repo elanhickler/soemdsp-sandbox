@@ -23,6 +23,7 @@ const check = (cond, msg) => {
 const keys = Object.fromEntries((d.parameters || []).map((p) => [p.key, p]));
 const want = [
   { kind: "cells", params: [["count", "Count"], ["frequency", "Freq"], ["duty", "Duty"]] },
+  { kind: "choices", param: "spacing", labels: ["Expo", "Harmonic", "Rational"] },
   { kind: "cells", params: [["curve", "Curve", "bipolar"], ["ampStart", "A Start"], ["ampEnd", "A End"], ["ampCurve", "A Crv", "bipolar"]] },
   { kind: "cells", params: [["pulseMode", "Fwd-Rev"]], horizontal: true },
   { kind: "choices", param: "curvePolarity", labels: ["+", "\u2212"] },
@@ -30,6 +31,7 @@ const want = [
   { kind: "choices", param: "recalculateOnTrigger", labels: ["Free", "Latch"] },
   { kind: "cells", params: [["wave", "Shape"]], horizontal: true },
   { kind: "cells", params: [["morph", "Morph"], ["amplitude", "Amp"]] },
+  { kind: "cells", params: [["presetMorph", "Preset Morph"]] },
   { kind: "choices", param: "antialiasing", labels: ["Off", "Random", "Dither"] },
   { kind: "seed", param: "seed" },
 ];
@@ -37,7 +39,7 @@ const want = [
 check(d.layout === "pulseCurve" && d.displayType === "pulseTrainFace" && d.defaultDisplayMode === "face", "GL pulse-curve plate stays (layout pulseCurve / pulseTrainFace)");
 check(JSON.stringify(d.inputs) === JSON.stringify(["Trigger", "f"]), "jacks: Trigger, ƒ");
 check(JSON.stringify(d.outputs) === JSON.stringify(["Shape", "Trigger", "End"]), "jacks: Shape, Trigger, End");
-check(Array.isArray(d.face) && d.face.length === 10, `face has 10 rows (got ${d.face?.length})`);
+check(Array.isArray(d.face) && d.face.length === 12, `face has 12 rows (got ${d.face?.length})`);
 
 for (let i = 0; i < want.length; i += 1) {
   const row = d.face?.[i] || {};
@@ -64,11 +66,13 @@ check(keys.wave?.choices?.length === 10, "Shape has 10 grains");
 check(keys.frequency?.unit === "Hz" && keys.duty?.label === "Pulse Duty", "Freq is Hz, Duty is Pulse Duty");
 check(keys.pulseMode?.label === "Fwd-Rev" && keys.pulseMode?.max === "1" && keys.pulseMode?.step === "any" && !keys.pulseMode?.choices, "Fwd-Rev is a 0..1 slider");
 check(keys.curvePolarity?.choices?.[0] === "+" && keys.curvePolarity?.choices?.[1] === "\u2212" && keys.curvePolarity?.defaultValue === "0", "Curve polarity is + / \u2212, default +");
+check(keys.spacing?.choices?.[0] === "Expo" && keys.spacing?.choices?.[2] === "Rational" && keys.spacing?.defaultValue === "0", "Spacing is Expo / Harmonic / Rational, default Expo");
 
 for (const page of ["index.html", "perform.html"]) {
   const html = fs.readFileSync(path.join(root, "public", page), "utf8");
-  check(/node-graph-module-definitions\.js\?v=pt-polarity-1/.test(html), `${page} cache-bust pt-polarity-1`);
-  check(/node-graph-pulse-train-display\.js\?v=pt-polarity-1/.test(html), `${page} cache-bust pt-polarity-1`);
+  check(/node-graph-module-definitions\.js\?v=pt-spacing-1/.test(html), `${page} cache-bust definitions pt-spacing-1`);
+  check(/node-graph-pulse-train-display\.js\?v=pt-spacing-1/.test(html), `${page} cache-bust display pt-spacing-1`);
+  check(/gl-line-renderer\.js\?v=pt-spacing-1/.test(html), `${page} cache-bust gl-line-renderer pt-spacing-1`);
 }
 
 const display = fs.readFileSync(path.join(root, "public", "node-graph-pulse-train-display.js"), "utf8");

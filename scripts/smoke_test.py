@@ -5504,7 +5504,7 @@ def require_node_graph_mvp_contract() -> None:
         "node-patch-page-toolbar",
         "nodeUiDevTooltipTextSize",
         "nodeUiDevTooltipTextSizeValue",
-        "tooltip text size",
+        "minimum tooltip text size",
         "nodeUiDevTooltipTextSizeValue\" for=\"nodeUiDevTooltipTextSize\">14px",
         "nodeUiDevMinimumGridBrightness",
         "nodeUiDevMinimumGridBrightnessValue",
@@ -10156,6 +10156,9 @@ def require_node_graph_mvp_contract() -> None:
         "function nodeGraphGlHitHoverElement(event)",
         "nodeGraphControlAuthoredTooltip(element)",
         "function attachNodeInteractionHelpTarget(element)",
+        "function fitNodeInteractionHelpText(help = document.getElementById(\"nodeInteractionHelp\"))",
+        "const nodeInteractionHelpFitCache = { key: \"\", sizePx: 0 }",
+        "function nodeInteractionHelpCanvasFits(ctx, text, fontPx, fontFamily, contentW, contentH)",
         "function normalizeNodeUiDevColor(value",
         "function nodeUiDevHexColorToRgbTriplet(value",
         "const nodeUiDevFontFamilyOptions",
@@ -16843,6 +16846,18 @@ def require_native_module_contract(base_url: str) -> None:
         and "kTypeFlowerChildFilterRev3 = 235" in flower_child_host,
         "Flower Child Filter Rev3 (type 235) process + sample missing from graph_engine",
     )
+    require(
+        "static void process_fluv_noise(Circuit" in flower_child_host
+        and "soemdsp_fluv_noise_sample_stereo" in flower_child_host
+        and "kTypeFluvNoise = 236" in flower_child_host,
+        "Fluv Noise (type 236) process + sample missing from graph_engine",
+    )
+    require(
+        "static void process_pump_curve(Circuit" in flower_child_host
+        and "soemdsp_pump_curve_sample" in flower_child_host
+        and "kTypePumpCurve = 237" in flower_child_host,
+        "Pump Curve (type 237) process + sample missing from graph_engine",
+    )
 
     expected_native_exports = {
         "rapt_elliptic_decimator": [
@@ -17500,6 +17515,8 @@ def require_native_module_contract(base_url: str) -> None:
         ],
         "flower_child_filter": ["soemdsp_flower_child_filter_create", "soemdsp_flower_child_filter_destroy", "soemdsp_flower_child_filter_sample"],
         "flower_child_filter_rev3": ["soemdsp_flower_child_filter_rev3_create", "soemdsp_flower_child_filter_rev3_destroy", "soemdsp_flower_child_filter_rev3_sample"],
+        "fluv_noise": ["soemdsp_fluv_noise_create", "soemdsp_fluv_noise_destroy", "soemdsp_fluv_noise_sample_stereo", "soemdsp_fluv_noise_left", "soemdsp_fluv_noise_right"],
+        "pump_curve": ["soemdsp_pump_curve_create", "soemdsp_pump_curve_destroy", "soemdsp_pump_curve_sample", "soemdsp_pump_curve_gain", "soemdsp_pump_curve_env"],
         "active_filter": ["soemdsp_active_filter_create", "soemdsp_active_filter_destroy", "soemdsp_active_filter_sample"],
         "yellowjacket_filter": ["soemdsp_yellowjacket_filter_create", "soemdsp_yellowjacket_filter_destroy", "soemdsp_yellowjacket_filter_sample"],
         "superlove_filter": ["soemdsp_superlove_filter_create", "soemdsp_superlove_filter_destroy", "soemdsp_superlove_filter_sample"],

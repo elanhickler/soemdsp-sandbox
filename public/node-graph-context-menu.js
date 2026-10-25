@@ -1645,7 +1645,8 @@ function configureNodeSceneContextMenu(mode) {
     );
     aliasInput.placeholder = targetNode && !multiModuleMode
       ? (portalTitleSelected
-        ? (nodeGraphModuleDefinitions?.[targetNode.type]?.defaultAlias || "A")
+        ? (nodeGraphModuleDefinitions?.[targetNode.type]?.defaultAlias
+          || (typeof nodeGraphNamedPortalDefaultAlias === "string" ? nodeGraphNamedPortalDefaultAlias : "initname"))
         : nodeGraphDefaultNodeTitle(targetNode.type, targetNode.id))
       : "module title";
     if (portalTitleSelected) {

@@ -80,7 +80,7 @@ const nodeUiDevSettingControls = Object.freeze([
     type: "number",
   },
   { defaultValue: false, id: "nodeUiDevShowOriginMarker", key: "showOriginMarker", type: "boolean" },
-  // The tip font size. Same value in the browser and the plugin.
+  // Floor for fit-to-box tip text. The fitter never goes below this; longer tips clip.
   { defaultValue: 14, id: "nodeUiDevTooltipTextSize", key: "tooltipTextSize", max: 96, min: 12, type: "number" },
   { defaultValue: 100, id: "nodeUiDevModuleLightBrightness", key: "moduleLightBrightness", max: 100, min: 0, type: "number" },
   { defaultValue: 20, id: "nodeUiDevMinimumGridBrightness", key: "minimumGridBrightness", max: 100, min: 0, type: "number" },

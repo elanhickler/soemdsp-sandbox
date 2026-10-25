@@ -824,7 +824,7 @@ void main() {
    * Instanced Pulse Train stems + dots. The vertex shader evaluates the same
    * E_k schedule as pulse_train.cpp (t_i = End * E_curve(u_i)) from
    * gl_InstanceID, so Count can be 16384 without a CPU vertex per pulse.
-   * spec: count, duration (Time s), axisEnd (x-axis s), curve, ampStart,
+   * spec: count, duration (Time s), axisEnd (x-axis s), curve, spacing, ampStart,
    * ampEnd, ampCurve, amplitude, loop, x0, x1, base, top, peak, halfPx,
    * feather, dotR, elapsed (NaN idle), fadeTau (s, 0 = hold), line/dot/lit rgba.
    */
@@ -851,6 +851,7 @@ void main() {
       duration: Number(spec.duration) || 0,
       axisEnd: Math.max(1e-6, Number(spec.axisEnd) || 0.001),
       curve: Number(spec.curve) || 0,
+      spacing: Number(spec.spacing) || 0,
       ampStart: Number(spec.ampStart) || 0,
       ampEnd: Number(spec.ampEnd) || 0,
       ampCurve: Number(spec.ampCurve) || 0,
@@ -1773,6 +1774,7 @@ uniform float uCount;
 uniform float uDuration;
 uniform float uAxis;
 uniform float uCurve;
+uniform float uSpacing;
 uniform float uAmpStart;
 uniform float uAmpEnd;
 uniform float uAmpCurve;
@@ -1806,6 +1808,30 @@ float curveShape(float k, float u) {
   if (abs(den) < 1e-12) return u;
   return (exp(k * u) - 1.0) / den;
 }
+float timeWarp(float k, float u, int i, float n, bool iLoop) {
+  if (!(u >= 0.0)) u = 0.0;
+  if (u > 1.0) u = 1.0;
+  float fam = uSpacing;
+  if (fam >= 0.5 && fam < 1.5) {
+    float ii = float(i);
+    float h = iLoop
+      ? (n > 0.0 ? (ii * (ii + 1.0)) / (n * (n + 1.0)) : 0.0)
+      : (n > 1.0 ? (ii * (ii + 1.0)) / ((n - 1.0) * n) : 0.0);
+    float w = clamp(abs(k) * 0.1, 0.0, 1.0);
+    if (!(k < 0.0)) return u + w * (h - u);
+    float hr = iLoop
+      ? (n > 0.0 ? (ii * (2.0 * n - ii + 1.0)) / (n * (n + 1.0)) : 0.0)
+      : (n > 1.0 ? (ii * (2.0 * n - ii - 1.0)) / ((n - 1.0) * n) : 0.0);
+    return u + w * (hr - u);
+  }
+  if (fam >= 1.5) {
+    float s = clamp(k * 0.1, -0.99, 0.99);
+    float den = 1.0 - s + 2.0 * s * u;
+    if (abs(den) < 1e-12) return u;
+    return ((1.0 + s) * u) / den;
+  }
+  return curveShape(k, u);
+}
 void main() {
   int id = gl_InstanceID;
   float n = max(uCount, 1.0);
@@ -1823,7 +1849,7 @@ void main() {
   float uu = iLoop ? float(i) / n : (n > 1.0 ? float(i) / (n - 1.0) : 0.0);
   float tf;
   if (!iLoop && i == ni - 1 && n > 1.0) tf = uDuration;
-  else tf = uDuration * curveShape(uCurve, uu);
+  else tf = uDuration * timeWarp(uCurve, uu, i, n, iLoop);
   if (!(tf >= 0.0)) tf = 0.0;
   if (tf > uDuration) tf = uDuration;
   float t;
@@ -1834,7 +1860,7 @@ void main() {
   }
   if (rotAmt > 0.0 && ni > 1) {
     float peakU = uLoop > 0.5 ? float(ni - 1) / n : 1.0;
-    float peak = uLoop < 0.5 && n > 1.0 ? uDuration : uDuration * curveShape(uCurve, peakU);
+    float peak = uLoop < 0.5 && n > 1.0 ? uDuration : uDuration * timeWarp(uCurve, peakU, ni - 1, n, uLoop > 0.5);
     if (!(peak >= 0.0)) peak = 0.0;
     if (peak > uDuration) peak = uDuration;
     float span = uDuration * (1.0 + dualAmt);
@@ -1976,6 +2002,7 @@ void main() {
         uDuration: u("uDuration"),
         uAxis: u("uAxis"),
         uCurve: u("uCurve"),
+        uSpacing: u("uSpacing"),
         uAmpStart: u("uAmpStart"),
         uAmpEnd: u("uAmpEnd"),
         uAmpCurve: u("uAmpCurve"),
@@ -2024,6 +2051,7 @@ void main() {
       gl.uniform1f(pt.uDuration, spec.duration);
       gl.uniform1f(pt.uAxis, spec.axisEnd);
       gl.uniform1f(pt.uCurve, spec.curve);
+      gl.uniform1f(pt.uSpacing, spec.spacing || 0);
       gl.uniform1f(pt.uAmpStart, spec.ampStart);
       gl.uniform1f(pt.uAmpEnd, spec.ampEnd);
       gl.uniform1f(pt.uAmpCurve, spec.ampCurve);

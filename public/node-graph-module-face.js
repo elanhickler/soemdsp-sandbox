@@ -134,7 +134,15 @@ function nodeGraphModuleFaceRowHeight(row) {
 
 function nodeGraphModuleFaceHeightPx(type, node = null) {
   const spec = nodeGraphModuleFaceSpec(type, node);
-  return spec ? spec.reduce((sum, row) => sum + nodeGraphModuleFaceRowHeight(row), 0) : 0;
+  if (!spec) return 0;
+  const rows = spec.reduce((sum, row) => sum + nodeGraphModuleFaceRowHeight(row), 0);
+  if (type === "sabrinaReverbOriginal" && typeof sabrinaPresetBarOffset === "function") {
+    return rows + sabrinaPresetBarOffset({ dataset: { nodeType: type } });
+  }
+  if (type === "pulseTrain" && typeof pulseTrainPresetBarOffset === "function") {
+    return rows + pulseTrainPresetBarOffset({ dataset: { nodeType: type } });
+  }
+  return rows;
 }
 
 /** Rail insets (px) { l, r } for a face row of moduleEl: the rail width on each side whose rail holds a patched param of the row, else 0. */
@@ -324,6 +332,8 @@ function mountNodeGraphModuleFace(article, type) {
   layoutNodeGraphModuleFace(article);
   face.addEventListener("pointerdown", (event) => beginNodeGraphModuleFaceGesture(article, face, nodeGraphModuleFaceSpecForElement(article), event));
   face.addEventListener("contextmenu", (event) => openNodeGraphModuleFaceParamOptions(article, face, event));
+  if (typeof mountSabrinaPresetBrowser === "function") mountSabrinaPresetBrowser(article, type);
+  if (typeof mountPulseTrainPresetBrowser === "function") mountPulseTrainPresetBrowser(article, type);
 }
 
 /** Size the face to its visible rows and stack each row's rail jacks (rerun when params hide/show). */
@@ -333,7 +343,9 @@ function layoutNodeGraphModuleFace(article) {
   const spec = face ? nodeGraphModuleFaceSpecForElement(article) : null;
   if (!spec) return;
   const total = spec.reduce((sum, row) => sum + nodeGraphModuleFaceRowHeight(row), 0);
-  body.style.height = `${total}px`;
+  const bar = (typeof sabrinaPresetBarOffset === "function" ? sabrinaPresetBarOffset(article) : 0)
+    + (typeof pulseTrainPresetBarOffset === "function" ? pulseTrainPresetBarOffset(article) : 0);
+  body.style.height = `${total + bar}px`;
   face.style.height = `${total}px`;
   const placed = new Set();
   let y = 0;

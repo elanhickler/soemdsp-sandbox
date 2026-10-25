@@ -83,7 +83,8 @@ const nodeGraphSampleWaveformScrollLinePositionRatios = Object.freeze({
 // stay 0..1 of face min-edge. See display-scale.js / APP_POLICY §15.
 const nodeGraphSampleWaveformDefaultSettings = Object.freeze({
   scrollMode: "smooth",
-  timeWindowSeconds: 2,
+  // null = whole file (HUD 100%). 0 = one sample. Positive = seconds in view.
+  timeWindowSeconds: null,
   scrollLinePosition: "mid",
   // 0 = hide playhead. CSS px @ zoom 1.
   scrollLineWidth: 1,
@@ -127,8 +128,11 @@ function normalizeNodeGraphSampleWaveformSettings(settings = {}) {
   const playlistVisibleCount = Number(source.playlistVisibleCount);
   return {
     scrollMode: source.scrollMode === "snap" ? "snap" : "smooth",
-    // 0 = one sample at a time. Finite values only; NaN keeps the default.
-    timeWindowSeconds: Number.isFinite(timeWindowSeconds)
+    // null = whole file. 0 = one sample. Finite 0…60 = seconds in view.
+    timeWindowSeconds: Object.prototype.hasOwnProperty.call(source, "timeWindowSeconds")
+      && source.timeWindowSeconds != null
+      && source.timeWindowSeconds !== ""
+      && Number.isFinite(timeWindowSeconds)
       ? Math.max(0, Math.min(60, timeWindowSeconds))
       : nodeGraphSampleWaveformDefaultSettings.timeWindowSeconds,
     scrollLinePosition: Object.prototype.hasOwnProperty.call(
@@ -396,7 +400,10 @@ function renderNodeGraphSampleWaveformSettingsWindow() {
       el.value = String(value);
     }
   };
-  setValueUnlessFocused("nodeSampleWaveformTimeWindowInput", settings.timeWindowSeconds);
+  setValueUnlessFocused(
+    "nodeSampleWaveformTimeWindowInput",
+    settings.timeWindowSeconds == null ? "" : settings.timeWindowSeconds,
+  );
   setValueUnlessFocused("nodeSampleWaveformLineWidthInput", settings.scrollLineWidth);
   setValueUnlessFocused("nodeSampleWaveformTraceWidthInput", settings.traceWidth);
   setValueUnlessFocused("nodeSampleWaveformHueInput", settings.hue);
@@ -564,7 +571,12 @@ function updateNodeGraphSampleWaveformSettings(patch) {
 }
 
 function handleNodeGraphSampleWaveformTimeWindowChange(event) {
-  const value = Number(event.target.value);
+  const raw = String(event.target.value ?? "").trim();
+  if (raw === "") {
+    updateNodeGraphSampleWaveformSettings({ timeWindowSeconds: null });
+    return;
+  }
+  const value = Number(raw);
   if (!Number.isFinite(value) || value < 0) {
     return;
   }
@@ -711,7 +723,7 @@ function buildNodeGraphSampleWaveformDisplaySettingsBodyHtml() {
       <div class="node-led-settings-row node-sample-waveform-settings-row node-sample-waveform-tune-row" role="group" aria-label="Time window">
         <span>Time Window</span>
         <span class="node-sample-waveform-control-widgets">
-          <input id="nodeSampleWaveformTimeWindowInput" data-phosphor-number-drag="timeWindowSeconds" type="number" inputmode="decimal" step="0.05" min="0" max="60" autocomplete="off" readonly title="Drag to adjust · double-click to type · 0 = single sample">
+          <input id="nodeSampleWaveformTimeWindowInput" data-phosphor-number-drag="timeWindowSeconds" type="number" inputmode="decimal" step="0.05" min="0" max="60" autocomplete="off" readonly title="Drag to adjust · double-click to type · empty = whole file (100%) · 0 = single sample">
           <span>s</span>
         </span>
       </div>
@@ -1464,6 +1476,20 @@ function endNodeGraphSampleWaveformSettingsDrag(event) {
       );
     }
   });
+}
+
+function nodeGraphSampleWaveformSettingsWindowFrames(settings, frames, sampleRate) {
+  const total = Math.max(1, Math.round(nodeGraphFiniteNumber(frames, 1)));
+  const seconds = settings?.timeWindowSeconds;
+  if (seconds == null || seconds === "" || !Number.isFinite(Number(seconds))) {
+    return total;
+  }
+  const sec = Number(seconds);
+  if (sec <= 0) {
+    return 1;
+  }
+  const rate = Math.max(1, nodeGraphFiniteNumber(sampleRate, 44100));
+  return Math.max(1, Math.min(total, Math.round(sec * rate)));
 }
 
 function nodeGraphSampleWaveformViewState(nodeId, frames, sectionOrFace) {
@@ -3023,14 +3049,10 @@ function drawNodeGraphSampleWaveformDisplay(section) {
   // Desired window length in samples. Manual Shift+wheel zoom keeps the live
   // span; Time Window / scroll-line setting only re-applies when those change
   // (never when canvas pixel width changes from modular zoom).
-  const settingsWindowFrames = Math.max(
-    nodeGraphSampleWaveformMinWindowFrames,
-    Math.min(
-      entry.frames,
-      settings.timeWindowSeconds <= 0
-        ? 1
-        : Math.round(settings.timeWindowSeconds * (entry.sampleRate || 44100)),
-    ),
+  const settingsWindowFrames = nodeGraphSampleWaveformSettingsWindowFrames(
+    settings,
+    entry.frames,
+    entry.sampleRate,
   );
   const appliedSignature = nodeGraphSampleWaveformSettingsSignature(settings);
   const viewKey = nodeGraphSampleWaveformViewKey(nodeId, section);
@@ -3313,14 +3335,20 @@ function nodeGraphSampleWaveformPaintFaceHud(batch, section, nodeId, node, width
       };
     }
     if (face === "wave") {
-      const plLabel = "playlist";
+      const nodeBusy = typeof nodeGraphAudioPlayerPlaylistLoadBusy !== "undefined"
+        && nodeGraphAudioPlayerPlaylistLoadBusy.get?.(String(nodeId || ""));
+      const pulse = 0.45 + 0.55 * (0.5 + 0.5 * Math.sin(performance.now() / 180));
+      const plLabel = nodeBusy ? "loading" : "playlist";
       const plW = typeof nodeGraphGlLinesMeasureText === "function"
         ? nodeGraphGlLinesMeasureText(plLabel, hudPx, family, 600)
         : hudPx * plLabel.length * 0.55;
       hudHoverRect("playlist", pad, plW);
+      const plInk = nodeBusy
+        ? [ink[0], ink[1], ink[2], hover === "playlist" ? 1 : pulse]
+        : hudInk("playlist");
       nodeGraphGlLinesText(batch, plLabel, Math.round(pad), Math.round(pad), {
         px: hudPx,
-        rgba: hudInk("playlist"),
+        rgba: plInk,
         align: "left",
         baseline: "top",
         family,

@@ -2244,6 +2244,15 @@ input[type="range"],
 .node-music-player-pl-row[data-playing="true"] {
   background: var(--sample-waveform-hud-color-dim);
 }
+@keyframes node-music-player-pl-load-blink {
+  0%, 100% { opacity: var(--node-music-player-pl-fade, 1); }
+  50% { opacity: calc(0.22 * var(--node-music-player-pl-fade, 1)); }
+}
+.node-music-player-pl-row.is-loading,
+.node-music-player-pl-row[data-loading="true"] {
+  animation: node-music-player-pl-load-blink 0.7s ease-in-out infinite;
+  color: var(--sample-waveform-hud-color-hot);
+}
 .node-music-player-pl-row.is-play-next,
 .node-music-player-pl-row[data-queue="next"] {
   background: hsla(140, 90%, 57%, 0.14);
@@ -2330,7 +2339,7 @@ input[type="range"],
 
 .node-wiring-panel {
   --node-toolbar-button-bg-alpha: 1;
-  --node-tooltip-text-size: 14px; /* tip font size, same in the browser and the plugin */
+  --node-tooltip-text-size: 14px; /* minimum tip font; fitter scales up to fill the box */
   --node-min-grid-brightness-alpha: 0;
   /* B-048: bypass chrome SSOT for module face + Module Settings (sibling under panel). */
   --node-bypass-icon-size-ratio: 0.36;
@@ -7252,7 +7261,8 @@ body.keyboard-debug-hidden .node-midi-keyboard-signal-bar {
    already provides chrome. Fills leftover window height (flex: 1 + min-height: 0).
    Do NOT set a large min-height here — at window min (90px) the title bar is
    ~30px, so the body only has ~60px; a 72px min left empty/clipped space.
-   Font size is --node-tooltip-text-size. The box does not grow with the text. */
+   --node-tooltip-text-size is the UIDEV minimum. fitNodeInteractionHelpText
+   sets an inline size so the whole tip fits in the box at once. */
 .node-interaction-help {
   display: flex;
   flex: 1 1 auto;
@@ -7303,7 +7313,7 @@ body.keyboard-debug-hidden .node-midi-keyboard-signal-bar {
    grow or shrink with the text reflows the whole interface every time the
    pointer moves over a different control -- the old width:fit-content plus
    open-ended min-height did exactly that. Width and height are now constant
-   and the text stays at --node-tooltip-text-size.
+   and the fitter scales the text to the box (never below --node-tooltip-text-size).
    --node-tooltip-embed-height is the single knob for the height. */
 .node-interaction-help.is-embedded {
   --node-tooltip-embed-height: 46px;
@@ -7329,7 +7339,7 @@ body.keyboard-debug-hidden .node-midi-keyboard-signal-bar {
     max-height: min(40vh, 220px);
     overflow-y: auto;
     padding: 4px 8px;
-    font-size: min(var(--node-tooltip-text-size, 14px), 12px);
+    font-size: var(--node-tooltip-text-size, 14px);
     line-height: 1.2;
   }
 }
@@ -13195,6 +13205,8 @@ body.room-dimmer-on .node-room-dimmer-canvas,
 .node-graph-workspace.gl-graph-on .dsp-node .node-plugin-momentary-button,
 .node-graph-workspace.gl-graph-on .dsp-node .node-seed-control,
 .node-graph-workspace.gl-graph-on .dsp-node .node-seed-control *,
+.node-graph-workspace.gl-graph-on .dsp-node .sabrina-preset-shell,
+.node-graph-workspace.gl-graph-on .dsp-node .sabrina-preset-shell *,
 .node-graph-workspace.gl-graph-on .dsp-node .node-sample-waveform-display,
 .node-graph-workspace.gl-graph-on .dsp-node .node-sample-waveform-display *,
 .node-graph-workspace.gl-graph-on .dsp-node .node-midi-keyboard-surface,

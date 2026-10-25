@@ -177,6 +177,7 @@ const NODE_GRAPH_BYPASS_TYPE_OVERRIDES = Object.freeze({
   phosphillator: "silence",
   sinc: "silence",
   noiseGenerator: "silence",
+  fluvNoise: "silence",
   piNoise: "silence",
   fractalBrownianNoise: "silence",
   fbmField: "silence",

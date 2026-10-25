@@ -1059,6 +1059,12 @@ const nodeGraphModuleStoreCatalog = Object.freeze({
     description: "Stereo noise colors (white/pink/brown/etc.) for texture, percussion, and dither.",
     notes: ["stereo output", "uniform to gaussian", "seed control", "native"],
   },
+  fluvNoise: {
+    category: "noise",
+    description: "Fluv Noise as a generator: pitch-tracked noise band (HP at ƒ, LP at ƒ×Spread) with log Start→Full mix.",
+    label: "Fluv Noise",
+    notes: ["fluv", "analog", "hiss", "dither", "noise band", "filter morph", "stereo", "native"],
+  },
   randomWalk: {
     category: "noise",
     description: "Controlled wander CV—smooth drift, steps, or filtered noise motion for parameters.",
@@ -1304,13 +1310,13 @@ const nodeGraphModuleStoreCatalog = Object.freeze({
   },
   output: {
     category: "portal",
-    description: "Final stereo sink—patch here to hear (and meter) the mix.",
+    description: "App speaker sink. Left/Right are host 1–2; jacks 3–8 are extra host channels.",
     label: "Output",
-    notes: ["audio sink", "left right inputs", "render target"],
+    notes: ["audio sink", "left right inputs", "8 channel", "render target"],
   },
   audioInput: {
     category: "portal",
-    description: "Bring the live mic/line into the patch as Mono, Left, Right.",
+    description: "Live mic/line into the patch. Left/Right are host 1–2; jacks 3–8 are extra host channels.",
     label: "Input",
     notes: [
       "audio source",
@@ -2062,7 +2068,7 @@ const nodeGraphModuleStoreCatalog = Object.freeze({
   },
   pulseTrain: {
     category: "clock",
-    description: "On trigger, a train of pulses (or grains: Gate/Saw/Ramp/Tri/Sine from one pulse to the next) that starts fast and stretches out. Shape out is the grain, Trigger out is always impulses, End fires at the last pulse. Fwd-Rev 0..1 adds an attack and walks the peak right; Polarity flips that. Antialiasing Off/Random/Dither.",
+    description: "On trigger, a train of pulses (or grains: Gate/Saw/Ramp/Tri/Sine from one pulse to the next). Spacing Expo / Harmonic / Rational warps time; Curve 0 is even (linear) in every family. Shape out is the grain, Trigger out is always impulses, End fires at the last pulse. Fwd-Rev 0..1 adds an attack and walks the peak right; Polarity flips that. Antialiasing Off/Random/Dither.",
     label: "Pulse Train",
     notes: ["trigger", "pulse train", "slowing down", "growing gaps", "bouncing ball", "End", "native"],
   },
@@ -2189,6 +2195,24 @@ const nodeGraphModuleStoreCatalog = Object.freeze({
       "dynamics",
       "musical",
       "gain reduction",
+      "native",
+    ],
+  },
+  pumpCurve: {
+    category: "dynamics",
+    description:
+      "Triggered ideal compressor curve: a Trigger is a Depth dB overshoot, Ratio/Law/Knee shape the dip, Attack/Hold/Release time it. Gain and Env jacks for ducking VCAs.",
+    label: "Pump Curve",
+    notes: [
+      "compressor",
+      "pump",
+      "envelope",
+      "trigger",
+      "gain reduction",
+      "opto",
+      "FET",
+      "duck",
+      "dynamics",
       "native",
     ],
   },
@@ -3748,6 +3772,14 @@ const nodeGraphJsSourceEntriesByType = Object.freeze({
   noiseGenerator: {
     source: "native_modules/noise_generator/noise_generator.cpp",
     sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/native_modules/noise_generator/noise_generator.cpp",
+  },
+  fluvNoise: {
+    source: "native_modules/fluv_noise/fluv_noise.cpp",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/native_modules/fluv_noise/fluv_noise.cpp",
+  },
+  pumpCurve: {
+    source: "native_modules/pump_curve/pump_curve.cpp",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/native_modules/pump_curve/pump_curve.cpp",
   },
   numberReadout: {
     source: "public/modules/numberReadout/number-readout-register.js",

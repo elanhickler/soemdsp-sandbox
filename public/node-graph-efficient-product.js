@@ -37,6 +37,7 @@ const NODE_GRAPH_EFFICIENT_PRODUCT_AUDIO_TYPES = Object.freeze([
   "pitchModWheel",
   "gain",
   "noiseGenerator",
+  "fluvNoise",
   "robinSinusoid",
   "robinOscillator",
   "robinSupersaw",
@@ -76,6 +77,7 @@ const NODE_GRAPH_EFFICIENT_PRODUCT_AUDIO_TYPES = Object.freeze([
   "lutCell",
   "lookaheadLimiter",
   "limiter",
+  "pumpCurve",
   "noiseGate",
   "sidechain",
   // Music Player / Sample Player — native PCM upload on the efficient path.

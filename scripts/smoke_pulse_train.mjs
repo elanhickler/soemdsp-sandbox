@@ -58,6 +58,38 @@ for (const [k, set] of SETS.entries()) {
   }
 }
 console.log(`ok pulseTrain schedule: ${SETS.length} sets, t_i = End*E_k(u_i), first 0, last == End (End 20 plays at 20 s, no hidden cap), gaps grow / even / shrink by Curve sign, amp curve, standalone == combined`);
+{
+  const n = 12, end = 3;
+  const lin = preview(N, [n, end, 0, 1, 0.2, 0, 1]);
+  const harm0 = preview(N, [n, end, 0, 1, 0.2, 0, 1, 0, 0, 0, 0, 1]);
+  const rat0 = preview(N, [n, end, 0, 1, 0.2, 0, 1, 0, 0, 0, 0, 2]);
+  for (let i = 0; i < n; i++) {
+    if (Math.abs(harm0.t[i] - lin.t[i]) > 1e-12) throw new Error(`harmonic curve 0 != linear at ${i}`);
+    if (Math.abs(rat0.t[i] - lin.t[i]) > 1e-12) throw new Error(`rational curve 0 != linear at ${i}`);
+  }
+  const harm = preview(N, [n, end, 10, 1, 0.2, 0, 1, 0, 0, 0, 0, 1]);
+  const sHarm = preview(S, [n, end, 10, 1, 0.2, 0, 1, 0, 0, 0, 0, 1]);
+  if (JSON.stringify(harm) !== JSON.stringify(sHarm)) throw new Error("harmonic standalone != combined");
+  if (harm.t[0] !== 0) throw new Error("harmonic first");
+  if (harm.t[n - 1] !== end) throw new Error("harmonic last");
+  for (let i = 0; i < n; i++) {
+    const want = end * (i * (i + 1)) / ((n - 1) * n);
+    if (Math.abs(harm.t[i] - want) > 1e-9 * end) throw new Error(`harmonic t[${i}] ${harm.t[i]} != ${want}`);
+  }
+  for (let i = 2; i < n; i++) {
+    const g0 = harm.t[i - 1] - harm.t[i - 2], g1 = harm.t[i] - harm.t[i - 1];
+    if (!(g1 > g0)) throw new Error(`harmonic gaps not growing ${g0} -> ${g1}`);
+  }
+  const rat = preview(N, [n, end, 10, 1, 0.2, 0, 1, 0, 0, 0, 0, 2]);
+  if (rat.t[0] !== 0 || rat.t[n - 1] !== end) throw new Error("rational ends");
+  const s = 0.99;
+  for (let i = 1; i < n - 1; i++) {
+    const u = i / (n - 1);
+    const want = end * ((1 + s) * u) / (1 - s + 2 * s * u);
+    if (Math.abs(rat.t[i] - want) > 1e-9 * end) throw new Error(`rational t[${i}]`);
+  }
+  console.log("ok pulseTrain spacing: Expo omitted, Harmonic multiples, Rational, Curve 0 = linear");
+}
 // 2) Playback == preview sample-exact, velocity scales, End out, elapsed.
 function play(E2, set, trigFn, n) {
   const h = E2.soemdsp_pulse_train_create();

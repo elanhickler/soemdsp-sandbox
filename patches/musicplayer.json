@@ -496,7 +496,7 @@
         "gridBrightness": 0.5,
         "lineBrightness": 0.5,
         "scrollLineWidth": 0.01,
-        "timeWindowSeconds": 2,
+        "timeWindowSeconds": null,
         "scrollLinePosition": "mid",
         "backgroundBrightness": 0.5,
         "playlistVisibleCount": 8
