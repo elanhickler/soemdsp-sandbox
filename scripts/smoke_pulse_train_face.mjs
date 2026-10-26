@@ -22,13 +22,13 @@ const check = (cond, msg) => {
 
 const keys = Object.fromEntries((d.parameters || []).map((p) => [p.key, p]));
 const want = [
-  { kind: "choices", param: "recalculateOnTrigger", labels: ["Free", "Latch"] },
   { kind: "cells", params: [["pulseMode", "Fwd-Rev"]], horizontal: true },
   { kind: "cells", params: [["wave", "Shape"]], horizontal: true },
   { kind: "choices", param: "antialiasing", labels: ["Off", "Random", "Dither"] },
+  { kind: "choices", param: "recalculateOnTrigger", labels: ["Free", "Latch"] },
+  { kind: "choices", param: "mode", labels: ["One shot", "Loop"] },
   { kind: "cells", params: [["morph", "Morph"], ["count", "Count"], ["duty", "Duty"], ["stretch", "Stretch"]] },
-  { kind: "cells", params: [["frequency", "Freq"], ["mode", "Mode", "stack"], ["curvePolarity", "+", "stack"]] },
-  { kind: "cells", params: [["curve", "F Crv", "bipolar"]], horizontal: true },
+  { kind: "cells", params: [["curvePolarity", "+", "stack"], ["frequency", "ƒ"], ["curve", "ƒ Crv", "bipolar"]] },
   { kind: "choices", param: "spacing", labels: ["Expo", "Harmonic", "Rational"] },
   { kind: "cells", params: [["ampStart", "A Start"], ["ampEnd", "A End"], ["ampCurve", "A Crv", "bipolar"]] },
   { kind: "cells", params: [["amplitude", "Amp"]], horizontal: true },
@@ -63,20 +63,20 @@ check(d.face.every((row) => !JSON.stringify(row).match(/time|endDelay|endTime/i)
 check(!keys.time && !keys.endDelay && !keys.endTime, "parameters stay Frequency + Duty (no Time / End Delay keys)");
 check(d.face.find((r) => r.params?.[0]?.[0] === "wave")?.horizontal === true, "Shape is a horizontal cell switch (10 grains)");
 check(keys.wave?.choices?.length === 10, "Shape has 10 grains");
-check(keys.frequency?.unit === "Hz" && keys.duty?.label === "Pulse Duty", "Freq is Hz, Duty is Pulse Duty");
+check(keys.frequency?.unit === "Hz" && keys.duty?.label === "Pulse Duty", "ƒ is Hz, Duty is Pulse Duty");
 check(keys.pulseMode?.label === "Fwd-Rev" && keys.pulseMode?.max === "1" && keys.pulseMode?.step === "any" && !keys.pulseMode?.choices, "Fwd-Rev is a 0..1 slider");
-check(keys.curve?.label === "F Crv" && keys.curve?.min === "-10" && keys.curve?.max === "10", "F Crv is bipolar Time Curve");
+check(keys.curve?.label === "ƒ Crv" && keys.curve?.min === "-10" && keys.curve?.max === "10", "ƒ Crv is bipolar Time Curve");
 check(keys.count?.max === "1280" && keys.count?.mid === "64" && keys.count?.sliderCurve === "skew", "Count slider domain 1280 mid-skew (DSP 16384)");
-check(d.face[0]?.kind === "choices" && d.face[0]?.param === "recalculateOnTrigger", "Free/Latch is a labeled-box choice row above Fwd-Rev");
-check(d.face[1]?.params?.[0]?.[0] === "pulseMode" && d.face[1]?.horizontal === true, "Fwd-Rev is a horizontal fill row under Free/Latch");
-check(d.face[2]?.params?.[0]?.[0] === "wave" && d.face[2]?.params.length === 1, "Shape is its own row under Fwd-Rev");
-check(d.face[3]?.kind === "choices" && d.face[3]?.param === "antialiasing", "Antialiasing is a labeled-box choice row under Shape");
-check(d.face[4]?.params?.[0]?.[0] === "morph" && d.face[4]?.params?.[1]?.[0] === "count" && d.face[4]?.params?.[3]?.[0] === "stretch", "Morph | Count | Duty | Stretch");
+check(d.face[0]?.params?.[0]?.[0] === "pulseMode" && d.face[0]?.horizontal === true, "Fwd-Rev is the first face row, horizontal");
+check(d.face[1]?.params?.[0]?.[0] === "wave" && d.face[1]?.params.length === 1, "Shape is its own row under Fwd-Rev");
+check(d.face[2]?.kind === "choices" && d.face[2]?.param === "antialiasing", "Antialiasing is a labeled-box choice row under Shape");
+check(d.face[3]?.kind === "choices" && d.face[3]?.param === "recalculateOnTrigger", "Free/Latch sits between AA and One shot/Loop");
+check(d.face[4]?.kind === "choices" && d.face[4]?.param === "mode", "One shot/Loop is a labeled-box choice row under Free/Latch");
+check(d.face[5]?.params?.[0]?.[0] === "morph" && d.face[5]?.params?.[1]?.[0] === "count" && d.face[5]?.params?.[3]?.[0] === "stretch", "Morph | Count | Duty | Stretch");
 check(keys.stretch?.defaultValue === "1" && keys.stretch?.min === "1" && keys.stretch?.max === "8" && keys.stretch?.sliderCurve === "skew", "Stretch slider 1–8 mid-skew (DSP unclamped)");
-check(d.face[5]?.params?.[0]?.[0] === "frequency" && d.face[5]?.params?.[1]?.[0] === "mode" && d.face[5]?.params?.[2]?.[0] === "curvePolarity", "Freq | One shot/Loop | +/-");
-check(d.face[6]?.horizontal === true && d.face[6]?.params?.[0]?.[0] === "curve", "F Crv is its own horizontal fill row");
+check(d.face[6]?.params?.[0]?.[0] === "curvePolarity" && d.face[6]?.params?.[1]?.[1] === "ƒ" && d.face[6]?.params?.[2]?.[1] === "ƒ Crv", "+/- | ƒ | ƒ Crv");
 check(d.face[7]?.kind === "choices" && d.face[7]?.param === "spacing", "Expo/Harmonic/Rational is a labeled-box choice row");
-check(d.face[8]?.params?.[0]?.[0] === "ampStart" && d.face[8]?.params.length === 3, "A Start | A End | A Crv (polarity moved to Frequency row)");
+check(d.face[8]?.params?.[0]?.[0] === "ampStart" && d.face[8]?.params.length === 3, "A Start | A End | A Crv");
 check(d.face[9]?.horizontal === true && d.face[9]?.params?.[0]?.[0] === "amplitude", "Amp is its own horizontal fill row");
 check(d.face[10]?.horizontal === true && d.face[10]?.params?.[0]?.[0] === "presetMorph", "Preset Morph sits above Seed");
 check(d.face[d.face.length - 1]?.kind === "seed" && d.face[d.face.length - 1]?.param === "seed", "Seed uses the shared seed row helper");
@@ -86,8 +86,8 @@ check(keys.spacing?.choices?.[0] === "Expo" && keys.spacing?.choices?.[2] === "R
 
 for (const page of ["index.html", "perform.html"]) {
   const html = fs.readFileSync(path.join(root, "public", page), "utf8");
-  check(/node-graph-module-definitions\.js\?v=pt-face-mode-1/.test(html), `${page} cache-bust definitions pt-face-mode-1`);
-  check(/node-graph-module-face\.js\?v=player-mode-1/.test(html) || /node-graph-module-face\.js\?v=pt-face-9/.test(html), `${page} cache-bust module-face`);
+  check(/node-graph-module-definitions\.js\?v=pt-f-label-1/.test(html), `${page} cache-bust definitions pt-f-label-1`);
+  check(/node-graph-module-face\.js\?v=unit-phi-1/.test(html) || /node-graph-module-face\.js\?v=player-mode-1/.test(html) || /node-graph-module-face\.js\?v=pt-face-9/.test(html), `${page} cache-bust module-face`);
   check(/node-graph-pulse-train-display\.js\?v=pt-stretch-1/.test(html), `${page} cache-bust display pt-stretch-1`);
   check(/gl-line-renderer\.js\?v=pt-dsp-16384/.test(html), `${page} cache-bust gl-line-renderer pt-dsp-16384`);
 }
