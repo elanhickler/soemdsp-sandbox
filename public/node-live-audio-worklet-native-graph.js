@@ -509,6 +509,7 @@ NodeLiveAudioProcessor.prototype.mapNativeGraphParamId = function mapNativeGraph
     // is kParamFrequency (unused by process_pulse_train) and KEY_IDS.mode is Recalc.
     if (k === "frequency") return P.NATIVE_GRAPH_PARAM_TIME_DENOMINATOR;
     if (k === "duty") return P.NATIVE_GRAPH_PARAM_TIME_NUMERATOR;
+    if (k === "stretch") return P.NATIVE_GRAPH_PARAM_OFFSET_MS;
     if (k === "mode") return P.NATIVE_GRAPH_PARAM_TIMING_MODE;
     if (k === "recalculateOnTrigger") return P.NATIVE_GRAPH_PARAM_MODE;
     if (k === "pulseMode") return P.NATIVE_GRAPH_PARAM_LFO_STYLE;
@@ -3250,6 +3251,7 @@ NodeLiveAudioProcessor.prototype.hostCvControllerBiasKey = function hostCvContro
     || type === "pluginSlider"
     || type === "toggleButton"
     || type === "momentaryButton"
+    || type === "playerMode"
   ) {
     if (sp === "Bias" || sp === "Out" || sp === "Ext Out" || sp === "offset" || sp === "value") {
       return "offset";
@@ -6522,9 +6524,10 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
       push("mode", P.NATIVE_GRAPH_PARAM_TIMING_MODE, disc("mode", 1)); // 0 One shot / 1 Loop
       push("recalculateOnTrigger", P.NATIVE_GRAPH_PARAM_MODE, disc("recalculateOnTrigger", 0)); // 0 Off live / 1 On latched
       push("pulseMode", P.NATIVE_GRAPH_PARAM_LFO_STYLE, cont("pulseMode", 0)); // 0 Forward / 0.5 out-and-back / 1 peak-right
-      push("curvePolarity", P.NATIVE_GRAPH_PARAM_FEEDBACK, disc("curvePolarity", 0)); // 0 + attack / 1 - return
+      push("curvePolarity", P.NATIVE_GRAPH_PARAM_FEEDBACK, disc("curvePolarity", 0)); // 0 + peak / 1 - trough
       push("spacing", P.NATIVE_GRAPH_PARAM_CENTER, disc("spacing", 0)); // 0 Expo / 1 Harmonic / 2 Rational
       push("duty", P.NATIVE_GRAPH_PARAM_TIME_NUMERATOR, cont("duty", 0.5)); // pulsing fraction of the cycle
+      push("stretch", P.NATIVE_GRAPH_PARAM_OFFSET_MS, cont("stretch", 1)); // schedule length in cycles at Duty 1
       push("antialiasing", P.NATIVE_GRAPH_PARAM_WAVEFORM, disc("antialiasing", 0)); // 0 Off / 1 Random / 2 Dither (Robin1 ±1)
       push("seed", P.NATIVE_GRAPH_PARAM_SEED, disc("seed", 0));
       push("wave", P.NATIVE_GRAPH_PARAM_OVERSAMPLE, disc("wave", 2)); // 0 Trigger / 1 Gate / 2 Saw / 3 Ramp / 4 TriSaw / 5 Sine / 6-8 Pulse Left/Center/Right / 9 Rect Sine

@@ -1200,6 +1200,9 @@ async function nodeGraphAudioPlayerLibraryPlayIndex(nodeId, index, { autoplay = 
       const sampleId = await nodeGraphAudioPlayerLibraryEnsureItemLoaded(nodeId, item);
       if (tokens.get(nodeId) !== token) {
         nodeGraphAudioPlayerLog("INFO", "play superseded during decode", { nodeId, token });
+        if (typeof nodeGraphAudioPlayerPlaylistEndLoad === "function") {
+          nodeGraphAudioPlayerPlaylistEndLoad(nodeId);
+        }
         return;
       }
       item.sampleId = sampleId || item.sampleId;
@@ -1211,6 +1214,9 @@ async function nodeGraphAudioPlayerLibraryPlayIndex(nodeId, index, { autoplay = 
       });
     } catch (error) {
       if (tokens.get(nodeId) !== token) {
+        if (typeof nodeGraphAudioPlayerPlaylistEndLoad === "function") {
+          nodeGraphAudioPlayerPlaylistEndLoad(nodeId);
+        }
         return;
       }
       const message = String(error?.message || error || "load failed");
@@ -1234,6 +1240,9 @@ async function nodeGraphAudioPlayerLibraryPlayIndex(nodeId, index, { autoplay = 
   const live = typeof nodeGraphPatchNode === "function" ? nodeGraphPatchNode(nodeId) : node;
   if (!live || tokens.get(nodeId) !== token) {
     nodeGraphAudioPlayerLog("INFO", "play superseded after decode", { nodeId, token });
+    if (typeof nodeGraphAudioPlayerPlaylistEndLoad === "function") {
+      nodeGraphAudioPlayerPlaylistEndLoad(nodeId);
+    }
     return;
   }
   const found = nodeGraphAudioPlayerLibraryFindBufferForItem(item)
@@ -1333,6 +1342,9 @@ async function nodeGraphAudioPlayerLibraryPlayIndex(nodeId, index, { autoplay = 
       ? (nodeGraphAudioPlayerPlaylistCurrentSampleRef(live)?.name || "")
       : (live.sample?.name || ""),
   });
+  if (typeof nodeGraphAudioPlayerPlaylistEndLoad === "function") {
+    nodeGraphAudioPlayerPlaylistEndLoad(nodeId);
+  }
 }
 
 function nodeGraphAudioPlayerLibraryPlayNext(nodeId, options = {}) {

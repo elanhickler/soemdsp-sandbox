@@ -201,6 +201,7 @@ function nodeGraphGhostSliderControllerOutSample(nodeId, port) {
     && type !== "momentaryButton"
     && type !== "knob"
     && type !== "pluginSlider"
+    && type !== "playerMode"
   ) {
     return null;
   }

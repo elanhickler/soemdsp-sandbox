@@ -209,7 +209,7 @@ registerNodeGraphChromelessModule("fbmField", {
         min: "0",
         step: "0.01",
         kind: "phase",
-        unit: "cycle",
+        unit: "\u03C6",
         wraparound: true,
         tooltip: "View rotation of the field (cycles).",
       },

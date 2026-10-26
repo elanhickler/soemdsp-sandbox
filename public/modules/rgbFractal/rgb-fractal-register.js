@@ -120,7 +120,7 @@ registerNodeGraphChromelessModule("rgbFractal", {
         nonlinearSlider: false,
         step: "any",
         wraparound: true,
-        unit: "cycle",
+        unit: "\u03C6",
         tooltip:
           "Static face view angle (0…1 cycle wrap). Adds to the free-running Rotation Speed phasor. Face only.",
       },

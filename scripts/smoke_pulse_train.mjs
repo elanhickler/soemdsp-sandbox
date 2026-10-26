@@ -8,8 +8,8 @@ import { fileURLToPath } from "url";
 // Graph Pulse Train is Frequency (timeDenominator) + Duty (timeNumerator):
 // Time = Duty/ƒ/(Fwd-Rev?2:1), End Delay = (1-Duty)/ƒ (graph 255). ptFD maps an
 // old Time / End Delay pair to the same schedule.
-const dualAmt = (m) => (m <= 0 ? 0 : m >= 0.5 ? 1 : m * 2);
-const ptFD = (T, D, m) => { const k = 1 + dualAmt(m); const c = k * T + D; const f = 1 / c; const duty = (k * T) / c; const P = 1 / f; return { f, duty, T: duty * P / k, D: (1 - duty) * P }; };
+const spanScale = (m) => (m <= 0.5 ? 1 + 2 * m : 3 - 2 * m);
+const ptFD = (T, D, m) => { const k = spanScale(m); const c = k * T + D; const f = 1 / c; const duty = (k * T) / c; const P = 1 / f; return { f, duty, T: duty * P / k, D: (1 - duty) * P }; };
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const imp = { env: { emo_process_block: () => 0 } };
 const load = async (p) => (await WebAssembly.instantiate(fs.readFileSync(p), imp)).instance.exports;
@@ -268,11 +268,11 @@ console.log("ok pulseTrain a new Trigger hit mid-train restarts it (single Trigg
   const loopLast = T + T * E(set[2], (Nf - 1) / Nf);
   if (Math.abs(loopP.t[loopP.t.length - 1] - loopLast) > 1e-6) throw new Error(`dual loop last ${loopP.t[loopP.t.length - 1]} want ${loopLast}`);
   const cap = preview(N, [16384, 0.01, 0, 1, 1, 0, 1, 0, 0.5, 0]);
-  if (cap.t.length !== 16383) throw new Error(`dual cap: count ${cap.t.length} want 16383 (nFwd 8192, prefix 2N-1)`);
+  if (cap.t.length !== 16383) throw new Error(`dual cap: count ${cap.t.length} want 16383 (nFwd 8192, 2N-1)`);
   console.log(`ok pulseTrain Fwd-Rev 0.5: reverse-then-forward peak at Time, last=2T, Loop 2N-1, playback sample-exact, last pulse sample ${last}`);
 }
-// 5b) + polarity: 0.25 grows an attack prefix (peak walks right). 1.0 peak at the right.
-//     - polarity: old return-grow / peak-left (v25).
+// 5b) + polarity: 0.25 grows an attack prefix (peak walks right). 1.0 is one-way reverse (peak at Time).
+//     - polarity: same times, each amp flips around (A Start + A End)/2.
 {
   const set = [8, 0.2, 3, 1, 0.2, 0, 1];
   const Nf = set[0], T = set[1];
@@ -286,21 +286,44 @@ console.log("ok pulseTrain a new Trigger hit mid-train restarts it (single Trigg
   if (Math.abs(grow.t[grow.t.length - 1] - 1.5 * T) > 1e-12) throw new Error(`fwdrev 0.25: last ${grow.t[grow.t.length - 1]} != 1.5*Time`);
   if (!(grow.a[0] < grow.a[gPeak] - 1e-9)) throw new Error("fwdrev 0.25: first pulse should be the attack");
   const rf = preview(N, [...set, 0, 1, 0]);
-  if (rf.t.length !== 2 * Nf - 2) throw new Error(`fwdrev 1.0: count ${rf.t.length}`);
+  if (rf.t.length !== Nf) throw new Error(`fwdrev 1.0: count ${rf.t.length} want ${Nf}`);
   const rPeak = rf.a.indexOf(Math.max(...rf.a));
-  if (Math.abs(rf.t[rPeak] - 2 * T) > 1e-12) throw new Error(`fwdrev 1.0: peak ${rf.t[rPeak]} != 2*Time (right)`);
+  if (Math.abs(rf.t[rPeak] - T) > 1e-12) throw new Error(`fwdrev 1.0: peak ${rf.t[rPeak]} != Time`);
+  if (rf.t[0] !== 0) throw new Error("fwdrev 1.0: first should be at t=0");
+  if (!(rf.a[0] < rf.a[rPeak] - 1e-9)) throw new Error("fwdrev 1.0: start should be quieter than the peak");
   for (let j = 1; j < rf.t.length; j++) {
     if (!(rf.t[j] >= rf.t[j - 1] - 1e-12)) throw new Error(`fwdrev 1.0 times not ordered at ${j}`);
   }
   const alias = preview(N, [...set, 0, 3, 0]);
   if (JSON.stringify(alias) !== JSON.stringify(rf)) throw new Error("old integer 3 does not alias to Fwd-Rev 1.0");
-  const oldGrow = preview(N, [...set, 0, 0.25, 0, 1]);
-  const oldS = preview(S, [...set, 0, 0.25, 0, 1]);
-  if (JSON.stringify(oldS) !== JSON.stringify(oldGrow)) throw new Error("polarity -: standalone != combined");
-  if (oldGrow.t.length !== 2 * Nf - 1) throw new Error(`polarity - 0.25: count ${oldGrow.t.length}`);
-  if (oldGrow.t[0] !== 0 || Math.abs(oldGrow.a[0] - 1) > 1e-12) throw new Error("polarity - 0.25: peak should stay at t=0");
-  if (Math.abs(oldGrow.t[oldGrow.t.length - 1] - 1.5 * T) > 1e-12) throw new Error("polarity - 0.25: last != 1.5*Time");
-  console.log("ok pulseTrain Fwd-Rev 0.25 adds attack and peak walks right; 1.0 peak at the right; polarity - is the old return-grow");
+  const inv = preview(N, [...set, 0, 0.25, 0, 1]);
+  const invS = preview(S, [...set, 0, 0.25, 0, 1]);
+  if (JSON.stringify(invS) !== JSON.stringify(inv)) throw new Error("polarity -: standalone != combined");
+  if (inv.t.length !== 2 * Nf - 1) throw new Error(`polarity - 0.25: count ${inv.t.length}`);
+  if (JSON.stringify(inv.t) !== JSON.stringify(grow.t)) throw new Error("polarity -: times must match + (vertical invert)");
+  const midA = set[3] + set[4];
+  for (let j = 0; j < grow.a.length; j++) {
+    if (Math.abs(grow.a[j] + inv.a[j] - midA) > 1e-12) throw new Error(`polarity -: amp ${inv.a[j]} + ${grow.a[j]} != ${midA} at ${j}`);
+  }
+  const troughI = inv.a.indexOf(Math.min(...inv.a));
+  if (Math.abs(inv.t[troughI] - 0.5 * T) > 1e-12) throw new Error(`polarity - 0.25: trough ${inv.t[troughI]} != 0.5*Time`);
+  if (!(inv.a[0] > inv.a[troughI] + 1e-9)) throw new Error("polarity - 0.25: start should be louder than the trough");
+  if (Math.abs(inv.t[inv.t.length - 1] - 1.5 * T) > 1e-12) throw new Error("polarity - 0.25: last != 1.5*Time");
+  const mid = preview(N, [...set, 0, 0.5, 0]);
+  const midInv = preview(N, [...set, 0, 0.5, 0, 1]);
+  const midPeak = mid.a.indexOf(Math.max(...mid.a));
+  const midTrough = midInv.a.indexOf(Math.min(...midInv.a));
+  if (Math.abs(mid.t[midPeak] - T) > 1e-12) throw new Error("0.5 +: peak not at Time");
+  if (Math.abs(midInv.t[midTrough] - T) > 1e-12) throw new Error("0.5 -: trough not at Time (center stays)");
+  if (JSON.stringify(mid.t) !== JSON.stringify(midInv.t)) throw new Error("0.5 -: times must match +");
+  const bent = [8, 0.2, 3, 1, 0.2, 4, 1];
+  const bPlus = preview(N, [...bent, 0, 0.5, 0]);
+  const bInv = preview(N, [...bent, 0, 0.5, 0, 1]);
+  if (JSON.stringify(bPlus.t) !== JSON.stringify(bInv.t)) throw new Error("ampCurve invert: times moved");
+  for (let j = 0; j < bPlus.a.length; j++) {
+    if (Math.abs(bPlus.a[j] + bInv.a[j] - 1.2) > 1e-9) throw new Error(`ampCurve invert not vertical at ${j}`);
+  }
+  console.log("ok pulseTrain Fwd-Rev 0.25 peak walks right; 1.0 is reverse over Time; polarity - is a vertical invert");
 }
 // 6) End Delay: One-shot End after last pulse + delay. Count 1 last pulse is t=0.
 {

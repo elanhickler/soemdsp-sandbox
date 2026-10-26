@@ -447,6 +447,7 @@ function paintNodeSliderReadout(slider, readout) {
   const displayValue = Number.isFinite(sentRaw) ? sentRaw : baseValue;
   const position = nodeSliderTravelFromValue(slider, baseValue) * 100;
   let unit = (slider.dataset.unit || "").trim();
+  if (/^cycles?$/i.test(unit)) unit = "\u03C6";
   let formattedValue = displayValue;
   let formattedKind = slider.dataset.kind;
   let formattedMaxDigits = slider.dataset.maxDigits;

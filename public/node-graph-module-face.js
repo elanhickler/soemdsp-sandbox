@@ -9,7 +9,9 @@
 //   choices   { param, labels }                 labeled button row (short names that fit)
 //   fraction  { num, den, mode, modeLabels, cell? } musical division: n / d + Normal/Dotted/Triplet (+ optional cell)
 //   lfoStyles { param, labels, seedParam }      buttons with waveform snips
-//   cells     { params: [[key, label, "bipolar"?]...], horizontal } fill sliders (bipolar fills from the middle)
+//   cells     { params: [[key, label, "bipolar"|"stack"|"horizontal"?]...], horizontal }
+//     fill sliders (bipolar fills from the middle). "stack" = two choice buttons + over −.
+//     Per-cell "horizontal" overrides the row flag.
 //     Choice switch (app-wide): { kind: "cells", params: [[key, label]], horizontal: true }
 //     Label left, value right, selected-slot rectangle, no divider strokes.
 //     Never use a DOM slider row for a face choice. leftover kind: "slider" is upgraded to this.
@@ -177,8 +179,9 @@ function nodeGraphModuleFaceWidgets(spec, fw, moduleEl = null) {
     const first = out.length;
     const base = { row, y, h };
     if (row.kind === "choices" || row.kind === "lfoStyles") {
+      const start = Math.max(0, Math.round(Number(row.start) || 0));
       split(0, w, row.labels.length).forEach(([x, cw], i) => out.push({
-        ...base, type: row.kind === "choices" ? "choice" : "lfoStyle", param: row.param, index: i, label: row.labels[i], x, w: cw,
+        ...base, type: row.kind === "choices" ? "choice" : "lfoStyle", param: row.param, index: start + i, label: row.labels[i], x, w: cw,
       }));
     } else if (row.kind === "fraction") {
       // Proportional so the row reads at any width (rails take width, never add it).
@@ -195,10 +198,43 @@ function nodeGraphModuleFaceWidgets(spec, fw, moduleEl = null) {
       }));
       if (row.cell) out.push({ ...base, type: "cell", param: row.cell[0], label: row.cell[1], bipolar: true, x: w - cellW, w: cellW });
     } else if (row.kind === "cells") {
-      split(0, w, row.params.length).forEach(([x, cw], i) => out.push({
-        ...base, type: "cell", param: row.params[i][0], label: row.params[i][1], horizontal: !!row.horizontal,
-        bipolar: row.params[i][2] === "bipolar", x, w: cw,
-      }));
+      const n = row.params.length;
+      const stackI = row.params.map((cell) => cell[2] === "stack");
+      const nStack = stackI.filter(Boolean).length;
+      const nFlex = n - nStack;
+      const stackW = nStack && nFlex
+        ? Math.round(Math.min(72, Math.max(44, w * 0.18)))
+        : 0;
+      const flexPool = nFlex ? Math.max(10, w - stackW * nStack) : w;
+      let x = 0;
+      let flexLeft = nFlex;
+      let flexRemain = flexPool;
+      row.params.forEach((cell, i) => {
+        const mode = cell[2] || "";
+        let cx;
+        let cw;
+        if (nFlex && nStack) {
+          if (stackI[i]) cw = stackW;
+          else {
+            cw = flexLeft === 1 ? flexRemain : Math.round(flexPool / nFlex);
+            flexRemain -= cw;
+            flexLeft -= 1;
+          }
+          cx = x;
+          x += cw;
+        } else {
+          const box = split(0, w, n)[i];
+          cx = box[0];
+          cw = box[1];
+        }
+        out.push({
+          ...base, type: "cell", param: cell[0], label: cell[1],
+          horizontal: mode === "horizontal" || (!mode && !!row.horizontal),
+          bipolar: mode === "bipolar",
+          stack: mode === "stack",
+          x: cx, w: cw,
+        });
+      });
     } else if (row.kind === "filter") {
       out.push({ ...base, type: "filter", hpf: row.hpf, lpf: row.lpf, x: 0, w, param: "" });
     } else if (row.kind === "band") {
@@ -241,7 +277,8 @@ function nodeGraphModuleFaceValueText(input) {
         shown = null;
       }
     }
-    const unit = String((shown && typeof shown === "object" && shown.unit) || input.dataset.unit || "");
+    let unit = String((shown && typeof shown === "object" && shown.unit) || input.dataset.unit || "");
+    if (/^cycles?$/i.test(unit)) unit = "\u03C6";
     return unit && !(typeof nodeSliderChoiceLabel === "function" && nodeSliderChoiceLabel(input)) ? `${text} ${unit}` : text;
   }
   const sent = Number(input.dataset.sentDomainValue);
@@ -250,7 +287,8 @@ function nodeGraphModuleFaceValueText(input) {
   const integer = Number(input.dataset.step) >= 1;
   const text = integer || (a >= 10 && Math.abs(v - Math.round(v)) < 1e-6) ? String(Math.round(v))
     : v.toFixed(a >= 100 ? 0 : (a >= 10 ? 1 : 2));
-  const unit = String(input.dataset.unit || "");
+  let unit = String(input.dataset.unit || "");
+  if (/^cycles?$/i.test(unit)) unit = "\u03C6";
   return unit ? `${text} ${unit}` : text;
 }
 
@@ -580,6 +618,16 @@ function beginNodeGraphModuleFaceGesture(article, face, spec, event) {
       return;
     }
     setNodeGraphModuleFaceValue(input, Number(input?.min || 0) + wd.index, false);
+    return;
+  }
+  if (wd.type === "cell" && wd.stack) {
+    if (resetOnClick) {
+      nodeGraphModuleFaceCapture(face, event, () => {}, captureOpts);
+      return;
+    }
+    const n = Math.max(2, nodeGraphModuleFaceParamChoiceCount(input) || 2);
+    const i = Math.max(0, Math.min(n - 1, Math.floor((p.y - wd.y) / Math.max(1, wd.h) * n)));
+    setNodeGraphModuleFaceValue(input, Number(input?.min || 0) + i, false);
     return;
   }
   if (wd.type === "seedButton") {
@@ -988,7 +1036,23 @@ function nodeGraphModuleFaceDrawGl(batch, el, w, ox, oy, z) {
       if (wd.param && el.querySelector(`.node-parameter-row.f-jack-owns-frequency[data-param="${CSS.escape(wd.param)}"]`)) {
         nodeGraphModuleFaceDrawOwnedStripes(batch, ox + (wd.x + gap) * z, oy + top * z, cw * z, ch * z, z);
       }
-      if (wd.horizontal) {
+      if (wd.stack) {
+        const parsed = typeof parseNodeMetadataChoices === "function"
+          ? parseNodeMetadataChoices(input?.dataset?.choices)
+          : [];
+        const labels = parsed.length >= 2 ? parsed : ["+", "\u2212"];
+        const n = Math.max(2, labels.length);
+        const idx = Math.max(0, Math.min(n - 1, Math.round(nodeGraphModuleFaceValue(input) - Number(input?.min || 0))));
+        const hh = ch / n;
+        for (let i = 0; i < n; i += 1) {
+          const sy = top + i * hh;
+          if (idx === i) rect(wd.x + gap, sy, cw, hh, ink.cellValueFill);
+          if (i > 0) line(wd.x + gap, sy, cw, 1, ink.cellLine);
+          const lab = String(labels[i] ?? (i === 0 ? "+" : "\u2212"));
+          const px = n > 2 ? 11.5 : 13.8;
+          nodeGraphModuleFaceText(batch, lab, ox + cx * z, oy + (sy + hh * 0.5) * z, px * z, idx === i ? ink.value : ink.label, { maxWidth: (cw - 4) * z });
+        }
+      } else if (wd.horizontal) {
         // Horizontal cell: label left, value right. Choice switch: selected-slot
         // rectangle, no divider strokes. Continuous params fill left to right.
         const choiceN = nodeGraphModuleFaceParamChoiceCount(input);

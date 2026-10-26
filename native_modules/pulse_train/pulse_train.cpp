@@ -6,7 +6,8 @@
 // Pulse Train: a trigger starts a train of single-sample pulses whose gaps
 // follow a time curve, like a thing slowing down over time (gaps grow).
 // The schedule is a closed form (no per-pulse buffer):
-//   N = Count (1..16384; Forward-Reverse: one-way max 8192 so 2N-1 fits),
+//   N = Count (DSP 1..16384; Forward-Reverse: one-way max 8192 so 2N-1 fits).
+//   Slider domain is Parameter Settings max (1280, mid-skew). Type above the slider for denser trains.
 //   u_i = i / (N - 1) (N = 1: u = 0), i = 0..N-1
 //   Spacing (time family; Amp Curve stays Expo):
 //     0 Expo (default): E_k(u) = (e^(k u) - 1) / (e^k - 1)  (k = 0: E(u) = u)
@@ -19,15 +20,16 @@
 // Curve > 0: gaps grow (fast first, stretching out); 0: even; < 0: gaps
 // shrink (a real bouncing ball settling speeds up). First pulse at t = 0,
 // last one-way pulse at exactly Time (Time 0..12 s). Pulse Mode is a
-// continuous Fwd-Rev bias p in [0, 1]: 0 Forward (one-way over Time).
-// Curve polarity + (0, default): (0, 0.5] grows an attack prefix so span =
-// Time*(1+2p) and the amplitude peak walks right (0.5 = reverse-then-forward,
-// peak at 50% of 2*Time); (0.5, 1] keeps the dual 2*Time train and rotates it
-// by (2p-1)*peakTime so the peak walks toward the end (1 = peak at the right).
-// Curve polarity - (1): the opposite -- (0, 0.5] grows the return after Time
-// (peak stays left); (0.5, 1] rotates so the peak walks toward t=0. One-shot
-// Forward-Reverse last pulse at 2*Time. Loop Forward-Reverse skips that
-// return so it does not stack on the next cycle's first pulse. End Delay is
+// continuous Fwd-Rev bias p in [0, 1] that walks the loud/fast peak:
+//   0   one-way forward over Time (high+fast first, low+slow last)
+//   0.5 reverse then forward, span 2*Time, peak in the middle
+//   1   one-way reverse over Time (opposite of 0: low+slow first, peak at Time)
+// (0, 0.5) grows the reverse attack in front; (0.5, 1) shrinks the forward
+// tail. Span is Time*(1+2p) until 0.5, then Time*(3-2p) back to Time.
+// Curve polarity − is a vertical invert of the same picture: pulse times
+// stay put, each amplitude reflects around (Amp Start + Amp End)/2 so a
+// peak becomes a trough and a palindrome’s time-center stays. One-shot dual last pulse at span. Loop dual skips a
+// wrap duplicate at the join. End Delay is
 // bipolar seconds after the last pulse: positive is silence after, negative
 // ends early (drop pulses with t > lastPulse+Delay). One-shot End fires at
 // max(0, lastPulse+Delay) (Count 1 last pulse is t=0). Loop cycle is
@@ -117,7 +119,7 @@ struct PulseTrainState {
   double effVel;
   bool loopSched;
   double pulseMode; // Fwd-Rev bias 0..1
-  double polarity;  // 0 + (attack / peak right), 1 - (return / peak left)
+  double polarity;  // 0 + peak, 1 - trough (invert curves around center)
   int spacing;      // 0 Expo / 1 Harmonic / 2 Rational
   bool allAtZero;
   double allAmp;
@@ -146,9 +148,9 @@ struct PreviewSched {
 static PulseTrainState gPool[kMaxInstances];
 static PreviewSched gPreview = {};
 
-// Pulse Mode p in [0, 1]: 0 Forward; 0.5 out-and-back; 1 fully reversed walk.
+// Pulse Mode p in [0, 1]: 0 Forward; 0.5 out-and-back peak at Time; 1 reverse.
 // Values > 1 (old integer Reverse / Rev-Fwd) clamp to 1.
-// polarity > 0.5 is - (old return-grow / peak-left); else + (attack / peak-right).
+// polarity > 0.5 is − (same times, amp inverted around start/end center); else + (peak).
 static inline double pulseBiasOf(double v) {
   if (!(v == v) || v <= 0.0) return 0.0;
   if (v >= 1.0) return 1.0;
@@ -157,19 +159,27 @@ static inline double pulseBiasOf(double v) {
 
 static inline bool polarityNeg(double v) { return v > 0.5; }
 
-static inline double dualAmtOf(double p) {
+static inline double preAmtOf(double p) {
+  p = pulseBiasOf(p);
   if (!(p > 0.0)) return 0.0;
   if (p >= 0.5) return 1.0;
   return p * 2.0;
 }
 
-static inline double rotAmtOf(double p) {
-  if (!(p > 0.5)) return 0.0;
-  if (p >= 1.0) return 1.0;
-  return (p - 0.5) * 2.0;
+static inline double postAmtOf(double p) {
+  p = pulseBiasOf(p);
+  if (p >= 1.0) return 0.0;
+  if (!(p > 0.5)) return 1.0;
+  return (1.0 - p) * 2.0;
 }
 
-static inline bool isDual(double p) { return dualAmtOf(p) > 0.0; }
+static inline double spanScaleOf(double p) {
+  return preAmtOf(p) + postAmtOf(p);
+}
+
+static inline bool isDual(double p) { return preAmtOf(p) > 0.0 && postAmtOf(p) > 0.0; }
+
+static inline bool isRevOnly(double p) { return preAmtOf(p) > 0.0 && !(postAmtOf(p) > 0.0); }
 
 static inline int clampFwd(double count, double pulseBias) {
   if (!(count >= 1.0)) return 1;
@@ -179,20 +189,15 @@ static inline int clampFwd(double count, double pulseBias) {
 }
 
 static inline int totalCount(int nFwd, double pulseBias, bool loop, double polarity) {
+  (void)loop;
+  (void)polarity;
   if (!isDual(pulseBias) || nFwd <= 1) return nFwd;
-  if (!polarityNeg(polarity)) {
-    // Prefix: skip reverse i=0 (peak join). When rotating, also skip reverse
-    // i=N-1 (it lands on wrapped forward last).
-    return rotAmtOf(pulseBias) > 0.0 ? 2 * nFwd - 2 : 2 * nFwd - 1;
-  }
-  // Suffix: one-shot keeps reverse i=0 at 2*Time; Loop drops the wrap duplicate.
-  return loop ? 2 * nFwd - 2 : 2 * nFwd - 1;
+  return 2 * nFwd - 1;
 }
 
-static inline int fwdRevIndex(int j, int nFwd, int total, bool prefix) {
+static inline int fwdRevIndex(int j, int nFwd) {
   if (j < nFwd) return j;
-  if (prefix && total == 2 * nFwd - 1) return 2 * nFwd - 1 - j;
-  return 2 * nFwd - 2 - j;
+  return 2 * nFwd - 1 - j;
 }
 
 static inline double curveShape(double k, double u) {
@@ -249,95 +254,63 @@ static inline double timeWarp(double k, double u, int i, int nFwd, bool loop) {
   return curveShape(k, u);
 }
 
-static inline double oneWayTime(int i, int nFwd, double end, double curve, bool loop) {
+static inline double oneWayTime(int i, int nFwd, double end, double curve, bool loop, double polarity) {
+  (void)polarity;
+  const double k = curve;
   if (!loop && i == nFwd - 1 && nFwd > 1) return end;
-  double t = end * timeWarp(curve, pulseU(i, nFwd, loop), i, nFwd, loop);
+  double t = end * timeWarp(k, pulseU(i, nFwd, loop), i, nFwd, loop);
   if (!(t >= 0.0)) t = 0.0;
   if (t > end) t = end;
   return t;
 }
 
-// prefix: reverse attack before the one-way train (peak walks right).
-// else: return after Time (v25, peak stays left / walks toward t=0).
-static inline double fwdRevTime(int j, int nFwd, double end, double curve, bool loop, double dualAmt, bool prefix, int total) {
-  const int i = fwdRevIndex(j, nFwd, total, prefix);
+// Reverse physical k (>= nFwd) then forward. Reverse attack is scaled by preAmt;
+// forward tail by postAmt. Join is at preAmt*Time.
+static inline double fwdRevTime(int j, int nFwd, double end, double curve, bool loop, double pulseBias, double polarity) {
+  const double p = pulseBiasOf(pulseBias);
+  const int i = fwdRevIndex(j, nFwd);
   const bool rev = j >= nFwd;
-  // Prefix reverse uses one-shot times so Loop still plants reverse i=N-1 at t=0.
-  const double tf = oneWayTime(i, nFwd, end, curve, (prefix && rev) ? false : loop);
+  const double tf = oneWayTime(i, nFwd, end, curve, rev ? false : loop, polarity);
+  const double pre = preAmtOf(p);
+  const double post = postAmtOf(p);
   if (rev) {
-    double t = prefix ? dualAmt * (end - tf) : end * (1.0 + dualAmt) - dualAmt * tf;
+    double t = pre * (end - tf);
     if (!(t >= 0.0)) t = 0.0;
     return t;
   }
-  return prefix ? dualAmt * end + tf : tf;
+  double t = pre * end + post * tf;
+  if (!(t >= 0.0)) t = 0.0;
+  return t;
 }
 
-// Time-order index j -> physical k. Prefix plays reverse pulses first.
-static inline int timeOrderK(int j, int nFwd, int total, bool prefix) {
-  if (!prefix) return j;
+// Time-order index j -> physical k. Reverse pulses first (attack / trough walk).
+static inline int timeOrderK(int j, int nFwd, int total) {
   const int nRev = total - nFwd;
   if (j < nRev) return nFwd + j;
   return j - nRev;
 }
 
-// First time-ordered index whose unrotated time is past thresh, so pulseTime(j)
-// stays sorted after the wrap (binary search in firstPulseAfter).
-static inline int rotK0(
-  int nFwd, double end, double curve, bool loop, double dualAmt, double shift, double span, int total, bool prefix
-) {
-  if (!(shift > 0.0) || total <= 1) return 0;
-  int lo = 0;
-  int hi = total;
-  while (lo < hi) {
-    const int mid = lo + ((hi - lo) >> 1);
-    const int k = timeOrderK(mid, nFwd, total, prefix);
-    const double tm = fwdRevTime(k, nFwd, end, curve, loop, dualAmt, prefix, total);
-    bool past;
-    if (prefix) {
-      const double rotT = tm + shift;
-      past = loop ? !(rotT < span) : rotT > span;
-    } else {
-      past = !((tm - shift) < 0.0);
-    }
-    if (!past) lo = mid + 1;
-    else hi = mid;
-  }
-  return lo >= total ? 0 : lo;
-}
-
-static inline int origK(
-  int j, int nFwd, double end, double curve, bool loop, double dualAmt, double shift, double span, int total, bool prefix
-) {
-  if (total <= 1 || !(shift > 0.0)) return timeOrderK(j, nFwd, total, prefix);
-  const int k0 = rotK0(nFwd, end, curve, loop, dualAmt, shift, span, total, prefix);
-  int idx = k0 + j;
-  if (idx >= total) idx -= total;
-  return timeOrderK(idx, nFwd, total, prefix);
+static inline int origK(int j, int nFwd, int total) {
+  return timeOrderK(j, nFwd, total);
 }
 
 static inline double pulseTime(int j, int nFwd, double end, double curve, bool loop, double pulseBias, double polarity) {
   const double p = pulseBiasOf(pulseBias);
-  if (!isDual(p) || nFwd <= 1) return oneWayTime(j, nFwd, end, curve, loop);
-  const bool prefix = !polarityNeg(polarity);
-  const double r = dualAmtOf(p);
-  const double rot = rotAmtOf(p);
-  const int total = totalCount(nFwd, p, loop, polarity);
-  const double span = end * (1.0 + r);
-  const double shift = rot * oneWayTime(nFwd - 1, nFwd, end, curve, loop);
-  const double thresh = shift > 0.0 ? (prefix ? span - shift : shift) : 0.0;
-  const int k = origK(j, nFwd, end, curve, loop, r, shift, span, total, prefix);
-  double tm = fwdRevTime(k, nFwd, end, curve, loop, r, prefix, total);
-  if (shift > 0.0) {
-    if (prefix) {
-      tm += shift;
-      if (loop ? tm >= span : tm > span) tm -= span;
-    } else {
-      tm -= shift;
-      if (tm < 0.0) tm += span;
-    }
-    if (!(tm >= 0.0)) tm = 0.0;
+  if (nFwd <= 1) return oneWayTime(0, nFwd, end, curve, loop, polarity);
+  if (isRevOnly(p)) {
+    const int i = nFwd - 1 - j;
+    double tf = oneWayTime(i, nFwd, end, curve, false, polarity);
+    double t = end - tf;
+    if (!(t >= 0.0)) t = 0.0;
+    if (t > end) t = end;
+    // Loop last pulse must sit before Time so it is not dropped at the wrap.
+    if (loop && nFwd > 1) t *= (double)(nFwd - 1) / (double)nFwd;
+    return t;
   }
-  return tm;
+  if (!isDual(p)) return oneWayTime(j, nFwd, end, curve, loop, polarity);
+  const int total = totalCount(nFwd, p, loop, polarity);
+  const int k = origK(j, nFwd, total);
+  return fwdRevTime(k, nFwd, end, curve, loop, p, polarity);
 }
 
 static inline double pulseAmp(
@@ -346,20 +319,23 @@ static inline double pulseAmp(
   double amplitude, double velocity, bool loop, double pulseBias, double polarity
 ) {
   const double p = pulseBiasOf(pulseBias);
-  int k = j;
-  const bool prefix = !polarityNeg(polarity);
-  const int total = totalCount(nFwd, p, loop, polarity);
-  if (isDual(p) && nFwd > 1) {
-    const double r = dualAmtOf(p);
-    const double rot = rotAmtOf(p);
-    const double span = end * (1.0 + r);
-    const double shift = rot * oneWayTime(nFwd - 1, nFwd, end, curve, loop);
-    const double thresh = shift > 0.0 ? (prefix ? span - shift : shift) : 0.0;
-    k = origK(j, nFwd, end, curve, loop, r, shift, span, total, prefix);
+  double a0 = ampStart, a1 = ampEnd, ac = ampCurve;
+  if (polarityNeg(polarity)) {
+    a0 = ampEnd;
+    a1 = ampStart;
   }
-  const int i = isDual(p) ? fwdRevIndex(k, nFwd, total, prefix) : k;
-  const bool rev = isDual(p) && nFwd > 1 && k >= nFwd;
-  return (ampStart + (ampEnd - ampStart) * curveShape(ampCurve, pulseU(i, nFwd, (prefix && rev) ? false : loop))) * amplitude * velocity;
+  int i = j;
+  bool uLoop = loop;
+  if (nFwd > 1 && isRevOnly(p)) {
+    i = nFwd - 1 - j;
+    uLoop = false;
+  } else if (isDual(p) && nFwd > 1) {
+    const int total = totalCount(nFwd, p, loop, polarity);
+    const int k = origK(j, nFwd, total);
+    i = fwdRevIndex(k, nFwd);
+    uLoop = k >= nFwd ? false : loop;
+  }
+  return (a0 + (a1 - a0) * curveShape(ac, pulseU(i, nFwd, uLoop))) * amplitude * velocity;
 }
 
 static inline bool paramsEqual(const double a[9], const double b[9]) {
@@ -603,7 +579,7 @@ static void applySchedule(PulseTrainState& s, const double live[9], double v, bo
   s.effVel = v;
   s.timeSpan = live[1] > 0.0 ? live[1] : 0.0;
   const double delay = clampDelay(live[8]);
-  const double span = (1.0 + dualAmtOf(s.pulseMode)) * s.timeSpan;
+  const double span = spanScaleOf(s.pulseMode) * s.timeSpan;
   s.cycle = span + delay;
   if (!(s.cycle == s.cycle)) s.cycle = 0.0;
   s.loopSched = loop;
@@ -669,7 +645,7 @@ static inline int pulseIndexAt(
 
 }  // namespace
 
-extern "C" int soemdsp_pulse_train_version() { return 27; }
+extern "C" int soemdsp_pulse_train_version() { return 31; }
 
 extern "C" int soemdsp_pulse_train_create() {
   for (int i = 0; i < kMaxInstances; i++) {
@@ -746,7 +722,7 @@ extern "C" double soemdsp_pulse_train_sample(
   const double modeNow = runningLatch ? s.pulseMode : pulseModeLive;
   const double timeNow = runningLatch ? s.timeSpan : (endTime > 0.0 ? endTime : 0.0);
   const double delayNow = runningLatch ? clampDelay(s.eff[8]) : live[8];
-  double schedNow = runningLatch ? s.cycle : ((1.0 + dualAmtOf(modeNow)) * timeNow + delayNow);
+  double schedNow = runningLatch ? s.cycle : (spanScaleOf(modeNow) * timeNow + delayNow);
   if (!(schedNow == schedNow)) schedNow = 0.0;
   const double periodLock = trackPeriodOf(freqHz, sr);
   const double scale = (periodLock > 0.0 && schedNow > 0.0) ? (periodLock / schedNow) : 1.0;
@@ -910,7 +886,7 @@ extern "C" double soemdsp_pulse_train_sample(
         // the cycle) is silent. Delay <= 0: runs to the wrap as before.
         const long long nWrap = s.cycleN > 0 ? s.cycleN : ceilLand(s.wrapCycle > 0.0 ? s.wrapCycle : 1.0 / sr, sr);
         if (delay > 0.0) {
-          const double spanT = (1.0 + dualAmtOf(du)) * endT;
+          const double spanT = spanScaleOf(du) * endT;
           const long long nSpan = eventLand(playT(spanT, scale), sr, stream, (unsigned int)total, aaMode, false);
           n1 = nSpan < nWrap ? nSpan : nWrap;
         } else {

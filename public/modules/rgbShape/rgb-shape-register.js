@@ -170,7 +170,7 @@
           mid: "0.5",
           min: "0",
           step: "0.01",
-          unit: "cycle",
+          unit: "\u03C6",
           wraparound: true },
         {
           choices: ["Clock(Ph)", "CounterClock(Ph)", "Clock(T)", "CounterClock(T)"],

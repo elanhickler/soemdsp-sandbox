@@ -25,6 +25,7 @@ const NODE_GRAPH_EFFICIENT_PRODUCT_AUDIO_TYPES = Object.freeze([
   "pluginSlider",
   "toggleButton",
   "momentaryButton",
+  "playerMode",
   "xyPad",
   "theremin",
   "keypad",

@@ -1839,41 +1839,29 @@ void main() {
   float p = uPulseMode;
   if (!(p > 0.0)) p = 0.0;
   if (p > 1.0) p = 1.0;
-  float dualAmt = p <= 0.0 ? 0.0 : (p >= 0.5 ? 1.0 : p * 2.0);
-  float rotAmt = p <= 0.5 ? 0.0 : (p >= 1.0 ? 1.0 : (p - 0.5) * 2.0);
-  bool prefix = !(uPolarity > 0.5);
-  bool rev = id >= ni;
-  bool prefixFull = prefix && !(rotAmt > 0.0);
-  int i = id < ni ? id : (prefixFull ? (2 * ni - 1 - id) : (2 * ni - 2 - id));
-  bool iLoop = uLoop > 0.5 && !(prefix && rev);
+  float preAmt = p <= 0.0 ? 0.0 : (p >= 0.5 ? 1.0 : p * 2.0);
+  float postAmt = p >= 1.0 ? 0.0 : (p <= 0.5 ? 1.0 : (1.0 - p) * 2.0);
+  bool revOnly = preAmt > 0.0 && !(postAmt > 0.0);
+  bool dual = preAmt > 0.0 && postAmt > 0.0;
+  bool rev = revOnly || (dual && id >= ni);
+  int i = id < ni ? id : (2 * ni - 1 - id);
+  if (revOnly) i = id;
+  float kT = uCurve;
+  bool iLoop = uLoop > 0.5 && !rev;
   float uu = iLoop ? float(i) / n : (n > 1.0 ? float(i) / (n - 1.0) : 0.0);
   float tf;
   if (!iLoop && i == ni - 1 && n > 1.0) tf = uDuration;
-  else tf = uDuration * timeWarp(uCurve, uu, i, n, iLoop);
+  else tf = uDuration * timeWarp(kT, uu, i, n, iLoop);
   if (!(tf >= 0.0)) tf = 0.0;
   if (tf > uDuration) tf = uDuration;
   float t;
-  if (id >= ni) {
-    t = prefix ? dualAmt * (uDuration - tf) : uDuration * (1.0 + dualAmt) - dualAmt * tf;
+  if (rev) {
+    t = preAmt * (uDuration - tf);
   } else {
-    t = prefix ? dualAmt * uDuration + tf : tf;
+    t = preAmt * uDuration + postAmt * tf;
   }
-  if (rotAmt > 0.0 && ni > 1) {
-    float peakU = uLoop > 0.5 ? float(ni - 1) / n : 1.0;
-    float peak = uLoop < 0.5 && n > 1.0 ? uDuration : uDuration * timeWarp(uCurve, peakU, ni - 1, n, uLoop > 0.5);
-    if (!(peak >= 0.0)) peak = 0.0;
-    if (peak > uDuration) peak = uDuration;
-    float span = uDuration * (1.0 + dualAmt);
-    float shift = rotAmt * peak;
-    if (prefix) {
-      t += shift;
-      if (uLoop > 0.5 ? t >= span : t > span) t -= span;
-    } else {
-      t -= shift;
-      if (t < 0.0) t += span;
-    }
-    if (!(t >= 0.0)) t = 0.0;
-  }
+  if (revOnly && uLoop > 0.5 && n > 1.0) t *= (n - 1.0) / n;
+  if (!(t >= 0.0)) t = 0.0;
   if (t > uAxis) {
     gl_Position = vec4(2.0, 2.0, 0.0, 1.0);
     vLocal = vec2(0.0);
@@ -1882,7 +1870,10 @@ void main() {
     vColour = vec4(0.0);
     return;
   }
-  float amp = abs((uAmpStart + (uAmpEnd - uAmpStart) * curveShape(uAmpCurve, uu)) * uAmp);
+  float a0 = uPolarity > 0.5 ? uAmpEnd : uAmpStart;
+  float a1 = uPolarity > 0.5 ? uAmpStart : uAmpEnd;
+  float kA = uAmpCurve;
+  float amp = abs((a0 + (a1 - a0) * curveShape(kA, uu)) * uAmp);
   float x = mix(uX0, uX1, clamp(t / uAxis, 0.0, 1.0));
   float y = uBase - (amp / uPeak) * (uBase - uTop);
   bool fired = uElapsed >= 0.0 && t <= uElapsed;

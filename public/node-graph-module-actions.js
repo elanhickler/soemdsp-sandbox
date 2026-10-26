@@ -2302,7 +2302,7 @@ function setNodeGraphModuleDisplayFromContext({ record = true } = {}) {
   if (
     typeof nodeGraphModuleUsesFaceLabelDisplay === "function"
       ? nodeGraphModuleUsesFaceLabelDisplay(type)
-      : (type === "knob" || type === "pluginSlider" || type === "toggleButton" || type === "momentaryButton")
+      : (type === "knob" || type === "pluginSlider" || type === "toggleButton" || type === "momentaryButton" || type === "playerMode")
   ) {
     if (typeof nodeGraphKnobFaceWriteLabelText === "function") {
       nodeGraphKnobFaceWriteLabelText(sourceNode.id, input?.value, { record });

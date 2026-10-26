@@ -68,6 +68,9 @@
   }
 
   const error = (code, message, extra = {}) => emit("error", { code, message, ...extra });
+  window.soemdspPlayerNotifyLoading = (busy, title) => {
+    emit("loading", { loading: Boolean(busy), title: String(title || "") });
+  };
 
   function state() {
     const id = nodeId();
@@ -82,6 +85,13 @@
     const phase = id && typeof nodeGraphSamplePhaseForNode === "function" ? nodeGraphSamplePhaseForNode(id) : 0;
     const transport = Math.round(Number(node?.params?.transport));
     const item = items[index] || null;
+    const fileName = String(item?.name || item?.title || node?.sample?.name || "");
+    const extMatch = fileName.match(/\.([^./\\]+)$/);
+    const base = fileName.replace(/\.[^./\\]+$/, "");
+    const split = base.split(/\s[-–—]\s+/);
+    const artist = split.length >= 2 ? split[0].trim() : "";
+    const song = split.length >= 2 ? split.slice(1).join(" - ").trim() : base;
+    const fileSize = Number(item?.bytes);
     return {
       nodeId: id,
       playing: [3, 4, 5].includes(transport) && running() && Boolean(node?.sample?.id),
@@ -89,6 +99,11 @@
       index: Number.isFinite(index) ? index : -1,
       count: items.length,
       title: String(item?.title || item?.name || node?.sample?.name || ""),
+      fileName,
+      fileExt: extMatch ? extMatch[1].toLowerCase() : "",
+      fileSize: Number.isFinite(fileSize) && fileSize > 0 ? fileSize : 0,
+      artist,
+      song,
       position: Math.round(phase * duration * 1000) / 1000,
       duration: Math.round(duration * 1000) / 1000,
       volume: Number(node?.params?.amplitude ?? 1),
@@ -345,6 +360,20 @@
     }
   }
 
+  function applyInfoStyle(msg) {
+    const root = document.documentElement;
+    const font = String(msg.font || "").trim();
+    const size = Number(msg.sizePx);
+    const line = Number(msg.lineHeight);
+    const color = String(msg.color || "").trim();
+    const background = String(msg.background || "").trim();
+    if (font) root.style.setProperty("--music-info-font", font);
+    if (Number.isFinite(size) && size > 0) root.style.setProperty("--music-info-size", `${size}px`);
+    if (Number.isFinite(line) && line > 0) root.style.setProperty("--music-info-line", String(line));
+    if (/^#[0-9a-fA-F]{6}$/.test(color)) root.style.setProperty("--music-info-color", color);
+    if (/^#[0-9a-fA-F]{6}$/.test(background)) root.style.setProperty("--music-info-bg", background);
+  }
+
   function setVolume(id, value) {
     const v = Math.max(0, Math.min(1, Number(value)));
     if (!Number.isFinite(v)) return error("bad-request", "volume needs value 0..1");
@@ -386,6 +415,7 @@
         break;
       }
       case "volume": setVolume(id, msg.value); break;
+      case "info-style": applyInfoStyle(msg); break;
       case "track": receiveTrack(msg); return;
       case "get-state": emit("state", state(), origin); return;
       default: return error("unknown-type", `unknown message ${msg.type}`);

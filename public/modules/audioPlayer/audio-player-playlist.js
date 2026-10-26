@@ -1759,6 +1759,9 @@ function nodeGraphAudioPlayerPlaylistBeginLoad(nodeId) {
   nodeGraphAudioPlayerPlaylistLoadBusy.set(id, true);
   nodeGraphAudioPlayerPlaylistAdvancePending.set(id, false);
   nodeGraphAudioPlayerPlaylistDebug(id, "begin-load");
+  if (typeof window.soemdspPlayerNotifyLoading === "function") {
+    window.soemdspPlayerNotifyLoading(true, "");
+  }
   nodeGraphAudioPlayerPlaylistRefreshLoadUi(id);
 }
 
@@ -1774,6 +1777,9 @@ function nodeGraphAudioPlayerPlaylistSetLoadTarget(nodeId, item) {
     name: item?.name || "",
     sampleId: item?.sampleId || "",
   });
+  if (typeof window.soemdspPlayerNotifyLoading === "function") {
+    window.soemdspPlayerNotifyLoading(true, item?.name || "");
+  }
   nodeGraphAudioPlayerPlaylistRefreshLoadUi(id);
 }
 
@@ -1783,6 +1789,9 @@ function nodeGraphAudioPlayerPlaylistEndLoad(nodeId) {
   nodeGraphAudioPlayerPlaylistLoadTarget.delete(id);
   nodeGraphAudioPlayerPlaylistAdvancePending.set(id, false);
   nodeGraphAudioPlayerPlaylistDebug(id, "end-load");
+  if (typeof window.soemdspPlayerNotifyLoading === "function") {
+    window.soemdspPlayerNotifyLoading(false, "");
+  }
   nodeGraphAudioPlayerPlaylistRefreshLoadUi(id);
 }
 

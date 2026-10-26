@@ -168,6 +168,7 @@ const nodeGraphNodeLabels = Object.freeze({
   pluginSlider: "Slider",
   toggleButton: "Toggle",
   momentaryButton: "Momentary",
+  playerMode: "Player Mode",
   fm: "Freq Manager",
   pitchHz: "Pitch ↔ Hz",
   pitchManager: "Pitch Manager",
@@ -916,7 +917,7 @@ const nodeGraphModuleDefinitions = (
         step: "1"
       },
       { defaultValue: "1", key: "rate", kind: "frequency", label: "Rate", max: "40", maxDigits: 5, mid: "1", min: "0", step: "any", unit: "Hz" },
-      { defaultValue: "0", key: "phase", kind: "phase", label: "Phase", max: "1", mid: "0.5", min: "0", nonlinearSlider: false, step: "0.01", unit: "cycle", wraparound: true },
+      { defaultValue: "0", key: "phase", kind: "phase", label: "Phase", max: "1", mid: "0.5", min: "0", nonlinearSlider: false, step: "0.01", unit: "\u03C6", wraparound: true },
       { defaultValue: "0", key: "inputMin", label: "In Min", max: "1", mid: "0", min: "-1", nonlinearSlider: false, step: "any" },
       { defaultValue: "1", key: "inputMax", label: "In Max", max: "1", mid: "0", min: "-1", nonlinearSlider: false, step: "any" },
     ]
@@ -976,7 +977,7 @@ const nodeGraphModuleDefinitions = (
         step: "1"
       },
       { defaultValue: "1", key: "rate", kind: "frequency", label: "Rate", max: "40", maxDigits: 5, mid: "1", min: "0", step: "any", unit: "Hz" },
-      { defaultValue: "0", key: "phase", kind: "phase", label: "Phase", max: "1", mid: "0.5", min: "0", nonlinearSlider: false, step: "0.01", unit: "cycle", wraparound: true },
+      { defaultValue: "0", key: "phase", kind: "phase", label: "Phase", max: "1", mid: "0.5", min: "0", nonlinearSlider: false, step: "0.01", unit: "\u03C6", wraparound: true },
       { defaultValue: "0", key: "inputMin", label: "In Min", max: "1", mid: "0", min: "-1", nonlinearSlider: false, step: "any" },
       { defaultValue: "1", key: "inputMax", label: "In Max", max: "1", mid: "0", min: "-1", nonlinearSlider: false, step: "any" },
     ]
@@ -1052,7 +1053,7 @@ const nodeGraphModuleDefinitions = (
         mid: "0.5",
         min: "0",
         step: "0.01",
-        unit: "cycle",
+        unit: "\u03C6",
         wraparound: true
       },
       {
@@ -1174,7 +1175,7 @@ const nodeGraphModuleDefinitions = (
         mid: "0.5",
         min: "0",
         step: "0.01",
-        unit: "cycle",
+        unit: "\u03C6",
         wraparound: true
       },
       {
@@ -1282,7 +1283,7 @@ const nodeGraphModuleDefinitions = (
         mid: "0.5",
         min: "0",
         step: "0.01",
-        unit: "cycle",
+        unit: "\u03C6",
         wraparound: true,
         tooltip:
           "Phase offset (cycles). Knob + Phase MOD from audio-rate sources add sample-accurately." },
@@ -1382,7 +1383,7 @@ const nodeGraphModuleDefinitions = (
         mid: "0.5",
         min: "0",
         step: "0.01",
-        unit: "cycle",
+        unit: "\u03C6",
         wraparound: true,
         tooltip:
           "Phase offset (cycles). Knob + Phase MOD from audio-rate sources add sample-accurately." },
@@ -1560,7 +1561,7 @@ const nodeGraphModuleDefinitions = (
         mid: "0.5",
         min: "0",
         step: "0.01",
-        unit: "cycle",
+        unit: "\u03C6",
         wraparound: true,
         tooltip: "Phase used when Reset is triggered (or on first sample)."
       },
@@ -1643,7 +1644,7 @@ const nodeGraphModuleDefinitions = (
         mid: "0.5",
         min: "0",
         step: "0.01",
-        unit: "cycle",
+        unit: "\u03C6",
         wraparound: true,
         tooltip: "Phase used when Reset is triggered (or on first sample)."
       },
@@ -1824,7 +1825,7 @@ const nodeGraphModuleDefinitions = (
         mid: "0.5",
         min: "0",
         step: "0.01",
-        unit: "cycle",
+        unit: "\u03C6",
         wraparound: true,
         outputDomain: true,
         tooltip: "Adds the same phase offset (cycles) to every harmonic in the Graph." },
@@ -2079,7 +2080,7 @@ const nodeGraphModuleDefinitions = (
         mid: "100",
         min: "0",
         step: "any",
-        unit: "cycle",
+        unit: "\u03C6",
         outputDomain: true,
         tooltip: "Phase cascade depth in cycles (0…10000). Bubbly progressive harmonic phase offset." },
       {
@@ -2091,7 +2092,7 @@ const nodeGraphModuleDefinitions = (
         mid: "1",
         min: "0",
         step: "any",
-        unit: "cycle",
+        unit: "\u03C6",
         outputDomain: true,
         tooltip: "0 = off (Phase Skew ignores Cutoff). >0 = as Cutoff→1, effective Phase Skew lerps toward this value." },
       {
@@ -2886,7 +2887,7 @@ const nodeGraphModuleDefinitions = (
         mid: "100",
         min: "0",
         step: "any",
-        unit: "cycle",
+        unit: "\u03C6",
         outputDomain: true,
         tooltip: "Stagger: cascade depth in cycles (like Bubble Phase Skew). Scales the curve staircase." },
       {
@@ -2921,7 +2922,7 @@ const nodeGraphModuleDefinitions = (
         mid: "0.5",
         min: "0",
         step: "any",
-        unit: "cycle",
+        unit: "\u03C6",
         outputDomain: true,
         tooltip: "Add a constant phase to every bin after the staircase." },
       {
@@ -2933,7 +2934,7 @@ const nodeGraphModuleDefinitions = (
         mid: "1",
         min: "0",
         step: "any",
-        unit: "cycle",
+        unit: "\u03C6",
         outputDomain: true,
         tooltip: "Extra phase step added per bin index (bin × Jump). Pure staircase on top of the curve." },
       {
@@ -3339,7 +3340,7 @@ const nodeGraphModuleDefinitions = (
         step: "any",
         unit: "Hz",
         tooltip: "Orbit rate in Hz. Slider 0…5000 Hz. Negative values reverse the orbit." },
-      { defaultValue: "0", key: "phase", kind: "phase", label: "Phase", max: "1", mid: "0.5", min: "0", step: "0.01", unit: "cycle", wraparound: true },
+      { defaultValue: "0", key: "phase", kind: "phase", label: "Phase", max: "1", mid: "0.5", min: "0", step: "0.01", unit: "\u03C6", wraparound: true },
       {
         defaultValue: "0",
         key: "morph",
@@ -3415,7 +3416,7 @@ const nodeGraphModuleDefinitions = (
         step: "1",
         tooltip: "Off = full scale (may alias). Limit = floor C by \u03c9=2\u03c0f/sr so edge steepness stays under Nyquist. Dither = Robin cycle-length dither (each cycle a whole number of samples, randomly \u00b11 around sr/f) so aliasing turns into noise; C is not floored." },
       { defaultValue: "100", key: "frequency", kind: "frequency", label: "Frequency", max: "20000", mid: "220", min: "0", step: "any", unit: "Hz" },
-      { defaultValue: "0", key: "phase", kind: "phase", label: "Phase", max: "1", mid: "0.5", min: "0", step: "0.01", unit: "cycle", wraparound: true },
+      { defaultValue: "0", key: "phase", kind: "phase", label: "Phase", max: "1", mid: "0.5", min: "0", step: "0.01", unit: "\u03C6", wraparound: true },
       {
         defaultValue: "0",
         key: "offset",
@@ -3540,7 +3541,7 @@ const nodeGraphModuleDefinitions = (
         mid: "0.5",
         min: "0",
         step: "0.01",
-        unit: "cycle",
+        unit: "\u03C6",
         wraparound: true },
       {
         curveAmount: "-0.9",
@@ -3601,7 +3602,7 @@ const nodeGraphModuleDefinitions = (
       { key: "sharp", label: "Sharp", defaultValue: "0.5", min: "0.01", mid: "0.5", max: "0.99", step: "0.01" },
       { key: "sharpCurve", label: "Sharp Curve", defaultValue: "0", min: "0", mid: "0.5", max: "1", step: "0.01" },
       { key: "sharpCurveMult", label: "Sharp Curve Mult", defaultValue: "1", min: "0", mid: "1", max: "4", step: "0.01" },
-      { key: "position", label: "Position", defaultValue: "0", min: "0", mid: "0.5", max: "1", step: "0.01", kind: "phase", unit: "cycle", wraparound: true },
+      { key: "position", label: "Position", defaultValue: "0", min: "0", mid: "0.5", max: "1", step: "0.01", kind: "phase", unit: "\u03C6", wraparound: true },
       { key: "morph", label: "Morph", defaultValue: "0", min: "0", mid: "0.5", max: "1", step: "0.01", kind: "phase", wraparound: true },
       { key: "rotX", label: "Rot X", defaultValue: "0", min: "0", mid: "0.5", max: "1", step: "0.01", kind: "phase", wraparound: true },
       { key: "rotY", label: "Rot Y", defaultValue: "0", min: "0", mid: "0.5", max: "1", step: "0.01", kind: "phase", wraparound: true },
@@ -3685,7 +3686,7 @@ const nodeGraphModuleDefinitions = (
       { key: "rho", label: "Rho", defaultValue: "28", min: "0", mid: "28", max: "60", step: "0.01" },
       { key: "beta", label: "Beta", defaultValue: "2.6667", min: "0", mid: "2.6667", max: "10", step: "0.0001" },
       { key: "scale", label: "Scale", defaultValue: "1", min: "0", mid: "1", max: "4", step: "0.01" },
-      { key: "rotate", label: "Rotate", defaultValue: "0", min: "0", mid: "0.5", max: "1", step: "0.01", kind: "phase", unit: "cycle", wraparound: true },
+      { key: "rotate", label: "Rotate", defaultValue: "0", min: "0", mid: "0.5", max: "1", step: "0.01", kind: "phase", unit: "\u03C6", wraparound: true },
       { key: "zDepth", label: "Z Depth", defaultValue: "0.4", min: "0", mid: "0.4", max: "1", step: "0.01" },
       { key: "amplitude", label: "Amplitude", defaultValue: "1", min: "0", mid: "1", max: "1", step: "0.01" },
     ]
@@ -4540,7 +4541,7 @@ const nodeGraphModuleDefinitions = (
         mid: "0.5",
         min: "0",
         step: "0.01",
-        unit: "cycle",
+        unit: "\u03C6",
         wraparound: true
       },
       { key: "antialias", label: "AA", defaultValue: "0", min: "0", mid: "0.5", max: "1", step: "0.01" },
@@ -4708,7 +4709,7 @@ const nodeGraphModuleDefinitions = (
         mid: "0.5",
         min: "0",
         step: "0.01",
-        unit: "cycle",
+        unit: "\u03C6",
         wraparound: true,
         tooltip: "Phase offset in cycles. Reset snaps Wave to this offset." },
       {
@@ -4786,7 +4787,7 @@ const nodeGraphModuleDefinitions = (
         mid: "0.5",
         min: "0",
         step: "0.01",
-        unit: "cycle",
+        unit: "\u03C6",
         wraparound: true },
       {
         defaultValue: "0",
@@ -4864,7 +4865,7 @@ const nodeGraphModuleDefinitions = (
         mid: "0.5",
         min: "0",
         step: "0.01",
-        unit: "cycle",
+        unit: "\u03C6",
         wraparound: true
       },
       {
@@ -4922,7 +4923,7 @@ const nodeGraphModuleDefinitions = (
         mid: "0.5",
         min: "0",
         step: "0.01",
-        unit: "cycle",
+        unit: "\u03C6",
         wraparound: true,
         tooltip:
           "Only for Project = Dot: direction of the projection line (0…1 cycles). Out = X·cosθ + Y·sinθ — the shadow of the 2D path onto that axis."
@@ -5016,7 +5017,7 @@ const nodeGraphModuleDefinitions = (
         mid: "0.5",
         min: "0",
         step: "0.01",
-        unit: "cycle",
+        unit: "\u03C6",
         wraparound: true,
         tooltip:
           "Path-walk phase offset in cycles (0…1). Added to the free-running Frequency phasor each sample before Direction morph." },
@@ -5091,7 +5092,7 @@ const nodeGraphModuleDefinitions = (
         mid: "0.5",
         min: "0",
         step: "0.01",
-        unit: "cycle",
+        unit: "\u03C6",
         wraparound: true
       },
       {
@@ -5160,7 +5161,7 @@ const nodeGraphModuleDefinitions = (
         mid: "0.5",
         min: "0",
         step: "0.01",
-        unit: "cycle",
+        unit: "\u03C6",
         wraparound: true
       },
       {
@@ -5209,7 +5210,7 @@ const nodeGraphModuleDefinitions = (
         nonlinearSlider: false,
         step: "0.001",
         wraparound: true,
-        unit: "cycle",
+        unit: "\u03C6",
         tooltip:
           "Common phase on every partial. Sweeps pulse / folded shapes of the same spectrum."
       },
@@ -5698,7 +5699,7 @@ const nodeGraphModuleDefinitions = (
         mid: "0.5",
         max: "1",
         step: "0.01",
-        unit: "cycle",
+        unit: "\u03C6",
         wraparound: true,
         nonlinearSlider: false,
         sliderCurve: "linear",
@@ -5954,7 +5955,7 @@ const nodeGraphModuleDefinitions = (
         mid: "0.5",
         max: "1",
         step: "0.01",
-        unit: "cycle",
+        unit: "\u03C6",
         wraparound: true,
         tooltip: "LFO phase (turns)." },
       {
@@ -6113,7 +6114,7 @@ const nodeGraphModuleDefinitions = (
         mid: "0.5",
         max: "1",
         step: "0.01",
-        unit: "cycle",
+        unit: "\u03C6",
         wraparound: true,
         tooltip: "Wow LFO phase offset (turns)." },
       {
@@ -6891,7 +6892,7 @@ const nodeGraphModuleDefinitions = (
         min: "0",
         nonlinearSlider: false,
         step: "any",
-        unit: "cycle",
+        unit: "\u03C6",
         wraparound: true
       },
       {
@@ -8837,9 +8838,9 @@ const nodeGraphModuleDefinitions = (
     inputs: ["X", "Y", "Z"],
     outputs: ["X", "Y"],
     parameters: [
-      { defaultValue: "0", key: "rotateX", kind: "phase", label: "Rotate X", max: "1", mid: "0.5", min: "0", nonlinearSlider: false, step: "0.01", unit: "cycle", wraparound: true },
-      { defaultValue: "0", key: "rotateY", kind: "phase", label: "Rotate Y", max: "1", mid: "0.5", min: "0", nonlinearSlider: false, step: "0.01", unit: "cycle", wraparound: true },
-      { defaultValue: "0", key: "rotateZ", kind: "phase", label: "Rotate Z", max: "1", mid: "0.5", min: "0", nonlinearSlider: false, step: "0.01", unit: "cycle", wraparound: true },
+      { defaultValue: "0", key: "rotateX", kind: "phase", label: "Rotate X", max: "1", mid: "0.5", min: "0", nonlinearSlider: false, step: "0.01", unit: "\u03C6", wraparound: true },
+      { defaultValue: "0", key: "rotateY", kind: "phase", label: "Rotate Y", max: "1", mid: "0.5", min: "0", nonlinearSlider: false, step: "0.01", unit: "\u03C6", wraparound: true },
+      { defaultValue: "0", key: "rotateZ", kind: "phase", label: "Rotate Z", max: "1", mid: "0.5", min: "0", nonlinearSlider: false, step: "0.01", unit: "\u03C6", wraparound: true },
     ]
   },
   // Stereo L/R → goniometer axes for any X/Y scope. Classic 45° + Rotate.
@@ -8944,7 +8945,7 @@ const nodeGraphModuleDefinitions = (
         mid: "0.5",
         min: "0",
         step: "0.01",
-        unit: "cycle",
+        unit: "\u03C6",
         wraparound: true,
         tooltip: "Base hue of the solid color face (0=red … ~0.67=blue). Not mixed into Speed/Inertia signal math."
       },
@@ -9074,6 +9075,46 @@ const nodeGraphModuleDefinitions = (
       Trigger: "Short 0→1 pulse (one audio block) when the button is pressed." },
     spawnParamMeta: NODE_GRAPH_CONTROLLER_BUTTON_SPAWN_PARAM_META,
     parameters: nodeGraphControllerButtonModuleParameters() },
+  playerMode: {
+    planRole: "source",
+    chrome: NodeGraphModuleChromeLayout.LayoutB,
+    defaultWidthGu: 8,
+    defaultHeightGu: 4,
+    displayHeightGu: 2,
+    layoutBPortLabels: true,
+    face: [
+      { kind: "choices", param: "offset", labels: ["Off", "Stop", "Pause"], h: 26 },
+      { kind: "choices", param: "offset", labels: ["Loop", "Play", "Loop All"], start: 3, h: 26 },
+    ],
+    inputs: ["In"],
+    inputLabels: { In: "→" },
+    outputs: ["Bias"],
+    outputLabels: { Bias: "←" },
+    outputTooltips: {
+      Bias: "Mode as 0…5: Off, Stop, Pause, Loop, Play, Loop All.",
+    },
+    spawnParamMeta: NODE_GRAPH_CONTROLLER_BUTTON_SPAWN_PARAM_META,
+    parameters: [
+      {
+        ...nodeGraphControllerBiasParameter(),
+        choices: ["Off (reset)", "Stop", "Pause", "Loop", "Play", "Loop All"],
+        defaultValue: "1",
+        displayChoices: true,
+        divideChoicesVisibly: true,
+        key: "offset",
+        label: "Mode",
+        linearSmoothing: false,
+        max: "5",
+        mid: "2",
+        min: "0",
+        smoothingMode: "off",
+        smoothingType: "none",
+        step: "1",
+        tooltip: "Music Player transport. 0 Off (reset), 1 Stop, 2 Pause, 3 Loop, 4 Play, 5 Loop All.",
+      },
+      ...nodeGraphControllerDisplayParameter(),
+    ],
+  },
   passiveFilter: {
     // Hand-written face (node-graph-module-face.js): Byp / LP / BP / HP, 6 / 12 / 18 / 24, HPF | LPF, Stagger | Amp, Comp Off / Comp On.
     face: [
@@ -11235,7 +11276,7 @@ const nodeGraphModuleDefinitions = (
         min: "-0.5",
         nonlinearSlider: false,
         step: "any",
-        unit: "cycle",
+        unit: "\u03C6",
         wraparound: true,
         tooltip: "Start phase offset. Trigger hard-resets the oscillator to this phase. 0 = clean start at zero. +-0.25 = starts at a peak: hard click." },
       {
@@ -12744,7 +12785,7 @@ const nodeGraphModuleDefinitions = (
         mid: "0.5",
         min: "0",
         step: "0.01",
-        unit: "cycle",
+        unit: "\u03C6",
         wraparound: true,
         tooltip:
           "Phase offset (cycles) for both oscillators. Knob + Phase MOD — useful at 0 Hz." },
@@ -14106,7 +14147,7 @@ const nodeGraphModuleDefinitions = (
         mid: "0.5",
         min: "0",
         step: "0.01",
-        unit: "cycle",
+        unit: "\u03C6",
         wraparound: true,
         tooltip: "Shared LFO phase (turns)." },
       {
@@ -14609,7 +14650,7 @@ const nodeGraphModuleDefinitions = (
     digitalOutputs: ["Trigger", "End"],
     outputs: ["Shape", "Trigger", "End"],
     layout: "pulseCurve",
-    // Face: instanced E_k stems/dots (Count 1..16384) + __Elapsed playhead (node-graph-pulse-train-display.js).
+    // Face: instanced E_k stems/dots (Count slider 1..1280, DSP 16384) + __Elapsed playhead.
     // Display Settings pulseTrainFace: the Pulse Explosion set plus Fade time.
     displayType: "pulseTrainFace",
     spectrumCompanion: false,
@@ -14617,20 +14658,21 @@ const nodeGraphModuleDefinitions = (
       { key: "face", label: "Face", renderer: "pulseTrainFace", settingsSchema: "pulseTrainFace" },
     ],
     defaultDisplayMode: "face",
-    // Hand-written face (node-graph-module-face.js): Count | Freq | Duty, Spacing, Curve | A Start | A End | A Crv,
-    // Fwd-Rev slider, Curve polarity +/−, One shot / Loop, Free / Latch, Shape slider, Morph | Amp, AA, seed.
+    // Hand-written face: Free/Latch boxes, Fwd-Rev, Shape, AA, Morph | Count | Duty | Stretch,
+    // Freq | One shot/Loop | +/−, F Crv, Expo/Harmonic/Rational, A Start | A End | A Crv,
+    // Amp, Preset Morph, Seed.
     face: [
-      { kind: "cells", params: [["count", "Count"], ["frequency", "Freq"], ["duty", "Duty"]], h: 52 },
-      { kind: "choices", param: "spacing", labels: ["Expo", "Harmonic", "Rational"], h: 26 },
-      { kind: "cells", params: [["curve", "Curve", "bipolar"], ["ampStart", "A Start"], ["ampEnd", "A End"], ["ampCurve", "A Crv", "bipolar"]], h: 52 },
-      { kind: "cells", params: [["pulseMode", "Fwd-Rev"]], horizontal: true, h: 30 },
-      { kind: "choices", param: "curvePolarity", labels: ["+", "\u2212"], h: 26 },
-      { kind: "choices", param: "mode", labels: ["One shot", "Loop"], h: 26 },
       { kind: "choices", param: "recalculateOnTrigger", labels: ["Free", "Latch"], h: 26 },
+      { kind: "cells", params: [["pulseMode", "Fwd-Rev"]], horizontal: true, h: 30 },
       { kind: "cells", params: [["wave", "Shape"]], horizontal: true, h: 30 },
-      { kind: "cells", params: [["morph", "Morph"], ["amplitude", "Amp"]], h: 40 },
-      { kind: "cells", params: [["presetMorph", "Preset Morph"]], h: 40 },
       { kind: "choices", param: "antialiasing", labels: ["Off", "Random", "Dither"], h: 26 },
+      { kind: "cells", params: [["morph", "Morph"], ["count", "Count"], ["duty", "Duty"], ["stretch", "Stretch"]], h: 52 },
+      { kind: "cells", params: [["frequency", "Freq"], ["mode", "Mode", "stack"], ["curvePolarity", "+", "stack"]], h: 52 },
+      { kind: "cells", params: [["curve", "F Crv", "bipolar"]], horizontal: true, h: 30 },
+      { kind: "choices", param: "spacing", labels: ["Expo", "Harmonic", "Rational"], h: 26 },
+      { kind: "cells", params: [["ampStart", "A Start"], ["ampEnd", "A End"], ["ampCurve", "A Crv", "bipolar"]], h: 52 },
+      { kind: "cells", params: [["amplitude", "Amp"]], horizontal: true, h: 30 },
+      { kind: "cells", params: [["presetMorph", "Preset Morph"]], horizontal: true, h: 30 },
       { kind: "seed", param: "seed", h: 28 },
     ],
     parameters: [
@@ -14673,7 +14715,7 @@ const nodeGraphModuleDefinitions = (
         min: "0",
         nonlinearSlider: false,
         step: "any",
-        tooltip: "0 Forward (one-way). + polarity: raising the slider adds an attack and walks the peak right. 0.5 reverse-then-forward (peak at 50%). 1 peak at the right. \u2212 polarity is the opposite (return grows, peak walks left)."
+        tooltip: "0 Forward (high+fast first). 0.5 reverse then forward, peak in the middle. 1 reverse (peak at the end)."
       },
       {
         choices: ["+", "\u2212"],
@@ -14689,7 +14731,7 @@ const nodeGraphModuleDefinitions = (
         min: "0",
         nonlinearSlider: false,
         step: "1",
-        tooltip: "+ attack / peak right as Fwd-Rev rises. \u2212 return / peak left."
+        tooltip: "Pulse height invert next to A Start. + as drawn. \u2212 flips each height around (A Start + A End)/2. Same times."
       },
       {
         choices: ["Off", "Random", "Dither"],
@@ -14726,9 +14768,10 @@ const nodeGraphModuleDefinitions = (
       // Morph: TriSaw peak (0 falling saw, 0.5 triangle, 1 rising saw); Pulse Left/Center/Right duty (0.5 = square). Other shapes ignore it.
       { defaultValue: "0.5", key: "morph", label: "Morph", max: "1", mid: "0.5", min: "0", nonlinearSlider: false, step: "any" },
       { defaultValue: "0", key: "seed", kind: "seed", label: "Seed", linearSmoothing: false, max: "16777215", maxDigits: 0, mid: "0", min: "0", nonlinearSlider: false, smoothingType: "none", step: "1", tooltip: "Locks the antialiasing pattern. Same Seed = same offsets on every trigger. Change Seed for a different noise texture." },
-      { defaultValue: "12", key: "count", label: "Count", max: "128", mid: "8", min: "1", nonlinearSlider: true, step: "1", tooltip: "Pulses in the train (one-way). Slider 1–128; type above the slider for denser trains (DSP up to 16384)." },
+      { defaultValue: "12", key: "count", label: "Count", max: "1280", mid: "64", min: "1", nonlinearSlider: true, sliderCurve: "skew", step: "1", tooltip: "Pulses in the train (one-way). Slider 1–1280, mid-skew (64 at the midpoint). Type above the slider for denser trains (DSP up to 16384)." },
       { defaultValue: "1", key: "frequency", label: "Frequency", max: "20000", mid: "10", min: "0.01", nonlinearSlider: true, step: "any", unit: "Hz" },
-      { defaultValue: "0.5", key: "duty", label: "Pulse Duty", max: "1", mid: "0.25", min: "0", nonlinearSlider: true, step: "any" },
+      { defaultValue: "0.5", key: "duty", label: "Pulse Duty", max: "1", mid: "0.25", min: "0", nonlinearSlider: true, step: "any", tooltip: "Pulsing fraction of one frequency cycle at Stretch 1. 0 stacks every pulse at t=0. 1 fills the cycle. Stretch lengthens the train past that window." },
+      { defaultValue: "1", key: "stretch", label: "Stretch", max: "8", mid: "2", min: "1", nonlinearSlider: true, sliderCurve: "skew", step: "any", tooltip: "Pulse-schedule length in frequency cycles at Duty 1. 1 fits the train in one cycle. Above 1 stretches it past the 1/ƒ window; pulses after the window do not play. Type above the slider for more." },
       {
         choices: ["Expo", "Harmonic", "Rational"],
         defaultValue: "0",
@@ -14745,7 +14788,7 @@ const nodeGraphModuleDefinitions = (
         step: "1",
         tooltip: "Time warp family. Curve 0 is even (linear) in every family. Expo is the original (e^(k u)-1)/(e^k-1). Harmonic mixes that linear spacing toward multiples of a base time (gaps 1τ, 2τ, 3τ…). Rational is rational_curve01.",
       },
-      { defaultValue: "3", key: "curve", label: "Time Curve", max: "10", mid: "0", min: "-10", nonlinearSlider: false, step: "any", tooltip: "0 even (linear). Expo: + gaps grow, − gaps shrink. Harmonic: |Curve|/10 mixes linear toward 1τ,2τ,3τ… (+ ) or the reverse (−). Rational: skew ±1 at the knob ends." },
+      { defaultValue: "3", key: "curve", label: "F Crv", max: "10", mid: "0", min: "-10", nonlinearSlider: false, step: "any", tooltip: "Frequency/time curve. 0 even (linear). Expo: + gaps grow, − gaps shrink. Harmonic: |F Crv|/10 mixes linear toward 1τ,2τ,3τ… (+) or the reverse (−). Rational: skew ±1 at the knob ends." },
       { defaultValue: "1", key: "ampStart", label: "Amp Start", max: "1", mid: "0.5", min: "0", nonlinearSlider: false, step: "any" },
       { defaultValue: "0.2", key: "ampEnd", label: "Amp End", max: "1", mid: "0.5", min: "0", nonlinearSlider: false, step: "any" },
       { defaultValue: "0", key: "ampCurve", label: "Amp Curve", max: "10", mid: "0", min: "-10", nonlinearSlider: false, step: "any" },
@@ -17569,7 +17612,7 @@ const nodeGraphModuleDefinitions = (
         mid: "0.5",
         min: "0",
         step: "0.01",
-        unit: "cycle",
+        unit: "\u03C6",
         wraparound: true },
       {
         defaultValue: "0",
@@ -17706,7 +17749,7 @@ const nodeGraphModuleDefinitions = (
     outputs: ["X", "Y"],
     parameters: [
       { defaultValue: "2", key: "frequency", kind: "frequency", label: "Frequency", max: "2000", maxDigits: 5, mid: "2", min: "0", step: "any", unit: "Hz" },
-      { defaultValue: "0", key: "phase", kind: "phase", label: "Phase", max: "1", mid: "0.5", min: "0", step: "0.01", unit: "cycle", wraparound: true },
+      { defaultValue: "0", key: "phase", kind: "phase", label: "Phase", max: "1", mid: "0.5", min: "0", step: "0.01", unit: "\u03C6", wraparound: true },
       {
         defaultValue: "0.5",
         key: "sharpness",
@@ -17725,7 +17768,8 @@ const nodeGraphModuleDefinitions = (
   audioPlayer: {
     // Hand-written face (node-graph-module-face.js): Play, start / end span, Speed | Dir | Scratch | Amp, Playlist, AA Off / Hermite.
     face: [
-      { kind: "cells", params: [["transport", "Play"]], horizontal: true, h: 30 },
+      { kind: "choices", param: "transport", labels: ["Off", "Stop", "Pause"], h: 26 },
+      { kind: "choices", param: "transport", labels: ["Loop", "Play", "Loop All"], start: 3, h: 26 },
       { kind: "span", handles: ["start", "end"], h: 40 },
       { kind: "cells", params: [["speed", "Speed"], ["direction", "Dir", "bipolar"], ["phase", "Scratch", "bipolar"], ["amplitude", "Amp"]], h: 52 },
       { kind: "cells", params: [["playlistScrub", "Playlist", "bipolar"]], h: 40 },
@@ -17734,7 +17778,7 @@ const nodeGraphModuleDefinitions = (
     planRole: "source",
     layout: "sampleWaveform",
     defaultWidthGu: 13,
-    defaultHeightGu: 21,
+    defaultHeightGu: 22,
     displayType: "sampleWaveform",
     displayModes: [
       {
@@ -17798,7 +17842,7 @@ const nodeGraphModuleDefinitions = (
         smoothingSeconds: 0.156,
         smoothingType: "papoulis",
         step: "any",
-        unit: "cycle",
+        unit: "\u03C6",
         wraparound: false,
         tooltip: "Fine scratch skip (−0.003…+0.003). 0.156 s Papoulis internal glide."
       },
@@ -20792,7 +20836,7 @@ const nodeGraphModuleDefinitions = (
         min: "-1",
         nonlinearSlider: false,
         step: "any",
-        unit: "cycle",
+        unit: "\u03C6",
         wraparound: true,
         tooltip: "Rotate graded RGB hue on the face and on R/G/B/📺 outs. 0 = unchanged. ±1 = full cycle. After contrast/brightness/invert." },
       {
@@ -21118,7 +21162,7 @@ const nodeGraphModuleDefinitions = (
         max: "1",
         min: "0",
         step: "0.01",
-        unit: "cycle",
+        unit: "\u03C6",
         wraparound: true
       },
       {

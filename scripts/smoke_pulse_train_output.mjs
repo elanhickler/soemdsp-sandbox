@@ -143,6 +143,7 @@ for (const sr of [48000, 88200]) {
   const block = map.slice(m, m + 900);
   check(/frequency.*TIME_DENOMINATOR/.test(block), "Frequency → Time Denominator (cycle Hz)");
   check(/duty.*TIME_NUMERATOR/.test(block), "Duty → Time Numerator");
+  check(/stretch.*OFFSET_MS/.test(block), "Stretch → Offset Ms");
   check(/mode.*TIMING_MODE/.test(block), "Mode → Timing Mode (Loop), not Recalc MODE");
 }
 

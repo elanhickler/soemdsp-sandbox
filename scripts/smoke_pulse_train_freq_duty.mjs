@@ -7,14 +7,14 @@ import { fileURLToPath } from "url";
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const N = (await WebAssembly.instantiate(fs.readFileSync(process.env.PT_COMBINED || path.join(root, "native_modules", "combined", "soemdsp_combined.wasm")), { env: { emo_process_block: () => 0 } })).instance.exports;
 const SR = 48000, TYPE_PT = 231;
-const P = { AMP: 12, SHAPE: 13, STAGES: 22, TNUM: 52, TDEN: 53, TIMING: 54, MODE: 21, LFO_STYLE: 56, OVERSAMPLE: 32, WIDTH: 31, IN_LOW: 80, IN_HIGH: 81 };
+const P = { AMP: 12, SHAPE: 13, STAGES: 22, TNUM: 52, TDEN: 53, TIMING: 54, OFFSET: 55, MODE: 21, LFO_STYLE: 56, OVERSAMPLE: 32, WIDTH: 31, IN_LOW: 80, IN_HIGH: 81 };
 const PORT = { MONO: 0, LEFT: 1, SAW: 3, RAMP: 4, PHASE: 10, IDLE: 11 };
-function run({ freq, duty, count = 4, wave = 0, pulseMode = 0, loop = 1, rec = 0, seconds = 0.5, onBlock = null }) {
+function run({ freq, duty, stretch = 1, count = 4, wave = 0, pulseMode = 0, loop = 1, rec = 0, seconds = 0.5, onBlock = null }) {
   const g = N.soemdsp_graph_create() | 0;
   N.soemdsp_graph_set_sample_rate(g, SR);
   const h = 0x7a01;
   if (N.soemdsp_graph_add_node(g, h, TYPE_PT) | 0) throw new Error("add");
-  for (const [p, v] of [[P.STAGES, count], [P.TDEN, freq], [P.TNUM, duty], [P.SHAPE, 0], [P.IN_LOW, 1], [P.IN_HIGH, 1], [P.WIDTH, 0], [P.AMP, 1], [P.TIMING, loop], [P.MODE, rec], [P.LFO_STYLE, pulseMode], [P.OVERSAMPLE, wave]]) N.soemdsp_graph_set_param(g, h, p, v);
+  for (const [p, v] of [[P.STAGES, count], [P.TDEN, freq], [P.TNUM, duty], [P.OFFSET, stretch], [P.SHAPE, 0], [P.IN_LOW, 1], [P.IN_HIGH, 1], [P.WIDTH, 0], [P.AMP, 1], [P.TIMING, loop], [P.MODE, rec], [P.LFO_STYLE, pulseMode], [P.OVERSAMPLE, wave]]) N.soemdsp_graph_set_param(g, h, p, v);
   if (N.soemdsp_graph_compile(g) | 0) throw new Error("compile");
   N.soemdsp_graph_snap_controls(g);
   const r = { out: [], end: [], el: [], saw: [], ramp: [], idle: [] };
@@ -52,6 +52,17 @@ for (const duty of [0, 0.01, 0.25, 0.5, 1]) {
   const z1 = wraps(r1)[0];
   const h1 = []; for (let i = z1; i < z1 + SR / 10; i++) if (r1.out[i] !== 0) h1.push(i - z1);
   check(h1.length === 4 && h1.every((x, i) => Math.abs(x - 1200 * i) <= 1), `Duty 1: pulses spread over the whole cycle at ${h1}`);
+}
+// Stretch > 1 keeps the 1/ƒ window and drops pulses past it.
+{
+  const r = run({ freq: 10, duty: 1, stretch: 2, count: 4 });
+  const w = wraps(r);
+  check(w.length >= 2 && Math.abs(w[1] - w[0] - SR / 10) <= 1, `Stretch 2 Duty 1: cycle still ${w[1] - w[0]} samples (= sr/10)`);
+  const t0 = w[0];
+  const hits = []; for (let i = t0; i < w[1]; i++) if (r.out[i] !== 0) hits.push(i - t0);
+  check(hits.length === 2 && Math.abs(hits[0]) <= 1 && Math.abs(hits[1] - SR / 20) <= 1, `Stretch 2 Duty 1 Count 4 Loop: only the first half of the train plays at ${hits}`);
+  const idle = r.idle[r.idle.length - 1];
+  check(Math.abs(idle - (-0.1)) < 1e-12, `Stretch 2 Duty 1 at 10 Hz: __Delay ${idle} s (= (1-2)/ƒ)`);
 }
 // 3) Count 1, Duty 1, Saw: the one grain fills the whole cycle (no silence).
 {
@@ -142,18 +153,17 @@ check((N.soemdsp_graph_version() | 0) >= 255, `graph version ${N.soemdsp_graph_v
 for (const pulseMode of [0, 0.25, 0.5, 1]) for (const count of [1, 2, 3, 4, 7]) for (const duty of [0.3, 0.5, 1]) {
   const r = run({ freq: 10, duty, count, pulseMode, seconds: 0.6 });
   const w = wraps(r);
-  const want = pulseMode > 0 && count > 1
-    ? (pulseMode > 0.5 ? 2 * count - 2 : 2 * count - 1)
+  const want = pulseMode > 0 && pulseMode < 1 && count > 1
+    ? 2 * count - 1
     : count;
   for (let c = 0; c + 1 < w.length; c++) {
     const hits = []; for (let i = w[c]; i < w[c + 1]; i++) if (r.out[i] !== 0) hits.push(i - w[c]);
     if (hits.length !== want) throw new Error(`pulseMode ${pulseMode} Count ${count} Duty ${duty} cycle ${c}: ${hits.length} pulses (want ${want}) at ${hits}`);
   }
 }
-console.log("ok pulseTrain Loop: exactly Count pulses per cycle in Forward / dual 2N-1 (0.25 / 0.5) / 2N-2 (1), no wrap double");
+console.log("ok pulseTrain Loop: exactly Count pulses per cycle in Forward / dual 2N-1 (0.25 / 0.5) / reverse N (1), no wrap double");
 
-// 6) Fwd-Rev 1.0 + polarity: peak at the right of the dual window (2*Time).
-// Loop still 2N-2, Duty still spans both legs.
+// 6) Fwd-Rev 1.0: one-way reverse over Time (peak at Time). Duty still 1/ƒ.
 const PV = (await WebAssembly.instantiate(fs.readFileSync(process.env.PT_SINGLE || path.join(root, "native_modules", "pulse_train", "pulse_train.wasm")), { env: {} })).instance.exports;
 const prev = (count, pulseMode, loop, time = 0.05, curve = 3, a0 = 1, a1 = 0.2, ac = 0) => {
   const n = PV.soemdsp_pulse_train_preview(count, time, curve, a0, a1, ac, 1, loop, pulseMode, 0) | 0;
@@ -166,31 +176,31 @@ if (!process.env.PT_PRINT_HASH) {
   const E = 0.05;
   for (const curve of [3, 0, -2]) for (const count of [1, 2, 3, 5, 9]) {
     const rf = prev(count, 1, 0, E, curve), N = count;
-    const want1 = N > 1 ? 2 * N - 2 : 1;
+    const want1 = N;
     if (rf.n !== want1) throw new Error(`Fwd-Rev 1.0 one shot Count ${N}: ${rf.n} pulses (want ${want1})`);
     if (N > 1) {
       const peakI = rf.a.indexOf(Math.max(...rf.a));
-      if (Math.abs(rf.t[peakI] - 2 * E) > 1e-9) throw new Error(`Fwd-Rev 1.0 one shot Count ${N}: peak t ${rf.t[peakI]} want ${2 * E}`);
+      if (Math.abs(rf.t[peakI] - E) > 1e-9) throw new Error(`Fwd-Rev 1.0 one shot Count ${N}: peak t ${rf.t[peakI]} want ${E}`);
       for (let j = 1; j < rf.n; j++) {
         if (!(rf.t[j] >= rf.t[j - 1] - 1e-12)) throw new Error(`Fwd-Rev 1.0 one shot times not ordered at ${j}`);
       }
     }
     const rfL = prev(count, 1, 1, E, curve);
-    const wantL = N > 1 ? 2 * N - 2 : 1;
+    const wantL = N;
     if (rfL.n !== wantL) throw new Error(`Fwd-Rev 1.0 Loop Count ${N}: ${rfL.n} pulses (want ${wantL})`);
     if (N > 1) {
-      const gaps = (t) => t.map((x, i) => (i + 1 < t.length ? t[i + 1] : 2 * E) - x);
+      const gaps = (t) => t.map((x, i) => (i + 1 < t.length ? t[i + 1] : E) - x);
       const gr = gaps(rfL.t), L = wantL;
       for (let j = 0; j < L; j++) {
         if (!(gr[j] > 0)) throw new Error(`Fwd-Rev 1.0 Loop Count ${N}: zero gap (duplicate) at ${j}`);
       }
-      if (!(rfL.t[0] >= 0 && rfL.t[L - 1] < 2 * E)) throw new Error(`Fwd-Rev 1.0 Loop range ${rfL.t}`);
+      if (!(rfL.t[0] >= 0 && rfL.t[L - 1] <= E + 1e-12)) throw new Error(`Fwd-Rev 1.0 Loop range ${rfL.t}`);
     }
   }
-  console.log("ok pulseTrain Fwd-Rev 1.0: One shot 2N-2 peak at 2*Time / Loop 2N-2 (no wrap duplicate)");
+  console.log("ok pulseTrain Fwd-Rev 1.0: One shot N peak at Time / Loop N (no wrap duplicate)");
   const r = run({ freq: 10, duty: 0.5, pulseMode: 1 });
   const w = wraps(r);
-  check(w.length >= 2 && Math.abs(w[1] - w[0] - SR / 10) <= 1 && Math.abs(r.ramp[r.ramp.length - 1] - 0.025) < 1e-12, `Fwd-Rev 1.0 Duty 0.5 at 10 Hz: cycle ${w[1] - w[0]} samples, Time per leg 0.025 s`);
+  check(w.length >= 2 && Math.abs(w[1] - w[0] - SR / 10) <= 1 && Math.abs(r.ramp[r.ramp.length - 1] - 0.05) < 1e-12, `Fwd-Rev 1.0 Duty 0.5 at 10 Hz: cycle ${w[1] - w[0]} samples, Time 0.05 s`);
   const rc = run({ freq: 4, duty: 0.75, count: 6, pulseMode: 1 });
   check(rc.saw[rc.saw.length - 1] === 6.5, `face __Count ${rc.saw[rc.saw.length - 1]} (6 + 0.5*1)`);
 }

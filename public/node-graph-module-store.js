@@ -2068,7 +2068,7 @@ const nodeGraphModuleStoreCatalog = Object.freeze({
   },
   pulseTrain: {
     category: "clock",
-    description: "On trigger, a train of pulses (or grains: Gate/Saw/Ramp/Tri/Sine from one pulse to the next). Spacing Expo / Harmonic / Rational warps time; Curve 0 is even (linear) in every family. Shape out is the grain, Trigger out is always impulses, End fires at the last pulse. Fwd-Rev 0..1 adds an attack and walks the peak right; Polarity flips that. Antialiasing Off/Random/Dither.",
+    description: "On trigger, a train of pulses (or grains: Gate/Saw/Ramp/Tri/Sine from one pulse to the next). Spacing Expo / Harmonic / Rational warps time; F Crv 0 is even (linear) in every family. Shape out is the grain, Trigger out is always impulses, End fires at the last pulse. Fwd-Rev 0..1 walks the loud/fast peak from the start to the middle (out-and-back) to the end. +/\u2212 flips pulse heights (same times, peak becomes trough).",
     label: "Pulse Train",
     notes: ["trigger", "pulse train", "slowing down", "growing gaps", "bouncing ball", "End", "native"],
   },

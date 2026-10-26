@@ -2027,9 +2027,18 @@ button.scw-label:hover,
   background: transparent;
   outline: none;
 }
+.node-music-player-page-playinfo {
+  background: var(--music-info-bg, transparent);
+  color: var(--music-info-color, var(--sample-waveform-hud-color));
+  font-family: var(--music-info-font, var(--sample-waveform-hud-font, inherit));
+  font-size: var(--music-info-size, inherit);
+  line-height: var(--music-info-line, inherit);
+}
 .node-music-player-page-playinfo .node-music-player-pl-ram-panel {
   flex: 1 1 0%;
   max-height: none;
+  color: inherit;
+  font: inherit;
 }
 .node-music-player-pl-ram-panel {
   flex: 1 1 0%;
@@ -2091,6 +2100,10 @@ button.scw-label:hover,
 .node-music-player-page-playinfo .node-music-player-pl-ram-head,
 .node-music-player-page-playinfo .node-music-player-pl-ram-body,
 .node-music-player-page-playinfo .node-music-player-pl-ram-table {
+  color: inherit;
+  font-family: inherit;
+  font-size: inherit;
+  line-height: inherit;
   font-size: calc(0.7 * var(--node-music-player-pl-row-height, 1.35rem));
   line-height: var(--node-music-player-pl-row-height, 1.35rem);
 }

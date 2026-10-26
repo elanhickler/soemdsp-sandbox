@@ -424,7 +424,7 @@ const nodeMetadataScriptTokenUnitOptions = Object.freeze([
   "dB",
   "V",
   "oct",
-  "cycle",
+  "\u03C6",
 ]);
 
 function nodeMetadataScriptKindOptions() {
