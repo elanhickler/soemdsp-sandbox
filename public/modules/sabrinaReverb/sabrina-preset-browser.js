@@ -379,12 +379,13 @@ function mountSabrinaPresetBrowser(article, type) {
     $("stops").innerHTML = stops.map((x) => `<button type="button" class="sabrina-preset-stop${x.id === selStop ? " is-sel" : ""}" data-stop="${sabrinaPresetEsc(x.id)}" style="left:${(x.pos * 100).toFixed(3)}%">${sabrinaPresetEsc(x.name)}</button>`).join("");
     $("del-stop").disabled = !selStop;
     $("add-preset").disabled = !(byId(auditionId || st.currentId || lastPicked));
+    const row = $("list").querySelector("li.is-sel, li.is-aud, li.is-loaded");
+    if (row && typeof row.scrollIntoView === "function") row.scrollIntoView({ block: "nearest" });
   }
 
   function applyPreset(pr, drag) {
     if (!pr) return;
     sabrinaPresetSmartApply(article, pr.values, null, null, drag);
-    committed = sabrinaPresetSnapshot(article);
   }
 
   function audition(pr) {
@@ -429,11 +430,69 @@ function mountSabrinaPresetBrowser(article, type) {
     const list = filtered();
     if (!list.length) return;
     const st = state();
-    const cur = auditionId || st.currentId;
+    const cur = listSel || auditionId || st.currentId;
     let i = list.findIndex((x) => x.id === cur);
     i = i < 0 ? (dir > 0 ? 0 : list.length - 1) : (i + dir + list.length) % list.length;
     choose(list[i]);
   }
+
+  function panelOpen() {
+    const panel = shell.querySelector(".sabrina-preset-panel");
+    return Boolean(panel && !panel.hidden);
+  }
+
+  function sabrinaPresetTypingField(target) {
+    const el = target instanceof Element ? target : target?.parentElement;
+    if (!el) return false;
+    const field = el.closest?.("input, textarea, select, [contenteditable='true']");
+    if (!field) return false;
+    if (field.tagName === "TEXTAREA" || field.tagName === "SELECT") return true;
+    if (field.isContentEditable) return true;
+    if (field.tagName !== "INPUT") return false;
+    const type = String(field.type || "text").toLowerCase();
+    return ["text", "search", "email", "url", "password", "tel", "number"].includes(type);
+  }
+
+  function ownsKeys(event) {
+    if (!article.isConnected) return false;
+    if (!panelOpen()) return false;
+    if (sabrinaPresetTypingField(event.target) && event.key !== "Escape" && event.key !== "Enter") return false;
+    if (shell.contains(event.target)) return true;
+    const ids = typeof nodeGraphSelectedNodeIds === "function" ? nodeGraphSelectedNodeIds() : null;
+    if (ids && typeof ids.has === "function") return ids.has(nodeId);
+    if (ids && typeof ids[Symbol.iterator] === "function") return [...ids].includes(nodeId);
+    return false;
+  }
+
+  function onKeys(event) {
+    if (!article.isConnected) {
+      document.removeEventListener("keydown", onKeys, true);
+      return;
+    }
+    if (!ownsKeys(event)) return;
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      event.stopPropagation();
+      if (typeof event.stopImmediatePropagation === "function") event.stopImmediatePropagation();
+      step(1);
+      $("list").focus();
+    } else if (event.key === "ArrowUp") {
+      event.preventDefault();
+      event.stopPropagation();
+      if (typeof event.stopImmediatePropagation === "function") event.stopImmediatePropagation();
+      step(-1);
+      $("list").focus();
+    } else if (event.key === "Enter" && auditionId) {
+      event.preventDefault();
+      event.stopPropagation();
+      commit();
+    } else if (event.key === "Escape" && auditionId) {
+      event.preventDefault();
+      event.stopPropagation();
+      cancelAudition();
+    }
+  }
+  document.addEventListener("keydown", onKeys, true);
 
   function applyMorph(t, drag) {
     const packed = sabrinaPresetMorphValues(state().stops, t);
@@ -456,6 +515,7 @@ function mountSabrinaPresetBrowser(article, type) {
     $("toggle").setAttribute("aria-expanded", String(open));
     article.classList.toggle("sabrina-preset-open", open);
     refresh();
+    if (open) $("list").focus();
   });
   $("prev").addEventListener("click", () => step(-1));
   $("next").addEventListener("click", () => step(1));
@@ -468,7 +528,10 @@ function mountSabrinaPresetBrowser(article, type) {
   });
   $("list").addEventListener("click", (e) => {
     const li = e.target.closest("li[data-id]");
-    if (li) choose(byId(li.dataset.id));
+    if (li) {
+      choose(byId(li.dataset.id));
+      $("list").focus();
+    }
   });
   $("list").addEventListener("dblclick", (e) => {
     const li = e.target.closest("li[data-id]");

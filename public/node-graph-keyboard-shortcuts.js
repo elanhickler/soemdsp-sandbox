@@ -113,6 +113,30 @@ function nodeGraphArrowKeyYieldsToTextCaret(event) {
 }
 
 /**
+ * Sabrina / Pulse Train preset explorer: Arrow Up/Down step patches like a
+ * sample list. Leave Left/Right for module nudge.
+ */
+function nodeGraphPresetExplorerCapturesArrows(event) {
+  if (event?.key !== "ArrowUp" && event?.key !== "ArrowDown") {
+    return false;
+  }
+  if (nodeGraphEventTargetIsTextEditable(event?.target)) {
+    return false;
+  }
+  const open = document.querySelectorAll(".dsp-node.sabrina-preset-open");
+  for (const article of open) {
+    const panel = article.querySelector(".sabrina-preset-panel");
+    if (!panel || panel.hidden) continue;
+    if (article.contains(event.target)) return true;
+    const id = article.dataset?.node;
+    const ids = typeof nodeGraphSelectedNodeIds === "function" ? nodeGraphSelectedNodeIds() : null;
+    if (ids && typeof ids.has === "function" && ids.has(id)) return true;
+    if (ids && typeof ids[Symbol.iterator] === "function" && [...ids].includes(id)) return true;
+  }
+  return false;
+}
+
+/**
  * App-wide: arrows move the selection, Shift+arrows resize it.
  * Nothing else may use these keys. No selection means the key is swallowed.
  */
@@ -139,7 +163,7 @@ function handleNodeGraphModuleArrowKeys(event) {
   if (nodeGraphAppHotkeysLocked()) {
     return false;
   }
-  if (!nodeGraphArrowKeyIsModulePolicy(event) || nodeGraphArrowKeyYieldsToTextCaret(event)) {
+  if (!nodeGraphArrowKeyIsModulePolicy(event) || nodeGraphArrowKeyYieldsToTextCaret(event) || nodeGraphPresetExplorerCapturesArrows(event)) {
     return false;
   }
   event.preventDefault();
