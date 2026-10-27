@@ -5,11 +5,11 @@
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
-// Graph Pulse Train is Frequency (timeDenominator) + Duty (timeNumerator):
-// Time = Duty/ƒ/(Fwd-Rev?2:1), End Delay = (1-Duty)/ƒ (graph 255). ptFD maps an
-// old Time / End Delay pair to the same schedule.
+// Graph Pulse Train is Frequency (timeDenominator) + Stretch (span m cycles,
+// default m = 1): Time = 1/f/(Fwd-Rev?2:1), End Delay 0. ptF maps an old
+// Time (End Delay 0) to the same schedule.
 const spanScale = (m) => (m <= 0.5 ? 1 + 2 * m : 3 - 2 * m);
-const ptFD = (T, D, m) => { const k = spanScale(m); const c = k * T + D; const f = 1 / c; const duty = (k * T) / c; const P = 1 / f; return { f, duty, T: duty * P / k, D: (1 - duty) * P }; };
+const ptF = (T, m) => { const k = spanScale(m); const f = 1 / (k * T); return { f, T: (1 / f) / k }; };
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const imp = { env: { emo_process_block: () => 0 } };
 const load = async (p) => (await WebAssembly.instantiate(fs.readFileSync(p), imp)).instance.exports;
@@ -166,7 +166,7 @@ console.log("ok pulseTrain a new Trigger hit mid-train restarts it (single Trigg
   const set = [20, 2, 4, 1, 0.1, 1, 1.5];
   const keys = [PR.STAGES, PR.TDEN, PR.SHAPE, PR.IN_LOW, PR.IN_HIGH, PR.WIDTH, PR.AMP];
   keys.forEach((p, i) => N.soemdsp_graph_set_param(g, hP, p, set[i]));
-  { const fd = ptFD(set[1], 0, 0); N.soemdsp_graph_set_param(g, hP, 53, fd.f); N.soemdsp_graph_set_param(g, hP, 52, fd.duty); set[1] = fd.T; }
+  { const fd = ptF(set[1], 0); N.soemdsp_graph_set_param(g, hP, 53, fd.f); set[1] = fd.T; }
   N.soemdsp_graph_set_param(g, hP, PR.LFO_STYLE, 0); // Pulse Mode Forward
   N.soemdsp_graph_set_param(g, hP, PR.TMODE, 0); // One shot
   N.soemdsp_graph_set_param(g, hP, PR.OVERSAMPLE, 0); // Trigger (impulse Shape)
@@ -192,7 +192,7 @@ console.log("ok pulseTrain a new Trigger hit mid-train restarts it (single Trigg
 // 4b) Graph Forward-Reverse + End Delay 0 == direct Pulse Mode 1.
 {
   const TYPE_CLOCK = 28, TYPE_PT = 231, PORT_MONO = 0, PORT_LEFT = 1, PORT_PHASE01 = 10, PORT_TRIGGER = 20;
-  const PR = { RATE: 10, AMP: 12, SHAPE: 13, STAGES: 22, WIDTH: 31, TNUM: 52, TDEN: 53, TMODE: 54, IN_LOW: 80, IN_HIGH: 81, LFO_STYLE: 56, OVERSAMPLE: 32 };
+  const PR = { RATE: 10, AMP: 12, SHAPE: 13, STAGES: 22, WIDTH: 31, TDEN: 53, TMODE: 54, IN_LOW: 80, IN_HIGH: 81, LFO_STYLE: 56, OVERSAMPLE: 32 };
   const g = N.soemdsp_graph_create() | 0;
   N.soemdsp_graph_set_sample_rate(g, SR);
   const hC = 0x7311, hP = 0x7312;
@@ -204,7 +204,7 @@ console.log("ok pulseTrain a new Trigger hit mid-train restarts it (single Trigg
   const set = [6, 0.15, 4, 1, 0.2, 0, 1];
   const keys = [PR.STAGES, PR.TDEN, PR.SHAPE, PR.IN_LOW, PR.IN_HIGH, PR.WIDTH, PR.AMP];
   keys.forEach((p, i) => N.soemdsp_graph_set_param(g, hP, p, set[i]));
-  { const fd = ptFD(set[1], 0, 0.5); N.soemdsp_graph_set_param(g, hP, 53, fd.f); N.soemdsp_graph_set_param(g, hP, 52, fd.duty); set[1] = fd.T; }
+  { const fd = ptF(set[1], 0.5); N.soemdsp_graph_set_param(g, hP, 53, fd.f); set[1] = fd.T; }
   N.soemdsp_graph_set_param(g, hP, PR.LFO_STYLE, 0.5);
   N.soemdsp_graph_set_param(g, hP, PR.TMODE, 0);
   N.soemdsp_graph_set_param(g, hP, PR.OVERSAMPLE, 0);
@@ -761,7 +761,7 @@ function grainWave(shape, u) {
   const set = [4, 0.01, 0, 1, 1, 0, 1];
   const keys = [PR.STAGES, PR.TDEN, PR.SHAPE, PR.IN_LOW, PR.IN_HIGH, PR.WIDTH, PR.AMP];
   keys.forEach((p, i) => N.soemdsp_graph_set_param(g, hP, p, set[i]));
-  { const fd = ptFD(set[1], 0, 0); N.soemdsp_graph_set_param(g, hP, 53, fd.f); N.soemdsp_graph_set_param(g, hP, 52, fd.duty); set[1] = fd.T; }
+  { const fd = ptF(set[1], 0); N.soemdsp_graph_set_param(g, hP, 53, fd.f); set[1] = fd.T; }
   N.soemdsp_graph_set_param(g, hP, PR.TIMING, 1); // Loop
   N.soemdsp_graph_set_param(g, hP, PR.OVERSAMPLE, 2); // Saw
   if (N.soemdsp_graph_compile(g) | 0) throw new Error("grain graph compile");

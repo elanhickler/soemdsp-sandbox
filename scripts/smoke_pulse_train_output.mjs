@@ -1,5 +1,5 @@
 // Pulse Train Shape → Output Mono (bugs/pusle train not producing output.json).
-// Loop / Saw / 1 Hz / Duty 0.5 / Count 12 must put energy on the speaker bus
+// Loop / Saw / 1 Hz / Stretch 0 / Count 12 must put energy on the speaker bus
 // with no Trigger cable. One shot with no Trigger stays silent.
 import fs from "fs";
 import path from "path";
@@ -25,7 +25,6 @@ const P = {
   oversample: 32,
   mix: 40,
   seed: 48,
-  tnum: 52,
   tden: 53,
   timing: 54,
   lfoStyle: 56,
@@ -142,7 +141,7 @@ for (const sr of [48000, 88200]) {
   check(m >= 0, "mapNativeGraphParamId pulseTrain");
   const block = map.slice(m, m + 900);
   check(/frequency.*TIME_DENOMINATOR/.test(block), "Frequency → Time Denominator (cycle Hz)");
-  check(/duty.*TIME_NUMERATOR/.test(block), "Duty → Time Numerator");
+  check(!/duty/i.test(block), "no Duty param id (removed)");
   check(/stretch.*OFFSET_MS/.test(block), "Stretch → Offset Ms");
   check(/mode.*TIMING_MODE/.test(block), "Mode → Timing Mode (Loop), not Recalc MODE");
 }

@@ -870,12 +870,12 @@ if ($node) {
   if ($LASTEXITCODE -ne 0) {
     throw "Combined build: Pulse Train Recalc smoke FAILED"
   }
-  # Pulse Train Frequency + Duty (graph 255): cycle = 1/f, Duty = pulsing fraction, latch, face ports.
-  & $node.Source "$root\scripts\smoke_pulse_train_freq_duty.mjs"
+  # Pulse Train Frequency + Stretch: cycle = 1/f, Stretch = span (-1 all at once, +1 one pulse), latch, face ports.
+  & $node.Source "$root\scripts\smoke_pulse_train_freq_stretch.mjs"
   if ($LASTEXITCODE -ne 0) {
-    throw "Combined build: Pulse Train Frequency/Duty smoke FAILED"
+    throw "Combined build: Pulse Train Frequency/Stretch smoke FAILED"
   }
-  # Pulse Train Shape to Output: Loop/Saw/1Hz/Duty 0.5 speaker bus (bugs/pusle train not producing output).
+  # Pulse Train Shape to Output: Loop/Saw/1Hz/Stretch 0 speaker bus (bugs/pusle train not producing output).
   & $node.Source "$root\scripts\smoke_pulse_train_output.mjs"
   if ($LASTEXITCODE -ne 0) {
     throw "Combined build: Pulse Train Shape/Output smoke FAILED"

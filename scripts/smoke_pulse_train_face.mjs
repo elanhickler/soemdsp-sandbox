@@ -1,5 +1,5 @@
 // Pulse Train condensed face: nine widget rows under the GL pulse-curve plate.
-// DSP stays Frequency + Duty (no Time / End Delay seconds knobs). Shape is a slider.
+// DSP is Frequency + Stretch (no Time / End Delay seconds knobs, no Duty). Shape is a slider.
 import fs from "node:fs";
 import path from "node:path";
 import vm from "node:vm";
@@ -27,7 +27,7 @@ const want = [
   { kind: "choices", param: "antialiasing", labels: ["Quant", "Rand", "Dither"] },
   { kind: "choices", param: "recalculateOnTrigger", labels: ["Free", "Latch"] },
   { kind: "choices", param: "mode", labels: ["One shot", "Loop"] },
-  { kind: "cells", params: [["morph", "Morph"], ["count", "Count"], ["duty", "Duty"], ["stretch", "Stretch"]] },
+  { kind: "cells", params: [["morph", "Morph"], ["count", "Count"], ["stretch", "Stretch"]] },
   { kind: "cells", params: [["curvePolarity", "+", "stack"], ["frequency", "ƒ"], ["curve", "ƒ Crv", "bipolar"]] },
   { kind: "choices", param: "spacing", labels: ["Expo", "Harmonic", "Rational"] },
   { kind: "cells", params: [["ampStart", "A Start"], ["ampEnd", "A End"], ["ampCurve", "A Crv", "bipolar"]] },
@@ -60,10 +60,10 @@ for (let i = 0; i < want.length; i += 1) {
 }
 
 check(d.face.every((row) => !JSON.stringify(row).match(/time|endDelay|endTime/i)), "face has no Time / End Delay seconds widgets");
-check(!keys.time && !keys.endDelay && !keys.endTime, "parameters stay Frequency + Duty (no Time / End Delay keys)");
+check(!keys.time && !keys.endDelay && !keys.endTime, "parameters are Frequency + Stretch (no Time / End Delay keys)");
 check(d.face.find((r) => r.params?.[0]?.[0] === "wave")?.horizontal === true, "Shape is a horizontal cell switch (10 grains)");
 check(keys.wave?.choices?.length === 10, "Shape has 10 grains");
-check(keys.frequency?.unit === "Hz" && keys.duty?.label === "Pulse Duty", "ƒ is Hz, Duty is Pulse Duty");
+check(keys.frequency?.unit === "Hz" && !Object.keys(keys).some((k) => /duty/i.test(k)), "ƒ is Hz, no Duty param");
 check(keys.pulseMode?.label === "Fwd-Rev" && keys.pulseMode?.max === "1" && keys.pulseMode?.step === "any" && !keys.pulseMode?.choices, "Fwd-Rev is a 0..1 slider");
 check(keys.curve?.label === "ƒ Crv" && keys.curve?.min === "-10" && keys.curve?.max === "10", "ƒ Crv is bipolar Time Curve");
 check(keys.count?.max === "1280" && keys.count?.mid === "64" && keys.count?.sliderCurve === "skew", "Count slider domain 1280 mid-skew (DSP 16384)");
@@ -72,7 +72,7 @@ check(d.face[1]?.params?.[0]?.[0] === "wave" && d.face[1]?.params.length === 1, 
 check(d.face[2]?.kind === "choices" && d.face[2]?.param === "antialiasing", "Antialiasing is a labeled-box choice row under Shape");
 check(d.face[3]?.kind === "choices" && d.face[3]?.param === "recalculateOnTrigger", "Free/Latch sits between AA and One shot/Loop");
 check(d.face[4]?.kind === "choices" && d.face[4]?.param === "mode", "One shot/Loop is a labeled-box choice row under Free/Latch");
-check(d.face[5]?.params?.[0]?.[0] === "morph" && d.face[5]?.params?.[1]?.[0] === "count" && d.face[5]?.params?.[3]?.[0] === "stretch", "Morph | Count | Duty | Stretch");
+check(d.face[5]?.params?.[0]?.[0] === "morph" && d.face[5]?.params?.[1]?.[0] === "count" && d.face[5]?.params?.[2]?.[0] === "stretch" && d.face[5]?.params?.length === 3, "Morph | Count | Stretch");
 check(keys.stretch?.defaultValue === "0" && keys.stretch?.min === "-1" && keys.stretch?.max === "1" && keys.stretch?.nonlinearSlider === false && !keys.stretch?.sliderCurve && !keys.stretch?.tooltip, "Stretch slider -1..+1 linear, default 0, no tooltip");
 check(d.face[6]?.params?.[0]?.[0] === "curvePolarity" && d.face[6]?.params?.[1]?.[1] === "ƒ" && d.face[6]?.params?.[2]?.[1] === "ƒ Crv", "+/- | ƒ | ƒ Crv");
 check(d.face[7]?.kind === "choices" && d.face[7]?.param === "spacing", "Expo/Harmonic/Rational is a labeled-box choice row");

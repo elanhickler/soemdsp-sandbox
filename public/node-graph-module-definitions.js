@@ -14643,7 +14643,7 @@ const nodeGraphModuleDefinitions = (
     // Loop free-runs with no Trigger (Clock-style). One shot stays silent until Trigger.
     planRole: "source",
     planFreeRun: true,
-    // ƒ: absolute Hz; wired and > 0 replaces Frequency. Cycle = 1/ƒ; Duty of it pulses, the rest is silent.
+    // ƒ: absolute Hz; wired and > 0 replaces Frequency. Cycle = 1/ƒ; Stretch sets how much of it pulses.
     inputs: ["Trigger", "f"],
     outputAliases: { Out: "Shape", Mono: "Shape" },
     outputChannels: { Shape: "green" },
@@ -14658,7 +14658,7 @@ const nodeGraphModuleDefinitions = (
       { key: "face", label: "Face", renderer: "pulseTrainFace", settingsSchema: "pulseTrainFace" },
     ],
     defaultDisplayMode: "face",
-    // Hand-written face: Fwd-Rev, Shape, AA, Free/Latch, One shot/Loop, Morph | Count | Duty | Stretch,
+    // Hand-written face: Fwd-Rev, Shape, AA, Free/Latch, One shot/Loop, Morph | Count | Stretch,
     // +/− | ƒ | ƒ Crv, Expo/Harmonic/Rational, A Start | A End | A Crv, Amp, Preset Morph, Seed.
     face: [
       { kind: "cells", params: [["pulseMode", "Fwd-Rev"]], horizontal: true, h: 30 },
@@ -14666,7 +14666,7 @@ const nodeGraphModuleDefinitions = (
       { kind: "choices", param: "antialiasing", labels: ["Quant", "Rand", "Dither"], h: 26 },
       { kind: "choices", param: "recalculateOnTrigger", labels: ["Free", "Latch"], h: 26 },
       { kind: "choices", param: "mode", labels: ["One shot", "Loop"], h: 26 },
-      { kind: "cells", params: [["morph", "Morph"], ["count", "Count"], ["duty", "Duty"], ["stretch", "Stretch"]], h: 52 },
+      { kind: "cells", params: [["morph", "Morph"], ["count", "Count"], ["stretch", "Stretch"]], h: 52 },
       { kind: "cells", params: [["curvePolarity", "+", "stack"], ["frequency", "ƒ"], ["curve", "ƒ Crv", "bipolar"]], h: 52 },
       { kind: "choices", param: "spacing", labels: ["Expo", "Harmonic", "Rational"], h: 26 },
       { kind: "cells", params: [["ampStart", "A Start"], ["ampEnd", "A End"], ["ampCurve", "A Crv", "bipolar"]], h: 52 },
@@ -14765,14 +14765,13 @@ const nodeGraphModuleDefinitions = (
         step: "1",
         tooltip: "Trigger: single-sample pulses. Gate: 50% high between pulses. Saw/Ramp: naive ramp from one pulse to the next. TriSaw/Sine: one cycle starting and ending at 0. Pulse Left/Center/Right: -1/+1 pulse. Rect Sine: zero-mean |sin| hump. Each grain starts at a pulse and ends at the next."
       },
-      // Morph: TriSaw peak (0 falling saw, 0.5 triangle, 1 rising saw); Pulse Left/Center/Right duty (0.5 = square). Other shapes ignore it.
+      // Morph: TriSaw peak (0 falling saw, 0.5 triangle, 1 rising saw); Pulse Left/Center/Right width (0.5 = square). Other shapes ignore it.
       { defaultValue: "0.5", key: "morph", label: "Morph", max: "1", mid: "0.5", min: "0", nonlinearSlider: false, step: "any" },
       { defaultValue: "0", key: "seed", kind: "seed", label: "Seed", linearSmoothing: false, max: "16777215", maxDigits: 0, mid: "0", min: "0", nonlinearSlider: false, smoothingType: "none", step: "1", tooltip: "Locks the antialiasing pattern. Same Seed = same offsets on every trigger. Change Seed for a different noise texture." },
       { defaultValue: "12", key: "count", label: "Count", max: "1280", mid: "64", min: "1", nonlinearSlider: true, sliderCurve: "skew", step: "1", tooltip: "Pulses in the train (one-way). Slider 1–1280, mid-skew (64 at the midpoint). Type above the slider for denser trains (DSP up to 16384)." },
       { defaultValue: "1", key: "frequency", label: "Frequency", max: "20000", mid: "10", min: "0.01", nonlinearSlider: true, step: "any", unit: "Hz" },
-      { defaultValue: "0.5", key: "duty", label: "Pulse Duty", max: "1", mid: "0.25", min: "0", nonlinearSlider: true, step: "any", tooltip: "Pulsing fraction of one frequency cycle at Stretch 0. 0 stacks every pulse at t=0. 1 fills the cycle. Stretch lengthens the train past that window." },
       // Stretch -1..+1: span multiplier m = 0 at -1 (all pulses at once), (1+s)^2
-      // below 0, 1 at 0, Count^s above 0 (+1: one pulse per window at Duty 1).
+      // below 0, 1 at 0, Count^s above 0 (+1: one pulse per window, linear spacing).
       // Mapped natively in graph_engine; old 1..8 patches convert on load
       // (node-graph-patch-migrations.js).
       { defaultValue: "0", key: "stretch", label: "Stretch", max: "1", mid: "0", min: "-1", nonlinearSlider: false, step: "any" },

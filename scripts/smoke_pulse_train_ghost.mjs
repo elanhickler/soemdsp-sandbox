@@ -51,7 +51,7 @@ function patchJson() {
   const d = JSON.parse(fs.readFileSync(path.join(root, "patches/livedemos/softpop.json"), "utf8"));
   d.nodes = d.nodes.filter((x) => x.id === "output").map((x) => ({ ...x, gx: 40, gy: 1 }));
   d.connections = []; d.graphConnections = []; d.modulations = [];
-  d.nodes.push({ gx: 2, gy: 2, id: "pt-1", type: "pulseTrain", params: { count: newP[0], frequency: 1 / newP[1], duty: 1, curve: newP[2], ampStart: newP[3], ampEnd: newP[4], ampCurve: newP[5], amplitude: newP[6], mode: 0, recalculateOnTrigger: 1 } });
+  d.nodes.push({ gx: 2, gy: 2, id: "pt-1", type: "pulseTrain", params: { count: newP[0], frequency: 1 / newP[1], curve: newP[2], ampStart: newP[3], ampEnd: newP[4], ampCurve: newP[5], amplitude: newP[6], mode: 0, recalculateOnTrigger: 1 } });
   return JSON.stringify(d);
 }
 const launch = { headless: true };

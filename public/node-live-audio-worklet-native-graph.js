@@ -505,10 +505,9 @@ NodeLiveAudioProcessor.prototype.mapNativeGraphParamId = function mapNativeGraph
     if (k === "semitones" || k === "semitoneOffset") return P.NATIVE_GRAPH_PARAM_CENTER;
   }
   if (t === "pulseTrain") {
-    // Frequency/Duty live on Time Denominator/Numerator. Generic KEY_IDS.frequency
+    // Frequency lives on Time Denominator. Generic KEY_IDS.frequency
     // is kParamFrequency (unused by process_pulse_train) and KEY_IDS.mode is Recalc.
     if (k === "frequency") return P.NATIVE_GRAPH_PARAM_TIME_DENOMINATOR;
-    if (k === "duty") return P.NATIVE_GRAPH_PARAM_TIME_NUMERATOR;
     if (k === "stretch") return P.NATIVE_GRAPH_PARAM_OFFSET_MS;
     if (k === "mode") return P.NATIVE_GRAPH_PARAM_TIMING_MODE;
     if (k === "recalculateOnTrigger") return P.NATIVE_GRAPH_PARAM_MODE;
@@ -6526,12 +6525,11 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
       push("pulseMode", P.NATIVE_GRAPH_PARAM_LFO_STYLE, cont("pulseMode", 0)); // 0 Forward / 0.5 out-and-back / 1 peak-right
       push("curvePolarity", P.NATIVE_GRAPH_PARAM_FEEDBACK, disc("curvePolarity", 0)); // 0 + peak / 1 - trough
       push("spacing", P.NATIVE_GRAPH_PARAM_CENTER, disc("spacing", 0)); // 0 Expo / 1 Harmonic / 2 Rational
-      push("duty", P.NATIVE_GRAPH_PARAM_TIME_NUMERATOR, cont("duty", 0.5)); // pulsing fraction of the cycle
       push("stretch", P.NATIVE_GRAPH_PARAM_OFFSET_MS, cont("stretch", 0)); // -1..+1, mapped to the span multiplier in graph_engine
       push("antialiasing", P.NATIVE_GRAPH_PARAM_WAVEFORM, disc("antialiasing", 0)); // 0 Quant / 1 Rand / 2 Dither (Robin1)
       push("seed", P.NATIVE_GRAPH_PARAM_SEED, disc("seed", 0));
       push("wave", P.NATIVE_GRAPH_PARAM_OVERSAMPLE, disc("wave", 2)); // 0 Trigger / 1 Gate / 2 Saw / 3 Ramp / 4 TriSaw / 5 Sine / 6-8 Pulse Left/Center/Right / 9 Rect Sine
-      push("morph", P.NATIVE_GRAPH_PARAM_MIX, cont("morph", 0.5)); // TriSaw peak / Pulse duty
+      push("morph", P.NATIVE_GRAPH_PARAM_MIX, cont("morph", 0.5)); // TriSaw peak / Pulse width
       continue;
     }
     if (type === "pulseExplosion") {

@@ -48,13 +48,13 @@ for (const m of [0, 0.1, 0.25, 0.5, 0.75, 0.9, 1]) {
 }
 { const g = g0(run(S, 4, 0)); if (!(g[0] === 1 && g[1599] < -0.99)) fail("TriSaw 0 not falling saw"); }
 { const g = g0(run(S, 4, 1)); if (!(g[0] === 0 && g[799] > 0.99 && g[800] === -1)) fail("TriSaw 1 not rising saw"); }
-// 3) Pulse Left / Center / Right: -1/+1, duty = Morph, placement left / centre / right
+// 3) Pulse Left / Center / Right: -1/+1, width = Morph, placement left / centre / right
 for (const d of [0.1, 0.25, 0.5, 0.8]) {
   const L = g0(run(S, 6, d)), C = g0(run(S, 7, d)), R = g0(run(S, 8, d));
   for (const [nm, g] of [["L", L], ["C", C], ["R", R]]) {
     if (!g.every((v) => v === 1 || v === -1)) fail(`Pulse ${nm} not bipolar +-1`);
     const hi = g.filter((v) => v === 1).length / 1600;
-    if (Math.abs(hi - d) > 1 / 1600) fail(`Pulse ${nm} duty ${hi} want ${d}`);
+    if (Math.abs(hi - d) > 1 / 1600) fail(`Pulse ${nm} width ${hi} want ${d}`);
   }
   if (L[0] !== 1 || R[1599] !== 1 || C[0] !== -1 || C[800] !== 1 || C[1599] !== -1) fail(`Pulse placement d=${d}`);
 }

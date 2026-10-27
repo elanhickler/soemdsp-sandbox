@@ -16,7 +16,6 @@
   const PT_PRESET_PARAMS = Object.freeze([
     { key: "count", step: 1 },
     { key: "frequency", step: 0 },
-    { key: "duty", step: 0 },
     { key: "stretch", step: 0 },
     { key: "curve", step: 0 },
     { key: "ampStart", step: 0 },
@@ -36,15 +35,15 @@
 
   const PT_PRESET_FACTORY = Object.freeze({
     Classic: [
-      ["Init", { count: 12, frequency: 1, duty: 0.5, curve: 3, wave: 2, mode: 1 }],
-      ["Click Train", { count: 32, frequency: 8, duty: 0.2, curve: 0, wave: 0, amplitude: 1 }],
-      ["Saw Grains", { count: 12, frequency: 2, duty: 0.7, curve: 3, wave: 2, morph: 0.5 }],
+      ["Init", { count: 12, frequency: 1, stretch: -0.293, curve: 3, wave: 2, mode: 1 }],
+      ["Click Train", { count: 32, frequency: 8, stretch: -0.553, curve: 0, wave: 0, amplitude: 1 }],
+      ["Saw Grains", { count: 12, frequency: 2, stretch: -0.163, curve: 3, wave: 2, morph: 0.5 }],
     ],
     Example: [
-      ["Slow Bounce", { count: 24, frequency: 0.5, duty: 0.85, curve: 4, ampStart: 1, ampEnd: 0.1, mode: 1, wave: 5 }],
-      ["Dense Trigger", { count: 64, frequency: 16, duty: 0.4, curve: -2, wave: 0, antialiasing: 2, seed: 17 }],
-      ["Fwd-Rev Saw", { count: 8, frequency: 4, duty: 1, pulseMode: 0.5, wave: 2, morph: 0.5 }],
-      ["One Shot Click", { count: 12, frequency: 6, duty: 0.6, curve: 2, wave: 0, mode: 0, amplitude: 1 }],
+      ["Slow Bounce", { count: 24, frequency: 0.5, stretch: -0.078, curve: 4, ampStart: 1, ampEnd: 0.1, mode: 1, wave: 5 }],
+      ["Dense Trigger", { count: 64, frequency: 16, stretch: -0.368, curve: -2, wave: 0, antialiasing: 2, seed: 17 }],
+      ["Fwd-Rev Saw", { count: 8, frequency: 4, pulseMode: 0.5, wave: 2, morph: 0.5 }],
+      ["One Shot Click", { count: 12, frequency: 6, stretch: -0.225, curve: 2, wave: 0, mode: 0, amplitude: 1 }],
     ],
   });
 

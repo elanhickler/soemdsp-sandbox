@@ -55,7 +55,7 @@
 // 9 Rect Sine (v22). Morph (v22, default 0.5; omitted / NaN wasm arg = 0.5):
 // TriSaw peak position (0 = falling saw, 0.5 = the old Tri bit-identical, 1 =
 // rising saw; the grain still starts on the upward 0 crossing). Pulse Left /
-// Center / Right: bipolar -1/+1, Morph = high fraction (duty) of the grain,
+// Center / Right: bipolar -1/+1, Morph = high fraction (width) of the grain,
 // high part at the start / centred / at the end; 0.5 = 50% square. Rect Sine:
 // soemdsp_maths::rect_sine_hump01 (math/rect_sine.h, the shared bipolar
 // zero-mean |sin| hump), one hump per grain; Morph ignored, as by Trigger /
@@ -656,7 +656,7 @@ static inline int pulseIndexAt(
 
 }  // namespace
 
-extern "C" int soemdsp_pulse_train_version() { return 35; } // v35: graph Stretch -1..+1 (no DSP change here)
+extern "C" int soemdsp_pulse_train_version() { return 36; } // v36: graph Duty removed (no DSP change here)
 
 extern "C" int soemdsp_pulse_train_create() {
   for (int i = 0; i < kMaxInstances; i++) {
@@ -912,7 +912,7 @@ extern "C" double soemdsp_pulse_train_sample(
         }
       } else if (lp) {
         // Loop last grain: ends where the pulse region ends (span = Time, or
-        // 2*Time Forward-Reverse) so a positive End Delay (graph: 1-Duty of
+        // 2*Time Forward-Reverse) so a positive End Delay (graph: 1-span of
         // the cycle) is silent. Delay <= 0: runs to the wrap as before.
         const long long nWrap = s.cycleN > 0 ? s.cycleN : ceilLand(s.wrapCycle > 0.0 ? s.wrapCycle : 1.0 / sr, sr);
         if (delay > 0.0) {

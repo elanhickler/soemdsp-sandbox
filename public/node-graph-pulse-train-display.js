@@ -9,7 +9,7 @@
 // running it uses the engine's params in effect (__Count .. __Amp). Playhead:
 // __Elapsed (seconds since trigger, -1 idle) shifted to the heard time; fired
 // pulses light up.
-// Latch: the plate is the in-effect (latched) cycle — Time, Duty, Frequency,
+// Latch: the plate is the in-effect (latched) cycle — Time, Stretch, Frequency,
 // Pulse Mode, Count. Live knobs that have not latched yet do not redraw or
 // retime the playhead. Free: the plate follows the knobs; Loop playhead is
 // phase-locked so a Frequency sweep does not modulo-reset the stems.
@@ -39,7 +39,7 @@ function nodeGraphPulseTrainPreviewLoad() {
   if (nodeGraphPulseTrainPreviewWasm.promise || typeof fetch !== "function" || typeof WebAssembly === "undefined") {
     return nodeGraphPulseTrainPreviewWasm.promise;
   }
-  nodeGraphPulseTrainPreviewWasm.promise = fetch("/native_modules/pulse_train/pulse_train.wasm?v=pt-stretch-2")
+  nodeGraphPulseTrainPreviewWasm.promise = fetch("/native_modules/pulse_train/pulse_train.wasm?v=pt-stretch-only-1")
     .then((response) => {
       if (!response.ok) throw new Error(`pulse_train wasm HTTP ${response.status}`);
       return response.arrayBuffer();
@@ -124,16 +124,14 @@ function nodeGraphPulseTrainSchedule(section, node) {
   nodeGraphPulseTrainPreviewLoad();
   const p = (key, fallback) => nodeGraphPulseTrainFaceParam(node, key, fallback);
   // Time is the E_k window. Wired ƒ scales the whole Count→End Delay cycle into 1/ƒ.
-  // Frequency (or wired ƒ) + Duty -> Time / End Delay seconds, same as process_pulse_train.
+  // Frequency (or wired ƒ) + Stretch -> Time / End Delay seconds, same as process_pulse_train.
   const fPeriod = nodeGraphPulseTrainFPeriod(node);
   const fKnob = p("frequency", 1);
   const periodS = Number.isFinite(fPeriod) && fPeriod > 0 ? fPeriod : (fKnob > 0 ? 1 / fKnob : 0);
-  const duty = p("duty", 0.5);
-  // Stretch -1..+1 -> span multiplier (same as graph_engine process_pulse_train).
-  const stretch = nodeGraphPulseTrainStretchSpan(p("stretch", 0), p("count", 12));
+  // Stretch -1..+1 -> span m in cycles (same as graph_engine process_pulse_train).
+  const span = nodeGraphPulseTrainStretchSpan(p("stretch", 0), p("count", 12));
   const pulseModeKnob = nodeGraphPulseTrainPulseMode(p("pulseMode", 0));
   const polarityKnob = nodeGraphPulseTrainPolarity(p("curvePolarity", 0));
-  const span = duty * stretch;
   let endTime = span * periodS / nodeGraphPulseTrainSpanScale(pulseModeKnob);
   const args = [
     nodeGraphPulseTrainClampCount(p("count", 12)), endTime, p("curve", 3),
@@ -144,7 +142,7 @@ function nodeGraphPulseTrainSchedule(section, node) {
   // Audio running: draw the params the engine is playing with (latched at the
   // trigger / cycle start with Latch, live with Free; idle = what
   // the next trigger latches), so the face always matches what is heard.
-  // Live Frequency / Duty knobs that have not latched (Latch mode) must not retune the plate.
+  // Live Frequency / Stretch knobs that have not latched (Latch mode) must not retune the plate.
   // __Amp is Amplitude * trigger velocity.
   const ctx = nodeGraphMvp?.live?.context;
   if (ctx?.state === "running" && typeof nodeGraphModuleScopeLatestOutputValue === "function") {
