@@ -14,7 +14,7 @@
   const PT_PRESET_ROOT = "Uncategorized";
 
   const PT_PRESET_PARAMS = Object.freeze([
-    { key: "count", step: 1 },
+    { key: "count" }, // continuous (pulse_train v37): Preset Morph glides Count
     { key: "frequency", step: 0 },
     { key: "stretch", step: 0 },
     { key: "curve", step: 0 },

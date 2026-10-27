@@ -14776,7 +14776,10 @@ const nodeGraphModuleDefinitions = (
       // Morph: TriSaw peak (0 falling saw, 0.5 triangle, 1 rising saw); Pulse Left/Center/Right width (0.5 = square). Other shapes ignore it.
       { defaultValue: "0.5", key: "morph", label: "Morph", max: "1", mid: "0.5", min: "0", nonlinearSlider: false, step: "any" },
       { defaultValue: "0", key: "seed", kind: "seed", label: "Seed", linearSmoothing: false, max: "16777215", maxDigits: 0, mid: "0", min: "0", nonlinearSlider: false, smoothingType: "none", step: "1", tooltip: "Locks the antialiasing pattern. Same Seed = same offsets on every trigger. Change Seed for a different noise texture." },
-      { defaultValue: "12", key: "count", label: "Count", max: "1280", mid: "64", min: "1", nonlinearSlider: true, sliderCurve: "skew", step: "1", tooltip: "Pulses in the train (one-way). Slider 1–1280, mid-skew (64 at the midpoint). Type above the slider for denser trains (DSP up to 16384)." },
+      // Count is continuous (pulse_train v37): between integers the last pulse fades
+      // in and the gaps shrink smoothly. maxDigits 4 also marks the new saved range
+      // copy (node-graph-patch-migrations.js drops the old step 1).
+      { defaultValue: "12", key: "count", label: "Count", max: "1280", maxDigits: 4, mid: "64", min: "1", nonlinearSlider: true, sliderCurve: "skew", step: "any", tooltip: "Pulses in the train (one-way). Slider 1–1280, mid-skew (64 at the midpoint). Type above the slider for denser trains (DSP up to 16384)." },
       { defaultValue: "1", key: "frequency", label: "Frequency", max: "20000", mid: "10", min: "0.01", nonlinearSlider: true, step: "any", unit: "Hz" },
       // Stretch -1..+1: span multiplier m = 0 at -1 (all pulses at once), (1+s)^2
       // below 0, 1 at 0, Count^s above 0 (+1: one pulse per window, linear spacing).

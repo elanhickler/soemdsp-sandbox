@@ -1,4 +1,4 @@
-// Pulse Train Frequency + Stretch (graph 297): Frequency (timeDenominator, Hz)
+// Pulse Train Frequency + Stretch (graph 298): Frequency (timeDenominator, Hz)
 // is the cycle rate; Stretch s (offsetMs) sets the schedule span m cycles:
 // Time = m/f (Fwd-Rev: per leg /2), End Delay = (1-m)/f, cycle = 1/f. Tests
 // that ask for a span m <= 1 use s = sqrt(m) - 1 (m = (1+s)^2).
@@ -112,11 +112,11 @@ for (const span of [0, 0.01, 0.25, 0.5, 1]) {
   const ramp = r2.ramp[r2.ramp.length - 1];
   check(Math.abs(ramp - 0.025) < 1e-12, `Forward-Reverse Span 0.5 at 10 Hz: Time per leg ${ramp} s (= m/ƒ/2)`);
 }
-// 5) Face ports: __Count = count + 0.5*p, __Delay = (1-m)/ƒ.
+// 5) Face ports: __Count = the plain Count (graph 298: Count is continuous, Fwd-Rev no longer packed), __Delay = (1-m)/ƒ.
 {
   const r = run({ freq: 4, span: 0.75, count: 6, pulseMode: 0.5 });
   const c = r.saw[r.saw.length - 1], d = r.idle[r.idle.length - 1];
-  check(c === 6.25 && Math.abs(d - 0.0625) < 1e-12, `face __Count ${c} (6 + 0.5*0.5), __Delay ${d} s (= 0.25/4)`);
+  check(c === 6 && Math.abs(d - 0.0625) < 1e-12, `face __Count ${c} (plain Count 6), __Delay ${d} s (= 0.25/4)`);
 }
 // 6) Recalculate On latches Frequency + Span at the cycle start; Off remaps
 // elapsed into the new period so Frequency stays phase-continuous.
@@ -230,7 +230,7 @@ if (!process.env.PT_PRINT_HASH) {
   const w = wraps(r);
   check(w.length >= 2 && Math.abs(w[1] - w[0] - SR / 10) <= 1 && Math.abs(r.ramp[r.ramp.length - 1] - 0.05) < 1e-12, `Fwd-Rev 1.0 Span 0.5 at 10 Hz: cycle ${w[1] - w[0]} samples, Time 0.05 s`);
   const rc = run({ freq: 4, span: 0.75, count: 6, pulseMode: 1 });
-  check(rc.saw[rc.saw.length - 1] === 6.5, `face __Count ${rc.saw[rc.saw.length - 1]} (6 + 0.5*1)`);
+  check(rc.saw[rc.saw.length - 1] === 6, `face __Count ${rc.saw[rc.saw.length - 1]} (plain Count 6)`);
 }
 // 7) Forward bit-identical to v20. Fwd-Rev 0.5 is prefix attack (v26).
 {

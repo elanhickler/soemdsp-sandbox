@@ -6,9 +6,17 @@
 // Pulse Train: a trigger starts a train of single-sample pulses whose gaps
 // follow a time curve, like a thing slowing down over time (gaps grow).
 // The schedule is a closed form (no per-pulse buffer):
-//   N = Count (DSP 1..16384; Forward-Reverse: one-way max 8192 so 2N-1 fits).
+//   C = Count, continuous (v37; DSP 0..16384, Forward-Reverse one-way max
+//   8192 so 2N-1 fits). N = ceil(C) pulses (at least 1). Positions use C, so
+//   they move continuously as Count turns: Loop u_i = i / C, One shot
+//   u_i = min(1, i / (C - 1)) with the last pulse pinned at Time. Forward
+//   pulse N-1 (the extra one when C is fractional) plays at f = C - (N-1),
+//   fading in from 0 just above an integer to full at the next one; C < 1
+//   fades the single pulse (C = 0 silent). Integer C: f = 1 and every formula
+//   is the old integer one (bit-identical). Reverse / Fwd-Rev legs reuse the
+//   forward schedule, so the faded pulse is forward pulse N-1 there too.
 //   Slider domain is Parameter Settings max (1280, mid-skew). Type above the slider for denser trains.
-//   u_i = i / (N - 1) (N = 1: u = 0), i = 0..N-1
+//   u_i = i / (N - 1) (N = 1: u = 0), i = 0..N-1  (integer C)
 //   Spacing (time family; Amp Curve stays Expo):
 //     0 Expo (default): E_k(u) = (e^(k u) - 1) / (e^k - 1)  (k = 0: E(u) = u)
 //     1 Harmonic: mix even u with triangular multiples of a base τ
@@ -102,7 +110,9 @@ struct PulseTrainState {
   bool running;
   double prevTrig;
   long long n;  // samples since trigger
-  int nFwd;     // one-way Count
+  int nFwd;     // one-way pulses = ceil(countF), at least 1
+  double countF; // continuous one-way Count C (positions)
+  double fade;   // amplitude of forward pulse nFwd-1: C - (nFwd-1), 1 at integer C
   int count;    // pulses this cycle (Forward-Reverse: 2*nFwd-1 or 2*nFwd-2)
   int next;
   double endOut;
@@ -134,10 +144,20 @@ struct PulseTrainState {
   // Highest pulse index fired this cycle: a Free remap can move n back onto
   // a landing that already played; it must not fire again (v33).
   int firedMax;
+  // Schedule layout (one-way pulses, pulses this cycle, 0 Forward / 1 Reverse
+  // / 2 Fwd-Rev order) and the sample n it last changed on (-1: since the
+  // cycle start). Pulse indexes only mean the same pulse while it holds, so a
+  // retarget trusts firedMax+1 as "the next pulse" only then (v37).
+  int layoutNFwd;
+  int layoutTotal;
+  int layoutOrder;
+  long long layoutAt;
 };
 
 struct PreviewSched {
   int nFwd;
+  double countF;
+  double fade;
   int count;
   bool loop;
   double pulseMode;
@@ -188,11 +208,27 @@ static inline bool isDual(double p) { return preAmtOf(p) > 0.0 && postAmtOf(p) >
 
 static inline bool isRevOnly(double p) { return preAmtOf(p) > 0.0 && !(postAmtOf(p) > 0.0); }
 
-static inline int clampFwd(double count, double pulseBias) {
-  if (!(count >= 1.0)) return 1;
-  const int cap = isDual(pulseBias) ? kMaxFwdDual : kMaxPulses;
-  if (count >= (double)cap) return cap;
-  return (int)(count + 0.5);
+// Count -> continuous one-way C (v37). NaN reads as 1; <= 0 is 0 (one silent
+// pulse); the DSP domain tops out at 16384 (Fwd-Rev 8192).
+static inline double countContOf(double count, double pulseBias) {
+  if (!(count == count)) return 1.0;
+  if (!(count > 0.0)) return 0.0;
+  const double cap = isDual(pulseBias) ? (double)kMaxFwdDual : (double)kMaxPulses;
+  return count >= cap ? cap : count;
+}
+
+// Pulses for C: ceil(C), at least 1.
+static inline int pulsesOf(double c) {
+  int n = (int)c;
+  if ((double)n < c) n += 1;
+  return n < 1 ? 1 : n;
+}
+
+// Amplitude of forward pulse nFwd-1: C - (nFwd-1) in [0, 1]; exactly 1 at integer C.
+static inline double fadeOf(double c, int nFwd) {
+  const double f = c - (double)(nFwd - 1);
+  if (!(f < 1.0)) return 1.0;
+  return f > 0.0 ? f : 0.0;
 }
 
 static inline int totalCount(int nFwd, double pulseBias, bool loop, double polarity) {
@@ -219,6 +255,10 @@ enum {
 };
 
 static int gTimeSpacing = 0;
+// Continuous Count of the schedule being evaluated (instance or preview), set
+// next to gTimeSpacing. Integer C keeps every formula bit-identical.
+static double gCountF = 1.0;
+static double gFade = 1.0;
 
 static inline int spacingOf(double v) {
   if (!(v == v) || v < 0.5) return kSpacingExpo;
@@ -227,9 +267,14 @@ static inline int spacingOf(double v) {
   return n;
 }
 
+// u from the continuous Count C (= n at integer C). One shot: the extra pulse
+// would land past 1, so u stops at 1 (that pulse is pinned at Time anyway).
 static inline double pulseU(int i, int n, bool loop) {
-  if (loop) return (double)i / (double)n;
-  return n > 1 ? (double)i / (double)(n - 1) : 0.0;
+  const double c = gCountF;
+  if (loop) return c > 0.0 ? (double)i / c : 0.0;
+  if (n <= 1) return 0.0;
+  const double u = (double)i / (c - 1.0);
+  return u < 1.0 ? u : 1.0;
 }
 
 // Time warp. Curve 0 is even (linear) in every family.
@@ -238,7 +283,7 @@ static inline double timeWarp(double k, double u, int i, int nFwd, bool loop) {
   if (u > 1.0) u = 1.0;
   const int fam = gTimeSpacing;
   if (fam == kSpacingHarmonic) {
-    const double n = (double)nFwd;
+    const double n = gCountF; // continuous Count (== nFwd at integer C)
     const double ii = (double)i;
     double h;
     if (loop) h = n > 0.0 ? (ii * (ii + 1.0)) / (n * (n + 1.0)) : 0.0;
@@ -311,7 +356,7 @@ static inline double pulseTime(int j, int nFwd, double end, double curve, bool l
     if (!(t >= 0.0)) t = 0.0;
     if (t > end) t = end;
     // Loop last pulse must sit before Time so it is not dropped at the wrap.
-    if (loop && nFwd > 1) t *= (double)(nFwd - 1) / (double)nFwd;
+    if (loop && nFwd > 1) t *= (gCountF - 1.0) / gCountF;
     return t;
   }
   if (!isDual(p)) return oneWayTime(j, nFwd, end, curve, loop, polarity);
@@ -342,7 +387,10 @@ static inline double pulseAmp(
     i = fwdRevIndex(k, nFwd);
     uLoop = k >= nFwd ? false : loop;
   }
-  return (a0 + (a1 - a0) * curveShape(ac, pulseU(i, nFwd, uLoop))) * amplitude * velocity;
+  const double a = (a0 + (a1 - a0) * curveShape(ac, pulseU(i, nFwd, uLoop))) * amplitude * velocity;
+  // Fractional Count: forward pulse nFwd-1 fades (every leg that plays it).
+  if (i == nFwd - 1 && gFade < 1.0) return a * gFade;
+  return a;
 }
 
 static inline bool paramsEqual(const double a[9], const double b[9]) {
@@ -584,8 +632,34 @@ static void applySchedule(PulseTrainState& s, const double live[9], double v, bo
   s.polarity = polarityNeg(polarity) ? 1.0 : 0.0;
   s.spacing = spacing;
   gTimeSpacing = spacing;
-  s.nFwd = clampFwd(live[0], s.pulseMode);
+  s.countF = countContOf(live[0], s.pulseMode);
+  s.nFwd = pulsesOf(s.countF);
+  s.fade = fadeOf(s.countF, s.nFwd);
+  gCountF = s.countF;
+  gFade = s.fade;
   s.count = totalCount(s.nFwd, s.pulseMode, loop, s.polarity);
+  const int order = s.nFwd > 1 && isDual(s.pulseMode) ? 2 : (s.nFwd > 1 && isRevOnly(s.pulseMode) ? 1 : 0);
+  if (s.layoutNFwd != s.nFwd || s.layoutTotal != s.count || s.layoutOrder != order) {
+    // Reverse-first orders (Reverse, Fwd-Rev) number pulses from the faded
+    // forward pulse nFwd-1 at the front, so a live Count step of d shifts every
+    // pulse index by d: shift firedMax with them so a pulse that already played
+    // is not played again (or a pending one skipped). A single pulse fits any
+    // order. Forward <-> reverse-first switches cannot be mapped (left as is).
+    const int oldN = s.layoutNFwd;
+    if (s.firedMax >= 0 && oldN > 0) {
+      const bool oldRevOk = oldN <= 1 || s.layoutOrder != 0;
+      const bool newRevOk = s.nFwd <= 1 || order != 0;
+      const bool anyRev = (oldN > 1 && s.layoutOrder != 0) || (s.nFwd > 1 && order != 0);
+      if (oldRevOk && newRevOk && anyRev) {
+        s.firedMax += s.nFwd - oldN;
+        if (s.firedMax < -1) s.firedMax = -1;
+      }
+    }
+    s.layoutNFwd = s.nFwd;
+    s.layoutTotal = s.count;
+    s.layoutOrder = order;
+    s.layoutAt = s.n;
+  }
   for (int k = 0; k < 9; k++) s.eff[k] = live[k];
   s.effVel = v;
   s.timeSpan = live[1] > 0.0 ? live[1] : 0.0;
@@ -641,22 +715,39 @@ static int firstPulseAfter(
   return lo;
 }
 
+// The layout held on the previous sample and this one, so pulse firedMax+1
+// is the same pulse that was not yet due one sample ago.
+static inline bool sameLayout(const PulseTrainState& s) {
+  return s.firedMax >= 0 && s.layoutAt < s.n - 1;
+}
+
 // Loop + Free: the pulse index that belongs at sample n after a live period
 // change. Trigger: first land at or after n (do not refire). Grain: the grain
 // that contains n (k-1), so a Frequency sweep does not skip-to-end then wrap.
+// rescue (v37): the pulse after the last one fired, when the schedule layout
+// (pulses per leg) has not changed since that fire, else -1. A live Count /
+// Time turn moves landings continuously, so that pulse can slide back across
+// the sample boundary on the very sample the playhead reaches it; it then
+// plays one sample late instead of being skipped.
 static inline int pulseIndexAt(
   long long n, int nFwd, int total, double end, double curve, bool loop, double pulseMode,
-  double sr, int aaMode, double scale, int shape, double polarity
+  double sr, int aaMode, double scale, int shape, double polarity, int rescue
 ) {
   const long long nPrev = n > 0 ? n - 1 : -1;
   const int k = firstPulseAfter(nPrev, nFwd, total, end, curve, loop, pulseMode, sr, aaMode, scale, polarity);
   if (shape != kShapeTrigger && k > 0) return k - 1;
+  if (rescue >= 0 && k == rescue + 1 && rescue < total && n > 0) {
+    const double t = playT(pulseTime(rescue, nFwd, end, curve, loop, pulseMode, polarity), scale);
+    const int rad = aaMode >= 4 ? 2 : 1;
+    const long long latest = aaMode >= 3 ? robinLatest(t, sr, rad) : ceilLand(t, sr);
+    if (latest == n - 1) return rescue;
+  }
   return k;
 }
 
 }  // namespace
 
-extern "C" int soemdsp_pulse_train_version() { return 36; } // v36: graph Duty removed (no DSP change here)
+extern "C" int soemdsp_pulse_train_version() { return 37; } // v37: continuous Count (fading last pulse); was v36 graph Duty removed
 
 extern "C" int soemdsp_pulse_train_create() {
   for (int i = 0; i < kMaxInstances; i++) {
@@ -666,6 +757,8 @@ extern "C" int soemdsp_pulse_train_create() {
       s.prevTrig = 0.0;
       s.n = 0;
       s.nFwd = 0;
+      s.countF = 1.0;
+      s.fade = 1.0;
       s.count = 0;
       s.next = 0;
       s.endOut = 0.0;
@@ -690,6 +783,10 @@ extern "C" int soemdsp_pulse_train_create() {
       s.cycleN = 0;
       s.phaseOff = 0.0;
       s.firedMax = -1;
+      s.layoutNFwd = 0;
+      s.layoutTotal = 0;
+      s.layoutOrder = 0;
+      s.layoutAt = -1;
       s.active = true;
       return i + 1;
     }
@@ -733,6 +830,8 @@ extern "C" double soemdsp_pulse_train_sample(
   const double pol = runningLatch ? s.polarity : polarityLive;
   const int spacingNow = runningLatch ? s.spacing : spacingLive;
   gTimeSpacing = spacingNow;
+  gCountF = s.countF;
+  gFade = s.fade;
   const double modeNow = runningLatch ? s.pulseMode : pulseModeLive;
   const double timeNow = runningLatch ? s.timeSpan : (endTime > 0.0 ? endTime : 0.0);
   const double delayNow = runningLatch ? clampDelay(s.eff[8]) : live[8];
@@ -777,6 +876,7 @@ extern "C" double soemdsp_pulse_train_sample(
     s.cycleN = eventLand(wrapNow, sr, streamW, (unsigned int)s.count + 1u, aaMode, aaMode == 2);
   }
   const bool loopStart = loop && (!s.running || trigHit || naturalWrap);
+  bool retargeted = false; // pulseIndexAt ran this sample (live Free change / ƒ lock)
   if (trigHit || loopStart) {
     const double v = trigHit ? gate_hit_velocity() : s.velocity;
     const bool needBuild = !s.running || trigHit || !paramsEqual(s.eff, live)
@@ -790,6 +890,7 @@ extern "C" double soemdsp_pulse_train_sample(
     s.next = 0;
     s.n = 0;
     s.firedMax = -1;
+    s.layoutAt = -1;
     s.endFired = false;
     s.running = true;
     clearSpill(s);
@@ -809,8 +910,10 @@ extern "C" double soemdsp_pulse_train_sample(
       s.cycleN = eventLand(wrapNow, sr, streamLive, (unsigned int)s.count + 1u, aaMode, aaMode == 2);
     }
     if (liveChange || remapLive) {
+      retargeted = true;
       const int k = pulseIndexAt(
-        s.n, s.nFwd, s.count, s.timeSpan, s.eff[2], s.loopSched, s.pulseMode, sr, aaMode, scale, shape, pol
+        s.n, s.nFwd, s.count, s.timeSpan, s.eff[2], s.loopSched, s.pulseMode, sr, aaMode, scale, shape, pol,
+        sameLayout(s) ? s.firedMax + 1 : -1
       );
       if (loop) s.next = k;
       else if (k > s.next) s.next = k;
@@ -818,8 +921,10 @@ extern "C" double soemdsp_pulse_train_sample(
     }
   }
   if (s.running && periodLock > 0.0 && !trigHit && !loopStart) {
+    retargeted = true;
     const int k = pulseIndexAt(
-      s.n, s.nFwd, s.count, s.timeSpan, s.eff[2], s.loopSched, s.pulseMode, sr, aaMode, scale, shape, pol
+      s.n, s.nFwd, s.count, s.timeSpan, s.eff[2], s.loopSched, s.pulseMode, sr, aaMode, scale, shape, pol,
+      sameLayout(s) ? s.firedMax + 1 : -1
     );
     s.next = k;
     if (s.next > s.count) s.next = s.count;
@@ -942,7 +1047,11 @@ extern "C" double soemdsp_pulse_train_sample(
         const double amp = pulseAmp(s.next, nFwd, endT, kCurve, s.eff[3], s.eff[4], s.eff[5], s.eff[6], s.effVel, lp, du, pol);
         const double mo = latch ? s.morphEff : morphLive;
         out = grainWave(shape, u, mo) * amp;
-        if (s.n == n0 && s.next > s.firedMax) {
+        // Trigger out on the grain's first sample; one sample late when a live
+        // retarget this sample found its landing slid back across the boundary
+        // (v37, see pulseIndexAt).
+        if ((s.n == n0 || (retargeted && s.n == n0 + 1 && s.next == s.firedMax + 1 && sameLayout(s)))
+            && s.next > s.firedMax) {
           trig += amp;
           s.firedMax = s.next;
         }
@@ -1025,7 +1134,11 @@ extern "C" int soemdsp_pulse_train_preview(
   gPreview.polarity = polarityNeg(curvePolarity) ? 1.0 : 0.0;
   gPreview.spacing = spacingOf(spacing);
   gTimeSpacing = gPreview.spacing;
-  gPreview.nFwd = clampFwd(count, gPreview.pulseMode);
+  gPreview.countF = countContOf(count, gPreview.pulseMode);
+  gPreview.nFwd = pulsesOf(gPreview.countF);
+  gPreview.fade = fadeOf(gPreview.countF, gPreview.nFwd);
+  gCountF = gPreview.countF;
+  gFade = gPreview.fade;
   gPreview.loop = mode > 0.5;
   gPreview.count = totalCount(gPreview.nFwd, gPreview.pulseMode, gPreview.loop, gPreview.polarity);
   gPreview.end = endTime > 0.0 ? endTime : 0.0;
@@ -1040,11 +1153,17 @@ extern "C" int soemdsp_pulse_train_preview(
 
 extern "C" double soemdsp_pulse_train_preview_time(int i) {
   if (i < 0 || i >= gPreview.count) return 0.0;
+  gTimeSpacing = gPreview.spacing;
+  gCountF = gPreview.countF;
+  gFade = gPreview.fade;
   return pulseTime(i, gPreview.nFwd, gPreview.end, gPreview.curve, gPreview.loop, gPreview.pulseMode, gPreview.polarity);
 }
 
 extern "C" double soemdsp_pulse_train_preview_amplitude(int i) {
   if (i < 0 || i >= gPreview.count) return 0.0;
+  gTimeSpacing = gPreview.spacing;
+  gCountF = gPreview.countF;
+  gFade = gPreview.fade;
   return pulseAmp(
     i, gPreview.nFwd, gPreview.end, gPreview.curve, gPreview.ampStart, gPreview.ampEnd, gPreview.ampCurve,
     gPreview.amplitude, 1.0, gPreview.loop, gPreview.pulseMode, gPreview.polarity

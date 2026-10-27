@@ -107,8 +107,28 @@ function migrateNodeGraphPulseTrainStretch(patch) {
   return patch;
 }
 
+// Pulse Train Count is continuous (pulse_train v37). Every saved patch carries
+// a range copy of Count (paramMeta.count) with the old step 1, which would keep
+// the slider on integers. Old-copy marker: step 1 and not the new maxDigits 4.
+// Its step and maxDigits keys are dropped so the definition (step any,
+// maxDigits 4) applies; a second pass is a no-op, and a step the user sets
+// later is kept. Count values are untouched (integers play bit-identically).
+function migrateNodeGraphPulseTrainCountStep(patch) {
+  const nodes = Array.isArray(patch?.nodes) ? patch.nodes : null;
+  if (!nodes) return patch;
+  for (const node of nodes) {
+    if (!node || node.type !== "pulseTrain") continue;
+    const meta = node.paramMeta && typeof node.paramMeta === "object" ? node.paramMeta.count : null;
+    if (!meta || typeof meta !== "object") continue;
+    if (Number(meta.step) !== 1 || Number(meta.maxDigits) === 4) continue;
+    delete meta.step;
+    delete meta.maxDigits;
+  }
+  return patch;
+}
+
 function migrateNodeGraphPatchToCurrent(patch) {
-  return migrateNodeGraphPulseTrainStretch(
+  return migrateNodeGraphPulseTrainCountStep(migrateNodeGraphPulseTrainStretch(
     migrateNodeGraphPulseTrainAntialiasing(migrateNodeGraphRetiredRmsMono(patch)),
-  );
+  ));
 }

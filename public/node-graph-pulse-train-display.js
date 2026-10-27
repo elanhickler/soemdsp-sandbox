@@ -4,6 +4,9 @@
 // on top, time axis 0 .. Time (Loop: the whole cycle; the playhead wraps).
 // The schedule is the same E_k closed form as pulse_train.cpp
 // (t_i = End * E_curve(u_i)); Count DSP goes to 16384. Slider domain is the Count param max.
+// Count is continuous (pulse_train v37): positions use C, the last forward
+// pulse plays at C - (ceil(C) - 1). Integer Count draws with the instanced GL
+// forest; a fractional one draws its stems from the preview schedule.
 // tap trains. Stems/dots are an instanced GL pass (nodeGraphGlLinesPulseTrain)
 // so the vertex shader evaluates the formula from gl_InstanceID. With audio
 // running it uses the engine's params in effect (__Count .. __Amp). Playhead:
@@ -39,7 +42,7 @@ function nodeGraphPulseTrainPreviewLoad() {
   if (nodeGraphPulseTrainPreviewWasm.promise || typeof fetch !== "function" || typeof WebAssembly === "undefined") {
     return nodeGraphPulseTrainPreviewWasm.promise;
   }
-  nodeGraphPulseTrainPreviewWasm.promise = fetch("/native_modules/pulse_train/pulse_train.wasm?v=pt-stretch-only-1")
+  nodeGraphPulseTrainPreviewWasm.promise = fetch("/native_modules/pulse_train/pulse_train.wasm?v=pt-count-frac-1")
     .then((response) => {
       if (!response.ok) throw new Error(`pulse_train wasm HTTP ${response.status}`);
       return response.arrayBuffer();
@@ -98,10 +101,13 @@ function nodeGraphPulseTrainTimeWarp(k, u, i, nFwd, loop, spacing) {
   return nodeGraphPulseTrainCurveShape(k, u);
 }
 
+// Continuous Count C, same domain as pulse_train.cpp countContOf: NaN reads
+// as 1, <= 0 is 0 (one silent pulse), max 16384.
 function nodeGraphPulseTrainClampCount(count) {
-  const n = Math.round(Number(count));
-  if (!(n >= 1)) return 1;
-  return n > NODE_GRAPH_PULSE_TRAIN_MAX ? NODE_GRAPH_PULSE_TRAIN_MAX : n;
+  const c = Number(count);
+  if (!(c === c)) return 1;
+  if (!(c > 0)) return 0;
+  return c > NODE_GRAPH_PULSE_TRAIN_MAX ? NODE_GRAPH_PULSE_TRAIN_MAX : c;
 }
 
 // Stretch s -> span multiplier m: 0 at s <= -1, (1+s)^2 up to 0, Count^s above
@@ -149,12 +155,8 @@ function nodeGraphPulseTrainSchedule(section, node) {
     const eng = ["__Count", "__End", "__Curve", "__AmpStart", "__AmpEnd", "__AmpCurve", "__Amp"]
       .map((name) => Number(nodeGraphModuleScopeLatestOutputValue(section.dataset.node, name, Number.NaN)));
     if (Number.isFinite(eng[1])) {
-      // __Count = count + 0.5 * Fwd-Rev bias (both latched).
-      if (Number.isFinite(eng[0])) {
-        const countIn = Math.floor(eng[0] + 1e-9);
-        args[0] = nodeGraphPulseTrainClampCount(countIn);
-        args[8] = nodeGraphPulseTrainPulseMode(2 * (eng[0] - countIn));
-      }
+      // __Count = the continuous Count in effect (graph 298). Fwd-Rev comes from the knob.
+      if (Number.isFinite(eng[0])) args[0] = nodeGraphPulseTrainClampCount(eng[0]);
       for (let i = 1; i < 7; i += 1) if (Number.isFinite(eng[i])) args[i] = eng[i];
       endTime = eng[1];
     }
@@ -221,10 +223,16 @@ function nodeGraphPulseTrainPreviewJs(args, endTime) {
   const pulseMode = nodeGraphPulseTrainPulseMode(args[8]);
   const polarity = nodeGraphPulseTrainPolarity(args[10]);
   const spacing = Math.round(Number(args[11]) || 0);
-  const nFwd = nodeGraphPulseTrainClampCount(args[0]);
+  const countC = nodeGraphPulseTrainClampCount(args[0]);
   const loop = args[7] > 0.5;
   const dual = nodeGraphPulseTrainIsDual(pulseMode);
-  const fwdCap = dual ? Math.min(nFwd, 8192) : nFwd;
+  // Continuous C (positions) and ceil(C) pulses; forward pulse fwdCap-1 plays at fade.
+  const countF = dual ? Math.min(countC, 8192) : countC;
+  const fwdCap = Math.max(1, Math.ceil(countF));
+  const fade = Math.min(1, Math.max(0, countF - (fwdCap - 1)));
+  const uOf = (i, asLoop) => (asLoop
+    ? (countF > 0 ? i / countF : 0)
+    : (fwdCap > 1 ? Math.min(1, i / (countF - 1)) : 0));
   const count = !dual || fwdCap <= 1 ? fwdCap : 2 * fwdCap - 1;
   const duration = Number(endTime) > 0 ? Number(endTime) : 0;
   const delayRaw = Number(args[9]);
@@ -254,8 +262,8 @@ function nodeGraphPulseTrainPreviewJs(args, endTime) {
     const post = nodeGraphPulseTrainPostAmt(pulseMode);
     const revOnly = pre > 0 && !(post > 0);
     const oneWay = (i, asLoop) => {
-      const u = asLoop ? i / fwdCap : (fwdCap > 1 ? i / (fwdCap - 1) : 0);
-      let t = !asLoop && i === fwdCap - 1 && fwdCap > 1 ? duration : duration * nodeGraphPulseTrainTimeWarp(kTime, u, i, fwdCap, asLoop, spacing);
+      const u = uOf(i, asLoop);
+      let t = !asLoop && i === fwdCap - 1 && fwdCap > 1 ? duration : duration * nodeGraphPulseTrainTimeWarp(kTime, u, i, countF, asLoop, spacing);
       if (!(t >= 0)) t = 0;
       if (t > duration) t = duration;
       return t;
@@ -286,7 +294,7 @@ function nodeGraphPulseTrainPreviewJs(args, endTime) {
         t = duration - oneWay(i, false);
         if (!(t >= 0)) t = 0;
         if (t > duration) t = duration;
-        if (loop) t *= (fwdCap - 1) / fwdCap;
+        if (loop) t *= (countF - 1) / countF;
       } else if (dual && fwdCap > 1) {
         const k = timeOrderK(jj);
         i = fwdRevIndex(k);
@@ -295,9 +303,10 @@ function nodeGraphPulseTrainPreviewJs(args, endTime) {
       } else {
         t = oneWay(jj, loop);
       }
-      const u = uLoop ? i / fwdCap : (fwdCap > 1 ? i / (fwdCap - 1) : 0);
+      const u = uOf(i, uLoop);
       times[jj] = t;
-      const a = (a0 + (a1 - a0) * nodeGraphPulseTrainCurveShape(ampCurve, u)) * amplitude;
+      let a = (a0 + (a1 - a0) * nodeGraphPulseTrainCurveShape(ampCurve, u)) * amplitude;
+      if (i === fwdCap - 1 && fade < 1) a *= fade;
       amps[jj] = a;
       peak = Math.max(peak, Math.abs(a));
     }
@@ -308,7 +317,7 @@ function nodeGraphPulseTrainPreviewJs(args, endTime) {
   const end = Math.max(0.001, loop || delay !== 0 ? Math.max(0, cutoff) : last || 0.001);
   return {
     times, amps, end, duration, peak, loop, pulseMode, polarity, delay,
-    count, nFwd: fwdCap, curve, spacing, ampStart, ampEnd, ampCurve, amplitude,
+    count, nFwd: fwdCap, countF, curve, spacing, ampStart, ampEnd, ampCurve, amplitude,
   };
 }
 
@@ -418,7 +427,27 @@ function drawNodeGraphPulseTrainDisplay(section) {
       });
       return true;
     };
-    forest(schedule, line, dot, lit, playing ? elapsed : Number.NaN);
+    // Fractional Count (or < 1): the instanced forest only knows integer
+    // Counts, so draw the preview schedule's stems on the CPU (up to 4096).
+    const fractional = !(schedule.countF === Math.floor(schedule.countF)) || schedule.countF < 1;
+    if (fractional && schedule.count <= 4096) {
+      const elapsedVal = playing ? elapsed : Number.NaN;
+      const fadeTau = Number(look.fadeTime) || 0;
+      const mixC = (a, b, w) => [0, 1, 2, 3].map((k) => a[k] + (b[k] - a[k]) * w);
+      for (let j = 0; j < schedule.count; j += 1) {
+        const t = schedule.times[j];
+        if (!(t <= end)) continue;
+        const amp = Math.abs(schedule.amps[j]);
+        const x = at(t);
+        const y = base - (amp / scale) * (base - top);
+        const litAmt = elapsedVal >= 0 && t <= elapsedVal
+          ? (fadeTau > 0 ? Math.exp(-(elapsedVal - t) / fadeTau) : 1) : 0;
+        if (base - y > 0.5) nodeGraphGlLinesSegment(batch, x, base, x, y, halfPx, smoothing, mixC(line, lit, litAmt));
+        if (dotR > 0 && amp > 0) nodeGraphGlLinesDot(batch, x, y, dotR, smoothing, mixC(dot, lit, litAmt));
+      }
+    } else {
+      forest(schedule, line, dot, lit, playing ? elapsed : Number.NaN);
+    }
   }
   if (playing) {
     const x = at(elapsed);
