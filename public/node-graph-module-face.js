@@ -851,11 +851,16 @@ function nodeGraphModuleFaceCapture(face, event, onMove, options = {}) {
   const startY = event.clientY;
   const resetOnClick = Boolean(options.resetOnClick);
   let moved = false;
+  let dot = false;
   const mv = (ev) => {
     if (!moved) {
       moved = typeof nodeGraphPointerDragExceededMoveThreshold === "function"
         ? nodeGraphPointerDragExceededMoveThreshold(startX, startY, ev.clientX, ev.clientY, 1)
         : (Math.abs(ev.clientX - startX) > 1 || Math.abs(ev.clientY - startY) > 1);
+    }
+    if (moved && !dot) {
+      dot = true;
+      if (typeof nodeGraphDragDotBegin === "function") nodeGraphDragDotBegin(face);
     }
     if (resetOnClick && !moved) {
       ev.preventDefault?.();
@@ -863,10 +868,17 @@ function nodeGraphModuleFaceCapture(face, event, onMove, options = {}) {
     }
     onMove(ev, true);
   };
+  const dotEnd = () => {
+    if (!dot) return;
+    dot = false;
+    if (typeof nodeGraphDragDotEnd === "function") nodeGraphDragDotEnd(face);
+  };
   const up = (ev) => {
+    dotEnd();
     face.removeEventListener("pointermove", mv);
     face.removeEventListener("pointerup", up);
     face.removeEventListener("pointercancel", up);
+    face.removeEventListener("lostpointercapture", dotEnd);
     if (!moved) {
       moved = typeof nodeGraphPointerDragExceededMoveThreshold === "function"
         ? nodeGraphPointerDragExceededMoveThreshold(startX, startY, ev.clientX, ev.clientY, 1)
@@ -885,6 +897,7 @@ function nodeGraphModuleFaceCapture(face, event, onMove, options = {}) {
   face.addEventListener("pointermove", mv);
   face.addEventListener("pointerup", up);
   face.addEventListener("pointercancel", up);
+  face.addEventListener("lostpointercapture", dotEnd);
 }
 
 // ----------------------------------------------------------------- GL -----

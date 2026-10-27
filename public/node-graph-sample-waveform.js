@@ -1313,7 +1313,11 @@ function nodeGraphSampleWaveformBeginNumberDrag(event) {
     valueStep: spec.step * mult,
     pixelsPerStep: spec.pixelsPerStep / Math.max(0.25, Math.min(4, mult)),
   };
-  input.classList.add("value-dragging");
+  if (typeof nodeGraphDragDotBegin === "function") {
+    nodeGraphDragDotBegin(input);
+  } else {
+    input.classList.add("value-dragging");
+  }
   try {
     input.setPointerCapture?.(event.pointerId);
   } catch {
@@ -1394,6 +1398,7 @@ function nodeGraphSampleWaveformEndNumberDrag(event) {
     return;
   }
   drag.input.classList.remove("value-dragging");
+  if (typeof nodeGraphDragDotEnd === "function") nodeGraphDragDotEnd();
   try {
     if (event?.pointerId !== undefined && drag.input.hasPointerCapture?.(event.pointerId)) {
       drag.input.releasePointerCapture(event.pointerId);
@@ -2075,6 +2080,7 @@ function beginNodeGraphSampleWaveformZoomDrag(event, section, canvas) {
   const startY = event.clientY;
   const surface = canvas || section.querySelector(".node-sample-waveform-canvas") || event.currentTarget;
   surface.setPointerCapture?.(pointerId);
+  if (typeof nodeGraphDragDotBegin === "function") nodeGraphDragDotBegin(surface);
   const applyFromStart = (moveEvent) => {
     if (moveEvent.pointerId !== pointerId) {
       return;
@@ -2096,6 +2102,7 @@ function beginNodeGraphSampleWaveformZoomDrag(event, section, canvas) {
       return;
     }
     surface.releasePointerCapture?.(pointerId);
+    if (typeof nodeGraphDragDotEnd === "function") nodeGraphDragDotEnd(surface);
     surface.removeEventListener("pointermove", applyFromStart);
     surface.removeEventListener("pointerup", endDrag);
     surface.removeEventListener("pointercancel", endDrag);
@@ -2276,6 +2283,10 @@ function bindNodeGraphSampleWaveformInteractions(section, canvas) {
     canvas.classList.add("dragging");
     canvas.classList.toggle("phase-scrubbing", dragMode === "phase");
     canvas.classList.toggle("region-handle-dragging", dragMode === "start" || dragMode === "end");
+    // Value drags (region handles, phase scrub) show the drag dot; pan does not.
+    if (dragMode !== "pan") {
+      if (typeof nodeGraphDragDotBegin === "function") nodeGraphDragDotBegin(canvas);
+    }
     event.preventDefault();
     event.stopPropagation();
   });
@@ -2335,6 +2346,7 @@ function bindNodeGraphSampleWaveformInteractions(section, canvas) {
     canvas.classList.remove("dragging");
     canvas.classList.remove("phase-scrubbing");
     canvas.classList.remove("region-handle-dragging");
+    if (typeof nodeGraphDragDotEnd === "function") nodeGraphDragDotEnd(canvas);
   };
   section.addEventListener("pointerup", endDrag);
   section.addEventListener("pointercancel", endDrag);

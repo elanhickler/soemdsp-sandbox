@@ -584,6 +584,19 @@ function setNodeChoiceSliderFromPointer(slider, surface, clientX, options = {}) 
 // path below (see dragNodeSlider), with screen-edge wraparound
 // (wrapNodeSliderDragAtScreenEdge) standing in for "infinite drag".
 function clearNodeSliderDragCursorState() {
+  nodeGraphDragDotEnd();
+}
+
+// Drag dot: one opt-in for every value drag. body.node-slider-dragging shows
+// the slider-drag-dot cursor (styles.css); the surface gets value-dragging.
+// Safe to call twice; End without a surface only clears the body class.
+function nodeGraphDragDotBegin(surface) {
+  surface?.classList?.add("value-dragging");
+  document.body.classList.add("node-slider-dragging");
+}
+
+function nodeGraphDragDotEnd(surface) {
+  surface?.classList?.remove("value-dragging");
   document.body.classList.remove("node-slider-dragging");
 }
 
@@ -1308,8 +1321,7 @@ function beginNodeSliderDrag(event) {
       }
     });
   }
-  surface.classList.add("value-dragging");
-  document.body.classList.add("node-slider-dragging");
+  nodeGraphDragDotBegin(surface);
   // soemdspPerformDragBegin
   if (window.soemdspPerformMode && window.soemdspPerform && slider) {
     const nodeId = window.soemdspPerform._nodeIdFromSlider

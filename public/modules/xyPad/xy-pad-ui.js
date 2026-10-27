@@ -1060,6 +1060,9 @@ function createNodeGraphXyPadBody(node, type) {
     }
     event.preventDefault();
     if (Math.abs(event.clientX - drag.startClientX) > 1 || Math.abs(event.clientY - drag.startClientY) > 1) {
+      if (!drag.moved) {
+        if (typeof nodeGraphDragDotBegin === "function") nodeGraphDragDotBegin(canvas);
+      }
       drag.moved = true;
     }
     nodeGraphXyPadApplyPointer(pad, event, drag);
@@ -1074,6 +1077,7 @@ function createNodeGraphXyPadBody(node, type) {
     const completedDrag = drag;
     drag = null;
     detachWindowDrag();
+    if (typeof nodeGraphDragDotEnd === "function") nodeGraphDragDotEnd(canvas);
     try {
       if (canvas.hasPointerCapture?.(completedDrag.pointerId)) {
         canvas.releasePointerCapture(completedDrag.pointerId);
