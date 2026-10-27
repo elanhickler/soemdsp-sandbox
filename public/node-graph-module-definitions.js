@@ -14665,7 +14665,7 @@ const nodeGraphModuleDefinitions = (
       { kind: "choices", param: "recalculateOnTrigger", labels: ["Free", "Latch"], h: 26 },
       { kind: "cells", params: [["pulseMode", "Fwd-Rev"]], horizontal: true, h: 30 },
       { kind: "cells", params: [["wave", "Shape"]], horizontal: true, h: 30 },
-      { kind: "choices", param: "antialiasing", labels: ["Off", "Random", "Dither"], h: 26 },
+      { kind: "choices", param: "antialiasing", labels: ["Off", "Random", "Dither", "None", "PolyBLEP"], h: 26 },
       { kind: "cells", params: [["morph", "Morph"], ["count", "Count"], ["duty", "Duty"], ["stretch", "Stretch"]], h: 52 },
       { kind: "cells", params: [["frequency", "Freq"], ["mode", "Mode", "stack"], ["curvePolarity", "+", "stack"]], h: 52 },
       { kind: "cells", params: [["curve", "F Crv", "bipolar"]], horizontal: true, h: 30 },
@@ -14734,7 +14734,7 @@ const nodeGraphModuleDefinitions = (
         tooltip: "Pulse height invert next to A Start. + as drawn. \u2212 flips each height around (A Start + A End)/2. Same times."
       },
       {
-        choices: ["Off", "Random", "Dither"],
+        choices: ["Off", "Random", "Dither", "None", "PolyBLEP"],
         defaultValue: "0",
         displayChoices: true,
         divideChoicesVisibly: true,
@@ -14742,7 +14742,7 @@ const nodeGraphModuleDefinitions = (
         label: "Antialiasing",
         linearSmoothing: false,
         smoothingType: "none",
-        max: "2",
+        max: "4",
         mid: "0",
         min: "0",
         nonlinearSlider: false,
