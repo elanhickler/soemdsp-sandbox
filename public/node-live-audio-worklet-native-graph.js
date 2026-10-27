@@ -6528,7 +6528,7 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
       push("spacing", P.NATIVE_GRAPH_PARAM_CENTER, disc("spacing", 0)); // 0 Expo / 1 Harmonic / 2 Rational
       push("duty", P.NATIVE_GRAPH_PARAM_TIME_NUMERATOR, cont("duty", 0.5)); // pulsing fraction of the cycle
       push("stretch", P.NATIVE_GRAPH_PARAM_OFFSET_MS, cont("stretch", 1)); // schedule length in cycles at Duty 1
-      push("antialiasing", P.NATIVE_GRAPH_PARAM_WAVEFORM, disc("antialiasing", 0)); // 0 Off / 1 Random / 2 Dither (Robin1 ±1)
+      push("antialiasing", P.NATIVE_GRAPH_PARAM_WAVEFORM, disc("antialiasing", 0)); // 0 Off / 1 Random / 2 Dither (Robin1 ±1) / 3 None / 4 PolyBLEP
       push("seed", P.NATIVE_GRAPH_PARAM_SEED, disc("seed", 0));
       push("wave", P.NATIVE_GRAPH_PARAM_OVERSAMPLE, disc("wave", 2)); // 0 Trigger / 1 Gate / 2 Saw / 3 Ramp / 4 TriSaw / 5 Sine / 6-8 Pulse Left/Center/Right / 9 Rect Sine
       push("morph", P.NATIVE_GRAPH_PARAM_MIX, cont("morph", 0.5)); // TriSaw peak / Pulse duty
