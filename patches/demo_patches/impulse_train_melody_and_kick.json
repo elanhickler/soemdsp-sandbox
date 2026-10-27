@@ -1254,7 +1254,7 @@
         "recalculateOnTrigger": 1,
         "mode": 1,
         "pulseMode": 0,
-        "antialiasing": 3,
+        "antialiasing": 2,
         "wave": 1,
         "seed": 1299612,
         "count": 30,
