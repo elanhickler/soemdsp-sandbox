@@ -14663,7 +14663,7 @@ const nodeGraphModuleDefinitions = (
     face: [
       { kind: "cells", params: [["pulseMode", "Fwd-Rev"]], horizontal: true, h: 30 },
       { kind: "cells", params: [["wave", "Shape"]], horizontal: true, h: 30 },
-      { kind: "choices", param: "antialiasing", labels: ["Random", "Dither", "None"], h: 26 },
+      { kind: "choices", param: "antialiasing", labels: ["Quant", "Rand", "Dither"], h: 26 },
       { kind: "choices", param: "recalculateOnTrigger", labels: ["Free", "Latch"], h: 26 },
       { kind: "choices", param: "mode", labels: ["One shot", "Loop"], h: 26 },
       { kind: "cells", params: [["morph", "Morph"], ["count", "Count"], ["duty", "Duty"], ["stretch", "Stretch"]], h: 52 },
@@ -14733,19 +14733,19 @@ const nodeGraphModuleDefinitions = (
         tooltip: "Pulse height invert next to A Start. + as drawn. \u2212 flips each height around (A Start + A End)/2. Same times."
       },
       {
-        // Stored value = choice: 1 Random / 2 Dither / 3 None (retired 0 Off /
-        // 4 PolyBLEP load as None, node-graph-patch-migrations.js).
-        choices: ["Random", "Dither", "None"],
-        defaultValue: "3",
+        // Stored value = choice: 0 Quant / 1 Rand / 2 Dither (retired v32/v33
+        // 3 None / 4 PolyBLEP load as 0 Quant, node-graph-patch-migrations.js).
+        choices: ["Quant", "Rand", "Dither"],
+        defaultValue: "0",
         displayChoices: true,
         divideChoicesVisibly: true,
         key: "antialiasing",
         label: "Antialiasing",
         linearSmoothing: false,
         smoothingType: "none",
-        max: "3",
-        mid: "2",
-        min: "1",
+        max: "2",
+        mid: "1",
+        min: "0",
         nonlinearSlider: false,
         step: "1"
       },

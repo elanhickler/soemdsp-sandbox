@@ -39,7 +39,7 @@ function nodeGraphPulseTrainPreviewLoad() {
   if (nodeGraphPulseTrainPreviewWasm.promise || typeof fetch !== "function" || typeof WebAssembly === "undefined") {
     return nodeGraphPulseTrainPreviewWasm.promise;
   }
-  nodeGraphPulseTrainPreviewWasm.promise = fetch("/native_modules/pulse_train/pulse_train.wasm?v=pt-free-phase-1")
+  nodeGraphPulseTrainPreviewWasm.promise = fetch("/native_modules/pulse_train/pulse_train.wasm?v=pt-quant-1")
     .then((response) => {
       if (!response.ok) throw new Error(`pulse_train wasm HTTP ${response.status}`);
       return response.arrayBuffer();

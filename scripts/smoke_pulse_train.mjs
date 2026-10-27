@@ -441,9 +441,9 @@ console.log("ok pulseTrain a new Trigger hit mid-train restarts it (single Trigg
   if (Math.abs((ends[1] - ends[0]) - cycle) > 1) throw new Error(`neg delay loop: End spacing ${ends[1] - ends[0]} want ~${cycle}`);
   console.log(`ok pulseTrain End Delay negative: one-shot drops tail End at lastPulse+delay, Count 1 clamps to 0, Loop cycle Time+delay`);
 }
-// 7) Antialiasing: 0 Off, 1 Random (seed-locked stack 0/+1), 2 Dither (Robin1 ±1).
-// Isolated pulses stay on the Off grid for Random. Dither ±1 moves them.
-// Leftover numeric 3 is still Robin1; 4 is still Robin2.
+// 7) Antialiasing (v34): 0 Quant (old Off sample grid), 1 Rand (seed-locked
+// stack 0/+1), 2 Dither (Robin1 ±1). Isolated pulses stay on the Quant grid
+// for Rand. Dither ±1 moves them. (Robin2 is unreachable since v33.)
 function seedAvalanche(x) {
   x >>>= 0;
   x = (x ^ (x >>> 16)) >>> 0;
@@ -519,10 +519,10 @@ function robinLand(seed, j, t, sr) {
   if (dMoved < 1) throw new Error("aa Dither sparse: identical to Off");
   const h3 = N.soemdsp_pulse_train_create();
   const outR = new Float64Array(n);
-  for (let i = 0; i < n; i++) outR[i] = N.soemdsp_pulse_train_sample(h3, i >= at ? 1 : 0, ...set, SR, 0, 0, 0, 0, 3, 0);
+  for (let i = 0; i < n; i++) outR[i] = N.soemdsp_pulse_train_sample(h3, i >= at ? 1 : 0, ...set, SR, 0, 0, 0, 0, 0, 0);
   N.soemdsp_pulse_train_destroy(h3);
-  for (let i = 0; i < n; i++) if (outD[i] !== outR[i]) throw new Error(`aa Dither (2) != leftover Robin1 (3) at ${i}`);
-  console.log(`ok pulseTrain AA Random sparse == Off; Dither ±1 moves ${dMoved} samples, energy conserved, 2==3`);
+  for (let i = 0; i < n; i++) if (outR[i] !== yOff[i]) throw new Error(`aa Quant (0) off the sample grid at ${i}`);
+  console.log(`ok pulseTrain AA Random sparse == Off; Dither ±1 moves ${dMoved} samples, energy conserved, Quant on the grid`);
 }
 {
   const set = [16384, 0.02, 3, 1, 0.1, 2, 1];
@@ -610,7 +610,7 @@ function robinLand(seed, j, t, sr) {
   const out = new Float64Array(n);
   for (let i = 0; i < n; i++) {
     const trig = (i === 5 || i === 5 + gap) ? 1 : 0;
-    out[i] = N.soemdsp_pulse_train_sample(h, trig, ...set, SR, 0, 0, 0, 0, 3, 0);
+    out[i] = N.soemdsp_pulse_train_sample(h, trig, ...set, SR, 0, 0, 0, 0, 2, 0);
   }
   N.soemdsp_pulse_train_destroy(h);
   let differ = 0;
@@ -638,7 +638,7 @@ function robinLand(seed, j, t, sr) {
   const h = N.soemdsp_pulse_train_create();
   let endIdx = -1;
   for (let i = 0; i < n; i++) {
-    N.soemdsp_pulse_train_sample(h, i >= at ? 1 : 0, ...set, SR, 0, 0, 0, delay, 3, 0);
+    N.soemdsp_pulse_train_sample(h, i >= at ? 1 : 0, ...set, SR, 0, 0, 0, delay, 2, 0);
     if (N.soemdsp_pulse_train_end(h) === 1) endIdx = i;
   }
   N.soemdsp_pulse_train_destroy(h);
@@ -668,58 +668,23 @@ function robinPick3(c, seed, j, component) {
   if (lenNow < 0) lenNow = 0;
   return lenNow;
 }
-function robinLand2(seed, j, t, sr) {
-  return robinPick3(robinLand(seed, j, t, sr), seed, j, 3);
-}
 {
   const set = [12, 3, 3, 1, 0.2, 0, 1];
   const { t, a } = preview(N, set);
   const at = 10, n = at + Math.ceil(3.05 * SR);
-  const playAa = (aa) => {
-    const h = N.soemdsp_pulse_train_create();
-    const out = new Float64Array(n);
-    for (let i = 0; i < n; i++) out[i] = N.soemdsp_pulse_train_sample(h, i >= at ? 1 : 0, ...set, SR, 0, 0, 0, 0, aa, 0);
-    N.soemdsp_pulse_train_destroy(h);
-    return out;
-  };
-  const r1 = playAa(3), r2 = playAa(4);
-  const stream = seedMix(0, 2, 1);
-  let max1 = 0, max2 = 0, hit2 = 0, differ = 0;
-  for (let j = 0; j < t.length; j++) {
-    const rnd = Math.round(t[j] * SR);
-    const k1 = robinLand(stream, j, t[j], SR);
-    const k2 = robinLand2(stream, j, t[j], SR);
-    max1 = Math.max(max1, Math.abs(k1 - rnd));
-    max2 = Math.max(max2, Math.abs(k2 - rnd));
-    if (Math.abs(k2 - rnd) === 2) hit2++;
-    if (Math.abs(r1[at + k1] - a[j]) > 1e-12) throw new Error(`aa Robin1 land: pulse ${j} sample ${at + k1} ${r1[at + k1]} vs ${a[j]}`);
-    if (Math.abs(r2[at + k2] - a[j]) > 1e-12) throw new Error(`aa Robin2 land: pulse ${j} sample ${at + k2} ${r2[at + k2]} vs ${a[j]}`);
-  }
-  for (let i = 0; i < n; i++) if (r1[i] !== r2[i]) differ++;
-  if (max1 > 1) throw new Error(`aa Robin1 radius ${max1}`);
-  if (max2 > 2) throw new Error(`aa Robin2 radius ${max2}`);
-  if (hit2 < 1) throw new Error("aa Robin2: never landed ±2");
-  if (differ < 1) throw new Error("aa Robin2 identical to Robin1");
-  console.log(`ok pulseTrain AA Robin1 ±1 / Robin2 ±2 (hit ±2 on ${hit2} pulses, ${differ} samples differ)`);
-}
-{
-  const set = [16384, 0.02, 3, 1, 0.1, 2, 1];
-  const at = 5, nWin = Math.ceil(0.03 * SR);
   const h = N.soemdsp_pulse_train_create();
-  const out = new Float64Array(nWin);
-  for (let i = 0; i < nWin; i++) out[i] = N.soemdsp_pulse_train_sample(h, i >= at ? 1 : 0, ...set, SR, 0, 0, 0, 0, 4, 0);
+  const r1 = new Float64Array(n);
+  for (let i = 0; i < n; i++) r1[i] = N.soemdsp_pulse_train_sample(h, i >= at ? 1 : 0, ...set, SR, 0, 0, 0, 0, 2, 0);
   N.soemdsp_pulse_train_destroy(h);
-  const { t, a } = preview(N, set);
   const stream = seedMix(0, 2, 1);
-  const y = new Float64Array(nWin);
+  let max1 = 0;
   for (let j = 0; j < t.length; j++) {
-    const k = robinLand2(stream, j, t[j], SR);
-    if (at + k < nWin) y[at + k] += a[j];
+    const k1 = robinLand(stream, j, t[j], SR);
+    max1 = Math.max(max1, Math.abs(k1 - Math.round(t[j] * SR)));
+    if (Math.abs(r1[at + k1] - a[j]) > 1e-12) throw new Error(`aa Robin1 land: pulse ${j} sample ${at + k1} ${r1[at + k1]} vs ${a[j]}`);
   }
-  for (let i = 0; i < nWin; i++) {
-    if (Math.abs(out[i] - y[i]) > 1e-12) throw new Error(`aa Robin2 hash: sample ${i} out ${out[i]} expected ${y[i]}`);
-  }
-  console.log("ok pulseTrain Antialiasing Robin2: first cycle matches ±2 pick (second ±1 around Robin1)");
+  if (max1 > 1) throw new Error(`aa Robin1 radius ${max1}`);
+  console.log("ok pulseTrain AA Dither = Robin1 ±1 (every pulse on its robin pick)");
 }
 function grainWave(shape, u) {
   if (u < 0) u = 0;

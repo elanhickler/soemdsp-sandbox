@@ -130,6 +130,10 @@ const ALLOW_UNBOUND = new Set([
   "radar.tunnelInv",
   "radar.spiralReturn",
   "phosphillator.smoothing",
+  // Preset browser Morph: face-only, the browser writes the morphed values
+  // into the real params (no native slot by design).
+  "pulseTrain.presetMorph",
+  "sabrinaReverbOriginal.presetMorph",
 ]);
 
 const novel = missing.filter((row) => !ALLOW_UNBOUND.has(row));

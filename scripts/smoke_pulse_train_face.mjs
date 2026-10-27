@@ -24,7 +24,7 @@ const keys = Object.fromEntries((d.parameters || []).map((p) => [p.key, p]));
 const want = [
   { kind: "cells", params: [["pulseMode", "Fwd-Rev"]], horizontal: true },
   { kind: "cells", params: [["wave", "Shape"]], horizontal: true },
-  { kind: "choices", param: "antialiasing", labels: ["Random", "Dither", "None"] },
+  { kind: "choices", param: "antialiasing", labels: ["Quant", "Rand", "Dither"] },
   { kind: "choices", param: "recalculateOnTrigger", labels: ["Free", "Latch"] },
   { kind: "choices", param: "mode", labels: ["One shot", "Loop"] },
   { kind: "cells", params: [["morph", "Morph"], ["count", "Count"], ["duty", "Duty"], ["stretch", "Stretch"]] },

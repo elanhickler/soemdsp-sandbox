@@ -48,9 +48,11 @@ function migrateNodeGraphRetiredRmsMono(patch) {
   return patch;
 }
 
-// Pulse Train Antialiasing (pulse_train v33): choices are 1 Random / 2 Dither /
-// 3 None. Retired 0 Off and 4 PolyBLEP (and anything outside 1..3) load as
-// 3 None. Idempotent: 1 / 2 / 3 are left alone.
+// Pulse Train Antialiasing (pulse_train v34): choices are 0 Quant / 1 Rand /
+// 2 Dither. Every saved value keeps its meaning: 0 (old Off) -> 0 Quant,
+// 1 Random -> 1 Rand, 2 Dither -> 2, v32/v33 3 None and 4 PolyBLEP -> 0 Quant
+// (None is Quant now; anything outside 0..2 -> 0). Idempotent without a
+// version marker: the new range 0..2 is left alone, only 3+ is rewritten.
 function migrateNodeGraphPulseTrainAntialiasing(patch) {
   const nodes = Array.isArray(patch?.nodes) ? patch.nodes : null;
   if (!nodes) return patch;
@@ -58,8 +60,8 @@ function migrateNodeGraphPulseTrainAntialiasing(patch) {
     if (!node || node.type !== "pulseTrain" || !node.params || typeof node.params !== "object") continue;
     if (!Object.hasOwn(node.params, "antialiasing")) continue;
     const v = Math.round(Number(node.params.antialiasing));
-    if (v === 1 || v === 2 || v === 3) continue;
-    node.params.antialiasing = typeof node.params.antialiasing === "number" ? 3 : "3";
+    if (v === 0 || v === 1 || v === 2) continue;
+    node.params.antialiasing = typeof node.params.antialiasing === "number" ? 0 : "0";
   }
   return patch;
 }

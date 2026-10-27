@@ -128,8 +128,8 @@ struct PulseTrainState {
   double morphEff;  // Morph latched at Trigger / Loop start (Recalculate On)
   // Cycle start sits phaseOff s before sample 0 (v33: every AA mode). A Free
   // live period change remaps the cycle position as a 0..1 fraction and keeps
-  // the sub-sample remainder here, so the train never stalls or restarts. None
-  // also carries the Loop wrap overshoot (the cycle is not whole samples).
+  // the sub-sample remainder here, so the train never stalls or restarts.
+  // Every Trigger / Loop cycle start resets it to 0 (whole-sample cycle, v34).
   double phaseOff;
   // Highest pulse index fired this cycle: a Free remap can move n back onto
   // a landing that already played; it must not fire again (v33).
@@ -401,14 +401,15 @@ enum {
   kShapeRectSine = 9
 };
 
-// Antialiasing (v33), stored value = choice: 1 Random, 2 Dither, 3 None
-// (default). Dither is Robin1 ±1 (native 3). None: plain ceil landing (aaMode 0)
-// with a fractional cycle start. Retired 0 Off / 4 PolyBLEP play as None (the
-// patch loader rewrites them to 3).
+// Antialiasing (v34), stored value = choice: 0 Quant (default), 1 Rand,
+// 2 Dither. Quant (aaMode 0) = the old Off: pulses land on the first sample at
+// or after their time, the Loop cycle is whole samples. Rand = seed-locked
+// stack 0/+1 (native 1). Dither = Robin1 ±1 (native 3). The patch loader
+// rewrites retired v32/v33 values 3 None / 4 PolyBLEP to 0 Quant.
 static inline int aaModeOf(double antialiasing) {
-  if (antialiasing >= 2.5 || !(antialiasing >= 0.5)) return 0; // None
   if (antialiasing >= 1.5) return 3; // Dither = Robin1 ±1
-  return 1; // Random
+  if (antialiasing >= 0.5) return 1; // Rand
+  return 0; // Quant
 }
 
 static inline int shapeOf(double wave) {
@@ -655,7 +656,7 @@ static inline int pulseIndexAt(
 
 }  // namespace
 
-extern "C" int soemdsp_pulse_train_version() { return 33; }
+extern "C" int soemdsp_pulse_train_version() { return 34; }
 
 extern "C" int soemdsp_pulse_train_create() {
   for (int i = 0; i < kMaxInstances; i++) {
@@ -714,7 +715,6 @@ extern "C" double soemdsp_pulse_train_sample(
   const bool loop = mode > 0.5;
   const bool latch = recalc > 0.5;
   const int aaMode = aaModeOf(antialiasing);
-  const bool frac = aaMode == 0; // None: fractional Loop wrap
   const int shape = shapeOf(waveShape);
   const unsigned int seedU = soemdsp_maths::seed_param_u32(seed);
   PulseTrainState& s = gPool[handle - 1];
@@ -746,13 +746,11 @@ extern "C" double soemdsp_pulse_train_sample(
   // period so a live Frequency jump keeps phase. Latch uses wrapNow (the
   // latched cycle) and does not remap.
   bool naturalWrap = false;
-  double wrapGate = 0.0;
   if (s.running && s.n > 0) {
     if (aaMode >= 2 && (latch || prevWrap <= 0.0 || wrapNow == prevWrap)) {
       naturalWrap = s.n >= (s.cycleN > 0 ? s.cycleN : 1);
     } else {
       const double gate = (!latch && prevWrap > 0.0) ? prevWrap : wrapNow;
-      wrapGate = gate;
       naturalWrap = ((double)s.n / sr + s.phaseOff) >= gate;
     }
   }
@@ -786,12 +784,9 @@ extern "C" double soemdsp_pulse_train_sample(
       || s.spacing != spacingLive;
     if (needBuild) applySchedule(s, live, v, loop, polarityLive, spacingLive);
     s.morphEff = morphLive;
-    // None: a natural Loop wrap carries its overshoot into the
-    // next cycle (fractional period). Trigger / first start: 0.
-    s.phaseOff = (frac && naturalWrap && !trigHit && wrapGate > 0.0)
-      ? ((double)s.n / sr + s.phaseOff - wrapGate) : 0.0;
-    if (!(s.phaseOff >= 0.0)) s.phaseOff = 0.0;
-    gPhaseOff = s.phaseOff;
+    // Cycle starts on a whole sample (Quant = old Off sample grid, v34).
+    s.phaseOff = 0.0;
+    gPhaseOff = 0.0;
     s.next = 0;
     s.n = 0;
     s.firedMax = -1;
@@ -806,7 +801,10 @@ extern "C" double soemdsp_pulse_train_sample(
       || s.spacing != spacingLive;
     if (liveChange) {
       applySchedule(s, live, s.effVel, loop, polarityLive, spacingLive);
-      clearSpill(s);
+      // Keep the spill: it holds pulses already fired this cycle (Dither lands
+      // up to 1 sample early). Clearing it on every smoothed Frequency step
+      // dropped them for good, so Free Dither went silent while Frequency
+      // moved (v34).
       const unsigned int streamLive = aaStream(seedU, s.ditherEpoch, aaMode);
       s.cycleN = eventLand(wrapNow, sr, streamLive, (unsigned int)s.count + 1u, aaMode, aaMode == 2);
     }
@@ -902,23 +900,17 @@ extern "C" double soemdsp_pulse_train_sample(
         break;
       }
       const long long n0 = landPulse(s.next, total, nFwd, endT, kCurve, lp, du, sr, stream, aaMode, scale, pol);
-      const double t0P = playT(t0, scale);
-      const double wrapT = s.wrapCycle > 0.0 ? s.wrapCycle : 1.0 / sr;
       long long n1;
-      double t1P; // grain end in seconds (None: continuous u)
       if (s.next + 1 < total) {
         const double tNext = pulseTime(s.next + 1, nFwd, endT, kCurve, lp, du, pol);
         if (pulseAfterCutoff(tNext, lp, s.cycle, tE)) {
           n1 = lp
             ? (s.cycleN > 0 ? s.cycleN : ceilLand(s.wrapCycle > 0.0 ? s.wrapCycle : 1.0 / sr, sr))
             : eventLand(tEPlay, sr, stream, (unsigned int)total, aaMode, false);
-          t1P = lp ? wrapT : tEPlay;
         } else {
           n1 = landPulse(s.next + 1, total, nFwd, endT, kCurve, lp, du, sr, stream, aaMode, scale, pol);
-          t1P = playT(tNext, scale);
         }
       } else if (lp) {
-        t1P = wrapT;
         // Loop last grain: ends where the pulse region ends (span = Time, or
         // 2*Time Forward-Reverse) so a positive End Delay (graph: 1-Duty of
         // the cycle) is silent. Delay <= 0: runs to the wrap as before.
@@ -927,15 +919,12 @@ extern "C" double soemdsp_pulse_train_sample(
           const double spanT = spanScaleOf(du) * endT;
           const long long nSpan = eventLand(playT(spanT, scale), sr, stream, (unsigned int)total, aaMode, false);
           n1 = nSpan < nWrap ? nSpan : nWrap;
-          const double spanP = playT(spanT, scale);
-          if (spanP < t1P) t1P = spanP;
         } else {
           n1 = nWrap;
         }
       } else {
         const double lastT = playT(pulseTime(total - 1, nFwd, endT, kCurve, lp, du, pol), scale);
         n1 = eventLand(tEPlay, sr, stream, (unsigned int)total, aaMode, delay > 0.0 && ceilLand(tEPlay, sr) == ceilLand(lastT, sr));
-        t1P = tEPlay;
       }
       if (n1 <= n0) {
         // One-shot delay 0: last pulse is the end of the previous grain, not a
@@ -946,12 +935,10 @@ extern "C" double soemdsp_pulse_train_sample(
           break;
         }
         n1 = n0 + 1;
-        if (!(t1P > t0P)) t1P = t0P + 1.0 / sr;
       }
       if (s.n < n0) break;
       if (s.n < n1) {
-        double u = (double)(s.n - n0) / (double)(n1 - n0);
-        if (frac && t1P > t0P) u = (e - t0P) / (t1P - t0P);
+        const double u = (double)(s.n - n0) / (double)(n1 - n0);
         const double amp = pulseAmp(s.next, nFwd, endT, kCurve, s.eff[3], s.eff[4], s.eff[5], s.eff[6], s.effVel, lp, du, pol);
         const double mo = latch ? s.morphEff : morphLive;
         out = grainWave(shape, u, mo) * amp;
