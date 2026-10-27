@@ -14770,8 +14770,12 @@ const nodeGraphModuleDefinitions = (
       { defaultValue: "0", key: "seed", kind: "seed", label: "Seed", linearSmoothing: false, max: "16777215", maxDigits: 0, mid: "0", min: "0", nonlinearSlider: false, smoothingType: "none", step: "1", tooltip: "Locks the antialiasing pattern. Same Seed = same offsets on every trigger. Change Seed for a different noise texture." },
       { defaultValue: "12", key: "count", label: "Count", max: "1280", mid: "64", min: "1", nonlinearSlider: true, sliderCurve: "skew", step: "1", tooltip: "Pulses in the train (one-way). Slider 1–1280, mid-skew (64 at the midpoint). Type above the slider for denser trains (DSP up to 16384)." },
       { defaultValue: "1", key: "frequency", label: "Frequency", max: "20000", mid: "10", min: "0.01", nonlinearSlider: true, step: "any", unit: "Hz" },
-      { defaultValue: "0.5", key: "duty", label: "Pulse Duty", max: "1", mid: "0.25", min: "0", nonlinearSlider: true, step: "any", tooltip: "Pulsing fraction of one frequency cycle at Stretch 1. 0 stacks every pulse at t=0. 1 fills the cycle. Stretch lengthens the train past that window." },
-      { defaultValue: "1", key: "stretch", label: "Stretch", max: "8", mid: "2", min: "1", nonlinearSlider: true, sliderCurve: "skew", step: "any", tooltip: "Pulse-schedule length in frequency cycles at Duty 1. 1 fits the train in one cycle. Above 1 stretches it past the 1/ƒ window; pulses after the window do not play. Type above the slider for more." },
+      { defaultValue: "0.5", key: "duty", label: "Pulse Duty", max: "1", mid: "0.25", min: "0", nonlinearSlider: true, step: "any", tooltip: "Pulsing fraction of one frequency cycle at Stretch 0. 0 stacks every pulse at t=0. 1 fills the cycle. Stretch lengthens the train past that window." },
+      // Stretch -1..+1: span multiplier m = 0 at -1 (all pulses at once), (1+s)^2
+      // below 0, 1 at 0, Count^s above 0 (+1: one pulse per window at Duty 1).
+      // Mapped natively in graph_engine; old 1..8 patches convert on load
+      // (node-graph-patch-migrations.js).
+      { defaultValue: "0", key: "stretch", label: "Stretch", max: "1", mid: "0", min: "-1", nonlinearSlider: false, step: "any" },
       {
         choices: ["Expo", "Harmonic", "Rational"],
         defaultValue: "0",

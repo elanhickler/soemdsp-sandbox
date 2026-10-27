@@ -73,7 +73,7 @@ check(d.face[2]?.kind === "choices" && d.face[2]?.param === "antialiasing", "Ant
 check(d.face[3]?.kind === "choices" && d.face[3]?.param === "recalculateOnTrigger", "Free/Latch sits between AA and One shot/Loop");
 check(d.face[4]?.kind === "choices" && d.face[4]?.param === "mode", "One shot/Loop is a labeled-box choice row under Free/Latch");
 check(d.face[5]?.params?.[0]?.[0] === "morph" && d.face[5]?.params?.[1]?.[0] === "count" && d.face[5]?.params?.[3]?.[0] === "stretch", "Morph | Count | Duty | Stretch");
-check(keys.stretch?.defaultValue === "1" && keys.stretch?.min === "1" && keys.stretch?.max === "8" && keys.stretch?.sliderCurve === "skew", "Stretch slider 1–8 mid-skew (DSP unclamped)");
+check(keys.stretch?.defaultValue === "0" && keys.stretch?.min === "-1" && keys.stretch?.max === "1" && keys.stretch?.nonlinearSlider === false && !keys.stretch?.sliderCurve && !keys.stretch?.tooltip, "Stretch slider -1..+1 linear, default 0, no tooltip");
 check(d.face[6]?.params?.[0]?.[0] === "curvePolarity" && d.face[6]?.params?.[1]?.[1] === "ƒ" && d.face[6]?.params?.[2]?.[1] === "ƒ Crv", "+/- | ƒ | ƒ Crv");
 check(d.face[7]?.kind === "choices" && d.face[7]?.param === "spacing", "Expo/Harmonic/Rational is a labeled-box choice row");
 check(d.face[8]?.params?.[0]?.[0] === "ampStart" && d.face[8]?.params.length === 3, "A Start | A End | A Crv");
@@ -86,9 +86,10 @@ check(keys.spacing?.choices?.[0] === "Expo" && keys.spacing?.choices?.[2] === "R
 
 for (const page of ["index.html", "perform.html"]) {
   const html = fs.readFileSync(path.join(root, "public", page), "utf8");
-  check(/node-graph-module-definitions\.js\?v=pt-f-label-1/.test(html), `${page} cache-bust definitions pt-f-label-1`);
-  check(/node-graph-module-face\.js\?v=unit-phi-1/.test(html) || /node-graph-module-face\.js\?v=player-mode-1/.test(html) || /node-graph-module-face\.js\?v=pt-face-9/.test(html), `${page} cache-bust module-face`);
-  check(/node-graph-pulse-train-display\.js\?v=pt-stretch-1/.test(html), `${page} cache-bust display pt-stretch-1`);
+  // Cache-busts change every commit: check they exist, not a pinned value.
+  check(/node-graph-module-definitions\.js\?v=[\w.-]+"/.test(html), `${page} cache-bust definitions`);
+  check(/node-graph-module-face\.js\?v=[\w.-]+"/.test(html), `${page} cache-bust module-face`);
+  check(/node-graph-pulse-train-display\.js\?v=[\w.-]+"/.test(html), `${page} cache-bust display`);
   check(/gl-line-renderer\.js\?v=pt-dsp-16384/.test(html), `${page} cache-bust gl-line-renderer pt-dsp-16384`);
 }
 

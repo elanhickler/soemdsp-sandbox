@@ -39,7 +39,7 @@ function nodeGraphPulseTrainPreviewLoad() {
   if (nodeGraphPulseTrainPreviewWasm.promise || typeof fetch !== "function" || typeof WebAssembly === "undefined") {
     return nodeGraphPulseTrainPreviewWasm.promise;
   }
-  nodeGraphPulseTrainPreviewWasm.promise = fetch("/native_modules/pulse_train/pulse_train.wasm?v=pt-quant-1")
+  nodeGraphPulseTrainPreviewWasm.promise = fetch("/native_modules/pulse_train/pulse_train.wasm?v=pt-stretch-2")
     .then((response) => {
       if (!response.ok) throw new Error(`pulse_train wasm HTTP ${response.status}`);
       return response.arrayBuffer();
@@ -104,6 +104,21 @@ function nodeGraphPulseTrainClampCount(count) {
   return n > NODE_GRAPH_PULSE_TRAIN_MAX ? NODE_GRAPH_PULSE_TRAIN_MAX : n;
 }
 
+// Stretch s -> span multiplier m: 0 at s <= -1, (1+s)^2 up to 0, Count^s above
+// (Count < 1 counts as 1). NaN reads as 0 (m = 1). Mirrors graph_engine.
+function nodeGraphPulseTrainStretchSpan(s, count) {
+  const v = Number(s);
+  if (v > 0) {
+    const c = Number(count);
+    return c > 1 ? c * Math.exp((v - 1) * Math.log(c)) : 1;
+  }
+  if (v <= 0) {
+    const a = 1 + v;
+    return a > 0 ? a * a : 0;
+  }
+  return 1;
+}
+
 /** { times, amps, end, peak } from the E_k formula (same as pulse_train.cpp). */
 function nodeGraphPulseTrainSchedule(section, node) {
   nodeGraphPulseTrainPreviewLoad();
@@ -114,8 +129,8 @@ function nodeGraphPulseTrainSchedule(section, node) {
   const fKnob = p("frequency", 1);
   const periodS = Number.isFinite(fPeriod) && fPeriod > 0 ? fPeriod : (fKnob > 0 ? 1 / fKnob : 0);
   const duty = p("duty", 0.5);
-  let stretch = p("stretch", 1);
-  if (!(stretch > 0)) stretch = 1;
+  // Stretch -1..+1 -> span multiplier (same as graph_engine process_pulse_train).
+  const stretch = nodeGraphPulseTrainStretchSpan(p("stretch", 0), p("count", 12));
   const pulseModeKnob = nodeGraphPulseTrainPulseMode(p("pulseMode", 0));
   const polarityKnob = nodeGraphPulseTrainPolarity(p("curvePolarity", 0));
   const span = duty * stretch;

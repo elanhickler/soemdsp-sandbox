@@ -9,7 +9,7 @@ const N = (await WebAssembly.instantiate(fs.readFileSync(process.env.PT_COMBINED
 const SR = 48000, TYPE_PT = 231;
 const P = { AMP: 12, SHAPE: 13, STAGES: 22, TNUM: 52, TDEN: 53, TIMING: 54, OFFSET: 55, MODE: 21, LFO_STYLE: 56, OVERSAMPLE: 32, WIDTH: 31, IN_LOW: 80, IN_HIGH: 81 };
 const PORT = { MONO: 0, LEFT: 1, SAW: 3, RAMP: 4, PHASE: 10, IDLE: 11 };
-function run({ freq, duty, stretch = 1, count = 4, wave = 0, pulseMode = 0, loop = 1, rec = 0, seconds = 0.5, onBlock = null }) {
+function run({ freq, duty, stretch = 0, count = 4, wave = 0, pulseMode = 0, loop = 1, rec = 0, seconds = 0.5, onBlock = null }) {
   const g = N.soemdsp_graph_create() | 0;
   N.soemdsp_graph_set_sample_rate(g, SR);
   const h = 0x7a01;
@@ -53,16 +53,43 @@ for (const duty of [0, 0.01, 0.25, 0.5, 1]) {
   const h1 = []; for (let i = z1; i < z1 + SR / 10; i++) if (r1.out[i] !== 0) h1.push(i - z1);
   check(h1.length === 4 && h1.every((x, i) => Math.abs(x - 1200 * i) <= 1), `Duty 1: pulses spread over the whole cycle at ${h1}`);
 }
-// Stretch > 1 keeps the 1/ƒ window and drops pulses past it.
+// Stretch s (graph 296): span multiplier m = Count^s above 0. Count 4,
+// s = 0.5 -> m = 2: keeps the 1/f window and drops pulses past it.
 {
-  const r = run({ freq: 10, duty: 1, stretch: 2, count: 4 });
+  const r = run({ freq: 10, duty: 1, stretch: 0.5, count: 4 });
   const w = wraps(r);
-  check(w.length >= 2 && Math.abs(w[1] - w[0] - SR / 10) <= 1, `Stretch 2 Duty 1: cycle still ${w[1] - w[0]} samples (= sr/10)`);
+  check(w.length >= 2 && Math.abs(w[1] - w[0] - SR / 10) <= 1, `Stretch 0.5 (m 2) Duty 1: cycle still ${w[1] - w[0]} samples (= sr/10)`);
   const t0 = w[0];
   const hits = []; for (let i = t0; i < w[1]; i++) if (r.out[i] !== 0) hits.push(i - t0);
-  check(hits.length === 2 && Math.abs(hits[0]) <= 1 && Math.abs(hits[1] - SR / 20) <= 1, `Stretch 2 Duty 1 Count 4 Loop: only the first half of the train plays at ${hits}`);
+  check(hits.length === 2 && Math.abs(hits[0]) <= 1 && Math.abs(hits[1] - SR / 20) <= 1, `Stretch 0.5 (m 2) Duty 1 Count 4 Loop: only the first half of the train plays at ${hits}`);
   const idle = r.idle[r.idle.length - 1];
-  check(Math.abs(idle - (-0.1)) < 1e-12, `Stretch 2 Duty 1 at 10 Hz: __Delay ${idle} s (= (1-2)/ƒ)`);
+  check(Math.abs(idle - (-0.1)) < 1e-9, `Stretch 0.5 (m 2) Duty 1 at 10 Hz: __Delay ${idle} s (= (1-2)/f)`);
+}
+// Stretch -1: every pulse on one sample (summed), no NaN.
+{
+  const r = run({ freq: 10, duty: 1, stretch: -1, count: 4 });
+  const w = wraps(r);
+  check(r.out.every((v) => Number.isFinite(v)), "Stretch -1: no NaN / inf");
+  const hits = []; for (let i = w[0]; i < w[1]; i++) if (r.out[i] !== 0) hits.push(i - w[0]);
+  check(hits.length === 1 && hits[0] === 0 && Math.abs(r.out[w[0]] - 4) < 1e-12, `Stretch -1: all 4 pulses on sample 0 of the cycle (sum ${r.out[w[0]]})`);
+}
+// Stretch +1, Count 8: m = Count, exactly one pulse per 1/f window.
+{
+  const r = run({ freq: 10, duty: 1, stretch: 1, count: 8 });
+  const w = wraps(r);
+  for (let c = 0; c + 1 < w.length; c++) {
+    const hits = []; for (let i = w[c]; i < w[c + 1]; i++) if (r.out[i] !== 0) hits.push(i - w[c]);
+    if (hits.length !== 1 || hits[0] !== 0) throw new Error(`Stretch +1 Count 8 cycle ${c}: ${hits.length} pulses at ${hits}`);
+  }
+  check(w.length >= 3, `Stretch +1 Count 8: one pulse per window over ${w.length - 1} cycles`);
+}
+// Stretch sweep -1 -> +1 (Free): finite throughout, the train keeps playing.
+{
+  const seconds = 1;
+  const r = run({ freq: 20, duty: 1, count: 8, seconds, onBlock: (q, set) => { set(P.OFFSET, -1 + 2 * (q * 128 / SR) / seconds); } });
+  check(r.out.every((v) => Number.isFinite(v)) && r.el.every((v) => Number.isFinite(v)), "Stretch sweep -1..+1: no NaN / inf");
+  let pulses = 0; for (const v of r.out) if (v !== 0) pulses++;
+  check(pulses > 20, `Stretch sweep -1..+1: train keeps playing (${pulses} pulse samples)`);
 }
 // 3) Count 1, Duty 1, Saw: the one grain fills the whole cycle (no silence).
 {

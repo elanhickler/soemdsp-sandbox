@@ -656,7 +656,7 @@ static inline int pulseIndexAt(
 
 }  // namespace
 
-extern "C" int soemdsp_pulse_train_version() { return 34; }
+extern "C" int soemdsp_pulse_train_version() { return 35; } // v35: graph Stretch -1..+1 (no DSP change here)
 
 extern "C" int soemdsp_pulse_train_create() {
   for (int i = 0; i < kMaxInstances; i++) {

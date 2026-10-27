@@ -6527,7 +6527,7 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
       push("curvePolarity", P.NATIVE_GRAPH_PARAM_FEEDBACK, disc("curvePolarity", 0)); // 0 + peak / 1 - trough
       push("spacing", P.NATIVE_GRAPH_PARAM_CENTER, disc("spacing", 0)); // 0 Expo / 1 Harmonic / 2 Rational
       push("duty", P.NATIVE_GRAPH_PARAM_TIME_NUMERATOR, cont("duty", 0.5)); // pulsing fraction of the cycle
-      push("stretch", P.NATIVE_GRAPH_PARAM_OFFSET_MS, cont("stretch", 1)); // schedule length in cycles at Duty 1
+      push("stretch", P.NATIVE_GRAPH_PARAM_OFFSET_MS, cont("stretch", 0)); // -1..+1, mapped to the span multiplier in graph_engine
       push("antialiasing", P.NATIVE_GRAPH_PARAM_WAVEFORM, disc("antialiasing", 0)); // 0 Quant / 1 Rand / 2 Dither (Robin1)
       push("seed", P.NATIVE_GRAPH_PARAM_SEED, disc("seed", 0));
       push("wave", P.NATIVE_GRAPH_PARAM_OVERSAMPLE, disc("wave", 2)); // 0 Trigger / 1 Gate / 2 Saw / 3 Ramp / 4 TriSaw / 5 Sine / 6-8 Pulse Left/Center/Right / 9 Rect Sine

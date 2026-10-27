@@ -66,6 +66,49 @@ function migrateNodeGraphPulseTrainAntialiasing(patch) {
   return patch;
 }
 
+// Pulse Train Stretch (graph 296): was the span multiplier v itself (slider
+// 1..8 skew, typed values < 1 allowed); now s in -1..+1 with m = (1+s)^2 below
+// 0 and Count^s above. Old v converts to the s that gives the same m:
+// v >= 1 -> min(1, ln v / ln max(Count, 2)) (v = 1 -> 0), 0 < v < 1 ->
+// sqrt(v) - 1, v <= 0 -> 0. Count is the saved Count param.
+// Old-format marker: the saved range copy (paramMeta.stretch) still says
+// skew / min 1 / default 1 (every saved patch carries it). Without that copy
+// only v > 1 is unmistakably old; v <= 1 then reads as the new scale (an old
+// copy-less patch at exactly 1 would play m = Count). The old range keys are
+// dropped so the new definition range applies, which also makes a second pass
+// a no-op.
+function nodeGraphPulseTrainStretchMetaIsOld(meta) {
+  if (!meta || typeof meta !== "object") return false;
+  return meta.sliderCurve === "skew" || Number(meta.min) >= 1 || Number(meta.def) === 1;
+}
+
+function migrateNodeGraphPulseTrainStretch(patch) {
+  const nodes = Array.isArray(patch?.nodes) ? patch.nodes : null;
+  if (!nodes) return patch;
+  for (const node of nodes) {
+    if (!node || node.type !== "pulseTrain" || !node.params || typeof node.params !== "object") continue;
+    const meta = node.paramMeta && typeof node.paramMeta === "object" ? node.paramMeta.stretch : null;
+    const metaOld = nodeGraphPulseTrainStretchMetaIsOld(meta);
+    const has = Object.hasOwn(node.params, "stretch");
+    const raw = has ? node.params.stretch : undefined;
+    const v = Number(raw);
+    if (has && (metaOld || v > 1)) {
+      const count = Number(node.params.count);
+      const base = count > 2 ? count : 2;
+      let sNew = 0;
+      if (v >= 1) sNew = Math.min(1, Math.log(v) / Math.log(base));
+      else if (v > 0) sNew = Math.sqrt(v) - 1;
+      node.params.stretch = typeof raw === "number" ? sNew : String(sNew);
+    }
+    if (metaOld) {
+      for (const k of ["min", "max", "mid", "def", "sliderCurve", "nonlinearSlider", "curveAmount", "tooltip"]) delete meta[k];
+    }
+  }
+  return patch;
+}
+
 function migrateNodeGraphPatchToCurrent(patch) {
-  return migrateNodeGraphPulseTrainAntialiasing(migrateNodeGraphRetiredRmsMono(patch));
+  return migrateNodeGraphPulseTrainStretch(
+    migrateNodeGraphPulseTrainAntialiasing(migrateNodeGraphRetiredRmsMono(patch)),
+  );
 }
