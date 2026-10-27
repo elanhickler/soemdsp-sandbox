@@ -266,6 +266,7 @@ function sabrinaPresetEsc(s) {
 }
 
 function mountSabrinaPresetBrowser(article, type) {
+  if (!(typeof NODE_GRAPH_MODULE_PRESETS_ENABLED !== "undefined" && NODE_GRAPH_MODULE_PRESETS_ENABLED === true)) return;
   if (type !== SABRINA_PRESET_TYPE || !article || article.querySelector(".sabrina-preset-shell")) return;
   const nodeId = article.dataset.node;
   const body = article.querySelector(":scope > .dsp-node-body");
@@ -681,6 +682,7 @@ function mountSabrinaPresetBrowser(article, type) {
 }
 
 function sabrinaPresetBarOffset(article) {
+  if (!(typeof NODE_GRAPH_MODULE_PRESETS_ENABLED !== "undefined" && NODE_GRAPH_MODULE_PRESETS_ENABLED === true)) return 0;
   if (!article) return 0;
   if (article.dataset?.nodeType === SABRINA_PRESET_TYPE) return SABRINA_PRESET_BAR_H;
   return article.querySelector(".sabrina-preset-shell .sabrina-preset-bar") ? SABRINA_PRESET_BAR_H : 0;

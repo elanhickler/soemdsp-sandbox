@@ -1,3 +1,9 @@
+// Per-module presets switch (Pulse Train + Sabrina Reverb): the preset bar/browser,
+// the morph lane, and the Preset Morph face cell. false = hidden (sandbox release).
+// true brings all of it back. presetMorph params stay defined either way, so saved
+// patches load unchanged.
+const NODE_GRAPH_MODULE_PRESETS_ENABLED = false;
+
 // Display name for the development reverb (key reverbEffect, grew out of Sabrina).
 // Change it here only -- labels and the module store read this constant.
 const nodeGraphCinematicReverbDisplayName = "Cinematic Reverb";
@@ -14671,7 +14677,9 @@ const nodeGraphModuleDefinitions = (
       { kind: "choices", param: "spacing", labels: ["Expo", "Harmonic", "Rational"], h: 26 },
       { kind: "cells", params: [["ampStart", "A Start"], ["ampEnd", "A End"], ["ampCurve", "A Crv", "bipolar"]], h: 52 },
       { kind: "cells", params: [["amplitude", "Amp"]], horizontal: true, h: 30 },
-      { kind: "cells", params: [["presetMorph", "Preset Morph"]], horizontal: true, h: 30 },
+      ...(NODE_GRAPH_MODULE_PRESETS_ENABLED
+        ? [{ kind: "cells", params: [["presetMorph", "Preset Morph"]], horizontal: true, h: 30 }]
+        : []),
       { kind: "seed", param: "seed", h: 28 },
     ],
     parameters: [
@@ -15737,7 +15745,7 @@ const nodeGraphModuleDefinitions = (
       { kind: "cells", params: [["delaySize", "Delay"], ["recycle", "Recyc"]], h: 40 },
       { kind: "cells", params: [["lfoAmplitude", "ModA"], ["lfoBaseSpeed", "ModS"], ["lfoVariation", "ModV"], ["delayTapMod", "Tap"]], h: 52 },
       { kind: "choices", param: "lfoStyle", labels: ["Parabol", "FBM"], h: 26 },
-      { kind: "cells", params: [["amplitude", "Amp"], ["presetMorph", "Morph"]], h: 40 },
+      { kind: "cells", params: NODE_GRAPH_MODULE_PRESETS_ENABLED ? [["amplitude", "Amp"], ["presetMorph", "Morph"]] : [["amplitude", "Amp"]], h: 40 },
       { kind: "seed", param: "seed", h: 28 },
     ],
     planRole: "processor",

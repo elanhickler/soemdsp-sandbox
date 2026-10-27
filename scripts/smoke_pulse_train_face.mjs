@@ -12,7 +12,11 @@ if (b0 < 0) throw new Error("pulseTrain def missing");
 const next = /\n  [A-Za-z0-9_]+: \{\r?\n/g;
 next.lastIndex = b0 + 2;
 const b1 = next.exec(defs).index;
-const d = vm.runInNewContext("(" + defs.slice(b0 + "\n  pulseTrain: ".length, defs.lastIndexOf("}", b1) + 1) + ")", {});
+// One switch hides per-module presets (Preset Morph row); read it like the page does.
+const presetsFlag = /\nconst NODE_GRAPH_MODULE_PRESETS_ENABLED = (true|false);/.exec(defs);
+if (!presetsFlag) throw new Error("NODE_GRAPH_MODULE_PRESETS_ENABLED missing");
+const presetsOn = presetsFlag[1] === "true";
+const d = vm.runInNewContext("(" + defs.slice(b0 + "\n  pulseTrain: ".length, defs.lastIndexOf("}", b1) + 1) + ")", { NODE_GRAPH_MODULE_PRESETS_ENABLED: presetsOn });
 
 let failures = 0;
 const check = (cond, msg) => {
@@ -32,14 +36,14 @@ const want = [
   { kind: "choices", param: "spacing", labels: ["Expo", "Harmonic", "Rational"] },
   { kind: "cells", params: [["ampStart", "A Start"], ["ampEnd", "A End"], ["ampCurve", "A Crv", "bipolar"]] },
   { kind: "cells", params: [["amplitude", "Amp"]], horizontal: true },
-  { kind: "cells", params: [["presetMorph", "Preset Morph"]], horizontal: true },
+  ...(presetsOn ? [{ kind: "cells", params: [["presetMorph", "Preset Morph"]], horizontal: true }] : []),
   { kind: "seed", param: "seed" },
 ];
 
 check(d.layout === "pulseCurve" && d.displayType === "pulseTrainFace" && d.defaultDisplayMode === "face", "GL pulse-curve plate stays (layout pulseCurve / pulseTrainFace)");
 check(JSON.stringify(d.inputs) === JSON.stringify(["Trigger", "f"]), "jacks: Trigger, ƒ");
 check(JSON.stringify(d.outputs) === JSON.stringify(["Shape", "Trigger", "End"]), "jacks: Shape, Trigger, End");
-check(Array.isArray(d.face) && d.face.length === 12, `face has 12 rows (got ${d.face?.length})`);
+check(Array.isArray(d.face) && d.face.length === (presetsOn ? 12 : 11), `face has ${presetsOn ? 12 : 11} rows (got ${d.face?.length})`);
 
 for (let i = 0; i < want.length; i += 1) {
   const row = d.face?.[i] || {};
@@ -78,7 +82,8 @@ check(d.face[6]?.params?.[0]?.[0] === "curvePolarity" && d.face[6]?.params?.[1]?
 check(d.face[7]?.kind === "choices" && d.face[7]?.param === "spacing", "Expo/Harmonic/Rational is a labeled-box choice row");
 check(d.face[8]?.params?.[0]?.[0] === "ampStart" && d.face[8]?.params.length === 3, "A Start | A End | A Crv");
 check(d.face[9]?.horizontal === true && d.face[9]?.params?.[0]?.[0] === "amplitude", "Amp is its own horizontal fill row");
-check(d.face[10]?.horizontal === true && d.face[10]?.params?.[0]?.[0] === "presetMorph", "Preset Morph sits above Seed");
+if (presetsOn) check(d.face[10]?.horizontal === true && d.face[10]?.params?.[0]?.[0] === "presetMorph", "Preset Morph sits above Seed");
+else check(!JSON.stringify(d.face).includes("presetMorph") && keys.presetMorph, "presets off: no Preset Morph row, param kept so patches load");
 check(d.face[d.face.length - 1]?.kind === "seed" && d.face[d.face.length - 1]?.param === "seed", "Seed uses the shared seed row helper");
 check(!d.face.some((r) => r.seed), "seed is not jammed into cells");
 check(keys.curvePolarity?.choices?.[0] === "+" && keys.curvePolarity?.choices?.[1] === "\u2212" && keys.curvePolarity?.defaultValue === "0", "Curve polarity is + / \u2212, default +");

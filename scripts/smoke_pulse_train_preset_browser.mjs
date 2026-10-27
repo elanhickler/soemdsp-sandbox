@@ -55,14 +55,26 @@ check(typeof ctx.pulseTrainPresetBarOffset === "function", "pulseTrainPresetBarO
 check(typeof ctx.mountSabrinaPresetBrowser === "function", "mountSabrinaPresetBrowser still exists");
 
 const fakeArticle = { dataset: { nodeType: "pulseTrain" }, querySelector: () => null };
+const sabArticle = { dataset: { nodeType: "sabrinaReverbOriginal" }, querySelector: () => null };
+// Switch off (or missing): no bar, mount is a no-op before touching the article.
+const trap = { get dataset() { throw new Error("mount touched the article"); }, querySelector() { throw new Error("mount touched the article"); } };
+check(ctx.pulseTrainPresetBarOffset(fakeArticle) === 0 && ctx.sabrinaPresetBarOffset(sabArticle) === 0, "switch off: no preset bar");
+let mounted = false;
+try { ctx.mountPulseTrainPresetBrowser(trap, "pulseTrain"); ctx.mountSabrinaPresetBrowser(trap, "sabrinaReverbOriginal"); } catch (_err) { mounted = true; }
+check(!mounted, "switch off: mount does nothing");
+ctx.NODE_GRAPH_MODULE_PRESETS_ENABLED = true;
 check(ctx.pulseTrainPresetBarOffset(fakeArticle) === 26, "Pulse Train bar offset is 26px");
-check(ctx.sabrinaPresetBarOffset({ dataset: { nodeType: "sabrinaReverbOriginal" }, querySelector: () => null }) === 26, "Sabrina bar offset still 26px");
+check(ctx.sabrinaPresetBarOffset(sabArticle) === 26, "Sabrina bar offset still 26px");
 check(ctx.sabrinaPresetBarOffset(fakeArticle) === 0, "Sabrina bar offset ignores Pulse Train articles");
+
+const defsSrc = fs.readFileSync(path.join(root, "public", "node-graph-module-definitions.js"), "utf8");
+check(/\nconst NODE_GRAPH_MODULE_PRESETS_ENABLED = false;/.test(defsSrc), "sandbox release: per-module presets switched off in definitions");
 
 for (const page of ["index.html", "perform.html"]) {
   const html = fs.readFileSync(path.join(root, "public", page), "utf8");
-  check(html.includes("pulse-train-preset-browser.js?v=pt-preset-2"), `${page} cache-bust Pulse Train browser pt-preset-2`);
-  check(html.includes("sabrina-preset-browser.js?v=sabrina-preset-2"), `${page} cache-bust Sabrina browser sabrina-preset-2`);
+  // Cache-busts change every commit: check they exist, not a pinned value.
+  check(/pulse-train-preset-browser\.js\?v=[\w.-]+"/.test(html), `${page} cache-bust Pulse Train browser`);
+  check(/sabrina-preset-browser\.js\?v=[\w.-]+"/.test(html), `${page} cache-bust Sabrina browser`);
   check(html.includes("node-graph-keyboard-shortcuts.js?v=pt-preset-2"), `${page} cache-bust keyboard shortcuts pt-preset-2`);
 }
 

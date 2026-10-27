@@ -267,6 +267,7 @@
   }
 
   function mountPulseTrainPresetBrowser(article, type) {
+    if (!(typeof NODE_GRAPH_MODULE_PRESETS_ENABLED !== "undefined" && NODE_GRAPH_MODULE_PRESETS_ENABLED === true)) return;
     if (type !== PT_PRESET_TYPE || !article || article.querySelector(".sabrina-preset-shell")) return;
     const nodeId = article.dataset.node;
     const body = article.querySelector(":scope > .dsp-node-body");
@@ -677,6 +678,7 @@
   }
 
   function pulseTrainPresetBarOffset(article) {
+    if (!(typeof NODE_GRAPH_MODULE_PRESETS_ENABLED !== "undefined" && NODE_GRAPH_MODULE_PRESETS_ENABLED === true)) return 0;
     if (!article) return 0;
     if (article.dataset?.nodeType === PT_PRESET_TYPE) return PT_PRESET_BAR_H;
     return article.querySelector(".sabrina-preset-shell .sabrina-preset-bar") ? PT_PRESET_BAR_H : 0;
