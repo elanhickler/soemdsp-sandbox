@@ -18,7 +18,11 @@ async function bindNodeGraphUiDevSettingsEvents() {
       return;
     }
     resetNodeUiDevControlsToDeclaredDefaults();
-    if (typeof scheduleNodeUiDevSettingsAutosave === "function") scheduleNodeUiDevSettingsAutosave();
+    if (typeof flushNodeUiDevSettingsAutosave === "function") {
+      flushNodeUiDevSettingsAutosave();
+    } else if (typeof scheduleNodeUiDevSettingsAutosave === "function") {
+      scheduleNodeUiDevSettingsAutosave();
+    }
     if (typeof flashNodeGraphDefaultButtonSaved === "function") {
       flashNodeGraphDefaultButtonSaved(event.currentTarget, "Reset");
     }

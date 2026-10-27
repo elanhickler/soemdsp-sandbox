@@ -126,8 +126,34 @@ function nodeGraphWorkingPatchShouldRestore(patch) {
   return Boolean(patch && Array.isArray(patch.nodes) && patch.nodes.length > 0);
 }
 
+function nodeGraphPluginHostPersistentUiSettings() {
+  try {
+    if (window.soemdspPluginHost) {
+      return true;
+    }
+  } catch (_error) {
+    // window can be missing in odd embeddings
+  }
+  try {
+    return document.documentElement.classList.contains("soemdsp-plugin-host");
+  } catch (_error) {
+    return false;
+  }
+}
+
 function nodeGraphLocalDefaultPresetAllowed() {
-  return ["localhost", "127.0.0.1", ""].includes(window.location.hostname);
+  // Browser localhost keeps localStorage. The designer-in-plugin WebView is
+  // https://juce.backend, so hostname is not local — still persist there:
+  // UIDEV / session / catalog go to WebView localStorage, and plugin autosave
+  // also POSTs useruisettings to Documents/Sandbox.
+  if (nodeGraphPluginHostPersistentUiSettings()) {
+    return true;
+  }
+  try {
+    return ["localhost", "127.0.0.1", ""].includes(window.location.hostname);
+  } catch (_error) {
+    return false;
+  }
 }
 
 function loadNodeGraphLocalDefaultPresetPatch() {

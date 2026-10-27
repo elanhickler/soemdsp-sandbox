@@ -1622,7 +1622,7 @@ function applyNodeGraphUserSession(session, options = {}) {
  * other host (soundemote.io / soundemote.dev) uses per-tab sessionStorage: a
  * refresh restores the edited patch, closing the tab drops it. UI look
  * settings and the default preset stay local-only via
- * nodeGraphLocalDefaultPresetAllowed().
+ * nodeGraphLocalDefaultPresetAllowed() (localhost plus the plugin WebView).
  */
 function nodeGraphUserSessionStorageArea() {
   try {
@@ -1929,6 +1929,57 @@ function loadNodeUiDevBundledDefaultSettings() {
 }
 
 let nodeUiDevSettingsAutosaveTimer = 0;
+let nodeUiDevSettingsPluginPostInFlight = false;
+let nodeUiDevSettingsPluginPostQueued = "";
+
+function nodeGraphUiSettingsPersistToPluginHost() {
+  return typeof nodeGraphPluginHostPersistentUiSettings === "function"
+    ? nodeGraphPluginHostPersistentUiSettings()
+    : Boolean(typeof window !== "undefined" && window.soemdspPluginHost);
+}
+
+function persistNodeUiDevSettingsToPluginHost(text) {
+  if (!text || typeof postNodeUiDevSettingsPreset !== "function") {
+    return;
+  }
+  if (!nodeGraphUiSettingsPersistToPluginHost()) {
+    return;
+  }
+  if (nodeUiDevSettingsPluginPostInFlight) {
+    nodeUiDevSettingsPluginPostQueued = text;
+    return;
+  }
+  nodeUiDevSettingsPluginPostInFlight = true;
+  postNodeUiDevSettingsPreset(text)
+    .catch(() => {})
+    .finally(() => {
+      nodeUiDevSettingsPluginPostInFlight = false;
+      const queued = nodeUiDevSettingsPluginPostQueued;
+      nodeUiDevSettingsPluginPostQueued = "";
+      if (queued) {
+        persistNodeUiDevSettingsToPluginHost(queued);
+      }
+    });
+}
+
+function flushNodeUiDevSettingsAutosave() {
+  if (!nodeUiDevSettingsHydrated) {
+    return;
+  }
+  if (nodeUiDevSettingsAutosaveTimer) {
+    window.clearTimeout(nodeUiDevSettingsAutosaveTimer);
+    nodeUiDevSettingsAutosaveTimer = 0;
+  }
+  if (typeof serializeNodeUiDevSettings !== "function") {
+    return;
+  }
+  const text = serializeNodeUiDevSettings();
+  saveNodeUiDevLocalDefaultSettings(text);
+  persistNodeUiDevSettingsToPluginHost(text);
+  if (typeof syncNodeUiDevSettingsScriptView === "function") {
+    syncNodeUiDevSettingsScriptView();
+  }
+}
 
 function scheduleNodeUiDevSettingsAutosave() {
   if (!nodeUiDevSettingsHydrated) {
@@ -1939,13 +1990,14 @@ function scheduleNodeUiDevSettingsAutosave() {
   }
   nodeUiDevSettingsAutosaveTimer = window.setTimeout(() => {
     nodeUiDevSettingsAutosaveTimer = 0;
-    if (typeof serializeNodeUiDevSettings === "function") {
-      saveNodeUiDevLocalDefaultSettings(serializeNodeUiDevSettings());
-    }
-    if (typeof syncNodeUiDevSettingsScriptView === "function") {
-      syncNodeUiDevSettingsScriptView();
-    }
+    flushNodeUiDevSettingsAutosave();
   }, 250);
+}
+
+if (typeof window !== "undefined" && !window.__nodeUiDevSettingsUnloadBound) {
+  window.__nodeUiDevSettingsUnloadBound = true;
+  window.addEventListener("pagehide", flushNodeUiDevSettingsAutosave);
+  window.addEventListener("beforeunload", flushNodeUiDevSettingsAutosave);
 }
 
 function saveNodeUiDevLocalDefaultSettings(text) {
