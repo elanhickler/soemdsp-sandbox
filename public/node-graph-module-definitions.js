@@ -14663,7 +14663,7 @@ const nodeGraphModuleDefinitions = (
     face: [
       { kind: "cells", params: [["pulseMode", "Fwd-Rev"]], horizontal: true, h: 30 },
       { kind: "cells", params: [["wave", "Shape"]], horizontal: true, h: 30 },
-      { kind: "choices", param: "antialiasing", labels: ["Off", "Random", "Dither", "None", "PolyBLEP"], h: 26 },
+      { kind: "choices", param: "antialiasing", labels: ["Random", "Dither", "None"], h: 26 },
       { kind: "choices", param: "recalculateOnTrigger", labels: ["Free", "Latch"], h: 26 },
       { kind: "choices", param: "mode", labels: ["One shot", "Loop"], h: 26 },
       { kind: "cells", params: [["morph", "Morph"], ["count", "Count"], ["duty", "Duty"], ["stretch", "Stretch"]], h: 52 },
@@ -14733,20 +14733,21 @@ const nodeGraphModuleDefinitions = (
         tooltip: "Pulse height invert next to A Start. + as drawn. \u2212 flips each height around (A Start + A End)/2. Same times."
       },
       {
-        choices: ["Off", "Random", "Dither", "None", "PolyBLEP"],
-        defaultValue: "0",
+        // Stored value = choice: 1 Random / 2 Dither / 3 None (retired 0 Off /
+        // 4 PolyBLEP load as None, node-graph-patch-migrations.js).
+        choices: ["Random", "Dither", "None"],
+        defaultValue: "3",
         displayChoices: true,
         divideChoicesVisibly: true,
         key: "antialiasing",
         label: "Antialiasing",
         linearSmoothing: false,
         smoothingType: "none",
-        max: "4",
-        mid: "0",
-        min: "0",
+        max: "3",
+        mid: "2",
+        min: "1",
         nonlinearSlider: false,
-        step: "1",
-        tooltip: "Off: first sample at or after each time. Random: seed-locked 0/+1 on stacked pulses. Dither: ±1 around the true time (Robin1)."
+        step: "1"
       },
       {
         choices: ["Trigger", "Gate", "Saw", "Ramp", "TriSaw", "Sine", "Pulse Left", "Pulse Center", "Pulse Right", "Rect Sine"],

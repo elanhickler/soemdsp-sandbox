@@ -48,6 +48,22 @@ function migrateNodeGraphRetiredRmsMono(patch) {
   return patch;
 }
 
+// Pulse Train Antialiasing (pulse_train v33): choices are 1 Random / 2 Dither /
+// 3 None. Retired 0 Off and 4 PolyBLEP (and anything outside 1..3) load as
+// 3 None. Idempotent: 1 / 2 / 3 are left alone.
+function migrateNodeGraphPulseTrainAntialiasing(patch) {
+  const nodes = Array.isArray(patch?.nodes) ? patch.nodes : null;
+  if (!nodes) return patch;
+  for (const node of nodes) {
+    if (!node || node.type !== "pulseTrain" || !node.params || typeof node.params !== "object") continue;
+    if (!Object.hasOwn(node.params, "antialiasing")) continue;
+    const v = Math.round(Number(node.params.antialiasing));
+    if (v === 1 || v === 2 || v === 3) continue;
+    node.params.antialiasing = typeof node.params.antialiasing === "number" ? 3 : "3";
+  }
+  return patch;
+}
+
 function migrateNodeGraphPatchToCurrent(patch) {
-  return migrateNodeGraphRetiredRmsMono(patch);
+  return migrateNodeGraphPulseTrainAntialiasing(migrateNodeGraphRetiredRmsMono(patch));
 }

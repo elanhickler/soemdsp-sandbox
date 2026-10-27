@@ -88,7 +88,6 @@
 #include <soemdsp/math/seed.h>
 #include <soemdsp/math/analog_filter_trig.h>
 #include <soemdsp/math/rect_sine.h>
-#include <soemdsp/math/poly_blep.h>
 using soemdsp_maths::gate_hit;
 using soemdsp_maths::gate_hit_velocity;
 
@@ -127,12 +126,14 @@ struct PulseTrainState {
   unsigned int ditherEpoch;
   long long cycleN; // Loop wrap sample index this cycle (Dither/Robin)
   double morphEff;  // Morph latched at Trigger / Loop start (Recalculate On)
-  // AA None / PolyBLEP (v32): the cycle start sits phaseOff s before sample 0,
-  // so the Loop wrap keeps its fractional overshoot (not quantized to samples).
+  // Cycle start sits phaseOff s before sample 0 (v33: every AA mode). A Free
+  // live period change remaps the cycle position as a 0..1 fraction and keeps
+  // the sub-sample remainder here, so the train never stalls or restarts. None
+  // also carries the Loop wrap overshoot (the cycle is not whole samples).
   double phaseOff;
-  // PolyBLEP: one sample of latency so the pre-step residual can be added.
-  double bPrevY, bPrevC, bAmp, bT1, bU, bMorph;
-  int bGrain;
+  // Highest pulse index fired this cycle: a Free remap can move n back onto
+  // a landing that already played; it must not fire again (v33).
+  int firedMax;
 };
 
 struct PreviewSched {
@@ -400,20 +401,14 @@ enum {
   kShapeRectSine = 9
 };
 
-// UI: 0 Off, 1 Random, 2 Dither. Dither is Robin1 ±1 (native 3).
-// Leftover numeric 3 stays Robin1; 3.5+ stays Robin2. Stack-dither native 2
-// is unreachable from the three-choice slider.
-// UI 3 None / 4 PolyBLEP (v32): plain ceil landing (aaMode 0) with a
-// fractional cycle start; PolyBLEP adds step residuals on grain edges. These
-// replace the leftover numeric 3 (Robin1) / 4 (Robin2) values.
-static inline bool aaFracOf(double antialiasing) { return antialiasing >= 2.5; }
-static inline bool aaBlepOf(double antialiasing) { return antialiasing >= 3.5; }
-
+// Antialiasing (v33), stored value = choice: 1 Random, 2 Dither, 3 None
+// (default). Dither is Robin1 ±1 (native 3). None: plain ceil landing (aaMode 0)
+// with a fractional cycle start. Retired 0 Off / 4 PolyBLEP play as None (the
+// patch loader rewrites them to 3).
 static inline int aaModeOf(double antialiasing) {
-  if (antialiasing >= 2.5) return 0; // None / PolyBLEP
-  if (antialiasing >= 1.5) return 3; // Dither = Robin1 ±1 (UI 2; old 2/3)
-  if (antialiasing >= 0.5) return 1; // Random (was Fixed)
-  return 0; // Off
+  if (antialiasing >= 2.5 || !(antialiasing >= 0.5)) return 0; // None
+  if (antialiasing >= 1.5) return 3; // Dither = Robin1 ±1
+  return 1; // Random
 }
 
 static inline int shapeOf(double wave) {
@@ -428,7 +423,7 @@ static inline unsigned int aaStream(unsigned int seed, unsigned int epoch, int a
   return seed;
 }
 
-static double gPhaseOff = 0.0; // AA None / PolyBLEP: this instance's phaseOff
+static double gPhaseOff = 0.0; // this instance's phaseOff (cycle start before sample 0)
 
 static inline long long ceilLand(double t, double sr) {
   t -= gPhaseOff;
@@ -483,7 +478,7 @@ static inline long long robinPick3(double c, unsigned int seed, unsigned int j, 
 
 static inline long long robinLand(double t, double sr, unsigned int seed, unsigned int j) {
   if (!(sr > 0.0)) return 0;
-  return robinPick3(t * sr, seed, j, kSeedAa);
+  return robinPick3((t - gPhaseOff) * sr, seed, j, kSeedAa);
 }
 
 // Robin2: ±1 pick, then a second independent ±1 around that integer (range ±2).
@@ -494,7 +489,7 @@ static inline long long robinLand2(double t, double sr, unsigned int seed, unsig
 
 static inline long long robinRound(double t, double sr) {
   if (!(sr > 0.0)) return 0;
-  double c = t * sr;
+  double c = (t - gPhaseOff) * sr;
   if (!(c > 0.0)) c = 0.0;
   const double ci = soemdsp_maths::dsp_floor(c);
   double c2 = ci;
@@ -551,24 +546,6 @@ static inline double grainWave(int shape, double u, double morph) {
   if (shape == kShapePulseRight) return u >= 1.0 - morph ? 1.0 : -1.0;
   if (shape == kShapeRectSine) return soemdsp_maths::rect_sine_hump01(u);
   return 0.0;
-}
-
-// PolyBLEP: steps inside one grain (u, height per unit amp). Edges at 0 / 1
-// are the grain boundaries, handled by the caller.
-static inline int grainEdges(int shape, double morph, double* ue, double* h) {
-  int n = 0;
-  if (shape == kShapeGate) { ue[n] = 0.5; h[n++] = -1.0; }
-  else if (shape == kShapePulseLeft) { ue[n] = morph; h[n++] = -2.0; }
-  else if (shape == kShapePulseCenter) {
-    const double hw = 0.5 * morph;
-    ue[n] = 0.5 - hw; h[n++] = 2.0;
-    ue[n] = 0.5 + hw; h[n++] = -2.0;
-  } else if (shape == kShapePulseRight) { ue[n] = 1.0 - morph; h[n++] = 2.0; }
-  int k = 0;
-  for (int i = 0; i < n; i++) {
-    if (ue[i] > 0.0 && ue[i] < 1.0) { ue[k] = ue[i]; h[k++] = h[i]; }
-  }
-  return k;
 }
 
 static void clearSpill(PulseTrainState& s) {
@@ -678,7 +655,7 @@ static inline int pulseIndexAt(
 
 }  // namespace
 
-extern "C" int soemdsp_pulse_train_version() { return 32; }
+extern "C" int soemdsp_pulse_train_version() { return 33; }
 
 extern "C" int soemdsp_pulse_train_create() {
   for (int i = 0; i < kMaxInstances; i++) {
@@ -711,9 +688,7 @@ extern "C" int soemdsp_pulse_train_create() {
       s.ditherEpoch = 0;
       s.cycleN = 0;
       s.phaseOff = 0.0;
-      s.bPrevY = s.bPrevC = s.bAmp = s.bT1 = s.bU = 0.0;
-      s.bMorph = 0.5;
-      s.bGrain = -1;
+      s.firedMax = -1;
       s.active = true;
       return i + 1;
     }
@@ -739,13 +714,11 @@ extern "C" double soemdsp_pulse_train_sample(
   const bool loop = mode > 0.5;
   const bool latch = recalc > 0.5;
   const int aaMode = aaModeOf(antialiasing);
-  const bool frac = aaFracOf(antialiasing);
-  const bool blep = aaBlepOf(antialiasing);
+  const bool frac = aaMode == 0; // None: fractional Loop wrap
   const int shape = shapeOf(waveShape);
   const unsigned int seedU = soemdsp_maths::seed_param_u32(seed);
   PulseTrainState& s = gPool[handle - 1];
   const double sr = sampleRate < 1.0 ? 44100.0 : sampleRate;
-  if (!frac) s.phaseOff = 0.0;
   gPhaseOff = s.phaseOff;
   const double pulseModeLive = pulseBiasOf(pulseMode);
   const double live[9] = {
@@ -791,10 +764,10 @@ extern "C" double soemdsp_pulse_train_sample(
     if (!(phase >= 0.0)) phase = 0.0;
     if (phase > 1.0) phase = 1.0;
     s.n = (long long)(phase * wrapNow * sr);
-    if (frac) {
-      s.phaseOff = phase * wrapNow - (double)s.n / sr;
-      gPhaseOff = s.phaseOff;
-    }
+    // Keep the sub-sample remainder (truncating it stalled n at 0 while a
+    // rising Frequency was smoothing: the train refired / restarted, v33).
+    s.phaseOff = phase * wrapNow - (double)s.n / sr;
+    gPhaseOff = s.phaseOff;
   }
   s.periodLock = periodLock;
   s.wrapCycle = wrapNow;
@@ -813,7 +786,7 @@ extern "C" double soemdsp_pulse_train_sample(
       || s.spacing != spacingLive;
     if (needBuild) applySchedule(s, live, v, loop, polarityLive, spacingLive);
     s.morphEff = morphLive;
-    // None / PolyBLEP: a natural Loop wrap carries its overshoot into the
+    // None: a natural Loop wrap carries its overshoot into the
     // next cycle (fractional period). Trigger / first start: 0.
     s.phaseOff = (frac && naturalWrap && !trigHit && wrapGate > 0.0)
       ? ((double)s.n / sr + s.phaseOff - wrapGate) : 0.0;
@@ -821,6 +794,7 @@ extern "C" double soemdsp_pulse_train_sample(
     gPhaseOff = s.phaseOff;
     s.next = 0;
     s.n = 0;
+    s.firedMax = -1;
     s.endFired = false;
     s.running = true;
     clearSpill(s);
@@ -862,9 +836,6 @@ extern "C" double soemdsp_pulse_train_sample(
     return 0.0;
   }
   const double e = (double)s.n / sr + s.phaseOff;
-  const bool restarted = trigHit || loopStart;
-  int actGrain = -1;
-  double actU = 0.0, actT0 = 0.0, actT1 = 0.0, actAmp = 0.0, actMorph = 0.5;
   s.elapsed = e;
   double out = 0.0;
   double trig = 0.0;
@@ -893,6 +864,10 @@ extern "C" double soemdsp_pulse_train_sample(
           s.next = total;
           break;
         }
+        if (s.next <= s.firedMax) {
+          s.next++;
+          continue;
+        }
         const double t = playT(tU, scale);
         if (aaMode >= 3) {
           if (robinEarliest(t, sr, rad) > s.n) break;
@@ -914,6 +889,7 @@ extern "C" double soemdsp_pulse_train_sample(
             out += amp;
           }
         }
+        s.firedMax = s.next;
         s.next++;
       }
     }
@@ -929,7 +905,7 @@ extern "C" double soemdsp_pulse_train_sample(
       const double t0P = playT(t0, scale);
       const double wrapT = s.wrapCycle > 0.0 ? s.wrapCycle : 1.0 / sr;
       long long n1;
-      double t1P; // grain end in seconds (None / PolyBLEP continuous u)
+      double t1P; // grain end in seconds (None: continuous u)
       if (s.next + 1 < total) {
         const double tNext = pulseTime(s.next + 1, nFwd, endT, kCurve, lp, du, pol);
         if (pulseAfterCutoff(tNext, lp, s.cycle, tE)) {
@@ -979,13 +955,10 @@ extern "C" double soemdsp_pulse_train_sample(
         const double amp = pulseAmp(s.next, nFwd, endT, kCurve, s.eff[3], s.eff[4], s.eff[5], s.eff[6], s.effVel, lp, du, pol);
         const double mo = latch ? s.morphEff : morphLive;
         out = grainWave(shape, u, mo) * amp;
-        if (s.n == n0) trig += amp;
-        actGrain = s.next;
-        actU = u;
-        actT0 = t0P;
-        actT1 = t1P;
-        actAmp = amp;
-        actMorph = mo;
+        if (s.n == n0 && s.next > s.firedMax) {
+          trig += amp;
+          s.firedMax = s.next;
+        }
         break;
       }
       s.next++;
@@ -994,44 +967,6 @@ extern "C" double soemdsp_pulse_train_sample(
     out = s.allAmp;
     trig = s.allAmp;
     s.next = s.count;
-  }
-  if (blep && shape != kShapeTrigger) {
-    // PolyBLEP on steps only (no BLAMP): grain start / end jumps and the
-    // Gate / Pulse edges inside a grain, at their true (fractional) times.
-    // Output is one sample late so the pre-step half can be added.
-    double corrPrev = 0.0, corrCur = 0.0;
-    auto addStep = [&](double tEv, double h) {
-      const double x = (e - tEv) * sr; // samples since the step, [0, 1)
-      if (!(x >= 0.0) || !(x < 1.0) || !(h == h)) return;
-      corrPrev += 0.5 * h * soemdsp_maths::poly_blep(1.0 - 0.5 * (1.0 - x), 0.5);
-      corrCur += 0.5 * h * soemdsp_maths::poly_blep(0.5 * x, 0.5);
-    };
-    const bool changed = restarted || actGrain != s.bGrain;
-    if (changed) {
-      const double oldEnd = s.bGrain >= 0 ? grainWave(shape, 1.0, s.bMorph) * s.bAmp : 0.0;
-      const double newStart = actGrain >= 0 ? grainWave(shape, 0.0, actMorph) * actAmp : 0.0;
-      addStep(actGrain >= 0 ? actT0 : s.bT1, newStart - oldEnd);
-    }
-    if (actGrain >= 0) {
-      double ue[2], hh[2];
-      const int ne = grainEdges(shape, actMorph, ue, hh);
-      const double uFrom = changed ? 0.0 : s.bU;
-      for (int i = 0; i < ne; i++) {
-        if (ue[i] > uFrom && ue[i] <= actU) addStep(actT0 + ue[i] * (actT1 - actT0), hh[i] * actAmp);
-      }
-    }
-    const double y = s.bPrevY + s.bPrevC + corrPrev;
-    s.bPrevY = out;
-    s.bPrevC = corrCur;
-    s.bGrain = actGrain;
-    s.bU = actU;
-    s.bAmp = actAmp;
-    s.bT1 = actT1;
-    s.bMorph = actMorph;
-    out = y;
-  } else {
-    s.bPrevY = s.bPrevC = 0.0;
-    s.bGrain = -1;
   }
   s.trigOut = trig;
   if (!loop) {
