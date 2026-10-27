@@ -9351,6 +9351,12 @@ NodeLiveAudioProcessor.prototype.fillNativeHostAudioInput = function fillNativeH
   const src = this.externalInput?.channels;
   const left = this.externalInput?.left;
   const right = this.externalInput?.right || left;
+  // Oversampling: chunk / offset count engine frames, the host buffer holds
+  // host frames. Hold each host sample for N engine frames (zero-order hold)
+  // so the input keeps its pitch and length instead of playing N x fast and
+  // then going silent for the rest of the quantum.
+  const rawOs = Math.round(Number(this.oversamplingRatio || this.oversamplingFactor || 1));
+  const osRatio = (rawOs === 2 || rawOs === 4) ? rawOs : 1;
   const hashes = [];
   if (this.nodes && typeof this.nodes.forEach === "function") {
     this.nodes.forEach((node, id) => {
@@ -9368,7 +9374,7 @@ NodeLiveAudioProcessor.prototype.fillNativeHostAudioInput = function fillNativeH
       if (!view || !view.length) continue;
       const ch = (src && src[c]) || (c === 0 ? left : (c === 1 ? right : null));
       for (let i = 0; i < chunk; i += 1) {
-        const at = offset + i;
+        const at = osRatio > 1 ? Math.floor((offset + i) / osRatio) : offset + i;
         const v = ch && at < ch.length ? Number(ch[at]) : 0;
         view[i] = Number.isFinite(v) ? v : 0;
       }
