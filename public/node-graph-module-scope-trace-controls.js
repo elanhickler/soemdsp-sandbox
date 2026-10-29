@@ -978,7 +978,7 @@ const nodeGraphTraceDisplayActiveControlsByType = Object.freeze({
   }),
   // Outer / Hub dot size (were one "Size") are in the centered face square; F-fullscreen scales with it.
   sinCos4Face: Object.freeze({
-    fields: Object.freeze(["sinCos4OuterDotSize", "sinCos4HubDotSize", "sinCos4RayThickness", "sinCos4RingThickness", "pixelDensity"]),
+    fields: Object.freeze(["sinCos4OuterDotSize", "sinCos4HubDotSize", "sinCos4RayThickness", "sinCos4RingThickness", "lineSmoothing", "pixelDensity"]),
     colors: Object.freeze([]),
     toggles: Object.freeze([]),
     choices: Object.freeze([]),

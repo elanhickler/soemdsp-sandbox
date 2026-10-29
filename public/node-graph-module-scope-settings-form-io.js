@@ -2089,8 +2089,19 @@ function bindNodeGraphHueTitleSteppers(host) {
       return;
     }
     if (event.ctrlKey || event.metaKey) {
-      colorInput.value = "#ff0000";
-      nodeGraphHueTitleStepperApplySwatch(row, "#ff0000");
+      // Reset to this display type's own default (a Background row must never
+      // reset to the old hard-coded red).
+      const defaults = typeof nodeGraphDisplaySettingsDefaultsForFormType === "function"
+        ? nodeGraphDisplaySettingsDefaultsForFormType()
+        : null;
+      const resetRaw = defaults?.[colorField]
+        ?? (colorField === "backgroundColor" ? defaults?.background : null)
+        ?? (colorField === "backgroundColor" ? "#000000" : "#ff0000");
+      const resetHex = typeof nodeGraphTraceDisplayPureHueHex === "function"
+        ? nodeGraphTraceDisplayPureHueHex(resetRaw, colorField === "backgroundColor" ? "#000000" : "#ff0000")
+        : resetRaw;
+      colorInput.value = resetHex;
+      nodeGraphHueTitleStepperApplySwatch(row, resetHex);
       if (typeof markNodeGraphTraceDisplaySettingsDirty === "function") {
         markNodeGraphTraceDisplaySettingsDirty(colorField);
       }

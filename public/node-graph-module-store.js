@@ -2573,6 +2573,12 @@ const nodeGraphModuleStoreCatalog = Object.freeze({
     label: "Hyperbolic",
     notes: ["Trigger", "Duration", "Shape w", "decay", "hyperbolic", "native"],
   },
+  robinLeakyEnvelope: {
+    category: "envelope",
+    description: "Robin Leaky Envelope: Trigger starts a leaky-integrator decay whose speed glides from Start Decay to End Decay over Transition. Fast fall that settles slow, or into a hold (End Decay max). After Robin Schmidt (RS-MET).",
+    label: "Robin Leaky Envelope",
+    notes: ["Trigger", "Start Decay", "End Decay", "Transition", "decay", "leaky integrator", "Robin Schmidt", "native"],
+  },
   exponentialMix: {
     category: "envelope",
     description: "Exponential Mix: Trigger restarts (1−p)·e^{−x}+p·e^{−rate·x}. Decay Time is when the slow exp hits −60 dB.",
@@ -3876,6 +3882,10 @@ const nodeGraphJsSourceEntriesByType = Object.freeze({
   hyperbolicDecay: {
     source: "native_modules/hyperbolic_decay/hyperbolic_decay.cpp",
     sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/native_modules/hyperbolic_decay/hyperbolic_decay.cpp",
+  },
+  robinLeakyEnvelope: {
+    source: "native_modules/robin_leaky_envelope/robin_leaky_envelope.cpp",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/native_modules/robin_leaky_envelope/robin_leaky_envelope.cpp",
   },
   exponentialMix: {
     source: "native_modules/exponential_mix/exponential_mix.cpp",

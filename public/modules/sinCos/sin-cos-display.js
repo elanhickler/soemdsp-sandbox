@@ -553,7 +553,7 @@ function drawNodeGraphSinCosDisplayInner(section) {
     `${Math.round(rawW)}x${Math.round(rawH)}`,
     look.strokePaint, look.dotPaint, look.backgroundPaint, strokeW, dotW,
     String(Number(look.padExtra) || 0),
-    String(Number(look.lineSmoothing) || 1),
+    String(nodeGraphLineSmoothingPx(look, 1)),
   ].join("|");
   const livePlaying = typeof nodeGraphRoundShapeLivePlaying === "function"
     ? nodeGraphRoundShapeLivePlaying()

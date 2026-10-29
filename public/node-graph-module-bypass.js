@@ -112,6 +112,7 @@ const NODE_GRAPH_BYPASS_TYPE_OVERRIDES = Object.freeze({
   rmsMeter: "silence",
   exponentialSkew: "silence",
   hyperbolicDecay: "silence",
+  robinLeakyEnvelope: "silence",
   exponentialMix: "silence",
   ellipsoidDecay: "silence",
   flowerChildEnvelopeFollower: "silence",

@@ -572,7 +572,7 @@ function compileNodeGraphExecutionPlan(patch = nodeGraphMvp.patch) {
         issues.push(`missing ${nodeGraphNodeDisplayName(nodeId)} gate`);
       }
     } else if (type === "pluckEnvelope" || type === "pingEnvelope" || type === "resonantEnvelope" || type === "resonantFollower" || type === "powerDecay"
-      || type === "exponentialSkew" || type === "hyperbolicDecay" || type === "exponentialMix"
+      || type === "exponentialSkew" || type === "hyperbolicDecay" || type === "robinLeakyEnvelope" || type === "exponentialMix"
       || type === "ellipsoidDecay") {
       const triggerCount = (graph.inputConnections.get(nodeGraphInputKey(nodeId, "Trigger")) || []).length;
       if (!triggerCount && nodeGraphNodeSignalOutputRequired(graph, nodeId)) {

@@ -534,7 +534,7 @@ async function sendNodeGraphLiveNativeModule(liveNode, entry) {
 // Chrome caps wasm memories per process (~100); many standalone instances
 // hit that cap. Slim is for small used-sets when per-module files exist;
 // huge patches / site deploys should use combined.
-const nodeGraphLiveCombinedNativeModuleUrl = "native_modules/combined/soemdsp_combined.wasm?v=pt-count-frac-1";
+const nodeGraphLiveCombinedNativeModuleUrl = "native_modules/combined/soemdsp_combined.wasm?v=leaky-env-1";
 
 /** @type {null|"slim"|"combined"} */
 let nodeGraphLiveNativeWasmLoadModeResolved = null;
@@ -3395,8 +3395,8 @@ const nodeGraphLiveWorkletSourceFilesEfficient = [
   "./public/node-graph-stdlib/node-graph-seeded-rng-helpers.js?v=stdlib-batch3-20260715",
   "./public/node-graph-parameter-smoother-filters.js?v=smooth-gpu-3p-1",
   // Bypass passthrough maps + frame eval (shared with main thread).
-  "./public/node-graph-module-bypass.js?v=clap-1",
-  "./public/node-graph-efficient-product.js?v=fcf-rev3-1",
+  "./public/node-graph-module-bypass.js?v=leaky-env-1",
+  "./public/node-graph-efficient-product.js?v=leaky-env-1",
   "./public/node-live-audio-worklet-core.js?v=softpop-ship-1",
   // Phase D: class methods extracted from core (must follow class definition).
   "./public/node-live-audio-worklet-graph.js?v=plan-d-split-5",
@@ -3415,7 +3415,7 @@ const nodeGraphLiveWorkletSourceFilesEfficient = [
   "./public/node-live-audio-worklet-scope-io.js?v=clap-1",
   "./public/node-live-audio-worklet-native-load.js?v=emo-shader-1",
   "./public/node-live-audio-worklet-native-exports.js?v=logic-ng-1",
-  "./public/node-live-audio-worklet-native-graph.js?v=pt-count-frac-1",
+  "./public/node-live-audio-worklet-native-graph.js?v=leaky-env-1",
   "./public/node-live-audio-worklet-meta-view.js?v=voice-preview-1",
   "./public/node-live-audio-worklet-set-plan.js?v=emo-1",
   "./public/node-live-audio-worklet-clear-plan.js?v=kbd-trig-1samp-20261013",
@@ -3985,8 +3985,24 @@ function nodeGraphPageHiddenPauseState() {
   return nodeGraphMvp.live.pageHiddenPause;
 }
 
+// ?unfocused=play on the page URL: the host (e.g. the soundemote.com music
+// page iframe) asks the sandbox to keep playing while its tab is hidden.
+// Without it the sandbox pauses on leaving the tab (soundemote.io default).
+let nodeGraphLiveUnfocusedPlayFromUrl = null;
+function nodeGraphLiveUnfocusedPlayRequestedByUrl() {
+  if (nodeGraphLiveUnfocusedPlayFromUrl === null) {
+    try {
+      const v = new URLSearchParams(window.location.search || "").get("unfocused");
+      nodeGraphLiveUnfocusedPlayFromUrl = String(v || "").trim().toLowerCase() === "play";
+    } catch (_e) {
+      nodeGraphLiveUnfocusedPlayFromUrl = false;
+    }
+  }
+  return nodeGraphLiveUnfocusedPlayFromUrl;
+}
+
 function nodeGraphLiveKeepPlayingWhenUnfocused() {
-  return Boolean(nodeGraphMvp?.live?.keepPlayingWhenUnfocused);
+  return Boolean(nodeGraphMvp?.live?.keepPlayingWhenUnfocused) || nodeGraphLiveUnfocusedPlayRequestedByUrl();
 }
 
 function nodeGraphLiveSetKeepPlayingWhenUnfocused(on) {

@@ -22,6 +22,7 @@ Any site can embed a sandbox patch from soundemote.io with an iframe. No copy of
 | `autoplay=1` | Start playing once loaded if the browser allows it. |
 | `loading=all\|lazy` | Default loading mode for Player API `load` (default `all`). A `load` message's own `loading` field wins. See "Loading modes". |
 | `bg=<css color>` | Perform background (`--soemdsp-perform-bg` on `<html>`). Any CSS color, alpha included: `bg=rgba(0,0,0,0.5)`, `bg=%2300000080` (encode `#`), `bg=transparent`. Default `#050805` with `embed=1`, `#0a0a0a` otherwise. Invalid values are ignored. |
+| `unfocused=play` | Keep playing while the host tab is hidden (same as the locked Play button). Without it the sandbox pauses on leaving the tab. soundemote.com's music page sets it; soundemote.io does not. |
 | `hideui`, `autoframe`, `autostart`, `mode=perform`, `wasmLoad` | Existing params, unchanged. |
 
 `playlist`/`src` handling lives in `public/modules/audioPlayer/audio-player-embed.js` and runs after `nodeSandboxInterfaceReady`.

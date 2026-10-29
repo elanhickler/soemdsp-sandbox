@@ -73,6 +73,7 @@ const NODE_GRAPH_SINCOS4_COLORS = Object.freeze([
 //   (Legacy `dot1Size` "Size" scaled both; old patches map it onto both.)
 //   sinCos4RayThickness   ray width, % of the face square, 0..100 (all four rays drawn equal)
 //   sinCos4RingThickness  ring width, % of the face square, 0..100
+//   lineSmoothing         app-wide smootherstep skirt on rays / ring / dots (gl-line-renderer), CSS px 0..8, default 1
 //   (sinCos4HubSize was an extra x multiplier on the hub radius (default 0.7), so Hub 2.5
 //   drew smaller than Outer 2.5. Retired: saved values are ignored.)
 // Defaults = the original fixed look (ray / ring 1.2 %, hub 0.7 x tip).
@@ -81,6 +82,7 @@ const nodeGraphSinCos4FaceDisplaySettingsDefaults = Object.freeze({
   sinCos4HubDotSize: 0.08,
   sinCos4RayThickness: 1.2,
   sinCos4RingThickness: 1.2,
+  lineSmoothing: 1,
   pixelDensity: 1,
 });
 
@@ -94,6 +96,7 @@ function normalizeNodeGraphSinCos4FaceSettings(settings = {}) {
     sinCos4HubDotSize: num(s.sinCos4HubDotSize ?? s.dot1Size, d.sinCos4HubDotSize, 0, 20),
     sinCos4RayThickness: num(s.sinCos4RayThickness, d.sinCos4RayThickness, 0, 100),
     sinCos4RingThickness: num(s.sinCos4RingThickness, d.sinCos4RingThickness, 0, 100),
+    lineSmoothing: num(s.lineSmoothing, d.lineSmoothing, 0, 8),
     pixelDensity: num(s.pixelDensity, d.pixelDensity, 0, 1),
   };
 }
@@ -118,6 +121,7 @@ function nodeGraphSinCos4FaceNorm(node) {
     ringStroke: td.sinCos4RingThickness / 100,
     tip,
     hub,
+    feather: td.lineSmoothing,
     pixelDensity: td.pixelDensity || 1,
   };
 }
@@ -261,7 +265,7 @@ function drawNodeGraphSinCos4DisplayInner(section) {
   const oy = (cssH - side) * 0.5;
   const X = (u) => ox + u * side;
   const Y = (v) => oy + v * side;
-  const feather = 0.7;
+  const feather = look.feather;
 
   const cx = 0.5;
   const cy = 0.5;

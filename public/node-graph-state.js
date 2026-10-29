@@ -332,6 +332,7 @@ var nodeGraphMvp = {
     rmsMeter: 0,
     exponentialSkew: 0,
     hyperbolicDecay: 0,
+    robinLeakyEnvelope: 0,
     exponentialMix: 0,
     ellipsoidDecay: 0,
     logisticMap: 0,

@@ -2504,6 +2504,24 @@
       "noticeUrl": "https://github.com/elanhickler/soemdsp-sandbox/blob/master/docs/THIRD_PARTY.md"
     },
     {
+      "name": "robin_leaky_envelope",
+      "label": "Robin Leaky Envelope",
+      "targetType": "robinLeakyEnvelope",
+      "kind": "envelope",
+      "source": "native_modules/robin_leaky_envelope/robin_leaky_envelope.cpp",
+      "sourceUrl": "https://github.com/elanhickler/soemdsp-sandbox/blob/master/native_modules/robin_leaky_envelope/robin_leaky_envelope.cpp",
+      "localSourceUrl": "/native_modules/robin_leaky_envelope/robin_leaky_envelope.cpp",
+      "libUrl": "",
+      "wasm": "native_modules/robin_leaky_envelope/robin_leaky_envelope.wasm",
+      "wasmUrl": "native_modules/robin_leaky_envelope/robin_leaky_envelope.wasm",
+      "wasmAvailable": true,
+      "license": "Soundemote Noncommercial",
+      "licenseUrl": "https://github.com/elanhickler/soemdsp-sandbox/blob/master/LICENSE",
+      "upstreamLicense": "",
+      "upstreamLicenseUrl": "",
+      "noticeUrl": "https://github.com/elanhickler/soemdsp-sandbox/blob/master/docs/THIRD_PARTY.md"
+    },
+    {
       "name": "robin_oscillator",
       "label": "RobinOscillator",
       "targetType": "robinOscillator",

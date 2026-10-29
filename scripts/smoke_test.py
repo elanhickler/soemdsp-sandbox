@@ -17155,6 +17155,15 @@ def require_native_module_contract(base_url: str) -> None:
             "soemdsp_hyperbolic_decay_metadata_json",
             "soemdsp_hyperbolic_decay_metadata_json_size",
         ],
+        "robin_leaky_envelope": [
+            "soemdsp_robin_leaky_envelope_create",
+            "soemdsp_robin_leaky_envelope_destroy",
+            "soemdsp_robin_leaky_envelope_sample",
+            "soemdsp_robin_leaky_envelope_is_idle",
+            "soemdsp_robin_leaky_envelope_version",
+            "soemdsp_robin_leaky_envelope_metadata_json",
+            "soemdsp_robin_leaky_envelope_metadata_json_size",
+        ],
         "exponential_mix": [
             "soemdsp_exponential_mix_create",
             "soemdsp_exponential_mix_destroy",

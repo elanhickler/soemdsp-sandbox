@@ -222,6 +222,7 @@ NodeLiveAudioProcessor.NATIVE_GRAPH_TYPE_IDS = Object.freeze({
   flowerChildFilterRev3: 235,
   fluvNoise: 236,
   pumpCurve: 237,
+  robinLeakyEnvelope: 238,
   yellowjacketFilter: 62,
   superloveFilter: 63,
   superloveRev2: 172,
@@ -543,6 +544,12 @@ NodeLiveAudioProcessor.prototype.mapNativeGraphParamId = function mapNativeGraph
     if (k === "frequency") return P.NATIVE_GRAPH_PARAM_FREQUENCY;
     if (k === "amplitude") return P.NATIVE_GRAPH_PARAM_AMPLITUDE;
     if (k === "seed") return P.NATIVE_GRAPH_PARAM_SEED;
+  }
+  if (t === "robinLeakyEnvelope") {
+    if (k === "startDecay") return P.NATIVE_GRAPH_PARAM_TIME_NUMERATOR;
+    if (k === "endDecay") return P.NATIVE_GRAPH_PARAM_TIME_DENOMINATOR;
+    if (k === "transition") return P.NATIVE_GRAPH_PARAM_OFFSET_MS;
+    if (k === "amplitude") return P.NATIVE_GRAPH_PARAM_AMPLITUDE;
   }
   if (t === "pumpCurve") {
     if (k === "law") return P.NATIVE_GRAPH_PARAM_MODE;
@@ -1447,6 +1454,7 @@ NodeLiveAudioProcessor.prototype.mapNativeGraphDstPortId = function mapNativeGra
         || tGateEnv === "powerDecay"
         || tGateEnv === "exponentialSkew"
         || tGateEnv === "hyperbolicDecay"
+        || tGateEnv === "robinLeakyEnvelope"
         || tGateEnv === "exponentialMix"
         || tGateEnv === "ellipsoidDecay"
         || tGateEnv === "pluckEnvelope"
@@ -4144,6 +4152,7 @@ NodeLiveAudioProcessor.prototype.syncNativeVoiceIdleCleanup = function syncNativ
     powerDecay: 1,
     exponentialSkew: 1,
     hyperbolicDecay: 1,
+    robinLeakyEnvelope: 1,
     exponentialMix: 1,
     ellipsoidDecay: 1,
     expAdsr: 1,
@@ -6138,6 +6147,13 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
       push("amplitude", P.NATIVE_GRAPH_PARAM_AMPLITUDE, cont("amplitude", 1));
       continue;
     }
+    if (type === "robinLeakyEnvelope") {
+      push("startDecay", P.NATIVE_GRAPH_PARAM_TIME_NUMERATOR, cont("startDecay", 0.2)); // s T60
+      push("endDecay", P.NATIVE_GRAPH_PARAM_TIME_DENOMINATOR, cont("endDecay", 4)); // s T60, 1000 = hold
+      push("transition", P.NATIVE_GRAPH_PARAM_OFFSET_MS, cont("transition", 0.1)); // s
+      push("amplitude", P.NATIVE_GRAPH_PARAM_AMPLITUDE, cont("amplitude", 1));
+      continue;
+    }
     if (type === "ellipsoidDecay") {
       push("decayTime", P.NATIVE_GRAPH_PARAM_TIME_DENOMINATOR, cont("decayTime", 2));
       push("morph", P.NATIVE_GRAPH_PARAM_SHAPE, cont("morph", 0));
@@ -6513,7 +6529,9 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
       continue;
     }
     if (type === "pulseTrain") {
-      push("count", P.NATIVE_GRAPH_PARAM_STAGES, disc("count", 12));
+      // Count is continuous (pulse_train v37); disc() rounded it, so the
+      // fading last pulse never reached the DSP.
+      push("count", P.NATIVE_GRAPH_PARAM_STAGES, cont("count", 12));
       push("frequency", P.NATIVE_GRAPH_PARAM_TIME_DENOMINATOR, cont("frequency", 1)); // Hz, cycle rate
       push("curve", P.NATIVE_GRAPH_PARAM_SHAPE, cont("curve", 3));
       push("ampStart", P.NATIVE_GRAPH_PARAM_IN_LOW, cont("ampStart", 1));
@@ -9948,6 +9966,7 @@ NodeLiveAudioProcessor.prototype.publishNativeGraphScopeTaps = function publishN
         || type === "powerDecay"
         || type === "exponentialSkew"
         || type === "hyperbolicDecay"
+        || type === "robinLeakyEnvelope"
         || type === "exponentialMix"
         || type === "ellipsoidDecay"
         || type === "curveAttackRelease"
