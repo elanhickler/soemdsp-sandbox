@@ -432,6 +432,27 @@ static inline double playT(double t, double scale) {
   return t * scale;
 }
 
+// Edge Fade (v38): when the schedule runs past its cutoff E (Loop: the cycle,
+// e.g. Stretch > 0; One shot: a negative End Delay), the last pulse k still
+// inside plays at (E - t_k) / (t_k+1 - t_k): 0 when the edge just reached it,
+// full when the edge reaches the next pulse, which then enters at 0. Pulses
+// slide in and out of the edge instead of popping. 1 when nothing is cut.
+static inline double edgeFadeOf(
+  int j, int total, int nFwd, double endT, double curve, bool loop, double pulseMode,
+  double polarity, double cycle, double tE
+) {
+  if (j + 1 >= total) return 1.0;
+  if (loop && !(cycle > 0.0)) return 1.0;
+  const double tn = pulseTime(j + 1, nFwd, endT, curve, loop, pulseMode, polarity);
+  if (!pulseAfterCutoff(tn, loop, cycle, tE)) return 1.0;
+  const double tj = pulseTime(j, nFwd, endT, curve, loop, pulseMode, polarity);
+  const double gap = tn - tj;
+  if (!(gap > 0.0)) return 1.0;
+  const double f = ((loop ? cycle : tE) - tj) / gap;
+  if (!(f > 0.0)) return 0.0;
+  return f < 1.0 ? f : 1.0;
+}
+
 static const unsigned int kSeedAa = 1u;
 static const unsigned int kSeedEpoch = 2u;
 static const unsigned int kSeedAa2 = 3u;
@@ -747,7 +768,7 @@ static inline int pulseIndexAt(
 
 }  // namespace
 
-extern "C" int soemdsp_pulse_train_version() { return 37; } // v37: continuous Count (fading last pulse); was v36 graph Duty removed
+extern "C" int soemdsp_pulse_train_version() { return 38; } // v38: Edge Fade (last pulse before the cutoff fades); was v37 continuous Count
 
 extern "C" int soemdsp_pulse_train_create() {
   for (int i = 0; i < kMaxInstances; i++) {
@@ -803,10 +824,11 @@ extern "C" double soemdsp_pulse_train_sample(
   int handle, double trigger, double count, double endTime, double curve,
   double ampStart, double ampEnd, double ampCurve, double amplitude, double sampleRate, double mode,
   double recalc, double pulseMode, double endDelay, double antialiasing, double seed, double waveShape,
-  double freqHz, double morph, double curvePolarity, double spacing
+  double freqHz, double morph, double curvePolarity, double spacing, double edgeFade
 ) {
   if (handle < 1 || handle > kMaxInstances) return 0.0;
   const double morphLive = morph == morph ? morph : 0.5; // omitted wasm arg (NaN) = 0.5
+  const bool edgeOn = edgeFade > 0.5; // omitted wasm arg (NaN) = Off (v37 output)
   const double polarityLive = polarityNeg(curvePolarity) ? 1.0 : 0.0;
   const int spacingLive = spacingOf(spacing); // omitted wasm arg (NaN/0) = Expo
   const bool loop = mode > 0.5;
@@ -952,6 +974,13 @@ extern "C" double soemdsp_pulse_train_sample(
   const double delay = clampDelay(s.eff[8]);
   double tE = oneShotEndTime(total, nFwd, endT, kCurve, lp, du, delay, pol);
   const double tEPlay = playT(tE, scale);
+  // Pulse amplitude, times the Edge Fade when the switch is On (v38).
+  const double cycleCut = s.cycle;
+  auto ampOf = [&](int j) {
+    const double a = pulseAmp(j, nFwd, endT, kCurve, s.eff[3], s.eff[4], s.eff[5], s.eff[6], s.effVel, lp, du, pol);
+    if (!edgeOn) return a;
+    return a * edgeFadeOf(j, total, nFwd, endT, kCurve, lp, du, pol, cycleCut, tE);
+  };
   if (shape == kShapeTrigger) {
     out = takeSpill(s);
     if (s.allAtZero) {
@@ -977,12 +1006,12 @@ extern "C" double soemdsp_pulse_train_sample(
           const long long land = aaMode >= 4
             ? robinLand2(t, sr, stream, (unsigned int)s.next)
             : robinLand(t, sr, stream, (unsigned int)s.next);
-          const double amp = pulseAmp(s.next, nFwd, endT, kCurve, s.eff[3], s.eff[4], s.eff[5], s.eff[6], s.effVel, lp, du, pol);
+          const double amp = ampOf(s.next);
           addAt(s, land, s.n, amp, &out);
         } else {
           const long long c = ceilLand(t, sr);
           if (c > s.n) break;
-          const double amp = pulseAmp(s.next, nFwd, endT, kCurve, s.eff[3], s.eff[4], s.eff[5], s.eff[6], s.effVel, lp, du, pol);
+          const double amp = ampOf(s.next);
           if (aaMode >= 1) {
             const double tPrev = playT(s.next > 0 ? pulseTime(s.next - 1, nFwd, endT, kCurve, lp, du, pol) : 0.0, scale);
             const double tNext = playT(s.next + 1 < total ? pulseTime(s.next + 1, nFwd, endT, kCurve, lp, du, pol) : tU, scale);
@@ -1035,7 +1064,7 @@ extern "C" double soemdsp_pulse_train_sample(
         // One-shot delay 0: last pulse is the end of the previous grain, not a
         // new 1-sample stub. End fires on that sample (same as Trigger).
         if (!lp && s.next + 1 >= total) {
-          trig += pulseAmp(s.next, nFwd, endT, kCurve, s.eff[3], s.eff[4], s.eff[5], s.eff[6], s.effVel, lp, du, pol);
+          trig += ampOf(s.next);
           s.next = total;
           break;
         }
@@ -1044,7 +1073,7 @@ extern "C" double soemdsp_pulse_train_sample(
       if (s.n < n0) break;
       if (s.n < n1) {
         const double u = (double)(s.n - n0) / (double)(n1 - n0);
-        const double amp = pulseAmp(s.next, nFwd, endT, kCurve, s.eff[3], s.eff[4], s.eff[5], s.eff[6], s.effVel, lp, du, pol);
+        const double amp = ampOf(s.next);
         const double mo = latch ? s.morphEff : morphLive;
         out = grainWave(shape, u, mo) * amp;
         // Trigger out on the grain's first sample; one sample late when a live

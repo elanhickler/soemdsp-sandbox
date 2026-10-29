@@ -144,6 +144,8 @@ function nodeGraphPulseTrainSchedule(section, node) {
     p("ampStart", 1), p("ampEnd", 0.2), p("ampCurve", 0), p("amplitude", 1),
     Math.round(p("mode", 1)), pulseModeKnob, (1 - span) * periodS, polarityKnob,
     Math.round(p("spacing", 0)),
+    // Edge Fade: stored 0 On / 1 Off (face stack order). JS preview only; the wasm preview ignores it.
+    Math.round(p("edgeFade", 0)) === 0 ? 1 : 0,
   ];
   // Audio running: draw the params the engine is playing with (latched at the
   // trigger / cycle start with Latch, live with Free; idle = what
@@ -315,7 +317,27 @@ function nodeGraphPulseTrainPreviewJs(args, endTime) {
   const last = count ? times[count - 1] : 0;
   const cutoff = loop ? span + delay : last + delay;
   const end = Math.max(0.001, loop || delay !== 0 ? Math.max(0, cutoff) : last || 0.001);
+  // Edge Fade (pulse_train v38): the last pulse before the cutoff plays at
+  // (cutoff - t_k) / (t_k+1 - t_k), same test as pulseAfterCutoff.
+  let edgeFaded = false;
+  if (args[12] && !(loop && !(cutoff > 0))) {
+    const after = (t) => (loop ? t >= cutoff : t > cutoff);
+    for (let j = 0; j + 1 < count; j += 1) {
+      if (after(times[j])) break;
+      if (!after(times[j + 1])) continue;
+      const gap = times[j + 1] - times[j];
+      if (gap > 0) {
+        const f = Math.min(1, Math.max(0, (cutoff - times[j]) / gap));
+        if (f < 1) {
+          amps[j] *= f;
+          edgeFaded = true;
+        }
+      }
+      break;
+    }
+  }
   return {
+    edgeFaded,
     times, amps, end, duration, peak, loop, pulseMode, polarity, delay,
     count, nFwd: fwdCap, countF, curve, spacing, ampStart, ampEnd, ampCurve, amplitude,
   };
@@ -427,10 +449,11 @@ function drawNodeGraphPulseTrainDisplay(section) {
       });
       return true;
     };
-    // Fractional Count (or < 1): the instanced forest only knows integer
-    // Counts, so draw the preview schedule's stems on the CPU (up to 4096).
+    // Fractional Count (or < 1) or an Edge-Faded pulse: the instanced forest
+    // only knows integer Counts at full height, so draw the preview schedule's
+    // stems on the CPU (up to 4096).
     const fractional = !(schedule.countF === Math.floor(schedule.countF)) || schedule.countF < 1;
-    if (fractional && schedule.count <= 4096) {
+    if ((fractional || schedule.edgeFaded) && schedule.count <= 4096) {
       const elapsedVal = playing ? elapsed : Number.NaN;
       const fadeTau = Number(look.fadeTime) || 0;
       const mixC = (a, b, w) => [0, 1, 2, 3].map((k) => a[k] + (b[k] - a[k]) * w);

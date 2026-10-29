@@ -14676,7 +14676,7 @@ const nodeGraphModuleDefinitions = (
       { kind: "cells", params: [["morph", "Morph"], ["count", "Count"], ["stretch", "Stretch"]], h: 52 },
       { kind: "cells", params: [["curvePolarity", "+", "stack"], ["frequency", "ƒ"], ["curve", "ƒ Crv", "bipolar"]], h: 52 },
       { kind: "choices", param: "spacing", labels: ["Expo", "Harmonic", "Rational"], h: 26 },
-      { kind: "cells", params: [["ampStart", "A Start"], ["ampEnd", "A End"], ["ampCurve", "A Crv", "bipolar"]], h: 52 },
+      { kind: "cells", params: [["edgeFade", "Edge", "stack"], ["ampStart", "A Start"], ["ampEnd", "A End"], ["ampCurve", "A Crv", "bipolar"]], h: 52 },
       { kind: "cells", params: [["amplitude", "Amp"]], horizontal: true, h: 30 },
       ...(NODE_GRAPH_MODULE_PRESETS_ENABLED
         ? [{ kind: "cells", params: [["presetMorph", "Preset Morph"]], horizontal: true, h: 30 }]
@@ -14740,6 +14740,24 @@ const nodeGraphModuleDefinitions = (
         nonlinearSlider: false,
         step: "1",
         tooltip: "Pulse height invert next to A Start. + as drawn. \u2212 flips each height around (A Start + A End)/2. Same times."
+      },
+      {
+        // Edge Fade (pulse_train v38). Stored 0 = On (top of the stack, the
+        // default, so older patches get it) / 1 = Off; the worklet flips it for the DSP.
+        choices: ["On", "Off"],
+        defaultValue: "0",
+        displayChoices: true,
+        divideChoicesVisibly: true,
+        key: "edgeFade",
+        label: "Edge Fade",
+        linearSmoothing: false,
+        smoothingType: "none",
+        max: "1",
+        mid: "1",
+        min: "0",
+        nonlinearSlider: false,
+        step: "1",
+        tooltip: "Edge Fade. On: when Stretch (or a negative End Delay) cuts the train, the last pulse before the cut fades by how far the edge is toward the next pulse, so pulses slide in and out instead of popping. Off: hard cut."
       },
       {
         // Stored value = choice: 0 Quant / 1 Rand / 2 Dither (retired v32/v33

@@ -514,6 +514,7 @@ NodeLiveAudioProcessor.prototype.mapNativeGraphParamId = function mapNativeGraph
     if (k === "recalculateOnTrigger") return P.NATIVE_GRAPH_PARAM_MODE;
     if (k === "pulseMode") return P.NATIVE_GRAPH_PARAM_LFO_STYLE;
     if (k === "curvePolarity") return P.NATIVE_GRAPH_PARAM_FEEDBACK;
+    if (k === "edgeFade") return P.NATIVE_GRAPH_PARAM_RESONANCE;
     if (k === "spacing") return P.NATIVE_GRAPH_PARAM_CENTER;
     if (k === "morph") return P.NATIVE_GRAPH_PARAM_MIX;
     if (k === "wave") return P.NATIVE_GRAPH_PARAM_OVERSAMPLE;
@@ -6548,6 +6549,8 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
       push("seed", P.NATIVE_GRAPH_PARAM_SEED, disc("seed", 0));
       push("wave", P.NATIVE_GRAPH_PARAM_OVERSAMPLE, disc("wave", 2)); // 0 Trigger / 1 Gate / 2 Saw / 3 Ramp / 4 TriSaw / 5 Sine / 6-8 Pulse Left/Center/Right / 9 Rect Sine
       push("morph", P.NATIVE_GRAPH_PARAM_MIX, cont("morph", 0.5)); // TriSaw peak / Pulse width
+      // Edge Fade: stored 0 On / 1 Off (On sits on top of the face stack); DSP takes 1 On / 0 Off.
+      push("edgeFade", P.NATIVE_GRAPH_PARAM_RESONANCE, 1 - disc("edgeFade", 0));
       continue;
     }
     if (type === "pulseExplosion") {
