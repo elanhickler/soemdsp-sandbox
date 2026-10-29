@@ -83,9 +83,21 @@ for (const [label, type, setup, useLo, useHi] of CASES) {
 // Defs: Sweep gone, ƒ jack present.
 {
   const defs = fs.readFileSync(path.join(root, "public", "node-graph-module-definitions.js"), "utf8");
+  // The whole definition object, matched brace to brace (strings skipped), so its layout (e.g. a face array first) doesn't matter.
+  const objectAt = (anchor) => {
+    const i = defs.indexOf(anchor); if (i < 0) throw new Error(`${anchor} not found`);
+    let depth = 0, quote = null;
+    for (let k = defs.indexOf("{", i); k < defs.length; k++) {
+      const c = defs[k];
+      if (quote) { if (c === "\\") k++; else if (c === quote) quote = null; continue; }
+      if (c === '"' || c === "'" || c === "`") quote = c;
+      else if (c === "{") depth++;
+      else if (c === "}" && --depth === 0) return defs.slice(i, k + 1);
+    }
+    throw new Error(`${anchor} unterminated`);
+  };
   for (const anchor of ["const nodeGraphActiveFilterDefinition = {", "  passiveFilter: {"]) {
-    const i = defs.indexOf(anchor); const j = defs.indexOf("\n  ]", i);
-    const block = defs.slice(i, j);
+    const block = objectAt(anchor);
     if (block.includes('key: "sweep"')) throw new Error(`${anchor} still has Sweep`);
     if (!block.includes('inputs: ["In", "Left", "Right", "f"]') || !block.includes('f: "ƒ"')) throw new Error(`${anchor} missing ƒ jack`);
   }

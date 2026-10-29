@@ -14,7 +14,7 @@ BASE = "/soemdsp-sandbox/patches"
 # duplicating the JSON file. Survives sync_soundemote_io.ps1 regenerations.
 # slug -> path relative to patches/ (POSIX-style for URL building).
 PAGE_PATCH_ALIASES: list[tuple[str, str]] = [
-    ("callnow", "Alarm/callnow.json"),
+    ("callnow", "foley/callnow.json"),
     ("sabrinareverb", "livedemos/sabrinareverb.json"),
 ]
 

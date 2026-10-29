@@ -301,6 +301,8 @@ PUBLIC_SCRIPT_PATHS = (
     "./public/lib/emo/emo-module.js",
     "./public/lib/emo/emo-display.js",
     "./public/modules/reverbEffect/sabrina-reverb-gl.js",
+    "./public/modules/sabrinaReverb/sabrina-preset-browser.js",
+    "./public/modules/pulseTrain/pulse-train-preset-browser.js",
     "./public/lib/visual/glyph-sdf-atlas.js",
     "./public/lib/visual/color-widget-plane-gl.js",
     "./public/modules/imageBurn/image-burn-gl.js",
@@ -1208,6 +1210,7 @@ def require_shell_contract(html: str) -> None:
             "./public/modules/arp/arp-display.css",
             "./public/modules/textStream/text-stream-ui.css",
             "./public/modules/acidSequencer/acid-sequencer-face.css",
+            "./public/modules/sabrinaReverb/sabrina-preset-browser.css",
             "/css2",
         },
         f"shell stylesheets were {sorted(parser.stylesheets)!r}",
@@ -3609,7 +3612,7 @@ def require_node_graph_mvp_contract() -> None:
         and "nodeGraphRmsDbGuideLabel" in (PUBLIC / "node-graph-module-scope-paint-helpers.js").read_text(encoding="utf-8")
         and "nodeGraphDeepCloneModuleField" in script_sources["./public/node-graph-module-actions.js"]
         and "defaultWidthGu: 13" in node_graph_module_definitions_source
-        and "defaultHeightGu: 21" in node_graph_module_definitions_source,
+        and "defaultHeightGu: 22" in node_graph_module_definitions_source,
         "RMS Mono removed (RMS Meter replaces it); RMS Stereo keeps Window/Attack/Release, absolute dBFS, visible outs RMS A/D",
     )
     lufs_definition_start = node_graph_module_definitions_source.index("  lufs: {")
