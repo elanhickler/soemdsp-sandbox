@@ -223,6 +223,7 @@ PUBLIC_SCRIPT_PATHS = (
     "./public/node-graph-phosphor-gaussian-drawer.js",
     "./public/color-widget-boot.js",
     "./public/modules/spectrogram/spectrogram-gradient-editor.js",
+    "./public/lib/visual/scope-sync.js",
     "./public/node-graph-module-scope-defaults.js",
     "./public/node-graph-module-scope-normalize.js",
     "./public/node-graph-module-scope-display-mode.js",
@@ -278,6 +279,7 @@ PUBLIC_SCRIPT_PATHS = (
     "./public/modules/spectrogram/spectrogram-display.js",
     "./public/modules/spectrum1d/spectrum1d-display.js",
     "./public/modules/transport/transport-display.js",
+    "./public/modules/plot/plot-display.js",
     "./public/modules/vectorRgb/vector-rgb-display.js",
     "./public/modules/rasterRgb/raster-rgb-math.js",
     "./public/modules/rasterRgb/raster-rgb-gl.js",
@@ -18543,7 +18545,8 @@ def check_dsf_face_spectrum() -> None:
     require("nodeGraphDsfMorphImpulse" in face, "DSF face has the spaced kernel")
     require("nodeGraphDsfSubMean" in face, "DSF face removes cycle DC")
     require("nodeGraphSinCosFacePadPx" in face and "padExtra: 0" in face, "DSF face auto-pads from line/dot")
-    require("Math.ceil(innerW) * 2" in face, "DSF stroke is pixel-stepped, not one vertex per kernel sample")
+    require("section._dsfPlot" in face and 'mode: "line", ...section._dsfPlot' in face,
+            "DSF cycle draws through the GPU sample plot (min/max band), not a JS point list")
     require('spacing: nodeGraphSinCosLiveParam(node, "spacing", 1)' in face, "DSF face reads Spacing")
     require('oddEven: nodeGraphSinCosLiveParam(node, "oddEven", 0)' in face, "DSF face reads Odd/Even")
     unit = subprocess.run(["node", str(ROOT / "scripts" / "smoke_dsf_display_unit.cjs")], capture_output=True, text=True)
