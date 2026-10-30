@@ -112,7 +112,8 @@ for (const [label, html] of [
   if (!html.includes("node-graph-default-preset.js?v=plugin-ui-persist-1")) {
     fail(`${label} missing default-preset cache tag`);
   }
-  if (!html.includes("node-graph-ui-settings-persistence.js?v=plugin-ui-persist-1")) {
+  // Any cache tag: later changes to the file bump it (e.g. cell-slider-1).
+  if (!/node-graph-ui-settings-persistence\.js\?v=[\w-]+/.test(html)) {
     fail(`${label} missing persistence cache tag`);
   }
   if (!html.includes("node-graph-uidev-event-bindings.js?v=plugin-ui-persist-1")) {

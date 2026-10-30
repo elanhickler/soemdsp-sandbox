@@ -77,8 +77,8 @@ if (shot === "--draw-only") {
   console.log(failures ? `${failures} FAIL` : "smoke_pulse_explosion_face draw-only ok");
   process.exit(failures ? 1 : 0);
 }
-const launch = { headless: true };
-if (process.env.CHROME_PATH) launch.executablePath = process.env.CHROME_PATH;
+const launch = { headless: true, channel: "chrome" }; // system Chrome: the bundled Chromium never boots the GL app here
+if (process.env.CHROME_PATH) { delete launch.channel; launch.executablePath = process.env.CHROME_PATH; }
 const browser = await chromium.launch(launch);
 const page = await browser.newPage({ viewport: { width: 1400, height: 900 } });
 const errors = [];

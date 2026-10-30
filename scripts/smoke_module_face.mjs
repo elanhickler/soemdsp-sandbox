@@ -29,8 +29,8 @@ function patchJson() {
   return JSON.stringify(d);
 }
 
-const launch = { headless: true };
-if (process.env.CHROME_PATH) launch.executablePath = process.env.CHROME_PATH;
+const launch = { headless: true, channel: "chrome" }; // system Chrome: the bundled Chromium never boots the GL app here
+if (process.env.CHROME_PATH) { delete launch.channel; launch.executablePath = process.env.CHROME_PATH; }
 const browser = await chromium.launch(launch);
 const page = await (await browser.newContext({ viewport: { width: 1200, height: 1000 } })).newPage();
 const errors = [];
@@ -110,10 +110,12 @@ const curve = await page.evaluate(() => {
 await drag((wd) => wd.type === "filter", -40, 0, curve.at);
 check("filter curve: dragging the LPF handle left lowers LPF", (await val("lpfFrequency")) < lpf0, `${lpf0} -> ${await val("lpfFrequency")}`);
 const seed0 = await val("seed");
+// + steps the last letter of the 4-character seed code (84877a07), not the raw number.
+const seedPlus = await page.evaluate((s) => stepNodeGraphSeedCode(s, 3, 1), seed0);
 await click((wd) => wd.type === "seedButton" && wd.action === "plus");
-check("seed +", (await val("seed")) === seed0 + 1, `${seed0} -> ${await val("seed")}`);
+check("seed + steps the last code letter", (await val("seed")) === seedPlus, `${seed0} -> ${await val("seed")} (want ${seedPlus})`);
 await click((wd) => wd.type === "seedButton" && wd.action === "dice");
-check("seed die rolls", (await val("seed")) !== seed0 + 1);
+check("seed die rolls", (await val("seed")) !== seedPlus);
 check("no page errors", errors.length === 0, errors.slice(0, 3).join(" | "));
 if (SHOT) await page.locator('article[data-node="pp-1"]').screenshot({ path: path.join(SHOT, "rails3-pingpong-face.png") });
 await browser.close();

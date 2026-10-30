@@ -37,7 +37,9 @@ const pointOf = (q) => page.evaluate((q) => {
 const mods = () => page.evaluate(() => JSON.stringify(nodeGraphMvp.patch.modulations));
 const clear = () => page.evaluate(() => { nodeGraphMvp.patch.modulations = nodeGraphMvp.patch.modulations.filter((m) => m.destinationNode !== "a3"); nodeGraphWireInteractions?.cancelPortConnectionMode?.(); });
 const zapped = () => page.evaluate(() => document.querySelectorAll(".node-zap-particle").length);
-const sources = [{ node: "sg", jack: "Out" }, { node: "sg", jack: "tension" }, { node: "re", jack: "Out" }];
+// Param thru jacks (e.g. sg.tension) are not sources here: the thru rail has no
+// width until a cable leaves a thru (8aab0c11), so an unpatched thru has no jack.
+const sources = [{ node: "sg", jack: "Out" }, { node: "re", jack: "Out" }];
 for (const src of sources) {
   const a = await pointOf(src);
   check(Boolean(a), `${src.node}.${src.jack} has a GL jack`);

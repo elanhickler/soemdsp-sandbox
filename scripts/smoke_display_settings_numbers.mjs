@@ -30,6 +30,9 @@ const ALLOWED_WHEEL_FILES = new Set([
   "text-box-host.js",
   "node-graph-magnifier.js",
   "audio-player-playlist.js",
+  // Preset lists keep their own scroll: the wheel stops at the shell instead of zooming the workspace.
+  "pulse-train-preset-browser.js",
+  "sabrina-preset-browser.js",
   "node-graph-workspace-event-bindings.js",
   "node-graph-workspace-view.js",
 ]);
@@ -46,8 +49,8 @@ check(!/function bindNodeGraphNativeSliderModifiers[\s\S]*?addEventListener\("wh
   .test(readFileSync(join(ROOT, "public/node-graph-slider-dragging.js"), "utf8")), "native range panels have no wheel");
 
 // ---- Browser checks.
-const launch = { headless: true };
-if (process.env.CHROME_PATH) launch.executablePath = process.env.CHROME_PATH;
+const launch = { headless: true, channel: "chrome" }; // system Chrome: the bundled Chromium never boots the GL app here
+if (process.env.CHROME_PATH) { delete launch.channel; launch.executablePath = process.env.CHROME_PATH; }
 const browser = await chromium.launch(launch);
 const page = await browser.newPage();
 const pageErrors = [];

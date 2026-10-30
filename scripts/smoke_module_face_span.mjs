@@ -30,8 +30,8 @@ function patchJson() {
   return JSON.stringify(d);
 }
 
-const launch = { headless: true };
-if (process.env.CHROME_PATH) launch.executablePath = process.env.CHROME_PATH;
+const launch = { headless: true, channel: "chrome" }; // system Chrome: the bundled Chromium never boots the GL app here
+if (process.env.CHROME_PATH) { delete launch.channel; launch.executablePath = process.env.CHROME_PATH; }
 const browser = await chromium.launch(launch);
 const page = await (await browser.newContext({ viewport: { width: 1200, height: 1000 } })).newPage();
 const errors = [];

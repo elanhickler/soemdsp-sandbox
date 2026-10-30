@@ -9,7 +9,7 @@ for (const banned of ["RaptElliptic", "Resample", "Prefilter", "QuarterbandSos"]
   if (src.includes(banned)) throw new Error(`render output still has JS DSP: ${banned}`);
 }
 
-const browser = await chromium.launch({ headless: true, args: ["--autoplay-policy=no-user-gesture-required"] });
+const browser = await chromium.launch({ headless: true, channel: "chrome", args: ["--autoplay-policy=no-user-gesture-required"] });
 const page = await browser.newPage();
 page.on("pageerror", (e) => console.error("pageerror", e.message));
 await page.goto("http://127.0.0.1:8765/?v=" + Date.now(), { waitUntil: "domcontentloaded", timeout: 120000 });

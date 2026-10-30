@@ -20,8 +20,8 @@ d.connections = []; d.graphConnections = []; d.modulations = [];
 d.nodes.push({ id: "chorus-1", type: "chorus", gx: 4, gy: 3, params: {} });
 d.nodes.push({ id: "pingPongDelay-1", type: "pingPongDelay", gx: 20, gy: 3, params: {} });
 
-const launch = { headless: true };
-if (process.env.CHROME_PATH) launch.executablePath = process.env.CHROME_PATH;
+const launch = { headless: true, channel: "chrome" }; // system Chrome: the bundled Chromium never boots the GL app here
+if (process.env.CHROME_PATH) { delete launch.channel; launch.executablePath = process.env.CHROME_PATH; }
 const browser = await chromium.launch(launch);
 const page = await (await browser.newContext({ viewport: { width: 1400, height: 1000 } })).newPage();
 const errors = [];

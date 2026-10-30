@@ -54,8 +54,8 @@ function patchJson() {
   d.nodes.push({ gx: 2, gy: 2, id: "pt-1", type: "pulseTrain", params: { count: newP[0], frequency: 1 / newP[1], curve: newP[2], ampStart: newP[3], ampEnd: newP[4], ampCurve: newP[5], amplitude: newP[6], mode: 0, recalculateOnTrigger: 1 } });
   return JSON.stringify(d);
 }
-const launch = { headless: true };
-if (process.env.CHROME_PATH) launch.executablePath = process.env.CHROME_PATH;
+const launch = { headless: true, channel: "chrome" }; // system Chrome: the bundled Chromium never boots the GL app here
+if (process.env.CHROME_PATH) { delete launch.channel; launch.executablePath = process.env.CHROME_PATH; }
 const browser = await chromium.launch(launch);
 const page = await (await browser.newContext({ viewport: { width: 1200, height: 800 }, deviceScaleFactor: 2 })).newPage();
 const errors = [];
