@@ -998,7 +998,7 @@
           "outputDomain": false,
           "domainOffset": 0
         },
-        "morph": {
+        "bright": {
           "alias": "",
           "choices": [],
           "curveAmount": 0,
@@ -1032,7 +1032,7 @@
           "outputDomain": false,
           "domainOffset": 0
         },
-        "pulseWidth": {
+        "morph": {
           "alias": "",
           "choices": [],
           "curveAmount": 0,
@@ -1139,8 +1139,8 @@
         "waveform": 1,
         "frequency": 14.072671733056294,
         "phase": 0,
-        "morph": 1,
-        "pulseWidth": 0.5,
+        "bright": 1,
+        "morph": 0.5,
         "blend": 0.5,
         "amplitude": 0.6128486109459496
       },

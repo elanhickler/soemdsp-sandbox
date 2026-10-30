@@ -34,7 +34,7 @@ const want = [
   { kind: "cells", params: [["morph", "Morph"], ["count", "Count"], ["stretch", "Stretch"]] },
   { kind: "cells", params: [["curvePolarity", "+", "stack"], ["frequency", "ƒ"], ["curve", "ƒ Crv", "bipolar"]] },
   { kind: "choices", param: "spacing", labels: ["Expo", "Harmonic", "Rational"] },
-  { kind: "cells", params: [["ampStart", "A Start"], ["ampEnd", "A End"], ["ampCurve", "A Crv", "bipolar"]] },
+  { kind: "cells", params: [["edgeFade", "Edge", "stack"], ["ampStart", "A Start"], ["ampEnd", "A End"], ["ampCurve", "A Crv", "bipolar"]] },
   { kind: "cells", params: [["amplitude", "Amp"]], horizontal: true },
   ...(presetsOn ? [{ kind: "cells", params: [["presetMorph", "Preset Morph"]], horizontal: true }] : []),
   { kind: "seed", param: "seed" },
@@ -80,7 +80,7 @@ check(d.face[5]?.params?.[0]?.[0] === "morph" && d.face[5]?.params?.[1]?.[0] ===
 check(keys.stretch?.defaultValue === "0" && keys.stretch?.min === "-1" && keys.stretch?.max === "1" && keys.stretch?.nonlinearSlider === false && !keys.stretch?.sliderCurve && !keys.stretch?.tooltip, "Stretch slider -1..+1 linear, default 0, no tooltip");
 check(d.face[6]?.params?.[0]?.[0] === "curvePolarity" && d.face[6]?.params?.[1]?.[1] === "ƒ" && d.face[6]?.params?.[2]?.[1] === "ƒ Crv", "+/- | ƒ | ƒ Crv");
 check(d.face[7]?.kind === "choices" && d.face[7]?.param === "spacing", "Expo/Harmonic/Rational is a labeled-box choice row");
-check(d.face[8]?.params?.[0]?.[0] === "ampStart" && d.face[8]?.params.length === 3, "A Start | A End | A Crv");
+check(d.face[8]?.params?.[0]?.[0] === "edgeFade" && d.face[8]?.params?.[0]?.[2] === "stack" && d.face[8]?.params?.[1]?.[0] === "ampStart" && d.face[8]?.params.length === 4, "Edge On/Off | A Start | A End | A Crv");
 check(d.face[9]?.horizontal === true && d.face[9]?.params?.[0]?.[0] === "amplitude", "Amp is its own horizontal fill row");
 if (presetsOn) check(d.face[10]?.horizontal === true && d.face[10]?.params?.[0]?.[0] === "presetMorph", "Preset Morph sits above Seed");
 else check(!JSON.stringify(d.face).includes("presetMorph") && keys.presetMorph, "presets off: no Preset Morph row, param kept so patches load");
@@ -95,7 +95,7 @@ for (const page of ["index.html", "perform.html"]) {
   check(/node-graph-module-definitions\.js\?v=[\w.-]+"/.test(html), `${page} cache-bust definitions`);
   check(/node-graph-module-face\.js\?v=[\w.-]+"/.test(html), `${page} cache-bust module-face`);
   check(/node-graph-pulse-train-display\.js\?v=[\w.-]+"/.test(html), `${page} cache-bust display`);
-  check(/gl-line-renderer\.js\?v=pt-dsp-16384/.test(html), `${page} cache-bust gl-line-renderer pt-dsp-16384`);
+  check(/gl-line-renderer\.js\?v=scope-sync-1/.test(html), `${page} cache-bust gl-line-renderer scope-sync-1`);
 }
 
 const display = fs.readFileSync(path.join(root, "public", "node-graph-pulse-train-display.js"), "utf8");

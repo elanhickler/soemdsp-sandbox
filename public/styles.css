@@ -164,8 +164,6 @@ body.node-boot-fading .shell {
   text-align: center;
 }
 
-
-
 body.node-boot-waiting .node-boot-loading-label,
 body.node-boot-waiting .node-boot-loading-bar,
 body.node-boot-waiting .node-boot-loading-messages {
@@ -182,8 +180,6 @@ body.node-boot-waiting .node-boot-loading-screen {
   user-select: text;
   -webkit-user-select: text;
 }
-
-
 
 .node-boot-hero-title {
   margin: 0 0 0.35rem;
@@ -279,7 +275,6 @@ body:not(.node-boot-waiting) .node-boot-menu-links {
   height: 1.2em;
   flex: 0 0 auto;
 }
-
 
 /* Bottom row: middle pair = full menu/rect column width; squares sit outside. */
 .node-boot-menu-bottom-row {
@@ -1306,15 +1301,10 @@ button:disabled {
   transform: translate(-50%, -50%) rotate(-45deg);
 }
 
-
 .panel,
 .audio-panel {
   background: var(--panel);
 }
-
-
-
-
 
 .audio-panel {
   display: grid;
@@ -2740,7 +2730,6 @@ html.soemdsp-hide-ui .node-boot-sysinfo {
   display: none;
 }
 
-
 /* Embed: never show Command Center / floating chrome even if UI settings restore them. */
 html.soemdsp-hide-ui #nodeSceneContextMenu,
 html.soemdsp-hide-ui .node-floating-window-surface,
@@ -3143,7 +3132,6 @@ body.node-screen-solo-active .node-layout-canvas-tile .node-midi-keyboard-surfac
 .node-midi-keyboard-panel[hidden] {
   display: none;
 }
-
 
 .node-midi-module {
   box-sizing: border-box;
@@ -5028,7 +5016,6 @@ body.keyboard-debug-hidden .node-midi-keyboard-signal-bar {
   box-shadow: 0 0 0 1px #ff8a80, 0 0 14px 3px rgba(229, 57, 53, 0.88);
 }
 
-
 /* Room dimmer + magnifier zoom/size + snake mouse-smooth share the old dimmer flex cell. */
 .node-room-tool-pair {
   display: flex;
@@ -5430,8 +5417,6 @@ body.keyboard-debug-hidden .node-midi-keyboard-signal-bar {
   padding: 8px 4px;
 }
 
-
-
 .node-pages-folder-card {
   width: 100%;
   cursor: var(--node-dot-cursor);
@@ -5449,7 +5434,6 @@ body.keyboard-debug-hidden .node-midi-keyboard-signal-bar {
   font-weight: 650;
   font-variant-numeric: tabular-nums;
 }
-
 
 .node-pages-back {
   width: 100%;
@@ -7497,8 +7481,7 @@ body.keyboard-debug-hidden .node-midi-keyboard-signal-bar {
   cursor: var(--node-dot-cursor);
 }
 
-.node-parameter-row.f-jack-owns-frequency,
-.node-parameter-row.bpm-jack-owns-bpm {
+.node-parameter-row.f-jack-owns-frequency {
   background:
     repeating-linear-gradient(
       135deg,
@@ -7659,7 +7642,6 @@ body.keyboard-debug-hidden .node-midi-keyboard-signal-bar {
     grid-column: 1;
   }
 }
-
 
 .node-graph-workspace {
   --node-graph-zoom: 1;
@@ -8150,7 +8132,6 @@ body.node-graph-magnifying-active .node-graph-workspace * {
 .node-graph-resize-handle:active::after {
   border-color: rgba(226, 168, 109, 0.5);
 }
-
 
 .node-script-view {
   margin-top: 16px;
@@ -10289,7 +10270,6 @@ body.node-graph-magnifying-active .node-graph-workspace * {
 
 /* Patch Control Surface / WYSIWYG UI-item editor removed (see node-graph-ui-view.js). */
 
-
 .node-mapping-view {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
@@ -10436,9 +10416,7 @@ body.node-graph-magnifying-active .node-graph-workspace * {
   min-width: 0;
 }
 
-
 /* SE grip always on top of the patch list (same contract as other inspectors). */
-
 
 /*
  * Single window / page title chrome.
@@ -10588,7 +10566,6 @@ body.node-graph-magnifying-active .node-graph-workspace * {
   color: var(--warning, #f3b75f);
 }
 
-
 .scene-context-heading > .panel-close-button {
   grid-column: 3;
   z-index: 3;
@@ -10695,7 +10672,6 @@ body.node-graph-magnifying-active .node-graph-workspace * {
   z-index: 90;
   pointer-events: auto;
 }
-
 
 @media (max-width: 780px) {
   .node-preset-controls {
@@ -11134,7 +11110,6 @@ body.node-graph-magnifying-active .node-graph-workspace * {
 .node-module-shop-column > .node-module-shop-scroll-frame {
   grid-row: 3;
 }
-
 
 /*
  * Unified window chrome SSOT.
@@ -12919,7 +12894,6 @@ body.node-graph-magnifying-active .node-graph-workspace * {
   overflow: visible;
 }
 
-
 .node-graph-origin-marker {
   position: absolute;
   display: none;
@@ -14091,7 +14065,6 @@ body.node-screen-solo-active .node-screen-solo-face.node-sample-waveform-display
   display: none !important;
 }
 
-
 /* Knob shell height follows shared LayoutB shell units. */
 .dsp-node.slider-widget-layout .node-knob-shell {
   /* Shell track already sets exact face height; fill the cell. */
@@ -14964,7 +14937,6 @@ body.node-screen-solo-active .node-screen-solo-face.node-sample-waveform-display
   grid-auto-rows: var(--node-body-row-height);
 }
 
-
 .node-module-scope-window {
   position: relative;
   z-index: 1;
@@ -15247,7 +15219,6 @@ body.node-screen-solo-active .node-screen-solo-face.node-sample-waveform-display
   image-rendering: pixelated;
 }
 
-
 .node-module-shop-body {
   box-sizing: border-box;
   display: grid;
@@ -15501,7 +15472,6 @@ body.node-screen-solo-active .node-screen-solo-face.node-sample-waveform-display
   color: var(--text);
   font: 700 0.62rem/1 var(--node-mono-font);
 }
-
 
 /* Step Grid's CSS lives in public/modules/stepGrid/step-grid.css now,
    loaded via its own <link> tag -- not here. */
@@ -18054,6 +18024,41 @@ body.node-slider-dragging * {
   visibility: hidden;
 }
 
+/* Generic slider = horizontal face cell (Pulse Train Amp): one line, label
+   left, value (+ unit) right, inset 6px like the face text. The GPU pass
+   (node-graph-gl-graph.js) draws the face-cell well and value fill behind it. */
+.node-slider-readout:not(.displays-choices) {
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  grid-template-rows: minmax(0, 1fr);
+  column-gap: 4px;
+  padding-inline: 6px;
+}
+
+.node-slider-readout:not(.displays-choices) > .node-slider-readout-label {
+  grid-column: 1;
+  grid-row: 1;
+  align-self: center;
+  text-align: left;
+}
+
+.node-slider-readout:not(.displays-choices) > .node-slider-readout-value {
+  grid-column: 2;
+  grid-row: 1;
+  align-self: center;
+  text-align: right;
+}
+
+.node-slider-readout:not(.displays-choices) > .node-slider-readout-unit {
+  grid-column: 3;
+  grid-row: 1;
+  min-width: 0;
+  align-self: center;
+}
+
+.node-slider-readout:not(.displays-choices) > .node-slider-readout-unit.is-empty {
+  display: none;
+}
+
 /* B-080: Choice divide/segment labels use the full track width before ellipsis.
    Empty unit still reserved min-width: 2.5em + column-gap, so names like
    "Analog Square" / "Trisaw Center" truncated early on choices-divided sliders.
@@ -18077,208 +18082,6 @@ body.node-slider-dragging * {
   min-width: 0;
   width: 100%;
   box-sizing: border-box;
-}
-/* value-outside / label-value-slider still need label|value side-by-side. */
-.node-graph-workspace[data-slider-layout="value-outside"] .node-slider-readout.displays-choices:has(> .node-slider-readout-unit.is-empty),
-.node-graph-workspace[data-slider-layout="label-value-slider"] .node-slider-readout.displays-choices:has(> .node-slider-readout-unit.is-empty) {
-  grid-template-columns: minmax(0, 1fr) auto;
-}
-
-.node-graph-workspace[data-slider-layout="label-value-slider"] .node-slider-readout-label {
-  grid-column: 1;
-  grid-row: 2;
-  align-self: center;
-  padding-left: 0;
-}
-
-.node-graph-workspace[data-slider-layout="label-value-slider"] .node-slider-readout-value {
-  grid-column: 2;
-  grid-row: 2;
-  align-self: center;
-  justify-self: end;
-  min-width: var(--node-slider-unit-width);
-  text-align: right;
-}
-
-.node-graph-workspace[data-slider-layout="label-value-slider"] .node-slider-readout-unit {
-  display: none;
-}
-
-.node-graph-workspace[data-slider-layout="value-unit-left"] .node-slider-readout,
-.node-graph-workspace[data-slider-layout="value-unit-right"] .node-slider-readout {
-  column-gap: 0.5ch;
-}
-
-.node-graph-workspace[data-slider-layout="value-unit-left"] .node-slider-readout {
-  grid-template-columns: max-content max-content minmax(0, 1fr);
-}
-
-.node-graph-workspace[data-slider-layout="value-unit-right"] .node-slider-readout {
-  grid-template-columns: minmax(0, 1fr) max-content max-content;
-}
-
-.node-graph-workspace[data-slider-layout="value-unit-left"] .node-slider-readout-label,
-.node-graph-workspace[data-slider-layout="value-unit-right"] .node-slider-readout-label {
-  display: none;
-}
-
-.node-graph-workspace[data-slider-layout="value-unit-left"] .node-slider-readout-value {
-  grid-column: 1;
-  grid-row: 2;
-  align-self: center;
-  justify-self: start;
-  text-align: left;
-}
-
-.node-graph-workspace[data-slider-layout="value-unit-left"] .node-slider-readout-unit {
-  grid-column: 2;
-  grid-row: 2;
-  align-self: center;
-  justify-self: start;
-  min-width: 0;
-  text-align: left;
-}
-
-.node-graph-workspace[data-slider-layout="value-unit-right"] .node-slider-readout-value {
-  grid-column: 2;
-  grid-row: 2;
-  align-self: center;
-  justify-self: end;
-  text-align: right;
-}
-
-.node-graph-workspace[data-slider-layout="value-unit-right"] .node-slider-readout-unit {
-  grid-column: 3;
-  grid-row: 2;
-  align-self: center;
-  justify-self: end;
-  min-width: 0;
-  text-align: right;
-}
-
-.node-graph-workspace[data-slider-layout="label-outside"] .node-slider-readout,
-.node-graph-workspace[data-slider-layout="label-outside-no-unit"] .node-slider-readout,
-.node-graph-workspace[data-slider-layout="value-outside"] .node-slider-readout {
-  grid-template-columns: minmax(0, 1fr) auto;
-  grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
-  background:
-    linear-gradient(#080b0d, #080b0d)
-      left bottom / 100% 50%
-      no-repeat;
-}
-
-.node-graph-workspace[data-slider-layout="label-outside"] .node-slider-readout::before,
-.node-graph-workspace[data-slider-layout="label-outside"] .node-slider-readout::after,
-.node-graph-workspace[data-slider-layout="label-outside"] .node-slider-amount-fill,
-.node-graph-workspace[data-slider-layout="label-outside"] .node-slider-readout-portal,
-.node-graph-workspace[data-slider-layout="label-outside-no-unit"] .node-slider-readout::before,
-.node-graph-workspace[data-slider-layout="label-outside-no-unit"] .node-slider-readout::after,
-.node-graph-workspace[data-slider-layout="label-outside-no-unit"] .node-slider-amount-fill,
-.node-graph-workspace[data-slider-layout="label-outside-no-unit"] .node-slider-readout-portal,
-.node-graph-workspace[data-slider-layout="value-outside"] .node-slider-readout::before,
-.node-graph-workspace[data-slider-layout="value-outside"] .node-slider-readout::after,
-.node-graph-workspace[data-slider-layout="value-outside"] .node-slider-amount-fill,
-.node-graph-workspace[data-slider-layout="value-outside"] .node-slider-readout-portal {
-  inset-block: 50% 0;
-  clip-path: none;
-}
-
-.node-graph-workspace[data-slider-layout="label-outside"] .node-choice-debug-layer,
-.node-graph-workspace[data-slider-layout="label-outside-no-unit"] .node-choice-debug-layer,
-.node-graph-workspace[data-slider-layout="value-outside"] .node-choice-debug-layer {
-  top: 50%;
-  right: 0;
-  width: 100%;
-  height: 50%;
-}
-
-.node-graph-workspace[data-slider-layout="label-outside"] .node-slider-readout-label,
-.node-graph-workspace[data-slider-layout="label-outside-no-unit"] .node-slider-readout-label {
-  grid-column: 1;
-  grid-row: 1;
-  align-self: center;
-  padding-left: 0;
-}
-
-.node-graph-workspace[data-slider-layout="label-outside"] .node-slider-readout-value,
-.node-graph-workspace[data-slider-layout="label-outside-no-unit"] .node-slider-readout-value {
-  display: none;
-}
-
-.node-graph-workspace[data-slider-layout="label-outside"] .node-slider-readout-unit {
-  grid-column: 2;
-  grid-row: 1;
-  align-self: center;
-  justify-self: end;
-  text-align: right;
-}
-
-.node-graph-workspace[data-slider-layout="label-outside-no-unit"] .node-slider-readout-unit {
-  display: none;
-}
-
-.node-graph-workspace[data-slider-layout="value-outside"] .node-slider-readout-label {
-  grid-column: 1;
-  grid-row: 1;
-  align-self: center;
-  padding-left: 0;
-}
-
-.node-graph-workspace[data-slider-layout="value-outside"] .node-slider-readout-value {
-  grid-column: 2;
-  grid-row: 1;
-  align-self: center;
-  justify-self: end;
-  min-width: var(--node-slider-unit-width);
-  text-align: right;
-}
-
-.node-graph-workspace[data-slider-layout="value-outside"] .node-slider-readout-unit {
-  display: none;
-}
-
-.node-graph-workspace[data-slider-layout="unit-only"] .node-slider-readout {
-  grid-template-columns: minmax(0, 1fr) auto;
-  grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
-}
-
-.node-graph-workspace[data-slider-layout="unit-only"] .node-slider-readout-label,
-.node-graph-workspace[data-slider-layout="unit-only"] .node-slider-readout-value {
-  display: none;
-}
-
-.node-graph-workspace[data-slider-layout="unit-only"] .node-slider-readout-unit {
-  grid-column: 2;
-  grid-row: 2;
-  align-self: center;
-  justify-self: end;
-  text-align: right;
-}
-
-.node-graph-workspace[data-slider-layout="value-focus"] .node-slider-readout {
-  grid-template-columns: minmax(0, 1fr) minmax(var(--node-slider-unit-width), auto);
-  grid-template-rows: minmax(0, 1fr);
-  column-gap: 4px;
-}
-
-.node-graph-workspace[data-slider-layout="value-focus"] .node-slider-readout-label {
-  display: none;
-}
-
-.node-graph-workspace[data-slider-layout="value-focus"] .node-slider-readout-value {
-  grid-column: 1;
-  grid-row: 1;
-  align-self: center;
-  justify-self: start;
-  text-align: left;
-}
-
-.node-graph-workspace[data-slider-layout="value-focus"] .node-slider-readout-unit {
-  grid-column: 2;
-  grid-row: 1;
-  align-self: center;
-  justify-self: center;
-  text-align: center;
 }
 
 .node-parameter-metadata-popover {
@@ -19170,7 +18973,6 @@ body.node-slider-dragging * {
 .metadata-popover-grid label.is-choice-divide-idle {
   opacity: 0.72;
 }
-
 
 .metadata-popover-grid button {
   align-self: end;
@@ -22219,7 +22021,6 @@ button#nodeScenePasteModuleSettings.settings-paste-mismatch {
   background: transparent;
 }
 
-
 .scene-context-timing-controls .node-header-timing-field span {
   display: flex;
   place-items: center;
@@ -23238,7 +23039,6 @@ button#nodeScenePasteModuleSettings.settings-paste-mismatch {
   font-variant-numeric: tabular-nums;
 }
 
-
 .node-scene-context-menu button kbd {
   margin-left: auto;
   border: 0;
@@ -23584,7 +23384,6 @@ body.node-slider-dragging .node-param-port {
 .node-wire-endpoint-cap.temp {
   opacity: 0.9;
 }
-
 
 /* No jack hover stroke restyle — permanent crescent is already the lit look.
    smoke token: color-mix(in srgb, var(--node-port-hover-fill) */
@@ -24637,27 +24436,6 @@ button[data-transport-action="stop"]:disabled {
   color: var(--good);
 }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 .node-execution-order {
   display: flex;
   flex-wrap: wrap;
@@ -24686,9 +24464,6 @@ button[data-transport-action="stop"]:disabled {
   box-shadow: 0 0 0 1px rgba(247, 183, 88, 0.24);
 }
 
-
-
-
 .node-execution-order li.empty {
   color: var(--muted);
 }
@@ -24701,16 +24476,6 @@ button[data-transport-action="stop"]:disabled {
   color: var(--accent-2);
   font-size: 0.72rem;
 }
-
-
-
-
-
-
-
-
-
-
 
 /* "Hide Debug" (nodeKeyboardDebugToggleButton, body.keyboard-debug-hidden)
    is the master switch -- when it's off, the "Show Evidence" button and
@@ -24766,7 +24531,6 @@ body.keyboard-debug-hidden
   margin-top: 0;
 }
 
-
 .grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr);
@@ -24796,11 +24560,6 @@ body.keyboard-debug-hidden
   flex-wrap: wrap;
   gap: 14px;
 }
-
-
-
-
-
 
 .pill {
   display: inline-flex;
@@ -24968,9 +24727,6 @@ body.keyboard-debug-hidden
   user-select: none;
 }
 
-
-
-
 .summary-card {
   min-width: 0;
   padding: 14px;
@@ -24995,7 +24751,6 @@ body.keyboard-debug-hidden
   border-color: rgba(120, 209, 255, 0.38);
   background: #182129;
 }
-
 
 .parameter-track {
   display: grid;
@@ -25072,7 +24827,6 @@ body.keyboard-debug-hidden
   box-shadow: 0 0 0 1px rgba(17, 20, 24, 0.72), 0 0 12px rgba(246, 201, 109, 0.25);
 }
 
-
 .report-button {
   min-height: 32px;
   padding: 0 12px;
@@ -25082,9 +24836,6 @@ body.keyboard-debug-hidden
   border-color: var(--accent);
   background: rgba(127, 199, 217, 0.16);
 }
-
-
-
 
 .control-group {
   display: inline-flex;
@@ -25145,7 +24896,6 @@ dd.warn {
   color: var(--warn);
 }
 
-
 .phase {
   padding: 14px;
   background: var(--panel-2);
@@ -25159,7 +24909,6 @@ dd.warn {
   background: rgba(255, 211, 119, 0.1);
 }
 
-
 .phase-stat {
   padding: 14px;
   border: 1px solid var(--line);
@@ -25172,14 +24921,12 @@ dd.warn {
   background: rgba(127, 199, 217, 0.12);
 }
 
-
 .checklist {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 10px;
   margin-top: 16px;
 }
-
 
 .check-row {
   display: flex;
@@ -25203,7 +24950,6 @@ dd.warn {
   text-align: right;
   color: var(--muted);
 }
-
 
 .contract-row {
   display: grid;
@@ -25231,7 +24977,6 @@ dd.warn {
 .contract-row.warn-row strong {
   color: var(--warn);
 }
-
 
 .chain-row {
   display: grid;

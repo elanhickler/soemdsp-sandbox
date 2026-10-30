@@ -107,9 +107,9 @@ const results = await page.evaluate(() => {
   };
   const line = (n, mods) => Array.from({ length: n }, (_, i) => ({ x: i + 1, y: 0, mods }));
   try {
-    // 1. Sweep / History rate fields: +20 px from 5 is modest; full sweep ≈ 220 px.
+    // 1. Time / History rate fields: +20 px from 5 is modest; full sweep ≈ 220 px.
     const cases = [
-      ["lineBurn", "sweepHz"], ["lineBurn", "sweepCycles"],
+      ["lineBurn", "timeMs"],
       ["trace", "historyHz"], ["gradientVectorscopeFace", "historyCycles"],
     ];
     for (const [type, key] of cases) {
@@ -127,12 +127,9 @@ const results = await page.evaluate(() => {
       window.endNodeGraphTraceDisplayFieldDrag(ev(input, 0, 0, { type: "pointerup" }));
       ok(full !== null && full >= 210 && full <= 230, `${type}.${key}: full sweep ≈ 220 px`, full);
     }
-    // Q2: 0 Hz pause detent — the first few px stay 0, then 0.01+ Hz.
+    // Q2: Time (ms) is one dial for Sync on and off (lib/visual/scope-sync.js).
     pop.dataset.displaySettingsType = "lineBurn";
-    ok(drag(field("sweepHz", 0), line(3)) === 0, "sweepHz: 0 Hz is a detent (3 px stays 0)");
-    const off = drag(field("sweepHz", 0), line(6));
-    ok(off >= 0.01 && off < 0.05, "sweepHz: leaving the detent lands just above 0.01 Hz", off);
-    ok(window.nodeGraphDisplaySettingsFieldSpec("sweepCycles").min === 0.05, "Q3: cycles min 0.05");
+    ok(window.nodeGraphDisplaySettingsFieldSpec("timeMs").min === 0.1, "Q3: Time min 0.1 ms");
 
     // 2. Fine ×0.1 / ×0.01, and no jump when Shift changes mid-drag.
     pop.dataset.displaySettingsType = "lineBurn";
@@ -151,7 +148,7 @@ const results = await page.evaluate(() => {
     ok(Math.abs(mid - (0.5 + 10 / 220 + 0.1 / 220)) < 0.002, "Shift pressed mid-drag re-anchors (no jump)", mid);
 
     // 3. Ctrl/Cmd+click resets to the form default with one recorded apply.
-    for (const [type, key] of [["lineBurn", "trail"], ["lineBurn", "dot1Size"], ["lineBurn", "sweepHz"],
+    for (const [type, key] of [["lineBurn", "trail"], ["lineBurn", "dot1Size"], ["lineBurn", "timeMs"],
       ["trace", "historyHz"], ["imageBurnFace", "blur"], ["lineBurn", "dotBudget"], ["lineBurn", "backgroundHue"],
       ["spectrogramBurn", "fftSize"]]) {
       pop.dataset.displaySettingsType = type;
@@ -195,8 +192,8 @@ const results = await page.evaluate(() => {
     pop.dataset.displaySettingsType = "lineBurn";
     ok(Math.abs(step("trail", 0.5, 1) - 0.6) < 1e-9, "stepper + = 0.1 on unit field");
     ok(Math.abs(step("trail", 0.5, 1, true) - 0.51) < 1e-9, "Shift stepper = fine 0.01");
-    const s5 = step("sweepHz", 5, 1);
-    ok(s5 > 5 && s5 < 7, "sweepHz + from 5 is a small log step", s5);
+    const s5 = step("timeMs", 5, 1);
+    ok(s5 > 5 && s5 < 7, "timeMs + from 5 is a small log step", s5);
     ok(step("dotBudget", 2048, 1) === 2049, "dotBudget steps by 1");
     pop.dataset.displaySettingsType = "spectrogramBurn";
     ok(step("fftSize", 1024, 1) === 2048, "FFT + walks the size table");
@@ -222,7 +219,7 @@ const results = await page.evaluate(() => {
     const html = window.buildNodeGraphDisplaySettingsBodyHtml("lineBurn", null) || "";
     ok(!html.includes("Sweep (c)"), "no 'Sweep (c)' label");
     ok(nodeGraphDisplaySettingsFieldMeta.historyCycles.label === "History (cycles)", "History (cycles) label");
-    ok(nodeGraphDisplaySettingsFieldMeta.sweepCycles.label === "Sweep (cycles)", "Sweep (cycles) label");
+    ok(nodeGraphDisplaySettingsFieldMeta.timeMs.label === "Time (ms)", "Time (ms) label");
   } catch (err) {
     ok(false, "exception", err.stack || err);
   } finally {
@@ -248,7 +245,7 @@ const order = await page.evaluate(() => {
     "softwaveOscFace", "spectrogramBurn", "trace", "traceRgb", "traceXyz", "value", "valueLcd",
     "vectorDot", "vectorRgbFace", "videoscopeBurn", "xyPad",
   ];
-  const RATE = new Set(["sweepHz", "sweepCycles", "historyHz", "historyCycles", "historySeconds", "zoomSeconds"]);
+  const RATE = new Set(["timeMs", "historyHz", "historyCycles", "historySeconds", "zoomSeconds"]);
   const COLOR = "[data-trace-display-color-row], [data-hue-title-stepper], [data-gradient-selector-host], input[type=color], [data-sound-color-widget], .node-trace-display-hbs-row, .node-trace-display-colors-section";
   const IMAGE = "[data-image-asset-row], [data-image-asset], [data-knob-face-layer]";
   const CONTROL = "[data-trace-display-field], [data-trace-display-choice], [data-trace-display-toggle], button, select";

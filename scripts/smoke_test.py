@@ -2410,7 +2410,7 @@ def require_user_ui_settings_update_contract(base_url: str) -> None:
         "kind": "soemdsp-sandbox-user-ui-settings",
         "version": 3,
     }
-    payload["view"] = {"gridVisible": False, "sliderLayout": "value-focus"}
+    payload["view"] = {"gridVisible": False, "sliderAmountVisible": True}
     body = json.dumps(payload).encode("utf-8")
     try:
         response = request(
@@ -2431,8 +2431,8 @@ def require_user_ui_settings_update_contract(base_url: str) -> None:
             "UI settings update did not preserve view.gridVisible",
         )
         require(
-            saved_payload.get("view", {}).get("sliderLayout") == "value-focus",
-            "UI settings update did not preserve view.sliderLayout",
+            saved_payload.get("view", {}).get("sliderAmountVisible") is True,
+            "UI settings update did not preserve view.sliderAmountVisible",
         )
         saved_script = DEFAULT_UI_SETTINGS_SCRIPT.read_text(encoding="utf-8")
         require(
@@ -2448,8 +2448,8 @@ def require_user_ui_settings_update_contract(base_url: str) -> None:
             "bundled UI settings script did not preserve view.gridVisible",
         )
         require(
-            '"sliderLayout": "value-focus"' in saved_script,
-            "bundled UI settings script did not preserve view.sliderLayout",
+            '"sliderAmountVisible": true' in saved_script,
+            "bundled UI settings script did not preserve view.sliderAmountVisible",
         )
         require(
             parse_bundled_default_ui_settings_script_payload(saved_script) == saved_payload,
@@ -10193,11 +10193,6 @@ def require_node_graph_mvp_contract() -> None:
         "moduleOscilloscopesVisible: false",
         "soemdsp-sandbox-user-ui-settings",
         "settings_format.get(\"version\") not in (1, 2, 3)",
-        "sliderLayout",
-        "text-inside",
-        "label-value-slider",
-        "value-unit-left",
-        "value-unit-right",
         "label-outside",
         "label-outside-no-unit",
         "value-outside",
@@ -10300,12 +10295,8 @@ def require_node_graph_mvp_contract() -> None:
         "createNodeUserUiSettingsModuleSlidersControl",
         "function toggleNodeGraphSliderAmount()",
         "function toggleNodeGraphSliderPosition()",
-        "function normalizeNodeGraphSliderLayout(value)",
-        "function cycleNodeGraphSliderLayout()",
         "target.closest?.(\".node-drag-handle, .scene-context-drag-handle\")",
         "button, a, input, textarea, select, option, label, [role='button'], [data-context-module], [contenteditable='true']",
-        "function createNodeUserUiSettingsSliderLayoutControl()",
-        "nodeUserSliderLayoutCycleButton",
         "ui settings view must be an object",
         "function serializeNodeUiDevSettings(options = {})",
         "function loadNodeUiDevSettingsFromScript(text)",
@@ -15519,22 +15510,6 @@ def require_node_graph_mvp_contract() -> None:
         ".node-slider-amount-fill",
         ".node-graph-workspace.show-slider-amount .node-slider-amount-fill",
         ".node-graph-workspace.hide-slider-position .node-slider-readout::before",
-        '[data-slider-layout="label-value-slider"] .node-slider-readout-label',
-        '[data-slider-layout="label-value-slider"] .node-slider-readout-value',
-        '[data-slider-layout="label-value-slider"] .node-slider-readout-unit',
-        '[data-slider-layout="value-unit-left"] .node-slider-readout-value',
-        '[data-slider-layout="value-unit-left"] .node-slider-readout-unit',
-        '[data-slider-layout="value-unit-right"] .node-slider-readout-value',
-        '[data-slider-layout="value-unit-right"] .node-slider-readout-unit',
-        '[data-slider-layout="label-outside-no-unit"] .node-slider-readout-label',
-        '[data-slider-layout="label-outside-no-unit"] .node-slider-readout-value',
-        '[data-slider-layout="label-outside-no-unit"] .node-slider-readout-unit',
-        '[data-slider-layout="value-outside"] .node-slider-readout-label',
-        '[data-slider-layout="value-outside"] .node-slider-readout-value',
-        '[data-slider-layout="value-outside"] .node-slider-readout-unit',
-        '[data-slider-layout="value-focus"] .node-slider-readout-label',
-        '[data-slider-layout="value-focus"] .node-slider-readout-value',
-        '[data-slider-layout="value-focus"] .node-slider-readout-unit',
         ".node-choice-debug-layer",
         ".node-choice-debug-square",
         ".node-choice-debug-cell-debug",

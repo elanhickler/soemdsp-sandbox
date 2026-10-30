@@ -324,7 +324,6 @@ const nodeUiDevSettingSections = Object.freeze([
       "nodeUiDevViewModuleSliders",
       "nodeUiDevViewSliderAmount",
       "nodeUiDevViewSliderPosition",
-      "nodeUiDevViewSliderLayout",
     ],
   },
   {

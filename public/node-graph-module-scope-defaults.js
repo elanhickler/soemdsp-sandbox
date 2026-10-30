@@ -88,7 +88,7 @@ const nodeGraphScopePhosphorLookDefaults = Object.freeze({
   // Shared phosphor drawer hang (all 1D/2D phosphor faces).
   ghost: 0.25,
   trail: 0.3,
-  burnAmount: 1,
+  burnAmount: PhosphorResidual.DEFAULT_BURN_AMOUNT,
   residualSchema: 4,
   // Size: CSS px diameter @ zoom 1.
   size: 2,
@@ -218,10 +218,10 @@ const nodeGraphLineBurnSettingsDefaults = Object.freeze({
   sourceSync: false,
   // Saw / square / pulse wrap jumps look like ink spikes without this.
   skipDiscontinuities: true,
-  // Sync off: left→right passes per second. Sync on: cycles in view.
-  // Stored separately so toggling Sync keeps both dials.
-  sweepHz: 4,
-  sweepCycles: 4,
+  // Window: Cycles (default 3) or Time (ms), Sync on or off (lib/visual/scope-sync.js).
+  windowMode: "cycles",
+  windowCycles: 3,
+  timeMs: 20,
   gradientStops: nodeGraphScopeCyanGradientStops,
 });
 
@@ -234,7 +234,7 @@ const nodeGraphZeroDBurnSettingsDefaults = Object.freeze({
   bipolarBrightness: false,
   ghost: nodeGraphScopePhosphorLookDefaults.ghost,
   trail: nodeGraphScopePhosphorLookDefaults.trail,
-  burnAmount: 1,
+  burnAmount: nodeGraphScopePhosphorLookDefaults.burnAmount,
   residualSchema: 4,
   dot1Brightness: nodeGraphScopePhosphorLookDefaults.brightness,
   dot1Color: nodeGraphScopePhosphorLookDefaults.peakColor,
@@ -269,7 +269,7 @@ const nodeGraphValueOscilloscopeSettingsDefaults = Object.freeze({
   // Residual unused (vector redraw every frame).
   ghost: 0,
   trail: 0,
-  burnAmount: 1,
+  burnAmount: nodeGraphScopePhosphorLookDefaults.burnAmount,
   residualSchema: 4,
   dot1Enabled: true,
   // Stroke diameter: authored CSS px at a 96px face. 0 = gone.
@@ -305,7 +305,7 @@ const nodeGraphNumberReadoutSettingsDefaults = Object.freeze({
   // Trail / Ghost / Burn Amount -- same phosphor drawer SSOT as 1D/2D scopes.
   trail: nodeGraphScopePhosphorLookDefaults.trail,
   ghost: nodeGraphScopePhosphorLookDefaults.ghost,
-  burnAmount: 1,
+  burnAmount: nodeGraphScopePhosphorLookDefaults.burnAmount,
   residualSchema: 4,
   // Legacy aliases (normalize keeps trail/ghost aliases in sync).
   residual: nodeGraphScopePhosphorLookDefaults.trail,
@@ -355,7 +355,7 @@ const nodeGraphValueLcdSettingsDefaults = Object.freeze({
   // Residual hang unused on LCD (kept 0 so old patches don’t re-enable burn path).
   trail: 0,
   ghost: 0,
-  burnAmount: 1,
+  burnAmount: nodeGraphScopePhosphorLookDefaults.burnAmount,
   residualSchema: 4,
   residual: 0,
   ghostBrightness: 0,
@@ -560,7 +560,7 @@ const nodeGraphXyPadDisplaySettingsDefaults = Object.freeze({
   // Ghost = super-exp hang; Trail = linear blend.
   ghost: nodeGraphScopePhosphorLookDefaults.ghost,
   trail: nodeGraphScopePhosphorLookDefaults.trail,
-  burnAmount: 1,
+  burnAmount: nodeGraphScopePhosphorLookDefaults.burnAmount,
   residualSchema: 4,
   // Phosphor beam brightness 0..1.
   dot1Brightness: nodeGraphScopePhosphorLookDefaults.brightness,
@@ -609,7 +609,7 @@ const nodeGraphScope2dTraceSettingsDefaults = Object.freeze({
   trail: typeof PhosphorResidual !== "undefined"
     ? PhosphorResidual.DEFAULT_TRAIL
     : nodeGraphScopePhosphorLookDefaults.trail,
-  burnAmount: 1,
+  burnAmount: nodeGraphScopePhosphorLookDefaults.burnAmount,
   // Vector stroke; density scales face buffer for lo-fi/chunky look (default 1).
   pixelDensity: nodeGraphScopePhosphorLookDefaults.pixelDensity,
   scale: nodeGraphScopePhosphorLookDefaults.scale,
@@ -667,14 +667,16 @@ const nodeGraphScope1dTraceSettingsDefaults = Object.freeze({
     ? PhosphorResidual.DEFAULT_TRAIL
     : nodeGraphScopePhosphorLookDefaults.trail,
   // Residual deposit gain vs Bright. 1 = hung ink at Bright. Live pen stays Bright.
-  burnAmount: 1,
+  burnAmount: nodeGraphScopePhosphorLookDefaults.burnAmount,
   pixelDensity: nodeGraphScopePhosphorLookDefaults.pixelDensity,
   scale: nodeGraphScopePhosphorLookDefaults.scale,
   skipDiscontinuities: true,
   // Rising-edge auto-trigger on In — ON for new 1D Trace modules (Tube Sat too).
   sourceSync: true,
-  sweepHz: 4,
-  sweepCycles: 4,
+  // Window: Cycles (default 3) or Time (ms), Sync on or off (lib/visual/scope-sync.js).
+  windowMode: "cycles",
+  windowCycles: 3,
+  timeMs: 20,
   // Shared colormap LUT: |sample| energy → color on TraceWoscope. Tube Sat overrides crt-amber.
   gradientStops: nodeGraphScopePhosphorLookDefaults.gradientStops,
   dotBudget: 2048,

@@ -297,21 +297,6 @@ function createNodeUserUiSettingsModuleSlidersControl() {
   });
 }
 
-function createNodeUserUiSettingsSliderLayoutControl() {
-  const row = document.createElement("div");
-  row.className = "node-user-ui-setting-control action";
-  row.id = "nodeUiDevViewSliderLayout";
-  const title = document.createElement("span");
-  title.textContent = "Slider layout";
-  const button = document.createElement("button");
-  button.id = "nodeUserSliderLayoutCycleButton";
-  button.type = "button";
-  button.dataset.nodeUiViewSetting = "sliderLayout";
-  button.addEventListener("click", cycleNodeGraphSliderLayout);
-  row.append(title, button);
-  return row;
-}
-
 function createNodeUserUiSettingsSection(title, controls) {
   const visibleControls = controls.filter(Boolean);
   if (!visibleControls.length) {
@@ -506,12 +491,6 @@ function syncNodeUserUiSettingsViewControls() {
       continue;
     }
     input.value = String(normalizeNodeGraphModuleScopeFramesPerSecond(nodeGraphMvp.moduleScopeFramesPerSecond ?? 60));
-  }
-  for (const button of document.querySelectorAll("[data-node-ui-view-setting='sliderLayout']")) {
-    const label = nodeGraphSliderLayoutLabel(nodeGraphMvp.sliderLayout);
-    button.textContent = label;
-    button.setAttribute("aria-label", `Cycle slider layout. Current: ${label}`);
-    button.setAttribute("data-current-slider-layout", normalizeNodeGraphSliderLayout(nodeGraphMvp.sliderLayout));
   }
 }
 

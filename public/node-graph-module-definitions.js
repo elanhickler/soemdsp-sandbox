@@ -333,6 +333,9 @@ const nodeGraphNodeLabels = Object.freeze({
   scope2dTraceStereo: "2D Trace Stereo",
   scope1dTrace: "1D Trace",
   scope1dTraceStereo: "1D Trace Stereo",
+  plot1d: "1D Plot",
+  plot1dStereo: "1D Plot Stereo",
+  plot2d: "2D Plot",
   spectrum1d: "1D Spectrum",
   vectorDot: "LED Dot",
   vectorRgb: "Vector RGB",
@@ -5043,12 +5046,12 @@ const nodeGraphModuleDefinitions = (
     ]
   },
   dsfOscillator: {
-    // Hand-written face (node-graph-module-face.js): Wave, Freq | Phase, Morph, PW | Blend | Amp.
+    // Hand-written face (node-graph-module-face.js): Wave, Freq | Phase, Bright | Morph | Blend, Amp.
     face: [
       { kind: "cells", params: [["waveform", "Wave"]], horizontal: true, h: 30 },
       { kind: "cells", params: [["frequency", "Freq"], ["phase", "Phase"]], h: 40 },
-      { kind: "cells", params: [["morph", "Morph"]], h: 40 },
-      { kind: "cells", params: [["pulseWidth", "PW"], ["blend", "Blend"], ["amplitude", "Amp"]], h: 52 },
+      { kind: "cells", params: [["bright", "Bright"], ["morph", "Morph"], ["blend", "Blend"]], h: 52 },
+      { kind: "cells", params: [["amplitude", "Amp"]], horizontal: true, h: 30 },
     ],
     planRole: "source",
     // One detailed cycle from the DSF closed form + phase dot (sinCosFace renderer).
@@ -5102,9 +5105,13 @@ const nodeGraphModuleDefinitions = (
         unit: "\u03C6",
         wraparound: true
       },
+      { key: "morph", label: "Morph", defaultValue: "0.5", min: "0.01", mid: "0.5", max: "0.99", step: "0.01",
+        tooltip: "Side to side. Trimorph: trisaw peak position (0.5 = triangle, toward 0.01 / 0.99 = saw / ramp). Square (PWM): pulse width. Band-limited at every setting (moves the offset DSF kernel)." },
+      { key: "blend", label: "Blend", defaultValue: "0.5", min: "0", mid: "0.5", max: "1", step: "0.01",
+        tooltip: "SquSaw only: saw (0) to square (1), a crossfade of two band-limited waves from the same kernel. Other waveforms ignore it." },
       {
-        key: "morph",
-        label: "Morph",
+        key: "bright",
+        label: "Bright",
         defaultValue: "1",
         min: "0",
         // Mid low so half the slider is the useful near-0 harmonic range.
@@ -5113,10 +5120,8 @@ const nodeGraphModuleDefinitions = (
         nonlinearSlider: true,
         step: "0.001",
         tooltip:
-          "Morph / DSF harmonic richness. Nonlinear slider: more sensitivity near 0 (where most of the useful range is)."
+          "Harmonic tilt (DSF geometric rolloff): 0 = sine, 1 = the full bright wave. Band-limited at every setting. Nonlinear slider: more sensitivity near 0 (where most of the useful range is)."
       },
-      { key: "pulseWidth", label: "Pulse Width", defaultValue: "0.5", min: "0.01", mid: "0.5", max: "0.99", step: "0.01" },
-      { key: "blend", label: "Square↔Saw", defaultValue: "0.5", min: "0", mid: "0.5", max: "1", step: "0.01" },
       {
         defaultValue: "1",
         key: "amplitude",
@@ -6934,18 +6939,70 @@ const nodeGraphModuleDefinitions = (
       },
     ]
   },
-  // Host/project tempo dump. Out = raw BPM (120 = 120 beats/min), not Hz.
-  // Standalone: patch.timing.tempoBpm. Plugin: host tempo via set_host_transport.
+  // Host BPM: the project tempo and beat (graph 305). Standalone: patch tempo;
+  // plugin: host tempo + host beat position. Never a phasor of its own: every
+  // out comes from the shared project beat position, so a tempo change never
+  // jumps it and several Host BPMs stay in sync. 120 BPM when there is no tempo.
+  // Outs: BPM and ƒ are raw numbers (white), ♯/♭ is ƒ as a pitch, Beat is a
+  // gate (high the first half of each division), Phase 0..1 in the division.
   hostBpm: {
     planRole: "source",
     planFreeRun: true,
-    defaultWidthGu: 4,
+    defaultWidthGu: 8,
     defaultUi: {
       buttonsHidden: true,
       oscilloscopeHidden: true },
-    outputs: ["Out"],
-    outputLabels: { Out: "BPM" },
-    parameters: [] },
+    face: [
+      { kind: "fraction", num: "timeNumerator", den: "timeDenominator", mode: "timingMode",
+        modeLabels: ["Normal", "Dotted", "Triplet"], h: 52 },
+    ],
+    outputs: ["BPM", "f", "pitch", "Beat", "Phase"],
+    // Old patches: the single "Out" was the BPM.
+    outputAliases: { Out: "BPM", Mono: "BPM", "ƒ": "f", Pitch: "pitch" },
+    outputLabels: { f: "ƒ", pitch: "♯/♭" },
+    digitalOutputs: ["BPM", "f", "Beat", "Phase"],
+    parameters: [
+      {
+        control: "number",
+        defaultValue: "1",
+        key: "timeNumerator",
+        label: "Numer",
+        linearSmoothing: false,
+        max: "64",
+        maxDigits: 2,
+        mid: "1",
+        min: "0",
+        nonlinearSlider: false,
+        step: "1",
+        tooltip: "Numerator of Numer/Denom × whole note. 1/4 = one beat. Numer 0 = no beat (ƒ 0)." },
+      {
+        control: "number",
+        defaultValue: "4",
+        key: "timeDenominator",
+        label: "Denom",
+        linearSmoothing: false,
+        max: "64",
+        maxDigits: 2,
+        mid: "8",
+        min: "1",
+        nonlinearSlider: false,
+        step: "1",
+        tooltip: "Denominator of Numer/Denom × whole note. At Numer=1: Denom 4=¼, 8=⅛, 16=1/16." },
+      {
+        choices: ["Normal", "Dotted", "Triplet"],
+        defaultValue: "0",
+        displayChoices: true,
+        divideChoicesVisibly: true,
+        key: "timingMode",
+        label: "Division",
+        linearSmoothing: false,
+        max: "2",
+        mid: "0",
+        min: "0",
+        nonlinearSlider: false,
+        step: "1",
+        tooltip: "Normal = Numer/Denom as written. Dotted = 1.5×. Triplet = 2/3×. Changing it moves Beat / Phase to wherever the new grid is at this beat." },
+    ] },
 
   // Metronome: Mode Sync (master playhead, continuous on BPM change) / Free. BPM is this node only.
   transport: {
@@ -6974,8 +7031,11 @@ const nodeGraphModuleDefinitions = (
     ],
     digitalInputs: ["Reset"],
     displayType: "transportBpm",
-    inputs: ["BPM", "Reset"],
-    inputLabels: { BPM: "BPM" },
+    // ƒ in: beat rate in Hz (BPM = ƒ × 60), cancels the BPM knob while wired
+    // (BPM row / face cell striped as owned by the jack).
+    inputs: ["f", "Reset"],
+    fJackParam: "bpm",
+    inputLabels: { f: "ƒ" },
     outputs: [
       "Gate 0-1",
       "Trigger",
@@ -15365,12 +15425,12 @@ const nodeGraphModuleDefinitions = (
       { kind: "fraction", num: "timeNumerator", den: "timeDenominator", mode: "timingMode",
         modeLabels: ["Normal", "Dotted", "Triplet"], cell: ["offset", "Offset"], h: 52 },
       { kind: "lfoStyles", param: "lfoStyle", labels: ["Parabol", "Walk", "FBM"], seedParam: "seed", h: 48 },
-      { kind: "cells", params: [["lfoAmp", "Amp"], ["lfoRate", "Hz"], ["lfoVariation", "Vary"]], h: 54 },
+      { kind: "cells", params: [["lfoAmp", "Amp"], ["lfoRate", "ƒ"], ["lfoVariation", "Vary"]], h: 54 },
       // Each filter handle: drag sideways = cutoff, up/down = that side's poles (1-4).
       { kind: "filter", hpf: "hpfFrequency", lpf: "lpfFrequency", hpfPoles: "hpfPoles", lpfPoles: "lpfPoles", h: 92 },
       { kind: "cells", params: [["hpfShelf", "HP Shelf"], ["lpfShelf", "LP Shelf"]], h: 54 },
-      { kind: "cells", params: [["feedback", "Feedback"], ["saturate", "Saturate"]], h: 54 },
-      { kind: "cells", params: [["mix", "Mix"], ["amplitude", "Amplitude"]], h: 54 },
+      { kind: "cells", params: [["feedback", "Feedback"], ["saturate", "Saturate"], ["mix", "Mix"]], h: 54 },
+      { kind: "cells", params: [["amplitude", "Amp"]], horizontal: true, h: 30 },
       { kind: "seed", param: "seed", h: 28 },
     ],
     // Instant Waterfall (Blur only; full-face waveform, no amplitude law) — stereo Mix Out (not LFO CV).
@@ -15504,8 +15564,8 @@ const nodeGraphModuleDefinitions = (
           "Shape of the built-in delay-time modulator. Parabol / Random Walk / FBM." },
       {
         defaultValue: "0.35",
-        key: "lfoRate", shortName: "Rate",
-        label: "LFO Rate",
+        key: "lfoRate", shortName: "ƒ",
+        label: "LFO ƒ",
         max: "20",
         mid: "0.35",
         min: "0",
@@ -15761,13 +15821,18 @@ const nodeGraphModuleDefinitions = (
   // FROZEN: Sabrina Reverb (key sabrinaReverbOriginal) == plugin 0.1.7 sound. Bug fixes only,
   // no sound changes; new work goes on reverbEffect. Same native DSP, Walter Speed variant.
   sabrinaReverbOriginal: {
-    // Hand-written face (node-graph-module-face.js): Mix | DSize | DAmt, Delay | Recyc, ModA | ModS | ModV | Tap, Parabol / FBM, Amp, seed.
+    // Hand-written face (node-graph-module-face.js): Mix, Diffusion Size, Diffusion Amount, Delay, Recycle
+    // as horizontal sliders; Ping Pong Delay's LFO block (waveform buttons, Amp | Speed | Vary | Tap); Amp; seed.
     face: [
-      { kind: "cells", params: [["mix", "Mix"], ["diffusionSize", "DSize"], ["diffusionAmount", "DAmt"]], h: 52 },
-      { kind: "cells", params: [["delaySize", "Delay"], ["recycle", "Recyc"]], h: 40 },
-      { kind: "cells", params: [["lfoAmplitude", "ModA"], ["lfoBaseSpeed", "ModS"], ["lfoVariation", "ModV"], ["delayTapMod", "Tap"]], h: 52 },
-      { kind: "choices", param: "lfoStyle", labels: ["Parabol", "FBM"], h: 26 },
-      { kind: "cells", params: NODE_GRAPH_MODULE_PRESETS_ENABLED ? [["amplitude", "Amp"], ["presetMorph", "Morph"]] : [["amplitude", "Amp"]], h: 40 },
+      { kind: "cells", params: [["mix", "Mix"]], horizontal: true, h: 30 },
+      { kind: "cells", params: [["diffusionSize", "Diffusion Size"]], horizontal: true, h: 30 },
+      { kind: "cells", params: [["diffusionAmount", "Diffusion Amount"]], horizontal: true, h: 30 },
+      { kind: "cells", params: [["delaySize", "Delay"]], horizontal: true, h: 30 },
+      { kind: "cells", params: [["recycle", "Recycle"]], horizontal: true, h: 30 },
+      { kind: "lfoStyles", param: "lfoStyle", labels: ["Parabol", "FBM"], shapes: [0, 2], seedParam: "seed", h: 48 },
+      { kind: "cells", params: [["lfoAmplitude", "Amp"], ["lfoBaseSpeed", "Speed"], ["lfoVariation", "Vary"], ["delayTapMod", "Tap"]], h: 54 },
+      { kind: "cells", params: [["amplitude", "Amp"]], horizontal: true, h: 30 },
+      ...(NODE_GRAPH_MODULE_PRESETS_ENABLED ? [{ kind: "cells", params: [["presetMorph", "Morph"]], horizontal: true, h: 30 }] : []),
       { kind: "seed", param: "seed", h: 28 },
     ],
     planRole: "processor",
@@ -15815,9 +15880,9 @@ const nodeGraphModuleDefinitions = (
       { defaultValue: "0.70", key: "diffusionAmount", label: "Diffusion Amount", max: "1", mid: "0.70", min: "0", nonlinearSlider: false, step: "any", tooltip: "Strength of early diffusion." },
       { defaultValue: "0.02", key: "delaySize", label: "Delay Time", max: "1", mid: "0.02", min: "0", nonlinearSlider: false, smoothingSeconds: 0.05, step: "any", tooltip: "Main reverb delay length." },
       { defaultValue: "0.70", key: "recycle", label: "Recycle", max: "1", mid: "0.70", min: "0", nonlinearSlider: false, step: "any", tooltip: "Feedback amount for the reverb tail." },
-      { defaultValue: "0.07", key: "lfoAmplitude", label: "Mod(~)Amp", max: "1", mid: "0.07", min: "0", nonlinearSlider: false, step: "any", tooltip: "Amount of delay modulation." },
-      { defaultValue: "0.83", key: "lfoBaseSpeed", label: "Mod(~)Speed", max: "1", mid: "0.83", min: "0", nonlinearSlider: false, step: "any", tooltip: "Speed of delay modulation (Walter's original map): LFO period 1.225 s (0) to 0.25 s (1); higher = faster. Frozen module: bug fixes only, no sound changes." },
-      { defaultValue: "0.999", key: "lfoVariation", label: "Mod(~)Vary", max: "1", mid: "0.999", min: "0", nonlinearSlider: false, step: "any", tooltip: "Spread of modulation speed between delay lines. 0 = all lines modulate at the same speed; higher = more spread." },
+      { defaultValue: "0.07", key: "lfoAmplitude", label: "LFO Amp", max: "1", mid: "0.07", min: "0", nonlinearSlider: false, step: "any", tooltip: "Amount of delay modulation." },
+      { defaultValue: "0.83", key: "lfoBaseSpeed", label: "LFO Speed", max: "1", mid: "0.83", min: "0", nonlinearSlider: false, step: "any", tooltip: "Speed of delay modulation (Walter's original map): LFO period 1.225 s (0) to 0.25 s (1); higher = faster. Frozen module: bug fixes only, no sound changes." },
+      { defaultValue: "0.999", key: "lfoVariation", label: "LFO Vary", max: "1", mid: "0.999", min: "0", nonlinearSlider: false, step: "any", tooltip: "Spread of modulation speed between delay lines. 0 = all lines modulate at the same speed; higher = more spread." },
       {
         choices: ["Parabol", "FBM"],
         choiceKeys: ["parabol", "fbm"],
@@ -15827,7 +15892,7 @@ const nodeGraphModuleDefinitions = (
         divideChoicesVisibly: true,
         key: "lfoStyle",
         kind: "choice",
-        label: "Mod(~)Style",
+        label: "LFO Style",
         linearSmoothing: false,
         max: "1",
         mid: "0",
@@ -20814,6 +20879,68 @@ const nodeGraphModuleDefinitions = (
       { key: "scope1dTraceStereoLeft", label: "Left", port: "Left" },
       { key: "scope1dTraceStereoRight", label: "Right", port: "Right" },
       { key: "scope1dTraceStereoReset", label: "Reset", port: "Reset" },
+    ],
+    visualSink: true
+  },
+  // 1D Plot / 1D Plot Stereo / 2D Plot: clinical plots (modules/plot/plot-display.js).
+  // One sharp antialiased line (smootherstep edge), no glow, no labels, data never smoothed.
+  // Look / Sync / Time / Gain live in Display Settings (plotFace), not parameters.
+  plot1d: {
+    planRole: "monitor",
+    bufferedInputs: ["In", "Trig"],
+    displayType: "plot",
+    displayModes: [{ key: "plot", label: "1D Plot", renderer: "plot", settingsSchema: "plotFace" }],
+    layout: "scopeFace",
+    defaultDisplayMode: "plot",
+    displaySignalPorts: ["In"],
+    digitalInputs: ["Trig"],
+    inputs: ["In", "Trig"],
+    outputs: ["Thru"],
+    outputLabels: { Thru: "\u2190" },
+    parameters: [],
+    visualInputs: [
+      { key: "plot1dIn", label: "In", port: "In" },
+      { key: "plot1dTrig", label: "Trig", port: "Trig" },
+    ],
+    visualSink: true
+  },
+  plot1dStereo: {
+    planRole: "monitor",
+    bufferedInputs: ["Left", "Right", "Trig"],
+    displayType: "plot",
+    displayModes: [{ key: "plot", label: "1D Plot Stereo", renderer: "plot", settingsSchema: "plotFace" }],
+    layout: "scopeFace",
+    defaultDisplayMode: "plot",
+    displaySignalPorts: ["Left", "Right"],
+    digitalInputs: ["Trig"],
+    inputAliases: { L: "Left", R: "Right", Mono: "Left" },
+    inputs: ["Left", "Right", "Trig"],
+    outputs: ["Left", "Right"],
+    parameters: [],
+    visualInputs: [
+      { key: "plot1dStereoLeft", label: "Left", port: "Left" },
+      { key: "plot1dStereoRight", label: "Right", port: "Right" },
+      { key: "plot1dStereoTrig", label: "Trig", port: "Trig" },
+    ],
+    visualSink: true
+  },
+  plot2d: {
+    planRole: "monitor",
+    bufferedInputs: ["Left", "Right", "Trig"],
+    displayType: "plot",
+    displayModes: [{ key: "plot", label: "2D Plot", renderer: "plot", settingsSchema: "plotFace" }],
+    layout: "scopeFace",
+    defaultDisplayMode: "plot",
+    displaySignalPorts: ["Left", "Right"],
+    digitalInputs: ["Trig"],
+    inputAliases: { L: "Left", R: "Right", X: "Left", Y: "Right", Mono: "Left" },
+    inputs: ["Left", "Right", "Trig"],
+    outputs: ["Left", "Right"],
+    parameters: [],
+    visualInputs: [
+      { key: "plot2dLeft", label: "Left", port: "Left" },
+      { key: "plot2dRight", label: "Right", port: "Right" },
+      { key: "plot2dTrig", label: "Trig", port: "Trig" },
     ],
     visualSink: true
   },

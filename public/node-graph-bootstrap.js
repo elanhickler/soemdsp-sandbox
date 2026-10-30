@@ -245,7 +245,6 @@ async function initNodeGraphMvp() {
     applyNodeGraphConstraintToggles(nodeGraphMvp?.constraintToggles, { persist: false });
   }
   renderNodeGraphSliderVisibilityToggles();
-  renderNodeGraphSliderLayout();
   ensureNodeGraphStartupModulesVisible();
   if (typeof applyNodeGraphSessionSelection === "function") {
     applyNodeGraphSessionSelection();

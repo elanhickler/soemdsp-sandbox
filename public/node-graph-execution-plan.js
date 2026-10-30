@@ -867,6 +867,7 @@ function nodeGraphVisualDisplayNeedsWaveformRing(node) {
     displayType === "scope2d" ||
     displayType === "scope2dTrace" ||
 displayType === "scope1dTrace" ||
+    displayType === "plot" ||
     displayType === "lineBurn" ||
     displayType === "hypersawBurn" ||
     displayType === "ensembleCloud" ||

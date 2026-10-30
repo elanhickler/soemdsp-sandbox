@@ -21,7 +21,12 @@ function run(E, { rate = 2, fHz = null, phase = 0, start = 0, end = 0.5, amp = 1
   if (E.soemdsp_graph_add_node(g, hC, TYPE_CLOCK) | 0) throw new Error("clock add");
   if (fHz !== null) {
     if (E.soemdsp_graph_add_node(g, hF, TYPE_HOST_BPM) | 0) throw new Error("bpm add");
-    if (E.soemdsp_graph_connect(g, hF, PORT_MONO, hC, PORT_F) | 0) throw new Error("bpm->f");
+    // Host BPM Out (Mono) is the raw tempo number, a constant ƒ source. A wired
+    // 0 comes from its ƒ out (Saw) at Numer 0: with no tempo it now reports 120 (graph 305).
+    if (fHz === 0) {
+      E.soemdsp_graph_set_param(g, hF, 52, 0);
+      if (E.soemdsp_graph_connect(g, hF, 3, hC, PORT_F) | 0) throw new Error("host f->f");
+    } else if (E.soemdsp_graph_connect(g, hF, PORT_MONO, hC, PORT_F) | 0) throw new Error("bpm->f");
     E.soemdsp_graph_set_host_transport(g, fHz, 0, 0);
   }
   if (resetHz > 0) {
@@ -52,7 +57,8 @@ const all = (r) => [...r.dig, ...r.ana, ...r.t];
 // 1) Unwired: old build == new build.
 if (O) {
   let worst = 0, cases = 0;
-  for (const rate of [0, 2, 48.98, 100]) for (const phase of [0, 0.79]) for (const [start, end] of [[0, 0.5], [0.39, 0.82]]) for (const resetHz of [0, 3]) {
+  // Rate 0 changed on purpose (clock v8 pauses instead of forcing the gate low).
+  for (const rate of [2, 48.98, 100]) for (const phase of [0, 0.79]) for (const [start, end] of [[0, 0.5], [0.39, 0.82]]) for (const resetHz of [0, 3]) {
     worst = Math.max(worst, md(all(run(N, { rate, phase, start, end, resetHz, blocks: 800 })), all(run(O, { rate, phase, start, end, resetHz, blocks: 800 }))));
     cases++;
   }
@@ -61,7 +67,7 @@ if (O) {
 }
 // 2) Wired: ticks at ƒ (rising edges of Digital Out over 10 s), Rate ignored.
 const rises = (x) => { let n = 0; for (let i = 1; i < x.length; i++) if (x[i - 1] <= 0 && x[i] > 0) n++; return n; };
-for (const fHz of [1.5, 2, 37.5, 100, 441]  /* Host BPM outputs 0 at tempo <= 1 */) {
+for (const fHz of [1.5, 2, 37.5, 100, 441]) {
   const r = run(N, { rate: 7, fHz });
   const secs = r.dig.length / SR;
   const n = rises(r.dig);
@@ -75,6 +81,20 @@ for (const fHz of [1.5, 2, 37.5, 100, 441]  /* Host BPM outputs 0 at tempo <= 1 
   console.log(`ok clock ƒ 0 Hz: ${rises(r.dig)} ticks (stopped, as Rate 0)`);
   const k = md(all(run(N, { rate: 0, blocks: 400 })), all(r));
   if (k !== 0) throw new Error(`ƒ 0 should equal Rate 0 (${k})`);
+}
+// Rate 0 pauses (clock v8): the gate holds its state; it is not forced to 0.
+{
+  const r = run(N, { rate: 0, start: 0, end: 0.5, blocks: 50 });
+  if (!(r.dig.every((v) => v > 0))) throw new Error("Rate 0 at phase 0 inside the gate should hold the gate high");
+  console.log("ok clock Rate 0 pauses with the gate held (no forced 0)");
+}
+// Negative Rate runs backwards (clock v9): same tick count as +Rate, T fires.
+{
+  const fwd = run(N, { rate: 4, blocks: 3750 });
+  const rev = run(N, { rate: -4, blocks: 3750 });
+  const ticks = (x) => x.t.filter((v) => v !== 0).length;
+  if (Math.abs(ticks(rev) - ticks(fwd)) > 1 || ticks(rev) < 35) throw new Error(`Rate -4: ${ticks(rev)} ticks vs +4: ${ticks(fwd)}`);
+  console.log(`ok clock Rate -4 runs backwards: ${ticks(rev)} ticks (Rate +4: ${ticks(fwd)})`);
 }
 // 3) Amplitude latch: 1 Hz, gate 0..0.5; sweep Amplitude 0.2 -> 1 (and a dip) while the gate is held.
 {

@@ -133,7 +133,7 @@ function nodeGraphPulseTrainSchedule(section, node) {
   // Frequency (or wired ƒ) + Stretch -> Time / End Delay seconds, same as process_pulse_train.
   const fPeriod = nodeGraphPulseTrainFPeriod(node);
   const fKnob = p("frequency", 1);
-  const periodS = Number.isFinite(fPeriod) && fPeriod > 0 ? fPeriod : (fKnob > 0 ? 1 / fKnob : 0);
+  const periodS = Number.isFinite(fPeriod) && fPeriod > 0 ? fPeriod : (Math.abs(fKnob) > 0 ? 1 / Math.abs(fKnob) : 0);
   // Stretch -1..+1 -> span m in cycles (same as graph_engine process_pulse_train).
   const span = nodeGraphPulseTrainStretchSpan(p("stretch", 0), p("count", 12));
   const pulseModeKnob = nodeGraphPulseTrainPulseMode(p("pulseMode", 0));
@@ -146,6 +146,8 @@ function nodeGraphPulseTrainSchedule(section, node) {
     Math.round(p("spacing", 0)),
     // Edge Fade: stored 0 On / 1 Off (face stack order). JS preview only; the wasm preview ignores it.
     Math.round(p("edgeFade", 0)) === 0 ? 1 : 0,
+    // Reverse (negative ƒ): the face draws the time-mirrored schedule the DSP plays (pulse_train v40).
+    nodeGraphPulseTrainReversed(node, fKnob) ? 1 : 0,
   ];
   // Audio running: draw the params the engine is playing with (latched at the
   // trigger / cycle start with Latch, live with Free; idle = what
@@ -174,17 +176,29 @@ function nodeGraphPulseTrainSchedule(section, node) {
 }
 
 /** 1/ƒ seconds when the ƒ jack is wired and > 0, else NaN. */
-function nodeGraphPulseTrainFPeriod(node) {
+/** Wired ƒ value (signed Hz), or NaN when the ƒ jack is not wired. */
+function nodeGraphPulseTrainFWired(node) {
   const id = String(node?.id || "");
   if (!id || typeof nodeGraphModuleScopeConnectionsTo !== "function") return Number.NaN;
   const wire = nodeGraphModuleScopeConnectionsTo(id, "f")
     .find((c) => c?.sourceNode && c?.sourcePort);
   if (!wire) return Number.NaN;
-  const hz = typeof nodeGraphModuleScopeLatestOutputValue === "function"
+  return typeof nodeGraphModuleScopeLatestOutputValue === "function"
     ? Number(nodeGraphModuleScopeLatestOutputValue(wire.sourceNode, wire.sourcePort, Number.NaN))
     : Number.NaN;
+}
+
+/** 1/|ƒ| seconds when the ƒ jack is wired and nonzero, else NaN (negative ƒ plays backwards). */
+function nodeGraphPulseTrainFPeriod(node) {
+  const hz = Math.abs(nodeGraphPulseTrainFWired(node));
   if (!(hz > 0)) return Number.NaN;
   return 1 / hz;
+}
+
+/** Negative ƒ (wired, or the Frequency knob): the cycle plays backwards (pulse_train v40). */
+function nodeGraphPulseTrainReversed(node, fKnob) {
+  const wired = nodeGraphPulseTrainFWired(node);
+  return Number.isFinite(wired) ? wired < 0 : Number(fKnob) < 0;
 }
 
 function nodeGraphPulseTrainPulseMode(v) {
@@ -317,6 +331,27 @@ function nodeGraphPulseTrainPreviewJs(args, endTime) {
   const last = count ? times[count - 1] : 0;
   const cutoff = loop ? span + delay : last + delay;
   const end = Math.max(0.001, loop || delay !== 0 ? Math.max(0, cutoff) : last || 0.001);
+  // Reverse (pulse_train v40): mirror around the cut (Loop: the cycle, its pulse
+  // at 0 stays; One shot: last pulse + End Delay). Pulses past the cut stay past it.
+  let reversed = false;
+  if (args[13] && count > 0) {
+    reversed = true;
+    const E = Math.max(0, cutoff);
+    let m = 0;
+    while (m < count && (loop ? times[m] < E : times[m] <= E)) m += 1;
+    const fwdT = Float64Array.from(times);
+    const fwdA = Float64Array.from(amps);
+    for (let j = 0; j < count; j += 1) {
+      if (j >= m) {
+        times[j] = loop ? E : E + 1;
+        amps[j] = fwdA[j];
+        continue;
+      }
+      const k = loop ? (j === 0 ? 0 : m - j) : m - 1 - j;
+      times[j] = loop && j === 0 ? 0 : Math.max(0, E - fwdT[k]);
+      amps[j] = fwdA[k];
+    }
+  }
   // Edge Fade (pulse_train v38): the last pulse before the cutoff plays at
   // (cutoff - t_k) / (t_k+1 - t_k), same test as pulseAfterCutoff.
   let edgeFaded = false;
@@ -338,6 +373,7 @@ function nodeGraphPulseTrainPreviewJs(args, endTime) {
   }
   return {
     edgeFaded,
+    reversed,
     times, amps, end, duration, peak, loop, pulseMode, polarity, delay,
     count, nFwd: fwdCap, countF, curve, spacing, ampStart, ampEnd, ampCurve, amplitude,
   };
@@ -449,11 +485,11 @@ function drawNodeGraphPulseTrainDisplay(section) {
       });
       return true;
     };
-    // Fractional Count (or < 1) or an Edge-Faded pulse: the instanced forest
-    // only knows integer Counts at full height, so draw the preview schedule's
+    // Fractional Count (or < 1), an Edge-Faded pulse or Reverse: the instanced
+    // forest only knows forward integer Counts at full height, so draw the preview schedule's
     // stems on the CPU (up to 4096).
     const fractional = !(schedule.countF === Math.floor(schedule.countF)) || schedule.countF < 1;
-    if ((fractional || schedule.edgeFaded) && schedule.count <= 4096) {
+    if ((fractional || schedule.edgeFaded || schedule.reversed) && schedule.count <= 4096) {
       const elapsedVal = playing ? elapsed : Number.NaN;
       const fadeTau = Number(look.fadeTime) || 0;
       const mixC = (a, b, w) => [0, 1, 2, 3].map((k) => a[k] + (b[k] - a[k]) * w);
@@ -472,12 +508,7 @@ function drawNodeGraphPulseTrainDisplay(section) {
       forest(schedule, line, dot, lit, playing ? elapsed : Number.NaN);
     }
   }
-  if (playing) {
-    const x = at(elapsed);
-    batch._over = true;
-    nodeGraphGlLinesSegment(batch, x, top - dotR, x, base, Math.max(0.5, halfPx), smoothing, rgba(look.playheadPaint));
-    batch._over = false;
-  }
+  // No playhead line: the lit stems already show where the train is.
   if (!nodeGraphGlLinesEnd(batch, "alpha")) nodeGraphDisplayGlFailed(canvas, "pulse train face: GL present failed");
 }
 

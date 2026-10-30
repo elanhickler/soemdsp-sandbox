@@ -101,6 +101,10 @@ function assignNodeGraphTypedDisplaySettingsToNode(node, displayType, settings) 
     }
     return node.traceDisplaySettings;
   }
+  if (displayType === "plotFace" && typeof normalizeNodeGraphPlotFaceSettings === "function") {
+    node.traceDisplaySettings = normalizeNodeGraphPlotFaceSettings(settings);
+    return node.traceDisplaySettings;
+  }
   if (displayType === "pulseTrainFace" && typeof normalizeNodeGraphPulseTrainFaceSettings === "function") {
     node.traceDisplaySettings = normalizeNodeGraphPulseTrainFaceSettings(settings);
     if (typeof applyNodeGraphPulseTrainDisplaySettingsToFace === "function") {
@@ -951,8 +955,8 @@ function applyNodeGraphTraceDisplaySettingsForm(options = {}) {
       settings,
     );
   }
-  if (typeof syncNodeGraphLineBurnSweepLabel === "function") {
-    syncNodeGraphLineBurnSweepLabel(
+  if (typeof syncNodeGraphScopeWindowRow === "function") {
+    syncNodeGraphScopeWindowRow(
       document.getElementById("nodeTraceDisplaySettingsPopover"),
       settings,
     );
@@ -977,8 +981,9 @@ function applyNodeGraphTraceDisplaySettingsForm(options = {}) {
         || k === "zoomSeconds"
         || k === "historyHz"
         || k === "historyCycles"
-        || k === "sweepHz"
-        || k === "sweepCycles"
+        || k === "timeMs"
+        || k === "windowCycles"
+        || k === "windowMode"
         || k === "pixelDensity"
         || k === "detail"
         || k === "scale";

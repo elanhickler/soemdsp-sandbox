@@ -86,8 +86,8 @@ gate(polys.length === 1, "End short of 1 re-triggers: closed rectangle");
 draw({ pulseStart: 0.001, pulseEnd: 1, rate: 1 }, 0.5);
 gate(polys.length === 1, "Start past 0 re-triggers: closed rectangle");
 draw({ pulseStart: 0, pulseEnd: 1, rate: 0 }, 0.5);
-gate(polys.length === 1, "Rate 0 (DSP holds the gate low): closed rectangle");
-gate(ctx.nodeGraphClockFaceGateEndless(0, 1, 2) && !ctx.nodeGraphClockFaceGateEndless(0.01, 1, 2) && !ctx.nodeGraphClockFaceGateEndless(0, 1, 0), "endless rule matches native: Start 0, End 1, Rate > 0");
+gate(polys.length === 0, "Rate 0 pauses (clock v8, no forced low): 100% gate stays endless");
+gate(ctx.nodeGraphClockFaceGateEndless(0, 1, 2) && !ctx.nodeGraphClockFaceGateEndless(0.01, 1, 2) && ctx.nodeGraphClockFaceGateEndless(0, 1, 0), "endless rule matches native: Start 0, End 1, any rate (0 included)");
 // B-104: fully open stays endless at every rate (fractional periods like 48000 / 74.2).
 {
   const miss = [];

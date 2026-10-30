@@ -11,6 +11,7 @@
 //   (soemdsp_ellipsoid_robin_phasor, host-owned state); shape rendered as Off.
 
 #include <soemdsp/soemdsp.hpp>
+#include <soemdsp/math/robin_dither.h>
 
 namespace {
 
@@ -132,28 +133,10 @@ static bool robinPickCycleLength(
   double c = cycleSamples;
   if (!(c == c) || c < 2.0) c = 2.0;
   if (c > 1.0e9) c = 1.0e9;
-  const double ci = dsp_floor(c);
-  const double cf = c - ci;
-  double c2 = ci;
-  if (cf >= 0.5) c2 += 1.0;
+  double c2 = 0.0, probShort = 0.0, probMid = 1.0;
+  const bool ok = robin_cycle_distribution(c, &c2, &probShort, &probMid); // shared (math/robin_dither.h)
   *outMid = c2;
-  const double c1 = c2 - 1.0;
-  const double c3 = c2 + 1.0;
-  const double e1 = c1 - c;
-  const double e2 = c2 - c;
-  const double e3 = c3 - c;
-  const double v1 = e1 * e1;
-  const double v2 = e2 * e2;
-  const double v3 = e3 * e3;
-  const double v = 0.25;
-  const double d1 = v - v1;
-  const double d2 = v - v2;
-  const double d3 = v - v3;
-  const double denom = e3 * (v1 - v2) - e2 * (v1 - v3) + e1 * (v2 - v3);
-  if (!(denom == denom) || denom == 0.0) return false;
-  const double s = 1.0 / denom;
-  const double probShort = (d2 * e3 - d3 * e2) * s;
-  const double probMid = (d3 * e1 - d1 * e3) * s;
+  if (!ok) return false;
 
   unsigned int state = *rng;
   if (state == 0u) state = 1u;
@@ -298,9 +281,8 @@ extern "C" double soemdsp_ellipsoid_robin_phasor(
     double p0 = (startPhase == startPhase) ? startPhase : 0.0;
     p0 -= dsp_floor(p0);
     *len = robinCycleLength(rng, cycleSamples);
-    double n0 = (direction < 0.0 ? 1.0 - p0 : p0) * (*len);
-    if (!(n0 >= 0.0) || n0 >= *len) n0 = 0.0;
-    *count = n0;
+    // Reset rule (math/robin_dither.h): start on a whole sample of the cycle.
+    *count = robin_grid_count(direction < 0.0 ? 1.0 - p0 : p0, *len);
   }
   const double u = *count / *len;
   double phase = (direction < 0.0) ? 1.0 - u : u;
@@ -317,5 +299,5 @@ extern "C" double soemdsp_ellipsoid_robin_phasor(
 }
 
 extern "C" int soemdsp_ellipsoid_version() {
-  return 14; // Ellipsoid osc AA Dither (Robin cycle-length phasor)
+  return 15; // 15: Dither phasor resets land on the sample grid (math/robin_dither.h); 14 Ellipsoid osc AA Dither
 }

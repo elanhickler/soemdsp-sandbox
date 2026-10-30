@@ -142,14 +142,19 @@ destroy(h2);
   const PARAM_SEED = 48;
   const mem = e.memory;
 
-  function runDither(on) {
+  // Shared stereo route (soemdsp/routing/stereo_route.h): Left + Right outs
+  // wired run the L and R cores; Mono out alone runs one Mono core.
+  function runDither(on, sides = true) {
     const g = gCreate() | 0;
     setSr(g, sr);
     const hF = 0xa101 >>> 0;
     const hOut = 0xa102 >>> 0;
     if ((add(g, hF, TYPE_REV3) | 0) !== 0) throw new Error("rev3 stereo add");
     if ((add(g, hOut, TYPE_OUT) | 0) !== 0) throw new Error("rev3 stereo out");
-    if ((connect(g, hF, PORT_MONO, hOut, PORT_MONO) | 0) !== 0) throw new Error("rev3 stereo connect");
+    if (sides) {
+      if ((connect(g, hF, PORT_LEFT, hOut, PORT_LEFT) | 0) !== 0) throw new Error("rev3 stereo connect L");
+      if ((connect(g, hF, PORT_RIGHT, hOut, PORT_RIGHT) | 0) !== 0) throw new Error("rev3 stereo connect R");
+    } else if ((connect(g, hF, PORT_MONO, hOut, PORT_MONO) | 0) !== 0) throw new Error("rev3 mono connect");
     setParam(g, hF, PARAM_FREQ, 8000);
     setParam(g, hF, PARAM_RESO, 0.2);
     setParam(g, hF, PARAM_LFO_STYLE, on ? 1 : 0);
@@ -185,6 +190,13 @@ destroy(h2);
     throw new Error(`rev3 dither on Left===Right (${on.differ} diffs, want uncorrelated L/R)`);
   }
   console.log(`ok rev3 stereo dither off identical, on differ=${on.differ}`);
+  // Mono in -> Mono out: one core, no L+R average of decorrelated cores (the
+  // "stereo summed to mono" bug); the unwired L / R taps mirror it.
+  const mono = runDither(true, false);
+  if (mono.differ !== 0) {
+    throw new Error(`rev3 mono route ran two cores (${mono.differ} L/R diffs, want one Mono core)`);
+  }
+  console.log("ok rev3 mono in -> Mono out runs one core");
 }
 
 console.log("ok flower_child_filter_rev3");

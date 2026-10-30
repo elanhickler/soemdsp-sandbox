@@ -1052,6 +1052,14 @@ NodeLiveAudioProcessor.prototype.mapNativeGraphSrcPortId = function mapNativeGra
     if (p === "trigger") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_RAMP;
   }
   // transport outs (Gate 0-1; Trigger; f; f adj; Click). Legacy bipolar twin → Gate 0-1.
+  // Host BPM (graph 305): BPM Mono, ƒ Saw, pitch Ramp, Beat Right, Phase Square.
+  if (t === "hostBpm") {
+    if (p === "bpm" || p === "out" || p === "mono") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_MONO;
+    if (p === "f" || p === "ƒ") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_SAW;
+    if (p === "pitch" || p === "♯/♭") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_RAMP;
+    if (p === "beat") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_RIGHT;
+    if (p === "phase") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_SQUARE;
+  }
   if (t === "transport") {
     if (
       p === "gate 0-1"
@@ -1399,10 +1407,6 @@ NodeLiveAudioProcessor.prototype.mapNativeGraphDstPortId = function mapNativeGra
   // Electro Hat: Open hit jack on the Mono live bus (Trigger = Closed on the Trigger bus).
   if (tDst === "electroHat" && p === "open") {
     return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_MONO;
-  }
-  // Metronome BPM In: absolute BPM on the ƒ live bus (slider ignored when wired).
-  if (tDst === "transport" && p === "bpm") {
-    return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_F;
   }
   // ƒ jack only. Frequency is a parameter (slider + MOD add), never kPortF.
   if (p === "f" || p === "ƒ") {
@@ -2667,6 +2671,7 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphFromPlanSurgical =
       }
       this._nativeLiveParamModKeys = liveParamModKeys;
       this._nativePhaseModLiveKeys = liveParamModKeys;
+      this.pushNativeGraphScopeTaps(native, connections, idSet, typeById, hashById);
 
       this.bindNativeNamedPortals?.();
       const crc = native.soemdsp_graph_compile(this.nativeGraphHandle) | 0;
@@ -5292,12 +5297,12 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
       continue;
     }
     if (type === "dsfOscillator") {
-      // shape=morph, width=PWM, mix=Square↔Saw blend.
+      // shape=Bright (harmonic tilt), width=Morph (Trimorph peak / PWM), mix=Blend (SquSaw).
       push("frequency", P.NATIVE_GRAPH_PARAM_FREQUENCY, cont("frequency", 100));
       push("waveform", P.NATIVE_GRAPH_PARAM_WAVEFORM, disc("waveform", 1));
       push("phase", P.NATIVE_GRAPH_PARAM_PHASE, cont("phase", 0));
-      push("morph", P.NATIVE_GRAPH_PARAM_SHAPE, cont("morph", 1));
-      push("pulseWidth", P.NATIVE_GRAPH_PARAM_WIDTH, cont("pulseWidth", 0.5));
+      push("bright", P.NATIVE_GRAPH_PARAM_SHAPE, cont("bright", 1));
+      push("morph", P.NATIVE_GRAPH_PARAM_WIDTH, cont("morph", 0.5));
       push("blend", P.NATIVE_GRAPH_PARAM_MIX, cont("blend", 0.5));
       push("amplitude", P.NATIVE_GRAPH_PARAM_AMPLITUDE, cont("amplitude", 1));
       continue;
@@ -7226,6 +7231,13 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
       continue;
     }
 
+    if (type === "hostBpm") {
+      // Division of the shared project beat (graph 305): Numer/Denom x Normal/Dotted/Triplet.
+      push("timeNumerator", P.NATIVE_GRAPH_PARAM_TIME_NUMERATOR, cont("timeNumerator", 1));
+      push("timeDenominator", P.NATIVE_GRAPH_PARAM_TIME_DENOMINATOR, cont("timeDenominator", 4));
+      push("timingMode", P.NATIVE_GRAPH_PARAM_TIMING_MODE, disc("timingMode", 0));
+      continue;
+    }
     if (type === "transport") {
       push("bpm", P.NATIVE_GRAPH_PARAM_TEMPO_BPM, cont("bpm", 120));
       push("pulseWidth", P.NATIVE_GRAPH_PARAM_WIDTH, cont("pulseWidth", 0.5));
@@ -8669,6 +8681,40 @@ NodeLiveAudioProcessor.prototype.bindNativeNamedPortals = function bindNativeNam
   this._nativeNamedPortalStampCount = stamped;
 };
 
+/**
+ * Native out ports that only scopes / observers read (a 1D Plot on PolyBLEP Saw).
+ * Those cables never become native Conns, so tap-masked shapes (PolyBLEP /
+ * BLIT) would stay silent. Tell the engine which ports are watched.
+ */
+NodeLiveAudioProcessor.prototype.pushNativeGraphScopeTaps = function pushNativeGraphScopeTaps(
+  native,
+  connections,
+  idSet,
+  typeById,
+  hashById,
+) {
+  if (!native?.soemdsp_graph_set_node_scope_taps || !this.nativeGraphHandle) return;
+  const masks = new Map();
+  const list = Array.isArray(connections) ? connections : [];
+  for (let i = 0; i < list.length; i += 1) {
+    const c = list[i];
+    const src = String(c?.sourceNode || "");
+    const dst = String(c?.destinationNode || "");
+    if (!src || !idSet.has(src) || idSet.has(dst)) continue;
+    const type = typeById.get(src);
+    if (type !== "polyBlep" && type !== "blit") continue;
+    const port = this.mapNativeGraphSrcPortId(c.sourcePort, type, src);
+    if (!Number.isFinite(port) || port < 0 || port > 31) continue;
+    masks.set(src, ((masks.get(src) || 0) | (1 << port)) >>> 0);
+  }
+  for (const [id, type] of typeById) {
+    if (type !== "polyBlep" && type !== "blit") continue;
+    const hash = hashById.get(id);
+    if (!hash) continue;
+    native.soemdsp_graph_set_node_scope_taps(this.nativeGraphHandle, hash >>> 0, (masks.get(id) || 0) >>> 0);
+  }
+};
+
 NodeLiveAudioProcessor.prototype.compileNativeGraphFromPlan = function compileNativeGraphFromPlan() {
   this.nativeGraphCompiled = false;
   this._nativeGraphTopologyKey = "";
@@ -9309,6 +9355,7 @@ NodeLiveAudioProcessor.prototype.compileNativeGraphFromPlan = function compileNa
       });
     }
     this._nativeWiredNodeIds = wiredIds;
+    this.pushNativeGraphScopeTaps(native, connections, idSet, typeById, hashById);
 
     this.bindNativeNamedPortals?.();
     const crc = native.soemdsp_graph_compile(this.nativeGraphHandle) | 0;
@@ -9621,6 +9668,7 @@ NodeLiveAudioProcessor.prototype.nativeGraphPortNames = function nativeGraphPort
     return ["Left"];
   }
   if (portId === P.NATIVE_GRAPH_PORT_RIGHT) {
+    if (type === "hostBpm") return ["Beat"];
     if (type === "pulseTrain") return ["Trigger"];
     if (type === "resonantCompressor") return ["Out R"];
     if (type === "rmsMeter") return ["RMS R", "RMS R Tap"];
@@ -9685,6 +9733,7 @@ NodeLiveAudioProcessor.prototype.nativeGraphPortNames = function nativeGraphPort
     return ["Right"];
   }
   if (portId === P.NATIVE_GRAPH_PORT_SAW) {
+    if (type === "hostBpm") return ["f", "ƒ"];
     if (type === "electroSnare" || type === "modalSnare" || type === "electroHat" || type === "electroTom" || type === "electroKick" || type === "electroClap") return ["f", "\u0192"];
     if (type === "resonantEnvelope" || type === "resonantFollower") return ["SC"];
     if (type === "resonantCompressor") return ["Gain"];
@@ -9733,6 +9782,7 @@ NodeLiveAudioProcessor.prototype.nativeGraphPortNames = function nativeGraphPort
     return ["Saw"];
   }
   if (portId === P.NATIVE_GRAPH_PORT_RAMP) {
+    if (type === "hostBpm") return ["pitch", "♯/♭"];
     if (type === "rmsMeter") return ["Env Inverted"];
     if (type === "helmholtzPitch") return ["Detune"];
     // Pre-level Right hold for face rings (distinct from audio Right).
@@ -9761,6 +9811,7 @@ NodeLiveAudioProcessor.prototype.nativeGraphPortNames = function nativeGraphPort
     return ["Ramp"];
   }
   if (portId === P.NATIVE_GRAPH_PORT_SQUARE) {
+    if (type === "hostBpm") return ["Phase"];
     if (type === "resonantCompressor") return ["Env"];
     if (type === "rmsMeter") return ["dB R"];
     if (type === "acidSequencer") return ["CV"];

@@ -27,13 +27,6 @@ function nodeGraphDisplaySettingsBuildStepperRowHtml(key, formType = null, optio
     label = key === "historyCycles" ? "History (cycles)" : "History (Hz)";
     title = "Live history window (Hz when free-run; History (cycles) when synced).";
   }
-  if (key === "sweepHz" || key === "sweepCycles") {
-    const syncOn = options.syncOn === true || key === "sweepCycles";
-    label = syncOn ? "Sweep (cycles)" : "Sweep (Hz)";
-    title = syncOn
-      ? "Cycles in view (smooth — e.g. 1.5 = 1½ periods). Pass restarts on the next rising zero-crossing."
-      : "Left→right passes per second (0.01–100). 0 = pause (bottom detent).";
-  }
   if (key === "cloudSpeed" && formType === "ensembleCloud") {
     label = "Speed";
     title = "Waterfall scroll. 0 = freeze. 1 = default. Higher = faster.";
@@ -146,7 +139,7 @@ function nodeGraphDisplaySettingsBuildStepperRowHtml(key, formType = null, optio
     label = "Scale";
     title = "Amplitude zoom on the face (1 = full-scale). Does not change the Display Settings preview dot.";
   }
-  if ((formType === "roundShapeFace" || formType === "basicShapeFace" || formType === "softwaveOscFace" || formType === "sinCosFace" || formType === "clockFace" || formType === "clockDividerFace" || formType === "pulseExplosionFace" || formType === "pulseTrainFace") && key === "lineThickness") {
+  if ((formType === "roundShapeFace" || formType === "basicShapeFace" || formType === "softwaveOscFace" || formType === "sinCosFace" || formType === "clockFace" || formType === "clockDividerFace" || formType === "pulseExplosionFace" || formType === "pulseTrainFace" || formType === "plotFace") && key === "lineThickness") {
     label = "Line thickness";
     title = formType === "clockFace" || formType === "clockDividerFace" || formType === "pulseExplosionFace" || formType === "pulseTrainFace" ? "" : formType === "roundShapeFace"
       ? "Orbit stroke width in CSS pixels (0.25–16)."
@@ -161,11 +154,18 @@ function nodeGraphDisplaySettingsBuildStepperRowHtml(key, formType = null, optio
     label = "Extra padding";
     title = "Extra CSS pixels inside the plate after the automatic line/dot inset (0 = flush, no clip).";
   }
+  if (formType === "plotFace" && key === "lineThickness") {
+    title = "Line width in face pixels (0.25–16). Scales with the display when zooming.";
+  }
+  if (formType === "plotFace" && key === "scale") {
+    label = "Gain";
+    title = "Plot scale: 1 = -1..+1 fills the height (2D Plot: the square, both axes).";
+  }
   if (formType === "pulseTrainFace" && key === "fadeTime") {
     label = "Fade time (s)";
     title = "Lit-dot hang after each pulse. 0 = stay lit until the next trigger. Small values drop immediately. Same exponential residual as phosphor / woscope.";
   }
-  if ((formType === "roundShapeFace" || formType === "basicShapeFace" || formType === "softwaveOscFace" || formType === "sinCosFace" || formType === "clockFace" || formType === "clockDividerFace" || formType === "pulseExplosionFace" || formType === "pulseTrainFace") && key === "lineSmoothing") {
+  if ((formType === "roundShapeFace" || formType === "basicShapeFace" || formType === "softwaveOscFace" || formType === "sinCosFace" || formType === "clockFace" || formType === "clockDividerFace" || formType === "pulseExplosionFace" || formType === "pulseTrainFace" || formType === "plotFace") && key === "lineSmoothing") {
     label = "Line smoothing";
     title = "Smootherstep antialiasing skirt in CSS pixels (0–8, default 1). 0 = hard core.";
   }
@@ -311,10 +311,10 @@ function nodeGraphDisplaySettingsBuildStepperRowHtml(key, formType = null, optio
     : "";
   const labelHtml = options.hideLabel
     ? ""
-    : (key === "sweepHz" || key === "sweepCycles"
-      ? `<span data-trace-display-sweep-label>${nodeGraphDisplaySettingsEscapeHtml(label)}</span>`
-      : (key === "historySeconds" || key === "zoomSeconds" || key === "historyHz" || key === "historyCycles")
-        ? `<span data-trace-display-history-label>${nodeGraphDisplaySettingsEscapeHtml(label)}</span>`
+    : ((key === "historySeconds" || key === "zoomSeconds" || key === "historyHz" || key === "historyCycles")
+      ? `<span data-trace-display-history-label>${nodeGraphDisplaySettingsEscapeHtml(label)}</span>`
+      : (key === "timeMs" || key === "windowCycles")
+        ? `<span data-trace-display-window-label>${nodeGraphDisplaySettingsEscapeHtml(label)}</span>`
         : `<span>${nodeGraphDisplaySettingsEscapeHtml(label)}</span>`);
   const rowClass = options.hideLabel
     ? "node-trace-display-line-burn-row node-trace-display-stepper-only"
@@ -1228,64 +1228,51 @@ function paintNodeGraphStampPreview(root, settings = {}) {
 }
 
 /** Hide Shape param for Circle; retitle Stretch/Corners/Sides/… from live Shape. */
+/** Window row key: windowCycles in Cycles mode, else timeMs (lib/visual/scope-sync.js). */
+function nodeGraphDisplaySettingsWindowRowKey(formType) {
+  const settings = typeof nodeGraphTraceDisplayCurrentSettingsForFormType === "function"
+    ? nodeGraphTraceDisplayCurrentSettingsForFormType(formType)
+    : null;
+  return nodeGraphScopeWindowMode(settings?.windowMode) === "cycles" ? "windowCycles" : "timeMs";
+}
+
 /**
- * Sweep (Hz) ↔ Sweep (cycles) when 1D Burn Sync is toggled.
- * Retargets the stepper to sweepHz or sweepCycles so both values stay stored.
+ * Window: Cycles <-> Time. Retargets the one stepper to windowCycles or
+ * timeMs so both values stay stored (switching keeps each).
  */
-function syncNodeGraphLineBurnSweepLabel(root, settings = {}) {
-  const host = root?.querySelector?.(
-    "[data-trace-display-sweep-label], [data-trace-display-field=\"sweepHz\"], [data-trace-display-field=\"sweepCycles\"]",
-  )
+function syncNodeGraphScopeWindowRow(root, settings = {}) {
+  const host = root?.querySelector?.("[data-trace-display-window-label]")
     ? root
     : document.getElementById("nodeTraceDisplaySettingsPopover");
-  if (!host) {
+  const field = host?.querySelector?.(`[data-trace-display-field="timeMs"], [data-trace-display-field="windowCycles"]`);
+  if (!field) {
     return;
   }
-  const titleSpan = host.querySelector("[data-trace-display-sweep-label]");
-  const field = host.querySelector(`[data-trace-display-field="sweepHz"]`)
-    || host.querySelector(`[data-trace-display-field="sweepCycles"]`);
-  if (!titleSpan && !field) {
-    return;
-  }
-  const syncOn = typeof nodeGraphDisplaySettingsToggleIsOn === "function"
-    ? nodeGraphDisplaySettingsToggleIsOn(settings?.sourceSync ?? settings?.sync)
-    : Boolean(settings?.sourceSync);
-  const key = syncOn ? "sweepCycles" : "sweepHz";
-  const label = syncOn ? "Sweep (cycles)" : "Sweep (Hz)";
-  const title = syncOn
-    ? "Cycles in view (smooth — e.g. 1.5 = 1½ periods). Pass restarts on the next rising zero-crossing."
-    : "Left→right passes per second (0.01–100). 0 = pause (bottom detent).";
+  const key = nodeGraphScopeWindowMode(settings?.windowMode) === "cycles" ? "windowCycles" : "timeMs";
+  const meta = nodeGraphDisplaySettingsFieldMeta[key] || { label: key };
+  const titleSpan = host.querySelector("[data-trace-display-window-label]");
   if (titleSpan) {
-    titleSpan.textContent = label;
+    titleSpan.textContent = meta.label;
   }
-  const row = field?.closest?.("[data-trace-display-control-row]");
+  const row = field.closest?.("[data-trace-display-control-row]");
   if (row) {
-    row.title = title;
+    row.title = meta.title || "";
   }
-  if (field) {
-    field.dataset.traceDisplayField = key;
-    field.setAttribute("data-trace-display-field", key);
-    field.title = title;
-    field.setAttribute("aria-label", `${label} amount`);
-    // Sync retargets the live key; don't clobber intentional type-in.
-    const editing = typeof nodeGraphTraceDisplayFieldIsEditing === "function"
-      ? nodeGraphTraceDisplayFieldIsEditing(field)
-      : field.classList.contains("trace-display-field-editing");
-    const stepBtns = row?.querySelectorAll?.("[data-trace-display-step-target]");
-    if (stepBtns) {
-      for (const btn of stepBtns) {
-        btn.setAttribute("data-trace-display-step-target", key);
-      }
-    }
-    if (!editing) {
-      field.readOnly = true;
-      field.classList.toggle("trace-display-field-editing", false);
-      const value = settings?.[key];
-      if (value != null && typeof formatNodeGraphTraceDisplayFieldValue === "function") {
-        field.value = formatNodeGraphTraceDisplayFieldValue(key, value);
-      } else if (value != null) {
-        field.value = String(value);
-      }
+  field.setAttribute("data-trace-display-field", key);
+  field.title = meta.title || "";
+  field.setAttribute("aria-label", `${meta.label} amount`);
+  for (const btn of row?.querySelectorAll?.("[data-trace-display-step-target]") || []) {
+    btn.setAttribute("data-trace-display-step-target", key);
+  }
+  const editing = typeof nodeGraphTraceDisplayFieldIsEditing === "function"
+    ? nodeGraphTraceDisplayFieldIsEditing(field)
+    : field.classList.contains("trace-display-field-editing");
+  if (!editing) {
+    const value = settings?.[key];
+    if (value != null) {
+      field.value = typeof formatNodeGraphTraceDisplayFieldValue === "function"
+        ? formatNodeGraphTraceDisplayFieldValue(key, value)
+        : String(value);
     }
   }
 }
@@ -1533,8 +1520,7 @@ function buildNodeGraphInstantTraceDisplaySettingsBodyHtml(type, node, allowKey)
     "zoomSeconds",
     "detail",
     "strokeThickness",
-    "sweepHz",
-    "sweepCycles",
+    "timeMs",
     "backgroundBrightness",
     "backgroundHue",
   ]);
@@ -1560,7 +1546,7 @@ function buildNodeGraphInstantTraceDisplaySettingsBodyHtml(type, node, allowKey)
     if (key === "historySeconds" && orderedPrimary.includes("historyHz")) {
       return;
     }
-    if (key === "historyCycles" || key === "sweepCycles") {
+    if (key === "historyCycles") {
       return;
     }
     rows.push(nodeGraphDisplaySettingsBuildStepperRowHtml(key, type, { syncOn: syncOnForStack }));
@@ -1592,12 +1578,13 @@ function buildNodeGraphInstantTraceDisplaySettingsBodyHtml(type, node, allowKey)
     pushStackField("historySeconds");
     pushStackField("zoomSeconds");
   }
-  if (orderedPrimary.includes("sweepHz") || orderedPrimary.includes("sweepCycles")) {
-    rows.push(nodeGraphDisplaySettingsBuildStepperRowHtml(
-      syncOnForStack ? "sweepCycles" : "sweepHz",
-      type,
-      { syncOn: syncOnForStack },
-    ));
+  if (orderedPrimary.includes("timeMs")) {
+    // Window (Cycles | Time) sits right above its one stepper.
+    if (choiceKeys.includes("windowMode")) {
+      rows.push(nodeGraphDisplaySettingsBuildChoiceRowHtml("windowMode"));
+      usedChoices.add("windowMode");
+    }
+    rows.push(nodeGraphDisplaySettingsBuildStepperRowHtml(nodeGraphDisplaySettingsWindowRowKey(type), type));
   }
   if (node?.type === "onset" && toggleKeys.includes("autoRange")) {
     rows.push(nodeGraphDisplaySettingsBuildToggleRowHtml("autoRange"));
@@ -1848,34 +1835,29 @@ function buildNodeGraphPhosphorDisplaySettingsBodyHtml(type, node, allowKey) {
     rows.push(nodeGraphDisplaySettingsBuildToggleRowHtml("sourceSync"));
     usedToggles.add("sourceSync");
   }
-  const phosphorSyncOn = (() => {
-    const settings = typeof nodeGraphLineBurnSettingsForNode === "function"
-      ? nodeGraphLineBurnSettingsForNode(node)
-      : (typeof nodeGraphTraceDisplaySettingsForNode === "function"
-        ? nodeGraphTraceDisplaySettingsForNode(node)
-        : null);
-    return typeof nodeGraphDisplaySettingsToggleIsOn === "function"
-      ? nodeGraphDisplaySettingsToggleIsOn(settings?.sourceSync ?? settings?.sync)
-      : Boolean(settings?.sourceSync);
-  })();
   for (const key of choiceKeys) {
+    // Window (Cycles | Time) goes right above its stepper, below.
+    if (key === "windowMode" && ordered.includes("timeMs")) {
+      continue;
+    }
     rows.push(nodeGraphDisplaySettingsBuildChoiceRowHtml(key));
     usedChoices.add(key);
   }
   for (const key of ordered) {
-    if (key === "sweepCycles") {
-      continue;
+    if (key === "timeMs" && choiceKeys.includes("windowMode")) {
+      rows.push(nodeGraphDisplaySettingsBuildChoiceRowHtml("windowMode"));
+      usedChoices.add("windowMode");
     }
     if (key === "backgroundHue"
       && typeof nodeGraphDisplaySettingsFormTypeUsesGradient === "function"
       && nodeGraphDisplaySettingsFormTypeUsesGradient(type)) {
       continue;
     }
-    const rowKey = key === "sweepHz"
-      ? (phosphorSyncOn ? "sweepCycles" : "sweepHz")
-      : key;
-    rows.push(nodeGraphDisplaySettingsBuildStepperRowHtml(rowKey, type, { syncOn: phosphorSyncOn }));
-    if (key === "dot1Brightness" || rowKey === "dot1Brightness") {
+    rows.push(nodeGraphDisplaySettingsBuildStepperRowHtml(
+      key === "timeMs" ? nodeGraphDisplaySettingsWindowRowKey(type) : key,
+      type,
+    ));
+    if (key === "dot1Brightness") {
       pushPreview();
     }
   }
@@ -2105,7 +2087,7 @@ function buildNodeGraphDisplaySettingsBodyHtml(formType, node = null) {
     if ((type === "vectorDot" || type === "pulseDot") && section === "dot1") {
       continue;
     }
-    if ((type === "roundShapeFace" || type === "basicShapeFace" || type === "softwaveOscFace" || type === "sinCosFace" || type === "clockFace" || type === "clockDividerFace" || type === "pulseExplosionFace" || type === "pulseTrainFace" || type === "robinSinepulseFace") && section === "dot1") {
+    if ((type === "roundShapeFace" || type === "basicShapeFace" || type === "softwaveOscFace" || type === "sinCosFace" || type === "clockFace" || type === "clockDividerFace" || type === "pulseExplosionFace" || type === "pulseTrainFace" || type === "robinSinepulseFace" || type === "plotFace") && section === "dot1") {
       continue;
     }
 
@@ -2132,6 +2114,11 @@ function buildNodeGraphDisplaySettingsBodyHtml(formType, node = null) {
         "pixelDensity",
       ].filter((key) => activeFields.has(key) && allowKey("fields", key));
     }
+    if (type === "plotFace" && section === "waterfall") {
+      fieldKeys = ["timeMs", "scale", "plotOffset", "lineThickness", "lineSmoothing"]
+        .filter((key) => activeFields.has(key) && allowKey("fields", key))
+        .map((key) => (key === "timeMs" ? nodeGraphDisplaySettingsWindowRowKey(type) : key));
+    }
     if (type === "softwaveOscFace" && section === "waterfall") {
       fieldKeys = [
         "lineThickness",
@@ -2147,13 +2134,13 @@ function buildNodeGraphDisplaySettingsBodyHtml(formType, node = null) {
     let colorKeys = (sectionControls.colors || []).filter(
       (key) => activeColors.has(key) && allowKey("colors", key),
     );
-    if ((type === "roundShapeFace" || type === "basicShapeFace" || type === "softwaveOscFace" || type === "sinCosFace" || type === "clockFace" || type === "clockDividerFace" || type === "pulseExplosionFace" || type === "pulseTrainFace" || type === "robinSinepulseFace") || type === "vectorDot" || type === "pulseDot" || type === "lcdDot" || type === "value") {
+    if ((type === "roundShapeFace" || type === "basicShapeFace" || type === "softwaveOscFace" || type === "sinCosFace" || type === "clockFace" || type === "clockDividerFace" || type === "pulseExplosionFace" || type === "pulseTrainFace" || type === "robinSinepulseFace" || type === "plotFace") || type === "vectorDot" || type === "pulseDot" || type === "lcdDot" || type === "value") {
       colorKeys = [];
     }
     if (type === "waterfall" && isStereoWaterfallNode) {
       colorKeys = colorKeys.filter((key) => !NODE_GRAPH_TRACE_STEREO_COLOR_ORDER.includes(key));
     }
-    const toggleKeys = (sectionControls.toggles || []).filter(
+    let toggleKeys = (sectionControls.toggles || []).filter(
       (key) => activeToggles.has(key) && allowKey("toggles", key)
         // auto-zoom lines only draws on the reverb line displays, not Hypersaw stems.
         && (key !== "autoZoomLines" || ["reverbEffect", "sabrinaReverbOriginal"].includes(String(node?.type || ""))),
@@ -2161,6 +2148,16 @@ function buildNodeGraphDisplaySettingsBodyHtml(formType, node = null) {
     let choiceKeys = (sectionControls.choices || []).filter(
       (key) => activeChoices.has(key) && allowKey("choices", key),
     );
+    if (type === "plotFace" && section === "waterfall") {
+      // 1D Plot: Sync on/off. 1D Plot Stereo / 2D Plot: Sync = Off / Left / Right / Mono.
+      const plotType = typeof nodeGraphPatchNode === "function"
+        && typeof nodeGraphTraceDisplaySettingsTargetNodeId === "function"
+        ? nodeGraphPatchNode(nodeGraphTraceDisplaySettingsTargetNodeId())?.type
+        : null;
+      const twoChannel = plotType === "plot1dStereo" || plotType === "plot2d";
+      toggleKeys = toggleKeys.filter((key) => !(twoChannel && key === "sourceSync"));
+      choiceKeys = (twoChannel ? ["windowMode", "syncChannel"] : ["windowMode"]).filter((key) => activeChoices.has(key));
+    }
     if (type === "robinSinepulseFace" && section === "waterfall") {
       choiceKeys = ["faceView"].filter(
         (key) => activeChoices.has(key) && allowKey("choices", key),
@@ -2478,6 +2475,25 @@ function buildNodeGraphDisplaySettingsBodyHtml(formType, node = null) {
         lamps.push(["start", "Tick", "startHue", "startBrightness", "startSaturation"]);
         lamps.push(["blink", "Fire", "blinkHue", "blinkBrightness", "blinkSaturation"]);
       }
+      hbsCells.push(...lamps.map(([id, label, hue, bright, sat]) => `
+          <div class="node-trace-display-hsl-lamp node-trace-display-color-widget-host" data-hsl-lamp="${id}" data-hsl-label="${label}">
+            <input type="hidden" data-trace-display-field="${hue}" value="">
+            <input type="hidden" data-trace-display-field="${bright}" value="">
+            <input type="hidden" data-trace-display-field="${sat}" value="">
+          </div>`));
+    }
+    if (type === "plotFace" && section === "waterfall") {
+      // Background, then the line(s): Line (1D Plot / 2D Plot) or Left / Right (1D Plot Stereo).
+      const plotNodeType = typeof nodeGraphPatchNode === "function"
+        && typeof nodeGraphTraceDisplaySettingsTargetNodeId === "function"
+        ? nodeGraphPatchNode(nodeGraphTraceDisplaySettingsTargetNodeId())?.type
+        : null;
+      const stereo = plotNodeType === "plot1dStereo";
+      const lamps = [
+        ["background", "Background", "backgroundHue", "backgroundBrightness", "backgroundSaturation"],
+        ["line", stereo ? "Left" : "Line", "lineHue", "lineBrightness", "lineSaturation"],
+      ];
+      if (stereo) lamps.push(["dot", "Right", "dotHue", "dotBrightness", "dotSaturation"]);
       hbsCells.push(...lamps.map(([id, label, hue, bright, sat]) => `
           <div class="node-trace-display-hsl-lamp node-trace-display-color-widget-host" data-hsl-lamp="${id}" data-hsl-label="${label}">
             <input type="hidden" data-trace-display-field="${hue}" value="">

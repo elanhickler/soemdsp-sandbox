@@ -222,7 +222,7 @@ function matrixPhosphorResidualFromParams(node) {
     trail: matrixLiveParam(node, "trail", Residual?.DEFAULT_TRAIL ?? 0.5, 0, 1),
     ghost: matrixLiveParam(node, "ghost", Residual?.DEFAULT_GHOST ?? 0.45, 0, 1),
     burnAmount: matrixLiveParam(
-      node, "burnAmount", Residual?.DEFAULT_BURN_AMOUNT ?? 1, 0, Residual?.BURN_AMOUNT_MAX ?? 4,
+      node, "burnAmount", Residual?.DEFAULT_BURN_AMOUNT ?? 0.3, 0, Residual?.BURN_AMOUNT_MAX ?? 4,
     ),
   };
 }

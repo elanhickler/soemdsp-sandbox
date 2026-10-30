@@ -15,15 +15,14 @@ function nodeGraphDisplaySettingsIsVectorTraceFormType(type) {
 /**
  * Shared Trace + Phosphor Display Settings order.
  * Skip / Sync sit above this (toggle or stereo channel). Unused keys are omitted.
- * Scale → Blend → History/Sweep → Brightness → Hue → Size → …
+ * Scale → Blend → History/Time → Brightness → Hue → Size → …
  */
 const nodeGraphDisplaySettingsSharedStackOrder = Object.freeze([
   "scale",
   "historyHz",
   "historySeconds",
   "historyCycles",
-  "sweepHz",
-  "sweepCycles",
+  "timeMs",
   "backgroundBrightness",
   "backgroundHue",
   "dot1Size",
@@ -42,8 +41,7 @@ const nodeGraphInstantTraceDisplayFieldOrder = Object.freeze([
   "historyHz",
   "historySeconds",
   "historyCycles",
-  "sweepHz",
-  "sweepCycles",
+  "timeMs",
   "backgroundBrightness",
   "backgroundHue",
   "dot1Size",
@@ -365,12 +363,11 @@ const nodeGraphTraceDisplayActiveControlsByType = Object.freeze({
     choices: Object.freeze(["shape", "stereoBlend"]),
   }),
   lineBurn: Object.freeze({
-    // Heart-monitor phosphor: Sweep first, then shared phosphor stack.
-    // Form swaps sweepHz ↔ sweepCycles when Sync toggles (see syncNodeGraphLineBurnSweepLabel).
-    // Scale first (shared phosphor order: Scale -> Sweep -> ...).
+    // Heart-monitor phosphor: Time (ms) (scope-sync.js), then shared phosphor stack.
+    // Scale first (shared phosphor order: Scale -> Time -> ...).
     fields: Object.freeze(nodeGraphPhosphorDisplayFieldsFor([
       "scale",
-      "sweepHz",
+      "timeMs",
         "backgroundBrightness",
         "backgroundHue",
         "dot1Size",
@@ -385,7 +382,7 @@ const nodeGraphTraceDisplayActiveControlsByType = Object.freeze({
     colors: Object.freeze([]),
     // Skip at top; packing row: Sync | Clear (continuous packing always on)
     toggles: Object.freeze(["skipDiscontinuities", "sourceSync"]),
-    choices: Object.freeze(["drawMode"]),
+    choices: Object.freeze(["windowMode", "drawMode"]),
   }),
   // 0D Value: WebGL beam (no face bitmap / pixelDensity / residual).
   value: Object.freeze({
@@ -425,13 +422,13 @@ const nodeGraphTraceDisplayActiveControlsByType = Object.freeze({
     toggles: Object.freeze(["skipDiscontinuities"]),
     choices: Object.freeze(["drawMode"]),
   }),
-  // 1D Trace: woscope beam + heart-monitor Sweep/Sync/Reset (not Waterfall scroll).
+  // 1D Trace: woscope beam + heart-monitor Time/Sync/Reset (scope-sync.js, not Waterfall scroll).
   // Color via shared Gradient editor → TraceWoscope LUT (not hue swatches).
   // 2D Trace uses the same brightness->LUT path; its two hues are the stops.
   scope1dTrace: Object.freeze({
     fields: Object.freeze(nodeGraphTraceDisplayFieldsFor([
       "scale",
-      "sweepHz",
+      "timeMs",
       "backgroundBrightness",
       "backgroundHue",
       "dot1Size",
@@ -444,7 +441,7 @@ const nodeGraphTraceDisplayActiveControlsByType = Object.freeze({
     ])),
     colors: Object.freeze([]),
     toggles: Object.freeze(["skipDiscontinuities", "sourceSync"]),
-    choices: Object.freeze(["drawMode"]),
+    choices: Object.freeze(["windowMode", "drawMode"]),
   }),
   // 2D Trace = woscope XY beam. Same gradient editor as 1D Trace.
   // Shared stack minus Sweep (no time axis). Ghost/Trail/Burn live in the brightness buffer.
@@ -962,6 +959,14 @@ const nodeGraphTraceDisplayActiveControlsByType = Object.freeze({
     toggles: Object.freeze([]),
     choices: Object.freeze([]),
   }),
+  // 1D Plot / 1D Plot Stereo / 2D Plot: Sync + Skip, Time, Gain, Offset, line
+  // thickness + smoothing; Background / Line (Left / Right) HBS lamps.
+  plotFace: Object.freeze({
+    fields: Object.freeze(["timeMs", "scale", "plotOffset", "lineThickness", "lineSmoothing"]),
+    colors: Object.freeze([]),
+    toggles: Object.freeze(["sourceSync", "skipDiscontinuities"]),
+    choices: Object.freeze(["windowMode", "syncChannel"]),
+  }),
   // Pulse Train: the Pulse Explosion set plus Fade time (lit-dot hang).
   pulseTrainFace: Object.freeze({
     fields: Object.freeze(["lineThickness", "lineSmoothing", "dotThickness", "fadeTime"]),
@@ -1124,7 +1129,6 @@ const nodeGraphTraceDisplaySectionControls = Object.freeze({
       "valueSize",
       "valueOffsetY",
       "innerRadius",
-      "sweepHz",
       "ghost",
       "trail",
       "burnAmount",
@@ -1156,6 +1160,8 @@ const nodeGraphTraceDisplaySectionControls = Object.freeze({
       "backgroundHue",
       "lineBlur",
       "lineSmoothing",
+      "timeMs",
+      "plotOffset",
       "pill",
       "squircle",
     ]),
@@ -1185,6 +1191,7 @@ const nodeGraphTraceDisplaySectionControls = Object.freeze({
       "freqOverlap",
       "freqScale",
       "syncChannel",
+      "windowMode",
       "spectrumAxis",
       "spectrumDbMode",
       "spectrumDbFloor",
@@ -1473,18 +1480,6 @@ const nodeGraphDisplaySettingsFieldMeta = Object.freeze({
     id: "nodeTraceDisplayZoomSeconds",
     title: "Seconds of capture shown (0–10 s). Exponential drag: most useful short windows live near 0; longer history toward max.",
   }),
-  sweepHz: Object.freeze({
-    label: "Sweep (Hz)",
-    inputmode: "decimal",
-    id: "nodeTraceDisplaySweepHz",
-    title: "Sync Off: left→right passes per second (0.01–100). 0 = pause (bottom detent). Sync On uses Sweep (cycles) instead.",
-  }),
-  sweepCycles: Object.freeze({
-    label: "Sweep (cycles)",
-    inputmode: "decimal",
-    id: "nodeTraceDisplaySweepCycles",
-    title: "Sync On: cycles in view (smooth — e.g. 1.5 = 1½ periods). Pass restarts on the next rising zero-crossing.",
-  }),
   cloudSpeed: Object.freeze({
     label: "Speed",
     inputmode: "decimal",
@@ -1708,6 +1703,24 @@ const nodeGraphDisplaySettingsFieldMeta = Object.freeze({
   blinkTime: Object.freeze({ label: "Blink time", inputmode: "decimal" }),
   gateHeight: Object.freeze({ label: "Height", inputmode: "decimal" }),
   ghostOpacity: Object.freeze({ label: "Ghost opacity", inputmode: "decimal" }),
+  timeMs: Object.freeze({
+    label: "Time (ms)",
+    inputmode: "decimal",
+    id: "nodeTraceDisplayTimeMs",
+    title: "One pass / window in ms (0.1–10000), Sync on or off. Sync: a pass starts on a rising edge (Trig / Reset jack when wired, else the signal through an auto level with hysteresis); no edge for a whole pass runs free.",
+  }),
+  windowCycles: Object.freeze({
+    label: "Cycles",
+    inputmode: "decimal",
+    id: "nodeTraceDisplayWindowCycles",
+    title: "Periods in one pass / window (0.05–100, e.g. 1.5 = 1½ periods), Sync on or off. The period is measured from the edges; until then Time is used.",
+  }),
+  plotOffset: Object.freeze({
+    label: "Offset",
+    inputmode: "decimal",
+    id: "nodeTraceDisplayPlotOffset",
+    title: "Vertical shift in half-heights (-1..1).",
+  }),
   fadeTime: Object.freeze({
     label: "Fade time (s)",
     inputmode: "decimal",
@@ -2425,6 +2438,16 @@ const nodeGraphDisplaySettingsChoiceMeta = Object.freeze({
       Object.freeze({ value: "mono", label: "Mono" }),
     ]),
   }),
+  windowMode: Object.freeze({
+    label: "Window",
+    aria: "Window: a fixed number of cycles or a fixed time",
+    id: "nodeTraceDisplayWindowMode",
+    title: "Cycles: a fixed number of periods (period measured from the edges). Time: a fixed length in ms; more cycles show as the pitch rises. Both values are kept (lib/visual/scope-sync.js).",
+    options: Object.freeze([
+      Object.freeze({ value: "cycles", label: "Cycles" }),
+      Object.freeze({ value: "time", label: "Time" }),
+    ]),
+  }),
   faceView: Object.freeze({
     label: "View",
     aria: "Robin Sinepulse face view",
@@ -2709,6 +2732,7 @@ const nodeGraphDisplaySettingsFormTypeTitles = Object.freeze({
   clockDividerFace: "Clock Divider",
   pulseExplosionFace: "Pulse Explosion",
   pulseTrainFace: "Pulse Train",
+  plotFace: "Plot",
   robinSinepulseFace: "Robin Sinepulse",
   textBoxFace: "Text Box",
   keyboardControllerFace: "MIDI Keyboard",

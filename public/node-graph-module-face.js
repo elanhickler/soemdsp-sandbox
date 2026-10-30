@@ -8,9 +8,11 @@
 // Row kinds (any module opts in with a `face` list in its definition):
 //   choices   { param, labels }                 labeled button row (short names that fit)
 //   fraction  { num, den, mode, modeLabels, cell? } musical division: n / d + Normal/Dotted/Triplet (+ optional cell)
-//   lfoStyles { param, labels, seedParam }      buttons with waveform snips
+//   lfoStyles { param, labels, seedParam, shapes? }  buttons with waveform snips; shapes maps
+//     each button to a snip (0 Parabol, 1 Walk, 2 FBM), default the button index
 //   cells     { params: [[key, label, "bipolar"|"stack"|"horizontal"?]...], horizontal }
-//     fill sliders (bipolar fills from the middle). "stack" = two choice buttons + over −.
+//     column cells are fill sliders (bipolar fills from the middle); row ("horizontal") cells
+//     show a position handle. "stack" = two choice buttons + over −.
 //     Per-cell "horizontal" overrides the row flag.
 //     Choice switch (app-wide): { kind: "cells", params: [[key, label]], horizontal: true }
 //     Label left, value right, selected-slot rectangle, no divider strokes.
@@ -41,6 +43,8 @@ const NODE_GRAPH_FACE_SPAN_GRAB_PX = 9;
 const NODE_GRAPH_FACE_SPAN_TEXT_PX = 18;
 const NODE_GRAPH_FACE_SPAN_EDGE_PX = 3;
 const NODE_GRAPH_FACE_SPAN_MID_PX = 5;
+// Row-cell position handle half width (face px), same as the generic slider.
+const NODE_GRAPH_FACE_CELL_HANDLE_HALF_PX = 8;
 
 const NodeGraphFaceInk = Object.freeze({
   rowFill: "#10131a",
@@ -61,6 +65,13 @@ const NodeGraphFaceInk = Object.freeze({
   slash: "#5a6578",
   label: "#cfdde5",
   value: "#ffffff",
+  // Unit after a value (the generic slider's --node-slider-unit-color).
+  unit: "#7fc7d9",
+  // Position handle on row cells: the generic slider handle's size and shape, face palette color.
+  handle: "#1c334c", // = cellValueFill: row handles match the column fill
+  // Live MOD ghost (the generic slider's --node-slider-ghost-color): a ghost
+  // handle at the modulated value, a translucent overlay on a switch slot.
+  ghost: "rgba(199, 140, 255, 0.38)",
   hpf: "#ffb0a0",
   lpf: "#9ec0ff",
   hpfCurve: "rgb(255 130 110)",
@@ -265,7 +276,13 @@ function nodeGraphModuleFaceValue(input) {
 
 /** Shown value (modulated when sent) + unit. B-106: same formatter as the slider readout, so the param's Max Digits applies. */
 function nodeGraphModuleFaceValueText(input) {
-  if (!input) return "";
+  const { text, unit } = nodeGraphModuleFaceValueParts(input);
+  return unit ? `${text} ${unit}` : text;
+}
+
+/** Value text and its unit, apart (the unit draws in ink.unit). */
+function nodeGraphModuleFaceValueParts(input) {
+  if (!input) return { text: "", unit: "" };
   if (typeof nodeSliderReadoutValueText === "function") {
     const text = String(nodeSliderReadoutValueText(input)).trim();
     // A param's displayTransform may show another unit (Sweep Time: s stored, ms shown).
@@ -279,7 +296,7 @@ function nodeGraphModuleFaceValueText(input) {
     }
     let unit = String((shown && typeof shown === "object" && shown.unit) || input.dataset.unit || "");
     if (/^cycles?$/i.test(unit)) unit = "\u03C6";
-    return unit && !(typeof nodeSliderChoiceLabel === "function" && nodeSliderChoiceLabel(input)) ? `${text} ${unit}` : text;
+    return unit && !(typeof nodeSliderChoiceLabel === "function" && nodeSliderChoiceLabel(input)) ? { text, unit } : { text, unit: "" };
   }
   const sent = Number(input.dataset.sentDomainValue);
   const v = Number.isFinite(sent) ? sent : nodeGraphModuleFaceValue(input);
@@ -289,17 +306,37 @@ function nodeGraphModuleFaceValueText(input) {
     : v.toFixed(a >= 100 ? 0 : (a >= 10 ? 1 : 2));
   let unit = String(input.dataset.unit || "");
   if (/^cycles?$/i.test(unit)) unit = "\u03C6";
-  return unit ? `${text} ${unit}` : text;
+  return { text, unit };
 }
 
-function nodeGraphModuleFaceTravel(input) {
-  if (!input) return 0;
-  const sent = Number(input.dataset.sentDomainValue);
-  const value = Number.isFinite(sent) ? sent : nodeGraphModuleFaceValue(input);
+function nodeGraphModuleFaceTravelOf(input, value) {
   const t = typeof nodeSliderTravelFromValue === "function"
     ? nodeSliderTravelFromValue(input, value)
     : (value - Number(input.min)) / Math.max(1e-9, Number(input.max) - Number(input.min));
   return Math.max(0, Math.min(1, Number(t) || 0));
+}
+
+/** Knob position 0..1: handles and fills sit at the knob; the modulated value is the ghost. */
+function nodeGraphModuleFaceTravel(input) {
+  if (!input) return 0;
+  return nodeGraphModuleFaceTravelOf(input, nodeGraphModuleFaceValue(input));
+}
+
+/** Modulated value while the param has a live MOD ghost, else NaN. syncNodeGraphGhostSliders
+ *  (node-graph-ghost-sliders.js) flags the readout and stores the value on the input, so
+ *  faces and generic sliders read the same ghost on the same tick. */
+function nodeGraphModuleFaceGhostValue(input) {
+  if (!input) return Number.NaN;
+  const readout = input.closest?.("label")?.querySelector?.(".node-slider-readout");
+  if (!readout?.classList.contains("has-ghost-slider")) return Number.NaN;
+  const v = Number(input.dataset.sentDomainValue);
+  return Number.isFinite(v) ? v : Number.NaN;
+}
+
+/** Ghost position 0..1, NaN when there is no ghost. */
+function nodeGraphModuleFaceGhostTravel(input) {
+  const v = nodeGraphModuleFaceGhostValue(input);
+  return Number.isFinite(v) ? nodeGraphModuleFaceTravelOf(input, v) : Number.NaN;
 }
 
 function nodeGraphModuleFaceLogT(hz) {
@@ -662,9 +699,24 @@ function beginNodeGraphModuleFaceGesture(article, face, spec, event) {
     const choiceN = nodeGraphModuleFaceParamChoiceCount(input);
     const choiceSwitch = wd.horizontal && choiceN > 1;
     // Choice switch: click the slot. Continuous cell: drag from the current value.
-    const t0 = choiceSwitch
+    let t0 = choiceSwitch
       ? Math.max(0, Math.min(1, (p.x - wd.x) / Math.max(1, wd.w)))
       : nodeGraphModuleFaceTravel(input);
+    // Alt+click (same law as every slider): jump to the pointer and snap the
+    // smoother for that write, then drag on from there. Row cells fill left to
+    // right, column cells bottom to top.
+    const altJump = !choiceSwitch && !resetOnClick && input
+      && event.altKey && !(event.shiftKey && (event.ctrlKey || event.metaKey));
+    if (altJump) {
+      t0 = wd.horizontal
+        ? Math.max(0, Math.min(1, (p.x - wd.x) / Math.max(1, wd.w)))
+        : Math.max(0, Math.min(1, 1 - (p.y - wd.y) / Math.max(1, wd.h)));
+      const v = typeof nodeSliderValueFromTravel === "function" ? nodeSliderValueFromTravel(input, t0) : t0;
+      if (typeof setNodeSliderValue === "function") {
+        setNodeSliderValue(input, Number(input.step) >= 1 ? Math.round(v) : v, { interaction: "drag", bypassSmoothing: true });
+      }
+      if (typeof markNodeGraphRenderPending === "function") markNodeGraphRenderPending();
+    }
     // Like every slider: up or right raises, down or left lowers.
     move = (ev) => {
       const { dx, dy } = travel(ev);
@@ -940,6 +992,24 @@ function nodeGraphModuleFaceText(batch, text, x, y, px, css, opts = {}) {
   nodeGraphGlLinesText(batch, String(text), x, y, typeof nodeGraphGlGraphTextOpts === "function" ? nodeGraphGlGraphTextOpts(o) : o);
 }
 
+/** A param's value in `css` with its unit after it in ink.unit (smaller), aligned as one run at x. */
+function nodeGraphModuleFaceValueRun(batch, input, x, y, px, css, opts = {}) {
+  const { text, unit } = nodeGraphModuleFaceValueParts(input);
+  if (!unit || typeof nodeGraphGlLinesMeasureText !== "function") {
+    nodeGraphModuleFaceText(batch, unit ? `${text} ${unit}` : text, x, y, px, css, opts);
+    return;
+  }
+  const family = typeof nodeGraphGlGraphTextOpts === "function" ? nodeGraphGlGraphTextOpts({ px }).family : undefined;
+  const unitPx = px * 0.8;
+  const gap = px * 0.3;
+  const valueW = nodeGraphGlLinesMeasureText(text, px, family, 400);
+  const unitW = nodeGraphGlLinesMeasureText(unit, unitPx, family, 400);
+  const align = opts.align || "center";
+  const start = align === "right" ? x - valueW - gap - unitW : (align === "left" ? x : x - (valueW + gap + unitW) * 0.5);
+  nodeGraphModuleFaceText(batch, text, start, y, px, css, { align: "left" });
+  nodeGraphModuleFaceText(batch, unit, start + valueW + gap, y, unitPx, NodeGraphFaceInk.unit, { align: "left" });
+}
+
 /** 135deg stripes (7 px band / 14 px period, as the CSS gradient) clipped to a screen-px box. */
 function nodeGraphModuleFaceDrawOwnedStripes(batch, x, y, w, h, z) {
   const rgba = nodeGraphModuleFaceRgba("rgba(226, 168, 109, 0.16)");
@@ -989,22 +1059,27 @@ function nodeGraphModuleFaceDrawGl(batch, el, w, ox, oy, z) {
     }
     const input = wd.param ? nodeGraphModuleFaceInput(el, wd.param) : null;
     const index = input ? Math.round(nodeGraphModuleFaceValue(input) - Number(input.min || 0)) : -1;
+    // Switch slot the modulated value lands in (NaN: no ghost).
+    const gv = input ? nodeGraphModuleFaceGhostValue(input) : Number.NaN;
+    const gIndex = Number.isFinite(gv) ? Math.round(gv - Number(input.min || 0)) : Number.NaN;
     const cx = wd.x + wd.w * 0.5;
     const cy = wd.y + wd.h * 0.5;
     if (wd.type === "choice") {
       const on = index === wd.index;
       if (on) rect(wd.x, wd.y + 1, wd.w, wd.h - 1, ink.choiceOn);
+      if (gIndex === wd.index) rect(wd.x, wd.y + 1, wd.w, wd.h - 1, ink.ghost);
       if (wd.x > 0) line(wd.x, wd.y, 1, wd.h, ink.rowLine);
       nodeGraphModuleFaceText(batch, wd.label, ox + cx * z, oy + cy * z, 12.6 * z, on ? ink.choiceOnText : ink.offText);
     } else if (wd.type === "lfoStyle") {
       const on = index === wd.index;
       if (on) rect(wd.x, wd.y + 1, wd.w, wd.h - 1, ink.subOn);
+      if (gIndex === wd.index) rect(wd.x, wd.y + 1, wd.w, wd.h - 1, ink.ghost);
       if (wd.x > 0) line(wd.x, wd.y, 1, wd.h, ink.rowLine);
-      // Condensed 5 waveform snips, drawn only while the project plays.
-      const live = typeof scopePaintIsDrawingLive === "function" && scopePaintIsDrawingLive();
+      // Condensed 5 waveform snips: a static preview from the Seed, drawn
+      // playing or stopped (displays work while stopped, APP_POLICY 3b).
       const seed = nodeGraphModuleFaceValue(nodeGraphModuleFaceInput(el, wd.row.seedParam || "seed"));
       const n = 48;
-      const shape = nodeGraphModuleFaceLfoShape(wd.index, seed, n);
+      const shape = nodeGraphModuleFaceLfoShape(wd.row.shapes?.[wd.index] ?? wd.index, seed, n);
       const px0 = wd.x + 5;
       const pw = wd.w - 10;
       const py = wd.y + 4;
@@ -1014,7 +1089,7 @@ function nodeGraphModuleFaceDrawGl(batch, el, w, ox, oy, z) {
         pts[i * 2] = ox + (px0 + (pw * i) / (n - 1)) * z;
         pts[i * 2 + 1] = oy + (py + ph * 0.5 - shape[i] * 0.92 * ph * 0.5) * z;
       }
-      if (live) {
+      {
         // One thin stroke of constant width: round-capped pieces of an opaque
         // ink meet as round joins, so the sharp Walk / FBM turns do not bulge
         // the way mitered ribbon joins do.
@@ -1032,6 +1107,7 @@ function nodeGraphModuleFaceDrawGl(batch, el, w, ox, oy, z) {
     } else if (wd.type === "subChoice") {
       const on = index === wd.index;
       if (on) rect(wd.x, wd.y, wd.w, wd.h, ink.subOn);
+      if (gIndex === wd.index) rect(wd.x, wd.y, wd.w, wd.h, ink.ghost);
       line(wd.x, wd.y, 1, wd.h, ink.rowLine);
       if (wd.index > 0) line(wd.x, wd.y, wd.w, 1, ink.rowLine);
       nodeGraphModuleFaceText(batch, wd.label, ox + cx * z, oy + cy * z, 11.5 * z, on ? ink.subOnText : ink.offText);
@@ -1044,6 +1120,7 @@ function nodeGraphModuleFaceDrawGl(batch, el, w, ox, oy, z) {
       if (wd.row.kind === "cells" && wd.x > 0) line(wd.x, wd.y, 1, wd.h, ink.cellLine);
       if (wd.bipolar) line(wd.x, wd.y, 1, wd.h, ink.cellLine);
       const t = nodeGraphModuleFaceTravel(input);
+      const tg = nodeGraphModuleFaceGhostTravel(input);
       // Jack-owned param (wired ƒ replaces it): the same 135deg stripes as the
       // .node-parameter-row.f-jack-owns-frequency row (styles.css).
       if (wd.param && el.querySelector(`.node-parameter-row.f-jack-owns-frequency[data-param="${CSS.escape(wd.param)}"]`)) {
@@ -1060,6 +1137,7 @@ function nodeGraphModuleFaceDrawGl(batch, el, w, ox, oy, z) {
         for (let i = 0; i < n; i += 1) {
           const sy = top + i * hh;
           if (idx === i) rect(wd.x + gap, sy, cw, hh, ink.cellValueFill);
+          if (gIndex === i) rect(wd.x + gap, sy, cw, hh, ink.ghost);
           if (i > 0) line(wd.x + gap, sy, cw, 1, ink.cellLine);
           const lab = String(labels[i] ?? (i === 0 ? "+" : "\u2212"));
           const px = n > 2 ? 11.5 : 13.8;
@@ -1067,17 +1145,22 @@ function nodeGraphModuleFaceDrawGl(batch, el, w, ox, oy, z) {
         }
       } else if (wd.horizontal) {
         // Horizontal cell: label left, value right. Choice switch: selected-slot
-        // rectangle, no divider strokes. Continuous params fill left to right.
+        // rectangle, no divider strokes. Continuous params show a position handle.
         const choiceN = nodeGraphModuleFaceParamChoiceCount(input);
         if (choiceN > 1) {
           const idx = Math.max(0, Math.min(choiceN - 1, Math.round(nodeGraphModuleFaceValue(input) - Number(input.min || 0))));
           const slot = cw / choiceN;
           rect(wd.x + gap + idx * slot, top, slot, ch, ink.cellValueFill);
+          if (gIndex >= 0 && gIndex < choiceN) rect(wd.x + gap + gIndex * slot, top, slot, ch, ink.ghost);
         } else {
-          rect(wd.x + gap, top, t * cw, ch, ink.cellValueFill);
+          // Position handle only (generic slider look), no fill; ghost handle at the modulated value.
+          const hw = Math.min(NODE_GRAPH_FACE_CELL_HANDLE_HALF_PX, cw * 0.5);
+          const hx = wd.x + gap + hw + t * Math.max(0, cw - 2 * hw);
+          rect(hx - hw, top, 2 * hw, ch, ink.handle);
+          if (Number.isFinite(tg)) rect(wd.x + gap + tg * Math.max(0, cw - 2 * hw), top, 2 * hw, ch, ink.ghost);
         }
         nodeGraphModuleFaceText(batch, wd.label, ox + (wd.x + gap + 6) * z, oy + cy * z, 12.6 * z, ink.label, { align: "left" });
-        nodeGraphModuleFaceText(batch, nodeGraphModuleFaceValueText(input), ox + (wd.x + wd.w - 6) * z, oy + cy * z, 13.8 * z, ink.value, { align: "right" });
+        nodeGraphModuleFaceValueRun(batch, input, ox + (wd.x + wd.w - 6) * z, oy + cy * z, 13.8 * z, ink.value, { align: "right" });
       } else {
         if (wd.bipolar) {
           const a = Math.min(0.5, 1 - t);
@@ -1085,8 +1168,14 @@ function nodeGraphModuleFaceDrawGl(batch, el, w, ox, oy, z) {
         } else {
           rect(wd.x + gap, top + (1 - t) * ch, cw, t * ch, ink.cellValueFill);
         }
+        // Ghost handle, vertical: a bar across the cell at the modulated height
+        // (the modulation range is unknown, so no range band).
+        if (Number.isFinite(tg)) {
+          const hv = Math.min(NODE_GRAPH_FACE_CELL_HANDLE_HALF_PX * 0.5, ch * 0.25);
+          rect(wd.x + gap, top + (1 - tg) * Math.max(0, ch - 2 * hv), cw, 2 * hv, ink.ghost);
+        }
         nodeGraphModuleFaceText(batch, wd.label, ox + cx * z, oy + (cy - 7) * z, 12.6 * z, ink.label, { maxWidth: (cw - 4) * z });
-        nodeGraphModuleFaceText(batch, nodeGraphModuleFaceValueText(input), ox + cx * z, oy + (cy + 7) * z, 13.8 * z, ink.value, { maxWidth: (cw - 4) * z });
+        nodeGraphModuleFaceValueRun(batch, input, ox + cx * z, oy + (cy + 7) * z, 13.8 * z, ink.value, { maxWidth: (cw - 4) * z });
       }
     } else if (wd.type === "filter") {
       nodeGraphModuleFaceDrawFilterGl(batch, el, wd, ox, oy, z, rect, line);
@@ -1098,8 +1187,8 @@ function nodeGraphModuleFaceDrawGl(batch, el, w, ox, oy, z) {
       rect(wd.x + a * wd.w, wd.y + 1, (b - a) * wd.w, wd.h - 1, ink.bandSpan);
       const loText = nodeGraphModuleFaceValueText(lo);
       const hiText = nodeGraphModuleFaceValueText(hi);
-      nodeGraphModuleFaceText(batch, loText, ox + (wd.x + 6) * z, oy + cy * z, 12 * z, ink.bandText, { align: "left" });
-      nodeGraphModuleFaceText(batch, hiText, ox + (wd.x + wd.w - 6) * z, oy + cy * z, 12 * z, ink.bandText, { align: "right" });
+      nodeGraphModuleFaceValueRun(batch, lo, ox + (wd.x + 6) * z, oy + cy * z, 12 * z, ink.bandText, { align: "left" });
+      nodeGraphModuleFaceValueRun(batch, hi, ox + (wd.x + wd.w - 6) * z, oy + cy * z, 12 * z, ink.bandText, { align: "right" });
       // Label shrinks to fit between the two values (one uniform px, no squeeze).
       const family = typeof nodeGraphGlGraphTextOpts === "function" ? nodeGraphGlGraphTextOpts({ px: 12 }).family : undefined;
       const measure = (text, px) => nodeGraphGlLinesMeasureText(text, px, family, 400);
@@ -1121,6 +1210,11 @@ function nodeGraphModuleFaceDrawGl(batch, el, w, ox, oy, z) {
           rect(hx, top, hw, bottom - top, ink.bandHandle);
         }
       }
+      // Ghost handles at each modulated end.
+      for (const end of [lo, hi]) {
+        const g = nodeGraphModuleFaceGhostTravel(end);
+        if (Number.isFinite(g)) rect(nodeGraphModuleFaceBandBarX(wd, g), wd.y + 4, hw, wd.h - 8, ink.ghost);
+      }
     } else if (wd.type === "span") {
       // Values on top (first left, last right, the rest spread between), bar below: fill from first to last
       // handle, end handles thin, inner handles wider and white.
@@ -1131,7 +1225,7 @@ function nodeGraphModuleFaceDrawGl(batch, el, w, ox, oy, z) {
       inputs.forEach((input, i) => {
         const f = n > 1 ? i / (n - 1) : 0.5;
         const align = i === 0 ? "left" : (i === n - 1 ? "right" : "center");
-        nodeGraphModuleFaceText(batch, nodeGraphModuleFaceValueText(input), ox + (wd.x + 6 + f * (wd.w - 12)) * z, oy + ty * z, 12 * z,
+        nodeGraphModuleFaceValueRun(batch, input, ox + (wd.x + 6 + f * (wd.w - 12)) * z, oy + ty * z, 12 * z,
           align === "center" ? ink.value : ink.bandText, { align, maxWidth: slot * z });
       });
       const top = wd.y + NODE_GRAPH_FACE_SPAN_TEXT_PX + 2;
@@ -1144,6 +1238,8 @@ function nodeGraphModuleFaceDrawGl(batch, el, w, ox, oy, z) {
         const inner = i > 0 && i < n - 1;
         const hw = inner ? NODE_GRAPH_FACE_SPAN_MID_PX : NODE_GRAPH_FACE_SPAN_EDGE_PX;
         rect(x0 + v * bw - hw * 0.5, inner ? top - 2 : top, hw, bottom - top + (inner ? 4 : 0), inner ? ink.spanMid : ink.bandHandle);
+        const g = nodeGraphModuleFaceGhostTravel(inputs[i]);
+        if (Number.isFinite(g)) rect(x0 + g * bw - hw * 0.5, inner ? top - 2 : top, hw, bottom - top + (inner ? 4 : 0), ink.ghost);
       });
     } else if (wd.type === "seedNumber" && typeof nodeGraphGlGraphDrawSeedWidget === "function") {
       // The app-wide seed widget ([code][die][+][-]); its buttons are this row's seedButton cells.
@@ -1227,12 +1323,18 @@ function nodeGraphModuleFaceDrawFilterGl(batch, el, wd, ox, oy, z, rect, line) {
   // Vertical handles (soundemote-dev Condensed 5 drawFilterCurve): a faint
   // full-height bar at each cutoff and the 4 pole stops (1-4 poles = 6/12/18/24
   // dB, bottom to top) as dots, the current one bigger and brighter.
-  for (const [fc, css, n] of [[fcH, ink.hpfCurve, nH], [fcL, ink.lpfCurve, nL]]) {
+  for (const [fc, css, n, cutInput] of [[fcH, ink.hpfCurve, nH, hpfInput], [fcL, ink.lpfCurve, nL, lpfInput]]) {
     const on = n - 1;
     const hx = ox + nodeGraphModuleFaceLogT(fc) * w * z;
     const c = nodeGraphModuleFaceRgba(css);
     const tint = (a) => [c[0], c[1], c[2], c[3] * a];
     nodeGraphGlLinesRect(batch, hx - z, oy + top * z, 2 * z, ch * z, tint(0.14));
+    // Ghost handle at the modulated cutoff.
+    const gfc = nodeGraphModuleFaceGhostValue(cutInput);
+    if (Number.isFinite(gfc)) {
+      const gx = ox + nodeGraphModuleFaceLogT(Math.max(1, gfc)) * w * z;
+      nodeGraphGlLinesRect(batch, gx - 1.5 * z, oy + top * z, 3 * z, ch * z, nodeGraphModuleFaceRgba(ink.ghost));
+    }
     if (typeof nodeGraphGlLinesDot !== "function") continue;
     const pad = 5;
     for (let k = 0; k < stops; k += 1) {

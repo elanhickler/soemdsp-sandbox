@@ -13,6 +13,7 @@
 // change restart every stream from Seed.
 
 #include <soemdsp/soemdsp.hpp>
+#include <soemdsp/math/robin_dither.h>
 
 namespace {
 
@@ -60,29 +61,9 @@ double centsToRatio(double cents) {
   return dsp_exp((cents / 1200.0) * 0.6931471805599453);
 }
 
+// Schmidt cycle distribution: shared single source (math/robin_dither.h).
 void calcCycleDistribution(double c, double* lenMid, double* probShort, double* probMid) {
-  const double ci = floorD(c);
-  const double cf = c - ci;
-  double c2 = ci;
-  if (cf >= 0.5) c2 += 1.0;
-  const double c1 = c2 - 1.0;
-  const double c3 = c2 + 1.0;
-
-  const double e1 = c1 - c;
-  const double e2 = c2 - c;
-  const double e3 = c3 - c;
-  const double v1 = e1 * e1;
-  const double v2 = e2 * e2;
-  const double v3 = e3 * e3;
-  const double v = 0.25;
-  const double d1 = v - v1;
-  const double d2 = v - v2;
-  const double d3 = v - v3;
-  const double s = 1.0 / (e3 * (v1 - v2) - e2 * (v1 - v3) + e1 * (v2 - v3));
-
-  *lenMid = c2;
-  *probShort = (d2 * e3 - d3 * e2) * s;
-  *probMid = (d3 * e1 - d1 * e3) * s;
+  soemdsp_maths::robin_cycle_distribution(c, lenMid, probShort, probMid);
 }
 
 struct DitherVoiceState {

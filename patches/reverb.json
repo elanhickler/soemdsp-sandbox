@@ -679,11 +679,11 @@
       "params": {
         "blend": 0.5,
         "level": 0.700913636384857,
-        "morph": 0.44,
+        "bright": 0.44,
         "phase": 0,
         "waveform": 3,
         "frequency": 7312.40894534695,
-        "pulseWidth": 0.64
+        "morph": 0.64
       },
       "paramMeta": {
         "blend": {
@@ -738,7 +738,7 @@
           "smoothingSeconds": null,
           "divideChoicesVisibly": false
         },
-        "morph": {
+        "bright": {
           "def": 1,
           "max": 1,
           "mid": 0.5,
@@ -848,7 +848,7 @@
           "smoothingSeconds": null,
           "divideChoicesVisibly": false
         },
-        "pulseWidth": {
+        "morph": {
           "def": 0.5,
           "max": 0.99,
           "mid": 0.5,
@@ -1027,7 +1027,7 @@
       "sourcePort": "Z",
       "tracePoints": [],
       "destinationNode": "dsfOscillator-1",
-      "destinationParam": "pulseWidth"
+      "destinationParam": "morph"
     }
   ],
   "bypassedNodes": [],

@@ -12,6 +12,7 @@
 // fixed component) at create, Reset and Seed change. No slot index or clock.
 
 #include <soemdsp/soemdsp.hpp>
+#include <soemdsp/math/robin_dither.h>
 
 namespace {
 
@@ -59,29 +60,9 @@ double randomUnit(unsigned int& state) {
   return static_cast<double>(xorshift32(state) >> 8) * (1.0 / 16777216.0);
 }
 
+// Schmidt cycle distribution: shared single source (math/robin_dither.h).
 void calcCycleDistribution(double c, double* lenMid, double* probShort, double* probMid) {
-  const double ci = dsp_floor(c);
-  const double cf = c - ci;
-  double c2 = ci;
-  if (cf >= 0.5) c2 += 1.0;
-  const double c1 = c2 - 1.0;
-  const double c3 = c2 + 1.0;
-
-  const double e1 = c1 - c;
-  const double e2 = c2 - c;
-  const double e3 = c3 - c;
-  const double v1 = e1 * e1;
-  const double v2 = e2 * e2;
-  const double v3 = e3 * e3;
-  const double v = 0.25;
-  const double d1 = v - v1;
-  const double d2 = v - v2;
-  const double d3 = v - v3;
-  const double s = 1.0 / (e3 * (v1 - v2) - e2 * (v1 - v3) + e1 * (v2 - v3));
-
-  *lenMid = c2;
-  *probShort = (d2 * e3 - d3 * e2) * s;
-  *probMid = (d3 * e1 - d1 * e3) * s;
+  robin_cycle_distribution(c, lenMid, probShort, probMid);
 }
 
 struct RobinOscState {
@@ -151,7 +132,9 @@ void updateCycleLength(RobinOscState& v) {
     v.phaseSlope = 0.0;
     return;
   }
-  double slope = 1.0 / (v.lenNow - 1.0);
+  // Phase steps 1/L so the cycle lasts exactly L samples (v4; 1/(L-1) wrapped
+  // on phase >= 1 one sample early, so every cycle played sharp).
+  double slope = 1.0 / v.lenNow;
   if (v.currentInc < 0.0) slope = -slope;
   v.phaseSlope = slope;
 }
@@ -182,6 +165,26 @@ void placePhaseInCycle(RobinOscState& voice, double phaseInto) {
     voice.sampleCount = 0.0;
   }
   if (!(voice.sampleCount >= 0.0) || !(voice.sampleCount < voice.lenNow)) {
+    voice.sampleCount = 0.0;
+  }
+}
+
+// Reset (full Reset, start phase, partial Reset): land on a whole sample of
+// the current cycle (math/robin_dither.h reset rule), so the next wrap stays on
+// the sample grid. Wraps keep their own overshoot path (beginCycle).
+void resetPhaseOnGrid(RobinOscState& voice, double target) {
+  const double steps = voice.lenNow >= 1.0 ? voice.lenNow : 1.0;
+  const double slope = voice.phaseSlope;
+  if (slope < -1.0e-15) {
+    const double count = robin_grid_count(1.0 - target, steps);
+    voice.sampleCount = count;
+    voice.phase = wrap01(1.0 - count / steps);
+  } else if (slope > 1.0e-15) {
+    const double count = robin_grid_count(target, steps);
+    voice.sampleCount = count;
+    voice.phase = count / steps;
+  } else {
+    voice.phase = wrap01(target);
     voice.sampleCount = 0.0;
   }
 }
@@ -409,7 +412,7 @@ double robinOscSample(
     bakeDistribution(state, inc);
     updateCycleLength(state);
     double sp = finiteValue(startPhaseCycles) ? startPhaseCycles : 0.0;
-    placePhaseInCycle(state, sp);
+    resetPhaseOnGrid(state, sp);
     state.lastFreqUpdate = style;
     state.primed = true;
   } else {
@@ -581,7 +584,7 @@ extern "C" int soemdsp_robin_oscillator_max_block_frames() {
 }
 
 extern "C" int soemdsp_robin_oscillator_version() {
-  return 3;
+  return 4; // v4: cycles last exactly L samples; Reset lands on the sample grid
 }
 
 extern "C" const char* soemdsp_robin_oscillator_metadata_json() {
@@ -598,5 +601,5 @@ extern "C" int soemdsp_robin_oscillator_metadata_json_size() {
 extern "C" void soemdsp_robin_oscillator_partial_reset(int handle, double h) {
   RobinOscState* state = stateForHandle(handle);
   if (!state) return;
-  state->phase = soemdsp::math::partial_reset_phase(state->phase, 0.0, h);
+  resetPhaseOnGrid(*state, soemdsp::math::partial_reset_phase(state->phase, 0.0, h));
 }

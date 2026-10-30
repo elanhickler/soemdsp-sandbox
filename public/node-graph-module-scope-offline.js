@@ -393,7 +393,7 @@ function nodeGraphModuleScopeOscillatorPhasor(slot, frequency, cycles, modelTime
 // displayType/renderer "waterfall"), so the field exists here for all of them,
 // but a non-Output trace node's draw path never reads it.
 // nodeGraphWaterfallSettingsDefaults → node-graph-module-scope-defaults.js
-// 1D Phosphor = heart-monitor energy trail: sweepHz = left→right passes/sec.
+// 1D Phosphor = heart-monitor energy trail: one pass = Time (ms) (lib/visual/scope-sync.js).
 // Y = sample. Optional rising-edge Reset snaps to the left.
 // nodeGraphLineBurnSettingsDefaults → node-graph-module-scope-defaults.js
 // nodeGraphTraceDisplayRenderPointBudgetDefault → node-graph-module-scope-defaults.js
@@ -462,7 +462,7 @@ function nodeGraphTraceDisplayRenderPointBudget() {
 // normalizeNodeGraphTraceDisplayColor → node-graph-module-scope-normalize.js
 // normalizeNodeGraphTraceDisplayNumber → node-graph-module-scope-normalize.js
 // normalizeNodeGraphTraceDisplayZoomSeconds → node-graph-module-scope-normalize.js
-// normalizeNodeGraphLineBurnSweepPair → node-graph-module-scope-normalize.js
+// Sync / Time (ms) → lib/visual/scope-sync.js
 // normalizeNodeGraphLineBurnSettings → node-graph-module-scope-normalize.js
 // normalizeNodeGraphZeroDBurnSettings → node-graph-module-scope-normalize.js
 // normalizeNodeGraphWaterfallSettings → node-graph-module-scope-normalize.js
@@ -486,7 +486,7 @@ function nodeGraphTraceDisplayRenderPointBudget() {
 // nodeGraphGlobalTraceSettings → node-graph-module-scope-normalize.js
 // nodeGraphTraceDisplaySettingsEditingGlobal → node-graph-module-scope-normalize.js
 // nodeGraphWaterfallSettingsEditingDefaults → node-graph-module-scope-normalize.js
-const nodeGraphDisplayModeRenderers = Object.freeze(["waterfall", "waterfallRgb", "clock", "dot", "vectorDot", "pulseDot", "lcdDot", "value", "lineBurn", "hypersawBurn", "ensembleCloud", "videoscopeBurn", "spectrogramBurn", "spectrumLine", "transportBpm", "scope2d", "scope2dTrace", "scope1dTrace", "phosphorLight", "sampleWaveform", "numberReadout", "xyPad", "customDisplay", "spectrum", "selfPaintFace", "matrixFace", "matrixWaterfallFace", "matrixDisplayFace", "knobFace", "pluginSliderFace", "toggleButtonFace", "momentaryButtonFace", "rgbShapeFace", "rgbPictureFace", "imageBurnFace", "videoFeedbackFace", "videoDelayFace", "aberrationFace", "screenBendFace", "placeFace", "rgbFractalFace", "evolveFieldFace", "fbmFieldFace", "speedColorInertiaFace", "patchFace", "keypadFace", "keyboardControllerFace", "textBoxFace", "phoneToneFace", "harmonicSeriesFace", "vectorRgbFace", "rasterRgbFace", "gradientVectorscopeFace", "waterfallXyz", "portalFace", "roundShapeFace", "basicShapeFace", "sinCosFace", "clockFace", "clockDividerFace", "logicLampsFace", "triggerDividerFace", "pulseExplosionFace", "pulseTrainFace", "robinSinepulseFace", "softwaveOscFace", "sinCos4Face", "limiterGainFace", "softpopFace", "arpKeysFace", "slewShapeFace", "torchFace", "tSeriesFace"]);
+const nodeGraphDisplayModeRenderers = Object.freeze(["waterfall", "waterfallRgb", "clock", "dot", "vectorDot", "pulseDot", "lcdDot", "value", "lineBurn", "hypersawBurn", "ensembleCloud", "videoscopeBurn", "spectrogramBurn", "spectrumLine", "transportBpm", "scope2d", "scope2dTrace", "scope1dTrace", "plot", "phosphorLight", "sampleWaveform", "numberReadout", "xyPad", "customDisplay", "spectrum", "selfPaintFace", "matrixFace", "matrixWaterfallFace", "matrixDisplayFace", "knobFace", "pluginSliderFace", "toggleButtonFace", "momentaryButtonFace", "rgbShapeFace", "rgbPictureFace", "imageBurnFace", "videoFeedbackFace", "videoDelayFace", "aberrationFace", "screenBendFace", "placeFace", "rgbFractalFace", "evolveFieldFace", "fbmFieldFace", "speedColorInertiaFace", "patchFace", "keypadFace", "keyboardControllerFace", "textBoxFace", "phoneToneFace", "harmonicSeriesFace", "vectorRgbFace", "rasterRgbFace", "gradientVectorscopeFace", "waterfallXyz", "portalFace", "roundShapeFace", "basicShapeFace", "sinCosFace", "clockFace", "clockDividerFace", "logicLampsFace", "triggerDividerFace", "pulseExplosionFace", "pulseTrainFace", "robinSinepulseFace", "softwaveOscFace", "sinCos4Face", "limiterGainFace", "softpopFace", "arpKeysFace", "slewShapeFace", "torchFace", "tSeriesFace"]);
 const nodeGraphDisplayModeSignalKinds = Object.freeze(["scalar", "xy", "buffer"]);
 
 // nodeGraphDisplayModeSettingsSchemaForRenderer → node-graph-module-scope-display-mode.js
@@ -571,7 +571,7 @@ function nodeGraphModuleDisplayTypeForSlot(slot) {
 }
 
 function nodeGraphModuleScopeSlotUsesWiredInputs(slot) {
-  return ["waterfall", "waterfallStereo", "onset", "onset2d", "waterfallXyz", "dotOscilloscope", "valueOscilloscope", "lineBurnOscilloscope", "scope1dTrace", "scope1dTraceStereo", "scope2d", "scope2dTrace", "phosphorLight", "visualOscilloscope", "numberReadout", "valueLcd", "led", "vectorDot", "lcdDot", "imageBurn", "rgbPicture", "vectorRgb", "rasterRgb", "gradientVectorscope", "waterfallXyz", "waterfallRgb"].includes(slot?.type);
+  return ["waterfall", "waterfallStereo", "onset", "onset2d", "waterfallXyz", "dotOscilloscope", "valueOscilloscope", "lineBurnOscilloscope", "scope1dTrace", "scope1dTraceStereo", "plot1d", "plot1dStereo", "plot2d", "scope2d", "scope2dTrace", "phosphorLight", "visualOscilloscope", "numberReadout", "valueLcd", "led", "vectorDot", "lcdDot", "imageBurn", "rgbPicture", "vectorRgb", "rasterRgb", "gradientVectorscope", "waterfallXyz", "waterfallRgb"].includes(slot?.type);
 }
 
 function nodeGraphModuleDisplaySourceForSlot(slot) {

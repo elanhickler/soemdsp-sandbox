@@ -2702,8 +2702,9 @@
         "lineThickness": 0.35,
         "pixelDensity": 1,
         "scale": 1,
-        "sweepHz": 4,
-        "sweepCycles": 4
+        "windowMode": "cycles",
+        "windowCycles": 4,
+        "timeMs": 250
       },
       "ui": {
         "buttonsHidden": false,

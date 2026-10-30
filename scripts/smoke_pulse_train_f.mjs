@@ -27,7 +27,12 @@ function run(E, { fHz = null, end = 3, count = 10, curve = 3, rate = 0.3, second
   if (E.soemdsp_graph_connect(g, hC, PORT_MONO, hP, PORT_TRIGGER) | 0) throw new Error("trig");
   if (fHz !== null) {
     if (E.soemdsp_graph_add_node(g, hF, TYPE_HOST_BPM) | 0) throw new Error("bpm add");
-    if (E.soemdsp_graph_connect(g, hF, PORT_MONO, hP, PORT_F) | 0) throw new Error("bpm->f");
+    // Host BPM Out (Mono) is the raw tempo number, a constant ƒ source. A wired
+    // 0 comes from its ƒ out (Saw) at Numer 0: with no tempo it now reports 120 (graph 305).
+    if (fHz === 0) {
+      E.soemdsp_graph_set_param(g, hF, 52, 0);
+      if (E.soemdsp_graph_connect(g, hF, 3, hP, PORT_F) | 0) throw new Error("host f->f");
+    } else if (E.soemdsp_graph_connect(g, hF, PORT_MONO, hP, PORT_F) | 0) throw new Error("bpm->f");
     E.soemdsp_graph_set_host_transport(g, fHz, 0, 0);
   }
   E.soemdsp_graph_set_param(g, hC, PR.RATE, rate);
@@ -138,13 +143,13 @@ for (const fHz of [2, 4, 1.5, 8]) {
   if (!(lastPad < lastFill - 0.1)) throw new Error(`delay 0.2 last pulse ${lastPad} s should be earlier than delay 0 (${lastFill})`);
   console.log(`ok pulseTrain ƒ 2 Hz scale: delay 0 Time 0.2/3 both ${count} pulses fill the period; delay 0.2 last pulse ${lastPad.toFixed(5)} s`);
 }
-// 3) ƒ <= 0 (Host BPM at tempo <= 1 outputs 0): Time knob is used.
+// 3) Wired ƒ 0 pauses the train (graph 304):
+// it does not fall back to the Frequency knob (APP_POLICY 18).
 {
-  const r = run(N, { fHz: 1, end: 0.8 });
+  const r = run(N, { fHz: 0, end: 0.8 });
   const d = lastPulseDelays(r);
-  if (!d.length || d.some((x) => Math.abs(x - 0.8) > 1 / SR)) throw new Error(`ƒ 0: delays ${d}`);
-  if (Math.abs(r.ramp[r.ramp.length - 1] - 0.8) > 1e-12) throw new Error(`ƒ 0: __End ${r.ramp[r.ramp.length - 1]}`);
-  console.log(`ok pulseTrain ƒ 0: Frequency knob (1/0.8 Hz) used, last pulse ${d[0].toFixed(5)} s`);
+  if (d.length) throw new Error(`ƒ 0 should pause (no End), got delays ${d}`);
+  console.log("ok pulseTrain wired ƒ 0: paused (no knob fallback)");
 }
 // 4) ƒ is live (even Recalculate On): 2 → 5 Hz mid-train, End tracks 1/5.
 {

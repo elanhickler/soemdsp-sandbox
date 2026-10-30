@@ -2257,7 +2257,7 @@ function drawNodeGraphNumberReadoutItem(renderer, item, pixelRatio) {
     1,
   );
   const burnAmountHang = clampNodeSliderValue(
-    nodeGraphFiniteNumber(settings.burnAmount, 1),
+    nodeGraphFiniteNumber(settings.burnAmount, PhosphorResidual.DEFAULT_BURN_AMOUNT),
     0,
     1,
   );

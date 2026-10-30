@@ -85,5 +85,10 @@
       "type": "output"
     }
   ],
-  "monitors": []
+  "monitors": [],
+  "timing": {
+    "tempoBpm": 120,
+    "timeSignatureDenominator": 4,
+    "timeSignatureNumerator": 4
+  }
 }

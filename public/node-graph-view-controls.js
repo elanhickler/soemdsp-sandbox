@@ -1102,53 +1102,6 @@ function handleNodeGraphModuleScopeDiscontinuitySkipSamplesInput(event) {
   setNodeGraphModuleScopeDiscontinuitySkipSamples(event.currentTarget.value);
 }
 
-const nodeGraphSliderLayouts = Object.freeze([
-  { key: "text-inside", label: "Text Inside" },
-  { key: "label-value-slider", label: "Label Knob" },
-  { key: "value-unit-left", label: "Value And Unit Left" },
-  { key: "value-unit-right", label: "Value And Unit Right" },
-  { key: "label-outside", label: "Label Outside" },
-  { key: "label-outside-no-unit", label: "Label Outside No Unit" },
-  { key: "value-outside", label: "Value Outside" },
-  { key: "unit-only", label: "Unit Only" },
-  { key: "value-focus", label: "Value Focus" },
-]);
-
-function normalizeNodeGraphSliderLayout(value) {
-  const aliases = {
-    alternate: "label-outside",
-    classic: "text-inside",
-  };
-  const key = aliases[value] || value;
-  return nodeGraphSliderLayouts.some((layout) => layout.key === key) ? key : "text-inside";
-}
-
-function nodeGraphSliderLayoutLabel(value) {
-  const normalized = normalizeNodeGraphSliderLayout(value);
-  return nodeGraphSliderLayouts.find((layout) => layout.key === normalized)?.label || "Text Inside";
-}
-
-function nextNodeGraphSliderLayout(value) {
-  const normalized = normalizeNodeGraphSliderLayout(value);
-  const index = nodeGraphSliderLayouts.findIndex((layout) => layout.key === normalized);
-  const next = nodeGraphSliderLayouts[(index + 1) % nodeGraphSliderLayouts.length];
-  return next?.key || "text-inside";
-}
-
-function renderNodeGraphSliderLayout() {
-  const layout = normalizeNodeGraphSliderLayout(nodeGraphMvp.sliderLayout);
-  nodeGraphMvp.sliderLayout = layout;
-  document.getElementById("nodeGraphWorkspace")?.setAttribute("data-slider-layout", layout);
-  document.getElementById("nodeWiringPanel")?.setAttribute("data-slider-layout", layout);
-  syncNodeUserUiSettingsViewControls();
-}
-
-function cycleNodeGraphSliderLayout() {
-  nodeGraphMvp.sliderLayout = nextNodeGraphSliderLayout(nodeGraphMvp.sliderLayout);
-  renderNodeGraphSliderLayout();
-  setNodeInteractionHelp(`Slider layout: ${nodeGraphSliderLayoutLabel(nodeGraphMvp.sliderLayout)}.`);
-}
-
 function nodeGraphDialogDragTargetIsInteractive(event) {
   const target = event?.target;
   if (!target || target === event.currentTarget) {

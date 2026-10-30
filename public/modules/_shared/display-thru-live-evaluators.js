@@ -48,6 +48,9 @@
     "scope1dTraceStereo left",
     "scope1dTraceStereo right",
   );
+  nodeGraphLiveModuleEvaluators.plot1d = thruFrom("In", "plot1d in");
+  nodeGraphLiveModuleEvaluators.plot1dStereo = stereoThru("plot1dStereo left", "plot1dStereo right");
+  nodeGraphLiveModuleEvaluators.plot2d = stereoThru("plot2d left", "plot2d right");
   nodeGraphLiveModuleEvaluators.matrixDisplay = thruFrom("In", "matrixDisplay in");
   nodeGraphLiveModuleEvaluators.numberReadout = thruFrom("In", "numberReadout in");
   nodeGraphLiveModuleEvaluators.customDisplay = thruFrom("In1", "customDisplay in");

@@ -123,13 +123,13 @@ function nodeGraphClockFaceGeometry(w, h, pulseStart, pulseEnd, stroke, heightPc
 }
 
 /**
- * True when the gate never falls. Same rule as native clock.cpp (v7): the gate
+ * True when the gate never falls. Same rule as native clock.cpp (v8): the gate
  * is high while phase is in [Start, End) with phase in [0, 1), so it is high on
- * every sample exactly when Start is 0 and End is 1, at any rate. Rate 0
- * holds the gate low in the DSP, so it is never endless there.
+ * every sample exactly when Start is 0 and End is 1, at any rate (Rate 0 just
+ * pauses the phase; it is not a special case).
  */
-function nodeGraphClockFaceGateEndless(pulseStart, pulseEnd, rate) {
-  return rate > 0 && pulseStart <= 0 && pulseEnd >= 1;
+function nodeGraphClockFaceGateEndless(pulseStart, pulseEnd) {
+  return pulseStart <= 0 && pulseEnd >= 1;
 }
 
 /** True when phase moved forward from last to now (under half a cycle, wrap allowed) past edge. */
@@ -166,7 +166,7 @@ function drawNodeGraphClockFace(section) {
   const clamp01 = (v) => Math.max(0, Math.min(1, v));
   const pulseStart = clamp01(nodeGraphClockFaceParam(node, "pulseStart", 0));
   const pulseEnd = clamp01(nodeGraphClockFaceParam(node, "pulseEnd", 0.5));
-  const endless = nodeGraphClockFaceGateEndless(pulseStart, pulseEnd, Math.max(0, nodeGraphClockFaceParam(node, "rate", 2)));
+  const endless = nodeGraphClockFaceGateEndless(pulseStart, pulseEnd);
   // Blink on gate start: the playhead crossed Pulse Start since the last frame.
   if (!endless && Number.isFinite(heard) && nodeGraphClockFaceCrossed(section._clockLast, heard, pulseStart)) section._clockFlash = now;
   section._clockLast = heard;

@@ -216,8 +216,8 @@ const nodeGraphTraceDisplaySettingFields = Object.freeze([
   ["historyCycles", "History (cycles)"],
   ["fade", "Fade"],
   ["scale", "Scale"],
-  ["sweepHz", "Sweep (Hz)"],
-  ["sweepCycles", "Sweep (cycles)"],
+  ["timeMs", "Time (ms)"],
+  ["windowCycles", "Cycles"],
   ["fftSize", "FFT size"],
   ["minFreq", "Min freq (Hz)"],
   ["maxFreq", "Max freq (Hz)"],
@@ -264,7 +264,7 @@ const nodeGraphTraceDisplaySettingFields = Object.freeze([
  */
 const nodeGraphPhosphorDisplayFieldOrder = Object.freeze([
   "scale",
-  "sweepHz",
+  "timeMs",
   "backgroundBrightness",
   "backgroundHue",
   "dot1Size",

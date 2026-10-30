@@ -351,7 +351,7 @@
         "background": "#ff0000",
         "backgroundColor": "#ff0000",
         "burn": 0,
-        "burnAmount": 1,
+        "burnAmount": 0.3,
         "residualSchema": 3,
         "decay": 0.7,
         "ghost": 0.25,
@@ -386,8 +386,9 @@
         "lineThickness": 0.35,
         "pixelDensity": 1,
         "scale": 1,
-        "sweepHz": 4,
-        "sweepCycles": 4
+        "windowMode": "time",
+        "windowCycles": 4,
+        "timeMs": 250
       }
     }
   ],

@@ -666,7 +666,7 @@ function drawNodeGraphScope2dEnergyBurnPath(item, pixelRatio, pathPoints, settin
     // Burn layer deposit = Bright x Burn (new strokes only; stored energy is
     // never rescaled). Ghost/Trail only set the decay in the step.
     const burnAmount = typeof PhosphorResidual !== "undefined" && PhosphorResidual.clampBurnAmount
-      ? PhosphorResidual.clampBurnAmount(settings?.burnAmount, 1)
+      ? PhosphorResidual.clampBurnAmount(settings?.burnAmount)
       : 1;
     const liveBrightness = nodeGraphScope2dEnergyBurnDepositGain(layer.brightness, sizeForGain);
     const beamBrightness = nodeGraphScope2dEnergyBurnDepositGain(

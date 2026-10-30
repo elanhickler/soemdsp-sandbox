@@ -54,6 +54,9 @@
   const MAX_DIM = 4096;
   const FLOATS = 12; // pos2, local2, len1, half1, feather1, caps1, rgba4
   const PULSE_TRAIN_MAX = 16384;
+  // Sample plot: raw samples live in an R32F texture this many texels wide.
+  const SAMPLE_PLOT_TEX_W = 4096;
+  const SAMPLE_PLOT_MAX = SAMPLE_PLOT_TEX_W * 64;
   // Perlin quintic. Same one-SDF cost as Hermite smoothstep; C2 at the
   // skirt ends.
   const COVERAGE_GLSL = `
@@ -760,7 +763,10 @@ void main() {
     const k = batch.camera ? 1 : (batch.scale || 1);
     if (k !== 1) { x0 *= k; y0 *= k; x1 *= k; y1 *= k; halfPx *= k; feather *= k; }
     const reach = Math.max(0, halfPx) + Math.max(0, feather) + 4;
-    const clipped = clipLineToRect(
+    // Camera batches hold world coordinates: batch.w/h is the screen, not a world
+    // rect, so clipping there dropped strokes at negative world x/y (face LFO snips
+    // vanished by module position). The GPU clips those.
+    const clipped = batch.camera ? [x0, y0, x1, y1] : clipLineToRect(
       x0, y0, x1, y1,
       -reach, -reach, batch.w + reach, batch.h + reach,
     );
@@ -870,6 +876,49 @@ void main() {
       line: rgba(spec.line),
       dot: rgba(spec.dot),
       lit: rgba(spec.lit),
+    });
+  }
+
+  /**
+   * Sample plot (1D Plot / 1D Plot Stereo / 2D Plot): raw samples, drawn on
+   * the GPU. The samples go up as an R32F texture; the vertex shader builds
+   * each segment (straight line between real samples), the min/max band per
+   * pixel column when there are more samples than columns, the breaks on
+   * non-finite or (skip > 0) jumps bigger than `skip`, and a dot for a lone
+   * sample. The fragment shader is the app smootherstep coverage.
+   * spec: { a, b?, mode: "line" | "xy", x, y, w, h, gain, offset, gainY,
+   *         halfPx, feather, rgba, skip, span?, shift? }
+   * a / b: Float32Array views of the window (b = Y for "xy").
+   * "line": sample i sits at x + w * (i - shift) / span. Default span = n - 1,
+   * shift 0. A sync window passes span = its sample intervals and the
+   * sub-sample start (scope-sync.js), with one extra sample past the end.
+   */
+  function nodeGraphGlLinesSamplePlot(batch, spec) {
+    if (!batch || !spec?.a) return;
+    const xy = spec.mode === "xy";
+    const n = Math.min(SAMPLE_PLOT_MAX, spec.a.length, xy ? (spec.b?.length || 0) : spec.a.length);
+    if (!(n > 0)) return;
+    if (!batch.samplePlots) batch.samplePlots = [];
+    const k = batch.camera ? 1 : (batch.scale || 1);
+    const c = spec.rgba || [1, 1, 1, 1];
+    batch.samplePlots.push({
+      a: spec.a,
+      b: xy ? spec.b : null,
+      n,
+      xy,
+      x: (Number(spec.x) || 0) * k,
+      y: (Number(spec.y) || 0) * k,
+      w: Math.max(1, (Number(spec.w) || 0) * k),
+      h: Math.max(1, (Number(spec.h) || 0) * k),
+      gain: Number.isFinite(Number(spec.gain)) ? Number(spec.gain) : 1,
+      gainY: Number.isFinite(Number(spec.gainY)) ? Number(spec.gainY) : (Number.isFinite(Number(spec.gain)) ? Number(spec.gain) : 1),
+      offset: Number(spec.offset) || 0,
+      half: Math.max(0, Number(spec.halfPx) || 0) * k,
+      feather: Math.max(0, Number(spec.feather) || 0) * k,
+      skip: Number(spec.skip) > 0 ? Number(spec.skip) : 0,
+      span: Number(spec.span) > 0 ? Number(spec.span) : Math.max(1, n - 1),
+      shift: Number.isFinite(Number(spec.shift)) ? Number(spec.shift) : 0,
+      rgba: [c[0] || 0, c[1] || 0, c[2] || 0, c.length > 3 && Number.isFinite(c[3]) ? c[3] : 1],
     });
   }
 
@@ -2072,6 +2121,274 @@ void main() {
     gl.bindBuffer(gl.ARRAY_BUFFER, null);
   }
 
+  const SP_VS = `#version 300 es
+precision highp float;
+precision highp int;
+precision highp sampler2D;
+layout(location = 0) in vec2 aCorner;
+uniform sampler2D uA;
+uniform sampler2D uB;
+uniform vec2 uVp;
+uniform vec4 uRect;
+uniform int uN;
+uniform int uMode;
+uniform int uCols;
+uniform vec2 uGain;
+uniform float uOffset;
+uniform float uHalf;
+uniform float uFeather;
+uniform float uSkip;
+uniform float uSpan;
+uniform float uShift;
+out vec2 vLocal;
+out float vLen;
+float S(sampler2D t, int i) {
+  return texelFetch(t, ivec2(i % ${SAMPLE_PLOT_TEX_W}, i / ${SAMPLE_PLOT_TEX_W}), 0).r;
+}
+bool bad(float v) {
+  return !(v == v) || abs(v) > 1e30;
+}
+float yOf(float v) {
+  return uRect.y + uRect.w * 0.5 - (v * uGain.x + uOffset) * uRect.w * 0.5;
+}
+vec2 lineAt(int i) {
+  return vec2(uRect.x + uRect.z * (float(i) - uShift) / uSpan, yOf(S(uA, i)));
+}
+vec2 xyAt(int i) {
+  float s = min(uRect.z, uRect.w) * 0.5;
+  return vec2(uRect.x + uRect.z * 0.5 + S(uA, i) * uGain.x * s, uRect.y + uRect.w * 0.5 - S(uB, i) * uGain.y * s);
+}
+bool jump(float a, float b) {
+  return bad(a) || bad(b) || (uSkip > 0.0 && abs(b - a) > uSkip);
+}
+// Segment i -> i + 1 is not drawn.
+bool breaks(int i) {
+  if (i < 0 || i >= uN - 1) return true;
+  if (uMode == 2) return jump(S(uA, i), S(uA, i + 1)) || jump(S(uB, i), S(uB, i + 1));
+  return jump(S(uA, i), S(uA, i + 1));
+}
+void hide() {
+  gl_Position = vec4(2.0, 2.0, 0.0, 1.0);
+  vLocal = vec2(0.0);
+  vLen = 0.0;
+}
+void main() {
+  int id = gl_InstanceID;
+  vec2 p0;
+  vec2 p1;
+  if (uMode == 1) {
+    // Dense: per column a min/max bar (even) and the link from the previous
+    // column's last sample to this column's first (odd).
+    int col = id / 2;
+    float cols = float(uCols);
+    int from = int(floor(uShift + float(col) * uSpan / cols));
+    int to = max(from + 1, min(uN, int(floor(uShift + float(col + 1) * uSpan / cols))));
+    float x = uRect.x + (float(col) + 0.5) * uRect.z / cols;
+    if (id % 2 == 0) {
+      float lo = 1e30;
+      float hi = -1e30;
+      for (int i = from; i < to; i++) {
+        float v = S(uA, i);
+        if (!bad(v)) {
+          lo = min(lo, v);
+          hi = max(hi, v);
+        }
+      }
+      if (lo > hi) { hide(); return; }
+      p0 = vec2(x, yOf(lo));
+      p1 = vec2(x, yOf(hi));
+    } else {
+      if (col == 0 || from < 1) { hide(); return; }
+      float a = S(uA, from - 1);
+      float b = S(uA, from);
+      if (jump(a, b)) { hide(); return; }
+      p0 = vec2(x - uRect.z / cols, yOf(a));
+      p1 = vec2(x, yOf(b));
+    }
+  } else {
+    bool xy = uMode == 2;
+    p0 = xy ? xyAt(id) : lineAt(id);
+    if (!breaks(id)) {
+      p1 = xy ? xyAt(id + 1) : lineAt(id + 1);
+    } else if (breaks(id - 1) && !bad(S(uA, id)) && (!xy || !bad(S(uB, id)))) {
+      p1 = p0; // lone sample: a dot
+    } else {
+      hide();
+      return;
+    }
+  }
+  vec2 d = p1 - p0;
+  float len = length(d);
+  vec2 u = len > 1e-4 ? d / len : vec2(1.0, 0.0);
+  vec2 nrm = vec2(-u.y, u.x);
+  float r = uHalf + uFeather;
+  float along = -r + aCorner.x * (len + 2.0 * r);
+  float across = mix(-r, r, aCorner.y);
+  vec2 pos = p0 + u * along + nrm * across;
+  vLocal = vec2(along, across);
+  vLen = len;
+  gl_Position = vec4(pos.x / uVp.x * 2.0 - 1.0, 1.0 - pos.y / uVp.y * 2.0, 0.0, 1.0);
+}
+`;
+  const SP_FS = `#version 300 es
+precision highp float;
+in vec2 vLocal;
+in float vLen;
+uniform float uHalf;
+uniform float uFeather;
+uniform vec4 uColour;
+out vec4 fragColor;
+void main() {
+  float u = vLocal.x;
+  float outside = u < 0.0 ? -u : (u > vLen ? u - vLen : 0.0);
+  float d = outside > 0.0 ? length(vec2(outside, vLocal.y)) : abs(vLocal.y);
+  // Ramp centred on the geometric edge: 50% at uHalf, full width uFeather.
+  // Reach in SP_VS (uHalf + uFeather) already covers the outer half of the ramp.
+  float w = max(uFeather, 1e-4);
+  float t = clamp((d - (uHalf - 0.5 * w)) / w, 0.0, 1.0);
+  float a = 1.0 - t * t * t * (t * (t * 6.0 - 15.0) + 10.0);
+  if (a < 0.004) discard;
+  fragColor = vec4(uColour.rgb, uColour.a * a);
+}
+`;
+
+  function ensureSamplePlot(s) {
+    if (!s || s.samplePlotFailed) return null;
+    if (s.samplePlot) return s.samplePlot;
+    const gl = s.gl;
+    if (!gl || typeof gl.drawArraysInstanced !== "function") {
+      s.samplePlotFailed = true;
+      return null;
+    }
+    try {
+      const vs = compile(gl, gl.VERTEX_SHADER, SP_VS, "samplePlot vertex");
+      const fs = compile(gl, gl.FRAGMENT_SHADER, SP_FS, "samplePlot fragment");
+      const program = gl.createProgram();
+      gl.attachShader(program, vs);
+      gl.attachShader(program, fs);
+      gl.bindAttribLocation(program, 0, "aCorner");
+      gl.linkProgram(program);
+      gl.deleteShader(vs);
+      gl.deleteShader(fs);
+      if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+        const log = gl.getProgramInfoLog(program) || "link failed";
+        gl.deleteProgram(program);
+        throw new Error(log);
+      }
+      const buf = gl.createBuffer();
+      gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+      gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
+        0, 0, 1, 0, 0, 1,
+        1, 0, 1, 1, 0, 1,
+      ]), gl.STATIC_DRAW);
+      gl.bindBuffer(gl.ARRAY_BUFFER, null);
+      const u = (name) => gl.getUniformLocation(program, name);
+      s.samplePlot = {
+        program,
+        buf,
+        tex: [null, null],
+        rows: [0, 0],
+        scratch: null,
+        uA: u("uA"),
+        uB: u("uB"),
+        uVp: u("uVp"),
+        uRect: u("uRect"),
+        uN: u("uN"),
+        uMode: u("uMode"),
+        uCols: u("uCols"),
+        uGain: u("uGain"),
+        uOffset: u("uOffset"),
+        uHalf: u("uHalf"),
+        uFeather: u("uFeather"),
+        uSkip: u("uSkip"),
+        uSpan: u("uSpan"),
+        uShift: u("uShift"),
+        uColour: u("uColour"),
+      };
+      return s.samplePlot;
+    } catch (error) {
+      s.samplePlotFailed = true;
+      console.error("[gl-line-renderer] sample plot shader failed: " + String(error?.message || error));
+      return null;
+    }
+  }
+
+  /** Upload n samples into sample texture slot (R32F, SAMPLE_PLOT_TEX_W wide). */
+  function samplePlotUpload(gl, sp, slot, src, n) {
+    const W = SAMPLE_PLOT_TEX_W;
+    const rows = Math.max(1, Math.ceil(n / W));
+    let data = src;
+    if (!(data instanceof Float32Array)) {
+      if (!sp.scratch || sp.scratch.length < n) sp.scratch = new Float32Array(Math.max(n, 4096));
+      sp.scratch.set(src.subarray ? src.subarray(0, n) : Array.prototype.slice.call(src, 0, n));
+      data = sp.scratch;
+    }
+    if (!sp.tex[slot] || sp.rows[slot] < rows) {
+      if (sp.tex[slot]) gl.deleteTexture(sp.tex[slot]);
+      const tex = gl.createTexture();
+      gl.bindTexture(gl.TEXTURE_2D, tex);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      const alloc = Math.max(rows, 4);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.R32F, W, alloc, 0, gl.RED, gl.FLOAT, null);
+      sp.tex[slot] = tex;
+      sp.rows[slot] = alloc;
+    }
+    gl.bindTexture(gl.TEXTURE_2D, sp.tex[slot]);
+    gl.pixelStorei(gl.UNPACK_ALIGNMENT, 4);
+    const full = Math.floor(n / W);
+    if (full > 0) gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, W, full, gl.RED, gl.FLOAT, data.subarray(0, full * W));
+    const rest = n - full * W;
+    if (rest > 0) gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, full, rest, 1, gl.RED, gl.FLOAT, data.subarray(full * W, n));
+  }
+
+  function drawSamplePlots(batch) {
+    const sp = ensureSamplePlot(batch.s);
+    if (!sp || !batch.samplePlots?.length) return;
+    const gl = batch.s.gl;
+    const { w, h } = batch;
+    gl.useProgram(sp.program);
+    gl.bindBuffer(gl.ARRAY_BUFFER, sp.buf);
+    gl.enableVertexAttribArray(0);
+    gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+    gl.vertexAttribDivisor(0, 0);
+    gl.uniform2f(sp.uVp, w, h);
+    gl.uniform1i(sp.uA, 0);
+    gl.uniform1i(sp.uB, 1);
+    for (const spec of batch.samplePlots) {
+      samplePlotUpload(gl, sp, 0, spec.a, spec.n);
+      if (spec.xy) samplePlotUpload(gl, sp, 1, spec.b, spec.n);
+      gl.activeTexture(gl.TEXTURE0);
+      gl.bindTexture(gl.TEXTURE_2D, sp.tex[0]);
+      gl.activeTexture(gl.TEXTURE1);
+      gl.bindTexture(gl.TEXTURE_2D, spec.xy ? sp.tex[1] : sp.tex[0]);
+      gl.activeTexture(gl.TEXTURE0);
+      const cols = Math.max(1, Math.ceil(spec.w));
+      const dense = !spec.xy && spec.span > cols * 2;
+      gl.uniform4f(sp.uRect, spec.x, spec.y, spec.w, spec.h);
+      gl.uniform1i(sp.uN, spec.n);
+      gl.uniform1i(sp.uMode, spec.xy ? 2 : (dense ? 1 : 0));
+      gl.uniform1i(sp.uCols, cols);
+      gl.uniform2f(sp.uGain, spec.gain, spec.gainY);
+      gl.uniform1f(sp.uOffset, spec.offset);
+      gl.uniform1f(sp.uHalf, spec.half);
+      gl.uniform1f(sp.uFeather, spec.feather);
+      gl.uniform1f(sp.uSkip, spec.skip);
+      gl.uniform1f(sp.uSpan, spec.span);
+      gl.uniform1f(sp.uShift, spec.shift);
+      gl.uniform4f(sp.uColour, spec.rgba[0], spec.rgba[1], spec.rgba[2], spec.rgba[3]);
+      gl.drawArraysInstanced(gl.TRIANGLES, 0, 6, dense ? cols * 2 : spec.n);
+    }
+    gl.activeTexture(gl.TEXTURE1);
+    gl.bindTexture(gl.TEXTURE_2D, null);
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, null);
+    gl.disableVertexAttribArray(0);
+    gl.bindBuffer(gl.ARRAY_BUFFER, null);
+  }
+
   /** Draw images, quads, text into the bound framebuffer with the given blend funcs. */
   function drawContent(batch, blend, alphaDst) {
     const { s } = batch;
@@ -2120,6 +2437,10 @@ void main() {
     if (batch.pulseTrains?.length) {
       gl.blendFuncSeparate(gl.SRC_ALPHA, colourDst, gl.ONE, alphaDst);
       drawPulseTrains(batch);
+    }
+    if (batch.samplePlots?.length) {
+      gl.blendFuncSeparate(gl.SRC_ALPHA, colourDst, gl.ONE, alphaDst);
+      drawSamplePlots(batch);
     }
     if (batch.outlines?.length) drawOutlines(batch);
     drawQuads(batch.over, batch.on);
@@ -2775,6 +3096,7 @@ void main() {
     nodeGraphGlLinesSegment,
     nodeGraphGlLinesDot,
     nodeGraphGlLinesPulseTrain,
+    nodeGraphGlLinesSamplePlot,
     nodeGraphGlLinesRing,
     nodeGraphGlLinesPolyline,
     nodeGraphGlLinesRibbon,

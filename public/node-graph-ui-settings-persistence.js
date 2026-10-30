@@ -856,7 +856,6 @@ function normalizeNodeUiDevSettings(settings = {}) {
         : (view.traceSettings ?? nodeGraphMvp.traceSettings),
     )
     : (view.traceSettings ?? nodeGraphMvp.traceSettings ?? {});
-  const sliderLayout = normalizeNodeGraphSliderLayout(view.sliderLayout ?? nodeGraphMvp.sliderLayout);
   const sliderAmountVisible = Boolean(view.sliderAmountVisible ?? nodeGraphMvp.sliderAmountVisible);
   const sliderPositionVisible = Boolean(
     view.sliderPositionVisible ??
@@ -965,7 +964,6 @@ function normalizeNodeUiDevSettings(settings = {}) {
       moduleScopeLineThickness,
       moduleScopeDiscontinuitySkipSamples,
       traceSettings,
-      sliderLayout,
       sliderAmountVisible,
       sliderPositionVisible,
       moduleCatalogVisibility,
@@ -1051,7 +1049,6 @@ function readNodeUiDevSettingsFromControls(options = {}) {
       moduleScopeDiscontinuitySkipSamples: normalizeNodeGraphModuleScopeDiscontinuitySkipSamples(
         nodeGraphMvp.moduleScopeDiscontinuitySkipSamples ?? 1,
       ),
-      sliderLayout: normalizeNodeGraphSliderLayout(nodeGraphMvp.sliderLayout),
       sliderAmountVisible: Boolean(nodeGraphMvp.sliderAmountVisible),
       sliderPositionVisible: Boolean(nodeGraphMvp.sliderPositionVisible),
       moduleCatalogVisibility: nodeGraphModuleCatalogVisibility(),
@@ -1827,7 +1824,6 @@ function applyNodeUiDevSettings(settings) {
   nodeGraphMvp.traceSettings = typeof normalizeNodeGraphWaterfallSettings === "function"
     ? normalizeNodeGraphWaterfallSettings(normalized.view.traceSettings)
     : normalized.view.traceSettings;
-  nodeGraphMvp.sliderLayout = normalizeNodeGraphSliderLayout(normalized.view.sliderLayout);
   nodeGraphMvp.sliderAmountVisible = Boolean(normalized.view.sliderAmountVisible);
   nodeGraphMvp.sliderPositionVisible = Boolean(normalized.view.sliderPositionVisible);
   if (typeof syncNodeSliderHiddenMouseClass === "function") {
@@ -1853,7 +1849,6 @@ function applyNodeUiDevSettings(settings) {
   renderNodeGraphModuleVisibilityToggles();
   renderNodeGraphModuleScopeBrightnessControl();
   renderNodeGraphSliderVisibilityToggles();
-  renderNodeGraphSliderLayout();
   syncNodeUiDevSettingsHeaderControls();
   if (!document.activeElement?.dataset?.nodeUiDevMirror) {
     renderNodeUserUiSettingsControls();

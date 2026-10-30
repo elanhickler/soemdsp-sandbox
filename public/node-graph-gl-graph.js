@@ -823,9 +823,14 @@ function nodeGraphGlGraphDrawSeedWidget(batch, cells, text, zoom, opts = {}) {
 function nodeGraphGlGraphDrawChrome(batch, toX, toY, zoom, cssW, cssH) {
   const chrome = nodeGraphGlGraphState.chrome;
   if (!chrome) return;
+  // Face-cell palette (node-graph-module-face.js NodeGraphFaceInk): cellFill
+  // well, cellValueFill fill, label / value ink.
   const ink = [1, 1, 1, 1];
-  const well = [0.031, 0.043, 0.051, 1];
-  const valueFill = [0.27, 0.64, 1, 0.9];
+  const labelInk = [0xcf / 255, 0xdd / 255, 0xe5 / 255, 1];
+  const well = [0x0e / 255, 0x11 / 255, 0x17 / 255, 1];
+  const cellFill = [0x1c / 255, 0x33 / 255, 0x4c / 255, 1];
+  // Position handle: the old handle's size and shape in the face palette (choiceOn).
+  const valueFill = [0x1c / 255, 0x33 / 255, 0x4c / 255, 1]; // face column fill (#1c334c)
   const ghostHost = document.getElementById("nodeGraphWorkspace");
   const hideGhost = ghostHost?.classList.contains("hide-slider-position");
   const ghostFill = chrome.ghostFill || [0.78, 0.55, 1, 0.38];
@@ -852,7 +857,7 @@ function nodeGraphGlGraphDrawChrome(batch, toX, toY, zoom, cssW, cssH) {
         const fx = Number(cell?.getAttribute("x"));
         const fw = Number(cell?.getAttribute("width"));
         if (fw > 0) {
-          nodeGraphGlLinesRect(batch, x + fx * zoom, y, fw * zoom, h, valueFill);
+          nodeGraphGlLinesRect(batch, x + fx * zoom, y, fw * zoom, h, cellFill);
         }
         const dividers = readout.querySelectorAll(".node-choice-debug-divider");
         const line = [0.62, 0.64, 0.66, 0.55];
@@ -864,8 +869,8 @@ function nodeGraphGlGraphDrawChrome(batch, toX, toY, zoom, cssW, cssH) {
         nodeGraphGlGraphDrawSliderGhost(batch, readout, x, y, h, zoom, hideGhost, ghostFill);
         return;
       }
-      // Position handle only. Wraparound clips it to the track and draws the
-      // overflow on the other edge.
+      // Generic slider: position handle only, on the face-cell well.
+      // Wraparound clips it to the track and draws the overflow on the other edge.
       nodeGraphGlGraphDrawSliderHandle(batch, readout, x, y, h, zoom, slider.w, valueFill);
       nodeGraphGlGraphDrawSliderGhost(batch, readout, x, y, h, zoom, hideGhost, ghostFill);
     });
@@ -880,7 +885,7 @@ function nodeGraphGlGraphDrawChrome(batch, toX, toY, zoom, cssW, cssH) {
           toY(slider.labelBox.y + slider.labelBox.h * 0.5),
           nodeGraphGlGraphTextOpts({
             px: Math.max(8, (slider.labelPx || 12.6) * zoom),
-            rgba: ink,
+            rgba: labelInk,
             align: slider.labelAnchor.align,
             baseline: "middle",
             weight: 400,
@@ -1063,10 +1068,11 @@ function nodeGraphGlGraphDrawButtonCaptions(batch, toX, toY, zoom, cssW, cssH) {
 }
 
 function nodeGraphGlGraphCubic(ax, ay, bx, by, steps, departSign = 1) {
+  // Wire curve 0..1 (normalized, finite): 0 is a straight line, not a fallback to full curve.
   const curve = typeof nodeGraphWireCurve === "function" ? nodeGraphWireCurve() : 1;
   const span = Math.min(
     96,
-    (Math.abs(bx - ax) * 0.48 + Math.abs(by - ay) * 0.12) * (Number(curve) || 1),
+    (Math.abs(bx - ax) * 0.48 + Math.abs(by - ay) * 0.12) * curve,
   );
   // Outlets leave to the right. Inlets leave to the left, out of the module.
   const sign = departSign < 0 ? -1 : 1;

@@ -83,6 +83,7 @@
 // pitch the oscillator actually steps with, as a MIDI note (A4 = 440).
 
 #include "softpop_core.h"
+#include <soemdsp/math/robin_dither.h>
 
 // Robin cycle-length dither pick: one copy, in native_modules/ellipsoid
 // (resolved in the combined link; standalone builds allow it undefined).
@@ -116,21 +117,9 @@ static inline double robin_random_unit(unsigned int& state) {
   return (double)(xorshift32(state) >> 8) * (1.0 / 16777216.0);
 }
 
+// Schmidt cycle distribution: shared single source (math/robin_dither.h).
 static void robin_calc_cycle_distribution(double c, double* lenMid, double* probShort, double* probMid) {
-  const double ci = dsp_floor(c);
-  const double cf = c - ci;
-  double c2 = ci;
-  if (cf >= 0.5) c2 += 1.0;
-  const double c1 = c2 - 1.0;
-  const double c3 = c2 + 1.0;
-  const double e1 = c1 - c, e2 = c2 - c, e3 = c3 - c;
-  const double v1 = e1 * e1, v2 = e2 * e2, v3 = e3 * e3;
-  const double v = 0.25;
-  const double d1 = v - v1, d2 = v - v2, d3 = v - v3;
-  const double s = 1.0 / (e3 * (v1 - v2) - e2 * (v1 - v3) + e1 * (v2 - v3));
-  *lenMid = c2;
-  *probShort = (d2 * e3 - d3 * e2) * s;
-  *probMid = (d3 * e1 - d1 * e3) * s;
+  robin_cycle_distribution(c, lenMid, probShort, probMid);
 }
 
 static double robin_mean_cycle_samples(double inc) {
@@ -176,6 +165,24 @@ static void robin_place_phase(Robin& v, double phaseInto) {
   if (!(v.sampleCount >= 0.0) || !(v.sampleCount < v.lenNow)) v.sampleCount = 0.0;
 }
 
+// Reset / start phase (prime, partial Reset): land on a whole sample of the
+// current cycle (math/robin_dither.h reset rule) so the next wrap stays on the grid.
+static void robin_reset_grid(Robin& v, double target) {
+  const double steps = v.lenNow >= 1.0 ? v.lenNow : 1.0;
+  if (v.phaseSlope < -1.0e-15) {
+    const double count = robin_grid_count(1.0 - target, steps);
+    v.sampleCount = count;
+    v.phase = wrap01(1.0 - count / steps);
+  } else if (v.phaseSlope > 1.0e-15) {
+    const double count = robin_grid_count(target, steps);
+    v.sampleCount = count;
+    v.phase = count / steps;
+  } else {
+    v.phase = wrap01(target);
+    v.sampleCount = 0.0;
+  }
+}
+
 static void robin_begin_cycle(Robin& v, unsigned int& rng, double phaseInto) {
   robin_bake(v, v.currentInc);
   robin_update_cycle_length(v, rng);
@@ -218,7 +225,7 @@ static double robin_step(Robin& v, unsigned int& rng, double inc, double startPh
     v.ditherOffset = 0.0;
     robin_bake(v, inc);
     robin_update_cycle_length(v, rng);
-    robin_place_phase(v, startPhase);
+    robin_reset_grid(v, startPhase);
     v.primed = true;
   } else {
     const double prev = v.currentInc;
@@ -524,7 +531,7 @@ extern "C" double soemdsp_softpop_oscillator_display_info(int handle, int which)
   return display_info(gPool[handle - 1].disp, which);
 }
 
-extern "C" int soemdsp_softpop_oscillator_version() { return 5; } // 5: PolyBLEP Trisaw (source 5); Dithered Trisaw renamed Dithered Trisaw
+extern "C" int soemdsp_softpop_oscillator_version() { return 6; } // 6: Dithered Trisaw resets land on the sample grid (math/robin_dither.h). was 5: PolyBLEP Trisaw (source 5); Dithered Trisaw renamed Dithered Trisaw
 extern "C" const char* soemdsp_softpop_oscillator_metadata_json() { return kMetadataJson; }
 extern "C" int soemdsp_softpop_oscillator_metadata_json_size() { return sizeof(kMetadataJson) - 1; }
 
@@ -533,6 +540,11 @@ extern "C" int soemdsp_softpop_oscillator_metadata_json_size() { return sizeof(k
 // Full-height hits (|h| = 1) use the full reset above.
 extern "C" void soemdsp_softpop_oscillator_partial_reset(int handle, double h) {
   if (State* s = live(handle)) {
-    for (int c = 0; c < 2; c += 1) s->ch[c].phase = soemdsp::math::partial_reset_phase(s->ch[c].phase, 0.0, h);
+    for (int c = 0; c < 2; c += 1) {
+      Chan& ch = s->ch[c];
+      ch.phase = soemdsp::math::partial_reset_phase(ch.phase, 0.0, h);
+      // Dithered Trisaw: its Robin phasor moves too, onto the sample grid.
+      if (ch.robin.primed) robin_reset_grid(ch.robin, soemdsp::math::partial_reset_phase(ch.robin.phase, 0.0, h));
+    }
   }
 }

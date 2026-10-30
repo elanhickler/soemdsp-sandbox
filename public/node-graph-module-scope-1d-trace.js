@@ -71,10 +71,11 @@ function nodeGraphScope1dTraceSizePx(settings = {}, role = "primary") {
 }
 
 /**
- * Stereo / multi-channel 1D Trace points on one shared sweep phasor.
+ * Stereo / multi-channel 1D Trace points on one shared sweep pen.
  * channels: Array<{ buffer: Float32Array, enabled?: boolean }>
  * Returns { channels: points[][], endFrame }
- * Phasor / Reset / Sync state lives on the face canvas (same keys as 1D Phosphor).
+ * Sync / Free / Time (ms): the one scope sync rule (lib/visual/scope-sync.js).
+ * Reset jack: rising edge snaps the pen to the left at once.
  */
 function nodeGraphScope1dTraceFrameChannels(canvas, channels, settings, resetBuffer = null, drawOptions = null) {
   const list = Array.isArray(channels) ? channels.filter((ch) => ch?.buffer?.length) : [];
@@ -108,35 +109,24 @@ function nodeGraphScope1dTraceFrameChannels(canvas, channels, settings, resetBuf
     return { channels: list.map(() => []), endFrame };
   }
   const sampleRate = Math.max(1, nodeGraphFiniteNumber(nodeGraphScopeSampleRate(driver), 44100));
-  const defaults = typeof nodeGraphScope1dTraceSettingsDefaults !== "undefined"
-    ? nodeGraphScope1dTraceSettingsDefaults
-    : null;
-  const sweepPair = typeof normalizeNodeGraphLineBurnSweepPair === "function"
-    ? normalizeNodeGraphLineBurnSweepPair(settings, defaults)
-    : null;
-  let sweepHz = Number(sweepPair?.sweepHz ?? settings?.sweepHz);
-  if (!Number.isFinite(sweepHz)) {
-    sweepHz = 4;
-  }
-  sweepHz = Math.max(0, Math.min(100, sweepHz));
-  const horizontalBurn = sweepHz <= 0;
-  const sweepPhaseInc = horizontalBurn ? 0 : sweepHz / sampleRate;
+  const syncState = nodeGraphScopeSyncState(canvas);
+  const passSamples = nodeGraphScopePassSamples(syncState, settings, sampleRate);
+  const phaseInc = 1 / passSamples;
+  // Cycles needs edges for the period even with Sync off.
+  const findEdges = nodeGraphScopeWindowCycles(settings) > 0;
   const width = canvas.width;
   const height = canvas.height;
 
-  let phasor = Number(canvas._lineBurnPhasor);
-  if (!Number.isFinite(phasor) || phasor < 0 || phasor >= 1) {
-    phasor = 0;
-  }
-  if (windowOverlap && width > 0 && Array.isArray(canvas._lineBurnJoinPoints)) {
+  const pen = nodeGraphScopeSyncPen(canvas);
+  if (windowOverlap && width > 0 && Array.isArray(canvas._lineBurnJoinPoints) && !pen.waiting) {
     const prev = canvas._lineBurnJoinPoints.find((point) => point && Number.isFinite(point.x));
     const joined = prev ? prev.x / width : NaN;
-    if (joined >= 0 && joined < 1 && phasor + 1e-9 >= joined) {
-      phasor = joined;
+    if (joined >= 0 && joined < 1 && pen.phasor + 1e-9 >= joined) {
+      pen.phasor = joined;
     }
   }
   let resetWasHigh = canvas._lineBurnResetWasHigh === true;
-  const autoSync = typeof nodeGraphDisplaySettingsToggleIsOn === "function"
+  const sync = typeof nodeGraphDisplaySettingsToggleIsOn === "function"
     ? nodeGraphDisplaySettingsToggleIsOn(settings?.sourceSync ?? settings?.sync)
     : Boolean(settings?.sourceSync);
   // Mirror 1D Phosphor (lineBurn): lift pen on large |Δsample| so wrap/jump
@@ -147,54 +137,7 @@ function nodeGraphScope1dTraceFrameChannels(canvas, channels, settings, resetBuf
   const discThreshold = typeof nodeGraphModuleScopeDiscontinuityThreshold === "number"
     ? nodeGraphModuleScopeDiscontinuityThreshold
     : 0.85;
-  let signalWasHigh = canvas._lineBurnSignalWasHigh === true;
-  const syncThreshold = Number.isFinite(Number(typeof nodeGraphLineBurnResetThreshold !== "undefined"
-    ? nodeGraphLineBurnResetThreshold
-    : 0.5))
-    ? Number(typeof nodeGraphLineBurnResetThreshold !== "undefined"
-      ? nodeGraphLineBurnResetThreshold
-      : 0.5)
-    : 0.5;
-  let syncPeriodSamples = Number(canvas._lineBurnSyncPeriodSamples);
-  if (!Number.isFinite(syncPeriodSamples) || syncPeriodSamples < 2) {
-    syncPeriodSamples = 0;
-  }
-  let samplesSinceSync = Number(canvas._lineBurnSamplesSinceSync);
-  if (!Number.isFinite(samplesSinceSync) || samplesSinceSync < 0) {
-    samplesSinceSync = 0;
-  }
-  let syncAwaitingRestart = canvas._lineBurnSyncAwaitingRestart === true;
-  const syncCyclesInView = (() => {
-    if (horizontalBurn) {
-      return 1;
-    }
-    const raw = Number(sweepPair?.sweepCycles ?? settings?.sweepCycles);
-    if (!Number.isFinite(raw) || raw <= 0) {
-      return 4;
-    }
-    return Math.max(0.05, Math.min(100, raw));
-  })();
-  const syncPhaseIncForPeriod = (periodSamples) => {
-    if (!(periodSamples >= 2)) {
-      return sweepPhaseInc;
-    }
-    return 1 / (periodSamples * syncCyclesInView);
-  };
-  let phaseInc = horizontalBurn
-    ? 0
-    : (autoSync && syncPeriodSamples >= 2
-      ? syncPhaseIncForPeriod(syncPeriodSamples)
-      : sweepPhaseInc);
-
-  const retuneSyncPeriodFromGap = () => {
-    if (samplesSinceSync >= 2) {
-      syncPeriodSamples = samplesSinceSync;
-      if (!horizontalBurn && autoSync) {
-        phaseInc = syncPhaseIncForPeriod(syncPeriodSamples);
-      }
-    }
-    samplesSinceSync = 0;
-  };
+  const resetThreshold = typeof nodeGraphLineBurnResetThreshold === "number" ? nodeGraphLineBurnResetThreshold : 0.5;
 
   const out = list.map(() => []);
   const hadPoint = list.map(() => false);
@@ -206,67 +149,62 @@ function nodeGraphScope1dTraceFrameChannels(canvas, channels, settings, resetBuf
   const externalSync = drawOptions?.syncBuffer;
   const syncBuf = externalSync?.length ? externalSync : list[0].buffer;
   const syncStart = Math.max(0, syncBuf.length - maxCount);
+  const level = sync || findEdges
+    ? nodeGraphScopeSyncLevel(
+      syncState,
+      syncBuf,
+      syncBuf.length - nodeGraphScopeSyncLevelSpan(passSamples, maxCount),
+      syncBuf.length,
+      false,
+    )
+    : null;
+  let syncPrev = Number(syncBuf[syncStart - 1]);
+  if (!Number.isFinite(syncPrev)) syncPrev = Number(syncBuf[syncStart]) || 0;
   const ampDiv = Number(drawOptions?.amplitudeDivisor);
   const sampleDiv = Number.isFinite(ampDiv) && Math.abs(ampDiv) > 1e-4 ? ampDiv : 1;
+  const breakAll = () => {
+    for (let c = 0; c < list.length; c += 1) {
+      if (hadPoint[c]) {
+        nodeGraphOneDimensionalBurnBreakPath(out[c]);
+      }
+      hadPoint[c] = false;
+      prevSample[c] = NaN;
+      nextJoins[c] = null;
+    }
+  };
 
   for (let index = 0; index < maxCount; index += 1) {
-    const syncSample = syncBuf[syncStart + index];
+    const syncSample = Number(syncBuf[syncStart + index]);
     const resetSample = typeof nodeGraphOneDimensionalBurnResetSample === "function"
       ? nodeGraphOneDimensionalBurnResetSample(resetBuffer, index, maxCount)
       : 0;
-    const resetHigh = Number(resetSample) >= syncThreshold;
+    const resetHigh = Number(resetSample) >= resetThreshold;
     const resetEdge = resetHigh && !resetWasHigh;
-    let syncEdge = false;
-    if (autoSync) {
-      const signalHigh = Number(syncSample) >= 0;
-      if (signalHigh && !signalWasHigh) {
-        syncEdge = true;
-      }
-      signalWasHigh = signalHigh;
-    }
-    if (resetEdge) {
-      for (let c = 0; c < list.length; c += 1) {
-        if (hadPoint[c]) {
-          nodeGraphOneDimensionalBurnBreakPath(out[c]);
-        }
-        hadPoint[c] = false;
-        prevSample[c] = NaN;
-      }
-      retuneSyncPeriodFromGap();
-      phasor = 0;
-      syncAwaitingRestart = false;
-    } else if (syncEdge) {
-      const hadPeriod = syncPeriodSamples >= 2;
-      retuneSyncPeriodFromGap();
-      if (autoSync && (syncAwaitingRestart || !hadPeriod)) {
-        for (let c = 0; c < list.length; c += 1) {
-          if (hadPoint[c]) {
-            nodeGraphOneDimensionalBurnBreakPath(out[c]);
-          }
-          hadPoint[c] = false;
-          prevSample[c] = NaN;
-        }
-        phasor = 0;
-        syncAwaitingRestart = false;
-      }
-    }
     resetWasHigh = resetHigh;
-    if (autoSync) {
-      samplesSinceSync += 1;
+    const edgeT = level ? nodeGraphScopeSyncStep(syncState, syncPrev, syncSample, level) : -1;
+    syncPrev = syncSample;
+    nodeGraphScopeSyncTrackPeriod(syncState, edgeT);
+    let step;
+    if (resetEdge) {
+      nodeGraphScopeSyncPenRestart(pen);
+      step = NODE_GRAPH_SCOPE_PEN_BREAK_DRAW;
+    } else {
+      step = nodeGraphScopeSyncPenStep(pen, phaseInc, sync, sync ? edgeT : -1);
     }
-
-    if (autoSync && syncAwaitingRestart && !horizontalBurn) {
-      phasor = 1;
+    if (step !== NODE_GRAPH_SCOPE_PEN_DRAW && step !== NODE_GRAPH_SCOPE_PEN_WAIT) {
+      breakAll();
+    }
+    if (step === NODE_GRAPH_SCOPE_PEN_WAIT || step === NODE_GRAPH_SCOPE_PEN_BREAK_WAIT) {
       continue;
     }
 
-    const x = horizontalBurn ? 0 : Math.min(width, phasor * width);
+    const x = Math.min(width, pen.phasor * width);
     for (let c = 0; c < list.length; c += 1) {
       if (list[c].enabled === false) {
         continue;
       }
       const sample = list[c].buffer[starts[c] + index] / sampleDiv;
-      if (!horizontalBurn && !hadPoint[c] && !joinUsed[c]) {
+      if (!hadPoint[c] && !joinUsed[c]) {
         joinUsed[c] = true;
         if (typeof nodeGraphOneDimensionalBurnPrependJoin === "function"
           && nodeGraphOneDimensionalBurnPrependJoin(
@@ -297,54 +235,16 @@ function nodeGraphScope1dTraceFrameChannels(canvas, channels, settings, resetBuf
         ? nodeGraphDisplaySettingsAmplitudeScale(settings)
         : 1;
       const energyT = Math.max(0, Math.min(1, Math.abs(nodeGraphFiniteNumber(sample) * amp)));
-      if (horizontalBurn) {
-        if (hadPoint[c]) {
-          nodeGraphOneDimensionalBurnBreakPath(out[c]);
-        }
-        out[c].push({ x: 0, y, t: energyT });
-        out[c].push({ x: width, y, t: energyT });
-        nodeGraphOneDimensionalBurnBreakPath(out[c]);
-        hadPoint[c] = false;
-        prevSample[c] = Number(sample);
-      } else {
-        out[c].push({ x, y, t: energyT });
-        hadPoint[c] = true;
-        prevSample[c] = Number(sample);
-        nextJoins[c] = { x, y, sample: Number(sample), t: energyT };
-      }
+      out[c].push({ x, y, t: energyT });
+      hadPoint[c] = true;
+      prevSample[c] = Number(sample);
+      nextJoins[c] = { x, y, sample: Number(sample), t: energyT };
     }
-
-    if (!horizontalBurn) {
-      phasor += phaseInc;
-      if (phasor >= 1) {
-        for (let c = 0; c < list.length; c += 1) {
-          if (hadPoint[c]) {
-            nodeGraphOneDimensionalBurnBreakPath(out[c]);
-          }
-          hadPoint[c] = false;
-          prevSample[c] = NaN;
-          nextJoins[c] = null;
-        }
-        if (autoSync && syncPeriodSamples >= 2) {
-          phasor = 1;
-          syncAwaitingRestart = true;
-        } else {
-          phasor -= Math.floor(phasor);
-          if (phasor < 0 || phasor >= 1) {
-            phasor = 0;
-          }
-        }
-      }
-    }
+    nodeGraphScopeSyncPenAdvance(pen, phaseInc);
   }
 
-  canvas._lineBurnJoinPoints = horizontalBurn ? null : nextJoins;
-  canvas._lineBurnPhasor = phasor;
+  canvas._lineBurnJoinPoints = nextJoins;
   canvas._lineBurnResetWasHigh = resetWasHigh;
-  canvas._lineBurnSignalWasHigh = signalWasHigh;
-  canvas._lineBurnSyncPeriodSamples = syncPeriodSamples;
-  canvas._lineBurnSamplesSinceSync = samplesSinceSync;
-  canvas._lineBurnSyncAwaitingRestart = syncAwaitingRestart;
   delete canvas._lineBurnSweepOriginFrame;
   return { channels: out, endFrame };
 }

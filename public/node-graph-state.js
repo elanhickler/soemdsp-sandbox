@@ -90,7 +90,6 @@ var nodeGraphMvp = {
   fullyOpaqueWires: false,
   // Cable strokes under modules by default; Visibility can raise them above.
   wiresAboveModules: false,
-  sliderLayout: "text-inside",
   // Amount fill off until the user turns it on (Visibility / UI settings).
   sliderAmountVisible: false,
   sliderPositionVisible: true,

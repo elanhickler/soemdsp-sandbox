@@ -39,6 +39,11 @@ static const double kLp18FinalBoost = 3.0;
 static const double kLp24FinalBoost = 2.0;
 static const double kHpFinalBoost = 2.0;
 static const double kNoiseMax = 0.25;
+// Onset: on create and on every mode change, filter state is cleared and
+// resonance ramps 0→knob over this time. The LP phase-feedback loop has more
+// than one stable orbit at high resonance; starting from low feedback walks it
+// into the same one every time instead of inheriting another mode's state.
+static const double kOnsetRampSeconds = 0.05;
 
 struct GraphNode {
   double x, y, skew;
@@ -160,9 +165,25 @@ struct State {
   double dcY[5];
   unsigned int rngState;
   ColdStart cold;
+  int lastMode;
+  int onsetIndex;
 };
 
 static State gPool[kMaxInstances];
+
+static void onset_arm(State& s) {
+  s.feedbackSignal = 0.0;
+  for (int j = 0; j < 5; j++) { s.filterY[j] = 0.0; s.dcY[j] = 0.0; }
+  s.onsetIndex = 0;
+}
+
+// 0…1 resonance scale while the onset ramp runs, 1 after. Advances one sample.
+static double onset_apply(State& s, double sampleRate) {
+  int rampN = (int)(kOnsetRampSeconds * sampleRate + 0.5);
+  if (rampN < 1) rampN = 1;
+  if (s.onsetIndex >= rampN) return 1.0;
+  return (double)(s.onsetIndex++) / (double)rampN;
+}
 
 enum : unsigned int { kSeedNoise = 1u };
 
@@ -186,8 +207,8 @@ extern "C" int soemdsp_vcvrack_superlove_filter_create() {
   for (int i = 0; i < kMaxInstances; i++) {
     if (!gPool[i].active) {
       State& s = gPool[i];
-      s.feedbackSignal = 0.0;
-      for (int j = 0; j < 5; j++) { s.filterY[j] = 0.0; s.dcY[j] = 0.0; }
+      onset_arm(s);
+      s.lastMode = -1;
       s.rngState = seed_to_rng_state(seed_mix(0u, kSeedNoise, 0u));
       cold_start_arm(&s.cold);
       s.active = true;
@@ -224,10 +245,15 @@ extern "C" double soemdsp_vcvrack_superlove_filter_sample(
 
   const double safeRate = sampleRate < 1.0 ? 44100.0 : sampleRate;
   const double freqNorm = clamp(frequency, 0.0, 1.0);
-  const double reso = clamp(resonance, 0.0, 1.0);
+  double reso = clamp(resonance, 0.0, 1.0);
   const double driveGain = clamp(drive, 0.0, 4.0);
   const double n01 = clamp((noise01 == noise01) ? noise01 : 0.0, 0.0, 1.0);
   const int safeMode = rev2ModeFromPanel(mode);
+  if (safeMode != s.lastMode) {
+    if (s.lastMode >= 0) onset_arm(s);
+    s.lastMode = safeMode;
+  }
+  reso *= onset_apply(s, safeRate);
   const double cutoffHz = clamp(
     midi_to_hz(map01(freqNorm, -12.0, 135.0)), 0.0, 0.5 * safeRate
   );
@@ -284,7 +310,7 @@ extern "C" double soemdsp_vcvrack_superlove_filter_sample(
 }
 
 extern "C" int soemdsp_vcvrack_superlove_filter_version() {
-  return 11;
+  return 12;
 }
 
 extern "C" const char* soemdsp_vcvrack_superlove_filter_metadata_json() {

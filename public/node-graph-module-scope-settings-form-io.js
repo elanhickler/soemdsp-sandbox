@@ -410,6 +410,9 @@ if (type === "portalFace") {
   if (type === "pulseTrainFace" && typeof normalizeNodeGraphPulseTrainFaceSettings === "function") {
     return normalizeNodeGraphPulseTrainFaceSettings();
   }
+  if (type === "plotFace" && typeof normalizeNodeGraphPlotFaceSettings === "function") {
+    return normalizeNodeGraphPlotFaceSettings();
+  }
   if (type === "robinSinepulseFace" && typeof normalizeNodeGraphRobinSinepulseFaceSettings === "function") {
     return normalizeNodeGraphRobinSinepulseFaceSettings();
   }
@@ -746,6 +749,9 @@ if (type === "portalFace") {
   if (type === "pulseTrainFace" && typeof normalizeNodeGraphPulseTrainFaceSettings === "function") {
     return normalizeNodeGraphPulseTrainFaceSettings(settings);
   }
+  if (type === "plotFace" && typeof normalizeNodeGraphPlotFaceSettings === "function") {
+    return normalizeNodeGraphPlotFaceSettings(settings);
+  }
   if (type === "robinSinepulseFace" && typeof normalizeNodeGraphRobinSinepulseFaceSettings === "function") {
     return normalizeNodeGraphRobinSinepulseFaceSettings(settings);
   }
@@ -980,6 +986,9 @@ if (settingsSchema === "portalFace") {
   }
   if (settingsSchema === "pulseTrainFace" && typeof nodeGraphPulseTrainFaceSettingsForNode === "function") {
     return nodeGraphPulseTrainFaceSettingsForNode(node);
+  }
+  if (settingsSchema === "plotFace" && typeof nodeGraphPlotFaceSettingsForNode === "function") {
+    return nodeGraphPlotFaceSettingsForNode(node);
   }
   if (settingsSchema === "robinSinepulseFace" && typeof nodeGraphRobinSinepulseFaceSettingsForNode === "function") {
     return nodeGraphRobinSinepulseFaceSettingsForNode(node);
@@ -1403,10 +1412,10 @@ function readNodeGraphTraceDisplaySettingsForm() {
   const activeColors = nodeGraphTraceDisplayActiveControlSet("colors", formType);
   const activeToggles = nodeGraphTraceDisplayActiveControlSet("toggles", formType);
   const activeChoices = nodeGraphTraceDisplayActiveControlSet("choices", formType);
-  // Sync retargets History/Sweep to *Cycles in the live DOM while schema still
+  // Sync retargets History to *Cycles in the live DOM while schema still
   // lists *Hz — always include whichever key is actually on the dial.
   const fieldKeysToRead = new Set(activeFields);
-  for (const liveKey of ["historySeconds", "historyCycles", "historyHz", "sweepHz", "sweepCycles"]) {
+  for (const liveKey of ["historySeconds", "historyCycles", "historyHz", "timeMs", "windowCycles"]) {
     if (root?.querySelector?.(`[data-trace-display-field="${liveKey}"]`)) {
       fieldKeysToRead.add(liveKey);
     }
@@ -1661,12 +1670,6 @@ function nodeGraphDisplaySettingsFormValue(settings, key) {
   if (key === "historyCycles") {
     return settings.historyCycles ?? 4;
   }
-  if (key === "sweepHz") {
-    return settings.sweepHz ?? 4;
-  }
-  if (key === "sweepCycles") {
-    return settings.sweepCycles ?? 4;
-  }
   return settings[key];
 }
 
@@ -1826,14 +1829,15 @@ function nodeGraphWriteTraceDisplaySettingsFormInner(settings) {
   // Sync retargets History/Sweep to *Cycles in the live DOM; activeFields lists
   // the free-run dial. Include both so Cycles stays seeded + readOnly (drag/type).
   const fieldKeysToWrite = new Set(activeFields);
+  // Window: both values stay stored; the stepper shows the one for the mode.
+  if (activeFields.has("timeMs")) {
+    fieldKeysToWrite.add("timeMs");
+    fieldKeysToWrite.add("windowCycles");
+  }
   if (activeFields.has("historySeconds") || activeFields.has("historyCycles") || activeFields.has("historyHz")) {
     if (activeFields.has("historySeconds")) fieldKeysToWrite.add("historySeconds");
     if (activeFields.has("historyHz")) fieldKeysToWrite.add("historyHz");
     fieldKeysToWrite.add("historyCycles");
-  }
-  if (activeFields.has("sweepHz") || activeFields.has("sweepCycles")) {
-    fieldKeysToWrite.add("sweepHz");
-    fieldKeysToWrite.add("sweepCycles");
   }
   if (
     (typeof nodeGraphDisplaySettingsFormTypeUsesGradient === "function"
@@ -1916,8 +1920,8 @@ function nodeGraphWriteTraceDisplaySettingsFormInner(settings) {
     && typeof syncNodeGraphStampPreview === "function") {
     syncNodeGraphStampPreview(root, normalized);
   }
-  if (typeof syncNodeGraphLineBurnSweepLabel === "function") {
-    syncNodeGraphLineBurnSweepLabel(root, normalized);
+  if (typeof syncNodeGraphScopeWindowRow === "function") {
+    syncNodeGraphScopeWindowRow(root, normalized);
   }
   if (typeof syncNodeGraphWaterfallHistoryLabel === "function") {
     syncNodeGraphWaterfallHistoryLabel(root, normalized);
@@ -2377,7 +2381,7 @@ function syncNodeGraphHslLampWidgets(popover = document.getElementById("nodeTrac
   const formType = typeof nodeGraphTraceDisplaySettingsFormType === "function"
     ? nodeGraphTraceDisplaySettingsFormType()
     : "";
-  const shape = formType === "roundShapeFace" || formType === "basicShapeFace" || formType === "softwaveOscFace" || formType === "sinCosFace" || formType === "clockFace" || formType === "clockDividerFace" || formType === "pulseExplosionFace" || formType === "pulseTrainFace" || formType === "robinSinepulseFace";
+  const shape = formType === "roundShapeFace" || formType === "basicShapeFace" || formType === "softwaveOscFace" || formType === "sinCosFace" || formType === "clockFace" || formType === "clockDividerFace" || formType === "pulseExplosionFace" || formType === "pulseTrainFace" || formType === "robinSinepulseFace" || formType === "plotFace";
   if (!popover || !shape) {
     return;
   }
@@ -2397,6 +2401,8 @@ function syncNodeGraphHslLampWidgets(popover = document.getElementById("nodeTrac
       ? normalizeNodeGraphPulseExplosionFaceSettings(current)
       : formType === "pulseTrainFace" && typeof normalizeNodeGraphPulseTrainFaceSettings === "function"
       ? normalizeNodeGraphPulseTrainFaceSettings(current)
+      : formType === "plotFace" && typeof normalizeNodeGraphPlotFaceSettings === "function"
+      ? normalizeNodeGraphPlotFaceSettings(current)
       : formType === "robinSinepulseFace" && typeof normalizeNodeGraphRobinSinepulseFaceSettings === "function"
       ? normalizeNodeGraphRobinSinepulseFaceSettings(current)
       : (typeof normalizeNodeGraphRoundShapeFaceSettings === "function"

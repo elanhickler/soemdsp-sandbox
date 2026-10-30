@@ -513,8 +513,11 @@ function drawNodeGraphSinCosDisplayInner(section) {
     morphing: node.type === "dsfMorphingOsc",
     waveform: nodeGraphSinCosLiveParam(node, "waveform", 1),
     frequency: nodeGraphSinCosLiveParam(node, "frequency", 100),
-    morph: nodeGraphSinCosLiveParam(node, "morph", 1),
-    pulseWidth: nodeGraphSinCosLiveParam(node, "pulseWidth", 0.5),
+    // DSF Oscillator: Bright = tilt, Morph = Trimorph peak / PWM. DSF Morphing Osc: Morph = tilt.
+    morph: node.type === "dsfOscillator"
+      ? nodeGraphSinCosLiveParam(node, "bright", 1)
+      : nodeGraphSinCosLiveParam(node, "morph", 1),
+    pulseWidth: node.type === "dsfOscillator" ? nodeGraphSinCosLiveParam(node, "morph", 0.5) : 0.5,
     blend: nodeGraphSinCosLiveParam(node, "blend", 0.5),
     symmetry: nodeGraphSinCosLiveParam(node, "symmetry", 0),
     width: nodeGraphSinCosLiveParam(node, "width", 0),

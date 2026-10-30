@@ -617,9 +617,9 @@ const nodeGraphModuleStoreCatalog = Object.freeze({
   },
   transport: {
     category: "clock",
-    description: "Metronome: per-clock BPM, BPM In (cancels slider when wired), Reset, hi/lo clicks. Mode Sync follows the master playhead (metronomes with the same BPM and Reset share beats); Free runs its own phase. A BPM change never jumps the phase.",
+    description: "Metronome: per-clock BPM, ƒ In (beat rate in Hz, BPM = ƒ × 60; cancels the BPM knob when wired), Reset, hi/lo clicks. Mode Sync follows the master playhead (metronomes with the same BPM and Reset share beats); Free runs its own phase. A BPM change never jumps the phase.",
     label: "Metronome",
-    notes: ["metronome", "clock", "BPM", "BPM In", "reset", "click", "Numer/Denom", "gate", "trigger"],
+    notes: ["metronome", "clock", "BPM", "ƒ In", "beat rate", "reset", "click", "Numer/Denom", "gate", "trigger"],
   },
   hostBpm: {
     category: "clock",
@@ -2827,6 +2827,24 @@ const nodeGraphModuleStoreCatalog = Object.freeze({
     description: "1D Trace mono—woscope Gaussian beam, sweep left→right, hard reset at the right edge (not Waterfall scroll).",
     label: "1D Trace",
     notes: ["1D Trace", "woscope", "sweep", "reset", "sync", "waveform", "display testbed"],
+  },
+  plot1d: {
+    category: "oscilloscope",
+    description: "Clinical 1D plot: one sharp antialiased line, Trig input, Sync or Free window, no glow, no labels.",
+    label: "1D Plot",
+    notes: ["plot", "clinical", "waveform", "trigger", "sync", "antialiased", "smootherstep"],
+  },
+  plot1dStereo: {
+    category: "oscilloscope",
+    description: "Clinical 1D plot of Left and Right on one shared trigger, each in its own color.",
+    label: "1D Plot Stereo",
+    notes: ["plot", "clinical", "stereo", "left", "right", "trigger", "sync"],
+  },
+  plot2d: {
+    category: "oscilloscope",
+    description: "Clinical X/Y plot: Left is X, Right is Y. Sharp antialiased line, Trig / Sync picks the stretch drawn.",
+    label: "2D Plot",
+    notes: ["plot", "clinical", "xy", "lissajous", "goniometer", "left", "right", "trigger"],
   },
   scope1dTraceStereo: {
     category: "oscilloscope",

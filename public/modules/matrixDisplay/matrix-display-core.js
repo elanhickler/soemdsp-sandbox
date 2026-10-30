@@ -32,7 +32,7 @@ function matrixDisplayParamsFromNode(node) {
     ghost: matrixLiveParam(node, "ghost", 0.35, 0, 1),
     backgroundBrightness: matrixLiveParam(node, "backgroundBrightness", 0, 0, 1),
     brightness: matrixLiveParam(node, "brightness", 1, 0, 1),
-    burnAmount: matrixLiveParam(node, "burnAmount", 1, 0, Residual?.BURN_AMOUNT_MAX ?? 4),
+    burnAmount: matrixLiveParam(node, "burnAmount", Residual?.DEFAULT_BURN_AMOUNT ?? 0.3, 0, Residual?.BURN_AMOUNT_MAX ?? 4),
     freeze: matrixLiveParam(node, "freeze", 0, 0, 1) >= 0.5,
   };
 }

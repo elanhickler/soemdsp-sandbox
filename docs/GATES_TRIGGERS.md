@@ -1,4 +1,4 @@
-> EXPERIMENTAL (see the EXPERIMENT commit): native gate_hit currently fires on every absolute positive change (|x[n]| > |x[n-1]|, velocity = the rise). Revert that commit to return to the law below.
+> EXPERIMENTAL (see the EXPERIMENT commit): native gate_hit currently fires on every absolute positive change (|x[n]| > |x[n-1]|, velocity = the rise), and on every upward zero crossing (x[n-1] <= 0 < x[n], velocity = x[n]), so a bipolar -1/+1 square fires on its rising edge. Revert that commit to return to the law below.
 
 # Gates, Triggers & Reset (app-wide)
 

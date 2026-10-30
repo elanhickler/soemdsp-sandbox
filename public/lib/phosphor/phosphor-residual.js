@@ -18,7 +18,8 @@
 (function initPhosphorResidual(global) {
   const DEFAULT_TRAIL = 0.3;
   const DEFAULT_GHOST = 0.25;
-  const DEFAULT_BURN_AMOUNT = 1;
+  // App-wide Burn × default (every phosphor face reads this).
+  const DEFAULT_BURN_AMOUNT = 0.3;
   const BURN_AMOUNT_MAX = 4;
   // Ghost -> dim-tail time constant, continuous from 0: tau = MAX * g^2
   // (g 0 = no tail, 0.001 = 60 us, 0.01 = 6 ms, 0.1 = 0.6 s, 0.5 = 15 s,
@@ -186,7 +187,7 @@
     return Math.round(240 + 60 * 7 * ghostTailSeconds(ghost));
   }
 
-  function residualKeeps(trail, ghost = 0, burnAmount = 1) {
+  function residualKeeps(trail, ghost = 0, burnAmount = DEFAULT_BURN_AMOUNT) {
     const keepFast = trailKeep(trail);
     const keepSlow = ghostKeep(ghost, keepFast);
     return {
@@ -196,19 +197,19 @@
       keep: keepFast,
       trail: clamp01(trail, DEFAULT_TRAIL),
       ghost: clamp01(ghost, 0),
-      burnAmount: Number.isFinite(Number(burnAmount)) ? Number(burnAmount) : 1,
+      burnAmount: Number.isFinite(Number(burnAmount)) ? Number(burnAmount) : DEFAULT_BURN_AMOUNT,
     };
   }
 
-  function clampBurnAmount(v, fb = 1) {
+  function clampBurnAmount(v, fb = DEFAULT_BURN_AMOUNT) {
     const n = Number(v);
     if (!Number.isFinite(n)) {
-      return Math.max(0, Math.min(BURN_AMOUNT_MAX, nodeGraphFiniteNumber(fb, 1)));
+      return Math.max(0, Math.min(BURN_AMOUNT_MAX, nodeGraphFiniteNumber(fb, DEFAULT_BURN_AMOUNT)));
     }
     return Math.max(0, Math.min(BURN_AMOUNT_MAX, n));
   }
 
-  function migrateBurnAmount(source = {}, fallback = 1) {
+  function migrateBurnAmount(source = {}, fallback = DEFAULT_BURN_AMOUNT) {
     const n = Number(source?.burnAmount);
     if (Number.isFinite(n)) {
       return Math.max(0, Math.min(BURN_AMOUNT_MAX, n));
@@ -217,9 +218,9 @@
   }
 
   /** Residual deposit peak = Bright x Burn Amount (live tip stays Bright). */
-  function depositBrightness(bright, burnAmount = 1) {
+  function depositBrightness(bright, burnAmount = DEFAULT_BURN_AMOUNT) {
     const b = Math.max(0, nodeGraphFiniteNumber(bright));
-    const a = clampBurnAmount(burnAmount, 1);
+    const a = clampBurnAmount(burnAmount);
     return Math.max(0, b * a);
   }
 

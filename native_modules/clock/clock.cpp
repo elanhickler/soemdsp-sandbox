@@ -98,7 +98,8 @@ extern "C" double soemdsp_clock_sample(
 
   const double safeReset = safe(reset);
   const double safePhaseOffset = wrap01(safe(phaseOffset));
-  const double safeRate = maxd(0.0, safe(rate));
+  // Signed: negative Rate runs the clock backwards (v9), 0 pauses. Not clamped to 0.
+  const double safeRate = safe(rate);
   const double safeStart = clamp(safe(pulseStart), 0.0, 1.0);
   const double safeEnd = clamp(safe(pulseEnd), 0.0, 1.0);
   const double safeLevel = safe(level);
@@ -124,30 +125,28 @@ extern "C" double soemdsp_clock_sample(
 
   const double rawPhase = wrap01(s.phase);
   const double phase = wrap01(rawPhase + safePhaseOffset);
-  const double periodSamples = safeRate > 0.0 ? rateHz / safeRate : 0.0;
-  double digital = 0.0;
-  if (periodSamples > 0.0) {
-    // High while the phase is in [Pulse Start, Pulse End); End before Start
-    // wraps through the cycle end. Compared in fractional phase, not rounded
-    // samples: the period is fractional (48000 / 74.2 = 646.9), and rounding
-    // End * period could land below the last sample's phase, so a full-width
-    // gate (Start 0, End 1) dropped low for a sample each cycle. Phase is in
-    // [0, 1), so Start 0 / End 1 is high on every sample (never re-triggers).
-    const bool high = safeEnd >= safeStart
-      ? (phase >= safeStart && phase < safeEnd)
-      : (phase >= safeStart || phase < safeEnd);
-    if (high && !s.digitalWasHigh) s.digitalLevel = safeLevel;
-    s.digitalWasHigh = high;
-    digital = high ? s.digitalLevel : 0.0;
-  } else {
-    s.digitalWasHigh = false;
-  }
+  // High while the phase is in [Pulse Start, Pulse End); End before Start
+  // wraps through the cycle end. Compared in fractional phase, not rounded
+  // samples: the period is fractional (48000 / 74.2 = 646.9), and rounding
+  // End * period could land below the last sample's phase, so a full-width
+  // gate (Start 0, End 1) dropped low for a sample each cycle. Phase is in
+  // [0, 1), so Start 0 / End 1 is high on every sample (never re-triggers).
+  // Rate 0 is not a special case (v8): the phase stops, so the clock pauses
+  // with its gate and Analog where they are (no forced 0, no T tick).
+  const bool high = safeEnd >= safeStart
+    ? (phase >= safeStart && phase < safeEnd)
+    : (phase >= safeStart || phase < safeEnd);
+  if (high && !s.digitalWasHigh) s.digitalLevel = safeLevel;
+  s.digitalWasHigh = high;
+  const double digital = high ? s.digitalLevel : 0.0;
   const double analog = clock_analog_whip_sample(phase, s.cycleLevel);
 
-  const double nextRawPhase = wrap01(rawPhase + safeRate / rateHz);
+  const double inc = safeRate / rateHz;
+  const double nextRawPhase = wrap01(rawPhase + inc);
   // T follows the offset phase. Two clocks at one rate with Phase 0 and 0.5
   // must tick half a cycle apart. Wrapping the raw phase made every T simultaneous.
-  const bool wrapped = safeRate > 0.0 && s.hasStarted && (phase + safeRate / rateHz) >= 1.0;
+  // Forward ticks when the offset phase passes 1, backwards when it passes 0.
+  const bool wrapped = s.hasStarted && (inc > 0.0 ? (phase + inc) >= 1.0 : (inc < 0.0 && (phase + inc) < 0.0));
   const double pulse = (resetRise || wrapped) ? safeLevel : 0.0;  // one sample: the tick's level
   if (wrapped) s.cycleLatch = true;
 
@@ -177,5 +176,5 @@ extern "C" double soemdsp_clock_phase(int handle) {
 }
 
 extern "C" int soemdsp_clock_version() {
-  return 7; // 7: gate compared in fractional phase (Start 0 / End 1 never drops at fractional periods). 6: Amplitude latched per pulse (Digital at gate rise, Analog at cycle start, T at tick). 5: Pulse Start / Pulse End replace duty; phase published. 4: T pulse follows Phase offset
+  return 9; // 9: negative Rate runs backwards (T on the 0 crossing). 8: Rate 0 pauses (gate / Analog hold, no forced 0). 7: gate compared in fractional phase (Start 0 / End 1 never drops at fractional periods). 6: Amplitude latched per pulse (Digital at gate rise, Analog at cycle start, T at tick). 5: Pulse Start / Pulse End replace duty; phase published. 4: T pulse follows Phase offset
 }

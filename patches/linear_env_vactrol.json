@@ -950,8 +950,9 @@
         "lineThickness": 0.35,
         "pixelDensity": 1,
         "scale": 1,
-        "sweepHz": 4,
-        "sweepCycles": 4,
+        "windowMode": "time",
+        "windowCycles": 4,
+        "timeMs": 250,
         "sweepSeconds": 0.25
       }
     },
@@ -1319,8 +1320,9 @@
         "lineThickness": 0.35,
         "pixelDensity": 1,
         "scale": 1,
-        "sweepHz": 0.3894,
-        "sweepCycles": 4,
+        "windowMode": "time",
+        "windowCycles": 4,
+        "timeMs": 2568,
         "sweepSeconds": 2.5680534155110424
       },
       "ui": {

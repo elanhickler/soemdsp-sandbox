@@ -96,6 +96,7 @@
 #include <soemdsp/math/seed.h>
 #include <soemdsp/math/analog_filter_trig.h>
 #include <soemdsp/math/rect_sine.h>
+#include <soemdsp/math/robin_dither.h>
 using soemdsp_maths::gate_hit;
 using soemdsp_maths::gate_hit_velocity;
 
@@ -108,6 +109,7 @@ static const int kMaxFwdDual = 8192; // 2*8192-1 = 16383
 struct PulseTrainState {
   bool active;
   bool running;
+  bool reversed;  // negative ƒ: the cycle plays backwards (v40)
   double prevTrig;
   long long n;  // samples since trigger
   int nFwd;     // one-way pulses = ceil(countF), at least 1
@@ -346,7 +348,7 @@ static inline int origK(int j, int nFwd, int total) {
   return timeOrderK(j, nFwd, total);
 }
 
-static inline double pulseTime(int j, int nFwd, double end, double curve, bool loop, double pulseBias, double polarity) {
+static inline double pulseTimeFwd(int j, int nFwd, double end, double curve, bool loop, double pulseBias, double polarity) {
   const double p = pulseBiasOf(pulseBias);
   if (nFwd <= 1) return oneWayTime(0, nFwd, end, curve, loop, polarity);
   if (isRevOnly(p)) {
@@ -365,7 +367,7 @@ static inline double pulseTime(int j, int nFwd, double end, double curve, bool l
   return fwdRevTime(k, nFwd, end, curve, loop, p, polarity);
 }
 
-static inline double pulseAmp(
+static inline double pulseAmpFwd(
   int j, int nFwd, double end, double curve,
   double ampStart, double ampEnd, double ampCurve,
   double amplitude, double velocity, bool loop, double pulseBias, double polarity
@@ -403,11 +405,57 @@ static inline double clampDelay(double d) {
   return d;
 }
 
+// Reverse (v40): the forward schedule played backwards in time. Set per
+// instance / preview by setReverse(): gRevEnd is the mirror end (Loop: the
+// schedule cycle; One shot: last pulse + End Delay), gRevCount the forward
+// pulses that play (t before the cut). Loop keeps its pulse at 0 (its mirror
+// is the next cycle's 0) and plays forward pulse M - j at gRevEnd - t; One
+// shot plays forward pulse M - 1 - j at gRevEnd - t. Pulses past the cut stay
+// past it. Times stay ascending in j, so every caller works unchanged.
+static bool gRev = false;
+static double gRevEnd = 0.0;
+static int gRevCount = 0;
+
+static inline int revForwardIndex(int j, bool loop) {
+  const int m = gRevCount;
+  if (loop) return j == 0 ? 0 : (j < m ? m - j : j);
+  return j < m ? m - 1 - j : j;
+}
+
+static inline double pulseTime(int j, int nFwd, double end, double curve, bool loop, double pulseBias, double polarity) {
+  if (!gRev) return pulseTimeFwd(j, nFwd, end, curve, loop, pulseBias, polarity);
+  if (j >= gRevCount) return loop ? gRevEnd : gRevEnd + 1.0; // past the cut
+  if (loop && j == 0) return 0.0;
+  const double t = gRevEnd - pulseTimeFwd(revForwardIndex(j, loop), nFwd, end, curve, loop, pulseBias, polarity);
+  return t > 0.0 ? t : 0.0;
+}
+
+static inline double pulseAmp(
+  int j, int nFwd, double end, double curve,
+  double ampStart, double ampEnd, double ampCurve,
+  double amplitude, double velocity, bool loop, double pulseBias, double polarity
+) {
+  const int k = gRev ? revForwardIndex(j, loop) : j;
+  return pulseAmpFwd(k, nFwd, end, curve, ampStart, ampEnd, ampCurve, amplitude, velocity, loop, pulseBias, polarity);
+}
+
+// Forward pulses that play before the cut (ascending times: binary search).
+static inline int forwardPulsesBeforeCut(int total, int nFwd, double end, double curve, bool loop, double pulseBias, double polarity, double cut) {
+  int lo = 0, hi = total;
+  while (lo < hi) {
+    const int mid = (lo + hi) >> 1;
+    const double tm = pulseTimeFwd(mid, nFwd, end, curve, loop, pulseBias, polarity);
+    if (loop ? tm < cut : tm <= cut) lo = mid + 1;
+    else hi = mid;
+  }
+  return lo;
+}
+
 static inline double oneShotEndTime(
   int count, int nFwd, double end, double curve, bool loop, double pulseMode, double delay, double polarity
 ) {
   const double lastT = count <= 0 ? 0.0
-    : pulseTime(count - 1, nFwd, end, curve, loop, pulseMode, polarity);
+    : pulseTimeFwd(count - 1, nFwd, end, curve, loop, pulseMode, polarity);
   double tE = lastT + delay;
   if (!(tE >= 0.0)) tE = 0.0;
   return tE;
@@ -456,6 +504,7 @@ static inline double edgeFadeOf(
 static const unsigned int kSeedAa = 1u;
 static const unsigned int kSeedEpoch = 2u;
 static const unsigned int kSeedAa2 = 3u;
+static const unsigned int kSeedCycle = 4u; // Rand / Dither Loop cycle length (v39)
 
 enum {
   kShapeTrigger = 0,
@@ -475,6 +524,9 @@ enum {
 // or after their time, the Loop cycle is whole samples. Rand = seed-locked
 // stack 0/+1 (native 1). Dither = Robin1 ±1 (native 3). The patch loader
 // rewrites retired v32/v33 values 3 None / 4 PolyBLEP to 0 Quant.
+// Rand and Dither Loop cycles (v39) are Robin-dithered whole-sample lengths
+// (cycleLandOf, math/robin_dither.h); a live period change re-picks the cycle
+// and moves the position onto its sample grid. Quant keeps the old grid.
 static inline int aaModeOf(double antialiasing) {
   if (antialiasing >= 1.5) return 3; // Dither = Robin1 ±1
   if (antialiasing >= 0.5) return 1; // Rand
@@ -587,6 +639,19 @@ static inline long long eventLand(
     return u < 0.5 ? c + 1 : c;
   }
   return c;
+}
+
+// Loop cycle length in samples (v39). Quant: the old whole-sample grid (first
+// sample at or after the wrap). Rand / Dither: a Robin-dithered whole-sample
+// length (math/robin_dither.h), mean wrap * sr, re-picked every cycle from
+// its own stream, so the pitch is exact on average and the cycle still starts
+// on the sample grid (no quantized pitch under the noise).
+static inline long long cycleLandOf(
+  double wrapT, double sr, unsigned int seed, unsigned int epoch, int aaMode, unsigned int streamAa, int count
+) {
+  if (aaMode == 0) return eventLand(wrapT, sr, streamAa, (unsigned int)count + 1u, aaMode, false);
+  const double r = (double)(soemdsp_maths::seed_mix(seed, kSeedCycle, epoch) >> 8) / 16777216.0;
+  return (long long)soemdsp_maths::robin_cycle_pick(wrapT * sr, r, 1.0);
 }
 
 static inline double grainWave(int shape, double u, double morph) {
@@ -768,7 +833,7 @@ static inline int pulseIndexAt(
 
 }  // namespace
 
-extern "C" int soemdsp_pulse_train_version() { return 38; } // v38: Edge Fade (last pulse before the cutoff fades); was v37 continuous Count
+extern "C" int soemdsp_pulse_train_version() { return 40; } // v40: reverse (negative ƒ plays the cycle backwards). was v39: Rand / Dither Loop cycles are Robin-dithered whole samples, resets on the grid; was v38 Edge Fade
 
 extern "C" int soemdsp_pulse_train_create() {
   for (int i = 0; i < kMaxInstances; i++) {
@@ -808,6 +873,7 @@ extern "C" int soemdsp_pulse_train_create() {
       s.layoutTotal = 0;
       s.layoutOrder = 0;
       s.layoutAt = -1;
+      s.reversed = false;
       s.active = true;
       return i + 1;
     }
@@ -820,15 +886,33 @@ extern "C" void soemdsp_pulse_train_destroy(int handle) {
   gPool[handle - 1].active = false;
 }
 
+// Point the reverse mirror at this instance's schedule (v40). Forward: off.
+static inline void setReverse(const PulseTrainState& s, bool rev) {
+  gRev = false;
+  if (!rev || s.count <= 0) return;
+  const double delay = clampDelay(s.eff[8]);
+  const double e = s.loopSched
+    ? s.cycle
+    : oneShotEndTime(s.count, s.nFwd, s.timeSpan, s.eff[2], false, s.pulseMode, delay, s.polarity);
+  gRevEnd = e > 0.0 ? e : 0.0;
+  gRevCount = forwardPulsesBeforeCut(s.count, s.nFwd, s.timeSpan, s.eff[2], s.loopSched, s.pulseMode, s.polarity, gRevEnd);
+  gRev = true;
+}
+
 extern "C" double soemdsp_pulse_train_sample(
   int handle, double trigger, double count, double endTime, double curve,
   double ampStart, double ampEnd, double ampCurve, double amplitude, double sampleRate, double mode,
   double recalc, double pulseMode, double endDelay, double antialiasing, double seed, double waveShape,
-  double freqHz, double morph, double curvePolarity, double spacing, double edgeFade
+  double freqHz, double morph, double curvePolarity, double spacing, double edgeFade, double reverse
 ) {
   if (handle < 1 || handle > kMaxInstances) return 0.0;
   const double morphLive = morph == morph ? morph : 0.5; // omitted wasm arg (NaN) = 0.5
   const bool edgeOn = edgeFade > 0.5; // omitted wasm arg (NaN) = Off (v37 output)
+  // Reverse (v40, the graph sends it for a negative ƒ): the cycle plays
+  // backwards. Pulse times mirror around the cycle end (setReverse /
+  // pulseTime), each grain plays from its end (u -> 1 - u), and a flip
+  // mid-cycle mirrors the position so crossing 0 Hz does not jump.
+  const bool rev = reverse > 0.5; // omitted wasm arg (NaN) = forward
   const double polarityLive = polarityNeg(curvePolarity) ? 1.0 : 0.0;
   const int spacingLive = spacingOf(spacing); // omitted wasm arg (NaN/0) = Expo
   const bool loop = mode > 0.5;
@@ -854,6 +938,7 @@ extern "C" double soemdsp_pulse_train_sample(
   gTimeSpacing = spacingNow;
   gCountF = s.countF;
   gFade = s.fade;
+  setReverse(s, rev);
   const double modeNow = runningLatch ? s.pulseMode : pulseModeLive;
   const double timeNow = runningLatch ? s.timeSpan : (endTime > 0.0 ? endTime : 0.0);
   const double delayNow = runningLatch ? clampDelay(s.eff[8]) : live[8];
@@ -868,7 +953,8 @@ extern "C" double soemdsp_pulse_train_sample(
   // latched cycle) and does not remap.
   bool naturalWrap = false;
   if (s.running && s.n > 0) {
-    if (aaMode >= 2 && (latch || prevWrap <= 0.0 || wrapNow == prevWrap)) {
+    if (aaMode >= 1) {
+      // Rand / Dither: the cycle ends on its picked whole sample (v39).
       naturalWrap = s.n >= (s.cycleN > 0 ? s.cycleN : 1);
     } else {
       const double gate = (!latch && prevWrap > 0.0) ? prevWrap : wrapNow;
@@ -878,7 +964,19 @@ extern "C" double soemdsp_pulse_train_sample(
   const bool remapLive = !latch && loop && s.running && !trigHit && !naturalWrap
     && prevWrap > 0.0 && wrapNow > 0.0
     && !(wrapNow == prevWrap);
-  if (remapLive) {
+  if (remapLive && aaMode >= 1) {
+    // Rand / Dither (v39): the cycle position moves onto the new cycle's
+    // sample grid (math/robin_dither.h reset rule), no sub-sample offset.
+    double phase = s.cycleN > 0 ? (double)s.n / (double)s.cycleN : 0.0;
+    if (!(phase >= 0.0)) phase = 0.0;
+    if (phase > 1.0) phase = 1.0;
+    const unsigned int streamR = aaStream(seedU, s.ditherEpoch, aaMode);
+    s.cycleN = cycleLandOf(wrapNow, sr, seedU, s.ditherEpoch, aaMode, streamR, s.count);
+    const double steps = (double)(s.cycleN > 0 ? s.cycleN : 1);
+    s.n = phase >= 1.0 ? s.cycleN : (long long)soemdsp_maths::robin_grid_count(phase, steps);
+    s.phaseOff = 0.0;
+    gPhaseOff = 0.0;
+  } else if (remapLive) {
     double phase = ((double)s.n / sr + s.phaseOff) / prevWrap;
     if (!(phase >= 0.0)) phase = 0.0;
     if (phase > 1.0) phase = 1.0;
@@ -888,14 +986,35 @@ extern "C" double soemdsp_pulse_train_sample(
     s.phaseOff = phase * wrapNow - (double)s.n / sr;
     gPhaseOff = s.phaseOff;
   }
+  if (rev != s.reversed) {
+    // Direction flip mid-cycle (Loop, live): the same moment of the cycle seen
+    // from the other end, on the sample grid when the cycle is dithered.
+    if (s.running && loop && !latch) {
+      if (aaMode >= 1 && s.cycleN > 0) {
+        s.n = s.cycleN > s.n ? s.cycleN - s.n : 0;
+        s.phaseOff = 0.0;
+      } else {
+        double e = wrapNow - ((double)s.n / sr + s.phaseOff);
+        if (!(e > 0.0)) e = 0.0;
+        s.n = (long long)(e * sr);
+        s.phaseOff = e - (double)s.n / sr;
+      }
+      gPhaseOff = s.phaseOff;
+      s.firedMax = -1;
+      s.layoutAt = s.n;
+      // Next pulse in the new direction: the first one at or after the mirrored position.
+      s.next = pulseIndexAt(
+        s.n, s.nFwd, s.count, s.timeSpan, s.eff[2], s.loopSched, s.pulseMode, sr, aaMode, scale, shape, pol, -1
+      );
+      if (s.next > s.count) s.next = s.count;
+    }
+    s.reversed = rev;
+  }
   s.periodLock = periodLock;
   s.wrapCycle = wrapNow;
   if (s.running && periodLock > 0.0) {
     const unsigned int streamW = aaStream(seedU, s.ditherEpoch, aaMode);
-    s.cycleN = eventLand(wrapNow, sr, streamW, (unsigned int)s.count + 1u, aaMode, aaMode == 2);
-  } else if (remapLive && aaMode >= 2) {
-    const unsigned int streamW = aaStream(seedU, s.ditherEpoch, aaMode);
-    s.cycleN = eventLand(wrapNow, sr, streamW, (unsigned int)s.count + 1u, aaMode, aaMode == 2);
+    s.cycleN = cycleLandOf(wrapNow, sr, seedU, s.ditherEpoch, aaMode, streamW, s.count);
   }
   const bool loopStart = loop && (!s.running || trigHit || naturalWrap);
   bool retargeted = false; // pulseIndexAt ran this sample (live Free change / ƒ lock)
@@ -905,6 +1024,7 @@ extern "C" double soemdsp_pulse_train_sample(
       || !(s.effVel == v) || s.loopSched != loop || s.polarity != polarityLive
       || s.spacing != spacingLive;
     if (needBuild) applySchedule(s, live, v, loop, polarityLive, spacingLive);
+    setReverse(s, rev);
     s.morphEff = morphLive;
     // Cycle starts on a whole sample (Quant = old Off sample grid, v34).
     s.phaseOff = 0.0;
@@ -916,20 +1036,21 @@ extern "C" double soemdsp_pulse_train_sample(
     s.endFired = false;
     s.running = true;
     clearSpill(s);
-    if (aaMode >= 2) s.ditherEpoch += 1u;
+    if (aaMode >= 1) s.ditherEpoch += 1u; // new cycle-length / Dither stream per cycle
     const unsigned int stream0 = aaStream(seedU, s.ditherEpoch, aaMode);
-    s.cycleN = eventLand(wrapNow, sr, stream0, (unsigned int)s.count + 1u, aaMode, aaMode == 2);
+    s.cycleN = cycleLandOf(wrapNow, sr, seedU, s.ditherEpoch, aaMode, stream0, s.count);
   } else if (s.running && !latch) {
     const bool liveChange = !paramsEqual(s.eff, live) || s.polarity != polarityLive
       || s.spacing != spacingLive;
     if (liveChange) {
       applySchedule(s, live, s.effVel, loop, polarityLive, spacingLive);
+      setReverse(s, rev);
       // Keep the spill: it holds pulses already fired this cycle (Dither lands
       // up to 1 sample early). Clearing it on every smoothed Frequency step
       // dropped them for good, so Free Dither went silent while Frequency
       // moved (v34).
       const unsigned int streamLive = aaStream(seedU, s.ditherEpoch, aaMode);
-      s.cycleN = eventLand(wrapNow, sr, streamLive, (unsigned int)s.count + 1u, aaMode, aaMode == 2);
+      s.cycleN = cycleLandOf(wrapNow, sr, seedU, s.ditherEpoch, aaMode, streamLive, s.count);
     }
     if (liveChange || remapLive) {
       retargeted = true;
@@ -1075,7 +1196,7 @@ extern "C" double soemdsp_pulse_train_sample(
         const double u = (double)(s.n - n0) / (double)(n1 - n0);
         const double amp = ampOf(s.next);
         const double mo = latch ? s.morphEff : morphLive;
-        out = grainWave(shape, u, mo) * amp;
+        out = grainWave(shape, rev ? 1.0 - u : u, mo) * amp;
         // Trigger out on the grain's first sample; one sample late when a live
         // retarget this sample found its landing slid back across the boundary
         // (v37, see pulseIndexAt).
@@ -1163,6 +1284,7 @@ extern "C" int soemdsp_pulse_train_preview(
   gPreview.polarity = polarityNeg(curvePolarity) ? 1.0 : 0.0;
   gPreview.spacing = spacingOf(spacing);
   gTimeSpacing = gPreview.spacing;
+  gRev = false;
   gPreview.countF = countContOf(count, gPreview.pulseMode);
   gPreview.nFwd = pulsesOf(gPreview.countF);
   gPreview.fade = fadeOf(gPreview.countF, gPreview.nFwd);
@@ -1183,6 +1305,7 @@ extern "C" int soemdsp_pulse_train_preview(
 extern "C" double soemdsp_pulse_train_preview_time(int i) {
   if (i < 0 || i >= gPreview.count) return 0.0;
   gTimeSpacing = gPreview.spacing;
+  gRev = false;
   gCountF = gPreview.countF;
   gFade = gPreview.fade;
   return pulseTime(i, gPreview.nFwd, gPreview.end, gPreview.curve, gPreview.loop, gPreview.pulseMode, gPreview.polarity);
@@ -1191,6 +1314,7 @@ extern "C" double soemdsp_pulse_train_preview_time(int i) {
 extern "C" double soemdsp_pulse_train_preview_amplitude(int i) {
   if (i < 0 || i >= gPreview.count) return 0.0;
   gTimeSpacing = gPreview.spacing;
+  gRev = false;
   gCountF = gPreview.countF;
   gFade = gPreview.fade;
   return pulseAmp(

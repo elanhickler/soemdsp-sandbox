@@ -62,6 +62,8 @@ $modules = @(
     "soemdsp_graph_set_named_portal",
     "soemdsp_graph_set_speed_limit",
     "soemdsp_graph_set_host_transport",
+    "soemdsp_graph_set_host_beats",
+    "soemdsp_graph_set_node_scope_taps",
     "soemdsp_graph_add_node", "soemdsp_graph_connect",
     "soemdsp_graph_disconnect", "soemdsp_graph_disconnect_param_mod",
     "soemdsp_graph_set_param",
@@ -840,6 +842,11 @@ if ($node) {
   & $node.Source "$root\scripts\smoke_graph_clock_f.mjs"
   if ($LASTEXITCODE -ne 0) {
     throw "Combined build: clock ƒ smoke FAILED"
+  }
+  # Host BPM: outs from the shared project beat (no jump on tempo change, divisions locked, 120 when unset).
+  & $node.Source "$root\scripts\smoke_graph_host_bpm.mjs"
+  if ($LASTEXITCODE -ne 0) {
+    throw "Combined build: Host BPM smoke FAILED"
   }
   # Modal Snare Body / Noise: 0 unchanged, -1 body only, +1 noise only, sum = default.
   & $node.Source "$root\scripts\smoke_modal_snare_body_noise.mjs"

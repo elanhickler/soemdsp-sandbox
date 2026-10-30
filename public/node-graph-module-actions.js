@@ -745,6 +745,12 @@ function syncNodeGraphPlacementSnapGhost(element, visible = true) {
     : { x, y };
   ghost.style.setProperty("--node-x", `${snapped.x}px`);
   ghost.style.setProperty("--node-y", `${snapped.y}px`);
+  // Same camera as the module: modules carry CSS zoom + a pan translate
+  // (node-graph-viewport-perf.js); without them the outline sat offset by the
+  // pan and unscaled by the zoom, away from the module it previews.
+  ghost.style.zoom = element.style.zoom;
+  ghost.style.transformOrigin = "0 0";
+  ghost.style.transform = element.style.transform;
   const cached = nodeGraphMvp._placementGhostMetrics;
   if (cached?.nodeId === element.dataset.node && cached.width > 0) {
     ghost.style.width = `${cached.width}px`;

@@ -107,7 +107,7 @@ function nodeGraphTransportBpmJackConnected(nodeId) {
     const c = conns[i];
     if (String(c?.destinationNode || "") !== id) continue;
     const p = String(c?.destinationPort || "").trim();
-    if (p === "BPM" || p.toLowerCase() === "bpm") return true;
+    if (p === "f" || p === "ƒ") return true;
   }
   return false;
 }
@@ -120,17 +120,18 @@ function nodeGraphTransportJackBpm(nodeId) {
     const c = conns[i];
     if (String(c?.destinationNode || "") !== id) continue;
     const p = String(c?.destinationPort || "").trim();
-    if (p !== "BPM" && p.toLowerCase() !== "bpm") continue;
+    if (p !== "f" && p !== "ƒ") continue;
+    // The jack carries ƒ (beat rate in Hz); the face shows BPM = ƒ × 60.
     const fromGhost = typeof nodeGraphGhostSliderModSample === "function"
       ? nodeGraphGhostSliderModSample(c.sourceNode, c.sourcePort)
       : null;
     const n = Number(fromGhost);
-    if (Number.isFinite(n)) return n;
+    if (Number.isFinite(n)) return n * 60;
     const local = typeof nodeGraphGhostSliderScopeSample === "function"
-      ? nodeGraphGhostSliderScopeSample(id, "BPM")
+      ? nodeGraphGhostSliderScopeSample(id, "f")
       : null;
     const ln = Number(local);
-    if (Number.isFinite(ln)) return ln;
+    if (Number.isFinite(ln)) return ln * 60;
   }
   return null;
 }
@@ -185,7 +186,8 @@ function nodeGraphTransportFaceBpm(node) {
       return Math.max(1, Math.round(sum));
     }
   }
-  return Math.max(1, Math.round(base > 0 ? base : 120));
+  // Clamp to the DSP's 1 BPM floor (transport.cpp); a stored 0 is not "use 120".
+  return Math.max(1, Math.round(base));
 }
 
 function paintNodeGraphTransportBpmFacesForNode(nodeId) {

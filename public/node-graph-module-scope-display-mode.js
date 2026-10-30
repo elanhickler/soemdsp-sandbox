@@ -285,6 +285,8 @@ function nodeGraphModuleDisplayTypeHasLocalSettings(displayType) {
     "triggerDividerFace",
     "pulseExplosionFace",
     "pulseTrainFace",
+    "plotFace",
+    "plot",
     "robinSinepulseFace",
     "sinCos4Face",
     // Lone t Torch: hue shift of the torch pixels.

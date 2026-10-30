@@ -545,8 +545,9 @@
         "lineThickness": 0.0437,
         "pixelDensity": 1,
         "scale": 1,
-        "sweepHz": 5,
-        "sweepCycles": 4
+        "windowMode": "time",
+        "windowCycles": 4,
+        "timeMs": 200
       },
       "ui": {
         "buttonsHidden": true,
@@ -866,8 +867,9 @@
         "lineThickness": 0,
         "pixelDensity": 1,
         "scale": 1.5,
-        "sweepHz": 2,
-        "sweepCycles": 0.05
+        "windowMode": "time",
+        "windowCycles": 0.05,
+        "timeMs": 500
       },
       "ui": {
         "buttonsHidden": false,

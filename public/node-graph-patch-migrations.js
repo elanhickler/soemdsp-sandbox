@@ -127,8 +127,45 @@ function migrateNodeGraphPulseTrainCountStep(patch) {
   return patch;
 }
 
+// ƒ replaces BPM on jacks (graph 302). Transport "BPM" in becomes "f" (beat
+// rate in Hz, BPM = ƒ x 60). Old patches keep their tempo: every cable into the
+// old BPM jack (Host BPM included, which still outputs raw BPM) gets an
+// Attenuverter x 1/60 between, so the same number lands as the same tempo.
+// Idempotent: a converted patch has no "BPM" Transport input.
+function migrateNodeGraphFInsteadOfBpm(patch) {
+  const nodes = Array.isArray(patch?.nodes) ? patch.nodes : null;
+  const connections = Array.isArray(patch?.connections) ? patch.connections : null;
+  if (!nodes || !connections) return patch;
+  const byId = new Map(nodes.map((node) => [String(node?.id), node]));
+  const usedIds = new Set(byId.keys());
+  const added = [];
+  for (const c of connections) {
+    if (!c) continue;
+    const dst = byId.get(String(c.destinationNode));
+    if (dst?.type !== "transport" || !/^bpm( in)?$/i.test(String(c.destinationPort || "").trim())) continue;
+    let k = 1;
+    while (usedIds.has(`attenuverter-${k}`)) k += 1;
+    const id = `attenuverter-${k}`;
+    usedIds.add(id);
+    nodes.push({
+      id,
+      type: "attenuverter",
+      gx: Number(dst.gx || 0) - 6,
+      gy: Number(dst.gy || 0),
+      params: { amplitude: 1 / 60, offset: 0 },
+    });
+    added.push({ sourceNode: c.sourceNode, sourcePort: c.sourcePort, destinationNode: id, destinationPort: "In", tracePoints: [] });
+    c.sourceNode = id;
+    c.sourcePort = "Out";
+    c.destinationPort = "f";
+    c.tracePoints = [];
+  }
+  connections.push(...added);
+  return patch;
+}
+
 function migrateNodeGraphPatchToCurrent(patch) {
-  return migrateNodeGraphPulseTrainCountStep(migrateNodeGraphPulseTrainStretch(
+  return migrateNodeGraphFInsteadOfBpm(migrateNodeGraphPulseTrainCountStep(migrateNodeGraphPulseTrainStretch(
     migrateNodeGraphPulseTrainAntialiasing(migrateNodeGraphRetiredRmsMono(patch)),
-  ));
+  )));
 }

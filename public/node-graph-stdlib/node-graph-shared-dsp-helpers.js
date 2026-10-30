@@ -23,7 +23,9 @@ function nodeGraphTriggerDividerSample(state, trigger, reset, params, sampleRate
   const division = Math.max(1, Math.min(64, Math.round(nodeGraphSafeFilterNumber(params.division, runtime, nodeId, null, "trigger divider division"))));
   const pulseTime = Math.max(0, nodeGraphSafeFilterNumber(params.pulseTime, runtime, nodeId, null, "trigger divider pulse"));
   const level = nodeGraphSafeFilterNumber(params.level, runtime, nodeId, null, "trigger divider level");
-  const absHit = (now, prev) => Math.abs(now) > Math.abs(prev);
+  // Same law as native gate_hit (trigger.h): any absolute rise, or an upward
+  // zero crossing (so a bipolar -1/+1 square fires on its rising edge).
+  const absHit = (now, prev) => (prev <= 0 && now > 0) || Math.abs(now) > Math.abs(prev);
   if (absHit(safeReset, state.lastReset)) {
     state.count = 0;
     state.remainingSamples = 0;

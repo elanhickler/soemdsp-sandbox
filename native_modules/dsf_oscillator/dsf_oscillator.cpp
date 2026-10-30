@@ -7,11 +7,19 @@
 // DSF Oscillator (type 46): harmonic SineSaw kit.
 //   n      = fade of floor(Nyquist/f - 1)
 //   k      = (1 - morph^0.14) * 4        // morph 0 = sine, 1 = saw
-//   leak   = leak * 0.99 + 0.000005      // settles at 0.0005
+//   leak   = glides to max(0.0005, 2*pi*f / (20*sr))   // DC blocker at f/20 (v23)
 //   acc    = acc * (1 - leak) + DSF() * increment
-//   out    = acc * map(morph, 3.15, 2.7)
+//   out    = acc * map(bright, 3.15, 2.7)
 // Phase step is increment * 0.9999 so the 0/0 pole at t=0 is skipped.
-// Square / Trimorph / SquSaw are PWM / extra integration of this saw kernel.
+// Params: Bright = the geometric tilt above (shape slot), Morph = Trimorph peak /
+// PWM width (width slot), Blend = SquSaw saw-to-square (mix slot).
+// Square = saw(t) - saw(t - Morph); SquSaw = saw crossfaded with a half-cycle square.
+// v23: the t - Morph saw is its own chain, integrated by its own phase step, so
+// moving Morph never leaves an integrator holding a stale shape. Trimorph = the
+// second integrals of both chains subtracted (the saw integrated over the Morph
+// window), level 1.3 / (Morph * (1 - Morph)), then a DC blocker. No peak follower.
+// Stable under standard modulation; very fast Bright / Morph / deep audio-rate
+// FM may still bump or clip (scripts/smoke_dsf_oscillator_stability.mjs).
 //
 // DSF Morphing Osc (type 232): one band-limited object.
 //   Morph     geometric |a| (sine → bright)
@@ -296,15 +304,33 @@ double spacedKernel(double ct, double mt, const DsfKernelCoeffs& c,
   return y;
 }
 
+// Trimorph level: (saw integral over the Morph window) / (Morph * (1 - Morph)),
+// scaled to sit with Saw (measured 0.53..0.77 before this gain at any Morph /
+// Bright / pitch, so about 0.7..1.0 after).
+constexpr double kTrimorphGain = 1.3;
+// Integrator DC blocker cutoff = ƒ / kDsfLeakDivisor.
+constexpr double kDsfLeakDivisor = 20.0;
+
 struct DsfOscillatorState {
   bool active;
   double t;
   double leak;
   double sawAcc;
-  double sqAcc;
   double blendSqAcc;
-  double triAcc;
-  double triPeak;
+  // Square (PWM) / Trimorph: chain B is the saw kernel at phase t - Morph,
+  // integrated by its own phase step, so it tracks the shifted saw while Morph
+  // moves (no integrator holds a stale Morph). Square = A - B. Trimorph = the
+  // second integrals of A and B, subtracted.
+  double sawB;
+  double triA;
+  double triB;
+  double prevPw;
+  bool chainB;
+  // Trimorph output DC blocker (one-pole high-pass at the integrators' cutoff):
+  // deep audio-rate FM gives the window integral a real DC, which the
+  // 1 / (Morph * (1 - Morph)) gain would otherwise park on the rail.
+  double triDcIn;
+  double triDcOut;
   double out;
   double renderPhase;
   DsfKernelCoeffs kernelLo;
@@ -380,7 +406,6 @@ extern "C" int soemdsp_dsf_oscillator_create() {
       gPool[i] = DsfOscillatorState{};
       gPool[i].active = true;
       gPool[i].leak = 1.0;
-      gPool[i].triPeak = 1.0;
       return i + 1;
     }
   }
@@ -399,10 +424,13 @@ extern "C" void soemdsp_dsf_oscillator_reset(int handle) {
   s.tm = 0.0;
   s.leak = 1.0;
   s.sawAcc = 0.0;
-  s.sqAcc = 0.0;
   s.blendSqAcc = 0.0;
-  s.triAcc = 0.0;
-  s.triPeak = 1.0;
+  s.sawB = 0.0;
+  s.triA = 0.0;
+  s.triB = 0.0;
+  s.chainB = false;
+  s.triDcIn = 0.0;
+  s.triDcOut = 0.0;
 }
 
 extern "C" void soemdsp_dsf_oscillator_set_spectrum(int handle, double, double) {
@@ -433,6 +461,7 @@ extern "C" void soemdsp_dsf_oscillator_sample(
   if (waveform == 0) {
     s.t = wrap01(s.t + dt);
     s.renderPhase = wrap01(s.t + phaseOffset);
+    s.chainB = false;
     double sinx = 0.0, cosx = 0.0;
     dsp_sin_cos_turns(s.renderPhase, &sinx, &cosx);
     sample = sinx;
@@ -447,12 +476,19 @@ extern "C" void soemdsp_dsf_oscillator_sample(
     };
     s.renderPhase = renderT;
 
-    s.leak = s.leak * 0.99 + 0.000005;
+    // Leak = the integrators' DC blocker: a one-pole high-pass at ƒ/20 (never
+    // below the old 0.0005 / sample), so offsets from sudden modulation clear in
+    // a few periods while the wave's own fundamental is barely touched. Starts
+    // at 1 and glides down, as before.
+    const double trackedLeak = kTwoPi * safeAbsFrequency / (kDsfLeakDivisor * safeSampleRate);
+    const double leakTarget = trackedLeak > 0.0005 ? trackedLeak : 0.0005;
+    s.leak = s.leak * 0.99 + leakTarget * 0.01;
     const double retention = 1.0 - s.leak;
     const double rawSaw = kern(0.0);
     s.sawAcc = s.sawAcc * retention + rawSaw * dt;
     const double ampAdjust = s.kernelLo.ampAdjust;
 
+    if (waveform != 2 && waveform != 3) s.chainB = false;
     if (waveform == 1) {
       sample = s.sawAcc * ampAdjust;
     } else if (waveform == 4) {
@@ -462,21 +498,32 @@ extern "C" void soemdsp_dsf_oscillator_sample(
       sample = (s.sawAcc * (1.0 - b) + s.blendSqAcc * b) * ampAdjust;
     } else {
       const double pw = clamp(pulseWidth, 0.01, 0.99);
-      const double rawSquare = rawSaw - kern(pw);
-      s.sqAcc = s.sqAcc * retention + rawSquare * dt;
+      // Chain B's phase step: the oscillator step minus how far Morph moved.
+      if (!s.chainB) {
+        s.chainB = true;
+        s.prevPw = pw;
+        s.sawB = s.sawAcc;
+        s.triA = 0.0;
+        s.triB = 0.0;
+        s.triDcIn = 0.0;
+        s.triDcOut = 0.0;
+      }
+      const double dtB = dt - (pw - s.prevPw);
+      s.prevPw = pw;
+      s.sawB = s.sawB * retention + kern(pw) * dtB;
 
       if (waveform == 2) {
-        sample = s.sqAcc * ampAdjust;
+        sample = (s.sawAcc - s.sawB) * ampAdjust;
       } else {
-        s.triAcc = s.triAcc * retention + s.sqAcc * dt * 4.0;
-        double sinPw = 0.0, cosPw = 0.0;
-        dsp_sin_cos_turns(0.5 * pw, &sinPw, &cosPw);
-        const double compensation = 1.0 / clamp(sinPw < 0.0 ? -sinPw : sinPw, 0.05, 1.0);
-        const double compensatedTri = s.triAcc * compensation;
-        const double absTri = compensatedTri < 0.0 ? -compensatedTri : compensatedTri;
-        s.triPeak = s.triPeak * 0.999 + absTri * 0.001;
-        if (s.triPeak < 1.0) s.triPeak = 1.0;
-        sample = compensatedTri / s.triPeak;
+        // Trimorph: integral of the saw over the window [t - Morph, t] =
+        // (second integral at t) - (second integral at t - Morph). Peak to peak is
+        // Morph * (1 - Morph) times the saw's, so that factor sets the level.
+        s.triA = s.triA * retention + s.sawAcc * dt;
+        s.triB = s.triB * retention + s.sawB * dtB;
+        const double tri = (s.triA - s.triB) * ampAdjust * kTrimorphGain / (pw * (1.0 - pw));
+        s.triDcOut = tri - s.triDcIn + retention * s.triDcOut;
+        s.triDcIn = tri;
+        sample = s.triDcOut;
       }
     }
   }
@@ -564,5 +611,5 @@ extern "C" double soemdsp_dsf_oscillator_phase(int handle) {
 }
 
 extern "C" int soemdsp_dsf_oscillator_version() {
-  return 22;
+  return 23;
 }

@@ -530,8 +530,9 @@
           }
         ],
         "sourceSync": false,
-        "sweepHz": 4,
-        "sweepCycles": 4,
+        "windowMode": "time",
+        "windowCycles": 4,
+        "timeMs": 250,
         "dotBudget": 1024,
         "drawMode": "budget"
       },

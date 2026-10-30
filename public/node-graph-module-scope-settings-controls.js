@@ -285,11 +285,18 @@ function nodeGraphTraceDisplayHistoryControlRange(key, type = null) {
     return { min: lo, max: hi };
   }
   // Hz dials: Hz domain (0 allowed = freeze). Never reuse the seconds 0…10 range.
-  if (key === "historyHz" || key === "sweepHz") {
+  if (key === "historyHz") {
     return { min: 0, max: 100 };
   }
+  // One pass / window (scope-sync.js).
+  if (key === "timeMs") {
+    return { min: NODE_GRAPH_SCOPE_TIME_MS_MIN, max: NODE_GRAPH_SCOPE_TIME_MS_MAX };
+  }
+  if (key === "windowCycles") {
+    return { min: NODE_GRAPH_SCOPE_WINDOW_CYCLES_MIN, max: NODE_GRAPH_SCOPE_WINDOW_CYCLES_MAX };
+  }
   // Cycles dials.
-  if (key === "historyCycles" || key === "sweepCycles") {
+  if (key === "historyCycles") {
     return { min: 0.05, max: 100 };
   }
   if (key === "historySeconds" && formType === "spectrogramBurn") {
@@ -332,9 +339,9 @@ const NODE_GRAPH_DISPLAY_SETTINGS_ZERO_DETENT = 4 / NODE_GRAPH_DISPLAY_SETTINGS_
 
 /** Keys whose spec does not follow from a classifier or a finite clamp. */
 const nodeGraphDisplaySettingsFieldSpecOverrides = Object.freeze({
-  sweepHz: { min: 0, max: 100, taper: "log", logMin: 0.01, zeroDetent: NODE_GRAPH_DISPLAY_SETTINGS_ZERO_DETENT, step: 0.025 },
+  timeMs: { min: 0.1, max: 10000, taper: "log", step: 0.025 },
+  windowCycles: { min: 0.05, max: 100, taper: "log", step: 0.025 },
   historyHz: { min: 0, max: 100, taper: "log", logMin: 0.01, zeroDetent: NODE_GRAPH_DISPLAY_SETTINGS_ZERO_DETENT, step: 0.025 },
-  sweepCycles: { min: 0.05, max: 100, taper: "log", step: 0.025 },
   historyCycles: { min: 0.05, max: 100, taper: "log", step: 0.025 },
   cycles: { min: 1, max: 64, taper: "linear", step: 1, integer: true },
   decimals: { min: 0, max: 8, taper: "linear", step: 1, integer: true },
@@ -623,12 +630,8 @@ const nodeGraphTraceDisplaySharedValueClamps = Object.freeze({
   secondaryBrightness: nodeGraphTraceDisplayClampBrightness,
   secondaryLineThickness: nodeGraphTraceDisplayClampNonNegative,
   secondarySize: nodeGraphTraceDisplayClampInkPx,
-  sweepHz: (value) => (typeof nodeGraphTraceDisplayClampSweepHz === "function"
-    ? nodeGraphTraceDisplayClampSweepHz(value, 4)
-    : clampNodeSliderValue(nodeGraphFiniteNumber(value, 4), 0, 100)),
-  sweepCycles: (value) => (typeof nodeGraphTraceDisplayClampSweepCycles === "function"
-    ? nodeGraphTraceDisplayClampSweepCycles(value, 4)
-    : clampNodeSliderValue(nodeGraphFiniteNumber(value, 4), 0.05, 100)),
+  timeMs: (value) => nodeGraphScopeClampTimeMs(value),
+  windowCycles: (value) => nodeGraphScopeClampWindowCycles(value),
   historyHz: (value) => {
     // Non-waterfall faces only. Instant Waterfall uses historySeconds.
     const n = Number(value);
@@ -871,6 +874,14 @@ const nodeGraphTraceDisplayFormTypeValueClampOverrides = Object.freeze({
     lineSmoothing: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, 1), 0, 8),
   }),
   pulseExplosionFace: nodeGraphPulseFaceValueClamps,
+  plotFace: Object.freeze({
+    lineThickness: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, 1.5), 0.25, 16),
+    lineSmoothing: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, 1), 0, 8),
+    timeMs: (value) => nodeGraphScopeClampTimeMs(value),
+    windowCycles: (value) => nodeGraphScopeClampWindowCycles(value),
+    scale: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, 1), 0, 16),
+    plotOffset: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, 0), -1, 1),
+  }),
   pulseTrainFace: Object.freeze({
     ...nodeGraphPulseFaceValueClamps,
     fadeTime: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, 0), 0, 60),

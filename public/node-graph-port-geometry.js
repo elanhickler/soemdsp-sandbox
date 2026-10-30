@@ -147,7 +147,7 @@ function nodeGraphPortElementIsLayoutVisible(element) {
 function nodeGraphFrequencyRowOwnedByFJack(nodeId) {
   const node = typeof nodeGraphNodeElement === "function" ? nodeGraphNodeElement(nodeId) : null;
   if (!node) return;
-  // Definition fJackParam names a non-"frequency" param the jack replaces (Clock: rate).
+  // Definition fJackParam names a non-"frequency" param the jack replaces (Clock: rate, Transport: bpm).
   const def = typeof nodeGraphModuleDefinition === "function" ? nodeGraphModuleDefinition(node.dataset?.nodeType) : null;
   const keys = ["frequency"];
   if (def?.fJackParam && def.fJackParam !== "frequency") keys.push(String(def.fJackParam));
@@ -158,23 +158,12 @@ function nodeGraphFrequencyRowOwnedByFJack(nodeId) {
   }
 }
 
-function nodeGraphBpmRowOwnedByBpmJack(nodeId) {
-  const node = typeof nodeGraphNodeElement === "function" ? nodeGraphNodeElement(nodeId) : null;
-  if (!node) return;
-  for (const row of node.querySelectorAll('.node-parameter-row[data-param="bpm"]')) {
-    row.classList.add("bpm-jack-owns-bpm");
-  }
-}
-
 function markNodeGraphPortConnected(node, port, io) {
   nodeGraphPortElementForWireEndpoint(node, port, io)?.classList.add("connected-port");
   if (io !== "input") return;
   const key = String(port || "").trim().toLowerCase();
   if (key === "f" || key === "ƒ") {
     nodeGraphFrequencyRowOwnedByFJack(node);
-  }
-  if (key === "bpm") {
-    nodeGraphBpmRowOwnedByBpmJack(node);
   }
 }
 

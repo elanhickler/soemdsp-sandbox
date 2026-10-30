@@ -517,8 +517,9 @@
           }
         ],
         "sourceSync": true,
-        "sweepHz": 4,
-        "sweepCycles": 1,
+        "windowMode": "cycles",
+        "windowCycles": 1,
+        "timeMs": 250,
         "dotBudget": 2048,
         "drawMode": "budget"
       },

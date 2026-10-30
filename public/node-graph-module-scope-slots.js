@@ -424,6 +424,10 @@ function nodeGraphModuleScopeHasModelDisplay() {
       nodeGraphModuleScopeIsOscillatorType(slot.type) ||
       (["waterfall", "dotOscilloscope", "valueOscilloscope", "lineBurnOscilloscope", "scope1dTrace", "led"].includes(slot.type) &&
         nodeGraphModuleScopeConnectionsTo(slot.nodeId, "In").length > 0) ||
+      (["plot1d", "plot1dStereo", "plot2d"].includes(slot.type) && (
+        nodeGraphModuleScopeConnectionsTo(slot.nodeId, slot.type === "plot1d" ? "In" : "Left").length > 0
+        || nodeGraphModuleScopeConnectionsTo(slot.nodeId, slot.type === "plot1d" ? "In" : "Right").length > 0
+      )) ||
       (slot.type === "scope1dTraceStereo" && (
         nodeGraphModuleScopeConnectionsTo(slot.nodeId, "Left").length > 0
         || nodeGraphModuleScopeConnectionsTo(slot.nodeId, "Right").length > 0

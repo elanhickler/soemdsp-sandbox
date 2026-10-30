@@ -219,7 +219,6 @@
       "faceBlur": 0,
       "xyzLayout": "stack"
     },
-    "sliderLayout": "text-inside",
     "sliderAmountVisible": false,
     "sliderPositionVisible": true,
     "moduleCatalogVisibility": {

@@ -51,6 +51,9 @@ static inline bool rising_edge_bool(bool high, bool* wasHigh) {
 // hit on any sample where |x[n]| > |x[n-1]|; velocity = |x[n]| - |x[n-1]|
 // (read with gate_hit_velocity() right after gate_hit). Examples:
 // 0.1 -> 0.2 hits with 0.1; -0.1 -> 0 no hit; -0.1 -> -0.2 hits with 0.1.
+// Plus an upward zero crossing (x[n-1] <= 0 < x[n]) is always a hit with
+// velocity x[n], so a bipolar square (-1 -> +1, |x| unchanged) still fires
+// once per cycle on its rising edge at full height. -0.2 -> 0.5 hits with 0.5.
 // on (held / step parts) stays x > 0. Updates *prev.
 static inline bool gate_on(double x) {
   return soemdsp::debug::safe(x) > 0.0;
@@ -72,8 +75,9 @@ static inline bool gate_hit(double now, double* prev) {
   const double p = soemdsp::debug::safe(*prev);
   const double ax = x < 0.0 ? -x : x;
   const double ap = p < 0.0 ? -p : p;
-  const bool hit = ax > ap;
-  gate_hit_velocity_slot() = hit ? ax - ap : 0.0;
+  const bool crossUp = p <= 0.0 && x > 0.0;
+  const bool hit = crossUp || ax > ap;
+  gate_hit_velocity_slot() = crossUp ? x : (hit ? ax - ap : 0.0);
   *prev = x;
   return hit;
 }

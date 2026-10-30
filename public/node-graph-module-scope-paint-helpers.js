@@ -57,20 +57,13 @@ function nodeGraphScopeRgbFloatsToCanvasRgb(color) {
 const nodeGraphLineBurnResetThreshold = 0.5;
 
 /**
- * Heart-monitor 1D burn: free-running left→right pen with its own phasor.
+ * Heart-monitor 1D burn: left→right pen with its own phasor (scope-sync.js pen).
  *
  * Position is NOT derived from absoluteFrame / duration (that jumps when you
- * change Sweep). Each face keeps canvas._lineBurnPhasor in [0, 1) and advances
- * it sample-by-sample:
- *   phasor += sweepHz / sampleRate
- * so changing rate mid-sweep continues from the current X.
- * Sweep 0 Hz = collapsed sweep: each sample burns one solid full-width horizontal
- * at its Y. Fuse spacing is preserved; under Dot Budget we skip samples, never
- * thin a line into dots. Reset (≥ 0.5) still snaps state.
- * Sync on: Sweep (cycles) = cycles-in-view (separate dial from free-run Hz).
- * Mid-sweep rising edges only retune period. When the pen finishes that window
- * it parks and restarts on the next rising zero-crossing. Reset jack still
- * snaps left immediately. Sync Off: Sweep (Hz).
+ * change Time). The pen phasor in [0, 1) advances sample-by-sample by
+ * 1 / (Time in samples), so changing Time mid-pass continues from the current
+ * X. Sync / Free follow the one scope sync rule (lib/visual/scope-sync.js).
+ * Reset (≥ 0.5) snaps the pen left immediately.
  */
 function nodeGraphOneDimensionalBurnBufferFrameInfo(buffer, count) {
   const endFrame = Number(buffer?.nodeGraphScopeAbsoluteFrame);
@@ -289,156 +282,72 @@ function nodeGraphOneDimensionalBurnFramePoints(canvas, buffer, settings, resetB
   }
   const start = Math.max(0, buffer.length - count);
   const sampleRate = Math.max(1, nodeGraphFiniteNumber(nodeGraphScopeSampleRate(buffer), 44100));
-  // Sync off: Sweep (Hz) = left→right passes per second.
-  // Sync on: Sweep (cycles) = cycles in view (separate dial — see sweepCycles).
-  // 0 Hz = collapsed sweep: solid full-width horizontal per sample at fuse density.
-  const sweepPair = typeof normalizeNodeGraphLineBurnSweepPair === "function"
-    ? normalizeNodeGraphLineBurnSweepPair(settings, nodeGraphLineBurnSettingsDefaults)
-    : null;
-  let sweepHz = Number(sweepPair?.sweepHz ?? settings?.sweepHz);
-  if (!Number.isFinite(sweepHz)) {
-    sweepHz = nodeGraphFiniteNumber(nodeGraphLineBurnSettingsDefaults.sweepHz, 4);
-  }
-  if (sweepHz < 0) {
-    sweepHz = 0;
-  }
-  sweepHz = Math.min(100, sweepHz);
-  const horizontalBurn = sweepHz <= 0;
-  const sweepPhaseInc = horizontalBurn ? 0 : sweepHz / sampleRate;
+  // Sync / Free / Window: the one scope sync rule (lib/visual/scope-sync.js).
+  const syncState = nodeGraphScopeSyncState(canvas);
+  const passSamples = nodeGraphScopePassSamples(syncState, settings, sampleRate);
+  const phaseInc = 1 / passSamples;
+  // Cycles needs edges for the period even with Sync off.
+  const findEdges = nodeGraphScopeWindowCycles(settings) > 0;
   const width = canvas.width;
   const height = canvas.height;
 
-  // Persistent free-run phasor on this face — survives Sweep (s) changes.
-  let phasor = Number(canvas._lineBurnPhasor);
-  if (!Number.isFinite(phasor) || phasor < 0 || phasor >= 1) {
-    phasor = 0;
-  }
+  // Persistent pen on this face — survives Window changes.
+  const pen = nodeGraphScopeSyncPen(canvas);
   // The undrawn window repeats the sample already stamped. Put the pen back
   // on that stamp so the repeated sample is not drawn one step to the right.
-  if (windowInfo.overlap && canvas._lineBurnJoinPoint && width > 0) {
+  if (windowInfo.overlap && canvas._lineBurnJoinPoint && width > 0 && !pen.waiting) {
     const joined = Number(canvas._lineBurnJoinPoint.x) / width;
-    // Only step backward onto the stamp. A wiped phasor (0) must not jump
-  // forward to a join left on the face.
-    if (joined >= 0 && joined < 1 && phasor + 1e-9 >= joined) {
-      phasor = joined;
+    // Only step backward onto the stamp. A wiped pen (0) must not jump
+    // forward to a join left on the face.
+    if (joined >= 0 && joined < 1 && pen.phasor + 1e-9 >= joined) {
+      pen.phasor = joined;
     }
   }
   let resetWasHigh = canvas._lineBurnResetWasHigh === true;
-  // Auto-sync: measure period from In rising edges; Sweep budgets N cycles.
-  const autoSync = typeof nodeGraphDisplaySettingsToggleIsOn === "function"
+  const sync = typeof nodeGraphDisplaySettingsToggleIsOn === "function"
     ? nodeGraphDisplaySettingsToggleIsOn(settings?.sourceSync ?? settings?.sync)
     : Boolean(settings?.sourceSync);
   const skipDisc = true;
   const discThreshold = typeof nodeGraphModuleScopeDiscontinuityThreshold === "number"
     ? nodeGraphModuleScopeDiscontinuityThreshold
     : 0.85;
-  let signalWasHigh = canvas._lineBurnSignalWasHigh === true;
-  const syncThreshold = Number.isFinite(Number(nodeGraphLineBurnResetThreshold))
+  const resetThreshold = Number.isFinite(Number(nodeGraphLineBurnResetThreshold))
     ? Number(nodeGraphLineBurnResetThreshold)
     : 0.5;
+  const level = sync || findEdges
+    ? nodeGraphScopeSyncLevel(
+      syncState,
+      buffer,
+      buffer.length - nodeGraphScopeSyncLevelSpan(passSamples, count),
+      buffer.length,
+      false,
+    )
+    : null;
+  let syncPrev = Number(buffer[start - 1]);
+  if (!Number.isFinite(syncPrev)) syncPrev = Number(buffer[start]) || 0;
 
-  // Sync: Sweep value = cycles in view (smooth). phaseInc = 1/(period×cycles).
-  // Restart only on a rising ZC after the window finishes; mid-window edges
-  // retune period without snapping X.
-  let syncPeriodSamples = Number(canvas._lineBurnSyncPeriodSamples);
-  if (!Number.isFinite(syncPeriodSamples) || syncPeriodSamples < 2) {
-    syncPeriodSamples = 0;
-  }
-  let samplesSinceSync = Number(canvas._lineBurnSamplesSinceSync);
-  if (!Number.isFinite(samplesSinceSync) || samplesSinceSync < 0) {
-    samplesSinceSync = 0;
-  }
-  let syncAwaitingRestart = canvas._lineBurnSyncAwaitingRestart === true;
-  // Sync uses its own Sweep (cycles) dial — not the free-run Hz value.
-  const syncCyclesInView = (() => {
-    if (horizontalBurn) {
-      return 1;
-    }
-    const raw = Number(sweepPair?.sweepCycles ?? settings?.sweepCycles);
-    if (!Number.isFinite(raw) || raw <= 0) {
-      return nodeGraphFiniteNumber(nodeGraphLineBurnSettingsDefaults.sweepCycles, 4);
-    }
-    return Math.max(0.05, Math.min(100, raw));
-  })();
-  const syncPhaseIncForPeriod = (periodSamples) => {
-    if (!(periodSamples >= 2)) {
-      return sweepPhaseInc;
-    }
-    return 1 / (periodSamples * syncCyclesInView);
-  };
-  let phaseInc = horizontalBurn
-    ? 0
-    : (autoSync && syncPeriodSamples >= 2
-      ? syncPhaseIncForPeriod(syncPeriodSamples)
-      : sweepPhaseInc);
-
-  /** Update measured period from the last edge gap. */
-  const retuneSyncPeriodFromGap = () => {
-    if (samplesSinceSync >= 2) {
-      syncPeriodSamples = samplesSinceSync;
-      if (!horizontalBurn && autoSync) {
-        phaseInc = syncPhaseIncForPeriod(syncPeriodSamples);
-      }
-    }
-    samplesSinceSync = 0;
-  };
-
-  const stepPhasorAndReset = (resetSample, signalSample) => {
-    const resetHigh = Number(resetSample) >= syncThreshold;
+  /** Reset jack + Schmitt edge + pen, one sample. Returns the pen step. */
+  const stepPen = (index) => {
+    const resetHigh = Number(nodeGraphOneDimensionalBurnResetSample(resetBuffer, index, count)) >= resetThreshold;
     const resetEdge = resetHigh && !resetWasHigh;
-    let syncEdge = false;
-    if (autoSync) {
-      const signalHigh = Number(signalSample) >= 0;
-      if (signalHigh && !signalWasHigh) {
-        syncEdge = true;
-      }
-      signalWasHigh = signalHigh;
-    }
-    if (resetEdge) {
-      retuneSyncPeriodFromGap();
-      phasor = 0;
-      syncAwaitingRestart = false;
-    } else if (syncEdge) {
-      const hadPeriod = syncPeriodSamples >= 2;
-      retuneSyncPeriodFromGap();
-      // Phase lock: start/restart a multi-cycle pass only on ZC.
-      if (syncAwaitingRestart || !hadPeriod) {
-        phasor = 0;
-        syncAwaitingRestart = false;
-      }
-    }
     resetWasHigh = resetHigh;
-    if (autoSync) {
-      samplesSinceSync += 1;
+    const sample = Number(buffer[start + index]);
+    const edgeT = level ? nodeGraphScopeSyncStep(syncState, syncPrev, sample, level) : -1;
+    syncPrev = sample;
+    nodeGraphScopeSyncTrackPeriod(syncState, edgeT);
+    if (resetEdge) {
+      nodeGraphScopeSyncPenRestart(pen);
+      return NODE_GRAPH_SCOPE_PEN_BREAK_DRAW;
     }
-    if (!horizontalBurn) {
-      if (autoSync && syncAwaitingRestart) {
-        phasor = 1;
-      } else {
-        phasor += phaseInc;
-        if (phasor >= 1) {
-          if (autoSync && syncPeriodSamples >= 2) {
-            // Finished N cycles — wait for next rising ZC to restart in phase.
-            phasor = 1;
-            syncAwaitingRestart = true;
-          } else {
-            phasor -= Math.floor(phasor);
-            if (phasor < 0 || phasor >= 1) {
-              phasor = 0;
-            }
-          }
-        }
-      }
-    }
-    return resetEdge;
+    return nodeGraphScopeSyncPenStep(pen, phaseInc, sync, sync ? edgeT : -1);
   };
 
-  // Samples already consumed still update phasor + Reset so edges are not missed.
+  // Samples already consumed still step the pen + Reset so edges are not missed.
   for (let index = 0; index < drawStartIndex; index += 1) {
-    stepPhasorAndReset(
-      nodeGraphOneDimensionalBurnResetSample(resetBuffer, index, count),
-      buffer[start + index],
-    );
+    const step = stepPen(index);
+    if (step === NODE_GRAPH_SCOPE_PEN_DRAW || step === NODE_GRAPH_SCOPE_PEN_BREAK_DRAW) {
+      nodeGraphScopeSyncPenAdvance(pen, phaseInc);
+    }
   }
 
   const points = [];
@@ -447,84 +356,26 @@ function nodeGraphOneDimensionalBurnFramePoints(canvas, buffer, settings, resetB
   const carriedJoin = canvas._lineBurnJoinPoint || null;
   let carriedJoinUsed = false;
   let joinPoint = null;
-  // Sweep 0: one solid full-width segment per sample (2 endpoints; energy GL
-  // packs stamps at thrifty fuse spacing). Cap line count so total ideal stamps
-  // stay ≤ Dot Budget — otherwise the budget spreads thin and lines look dotted.
-  const remaining = Math.max(0, count - drawStartIndex);
-  let horizStride = 1;
-  if (horizontalBurn) {
-    const dotSpace = Math.max(1, Math.min(width, height));
-    const authoredSize = nodeGraphFiniteNumber(settings?.dot1Size, 2);
-    let radius = Math.max(0.35, (typeof faceInkPx === "function" ? faceInkPx(authoredSize, dotSpace) : authoredSize) * 0.5);
-    if (typeof nodeGraphScopeSize01ToRadiusPx === "function") {
-      radius = Math.max(0.35, nodeGraphScopeSize01ToRadiusPx(dotSpace, authoredSize));
-    } else if (typeof PhosphorDrawer !== "undefined" && typeof PhosphorDrawer.size01ToRadiusPx === "function") {
-      radius = Math.max(0.35, PhosphorDrawer.size01ToRadiusPx(dotSpace, authoredSize));
-    }
-    const blurRaw = Number(settings?.lineThickness);
-    const blur = typeof nodeGraphTraceDisplayClampStampBlur === "function"
-      ? nodeGraphTraceDisplayClampStampBlur(blurRaw)
-      : Math.max(0, Math.min(1, Number.isFinite(blurRaw) ? blurRaw : 0));
-    // Match phosphor-energy-gl thriftyStep so densify stays under maxDots.
-    const idealStep = Math.max(0.35, radius * (0.18 + blur * 0.18));
-    const stampsPerLine = Math.max(2, Math.ceil(width / idealStep) + 1);
-    let maxDots = 2048;
-    if (typeof nodeGraphScope2dMaxSamplesPerFrame === "function") {
-      maxDots = nodeGraphScope2dMaxSamplesPerFrame(canvas);
-    }
-    const budgetRaw = Number(settings?.dotBudget);
-    if (Number.isFinite(budgetRaw) && budgetRaw > 0) {
-      maxDots = budgetRaw;
-    }
-    maxDots = Math.max(64, Math.min(8192, Math.round(maxDots)));
-    const maxLines = Math.max(1, Math.floor(maxDots / stampsPerLine));
-    horizStride = Math.max(1, Math.ceil(remaining / maxLines));
-  }
-  let horizEmitIndex = 0;
 
   for (let index = drawStartIndex; index < count; index += 1) {
     const sample = buffer[start + index];
-    const resetSample = nodeGraphOneDimensionalBurnResetSample(resetBuffer, index, count);
-    const resetHigh = Number(resetSample) >= syncThreshold;
-    const resetEdge = resetHigh && !resetWasHigh;
-    let syncEdge = false;
-    if (autoSync) {
-      const signalHigh = Number(sample) >= 0;
-      if (signalHigh && !signalWasHigh) {
-        syncEdge = true;
-      }
-      signalWasHigh = signalHigh;
-    }
-    if (resetEdge) {
-      // Hard Reset: retune + snap pen to left.
+    const step = stepPen(index);
+    if (step !== NODE_GRAPH_SCOPE_PEN_DRAW && step !== NODE_GRAPH_SCOPE_PEN_WAIT) {
       if (hadPoint) {
         nodeGraphOneDimensionalBurnBreakPath(points);
       }
-      retuneSyncPeriodFromGap();
-      phasor = 0;
-      syncAwaitingRestart = false;
       hadPoint = false;
-    } else if (syncEdge) {
-      const hadPeriod = syncPeriodSamples >= 2;
-      retuneSyncPeriodFromGap();
-      // Restart pass on ZC after window end (or first lock) — keeps phase.
-      if (autoSync && (syncAwaitingRestart || !hadPeriod)) {
-        if (hadPoint) {
-          nodeGraphOneDimensionalBurnBreakPath(points);
-        }
-        phasor = 0;
-        syncAwaitingRestart = false;
-        hadPoint = false;
-      }
+      joinPoint = null;
     }
-    resetWasHigh = resetHigh;
-    if (autoSync) {
-      samplesSinceSync += 1;
+    if (step === NODE_GRAPH_SCOPE_PEN_WAIT || step === NODE_GRAPH_SCOPE_PEN_BREAK_WAIT) {
+      // Parked at the right edge until the next edge (Sync).
+      prevSample = Number(sample);
+      continue;
     }
 
     const y = nodeGraphOneDimensionalBurnSampleToY(sample, height, settings);
-    const penX = horizontalBurn ? 0 : Math.min(width, phasor * width);
-    if (!horizontalBurn && !hadPoint && !carriedJoinUsed) {
+    const penX = Math.min(width, pen.phasor * width);
+    if (!hadPoint && !carriedJoinUsed) {
       carriedJoinUsed = true;
       if (nodeGraphOneDimensionalBurnPrependJoin(
         points,
@@ -549,29 +400,6 @@ function nodeGraphOneDimensionalBurnFramePoints(canvas, buffer, settings, resetB
       joinPoint = null;
     }
 
-    if (horizontalBurn) {
-      // Collapsed sweep: solid full-width burn at this sample's Y.
-      if ((horizEmitIndex % horizStride) === 0) {
-        if (hadPoint) {
-          nodeGraphOneDimensionalBurnBreakPath(points);
-        }
-        points.push({ x: 0, y });
-        points.push({ x: width, y });
-        nodeGraphOneDimensionalBurnBreakPath(points);
-        hadPoint = false;
-      }
-      horizEmitIndex += 1;
-      prevSample = Number(sample);
-      continue;
-    }
-
-    // Finished N cycles — blank until the next rising ZC (phase-aligned restart).
-    if (autoSync && syncAwaitingRestart) {
-      phasor = 1;
-      prevSample = Number(sample);
-      continue;
-    }
-
     // Sweeping: stamp at current pen X, then advance.
     points.push({
       x: penX,
@@ -580,35 +408,11 @@ function nodeGraphOneDimensionalBurnFramePoints(canvas, buffer, settings, resetB
     hadPoint = true;
     prevSample = Number(sample);
     joinPoint = { x: penX, y, sample: Number(sample) };
-
-    phasor += phaseInc;
-    if (phasor >= 1) {
-      if (hadPoint) {
-        nodeGraphOneDimensionalBurnBreakPath(points);
-      }
-      hadPoint = false;
-      joinPoint = null;
-      if (autoSync && syncPeriodSamples >= 2) {
-        // End of Sweep budget — wait for rising ZC to start the next pass.
-        phasor = 1;
-        syncAwaitingRestart = true;
-      } else {
-        // Freerun: wrap immediately.
-        phasor -= Math.floor(phasor);
-        if (phasor < 0 || phasor >= 1) {
-          phasor = 0;
-        }
-      }
-    }
+    nodeGraphScopeSyncPenAdvance(pen, phaseInc);
   }
 
-  canvas._lineBurnJoinPoint = horizontalBurn ? null : joinPoint;
-  canvas._lineBurnPhasor = phasor;
+  canvas._lineBurnJoinPoint = joinPoint;
   canvas._lineBurnResetWasHigh = resetWasHigh;
-  canvas._lineBurnSignalWasHigh = signalWasHigh;
-  canvas._lineBurnSyncPeriodSamples = syncPeriodSamples;
-  canvas._lineBurnSamplesSinceSync = samplesSinceSync;
-  canvas._lineBurnSyncAwaitingRestart = syncAwaitingRestart;
   delete canvas._lineBurnSweepOriginFrame;
   return points;
 }

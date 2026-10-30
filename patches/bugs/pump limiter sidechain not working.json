@@ -800,8 +800,9 @@
           }
         ],
         "sourceSync": true,
-        "sweepHz": 4,
-        "sweepCycles": 4,
+        "windowMode": "cycles",
+        "windowCycles": 4,
+        "timeMs": 250,
         "dotBudget": 2048,
         "drawMode": "budget"
       },
@@ -1140,8 +1141,9 @@
         "lineThickness": 0.35,
         "pixelDensity": 1,
         "scale": 1,
-        "sweepHz": 4,
-        "sweepCycles": 4
+        "windowMode": "cycles",
+        "windowCycles": 4,
+        "timeMs": 250
       },
       "ui": {
         "buttonsHidden": true,
@@ -3582,8 +3584,9 @@
         "lineThickness": 0.35,
         "pixelDensity": 1,
         "scale": 1,
-        "sweepHz": 4,
-        "sweepCycles": 4
+        "windowMode": "time",
+        "windowCycles": 4,
+        "timeMs": 250
       },
       "ui": {
         "buttonsHidden": true,

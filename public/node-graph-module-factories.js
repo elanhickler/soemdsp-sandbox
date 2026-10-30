@@ -1041,6 +1041,7 @@ function nodeGraphModuleResourceConstraintsForType(type) {
     || display === "scope2d"
     || display === "scope2dTrace"
     || display === "scope1dTrace"
+    || display === "plot"
     || display === "lineBurn"
     || display === "dot"
     || display === "vectorDot"

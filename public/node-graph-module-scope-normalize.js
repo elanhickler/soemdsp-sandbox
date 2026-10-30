@@ -671,20 +671,7 @@ function normalizeNodeGraphTraceDisplayZoomSeconds(value, fallback) {
 }
 
 
-/** Sync-off Sweep: left→right passes per second. 0 = collapsed full-width burn. */
-function nodeGraphTraceDisplayClampSweepHz(value, fallback = 4) {
-  const n = Number(value);
-  if (!Number.isFinite(n)) {
-    const fb = Number(fallback);
-    return Number.isFinite(fb) ? Math.max(0, fb) : 4;
-  }
-  if (n <= 0) {
-    return 0;
-  }
-  return clampNodeSliderValue(n, 0.01, 100);
-}
-
-/** Sync-on Sweep: cycles in view (smooth — e.g. 1.5 = 1½ periods). */
+/** Cycles in view (smooth — e.g. 1.5 = 1½ periods): Instant Waterfall History (cycles). */
 function nodeGraphTraceDisplayClampSweepCycles(value, fallback = 4) {
   const n = Number(value);
   if (!Number.isFinite(n) || n <= 0) {
@@ -692,24 +679,6 @@ function nodeGraphTraceDisplayClampSweepCycles(value, fallback = 4) {
     return Number.isFinite(fb) && fb > 0 ? fb : 4;
   }
   return clampNodeSliderValue(n, 0.05, 100);
-}
-
-/** Resolve Sweep Hz + Cycles as separate dials (sweepHz / sweepCycles only). */
-function normalizeNodeGraphLineBurnSweepPair(source, defaults = nodeGraphLineBurnSettingsDefaults) {
-  const defHz = Number(defaults?.sweepHz);
-  const defCycles = Number(defaults?.sweepCycles);
-  const hz = Number(source?.sweepHz);
-  const cycles = Number(source?.sweepCycles);
-  return {
-    sweepHz: nodeGraphTraceDisplayClampSweepHz(
-      Number.isFinite(hz) ? hz : (Number.isFinite(defHz) ? defHz : 4),
-      defHz,
-    ),
-    sweepCycles: nodeGraphTraceDisplayClampSweepCycles(
-      Number.isFinite(cycles) ? cycles : (Number.isFinite(defCycles) ? defCycles : 4),
-      defCycles,
-    ),
-  };
 }
 
 /** Sync-on History: cycles in view (Instant Waterfall Cycles dial). */
@@ -830,7 +799,7 @@ function normalizeNodeGraphLineBurnSettings(settings = {}) {
       1,
     ),
     scale: normalizeNodeGraphTraceDisplayNumber(source.scale, defaults.scale, 0.01, 100),
-    ...normalizeNodeGraphLineBurnSweepPair(source, defaults),
+    ...nodeGraphScopeWindowSettings(source, defaults),
   };
 }
 
@@ -1758,8 +1727,8 @@ function normalizeNodeGraphScope2dTraceSettings(settings = {}, typeDefaults = nu
       ? PhosphorResidual.migrateTrail(source, defaults.trail)
       : normalizeNodeGraphTraceDisplayNumber(source.trail, defaults.trail, 0, 1),
     burnAmount: typeof PhosphorResidual !== "undefined" && PhosphorResidual.migrateBurnAmount
-      ? PhosphorResidual.migrateBurnAmount(source, defaults.burnAmount ?? 1)
-      : normalizeNodeGraphTraceDisplayNumber(source.burnAmount, defaults.burnAmount ?? 1, 0, 4),
+      ? PhosphorResidual.migrateBurnAmount(source, defaults.burnAmount ?? PhosphorResidual.DEFAULT_BURN_AMOUNT)
+      : normalizeNodeGraphTraceDisplayNumber(source.burnAmount, defaults.burnAmount ?? PhosphorResidual.DEFAULT_BURN_AMOUNT, 0, 4),
     pixelDensity: normalizeNodeGraphTraceDisplayNumber(
       source.pixelDensity,
       defaults.pixelDensity,
@@ -1838,9 +1807,6 @@ function normalizeNodeGraphScope1dTraceSettings(settings = {}) {
   // second (Right) beam follows them; a stored secondary* from an earlier
   // normalize must not pin the Right beam at its first-save value.
   const secBright = inkBright;
-  const sweepDefaults = typeof nodeGraphLineBurnSettingsDefaults !== "undefined"
-    ? nodeGraphLineBurnSettingsDefaults
-    : { sweepHz: 4, sweepCycles: 4 };
   const traceGradient = ((Array.isArray(source.gradientStops) && source.gradientStops.length >= 2)
     || (Array.isArray(source.gradient) && source.gradient.length >= 2))
     ? (typeof nodeGraphPhosphorGradientStopsFromSettings === "function"
@@ -1875,8 +1841,8 @@ function normalizeNodeGraphScope1dTraceSettings(settings = {}) {
       : normalizeNodeGraphTraceDisplayNumber(source.trail, defaults.trail, 0, 1),
     // Must survive normalize or the Burn ⨯ stepper never reaches the painter.
     burnAmount: typeof PhosphorResidual !== "undefined" && PhosphorResidual.migrateBurnAmount
-      ? PhosphorResidual.migrateBurnAmount(source, defaults.burnAmount ?? 1)
-      : normalizeNodeGraphTraceDisplayNumber(source.burnAmount, defaults.burnAmount ?? 1, 0, 4),
+      ? PhosphorResidual.migrateBurnAmount(source, defaults.burnAmount ?? PhosphorResidual.DEFAULT_BURN_AMOUNT)
+      : normalizeNodeGraphTraceDisplayNumber(source.burnAmount, defaults.burnAmount ?? PhosphorResidual.DEFAULT_BURN_AMOUNT, 0, 4),
     pixelDensity: normalizeNodeGraphTraceDisplayNumber(
       source.pixelDensity,
       defaults.pixelDensity,
@@ -1891,10 +1857,7 @@ function normalizeNodeGraphScope1dTraceSettings(settings = {}) {
     sourceSync: nodeGraphDisplaySettingsToggleIsOn(
       source.sourceSync ?? source.sync ?? defaults.sourceSync,
     ),
-    ...normalizeNodeGraphLineBurnSweepPair(source, {
-      sweepHz: defaults.sweepHz ?? sweepDefaults.sweepHz,
-      sweepCycles: defaults.sweepCycles ?? sweepDefaults.sweepCycles,
-    }),
+    ...nodeGraphScopeWindowSettings(source, defaults),
     dotBudget: typeof nodeGraphTraceDisplayClampDotBudget === "function"
       ? nodeGraphTraceDisplayClampDotBudget(source.dotBudget ?? defaults.dotBudget)
       : Math.max(8, Math.min(8192, Math.round(nodeGraphFiniteNumber(source.dotBudget ?? defaults.dotBudget, 2048)))),
