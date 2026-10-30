@@ -11,6 +11,7 @@ const NODE_GRAPH_KEYPAD_DISPLAY_SLIDER_FIELDS = Object.freeze([
   "padPx",
   "rounding",
   "stroke",
+  "smoothing",
 ]);
 
 function nodeGraphKeypadDisplaySettingsForNode(node) {
@@ -106,6 +107,11 @@ function buildNodeGraphKeypadDisplaySettingsBodyHtml() {
       <label class="node-led-settings-row">
         <span>Stroke</span>
         <input type="range" min="0" max="1" step="0.01" data-keypad-field="stroke" aria-label="Button stroke 0–1">
+      </label>
+      <label class="node-led-settings-row">
+        <span>Smoothing</span>
+        <input type="range" min="0" max="4" step="0.05" data-keypad-field="smoothing" aria-label="Edge smoothing in pixels (smootherstep)">
+        <span>px</span>
       </label>
       ${(typeof nodeGraphDisplaySettingsColorRows === "function"
         ? nodeGraphDisplaySettingsColorRows([

@@ -650,6 +650,7 @@ export class SoundColorWidget {
     this.handlePointerMove = this.handlePointerMove.bind(this);
     this.handlePointerUp = this.handlePointerUp.bind(this);
     this.handleHexInput = this.handleHexInput.bind(this);
+    this.handleHexClick = this.handleHexClick.bind(this);
     this.preventSelection = this.preventSelection.bind(this);
     this.render();
     this.resizeObserver = new ResizeObserver(() => {
@@ -673,6 +674,7 @@ export class SoundColorWidget {
     hexInput?.removeEventListener("input", this.handleHexInput);
     hexInput?.removeEventListener("change", this.handleHexInput);
     hexInput?.removeEventListener("keydown", this.handleHexInput);
+    hexInput?.removeEventListener("click", this.handleHexClick);
     this.root?.removeEventListener("pointerdown", this.handlePointerDown);
     this.root?.removeEventListener("selectstart", this.preventSelection);
     this.root?.removeEventListener("dragstart", this.preventSelection);
@@ -795,6 +797,7 @@ export class SoundColorWidget {
       hexField?.addEventListener("input", this.handleHexInput);
       hexField?.addEventListener("change", this.handleHexInput);
       hexField?.addEventListener("keydown", this.handleHexInput);
+      hexField?.addEventListener("click", this.handleHexClick);
     }
     const titled = this.hasTitle();
     this.root.dataset.channels = this.channels;
@@ -944,6 +947,28 @@ export class SoundColorWidget {
     this.showCopyToast("Hashtag copied");
   }
 
+  // Clicking the hex text copies it ("Copied") and selects it, so typing
+  // still replaces the value. A drag that selects part of the text does not copy.
+  async handleHexClick(event) {
+    const field = event.currentTarget;
+    if (!field || field.selectionStart !== field.selectionEnd) {
+      return;
+    }
+    const shown = String(field.value || "").trim();
+    const hex = /^#?[0-9a-f]{6}$/i.test(shown)
+      ? `#${shown.replace("#", "").toUpperCase()}`
+      : this.getColor().hex;
+    field.select();
+    try {
+      await navigator.clipboard?.writeText(hex);
+    } catch {
+      this.copyHexFallback(hex);
+      field.focus();
+      field.select();
+    }
+    this.showCopyToast("Copied", field);
+  }
+
   copyHexFallback(hex) {
     const holder = document.createElement("textarea");
     holder.value = hex;
@@ -957,14 +982,22 @@ export class SoundColorWidget {
     holder.remove();
   }
 
-  showCopyToast(message) {
+  // anchor: cover only that element (the hex field) and leave the label as is;
+  // no anchor covers the whole title strip (swatch click).
+  showCopyToast(message, anchor = null) {
     const toast = this.root?.querySelector(".scw-copy-toast");
     if (!toast) {
       return;
     }
     toast.textContent = message;
+    const box = anchor && anchor.offsetParent === toast.offsetParent ? anchor : null;
+    toast.style.inset = box ? "auto" : "";
+    toast.style.left = box ? `${box.offsetLeft}px` : "";
+    toast.style.top = box ? `${box.offsetTop}px` : "";
+    toast.style.width = box ? `${box.offsetWidth}px` : "";
+    toast.style.height = box ? `${box.offsetHeight}px` : "";
     toast.dataset.visible = "true";
-    const titleStrip = this.root?.querySelector(".scw-label");
+    const titleStrip = box ? null : this.root?.querySelector(".scw-label");
     if (titleStrip) {
       titleStrip.dataset.copied = "true";
     }

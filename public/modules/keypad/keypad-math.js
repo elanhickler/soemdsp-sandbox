@@ -202,20 +202,22 @@ function nodeGraphKeypadSample(state, options = {}) {
 
 const NODE_GRAPH_KEYPAD_LAYOUT_DEFAULTS = Object.freeze({
   backgroundColor: "#000000",
-  buttonColor: "#c4c2a6",
+  buttonColor: "#f4f2e2",
   buttonHeight: 1,
   buttonSize: 1,
   buttonWidth: 1,
   cornerShape: "squircle",
-  downColor: "#d9d9d9",
+  downColor: "#ffffff",
   font: "thasadith",
-  hoverColor: "#89bfc2",
+  hoverColor: "#c7edea",
   padPx: 2,
   rounding: 48.2527147087858,
+  // Smootherstep edge width in CSS px (GL key draw); 0 = hard edge.
+  smoothing: 1,
   squareRatio: false,
   stroke: 0.0705278719888686,
-  strokeColor: "#5c5071",
-  textColor: "#2d2d2d",
+  strokeColor: "#e2dcc7",
+  textColor: "#1f1f1f",
   textSize: 0.87708066581306,
   textWeight: 900,
   labels: NODE_GRAPH_KEYPAD_LABELS_TEXT,
@@ -372,6 +374,11 @@ function nodeGraphKeypadClampStroke(value, legacyPx) {
   return NODE_GRAPH_KEYPAD_LAYOUT_DEFAULTS.stroke;
 }
 
+function nodeGraphKeypadClampSmoothing(value) {
+  const n = Number(value);
+  return Number.isFinite(n) ? Math.max(0, Math.min(4, n)) : NODE_GRAPH_KEYPAD_LAYOUT_DEFAULTS.smoothing;
+}
+
 function nodeGraphKeypadStrokePixels(stroke, widthPx, heightPx) {
   const t = nodeGraphKeypadClampStroke(stroke);
   const max = Math.max(0, Math.min(nodeGraphFiniteNumber(widthPx), nodeGraphFiniteNumber(heightPx)) * 0.5);
@@ -437,6 +444,7 @@ function normalizeNodeGraphKeypadLayout(layout = {}) {
     cornerShape: nodeGraphKeypadNormalizeCorner(source.cornerShape || d.cornerShape),
     font: nodeGraphKeypadNormalizeFont(source.font || d.font),
     rounding: nodeGraphKeypadClampRounding(source.rounding),
+    smoothing: nodeGraphKeypadClampSmoothing(source.smoothing),
     stroke: nodeGraphKeypadClampStroke(source.stroke, source.strokePx),
     strokeColor: nodeGraphKeypadNormalizeHex(source.strokeColor, d.strokeColor),
     backgroundImage: nodeGraphKeypadNormalizeKeyImage(

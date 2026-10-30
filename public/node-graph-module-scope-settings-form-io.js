@@ -1278,7 +1278,7 @@ function readNodeGraphTraceDisplaySettingsForm() {
   if (formType === "keypadFace") {
     const panel = root?.querySelector?.("[data-keypad-display-settings-panel]") || root;
     const next = { ...current };
-    for (const key of ["textSize", "textWeight", "buttonWidth", "buttonHeight", "buttonSize", "padPx", "rounding", "stroke"]) {
+    for (const key of ["textSize", "textWeight", "buttonWidth", "buttonHeight", "buttonSize", "padPx", "rounding", "stroke", "smoothing"]) {
       const input = panel?.querySelector?.(`[data-keypad-field="${key}"]`);
       if (input) {
         next[key] = Number(input.value);
@@ -2695,6 +2695,16 @@ function syncNodeGraphTraceDisplayColorWidgets(popover = document.getElementById
         host.replaceChildren();
         widget = null;
       }
+      // Plain colour rows show and copy the exact stored hex. The HSL round
+      // trip drifts (#F4F2E2 came back #FEFDFA); hue-only and HBS lamps keep
+      // brightness / saturation apart, so their hex is not the whole colour.
+      const pinExact = () => {
+        if (!widget || hueOnly || brightKey || satKey) return;
+        const exact = nodeGraphTraceDisplayNormalizeHexColor(hex, "");
+        if (!exact) return;
+        widget.pinnedHex = exact.toUpperCase();
+        widget.render?.();
+      };
       if (!widget) {
         try {
           host.replaceChildren();
@@ -2746,6 +2756,7 @@ function syncNodeGraphTraceDisplayColorWidgets(popover = document.getElementById
             nodeGraphTraceDisplayColorWidgetState.syncing = false;
           }
           nodeGraphTraceDisplayColorWidgetState.widgets.set(field, widget);
+          pinExact();
           requestAnimationFrame(() => {
             try {
               widget?.fitFittedText?.();
@@ -2780,6 +2791,7 @@ function syncNodeGraphTraceDisplayColorWidgets(popover = document.getElementById
         try {
           widget.label = hueOnly ? "" : label;
           widget.setColor(mountHsl, false);
+          pinExact();
         } finally {
           nodeGraphTraceDisplayColorWidgetState.syncing = false;
         }

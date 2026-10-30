@@ -718,36 +718,25 @@ function nodeGraphGlGraphKeypadLook(face) {
   };
   return {
     background: color("--node-keypad-background-color", "#000000"),
-    button: color("--node-keypad-button-color", "#c4c2a6"),
-    hover: color("--node-keypad-hover-color", "#89bfc2"),
-    down: color("--node-keypad-down-color", "#d9d9d9"),
-    text: color("--node-keypad-text-color", "#2d2d2d"),
-    stroke: color("--node-keypad-stroke-color", "#5c5071"),
-    strokePx: Math.max(0, number("--node-keypad-stroke", 0)),
-    radiusPx: Math.max(0, number("--node-keypad-radius", 0)),
+    button: color("--node-keypad-button-color", "#f4f2e2"),
+    hover: color("--node-keypad-hover-color", "#c7edea"),
+    down: color("--node-keypad-down-color", "#ffffff"),
+    text: color("--node-keypad-text-color", "#1f1f1f"),
+    stroke: color("--node-keypad-stroke-color", "#e2dcc7"),
+    // Fractions, not cached px: the draw sizes them from the key it draws, so a
+    // Size / Width / Height drag never leaves the corners sized for the old key.
+    strokeT: typeof nodeGraphKeypadClampStroke === "function"
+      ? nodeGraphKeypadClampStroke(face?.dataset?.keypadStroke)
+      : Math.max(0, Math.min(1, Number(face?.dataset?.keypadStroke) || 0)),
+    rounding: Math.max(0, Math.min(100, Number(face?.dataset?.keypadRounding) || 0)),
+    // Smootherstep edge width, CSS px (Display Settings Smoothing).
+    smoothing: Number.isFinite(Number.parseFloat(face?.dataset?.keypadSmoothing))
+      ? Math.max(0, Number.parseFloat(face.dataset.keypadSmoothing))
+      : 1,
     textSize: Math.max(0, number("--node-keypad-text-size", 0.87708066581306)),
     weight: number("--node-keypad-text-weight", 900),
     family: read("--node-keypad-font", "\"Thasadith\", sans-serif"),
   };
-}
-
-// Filled rounded rect: three bands plus a dot in each corner.
-function nodeGraphGlGraphRoundRect(batch, x, y, w, h, radius, rgba) {
-  if (!(w > 0) || !(h > 0)) return;
-  const r = Math.max(0, Math.min(radius, w * 0.5, h * 0.5));
-  if (r < 0.5 || typeof nodeGraphGlLinesDot !== "function") {
-    nodeGraphGlLinesRect(batch, x, y, w, h, rgba);
-    return;
-  }
-  nodeGraphGlLinesRect(batch, x + r, y, w - r * 2, h, rgba);
-  nodeGraphGlLinesRect(batch, x, y + r, r, h - r * 2, rgba);
-  nodeGraphGlLinesRect(batch, x + w - r, y + r, r, h - r * 2, rgba);
-  const feather = 0.75;
-  const inset = r - feather * 0.5;
-  nodeGraphGlLinesDot(batch, x + r, y + r, inset, feather, rgba);
-  nodeGraphGlLinesDot(batch, x + w - r, y + r, inset, feather, rgba);
-  nodeGraphGlLinesDot(batch, x + r, y + h - r, inset, feather, rgba);
-  nodeGraphGlLinesDot(batch, x + w - r, y + h - r, inset, feather, rgba);
 }
 
 function nodeGraphGlGraphDrawOver(batch, draw) {
@@ -1054,15 +1043,14 @@ function nodeGraphGlGraphDrawChrome(batch, toX, toY, zoom, cssW, cssH) {
     const hover = !down && (cls?.contains("is-hover")
       || (key.face?.dataset.keypadHoverSlot ?? null) === key.slot);
     const fill = down ? look.down : (hover ? look.hover : look.button);
-    const stroke = Math.min(look.strokePx * zoom, Math.min(w, h) * 0.5);
-    const radius = look.radiusPx * zoom;
-    nodeGraphGlGraphDrawOver(batch, () => {
-      if (stroke > 0) {
-        nodeGraphGlGraphRoundRect(batch, x, y, w, h, radius, look.stroke);
-        nodeGraphGlGraphRoundRect(batch, x + stroke, y + stroke, w - stroke * 2, h - stroke * 2, Math.max(0, radius - stroke), fill);
-      } else {
-        nodeGraphGlGraphRoundRect(batch, x, y, w, h, radius, fill);
-      }
+    // keypad-ui.js nodeGraphKeypadSyncLookPixels, from this key's own size.
+    const halfMin = Math.min(key.w, key.h) * 0.5;
+    const stroke = Math.round(look.strokeT * halfMin) * zoom;
+    const radius = Math.round((look.rounding / 100) * halfMin) * zoom;
+    // One SDF box: the stroke sits inside the edge and shares the corner
+    // curve with the fill, smootherstep edges (gl-line-renderer round rect).
+    nodeGraphGlLinesRoundRect(batch, x, y, w, h, {
+      radius, stroke, feather: look.smoothing, fill, strokeRgba: look.stroke,
     });
     if (key.label && typeof nodeGraphGlLinesText === "function") {
       // keypad-ui.css: font-size = text-size * min(100cqw, 100cqh) of the key's content box.

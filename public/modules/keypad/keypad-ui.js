@@ -63,11 +63,11 @@ function nodeGraphKeypadApplyLayout(face, layout) {
   const bgSrc = next.backgroundImage?.dataUrl || "";
   face.style.setProperty("--node-keypad-background-image", bgSrc ? `url("${bgSrc}")` : "none");
   face.classList.toggle("has-background-image", Boolean(bgSrc));
-  face.style.setProperty("--node-keypad-button-color", next.buttonColor || d.buttonColor || "#c4c2a6");
-  face.style.setProperty("--node-keypad-hover-color", next.hoverColor || d.hoverColor || "#89bfc2");
-  face.style.setProperty("--node-keypad-down-color", next.downColor || d.downColor || "#d9d9d9");
-  face.style.setProperty("--node-keypad-text-color", next.textColor || d.textColor || "#2d2d2d");
-  face.style.setProperty("--node-keypad-stroke-color", next.strokeColor || d.strokeColor || "#5c5071");
+  face.style.setProperty("--node-keypad-button-color", next.buttonColor || d.buttonColor || "#f4f2e2");
+  face.style.setProperty("--node-keypad-hover-color", next.hoverColor || d.hoverColor || "#c7edea");
+  face.style.setProperty("--node-keypad-down-color", next.downColor || d.downColor || "#ffffff");
+  face.style.setProperty("--node-keypad-text-color", next.textColor || d.textColor || "#1f1f1f");
+  face.style.setProperty("--node-keypad-stroke-color", next.strokeColor || d.strokeColor || "#e2dcc7");
   face.style.setProperty("--node-keypad-button-width", String(next.buttonWidth ?? d.buttonWidth ?? 1));
   face.style.setProperty("--node-keypad-button-height", String(next.buttonHeight ?? d.buttonHeight ?? 1));
   face.style.setProperty("--node-keypad-button-size", String(next.buttonSize ?? d.buttonSize ?? 1));
@@ -90,6 +90,7 @@ function nodeGraphKeypadApplyLayout(face, layout) {
   );
   face.dataset.keypadStroke = String(next.stroke ?? d.stroke ?? 0.0705278719888686);
   face.dataset.keypadRounding = String(next.rounding ?? d.rounding ?? 48.2527147087858);
+  face.dataset.keypadSmoothing = String(next.smoothing ?? d.smoothing ?? 1);
   const labels = typeof nodeGraphKeypadLabelsList === "function"
     ? nodeGraphKeypadLabelsList(next.labels)
     : (typeof NODE_GRAPH_KEYPAD_LABELS !== "undefined"
@@ -115,7 +116,7 @@ function nodeGraphKeypadApplyLayout(face, layout) {
   nodeGraphKeypadSyncGridGeometry(face, next);
   nodeGraphKeypadSyncLookPixels(face, next);
   nodeGraphKeypadEnsureStrokeWatch(face);
-  nodeGraphKeypadRequestGlPaint();
+  nodeGraphKeypadRequestGlRebuild();
 }
 
 function nodeGraphKeypadSyncGridGeometry(face, layout) {
@@ -136,12 +137,19 @@ function nodeGraphKeypadSyncGridGeometry(face, layout) {
   const metrics = typeof nodeGraphKeypadGridMetrics === "function"
     ? nodeGraphKeypadGridMetrics(innerW, innerH, square)
     : null;
-  if (square && metrics && metrics.width > 0 && metrics.height > 0) {
-    grid.style.width = `${metrics.width}px`;
-    grid.style.height = `${metrics.height}px`;
+  // The grid always fills the padded face; square mode only makes the keys
+  // square (px tracks from one square cell), so Pad stays equal on all sides.
+  grid.style.width = "100%";
+  grid.style.height = "100%";
+  if (square && metrics && metrics.cell > 0) {
+    const size = nodeGraphFiniteNumber(next.buttonSize ?? face.style.getPropertyValue("--node-keypad-button-size")) || 1;
+    const bw = nodeGraphFiniteNumber(next.buttonWidth ?? face.style.getPropertyValue("--node-keypad-button-width")) || 0;
+    const bh = nodeGraphFiniteNumber(next.buttonHeight ?? face.style.getPropertyValue("--node-keypad-button-height")) || 0;
+    face.style.setProperty("--node-keypad-track-w", `${metrics.cell * bw * size}px`);
+    face.style.setProperty("--node-keypad-track-h", `${metrics.cell * bh * size}px`);
   } else {
-    grid.style.width = "100%";
-    grid.style.height = "100%";
+    face.style.removeProperty("--node-keypad-track-w");
+    face.style.removeProperty("--node-keypad-track-h");
   }
 }
 
@@ -172,6 +180,7 @@ function nodeGraphKeypadEnsureStrokeWatch(face) {
   const ro = new ResizeObserver(() => {
     nodeGraphKeypadSyncGridGeometry(face);
     nodeGraphKeypadSyncLookPixels(face);
+    nodeGraphKeypadRequestGlRebuild();
   });
   ro.observe(face);
 }
@@ -179,6 +188,18 @@ function nodeGraphKeypadEnsureStrokeWatch(face) {
 // GL mode draws the keys from these classes and vars; repaint after they change.
 function nodeGraphKeypadRequestGlPaint() {
   if (typeof nodeGraphGlGraphPresentSoon === "function") nodeGraphGlGraphPresentSoon();
+}
+
+// Layout changes (Size / Width / Height / Pad / Square) move the key boxes the
+// GL pass reads from its chrome cache: rebuild it once per frame, then repaint.
+let nodeGraphKeypadChromeFrame = 0;
+function nodeGraphKeypadRequestGlRebuild() {
+  if (nodeGraphKeypadChromeFrame || typeof requestAnimationFrame !== "function") return;
+  nodeGraphKeypadChromeFrame = requestAnimationFrame(() => {
+    nodeGraphKeypadChromeFrame = 0;
+    if (typeof nodeGraphGlGraphRebuildChrome === "function") nodeGraphGlGraphRebuildChrome();
+    nodeGraphKeypadRequestGlPaint();
+  });
 }
 
 function nodeGraphKeypadPaintSlot(face, slot, down, hoverSlot = null) {

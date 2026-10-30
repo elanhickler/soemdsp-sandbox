@@ -923,6 +923,30 @@ void main() {
   }
 
   /**
+   * Rounded rectangle with an inside stroke, one SDF per pixel: the stroke and
+   * fill share the box's distance field, so straight edges and corners are one
+   * continuous shape (the CSS border-box look: stroke inside the edge, the fill
+   * corner radius = radius - stroke). Edges use the app smootherstep, centred
+   * on the edge, `feather` CSS px wide. Drawn after the "over" quads, before
+   * text, one instanced call per batch.
+   * spec: { radius, stroke, feather = 1, fill: rgba, strokeRgba: rgba }
+   * x / y / w / h / radius / stroke are batch units (world px under a camera).
+   */
+  function nodeGraphGlLinesRoundRect(batch, x, y, w, h, spec = {}) {
+    if (!batch || !(w > 0) || !(h > 0)) return;
+    if (!batch.roundRects) batch.roundRects = [];
+    const f = spec.fill || [0, 0, 0, 0];
+    const st = spec.strokeRgba || f;
+    const feather = Number.isFinite(Number(spec.feather)) ? Math.max(0, Number(spec.feather)) : 1;
+    batch.roundRects.push(
+      x, y, w, h,
+      Math.max(0, Number(spec.radius) || 0), Math.max(0, Number(spec.stroke) || 0), feather,
+      f[0] || 0, f[1] || 0, f[2] || 0, f.length > 3 ? f[3] : 1,
+      st[0] || 0, st[1] || 0, st[2] || 0, st.length > 3 ? st[3] : 1,
+    );
+  }
+
+  /**
    * Polyline: the app-wide antialiased line. Default (round) is one joined
    * strip (nodeGraphGlLinesRibbon), so joints never double-blend; `feather` is
    * the soft edge (pass ~1 device px). caps "butt" ends each segment flat.
@@ -2389,6 +2413,156 @@ void main() {
     gl.bindBuffer(gl.ARRAY_BUFFER, null);
   }
 
+  // Rounded rect (nodeGraphGlLinesRoundRect): one instance per box, worked in
+  // device px. Camera batches: rect / radius / stroke are world px (x zoom x
+  // device); feather is screen CSS px (x device). Otherwise CSS px x uScale.
+  const RR_VS = `#version 300 es
+precision highp float;
+layout(location = 0) in vec2 aCorner;
+layout(location = 1) in vec4 aRect;
+layout(location = 2) in vec3 aShape;
+layout(location = 3) in vec4 aFill;
+layout(location = 4) in vec4 aStroke;
+uniform float uPixel;
+uniform vec3 uCam;
+uniform vec2 uVp;
+uniform float uDevice;
+uniform float uScale;
+out vec2 vP;
+out vec2 vHalf;
+out vec3 vShape;
+out vec4 vFill;
+out vec4 vStroke;
+void main() {
+  float k = uPixel > 0.5 ? max(uCam.z, 0.0001) * uDevice : uScale;
+  float fk = uPixel > 0.5 ? uDevice : uScale;
+  vec2 centre = aRect.xy + aRect.zw * 0.5;
+  vec2 dev = uPixel > 0.5 ? (centre - uCam.xy) * k : centre * k;
+  vec2 halfSize = aRect.zw * 0.5 * k;
+  float feather = aShape.z * fk;
+  vec2 off = (aCorner * 2.0 - 1.0) * (halfSize + feather);
+  vec2 pos = dev + off;
+  gl_Position = vec4(pos.x / uVp.x * 2.0 - 1.0, 1.0 - pos.y / uVp.y * 2.0, 0.0, 1.0);
+  vP = off;
+  vHalf = halfSize;
+  vShape = vec3(aShape.x * k, aShape.y * k, feather);
+  vFill = aFill;
+  vStroke = aStroke;
+}
+`;
+  const RR_FS = `#version 300 es
+precision highp float;
+in vec2 vP;
+in vec2 vHalf;
+in vec3 vShape;
+in vec4 vFill;
+in vec4 vStroke;
+out vec4 fragColor;
+// Inside fraction across an edge at sd = 0: smootherstep ramp centred on the
+// edge, w wide (sd < 0 is inside).
+float inside(float sd, float w) {
+  float t = clamp(sd / max(w, 1e-4) + 0.5, 0.0, 1.0);
+  return 1.0 - t * t * t * (t * (t * 6.0 - 15.0) + 10.0);
+}
+void main() {
+  float r = min(vShape.x, min(vHalf.x, vHalf.y));
+  vec2 q = abs(vP) - vHalf + r;
+  float sd = length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - r;
+  float w = vShape.z;
+  float outer = inside(sd, w);
+  float stroke = min(vShape.y, min(vHalf.x, vHalf.y));
+  float fill = stroke > 0.0 ? inside(sd + stroke, w) : 1.0;
+  vec4 c = mix(vStroke, vFill, fill);
+  float a = outer * c.a;
+  if (a < 0.004) discard;
+  fragColor = vec4(c.rgb, a);
+}
+`;
+  const RR_FLOATS = 15;
+
+  function ensureRoundRect(s) {
+    if (!s || s.roundRectFailed) return null;
+    if (s.roundRect) return s.roundRect;
+    const gl = s.gl;
+    if (!gl || typeof gl.drawArraysInstanced !== "function") {
+      s.roundRectFailed = true;
+      return null;
+    }
+    try {
+      const vs = compile(gl, gl.VERTEX_SHADER, RR_VS, "roundRect vertex");
+      const fs = compile(gl, gl.FRAGMENT_SHADER, RR_FS, "roundRect fragment");
+      const program = gl.createProgram();
+      gl.attachShader(program, vs);
+      gl.attachShader(program, fs);
+      gl.linkProgram(program);
+      gl.deleteShader(vs);
+      gl.deleteShader(fs);
+      if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+        const log = gl.getProgramInfoLog(program) || "link failed";
+        gl.deleteProgram(program);
+        throw new Error(log);
+      }
+      const corners = gl.createBuffer();
+      gl.bindBuffer(gl.ARRAY_BUFFER, corners);
+      gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
+        0, 0, 1, 0, 0, 1,
+        1, 0, 1, 1, 0, 1,
+      ]), gl.STATIC_DRAW);
+      const instances = gl.createBuffer();
+      gl.bindBuffer(gl.ARRAY_BUFFER, null);
+      const u = (name) => gl.getUniformLocation(program, name);
+      s.roundRect = {
+        program,
+        corners,
+        instances,
+        locs: { pixel: u("uPixel"), cam: u("uCam"), vp: u("uVp"), device: u("uDevice") },
+        uScale: u("uScale"),
+        uVp: u("uVp"),
+        scratch: new Float32Array(RR_FLOATS * 64),
+      };
+      return s.roundRect;
+    } catch (error) {
+      s.roundRectFailed = true;
+      console.error("[gl-line-renderer] round rect shader failed: " + String(error?.message || error));
+      return null;
+    }
+  }
+
+  function drawRoundRects(batch) {
+    const rr = ensureRoundRect(batch.s);
+    const list = batch.roundRects;
+    if (!rr || !list?.length) return;
+    const gl = batch.s.gl;
+    const count = list.length / RR_FLOATS;
+    if (rr.scratch.length < list.length) rr.scratch = new Float32Array(list.length * 2);
+    rr.scratch.set(list);
+    gl.useProgram(rr.program);
+    gl.uniform2f(rr.uVp, batch.w, batch.h);
+    gl.uniform1f(rr.uScale, batch.scale > 0 ? batch.scale : 1);
+    bindCam(gl, rr.locs, batch);
+    gl.bindBuffer(gl.ARRAY_BUFFER, rr.corners);
+    gl.enableVertexAttribArray(0);
+    gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+    gl.vertexAttribDivisor(0, 0);
+    gl.bindBuffer(gl.ARRAY_BUFFER, rr.instances);
+    gl.bufferData(gl.ARRAY_BUFFER, rr.scratch.subarray(0, list.length), gl.STREAM_DRAW);
+    const sizes = [4, 3, 4, 4];
+    let off = 0;
+    for (let i = 0; i < sizes.length; i += 1) {
+      gl.enableVertexAttribArray(i + 1);
+      gl.vertexAttribPointer(i + 1, sizes[i], gl.FLOAT, false, RR_FLOATS * 4, off * 4);
+      gl.vertexAttribDivisor(i + 1, 1);
+      off += sizes[i];
+    }
+    gl.drawArraysInstanced(gl.TRIANGLES, 0, 6, count);
+    for (let i = 1; i <= sizes.length; i += 1) {
+      gl.vertexAttribDivisor(i, 0);
+      gl.disableVertexAttribArray(i);
+    }
+    gl.disableVertexAttribArray(0);
+    gl.bindBuffer(gl.ARRAY_BUFFER, null);
+  }
+
   /** Draw images, quads, text into the bound framebuffer with the given blend funcs. */
   function drawContent(batch, blend, alphaDst) {
     const { s } = batch;
@@ -2444,6 +2618,10 @@ void main() {
     }
     if (batch.outlines?.length) drawOutlines(batch);
     drawQuads(batch.over, batch.on);
+    if (batch.roundRects?.length) {
+      gl.blendFuncSeparate(gl.SRC_ALPHA, colourDst, gl.ONE, alphaDst);
+      drawRoundRects(batch);
+    }
     if (batch.texts.length) {
       gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, alphaDst);
       drawTexts(batch, alphaDst);
@@ -3097,6 +3275,7 @@ void main() {
     nodeGraphGlLinesDot,
     nodeGraphGlLinesPulseTrain,
     nodeGraphGlLinesSamplePlot,
+    nodeGraphGlLinesRoundRect,
     nodeGraphGlLinesRing,
     nodeGraphGlLinesPolyline,
     nodeGraphGlLinesRibbon,
