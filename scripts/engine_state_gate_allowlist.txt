@@ -13,7 +13,6 @@ public/modules/rgbFractal/rgb-fractal-display.js | 3
 public/modules/sequencer/sequencer-ui.js | 2
 public/modules/sinCos/sin-cos-display.js | 1
 public/modules/sineWavetable/sine-wavetable-display.js | 1
-public/modules/softwaveOsc/softwave-osc-display.js | 4
 public/modules/vectorRgb/vector-rgb-display.js | 1
 public/modules/videoDelay/video-delay-ui.js | 1
 public/modules/videoFeedback/video-feedback-ui.js | 1

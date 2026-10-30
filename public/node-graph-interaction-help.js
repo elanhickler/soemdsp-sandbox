@@ -283,16 +283,24 @@ function nodeInteractionMouseHint(element) {
 const nodeInteractionHelpAbsoluteMaxFontPx = 120;
 const nodeInteractionHelpLineHeight = 1.25;
 const nodeInteractionHelpFitCache = { key: "", sizePx: 0 };
-let nodeInteractionHelpMeasureCtx = null;
 let nodeInteractionHelpResizeObserver = null;
 let nodeInteractionHelpFitRaf = 0;
 
-function nodeInteractionHelpMeasureContext() {
-  if (!nodeInteractionHelpMeasureCtx) {
-    nodeInteractionHelpMeasureCtx = document.createElement("canvas").getContext("2d");
-  }
-  return nodeInteractionHelpMeasureCtx;
-}
+// Text widths come from the shared GL text atlas (no Canvas2D in app code).
+// Same measureText(text).width shape as a 2D context, so the wrap math reads
+// the same; fontPx / family / weight are set per fit attempt.
+const nodeInteractionHelpMeasure = {
+  fontPx: 12,
+  family: "Consolas, monospace",
+  weight: 400,
+  measureText(text) {
+    const str = String(text ?? "");
+    const width = typeof nodeGraphGlLinesMeasureText === "function"
+      ? nodeGraphGlLinesMeasureText(str, this.fontPx, this.family, this.weight)
+      : str.length * this.fontPx * 0.6;
+    return { width };
+  },
+};
 
 function nodeInteractionHelpMinFontPx(cs) {
   const raw = Number.parseFloat(cs.getPropertyValue("--node-tooltip-text-size"));
@@ -303,7 +311,7 @@ function nodeInteractionHelpMinFontPx(cs) {
 }
 
 function nodeInteractionHelpWrapHeightPx(ctx, text, contentW) {
-  const fontPx = Number.parseFloat(ctx.font);
+  const fontPx = ctx.fontPx;
   const lineH = fontPx * nodeInteractionHelpLineHeight;
   let lines = 0;
   const paragraphs = String(text).split("\n");
@@ -362,7 +370,8 @@ function nodeInteractionHelpWrapHeightPx(ctx, text, contentW) {
 }
 
 function nodeInteractionHelpCanvasFits(ctx, text, fontPx, fontFamily, contentW, contentH) {
-  ctx.font = `${fontPx}px ${fontFamily}`;
+  ctx.fontPx = fontPx;
+  ctx.family = fontFamily;
   return nodeInteractionHelpWrapHeightPx(ctx, text, contentW) <= contentH + 0.5;
 }
 
@@ -438,7 +447,8 @@ function fitNodeInteractionHelpText(help = document.getElementById("nodeInteract
     minFont,
     Math.min(contentH / nodeInteractionHelpLineHeight, nodeInteractionHelpAbsoluteMaxFontPx),
   );
-  const ctx = nodeInteractionHelpMeasureContext();
+  const ctx = nodeInteractionHelpMeasure;
+  ctx.weight = Number.parseFloat(cs.fontWeight) || 400;
   let low = minFont;
   let high = maxFont;
   let chosen = minFont;

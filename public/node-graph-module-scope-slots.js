@@ -133,8 +133,9 @@ function nodeGraphPlateFacesAfterPatchLoad() {
           syncNodeGraphModuleScopeLocalFallbackCanvas(canvas, face, ratio);
         }
         if (canvas.width > 1 && canvas.height > 1) continue;
-        if (typeof nodeGraphGlLinesFillBlack === "function") {
-          nodeGraphGlLinesFillBlack(canvas);
+        // Still unsized: nothing to show, so drop any stale GPU copy of the face.
+        if (typeof nodeGraphSharedGlFaceForget === "function") {
+          nodeGraphSharedGlFaceForget(canvas);
         }
       }
     }

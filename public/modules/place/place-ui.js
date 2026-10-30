@@ -17,8 +17,8 @@ function createNodeGraphPlaceBody(node, type) {
 
 function nodeGraphPlaceShouldAnimate(face) {
   if (typeof scopePaintIsVisualPaused === "function" && scopePaintIsVisualPaused()) return false;
-  const speed = Number(typeof nodeGraphMvp !== "undefined" ? nodeGraphMvp?.live?.speedMultiplier : 1);
-  if (Number.isFinite(speed) && speed <= 0) return false;
+  // Speed 0 pauses the engine; the paint gate owns that read.
+  if (typeof scopePaintEngineState === "function" && scopePaintEngineState() === "paused") return false;
   return !nodeGraphVideoGraphShouldSleep(face?.dataset?.node || "");
 }
 
