@@ -8,7 +8,7 @@
 //   present: color = LUT(energy) with HDR film curve
 //   resize:  reallocate FBOs + copy residual (do NOT clear on zoom)
 //
-// Blur UX: 0 = hard disc (~1px AA), 1 = full soft gaussian bleed.
+// Blur UX: 0 = hard disc (~1px smootherstep edge), 1 = smootherstep dome; both end at Size.
 // Optional 2D mask deposit remains for LCD glyphs (Number Readout).
 //
 // Consumers:
@@ -237,7 +237,8 @@
       float side = (aCorner == 0.0 || aCorner == 2.0) ? 1.0 : -1.0;
       float endpointMix = aCorner < 2.0 ? 0.0 : 1.0;
       float cap = aCorner < 2.0 ? -1.0 : 1.0;
-      float padding = max(uRadius * 3.45, 2.0);
+      // Profile reaches zero at uRadius (+ <1px AA), so a pixel past it is enough.
+      float padding = max(uRadius, 0.5) + 2.0;
       vec2 endpoint = mix(aStart, aEnd, endpointMix);
       vec2 position = endpoint + normal * side * padding + tangent * cap * padding;
       vStart = aStart;
@@ -259,6 +260,12 @@
     varying vec2 vStart;
     varying vec2 vEnd;
     varying vec2 vPosition;
+    float phosphorShoulder(float d, float R, float aa, float soft) {
+      float inner = mix(R - aa, 0.0, soft);
+      float outer = mix(R + aa * 0.35, R, soft);
+      float t = clamp((d - inner) / max(outer - inner, 1e-4), 0.0, 1.0);
+      return 1.0 - t * t * t * (t * (t * 6.0 - 15.0) + 10.0);
+    }
     void main() {
       vec2 segment = vEnd - vStart;
       float soft = clamp(uBlur, 0.0, 1.0);
@@ -270,18 +277,10 @@
       vec2 closest = vStart + segment * t;
       float d = length(vPosition - closest);
 
-      // Hard ribbon (blur 0): flat capsule core + ~1px AA — true hard edge.
+      // Flat core, smootherstep shoulder, exactly zero at R (no gaussian skirt).
+      // Blur 0: ~1px shoulder at the edge; Blur 1: shoulder spans the whole radius (dome).
       float aa = max(0.65, min(1.6, R * 0.08));
-      float hard = 1.0 - smoothstep(R - aa, R + aa * 0.35, d);
-
-      // Soft ribbon (blur 1): wide gaussian energy skirt.
-      float sigma = max(R * mix(0.34, 1.15, soft), 0.45);
-      float softProfile = exp(-(d * d) / (2.0 * sigma * sigma));
-      // Morph hard capsule → soft beam. Match dot softMix so mid Blur is soft.
-      float softMix = pow(soft, 0.55);
-      float hardPeak = 0.88;
-      float softPeak = mix(0.78, 0.42, soft);
-      float profile = mix(hard * hardPeak, softProfile * softPeak, softMix);
+      float profile = phosphorShoulder(d, R, aa, soft) * mix(0.88, 0.78, soft);
 
       float e = clamp(profile, 0.0, 1.0) * clamp(uBrightness, 0.0, 1.0);
       // Monochrome energy (R=G=B); additive blend accumulates trail.
@@ -290,8 +289,8 @@
   `;
 
   // Soft phosphor dabs — blur is 0..1 UX (hard → soft), aesthetic only:
-  //   blur 0 → hard disc + ~1px AA
-  //   blur 1 → full soft wide gaussian
+  //   blur 0 → hard disc + ~1px smootherstep edge
+  //   blur 1 → smootherstep dome, still zero at Size
   // Continuity of the trail comes from path packing, not from raising Blur.
   // Size (uRadius) = geometric footprint. aCorner: 0=BL,1=BR,2=TL,3=TR.
   const DOT_VERT = `
@@ -307,8 +306,8 @@
     varying float vBlur;
     void main() {
       float softAmt = clamp(uBlur, 0.0, 1.0);
-      // Hard end: tight pad (disc + AA). Soft end: wide pad for long skirts.
-      float pad = max(uRadius * mix(1.2, 6.5, softAmt) + mix(1.5, 0.0, softAmt), 2.0);
+      // Built-in profile ends at uRadius (+ <1px AA); custom stamps fill the quad.
+      float pad = max(uRadius, 0.5) + 2.0;
       vec2 cornerOffset = vec2(
         (aCorner == 0.0 || aCorner == 2.0) ? -1.0 : 1.0,
         (aCorner < 2.0) ? -1.0 : 1.0
@@ -335,6 +334,12 @@
     varying vec2 vUv;
     varying float vRadius;
     varying float vBlur;
+    float phosphorShoulder(float d, float R, float aa, float soft) {
+      float inner = mix(R - aa, 0.0, soft);
+      float outer = mix(R + aa * 0.35, R, soft);
+      float t = clamp((d - inner) / max(outer - inner, 1e-4), 0.0, 1.0);
+      return 1.0 - t * t * t * (t * (t * 6.0 - 15.0) + 10.0);
+    }
     void main() {
       float soft = clamp(vBlur, 0.0, 1.0);
       float R = max(vRadius, 0.5);
@@ -350,13 +355,9 @@
         gl_FragColor = vec4(e, e, e, e);
         return;
       }
-      // Built-in: Blur 0 = hard disc; Blur 1 = baked gaussian texture.
-      // soft^0.55 so mid Blur (0.2–0.4) actually reads soft — soft^1.45 kept
-      // ~80% hard discs and looked like stacked circles / lost gaussian.
+      // Built-in: same flat core + smootherstep shoulder as the ribbon, zero at R.
       float aa = max(0.55, min(1.25, R * 0.06));
-      float hard = 1.0 - smoothstep(R - aa, R + aa * 0.25, r);
-      float softMix = pow(soft, 0.55);
-      float profile = mix(hard * 0.92, tex * mix(0.78, 0.42, soft), softMix);
+      float profile = phosphorShoulder(r, R, aa, soft) * mix(0.92, 0.78, soft);
       float e = clamp(profile, 0.0, 1.0) * clamp(uBrightness, 0.0, 1.0);
       gl_FragColor = vec4(e, e, e, e);
     }
