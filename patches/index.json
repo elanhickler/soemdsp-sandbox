@@ -94,6 +94,15 @@
       "folder": "demo_patches"
     },
     {
+      "slug": "demo_patches/DSF brightness pluck",
+      "label": "DSF brightness pluck",
+      "name": "",
+      "url": "/soemdsp-sandbox/patches/demo_patches/DSF%20brightness%20pluck.json",
+      "author": "",
+      "emoji": "",
+      "folder": "demo_patches"
+    },
+    {
       "slug": "demo_patches/impulse_train_melody_and_kick",
       "label": "impulse_train_melody_and_kick",
       "name": "",
@@ -613,6 +622,14 @@
       "label": "dreamy_delay",
       "name": "",
       "url": "/soemdsp-sandbox/patches/guitar_pedals/dreamy_delay.json",
+      "author": "",
+      "emoji": ""
+    },
+    {
+      "slug": "DSF brightness pluck",
+      "label": "DSF brightness pluck",
+      "name": "",
+      "url": "/soemdsp-sandbox/patches/demo_patches/DSF%20brightness%20pluck.json",
       "author": "",
       "emoji": ""
     },
