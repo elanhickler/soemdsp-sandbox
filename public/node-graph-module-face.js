@@ -240,7 +240,8 @@ function nodeGraphModuleFaceWidgets(spec, fw, moduleEl = null) {
         }
         out.push({
           ...base, type: "cell", param: cell[0], label: cell[1],
-          horizontal: mode === "horizontal" || (!mode && !!row.horizontal),
+          // A slider alone on its row is always a horizontal slider (app-wide).
+          horizontal: mode === "horizontal" || (mode !== "stack" && n === 1) || (!mode && !!row.horizontal),
           bipolar: mode === "bipolar",
           stack: mode === "stack",
           x: cx, w: cw,

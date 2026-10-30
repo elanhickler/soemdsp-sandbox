@@ -3259,11 +3259,12 @@ const nodeGraphModuleDefinitions = (
   // RoundShape — sine→square modulator (getSineToSquare). Separate from full Ellipsoid osc.
   // Face: cheap static orbit outline (filter-curve family), not phosphor trace.
   ellipsoid: {
-    // Hand-written face (node-graph-module-face.js): Motion, Freq | Phase, Morph | Amp, AA Off / AA Limit, Dith Off / Dith On.
+    // Hand-written face (node-graph-module-face.js): Motion, Freq | Phase, Morph, Amp (horizontal), AA Off / AA Limit, Dith Off / Dith On.
     face: [
       { kind: "cells", params: [["motion", "Motion"]], horizontal: true, h: 30 },
       { kind: "cells", params: [["frequency", "Freq"], ["phase", "Phase"]], h: 40 },
-      { kind: "cells", params: [["morph", "Morph"], ["amplitude", "Amp"]], h: 40 },
+      { kind: "cells", params: [["morph", "Morph"]], horizontal: true, h: 30 },
+      { kind: "cells", params: [["amplitude", "Amp"]], horizontal: true, h: 30 },
       { kind: "choices", param: "antialias", labels: ["AA Off", "AA Limit"], h: 26 },
       { kind: "choices", param: "dither", labels: ["Dith Off", "Dith On"], h: 26 },
     ],
@@ -14941,7 +14942,8 @@ const nodeGraphModuleDefinitions = (
     face: [
       { kind: "cells", params: [["mode", "Mode"]], horizontal: true, h: 30 },
       { kind: "cells", params: [["frequency", "Cutoff"], ["resonance", "Res"]], h: 40 },
-      { kind: "cells", params: [["chaos", "Chaos"], ["amplitude", "Amp"]], h: 40 },
+      { kind: "cells", params: [["chaos", "Chaos"]], horizontal: true, h: 30 },
+      { kind: "cells", params: [["amplitude", "Amp"]], horizontal: true, h: 30 },
       { kind: "seed", param: "seed", h: 28 },
     ],
     planRole: "processor",
@@ -15030,7 +15032,8 @@ const nodeGraphModuleDefinitions = (
     face: [
       { kind: "cells", params: [["mode", "Mode"]], horizontal: true, h: 30 },
       { kind: "cells", params: [["frequency", "Freq"], ["resonance", "Res"]], h: 40 },
-      { kind: "cells", params: [["chaos", "Chaos"], ["amplitude", "Amp"]], h: 40 },
+      { kind: "cells", params: [["chaos", "Chaos"]], horizontal: true, h: 30 },
+      { kind: "cells", params: [["amplitude", "Amp"]], horizontal: true, h: 30 },
       { kind: "cells", params: [["dither", "Dither"]], horizontal: true, h: 30 },
       { kind: "cells", params: [["start", "Start"], ["full", "Full"]], h: 40 },
       { kind: "cells", params: [["amount", "Amt"]], h: 40 },
