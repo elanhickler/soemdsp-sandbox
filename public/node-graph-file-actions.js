@@ -992,6 +992,32 @@ function nodeGraphDownloadPatchTextFile(text, filename) {
 }
 
 /**
+ * Toolbar Download: the current patch straight to the browser's download
+ * folder, no dialog (unless the browser itself asks where to save). Named
+ * patches download as <name>_<timestamp>.json, Untitled as
+ * sandbox_patch_<timestamp>.json, so repeated downloads never collide.
+ */
+function nodeGraphPatchDownloadTimestamp(date = new Date()) {
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
+    + `_${pad(date.getHours())}${pad(date.getMinutes())}${pad(date.getSeconds())}`;
+}
+
+function downloadNodeGraphPatch() {
+  const payload = nodeGraphPatchExportPayload();
+  if (!payload) {
+    return false;
+  }
+  const title = typeof nodeGraphHeaderPatchTitleSource === "function"
+    ? nodeGraphHeaderPatchTitleSource()
+    : null;
+  const stem = title?.filled ? title.name : "sandbox_patch";
+  const filename = nodeGraphSanitizeSuggestedPatchFileName(`${stem}_${nodeGraphPatchDownloadTimestamp()}`);
+  nodeGraphDownloadTextFile(filename, payload.text);
+  return true;
+}
+
+/**
  * Native save dialog for the current patch (Save Patch / Ctrl+S).
  * Remembers the last File System Access location (IndexedDB handle) so the
  * next save opens in that folder. Fallback download cannot remember a path.

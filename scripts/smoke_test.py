@@ -5492,7 +5492,7 @@ def require_node_graph_mvp_contract() -> None:
         "nodeUiDevModularShaderEnabled",
         "modular shader glow",
         "nodeDownloadAppButton",
-        'aria-label="Download native app (under construction)"',
+        'aria-label="Download patch"',
         "node-download-app-button",
         "nodeSceneOpenPostProcessing",
         "Screen Shader",

@@ -2,6 +2,9 @@ function bindNodeGraphHeaderControlEvents() {
   if (window.__TAURI_INTERNALS__ || window.__TAURI__ || window.__SOEMDSP_TAURI__) {
     document.getElementById("nodeDownloadAppButton")?.setAttribute("hidden", "");
   }
+  document.getElementById("nodeDownloadAppButton")?.addEventListener("click", () => {
+    if (typeof downloadNodeGraphPatch === "function") downloadNodeGraphPatch();
+  });
   bindNodeGraphEarProtectionFaultUi();
   const sharePatchButton = document.getElementById("sharePatchCommunityButton");
   if (sharePatchButton) {
