@@ -806,9 +806,8 @@ function nodeGraphScope2dLayerRadiusPx(settings, dotSpace) {
   if (settings?.dot1Enabled === false) {
     return 0;
   }
-  const sizeValue = Number(settings?.dot1Size);
-  const size = Number.isFinite(sizeValue) ? clampNodeSliderValue(sizeValue, 0, 1) : 0;
-  return nodeGraphScopeSize01ToRadiusPx(dotSpace, size);
+  // Size is a share of the face min side (0…1); the radius helper takes px at 96.
+  return nodeGraphScopeSize01ToRadiusPx(dotSpace, (typeof dotUnitInkPx === "function" ? dotUnitInkPx(settings?.dot1Size) : Math.max(0, Math.min(1, Number(settings?.dot1Size) || 0)) * 96));
 }
 
 function nodeGraphScope2dContinuitySpacingPx(settings, dotSpace) {
@@ -2223,7 +2222,8 @@ function nodeGraphTraceApplyDrawMode(points, settings) {
   if (mode === "lines") {
     return src;
   }
-  const step = Math.max(0.35, nodeGraphFiniteNumber(settings?.dot1Size, 2) * 0.2);
+  // Dot-budget scopes store Size as a share of the face (0…1): step in px at 96.
+  const step = Math.max(0.35, (typeof dotUnitInkPx === "function" ? dotUnitInkPx(settings?.dot1Size) : Math.max(0, Math.min(1, Number(settings?.dot1Size) || 0)) * 96) * 0.2);
   const fit = nodeGraphTraceFusePrefixCount(src, budget, step);
   if (!fit.truncated) {
     return src;

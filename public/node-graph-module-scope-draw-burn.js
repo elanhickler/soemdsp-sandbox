@@ -403,14 +403,15 @@ function decayNodeGraphScope2dBurn(renderer, settings) {
 function nodeGraphScope2dBurnLayers(settings, dotSpace) {
   const layers = [];
   if (settings?.dot1Enabled !== false) {
-    // Authored CSS px at a 96px face. Do not clamp to 0…1 — that pegs every
-    // size ≥ 1 to the same radius.
+    // Size is a share of the face min side (0…1); the drawers take authored
+    // px at the 96px reference.
     const side = Math.max(1, nodeGraphFiniteNumber(dotSpace, 1));
+    const sizePx = (typeof dotUnitInkPx === "function" ? dotUnitInkPx(settings.dot1Size) : Math.max(0, Math.min(1, Number(settings.dot1Size) || 0)) * 96);
     const radius = typeof nodeGraphScopeSize01ToRadiusPx === "function"
-      ? nodeGraphScopeSize01ToRadiusPx(side, settings.dot1Size)
+      ? nodeGraphScopeSize01ToRadiusPx(side, sizePx)
       : (typeof PhosphorDrawer !== "undefined" && PhosphorDrawer.size01ToRadiusPx
-        ? PhosphorDrawer.size01ToRadiusPx(side, settings.dot1Size)
-        : Math.max(0, (typeof faceInkPx === "function" ? faceInkPx(settings.dot1Size, side) : 0) * 0.5));
+        ? PhosphorDrawer.size01ToRadiusPx(side, sizePx)
+        : Math.max(0, (typeof faceInkPx === "function" ? faceInkPx(sizePx, side) : 0) * 0.5));
     layers.push({
       // Blur 0 hard disc … 1 full soft gaussian.
       blur: nodeGraphTraceDisplayClampStampBlur(settings.lineThickness),
@@ -661,7 +662,7 @@ function drawNodeGraphScope2dEnergyBurnPath(item, pixelRatio, pathPoints, settin
     // Continuous CRT trail only: always pack stamps along chords between
     // samples (c1091b4 / 8bc05d90). Dots Only / Full Dot Economy are retired —
     // they produced beads or over-fat solid mush; ignore sticky patch flags.
-    const sizeForGain = Math.max(0, Math.min(1, nodeGraphFiniteNumber(settings?.dot1Size) / 32));
+    const sizeForGain = Math.max(0, Math.min(1, (typeof dotUnitInkPx === "function" ? dotUnitInkPx(settings?.dot1Size) : Math.max(0, Math.min(1, Number(settings?.dot1Size) || 0)) * 96) / 32));
     // Live trace = Bright (independent of Burn), Trail decay only.
     // Burn layer deposit = Bright x Burn (new strokes only; stored energy is
     // never rescaled). Ghost/Trail only set the decay in the step.
@@ -1289,7 +1290,7 @@ function drawNodeGraphScope2dTraceLayer(context, points, dotSpace, settings) {
     let count = 0;
     for (let i = 0; i < inks.length; i += 1) {
       count += TraceWoscope.draw(context, points, {
-        size: settings.dot1Size,
+        size: (typeof dotUnitInkPx === "function" ? dotUnitInkPx(settings.dot1Size) : Math.max(0, Math.min(1, Number(settings.dot1Size) || 0)) * 96),
         color: parse(inks[i], inks[i]),
         faceMinSide: Math.max(1, nodeGraphFiniteNumber(dotSpace, 1)),
         brightness: 1,
@@ -1314,7 +1315,7 @@ function drawNodeGraphScope2dTraceLayer(context, points, dotSpace, settings) {
         ? nodeGraphPhosphorGradientStopsFromSettings(settings, "#ffffff")
         : settings.gradientStops);
     const count = TraceWoscope.draw(context, points, {
-      size: settings.dot1Size,
+      size: (typeof dotUnitInkPx === "function" ? dotUnitInkPx(settings.dot1Size) : Math.max(0, Math.min(1, Number(settings.dot1Size) || 0)) * 96),
       color: [1, 1, 1],
       faceMinSide: Math.max(1, nodeGraphFiniteNumber(dotSpace, 1)),
       brightness: intensity,

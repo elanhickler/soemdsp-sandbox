@@ -90,8 +90,9 @@ const nodeGraphScopePhosphorLookDefaults = Object.freeze({
   trail: 0.3,
   burnAmount: PhosphorResidual.DEFAULT_BURN_AMOUNT,
   residualSchema: 4,
-  // Size: CSS px diameter @ zoom 1.
-  size: 2,
+  // Size: dot diameter as a share of the face min side, 0…1 (1 = one dot as
+  // big as the display). 0.02 ~ the old 2 px at the 96px reference (2 / 96).
+  size: 0.02,
   // Stamp blur 0 hard … 1 soft (aesthetic; continuity comes from path packing).
   blur: 0.35,
   // Max phosphor stamps / frame (economy spreads when over).

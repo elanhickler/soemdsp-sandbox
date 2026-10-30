@@ -257,7 +257,7 @@ function nodeGraphTraceDisplayHistoryCurveExponent(key) {
 }
 
 
-function nodeGraphTraceDisplaySensitiveControlMax(key) {
+function nodeGraphTraceDisplaySensitiveControlMax(key, formType = "") {
   if (key === "pixelDensity") {
     return 1;
   }
@@ -265,9 +265,11 @@ function nodeGraphTraceDisplaySensitiveControlMax(key) {
   if (key === "imageSize") {
     return 4;
   }
-  // Stroke size is authored ink px (0…32 at a 96px face), not a 0…1 fraction.
+  // Stroke size is authored ink px (0…32 at a 96px face), not a 0…1 fraction,
+  // except on the dot-budget scopes: there Size is a share of the face min
+  // side (0…1, 1 = one dot as big as the display).
   if (key === "dot1Size" || key === "secondarySize") {
-    return 32;
+    return typeof nodeGraphScopeDotSizeIsUnit === "function" && nodeGraphScopeDotSizeIsUnit(formType) ? 1 : 32;
   }
   // Bright is 0…1 energy app-wide (1 = full tip / full deposit).
   return 1;
@@ -382,7 +384,7 @@ function nodeGraphDisplaySettingsFieldSpec(key, formType = null) {
       : { key, min, max, taper: "power", exponent: nodeGraphTraceDisplayHistoryCurveExponent(key), step: 0.025 };
   }
   if (nodeGraphTraceDisplaySizeControlField(key) && key !== "capSize") {
-    return { key, min: 0, max: nodeGraphTraceDisplaySensitiveControlMax(key), taper: "power", exponent: nodeGraphTraceDisplaySensitiveControlExponent, step: 0.04 };
+    return { key, min: 0, max: nodeGraphTraceDisplaySensitiveControlMax(key, type), taper: "power", exponent: nodeGraphTraceDisplaySensitiveControlExponent, step: 0.04 };
   }
   if (nodeGraphWaterfallBlurField(key, type)) {
     return { key, min: 0, max: 1, taper: "power", exponent: nodeGraphTraceDisplaySensitiveControlExponent, step: 0.03 };
@@ -779,10 +781,14 @@ const nodeGraphTraceDisplayFormTypeValueClampOverrides = Object.freeze({
   // 1D Phosphor: stamp blur + sweep rate.
   lineBurn: Object.freeze({
     lineThickness: nodeGraphTraceDisplayClampStampBlur,
+    // Dot Size is a share of the face min side (0…1).
+    dot1Size: nodeGraphTraceDisplayClampUnit,
   }),
   // Soft phosphor stamps: blur 0 hard … 1 full soft.
   scope2d: Object.freeze({
     lineThickness: nodeGraphTraceDisplayClampStampBlur,
+    // Dot Size is a share of the face min side (0…1).
+    dot1Size: nodeGraphTraceDisplayClampUnit,
   }),
   phosphorLight: Object.freeze({
     lineThickness: nodeGraphTraceDisplayClampStampBlur,
@@ -825,6 +831,8 @@ const nodeGraphTraceDisplayFormTypeValueClampOverrides = Object.freeze({
   }),
   xyPad: Object.freeze({
     lineThickness: nodeGraphTraceDisplayClampStampBlur,
+    // Dot Size is a share of the face min side (0…1).
+    dot1Size: nodeGraphTraceDisplayClampUnit,
   }),
   roundShapeFace: Object.freeze({
     lineThickness: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, 2), 0.25, 16),
@@ -935,12 +943,12 @@ const nodeGraphTraceDisplayFormTypeValueClampOverrides = Object.freeze({
     burnAmount: nodeGraphTraceDisplayClampUnit,
   }),
   scope2dTrace: Object.freeze({
-    dot1Size: nodeGraphTraceDisplayClampInkPx,
+    dot1Size: nodeGraphTraceDisplayClampUnit,
     lineThickness: nodeGraphTraceDisplayClampStampBlur,
   }),
   scope1dTrace: Object.freeze({
-    dot1Size: nodeGraphTraceDisplayClampInkPx,
-    secondarySize: nodeGraphTraceDisplayClampInkPx,
+    dot1Size: nodeGraphTraceDisplayClampUnit,
+    secondarySize: nodeGraphTraceDisplayClampUnit,
   }),
 });
 

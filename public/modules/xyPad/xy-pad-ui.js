@@ -651,10 +651,9 @@ function drawNodeGraphXyPad(pad, options = {}) {
     ? ResidualUx.migrateGhost(display, 0.45)
     : Math.max(0, Math.min(1, nodeGraphFiniteNumber(display.ghost)));
   const residualSchemaUx = ResidualUx?.RESIDUAL_SCHEMA || 2;
-  // Beam diameter: authored CSS px at a 96px face, then × this bitmap's px/CSS.
-  const beamAuthored = typeof clampAuthoredInkPx === "function"
-    ? clampAuthoredInkPx(display.dot1Size, 2)
-    : Math.max(0, nodeGraphFiniteNumber(display.dot1Size, 2));
+  // Beam diameter: Size is a share of the face min side (0…1) -> authored px
+  // at the 96px reference, then × this bitmap's px/CSS.
+  const beamAuthored = (typeof dotUnitInkPx === "function" ? dotUnitInkPx(display.dot1Size) : Math.max(0, Math.min(1, Number(display.dot1Size) || 0)) * 96);
   const blur = typeof nodeGraphTraceDisplayClampStampBlur === "function"
     ? nodeGraphTraceDisplayClampStampBlur(display.lineThickness)
     : Math.max(0, Math.min(1, nodeGraphFiniteNumber(display.lineThickness, 0.42)));

@@ -285,7 +285,7 @@
         "ghost": 0,
         "scale": 1,
         "trail": 0,
-        "dot1Size": 0.0187,
+        "dot1Size": 0.000195,
         "dotsOnly": false,
         "dot1Color": "#fcffa4",
         "dotBudget": 3944,

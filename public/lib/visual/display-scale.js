@@ -43,6 +43,12 @@
     return authored * (side / FACE_INK_REF_PX);
   }
 
+  // Dot size stored as a share of the face min side (0…1, 1 = one dot as big
+  // as the display) -> authored px at the 96px reference, for faceInkPx.
+  function dotUnitInkPx(unit01) {
+    return clampDisplayUnit01(unit01, 0) * FACE_INK_REF_PX;
+  }
+
   function faceFracPx(unit01, minSide) {
     const side = Number(minSide);
     if (!(side > 0)) {
@@ -57,6 +63,7 @@
     clampDisplayUnit01,
     clampAuthoredInkPx,
     faceInkPx,
+    dotUnitInkPx,
     faceFracPx,
   };
 

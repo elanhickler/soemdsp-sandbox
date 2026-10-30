@@ -60,9 +60,10 @@ function nodeGraphDisplaySettingsBuildStepperRowHtml(key, formType = null, optio
     label = "Blur";
     title = "0 = Size as a hard line. Raise to fatten a soft halo outward. Lower returns to the thin sharp line.";
   }
-  if (key === "dot1Size" && formType === "xyPad") {
+  if ((key === "dot1Size" || key === "secondarySize")
+    && typeof nodeGraphScopeDotSizeIsUnit === "function" && nodeGraphScopeDotSizeIsUnit(formType)) {
     label = "Size";
-    title = "Beam diameter in CSS pixels at a 96px face. Grows with the module and the canvas tile. Zoom scales the bitmap; it does not change this number.";
+    title = "Dot diameter as a share of the display's short side: 0…1, 1 = one dot as big as the display. Fine control near 0. Dot Budget 1 + a big Size prints giant dots.";
   }
   if ((key === "dot1Size" || key === "secondarySize") && (
     formType === "waterfall"

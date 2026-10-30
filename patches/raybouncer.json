@@ -743,7 +743,7 @@
         "burn": 0.97,
         "decay": 0.2625,
         "scale": 1.04,
-        "dot1Size": 0.007,
+        "dot1Size": 7.3e-05,
         "dot1Color": "#75ebff",
         "dotBudget": 2048,
         "background": "#000000",
@@ -792,7 +792,7 @@
       "paramMeta": {},
       "traceDisplaySettings": {
         "scale": 0.9375,
-        "dot1Size": 0.0124,
+        "dot1Size": 0.000129,
         "dot1Color": "#75ebff",
         "background": "#000000",
         "dot1Enabled": true,

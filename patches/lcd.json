@@ -414,7 +414,7 @@
       "traceDisplaySettings": {
         "fade": 0,
         "scale": 1,
-        "dot1Size": 0.2701,
+        "dot1Size": 0.002814,
         "dot1Color": "#ffffff",
         "background": "#ff0000",
         "dot1Enabled": true,

@@ -456,7 +456,7 @@
       "paramMeta": {},
       "traceDisplaySettings": {
         "scale": 1,
-        "dot1Size": 0.2653,
+        "dot1Size": 0.002764,
         "dot1Color": "#000000",
         "background": "#828282",
         "dot1Enabled": true,

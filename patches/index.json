@@ -40,6 +40,15 @@
       "folder": "bugs"
     },
     {
+      "slug": "bugs/scangrid",
+      "label": "scangrid",
+      "name": "",
+      "url": "/soemdsp-sandbox/patches/bugs/scangrid.json",
+      "author": "",
+      "emoji": "",
+      "folder": "bugs"
+    },
+    {
       "slug": "demo_patches/analogdream",
       "label": "analogdream",
       "name": "",
@@ -920,14 +929,6 @@
       "emoji": ""
     },
     {
-      "slug": "pixelgrid",
-      "label": "pixelgrid",
-      "name": "",
-      "url": "/soemdsp-sandbox/patches/pixelgrid.json",
-      "author": "",
-      "emoji": ""
-    },
-    {
       "slug": "pluck_envelope",
       "label": "pluck_envelope",
       "name": "",
@@ -1068,6 +1069,14 @@
       "label": "sawtoothalarm",
       "name": "",
       "url": "/soemdsp-sandbox/patches/sawtoothalarm.json",
+      "author": "",
+      "emoji": ""
+    },
+    {
+      "slug": "scangrid",
+      "label": "scangrid",
+      "name": "",
+      "url": "/soemdsp-sandbox/patches/bugs/scangrid.json",
       "author": "",
       "emoji": ""
     },

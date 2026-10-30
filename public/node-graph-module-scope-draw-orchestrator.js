@@ -611,9 +611,15 @@ function drawNodeGraphModuleScopes(options = {}) {
     gl.enable(gl.SCISSOR_TEST);
     const brightness = nodeGraphModuleScopeTraceBrightness(slot, scopeSettings);
     const zoomScale = nodeGraphModuleScopeStrokeZoomScale();
-    const authoredStrokePx = typeof nodeGraphTraceDisplayNormalizeInkPx === "function"
-      ? nodeGraphTraceDisplayNormalizeInkPx(scopeSettings?.dot1Size, 2)
-      : Math.max(0, nodeGraphFiniteNumber(scopeSettings?.dot1Size, 2));
+    // Dot-budget scopes store Size as a share of the face (0…1); the rest px at 96.
+    const unitSize = typeof nodeGraphScopeDotSizeIsUnit === "function"
+      && typeof nodeGraphModuleDisplaySettingsSchemaForSlot === "function"
+      && nodeGraphScopeDotSizeIsUnit(nodeGraphModuleDisplaySettingsSchemaForSlot(slot));
+    const authoredStrokePx = unitSize
+      ? (typeof dotUnitInkPx === "function" ? dotUnitInkPx(scopeSettings?.dot1Size) : Math.max(0, Math.min(1, Number(scopeSettings?.dot1Size) || 0)) * 96)
+      : (typeof nodeGraphTraceDisplayNormalizeInkPx === "function"
+        ? nodeGraphTraceDisplayNormalizeInkPx(scopeSettings?.dot1Size, 2)
+        : Math.max(0, nodeGraphFiniteNumber(scopeSettings?.dot1Size, 2)));
     const faceMin = Math.max(
       1,
       Math.min(

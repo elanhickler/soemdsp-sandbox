@@ -551,14 +551,11 @@ function normalizeNodeGraphXyPadDisplaySettings(settings = {}) {
     ),
     dot1Color: normalizeNodeGraphTraceDisplayColor(peak, defaults.dot1Color),
     dot1Enabled: true,
-    // Authored ink px at a 96px face (same as phosphor). Not a 0…1 fraction.
-    dot1Size: typeof nodeGraphTraceDisplayClampInkPx === "function"
-      ? nodeGraphTraceDisplayClampInkPx(
-        source.dot1Size != null && source.dot1Size !== ""
-          ? source.dot1Size
-          : defaults.dot1Size,
-      )
-      : normalizeNodeGraphTraceDisplayNumber(source.dot1Size, defaults.dot1Size, 0, 32),
+    // Share of the face min side, 0…1 (NODE_GRAPH_SCOPE_DOT_UNIT_SCHEMAS).
+    dot1Size: nodeGraphTraceDisplayNormalizeDotUnit(
+      source.dot1Size != null && source.dot1Size !== "" ? source.dot1Size : defaults.dot1Size,
+      defaults.dot1Size,
+    ),
     dotBudget: typeof nodeGraphTraceDisplayClampDotBudget === "function"
       ? nodeGraphTraceDisplayClampDotBudget(source.dotBudget ?? defaults.dotBudget)
       : Math.max(1, Math.min(8192, Math.round(nodeGraphFiniteNumber(source.dotBudget ?? defaults.dotBudget, 1024)))),
@@ -595,6 +592,23 @@ function nodeGraphXyPadDisplaySettingsForNode(node) {
 }
 
 /** Authored stroke/dot diameter in CSS px at a 96px face. 0 = gone. Not 0…1. */
+// Dot Size on the dot-budget scopes is a share of the face min side, 0…1
+// (1 = one dot as big as the display). Renderers turn it into authored px at
+// 96 with dotUnitInkPx. Every other face keeps px at 96 (nodeGraphTraceDisplayNormalizeInkPx).
+const NODE_GRAPH_SCOPE_DOT_UNIT_SCHEMAS = Object.freeze(new Set([
+  "scope1dTrace", "scope2dTrace", "lineBurn", "scope2d", "xyPad",
+]));
+
+function nodeGraphScopeDotSizeIsUnit(schema) {
+  return NODE_GRAPH_SCOPE_DOT_UNIT_SCHEMAS.has(String(schema || ""));
+}
+
+function nodeGraphTraceDisplayNormalizeDotUnit(value, fallback = 0.033) {
+  const n = Number(value);
+  const raw = Number.isFinite(n) ? n : Number(fallback);
+  return Number.isFinite(raw) ? Math.max(0, Math.min(1, raw)) : 0;
+}
+
 function nodeGraphTraceDisplayNormalizeInkPx(value, fallback = 2) {
   const n = Number(value);
   const raw = Number.isFinite(n) ? n : Number(fallback);
@@ -766,7 +780,7 @@ function normalizeNodeGraphLineBurnSettings(settings = {}) {
     dot1Enabled: true,
     // Authored CSS px at a 96px face (APP_POLICY §15). Not a 0…1 fraction —
     // clamping to 0…1 pegged every Size ≥ 1 to the same stamp (B-072).
-    dot1Size: nodeGraphTraceDisplayNormalizeInkPx(source.dot1Size, defaults.dot1Size),
+    dot1Size: nodeGraphTraceDisplayNormalizeDotUnit(source.dot1Size, defaults.dot1Size),
     // Dot Budget + Full Dot Economy persist (toggle was dropped before).
     dotBudget: typeof nodeGraphTraceDisplayClampDotBudget === "function"
       ? nodeGraphTraceDisplayClampDotBudget(source.dotBudget ?? defaults.dotBudget)
@@ -1637,7 +1651,7 @@ function normalizeNodeGraphScope2dSettings(settings = {}, defaultsOverride = nul
     dot1Enabled: true,
     // Authored CSS px at a 96px face (APP_POLICY §15). Not a 0…1 fraction —
     // clamping to 0…1 pegged every Size ≥ 1 to the same stamp (B-072).
-    dot1Size: nodeGraphTraceDisplayNormalizeInkPx(source.dot1Size, defaults.dot1Size),
+    dot1Size: nodeGraphTraceDisplayNormalizeDotUnit(source.dot1Size, defaults.dot1Size),
     dotBudget: typeof nodeGraphTraceDisplayClampDotBudget === "function"
       ? nodeGraphTraceDisplayClampDotBudget(source.dotBudget ?? defaults.dotBudget)
       : Math.max(1, Math.min(8192, Math.round(nodeGraphFiniteNumber(source.dotBudget ?? defaults.dotBudget, 1024)))),
@@ -1719,7 +1733,7 @@ function normalizeNodeGraphScope2dTraceSettings(settings = {}, typeDefaults = nu
     dot1Color: inkHueHex,
     secondaryColor: secHueHex,
     dot1Enabled: true,
-    dot1Size: nodeGraphTraceDisplayNormalizeInkPx(source.dot1Size, defaults.dot1Size),
+    dot1Size: nodeGraphTraceDisplayNormalizeDotUnit(source.dot1Size, defaults.dot1Size),
     ghost: typeof PhosphorResidual !== "undefined" && PhosphorResidual.migrateGhost
       ? PhosphorResidual.migrateGhost(source, defaults.ghost)
       : normalizeNodeGraphTraceDisplayNumber(source.ghost, defaults.ghost, 0, 1),
@@ -1828,11 +1842,11 @@ function normalizeNodeGraphScope1dTraceSettings(settings = {}) {
     dot1Brightness: inkBright,
     dot1Color: inkHueHex,
     dot1Enabled: true,
-    dot1Size: nodeGraphTraceDisplayNormalizeInkPx(source.dot1Size, defaults.dot1Size),
+    dot1Size: nodeGraphTraceDisplayNormalizeDotUnit(source.dot1Size, defaults.dot1Size),
     secondaryBrightness: secBright,
     secondaryColor: secHueHex,
     secondaryEnabled: source.secondaryEnabled !== false,
-    secondarySize: nodeGraphTraceDisplayNormalizeInkPx(source.dot1Size, defaults.dot1Size),
+    secondarySize: nodeGraphTraceDisplayNormalizeDotUnit(source.dot1Size, defaults.dot1Size),
     ghost: typeof PhosphorResidual !== "undefined" && PhosphorResidual.migrateGhost
       ? PhosphorResidual.migrateGhost(source, defaults.ghost)
       : normalizeNodeGraphTraceDisplayNumber(source.ghost, defaults.ghost, 0, 1),

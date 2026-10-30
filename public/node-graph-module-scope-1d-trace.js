@@ -47,7 +47,7 @@ function nodeGraphScope1dTraceBrightness01(settings = {}, role = "primary") {
 }
 
 
-/** Size authored CSS px @ 96 for TraceWoscope beam diameter (uSize via faceInkPx). */
+/** Size (0…1 of the face min side) as authored CSS px @ 96 for TraceWoscope (uSize via faceInkPx). */
 function nodeGraphScope1dTraceSizePx(settings = {}, role = "primary") {
   const isSecondary = role === "secondary" || role === "right";
   const raw = isSecondary
@@ -59,15 +59,10 @@ function nodeGraphScope1dTraceSizePx(settings = {}, role = "primary") {
   const fallback = isSecondary
     ? (defaults?.secondarySize ?? defaults?.dot1Size ?? 2)
     : (defaults?.dot1Size ?? 2);
-  if (typeof nodeGraphTraceDisplayNormalizeInkPx === "function") {
-    return nodeGraphTraceDisplayNormalizeInkPx(raw, fallback);
-  }
+  // Stored as a share of the face min side (0…1); authored px at 96 for faceInkPx.
   const n = Number(raw);
-  if (Number.isFinite(n)) {
-    return Math.max(0, Math.min(32, n));
-  }
-  const fb = Number(fallback);
-  return Number.isFinite(fb) ? Math.max(0, Math.min(32, fb)) : 2;
+  const unit = Number.isFinite(n) ? n : Number(fallback);
+  return (typeof dotUnitInkPx === "function" ? dotUnitInkPx(unit) : Math.max(0, Math.min(1, Number(unit) || 0)) * 96);
 }
 
 /**

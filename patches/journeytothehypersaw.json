@@ -2675,7 +2675,7 @@
         "dot1Brightness": 1,
         "dot1Color": "#75ebff",
         "dot1Enabled": true,
-        "dot1Size": 0.02,
+        "dot1Size": 0.000208,
         "dotBudget": 2048,
         "fullDotEconomy": false,
         "dotsOnly": false,

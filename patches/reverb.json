@@ -312,7 +312,7 @@
         "burn": 0.5075,
         "decay": 0.3575,
         "scale": 3.275,
-        "dot1Size": 0.0402,
+        "dot1Size": 0.000419,
         "dot1Color": "#75ebff",
         "dotBudget": 2048,
         "background": "#000000",
