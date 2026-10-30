@@ -3159,6 +3159,8 @@ function nodeGraphLicenseInfoForEntry(entry) {
 const nodeGraphNativeModuleTargetAliases = Object.freeze({
   eqFilter: Object.freeze(["bandpass", "allpass", "lowpass", "highpass"]),
   crossover2: Object.freeze(["crossover3", "crossover4", "crossover5", "crossover6"]),
+  ellipsoid: Object.freeze(["ellipsoidOsc"]),
+  dsfOscillator: Object.freeze(["dsfMorphingOsc"]),
 });
 
 const nodeGraphModuleStoreNativeLabelTypes = Object.freeze(new Set([
