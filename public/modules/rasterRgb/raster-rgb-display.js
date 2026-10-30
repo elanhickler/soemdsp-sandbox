@@ -514,7 +514,8 @@ function nodeGraphRasterRgbWiredPicture(slot) {
   const nodeId = slot?.nodeId;
   if (!nodeId) return null;
   if (typeof nodeGraphPictureRead !== "function") return null;
-  // Edge table (VG-1): rgba / 📺 first, then any picture source cabled to R/G/B.
+  // Edge table (VG-1): rgba / 📺 first, then a 📺 out cabled into R/G/B. An
+  // audio out on R/G/B is not a picture edge (picture-device.js), so it scans.
   const ports = ["rgba", "📺", "R", "G", "B"];
   for (let i = 0; i < ports.length; i += 1) {
     const pic = nodeGraphPictureRead(nodeId, ports[i]);

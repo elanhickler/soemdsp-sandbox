@@ -188,7 +188,11 @@
   // leaving them. Module faces (gl-line-renderer, PublishCanvas) publish only
   // for tvSources: an audio cable into Scan Grid R/G/B must not turn the
   // source's face (e.g. SinCos4) into the picture Scan Grid shows.
-  const PICTURE_GET_INLETS = { rasterRgb: new Set(["R", "G", "B", "rgba"]) };
+  // Inlets that take a source's picture over a non-📺 cable. Scan Grid's
+  // R / G / B are audio: X / Y / Z (or any signal) cabled there is scanned into
+  // pixels, never swapped for the source module's picture. A picture reaches
+  // Scan Grid only over a cable that leaves a 📺 out.
+  const PICTURE_GET_INLETS = { rasterRgb: new Set(["rgba"]) };
 
   function patchConnections() {
     return nodeGraphMvp?.patch?.connections || nodeGraphMvp?.connections || null;
@@ -221,8 +225,8 @@
       if (!from.node) continue;
       const to = connectionEnd(list[i], "to");
       if (!isTvPort(from.port) && !PICTURE_GET_INLETS[typeOf.get(to.node)]?.has(to.port)) continue;
-      // RGB Picture's R/G/B/rgba inlets take the source's picture over any
-      // cable (an explicit edge, read through nodeGraphPictureRead).
+      // A 📺 cable, or an explicit picture inlet (PICTURE_GET_INLETS), carries
+      // the source's picture (read through nodeGraphPictureRead).
       edges.sources.add(from.node);
       if (isTvPort(from.port)) edges.tvSources.add(from.node);
       if (!to.node) continue;
