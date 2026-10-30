@@ -157,10 +157,21 @@ $excludeTop = @(
 )
 $dstPublic = Join-Path $dst "public"
 
+# Ship only what git tracks. Untracked and ignored files (local backups,
+# scratch notes) live in the working tree but must never reach the release.
+$untrackedRaw = git -C $root ls-files --others -z -- public patches
+if ($LASTEXITCODE -ne 0) { throw "git ls-files failed -- cannot tell tracked from untracked files" }
+$untracked = New-Object 'System.Collections.Generic.HashSet[string]' ([System.StringComparer]::OrdinalIgnoreCase)
+foreach ($rel in ($untrackedRaw -split "`0")) {
+  if ($rel) { [void]$untracked.Add([System.IO.Path]::GetFullPath((Join-Path $root $rel))) }
+}
+
 function Sync-Dir([string]$SrcDir, [string]$DstDir, [string[]]$ExcludeNames = @()) {
   if (!(Test-Path -LiteralPath $DstDir)) { New-Item -ItemType Directory -Path $DstDir | Out-Null }
 
-  $srcEntries = @(Get-ChildItem -LiteralPath $SrcDir -Force | Where-Object { $ExcludeNames -notcontains $_.Name })
+  $srcEntries = @(Get-ChildItem -LiteralPath $SrcDir -Force | Where-Object {
+    $ExcludeNames -notcontains $_.Name -and !$untracked.Contains($_.FullName)
+  })
   $dstEntries = @(Get-ChildItem -LiteralPath $DstDir -Force | Where-Object { $ExcludeNames -notcontains $_.Name })
 
   $srcNames = @($srcEntries | ForEach-Object { $_.Name })
@@ -221,6 +232,17 @@ if (Test-Path -LiteralPath $dstPatches) {
 }
 New-Item -ItemType Directory -Path $dstPatches | Out-Null
 Copy-Item -Path (Join-Path $srcPatches "*") -Destination $dstPatches -Recurse -Force
+# index.json was just rebuilt above, so it ships even when it is not committed yet.
+$srcPatchesIndex = [System.IO.Path]::GetFullPath((Join-Path $srcPatches "index.json"))
+foreach ($path in $untracked) {
+  if (!$path.StartsWith($srcPatches + "\", [System.StringComparison]::OrdinalIgnoreCase)) { continue }
+  if ($path -ieq $srcPatchesIndex) { continue }
+  $dstPath = Join-Path $dstPatches $path.Substring($srcPatches.Length + 1)
+  if (Test-Path -LiteralPath $dstPath) {
+    Remove-Item -LiteralPath $dstPath -Force
+    Write-Host "  skipped untracked patches\$($path.Substring($srcPatches.Length + 1))"
+  }
+}
 $patchCount = @(Get-ChildItem -LiteralPath $dstPatches -Filter "*.json" -File -Recurse).Count
 Write-Host "  patches\ ($patchCount json files)"
 if (!(Test-Path -LiteralPath (Join-Path $dstPatches "init.json"))) {
