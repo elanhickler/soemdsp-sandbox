@@ -48,7 +48,10 @@ function migrateNodeGraphRetiredRmsMono(patch) {
   return patch;
 }
 
-// Pulse Train Antialiasing (pulse_train v34): choices are 0 Quant / 1 Rand /
+// Pulse Train Antialiasing (pulse_train v41): choices are 0 Quant / 1 Rand /
+// 2 Dither / 3 AA. A saved patch with no value gets 0 Quant (the definition
+// default is now AA, which would change how old patches sound). Earlier (v34):
+// choices are 0 Quant / 1 Rand /
 // 2 Dither. Every saved value keeps its meaning: 0 (old Off) -> 0 Quant,
 // 1 Random -> 1 Rand, 2 Dither -> 2, v32/v33 3 None and 4 PolyBLEP -> 0 Quant
 // (None is Quant now; anything outside 0..2 -> 0). Idempotent without a
@@ -58,9 +61,19 @@ function migrateNodeGraphPulseTrainAntialiasing(patch) {
   if (!nodes) return patch;
   for (const node of nodes) {
     if (!node || node.type !== "pulseTrain" || !node.params || typeof node.params !== "object") continue;
-    if (!Object.hasOwn(node.params, "antialiasing")) continue;
+    if (!Object.hasOwn(node.params, "antialiasing")) {
+      node.params.antialiasing = 0;
+      continue;
+    }
     const v = Math.round(Number(node.params.antialiasing));
-    if (v === 0 || v === 1 || v === 2) continue;
+    // The saved range copy (paramMeta.antialiasing) still lists three choices
+    // and max 2: drop those keys so the definition's four apply (no-op on a
+    // second pass, the copy is gone).
+    const meta = node.paramMeta && typeof node.paramMeta === "object" ? node.paramMeta.antialiasing : null;
+    if (meta && typeof meta === "object" && Number(meta.max) === 2) {
+      for (const k of ["choices", "max", "mid", "def", "choiceOriginMin"]) delete meta[k];
+    }
+    if (v === 0 || v === 1 || v === 2 || v === 3) continue;
     node.params.antialiasing = typeof node.params.antialiasing === "number" ? 0 : "0";
   }
   return patch;
