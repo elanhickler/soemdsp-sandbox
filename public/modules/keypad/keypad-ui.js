@@ -115,6 +115,7 @@ function nodeGraphKeypadApplyLayout(face, layout) {
   nodeGraphKeypadSyncGridGeometry(face, next);
   nodeGraphKeypadSyncLookPixels(face, next);
   nodeGraphKeypadEnsureStrokeWatch(face);
+  nodeGraphKeypadRequestGlPaint();
 }
 
 function nodeGraphKeypadSyncGridGeometry(face, layout) {
@@ -175,6 +176,11 @@ function nodeGraphKeypadEnsureStrokeWatch(face) {
   ro.observe(face);
 }
 
+// GL mode draws the keys from these classes and vars; repaint after they change.
+function nodeGraphKeypadRequestGlPaint() {
+  if (typeof nodeGraphGlGraphPresentSoon === "function") nodeGraphGlGraphPresentSoon();
+}
+
 function nodeGraphKeypadPaintSlot(face, slot, down, hoverSlot = null) {
   if (!face) return;
   const has = slot != null && Number.isFinite(Number(slot));
@@ -193,6 +199,7 @@ function nodeGraphKeypadPaintSlot(face, slot, down, hoverSlot = null) {
     key.classList.toggle("is-hover", lit);
     key.setAttribute("aria-pressed", on ? "true" : "false");
   }
+  nodeGraphKeypadRequestGlPaint();
 }
 
 function nodeGraphKeypadIndexSlot(patchNode) {
@@ -477,6 +484,7 @@ function createNodeGraphKeypadBody(node) {
       return;
     }
     face.dataset.keypadHoverSlot = next;
+    nodeGraphKeypadRequestGlPaint();
     const live = typeof nodeGraphPatchNode === "function" ? nodeGraphPatchNode(nodeId) : null;
     if (!nodeGraphKeypadNodeIsLatch(live)) {
       return;
@@ -492,6 +500,7 @@ function createNodeGraphKeypadBody(node) {
       return;
     }
     delete face.dataset.keypadHoverSlot;
+    nodeGraphKeypadRequestGlPaint();
     const live = typeof nodeGraphPatchNode === "function" ? nodeGraphPatchNode(nodeId) : null;
     if (!nodeGraphKeypadNodeIsLatch(live)) {
       return;

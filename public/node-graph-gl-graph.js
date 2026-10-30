@@ -264,6 +264,7 @@ function nodeGraphGlGraphRebuildChrome() {
   const sliders = [];
   const seeds = [];
   const keys = [];
+  const keypads = [];
   const graphs = [];
   const headerButtons = [];
   const host = document.getElementById("nodeGraphWorkspace");
@@ -429,6 +430,11 @@ function nodeGraphGlGraphRebuildChrome() {
           || "",
       });
     }
+    const keypadFace = el.querySelector(".node-keypad-face");
+    const keypadFaceBox = keypadFace ? nodeGraphGlGraphWorldBox(keypadFace) : null;
+    if (keypadFaceBox) {
+      keypads.push({ face: keypadFace, x: keypadFaceBox.x, y: keypadFaceBox.y, w: keypadFaceBox.w, h: keypadFaceBox.h });
+    }
     const keypadKeys = el.querySelectorAll(".node-keypad-key");
     for (let k = 0; k < keypadKeys.length; k += 1) {
       const key = keypadKeys[k];
@@ -436,6 +442,8 @@ function nodeGraphGlGraphRebuildChrome() {
       if (!keyBox) continue;
       keys.push({
         el: key,
+        face: keypadFace,
+        slot: String(key.dataset.slot ?? ""),
         x: keyBox.x,
         y: keyBox.y,
         w: keyBox.w,
@@ -459,7 +467,7 @@ function nodeGraphGlGraphRebuildChrome() {
   const root = document.documentElement;
   const ghostHost = host || root;
   nodeGraphGlGraphState.chrome = {
-    titles, labels, jacks, sliders, seeds, keys, graphs, headerButtons,
+    titles, labels, jacks, sliders, seeds, keys, keypads, graphs, headerButtons,
     // Read once per rebuild, not per present.
     seedLine: typeof nodeGraphGlLinesCss === "function"
       ? nodeGraphGlLinesCss(getComputedStyle(root).getPropertyValue("--line") || "#3a4248")
@@ -696,6 +704,50 @@ function nodeGraphGlGraphDrawPlate(batch, plate, toX, toY, zoom, cssW, cssH, pla
     const cuts = typeof nodeGraphModuleRailBorderCuts === "function" ? nodeGraphModuleRailBorderCuts(batch, plate, toX, toY, zoom) : null;
     nodeGraphGlLinesModuleOutline(batch, x0, y0, w0, h0, edge, color, plateJacks, plate.fill, cuts);
   }
+}
+
+// Keypad look from the face's inline vars (nodeGraphKeypadApplyLayout and
+// nodeGraphKeypadSyncLookPixels write them), falling back to keypad-ui.css.
+function nodeGraphGlGraphKeypadLook(face) {
+  const style = face?.style;
+  const read = (name, fallback) => String(style?.getPropertyValue(name) || "").trim() || fallback;
+  const color = (name, fallback) => nodeGraphGlGraphParseCssColor(read(name, fallback), nodeGraphGlGraphCssColor(fallback));
+  const number = (name, fallback) => {
+    const n = Number.parseFloat(read(name, ""));
+    return Number.isFinite(n) ? n : fallback;
+  };
+  return {
+    background: color("--node-keypad-background-color", "#000000"),
+    button: color("--node-keypad-button-color", "#c4c2a6"),
+    hover: color("--node-keypad-hover-color", "#89bfc2"),
+    down: color("--node-keypad-down-color", "#d9d9d9"),
+    text: color("--node-keypad-text-color", "#2d2d2d"),
+    stroke: color("--node-keypad-stroke-color", "#5c5071"),
+    strokePx: Math.max(0, number("--node-keypad-stroke", 0)),
+    radiusPx: Math.max(0, number("--node-keypad-radius", 0)),
+    textSize: Math.max(0, number("--node-keypad-text-size", 0.87708066581306)),
+    weight: number("--node-keypad-text-weight", 900),
+    family: read("--node-keypad-font", "\"Thasadith\", sans-serif"),
+  };
+}
+
+// Filled rounded rect: three bands plus a dot in each corner.
+function nodeGraphGlGraphRoundRect(batch, x, y, w, h, radius, rgba) {
+  if (!(w > 0) || !(h > 0)) return;
+  const r = Math.max(0, Math.min(radius, w * 0.5, h * 0.5));
+  if (r < 0.5 || typeof nodeGraphGlLinesDot !== "function") {
+    nodeGraphGlLinesRect(batch, x, y, w, h, rgba);
+    return;
+  }
+  nodeGraphGlLinesRect(batch, x + r, y, w - r * 2, h, rgba);
+  nodeGraphGlLinesRect(batch, x, y + r, r, h - r * 2, rgba);
+  nodeGraphGlLinesRect(batch, x + w - r, y + r, r, h - r * 2, rgba);
+  const feather = 0.75;
+  const inset = r - feather * 0.5;
+  nodeGraphGlLinesDot(batch, x + r, y + r, inset, feather, rgba);
+  nodeGraphGlLinesDot(batch, x + w - r, y + r, inset, feather, rgba);
+  nodeGraphGlLinesDot(batch, x + r, y + h - r, inset, feather, rgba);
+  nodeGraphGlLinesDot(batch, x + w - r, y + h - r, inset, feather, rgba);
 }
 
 function nodeGraphGlGraphDrawOver(batch, draw) {
@@ -974,26 +1026,57 @@ function nodeGraphGlGraphDrawChrome(batch, toX, toY, zoom, cssW, cssH) {
       weight: 400,
     }));
   }
-  const keyIdle = [0.1, 0.11, 0.13, 1];
-  const keyDown = [0.35, 0.62, 0.78, 1];
+  // Keypad: the DOM face is transparent in GL mode, so its Display Settings
+  // (keypad-ui.css vars set inline by nodeGraphKeypadApplyLayout) draw here.
+  const keypadList = chrome.keypads || [];
+  for (let i = 0; i < keypadList.length; i += 1) {
+    const pad = keypadList[i];
+    const x = toX(pad.x);
+    const y = toY(pad.y);
+    const w = pad.w * zoom;
+    const h = pad.h * zoom;
+    if (nodeGraphGlGraphOutside(x, y, w, h, cssW, cssH)) continue;
+    const look = nodeGraphGlGraphKeypadLook(pad.face);
+    nodeGraphGlGraphDrawOver(batch, () => nodeGraphGlLinesRect(batch, x, y, w, h, look.background));
+  }
   const keyList = chrome.keys || [];
   for (let i = 0; i < keyList.length; i += 1) {
     const key = keyList[i];
-    const down = key.el?.classList?.contains("is-down") || key.el?.classList?.contains("is-active");
+    if (key.face?.classList?.contains("is-empty")) continue;
     const x = toX(key.x);
     const y = toY(key.y);
     const w = key.w * zoom;
     const h = key.h * zoom;
     if (nodeGraphGlGraphOutside(x, y, w, h, cssW, cssH)) continue;
-    nodeGraphGlGraphDrawOver(batch, () => nodeGraphGlLinesRect(batch, x, y, w, h, down ? keyDown : keyIdle));
+    const look = nodeGraphGlGraphKeypadLook(key.face);
+    const cls = key.el?.classList;
+    const down = cls?.contains("is-down") || cls?.contains("is-active");
+    const hover = !down && (cls?.contains("is-hover")
+      || (key.face?.dataset.keypadHoverSlot ?? null) === key.slot);
+    const fill = down ? look.down : (hover ? look.hover : look.button);
+    const stroke = Math.min(look.strokePx * zoom, Math.min(w, h) * 0.5);
+    const radius = look.radiusPx * zoom;
+    nodeGraphGlGraphDrawOver(batch, () => {
+      if (stroke > 0) {
+        nodeGraphGlGraphRoundRect(batch, x, y, w, h, radius, look.stroke);
+        nodeGraphGlGraphRoundRect(batch, x + stroke, y + stroke, w - stroke * 2, h - stroke * 2, Math.max(0, radius - stroke), fill);
+      } else {
+        nodeGraphGlGraphRoundRect(batch, x, y, w, h, radius, fill);
+      }
+    });
     if (key.label && typeof nodeGraphGlLinesText === "function") {
-      nodeGraphGlLinesText(batch, key.label, x + w * 0.5, y + h * 0.5, nodeGraphGlGraphTextOpts({
-        px: Math.max(8, h * 0.42),
-        rgba: ink,
-        align: "center",
-        baseline: "middle",
-        weight: 400,
-      }));
+      // keypad-ui.css: font-size = text-size * min(100cqw, 100cqh) of the key's content box.
+      const px = look.textSize * Math.max(0, Math.min(w, h) - stroke * 2);
+      if (px >= 1) {
+        nodeGraphGlLinesText(batch, key.label, x + w * 0.5, y + h * 0.5, nodeGraphGlGraphTextOpts({
+          px,
+          rgba: look.text,
+          align: "center",
+          baseline: "middle",
+          weight: look.weight,
+          family: look.family,
+        }));
+      }
     }
   }
   const graphList = chrome.graphs || [];
