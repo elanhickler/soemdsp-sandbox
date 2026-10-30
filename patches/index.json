@@ -139,6 +139,15 @@
       "folder": "demo_patches"
     },
     {
+      "slug": "demo_patches/rgb",
+      "label": "rgb",
+      "name": "",
+      "url": "/soemdsp-sandbox/patches/demo_patches/rgb.json",
+      "author": "",
+      "emoji": "",
+      "folder": "demo_patches"
+    },
+    {
       "slug": "demo_patches/sawtooth_into_resonant_envelope",
       "label": "sawtooth_into_resonant_envelope",
       "name": "",
@@ -398,6 +407,15 @@
       "author": "Sandbox",
       "emoji": "",
       "folder": "modulator_breadboards"
+    },
+    {
+      "slug": "need_for_speed/square_super_sync",
+      "label": "square_super_sync",
+      "name": "",
+      "url": "/soemdsp-sandbox/patches/need_for_speed/square_super_sync.json",
+      "author": "",
+      "emoji": "",
+      "folder": "need_for_speed"
     },
     {
       "slug": "Soundemote_Softwave_prototypes/Soft_Asymmetrical_Sine",
@@ -976,7 +994,7 @@
       "slug": "rgb",
       "label": "rgb",
       "name": "",
-      "url": "/soemdsp-sandbox/patches/rgb.json",
+      "url": "/soemdsp-sandbox/patches/demo_patches/rgb.json",
       "author": "",
       "emoji": ""
     },
@@ -1161,6 +1179,14 @@
       "label": "soundemotecommusicplayer",
       "name": "",
       "url": "/soemdsp-sandbox/patches/soundemotecommusicplayer.json",
+      "author": "",
+      "emoji": ""
+    },
+    {
+      "slug": "square_super_sync",
+      "label": "square_super_sync",
+      "name": "",
+      "url": "/soemdsp-sandbox/patches/need_for_speed/square_super_sync.json",
       "author": "",
       "emoji": ""
     },
