@@ -162,7 +162,7 @@ const defs = src("node-graph-module-definitions.js");
 gate(/\["phase", "Phase"\]\], horizontal: true/.test(defs), "Clock Phase face row is a horizontal slider");
 gate(/renderer: "clockFace", settingsSchema: "clockFace"/.test(defs), "Clock face has the clockFace Display Settings schema");
 const face = src("node-graph-module-face.js");
-gate(face.includes("horizontal: !!row.horizontal") && face.includes("if (wd.horizontal)"), "face cells draw horizontal sliders");
+gate(face.includes("!!row.horizontal") && face.includes("if (wd.horizontal)"), "face cells draw horizontal sliders");
 const form = src("node-graph-module-scope-settings-form.js");
 gate(/\["fill", "Fill", "fillHue"/.test(form) && /\["start", "Start"/.test(form) && /\["blink", "Blink"/.test(form) && /clock \? "Playhead"/.test(form), "Display Settings lamps: Background, Pulse, Playhead, Fill, Start, Blink");
 console.log(failures ? `FAILED ${failures}` : "smoke_clock_face ok");

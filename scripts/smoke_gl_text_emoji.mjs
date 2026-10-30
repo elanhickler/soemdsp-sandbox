@@ -84,7 +84,8 @@ const first = draw("Go 🎸", 14.3, 1.5);   // 14.3 css px x DPR 1.5 = 21.45 -> 
 const s1 = R.nodeGraphGlLinesEmojiStats();
 gate(s1.bakes - s0.bakes === 1 && s1.keys.includes("🎸|21"), `first draw bakes once at the exact base size (keys ${s1.keys.join(",")})`);
 const up = glLog.texSub[glLog.texSub.length - 1];
-gate(up && up.w === 21 + 4 && up.h === Math.ceil(21 * 1.25) + 4, `upload is the exact-size cell (${up?.w}x${up?.h}), not a larger bake`);
+// Cell = advance + pad x 2, by 1.25 em + pad x 2 + 0.45 em headroom (colour emoji draw above the em box).
+gate(up && up.w === 21 + 4 && up.h === Math.ceil(21 * 1.25) + 4 + Math.ceil(21 * 0.45), `upload is the exact-size cell (${up?.w}x${up?.h}), not a larger bake`);
 const emojiRun = first.runs.find((r) => r.color);
 gate(first.runs.length === 2 && emojiRun?.n === 1 && first.runs[0].color === false, "emoji draws inline after the coverage glyphs (2 runs)");
 const eq = first.quads[first.quads.length - 1];
@@ -102,8 +103,10 @@ gate(s2.segmentMisses === segMiss0, "200 steady frames: segmentation served from
 draw("🎸 On", 14, 1.5);  // 21 device px again
 gate(R.nodeGraphGlLinesEmojiStats().bakes === s1.bakes, "same emoji + base px on another face reuses the bake");
 // Workspace zoom: the face backing stays layout css x DPR (never x zoom), so a
-// zoomed face issues the identical draw; the renderer has no zoom input at all.
-gate(!/zoom/i.test(src.replace(/\/\/[^\n]*|\/\*[\s\S]*?\*\//g, "")), "renderer code has no zoom input (zoom can not drive a bake)");
+// zoomed face issues the identical draw. The camera hands zoom to the GPU as a
+// transform only; the emoji bake path (the emoji* functions) never sees it.
+const emojiBakeCode = [...src.matchAll(/\n  function (emoji\w*)\([^)]*\) \{[\s\S]*?\n  \}/g)].map((m) => m[0]).join("\n");
+gate(emojiBakeCode.includes("function emojiEntry") && !/zoom/i.test(emojiBakeCode.replace(/\/\/[^\n]*|\/\*[\s\S]*?\*\//g, "")), "emoji bake code has no zoom input (zoom can not drive a bake)");
 for (const z of [0.5, 1, 2, 4, 8]) draw("Go 🎸", 14.3, 1.5);
 gate(R.nodeGraphGlLinesEmojiStats().bakes === s1.bakes, "zoom sweep 0.5x..8x: nothing re-bakes");
 // A different base size (e.g. a 2x canvas tile layout) is its own one-time bake.

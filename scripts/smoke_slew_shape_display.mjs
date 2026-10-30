@@ -57,7 +57,8 @@ const canvas = { width: W, height: H, getContext: () => ({ setTransform() {}, fi
 gate(ctx.nodeGraphSlewShapePresent(canvas, geo) === true && glLog.draws === 1 && fills.length === 0, "GL: one draw, no 2D drawing");
 gate(glLog.clear === "2,6,9", `GL: dark plate clear (${glLog.clear})`);
 const cols = new Set();
-for (let i = 0; i < glLog.verts.length; i += 11) cols.add(glLog.verts.slice(i + 7, i + 10).map((v) => Math.round(v * 255)).join(","));
+// Vertex layout (gl-line-renderer FLOATS = 12): pos2, local2, len1, half1, feather1, caps1, rgba4.
+for (let i = 0; i < glLog.verts.length; i += 12) cols.add(glLog.verts.slice(i + 8, i + 11).map((v) => Math.round(v * 255)).join(","));
 gate(cols.has("127,199,217") && cols.has("255,130,110"), "GL: Up and Down curves drawn in their colours");
 glOn = false;
 gate(ctx.nodeGraphSlewShapePresent(canvas, geo) === false && fills.length === 1 && fills[0][0] === "#000", "No GL: plain black square");

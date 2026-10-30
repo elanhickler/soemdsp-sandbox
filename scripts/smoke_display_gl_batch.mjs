@@ -63,8 +63,9 @@ function face(draw, label, colour) {
   ctx[draw](section);
   const cols = new Set();
   let maxX = 0;
-  for (let i = 0; i < glLog.verts.length; i += 11) {
-    cols.add(glLog.verts.slice(i + 7, i + 10).map((v) => Math.round(v * 255)).join(","));
+  // Vertex layout (gl-line-renderer FLOATS = 12): pos2, local2, len1, half1, feather1, caps1, rgba4.
+  for (let i = 0; i < glLog.verts.length; i += 12) {
+    cols.add(glLog.verts.slice(i + 8, i + 11).map((v) => Math.round(v * 255)).join(","));
     maxX = Math.max(maxX, glLog.verts[i]);
   }
   gate(glLog.draws >= 1 && fills.length === 0, `${label}: GL draw, no 2D drawing`);

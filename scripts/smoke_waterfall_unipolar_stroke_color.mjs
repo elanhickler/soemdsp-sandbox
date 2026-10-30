@@ -37,7 +37,7 @@ const facePolarityFaces = ["waterfall", "waterfallXyz", "waterfallRgb"].filter((
 gate(facePolarityFaces.length === 3, `Polarity choice on waterfall / waterfallXyz / waterfallRgb (${facePolarityFaces.join(", ")})`);
 gate(/value: "bipolar", label: "Bipolar"[\s\S]{0,80}value: "unipolar", label: "Unipolar"/.test(tc), "choice offers Bipolar and Unipolar");
 const norm = src("node-graph-module-scope-normalize.js");
-gate(/polarity: \(function \(\) \{\s*const raw = String\(source\.facePolarity \|\| source\.polarity \|\| defaults\.polarity \|\| "bipolar"\)/.test(norm), "normalize: saved polarity / facePolarity kept, missing = Bipolar");
+gate(/polarity: \(function \(\) \{[\s\S]{0,400}?const raw = String\(source\.polarity \|\| source\.facePolarity \|\| defaults\.polarity \|\| "bipolar"\)/.test(norm), "normalize: saved polarity wins over facePolarity, missing = Bipolar");
 // Bottom fill: bipolar -1..1 map, clamped; bars from the bottom edge to the column max.
 const B = { polarity: "bottomFill" };
 gate(near(Y(-1, B), 100) && near(Y(0, B), 50) && near(Y(1, B), 0), "bottom fill: -1 bottom, 0 middle, +1 top");

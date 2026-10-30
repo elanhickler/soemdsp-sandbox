@@ -18580,28 +18580,42 @@ def check_page_patch_index_covers_all_patches() -> None:
             require(path.stem in slugs, f"patches/index.json missing bare patch route /{path.stem}")
 
 
+BROWSER_SMOKE_TIMEOUT_S = 300
+
+
 def check_display_draws_live(manifest: Path) -> None:
     """Displays paint more than their background and take a live bg colour
-    change (scripts/smoke_display_draws_live.mjs, headless system Chrome)."""
+    change (scripts/smoke_display_draws_live.mjs, headless system Chrome).
+    Each browser smoke prints its name and has a time limit, so a stuck
+    browser fails with a message instead of hanging the run silently."""
+    browser_smokes = [
+        ("smoke_display_draws_live.mjs", "display draws live"),
+        ("smoke_wire_ends_on_modules.mjs", "wire ends on modules"),
+        ("smoke_spawn_face_plate_live.mjs", "spawn face plate live"),
+        ("smoke_display_choices_filled.mjs", "display choices filled"),
+        ("smoke_screen_fx_browser.mjs", "screen fx (compile, draw, chain, feedback)"),
+        ("smoke_param_sliders_browser.mjs", "param slider (collapsed module, follows picker, both ways)"),
+        ("smoke_show_module_browser.mjs", "show module (performance view pin)"),
+    ]
     port = find_free_port()
     process = start_server(port, manifest)
     try:
         wait_for_server(f"http://127.0.0.1:{port}", process)
         env = {**os.environ, "SANDBOX_URL": f"http://127.0.0.1:{port}/"}
-        unit = subprocess.run(["node", str(ROOT / "scripts" / "smoke_display_draws_live.mjs")], capture_output=True, text=True, env=env)
-        require(unit.returncode == 0, f"display draws live: {unit.stdout}{unit.stderr}")
-        unit = subprocess.run(["node", str(ROOT / "scripts" / "smoke_wire_ends_on_modules.mjs")], capture_output=True, text=True, env=env)
-        require(unit.returncode == 0, f"wire ends on modules: {unit.stdout}{unit.stderr}")
-        unit = subprocess.run(["node", str(ROOT / "scripts" / "smoke_spawn_face_plate_live.mjs")], capture_output=True, text=True, env=env)
-        require(unit.returncode == 0, f"spawn face plate live: {unit.stdout}{unit.stderr}")
-        unit = subprocess.run(["node", str(ROOT / "scripts" / "smoke_display_choices_filled.mjs")], capture_output=True, text=True, env=env)
-        require(unit.returncode == 0, f"display choices filled: {unit.stdout}{unit.stderr}")
-        unit = subprocess.run(["node", str(ROOT / "scripts" / "smoke_screen_fx_browser.mjs")], capture_output=True, text=True, env=env)
-        require(unit.returncode == 0, f"screen fx (compile, draw, chain, feedback): {unit.stdout}{unit.stderr}")
-        unit = subprocess.run(["node", str(ROOT / "scripts" / "smoke_param_sliders_browser.mjs")], capture_output=True, text=True, env=env)
-        require(unit.returncode == 0, f"param slider (collapsed module, follows picker, both ways): {unit.stdout}{unit.stderr}")
-        unit = subprocess.run(["node", str(ROOT / "scripts" / "smoke_show_module_browser.mjs")], capture_output=True, text=True, env=env)
-        require(unit.returncode == 0, f"show module (performance view pin): {unit.stdout}{unit.stderr}")
+        for script, label in browser_smokes:
+            print(f"[smoke] browser: {label}...", flush=True)
+            try:
+                unit = subprocess.run(
+                    ["node", str(ROOT / "scripts" / script)],
+                    capture_output=True, text=True, env=env, timeout=BROWSER_SMOKE_TIMEOUT_S,
+                )
+            except subprocess.TimeoutExpired as error:
+                raise AssertionError(
+                    f"{label}: {script} did not finish in {BROWSER_SMOKE_TIMEOUT_S} s" + chr(10)
+                    + f"{error.stdout or ''}{error.stderr or ''}"
+                ) from None
+            require(unit.returncode == 0, f"{label}: {unit.stdout}{unit.stderr}")
+            print(f"[smoke] browser: {label}: ok", flush=True)
     finally:
         stop_server(process)
 

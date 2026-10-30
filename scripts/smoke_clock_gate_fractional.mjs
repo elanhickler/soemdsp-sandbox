@@ -30,6 +30,10 @@ for (const sr of [44100, 48000, 96000]) {
     gate(Math.abs(wrap.high / wrap.n - 0.5) < 0.01 + 2 * rate / sr, `wrapped Start 0.75 / End 0.25: ${rate} Hz @ ${sr}`);
   }
 }
-gate(run(0, 48000, 0, 1).high === 0, "Rate 0 holds the gate low");
+// Rate 0 pauses (clock v8): the phase stops, so the gate holds its state.
+{
+  const paused = run(0, 48000, 0, 1);
+  gate(paused.high === 0 || paused.high === paused.n, `Rate 0 pauses: gate holds one state (${paused.high}/${paused.n} high)`);
+}
 if (fails) { console.log(`smoke_clock_gate_fractional FAILED (${fails})`); process.exit(1); }
 console.log("smoke_clock_gate_fractional ok");

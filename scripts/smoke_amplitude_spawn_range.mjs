@@ -34,6 +34,7 @@ const defs = ctx.__defs;
 const EXEMPT = {
   "attenuverter.amplitude": "bipolar scale −1…+1 (inverts by design)",
   "attenumax.amplitude": "bipolar scale −1…+1 (inverts by design)",
+  "rmsMeter.amplitude": "sensitivity on the RMS reading for Env Inverted (0…4), not an output level",
 };
 const KEY_RE = /^(amplitude\d*|amp|volume\d*|level\d*|outputlevel|outlevel|outputgain|outputamplitude)$/i;
 const LABEL_RE = /^(amplitude|amp|volume|level|output level|output amplitude)(\s*\d+)?(\s*\(.*\))?$/i;

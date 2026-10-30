@@ -124,7 +124,8 @@ for (const [name, model] of Object.entries(MODELS)) {
   const sandbox = { console };
   sandbox.window = sandbox;
   vm.createContext(sandbox);
-  for (const rel of ["public/node-graph-module-scope-defaults.js", "public/node-graph-module-scope-normalize.js"]) {
+  // Page order: phosphor-residual.js (Burn / Ghost / Trail defaults) loads before the scope defaults.
+  for (const rel of ["public/lib/phosphor/phosphor-residual.js", "public/node-graph-module-scope-defaults.js", "public/node-graph-module-scope-normalize.js"]) {
     try { vm.runInContext(read(rel), sandbox, { filename: rel }); } catch (_) { /* later globals optional */ }
   }
   const legacyKnob = { dialSize: 0.5, dialOffsetY: 0.3, labelSize: 0.4, valueSize: 0.1, valueOffsetY: 0.2, valuePosition: "midknob", labelPosition: "mid", rotationDegrees: 1080, innerRadius: 0, arcFill: "#ff0000", backgroundColor: "#123456" };

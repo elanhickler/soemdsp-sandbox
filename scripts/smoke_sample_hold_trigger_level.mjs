@@ -102,8 +102,9 @@ check(d.defaultDisplaySettings.historySeconds === 8, "S&H display sweep (History
 const ip = d.parameters.find((x) => x.key === "interpolate");
 check(JSON.stringify(ip.choices) === JSON.stringify(["Hold", "Linear", "Smoothstep", "Quadratic Out", "Quadratic In", "Cosine"]), "Interpolate list: Hold first");
 check(JSON.stringify(ip.choiceIds) === "[5,0,1,2,3,4]" && ip.defaultValue === "linear", "native ids unchanged, default Linear");
-const face = d.face.find((r) => r.param === "interpolate");
-check(face.labels[0] === "Hold" && face.labels[5] === "Cos", "face buttons Hold Lin Smooth QOut QIn Cos");
+// Interp overflowed its choice buttons, so the face shows it as a horizontal slider cell (9c19ccb9).
+const face = d.face.find((r) => r.kind === "cells" && r.params?.some((cell) => cell[0] === "interpolate"));
+check(face?.horizontal === true, "face shows Interp as a horizontal slider cell");
 const norm = (v) => vm.runInContext(`normalizeNodeGraphPatchParameter("sampleHold", "interpolate", ${JSON.stringify(v)})`, dctx);
 check(norm("5") === "hold" && norm(0) === "linear" && norm("4") === "cosine" && norm("quadIn") === "quadIn", "legacy numeric saves remap to the same curve");
 console.log(failures ? `\n${failures} FAILED` : "\nsmoke_sample_hold_trigger_level ok");

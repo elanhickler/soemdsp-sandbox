@@ -266,12 +266,14 @@ let curve;
   ctx.nodeGraphPictureDevice = () => (glOn ? { gl: fakeGl, canvas: { height: 4096 } } : null);
   ctx.nodeGraphSharedGlBlitTo2D = () => true;
   vm.runInContext(fs.readFileSync(path.join(root, "public", "lib", "visual", "gl-line-renderer.js"), "utf8"), ctx);
+  // Vertex layout (gl-line-renderer FLOATS = 12): pos2, local2, len1, half1, feather1, caps1, rgba4.
+  const VERT = 12;
   const colours = () => {
     const out = [];
-    for (let i = 0; i < glLog.verts.length; i += 11) out.push(glLog.verts.slice(i + 7, i + 10).map((v) => Math.round(v * 255)).join(","));
+    for (let i = 0; i < glLog.verts.length; i += VERT) out.push(glLog.verts.slice(i + 8, i + 11).map((v) => Math.round(v * 255)).join(","));
     return out;
   };
-  const halves = () => { const out = new Set(); for (let i = 0; i < glLog.verts.length; i += 11) out.add(glLog.verts[i + 5]); return out; };
+  const halves = () => { const out = new Set(); for (let i = 0; i < glLog.verts.length; i += VERT) out.add(glLog.verts[i + 5]); return out; };
   const reset = () => { glLog.clear = null; glLog.verts = []; glLog.draws = 0; };
   const mkCanvas = (w, h) => {
     const calls = { fills: [] };
@@ -290,8 +292,8 @@ let curve;
     const cH = 100;
     ctx.__present(mkCanvas(256, cH), curve.bins, curve.info, sS, 256);
     let full = glLog.verts.length > 0;
-    for (let i = 0; i < glLog.verts.length; i += 11) { const y = glLog.verts[i + 1]; if (Math.abs(Math.abs(y) - 1) > 1e-6) full = false; }
-    gate(full, `Sine (GL): every printed line is full face height (${glLog.verts.length / 11} verts)`);
+    for (let i = 0; i < glLog.verts.length; i += VERT) { const y = glLog.verts[i + 1]; if (Math.abs(Math.abs(y) - 1) > 1e-6) full = false; }
+    gate(full, `Sine (GL): every printed line is full face height (${glLog.verts.length / VERT} verts)`);
   }
   gate(sineCols.some((c) => { const v = c.split(",").map(Number); return v[0] === 255 && v[1] > 100; }) && glLog.draws === 1,
     `Sine (GL): glow at the note climbs the gradient toward white, one draw (${glLog.draws})`);
@@ -330,7 +332,7 @@ let curve;
   ctx.__present(mkCanvas(200, 50), new Float32Array(256), fInfo, ctx.__norm({ backgroundBrightness: 0, gradientStops: stops }), 200);
   const fillCols = new Set(); const strokeCols = new Set();
   const cols = colours();
-  for (let i = 0; i < cols.length; i += 1) (glLog.verts[i * 11 + 5] > 1e5 ? fillCols : strokeCols).add(cols[i]);
+  for (let i = 0; i < cols.length; i += 1) (glLog.verts[i * VERT + 5] > 1e5 ? fillCols : strokeCols).add(cols[i]);
   gate(glLog.clear === "0,0,0", `Filter (GL): plate = LUT(0) (${glLog.clear})`);
   gate(fillCols.size > 5 && strokeCols.size === 1 && strokeCols.has(at(255)) && glLog.draws === 1,
     `Filter (GL): area coloured per column (${fillCols.size} colours), stroke = one constant LUT(1) colour, one draw`);

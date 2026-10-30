@@ -209,10 +209,15 @@ function extractFunction(source, name) {
 // BPM plate behavior: second identical frame does not draw; wipe redraws.
 {
   const src = read("public/modules/transport/transport-display.js");
+  // The BPM plate paints through the shared GL batch; one Begin = one painted frame.
   let fills = 0;
-  const canvas = { width: 40, height: 20, getContext: () => ctx2d };
-  const ctx2d = new Proxy({}, { get: (t, k) => (k === "fillRect" ? () => { fills += 1; } : k === "measureText" ? () => ({ width: 5 }) : (typeof t[k] !== "undefined" ? t[k] : () => {})), set: (t, k, v) => { t[k] = v; return true; } });
+  const canvas = { width: 40, height: 20 };
   const ctx = vm.createContext({
+    nodeGraphGlLinesBegin: () => { fills += 1; return {}; },
+    nodeGraphGlLinesEnd: () => true,
+    nodeGraphGlLinesText: () => {},
+    nodeGraphGlLinesDot: () => {},
+    nodeGraphGlLinesMeasureText: () => 5,
     nodeGraphModuleScopeLocalFallbackCanvas: () => canvas,
     syncNodeGraphModuleScopeLocalFallbackCanvas: () => true,
     nodeGraphMvp: { patch: { nodes: [{ id: "t", params: { bpm: 120 } }] } },

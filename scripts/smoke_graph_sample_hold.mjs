@@ -168,7 +168,8 @@ if (!(amp025.pS > amp1.pS * 0.5)) {
 }
 
 
-// Trigger (digital, port Square=5): 1-sample 0/1 pulse on exactly the latch sample.
+// Trigger (port Square=5): a 1-sample pulse on exactly the latch sample whose
+// level is the newly latched value, signed, same as Left (sample_hold v7).
 const PORT_TRIGGER = 5;
 setParam(g, hHold, PARAM_AMPLITUDE, 1);
 setParam(g, hHold, PARAM_PHASE, 0);
@@ -187,25 +188,27 @@ for (let q = 0; q < 40; q++) {
   if (n < 1) throw new Error(`trigger process_block returned ${n}`);
   const trig = new Float64Array(mem.buffer, portPtr(g, hHold, PORT_TRIGGER) | 0, frames);
   const raw = new Float64Array(mem.buffer, portPtr(g, hHold, PORT_SAW) | 0, frames);
+  const left = new Float64Array(mem.buffer, portPtr(g, hHold, PORT_LEFT) | 0, frames);
   for (let i = 0; i < frames; i++, sampleIdx++) {
     const t = trig[i];
-    if (t !== 0 && t !== 1) trigBad += 1;
-    if (t === 1) {
+    const pulse = t !== 0;
+    if (pulse && Math.abs(t - left[i]) > 1e-12) trigBad += 1;
+    if (pulse) {
       trigPulses += 1;
       trigIdx.push(sampleIdx);
-      if (prevTrig === 1) trigWide += 1;
+      if (prevTrig !== 0) trigWide += 1;
     }
     // Latch sample == sample where held value changes (instant mode).
     if (prevRaw !== null) {
       const changed = raw[i] !== prevRaw;
-      if (changed && t !== 1) trigMismatch += 1;
+      if (changed && !pulse) trigMismatch += 1;
     }
     prevRaw = raw[i];
     prevTrig = t;
   }
 }
 const expectPulses = Math.floor((40 * frames) / 100);
-if (trigBad) throw new Error(`Trigger must be 0/1 only, bad=${trigBad}`);
+if (trigBad) throw new Error(`Trigger level must equal the latched Left value, bad=${trigBad}`);
 if (trigWide) throw new Error(`Trigger must be 1 sample wide, wide=${trigWide}`);
 if (trigMismatch) throw new Error(`Trigger missing on ${trigMismatch} latch samples`);
 if (Math.abs(trigPulses - expectPulses) > 1) {
