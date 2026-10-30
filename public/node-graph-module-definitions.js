@@ -21315,6 +21315,8 @@ const nodeGraphModuleDefinitions = (
     defaultDisplaySettings: {
       background: "#000000",
       backgroundBrightness: 0,
+      historySeconds: 4.097,
+      zoomSeconds: 4.097,
     },
     uniqueInPatch: true,
     // Capture Mono/Left/Right for stereo Trace (scope rings). Instant Waterfall

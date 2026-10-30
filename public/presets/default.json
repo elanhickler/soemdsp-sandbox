@@ -165,8 +165,8 @@
         "syncChannel": "off",
         "historyHz": 4,
         "historyCycles": 4,
-        "historySeconds": 0.25,
-        "zoomSeconds": 0.25,
+        "historySeconds": 4.097,
+        "zoomSeconds": 4.097,
         "fade": 0,
         "xyzLayout": "stack"
       }
