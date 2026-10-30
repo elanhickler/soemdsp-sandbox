@@ -9,7 +9,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, "..");
 const wasmPath = path.join(root, "native_modules", "combined", "soemdsp_combined.wasm");
 const goldenPath = path.join(__dirname, "goldens", "stereo_route_regression.json");
-const { instance } = await WebAssembly.instantiate(fs.readFileSync(wasmPath), {});
+const { instance } = await WebAssembly.instantiate(fs.readFileSync(wasmPath), { env: { emo_process_block: () => 0 } });
 const e = instance.exports;
 const mem = e.memory;
 

@@ -8,7 +8,7 @@ import { fileURLToPath } from "url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.join(__dirname, "..");
-const e = (await WebAssembly.instantiate(fs.readFileSync(path.join(root, "native_modules/sabrina_reverb/sabrina_reverb.wasm")), {})).instance.exports;
+const e = (await WebAssembly.instantiate(fs.readFileSync(path.join(root, "native_modules/sabrina_reverb/sabrina_reverb.wasm")), { env: { emo_process_block: () => 0 } })).instance.exports;
 const sr = 44100, frames = 128, N = 14;
 // Defaults (so a fresh instance has no smoothing glide), with seed 7.
 // Cinematic Reverb units: ms, ms, depth fraction, Hz, ms (Cinematic defaults).

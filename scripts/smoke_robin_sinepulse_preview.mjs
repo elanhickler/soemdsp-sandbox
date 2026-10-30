@@ -11,7 +11,7 @@ import { fileURLToPath } from "url";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, "..");
 const wasm = fs.readFileSync(path.join(root, "native_modules", "robin_sinepulse", "robin_sinepulse.wasm"));
-const { instance } = await WebAssembly.instantiate(wasm, {});
+const { instance } = await WebAssembly.instantiate(wasm, { env: { emo_process_block: () => 0 } });
 const e = instance.exports;
 const ver = e.soemdsp_robin_sinepulse_version();
 if (ver < 14) throw new Error(`robin_sinepulse version ${ver} < 14`);

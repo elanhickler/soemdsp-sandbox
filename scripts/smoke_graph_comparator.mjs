@@ -13,7 +13,7 @@ const bytes = fs.readFileSync(wasmPath);
 const rsp = fs.readFileSync(rspPath, "utf8");
 const exportNames = [...rsp.matchAll(/--export=([^\s]+)/g)].map((m) => m[1]);
 
-const { instance } = await WebAssembly.instantiate(bytes, {});
+const { instance } = await WebAssembly.instantiate(bytes, { env: { emo_process_block: () => 0 } });
 const e = instance.exports;
 const mem = e.memory;
 if (!mem) throw new Error("wasm memory export missing");

@@ -12,7 +12,7 @@ import { fileURLToPath } from "url";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const { instance } = await WebAssembly.instantiate(
-  fs.readFileSync(path.join(root, "native_modules", "combined", "soemdsp_combined.wasm")), {});
+  fs.readFileSync(path.join(root, "native_modules", "combined", "soemdsp_combined.wasm")), { env: { emo_process_block: () => 0 } });
 const e = instance.exports;
 const must = (n) => { if (typeof e[n] !== "function") throw new Error(`missing export ${n}`); return e[n]; };
 const create = must("soemdsp_graph_create"), destroy = must("soemdsp_graph_destroy");

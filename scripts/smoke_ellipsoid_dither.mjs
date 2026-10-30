@@ -17,7 +17,7 @@ const ellipsoidPath = path.join(root, "native_modules", "ellipsoid", "ellipsoid.
 const refPath = process.argv[2] || "";
 
 async function load(p) {
-  const { instance } = await WebAssembly.instantiate(fs.readFileSync(p), {});
+  const { instance } = await WebAssembly.instantiate(fs.readFileSync(p), { env: { emo_process_block: () => 0 } });
   return instance.exports;
 }
 function must(e, name) {

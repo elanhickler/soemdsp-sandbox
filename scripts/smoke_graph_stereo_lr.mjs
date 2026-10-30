@@ -13,7 +13,7 @@ import { fileURLToPath } from "url";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, "..");
 const wasmPath = path.join(root, "native_modules", "combined", "soemdsp_combined.wasm");
-const { instance } = await WebAssembly.instantiate(fs.readFileSync(wasmPath), {});
+const { instance } = await WebAssembly.instantiate(fs.readFileSync(wasmPath), { env: { emo_process_block: () => 0 } });
 const e = instance.exports;
 const mem = e.memory;
 function must(name) {

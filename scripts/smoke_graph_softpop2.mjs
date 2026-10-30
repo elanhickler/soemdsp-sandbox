@@ -5,7 +5,7 @@ import { fileURLToPath } from "url";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const wasm = fs.readFileSync(path.join(root, "native_modules", "combined", "soemdsp_combined.wasm"));
-const { instance } = await WebAssembly.instantiate(wasm, {});
+const { instance } = await WebAssembly.instantiate(wasm, { env: { emo_process_block: () => 0 } });
 const e = instance.exports;
 const must = (n) => { if (typeof e[n] !== "function") throw new Error(`missing export ${n}`); return e[n]; };
 

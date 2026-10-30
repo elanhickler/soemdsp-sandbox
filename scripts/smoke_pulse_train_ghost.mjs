@@ -21,7 +21,7 @@ const check = (label, ok, detail = "") => {
 };
 
 // 1. Engine.
-const W = (await WebAssembly.instantiate(fs.readFileSync(path.join(root, "native_modules/pulse_train/pulse_train.wasm")), {})).instance.exports;
+const W = (await WebAssembly.instantiate(fs.readFileSync(path.join(root, "native_modules/pulse_train/pulse_train.wasm")), { env: { emo_process_block: () => 0 } })).instance.exports;
 const SR = 48000;
 const h = W.soemdsp_pulse_train_create();
 const oldP = [6, 0.5, 2, 1, 0.2, 0, 1];

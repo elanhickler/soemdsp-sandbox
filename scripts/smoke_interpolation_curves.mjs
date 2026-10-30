@@ -5,7 +5,7 @@
 import fs from "fs"; import path from "path"; import { fileURLToPath } from "url"; import crypto from "crypto";
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const old = process.argv[2];
-async function load(f) { return (await WebAssembly.instantiate(fs.readFileSync(f), {})).instance.exports; }
+async function load(f) { return (await WebAssembly.instantiate(fs.readFileSync(f), { env: { emo_process_block: () => 0 } })).instance.exports; }
 function shRun(e, mode, smooth) { const h = e.soemdsp_sample_hold_create(); const o = new Float64Array(6000);
   let c = 0; for (let i = 0; i < 6000; i++) { const clk = (i % 173) < 9 ? 1 : 0; o[i] = e.soemdsp_sample_hold_sample(h, Math.sin(i * 0.37) * 0.9, clk, 0, i < 3000 ? 0 : 301, 48000, i < 4500 ? 1 : 0, 7, 0.8, 0, mode, 0.25, smooth); }
   e.soemdsp_sample_hold_destroy(h); return o; }

@@ -6,7 +6,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const { instance } = await WebAssembly.instantiate(
-  fs.readFileSync(path.join(root, "native_modules/combined/soemdsp_combined.wasm")), {});
+  fs.readFileSync(path.join(root, "native_modules/combined/soemdsp_combined.wasm")), { env: { emo_process_block: () => 0 } });
 const e = instance.exports;
 const N = e.soemdsp_graph_max_block_frames() | 0;
 if (N !== 128) throw new Error(`max_block_frames=${N}, expected 128`);

@@ -14,7 +14,7 @@ const wasmPath = path.join(
 );
 
 const buf = fs.readFileSync(wasmPath);
-const { instance } = await WebAssembly.instantiate(buf, {});
+const { instance } = await WebAssembly.instantiate(buf, { env: { emo_process_block: () => 0 } });
 const e = instance.exports;
 
 const ver = e.soemdsp_ping_pong_delay_version();

@@ -10,7 +10,7 @@ import { fileURLToPath } from "url";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const wasm = fs.readFileSync(path.join(root, "native_modules", "combined", "soemdsp_combined.wasm"));
-const { instance } = await WebAssembly.instantiate(wasm, {});
+const { instance } = await WebAssembly.instantiate(wasm, { env: { emo_process_block: () => 0 } });
 const e = instance.exports;
 const ver = e.soemdsp_graph_version() | 0;
 if (ver < 182) throw new Error(`graph version ${ver} < 182 (no SinCos Polarity in this WASM)`);

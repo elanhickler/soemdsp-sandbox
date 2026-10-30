@@ -14,7 +14,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.join(__dirname, "..");
 const rel = "native_modules/sabrina_reverb/sabrina_reverb.wasm";
 const REF_COMMIT = "c4f6a9f8";
-const load = async (bytes) => (await WebAssembly.instantiate(bytes, {})).instance.exports;
+const load = async (bytes) => (await WebAssembly.instantiate(bytes, { env: { emo_process_block: () => 0 } })).instance.exports;
 const cur = await load(fs.readFileSync(path.join(root, rel)));
 const sr = 44100, frames = 128, blocks = Math.ceil((sr * 3) / frames);
 let failed = false;

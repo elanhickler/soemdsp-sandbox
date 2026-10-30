@@ -7,7 +7,7 @@ import { fileURLToPath } from "url";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, "..");
 const wasm = path.join(root, "native_modules", "combined", "soemdsp_combined.wasm");
-const { instance } = await WebAssembly.instantiate(fs.readFileSync(wasm), {});
+const { instance } = await WebAssembly.instantiate(fs.readFileSync(wasm), { env: { emo_process_block: () => 0 } });
 const e = instance.exports;
 const mem = e.memory;
 

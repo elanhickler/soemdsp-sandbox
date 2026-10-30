@@ -4,7 +4,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const { instance } = await WebAssembly.instantiate(fs.readFileSync(path.join(root, "native_modules", "clock", "clock.wasm")), {});
+const { instance } = await WebAssembly.instantiate(fs.readFileSync(path.join(root, "native_modules", "clock", "clock.wasm")), { env: { emo_process_block: () => 0 } });
 const e = instance.exports;
 let fails = 0;
 function gate(ok, msg) { if (!ok) { fails++; console.log("FAIL", msg); } }

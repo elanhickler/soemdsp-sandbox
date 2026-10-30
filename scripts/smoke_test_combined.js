@@ -27,7 +27,7 @@ const expected = fs
 
 (async () => {
   const bytes = fs.readFileSync(wasmPath);
-  const { instance } = await WebAssembly.instantiate(bytes, {});
+  const { instance } = await WebAssembly.instantiate(bytes, { env: { emo_process_block: () => 0 } });
   const exportsObj = instance.exports;
 
   const missing = expected.filter((name) => !(name in exportsObj));

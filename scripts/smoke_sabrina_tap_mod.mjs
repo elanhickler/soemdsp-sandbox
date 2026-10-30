@@ -14,7 +14,7 @@ import { fileURLToPath } from "url";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.join(__dirname, "..");
 const rel = "native_modules/sabrina_reverb/sabrina_reverb.wasm";
-const load = async (bytes) => (await WebAssembly.instantiate(bytes, {})).instance.exports;
+const load = async (bytes) => (await WebAssembly.instantiate(bytes, { env: { emo_process_block: () => 0 } })).instance.exports;
 const cur = await load(fs.readFileSync(path.join(root, rel)));
 
 // Same LFO settings as the old 0.83 / 0.001 knobs, in the current mappings
