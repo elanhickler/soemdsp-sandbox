@@ -268,7 +268,9 @@
     }
     void main() {
       vec2 segment = vEnd - vStart;
+      // Blur²: the low end changes the look most, so give it more of the knob.
       float soft = clamp(uBlur, 0.0, 1.0);
+      soft *= soft;
       float R = max(uRadius, 0.5);
       float segmentLengthSquared = dot(segment, segment);
       float t = segmentLengthSquared > 0.000001
@@ -341,7 +343,9 @@
       return 1.0 - t * t * t * (t * (t * 6.0 - 15.0) + 10.0);
     }
     void main() {
+      // Blur² (same curve as the ribbon).
       float soft = clamp(vBlur, 0.0, 1.0);
+      soft *= soft;
       float R = max(vRadius, 0.5);
       float r = length(vOffset);
       vec4 stamp = texture2D(uStamp, vUv);
@@ -1116,7 +1120,7 @@
     if (brightness < 1e-6) {
       return 0;
     }
-    // Blur 0 hard … 1 full soft gaussian.
+    // Blur 0 hard … 1 smootherstep dome (squared in the shader).
     const blur = Math.max(0, Math.min(1, nodeGraphFiniteNumber(options.blur)));
     const { gl } = renderer;
 
