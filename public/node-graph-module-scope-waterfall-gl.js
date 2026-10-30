@@ -460,7 +460,20 @@ function nodeGraphOnsetGlEnsureLine(s) {
 
 // clipX0 (optional, canvas px): draw only at x >= clipX0 (scissor), to repaint
 // the part of an earlier segment that a strip clear erased.
-function nodeGraphOnsetGlStrokePolyline(canvas, points, widthPx, rgb, clipX0 = null) {
+// blend: the waterfall's Blend for this layer. Fixed-function forms of the
+// premultiplied modes (the line writes premultiplied coverage); difference /
+// exclusion / xor need the destination in a shader, so a line draws them as
+// plain over.
+function nodeGraphOnsetGlStrokeBlend(gl, blend) {
+  const m = String(blend || "source-over");
+  if (m === "lighter" || m === "combine" || m === "meet") gl.blendFunc(gl.ONE, gl.ONE);
+  else if (m === "screen") gl.blendFunc(gl.ONE_MINUS_DST_COLOR, gl.ONE);
+  // d * (c * a + 1 - a): multiply inside, untouched where coverage is 0.
+  else if (m === "multiply") gl.blendFunc(gl.DST_COLOR, gl.ONE_MINUS_SRC_ALPHA);
+  else gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+}
+
+function nodeGraphOnsetGlStrokePolyline(canvas, points, widthPx, rgb, clipX0 = null, blend = "source-over") {
   const s = canvas && canvas._wfGlSession;
   if (!s || !points || points.length < 2) return false;
   nodeGraphOnsetGlEnsureLine(s);
@@ -508,7 +521,7 @@ function nodeGraphOnsetGlStrokePolyline(canvas, points, widthPx, rgb, clipX0 = n
   gl.viewport(0, 0, s.w, s.h);
   gl.enable(gl.BLEND);
   // Premultiplied coverage, same blend as the filled bars.
-  gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+  nodeGraphOnsetGlStrokeBlend(gl, blend);
   gl.useProgram(s.lineProg);
   gl.uniform2f(s.lineLoc.css, s.w, s.h);
   gl.bindBuffer(gl.ARRAY_BUFFER, s.lineBuf);

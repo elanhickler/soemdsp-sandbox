@@ -1172,7 +1172,7 @@ function nodeGraphWaterfallStrokeReach(canvas, settings) {
  * only there, so finished history is never inked twice. cols: [{ x, ys }]
  * in x order (ys null = no signal, which breaks the line).
  */
-function nodeGraphWaterfallStrokeWaveRun(canvas, bag, key, cols, settings, strokeColor, clipX0) {
+function nodeGraphWaterfallStrokeWaveRun(canvas, bag, key, cols, settings, strokeColor, clipX0, blend = "source-over") {
   if (!bag.strokePts) bag.strokePts = Object.create(null);
   const { strokePx, reach } = nodeGraphWaterfallStrokeReach(canvas, settings);
   // Clamp to the panel so values past the top / bottom (Sidechain gain > 2x
@@ -1183,7 +1183,7 @@ function nodeGraphWaterfallStrokeWaveRun(canvas, bag, key, cols, settings, strok
   const rgb = nodeGraphWaterfallStrokeRgb(settings, strokeColor);
   const draw = (pts) => {
     if (pts.length > 1 && typeof nodeGraphOnsetGlStrokePolyline === "function") {
-      nodeGraphOnsetGlStrokePolyline(canvas, pts, strokePx, rgb, clipX0);
+      nodeGraphOnsetGlStrokePolyline(canvas, pts, strokePx, rgb, clipX0, blend);
     }
   };
   const kept = Array.isArray(bag.strokePts[key]) ? bag.strokePts[key] : [];
@@ -1961,10 +1961,13 @@ function nodeGraphWaterfallSmoothAdvance(destCtx, destCanvas, spec, options) {
   }
   if (useStroke) {
     // Channel order = z order: the first channel (L) first, later ones (R) on top.
-    for (const key of Object.keys(strokeCols)) {
+    // Blend applies to the later layers, as with the fills (the first channel
+    // lays down over the plate; multiply also applies to it).
+    Object.keys(strokeCols).forEach((key, i) => {
       // Draw the waveform (both peaks + last sample), not a one-sided edge.
-      nodeGraphWaterfallStrokeWaveRun(destCanvas, bag, key, strokeCols[key].cols, settings, strokeCols[key].color, clipX0);
-    }
+      const layer = (i === 0 && stampComposite !== "multiply") ? "source-over" : stampComposite;
+      nodeGraphWaterfallStrokeWaveRun(destCanvas, bag, key, strokeCols[key].cols, settings, strokeCols[key].color, clipX0, layer);
+    });
     const { reach } = nodeGraphWaterfallStrokeReach(destCanvas, settings);
     bag.recentCols = redo.concat(recent).filter((c) => c.x >= width - reach - 1);
     bag.recentW = width;
