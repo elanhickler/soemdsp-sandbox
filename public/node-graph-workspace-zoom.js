@@ -244,11 +244,19 @@ function nodeGraphModuleBoundsUnion(nodes) {
   let right = -Infinity;
   let bottom = -Infinity;
   let count = 0;
-  for (const node of nodes || []) {
-    if (!node || typeof nodeGraphNodeBounds !== "function") {
+  // Culled (off-screen) modules are display:none and measure 0x0, which is
+  // exactly when centring needs them. Wake them for one shared reflow.
+  const list = Array.from(nodes || []);
+  const asleep = list.filter((node) => node?.classList?.contains("viewport-asleep"));
+  for (const node of asleep) node.classList.remove("viewport-asleep");
+  const bounds = list.map((node) => (
+    node && typeof nodeGraphNodeBounds === "function" ? nodeGraphNodeBounds(node) : null
+  ));
+  for (const node of asleep) node.classList.add("viewport-asleep");
+  for (const b of bounds) {
+    if (!b) {
       continue;
     }
-    const b = nodeGraphNodeBounds(node);
     if (b.right - b.left <= 0 || b.bottom - b.top <= 0) {
       continue;
     }
