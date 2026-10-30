@@ -143,9 +143,9 @@ void main() {
   float env = max(vEnv, 0.0);
   float a;
   if (uBipolar > 0.5) {
-    float half = 0.5 * env;
-    float lo = 0.5 - half;
-    float hi = 0.5 + half;
+    float halfSpan = 0.5 * env; // "half" is a reserved word in GLSL ES 3.0
+    float lo = 0.5 - halfSpan;
+    float hi = 0.5 + halfSpan;
     a = smoother(lo, lo + fe, vY) * (1.0 - smoother(hi, hi + fe, vY));
   } else {
     a = smoother(0.0, fe, vY) * (1.0 - smoother(env, env + fe, vY));
@@ -263,7 +263,7 @@ function nodeGraphRobinSinepulseGlEnsure(canvas) {
   if (!gl || typeof SoemGl === "undefined") {
     return null;
   }
-  const program = SoemGl.link(gl, NODE_GRAPH_SINEPULSE_CURVE_VS, NODE_GRAPH_SINEPULSE_CURVE_FS, "robin-sinepulse-display.js:view-3");
+  const program = SoemGl.link(gl, NODE_GRAPH_SINEPULSE_CURVE_VS, NODE_GRAPH_SINEPULSE_CURVE_FS, "robin-sinepulse-display.js:view-4");
   const specProgram = SoemGl.link(gl, SoemGl.GLSL_FULLSCREEN_VS, NODE_GRAPH_SINEPULSE_SPEC_FS, "robin-sinepulse-display.js:spec-view-5");
   if (!program) {
     nodeGraphRobinSinepulseGlStates.set(canvas, { failed: true });
