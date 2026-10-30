@@ -93,6 +93,15 @@ const drag = async (x, y, dx, dy) => {
 };
 
 const choiceLabel = (id, key) => page.evaluate(({ id, key }) => String(nodeSliderChoiceLabel(nodeGraphModuleFaceInput(document.querySelector(`article[data-node="${id}"]`), key))), { id, key });
+// undoNodeGraphPatch applies two animation frames later (after the button glow).
+// Wait until the history index moves, or the undo can land on the next module's first click.
+const undo = () => page.evaluate(() => new Promise((resolve) => {
+  const before = nodeGraphMvp.historyIndex;
+  undoNodeGraphPatch();
+  const t0 = performance.now();
+  const poll = () => (nodeGraphMvp.historyIndex !== before || performance.now() - t0 > 5000 ? resolve() : setTimeout(poll, 10));
+  poll();
+}));
 const click = async (wd) => { await page.mouse.click(wd.x + wd.w / 2, wd.y); await page.waitForTimeout(500); };
 for (let i = 0; i < TYPES.length; i += 1) {
   const id = `m-${i}`;
@@ -128,7 +137,7 @@ for (let i = 0; i < TYPES.length; i += 1) {
     await drag(sw.x + sw.w * from, sw.y, sw.w * (to - from), 0);
     const l1 = await choiceLabel(id, k0);
     check(`${TYPES[i]}: switch ${k0} drag changes choice`, l1 !== l0 && l1 !== "", `${l0} -> ${l1}`);
-    await page.evaluate(() => undoNodeGraphPatch());
+    await undo();
     await page.waitForFunction(({ id, k0, l0 }) => String(nodeSliderChoiceLabel(nodeGraphModuleFaceInput(document.querySelector(`article[data-node="${id}"]`), k0))) === l0, { id, k0, l0 }, { timeout: 5000 }).catch(() => {});
     check(`${TYPES[i]}: undo restores ${k0}`, (await choiceLabel(id, k0)) === l0, await choiceLabel(id, k0));
   }
@@ -142,7 +151,7 @@ for (let i = 0; i < TYPES.length; i += 1) {
   check(`${TYPES[i]}: dragging ${key} ${atMax ? "down lowers" : "up raises"} it`, atMax ? c1 < c0 : c1 > c0, `${c0} -> ${c1}`);
   const step = await page.evaluate(({ t, key }) => Number(nodeGraphModuleDefinitions[t].parameters.find((p) => p.key === key).step), { t: TYPES[i], key });
   if (step >= 1) check(`${TYPES[i]}: ${key} stays whole`, Number.isInteger(c1), c1);
-  await page.evaluate(() => undoNodeGraphPatch());
+  await undo();
   await page.waitForFunction(({ id, key, c0 }) => Math.abs(Number(nodeGraphMvp.patch.nodes.find((n) => n.id === id).params[key]) - c0) < 1e-6, { id, key, c0 }, { timeout: 5000 }).catch(() => {});
   check(`${TYPES[i]}: undo restores ${key}`, Math.abs((await val(id, key)) - c0) < 1e-6, await val(id, key));
 }

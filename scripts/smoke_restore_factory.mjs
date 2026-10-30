@@ -28,7 +28,8 @@ function loadApp() {
     localStorage: { getItem: () => null, setItem() {}, removeItem() {} },
     sessionStorage: { getItem: () => null, setItem() {}, removeItem() {} },
     location: { search: "", href: "", pathname: "/", hostname: "localhost" },
-    addEventListener() {}, removeEventListener() {}, dispatchEvent() { return true; }, CustomEvent: class CustomEvent {}, Event: class Event {}, matchMedia: () => ({ matches: false, addEventListener() {} }),
+    addEventListener() {}, removeEventListener() {}, dispatchEvent() { return true; }, CustomEvent: class CustomEvent {}, Event: class Event {},
+    Document: class Document {}, DocumentFragment: class DocumentFragment {}, Element: class Element {}, HTMLElement: class HTMLElement {}, matchMedia: () => ({ matches: false, addEventListener() {} }),
     fetch: () => Promise.reject(new Error("no fetch in smoke")),
   };
   ctx.window = ctx; ctx.self = ctx; ctx.globalThis = ctx;

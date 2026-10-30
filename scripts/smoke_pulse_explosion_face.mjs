@@ -146,6 +146,7 @@ const geom = () => page.evaluate((s) => {
     times: Array.from(sch.times),
     sparkX: Array.from(sch.xs), sparkY: Array.from(sch.ys),
     end: sch.end, spread: sch.spread, x0: sch.x0, y0: sch.y0,
+    dotR: look.dotThickness / 2,
   };
 }, sel);
 // Brightest pixel in a column band, rows y0..y1 (CSS px scaled to image px).
@@ -187,7 +188,7 @@ const gb = await geom();
 gate(JSON.stringify(gb.times) !== JSON.stringify(ga.times), "a new Seed moves the sparks");
 if (shot) await page.screenshot({ clip: await faceClip(), path: shot });
 
-await setParams({ numberOfPulses: 6, spread: 0.6, seed: 0 });
+await setParams({ numberOfPulses: 6, spread: 1, seed: 0 }); // full spread: sparks far enough apart to judge each dot
 await page.evaluate(() => {
   window.__peOrig = {
     mvpLive: window.nodeGraphMvp.live,
@@ -218,7 +219,16 @@ const dist = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
 const sx = img.w / G.cw, sy = img.h / G.ch;
 const dotAt = (x, y) => px(img, x * sx, y * sy);
 const fired = G.times.map((t) => t <= 0.4);
-gate(G.xs.every((x, i) => (fired[i] ? dist(dotAt(x, G.ys[i]), litC) < dist(dotAt(x, G.ys[i]), dotC) : dist(dotAt(x, G.ys[i]), dotC) < dist(dotAt(x, G.ys[i]), litC))), `sparks at or before 0.4 s are Lit (${fired.map((f) => (f ? "L" : "d")).join("")})`);
+// A spark whose dot touches a spark of the other state can be painted over by it
+// (draw order), so only sparks clear of the other state are judged.
+const clear = G.xs.map((x, i) => G.xs.every((x2, j) => j === i || fired[j] === fired[i]
+  || Math.hypot(x - x2, G.ys[i] - G.ys[j]) > 2 * G.dotR + 1));
+const judged = G.xs.map((x, i) => i).filter((i) => clear[i]);
+// The lit / unlit rule itself is the "xy face lights sparks" unit check above.
+gate(judged.length > 0 && judged.every((i) => {
+  const c = dotAt(G.xs[i], G.ys[i]);
+  return fired[i] ? dist(c, litC) < dist(c, dotC) : dist(c, dotC) < dist(c, litC);
+}), `sparks at or before 0.4 s are Lit (${fired.map((f, i) => (clear[i] ? (f ? "L" : "d") : "-")).join("")})`);
 if (shot) await page.screenshot({ clip: await faceClip(), path: shot.replace(/\.png$/, "-playing.png") });
 
 // 5) Display Settings colors: Background HBS repaints the face.

@@ -34,6 +34,15 @@ const launch = { headless: true, channel: "chrome" }; // system Chrome: the bund
 if (process.env.CHROME_PATH) { delete launch.channel; launch.executablePath = process.env.CHROME_PATH; }
 const browser = await chromium.launch(launch);
 const page = await (await browser.newContext({ viewport: { width: 1200, height: 1000 } })).newPage();
+// undoNodeGraphPatch applies two animation frames later (after the button glow).
+// Wait until the history index moves, or the undo can land on a later click.
+const undo = () => page.evaluate(() => new Promise((resolve) => {
+  const before = nodeGraphMvp.historyIndex;
+  undoNodeGraphPatch();
+  const t0 = performance.now();
+  const poll = () => (nodeGraphMvp.historyIndex !== before || performance.now() - t0 > 5000 ? resolve() : setTimeout(poll, 10));
+  poll();
+}));
 const errors = [];
 page.on("pageerror", (e) => errors.push(String(e.message || e)));
 await page.route("**/span-smoke.json*", (r) => r.fulfill({ status: 200, contentType: "application/json", body: patchJson() }));
@@ -94,7 +103,7 @@ let v0 = await vals();
 await drag(v0.c, 25);
 let v1 = await vals();
 check("Center handle moves Center alone", v1.c > v0.c + 0.3 && near(v1.s, v0.s) && near(v1.e, v0.e), `${JSON.stringify(v0)} -> ${JSON.stringify(v1)}`);
-await page.evaluate(() => undoNodeGraphPatch());
+await undo();
 await page.waitForTimeout(400);
 const vu = await vals();
 check("undo restores Center", near(vu.c, v0.c), JSON.stringify(vu));

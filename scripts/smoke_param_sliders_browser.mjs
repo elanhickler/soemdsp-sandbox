@@ -13,6 +13,15 @@ const NODE = "polyBlep-1";
 const fail = [];
 const b = await chromium.launch({ channel: "chrome", headless: !process.env.HEADED, args: ["--ignore-gpu-blocklist"] });
 const page = await (await b.newContext({ viewport: { width: 1400, height: 900 }, deviceScaleFactor: 1, hasTouch: true })).newPage();
+// undoNodeGraphPatch applies two animation frames later (after the button glow).
+// Wait until the history index moves, or the undo can land on a later click.
+const undo = () => page.evaluate(() => new Promise((resolve) => {
+  const before = nodeGraphMvp.historyIndex;
+  undoNodeGraphPatch();
+  const t0 = performance.now();
+  const poll = () => (nodeGraphMvp.historyIndex !== before || performance.now() - t0 > 5000 ? resolve() : setTimeout(poll, 10));
+  poll();
+}));
 page.on("pageerror", (e) => console.log("pageerror:", e.message.slice(0, 200)));
 await page.route("**/paramsliders.json*", (r) => r.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(fixture) }));
 await page.goto(`${BASE}?pagePatch=paramsliders`, { waitUntil: "domcontentloaded", timeout: 120000 });
@@ -100,7 +109,7 @@ console.log("module write", target, JSON.stringify(s2));
 if (Math.abs(Number(s2.shown) - target) > 1e-6) fail.push("page did not follow module write");
 
 // 3. Undo flows back to the page.
-await page.evaluate(() => undoNodeGraphPatch());
+await undo();
 await page.waitForTimeout(500);
 const s3 = (await state()).rows[idx];
 console.log("undo", JSON.stringify(s3));

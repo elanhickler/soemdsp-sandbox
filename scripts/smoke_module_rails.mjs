@@ -233,8 +233,9 @@ for (const zoom of [0.75, 1, 1.5]) {
       wire: end ? [end.x - plate.x, end.y - (plate.y + lb.y + lb.h / 2)] : null };
   });
   check(`zoom ${zoom}: wire ends on the box's open side, on the border's outer edge, centred`, geo.wire && Math.abs(geo.wire[0] + 1) < 0.01 && Math.abs(geo.wire[1]) < 0.01, JSON.stringify(geo.wire));
-  check(`zoom ${zoom}: param wire is thin with a tiny end dot on the box, jack wires keep their width`, geo.param?.param && geo.param.dot && geo.param.thick === 0.5 && Math.abs(geo.param.dotSize - 0.267) < 0.01 && geo.param.jack === 2, JSON.stringify(geo.param));
-  check(`zoom ${zoom}: param wire crossfades from the outlet colour to the mod inlet colour (purple)`, geo.param?.to && geo.param.to.slice(0, 3).join() === "177,132,255" && geo.param.from.slice(0, 3).join() !== "177,132,255", JSON.stringify(geo.param));
+  check(`zoom ${zoom}: param wire is thin with the default end dot (--node-param-wire-dot-size) on the box, jack wires keep their width`, geo.param?.param && geo.param.dot && geo.param.thick === 0.5 && Math.abs(geo.param.dotSize - 2.012454) < 0.01 && geo.param.jack === 2, JSON.stringify(geo.param));
+  // Solid-colour wires (9516bb94): a param wire is the mod inlet's colour end to end, no crossfade.
+  check(`zoom ${zoom}: param wire is solid in the mod inlet colour (purple)`, geo.param && !geo.param.to && geo.param.from.slice(0, 3).join() === "177,132,255", JSON.stringify(geo.param));
   check(`zoom ${zoom}: one IO box per rail, left and right`, geo.pins.length === 2 && geo.pins.includes(-1) && geo.pins.includes(1), JSON.stringify(geo.pins));
   const bh = Math.min(geo.inL[3] - geo.inL[1], 16 * geo.z);
   const cy = (geo.inL[1] + geo.inL[3]) / 2;
@@ -319,7 +320,8 @@ const cmp = await page.evaluate(() => {
   const ins = [...el.querySelectorAll(".node-io-row.input")];
   const outs = [...el.querySelectorAll(".node-io-row.output")];
   const labels = [...el.querySelectorAll(".node-io-label")].map((l) => l.textContent);
-  const maxLabelW = Math.max(...[...el.querySelectorAll(".node-io-label")].map((l) => l.scrollWidth));
+  // Widest overflow of any IO label past its own box (0 = every label fits).
+  const maxLabelW = Math.max(...[...el.querySelectorAll(".node-io-label")].map((l) => l.scrollWidth - l.clientWidth));
   return {
     layout: el.dataset.faceLayout,
     inletOutlet: el.classList.contains("chrome-layout-inlet-outlet"),
@@ -337,7 +339,7 @@ check("comparator resolves to railsOnly", cmp.layout === "railsOnly", cmp.layout
 check("comparator: title bar + IO only", cmp.inletOutlet && cmp.header && cmp.params === 0 && cmp.canvases === 0, JSON.stringify(cmp));
 check("comparator: inputs left, outputs right", cmp.inLeft);
 check("comparator: short labels", cmp.labels.every((l) => l.length <= 6), cmp.labels.join(","));
-check("comparator: labels fit the rail width", cmp.maxLabelW <= RAIL * z + 0.5, cmp.maxLabelW);
+check("comparator: labels fit their column (no overflow)", cmp.maxLabelW <= 0.5, cmp.maxLabelW);
 await shot("comparator", 'article[data-node="cmp-1"]');
 
 // No hover text on modules, rails or ports.

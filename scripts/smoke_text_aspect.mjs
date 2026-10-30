@@ -65,7 +65,16 @@ const load = (list, open, far = FAR) => page.evaluate(({ list, open, base, far }
   }));
   commitNodeGraphPatch(loadNodeGraphPatchFromObject(patch), { status: "aspect smoke" });
   if (typeof setNodeGraphZoom === "function") setNodeGraphZoom(0.62);
-  nodeGraphCenterViewOnModules({ preferSelection: false });
+  // Centre on the test modules only: centring on every module also counts the
+  // base patch's Output near the origin, which leaves the far modules off screen.
+  const mods = [...document.querySelectorAll('article.dsp-node[data-node^="m-"]')];
+  const b = typeof nodeGraphModuleBoundsUnion === "function" ? nodeGraphModuleBoundsUnion(mods) : null;
+  if (b) {
+    const z = nodeGraphZoom();
+    setNodeGraphPan(-((b.left + b.right) / 2) * z, -((b.top + b.bottom) / 2) * z, { immediate: true });
+  } else {
+    nodeGraphCenterViewOnModules({ preferSelection: false });
+  }
 }, { list, open, base, far });
 const measure = async () => {
   await page.evaluate(() => nodeGraphGlLinesTextAspectStats(true));

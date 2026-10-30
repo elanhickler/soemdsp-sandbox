@@ -38,6 +38,15 @@ const launch = { headless: true, channel: "chrome" }; // system Chrome: the bund
 if (process.env.CHROME_PATH) { delete launch.channel; launch.executablePath = process.env.CHROME_PATH; }
 const browser = await chromium.launch(launch);
 const page = await (await browser.newContext({ viewport: { width: 2400, height: 2600 } })).newPage();
+// undoNodeGraphPatch applies two animation frames later (after the button glow).
+// Wait until the history index moves, or the undo can land on a later click.
+const undo = () => page.evaluate(() => new Promise((resolve) => {
+  const before = nodeGraphMvp.historyIndex;
+  undoNodeGraphPatch();
+  const t0 = performance.now();
+  const poll = () => (nodeGraphMvp.historyIndex !== before || performance.now() - t0 > 5000 ? resolve() : setTimeout(poll, 10));
+  poll();
+}));
 const errors = [];
 page.on("pageerror", (e) => errors.push(String(e.message || e)));
 await page.route("**/batch-smoke.json*", (r) => r.fulfill({ status: 200, contentType: "application/json", body: patchJson() }));
@@ -113,7 +122,7 @@ if (!Number.isFinite(den?.x + den?.y + den?.w)) console.log("den widget", JSON.s
 if (Number.isFinite(den?.x + den?.y + den?.w)) await drag(den.x + den.w / 2, den.y, 0, -30);
 const d1 = await val(`m-${tIdx}`, "timeDenominator");
 check("Metronome division: dragging the denominator up steps it", d1 > d0, `${d0} -> ${d1}`);
-await page.evaluate(() => undoNodeGraphPatch());
+await undo();
 await page.waitForTimeout(400);
 check("undo restores the denominator", (await val(`m-${tIdx}`, "timeDenominator")) === d0, await val(`m-${tIdx}`, "timeDenominator"));
 check("no page errors", errors.length === 0, errors.slice(0, 3).join(" | "));

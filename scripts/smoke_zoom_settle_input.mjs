@@ -82,6 +82,8 @@ check(settled.n > 3 && settled.worst <= 1.5, "settled HTML sits on the GL plates
 const targets = await page.evaluate(() => {
   const ws = document.getElementById("nodeGraphWorkspace").getBoundingClientRect();
   const inView = (r) => r.width > 4 && r.height > 4 && r.left > ws.left + 8 && r.top > ws.top + 8 && r.right < ws.right - 8 && r.bottom < ws.bottom - 8;
+  // Drags only need their points on screen; at high zoom whole controls rarely fit.
+  const pointIn = (x, y) => x > ws.left + 8 && x < ws.right - 8 && y > ws.top + 8 && y < ws.bottom - 8;
   const nodes = [...document.querySelectorAll("#nodeGraphNodes > .dsp-node:not(.viewport-asleep)")];
   let title = null; let slider = null; let out = null; let inp = null;
   for (const n of nodes) {
@@ -91,7 +93,8 @@ const targets = await page.evaluate(() => {
     for (const ro of n.querySelectorAll(".node-parameter-row .node-slider-readout")) {
       const input = ro.closest("label")?.querySelector("input[type='range']");
       const r = ro.getBoundingClientRect();
-      if (slider || !input || !inView(r) || ro.closest(".node-seed-control")) continue;
+      if (slider || !input || r.width < 20 || ro.closest(".node-seed-control")) continue;
+      if (!pointIn(r.left + r.width * 0.3, r.top + r.height * 0.5) || !pointIn(r.left + r.width * 0.75, r.top + r.height * 0.5)) continue;
       input.dataset.zpProbe = "1";
       slider = { id: n.dataset.node, name: input.name || input.dataset.param || "", x0: r.left + r.width * 0.3, x1: r.left + r.width * 0.75, y: r.top + r.height * 0.5, value: input.value };
     }
@@ -106,7 +109,25 @@ const targets = await page.evaluate(() => {
     if (inp || !out || p.dataset.node === out.node || taken.has(`${p.dataset.node}:${p.dataset.port}`) || !inView(r)) continue;
     inp = { node: p.dataset.node, port: p.dataset.port, x: r.left + r.width / 2, y: r.top + r.height / 2 };
   }
-  return { title, slider, out, inp, conns: nodeGraphMvp.connections.length };
+  // Face modules draw their controls in GL (no DOM readout): use a face cell instead.
+  let cell = null;
+  for (const n of nodes) {
+    const face = n.querySelector(".node-face");
+    if (cell || !face || typeof nodeGraphModuleFaceWidgets !== "function") continue;
+    const fr = face.getBoundingClientRect();
+    const k = fr.width / Math.max(1, face.offsetWidth);
+    const spec = nodeGraphModuleFaceSpec(nodeGraphPatchNode(n.dataset.node)?.type, nodeGraphPatchNode(n.dataset.node));
+    for (const wd of nodeGraphModuleFaceWidgets(spec, face.offsetWidth, n)) {
+      if (wd.type !== "cell" || wd.horizontal || !wd.param) continue;
+      const r = { left: fr.left + wd.x * k, top: fr.top + wd.y * k, width: wd.w * k, height: wd.h * k };
+      r.right = r.left + r.width; r.bottom = r.top + r.height;
+      const cx = r.left + r.width / 2; const cy = r.top + r.height / 2;
+      if (!pointIn(cx, cy) || !pointIn(cx, cy - 40) || !pointIn(cx, cy + 40)) continue;
+      cell = { id: n.dataset.node, param: wd.param, x: r.left + r.width / 2, y: r.top + r.height / 2, value: Number(nodeGraphPatchNode(n.dataset.node)?.params?.[wd.param]) };
+      break;
+    }
+  }
+  return { title, slider, cell, out, inp, conns: nodeGraphMvp.connections.length };
 });
 
 const drag = async (x0, y0, x1, y1, steps = 12) => {
@@ -124,7 +145,50 @@ if (targets.slider) {
   await drag(targets.slider.x0, targets.slider.y, targets.slider.x1, targets.slider.y);
   const value = await page.evaluate(() => document.querySelector("input[data-zp-probe='1']")?.value);
   check(value !== targets.slider.value, "real mouse: drag a slider", `${targets.slider.id} ${targets.slider.value} -> ${value}`);
-} else check(false, "real mouse: no slider on screen");
+} else if (targets.cell) {
+  // Drag up and down from the cell's centre: one of the two moves the value off any end stop.
+  await drag(targets.cell.x, targets.cell.y, targets.cell.x, targets.cell.y - 40);
+  let value = await page.evaluate(({ id, param }) => Number(nodeGraphPatchNode(id)?.params?.[param]), targets.cell);
+  if (value === targets.cell.value) {
+    await drag(targets.cell.x, targets.cell.y, targets.cell.x, targets.cell.y + 40);
+    value = await page.evaluate(({ id, param }) => Number(nodeGraphPatchNode(id)?.params?.[param]), targets.cell);
+  }
+  check(value !== targets.cell.value, "real mouse: drag a face cell", `${targets.cell.id}.${targets.cell.param} ${targets.cell.value} -> ${value}`);
+} else {
+  // Nothing on screen at this framing: pan a face cell to the workspace centre, drag it, pan back.
+  const placed = await page.evaluate(() => {
+    const ws = document.getElementById("nodeGraphWorkspace").getBoundingClientRect();
+    for (const n of document.querySelectorAll("#nodeGraphNodes > .dsp-node")) {
+      const face = n.querySelector(".node-face");
+      const node = nodeGraphPatchNode(n.dataset.node);
+      if (!face || !node || n.classList.contains("viewport-asleep")) continue;
+      const wd = nodeGraphModuleFaceWidgets(nodeGraphModuleFaceSpec(node.type, node), face.offsetWidth, n)
+        .find((w) => w.type === "cell" && !w.horizontal && w.param);
+      if (!wd) continue;
+      const fr = face.getBoundingClientRect();
+      const k = fr.width / Math.max(1, face.offsetWidth);
+      const cx = fr.left + (wd.x + wd.w / 2) * k;
+      const cy = fr.top + (wd.y + wd.h / 2) * k;
+      const pan0 = { ...nodeGraphMvp.pan };
+      setNodeGraphPan(pan0.x + (ws.left + ws.width / 2 - cx), pan0.y + (ws.top + ws.height / 2 - cy), { immediate: true });
+      return { id: n.dataset.node, param: wd.param, x: ws.left + ws.width / 2, y: ws.top + ws.height / 2, value: Number(node.params?.[wd.param]), pan0 };
+    }
+    return null;
+  });
+  if (placed) {
+    await page.waitForTimeout(400);
+    const read = () => page.evaluate(({ id, param }) => Number(nodeGraphPatchNode(id)?.params?.[param]), placed);
+    await drag(placed.x, placed.y, placed.x, placed.y - 40);
+    let value = await read();
+    if (value === placed.value) {
+      await drag(placed.x, placed.y, placed.x, placed.y + 40);
+      value = await read();
+    }
+    check(value !== placed.value, "real mouse: drag a face cell", `${placed.id}.${placed.param} ${placed.value} -> ${value}`);
+    await page.evaluate((p) => setNodeGraphPan(p.x, p.y, { immediate: true }), placed.pan0);
+    await page.waitForTimeout(400);
+  } else check(false, "real mouse: no slider or face cell to drag");
+}
 
 if (targets.title) {
   await drag(targets.title.x, targets.title.y, targets.title.x + 90, targets.title.y + 60);

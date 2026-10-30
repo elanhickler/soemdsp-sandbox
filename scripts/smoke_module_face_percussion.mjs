@@ -38,6 +38,15 @@ const launch = { headless: true, channel: "chrome" }; // system Chrome: the bund
 if (process.env.CHROME_PATH) { delete launch.channel; launch.executablePath = process.env.CHROME_PATH; }
 const browser = await chromium.launch(launch);
 const page = await (await browser.newContext({ viewport: { width: 2400, height: 5200 } })).newPage();
+// undoNodeGraphPatch applies two animation frames later (after the button glow).
+// Wait until the history index moves, or the undo can land on a later click.
+const undo = () => page.evaluate(() => new Promise((resolve) => {
+  const before = nodeGraphMvp.historyIndex;
+  undoNodeGraphPatch();
+  const t0 = performance.now();
+  const poll = () => (nodeGraphMvp.historyIndex !== before || performance.now() - t0 > 5000 ? resolve() : setTimeout(poll, 10));
+  poll();
+}));
 const errors = [];
 page.on("pageerror", (e) => errors.push(String(e.message || e)));
 await page.route("**/batch-smoke.json*", (r) => r.fulfill({ status: 200, contentType: "application/json", body: patchJson() }));
@@ -72,7 +81,12 @@ for (let i = 0; i < TYPES.length; i += 1) {
   check(`${type}: every visible param placed exactly once`, !info.dup && !info.missingKeys?.length && !info.extra?.length, JSON.stringify(info));
 }
 
-const val = (id, key) => page.evaluate(({ id, key }) => Number(nodeGraphMvp.patch.nodes.find((n) => n.id === id).params[key]), { id, key });
+// Choice params with choiceKeys store a key ("tr808"); compare those by the slider's choice index.
+const val = (id, key) => page.evaluate(({ id, key }) => {
+  const raw = Number(nodeGraphMvp.patch.nodes.find((n) => n.id === id).params[key]);
+  if (Number.isFinite(raw)) return raw;
+  return Number(nodeGraphModuleFaceInput(document.querySelector(`article[data-node="${id}"]`), key)?.value);
+}, { id, key });
 const widgets = (id, type) => page.evaluate(({ id, type }) => {
   const el = document.querySelector(`article[data-node="${id}"]`);
   const face = el.querySelector(".node-face");
@@ -135,7 +149,7 @@ for (let i = 0; i < TYPES.length; i += 1) {
     await drag(sw.x + sw.w * from, sw.y, sw.w * (to - from), 0);
     const l1 = await choiceLabel(id, sw.key);
     check(`${TYPES[i]}: switch ${sw.key} drag changes choice`, l1 !== l0 && l1 !== "", `${l0} -> ${l1}`);
-    await page.evaluate(() => undoNodeGraphPatch());
+    await undo();
     await page.waitForFunction(({ id, key, l0 }) => String(nodeSliderChoiceLabel(nodeGraphModuleFaceInput(document.querySelector(`article[data-node="${id}"]`), key))) === l0, { id, key: sw.key, l0 }, { timeout: 5000 }).catch(() => {});
     check(`${TYPES[i]}: undo restores ${sw.key}`, (await choiceLabel(id, sw.key)) === l0, await choiceLabel(id, sw.key));
   }
@@ -169,7 +183,7 @@ if (mIdx >= 0) {
   await drag(tilt.x + tilt.w / 2, tilt.y, 0, 30);
   const t1 = await val(`m-${mIdx}`, "noiseTilt");
   check("Modal Snare Tilt: dragging down goes negative", t1 < t0 && t1 < 0, `${t0} -> ${t1}`);
-  await page.evaluate(() => undoNodeGraphPatch());
+  await undo();
   await page.waitForTimeout(400);
   check("undo restores Tilt", Math.abs((await val(`m-${mIdx}`, "noiseTilt")) - t0) < 1e-6, await val(`m-${mIdx}`, "noiseTilt"));
 }
