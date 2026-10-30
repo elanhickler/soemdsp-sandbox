@@ -18024,38 +18024,46 @@ body.node-slider-dragging * {
 }
 
 /* Generic slider = horizontal face cell (Pulse Train Amp): one line, label
-   left, value (+ unit) right, inset 6px like the face text. The GPU pass
+   left, value (+ unit) right, inset 6px like the face text. Rows too narrow
+   for that get .is-stacked and keep the two-line grid. The GPU pass
    (node-graph-gl-graph.js) draws the face-cell well and value fill behind it. */
-.node-slider-readout:not(.displays-choices) {
+.node-slider-readout:not(.displays-choices):not(.is-stacked) {
   grid-template-columns: minmax(0, 1fr) auto auto;
   grid-template-rows: minmax(0, 1fr);
   column-gap: 4px;
   padding-inline: 6px;
 }
 
-.node-slider-readout:not(.displays-choices) > .node-slider-readout-label {
+.node-slider-readout:not(.displays-choices):not(.is-stacked) > .node-slider-readout-label {
   grid-column: 1;
   grid-row: 1;
   align-self: center;
   text-align: left;
 }
 
-.node-slider-readout:not(.displays-choices) > .node-slider-readout-value {
+.node-slider-readout:not(.displays-choices):not(.is-stacked) > .node-slider-readout-value {
   grid-column: 2;
   grid-row: 1;
   align-self: center;
   text-align: right;
 }
 
-.node-slider-readout:not(.displays-choices) > .node-slider-readout-unit {
+.node-slider-readout:not(.displays-choices):not(.is-stacked) > .node-slider-readout-unit {
   grid-column: 3;
   grid-row: 1;
   min-width: 0;
   align-self: center;
 }
 
-.node-slider-readout:not(.displays-choices) > .node-slider-readout-unit.is-empty {
+.node-slider-readout:not(.displays-choices):not(.is-stacked) > .node-slider-readout-unit.is-empty {
   display: none;
+}
+
+/* Auto-stack (nodeSliderReadoutFitStack): when label + value + unit do not
+   fit on one line, the readout keeps the base two-line grid (label on top,
+   value + unit below) with the one-line inset. */
+.node-slider-readout.is-stacked:not(.displays-choices) {
+  padding-inline: 6px;
 }
 
 /* B-080: Choice divide/segment labels use the full track width before ellipsis.

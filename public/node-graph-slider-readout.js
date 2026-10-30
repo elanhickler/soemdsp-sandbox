@@ -430,6 +430,74 @@ function paintNodeSliderMirrorReadouts(slider) {
   }
 }
 
+// Auto-stack: a one-line readout (label left, value + unit right) that cannot
+// fit its text goes two-line (.is-stacked: label on top, value below). Slider
+// text is monospace, so the fit is a character count against the readout
+// width. Width and font sizes come from one ResizeObserver; value updates
+// only count characters and never read layout. The value side counts its
+// widest text so far (and the reserved digits), so dragging never flips it.
+const NODE_SLIDER_MONO_ADVANCE_EM = 0.6;
+const NODE_SLIDER_ONE_LINE_GAP_PX = 4; // one-line column-gap
+let nodeSliderReadoutFitObserver = null;
+let nodeSliderReadoutFitChromeFrame = 0;
+
+function nodeSliderReadoutFitMetrics(readout, width) {
+  const px = (el) => Number.parseFloat(el ? getComputedStyle(el).fontSize : "") || 0;
+  readout._stackFit = {
+    width,
+    labelPx: px(readout.querySelector(".node-slider-readout-label")),
+    valuePx: px(readout.querySelector(".node-slider-readout-value")),
+    unitPx: px(readout.querySelector(".node-slider-readout-unit")),
+  };
+}
+
+function nodeSliderReadoutFitObserve(readout) {
+  if (readout._stackFitObserved || typeof ResizeObserver !== "function") return;
+  readout._stackFitObserved = true;
+  nodeSliderReadoutFitObserver ||= new ResizeObserver((entries) => {
+    for (const entry of entries) {
+      const target = entry.target;
+      // Content box: both layouts share the 6px inline padding.
+      nodeSliderReadoutFitMetrics(target, entry.contentBoxSize?.[0]?.inlineSize ?? entry.contentRect.width);
+      nodeSliderReadoutFitStack(target, target._stackFitMaxDigits);
+    }
+  });
+  nodeSliderReadoutFitObserver.observe(readout);
+}
+
+function nodeSliderReadoutFitStack(readout, maxDigits) {
+  if (!readout) return;
+  nodeSliderReadoutFitObserve(readout);
+  readout._stackFitMaxDigits = maxDigits;
+  const fit = readout._stackFit;
+  if (!fit || !(fit.width > 0)) return;
+  let stacked = false;
+  if (!readout.classList.contains("displays-choices")) {
+    const label = String(readout.querySelector(".node-slider-readout-label")?.textContent || "");
+    const value = String(readout.querySelector(".node-slider-readout-value")?.textContent || "");
+    const unit = String(readout.querySelector(".node-slider-readout-unit")?.textContent || "");
+    const digits = Number(maxDigits);
+    // Reserved number: digits + decimal point + sign column.
+    const reserved = Number.isFinite(digits) && digits > 0 ? Math.round(digits) + 2 : 0;
+    readout._stackFitValueChars = Math.max(readout._stackFitValueChars || 0, value.length, reserved);
+    const em = NODE_SLIDER_MONO_ADVANCE_EM;
+    const need = label.length * fit.labelPx * em
+      + NODE_SLIDER_ONE_LINE_GAP_PX
+      + readout._stackFitValueChars * fit.valuePx * em
+      + (unit ? NODE_SLIDER_ONE_LINE_GAP_PX + unit.length * fit.unitPx * em : 0);
+    stacked = label.length > 0 && need > fit.width;
+  }
+  if (readout.classList.contains("is-stacked") === stacked) return;
+  readout.classList.toggle("is-stacked", stacked);
+  // The GPU pass reads text anchors from the DOM layout; rebuild once per frame.
+  if (!nodeSliderReadoutFitChromeFrame && typeof requestAnimationFrame === "function") {
+    nodeSliderReadoutFitChromeFrame = requestAnimationFrame(() => {
+      nodeSliderReadoutFitChromeFrame = 0;
+      if (typeof nodeSliderReadoutEditRefreshChrome === "function") nodeSliderReadoutEditRefreshChrome();
+    });
+  }
+}
+
 function paintNodeSliderReadout(slider, readout) {
   if (!readout.querySelector(".node-slider-readout-value")) {
     readout.textContent = "";
@@ -511,6 +579,7 @@ function paintNodeSliderReadout(slider, readout) {
   // B-080: let choice labels claim full track width when unit column is empty.
   readout.classList.toggle("displays-choices", usesChoices);
   readout.classList.toggle("reserves-sign-column", usesNumericReadout || usesChoices);
+  nodeSliderReadoutFitStack(readout, formattedMaxDigits);
   readout.removeAttribute("title");
   if (dividesChoices) {
     readout.style.removeProperty("--amount-start");
