@@ -306,9 +306,11 @@ function drawNodeGraphRoundShapeDisplayInner(section) {
   const half = Math.max(4, Math.min(drawW, drawH) * 0.5 - pad);
   const viewScale = half;
 
-  let lines = null;
-  if (orbitDirty) {
-    const points = [];
+  // The orbit is an X/Y sample plot (the 1D Plot drawing, xy mode): the
+  // shader builds the closed curve from the raw X / Y samples.
+  if (orbitDirty || !section._roundShapeOrbit) {
+    const ox = new Float32Array(samples + 1);
+    const oy = new Float32Array(samples + 1);
     if (isEllipsoidOsc || typeof nodeGraphEllipsoidSineToSquareVector === "function") {
       // Phase 0/1 is the mid-point of the +X side at shape=1. Starting
       // and ending there drops that whole side (open path + clip). Walk
@@ -320,18 +322,37 @@ function drawNodeGraphRoundShapeDisplayInner(section) {
         const pt = isEllipsoidOsc
           ? nodeGraphRoundShapeEllipsoidOscPoint(phase, node)
           : nodeGraphRoundShapeEllipsoidPoint(phase, shape);
-        points.push({ x: cx + pt.x * viewScale, y: cy - pt.y * viewScale });
+        ox[i] = pt.x;
+        oy[i] = pt.y;
       }
     } else {
       for (let i = 0; i < samples; i += 1) {
         const a = (i / samples) * Math.PI * 2;
-        points.push({ x: cx + Math.cos(a) * half * 0.85, y: cy + Math.sin(a) * half * 0.85 });
+        ox[i] = Math.cos(a) * 0.85;
+        oy[i] = -Math.sin(a) * 0.85;
       }
     }
-    if (points.length) points.push(points[0]);
-    lines = [{ points, color: strokeColor, width: strokeW, blur: lineBlur, feather: lineSmoothing }];
+    ox[samples] = ox[0];
+    oy[samples] = oy[0];
+    section._roundShapeOrbit = { a: ox, b: oy };
     section._roundShapeOrbitSig = glKey;
   }
+  const orbit = section._roundShapeOrbit;
+  const plots = [{
+    mode: "xy",
+    a: orbit.a,
+    b: orbit.b,
+    x: cx - viewScale,
+    y: cy - viewScale,
+    w: viewScale * 2,
+    h: viewScale * 2,
+    gain: 1,
+    gainY: 1,
+    color: strokeColor,
+    width: strokeW,
+    blur: lineBlur,
+    feather: lineSmoothing,
+  }];
 
   // Cursor: worklet live uses scope Bi X / Bi Y (no main-thread phases Map).
   let px = null;
@@ -406,7 +427,7 @@ function drawNodeGraphRoundShapeDisplayInner(section) {
     background: plateBg,
     waveKey: signature,
     smoothing: lineSmoothing,
-    lines: lines || [],
+    plots,
     dots: Number.isFinite(px) && Number.isFinite(py) ? dots : [],
   });
 }

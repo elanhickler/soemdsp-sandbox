@@ -15058,8 +15058,7 @@ body.node-screen-solo-active .node-screen-solo-face.node-sample-waveform-display
   pointer-events: none;
 }
 
-.node-filter-curve-canvas,
-.node-softwave-osc-canvas {
+.node-filter-curve-canvas {
   display: block;
   position: static;
   width: 100%;

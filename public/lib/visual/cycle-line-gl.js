@@ -1,8 +1,15 @@
-// Shared presenter for one-cycle line + phase-dot faces (SinCos, DSF, Basic
-// Shape, Ellipsoid, Softwave). Drawn with the app-wide antialiased line drawer
-// (gl-line-renderer.js): each line is one joined strip with a smootherstep
-// skirt (`line.feather` or `frame.smoothing` CSS px, default 1). Coordinates
-// are CSS pixels, origin top-left, y down.
+// Shared presenter for one-cycle faces. Coordinates are CSS pixels, origin
+// top-left, y down.
+//   plots: a signal curve (SinCos, DSF, Basic Shape, Softwave, Ellipsoid), drawn
+//     the 1D Plot way: the raw samples go to the GPU sample plot primitive
+//     (nodeGraphGlLinesSamplePlot), whose shaders build the segments, the
+//     min/max band where samples outnumber pixels, and the jump breaks.
+//     { a, b?, mode: "line" | "xy", x, y, w, h, gain, gainY?, offset, span?,
+//       shift?, skip?, color, width, blur?, feather? }
+//   dots: phase markers, drawn on top.
+// Clock / dividers / Logic / Pulse faces use only nodeGraphCycleLineGlMetrics.
+// Strokes use the app-wide smootherstep skirt (`feather` or `frame.smoothing`
+// CSS px, default 1).
 
 function nodeGraphCycleLineGlMetrics(section, canvas, pixelDensity) {
   if (!section || !canvas) return null;
@@ -65,23 +72,6 @@ function nodeGraphCycleLineGlBlurTaps(blur) {
   return taps.map((tap) => ({ x: tap.x, y: tap.y, w: tap.w / sum }));
 }
 
-function nodeGraphCycleLineGlStrips(points) {
-  const strips = [];
-  let current = [];
-  const list = Array.isArray(points) ? points : [];
-  for (let i = 0; i < list.length; i += 1) {
-    const point = list[i];
-    if (!point || !Number.isFinite(point.x) || !Number.isFinite(point.y)) {
-      if (current.length) strips.push(current);
-      current = [];
-      continue;
-    }
-    current.push(point);
-  }
-  if (current.length) strips.push(current);
-  return strips;
-}
-
 function nodeGraphCycleLineGlPresent(canvas, frame = {}) {
   const state = canvas && canvas.__cycleLineGl;
   if (!state || typeof nodeGraphGlLinesBegin !== "function") return false;
@@ -96,24 +86,24 @@ function nodeGraphCycleLineGlPresent(canvas, frame = {}) {
   const smoothing = Number.isFinite(Number(frame.smoothing))
     ? Math.max(0, Number(frame.smoothing))
     : (typeof nodeGraphLineSmoothingPx === "function" ? nodeGraphLineSmoothingPx(frame, 1) : 1);
-  for (const line of Array.isArray(frame.lines) ? frame.lines : []) {
-    const rgba = nodeGraphGlLinesCss(line?.color || "#ffffff");
-    const half = Number.isFinite(Number(line?.half))
-      ? Math.max(0, Number(line.half))
-      : Math.max(0.125, (Number(line?.width) || 1) * 0.5);
-    const feather = Number.isFinite(Number(line?.feather))
-      ? Math.max(0, Number(line.feather))
-      : smoothing;
-    const taps = nodeGraphCycleLineGlBlurTaps(line?.blur);
-    for (const strip of nodeGraphCycleLineGlStrips(line?.points)) {
-      if (strip.length < 2) continue;
-      for (const tap of taps) {
-        const pts = [];
-        for (const pt of strip) pts.push(pt.x + tap.x, pt.y + tap.y);
-        nodeGraphGlLinesPolyline(batch, pts, half, feather, [rgba[0], rgba[1], rgba[2], rgba[3] * tap.w]);
-      }
+  for (const plot of Array.isArray(frame.plots) ? frame.plots : []) {
+    if (!plot?.a?.length || typeof nodeGraphGlLinesSamplePlot !== "function") continue;
+    const rgba = nodeGraphGlLinesCss(plot.color || "#ffffff");
+    const half = Math.max(0.125, (Number(plot.width) || 1) * 0.5);
+    const feather = Number.isFinite(Number(plot.feather)) ? Math.max(0, Number(plot.feather)) : smoothing;
+    for (const tap of nodeGraphCycleLineGlBlurTaps(plot.blur)) {
+      nodeGraphGlLinesSamplePlot(batch, {
+        ...plot,
+        x: (Number(plot.x) || 0) + tap.x,
+        y: (Number(plot.y) || 0) + tap.y,
+        halfPx: half,
+        feather,
+        rgba: [rgba[0], rgba[1], rgba[2], rgba[3] * tap.w],
+      });
     }
   }
+  // Dots over the plots (sample plots draw after the base quads).
+  batch._over = true;
   for (const dot of Array.isArray(frame.dots) ? frame.dots : []) {
     if (!dot || !Number.isFinite(dot.x) || !Number.isFinite(dot.y)) continue;
     nodeGraphGlLinesDot(batch, dot.x, dot.y, Math.max(0.5, Number(dot.radius) || 0.5), Number.isFinite(Number(dot.feather)) ? Math.max(0, Number(dot.feather)) : smoothing, nodeGraphGlLinesCss(dot.color || "#ffffff"));

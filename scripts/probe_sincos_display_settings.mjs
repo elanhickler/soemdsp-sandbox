@@ -27,7 +27,7 @@ const r = await page.evaluate(async () => {
   globalThis.nodeGraphCycleLineGlPresent = (c, f) => { frame = f; return realPresent(c, f); };
   const rgb = (css) => { const v = nodeGraphGlLinesCss(css); return v.slice(0, 3).map((x) => Math.round(x * 255)).join(","); };
   const grab = async () => { frame = null; sec._sinCosForceDraw = true; sec._sinCosLaidOut = false; drawNodeGraphSinCosDisplay(sec);
-    return { bg: rgb(frame.background), lines: frame.lines.map((l) => ({ c: rgb(l.color), w: l.width })), dots: frame.dots.map((d) => ({ c: rgb(d.color), r: d.radius })) }; };
+    return { bg: rgb(frame.background), lines: frame.plots.map((l) => ({ c: rgb(l.color), w: l.width })), dots: frame.dots.map((d) => ({ c: rgb(d.color), r: d.radius })) }; };
   out.dbg = { found: !!nodeGraphPatchNode(id), canvasClass: sec.querySelector("canvas")?.className, w: sec.querySelector("canvas")?.width, sig: sec._sinCosSignature || null, wire: nodeGraphSinCosOutputHasWire(id, "sin") };
   const def = await grab();
   out.dbg.sig2 = sec._sinCosSignature || null; { const c = sec.querySelector("canvas"); out.dbg.state = !!c.__cycleLineGl; const d = nodeGraphDisplayCanvasPresentContext(c).getImageData(0,0,1,1).data; out.dbg.px = Array.from(d); out.dbg.keys = Object.keys(c).filter((k) => k.startsWith("_") || k.startsWith("__")); }

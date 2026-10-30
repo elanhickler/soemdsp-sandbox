@@ -162,42 +162,6 @@ function nodeGraphLineSmoothingPx(look, fallback = 1) {
   return Number.isFinite(n) ? Math.max(0, Math.min(8, n)) : fallback;
 }
 
-/** Softwave face — same hue/brightness model; thicker line, no playhead by default. */
-const nodeGraphSoftwaveOscFaceDisplaySettingsDefaults = Object.freeze({
-  lineHue: 165,
-  lineBrightness: 0.5,
-  lineThickness: 3,
-  lineSmoothing: 1,
-  lineBlur: 0,
-  dotHue: 165,
-  dotBrightness: 1,
-  dotThickness: 5,
-  backgroundHue: 200,
-  backgroundBrightness: 0.03,
-  pixelDensity: 1,
-  showDot: true,
-});
-
-function normalizeNodeGraphSoftwaveOscFaceSettings(settings = {}) {
-  const source = settings && typeof settings === "object" ? settings : {};
-  const d = nodeGraphSoftwaveOscFaceDisplaySettingsDefaults;
-  // Softwave defaults (thicker line) then patch overrides.
-  const base = normalizeNodeGraphRoundShapeFaceSettings({ ...d, ...source });
-  const rawShow = source.showDot;
-  const showDot = rawShow === undefined || rawShow === null
-    ? d.showDot
-    : (rawShow === true
-      || rawShow === 1
-      || rawShow === "1"
-      || rawShow === "true"
-      || rawShow === "on");
-  return { ...base, showDot };
-}
-
-function nodeGraphSoftwaveOscFaceSettingsForNode(node) {
-  return normalizeNodeGraphSoftwaveOscFaceSettings(node?.traceDisplaySettings);
-}
-
 function applyNodeGraphRoundShapeDisplaySettingsToFace(node) {
   if (!node?.id || typeof drawNodeGraphRoundShapeDisplay !== "function") {
     return;

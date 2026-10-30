@@ -114,7 +114,7 @@ load("modules/rgbPicture/rgb-picture-display.js");
   const presents = [];
   ctx.nodeGraphCycleLineGlMetrics = (_s, canvas) => { canvas.width = 200; canvas.height = 200; canvas.__cycleLineGl = canvas.__cycleLineGl || { waveKey: "" }; return { cssWidth: 100, cssHeight: 100, pixelRatio: 2, width: 200, height: 200 }; };
   ctx.nodeGraphCycleLineGlPresent = (canvas, frame) => {
-    presents.push({ lines: frame.lines.length, pts: frame.lines[0]?.points.length || 0, dots: frame.dots.length, bg: frame.background });
+    presents.push({ plots: frame.plots.length, mode: frame.plots[0]?.mode, pts: frame.plots[0]?.a?.length || 0, dots: frame.dots.length, bg: frame.background });
     canvas.__cycleLineGl.waveKey = `${frame.waveKey}|${canvas.width}x${canvas.height}`;
     return true;
   };
@@ -131,8 +131,8 @@ load("modules/rgbPicture/rgb-picture-display.js");
   ctx.drawNodeGraphRoundShapeDisplayInner(section);
   ctx.drawNodeGraphRoundShapeDisplayInner(section);
   gate(presents.length === 2, `Ellipsoid: presented each frame (${presents.length})`);
-  gate(presents[0]?.lines === 1 && presents[0]?.pts === 257, `Ellipsoid: orbit closed polyline on first frame (${presents[0]?.pts} pts)`);
-  gate(presents[1]?.lines === 0 && presents[1]?.dots === 1, "Ellipsoid: orbit cached, only the phase dot per frame");
+  gate(presents[0]?.plots === 1 && presents[0]?.mode === "xy" && presents[0]?.pts === 257, `Ellipsoid: orbit is a closed X/Y sample plot (${presents[0]?.pts} samples)`);
+  gate(presents[1]?.plots === 1 && presents[1]?.dots === 1, "Ellipsoid: cached orbit samples + the phase dot every frame");
   gate(presents[0]?.bg === "#020609" && canvas.log.twoD === 0, "Ellipsoid: plate colour, no 2D drawing");
 }
 

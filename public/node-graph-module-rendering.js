@@ -1089,20 +1089,6 @@ function createNodeGraphModuleElement(type, node) {
       inputPorts,
       outputPorts,
     );
-  } else if (definition.layout === "softwaveOsc") {
-    if ((typeof nodeGraphModuleShouldMountDisplayFace === "function"
-      ? nodeGraphModuleShouldMountDisplayFace(type, patchNode.ui)
-      : !patchNodeUi.oscilloscopeHidden)
-      && typeof createNodeGraphSoftwaveOscDisplay === "function") {
-      article.append(createNodeGraphSoftwaveOscDisplay(node, type));
-    }
-    appendNodeGraphModuleIoSection(
-      article,
-      createNodeGraphLayoutAIoSection(node, type, inputPorts, outputPorts),
-      node,
-      inputPorts,
-      outputPorts,
-    );
   } else if (definition.layout === "sinCos4") {
     if ((typeof nodeGraphModuleShouldMountDisplayFace === "function"
       ? nodeGraphModuleShouldMountDisplayFace(type, patchNode.ui)

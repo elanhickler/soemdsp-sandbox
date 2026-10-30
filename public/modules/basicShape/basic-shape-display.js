@@ -258,19 +258,15 @@ function drawNodeGraphBasicShapeDisplayInner(section) {
     return y;
   };
 
-  const points = [];
+  // The 1D Plot drawing: raw cycle values to the GPU sample plot, which builds
+  // the line and breaks it on jumps bigger than the scope threshold.
   const discThreshold = typeof nodeGraphModuleScopeDiscontinuityThreshold === "number"
     ? nodeGraphModuleScopeDiscontinuityThreshold
     : 0.85;
-  let prevY = null;
+  const cycle = new Float32Array(samples + 1);
   for (let i = 0; i <= samples; i += 1) {
     const xNorm = i / samples;
-    const sample = sampleAt(wrap01(xNorm + phaseOff));
-    if (i > 0 && prevY != null && Math.abs(sample - prevY) > discThreshold) {
-      points.push(null);
-    }
-    points.push({ x: mapX(xNorm), y: mapY(sample) });
-    prevY = sample;
+    cycle[i] = sampleAt(wrap01(xNorm + phaseOff));
   }
 
   let play = nodeGraphBasicShapeReadPhase(nodeId, node, section);
@@ -296,8 +292,17 @@ function drawNodeGraphBasicShapeDisplayInner(section) {
     background: look.backgroundPaint || look.background || "#020609",
     waveKey: signature,
     smoothing: lineSmoothing,
-    lines: [{
-      points,
+    plots: [{
+      mode: "line",
+      a: cycle,
+      span: samples,
+      x: padX,
+      y: padY,
+      w: innerW,
+      h: innerH,
+      gain: 1,
+      offset: 0,
+      skip: discThreshold,
       color: look.strokePaint || look.strokeColor || "#78dcc8",
       width: strokeW,
       blur: lineBlur,

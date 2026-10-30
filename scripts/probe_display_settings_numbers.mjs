@@ -44,7 +44,7 @@ const rows = await page.evaluate(() => {
     "lcdDot", "led", "limiterGainFace", "lineBurn", "macroControlsFace", "matrixDisplayFace", "matrixFace",
     "matrixWaterfallFace", "momentaryButtonFace", "numberReadout", "oscilloscopeBankBurn", "output", "patchFace",
     "phosphorLight", "phosphorWaveform", "portalFace", "pulseDot", "rasterRgbFace", "rgbFractalFace",
-    "rgbPictureFace", "rgbShapeFace", "roundShapeFace", "scope2d", "scope2dTrace", "softwaveOscFace",
+    "rgbPictureFace", "rgbShapeFace", "roundShapeFace", "scope2d", "scope2dTrace",
     "spectrogramBurn", "textBoxFace", "toggleButtonFace", "trace", "traceRgb", "traceXyz", "transportBpm",
     "value", "valueLcd", "vectorDot", "vectorRgbFace", "videoscopeBurn", "xyPad",
   ];

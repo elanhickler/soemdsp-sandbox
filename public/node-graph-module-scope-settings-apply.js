@@ -129,20 +129,11 @@ function assignNodeGraphTypedDisplaySettingsToNode(node, displayType, settings) 
   if (
     displayType === "roundShapeFace"
     || displayType === "basicShapeFace"
-    || displayType === "softwaveOscFace"
   ) {
-    if (displayType === "softwaveOscFace"
-      && typeof normalizeNodeGraphSoftwaveOscFaceSettings === "function") {
-      node.traceDisplaySettings = normalizeNodeGraphSoftwaveOscFaceSettings(settings);
-    } else {
-      node.traceDisplaySettings = typeof normalizeNodeGraphRoundShapeFaceSettings === "function"
-        ? normalizeNodeGraphRoundShapeFaceSettings(settings)
-        : (settings || {});
-    }
-    if (displayType === "softwaveOscFace"
-      && typeof applyNodeGraphSoftwaveOscDisplaySettingsToFace === "function") {
-      applyNodeGraphSoftwaveOscDisplaySettingsToFace(node);
-    } else if (displayType === "basicShapeFace"
+    node.traceDisplaySettings = typeof normalizeNodeGraphRoundShapeFaceSettings === "function"
+      ? normalizeNodeGraphRoundShapeFaceSettings(settings)
+      : (settings || {});
+    if (displayType === "basicShapeFace"
       && typeof applyNodeGraphBasicShapeDisplaySettingsToFace === "function") {
       applyNodeGraphBasicShapeDisplaySettingsToFace(node);
     } else if (typeof applyNodeGraphRoundShapeDisplaySettingsToFace === "function") {

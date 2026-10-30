@@ -2600,18 +2600,16 @@ function openNodeRoundShapeContextMenu(event) {
     return false;
   }
   const face = target.closest?.(
-    ".node-round-shape-display, .node-round-shape-canvas, .node-basic-shape-display, .node-basic-shape-canvas, .node-softwave-osc-display, .node-softwave-osc-canvas",
+    ".node-round-shape-display, .node-round-shape-canvas, .node-basic-shape-display, .node-basic-shape-canvas",
   );
   if (!face) {
     return false;
   }
   const display = face.classList?.contains("node-round-shape-display")
     || face.classList?.contains("node-basic-shape-display")
-    || face.classList?.contains("node-softwave-osc-display")
     ? face
     : (face.closest?.(".node-round-shape-display")
-      || face.closest?.(".node-basic-shape-display")
-      || face.closest?.(".node-softwave-osc-display"));
+      || face.closest?.(".node-basic-shape-display"));
   const nodeId = String(
     display?.dataset?.node
     || face.dataset?.node
@@ -2670,7 +2668,6 @@ function openNodeScopeContextMenu(event) {
       ".node-matrix-display-face",
       ".node-round-shape-display",
       ".node-basic-shape-display",
-      ".node-softwave-osc-display",
       ".node-envelope-curve-display",
       ".node-filter-curve-display",
       ".node-phone-tone-display",

@@ -242,7 +242,7 @@ const order = await page.evaluate(() => {
     "dot", "gradientVectorscopeFace", "graphFace", "hypersawBurn", "imageBurnFace", "knobFace", "lcd",
     "lcdDot", "led", "lineBurn", "numberReadout", "oscilloscopeBankBurn", "output", "phosphorLight",
     "pulseDot", "rasterRgbFace", "roundShapeFace", "basicShapeFace", "scope2d", "scope2dTrace",
-    "softwaveOscFace", "spectrogramBurn", "trace", "traceRgb", "traceXyz", "value", "valueLcd",
+    "spectrogramBurn", "trace", "traceRgb", "traceXyz", "value", "valueLcd",
     "vectorDot", "vectorRgbFace", "videoscopeBurn", "xyPad",
   ];
   const RATE = new Set(["timeMs", "historyHz", "historyCycles", "historySeconds", "zoomSeconds"]);

@@ -911,18 +911,6 @@ const nodeGraphTraceDisplayActiveControlsByType = Object.freeze({
     toggles: Object.freeze([]),
     choices: Object.freeze([]),
   }),
-  softwaveOscFace: Object.freeze({
-    fields: Object.freeze([
-      "lineThickness",
-      "lineSmoothing",
-      "lineBrightness",
-      "dotThickness",
-      "backgroundBrightness",
-    ]),
-    colors: Object.freeze(["strokeColor", "dotColor", "backgroundColor"]),
-    toggles: Object.freeze(["showDot"]),
-    choices: Object.freeze([]),
-  }),
   // SinCos: line (sine; cosine follows) / dot / background HBS + thickness.
   sinCosFace: Object.freeze({
     fields: Object.freeze([

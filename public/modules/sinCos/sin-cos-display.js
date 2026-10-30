@@ -437,12 +437,14 @@ function nodeGraphDsfCycle(params, count) {
       const lo = nodeGraphDsfKernelCS(ct, cLo).C;
       return frac <= 0 ? lo : lo + (nodeGraphDsfKernelCS(ct, cHi).C - lo) * frac;
     };
-  // Original leaky integrator: leak → 0.0005, acc = acc*(1-leak) + raw*dt.
-  // Display steps are 1/count of a cycle; map the per-sample leak through
-  // audio samples per display step so the shape matches the engine.
+  // The engine's leaky integrator (dsf v23): leak = max(0.0005, 2*pi*f / (20*sr))
+  // per audio sample, acc = acc*(1-leak) + raw*dt. Display steps are 1/count of
+  // a cycle; map the per-sample leak through audio samples per display step so
+  // the shape matches the engine.
   const audioPerCycle = sr / f;
   const audioPerStep = audioPerCycle / count;
-  const r = Math.pow(0.9995, audioPerStep);
+  const leak = Math.max(0.0005, (2 * Math.PI * f) / (20 * sr));
+  const r = Math.pow(1 - leak, audioPerStep);
   const h = 1 / count;
   const ampAdjust = m * (2.7 - 3.15) + 3.15;
   const integrateArr = (rawAt) => {
@@ -474,12 +476,20 @@ function nodeGraphDsfCycle(params, count) {
     const sq = integrate((t) => kernel(t) - kernel(t - pw));
     shape = sq;
     if (waveform === 3) {
-      const tri = integrateArr((i) => sq[i] * 4);
-      const comp = 1 / Math.max(0.05, Math.min(1, Math.abs(Math.sin(Math.PI * pw))));
-      let absMean = 0;
-      for (let i = 0; i < count; i += 1) { tri[i] *= comp; absMean += Math.abs(tri[i]); }
-      const peak = Math.max(1, absMean / count);
-      for (let i = 0; i < count; i += 1) tri[i] /= peak;
+      // Trimorph (dsf v23): the saw integrated over the Morph window =
+      // P(t) - P(t - Morph), P = the saw's integral; level 1.3 / (Morph*(1-Morph)).
+      const P = integrateArr((i) => saw[i]);
+      const back = pw * count;
+      const tri = new Float64Array(count);
+      const scale = (ampAdjust * 1.3) / (pw * (1 - pw));
+      for (let i = 0; i < count; i += 1) {
+        let src = i - back;
+        src -= Math.floor(src / count) * count;
+        const i0 = Math.floor(src);
+        const fr = src - i0;
+        const lagged = P[i0] + (P[(i0 + 1) % count] - P[i0]) * fr;
+        tri[i] = (P[i] - lagged) * scale;
+      }
       shape = tri;
     }
   }
@@ -614,50 +624,46 @@ function drawNodeGraphSinCosDisplayInner(section) {
   };
   const phaseOff = wrap01(phaseParam);
   const sampleKind = (cycle01, kind) => nodeGraphSinCosSample(wrap01(cycle01 + phaseOff), kind, amplitude, polarity);
-  const lines = [];
-  const pushLine = (kind, color) => {
-    const points = [];
-    for (let i = 0; i <= samples; i += 1) {
-      const xNorm = i / samples;
-      points.push({ x: mapX(xNorm), y: mapY(sampleKind(xNorm, kind)) });
-    }
-    lines.push({ points, color, width: strokeW, blur: 0, feather: nodeGraphLineSmoothingPx(look, 1) });
+  // Curves go to the GPU sample plot (the 1D Plot drawing): raw cycle values,
+  // the shader builds the line. Bipolar: value v at midY - v / yFull * halfH;
+  // unipolar (SinCos 0..1): gain 2, offset -1 puts 0 on the bottom, 1 on top.
+  const feather = nodeGraphLineSmoothingPx(look, 1);
+  const plotRect = {
+    x: pad,
+    y: pad,
+    w: innerW,
+    h: innerH,
+    gain: polarity ? 2 : 1 / yFull,
+    offset: polarity ? -1 : 0,
+    width: strokeW,
+    feather,
+  };
+  const plots = [];
+  const pushPlot = (kind, color) => {
+    const a = new Float32Array(samples + 1);
+    for (let i = 0; i <= samples; i += 1) a[i] = sampleKind(i / samples, kind);
+    plots.push({ ...plotRect, mode: "line", a, span: samples, color });
   };
   // Red sine only if a wire leaves the sin jack. Blue cosine only for cos.
-  if (drawSin) pushLine("sin", look.strokePaint);
-  if (drawCos) pushLine("cos", nodeGraphSinCosCosPaint(look));
+  if (drawSin) pushPlot("sin", look.strokePaint);
+  if (drawCos) pushPlot("cos", nodeGraphSinCosCosPaint(look));
   let dsfCycle = null;
   if (isDsf) {
     if (section._dsfCycleKey !== signature) {
-      section._dsfCycle = nodeGraphDsfCycle(dsfParams, nodeGraphDsfCyclePointCount(node));
+      const cycle = nodeGraphDsfCycle(dsfParams, nodeGraphDsfCyclePointCount(node));
+      // One cycle starting at the Phase offset (+2 so a sub-sample shift
+      // still reaches the right edge); the min/max band covers dense cycles.
+      const count = cycle.length;
+      const start = phaseOff * count;
+      const i0 = Math.floor(start);
+      const rotated = new Float32Array(count + 2);
+      for (let i = 0; i < count + 2; i += 1) rotated[i] = cycle[(i0 + i) % count];
+      section._dsfCycle = cycle;
+      section._dsfPlot = { a: rotated, span: count, shift: start - i0 };
       section._dsfCycleKey = signature;
     }
     dsfCycle = section._dsfCycle;
-    const count = dsfCycle.length;
-    // Same idea as 1D Onset: one vertex every half CSS pixel, then the shared
-    // GL ribbon (gl-line-renderer). Dumping 2k–8k Gibbs samples into a ~200px
-    // face made a scribbled capsule. Do not touch the onset drawer.
-    const nDraw = Math.max(32, Math.min(count, Math.ceil(innerW) * 2));
-    const shiftF = phaseOff * count;
-    const points = [];
-    for (let i = 0; i <= nDraw; i += 1) {
-      const t = i / nDraw;
-      let src = t * count + shiftF;
-      src -= Math.floor(src / count) * count;
-      const i0 = Math.floor(src);
-      const f = src - i0;
-      const v0 = dsfCycle[i0];
-      const v1 = dsfCycle[(i0 + 1) % count];
-      points.push({ x: mapX(t), y: mapY(v0 + (v1 - v0) * f) });
-    }
-    lines.push({
-      points,
-      color: look.strokePaint,
-      width: strokeW,
-      blur: 0,
-      half: Math.max(0, strokeW * 0.5 - 0.5),
-      feather: nodeGraphLineSmoothingPx(look, 1),
-    });
+    plots.push({ ...plotRect, mode: "line", ...section._dsfPlot, color: look.strokePaint });
   }
 
   let play = nodeGraphSinCosReadPhase(nodeId, node, section);
@@ -689,7 +695,7 @@ function drawNodeGraphSinCosDisplayInner(section) {
     background: look.backgroundPaint,
     waveKey: signature,
     smoothing: nodeGraphLineSmoothingPx(look, 1),
-    lines,
+    plots,
     dots,
   });
 }
