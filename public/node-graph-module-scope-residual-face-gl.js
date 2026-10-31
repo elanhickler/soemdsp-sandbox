@@ -505,6 +505,36 @@ function drawNodeGraphPhosphorDotGlItem(renderer, item, pixelRatio) {
   recordNodeGraphModuleScopeRenderMetrics(1, 1);
 }
 
+// Ping Pong Delay lines: no native tap export, so the face derives the two
+// tap positions from the node's own params (fraction of a beat at the patch
+// tempo, timing-mode multiplier, Offset ms). L red, R blue on a 0..2 s axis.
+const NODE_GRAPH_PING_PONG_AXIS_SECONDS = 2;
+function nodeGraphPingPongDelayLinePhases(node) {
+  const params = node?.params || {};
+  const defs = nodeGraphModuleDefinitions?.pingPongDelay?.parameters || [];
+  const param = (key, fallback) => {
+    const v = Number(params[key]);
+    if (Number.isFinite(v)) return v;
+    const dv = Number(defs.find((p) => p.key === key)?.defaultValue);
+    return Number.isFinite(dv) ? dv : fallback;
+  };
+  const num = param("timeNumerator", 1);
+  const den = param("timeDenominator", 4);
+  if (!(num > 0) || !(den > 0)) {
+    return null;
+  }
+  const bpm = Number(nodeGraphMvp?.patch?.timing?.tempoBpm);
+  const modeFactor = [1, 1.5, 2 / 3][Math.round(param("timingMode", 0))] || 1;
+  const base = (num / den) * modeFactor * (60 / (Number.isFinite(bpm) && bpm > 0 ? bpm : 120));
+  const offsetSec = param("offset", 0) / 1000;
+  const times = [Math.max(0.001, base), Math.max(0.001, base + offsetSec)];
+  return {
+    phases: times.map((t) => Math.min(1, t / NODE_GRAPH_PING_PONG_AXIS_SECONDS)),
+    pans: [-1, 1],
+    amplitudes: [1, 1],
+  };
+}
+
 /**
  * Hypersaw stems: x = voice phase across the face, one batched quad per stem
  * and colour (additive red / blue, Sabrina taps green), on a GPU plate that
@@ -522,9 +552,21 @@ function drawNodeGraphHypersawBurnGlItem(renderer, item, pixelRatio) {
     return;
   }
   const bus = typeof nodeGraphDataBus !== "undefined" ? nodeGraphDataBus : null;
-  const phases = bus ? bus.get(nodeGraphDataBusKey(String(nodeId), "Phases")) : null;
-  const pans = bus ? bus.get(nodeGraphDataBusKey(String(nodeId), "Pans")) : null;
-  const amps = bus ? bus.get(nodeGraphDataBusKey(String(nodeId), "Amplitudes")) : null;
+  let phases = bus ? bus.get(nodeGraphDataBusKey(String(nodeId), "Phases")) : null;
+  let pans = bus ? bus.get(nodeGraphDataBusKey(String(nodeId), "Pans")) : null;
+  let amps = bus ? bus.get(nodeGraphDataBusKey(String(nodeId), "Amplitudes")) : null;
+  const patchNode = typeof nodeGraphPatchNode === "function" ? nodeGraphPatchNode(nodeId) : null;
+  // Ping Pong Delay has no native tap export: derive its two lines from the
+  // node's own params so the shared drawer works without audio running.
+  if (String(patchNode?.type || "") === "pingPongDelay"
+    && (!Array.isArray(phases) || !phases.length)) {
+    const derived = nodeGraphPingPongDelayLinePhases(patchNode);
+    if (derived) {
+      phases = derived.phases;
+      pans = derived.pans;
+      amps = derived.amplitudes;
+    }
+  }
   const look = typeof nodeGraphScopePhosphorLookDefaults !== "undefined"
     ? nodeGraphScopePhosphorLookDefaults
     : null;
@@ -540,7 +582,6 @@ function drawNodeGraphHypersawBurnGlItem(renderer, item, pixelRatio) {
   if (!Array.isArray(phases) || !phases.length) {
     return;
   }
-  const patchNode = typeof nodeGraphPatchNode === "function" ? nodeGraphPatchNode(nodeId) : null;
   const sabrinaStems = ["reverbEffect", "sabrinaReverbOriginal"].includes(String(patchNode?.type || ""));
   if (sabrinaStems && typeof nodeGraphSabrinaReverbGlPresent === "function") {
     const cssW = Math.max(1, canvas.clientWidth || screenElement?.clientWidth || 1);

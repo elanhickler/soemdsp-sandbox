@@ -20,12 +20,12 @@ const nodeGraphEmojiCatalog = Object.freeze([
       // Scope square / pulse (no dedicated square-wave emoji)
       "⎍", "▁", "▂", "▃", "▅", "▆", "▇", "┌", "┐", "└", "┘", "│",
       // Trigger (impulse)
-      "⚡", "▲", "◀", "▶", "△", "◁", "▷", "↑", "↥", "⌃", "⌅", "※",
+      "▲", "◀", "▶", "△", "◁", "▷", "↑", "↥", "⌃", "⌅", "※",
       // Wave / analog
       "∿", "∼", "≈", "〜", "⌇", "﹋", "﹏", "⎺", "⎻", "─", "⎼", "⎽",
       "ƒ", "τ",
       // Circuit / power / jacks
-      "⏚", "⊤", "⊥", "⌁", "⎓", "⏦", "⊕", "⊖", "⊗", "⊙", "⊚",
+      "⏚", "⊤", "⊥", "⌁", "🗲", "⚡", "⎓", "⏦", "⊕", "⊖", "⊗", "⊙", "⊚",
       "⏻", "⏼", "⏽", "⭘", "⏏",
       "⚙️", "🔌", "🔋", "💡", "🎚️", "🎛️", "🔊",
     ],
@@ -269,6 +269,7 @@ const nodeGraphEmojiGlyphNames = Object.freeze({
   "⏚": "earth ground",
   "⊤": "down tack (rail)",
   "⌁": "electric arrow",
+  "🗲": "lightning mood (module power)",
   "⎓": "direct current",
   "⏦": "AC current",
   "⊕": "circled plus (junction)",

@@ -1694,6 +1694,14 @@ function applyNodeGraphChromeNodesToDom(nodeIds = []) {
       elements.push(element);
     }
   }
+  // Chrome changes can replace keyboard surfaces (e.g. hiding the title).
+  // Repopulate keys and bind the new surface, just as the full DOM sync does.
+  if (
+    elements.some((element) => nodeGraphModuleDefinitions[element.dataset.nodeType]?.layout === "keyboard")
+    && typeof renderNodeGraphKeyboardControllerModules === "function"
+  ) {
+    renderNodeGraphKeyboardControllerModules();
+  }
   if (typeof scheduleNodeGraphModuleFramesUpdate === "function") {
     for (const element of elements) {
       scheduleNodeGraphModuleFramesUpdate({ force: true, nodeElement: element });

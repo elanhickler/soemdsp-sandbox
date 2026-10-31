@@ -934,6 +934,37 @@ extern "C" double soemdsp_ping_pong_delay_mod_right(int handle) {
   return gPool[handle - 1].lastModR;
 }
 
+// Tap positions for the Delay Lines face (same contract as the Sabrina /
+// Early Reflections voice exports). Two voices: 0 = Left, 1 = Right.
+// voice_delay is the LIVE delay the audio reads (tempo base + Offset +
+// LFO Amp x the last LFO value), as a fraction of kVoiceAxisSeconds so the face
+// can draw it directly. voice_pan is 0 for Left, 1 for Right.
+static const double kVoiceAxisSeconds = 2.0;
+
+extern "C" int soemdsp_ping_pong_delay_voice_count(int handle) {
+  if (handle < 1 || handle > kMaxInstances) return 0;
+  return 2;
+}
+
+extern "C" double soemdsp_ping_pong_delay_voice_delay(int handle, int index) {
+  if (handle < 1 || handle > kMaxInstances || index < 0 || index > 1) return 0.5;
+  const PingPongDelayState& s = gPool[handle - 1];
+  const double rate = maxd(1.0, s.liveSampleRate);
+  const double offsetSec = safe(s.liveOffsetMs) / 1000.0;
+  const double lfoAmpSec = safe(s.liveLfoAmpMs) / 1000.0;
+  const double lfo = index == 0 ? s.lastModL : s.lastModR;
+  double sec = ping_pong_delay_seconds(s.baseSeconds, offsetSec, lfoAmpSec, lfo);
+  if (sec < 1.0 / rate) sec = 1.0 / rate; // the audio reads at least one sample back
+  double x = sec / kVoiceAxisSeconds;
+  if (x > 1.0) x = 1.0;
+  return x;
+}
+
+extern "C" double soemdsp_ping_pong_delay_voice_pan(int handle, int index) {
+  if (handle < 1 || handle > kMaxInstances || index < 0 || index > 1) return 0.5;
+  return index == 1 ? 1.0 : 0.0;
+}
+
 extern "C" int soemdsp_ping_pong_delay_memory_generation() {
   return gPingPongMemoryGeneration;
 }

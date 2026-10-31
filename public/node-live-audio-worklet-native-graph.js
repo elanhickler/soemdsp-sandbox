@@ -7416,7 +7416,33 @@ NodeLiveAudioProcessor.prototype.syncNativeEnsemblePublish =
       const sab = kind === "reverbEffect" || kind === "sabrinaReverbOriginal";
       // Early Reflections: per-tap x in [0,1] + side (-1 L / +1 R / 0 both), native-computed.
       const er = kind === "earlyReflections";
-      if (!ens && !cho && !sab && !er) {
+      // Ping Pong Delay: two taps (L red / R blue), live delay incl. LFO wobble.
+      const pp = kind === "pingPongDelay";
+      if (!ens && !cho && !sab && !er && !pp) {
+        continue;
+      }
+      if (pp) {
+        const ppCount = native.soemdsp_ping_pong_delay_voice_count;
+        const ppDelay = native.soemdsp_ping_pong_delay_voice_delay;
+        const ppPan = native.soemdsp_ping_pong_delay_voice_pan;
+        if (!ppCount || !ppDelay || !ppPan) continue;
+        live.add(id);
+        let h = 0;
+        try { h = handleFn(this.nativeGraphHandle, this.fnv1aHash32(id)) | 0; } catch (_e) { h = 0; }
+        if (!(h > 0)) continue;
+        let c = 0;
+        try { c = ppCount(h) | 0; } catch (_e) { c = 0; }
+        if (c > 2) c = 2;
+        const phases = new Array(Math.max(0, c));
+        const pans = new Array(Math.max(0, c));
+        const amplitudes = new Array(Math.max(0, c));
+        for (let i = 0; i < c; i += 1) {
+          // delay is already a 0..1 fraction of the 2 s drawer axis.
+          phases[i] = Number(ppDelay(h, i));
+          pans[i] = Number(ppPan(h, i)) > 0.5 ? 1 : -1;
+          amplitudes[i] = 1;
+        }
+        this.ensemblePublish.set(id, { phases, pans, amplitudes });
         continue;
       }
       if (er) {

@@ -15437,14 +15437,15 @@ const nodeGraphModuleDefinitions = (
       { kind: "cells", params: [["amplitude", "Amp"]], horizontal: true, h: 30 },
       { kind: "seed", param: "seed", h: 28 },
     ],
-    // Instant Waterfall (Blur only; full-face waveform, no amplitude law) — stereo Mix Out (not LFO CV).
-    displayType: "waterfall",
+    // Delay Lines (shared hypersawBurn drawer): one vertical line per tap,
+    // red Left / blue Right, derived from the fraction/offset params (no
+    // native tap export — see nodeGraphPingPongDelayLinePhases).
+    displayType: "hypersawBurn",
     spectrumCompanion: false,
     displayModes: [
-      { key: "waterfall", label: "Waterfall", renderer: "waterfall", settingsSchema: "waterfall" },
+      { key: "hypersawBurn", label: "Delay Lines", renderer: "hypersawBurn", settingsSchema: "hypersawBurn" },
     ],
-    defaultDisplayMode: "waterfall",
-    stereoWaterfallPorts: { left: "Mix L", right: "Mix R" },
+    defaultDisplayMode: "hypersawBurn",
     displaySignals: [
       { key: "Mix L", kind: "scalar" },
       { key: "Mix R", kind: "scalar" },

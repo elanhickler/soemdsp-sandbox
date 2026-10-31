@@ -319,6 +319,8 @@ $modules = @(
     "soemdsp_ping_pong_delay_block_output_mod_left_ptr",
     "soemdsp_ping_pong_delay_block_output_mod_right_ptr",
     "soemdsp_ping_pong_delay_max_block_frames",
+    "soemdsp_ping_pong_delay_voice_count", "soemdsp_ping_pong_delay_voice_delay",
+    "soemdsp_ping_pong_delay_voice_pan",
     "soemdsp_ping_pong_delay_memory_generation", "soemdsp_ping_pong_delay_version"
   ) },
   @{ Name = "papoulis_filter"; Simd = $false; Exports = @("soemdsp_papoulis_filter_create", "soemdsp_papoulis_filter_destroy", "soemdsp_papoulis_filter_sample", "soemdsp_papoulis_filter_snap", "soemdsp_papoulis_filter_version") },
