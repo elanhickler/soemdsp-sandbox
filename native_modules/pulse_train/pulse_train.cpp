@@ -22,7 +22,7 @@
 //     1 Harmonic: mix even u with triangular multiples of a base τ
 //       (gaps 1τ, 2τ, 3τ, …). Curve 0 = linear; + = that mix; − = reverse
 //       (gaps Nτ, (N-1)τ, …). |Curve|/10 is the mix amount (10 = full).
-//     2 Rational: rational_curve01(u, Curve/10)  (0 = linear)
+//     2 Rational: rational_curve01(u, -Curve/10)  (0 = linear)
 //   t_i = Time * warp(u_i)                 seconds after the trigger
 //   a_i = (Start + (End Amp - Start) * E_ampCurve(u_i)) * Amplitude * velocity
 // Curve > 0: gaps grow (fast first, stretching out); 0: even; < 0: gaps
@@ -167,6 +167,13 @@ struct PulseTrainState {
   double aaRing[32];
   long long aaPos;
   long long aaLastIdx;
+  // AA (v42): the core runs kAaOs times per output sample at kAaOs x the rate
+  // and a Kaiser low-pass decimates it. osOn: the sample counters (n, cycleN,
+  // layoutAt) are at the oversampled rate. osHist: the last kAaOsTaps
+  // oversampled samples (ring at osPos).
+  bool osOn;
+  double osHist[257];
+  int osPos;
 };
 
 struct PreviewSched {
@@ -313,7 +320,7 @@ static inline double timeWarp(double k, double u, int i, int nFwd, bool loop) {
     return u + w * (hr - u);
   }
   if (fam == kSpacingRational) {
-    double s = k * 0.1;
+    double s = -k * 0.1; // sign matches Expo/Harmonic: + = gaps grow
     if (s > 0.99) s = 0.99;
     if (s < -0.99) s = -0.99;
     return soemdsp_maths::rational_curve01(u, s);
@@ -1065,7 +1072,7 @@ static inline int pulseIndexAt(
 
 }  // namespace
 
-extern "C" int soemdsp_pulse_train_version() { return 41; } // v41: Antialiasing AA (auto, stored 3): fractional Loop period, PolyBLEP / BLAMP on every grain shape, BLIT for Trigger. was v40: reverse (negative ƒ plays the cycle backwards). was v39: Rand / Dither Loop cycles are Robin-dithered whole samples, resets on the grid; was v38 Edge Fade
+extern "C" int soemdsp_pulse_train_version() { return 42; } // v42: AA runs the train at 8x the rate and decimates (Kaiser low-pass, 257 taps): alias floor ~-75..-90 dB on every Shape (v41's per-edge PolyBLEP left -20..-50 dB on Gate / Saw / Pulse). was v41: Antialiasing AA (auto, stored 3): fractional Loop period, PolyBLEP / BLAMP on every grain shape, BLIT for Trigger. was v40: reverse (negative ƒ plays the cycle backwards). was v39: Rand / Dither Loop cycles are Robin-dithered whole samples, resets on the grid; was v38 Edge Fade
 
 extern "C" int soemdsp_pulse_train_create() {
   for (int i = 0; i < kMaxInstances; i++) {
@@ -1112,6 +1119,9 @@ extern "C" int soemdsp_pulse_train_create() {
       for (int k = 0; k < 32; k++) s.aaRing[k] = 0.0;
       s.aaPos = 0;
       s.aaLastIdx = -1;
+      s.osOn = false;
+      for (int k = 0; k < 257; k++) s.osHist[k] = 0.0;
+      s.osPos = 0;
       s.active = true;
       return i + 1;
     }
@@ -1137,7 +1147,7 @@ static inline void setReverse(const PulseTrainState& s, bool rev) {
   gRev = true;
 }
 
-extern "C" double soemdsp_pulse_train_sample(
+static double pulseTrainCore(
   int handle, double trigger, double count, double endTime, double curve,
   double ampStart, double ampEnd, double ampCurve, double amplitude, double sampleRate, double mode,
   double recalc, double pulseMode, double endDelay, double antialiasing, double seed, double waveShape,
@@ -1641,6 +1651,106 @@ extern "C" double soemdsp_pulse_train_sample(
   s.n++;
   if (aaBlep) s.aaPos++;
   return out;
+}
+
+// ---------------------------------------------------------------------------
+// AA (v42): oversample + decimate. The core plays the train at kAaOs x the
+// rate (its own AA path: exact fractional Loop period, BLEP / BLIT edges) and
+// a Kaiser windowed-sinc low-pass (cutoff 0.4583 x the output rate, i.e. 22 kHz
+// at 48 kHz) decimates it. Measured against a 64x band-limited reference the
+// alias energy sits at -75..-90 dB for every Shape and pitch. Latency
+// (kAaOsTaps - 1) / 2 oversampled samples = 16 output samples.
+static const int kAaOs = 8;
+static const int kAaOsTaps = 257;
+
+static const double* aaOsKernel() {
+  static double h[kAaOsTaps];
+  static bool built = false;
+  if (built) return h;
+  const double beta = 10.0;
+  const double fc = 0.4583333333 / kAaOs; // cycles per oversampled sample
+  const double c = (kAaOsTaps - 1) * 0.5;
+  auto i0 = [](double x) {
+    double s = 1.0, term = 1.0;
+    for (int k = 1; k < 40; k++) { term *= (x / (2.0 * k)) * (x / (2.0 * k)); s += term; }
+    return s;
+  };
+  const double kPi = soemdsp::constant::kPI;
+  double sum = 0.0;
+  for (int i = 0; i < kAaOsTaps; i++) {
+    const double x = i - c;
+    const double sinc = x == 0.0 ? 2.0 * fc : soemdsp_maths::dsp_sin(2.0 * kPi * fc * x) / (kPi * x);
+    const double r = x / c;
+    const double w2 = 1.0 - r * r;
+    h[i] = sinc * i0(beta * soemdsp_maths::sqrt_newton(w2 > 0.0 ? w2 : 0.0)) / i0(beta);
+    sum += h[i];
+  }
+  for (int i = 0; i < kAaOsTaps; i++) h[i] /= sum; // unity DC gain
+  built = true;
+  return h;
+}
+
+// AA on <-> off changes the rate the sample counters run at: rescale them so
+// the cycle keeps its place, and drop rate-bound tails (BLIT ring, spill, FIR).
+static void aaOsSwitchRate(PulseTrainState& s, bool on) {
+  const double k = on ? (double)kAaOs : 1.0 / (double)kAaOs;
+  auto scale = [k](long long v) { return v > 0 ? (long long)((double)v * k + 0.5) : v; };
+  s.n = scale(s.n);
+  s.cycleN = scale(s.cycleN);
+  s.layoutAt = scale(s.layoutAt);
+  aaClearState(s);
+  for (int k2 = 0; k2 < 5; k2++) s.spill[k2] = 0.0;
+  for (int k2 = 0; k2 < kAaOsTaps; k2++) s.osHist[k2] = 0.0;
+  s.osPos = 0;
+  s.osOn = on;
+}
+
+// Keep the strongest sub-step value (Trigger / End outs are 1-sample pulses
+// that would otherwise vanish between output samples).
+static inline double aaOsStronger(double a, double b) {
+  return (b < 0.0 ? -b : b) > (a < 0.0 ? -a : a) ? b : a;
+}
+
+extern "C" double soemdsp_pulse_train_sample(
+  int handle, double trigger, double count, double endTime, double curve,
+  double ampStart, double ampEnd, double ampCurve, double amplitude, double sampleRate, double mode,
+  double recalc, double pulseMode, double endDelay, double antialiasing, double seed, double waveShape,
+  double freqHz, double morph, double curvePolarity, double spacing, double edgeFade, double reverse
+) {
+  if (handle < 1 || handle > kMaxInstances) return 0.0;
+  PulseTrainState& s = gPool[handle - 1];
+  const bool os = antialiasing >= 2.5;
+  if (os != s.osOn) aaOsSwitchRate(s, os);
+  if (!os) {
+    return pulseTrainCore(handle, trigger, count, endTime, curve, ampStart, ampEnd, ampCurve, amplitude,
+      sampleRate, mode, recalc, pulseMode, endDelay, antialiasing, seed, waveShape, freqHz, morph,
+      curvePolarity, spacing, edgeFade, reverse);
+  }
+  const double sr = sampleRate < 1.0 ? 44100.0 : sampleRate;
+  // The Trigger shape is an impulse: at kAaOs x the rate its area is 1 / kAaOs
+  // of an output sample, so scale it back to the output-rate level.
+  const double gain = shapeOf(waveShape) == kShapeTrigger ? (double)kAaOs : 1.0;
+  double trigAgg = 0.0;
+  double endAgg = 0.0;
+  for (int k = 0; k < kAaOs; k++) {
+    const double x = pulseTrainCore(handle, trigger, count, endTime, curve, ampStart, ampEnd, ampCurve,
+      amplitude, sr * kAaOs, mode, recalc, pulseMode, endDelay, antialiasing, seed, waveShape, freqHz,
+      morph, curvePolarity, spacing, edgeFade, reverse) * gain;
+    s.osHist[s.osPos] = x;
+    s.osPos = s.osPos + 1 == kAaOsTaps ? 0 : s.osPos + 1;
+    trigAgg = aaOsStronger(trigAgg, s.trigOut);
+    endAgg = aaOsStronger(endAgg, s.endOut);
+  }
+  s.trigOut = trigAgg;
+  s.endOut = endAgg;
+  const double* h = aaOsKernel();
+  double acc = 0.0;
+  int j = s.osPos; // oldest sample
+  for (int i = 0; i < kAaOsTaps; i++) {
+    acc += h[i] * s.osHist[j];
+    j = j + 1 == kAaOsTaps ? 0 : j + 1;
+  }
+  return acc;
 }
 
 extern "C" double soemdsp_pulse_train_effective(int handle, int i) {

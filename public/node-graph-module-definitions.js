@@ -14731,7 +14731,7 @@ const nodeGraphModuleDefinitions = (
     face: [
       { kind: "cells", params: [["pulseMode", "Fwd-Rev"]], horizontal: true, h: 30 },
       { kind: "cells", params: [["wave", "Shape"]], horizontal: true, h: 30 },
-      { kind: "choices", param: "antialiasing", labels: ["Quant", "Rand", "Dither", "AA"], h: 26 },
+      { kind: "choices", param: "antialiasing", labels: ["Quant", "Rand", "Dither"], h: 26 },
       { kind: "choices", param: "recalculateOnTrigger", labels: ["Free", "Latch"], h: 26 },
       { kind: "choices", param: "mode", labels: ["One shot", "Loop"], h: 26 },
       { kind: "cells", params: [["morph", "Morph"], ["count", "Count"], ["stretch", "Stretch"]], h: 52 },
@@ -14821,19 +14821,18 @@ const nodeGraphModuleDefinitions = (
         tooltip: "Edge Fade. On: when Stretch (or a negative End Delay) cuts the train, the last pulse before the cut fades by how far the edge is toward the next pulse, so pulses slide in and out instead of popping. Off: hard cut."
       },
       {
-        // Stored value = choice: 0 Quant / 1 Rand / 2 Dither / 3 AA (auto, v41:
-        // band-limited per Shape). New nodes default to AA; saved patches keep
-        // their value, and patches with none load as 0 Quant
-        // (node-graph-patch-migrations.js). Retired v32/v33 4 PolyBLEP -> 0.
-        choices: ["Quant", "Rand", "Dither", "AA"],
-        defaultValue: "3",
+        // Stored value = choice: 0 Quant / 1 Rand / 2 Dither. The AA choice
+        // (stored 3) is hidden; saved 3 and retired 4 load as 0 Quant
+        // (node-graph-patch-migrations.js).
+        choices: ["Quant", "Rand", "Dither"],
+        defaultValue: "0",
         displayChoices: true,
         divideChoicesVisibly: true,
         key: "antialiasing",
         label: "Antialiasing",
         linearSmoothing: false,
         smoothingType: "none",
-        max: "3",
+        max: "2",
         mid: "1",
         min: "0",
         nonlinearSlider: false,

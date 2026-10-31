@@ -82,11 +82,15 @@ console.log(`ok pulseTrain schedule: ${SETS.length} sets, t_i = End*E_k(u_i), fi
   }
   const rat = preview(N, [n, end, 10, 1, 0.2, 0, 1, 0, 0, 0, 0, 2]);
   if (rat.t[0] !== 0 || rat.t[n - 1] !== end) throw new Error("rational ends");
-  const s = 0.99;
+  const s = -0.99; // Rational is sign-flipped so + Curve stretches gaps like Expo/Harmonic
   for (let i = 1; i < n - 1; i++) {
     const u = i / (n - 1);
     const want = end * ((1 + s) * u) / (1 - s + 2 * s * u);
     if (Math.abs(rat.t[i] - want) > 1e-9 * end) throw new Error(`rational t[${i}]`);
+  }
+  for (let i = 2; i < n; i++) {
+    const g0 = rat.t[i - 1] - rat.t[i - 2], g1 = rat.t[i] - rat.t[i - 1];
+    if (!(g1 > g0)) throw new Error(`rational gaps not growing ${g0} -> ${g1}`);
   }
   console.log("ok pulseTrain spacing: Expo omitted, Harmonic multiples, Rational, Curve 0 = linear");
 }
