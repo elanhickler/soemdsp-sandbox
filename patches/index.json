@@ -283,6 +283,15 @@
       "folder": "foley"
     },
     {
+      "slug": "foley/gotsound",
+      "label": "gotsound",
+      "name": "",
+      "url": "/soemdsp-sandbox/patches/foley/gotsound.json",
+      "author": "",
+      "emoji": "",
+      "folder": "foley"
+    },
+    {
       "slug": "guitar_pedals/chorus_vs_ensemble",
       "label": "chorus_vs_ensemble",
       "name": "",
@@ -686,6 +695,14 @@
       "label": "frequencysweep",
       "name": "",
       "url": "/soemdsp-sandbox/patches/frequencysweep.json",
+      "author": "",
+      "emoji": ""
+    },
+    {
+      "slug": "gotsound",
+      "label": "gotsound",
+      "name": "",
+      "url": "/soemdsp-sandbox/patches/foley/gotsound.json",
       "author": "",
       "emoji": ""
     },

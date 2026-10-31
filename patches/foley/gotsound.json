@@ -1198,7 +1198,7 @@
       },
       "params": {
         "motion": 1,
-        "frequency": 0.368700431728529,
+        "frequency": 0.12998071611403045,
         "octaves": 4,
         "persistence": 0.5649713544401804,
         "lacunarity": 2.0947027024288287,
@@ -1206,7 +1206,7 @@
         "scale": 2.199763942444709,
         "zoom": 0.20281958052784654,
         "contrast": 2.491388051376343,
-        "brightness": 0.12,
+        "brightness": 0.24,
         "rotate": 0,
         "amplitude": 1,
         "panX": 0,
