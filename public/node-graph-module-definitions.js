@@ -21359,8 +21359,8 @@ const nodeGraphModuleDefinitions = (
         kind: "decibels",
         label: "Volume",
         max: "0",
-        mid: "-3",
-        min: "-140",
+        mid: "-12",
+        min: "-120",
         minusInf: true,
         nonlinearSlider: true,
         linearSmoothing: true,
@@ -21369,7 +21369,7 @@ const nodeGraphModuleDefinitions = (
         smoothingSeconds: 0.0333,
         step: "any",
         unit: "dB",
-        tooltip: "Speaker level (−∞…0 dB). 0 dB is unity. Default −3 dB. Old patches that stored 0…1 linear Volume are converted on load. Type a dB value (or −inf)."
+        tooltip: "Speaker level (−∞…0 dB, slider −120…0 dB with −12 dB at the middle). 0 dB is unity. Default −3 dB. Old patches that stored 0…1 linear Volume are converted on load. Type a dB value (or −inf)."
       },
       {
         defaultValue: "0",
