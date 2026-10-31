@@ -107,13 +107,6 @@
   "modulations": [
     {
       "destinationNode": "dsfOscillator-1",
-      "destinationParam": "bright",
-      "sourceNode": "ampCurve-1",
-      "sourcePort": "Curve",
-      "tracePoints": []
-    },
-    {
-      "destinationNode": "dsfOscillator-1",
       "destinationParam": "amplitude",
       "sourceNode": "arp-1",
       "sourcePort": "Gate",
@@ -738,19 +731,19 @@
           "source": "pointer",
           "gate": 0,
           "gatePulse": 0,
-          "x": 0.4468107740096166,
-          "y": 0.6149109511178477,
+          "x": 0.37103110710375475,
+          "y": 0.7615634556574924,
           "velocity": 1,
-          "keyIndex": 27,
-          "keyQuantized": 0.45,
-          "rawMidi": 51,
+          "keyIndex": 23,
+          "keyQuantized": 0.38333333333333336,
+          "rawMidi": 47,
           "octave": 0,
-          "midi": 51,
-          "pitch": "D#2",
-          "pitchValue": 51,
-          "midiNormalized": 0.4015748031496063,
-          "tenthVoltPerOctave": 0.425,
-          "frequency": 155.56349186104046
+          "midi": 47,
+          "pitch": "B1",
+          "pitchValue": 47,
+          "midiNormalized": 0.3700787401574803,
+          "tenthVoltPerOctave": 0.39166666666666666,
+          "frequency": 123.47082531403103
         },
         "hideKeyboardInfo": false
       },
@@ -774,74 +767,6 @@
       },
       "chordMemory": {
         "slots": {}
-      }
-    },
-    {
-      "gx": 15,
-      "gy": -4,
-      "id": "ampCurve-1",
-      "paramMeta": {
-        "mode": {
-          "alias": "",
-          "choices": [
-            "Lin",
-            "Exp"
-          ],
-          "choiceOriginMin": 0,
-          "curveAmount": 0,
-          "def": 1,
-          "displayChoices": true,
-          "divideChoicesVisibly": true,
-          "kind": "decimal",
-          "bipolar": false,
-          "max": 1,
-          "maxDigits": 3,
-          "mid": 1,
-          "min": 0,
-          "reverse": false,
-          "nonlinearSlider": false,
-          "sliderCurve": "linear",
-          "showSign": false,
-          "removeTrailingZeros": false,
-          "smoothingMode": "global",
-          "smoothingSeconds": null,
-          "smoothingType": "none",
-          "step": 1,
-          "tooltip": "Lin = clamp Env to 0…1. Exp = classic VCA CV law (quiet lows, unity at 1) for Amplitude params.",
-          "hardClamp": false,
-          "modMultiply": false,
-          "vca": false,
-          "constraint": "",
-          "unit": "",
-          "wraparound": false,
-          "visible": true,
-          "linearSmoothing": false,
-          "outputDomain": false,
-          "domainOffset": 0
-        }
-      },
-      "params": {
-        "mode": 1
-      },
-      "type": "ampCurve",
-      "alias": "Out → bright",
-      "widthGu": 4,
-      "ui": {
-        "buttonsHidden": true,
-        "buttonsForceShow": false,
-        "displayHeightOffsetGu": 0,
-        "displayModeKey": "",
-        "ioHidden": false,
-        "hideUnused": false,
-        "modRailAlwaysOn": false,
-        "interfaceControlsHidden": false,
-        "interfaceControlsForceShow": false,
-        "movementLocked": false,
-        "oscilloscopeHidden": true,
-        "oscilloscopeForceShow": false,
-        "slidersHidden": false,
-        "slidersForceShow": false,
-        "titleHidden": false
       }
     },
     {
@@ -1349,7 +1274,7 @@
   "view": {
     "heightGu": 24,
     "widthGu": 48,
-    "zoom": 1.1333425946753697,
+    "zoom": 1.1013249379986607,
     "gridVisible": true,
     "gridLightVisible": true,
     "wireLengthsVisible": true,
