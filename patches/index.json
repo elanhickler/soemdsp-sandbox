@@ -454,6 +454,15 @@
       "folder": "need_for_speed"
     },
     {
+      "slug": "pulsetrain/pulsetrain_example",
+      "label": "pulsetrain_example",
+      "name": "",
+      "url": "/soemdsp-sandbox/patches/pulsetrain/pulsetrain_example.json",
+      "author": "",
+      "emoji": "",
+      "folder": "pulsetrain"
+    },
+    {
       "slug": "Soundemote_Softwave_prototypes/Soft_Asymmetrical_Sine",
       "label": "Soft_Asymmetrical_Sine",
       "name": "",
@@ -991,6 +1000,14 @@
       "label": "pulsetrain",
       "name": "",
       "url": "/soemdsp-sandbox/patches/demo_patches/pulsetrain.json",
+      "author": "",
+      "emoji": ""
+    },
+    {
+      "slug": "pulsetrain_example",
+      "label": "pulsetrain_example",
+      "name": "",
+      "url": "/soemdsp-sandbox/patches/pulsetrain/pulsetrain_example.json",
       "author": "",
       "emoji": ""
     },
