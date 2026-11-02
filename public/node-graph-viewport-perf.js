@@ -990,7 +990,7 @@ function nodeGraphViewportCullBootOrLayoutUnsafe() {
   return false;
 }
 
-/** Module world layer plus Text Box hosts (#nodeGraphAnnotationNodes).
+/** Module world layer plus every legal Text Box host.
  *  Those nodes sit outside the zoom surface. A cull that only walks the
  *  module world layer never clears viewport-asleep, and display:none
  *  stops IntersectionObserver from firing again. */
@@ -1009,7 +1009,15 @@ function nodeGraphViewportCullModuleRoots(surface) {
       ? nodeGraphZoomSurface()
       : document.getElementById("nodeGraphWorldLayer") || document.getElementById("nodeGraphZoomSurface"))
     || document.getElementById("nodeGraphWorkspace"));
-  add(document.getElementById("nodeGraphAnnotationNodes"));
+  if (typeof nodeGraphModuleMountContainers === "function") {
+    for (const container of nodeGraphModuleMountContainers()) {
+      add(container);
+    }
+  } else {
+    add(document.getElementById("nodeGraphAnnotationNodes"));
+    add(document.getElementById("nodeGraphTextBehind"));
+    add(document.getElementById("nodeGraphTextFront"));
+  }
   return roots;
 }
 

@@ -97,7 +97,6 @@
 #include <soemdsp/math/analog_filter_trig.h>
 #include <soemdsp/math/rect_sine.h>
 #include <soemdsp/math/robin_dither.h>
-#include <soemdsp/math/poly_blep.h>
 using soemdsp_maths::gate_hit;
 using soemdsp_maths::gate_hit_velocity;
 
@@ -155,25 +154,13 @@ struct PulseTrainState {
   int layoutTotal;
   int layoutOrder;
   long long layoutAt;
-  // AA (auto, v41). Grain shapes: end value and per-sample slope of the grain
-  // that played last, so the next grain's start boundary is corrected against
-  // it (aaHaveLast false = hard start, no correction). Trigger shape: BLIT
-  // taps due in the next 32 samples (aaRing, indexed by the running sample
-  // count aaPos, which does not reset at a Loop wrap) and the index of the
-  // last tap written.
-  bool aaHaveLast;
-  double aaLastV;
-  double aaLastS;
+  // Trigger BLIT taps indexed by monotonic host sample position.
   double aaRing[32];
   long long aaPos;
   long long aaLastIdx;
-  // AA (v42): the core runs kAaOs times per output sample at kAaOs x the rate
-  // and a Kaiser low-pass decimates it. osOn: the sample counters (n, cycleN,
-  // layoutAt) are at the oversampled rate. osHist: the last kAaOsTaps
-  // oversampled samples (ring at osPos).
-  bool osOn;
-  double osHist[257];
-  int osPos;
+  // Track mode/shape changes so unsupported shapes cannot leak old tails.
+  int aaShape;
+  bool aaEnabled;
 };
 
 struct PreviewSched {
@@ -195,6 +182,7 @@ struct PreviewSched {
 };
 
 static PulseTrainState gPool[kMaxInstances];
+static double gGrainTail[kMaxInstances][32];
 static PreviewSched gPreview = {};
 
 // Pulse Mode p in [0, 1]: 0 Forward; 0.5 out-and-back peak at Time; 1 reverse.
@@ -733,32 +721,7 @@ static void addAt(PulseTrainState& s, long long land, long long n, double amp, d
   s.spill[d - 1] += amp;
 }
 
-// ---------------------------------------------------------------------------
-// AA (auto, v41): band-limited output for every Shape. Scheduling stays the
-// Quant landing (first sample at or after the pulse time); what changes is
-//  * Loop cycles carry their sub-sample remainder (phaseOff) across the wrap,
-//    so the period is exact instead of a whole number of samples;
-//  * grain shapes are evaluated at fractional positions and every step /
-//    corner (grain boundaries and the shape's own edges) gets a PolyBLEP /
-//    PolyBLAMP residual (math/poly_blep.h);
-//  * the Trigger shape is a windowed-sinc BLIT placed at the exact fractional
-//    pulse time, delayed kBlitLat samples so the kernel is causal.
-// Residual windows are +-1 sample. A step of height H at position x adds
-// (H/2) * aaStepRes(n - x) to sample n; a slope change of S (per sample) adds
-// (S/2) * aaCornerRes(n - x). poly_blep/poly_blamp take a phase and a phase
-// increment; a virtual 4-sample period maps the +-1 sample window onto them.
-static const double kAaDt = 0.25;
-
-static inline double aaStepRes(double d) {
-  if (d >= 1.0 || d <= -1.0) return 0.0;
-  return soemdsp_maths::poly_blep(d >= 0.0 ? d * kAaDt : 1.0 + d * kAaDt, kAaDt);
-}
-
-static inline double aaCornerRes(double d) {
-  if (d >= 1.0 || d <= -1.0) return 0.0;
-  return soemdsp_maths::poly_blamp(d >= 0.0 ? d * kAaDt : 1.0 + d * kAaDt, kAaDt);
-}
-
+// Shape boundary geometry shared by BLIT step and ramp responses.
 // Shape edges in grain units u in [0, 1]. Values and slopes are the limits at
 // u = 0+ and u = 1-, plus the interior steps (dv) and slope changes (ds).
 struct AaEdge {
@@ -947,9 +910,46 @@ static inline bool aaRingPending(const PulseTrainState& s) { return s.aaLastIdx 
 static void aaClearState(PulseTrainState& s) {
   for (int k = 0; k < 32; k++) s.aaRing[k] = 0.0;
   s.aaLastIdx = -1;
-  s.aaHaveLast = false;
-  s.aaLastV = 0.0;
-  s.aaLastS = 0.0;
+}
+
+// v43: host-rate BLIT step/ramp responses. No oversampling or PolyBLEP.
+static inline bool aaBlitShape(int shape) {
+  return shape == kShapeTrigger || shape == kShapeGate || shape == kShapeSaw
+    || shape == kShapeRamp || shape == kShapePulseLeft
+    || shape == kShapePulseCenter || shape == kShapePulseRight;
+}
+
+struct BlitResidual { double step, ramp; };
+static BlitResidual aaBlitResidual(double nn, double x) {
+  BlitResidual r = {0.0, 0.0};
+  const double center = x + kBlitLat;
+  const double d = nn - center;
+  if (d < -8.0 || d > 8.0) return r;
+  aaBlitBuild();
+  const double fl = soemdsp_maths::dsp_floor(center);
+  const double frac = center - fl;
+  const double pos = frac * kBlitP;
+  int p = (int)pos;
+  double w = pos - p;
+  if (p >= kBlitP) { p = kBlitP - 1; w = 1.0; }
+  const double* a = &gBlitTab[p * kBlitK];
+  const double* b = a + kBlitK;
+  double moment = 0.0;
+  for (int i = 0; i < kBlitK; i++) moment += (i - 7) * (a[i] + (b[i] - a[i]) * w);
+  const double fix = frac - moment;
+  // Trapezoidal integration: half the current impulse belongs to this
+  // sample. This preserves continuous step area, including grid-aligned
+  // edges, rather than introducing a half-sample DC bias per jump.
+  for (int i = 0; i < kBlitK; i++) {
+    const double v = a[i] + (b[i] - a[i]) * w;
+    const double at = fl + i - 7;
+    const double vr = v + (i == 8 ? fix : (i == 7 ? -fix : 0.0));
+    if (nn > at) { r.step += v; r.ramp += vr * (nn - at); }
+    else if (nn == at) r.step += 0.5 * v;
+  }
+  if (d > 0.0) { r.step -= 1.0; r.ramp -= d; }
+  else if (d == 0.0) r.step -= 0.5;
+  return r;
 }
 
 static void applySchedule(PulseTrainState& s, const double live[9], double v, bool loop, double polarity, int spacing) {
@@ -1072,12 +1072,15 @@ static inline int pulseIndexAt(
 
 }  // namespace
 
-extern "C" int soemdsp_pulse_train_version() { return 42; } // v42: AA runs the train at 8x the rate and decimates (Kaiser low-pass, 257 taps): alias floor ~-75..-90 dB on every Shape (v41's per-edge PolyBLEP left -20..-50 dB on Gate / Saw / Pulse). was v41: Antialiasing AA (auto, stored 3): fractional Loop period, PolyBLEP / BLAMP on every grain shape, BLIT for Trigger. was v40: reverse (negative ƒ plays the cycle backwards). was v39: Rand / Dither Loop cycles are Robin-dithered whole samples, resets on the grid; was v38 Edge Fade
+extern "C" int soemdsp_pulse_train_version() { return 43; } // Host-rate BLIT Trigger/step/ramp AA; unsupported shapes silent.
 
 extern "C" int soemdsp_pulse_train_create() {
   for (int i = 0; i < kMaxInstances; i++) {
     if (!gPool[i].active) {
       PulseTrainState& s = gPool[i];
+      for (int k = 0; k < 32; k++) gGrainTail[i][k] = 0.0;
+      s.aaShape = -1;
+      s.aaEnabled = false;
       s.running = false;
       s.prevTrig = 0.0;
       s.n = 0;
@@ -1113,15 +1116,9 @@ extern "C" int soemdsp_pulse_train_create() {
       s.layoutOrder = 0;
       s.layoutAt = -1;
       s.reversed = false;
-      s.aaHaveLast = false;
-      s.aaLastV = 0.0;
-      s.aaLastS = 0.0;
-      for (int k = 0; k < 32; k++) s.aaRing[k] = 0.0;
+                  for (int k = 0; k < 32; k++) s.aaRing[k] = 0.0;
       s.aaPos = 0;
       s.aaLastIdx = -1;
-      s.osOn = false;
-      for (int k = 0; k < 257; k++) s.osHist[k] = 0.0;
-      s.osPos = 0;
       s.active = true;
       return i + 1;
     }
@@ -1147,6 +1144,106 @@ static inline void setReverse(const PulseTrainState& s, bool rev) {
   gRev = true;
 }
 
+static double aaBlitGrains(PulseTrainState& s, double sr, double scale, int shape,
+  double mo, bool rev, bool edgeOn, double nn, double cutoff) {
+  gTimeSpacing = s.spacing; gCountF = s.countF; gFade = s.fade;
+  gPhaseOff = s.phaseOff; setReverse(s, rev);
+  const double pol = s.polarity;
+  const double endT = s.timeSpan, kCurve = s.eff[2], du = s.pulseMode;
+  const bool lp = s.loopSched;
+  const int total = s.count, nFwd = s.nFwd;
+  const double delay = clampDelay(s.eff[8]);
+  const double tE = oneShotEndTime(total, nFwd, endT, kCurve, lp, du, delay, pol);
+  const double tEPlay = playT(tE, scale);
+  // Pulse amplitude, times the Edge Fade when the switch is On (v38).
+  const double cycleCut = s.cycle;
+  auto ampOf = [&](int j) {
+    const double a = pulseAmp(j, nFwd, endT, kCurve, s.eff[3], s.eff[4], s.eff[5], s.eff[6], s.effVel, lp, du, pol);
+    if (!edgeOn) return a;
+    return a * edgeFadeOf(j, total, nFwd, endT, kCurve, lp, du, pol, cycleCut, tE);
+  };
+  // AA grain geometry in fractional samples (cycle relative). po = the cycle's
+  // phaseOff the positions are measured against.
+  auto aaGrainAt = [&](int j, double po) -> AaGrain {
+    AaGrain g;
+    g.ok = false; g.xs = 0.0; g.xe = 0.0; g.amp = 0.0; g.endKind = 2;
+    if (j < 0 || j >= total) return g;
+    const double t0 = pulseTime(j, nFwd, endT, kCurve, lp, du, pol);
+    if (pulseAfterCutoff(t0, lp, s.cycle, tE)) return g;
+    g.xs = (playT(t0, scale) - po) * sr;
+    const double wrapEnd = s.wrapCycle > 0.0 ? s.wrapCycle : 1.0 / sr;
+    if (j + 1 < total) {
+      const double tn = pulseTime(j + 1, nFwd, endT, kCurve, lp, du, pol);
+      if (pulseAfterCutoff(tn, lp, s.cycle, tE)) {
+        if (lp) { g.xe = (wrapEnd - po) * sr; g.endKind = 1; }
+        else { g.xe = (tEPlay - po) * sr; g.endKind = 2; }
+      } else {
+        g.xe = (playT(tn, scale) - po) * sr;
+        g.endKind = 0;
+      }
+    } else if (lp) {
+      const double spanP = playT(spanScaleOf(du) * endT, scale);
+      if (delay > 0.0 && spanP < wrapEnd) { g.xe = (spanP - po) * sr; g.endKind = 2; }
+      else { g.xe = (wrapEnd - po) * sr; g.endKind = 1; }
+    } else {
+      g.xe = (tEPlay - po) * sr;
+      g.endKind = 2;
+    }
+    g.amp = ampOf(j);
+    g.ok = true;
+    return g;
+  };
+    if (!aaBlitShape(shape)) return 0.0;
+
+    const double at = nn - kBlitLat;
+    int lo = 0, hi = total;
+    while (lo < hi) {
+      const int mid = lo + (hi - lo) / 2;
+      const double x = (playT(pulseTime(mid, nFwd, endT, kCurve, lp, du, pol), scale) - s.phaseOff) * sr;
+      if (x < nn - 16.0) lo = mid + 1; else hi = mid;
+    }
+    int first = lo > 0 ? lo - 1 : 0;
+    double y = 0.0;
+
+    const AaEdge ed = aaEdgeOf(shape, mo);
+    for (int j = first; j < total; j++) {
+      AaGrain g = aaGrainAt(j, s.phaseOff);
+      const double originalEnd = g.xe;
+      if (cutoff < g.xe) g.xe = cutoff;
+      if (g.xs > nn) break;
+      const double L = originalEnd - g.xs;
+      if (!g.ok || !(g.xe > g.xs) || !(L > 0.0) || g.xe < nn - 16.0) continue;
+      AaEnds ends = aaEndsOf(ed, g.amp, L, rev);
+      if (g.xe < originalEnd) {
+        const double uEnd = (g.xe - g.xs) / L;
+        ends.ve = grainWave(shape, rev ? 1.0 - uEnd : uEnd, mo) * g.amp;
+      }
+      auto step = [&](double x) { const double d = nn - (x + kBlitLat); return d > 0.0 ? 1.0 : (d == 0.0 ? 0.5 : 0.0); };
+      auto ramp = [&](double x) { const double d = nn - (x + kBlitLat); return d > 0.0 ? d : 0.0; };
+      y += ends.vs * step(g.xs) + ends.ss * ramp(g.xs);
+      y -= ends.ve * step(g.xe) + ends.se * ramp(g.xe);
+      for (int i = 0; i < ed.nev; i++) {
+        const double edge = g.xs + (rev ? 1.0 - ed.ue[i] : ed.ue[i]) * L;
+        if (edge >= g.xe) continue;
+        y += (rev ? -ed.dv[i] : ed.dv[i]) * g.amp * step(edge)
+          + ed.ds[i] * g.amp / L * ramp(edge);
+      }
+      const BlitResidual rs = aaBlitResidual(nn, g.xs);
+      const BlitResidual re = aaBlitResidual(nn, g.xe);
+      y += ends.vs * rs.step + ends.ss * rs.ramp;
+      y -= ends.ve * re.step + ends.se * re.ramp;
+      for (int i = 0; i < ed.nev; i++) {
+        const double u = rev ? 1.0 - ed.ue[i] : ed.ue[i];
+        const double edge = g.xs + u * L;
+        if (edge >= g.xe) continue;
+        const BlitResidual r = aaBlitResidual(nn, edge);
+        y += (rev ? -ed.dv[i] : ed.dv[i]) * g.amp * r.step
+          + ed.ds[i] * g.amp / L * r.ramp;
+      }
+    }
+    return y;
+}
+
 static double pulseTrainCore(
   int handle, double trigger, double count, double endTime, double curve,
   double ampStart, double ampEnd, double ampCurve, double amplitude, double sampleRate, double mode,
@@ -1165,15 +1262,18 @@ static double pulseTrainCore(
   const int spacingLive = spacingOf(spacing); // omitted wasm arg (NaN/0) = Expo
   const bool loop = mode > 0.5;
   const bool latch = recalc > 0.5;
-  // AA (auto, stored 3): Quant scheduling (aaMode 0) plus the band-limited
-  // output of aaBlep. Every other value keeps its old meaning exactly.
-  const bool aaBlep = antialiasing >= 2.5;
-  const int aaMode = aaBlep ? 0 : aaModeOf(antialiasing);
+  // Stored 3 AA: host-rate BLIT with fractional scheduling; no oversampling.
+  const bool aaBlit = antialiasing >= 2.5;
+  const int aaMode = aaBlit ? 0 : aaModeOf(antialiasing);
   const int shape = shapeOf(waveShape);
   const unsigned int seedU = soemdsp_maths::seed_param_u32(seed);
   PulseTrainState& s = gPool[handle - 1];
   const double sr = sampleRate < 1.0 ? 44100.0 : sampleRate;
-  if (!aaBlep && (s.aaLastIdx >= 0 || s.aaHaveLast)) aaClearState(s);
+  if (aaBlit != s.aaEnabled || shape != s.aaShape) {
+    aaClearState(s);
+    for (int k = 0; k < 32; k++) gGrainTail[handle - 1][k] = 0.0;
+    s.aaEnabled = aaBlit; s.aaShape = shape;
+  }
   gPhaseOff = s.phaseOff;
   const double pulseModeLive = pulseBiasOf(pulseMode);
   const double live[9] = {
@@ -1213,7 +1313,7 @@ static double pulseTrainCore(
       const double gate = (!latch && prevWrap > 0.0) ? prevWrap : wrapNow;
       const double elapsedNow = (double)s.n / sr + s.phaseOff;
       naturalWrap = elapsedNow >= gate;
-      if (naturalWrap && aaBlep) wrapOvershoot = elapsedNow - gate;
+      if (naturalWrap && aaBlit) wrapOvershoot = elapsedNow - gate;
     }
   }
   const bool remapLive = !latch && loop && s.running && !trigHit && !naturalWrap
@@ -1274,7 +1374,18 @@ static double pulseTrainCore(
   const bool loopStart = loop && (!s.running || trigHit || naturalWrap);
   bool retargeted = false; // pulseIndexAt ran this sample (live Free change / ƒ lock)
   if (trigHit || loopStart) {
-    const double v = trigHit ? gate_hit_velocity() : s.velocity;
+    if (aaBlit && shape != kShapeTrigger && s.running) {
+      const double oldScale = s.periodLock > 0.0 && s.cycle > 0.0 ? s.periodLock / s.cycle : 1.0;
+      const double cut = trigHit ? (double)s.n : 1e30;
+      for (int k = 0; k < 16; k++) {
+        gGrainTail[handle - 1][(s.aaPos + k) & 31] += aaBlitGrains(s, sr, oldScale,
+          shape, latch ? s.morphEff : morphLive, s.reversed, edgeOn, (double)s.n + k, cut);
+      }
+      gTimeSpacing = spacingNow; gCountF = s.countF; gFade = s.fade;
+      gPhaseOff = s.phaseOff; setReverse(s, rev);
+    }
+
+    const double v = trigHit ? s.velocity : s.effVel;
     const bool needBuild = !s.running || trigHit || !paramsEqual(s.eff, live)
       || !(s.effVel == v) || s.loopSched != loop || s.polarity != polarityLive
       || s.spacing != spacingLive;
@@ -1284,7 +1395,7 @@ static double pulseTrainCore(
     // Cycle starts on a whole sample (Quant = old Off sample grid, v34).
     // AA: a Loop that wrapped by itself keeps the sub-sample remainder, so the
     // period is exact; its pending tails (spill, BLIT ring) keep playing.
-    const bool aaCarry = aaBlep && naturalWrap && !trigHit;
+    const bool aaCarry = aaBlit && naturalWrap && !trigHit;
     double carry = 0.0;
     if (aaCarry) {
       carry = wrapOvershoot;
@@ -1300,7 +1411,6 @@ static double pulseTrainCore(
     s.endFired = false;
     s.running = true;
     if (!aaCarry) clearSpill(s);
-    if (aaBlep && !aaCarry) s.aaHaveLast = false; // hard (re)start: no boundary correction
     if (aaMode >= 1) s.ditherEpoch += 1u; // new cycle-length / Dither stream per cycle
     const unsigned int stream0 = aaStream(seedU, s.ditherEpoch, aaMode);
     s.cycleN = cycleLandOf(wrapNow, sr, seedU, s.ditherEpoch, aaMode, stream0, s.count);
@@ -1338,19 +1448,16 @@ static double pulseTrainCore(
     if (s.next > s.count) s.next = s.count;
   }
   if (!s.running) {
-    for (int k = 0; k < 9; k++) s.eff[k] = live[k];
-    s.effVel = 1.0;
-    s.polarity = polarityLive;
-    s.spacing = spacingLive;
-    s.morphEff = morphLive;
     s.elapsed = -1.0;
-    if (aaBlep && aaRingPending(s)) {
-      // End has fired but the last BLIT pulses are still ringing out.
-      const double tail = aaRingTake(s);
-      s.aaPos++;
-      return tail;
+    double tail = 0.0;
+    if (aaBlit && shape == kShapeTrigger) tail = aaRingTake(s);
+    else if (aaBlit && aaBlitShape(shape) && s.count > 0) {
+      tail = aaBlitGrains(s, sr, scale, shape, latch ? s.morphEff : morphLive,
+        rev, edgeOn, (double)s.n, 1e30) + gGrainTail[handle - 1][s.aaPos & 31];
     }
-    return 0.0;
+    gGrainTail[handle - 1][s.aaPos & 31] = 0.0;
+    if (aaBlit) { s.n++; s.aaPos++; }
+    return tail;
   }
   const double e = (double)s.n / sr + s.phaseOff;
   s.elapsed = e;
@@ -1366,104 +1473,12 @@ static double pulseTrainCore(
   const double delay = clampDelay(s.eff[8]);
   double tE = oneShotEndTime(total, nFwd, endT, kCurve, lp, du, delay, pol);
   const double tEPlay = playT(tE, scale);
-  // Pulse amplitude, times the Edge Fade when the switch is On (v38).
-  const double cycleCut = s.cycle;
+  const long long cycleNEff = aaBlit ? 0 : s.cycleN;
   auto ampOf = [&](int j) {
     const double a = pulseAmp(j, nFwd, endT, kCurve, s.eff[3], s.eff[4], s.eff[5], s.eff[6], s.effVel, lp, du, pol);
-    if (!edgeOn) return a;
-    return a * edgeFadeOf(j, total, nFwd, endT, kCurve, lp, du, pol, cycleCut, tE);
+    return edgeOn ? a * edgeFadeOf(j, total, nFwd, endT, kCurve, lp, du, pol, s.cycle, tE) : a;
   };
-  // AA grain geometry in fractional samples (cycle relative). po = the cycle's
-  // phaseOff the positions are measured against.
-  const long long cycleNEff = aaBlep ? 0 : s.cycleN; // AA wraps on the fractional period
-  auto aaGrainAt = [&](int j, double po) -> AaGrain {
-    AaGrain g;
-    g.ok = false; g.xs = 0.0; g.xe = 0.0; g.amp = 0.0; g.endKind = 2;
-    if (j < 0 || j >= total) return g;
-    const double t0 = pulseTime(j, nFwd, endT, kCurve, lp, du, pol);
-    if (pulseAfterCutoff(t0, lp, s.cycle, tE)) return g;
-    g.xs = (playT(t0, scale) - po) * sr;
-    const double wrapEnd = s.wrapCycle > 0.0 ? s.wrapCycle : 1.0 / sr;
-    if (j + 1 < total) {
-      const double tn = pulseTime(j + 1, nFwd, endT, kCurve, lp, du, pol);
-      if (pulseAfterCutoff(tn, lp, s.cycle, tE)) {
-        if (lp) { g.xe = (wrapEnd - po) * sr; g.endKind = 1; }
-        else { g.xe = (tEPlay - po) * sr; g.endKind = 2; }
-      } else {
-        g.xe = (playT(tn, scale) - po) * sr;
-        g.endKind = 0;
-      }
-    } else if (lp) {
-      const double spanP = playT(spanScaleOf(du) * endT, scale);
-      if (delay > 0.0 && spanP < wrapEnd) { g.xe = (spanP - po) * sr; g.endKind = 2; }
-      else { g.xe = (wrapEnd - po) * sr; g.endKind = 1; }
-    } else {
-      g.xe = (tEPlay - po) * sr;
-      g.endKind = 2;
-    }
-    g.amp = ampOf(j);
-    g.ok = true;
-    return g;
-  };
-  bool aaGrainPlayed = false;
-  // One output sample of grain k: the naive value at the fractional grain
-  // position plus the residuals of every step / corner within +-1 sample.
-  auto aaGrainVal = [&](int k, long long n0v, long long n1v, bool stub, double amp, double mo) -> double {
-    const AaGrain g = aaGrainAt(k, s.phaseOff);
-    const double L = g.xe - g.xs;
-    if (stub || !g.ok || !(L >= 1.0)) {
-      // Too short to band-limit (or the Quant 1-sample stub): the old value.
-      const double us = (double)(s.n - n0v) / (double)(n1v - n0v);
-      s.aaHaveLast = false;
-      return grainWave(shape, rev ? 1.0 - us : us, mo) * amp;
-    }
-    aaGrainPlayed = true;
-    const double nn = (double)s.n;
-    double u = (nn - g.xs) / L;
-    if (u < 0.0) u = 0.0;
-    if (u > 1.0) u = 1.0;
-    double y = amp * grainWave(shape, rev ? 1.0 - u : u, mo);
-    const AaEdge ed = aaEdgeOf(shape, mo);
-    const AaEnds me = aaEndsOf(ed, amp, L, rev);
-    // Start boundary: this is its first sample.
-    const double dS = nn - g.xs;
-    if (dS >= 0.0 && dS < 1.0 && s.aaHaveLast) {
-      y += 0.5 * (me.vs - s.aaLastV) * aaStepRes(dS) + 0.5 * (me.ss - s.aaLastS) * aaCornerRes(dS);
-    }
-    // End boundary: this is its last sample (the next one follows).
-    const double dE = nn - g.xe;
-    const bool lastSample = s.n + 1 >= n1v;
-    if (dE > -1.0 && dE < 0.0) {
-      double nv = 0.0, nsl = 0.0;
-      if (g.endKind != 2) {
-        AaGrain nx = g.endKind == 0 ? aaGrainAt(k + 1, s.phaseOff) : aaGrainAt(0, 0.0);
-        const double nL = nx.xe - nx.xs;
-        if (nx.ok && nL >= 1.0) {
-          const AaEnds ne = aaEndsOf(aaEdgeOf(shape, mo), nx.amp, nL, rev);
-          nv = ne.vs; nsl = ne.ss;
-        }
-      }
-      y += 0.5 * (nv - me.ve) * aaStepRes(dE) + 0.5 * (nsl - me.se) * aaCornerRes(dE);
-    }
-    if (lastSample && g.endKind == 2) {
-      // The step down to silence lands on the next sample, which has no grain.
-      const double dP = (double)n1v - g.xe;
-      s.spill[0] += 0.5 * (0.0 - me.ve) * aaStepRes(dP) + 0.5 * (0.0 - me.se) * aaCornerRes(dP);
-    }
-    // The shape's own edges inside the grain.
-    for (int i = 0; i < ed.nev; i++) {
-      const double ut = rev ? 1.0 - ed.ue[i] : ed.ue[i];
-      const double dv = (rev ? -ed.dv[i] : ed.dv[i]) * amp;
-      const double dsl = ed.ds[i] * amp / L;
-      const double dI = nn - (g.xs + ut * L);
-      if (dI > -1.0 && dI < 1.0) y += 0.5 * dv * aaStepRes(dI) + 0.5 * dsl * aaCornerRes(dI);
-    }
-    s.aaLastV = me.ve;
-    s.aaLastS = me.se;
-    s.aaHaveLast = true;
-    return y;
-  };
-  if (shape == kShapeTrigger && aaBlep) {
+  if (shape == kShapeTrigger && aaBlit) {
     // BLIT at the exact fractional pulse time (kBlitLat samples late so the
     // kernel is causal). Trigger out stays the plain impulse on the landing.
     out = aaRingTake(s);
@@ -1537,9 +1552,9 @@ static double pulseTrainCore(
         s.next++;
       }
     }
-    if (!aaBlep) trig = out;
+    if (!aaBlit) trig = out;
   } else if (!s.allAtZero && total > 0) {
-    if (aaBlep) out = takeSpill(s); // step-down tail of a grain that just ended
+    if (aaBlit) out = takeSpill(s); // step-down tail of a grain that just ended
     while (s.next < total) {
       const double t0 = pulseTime(s.next, nFwd, endT, kCurve, lp, du, pol);
       if (pulseAfterCutoff(t0, lp, s.cycle, tE)) {
@@ -1573,7 +1588,6 @@ static double pulseTrainCore(
         const double lastT = playT(pulseTime(total - 1, nFwd, endT, kCurve, lp, du, pol), scale);
         n1 = eventLand(tEPlay, sr, stream, (unsigned int)total, aaMode, delay > 0.0 && ceilLand(tEPlay, sr) == ceilLand(lastT, sr));
       }
-      bool aaStub = false;
       if (n1 <= n0) {
         // One-shot delay 0: last pulse is the end of the previous grain, not a
         // new 1-sample stub. End fires on that sample (same as Trigger).
@@ -1583,14 +1597,13 @@ static double pulseTrainCore(
           break;
         }
         n1 = n0 + 1;
-        aaStub = true;
       }
       if (s.n < n0) break;
       if (s.n < n1) {
         const double u = (double)(s.n - n0) / (double)(n1 - n0);
         const double amp = ampOf(s.next);
         const double mo = latch ? s.morphEff : morphLive;
-        if (aaBlep) out += aaGrainVal(s.next, n0, n1, aaStub, amp, mo);
+        if (aaBlit) out = 0.0; // final host-rate BLIT evaluation below
         else out = grainWave(shape, rev ? 1.0 - u : u, mo) * amp;
         // Trigger out on the grain's first sample; one sample late when a live
         // retarget this sample found its landing slid back across the boundary
@@ -1609,9 +1622,11 @@ static double pulseTrainCore(
     trig = s.allAmp;
     s.next = s.count;
   }
-  if (aaBlep && shape != kShapeTrigger && !aaGrainPlayed && s.aaHaveLast) {
-    s.aaLastV = 0.0; // no grain this sample: silence precedes the next one
-    s.aaLastS = 0.0;
+  if (aaBlit && shape != kShapeTrigger) {
+    out = aaBlitGrains(s, sr, scale, shape, latch ? s.morphEff : morphLive,
+      rev, edgeOn, (double)s.n, 1e30);
+    if (aaBlitShape(shape)) out += gGrainTail[handle - 1][s.aaPos & 31];
+    gGrainTail[handle - 1][s.aaPos & 31] = 0.0;
   }
   s.trigOut = trig;
   if (!loop) {
@@ -1621,11 +1636,11 @@ static double pulseTrainCore(
       const double lastPlay = playT(lastT, scale);
       bool fireEnd = false;
       if (!(delay > 0.0) && !(delay < 0.0)) {
-        fireEnd = (shape == kShapeTrigger && !aaBlep) ? !spillPending(s) : true;
+        fireEnd = (shape == kShapeTrigger && !aaBlit) ? !spillPending(s) : true;
       } else {
         const bool stackedEnd = delay > 0.0 && ceilLand(tEPlay, sr) == ceilLand(lastPlay, sr);
         const long long eLand = eventLand(tEPlay, sr, stream, (unsigned int)s.count, aaMode, stackedEnd);
-        fireEnd = ((shape == kShapeTrigger && !aaBlep) ? !spillPending(s) : true) && s.n >= eLand;
+        fireEnd = ((shape == kShapeTrigger && !aaBlit) ? !spillPending(s) : true) && s.n >= eLand;
       }
       if (fireEnd) {
         s.endOut = 1.0;
@@ -1649,108 +1664,20 @@ static double pulseTrainCore(
     }
   }
   s.n++;
-  if (aaBlep) s.aaPos++;
+  if (aaBlit) s.aaPos++;
   return out;
 }
 
-// ---------------------------------------------------------------------------
-// AA (v42): oversample + decimate. The core plays the train at kAaOs x the
-// rate (its own AA path: exact fractional Loop period, BLEP / BLIT edges) and
-// a Kaiser windowed-sinc low-pass (cutoff 0.4583 x the output rate, i.e. 22 kHz
-// at 48 kHz) decimates it. Measured against a 64x band-limited reference the
-// alias energy sits at -75..-90 dB for every Shape and pitch. Latency
-// (kAaOsTaps - 1) / 2 oversampled samples = 16 output samples.
-static const int kAaOs = 8;
-static const int kAaOsTaps = 257;
-
-static const double* aaOsKernel() {
-  static double h[kAaOsTaps];
-  static bool built = false;
-  if (built) return h;
-  const double beta = 10.0;
-  const double fc = 0.4583333333 / kAaOs; // cycles per oversampled sample
-  const double c = (kAaOsTaps - 1) * 0.5;
-  auto i0 = [](double x) {
-    double s = 1.0, term = 1.0;
-    for (int k = 1; k < 40; k++) { term *= (x / (2.0 * k)) * (x / (2.0 * k)); s += term; }
-    return s;
-  };
-  const double kPi = soemdsp::constant::kPI;
-  double sum = 0.0;
-  for (int i = 0; i < kAaOsTaps; i++) {
-    const double x = i - c;
-    const double sinc = x == 0.0 ? 2.0 * fc : soemdsp_maths::dsp_sin(2.0 * kPi * fc * x) / (kPi * x);
-    const double r = x / c;
-    const double w2 = 1.0 - r * r;
-    h[i] = sinc * i0(beta * soemdsp_maths::sqrt_newton(w2 > 0.0 ? w2 : 0.0)) / i0(beta);
-    sum += h[i];
-  }
-  for (int i = 0; i < kAaOsTaps; i++) h[i] /= sum; // unity DC gain
-  built = true;
-  return h;
-}
-
-// AA on <-> off changes the rate the sample counters run at: rescale them so
-// the cycle keeps its place, and drop rate-bound tails (BLIT ring, spill, FIR).
-static void aaOsSwitchRate(PulseTrainState& s, bool on) {
-  const double k = on ? (double)kAaOs : 1.0 / (double)kAaOs;
-  auto scale = [k](long long v) { return v > 0 ? (long long)((double)v * k + 0.5) : v; };
-  s.n = scale(s.n);
-  s.cycleN = scale(s.cycleN);
-  s.layoutAt = scale(s.layoutAt);
-  aaClearState(s);
-  for (int k2 = 0; k2 < 5; k2++) s.spill[k2] = 0.0;
-  for (int k2 = 0; k2 < kAaOsTaps; k2++) s.osHist[k2] = 0.0;
-  s.osPos = 0;
-  s.osOn = on;
-}
-
-// Keep the strongest sub-step value (Trigger / End outs are 1-sample pulses
-// that would otherwise vanish between output samples).
-static inline double aaOsStronger(double a, double b) {
-  return (b < 0.0 ? -b : b) > (a < 0.0 ? -a : a) ? b : a;
-}
-
+// Host-rate AA uses the same ABI as previous native releases.
 extern "C" double soemdsp_pulse_train_sample(
   int handle, double trigger, double count, double endTime, double curve,
   double ampStart, double ampEnd, double ampCurve, double amplitude, double sampleRate, double mode,
   double recalc, double pulseMode, double endDelay, double antialiasing, double seed, double waveShape,
   double freqHz, double morph, double curvePolarity, double spacing, double edgeFade, double reverse
 ) {
-  if (handle < 1 || handle > kMaxInstances) return 0.0;
-  PulseTrainState& s = gPool[handle - 1];
-  const bool os = antialiasing >= 2.5;
-  if (os != s.osOn) aaOsSwitchRate(s, os);
-  if (!os) {
-    return pulseTrainCore(handle, trigger, count, endTime, curve, ampStart, ampEnd, ampCurve, amplitude,
-      sampleRate, mode, recalc, pulseMode, endDelay, antialiasing, seed, waveShape, freqHz, morph,
-      curvePolarity, spacing, edgeFade, reverse);
-  }
-  const double sr = sampleRate < 1.0 ? 44100.0 : sampleRate;
-  // The Trigger shape is an impulse: at kAaOs x the rate its area is 1 / kAaOs
-  // of an output sample, so scale it back to the output-rate level.
-  const double gain = shapeOf(waveShape) == kShapeTrigger ? (double)kAaOs : 1.0;
-  double trigAgg = 0.0;
-  double endAgg = 0.0;
-  for (int k = 0; k < kAaOs; k++) {
-    const double x = pulseTrainCore(handle, trigger, count, endTime, curve, ampStart, ampEnd, ampCurve,
-      amplitude, sr * kAaOs, mode, recalc, pulseMode, endDelay, antialiasing, seed, waveShape, freqHz,
-      morph, curvePolarity, spacing, edgeFade, reverse) * gain;
-    s.osHist[s.osPos] = x;
-    s.osPos = s.osPos + 1 == kAaOsTaps ? 0 : s.osPos + 1;
-    trigAgg = aaOsStronger(trigAgg, s.trigOut);
-    endAgg = aaOsStronger(endAgg, s.endOut);
-  }
-  s.trigOut = trigAgg;
-  s.endOut = endAgg;
-  const double* h = aaOsKernel();
-  double acc = 0.0;
-  int j = s.osPos; // oldest sample
-  for (int i = 0; i < kAaOsTaps; i++) {
-    acc += h[i] * s.osHist[j];
-    j = j + 1 == kAaOsTaps ? 0 : j + 1;
-  }
-  return acc;
+  return pulseTrainCore(handle, trigger, count, endTime, curve, ampStart, ampEnd, ampCurve, amplitude,
+    sampleRate, mode, recalc, pulseMode, endDelay, antialiasing, seed, waveShape, freqHz, morph,
+    curvePolarity, spacing, edgeFade, reverse);
 }
 
 extern "C" double soemdsp_pulse_train_effective(int handle, int i) {

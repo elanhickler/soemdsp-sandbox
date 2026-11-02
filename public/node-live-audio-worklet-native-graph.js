@@ -7432,7 +7432,7 @@ NodeLiveAudioProcessor.prototype.syncNativeEnsemblePublish =
         if (!(h > 0)) continue;
         let c = 0;
         try { c = ppCount(h) | 0; } catch (_e) { c = 0; }
-        if (c > 2) c = 2;
+        if (c > 3) c = 3;
         const phases = new Array(Math.max(0, c));
         const pans = new Array(Math.max(0, c));
         const amplitudes = new Array(Math.max(0, c));

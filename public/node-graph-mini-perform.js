@@ -25,7 +25,7 @@ const nodeGraphMiniPerformDefaults = Object.freeze({
 
 const nodeGraphMiniPerformChoices = Object.freeze({
   mode: [["off", "Off"], ["perform", "Perform"], ["background", "Background"], ["position", "Position"], ["arrange", "Arrange"]],
-  anchor: [["screen", "Screen"], ["workspace", "Workspace"]],
+  anchor: [["screen", "Screen"], ["workspace", "Workspace"], ["bottomDock", "Bottom dock"]],
   corner: [["topLeft", "Top left"], ["topRight", "Top right"], ["bottomLeft", "Bottom left"], ["bottomRight", "Bottom right"]],
   aspect: [
     ["free", "Free"],
@@ -318,13 +318,25 @@ function nodeGraphMiniPerformViewCentreWorld(settings) {
 function nodeGraphMiniPerformFrame() {
   const host = document.getElementById("nodeGraphWorkspace");
   const settings = nodeGraphMiniPerformSettings();
-  const ref = nodeGraphMiniPerformReference(settings);
   const hw = host?.clientWidth || 0;
   const hh = host?.clientHeight || 0;
+  const docked = settings.anchor === "bottomDock";
+  const dockHeight = Math.round(nodeGraphMiniPerformClamp(settings.height, 80, Math.max(80, hh), settings.height));
+  const ref = docked ? { w: Math.max(1, hw), h: dockHeight } : nodeGraphMiniPerformReference(settings);
   if (nodeGraphMiniPerformEnlarged.on) {
     const box = nodeGraphMiniPerformEnlarged.box
       || nodeGraphMiniPerformEnlargedRect(hw, hh, ref.w, ref.h);
     return { ...box, ref, s: box.w / Math.max(1, ref.w) };
+  }
+  if (docked) {
+    return {
+      x: 0,
+      y: Math.max(0, hh - dockHeight),
+      w: Math.max(1, hw),
+      h: dockHeight,
+      s: 1,
+      ref,
+    };
   }
   const frame = nodeGraphMiniPerformFrameRect(
     settings, ref, hw, hh,
@@ -482,6 +494,10 @@ function nodeGraphMiniPerformApplyHostRect(rect, options = {}) {
     return;
   }
   const settings = nodeGraphMiniPerformSettings();
+  if (settings.anchor === "bottomDock") {
+    setNodeGraphMiniPerformSettings({ height: Math.round(nodeGraphMiniPerformClamp(rect.h, 80, 1600, settings.height)) }, options);
+    return;
+  }
   const zoom = settings.anchor === "workspace" ? nodeGraphMiniPerformCamera().zoom : 1;
   const width = Math.round(nodeGraphMiniPerformClamp(rect.w / zoom, 120, 1600, settings.width));
   const height = Math.round(nodeGraphMiniPerformClamp(rect.h / zoom, 80, 1600, settings.height));
@@ -507,6 +523,11 @@ function nodeGraphMiniPerformResizeHostRect(start, dx, dy, corner) {
   const enlarged = nodeGraphMiniPerformEnlarged.on;
   const zoom = !enlarged && settings.anchor === "workspace" ? nodeGraphMiniPerformCamera().zoom : 1;
   const host = document.getElementById("nodeGraphWorkspace");
+  if (!enlarged && settings.anchor === "bottomDock") {
+    const hostHeight = Math.max(80, host?.clientHeight || 80);
+    const height = nodeGraphMiniPerformClamp(start.h - dy, 80, hostHeight, start.h);
+    return { x: 0, y: hostHeight - height, w: Math.max(1, host?.clientWidth || start.w), h: height };
+  }
   const free = settings.aspect === "free";
   let w;
   let h;
@@ -694,6 +715,55 @@ function nodeGraphMiniPerformForwardControl(event, surface) {
   return nodeGraphMvp?.sliderLastPointerDown?.surface === surface;
 }
 
+/**
+ * A Mini View keyboard is a DOM mirror. Map its gesture onto the source
+ * keyboard so one keyboard runtime remains the sole owner of notes and gates.
+ */
+function nodeGraphMiniPerformForwardKeyboardPointer(event, mirrorHost) {
+  const host = mirrorHost?.closest?.(".node-mini-perform-keyboard") || mirrorHost;
+  const source = host?._source;
+  const mirror = host?.firstElementChild;
+  if (!source || !mirror || !event?.type?.startsWith("pointer")) return false;
+  const mirrorKey = event.target?.closest?.("[data-midi]");
+  const keyMidi = String(mirrorKey?.dataset?.midi || "");
+  const sourceKey = keyMidi
+    ? [...source.querySelectorAll("[data-midi]")].find((key) => String(key.dataset.midi) === keyMidi)
+    : null;
+  const target = sourceKey || source;
+  const mirrorRect = mirror.getBoundingClientRect?.();
+  const sourceRect = source.getBoundingClientRect?.();
+  if (!mirrorRect || !sourceRect || !(mirrorRect.width > 0) || !(mirrorRect.height > 0)) return false;
+  const x01 = Math.max(0, Math.min(1, (event.clientX - mirrorRect.left) / mirrorRect.width));
+  const y01 = Math.max(0, Math.min(1, (event.clientY - mirrorRect.top) / mirrorRect.height));
+  const forwarded = new PointerEvent(event.type, {
+    bubbles: true,
+    cancelable: true,
+    composed: true,
+    pointerId: event.pointerId,
+    pointerType: event.pointerType,
+    isPrimary: event.isPrimary,
+    button: event.button,
+    buttons: event.buttons,
+    clientX: sourceRect.left + x01 * sourceRect.width,
+    clientY: sourceRect.top + y01 * sourceRect.height,
+    ctrlKey: event.ctrlKey,
+    shiftKey: event.shiftKey,
+    altKey: event.altKey,
+    metaKey: event.metaKey,
+    pressure: event.pressure,
+  });
+  target.dispatchEvent(forwarded);
+  if (event.type === "pointerdown") {
+    try { host.setPointerCapture?.(event.pointerId); } catch (_error) { /* pointer capture is optional */ }
+  }
+  if (event.type === "pointerup" || event.type === "pointercancel") {
+    try { host.releasePointerCapture?.(event.pointerId); } catch (_error) { /* already released */ }
+  }
+  event.preventDefault();
+  event.stopPropagation();
+  return true;
+}
+
 function beginNodeGraphMiniPerformPointer(event) {
   const view = document.getElementById("nodeMiniPerformView");
   if (!view || event.button !== 0 || view.hidden) return;
@@ -702,6 +772,8 @@ function beginNodeGraphMiniPerformPointer(event) {
   const positioning = mode === "position";
   const arrange = mode === "arrange";
   if (mode === "perform") {
+    const keyboardMirror = event.target?.closest?.(".node-mini-perform-keyboard");
+    if (keyboardMirror && nodeGraphMiniPerformForwardKeyboardPointer(event, keyboardMirror)) return;
     const control = nodeGraphMiniPerformControlAt(event.clientX, event.clientY);
     if (control && nodeGraphMiniPerformForwardControl(event, control)) {
       event.preventDefault();
@@ -713,7 +785,10 @@ function beginNodeGraphMiniPerformPointer(event) {
   event.preventDefault();
   event.stopPropagation();
   const placed = nodeGraphMiniPerformHostRect();
-  const corner = positioning ? nodeGraphMiniPerformCornerAt(view.getBoundingClientRect(), event.clientX, event.clientY) : "";
+  const docked = nodeGraphMiniPerformSettings().anchor === "bottomDock";
+  const corner = positioning
+    ? (docked ? "topLeft" : nodeGraphMiniPerformCornerAt(view.getBoundingClientRect(), event.clientX, event.clientY))
+    : "";
   const hit = corner ? null : nodeGraphMiniPerformTileHit(event.clientX, event.clientY);
   const tileDrag = Boolean(arrange && hit?.tile);
   let origin = null;
@@ -729,7 +804,7 @@ function beginNodeGraphMiniPerformPointer(event) {
     y0: event.clientY,
     start: { x: placed.x, y: placed.y, w: placed.w, h: placed.h },
     corner,
-    kind: tileDrag ? "tile" : (positioning ? (corner ? "resize" : "move") : "click"),
+    kind: tileDrag ? "tile" : (positioning ? ((corner || docked) ? "resize" : "move") : "click"),
     tileKind: hit?.corner ? "resize" : "move",
     tileCorner: hit?.corner || "",
     nodeId: hit?.tile?.nodeId || "",
@@ -895,6 +970,7 @@ function renderNodeGraphMiniPerformPage() {
     const rows = [
       nodeGraphMiniPerformButtonRow("Mini view mode (Shift+F)", "mode"),
       nodeGraphMiniPerformRow("Anchor", nodeGraphMiniPerformSelect("anchor")),
+      nodeGraphMiniPerformRow("Dock height", nodeGraphMiniPerformInput("height", "number", { min: 80, max: 1600, step: 1 })),
       nodeGraphMiniPerformButtonRow("Aspect ratio", "aspect"),
       nodeGraphMiniPerformRow("Opacity", nodeGraphMiniPerformInput("opacity", "range", { min: 0.1, max: 1, step: 0.05 })),
       nodeGraphMiniPerformRow("Refresh rate", nodeGraphMiniPerformSelect("refresh")),
@@ -946,6 +1022,8 @@ function syncNodeGraphMiniPerformPage() {
   if (note) note.hidden = allowed;
   for (const control of body.querySelectorAll("[data-mini-perform-key]")) {
     const key = control.dataset.miniPerformKey;
+    const dockHeight = key === "height";
+    control.closest(".node-mini-perform-row")?.toggleAttribute("hidden", dockHeight && settings.anchor !== "bottomDock");
     control.disabled = !allowed && key !== "reset";
     if (control.dataset.miniPerformValue) {
       control.setAttribute("aria-pressed", String(settings[key] === control.dataset.miniPerformValue));

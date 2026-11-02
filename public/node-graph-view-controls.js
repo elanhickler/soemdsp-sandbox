@@ -3089,7 +3089,9 @@ function nodeGraphMidiKeyboardHeldPointerSignal(nodeId) {
 }
 
 function clearNodeGraphMidiKeyboardPointerHold(nodeId) {
-  nodeGraphKeyboardRuntime(nodeId).pointerHeldSignal = null;
+  const rt = nodeGraphKeyboardRuntime(nodeId);
+  rt.pointerHeldSignal = null;
+  rt.pointerHoldDragPointerId = null;
   renderNodeGraphMidiKeyboardSignal(nodeId, null);
 }
 
@@ -3136,6 +3138,9 @@ function toggleNodeGraphMidiKeyboardPointerHold(event, surface) {
     gatePulse: 0,
     source: "pointerHold",
   };
+  // A Shift press latches the note. Its captured drag is still allowed to
+  // retune that held note, using the same pitch/velocity path as Slide mode.
+  rt.pointerHoldDragPointerId = event.pointerId;
   renderNodeGraphMidiKeyboardSignal(nodeId, rt.pointerHeldSignal);
 }
 
@@ -3727,14 +3732,37 @@ function updateNodeGraphMidiKeyboardSignal(event) {
       renderNodeGraphMidiKeyboardSignal(nodeId, next);
       return;
     }
+    if (held && rt.pointerHoldDragPointerId === pointerId && event.buttons > 0) {
+      const prevMidi = nodeGraphMidiKeyboardRawMidiFromSignal(held);
+      const probe = nodeGraphMidiKeyboardSignalFromPointer(event, surface);
+      const nextMidi = nodeGraphMidiKeyboardRawMidiFromSignal(probe);
+      const next = nodeGraphMidiKeyboardSignalFromPointer(event, surface, {
+        refreshVelocity: prevMidi !== nextMidi,
+      });
+      rt.pointerHeldSignal = {
+        ...next,
+        gate: 1,
+        gatePulse: 0,
+        source: "pointerHold",
+      };
+      renderNodeGraphMidiKeyboardSignal(nodeId, rt.pointerHeldSignal);
+      return;
+    }
     updateNodeGraphMidiKeyboardPointerPosition(event, surface);
     return;
   }
-  if (event.type === "pointerup" || event.type === "pointercancel") {
+  if (
+    event.type === "pointerup"
+    || event.type === "pointercancel"
+    || event.type === "lostpointercapture"
+  ) {
     try {
       surface.releasePointerCapture?.(event.pointerId);
     } catch (_e) { /* ignore */ }
     if (held) {
+      if (rt.pointerHoldDragPointerId === pointerId) {
+        rt.pointerHoldDragPointerId = null;
+      }
       const { x, y } = nodeGraphMidiKeyboardPointerXY(event, surface);
       renderNodeGraphMidiKeyboardSignal(nodeId, { ...held, x, y, gate: 1, gatePulse: 0 });
       return;

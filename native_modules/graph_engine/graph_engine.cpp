@@ -2834,6 +2834,11 @@ static bool node_has_live_param_mods(const Circuit& g, const Node& node) {
 }
 
 // SSOT: sample path whenever continuous Controls must move inside the quantum.
+// A processor may only read a chased Control after control_frame(g, node, f).
+// If it calls a native parameter setter, that setter must receive those
+// control_audio values in the same sample path; setting it once before the
+// loop is only valid on the false branch below. This is the guard against
+// block-rate parameter zippering at the graph/native boundary.
 // liveContinuousSignalIns = caller OR of gold continuous live ports (ƒ / pitch /
 // Phase CV / Inc / …). Do not pass cyan Morph ZOH (kPortMorph) here.
 static inline bool node_needs_sample_accurate_controls(
@@ -6145,8 +6150,9 @@ static void process_ping_pong(Circuit& g, Node& node, int frames) {
   mix_node_inputs(g, node, frames);
   // Feedback filter poles (1..4 each): HPF on the stages slot, LPF on the waveform slot; per block.
   soemdsp_ping_pong_delay_set_poles(node.nativeHandle, control_effective(node.stages), control_effective(node.waveform));
-  // Feedback filter shelves (0..100 %): HPF on the center slot, LPF on the shape slot; per block.
-  soemdsp_ping_pong_delay_set_shelves(node.nativeHandle, control_effective(node.center), control_effective(node.shape));
+  // Pole counts are discrete. Shelves are continuous controls and are applied
+  // below after control_frame(), once per sample, so their native state does
+  // not turn the common parameter smoother into a block-rate zipper.
   const double sr = g.sampleRate < 1.0f ? 44100.0 : (double)g.sampleRate;
   // Control slots match Delay (Amp→lfoAmplitude, Rate→lfoRate); depth is ms
   // (Delay modAmount is a fraction of delay time). Formula:
@@ -6154,6 +6160,11 @@ static void process_ping_pong(Circuit& g, Node& node, int frames) {
   // Keep stereo: Mono folds into both; Left/Right stay separate (no L+R sum).
   for (int f = 0; f < frames; f++) {
     control_frame(g, node, f);
+    soemdsp_ping_pong_delay_set_shelves(
+      node.nativeHandle,
+      control_audio(g, node.center, f),
+      control_audio(g, node.shape, f)
+    );
     const double dryL = g.mixMono[f] + g.mixLeft[f];
     const double dryR = g.mixMono[f] + g.mixRight[f];
     const double offsetMs = control_audio(g, node.offsetMs, f);
@@ -11379,35 +11390,44 @@ static void process_delay_effect(Circuit& g, Node& node, int frames) {
 static void process_soem_reverb(Circuit& g, Node& node, int frames) {
   if (node.nativeHandle <= 0) return;
   mix_node_inputs(g, node, frames);
-  soemdsp_soem_reverb_set_params(
-    node.nativeHandle,
-    control_effective(node.mix),
-    control_effective(node.delaySize),
-    control_effective(node.recycle),
-    control_effective(node.stages),
-    control_effective(node.diffusionSize),
-    control_effective(node.diffusionAmount),
-    control_effective(node.seed),
-    control_effective(node.lfoAmplitude),
-    control_effective(node.lfoBaseSpeed),
-    control_effective(node.lfoVariation),
-    control_effective(node.lfoStyle),
-    control_effective(node.mode),
-    control_effective(node.timingMode),
-    control_effective(node.waveform),
-    control_effective(node.saturate),
-    control_effective(node.lpfFrequency),
-    control_effective(node.hpfFrequency),
-    control_effective(node.frequency),
-    control_effective(node.gainDb),
-    control_effective(node.resonance),
-    control_effective(node.width),
-    control_effective(node.center),
-    control_effective(node.feedback),
-    control_effective(node.offsetMs)
-  );
+  // The module processes one sample at a time. Its native setter must consume
+  // the same control frame as the DSP sample whenever a continuous control is
+  // chasing or modulated. Reading controls once before this loop turns the
+  // shared smoother into a quantum-rate zipper.
+  const bool takeSampleParams = node_needs_sample_accurate_controls(g, node, false);
+  auto setParams = [&](int f, bool audio) {
+    soemdsp_soem_reverb_set_params(
+      node.nativeHandle,
+      audio ? control_audio(g, node.mix, f) : control_effective(node.mix),
+      audio ? control_audio(g, node.delaySize, f) : control_effective(node.delaySize),
+      audio ? control_audio(g, node.recycle, f) : control_effective(node.recycle),
+      control_effective(node.stages),
+      audio ? control_audio(g, node.diffusionSize, f) : control_effective(node.diffusionSize),
+      audio ? control_audio(g, node.diffusionAmount, f) : control_effective(node.diffusionAmount),
+      control_effective(node.seed),
+      audio ? control_audio(g, node.lfoAmplitude, f) : control_effective(node.lfoAmplitude),
+      audio ? control_audio(g, node.lfoBaseSpeed, f) : control_effective(node.lfoBaseSpeed),
+      audio ? control_audio(g, node.lfoVariation, f) : control_effective(node.lfoVariation),
+      control_effective(node.lfoStyle),
+      control_effective(node.mode),
+      control_effective(node.timingMode),
+      control_effective(node.waveform),
+      audio ? control_audio(g, node.saturate, f) : control_effective(node.saturate),
+      audio ? control_audio(g, node.lpfFrequency, f) : control_effective(node.lpfFrequency),
+      audio ? control_audio(g, node.hpfFrequency, f) : control_effective(node.hpfFrequency),
+      audio ? control_audio(g, node.frequency, f) : control_effective(node.frequency),
+      audio ? control_audio(g, node.gainDb, f) : control_effective(node.gainDb),
+      audio ? control_audio(g, node.resonance, f) : control_effective(node.resonance),
+      control_effective(node.width),
+      control_effective(node.center),
+      audio ? control_audio(g, node.feedback, f) : control_effective(node.feedback),
+      audio ? control_audio(g, node.offsetMs, f) : control_effective(node.offsetMs)
+    );
+  };
+  if (!takeSampleParams) setParams(0, false);
   for (int f = 0; f < frames; f++) {
     control_frame(g, node, f);
+    if (takeSampleParams) setParams(f, true);
     const double mono = g.mixMono[f];
     const double inL = mono + g.mixLeft[f];
     const double inR = mono + g.mixRight[f];
@@ -11479,16 +11499,21 @@ static void process_pll(Circuit& g, Node& node, int frames) {
     }
   }
   const double sr = g.sampleRate < 1.0f ? 44100.0 : (double)g.sampleRate;
-  soemdsp_pll_set_params(
-    node.nativeHandle,
-    sr,
-    control_effective(node.frequency),
-    control_effective(node.mode),
-    (int)(control_effective(node.stages) + 0.5),
-    control_effective(node.lpfFrequency)
-  );
+  const bool takeSampleParams = node_needs_sample_accurate_controls(g, node, false);
+  auto setParams = [&](int f, bool audio) {
+    soemdsp_pll_set_params(
+      node.nativeHandle,
+      sr,
+      audio ? control_audio(g, node.frequency, f) : control_effective(node.frequency),
+      audio ? control_audio(g, node.mode, f) : control_effective(node.mode),
+      (int)(control_effective(node.stages) + 0.5),
+      audio ? control_audio(g, node.lpfFrequency, f) : control_effective(node.lpfFrequency)
+    );
+  };
+  if (!takeSampleParams) setParams(0, false);
   for (int f = 0; f < frames; f++) {
     control_frame(g, node, f);
+    if (takeSampleParams) setParams(f, true);
     soemdsp_pll_process(
       node.nativeHandle,
       g.mixMono[f],

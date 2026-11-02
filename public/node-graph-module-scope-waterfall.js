@@ -349,6 +349,8 @@ function nodeGraphOnsetPaint(spec, live) {
     below: true,
     resetHi: false,
     scanned: NaN,
+    resetBuffer: null,
+    resetScanned: NaN,
     right: { below: true },
   });
   const absEnd = typeof nodeGraphScopeBufferAbsoluteFrame === "function"
@@ -369,15 +371,38 @@ function nodeGraphOnsetPaint(spec, live) {
     : null;
   const hz = nodeGraphWaterfallVisualHz(live);
   const resetEdges = [];
-  nodeGraphOnsetScanEdges(
-    resetBuf,
-    scanFrom,
-    absEnd,
-    planck,
-    onset,
-    "reset",
-    (frame) => resetEdges.push(frame),
-  );
+  if (resetBuf) {
+    const resetAbsEnd = nodeGraphScopeBufferAbsoluteFrame(resetBuf);
+    const resetRetained = nodeGraphScopeAvailableSampleCount(resetBuf);
+    const resetAbsStart = Math.max(0, resetAbsEnd - resetRetained);
+    if (onset.resetBuffer !== resetBuf) {
+      onset.resetBuffer = resetBuf;
+      onset.resetScanned = resetAbsStart;
+      onset.hi = false;
+    }
+    const resetScanFrom = Number.isFinite(onset.resetScanned)
+      ? Math.max(resetAbsStart, onset.resetScanned)
+      : resetAbsStart;
+    nodeGraphOnsetScanEdges(
+      resetBuf,
+      resetScanFrom,
+      resetAbsEnd,
+      planck,
+      onset,
+      "reset",
+      (frame) => {
+        // Input rings can be created at different times. Map by age from the
+        // newest sample instead of assuming their absolute counters match.
+        const signalFrame = absEnd - (resetAbsEnd - frame);
+        if (signalFrame >= absStart && signalFrame < absEnd) resetEdges.push(signalFrame);
+      },
+    );
+    onset.resetScanned = resetAbsEnd;
+  } else {
+    onset.resetBuffer = null;
+    onset.resetScanned = NaN;
+    onset.hi = false;
+  }
   let signalHit = nodeGraphOnsetScanEdges(live, scanFrom, absEnd, planck, onset, "signal");
   const right = spec.stereoBuffers?.right;
   if (right && right !== live) {

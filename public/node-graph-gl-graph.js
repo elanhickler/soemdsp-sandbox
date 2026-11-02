@@ -1252,8 +1252,17 @@ function nodeGraphGlGraphRebuild(options = {}) {
     typeof nodeGraphWireJackIsSquare === "function" && nodeGraphWireJackIsSquare(node, port, io)
   );
   if (!lite && nodeGraphMvp) {
+    const mode = nodeGraphMvp.portConnectionMode;
+    const hiddenMovingWires = new Set(
+      mode?.movingWires && Array.isArray(mode.hideWireKeys)
+        ? mode.hideWireKeys
+        : [],
+    );
     const signalWires = nodeGraphMvp.connections || [];
     for (let i = 0; i < signalWires.length; i += 1) {
+      if (hiddenMovingWires.has(`signal:${i}`)) {
+        continue;
+      }
       const connection = signalWires[i];
       if (typeof nodeGraphSignalWireDestinationIsRenderable === "function"
         && !nodeGraphSignalWireDestinationIsRenderable(connection)) {
@@ -1275,6 +1284,9 @@ function nodeGraphGlGraphRebuild(options = {}) {
     }
     const modulationWires = nodeGraphMvp.modulations || [];
     for (let i = 0; i < modulationWires.length; i += 1) {
+      if (hiddenMovingWires.has(`modulation:${i}`)) {
+        continue;
+      }
       const modulation = modulationWires[i];
       if (typeof nodeGraphModulationWireDestinationIsRenderable === "function"
         && !nodeGraphModulationWireDestinationIsRenderable(modulation)) {
@@ -1298,6 +1310,9 @@ function nodeGraphGlGraphRebuild(options = {}) {
     }
     const graphWires = nodeGraphMvp.graphConnections || [];
     for (let i = 0; i < graphWires.length; i += 1) {
+      if (hiddenMovingWires.has(`graph:${i}`)) {
+        continue;
+      }
       const graphConnection = graphWires[i];
       const from = nodeGraphPortCenter(graphConnection.sourceNode, graphConnection.sourcePort, "output");
       const to = typeof nodeGraphGraphInputPortCenter === "function"
@@ -1331,18 +1346,17 @@ function nodeGraphGlGraphRebuild(options = {}) {
         false,
       );
     }
-    const mode = nodeGraphMvp.portConnectionMode;
     if (mode?.cursorPoint && mode.selected && typeof mode.selected.values === "function") {
       for (const entry of mode.selected.values()) {
         if (entry?.from) {
-          const modeColor = mode.interactColor || endpointColor(entry.endpoint);
+          const modeColor = entry.previewColor || mode.interactColor || endpointColor(entry.endpoint);
           nodeGraphGlGraphPushWire(
             wires,
             nodeGraphGlGraphDragFrom(entry.from, entry.endpoint),
             mode.cursorPoint,
             modeColor,
             zoom,
-            null,
+            entry.wire || entry.connectOptions || null,
             false,
             false,
           );

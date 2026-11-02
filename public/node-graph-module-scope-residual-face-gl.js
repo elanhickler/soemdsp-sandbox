@@ -525,13 +525,15 @@ function nodeGraphPingPongDelayLinePhases(node) {
   }
   const bpm = Number(nodeGraphMvp?.patch?.timing?.tempoBpm);
   const modeFactor = [1, 1.5, 2 / 3][Math.round(param("timingMode", 0))] || 1;
-  const base = (num / den) * modeFactor * (60 / (Number.isFinite(bpm) && bpm > 0 ? bpm : 120));
+  const base = (num / den) * modeFactor * (240 / (Number.isFinite(bpm) && bpm > 0 ? bpm : 120));
   const offsetSec = param("offset", 0) / 1000;
-  const times = [Math.max(0.001, base), Math.max(0.001, base + offsetSec)];
+  const delay = Math.max(0.001, base + offsetSec);
+  const lmr = Math.round(param("pingPong", 1)) === 2;
+  const times = lmr ? [delay, delay * 2, delay * 3] : [delay, delay];
   return {
     phases: times.map((t) => Math.min(1, t / NODE_GRAPH_PING_PONG_AXIS_SECONDS)),
-    pans: [-1, 1],
-    amplitudes: [1, 1],
+    pans: lmr ? [-1, 0, 1] : [-1, 1],
+    amplitudes: times.map(() => 1),
   };
 }
 

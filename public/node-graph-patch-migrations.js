@@ -48,19 +48,14 @@ function migrateNodeGraphRetiredRmsMono(patch) {
   return patch;
 }
 
-// Pulse Train Antialiasing: choices are 0 Quant / 1 Rand / 2 Dither. The AA
-// choice (stored 3) is hidden for now, so a saved 3 loads as 0 Quant. Retired
-// v32/v33 3 None and 4 PolyBLEP also load as 0 Quant, and a saved patch with no
-// value gets 0 Quant. The saved range copy (paramMeta.antialiasing) is dropped
-// when it still lists AA (max above 2), so the definition's three choices apply.
-// Idempotent: 0..2 are left alone.
+// Pulse Train: preserve stored 3 AA; retire 4. Drop stale saved choice ranges.
 function migrateNodeGraphPulseTrainAntialiasing(patch) {
   const nodes = Array.isArray(patch?.nodes) ? patch.nodes : null;
   if (!nodes) return patch;
   for (const node of nodes) {
     if (!node || node.type !== "pulseTrain" || !node.params || typeof node.params !== "object") continue;
     const meta = node.paramMeta && typeof node.paramMeta === "object" ? node.paramMeta.antialiasing : null;
-    if (meta && typeof meta === "object" && Number(meta.max) > 2) {
+    if (meta && typeof meta === "object" && Number(meta.max) !== 3) {
       for (const k of ["choices", "max", "mid", "def", "choiceOriginMin"]) delete meta[k];
     }
     if (!Object.hasOwn(node.params, "antialiasing")) {
@@ -68,7 +63,7 @@ function migrateNodeGraphPulseTrainAntialiasing(patch) {
       continue;
     }
     const v = Math.round(Number(node.params.antialiasing));
-    if (v === 0 || v === 1 || v === 2) continue;
+    if (v === 0 || v === 1 || v === 2 || v === 3) continue;
     node.params.antialiasing = typeof node.params.antialiasing === "number" ? 0 : "0";
   }
   return patch;

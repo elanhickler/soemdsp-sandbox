@@ -882,10 +882,11 @@ void main() {
   /**
    * Sample plot (1D Plot / 1D Plot Stereo / 2D Plot): raw samples, drawn on
    * the GPU. The samples go up as an R32F texture; the vertex shader builds
-   * each segment (straight line between real samples), the min/max band per
-   * pixel column when there are more samples than columns, the breaks on
-   * non-finite or (skip > 0) jumps bigger than `skip`, and a dot for a lone
-   * sample. The fragment shader is the app smootherstep coverage.
+   * one miter-joined raw polyline (straight line between real samples), the
+   * min/max band per pixel column when there are more samples than columns,
+   * and breaks on non-finite or (skip > 0) jumps bigger than `skip`.
+   * Raw samples never become individually capped mini-lines. The fragment
+   * shader supplies the app smootherstep coverage.
    * spec: { a, b?, mode: "line" | "xy", x, y, w, h, gain, offset, gainY,
    *         halfPx, feather, rgba, skip, span?, shift? }
    * a / b: Float32Array views of the window (b = Y for "xy").
@@ -1871,6 +1872,8 @@ uniform vec4 uDotCol;
 uniform vec4 uLit;
 out vec2 vLocal;
 out float vLen;
+out float vAcross;
+out float vPolyline;
 out float vHalf;
 out float vFeather;
 out float vMode;
@@ -2191,16 +2194,69 @@ bool breaks(int i) {
   if (uMode == 2) return jump(S(uA, i), S(uA, i + 1)) || jump(S(uB, i), S(uB, i + 1));
   return jump(S(uA, i), S(uA, i + 1));
 }
+vec2 pointAt(int i) {
+  return uMode == 2 ? xyAt(i) : lineAt(i);
+}
+vec2 direction(vec2 a, vec2 b) {
+  vec2 d = b - a;
+  float len = length(d);
+  return len > 1e-4 ? d / len : vec2(1.0, 0.0);
+}
+vec2 normalOf(vec2 d) {
+  return vec2(-d.y, d.x);
+}
+// The two neighboring raw segments share this exact miter vector. That makes
+// the sampled signal one strip instead of a sequence of overlapping capsules.
+vec2 polylineJoin(vec2 prev, vec2 point, vec2 next, bool hasPrev, bool hasNext, float r) {
+  if (!hasPrev) return normalOf(direction(point, next)) * r;
+  if (!hasNext) return normalOf(direction(prev, point)) * r;
+  vec2 incoming = direction(prev, point);
+  vec2 outgoing = direction(point, next);
+  if (dot(incoming, outgoing) < -0.95) return normalOf(outgoing) * r;
+  vec2 outgoingNormal = normalOf(outgoing);
+  vec2 miter = normalOf(incoming) + outgoingNormal;
+  float miterLength = length(miter);
+  if (miterLength <= 1e-4) return outgoingNormal * r;
+  miter /= miterLength;
+  float denominator = dot(miter, outgoingNormal);
+  if (abs(denominator) <= 0.25) return outgoingNormal * r;
+  return miter * clamp(r / denominator, -4.0 * r, 4.0 * r);
+}
 void hide() {
   gl_Position = vec4(2.0, 2.0, 0.0, 1.0);
   vLocal = vec2(0.0);
   vLen = 0.0;
+  vAcross = 0.0;
+  vPolyline = 0.0;
 }
 void main() {
   int id = gl_InstanceID;
   vec2 p0;
   vec2 p1;
-  if (uMode == 1) {
+  // Raw 1D and XY plots are one miter-joined strip. Every segment's endpoint
+  // uses the same neighbor-derived edge as the following segment, so there is
+  // no round cap or alpha double-blend at each recorded sample.
+  if (uMode != 1) {
+    if (breaks(id)) { hide(); return; }
+    p0 = pointAt(id);
+    p1 = pointAt(id + 1);
+    float r = uHalf + uFeather;
+    bool p0HasPrev = id > 0 && !breaks(id - 1);
+    bool p1HasNext = id + 1 < uN - 1 && !breaks(id + 1);
+    vec2 beforeP0 = p0HasPrev ? pointAt(id - 1) : p0;
+    vec2 afterP1 = p1HasNext ? pointAt(id + 2) : p1;
+    vec2 edge0 = polylineJoin(beforeP0, p0, p1, p0HasPrev, true, r);
+    vec2 edge1 = polylineJoin(p0, p1, afterP1, true, p1HasNext, r);
+    float side = mix(-1.0, 1.0, aCorner.y);
+    vec2 pos = aCorner.x < 0.5 ? p0 + edge0 * side : p1 + edge1 * side;
+    vLocal = vec2(0.0);
+    vLen = 0.0;
+    vAcross = side * r;
+    vPolyline = 1.0;
+    gl_Position = vec4(pos.x / uVp.x * 2.0 - 1.0, 1.0 - pos.y / uVp.y * 2.0, 0.0, 1.0);
+    return;
+  }
+  {
     // Dense: per column a min/max bar (even) and the link from the previous
     // column's last sample to this column's first (odd).
     int col = id / 2;
@@ -2229,17 +2285,6 @@ void main() {
       p0 = vec2(x - uRect.z / cols, yOf(a));
       p1 = vec2(x, yOf(b));
     }
-  } else {
-    bool xy = uMode == 2;
-    p0 = xy ? xyAt(id) : lineAt(id);
-    if (!breaks(id)) {
-      p1 = xy ? xyAt(id + 1) : lineAt(id + 1);
-    } else if (breaks(id - 1) && !bad(S(uA, id)) && (!xy || !bad(S(uB, id)))) {
-      p1 = p0; // lone sample: a dot
-    } else {
-      hide();
-      return;
-    }
   }
   vec2 d = p1 - p0;
   float len = length(d);
@@ -2251,6 +2296,8 @@ void main() {
   vec2 pos = p0 + u * along + nrm * across;
   vLocal = vec2(along, across);
   vLen = len;
+  vAcross = across;
+  vPolyline = 0.0;
   gl_Position = vec4(pos.x / uVp.x * 2.0 - 1.0, 1.0 - pos.y / uVp.y * 2.0, 0.0, 1.0);
 }
 `;
@@ -2258,11 +2305,21 @@ void main() {
 precision highp float;
 in vec2 vLocal;
 in float vLen;
+in float vAcross;
+in float vPolyline;
 uniform float uHalf;
 uniform float uFeather;
 uniform vec4 uColour;
 out vec4 fragColor;
 void main() {
+  if (vPolyline > 0.5) {
+    float w = max(uFeather, 1e-4);
+    float t = clamp((abs(vAcross) - (uHalf - 0.5 * w)) / w, 0.0, 1.0);
+    float a = 1.0 - t * t * t * (t * (t * 6.0 - 15.0) + 10.0);
+    if (a < 0.004) discard;
+    fragColor = vec4(uColour.rgb, uColour.a * a);
+    return;
+  }
   float u = vLocal.x;
   float outside = u < 0.0 ? -u : (u > vLen ? u - vLen : 0.0);
   float d = outside > 0.0 ? length(vec2(outside, vLocal.y)) : abs(vLocal.y);

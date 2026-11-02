@@ -31,6 +31,7 @@ struct SlewLimiterState {
   double from;
   double out;
   double target;
+  double progress;
   double blockIn[kMaxBlockFrames];
   double blockOut[kMaxBlockFrames];
 };
@@ -49,28 +50,12 @@ static double powPos(double base, double expv) {
   return dsp_exp(expv * dsp_ln(base));
 }
 
-static double acosUnit(double x) {
-  double v = clamp11(x);
-  const double a = dsp_fabs(v);
-  const double t = ((-0.0187293 * a + 0.0742610) * a - 0.2121144) * a + 1.5707288;
-  const double s = t * dsp_exp(0.5 * dsp_ln(maxd(1e-30, 1.0 - a)));
-  return v >= 0.0 ? s : (kPi - s);
-}
-
 static double applyShape(double t, int shape) {
   const double x = t <= 0.0 ? 0.0 : (t >= 1.0 ? 1.0 : t);
   if (shape == kShapeLog) return 1.0 - powPos(1.0 - x, kCurveK);
   if (shape == kShapeExp) return powPos(x, kCurveK);
   if (shape == kShapeSmooth) return 0.5 - 0.5 * dsp_cos(kPi * x);
   return x;
-}
-
-static double invertShape(double u, int shape) {
-  const double y = u <= 0.0 ? 0.0 : (u >= 1.0 ? 1.0 : u);
-  if (shape == kShapeLog) return 1.0 - powPos(1.0 - y, 1.0 / kCurveK);
-  if (shape == kShapeExp) return powPos(y, 1.0 / kCurveK);
-  if (shape == kShapeSmooth) return acosUnit(1.0 - 2.0 * y) / kPi;
-  return y;
 }
 
 static double chanSample(
@@ -90,6 +75,7 @@ static double chanSample(
     s.from = target;
     s.out = target;
     s.target = target;
+    s.progress = 1.0;
     s.rising = true;
     return target;
   }
@@ -97,6 +83,14 @@ static double chanSample(
   const double upSeconds = maxd(0.0, safe(upTime));
   const double downSeconds = maxd(0.0, safe(downTime));
   const double delta = target - s.out;
+  if (dsp_fabs(delta) <= 1e-9) {
+    s.slewActive = false;
+    s.from = target;
+    s.out = target;
+    s.target = target;
+    s.progress = 1.0;
+    return target;
+  }
   const bool rising = delta >= 0.0;
   const double seconds = rising ? upSeconds : downSeconds;
   if (seconds <= 0.0) {
@@ -104,6 +98,7 @@ static double chanSample(
     s.from = target;
     s.out = target;
     s.target = target;
+    s.progress = 1.0;
     s.rising = rising;
     return target;
   }
@@ -115,6 +110,7 @@ static double chanSample(
     s.target = target;
     s.rising = rising;
     s.slewActive = true;
+    s.progress = 0.0;
   }
   const double span = s.target - s.from;
   if (!(span * 0.0 == 0.0) || dsp_fabs(span) < 1e-12) {
@@ -122,24 +118,24 @@ static double chanSample(
     s.from = target;
     s.out = target;
     s.target = target;
+    s.progress = 1.0;
     return target;
   }
 
-  double u = (s.out - s.from) / span;
-  if (!(u * 0.0 == 0.0)) u = 0.0;
-  if (u < 0.0) u = 0.0;
-  if (u > 1.0) u = 1.0;
   // Lin + curves share fixed glide time (seconds to target, any amplitude).
-  double t = invertShape(u, shape == kShapeLin ? kShapeLin : shape);
+  // Track time directly. Reconstructing it from the shaped output stalls near
+  // the flat ends of Exp/Smooth when adjacent samples round to one value.
   const double dt = 1.0 / maxd(1.0, seconds * rate);
-  t = t + dt;
-  if (t >= 1.0) {
+  s.progress += dt;
+  if (s.progress >= 1.0) {
     s.slewActive = false;
     s.from = s.target;
     s.out = s.target;
+    s.progress = 1.0;
     return s.target;
   }
-  s.out = s.from + span * applyShape(t, shape == kShapeLin ? kShapeLin : shape);
+  const double shaped = clamp(applyShape(s.progress, shape), 0.0, 1.0);
+  s.out = s.from + span * shaped;
   return s.out;
 }
 
@@ -220,5 +216,5 @@ extern "C" int soemdsp_slew_limiter_max_block_frames() {
 }
 
 extern "C" int soemdsp_slew_limiter_version() {
-  return 5; // sample() takes up/down shape + bias (missing args stay 0 = Lin / no bias)
+  return 6; // explicit progress prevents Exp/Smooth endpoint stalls
 }

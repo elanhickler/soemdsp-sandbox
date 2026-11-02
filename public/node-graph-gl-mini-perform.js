@@ -1,10 +1,10 @@
 // Mini Performance View, GL pass (docs/MINI_PERFORM_VIEW_PLAN.md MP-3).
 // WebGL2 through gl-line-renderer on the shared context. No 2D drawing, no
-// DOM copies of faces: display tiles draw the module's display canvases as
-// textured quads; whole-module, Text Box and not-yet-GPU tiles run the GL
-// graph's own module pass (its `view` path) aimed at a host over the tile.
-// Everything is laid out at the reference screen size and scaled by one
-// factor s (zoom-1 / no reflow).
+// Display tiles draw module canvases as textured quads; whole-module, Text
+// Box and not-yet-GPU tiles run the GL graph's module pass. Interactive DOM
+// instruments which GL intentionally excludes (currently Keyboard) get a
+// small mirrored face that forwards gestures to their live source. Everything
+// is laid out at the reference screen size and scaled by one factor s.
 
 const NODE_GRAPH_MINI_PERFORM_BACKDROP = [0, 0, 0, 1];
 const NODE_GRAPH_MINI_PERFORM_FRAME = [1, 1, 1, 0.28];
@@ -25,6 +25,7 @@ function nodeGraphGlMiniPerformView() {
     canvas.className = "node-mini-perform-canvas";
     view.append(canvas);
     view._moduleHosts = new Map();
+    view._keyboardHosts = new Map();
     const refreshMarks = () => {
       if (typeof nodeGraphGlMiniPerformPresent === "function") nodeGraphGlMiniPerformPresent();
     };
@@ -127,6 +128,96 @@ function nodeGraphGlMiniPerformModuleHost(view, key) {
   }
   host._miniUsed = true;
   return host;
+}
+
+/**
+ * Keyboard is an interactive DOM instrument, not a plate primitive. Keep one
+ * mirror per node instead of asking the GL plate pass to silently omit it.
+ */
+function nodeGraphGlMiniPerformKeyboardHost(view, nodeId, source) {
+  // A cache-busted script can arrive while the view itself survives. Keep the
+  // per-view ownership maps valid in that hot-update case.
+  if (!(view._keyboardHosts instanceof Map)) view._keyboardHosts = new Map();
+  let host = view._keyboardHosts.get(nodeId);
+  if (!host || !host.isConnected || host._source !== source) {
+    host?.remove();
+    host = document.createElement("div");
+    host.className = "node-mini-perform-keyboard";
+    host.dataset.node = nodeId;
+    host._source = source;
+    const mirror = source.cloneNode(true);
+    mirror.removeAttribute("id");
+    mirror.dataset.miniPerformKeyboardMirror = "true";
+    host.append(mirror);
+    const forward = (event) => {
+      if (typeof nodeGraphMiniPerformForwardKeyboardPointer === "function") {
+        nodeGraphMiniPerformForwardKeyboardPointer(event, host);
+      }
+    };
+    for (const type of ["pointermove", "pointerup", "pointercancel", "lostpointercapture"]) {
+      host.addEventListener(type, forward);
+    }
+    view.append(host);
+    view._keyboardHosts.set(nodeId, host);
+  }
+  host._miniUsed = true;
+  return host;
+}
+
+/** Copy only live key state into the mirror; its structure stays stable. */
+function nodeGraphGlMiniPerformSyncKeyboardHost(host) {
+  const source = host?._source;
+  const mirror = host?.firstElementChild;
+  if (!source || !mirror) return;
+  const sourceKeys = source.querySelectorAll("[data-midi]");
+  const mirrorKeys = mirror.querySelectorAll("[data-midi]");
+  if (sourceKeys.length !== mirrorKeys.length) {
+    const fresh = source.cloneNode(true);
+    fresh.removeAttribute("id");
+    fresh.dataset.miniPerformKeyboardMirror = "true";
+    mirror.replaceWith(fresh);
+    return;
+  }
+  const count = Math.min(sourceKeys.length, mirrorKeys.length);
+  for (let i = 0; i < count; i += 1) {
+    mirrorKeys[i].className = sourceKeys[i].className;
+    mirrorKeys[i].textContent = sourceKeys[i].textContent;
+  }
+}
+
+/** Present the keyboard surface itself at a persisted performance-view tile. */
+function nodeGraphGlMiniPerformKeyboardTile(view, tile, el, frame, order) {
+  const source = el?.querySelector?.(".node-midi-keyboard-surface, .node-grid-keyboard-surface");
+  const sourceBox = source && typeof nodeGraphModuleLayoutBox === "function"
+    ? nodeGraphModuleLayoutBox(source, el)
+    : null;
+  if (!source || !sourceBox || !(sourceBox.w > 1) || !(sourceBox.h > 1)) return false;
+  const fit = nodeGraphWholeModuleFitBox(tile.refW, tile.refH, sourceBox.w, sourceBox.h);
+  if (!fit) return false;
+  const scale = fit.s * frame.s;
+  const host = nodeGraphGlMiniPerformKeyboardHost(view, tile.nodeId, source);
+  nodeGraphGlMiniPerformPlaceHost(
+    host,
+    tile.x + fit.ox * frame.s,
+    tile.y + fit.oy * frame.s,
+    sourceBox.w * scale,
+    sourceBox.h * scale,
+    order,
+  );
+  host.style.setProperty("--node-mini-perform-keyboard-scale", String(scale));
+  nodeGraphGlMiniPerformSyncKeyboardHost(host);
+  view._miniMaps?.push({
+    nodeId: tile.nodeId,
+    x: tile.x + fit.ox * frame.s,
+    y: tile.y + fit.oy * frame.s,
+    w: sourceBox.w * scale,
+    h: sourceBox.h * scale,
+    scale,
+    layoutX: sourceBox.x,
+    layoutY: sourceBox.y,
+    keyboardMirror: true,
+  });
+  return true;
 }
 
 function nodeGraphGlMiniPerformPlaceHost(host, x, y, w, h, z) {
@@ -315,6 +406,8 @@ function nodeGraphEmptyCanvasEnsureLoop() {
 function nodeGraphGlMiniPerformPresent() {
   const view = nodeGraphGlMiniPerformView();
   if (!view || typeof nodeGraphGlLinesBegin !== "function") return false;
+  if (!(view._moduleHosts instanceof Map)) view._moduleHosts = new Map();
+  if (!(view._keyboardHosts instanceof Map)) view._keyboardHosts = new Map();
   const settings = nodeGraphMiniPerformSettings();
   const frame = nodeGraphMiniPerformFrame();
   view.hidden = false;
@@ -343,12 +436,16 @@ function nodeGraphGlMiniPerformPresent() {
     return false;
   }
   for (const host of view._moduleHosts.values()) host._miniUsed = false;
+  for (const host of view._keyboardHosts.values()) host._miniUsed = false;
   if (!tiles.length) nodeGraphGlMiniPerformDrawEmpty(batch, cssW, cssH);
   for (let i = 0; i < tiles.length; i += 1) {
     const tile = tiles[i];
     const el = typeof nodeGraphNodeElement === "function" ? nodeGraphNodeElement(tile.nodeId) : null;
     if (!el || !el.isConnected || el.hidden) continue;
     const patchNode = typeof nodeGraphPatchNode === "function" ? nodeGraphPatchNode(tile.nodeId) : null;
+    if (patchNode?.type === "keyboard" || patchNode?.type === "gridKeyboard") {
+      if (nodeGraphGlMiniPerformKeyboardTile(view, tile, el, frame, i)) continue;
+    }
     const whole = Boolean(patchNode?.ui?.canvasWholeModule) || Boolean(el.querySelector(":scope > .node-text-box-body"));
     const displays = whole ? [] : nodeGraphGlMiniPerformDisplays(el);
     if (whole || !displays.length) {
@@ -400,6 +497,12 @@ function nodeGraphGlMiniPerformPresent() {
     if (!host._miniUsed) {
       host.remove();
       view._moduleHosts.delete(key);
+    }
+  }
+  for (const [key, host] of view._keyboardHosts) {
+    if (!host._miniUsed) {
+      host.remove();
+      view._keyboardHosts.delete(key);
     }
   }
   return ok;

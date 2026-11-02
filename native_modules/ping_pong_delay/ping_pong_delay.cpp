@@ -541,7 +541,9 @@ static void ensure_buffer_size(PingPongDelayState& s, double sampleRate) {
   const double rate = maxd(1.0, safe(sampleRate));
   const double offsetSec = safe(s.liveOffsetMs) / 1000.0;
   const double driftSec = maxd(0.0, safe(s.liveLfoAmpMs)) / 1000.0;
-  double needSec = s.baseSeconds + dsp_fabs(offsetSec) + driftSec + 0.02;
+  const int mode = (int)(safe(s.livePingPong) + (s.livePingPong >= 0.0 ? 0.5 : -0.5));
+  const double longestTap = mode == 2 ? 3.0 : 1.0;
+  double needSec = (s.baseSeconds + dsp_fabs(offsetSec) + driftSec) * longestTap + 0.02;
   if (needSec < 0.05) needSec = 0.05;
   if (needSec > kMaxDelaySeconds) needSec = kMaxDelaySeconds;
   int need = (int)dsp_ceil(needSec * rate) + 2;
@@ -549,13 +551,9 @@ static void ensure_buffer_size(PingPongDelayState& s, double sampleRate) {
   if (need > kMaxDelaySamples) need = kMaxDelaySamples;
 
   if (s.bufferL && s.bufferR && s.bufferCap >= need) {
-    // Keep capacity; only update logical ring length. Do NOT zero memory.
-    if (s.bufferSize != need) {
-      s.bufferSize = need;
-      if (s.position >= s.bufferSize) {
-        s.position %= s.bufferSize;
-      }
-    }
+    // A parameter change changes read distance, never ring geometry. Resizing
+    // the logical ring here reinterpreted the existing history and made LFO
+    // Amp moves sound like discontinuous delay-time jitter.
     return;
   }
 
@@ -581,7 +579,9 @@ static void ensure_buffer_size(PingPongDelayState& s, double sampleRate) {
   s.bufferL = newL;
   s.bufferR = newR;
   s.bufferCap = newCap;
-  s.bufferSize = need;
+  // Use the full allocated ring. Its geometry remains stable until a genuine
+  // capacity grow, and the 2x headroom avoids repeated grows while tuning.
+  s.bufferSize = newCap;
   if (s.position >= s.bufferSize) {
     s.position = 0;
   }
@@ -943,17 +943,21 @@ static const double kVoiceAxisSeconds = 2.0;
 
 extern "C" int soemdsp_ping_pong_delay_voice_count(int handle) {
   if (handle < 1 || handle > kMaxInstances) return 0;
-  return 2;
+  const PingPongDelayState& s = gPool[handle - 1];
+  const int mode = (int)(safe(s.livePingPong) + (s.livePingPong >= 0.0 ? 0.5 : -0.5));
+  return mode == 2 ? 3 : 2;
 }
 
 extern "C" double soemdsp_ping_pong_delay_voice_delay(int handle, int index) {
-  if (handle < 1 || handle > kMaxInstances || index < 0 || index > 1) return 0.5;
+  if (handle < 1 || handle > kMaxInstances || index < 0 || index > 2) return 0.5;
   const PingPongDelayState& s = gPool[handle - 1];
   const double rate = maxd(1.0, s.liveSampleRate);
   const double offsetSec = safe(s.liveOffsetMs) / 1000.0;
   const double lfoAmpSec = safe(s.liveLfoAmpMs) / 1000.0;
-  const double lfo = index == 0 ? s.lastModL : s.lastModR;
-  double sec = ping_pong_delay_seconds(s.baseSeconds, offsetSec, lfoAmpSec, lfo);
+  const double lfo = index == 0 ? s.lastModL : (index == 1 ? 0.5 * (s.lastModL + s.lastModR) : s.lastModR);
+  const int mode = (int)(safe(s.livePingPong) + (s.livePingPong >= 0.0 ? 0.5 : -0.5));
+  const double tapMultiple = mode == 2 ? (double)(index + 1) : 1.0;
+  double sec = tapMultiple * ping_pong_delay_seconds(s.baseSeconds, offsetSec, lfoAmpSec, lfo);
   if (sec < 1.0 / rate) sec = 1.0 / rate; // the audio reads at least one sample back
   double x = sec / kVoiceAxisSeconds;
   if (x > 1.0) x = 1.0;
@@ -961,7 +965,10 @@ extern "C" double soemdsp_ping_pong_delay_voice_delay(int handle, int index) {
 }
 
 extern "C" double soemdsp_ping_pong_delay_voice_pan(int handle, int index) {
-  if (handle < 1 || handle > kMaxInstances || index < 0 || index > 1) return 0.5;
+  if (handle < 1 || handle > kMaxInstances || index < 0 || index > 2) return 0.5;
+  const PingPongDelayState& s = gPool[handle - 1];
+  const int mode = (int)(safe(s.livePingPong) + (s.livePingPong >= 0.0 ? 0.5 : -0.5));
+  if (mode == 2) return index == 0 ? 0.0 : (index == 1 ? 0.5 : 1.0);
   return index == 1 ? 1.0 : 0.0;
 }
 

@@ -948,6 +948,31 @@
       return options;
     }
 
+    function previewColorFromWire(kind, wire) {
+      if (!wire || typeof nodeGraphPortWireColor !== "function") {
+        return null;
+      }
+      if (kind === "modulation") {
+        return nodeGraphPortWireColor(
+          wire.destinationNode,
+          wire.destinationParam,
+          "modulation",
+        ) || null;
+      }
+      if (kind === "graph") {
+        return nodeGraphPortWireColor(
+          wire.destinationNode,
+          wire.destinationGraphInput,
+          "graph",
+        ) || null;
+      }
+      return nodeGraphPortWireColor(
+        wire.destinationNode,
+        wire.destinationPort,
+        "input",
+      ) || null;
+    }
+
     function markEndpointSelected(element) {
       if (!element) {
         return;
@@ -1024,6 +1049,8 @@
           endpoint: fixed,
           element,
           from,
+          wire: entry.wire,
+          previewColor: previewColorFromWire(entry.kind, entry.wire),
           connectOptions: connectOptionsFromWire(entry.wire),
           remove: { kind: entry.kind, index: entry.index },
         });

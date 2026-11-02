@@ -5662,6 +5662,25 @@ body.keyboard-debug-hidden .node-midi-keyboard-signal-bar {
   pointer-events: none;
 }
 
+/* Keyboard is the one Mini View surface that remains live DOM. Its mirror is
+   scaled inside the tile while gestures forward to the source keyboard. */
+.node-mini-perform-keyboard {
+  position: absolute;
+  overflow: hidden;
+  pointer-events: auto;
+  transform-origin: top left;
+}
+
+.node-mini-perform-keyboard > .node-midi-keyboard-surface,
+.node-mini-perform-keyboard > .node-grid-keyboard-surface {
+  box-sizing: border-box;
+  width: 100% !important;
+  min-width: 0 !important;
+  height: 100% !important;
+  min-height: 0 !important;
+  margin: 0 !important;
+}
+
 .node-mini-perform-module > canvas {
   position: absolute;
   inset: 0;

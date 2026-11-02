@@ -30,9 +30,18 @@ function nodeGraphModuleMountContainer(type) {
 function nodeGraphModuleMountContainers() {
   const primary = document.getElementById("nodeGraphNodes");
   const annotation = document.getElementById("nodeGraphAnnotationNodes");
+  // Text Boxes are mounted in the annotation host, then moved into one of
+  // these camera-aware stacking layers by nodeGraphPositionGridHtml(). They
+  // remain module owners: patch cleanup, viewport wakeup, and duplicate-id
+  // checks must continue to see them after that move.
+  const textBehind = document.getElementById("nodeGraphTextBehind");
+  const textFront = document.getElementById("nodeGraphTextFront");
   const list = [];
-  if (primary) list.push(primary);
-  if (annotation && annotation !== primary) list.push(annotation);
+  for (const container of [primary, annotation, textBehind, textFront]) {
+    if (container && !list.includes(container)) {
+      list.push(container);
+    }
+  }
   return list;
 }
 

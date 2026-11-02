@@ -6952,7 +6952,7 @@ const nodeGraphModuleDefinitions = (
     defaultWidthGu: 8,
     defaultUi: {
       buttonsHidden: true,
-      oscilloscopeHidden: true },
+      oscilloscopeHidden: false },
     face: [
       { kind: "fraction", num: "timeNumerator", den: "timeDenominator", mode: "timingMode",
         modeLabels: ["Normal", "Dotted", "Triplet"], h: 52 },
@@ -14731,7 +14731,7 @@ const nodeGraphModuleDefinitions = (
     face: [
       { kind: "cells", params: [["pulseMode", "Fwd-Rev"]], horizontal: true, h: 30 },
       { kind: "cells", params: [["wave", "Shape"]], horizontal: true, h: 30 },
-      { kind: "choices", param: "antialiasing", labels: ["Quant", "Rand", "Dither"], h: 26 },
+      { kind: "choices", param: "antialiasing", labels: ["Quant", "Rand", "Dither", "AA"], h: 26 },
       { kind: "choices", param: "recalculateOnTrigger", labels: ["Free", "Latch"], h: 26 },
       { kind: "choices", param: "mode", labels: ["One shot", "Loop"], h: 26 },
       { kind: "cells", params: [["morph", "Morph"], ["count", "Count"], ["stretch", "Stretch"]], h: 52 },
@@ -14821,10 +14821,8 @@ const nodeGraphModuleDefinitions = (
         tooltip: "Edge Fade. On: when Stretch (or a negative End Delay) cuts the train, the last pulse before the cut fades by how far the edge is toward the next pulse, so pulses slide in and out instead of popping. Off: hard cut."
       },
       {
-        // Stored value = choice: 0 Quant / 1 Rand / 2 Dither. The AA choice
-        // (stored 3) is hidden; saved 3 and retired 4 load as 0 Quant
-        // (node-graph-patch-migrations.js).
-        choices: ["Quant", "Rand", "Dither"],
+        // Stored 3: host-rate BLIT AA. Unsupported shapes are silent.
+        choices: ["Quant", "Rand", "Dither", "AA"],
         defaultValue: "0",
         displayChoices: true,
         divideChoicesVisibly: true,
@@ -14832,7 +14830,7 @@ const nodeGraphModuleDefinitions = (
         label: "Antialiasing",
         linearSmoothing: false,
         smoothingType: "none",
-        max: "2",
+        max: "3",
         mid: "1",
         min: "0",
         nonlinearSlider: false,
@@ -15572,7 +15570,7 @@ const nodeGraphModuleDefinitions = (
         key: "lfoRate", shortName: "ƒ",
         label: "LFO ƒ",
         max: "20",
-        mid: "0.35",
+        mid: "2",
         min: "0",
         nonlinearSlider: false,
         step: "any",
@@ -15587,7 +15585,7 @@ const nodeGraphModuleDefinitions = (
         label: "LFO Amp",
         max: "500",
         maxDigits: 5,
-        mid: "25",
+        mid: "5",
         min: "0",
         nonlinearSlider: false,
         step: "any",
@@ -16403,8 +16401,10 @@ const nodeGraphModuleDefinitions = (
     defaultDisplayMode: "face",
     inputAliases: { Mono: "In", Left: "In", Right: "In" },
     inputs: ["In"],
+    inputLabels: { In: "→" },
     outputAliases: { Mono: "Out", Left: "Out", Right: "Out" },
     outputs: ["Out", "rgba"],
+    outputLabels: { Out: "←" },
     defaultUi: {
       buttonsHidden: true,
       oscilloscopeHidden: true },
@@ -20026,7 +20026,7 @@ const nodeGraphModuleDefinitions = (
     ],
     defaultDisplayMode: "waterfall",
     inputs: ["In", "Reset"],
-    inputLabels: { In: "→", Reset: "Reset" },
+    inputLabels: { In: "→", Reset: "⎍" },
     layout: "scopeFace",
     outputs: ["Thru"],
     outputLabels: { Thru: "←" },
@@ -20900,6 +20900,7 @@ const nodeGraphModuleDefinitions = (
     displaySignalPorts: ["In"],
     digitalInputs: ["Trig"],
     inputs: ["In", "Trig"],
+    inputLabels: { In: "→" },
     outputs: ["Thru"],
     outputLabels: { Thru: "\u2190" },
     parameters: [],

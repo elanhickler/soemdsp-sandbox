@@ -3719,6 +3719,13 @@ def require_node_graph_mvp_contract() -> None:
         "Text Box look should be textBoxFace Display Settings with Waveform sliders and Sound Color Widgets",
     )
     require(
+        'document.getElementById("nodeGraphTextBehind")' in script_sources["./public/node-graph-node-accessors.js"]
+        and 'document.getElementById("nodeGraphTextFront")' in script_sources["./public/node-graph-node-accessors.js"]
+        and "for (const container of [primary, annotation, textBehind, textFront])" in script_sources["./public/node-graph-node-accessors.js"]
+        and "for (const container of nodeGraphModuleMountContainers())" in script_sources["./public/node-graph-viewport-perf.js"],
+        "Text Boxes moved into front/behind camera layers must remain visible to patch cleanup and viewport wakeup",
+    )
+    require(
         "phoneTone:" in script_sources["./public/node-graph-module-definitions.js"]
         and 'phoneTone: "Phone Tone"' in script_sources["./public/node-graph-module-definitions.js"]
         and 'label: "Phone Tone"' in script_sources["./public/node-graph-module-store.js"]
@@ -5983,6 +5990,19 @@ def require_node_graph_mvp_contract() -> None:
         "bindNodeGraphKeyboardControllerModuleEvents();" in keyboard_module_source,
         "keyboard module render should idempotently bind keyboard controls after module render",
     )
+    require(
+        'event.type === "lostpointercapture"' in view_controls_source[
+            view_controls_source.index("// Shift / Hold mode: blue mono sustain."):
+            view_controls_source.index("function handleNodeGraphMidiKeyboardPointerLeave")
+        ],
+        "keyboard blue hold should preserve its gate when pointer capture ends",
+    )
+    require(
+        "rt.pointerHoldDragPointerId === pointerId"
+        in view_controls_source
+        and "source: \"pointerHold\"" in view_controls_source,
+        "Shift-held keyboard notes should retune through the captured slide-drag path",
+    )
     for snippet in [
         'document.querySelectorAll(`[data-performance-wheel="${control.kind}"]`).forEach((element) => {',
         'document.querySelectorAll(`[data-performance-wheel-value="${control.valueKey}"]`).forEach((valueElement) => {',
@@ -7299,6 +7319,15 @@ def require_node_graph_mvp_contract() -> None:
         "const nodeGraphWireInteractions = window.createNodeGraphWireInteractionController({",
         "helpers: nodeGraphWireHelpers",
         "function createNodeGraphWireInteractionController(deps)",
+        "function previewColorFromWire(kind, wire)",
+        "hideWireKeys.push(`${entry.kind}:${entry.index}`)",
+        "previewColor: previewColorFromWire(entry.kind, entry.wire)",
+        "const hiddenMovingWires = new Set(",
+        "hiddenMovingWires.has(`signal:${i}`)",
+        "hiddenMovingWires.has(`modulation:${i}`)",
+        "hiddenMovingWires.has(`graph:${i}`)",
+        "entry.previewColor || mode.interactColor || endpointColor(entry.endpoint)",
+        "entry.wire || entry.connectOptions || null",
         "if (event.button !== 0) {\n    return;",
         "function endpointHitboxClientRect(endpoint, hitboxElement = null)",
         "const rect = element.getBoundingClientRect()",
@@ -16746,6 +16775,58 @@ def require_native_module_contract(base_url: str) -> None:
         and source_path.stem == source_path.parent.name
     ]
     require(native_sources, "native modules folder should contain C++ sources")
+    ping_pong_native_source = (
+        ROOT / "native_modules" / "ping_pong_delay" / "ping_pong_delay.cpp"
+    ).read_text(encoding="utf-8")
+    require(
+        "const double longestTap = mode == 2 ? 3.0 : 1.0;" in ping_pong_native_source
+        and "s.bufferSize = newCap;" in ping_pong_native_source
+        and "s.bufferSize = need;" not in ping_pong_native_source
+        and "return mode == 2 ? 3 : 2;" in ping_pong_native_source,
+        "Ping Pong Delay should keep stable ring geometry and allocate/publish all LMR taps",
+    )
+    require(
+        "if (c > 3) c = 3;" in native_graph_source,
+        "Ping Pong Delay display bridge should preserve the three LMR taps",
+    )
+    graph_engine_source = (
+        ROOT / "native_modules" / "graph_engine" / "graph_engine.cpp"
+    ).read_text(encoding="utf-8")
+    ping_pong_process_start = graph_engine_source.index("static void process_ping_pong")
+    ping_pong_process_end = graph_engine_source.index("// Mono utility:", ping_pong_process_start)
+    ping_pong_process_source = graph_engine_source[ping_pong_process_start:ping_pong_process_end]
+    require(
+        "control_frame(g, node, f);\n    soemdsp_ping_pong_delay_set_shelves(" in ping_pong_process_source
+        and "set_shelves(node.nativeHandle, control_effective" not in ping_pong_process_source,
+        "Ping Pong's continuous filter shelves must consume the shared smoother at audio rate, not once per block",
+    )
+    soem_reverb_process_start = graph_engine_source.index("static void process_soem_reverb")
+    soem_reverb_process_end = graph_engine_source.index("// PLL:", soem_reverb_process_start)
+    soem_reverb_process_source = graph_engine_source[soem_reverb_process_start:soem_reverb_process_end]
+    require(
+        "const bool takeSampleParams = node_needs_sample_accurate_controls(g, node, false);" in soem_reverb_process_source
+        and "control_frame(g, node, f);\n    if (takeSampleParams) setParams(f, true);" in soem_reverb_process_source
+        and "audio ? control_audio(g, node.lpfFrequency, f)" in soem_reverb_process_source,
+        "SoEm Reverb must consume continuously smoothed parameters after the shared control frame",
+    )
+    pll_process_start = graph_engine_source.index("static void process_pll")
+    pll_process_end = graph_engine_source.index("// Lorenz:", pll_process_start)
+    pll_process_source = graph_engine_source[pll_process_start:pll_process_end]
+    require(
+        "const bool takeSampleParams = node_needs_sample_accurate_controls(g, node, false);" in pll_process_source
+        and "control_frame(g, node, f);\n    if (takeSampleParams) setParams(f, true);" in pll_process_source
+        and "audio ? control_audio(g, node.lpfFrequency, f)" in pll_process_source,
+        "PLL must consume continuously smoothed parameters after the shared control frame",
+    )
+    slew_native_source = (
+        ROOT / "native_modules" / "slew_limiter" / "slew_limiter.cpp"
+    ).read_text(encoding="utf-8")
+    require(
+        "double progress;" in slew_native_source
+        and "s.progress += dt;" in slew_native_source
+        and "invertShape" not in slew_native_source,
+        "Up/Down Slew should advance explicit time instead of reverse-solving shaped output",
+    )
 
     require(
         '"wasmUrl": relative_wasm,' in server_source
@@ -18467,6 +18548,15 @@ def check_mini_perform_view() -> None:
     require('trailBatch._blend = "max"' in (public / "node-graph-gl-graph.js").read_text(encoding="utf-8"), "snake trail uses straight coverage")
     require("keep: true" not in (public / "node-graph-gl-graph.js").read_text(encoding="utf-8").split("nodeGlGraphSnake")[1][:500], "snake canvas clears each frame")
     require("nodeGraphMiniPerformForwardControl" in mini, "perform mode forwards knob drags")
+    require("nodeGraphMiniPerformForwardKeyboardPointer" in mini, "perform mode forwards keyboard gestures")
+    require("nodeGraphGlMiniPerformKeyboardTile" in gl, "mini GL pass presents Keyboard as a DOM mirror")
+    require("node-mini-perform-keyboard" in (public / "styles.css").read_text(encoding="utf-8"), "mini keyboard mirror has a scoped style")
+    require(
+        '["bottomDock", "Bottom dock"]' in mini
+        and 'if (settings.anchor === "bottomDock")' in mini
+        and 'return { x: 0, y: hostHeight - height' in mini,
+        "mini performance bottom dock must be full-width, bottom-anchored, and resize by height only",
+    )
     require("Reset position and size" in mini and "Aspect ratio" in mini, "page has aspect and reset")
     require('["free", "Free"]' in mini, "page has Free aspect")
     require("nodeGraphMiniPerformResizeFreeRect" in texts["node-graph-canvas-fit.js"], "free resize lives in canvas-fit")
@@ -18542,6 +18632,7 @@ def check_init_patch_view() -> None:
 def check_dsf_face_spectrum() -> None:
     """DSF Morphing Osc face follows Spacing and Odd/Even."""
     face = (PUBLIC / "modules" / "sinCos" / "sin-cos-display.js").read_text(encoding="utf-8")
+    line_renderer = (PUBLIC / "lib" / "visual" / "gl-line-renderer.js").read_text(encoding="utf-8")
     require("nodeGraphDsfMorphImpulse" in face, "DSF face has the spaced kernel")
     require("nodeGraphDsfSubMean" in face, "DSF face removes cycle DC")
     require("nodeGraphSinCosFacePadPx" in face and "padExtra: 0" in face, "DSF face auto-pads from line/dot")
@@ -18549,6 +18640,13 @@ def check_dsf_face_spectrum() -> None:
             "DSF cycle draws through the GPU sample plot (min/max band), not a JS point list")
     require('spacing: nodeGraphSinCosLiveParam(node, "spacing", 1)' in face, "DSF face reads Spacing")
     require('oddEven: nodeGraphSinCosLiveParam(node, "oddEven", 0)' in face, "DSF face reads Odd/Even")
+    require(
+        "vec2 polylineJoin" in line_renderer
+        and "Raw 1D and XY plots are one miter-joined strip" in line_renderer
+        and "vPolyline > 0.5" in line_renderer
+        and "p1 = p0; // lone sample: a dot" not in line_renderer,
+        "GPU sample plots must use one joined raw polyline rather than capped mini-segments",
+    )
     unit = subprocess.run(["node", str(ROOT / "scripts" / "smoke_dsf_display_unit.cjs")], capture_output=True, text=True)
     require(unit.returncode == 0, f"dsf display unit: {unit.stdout}{unit.stderr}")
 
