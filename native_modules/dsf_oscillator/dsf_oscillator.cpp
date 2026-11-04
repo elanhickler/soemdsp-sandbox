@@ -1,16 +1,17 @@
-// soemdsp-native-module: dsf_oscillator
+﻿// soemdsp-native-module: dsf_oscillator
 // soemdsp-native-label: DSF Oscillator
 // soemdsp-native-target: dsfOscillator
 // soemdsp-native-kind: oscillator
 // soemdsp-native-lib: https://github.com/elanhickler/soemdsp/blob/main/include/soemdsp/oscillator/DSFOscillator.hpp
 //
 // DSF Oscillator (type 46): harmonic SineSaw kit.
-//   n      = fade of floor(Nyquist/f - 1)
+//   n      = fade of min(floor(Nyquist/f - 1), Partials, kMaxPartials)
 //   k      = (1 - morph^0.14) * 4        // morph 0 = sine, 1 = saw
 //   leak   = glides to max(0.0005, 2*pi*f / (20*sr))   // DC blocker at f/20 (v23)
 //   acc    = acc * (1 - leak) + DSF() * increment
 //   out    = acc * map(bright, 3.15, 2.7)
-// Phase step is increment * 0.9999 so the 0/0 pole at t=0 is skipped.
+// Phase step is increment * 0.9999 (keeps render off the exact wrap sample);
+// the kernel itself is O(1) near the removable pole (stable den / Dirichlet).
 // Params: Bright = the geometric tilt above (shape slot), Morph = Trimorph peak /
 // PWM width (width slot), Blend = SquSaw saw-to-square (mix slot).
 // Square = saw(t) - saw(t - Morph); SquSaw = saw crossfaded with a half-cycle square.
@@ -22,9 +23,9 @@
 // FM may still bump or clip (scripts/smoke_dsf_oscillator_stability.mjs).
 //
 // DSF Morphing Osc (type 232): one band-limited object.
-//   Morph     geometric |a| (sine → bright)
-//   Symmetry  mix of +a and −a (saw → alternating pulse)
-//   Width     all harmonics → odd-only square-to-sine DSF
+//   Morph     geometric |a| (sine â†’ bright)
+//   Symmetry  mix of +a and âˆ’a (saw â†’ alternating pulse)
+//   Width     all harmonics â†’ odd-only square-to-sine DSF
 //   Rotate    common phase on every partial
 //   Slice     start partial (compositional brick / formant)
 //   Spacing   Moorer ratio: partial k at f*(1+(k-1)*Spacing); 1 = harmonic
@@ -72,10 +73,14 @@ void kernelSinCosTurns(double turns, double* sOut, double* cOut) {
   }
 }
 
+// Soft ceiling only: keeps int casts finite at near-zero Hz.
+// At 48 kHz this still tracks Nyquist all the way down through ~0.023 Hz
+// (1 Hz â†’ ~23999 partials). Not an audible-spectrum limiter.
+constexpr double kMaxPartials = 1048576.0;
 double sawPartials(double nyquist, double freq) {
   double n = nyquist / freq - 1.0;
   if (n < 1.0) n = 1.0;
-  if (n > 4096.0) n = 4096.0;
+  if (n > kMaxPartials) n = kMaxPartials;
   return n;
 }
 
@@ -107,34 +112,76 @@ void prepareSawCoeffs(DsfKernelCoeffs& c, double morph, double n) {
   c.ready = 1;
 }
 
-void sumPartialsCS(double sinx, double cosx, const DsfKernelCoeffs& c, double& C, double& S) {
-  const double r = c.twoK2 > 0.0 ? 1.0 / c.twoK2 : 1.0;
-  double tr = cosx, ti = sinx, sr = 0.0, si = 0.0;
-  const int n = static_cast<int>(c.n);
-  for (int k = 0; k < n; k++) {
-    sr += tr;
-    si += ti;
-    const double nr = (tr * cosx - ti * sinx) * r;
-    ti = (tr * sinx + ti * cosx) * r;
-    tr = nr;
+// Stable O(1) Re/Im of Σ_{k=0}^{n-1} a^k exp(i (k+1) x)
+//   = exp(i x) (1 - (a exp(i x))^n) / (1 - a exp(i x)), x = 2π turns.
+// Denominator: (1-a)^2 + 4 a sin^2(x/2). When a≈1 use Dirichlet
+// sin(n x/2)/sin(x/2) (same removable-pole limit BLIT uses). No O(N) loop.
+void dsfGeoSumUnitCS(double turns, double a, double nCount, double& C, double& S) {
+  double n = nCount;
+  if (n < 0.0) n = 0.0;
+  if (n > kMaxPartials) n = kMaxPartials;
+  if (n < 1.0e-12) {
+    C = 0.0;
+    S = 0.0;
+    return;
   }
-  C = sr;
-  S = si;
+  if (a < 0.0) a = 0.0;
+
+  double sinx = 0.0, cosx = 0.0;
+  kernelSinCosTurns(turns, &sinx, &cosx);
+  double sinHalf = 0.0, cosHalf = 0.0;
+  kernelSinCosTurns(0.5 * turns, &sinHalf, &cosHalf);
+  const double den2 = (1.0 - a) * (1.0 - a) + 4.0 * a * sinHalf * sinHalf;
+
+  if (den2 < 1.0e-30) {
+    C = n;
+    S = 0.0;
+    return;
+  }
+
+  // a≈1: Dirichlet kernel (exact at a=1).
+  if (a > 1.0 - 1.0e-12) {
+    if (sinHalf > -1.0e-15 && sinHalf < 1.0e-15) {
+      C = n;
+      S = 0.0;
+      return;
+    }
+    double sn = 0.0, cn = 0.0;
+    kernelSinCosTurns(0.5 * n * turns, &sn, &cn);
+    double sa = 0.0, ca = 0.0;
+    kernelSinCosTurns(0.5 * (n + 1.0) * turns, &sa, &ca);
+    const double scale = sn / sinHalf;
+    C = scale * ca;
+    S = scale * sa;
+    return;
+  }
+
+  // General a with stable |1 - a e^{ix}|^2.
+  const double zr = a * cosx;
+  const double zi = a * sinx;
+  const double rn = dsfPow(a, n);
+  double pr = 0.0, pi = 0.0;
+  kernelSinCosTurns(n * turns, &pi, &pr);  // sin=pi out, cos=pr out → e^{i n x}
+  // kernelSinCosTurns writes sin then cos into (&s,&c) — we passed (&pi, &pr)
+  // so pi=sin(n x), pr=cos(n x). Good.
+  const double zn_r = rn * pr;
+  const double zn_i = rn * pi;
+  const double num_r = 1.0 - zn_r;
+  const double num_i = -zn_i;
+  const double den_r = 1.0 - zr;
+  const double den_i = -zi;
+  const double inv = 1.0 / den2;
+  const double qr = (num_r * den_r + num_i * den_i) * inv;
+  const double qi = (num_i * den_r - num_r * den_i) * inv;
+  C = cosx * qr - sinx * qi;
+  S = cosx * qi + sinx * qr;
 }
 
 double sineSawKernel(double turns, const DsfKernelCoeffs& c) {
-  double sinx = 0.0, cosx = 0.0, sinxn = 0.0, cosxn = 0.0;
-  kernelSinCosTurns(turns, &sinx, &cosx);
-  kernelSinCosTurns(turns * c.n, &sinxn, &cosxn);
-  const double den = 1.0 - c.denCos * cosx + c.k42;
-  if (den > -1.0e-2 && den < 1.0e-2) {
-    double C = 0.0, S = 0.0;
-    sumPartialsCS(sinx, cosx, c, C, S);
-    return C;
-  }
-  const double num = (c.k42 * cosxn - c.eightK2 * (cosxn * cosx - sinxn * sinx)) * c.decay
-    + cosx * c.k42 - c.twoK2;
-  return num / den;
+  const double a = c.twoK2 > 0.0 ? 1.0 / c.twoK2 : 1.0;
+  double C = 0.0, S = 0.0;
+  dsfGeoSumUnitCS(turns, a, c.n, C, S);
+  return C;
 }
 
 int seriesCount(double start, double step, double end) {
@@ -142,11 +189,14 @@ int seriesCount(double start, double step, double end) {
   if (absStep < 1.0e-12) return 0;
   double n = (end - start) / absStep + 1.0;
   if (n < 1.0) return 0;
-  if (n > 4096.0) n = 4096.0;
+  if (n > kMaxPartials) n = kMaxPartials;
   return static_cast<int>(dsp_floor(n + 1.0e-12));
 }
 
+// Geometric sum_{k=0}^{count-1} r^k exp(i 2Ï€ (start + kÂ·step) turns + i 2Ï€ rot)
 // Geometric sum_{k=0}^{count-1} r^k exp(i 2π (start + k·step) turns + i 2π rot)
+// = A (1 - z^count)/(1 - z), z = r exp(i φ), φ = 2π step turns, A = exp(i 2π (start turns+rot)).
+// O(1) always: stable |1-z|^2 = (1-r)^2 + 4 r sin^2(φ/2); Dirichlet when r≈1.
 void geoSeriesCS(
   double r,
   double start,
@@ -171,29 +221,43 @@ void geoSeriesCS(
   }
   double sinZ = 0.0, cosZ = 0.0;
   kernelSinCosTurns(turns * step, &sinZ, &cosZ);
+
+  // Stable |1 - r e^{iφ}|^2, φ = 2π step·turns. Identity holds for negative r.
+  double sinHalf = 0.0, cosHalf = 0.0;
+  kernelSinCosTurns(0.5 * turns * step, &sinHalf, &cosHalf);
+  double den2 = (1.0 - r) * (1.0 - r) + 4.0 * r * sinHalf * sinHalf;
+  if (den2 < 0.0) den2 = 0.0;
+
+  if (den2 < 1.0e-30) {
+    C = static_cast<double>(count) * cosA;
+    S = static_cast<double>(count) * sinA;
+    return;
+  }
+
+  // r≈+1: Dirichlet A * e^{i (count-1)φ/2} * sin(count φ/2) / sin(φ/2)
+  if (r > 1.0 - 1.0e-12 && r < 1.0 + 1.0e-12) {
+    if (sinHalf > -1.0e-15 && sinHalf < 1.0e-15) {
+      C = static_cast<double>(count) * cosA;
+      S = static_cast<double>(count) * sinA;
+      return;
+    }
+    const double n = static_cast<double>(count);
+    double sn = 0.0, cn = 0.0;
+    kernelSinCosTurns(0.5 * n * turns * step, &sn, &cn);
+    double ci = 0.0, cr = 0.0;
+    kernelSinCosTurns(0.5 * (n - 1.0) * turns * step, &ci, &cr);
+    const double scale = sn / sinHalf;
+    C = scale * (cosA * cr - sinA * ci);
+    S = scale * (cosA * ci + sinA * cr);
+    return;
+  }
+
   const double zr = r * cosZ;
   const double zi = r * sinZ;
   const double denr = 1.0 - zr;
   const double deni = -zi;
-  const double den2 = denr * denr + deni * deni;
-  const bool nearPole = den2 < 1.0e-4;
-  if (nearPole || count > 4096) {
-    double tr = cosA, ti = sinA;
-    double sr = 0.0, si = 0.0;
-    const int n = count > 4096 ? 4096 : count;
-    for (int k = 0; k < n; k++) {
-      sr += tr;
-      si += ti;
-      const double nr = tr * zr - ti * zi;
-      ti = tr * zi + ti * zr;
-      tr = nr;
-    }
-    C = sr;
-    S = si;
-    return;
-  }
   const double mag = r < 0.0 ? -r : r;
-  double rm = count == 0 ? 1.0 : dsfPow(mag, static_cast<double>(count));
+  double rm = dsfPow(mag, static_cast<double>(count));
   if (r < 0.0 && (count & 1)) rm = -rm;
   double sinM = 0.0, cosM = 0.0;
   kernelSinCosTurns(turns * step * static_cast<double>(count), &sinM, &cosM);
@@ -274,18 +338,8 @@ void prepareSawCoeffsMul(DsfKernelCoeffs& c, double morph, double n, double mult
 }
 
 void sineSawKernelCS(double turns, const DsfKernelCoeffs& c, double& C, double& S) {
-  double sinx = 0.0, cosx = 0.0, sinxn = 0.0, cosxn = 0.0;
-  kernelSinCosTurns(turns, &sinx, &cosx);
-  kernelSinCosTurns(turns * c.n, &sinxn, &cosxn);
-  const double den = 1.0 - c.denCos * cosx + c.k42;
-  if (den > -1.0e-2 && den < 1.0e-2) {
-    sumPartialsCS(sinx, cosx, c, C, S);
-    return;
-  }
-  const double cos1 = cosxn * cosx - sinxn * sinx;
-  const double sin1 = sinxn * cosx + cosxn * sinx;
-  C = ((c.k42 * cosxn - c.eightK2 * cos1) * c.decay + cosx * c.k42 - c.twoK2) / den;
-  S = ((c.k42 * sinxn - c.eightK2 * sin1) * c.decay + sinx * c.k42) / den;
+  const double a = c.twoK2 > 0.0 ? 1.0 / c.twoK2 : 1.0;
+  dsfGeoSumUnitCS(turns, a, c.n, C, S);
 }
 
 // Moorer: partial k at f*(1+(k-1)*spacing). Odd/Even subtracts the even series.
@@ -308,7 +362,7 @@ double spacedKernel(double ct, double mt, const DsfKernelCoeffs& c,
 // scaled to sit with Saw (measured 0.53..0.77 before this gain at any Morph /
 // Bright / pitch, so about 0.7..1.0 after).
 constexpr double kTrimorphGain = 1.3;
-// Integrator DC blocker cutoff = ƒ / kDsfLeakDivisor.
+// Integrator DC blocker cutoff = Æ’ / kDsfLeakDivisor.
 constexpr double kDsfLeakDivisor = 20.0;
 
 struct DsfOscillatorState {
@@ -371,7 +425,14 @@ double fadedMorph(
 
 static DsfOscillatorState gPool[kMaxInstances];
 
-void preparePartials(DsfOscillatorState& s, double morph, double nyquist, double freq, double spacing = 1.0) {
+void preparePartials(
+  DsfOscillatorState& s,
+  double morph,
+  double nyquist,
+  double freq,
+  double spacing = 1.0,
+  double partials = kMaxPartials
+) {
   double nf;
   double absS = spacing < 0.0 ? -spacing : spacing;
   if (absS < 1.0e-9 || (absS > 0.999999 && absS < 1.000001)) {
@@ -379,11 +440,19 @@ void preparePartials(DsfOscillatorState& s, double morph, double nyquist, double
   } else {
     nf = (nyquist / freq - 2.0) / absS + 1.0;
     if (nf < 1.0) nf = 1.0;
-    if (nf > 4096.0) nf = 4096.0;
+    if (nf > kMaxPartials) nf = kMaxPartials;
+  }
+  // Partials user cap. No sentinel: max == kMaxPartials is effectively unlimited.
+  // Existing nLo/nHi fade crossfades the top partial when the cap is fractional.
+  {
+    double cap = partials;
+    if (cap < 1.0) cap = 1.0;
+    if (cap > kMaxPartials) cap = kMaxPartials;
+    if (nf > cap) nf = cap;
   }
   double nLo = dsp_floor(nf);
   if (nLo < 1.0) nLo = 1.0;
-  const double nHi = nLo < 4096.0 ? nLo + 1.0 : nLo;
+  const double nHi = nLo < kMaxPartials ? nLo + 1.0 : nLo;
   s.frac = (nHi > nLo) ? (nf - nLo) : 0.0;
   prepareSawCoeffs(s.kernelLo, morph, nLo);
   if (s.frac > 0.0) prepareSawCoeffs(s.kernelHi, morph, nHi);
@@ -446,7 +515,8 @@ extern "C" void soemdsp_dsf_oscillator_sample(
   double pulseWidth,
   double blend,
   double phase,
-  double level
+  double level,
+  double partials
 ) {
   if (handle < 1 || handle > kMaxInstances) return;
   DsfOscillatorState& s = gPool[handle - 1];
@@ -467,7 +537,7 @@ extern "C" void soemdsp_dsf_oscillator_sample(
     sample = sinx;
   } else {
     const double nyquist = safeSampleRate * 0.5;
-    preparePartials(s, morph, nyquist, safeAbsFrequency);
+    preparePartials(s, morph, nyquist, safeAbsFrequency, 1.0, partials);
 
     s.t = wrap01(s.t + dt * 0.9999);
     const double renderT = wrap01(s.t + phaseOffset);
@@ -476,7 +546,7 @@ extern "C" void soemdsp_dsf_oscillator_sample(
     };
     s.renderPhase = renderT;
 
-    // Leak = the integrators' DC blocker: a one-pole high-pass at ƒ/20 (never
+    // Leak = the integrators' DC blocker: a one-pole high-pass at Æ’/20 (never
     // below the old 0.0005 / sample), so offsets from sudden modulation clear in
     // a few periods while the wave's own fundamental is barely touched. Starts
     // at 1 and glides down, as before.
@@ -611,5 +681,5 @@ extern "C" double soemdsp_dsf_oscillator_phase(int handle) {
 }
 
 extern "C" int soemdsp_dsf_oscillator_version() {
-  return 23;
+  return 33;
 }

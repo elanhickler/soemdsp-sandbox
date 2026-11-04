@@ -133,6 +133,9 @@ const ALLOW_UNBOUND = new Set([
   // Preset browser Morph: face-only, the browser writes the morphed values
   // into the real params (no native slot by design).
   "pulseTrain.presetMorph",
+  // Face-only phase-dot toggles (drawn on the face, no DSP slot).
+  "blit.phaseDot",
+  "dsfMorphingOsc.phaseDot",
   "sabrinaReverbOriginal.presetMorph",
 ]);
 

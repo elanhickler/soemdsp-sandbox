@@ -21,6 +21,7 @@
 
 #include <soemdsp/soemdsp.hpp>
 #include <soemdsp/math/rect_sine.h>
+#include <soemdsp/oscillator/dsf_sawmorph.h>
 
 namespace {
 
@@ -130,7 +131,15 @@ double polyBlepTrapezoid(double t, double dt) {
   return y;
 }
 
-double hypersaw2WaveSample(int waveform, double phase, double dt, double morph) {
+double hypersaw2WaveSample(
+  int waveform,
+  double phase,
+  double dt,
+  double frequencyHz,
+  double sampleRate,
+  double morph,
+  double& sawmorphAccumulator
+) {
   // Allow exact 0 Hz (dt=0) — parameter domain owns the floor, not DSP.
   const double d = dt > 0.0 ? dt : 0.0;
   switch (waveform) {
@@ -141,6 +150,9 @@ double hypersaw2WaveSample(int waveform, double phase, double dt, double morph) 
     case 4: return polyBlepPulse(phase, d, morph);
     case 5: return polyBlepRectSin(phase, d);
     case 6: return polyBlepTrapezoid(phase, d);
+    case 7: return soemdsp::oscillator::dsf_sawmorph_sample(
+      sawmorphAccumulator, phase, dt, frequencyHz, sampleRate, morph
+    );
     default: return polyBlepSaw(phase, d);
   }
 }
@@ -222,6 +234,7 @@ struct Hypersaw2VoiceState {
   JitterState jitter;
   double lastOffset;
   unsigned int rngState;
+  double sawmorphAccumulator;
 };
 
 struct Hypersaw2State {
@@ -254,6 +267,7 @@ void seedVoice(Hypersaw2VoiceState& voice, unsigned int seed, int voiceIndex) {
   voice.jitter.rng = seed_to_rng_state(seed_mix(seed, kSeedJitter, (unsigned int)voiceIndex));
   jitter_reset(voice.jitter);
   voice.lastOffset = 0.0;
+  voice.sawmorphAccumulator = 0.0;
 }
 
 void reseedAll(Hypersaw2State& s, unsigned int seed) {
@@ -405,7 +419,7 @@ extern "C" void soemdsp_hypersaw2_sample(
   const double cs = clamp(centerSide, 0.0, 1.0);
   int wave = (int)(waveform + (waveform >= 0.0 ? 0.5 : -0.5));
   if (wave < 0) wave = 0;
-  if (wave > 6) wave = 6;
+  if (wave > 7) wave = 7;
   const double morphAmt = (!is_nan(morph)) ? morph : 0.5;
   const double gain = (level == level) ? level : 0.0;
   const double phaseG = (phaseGlobal == phaseGlobal) ? phaseGlobal : 0.0;
@@ -415,6 +429,7 @@ extern "C" void soemdsp_hypersaw2_sample(
     for (int v = start; v < voiceCount; v++) {
       s.voices[v].randomOffset = randomBipolar(s.voices[v].rngState);
       jitter_reset(s.voices[v].jitter);
+      s.voices[v].sawmorphAccumulator = 0.0;
     }
     s.lastVoiceCount = voiceCount;
   }
@@ -482,7 +497,9 @@ extern "C" void soemdsp_hypersaw2_sample(
     voice.lastOffset = wrap01(phaseG + phaseOffset);
 
     const double renderPhase = wrap01(s.masterPhase + phaseG + phaseOffset);
-    double saw = hypersaw2WaveSample(wave, renderPhase, blepDt, morphAmt);
+    double saw = hypersaw2WaveSample(
+      wave, renderPhase, blepDt, freq, sr, morphAmt, voice.sawmorphAccumulator
+    );
     double voiceAmp = 1.0;
     if (lastFrac > 0.0 && i == voiceCount - 1) voiceAmp = lastFrac;
     saw *= voiceAmp;
@@ -551,7 +568,7 @@ extern "C" int soemdsp_hypersaw2_max_voices() {
 }
 
 extern "C" int soemdsp_hypersaw2_version() {
-  return 51; // Distance source defaults; random steps ×2 so Speed Hz matches Fixed
+  return 52; // Sawmorph: shared band-limited DSF saw-to-sine waveform
 }
 
 // Reset trigger below full height: move the phase |h| of the way to where a

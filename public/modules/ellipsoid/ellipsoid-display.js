@@ -273,9 +273,9 @@ function drawNodeGraphRoundShapeDisplayInner(section) {
     return;
   }
 
-  // Shared GL presenter (cycle-line-gl.js on the shared WebGL2 device): the
-  // orbit polyline is tessellated only when the look/shape signature or the
-  // backing size changes; per frame only the phase dot is rebuilt.
+  // Clinical Expo drawer on the shared WebGL2 device: the orbit polyline is
+  // rebuilt only when the look/shape signature or backing size changes; per
+  // frame only the phase dot is rebuilt.
   const metrics = typeof nodeGraphCycleLineGlMetrics === "function"
     ? nodeGraphCycleLineGlMetrics(section, canvas, pixelDensity)
     : null;
@@ -293,7 +293,7 @@ function drawNodeGraphRoundShapeDisplayInner(section) {
   const glKey = `${signature}|${canvas.width}x${canvas.height}`;
   // Also rebuild when the presenter state is fresh (context restored).
   const orbitDirty = section._roundShapeOrbitSig !== glKey || section._roundShapeForceDraw
-    || canvas.__cycleLineGl?.waveKey !== glKey;
+    || canvas.__clinicalLineGl?.waveKey !== glKey;
   section._roundShapeSignature = signature;
   section._roundShapeForceDraw = false;
   section._roundShapeLaidOut = true;
@@ -306,8 +306,7 @@ function drawNodeGraphRoundShapeDisplayInner(section) {
   const half = Math.max(4, Math.min(drawW, drawH) * 0.5 - pad);
   const viewScale = half;
 
-  // The orbit is an X/Y sample plot (the 1D Plot drawing, xy mode): the
-  // shader builds the closed curve from the raw X / Y samples.
+  // Orbit samples in shape space; clinical polylines map them into CSS px.
   if (orbitDirty || !section._roundShapeOrbit) {
     const ox = new Float32Array(samples + 1);
     const oy = new Float32Array(samples + 1);
@@ -338,21 +337,6 @@ function drawNodeGraphRoundShapeDisplayInner(section) {
     section._roundShapeOrbitSig = glKey;
   }
   const orbit = section._roundShapeOrbit;
-  const plots = [{
-    mode: "xy",
-    a: orbit.a,
-    b: orbit.b,
-    x: cx - viewScale,
-    y: cy - viewScale,
-    w: viewScale * 2,
-    h: viewScale * 2,
-    gain: 1,
-    gainY: 1,
-    color: strokeColor,
-    width: strokeW,
-    blur: lineBlur,
-    feather: lineSmoothing,
-  }];
 
   // Cursor: worklet live uses scope Bi X / Bi Y (no main-thread phases Map).
   let px = null;
@@ -421,13 +405,33 @@ function drawNodeGraphRoundShapeDisplayInner(section) {
   dot.y = py;
   dot.color = dotColor;
   dot.radius = Math.max(0.5, dotW * 0.5);
-  nodeGraphCycleLineGlPresent(canvas, {
+  const blur = typeof nodeGraphClinicalLineBlur === "number" ? nodeGraphClinicalLineBlur : 1.2;
+  const n = orbit.a.length;
+  const raw = new Float32Array(n * 2);
+  const ox0 = cx - viewScale;
+  const oy0 = cy - viewScale;
+  const span = viewScale * 2;
+  for (let i = 0; i < n; i += 1) {
+    // Sample plot xy maps a/b in [-1..1]-ish into the view rect (y down).
+    raw[i * 2] = ox0 + (orbit.a[i] * 0.5 + 0.5) * span;
+    raw[i * 2 + 1] = oy0 + (0.5 - orbit.b[i] * 0.5) * span;
+  }
+  const pts = typeof nodeGraphClinicalLineAdaptPoints === "function"
+    ? nodeGraphClinicalLineAdaptPoints(raw, Math.max(64, Math.ceil(span * 4)))
+    : raw;
+  if (typeof nodeGraphClinicalLineGlPresent !== "function") {
+    if (typeof nodeGraphDisplayGlFailed === "function") {
+      nodeGraphDisplayGlFailed(canvas, "clinical line missing");
+    }
+    return;
+  }
+  nodeGraphClinicalLineGlPresent(canvas, {
     cssWidth: drawW,
     cssHeight: drawH,
     background: plateBg,
     waveKey: signature,
-    smoothing: lineSmoothing,
-    plots,
+    blur,
+    polylines: [{ points: pts, color: strokeColor, width: strokeW }],
     dots: Number.isFinite(px) && Number.isFinite(py) ? dots : [],
   });
 }

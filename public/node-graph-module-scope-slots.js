@@ -315,6 +315,10 @@ function nodeGraphDefaultModuleScopeMonitors(patch = nodeGraphMvp?.patch) {
         }
         return pair;
       }
+      const valuePort = String(modeSource?.value || "").trim();
+      if (valuePort && nodeGraphPatchNodeOutputPorts(node).includes(valuePort)) {
+        return [{ io: "output", node: node.id, port: valuePort }];
+      }
       if (nodeGraphModuleScopeIsOscillatorType(node?.type)) {
         return [{
           io: "output",

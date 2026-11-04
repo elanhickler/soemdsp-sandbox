@@ -836,7 +836,8 @@ extern "C" void soemdsp_dsf_oscillator_sample(
   double pulseWidth,
   double blend,
   double phase,
-  double level
+  double level,
+  double partials
 );
 extern "C" void soemdsp_dsf_oscillator_sample_morph(
   int handle,
@@ -8446,9 +8447,6 @@ static void process_dsf_oscillator(Circuit& g, Node& node, int frames) {
   const double referenceVoltage = circuit_pitch_ref_v(g);
   const bool morphing = node.typeId == kTypeDsfMorphingOsc;
   double morph = shape_param_01(node);
-  const double pulseWidth = control_effective(node.width);
-  const double blend = control_effective(node.mix);
-  const double phase = control_effective(node.phaseParam);
   double level = control_effective(node.amplitude);
   const double waveV = control_effective(node.waveform);
   int waveform = (int)(waveV + (waveV >= 0.0 ? 0.5 : -0.5));
@@ -8478,8 +8476,15 @@ static void process_dsf_oscillator(Circuit& g, Node& node, int frames) {
         control_effective(node.feedback)
       );
     } else {
+      // Phase / Morph (PWM) / Blend are read per frame after control_frame, so a
+      // moving slider or MOD glides per sample (no once-per-block zipper).
       soemdsp_dsf_oscillator_sample(
-        node.nativeHandle, freq, sr, waveform, morph, pulseWidth, blend, phase, level
+        node.nativeHandle, freq, sr, waveform, morph,
+        control_effective(node.width),
+        control_effective(node.mix),
+        control_effective(node.phaseParam),
+        level,
+        control_effective(node.stages)
       );
     }
     const double y = soemdsp_dsf_oscillator_out(node.nativeHandle);

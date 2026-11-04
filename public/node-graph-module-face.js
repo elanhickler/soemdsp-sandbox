@@ -655,7 +655,16 @@ function beginNodeGraphModuleFaceGesture(article, face, spec, event) {
       nodeGraphModuleFaceCapture(face, event, () => {}, captureOpts);
       return;
     }
-    setNodeGraphModuleFaceValue(input, Number(input?.min || 0) + wd.index, false);
+    const setChoiceAt = (pointerEvent, drag) => {
+      const point = nodeGraphModuleFaceLocalPoint(face, pointerEvent);
+      const candidate = nodeGraphModuleFaceWidgetAt(spec, face, point.x, point.y);
+      if (!candidate || candidate.type !== wd.type || candidate.param !== wd.param) return;
+      setNodeGraphModuleFaceValue(input, Number(input?.min || 0) + candidate.index, drag);
+    };
+    setChoiceAt(event, false);
+    // Choice widgets are switches rather than continuous sliders: dragging
+    // across their segments follows the pointer and selects each crossed slot.
+    nodeGraphModuleFaceCapture(face, event, setChoiceAt);
     return;
   }
   if (wd.type === "cell" && wd.stack) {

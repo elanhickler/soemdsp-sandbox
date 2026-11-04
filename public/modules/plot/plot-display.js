@@ -68,23 +68,20 @@ function nodeGraphPlotFaceSettingsForNode(node) {
   return normalizeNodeGraphPlotFaceSettings(node?.traceDisplaySettings);
 }
 
-function nodeGraphPlotWired(nodeId, port) {
-  return typeof nodeGraphModuleScopeConnectionsTo === "function"
-    && nodeGraphModuleScopeConnectionsTo(nodeId, port).length > 0;
-}
-
 /** History buffer for one of this node's input ports (newest sample last). */
-function nodeGraphPlotPortBuffer(nodeId, port) {
-  if (!nodeGraphPlotWired(nodeId, port)) return null;
+function nodeGraphPlotPortBuffer(nodeId, port, capturedFallback = null) {
+  // A visual sink owns a captured input ring. Do not make that ring contingent
+  // on a second, UI-side exact-port connection lookup: aliases and a plan/UI
+  // update arriving one frame apart otherwise make a healthy 1D Plot blank.
   const own = typeof nodeGraphModuleScopeState !== "undefined"
     ? nodeGraphModuleScopeState.buffers?.get?.(`${nodeId}:${port}`)
     : null;
-  if (own?.length && Math.floor(Number(own.nodeGraphScopeRecentSampleCount)) > 0) return own;
+  if (own?.length) return own;
   const wired = typeof nodeGraphModuleScopeConnectedSourceBuffer === "function"
     ? nodeGraphModuleScopeConnectedSourceBuffer(nodeId, port)
     : null;
   if (wired?.length) return wired;
-  return own?.length ? own : null;
+  return capturedFallback?.length ? capturedFallback : null;
 }
 
 /** Samples floor(start) .. + n + 1 of an end-aligned buffer (common length `length`). */
@@ -123,7 +120,7 @@ function drawNodeGraphPlotItem(renderer, item, pixelRatio) {
   const type = String(node.type || slot?.type || "");
   const mono = type === "plot1d";
   const xy = type === "plot2d";
-  const a = nodeGraphPlotPortBuffer(nodeId, mono ? "In" : "Left");
+  const a = nodeGraphPlotPortBuffer(nodeId, mono ? "In" : "Left", mono ? item?.buffer : null);
   const b = mono ? null : nodeGraphPlotPortBuffer(nodeId, "Right");
   const trig = nodeGraphPlotPortBuffer(nodeId, "Trig");
   // Width / Smoothness: face px. The backing is the zoom-1 face size (the GL

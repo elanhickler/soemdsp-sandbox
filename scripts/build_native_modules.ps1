@@ -811,6 +811,10 @@ if ($node) {
   if ($LASTEXITCODE -ne 0) {
     throw "Combined build: robin supersaw pitch jitter smoke FAILED"
   }
+  & $node.Source "$root\scripts\smoke_sawmorph.mjs"
+  if ($LASTEXITCODE -ne 0) {
+    throw "Combined build: Sawmorph smoke FAILED"
+  }
   & $node.Source "$root\scripts\smoke_remove_node_preserves_state.mjs"
   if ($LASTEXITCODE -ne 0) {
     throw "Combined build: remove_node preserves state smoke FAILED"

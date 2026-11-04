@@ -1124,17 +1124,30 @@ const nodeGraphModuleDefinitions = (
     ]
   },
   blit: {
-    // Hand-written face (node-graph-module-face.js): Saw / Ramp / Sqr / Tri / Sine, Freq | Phase, Amp.
+    // Hand-written face: Saw / Ramp / Sqr / Tri / Sine, Freq | Phase, Amp, Dot Off/On.
+    // Display is math-plotted clinical (Dirichlet BLIT), not lineBurn.
     face: [
       { kind: "choices", param: "waveform", labels: ["Saw", "Ramp", "Sqr", "Tri", "Sine"], h: 26 },
       { kind: "cells", params: [["frequency", "Freq"], ["phase", "Phase"]], h: 40 },
       { kind: "cells", params: [["amplitude", "Amp"]], h: 40 },
+      { kind: "choices", param: "phaseDot", labels: ["Dot Off", "Dot On"], h: 26 },
     ],
     planRole: "source",
-    displayType: "lineBurn",
+    layout: "blit",
+    chrome: "LayoutA",
+    customDisplayArea: true,
+    displayType: "blitFace",
+    displayHeightGu: 4,
+    spectrumCompanion: false,
     displayModes: [
-      { key: "lineBurn", renderer: "lineBurn", source: { value: "Wave" } },
+      {
+        key: "face",
+        label: "Face",
+        renderer: "blitFace",
+        settingsSchema: "blitFace",
+      },
     ],
+    defaultDisplayMode: "face",
     displaySignals: [
       { key: "Wave", kind: "scalar" },
     ],
@@ -1197,6 +1210,20 @@ const nodeGraphModuleDefinitions = (
         min: "0",
         nonlinearSlider: false,
         step: "any",
+      },
+      {
+        choices: ["Off", "On"],
+        defaultValue: "0",
+        displayChoices: true,
+        divideChoicesVisibly: true,
+        key: "phaseDot",
+        kind: "choice",
+        label: "Phase dot",
+        linearSmoothing: false,
+        max: "1",
+        mid: "0",
+        min: "0",
+        step: "1",
       },
     ]
   },
@@ -4537,8 +4564,8 @@ const nodeGraphModuleDefinitions = (
         label: "Morph",
         defaultValue: "0.5",
         min: "0",
-        mid: "0.5",
-        max: "1",
+        mid: "1",
+        max: "4",
         step: "0.001",
         smoothingType: "papoulis",
         tooltip: "Triangle: 0 = sine, 1 = triangle. Same shape at every pitch. Other waveforms still use Softwave drive (Morph⁴ × sine_amp)."
@@ -5047,10 +5074,11 @@ const nodeGraphModuleDefinitions = (
     ]
   },
   dsfOscillator: {
-    // Hand-written face (node-graph-module-face.js): Wave, Freq | Phase, Bright | Morph | Blend, Amp.
+    // Hand-written face (node-graph-module-face.js): Wave, Partials | Freq | Phase, Bright | Morph | Blend, Amp.
+    // Phase dot is a sinCosFace display setting (showDot), not a parameter.
     face: [
       { kind: "cells", params: [["waveform", "Wave"]], horizontal: true, h: 30 },
-      { kind: "cells", params: [["frequency", "Freq"], ["phase", "Phase"]], h: 40 },
+      { kind: "cells", params: [["partials", "Partials"], ["frequency", "Freq"], ["phase", "Phase"]], h: 40 },
       { kind: "cells", params: [["bright", "Bright"], ["morph", "Morph"], ["blend", "Blend"]], h: 52 },
       { kind: "cells", params: [["amplitude", "Amp"]], horizontal: true, h: 30 },
     ],
@@ -5067,9 +5095,14 @@ const nodeGraphModuleDefinitions = (
         key: "face",
         label: "Face",
         renderer: "sinCosFace",
+        source: { value: "Out" },
         settingsSchema: "sinCosFace" },
     ],
     defaultDisplayMode: "face",
+    // Phase playhead dot: display setting (sinCosFace showDot), not a face param.
+    defaultDisplaySettings: {
+      showDot: false,
+    },
     // Morph / Phase / Amplitude are parameters (+ MOD) only — no twin CV jacks.
     // Frequency is Hz (ƒ jack = absolute Hz). See MODULE_PATTERN_REFERENCE
     // "Three control surfaces".
@@ -5093,7 +5126,23 @@ const nodeGraphModuleDefinitions = (
         nonlinearSlider: false,
         step: "1"
       },
+
+      {
+        key: "partials",
+        label: "Partials",
+        defaultValue: "20000",
+        min: "1",
+        mid: "16",
+        max: "1048576",
+        step: "1",
+        maxDigits: 0,
+        nonlinearSlider: true,
+        linearSmoothing: false,
+        smoothingType: "none"
+      },
+
       { key: "frequency", label: "Frequency", kind: "frequency", defaultValue: "100", min: "0", mid: "220", max: "20000", step: "any", unit: "Hz", tooltip: "Default slider 0…20 kHz. Pitch MOD can run down through 0. Thru-zero: enable Bipolar on Frequency (domain-add MOD). Domain min/max are slider guides." },
+
       {
         defaultValue: "0",
         key: "phase",
@@ -5142,6 +5191,7 @@ const nodeGraphModuleDefinitions = (
       { kind: "cells", params: [["morph", "Morph"], ["symmetry", "Sym"], ["width", "Width"]], h: 52 },
       { kind: "cells", params: [["rotate", "Rotate"], ["slice", "Slice"], ["spacing", "Space"]], h: 52 },
       { kind: "cells", params: [["oddEven", "Odd"], ["amplitude", "Amp"]], h: 40 },
+      { kind: "choices", param: "phaseDot", labels: ["Dot Off", "Dot On"], h: 26 },
     ],
     planRole: "source",
     layout: "sinCos",
@@ -5273,6 +5323,20 @@ const nodeGraphModuleDefinitions = (
         nonlinearSlider: false,
         step: "any",
       },
+      {
+        choices: ["Off", "On"],
+        defaultValue: "0",
+        displayChoices: true,
+        divideChoicesVisibly: true,
+        key: "phaseDot",
+        kind: "choice",
+        label: "Phase dot",
+        linearSmoothing: false,
+        max: "1",
+        mid: "0",
+        min: "0",
+        step: "1",
+      },
     ]
   },
   robinSupersaw: {
@@ -5295,9 +5359,9 @@ const nodeGraphModuleDefinitions = (
     outputs: ["Mono", "Left", "Right"],
     parameters: [
       {
-        choices: ["Saw", "Squircle", "Trisaw", "Center Pulse", "Left Edge Pulse", "Right Edge Pulse", "Ramp"],
-        choiceKeys: ["saw", "squircle", "trisaw", "centerPulse", "leftEdgePulse", "rightEdgePulse", "ramp"],
-        choiceIds: [0, 1, 2, 3, 4, 5, 6],
+        choices: ["Saw", "Squircle", "Trisaw", "Center Pulse", "Left Edge Pulse", "Right Edge Pulse", "Ramp", "Sawmorph"],
+        choiceKeys: ["saw", "squircle", "trisaw", "centerPulse", "leftEdgePulse", "rightEdgePulse", "ramp", "sawmorph"],
+        choiceIds: [0, 1, 2, 3, 4, 5, 6, 7],
         defaultValue: "saw",
         displayChoices: true,
         divideChoicesVisibly: true,
@@ -5305,12 +5369,12 @@ const nodeGraphModuleDefinitions = (
         kind: "waveform",
         label: "Waveform",
         linearSmoothing: false,
-        max: "6",
+        max: "7",
         mid: "3",
         min: "0",
         nonlinearSlider: false,
         step: "1",
-        tooltip: "Same wave on every voice. Saw: rising saw (Morph ignored). Squircle: Morph 0 is a sine, Morph 1 is a square. Trisaw: naive trisaw-center; Morph slides the opposing peaks (0 and 1 are saw extremes, 0.5 is the triangle). Center Pulse: high in the middle, width = Morph. Left Edge Pulse: high from the start, width = Morph. Right Edge Pulse: high at the end, width = Morph. Pulse Morph 0 is no high region (constant -1), Morph 1 is full high. Ramp: falling saw (Morph ignored)." },
+        tooltip: "Same wave on every voice. Saw: rising saw (Morph ignored). Squircle: Morph 0 is a sine, Morph 1 is a square. Trisaw: naive trisaw-center; Morph slides the opposing peaks (0 and 1 are saw extremes, 0.5 is the triangle). Center Pulse: high in the middle, width = Morph. Left Edge Pulse: high from the start, width = Morph. Right Edge Pulse: high at the end, width = Morph. Pulse Morph 0 is no high region (constant -1), Morph 1 is full high. Ramp: falling saw (Morph ignored). Sawmorph: clean band-limited DSF sine at Morph 0 through to saw at Morph 1." },
       {
         key: "morph",
         label: "Morph",
@@ -5319,7 +5383,7 @@ const nodeGraphModuleDefinitions = (
         mid: "0.5",
         max: "1",
         step: "any",
-        tooltip: "Continuous 0 to 1. Squircle: 0 is a sine, 1 is a square (RoundShape sine-to-square, shifted onto the first-half square). Trisaw: peak slide of trisaw-center. Center / Left / Right Pulse: pulse width (0 = no high region, 1 = full high). Saw and Ramp ignore Morph." },
+        tooltip: "Continuous 0 to 1. Squircle: 0 is a sine, 1 is a square (RoundShape sine-to-square, shifted onto the first-half square). Trisaw: peak slide of trisaw-center. Center / Left / Right Pulse: pulse width (0 = no high region, 1 = full high). Sawmorph: 0 is sine and 1 is a band-limited saw. Saw and Ramp ignore Morph." },
       {
         choices: ["Off", "On"],
         choiceKeys: ["off", "on"],
@@ -5514,7 +5578,7 @@ const nodeGraphModuleDefinitions = (
     outputs: ["Mono", "Left", "Right"],
     parameters: [
       {
-        choices: ["Trisaw", "Saw", "Ramp", "Center Pulse", "Pulse", "Square"],
+        choices: ["Trisaw", "Saw", "Ramp", "Center Pulse", "Pulse", "Square", "Sawmorph"],
         defaultValue: "1",
         displayChoices: true,
         divideChoicesVisibly: true,
@@ -5522,11 +5586,11 @@ const nodeGraphModuleDefinitions = (
         kind: "waveform",
         label: "Waveform",
         linearSmoothing: false,
-        max: "5",
+        max: "6",
         mid: "2",
         min: "0",
         step: "1",
-        tooltip: "PolyBLEP waves. Morph sets the width of Trisaw, Pulse, Center Pulse, and Square. Saw and Ramp ignore Morph. All voices start in phase." },
+        tooltip: "PolyBLEP waves. Morph sets the width of Trisaw, Pulse, Center Pulse, and Square. Sawmorph is a clean band-limited DSF sine at 0 through to saw at 1. Saw and Ramp ignore Morph. All voices start in phase." },
       {
         key: "morph",
         label: "Morph",
@@ -5535,7 +5599,7 @@ const nodeGraphModuleDefinitions = (
         mid: "0.5",
         max: "1",
         step: "any",
-        tooltip: "Width. 0.5 is the centered shape. Trisaw, Pulse, Center Pulse, and Square follow it. Saw and Ramp stay fixed.",
+        tooltip: "Width. 0.5 is the centered shape. Trisaw, Pulse, Center Pulse, and Square follow it. Sawmorph is sine at 0 and a band-limited saw at 1. Saw and Ramp stay fixed.",
       },
       {
         choices: ["Mono", "Dual Channel", "Alternating"],
@@ -5560,7 +5624,7 @@ const nodeGraphModuleDefinitions = (
         key: "detuneAlgorithm",
         label: "Detune Algorithm",
         linearSmoothing: false,
-        max: "6",
+        max: "7",
         mid: "2",
         min: "0",
         nonlinearSlider: false,
@@ -5666,13 +5730,13 @@ const nodeGraphModuleDefinitions = (
         defaultValue: "1",
         min: "0",
         mid: "1",
-        max: "6",
+        max: "7",
         step: "1",
-        choices: ["Trisaw", "Saw", "Pulse Center", "Ramp", "Pulse", "RectifiedSin", "Trapezoid"],
+        choices: ["Trisaw", "Saw", "Pulse Center", "Ramp", "Pulse", "RectifiedSin", "Trapezoid", "Sawmorph"],
         displayChoices: true,
         linearSmoothing: false,
         smoothingType: "none",
-        tooltip: "soemdsp PolyBLEP shape for every oscillator. Pulse / Pulse Center / Trisaw use Morph as PWM." },
+        tooltip: "soemdsp PolyBLEP shape for every oscillator. Pulse / Pulse Center / Trisaw use Morph as PWM. Sawmorph uses clean band-limited DSF sine at 0 through to saw at 1." },
       {
         key: "morph",
         label: "Morph",
@@ -5686,7 +5750,7 @@ const nodeGraphModuleDefinitions = (
         sliderCurve: "bipolarRational",
         step: "0",
         tooltip:
-          "PWM / width (0…1). 0.5 = center / 50%. Affects Trisaw, Pulse, and Pulse Center. "
+          "PWM / width (0…1). 0.5 = center / 50%. Affects Trisaw, Pulse, and Pulse Center. Sawmorph is sine at 0 and a band-limited saw at 1. "
           + "Same bipolar rational −0.9 skew as PolyBLEP Morph (finer near center)." },
       {
         key: "frequency",

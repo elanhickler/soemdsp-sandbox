@@ -19,6 +19,7 @@ function must(name) {
 }
 
 const create = must("soemdsp_graph_create");
+const destroy = must("soemdsp_graph_destroy");
 const add = must("soemdsp_graph_add_node");
 const connect = must("soemdsp_graph_connect");
 const setParam = must("soemdsp_graph_set_param");
@@ -36,6 +37,7 @@ const PARAM_FREQUENCY = 10;
 const PARAM_WAVEFORM = 11;
 const PARAM_AMPLITUDE = 12;
 const PARAM_SHAPE = 13; // morph
+const PARAM_LFO_STYLE = 56; // DSF Dithering
 
 function view(ptr, n) {
   return new Float64Array(mem.buffer, ptr, n);

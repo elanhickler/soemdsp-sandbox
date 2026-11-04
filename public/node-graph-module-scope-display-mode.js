@@ -277,6 +277,7 @@ function nodeGraphModuleDisplayTypeHasLocalSettings(displayType) {
     "portalFace",
     "roundShapeFace",
     "basicShapeFace",
+    "blitFace",
     "sinCosFace",
     "clockFace",
     "clockDividerFace",

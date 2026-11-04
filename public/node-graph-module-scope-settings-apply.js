@@ -128,12 +128,12 @@ function assignNodeGraphTypedDisplaySettingsToNode(node, displayType, settings) 
   }
   if (
     displayType === "roundShapeFace"
-    || displayType === "basicShapeFace"
+    || displayType === "basicShapeFace" || displayType === "blitFace"
   ) {
     node.traceDisplaySettings = typeof normalizeNodeGraphRoundShapeFaceSettings === "function"
       ? normalizeNodeGraphRoundShapeFaceSettings(settings)
       : (settings || {});
-    if (displayType === "basicShapeFace"
+    if (displayType === "basicShapeFace" || displayType === "blitFace"
       && typeof applyNodeGraphBasicShapeDisplaySettingsToFace === "function") {
       applyNodeGraphBasicShapeDisplaySettingsToFace(node);
     } else if (typeof applyNodeGraphRoundShapeDisplaySettingsToFace === "function") {

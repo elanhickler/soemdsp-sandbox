@@ -140,13 +140,13 @@ function nodeGraphDisplaySettingsBuildStepperRowHtml(key, formType = null, optio
     label = "Scale";
     title = "Amplitude zoom on the face (1 = full-scale). Does not change the Display Settings preview dot.";
   }
-  if ((formType === "roundShapeFace" || formType === "basicShapeFace" || formType === "sinCosFace" || formType === "clockFace" || formType === "clockDividerFace" || formType === "pulseExplosionFace" || formType === "pulseTrainFace" || formType === "plotFace") && key === "lineThickness") {
+  if ((formType === "roundShapeFace" || formType === "basicShapeFace" || formType === "blitFace" || formType === "sinCosFace" || formType === "clockFace" || formType === "clockDividerFace" || formType === "pulseExplosionFace" || formType === "pulseTrainFace" || formType === "plotFace") && key === "lineThickness") {
     label = "Line thickness";
     title = formType === "clockFace" || formType === "clockDividerFace" || formType === "pulseExplosionFace" || formType === "pulseTrainFace" ? "" : formType === "roundShapeFace"
       ? "Orbit stroke width in CSS pixels (0.25–16)."
       : "Wave stroke width in CSS pixels (0.25–16).";
   }
-  if ((formType === "roundShapeFace" || formType === "basicShapeFace" || formType === "sinCosFace" || formType === "pulseExplosionFace" || formType === "pulseTrainFace") && key === "dotThickness") {
+  if ((formType === "roundShapeFace" || formType === "basicShapeFace" || formType === "blitFace" || formType === "sinCosFace" || formType === "pulseExplosionFace" || formType === "pulseTrainFace") && key === "dotThickness") {
     label = "Dot size";
     title = "Phase-dot diameter in CSS pixels (0.25–32).";
   }
@@ -166,7 +166,7 @@ function nodeGraphDisplaySettingsBuildStepperRowHtml(key, formType = null, optio
     label = "Fade time (s)";
     title = "Lit-dot hang after each pulse. 0 = stay lit until the next trigger. Small values drop immediately. Same exponential residual as phosphor / woscope.";
   }
-  if ((formType === "roundShapeFace" || formType === "basicShapeFace" || formType === "sinCosFace" || formType === "clockFace" || formType === "clockDividerFace" || formType === "pulseExplosionFace" || formType === "pulseTrainFace" || formType === "plotFace") && key === "lineSmoothing") {
+  if ((formType === "roundShapeFace" || formType === "basicShapeFace" || formType === "blitFace" || formType === "sinCosFace" || formType === "clockFace" || formType === "clockDividerFace" || formType === "pulseExplosionFace" || formType === "pulseTrainFace" || formType === "plotFace") && key === "lineSmoothing") {
     label = "Line smoothing";
     title = "Smootherstep antialiasing skirt in CSS pixels (0–8, default 1). 0 = hard core.";
   }
@@ -178,11 +178,11 @@ function nodeGraphDisplaySettingsBuildStepperRowHtml(key, formType = null, optio
     label = "Pixel density";
     title = "1.0 = CSS × devicePixelRatio. Below 1 = chunky lo-fi.";
   }
-  if ((formType === "roundShapeFace" || formType === "basicShapeFace") && key === "lineBlur") {
+  if ((formType === "roundShapeFace" || formType === "basicShapeFace" || formType === "blitFace") && key === "lineBlur") {
     label = "Line blur";
     title = "Diamond restroke blur in CSS pixels (0 = hard). Path is redrawn at 9 tent-weighted offsets — cheap, no extra canvas.";
   }
-  if ((formType === "roundShapeFace" || formType === "basicShapeFace") && key === "pixelDensity") {
+  if ((formType === "roundShapeFace" || formType === "basicShapeFace" || formType === "blitFace") && key === "pixelDensity") {
     label = "Pixel density";
     title = "1.0 = CSS × devicePixelRatio. Below 1 = chunky lo-fi.";
   }
@@ -672,13 +672,13 @@ function nodeGraphDisplaySettingsColorRowMeta(key, formType = null, options = {}
     aria = "Keypad text color";
   } else if (formType === "keypadFace" && key === "strokeColor") {
     aria = "Keypad stroke color";
-  } else if ((formType === "roundShapeFace" || formType === "basicShapeFace" || formType === "sinCosFace") && key === "backgroundColor") {
+  } else if ((formType === "roundShapeFace" || formType === "basicShapeFace" || formType === "blitFace" || formType === "sinCosFace") && key === "backgroundColor") {
     aria = "RoundShape background color";
     base = { ...base, defaultValue: "#020609" };
-  } else if ((formType === "roundShapeFace" || formType === "basicShapeFace" || formType === "sinCosFace") && key === "strokeColor") {
+  } else if ((formType === "roundShapeFace" || formType === "basicShapeFace" || formType === "blitFace" || formType === "sinCosFace") && key === "strokeColor") {
     aria = "RoundShape foreground / stroke color";
     base = { ...base, defaultValue: "#78dcc8" };
-  } else if ((formType === "roundShapeFace" || formType === "basicShapeFace" || formType === "sinCosFace") && key === "dotColor") {
+  } else if ((formType === "roundShapeFace" || formType === "basicShapeFace" || formType === "blitFace" || formType === "sinCosFace") && key === "dotColor") {
     aria = "RoundShape cursor dot color";
     base = { ...base, defaultValue: "#ffffff" };
   } else if (formType === "limiterGainFace" && key === "backgroundColor") {
@@ -1498,7 +1498,7 @@ function buildNodeGraphInstantTraceDisplaySettingsBodyHtml(type, node, allowKey)
   const usedChoices = new Set();
   const usedToggles = new Set();
   if (toggleKeys.includes("skipDiscontinuities")) {
-    // Always break discontinuity edges in the drawer — no UI toggle.
+    rows.push(nodeGraphDisplaySettingsBuildToggleRowHtml("skipDiscontinuities"));
     usedToggles.add("skipDiscontinuities");
   }
   if (isInstantWaterfall) {
@@ -1829,7 +1829,7 @@ function buildNodeGraphPhosphorDisplaySettingsBodyHtml(type, node, allowKey) {
     previewPlaced = true;
   };
   if (toggleKeys.includes("skipDiscontinuities")) {
-    // Always break discontinuity edges in the drawer — no UI toggle.
+    rows.push(nodeGraphDisplaySettingsBuildToggleRowHtml("skipDiscontinuities"));
     usedToggles.add("skipDiscontinuities");
   }
   if (toggleKeys.includes("sourceSync")) {

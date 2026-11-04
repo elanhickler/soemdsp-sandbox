@@ -540,6 +540,7 @@ const NODE_GRAPH_FACE_PAINT_KINDS = ["param", "buffer", "modulation"];
 const nodeGraphFacePaintKindTable = Object.assign(Object.create(null), {
   // Parameter-driven pictures (curves, shapes, keys, digits from params).
   basicShapeFace: "param",
+  blitFace: "param",
   sinCosFace: "param",
   clockFace: "param",
   clockDividerFace: "param",

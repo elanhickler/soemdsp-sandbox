@@ -1,5 +1,5 @@
 // BasicShape face — cheap 1D one-cycle of the selected wave + phase dot.
-// WebGL via cycle-line-gl. Frame-rate paint, no engine-rate ring.
+// WebGL via clinical-line-gl (Adapt Max + SSAA 4× Expo). Frame-rate paint, no engine-rate ring.
 
 function createNodeGraphBasicShapeDisplay(nodeId, type = "basicShape") {
   const id = nodeId && typeof nodeId === "object"
@@ -258,8 +258,7 @@ function drawNodeGraphBasicShapeDisplayInner(section) {
     return y;
   };
 
-  // The 1D Plot drawing: raw cycle values to the GPU sample plot, which builds
-  // the line and breaks it on jumps bigger than the scope threshold.
+  // One-cycle samples; clinical polylines split on jumps bigger than the scope threshold.
   const discThreshold = typeof nodeGraphModuleScopeDiscontinuityThreshold === "number"
     ? nodeGraphModuleScopeDiscontinuityThreshold
     : 0.85;
@@ -268,6 +267,30 @@ function drawNodeGraphBasicShapeDisplayInner(section) {
     const xNorm = i / samples;
     cycle[i] = sampleAt(wrap01(xNorm + phaseOff));
   }
+
+  // Clinical Expo: Adapt Max polylines in CSS px (split on scope jumps).
+  const blur = typeof nodeGraphClinicalLineBlur === "number" ? nodeGraphClinicalLineBlur : 1.2;
+  const strokeColor = look.strokePaint || look.strokeColor || "#78dcc8";
+  const polylines = [];
+  let seg = [];
+  const flushSeg = () => {
+    if (seg.length < 4) { seg = []; return; }
+    const raw = Float32Array.from(seg);
+    const pts = typeof nodeGraphClinicalLineAdaptPoints === "function"
+      ? nodeGraphClinicalLineAdaptPoints(raw, Math.max(64, Math.ceil(innerW * 4)))
+      : raw;
+    polylines.push({ points: pts, color: strokeColor, width: strokeW });
+    seg = [];
+  };
+  let prevY = null;
+  for (let i = 0; i <= samples; i += 1) {
+    const xNorm = i / samples;
+    const y = cycle[i];
+    if (prevY !== null && Math.abs(y - prevY) > discThreshold) flushSeg();
+    seg.push(mapX(xNorm), mapY(y));
+    prevY = y;
+  }
+  flushSeg();
 
   let play = nodeGraphBasicShapeReadPhase(nodeId, node, section);
   if (!Number.isFinite(play)) {
@@ -286,28 +309,19 @@ function drawNodeGraphBasicShapeDisplayInner(section) {
       radius: Math.max(0.5, dotW * 0.5),
     });
   }
-  nodeGraphCycleLineGlPresent(canvas, {
+  if (typeof nodeGraphClinicalLineGlPresent !== "function") {
+    if (typeof nodeGraphDisplayGlFailed === "function") {
+      nodeGraphDisplayGlFailed(canvas, "clinical line missing");
+    }
+    return;
+  }
+  nodeGraphClinicalLineGlPresent(canvas, {
     cssWidth: drawW,
     cssHeight: drawH,
     background: look.backgroundPaint || look.background || "#020609",
     waveKey: signature,
-    smoothing: lineSmoothing,
-    plots: [{
-      mode: "line",
-      a: cycle,
-      span: samples,
-      x: padX,
-      y: padY,
-      w: innerW,
-      h: innerH,
-      gain: 1,
-      offset: 0,
-      skip: discThreshold,
-      color: look.strokePaint || look.strokeColor || "#78dcc8",
-      width: strokeW,
-      blur: lineBlur,
-      feather: lineSmoothing,
-    }],
+    blur,
+    polylines,
     dots,
   });
 }

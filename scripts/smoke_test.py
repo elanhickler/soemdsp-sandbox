@@ -441,6 +441,8 @@ PUBLIC_SCRIPT_PATHS = (
     "./public/modules/acidSequencer/acid-sequencer-face.js",
     "./public/node-graph-softwave-oscillator.js",
     "./public/lib/visual/cycle-line-gl.js",
+    "./public/lib/visual/clinical-line-gl.js",
+    "./public/lib/visual/math-cycle-plot.js",
     "./public/modules/asciiscope/asciiscope-core.js",
     "./public/modules/asciiscope/asciiscope-gl.js",
     "./public/modules/asciiscope/asciiscope-display.js",
@@ -509,6 +511,7 @@ PUBLIC_SCRIPT_PATHS = (
     "./public/modules/helmholtzPitch/helmholtz-pitch-ui.js",
     "./public/lib/sample-interpolate.js",
     "./public/modules/basicShape/basic-shape-display.js",
+    "./public/modules/blit/blit-display.js",
     "./public/modules/sinCos/sin-cos-display.js",
     "./public/modules/clock/clock-display.js",
     "./public/modules/clockDivider/clock-divider-display.js",
@@ -3807,7 +3810,7 @@ def require_node_graph_mvp_contract() -> None:
         and "TraceRgbPoints.stamp" not in script_sources["./public/modules/vectorRgb/vector-rgb-display.js"]
         and "function stamp(" in script_sources["./public/lib/trace/trace-rgb-points.js"]
         and "drawNodeGraphSinCos4DisplayInner" in script_sources["./public/modules/sineWavetable/sine-wavetable-display.js"]
-        and "drawNodeGraphSinCos4FillDot" in script_sources["./public/modules/sineWavetable/sine-wavetable-display.js"]
+        and "nodeGraphClinicalLineGlPresent" in script_sources["./public/modules/sineWavetable/sine-wavetable-display.js"]
         and "SinCos4FaceGl" not in script_sources["./public/modules/sineWavetable/sine-wavetable-display.js"]
         and "sineWavetable:" in (PUBLIC / "node-live-audio-worklet-native-graph.js").read_text(encoding="utf-8")
         and "this.efficientProduct" in (PUBLIC / "node-live-audio-worklet-process.js").read_text(encoding="utf-8")
@@ -18636,8 +18639,18 @@ def check_dsf_face_spectrum() -> None:
     require("nodeGraphDsfMorphImpulse" in face, "DSF face has the spaced kernel")
     require("nodeGraphDsfSubMean" in face, "DSF face removes cycle DC")
     require("nodeGraphSinCosFacePadPx" in face and "padExtra: 0" in face, "DSF face auto-pads from line/dot")
-    require("section._dsfPlot" in face and 'mode: "line", ...section._dsfPlot' in face,
-            "DSF cycle draws through the GPU sample plot (min/max band), not a JS point list")
+    clinical_line = (PUBLIC / "lib" / "visual" / "clinical-line-gl.js").read_text(encoding="utf-8")
+    math_cycle = (PUBLIC / "lib" / "visual" / "math-cycle-plot.js").read_text(encoding="utf-8")
+    require("nodeGraphClinicalLineGlPresent" in face and "nodeGraphDsfCycle" in face,
+            "DSF face plots the closed-form math cycle")
+    require("nodeGraphMathCycleColumnEnvelope" in face or "nodeGraphMathCycleColumnEnvelope" in math_cycle,
+            "DSF face uses per-pixel min/max envelopes")
+    require("1048576" in face or "NODE_GRAPH_DSF_MAX_PARTIALS" in math_cycle,
+            "DSF N tracks engine kMaxPartials (1048576)")
+    require("Array.isArray(frame.columns)" in clinical_line
+            and "nodeGraphClinicalLineAdaptPoints" in clinical_line
+            and "SSAA" in clinical_line,
+            "clinical-line presenter supports column envelopes + SSAA Expo")
     require('spacing: nodeGraphSinCosLiveParam(node, "spacing", 1)' in face, "DSF face reads Spacing")
     require('oddEven: nodeGraphSinCosLiveParam(node, "oddEven", 0)' in face, "DSF face reads Odd/Even")
     require(

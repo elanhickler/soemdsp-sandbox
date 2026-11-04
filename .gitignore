@@ -26,6 +26,8 @@ _*
 /apply-*.ps1
 scripts/_*
 scripts/_*/
+/TEMP/
+/test-results/
 
 
 # Dependencies (install locally; never commit)

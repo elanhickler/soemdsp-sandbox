@@ -17609,6 +17609,12 @@ body.node-screen-solo-active .node-screen-solo-face.node-text-box-body > .node-t
   text-rendering: geometricPrecision;
 }
 
+/* Module headers need a quieter power glyph than the full-size settings
+   command. Keep the shared UIDEV ratio, then scale only the face affordance. */
+.dsp-node .node-bypass-button::before {
+  font-size: calc(var(--node-bypass-icon-size-ratio, 0.36) * var(--node-electric-glyph-em, 2.4) * 0.456 * 100cqh);
+}
+
 .node-bypass-button[aria-pressed="true"] {
   background: var(--node-bypass-on-bg, #5c1818);
   color: transparent;
@@ -17636,6 +17642,10 @@ body.node-screen-solo-active .node-screen-solo-face.node-text-box-body > .node-t
   text-shadow:
     0 0 calc(100cqh * var(--node-bypass-icon-glow-spread-ratio, 0.4) * 0.18) color-mix(in srgb, var(--node-bypass-icon-glow-color, #f25d5d) 72%, transparent),
     0 0 calc(100cqh * var(--node-bypass-icon-glow-spread-ratio, 0.4) * 0.42) color-mix(in srgb, var(--node-bypass-icon-glow-color, #f25d5d) 46%, transparent);
+}
+
+.dsp-node .node-bypass-button[aria-pressed="true"]::before {
+  font-size: calc(var(--node-bypass-icon-size-ratio, 0.36) * var(--node-electric-glyph-em, 2.4) * 0.456 * 100cqh);
 }
 
 .dsp-node.bypassed:not(.connected) .node-bypass-button[aria-pressed="true"] {

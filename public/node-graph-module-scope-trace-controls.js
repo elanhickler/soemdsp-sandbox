@@ -923,7 +923,7 @@ const nodeGraphTraceDisplayActiveControlsByType = Object.freeze({
       "padExtra",
     ]),
     colors: Object.freeze(["strokeColor", "dotColor", "backgroundColor"]),
-    toggles: Object.freeze([]),
+    toggles: Object.freeze(["showDot"]),
     choices: Object.freeze([]),
   }),
   // Clock: Background / Pulse / Playhead / Fill / Start / Blink HBS lamps + thicknesses, blink time.
@@ -1917,7 +1917,7 @@ const nodeGraphDisplaySettingsToggleMeta = Object.freeze({
   showDot: Object.freeze({
     label: "Show Dot",
     id: "nodeTraceDisplayShowDot",
-    title: "Softwave face: show the phase playhead dot on the waveshape. Off by default (static shape only).",
+    title: "Show the phase playhead dot on the waveshape (SinCos / DSF face). Off by default.",
   }),
   cmyMode: Object.freeze({
     label: "CMY",

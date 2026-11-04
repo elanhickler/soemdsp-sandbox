@@ -14,6 +14,7 @@
 
 #include <soemdsp/soemdsp.hpp>
 #include <soemdsp/math/robin_dither.h>
+#include <soemdsp/oscillator/dsf_sawmorph.h>
 
 namespace {
 
@@ -100,6 +101,7 @@ struct DitherVoiceState {
   // Squircle-only Robin cycle dither (?1 sample of phase). Separate RNG so
   // Square AA Off does not change the pitch-dither sequence.
   bool squareAaOn;
+  bool sawmorphOn;
   double squareAaOffset;
   unsigned int squareAaRng;
 };
@@ -146,7 +148,7 @@ double rampFromPhasor(double phasor) {
   return 1.0 - 2.0 * phasor;
 }
 
-// Shop order: Saw, Squircle, Trisaw, Center Pulse, Left Edge Pulse, Right Edge Pulse, Ramp.
+// Shop order: Saw, Squircle, Trisaw, Center Pulse, Left Edge Pulse, Right Edge Pulse, Ramp, Sawmorph.
 constexpr int kWaveSaw = 0;
 constexpr int kWaveSquircle = 1; // sine to square
 constexpr int kWaveTrisaw = 2;
@@ -154,7 +156,8 @@ constexpr int kWaveCenterPulse = 3;
 constexpr int kWaveLeftEdgePulse = 4;
 constexpr int kWaveRightEdgePulse = 5;
 constexpr int kWaveRamp = 6;
-constexpr int kWaveCount = 7;
+constexpr int kWaveSawmorph = 7;
+constexpr int kWaveCount = 8;
 
 // Pulse width = Morph, same as Robin Oscillator Pulse and Basic Shape Center Square.
 // 0 = no high region (constant -1). 1 = full high. NaN follows the knob default 0,
@@ -222,7 +225,13 @@ double naiveRightEdgePulse(double phase01, double morph) {
 // Every voice uses this. Squircle morph is sine to square.
 // Trisaw passes Morph into naive_trisaw_center (0 and 1 are saw extremes).
 // Pulses use Morph as width. Saw and Ramp ignore Morph.
-double waveFromPhasor(double phasor, int waveform, double morph, double squareAaCycles) {
+double waveFromPhasor(
+  DitherVoiceState& voice,
+  double phasor,
+  int waveform,
+  double morph,
+  double squareAaCycles
+) {
   switch (waveform) {
     case kWaveSquircle:
       return sineToRobinSquare(phasor, morph, squareAaCycles);
@@ -236,6 +245,10 @@ double waveFromPhasor(double phasor, int waveform, double morph, double squareAa
       return naiveRightEdgePulse(phasor, morph);
     case kWaveRamp:
       return rampFromPhasor(phasor);
+    case kWaveSawmorph:
+      return soemdsp::oscillator::dsf_sawmorph_sample(
+        voice.squareAaOffset, phasor, voice.phaseSlope, voice.currentHz, voice.sampleRateHz, morph
+      );
     case kWaveSaw:
     default:
       return sawFromPhasor(phasor);
@@ -286,7 +299,7 @@ static void beginCycleFromPitch(DitherVoiceState& voice) {
     if (r < voice.probShort) deltaSamples = -1.0;
     else if (r >= voice.probShort + voice.probMid) deltaSamples = 1.0;
     voice.squareAaOffset = deltaSamples * voice.phaseSlope;
-  } else {
+  } else if (!voice.sawmorphOn) {
     voice.squareAaOffset = 0.0;
   }
 }
@@ -769,11 +782,18 @@ double sumPreparedVoiceBank(
       bank[i], safeSampleRate, portaOn, jitterSpeedHz, jitterDepthCents, jitterFilterHz,
       jitterFixedSteps
     );
-    bank[i].squareAaOn = squareAa;
-    if (!squareAa) bank[i].squareAaOffset = 0.0;
+    if (waveform == kWaveSawmorph) {
+      if (bank[i].squareAaOn) bank[i].squareAaOffset = 0.0;
+      bank[i].squareAaOn = false;
+      bank[i].sawmorphOn = true;
+    } else {
+      bank[i].sawmorphOn = false;
+      bank[i].squareAaOn = squareAa;
+      if (!squareAa) bank[i].squareAaOffset = 0.0;
+    }
     const double aaNow = bank[i].squareAaOffset;
     double y = waveFromPhasor(
-      getSamplePhasor(bank[i], randomPhaseAmount, incrementCycles), waveform, morph, aaNow
+      bank[i], getSamplePhasor(bank[i], randomPhaseAmount, incrementCycles), waveform, morph, aaNow
     );
     double amp = 1.0;
     if (lastFrac > 0.0 && i == voiceCount - 1) amp = lastFrac;
@@ -847,6 +867,7 @@ void seedBank(DitherVoiceState* bank, unsigned int seed, bool right) {
     voice.hzCeiling = 20000.0;
     voice.sampleRateHz = 48000.0;
     voice.squareAaOn = false;
+    voice.sawmorphOn = false;
     voice.squareAaOffset = 0.0;
   }
 }
@@ -947,11 +968,18 @@ void mixAlternatingBank(
       bank[i], safeSampleRate, portaOn, jitterSpeedHz, jitterDepthCents, jitterFilterHz,
       jitterFixedSteps
     );
-    bank[i].squareAaOn = squareAa;
-    if (!squareAa) bank[i].squareAaOffset = 0.0;
+    if (waveform == kWaveSawmorph) {
+      if (bank[i].squareAaOn) bank[i].squareAaOffset = 0.0;
+      bank[i].squareAaOn = false;
+      bank[i].sawmorphOn = true;
+    } else {
+      bank[i].sawmorphOn = false;
+      bank[i].squareAaOn = squareAa;
+      if (!squareAa) bank[i].squareAaOffset = 0.0;
+    }
     const double aaNow = bank[i].squareAaOffset;
     double y = waveFromPhasor(
-      getSamplePhasor(bank[i], randomPhaseAmount, incrementCycles), waveform, morph, aaNow
+      bank[i], getSamplePhasor(bank[i], randomPhaseAmount, incrementCycles), waveform, morph, aaNow
     );
     double amp = 1.0;
     if (lastFrac > 0.0 && i == voiceCount - 1) amp = lastFrac;
@@ -1252,5 +1280,5 @@ extern "C" double soemdsp_robin_supersaw_voice_amp(int handle, int index) {
 }
 
 extern "C" int soemdsp_robin_supersaw_version() {
-  return 30; // optional Squircle Robin cycle dither
+  return 31; // Sawmorph: shared band-limited DSF saw-to-sine waveform
 }

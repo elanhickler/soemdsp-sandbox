@@ -25,6 +25,15 @@ python server.py   # then open http://127.0.0.1:8765
 
 Full setup (requirements, clone, smoke test, optional native artifact resync, server boundaries): [`docs/SANDBOX_REFERENCE.md`](docs/SANDBOX_REFERENCE.md).
 
+Before syncing or publishing page-routable patches, run:
+
+```powershell
+.\scripts\prepare_page_patches.ps1
+```
+
+It validates patch JSON, rebuilds `patches/index.json`, and verifies that every
+root or one-folder page patch has a catalog entry.
+
 ---
 
 ## Docs & reference

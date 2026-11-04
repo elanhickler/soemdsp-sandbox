@@ -170,10 +170,6 @@ function drawNodeGraphSinCos4Display(section) {
   }
 }
 
-// Round position dot (shared smoothstep capsule of zero length).
-function drawNodeGraphSinCos4FillDot(batch, x, y, radius, feather, rgba) {
-  nodeGraphGlLinesDot(batch, x, y, radius, feather, rgba);
-}
 
 function drawNodeGraphSinCos4DisplayInner(section) {
   if (!section || section.isConnected === false) {
@@ -252,11 +248,10 @@ function drawNodeGraphSinCos4DisplayInner(section) {
   const phase = nodeGraphSinCos4ReadPhase(nodeId, node, section);
 
   // CSS-pixel plate, then a centered unit square (0…1) so F scales cleanly.
-  const batch = typeof nodeGraphGlLinesBegin === "function"
-    ? nodeGraphGlLinesBegin(canvas, [5 / 255, 6 / 255, 10 / 255, 1], { scale: pixelRatio })
-    : null;
-  if (!batch) {
-    if (typeof nodeGraphGlLinesFillBlack === "function") nodeGraphGlLinesFillBlack(canvas);
+  if (typeof nodeGraphClinicalLineGlPresent !== "function") {
+    if (typeof nodeGraphDisplayGlFailed === "function") {
+      nodeGraphDisplayGlFailed(canvas, "clinical line missing");
+    }
     section._sinCos4ForceDraw = false;
     return;
   }
@@ -265,30 +260,66 @@ function drawNodeGraphSinCos4DisplayInner(section) {
   const oy = (cssH - side) * 0.5;
   const X = (u) => ox + u * side;
   const Y = (v) => oy + v * side;
-  const feather = look.feather;
-
   const cx = 0.5;
   const cy = 0.5;
   const radius = look.radius;
   const stroke = look.stroke;
   const tipR = look.tip;
   const hubR = look.hub;
-  const halfOf = (unitW) => Math.max(0, unitW * side * 0.5 - feather * 0.5);
+  // Full stroke width in CSS px (clinical Present takes width, not half).
+  const rayW = Math.max(0.5, stroke * side);
+  const ringW = Math.max(0.5, look.ringStroke * side);
+  const blur = typeof nodeGraphClinicalLineBlur === "number" ? nodeGraphClinicalLineBlur : 1.2;
+  const polylines = [];
+  const dots = [];
 
-  // Analytic shader ring (distance field, same feather as the dots).
-  nodeGraphGlLinesRing(batch, X(cx), Y(cy), X(cx + radius) - X(cx), halfOf(look.ringStroke), feather, [160 / 255, 190 / 255, 210 / 255, 0.35]);
+  // Unit circle as Adapt Max polyline.
+  const ringN = Math.max(64, Math.ceil(side * Math.PI));
+  const ringPts = new Float32Array((ringN + 1) * 2);
+  for (let i = 0; i <= ringN; i += 1) {
+    const a = (i / ringN) * Math.PI * 2;
+    ringPts[i * 2] = X(cx + Math.cos(a) * radius);
+    ringPts[i * 2 + 1] = Y(cy - Math.sin(a) * radius);
+  }
+  polylines.push({
+    points: ringPts,
+    color: [160 / 255, 190 / 255, 210 / 255, 0.35],
+    width: ringW,
+  });
 
-  // Rays; position shown by round dots.
   for (let i = 0; i < offsets.length; i += 1) {
     const ang = (phase + offsets[i]) * Math.PI * 2;
     const x = cx + Math.cos(ang) * radius;
     const y = cy - Math.sin(ang) * radius;
-    const color = nodeGraphGlLinesCss(NODE_GRAPH_SINCOS4_COLORS[i] || NODE_GRAPH_SINCOS4_COLORS[3]);
-    nodeGraphGlLinesSegment(batch, X(cx), Y(cy), X(x), Y(y), halfOf(stroke), feather, color);
-    drawNodeGraphSinCos4FillDot(batch, X(x), Y(y), Math.max(0, tipR * side - feather * 0.5), feather, color);
+    const color = (typeof nodeGraphGlLinesCss === "function"
+      ? nodeGraphGlLinesCss(NODE_GRAPH_SINCOS4_COLORS[i] || NODE_GRAPH_SINCOS4_COLORS[3])
+      : [1, 1, 1, 1]);
+    polylines.push({
+      points: new Float32Array([X(cx), Y(cy), X(x), Y(y)]),
+      color,
+      width: rayW,
+    });
+    dots.push({
+      x: X(x), y: Y(y),
+      radius: Math.max(0.5, tipR * side * 0.5),
+      color,
+    });
   }
-  drawNodeGraphSinCos4FillDot(batch, X(cx), Y(cy), Math.max(0, hubR * side - feather * 0.5), feather, [220 / 255, 230 / 255, 240 / 255, 0.9]);
-  if (!nodeGraphGlLinesEnd(batch) && typeof nodeGraphGlLinesFillBlack === "function") nodeGraphGlLinesFillBlack(canvas);
+  dots.push({
+    x: X(cx), y: Y(cy),
+    radius: Math.max(0.5, hubR * side * 0.5),
+    color: [220 / 255, 230 / 255, 240 / 255, 0.9],
+  });
+
+  // Face canvas size already set by nodeGraphDisplayCanvasSize*; Present reads canvas.width.
+  nodeGraphClinicalLineGlPresent(canvas, {
+    cssWidth: cssW,
+    cssHeight: cssH,
+    background: "#05060a",
+    blur,
+    polylines,
+    dots,
+  });
 
   section._sinCos4LaidOut = true;
   section._sinCos4ForceDraw = false;

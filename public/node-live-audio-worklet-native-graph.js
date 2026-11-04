@@ -572,6 +572,9 @@ NodeLiveAudioProcessor.prototype.mapNativeGraphParamId = function mapNativeGraph
     if (k === "spacing") return P.NATIVE_GRAPH_PARAM_STAGES;
     if (k === "oddEven") return P.NATIVE_GRAPH_PARAM_FEEDBACK;
   }
+  if (t === "dsfOscillator" && k === "partials") {
+    return P.NATIVE_GRAPH_PARAM_STAGES;
+  }
   if (t === "exponentialMix" && k === "rate") return P.NATIVE_GRAPH_PARAM_WIDTH;
   if (t === "logisticMap" && k === "antialias") return P.NATIVE_GRAPH_PARAM_MODE;
   if (k === "morph") {
@@ -5298,9 +5301,11 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
     }
     if (type === "dsfOscillator") {
       // shape=Bright (harmonic tilt), width=Morph (Trimorph peak / PWM), mix=Blend (SquSaw).
+      // stages=Partials (1..1048576; spawn default 20000; max = soft ceiling).
       push("frequency", P.NATIVE_GRAPH_PARAM_FREQUENCY, cont("frequency", 100));
       push("waveform", P.NATIVE_GRAPH_PARAM_WAVEFORM, disc("waveform", 1));
       push("phase", P.NATIVE_GRAPH_PARAM_PHASE, cont("phase", 0));
+      push("partials", P.NATIVE_GRAPH_PARAM_STAGES, cont("partials", 20000));
       push("bright", P.NATIVE_GRAPH_PARAM_SHAPE, cont("bright", 1));
       push("morph", P.NATIVE_GRAPH_PARAM_WIDTH, cont("morph", 0.5));
       push("blend", P.NATIVE_GRAPH_PARAM_MIX, cont("blend", 0.5));

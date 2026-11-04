@@ -10,6 +10,7 @@
 // Random from the module Seed (seed_mix; no slot index). Fractional voices like Hypersaw. Hard voice cap 128; UI ≤32.
 
 #include <soemdsp/soemdsp.hpp>
+#include <soemdsp/oscillator/dsf_sawmorph.h>
 
 namespace {
 
@@ -24,7 +25,8 @@ constexpr int kWaveformRamp = 2;
 constexpr int kWaveformCenterPulse = 3;
 constexpr int kWaveformPulse = 4;
 constexpr int kWaveformSquare = 5;
-constexpr int kWaveformMax = 5;
+constexpr int kWaveformSawmorph = 6;
+constexpr int kWaveformMax = 6;
 constexpr double kMorphCenter = 0.5;
 constexpr int kPhaseAlgoLinear = 0;
 constexpr int kPhaseAlgoExponential = 1;
@@ -115,7 +117,15 @@ double polyBlepSquare(double t, double dt) {
   return y;
 }
 
-double hyperpluckWaveSample(int waveform, double phase, double inc, double morph) {
+double hyperpluckWaveSample(
+  int waveform,
+  double phase,
+  double inc,
+  double frequencyHz,
+  double sampleRate,
+  double morph,
+  double& sawmorphAccumulator
+) {
   const double dt = incrementAbs(inc);
   const double t = wrap01(phase);
   double m = morph;
@@ -131,6 +141,10 @@ double hyperpluckWaveSample(int waveform, double phase, double inc, double morph
     // 0.5 stays the dedicated square. Away from center it becomes a pulse.
     case kWaveformSquare:
       return (m > 0.499 && m < 0.501) ? polyBlepSquare(t, dt) : polyBlepPulse(t, dt, m);
+    case kWaveformSawmorph:
+      return soemdsp::oscillator::dsf_sawmorph_sample(
+        sawmorphAccumulator, t, inc, frequencyHz, sampleRate, m
+      );
     default: return polyBlepSaw(t, dt);
   }
 }
@@ -365,6 +379,7 @@ struct VoiceState {
   double phase;
   double hzOffset;
   double phaseLayout;
+  double sawmorphAccumulator;
 };
 
 double playbackPhase(const VoiceState& v, double multiply) {
@@ -419,6 +434,7 @@ void restartFromSeed(HyperpluckState& s) {
 void resetPhases(HyperpluckState& s) {
   for (int v = 0; v < kMaxVoices; v++) {
     s.voices[v].phase = 0.0;
+    s.voices[v].sawmorphAccumulator = 0.0;
   }
 }
 
@@ -602,7 +618,9 @@ extern "C" void soemdsp_hyperpluck_process_block(
       if (!(inc == inc)) inc = 0.0;
       if (inc > 0.5) inc = 0.5;
       if (inc < -0.5) inc = -0.5;
-      const double y = hyperpluckWaveSample(wave, v.phase + v.phaseLayout * multiply, inc, morph);
+      const double y = hyperpluckWaveSample(
+        wave, v.phase + v.phaseLayout * multiply, inc, hz, safeSampleRate, morph, v.sawmorphAccumulator
+      );
       v.phase = wrap01(v.phase + inc);
       double amp = 1.0;
       if (lastFrac > 0.0 && i == voiceCount - 1) amp = lastFrac;
@@ -730,5 +748,5 @@ extern "C" double soemdsp_hyperpluck_voice_amp(int handle, int index) {
 }
 
 extern "C" int soemdsp_hyperpluck_version() {
-  return 2;
+  return 3; // Sawmorph: shared band-limited DSF saw-to-sine waveform
 }

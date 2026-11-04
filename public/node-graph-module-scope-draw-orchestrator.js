@@ -89,6 +89,7 @@ const nodeGraphModuleScopeCustomRenderers = {
   portalFace: () => {},
   roundShapeFace: () => {},
   basicShapeFace: () => {},
+  blitFace: () => {},
   sinCosFace: () => {},
   clockFace: () => {},
   clockDividerFace: () => {},

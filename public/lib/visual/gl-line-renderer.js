@@ -373,9 +373,8 @@ void main() {
 }
 `;
   const OUT_FS = `
-precision mediump float;
-// highp: world-space pixel coords near 1000 lose half-pixels in mediump, which
-// walked the plate border a device row off the quads drawn beside it.
+precision highp float;
+// Keep the jack's subpixel radius and distance in high precision as it shrinks.
 varying highp vec2 vPx;
 // Shared with the vertex shader, whose floats are highp. An unqualified
 // float here is mediump and the program fails to link.
@@ -447,7 +446,7 @@ void main() {
   // the plate edges sit on pixel edges, so walls stay crisp and curves get a
   // one-pixel ramp. Coverage is linear in sd over one pixel (SDF slope 1).
   float strokePx = uPixel > 0.5 ? strokeW : max(1.0, floor(strokeW + 0.5));
-  float aa = uPixel > 0.5 ? 1.0 : max(fwidth(sd), 1e-4);
+  float aa = max(fwidth(sd), uPixel > 0.5 ? 1.0 : 1e-4);
   float inner = clamp(sd / aa + 0.5, 0.0, 1.0);
   float band = inner - clamp((sd - strokePx) / aa + 0.5, 0.0, 1.0);
   for (int i = 0; i < 16; i++) {
@@ -899,6 +898,7 @@ void main() {
     const xy = spec.mode === "xy";
     const n = Math.min(SAMPLE_PLOT_MAX, spec.a.length, xy ? (spec.b?.length || 0) : spec.a.length);
     if (!(n > 0)) return;
+    if (!ensureSamplePlot(batch.s)) return false;
     if (!batch.samplePlots) batch.samplePlots = [];
     const k = batch.camera ? 1 : (batch.scale || 1);
     const c = spec.rgba || [1, 1, 1, 1];
@@ -921,6 +921,7 @@ void main() {
       shift: Number.isFinite(Number(spec.shift)) ? Number(spec.shift) : 0,
       rgba: [c[0] || 0, c[1] || 0, c[2] || 0, c.length > 3 && Number.isFinite(c[3]) ? c[3] : 1],
     });
+    return true;
   }
 
   /**
@@ -1051,7 +1052,12 @@ void main() {
       nx /= nl;
       ny /= nl;
       const dot = nx * n0x + ny * n0y;
-      const scale = dot > 0.35 ? 1 / dot : 1 / 0.35;
+      // A wide miter at a fast turn becomes a visible, rotating triangle at
+      // waveform resolution. Keep the two neighbouring segments on one shared
+      // edge, but cap the extension near the stroke width. This is the common
+      // polyline rule: a limited miter, never a per-sample cap.
+      const minMiterDot = 0.72;
+      const scale = dot > minMiterDot ? 1 / dot : 1 / minMiterDot;
       return [nx * scale, ny * scale];
     };
     const edge = [];
@@ -2169,6 +2175,8 @@ uniform float uSpan;
 uniform float uShift;
 out vec2 vLocal;
 out float vLen;
+out float vAcross;
+out float vPolyline;
 float S(sampler2D t, int i) {
   return texelFetch(t, ivec2(i % ${SAMPLE_PLOT_TEX_W}, i / ${SAMPLE_PLOT_TEX_W}), 0).r;
 }
