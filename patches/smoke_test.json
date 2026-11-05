@@ -894,7 +894,7 @@
         }
       },
       "params": {
-        "sampleFrequency": 1,
+        "sampleFrequency": 4,
         "interpolate": "cosine",
         "smoothing": 0,
         "phaseOffset": 0,
@@ -984,7 +984,7 @@
   "view": {
     "heightGu": 24,
     "widthGu": 48,
-    "zoom": 1.1796514623016157,
+    "zoom": 1.5361632016138698,
     "gridVisible": true,
     "gridLightVisible": true,
     "wireLengthsVisible": true,

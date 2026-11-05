@@ -1,12 +1,29 @@
-function nodeGraphRenderedSampleDownloadName() {
-  const info = typeof normalizeNodeGraphPatchInfo === "function"
-    ? normalizeNodeGraphPatchInfo(nodeGraphMvp?.patch?.info)
-    : {};
-  const base = String(info?.name || "rendered-sample")
+// Rendered sample file name = the patch name (header title / file stem):
+// smoke_test.json renders to smoke_test.wav. Untitled patches use
+// sandbox_sample. Downloads in one page session count up per name:
+// smoke_test.wav, smoke_test_2.wav, smoke_test_3.wav, ...
+function nodeGraphRenderedSampleBaseName() {
+  const title = typeof nodeGraphHeaderPatchTitleSource === "function"
+    ? nodeGraphHeaderPatchTitleSource()
+    : null;
+  const name = title?.filled ? title.name : "";
+  return String(name)
     .trim()
-    .replace(/[^\w.-]+/g, "-")
-    .replace(/^-+|-+$/g, "") || "rendered-sample";
-  return `${base}.wav`;
+    .replace(/[^\w.-]+/g, "_")
+    .replace(/^[_.-]+|[_.-]+$/g, "") || "sandbox_sample";
+}
+
+function nodeGraphRenderedSampleDownloadName() {
+  return `${nodeGraphRenderedSampleBaseName()}.wav`;
+}
+
+const nodeGraphRenderedSampleDownloadCounts = new Map();
+
+function nodeGraphRenderedSampleNextDownloadName() {
+  const base = nodeGraphRenderedSampleBaseName();
+  const n = (nodeGraphRenderedSampleDownloadCounts.get(base) || 0) + 1;
+  nodeGraphRenderedSampleDownloadCounts.set(base, n);
+  return n === 1 ? `${base}.wav` : `${base}_${n}.wav`;
 }
 
 function downloadNodeGraphRenderedSample() {
@@ -23,7 +40,7 @@ function downloadNodeGraphRenderedSample() {
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
   anchor.href = url;
-  anchor.download = nodeGraphRenderedSampleDownloadName();
+  anchor.download = nodeGraphRenderedSampleNextDownloadName();
   document.body.append(anchor);
   anchor.click();
   anchor.remove();
