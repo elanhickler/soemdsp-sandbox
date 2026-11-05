@@ -1346,6 +1346,17 @@ function nodeGraphWaterfallFillTooCloseToPlate(fillRgb, bright01, plateCss) {
   return Math.abs(nodeGraphWaterfallRgbLuminance01(scaled) - nodeGraphWaterfallRgbLuminance01(plate)) < 0.12;
 }
 
+/** Fill ink for one channel; lifted only if THIS channel vanishes on the plate. */
+function nodeGraphWaterfallChannelFillRgb(ch, useFill, plateBg) {
+  const rgb = nodeGraphWaterfallParseInkRgb(ch.color);
+  const bright = nodeGraphWaterfallClamp01(ch.bright ?? 1, 1);
+  if (useFill && nodeGraphWaterfallFillTooCloseToPlate(rgb, bright, plateBg)) {
+    return [...nodeGraphWaterfallLiftFillRgb(rgb, bright), 1];
+  }
+  // Brightness = ink alpha (4th entry), like the bar path.
+  return [...rgb, bright];
+}
+
 /** Same hue, lifted so a filled bar still reads against the plate. */
 function nodeGraphWaterfallLiftFillRgb(fillRgb, bright01) {
   const scaled = nodeGraphWaterfallScaleRgb(fillRgb, bright01);
@@ -1902,11 +1913,7 @@ function nodeGraphWaterfallSmoothAdvance(destCtx, destCanvas, spec, options) {
   const sampleSpan = Math.max(0, sampleEnd - sampleStart);
   const pix0 = Math.max(0, width - paintPx);
   const useFill = nodeGraphWaterfallBarsFilled(settings);
-  const fillRgb0 = nodeGraphWaterfallParseInkRgb(settings.color || settings.dot1Color || "#ff0000");
-  const fillBright0 = nodeGraphWaterfallClamp01(settings.dot1Brightness ?? settings.brightness, 1);
-  const fillVanishes = useFill && nodeGraphWaterfallFillTooCloseToPlate(fillRgb0, fillBright0, plateBg);
   const useStroke = nodeGraphWaterfallDrawStroke(settings);
-  const liftedFillRgb = fillVanishes ? nodeGraphWaterfallLiftFillRgb(fillRgb0, fillBright0) : null;
   const bag = destCanvas._waterfall || (destCanvas._waterfall = {});
   // Stroke layering: a thick, antialiased stroke reaches past its column, and
   // channels were stroked column by column (L, R, L, R ...), so in each
@@ -1962,9 +1969,9 @@ function nodeGraphWaterfallSmoothAdvance(destCtx, destCanvas, spec, options) {
         prevEdge: connectEdge && edgeMap ? edgeMap[key] : null,
         strokeColor: ch.strokeColor,
         // Brightness = ink alpha (4th entry), like the bar path.
-        rgb: liftedFillRgb
-          ? [...liftedFillRgb, 1]
-          : [...nodeGraphWaterfallParseInkRgb(ch.color), nodeGraphWaterfallClamp01(ch.bright ?? 1, 1)],
+        // Lift is per channel: Left's lifted colour used to be applied to
+        // every channel, so a black Left turned Right black too (Over = black).
+        rgb: nodeGraphWaterfallChannelFillRgb(ch, useFill, plateBg),
       });
     }
     nodeGraphWaterfallStampColumnFills(
