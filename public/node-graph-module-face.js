@@ -1172,9 +1172,16 @@ function nodeGraphModuleFaceDrawGl(batch, el, w, ox, oy, z) {
         nodeGraphModuleFaceText(batch, wd.label, ox + (wd.x + gap + 6) * z, oy + cy * z, 12.6 * z, ink.label, { align: "left" });
         nodeGraphModuleFaceValueRun(batch, input, ox + (wd.x + wd.w - 6) * z, oy + cy * z, 13.8 * z, ink.value, { align: "right" });
       } else {
-        // Ghost fill first (under), then the real fill on top so the live value
-        // stays readable where they overlap. Same geometry as the real fill:
-        // unipolar bottom→position, bipolar mid→position.
+        // Real fill first, then translucent ghost fill on top so the ghost stays
+        // visible when it is below the real value (overlap = tinted blend; the
+        // ghost edge beyond/under the real fill still reads). Same geometry as
+        // the real fill: unipolar bottom→position, bipolar mid→position.
+        if (wd.bipolar) {
+          const a = Math.min(0.5, 1 - t);
+          rect(wd.x + gap, top + a * ch, cw, Math.abs(0.5 - t) * ch, ink.cellValueFill);
+        } else {
+          rect(wd.x + gap, top + (1 - t) * ch, cw, t * ch, ink.cellValueFill);
+        }
         if (Number.isFinite(tg)) {
           if (wd.bipolar) {
             const a = Math.min(0.5, 1 - tg);
@@ -1182,12 +1189,6 @@ function nodeGraphModuleFaceDrawGl(batch, el, w, ox, oy, z) {
           } else {
             rect(wd.x + gap, top + (1 - tg) * ch, cw, tg * ch, ink.ghost);
           }
-        }
-        if (wd.bipolar) {
-          const a = Math.min(0.5, 1 - t);
-          rect(wd.x + gap, top + a * ch, cw, Math.abs(0.5 - t) * ch, ink.cellValueFill);
-        } else {
-          rect(wd.x + gap, top + (1 - t) * ch, cw, t * ch, ink.cellValueFill);
         }
         nodeGraphModuleFaceText(batch, wd.label, ox + cx * z, oy + (cy - 7) * z, 12.6 * z, ink.label, { maxWidth: (cw - 4) * z });
         nodeGraphModuleFaceValueRun(batch, input, ox + cx * z, oy + (cy + 7) * z, 13.8 * z, ink.value, { maxWidth: (cw - 4) * z });

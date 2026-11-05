@@ -368,11 +368,11 @@ function nodeGraphMathGibbsSquareCycle(N, count) {
   const n = Math.max(16, count | 0);
   const harm = Math.max(1, Number(N) || 1);
   const out = new Float64Array(n);
-  const eps = Math.min(0.25, 0.5 / harm);
+  // Every phase, edges included: the closed form is exact at the jump (its
+  // midpoint, 0). A phase clamp here froze the first / last 0.5/N of the
+  // cycle, a flat lead-in and lead-out at high pitch (few harmonics).
   for (let i = 0; i < n; i += 1) {
-    let ph = i / (n - 1);
-    if (ph < eps) ph = eps;
-    if (ph > 1 - eps) ph = 1 - eps;
+    const ph = i / (n - 1);
     out[i] = nodeGraphMathGibbsSaw(ph, harm) - nodeGraphMathGibbsSaw(ph - 0.5, harm);
   }
   return out;
