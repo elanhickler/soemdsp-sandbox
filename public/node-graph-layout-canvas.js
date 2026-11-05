@@ -580,6 +580,12 @@ function nodeGraphLayoutCanvasOpen(mode = "perform", options = {}) {
       }
     }
   }
+  nodeGraphLayoutCanvasAnnounceMode(next, ids.length, options);
+  return true;
+}
+
+/** Stage label + help line + view buttons for the current Performance view mode. */
+function nodeGraphLayoutCanvasAnnounceMode(next, n, options = {}) {
   const stage = document.getElementById("nodeScreenSoloStage");
   if (stage) {
     stage.setAttribute(
@@ -590,7 +596,6 @@ function nodeGraphLayoutCanvasOpen(mode = "perform", options = {}) {
     );
   }
   if (options.silent !== true && typeof setNodeInteractionHelp === "function") {
-    const n = ids.length;
     const scope = nodeGraphLayoutCanvasActiveScopeId() ? "metamodule" : "root";
     setNodeInteractionHelp(
       next === "edit"
@@ -601,7 +606,29 @@ function nodeGraphLayoutCanvasOpen(mode = "perform", options = {}) {
   if (typeof renderNodeGraphModularViewModeButtons === "function") {
     renderNodeGraphModularViewModeButtons();
   }
-  return true;
+}
+
+/**
+ * Perform <-> Arrange on a live stage: same tiles, same faces, only the edit
+ * chrome flips. Rebuilding the stage (end solo + re-collect) put every face
+ * back in the circuit builder for a moment, where it repainted with its
+ * stale tile-size metrics; canvas view and arrange then drew the same face
+ * from two different size baselines. One stage, one look.
+ * Returns false when the pinned set changed (caller rebuilds).
+ */
+function nodeGraphLayoutCanvasSwitchModeInPlace(next) {
+  if (!nodeGraphLayoutCanvasStageIsLive()) return false;
+  const stage = document.getElementById("nodeScreenSoloStage");
+  const tiles = Array.from(stage?.querySelectorAll(".node-layout-canvas-tile") || []);
+  const ids = nodeGraphLayoutCanvasPinnedNodeIds();
+  if (!tiles.length || tiles.length !== ids.length) return false;
+  const have = new Set(tiles.map((tile) => String(tile.dataset.node || "")));
+  if (!ids.every((id) => have.has(String(id)))) return false;
+  document.body.classList.toggle("node-layout-canvas-edit", next === "edit");
+  stage.classList.toggle("node-layout-canvas-edit", next === "edit");
+  nodeGraphMvp.layoutCanvasMode = next;
+  nodeGraphMvp.layoutCanvasActive = true;
+  return ids.length;
 }
 
 /**
@@ -704,6 +731,11 @@ function toggleNodeGraphLayoutCanvasView(options = {}) {
     return nodeGraphLayoutCanvasOpen("perform", options);
   }
   if (mode === "perform") {
+    const n = nodeGraphLayoutCanvasSwitchModeInPlace("edit");
+    if (n) {
+      nodeGraphLayoutCanvasAnnounceMode("edit", n, options);
+      return true;
+    }
     return nodeGraphLayoutCanvasOpen("edit", options);
   }
   return nodeGraphLayoutCanvasClose(options);
