@@ -195,7 +195,7 @@ function paintNodeGraphTransportBpmFacesForNode(nodeId) {
   if (!id) return;
   const faces = document.querySelectorAll(".node-transport-bpm-face");
   if (!faces.length) return;
-  const dpr = Math.max(1, window.devicePixelRatio || 1);
+  const dpr = nodeGraphDisplayCanvasPixelRatio();
   for (const face of faces) {
     if (String(face.dataset.sliderTarget || "") !== `node-${id}-bpm`) continue;
     drawNodeGraphTransportBpmItem(null, {

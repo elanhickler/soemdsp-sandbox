@@ -58,29 +58,42 @@ function sequencerDeviceAlign(x, dpr) {
   return Math.round(Number(x) * dpr) / dpr;
 }
 
-function sequencerStrokeV(ctx, x, y0, y1, dpr, color, devPx = 1) {
-  const odd = (devPx & 1) === 1;
-  const ax = (Math.round(x * dpr) + (odd ? 0.5 : 0)) / dpr;
-  ctx.strokeStyle = color;
-  ctx.lineWidth = devPx / dpr;
-  ctx.beginPath();
-  ctx.moveTo(ax, y0);
-  ctx.lineTo(ax, y1);
-  ctx.stroke();
+// CSS colour strings -> [r,g,b,a] for the GL batch (parsed once).
+const SEQUENCER_RGBA = new Map();
+function sequencerRgba(css) {
+  let c = SEQUENCER_RGBA.get(css);
+  if (!c) {
+    c = nodeGraphGlLinesCss(css);
+    SEQUENCER_RGBA.set(css, c);
+  }
+  return c;
 }
 
-function sequencerStrokeH(ctx, x0, x1, y, dpr, color, devPx = 1) {
+/** Vertical line `devPx` device px wide, snapped to the device grid (GL rect). */
+function sequencerStrokeV(batch, x, y0, y1, dpr, color, devPx = 1) {
   const odd = (devPx & 1) === 1;
-  const ay = (Math.round(y * dpr) + (odd ? 0.5 : 0)) / dpr;
-  ctx.strokeStyle = color;
-  ctx.lineWidth = devPx / dpr;
-  ctx.beginPath();
-  ctx.moveTo(x0, ay);
-  ctx.lineTo(x1, ay);
-  ctx.stroke();
+  const left = (Math.round(x * dpr) + (odd ? 0.5 : 0) - devPx * 0.5) / dpr;
+  nodeGraphGlLinesRect(batch, left, y0, devPx / dpr, y1 - y0, sequencerRgba(color));
 }
 
-function sequencerFillAligned(ctx, x, y, w, h, dpr) {
+/** Horizontal line `devPx` device px tall, snapped to the device grid (GL rect). */
+function sequencerStrokeH(batch, x0, x1, y, dpr, color, devPx = 1) {
+  const odd = (devPx & 1) === 1;
+  const top = (Math.round(y * dpr) + (odd ? 0.5 : 0) - devPx * 0.5) / dpr;
+  nodeGraphGlLinesRect(batch, x0, top, x1 - x0, devPx / dpr, sequencerRgba(color));
+}
+
+/** 1-device-px outline inside (x, y, w, h), as four GL rects. */
+function sequencerStrokeRect(batch, x, y, w, h, dpr, color) {
+  const t = 1 / dpr;
+  const c = sequencerRgba(color);
+  nodeGraphGlLinesRect(batch, x, y, w, t, c);
+  nodeGraphGlLinesRect(batch, x, y + h - t, w, t, c);
+  nodeGraphGlLinesRect(batch, x, y + t, t, h - 2 * t, c);
+  nodeGraphGlLinesRect(batch, x + w - t, y + t, t, h - 2 * t, c);
+}
+
+function sequencerFillAligned(batch, x, y, w, h, dpr, color) {
   const x0 = Math.round(x * dpr) / dpr;
   const y0 = Math.round(y * dpr) / dpr;
   const x1 = Math.round((x + w) * dpr) / dpr;
@@ -89,7 +102,7 @@ function sequencerFillAligned(ctx, x, y, w, h, dpr) {
   let rh = y1 - y0;
   if (rw * dpr < 1) rw = 1 / dpr;
   if (rh * dpr < 1) rh = 1 / dpr;
-  ctx.fillRect(x0, y0, rw, rh);
+  nodeGraphGlLinesRect(batch, x0, y0, rw, rh, sequencerRgba(color));
   return { x: x0, y: y0, w: rw, h: rh };
 }
 
@@ -326,21 +339,10 @@ function createNodeGraphSequencerBody(node) {
 
   function layout(needBox) {
     const clip = nodeGraphSequencerReadClip(nodeId);
-    const dpr = Math.max(1, window.devicePixelRatio || 1);
+    const dpr = nodeGraphDisplayCanvasPixelRatio();
     const w = Math.max(1, canvas.clientWidth || 1);
     const h = Math.max(1, canvas.clientHeight || 1);
-    const bw = Math.round(w * dpr);
-    const bh = Math.round(h * dpr);
-    const resized = canvas.width !== bw || canvas.height !== bh;
-    if (resized) {
-      canvas.width = bw;
-      canvas.height = bh;
-    }
-    const ctx = canvas.getContext("2d");
-    if (resized || !layoutCache) {
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      ctx.imageSmoothingEnabled = false;
-    }
+    nodeGraphDisplayCanvasSetBacking(canvas, w * dpr, h * dpr);
     const box = needBox || !layoutCache?.box
       ? canvas.getBoundingClientRect()
       : layoutCache.box;
@@ -353,7 +355,7 @@ function createNodeGraphSequencerBody(node) {
     const tickW = gridW / viewTicks;
     const maxScroll = Math.max(0, 128 - keys);
     if (clip.scrollMidi > maxScroll) clip.scrollMidi = maxScroll;
-    layoutCache = { ctx, w, h, clip, keys, viewTicks, gridW, rowH, tickW, box, gutter, dpr };
+    layoutCache = { w, h, clip, keys, viewTicks, gridW, rowH, tickW, box, gutter, dpr };
     return layoutCache;
   }
 
@@ -454,42 +456,47 @@ function createNodeGraphSequencerBody(node) {
     drawDirty = false;
     lastDrawnPlayTick = peekTick;
     const L = layout();
-    const { ctx, w, h, clip, keys, viewTicks, tickW, rowH, gutter, dpr } = L;
-    ctx.fillStyle = "#101014";
-    ctx.fillRect(0, 0, w, h);
-    ctx.fillStyle = "#1a1a20";
-    ctx.fillRect(0, 0, gutter, h);
+    const { w, h, clip, keys, viewTicks, tickW, rowH, gutter, dpr } = L;
+    // GL: plate cleared to #101014; rects, one triangle and atlas text on top.
+    const batch = nodeGraphGlLinesBegin(canvas, sequencerRgba("#101014"), { scale: dpr });
+    if (!batch) {
+      nodeGraphGlLinesFillBlack(canvas);
+      drawDirty = true;
+      return;
+    }
+    const fill = (x, y, rw, rh, color) => nodeGraphGlLinesRect(batch, x, y, rw, rh, sequencerRgba(color));
+    fill(0, 0, gutter, h, "#1a1a20");
     for (let r = 0; r < keys; r += 1) {
       const midi = midiAtRow(clip, r, keys);
       const y0 = sequencerDeviceAlign(r * rowH, dpr);
       const y1 = sequencerDeviceAlign((r + 1) * rowH, dpr);
       const black = pcBlack.has(((midi % 12) + 12) % 12);
-      ctx.fillStyle = black ? "#16161a" : "#202028";
-      ctx.fillRect(gutter, y0, w - gutter, Math.max(1 / dpr, y1 - y0));
-      ctx.fillStyle = black ? "#2a2a32" : "#d8d8de";
-      sequencerFillAligned(ctx, 4, y0 + 1, gutter - 8, Math.max(1 / dpr, rowH - 2), dpr);
+      fill(gutter, y0, w - gutter, Math.max(1 / dpr, y1 - y0), black ? "#16161a" : "#202028");
+      sequencerFillAligned(batch, 4, y0 + 1, gutter - 8, Math.max(1 / dpr, rowH - 2), dpr, black ? "#2a2a32" : "#d8d8de");
       if (rowH >= 9) {
-        ctx.fillStyle = black ? "#ccc" : "#222";
-        ctx.font = `${Math.max(8, Math.min(11, rowH - 4))}px sans-serif`;
         const label = clip.labelMode === "number"
           ? String(midi)
           : (typeof sequencerPitchLabel === "function" ? sequencerPitchLabel(midi) : String(midi));
-        ctx.fillText(label, 5, y0 + Math.min(rowH - 2, 11));
+        nodeGraphGlLinesText(batch, label, 5, y0 + Math.min(rowH - 2, 11), {
+          px: Math.max(8, Math.min(11, rowH - 4)),
+          rgba: sequencerRgba(black ? "#ccc" : "#222"),
+          align: "left",
+          baseline: "alphabetic",
+          family: "sans-serif",
+          weight: 400,
+        });
       }
     }
     if (rowH * dpr >= 3) {
       for (let r = 0; r <= keys; r += 1) {
-        sequencerStrokeH(ctx, gutter, w, r * rowH, dpr, "#18181e", 1);
+        sequencerStrokeH(batch, gutter, w, r * rowH, dpr, "#18181e", 1);
       }
     }
     const phraseTicks = 32 * 4;
     for (let t = 0; t < viewTicks; t += phraseTicks) {
       const x = gutter + t * tickW;
       const bw = Math.min(32 * tickW, w - x);
-      if (bw > 0) {
-        ctx.fillStyle = "rgba(196, 176, 106, 0.07)";
-        ctx.fillRect(sequencerDeviceAlign(x, dpr), 0, bw, h);
-      }
+      if (bw > 0) fill(sequencerDeviceAlign(x, dpr), 0, bw, h, "rgba(196, 176, 106, 0.07)");
     }
     const snap = Math.max(1, clip.snap | 0);
     const gridStep = sequencerDrawnGridStep(snap, tickW, 4);
@@ -500,17 +507,16 @@ function createNodeGraphSequencerBody(node) {
       const beat = t % 8 === 0;
       if (phrase) continue;
       const color = bar ? "#7a7a88" : beat ? "#3a3a48" : "#2c2c36";
-      sequencerStrokeV(ctx, x, 0, h, dpr, color, 1);
+      sequencerStrokeV(batch, x, 0, h, dpr, color, 1);
     }
     for (let t = 0; t <= viewTicks; t += phraseTicks) {
-      sequencerStrokeV(ctx, gutter + t * tickW, 0, h, dpr, "#c4b06a", 2);
+      sequencerStrokeV(batch, gutter + t * tickW, 0, h, dpr, "#c4b06a", 2);
     }
     const loop = Math.max(1, clip.loopTicks | 0);
     if (loop < viewTicks) {
       const lx = gutter + loop * tickW;
-      ctx.fillStyle = "rgba(0, 0, 0, 0.35)";
-      ctx.fillRect(sequencerDeviceAlign(lx, dpr), 0, Math.max(0, w - lx), h);
-      sequencerStrokeV(ctx, lx, 0, h, dpr, "#c8c86a", 2);
+      fill(sequencerDeviceAlign(lx, dpr), 0, Math.max(0, w - lx), h, "rgba(0, 0, 0, 0.35)");
+      sequencerStrokeV(batch, lx, 0, h, dpr, "#c8c86a", 2);
     }
     const notes = Array.isArray(clip.notes) ? clip.notes : [];
     for (let i = 0; i < notes.length; i += 1) {
@@ -519,38 +525,28 @@ function createNodeGraphSequencerBody(node) {
       if (!r) continue;
       const pastLoop = n.start >= loop;
       const isSel = selected.has(noteKey(n));
-      ctx.fillStyle = pastLoop ? (isSel ? "#4a7ab8" : "#2a4a7a") : (isSel ? "#8ec2ff" : "#3d7dff");
-      ctx.fillRect(r.x, r.y, r.w, r.h);
-      if (isSel) {
-        ctx.strokeStyle = "#e8f4ff";
-        ctx.lineWidth = 1 / dpr;
-        ctx.strokeRect(r.x + 0.5 / dpr, r.y + 0.5 / dpr, Math.max(0, r.w - 1 / dpr), Math.max(0, r.h - 1 / dpr));
-      }
+      fill(r.x, r.y, r.w, r.h, pastLoop ? (isSel ? "#4a7ab8" : "#2a4a7a") : (isSel ? "#8ec2ff" : "#3d7dff"));
+      if (isSel) sequencerStrokeRect(batch, r.x, r.y, r.w, r.h, dpr, "#e8f4ff");
     }
     if (drag?.mode === "marquee") {
       const mx = Math.min(drag.x0, drag.x1);
       const my = Math.min(drag.y0, drag.y1);
       const mw = Math.abs(drag.x1 - drag.x0);
       const mh = Math.abs(drag.y1 - drag.y0);
-      ctx.fillStyle = "rgba(61, 125, 255, 0.18)";
-      ctx.fillRect(mx, my, mw, mh);
-      ctx.strokeStyle = "#6aa0ff";
-      ctx.lineWidth = 1 / dpr;
-      ctx.strokeRect(mx + 0.5 / dpr, my + 0.5 / dpr, mw, mh);
+      fill(mx, my, mw, mh, "rgba(61, 125, 255, 0.18)");
+      sequencerStrokeRect(batch, mx, my, mw + 1 / dpr, mh + 1 / dpr, dpr, "#6aa0ff");
     }
     const playTick = peekTick;
     if (playTick >= 0 && playTick <= viewTicks) {
       const px = gutter + playTick * tickW;
-      sequencerStrokeV(ctx, px, 0, h, dpr, "rgba(255, 80, 80, 0.35)", 5);
-      sequencerStrokeV(ctx, px, 0, h, dpr, "#ff3a3a", 2);
-      ctx.fillStyle = "#ff3a3a";
+      sequencerStrokeV(batch, px, 0, h, dpr, "rgba(255, 80, 80, 0.35)", 5);
+      sequencerStrokeV(batch, px, 0, h, dpr, "#ff3a3a", 2);
       const ax = sequencerDeviceAlign(px, dpr);
-      ctx.beginPath();
-      ctx.moveTo(ax - 5, 0);
-      ctx.lineTo(ax + 5, 0);
-      ctx.lineTo(ax, 7);
-      ctx.closePath();
-      ctx.fill();
+      nodeGraphGlLinesTriangle(batch, ax - 5, 0, ax + 5, 0, ax, 7, sequencerRgba("#ff3a3a"));
+    }
+    if (!nodeGraphGlLinesEnd(batch)) {
+      nodeGraphGlLinesFillBlack(canvas);
+      drawDirty = true;
     }
   }
 

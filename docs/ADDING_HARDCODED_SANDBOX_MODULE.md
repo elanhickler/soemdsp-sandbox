@@ -124,13 +124,10 @@ Use the existing modules as the template: `osc`, `noise`, `gain`, and `bias`.
    any new module with a signal input -- see the OfflineAudioContext note
    below for how to do that without needing a real user gesture.
 
-7. Update the smoke test when the new module becomes part of the durable
-   sandbox contract.
-
-   File: `scripts/smoke_test.py`.
-
-   Add checks for the source anchors, menu marker, metadata shape, execution
-   branch, and worklet branch that should not regress.
+7. If the module should stay covered, add it to a smoke test patch
+   (`patches/smoke_test.json`), re-render, and save over
+   `patches/smoke_test.wav`. `node scripts/smoke.mjs` then checks it on
+   every run. Do not write a per-module smoke script.
 
 ## Testing Live Audio (not just Render Sample) from a script
 
@@ -250,7 +247,6 @@ Before considering a hardcoded module complete:
   can look completely done and still throw `"unsupported source"` the
   moment someone plays it live, and Render Sample testing alone will never
   catch that.
-- Smoke tests cover the source markers and behavior contract that must survive
-  future edits.
+- The smoke test patch covers the module if it should not regress.
 - The documentation still states that this is not a plugin API, manifest module
   format, WASM module format, or final C++ module API.

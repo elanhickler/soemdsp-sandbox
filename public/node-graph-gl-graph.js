@@ -265,6 +265,7 @@ function nodeGraphGlGraphRebuildChrome() {
   const seeds = [];
   const keys = [];
   const keypads = [];
+  const keyboards = [];
   const graphs = [];
   const headerButtons = [];
   const host = document.getElementById("nodeGraphWorkspace");
@@ -451,6 +452,13 @@ function nodeGraphGlGraphRebuildChrome() {
         label: String(key.querySelector(".node-keypad-key-label")?.textContent || "").trim(),
       });
     }
+    // Piano Keyboard: no key elements; keyboard-face-gl.js draws its key model
+    // into this surface box (rects from the same layout as the hit test).
+    const keyboardSurface = el.querySelector(".node-midi-keyboard-module .node-midi-keyboard-surface");
+    const keyboardBox = keyboardSurface ? nodeGraphGlGraphWorldBox(keyboardSurface) : null;
+    if (keyboardBox) {
+      keyboards.push({ surface: keyboardSurface, x: keyboardBox.x, y: keyboardBox.y, w: keyboardBox.w, h: keyboardBox.h });
+    }
     const graphFace = el.querySelector(".node-module-graph-display");
     const graphBox = nodeGraphGlGraphWorldBox(graphFace);
     if (graphBox) {
@@ -467,7 +475,7 @@ function nodeGraphGlGraphRebuildChrome() {
   const root = document.documentElement;
   const ghostHost = host || root;
   nodeGraphGlGraphState.chrome = {
-    titles, labels, jacks, sliders, seeds, keys, keypads, graphs, headerButtons,
+    titles, labels, jacks, sliders, seeds, keys, keypads, keyboards, graphs, headerButtons,
     // Read once per rebuild, not per present.
     seedLine: typeof nodeGraphGlLinesCss === "function"
       ? nodeGraphGlLinesCss(getComputedStyle(root).getPropertyValue("--line") || "#3a4248")
@@ -1066,6 +1074,17 @@ function nodeGraphGlGraphDrawChrome(batch, toX, toY, zoom, cssW, cssH) {
         }));
       }
     }
+  }
+  // Piano Keyboard faces: key model state + layout rects (keyboard-face-gl.js).
+  const keyboardList = chrome.keyboards || [];
+  for (let i = 0; i < keyboardList.length; i += 1) {
+    const kb = keyboardList[i];
+    const x = toX(kb.x);
+    const y = toY(kb.y);
+    const w = kb.w * zoom;
+    const h = kb.h * zoom;
+    if (nodeGraphGlGraphOutside(x, y, w, h, cssW, cssH)) continue;
+    if (typeof nodeGraphMidiKeyboardGlDraw === "function") nodeGraphMidiKeyboardGlDraw(batch, kb.surface, x, y, w, h);
   }
   const graphList = chrome.graphs || [];
   for (let i = 0; i < graphList.length; i += 1) {
@@ -2215,7 +2234,7 @@ function nodeGraphGlHitIsLiveHtml(target) {
 function nodeGraphGlHitKeepsNativeTarget(target) {
   if (!(target instanceof Element)) return false;
   return Boolean(target.closest(
-    ".node-face, .node-module-graph-face, .node-module-graph-display, .node-keypad-face, .node-knob-face, .node-xy-pad-canvas, .node-sequencer-roll, .acid-seq-face, .node-arp-keys-face, .node-plugin-toggle-button, .node-plugin-momentary-button, .node-sample-waveform-display, .node-midi-keyboard-surface, .node-midi-keyboard-module, .node-grid-keyboard-surface, .node-grid-keyboard-pad, .node-seed-control, .sabrina-preset-shell, [data-key-index]",
+    ".node-face, .node-module-graph-face, .node-module-graph-display, .node-keypad-face, .node-knob-face, .node-xy-pad-canvas, .node-sequencer-roll, .acid-seq-face, .node-arp-keys-face, .node-plugin-toggle-button, .node-plugin-momentary-button, .node-sample-waveform-display, .node-midi-keyboard-surface, .node-midi-keyboard-module, .node-grid-keyboard-surface, .node-grid-keyboard-pad, .node-seed-control, .sabrina-preset-shell",
   ));
 }
 

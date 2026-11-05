@@ -761,16 +761,18 @@ function nodeGraphChordMemoryPaintKeys() {
     }
     return cmModeByNode.get(nodeId);
   };
-  document.querySelectorAll(".node-midi-keyboard-module [data-midi]").forEach((key) => {
-    const nodeId = nodeGraphChordMemoryNodeIdFromElement(key);
+  // Piano keys are key-model state (keyboard-face-gl.js), drawn by WebGL.
+  const pianoKeys = typeof nodeGraphMidiKeyboardAllKeys === "function" ? nodeGraphMidiKeyboardAllKeys() : [];
+  pianoKeys.forEach((key) => {
+    const nodeId = nodeGraphChordMemoryNodeIdFromElement(key.surface);
     const cmMode = cmModeFor(nodeId);
-    const midi = Number(key.dataset.midi);
+    const midi = key.midi;
     const editNote = cmMode && nodeGraphChordMemoryNoteIsEdit(nodeId, midi);
-    key.classList.toggle("chord-memory", nodeGraphChordMemoryHasSlot(nodeId, midi));
-    key.classList.toggle("slot-on", nodeGraphChordMemorySlotIsOn(nodeId, midi));
-    key.classList.toggle("slot-edit", cmMode && nodeGraphChordMemoryEditIs(nodeId, midi));
-    key.classList.toggle("chord-edit-note", editNote);
-    key.classList.toggle("ghost-chord", !editNote && nodeGraphChordMemoryNoteIsSounding(nodeId, midi));
+    key.state.toggle("chord-memory", nodeGraphChordMemoryHasSlot(nodeId, midi));
+    key.state.toggle("slot-on", nodeGraphChordMemorySlotIsOn(nodeId, midi));
+    key.state.toggle("slot-edit", cmMode && nodeGraphChordMemoryEditIs(nodeId, midi));
+    key.state.toggle("chord-edit-note", editNote);
+    key.state.toggle("ghost-chord", !editNote && nodeGraphChordMemoryNoteIsSounding(nodeId, midi));
   });
   document.querySelectorAll(".node-grid-keyboard-pad[data-grid-midi]").forEach((pad) => {
     const nodeId = nodeGraphChordMemoryNodeIdFromElement(pad);

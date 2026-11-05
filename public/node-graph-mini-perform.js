@@ -716,13 +716,15 @@ function nodeGraphMiniPerformForwardControl(event, surface) {
 }
 
 /**
- * A Mini View keyboard is a DOM mirror. Map its gesture onto the source
- * keyboard so one keyboard runtime remains the sole owner of notes and gates.
+ * A Mini View keyboard tile is a gesture host (Grid Keyboard: a DOM mirror;
+ * piano Keyboard: an empty layer over its GL-drawn keys). Map its gesture onto
+ * the source keyboard so one keyboard runtime remains the sole owner of notes
+ * and gates. The source resolves the key from the mapped coordinates.
  */
 function nodeGraphMiniPerformForwardKeyboardPointer(event, mirrorHost) {
   const host = mirrorHost?.closest?.(".node-mini-perform-keyboard") || mirrorHost;
   const source = host?._source;
-  const mirror = host?.firstElementChild;
+  const mirror = host?.firstElementChild || host;
   if (!source || !mirror || !event?.type?.startsWith("pointer")) return false;
   const mirrorKey = event.target?.closest?.("[data-midi]");
   const keyMidi = String(mirrorKey?.dataset?.midi || "");

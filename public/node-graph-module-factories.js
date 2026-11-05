@@ -790,17 +790,9 @@ function createNodeGraphKeyboardControllerBody(node = null) {
   const surface = document.createElement("div");
   surface.className = "node-midi-keyboard-surface";
   surface.setAttribute("aria-label", "MIDI keyboard");
-  // Left empty -- populated by renderNodeGraphMidiKeyboardKeys (called
-  // from bindNodeGraphKeyboardControllerModuleEvents right after mount)
-  // from the current key count, since the key set is now user-configurable
-  // rather than a fixed 2-octave layout.
-  const whiteRow = document.createElement("div");
-  whiteRow.className = "node-midi-keyboard-white-row";
-  whiteRow.setAttribute("aria-hidden", "true");
-  const blackRow = document.createElement("div");
-  blackRow.className = "node-midi-keyboard-black-row";
-  blackRow.setAttribute("aria-hidden", "true");
-  surface.append(whiteRow, blackRow);
+  // No key elements: renderNodeGraphMidiKeyboardKeys (called from
+  // bindNodeGraphKeyboardControllerModuleEvents right after mount) builds the
+  // key model (keyboard-face-gl.js) from the current window; WebGL draws it.
   performance.append(surface);
 
   const signalBar = document.createElement("div");

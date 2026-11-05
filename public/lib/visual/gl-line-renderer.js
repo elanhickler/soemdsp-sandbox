@@ -931,20 +931,27 @@ void main() {
    * corner radius = radius - stroke). Edges use the app smootherstep, centred
    * on the edge, `feather` CSS px wide. Drawn after the "over" quads, before
    * text, one instanced call per batch.
-   * spec: { radius, stroke, feather = 1, fill: rgba, strokeRgba: rgba }
+   * spec: { radius, stroke, feather = 1, fill: rgba, strokeRgba: rgba,
+   *         fillBottom: rgba (optional vertical gradient: fill at the top
+   *         edge, fillBottom at the bottom), radiusTop (optional: top corners
+   *         use this radius, bottom corners use radius) }
    * x / y / w / h / radius / stroke are batch units (world px under a camera).
    */
   function nodeGraphGlLinesRoundRect(batch, x, y, w, h, spec = {}) {
     if (!batch || !(w > 0) || !(h > 0)) return;
     if (!batch.roundRects) batch.roundRects = [];
     const f = spec.fill || [0, 0, 0, 0];
+    const fb = spec.fillBottom || f;
     const st = spec.strokeRgba || f;
     const feather = Number.isFinite(Number(spec.feather)) ? Math.max(0, Number(spec.feather)) : 1;
+    const radius = Math.max(0, Number(spec.radius) || 0);
+    const radiusTop = Number.isFinite(Number(spec.radiusTop)) ? Math.max(0, Number(spec.radiusTop)) : radius;
     batch.roundRects.push(
       x, y, w, h,
-      Math.max(0, Number(spec.radius) || 0), Math.max(0, Number(spec.stroke) || 0), feather,
+      radius, Math.max(0, Number(spec.stroke) || 0), feather, radiusTop,
       f[0] || 0, f[1] || 0, f[2] || 0, f.length > 3 ? f[3] : 1,
       st[0] || 0, st[1] || 0, st[2] || 0, st.length > 3 ? st[3] : 1,
+      fb[0] || 0, fb[1] || 0, fb[2] || 0, fb.length > 3 ? fb[3] : 1,
     );
   }
 
@@ -1526,6 +1533,19 @@ void main() {
       }
     }
     return width;
+  }
+
+  /**
+   * Font metrics of `text` in a CSS `font` string (the browser's TextMetrics:
+   * width, actualBoundingBox*, fontBoundingBox*). Layout only, for faces that
+   * fit labels; one detached measuring context lives here, never drawn into.
+   */
+  let measureInkCtx = null;
+  function nodeGraphGlLinesMeasureInk(text, font) {
+    if (!measureInkCtx) measureInkCtx = global.document?.createElement?.("canvas")?.getContext?.("2d") || null;
+    if (!measureInkCtx) return null;
+    measureInkCtx.font = String(font || "");
+    return measureInkCtx.measureText(String(text ?? ""));
   }
 
   /**
@@ -2485,9 +2505,10 @@ void main() {
 precision highp float;
 layout(location = 0) in vec2 aCorner;
 layout(location = 1) in vec4 aRect;
-layout(location = 2) in vec3 aShape;
+layout(location = 2) in vec4 aShape;
 layout(location = 3) in vec4 aFill;
 layout(location = 4) in vec4 aStroke;
+layout(location = 5) in vec4 aFill2;
 uniform float uPixel;
 uniform vec3 uCam;
 uniform vec2 uVp;
@@ -2496,8 +2517,10 @@ uniform float uScale;
 out vec2 vP;
 out vec2 vHalf;
 out vec3 vShape;
+out float vRadiusTop;
 out vec4 vFill;
 out vec4 vStroke;
+out vec4 vFill2;
 void main() {
   float k = uPixel > 0.5 ? max(uCam.z, 0.0001) * uDevice : uScale;
   float fk = uPixel > 0.5 ? uDevice : uScale;
@@ -2511,8 +2534,10 @@ void main() {
   vP = off;
   vHalf = halfSize;
   vShape = vec3(aShape.x * k, aShape.y * k, feather);
+  vRadiusTop = aShape.w * k;
   vFill = aFill;
   vStroke = aStroke;
+  vFill2 = aFill2;
 }
 `;
   const RR_FS = `#version 300 es
@@ -2520,8 +2545,10 @@ precision highp float;
 in vec2 vP;
 in vec2 vHalf;
 in vec3 vShape;
+in float vRadiusTop;
 in vec4 vFill;
 in vec4 vStroke;
+in vec4 vFill2;
 out vec4 fragColor;
 // Inside fraction across an edge at sd = 0: smootherstep ramp centred on the
 // edge, w wide (sd < 0 is inside).
@@ -2530,20 +2557,23 @@ float inside(float sd, float w) {
   return 1.0 - t * t * t * (t * (t * 6.0 - 15.0) + 10.0);
 }
 void main() {
-  float r = min(vShape.x, min(vHalf.x, vHalf.y));
+  // Top corners (vP.y < 0, y down) may use their own radius.
+  float r = min(vP.y < 0.0 ? vRadiusTop : vShape.x, min(vHalf.x, vHalf.y));
   vec2 q = abs(vP) - vHalf + r;
   float sd = length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - r;
   float w = vShape.z;
   float outer = inside(sd, w);
   float stroke = min(vShape.y, min(vHalf.x, vHalf.y));
   float fill = stroke > 0.0 ? inside(sd + stroke, w) : 1.0;
-  vec4 c = mix(vStroke, vFill, fill);
+  // Vertical gradient: vFill at the top edge, vFill2 at the bottom edge.
+  vec4 body = mix(vFill, vFill2, clamp(vP.y / max(2.0 * vHalf.y, 1e-4) + 0.5, 0.0, 1.0));
+  vec4 c = mix(vStroke, body, fill);
   float a = outer * c.a;
   if (a < 0.004) discard;
   fragColor = vec4(c.rgb, a);
 }
 `;
-  const RR_FLOATS = 15;
+  const RR_FLOATS = 20;
 
   function ensureRoundRect(s) {
     if (!s || s.roundRectFailed) return null;
@@ -2611,7 +2641,7 @@ void main() {
     gl.vertexAttribDivisor(0, 0);
     gl.bindBuffer(gl.ARRAY_BUFFER, rr.instances);
     gl.bufferData(gl.ARRAY_BUFFER, rr.scratch.subarray(0, list.length), gl.STREAM_DRAW);
-    const sizes = [4, 3, 4, 4];
+    const sizes = [4, 4, 4, 4, 4];
     let off = 0;
     for (let i = 0; i < sizes.length; i += 1) {
       gl.enableVertexAttribArray(i + 1);
@@ -3352,6 +3382,7 @@ void main() {
     nodeGraphGlLinesText,
     nodeGraphGlLinesSetGlyphBakePx,
     nodeGraphGlLinesMeasureText,
+    nodeGraphGlLinesMeasureInk,
     nodeGraphGlLinesTextAtlas,
     nodeGraphGlLinesTextSegments,
     nodeGraphGlLinesEmojiStats,

@@ -42,6 +42,7 @@ struct SampleHoldState {
   int pendingFireSamples; // Clock-edge delay for phaseOffset (>0 counting down)
   unsigned int noiseSeed;
   int currentSeed;
+  bool primed;            // false until the first sample has latched a value
 };
 
 static SampleHoldState gPool[kMaxInstances];
@@ -87,6 +88,7 @@ extern "C" int soemdsp_sample_hold_create() {
       s.lastEdgeInterval = 0.0;
       s.noiseSeed = 1U;
       s.currentSeed = 0;
+      s.primed = false;
       s.active = true;
       return i + 1;
     }
@@ -207,6 +209,13 @@ extern "C" double soemdsp_sample_hold_sample(
     }
   }
 
+  // First sample: never output the placeholder 0. Internal clock at offset 0
+  // starts on its tick (phase 0), so it fires; any other lane takes its first
+  // value silently and keeps its own fire timing.
+  const bool first = !s.primed;
+  s.primed = true;
+  if (first && safeFreq > 0.0 && (offset <= 1.0e-12 || offset >= 1.0 - 1.0e-12)) fire = true;
+
   s.samplesSinceFire = safe(s.samplesSinceFire) + 1.0;
   s.fired = fire ? 1.0 : 0.0;
 
@@ -222,12 +231,18 @@ extern "C" double soemdsp_sample_hold_sample(
     if (seg < 1.0) seg = 1.0;
     s.segmentSamples = seg;
     s.samplesInSegment = 0.0;
-    s.from = safe(s.out);
+    s.from = first ? safeInput : safe(s.out);  // no glide up from 0 on the first value
     s.held = safeInput;
     if (instant) {
       s.out = safeInput;
       s.from = safeInput;
     }
+  }
+
+  if (first && !fire) {
+    s.held = safeInput;
+    s.from = safeInput;
+    s.out = safeInput;
   }
 
   double out;
@@ -262,5 +277,5 @@ extern "C" double soemdsp_sample_hold_held(int handle) {
 }
 
 extern "C" int soemdsp_sample_hold_version() {
-  return 7; // held() export for signed Trigger level. was 6: // Interpolate + Cosine, Hold (shared two_point_curves.h). was 5: external-Clock phase offset uses edge interval (offset lane latches)
+  return 8; // first sample latches a value (was the placeholder 0). was 7: held() export for signed Trigger level. was 6: // Interpolate + Cosine, Hold (shared two_point_curves.h). was 5: external-Clock phase offset uses edge interval (offset lane latches)
 }

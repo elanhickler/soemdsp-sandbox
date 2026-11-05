@@ -51,63 +51,7 @@ function nodeGraphMidiKeyboardLayoutHostWidth(surface) {
   if (surfaceW > 0) {
     return surfaceW;
   }
-  const whiteRow = surface?.querySelector?.(".node-midi-keyboard-white-row");
-  if (whiteRow?.clientWidth > 0) {
-    return whiteRow.clientWidth;
-  }
   return Math.max(0, surface?.parentElement?.clientWidth || 0);
-}
-
-function nodeGraphPositionMidiKeyboardBlackKeys(surface, blackByIndex, totalWhite, blackW, whiteW, blackH, blackKeyHeightPercent, inModuleFace, pads = null) {
-  // pads: half-white beds past an edge black key (range starts / ends on black).
-  const leadPad = Math.max(0, Number(pads?.leadPad) || 0);
-  const trailPad = Math.max(0, Number(pads?.trailPad) || 0);
-  const nW = Math.max(1, totalWhite + leadPad + trailPad);
-  const widthPct = Math.min(90 / nW, (blackW / Math.max(1, whiteW)) * (100 / nW));
-  const halfPct = widthPct * 0.5;
-  const widthText = `${widthPct}%`;
-  surface.querySelectorAll(".node-midi-keyboard-black-row [data-key-index]").forEach((span) => {
-    const key = blackByIndex.get(Number(span.dataset.keyIndex));
-    if (!key) {
-      return;
-    }
-    const leftIdx = Number(key.leftWhiteIndex);
-    if (!(leftIdx >= 0 || (leftIdx === -1 && leadPad > 0))) {
-      if (span.style.display !== "none") {
-        span.style.display = "none";
-      }
-      return;
-    }
-    let centerPct = ((leftIdx + 1 + leadPad) / nW) * 100;
-    centerPct = Math.max(halfPct, Math.min(100 - halfPct, centerPct));
-    const leftText = `${centerPct}%`;
-    if (span.style.display === "none") {
-      span.style.display = "";
-    }
-    if (span.style.left !== leftText) {
-      span.style.left = leftText;
-    }
-    if (span.style.transform !== "translateX(-50%)") {
-      span.style.transform = "translateX(-50%)";
-    }
-    if (span.style.width !== widthText) {
-      span.style.width = widthText;
-    }
-    if (span.style.marginLeft) {
-      span.style.removeProperty("margin-left");
-    }
-    const heightText = (inModuleFace || !(blackH > 0)) ? `${blackKeyHeightPercent}%` : `${blackH}px`;
-    if (span.style.height !== heightText) {
-      span.style.height = heightText;
-    }
-    if (inModuleFace || !(blackH > 0)) {
-      if (span.style.maxHeight) {
-        span.style.removeProperty("max-height");
-      }
-    } else if (span.style.maxHeight !== heightText) {
-      span.style.maxHeight = heightText;
-    }
-  });
 }
 
 let nodeGraphMidiKeyboardLayoutApplying = false;
@@ -148,7 +92,6 @@ function applyNodeGraphMidiKeyboardLayoutBody() {
     const totalWhite = generated.totalWhite || 0;
     const pads = { leadPad: generated.leadPad || 0, trailPad: generated.trailPad || 0 };
     const totalUnits = totalWhite + pads.leadPad + pads.trailPad;
-    const blackByIndex = new Map((generated.blackKeys || []).map((key) => [key.index, key]));
     const s = nodeGraphMidiKeyboardLayoutForSurface(surface);
     const available = nodeGraphMidiKeyboardLayoutHostWidth(surface);
     const desired = totalUnits * s.whiteKeyWidth;
@@ -164,6 +107,20 @@ function applyNodeGraphMidiKeyboardLayoutBody() {
       ? available
       : Math.max(0, totalUnits * whiteW);
     const surfaceH = Math.max(0, surface.clientHeight || 0);
+    // Key rects for the GL draw and the hit test: one source, rebuilt every
+    // pass (cheap) so a key-window change with the same counts still lands.
+    const layoutKeyRects = () => {
+      if (typeof nodeGraphMidiKeyboardLayoutKeyRects !== "function") return;
+      nodeGraphMidiKeyboardLayoutKeyRects(surface, {
+        width: surface.clientWidth || 0,
+        height: surface.clientHeight || 0,
+        inModuleFace,
+        whiteW,
+        blackW,
+        blackH: nodeGraphMidiKeyboardBlackKeyHeightPx(surface.clientHeight || 0, s.blackKeyHeight),
+        blackKeyHeight: s.blackKeyHeight,
+      });
+    };
     const layoutSig = [
       s.whiteKeyWidth,
       s.blackKeyWidth,
@@ -179,18 +136,7 @@ function applyNodeGraphMidiKeyboardLayoutBody() {
       pads.trailPad,
     ].join(":");
     if (surface.dataset.midiLayoutSig === layoutSig) {
-      const blackH = nodeGraphMidiKeyboardBlackKeyHeightPx(surfaceH, s.blackKeyHeight);
-      nodeGraphPositionMidiKeyboardBlackKeys(
-        surface,
-        blackByIndex,
-        totalWhite,
-        blackW,
-        whiteW,
-        blackH,
-        s.blackKeyHeight,
-        inModuleFace,
-        pads,
-      );
+      layoutKeyRects();
       return;
     }
     if (surfaceH < 8) {
@@ -212,10 +158,6 @@ function applyNodeGraphMidiKeyboardLayoutBody() {
       surface.style.maxWidth = "100%";
     }
     surface.dataset.keyLabels = s.keyLabels;
-    surface.style.setProperty("--midi-white-key-width", `${whiteW}px`);
-    // White-key units across the surface; labels size per key from it (styles.css).
-    surface.style.setProperty("--midi-key-units", String(Math.max(1, totalUnits || 1)));
-    surface.style.setProperty("--midi-black-key-width", `${blackW}px`);
     if (inModuleFace) {
       surface.style.removeProperty("--midi-keyboard-piano-height");
       surface.style.height = "100%";
@@ -230,35 +172,10 @@ function applyNodeGraphMidiKeyboardLayoutBody() {
       surface.style.minHeight = "0";
       surface.style.maxHeight = "100%";
     }
-    const whiteRow = surface.querySelector(".node-midi-keyboard-white-row");
-    if (whiteRow) {
-      whiteRow.style.gridTemplateColumns = totalWhite > 0
-        ? (inModuleFace ? `repeat(${totalWhite}, minmax(0, 1fr))` : `repeat(${totalWhite}, ${whiteW}px)`)
-        : "";
-      // Empty half-white bed before / after an edge black key (% of surface width).
-      const unitPct = totalUnits > 0 ? 100 / totalUnits : 0;
-      whiteRow.style.paddingLeft = pads.leadPad > 0 ? `${pads.leadPad * unitPct}%` : "";
-      whiteRow.style.paddingRight = pads.trailPad > 0 ? `${pads.trailPad * unitPct}%` : "";
-    }
-    // Black keys: geometry from key count only (not DOM measure, not octave).
-    // N whites fill 100% width. Black sits on the joint after white[leftWhiteIndex],
-    // centered, width ≈ 65% of one white, height = blackKeyHeight % of surface.
-    const blackH = nodeGraphMidiKeyboardBlackKeyHeightPx(surfaceH, s.blackKeyHeight);
-    surface.style.setProperty(
-      "--midi-black-key-height",
-      blackH > 0 ? `${blackH}px` : `${s.blackKeyHeight}%`,
-    );
-    nodeGraphPositionMidiKeyboardBlackKeys(
-      surface,
-      blackByIndex,
-      totalWhite,
-      blackW,
-      whiteW,
-      blackH,
-      s.blackKeyHeight,
-      inModuleFace,
-      pads,
-    );
+    // Keys: geometry from key count only (not DOM measure, not octave). N whites
+    // fill the bed; a black sits on the joint after white[leftWhiteIndex],
+    // height = blackKeyHeight % of the bed (keyboard-face-gl.js).
+    layoutKeyRects();
     const module = surface.closest(".node-midi-keyboard-module");
     if (module) {
       module.classList.toggle("show-keyboard-info", s.hideKeyboardInfo === false);
@@ -644,7 +561,10 @@ function bindNodeGraphKeyboardControllerDisplayContextMenu() {
       return;
     }
     // Keys own right-click (arp-style Trigger sweep in view-controls); no menu there.
-    const key = event.target?.closest?.(".node-midi-keyboard-surface [data-key-index]");
+    const surface = event.target?.closest?.(".node-midi-keyboard-surface");
+    const key = surface && typeof nodeGraphMidiKeyboardKeyAtClient === "function"
+      ? nodeGraphMidiKeyboardKeyAtClient(surface, event.clientX, event.clientY)
+      : null;
     if (key) {
       event.preventDefault();
       event.stopPropagation();

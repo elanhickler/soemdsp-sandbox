@@ -2054,191 +2054,6 @@ function nodeGraphAudioPlayerPlaylistStopScrubLoop(nodeId) {
   }
 }
 
-const nodeGraphAudioPlayerPlaylistEnvelopeCache = new Map();
-const nodeGraphAudioPlayerPlaylistEnvelopeBins = 512;
-const nodeGraphAudioPlayerPlaylistEnvelopeStrideCap = 64;
-
-function nodeGraphAudioPlayerPlaylistSamplesForId(sampleId) {
-  const id = normalizeNodeGraphSampleId
-    ? normalizeNodeGraphSampleId(sampleId)
-    : String(sampleId || "").trim();
-  if (!id) {
-    return null;
-  }
-  const buf = nodeGraphMvp?.sampleBuffers?.get?.(id);
-  if (!buf) {
-    return null;
-  }
-  if (buf.samples?.length) {
-    return buf.samples;
-  }
-  const channel = buf.channelData?.[0];
-  return channel?.length ? channel : null;
-}
-
-function nodeGraphAudioPlayerPlaylistEnvelope(sampleId) {
-  const samples = nodeGraphAudioPlayerPlaylistSamplesForId(sampleId);
-  const length = samples?.length || 0;
-  if (!length) {
-    return null;
-  }
-  const cached = nodeGraphAudioPlayerPlaylistEnvelopeCache.get(sampleId);
-  if (cached && cached.length === length) {
-    return cached;
-  }
-  const bins = Math.min(nodeGraphAudioPlayerPlaylistEnvelopeBins, length);
-  const mins = new Float32Array(bins);
-  const maxs = new Float32Array(bins);
-  for (let bin = 0; bin < bins; bin += 1) {
-    const t0 = Math.floor((bin * length) / bins);
-    const t1 = Math.max(t0 + 1, Math.floor(((bin + 1) * length) / bins));
-    const stride = Math.max(1, Math.floor((t1 - t0) / nodeGraphAudioPlayerPlaylistEnvelopeStrideCap));
-    let minV = 1;
-    let maxV = -1;
-    for (let frame = t0; frame < t1; frame += stride) {
-      const value = samples[frame];
-      if (value < minV) minV = value;
-      if (value > maxV) maxV = value;
-    }
-    const last = samples[t1 - 1];
-    if (last < minV) minV = last;
-    if (last > maxV) maxV = last;
-    mins[bin] = minV;
-    maxs[bin] = maxV;
-  }
-  const envelope = { length, bins, mins, maxs };
-  nodeGraphAudioPlayerPlaylistEnvelopeCache.set(sampleId, envelope);
-  return envelope;
-}
-
-function nodeGraphAudioPlayerPlaylistSizeWaveCanvas(canvas) {
-  if (!canvas) {
-    return null;
-  }
-  const cssW = Math.max(1, canvas.clientWidth || 0);
-  const cssH = Math.max(1, canvas.clientHeight || 0);
-  const dpr = Math.max(1, nodeGraphFiniteNumber(window.devicePixelRatio, 1));
-  const width = Math.max(1, Math.round(cssW * dpr));
-  const height = Math.max(1, Math.round(cssH * dpr));
-  if (canvas.width !== width) {
-    canvas.width = width;
-  }
-  if (canvas.height !== height) {
-    canvas.height = height;
-  }
-  const context = canvas.getContext("2d");
-  if (!context) {
-    return null;
-  }
-  context.setTransform(1, 0, 0, 1, 0, 0);
-  return { context, width, height, pixelRatio: dpr };
-}
-
-function nodeGraphAudioPlayerPlaylistStrokeEnvelope(context, envelope, viewStart, viewEnd, width, midY, amplitude) {
-  if (!envelope || !(width > 1)) {
-    return false;
-  }
-  const span = Math.max(1e-9, viewEnd - viewStart);
-  const startBin = Math.max(0, Math.floor((viewStart / envelope.length) * envelope.bins));
-  const endBin = Math.min(envelope.bins - 1, Math.ceil((viewEnd / envelope.length) * envelope.bins));
-  if (endBin < startBin) {
-    return false;
-  }
-  context.beginPath();
-  let started = false;
-  for (let bin = startBin; bin <= endBin; bin += 1) {
-    const frame = ((bin + 0.5) / envelope.bins) * envelope.length;
-    const x = ((frame - viewStart) / span) * width;
-    const yMax = midY - envelope.maxs[bin] * amplitude;
-    if (!started) {
-      context.moveTo(x, yMax);
-      started = true;
-    } else {
-      context.lineTo(x, yMax);
-    }
-  }
-  for (let bin = endBin; bin >= startBin; bin -= 1) {
-    const frame = ((bin + 0.5) / envelope.bins) * envelope.length;
-    const x = ((frame - viewStart) / span) * width;
-    context.lineTo(x, midY - envelope.mins[bin] * amplitude);
-  }
-  context.closePath();
-  return started;
-}
-
-function nodeGraphAudioPlayerPlaylistPaintWaveCanvas(canvas, {
-  sampleId,
-  live = false,
-  viewStart = 0,
-  viewEnd = 0,
-  playheadFrame = null,
-  settings = null,
-} = {}) {
-  const sized = nodeGraphAudioPlayerPlaylistSizeWaveCanvas(canvas);
-  if (!sized) {
-    return;
-  }
-  const { context, width, height, pixelRatio } = sized;
-  context.fillStyle = live ? "hsl(140, 18%, 5%)" : "#050805";
-  context.fillRect(0, 0, width, height);
-  const samples = nodeGraphAudioPlayerPlaylistSamplesForId(sampleId);
-  const total = samples?.length || 0;
-  if (!total) {
-    return;
-  }
-  const start = live ? nodeGraphFiniteNumber(viewStart) : 0;
-  const end = live && viewEnd > viewStart ? viewEnd : total;
-  const midY = height * 0.5;
-  const amplitude = midY * 0.9;
-  const look = settings;
-  const stroke = typeof nodeGraphSampleWaveformLineColor === "function" && look
-    ? nodeGraphSampleWaveformLineColor(look, 82, 0.92)
-    : "rgba(120, 220, 180, 0.9)";
-  const fill = typeof nodeGraphSampleWaveformLineColor === "function" && look
-    ? nodeGraphSampleWaveformLineColor(look, 75, 0.28)
-    : "rgba(80, 180, 140, 0.28)";
-  let drew = false;
-  if (
-    live
-    && typeof nodeGraphSampleWaveformBuildVectorPath === "function"
-  ) {
-    const points = nodeGraphSampleWaveformBuildVectorPath(
-      samples,
-      start,
-      end,
-      width,
-      midY,
-      amplitude,
-    );
-    if (nodeGraphAudioPlayerPlaylistStrokeVectorPath(context, points)) {
-      context.strokeStyle = stroke;
-      context.lineWidth = Math.max(1, pixelRatio);
-      context.lineJoin = "miter";
-      context.stroke();
-      drew = true;
-    }
-  }
-  if (!drew) {
-    const envelope = nodeGraphAudioPlayerPlaylistEnvelope(sampleId);
-    if (nodeGraphAudioPlayerPlaylistStrokeEnvelope(context, envelope, start, end, width, midY, amplitude)) {
-      context.fillStyle = fill;
-      context.fill();
-      context.strokeStyle = stroke;
-      context.lineWidth = Math.max(1, pixelRatio);
-      context.stroke();
-    }
-  }
-  if (live && Number.isFinite(playheadFrame) && playheadFrame >= start && playheadFrame <= end) {
-    const x = ((playheadFrame - start) / Math.max(1e-9, end - start)) * width;
-    context.strokeStyle = "rgba(255, 255, 255, 0.88)";
-    context.lineWidth = Math.max(1, pixelRatio);
-    context.beginPath();
-    context.moveTo(x, 0);
-    context.lineTo(x, height);
-    context.stroke();
-  }
-}
-
 function nodeGraphAudioPlayerPlaylistPaintWaves(nodeId, { liveOnly = false } = {}) {
   const section = document.querySelector(
     `.node-sample-waveform-display[data-node="${CSS.escape(String(nodeId || ""))}"]`,
@@ -2878,8 +2693,7 @@ function nodeGraphAudioPlayerPlaylistEnhanceDisplay(section, nodeId) {
   vslrPage.className = "node-music-player-page node-music-player-page-vs";
   vslrPage.dataset.musicPlayerPage = "vslr";
   vslrPage.hidden = true;
-  const vslrCanvas = document.createElement("canvas");
-  vslrCanvas.className = "node-music-player-vs-canvas";
+  const vslrCanvas = nodeGraphDisplayCanvasCreate("node-music-player-vs-canvas");
   vslrCanvas.dataset.musicPlayerVs = "lr";
   vslrPage.append(vslrCanvas);
 
@@ -2964,58 +2778,53 @@ function nodeGraphAudioPlayerVideoscopePaint(section) {
   const page = canvas.parentElement;
   const cssW = Math.max(8, Math.round(page?.clientWidth || canvas.clientWidth || 8));
   const cssH = Math.max(8, Math.round(page?.clientHeight || canvas.clientHeight || 8));
-  const pixelRatio = Math.max(1, window.devicePixelRatio || 1);
+  const pixelRatio = nodeGraphDisplayCanvasPixelRatio();
   const width = Math.max(8, Math.round(cssW * pixelRatio));
   const height = Math.max(8, Math.round(cssH * pixelRatio));
-  const sized = canvas.width !== width || canvas.height !== height;
-  if (canvas.width !== width) canvas.width = width;
-  if (canvas.height !== height) canvas.height = height;
-  if (sized && typeof nodeGraphGlGraphNoteFaceCanvasSized === "function") {
+  if (nodeGraphDisplayCanvasSetBacking(canvas, width, height)
+    && typeof nodeGraphGlGraphNoteFaceCanvasSized === "function") {
     nodeGraphGlGraphNoteFaceCanvasSized();
   }
   const channels = nodeGraphAudioPlayerVideoscopeChannels(nodeId);
-  const context = canvas.getContext("2d");
-  if (!context) {
-    return;
-  }
-  context.setTransform(1, 0, 0, 1, 0, 0);
-  context.clearRect(0, 0, width, height);
   const bg = typeof nodeGraphSampleWaveformBackgroundColor === "function"
     ? nodeGraphSampleWaveformBackgroundColor(settings)
     : "#050805";
-  context.fillStyle = bg;
-  context.fillRect(0, 0, width, height);
-  nodeGraphAudioPlayerVideoscopePaintLr(context, width, height, channels, settings, nodeId);
+  // Device-px batch (scale 1): the plate is the clear colour.
+  const batch = nodeGraphGlLinesBegin(canvas, nodeGraphGlLinesCss(bg));
+  if (!batch) {
+    nodeGraphGlLinesFillBlack(canvas);
+    return;
+  }
+  nodeGraphAudioPlayerVideoscopePaintLr(batch, width, height, channels, settings, nodeId);
+  if (!nodeGraphGlLinesEnd(batch)) {
+    nodeGraphGlLinesFillBlack(canvas);
+  }
 }
 
-function nodeGraphAudioPlayerVideoscopePaintLr(context, width, height, channels, settings, nodeId) {
+function nodeGraphAudioPlayerVideoscopePaintLr(batch, width, height, channels, settings, nodeId) {
   const mid = Math.round(height * 0.5);
-  const line = typeof nodeGraphSampleWaveformLineColor === "function"
+  const line = nodeGraphGlLinesCss(typeof nodeGraphSampleWaveformLineColor === "function"
     ? nodeGraphSampleWaveformLineColor(settings, 57, 0.28)
-    : "rgba(80, 160, 130, 0.28)";
-  context.fillStyle = line;
-  context.fillRect(0, mid, width, 1);
+    : "rgba(80, 160, 130, 0.28)");
+  nodeGraphGlLinesRect(batch, 0, mid, width, 1, line);
   const leftZero = Math.round(mid * 0.5);
   const rightZero = mid + Math.round((height - mid) * 0.5);
-  context.fillRect(0, leftZero, width, 1);
-  context.fillRect(0, rightZero, width, 1);
+  nodeGraphGlLinesRect(batch, 0, leftZero, width, 1, line);
+  nodeGraphGlLinesRect(batch, 0, rightZero, width, 1, line);
   if (!channels) {
     return;
   }
   const win = nodeGraphAudioPlayerVideoscopeWindow(nodeId, channels.frames, channels.sampleRate);
-  const paintPane = (channel, top, paneH, color) => {
+  const unit = settings && Number.isFinite(Number(settings.traceWidth))
+    ? Number(settings.traceWidth)
+    : nodeGraphSampleWaveformDefaultSettings.traceWidth;
+  const lineWidth = Math.max(0.25, faceInkPx(clampAuthoredInkPx(unit, 2), faceMinSide(width, height)));
+  // One butt-capped min..max stem per device column, 1 px smootherstep edge.
+  const half = Math.max(0.125, lineWidth * 0.5 - 0.5);
+  const paintPane = (channel, top, paneH, rgba) => {
     const center = top + paneH * 0.5;
     const amp = paneH * 0.42;
     const count = Math.max(1, win.end - win.start);
-    context.strokeStyle = color;
-    {
-      const faceMin = faceMinSide(width, height);
-      const unit = settings && Number.isFinite(Number(settings.traceWidth))
-        ? Number(settings.traceWidth)
-        : nodeGraphSampleWaveformDefaultSettings.traceWidth;
-      context.lineWidth = Math.max(0.25, faceInkPx(clampAuthoredInkPx(unit, 2), faceMin));
-    }
-    context.beginPath();
     for (let x = 0; x < width; x += 1) {
       const i0 = win.start + Math.floor((x / width) * count);
       const i1 = win.start + Math.floor(((x + 1) / width) * count);
@@ -3028,18 +2837,17 @@ function nodeGraphAudioPlayerVideoscopePaintLr(context, width, height, channels,
       }
       const y0 = center - max * amp;
       const y1 = center - min * amp;
-      context.moveTo(x + 0.5, y0);
-      context.lineTo(x + 0.5, y1);
+      if (y1 - y0 > 1e-6) {
+        nodeGraphGlLinesSegment(batch, x + 0.5, y0, x + 0.5, y1, half, 1, rgba, "square");
+      }
     }
-    context.stroke();
   };
-  paintPane(channels.left, 0, mid, "rgba(220, 70, 70, 0.92)");
-  paintPane(channels.right, mid, height - mid, "rgba(70, 140, 230, 0.92)");
+  paintPane(channels.left, 0, mid, [220 / 255, 70 / 255, 70 / 255, 0.92]);
+  paintPane(channels.right, mid, height - mid, [70 / 255, 140 / 255, 230 / 255, 0.92]);
   const playX = win.span > 0
     ? Math.round(((win.playhead - win.start) / win.span) * width)
     : 0;
-  context.fillStyle = "rgba(255, 255, 255, 0.85)";
-  context.fillRect(playX, 0, 1, height);
+  nodeGraphGlLinesRect(batch, playX, 0, 1, height, [1, 1, 1, 0.85]);
 }
 
 // Hook runtime status → auto-advance + scrubber live update.
@@ -3232,7 +3040,6 @@ const NODE_GRAPH_AUDIO_PLAYER_LABEL_FILL = 0.82; // 1 - 2 x 9% margin
 // every label; a label too wide for its box tightens letter-spacing (never the size).
 const NODE_GRAPH_AUDIO_PLAYER_PAGE_LABEL_PX = 11.5;
 const NODE_GRAPH_AUDIO_PLAYER_PAGE_LABEL_FILL = 0.94;
-let nodeGraphAudioPlayerLabelCtx = null;
 let nodeGraphAudioPlayerLabelResize = null;
 let nodeGraphAudioPlayerLabelMutate = null;
 
@@ -3247,16 +3054,14 @@ function nodeGraphAudioPlayerFitLabel(btn) {
     return;
   }
   const cs = window.getComputedStyle(btn);
-  if (!nodeGraphAudioPlayerLabelCtx) {
-    nodeGraphAudioPlayerLabelCtx = document.createElement("canvas").getContext("2d");
-  }
   // Same ink-box approach as the canvas labels (paint-helpers / number readout):
   // size and center on measureText actualBoundingBox*, not on line metrics, so
   // glyphs like ▶ ⏹ ⏸ 🔁 🔀 sit in the middle of their button.
-  const ctx = nodeGraphAudioPlayerLabelCtx;
   const U = 100;
-  ctx.font = `${cs.fontStyle} ${cs.fontWeight} ${U}px ${cs.fontFamily}`;
-  const m = ctx.measureText(text);
+  const m = nodeGraphGlLinesMeasureInk(text, `${cs.fontStyle} ${cs.fontWeight} ${U}px ${cs.fontFamily}`);
+  if (!m) {
+    return;
+  }
   const num = (v, fb) => (Number.isFinite(Number(v)) ? Number(v) : fb);
   const inkL = num(m.actualBoundingBoxLeft, 0);
   const inkR = num(m.actualBoundingBoxRight, m.width);
@@ -3330,23 +3135,4 @@ function nodeGraphAudioPlayerFitSectionLabels(section) {
     }
     nodeGraphAudioPlayerFitLabel(btn);
   }
-}
-
-// Playlist row waveform path (Playlist stays 2D: approved exception).
-function nodeGraphAudioPlayerPlaylistStrokeVectorPath(context, points) {
-  const count = points.length;
-  if (count < 2) {
-    return false;
-  }
-  context.beginPath();
-  context.moveTo(points[0], points[1]);
-  if (count === 2) {
-    // Single sample in view - tiny tick so it still inks.
-    context.lineTo(points[0], points[1] + 0.5);
-    return true;
-  }
-  for (let i = 2; i < count; i += 2) {
-    context.lineTo(points[i], points[i + 1]);
-  }
-  return true;
 }
