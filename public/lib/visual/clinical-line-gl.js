@@ -12,8 +12,9 @@
 //     dots: [{ x, y, color, radius }],
 //   })
 // Thickness is full stroke width in CSS px at the face's circuit-builder size;
-// in canvas view / screen solo all ink scales with the face. Expo blur
-// defaults to 1.2 CSS px; faces pass their Line Smoothing.
+// in canvas view / screen solo thickness and dots scale with the face, while
+// smoothing (antialiasing) stays in CSS px. Expo blur defaults to 1.2 CSS px;
+// faces pass their Line blur (stored as lineSmoothing).
 
 (function initNodeGraphClinicalLineGl(global) {
   "use strict";
@@ -43,6 +44,9 @@ void main() {
 }`;
 
   // Expo falloff only (clinical). Coverage in .r for MAX blend.
+  // Outer skirt (AA Blur experiment, "Outer (solid core)"): coverage is 1 out
+  // to the stroke's half width and the blur fades outside it, so smoothing
+  // never eats into the line and more smoothing only softens the edge.
   const SEG_FS = `#version 300 es
 precision highp float;
 in vec2 vPos;
@@ -51,8 +55,8 @@ uniform float uHalf;
 uniform float uBlur;
 out vec4 outColor;
 float expoCover(float d, float halfW, float blur) {
-  float a = halfW - blur * 0.5;
-  float b = halfW + blur * 0.5;
+  float a = halfW;
+  float b = halfW + blur;
   float t = clamp((d - a) / max(b - a, 1e-8), 0.0, 1.0);
   float e = 1.0 - exp(-3.0 * t);
   float e1 = 1.0 - exp(-3.0);
@@ -95,8 +99,8 @@ out vec4 outColor;
 void main() {
   float d = length(vPos - vDot.xy);
   float halfW = vDot.z;
-  float a = halfW - uBlur * 0.5;
-  float b = halfW + uBlur * 0.5;
+  float a = halfW;
+  float b = halfW + uBlur;
   float t = clamp((d - a) / max(b - a, 1e-8), 0.0, 1.0);
   float e = 1.0 - exp(-3.0 * t);
   float e1 = 1.0 - exp(-3.0);
@@ -439,13 +443,14 @@ void main() {
     const bg = cssColor(frame.background || "#020609");
     // The circuit builder face is the source of truth for ink size. A face
     // shown bigger or smaller in canvas view / screen solo keeps the same
-    // relative line width, smoothing and dot size: ink x (now / builder).
+    // relative line width and dot size: ink x (now / builder). Smoothing is
+    // antialiasing, so it stays the set number of pixels at every size.
     const minCss = Math.min(cssWidth, cssHeight);
     const presented = typeof canvas.closest === "function" && canvas.closest(".node-screen-solo-face");
     if (!presented) canvas.__clinicalBuilderMinCss = minCss;
     const builderMin = Number(canvas.__clinicalBuilderMinCss);
     const ink = presented && builderMin > 0 ? minCss / builderMin : 1;
-    const blurCss = (Number.isFinite(Number(frame.blur)) ? Math.max(0.05, Number(frame.blur)) : DEFAULT_BLUR) * ink;
+    const blurCss = Number.isFinite(Number(frame.blur)) ? Math.max(0.05, Number(frame.blur)) : DEFAULT_BLUR;
 
     // Build per-ink segment lists (CSS-space segs).
     const byColor = new Map();
@@ -458,9 +463,9 @@ void main() {
       if (n < 1) continue;
       const color = cssColor(col.color || "#ffffff");
       const key = color.slice(0, 3).map((x) => x.toFixed(4)).join(",");
-      if (!byColor.has(key)) byColor.set(key, { color, segs: [], half: 0.75, dots: [] });
+      if (!byColor.has(key)) byColor.set(key, { color, segs: [], half: 0, dots: [] });
       const g = byColor.get(key);
-      g.half = Math.max(g.half, Math.max(0.125, (Number(col.width) || 1.5) * 0.5) * ink);
+      g.half = Math.max(g.half, Math.max(0.02, (Number(col.width) || 1.5) * 0.5) * ink);
       const segs = new Float32Array(n * 4);
       let w = 0;
       for (let i = 0; i < n; i += 1) {
@@ -483,18 +488,23 @@ void main() {
     }
     for (const line of Array.isArray(frame.polylines) ? frame.polylines : []) {
       if (!line?.points || line.points.length < 4) continue;
+      // Thickness 0 = no line at all (no skirt either); dots still draw.
+      const lineWidth = line.width == null ? 1.5 : Number(line.width);
+      if (!(lineWidth > 0)) continue;
       let pts = line.points instanceof Float32Array ? line.points : Float32Array.from(line.points);
-      const target = Math.min(8192, Math.max(64, Math.ceil(cssWidth * 4)));
-      if ((pts.length / 2) > target * 1.5) pts = adaptPoints(pts, target);
+      // Same ceiling as AA Blur's sample count; below it every point is drawn.
+      if ((pts.length / 2) > 120000) pts = adaptPoints(pts, 120000);
       // CSS px → device px (canvas.width / cssWidth).
       for (let i = 0; i < pts.length; i++) pts[i] *= scale;
       const segs = pointsToSegs(pts);
       if (!segs.length) continue;
       const color = cssColor(line.color || "#ffffff");
       const key = color.slice(0, 3).map((x) => x.toFixed(4)).join(",");
-      if (!byColor.has(key)) byColor.set(key, { color, segs: [], half: 0.75, dots: [] });
+      // No width floor: sub-pixel thickness draws razor thin (AA Blur), the
+      // 4x supersampling and the Expo skirt antialias it.
+      if (!byColor.has(key)) byColor.set(key, { color, segs: [], half: 0, dots: [] });
       const g = byColor.get(key);
-      g.half = Math.max(g.half, Math.max(0.125, (Number(line.width) || 1.5) * 0.5) * ink);
+      g.half = Math.max(g.half, Math.max(0.02, lineWidth * 0.5) * ink);
       const merged = new Float32Array(g.segs.length + segs.length);
       merged.set(g.segs, 0); merged.set(segs, g.segs.length);
       g.segs = merged;
@@ -503,7 +513,7 @@ void main() {
       if (!dot || !Number.isFinite(dot.x) || !Number.isFinite(dot.y)) continue;
       const color = cssColor(dot.color || "#ffffff");
       const key = color.slice(0, 3).map((x) => x.toFixed(4)).join(",");
-      if (!byColor.has(key)) byColor.set(key, { color, segs: new Float32Array(0), half: 0.75, dots: [] });
+      if (!byColor.has(key)) byColor.set(key, { color, segs: new Float32Array(0), half: 0, dots: [] });
       byColor.get(key).dots.push({
         x: dot.x * scale, y: dot.y * scale,
         radius: Math.max(0.5, Number(dot.radius) || 0.5) * ink * scale,

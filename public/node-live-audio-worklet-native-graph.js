@@ -4973,6 +4973,11 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
       push("pan", P.NATIVE_GRAPH_PARAM_PAN, cont("pan", 0));
       continue;
     }
+    if (type === "portalOutlet" || type.startsWith("portalOutlet")) {
+      push("volume", P.NATIVE_GRAPH_PARAM_VOLUME_DB,
+        Number.isFinite(this.sharedOutputVolumeDb) ? this.sharedOutputVolumeDb : -3);
+      continue;
+    }
     if (type === "polyBlep") {
       push("frequency", P.NATIVE_GRAPH_PARAM_FREQUENCY, cont("frequency", 220));
       push("waveform", P.NATIVE_GRAPH_PARAM_WAVEFORM, disc("waveform", 0));
@@ -9455,12 +9460,16 @@ NodeLiveAudioProcessor.prototype.fillNativeHostAudioInput = function fillNativeH
   const rawOs = Math.round(Number(this.oversamplingRatio || this.oversamplingFactor || 1));
   const osRatio = (rawOs === 2 || rawOs === 4) ? rawOs : 1;
   const hashes = [];
+  const portalHashes = [];
   if (this.nodes && typeof this.nodes.forEach === "function") {
     this.nodes.forEach((node, id) => {
       if (String(node?.type || "") === "audioInput") hashes.push(this.fnv1aHash32(id));
+      if (String(node?.type || "").startsWith("portalInlet")) {
+        portalHashes.push(this.fnv1aHash32(id));
+      }
     });
   }
-  if (!hashes.length) return;
+  if (!hashes.length && !portalHashes.length) return;
   for (let hi = 0; hi < hashes.length; hi += 1) {
     const hash = hashes[hi];
     for (let c = 0; c < nCh; c += 1) {
@@ -9483,6 +9492,21 @@ NodeLiveAudioProcessor.prototype.fillNativeHostAudioInput = function fillNativeH
       for (let i = 0; i < chunk; i += 1) {
         mono[i] = 0.5 * (Number(lView[i]) + Number(rView[i]));
       }
+    }
+  }
+  for (const hash of portalHashes) {
+    const mono = this.bindNativeGraphNodePortView(hash, P.NATIVE_GRAPH_PORT_MONO, chunk);
+    const lView = this.bindNativeGraphNodePortView(hash, P.NATIVE_GRAPH_PORT_LEFT, chunk);
+    const rView = this.bindNativeGraphNodePortView(hash, P.NATIVE_GRAPH_PORT_RIGHT, chunk);
+    const hostLeft = (src && src[0]) || left;
+    const hostRight = (src && src[1]) || right;
+    for (let i = 0; i < chunk; i += 1) {
+      const at = osRatio > 1 ? Math.floor((offset + i) / osRatio) : offset + i;
+      const l = Number(hostLeft?.[at]) || 0;
+      const r = Number(hostRight?.[at]) || 0;
+      if (mono) mono[i] = (l + r) * 0.5;
+      if (lView) lView[i] = l;
+      if (rView) rView[i] = r;
     }
   }
 };

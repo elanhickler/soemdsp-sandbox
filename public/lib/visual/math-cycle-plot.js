@@ -224,60 +224,6 @@ function nodeGraphMathNormalizePeak(samples, fit = 1.15) {
   return peak;
 }
 
-function nodeGraphMathCycleColumnEnvelope(samples, mapX, mapY, cssW, span) {
-  const n = samples?.length || 0;
-  const cols = Math.max(1, Math.floor(Number(cssW) || 1));
-  const x = new Float32Array(cols);
-  const yMin = new Float32Array(cols);
-  const yMax = new Float32Array(cols);
-  const has = new Uint8Array(cols);
-  const useSpan = Number(span) > 0 ? Number(span) : Math.max(1, n - 1);
-  for (let i = 0; i < n; i += 1) {
-    const phase = n <= 1 ? 0 : i / useSpan;
-    const col = Math.max(0, Math.min(cols - 1, Math.floor(phase * cols + 1e-12)));
-    const y = Number(samples[i]);
-    if (!Number.isFinite(y)) continue;
-    if (!has[col]) {
-      has[col] = 1;
-      yMin[col] = y;
-      yMax[col] = y;
-    } else {
-      if (y < yMin[col]) yMin[col] = y;
-      if (y > yMax[col]) yMax[col] = y;
-    }
-  }
-  for (let c = 0; c < cols; c += 1) {
-    if (has[c]) continue;
-    let L = c - 1;
-    while (L >= 0 && !has[L]) L -= 1;
-    let R = c + 1;
-    while (R < cols && !has[R]) R += 1;
-    if (L >= 0 && R < cols) {
-      const u = (c - L) / (R - L);
-      yMin[c] = yMin[L] + (yMin[R] - yMin[L]) * u;
-      yMax[c] = yMax[L] + (yMax[R] - yMax[L]) * u;
-      has[c] = 1;
-    } else if (L >= 0) {
-      yMin[c] = yMin[L]; yMax[c] = yMax[L]; has[c] = 1;
-    } else if (R < cols) {
-      yMin[c] = yMin[R]; yMax[c] = yMax[R]; has[c] = 1;
-    } else {
-      yMin[c] = 0; yMax[c] = 0; has[c] = 1;
-    }
-  }
-  for (let c = 0; c < cols; c += 1) {
-    x[c] = mapX((c + 0.5) / cols);
-    yMin[c] = mapY(yMin[c]);
-    yMax[c] = mapY(yMax[c]);
-  }
-  return { x, yMin, yMax };
-}
-
-/**
- * Build clinical polylines + columns for a 1D cycle.
- * Large |Δy| jumps become short steep connected segments (Gibbs edge),
- * never a long diagonal and never a gap.
- */
 function nodeGraphMathCycleClinicalGeom(samples, mapX, mapY, cssW, strokeW, color, disc = 0.85) {
   const n = samples.length;
   const polylines = [];
@@ -285,8 +231,10 @@ function nodeGraphMathCycleClinicalGeom(samples, mapX, mapY, cssW, strokeW, colo
   const flush = () => {
     if (seg.length < 4) { seg = []; return; }
     const raw = Float32Array.from(seg);
+    // Arc-length respacing at the samples' own density (as AA Blur draws:
+    // no thinning, so ripples denser than a pixel keep their points).
     const pts = typeof nodeGraphClinicalLineAdaptPoints === "function"
-      ? nodeGraphClinicalLineAdaptPoints(raw, Math.max(32, Math.ceil(cssW * 2)))
+      ? nodeGraphClinicalLineAdaptPoints(raw, Math.max(32, Math.ceil(cssW * 2), raw.length / 2))
       : raw;
     polylines.push({ points: pts, color, width: strokeW });
     seg = [];
@@ -313,11 +261,7 @@ function nodeGraphMathCycleClinicalGeom(samples, mapX, mapY, cssW, strokeW, colo
     prevPhase = phase;
   }
   flush();
-  const env = nodeGraphMathCycleColumnEnvelope(samples, mapX, mapY, cssW, Math.max(1, n - 1));
-  return {
-    polylines,
-    columns: [{ x: env.x, yMin: env.yMin, yMax: env.yMax, color, width: strokeW }],
-  };
+  return { polylines };
 }
 
 /**

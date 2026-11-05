@@ -947,7 +947,7 @@ const nodeGraphTraceDisplayActiveControlsByType = Object.freeze({
     toggles: Object.freeze([]),
     choices: Object.freeze([]),
   }),
-  // Clock Divider: Background / Ring / Count / Tick / Fire HBS lamps, ring thickness, line smoothing.
+  // Clock Divider: Background / Ring / Count / Tick / Fire HBS lamps, ring thickness, line blur.
   clockDividerFace: Object.freeze({
     fields: Object.freeze(["lineThickness", "lineSmoothing"]),
     colors: Object.freeze([]),
@@ -1819,11 +1819,11 @@ const nodeGraphDisplaySettingsFieldMeta = Object.freeze({
       "Vector restroke blur in CSS pixels (0 = hard). Diamond tent kernel: the path is redrawn at center + 4 cardinal + 4 diagonal offsets. Cheap, no extra canvas.",
   }),
   lineSmoothing: Object.freeze({
-    label: "Line smoothing",
+    label: "Line blur",
     inputmode: "decimal",
     id: "nodeTraceDisplayLineSmoothing",
     title:
-      "Smootherstep antialiasing skirt in CSS pixels (0–8, default 1). 0 = hard core; larger values fade the edge over more pixels. Different faces need different amounts.",
+      "Expo antialiasing skirt in CSS pixels (0–8, default 1), outside the line's thickness. 0 = hard core; larger values fade the edge over more pixels. Different faces need different amounts.",
   }),
   lineBrightness: Object.freeze({
     label: "Line",

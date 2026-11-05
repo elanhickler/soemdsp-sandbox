@@ -902,18 +902,21 @@ function nodeGraphGlGraphDrawChrome(batch, toX, toY, zoom, cssW, cssH) {
       const readout = slider.readout;
       const divided = readout?.classList?.contains("choices-divided");
       if (divided) {
+        // Switch: the selected slot's handle, inset 2 px from the slot on
+        // every side (no dividers) so it reads as a movable object. Placed
+        // exactly against the well (same unrounded coordinates as the well
+        // rect above): rounding only the handle shifted it against the well
+        // at fractional positions, taking the top gap into the bottom one.
         const cell = readout.querySelector(".node-choice-debug-cell-fill");
         const fx = Number(cell?.getAttribute("x"));
         const fw = Number(cell?.getAttribute("width"));
         if (fw > 0) {
-          nodeGraphGlLinesRect(batch, x + fx * zoom, y, fw * zoom, h, cellFill);
-        }
-        const dividers = readout.querySelectorAll(".node-choice-debug-divider");
-        const line = [0.62, 0.64, 0.66, 0.55];
-        for (let d = 0; d < dividers.length; d += 1) {
-          const dx = Number(dividers[d].getAttribute("x1"));
-          if (!Number.isFinite(dx)) continue;
-          nodeGraphGlLinesRect(batch, x + dx * zoom, y, Math.max(1, 0.5 * zoom), h, line);
+          const gap = 2 * zoom;
+          const sx0 = x + Math.max(0, fx) * zoom;
+          const sx1 = x + Math.min(slider.w, Math.max(0, fx) + fw) * zoom;
+          const hw = sx1 - sx0 - 2 * gap;
+          const hh = h - 2 * gap;
+          if (hw > 0 && hh > 0) nodeGraphGlLinesRect(batch, sx0 + gap, y + gap, hw, hh, cellFill);
         }
         nodeGraphGlGraphDrawSliderGhost(batch, readout, x, y, h, zoom, hideGhost, ghostFill);
         return;
@@ -1648,7 +1651,9 @@ function nodeGraphGlGraphPresent(options = {}) {
     nodeGraphGlGraphState.thickGen = nodeGraphGlGraphState.gen;
     const style = getComputedStyle(host);
     thick = Number.parseFloat(style.getPropertyValue("--node-wire-thickness")) || 2;
-    dotSize = Number.parseFloat(style.getPropertyValue("--node-wire-patch-point-size")) || 8;
+    const parsedDot = Number.parseFloat(style.getPropertyValue("--node-wire-patch-point-size"));
+    // Same default as UIDEV nodeUiDevWirePatchPointSize (stock jack * 0.54).
+    dotSize = Number.isFinite(parsedDot) ? parsedDot : 7.8624;
     nodeGraphGlGraphState.thick = thick;
     nodeGraphGlGraphState.dotSize = dotSize;
     nodeGraphGlGraphState.traceThick = Number.parseFloat(style.getPropertyValue("--node-trace-wire-thickness")) || 1;

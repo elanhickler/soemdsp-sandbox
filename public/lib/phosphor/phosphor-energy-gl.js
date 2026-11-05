@@ -8,7 +8,7 @@
 //   present: color = LUT(energy) with HDR film curve
 //   resize:  reallocate FBOs + copy residual (do NOT clear on zoom)
 //
-// Blur UX: 0 = hard disc (~1px smootherstep edge), 1 = smootherstep dome; both end at Size.
+// Blur UX: 0 = hard disc (~1px Expo edge), 1 = Expo dome; both end at Size.
 // Optional 2D mask deposit remains for LCD glyphs (Number Readout).
 //
 // Consumers:
@@ -264,7 +264,8 @@
       float inner = mix(R - aa, 0.0, soft);
       float outer = mix(R + aa * 0.35, R, soft);
       float t = clamp((d - inner) / max(outer - inner, 1e-4), 0.0, 1.0);
-      return 1.0 - t * t * t * (t * (t * 6.0 - 15.0) + 10.0);
+      // App Expo curve (APP_POLICY section 3), still exactly zero at outer.
+      return 1.0 - (1.0 - exp(-3.0 * t)) / 0.95021293163;
     }
     void main() {
       vec2 segment = vEnd - vStart;
@@ -279,7 +280,7 @@
       vec2 closest = vStart + segment * t;
       float d = length(vPosition - closest);
 
-      // Flat core, smootherstep shoulder, exactly zero at R (no gaussian skirt).
+      // Flat core, Expo shoulder, exactly zero at R (no gaussian skirt).
       // Blur 0: ~1px shoulder at the edge; Blur 1: shoulder spans the whole radius (dome).
       float aa = max(0.65, min(1.6, R * 0.08));
       float profile = phosphorShoulder(d, R, aa, soft) * mix(0.88, 0.78, soft);
@@ -291,8 +292,8 @@
   `;
 
   // Soft phosphor dabs — blur is 0..1 UX (hard → soft), aesthetic only:
-  //   blur 0 → hard disc + ~1px smootherstep edge
-  //   blur 1 → smootherstep dome, still zero at Size
+  //   blur 0 → hard disc + ~1px Expo edge
+  //   blur 1 → Expo dome, still zero at Size
   // Continuity of the trail comes from path packing, not from raising Blur.
   // Size (uRadius) = geometric footprint. aCorner: 0=BL,1=BR,2=TL,3=TR.
   const DOT_VERT = `
@@ -340,7 +341,8 @@
       float inner = mix(R - aa, 0.0, soft);
       float outer = mix(R + aa * 0.35, R, soft);
       float t = clamp((d - inner) / max(outer - inner, 1e-4), 0.0, 1.0);
-      return 1.0 - t * t * t * (t * (t * 6.0 - 15.0) + 10.0);
+      // App Expo curve (APP_POLICY section 3), still exactly zero at outer.
+      return 1.0 - (1.0 - exp(-3.0 * t)) / 0.95021293163;
     }
     void main() {
       // Blur² (same curve as the ribbon).
@@ -359,7 +361,7 @@
         gl_FragColor = vec4(e, e, e, e);
         return;
       }
-      // Built-in: same flat core + smootherstep shoulder as the ribbon, zero at R.
+      // Built-in: same flat core + Expo shoulder as the ribbon, zero at R.
       float aa = max(0.55, min(1.25, R * 0.06));
       float profile = phosphorShoulder(r, R, aa, soft) * mix(0.92, 0.78, soft);
       float e = clamp(profile, 0.0, 1.0) * clamp(uBrightness, 0.0, 1.0);
@@ -1120,7 +1122,7 @@
     if (brightness < 1e-6) {
       return 0;
     }
-    // Blur 0 hard … 1 smootherstep dome (squared in the shader).
+    // Blur 0 hard … 1 Expo dome (squared in the shader).
     const blur = Math.max(0, Math.min(1, nodeGraphFiniteNumber(options.blur)));
     const { gl } = renderer;
 

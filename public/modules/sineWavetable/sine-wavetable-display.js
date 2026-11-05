@@ -73,7 +73,7 @@ const NODE_GRAPH_SINCOS4_COLORS = Object.freeze([
 //   (Legacy `dot1Size` "Size" scaled both; old patches map it onto both.)
 //   sinCos4RayThickness   ray width, % of the face square, 0..100 (all four rays drawn equal)
 //   sinCos4RingThickness  ring width, % of the face square, 0..100
-//   lineSmoothing         app-wide smootherstep skirt on rays / ring / dots (gl-line-renderer), CSS px 0..8, default 1
+//   lineSmoothing         app-wide Expo skirt on rays / ring / dots (gl-line-renderer), CSS px 0..8, default 1
 //   (sinCos4HubSize was an extra x multiplier on the hub radius (default 0.7), so Hub 2.5
 //   drew smaller than Outer 2.5. Retired: saved values are ignored.)
 // Defaults = the original fixed look (ray / ring 1.2 %, hub 0.7 x tip).
@@ -269,7 +269,7 @@ function drawNodeGraphSinCos4DisplayInner(section) {
   // Full stroke width in CSS px (clinical Present takes width, not half).
   const rayW = Math.max(0.5, stroke * side);
   const ringW = Math.max(0.5, look.ringStroke * side);
-  // Display Settings > Line Smoothing (CSS px skirt) drives the drawer blur.
+  // Display Settings > Line blur (lineSmoothing, CSS px skirt) drives the drawer blur.
   const blur = typeof nodeGraphLineSmoothingPx === "function"
     ? nodeGraphLineSmoothingPx(look, 1)
     : Math.max(0, Number(look.lineSmoothing) || 1);

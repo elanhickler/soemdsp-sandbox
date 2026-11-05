@@ -47,7 +47,7 @@ function normalizeNodeGraphSinCosFaceSettings(settings = {}) {
   return look;
 }
 
-/** CSS px inset so stroke + phase-dot + smootherstep skirt stay inside the plate. */
+/** CSS px inset so stroke + phase-dot + Expo skirt stay inside the plate. */
 function nodeGraphSinCosFacePadPx(look, pixelRatio, options = {}) {
   const strokeW = Math.max(0, Number(look?.lineThickness) || 0);
   const dotW = Math.max(0, Number(look?.dotThickness) || 0);
@@ -851,12 +851,11 @@ function drawNodeGraphSinCosDisplayInner(section) {
   const phaseOff = wrap01(phaseParam);
   const sampleKind = (cycle01, kind) => nodeGraphSinCosSample(wrap01(cycle01 + phaseOff), kind, amplitude, polarity);
   // Clinical Expo: math closed-form cycle → per-pixel min/max envelopes.
-  // Display Settings > Line Smoothing (CSS px skirt) drives the drawer blur.
+  // Display Settings > Line blur (lineSmoothing, CSS px skirt) drives the drawer blur.
   const blur = typeof nodeGraphLineSmoothingPx === "function"
     ? nodeGraphLineSmoothingPx(look, 1)
     : Math.max(0, Number(look.lineSmoothing) || 1);
   const polylines = [];
-  const columns = [];
   const pushPoly = (kind, color) => {
     const raw = new Float32Array((samples + 1) * 2);
     for (let i = 0; i <= samples; i += 1) {
@@ -893,7 +892,6 @@ function drawNodeGraphSinCosDisplayInner(section) {
         dsfSamples, mapX, mapY, Math.max(1, Math.floor(innerW)), strokeW, look.strokePaint,
       );
       polylines.push(...geom.polylines);
-      columns.push(...geom.columns);
     }
   }
 
@@ -940,7 +938,6 @@ function drawNodeGraphSinCosDisplayInner(section) {
     waveKey: signature,
     blur,
     polylines,
-    columns,
     dots,
   });
 }

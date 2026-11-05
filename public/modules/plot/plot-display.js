@@ -1,5 +1,5 @@
 // 1D Plot / 1D Plot Stereo / 2D Plot: clinical plots.
-// One sharp line, antialiased with the app smootherstep edge, no glow, no
+// One sharp line, antialiased with the app Expo edge, no glow, no
 // labels. Data is never smoothed: straight segments between real samples, a
 // min/max band per pixel column when there are more samples than pixels.
 //
@@ -9,7 +9,7 @@
 // window (Sync / Free) and passes the Display Settings look.
 //
 // Display Settings `plotFace`: Background / Line (Left / Right) HBS lamps,
-// Line thickness + Line smoothing (face px, scale with zoom), Time (ms), Gain,
+// Line thickness + Line blur (face px, scale with zoom), Time (ms), Gain,
 // Offset, Skip (discontinuities), Sync (1D Plot) or Sync Off / Left / Right /
 // Mono (1D Plot Stereo, 2D Plot).
 //

@@ -81,7 +81,7 @@ const NODE_GRAPH_VIDEO_FEEDBACK_WAVE = 512;
       float thick = 0.035 + mag * (0.2 + 0.28 * uBright);
       float d = abs(rad - inner);
       float edge = thick + 0.02 + 0.04 * uSmooth;
-      float line = 1.0 - smoothstep(thick, edge, d);
+      float line = d <= thick ? 1.0 : 1.0 - (1.0 - exp(-3.0 * clamp((d - thick) / max(edge - thick, 1e-4), 0.0, 1.0))) / 0.95021293163;
       line += mag * exp(-d * (10.0 + 18.0 * (1.0 - uSmooth))) * 0.55;
       col = min(col + uInk * line * uBright, vec3(1.0));
       gl_FragColor = vec4(col, 1.0);

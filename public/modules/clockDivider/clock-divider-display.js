@@ -4,8 +4,8 @@
 // Tick dot and the last dot is the fire step. While the engine's Gate output
 // is high (its duty-cycle high time) every dot shows Fire.
 // Display Settings `clockDividerFace`: Background, Ring (line), Count (dot),
-// Tick (start), Fire (blink) HBS; Line thickness (rings), Line smoothing
-// (smootherstep skirt, 0–8 CSS px).
+// Tick (start), Fire (blink) HBS; Line thickness (rings), Line blur
+// (Expo skirt, 0–8 CSS px).
 // GPU only, drawn with the shared antialiased line drawer (gl-line-renderer).
 
 const nodeGraphClockDividerFaceDisplaySettingsDefaults = Object.freeze({

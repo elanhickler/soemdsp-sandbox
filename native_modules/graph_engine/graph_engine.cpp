@@ -14673,12 +14673,13 @@ static void process_portal_outlet(Circuit& g, Node& node, int frames) {
     node.buf[kPortMono][f] = mid;
     node.buf[kPortLeft][f] = left;
     node.buf[kPortRight][f] = right;
-    g.outL[f] += left;
-    g.outR[f] += right;
+    const double volume = (double)db_to_lin((float)control_audio(g, node.volumeDb, f));
+    g.outL[f] += left * volume;
+    g.outR[f] += right * volume;
   }
 }
 
-// Portal inlet: wired →/â† thru mix; live mic bus not in graph_engine yet (silence addend).
+// Portal inlet: host-filled mic channels plus any wired thru signals.
 static void process_portal_inlet(Circuit& g, Node& node, int frames) {
   mix_node_inputs(g, node, frames);
   bool hasMonoIn = false, hasLeftIn = false, hasRightIn = false, monoOutWired = false;
@@ -14703,9 +14704,9 @@ static void process_portal_inlet(Circuit& g, Node& node, int frames) {
     } else {
       mid = right;
     }
-    node.buf[kPortMono][f] = mid;
-    node.buf[kPortLeft][f] = left;
-    node.buf[kPortRight][f] = right;
+    node.buf[kPortMono][f] += mid;
+    node.buf[kPortLeft][f] += left;
+    node.buf[kPortRight][f] += right;
   }
 }
 
@@ -17427,9 +17428,9 @@ extern "C" int soemdsp_graph_process_block(int handle, int n) {
 
     if (node.processedThisBlock) continue;
 
-    // AudioInput is filled by the host via node_port_ptr before process_block.
+    // Input modules are filled by the host via node_port_ptr before process_block.
     // Do not wipe it — that was silencing the plugin graph.
-    if (node.typeId != kTypeAudioInput) {
+    if (node.typeId != kTypeAudioInput && node.typeId != kTypePortalInlet) {
       for (int c = 0; c < kChannels; c++) zero_buf(node.buf[c], frames);
     }
 

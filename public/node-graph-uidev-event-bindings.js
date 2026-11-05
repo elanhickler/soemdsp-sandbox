@@ -193,6 +193,7 @@ async function bindNodeGraphUiDevSettingsEvents() {
     "nodeUiDevSliderTextLineHeight",
     "nodeUiDevSliderTextPadding",
     "nodeUiDevWireThickness",
+    "nodeUiDevWirePatchPointSize",
     "nodeUiDevWireDip",
     "nodeUiDevWireDipWidth",
     "nodeUiDevParamWireThickness",
@@ -202,12 +203,6 @@ async function bindNodeGraphUiDevSettingsEvents() {
     sliderTextInput?.addEventListener("input", syncNodeUiDevSettingsHeaderControls);
     sliderTextInput?.addEventListener("change", syncNodeUiDevSettingsHeaderControls);
   }
-  document
-    .getElementById("nodeUiDevWirePatchPointSize")
-    ?.addEventListener("input", syncNodeUiDevSettingsHeaderControls);
-  document
-    .getElementById("nodeUiDevWirePatchPointSize")
-    ?.addEventListener("change", syncNodeUiDevSettingsHeaderControls);
   document
     .getElementById("nodeUiDevChoiceSlideEmptyBorder")
     ?.addEventListener("input", syncNodeUiDevSettingsHeaderControls);

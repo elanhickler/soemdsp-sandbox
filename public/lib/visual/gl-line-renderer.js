@@ -14,10 +14,14 @@
 //
 // Lines are shader-expanded quads (capsules): each vertex carries its local
 // position along/across the segment, the fragment shader takes the distance
-// to the segment and fades it over `feather` px past `halfPx` with Perlin
-// smootherstep (docs/APP_POLICY.md):
-//   a = 1 - smootherstep(halfPx, halfPx + feather, dist)
-// so thickness never depends on fractional pixel position. Fills are the
+// to the segment and fades it over `feather` px past `halfPx`, supersampled
+// 4x4 in the shader (docs/APP_POLICY.md section 3):
+//   a = mean over 16 sub-pixel offsets of edge((dist' - halfPx) / feather)
+// so thickness never depends on fractional pixel position. Two edge kinds,
+// per batch (begin option `edge`):
+//   display (default): Expo skirt, 1 - (1 - e^-3t) / (1 - e^-3)
+//   "chrome": smootherstep, 1 - (6t^5 - 15t^4 + 10t^3), for the circuit
+//   builder's fixed-width edges (wires, jack dots, plates, keys). Fills are the
 // same quads with an infinite halfPx (solid). A zero-length segment is a
 // round dot of radius halfPx. Phosphor beams keep gaussian/erf. Jack
 // rings keep a 1px AA skirt.
@@ -59,11 +63,31 @@
   const SAMPLE_PLOT_MAX = SAMPLE_PLOT_TEX_W * 64;
   // Perlin quintic. Same one-SDF cost as Hermite smoothstep; C2 at the
   // skirt ends.
+  // App edge (APP_POLICY section 3), in-shader 4x4 supersampling. The 16
+  // sub-pixel samples are the pixel's distance plus its screen-space gradient
+  // at each offset, the same box filter as an SSAA 4x buffer, so it works with
+  // mixed colours and the batch's normal draw order. uEdge picks the curve:
+  // 0 = display Expo skirt (default), 1 = chrome smootherstep.
   const COVERAGE_GLSL = `
-float coverageSmoother(float halfPx, float feather, float dist) {
-  float w = max(feather, 1e-4);
-  float t = clamp((dist - halfPx) / w, 0.0, 1.0);
-  return 1.0 - t * t * t * (t * (t * 6.0 - 15.0) + 10.0);
+uniform float uEdge;
+float edgeCurve(float t) {
+  if (uEdge > 0.5) return 1.0 - t * t * t * (t * (t * 6.0 - 15.0) + 10.0);
+  return 1.0 - (1.0 - exp(-3.0 * t)) / 0.95021293163;
+}
+float coverageEdgeAt(float halfPx, float feather, float dist) {
+  if (dist <= halfPx) return 1.0;
+  return edgeCurve(clamp((dist - halfPx) / max(feather, 1e-4), 0.0, 1.0));
+}
+float coverageEdge(float halfPx, float feather, float dist) {
+  vec2 g = vec2(dFdx(dist), dFdy(dist));
+  float acc = 0.0;
+  for (int j = 0; j < 4; j += 1) {
+    for (int i = 0; i < 4; i += 1) {
+      vec2 o = (vec2(float(i), float(j)) + 0.5) * 0.25 - 0.5;
+      acc += coverageEdgeAt(halfPx, feather, dist + dot(o, g));
+    }
+  }
+  return acc * 0.0625;
 }
 `;
   const VS = `
@@ -170,9 +194,9 @@ void main() {
   float a;
   if (vCaps > 9.75) {
     // Analytic ring: distance to the circle of radius vLen, same solid core +
-    // shared feather smootherstep as the capsule / dot primitives.
+    // shared edge as the capsule / dot primitives.
     float d = abs(length(vLocal) - vLen);
-    a = coverageSmoother(vHalf, vFeather, d);
+    a = coverageEdge(vHalf, vFeather, d);
   } else if (vCaps > 5.5 && vCaps < 6.5) {
     // One stadium per dash. Arc length is zoom-1 px, so the pattern stays
     // put while the camera moves. Caps and the body share this coverage.
@@ -197,7 +221,7 @@ void main() {
     float dScreen = length(vec2(best, gap)) * z;
     float halfScreen = max(vHalf, 0.0) * z;
     float fw = max(fwidth(dScreen), 0.6);
-    a = coverageSmoother(halfScreen, fw, dScreen);
+    a = coverageEdge(halfScreen, fw, dScreen);
   } else if (vCaps > 1.5) {
     // Phosphor beam. erf integrates the gaussian along the segment so
     // overlapping ends add to one continuous brightness.
@@ -227,7 +251,7 @@ void main() {
     } else {
       d = u < 0.0 ? length(vLocal) : (u > vLen ? length(vec2(u - vLen, vLocal.y)) : across);
     }
-    a = coverageSmoother(vHalf, vFeather, d);
+    a = coverageEdge(vHalf, vFeather, d);
   }
   float cov = vColour.a * a;
   // Coverage pass stores straight alpha. Zero-coverage corners must be
@@ -420,6 +444,8 @@ void main() {
   // Param and signal jacks take this one path.
   float sd = sdRect;
   vec4 strokeCol = uPlateColor;
+  // True where a round jack shapes the edge (its curve), not the wall.
+  float jackEdge = 0.0;
   for (int i = 0; i < 24; i++) {
     if (i >= uCount) break;
     vec2 jack = uJack[i].xy;
@@ -437,6 +463,7 @@ void main() {
     if (-d > sd) {
       sd = -d;
       strokeCol = vec4(uJackColor[i].rgb, uPlateColor.a);
+      jackEdge = 1.0 - square;
     }
   }
   // One stroke for wall and jack: the band 0 < sd <= strokePx outside the
@@ -446,9 +473,37 @@ void main() {
   // the plate edges sit on pixel edges, so walls stay crisp and curves get a
   // one-pixel ramp. Coverage is linear in sd over one pixel (SDF slope 1).
   float strokePx = uPixel > 0.5 ? strokeW : max(1.0, floor(strokeW + 0.5));
+  // Derivatives in uniform control flow (before any branch on jackEdge).
+  vec2 sdGrad = vec2(dFdx(sd), dFdy(sd));
   float aa = max(fwidth(sd), uPixel > 0.5 ? 1.0 : 1e-4);
   float inner = clamp(sd / aa + 0.5, 0.0, 1.0);
   float band = inner - clamp((sd - strokePx) / aa + 0.5, 0.0, 1.0);
+  if (jackEdge > 0.5) {
+    // Round jacks (inlet / outlet half circles): the chrome edge, smootherstep
+    // over one pixel, supersampled 4x4 from the distance gradient (APP_POLICY
+    // section 3). A one-sample linear ramp stair-stepped on these small
+    // curves. Walls keep the crisp pixel-snapped ramp above.
+    // One pixel window centred on each edge: against an exact 16x16 box
+    // reference this is the closest (edge error 0.035 RMS vs 0.057 for the old
+    // one-sample linear ramp); wider windows only soften it away from true.
+    float jw = aa;
+    float accIn = 0.0;
+    float accBand = 0.0;
+    for (int j = 0; j < 4; j += 1) {
+      for (int i = 0; i < 4; i += 1) {
+        vec2 o = (vec2(float(i), float(j)) + 0.5) * 0.25 - 0.5;
+        float s = sd + dot(o, sdGrad);
+        float tIn = clamp(s / jw + 0.5, 0.0, 1.0);
+        float tOut = clamp((s - strokePx) / jw + 0.5, 0.0, 1.0);
+        float eIn = tIn * tIn * tIn * (tIn * (tIn * 6.0 - 15.0) + 10.0);
+        float eOut = tOut * tOut * tOut * (tOut * (tOut * 6.0 - 15.0) + 10.0);
+        accIn += eIn;
+        accBand += eIn - eOut;
+      }
+    }
+    inner = accIn * 0.0625;
+    band = accBand * 0.0625;
+  }
   for (int i = 0; i < 16; i++) {
     if (i >= uCutCount) break;
     highp vec4 cut = uCut[i];
@@ -551,6 +606,7 @@ void main() {
         camVp: gl.getUniformLocation(program, "uVp"),
         camDevice: gl.getUniformLocation(program, "uDevice"),
         lineDash: gl.getUniformLocation(program, "uDash"),
+        lineEdge: gl.getUniformLocation(program, "uEdge"),
         imgProgram,
         imgBuf: gl.createBuffer(),
         imgTex: gl.createTexture(),
@@ -618,6 +674,9 @@ void main() {
       camera: options?.camera || null,
       // Keep the vertex arrays so a later camera change can redraw without rebuilding them.
       keepMesh: options?.keepMesh === true,
+      // Edge kind (APP_POLICY section 3): "chrome" = smootherstep for the
+      // circuit builder's fixed-width edges; anything else = display Expo skirt.
+      edge: options?.edge === "chrome" ? "chrome" : "display",
     };
   }
 
@@ -730,7 +789,7 @@ void main() {
 
   /**
    * Capsule segment (x0,y0)-(x1,y1): solid core halfPx, then `feather` px of
-   * smootherstep fade. Round ends/joins.
+   * the batch's edge (display Expo / chrome smootherstep). Round ends/joins.
    */
   function nodeGraphGlLinesSegment(batch, x0, y0, x1, y1, halfPx, feather, rgba, caps) {
     if (!batch) return;
@@ -799,7 +858,7 @@ void main() {
 
   /**
    * Analytic ring (distance field, no segments): circle of radius r centred at
-   * (x,y), solid core halfPx either side of r, then `feather` px of smootherstep
+   * (x,y), solid core halfPx either side of r, then `feather` px of Expo skirt
    * fade - the same edge as nodeGraphGlLinesSegment / nodeGraphGlLinesDot.
    */
   function nodeGraphGlLinesRing(batch, x, y, r, halfPx, feather, rgba) {
@@ -885,7 +944,7 @@ void main() {
    * min/max band per pixel column when there are more samples than columns,
    * and breaks on non-finite or (skip > 0) jumps bigger than `skip`.
    * Raw samples never become individually capped mini-lines. The fragment
-   * shader supplies the app smootherstep coverage.
+   * shader supplies the app Expo coverage.
    * spec: { a, b?, mode: "line" | "xy", x, y, w, h, gain, offset, gainY,
    *         halfPx, feather, rgba, skip, span?, shift? }
    * a / b: Float32Array views of the window (b = Y for "xy").
@@ -928,7 +987,7 @@ void main() {
    * Rounded rectangle with an inside stroke, one SDF per pixel: the stroke and
    * fill share the box's distance field, so straight edges and corners are one
    * continuous shape (the CSS border-box look: stroke inside the edge, the fill
-   * corner radius = radius - stroke). Edges use the app smootherstep, centred
+   * corner radius = radius - stroke). Edges use the app Expo curve, centred
    * on the edge, `feather` CSS px wide. Drawn after the "over" quads, before
    * text, one instanced call per batch.
    * spec: { radius, stroke, feather = 1, fill: rgba, strokeRgba: rgba,
@@ -2034,11 +2093,7 @@ in float vFeather;
 in float vMode;
 in vec4 vColour;
 out vec4 fragColor;
-float coverageSmoother(float halfPx, float feather, float dist) {
-  float w = max(feather, 1e-4);
-  float t = clamp((dist - halfPx) / w, 0.0, 1.0);
-  return 1.0 - t * t * t * (t * (t * 6.0 - 15.0) + 10.0);
-}
+${COVERAGE_GLSL}
 void main() {
   float a;
   if (vMode < 0.5) {
@@ -2046,10 +2101,10 @@ void main() {
     float across = abs(vLocal.y);
     float outside = u < 0.0 ? -u : (u > vLen ? u - vLen : 0.0);
     float d = outside > 0.0 ? length(vec2(outside, vLocal.y)) : across;
-    a = coverageSmoother(vHalf, vFeather, d);
+    a = coverageEdge(vHalf, vFeather, d);
   } else {
     float d = length(vLocal);
-    a = coverageSmoother(vHalf, vFeather, d);
+    a = coverageEdge(vHalf, vFeather, d);
   }
   if (a < 0.004) discard;
   fragColor = vec4(vColour.rgb, vColour.a * a);
@@ -2339,11 +2394,10 @@ uniform float uHalf;
 uniform float uFeather;
 uniform vec4 uColour;
 out vec4 fragColor;
+${COVERAGE_GLSL}
 void main() {
   if (vPolyline > 0.5) {
-    float w = max(uFeather, 1e-4);
-    float t = clamp((abs(vAcross) - (uHalf - 0.5 * w)) / w, 0.0, 1.0);
-    float a = 1.0 - t * t * t * (t * (t * 6.0 - 15.0) + 10.0);
+    float a = coverageEdge(uHalf, uFeather, abs(vAcross));
     if (a < 0.004) discard;
     fragColor = vec4(uColour.rgb, uColour.a * a);
     return;
@@ -2351,11 +2405,9 @@ void main() {
   float u = vLocal.x;
   float outside = u < 0.0 ? -u : (u > vLen ? u - vLen : 0.0);
   float d = outside > 0.0 ? length(vec2(outside, vLocal.y)) : abs(vLocal.y);
-  // Ramp centred on the geometric edge: 50% at uHalf, full width uFeather.
-  // Reach in SP_VS (uHalf + uFeather) already covers the outer half of the ramp.
-  float w = max(uFeather, 1e-4);
-  float t = clamp((d - (uHalf - 0.5 * w)) / w, 0.0, 1.0);
-  float a = 1.0 - t * t * t * (t * (t * 6.0 - 15.0) + 10.0);
+  // App Expo skirt: solid to uHalf, fading over uFeather outside it. Reach in
+  // SP_VS (uHalf + uFeather) covers the whole skirt.
+  float a = coverageEdge(uHalf, uFeather, d);
   if (a < 0.004) discard;
   fragColor = vec4(uColour.rgb, uColour.a * a);
 }
@@ -2550,11 +2602,27 @@ in vec4 vFill;
 in vec4 vStroke;
 in vec4 vFill2;
 out vec4 fragColor;
-// Inside fraction across an edge at sd = 0: smootherstep ramp centred on the
-// edge, w wide (sd < 0 is inside).
-float inside(float sd, float w) {
+// Inside fraction across a filled edge at sd = 0 (sd < 0 is inside): the
+// batch's edge curve over a window w wide centred on the outline, so box sizes
+// stay exact (fills keep their edge on the outline; lines use the outer
+// skirt). uEdge 0 = display Expo, 1 = chrome smootherstep. In-shader 4x4
+// supersampling like the line coverage.
+uniform float uEdge;
+float insideAt(float sd, float w) {
   float t = clamp(sd / max(w, 1e-4) + 0.5, 0.0, 1.0);
-  return 1.0 - t * t * t * (t * (t * 6.0 - 15.0) + 10.0);
+  if (uEdge > 0.5) return 1.0 - t * t * t * (t * (t * 6.0 - 15.0) + 10.0);
+  return 1.0 - (1.0 - exp(-3.0 * t)) / 0.95021293163;
+}
+float inside(float sd, float w) {
+  vec2 g = vec2(dFdx(sd), dFdy(sd));
+  float acc = 0.0;
+  for (int j = 0; j < 4; j += 1) {
+    for (int i = 0; i < 4; i += 1) {
+      vec2 o = (vec2(float(i), float(j)) + 0.5) * 0.25 - 0.5;
+      acc += insideAt(sd + dot(o, g), w);
+    }
+  }
+  return acc * 0.0625;
 }
 void main() {
   // Top corners (vP.y < 0, y down) may use their own radius.
@@ -2613,6 +2681,7 @@ void main() {
         locs: { pixel: u("uPixel"), cam: u("uCam"), vp: u("uVp"), device: u("uDevice") },
         uScale: u("uScale"),
         uVp: u("uVp"),
+        uEdge: u("uEdge"),
         scratch: new Float32Array(RR_FLOATS * 64),
       };
       return s.roundRect;
@@ -2634,6 +2703,7 @@ void main() {
     gl.useProgram(rr.program);
     gl.uniform2f(rr.uVp, batch.w, batch.h);
     gl.uniform1f(rr.uScale, batch.scale > 0 ? batch.scale : 1);
+    if (rr.uEdge) gl.uniform1f(rr.uEdge, batch.edge === "chrome" ? 1 : 0);
     bindCam(gl, rr.locs, batch);
     gl.bindBuffer(gl.ARRAY_BUFFER, rr.corners);
     gl.enableVertexAttribArray(0);
@@ -2681,6 +2751,7 @@ void main() {
       bindCam(gl, lineCamLocs(s), batch);
       if (s.lineDash) gl.uniform2f(s.lineDash, batch.dashOn || 0, batch.dashOff || 0);
       if (s.coverage) gl.uniform1f(s.coverage, max ? 1 : 0);
+      if (s.lineEdge) gl.uniform1f(s.lineEdge, batch.edge === "chrome" ? 1 : 0);
       gl.bindBuffer(gl.ARRAY_BUFFER, s.buf);
       gl.bufferData(gl.ARRAY_BUFFER, data.subarray(0, n), gl.STREAM_DRAW);
       const sizes = [2, 2, 1, 1, 1, 1, 4];

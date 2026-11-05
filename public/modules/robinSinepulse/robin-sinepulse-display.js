@@ -121,9 +121,11 @@ uniform float uGhost;
 uniform float uFade;   // C2 skirt in plate Y (0..1)
 uniform float uBipolar;
 
-float smoother(float e0, float e1, float x) {
-  float t = clamp((x - e0) / max(e1 - e0, 1e-6), 0.0, 1.0);
-  return t * t * t * (t * (t * 6.0 - 15.0) + 10.0);
+// App Expo skirt (APP_POLICY section 3): coverage of a point d past a solid
+// edge, fading over w. 1 at the edge, 0 at w.
+float expoFade(float d, float w) {
+  float t = clamp(d / max(w, 1e-6), 0.0, 1.0);
+  return 1.0 - (1.0 - exp(-3.0 * t)) / 0.95021293163;
 }
 
 void main() {
@@ -146,9 +148,9 @@ void main() {
     float halfSpan = 0.5 * env; // "half" is a reserved word in GLSL ES 3.0
     float lo = 0.5 - halfSpan;
     float hi = 0.5 + halfSpan;
-    a = smoother(lo, lo + fe, vY) * (1.0 - smoother(hi, hi + fe, vY));
+    a = expoFade(lo + fe - vY, fe) * expoFade(vY - hi, fe);
   } else {
-    a = smoother(0.0, fe, vY) * (1.0 - smoother(env, env + fe, vY));
+    a = expoFade(fe - vY, fe) * expoFade(vY - env, fe);
   }
   gl_FragColor = vec4(field * gain, a);
 }

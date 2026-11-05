@@ -17,7 +17,7 @@
     "  vec4 live = rgbaLive > 0.5 ? texture(rgbaIn, uv) : vec4(0.0);",
     "  vec3 rgb = live.a > 0.001 ? live.rgb / live.a : vec3(0.0);",
     "  vec3 held = delayFrame(3.0).rgb;",
-    "  float line = 1.0 - smoothstep(0.0, 0.02, abs(uv.y - env));",
+    "  float line = 1.0 - (1.0 - exp(-3.0 * clamp(abs(uv.y - env) / 0.02, 0.0, 1.0))) / 0.95021293163;",
     "  out_color = vec4(max(old, max(rgb, held * 0.35)) + vec3(line), 1.0);",
     "}",
   ].join("\n");

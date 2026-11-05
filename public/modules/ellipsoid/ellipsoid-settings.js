@@ -122,7 +122,7 @@ function normalizeNodeGraphRoundShapeFaceSettings(settings = {}) {
     lineBrightness,
     lineSaturation,
     lineThickness: Number.isFinite(thicknessRaw)
-      ? Math.max(0.25, Math.min(16, thicknessRaw))
+      ? Math.max(0, Math.min(16, thicknessRaw))
       : d.lineThickness,
     lineSmoothing: Number.isFinite(smoothingRaw)
       ? Math.max(0, Math.min(8, smoothingRaw))
@@ -156,7 +156,7 @@ function nodeGraphRoundShapeFaceSettingsForNode(node) {
   return normalizeNodeGraphRoundShapeFaceSettings(node?.traceDisplaySettings);
 }
 
-/** CSS px of smootherstep skirt past the solid core (0–8). Default 1. */
+/** CSS px of Expo skirt past the solid core (0–8). Default 1. */
 function nodeGraphLineSmoothingPx(look, fallback = 1) {
   const n = Number(look?.lineSmoothing);
   return Number.isFinite(n) ? Math.max(0, Math.min(8, n)) : fallback;

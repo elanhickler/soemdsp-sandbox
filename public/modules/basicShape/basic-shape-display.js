@@ -128,7 +128,7 @@ function nodeGraphBasicShapeFaceLook(node) {
     backgroundPaint: String(face.backgroundPaint || face.background || "#020609"),
     strokePaint: String(face.strokePaint || face.strokeColor || "rgba(120, 220, 200, 0.92)"),
     dotPaint: String(face.dotPaint || face.dotColor || "#ffffff"),
-    lineThickness: Math.max(0.25, nodeGraphFiniteNumber(face.lineThickness, 2)),
+    lineThickness: Math.max(0, nodeGraphFiniteNumber(face.lineThickness, 2)),
     lineSmoothing: Math.max(0, nodeGraphFiniteNumber(face.lineSmoothing, 1)),
     dotThickness: Math.max(0.25, nodeGraphFiniteNumber(face.dotThickness, 5)),
     lineBlur: Math.max(0, nodeGraphFiniteNumber(face.lineBlur)),
@@ -270,7 +270,7 @@ function drawNodeGraphBasicShapeDisplayInner(section) {
   }
 
   // Clinical Expo: Adapt Max polylines in CSS px (split on scope jumps).
-  // Display Settings > Line Smoothing (CSS px skirt) drives the drawer blur.
+  // Display Settings > Line blur (lineSmoothing, CSS px skirt) drives the drawer blur.
   const blur = typeof nodeGraphLineSmoothingPx === "function"
     ? nodeGraphLineSmoothingPx(look, 1)
     : Math.max(0, Number(look.lineSmoothing) || 1);

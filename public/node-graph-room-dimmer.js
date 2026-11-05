@@ -109,11 +109,15 @@ void main() {
       float t = clamp(max(d, 0.0) / bloom, 0.0, 1.0);
       float s1 = t * t * (3.0 - 2.0 * t);
       float fall = 1.0 - s1 * s1;
-      float core = 1.0 - smoothstep(-0.6, 0.6, d);
+      float tc = clamp(d / 1.2 + 0.5, 0.0, 1.0);
+      float core = 1.0 - tc * tc * tc * (tc * (tc * 6.0 - 15.0) + 10.0);
       inside = max(core, fall);
     } else {
       float feather = max(soft, 0.6);
-      inside = 1.0 - smoothstep(-feather, feather, d);
+      // Chrome edge (APP_POLICY section 3): smootherstep, centred on the box
+      // outline so the opening keeps its size.
+      float ti = clamp(d / (2.0 * feather) + 0.5, 0.0, 1.0);
+      inside = 1.0 - ti * ti * ti * (ti * (ti * 6.0 - 15.0) + 10.0);
     }
     open = max(open, inside * s);
   }

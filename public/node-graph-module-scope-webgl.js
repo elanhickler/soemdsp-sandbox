@@ -119,7 +119,10 @@ function createNodeGraphModuleScopeWebGlRenderer(canvas) {
       float edgeFromBlur = mix(0.01, 1.0, blur);
       float edgeFromPixel = 0.85 / max(radius, 0.5);
       float edgeWidth = max(edgeFromBlur, min(0.55, edgeFromPixel));
-      float alpha = clamp((1.0 - smoothstep(1.0 - edgeWidth, 1.0 + edgeWidth, normalizedDistance)) * uIntensity, 0.0, 1.0);
+      // App Expo skirt: solid to the radius, then fades over 2 x edgeWidth.
+      float skirtT = clamp((normalizedDistance - 1.0) / (2.0 * edgeWidth), 0.0, 1.0);
+      float cover = normalizedDistance <= 1.0 ? 1.0 : 1.0 - (1.0 - exp(-3.0 * skirtT)) / 0.95021293163;
+      float alpha = clamp(cover * uIntensity, 0.0, 1.0);
       gl_FragColor = vec4(uColor * alpha, alpha);
     }
   `);

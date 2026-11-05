@@ -13540,6 +13540,14 @@ const nodeGraphModuleDefinitions = (
   },
   // Superlove Filter Rev2: LP18/LP24 Softwave-Tri breadboard; HP6/BP6 = Rev1 HP/BP.
   superloveRev2: {
+    // Hand-written face, Rev1 style: LP18 / LP24 / HP6 / BP6, Cutoff | Res, Morph | Phase, Noise | Amp, seed.
+    face: [
+      { kind: "choices", param: "mode", labels: ["LP18", "LP24", "HP6", "BP6"], h: 26 },
+      { kind: "cells", params: [["frequency", "Cutoff"], ["resonance", "Res"]], h: 40 },
+      { kind: "cells", params: [["morph", "Morph"], ["phase", "Phase"]], h: 40 },
+      { kind: "cells", params: [["noise", "Noise"], ["amplitude", "Amp"]], h: 40 },
+      { kind: "seed", param: "seed", h: 28 },
+    ],
     planRole: "processor",
     inputAliases: { Mono: "In" },
     inputLabels: { In: "Mono" },
@@ -13613,6 +13621,14 @@ const nodeGraphModuleDefinitions = (
     ]
   },
   vcvrackSuperloveFilter: {
+    // Hand-written face, Rev1 style: LP18 / LP24 / BP / HP, Cutoff | Res, Drive | Noise, Spread | Amp, seed.
+    face: [
+      { kind: "choices", param: "mode", labels: ["LP18", "LP24", "BP", "HP"], h: 26 },
+      { kind: "cells", params: [["frequency", "Cutoff"], ["resonance", "Res"]], h: 40 },
+      { kind: "cells", params: [["drive", "Drive"], ["noise", "Noise"]], h: 40 },
+      { kind: "cells", params: [["spread", "Spread"], ["amplitude", "Amp"]], h: 40 },
+      { kind: "seed", param: "seed", h: 28 },
+    ],
     planRole: "processor",
     // 1D Stereo Trace face (TraceWoscope beam, same as tubeSaturation).
     // L/R beams come from this node's own Left/Right displaySignals taps
@@ -20952,7 +20968,7 @@ const nodeGraphModuleDefinitions = (
     visualSink: true
   },
   // 1D Plot / 1D Plot Stereo / 2D Plot: clinical plots (modules/plot/plot-display.js).
-  // One sharp antialiased line (smootherstep edge), no glow, no labels, data never smoothed.
+  // One sharp antialiased line (Expo edge), no glow, no labels, data never smoothed.
   // Look / Sync / Time / Gain live in Display Settings (plotFace), not parameters.
   plot1d: {
     planRole: "monitor",

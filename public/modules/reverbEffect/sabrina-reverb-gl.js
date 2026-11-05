@@ -2,7 +2,8 @@
 // (sabrina-reverb-clap/src/ui/sabrina-face.cpp, SabrinaDelayLines).
 //   - black plate, 14 full-height vertical lines at x = delay / 0.45 s
 //   - lines 0..11 alternate L (255,130,110) / R (110,130,255); 12..13 recycle (86,206,118)
-//   - kLineFrag: a = 1 - smoothstep(halfPx, halfPx + 2, |dist|), additive blend
+//   - kLineFrag (original): 1 - smoothstep(halfPx, halfPx + 2, |dist|); here the
+//     shared line renderer's Expo skirt over the same 2 px, additive blend
 //     (GL_SRC_ALPHA, GL_ONE), halfPx = stemWidth / 2, stemWidth = max(1, displayW / 222)
 //   - a line outside 0..1 (past the 0.45 s axis) is not drawn
 // GL via the shared line renderer (public/lib/visual/gl-line-renderer.js);

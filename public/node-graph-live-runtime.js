@@ -73,8 +73,8 @@ function setNodeGraphLiveOutputMuted(muted) {
 }
 
 // Ã¢â€â‚¬Ã¢â€â‚¬ Module level mirrors (toolbar Ã°Å¸â€Å  Ã¢â€ â€ Input/Output module params) Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
-// Loudness lives in the graph (audioInput.amplitude, output.volume). Host gain is
-// mute-only for output and unity for input so we never double-apply.
+// Output loudness is applied at each speaker sink. Input loudness is applied
+// once at the host stream before it reaches any Input portal.
 
 function nodeGraphPatchModuleNodeByType(type, fallbackId = "") {
   const nodes = nodeGraphMvp?.patch?.nodes;
@@ -243,6 +243,9 @@ function setNodeGraphOutputModuleVolumeDb(db, options = {}) {
     }
   } else if (!node && !options.fromModuleSlider) {
     writeNodeGraphIoModuleSavedParam("output", "volume", value);
+    if (typeof scheduleNodeGraphLiveParameterSync === "function") {
+      scheduleNodeGraphLiveParameterSync();
+    }
   }
   const lin = typeof nodeGraphOutputVolumeDbToLin === "function"
     ? nodeGraphOutputVolumeDbToLin(value)
@@ -288,7 +291,6 @@ function setNodeGraphAudioInputModuleLevel(value, options = {}) {
   if (nodeGraphMvp?.live) {
     nodeGraphMvp.live.inputVolume = level;
   }
-  // Host mic gain is unity Ã¢â‚¬â€ level is applied on the audioInput module only.
   applyNodeGraphLiveInputHostGain();
   if (!options.fromToolbar && typeof syncNodeGraphVolumeSlider === "function") {
     syncNodeGraphVolumeSlider("nodeLiveInputVolume", "nodeLiveInputVolumeValue", level);
@@ -347,9 +349,7 @@ function syncNodeGraphLiveVolumeMirrorsFromModules() {
 }
 
 /**
- * Mic host gain is always unity. Attenuation is audioInput.amplitude in the graph
- * (same rule as output: one place for loudness). Node still exists so the
- * stream can be rewired without re-prompting for permission.
+ * One host gain feeds the original Input and every Portal Input.
  */
 function applyNodeGraphLiveInputHostGain() {
   const gainNode = nodeGraphMvp?.live?.inputVolumeGain;
@@ -358,11 +358,12 @@ function applyNodeGraphLiveInputHostGain() {
     return;
   }
   const time = context?.currentTime || 0;
+  const level = getNodeGraphAudioInputModuleLevel();
   try {
     gainNode.gain.cancelScheduledValues(time);
-    gainNode.gain.setValueAtTime(1, time);
+    gainNode.gain.setTargetAtTime(level, time, 0.008);
   } catch (_error) {
-    gainNode.gain.value = 1;
+    gainNode.gain.value = level;
   }
 }
 
@@ -2479,6 +2480,7 @@ function nodeGraphLiveConnectionUpdatePayload(plan = {}, audio = {}) {
     }
   }
   return {
+    sharedOutputVolumeDb: getNodeGraphOutputModuleVolumeDb(),
     connections: Array.isArray(plan.connections) ? plan.connections : [],
     engineSampleRate: audio.clampedEngineSampleRate,
     graphConnections: Array.isArray(plan.graphConnections) ? plan.graphConnections : [],
@@ -2593,6 +2595,7 @@ async function sendNodeGraphLivePlan() {
               ? nodeGraphSimulationDisplayFps()
               : 60,
             type: "setPlan",
+            sharedOutputVolumeDb: getNodeGraphOutputModuleVolumeDb(),
           });
           sendNodeGraphLiveSpeed();
           sendNodeGraphLiveDisplayFps();
@@ -2800,7 +2803,8 @@ function sendNodeGraphLiveParameterUpdate() {
   try {
     const allNodes = nodeGraphBuildLiveParameterNodes(nodeGraphMvp.live.activeNodeIds);
     const delta = nodeGraphLiveDragParameterDelta(allNodes);
-    if (delta && !delta.nodes.length) {
+    if (delta && !delta.nodes.length
+      && nodeGraphMvp.live.sentOutputVolumeDb === getNodeGraphOutputModuleVolumeDb()) {
       // Drag frame with no parameter change: nothing to send.
       return;
     }
@@ -2820,6 +2824,7 @@ function sendNodeGraphLiveParameterUpdate() {
     nodeGraphMvp.live.autoSmoothingSeconds = autoSmoothingSeconds;
     nodeGraphMvp.live.planSerial += 1;
     if (nodeGraphMvp.live.usesWorklet) {
+      nodeGraphMvp.live.sentOutputVolumeDb = getNodeGraphOutputModuleVolumeDb();
       setNodeGraphLiveEvidence("params-sent", {
         autoSmoothingSeconds,
         delta: Boolean(delta),
@@ -2837,6 +2842,7 @@ function sendNodeGraphLiveParameterUpdate() {
         planSerial: nodeGraphMvp.live.planSerial,
         sessionId: nodeGraphMvp.live.sessionId,
         type: "setParams",
+        sharedOutputVolumeDb: getNodeGraphOutputModuleVolumeDb(),
       });
     } else if (nodeGraphMvp.live.runtime) {
       nodeGraphMvp.live.runtime.autoSmoothingSeconds = autoSmoothingSeconds;
@@ -3410,14 +3416,14 @@ const nodeGraphLiveWorkletSourceFilesEfficient = [
   "./public/lib/note-mask-128.js?v=pq-oct-st-1",
   "./public/node-graph-keyboard-chord-memory.js?v=kbd-gl-1",
   "./public/modules/sequencer/sequencer-math.js?v=seq-23",
-  "./public/node-live-audio-worklet-events.js?v=rclick-sweep-2",
+  "./public/node-live-audio-worklet-events.js?v=portal-shared-levels-1",
   "./public/node-live-audio-worklet-visual.js?v=perf-20261015",
   "./public/node-live-audio-worklet-scope-io.js?v=clap-1",
   "./public/node-live-audio-worklet-native-load.js?v=emo-shader-1",
   "./public/node-live-audio-worklet-native-exports.js?v=logic-ng-1",
-  "./public/node-live-audio-worklet-native-graph.js?v=dsf-bright-1",
+  "./public/node-live-audio-worklet-native-graph.js?v=portal-shared-levels-1",
   "./public/node-live-audio-worklet-meta-view.js?v=voice-preview-1",
-  "./public/node-live-audio-worklet-set-plan.js?v=emo-1",
+  "./public/node-live-audio-worklet-set-plan.js?v=portal-shared-levels-1",
   "./public/node-live-audio-worklet-clear-plan.js?v=kbd-trig-1samp-20261013",
   "./public/node-live-audio-worklet-handle-message.js?v=kbd-trig-1samp-20261013",
   "./public/node-live-audio-worklet-scope-snapshot.js?v=multi-f-20261015",
@@ -3595,10 +3601,11 @@ async function startNodeGraphLiveInputSource() {
       syncNodeGraphLiveInputVolumeFromInputModule();
     }
     const inputVolumeGain = context.createGain();
-    inputVolumeGain.gain.value = 1;
+    inputVolumeGain.gain.value = getNodeGraphAudioInputModuleLevel();
     source.connect(inputVolumeGain);
     inputVolumeGain.connect(liveNode);
     nodeGraphMvp.live.inputVolumeGain = inputVolumeGain;
+    applyNodeGraphLiveInputHostGain();
     nodeGraphMvp.live.inputStream = stream;
     nodeGraphMvp.live.inputSource = source;
     nodeGraphMvp.live.inputPermissionStatus = "granted";

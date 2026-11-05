@@ -404,7 +404,7 @@ function nodeGraphEmptyCanvasPresentStage() {
   const cssH = Math.max(1, stage.clientHeight || window.innerHeight || 1);
   if (canvas.width !== cssW) canvas.width = cssW;
   if (canvas.height !== cssH) canvas.height = cssH;
-  const batch = nodeGraphGlLinesBegin(canvas, NODE_GRAPH_MINI_PERFORM_BACKDROP, { scale: 1 });
+  const batch = nodeGraphGlLinesBegin(canvas, NODE_GRAPH_MINI_PERFORM_BACKDROP, { scale: 1, edge: "chrome" });
   if (!batch) return false;
   nodeGraphGlMiniPerformDrawEmpty(batch, cssW, cssH);
   return nodeGraphGlLinesEnd(batch, "alpha") !== false;
@@ -450,7 +450,7 @@ function nodeGraphGlMiniPerformPresent() {
     canvas,
     // Backdrop as the clear colour: the renderer draws images under its rect quads.
     settings.frame ? NODE_GRAPH_MINI_PERFORM_BACKDROP : [0, 0, 0, 0],
-    { scale: 1, transparent: !settings.frame },
+    { scale: 1, transparent: !settings.frame, edge: "chrome" },
   );
   if (!batch) {
     if (typeof nodeGraphDisplayGlFailed === "function") nodeGraphDisplayGlFailed(canvas, "GL mini perform begin");

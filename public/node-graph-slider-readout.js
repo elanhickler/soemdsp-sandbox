@@ -465,6 +465,11 @@ function nodeSliderReadoutFitObserve(readout) {
   nodeSliderReadoutFitObserver.observe(readout);
 }
 
+// Choice switches: true = label always stacked over the value; false = the
+// responsive one-line rule other sliders use (label left, value right, stacked
+// only when it does not fit). Same flag as NODE_GRAPH_FACE_SWITCH_STACKED.
+const NODE_SLIDER_SWITCH_STACKED = true;
+
 function nodeSliderReadoutFitStack(readout, maxDigits) {
   if (!readout) return;
   nodeSliderReadoutFitObserve(readout);
@@ -472,20 +477,25 @@ function nodeSliderReadoutFitStack(readout, maxDigits) {
   const fit = readout._stackFit;
   if (!fit || !(fit.width > 0)) return;
   let stacked = false;
-  if (!readout.classList.contains("displays-choices")) {
+  {
+    // Choice readouts (switches) use the same rule: label left, value right,
+    // stacked only when they do not fit. Their value side counts the longest
+    // choice label, so switching choices never flips the layout.
     const label = String(readout.querySelector(".node-slider-readout-label")?.textContent || "");
     const value = String(readout.querySelector(".node-slider-readout-value")?.textContent || "");
     const unit = String(readout.querySelector(".node-slider-readout-unit")?.textContent || "");
     const digits = Number(maxDigits);
     // Reserved number: digits + decimal point + sign column.
     const reserved = Number.isFinite(digits) && digits > 0 ? Math.round(digits) + 2 : 0;
-    readout._stackFitValueChars = Math.max(readout._stackFitValueChars || 0, value.length, reserved);
+    const choiceChars = readout.classList.contains("displays-choices") ? (readout._stackFitChoiceChars || 0) : 0;
+    readout._stackFitValueChars = Math.max(readout._stackFitValueChars || 0, value.length, reserved, choiceChars);
     const em = NODE_SLIDER_MONO_ADVANCE_EM;
     const need = label.length * fit.labelPx * em
       + NODE_SLIDER_ONE_LINE_GAP_PX
       + readout._stackFitValueChars * fit.valuePx * em
       + (unit ? NODE_SLIDER_ONE_LINE_GAP_PX + unit.length * fit.unitPx * em : 0);
     stacked = label.length > 0 && need > fit.width;
+    if (NODE_SLIDER_SWITCH_STACKED && choiceChars > 0) stacked = true;
   }
   if (readout.classList.contains("is-stacked") === stacked) return;
   readout.classList.toggle("is-stacked", stacked);
@@ -579,6 +589,9 @@ function paintNodeSliderReadout(slider, readout) {
   // B-080: let choice labels claim full track width when unit column is empty.
   readout.classList.toggle("displays-choices", usesChoices);
   readout.classList.toggle("reserves-sign-column", usesNumericReadout || usesChoices);
+  readout._stackFitChoiceChars = usesChoices
+    ? choices.reduce((n, choice) => Math.max(n, String(choice ?? "").length), 0)
+    : 0;
   nodeSliderReadoutFitStack(readout, formattedMaxDigits);
   readout.removeAttribute("title");
   if (dividesChoices) {

@@ -20,6 +20,9 @@ NodeLiveAudioProcessor.prototype.setPlan = function setPlan(plan, message = {}) 
 };
 
 NodeLiveAudioProcessor.prototype._setPlanImpl = function _setPlanImpl(plan, message = {}) {
+    if (Number.isFinite(Number(message.sharedOutputVolumeDb))) {
+      this.sharedOutputVolumeDb = Number(message.sharedOutputVolumeDb);
+    }
     const patchFingerprint = message.patchFingerprint || plan?.patchFingerprint || "";
     this.planSerial = message.planSerial || 0;
     const nextSessionId = message.sessionId || 0;

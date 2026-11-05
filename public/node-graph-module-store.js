@@ -2832,7 +2832,7 @@ const nodeGraphModuleStoreCatalog = Object.freeze({
     category: "oscilloscope",
     description: "Clinical 1D plot: one sharp antialiased line, Trig input, Sync or Free window, no glow, no labels.",
     label: "1D Plot",
-    notes: ["plot", "clinical", "waveform", "trigger", "sync", "antialiased", "smootherstep"],
+    notes: ["plot", "clinical", "waveform", "trigger", "sync", "antialiased", "expo"],
   },
   plot1dStereo: {
     category: "oscilloscope",

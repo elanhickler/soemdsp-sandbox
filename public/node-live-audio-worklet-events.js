@@ -185,6 +185,9 @@ NodeLiveAudioProcessor.prototype.setBugButtonInteraction = function setBugButton
 };
 
 NodeLiveAudioProcessor.prototype.setConnections = function setConnections(plan, message = {}) {
+    if (Number.isFinite(Number(message.sharedOutputVolumeDb))) {
+      this.sharedOutputVolumeDb = Number(message.sharedOutputVolumeDb);
+    }
     // Live OS / engine-rate updates arrive on setConnections (plan shape unchanged).
     if (typeof this.applyOversamplingFromMessage === "function") {
       this.applyOversamplingFromMessage(message);
@@ -296,6 +299,9 @@ NodeLiveAudioProcessor.prototype.setGraphData = function setGraphData(graphData)
 };
 
 NodeLiveAudioProcessor.prototype.setParams = function setParams(nodes, message = {}) {
+    if (Number.isFinite(Number(message.sharedOutputVolumeDb))) {
+      this.sharedOutputVolumeDb = Number(message.sharedOutputVolumeDb);
+    }
     const patchFingerprint = message.patchFingerprint || "";
     this.patchFingerprint = patchFingerprint || this.patchFingerprint;
     this.planSerial = message.planSerial || 0;

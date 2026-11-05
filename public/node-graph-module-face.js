@@ -45,6 +45,13 @@ const NODE_GRAPH_FACE_SPAN_EDGE_PX = 3;
 const NODE_GRAPH_FACE_SPAN_MID_PX = 5;
 // Row-cell position handle half width (face px), same as the generic slider.
 const NODE_GRAPH_FACE_CELL_HANDLE_HALF_PX = 8;
+// Choice switches: true = label stacked over the value (row grows to the
+// column-cell height); false = one line, label left, value right. Same flag as
+// NODE_SLIDER_SWITCH_STACKED (node-graph-slider-readout.js).
+const NODE_GRAPH_FACE_SWITCH_STACKED = true;
+const NODE_GRAPH_FACE_SWITCH_STACKED_H = 40;
+// Switch handle (selected slot): inset this many face px on all four sides.
+const NODE_GRAPH_FACE_SWITCH_GAP_PX = 2;
 
 const NodeGraphFaceInk = Object.freeze({
   rowFill: "#10131a",
@@ -107,7 +114,16 @@ function nodeGraphModuleFaceParamChoiceCount(input) {
 function nodeGraphModuleFaceSpec(type, node = null) {
   const face = nodeGraphModuleDefinitions?.[type]?.face;
   if (!Array.isArray(face) || !face.length) return null;
-  const mapped = face.map((row) => nodeGraphModuleFaceUpgradeSliderRow(row, type));
+  const defsAll = nodeGraphModuleDefinitions[type]?.parameters || [];
+  const mapped = face.map((row) => {
+    const up = nodeGraphModuleFaceUpgradeSliderRow(row, type);
+    // A lone choice cell is a switch; stacked switches get column-cell height.
+    if (NODE_GRAPH_FACE_SWITCH_STACKED && up.kind === "cells" && up.params?.length === 1 && up.params[0][2] !== "stack") {
+      const p = defsAll.find((item) => item.key === up.params[0][0]);
+      if (Array.isArray(p?.choices) && p.choices.length > 1) return { ...up, h: Math.max(up.h, NODE_GRAPH_FACE_SWITCH_STACKED_H) };
+    }
+    return up;
+  });
   if (!node || typeof nodeGraphParameterEffectiveVisible !== "function") return mapped;
   const defs = nodeGraphModuleDefinitions[type]?.parameters || [];
   const shown = (key) => nodeGraphParameterEffectiveVisible(defs.find((p) => p.key === key), node.paramMeta?.[key]);
@@ -1158,10 +1174,34 @@ function nodeGraphModuleFaceDrawGl(batch, el, w, ox, oy, z) {
         // rectangle, no divider strokes. Continuous params show a position handle.
         const choiceN = nodeGraphModuleFaceParamChoiceCount(input);
         if (choiceN > 1) {
+          // Switch handle: the selected slot inset 2 px on all four sides. The
+          // row lines are pixel-snapped and the face can sit at a fractional
+          // position, so the well and handle are snapped to the same grid:
+          // between the row's top line and the next row's line, whole-pixel
+          // gaps. Unsnapped, the bottom gap lost a pixel to the next line.
           const idx = Math.max(0, Math.min(choiceN - 1, Math.round(nodeGraphModuleFaceValue(input) - Number(input.min || 0))));
-          const slot = cw / choiceN;
-          rect(wd.x + gap + idx * slot, top, slot, ch, ink.cellValueFill);
-          if (gIndex >= 0 && gIndex < choiceN) rect(wd.x + gap + gIndex * slot, top, slot, ch, ink.ghost);
+          const sx = (v) => (grid ? grid.x(ox + v * z) : ox + v * z);
+          const sy = (v) => (grid ? grid.y(oy + v * z) : oy + v * z);
+          const L = wd.x > 0 ? sx(wd.x) + hair : sx(wd.x);
+          const R = sx(wd.x + wd.w);
+          const Y0 = sy(wd.y) + hair;
+          const Y1 = sy(wd.y + wd.h);
+          const edge = (i) => (grid ? grid.x(L + ((R - L) * i) / choiceN) : L + ((R - L) * i) / choiceN);
+          const g = grid ? grid.t(NODE_GRAPH_FACE_SWITCH_GAP_PX * z) : NODE_GRAPH_FACE_SWITCH_GAP_PX * z;
+          nodeGraphGlLinesRect(batch, L, Y0, R - L, Y1 - Y0, nodeGraphModuleFaceRgba(ink.cellFill));
+          const handle = (i, fill) => {
+            const hx = edge(i) + g;
+            const hw = edge(i + 1) - g - hx;
+            const hh = Y1 - Y0 - 2 * g;
+            if (hw > 0 && hh > 0) nodeGraphGlLinesRect(batch, hx, Y0 + g, hw, hh, nodeGraphModuleFaceRgba(fill));
+          };
+          handle(idx, ink.cellValueFill);
+          if (gIndex >= 0 && gIndex < choiceN) handle(gIndex, ink.ghost);
+          if (NODE_GRAPH_FACE_SWITCH_STACKED) {
+            nodeGraphModuleFaceText(batch, wd.label, ox + cx * z, oy + (cy - 7) * z, 12.6 * z, ink.label, { maxWidth: (cw - 4) * z });
+            nodeGraphModuleFaceValueRun(batch, input, ox + cx * z, oy + (cy + 7) * z, 13.8 * z, ink.value, { maxWidth: (cw - 4) * z });
+            continue;
+          }
         } else {
           // Position handle only (generic slider look), no fill; ghost handle at the modulated value.
           const hw = Math.min(NODE_GRAPH_FACE_CELL_HANDLE_HALF_PX, cw * 0.5);

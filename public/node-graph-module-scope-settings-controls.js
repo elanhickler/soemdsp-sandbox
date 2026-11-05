@@ -835,7 +835,7 @@ const nodeGraphTraceDisplayFormTypeValueClampOverrides = Object.freeze({
     dot1Size: nodeGraphTraceDisplayClampUnit,
   }),
   roundShapeFace: Object.freeze({
-    lineThickness: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, 2), 0.25, 16),
+    lineThickness: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, 2), 0, 16),
     lineSmoothing: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, 1), 0, 8),
     lineBlur: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value), 0, 8),
     lineBrightness: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value), 0, 1),
@@ -845,7 +845,7 @@ const nodeGraphTraceDisplayFormTypeValueClampOverrides = Object.freeze({
     pixelDensity: nodeGraphTraceDisplayClampPixelDensity,
   }),
   blitFace: Object.freeze({
-    lineThickness: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, 2), 0.25, 16),
+    lineThickness: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, 2), 0, 16),
     lineSmoothing: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, 1), 0, 8),
     lineBrightness: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value), 0, 1),
     dotThickness: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, 5), 0.25, 32),
@@ -853,7 +853,7 @@ const nodeGraphTraceDisplayFormTypeValueClampOverrides = Object.freeze({
     backgroundBrightness: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value), 0, 1),
   }),
   basicShapeFace: Object.freeze({
-    lineThickness: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, 2), 0.25, 16),
+    lineThickness: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, 2), 0, 16),
     lineSmoothing: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, 1), 0, 8),
     lineBlur: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value), 0, 8),
     lineBrightness: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value), 0, 1),
@@ -863,7 +863,7 @@ const nodeGraphTraceDisplayFormTypeValueClampOverrides = Object.freeze({
     pixelDensity: nodeGraphTraceDisplayClampPixelDensity,
   }),
   sinCosFace: Object.freeze({
-    lineThickness: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, 2), 0.25, 16),
+    lineThickness: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, 2), 0, 16),
     lineSmoothing: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, 1), 0, 8),
     lineBrightness: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value), 0, 1),
     dotThickness: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, 5), 0.25, 32),

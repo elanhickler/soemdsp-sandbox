@@ -143,8 +143,8 @@ function nodeGraphDisplaySettingsBuildStepperRowHtml(key, formType = null, optio
   if ((formType === "roundShapeFace" || formType === "basicShapeFace" || formType === "blitFace" || formType === "sinCosFace" || formType === "clockFace" || formType === "clockDividerFace" || formType === "pulseExplosionFace" || formType === "pulseTrainFace" || formType === "plotFace") && key === "lineThickness") {
     label = "Line thickness";
     title = formType === "clockFace" || formType === "clockDividerFace" || formType === "pulseExplosionFace" || formType === "pulseTrainFace" ? "" : formType === "roundShapeFace"
-      ? "Orbit stroke width in CSS pixels (0.25–16)."
-      : "Wave stroke width in CSS pixels (0.25–16).";
+      ? "Orbit stroke width in CSS pixels (0–16). 0 = no line, only the dot."
+      : "Wave stroke width in CSS pixels (0–16). 0 = no line, only the dot.";
   }
   if ((formType === "roundShapeFace" || formType === "basicShapeFace" || formType === "blitFace" || formType === "sinCosFace" || formType === "pulseExplosionFace" || formType === "pulseTrainFace") && key === "dotThickness") {
     label = "Dot size";
@@ -167,12 +167,12 @@ function nodeGraphDisplaySettingsBuildStepperRowHtml(key, formType = null, optio
     title = "Lit-dot hang after each pulse. 0 = stay lit until the next trigger. Small values drop immediately. Same exponential residual as phosphor / woscope.";
   }
   if ((formType === "roundShapeFace" || formType === "basicShapeFace" || formType === "blitFace" || formType === "sinCosFace" || formType === "clockFace" || formType === "clockDividerFace" || formType === "pulseExplosionFace" || formType === "pulseTrainFace" || formType === "plotFace") && key === "lineSmoothing") {
-    label = "Line smoothing";
-    title = "Smootherstep antialiasing skirt in CSS pixels (0–8, default 1). 0 = hard core.";
+    label = "Line blur";
+    title = "Expo antialiasing skirt in CSS pixels (0–8, default 1), outside the line's thickness. 0 = hard core.";
   }
   if (formType === "robinSinepulseFace" && key === "lineSmoothing") {
-    label = "Envelope smoothing";
-    title = "Smootherstep fade on the baseline and top edge (CSS pixels, 0–8, default 1). Thin bars fade to 0 instead of a hard line.";
+    label = "Envelope blur";
+    title = "Expo fade on the baseline and top edge (CSS pixels, 0–8, default 1). Thin bars fade to 0 instead of a hard line.";
   }
   if (formType === "robinSinepulseFace" && key === "pixelDensity") {
     label = "Pixel density";

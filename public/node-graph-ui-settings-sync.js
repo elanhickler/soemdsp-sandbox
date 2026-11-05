@@ -950,11 +950,16 @@ function syncNodeUiDevSettingsHeaderControls() {
   if (sliderTextSizeValue) sliderTextSizeValue.textContent = `${sliderTextSize}px`;
   if (sliderTextLineValue) sliderTextLineValue.textContent = String(sliderTextLine);
   if (sliderTextPadValue) sliderTextPadValue.textContent = `${sliderTextPad}px`;
-  // Signal wires (jack to jack) width.
+  // Signal wires (jack to jack) width and end-dot diameter.
   const wireThick = Math.max(0.5, Math.min(12, nodeGraphFiniteNumber(document.getElementById("nodeUiDevWireThickness")?.value, 2)));
   sliderTextHost?.style.setProperty("--node-wire-thickness", `${wireThick}px`);
   const wireThickValue = document.getElementById("nodeUiDevWireThicknessValue");
   if (wireThickValue) wireThickValue.textContent = `${wireThick}px`;
+  // Default 7.8624 = port-diameter * 0.54 at stock 28px grid / 0.52 jack ratio.
+  const wireDot = Math.max(0, Math.min(12, nodeGraphFiniteNumber(document.getElementById("nodeUiDevWirePatchPointSize")?.value, 7.8624)));
+  sliderTextHost?.style.setProperty("--node-wire-patch-point-size", `${wireDot}px`);
+  const wireDotValue = document.getElementById("nodeUiDevWirePatchPointSizeValue");
+  if (wireDotValue) wireDotValue.textContent = `${wireDot}px`;
   // Param wire gradient dip: darkening depth / width at the crossfade midpoint.
   for (const [id, cssVar] of [["nodeUiDevWireDip", "--node-wire-dip"], ["nodeUiDevWireDipWidth", "--node-wire-dip-width"]]) {
     const v = Math.max(0, Math.min(1, nodeGraphFiniteNumber(document.getElementById(id)?.value, id === "nodeUiDevWireDip" ? 0.35 : 0.5)));

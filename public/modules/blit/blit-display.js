@@ -130,7 +130,7 @@ function nodeGraphBlitFaceLook(node) {
     backgroundPaint: String(face.backgroundPaint || face.background || "#020609"),
     strokePaint: String(face.strokePaint || face.strokeColor || "rgba(120, 220, 200, 0.92)"),
     dotPaint: String(face.dotPaint || face.dotColor || "#ffffff"),
-    lineThickness: Math.max(0.25, nodeGraphFiniteNumber(face.lineThickness, 2)),
+    lineThickness: Math.max(0, nodeGraphFiniteNumber(face.lineThickness, 2)),
     dotThickness: Math.max(0.25, nodeGraphFiniteNumber(face.dotThickness, 5)),
     pixelDensity: Number.isFinite(Number(face.pixelDensity)) ? Number(face.pixelDensity) : 1,
   };
@@ -269,18 +269,16 @@ function drawNodeGraphBlitDisplayInner(section) {
     waveform,
   }, count);
 
-  // Display Settings > Line Smoothing (CSS px skirt) drives the drawer blur.
+  // Display Settings > Line blur (lineSmoothing, CSS px skirt) drives the drawer blur.
   const blur = typeof nodeGraphLineSmoothingPx === "function"
     ? nodeGraphLineSmoothingPx(look, 1)
     : Math.max(0, Number(look.lineSmoothing) || 1);
   let polylines = [];
-  let columns = [];
   if (samples?.length && typeof nodeGraphMathCycleClinicalGeom === "function") {
     const geom = nodeGraphMathCycleClinicalGeom(
       samples, mapX, mapY, Math.max(1, Math.floor(innerW)), strokeW, look.strokePaint,
     );
     polylines = geom.polylines;
-    columns = geom.columns;
   }
 
   const dots = [];
@@ -316,7 +314,6 @@ function drawNodeGraphBlitDisplayInner(section) {
     waveKey: signature,
     blur,
     polylines,
-    columns,
     dots,
   });
 }

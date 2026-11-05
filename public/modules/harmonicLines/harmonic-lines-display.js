@@ -35,8 +35,8 @@ function buildNodeGraphHarmonicLinesDisplaySettingsBodyHtml() {
         <span>px</span>
       </label>
       <label class="node-led-settings-row">
-        <span>Line smoothing</span>
-        <input type="range" min="0" max="8" step="0.1" data-harmonic-lines-field="lineSmoothing" aria-label="Smootherstep antialiasing skirt in CSS pixels">
+        <span>Line blur</span>
+        <input type="range" min="0" max="8" step="0.1" data-harmonic-lines-field="lineSmoothing" aria-label="Expo antialiasing skirt in CSS pixels">
         <span>px</span>
       </label>
     </div>`;
@@ -335,7 +335,7 @@ function drawNodeGraphHarmonicLinesDisplay(section) {
   const lineW = faceInkPx(hlLook.lineWidth, faceMin);
 
   // Dim mid line — Left above, Right below.
-  // Capsule half-width for a CSS stroke width: core = w/2 - 0.35, smootherstep skirt.
+  // Capsule half-width for a CSS stroke width: core = w/2 - 0.35, Expo skirt.
   const smoothing = Math.max(0, Number(hlLook.lineSmoothing) || 1);
   const half = (lw) => Math.max(0, lw * 0.5 - 0.35);
   nodeGraphGlLinesSegment(batch, pad, midY, pad + span, midY, half(faceInkPx(1, faceMin)), smoothing, [1, 1, 1, 0.18]);

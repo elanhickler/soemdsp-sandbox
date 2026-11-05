@@ -2819,7 +2819,7 @@ function nodeGraphAudioPlayerVideoscopePaintLr(batch, width, height, channels, s
     ? Number(settings.traceWidth)
     : nodeGraphSampleWaveformDefaultSettings.traceWidth;
   const lineWidth = Math.max(0.25, faceInkPx(clampAuthoredInkPx(unit, 2), faceMinSide(width, height)));
-  // One butt-capped min..max stem per device column, 1 px smootherstep edge.
+  // One butt-capped min..max stem per device column, 1 px Expo edge.
   const half = Math.max(0.125, lineWidth * 0.5 - 0.5);
   const paintPane = (channel, top, paneH, rgba) => {
     const center = top + paneH * 0.5;
