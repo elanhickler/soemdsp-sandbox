@@ -1179,6 +1179,14 @@
       "emoji": ""
     },
     {
+      "slug": "smoke_test",
+      "label": "smoke_test",
+      "name": "",
+      "url": "/soemdsp-sandbox/patches/smoke_test.json",
+      "author": "",
+      "emoji": ""
+    },
+    {
       "slug": "SoEmEnsemble",
       "label": "SoEmEnsemble",
       "name": "",
