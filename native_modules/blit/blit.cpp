@@ -35,6 +35,22 @@
 // All three verified numerically in Python against this exact formula
 // before porting: flat, bounded amplitude and near-zero DC from 10Hz to
 // 20kHz, no blowups, no low-frequency beat.
+//
+// v6:
+//   - Harmonic count is continuous: Mf = max(1, p/2 - 1) harmonics, the
+//     top one faded by the fractional part (closed-form crossfade of the M
+//     and M+1 kernels, as DSF does), so harmonics no longer click in and
+//     out as the pitch moves. The faded partial stays one harmonic below
+//     Nyquist; the fundamental is always kept.
+//   - Leak tracks pitch: a DC blocker at f/20 (same per-period shape at
+//     every pitch). The fixed 0.995 leak drooped low notes, so the peak
+//     drifted with pitch.
+//   - Level: the per-sample integrator boosts frequency w by
+//     (w/2)/sin(w/2) over a true integral; the output is corrected by
+//     sin(w/2)/(w/2) at the fundamental. Measured peaks then stay flat
+//     (saw <= 0.665, square <= 0.679 raw, 5 Hz .. 20 kHz), so fixed gains
+//     keep both under 0.98 and the clamp never clips (v5 clipped up to
+//     16% of square samples, which aliased).
 
 #include <soemdsp/math/scalar_helpers.h>
 using soemdsp_maths::clamp;
@@ -47,6 +63,7 @@ using soemdsp_maths::kHalfPi;
 namespace {
 
 constexpr int kMaxInstances = 16;
+constexpr double kBlitLeakDivisor = 20.0;  // integrator DC blocker at f / 20
 
 // Taylor series through x^17, Horner-evaluated (~2e-8 worst-case error).
 double sinApprox(double value) {
@@ -70,36 +87,41 @@ double cosApprox(double value) { return sinApprox(value + kHalfPi); }
 // integrated with a fixed fast leak. Runs its own phase 0..pi (this
 // algorithm's native convention, half the usual 0..2pi audio phase) so a
 // second instance can be offset by half a cycle for Square.
+// Kernel with M harmonics: sin((2M+1)x) / (p sin x), x in [0, pi).
+double blitKernel(double phase, double denom, double harmonics, double p) {
+  const double m = 2.0 * harmonics + 1.0;
+  if (denom > -1.0e-9 && denom < 1.0e-9) return m / p;  // limit at phase 0
+  return sinApprox(m * phase) / (p * denom);
+}
+
 struct BlitSaw {
   double phase;
   double phaseOffset;  // in this oscillator's own pi-periodic units
   double state;
-  double leak;
 
-  void init(double phaseOffsetCycles, double leak_) {
+  void init(double phaseOffsetCycles) {
     phaseOffset = phaseOffsetCycles * kPi;
     phase = phaseOffset;
     state = 0.0;
-    leak = leak_;
   }
 
   // periodSamples = 1/|dt|; direction +1 forward, −1 through-zero reverse.
   double update(double periodSamples, double direction = 1.0) {
     const double p = periodSamples > 1.0e-6 ? periodSamples : 1.0e-6;
-    const double maxHarmonics = __builtin_floor(0.5 * p);
-    const double m = 2.0 * maxHarmonics + 1.0;
-    const double a = m / p;   // limiting value of the kernel at phase 0
+    // Continuous harmonic count, top partial one harmonic below Nyquist.
+    double harmonics = 0.5 * p - 1.0;
+    if (harmonics < 1.0) harmonics = 1.0;
+    const double lo = __builtin_floor(harmonics);
+    const double frac = harmonics - lo;
     const double c2 = 1.0 / p;
 
     const double denom = sinApprox(phase);
-    double tmp;
-    if (denom > -1.0e-9 && denom < 1.0e-9) {
-      tmp = a;
-    } else {
-      tmp = sinApprox(m * phase) / (p * denom);
-    }
+    double tmp = blitKernel(phase, denom, lo, p);
+    if (frac > 0.0) tmp += (blitKernel(phase, denom, lo + 1.0, p) - tmp) * frac;
     tmp += state - c2;
-    state = tmp * leak;
+    // DC blocker at f/20: the same leak per period at every pitch.
+    const double leak = 1.0 - (kTwoPi / kBlitLeakDivisor) / p;
+    state = tmp * (leak > 0.0 ? leak : 0.0);
 
     const double dir = direction < 0.0 ? -1.0 : 1.0;
     phase += dir * (kPi / p);
@@ -132,13 +154,13 @@ struct BlitState {
 
 static BlitState gPool[kMaxInstances];
 
-constexpr double kBlitLeak = 0.995;     // fixed, fast -- per STK's own tuning.
-constexpr double kSawGain = 1.6;        // makeup gain to bring ptp near +-1.
+constexpr double kSawGain = 1.47;       // raw saw peak <= 0.665 -> under 0.98.
+constexpr double kSquareGain = 1.44;    // raw square peak <= 0.679 -> under 0.98.
 constexpr double kTriTrackGain = 2.0;   // frequency-tracking one-pole gain.
 
 void initSlot(SlotState& slot) {
-  slot.sawA.init(0.0, kBlitLeak);
-  slot.sawB.init(0.5, kBlitLeak);
+  slot.sawA.init(0.0);
+  slot.sawB.init(0.5);
   slot.triState = 0.0;
   slot.initialized = true;
 }
@@ -153,17 +175,22 @@ double oscillatorSample(BlitState& s, int slotIndex, double phase, double phaseI
   const double periodSamples = 1.0 / dt;
   const double direction = phaseIncrement < 0.0 ? -1.0 : 1.0;
 
-  const double sawARaw = slot.sawA.update(periodSamples, direction) * kSawGain;
-  const double sawBRaw = slot.sawB.update(periodSamples, direction) * kSawGain;
+  // Integrator level correction at the fundamental: sin(w/2) / (w/2).
+  const double halfW = kPi / periodSamples;
+  const double comp = sinApprox(halfW) / halfW;
+  const double sawA = slot.sawA.update(periodSamples, direction) * comp;
+  const double sawB = slot.sawB.update(periodSamples, direction) * comp;
+  const double sawARaw = sawA * kSawGain;
+  const double squareRaw = (sawA - sawB) * kSquareGain;
 
   switch (waveform) {
     case 1:
       return -clamp11(sawARaw);
     case 2: {
-      return clamp11(sawARaw - sawBRaw);
+      return clamp11(squareRaw);
     }
     case 3: {
-      const double sqOut = clamp11(sawARaw - sawBRaw);
+      const double sqOut = clamp11(squareRaw);
       // Integrate with signed dt so reverse also reverses the triangle slope.
       const double signedDt = direction * dt;
       slot.triState += signedDt * kTriTrackGain * (sqOut - slot.triState);
@@ -252,5 +279,5 @@ extern "C" double soemdsp_blit_sine(int handle) {
 }
 
 extern "C" int soemdsp_blit_version() {
-  return 5;
+  return 6;
 }

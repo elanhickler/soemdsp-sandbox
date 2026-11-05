@@ -269,7 +269,10 @@ function drawNodeGraphSinCos4DisplayInner(section) {
   // Full stroke width in CSS px (clinical Present takes width, not half).
   const rayW = Math.max(0.5, stroke * side);
   const ringW = Math.max(0.5, look.ringStroke * side);
-  const blur = typeof nodeGraphClinicalLineBlur === "number" ? nodeGraphClinicalLineBlur : 1.2;
+  // Display Settings > Line Smoothing (CSS px skirt) drives the drawer blur.
+  const blur = typeof nodeGraphLineSmoothingPx === "function"
+    ? nodeGraphLineSmoothingPx(look, 1)
+    : Math.max(0, Number(look.lineSmoothing) || 1);
   const polylines = [];
   const dots = [];
 

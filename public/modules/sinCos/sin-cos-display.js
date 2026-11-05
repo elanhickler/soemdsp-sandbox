@@ -850,7 +850,10 @@ function drawNodeGraphSinCosDisplayInner(section) {
   const phaseOff = wrap01(phaseParam);
   const sampleKind = (cycle01, kind) => nodeGraphSinCosSample(wrap01(cycle01 + phaseOff), kind, amplitude, polarity);
   // Clinical Expo: math closed-form cycle → per-pixel min/max envelopes.
-  const blur = typeof nodeGraphClinicalLineBlur === "number" ? nodeGraphClinicalLineBlur : 1.2;
+  // Display Settings > Line Smoothing (CSS px skirt) drives the drawer blur.
+  const blur = typeof nodeGraphLineSmoothingPx === "function"
+    ? nodeGraphLineSmoothingPx(look, 1)
+    : Math.max(0, Number(look.lineSmoothing) || 1);
   const polylines = [];
   const columns = [];
   const pushPoly = (kind, color) => {

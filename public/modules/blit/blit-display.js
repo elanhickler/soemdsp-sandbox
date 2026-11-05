@@ -168,6 +168,7 @@ function drawNodeGraphBlitDisplayInner(section) {
     String(phaseParam),
     String(phaseDot),
     String(strokeW),
+    String(look.lineSmoothing),
     look.strokePaint,
     look.backgroundPaint,
     String(nodeGraphBlitSampleRate()),
@@ -235,7 +236,10 @@ function drawNodeGraphBlitDisplayInner(section) {
     waveform,
   }, count);
 
-  const blur = typeof nodeGraphClinicalLineBlur === "number" ? nodeGraphClinicalLineBlur : 1.2;
+  // Display Settings > Line Smoothing (CSS px skirt) drives the drawer blur.
+  const blur = typeof nodeGraphLineSmoothingPx === "function"
+    ? nodeGraphLineSmoothingPx(look, 1)
+    : Math.max(0, Number(look.lineSmoothing) || 1);
   let polylines = [];
   let columns = [];
   if (samples?.length && typeof nodeGraphMathCycleClinicalGeom === "function") {

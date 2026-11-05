@@ -11,7 +11,9 @@
 //     columns: [{ x, yMin, yMax, color, width }] per-pixel envelopes,
 //     dots: [{ x, y, color, radius }],
 //   })
-// Thickness is full stroke width in CSS px. Expo blur defaults to 1.2 CSS px.
+// Thickness is full stroke width in CSS px at the face's circuit-builder size;
+// in canvas view / screen solo all ink scales with the face. Expo blur
+// defaults to 1.2 CSS px; faces pass their Line Smoothing.
 
 (function initNodeGraphClinicalLineGl(global) {
   "use strict";
@@ -435,7 +437,15 @@ void main() {
     const W = Math.max(1, Math.min(MAX_DIM, canvas.width | 0));
     const H = Math.max(1, Math.min(MAX_DIM, canvas.height | 0));
     const bg = cssColor(frame.background || "#020609");
-    const blurCss = Number.isFinite(Number(frame.blur)) ? Math.max(0.05, Number(frame.blur)) : DEFAULT_BLUR;
+    // The circuit builder face is the source of truth for ink size. A face
+    // shown bigger or smaller in canvas view / screen solo keeps the same
+    // relative line width, smoothing and dot size: ink x (now / builder).
+    const minCss = Math.min(cssWidth, cssHeight);
+    const presented = typeof canvas.closest === "function" && canvas.closest(".node-screen-solo-face");
+    if (!presented) canvas.__clinicalBuilderMinCss = minCss;
+    const builderMin = Number(canvas.__clinicalBuilderMinCss);
+    const ink = presented && builderMin > 0 ? minCss / builderMin : 1;
+    const blurCss = (Number.isFinite(Number(frame.blur)) ? Math.max(0.05, Number(frame.blur)) : DEFAULT_BLUR) * ink;
 
     // Build per-ink segment lists (CSS-space segs).
     const byColor = new Map();
@@ -450,7 +460,7 @@ void main() {
       const key = color.slice(0, 3).map((x) => x.toFixed(4)).join(",");
       if (!byColor.has(key)) byColor.set(key, { color, segs: [], half: 0.75, dots: [] });
       const g = byColor.get(key);
-      g.half = Math.max(g.half, Math.max(0.125, (Number(col.width) || 1.5) * 0.5));
+      g.half = Math.max(g.half, Math.max(0.125, (Number(col.width) || 1.5) * 0.5) * ink);
       const segs = new Float32Array(n * 4);
       let w = 0;
       for (let i = 0; i < n; i += 1) {
@@ -484,7 +494,7 @@ void main() {
       const key = color.slice(0, 3).map((x) => x.toFixed(4)).join(",");
       if (!byColor.has(key)) byColor.set(key, { color, segs: [], half: 0.75, dots: [] });
       const g = byColor.get(key);
-      g.half = Math.max(g.half, Math.max(0.125, (Number(line.width) || 1.5) * 0.5));
+      g.half = Math.max(g.half, Math.max(0.125, (Number(line.width) || 1.5) * 0.5) * ink);
       const merged = new Float32Array(g.segs.length + segs.length);
       merged.set(g.segs, 0); merged.set(segs, g.segs.length);
       g.segs = merged;
@@ -496,7 +506,7 @@ void main() {
       if (!byColor.has(key)) byColor.set(key, { color, segs: new Float32Array(0), half: 0.75, dots: [] });
       byColor.get(key).dots.push({
         x: dot.x * scale, y: dot.y * scale,
-        radius: Math.max(0.5, Number(dot.radius) || 0.5) * scale,
+        radius: Math.max(0.5, Number(dot.radius) || 0.5) * ink * scale,
         color,
       });
     }

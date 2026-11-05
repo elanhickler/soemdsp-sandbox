@@ -1045,7 +1045,26 @@ function nodeGraphWaterfallUndrawn(buffer, lastAbs) {
 /** Fresh peak-to-peak accumulator (raw sample units). */
 function nodeGraphWaterfallAccMake() {
   // minAt / maxAt / last: time order for the Stroke waveform (both peaks).
-  return { min: Infinity, max: -Infinity, has: false, minAt: 0, maxAt: 0, last: Number.NaN };
+  // jump / jumpAt / jumpFrom / jumpTo: the column's largest single-sample step
+  // (Skip discontinuities lifts the stroke there).
+  return {
+    min: Infinity, max: -Infinity, has: false, minAt: 0, maxAt: 0, last: Number.NaN,
+    jump: 0, jumpAt: -1, jumpFrom: Number.NaN, jumpTo: Number.NaN,
+  };
+}
+
+/** Track the largest step between two neighbouring inspected samples. */
+function nodeGraphWaterfallAccStep(acc, v, at) {
+  const prev = acc.last;
+  if (Number.isFinite(prev)) {
+    const d = Math.abs(v - prev);
+    if (d > acc.jump) {
+      acc.jump = d;
+      acc.jumpAt = at;
+      acc.jumpFrom = prev;
+      acc.jumpTo = v;
+    }
+  }
 }
 
 /** Fold samples into a running min/max. Does not scan beyond [start, end). */
@@ -1073,6 +1092,7 @@ function nodeGraphWaterfallAccPush(acc, buffer, start, end, settings = null, slo
           if (v < acc.min) { acc.min = v; acc.minAt = right; }
           if (v > acc.max) { acc.max = v; acc.maxAt = right; }
         }
+        nodeGraphWaterfallAccStep(acc, v, right);
         acc.last = v;
       }
     }
@@ -1103,6 +1123,7 @@ function nodeGraphWaterfallAccPush(acc, buffer, start, end, settings = null, slo
         acc.maxAt = i;
       }
     }
+    nodeGraphWaterfallAccStep(acc, v, i);
     acc.last = v;
   }
   // Always include the true last sample so the bar tip tracks the newest value.
@@ -1141,8 +1162,24 @@ function nodeGraphWaterfallAccReset(acc) {
   acc.minAt = 0;
   acc.maxAt = 0;
   acc.last = Number.NaN;
+  acc.jump = 0;
+  acc.jumpAt = -1;
+  acc.jumpFrom = Number.NaN;
+  acc.jumpTo = Number.NaN;
   return acc;
 }
+
+/** Display setting: lift the stroke over single-sample jumps (default off). */
+function nodeGraphWaterfallSkipDiscontinuities(settings) {
+  return typeof nodeGraphDisplaySettingsToggleIsOn === "function"
+    ? nodeGraphDisplaySettingsToggleIsOn(settings?.skipDiscontinuities ?? false)
+    : settings?.skipDiscontinuities === true;
+}
+
+// A single-sample step taller than this share of the face height counts as a
+// discontinuity (1/8 of the face = a quarter of the half-height). Measured on
+// screen, so it works at any amplitude the waterfall scales up.
+const NODE_GRAPH_WATERFALL_JUMP_FACE_SHARE = 0.125;
 
 /**
  * Stroke = draw the waveform. Raw samples of one column in time order:
@@ -1150,11 +1187,26 @@ function nodeGraphWaterfallAccReset(acc) {
  * Absolute polarity folds a sign change through 0 between the peaks.
  * Both peaks are kept, so the line covers the top AND bottom of the signal.
  */
-function nodeGraphWaterfallWaveRaw(acc, settings = null) {
+function nodeGraphWaterfallWaveRaw(acc, settings = null, breakJump = false) {
   if (!acc?.has) return [];
   const minFirst = !(Number(acc.maxAt) < Number(acc.minAt));
   const a = minFirst ? acc.min : acc.max;
   const b = minFirst ? acc.max : acc.min;
+  if (breakJump && Number.isFinite(acc.jumpFrom) && Number.isFinite(acc.jumpTo)) {
+    // Skip discontinuities: the line up to the jump, a gap (null), then the
+    // line after it. Each peak stays on its own side of the jump.
+    const tA = minFirst ? acc.minAt : acc.maxAt;
+    const tB = minFirst ? acc.maxAt : acc.minAt;
+    const before = [];
+    const after = [];
+    (tA < acc.jumpAt ? before : after).push(a);
+    (tB < acc.jumpAt ? before : after).push(b);
+    if (!before.length || before[before.length - 1] !== acc.jumpFrom) before.push(acc.jumpFrom);
+    if (!after.length || after[0] !== acc.jumpTo) after.unshift(acc.jumpTo);
+    const last = Number(acc.last);
+    if (Number.isFinite(last) && after[after.length - 1] !== last) after.push(last);
+    return [...before, null, ...after];
+  }
   const out = [a];
   if (nodeGraphWaterfallPolarity(settings) === "absolute" && acc.min < 0 && acc.max > 0) out.push(0);
   out.push(b);
@@ -1165,16 +1217,27 @@ function nodeGraphWaterfallWaveRaw(acc, settings = null) {
 
 /** Face Y (canvas px) for nodeGraphWaterfallWaveRaw, same mapping as the bars. */
 function nodeGraphWaterfallWaveYs(acc, buffer, slot, settings, height) {
-  const raw = nodeGraphWaterfallWaveRaw(acc, settings);
-  if (!raw.length) return [];
+  if (!acc?.has) return [];
   const live = nodeGraphWaterfallPrepare(buffer, settings) || buffer;
   const amp = nodeGraphWaterfallAmp(live, slot);
   const midY = height * 0.5;
   const halfHeight = nodeGraphWaterfallHalfHeight(height, slot, settings, amp);
+  const toY = (v) => nodeGraphWaterfallY(v, amp.gain, amp.offset, midY, halfHeight, amp, settings);
+  let breakJump = false;
+  if (nodeGraphWaterfallSkipDiscontinuities(settings) && acc.jump > 0) {
+    const jumpPx = Math.abs(toY(acc.jumpTo) - toY(acc.jumpFrom));
+    breakJump = jumpPx > height * NODE_GRAPH_WATERFALL_JUMP_FACE_SHARE;
+  }
+  const raw = nodeGraphWaterfallWaveRaw(acc, settings, breakJump);
   const ys = [];
   for (let i = 0; i < raw.length; i += 1) {
-    const y = nodeGraphWaterfallY(raw[i], amp.gain, amp.offset, midY, halfHeight, amp, settings);
-    if (Number.isFinite(y) && (!ys.length || Math.abs(ys[ys.length - 1] - y) > 1e-6)) ys.push(y);
+    if (raw[i] === null) {
+      if (ys.length && ys[ys.length - 1] !== null) ys.push(null);
+      continue;
+    }
+    const y = toY(raw[i]);
+    const prev = ys.length ? ys[ys.length - 1] : null;
+    if (Number.isFinite(y) && (prev === null || Math.abs(prev - y) > 1e-6)) ys.push(y);
   }
   return ys;
 }
@@ -1213,6 +1276,8 @@ function nodeGraphWaterfallStrokeWaveRun(canvas, bag, key, cols, settings, strok
   };
   const kept = Array.isArray(bag.strokePts[key]) ? bag.strokePts[key] : [];
   let run = kept.slice();
+  const skip = nodeGraphWaterfallSkipDiscontinuities(settings);
+  const jumpPx = faceH > 0 ? faceH * NODE_GRAPH_WATERFALL_JUMP_FACE_SHARE : Infinity;
   for (let c = 0; c < cols.length; c += 1) {
     const { x, ys } = cols[c];
     if (!ys || !ys.length) {
@@ -1223,9 +1288,23 @@ function nodeGraphWaterfallStrokeWaveRun(canvas, bag, key, cols, settings, strok
     // Spread the column's peaks over its width (x .. x+1) instead of
     // stacking them on one x (a vertical spike, a stair at every pixel).
     // The last sample sits on the right edge, where the next column starts.
+    // null in ys = a skipped discontinuity: end the line, start a new one.
     const n = ys.length;
-    if (!run.length) run.push({ x, y: clampY(ys[0]) });
-    for (let i = 0; i < n; i += 1) run.push({ x: x + (i + 1) / n, y: clampY(ys[i]) });
+    for (let i = 0; i < n; i += 1) {
+      if (ys[i] === null) {
+        draw(run);
+        run = [];
+        continue;
+      }
+      const y = clampY(ys[i]);
+      // A jump that lands between two columns (one sample apart) also breaks.
+      if (skip && i === 0 && run.length && Math.abs(run[run.length - 1].y - y) > jumpPx) {
+        draw(run);
+        run = [];
+      }
+      if (!run.length) run.push({ x: x + i / n, y });
+      run.push({ x: x + (i + 1) / n, y });
+    }
   }
   draw(run);
   if (!run.length) {

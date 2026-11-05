@@ -405,7 +405,10 @@ function drawNodeGraphRoundShapeDisplayInner(section) {
   dot.y = py;
   dot.color = dotColor;
   dot.radius = Math.max(0.5, dotW * 0.5);
-  const blur = typeof nodeGraphClinicalLineBlur === "number" ? nodeGraphClinicalLineBlur : 1.2;
+  // Display Settings > Line Smoothing (CSS px skirt) drives the drawer blur.
+  const blur = typeof nodeGraphLineSmoothingPx === "function"
+    ? nodeGraphLineSmoothingPx(look, 1)
+    : Math.max(0, Number(look.lineSmoothing) || 1);
   const n = orbit.a.length;
   const raw = new Float32Array(n * 2);
   const ox0 = cx - viewScale;

@@ -269,7 +269,10 @@ function drawNodeGraphBasicShapeDisplayInner(section) {
   }
 
   // Clinical Expo: Adapt Max polylines in CSS px (split on scope jumps).
-  const blur = typeof nodeGraphClinicalLineBlur === "number" ? nodeGraphClinicalLineBlur : 1.2;
+  // Display Settings > Line Smoothing (CSS px skirt) drives the drawer blur.
+  const blur = typeof nodeGraphLineSmoothingPx === "function"
+    ? nodeGraphLineSmoothingPx(look, 1)
+    : Math.max(0, Number(look.lineSmoothing) || 1);
   const strokeColor = look.strokePaint || look.strokeColor || "#78dcc8";
   const polylines = [];
   let seg = [];
