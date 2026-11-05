@@ -72,8 +72,8 @@
   "modulations": [],
   "nodes": [
     {
-      "gx": 1,
-      "gy": -24,
+      "gx": 3,
+      "gy": -12,
       "id": "output",
       "paramMeta": {
         "volume": {
@@ -218,8 +218,8 @@
       }
     },
     {
-      "gx": -14,
-      "gy": -24,
+      "gx": -12,
+      "gy": -12,
       "id": "chaosfly-1",
       "paramMeta": {
         "outputMode": {
