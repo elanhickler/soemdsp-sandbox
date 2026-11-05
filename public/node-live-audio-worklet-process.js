@@ -200,7 +200,14 @@ NodeLiveAudioProcessor.prototype.process = function process(inputs, outputs) {
             this.scopeSnapshotCounter = snapshotEvery;
           } else {
             const posted = this.postModuleScopeSnapshot?.();
-            this.scopeSnapshotCounter = 0;
+            // Carry the remainder. Resetting to 0 rounded every period up to
+            // whole quanta (735 → 768 samples = 57.4 posts/s at 60 fps), so a
+            // display frame with zero new samples landed every few frames —
+            // the rhythmic 2-2-3 blink. Clamp so a stall cannot burst-post.
+            this.scopeSnapshotCounter = Math.min(
+              snapshotEvery - 1,
+              Math.max(0, this.scopeSnapshotCounter - snapshotEvery),
+            );
             this.scopePostInFlight = posted === true;
           }
         }

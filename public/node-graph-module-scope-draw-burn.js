@@ -656,7 +656,14 @@ function drawNodeGraphScope2dEnergyBurnPath(item, pixelRatio, pathPoints, settin
 
   // Engine speed 0 (and other pause paths): never step energy — hold FBO as-is.
   const frozen = nodeGraphModuleScopePhosphorFrozen();
-  if (frozen) {
+  // Audio posts and vsync are two free-running clocks, so some display frames
+  // get zero new samples. Stepping decay on those frames dims the live trace
+  // for one frame (rhythmic blink). Hold a short run of empty frames; after
+  // that keep stepping so a silenced / unplugged trace still fades out.
+  const emptyStreak = points.length > 0 ? 0 : (canvas._nodeGraphBurnEmptyStreak || 0) + 1;
+  canvas._nodeGraphBurnEmptyStreak = emptyStreak;
+  const holdEmptyFrame = emptyStreak > 0 && emptyStreak <= 3;
+  if (frozen || holdEmptyFrame) {
     // Present only (below). No residual step, no bleed, no deposit.
   } else if (layer) {
     // Continuous CRT trail only: always pack stamps along chords between
