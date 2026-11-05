@@ -508,7 +508,17 @@ void main() {
     let top = Number(r.top) - cr.top;
     let right = Number(r.right) - cr.left;
     let bottom = Number(r.bottom) - cr.top;
-    if (screenSoft > 0) {
+    if (opts.fitWidget === true) {
+      // Toolbar dimmer sits above the veil but is translucent, so a too-small
+      // hole reads as a fill that misses the chrome. Skip the module inset and
+      // grow by the shader's min chrome feather (0.6) so the centred edge stays
+      // solid out to the widget outline.
+      const pad = 0.6;
+      left -= pad;
+      top -= pad;
+      right += pad;
+      bottom += pad;
+    } else if (screenSoft > 0) {
       left -= 0.5;
       top -= 0.5;
       right += 0.5;
@@ -649,7 +659,9 @@ void main() {
       if (punch.dataset) {
         punch.dataset.lightStrength = "1";
       }
-      pushRectLight(punch, canvasRect, canvas, seen, rects, rectStr, rectSoft, rectRound);
+      pushRectLight(punch, canvasRect, canvas, seen, rects, rectStr, rectSoft, rectRound, {
+        fitWidget: true,
+      });
       if (punch.dataset) {
         if (prev == null || prev === "") {
           delete punch.dataset.lightStrength;

@@ -90,10 +90,11 @@ function createNodeGraphSinCosDisplay(nodeId, type = "sinCos") {
   section.dataset.nodeType = String(type || "sinCos");
   section.dataset.parameterVisual = "true";
   section.dataset.lightSource = "screen";
-  section.dataset.lightStrength = "0.66";
+  // Full punch: LCD-only partial cutout is ApplyLcdLightCutout / 2/3.
+  section.dataset.lightStrength = "1";
   const canvas = nodeGraphDisplayCanvasCreate("node-filter-curve-canvas node-sincos-canvas");
   canvas.dataset.lightSource = "screen";
-  canvas.dataset.lightStrength = "0.66";
+  canvas.dataset.lightStrength = "1";
   section.append(canvas);
   nodeGraphInstallDrawingFacePump(section, {
     clockKey: (el) => `sinCos:${el.dataset?.node || ""}`,
