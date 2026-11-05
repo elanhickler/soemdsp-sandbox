@@ -926,6 +926,20 @@ const nodeGraphTraceDisplayActiveControlsByType = Object.freeze({
     toggles: Object.freeze(["showDot"]),
     choices: Object.freeze([]),
   }),
+  // BLIT: same line drawer as SinCos / DSF. Phase dot is the face's Dot Off / On.
+  blitFace: Object.freeze({
+    fields: Object.freeze([
+      "lineThickness",
+      "lineSmoothing",
+      "lineBrightness",
+      "dotThickness",
+      "dotBrightness",
+      "backgroundBrightness",
+    ]),
+    colors: Object.freeze(["strokeColor", "dotColor", "backgroundColor"]),
+    toggles: Object.freeze([]),
+    choices: Object.freeze([]),
+  }),
   // Clock: Background / Pulse / Playhead / Fill / Start / Blink HBS lamps + thicknesses, blink time.
   clockFace: Object.freeze({
     fields: Object.freeze(["lineThickness", "lineSmoothing", "startThickness", "blinkTime", "gateHeight"]),
@@ -2716,6 +2730,7 @@ const nodeGraphDisplaySettingsFormTypeTitles = Object.freeze({
   roundShapeFace: "RoundShape",
   sinCos4Face: "SinCos4",
   sinCosFace: "SinCos",
+  blitFace: "BLIT",
   clockFace: "Clock",
   clockDividerFace: "Clock Divider",
   pulseExplosionFace: "Pulse Explosion",

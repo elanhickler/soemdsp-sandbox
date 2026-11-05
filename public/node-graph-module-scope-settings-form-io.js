@@ -416,7 +416,7 @@ if (type === "portalFace") {
   if (type === "robinSinepulseFace" && typeof normalizeNodeGraphRobinSinepulseFaceSettings === "function") {
     return normalizeNodeGraphRobinSinepulseFaceSettings();
   }
-  if (type === "roundShapeFace" || type === "basicShapeFace") {
+  if (type === "roundShapeFace" || type === "basicShapeFace" || type === "blitFace") {
     return typeof normalizeNodeGraphRoundShapeFaceSettings === "function"
       ? normalizeNodeGraphRoundShapeFaceSettings()
       : {
@@ -734,7 +734,7 @@ if (type === "portalFace") {
   if (type === "robinSinepulseFace" && typeof normalizeNodeGraphRobinSinepulseFaceSettings === "function") {
     return normalizeNodeGraphRobinSinepulseFaceSettings(settings);
   }
-  if (type === "roundShapeFace" || type === "basicShapeFace") {
+  if (type === "roundShapeFace" || type === "basicShapeFace" || type === "blitFace") {
     return typeof normalizeNodeGraphRoundShapeFaceSettings === "function"
       ? normalizeNodeGraphRoundShapeFaceSettings(settings)
       : (settings || {});
@@ -967,7 +967,7 @@ if (settingsSchema === "portalFace") {
   if (settingsSchema === "robinSinepulseFace" && typeof nodeGraphRobinSinepulseFaceSettingsForNode === "function") {
     return nodeGraphRobinSinepulseFaceSettingsForNode(node);
   }
-  if (settingsSchema === "roundShapeFace" || settingsSchema === "basicShapeFace") {
+  if (settingsSchema === "roundShapeFace" || settingsSchema === "basicShapeFace" || settingsSchema === "blitFace") {
     return typeof nodeGraphRoundShapeFaceSettingsForNode === "function"
       ? nodeGraphRoundShapeFaceSettingsForNode(node)
       : (typeof normalizeNodeGraphRoundShapeFaceSettings === "function"
@@ -2348,7 +2348,7 @@ function syncNodeGraphHslLampWidgets(popover = document.getElementById("nodeTrac
   const formType = typeof nodeGraphTraceDisplaySettingsFormType === "function"
     ? nodeGraphTraceDisplaySettingsFormType()
     : "";
-  const shape = formType === "roundShapeFace" || formType === "basicShapeFace" || formType === "sinCosFace" || formType === "clockFace" || formType === "clockDividerFace" || formType === "pulseExplosionFace" || formType === "pulseTrainFace" || formType === "robinSinepulseFace" || formType === "plotFace";
+  const shape = formType === "roundShapeFace" || formType === "basicShapeFace" || formType === "blitFace" || formType === "sinCosFace" || formType === "clockFace" || formType === "clockDividerFace" || formType === "pulseExplosionFace" || formType === "pulseTrainFace" || formType === "robinSinepulseFace" || formType === "plotFace";
   if (!popover || !shape) {
     return;
   }

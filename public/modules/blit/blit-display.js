@@ -151,6 +151,16 @@ function nodeGraphBlitReadPhase(nodeId, node, section) {
   return Number.NaN;
 }
 
+/** Repaint this node's BLIT face after its Display Settings change. */
+function applyNodeGraphBlitDisplaySettingsToFace(node) {
+  if (!node?.id) return;
+  const el = document.querySelector?.(`.node-blit-display[data-node="${CSS.escape(String(node.id))}"]`);
+  if (!el) return;
+  el._blitForceDraw = true;
+  el._blitLaidOut = false;
+  drawNodeGraphBlitDisplay(el);
+}
+
 function drawNodeGraphBlitDisplay(section) {
   try {
     drawNodeGraphBlitDisplayInner(section);

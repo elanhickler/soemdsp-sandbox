@@ -2088,7 +2088,7 @@ function buildNodeGraphDisplaySettingsBodyHtml(formType, node = null) {
     if ((type === "vectorDot" || type === "pulseDot") && section === "dot1") {
       continue;
     }
-    if ((type === "roundShapeFace" || type === "basicShapeFace" || type === "sinCosFace" || type === "clockFace" || type === "clockDividerFace" || type === "pulseExplosionFace" || type === "pulseTrainFace" || type === "robinSinepulseFace" || type === "plotFace") && section === "dot1") {
+    if ((type === "roundShapeFace" || type === "basicShapeFace" || type === "blitFace" || type === "sinCosFace" || type === "clockFace" || type === "clockDividerFace" || type === "pulseExplosionFace" || type === "pulseTrainFace" || type === "robinSinepulseFace" || type === "plotFace") && section === "dot1") {
       continue;
     }
 
@@ -2104,7 +2104,7 @@ function buildNodeGraphDisplaySettingsBodyHtml(formType, node = null) {
         (key) => activeFields.has(key) && allowKey("fields", key),
       );
     }
-    if ((type === "roundShapeFace" || type === "basicShapeFace" || type === "sinCosFace" || type === "clockFace" || type === "clockDividerFace" || type === "pulseExplosionFace" || type === "pulseTrainFace") && section === "waterfall") {
+    if ((type === "roundShapeFace" || type === "basicShapeFace" || type === "blitFace" || type === "sinCosFace" || type === "clockFace" || type === "clockDividerFace" || type === "pulseExplosionFace" || type === "pulseTrainFace") && section === "waterfall") {
       fieldKeys = [
         "lineThickness",
         "lineSmoothing",
@@ -2126,7 +2126,7 @@ function buildNodeGraphDisplaySettingsBodyHtml(formType, node = null) {
     let colorKeys = (sectionControls.colors || []).filter(
       (key) => activeColors.has(key) && allowKey("colors", key),
     );
-    if ((type === "roundShapeFace" || type === "basicShapeFace" || type === "sinCosFace" || type === "clockFace" || type === "clockDividerFace" || type === "pulseExplosionFace" || type === "pulseTrainFace" || type === "robinSinepulseFace" || type === "plotFace") || type === "vectorDot" || type === "pulseDot" || type === "lcdDot" || type === "value") {
+    if ((type === "roundShapeFace" || type === "basicShapeFace" || type === "blitFace" || type === "sinCosFace" || type === "clockFace" || type === "clockDividerFace" || type === "pulseExplosionFace" || type === "pulseTrainFace" || type === "robinSinepulseFace" || type === "plotFace") || type === "vectorDot" || type === "pulseDot" || type === "lcdDot" || type === "value") {
       colorKeys = [];
     }
     if (type === "waterfall" && isStereoWaterfallNode) {
@@ -2435,13 +2435,13 @@ function buildNodeGraphDisplaySettingsBodyHtml(formType, node = null) {
         rows.push(nodeGraphStampPreviewHtml(false, type));
         continue;
       }
-      if ((type === "roundShapeFace" || type === "basicShapeFace" || type === "sinCosFace")
+      if ((type === "roundShapeFace" || type === "basicShapeFace" || type === "blitFace" || type === "sinCosFace")
         && (key === "lineBrightness" || key === "dotBrightness" || key === "backgroundBrightness")) {
         continue;
       }
       rows.push(nodeGraphDisplaySettingsBuildStepperRowHtml(key, type));
     }
-    if ((type === "roundShapeFace" || type === "basicShapeFace" || type === "sinCosFace" || type === "clockFace" || type === "clockDividerFace" || type === "pulseExplosionFace" || type === "pulseTrainFace") && section === "waterfall") {
+    if ((type === "roundShapeFace" || type === "basicShapeFace" || type === "blitFace" || type === "sinCosFace" || type === "clockFace" || type === "clockDividerFace" || type === "pulseExplosionFace" || type === "pulseTrainFace") && section === "waterfall") {
       // Background first, then Line, then Dot (same order as every other display).
       // Clock: Background, Pulse (line), Playhead (dot), Fill, Start, Blink.
       // Clock Divider: Background, Ring (line), Count (dot), Tick (start), Fire (blink).

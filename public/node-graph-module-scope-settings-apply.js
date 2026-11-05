@@ -133,7 +133,11 @@ function assignNodeGraphTypedDisplaySettingsToNode(node, displayType, settings) 
     node.traceDisplaySettings = typeof normalizeNodeGraphRoundShapeFaceSettings === "function"
       ? normalizeNodeGraphRoundShapeFaceSettings(settings)
       : (settings || {});
-    if (displayType === "basicShapeFace" || displayType === "blitFace"
+    if (displayType === "blitFace") {
+      if (typeof applyNodeGraphBlitDisplaySettingsToFace === "function") {
+        applyNodeGraphBlitDisplaySettingsToFace(node);
+      }
+    } else if (displayType === "basicShapeFace"
       && typeof applyNodeGraphBasicShapeDisplaySettingsToFace === "function") {
       applyNodeGraphBasicShapeDisplaySettingsToFace(node);
     } else if (typeof applyNodeGraphRoundShapeDisplaySettingsToFace === "function") {
