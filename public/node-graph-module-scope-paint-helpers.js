@@ -1324,6 +1324,8 @@ function nodeGraphOutputInkNowMs() {
 let nodeGraphOutputMarksHoldUntil = 0;
 let nodeGraphOutputPauseHeld = false;
 let nodeGraphOutputPauseFadeUntil = 0;
+let nodeGraphOutputProtectHeld = false;
+let nodeGraphOutputProtectFadeUntil = 0;
 
 function nodeGraphOutputInkWantsFrames() {
   if ((nodeGraphFiniteNumber(globalThis.nodeGraphOutputProtectMute)) > 0.001) {
@@ -1333,7 +1335,15 @@ function nodeGraphOutputInkWantsFrames() {
     return true;
   }
   const now = nodeGraphOutputInkNowMs();
-  return now < nodeGraphOutputMarksHoldUntil || now < nodeGraphOutputPauseFadeUntil;
+  return now < nodeGraphOutputMarksHoldUntil
+    || now < nodeGraphOutputPauseFadeUntil
+    || now < nodeGraphOutputProtectFadeUntil;
+}
+
+function nodeGraphOutputHoldFadeUntil(until) {
+  if (until > nodeGraphOutputMarksHoldUntil) {
+    nodeGraphOutputMarksHoldUntil = until;
+  }
 }
 
 function nodeGraphOutputBeginPauseFade() {
@@ -1343,9 +1353,18 @@ function nodeGraphOutputBeginPauseFade() {
   nodeGraphOutputPauseHeld = false;
   const until = nodeGraphOutputInkNowMs() + NODE_GRAPH_OUTPUT_PAUSE_FADE_MS;
   nodeGraphOutputPauseFadeUntil = until;
-  if (until > nodeGraphOutputMarksHoldUntil) {
-    nodeGraphOutputMarksHoldUntil = until;
+  nodeGraphOutputHoldFadeUntil(until);
+}
+
+/** Heat (protect) mute often snaps 1?0. Keep a timed fade so stamps can cascade. */
+function nodeGraphOutputBeginProtectFade() {
+  if (!nodeGraphOutputProtectHeld) {
+    return;
   }
+  nodeGraphOutputProtectHeld = false;
+  const until = nodeGraphOutputInkNowMs() + NODE_GRAPH_OUTPUT_PAUSE_FADE_MS;
+  nodeGraphOutputProtectFadeUntil = until;
+  nodeGraphOutputHoldFadeUntil(until);
 }
 
 function nodeGraphOutputHoldContext(canvas) {
@@ -1465,12 +1484,24 @@ function nodeGraphOutputInkMarks(target, slot) {
   const mute = Math.max(0, Math.min(1, nodeGraphFiniteNumber(globalThis.nodeGraphOutputProtectMute)));
   if (mute >= NODE_GRAPH_OUTPUT_PROTECT_SOLID_MUTE) {
     target._outputProtectWasSolid = true;
+    nodeGraphOutputProtectHeld = true;
+    nodeGraphOutputProtectFadeUntil = 0;
     marks.push(["protect", 1]);
-  } else if (mute > 0.001 && target._outputProtectWasSolid) {
-    marks.push(["protect", mute]);
-    bake = true;
   } else {
+    // Mute may snap to 0 when protection clears ? still run a timed fade so the
+    // heat mark burns into the waterfall and scrolls away (same as pause).
+    if (target._outputProtectWasSolid || nodeGraphOutputProtectHeld) {
+      nodeGraphOutputBeginProtectFade();
+    }
     target._outputProtectWasSolid = false;
+    if (nodeGraphOutputProtectFadeUntil > now) {
+      const fade = Math.max(0, Math.min(1, (nodeGraphOutputProtectFadeUntil - now) / NODE_GRAPH_OUTPUT_PAUSE_FADE_MS));
+      const alpha = mute > 0.001 ? Math.max(mute, fade) : fade;
+      marks.push(["protect", alpha]);
+      bake = true;
+    } else {
+      nodeGraphOutputProtectFadeUntil = 0;
+    }
   }
   target._outputProtectLastMute = mute;
   target._outputInkBake = bake;

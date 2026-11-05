@@ -1818,7 +1818,6 @@ function nodeGraphWaterfallFaceBlur(settings) {
 
 function nodeGraphWaterfallFinishOutputInk(spec, context, canvas, scrollPx) {
   void context;
-  void scrollPx;
   const face = spec?.canvas || canvas;
   if (typeof paintNodeGraphFaceInkOverlay !== "function") {
     return;
@@ -1831,8 +1830,14 @@ function nodeGraphWaterfallFinishOutputInk(spec, context, canvas, scrollPx) {
   const inked = paintNodeGraphFaceInkOverlay(face, spec?.slot, spec?.settings, spec?.density, {
     rmsDbGuides: Boolean(def?.rmsDbGuides) && !spec?.cold,
   });
-  // Fade frames burn the mark into the history, then re-present.
+  // Fade frames burn the mark into the history, then re-present. If this
+  // frame had no audio scroll, nudge 1px so pause/heat cascade instead of
+  // stacking in place while the overlay fades.
   if (inked?._outputInkBake && typeof nodeGraphWaterfallGlStampInk === "function") {
+    const scrolled = Math.round(Number(scrollPx) || 0);
+    if (!(scrolled >= 1) && typeof nodeGraphWaterfallGlScroll === "function") {
+      nodeGraphWaterfallGlScroll(face, 1, spec?.bg || "#000000");
+    }
     nodeGraphWaterfallGlStampInk(face);
     nodeGraphWaterfallGlPresent(face, spec?.bg || "#000000");
   }
@@ -2132,14 +2137,17 @@ function nodeGraphWaterfallPaint(spec) {
   };
 
   const frozen = typeof scopePaintIsFrozen === "function" && scopePaintIsFrozen();
-  // Transport pause holds the plate. The first playing frame drops the cursor:
-  // leaving lastAbs glued at the pre-pause absolute frame made the undrawn
-  // count stay 0 after Play, so Output and Vibrato looked stuck in pause.
-  // History-at-0 is not a transport hold and must not clear the cursor.
+  // Transport pause holds the plate. On Play, eat samples that arrived while
+  // paused (cursor = absEnd) so we do not burst-scroll a full face and dump
+  // pause/heat fade stamps in one frame. NaN used to re-window the recent
+  // buffer and wipe the cascade. History-at-0 is not a transport hold.
   if (frozen) st.transportHeld = true;
   if (!frozen && st.transportHeld) {
     st.transportHeld = false;
-    st.lastAbs = Number.NaN;
+    const absEnd = typeof nodeGraphWaterfallAbsEnd === "function"
+      ? nodeGraphWaterfallAbsEnd(live)
+      : Number.NaN;
+    st.lastAbs = Number.isFinite(absEnd) ? absEnd : Number.NaN;
     st.frac = 0;
     st.colPx = 0;
     st.pxCarry = 0;
