@@ -49,16 +49,44 @@ function nodeGraphBlitSampleRate() {
   return 48000;
 }
 
-/** Ideal integrated BLIT = Si bandlimited saw/square (no leak). */
+/**
+ * Harmonic count the engine plays (blit.cpp v6): Mf = max(1, Nyquist/f - 1)
+ * harmonics, the top one faded by the fractional part. { lo, frac, top }.
+ */
+function nodeGraphBlitHarmonicCount(sr, f) {
+  const nyquistIndex = (Math.max(1, Number(sr) || 48000) * 0.5) / Math.max(1e-9, Math.abs(Number(f) || 0));
+  const mf = Math.min(1048576, Math.max(1, nyquistIndex - 1));
+  const lo = Math.floor(mf);
+  const frac = mf - lo;
+  return { lo, frac, top: frac > 0 ? lo + 1 : lo };
+}
+
+/** Ideal integrated BLIT = Si bandlimited saw/square (no leak), engine's fading count. */
 function nodeGraphBlitMathCycle(params, count) {
   const n = Math.max(16, count | 0);
   const sr = nodeGraphBlitSampleRate();
   const f = Math.max(1e-6, Math.abs(nodeGraphFiniteNumber(params.frequency, 100)));
   const amp = Number.isFinite(params.amplitude) ? params.amplitude : 1;
   const waveform = Math.max(0, Math.min(4, Math.round(nodeGraphFiniteNumber(params.waveform, 0))));
-  const N = typeof nodeGraphMathSawHarmonics === "function"
-    ? nodeGraphMathSawHarmonics(sr, f)
-    : Math.max(1, Math.floor((sr * 0.5) / f));
+  const { lo, frac } = nodeGraphBlitHarmonicCount(sr, f);
+  // The engine crossfades the lo and lo+1 kernels; the integral of that is
+  // the same crossfade of the two closed-form cycles.
+  const lower = nodeGraphBlitMathCycleAt(waveform, lo, n);
+  let samples = lower;
+  if (frac > 0 && waveform !== 4) {
+    const upper = nodeGraphBlitMathCycleAt(waveform, lo + 1, n);
+    samples = new Float64Array(n);
+    for (let i = 0; i < n; i += 1) samples[i] = lower[i] + (upper[i] - lower[i]) * frac;
+  }
+  if (typeof nodeGraphMathNormalizePeak === "function") nodeGraphMathNormalizePeak(samples, 1.15);
+  if (amp !== 1) {
+    for (let i = 0; i < n; i += 1) samples[i] *= amp;
+  }
+  return samples;
+}
+
+/** One cycle at a whole harmonic count N (closed-form Si sums). */
+function nodeGraphBlitMathCycleAt(waveform, N, n) {
   let samples;
   if (waveform === 4) {
     samples = new Float64Array(n);
@@ -85,10 +113,6 @@ function nodeGraphBlitMathCycle(params, count) {
     samples = typeof nodeGraphMathGibbsSawCycle === "function"
       ? nodeGraphMathGibbsSawCycle(N, n)
       : new Float64Array(n);
-  }
-  if (typeof nodeGraphMathNormalizePeak === "function") nodeGraphMathNormalizePeak(samples, 1.15);
-  if (amp !== 1) {
-    for (let i = 0; i < n; i += 1) samples[i] *= amp;
   }
   return samples;
 }
@@ -224,9 +248,7 @@ function drawNodeGraphBlitDisplayInner(section) {
 
   const sr = nodeGraphBlitSampleRate();
   const f = Math.max(1e-6, Math.abs(frequency));
-  const harmonics = typeof nodeGraphMathSawHarmonics === "function"
-    ? nodeGraphMathSawHarmonics(sr, f)
-    : Math.max(1, Math.floor((sr * 0.5) / f));
+  const harmonics = nodeGraphBlitHarmonicCount(sr, f).top;
   const count = typeof nodeGraphMathCycleSampleCount === "function"
     ? nodeGraphMathCycleSampleCount(innerW, harmonics)
     : Math.max(64, Math.min(120000, Math.ceil(Math.max(innerW * 8, Math.min(harmonics, innerW) * 24))));

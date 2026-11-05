@@ -69,8 +69,8 @@ const NodeGraphFaceInk = Object.freeze({
   unit: "#7fc7d9",
   // Position handle on row cells: the generic slider handle's size and shape, face palette color.
   handle: "#1c334c", // = cellValueFill: row handles match the column fill
-  // Live MOD ghost (the generic slider's --node-slider-ghost-color): a ghost
-  // handle at the modulated value, a translucent overlay on a switch slot.
+  // Live MOD ghost (the generic slider's --node-slider-ghost-color): vertical
+  // cells fill bottom/mid→ghost position; switches/horizontal keep a handle overlay.
   ghost: "rgba(199, 140, 255, 0.38)",
   hpf: "#ffb0a0",
   lpf: "#9ec0ff",
@@ -1172,17 +1172,22 @@ function nodeGraphModuleFaceDrawGl(batch, el, w, ox, oy, z) {
         nodeGraphModuleFaceText(batch, wd.label, ox + (wd.x + gap + 6) * z, oy + cy * z, 12.6 * z, ink.label, { align: "left" });
         nodeGraphModuleFaceValueRun(batch, input, ox + (wd.x + wd.w - 6) * z, oy + cy * z, 13.8 * z, ink.value, { align: "right" });
       } else {
+        // Ghost fill first (under), then the real fill on top so the live value
+        // stays readable where they overlap. Same geometry as the real fill:
+        // unipolar bottom→position, bipolar mid→position.
+        if (Number.isFinite(tg)) {
+          if (wd.bipolar) {
+            const a = Math.min(0.5, 1 - tg);
+            rect(wd.x + gap, top + a * ch, cw, Math.abs(0.5 - tg) * ch, ink.ghost);
+          } else {
+            rect(wd.x + gap, top + (1 - tg) * ch, cw, tg * ch, ink.ghost);
+          }
+        }
         if (wd.bipolar) {
           const a = Math.min(0.5, 1 - t);
           rect(wd.x + gap, top + a * ch, cw, Math.abs(0.5 - t) * ch, ink.cellValueFill);
         } else {
           rect(wd.x + gap, top + (1 - t) * ch, cw, t * ch, ink.cellValueFill);
-        }
-        // Ghost handle, vertical: a bar across the cell at the modulated height
-        // (the modulation range is unknown, so no range band).
-        if (Number.isFinite(tg)) {
-          const hv = Math.min(NODE_GRAPH_FACE_CELL_HANDLE_HALF_PX * 0.5, ch * 0.25);
-          rect(wd.x + gap, top + (1 - tg) * Math.max(0, ch - 2 * hv), cw, 2 * hv, ink.ghost);
         }
         nodeGraphModuleFaceText(batch, wd.label, ox + cx * z, oy + (cy - 7) * z, 12.6 * z, ink.label, { maxWidth: (cw - 4) * z });
         nodeGraphModuleFaceValueRun(batch, input, ox + cx * z, oy + (cy + 7) * z, 13.8 * z, ink.value, { maxWidth: (cw - 4) * z });
