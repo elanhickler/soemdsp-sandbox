@@ -364,6 +364,15 @@
       "folder": "hyperpluck"
     },
     {
+      "slug": "livedemos/chaosfly",
+      "label": "chaosfly",
+      "name": "",
+      "url": "/soemdsp-sandbox/patches/livedemos/chaosfly.json",
+      "author": "",
+      "emoji": "",
+      "folder": "livedemos"
+    },
+    {
       "slug": "livedemos/earlyreflections",
       "label": "earlyreflections",
       "name": "",
@@ -548,6 +557,14 @@
       "emoji": ""
     },
     {
+      "slug": "chaosfly",
+      "label": "chaosfly",
+      "name": "",
+      "url": "/soemdsp-sandbox/patches/livedemos/chaosfly.json",
+      "author": "",
+      "emoji": ""
+    },
+    {
       "slug": "chaosfly_high_freq",
       "label": "chaosfly_high_freq",
       "name": "",
@@ -560,14 +577,6 @@
       "label": "chaosfly_lowfreq",
       "name": "",
       "url": "/soemdsp-sandbox/patches/chaosfly_lowfreq.json",
-      "author": "",
-      "emoji": ""
-    },
-    {
-      "slug": "chaosfly_lowfreq2",
-      "label": "chaosfly_lowfreq2",
-      "name": "",
-      "url": "/soemdsp-sandbox/patches/chaosfly_lowfreq2.json",
       "author": "",
       "emoji": ""
     },
