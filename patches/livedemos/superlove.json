@@ -1017,21 +1017,21 @@
           "source": "pointer",
           "gate": 0,
           "gatePulse": 0,
-          "x": 0.3227969348659004,
-          "y": 0.6258572517145035,
-          "velocity": 0.8221581350996177,
-          "keyIndex": 24,
-          "keyQuantized": 0.3157894736842105,
-          "rawMidi": 41,
+          "x": 0.6662811358074358,
+          "y": 0.9471290505969301,
+          "velocity": 1,
+          "keyIndex": 50,
+          "keyQuantized": 0.6578947368421053,
+          "rawMidi": 67,
           "octave": 0,
-          "midi": 41,
-          "pitch": "F1",
-          "pitchValue": 41,
-          "midiNormalized": 0.3228346456692913,
-          "tenthVoltPerOctave": 0.3416666666666667,
-          "frequency": 87.30705785825097
+          "midi": 67,
+          "pitch": "G3",
+          "pitchValue": 67,
+          "midiNormalized": 0.5275590551181102,
+          "tenthVoltPerOctave": 0.5583333333333333,
+          "frequency": 391.99543598174927
         },
-        "hideKeyboardInfo": false,
+        "hideKeyboardInfo": true,
         "blackKeyWidth": 10,
         "blackKeyHeight": 62,
         "keyLabels": "name"
@@ -1042,7 +1042,7 @@
         "displayHeightOffsetGu": 0,
         "displayModeKey": "",
         "ioHidden": false,
-        "hideUnused": false,
+        "hideUnused": true,
         "modRailAlwaysOn": false,
         "interfaceControlsHidden": false,
         "interfaceControlsForceShow": false,
@@ -1051,8 +1051,8 @@
         "oscilloscopeForceShow": false,
         "slidersHidden": false,
         "slidersForceShow": false,
-        "titleHidden": false,
-        "displayHeightGu": 4
+        "titleHidden": true,
+        "displayHeightGu": 3
       },
       "chordMemory": {
         "slots": {}
@@ -1439,7 +1439,7 @@
     },
     {
       "gx": -27,
-      "gy": 6,
+      "gy": 4,
       "id": "keyboardController-1",
       "paramMeta": {},
       "params": {},
@@ -1631,7 +1631,7 @@
   "view": {
     "heightGu": 24,
     "widthGu": 48,
-    "zoom": 0.8928571428571433,
+    "zoom": 1.1200000000000017,
     "gridVisible": true,
     "gridLightVisible": true,
     "wireLengthsVisible": true,
