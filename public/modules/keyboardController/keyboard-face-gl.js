@@ -494,8 +494,10 @@ function nodeGraphMidiKeyboardGlDraw(batch, surface, x, y, w, h) {
   if (model.labels !== "off" && typeof nodeGraphGlLinesText === "function") {
     const units = Math.max(1, model.totalUnits);
     // Old per-key label sizes: 17.560976cqi / units (white), 14.146342cqi / units (black).
-    const whitePx = (0.17560976 * geom.w / units) * sx;
-    const blackPx = (0.14146342 * geom.w / units) * sx;
+    // Label size setting (percent); the maxWidth below still shrinks a label to its key.
+    const sizeK = Math.max(0.5, Math.min(4, (Number(model.keys[0]?.surface?.dataset?.keyLabelSize) || 100) / 100));
+    const whitePx = (0.17560976 * geom.w / units) * sx * sizeK;
+    const blackPx = (0.14146342 * geom.w / units) * sx * sizeK;
     const textOpts = typeof nodeGraphGlGraphTextOpts === "function" ? nodeGraphGlGraphTextOpts : (o) => o;
     for (const key of model.keys) {
       const r = geom.rects.get(key);

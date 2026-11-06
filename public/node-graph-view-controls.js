@@ -2566,6 +2566,7 @@ function normalizeNodeGraphKeyboardControllerFaceSettings(raw) {
     if (has("blackKeyWidth")) out.blackKeyWidth = layout.blackKeyWidth;
     if (has("blackKeyHeight")) out.blackKeyHeight = layout.blackKeyHeight;
     if (has("keyLabels")) out.keyLabels = layout.keyLabels;
+    if (has("keyLabelSize")) out.keyLabelSize = layout.keyLabelSize;
   }
   return out;
 }

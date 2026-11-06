@@ -11,6 +11,7 @@ const nodeGraphMidiKeyboardLayoutDefaults = Object.freeze({
   blackKeyHeight: 62,
   keyboardHeight: 112,
   keyLabels: "name",
+  keyLabelSize: 100,
   hideKeyboardInfo: true,
 });
 
@@ -29,6 +30,8 @@ function normalizeNodeGraphMidiKeyboardLayout(raw = {}) {
     blackKeyHeight: clamp(source.blackKeyHeight, 28, 82, nodeGraphMidiKeyboardLayoutDefaults.blackKeyHeight),
     keyboardHeight: clamp(source.keyboardHeight, 48, 220, nodeGraphMidiKeyboardLayoutDefaults.keyboardHeight),
     keyLabels: normalizeNodeGraphMidiKeyboardKeyLabels(source.keyLabels),
+    // Percent of the old per-key label size; labels still shrink to fit the key.
+    keyLabelSize: clamp(source.keyLabelSize, 50, 400, nodeGraphMidiKeyboardLayoutDefaults.keyLabelSize),
     hideKeyboardInfo: source.hideKeyboardInfo === false ? false : true,
   };
 }
@@ -127,6 +130,7 @@ function applyNodeGraphMidiKeyboardLayoutBody() {
       s.blackKeyHeight,
       s.keyboardHeight,
       s.keyLabels,
+      s.keyLabelSize,
       s.hideKeyboardInfo ? 1 : 0,
       inModuleFace ? 1 : 0,
       Math.round(available),
@@ -158,6 +162,10 @@ function applyNodeGraphMidiKeyboardLayoutBody() {
       surface.style.maxWidth = "100%";
     }
     surface.dataset.keyLabels = s.keyLabels;
+    surface.dataset.keyLabelSize = String(s.keyLabelSize);
+    if (typeof nodeGraphMidiKeyboardRequestPaint === "function") {
+      nodeGraphMidiKeyboardRequestPaint();
+    }
     if (inModuleFace) {
       surface.style.removeProperty("--midi-keyboard-piano-height");
       surface.style.height = "100%";
@@ -372,6 +380,10 @@ function buildNodeGraphKeyboardControllerFaceDisplaySettingsBodyHtml() {
           <option value="name"${s.keyLabels === "name" ? " selected" : ""}>MIDI note name</option>
           <option value="number"${s.keyLabels === "number" ? " selected" : ""}>MIDI note number</option>
         </select>
+      </label>
+      <label class="node-trace-display-line-burn-row">
+        <span>Label size</span>
+        <input type="range" min="50" max="400" step="5" data-midi-key-layout="keyLabelSize" value="${s.keyLabelSize}" aria-label="Key label size">
       </label>
     </div>`;
 }
