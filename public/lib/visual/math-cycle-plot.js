@@ -233,8 +233,8 @@ function nodeGraphMathCycleClinicalGeom(samples, mapX, mapY, cssW, strokeW, colo
     const raw = Float32Array.from(seg);
     // Arc-length respacing at the samples' own density (as AA Blur draws:
     // no thinning, so ripples denser than a pixel keep their points).
-    const pts = typeof nodeGraphClinicalLineAdaptPoints === "function"
-      ? nodeGraphClinicalLineAdaptPoints(raw, Math.max(32, Math.ceil(cssW * 2), raw.length / 2))
+    const pts = typeof nodeGraphGlLinesAdaptPoints === "function"
+      ? nodeGraphGlLinesAdaptPoints(raw, Math.max(32, Math.ceil(cssW * 2), raw.length / 2))
       : raw;
     polylines.push({ points: pts, color, width: strokeW });
     seg = [];

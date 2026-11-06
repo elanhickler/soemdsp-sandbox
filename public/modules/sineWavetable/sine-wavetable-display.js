@@ -248,9 +248,9 @@ function drawNodeGraphSinCos4DisplayInner(section) {
   const phase = nodeGraphSinCos4ReadPhase(nodeId, node, section);
 
   // CSS-pixel plate, then a centered unit square (0…1) so F scales cleanly.
-  if (typeof nodeGraphClinicalLineGlPresent !== "function") {
+  if (typeof nodeGraphGlLinesPresentFrame !== "function") {
     if (typeof nodeGraphDisplayGlFailed === "function") {
-      nodeGraphDisplayGlFailed(canvas, "clinical line missing");
+      nodeGraphDisplayGlFailed(canvas, "line renderer missing");
     }
     section._sinCos4ForceDraw = false;
     return;
@@ -266,7 +266,7 @@ function drawNodeGraphSinCos4DisplayInner(section) {
   const stroke = look.stroke;
   const tipR = look.tip;
   const hubR = look.hub;
-  // Full stroke width in CSS px (clinical Present takes width, not half).
+  // Full stroke width in CSS px (PresentFrame takes width, not half).
   const rayW = Math.max(0.5, stroke * side);
   const ringW = Math.max(0.5, look.ringStroke * side);
   // Display Settings > Line blur (lineSmoothing, CSS px skirt) drives the drawer blur.
@@ -315,7 +315,7 @@ function drawNodeGraphSinCos4DisplayInner(section) {
   });
 
   // Face canvas size already set by nodeGraphDisplayCanvasSize*; Present reads canvas.width.
-  nodeGraphClinicalLineGlPresent(canvas, {
+  nodeGraphGlLinesPresentFrame(canvas, {
     cssWidth: cssW,
     cssHeight: cssH,
     background: "#05060a",

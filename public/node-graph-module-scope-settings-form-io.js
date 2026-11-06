@@ -308,6 +308,16 @@ function nodeGraphDisplaySettingsWriteToggleElement(el, on) {
   el.classList?.toggle?.("is-off", !on);
 }
 
+// Per-module hypersawBurn defaults for the node the settings form is editing.
+function nodeGraphHypersawBurnFormTargetDefaults() {
+  if (typeof nodeGraphHypersawBurnDefaultsForModuleType !== "function") return null;
+  const id = typeof nodeGraphTraceDisplaySettingsTargetNodeId === "function"
+    ? nodeGraphTraceDisplaySettingsTargetNodeId()
+    : "";
+  const node = id && typeof nodeGraphPatchNode === "function" ? nodeGraphPatchNode(id) : null;
+  return nodeGraphHypersawBurnDefaultsForModuleType(node?.type);
+}
+
 function nodeGraphDisplaySettingsDefaultsForFormType(type = nodeGraphTraceDisplaySettingsFormType()) {
   // scope2d / phosphorLight Defaults: one schema SSOT for every module that
   // shares that face type (Lorenz, snowflake, Jerobeam, standalone scope2d…).
@@ -534,7 +544,7 @@ if (type === "portalFace") {
   }
   if (type === "hypersawBurn") {
     return typeof normalizeNodeGraphHypersawBurnSettings === "function"
-      ? normalizeNodeGraphHypersawBurnSettings()
+      ? normalizeNodeGraphHypersawBurnSettings({}, nodeGraphHypersawBurnFormTargetDefaults())
       : { lineThickness: 0.01, lineThicknessFace01: true };
   }
   if (type === "ensembleCloud") {
@@ -807,7 +817,7 @@ if (type === "portalFace") {
   }
   if (type === "hypersawBurn") {
     return typeof normalizeNodeGraphHypersawBurnSettings === "function"
-      ? normalizeNodeGraphHypersawBurnSettings(settings)
+      ? normalizeNodeGraphHypersawBurnSettings(settings, nodeGraphHypersawBurnFormTargetDefaults())
       : (settings || { lineThickness: 0.01, lineThicknessFace01: true });
   }
   if (type === "ensembleCloud") {
@@ -1861,6 +1871,7 @@ function nodeGraphWriteTraceDisplaySettingsFormInner(settings) {
       input.value = String(nodeGraphDisplaySettingsFormValue(normalized, key) ?? "");
     }
   }
+  if (typeof nodeGraphDisplaySettingsSyncSwitches === "function") nodeGraphDisplaySettingsSyncSwitches(root);
   if (nodeGraphDisplaySettingsFormTypeUsesGradient(formType)) {
     const editor = typeof NodeGraphGradientSelector !== "undefined"
       ? NodeGraphGradientSelector.getActive?.()

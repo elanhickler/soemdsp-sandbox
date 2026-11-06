@@ -195,6 +195,56 @@ function nodeGraphAssertJackListsDisjoint(signalPorts, dataPorts, where) {
   }
 }
 
+/**
+ * Patch channel count (Command Center "Channels"), shared by the Output and
+ * Audio Input modules: 1 = Mono only, 2 = Mono / Left / Right (default),
+ * 3..8 add jacks 3..N. Stored on the Output module (outputChannels); Audio
+ * Input follows it. A jack that has a cable stays shown at any count, so
+ * older patches keep their wires.
+ */
+const NODE_GRAPH_OUTPUT_MODULE_PORTS = Object.freeze(["Mono", "Left", "Right", "3", "4", "5", "6", "7", "8"]);
+
+function nodeGraphOutputModuleChannelCount(node) {
+  const n = Math.round(Number(node?.outputChannels));
+  return Number.isFinite(n) ? Math.min(8, Math.max(1, n)) : 2;
+}
+
+/** The patch's shared channel count (from its Output module; 2 without one). */
+function nodeGraphPatchChannelCount(patch = (typeof nodeGraphMvp !== "undefined" ? nodeGraphMvp?.patch : null)) {
+  const output = (patch?.nodes || []).find((node) => node?.type === "output");
+  return nodeGraphOutputModuleChannelCount(output);
+}
+
+function nodeGraphOutputModulePorts(node, side) {
+  const n = node?.type === "output" ? nodeGraphOutputModuleChannelCount(node) : nodeGraphPatchChannelCount();
+  const keep = new Set(n === 1 ? ["Mono"] : NODE_GRAPH_OUTPUT_MODULE_PORTS.slice(0, n + 1));
+  const id = node?.id;
+  const connections = typeof nodeGraphMvp !== "undefined" ? (nodeGraphMvp?.patch?.connections || []) : [];
+  for (const c of connections) {
+    if (side === "input" && c?.destinationNode === id) keep.add(String(c.destinationPort));
+    if (side === "output" && c?.sourceNode === id) keep.add(String(c.sourcePort));
+  }
+  return NODE_GRAPH_OUTPUT_MODULE_PORTS.filter((port) => keep.has(port));
+}
+
+/**
+ * Ports a cable may use (load, wiring, execution plan). The Output module's
+ * Outputs count only hides jacks on the face: all nine stay valid, so a
+ * patch never loses a cable to a hidden jack. Drawing uses the
+ * nodeGraphPatchNode*Ports lists (visible jacks).
+ */
+function nodeGraphPatchNodeValidInputPorts(node) {
+  const patchNode = typeof node === "string" ? nodeGraphPatchNode(node) : node;
+  return patchNode?.type === "output" ? NODE_GRAPH_OUTPUT_MODULE_PORTS.slice() : nodeGraphPatchNodeInputPorts(patchNode);
+}
+
+function nodeGraphPatchNodeValidOutputPorts(node) {
+  const patchNode = typeof node === "string" ? nodeGraphPatchNode(node) : node;
+  return patchNode?.type === "output" || patchNode?.type === "audioInput"
+    ? NODE_GRAPH_OUTPUT_MODULE_PORTS.slice()
+    : nodeGraphPatchNodeOutputPorts(patchNode);
+}
+
 function nodeGraphPatchNodeInputPorts(node) {
   const patchNode = typeof node === "string" ? nodeGraphPatchNode(node) : node;
   if (patchNode?.type === "script") {
@@ -205,6 +255,9 @@ function nodeGraphPatchNodeInputPorts(node) {
   }
   if (patchNode?.type === "canvas") {
     return normalizeNodeGraphCanvasScript(patchNode.canvasScript).inputs;
+  }
+  if (patchNode?.type === "output") {
+    return nodeGraphOutputModulePorts(patchNode, "input");
   }
   if (patchNode?.type === "screenSpaceShader") {
     return normalizeNodeGraphScreenSpaceShader(patchNode.screenSpaceShader).inputs;
@@ -245,6 +298,9 @@ function nodeGraphPatchNodeOutputPorts(node) {
     && typeof nodeGraphMetamoduleShellPorts === "function"
   ) {
     return nodeGraphMetamoduleShellPorts(patchNode).outputs;
+  }
+  if (patchNode?.type === "output" || patchNode?.type === "audioInput") {
+    return nodeGraphOutputModulePorts(patchNode, "output");
   }
   return nodeGraphModuleOutputPorts(patchNode?.type);
 }

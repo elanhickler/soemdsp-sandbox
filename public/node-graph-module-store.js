@@ -591,6 +591,12 @@ const nodeGraphModuleStoreCatalog = Object.freeze({
     label: "Ellipsoid",
     notes: ["ellipsoid", "getEllipsoid", "offset", "shape", "scale", "AA Off|Limit|Dither", "Robin dither", "stereo", "Left", "Right", "native", "oms"],
   },
+  stepRegister: {
+    category: "oscillator",
+    description: "Pitch on a coarse register grid with dither between steps to fake the notes in between, plus a drawn lane that turns it into a step sequencer.",
+    label: "Step Register",
+    notes: ["register", "divider", "chip", "dither", "step sequencer", "LFSR", "poly", "quantized pitch", "native"],
+  },
   basicShape: {
     category: "modulator",
     description: "Naive sine / tri / saw / square (no anti-aliasing) with PWM, a cheap 1D cycle+dot face, and RoundShape-style motion.",

@@ -385,7 +385,12 @@ function assignNodeGraphTypedDisplaySettingsToNode(node, displayType, settings) 
     return node.traceDisplaySettings;
   }
   if (displayType === "hypersawBurn") {
-    node.traceDisplaySettings = normalizeNodeGraphHypersawBurnSettings(settings);
+    node.traceDisplaySettings = normalizeNodeGraphHypersawBurnSettings(
+      settings,
+      typeof nodeGraphHypersawBurnDefaultsForModuleType === "function"
+        ? nodeGraphHypersawBurnDefaultsForModuleType(node?.type)
+        : null,
+    );
     return node.traceDisplaySettings;
   }
   if (
@@ -979,6 +984,8 @@ function applyNodeGraphTraceDisplaySettingsForm(options = {}) {
         || k === "timeMs"
         || k === "windowCycles"
         || k === "windowMode"
+        || k === "plotDraw"
+        || k === "barInk"
         || k === "pixelDensity"
         || k === "detail"
         || k === "scale";

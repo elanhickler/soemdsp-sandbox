@@ -572,8 +572,12 @@ function drawNodeGraphHypersawBurnGlItem(renderer, item, pixelRatio) {
   const look = typeof nodeGraphScopePhosphorLookDefaults !== "undefined"
     ? nodeGraphScopePhosphorLookDefaults
     : null;
-  const trail = clampNodeSliderValue(Number(look?.trail ?? 0.35), 0, 1);
-  const ghost = clampNodeSliderValue(Number(look?.ghost ?? 0.45), 0, 1);
+  // Trail / Ghost per module (Display settings); defaults = the shared look.
+  const fadeSettings = typeof nodeGraphHypersawBurnSettingsForNode === "function"
+    ? nodeGraphHypersawBurnSettingsForNode(patchNode)
+    : null;
+  const trail = clampNodeSliderValue(Number(fadeSettings?.trail ?? look?.trail ?? 0.3), 0, 1);
+  const ghost = clampNodeSliderValue(Number(fadeSettings?.ghost ?? look?.ghost ?? 0.25), 0, 1);
   const bgHex = typeof nodeGraphFacePlateBackground === "function"
     ? nodeGraphFacePlateBackground({ background: look?.background ?? "#000004" })
     : (look?.background ?? "#000004");

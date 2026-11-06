@@ -12787,6 +12787,7 @@ body.room-dimmer-on .node-room-dimmer-canvas,
 .node-graph-workspace.gl-graph-on .dsp-node .node-keypad-face *,
 .node-graph-workspace.gl-graph-on .dsp-node .node-knob-face *,
 .node-graph-workspace.gl-graph-on .dsp-node .acid-seq-face *,
+.node-graph-workspace.gl-graph-on .dsp-node .node-step-register-display,
 .node-graph-workspace.gl-graph-on .dsp-node:has(> .node-text-box-body),
 .node-graph-workspace.gl-graph-on .dsp-node:has(> .node-text-box-body) * {
   pointer-events: auto;
@@ -18635,6 +18636,84 @@ body.node-slider-dragging * {
   font-size: var(--metadata-field-name-size, 0.72rem);
 }
 
+/*
+ * Display Settings groups inside one section (1D Plot: Window / Signal / Line).
+ * A quiet label rule, lighter than .metadata-section-title.
+ */
+.node-trace-display-subsection-title {
+  display: block;
+  margin: 6px 0 1px;
+  color: color-mix(in srgb, var(--accent) 70%, var(--muted));
+  font-size: var(--metadata-field-name-size, 0.72rem);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+/* Switch row: label | segmented options (| side latch, e.g. Sync). */
+.node-trace-display-switch-cells {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 4px;
+  min-width: 0;
+  min-height: var(--ds-latch-h, var(--metadata-control-row-height, 22px));
+}
+
+.node-trace-display-switch-cells > .node-trace-display-switch {
+  grid-column: 1;
+  min-width: 0;
+}
+
+.node-trace-display-switch-cells > .node-trace-display-switch:only-child {
+  grid-column: 1 / -1;
+}
+
+.node-trace-display-switch-cells > .node-trace-display-switch-side {
+  grid-column: 2;
+  min-width: 52px;
+  border-radius: 3px;
+}
+
+/* Switch options: one text size per panel (field-label size), not the
+   latch's height-scaled size, so long options (Reconstructed) fit and every
+   switch row reads the same. */
+.node-trace-display-switch-option .app-latch-button-label,
+.node-trace-display-switch-side .app-latch-button-label {
+  font-size: var(--metadata-field-name-size, 0.72rem);
+}
+
+/* Plot panel: no per-row rules (the group labels separate it), bigger
+   numbers in taller rows, a full-width latch for Skip discontinuities. */
+.node-trace-display-settings-popover[data-display-settings-type="plotFace"] .node-trace-display-waterfall-section .node-trace-display-line-burn-row {
+  min-height: 27px;
+  border-bottom: 0;
+}
+
+.node-trace-display-settings-popover[data-display-settings-type="plotFace"] .node-trace-display-waterfall-section [data-trace-display-field] {
+  font-size: 1.05rem;
+}
+
+.node-trace-display-wide-latch-row {
+  --ds-latch-h: 26px;
+  margin: 3px 0;
+}
+
+.node-trace-display-wide-latch-row > .node-trace-display-wide-latch {
+  border-radius: 3px;
+}
+
+.node-trace-display-wide-latch .app-latch-button-label {
+  font-size: var(--metadata-field-name-size, 0.72rem);
+}
+
+/* Two steppers side by side (Line thickness | Line blur). */
+.node-trace-display-pair-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 0 8px;
+  min-width: 0;
+}
+
 .node-trace-display-line-burn-row.is-disabled {
   opacity: 0.45;
   pointer-events: none;
@@ -21788,6 +21867,18 @@ button#nodeScenePasteModuleSettings.settings-paste-mismatch {
 .scene-context-modular-view-controls .scene-context-window-button {
   border: 0;
   border-radius: 0;
+  /* Label only (no kbd column): one centred column, two lines when needed,
+     so Performance view [ F ] / Mini performance view [ Shift+F ] never clip. */
+  grid-template-columns: minmax(0, 1fr);
+  justify-items: center;
+}
+
+.scene-context-modular-view-controls .scene-context-window-button-label {
+  display: block;
+  padding: 0 4px;
+  white-space: normal;
+  text-align: center;
+  line-height: 1.1;
 }
 
 .scene-context-modular-view-controls .scene-context-window-button + .scene-context-window-button {

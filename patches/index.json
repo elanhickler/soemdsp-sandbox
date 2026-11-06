@@ -103,10 +103,10 @@
       "folder": "demo_patches"
     },
     {
-      "slug": "demo_patches/DSF brightness pluck",
-      "label": "DSF brightness pluck",
+      "slug": "demo_patches/DSF_brightness_pluck",
+      "label": "DSF_brightness_pluck",
       "name": "",
-      "url": "/soemdsp-sandbox/patches/demo_patches/DSF%20brightness%20pluck.json",
+      "url": "/soemdsp-sandbox/patches/demo_patches/DSF_brightness_pluck.json",
       "author": "",
       "emoji": "",
       "folder": "demo_patches"
@@ -220,15 +220,6 @@
       "folder": "demonstration"
     },
     {
-      "slug": "drums/kick using fcf",
-      "label": "kick using fcf",
-      "name": "",
-      "url": "/soemdsp-sandbox/patches/drums/kick%20using%20fcf.json",
-      "author": "",
-      "emoji": "",
-      "folder": "drums"
-    },
-    {
       "slug": "drums/kick_drum_attempt",
       "label": "kick_drum_attempt",
       "name": "",
@@ -242,6 +233,15 @@
       "label": "kick_drum_attempt_2",
       "name": "",
       "url": "/soemdsp-sandbox/patches/drums/kick_drum_attempt_2.json",
+      "author": "",
+      "emoji": "",
+      "folder": "drums"
+    },
+    {
+      "slug": "drums/kick_using_fcf",
+      "label": "kick_using_fcf",
+      "name": "",
+      "url": "/soemdsp-sandbox/patches/drums/kick_using_fcf.json",
       "author": "",
       "emoji": "",
       "folder": "drums"
@@ -274,10 +274,10 @@
       "folder": "drums"
     },
     {
-      "slug": "drums/soft clip toms",
-      "label": "soft clip toms",
+      "slug": "drums/soft_clip_toms",
+      "label": "soft_clip_toms",
       "name": "",
-      "url": "/soemdsp-sandbox/patches/drums/soft%20clip%20toms.json",
+      "url": "/soemdsp-sandbox/patches/drums/soft_clip_toms.json",
       "author": "",
       "emoji": "",
       "folder": "drums"
@@ -368,6 +368,15 @@
       "label": "chaosfly",
       "name": "",
       "url": "/soemdsp-sandbox/patches/livedemos/chaosfly.json",
+      "author": "",
+      "emoji": "",
+      "folder": "livedemos"
+    },
+    {
+      "slug": "livedemos/chaosflyjsfx",
+      "label": "chaosflyjsfx",
+      "name": "",
+      "url": "/soemdsp-sandbox/patches/livedemos/chaosflyjsfx.json",
       "author": "",
       "emoji": "",
       "folder": "livedemos"
@@ -581,6 +590,14 @@
       "emoji": ""
     },
     {
+      "slug": "chaosflyjsfx",
+      "label": "chaosflyjsfx",
+      "name": "",
+      "url": "/soemdsp-sandbox/patches/livedemos/chaosflyjsfx.json",
+      "author": "",
+      "emoji": ""
+    },
+    {
       "slug": "chorus_vs_ensemble",
       "label": "chorus_vs_ensemble",
       "name": "",
@@ -653,10 +670,10 @@
       "emoji": ""
     },
     {
-      "slug": "DSF brightness pluck",
-      "label": "DSF brightness pluck",
+      "slug": "DSF_brightness_pluck",
+      "label": "DSF_brightness_pluck",
       "name": "",
-      "url": "/soemdsp-sandbox/patches/demo_patches/DSF%20brightness%20pluck.json",
+      "url": "/soemdsp-sandbox/patches/demo_patches/DSF_brightness_pluck.json",
       "author": "",
       "emoji": ""
     },
@@ -805,14 +822,6 @@
       "emoji": ""
     },
     {
-      "slug": "kick using fcf",
-      "label": "kick using fcf",
-      "name": "",
-      "url": "/soemdsp-sandbox/patches/drums/kick%20using%20fcf.json",
-      "author": "",
-      "emoji": ""
-    },
-    {
       "slug": "kick_and_snare",
       "label": "kick_and_snare",
       "name": "",
@@ -833,6 +842,14 @@
       "label": "kick_drum_attempt_2",
       "name": "",
       "url": "/soemdsp-sandbox/patches/drums/kick_drum_attempt_2.json",
+      "author": "",
+      "emoji": ""
+    },
+    {
+      "slug": "kick_using_fcf",
+      "label": "kick_using_fcf",
+      "name": "",
+      "url": "/soemdsp-sandbox/patches/drums/kick_using_fcf.json",
       "author": "",
       "emoji": ""
     },
@@ -1229,18 +1246,18 @@
       "emoji": ""
     },
     {
-      "slug": "soft clip toms",
-      "label": "soft clip toms",
-      "name": "",
-      "url": "/soemdsp-sandbox/patches/drums/soft%20clip%20toms.json",
-      "author": "",
-      "emoji": ""
-    },
-    {
       "slug": "Soft_Asymmetrical_Sine",
       "label": "Soft_Asymmetrical_Sine",
       "name": "",
       "url": "/soemdsp-sandbox/patches/Soundemote_Softwave_prototypes/Soft_Asymmetrical_Sine.json",
+      "author": "",
+      "emoji": ""
+    },
+    {
+      "slug": "soft_clip_toms",
+      "label": "soft_clip_toms",
+      "name": "",
+      "url": "/soemdsp-sandbox/patches/drums/soft_clip_toms.json",
       "author": "",
       "emoji": ""
     },

@@ -143,9 +143,12 @@ function drawNodeGraphClockDividerFace(section) {
     } else if (i < count) {
       nodeGraphGlLinesDot(batch, x, y, g.r, smoothing, i === count - 1 ? tick : lit);
     } else {
-      nodeGraphGlLinesDot(batch, x, y, g.r, smoothing, ring);
-      const inner = g.r - Math.max(0.5, stroke);
-      if (inner > 0.5) nodeGraphGlLinesDot(batch, x, y, inner, smoothing, bg);
+      // Line thickness 0 = no ring outline on unlit dots.
+      if (stroke > 0) {
+        nodeGraphGlLinesDot(batch, x, y, g.r, smoothing, ring);
+        const inner = g.r - stroke;
+        if (inner > 0.5) nodeGraphGlLinesDot(batch, x, y, inner, smoothing, bg);
+      }
     }
   });
   if (!nodeGraphGlLinesEnd(batch, "alpha")) nodeGraphDisplayGlFailed(canvas, "clock divider face: GL present failed");

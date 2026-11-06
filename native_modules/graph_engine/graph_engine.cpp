@@ -2226,6 +2226,7 @@ static const int kTypeFlowerChildFilterRev3 = 235; // Hz + Robin dither experime
 static const int kTypeFluvNoise = 236; // Filter Morph noise band as a generator
 static const int kTypePumpCurve = 237; // triggered ideal compressor GR envelope
 static const int kTypeRobinLeakyEnvelope = 238; // Robin leaky integrator, coefficient glides Start -> End decay
+static const int kTypeStepRegister = 239; // coarse register pitch grid + dither + drawn step pattern
 static const int kTypeYellowjacketFilter = 62;
 static const int kTypeSuperloveFilter = 63;
 static const int kTypeHumanFilter = 64;
@@ -2482,6 +2483,7 @@ static const int kParamAttAmplitude = 70;      // attenuverter
 static const int kParamAttOffset = 71;         // attenuverter
 static const int kParamNamedPortalBus = 201;   // uint32 bus key as double
 static const int kParamAcidStep0 = 420;  // acidSequencer packed steps 420..451
+static const int kParamStepRegStep0 = 460; // stepRegister pattern steps 460..523
 static const int kParamInLow = 80;             // range
 static const int kParamInHigh = 81;            // range
 static const int kParamOutLow = 82;            // range
@@ -2694,6 +2696,19 @@ struct Node {
   double acidSlideFrom;
   double acidSlideTo;
   unsigned char acidHasPitch;
+  // Step Register (inline DSP, not a native pool).
+  float stepRegSteps[64];
+  double stepRegErr;       // accumulator dither error
+  double stepRegTickAcc;   // internal update clock 0..1
+  double stepRegLastClock; // Clock jack rising-edge latch
+  int stepRegTickIdx;      // pattern position (-1 = before first tick)
+  unsigned int stepRegTickCount; // ticks since reset (dither sequence)
+  int stepRegQ;            // register playing (-1 = not chosen yet)
+  double stepRegIdeal;     // ideal fractional register at last tick
+  unsigned int stepRegLfsr;
+  unsigned int stepRegRng;
+  unsigned char stepRegSquare;
+  unsigned char stepRegWrapped; // waveform wrapped last sample (per-cycle tick)
 };
 
 enum SinkKind : unsigned char { kSinkPort = 0, kSinkControl = 1 };
@@ -3461,6 +3476,18 @@ static void init_node_defaults(Node& n, int typeId) {
   n.acidSlideTo = 36.0;
   n.acidHasPitch = 0;
   for (int acidI = 0; acidI < 32; acidI++) n.acidPack[acidI] = 0u;
+  for (int srI = 0; srI < 64; srI++) n.stepRegSteps[srI] = 0.0f;
+  n.stepRegErr = 0.0;
+  n.stepRegTickAcc = 0.0;
+  n.stepRegLastClock = 0.0;
+  n.stepRegTickIdx = -1;
+  n.stepRegTickCount = 0u;
+  n.stepRegQ = -1;
+  n.stepRegIdeal = 0.0;
+  n.stepRegLfsr = 1u;
+  n.stepRegRng = 0x9E3779B9u;
+  n.stepRegSquare = 0;
+  n.stepRegWrapped = 0;
   init_control(n.volumeDb, (typeId == kTypeMixStereo) ? 0.0 : -3.0, false);
   init_control(
     n.pan,
@@ -3528,7 +3555,7 @@ static void init_node_defaults(Node& n, int typeId) {
       : (typeId == kTypeSmoothGraph || typeId == kTypeStepGraph) ? 1.0 // rate Hz
       : (typeId == kTypePhaseDisperse) ? 100.0 // APF corner Hz
       : (typeId == kTypeSnowflake) ? 55.0
-      : (typeId == kTypeAntisaw) ? 110.0
+      : (typeId == kTypeAntisaw) ? 1000.0
       : (typeId == kTypeHarmonicSeries) ? 100.0
       : (typeId == kTypePll) ? 110.0 // VCO center Hz
       : (typeId == kTypeSoemReverb) ? 1000.0 // bandFrequency
@@ -3829,7 +3856,7 @@ static void init_node_defaults(Node& n, int typeId) {
       : (typeId == kTypeMushroom || typeId == kTypeKeplerBouwkamp
           || typeId == kTypeRadar || typeId == kTypeWirdoSpiral) ? 1.0
       : (typeId == kTypeTransport) ? 4.0 // Beats per bar (downbeat)
-      : (typeId == kTypeAntisaw) ? 64.0
+      : (typeId == kTypeAntisaw) ? 128.0
       : (typeId == kTypeArchimedes) ? 12.0
       : (typeId == kTypeAdditiveOsc || typeId == kTypeAdditiveGenerator) ? 32.0
       : (typeId == kTypeHypersaw2) ? 7.0 // Oscillators
@@ -6796,13 +6823,13 @@ static void process_clock(Circuit& g, Node& node, int frames) {
   const bool hasReset = mix_live_port(g, node, kPortReset, frames, g.mixReset);
   const bool liveF = mix_live_port(g, node, kPortF, frames, g.mixF);
   const double sr = g.sampleRate < 1.0f ? 44100.0 : (double)g.sampleRate;
-  const double rateKnob = control_effective(node.frequency);
-  const double phaseOff = control_effective(node.phaseParam);
-  const double pulseStart = control_effective(node.center);
-  const double pulseEnd = control_effective(node.shape);
-  const double level = control_effective(node.amplitude);
   for (int f = 0; f < frames; f++) {
     control_frame(g, node, f);
+    const double rateKnob = control_audio(g, node.frequency, f);
+    const double phaseOff = control_audio(g, node.phaseParam, f);
+    const double pulseStart = control_audio(g, node.center, f);
+    const double pulseEnd = control_audio(g, node.shape, f);
+    const double level = control_audio(g, node.amplitude, f);
     const double reset = hasReset ? g.mixReset[f] : 0.0;
     // ƒ jack (kPortF, absolute Hz) replaces Rate while wired; unwired = Rate knob.
     const double rate = liveF ? g.mixF[f] : rateKnob;
@@ -6823,10 +6850,10 @@ static void process_trigger_divider(Circuit& g, Node& node, int frames) {
   const bool hasReset = mix_live_port(g, node, kPortReset, frames, g.mixReset);
   const double sr = g.sampleRate < 1.0f ? 44100.0 : (double)g.sampleRate;
   const double division = control_effective(node.stages);
-  const double pulseTime = control_effective(node.timeNumerator);
-  const double level = control_effective(node.amplitude);
   for (int f = 0; f < frames; f++) {
     control_frame(g, node, f);
+    const double pulseTime = control_audio(g, node.timeNumerator, f);
+    const double level = control_audio(g, node.amplitude, f);
     const double out = soemdsp_trigger_divider_sample(
       node.nativeHandle,
       hasTrig ? g.mixTrigger[f] : 0.0,
@@ -6852,10 +6879,10 @@ static void process_clock_divider(Circuit& g, Node& node, int frames) {
   const bool hasReset = mix_live_port(g, node, kPortReset, frames, g.mixReset);
   const double sr = g.sampleRate < 1.0f ? 44100.0 : (double)g.sampleRate;
   const double division = control_effective(node.stages);
-  const double duty = control_effective(node.shape);
-  const double amplitude = control_effective(node.amplitude);
   for (int f = 0; f < frames; f++) {
     control_frame(g, node, f);
+    const double duty = control_audio(g, node.shape, f);
+    const double amplitude = control_audio(g, node.amplitude, f);
     const double gate = soemdsp_trigger_divider_sample_clock(
       node.nativeHandle,
       hasClock ? g.mixTrigger[f] : 0.0,
@@ -6878,10 +6905,10 @@ static void process_clock_divider(Circuit& g, Node& node, int frames) {
 static void process_alias_sine(Circuit& g, Node& node, int frames) {
   if (node.nativeHandle <= 0) return;
   const double sr = g.sampleRate < 1.0f ? 44100.0 : (double)g.sampleRate;
-  const double normFreq = control_effective(node.frequency);
-  const double level = control_effective(node.amplitude);
   for (int f = 0; f < frames; f++) {
     control_frame(g, node, f);
+    const double normFreq = control_audio(g, node.frequency, f);
+    const double level = control_audio(g, node.amplitude, f);
     const double y = soemdsp_alias_sine_sample(node.nativeHandle, normFreq, level, sr);
     node.buf[kPortMono][f] = y;
     node.buf[kPortLeft][f] = y;
@@ -7117,10 +7144,10 @@ static void process_antisaw(Circuit& g, Node& node, int frames) {
   const double sr = g.sampleRate < 1.0f ? 44100.0 : (double)g.sampleRate;
   const bool liveF = mix_live_port(g, node, kPortF, frames, g.mixF);
   const double reflections = control_effective(node.stages);
-  const double tilt = control_effective(node.shape);
-  const double level = control_effective(node.amplitude);
   for (int f = 0; f < frames; f++) {
     control_frame(g, node, f);
+    const double tilt = control_audio(g, node.shape, f);
+    const double level = control_audio(g, node.amplitude, f);
     const double fundamental = /*ƒ retired*/ control_audio(g, node.frequency, f);
     const double y = soemdsp_antisaw_sample(
       node.nativeHandle, fundamental, reflections, tilt, level, sr
@@ -7155,7 +7182,6 @@ static void process_archimedes(Circuit& g, Node& node, int frames) {
   int dither = (int)(ditherV + (ditherV >= 0.0 ? 0.5 : -0.5));
   if (dither < 0) dither = 0;
   if (dither > 63) dither = 63;
-  const double amp = control_effective(node.amplitude);
 
   soemdsp_archimedes_set_profile(node.nativeHandle, profile);
   if (!liveReset) node.lastReset = 0.0;
@@ -7177,6 +7203,7 @@ static void process_archimedes(Circuit& g, Node& node, int frames) {
     if (freqHz < 0) freqHz = -freqHz;
     soemdsp_archimedes_set_frequency(node.nativeHandle, freqHz);
     soemdsp_archimedes_step(node.nativeHandle, dither);
+    const double amp = control_audio(g, node.amplitude, f);
     const double sn = soemdsp_archimedes_sine(node.nativeHandle) * amp;
     const double cn = soemdsp_archimedes_cosine(node.nativeHandle) * amp;
     node.buf[kPortMono][f] = sn;
@@ -8109,8 +8136,6 @@ static void process_surge_oscillator(Circuit& g, Node& node, int frames) {
   const bool livePitch = mix_live_port(g, node, kPortPitchCv, frames, g.mixPitch);
   const bool hasSync = mix_live_port(g, node, kPortMono, frames, g.mixMono);
   const double referenceVoltage = circuit_pitch_ref_v(g);
-  const double syncFreq = control_effective(node.width);
-  const double level = control_effective(node.amplitude);
   const double waveV = control_effective(node.waveform);
   int waveform = (int)(waveV + (waveV >= 0.0 ? 0.5 : -0.5));
   if (waveform < 0) waveform = 0;
@@ -8118,6 +8143,8 @@ static void process_surge_oscillator(Circuit& g, Node& node, int frames) {
 
   for (int f = 0; f < frames; f++) {
     control_frame(g, node, f);
+    const double syncFreq = control_audio(g, node.width, f);
+    const double level = control_audio(g, node.amplitude, f);
     double freq = resolve_osc_hz(
       g, f, liveF, livePitch, node.frequency, referenceVoltage, sr
     );
@@ -8653,12 +8680,12 @@ static void process_sinc(Circuit& g, Node& node, int frames) {
   const bool liveF = mix_live_port(g, node, kPortF, frames, g.mixF);
   const bool livePitch = mix_live_port(g, node, kPortPitchCv, frames, g.mixPitch);
   const double referenceVoltage = circuit_pitch_ref_v(g);
-  const double phaseOff = control_effective(node.phaseParam);
   const double lobes = control_effective(node.stages);
   const double bandLimit = control_effective(node.mode);
 
   for (int f = 0; f < frames; f++) {
     control_frame(g, node, f);
+    const double phaseOff = control_audio(g, node.phaseParam, f);
     double freq = resolve_osc_hz(
       g, f, liveF, livePitch, node.frequency, referenceVoltage, sr
     );
@@ -8684,24 +8711,24 @@ static void process_bradley2a(Circuit& g, Node& node, int frames) {
   const bool liveF = mix_live_port(g, node, kPortF, frames, g.mixF);
   const bool livePitch = mix_live_port(g, node, kPortPitchCv, frames, g.mixPitch);
   const double referenceVoltage = circuit_pitch_ref_v(g);
-  const double freqOffset = control_effective(node.width);
-  const double jitterDepth = control_effective(node.shape);
-  const double jitterRate = control_effective(node.lfoRate);
-  const double ampDepth = control_effective(node.lfoAmplitude);
-  const double ampRate = control_effective(node.lfoBaseSpeed);
-  const double interfLevel = control_effective(node.mix);
-  const double interfFreq = control_effective(node.lpfFrequency);
-  const double harm2 = control_effective(node.diffusionSize);
-  const double harm3 = control_effective(node.diffusionAmount);
-  const double hitRate = control_effective(node.feedback);
-  const double hitDuration = control_effective(node.timeNumerator);
-  const double hitGain = control_effective(node.level);
-  const double hitPhase = control_effective(node.phaseParam);
-  const double impulseLevel = control_effective(node.recycle);
-  const double level = control_effective(node.amplitude);
 
   for (int f = 0; f < frames; f++) {
     control_frame(g, node, f);
+    const double freqOffset = control_audio(g, node.width, f);
+    const double jitterDepth = control_audio(g, node.shape, f);
+    const double jitterRate = control_audio(g, node.lfoRate, f);
+    const double ampDepth = control_audio(g, node.lfoAmplitude, f);
+    const double ampRate = control_audio(g, node.lfoBaseSpeed, f);
+    const double interfLevel = control_audio(g, node.mix, f);
+    const double interfFreq = control_audio(g, node.lpfFrequency, f);
+    const double harm2 = control_audio(g, node.diffusionSize, f);
+    const double harm3 = control_audio(g, node.diffusionAmount, f);
+    const double hitRate = control_audio(g, node.feedback, f);
+    const double hitDuration = control_audio(g, node.timeNumerator, f);
+    const double hitGain = control_audio(g, node.level, f);
+    const double hitPhase = control_audio(g, node.phaseParam, f);
+    const double impulseLevel = control_audio(g, node.recycle, f);
+    const double level = control_audio(g, node.amplitude, f);
     double freq = resolve_osc_hz(
       g, f, liveF, livePitch, node.frequency, referenceVoltage, sr
     );
@@ -8926,6 +8953,264 @@ static void process_ellipsoid_osc(Circuit& g, Node& node, int frames) {
   node.phase = phase;
 }
 
+// Step Register: pitch can only land on a coarse register grid; dither
+// between neighbouring registers fakes the in-between pitches (in the spirit
+// of clock-divider sound chips, not a clone). A per-tick step pattern turns
+// it into an oscillator / step-sequencer hybrid.
+// frequency=target Hz, stages=bits (2^bits registers), center=clock Hz,
+// mode=grid (0 Divide clock/(r+1), 1 Multiply clock*(r+1)/N, 2 Log 20 Hz..clock),
+// offset=grid offset (registers), mix=dither 0..1,
+// lfoStyle=method (0 Accumulator, 1 Pattern, 2 Random), seed=seed,
+// lfoRate=update Hz (0 = once per waveform cycle; a wired Clock overrides),
+// timeNumerator=span, waveform (0 Square, 1 Pulse, 2 Saw, 3 Tri, 4 Noise,
+// 5 Poly), timeDenominator=LFSR bits, width=pulse width, resonance=amp bits,
+// amplitude=level, timingMode=source (0 Auto, 1 Offset, 2 Drawn),
+// feedback=pattern length.
+// Outs: Mono/L/R=Out, Saw=Error (semitones, target vs played), Ramp=Step
+// (1 on tick samples), Square=__Register (0..1), Tri=__Ideal (0..1),
+// Phase01=__Tick (pattern position).
+static const unsigned int kStepRegLfsrTaps[25] = {
+  0u, 0u, 0x3u, 0x6u, 0xCu, 0x14u, 0x30u, 0x60u, 0xB8u, 0x110u, 0x240u,
+  0x500u, 0x829u, 0x100Du, 0x2015u, 0x6000u, 0xD008u, 0x12000u, 0x20400u,
+  0x40023u, 0x90000u, 0x140000u, 0x300000u, 0x420000u, 0xE10000u
+};
+
+static inline int step_reg_round_int(double v) {
+  return (int)dsp_floor(v + 0.5);
+}
+
+static double step_reg_hz(int grid, double clock, double count, double r) {
+  if (grid == 0) return clock / (r + 1.0);
+  if (grid == 1) return clock * (r + 1.0) / count;
+  const double lo = 20.0;
+  const double hi = clock > lo * 1.0001 ? clock : lo * 1.0001;
+  const double t = count > 1.0 ? r / (count - 1.0) : 0.0;
+  return lo * dsp_exp(t * dsp_ln(hi / lo));
+}
+
+static double step_reg_index(int grid, double clock, double count, double hz) {
+  if (hz < 1.0e-6) hz = 1.0e-6;
+  if (grid == 0) return clock / hz - 1.0;
+  if (grid == 1) return hz * count / clock - 1.0;
+  const double lo = 20.0;
+  const double hi = clock > lo * 1.0001 ? clock : lo * 1.0001;
+  return (count - 1.0) * dsp_ln(hz / lo) / dsp_ln(hi / lo);
+}
+
+static inline double step_reg_rand01(unsigned int* s) {
+  unsigned int x = *s;
+  x ^= x << 13;
+  x ^= x >> 17;
+  x ^= x << 5;
+  if (x == 0u) x = 0x9E3779B9u;
+  *s = x;
+  return (double)(x >> 8) * (1.0 / 16777216.0);
+}
+
+static inline unsigned int step_reg_lfsr_step(unsigned int* s, int bits) {
+  const unsigned int mask = kStepRegLfsrTaps[bits];
+  const unsigned int full = (1u << bits) - 1u;
+  unsigned int v = *s & full;
+  if (v == 0u) v = 1u;
+  const unsigned int lsb = v & 1u;
+  v >>= 1;
+  if (lsb) v ^= mask;
+  *s = v;
+  return lsb;
+}
+
+static void step_reg_reseed(Node& node, double seedV) {
+  const unsigned int sd = (unsigned int)(seedV < 0.0 ? 0.0 : seedV);
+  node.stepRegRng = 0x9E3779B9u ^ (sd * 2654435761u + 1u);
+  if (node.stepRegRng == 0u) node.stepRegRng = 1u;
+  node.stepRegLfsr = 1u;
+}
+
+static inline int step_reg_clamp_int(int v, int lo, int hi) {
+  return v < lo ? lo : (v > hi ? hi : v);
+}
+
+static void process_step_register(Circuit& g, Node& node, int frames) {
+  const double sr = g.sampleRate < 1.0f ? 44100.0 : (double)g.sampleRate;
+  const bool liveF = mix_live_port(g, node, kPortF, frames, g.mixF);
+  const bool livePitch = mix_live_port(g, node, kPortPitchCv, frames, g.mixPitch);
+  const bool liveReset = mix_live_port(g, node, kPortReset, frames, g.mixReset);
+  const bool liveClock = mix_live_port(g, node, kPortTrigger, frames, g.mixTrigger);
+  const double referenceVoltage = circuit_pitch_ref_v(g);
+  if (!liveReset) node.lastReset = 0.0;
+  if (!liveClock) node.stepRegLastClock = 0.0;
+  {
+    const double seedNow = control_effective(node.seed);
+    if (node.appliedSeed != seedNow) {
+      node.appliedSeed = seedNow;
+      step_reg_reseed(node, seedNow);
+    }
+  }
+  double phase = node.phase; // cycles 0..1
+
+  for (int f = 0; f < frames; f++) {
+    control_frame(g, node, f);
+    // Choices and integer counts (discrete).
+    const int bits = step_reg_clamp_int(step_reg_round_int(control_effective(node.stages)), 1, 16);
+    const double count = (double)(1 << bits);
+    const int maxReg = (1 << bits) - 1;
+    const int grid = step_reg_clamp_int(step_reg_round_int(control_effective(node.mode)), 0, 2);
+    const int method = step_reg_clamp_int(step_reg_round_int(control_effective(node.lfoStyle)), 0, 2);
+    const int span = step_reg_clamp_int(step_reg_round_int(control_effective(node.timeNumerator)), 1, 4);
+    const int wave = step_reg_clamp_int(step_reg_round_int(control_effective(node.waveform)), 0, 5);
+    const int lfsrBits = step_reg_clamp_int(step_reg_round_int(control_effective(node.timeDenominator)), 2, 24);
+    const int ampBits = step_reg_clamp_int(step_reg_round_int(control_effective(node.resonance)), 1, 16);
+    const int source = step_reg_clamp_int(step_reg_round_int(control_effective(node.timingMode)), 0, 2);
+    const int patLen = step_reg_clamp_int(step_reg_round_int(control_effective(node.feedback)), 1, 64);
+
+    // Continuous: per sample, after control_frame.
+    double clock = control_audio(g, node.center, f);
+    if (!(clock > 1.0e-3)) clock = 1.0e-3;
+    double gridOffset = control_audio(g, node.offset, f);
+    if (!(gridOffset == gridOffset)) gridOffset = 0.0;
+    double dither = control_audio(g, node.mix, f);
+    if (!(dither == dither)) dither = 0.0;
+    if (dither < 0.0) dither = 0.0;
+    if (dither > 1.0) dither = 1.0;
+    double rate = control_audio(g, node.lfoRate, f);
+    if (!(rate > 0.0)) rate = 0.0;
+    const double pw = control_audio(g, node.width, f);
+    double level = control_audio(g, node.amplitude, f);
+    if (!(level == level)) level = 0.0;
+    double target = resolve_osc_hz(
+      g, f, liveF, livePitch, node.frequency, referenceVoltage, sr
+    );
+    if (target < 0.0) target = -target;
+
+    bool tick = false;
+    if (liveReset) {
+      const double rv = g.mixReset[f];
+      if (gate_hit(rv, &node.lastReset)) {
+        phase = 0.0;
+        node.stepRegTickIdx = -1;
+        node.stepRegTickCount = 0u;
+        node.stepRegErr = 0.0;
+        node.stepRegTickAcc = 0.0;
+        node.stepRegSquare = 0;
+        step_reg_reseed(node, control_effective(node.seed));
+        tick = true;
+      }
+      node.lastReset = rv;
+    }
+    if (liveClock) {
+      const double cv = g.mixTrigger[f];
+      if (gate_hit(cv, &node.stepRegLastClock)) tick = true;
+      node.stepRegLastClock = cv;
+    } else if (rate > 0.0) {
+      node.stepRegTickAcc += rate / sr;
+      if (node.stepRegTickAcc >= 1.0) {
+        node.stepRegTickAcc -= dsp_floor(node.stepRegTickAcc);
+        tick = true;
+      }
+    } else if (node.stepRegWrapped) {
+      tick = true;
+    }
+    if (node.stepRegQ < 0) tick = true;
+
+    double ideal = step_reg_index(grid, clock, count, target) - gridOffset;
+    if (!(ideal == ideal)) ideal = 0.0;
+    if (ideal < 0.0) ideal = 0.0;
+    if (ideal > (double)maxReg) ideal = (double)maxReg;
+
+    if (tick) {
+      int idx = node.stepRegTickIdx + 1;
+      if (idx < 0 || idx >= patLen) idx = 0;
+      node.stepRegTickIdx = idx;
+      const unsigned int k = node.stepRegTickCount++;
+      const double drawn = (double)node.stepRegSteps[idx];
+      int q = 0;
+      if (source == 2) {
+        q = step_reg_round_int(drawn);
+      } else {
+        const double spreadAmp = 0.5 * (double)(span - 1);
+        double u = (double)k * 0.6180339887498949;
+        u -= dsp_floor(u);
+        if (method == 0) {
+          // Error diffusion. Dither 1 = first-order sigma-delta: the played
+          // registers average to the ideal one. Dither 0 = nearest register.
+          const double j = (2.0 * u - 1.0) * spreadAmp;
+          const double v = ideal + j + dither * node.stepRegErr;
+          q = step_reg_round_int(v);
+          node.stepRegErr = v - (double)q;
+        } else {
+          const double j = (method == 2)
+            ? (2.0 * step_reg_rand01(&node.stepRegRng) - 1.0) * spreadAmp
+            : (2.0 * u - 1.0) * spreadAmp;
+          const double x = ideal + j;
+          const double lo = dsp_floor(x);
+          const double fr = x - lo;
+          const double frEff = dither * fr + (1.0 - dither) * (fr >= 0.5 ? 1.0 : 0.0);
+          const double threshold = (method == 1)
+            ? ((double)((k * 5u) & 7u) + 0.5) / 8.0
+            : step_reg_rand01(&node.stepRegRng);
+          q = (int)lo + (threshold < frEff ? 1 : 0);
+        }
+        if (source == 1) q += step_reg_round_int(drawn);
+      }
+      node.stepRegQ = step_reg_clamp_int(q, 0, maxReg);
+      node.stepRegIdeal = ideal;
+    }
+    const int q = step_reg_clamp_int(node.stepRegQ, 0, maxReg);
+
+    const double played = step_reg_hz(grid, clock, count, (double)q + gridOffset);
+    phase += played / sr;
+    int wraps = (int)dsp_floor(phase);
+    phase -= (double)wraps;
+    if (wraps < 0) wraps = 0;
+    if (wraps > 64) wraps = 64;
+    node.stepRegWrapped = wraps > 0 ? 1 : 0;
+
+    double y = 0.0;
+    if (wave == 4 || wave == 5) {
+      for (int w = 0; w < wraps; w++) {
+        const unsigned int bit = step_reg_lfsr_step(&node.stepRegLfsr, lfsrBits);
+        if (wave == 4) node.stepRegSquare = (unsigned char)bit;
+        else if (bit) node.stepRegSquare = node.stepRegSquare ? 0 : 1;
+      }
+      y = node.stepRegSquare ? 1.0 : -1.0;
+    } else if (wave == 0) {
+      y = phase < 0.5 ? 1.0 : -1.0;
+    } else if (wave == 1) {
+      // Duty is register-limited too: 2^bits widths.
+      double pwq = dsp_floor(pw * count + 0.5) / count;
+      const double minW = 1.0 / count;
+      if (pwq < minW) pwq = minW;
+      if (pwq > 1.0 - minW) pwq = 1.0 - minW;
+      if (count <= 2.0) pwq = 0.5;
+      y = phase < pwq ? 1.0 : -1.0;
+    } else if (wave == 2) {
+      y = 2.0 * phase - 1.0;
+    } else {
+      const double d = phase - 0.5;
+      y = 1.0 - 4.0 * (d < 0.0 ? -d : d);
+    }
+    y *= level;
+    if (ampBits < 16) {
+      const double levels = (double)(1 << (ampBits - 1));
+      y = dsp_floor(y * levels + 0.5) / levels;
+    }
+
+    double err = 0.0;
+    if (target > 1.0e-9 && played > 1.0e-9) {
+      err = 12.0 * dsp_ln(target / played) * 1.4426950408889634;
+    }
+    node.buf[kPortMono][f] = y;
+    node.buf[kPortLeft][f] = y;
+    node.buf[kPortRight][f] = y;
+    node.buf[kPortSaw][f] = err;
+    node.buf[kPortRamp][f] = tick ? 1.0 : 0.0;
+    node.buf[kPortSquare][f] = maxReg > 0 ? (double)q / (double)maxReg : 0.0;
+    node.buf[kPortTri][f] = maxReg > 0 ? node.stepRegIdeal / (double)maxReg : 0.0;
+    node.buf[kPortPhase01][f] = (double)(node.stepRegTickIdx < 0 ? 0 : node.stepRegTickIdx);
+  }
+  node.phase = phase;
+}
+
 // Snowflake: stereo X/Y path walk. mode=pattern, stages=iterations,
 // width=angleÂ°, shape=direction, center=spin, phaseParam=phase.
 static void process_snowflake(Circuit& g, Node& node, int frames) {
@@ -8937,15 +9222,15 @@ static void process_snowflake(Circuit& g, Node& node, int frames) {
   const double referenceVoltage = circuit_pitch_ref_v(g);
   const double pattern = control_effective(node.mode);
   const double iterations = control_effective(node.stages);
-  const double angleDeg = control_effective(node.width);
-  const double direction = control_effective(node.shape);
-  const double spin = control_effective(node.center);
-  const double phaseArg = control_effective(node.phaseParam);
-  const double level = control_effective(node.amplitude);
   if (!liveReset) node.lastReset = 0.0;
 
   for (int f = 0; f < frames; f++) {
     control_frame(g, node, f);
+    const double angleDeg = control_audio(g, node.width, f);
+    const double direction = control_audio(g, node.shape, f);
+    const double spin = control_audio(g, node.center, f);
+    const double phaseArg = control_audio(g, node.phaseParam, f);
+    const double level = control_audio(g, node.amplitude, f);
     double resetGate = 0.0;
     if (liveReset) {
       const double rv = g.mixReset[f];
@@ -9089,11 +9374,11 @@ static void process_scientific_iir(
   if (order < 2) order = 2;
   if (order > 8) order = 8;
   if (order & 1) order += 1; // even only
-  const double bandwidth = control_effective(node.width);
-  const double ripple = control_effective(node.resonance);
 
   for (int f = 0; f < frames; f++) {
     control_frame(g, node, f);
+    const double bandwidth = control_audio(g, node.width, f);
+    const double ripple = control_audio(g, node.resonance, f);
     // ƒ wired: absolute Hz replaces Frequency per sample (resolve_osc_hz).
     const double freq = resolve_osc_hz(
       g, f, liveF, livePitch, node.frequency, referenceVoltage, sr
@@ -11189,9 +11474,6 @@ static void process_basic_shape(Circuit& g, Node& node, int frames) {
   const bool livePitch = mix_live_port(g, node, kPortPitchCv, frames, g.mixPitch);
   const bool liveReset = mix_live_port(g, node, kPortReset, frames, g.mixReset);
   const double referenceVoltage = circuit_pitch_ref_v(g);
-  const double phaseOff = control_effective(node.phaseParam);
-  const double morph = control_effective(node.shape);
-  const double amp = control_effective(node.amplitude);
   const double waveV = control_effective(node.waveform);
   const double motion = control_effective(node.mode);
   const double polarity = control_effective(node.center);
@@ -11199,6 +11481,9 @@ static void process_basic_shape(Circuit& g, Node& node, int frames) {
 
   for (int f = 0; f < frames; f++) {
     control_frame(g, node, f);
+    const double phaseOff = control_audio(g, node.phaseParam, f);
+    const double morph = control_audio(g, node.shape, f);
+    const double amp = control_audio(g, node.amplitude, f);
     double freq = resolve_osc_hz(
       g, f, liveF, livePitch, node.frequency, referenceVoltage, sr
     );
@@ -13570,10 +13855,9 @@ static void process_lookahead_limiter(Circuit& g, Node& node, int frames) {
 
 // Metallic mean: Ratio = (n + sqrt(n^2+4))/2. Free-function; fan M/L/R.
 static void process_metallic_ratio(Circuit& g, Node& node, int frames) {
-  const double index = control_effective(node.width);
-  const double ratio = soemdsp_metallic_ratio_sample(index);
   for (int f = 0; f < frames; f++) {
     control_frame(g, node, f);
+    const double ratio = soemdsp_metallic_ratio_sample(control_audio(g, node.width, f));
     node.buf[kPortMono][f] = ratio;
     node.buf[kPortLeft][f] = ratio;
     node.buf[kPortRight][f] = ratio;
@@ -13638,15 +13922,15 @@ static void process_random_clock(Circuit& g, Node& node, int frames) {
   if (node.nativeHandle <= 0) return;
   const bool hasReset = mix_live_port(g, node, kPortReset, frames, g.mixReset);
   const double sr = g.sampleRate < 1.0f ? 44100.0 : (double)g.sampleRate;
-  const double threshold = control_effective(node.center);
-  const double minSec = control_effective(node.timeNumerator);
-  const double maxSec = control_effective(node.timeDenominator);
-  const double duty = control_effective(node.shape);
-  const double triggerTime = control_effective(node.offsetMs);
-  const double level = control_effective(node.amplitude);
   const int seedKey = (int)(control_effective(node.seed) + (control_effective(node.seed) >= 0.0 ? 0.5 : -0.5));
   for (int f = 0; f < frames; f++) {
     control_frame(g, node, f);
+    const double threshold = control_audio(g, node.center, f);
+    const double minSec = control_audio(g, node.timeNumerator, f);
+    const double maxSec = control_audio(g, node.timeDenominator, f);
+    const double duty = control_audio(g, node.shape, f);
+    const double triggerTime = control_audio(g, node.offsetMs, f);
+    const double level = control_audio(g, node.amplitude, f);
     const double trig = soemdsp_random_clock_sample(
       node.nativeHandle,
       hasReset ? g.mixReset[f] : 0.0,
@@ -13672,13 +13956,13 @@ static void process_trigger_counter(Circuit& g, Node& node, int frames) {
   const bool hasTrig = mix_live_port(g, node, kPortTrigger, frames, g.mixTrigger);
   const bool hasReset = mix_live_port(g, node, kPortReset, frames, g.mixReset);
   const double sr = g.sampleRate < 1.0f ? 44100.0 : (double)g.sampleRate;
-  const double threshold = control_effective(node.center);
   const double countMax = control_effective(node.stages);
-  const double increment = control_effective(node.width);
-  const double pulseTime = control_effective(node.timeNumerator);
-  const double level = control_effective(node.amplitude);
   for (int f = 0; f < frames; f++) {
     control_frame(g, node, f);
+    const double threshold = control_audio(g, node.center, f);
+    const double increment = control_audio(g, node.width, f);
+    const double pulseTime = control_audio(g, node.timeNumerator, f);
+    const double level = control_audio(g, node.amplitude, f);
     const double pulse = soemdsp_trigger_counter_sample(
       node.nativeHandle,
       hasTrig ? g.mixTrigger[f] : 0.0,
@@ -13702,12 +13986,12 @@ static void process_delayed_trigger(Circuit& g, Node& node, int frames) {
   const bool hasTrig = mix_live_port(g, node, kPortTrigger, frames, g.mixTrigger);
   const bool hasReset = mix_live_port(g, node, kPortReset, frames, g.mixReset);
   const double sr = g.sampleRate < 1.0f ? 44100.0 : (double)g.sampleRate;
-  const double threshold = control_effective(node.center);
-  const double delay = control_effective(node.timeNumerator);
-  const double pulseTime = control_effective(node.timeDenominator);
-  const double level = control_effective(node.amplitude);
   for (int f = 0; f < frames; f++) {
     control_frame(g, node, f);
+    const double threshold = control_audio(g, node.center, f);
+    const double delay = control_audio(g, node.timeNumerator, f);
+    const double pulseTime = control_audio(g, node.timeDenominator, f);
+    const double level = control_audio(g, node.amplitude, f);
     const double out = soemdsp_delayed_trigger_sample(
       node.nativeHandle,
       hasTrig ? g.mixTrigger[f] : 0.0,
@@ -13730,10 +14014,10 @@ static void process_mid_side_encode(Circuit& g, Node& node, int frames) {
   double right[kMaxBlockFrames];
   mix_live_port(g, node, kPortLeft, frames, left);
   mix_live_port(g, node, kPortRight, frames, right);
-  const double midGain = control_effective(node.gainDb);
-  const double sideGain = control_effective(node.gainLeftDb);
   for (int f = 0; f < frames; f++) {
     control_frame(g, node, f);
+    const double midGain = control_audio(g, node.gainDb, f);
+    const double sideGain = control_audio(g, node.gainLeftDb, f);
     node.buf[kPortMono][f] = soemdsp_mid_side_encode_sample(
       0.0, left[f], right[f], midGain, sideGain
     );
@@ -13804,9 +14088,9 @@ static void process_crossover(Circuit& g, Node& node, int frames) {
   const bool takeSamplePath = node_has_active_chase(node)
     || node.lpfFrequency.active || node.hpfFrequency.active;
   const int bands = crossover_band_count_for_type(node.typeId);
-  const double amp = control_effective(node.amplitude);
   for (int f = 0; f < frames; f++) {
     control_frame(g, node, f);
+    const double amp = control_audio(g, node.amplitude, f);
     double f0 = /*ƒ retired*/ control_audio(g, node.frequency, f);
     double f1 = control_audio(g, node.center, f);
     double f2 = control_audio(g, node.width, f);
@@ -14781,6 +15065,7 @@ static void process_bypass(Circuit& g, Node& node, int frames) {
     || node.typeId == kTypeBradley2a
     || node.typeId == kTypeEllipsoid
     || node.typeId == kTypeEllipsoidOsc
+    || node.typeId == kTypeStepRegister
     || node.typeId == kTypeSnowflake
   ) {
     return; // sources: silence
@@ -15797,6 +16082,12 @@ extern "C" int soemdsp_graph_set_param(int handle, unsigned int nodeHash, int pa
     n.acidPack[step] = (unsigned int)(packed + 0.5);
     return 0;
   }
+  if (n.typeId == kTypeStepRegister
+      && paramId >= kParamStepRegStep0
+      && paramId < kParamStepRegStep0 + 64) {
+    n.stepRegSteps[paramId - kParamStepRegStep0] = (float)value;
+    return 0;
+  }
   if (n.typeId == kTypeGraphicEq
       && paramId >= kParamGraphicEqBand0
       && paramId < kParamGraphicEqBand0 + 30) {
@@ -16727,6 +17018,10 @@ static void dispatch_process_node(Circuit& g, Node& node, int frames) {
     }
     if (node.typeId == kTypeEllipsoidOsc) {
       process_ellipsoid_osc(g, node, frames);
+      return;
+    }
+    if (node.typeId == kTypeStepRegister) {
+      process_step_register(g, node, frames);
       return;
     }
     if (node.typeId == kTypeSnowflake) {

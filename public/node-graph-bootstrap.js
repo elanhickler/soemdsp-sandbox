@@ -19,9 +19,11 @@ function nodeGraphPagePatchFileUrls(slug) {
  * Page route /{slug} -> patches/index.json url.
  * Folders are organization only. analogdream and demo_patches/analogdream
  * are the same stem; try every catalog hit whose filename is that stem.
+ * A folder-style link (/livedemos/softpop) resolves by its last segment.
  */
 async function nodeGraphResolvePagePatchUrls(slug) {
-  const want = String(slug || "").trim().toLowerCase().replace(/\.json$/i, "").replace(/^\/+|\/+$/g, "");
+  const full = String(slug || "").trim().toLowerCase().replace(/\.json$/i, "").replace(/^\/+|\/+$/g, "");
+  const want = full.split("/").pop() || "";
   const urls = [];
   const push = (url) => {
     const value = String(url || "").trim();
@@ -43,6 +45,8 @@ async function nodeGraphResolvePagePatchUrls(slug) {
   } catch (_error) {
     // Catalog optional; direct path is tried below.
   }
+  // Folder link: its own file first, then the bare name.
+  if (full !== want) nodeGraphPagePatchFileUrls(full).forEach(push);
   nodeGraphPagePatchFileUrls(want).forEach(push);
   // /sandbox with no sandbox patch still opens, on the init patch.
   if (want === "sandbox") nodeGraphPagePatchFileUrls("init").forEach(push);

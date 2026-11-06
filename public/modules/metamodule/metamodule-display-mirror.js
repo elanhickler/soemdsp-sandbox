@@ -212,8 +212,8 @@ function nodeGraphMetamoduleBuildFaceTile(entry, collected, index, stage) {
   if (typeof nodeGraphTextBoxCaptureCanvasScaleSource === "function") {
     nodeGraphTextBoxCaptureCanvasScaleSource(found.face);
   }
-  if (typeof nodeGraphClinicalLineCaptureBuilderSize === "function") {
-    nodeGraphClinicalLineCaptureBuilderSize(found.face);
+  if (typeof nodeGraphGlLinesCaptureBuilderSize === "function") {
+    nodeGraphGlLinesCaptureBuilderSize(found.face);
   }
 
   const tile = document.createElement("div");

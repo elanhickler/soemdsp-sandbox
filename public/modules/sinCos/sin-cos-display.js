@@ -1,5 +1,5 @@
 // SinCos face — cheap 1D one-cycle sine (red) and cosine (blue).
-// WebGL clinical line + white phase dots (clinical-line-gl: Adapt Max + SSAA 4× Expo).
+// WebGL clinical line + white phase dots (nodeGraphGlLinesPresentFrame: Adapt Max + exact 4x4 Expo).
 // Frame-rate paint, no engine-rate ring.
 // A line is drawn only when a patch wire leaves that output jack.
 // Each drawn line gets its own phase dot. Both dots are white.
@@ -863,8 +863,8 @@ function drawNodeGraphSinCosDisplayInner(section) {
       raw[i * 2] = mapX(phase);
       raw[i * 2 + 1] = mapY(sampleKind(phase, kind));
     }
-    const pts = typeof nodeGraphClinicalLineAdaptPoints === "function"
-      ? nodeGraphClinicalLineAdaptPoints(raw, Math.max(64, Math.ceil(innerW * 4)))
+    const pts = typeof nodeGraphGlLinesAdaptPoints === "function"
+      ? nodeGraphGlLinesAdaptPoints(raw, Math.max(64, Math.ceil(innerW * 4)))
       : raw;
     polylines.push({ points: pts, color, width: strokeW });
   };
@@ -925,13 +925,13 @@ function drawNodeGraphSinCosDisplayInner(section) {
     }
   }
 
-  if (typeof nodeGraphClinicalLineGlPresent !== "function") {
+  if (typeof nodeGraphGlLinesPresentFrame !== "function") {
     if (typeof nodeGraphDisplayGlFailed === "function") {
-      nodeGraphDisplayGlFailed(canvas, "clinical line missing");
+      nodeGraphDisplayGlFailed(canvas, "line renderer missing");
     }
     return;
   }
-  nodeGraphClinicalLineGlPresent(canvas, {
+  nodeGraphGlLinesPresentFrame(canvas, {
     cssWidth: drawW,
     cssHeight: drawH,
     background: look.backgroundPaint,

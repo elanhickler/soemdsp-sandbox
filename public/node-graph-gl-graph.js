@@ -2054,7 +2054,9 @@ function nodeGraphGlGraphDrawRoundShapes(batch, toX, toY, zoom, cameraOn) {
     const look = typeof nodeGraphRoundShapeFaceLook === "function"
       ? nodeGraphRoundShapeFaceLook(node)
       : {};
-    const strokeW = Math.max(0.25, Number(look.lineThickness) || 2);
+    // Line thickness 0 = no orbit line (the dot stays).
+    const strokeRaw = Number(look.lineThickness);
+    const strokeW = Number.isFinite(strokeRaw) ? Math.max(0, strokeRaw) : 2;
     const dotW = Math.max(0.25, Number(look.dotThickness) || 5);
     const bg = nodeGraphGlGraphParseCssColor(look.backgroundPaint || look.background || "#020609", [0.008, 0.024, 0.035, 1]);
     const stroke = nodeGraphGlGraphParseCssColor(look.strokePaint || look.strokeColor || "#7fc7d9", [0.5, 0.86, 0.78, 1]);
@@ -2112,16 +2114,11 @@ function nodeGraphGlGraphDrawRoundShapes(batch, toX, toY, zoom, cameraOn) {
         flat[p * 2] = at[0];
         flat[p * 2 + 1] = at[1];
       }
-      if (typeof nodeGraphGlLinesRibbon === "function") {
-        nodeGraphGlLinesRibbon(batch, flat, halfStroke, feather, stroke);
-      }
+      if (strokeW > 0) nodeGraphGlLinesStroke(batch, flat, halfStroke, feather, stroke);
     }
-    if (typeof nodeGraphGlLinesDot === "function") {
-      const cornerR = halfStroke;
-      for (let d = 0; d < cornerDots.length; d += 1) {
-        const at = place(cornerDots[d]);
-        nodeGraphGlLinesDot(batch, at[0], at[1], cornerR, feather, stroke);
-      }
+    for (let d = 0; strokeW > 0 && d < cornerDots.length; d += 1) {
+      const at = place(cornerDots[d]);
+      nodeGraphGlLinesStroke(batch, [at[0], at[1]], halfStroke, feather, stroke);
     }
     if (typeof nodeGraphRoundShapeLiveCursor === "function" && !isOsc) {
       const cursor = nodeGraphRoundShapeLiveCursor(id, node, section);
@@ -2239,7 +2236,7 @@ function nodeGraphGlHitIsLiveHtml(target) {
 function nodeGraphGlHitKeepsNativeTarget(target) {
   if (!(target instanceof Element)) return false;
   return Boolean(target.closest(
-    ".node-face, .node-module-graph-face, .node-module-graph-display, .node-keypad-face, .node-knob-face, .node-xy-pad-canvas, .node-sequencer-roll, .acid-seq-face, .node-arp-keys-face, .node-plugin-toggle-button, .node-plugin-momentary-button, .node-sample-waveform-display, .node-midi-keyboard-surface, .node-midi-keyboard-module, .node-grid-keyboard-surface, .node-grid-keyboard-pad, .node-seed-control, .sabrina-preset-shell",
+    ".node-face, .node-module-graph-face, .node-module-graph-display, .node-keypad-face, .node-knob-face, .node-xy-pad-canvas, .node-sequencer-roll, .acid-seq-face, .node-step-register-display, .node-arp-keys-face, .node-plugin-toggle-button, .node-plugin-momentary-button, .node-sample-waveform-display, .node-midi-keyboard-surface, .node-midi-keyboard-module, .node-grid-keyboard-surface, .node-grid-keyboard-pad, .node-seed-control, .sabrina-preset-shell",
   ));
 }
 

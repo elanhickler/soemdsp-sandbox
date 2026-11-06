@@ -2308,7 +2308,21 @@ function nodeGraphScope2dSettingsForNode(node) {
 const nodeGraphHypersawBurnSettingsDefaults = Object.freeze({
   lineThickness: 2,
   autoZoomLines: false,
+  // Plate fade: the shared phosphor look (what the face used before these
+  // were per module), so older patches look the same.
+  trail: typeof nodeGraphScopePhosphorLookDefaults !== "undefined" ? nodeGraphScopePhosphorLookDefaults.trail : 0.3,
+  ghost: typeof nodeGraphScopePhosphorLookDefaults !== "undefined" ? nodeGraphScopePhosphorLookDefaults.ghost : 0.25,
 });
+
+// Per-module overrides of the defaults above. Ping Pong's few delay lines
+// read thin at 2 px; Hypersaw / Sabrina stems keep 2.
+const nodeGraphHypersawBurnTypeDefaults = Object.freeze({
+  pingPongDelay: Object.freeze({ lineThickness: 5.49 }),
+});
+
+function nodeGraphHypersawBurnDefaultsForModuleType(type) {
+  return nodeGraphHypersawBurnTypeDefaults[String(type || "")] || null;
+}
 
 function normalizeNodeGraphHypersawBurnSettings(settings = {}, defaultsOverride = null) {
   const defaults = defaultsOverride && typeof defaultsOverride === "object"
@@ -2326,6 +2340,8 @@ function normalizeNodeGraphHypersawBurnSettings(settings = {}, defaultsOverride 
   return {
     lineThickness: thickness,
     autoZoomLines: source.autoZoomLines === true,
+    trail: normalizeNodeGraphTraceDisplayNumber(source.trail, defaults.trail, 0, 1),
+    ghost: normalizeNodeGraphTraceDisplayNumber(source.ghost, defaults.ghost, 0, 1),
   };
 }
 
@@ -2333,7 +2349,10 @@ function nodeGraphHypersawBurnSettingsForNode(node) {
   if (!node) {
     return normalizeNodeGraphHypersawBurnSettings();
   }
-  return normalizeNodeGraphHypersawBurnSettings(node.traceDisplaySettings);
+  return normalizeNodeGraphHypersawBurnSettings(
+    node.traceDisplaySettings,
+    nodeGraphHypersawBurnDefaultsForModuleType(node.type),
+  );
 }
 
 

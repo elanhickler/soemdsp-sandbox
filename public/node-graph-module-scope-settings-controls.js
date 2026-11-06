@@ -718,7 +718,7 @@ const nodeGraphTraceDisplaySharedValueClamps = Object.freeze({
 // leak into unrelated display types.
 /** Pulse Explosion / Pulse Train face: stem + dot size (Pulse Train adds Ghost opacity). */
 const nodeGraphPulseFaceValueClamps = Object.freeze({
-  lineThickness: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, 1.5), 0.25, 16),
+  lineThickness: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, 1.5), 0, 16),
   lineSmoothing: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, 1), 0, 8),
   dotThickness: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, 5), 0.25, 32),
 });
@@ -872,19 +872,19 @@ const nodeGraphTraceDisplayFormTypeValueClampOverrides = Object.freeze({
     padExtra: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, 0), 0, 64),
   }),
   clockFace: Object.freeze({
-    lineThickness: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, 2), 0.25, 16),
+    lineThickness: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, 2), 0, 16),
     lineSmoothing: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, 1), 0, 8),
     startThickness: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, 1.5), 0, 16),
     blinkTime: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, 0), 0, 1),
     gateHeight: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, 68), 0, 100),
   }),
   clockDividerFace: Object.freeze({
-    lineThickness: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, 1.5), 0.25, 16),
+    lineThickness: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, 1.5), 0, 16),
     lineSmoothing: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, 1), 0, 8),
   }),
   pulseExplosionFace: nodeGraphPulseFaceValueClamps,
   plotFace: Object.freeze({
-    lineThickness: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, 1.5), 0.25, 16),
+    lineThickness: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, 1.5), 0, 16),
     lineSmoothing: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, 1), 0, 8),
     timeMs: (value) => nodeGraphScopeClampTimeMs(value),
     windowCycles: (value) => nodeGraphScopeClampWindowCycles(value),

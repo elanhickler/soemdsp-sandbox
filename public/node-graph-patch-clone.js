@@ -401,7 +401,12 @@ function cloneNodeGraphTypedDisplaySettings(node) {
     case "hypersawBurn": {
       return {
         traceDisplaySettings: typeof normalizeNodeGraphHypersawBurnSettings === "function"
-          ? normalizeNodeGraphHypersawBurnSettings(bag)
+          ? normalizeNodeGraphHypersawBurnSettings(
+            bag,
+            typeof nodeGraphHypersawBurnDefaultsForModuleType === "function"
+              ? nodeGraphHypersawBurnDefaultsForModuleType(node?.type)
+              : null,
+          )
           : { lineThickness: nodeGraphFiniteNumber(bag?.lineThickness, 1) },
       };
     }
@@ -731,6 +736,12 @@ function cloneNodeGraphPatch(patch) {
               ? sequencerCloneClip(node.sequencer)
               : (node.sequencer && typeof node.sequencer === "object" ? { ...node.sequencer } : undefined),
           }
+          : {}),
+        ...(node.type === "output" && node.outputChannels != null
+          ? { outputChannels: node.outputChannels }
+          : {}),
+        ...(node.type === "stepRegister"
+          ? { stepRegister: { steps: Array.isArray(node.stepRegister && node.stepRegister.steps) ? node.stepRegister.steps.slice(0, 64).map((v) => { const n = Math.round(Number(v)); return Number.isFinite(n) ? n : 0; }) : [] } }
           : {}),
         ...(node.type === "acidSequencer"
           ? {

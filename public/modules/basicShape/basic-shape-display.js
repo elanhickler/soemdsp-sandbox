@@ -1,5 +1,5 @@
 // BasicShape face — cheap 1D one-cycle of the selected wave + phase dot.
-// WebGL via clinical-line-gl (Adapt Max + SSAA 4× Expo). Frame-rate paint, no engine-rate ring.
+// WebGL via the shared stroke (nodeGraphGlLinesPresentFrame: Adapt Max + exact 4x4 Expo). Frame-rate paint, no engine-rate ring.
 
 function createNodeGraphBasicShapeDisplay(nodeId, type = "basicShape") {
   const id = nodeId && typeof nodeId === "object"
@@ -280,8 +280,8 @@ function drawNodeGraphBasicShapeDisplayInner(section) {
   const flushSeg = () => {
     if (seg.length < 4) { seg = []; return; }
     const raw = Float32Array.from(seg);
-    const pts = typeof nodeGraphClinicalLineAdaptPoints === "function"
-      ? nodeGraphClinicalLineAdaptPoints(raw, Math.max(64, Math.ceil(innerW * 4)))
+    const pts = typeof nodeGraphGlLinesAdaptPoints === "function"
+      ? nodeGraphGlLinesAdaptPoints(raw, Math.max(64, Math.ceil(innerW * 4)))
       : raw;
     polylines.push({ points: pts, color: strokeColor, width: strokeW });
     seg = [];
@@ -313,13 +313,13 @@ function drawNodeGraphBasicShapeDisplayInner(section) {
       radius: Math.max(0.5, dotW * 0.5),
     });
   }
-  if (typeof nodeGraphClinicalLineGlPresent !== "function") {
+  if (typeof nodeGraphGlLinesPresentFrame !== "function") {
     if (typeof nodeGraphDisplayGlFailed === "function") {
-      nodeGraphDisplayGlFailed(canvas, "clinical line missing");
+      nodeGraphDisplayGlFailed(canvas, "line renderer missing");
     }
     return;
   }
-  nodeGraphClinicalLineGlPresent(canvas, {
+  nodeGraphGlLinesPresentFrame(canvas, {
     cssWidth: drawW,
     cssHeight: drawH,
     background: look.backgroundPaint || look.background || "#020609",

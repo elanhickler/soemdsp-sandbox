@@ -58,9 +58,6 @@
   const MAX_DIM = 4096;
   const FLOATS = 12; // pos2, local2, len1, half1, feather1, caps1, rgba4
   const PULSE_TRAIN_MAX = 16384;
-  // Sample plot: raw samples live in an R32F texture this many texels wide.
-  const SAMPLE_PLOT_TEX_W = 4096;
-  const SAMPLE_PLOT_MAX = SAMPLE_PLOT_TEX_W * 64;
   // Perlin quintic. Same one-SDF cost as Hermite smoothstep; C2 at the
   // skirt ends.
   // App edge (APP_POLICY section 3), in-shader 4x4 supersampling. The 16
@@ -938,52 +935,6 @@ void main() {
   }
 
   /**
-   * Sample plot (1D Plot / 1D Plot Stereo / 2D Plot): raw samples, drawn on
-   * the GPU. The samples go up as an R32F texture; the vertex shader builds
-   * one miter-joined raw polyline (straight line between real samples), the
-   * min/max band per pixel column when there are more samples than columns,
-   * and breaks on non-finite or (skip > 0) jumps bigger than `skip`.
-   * Raw samples never become individually capped mini-lines. The fragment
-   * shader supplies the app Expo coverage.
-   * spec: { a, b?, mode: "line" | "xy", x, y, w, h, gain, offset, gainY,
-   *         halfPx, feather, rgba, skip, span?, shift? }
-   * a / b: Float32Array views of the window (b = Y for "xy").
-   * "line": sample i sits at x + w * (i - shift) / span. Default span = n - 1,
-   * shift 0. A sync window passes span = its sample intervals and the
-   * sub-sample start (scope-sync.js), with one extra sample past the end.
-   */
-  function nodeGraphGlLinesSamplePlot(batch, spec) {
-    if (!batch || !spec?.a) return;
-    const xy = spec.mode === "xy";
-    const n = Math.min(SAMPLE_PLOT_MAX, spec.a.length, xy ? (spec.b?.length || 0) : spec.a.length);
-    if (!(n > 0)) return;
-    if (!ensureSamplePlot(batch.s)) return false;
-    if (!batch.samplePlots) batch.samplePlots = [];
-    const k = batch.camera ? 1 : (batch.scale || 1);
-    const c = spec.rgba || [1, 1, 1, 1];
-    batch.samplePlots.push({
-      a: spec.a,
-      b: xy ? spec.b : null,
-      n,
-      xy,
-      x: (Number(spec.x) || 0) * k,
-      y: (Number(spec.y) || 0) * k,
-      w: Math.max(1, (Number(spec.w) || 0) * k),
-      h: Math.max(1, (Number(spec.h) || 0) * k),
-      gain: Number.isFinite(Number(spec.gain)) ? Number(spec.gain) : 1,
-      gainY: Number.isFinite(Number(spec.gainY)) ? Number(spec.gainY) : (Number.isFinite(Number(spec.gain)) ? Number(spec.gain) : 1),
-      offset: Number(spec.offset) || 0,
-      half: Math.max(0, Number(spec.halfPx) || 0) * k,
-      feather: Math.max(0, Number(spec.feather) || 0) * k,
-      skip: Number(spec.skip) > 0 ? Number(spec.skip) : 0,
-      span: Number(spec.span) > 0 ? Number(spec.span) : Math.max(1, n - 1),
-      shift: Number.isFinite(Number(spec.shift)) ? Number(spec.shift) : 0,
-      rgba: [c[0] || 0, c[1] || 0, c[2] || 0, c.length > 3 && Number.isFinite(c[3]) ? c[3] : 1],
-    });
-    return true;
-  }
-
-  /**
    * Rounded rectangle with an inside stroke, one SDF per pixel: the stroke and
    * fill share the box's distance field, so straight edges and corners are one
    * continuous shape (the CSS border-box look: stroke inside the edge, the fill
@@ -1015,9 +966,10 @@ void main() {
   }
 
   /**
-   * Polyline: the app-wide antialiased line. Default (round) is one joined
-   * strip (nodeGraphGlLinesRibbon), so joints never double-blend; `feather` is
-   * the soft edge (pass ~1 device px). caps "butt" ends each segment flat.
+   * Polyline: the app-wide antialiased line. Default (round) is the app
+   * stroke (nodeGraphGlLinesStroke): exact capsules MAX-merged per colour, so
+   * joints and hairpins never double-blend or pinch; `feather` is the soft
+   * edge (pass ~1 device px). caps "butt" ends each segment flat.
    * caps "ortho" is for axis-aligned traces: at each corner the segment runs
    * to the far edge of the crossing stroke, so the corner square is covered
    * by overlap. No diagonal.
@@ -1032,7 +984,7 @@ void main() {
         if (points[i] === joined[joined.length - 2] && points[i + 1] === joined[joined.length - 1]) continue;
         joined.push(points[i], points[i + 1]);
       }
-      if (joined.length >= 4) nodeGraphGlLinesRibbon(batch, joined, halfPx, feather, rgba);
+      if (joined.length >= 4) nodeGraphGlLinesStroke(batch, joined, halfPx, feather, rgba);
       return;
     }
     const reachScale = batch.camera ? (batch.camera.zoom > 0 ? batch.camera.zoom : 1) : 1;
@@ -1173,6 +1125,422 @@ void main() {
         push(batch, v[0], v[1], 0, v[2], 0, half, fade, ink ? ink[tri[t] < 2 ? i : i + 1] : rgba, 1);
       }
     }
+  }
+
+  // ---------------------------------------------------------------- Stroke --
+  // The app's one line stroke (round Polyline, nodeGraphGlLinesStroke and the
+  // nodeGraphGlLinesPresentFrame line faces). Each segment is a capsule; the
+  // fragment shader takes the exact distance to the segment at 4x4 sub-pixel
+  // offsets and applies the batch edge (display Expo skirt / chrome
+  // smootherstep) with a solid core out to halfPx. Consecutive strokes of one
+  // colour are MAX-merged in a coverage target first, so joints, hairpins
+  // (square waves, Gibbs spikes) and dots on the line never double-blend or
+  // pinch; the coverage is then composited over the face in call order
+  // between the batch's quads (main and "over" layers).
+  const STROKE_VS = `#version 300 es
+precision highp float;
+layout(location = 0) in vec2 aCorner;
+layout(location = 1) in vec4 aSeg;
+layout(location = 2) in vec2 aHF;
+uniform float uPixel;
+uniform vec3 uCam;
+uniform float uDevice;
+uniform vec2 uSize;
+out vec2 vPos;
+flat out vec4 vSeg;
+flat out vec2 vHF;
+void main() {
+  vec4 s = aSeg;
+  vec2 hf = aHF;
+  if (uPixel > 0.5) {
+    // Camera: points and half width are world px (x zoom x device), the
+    // feather is screen CSS px (x device), as nodeGraphGlLinesRoundRect.
+    float k = max(uCam.z, 0.0001) * uDevice;
+    s = vec4((s.xy - uCam.xy) * k, (s.zw - uCam.xy) * k);
+    hf = vec2(hf.x * k, hf.y * uDevice);
+  }
+  vec2 p0 = s.xy;
+  vec2 p1 = s.zw;
+  vec2 d = p1 - p0;
+  float len = length(d);
+  vec2 u = len > 1e-6 ? d / len : vec2(1.0, 0.0);
+  vec2 n = vec2(-u.y, u.x);
+  float reach = hf.x + hf.y + 2.0;
+  vec2 pos = mix(p0 - u * reach, p1 + u * reach, aCorner.x) + n * reach * (aCorner.y * 2.0 - 1.0);
+  vPos = pos;
+  vSeg = s;
+  vHF = hf;
+  gl_Position = vec4(pos.x / uSize.x * 2.0 - 1.0, 1.0 - pos.y / uSize.y * 2.0, 0.0, 1.0);
+}`;
+  const STROKE_FS = `#version 300 es
+precision highp float;
+in vec2 vPos;
+flat in vec4 vSeg;
+flat in vec2 vHF;
+out vec4 fragColor;
+uniform float uEdge;
+float edgeCurve(float t) {
+  if (uEdge > 0.5) return 1.0 - t * t * t * (t * (t * 6.0 - 15.0) + 10.0);
+  return 1.0 - (1.0 - exp(-3.0 * t)) / 0.95021293163;
+}
+float segDist(vec2 p) {
+  vec2 a = vSeg.xy;
+  vec2 ba = vSeg.zw - a;
+  vec2 pa = p - a;
+  float h = clamp(dot(pa, ba) / max(dot(ba, ba), 1e-12), 0.0, 1.0);
+  return length(pa - ba * h);
+}
+void main() {
+  float halfW = max(vHF.x, 0.0);
+  float feather = max(vHF.y, 1e-4);
+  float acc = 0.0;
+  for (int j = 0; j < 4; j += 1) {
+    for (int i = 0; i < 4; i += 1) {
+      vec2 o = (vec2(float(i), float(j)) + 0.5) * 0.25 - 0.5;
+      float d = segDist(vPos + o);
+      acc += d <= halfW ? 1.0 : edgeCurve(clamp((d - halfW) / feather, 0.0, 1.0));
+    }
+  }
+  fragColor = vec4(acc * 0.0625, 0.0, 0.0, 1.0);
+}`;
+  const STROKE_COMP_VS = `#version 300 es
+void main() {
+  vec2 p = vec2(float((gl_VertexID << 1) & 2), float(gl_VertexID & 2));
+  gl_Position = vec4(p * 2.0 - 1.0, 0.0, 1.0);
+}`;
+  const STROKE_COMP_FS = `#version 300 es
+precision highp float;
+uniform sampler2D uCov;
+uniform ivec2 uOrigin;
+uniform vec4 uColour;
+out vec4 fragColor;
+void main() {
+  float c = texelFetch(uCov, ivec2(gl_FragCoord.xy) - uOrigin, 0).r;
+  if (c < 0.004) discard;
+  fragColor = vec4(uColour.rgb, uColour.a * c);
+}`;
+  const STROKE_FLOATS = 6; // x0 y0 x1 y1 half feather
+
+  function ensureStroke(s) {
+    if (!s || s.strokeFailed) return null;
+    if (s.stroke) return s.stroke;
+    const gl = s.gl;
+    if (!gl || typeof gl.drawArraysInstanced !== "function" || typeof gl.createVertexArray !== "function") {
+      s.strokeFailed = true;
+      return null;
+    }
+    try {
+      const build = (vsSrc, fsSrc, name) => {
+        const vs = compile(gl, gl.VERTEX_SHADER, vsSrc, name + " vertex");
+        const fs = compile(gl, gl.FRAGMENT_SHADER, fsSrc, name + " fragment");
+        const program = gl.createProgram();
+        gl.attachShader(program, vs);
+        gl.attachShader(program, fs);
+        gl.linkProgram(program);
+        gl.deleteShader(vs);
+        gl.deleteShader(fs);
+        if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+          const log = gl.getProgramInfoLog(program) || "link failed";
+          gl.deleteProgram(program);
+          throw new Error(name + ": " + log);
+        }
+        return program;
+      };
+      const program = build(STROKE_VS, STROKE_FS, "stroke");
+      const comp = build(STROKE_COMP_VS, STROKE_COMP_FS, "stroke composite");
+      const vao = gl.createVertexArray();
+      const corner = gl.createBuffer();
+      const inst = gl.createBuffer();
+      gl.bindVertexArray(vao);
+      gl.bindBuffer(gl.ARRAY_BUFFER, corner);
+      gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([0, 0, 1, 0, 0, 1, 1, 0, 1, 1, 0, 1]), gl.STATIC_DRAW);
+      gl.enableVertexAttribArray(0);
+      gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+      gl.vertexAttribDivisor(0, 0);
+      gl.bindBuffer(gl.ARRAY_BUFFER, inst);
+      gl.enableVertexAttribArray(1);
+      gl.vertexAttribPointer(1, 4, gl.FLOAT, false, STROKE_FLOATS * 4, 0);
+      gl.vertexAttribDivisor(1, 1);
+      gl.enableVertexAttribArray(2);
+      gl.vertexAttribPointer(2, 2, gl.FLOAT, false, STROKE_FLOATS * 4, 16);
+      gl.vertexAttribDivisor(2, 1);
+      gl.bindVertexArray(null);
+      gl.bindBuffer(gl.ARRAY_BUFFER, null);
+      const u = (prog, name) => gl.getUniformLocation(prog, name);
+      s.stroke = {
+        program,
+        comp,
+        vao,
+        inst,
+        emptyVao: gl.createVertexArray(),
+        cov: null,
+        uPixel: u(program, "uPixel"),
+        uCam: u(program, "uCam"),
+        uDevice: u(program, "uDevice"),
+        uSize: u(program, "uSize"),
+        uEdge: u(program, "uEdge"),
+        uCov: u(comp, "uCov"),
+        uOrigin: u(comp, "uOrigin"),
+        uColour: u(comp, "uColour"),
+      };
+      return s.stroke;
+    } catch (error) {
+      s.strokeFailed = true;
+      console.error("[gl-line-renderer] stroke shader failed: " + String(error?.message || error));
+      return null;
+    }
+  }
+
+  function ensureStrokeCoverage(st, gl, w, h) {
+    if (!st.cov) st.cov = { tex: gl.createTexture(), fbo: gl.createFramebuffer(), w: 0, h: 0 };
+    if (st.cov.w === w && st.cov.h === h) return st.cov;
+    gl.bindTexture(gl.TEXTURE_2D, st.cov.tex);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.bindTexture(gl.TEXTURE_2D, null);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, st.cov.fbo);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, st.cov.tex, 0);
+    st.cov.w = w;
+    st.cov.h = h;
+    return st.cov;
+  }
+
+  /**
+   * The app line: points [x0,y0,x1,y1,...] (batch units, like Polyline) as one
+   * stroke, solid core halfPx then `feather` px of the batch edge. A
+   * non-finite point breaks the line; a lone point is a round dot of radius
+   * halfPx. Drawn in call order between the batch's quads.
+   */
+  function nodeGraphGlLinesStroke(batch, points, halfPx, feather, rgba) {
+    if (!batch || !points || points.length < 2) return;
+    if (batch._glow === true || !ensureStroke(batch.s)) {
+      if (points.length >= 4) nodeGraphGlLinesRibbon(batch, points, halfPx, feather, rgba);
+      else nodeGraphGlLinesDot(batch, points[0], points[1], halfPx, feather, rgba);
+      return;
+    }
+    const over = batch._over === true;
+    const at = over ? batch.on : batch.n;
+    const c = rgba || [1, 1, 1, 1];
+    const col = [c[0] || 0, c[1] || 0, c[2] || 0, c.length > 3 && Number.isFinite(c[3]) ? c[3] : 1];
+    if (!batch.strokes) batch.strokes = [];
+    let g = batch.strokes[batch.strokes.length - 1];
+    if (!g || g.over !== over || g.at !== at
+      || g.rgba[0] !== col[0] || g.rgba[1] !== col[1] || g.rgba[2] !== col[2] || g.rgba[3] !== col[3]) {
+      g = { over, at, rgba: col, data: new Float32Array(256), n: 0 };
+      batch.strokes.push(g);
+    }
+    const cam = !!batch.camera;
+    const k = cam ? 1 : (batch.scale || 1);
+    const half = Math.max(0, Number(halfPx) || 0) * k;
+    const fade = Math.max(0, Number(feather) || 0) * k;
+    const reach = half + fade + 4;
+    const add = (x0, y0, x1, y1) => {
+      if (!cam) {
+        const clipped = clipLineToRect(x0, y0, x1, y1, -reach, -reach, batch.w + reach, batch.h + reach);
+        if (!clipped) return;
+        x0 = clipped[0]; y0 = clipped[1]; x1 = clipped[2]; y1 = clipped[3];
+      }
+      if (g.n + STROKE_FLOATS > g.data.length) {
+        const grown = new Float32Array(g.data.length * 2);
+        grown.set(g.data);
+        g.data = grown;
+      }
+      const d = g.data;
+      const i = g.n;
+      d[i] = x0; d[i + 1] = y0; d[i + 2] = x1; d[i + 3] = y1; d[i + 4] = half; d[i + 5] = fade;
+      g.n = i + STROKE_FLOATS;
+    };
+    const count = (points.length / 2) | 0;
+    let px = NaN;
+    let py = NaN;
+    let run = 0;
+    for (let i = 0; i < count; i += 1) {
+      const x = Number(points[i * 2]) * k;
+      const y = Number(points[i * 2 + 1]) * k;
+      if (!Number.isFinite(x) || !Number.isFinite(y)) {
+        if (run === 1) add(px, py, px, py);
+        run = 0;
+        continue;
+      }
+      if (run > 0 && (x !== px || y !== py)) add(px, py, x, y);
+      px = x;
+      py = y;
+      run += 1;
+    }
+    if (run === 1) add(px, py, px, py);
+  }
+
+  function drawStrokeGroup(batch, g, blend, colourDst, alphaDst) {
+    const st = ensureStroke(batch.s);
+    const count = (g.n / STROKE_FLOATS) | 0;
+    if (!st || !(count > 0)) return;
+    const gl = batch.s.gl;
+    const prevFbo = gl.getParameter(gl.FRAMEBUFFER_BINDING);
+    const vp = gl.getParameter(gl.VIEWPORT);
+    const scissor = gl.isEnabled(gl.SCISSOR_TEST);
+    const vw = Math.max(1, vp[2] | 0);
+    const vh = Math.max(1, vp[3] | 0);
+    const cov = ensureStrokeCoverage(st, gl, vw, vh);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, cov.fbo);
+    gl.viewport(0, 0, vw, vh);
+    gl.disable(gl.SCISSOR_TEST);
+    gl.clearColor(0, 0, 0, 0);
+    gl.clear(gl.COLOR_BUFFER_BIT);
+    gl.enable(gl.BLEND);
+    gl.blendEquation(gl.MAX);
+    gl.blendFunc(gl.ONE, gl.ONE);
+    gl.useProgram(st.program);
+    const cam = batch.camera;
+    gl.uniform1f(st.uPixel, cam ? 1 : 0);
+    gl.uniform3f(st.uCam, cam?.x || 0, cam?.y || 0, cam?.zoom > 0 ? cam.zoom : 1);
+    gl.uniform1f(st.uDevice, batch.scale > 0 ? batch.scale : 1);
+    gl.uniform2f(st.uSize, batch.w, batch.h);
+    gl.uniform1f(st.uEdge, batch.edge === "chrome" ? 1 : 0);
+    gl.bindVertexArray(st.vao);
+    gl.bindBuffer(gl.ARRAY_BUFFER, st.inst);
+    gl.bufferData(gl.ARRAY_BUFFER, g.data.subarray(0, g.n), gl.STREAM_DRAW);
+    gl.drawArraysInstanced(gl.TRIANGLES, 0, 6, count);
+    gl.bindVertexArray(null);
+    gl.bindBuffer(gl.ARRAY_BUFFER, null);
+    gl.blendEquation(gl.FUNC_ADD);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, prevFbo);
+    gl.viewport(vp[0], vp[1], vp[2], vp[3]);
+    if (scissor) gl.enable(gl.SCISSOR_TEST);
+    const max = blend === "max";
+    if (max) {
+      gl.blendEquation(gl.MAX);
+      gl.blendFunc(gl.ONE, gl.ONE);
+    } else {
+      gl.blendFuncSeparate(gl.SRC_ALPHA, colourDst, gl.ONE, alphaDst);
+    }
+    gl.useProgram(st.comp);
+    gl.uniform1i(st.uCov, 0);
+    gl.uniform2i(st.uOrigin, vp[0] | 0, vp[1] | 0);
+    gl.uniform4f(st.uColour, g.rgba[0], g.rgba[1], g.rgba[2], g.rgba[3]);
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, cov.tex);
+    gl.bindVertexArray(st.emptyVao);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+    gl.bindVertexArray(null);
+    gl.bindTexture(gl.TEXTURE_2D, null);
+    if (max) gl.blendEquation(gl.FUNC_ADD);
+  }
+
+  // Adapt Max: arc-length resample of a polyline [x0,y0,x1,y1,...] to
+  // outCount evenly spaced points (formula faces pre-sample y = f(x) or
+  // parametric curves; a single line is capped at 120000 points).
+  function nodeGraphGlLinesAdaptPoints(points, outCount) {
+    const pts = points instanceof Float32Array ? points : Float32Array.from(points || []);
+    const n = (pts.length / 2) | 0;
+    if (n < 2) return pts;
+    outCount = Math.max(2, outCount | 0);
+    const dist = new Float64Array(n);
+    for (let i = 1; i < n; i += 1) {
+      dist[i] = dist[i - 1] + Math.hypot(pts[i * 2] - pts[i * 2 - 2], pts[i * 2 + 1] - pts[i * 2 - 1]);
+    }
+    const total = dist[n - 1] || 1;
+    const out = new Float32Array(outCount * 2);
+    let j = 0;
+    for (let i = 0; i < outCount; i += 1) {
+      const target = total * (i / (outCount - 1));
+      while (j < n - 2 && dist[j + 1] < target) j += 1;
+      const d0 = dist[j];
+      const d1 = dist[j + 1];
+      const a = d1 > d0 ? (target - d0) / (d1 - d0) : 0;
+      out[i * 2] = pts[j * 2] + (pts[j * 2 + 2] - pts[j * 2]) * a;
+      out[i * 2 + 1] = pts[j * 2 + 1] + (pts[j * 2 + 3] - pts[j * 2 + 1]) * a;
+    }
+    return out;
+  }
+
+  // Line-face ink size in canvas view / screen solo. The circuit builder face
+  // is the source of truth: a face shown bigger or smaller keeps the same
+  // relative line width and dot size (ink x now / builder). Smoothing is
+  // antialiasing, so it stays the set number of CSS px at every size.
+  function faceMinCss(face) {
+    const w = face?.clientWidth || 0;
+    const h = face?.clientHeight || 0;
+    return w > 0 && h > 0 ? Math.min(w, h) : 0;
+  }
+
+  /**
+   * Record circuit-builder ink size for every canvas in `face`, once, right
+   * before the face is reparented into canvas view / screen solo.
+   */
+  function nodeGraphGlLinesCaptureBuilderSize(face) {
+    if (!(face instanceof Element)) return false;
+    const faceMin = faceMinCss(face);
+    if (faceMin > 0) face.__glLinesBuilderFaceMinCss = faceMin;
+    for (const canvas of face.querySelectorAll("canvas")) {
+      const w = canvas.clientWidth || 0;
+      const h = canvas.clientHeight || 0;
+      if (w > 0 && h > 0) canvas.__glLinesBuilderMinCss = Math.min(w, h);
+    }
+    return faceMin > 0;
+  }
+
+  function builderMinCss(canvas, presentedFace) {
+    const captured = Number(canvas.__glLinesBuilderMinCss);
+    if (captured > 0) return captured;
+    const faceCaptured = Number(presentedFace?.__glLinesBuilderFaceMinCss);
+    if (faceCaptured > 0) return faceCaptured;
+    const drawn = Number(canvas.__glLinesDrawnMinCss);
+    if (drawn > 0) {
+      canvas.__glLinesBuilderMinCss = drawn;
+      return drawn;
+    }
+    return 0;
+  }
+
+  /**
+   * A line face in one call (SinCos, SinCos4, DSF, BLIT, Basic Shape,
+   * Ellipsoid, Step Register): CSS-px frame on the face canvas, drawn with the
+   * app stroke. frame: { cssWidth, cssHeight, background, waveKey?, blur,
+   *   polylines: [{ points, color, width }], dots: [{ x, y, color, radius }] }
+   * width = full stroke width (0 = no line), blur = Line blur (CSS px).
+   */
+  function nodeGraphGlLinesPresentFrame(canvas, frame = {}) {
+    if (!canvas) return false;
+    const cssWidth = Math.max(1, Number(frame.cssWidth) || canvas.clientWidth || 1);
+    const cssHeight = Math.max(1, Number(frame.cssHeight) || canvas.clientHeight || 1);
+    const scale = Math.max(1e-6, canvas.width / cssWidth);
+    const colour = (c, fallback) => {
+      if (Array.isArray(c)) return [+c[0] || 0, +c[1] || 0, +c[2] || 0, c.length > 3 ? +c[3] : 1];
+      return nodeGraphGlLinesCss(typeof c === "string" && c ? c : fallback);
+    };
+    const minCss = Math.min(cssWidth, cssHeight);
+    const presented = typeof canvas.closest === "function" && canvas.closest(".node-screen-solo-face");
+    if (!presented) canvas.__glLinesDrawnMinCss = minCss;
+    const builderMin = presented ? builderMinCss(canvas, presented) : 0;
+    const ink = presented && builderMin > 0
+      ? (canvas.__glLinesBuilderMinCss > 0 ? minCss : faceMinCss(presented) || minCss) / builderMin
+      : 1;
+    const blur = Number.isFinite(Number(frame.blur)) ? Math.max(0.05, Number(frame.blur)) : 1.2;
+    const batch = nodeGraphGlLinesBegin(canvas, colour(frame.background, "#020609"), { scale });
+    if (!batch) {
+      if (typeof global.nodeGraphDisplayGlFailed === "function") global.nodeGraphDisplayGlFailed(canvas, "line face: no shared GL device");
+      else nodeGraphGlLinesFillBlack(canvas);
+      return false;
+    }
+    for (const line of Array.isArray(frame.polylines) ? frame.polylines : []) {
+      if (!line?.points || line.points.length < 4) continue;
+      const width = line.width == null ? 1.5 : Number(line.width);
+      if (!(width > 0)) continue;
+      let pts = line.points;
+      if (pts.length / 2 > 120000) pts = nodeGraphGlLinesAdaptPoints(pts, 120000);
+      nodeGraphGlLinesStroke(batch, pts, Math.max(0.02, width * 0.5) * ink, blur, colour(line.color, "#ffffff"));
+    }
+    for (const dot of Array.isArray(frame.dots) ? frame.dots : []) {
+      if (!dot || !Number.isFinite(dot.x) || !Number.isFinite(dot.y)) continue;
+      nodeGraphGlLinesStroke(batch, [dot.x, dot.y], Math.max(0.5, Number(dot.radius) || 0.5) * ink, blur, colour(dot.color, "#ffffff"));
+    }
+    const ok = nodeGraphGlLinesEnd(batch);
+    if (!ok && typeof global.nodeGraphDisplayGlFailed === "function") global.nodeGraphDisplayGlFailed(canvas, "line face: draw failed");
+    canvas.__glLinesFrame = { waveKey: `${frame.waveKey || ""}|${canvas.width}x${canvas.height}` };
+    return ok;
   }
 
   // Dashed round stroke. One quad per segment; the fragment shader cuts the
@@ -2229,327 +2597,6 @@ void main() {
     gl.bindBuffer(gl.ARRAY_BUFFER, null);
   }
 
-  const SP_VS = `#version 300 es
-precision highp float;
-precision highp int;
-precision highp sampler2D;
-layout(location = 0) in vec2 aCorner;
-uniform sampler2D uA;
-uniform sampler2D uB;
-uniform vec2 uVp;
-uniform vec4 uRect;
-uniform int uN;
-uniform int uMode;
-uniform int uCols;
-uniform vec2 uGain;
-uniform float uOffset;
-uniform float uHalf;
-uniform float uFeather;
-uniform float uSkip;
-uniform float uSpan;
-uniform float uShift;
-out vec2 vLocal;
-out float vLen;
-out float vAcross;
-out float vPolyline;
-float S(sampler2D t, int i) {
-  return texelFetch(t, ivec2(i % ${SAMPLE_PLOT_TEX_W}, i / ${SAMPLE_PLOT_TEX_W}), 0).r;
-}
-bool bad(float v) {
-  return !(v == v) || abs(v) > 1e30;
-}
-float yOf(float v) {
-  return uRect.y + uRect.w * 0.5 - (v * uGain.x + uOffset) * uRect.w * 0.5;
-}
-vec2 lineAt(int i) {
-  return vec2(uRect.x + uRect.z * (float(i) - uShift) / uSpan, yOf(S(uA, i)));
-}
-vec2 xyAt(int i) {
-  float s = min(uRect.z, uRect.w) * 0.5;
-  return vec2(uRect.x + uRect.z * 0.5 + S(uA, i) * uGain.x * s, uRect.y + uRect.w * 0.5 - S(uB, i) * uGain.y * s);
-}
-bool jump(float a, float b) {
-  return bad(a) || bad(b) || (uSkip > 0.0 && abs(b - a) > uSkip);
-}
-// Segment i -> i + 1 is not drawn.
-bool breaks(int i) {
-  if (i < 0 || i >= uN - 1) return true;
-  if (uMode == 2) return jump(S(uA, i), S(uA, i + 1)) || jump(S(uB, i), S(uB, i + 1));
-  return jump(S(uA, i), S(uA, i + 1));
-}
-vec2 pointAt(int i) {
-  return uMode == 2 ? xyAt(i) : lineAt(i);
-}
-vec2 direction(vec2 a, vec2 b) {
-  vec2 d = b - a;
-  float len = length(d);
-  return len > 1e-4 ? d / len : vec2(1.0, 0.0);
-}
-vec2 normalOf(vec2 d) {
-  return vec2(-d.y, d.x);
-}
-// The two neighboring raw segments share this exact miter vector. That makes
-// the sampled signal one strip instead of a sequence of overlapping capsules.
-vec2 polylineJoin(vec2 prev, vec2 point, vec2 next, bool hasPrev, bool hasNext, float r) {
-  if (!hasPrev) return normalOf(direction(point, next)) * r;
-  if (!hasNext) return normalOf(direction(prev, point)) * r;
-  vec2 incoming = direction(prev, point);
-  vec2 outgoing = direction(point, next);
-  if (dot(incoming, outgoing) < -0.95) return normalOf(outgoing) * r;
-  vec2 outgoingNormal = normalOf(outgoing);
-  vec2 miter = normalOf(incoming) + outgoingNormal;
-  float miterLength = length(miter);
-  if (miterLength <= 1e-4) return outgoingNormal * r;
-  miter /= miterLength;
-  float denominator = dot(miter, outgoingNormal);
-  if (abs(denominator) <= 0.25) return outgoingNormal * r;
-  return miter * clamp(r / denominator, -4.0 * r, 4.0 * r);
-}
-void hide() {
-  gl_Position = vec4(2.0, 2.0, 0.0, 1.0);
-  vLocal = vec2(0.0);
-  vLen = 0.0;
-  vAcross = 0.0;
-  vPolyline = 0.0;
-}
-void main() {
-  int id = gl_InstanceID;
-  vec2 p0;
-  vec2 p1;
-  // Raw 1D and XY plots are one miter-joined strip. Every segment's endpoint
-  // uses the same neighbor-derived edge as the following segment, so there is
-  // no round cap or alpha double-blend at each recorded sample.
-  if (uMode != 1) {
-    if (breaks(id)) { hide(); return; }
-    p0 = pointAt(id);
-    p1 = pointAt(id + 1);
-    float r = uHalf + uFeather;
-    bool p0HasPrev = id > 0 && !breaks(id - 1);
-    bool p1HasNext = id + 1 < uN - 1 && !breaks(id + 1);
-    vec2 beforeP0 = p0HasPrev ? pointAt(id - 1) : p0;
-    vec2 afterP1 = p1HasNext ? pointAt(id + 2) : p1;
-    vec2 edge0 = polylineJoin(beforeP0, p0, p1, p0HasPrev, true, r);
-    vec2 edge1 = polylineJoin(p0, p1, afterP1, true, p1HasNext, r);
-    float side = mix(-1.0, 1.0, aCorner.y);
-    vec2 pos = aCorner.x < 0.5 ? p0 + edge0 * side : p1 + edge1 * side;
-    vLocal = vec2(0.0);
-    vLen = 0.0;
-    vAcross = side * r;
-    vPolyline = 1.0;
-    gl_Position = vec4(pos.x / uVp.x * 2.0 - 1.0, 1.0 - pos.y / uVp.y * 2.0, 0.0, 1.0);
-    return;
-  }
-  {
-    // Dense: per column a min/max bar (even) and the link from the previous
-    // column's last sample to this column's first (odd).
-    int col = id / 2;
-    float cols = float(uCols);
-    int from = int(floor(uShift + float(col) * uSpan / cols));
-    int to = max(from + 1, min(uN, int(floor(uShift + float(col + 1) * uSpan / cols))));
-    float x = uRect.x + (float(col) + 0.5) * uRect.z / cols;
-    if (id % 2 == 0) {
-      float lo = 1e30;
-      float hi = -1e30;
-      for (int i = from; i < to; i++) {
-        float v = S(uA, i);
-        if (!bad(v)) {
-          lo = min(lo, v);
-          hi = max(hi, v);
-        }
-      }
-      if (lo > hi) { hide(); return; }
-      p0 = vec2(x, yOf(lo));
-      p1 = vec2(x, yOf(hi));
-    } else {
-      if (col == 0 || from < 1) { hide(); return; }
-      float a = S(uA, from - 1);
-      float b = S(uA, from);
-      if (jump(a, b)) { hide(); return; }
-      p0 = vec2(x - uRect.z / cols, yOf(a));
-      p1 = vec2(x, yOf(b));
-    }
-  }
-  vec2 d = p1 - p0;
-  float len = length(d);
-  vec2 u = len > 1e-4 ? d / len : vec2(1.0, 0.0);
-  vec2 nrm = vec2(-u.y, u.x);
-  float r = uHalf + uFeather;
-  float along = -r + aCorner.x * (len + 2.0 * r);
-  float across = mix(-r, r, aCorner.y);
-  vec2 pos = p0 + u * along + nrm * across;
-  vLocal = vec2(along, across);
-  vLen = len;
-  vAcross = across;
-  vPolyline = 0.0;
-  gl_Position = vec4(pos.x / uVp.x * 2.0 - 1.0, 1.0 - pos.y / uVp.y * 2.0, 0.0, 1.0);
-}
-`;
-  const SP_FS = `#version 300 es
-precision highp float;
-in vec2 vLocal;
-in float vLen;
-in float vAcross;
-in float vPolyline;
-uniform float uHalf;
-uniform float uFeather;
-uniform vec4 uColour;
-out vec4 fragColor;
-${COVERAGE_GLSL}
-void main() {
-  if (vPolyline > 0.5) {
-    float a = coverageEdge(uHalf, uFeather, abs(vAcross));
-    if (a < 0.004) discard;
-    fragColor = vec4(uColour.rgb, uColour.a * a);
-    return;
-  }
-  float u = vLocal.x;
-  float outside = u < 0.0 ? -u : (u > vLen ? u - vLen : 0.0);
-  float d = outside > 0.0 ? length(vec2(outside, vLocal.y)) : abs(vLocal.y);
-  // App Expo skirt: solid to uHalf, fading over uFeather outside it. Reach in
-  // SP_VS (uHalf + uFeather) covers the whole skirt.
-  float a = coverageEdge(uHalf, uFeather, d);
-  if (a < 0.004) discard;
-  fragColor = vec4(uColour.rgb, uColour.a * a);
-}
-`;
-
-  function ensureSamplePlot(s) {
-    if (!s || s.samplePlotFailed) return null;
-    if (s.samplePlot) return s.samplePlot;
-    const gl = s.gl;
-    if (!gl || typeof gl.drawArraysInstanced !== "function") {
-      s.samplePlotFailed = true;
-      return null;
-    }
-    try {
-      const vs = compile(gl, gl.VERTEX_SHADER, SP_VS, "samplePlot vertex");
-      const fs = compile(gl, gl.FRAGMENT_SHADER, SP_FS, "samplePlot fragment");
-      const program = gl.createProgram();
-      gl.attachShader(program, vs);
-      gl.attachShader(program, fs);
-      gl.bindAttribLocation(program, 0, "aCorner");
-      gl.linkProgram(program);
-      gl.deleteShader(vs);
-      gl.deleteShader(fs);
-      if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
-        const log = gl.getProgramInfoLog(program) || "link failed";
-        gl.deleteProgram(program);
-        throw new Error(log);
-      }
-      const buf = gl.createBuffer();
-      gl.bindBuffer(gl.ARRAY_BUFFER, buf);
-      gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
-        0, 0, 1, 0, 0, 1,
-        1, 0, 1, 1, 0, 1,
-      ]), gl.STATIC_DRAW);
-      gl.bindBuffer(gl.ARRAY_BUFFER, null);
-      const u = (name) => gl.getUniformLocation(program, name);
-      s.samplePlot = {
-        program,
-        buf,
-        tex: [null, null],
-        rows: [0, 0],
-        scratch: null,
-        uA: u("uA"),
-        uB: u("uB"),
-        uVp: u("uVp"),
-        uRect: u("uRect"),
-        uN: u("uN"),
-        uMode: u("uMode"),
-        uCols: u("uCols"),
-        uGain: u("uGain"),
-        uOffset: u("uOffset"),
-        uHalf: u("uHalf"),
-        uFeather: u("uFeather"),
-        uSkip: u("uSkip"),
-        uSpan: u("uSpan"),
-        uShift: u("uShift"),
-        uColour: u("uColour"),
-      };
-      return s.samplePlot;
-    } catch (error) {
-      s.samplePlotFailed = true;
-      console.error("[gl-line-renderer] sample plot shader failed: " + String(error?.message || error));
-      return null;
-    }
-  }
-
-  /** Upload n samples into sample texture slot (R32F, SAMPLE_PLOT_TEX_W wide). */
-  function samplePlotUpload(gl, sp, slot, src, n) {
-    const W = SAMPLE_PLOT_TEX_W;
-    const rows = Math.max(1, Math.ceil(n / W));
-    let data = src;
-    if (!(data instanceof Float32Array)) {
-      if (!sp.scratch || sp.scratch.length < n) sp.scratch = new Float32Array(Math.max(n, 4096));
-      sp.scratch.set(src.subarray ? src.subarray(0, n) : Array.prototype.slice.call(src, 0, n));
-      data = sp.scratch;
-    }
-    if (!sp.tex[slot] || sp.rows[slot] < rows) {
-      if (sp.tex[slot]) gl.deleteTexture(sp.tex[slot]);
-      const tex = gl.createTexture();
-      gl.bindTexture(gl.TEXTURE_2D, tex);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-      const alloc = Math.max(rows, 4);
-      gl.texImage2D(gl.TEXTURE_2D, 0, gl.R32F, W, alloc, 0, gl.RED, gl.FLOAT, null);
-      sp.tex[slot] = tex;
-      sp.rows[slot] = alloc;
-    }
-    gl.bindTexture(gl.TEXTURE_2D, sp.tex[slot]);
-    gl.pixelStorei(gl.UNPACK_ALIGNMENT, 4);
-    const full = Math.floor(n / W);
-    if (full > 0) gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, W, full, gl.RED, gl.FLOAT, data.subarray(0, full * W));
-    const rest = n - full * W;
-    if (rest > 0) gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, full, rest, 1, gl.RED, gl.FLOAT, data.subarray(full * W, n));
-  }
-
-  function drawSamplePlots(batch) {
-    const sp = ensureSamplePlot(batch.s);
-    if (!sp || !batch.samplePlots?.length) return;
-    const gl = batch.s.gl;
-    const { w, h } = batch;
-    gl.useProgram(sp.program);
-    gl.bindBuffer(gl.ARRAY_BUFFER, sp.buf);
-    gl.enableVertexAttribArray(0);
-    gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
-    gl.vertexAttribDivisor(0, 0);
-    gl.uniform2f(sp.uVp, w, h);
-    gl.uniform1i(sp.uA, 0);
-    gl.uniform1i(sp.uB, 1);
-    for (const spec of batch.samplePlots) {
-      samplePlotUpload(gl, sp, 0, spec.a, spec.n);
-      if (spec.xy) samplePlotUpload(gl, sp, 1, spec.b, spec.n);
-      gl.activeTexture(gl.TEXTURE0);
-      gl.bindTexture(gl.TEXTURE_2D, sp.tex[0]);
-      gl.activeTexture(gl.TEXTURE1);
-      gl.bindTexture(gl.TEXTURE_2D, spec.xy ? sp.tex[1] : sp.tex[0]);
-      gl.activeTexture(gl.TEXTURE0);
-      const cols = Math.max(1, Math.ceil(spec.w));
-      const dense = !spec.xy && spec.span > cols * 2;
-      gl.uniform4f(sp.uRect, spec.x, spec.y, spec.w, spec.h);
-      gl.uniform1i(sp.uN, spec.n);
-      gl.uniform1i(sp.uMode, spec.xy ? 2 : (dense ? 1 : 0));
-      gl.uniform1i(sp.uCols, cols);
-      gl.uniform2f(sp.uGain, spec.gain, spec.gainY);
-      gl.uniform1f(sp.uOffset, spec.offset);
-      gl.uniform1f(sp.uHalf, spec.half);
-      gl.uniform1f(sp.uFeather, spec.feather);
-      gl.uniform1f(sp.uSkip, spec.skip);
-      gl.uniform1f(sp.uSpan, spec.span);
-      gl.uniform1f(sp.uShift, spec.shift);
-      gl.uniform4f(sp.uColour, spec.rgba[0], spec.rgba[1], spec.rgba[2], spec.rgba[3]);
-      gl.drawArraysInstanced(gl.TRIANGLES, 0, 6, dense ? cols * 2 : spec.n);
-    }
-    gl.activeTexture(gl.TEXTURE1);
-    gl.bindTexture(gl.TEXTURE_2D, null);
-    gl.activeTexture(gl.TEXTURE0);
-    gl.bindTexture(gl.TEXTURE_2D, null);
-    gl.disableVertexAttribArray(0);
-    gl.bindBuffer(gl.ARRAY_BUFFER, null);
-  }
-
   // Rounded rect (nodeGraphGlLinesRoundRect): one instance per box, worked in
   // device px. Camera batches: rect / radius / stroke are world px (x zoom x
   // device); feather is screen CSS px (x device). Otherwise CSS px x uScale.
@@ -2738,8 +2785,8 @@ void main() {
     if (batch.images.length) {
       drawImages(batch, alphaDst);
     }
-    const drawQuads = (data, n) => {
-      const count = n / FLOATS;
+    const drawQuads = (data, n, start = 0) => {
+      const count = (n - start) / FLOATS;
       if (!(count > 0) || !data) return;
       // "max": straight coverage. The dot canvas is premultipliedAlpha:false,
       // so a normal SRC_ALPHA write gets multiplied again when it crosses the
@@ -2753,7 +2800,7 @@ void main() {
       if (s.coverage) gl.uniform1f(s.coverage, max ? 1 : 0);
       if (s.lineEdge) gl.uniform1f(s.lineEdge, batch.edge === "chrome" ? 1 : 0);
       gl.bindBuffer(gl.ARRAY_BUFFER, s.buf);
-      gl.bufferData(gl.ARRAY_BUFFER, data.subarray(0, n), gl.STREAM_DRAW);
+      gl.bufferData(gl.ARRAY_BUFFER, data.subarray(start, n), gl.STREAM_DRAW);
       const sizes = [2, 2, 1, 1, 1, 1, 4];
       let off = 0;
       for (let i = 0; i < sizes.length; i += 1) {
@@ -2773,17 +2820,28 @@ void main() {
       drawQuads(batch.gdata, batch.gn);
       gl.blendFuncSeparate(gl.SRC_ALPHA, colourDst, gl.ONE, alphaDst);
     }
-    drawQuads(batch.data, batch.n);
+    // Quads and strokes in call order (a stroke sits between the quads pushed
+    // before and after it).
+    const drawLayer = (over) => {
+      const data = over ? batch.over : batch.data;
+      const n = over ? batch.on : batch.n;
+      let pos = 0;
+      for (const g of batch.strokes || []) {
+        if (g.over !== over) continue;
+        if (g.at > pos) drawQuads(data, g.at, pos);
+        pos = Math.max(pos, g.at);
+        drawStrokeGroup(batch, g, blend, colourDst, alphaDst);
+        gl.blendFuncSeparate(gl.SRC_ALPHA, colourDst, gl.ONE, alphaDst);
+      }
+      if (n > pos) drawQuads(data, n, pos);
+    };
+    drawLayer(false);
     if (batch.pulseTrains?.length) {
       gl.blendFuncSeparate(gl.SRC_ALPHA, colourDst, gl.ONE, alphaDst);
       drawPulseTrains(batch);
     }
-    if (batch.samplePlots?.length) {
-      gl.blendFuncSeparate(gl.SRC_ALPHA, colourDst, gl.ONE, alphaDst);
-      drawSamplePlots(batch);
-    }
     if (batch.outlines?.length) drawOutlines(batch);
-    drawQuads(batch.over, batch.on);
+    drawLayer(true);
     if (batch.roundRects?.length) {
       gl.blendFuncSeparate(gl.SRC_ALPHA, colourDst, gl.ONE, alphaDst);
       drawRoundRects(batch);
@@ -2825,6 +2883,7 @@ void main() {
     batch.tdata = null;
     batch.n = 0;
     batch.tn = 0;
+    batch.strokes = null;
   }
 
   /**
@@ -3440,11 +3499,14 @@ void main() {
     nodeGraphGlLinesSegment,
     nodeGraphGlLinesDot,
     nodeGraphGlLinesPulseTrain,
-    nodeGraphGlLinesSamplePlot,
     nodeGraphGlLinesRoundRect,
     nodeGraphGlLinesRing,
     nodeGraphGlLinesPolyline,
     nodeGraphGlLinesRibbon,
+    nodeGraphGlLinesStroke,
+    nodeGraphGlLinesAdaptPoints,
+    nodeGraphGlLinesCaptureBuilderSize,
+    nodeGraphGlLinesPresentFrame,
     nodeGraphGlLinesDash,
     nodeGraphGlLinesPhosphor,
     nodeGraphGlLinesImage,

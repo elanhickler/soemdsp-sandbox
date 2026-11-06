@@ -142,7 +142,7 @@ function nodeGraphDisplaySettingsBuildStepperRowHtml(key, formType = null, optio
   }
   if ((formType === "roundShapeFace" || formType === "basicShapeFace" || formType === "blitFace" || formType === "sinCosFace" || formType === "clockFace" || formType === "clockDividerFace" || formType === "pulseExplosionFace" || formType === "pulseTrainFace" || formType === "plotFace") && key === "lineThickness") {
     label = "Line thickness";
-    title = formType === "clockFace" || formType === "clockDividerFace" || formType === "pulseExplosionFace" || formType === "pulseTrainFace" ? "" : formType === "roundShapeFace"
+    title = formType === "clockFace" || formType === "clockDividerFace" || formType === "pulseExplosionFace" || formType === "pulseTrainFace" ? "Line width in CSS pixels (0–16). 0 = no line." : formType === "roundShapeFace"
       ? "Orbit stroke width in CSS pixels (0–16). 0 = no line, only the dot."
       : "Wave stroke width in CSS pixels (0–16). 0 = no line, only the dot.";
   }
@@ -156,7 +156,7 @@ function nodeGraphDisplaySettingsBuildStepperRowHtml(key, formType = null, optio
     title = "Extra CSS pixels inside the plate after the automatic line/dot inset (0 = flush, no clip).";
   }
   if (formType === "plotFace" && key === "lineThickness") {
-    title = "Line width in face pixels (0.25–16). Scales with the display when zooming.";
+    title = "Line width in face pixels (0–16). 0 = no line. Scales with the display when zooming.";
   }
   if (formType === "plotFace" && key === "scale") {
     label = "Gain";
@@ -623,6 +623,137 @@ function nodeGraphDisplaySettingsBuildChoiceRowHtml(key) {
     </label>`;
 }
 
+
+/**
+ * Switch row: every option of a small choice visible at once (segmented,
+ * app-latch-button look). The hidden <select> stays the value carrier, so the
+ * form read / write and the popover input / change commit are unchanged.
+ * options.sideHtml: extra cell(s) at the row end (Plot: the Sync latch).
+ */
+function nodeGraphDisplaySettingsBuildSwitchRowHtml(key, options = {}) {
+  const meta = nodeGraphDisplaySettingsChoiceMeta[key];
+  if (!meta) {
+    return "";
+  }
+  const esc = nodeGraphDisplaySettingsEscapeHtml;
+  const label = options.label || meta.label;
+  const titleAttr = meta.title ? ` title="${esc(meta.title)}"` : "";
+  const idAttr = meta.id ? ` id="${esc(meta.id)}"` : "";
+  const list = meta.options || [];
+  const short = options.labels || {};
+  const buttons = list.map((option) => (
+    `<button type="button" class="app-latch-button node-trace-display-switch-option is-off" aria-pressed="false"`
+    + ` data-trace-display-switch-option="${esc(option.value)}">`
+    + `<span class="app-latch-button-label">${esc(short[option.value] || option.label)}</span></button>`
+  )).join("");
+  const selectOptions = list
+    .map((option) => `<option value="${esc(option.value)}">${esc(option.label)}</option>`)
+    .join("");
+  return `
+    <div class="node-trace-display-line-burn-row node-trace-display-switch-row" data-trace-display-control-row data-trace-display-choice-row="${key}" data-trace-display-switch-for="${key}"${titleAttr}>
+      <span>${esc(label)}</span>
+      <span class="node-trace-display-switch-cells">
+        <span class="app-latch-button-row node-trace-display-switch" role="group" aria-label="${esc(meta.aria || meta.label)}" style="--latch-cols:${Math.max(1, list.length)};grid-template-columns:repeat(${Math.max(1, list.length)},minmax(0,1fr))">${buttons}</span>
+        ${options.sideHtml || ""}
+      </span>
+      <select hidden data-trace-display-choice="${key}"${idAttr} aria-hidden="true" tabindex="-1">${selectOptions}</select>
+    </div>`;
+}
+
+/** Light the switch option that matches each hidden select. */
+function nodeGraphDisplaySettingsSyncSwitches(root) {
+  const host = root || document.getElementById("nodeTraceDisplaySettingsPopover");
+  const rows = [...(host?.querySelectorAll?.("[data-trace-display-switch-for]") || [])];
+  if (host?.matches?.("[data-trace-display-switch-for]")) rows.push(host);
+  for (const row of rows) {
+    const select = row.querySelector("select[data-trace-display-choice]");
+    const value = select ? String(select.value) : "";
+    for (const button of row.querySelectorAll("[data-trace-display-switch-option]")) {
+      const on = button.getAttribute("data-trace-display-switch-option") === value;
+      button.classList.toggle("is-on", on);
+      button.classList.toggle("is-off", !on);
+      button.setAttribute("aria-pressed", on ? "true" : "false");
+    }
+  }
+}
+
+if (typeof document !== "undefined" && !globalThis.__nodeGraphDisplaySwitchBound) {
+  globalThis.__nodeGraphDisplaySwitchBound = true;
+  document.addEventListener("click", (event) => {
+    const button = event.target?.closest?.("[data-trace-display-switch-option]");
+    if (!button) return;
+    const row = button.closest("[data-trace-display-switch-for]");
+    const select = row?.querySelector("select[data-trace-display-choice]");
+    if (!select) return;
+    const value = button.getAttribute("data-trace-display-switch-option");
+    if (select.value === value) return;
+    select.value = value;
+    nodeGraphDisplaySettingsSyncSwitches(row);
+    select.dispatchEvent(new Event("input", { bubbles: true }));
+    select.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+}
+
+/**
+ * 1D Plot / 1D Plot Stereo / 2D Plot panel, grouped by purpose:
+ *   Window  Cycles | Time (+ Sync), the window amount
+ *   Signal  Gain, Offset
+ *   Line    Draw, Ink (1D plots), Skip discontinuities (wide latch), Thickness + Blur
+ * Colours follow in the shared colour section.
+ */
+function nodeGraphPlotDisplaySettingsRows(type, choiceKeys, toggleKeys, fieldKeys) {
+  const rows = [];
+  const sub = (text) => `<div class="node-trace-display-subsection-title">${nodeGraphDisplaySettingsEscapeHtml(text)}</div>`;
+  const hasChoice = (key) => choiceKeys.includes(key);
+  const hasToggle = (key) => toggleKeys.includes(key);
+  const hasField = (key) => fieldKeys.includes(key);
+  // Window: the mode switch, with Sync beside it (1D Plot) or its own
+  // Off / Left / Right / Mono switch (1D Plot Stereo, 2D Plot).
+  rows.push(sub("Window"));
+  const syncLatch = hasToggle("sourceSync") && typeof AppLatchButton !== "undefined"
+    ? AppLatchButton.buildHtml({
+      label: (nodeGraphDisplaySettingsToggleMeta.sourceSync || {}).label || "Sync",
+      title: (nodeGraphDisplaySettingsToggleMeta.sourceSync || {}).title || "",
+      toggleKey: "sourceSync",
+      on: false,
+      className: "node-trace-display-switch-side",
+    })
+    : "";
+  if (hasChoice("windowMode")) {
+    rows.push(nodeGraphDisplaySettingsBuildSwitchRowHtml("windowMode", { sideHtml: syncLatch }));
+  }
+  if (hasChoice("syncChannel")) {
+    rows.push(nodeGraphDisplaySettingsBuildSwitchRowHtml("syncChannel", { label: "Sync" }));
+  }
+  const windowKey = fieldKeys.find((key) => key === "timeMs" || key === "windowCycles");
+  if (windowKey) rows.push(nodeGraphDisplaySettingsBuildStepperRowHtml(windowKey, type));
+  // Signal: how the samples map onto the face.
+  rows.push(sub("Signal"));
+  for (const key of ["scale", "plotOffset"]) {
+    if (hasField(key)) rows.push(nodeGraphDisplaySettingsBuildStepperRowHtml(key, type));
+  }
+  // Line: how the samples are drawn.
+  rows.push(sub("Line"));
+  if (hasChoice("plotDraw")) rows.push(nodeGraphDisplaySettingsBuildSwitchRowHtml("plotDraw"));
+  if (hasChoice("barInk")) {
+    rows.push(nodeGraphDisplaySettingsBuildSwitchRowHtml("barInk", { labels: { stroke: "Stroke", fill: "Fill", both: "Both" } }));
+  }
+  if (hasToggle("skipDiscontinuities") && typeof AppLatchButton !== "undefined") {
+    const meta = nodeGraphDisplaySettingsToggleMeta.skipDiscontinuities || {};
+    rows.push(AppLatchButton.buildRowHtml([{
+      label: meta.label || "Skip discontinuities",
+      title: meta.title || "",
+      toggleKey: "skipDiscontinuities",
+      on: false,
+      className: "node-trace-display-wide-latch",
+    }], "node-trace-display-wide-latch-row"));
+  }
+  const lineKeys = ["lineThickness", "lineSmoothing"].filter(hasField);
+  if (lineKeys.length) {
+    rows.push(`<div class="node-trace-display-pair-grid">${lineKeys.map((key) => nodeGraphDisplaySettingsBuildStepperRowHtml(key, type)).join("")}</div>`);
+  }
+  return rows;
+}
 
 function nodeGraphDisplaySettingsColorRowMeta(key, formType = null, options = {}) {
   let base = nodeGraphDisplaySettingsColorMeta[key] || {
@@ -2097,7 +2228,10 @@ function buildNodeGraphDisplaySettingsBodyHtml(formType, node = null) {
       continue;
     }
     let fieldKeys = (sectionControls.fields || []).filter(
-      (key) => activeFields.has(key) && allowKey("fields", key),
+      (key) => activeFields.has(key) && allowKey("fields", key)
+        // Trail / Ghost fade the stem plate; the reverb line displays draw their own way.
+        && !(type === "hypersawBurn" && (key === "trail" || key === "ghost")
+          && ["reverbEffect", "sabrinaReverbOriginal"].includes(String(node?.type || ""))),
     );
     if (type === "robinSinepulseFace" && section === "waterfall") {
       fieldKeys = ["lineSmoothing", "pixelDensity"].filter(
@@ -2148,7 +2282,7 @@ function buildNodeGraphDisplaySettingsBodyHtml(formType, node = null) {
         : null;
       const twoChannel = plotType === "plot1dStereo" || plotType === "plot2d";
       toggleKeys = toggleKeys.filter((key) => !(twoChannel && key === "sourceSync"));
-      choiceKeys = (twoChannel ? ["windowMode", "syncChannel"] : ["windowMode"]).filter((key) => activeChoices.has(key));
+      choiceKeys = (plotType === "plot2d" ? ["windowMode", "syncChannel", "plotDraw"] : (twoChannel ? ["windowMode", "syncChannel", "plotDraw", "barInk"] : ["windowMode", "plotDraw", "barInk"])).filter((key) => activeChoices.has(key));
     }
     if (type === "robinSinepulseFace" && section === "waterfall") {
       choiceKeys = ["faceView"].filter(
@@ -2324,10 +2458,15 @@ function buildNodeGraphDisplaySettingsBodyHtml(formType, node = null) {
     const packingCandidates = NODE_GRAPH_DISPLAY_PACKING_TOGGLE_KEYS.filter((key) => toggleKeys.includes(key));
     const packingKeys = packingCandidates;
     const packingKeySet = new Set(packingKeys);
+    // 1D Plot / 1D Plot Stereo / 2D Plot: Window / Signal / Line groups.
+    const plotLayout = type === "plotFace" && section === "waterfall";
+    if (plotLayout) rows.push(...nodeGraphPlotDisplaySettingsRows(type, choiceKeys, toggleKeys, fieldKeys));
     // Preferred order: choices → toggles (except packing) → fields → packing → colors.
     // Spectrogram: one column, one row per control (label | dropdown).
     // Other faces may pack 2+ short choices into a two-column grid.
-    if (type === "spectrogramBurn" || type === "spectrumLine" || choiceKeys.length < 2) {
+    if (plotLayout) {
+      // Built above.
+    } else if (type === "spectrogramBurn" || type === "spectrumLine" || choiceKeys.length < 2) {
       for (const key of choiceKeys) {
         rows.push(nodeGraphDisplaySettingsBuildChoiceRowHtml(key));
       }
@@ -2338,7 +2477,7 @@ function buildNodeGraphDisplaySettingsBodyHtml(formType, node = null) {
         }</div>`,
       );
     }
-    for (const key of toggleKeys) {
+    for (const key of plotLayout ? [] : toggleKeys) {
       if (section === "secondary" && key === "secondaryEnabled") {
         continue; // already in title
       }
@@ -2347,7 +2486,7 @@ function buildNodeGraphDisplaySettingsBodyHtml(formType, node = null) {
       }
       rows.push(nodeGraphDisplaySettingsBuildToggleRowHtml(key));
     }
-    for (const key of fieldKeys) {
+    for (const key of plotLayout ? [] : fieldKeys) {
       if (key === "backgroundHue"
         && typeof nodeGraphDisplaySettingsFormTypeUsesGradient === "function"
         && nodeGraphDisplaySettingsFormTypeUsesGradient(type)) {
@@ -2492,7 +2631,8 @@ function buildNodeGraphDisplaySettingsBodyHtml(formType, node = null) {
           </div>`));
     }
     // Sync | Clear — one row under Dot Budget (1D + 2D phosphor).
-    if (packingKeys.length || type === "lineBurn" || type === "scope2d" || type === "xyPad") {
+    // Plot: Sync sits in the Window row and there is nothing to Clear.
+    if (!plotLayout && (packingKeys.length || type === "lineBurn" || type === "scope2d" || type === "xyPad")) {
       rows.push(nodeGraphDisplaySettingsBuildPackingToggleRowHtml(packingKeys));
     }
     for (const key of colorKeys) {

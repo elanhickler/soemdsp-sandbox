@@ -257,6 +257,7 @@ const nodeGraphTraceDisplaySettingControlKeys = Object.freeze({
   ],
   choices: [
     "syncChannel",
+    "plotDraw",
     "stereoBlend",
     "fftSize",
     "window",
@@ -789,9 +790,10 @@ const nodeGraphTraceDisplayActiveControlsByType = Object.freeze({
     toggles: Object.freeze([]),
     choices: Object.freeze(["drawMode"]),
   }),
-  // Hypersaw / RobinSupersaw: stem thickness only (no full phosphor stack).
+  // Hypersaw / RobinSupersaw / Ping Pong Delay Lines: stem thickness plus the
+  // plate fade (Trail / Ghost), not the full phosphor stack.
   hypersawBurn: Object.freeze({
-    fields: Object.freeze(["lineThickness"]),
+    fields: Object.freeze(["lineThickness", "trail", "ghost"]),
     colors: Object.freeze([]),
     toggles: Object.freeze(["autoZoomLines"]),
     choices: Object.freeze([]),
@@ -967,7 +969,7 @@ const nodeGraphTraceDisplayActiveControlsByType = Object.freeze({
     fields: Object.freeze(["timeMs", "scale", "plotOffset", "lineThickness", "lineSmoothing"]),
     colors: Object.freeze([]),
     toggles: Object.freeze(["sourceSync", "skipDiscontinuities"]),
-    choices: Object.freeze(["windowMode", "syncChannel"]),
+    choices: Object.freeze(["windowMode", "syncChannel", "plotDraw", "barInk"]),
   }),
   // Pulse Train: the Pulse Explosion set plus Fade time (lit-dot hang).
   pulseTrainFace: Object.freeze({
@@ -1194,6 +1196,8 @@ const nodeGraphTraceDisplaySectionControls = Object.freeze({
       "freqScale",
       "syncChannel",
       "windowMode",
+      "plotDraw",
+      "barInk",
       "spectrumAxis",
       "spectrumDbMode",
       "spectrumDbFloor",
@@ -2438,6 +2442,17 @@ const nodeGraphDisplaySettingsChoiceMeta = Object.freeze({
       Object.freeze({ value: "left", label: "Left" }),
       Object.freeze({ value: "right", label: "Right" }),
       Object.freeze({ value: "mono", label: "Mono" }),
+    ]),
+  }),
+  plotDraw: Object.freeze({
+    label: "Draw",
+    aria: "How the samples are joined",
+    id: "nodeTraceDisplayPlotDraw",
+    title: "Discrete: each sample held flat until the next (2D Plot: a dot per sample). Linear: straight lines between samples. Reconstructed: the bandlimited signal between samples (windowed sinc, what a DAC plays). Zoomed out past two samples per pixel, all three show the min/max band.",
+    options: Object.freeze([
+      Object.freeze({ value: "discrete", label: "Discrete" }),
+      Object.freeze({ value: "linear", label: "Linear" }),
+      Object.freeze({ value: "reconstructed", label: "Reconstructed" }),
     ]),
   }),
   windowMode: Object.freeze({

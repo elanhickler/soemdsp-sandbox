@@ -131,7 +131,7 @@ function nodeGraphRoundShapeFaceLook(node) {
     strokePaint: String(face.strokePaint || face.strokeColor || "rgba(120, 220, 200, 0.92)"),
     dotColor: String(face.dotColor || "#ffffff"),
     dotPaint: String(face.dotPaint || face.dotColor || "#ffffff"),
-    lineThickness: Math.max(0.25, nodeGraphFiniteNumber(face.lineThickness, 2)),
+    lineThickness: Math.max(0, nodeGraphFiniteNumber(face.lineThickness, 2)),
     lineSmoothing: Math.max(0, nodeGraphFiniteNumber(face.lineSmoothing, 1)),
     dotThickness: Math.max(0.25, nodeGraphFiniteNumber(face.dotThickness, 5)),
     lineBlur: Math.max(0, nodeGraphFiniteNumber(face.lineBlur)),
@@ -294,7 +294,7 @@ function drawNodeGraphRoundShapeDisplayInner(section) {
   const glKey = `${signature}|${canvas.width}x${canvas.height}`;
   // Also rebuild when the presenter state is fresh (context restored).
   const orbitDirty = section._roundShapeOrbitSig !== glKey || section._roundShapeForceDraw
-    || canvas.__clinicalLineGl?.waveKey !== glKey;
+    || canvas.__glLinesFrame?.waveKey !== glKey;
   section._roundShapeSignature = signature;
   section._roundShapeForceDraw = false;
   section._roundShapeLaidOut = true;
@@ -420,16 +420,16 @@ function drawNodeGraphRoundShapeDisplayInner(section) {
     raw[i * 2] = ox0 + (orbit.a[i] * 0.5 + 0.5) * span;
     raw[i * 2 + 1] = oy0 + (0.5 - orbit.b[i] * 0.5) * span;
   }
-  const pts = typeof nodeGraphClinicalLineAdaptPoints === "function"
-    ? nodeGraphClinicalLineAdaptPoints(raw, Math.max(64, Math.ceil(span * 4)))
+  const pts = typeof nodeGraphGlLinesAdaptPoints === "function"
+    ? nodeGraphGlLinesAdaptPoints(raw, Math.max(64, Math.ceil(span * 4)))
     : raw;
-  if (typeof nodeGraphClinicalLineGlPresent !== "function") {
+  if (typeof nodeGraphGlLinesPresentFrame !== "function") {
     if (typeof nodeGraphDisplayGlFailed === "function") {
-      nodeGraphDisplayGlFailed(canvas, "clinical line missing");
+      nodeGraphDisplayGlFailed(canvas, "line renderer missing");
     }
     return;
   }
-  nodeGraphClinicalLineGlPresent(canvas, {
+  nodeGraphGlLinesPresentFrame(canvas, {
     cssWidth: drawW,
     cssHeight: drawH,
     background: plateBg,

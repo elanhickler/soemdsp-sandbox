@@ -57,7 +57,7 @@ function nodeGraphPulseFaceNormalize(settings, d, lamps) {
     const n = Number(v);
     return Number.isFinite(n) ? Math.max(lo, Math.min(hi, n)) : fallback;
   };
-  out.lineThickness = span(merged.lineThickness, 0.25, 16, d.lineThickness);
+  out.lineThickness = span(merged.lineThickness, 0, 16, d.lineThickness);
   out.dotThickness = span(merged.dotThickness, 0.25, 32, d.dotThickness);
   if ("ghostOpacity" in d) out.ghostOpacity = span(merged.ghostOpacity, 0, 1, d.ghostOpacity);
   if ("fadeTime" in d) out.fadeTime = span(merged.fadeTime, 0, 60, d.fadeTime);
@@ -223,7 +223,8 @@ function drawNodeGraphPulseCurveDisplay(section) {
   const y0 = schedule ? schedule.y0 : nodeGraphPulseExplosionFaceParam(node, "y0", 0);
   const spread = schedule ? schedule.spread : nodeGraphPulseExplosionFaceParam(node, "spread", 0.5);
   const origin = g.at(x0, y0);
-  if (spread > 0.002) {
+  // Line thickness 0 = no line: ring, pivot and stems all go.
+  if (spread > 0.002 && halfPx > 0) {
     const segs = 48;
     const ring = [];
     for (let i = 0; i <= segs; i += 1) {
@@ -234,8 +235,10 @@ function drawNodeGraphPulseCurveDisplay(section) {
     nodeGraphGlLinesPolyline(batch, ring, Math.max(0.4, halfPx * 0.55), smoothing, dim(line, 0.45));
   }
   const tick = Math.max(4, g.side * 0.03);
-  nodeGraphGlLinesSegment(batch, origin.x - tick, origin.y, origin.x + tick, origin.y, halfPx, smoothing, pivotPaint);
-  nodeGraphGlLinesSegment(batch, origin.x, origin.y - tick, origin.x, origin.y + tick, halfPx, smoothing, pivotPaint);
+  if (halfPx > 0) {
+    nodeGraphGlLinesSegment(batch, origin.x - tick, origin.y, origin.x + tick, origin.y, halfPx, smoothing, pivotPaint);
+    nodeGraphGlLinesSegment(batch, origin.x, origin.y - tick, origin.x, origin.y + tick, halfPx, smoothing, pivotPaint);
+  }
   const elapsed = schedule ? nodeGraphPulseExplosionHeardElapsed(section, end) : Number.NaN;
   const playing = Number.isFinite(elapsed);
   if (schedule) {

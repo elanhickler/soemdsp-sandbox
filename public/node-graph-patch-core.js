@@ -644,6 +644,9 @@ function validateNodeGraphPatch(patch) {
         ? sequencerCloneClip(node.sequencer)
         : (node.sequencer && typeof node.sequencer === "object" ? node.sequencer : undefined);
     }
+    if (type === "stepRegister") {
+      normalizedNode.stepRegister = { steps: Array.isArray(node.stepRegister && node.stepRegister.steps) ? node.stepRegister.steps.slice(0, 64).map((v) => { const n = Math.round(Number(v)); return Number.isFinite(n) ? n : 0; }) : [] };
+    }
     if (type === "acidSequencer") {
       normalizedNode.acidSequencer = typeof acidSequencerNormalize === "function"
         ? acidSequencerNormalize(node.acidSequencer)
@@ -652,6 +655,9 @@ function validateNodeGraphPatch(patch) {
             ? node.acidSequencer.steps.map((step) => (step && typeof step === "object" ? { ...step } : step))
             : [],
         };
+    }
+    if (type === "output" && node.outputChannels != null && typeof nodeGraphOutputModuleChannelCount === "function") {
+      normalizedNode.outputChannels = nodeGraphOutputModuleChannelCount(node);
     }
     if (type === "bugButton") {
       normalizedNode.bugButton = {
@@ -887,7 +893,7 @@ function validateNodeGraphPatch(patch) {
     if (sourceType === "softpopFilter" && sourcePort === "rgba") {
       return [];
     }
-    if (!nodeGraphPatchNodeOutputPorts(nodeById.get(sourceNode)).includes(sourcePort)) {
+    if (!nodeGraphPatchNodeValidOutputPorts(nodeById.get(sourceNode)).includes(sourcePort)) {
       loadWarnings.push(`connection source port invalid: ${sourceNode}.${sourcePort}`);
       return [];
     }
@@ -898,7 +904,7 @@ function validateNodeGraphPatch(patch) {
       destinationPort = normalizeNodeGraphPitchPortName(destinationPort);
     }
     destinationPort = nodeGraphCanonicalInputPort(destinationType, destinationPort);
-    if (!nodeGraphPatchNodeInputPorts(nodeById.get(destinationNode)).includes(destinationPort)) {
+    if (!nodeGraphPatchNodeValidInputPorts(nodeById.get(destinationNode)).includes(destinationPort)) {
       loadWarnings.push(`connection destination port invalid: ${destinationNode}.${destinationPort}`);
       return [];
     }
@@ -948,7 +954,7 @@ function validateNodeGraphPatch(patch) {
       sourcePort = normalizeNodeGraphPitchPortName(sourcePort);
     }
       sourcePort = nodeGraphCanonicalOutputPort(sourceType, sourcePort);
-      if (!nodeGraphPatchNodeOutputPorts(nodeById.get(sourceNode)).includes(sourcePort)) {
+      if (!nodeGraphPatchNodeValidOutputPorts(nodeById.get(sourceNode)).includes(sourcePort)) {
         loadWarnings.push(`modulation source port invalid: ${sourceNode}.${sourcePort}`);
         return [];
       }

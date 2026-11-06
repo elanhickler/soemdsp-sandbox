@@ -814,6 +814,51 @@ function createNodeGraphPlanckReadout() {
   return field;
 }
 
+/** Channels (1 = Mono .. 8) for the Output and Audio Input modules. Stored on the patch's one Output module. */
+function nodeGraphPatchOutputNode(patch = nodeGraphMvp?.patch) {
+  return (patch?.nodes || []).find((node) => node?.type === "output") || null;
+}
+
+function createNodeGraphOutputChannelsField() {
+  const field = document.createElement("label");
+  field.className = "node-header-timing-field node-header-output-channels-field is-name-value";
+  field.setAttribute("aria-label", "Input and Output module channels");
+  const caption = document.createElement("span");
+  caption.className = "node-header-timing-caption";
+  caption.textContent = "Channels";
+  const colon = document.createElement("span");
+  colon.className = "node-header-timing-colon";
+  colon.textContent = ":";
+  colon.setAttribute("aria-hidden", "true");
+  const select = document.createElement("select");
+  select.className = "node-header-timing-input node-header-oversampling-select";
+  select.dataset.outputChannels = "true";
+  select.setAttribute("aria-label", "Input and Output module channels");
+  const labels = { 1: "1 Mono", 2: "2 Mono L R" };
+  for (let n = 1; n <= 8; n += 1) {
+    const opt = document.createElement("option");
+    opt.value = String(n);
+    opt.textContent = labels[n] || String(n);
+    select.append(opt);
+  }
+  select.addEventListener("change", () => {
+    if (typeof setNodeGraphOutputChannels === "function") setNodeGraphOutputChannels(select.value);
+  });
+  field.append(caption, colon, select);
+  return field;
+}
+
+function syncNodeGraphOutputChannelsField(root = document) {
+  const output = nodeGraphPatchOutputNode();
+  for (const select of root.querySelectorAll?.("[data-output-channels]") || []) {
+    const field = select.closest(".node-header-output-channels-field");
+    if (field) field.hidden = !output;
+    if (output && document.activeElement !== select && typeof nodeGraphOutputModuleChannelCount === "function") {
+      select.value = String(nodeGraphOutputModuleChannelCount(output));
+    }
+  }
+}
+
 function createNodeGraphCommandCenterTimingWidgets() {
   const group = document.createElement("div");
   group.className = "node-header-timing-widgets node-command-center-timing-widgets";
@@ -840,6 +885,7 @@ function createNodeGraphCommandCenterTimingWidgets() {
     ),
     createNodeGraphPlanckReadout(),
     createNodeGraphOversamplingFactorField(),
+    createNodeGraphOutputChannelsField(),
     createNodeGraphSampleRateReadout("sample-rate", "Sample Rate"),
     createNodeGraphSampleRateReadout("simulated-rate", "Simulated"),
   );
@@ -866,11 +912,13 @@ function renderNodeGraphCommandCenterTimingControls() {
     || !host.querySelector(".node-header-bpm-tap")
     || !host.querySelector('[data-speed-limit="true"]')
     || firstCaption?.textContent !== "Speed"
+    || !host.querySelector("[data-output-channels]")
   ) {
     host.replaceChildren(createNodeGraphCommandCenterTimingWidgets());
   }
   bindNodeGraphHeaderTimingWidgets(host);
   syncNodeGraphOversamplingReadouts();
+  syncNodeGraphOutputChannelsField(host);
 }
 
 function renderNodeGraphPatchTimingControls() {

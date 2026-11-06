@@ -261,6 +261,9 @@ function nodeGraphBuildLiveParameterNodes(activeNodeIds = null, bypassedNodes = 
           ? sequencerCloneClip(node.sequencer)
           : (node.sequencer || null);
       }
+      if (node.type === "stepRegister") {
+        runtimeNode.stepRegister = { steps: Array.isArray(node.stepRegister && node.stepRegister.steps) ? node.stepRegister.steps.slice(0, 64).map((v) => { const n = Math.round(Number(v)); return Number.isFinite(n) ? n : 0; }) : [] };
+      }
       if (node.type === "acidSequencer") {
         const steps = Array.isArray(node.acidSequencer && node.acidSequencer.steps)
           ? node.acidSequencer.steps.map((step) => (step && typeof step === "object" ? { ...step } : step))
@@ -386,6 +389,9 @@ function nodeGraphBuildLiveParameterNodesForPatch(patch, activeNodeIds = null, b
         runtimeNode.sequencer = typeof sequencerCloneClip === "function"
           ? sequencerCloneClip(node.sequencer)
           : (node.sequencer || null);
+      }
+      if (node.type === "stepRegister") {
+        runtimeNode.stepRegister = { steps: Array.isArray(node.stepRegister && node.stepRegister.steps) ? node.stepRegister.steps.slice(0, 64).map((v) => { const n = Math.round(Number(v)); return Number.isFinite(n) ? n : 0; }) : [] };
       }
       if (node.type === "acidSequencer") {
         const steps = Array.isArray(node.acidSequencer && node.acidSequencer.steps)

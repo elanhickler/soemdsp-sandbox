@@ -45,10 +45,10 @@ function nodeGraphBuildDependencyMap(patch = nodeGraphMvp.patch) {
       issues.push("connection references missing node");
       continue;
     }
-    const sourceOutputs = nodeGraphPatchNodeOutputPorts(source);
+    const sourceOutputs = nodeGraphPatchNodeValidOutputPorts(source);
     const sourcePort = nodeGraphCanonicalOutputPort(source.type, connection.sourcePort);
     const destinationPort = nodeGraphCanonicalInputPort(destination.type, connection.destinationPort);
-    const destinationInputs = nodeGraphPatchNodeInputPorts(destination);
+    const destinationInputs = nodeGraphPatchNodeValidInputPorts(destination);
     if (!sourceOutputs.includes(sourcePort)) {
       issues.push(`connection source port invalid: ${connection.sourceNode}.${connection.sourcePort}`);
       continue;
@@ -80,7 +80,7 @@ function nodeGraphBuildDependencyMap(patch = nodeGraphMvp.patch) {
       issues.push("modulation references missing node");
       continue;
     }
-    const sourceOutputs = nodeGraphPatchNodeOutputPorts(source);
+    const sourceOutputs = nodeGraphPatchNodeValidOutputPorts(source);
     const sourcePort = nodeGraphCanonicalOutputPort(source.type, modulation.sourcePort);
     const destinationParameters = nodeGraphPatchNodeParameterDefinitions(destination);
     if (!sourceOutputs.includes(sourcePort)) {
@@ -921,7 +921,7 @@ function nodeGraphVisualSinkBufferSampleLimit(node) {
 
 function nodeGraphNodeSignalOutputRequired(graph, nodeId) {
   const node = graph.nodeMap.get(nodeId);
-  const signalOutputs = new Set(nodeGraphPatchNodeOutputPorts(node));
+  const signalOutputs = new Set(nodeGraphPatchNodeValidOutputPorts(node));
   if (!signalOutputs.size) {
     return false;
   }

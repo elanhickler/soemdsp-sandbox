@@ -301,13 +301,13 @@ function drawNodeGraphBlitDisplayInner(section) {
     }
   }
 
-  if (typeof nodeGraphClinicalLineGlPresent !== "function") {
+  if (typeof nodeGraphGlLinesPresentFrame !== "function") {
     if (typeof nodeGraphDisplayGlFailed === "function") {
-      nodeGraphDisplayGlFailed(canvas, "clinical line missing");
+      nodeGraphDisplayGlFailed(canvas, "line renderer missing");
     }
     return;
   }
-  nodeGraphClinicalLineGlPresent(canvas, {
+  nodeGraphGlLinesPresentFrame(canvas, {
     cssWidth: drawW,
     cssHeight: drawH,
     background: look.backgroundPaint,

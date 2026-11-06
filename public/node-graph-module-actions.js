@@ -2895,6 +2895,26 @@ function setNodeGraphLedColorFromContext({ record = true } = {}) {
   }
 }
 
+/** Command Center "Channels": Output and Audio Input jack count, 1 (Mono) .. 8 (stored on Output). */
+function setNodeGraphOutputChannels(value) {
+  if (nodeGraphPatchIsLocked()) {
+    return;
+  }
+  const next = nodeGraphOutputModuleChannelCount({ outputChannels: value });
+  const patch = cloneNodeGraphPatch(nodeGraphMvp.patch);
+  const targetNode = (patch.nodes || []).find((node) => node.type === "output");
+  if (!targetNode || next === nodeGraphOutputModuleChannelCount(targetNode)) {
+    return;
+  }
+  targetNode.outputChannels = next;
+  const label = next === 1 ? "Mono only" : (next === 2 ? "Mono / Left / Right" : String(next) + " channels");
+  commitNodeGraphPatch(patch, {
+    status: "channels: " + label,
+    topologyEdit: true,
+  });
+  if (typeof syncNodeGraphOutputChannelsField === "function") syncNodeGraphOutputChannelsField();
+}
+
 function setNodeGraphBugButtonGlyphFromContext({ record = true } = {}) {
   if (nodeGraphPatchIsLocked()) {
     return;

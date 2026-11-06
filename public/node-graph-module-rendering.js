@@ -1081,7 +1081,11 @@ function createNodeGraphModuleElement(type, node) {
       ? nodeGraphModuleShouldMountDisplayFace(type, patchNode.ui)
       : !patchNodeUi.oscilloscopeHidden)
       && typeof createNodeGraphBasicShapeDisplay === "function") {
-      article.append(createNodeGraphBasicShapeDisplay(node, type));
+      article.append(
+        type === "stepRegister" && typeof createNodeGraphStepRegisterDisplay === "function"
+          ? createNodeGraphStepRegisterDisplay(node, type)
+          : createNodeGraphBasicShapeDisplay(node, type),
+      );
     }
     appendNodeGraphModuleIoSection(
       article,

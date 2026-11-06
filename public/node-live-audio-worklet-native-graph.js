@@ -223,6 +223,7 @@ NodeLiveAudioProcessor.NATIVE_GRAPH_TYPE_IDS = Object.freeze({
   fluvNoise: 236,
   pumpCurve: 237,
   robinLeakyEnvelope: 238,
+  stepRegister: 239,
   yellowjacketFilter: 62,
   superloveFilter: 63,
   superloveRev2: 172,
@@ -285,6 +286,7 @@ NodeLiveAudioProcessor.NATIVE_GRAPH_PARAM_PAN = 1;
 NodeLiveAudioProcessor.NATIVE_GRAPH_PARAM_FREQUENCY = 10;
 NodeLiveAudioProcessor.NATIVE_GRAPH_PARAM_GRAPHIC_EQ_BAND0 = 300;
 NodeLiveAudioProcessor.NATIVE_GRAPH_PARAM_ACID_STEP0 = 420;
+NodeLiveAudioProcessor.NATIVE_GRAPH_PARAM_STEP_REG_STEP0 = 460;
 NodeLiveAudioProcessor.NATIVE_GRAPH_PARAM_WAVEFORM = 11;
 NodeLiveAudioProcessor.NATIVE_GRAPH_PARAM_AMPLITUDE = 12;
 NodeLiveAudioProcessor.NATIVE_GRAPH_PARAM_SHAPE = 13;
@@ -710,6 +712,25 @@ NodeLiveAudioProcessor.prototype.mapNativeGraphParamId = function mapNativeGraph
     if (k === "bandwidthOverCrossfade") return P.NATIVE_GRAPH_PARAM_WIDTH;
     if (k === "pitchModOverCrossfade") return P.NATIVE_GRAPH_PARAM_LFO_AMPLITUDE;
   }
+  if (t === "stepRegister") {
+    if (k === "frequency") return P.NATIVE_GRAPH_PARAM_FREQUENCY;
+    if (k === "bits") return P.NATIVE_GRAPH_PARAM_STAGES;
+    if (k === "clock") return P.NATIVE_GRAPH_PARAM_CENTER;
+    if (k === "grid") return P.NATIVE_GRAPH_PARAM_MODE;
+    if (k === "gridOffset") return P.NATIVE_GRAPH_PARAM_ATT_OFFSET;
+    if (k === "dither") return P.NATIVE_GRAPH_PARAM_MIX;
+    if (k === "method") return P.NATIVE_GRAPH_PARAM_LFO_STYLE;
+    if (k === "seed") return P.NATIVE_GRAPH_PARAM_SEED;
+    if (k === "updateRate") return P.NATIVE_GRAPH_PARAM_LFO_RATE;
+    if (k === "span") return P.NATIVE_GRAPH_PARAM_TIME_NUMERATOR;
+    if (k === "waveform") return P.NATIVE_GRAPH_PARAM_WAVEFORM;
+    if (k === "lfsrLength") return P.NATIVE_GRAPH_PARAM_TIME_DENOMINATOR;
+    if (k === "pulseWidth") return P.NATIVE_GRAPH_PARAM_WIDTH;
+    if (k === "ampBits") return P.NATIVE_GRAPH_PARAM_RESONANCE;
+    if (k === "amplitude") return P.NATIVE_GRAPH_PARAM_AMPLITUDE;
+    if (k === "source") return P.NATIVE_GRAPH_PARAM_TIMING_MODE;
+    if (k === "patternLength") return P.NATIVE_GRAPH_PARAM_FEEDBACK;
+  }
   if (t === "acidSequencer") {
     if (k === "bpm") return P.NATIVE_GRAPH_PARAM_TEMPO_BPM;
     if (k === "stepLength") return P.NATIVE_GRAPH_PARAM_STAGES;
@@ -770,6 +791,13 @@ NodeLiveAudioProcessor.prototype.mapNativeGraphSrcPortId = function mapNativeGra
     if (p === "6") return 6;
     if (p === "7") return 7;
     if (p === "8") return 8;
+  }
+  if (t === "stepRegister") {
+    if (p === "error") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_SAW;
+    if (p === "step") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_RAMP;
+    if (p === "__register") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_SQUARE;
+    if (p === "__ideal") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_TRI;
+    if (p === "__tick") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_PHASE01;
   }
   if (t === "acidSequencer") {
     if (p === "gate") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_MONO;
@@ -5189,8 +5217,8 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
     }
     if (type === "antisaw") {
       // stages = reflections, shape = tilt, amplitude → native level.
-      push("fundamental", P.NATIVE_GRAPH_PARAM_FREQUENCY, cont("fundamental", 110));
-      push("reflections", P.NATIVE_GRAPH_PARAM_STAGES, disc("reflections", 64));
+      push("fundamental", P.NATIVE_GRAPH_PARAM_FREQUENCY, cont("fundamental", 1000));
+      push("reflections", P.NATIVE_GRAPH_PARAM_STAGES, disc("reflections", 128));
       push("tilt", P.NATIVE_GRAPH_PARAM_SHAPE, cont("tilt", 0));
       push("amplitude", P.NATIVE_GRAPH_PARAM_AMPLITUDE, cont("amplitude", 1));
       continue;
@@ -5603,6 +5631,36 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
       push("morph", P.NATIVE_GRAPH_PARAM_SHAPE, cont("morph", 0.5));
       push("polarity", P.NATIVE_GRAPH_PARAM_CENTER, disc("polarity", 0));
       push("amplitude", P.NATIVE_GRAPH_PARAM_AMPLITUDE, cont("amplitude", 1));
+      continue;
+    }
+    if (type === "stepRegister") {
+      // See process_step_register in graph_engine.cpp for the slot map.
+      push("frequency", P.NATIVE_GRAPH_PARAM_FREQUENCY, cont("frequency", 220));
+      push("bits", P.NATIVE_GRAPH_PARAM_STAGES, disc("bits", 5));
+      push("clock", P.NATIVE_GRAPH_PARAM_CENTER, cont("clock", 4000));
+      push("grid", P.NATIVE_GRAPH_PARAM_MODE, disc("grid", 0));
+      push("gridOffset", P.NATIVE_GRAPH_PARAM_ATT_OFFSET, cont("gridOffset", 0));
+      push("dither", P.NATIVE_GRAPH_PARAM_MIX, cont("dither", 1));
+      push("method", P.NATIVE_GRAPH_PARAM_LFO_STYLE, disc("method", 0));
+      push("seed", P.NATIVE_GRAPH_PARAM_SEED, disc("seed", 0));
+      push("updateRate", P.NATIVE_GRAPH_PARAM_LFO_RATE, cont("updateRate", 60));
+      push("span", P.NATIVE_GRAPH_PARAM_TIME_NUMERATOR, disc("span", 1));
+      push("waveform", P.NATIVE_GRAPH_PARAM_WAVEFORM, disc("waveform", 5));
+      push("lfsrLength", P.NATIVE_GRAPH_PARAM_TIME_DENOMINATOR, disc("lfsrLength", 5));
+      push("pulseWidth", P.NATIVE_GRAPH_PARAM_WIDTH, cont("pulseWidth", 0.25));
+      push("ampBits", P.NATIVE_GRAPH_PARAM_RESONANCE, disc("ampBits", 4));
+      push("amplitude", P.NATIVE_GRAPH_PARAM_AMPLITUDE, cont("amplitude", 1));
+      push("source", P.NATIVE_GRAPH_PARAM_TIMING_MODE, disc("source", 0));
+      push("patternLength", P.NATIVE_GRAPH_PARAM_FEEDBACK, disc("patternLength", 8));
+      const srStep0 = P.NATIVE_GRAPH_PARAM_STEP_REG_STEP0;
+      const srSteps = Array.isArray(node.stepRegister && node.stepRegister.steps)
+        ? node.stepRegister.steps
+        : [];
+      for (let srI = 0; srI < 64; srI += 1) {
+        let v = Math.round(Number(srSteps[srI]));
+        if (!Number.isFinite(v)) v = 0;
+        push("stepRegStep" + srI, srStep0 + srI, v);
+      }
       continue;
     }
     if (type === "acidSequencer") {
@@ -9552,6 +9610,15 @@ NodeLiveAudioProcessor.prototype.nativeGraphPortNames = function nativeGraphPort
     if (type === "pulseTrain" && portId === P.NATIVE_GRAPH_PORT_CENTER_SQUARE) return ["__Amp"];
     if (type === "pulseTrain" && portId === P.NATIVE_GRAPH_PORT_IS_IDLE) return ["__Delay"];
   }
+  if (type === "stepRegister") {
+    if (portId === P.NATIVE_GRAPH_PORT_MONO) return ["Out"];
+    if (portId === P.NATIVE_GRAPH_PORT_SAW) return ["Error"];
+    if (portId === P.NATIVE_GRAPH_PORT_RAMP) return ["Step"];
+    if (portId === P.NATIVE_GRAPH_PORT_SQUARE) return ["__Register"];
+    if (portId === P.NATIVE_GRAPH_PORT_TRI) return ["__Ideal"];
+    if (portId === P.NATIVE_GRAPH_PORT_PHASE01) return ["__Tick"];
+    return [];
+  }
   if (portId === P.NATIVE_GRAPH_PORT_IS_IDLE) {
     return ["isIdle", "Idle"];
   }
@@ -9911,7 +9978,7 @@ NodeLiveAudioProcessor.prototype.nativeGraphPortNames = function nativeGraphPort
     if (type === "acidSequencer") return ["__AcidStep"];
     // Face playhead — not a patchable jack.
     if (type === "basicShape" || type === "sineWavetable" || type === "sinCos" || type === "clock"
-      || type === "ellipsoid" || type === "ellipsoidOsc" || type === "dsfOscillator" || type === "dsfMorphingOsc") {
+      || type === "ellipsoid" || type === "ellipsoidOsc" || type === "stepRegister" || type === "dsfOscillator" || type === "dsfMorphingOsc") {
       return ["__Phase"];
     }
     // Smooth/Step Graph purple ghost (syncNodeGraphGraphLivePlayheads).
@@ -10019,7 +10086,7 @@ NodeLiveAudioProcessor.prototype.publishNativeGraphScopeTaps = function publishN
       : (type === "sineWavetable" || type === "sinCos" || type === "smoothGraph" || type === "stepGraph"
         || type === "acidSequencer" || type === "fbmField" || type === "clock" || type === "pulseExplosion"
         || type === "robinSinepulse"
-        || type === "ellipsoid" || type === "ellipsoidOsc" || type === "dsfOscillator" || type === "dsfMorphingOsc"
+        || type === "ellipsoid" || type === "ellipsoidOsc" || type === "stepRegister" || type === "dsfOscillator" || type === "dsfMorphingOsc"
         || type === "clockDivider" || type === "triggerDivider"
         ? audioPorts.concat(P.NATIVE_GRAPH_PORT_PHASE01)
         : audioPorts);
@@ -10188,7 +10255,7 @@ NodeLiveAudioProcessor.prototype.publishNativeGraphScopeTaps = function publishN
         || type === "smoothGraph" || type === "stepGraph"
         || type === "acidSequencer" || type === "clock" || type === "pulseExplosion" || type === "pulseTrain"
         || type === "robinSinepulse"
-        || type === "ellipsoid" || type === "ellipsoidOsc" || type === "dsfOscillator" || type === "dsfMorphingOsc"
+        || type === "ellipsoid" || type === "ellipsoidOsc" || type === "stepRegister" || type === "dsfOscillator" || type === "dsfMorphingOsc"
         || type === "clockDivider" || type === "triggerDivider"
       ) {
         ports = facePorts.concat(P.NATIVE_GRAPH_PORT_PHASE01);

@@ -192,13 +192,15 @@ function drawNodeGraphClockFace(section) {
   // Gate: a closed rectangle. End before Start wraps it across the cycle edge.
   // A gate that never falls has no edges: top and bottom only.
   const pulse = rgba(look.strokePaint);
-  if (endless) {
+  // Line thickness 0 = no gate outline (the fill stays).
+  const outline = halfPx > 0;
+  if (outline && endless) {
     nodeGraphGlLinesSegment(batch, x0, high, x1, high, halfPx, smoothing, pulse);
     nodeGraphGlLinesSegment(batch, x0, low, x1, low, halfPx, smoothing, pulse);
-  } else if (pulseEnd >= pulseStart) {
+  } else if (outline && pulseEnd >= pulseStart) {
     const mid = (xs + xe) * 0.5;
     nodeGraphGlLinesPolyline(batch, [mid, low, xs, low, xs, high, xe, high, xe, low, mid, low], halfPx, smoothing, pulse);
-  } else {
+  } else if (outline) {
     nodeGraphGlLinesPolyline(batch, [x1, low, xs, low, xs, high, x1, high], halfPx, smoothing, pulse);
     nodeGraphGlLinesPolyline(batch, [x0, high, xe, high, xe, low, x0, low], halfPx, smoothing, pulse);
   }

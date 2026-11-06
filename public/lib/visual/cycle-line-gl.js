@@ -1,5 +1,5 @@
 // Face metrics helper for cycle / lamp / pulse faces.
-// Coordinates are CSS pixels. Drawing moved to clinical-line-gl.js.
+// Coordinates are CSS pixels. Drawing is the shared stroke in gl-line-renderer.js.
 // Clock / dividers / Logic / Pulse faces use only nodeGraphCycleLineGlMetrics.
 // SinCos / BasicShape / Ellipsoid still call Metrics for canvas sizing.
 

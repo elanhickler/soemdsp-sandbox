@@ -337,6 +337,11 @@ NodeLiveAudioProcessor.prototype.setParams = function setParams(nodes, message =
           ? node.acidSequencer
           : null;
       }
+      if (Object.hasOwn(node, "stepRegister")) {
+        current.stepRegister = node.stepRegister && typeof node.stepRegister === "object"
+          ? node.stepRegister
+          : null;
+      }
       if (Object.hasOwn(node, "chordMemory")) {
         current.chordMemory = node.chordMemory && typeof node.chordMemory === "object"
           ? node.chordMemory

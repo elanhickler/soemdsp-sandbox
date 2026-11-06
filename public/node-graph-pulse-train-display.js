@@ -447,6 +447,8 @@ function drawNodeGraphPulseTrainDisplay(section) {
   const x0 = padX;
   const x1 = Math.max(x0 + 1, w - padX);
   const at = (t) => x0 + (x1 - x0) * Math.max(0, Math.min(1, t / end));
+  // Line thickness 0 = no stems (the axis guide stays).
+  const stemsOn = halfPx > 0;
   const line = rgba(look.strokePaint);
   const dot = rgba(look.dotPaint);
   const lit = rgba(look.litPaint);
@@ -481,7 +483,7 @@ function drawNodeGraphPulseTrainDisplay(section) {
         halfPx, feather: smoothing, dotR,
         elapsed: elapsedVal,
         fadeTau: Number(look.fadeTime) || 0,
-        line: lineC, dot: dotC, lit: litC,
+        line: stemsOn ? lineC : [0, 0, 0, 0], dot: dotC, lit: litC,
       });
       return true;
     };
@@ -501,7 +503,7 @@ function drawNodeGraphPulseTrainDisplay(section) {
         const y = base - (amp / scale) * (base - top);
         const litAmt = elapsedVal >= 0 && t <= elapsedVal
           ? (fadeTau > 0 ? Math.exp(-(elapsedVal - t) / fadeTau) : 1) : 0;
-        if (base - y > 0.5) nodeGraphGlLinesSegment(batch, x, base, x, y, halfPx, smoothing, mixC(line, lit, litAmt));
+        if (stemsOn && base - y > 0.5) nodeGraphGlLinesSegment(batch, x, base, x, y, halfPx, smoothing, mixC(line, lit, litAmt));
         if (dotR > 0 && amp > 0) nodeGraphGlLinesDot(batch, x, y, dotR, smoothing, mixC(dot, lit, litAmt));
       }
     } else {
