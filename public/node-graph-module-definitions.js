@@ -5293,7 +5293,7 @@ const nodeGraphModuleDefinitions = (
   },
   dsfOscillator: {
     // Hand-written face (node-graph-module-face.js): Wave, Partials | Freq | Phase, Bright | Morph | Blend, Amp.
-    // Phase dot is a sinCosFace display setting (showDot), not a parameter.
+    // Phase dot is the sinCosFace Dot size (0 = none), not a parameter.
     face: [
       { kind: "cells", params: [["waveform", "Wave"]], horizontal: true, h: 30 },
       { kind: "cells", params: [["partials", "Partials"], ["frequency", "Freq"], ["phase", "Phase"]], h: 40 },
@@ -5317,9 +5317,9 @@ const nodeGraphModuleDefinitions = (
         settingsSchema: "sinCosFace" },
     ],
     defaultDisplayMode: "face",
-    // Phase playhead dot: display setting (sinCosFace showDot), not a face param.
+    // Phase playhead dot: Dot size (sinCosFace dotThickness, 0 = none), not a face param.
     defaultDisplaySettings: {
-      showDot: false,
+      dotThickness: 0,
     },
     // Morph / Phase / Amplitude are parameters (+ MOD) only — no twin CV jacks.
     // Frequency is Hz (ƒ jack = absolute Hz). See MODULE_PATTERN_REFERENCE

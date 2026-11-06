@@ -133,7 +133,7 @@ function nodeGraphRoundShapeFaceLook(node) {
     dotPaint: String(face.dotPaint || face.dotColor || "#ffffff"),
     lineThickness: Math.max(0, nodeGraphFiniteNumber(face.lineThickness, 2)),
     lineSmoothing: Math.max(0, nodeGraphFiniteNumber(face.lineSmoothing, 1)),
-    dotThickness: Math.max(0.25, nodeGraphFiniteNumber(face.dotThickness, 5)),
+    dotThickness: Math.max(0, nodeGraphFiniteNumber(face.dotThickness, 5)),
     lineBlur: Math.max(0, nodeGraphFiniteNumber(face.lineBlur)),
     pixelDensity: Number.isFinite(Number(face.pixelDensity)) ? Number(face.pixelDensity) : 1,
   };
@@ -405,7 +405,7 @@ function drawNodeGraphRoundShapeDisplayInner(section) {
   dot.x = px;
   dot.y = py;
   dot.color = dotColor;
-  dot.radius = Math.max(0.5, dotW * 0.5);
+  dot.radius = dotW > 0 ? Math.max(0.5, dotW * 0.5) : 0;
   // Display Settings > Line blur (lineSmoothing, CSS px skirt) drives the drawer blur.
   const blur = typeof nodeGraphLineSmoothingPx === "function"
     ? nodeGraphLineSmoothingPx(look, 1)

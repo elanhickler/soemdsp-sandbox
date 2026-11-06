@@ -58,7 +58,7 @@ function nodeGraphPulseFaceNormalize(settings, d, lamps) {
     return Number.isFinite(n) ? Math.max(lo, Math.min(hi, n)) : fallback;
   };
   out.lineThickness = span(merged.lineThickness, 0, 16, d.lineThickness);
-  out.dotThickness = span(merged.dotThickness, 0.25, 32, d.dotThickness);
+  out.dotThickness = span(merged.dotThickness, 0, 32, d.dotThickness);
   if ("ghostOpacity" in d) out.ghostOpacity = span(merged.ghostOpacity, 0, 1, d.ghostOpacity);
   if ("fadeTime" in d) out.fadeTime = span(merged.fadeTime, 0, 60, d.fadeTime);
   return out;

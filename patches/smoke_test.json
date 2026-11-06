@@ -554,7 +554,7 @@
         "morph": 0.18267188078634386,
         "blend": 0.5997141598857325,
         "bright": 0.39749148883021257,
-        "amplitude": 0.5473874173106901
+        "amplitude": 0.5
       },
       "type": "dsfOscillator",
       "widthGu": 8,
@@ -984,7 +984,7 @@
   "view": {
     "heightGu": 24,
     "widthGu": 48,
-    "zoom": 1.5361632016138698,
+    "zoom": 1.2544000000000004,
     "gridVisible": true,
     "gridLightVisible": true,
     "wireLengthsVisible": true,

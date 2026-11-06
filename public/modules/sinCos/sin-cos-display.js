@@ -19,14 +19,13 @@ const nodeGraphSinCosFaceDisplaySettingsDefaults = Object.freeze({
   dotHue: 0,
   dotBrightness: 1,
   dotSaturation: 0,
-  dotThickness: 5,
+  // Phase playhead dot size; 0 = no dot (the default, as the old Show dot off).
+  dotThickness: 0,
   backgroundHue: 205.714,
   backgroundBrightness: 0.009,
   backgroundSaturation: 0.59,
   pixelDensity: 1,
   padExtra: 0,
-  // Phase playhead dot (was a face param phaseDot on DSF / SinCos). Off by default.
-  showDot: false,
 });
 const NODE_GRAPH_SINCOS_COS_HUE_OFFSET = 212.6;
 const NODE_GRAPH_SINCOS_COS_BRIGHTNESS_RATIO = 0.562 / 0.544;
@@ -36,14 +35,13 @@ function normalizeNodeGraphSinCosFaceSettings(settings = {}) {
   const look = normalizeNodeGraphRoundShapeFaceSettings({ ...nodeGraphSinCosFaceDisplaySettingsDefaults, ...source });
   const extra = Number(source.padExtra);
   look.padExtra = Number.isFinite(extra) ? Math.max(0, Math.min(64, extra)) : 0;
-  // Boolean toggle from Display Settings (and legacy params.phaseDot if present).
-  if (Object.prototype.hasOwnProperty.call(source, "showDot")) {
-    look.showDot = !!source.showDot;
-  } else if (Object.prototype.hasOwnProperty.call(source, "phaseDot")) {
-    look.showDot = Number(source.phaseDot) >= 1;
-  } else {
-    look.showDot = !!nodeGraphSinCosFaceDisplaySettingsDefaults.showDot;
-  }
+  // Show dot is gone: Dot size 0 = no dot. Saves from before keep their look
+  // (Show dot off, or legacy phaseDot 0, load as size 0).
+  const legacyOff = Object.prototype.hasOwnProperty.call(source, "showDot")
+    ? !source.showDot
+    : (Object.prototype.hasOwnProperty.call(source, "phaseDot") ? Number(source.phaseDot) < 1 : false);
+  if (legacyOff) look.dotThickness = 0;
+  delete look.showDot;
   return look;
 }
 
@@ -57,7 +55,7 @@ function nodeGraphSinCosFacePadPx(look, pixelRatio, options = {}) {
     ? nodeGraphLineSmoothingPx(look, 1)
     : Math.max(0, Number(look?.lineSmoothing) || 1);
   const lineHalf = strokeW * 0.5;
-  const dotR = options.showDot === false ? 0 : Math.max(dotW > 0 ? 0.5 : 0, dotW * 0.5);
+  const dotR = options.showDot === false || !(dotW > 0) ? 0 : Math.max(0.5, dotW * 0.5);
   return Math.max(lineHalf, dotR) + blur + feather + extra;
 }
 
@@ -895,9 +893,8 @@ function drawNodeGraphSinCosDisplayInner(section) {
     }
   }
 
-  // Display setting showDot (sinCosFace). Legacy params.phaseDot still honored if present.
-  const showPhaseDot = look.showDot === true
-    || Math.round(nodeGraphFiniteNumber(node?.params?.phaseDot ?? look.phaseDot ?? 0)) >= 1;
+  // Dot size 0 = no phase dot.
+  const showPhaseDot = dotW > 0;
   let play = nodeGraphSinCosReadPhase(nodeId, node, section);
   if (!Number.isFinite(play)) {
     play = phaseOff;

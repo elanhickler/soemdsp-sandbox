@@ -720,7 +720,7 @@ const nodeGraphTraceDisplaySharedValueClamps = Object.freeze({
 const nodeGraphPulseFaceValueClamps = Object.freeze({
   lineThickness: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, 1.5), 0, 16),
   lineSmoothing: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, 1), 0, 8),
-  dotThickness: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, 5), 0.25, 32),
+  dotThickness: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, 5), 0, 32),
 });
 const nodeGraphTraceDisplayFormTypeValueClampOverrides = Object.freeze({
   // Spectrogram: History (s) 0…30 (waterfall scroll rate; longer = slower).
@@ -839,7 +839,7 @@ const nodeGraphTraceDisplayFormTypeValueClampOverrides = Object.freeze({
     lineSmoothing: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, 1), 0, 8),
     lineBlur: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value), 0, 8),
     lineBrightness: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value), 0, 1),
-    dotThickness: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, 5), 0.25, 32),
+    dotThickness: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, 5), 0, 32),
     dotBrightness: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value), 0, 1),
     backgroundBrightness: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value), 0, 1),
     pixelDensity: nodeGraphTraceDisplayClampPixelDensity,
@@ -848,7 +848,7 @@ const nodeGraphTraceDisplayFormTypeValueClampOverrides = Object.freeze({
     lineThickness: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, 2), 0, 16),
     lineSmoothing: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, 1), 0, 8),
     lineBrightness: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value), 0, 1),
-    dotThickness: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, 5), 0.25, 32),
+    dotThickness: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, 5), 0, 32),
     dotBrightness: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value), 0, 1),
     backgroundBrightness: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value), 0, 1),
   }),
@@ -857,7 +857,7 @@ const nodeGraphTraceDisplayFormTypeValueClampOverrides = Object.freeze({
     lineSmoothing: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, 1), 0, 8),
     lineBlur: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value), 0, 8),
     lineBrightness: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value), 0, 1),
-    dotThickness: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, 5), 0.25, 32),
+    dotThickness: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, 5), 0, 32),
     dotBrightness: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value), 0, 1),
     backgroundBrightness: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value), 0, 1),
     pixelDensity: nodeGraphTraceDisplayClampPixelDensity,
@@ -866,7 +866,7 @@ const nodeGraphTraceDisplayFormTypeValueClampOverrides = Object.freeze({
     lineThickness: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, 2), 0, 16),
     lineSmoothing: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, 1), 0, 8),
     lineBrightness: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value), 0, 1),
-    dotThickness: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, 5), 0.25, 32),
+    dotThickness: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, 5), 0, 32),
     dotBrightness: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value), 0, 1),
     backgroundBrightness: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value), 0, 1),
     padExtra: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, 0), 0, 64),

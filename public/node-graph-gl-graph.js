@@ -2057,7 +2057,9 @@ function nodeGraphGlGraphDrawRoundShapes(batch, toX, toY, zoom, cameraOn) {
     // Line thickness 0 = no orbit line (the dot stays).
     const strokeRaw = Number(look.lineThickness);
     const strokeW = Number.isFinite(strokeRaw) ? Math.max(0, strokeRaw) : 2;
-    const dotW = Math.max(0.25, Number(look.dotThickness) || 5);
+    // Dot size 0 = no dot.
+    const dotRaw = Number(look.dotThickness);
+    const dotW = Number.isFinite(dotRaw) ? Math.max(0, dotRaw) : 5;
     const bg = nodeGraphGlGraphParseCssColor(look.backgroundPaint || look.background || "#020609", [0.008, 0.024, 0.035, 1]);
     const stroke = nodeGraphGlGraphParseCssColor(look.strokePaint || look.strokeColor || "#7fc7d9", [0.5, 0.86, 0.78, 1]);
     const dotColor = nodeGraphGlGraphParseCssColor(look.dotPaint || look.dotColor || "#ffffff", [1, 1, 1, 1]);
@@ -2156,7 +2158,7 @@ function nodeGraphGlGraphDrawRoundShapes(batch, toX, toY, zoom, cameraOn) {
         }
       }
     }
-    if (typeof nodeGraphGlLinesDot === "function") {
+    if (dotW > 0 && typeof nodeGraphGlLinesDot === "function") {
       nodeGraphGlLinesDot(batch, toX(box.x + px), toY(box.y + py), Math.max(0.5, dotW * 0.5) * scale, Math.max(0.75, scale), dotColor);
     }
   }

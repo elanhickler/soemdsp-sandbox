@@ -131,7 +131,7 @@ function nodeGraphBlitFaceLook(node) {
     strokePaint: String(face.strokePaint || face.strokeColor || "rgba(120, 220, 200, 0.92)"),
     dotPaint: String(face.dotPaint || face.dotColor || "#ffffff"),
     lineThickness: Math.max(0, nodeGraphFiniteNumber(face.lineThickness, 2)),
-    dotThickness: Math.max(0.25, nodeGraphFiniteNumber(face.dotThickness, 5)),
+    dotThickness: Math.max(0, nodeGraphFiniteNumber(face.dotThickness, 5)),
     pixelDensity: Number.isFinite(Number(face.pixelDensity)) ? Number(face.pixelDensity) : 1,
   };
 }
@@ -296,7 +296,7 @@ function drawNodeGraphBlitDisplayInner(section) {
         x: px,
         y: py,
         color: look.dotPaint,
-        radius: Math.max(0.5, dotW * 0.5),
+        radius: dotW > 0 ? Math.max(0.5, dotW * 0.5) : 0,
       });
     }
   }

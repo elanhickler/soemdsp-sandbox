@@ -132,7 +132,7 @@ function normalizeNodeGraphRoundShapeFaceSettings(settings = {}) {
     dotBrightness,
     dotSaturation,
     dotThickness: Number.isFinite(dotThickRaw)
-      ? Math.max(0.25, Math.min(32, dotThickRaw))
+      ? Math.max(0, Math.min(32, dotThickRaw))
       : d.dotThickness,
     backgroundHue,
     backgroundBrightness,

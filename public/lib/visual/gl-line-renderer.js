@@ -1535,7 +1535,9 @@ void main() {
     }
     for (const dot of Array.isArray(frame.dots) ? frame.dots : []) {
       if (!dot || !Number.isFinite(dot.x) || !Number.isFinite(dot.y)) continue;
-      nodeGraphGlLinesStroke(batch, [dot.x, dot.y], Math.max(0.5, Number(dot.radius) || 0.5) * ink, blur, colour(dot.color, "#ffffff"));
+      // Dot size 0 = no dot.
+      if (!(Number(dot.radius) > 0)) continue;
+      nodeGraphGlLinesStroke(batch, [dot.x, dot.y], Math.max(0.5, Number(dot.radius)) * ink, blur, colour(dot.color, "#ffffff"));
     }
     const ok = nodeGraphGlLinesEnd(batch);
     if (!ok && typeof global.nodeGraphDisplayGlFailed === "function") global.nodeGraphDisplayGlFailed(canvas, "line face: draw failed");

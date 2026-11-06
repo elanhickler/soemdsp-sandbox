@@ -925,7 +925,7 @@ const nodeGraphTraceDisplayActiveControlsByType = Object.freeze({
       "padExtra",
     ]),
     colors: Object.freeze(["strokeColor", "dotColor", "backgroundColor"]),
-    toggles: Object.freeze(["showDot"]),
+    toggles: Object.freeze([]),
     choices: Object.freeze([]),
   }),
   // BLIT: same line drawer as SinCos / DSF. Phase dot is the face's Dot Off / On.
@@ -1174,7 +1174,6 @@ const nodeGraphTraceDisplaySectionControls = Object.freeze({
     toggles: Object.freeze([
       "sourceSync",
       "skipDiscontinuities",
-      "showDot",
       "digitBins",
       "decimalBudget",
       "removeTrailingZeros",
@@ -1931,11 +1930,6 @@ const nodeGraphDisplaySettingsToggleMeta = Object.freeze({
     id: "nodeTraceDisplaySourceSync",
     title:
       "1D Phosphor / 1D Trace: Sync Off = Sweep (Hz). Sync On = Sweep (cycles) cycles in view, restart each pass on a rising zero-crossing. Reset jack still snaps. Not used on Instant Waterfall.",
-  }),
-  showDot: Object.freeze({
-    label: "Show Dot",
-    id: "nodeTraceDisplayShowDot",
-    title: "Show the phase playhead dot on the waveshape (SinCos / DSF face). Off by default.",
   }),
   cmyMode: Object.freeze({
     label: "CMY",
