@@ -292,7 +292,7 @@
     },
     {
       "gx": -2,
-      "gy": -5,
+      "gy": -6,
       "id": "vcvrackSuperloveFilter-1",
       "paramMeta": {
         "mode": {
@@ -593,14 +593,14 @@
         "background": "#000000",
         "backgroundColor": "#000000",
         "hueRotationReady": true,
-        "dot1Brightness": 0.0864,
+        "dot1Brightness": 0.0455,
         "dot1Color": "#00ff4f",
         "dot1Enabled": true,
-        "dot1Size": 0.046661,
-        "secondaryBrightness": 0.0864,
+        "dot1Size": 0.0433,
+        "secondaryBrightness": 0.0455,
         "secondaryColor": "#0000ff",
         "secondaryEnabled": true,
-        "secondarySize": 0.046661,
+        "secondarySize": 0.0433,
         "ghost": 0.4727,
         "trail": 0.2409,
         "burnAmount": 0.3,
@@ -656,7 +656,7 @@
         "slidersHidden": false,
         "slidersForceShow": false,
         "titleHidden": false,
-        "displayHeightGu": 3
+        "displayHeightGu": 4
       }
     },
     {
@@ -1017,19 +1017,19 @@
           "source": "pointer",
           "gate": 0,
           "gatePulse": 0,
-          "x": 0.5576769418394382,
-          "y": 0.7424188369603996,
-          "velocity": 0.9017485445147586,
-          "keyIndex": 43,
-          "keyQuantized": 0.5657894736842105,
-          "rawMidi": 60,
+          "x": 0.3227969348659004,
+          "y": 0.6258572517145035,
+          "velocity": 0.8221581350996177,
+          "keyIndex": 24,
+          "keyQuantized": 0.3157894736842105,
+          "rawMidi": 41,
           "octave": 0,
-          "midi": 60,
-          "pitch": "C3",
-          "pitchValue": 60,
-          "midiNormalized": 0.47244094488188976,
-          "tenthVoltPerOctave": 0.5,
-          "frequency": 261.6255653005986
+          "midi": 41,
+          "pitch": "F1",
+          "pitchValue": 41,
+          "midiNormalized": 0.3228346456692913,
+          "tenthVoltPerOctave": 0.3416666666666667,
+          "frequency": 87.30705785825097
         },
         "hideKeyboardInfo": false,
         "blackKeyWidth": 10,
@@ -1328,7 +1328,7 @@
           "alias": "",
           "choices": [],
           "curveAmount": 0,
-          "def": 0.66,
+          "def": 0.79,
           "displayChoices": false,
           "divideChoicesVisibly": false,
           "kind": "decimal",
@@ -1356,7 +1356,7 @@
           "visible": false,
           "linearSmoothing": true,
           "outputDomain": true,
-          "domainOffset": 0.6631551937710141
+          "domainOffset": 0.7728321370104521
         },
         "displaySource": {
           "alias": "",
@@ -1398,7 +1398,7 @@
         }
       },
       "params": {
-        "offset": 0.6631551937710141,
+        "offset": 0.79,
         "displaySource": 0
       },
       "type": "knob",
@@ -1439,7 +1439,7 @@
     },
     {
       "gx": -27,
-      "gy": 5,
+      "gy": 6,
       "id": "keyboardController-1",
       "paramMeta": {},
       "params": {},
@@ -1465,13 +1465,14 @@
       }
     },
     {
-      "gx": -25,
-      "gy": 1,
+      "gx": -23,
+      "gy": -1,
       "id": "t-1",
       "paramMeta": {},
       "params": {},
       "type": "t",
-      "widthGu": 4,
+      "alias": "t",
+      "widthGu": 2,
       "traceDisplaySettings": {
         "torchHue": 0
       },
@@ -1486,17 +1487,17 @@
         "interfaceControlsHidden": false,
         "interfaceControlsForceShow": false,
         "movementLocked": false,
-        "oscilloscopeHidden": false,
+        "oscilloscopeHidden": true,
         "oscilloscopeForceShow": false,
         "slidersHidden": false,
         "slidersForceShow": false,
         "titleHidden": false,
-        "displayHeightGu": 2
+        "displayHeightGu": 0
       }
     },
     {
       "gx": -21,
-      "gy": -6,
+      "gy": -4,
       "id": "toggleButton-1",
       "paramMeta": {
         "offset": {
@@ -1577,16 +1578,18 @@
         }
       },
       "params": {
-        "offset": 1,
+        "offset": 0,
         "displaySource": 0
       },
       "type": "toggleButton",
       "alias": "Gate or Trig",
+      "pluginId": 1,
       "widthGu": 7,
       "traceDisplaySettings": {
         "strokeScale": 0.06,
         "rounding": 0.18,
         "buttonShowLabel": true,
+        "buttonLabelAlign": "left",
         "labelText": "",
         "offText": "⎍ Trigger",
         "onText": "▮ Gate",
@@ -1613,9 +1616,8 @@
         "slidersHidden": true,
         "slidersForceShow": false,
         "titleHidden": true,
-        "displayHeightGu": 5
-      },
-      "pluginId": 1
+        "displayHeightGu": 3
+      }
     }
   ],
   "requiredAssets": [],
@@ -1629,7 +1631,7 @@
   "view": {
     "heightGu": 24,
     "widthGu": 48,
-    "zoom": 0.711780247813411,
+    "zoom": 0.8928571428571433,
     "gridVisible": true,
     "gridLightVisible": true,
     "wireLengthsVisible": true,

@@ -7,11 +7,10 @@ setlocal enabledelayedexpansion
 :: button renders red; see node-graph-debug-console.js). Always runs the
 :: latest code. Replaces both the old start_sandbox.cmd (identical
 :: fresh-restart flow) and start_sandbox.ps1.
-:: See start_sandbox_release.cmd for the release counterpart, which also
-:: rebuilds native modules, runs the smoke test, and refreshes the copy
-:: embedded in soundemote-io.
+:: See soundemote_io_preview.cmd for build + smoke + site preview, or
+:: soundemote_io_publish.cmd for a live release.
 
-set "REPO=%~dp0"
+for %%I in ("%~dp0..") do set "REPO=%%~fI"
 cd /d "%REPO%"
 
 echo === Soemdsp Sandbox (DEBUG build) ===
@@ -26,10 +25,10 @@ powershell -NoProfile -Command ^
   "if (-not $w) { Write-Host 'WARNING: combined native wasm missing -- run scripts\build_native_modules.ps1' -ForegroundColor Yellow }" ^
   "elseif ($c -and $c.LastWriteTime -gt $w.LastWriteTime) { Write-Host ('WARNING: ' + $c.Name + ' is newer than the combined native wasm -- run scripts\build_native_modules.ps1 or native modules run STALE code') -ForegroundColor Yellow }"
 
-:: Kill any existing python process on port 8765 (the sandbox server itself
+:: Kill any existing python process on port 8766 (the sandbox server itself
 :: IS cheap to restart, and we always want it running the latest code).
 echo [1/3] Stopping existing sandbox server...
-for /f "tokens=5" %%a in ('netstat -ano ^| findstr ":8765.*LISTENING" 2^>nul') do (
+for /f "tokens=5" %%a in ('netstat -ano ^| findstr ":8766.*LISTENING" 2^>nul') do (
     taskkill /F /PID %%a >nul 2>&1
     echo       Killed stale process PID %%a
 )
@@ -37,17 +36,17 @@ timeout /t 1 /nobreak >nul
 
 :: Start fresh, serving BUILD_MODE=debug (the default -- no --release flag)
 echo [2/3] Starting sandbox server (debug)...
-start "Soemdsp Sandbox (Debug)" /D "%REPO%" powershell -NoProfile -ExecutionPolicy Bypass -Command "python server.py --host 127.0.0.1 --port 8765; Read-Host 'Press Enter to close'"
+start "Soemdsp Sandbox (Debug)" /D "%REPO%" powershell -NoProfile -ExecutionPolicy Bypass -Command "python server.py --host 127.0.0.1 --port 8766; Read-Host 'Press Enter to close'"
 
 :: Wait for it to be ready
 echo [3/3] Waiting for server...
 :wait
 timeout /t 1 /nobreak >nul
-curl -s -o nul http://127.0.0.1:8765/ 2>nul
+curl -s -o nul http://127.0.0.1:8766/ 2>nul
 if errorlevel 1 goto wait
 
 echo       Server ready.
-start http://127.0.0.1:8765/
+start http://127.0.0.1:8766/
 echo.
 echo Sandbox is running in DEBUG mode. Close the PowerShell window to stop it.
 exit /b 0

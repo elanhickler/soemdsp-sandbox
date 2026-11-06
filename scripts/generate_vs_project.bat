@@ -1,6 +1,7 @@
 @echo off
 setlocal EnableExtensions
-cd /d "%~dp0"
+for %%I in ("%~dp0..") do set "REPO=%%~fI"
+cd /d "%REPO%"
 
 echo ============================================================
 echo  soemdsp — generate Visual Studio project/solution
@@ -22,7 +23,7 @@ if errorlevel 1 (
   exit /b 1
 )
 
-set "BUILD_DIR=%~dp0build_vs"
+set "BUILD_DIR=%REPO%\build_vs"
 set "GEN="
 
 REM Fresh configure tree so a failed generator cannot poison the next try.
@@ -30,7 +31,7 @@ if exist "%BUILD_DIR%\CMakeCache.txt" del /f /q "%BUILD_DIR%\CMakeCache.txt" >nu
 if exist "%BUILD_DIR%\CMakeFiles" rd /s /q "%BUILD_DIR%\CMakeFiles" >nul 2>&1
 
 echo Trying generator: Visual Studio 17 2022 (x64)...
-cmake -G "Visual Studio 17 2022" -A x64 -S "%~dp0." -B "%BUILD_DIR%"
+cmake -G "Visual Studio 17 2022" -A x64 -S "%REPO%" -B "%BUILD_DIR%"
 if not errorlevel 1 (
   set "GEN=Visual Studio 17 2022"
   goto :success
@@ -40,7 +41,7 @@ echo.
 echo VS 2022 unavailable — clearing cache and trying Visual Studio 16 2019...
 if exist "%BUILD_DIR%\CMakeCache.txt" del /f /q "%BUILD_DIR%\CMakeCache.txt" >nul 2>&1
 if exist "%BUILD_DIR%\CMakeFiles" rd /s /q "%BUILD_DIR%\CMakeFiles" >nul 2>&1
-cmake -G "Visual Studio 16 2019" -A x64 -S "%~dp0." -B "%BUILD_DIR%"
+cmake -G "Visual Studio 16 2019" -A x64 -S "%REPO%" -B "%BUILD_DIR%"
 if not errorlevel 1 (
   set "GEN=Visual Studio 16 2019"
   goto :success
@@ -50,7 +51,7 @@ echo.
 echo VS 2019 unavailable — clearing cache and trying CMake default generator...
 if exist "%BUILD_DIR%\CMakeCache.txt" del /f /q "%BUILD_DIR%\CMakeCache.txt" >nul 2>&1
 if exist "%BUILD_DIR%\CMakeFiles" rd /s /q "%BUILD_DIR%\CMakeFiles" >nul 2>&1
-cmake -S "%~dp0." -B "%BUILD_DIR%"
+cmake -S "%REPO%" -B "%BUILD_DIR%"
 if errorlevel 1 (
   echo.
   echo ERROR: cmake configure failed for all attempted generators.

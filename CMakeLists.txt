@@ -5,7 +5,7 @@
 #
 # This CMake tree exists so you can open a .sln in Visual Studio for
 # browsing, IntelliSense, and compiling what is practical under MSVC.
-# Generate with:  generate_vs_project.bat  (repo root)
+# Generate with:  scripts/generate_vs_project.bat
 
 cmake_minimum_required(VERSION 3.20)
 project(soemdsp LANGUAGES CXX)
@@ -175,7 +175,7 @@ Caveats under MSVC
     solution for browsing but excluded from soemdsp_all_modules / ALL_BUILD.
 
 Regenerate
-  Double-click generate_vs_project.bat at the repo root.
+  Double-click scripts/generate_vs_project.bat.
 ")
 add_custom_target(soemdsp_vs_readme SOURCES "${_vs_readme}")
 set_target_properties(soemdsp_vs_readme PROPERTIES FOLDER "CMake")
