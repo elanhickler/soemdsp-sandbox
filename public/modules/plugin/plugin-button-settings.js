@@ -1,8 +1,11 @@
 // Toggle and Momentary share one Display Settings set (native WebGL button,
 // modules/_shared/controller-face-gl.js): stroke, rounding, Off / On caption,
-// optional label row, and six colors (face background included). Off / On text is Display Settings, not
-// Parameter Settings. Older patches' extra keys (pads, font sizes, label
-// align/padding, corner shape) are dropped on load.
+// label show + Left / Middle / Right alignment, and six colors (face
+// background included). Off / On text is Display Settings, not Parameter
+// Settings. The label TEXT is the module's display name: stored as labelText
+// but edited only in Module Options (one source of truth, same as Knob) —
+// there is no Display Settings label box. Older patches' extra keys (pads,
+// font sizes, label padding, corner shape) are dropped on load.
 
 const NODE_GRAPH_PLUGIN_BUTTON_TEXT_MAX = 48;
 
@@ -17,12 +20,25 @@ const NODE_GRAPH_PLUGIN_BUTTON_COLOR_FIELDS = Object.freeze([
   "textColor",
 ]);
 
-const NODE_GRAPH_PLUGIN_BUTTON_TEXT_FIELDS = Object.freeze(["labelText", "offText", "onText"]);
+const NODE_GRAPH_PLUGIN_BUTTON_TEXT_FIELDS = Object.freeze(["offText", "onText"]);
+
+const NODE_GRAPH_PLUGIN_BUTTON_LABEL_ALIGNS = Object.freeze([
+  Object.freeze({ value: "left", label: "Left" }),
+  Object.freeze({ value: "middle", label: "Middle" }),
+  Object.freeze({ value: "right", label: "Right" }),
+]);
+
+function nodeGraphPluginButtonNormalizeLabelAlign(value, fallback = "left") {
+  const key = String(value || "").trim().toLowerCase();
+  if (key === "center" || key === "centre" || key === "mid") return "middle";
+  return NODE_GRAPH_PLUGIN_BUTTON_LABEL_ALIGNS.some((option) => option.value === key) ? key : fallback;
+}
 
 const NODE_GRAPH_PLUGIN_BUTTON_DISPLAY_DEFAULTS = Object.freeze({
   strokeScale: 0.06,
   rounding: 0.18,
   buttonShowLabel: true,
+  buttonLabelAlign: "left",
   labelText: "",
   offText: "Off",
   onText: "On",
@@ -68,7 +84,9 @@ function normalizeNodeGraphPluginButtonDisplaySettings(settings, type) {
     strokeScale: nodeGraphPluginButtonClamp01(src.strokeScale, d.strokeScale),
     // Legacy patches stored percent 0…100.
     rounding: nodeGraphPluginButtonClamp01(Number.isFinite(rounding) && rounding > 1 ? rounding / 100 : src.rounding, d.rounding),
-    buttonShowLabel: src.buttonShowLabel !== false,
+    buttonShowLabel: src.buttonShowLabel !== false && src.buttonShowLabel !== "false",
+    buttonLabelAlign: nodeGraphPluginButtonNormalizeLabelAlign(src.buttonLabelAlign, d.buttonLabelAlign),
+    // Display name — written by Module Options only (nodeGraphControllerFaceSettingsForNode).
     labelText: nodeGraphPluginButtonNormalizeText(src.labelText, d.labelText),
     offText: nodeGraphPluginButtonNormalizeText(src.offText, momentary ? "Gate" : d.offText),
     onText: nodeGraphPluginButtonNormalizeText(src.onText, momentary ? "Gate" : d.onText),
@@ -99,10 +117,13 @@ function nodeGraphPluginButtonFaceLabelText(node) {
     : node;
   const s = nodeGraphPluginButtonDisplaySettingsForNode(patchNode);
   if (s.buttonShowLabel === false) return "";
+  // Module Options display name (falls back to the module title), as Knob.
   if (typeof nodeGraphKnobResolvedDisplayNameForNode === "function") {
     return nodeGraphKnobResolvedDisplayNameForNode(patchNode) || "";
   }
-  return s.labelText || "";
+  return typeof nodeGraphNodeDisplayName === "function" && patchNode?.id
+    ? String(nodeGraphNodeDisplayName(patchNode.id) || "")
+    : "";
 }
 
 /** Display Settings applied: repaint the live face. */
@@ -127,6 +148,20 @@ function nodeGraphPluginButtonTextRowHtml(key, label, placeholder) {
     </label>`;
 }
 
+function nodeGraphPluginButtonLabelAlignRowHtml() {
+  const escape = typeof nodeGraphDisplaySettingsEscapeHtml === "function"
+    ? nodeGraphDisplaySettingsEscapeHtml
+    : (value) => String(value ?? "");
+  const options = NODE_GRAPH_PLUGIN_BUTTON_LABEL_ALIGNS
+    .map((option) => `<option value="${escape(option.value)}">${escape(option.label)}</option>`)
+    .join("");
+  return `
+    <label class="node-trace-display-line-burn-row" data-trace-display-control-row>
+      <span>Align</span>
+      <select data-plugin-btn-choice="buttonLabelAlign" aria-label="Label alignment">${options}</select>
+    </label>`;
+}
+
 function buildNodeGraphPluginButtonDisplaySettingsBodyHtml(formType) {
   const type = formType || "toggleButtonFace";
   const colorRow = (key) => nodeGraphDisplaySettingsBuildColorRowHtml(key, type);
@@ -136,7 +171,7 @@ function buildNodeGraphPluginButtonDisplaySettingsBodyHtml(formType) {
   return `
     <div data-plugin-button-display-settings-panel>
       <div class="metadata-section-title">Label</div>
-      <div class="metadata-field-section">${toggleRow("buttonShowLabel")}${nodeGraphPluginButtonTextRowHtml("labelText", "Label", "")}</div>
+      <div class="metadata-field-section">${toggleRow("buttonShowLabel")}${nodeGraphPluginButtonLabelAlignRowHtml()}</div>
       <div class="metadata-section-title">Button</div>
       <div class="metadata-field-section">${NODE_GRAPH_PLUGIN_BUTTON_SLIDER_FIELDS.map(fieldRow).join("")}</div>
       <div class="metadata-field-section">${nodeGraphPluginButtonTextRowHtml("offText", "Off", momentary ? "Gate" : "Off")}${nodeGraphPluginButtonTextRowHtml("onText", "On", momentary ? "Gate" : "On")}</div>
@@ -168,6 +203,8 @@ function syncNodeGraphPluginButtonDisplaySettingsControls(root, settings) {
   }
   const show = root.querySelector?.(`[data-trace-display-toggle="buttonShowLabel"]`);
   if (show) show.checked = s.buttonShowLabel !== false;
+  const align = root.querySelector?.(`[data-plugin-btn-choice="buttonLabelAlign"]`);
+  if (align && document.activeElement !== align) align.value = s.buttonLabelAlign;
   for (const key of NODE_GRAPH_PLUGIN_BUTTON_TEXT_FIELDS) {
     const el = root.querySelector?.(`[data-plugin-btn-text="${key}"]`);
     if (el && document.activeElement !== el) el.value = String(s[key] || "");
@@ -190,7 +227,7 @@ function bindNodeGraphPluginButtonDisplaySettingsBody(host) {
     }
   };
   const isOurs = (target) => target?.closest?.(
-    "[data-plugin-btn-text], [data-trace-display-field], [data-trace-display-toggle]",
+    "[data-plugin-btn-text], [data-plugin-btn-choice], [data-trace-display-field], [data-trace-display-toggle]",
   );
   host.addEventListener("input", (event) => {
     if (isOurs(event.target)) apply("none", false);
@@ -212,6 +249,8 @@ function readNodeGraphPluginButtonDisplaySettingsForm(root, current) {
   }
   const show = panel?.querySelector?.(`[data-trace-display-toggle="buttonShowLabel"]`);
   if (show) next.buttonShowLabel = Boolean(show.checked);
+  const align = panel?.querySelector?.(`[data-plugin-btn-choice="buttonLabelAlign"]`);
+  if (align) next.buttonLabelAlign = align.value;
   for (const key of NODE_GRAPH_PLUGIN_BUTTON_TEXT_FIELDS) {
     const input = panel?.querySelector?.(`[data-plugin-btn-text="${key}"]`);
     if (input) next[key] = input.value;

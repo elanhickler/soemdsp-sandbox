@@ -273,8 +273,11 @@ function nodeGraphPluginButtonFacePaint(face, btn, label, node) {
     held: btn.classList.contains("is-held"),
     caption: (on ? s.onText : s.offText) || "",
     labelText,
+    labelAlign: s.buttonLabelAlign || "left",
     labelEditing: label.dataset.editing === "true",
   };
+  // DOM label (rename-in-place overlay) follows the same alignment.
+  label.style.textAlign = model.labelAlign === "middle" ? "center" : model.labelAlign;
   nodeGraphControllerFacePaint(face, "button", model, (L) => {
     nodeGraphControllerFacePlace(btn, L.rects.button, L.w, L.h);
     nodeGraphControllerFacePlace(label, labelText ? L.rects.label : null, L.w, L.h);

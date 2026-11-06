@@ -1038,6 +1038,9 @@ function beginNodeGraphScreenSoloGrid(nodeIds) {
     if (typeof nodeGraphTextBoxCaptureCanvasScaleSource === "function") {
       nodeGraphTextBoxCaptureCanvasScaleSource(entry.face, sourceBox);
     }
+    if (typeof nodeGraphClinicalLineCaptureBuilderSize === "function") {
+      nodeGraphClinicalLineCaptureBuilderSize(entry.face);
+    }
     const aspect = nodeGraphDisplayAspect(nodeGraphPatchNode(entry.id)?.type);
     items.push({
       nodeId: entry.id,

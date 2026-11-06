@@ -3189,10 +3189,6 @@ body.node-screen-solo-active .node-layout-canvas-tile .node-midi-keyboard-surfac
   border-color: rgba(127, 199, 217, 0.58);
 }
 
-.node-midi-listen .node-midi-keyboard-octave-control {
-  justify-self: start;
-}
-
 .node-midi-keyboard-heading {
   display: flex;
   flex: 0 0 auto;

@@ -886,9 +886,15 @@ function nodeGraphLayoutBShellHeightGu(type, ui = {}) {
   if (faceGu > 0) {
     return faceGu;
   }
-  // No visible face: still need a 1gu plate (or jack-only floor).
+  // No visible face (Hide / Off / Display Height 0): still need a 1gu plate
+  // (or jack-only floor). Jacks share the shell as 1fr bands, so they fit in
+  // the type's default face height — cap the floor there so hiding a display
+  // never makes the module taller than showing it (lone `t`: 3 jacks, 1gu face).
   const ioGu = nodeGraphLayoutBIoColumnHeightGu(type);
-  return Math.max(nodeGraphModuleGuPolicy.minGu, ioGu);
+  const defaultFaceGu = nodeGraphModuleHasFace(type)
+    ? nodeGraphModuleDefaultDisplayHeightUnits(type)
+    : ioGu;
+  return Math.max(nodeGraphModuleGuPolicy.minGu, Math.min(ioGu, Math.max(1, defaultFaceGu)));
 }
 
 /** @deprecated use nodeGraphLayoutBShellHeightGu */
@@ -1327,7 +1333,17 @@ function applyNodeGraphModuleLayout(article, patchNodeOrBands) {
   });
   const omitsFaceTrack = article.classList?.contains("chrome-layout-a")
     || article.classList?.contains("chrome-layout-metamodule");
-  article.classList?.toggle("face-track-omitted", Boolean(omitsFaceTrack && !faceBandVisible));
+  // LayoutB keeps its shell (side jacks) but the face itself must go when
+  // Display Height is 0 — same as Hide / Off. Never paint a 0gu face.
+  const layoutBFaceOff = !omitsFaceTrack
+    && patchNodeForGeometry?.type
+    && (article.classList?.contains("chrome-layout-b") || article.classList?.contains("solid-module-layout"))
+    && nodeGraphModuleHasFace(patchNodeForGeometry.type)
+    && nodeGraphModuleDisplayHeightUnits(patchNodeForGeometry.type, patchNodeForGeometry.ui) <= 0;
+  article.classList?.toggle(
+    "face-track-omitted",
+    Boolean((omitsFaceTrack && !faceBandVisible) || layoutBFaceOff),
+  );
   const stack = visible.map(nodeGraphModuleBandTrackCss).join(" ") || "minmax(0, 1fr)";
   article.classList.add("module-stack");
   article.style.setProperty("--node-module-stack-rows", stack);

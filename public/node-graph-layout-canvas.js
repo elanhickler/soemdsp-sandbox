@@ -384,6 +384,10 @@ function beginNodeGraphLayoutCanvasStage(nodeIds, mode = "perform") {
     if (typeof nodeGraphTextBoxCaptureCanvasScaleSource === "function") {
       nodeGraphTextBoxCaptureCanvasScaleSource(entry.face);
     }
+    // Line faces (DSF / BLIT / SinCos): builder ink size, once, before reparent.
+    if (typeof nodeGraphClinicalLineCaptureBuilderSize === "function") {
+      nodeGraphClinicalLineCaptureBuilderSize(entry.face);
+    }
 
     const tile = document.createElement("div");
     tile.className = "node-layout-canvas-tile";

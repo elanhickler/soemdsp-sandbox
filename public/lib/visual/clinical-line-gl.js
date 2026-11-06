@@ -447,9 +447,15 @@ void main() {
     // antialiasing, so it stays the set number of pixels at every size.
     const minCss = Math.min(cssWidth, cssHeight);
     const presented = typeof canvas.closest === "function" && canvas.closest(".node-screen-solo-face");
-    if (!presented) canvas.__clinicalBuilderMinCss = minCss;
-    const builderMin = Number(canvas.__clinicalBuilderMinCss);
-    const ink = presented && builderMin > 0 ? minCss / builderMin : 1;
+    // Builder size is recorded once, when the face enters canvas view / solo
+    // (nodeGraphClinicalLineCaptureBuilderSize). Draws outside canvas view
+    // only keep a fallback for faces that never went through that capture,
+    // so a stale-size draw can no longer overwrite the captured size.
+    if (!presented) canvas.__clinicalDrawnMinCss = minCss;
+    const builderMin = presented ? clinicalBuilderMinCss(canvas, presented) : 0;
+    const ink = presented && builderMin > 0
+      ? (canvas.__clinicalBuilderMinCss > 0 ? minCss : clinicalFaceMinCss(presented) || minCss) / builderMin
+      : 1;
     const blurCss = Number.isFinite(Number(frame.blur)) ? Math.max(0.05, Number(frame.blur)) : DEFAULT_BLUR;
 
     // Build per-ink segment lists (CSS-space segs).
@@ -575,6 +581,45 @@ void main() {
     return adaptPoints(pts, outCount);
   }
 
+  function clinicalFaceMinCss(face) {
+    const w = face?.clientWidth || 0;
+    const h = face?.clientHeight || 0;
+    return w > 0 && h > 0 ? Math.min(w, h) : 0;
+  }
+
+  /**
+   * Record circuit-builder ink size for every canvas in `face`, once, right
+   * before the face is reparented into canvas view / screen solo. Canvases
+   * created later inside the presented face fall back to the face's own
+   * builder size (ratio taken face-to-face).
+   */
+  function nodeGraphClinicalLineCaptureBuilderSize(face) {
+    if (!(face instanceof Element)) return false;
+    const faceMin = clinicalFaceMinCss(face);
+    if (faceMin > 0) face.__clinicalBuilderFaceMinCss = faceMin;
+    for (const canvas of face.querySelectorAll("canvas")) {
+      const w = canvas.clientWidth || 0;
+      const h = canvas.clientHeight || 0;
+      if (w > 0 && h > 0) canvas.__clinicalBuilderMinCss = Math.min(w, h);
+    }
+    return faceMin > 0;
+  }
+
+  function clinicalBuilderMinCss(canvas, presentedFace) {
+    const captured = Number(canvas.__clinicalBuilderMinCss);
+    if (captured > 0) return captured;
+    const faceCaptured = Number(presentedFace?.__clinicalBuilderFaceMinCss);
+    if (faceCaptured > 0) return faceCaptured;
+    // Never captured (older entry path): last builder-view draw size.
+    const drawn = Number(canvas.__clinicalDrawnMinCss);
+    if (drawn > 0) {
+      canvas.__clinicalBuilderMinCss = drawn;
+      return drawn;
+    }
+    return 0;
+  }
+
+  global.nodeGraphClinicalLineCaptureBuilderSize = nodeGraphClinicalLineCaptureBuilderSize;
   global.nodeGraphClinicalLineGlPresent = nodeGraphClinicalLineGlPresent;
   global.nodeGraphClinicalLineAdaptPoints = nodeGraphClinicalLineAdaptPoints;
   global.nodeGraphClinicalLineSSAA = SSAA;

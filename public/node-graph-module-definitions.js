@@ -17640,8 +17640,6 @@ const nodeGraphModuleDefinitions = (
       "pitch",
       "Frequency",
       "Velocity",
-      "X",
-      "Y",
     ],
     parameters: []
   },

@@ -693,15 +693,14 @@ function createNodeGraphMidiListenControls() {
   channelRow.className = "node-midi-listen-row";
   const channelLabel = document.createElement("span");
   channelLabel.textContent = "Channel";
-  const channel = createNodeGraphPlusMinusControl({
-    ariaLabel: "MIDI listen channel (All or 1-16)",
-    downKey: "midiListenChannelDown",
-    valueKey: "midiListenChannelValue",
-    upKey: "midiListenChannelUp",
-    downAria: "MIDI channel down",
-    upAria: "MIDI channel up",
-    valueText: "All",
-  });
+  // Dropdown (not -/+ stepper) so it shrinks with the module like Input.
+  const channel = document.createElement("select");
+  channel.dataset.midiListenChannelSelect = "true";
+  channel.setAttribute("aria-label", "MIDI listen channel (All or 1-16)");
+  channel.append(new Option("All", "0"));
+  for (let ch = 1; ch <= 16; ch += 1) {
+    channel.append(new Option(String(ch), String(ch)));
+  }
   channelRow.append(channelLabel, channel);
   host.append(inputRow, channelRow);
   return host;

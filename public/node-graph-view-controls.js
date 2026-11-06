@@ -3422,9 +3422,6 @@ function bindNodeGraphMidiKeyboardScrubControls() {
       changeNodeGraphMidiKeyboardKeyCount(nodeGraphMidiKeyboardNodeIdFromElement(element), delta);
     });
   });
-  document.querySelectorAll("[data-midi-listen-channel-value]").forEach((element) => {
-    bindNodeGraphMidiKeyboardScrubControl(element, changeNodeGraphMidiListenChannel);
-  });
 }
 
 function changeNodeGraphMidiKeyboardOctave(nodeId, delta) {
@@ -3774,20 +3771,14 @@ function renderNodeGraphMidiKeyboardInputControls() {
 
 function renderNodeGraphMidiListenChannelControl() {
   const channel = nodeGraphMidiListenChannel();
-  document.querySelectorAll("[data-midi-listen-channel-value]").forEach((value) => {
+  document.querySelectorAll("[data-midi-listen-channel-select]").forEach((select) => {
     // 0 = listen on all MIDI channels (not a channel number).
-    value.textContent = channel <= 0 ? "All" : String(channel);
-  });
-  document.querySelectorAll("[data-midi-listen-channel-down]").forEach((down) => {
-    down.disabled = channel <= 0;
-  });
-  document.querySelectorAll("[data-midi-listen-channel-up]").forEach((up) => {
-    up.disabled = channel >= 16;
+    select.value = String(channel);
   });
 }
 
-function changeNodeGraphMidiListenChannel(delta) {
-  nodeGraphMvp.midiListenChannel = nodeGraphMidiListenChannel(nodeGraphMidiListenChannel() + delta);
+function setNodeGraphMidiListenChannel(value) {
+  nodeGraphMvp.midiListenChannel = nodeGraphMidiListenChannel(value);
   saveNodeGraphMidiInputMemory();
   renderNodeGraphMidiListenChannelControl();
 }
@@ -4125,19 +4116,12 @@ function bindNodeGraphKeyboardControllerModuleEvents() {
     select.dataset.midiKeyboardInputBound = "true";
     select.addEventListener("change", handleNodeGraphMidiKeyboardInputChange);
   });
-  document.querySelectorAll("[data-midi-listen-channel-down]").forEach((button) => {
-    if (button.dataset.midiListenChannelBound === "true") {
+  document.querySelectorAll("[data-midi-listen-channel-select]").forEach((select) => {
+    if (select.dataset.midiListenChannelBound === "true") {
       return;
     }
-    button.dataset.midiListenChannelBound = "true";
-    button.addEventListener("click", () => changeNodeGraphMidiListenChannel(-1));
-  });
-  document.querySelectorAll("[data-midi-listen-channel-up]").forEach((button) => {
-    if (button.dataset.midiListenChannelBound === "true") {
-      return;
-    }
-    button.dataset.midiListenChannelBound = "true";
-    button.addEventListener("click", () => changeNodeGraphMidiListenChannel(1));
+    select.dataset.midiListenChannelBound = "true";
+    select.addEventListener("change", () => setNodeGraphMidiListenChannel(select.value));
   });
   document.querySelectorAll("[data-midi-keyboard-mode-select]").forEach((select) => {
     if (select.dataset.midiKeyboardModeBound === "true") {

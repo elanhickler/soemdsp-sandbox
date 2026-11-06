@@ -72,8 +72,8 @@
   "modulations": [],
   "nodes": [
     {
-      "gx": 3,
-      "gy": -12,
+      "gx": 2,
+      "gy": -13,
       "id": "output",
       "paramMeta": {
         "volume": {
@@ -219,7 +219,7 @@
     },
     {
       "gx": -12,
-      "gy": -12,
+      "gy": -13,
       "id": "chaosfly-1",
       "paramMeta": {
         "outputMode": {
@@ -1046,7 +1046,7 @@
   "view": {
     "heightGu": 13,
     "widthGu": 16,
-    "zoom": 0.8900999659893882,
+    "zoom": 1,
     "gridVisible": true,
     "gridLightVisible": true,
     "wireLengthsVisible": true,

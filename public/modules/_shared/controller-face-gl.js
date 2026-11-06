@@ -246,7 +246,10 @@
     const ink = css(m.textColor);
     if (L.rects.label && m.labelText && !m.labelEditing) {
       const r = L.rects.label;
-      text(batch, m.labelText, r.x, r.y + r.h * 0.5, { px: r.h * 0.66, maxWidth: r.w, rgba: ink, align: "left" });
+      // Display Settings label align: Left / Middle / Right (maxWidth clamps long text).
+      const align = m.labelAlign === "middle" ? "center" : (m.labelAlign === "right" ? "right" : "left");
+      const x = align === "center" ? r.x + r.w * 0.5 : (align === "right" ? r.x + r.w : r.x);
+      text(batch, m.labelText, x, r.y + r.h * 0.5, { px: r.h * 0.66, maxWidth: r.w, rgba: ink, align });
     }
   }
 
