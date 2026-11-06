@@ -1024,6 +1024,97 @@ function nodeGraphAudioPlayerLibraryFindFileForItem(item) {
   return null;
 }
 
+// ---- Load progress (playlist row fill) ----
+// Download progress is real (streamed bytes / Content-Length). Decode gives no
+// progress events, so it is estimated from file size x a learned ms-per-MB rate
+// (remembered per browser). No rate yet / unknown size -> no fill, blink only.
+const NODE_GRAPH_AUDIO_PLAYER_DECODE_RATE_KEY = "soemdsp.musicPlayer.decodeMsPerMb";
+const NODE_GRAPH_AUDIO_PLAYER_DOWNLOAD_SHARE = 0.7;
+
+function nodeGraphAudioPlayerLibrarySetLoadProgress(nodeId, frac) {
+  if (typeof nodeGraphAudioPlayerPlaylistSetLoadProgress === "function") {
+    nodeGraphAudioPlayerPlaylistSetLoadProgress(nodeId, frac);
+  }
+}
+
+function nodeGraphAudioPlayerLibraryDecodeRate() {
+  try {
+    const v = Number(window.localStorage.getItem(NODE_GRAPH_AUDIO_PLAYER_DECODE_RATE_KEY));
+    return Number.isFinite(v) && v > 0 ? v : 0;
+  } catch (_) {
+    return 0;
+  }
+}
+
+function nodeGraphAudioPlayerLibraryLearnDecodeRate(bytes, ms) {
+  const mb = bytes / (1024 * 1024);
+  if (!(mb >= 0.25) || !(ms > 0)) {
+    return;
+  }
+  const measured = ms / mb;
+  const prev = nodeGraphAudioPlayerLibraryDecodeRate();
+  const next = prev > 0 ? prev * 0.6 + measured * 0.4 : measured;
+  try {
+    window.localStorage.setItem(NODE_GRAPH_AUDIO_PLAYER_DECODE_RATE_KEY, String(next));
+  } catch (_) {
+    // storage blocked: estimate just stays unavailable
+  }
+}
+
+// Runs the decode/bind and animates the fill from `from` toward 1 by the
+// learned rate. Eases out past the estimate so a slow decode never "finishes"
+// early; the row clears when the load ends.
+async function nodeGraphAudioPlayerLibraryDecodeWithProgress(nodeId, file, options, from = 0) {
+  const bytes = Math.max(0, nodeGraphFiniteNumber(file?.size));
+  const rate = nodeGraphAudioPlayerLibraryDecodeRate();
+  const estimateMs = rate > 0 && bytes > 0 ? rate * (bytes / (1024 * 1024)) : 0;
+  const start = performance.now();
+  let raf = 0;
+  if (estimateMs > 0) {
+    const tick = () => {
+      const t = (performance.now() - start) / estimateMs;
+      const eased = t < 1 ? t * 0.95 : 0.95 + 0.05 * (1 - Math.exp(-(t - 1)));
+      nodeGraphAudioPlayerLibrarySetLoadProgress(nodeId, from + (1 - from) * eased);
+      raf = window.requestAnimationFrame(tick);
+    };
+    tick();
+  } else if (from <= 0) {
+    nodeGraphAudioPlayerLibrarySetLoadProgress(nodeId, undefined);
+  }
+  try {
+    const sample = await loadNodeGraphSampleForNode(nodeId, file, options);
+    nodeGraphAudioPlayerLibraryLearnDecodeRate(bytes, performance.now() - start);
+    return sample;
+  } finally {
+    if (raf) {
+      window.cancelAnimationFrame(raf);
+    }
+  }
+}
+
+// fetch() + streamed read so the row can fill with real bytes received.
+async function nodeGraphAudioPlayerLibraryFetchBlobWithProgress(nodeId, res, share) {
+  const total = Number(res.headers.get("content-length")) || 0;
+  if (!res.body || !total) {
+    nodeGraphAudioPlayerLibrarySetLoadProgress(nodeId, undefined);
+    return res.blob();
+  }
+  const reader = res.body.getReader();
+  const chunks = [];
+  let received = 0;
+  nodeGraphAudioPlayerLibrarySetLoadProgress(nodeId, 0);
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) {
+      break;
+    }
+    chunks.push(value);
+    received += value.byteLength;
+    nodeGraphAudioPlayerLibrarySetLoadProgress(nodeId, share * Math.min(1, received / total));
+  }
+  return new Blob(chunks, { type: res.headers.get("content-type") || "" });
+}
+
 async function nodeGraphAudioPlayerLibraryEnsureItemLoaded(nodeId, item) {
   if (!item) {
     nodeGraphAudioPlayerLog("FAIL", "decode skipped: no playlist item", { nodeId });
@@ -1055,7 +1146,7 @@ async function nodeGraphAudioPlayerLibraryEnsureItemLoaded(nodeId, item) {
     fileBytes: Math.max(0, Math.round(nodeGraphFiniteNumber(file?.size))),
   });
   if (file && typeof loadNodeGraphSampleForNode === "function") {
-    const sample = await loadNodeGraphSampleForNode(nodeId, file, {
+    const sample = await nodeGraphAudioPlayerLibraryDecodeWithProgress(nodeId, file, {
       commit: true,
       livePlan: true,
       persist: false,
@@ -1088,7 +1179,7 @@ async function nodeGraphAudioPlayerLibraryEnsureItemLoaded(nodeId, item) {
     nodeGraphAudioPlayerLog("INFO", "decode via host request", { nodeId, index: item.hostIndex });
     const hosted = await window.soemdspPlayerHostTrack(item);
     item.bytes = hosted.size;
-    const sample = await loadNodeGraphSampleForNode(nodeId, hosted, {
+    const sample = await nodeGraphAudioPlayerLibraryDecodeWithProgress(nodeId, hosted, {
       commit: true,
       livePlan: true,
       persist: false,
@@ -1110,21 +1201,24 @@ async function nodeGraphAudioPlayerLibraryEnsureItemLoaded(nodeId, item) {
     if (!res.ok) {
       throw new Error(`could not fetch ${item.name || url} (${res.status})`);
     }
-    const blob = await res.blob();
+    const blob = await nodeGraphAudioPlayerLibraryFetchBlobWithProgress(nodeId, res, NODE_GRAPH_AUDIO_PLAYER_DOWNLOAD_SHARE);
     const fileName = decodeURIComponent(url.split(/[?#]/)[0].split("/").pop() || "") || item.name || "track";
     const fetched = new File([blob], fileName, { type: blob.type || "", lastModified: 0 });
     const key = nodeGraphAudioPlayerLibraryFileKey(fetched);
     nodeGraphAudioPlayerLibraryFiles().set(key, fetched);
     item.fileKey = key;
     item.bytes = fetched.size;
-    const sample = await loadNodeGraphSampleForNode(nodeId, fetched, {
+    const downloadedTo = typeof nodeGraphAudioPlayerPlaylistLoadProgress !== "undefined"
+      ? nodeGraphAudioPlayerPlaylistLoadProgress.get(String(nodeId || "")) || 0
+      : 0;
+    const sample = await nodeGraphAudioPlayerLibraryDecodeWithProgress(nodeId, fetched, {
       commit: true,
       livePlan: true,
       persist: false,
       record: false,
       sourcePath: url,
       syncDisplay: true,
-    });
+    }, downloadedTo);
     return sample?.id || "";
   }
   throw new Error(`no local file for ${item.name || item.path || "track"} — paste a full folder path and Load`);

@@ -2256,6 +2256,16 @@ input[type="range"],
   animation: node-music-player-pl-load-blink 0.7s ease-in-out infinite;
   color: var(--sample-waveform-hud-color-hot);
 }
+/* Load fill: real download bytes, then a size-based decode estimate.
+   Sits behind the text; the blink above still marks it as busy. */
+.node-music-player-pl-row[data-loading="true"][data-load-fill="true"] {
+  background-image: linear-gradient(
+    to right,
+    var(--sample-waveform-hud-color-dim) var(--node-music-player-pl-load, 0%),
+    transparent var(--node-music-player-pl-load, 0%)
+  );
+  background-repeat: no-repeat;
+}
 .node-music-player-pl-row.is-play-next,
 .node-music-player-pl-row[data-queue="next"] {
   background: hsla(140, 90%, 57%, 0.14);

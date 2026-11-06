@@ -1670,6 +1670,32 @@ function nodeGraphAudioPlayerPlaylistPlayPrev(nodeId) {
 const nodeGraphAudioPlayerPlaylistAdvanceArmed = new Map();
 const nodeGraphAudioPlayerPlaylistLoadBusy = new Map();
 const nodeGraphAudioPlayerPlaylistLoadTarget = new Map();
+// Load fill (0..1) for the row being loaded; absent = unknown (blink only).
+const nodeGraphAudioPlayerPlaylistLoadProgress = new Map();
+
+function nodeGraphAudioPlayerPlaylistApplyLoadFill(row, frac) {
+  if (Number.isFinite(frac)) {
+    row.dataset.loadFill = "true";
+    row.style.setProperty("--node-music-player-pl-load", `${(Math.max(0, Math.min(1, frac)) * 100).toFixed(1)}%`);
+  } else {
+    delete row.dataset.loadFill;
+    row.style.removeProperty("--node-music-player-pl-load");
+  }
+}
+
+// Cheap per-frame update: touches only the loading row(s), no list repaint.
+function nodeGraphAudioPlayerPlaylistSetLoadProgress(nodeId, frac) {
+  const id = String(nodeId || "");
+  if (Number.isFinite(frac)) {
+    nodeGraphAudioPlayerPlaylistLoadProgress.set(id, Math.max(0, Math.min(1, frac)));
+  } else {
+    nodeGraphAudioPlayerPlaylistLoadProgress.delete(id);
+  }
+  const value = nodeGraphAudioPlayerPlaylistLoadProgress.get(id);
+  document.querySelectorAll(
+    `.node-sample-waveform-display[data-node="${CSS.escape(id)}"] .node-music-player-pl-row[data-loading="true"]`,
+  ).forEach((row) => nodeGraphAudioPlayerPlaylistApplyLoadFill(row, value));
+}
 const nodeGraphAudioPlayerPlaylistAdvancePending = new Map();
 const nodeGraphAudioPlayerPlaylistAdvanceTimer = new Map();
 const nodeGraphAudioPlayerPlaylistLastCompletedSid = new Map();
@@ -1756,6 +1782,7 @@ function nodeGraphAudioPlayerPlaylistBeginLoad(nodeId) {
   const id = String(nodeId || "");
   nodeGraphAudioPlayerPlaylistCancelAdvanceTimer(id);
   nodeGraphAudioPlayerPlaylistAdvanceArmed.set(id, false);
+  nodeGraphAudioPlayerPlaylistLoadProgress.delete(id);
   nodeGraphAudioPlayerPlaylistLoadBusy.set(id, true);
   nodeGraphAudioPlayerPlaylistAdvancePending.set(id, false);
   nodeGraphAudioPlayerPlaylistDebug(id, "begin-load");
@@ -1787,6 +1814,7 @@ function nodeGraphAudioPlayerPlaylistEndLoad(nodeId) {
   const id = String(nodeId || "");
   nodeGraphAudioPlayerPlaylistLoadBusy.set(id, false);
   nodeGraphAudioPlayerPlaylistLoadTarget.delete(id);
+  nodeGraphAudioPlayerPlaylistLoadProgress.delete(id);
   nodeGraphAudioPlayerPlaylistAdvancePending.set(id, false);
   nodeGraphAudioPlayerPlaylistDebug(id, "end-load");
   if (typeof window.soemdspPlayerNotifyLoading === "function") {
@@ -2413,6 +2441,7 @@ function nodeGraphAudioPlayerPlaylistPaintSlots(nodeId, list, { followPlaying = 
     row.dataset.playing = isPlaying ? "true" : "false";
     row.dataset.loading = isLoading ? "true" : "false";
     row.classList.toggle("is-loading", isLoading);
+    nodeGraphAudioPlayerPlaylistApplyLoadFill(row, isLoading ? nodeGraphAudioPlayerPlaylistLoadProgress.get(String(nodeId || "")) : undefined);
     row.dataset.queue = isPlaying ? "playing" : (isPlayNext ? "next" : (isPlayed ? "played" : "unplayed"));
     row.classList.toggle("is-played", isPlayed);
     row.classList.toggle("is-play-next", isPlayNext);
