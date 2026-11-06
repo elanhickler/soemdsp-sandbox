@@ -31,15 +31,6 @@
       "folder": "Alarm"
     },
     {
-      "slug": "bugs/jagged lines",
-      "label": "jagged lines",
-      "name": "",
-      "url": "/soemdsp-sandbox/patches/bugs/jagged%20lines.json",
-      "author": "",
-      "emoji": "",
-      "folder": "bugs"
-    },
-    {
       "slug": "bugs/pump limiter sidechain not working",
       "label": "pump limiter sidechain not working",
       "name": "",
@@ -787,14 +778,6 @@
       "name": "",
       "url": "/soemdsp-sandbox/patches/input-gain-output.json",
       "author": "Sandbox",
-      "emoji": ""
-    },
-    {
-      "slug": "jagged lines",
-      "label": "jagged lines",
-      "name": "",
-      "url": "/soemdsp-sandbox/patches/bugs/jagged%20lines.json",
-      "author": "",
       "emoji": ""
     },
     {
