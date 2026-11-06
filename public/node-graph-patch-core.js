@@ -1633,7 +1633,9 @@ function applyNodeGraphModuleElementFromPatch(patchNode, options = {}) {
       container.append(element);
     }
   }
+  let freshElement = false;
   if (!element) {
+    freshElement = true;
     element = createNodeGraphModuleElement(patchNode.type, patchNode.id);
     container.append(element);
     if (typeof nodeGraphModuleFrameObserve === "function") {
@@ -1654,7 +1656,31 @@ function applyNodeGraphModuleElementFromPatch(patchNode, options = {}) {
   } else if (patchNode.type === "keypad" && typeof syncNodeGraphKeypadElement === "function") {
     syncNodeGraphKeypadElement(element, patchNode);
   }
+  if (freshElement) {
+    nodeGraphModuleMarkConnectedPorts(patchNode.id);
+  }
   return element;
+}
+
+/**
+ * A remounted article (title hide/show changes the structural signature)
+ * starts with no connected-port marks. With Hide unused on, every jack then
+ * reads as unused and is hidden, and the GL chrome pass collects no jacks
+ * until some other chrome edit rebuilds it. Re-mark this module's cable ends
+ * right away so the first layout / geometry pass already sees them.
+ */
+function nodeGraphModuleMarkConnectedPorts(nodeId) {
+  if (typeof markNodeGraphWireEndpointsConnected !== "function" || typeof nodeGraphMvp === "undefined") {
+    return;
+  }
+  const id = String(nodeId || "");
+  const touches = (wire) => wire && (String(wire.sourceNode) === id || String(wire.destinationNode) === id);
+  for (const connection of nodeGraphMvp.connections || []) {
+    if (touches(connection)) markNodeGraphWireEndpointsConnected(connection);
+  }
+  for (const modulation of nodeGraphMvp.modulations || []) {
+    if (touches(modulation)) markNodeGraphWireEndpointsConnected(modulation, "modulation");
+  }
 }
 
 let nodeGraphChromeHeavyTimer = 0;
