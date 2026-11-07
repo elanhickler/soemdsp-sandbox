@@ -295,6 +295,12 @@ const nodeGraphTraceDisplayActiveControlsByType = Object.freeze({
     toggles: Object.freeze([]),
     choices: Object.freeze([]),
   }),
+  additiveWaveform: Object.freeze({
+    fields: Object.freeze(["lineThickness", "lineSmoothing"]),
+    colors: Object.freeze(["strokeColor", "backgroundColor"]),
+    toggles: Object.freeze([]),
+    choices: Object.freeze([]),
+  }),
   ensembleCloud: Object.freeze({
     fields: Object.freeze(["cloudSpeed"]),
     colors: Object.freeze([]),
@@ -2739,6 +2745,7 @@ const nodeGraphDisplaySettingsFormTypeTitles = Object.freeze({
   roundShapeFace: "RoundShape",
   sinCos4Face: "SinCos4",
   sinCosFace: "SinCos",
+  additiveWaveform: "Additive Waveform",
   blitFace: "BLIT",
   clockFace: "Clock",
   clockDividerFace: "Clock Divider",

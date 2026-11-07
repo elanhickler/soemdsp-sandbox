@@ -140,7 +140,7 @@ function nodeGraphDisplaySettingsBuildStepperRowHtml(key, formType = null, optio
     label = "Scale";
     title = "Amplitude zoom on the face (1 = full-scale). Does not change the Display Settings preview dot.";
   }
-  if ((formType === "roundShapeFace" || formType === "basicShapeFace" || formType === "blitFace" || formType === "sinCosFace" || formType === "clockFace" || formType === "clockDividerFace" || formType === "pulseExplosionFace" || formType === "pulseTrainFace" || formType === "plotFace") && key === "lineThickness") {
+  if ((formType === "roundShapeFace" || formType === "basicShapeFace" || formType === "blitFace" || formType === "sinCosFace" || formType === "additiveWaveform" || formType === "clockFace" || formType === "clockDividerFace" || formType === "pulseExplosionFace" || formType === "pulseTrainFace" || formType === "plotFace") && key === "lineThickness") {
     label = "Line thickness";
     title = formType === "clockFace" || formType === "clockDividerFace" || formType === "pulseExplosionFace" || formType === "pulseTrainFace" ? "Line width in CSS pixels (0–16). 0 = no line." : formType === "roundShapeFace"
       ? "Orbit stroke width in CSS pixels (0–16). 0 = no line, only the dot."
@@ -166,7 +166,7 @@ function nodeGraphDisplaySettingsBuildStepperRowHtml(key, formType = null, optio
     label = "Fade time (s)";
     title = "Lit-dot hang after each pulse. 0 = stay lit until the next trigger. Small values drop immediately. Same exponential residual as phosphor / woscope.";
   }
-  if ((formType === "roundShapeFace" || formType === "basicShapeFace" || formType === "blitFace" || formType === "sinCosFace" || formType === "clockFace" || formType === "clockDividerFace" || formType === "pulseExplosionFace" || formType === "pulseTrainFace" || formType === "plotFace") && key === "lineSmoothing") {
+  if ((formType === "roundShapeFace" || formType === "basicShapeFace" || formType === "blitFace" || formType === "sinCosFace" || formType === "additiveWaveform" || formType === "clockFace" || formType === "clockDividerFace" || formType === "pulseExplosionFace" || formType === "pulseTrainFace" || formType === "plotFace") && key === "lineSmoothing") {
     label = "Line blur";
     title = "Expo antialiasing skirt in CSS pixels (0–8, default 1), outside the line's thickness. 0 = hard core.";
   }
@@ -803,6 +803,12 @@ function nodeGraphDisplaySettingsColorRowMeta(key, formType = null, options = {}
     aria = "Keypad text color";
   } else if (formType === "keypadFace" && key === "strokeColor") {
     aria = "Keypad stroke color";
+  } else if (formType === "additiveWaveform" && key === "backgroundColor") {
+    aria = "Additive waveform background color";
+    base = { ...base, defaultValue: "#050508" };
+  } else if (formType === "additiveWaveform" && key === "strokeColor") {
+    aria = "Additive waveform line color";
+    base = { ...base, defaultValue: "#ffd228" };
   } else if ((formType === "roundShapeFace" || formType === "basicShapeFace" || formType === "blitFace" || formType === "sinCosFace") && key === "backgroundColor") {
     aria = "RoundShape background color";
     base = { ...base, defaultValue: "#020609" };
@@ -2222,6 +2228,7 @@ function buildNodeGraphDisplaySettingsBodyHtml(formType, node = null) {
     if ((type === "roundShapeFace" || type === "basicShapeFace" || type === "blitFace" || type === "sinCosFace" || type === "clockFace" || type === "clockDividerFace" || type === "pulseExplosionFace" || type === "pulseTrainFace" || type === "robinSinepulseFace" || type === "plotFace") && section === "dot1") {
       continue;
     }
+    if (type === "additiveWaveform" && section === "dot1") continue;
 
     const sectionControls = nodeGraphTraceDisplaySectionControls[section];
     if (!sectionControls) {
@@ -2248,6 +2255,10 @@ function buildNodeGraphDisplaySettingsBodyHtml(formType, node = null) {
         ...(type === "pulseTrainFace" ? ["fadeTime"] : []),
         "pixelDensity",
       ].filter((key) => activeFields.has(key) && allowKey("fields", key));
+    }
+    if (type === "additiveWaveform" && section === "waterfall") {
+      fieldKeys = ["lineThickness", "lineSmoothing"]
+        .filter((key) => activeFields.has(key) && allowKey("fields", key));
     }
     if (type === "plotFace" && section === "waterfall") {
       fieldKeys = ["timeMs", "scale", "plotOffset", "lineThickness", "lineSmoothing"]
@@ -2280,7 +2291,7 @@ function buildNodeGraphDisplaySettingsBodyHtml(formType, node = null) {
         && typeof nodeGraphTraceDisplaySettingsTargetNodeId === "function"
         ? nodeGraphPatchNode(nodeGraphTraceDisplaySettingsTargetNodeId())?.type
         : null;
-      const twoChannel = plotType === "plot1dStereo" || plotType === "plot2d";
+      const twoChannel = plotType === "plot1dStereo" || plotType === "plot2d" || plotType === "output";
       toggleKeys = toggleKeys.filter((key) => !(twoChannel && key === "sourceSync"));
       choiceKeys = (plotType === "plot2d" ? ["windowMode", "syncChannel", "plotDraw"] : (twoChannel ? ["windowMode", "syncChannel", "plotDraw", "barInk"] : ["windowMode", "plotDraw", "barInk"])).filter((key) => activeChoices.has(key));
     }
@@ -2617,7 +2628,7 @@ function buildNodeGraphDisplaySettingsBodyHtml(formType, node = null) {
         && typeof nodeGraphTraceDisplaySettingsTargetNodeId === "function"
         ? nodeGraphPatchNode(nodeGraphTraceDisplaySettingsTargetNodeId())?.type
         : null;
-      const stereo = plotNodeType === "plot1dStereo";
+      const stereo = plotNodeType === "plot1dStereo" || plotNodeType === "output";
       const lamps = [
         ["background", "Background", "backgroundHue", "backgroundBrightness", "backgroundSaturation"],
         ["line", stereo ? "Left" : "Line", "lineHue", "lineBrightness", "lineSaturation"],

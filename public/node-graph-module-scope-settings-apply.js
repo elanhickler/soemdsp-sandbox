@@ -126,6 +126,13 @@ function assignNodeGraphTypedDisplaySettingsToNode(node, displayType, settings) 
     }
     return node.traceDisplaySettings;
   }
+  if (displayType === "additiveWaveform" && typeof normalizeNodeGraphAdditiveWaveformSettings === "function") {
+    node.traceDisplaySettings = normalizeNodeGraphAdditiveWaveformSettings(settings);
+    if (typeof applyNodeGraphAdditiveWaveformSettingsToFace === "function") {
+      applyNodeGraphAdditiveWaveformSettingsToFace(node);
+    }
+    return node.traceDisplaySettings;
+  }
   if (
     displayType === "roundShapeFace"
     || displayType === "basicShapeFace" || displayType === "blitFace"

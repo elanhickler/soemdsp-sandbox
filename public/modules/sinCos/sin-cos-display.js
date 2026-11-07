@@ -225,15 +225,14 @@ function drawNodeGraphSinCosDisplay(section) {
   }
 }
 
-// DSF Oscillator face: one steady-state cycle from the original SineSaw closed
-// form (n = floor(Nyquist/f), extra partial faded by the fractional part).
-// DSF Morphing Osc draws Morph / Symmetry / Width / Rotate / Slice / Spacing /
-// Odd-Even of the same object. The engine leaky-integrates (leak → 0.0005); at
-// steady state that is the running integral over one cycle minus its mean.
+// DSF faces use a settled cycle from the native oscillator. The rate must
+// match the engine so partial limits and integrator leakage match the sound.
 function nodeGraphDsfSampleRate() {
   const live = typeof nodeGraphMvp !== "undefined" ? nodeGraphMvp?.live : null;
   const sr = Number(live?.context?.sampleRate ?? live?.audioContext?.sampleRate);
-  return Number.isFinite(sr) && sr > 1 ? sr : 48000;
+  if (Number.isFinite(sr) && sr > 1) return sr;
+  const target = Number(typeof nodeGraphMvp !== "undefined" ? nodeGraphMvp?.patch?.audio?.targetSampleRate : NaN);
+  return Number.isFinite(target) && target > 1 ? target : 48000;
 }
 
 function nodeGraphDsfWrap01(turns) {
@@ -556,171 +555,11 @@ function nodeGraphDsfCyclePointCount(node) {
   return Math.max(2048, Math.min(8192, Math.ceil(n * 12)));
 }
 
-/**
- * Face plot: DSF closed-form cycle with NO leaky integrator.
- * Evaluates the same geometric kernel as the engine (Bright/Morph tilt,
- * Spacing, Odd/Even, Morphing Width/Symmetry/Rotate/Slice), then integrates
- * with a pure running sum (DC-removed) so Gibbs is crisp and params show.
- * Strictly DSF: every sample is one O(1) closed-form kernel evaluation, never
- * a per-harmonic sum, at whatever Partials count the engine plays.
- */
-/**
- * Face plot: DSF closed-form cycle with NO leaky integrator.
- * Phase index i maps to engine phase i/(count-1) — same convention as
- * renderT / __Phase — so x=0 and the phase dot match audio phase 0.
- * Engine phase 0 is the wrap (impulse / jump); Σsin(kθ)/k = 0 there
- * (jump midpoint). Ramp zero-cross is at phase 0.5.
- *
- * Bright/Morph tilt uses the geometric kernel; Bright=1 (k=0) is its
- * Dirichlet limit, the same closed form the engine uses.
- */
-function nodeGraphDsfIntegrateNoLeak(rawAt, count) {
-  const raw = new Float64Array(count);
-  for (let i = 0; i < count; i += 1) raw[i] = rawAt(i);
-  nodeGraphDsfSubMean(raw);
-  const acc = new Float64Array(count);
-  let y = 0;
-  const h = 1 / count;
-  for (let i = 0; i < count; i += 1) {
-    y += raw[i] * h;
-    acc[i] = y;
-  }
-  return nodeGraphDsfSubMean(acc);
-}
-
+/** One settled, phase-aligned cycle of native DSF output at unit level. */
 function nodeGraphDsfDisplayCycle(params, count) {
-  const n = Math.max(16, count | 0);
-  const amp = Number.isFinite(params.amplitude) ? params.amplitude : 1;
-  const out = new Float64Array(n);
-  const morphing = params.morphing === true;
-  const waveform = Math.max(0, Math.min(4, Math.round(nodeGraphFiniteNumber(params.waveform, 1))));
-
-  if (!morphing && waveform === 0) {
-    for (let i = 0; i < n; i += 1) out[i] = Math.sin((i / (n - 1)) * Math.PI * 2) * amp;
-    return out;
-  }
-
-  const sr = nodeGraphDsfSampleRate();
-  const f = Math.max(1e-6, Math.abs(nodeGraphFiniteNumber(params.frequency, 100)));
-  // Geometric DSF kernel → pure integral. Phase = i/(n-1) matches engine renderT.
-  // DSF Oscillator honors its Partials cap like the engine (preparePartials).
-  const counts = nodeGraphDsfPartials(
-    sr, f, morphing ? nodeGraphFiniteNumber(params.spacing, 1) : 1,
-    morphing ? 1048576 : nodeGraphFiniteNumber(params.partials, 20000),
-  );
-  // Plot resolution cap: past ~4k partials the extra ripple is far below one
-  // pixel of the face, and the integration grid below stays <= 16k samples.
-  const NODE_GRAPH_DSF_FACE_MAX_PARTIALS = 4092;
-  let { nLo, nHi, frac } = counts;
-  if (nLo >= NODE_GRAPH_DSF_FACE_MAX_PARTIALS) {
-    nLo = NODE_GRAPH_DSF_FACE_MAX_PARTIALS;
-    nHi = nLo;
-    frac = 0;
-  }
-  const m = Math.max(0, Math.min(1, nodeGraphFiniteNumber(params.morph, 1)));
-  const k = (1 - (m > 0 ? Math.pow(m, 0.14) : 0)) * 4;
-  const k2 = k * k;
-  const cLo = nodeGraphDsfMakeCoeffs(nLo, k2);
-  const cHi = frac > 0 ? nodeGraphDsfMakeCoeffs(nHi, k2) : cLo;
-
-  const kernel = morphing
-    ? (turns) => {
-      const a = Math.pow(0.5, k2);
-      const rot = nodeGraphDsfWrap01(nodeGraphFiniteNumber(params.rotate, 0));
-      const width = nodeGraphFiniteNumber(params.width, 0);
-      const symmetry = nodeGraphFiniteNumber(params.symmetry, 0);
-      let spacing = nodeGraphFiniteNumber(params.spacing, 1);
-      if (!(spacing > 1e-9) && !(spacing < -1e-9)) spacing = 1;
-      const oddEven = Math.max(0, Math.min(1, nodeGraphFiniteNumber(params.oddEven, 0)));
-      const harmonic = spacing > 0.999999 && spacing < 1.000001;
-      if (!harmonic) {
-        const ct = nodeGraphDsfWrap01(turns + rot);
-        const mt = nodeGraphDsfWrap01(ct * spacing);
-        const spaced = (c) => {
-          const mk = nodeGraphDsfKernelCSDisplay(mt, c);
-          const ang = 2 * Math.PI * nodeGraphDsfWrap01(ct - mt);
-          let y = Math.cos(ang) * mk.C - Math.sin(ang) * mk.S;
-          if (oddEven > 0) {
-            const nEven = Math.max(1, Math.floor(c.n * 0.5));
-            const ce = nodeGraphDsfMakeCoeffs(nEven, k2 * 2);
-            const me = nodeGraphDsfKernelCSDisplay(nodeGraphDsfWrap01(2 * mt), ce);
-            y -= oddEven * (Math.cos(ang) * me.C - Math.sin(ang) * me.S) / c.twoK2;
-          }
-          return y;
-        };
-        const lo = spaced(cLo);
-        if (frac <= 0) return lo;
-        return lo + (spaced(cHi) - lo) * frac;
-      }
-      const slice = nodeGraphFiniteNumber(params.slice, 0);
-      const startLo = nodeGraphDsfSliceStart(slice, nLo);
-      const lo = nodeGraphDsfMorphImpulse(turns, a, startLo, nLo, rot, width, symmetry, 1, oddEven);
-      if (frac <= 0) return lo;
-      const startHi = nodeGraphDsfSliceStart(slice, nHi);
-      return lo + (nodeGraphDsfMorphImpulse(turns, a, startHi, nHi, rot, width, symmetry, 1, oddEven) - lo) * frac;
-    }
-    : (turns) => {
-      const ct = nodeGraphDsfWrap01(turns);
-      const lo = nodeGraphDsfKernelCSDisplay(ct, cLo).C;
-      return frac <= 0 ? lo : lo + (nodeGraphDsfKernelCSDisplay(ct, cHi).C - lo) * frac;
-    };
-
-  // The kernel is an impulse train holding nHi partials. Integrate it on a
-  // grid of at least 4 samples per top partial (same running sum the engine
-  // does per audio sample) so the integral never aliases, then resample to
-  // the n plotted points at engine phase i/(n-1).
-  const M = Math.max(n, Math.ceil(4 * nHi) + 16);
-  const phaseOf = (i) => (i + 0.5) / M;
-  const toPlot = (dense) => {
-    if (M === n) return dense;
-    const res = new Float64Array(n);
-    for (let i = 0; i < n; i += 1) {
-      const src = (i / (n - 1)) * M - 0.5;
-      const w = src - Math.floor(src);
-      const j0 = ((Math.floor(src) % M) + M) % M;
-      res[i] = dense[j0] + (dense[(j0 + 1) % M] - dense[j0]) * w;
-    }
-    return res;
-  };
-  const integrateDense = (rawAt) => toPlot(nodeGraphDsfIntegrateNoLeak(rawAt, M));
-
-  const saw = integrateDense((i) => kernel(phaseOf(i)));
-  const pw = Math.max(0.01, Math.min(0.99, nodeGraphFiniteNumber(params.pulseWidth, 0.5)));
-  let shape = saw;
-  if (!morphing && waveform === 4) {
-    const sq = integrateDense((i) => {
-      const t = phaseOf(i);
-      return kernel(t) - kernel(t - 0.5);
-    });
-    const b = Math.max(0, Math.min(1, nodeGraphFiniteNumber(params.blend, 0.5)));
-    shape = new Float64Array(n);
-    for (let i = 0; i < n; i += 1) shape[i] = saw[i] * (1 - b) + sq[i] * b;
-  } else if (!morphing && (waveform === 2 || waveform === 3)) {
-    const sq = integrateDense((i) => {
-      const t = phaseOf(i);
-      return kernel(t) - kernel(t - pw);
-    });
-    shape = sq;
-    if (waveform === 3) {
-      const P = nodeGraphDsfIntegrateNoLeak((i) => saw[i], n);
-      const back = pw * n;
-      const tri = new Float64Array(n);
-      const scale = 1.3 / (pw * (1 - pw));
-      for (let i = 0; i < n; i += 1) {
-        let src = i - back;
-        src -= Math.floor(src / n) * n;
-        const i0 = Math.floor(src);
-        const fr = src - i0;
-        const lagged = P[i0] + (P[(i0 + 1) % n] - P[i0]) * fr;
-        tri[i] = (P[i] - lagged) * scale;
-      }
-      shape = nodeGraphDsfSubMean(tri);
-    }
-  }
-  nodeGraphDsfSubMean(shape);
-  if (typeof nodeGraphMathNormalizePeak === "function") nodeGraphMathNormalizePeak(shape, 1);
-  for (let i = 0; i < n; i += 1) out[i] = shape[i] * amp;
-  return out;
+  return typeof nodeGraphDsfOscillatorPreviewCycle === "function"
+    ? nodeGraphDsfOscillatorPreviewCycle(params, count)
+    : null;
 }
 
 
@@ -753,7 +592,6 @@ function drawNodeGraphSinCosDisplayInner(section) {
     slice: nodeGraphSinCosLiveParam(node, "slice", 0),
     spacing: nodeGraphSinCosLiveParam(node, "spacing", 1),
     oddEven: nodeGraphSinCosLiveParam(node, "oddEven", 0),
-    amplitude,
   } : null;
   const polarity = isDsf ? 0 : Math.round(nodeGraphFiniteNumber(nodeGraphSinCosLiveParam(node, "polarity", 0))) >= 1 ? 1 : 0;
   const phaseParam = nodeGraphFiniteNumber(nodeGraphSinCosLiveParam(node, "phase", 0));
@@ -778,7 +616,7 @@ function drawNodeGraphSinCosDisplayInner(section) {
     drawSin ? "sin" : "",
     drawCos ? "cos" : "",
     dsfParams ? JSON.stringify(dsfParams) + "@" + nodeGraphDsfSampleRate() : "",
-    String(Number(amplitude).toFixed(4)),
+    isDsf ? "unit-level-face" : String(Number(amplitude).toFixed(4)),
     polarity ? "uni" : "bi",
     String((phaseParam - Math.floor(phaseParam)).toFixed(4)),
     `${Math.round(rawW)}x${Math.round(rawH)}`,
@@ -836,7 +674,7 @@ function drawNodeGraphSinCosDisplayInner(section) {
   const midY = padY + innerH * 0.5;
   const halfH = innerH * 0.5;
   const mapX = (phase) => padX + phase * innerW;
-  // Samples are peak-normalized to ±1; map into the padded inner rect.
+  // DSF uses native unit-level samples; amplitude does not change the face.
   const yFull = 1;
   const mapY = polarity
     ? (value) => padY + innerH - value * innerH
@@ -870,6 +708,18 @@ function drawNodeGraphSinCosDisplayInner(section) {
   if (drawCos) pushPoly("cos", nodeGraphSinCosCosPaint(look));
   let dsfSamples = null;
   if (isDsf && dsfParams) {
+    nodeGraphDsfOscillatorLoadWasm();
+    if (!nodeGraphDsfOscillatorWasm.exports
+      && !nodeGraphDsfOscillatorWasm.failed
+      && !section._dsfFaceAwaitingWasm) {
+      section._dsfFaceAwaitingWasm = true;
+      nodeGraphDsfOscillatorWasm.promise?.then(() => {
+        section._dsfFaceAwaitingWasm = false;
+        if (!section.isConnected || nodeGraphDsfOscillatorWasm.failed) return;
+        section._sinCosForceDraw = true;
+        drawNodeGraphSinCosDisplay(section);
+      });
+    }
     const sr = nodeGraphDsfSampleRate();
     const f = Math.max(1e-6, Math.abs(nodeGraphFiniteNumber(dsfParams.frequency)));
     const spacing = dsfParams.morphing ? nodeGraphFiniteNumber(dsfParams.spacing, 1) : 1;
@@ -878,13 +728,12 @@ function drawNodeGraphSinCosDisplayInner(section) {
     const count = typeof nodeGraphMathCycleSampleCount === "function"
       ? nodeGraphMathCycleSampleCount(innerW, N)
       : Math.max(64, Math.min(120000, Math.ceil(Math.max(innerW * 8, Math.min(N, innerW) * 24))));
-    dsfSamples = typeof nodeGraphDsfDisplayCycle === "function"
-      ? nodeGraphDsfDisplayCycle(dsfParams, count)
-      : null;
-    // Peak already normalized to ±1 inside DisplayCycle; keep a hair of margin.
-    if (dsfSamples && typeof nodeGraphMathNormalizePeak === "function") {
-      nodeGraphMathNormalizePeak(dsfSamples, 0.92);
+    const cycleKey = `${JSON.stringify(dsfParams)}@${sr}|${count}`;
+    if (section._dsfFaceCycleKey !== cycleKey || !section._dsfFaceCycle) {
+      section._dsfFaceCycle = nodeGraphDsfDisplayCycle(dsfParams, count);
+      section._dsfFaceCycleKey = section._dsfFaceCycle ? cycleKey : "";
     }
+    dsfSamples = section._dsfFaceCycle;
     if (dsfSamples?.length && typeof nodeGraphMathCycleClinicalGeom === "function") {
       const geom = nodeGraphMathCycleClinicalGeom(
         dsfSamples, mapX, mapY, Math.max(1, Math.floor(innerW)), strokeW, look.strokePaint,

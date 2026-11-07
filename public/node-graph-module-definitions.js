@@ -1796,10 +1796,16 @@ const nodeGraphModuleDefinitions = (
     customDisplayArea: true,
     displayType: "additiveWaveform",
     displayHeightGu: 2,
+    defaultDisplaySettings: {
+      lineThickness: 0.4,
+      lineSmoothing: 0.7,
+      strokeColor: "#ffd228",
+      backgroundColor: "#050508",
+    },
     // Pin width so long Waveform choice names cannot thrash the stack.
     defaultWidthGu: 8,
     displayModes: [
-      { key: "additiveWaveform", renderer: "additiveWaveform" },
+      { key: "additiveWaveform", renderer: "additiveWaveform", settingsSchema: "additiveWaveform" },
       { key: "harmonicCount", renderer: "harmonicCount" },
     ],
     inputs: [],
@@ -5301,7 +5307,7 @@ const nodeGraphModuleDefinitions = (
       { kind: "cells", params: [["amplitude", "Amp"]], horizontal: true, h: 30 },
     ],
     planRole: "source",
-    // One detailed cycle from the DSF closed form + phase dot (sinCosFace renderer).
+    // One settled cycle from the native DSF + phase dot (sinCosFace renderer).
     layout: "sinCos",
     chrome: "LayoutA",
     customDisplayArea: true,
@@ -21611,19 +21617,13 @@ const nodeGraphModuleDefinitions = (
   },
   output: {
     planRole: "sink",
+    // The face is a stereo waterfall; the audio sink is unchanged.
     displayType: "waterfall",
-    // New Output modules start with an explicitly black display plate.
-    // Display-only; does not affect the audio sink or saved patches with local settings.
     defaultDisplaySettings: {
-      background: "#000000",
       backgroundBrightness: 0,
-      historySeconds: 4.097,
-      zoomSeconds: 4.097,
     },
     uniqueInPatch: true,
-    // Capture Mono/Left/Right for stereo Trace (scope rings). Instant Waterfall
-    // shows the arrival mix (mono folded into L/R, pan applied) and ignores
-    // Volume. Speaker audio still uses Volume. Without visualSink the face stayed blank.
+    // Capture the arrival mix before the speaker volume control.
     visualSink: true,
     visualInputs: [
       { key: "outputMono", label: "Mono", port: "Mono" },
@@ -21642,8 +21642,9 @@ const nodeGraphModuleDefinitions = (
       { key: "waterfall", label: "Waterfall", renderer: "waterfall", settingsSchema: "waterfall" },
     ],
     defaultDisplayMode: "waterfall",
-    bufferedInputs: ["Mono", "Left", "Right"],
     stereoWaterfallPorts: { left: "Left", right: "Right" },
+    displaySignalPorts: ["Left", "Right"],
+    bufferedInputs: ["Mono", "Left", "Right"],
     inputs: ["Mono", "Left", "Right", "3", "4", "5", "6", "7", "8"],
     inputLabels: { Mono: "Mono", Left: "Left", Right: "Right", 3: "3", 4: "4", 5: "5", 6: "6", 7: "7", 8: "8" },
     outputAliases: { Out: "Mono", M: "Mono", L: "Left", R: "Right" },
@@ -21657,17 +21658,18 @@ const nodeGraphModuleDefinitions = (
         kind: "decibels",
         label: "Volume",
         max: "0",
-        mid: "-12",
+        mid: "-18",
         min: "-120",
         minusInf: true,
         nonlinearSlider: true,
+        sliderCurve: "skew",
         linearSmoothing: true,
         smoothingType: "linear",
         smoothingMode: "internal",
         smoothingSeconds: 0.0333,
         step: "any",
         unit: "dB",
-        tooltip: "Speaker level (−∞…0 dB, slider −120…0 dB with −12 dB at the middle). 0 dB is unity. Default −3 dB. Old patches that stored 0…1 linear Volume are converted on load. Type a dB value (or −inf)."
+        tooltip: "Speaker level (−∞…0 dB, slider −120…0 dB with −18 dB at the middle). 0 dB is unity. Default −3 dB. Old patches that stored 0…1 linear Volume are converted on load. Type a dB value (or −inf)."
       },
       {
         defaultValue: "0",

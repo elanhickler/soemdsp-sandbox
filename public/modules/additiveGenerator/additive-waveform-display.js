@@ -1,5 +1,42 @@
-// Additive Generator face — cheap one-cycle bake from Yellow Graph.
+// Additive Generator face — one-cycle bake from Yellow Graph, drawn with WebGL.
 // O(min(H,64)·N); rebakes when Graph fingerprint changes.
+
+const nodeGraphAdditiveWaveformSettingsDefaults = Object.freeze({
+  lineThickness: 0.4,
+  lineSmoothing: 0.7,
+  strokeColor: "#ffd228",
+  backgroundColor: "#050508",
+});
+
+function normalizeNodeGraphAdditiveWaveformSettings(settings = {}) {
+  const source = settings && typeof settings === "object" ? settings : {};
+  const defaults = nodeGraphAdditiveWaveformSettingsDefaults;
+  const number = (key, max) => {
+    const value = Number(source[key]);
+    return Number.isFinite(value) ? Math.max(0, Math.min(max, value)) : defaults[key];
+  };
+  const color = (key) => {
+    const value = String(source[key] || "").trim();
+    return /^#[0-9a-fA-F]{6}$/.test(value) ? value.toLowerCase() : defaults[key];
+  };
+  return {
+    lineThickness: number("lineThickness", 16),
+    lineSmoothing: number("lineSmoothing", 8),
+    strokeColor: color("strokeColor"),
+    backgroundColor: color("backgroundColor"),
+  };
+}
+
+function nodeGraphAdditiveWaveformSettingsForNode(node) {
+  return normalizeNodeGraphAdditiveWaveformSettings(node?.traceDisplaySettings);
+}
+
+function applyNodeGraphAdditiveWaveformSettingsToFace(node) {
+  const id = String(node?.id || "");
+  if (!id) return;
+  const face = document.querySelector?.(`.node-additive-waveform-display[data-node="${CSS.escape(id)}"]`);
+  if (face) drawNodeGraphAdditiveWaveformDisplay(face);
+}
 
 function createNodeGraphAdditiveWaveformDisplay(nodeId, type = "additiveGenerator") {
   const id = nodeId && typeof nodeId === "object"
@@ -88,9 +125,12 @@ function drawNodeGraphAdditiveWaveformDisplay(section) {
   if (!m || m.cssWidth < 8 || m.cssHeight < 8) return;
   const w = m.cssWidth;
   const h = m.cssHeight;
+  const node = typeof nodeGraphPatchNode === "function" ? nodeGraphPatchNode(section.dataset.node) : null;
+  const look = nodeGraphAdditiveWaveformSettingsForNode(node);
+  const rgba = (color, fallback) => nodeGraphGlGraphParseCssColor(color, fallback);
 
   const batch = typeof nodeGraphGlLinesBegin === "function"
-    ? nodeGraphGlLinesBegin(canvas, [5 / 255, 5 / 255, 8 / 255, 1], { scale: m.pixelRatio })
+    ? nodeGraphGlLinesBegin(canvas, rgba(look.backgroundColor, [5 / 255, 5 / 255, 8 / 255, 1]), { scale: m.pixelRatio })
     : null;
   if (!batch) {
     if (typeof nodeGraphGlLinesFillBlack === "function") nodeGraphGlLinesFillBlack(canvas);
@@ -131,8 +171,12 @@ function drawNodeGraphAdditiveWaveformDisplay(section) {
     pts[n * 2] = pad + (n / Math.max(1, wave.length - 1)) * span;
     pts[n * 2 + 1] = midY - (nodeGraphFiniteNumber(wave[n])) * ampY;
   }
-  // 1.5 px CMYK Y ink (was 2D lineWidth 1.5): core 0.4 + 0.7 smoothstep feather.
-  nodeGraphGlLinesPolyline(batch, pts, 0.4, 0.7, [1, 210 / 255, 40 / 255, 1]);
+  if (look.lineThickness > 0) {
+    nodeGraphGlLinesPolyline(
+      batch, pts, look.lineThickness, look.lineSmoothing,
+      rgba(look.strokeColor, [1, 210 / 255, 40 / 255, 1]),
+    );
+  }
   if (!nodeGraphGlLinesEnd(batch) && typeof nodeGraphGlLinesFillBlack === "function") nodeGraphGlLinesFillBlack(canvas);
   section._forceDraw = false;
 }

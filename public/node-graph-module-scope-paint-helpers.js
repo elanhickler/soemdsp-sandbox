@@ -1297,7 +1297,9 @@ const NODE_GRAPH_OUTPUT_PROTECT_SOLID_MUTE = 0.98;
 
 function nodeGraphOutputProtectFaceSlot(slot) {
   const type = String(slot?.type || "");
-  return type === "output";
+  return type === "output"
+    && typeof nodeGraphModuleDisplayRendererForSlot === "function"
+    && nodeGraphModuleDisplayRendererForSlot(slot) === "waterfall";
 }
 
 function nodeGraphOutputTransportIsPaused() {

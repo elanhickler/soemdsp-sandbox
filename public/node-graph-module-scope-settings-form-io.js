@@ -408,6 +408,9 @@ if (type === "portalFace") {
   if (type === "sinCosFace" && typeof normalizeNodeGraphSinCosFaceSettings === "function") {
     return normalizeNodeGraphSinCosFaceSettings();
   }
+  if (type === "additiveWaveform" && typeof normalizeNodeGraphAdditiveWaveformSettings === "function") {
+    return normalizeNodeGraphAdditiveWaveformSettings();
+  }
   if (type === "clockFace" && typeof normalizeNodeGraphClockFaceSettings === "function") {
     return normalizeNodeGraphClockFaceSettings();
   }
@@ -725,6 +728,9 @@ if (type === "portalFace") {
   }
   if (type === "sinCosFace" && typeof normalizeNodeGraphSinCosFaceSettings === "function") {
     return normalizeNodeGraphSinCosFaceSettings(settings);
+  }
+  if (type === "additiveWaveform" && typeof normalizeNodeGraphAdditiveWaveformSettings === "function") {
+    return normalizeNodeGraphAdditiveWaveformSettings(settings);
   }
   if (type === "clockFace" && typeof normalizeNodeGraphClockFaceSettings === "function") {
     return normalizeNodeGraphClockFaceSettings(settings);

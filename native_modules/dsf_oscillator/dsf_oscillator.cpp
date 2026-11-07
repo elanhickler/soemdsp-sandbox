@@ -7,9 +7,11 @@
 // DSF Oscillator (type 46): harmonic SineSaw kit.
 //   n      = fade of min(floor(Nyquist/f - 1), Partials, kMaxPartials)
 //   k      = (1 - morph^0.14) * 4        // morph 0 = sine, 1 = saw
-//   leak   = glides to max(0.0005, 2*pi*f / (20*sr))   // DC blocker at f/20 (v23)
+//   leak   = glides to max(0.0005, 2*pi*f / (20*sr))
 //   acc    = acc * (1 - leak) + DSF() * increment
 //   out    = acc * map(bright, 3.15, 2.7)
+// The per-cycle drift correction tried in v34 introduced strong aliasing at
+// high frequencies. The tracked leak is the stable DC blocker again.
 // Phase step is increment * 0.9999 (keeps render off the exact wrap sample);
 // the kernel itself is O(1) near the removable pole (stable den / Dirichlet).
 // Params: Bright = the geometric tilt above (shape slot), Morph = Trimorph peak /
@@ -362,7 +364,6 @@ double spacedKernel(double ct, double mt, const DsfKernelCoeffs& c,
 // scaled to sit with Saw (measured 0.53..0.77 before this gain at any Morph /
 // Bright / pitch, so about 0.7..1.0 after).
 constexpr double kTrimorphGain = 1.3;
-// Integrator DC blocker cutoff = Æ’ / kDsfLeakDivisor.
 constexpr double kDsfLeakDivisor = 20.0;
 
 struct DsfOscillatorState {
@@ -380,9 +381,7 @@ struct DsfOscillatorState {
   double triB;
   double prevPw;
   bool chainB;
-  // Trimorph output DC blocker (one-pole high-pass at the integrators' cutoff):
-  // deep audio-rate FM gives the window integral a real DC, which the
-  // 1 / (Morph * (1 - Morph)) gain would otherwise park on the rail.
+  // Trimorph output DC blocker.
   double triDcIn;
   double triDcOut;
   double out;
@@ -395,6 +394,32 @@ struct DsfOscillatorState {
   double tm;
   double oddEven;
 };
+
+// Start values for a chain: the ideal integral I(t) = sum a^j sin(2 pi h
+// t) / (2 pi h) and second integral J(t) = -sum a^j cos(2 pi h t) / (2 pi h)^2,
+// h = j + 1, from the first kDsfInitTerms partials (J converges like 1/h^2).
+// Used once when
+// Square / Trimorph's chain B starts (note start, Reset, waveform change), so
+// the chains begin on the wave instead of at 0.
+constexpr int kDsfInitTerms = 256;
+
+void idealIntegrals(double turns, const DsfKernelCoeffs& c, double& I, double& J) {
+  const double a = c.twoK2 > 0.0 ? 1.0 / c.twoK2 : 1.0;
+  int n = static_cast<int>(c.n);
+  if (n > kDsfInitTerms) n = kDsfInitTerms;
+  I = 0.0;
+  J = 0.0;
+  double w = 1.0;
+  for (int j = 0; j < n; j++) {
+    const double h = static_cast<double>(j + 1);
+    double sn = 0.0, cs = 0.0;
+    kernelSinCosTurns(wrap01(h * turns), &sn, &cs);
+    const double inv = 1.0 / (kTwoPi * h);
+    I += w * sn * inv;
+    J -= w * cs * inv * inv;
+    w *= a;
+  }
+}
 
 double fadedKernel(double turns, const DsfOscillatorState& s) {
   const double lo = sineSawKernel(turns, s.kernelLo);
@@ -539,22 +564,30 @@ extern "C" void soemdsp_dsf_oscillator_sample(
     const double nyquist = safeSampleRate * 0.5;
     preparePartials(s, morph, nyquist, safeAbsFrequency, 1.0, partials);
 
-    s.t = wrap01(s.t + dt * 0.9999);
+    const double step = dt * 0.9999;
+    s.t = wrap01(s.t + step);
     const double renderT = wrap01(s.t + phaseOffset);
+    // Two midpoint sub-steps per sample (v34): the kernel is sampled at the
+    // middles of the two half steps behind this sample. Centred, so the
+    // integral sits on the sample's own phase (a plain running sum leads by
+    // half a sample, which moved every jump); two of them keep the sampled
+    // integral's high-harmonic lift x/sin(x) to < +0.6 dB at 20 kHz (one
+    // sample per step lifted 20 kHz by +2.6 dB).
+    const double q1 = 0.25 * step;
+    const double q3 = 0.75 * step;
     auto kern = [&](double back) {
-      return fadedKernel(wrap01(renderT - back), s);
+      const double at = renderT - back;
+      return 0.5 * (fadedKernel(wrap01(at - q1), s) + fadedKernel(wrap01(at - q3), s));
     };
     s.renderPhase = renderT;
 
-    // Leak = the integrators' DC blocker: a one-pole high-pass at Æ’/20 (never
-    // below the old 0.0005 / sample), so offsets from sudden modulation clear in
-    // a few periods while the wave's own fundamental is barely touched. Starts
-    // at 1 and glides down, as before.
+    // Track the DC-blocking leak so pitch modulation does not step its cutoff.
     const double trackedLeak = kTwoPi * safeAbsFrequency / (kDsfLeakDivisor * safeSampleRate);
     const double leakTarget = trackedLeak > 0.0005 ? trackedLeak : 0.0005;
     s.leak = s.leak * 0.99 + leakTarget * 0.01;
     const double retention = 1.0 - s.leak;
     const double rawSaw = kern(0.0);
+    const double prevSawAcc = s.sawAcc;
     s.sawAcc = s.sawAcc * retention + rawSaw * dt;
     const double ampAdjust = s.kernelLo.ampAdjust;
 
@@ -572,14 +605,19 @@ extern "C" void soemdsp_dsf_oscillator_sample(
       if (!s.chainB) {
         s.chainB = true;
         s.prevPw = pw;
-        s.sawB = s.sawAcc;
-        s.triA = 0.0;
-        s.triB = 0.0;
+        // Start chain B and the second integrals on the wave (v34).
+        double iA = 0.0, jA = 0.0, iB = 0.0, jB = 0.0;
+        idealIntegrals(s.t, s.kernelLo, iA, jA);
+        idealIntegrals(wrap01(s.t - pw), s.kernelLo, iB, jB);
+        s.sawB = s.sawAcc - (iA - iB);
+        s.triA = jA;
+        s.triB = jB;
         s.triDcIn = 0.0;
         s.triDcOut = 0.0;
       }
       const double dtB = dt - (pw - s.prevPw);
       s.prevPw = pw;
+      const double prevSawB = s.sawB;
       s.sawB = s.sawB * retention + kern(pw) * dtB;
 
       if (waveform == 2) {
@@ -588,8 +626,9 @@ extern "C" void soemdsp_dsf_oscillator_sample(
         // Trimorph: integral of the saw over the window [t - Morph, t] =
         // (second integral at t) - (second integral at t - Morph). Peak to peak is
         // Morph * (1 - Morph) times the saw's, so that factor sets the level.
-        s.triA = s.triA * retention + s.sawAcc * dt;
-        s.triB = s.triB * retention + s.sawB * dtB;
+        // Trapezoid rule (v34): no half-sample lead in the second integral.
+        s.triA = s.triA * retention + 0.5 * (s.sawAcc + prevSawAcc) * dt;
+        s.triB = s.triB * retention + 0.5 * (s.sawB + prevSawB) * dtB;
         const double tri = (s.triA - s.triB) * ampAdjust * kTrimorphGain / (pw * (1.0 - pw));
         s.triDcOut = tri - s.triDcIn + retention * s.triDcOut;
         s.triDcIn = tri;
@@ -639,12 +678,18 @@ extern "C" void soemdsp_dsf_oscillator_sample_morph(
   const double oe = clamp(oddEven, 0.0, 1.0);
   const bool harmonic = (sp > 0.999999 && sp < 1.000001);
 
-  s.t = wrap01(s.t + dt * 0.9999);
+  const double step = dt * 0.9999;
+  s.t = wrap01(s.t + step);
   const double renderT = wrap01(s.t + phaseOffset + rotTurns);
   s.renderPhase = wrap01(s.t + phaseOffset);
   double raw;
   if (harmonic) {
-    raw = fadedMorph(wrap01(s.t + phaseOffset), s, a, startLo, startHi, rotTurns, width, symmetry, 1.0, oe);
+    // Two midpoint sub-steps (v34), as the DSF Oscillator: no half-sample
+    // lead, < +0.6 dB high-harmonic lift at 20 kHz.
+    const double at = s.t + phaseOffset;
+    raw = 0.5 * (
+      fadedMorph(wrap01(at - 0.25 * step), s, a, startLo, startHi, rotTurns, width, symmetry, 1.0, oe)
+      + fadedMorph(wrap01(at - 0.75 * step), s, a, startLo, startHi, rotTurns, width, symmetry, 1.0, oe));
   } else {
     prepareSawCoeffsMul(s.evenLo, morph, dsp_floor(s.kernelLo.n * 0.5), 2.0);
     if (s.frac > 0.0) prepareSawCoeffsMul(s.evenHi, morph, dsp_floor(s.kernelHi.n * 0.5), 2.0);
@@ -660,9 +705,10 @@ extern "C" void soemdsp_dsf_oscillator_sample_morph(
     }
   }
 
-  s.leak = s.leak * 0.99 + 0.000005;
-  const double retention = 1.0 - s.leak;
-  s.sawAcc = s.sawAcc * retention + raw * dt;
+  const double trackedLeak = kTwoPi * safeAbsFrequency / (kDsfLeakDivisor * safeSampleRate);
+  const double leakTarget = trackedLeak > 0.0005 ? trackedLeak : 0.0005;
+  s.leak = s.leak * 0.99 + leakTarget * 0.01;
+  s.sawAcc = s.sawAcc * (1.0 - s.leak) + raw * dt;
   double sample = s.sawAcc * s.kernelLo.ampAdjust;
 
   const bool finite = sample * 0.0 == 0.0;
@@ -681,5 +727,5 @@ extern "C" double soemdsp_dsf_oscillator_phase(int handle) {
 }
 
 extern "C" int soemdsp_dsf_oscillator_version() {
-  return 33;
+  return 35;
 }

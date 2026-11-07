@@ -862,6 +862,10 @@ const nodeGraphTraceDisplayFormTypeValueClampOverrides = Object.freeze({
     backgroundBrightness: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value), 0, 1),
     pixelDensity: nodeGraphTraceDisplayClampPixelDensity,
   }),
+  additiveWaveform: Object.freeze({
+    lineThickness: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, 0.4), 0, 16),
+    lineSmoothing: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, 0.7), 0, 8),
+  }),
   sinCosFace: Object.freeze({
     lineThickness: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, 2), 0, 16),
     lineSmoothing: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, 1), 0, 8),

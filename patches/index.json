@@ -31,6 +31,15 @@
       "folder": "Alarm"
     },
     {
+      "slug": "bugs/dsf buggy",
+      "label": "dsf buggy",
+      "name": "",
+      "url": "/soemdsp-sandbox/patches/bugs/dsf%20buggy.json",
+      "author": "",
+      "emoji": "",
+      "folder": "bugs"
+    },
+    {
       "slug": "bugs/pump limiter sidechain not working",
       "label": "pump limiter sidechain not working",
       "name": "",
@@ -657,6 +666,14 @@
       "label": "dreamy_delay",
       "name": "",
       "url": "/soemdsp-sandbox/patches/guitar_pedals/dreamy_delay.json",
+      "author": "",
+      "emoji": ""
+    },
+    {
+      "slug": "dsf buggy",
+      "label": "dsf buggy",
+      "name": "",
+      "url": "/soemdsp-sandbox/patches/bugs/dsf%20buggy.json",
       "author": "",
       "emoji": ""
     },

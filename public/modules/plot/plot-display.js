@@ -289,6 +289,15 @@ function nodeGraphPlotFill(batch, line, rgba) {
   flush();
 }
 
+/** Output module: Mono folded into a Left / Right window view (speaker mix). */
+function nodeGraphPlotFoldMono(view, monoView) {
+  if (!view || !monoView || view === monoView) return view;
+  const n = Math.min(view.length, monoView.length);
+  const out = new Float32Array(n);
+  for (let i = 0; i < n; i += 1) out[i] = view[i] + monoView[i];
+  return out;
+}
+
 function drawNodeGraphPlotItem(renderer, item, pixelRatio) {
   if (typeof scopePaintIsFrozen === "function" && scopePaintIsFrozen()) return;
   const slot = item?.slot;
@@ -318,8 +327,15 @@ function drawNodeGraphPlotItem(renderer, item, pixelRatio) {
   const type = String(node.type || slot?.type || "");
   const mono = type === "plot1d";
   const xy = type === "plot2d";
-  const a = nodeGraphPlotPortBuffer(nodeId, mono ? "In" : "Left", mono ? item?.buffer : null);
-  const b = mono ? null : nodeGraphPlotPortBuffer(nodeId, "Right");
+  // Output module: the 1D Plot Stereo face with Mono folded into both lines.
+  const outputModule = type === "output";
+  let a = nodeGraphPlotPortBuffer(nodeId, mono ? "In" : "Left", mono ? item?.buffer : null);
+  let b = mono ? null : nodeGraphPlotPortBuffer(nodeId, "Right");
+  const m = outputModule ? nodeGraphPlotPortBuffer(nodeId, "Mono") : null;
+  if (m?.length) {
+    if (!a?.length) a = m;
+    if (!b?.length) b = m;
+  }
   const trig = nodeGraphPlotPortBuffer(nodeId, "Trig");
   // Width / Smoothness: face px. The backing is the zoom-1 face size (the GL
   // graph scales the texture), so layout width, never the zoomed client rect.
@@ -332,7 +348,7 @@ function drawNodeGraphPlotItem(renderer, item, pixelRatio) {
     : 0;
   const driver = a?.length ? a : b;
   if (driver?.length) {
-    const lengths = [a, b].filter((x) => x?.length).map((x) => x.length);
+    const lengths = [a, b, m].filter((x) => x?.length).map((x) => x.length);
     if (xy && !(a?.length && b?.length)) lengths.length = 0;
     const length = lengths.length ? Math.min(...lengths, trig?.length || Infinity) : 0;
     if (length >= 2) {
@@ -358,8 +374,10 @@ function drawNodeGraphPlotItem(renderer, item, pixelRatio) {
         // Line thickness 0 = no line; a fill keeps its hairline edge.
         const stroke = look.barInk !== "fill" && halfPx > 0;
         const lines = [];
-        if (a?.length) lines.push({ line: nodeGraphPlotLinePoints(nodeGraphPlotWindowView(a, length, win), common), rgba: rgbaA });
-        if (b?.length) lines.push({ line: nodeGraphPlotLinePoints(nodeGraphPlotWindowView(b, length, win), common), rgba: rgbaB });
+        const mView = m?.length ? nodeGraphPlotWindowView(m, length, win) : null;
+        const view = (buf) => (m && buf !== m ? nodeGraphPlotFoldMono(nodeGraphPlotWindowView(buf, length, win), mView) : nodeGraphPlotWindowView(buf, length, win));
+        if (a?.length) lines.push({ line: nodeGraphPlotLinePoints(view(a), common), rgba: rgbaA });
+        if (b?.length) lines.push({ line: nodeGraphPlotLinePoints(view(b), common), rgba: rgbaB });
         // Fill first, then the line(s) on top, channels in order (1D Waterfall).
         for (const l of fill ? lines : []) nodeGraphPlotFill(batch, l.line, l.rgba);
         for (const l of lines) {
