@@ -229,11 +229,11 @@
         "backgroundColor": "#000000",
         "hueRotationReady": true,
         "brightness": 0.95,
-        "color": "#00aaff",
+        "color": "#ff009d",
         "dot1Enabled": true,
         "dot1Size": 2,
         "secondaryBrightness": 0.95,
-        "secondaryColor": "#0000ff",
+        "secondaryColor": "#00ff91",
         "secondaryEnabled": true,
         "secondarySize": 2,
         "secondaryLineThickness": 0,
@@ -248,7 +248,7 @@
         "cmyMode": false,
         "sourceSync": false,
         "polarity": "bipolar",
-        "stereoBlend": "combine",
+        "stereoBlend": "lighter",
         "meetColor": "auto",
         "syncChannel": "off",
         "historySeconds": 0.0987,
@@ -576,7 +576,7 @@
       },
       "params": {
         "waveform": 1,
-        "partials": 33.09577600245284,
+        "partials": 16415.55878724345,
         "frequency": 29.285,
         "phase": 0,
         "morph": 0,
@@ -643,8 +643,8 @@
         "lineHue": 200,
         "lineBrightness": 1,
         "lineSaturation": 1,
-        "lineThickness": 0.5637,
-        "lineSmoothing": 1.6364,
+        "lineThickness": 1.2182,
+        "lineSmoothing": 4.6546,
         "lineBlur": 0,
         "dotHue": 200,
         "dotBrightness": 0.5,
@@ -666,7 +666,7 @@
         "windowMode": "cycles",
         "windowCycles": 4.238,
         "timeMs": 120.3858,
-        "scale": 0.5172,
+        "scale": 0.2434,
         "plotOffset": 0,
         "sourceSync": true,
         "skipDiscontinuities": false,
@@ -873,8 +873,8 @@
         "contrast": 1,
         "brightness": 1,
         "minFreq": 1,
-        "maxFreq": 6623.935753565409,
-        "historySeconds": 7.155374008406279
+        "maxFreq": 3304.2995284446115,
+        "historySeconds": 5.575955323333645
       },
       "type": "spectrogram",
       "widthGu": 20,
@@ -1389,8 +1389,8 @@
       },
       "params": {
         "mix": 0.3957873288412027,
-        "diffusionSize": 0.6522177029889669,
-        "diffusionAmount": 0.2780325035024849,
+        "diffusionSize": 0.6740498787356405,
+        "diffusionAmount": 0.3981105282285012,
         "delaySize": 0.02,
         "recycle": 0.7,
         "lfoAmplitude": 0.053998701842599146,
@@ -1399,7 +1399,7 @@
         "lfoStyle": "fbm",
         "delayTapMod": 1,
         "presetMorph": 0,
-        "seed": 3449464,
+        "seed": 3449444,
         "amplitude": 1
       },
       "type": "sabrinaReverbOriginal",
@@ -1619,8 +1619,8 @@
         "polarity": 1,
         "method": 3,
         "phase": 0,
-        "freq": 0.47,
-        "amp": 0.7254501227746288
+        "freq": 1.459205629049907,
+        "amp": 0.5445871180643262
       },
       "type": "sinCos",
       "widthGu": 7,
@@ -1998,7 +1998,7 @@
       },
       "params": {
         "waveform": 1,
-        "partials": 13.133797094592726,
+        "partials": 927.5903744407159,
         "frequency": 58.57,
         "phase": 0,
         "morph": 0.5,
@@ -2050,6 +2050,7 @@
         "slidersHidden": false,
         "slidersForceShow": false,
         "titleHidden": false,
+        "showInCanvas": true,
         "displayHeightGu": 4
       }
     },
@@ -2128,7 +2129,7 @@
         }
       },
       "params": {
-        "amplitude": 1,
+        "amplitude": 0.7726373057520731,
         "offset": 0
       },
       "type": "attenuverter",
@@ -2263,7 +2264,7 @@
   "view": {
     "heightGu": 24,
     "widthGu": 48,
-    "zoom": 1.0185260910248777,
+    "zoom": 0.8196903062983568,
     "gridVisible": true,
     "gridLightVisible": true,
     "wireLengthsVisible": true,
@@ -2283,11 +2284,20 @@
           {
             "nodeId": "spectrogram-1",
             "enabled": true,
-            "x": 0,
-            "y": 0,
-            "w": 1,
-            "h": 1,
-            "z": 200
+            "x": 0.35624999999999996,
+            "y": 0.6503089658388714,
+            "w": 0.35989583333333336,
+            "h": 0.13425925925925924,
+            "z": 1300
+          },
+          {
+            "nodeId": "dsfOscillator-2",
+            "enabled": true,
+            "x": 0.35624999999999996,
+            "y": 0.3314814814814815,
+            "w": 0.36,
+            "h": 0.32,
+            "z": 201
           }
         ]
       },
