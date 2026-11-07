@@ -49,6 +49,15 @@
       "folder": "bugs"
     },
     {
+      "slug": "bugs/pluck envelope not modulating additive out skew end",
+      "label": "pluck envelope not modulating additive out skew end",
+      "name": "",
+      "url": "/soemdsp-sandbox/patches/bugs/pluck%20envelope%20not%20modulating%20additive%20out%20skew%20end.json",
+      "author": "",
+      "emoji": "",
+      "folder": "bugs"
+    },
+    {
       "slug": "bugs/pump limiter sidechain not working",
       "label": "pump limiter sidechain not working",
       "name": "",
@@ -80,6 +89,15 @@
       "label": "analoghorror",
       "name": "",
       "url": "/soemdsp-sandbox/patches/demo_patches/analoghorror.json",
+      "author": "",
+      "emoji": "",
+      "folder": "demo_patches"
+    },
+    {
+      "slug": "demo_patches/blaster",
+      "label": "blaster",
+      "name": "",
+      "url": "/soemdsp-sandbox/patches/demo_patches/blaster.json",
       "author": "",
       "emoji": "",
       "folder": "demo_patches"
@@ -576,6 +594,14 @@
       "emoji": ""
     },
     {
+      "slug": "blaster",
+      "label": "blaster",
+      "name": "",
+      "url": "/soemdsp-sandbox/patches/demo_patches/blaster.json",
+      "author": "",
+      "emoji": ""
+    },
+    {
       "slug": "callnow",
       "label": "callnow",
       "name": "",
@@ -1036,6 +1062,14 @@
       "label": "ping_vs_power_vs_expo",
       "name": "",
       "url": "/soemdsp-sandbox/patches/demo_patches/ping_vs_power_vs_expo.json",
+      "author": "",
+      "emoji": ""
+    },
+    {
+      "slug": "pluck envelope not modulating additive out skew end",
+      "label": "pluck envelope not modulating additive out skew end",
+      "name": "",
+      "url": "/soemdsp-sandbox/patches/bugs/pluck%20envelope%20not%20modulating%20additive%20out%20skew%20end.json",
       "author": "",
       "emoji": ""
     },
