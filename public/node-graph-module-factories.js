@@ -908,7 +908,15 @@ function createNodeGraphParameter(node, type, parameter) {
   );
   input.dataset.unit = metadata?.unit ?? parameter.unit ?? "";
   input.dataset.tooltip = metadata?.tooltip ?? parameter.tooltip ?? "";
-  input.displayTransform = typeof parameter.displayTransform === "function" ? parameter.displayTransform : null;
+  const percentDisplay = typeof nodeGraphParameterIsUnitPercent === "function"
+    && nodeGraphParameterIsUnitPercent(parameter, metadata);
+  input.displayTransform = typeof parameter.displayTransform === "function"
+    ? parameter.displayTransform
+    : (percentDisplay ? nodeGraphPercentDisplayTransform : null);
+  // Typed entry is in the shown unit: displayInverse maps it back to the stored value.
+  input.displayInverse = typeof parameter.displayInverse === "function"
+    ? parameter.displayInverse
+    : (percentDisplay ? nodeGraphPercentDisplayInverse : null);
   input.dataset.choices = formatNodeMetadataChoices(metadata?.choices || parameter.choices || []);
   {
     const origin = Number(

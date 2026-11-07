@@ -37,6 +37,22 @@ function nodeSliderReadoutEditRefreshChrome() {
   }
 }
 
+// Edit text starts in the shown unit (percent, ms) when the slider has a
+// displayInverse to map typed text back (updateNodeSliderCurrentValue).
+function nodeSliderEditShownValue(slider, value) {
+  const plain = { value, kind: slider.dataset.kind, maxDigits: slider.dataset.maxDigits };
+  if (typeof slider.displayTransform !== "function" || typeof slider.displayInverse !== "function") return plain;
+  let shown = null;
+  try {
+    shown = slider.displayTransform(value, slider);
+  } catch (error) {
+    return plain;
+  }
+  const shownValue = Number(shown && typeof shown === "object" ? shown.value : shown);
+  if (!Number.isFinite(shownValue)) return plain;
+  return { value: shownValue, kind: "", maxDigits: shown?.maxDigits ?? slider.dataset.maxDigits };
+}
+
 function commitNodeSliderReadoutEdit(input) {
   if (input.dataset.editCanceled === "true" || input.dataset.editCommitted === "true") {
     return;
@@ -109,10 +125,10 @@ function beginNodeSliderFaceValueEdit(surface) {
   input.autocomplete = "off";
   input.spellcheck = false;
   const domainRaw = Number(slider.dataset?.domainValue);
-  const editValue = Number.isFinite(domainRaw) ? domainRaw : Number(slider.value);
-  input.value = nodeSliderChoiceLabel(slider) ?? formatNodeSliderNumber(editValue, {
-    kind: slider.dataset.kind,
-    maxDigits: slider.dataset.maxDigits,
+  const editShown = nodeSliderEditShownValue(slider, Number.isFinite(domainRaw) ? domainRaw : Number(slider.value));
+  input.value = nodeSliderChoiceLabel(slider) ?? formatNodeSliderNumber(editShown.value, {
+    kind: editShown.kind,
+    maxDigits: editShown.maxDigits,
     reserveSignSpace: true,
     showSign: nodeSliderShouldShowSign(slider),
   });
@@ -205,10 +221,10 @@ function beginNodeSliderReadoutEdit(readout) {
   input.dataset.mirror = readout.dataset.mirror || "false";
   // Prefer domainValue (may exceed HTML thumb min/max); slider.value is clamped.
   const domainRaw = Number(slider.dataset?.domainValue);
-  const editValue = Number.isFinite(domainRaw) ? domainRaw : Number(slider.value);
-  input.value = nodeSliderChoiceLabel(slider) ?? formatNodeSliderNumber(editValue, {
-    kind: slider.dataset.kind,
-    maxDigits: slider.dataset.maxDigits,
+  const editShown = nodeSliderEditShownValue(slider, Number.isFinite(domainRaw) ? domainRaw : Number(slider.value));
+  input.value = nodeSliderChoiceLabel(slider) ?? formatNodeSliderNumber(editShown.value, {
+    kind: editShown.kind,
+    maxDigits: editShown.maxDigits,
     reserveSignSpace: true,
     showSign: nodeSliderShouldShowSign(slider),
   });

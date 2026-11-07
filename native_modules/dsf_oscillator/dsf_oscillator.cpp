@@ -7,11 +7,25 @@
 // DSF Oscillator (type 46): harmonic SineSaw kit.
 //   n      = fade of min(floor(Nyquist/f - 1), Partials, kMaxPartials)
 //   k      = (1 - morph^0.14) * 4        // morph 0 = sine, 1 = saw
-//   leak   = glides to max(0.0005, 2*pi*f / (20*sr))
+//   leak   = 2*pi*|increment| / 20                (v36: per phase, no floor)
 //   acc    = acc * (1 - leak) + DSF() * increment
+//   corr   = corr * (1 - leak) + leak * acc     (v36)
+//   saw    = acc + corr                         (v36)
 //   out    = acc * map(bright, 3.15, 2.7)
 // The per-cycle drift correction tried in v34 introduced strong aliasing at
 // high frequencies. The tracked leak is the stable DC blocker again.
+// v36: the leak is per unit of phase travelled (2 pi / 20 per turn), with no
+// floor. v35 clamped it to 0.0005 per sample, a 3.8 Hz high-pass at 48 kHz that
+// flattened every saw below ~76 Hz. Per phase, the filter is the same at every
+// pitch and under any FM, and a stalled phase (0 Hz) holds its state instead of
+// decaying off the wave. Each saw chain also adds corr, its own leaky integral
+// times the leak, which cancels the first-order bend of the leak: the response
+// becomes 1 - (leak / (s + leak))^2, so the fundamental is off by 0.25 %
+// instead of 5 %. Both are fixed linear filters in phase (nothing measured per
+// cycle), so they add no aliasing. The chains start on the ideal wave.
+// A Phase jump (> 0.05 turn in one sample) shifts every chain by the ideal
+// wave's difference across the jump, so the slower leak does not leave the
+// jump's offset ringing; smooth phase modulation is untouched.
 // Phase step is increment * 0.9999 (keeps render off the exact wrap sample);
 // the kernel itself is O(1) near the removable pole (stable den / Dirichlet).
 // Params: Bright = the geometric tilt above (shape slot), Morph = Trimorph peak /
@@ -365,6 +379,35 @@ double spacedKernel(double ct, double mt, const DsfKernelCoeffs& c,
 // Bright / pitch, so about 0.7..1.0 after).
 constexpr double kTrimorphGain = 1.3;
 constexpr double kDsfLeakDivisor = 20.0;
+// A Phase change bigger than this in one sample is a jump (v36), shifted at
+// most once per kDsfPhaseJumpHold samples (bounds the cost under extreme PM).
+constexpr double kDsfPhaseJump = 0.05;
+constexpr int kDsfPhaseJumpHold = 32;
+
+// Leak per turn of phase travelled (cutoff f / 20).
+constexpr double kDsfLeakPerTurn = kTwoPi / kDsfLeakDivisor;
+
+// Per-sample leak: 2 pi / 20 per turn of phase travelled (cutoff f / 20).
+inline double dsfLeakTarget(double absFrequency, double sampleRate) {
+  return kTwoPi * absFrequency / (kDsfLeakDivisor * sampleRate);
+}
+
+struct DsfOscillatorRotateCache {
+  bool ready;
+  // Control rate: the gain is recomputed every kDsfRotateGainBlock samples
+  // and glides linearly in between (a moving Rotate cost ~5x the oscillator
+  // when recomputed every sample).
+  bool running;
+  double lastRot;
+  int countdown;
+  double level;
+  double step;
+  double aEff;
+  double n;
+  double rot;
+  double peak0;
+  double gain;
+};
 
 struct DsfOscillatorState {
   bool active;
@@ -379,11 +422,26 @@ struct DsfOscillatorState {
   double sawB;
   double triA;
   double triB;
+  // v36 leak compensation: leak * each saw chain's own leaky integral.
+  double sawJ;
+  double blendSqJ;
+  double sawBJ;
+  bool primed;
+  // Phase input last sample, and samples since the last jump shift (v36).
+  double prevOffset;
+  int jumpHold;
+  // DSF Morphing Osc: Rotate last sample (a Rotate jump is shifted too).
+  double prevRot;
+  // DSF Morphing Osc Rotate level compensation (v36).
+  DsfOscillatorRotateCache rotGain;
   double prevPw;
   bool chainB;
   // Trimorph output DC blocker.
   double triDcIn;
   double triDcOut;
+  // The blocker starts settled on the first Trimorph sample (v36): the chains
+  // start zero-mean, so starting it at 0 only left a slow vertical offset.
+  bool triDcPrime;
   double out;
   double renderPhase;
   DsfKernelCoeffs kernelLo;
@@ -418,6 +476,196 @@ void idealIntegrals(double turns, const DsfKernelCoeffs& c, double& I, double& J
     I += w * sn * inv;
     J -= w * cs * inv * inv;
     w *= a;
+  }
+}
+
+// The leaky chain's steady state (v36): per partial h, the leaky integral of
+// cos(2 pi h t) with leak alpha per turn is (w sin + alpha cos) / D,
+// w = 2 pi h, D = w^2 + alpha^2, and corr = alpha * the leaky integral of that
+// = alpha (2 w alpha sin + (alpha^2 - w^2) cos) / D^2. alpha < 0 when the phase
+// runs backwards. Starting (and Phase-jump shifting) the chains here leaves
+// no start-up transient.
+void leakyIntegrals(double turns, const DsfKernelCoeffs& c, double alpha, double& I, double& Q) {
+  const double a = c.twoK2 > 0.0 ? 1.0 / c.twoK2 : 1.0;
+  int n = static_cast<int>(c.n);
+  if (n > kDsfInitTerms) n = kDsfInitTerms;
+  I = 0.0;
+  Q = 0.0;
+  double amp = 1.0;
+  const double a2 = alpha * alpha;
+  for (int j = 0; j < n; j++) {
+    const double w = kTwoPi * static_cast<double>(j + 1);
+    double sn = 0.0, cs = 0.0;
+    kernelSinCosTurns(wrap01(static_cast<double>(j + 1) * turns), &sn, &cs);
+    const double d = w * w + a2;
+    I += amp * (w * sn + alpha * cs) / d;
+    Q += amp * alpha * (2.0 * w * alpha * sn + (a2 - w * w) * cs) / (d * d);
+    amp *= a;
+  }
+}
+
+// DSF Morphing Osc Rotate level (v36). Rotate keeps the energy but moves the
+// peak: the integrated series rotated by phi is
+//   f(x) = cos(phi) atan2(a sin x, 1 - a cos x) - sin(phi) ln(1 - 2 a cos x + a^2) / 2
+// (all partials; the partial count n enters as a <= 1 - 0.5615 / n, which
+// gives the harmonic sum ln n + 0.577 at a = 1). Its peaks crowd around x = 0
+// as a -> 1, so x is searched on points spaced geometrically from 1 - a. A
+// cut-off series overshoots its jump (Gibbs, 17.9 %) by as much as its top
+// partial still sounds, so the unrotated term is scaled by 1 + 0.179 a^n.
+// Measured against exact finite sums: within -11 % / +6 % of the Rotate 0 level.
+// The output is scaled by peak(phi = 0) / peak(phi): Rotate no longer clips,
+// and Rotate 0 is unchanged.
+double dsfAtan2(double y, double x) {
+  const double ax = x < 0.0 ? -x : x;
+  const double ay = y < 0.0 ? -y : y;
+  if (ax < 1.0e-300 && ay < 1.0e-300) return 0.0;
+  const bool swap = ay > ax;
+  const double t = swap ? ax / ay : ay / ax;
+  double z = t;
+  double base = 0.0;
+  if (t > 0.41421356237) {
+    z = (t - 1.0) / (t + 1.0);
+    base = 0.25 * kTwoPi * 0.5;
+  }
+  const double z2 = z * z;
+  const double p = z * (1.0 + z2 * (-1.0 / 3.0 + z2 * (1.0 / 5.0 + z2 * (-1.0 / 7.0
+    + z2 * (1.0 / 9.0 + z2 * (-1.0 / 11.0 + z2 * (1.0 / 13.0 + z2 * (-1.0 / 15.0))))))));
+  double r = base + p;
+  if (swap) r = 0.25 * kTwoPi - r;
+  if (x < 0.0) r = 0.5 * kTwoPi - r;
+  return y < 0.0 ? -r : r;
+}
+
+double rotatedPeak(double a, double gibbs, double cosR, double sinR) {
+  double peak = 0.0;
+  auto at = [&](double turns) {
+    double sn = 0.0, cs = 0.0;
+    kernelSinCosTurns(wrap01(turns), &sn, &cs);
+    const double q = 1.0 - 2.0 * a * cs + a * a;
+    const double f = cosR * gibbs * dsfAtan2(a * sn, 1.0 - a * cs) - sinR * 0.5 * dsp_ln(q > 1.0e-300 ? q : 1.0e-300);
+    const double m = f < 0.0 ? -f : f;
+    if (m > peak) peak = m;
+  };
+  const double e = (1.0 - a) / kTwoPi;  // turns
+  for (int k = -8; k < 80; k++) {
+    const double x = e * dsp_exp2(0.5 * static_cast<double>(k));
+    if (x > 0.5) break;
+    at(x);
+    at(-x);
+  }
+  at(0.0);
+  at(0.5);
+  return peak;
+}
+
+double rotateGain(DsfOscillatorRotateCache& c, double a, double n, double rotTurns) {
+  double aEff = a;
+  const double cap = 1.0 - 0.5615 / (n > 1.0 ? n : 1.0);
+  if (aEff > cap) aEff = cap;
+  if (aEff < 1.0e-6) return 1.0;
+  double r = wrap01(rotTurns);
+  if (r > 0.5) r -= 1.0;
+  if (r > -1.0e-9 && r < 1.0e-9) return 1.0;
+  if (c.ready && c.aEff == aEff && c.n == n && c.rot == r) return c.gain;
+  const double gibbs = 1.0 + 0.179 * dsfPow(a, n);
+  if (!c.ready || c.aEff != aEff || c.n != n) {
+    c.peak0 = rotatedPeak(aEff, gibbs, 1.0, 0.0);
+    c.aEff = aEff;
+    c.n = n;
+  }
+  double sn = 0.0, cs = 0.0;
+  kernelSinCosTurns(wrap01(r), &sn, &cs);
+  const double pr = rotatedPeak(aEff, gibbs, cs, sn);
+  c.rot = r;
+  c.gain = pr > 1.0e-12 ? c.peak0 / pr : 1.0;
+  c.ready = true;
+  return c.gain;
+}
+
+constexpr int kDsfRotateGainBlock = 32;
+
+// Per-sample Rotate level: control-rate rotateGain with a linear glide.
+double rotateLevel(DsfOscillatorRotateCache& c, double a, double n, double rotTurns) {
+  double jump = rotTurns - c.lastRot;
+  jump -= dsp_floor(jump + 0.5);
+  c.lastRot = rotTurns;
+  // A Rotate jump snaps the level (a glide would let the unscaled peak through).
+  if (!c.running || jump > kDsfPhaseJump || jump < -kDsfPhaseJump) {
+    c.level = rotateGain(c, a, n, rotTurns);
+    c.step = 0.0;
+    c.countdown = kDsfRotateGainBlock;
+    c.running = true;
+    return c.level;
+  }
+  if (--c.countdown <= 0) {
+    const double target = rotateGain(c, a, n, rotTurns);
+    c.step = (target - c.level) / static_cast<double>(kDsfRotateGainBlock);
+    c.countdown = kDsfRotateGainBlock;
+  }
+  c.level += c.step;
+  return c.level;
+}
+
+// DSF Morphing Osc steady state (v36), the same per-partial closed form:
+// a term amp * cos(2 pi phase) at rate partials-per-turn adds its leaky
+// integral to I and its correction (leak * leaky integral of that) to Q.
+inline void addLeakyTerm(double amp, double phaseTurns, double rate, double alpha, double& I, double& Q) {
+  const double w = kTwoPi * rate;
+  double sn = 0.0, cs = 0.0;
+  kernelSinCosTurns(wrap01(phaseTurns), &sn, &cs);
+  const double a2 = alpha * alpha;
+  const double d = w * w + a2;
+  I += amp * (alpha * cs + w * sn) / d;
+  Q += amp * alpha * (cs * (a2 - w * w) + sn * 2.0 * alpha * w) / (d * d);
+}
+
+// Harmonic Morphing kernel (morphImpulse, Spacing 1): partials start..end,
+// amplitude r^(h - start) for r = a and -a (Symmetry), odd offsets times
+// (1 - Odd/Even), Width mixes in the odd-partial series, Rotate adds a phase.
+void morphHarmonicLeaky(double at, double a, int start, int end, double rotTurns, double width,
+                        double symmetry, double oddEven, double alpha, double weight, double& I, double& Q) {
+  const double w = clamp(width, 0.0, 1.0);
+  const double sym = clamp(symmetry, 0.0, 1.0);
+  const double oe = clamp(oddEven, 0.0, 1.0);
+  const double rs[2] = {a, -a};
+  const double rw[2] = {1.0 - sym, sym};
+  for (int side = 0; side < 2; side++) {
+    if (rw[side] <= 0.0) continue;
+    const double r = rs[side];
+    const double g = weight * rw[side];
+    if (w < 1.0) {
+      double rk = 1.0;
+      for (int h = start, i = 0; h <= end && i < kDsfInitTerms; h++, i++) {
+        const double amp = g * (1.0 - w) * rk * (((h - start) & 1) ? 1.0 - oe : 1.0);
+        if (amp != 0.0) addLeakyTerm(amp, static_cast<double>(h) * at + rotTurns, static_cast<double>(h), alpha, I, Q);
+        rk *= r;
+        if (rk < 1.0e-14 && rk > -1.0e-14) break;
+      }
+    }
+    if (w > 0.0) {
+      int oddStart = start;
+      if ((oddStart & 1) == 0) oddStart += 1;
+      double rk = 1.0;
+      for (int h = oddStart, i = 0; h <= end && i < kDsfInitTerms; h += 2, i++) {
+        addLeakyTerm(g * w * rk, static_cast<double>(h) * at + rotTurns, static_cast<double>(h), alpha, I, Q);
+        rk *= r;
+        if (rk < 1.0e-14 && rk > -1.0e-14) break;
+      }
+    }
+  }
+}
+
+// Inharmonic Morphing kernel (spacedKernel): partial j at rate 1 + j Spacing,
+// phase ct + j mt, amplitude a^j (odd j times 1 - Odd/Even).
+void morphSpacedLeaky(double ct, double mt, double a, int count, double spacing, double oddEven,
+                      double alpha, double weight, double& I, double& Q) {
+  const double oe = clamp(oddEven, 0.0, 1.0);
+  double aj = 1.0;
+  for (int j = 0; j < count && j < kDsfInitTerms; j++) {
+    const double amp = weight * aj * ((j & 1) ? 1.0 - oe : 1.0);
+    if (amp != 0.0) addLeakyTerm(amp, ct + static_cast<double>(j) * mt, 1.0 + static_cast<double>(j) * spacing, alpha, I, Q);
+    aj *= a;
+    if (aj < 1.0e-14) break;
   }
 }
 
@@ -522,6 +770,11 @@ extern "C" void soemdsp_dsf_oscillator_reset(int handle) {
   s.sawB = 0.0;
   s.triA = 0.0;
   s.triB = 0.0;
+  s.sawJ = 0.0;
+  s.blendSqJ = 0.0;
+  s.sawBJ = 0.0;
+  s.primed = false;
+  s.rotGain = DsfOscillatorRotateCache{};
   s.chainB = false;
   s.triDcIn = 0.0;
   s.triDcOut = 0.0;
@@ -557,6 +810,7 @@ extern "C" void soemdsp_dsf_oscillator_sample(
     s.t = wrap01(s.t + dt);
     s.renderPhase = wrap01(s.t + phaseOffset);
     s.chainB = false;
+    s.primed = false;
     double sinx = 0.0, cosx = 0.0;
     dsp_sin_cos_turns(s.renderPhase, &sinx, &cosx);
     sample = sinx;
@@ -581,47 +835,115 @@ extern "C" void soemdsp_dsf_oscillator_sample(
     };
     s.renderPhase = renderT;
 
-    // Track the DC-blocking leak so pitch modulation does not step its cutoff.
-    const double trackedLeak = kTwoPi * safeAbsFrequency / (kDsfLeakDivisor * safeSampleRate);
-    const double leakTarget = trackedLeak > 0.0005 ? trackedLeak : 0.0005;
-    s.leak = s.leak * 0.99 + leakTarget * 0.01;
+    // The DC-blocking leak follows the phase step exactly (v36).
+    const double leakTarget = dsfLeakTarget(safeAbsFrequency, safeSampleRate);
+    if (!s.primed) {
+      // Start on the wave (v36): the chains hold the ideal integrals of the
+      // phase one step back, and the leak starts at its target.
+      const double back = wrap01(renderT - step);
+      const double alpha = dt < 0.0 ? -kDsfLeakPerTurn : kDsfLeakPerTurn;
+      double i0 = 0.0, q0 = 0.0, iH = 0.0, qH = 0.0;
+      leakyIntegrals(back, s.kernelLo, alpha, i0, q0);
+      leakyIntegrals(wrap01(back - 0.5), s.kernelLo, alpha, iH, qH);
+      s.sawAcc = i0;
+      s.blendSqAcc = i0 - iH;
+      s.sawJ = q0;
+      s.blendSqJ = q0 - qH;
+      s.leak = leakTarget;
+      s.primed = true;
+      s.prevOffset = phaseOffset;
+      s.jumpHold = 0;
+    }
+    {
+      double jump = phaseOffset - s.prevOffset;
+      jump -= dsp_floor(jump + 0.5);
+      s.prevOffset = phaseOffset;
+      if (s.jumpHold > 0) s.jumpHold -= 1;
+      if ((jump > kDsfPhaseJump || jump < -kDsfPhaseJump) && s.jumpHold == 0) {
+        // The chains hold the wave one step back: shift each by the ideal
+        // integrals' difference between the old and the new phase there.
+        s.jumpHold = kDsfPhaseJumpHold;
+        const double x1 = wrap01(renderT - step);
+        const double x0 = wrap01(x1 - jump);
+        const double alpha = dt < 0.0 ? -kDsfLeakPerTurn : kDsfLeakPerTurn;
+        double i0, q0, i1, q1;
+        leakyIntegrals(x0, s.kernelLo, alpha, i0, q0);
+        leakyIntegrals(x1, s.kernelLo, alpha, i1, q1);
+        s.sawAcc += i1 - i0;
+        s.sawJ += q1 - q0;
+        double h0, r0, h1, r1;
+        leakyIntegrals(wrap01(x0 - 0.5), s.kernelLo, alpha, h0, r0);
+        leakyIntegrals(wrap01(x1 - 0.5), s.kernelLo, alpha, h1, r1);
+        s.blendSqAcc += (i1 - i0) - (h1 - h0);
+        s.blendSqJ += (q1 - q0) - (r1 - r0);
+        if (s.chainB) {
+          const double pwNow = clamp(pulseWidth, 0.01, 0.99);
+          double b0, c0, b1, c1;
+          leakyIntegrals(wrap01(x0 - pwNow), s.kernelLo, alpha, b0, c0);
+          leakyIntegrals(wrap01(x1 - pwNow), s.kernelLo, alpha, b1, c1);
+          s.sawB += b1 - b0;
+          s.sawBJ += c1 - c0;
+          // Trimorph chains (corr / alpha): their steady difference across the jump.
+          s.triA += (q1 - q0) / alpha;
+          s.triB += (c1 - c0) / alpha;
+        }
+      }
+    }
+    s.leak = leakTarget;
     const double retention = 1.0 - s.leak;
     const double rawSaw = kern(0.0);
     const double prevSawAcc = s.sawAcc;
     s.sawAcc = s.sawAcc * retention + rawSaw * dt;
+    s.sawJ = s.sawJ * retention + s.leak * s.sawAcc;
+    const double sawOut = s.sawAcc + s.sawJ;
     const double ampAdjust = s.kernelLo.ampAdjust;
 
     if (waveform != 2 && waveform != 3) s.chainB = false;
     if (waveform == 1) {
-      sample = s.sawAcc * ampAdjust;
+      sample = sawOut * ampAdjust;
     } else if (waveform == 4) {
       const double rawBlendSquare = rawSaw - kern(0.5);
       s.blendSqAcc = s.blendSqAcc * retention + rawBlendSquare * dt;
+      s.blendSqJ = s.blendSqJ * retention + s.leak * s.blendSqAcc;
+      const double blendOut = s.blendSqAcc + s.blendSqJ;
       const double b = clamp(blend, 0.0, 1.0);
-      sample = (s.sawAcc * (1.0 - b) + s.blendSqAcc * b) * ampAdjust;
+      sample = (sawOut * (1.0 - b) + blendOut * b) * ampAdjust;
     } else {
       const double pw = clamp(pulseWidth, 0.01, 0.99);
       // Chain B's phase step: the oscillator step minus how far Morph moved.
       if (!s.chainB) {
         s.chainB = true;
         s.prevPw = pw;
-        // Start chain B and the second integrals on the wave (v34).
-        double iA = 0.0, jA = 0.0, iB = 0.0, jB = 0.0;
-        idealIntegrals(s.t, s.kernelLo, iA, jA);
-        idealIntegrals(wrap01(s.t - pw), s.kernelLo, iB, jB);
-        s.sawB = s.sawAcc - (iA - iB);
-        s.triA = jA;
-        s.triB = jB;
+        // Start chain B and the second integrals on the wave (v34). Chain A is
+        // already at this sample's phase; chain B and the second integrals
+        // are updated below, so they start one step back (v36), chain B on
+        // the leaky steady state (as chain A).
+        const double back = wrap01(renderT - step);
+        const double alpha = dt < 0.0 ? -kDsfLeakPerTurn : kDsfLeakPerTurn;
+        double la, qa, lb, qb;
+        leakyIntegrals(renderT, s.kernelLo, alpha, la, qa);
+        leakyIntegrals(wrap01(back - pw), s.kernelLo, alpha, lb, qb);
+        s.sawB = s.sawAcc - (la - lb);
+        s.sawBJ = s.sawJ - (qa - qb);
+        // Trimorph chains: the leaky integral of the leaky saw, = corr / alpha
+        // (the ideal J here left a start error that 1 / (Morph (1 - Morph))
+        // magnified ~50x at extreme Morph).
+        double lBack, qBack;
+        leakyIntegrals(back, s.kernelLo, alpha, lBack, qBack);
+        s.triA = qBack / alpha;
+        s.triB = qb / alpha;
         s.triDcIn = 0.0;
         s.triDcOut = 0.0;
+        s.triDcPrime = true;
       }
       const double dtB = dt - (pw - s.prevPw);
       s.prevPw = pw;
       const double prevSawB = s.sawB;
       s.sawB = s.sawB * retention + kern(pw) * dtB;
+      s.sawBJ = s.sawBJ * retention + s.leak * s.sawB;
 
       if (waveform == 2) {
-        sample = (s.sawAcc - s.sawB) * ampAdjust;
+        sample = (sawOut - (s.sawB + s.sawBJ)) * ampAdjust;
       } else {
         // Trimorph: integral of the saw over the window [t - Morph, t] =
         // (second integral at t) - (second integral at t - Morph). Peak to peak is
@@ -630,6 +952,11 @@ extern "C" void soemdsp_dsf_oscillator_sample(
         s.triA = s.triA * retention + 0.5 * (s.sawAcc + prevSawAcc) * dt;
         s.triB = s.triB * retention + 0.5 * (s.sawB + prevSawB) * dtB;
         const double tri = (s.triA - s.triB) * ampAdjust * kTrimorphGain / (pw * (1.0 - pw));
+        if (s.triDcPrime) {
+          s.triDcPrime = false;
+          s.triDcIn = tri;
+          s.triDcOut = tri;
+        }
         s.triDcOut = tri - s.triDcIn + retention * s.triDcOut;
         s.triDcIn = tri;
         sample = s.triDcOut;
@@ -696,20 +1023,76 @@ extern "C" void soemdsp_dsf_oscillator_sample_morph(
     s.tm = wrap01(s.tm + dt * sp * 0.9999);
     const double renderM = wrap01(s.tm + (phaseOffset + rotTurns) * sp);
     const double ct = renderT;
-    const double lo = spacedKernel(ct, renderM, s.kernelLo, s.evenLo, oe);
-    if (s.frac <= 0.0) {
-      raw = lo;
-    } else {
-      const double hi = spacedKernel(ct, renderM, s.kernelHi, s.evenHi, oe);
-      raw = lo + (hi - lo) * s.frac;
-    }
+    // Two midpoint sub-steps (v36), as the harmonic path: one kernel sample at
+    // the end of the step led the integral by half a sample (up to ~90 deg on
+    // the top partials at bright settings).
+    auto spaced = [&](double back) {
+      const double cB = wrap01(ct - back * step);
+      const double mB = wrap01(renderM - back * step * sp);
+      const double lo = spacedKernel(cB, mB, s.kernelLo, s.evenLo, oe);
+      if (s.frac <= 0.0) return lo;
+      const double hi = spacedKernel(cB, mB, s.kernelHi, s.evenHi, oe);
+      return lo + (hi - lo) * s.frac;
+    };
+    raw = 0.5 * (spaced(0.25) + spaced(0.75));
   }
 
-  const double trackedLeak = kTwoPi * safeAbsFrequency / (kDsfLeakDivisor * safeSampleRate);
-  const double leakTarget = trackedLeak > 0.0005 ? trackedLeak : 0.0005;
-  s.leak = s.leak * 0.99 + leakTarget * 0.01;
+  const double leakTarget = dsfLeakTarget(safeAbsFrequency, safeSampleRate);
+  // Steady state of the chain for a Phase / Rotate setting, one step back
+  // (v36): the start value, and the shift across a Phase / Rotate jump.
+  const double alpha = dt < 0.0 ? -kDsfLeakPerTurn : kDsfLeakPerTurn;
+  auto steady = [&](double offset, double rot, double& I, double& Q) {
+    I = 0.0;
+    Q = 0.0;
+    if (harmonic) {
+      const double at = s.t + offset - step;
+      morphHarmonicLeaky(at, a, startLo, static_cast<int>(s.kernelLo.n), rot, width, symmetry, oe, alpha, 1.0 - s.frac, I, Q);
+      if (s.frac > 0.0) {
+        morphHarmonicLeaky(at, a, startHi, static_cast<int>(s.kernelHi.n), rot, width, symmetry, oe, alpha, s.frac, I, Q);
+      }
+    } else {
+      const double ct = s.t + offset + rot - step;
+      const double mt = s.tm + (offset + rot) * sp - step * sp;
+      morphSpacedLeaky(ct, mt, a, static_cast<int>(s.kernelLo.n), sp, oe, alpha, 1.0 - s.frac, I, Q);
+      if (s.frac > 0.0) morphSpacedLeaky(ct, mt, a, static_cast<int>(s.kernelHi.n), sp, oe, alpha, s.frac, I, Q);
+    }
+  };
+  if (!s.primed) {
+    // Start on the steady wave at any Rotate / Symmetry / Slice (v36).
+    double I0, Q0;
+    steady(phaseOffset, rotTurns, I0, Q0);
+    s.sawAcc = I0;
+    s.sawJ = Q0;
+    s.leak = leakTarget;
+    s.prevOffset = phaseOffset;
+    s.prevRot = rotTurns;
+    s.jumpHold = 0;
+    s.primed = true;
+  } else {
+    double dOff = phaseOffset - s.prevOffset;
+    dOff -= dsp_floor(dOff + 0.5);
+    double dRot = rotTurns - s.prevRot;
+    dRot -= dsp_floor(dRot + 0.5);
+    if (s.jumpHold > 0) s.jumpHold -= 1;
+    const bool jump = dOff > kDsfPhaseJump || dOff < -kDsfPhaseJump || dRot > kDsfPhaseJump || dRot < -kDsfPhaseJump;
+    if (jump && s.jumpHold == 0) {
+      // Shift the chain by the steady difference across the jump.
+      s.jumpHold = kDsfPhaseJumpHold;
+      double I0, Q0, I1, Q1;
+      steady(s.prevOffset, s.prevRot, I0, Q0);
+      steady(phaseOffset, rotTurns, I1, Q1);
+      s.sawAcc += I1 - I0;
+      s.sawJ += Q1 - Q0;
+    }
+    s.prevOffset = phaseOffset;
+    s.prevRot = rotTurns;
+  }
+  s.leak = leakTarget;
   s.sawAcc = s.sawAcc * (1.0 - s.leak) + raw * dt;
-  double sample = s.sawAcc * s.kernelLo.ampAdjust;
+  s.sawJ = s.sawJ * (1.0 - s.leak) + s.leak * s.sawAcc;
+  // Rotate level (harmonic only; on the inharmonic path Rotate is a time shift).
+  const double rotLevel = harmonic ? rotateLevel(s.rotGain, a, s.kernelLo.n, rotTurns) : 1.0;
+  double sample = (s.sawAcc + s.sawJ) * s.kernelLo.ampAdjust * rotLevel;
 
   const bool finite = sample * 0.0 == 0.0;
   if (!finite) sample = 0.0;
@@ -727,5 +1110,5 @@ extern "C" double soemdsp_dsf_oscillator_phase(int handle) {
 }
 
 extern "C" int soemdsp_dsf_oscillator_version() {
-  return 35;
+  return 36;
 }

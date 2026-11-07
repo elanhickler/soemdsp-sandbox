@@ -4384,7 +4384,7 @@ const nodeGraphModuleDefinitions = (
     outputs: ["CV", "Scale", "Gate", "Pitch", "Trigger"],
     parameters: [
       { key: "length", label: "Length", defaultValue: "8", min: "1", mid: "8", max: "16", nonlinearSlider: false, step: "1" },
-      { key: "probability", label: "Probability", defaultValue: "0.25", min: "0", mid: "0.25", max: "1", step: "any" },
+      { key: "probability", unit: "%", label: "Probability", defaultValue: "0.25", min: "0", mid: "0.25", max: "1", step: "any" },
       { key: "octaves", label: "Octaves", defaultValue: "3", min: "1", mid: "3", max: "8", nonlinearSlider: false, step: "1", tooltip: "How many octaves Scale out sends, from C3 + Octave Offset." },
       { key: "octaveOffset", label: "Octave Offset", defaultValue: "0", min: "-4", mid: "0", max: "4", nonlinearSlider: false, step: "1", unit: "oct", tooltip: "0 = C3 (MIDI 60) for Scale out." },
       { key: "amplitude", label: "Amplitude", defaultValue: "1", min: "0", mid: "1", max: "1", step: "0.01" },
@@ -4481,7 +4481,7 @@ const nodeGraphModuleDefinitions = (
     outputLabels: { "pitch": "♯/♭" },
     parameters: [
       { key: "length", label: "Length", defaultValue: "8", min: "2", mid: "8", max: "16", nonlinearSlider: false, step: "1" },
-      { key: "probability", label: "Probability", defaultValue: "0.18", min: "0", mid: "0.25", max: "1", step: "any" },
+      { key: "probability", unit: "%", label: "Probability", defaultValue: "0.18", min: "0", mid: "0.25", max: "1", step: "any" },
       { key: "octaves", label: "Octaves", defaultValue: "1", min: "0", mid: "1", max: "4", nonlinearSlider: false, step: "1" },
       { key: "level", label: "Level", defaultValue: "1", min: "0", mid: "0.5", max: "1", step: "0.01" },
       {
@@ -4939,7 +4939,7 @@ const nodeGraphModuleDefinitions = (
         tooltip: "ƒ where the noise-band mix reaches Amount. Log ramp between Start and Full." },
       {
         defaultValue: "1",
-        key: "amount",
+        key: "amount", unit: "%",
         label: "Amount",
         max: "1",
         mid: "0.5",
@@ -5358,8 +5358,9 @@ const nodeGraphModuleDefinitions = (
         min: "1",
         mid: "16",
         max: "1048576",
-        step: "1",
-        maxDigits: 0,
+        step: "any",
+        maxDigits: 2,
+        tooltip: "Partial count cap. Fractional values fade the top partial in (e.g. 3.5 = three partials plus the fourth at half level), so sweeps are smooth.",
         nonlinearSlider: true,
         linearSmoothing: false,
         smoothingType: "none"
@@ -6715,7 +6716,7 @@ const nodeGraphModuleDefinitions = (
       },
       {
         defaultValue: "1",
-        key: "amount",
+        key: "amount", unit: "%",
         label: "Amount",
         max: "1",
         mid: "0.5",
@@ -7485,7 +7486,7 @@ const nodeGraphModuleDefinitions = (
     parameters: [
       { defaultValue: "0.25", key: "minSeconds", kind: "time", label: "Min", max: "60", maxDigits: 5, mid: "0.25", min: "0", step: "any", unit: "s", tooltip: "Shortest wait between random triggers." },
       { defaultValue: "1", key: "maxSeconds", kind: "time", label: "Max", max: "60", maxDigits: 5, mid: "1", min: "0", step: "any", unit: "s", tooltip: "Longest wait between random triggers. Changing Min/Max remaps the current wait immediately." },
-      { defaultValue: "0.5", key: "duty", label: "Duty", max: "1", mid: "0.5", min: "0", nonlinearSlider: true, sliderCurve: "edges", curveAmount: "0.3", step: "any" },
+      { defaultValue: "0.5", key: "duty", unit: "%", label: "Duty", max: "1", mid: "0.5", min: "0", nonlinearSlider: true, sliderCurve: "edges", curveAmount: "0.3", step: "any" },
       { defaultValue: "0.01", key: "triggerTime", kind: "time", label: "Trigger", max: "1", maxDigits: 5, mid: "0.01", min: "0", step: "any", unit: "s", tooltip: "How long the Trigger output stays high. Gate length is Duty × this interval." },
       { defaultValue: "1", key: "level", label: "Level", max: "1", mid: "0.5", min: "0", nonlinearSlider: false, step: "any" },
       { defaultValue: "1", key: "seed", kind: "seed", label: "Seed", linearSmoothing: false, max: "16777215", maxDigits: 0, mid: "1", min: "0", nonlinearSlider: false, step: "1" },
@@ -7748,7 +7749,7 @@ const nodeGraphModuleDefinitions = (
     parameters: [
       {
         defaultValue: "1",
-        key: "mix",
+        key: "mix", unit: "%",
         label: "Mix",
         max: "1",
         mid: "0.5",
@@ -8743,7 +8744,7 @@ const nodeGraphModuleDefinitions = (
     parameters: [
       {
         defaultValue: "0",
-        key: "crossfade",
+        key: "crossfade", unit: "%",
         label: "Crossfade",
         max: "1",
         mid: "0",
@@ -9094,7 +9095,7 @@ const nodeGraphModuleDefinitions = (
       {
         defaultValue: "1",
         hidden: true,
-        key: "mix",
+        key: "mix", unit: "%",
         label: "Mix",
         max: "1",
         mid: "0.5",
@@ -9642,7 +9643,7 @@ const nodeGraphModuleDefinitions = (
         tooltip: "Bandwidth of every band. 4.32 is one-third octave, so a fader is about the level at that frequency. Lower Q is wider and neighboring cuts stack." },
       {
         defaultValue: "1",
-        key: "mix",
+        key: "mix", unit: "%",
         label: "Mix",
         max: "1",
         mid: "0.5",
@@ -11406,7 +11407,7 @@ const nodeGraphModuleDefinitions = (
       },
       {
         defaultValue: "0",
-        key: "crossfade",
+        key: "crossfade", unit: "%",
         label: "Crossfade",
         max: "1",
         maxDigits: 4,
@@ -11572,7 +11573,7 @@ const nodeGraphModuleDefinitions = (
         min: "0.05",
         step: "any",
         unit: "s",
-        displayTransform: (value) => ({ maxDigits: 1, unit: "ms", value: value * 1000 }),
+        displayTransform: (value) => ({ maxDigits: 1, unit: "ms", value: value * 1000 }), displayInverse: (value) => value / 1000,
         tooltip: "Time to fall from High Freq to Low Freq + 50 Hz. Latched on each Trigger. From Robin Schmidt's SweepKicker, RS-MET." },
       {
         defaultValue: "0",
@@ -11853,7 +11854,7 @@ const nodeGraphModuleDefinitions = (
         tooltip: "Gain of the In jack into the chain. Negative flips it." },
       {
         defaultValue: "1",
-        key: "mix",
+        key: "mix", unit: "%",
         label: "Mix",
         max: "1",
         mid: "0.5",
@@ -12879,7 +12880,7 @@ const nodeGraphModuleDefinitions = (
         tooltip: "Under construction — natural frequency √(k/m)." },
       {
         defaultValue: "0.5",
-        key: "damping",
+        key: "damping", unit: "%",
         label: "Damping",
         max: "1",
         mid: "0.5",
@@ -13386,7 +13387,7 @@ const nodeGraphModuleDefinitions = (
       },
       {
         defaultValue: "0.5",
-        key: "swing",
+        key: "swing", unit: "%",
         label: "Swing",
         max: "1",
         mid: "0.5",
@@ -14117,7 +14118,7 @@ const nodeGraphModuleDefinitions = (
       },
       {
         defaultValue: "0",
-        key: "damping",
+        key: "damping", unit: "%",
         label: "Damping",
         max: "1",
         mid: "0.35",
@@ -14160,7 +14161,7 @@ const nodeGraphModuleDefinitions = (
       },
       {
         defaultValue: "1",
-        key: "depth",
+        key: "depth", unit: "%",
         label: "Depth",
         max: "1",
         mid: "0.5",
@@ -14310,7 +14311,7 @@ const nodeGraphModuleDefinitions = (
       },
       {
         defaultValue: "0.5",
-        key: "mix",
+        key: "mix", unit: "%",
         label: "Mix",
         max: "1",
         mid: "0.5",
@@ -14439,7 +14440,7 @@ const nodeGraphModuleDefinitions = (
       },
       {
         defaultValue: "0.5",
-        key: "mix",
+        key: "mix", unit: "%",
         label: "Mix",
         max: "1",
         mid: "0.5",
@@ -14494,7 +14495,7 @@ const nodeGraphModuleDefinitions = (
         tooltip: "Vibrato throw in milliseconds. LFO is ±1 × Depth." },
       {
         defaultValue: "0.5",
-        key: "mix",
+        key: "mix", unit: "%",
         label: "Mix",
         max: "1",
         mid: "0.5",
@@ -14628,7 +14629,7 @@ const nodeGraphModuleDefinitions = (
     parameters: [
       {
         defaultValue: "0.5",
-        key: "mix",
+        key: "mix", unit: "%",
         label: "Mix",
         max: "1",
         mid: "0.5",
@@ -14767,7 +14768,7 @@ const nodeGraphModuleDefinitions = (
       },
       {
         defaultValue: "1",
-        key: "mix",
+        key: "mix", unit: "%",
         label: "Mix",
         max: "1",
         mid: "0.5",
@@ -14863,7 +14864,7 @@ const nodeGraphModuleDefinitions = (
       },
       {
         defaultValue: "1",
-        key: "mix",
+        key: "mix", unit: "%",
         label: "Mix",
         max: "1",
         mid: "0.5",
@@ -15461,7 +15462,7 @@ const nodeGraphModuleDefinitions = (
       },
       {
         defaultValue: "1",
-        key: "amount",
+        key: "amount", unit: "%",
         label: "Amount",
         max: "1",
         mid: "0.5",
@@ -15663,7 +15664,7 @@ const nodeGraphModuleDefinitions = (
       { defaultValue: "0.18", key: "time", kind: "time", label: "Time", max: "4", maxDigits: 5, mid: "0.18", min: "0.001", step: "any", unit: "s" },
       {
         defaultValue: "0.25",
-        key: "feedback",
+        key: "feedback", unit: "%",
         label: "Feedback",
         max: "1",
         mid: "0.5",
@@ -15672,7 +15673,7 @@ const nodeGraphModuleDefinitions = (
         step: "any",
         tooltip: "Regen into the delay line. Range 0–1 (clamped in DSP so tails stay stable)."
       },
-      { defaultValue: "0.35", key: "mix", label: "Mix", max: "1", mid: "0.35", min: "0", nonlinearSlider: false, step: "any" },
+      { defaultValue: "0.35", key: "mix", unit: "%", label: "Mix", max: "1", mid: "0.35", min: "0", nonlinearSlider: false, step: "any" },
       {
         choices: ["Parabol", "Random Walk", "FBM"],
         defaultValue: "0",
@@ -15974,7 +15975,7 @@ const nodeGraphModuleDefinitions = (
           "Soft clip in the feedback path (tape grunge). Lower = harder saturation; higher = cleaner." },
       {
         defaultValue: "0.35",
-        key: "mix",
+        key: "mix", unit: "%",
         label: "Mix",
         max: "1",
         mid: "0.35",
@@ -16028,8 +16029,8 @@ const nodeGraphModuleDefinitions = (
       { control: "number", defaultValue: "0", key: "roomSeed", label: "Seed", linearSmoothing: false, max: "9999", maxDigits: 0, mid: "1", min: "0", nonlinearSlider: false, step: "1", tooltip: "Randomizes the Random/Fractal room shape and each bounce's scatter direction. Same seed always reproduces the same shape and echo pattern." },
       { constraint: "cpu", control: "number", defaultValue: "6", key: "rayCount", label: "Rays", linearSmoothing: false, max: "16", maxDigits: 1, mid: "6", min: "1", nonlinearSlider: false, step: "1", tooltip: "Number of initial directions sampled from each ear (X). Total delay taps = Rays x Bounces." },
       { constraint: "cpu", control: "number", defaultValue: "3", key: "bounceCount", label: "Bounces", linearSmoothing: false, max: "6", maxDigits: 1, mid: "3", min: "1", nonlinearSlider: false, step: "1", tooltip: "Number of wall bounces simulated per ray (Y). Total delay taps = Rays x Bounces." },
-      { defaultValue: "0.6", key: "reflectivity", label: "Reflectivity", max: "1", mid: "0.5", min: "0", nonlinearSlider: false, step: "any", tooltip: "1 = mirror-like: each bounce reflects off the room's real surface normal, stays coherent, and loses little energy. 0 = rough/absorptive: each bounce scatters into a random direction and energy drops fast -- reads as more diffusion. Also sets the shared diffusion cascade's feedback (1 - Reflectivity)." },
-      { defaultValue: "0.5", key: "mix", label: "Mix", max: "1", mid: "0.5", min: "0", nonlinearSlider: false, step: "any" },
+      { defaultValue: "0.6", key: "reflectivity", unit: "%", label: "Reflectivity", max: "1", mid: "0.5", min: "0", nonlinearSlider: false, step: "any", tooltip: "1 = mirror-like: each bounce reflects off the room's real surface normal, stays coherent, and loses little energy. 0 = rough/absorptive: each bounce scatters into a random direction and energy drops fast -- reads as more diffusion. Also sets the shared diffusion cascade's feedback (1 - Reflectivity)." },
+      { defaultValue: "0.5", key: "mix", unit: "%", label: "Mix", max: "1", mid: "0.5", min: "0", nonlinearSlider: false, step: "any" },
       { defaultValue: "1", key: "level", label: "Level", max: "1", mid: "0.5", min: "0", nonlinearSlider: false, step: "any" },
     ]
   },
@@ -16083,11 +16084,11 @@ const nodeGraphModuleDefinitions = (
       "Mix L": "Mix L",
       "Mix R": "Mix R" },
     parameters: [
-      { defaultValue: "0.43", key: "mix", label: "Mix", max: "1", mid: "0.43", min: "0", nonlinearSlider: false, step: "any", tooltip: "Dry/wet balance on the Mix outputs (not a wet-only path)." },
+      { defaultValue: "0.43", key: "mix", unit: "%", label: "Mix", max: "1", mid: "0.43", min: "0", nonlinearSlider: false, step: "any", tooltip: "Dry/wet balance on the Mix outputs (not a wet-only path)." },
       { defaultValue: "140", key: "diffusionSize", label: "Diffusion Size", max: "400", mid: "140", min: "0", nonlinearSlider: false, smoothingSeconds: 0.05, step: "any", unit: "ms", tooltip: "Longest diffusion delay line, in ms (each line gets a random fraction of it)." },
-      { defaultValue: "0.70", key: "diffusionAmount", label: "Diffusion Amount", max: "1", mid: "0.70", min: "0", nonlinearSlider: false, step: "any", tooltip: "Strength of early diffusion." },
+      { defaultValue: "0.70", key: "diffusionAmount", unit: "%", label: "Diffusion Amount", max: "1", mid: "0.70", min: "0", nonlinearSlider: false, step: "any", tooltip: "Strength of early diffusion." },
       { defaultValue: "8", key: "delaySize", label: "Delay Time", max: "400", mid: "50", min: "0", nonlinearSlider: true, smoothingSeconds: 0.05, step: "any", unit: "ms", tooltip: "Length of the 2 main reverb delay taps, in ms." },
-      { defaultValue: "0.70", key: "recycle", label: "Recycle", max: "1", mid: "0.70", min: "0", nonlinearSlider: false, step: "any", tooltip: "Feedback amount for the reverb tail." },
+      { defaultValue: "0.70", key: "recycle", unit: "%", label: "Recycle", max: "1", mid: "0.70", min: "0", nonlinearSlider: false, step: "any", tooltip: "Feedback amount for the reverb tail." },
       { defaultValue: "0.028", key: "lfoAmplitude", label: "Mod(~)Amp", max: "0.4", mid: "0.028", min: "0", nonlinearSlider: false, step: "any", unit: "\u00d7", tooltip: "Delay modulation depth as a fraction of each line's own delay length (0.1 = each line swings by 10% of its length)." },
       { defaultValue: "2.40684", key: "lfoBaseSpeed", label: "Mod(~)Speed", max: "20", mid: "2.40684", min: "0.5", nonlinearSlider: true, step: "any", unit: "Hz", tooltip: "Delay modulation LFO rate in Hz (base rate; Mod(~)Vary slows some lines down)." },
       { defaultValue: "249.75", key: "lfoVariation", label: "Mod(~)Vary", max: "250", mid: "125", min: "0", nonlinearSlider: false, step: "any", unit: "ms", tooltip: "Spread of modulation speed between delay lines: up to this many ms of extra LFO period per line. 0 = all lines modulate at the same speed." },
@@ -16182,11 +16183,11 @@ const nodeGraphModuleDefinitions = (
       "Mix L": "Mix L",
       "Mix R": "Mix R" },
     parameters: [
-      { defaultValue: "0.43", key: "mix", label: "Mix", max: "1", mid: "0.43", min: "0", nonlinearSlider: false, step: "any", tooltip: "Dry/wet balance on the Mix outputs (not a wet-only path). Sabrina Reverb is frozen to the plugin 0.1.7 sound: bug fixes only." },
+      { defaultValue: "0.43", key: "mix", unit: "%", label: "Mix", max: "1", mid: "0.43", min: "0", nonlinearSlider: false, step: "any", tooltip: "Dry/wet balance on the Mix outputs (not a wet-only path). Sabrina Reverb is frozen to the plugin 0.1.7 sound: bug fixes only." },
       { defaultValue: "0.35", key: "diffusionSize", label: "Diffusion Size", max: "1", mid: "0.35", min: "0", nonlinearSlider: false, smoothingSeconds: 0.05, step: "any", tooltip: "Size of the diffusion network." },
-      { defaultValue: "0.70", key: "diffusionAmount", label: "Diffusion Amount", max: "1", mid: "0.70", min: "0", nonlinearSlider: false, step: "any", tooltip: "Strength of early diffusion." },
+      { defaultValue: "0.70", key: "diffusionAmount", unit: "%", label: "Diffusion Amount", max: "1", mid: "0.70", min: "0", nonlinearSlider: false, step: "any", tooltip: "Strength of early diffusion." },
       { defaultValue: "0.02", key: "delaySize", label: "Delay Time", max: "1", mid: "0.02", min: "0", nonlinearSlider: false, smoothingSeconds: 0.05, step: "any", tooltip: "Main reverb delay length." },
-      { defaultValue: "0.70", key: "recycle", label: "Recycle", max: "1", mid: "0.70", min: "0", nonlinearSlider: false, step: "any", tooltip: "Feedback amount for the reverb tail." },
+      { defaultValue: "0.70", key: "recycle", unit: "%", label: "Recycle", max: "1", mid: "0.70", min: "0", nonlinearSlider: false, step: "any", tooltip: "Feedback amount for the reverb tail." },
       { defaultValue: "0.07", key: "lfoAmplitude", label: "LFO Amp", max: "1", mid: "0.07", min: "0", nonlinearSlider: false, step: "any", tooltip: "Amount of delay modulation." },
       { defaultValue: "0.83", key: "lfoBaseSpeed", label: "LFO Speed", max: "1", mid: "0.83", min: "0", nonlinearSlider: false, step: "any", tooltip: "Speed of delay modulation (Walter's original map): LFO period 1.225 s (0) to 0.25 s (1); higher = faster. Frozen module: bug fixes only, no sound changes." },
       { defaultValue: "0.999", key: "lfoVariation", label: "LFO Vary", max: "1", mid: "0.999", min: "0", nonlinearSlider: false, step: "any", tooltip: "Spread of modulation speed between delay lines. 0 = all lines modulate at the same speed; higher = more spread." },
@@ -16298,7 +16299,7 @@ const nodeGraphModuleDefinitions = (
       "Mix L": "Mix L",
       "Mix R": "Mix R" },
     parameters: [
-      { defaultValue: "0.43", key: "mix", label: "Mix", max: "1", mid: "0.43", min: "0", step: "any", tooltip: "Dry/wet balance on the Mix outputs." },
+      { defaultValue: "0.43", key: "mix", unit: "%", label: "Mix", max: "1", mid: "0.43", min: "0", step: "any", tooltip: "Dry/wet balance on the Mix outputs." },
       {
         choices: ["Off", "On"],
         defaultValue: "0",
@@ -17293,7 +17294,7 @@ const nodeGraphModuleDefinitions = (
       },
       {
         defaultValue: "1",
-        key: "mix",
+        key: "mix", unit: "%",
         label: "Mix",
         max: "1",
         mid: "1",
@@ -17535,7 +17536,7 @@ const nodeGraphModuleDefinitions = (
         tooltip: "How fast the mix returns to Mix after Hold. Longer = slower swell." },
       {
         defaultValue: "0.35",
-        key: "mix",
+        key: "mix", unit: "%",
         label: "Mix",
         max: "1",
         mid: "0.5",
@@ -17545,7 +17546,7 @@ const nodeGraphModuleDefinitions = (
         tooltip: "Dry/Wet crossfade at rest (no ducking). 0 = all Dry, 1 = all Wet." },
       {
         defaultValue: "0",
-        key: "duckedMix",
+        key: "duckedMix", unit: "%",
         label: "Ducked Mix",
         max: "1",
         mid: "0.5",
@@ -18887,7 +18888,7 @@ const nodeGraphModuleDefinitions = (
         min: "0",
         step: "any",
         unit: "s",
-        displayTransform: (value) => ({ maxDigits: 1, unit: "ms", value: value * 1000 }),
+        displayTransform: (value) => ({ maxDigits: 1, unit: "ms", value: value * 1000 }), displayInverse: (value) => value / 1000,
         tooltip: "Rise time constant toward a brighter Light target. 0 = instant." },
       {
         defaultValue: "0.1",
@@ -18900,7 +18901,7 @@ const nodeGraphModuleDefinitions = (
         min: "0",
         step: "any",
         unit: "s",
-        displayTransform: (value) => ({ maxDigits: 1, unit: "ms", value: value * 1000 }),
+        displayTransform: (value) => ({ maxDigits: 1, unit: "ms", value: value * 1000 }), displayInverse: (value) => value / 1000,
         tooltip: "Fall time constant toward a dimmer Light target (photoconductive lag)." },
       {
         defaultValue: "1",
@@ -19488,7 +19489,7 @@ const nodeGraphModuleDefinitions = (
         step: "any" },
       {
         defaultValue: "1",
-        key: "depth",
+        key: "depth", unit: "%",
         label: "Depth",
         max: "1",
         mid: "0.5",
@@ -19497,7 +19498,7 @@ const nodeGraphModuleDefinitions = (
         step: "any" },
       {
         defaultValue: "1",
-        key: "mix",
+        key: "mix", unit: "%",
         label: "Mix",
         max: "1",
         mid: "0.5",

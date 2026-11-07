@@ -728,12 +728,30 @@ function drawNodeGraphSinCosDisplayInner(section) {
     const count = typeof nodeGraphMathCycleSampleCount === "function"
       ? nodeGraphMathCycleSampleCount(innerW, N)
       : Math.max(64, Math.min(120000, Math.ceil(Math.max(innerW * 8, Math.min(N, innerW) * 24))));
-    const cycleKey = `${JSON.stringify(dsfParams)}@${sr}|${count}`;
+    // Below audio rate the cycle depends on the pitch only through the partial
+    // count, so a modulated slow pitch reuses the cached cycle.
+    const pitchKey = typeof nodeGraphDsfPreviewPitchKey === "function"
+      ? nodeGraphDsfPreviewPitchKey(dsfParams, sr)
+      : String(dsfParams.frequency);
+    const cycleKey = `${JSON.stringify({ ...dsfParams, frequency: pitchKey })}@${sr}|${count}`;
     if (section._dsfFaceCycleKey !== cycleKey || !section._dsfFaceCycle) {
       section._dsfFaceCycle = nodeGraphDsfDisplayCycle(dsfParams, count);
       section._dsfFaceCycleKey = section._dsfFaceCycle ? cycleKey : "";
     }
     dsfSamples = section._dsfFaceCycle;
+    // Phase: the output at oscillator phase x is the cycle at x + Phase, so
+    // the drawn cycle starts Phase into it (no re-render, just a rotation).
+    if (dsfSamples?.length && phaseOff > 0) {
+      const n = dsfSamples.length;
+      const rotated = new Float64Array(n);
+      for (let i = 0; i < n; i += 1) {
+        const src = wrap01(i / n + phaseOff) * n;
+        const i0 = Math.floor(src) % n;
+        const fr = src - Math.floor(src);
+        rotated[i] = dsfSamples[i0] + (dsfSamples[(i0 + 1) % n] - dsfSamples[i0]) * fr;
+      }
+      dsfSamples = rotated;
+    }
     if (dsfSamples?.length && typeof nodeGraphMathCycleClinicalGeom === "function") {
       const geom = nodeGraphMathCycleClinicalGeom(
         dsfSamples, mapX, mapY, Math.max(1, Math.floor(innerW)), strokeW, look.strokePaint,

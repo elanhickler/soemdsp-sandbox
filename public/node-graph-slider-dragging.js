@@ -334,12 +334,16 @@ function updateNodeSliderCurrentValue(slider, rawValue) {
     : (slider?.dataset?.kind === "seed" && typeof parseNodeGraphSeedInput === "function"
       ? parseNodeGraphSeedInput(normalizedValue)
       : parseNodeSliderMathExpression(normalizedValue));
+  // Typed text is in the shown unit (percent, ms); store the parameter's own unit.
+  const typedValue = choiceIndex == null && typeof slider.displayInverse === "function" && Number.isFinite(parsed)
+    ? Number(slider.displayInverse(parsed, slider))
+    : parsed;
   // Whole-number params (definition wholeNumber: true): typed entry rounds.
   const nodeId = slider.closest?.(".dsp-node")?.dataset?.node;
   const nodeType = nodeId ? nodeGraphMvp.patch.nodes.find((n) => n.id === nodeId)?.type : "";
   const value = nodeType && nodeGraphParameterByKey(nodeType, slider.dataset.param)?.wholeNumber
-    ? Math.round(parsed)
-    : parsed;
+    ? Math.round(typedValue)
+    : typedValue;
   if (!Number.isFinite(value)) {
     syncNodeSliderReadout(slider);
     return;

@@ -52,6 +52,12 @@ const NODE_GRAPH_FACE_SWITCH_STACKED = true;
 const NODE_GRAPH_FACE_SWITCH_STACKED_H = 40;
 // Switch handle (selected slot): inset this many face px on all four sides.
 const NODE_GRAPH_FACE_SWITCH_GAP_PX = 2;
+// Dark gap between face value cells (the generic slider row gap).
+const NODE_GRAPH_FACE_CELL_GAP_PX = 2;
+// Column cells with a unit draw three lines (Label / Value / Unit); their row
+// is at least this tall. The unit is as large as the value.
+const NODE_GRAPH_FACE_UNIT_ROW_H = 52;
+const NODE_GRAPH_FACE_UNIT_LINE_PX = 14;
 
 const NodeGraphFaceInk = Object.freeze({
   rowFill: "#10131a",
@@ -110,13 +116,29 @@ function nodeGraphModuleFaceParamChoiceCount(input) {
   return parseNodeMetadataChoices(input.dataset.choices).length;
 }
 
+/** True when a cells row has a column (vertical) cell whose param shows a unit. */
+function nodeGraphModuleFaceRowHasUnitColumn(row, defs) {
+  const n = row.params.length;
+  return row.params.some((cell) => {
+    const mode = cell[2] || "";
+    const horizontal = mode === "horizontal" || (mode !== "stack" && n === 1) || (!mode && !!row.horizontal);
+    if (horizontal || mode === "stack") return false;
+    const p = defs.find((item) => item.key === cell[0]);
+    if (!p || (Array.isArray(p.choices) && p.choices.length)) return false;
+    return String(p.unit || "").trim() !== "";
+  });
+}
+
 /** Face rows for a type. With a patch node, hidden params drop out and their rows close up. */
 function nodeGraphModuleFaceSpec(type, node = null) {
   const face = nodeGraphModuleDefinitions?.[type]?.face;
   if (!Array.isArray(face) || !face.length) return null;
   const defsAll = nodeGraphModuleDefinitions[type]?.parameters || [];
   const mapped = face.map((row) => {
-    const up = nodeGraphModuleFaceUpgradeSliderRow(row, type);
+    let up = nodeGraphModuleFaceUpgradeSliderRow(row, type);
+    if (up.kind === "cells" && Array.isArray(up.params) && nodeGraphModuleFaceRowHasUnitColumn(up, defsAll)) {
+      up = { ...up, h: Math.max(Number(up.h) || 0, NODE_GRAPH_FACE_UNIT_ROW_H) };
+    }
     // A lone choice cell is a switch; stacked switches get column-cell height.
     if (NODE_GRAPH_FACE_SWITCH_STACKED && up.kind === "cells" && up.params?.length === 1 && up.params[0][2] !== "stack") {
       const p = defsAll.find((item) => item.key === up.params[0][0]);
@@ -1080,8 +1102,12 @@ function nodeGraphModuleFaceDrawGl(batch, el, w, ox, oy, z) {
     if (wd.row && wd.y !== rowY && wd.type !== "subChoice") {
       rowY = wd.y;
       const fill = wd.row.kind === "lfoStyles" ? ink.lfoFill : (wd.row.kind === "filter" ? ink.curveBack : ink.rowFill);
-      rect(0, wd.y, w, wd.h, wd.row.kind === "cells" ? ink.cellLine : fill);
-      line(0, wd.y, w, 1, wd.row.kind === "cells" ? ink.cellLine : ink.rowLine);
+      // Cell rows paint no backdrop: the gaps between cells show the module
+      // plate, the same dark gap as between generic slider rows.
+      if (wd.row.kind !== "cells") {
+        rect(0, wd.y, w, wd.h, fill);
+        line(0, wd.y, w, 1, ink.rowLine);
+      }
     }
     const input = wd.param ? nodeGraphModuleFaceInput(el, wd.param) : null;
     const index = input ? Math.round(nodeGraphModuleFaceValue(input) - Number(input.min || 0)) : -1;
@@ -1138,13 +1164,15 @@ function nodeGraphModuleFaceDrawGl(batch, el, w, ox, oy, z) {
       if (wd.index > 0) line(wd.x, wd.y, wd.w, 1, ink.rowLine);
       nodeGraphModuleFaceText(batch, wd.label, ox + cx * z, oy + cy * z, 11.5 * z, on ? ink.subOnText : ink.offText);
     } else if (wd.type === "cell") {
-      const top = wd.y + hairFace;
-      const gap = wd.row.kind === "cells" && wd.x > 0 ? hairFace : 0;
+      // Gap between cells and rows: the generic slider row gap (2 px,
+      // --node-body-row-gap), never thinner than one device pixel.
+      const cellGap = wd.row.kind === "cells" ? Math.max(hairFace, NODE_GRAPH_FACE_CELL_GAP_PX) : hairFace;
+      const top = wd.y + cellGap;
+      const gap = wd.row.kind === "cells" && wd.x > 0 ? cellGap : 0;
       const cw = wd.w - gap;
-      const ch = wd.h - hairFace;
+      const ch = wd.h - cellGap;
       rect(wd.x + gap, top, cw, ch, ink.cellFill);
-      if (wd.row.kind === "cells" && wd.x > 0) line(wd.x, wd.y, 1, wd.h, ink.cellLine);
-      if (wd.bipolar) line(wd.x, wd.y, 1, wd.h, ink.cellLine);
+      if (wd.bipolar && !gap) line(wd.x, wd.y, 1, wd.h, ink.cellLine);
       const t = nodeGraphModuleFaceTravel(input);
       const tg = nodeGraphModuleFaceGhostTravel(input);
       // Jack-owned param (wired ƒ replaces it): the same 135deg stripes as the
@@ -1230,8 +1258,19 @@ function nodeGraphModuleFaceDrawGl(batch, el, w, ox, oy, z) {
             rect(wd.x + gap, top + (1 - tg) * ch, cw, tg * ch, ink.ghost);
           }
         }
-        nodeGraphModuleFaceText(batch, wd.label, ox + cx * z, oy + (cy - 7) * z, 12.6 * z, ink.label, { maxWidth: (cw - 4) * z });
-        nodeGraphModuleFaceValueRun(batch, input, ox + cx * z, oy + (cy + 7) * z, 13.8 * z, ink.value, { maxWidth: (cw - 4) * z });
+        const parts = nodeGraphModuleFaceValueParts(input);
+        if (wd.h >= NODE_GRAPH_FACE_UNIT_ROW_H) {
+          // Label / Value / Unit, one line each; the unit as large as the value.
+          // Unitless cells in the same row keep the same label and value lines.
+          const step = NODE_GRAPH_FACE_UNIT_LINE_PX;
+          const tcy = top + ch * 0.5;
+          nodeGraphModuleFaceText(batch, wd.label, ox + cx * z, oy + (tcy - step) * z, 12.6 * z, ink.label, { maxWidth: (cw - 4) * z });
+          nodeGraphModuleFaceText(batch, parts.text, ox + cx * z, oy + tcy * z, 13.8 * z, ink.value, { maxWidth: (cw - 4) * z });
+          if (parts.unit) nodeGraphModuleFaceText(batch, parts.unit, ox + cx * z, oy + (tcy + step) * z, 13.8 * z, ink.unit, { maxWidth: (cw - 4) * z });
+        } else {
+          nodeGraphModuleFaceText(batch, wd.label, ox + cx * z, oy + (cy - 7) * z, 12.6 * z, ink.label, { maxWidth: (cw - 4) * z });
+          nodeGraphModuleFaceValueRun(batch, input, ox + cx * z, oy + (cy + 7) * z, 13.8 * z, ink.value, { maxWidth: (cw - 4) * z });
+        }
       }
     } else if (wd.type === "filter") {
       nodeGraphModuleFaceDrawFilterGl(batch, el, wd, ox, oy, z, rect, line);

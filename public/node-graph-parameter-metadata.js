@@ -416,6 +416,22 @@ function nodeGraphDefaultMetadataMaxDigits(kind = "decimal") {
   return normalizeNodeMetadataKind(kind) === "frequency" ? 5 : 3;
 }
 
+// Percent display: a 0..1 parameter whose unit is "%" shows 0..100 and takes
+// typed entry in percent (50 -> 0.5). Stored values stay 0..1.
+function nodeGraphParameterIsUnitPercent(parameter, metadata) {
+  const unit = String(metadata?.unit ?? parameter?.unit ?? "").trim();
+  const max = Number(parameter?.max);
+  return unit === "%" && Number.isFinite(max) && Math.abs(max) <= 1;
+}
+
+function nodeGraphPercentDisplayTransform(value) {
+  return { maxDigits: 3, unit: "%", value: Number(value) * 100 };
+}
+
+function nodeGraphPercentDisplayInverse(value) {
+  return Number(value) / 100;
+}
+
 function normalizeNodeGraphMetadataMaxDigits(value, kind = "decimal") {
   // 0 = integer (no fraction). 1…12 = digit budget. Missing → kind default.
   const number = Number(value);

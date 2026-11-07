@@ -22,6 +22,18 @@
 //   the smoothed level stops the level (and so the edge) wandering per frame.
 //   Edges are interpolated to the sub-sample, so the picture does not jitter
 //   by up to one sample per frame.
+//
+// Period (plots): a wave can cross the level more than once per cycle (two
+// saws an octave apart cross twice). The period is the shortest run of 1, 2,
+// 3 or 4 edge intervals over which the wave repeats (normalized correlation
+// >= PERIOD_CORRELATION), else the median interval as before.
+// Sync (plots): the chosen edge is locked in absolute time: of the edges that
+// fit, the newest on the same point of the cycle as last frame's edge, so a
+// second crossing per cycle never flips the picture by part of a cycle.
+// Free (plots): the window moves with the clock, FREE_LAG samples behind the
+// newest, not "the newest samples": audio arrives in 128-sample blocks, so
+// the newest end steps unevenly frame to frame (1408 / 1536 at 44.1 kHz and
+// 30 fps) and the picture wobbled back and forth.
 
 (function initNodeGraphScopeSync(global) {
   const TIME_MS_MIN = 0.1;
@@ -46,6 +58,15 @@
   const PERIOD_INTERVALS = 7;
   const PERIOD_SNAP = 0.03;
   const PERIOD_GLIDE = 0.15;
+  // Candidate periods must repeat the wave this well (normalized correlation).
+  const PERIOD_CORRELATION = 0.9;
+  const PERIOD_CORRELATION_SPAN = 1024;
+  const PERIOD_MAX_RUN = 4;
+  // Sync lock: an edge within this fraction of a cycle of the locked phase.
+  const LOCK_TOLERANCE = 0.15;
+  // Free window: this far behind the newest sample, eased back at FREE_EASE per frame.
+  const FREE_LAG = 2048;
+  const FREE_EASE = 0.05;
 
   function nodeGraphScopeClampTimeMs(value, fallback = TIME_MS_DEFAULT) {
     const n = Number(value);
@@ -95,7 +116,7 @@
 
   /** Per-face sync state (level, hysteresis, Schmitt arm, period, pen). Kept on the face canvas. */
   function nodeGraphScopeSyncState(holder) {
-    const fresh = () => ({ level: NaN, hyst: NaN, armed: false, period: 0, intervals: [], clock: 0, lastEdge: NaN });
+    const fresh = () => ({ level: NaN, hyst: NaN, armed: false, period: 0, intervals: [], clock: 0, lastEdge: NaN, lockAbs: NaN, freeEnd: NaN, freeTime: 0 });
     if (!holder) return fresh();
     if (!holder._scopeSync) holder._scopeSync = fresh();
     return holder._scopeSync;
@@ -154,6 +175,61 @@
     return s.length ? s[s.length >> 1] : 0;
   }
 
+  /** Normalized correlation of the newest span of buffer[0..end) with itself `lag` samples earlier. */
+  function repeatCorrelation(buffer, end, lag) {
+    const n = Math.min(PERIOD_CORRELATION_SPAN, Math.floor(end - lag - 2));
+    if (!(n > 16) || !(lag > 2)) return 0;
+    const li = Math.floor(lag);
+    const lf = lag - li;
+    let sa = 0;
+    let sb = 0;
+    const b = (i) => buffer[i - li] + (buffer[i - li - 1] - buffer[i - li]) * lf;
+    for (let k = 0; k < n; k += 1) {
+      const i = end - 1 - k;
+      sa += buffer[i];
+      sb += b(i);
+    }
+    const ma = sa / n;
+    const mb = sb / n;
+    let ab = 0;
+    let aa = 0;
+    let bb = 0;
+    for (let k = 0; k < n; k += 1) {
+      const i = end - 1 - k;
+      const x = buffer[i] - ma;
+      const y = b(i) - mb;
+      ab += x * y;
+      aa += x * x;
+      bb += y * y;
+    }
+    return aa > 0 && bb > 0 ? ab / Math.sqrt(aa * bb) : 0;
+  }
+
+  /** Period from edge times: the shortest run of intervals the wave repeats over. */
+  function periodFromEdges(edges, buffer, end) {
+    const iv = [];
+    for (let k = Math.max(1, edges.length - PERIOD_INTERVALS * PERIOD_MAX_RUN); k < edges.length; k += 1) {
+      iv.push(edges[k] - edges[k - 1]);
+    }
+    if (!iv.length) return 0;
+    for (let run = 1; run <= PERIOD_MAX_RUN; run += 1) {
+      const sums = [];
+      for (let j = Math.max(0, iv.length - PERIOD_INTERVALS - run + 1); j + run <= iv.length; j += 1) {
+        let sum = 0;
+        for (let q = 0; q < run; q += 1) sum += iv[j + q];
+        sums.push(sum);
+      }
+      if (!sums.length) break;
+      const lag = median(sums);
+      if (repeatCorrelation(buffer, end, lag) >= PERIOD_CORRELATION) return lag;
+    }
+    return median(iv.slice(-PERIOD_INTERVALS));
+  }
+
+  function nowMs() {
+    return typeof performance !== "undefined" && performance.now ? performance.now() : Date.now();
+  }
+
   /** Fold a measured period (samples) into state.period: glide small changes, snap real ones. */
   function settlePeriod(state, measured) {
     if (!(measured > 2)) return;
@@ -201,7 +277,12 @@
     const timeSamples = nodeGraphScopeTimeSamples(opts.settings?.timeMs, opts.sampleRate);
     const fit = (n) => Math.max(2, Math.min(length - 3, Math.round(n)));
     const freeOf = (n) => ({ start: Math.max(0, length - 2 - n), n });
-    if (!(length > 4) || !edge?.length || !(opts.sync || cycles > 0)) return freeOf(fit(timeSamples));
+    if (!(length > 4) || !edge?.length) return freeOf(fit(timeSamples));
+    if (!(opts.sync || cycles > 0)) {
+      const total = Number(edge.nodeGraphScopeTotalSampleCount);
+      const base = Number.isFinite(total) && total >= length ? total - length : NaN;
+      return freeWindow(state, fit(timeSamples), length, base, opts.sampleRate);
+    }
     // Search back over enough samples for SEARCH_WINDOWS windows and the period.
     const guess = cycles > 0 ? (state.period > 0 ? cycles * state.period : LEVEL_SPAN_MAX) : timeSamples;
     const span = Math.min(length - 3, Math.max(LEVEL_SPAN_MIN, Math.ceil(guess * SEARCH_WINDOWS + (state.period || 0) * 2)));
@@ -219,17 +300,64 @@
       prev = cur;
     }
     if (cycles > 0 && edges.length > 2) {
-      const intervals = [];
-      for (let k = Math.max(1, edges.length - PERIOD_INTERVALS); k < edges.length; k += 1) intervals.push(edges[k] - edges[k - 1]);
-      settlePeriod(state, median(intervals));
+      settlePeriod(state, periodFromEdges(edges, edge, offset + length - 1));
     }
     const n = fit(cycles > 0 && state.period > 0 ? cycles * state.period : timeSamples);
-    if (!opts.sync) return freeOf(n);
+    // Absolute sample index of index 0 (ring buffers count every sample written).
+    const total = Number(edge.nodeGraphScopeTotalSampleCount);
+    const base = Number.isFinite(total) && total >= length ? total - length : NaN;
+    if (!opts.sync) return freeWindow(state, n, length, base, opts.sampleRate);
+    state.freeEnd = NaN;
     const last = length - 2 - n;
-    for (let k = edges.length - 1; k >= 0; k -= 1) {
-      if (edges[k] <= last) return { start: edges[k], n };
+    let chosen = -1;
+    const period = state.period > 0 ? state.period : 0;
+    if (Number.isFinite(base) && Number.isFinite(state.lockAbs) && period > 0) {
+      for (let k = edges.length - 1; k >= 0; k -= 1) {
+        if (edges[k] > last) continue;
+        const cyclesAway = (base + edges[k] - state.lockAbs) / period;
+        if (Math.abs(cyclesAway - Math.round(cyclesAway)) <= LOCK_TOLERANCE) {
+          chosen = edges[k];
+          break;
+        }
+      }
     }
-    return freeOf(n);
+    if (chosen < 0) {
+      for (let k = edges.length - 1; k >= 0; k -= 1) {
+        if (edges[k] <= last) {
+          chosen = edges[k];
+          break;
+        }
+      }
+    }
+    if (chosen < 0) return freeOf(n);
+    state.lockAbs = Number.isFinite(base) ? base + chosen : NaN;
+    return { start: chosen, n };
+  }
+
+  /**
+   * Free window that moves with the clock FREE_LAG samples behind the newest
+   * (eased), so uneven block arrival does not shake it. Without an absolute
+   * sample count: the newest window.
+   */
+  function freeWindow(state, n, length, base, sampleRate) {
+    state.lockAbs = NaN;
+    const newest = length - 2;
+    if (!Number.isFinite(base)) return { start: Math.max(0, newest - n), n };
+    const totalNewest = base + newest;
+    const target = totalNewest - FREE_LAG;
+    const now = nowMs();
+    const elapsed = (now - (state.freeTime || now)) / 1000;
+    state.freeTime = now;
+    const rate = Number(sampleRate) > 0 ? Number(sampleRate) : 48000;
+    if (!Number.isFinite(state.freeEnd) || elapsed > 1 || Math.abs(state.freeEnd - target) > 4 * FREE_LAG) {
+      state.freeEnd = target;
+    } else {
+      state.freeEnd += elapsed * rate;
+      state.freeEnd += (target - state.freeEnd) * FREE_EASE;
+    }
+    const lo = base + n;
+    state.freeEnd = Math.max(lo, Math.min(totalNewest, state.freeEnd));
+    return { start: Math.max(0, state.freeEnd - base - n), n };
   }
 
   // Pen step results.

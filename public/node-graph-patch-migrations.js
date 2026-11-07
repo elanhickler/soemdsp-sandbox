@@ -130,6 +130,27 @@ function migrateNodeGraphPulseTrainCountStep(patch) {
   return patch;
 }
 
+// DSF Oscillator Partials is fractional (the top partial fades in). Saved
+// patches carry a range copy of Partials (paramMeta.partials) with the old
+// step 1 / maxDigits 0, which rounded every value (the audio never got 2.5
+// while the face drew it). Old-copy marker: step 1 and not maxDigits 2. Its
+// step and maxDigits keys are dropped so the definition (step any, maxDigits
+// 2) applies; a second pass is a no-op, a step set later is kept, and saved
+// values are untouched.
+function migrateNodeGraphDsfPartialsStep(patch) {
+  const nodes = Array.isArray(patch?.nodes) ? patch.nodes : null;
+  if (!nodes) return patch;
+  for (const node of nodes) {
+    if (!node || node.type !== "dsfOscillator") continue;
+    const meta = node.paramMeta && typeof node.paramMeta === "object" ? node.paramMeta.partials : null;
+    if (!meta || typeof meta !== "object") continue;
+    if (Number(meta.step) !== 1 || Number(meta.maxDigits) === 2) continue;
+    delete meta.step;
+    delete meta.maxDigits;
+  }
+  return patch;
+}
+
 // ƒ replaces BPM on jacks (graph 302). Transport "BPM" in becomes "f" (beat
 // rate in Hz, BPM = ƒ x 60). Old patches keep their tempo: every cable into the
 // old BPM jack (Host BPM included, which still outputs raw BPM) gets an
@@ -168,7 +189,7 @@ function migrateNodeGraphFInsteadOfBpm(patch) {
 }
 
 function migrateNodeGraphPatchToCurrent(patch) {
-  return migrateNodeGraphFInsteadOfBpm(migrateNodeGraphPulseTrainCountStep(migrateNodeGraphPulseTrainStretch(
+  return migrateNodeGraphDsfPartialsStep(migrateNodeGraphFInsteadOfBpm(migrateNodeGraphPulseTrainCountStep(migrateNodeGraphPulseTrainStretch(
     migrateNodeGraphPulseTrainAntialiasing(migrateNodeGraphRetiredRmsMono(patch)),
-  )));
+  ))));
 }
