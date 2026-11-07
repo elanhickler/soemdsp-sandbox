@@ -129,20 +129,11 @@ function bindNodeGraphHeaderControlEvents() {
       .getElementById("nodeSampleWaveformTraceWidthInput")
       ?.addEventListener("input", handleNodeGraphSampleWaveformTraceWidthChange);
     document
-      .getElementById("nodeSampleWaveformHueInput")
-      ?.addEventListener("input", handleNodeGraphSampleWaveformHueChange);
-    document
-      .getElementById("nodeSampleWaveformLineBrightnessInput")
-      ?.addEventListener("input", handleNodeGraphSampleWaveformLineBrightnessChange);
+      .getElementById("nodeSampleWaveformPlayheadAlphaInput")
+      ?.addEventListener("input", handleNodeGraphSampleWaveformPlayheadAlphaChange);
     document
       .getElementById("nodeSampleWaveformGridBrightnessInput")
       ?.addEventListener("input", handleNodeGraphSampleWaveformGridBrightnessChange);
-    document
-      .getElementById("nodeSampleWaveformBackgroundHueInput")
-      ?.addEventListener("input", handleNodeGraphSampleWaveformBackgroundHueChange);
-    document
-      .getElementById("nodeSampleWaveformBackgroundBrightnessInput")
-      ?.addEventListener("input", handleNodeGraphSampleWaveformBackgroundBrightnessChange);
     document
       .getElementById("nodeSampleWaveformCornerSquareButton")
       ?.addEventListener("click", () => setNodeGraphSampleWaveformCornerShape("square"));

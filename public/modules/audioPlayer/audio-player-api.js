@@ -107,6 +107,7 @@
       position: Math.round(phase * duration * 1000) / 1000,
       duration: Math.round(duration * 1000) / 1000,
       volume: Number(node?.params?.amplitude ?? 1),
+      display: displaySettings(id),
       needsGesture: !running(),
     };
   }
@@ -374,6 +375,33 @@
     if (/^#[0-9a-fA-F]{6}$/.test(background)) root.style.setProperty("--music-info-bg", background);
   }
 
+  // Music Player display settings (the node's own sampleWaveformSettings, the
+  // same values its Display Settings panel edits). Unknown keys are ignored.
+  function displaySettings(id) {
+    const node = id && typeof nodeGraphPatchNode === "function" ? nodeGraphPatchNode(id) : null;
+    return node && typeof normalizeNodeGraphSampleWaveformSettings === "function"
+      ? normalizeNodeGraphSampleWaveformSettings(node.sampleWaveformSettings)
+      : null;
+  }
+
+  function applyDisplay(id, msg) {
+    const patch = msg.settings && typeof msg.settings === "object" ? msg.settings : null;
+    const node = typeof nodeGraphPatchNode === "function" ? nodeGraphPatchNode(id) : null;
+    const current = displaySettings(id);
+    if (!patch) return error("bad-request", "display needs settings { key: value }");
+    if (!node || !current) return error("no-player", "Music Player display settings unavailable");
+    const next = { ...current };
+    for (const key of Object.keys(current)) {
+      if (Object.prototype.hasOwnProperty.call(patch, key)) next[key] = patch[key];
+    }
+    node.sampleWaveformSettings = normalizeNodeGraphSampleWaveformSettings(next);
+    document.querySelectorAll(`.node-sample-waveform-display[data-node="${CSS.escape(id)}"]`).forEach((section) => {
+      try { drawNodeGraphSampleWaveformDisplay(section); } catch (_error) { /* next frame paints */ }
+    });
+    if (typeof renderNodeGraphSampleWaveformSettingsWindow === "function") renderNodeGraphSampleWaveformSettingsWindow();
+    if (typeof nodeGraphGlGraphPresentSoon === "function") nodeGraphGlGraphPresentSoon();
+  }
+
   function setVolume(id, value) {
     const v = Math.max(0, Math.min(1, Number(value)));
     if (!Number.isFinite(v)) return error("bad-request", "volume needs value 0..1");
@@ -416,6 +444,7 @@
       }
       case "volume": setVolume(id, msg.value); break;
       case "info-style": applyInfoStyle(msg); break;
+      case "display": applyDisplay(id, msg); break;
       case "track": receiveTrack(msg); return;
       case "get-state": emit("state", state(), origin); return;
       default: return error("unknown-type", `unknown message ${msg.type}`);

@@ -67,6 +67,8 @@
   // Free window: this far behind the newest sample, eased back at FREE_EASE per frame.
   const FREE_LAG = 2048;
   const FREE_EASE = 0.05;
+  // Per-frame keep of the arrival-rate average (~1 s at 30 fps).
+  const FREE_RATE_KEEP = 0.97;
 
   function nodeGraphScopeClampTimeMs(value, fallback = TIME_MS_DEFAULT) {
     const n = Number(value);
@@ -116,7 +118,7 @@
 
   /** Per-face sync state (level, hysteresis, Schmitt arm, period, pen). Kept on the face canvas. */
   function nodeGraphScopeSyncState(holder) {
-    const fresh = () => ({ level: NaN, hyst: NaN, armed: false, period: 0, intervals: [], clock: 0, lastEdge: NaN, lockAbs: NaN, freeEnd: NaN, freeTime: 0 });
+    const fresh = () => ({ level: NaN, hyst: NaN, armed: false, period: 0, intervals: [], clock: 0, lastEdge: NaN, lockAbs: NaN, freeEnd: NaN, freeTime: 0, freePrevTotal: NaN, freeSamples: 0, freeSeconds: 0 });
     if (!holder) return fresh();
     if (!holder._scopeSync) holder._scopeSync = fresh();
     return holder._scopeSync;
@@ -280,7 +282,7 @@
     if (!(length > 4) || !edge?.length) return freeOf(fit(timeSamples));
     if (!(opts.sync || cycles > 0)) {
       const total = Number(edge.nodeGraphScopeTotalSampleCount);
-      const base = Number.isFinite(total) && total >= length ? total - length : NaN;
+      const base = Number.isFinite(total) && total > 0 ? total - length : NaN;
       return freeWindow(state, fit(timeSamples), length, base, opts.sampleRate);
     }
     // Search back over enough samples for SEARCH_WINDOWS windows and the period.
@@ -303,9 +305,12 @@
       settlePeriod(state, periodFromEdges(edges, edge, offset + length - 1));
     }
     const n = fit(cycles > 0 && state.period > 0 ? cycles * state.period : timeSamples);
-    // Absolute sample index of index 0 (ring buffers count every sample written).
+    // Absolute sample index of index 0 (ring buffers count every sample
+    // written). Negative while the ring is still filling (its first 10 s):
+    // those older slots are silence. Requiring a full ring left the first 10 s
+    // on the old newest-window / unlocked behaviour (the jitter that settled).
     const total = Number(edge.nodeGraphScopeTotalSampleCount);
-    const base = Number.isFinite(total) && total >= length ? total - length : NaN;
+    const base = Number.isFinite(total) && total > 0 ? total - length : NaN;
     if (!opts.sync) return freeWindow(state, n, length, base, opts.sampleRate);
     state.freeEnd = NaN;
     const last = length - 2 - n;
@@ -320,6 +325,14 @@
           break;
         }
       }
+    }
+    if (chosen < 0 && Number.isFinite(base) && Number.isFinite(state.lockAbs) && period > 0) {
+      // The locked crossing was not detected this frame (the level wandered
+      // past it): keep its phase, whole periods on from the last lock, rather
+      // than jumping to another crossing of the cycle.
+      const k = Math.floor((base + last - state.lockAbs) / period);
+      const projected = state.lockAbs + k * period - base;
+      if (projected >= 1 && projected <= last) chosen = projected;
     }
     if (chosen < 0) {
       for (let k = edges.length - 1; k >= 0; k -= 1) {
@@ -348,8 +361,23 @@
     const now = nowMs();
     const elapsed = (now - (state.freeTime || now)) / 1000;
     state.freeTime = now;
-    const rate = Number(sampleRate) > 0 ? Number(sampleRate) : 48000;
-    if (!Number.isFinite(state.freeEnd) || elapsed > 1 || Math.abs(state.freeEnd - target) > 4 * FREE_LAG) {
+    // Advance at the rate samples really arrive (about a second's average of
+    // the ring's counter), not the nominal rate: a mismatch (48 k assumed,
+    // 44.1 k arriving) ran the window into the newest sample, where it rode
+    // the uneven block arrivals again.
+    const arrived = Number.isFinite(state.freePrevTotal) ? totalNewest - state.freePrevTotal : 0;
+    state.freePrevTotal = totalNewest;
+    const nominal = Number(sampleRate) > 0 ? Number(sampleRate) : 48000;
+    // A jump (the ring filling when audio starts, a seek) is not arrival: it
+    // inflated the average, ran the window into the newest sample, and the
+    // picture rode the blocks until the average decayed (seconds).
+    const plausible = arrived <= Math.max(8192, elapsed * nominal * 3);
+    if (elapsed > 0 && elapsed < 1 && arrived >= 0 && plausible) {
+      state.freeSamples = (state.freeSamples || 0) * FREE_RATE_KEEP + arrived;
+      state.freeSeconds = (state.freeSeconds || 0) * FREE_RATE_KEEP + elapsed;
+    }
+    const rate = state.freeSeconds > 0.25 ? state.freeSamples / state.freeSeconds : nominal;
+    if (!plausible || !Number.isFinite(state.freeEnd) || elapsed > 1 || Math.abs(state.freeEnd - target) > 4 * FREE_LAG) {
       state.freeEnd = target;
     } else {
       state.freeEnd += elapsed * rate;

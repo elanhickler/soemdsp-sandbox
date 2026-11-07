@@ -86,17 +86,25 @@ const nodeGraphSampleWaveformDefaultSettings = Object.freeze({
   // null = whole file (HUD 100%). 0 = one sample. Positive = seconds in view.
   timeWindowSeconds: null,
   scrollLinePosition: "mid",
-  // 0 = hide playhead. CSS px @ zoom 1.
+  // Playhead thickness. 0 = hide playhead. CSS px @ zoom 1.
   scrollLineWidth: 1,
   // Trace core width (+0.5 CSS-px skirt at draw).
   traceWidth: 2,
+  // Colors are HBS (nodeGraphHueBrightnessCss): brightness 0 black → 0.5
+  // full hue → 1 white; saturation 0 grey … 1 full. Foreground = hue/line*.
   hue: 140,
   lineBrightness: 0.5,
+  lineSaturation: 1,
   // Per-sample vertical grid when zoomed in. 0 = hidden.
   gridBrightness: 0.5,
   backgroundHue: 140,
-  // 0…1 plate brightness. 1 is the brightest plate, not white.
-  backgroundBrightness: 0.5,
+  // ≈ the old dark scope-green plate (legacy brightness 0.5).
+  backgroundBrightness: 0.0368,
+  backgroundSaturation: 0.85,
+  playheadHue: 140,
+  playheadBrightness: 1,
+  playheadSaturation: 1,
+  playheadAlpha: 0.88,
   // cornerShape only matters once cornerRadius > 0.
   // edgeSpacing: 0..1 of maxInset (half min-edge); 1 collapses the panel.
   // cornerRadius: 0..1 of maxRadius (half panel min-edge); 1 is fully round.
@@ -110,8 +118,37 @@ const nodeGraphSampleWaveformDefaultSettings = Object.freeze({
   playlistVisibleCount: 8,
 });
 
+/**
+ * Pre-HBS plates stored backgroundBrightness on a dark CRT curve
+ * (hsl(h, 70%, 100·b^3.5 %), capped at 24%). Map that onto HBS brightness
+ * with the same peak channel so old patches keep their plate.
+ */
+function nodeGraphSampleWaveformLegacyPlateBrightness(legacy) {
+  const lightness = Math.min(0.24, Math.max(0, Math.min(1, legacy)) ** 3.5);
+  const target = Math.min(1, lightness * 1.7) ** 2.2;
+  let lo = 0;
+  let hi = 1;
+  for (let i = 0; i < 24; i += 1) {
+    const u = (lo + hi) * 0.5;
+    if (u * u * (3 - 2 * u) < target) lo = u;
+    else hi = u;
+  }
+  return (lo + hi) * 0.25;
+}
+
+function nodeGraphSampleWaveformUnit(value, fallback) {
+  const n = Number(value);
+  return Number.isFinite(n) ? Math.max(0, Math.min(1, n)) : fallback;
+}
+
+function nodeGraphSampleWaveformHue(value, fallback) {
+  const n = Number(value);
+  return Number.isFinite(n) ? ((n % 360) + 360) % 360 : fallback;
+}
+
 function normalizeNodeGraphSampleWaveformSettings(settings = {}) {
   const source = settings && typeof settings === "object" ? settings : {};
+  const defaults = nodeGraphSampleWaveformDefaultSettings;
   const timeWindowSeconds = Number(source.timeWindowSeconds);
   const scrollLineWidth = Number(source.scrollLineWidth);
   const traceWidth = Number(source.traceWidth);
@@ -119,7 +156,13 @@ function normalizeNodeGraphSampleWaveformSettings(settings = {}) {
   const lineBrightness = Number(source.lineBrightness);
   const gridBrightness = Number(source.gridBrightness);
   const backgroundHue = Number(source.backgroundHue);
-  const backgroundBrightness = Number(source.backgroundBrightness);
+  // No saturation key = stored before the HBS plate; convert its brightness.
+  const legacyPlate = source.backgroundSaturation == null
+    && source.backgroundBrightness != null
+    && Number.isFinite(Number(source.backgroundBrightness));
+  const backgroundBrightness = legacyPlate
+    ? nodeGraphSampleWaveformLegacyPlateBrightness(Number(source.backgroundBrightness))
+    : Number(source.backgroundBrightness);
   const cornerRadius = Number(source.cornerRadius);
   const edgeSpacing = Number(source.edgeSpacing);
   const labelInset = Number(source.labelInset);
@@ -160,6 +203,12 @@ function normalizeNodeGraphSampleWaveformSettings(settings = {}) {
     backgroundBrightness: Number.isFinite(backgroundBrightness)
       ? Math.max(0, Math.min(1, backgroundBrightness))
       : nodeGraphSampleWaveformDefaultSettings.backgroundBrightness,
+    lineSaturation: nodeGraphSampleWaveformUnit(source.lineSaturation, defaults.lineSaturation),
+    backgroundSaturation: nodeGraphSampleWaveformUnit(source.backgroundSaturation, defaults.backgroundSaturation),
+    playheadHue: nodeGraphSampleWaveformHue(source.playheadHue, defaults.playheadHue),
+    playheadBrightness: nodeGraphSampleWaveformUnit(source.playheadBrightness, defaults.playheadBrightness),
+    playheadSaturation: nodeGraphSampleWaveformUnit(source.playheadSaturation, defaults.playheadSaturation),
+    playheadAlpha: nodeGraphSampleWaveformUnit(source.playheadAlpha, defaults.playheadAlpha),
     cornerShape: source.cornerShape === "square" ? "square" : "squircle",
     cornerRadius: Number.isFinite(cornerRadius)
       ? clampDisplayUnit01(cornerRadius, nodeGraphSampleWaveformDefaultSettings.cornerRadius)
@@ -406,11 +455,9 @@ function renderNodeGraphSampleWaveformSettingsWindow() {
   );
   setValueUnlessFocused("nodeSampleWaveformLineWidthInput", settings.scrollLineWidth);
   setValueUnlessFocused("nodeSampleWaveformTraceWidthInput", settings.traceWidth);
-  setValueUnlessFocused("nodeSampleWaveformHueInput", settings.hue);
-  setValueUnlessFocused("nodeSampleWaveformLineBrightnessInput", settings.lineBrightness);
+  setValueUnlessFocused("nodeSampleWaveformPlayheadAlphaInput", settings.playheadAlpha);
   setValueUnlessFocused("nodeSampleWaveformGridBrightnessInput", settings.gridBrightness);
-  setValueUnlessFocused("nodeSampleWaveformBackgroundHueInput", settings.backgroundHue);
-  setValueUnlessFocused("nodeSampleWaveformBackgroundBrightnessInput", settings.backgroundBrightness);
+  syncNodeGraphSampleWaveformColorWidgets(settings);
   setValueUnlessFocused("nodeSampleWaveformCornerRadiusInput", settings.cornerRadius);
   setValueUnlessFocused("nodeSampleWaveformEdgeSpacingInput", settings.edgeSpacing);
   setValueUnlessFocused("nodeSampleWaveformLabelInsetInput", settings.labelInset);
@@ -607,24 +654,61 @@ function handleNodeGraphSampleWaveformTraceWidthChange(event) {
   updateNodeGraphSampleWaveformSettings({ traceWidth: value });
 }
 
-function handleNodeGraphSampleWaveformHueChange(event) {
-  updateNodeGraphSampleWaveformSettings({ hue: Number(event.target.value) });
-}
-
-function handleNodeGraphSampleWaveformLineBrightnessChange(event) {
-  updateNodeGraphSampleWaveformSettings({ lineBrightness: Number(event.target.value) });
+function handleNodeGraphSampleWaveformPlayheadAlphaChange(event) {
+  updateNodeGraphSampleWaveformSettings({ playheadAlpha: Number(event.target.value) });
 }
 
 function handleNodeGraphSampleWaveformGridBrightnessChange(event) {
   updateNodeGraphSampleWaveformSettings({ gridBrightness: Number(event.target.value) });
 }
 
-function handleNodeGraphSampleWaveformBackgroundHueChange(event) {
-  updateNodeGraphSampleWaveformSettings({ backgroundHue: Number(event.target.value) });
-}
+// Background / Foreground / Playhead: HBS color widgets (same SoundColorWidget
+// "hbs" channels as Clock / Plot lamps). key → [hue, brightness, saturation].
+const nodeGraphSampleWaveformColorLamps = Object.freeze({
+  background: ["backgroundHue", "backgroundBrightness", "backgroundSaturation"],
+  foreground: ["hue", "lineBrightness", "lineSaturation"],
+  playhead: ["playheadHue", "playheadBrightness", "playheadSaturation"],
+});
 
-function handleNodeGraphSampleWaveformBackgroundBrightnessChange(event) {
-  updateNodeGraphSampleWaveformSettings({ backgroundBrightness: Number(event.target.value) });
+const nodeGraphSampleWaveformColorWidgets = new WeakMap();
+
+function syncNodeGraphSampleWaveformColorWidgets(settings) {
+  const hosts = document.querySelectorAll?.("[data-sample-waveform-color]");
+  if (!hosts?.length || typeof loadNodeGraphTraceDisplayColorWidgetModule !== "function") {
+    return;
+  }
+  loadNodeGraphTraceDisplayColorWidgetModule().then((module) => {
+    const mount = module?.mountColorWidget || window.mountColorWidget;
+    if (typeof mount !== "function") return;
+    for (const host of hosts) {
+      if (!host.isConnected) continue;
+      const keys = nodeGraphSampleWaveformColorLamps[host.getAttribute("data-sample-waveform-color")];
+      if (!keys) continue;
+      const [hueKey, brightKey, satKey] = keys;
+      const color = {
+        h: settings[hueKey],
+        s: settings[satKey] * 100,
+        l: settings[brightKey] * 100,
+      };
+      const existing = nodeGraphSampleWaveformColorWidgets.get(host);
+      if (existing) {
+        if (!existing.drag) existing.setColor(color, false, { preserveHueSample: true });
+        continue;
+      }
+      nodeGraphSampleWaveformColorWidgets.set(host, mount(host, {
+        label: host.getAttribute("data-label") || "",
+        channels: "hbs",
+        ...color,
+        a: 1,
+        defaultHue: nodeGraphSampleWaveformDefaultSettings[hueKey],
+        onChange: (next) => updateNodeGraphSampleWaveformSettings({
+          [hueKey]: Number(next.h),
+          [brightKey]: Number(next.l) / 100,
+          [satKey]: Number(next.s) / 100,
+        }),
+      }));
+    }
+  }).catch(() => {});
 }
 
 function setNodeGraphSampleWaveformCornerShape(shape) {
@@ -742,12 +826,19 @@ function buildNodeGraphSampleWaveformDisplaySettingsBodyHtml() {
           <button id="nodeSampleWaveformPositionRightButton" type="button" data-scroll-position="right" aria-pressed="false">Right</button>
         </span>
       </div>
-      <div class="node-led-settings-row node-sample-waveform-settings-row node-sample-waveform-tune-row" role="group" aria-label="Scroll line thickness">
-        <span>Scroll Line</span>
+      <div class="node-led-settings-row node-sample-waveform-settings-row node-sample-waveform-tune-row" role="group" aria-label="Playhead thickness">
+        <span>Playhead</span>
         <span class="node-sample-waveform-control-widgets">
-          <input id="nodeSampleWaveformLineWidthInput" data-phosphor-number-drag="scrollLineWidth" type="number" inputmode="decimal" step="0.25" min="0" max="16" autocomplete="off" readonly title="Drag to adjust · double-click to type · CSS px @ zoom 1 (0 = hidden)">
+          <input id="nodeSampleWaveformLineWidthInput" data-phosphor-number-drag="scrollLineWidth" type="number" inputmode="decimal" step="0.25" min="0" max="16" autocomplete="off" readonly title="Playhead thickness · drag to adjust · double-click to type · CSS px @ zoom 1 (0 = hidden)">
+          <span>px</span>
         </span>
       </div>
+      <label class="node-led-settings-row node-sample-waveform-settings-row node-sample-waveform-tune-row">
+        <span>Playhead Alpha</span>
+        <span class="node-sample-waveform-control-widgets">
+          <input id="nodeSampleWaveformPlayheadAlphaInput" type="range" min="0" max="1" step="0.01" title="Playhead opacity (0 = invisible, 1 = solid)">
+        </span>
+      </label>
       <div class="node-led-settings-row node-sample-waveform-settings-row node-sample-waveform-tune-row" role="group" aria-label="Trace thickness">
         <span>Trace</span>
         <span class="node-sample-waveform-control-widgets">
@@ -755,35 +846,16 @@ function buildNodeGraphSampleWaveformDisplaySettingsBodyHtml() {
         </span>
       </div>
       <label class="node-led-settings-row node-sample-waveform-settings-row node-sample-waveform-tune-row">
-        <span>Hue</span>
-        <span class="node-sample-waveform-control-widgets">
-          <input id="nodeSampleWaveformHueInput" type="range" min="0" max="360" step="1">
-        </span>
-      </label>
-      <label class="node-led-settings-row node-sample-waveform-settings-row node-sample-waveform-tune-row">
-        <span>Line Brightness</span>
-        <span class="node-sample-waveform-control-widgets">
-          <input id="nodeSampleWaveformLineBrightnessInput" type="range" min="0" max="1" step="0.01">
-        </span>
-      </label>
-      <label class="node-led-settings-row node-sample-waveform-settings-row node-sample-waveform-tune-row">
         <span>Grid Brightness</span>
         <span class="node-sample-waveform-control-widgets">
           <input id="nodeSampleWaveformGridBrightnessInput" type="range" min="0" max="1" step="0.01" title="Sample grid lines when zoomed in (0 = hidden)">
         </span>
       </label>
-      <label class="node-led-settings-row node-sample-waveform-settings-row node-sample-waveform-tune-row">
-        <span>BG Hue</span>
-        <span class="node-sample-waveform-control-widgets">
-          <input id="nodeSampleWaveformBackgroundHueInput" type="range" min="0" max="360" step="1">
-        </span>
-      </label>
-      <label class="node-led-settings-row node-sample-waveform-settings-row node-sample-waveform-tune-row">
-        <span>BG Brightness</span>
-        <span class="node-sample-waveform-control-widgets">
-          <input id="nodeSampleWaveformBackgroundBrightnessInput" type="range" min="0" max="1" step="0.01">
-        </span>
-      </label>
+      <div class="node-trace-display-hbs-row node-sample-waveform-color-row" style="--color-row-cells:3" data-color-row-cells="3">
+        <div class="node-trace-display-hsl-lamp node-trace-display-color-widget-host" data-sample-waveform-color="background" data-label="Background" role="group" aria-label="Background color"></div>
+        <div class="node-trace-display-hsl-lamp node-trace-display-color-widget-host" data-sample-waveform-color="foreground" data-label="Foreground" role="group" aria-label="Foreground color"></div>
+        <div class="node-trace-display-hsl-lamp node-trace-display-color-widget-host" data-sample-waveform-color="playhead" data-label="Playhead" role="group" aria-label="Playhead color"></div>
+      </div>
       ${buildNodeGraphSampleWaveformCornerChromeHtml()}
       <label class="node-led-settings-row node-sample-waveform-settings-row node-sample-waveform-tune-row">
         <span>Label inset</span>
@@ -830,16 +902,10 @@ function bindNodeGraphSampleWaveformDisplaySettingsBody(host) {
     host.dataset.sampleWaveformSettingsBound = "true";
     host.addEventListener("input", (event) => {
       const id = event.target?.id || "";
-      if (id === "nodeSampleWaveformHueInput") {
-        handleNodeGraphSampleWaveformHueChange(event);
-      } else if (id === "nodeSampleWaveformLineBrightnessInput") {
-        handleNodeGraphSampleWaveformLineBrightnessChange(event);
+      if (id === "nodeSampleWaveformPlayheadAlphaInput") {
+        handleNodeGraphSampleWaveformPlayheadAlphaChange(event);
       } else if (id === "nodeSampleWaveformGridBrightnessInput") {
         handleNodeGraphSampleWaveformGridBrightnessChange(event);
-      } else if (id === "nodeSampleWaveformBackgroundHueInput") {
-        handleNodeGraphSampleWaveformBackgroundHueChange(event);
-      } else if (id === "nodeSampleWaveformBackgroundBrightnessInput") {
-        handleNodeGraphSampleWaveformBackgroundBrightnessChange(event);
       } else if (id === "nodeSampleWaveformCornerRadiusInput") {
         handleNodeGraphSampleWaveformCornerRadiusChange(event);
       } else if (id === "nodeSampleWaveformEdgeSpacingInput") {
@@ -1189,11 +1255,8 @@ const nodeGraphSampleWaveformSettingInputs = Object.freeze([
   ["nodeSampleWaveformTimeWindowInput", "timeWindowSeconds"],
   ["nodeSampleWaveformLineWidthInput", "scrollLineWidth"],
   ["nodeSampleWaveformTraceWidthInput", "traceWidth"],
-  ["nodeSampleWaveformHueInput", "hue"],
-  ["nodeSampleWaveformLineBrightnessInput", "lineBrightness"],
+  ["nodeSampleWaveformPlayheadAlphaInput", "playheadAlpha"],
   ["nodeSampleWaveformGridBrightnessInput", "gridBrightness"],
-  ["nodeSampleWaveformBackgroundHueInput", "backgroundHue"],
-  ["nodeSampleWaveformBackgroundBrightnessInput", "backgroundBrightness"],
   ["nodeSampleWaveformCornerRadiusInput", "cornerRadius"],
   ["nodeSampleWaveformEdgeSpacingInput", "edgeSpacing"],
   ["nodeSampleWaveformLabelInsetInput", "labelInset"],
@@ -2881,9 +2944,11 @@ function nodeGraphSampleWaveformLineColor(settings, lightness, alpha) {
     : nodeGraphFiniteNumber(defaults.lineBrightness, 0.5);
   const hueRaw = Number(s.hue);
   const hue = Number.isFinite(hueRaw) ? hueRaw : nodeGraphFiniteNumber(defaults.hue, 140);
+  const satRaw = Number(s.lineSaturation);
+  const saturation = Number.isFinite(satRaw) ? satRaw : 1;
   const a = Number(alpha);
   if (typeof nodeGraphHueBrightnessCss === "function") {
-    return nodeGraphHueBrightnessCss(hue, brightness, Number.isFinite(a) ? a : 1);
+    return nodeGraphHueBrightnessCss(hue, brightness, Number.isFinite(a) ? a : 1, saturation);
   }
   const light = Number(lightness);
   const scaledLightness = Math.max(0, Math.min(100, (Number.isFinite(light) ? light : 50)));
@@ -2891,14 +2956,32 @@ function nodeGraphSampleWaveformLineColor(settings, lightness, alpha) {
 }
 
 function nodeGraphSampleWaveformBackgroundColor(settings) {
-  // Brightness 0…1 maps onto a dark CRT plate. Exponential curve keeps the
-  // dark end usable; default 0.5 ≈ old mid (~8.8% lightness). Cap well below
-  // the trace (~85%) so a stored 1.0 (old 0–2 mid, or slider max) cannot
-  // become a solid green/white square that hides the waveform.
+  // HBS plate (Background widget). Legacy dark-curve values are converted in
+  // normalize, so old patches keep their plate.
   const s = normalizeNodeGraphSampleWaveformSettings(settings);
-  const normalized = Math.max(0, Math.min(1, nodeGraphFiniteNumber(s.backgroundBrightness)));
-  const scaledLightness = Math.max(0, Math.min(24, 100 * (normalized ** 3.5)));
-  return `hsl(${s.backgroundHue}, 70%, ${scaledLightness}%)`;
+  if (typeof nodeGraphHueBrightnessCss === "function") {
+    return nodeGraphHueBrightnessCss(s.backgroundHue, s.backgroundBrightness, 1, s.backgroundSaturation);
+  }
+  return `hsl(${s.backgroundHue}, ${Math.round(s.backgroundSaturation * 100)}%, ${(s.backgroundBrightness * 100).toFixed(2)}%)`;
+}
+
+/** Playhead color as GL rgba 0…1 (Playhead widget + Playhead Alpha). */
+function nodeGraphSampleWaveformPlayheadRgba(settings, alphaScale = 1) {
+  const s = normalizeNodeGraphSampleWaveformSettings(settings);
+  const rgb = typeof nodeGraphHueBrightnessRgb01 === "function"
+    ? nodeGraphHueBrightnessRgb01(s.playheadHue, s.playheadBrightness, s.playheadSaturation)
+    : [1, 1, 1];
+  return [rgb[0], rgb[1], rgb[2], s.playheadAlpha * Math.max(0, Math.min(1, alphaScale))];
+}
+
+/**
+ * Playhead core half-width in device px. Thickness is CSS px @ zoom 1 and does
+ * not scale with face size; 1 px keeps the original 0.45 px hairline core.
+ */
+function nodeGraphSampleWaveformPlayheadHalfPx(settings, pixelRatio = 1) {
+  const s = normalizeNodeGraphSampleWaveformSettings(settings);
+  const pr = Number(pixelRatio) > 0 ? Number(pixelRatio) : 1;
+  return Math.max(0.45, s.scrollLineWidth * pr * 0.5 - 0.35);
 }
 
 /**
@@ -3185,7 +3268,7 @@ function drawNodeGraphSampleWaveformDisplay(section) {
   if (showSampleGrid) {
     const gridHue = Number.isFinite(Number(settings.hue)) ? Number(settings.hue) : 140;
     const gridRgba = nodeGraphGlLinesCss(typeof nodeGraphHueBrightnessCss === "function"
-      ? nodeGraphHueBrightnessCss(gridHue, gridBrightness, 0.45)
+      ? nodeGraphHueBrightnessCss(gridHue, gridBrightness, 0.45, settings.lineSaturation)
       : nodeGraphSampleWaveformLineColor(settings, 68, 0.45));
     const firstFrame = Math.ceil(viewStart);
     const lastFrame = Math.floor(viewEnd);
@@ -3249,7 +3332,11 @@ function drawNodeGraphSampleWaveformDisplay(section) {
     const x = (!autoScrollPaused && settings.scrollMode === "smooth")
       ? scrollLineRatio * width
       : frameToX(playheadFrame);
-    nodeGraphGlLinesSegment(batch, x, 0, x, height, 0.45, 0.7, [1, 1, 1, 0.88]);
+    nodeGraphGlLinesSegment(
+      batch, x, 0, x, height,
+      nodeGraphSampleWaveformPlayheadHalfPx(settings, pixelRatio), 0.7,
+      nodeGraphSampleWaveformPlayheadRgba(settings),
+    );
   }
 
   const clickMark = nodeGraphSampleWaveformClickMarks.get(nodeId);
@@ -3260,7 +3347,7 @@ function drawNodeGraphSampleWaveformDisplay(section) {
     } else {
       const cx = frameToX(clickMark.frame);
       if (cx >= -1 && cx <= width + 1) {
-        nodeGraphGlLinesSegment(batch, cx, 0, cx, height, 0.45, 0.7, [1, 1, 1, 1 - age]);
+        nodeGraphGlLinesSegment(batch, cx, 0, cx, height, 0.45, 0.7, nodeGraphSampleWaveformPlayheadRgba(settings, 1 - age));
       }
     }
   }

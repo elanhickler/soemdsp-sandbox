@@ -90,9 +90,10 @@ Commands (host -> iframe):
 | `soemdsp:player:select` | `index`, `play?` | Select a track. |
 | `soemdsp:player:seek` | `seconds` or `position` (0..1) | Move the playhead. |
 | `soemdsp:player:volume` | `value` (0..1) | Player amplitude. |
+| `soemdsp:player:display` | `settings: { key: value }` | Set the Music Player's display settings (the same values its Display Settings panel edits; `state.display` has them all). Playhead: `scrollLineWidth` (CSS px, 0 hides), `playheadAlpha` (0..1), `playheadHue` (deg) / `playheadBrightness` / `playheadSaturation` (0..1). Background: `backgroundHue` / `backgroundBrightness` / `backgroundSaturation`. Foreground: `hue` / `lineBrightness` / `lineSaturation`. Brightness is HBS: 0 black, 0.5 full hue, 1 white. Unknown keys are ignored. Not saved into the patch. |
 | `soemdsp:player:get-state` | - | Replies with a `state` event. |
 
-Events (iframe -> host): `need-track { index, requestId, title }` (lazy mode: send that one track with a `track` reply), `ready { patch, nodeId }`, `state { playing, paused, index, count, title, position, duration, volume, needsGesture }` (4 Hz while changing, and on demand), `error { code, message }` with code `bad-request`, `autoplay-blocked`, `decode`, `no-player`, `unknown-type`, `internal`. Commands sent before boot are queued. `state.needsGesture` is true while the AudioContext is not running.
+Events (iframe -> host): `need-track { index, requestId, title }` (lazy mode: send that one track with a `track` reply), `ready { patch, nodeId }`, `state { playing, paused, index, count, title, position, duration, volume, needsGesture, display }` (4 Hz while changing, and on demand), `error { code, message }` with code `bad-request`, `autoplay-blocked`, `decode`, `no-player`, `unknown-type`, `internal`. Commands sent before boot are queued. `state.needsGesture` is true while the AudioContext is not running.
 
 ### Loading modes
 

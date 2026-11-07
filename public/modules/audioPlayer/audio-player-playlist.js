@@ -2824,13 +2824,13 @@ function nodeGraphAudioPlayerVideoscopePaint(section) {
     nodeGraphGlLinesFillBlack(canvas);
     return;
   }
-  nodeGraphAudioPlayerVideoscopePaintLr(batch, width, height, channels, settings, nodeId);
+  nodeGraphAudioPlayerVideoscopePaintLr(batch, width, height, channels, settings, nodeId, pixelRatio);
   if (!nodeGraphGlLinesEnd(batch)) {
     nodeGraphGlLinesFillBlack(canvas);
   }
 }
 
-function nodeGraphAudioPlayerVideoscopePaintLr(batch, width, height, channels, settings, nodeId) {
+function nodeGraphAudioPlayerVideoscopePaintLr(batch, width, height, channels, settings, nodeId, pixelRatio = 1) {
   const mid = Math.round(height * 0.5);
   const line = nodeGraphGlLinesCss(typeof nodeGraphSampleWaveformLineColor === "function"
     ? nodeGraphSampleWaveformLineColor(settings, 57, 0.28)
@@ -2876,7 +2876,16 @@ function nodeGraphAudioPlayerVideoscopePaintLr(batch, width, height, channels, s
   const playX = win.span > 0
     ? Math.round(((win.playhead - win.start) / win.span) * width)
     : 0;
-  nodeGraphGlLinesRect(batch, playX, 0, 1, height, [1, 1, 1, 0.85]);
+  // Playhead: thickness / color / alpha from the Music Player display settings.
+  const playW = settings && Number(settings.scrollLineWidth) > 0
+    ? Math.max(1, Math.round(Number(settings.scrollLineWidth) * (Number(pixelRatio) > 0 ? Number(pixelRatio) : 1)))
+    : 0;
+  if (playW > 0) {
+    const playRgba = typeof nodeGraphSampleWaveformPlayheadRgba === "function"
+      ? nodeGraphSampleWaveformPlayheadRgba(settings)
+      : [1, 1, 1, 0.85];
+    nodeGraphGlLinesRect(batch, playX - Math.floor((playW - 1) / 2), 0, playW, height, playRgba);
+  }
 }
 
 // Hook runtime status → auto-advance + scrubber live update.
