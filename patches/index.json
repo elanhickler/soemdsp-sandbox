@@ -40,6 +40,15 @@
       "folder": "bugs"
     },
     {
+      "slug": "bugs/jittery plot",
+      "label": "jittery plot",
+      "name": "",
+      "url": "/soemdsp-sandbox/patches/bugs/jittery%20plot.json",
+      "author": "",
+      "emoji": "",
+      "folder": "bugs"
+    },
+    {
       "slug": "bugs/pump limiter sidechain not working",
       "label": "pump limiter sidechain not working",
       "name": "",
@@ -98,6 +107,15 @@
       "label": "decay_envelope_shootout",
       "name": "",
       "url": "/soemdsp-sandbox/patches/demo_patches/decay_envelope_shootout.json",
+      "author": "",
+      "emoji": "",
+      "folder": "demo_patches"
+    },
+    {
+      "slug": "demo_patches/dsf",
+      "label": "dsf",
+      "name": "",
+      "url": "/soemdsp-sandbox/patches/demo_patches/dsf.json",
       "author": "",
       "emoji": "",
       "folder": "demo_patches"
@@ -670,6 +688,14 @@
       "emoji": ""
     },
     {
+      "slug": "dsf",
+      "label": "dsf",
+      "name": "",
+      "url": "/soemdsp-sandbox/patches/demo_patches/dsf.json",
+      "author": "",
+      "emoji": ""
+    },
+    {
       "slug": "dsf buggy",
       "label": "dsf buggy",
       "name": "",
@@ -795,6 +821,14 @@
       "name": "",
       "url": "/soemdsp-sandbox/patches/input-gain-output.json",
       "author": "Sandbox",
+      "emoji": ""
+    },
+    {
+      "slug": "jittery plot",
+      "label": "jittery plot",
+      "name": "",
+      "url": "/soemdsp-sandbox/patches/bugs/jittery%20plot.json",
+      "author": "",
       "emoji": ""
     },
     {
