@@ -31,15 +31,6 @@
       "folder": "Alarm"
     },
     {
-      "slug": "bugs/dsf buggy",
-      "label": "dsf buggy",
-      "name": "",
-      "url": "/soemdsp-sandbox/patches/bugs/dsf%20buggy.json",
-      "author": "",
-      "emoji": "",
-      "folder": "bugs"
-    },
-    {
       "slug": "bugs/jittery plot",
       "label": "jittery plot",
       "name": "",
@@ -49,10 +40,10 @@
       "folder": "bugs"
     },
     {
-      "slug": "bugs/pluck envelope not modulating additive out skew end",
-      "label": "pluck envelope not modulating additive out skew end",
+      "slug": "bugs/keyboard not controling step register pitch",
+      "label": "keyboard not controling step register pitch",
       "name": "",
-      "url": "/soemdsp-sandbox/patches/bugs/pluck%20envelope%20not%20modulating%20additive%20out%20skew%20end.json",
+      "url": "/soemdsp-sandbox/patches/bugs/keyboard%20not%20controling%20step%20register%20pitch.json",
       "author": "",
       "emoji": "",
       "folder": "bugs"
@@ -224,6 +215,15 @@
       "label": "sawtooth_into_resonant_envelope",
       "name": "",
       "url": "/soemdsp-sandbox/patches/demo_patches/sawtooth_into_resonant_envelope.json",
+      "author": "",
+      "emoji": "",
+      "folder": "demo_patches"
+    },
+    {
+      "slug": "demo_patches/stepregister",
+      "label": "stepregister",
+      "name": "",
+      "url": "/soemdsp-sandbox/patches/demo_patches/stepregister.json",
       "author": "",
       "emoji": "",
       "folder": "demo_patches"
@@ -722,14 +722,6 @@
       "emoji": ""
     },
     {
-      "slug": "dsf buggy",
-      "label": "dsf buggy",
-      "name": "",
-      "url": "/soemdsp-sandbox/patches/bugs/dsf%20buggy.json",
-      "author": "",
-      "emoji": ""
-    },
-    {
       "slug": "DSF_brightness_pluck",
       "label": "DSF_brightness_pluck",
       "name": "",
@@ -878,6 +870,14 @@
       "label": "karplus-strong-like-envelope",
       "name": "",
       "url": "/soemdsp-sandbox/patches/demonstration/karplus-strong-like-envelope.json",
+      "author": "",
+      "emoji": ""
+    },
+    {
+      "slug": "keyboard not controling step register pitch",
+      "label": "keyboard not controling step register pitch",
+      "name": "",
+      "url": "/soemdsp-sandbox/patches/bugs/keyboard%20not%20controling%20step%20register%20pitch.json",
       "author": "",
       "emoji": ""
     },
@@ -1062,14 +1062,6 @@
       "label": "ping_vs_power_vs_expo",
       "name": "",
       "url": "/soemdsp-sandbox/patches/demo_patches/ping_vs_power_vs_expo.json",
-      "author": "",
-      "emoji": ""
-    },
-    {
-      "slug": "pluck envelope not modulating additive out skew end",
-      "label": "pluck envelope not modulating additive out skew end",
-      "name": "",
-      "url": "/soemdsp-sandbox/patches/bugs/pluck%20envelope%20not%20modulating%20additive%20out%20skew%20end.json",
       "author": "",
       "emoji": ""
     },
@@ -1390,6 +1382,14 @@
       "label": "starwarsalarm3",
       "name": "",
       "url": "/soemdsp-sandbox/patches/starwarsalarm3.json",
+      "author": "",
+      "emoji": ""
+    },
+    {
+      "slug": "stepregister",
+      "label": "stepregister",
+      "name": "",
+      "url": "/soemdsp-sandbox/patches/demo_patches/stepregister.json",
       "author": "",
       "emoji": ""
     },
