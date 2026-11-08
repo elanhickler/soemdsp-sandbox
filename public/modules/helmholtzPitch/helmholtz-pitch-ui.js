@@ -279,12 +279,12 @@ function nodeGraphPitchDetectorCycleDisplayMode(face) {
   return next;
 }
 
-function createNodeGraphPitchDetectorBody(nodeId) {
+function createNodeGraphPitchDetectorBody(nodeId, nodeType = "helmholtzPitch") {
   const id = String(nodeId || "");
   const body = document.createElement("div");
   body.className = "node-pitch-detector-face node-light-source";
   body.dataset.node = id;
-  body.dataset.nodeType = "helmholtzPitch";
+  body.dataset.nodeType = nodeType;
   body.dataset.pitchDetectorFace = "true";
   body.dataset.pitchDisplayMode = "hz";
   body.dataset.lightSource = "screen";
@@ -294,7 +294,7 @@ function createNodeGraphPitchDetectorBody(nodeId) {
   const lcd = document.createElement("div");
   lcd.className = "node-pitch-detector-lcd node-module-scope-window node-number-readout-face node-value-lcd-face node-light-source";
   lcd.dataset.node = id;
-  lcd.dataset.nodeType = "helmholtzPitch";
+  lcd.dataset.nodeType = nodeType;
   lcd.dataset.valueFaceStyle = "lcd";
   lcd.dataset.lightSource = "screen";
   lcd.setAttribute("aria-hidden", "true");
@@ -327,7 +327,7 @@ function createNodeGraphPitchDetectorBody(nodeId) {
 
   const fidKey = document.createElement("span");
   fidKey.className = "node-pitch-detector-k";
-  fidKey.textContent = "Fid";
+  fidKey.textContent = nodeType === "edgeDetector" ? "Conf" : "Fid";
   const fidVal = document.createElement("strong");
   fidVal.className = "node-pitch-detector-v";
   fidVal.dataset.pitchValue = "fidelity";
@@ -406,7 +406,7 @@ function updateNodeGraphPitchDetectorFacesFromScopeValues(values) {
         continue;
       }
     }
-    const fid = lastByKey.get(`${nodeId}:Fidelity`);
+    const fid = lastByKey.get(`${nodeId}:${body.dataset.nodeType === "edgeDetector" ? "Confidence" : "Fidelity"}`);
     const fidEl = typeof nodeGraphCachedChild === "function"
       ? nodeGraphCachedChild(body, '[data-pitch-value="fidelity"]')
       : body.querySelector?.('[data-pitch-value="fidelity"]');
@@ -443,7 +443,7 @@ function updateNodeGraphPitchDetectorFacesFromScopeValues(values) {
  * After module mount: register LCD for Number Readout paint + cold plate so
  * the black face is never invisible.
  */
-function mountNodeGraphPitchDetectorFace(article, body, nodeId) {
+function mountNodeGraphPitchDetectorFace(article, body, nodeId, nodeType = "helmholtzPitch") {
   if (!article || !body) {
     return;
   }
@@ -452,7 +452,7 @@ function mountNodeGraphPitchDetectorFace(article, body, nodeId) {
     registerNodeGraphModuleScopeSlot(article, {
       nodeId: String(nodeId || body.dataset.node || ""),
       scopeElement: lcd,
-      type: "helmholtzPitch",
+      type: nodeType,
       viewDrag: false,
     });
   }

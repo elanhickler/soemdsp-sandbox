@@ -14,6 +14,7 @@
 #include <soemdsp/soemdsp.hpp>
 #include <soemdsp/math/exp_log.h>
 #include <soemdsp/math/analog_filter_trig.h>
+#include <soemdsp/math/poly_blep.h>
 #include <soemdsp/math/scalar_helpers.h>
 #include <soemdsp/routing/stereo_route.h>
 
@@ -1377,7 +1378,7 @@ extern "C" void soemdsp_hyperbolic_decay_destroy(int handle);
 extern "C" int soemdsp_hyperbolic_decay_is_idle(int handle);
 extern "C" double soemdsp_hyperbolic_decay_sample(
   int handle, double trigger, double duration, double shapeW,
-  double amplitude, double sampleRate
+  double amplitude, double mode, double sampleRate
 );
 
 extern "C" int soemdsp_robin_leaky_envelope_create();
@@ -1595,6 +1596,12 @@ extern "C" void soemdsp_helmholtz_set_params(
 extern "C" void soemdsp_helmholtz_process(int handle, double input);
 extern "C" double soemdsp_helmholtz_frequency(int handle);
 extern "C" double soemdsp_helmholtz_fidelity(int handle);
+extern "C" int soemdsp_edge_detector_create(double sampleRate);
+extern "C" void soemdsp_edge_detector_destroy(int handle);
+extern "C" void soemdsp_edge_detector_process(int handle, double input);
+extern "C" double soemdsp_edge_detector_frequency(int handle);
+extern "C" double soemdsp_edge_detector_confidence(int handle);
+extern "C" double soemdsp_edge_detector_edge(int handle);
 
 
 extern "C" int soemdsp_lorenz_attractor_create();
@@ -2318,6 +2325,7 @@ static const int kTypeBasicShape = 139;
 static const int kTypeChordPad = 140;
 static const int kTypeXyPad = 190; // XY Pad (Papoulis/lattice); was 186 colliding with ellipsoidOsc
 static const int kTypeHelmholtzPitch = 191; // Pitch Detector (MPM) — inc/Frequency/Fidelity/Gate/Detune
+static const int kTypeEdgeDetector = 240; // scope-style rising-edge interval detector
 static const int kTypeHostBpm = 192; // Host/project BPM dump (Circuit::hostTempoBpm)
 static const int kTypeSineWarp = 193; // live warped rectSin / sine + PolyBLAMP
 static const int kTypeTheremin = 194; // XY pad pitch/volume Softwave theremin
@@ -2709,6 +2717,9 @@ struct Node {
   unsigned int stepRegRng;
   unsigned char stepRegSquare;
   unsigned char stepRegWrapped; // waveform wrapped last sample (per-cycle tick)
+  double stepRegAaHeld; // one-sample delayed LFSR wave for edge correction
+  int stepRegAaWave;
+  unsigned char stepRegAaReady;
 };
 
 enum SinkKind : unsigned char { kSinkPort = 0, kSinkControl = 1 };
@@ -3151,6 +3162,8 @@ static void destroy_native_kind_handle(int kind, int handle) {
     soemdsp_pll_destroy(handle);
   } else if (kind == kTypeHelmholtzPitch) {
     soemdsp_helmholtz_destroy(handle);
+  } else if (kind == kTypeEdgeDetector) {
+    soemdsp_edge_detector_destroy(handle);
   } else if (kind == kTypeLorenzAttractor) {
     soemdsp_lorenz_attractor_destroy(handle);
   } else if (kind == kTypeLogisticMap) {
@@ -3488,6 +3501,9 @@ static void init_node_defaults(Node& n, int typeId) {
   n.stepRegRng = 0x9E3779B9u;
   n.stepRegSquare = 0;
   n.stepRegWrapped = 0;
+  n.stepRegAaHeld = 0.0;
+  n.stepRegAaWave = -1;
+  n.stepRegAaReady = 0;
   init_control(n.volumeDb, (typeId == kTypeMixStereo) ? 0.0 : -3.0, false);
   init_control(
     n.pan,
@@ -3637,6 +3653,7 @@ static void init_node_defaults(Node& n, int typeId) {
   init_control(
     n.shape,
     (typeId == kTypePulseTrain) ? 3.0 : // curve (Pulse Train)
+    (typeId == kTypeStepRegister) ? 1.0 : // Antialias On
     (typeId == kTypeResonantCompressor) ? 0.0 : // Impulse (Resonant Compressor)
     (typeId == kTypeXyPad) ? 0.35 // Smoothing (Papoulis amount)
       : (typeId == kTypeSoftpopOscillator) ? 0.5 // Morph
@@ -3704,7 +3721,7 @@ static void init_node_defaults(Node& n, int typeId) {
       : (typeId == kTypeStepGraph) ? 0.0 // curveOffset (CENTER used; shape unused)
       : (typeId == kTypeSampleHold) ? 0.0 // interpolate Linear
       : 0.5,
-    (typeId == kTypeSlewLimiter || typeId == kTypeSineWavetable || typeId == kTypeSinCos)
+    (typeId == kTypeSlewLimiter || typeId == kTypeSineWavetable || typeId == kTypeSinCos || typeId == kTypeStepRegister)
   );
   init_control(
     n.phaseParam,
@@ -5364,6 +5381,10 @@ static int create_native_for_type(int typeId, float sampleRate) {
   if (typeId == kTypeHelmholtzPitch) {
     const double sr = sampleRate < 1.0f ? 44100.0 : (double)sampleRate;
     return soemdsp_helmholtz_create(sr);
+  }
+  if (typeId == kTypeEdgeDetector) {
+    const double sr = sampleRate < 1.0f ? 44100.0 : (double)sampleRate;
+    return soemdsp_edge_detector_create(sr);
   }
   if (typeId == kTypeLorenzAttractor) return soemdsp_lorenz_attractor_create();
   if (typeId == kTypeLogisticMap) return soemdsp_logistic_map_create();
@@ -7379,6 +7400,33 @@ static void additive_generator_apply_mask(
   node.yellowMaskActive = masking ? 1 : 0;
 }
 
+static bool additive_out_has_live_slope_mod(const Circuit& g, const Node& node) {
+  if (!node.hasParamMods) return false;
+  for (int i = 0; i < g.paramModEdgeCount; i++) {
+    const ParamModEdge& e = g.paramModEdges[i];
+    if (!e.used || e.dstHash != node.idHash) continue;
+    if (e.paramId == kParamCenter || e.paramId == kParamInLow
+        || e.paramId == kParamInHigh || e.paramId == kParamResonance
+        || e.paramId == kParamLfoStyle) return true;
+  }
+  return false;
+}
+
+static soemdsp_yellow_graph::SlopeMask additive_out_live_slope(const Node& node) {
+  const float height = (float)control_effective(node.center);
+  float start = (float)control_effective(node.inLow);
+  float end = (float)control_effective(node.inHigh);
+  if (!(start * 0.0f == 0.0f)) start = 1.0f;
+  if (!(end * 0.0f == 0.0f)) end = 32.0f;
+  if (start < 1.0f) start = 1.0f;
+  if (start > soemdsp_yellow_graph::kMaxHarmonics) start = soemdsp_yellow_graph::kMaxHarmonics;
+  if (end > soemdsp_yellow_graph::kMaxHarmonics) end = soemdsp_yellow_graph::kMaxHarmonics;
+  if (end < start + 1.0e-6f) end = start + 1.0e-6f;
+  const double curve = control_effective(node.lfoStyle);
+  return { height, start, end, (float)control_effective(node.resonance),
+    (int)(curve + (curve >= 0.0 ? 0.5 : -0.5)) == 1 ? 1 : 0 };
+}
+
 static int yellow_slope_keep_count(
   Circuit& g, unsigned int fromHash, const soemdsp_yellow_graph::GraphPayload& graph
 );
@@ -7470,6 +7518,7 @@ static int yellow_slope_keep_count(
     if (seen[ni]) continue;
     seen[ni] = 1;
     if (g.nodes[ni].typeId == kTypeAdditiveOut && id != fromHash) {
+      if (additive_out_has_live_slope_mod(g, g.nodes[ni])) return -1;
       const float slope = (float)control_effective(g.nodes[ni].center);
       const float start = (float)control_effective(g.nodes[ni].inLow);
       float end = (float)control_effective(g.nodes[ni].inHigh);
@@ -8038,7 +8087,9 @@ static void process_additive_out(Circuit& g, Node& node, int frames) {
   }
   soemdsp_yellow_graph::graph_copy(node.yellowGraph, g.nodes[srcIdx].yellowGraph);
   // Final frequency-tracked slope: ratio units, so the knee follows pitch.
-  additive_generator_apply_mask(node, prevH > 0 ? prevMaskedAmp : nullptr, prevH);
+  const bool liveSlopeMod = additive_out_has_live_slope_mod(g, node);
+  if (liveSlopeMod) node.yellowMaskActive = 0;
+  else additive_generator_apply_mask(node, prevH > 0 ? prevMaskedAmp : nullptr, prevH);
   const int H = local.harmonics < soemdsp_yellow_graph::kMaxHarmonics
     ? local.harmonics
     : soemdsp_yellow_graph::kMaxHarmonics;
@@ -8085,6 +8136,9 @@ static void process_additive_out(Circuit& g, Node& node, int frames) {
 
   for (int f = 0; f < frames; f += 1) {
     control_frame(g, node, f);
+    const soemdsp_yellow_graph::SlopeMask liveSlope = liveSlopeMod
+      ? additive_out_live_slope(node)
+      : soemdsp_yellow_graph::SlopeMask{};
     if (liveReset) {
       const double rv = g.mixReset[f];
       if (gate_hit(rv, &node.lastReset)) {
@@ -8112,12 +8166,14 @@ static void process_additive_out(Circuit& g, Node& node, int frames) {
       f,
       frames,
       &node.yellowLastHarmonics,
-      &node.yellowWalkSeed
+      &node.yellowWalkSeed,
+      liveSlopeMod ? &liveSlope : nullptr
     );
     node.buf[kPortMono][f] = (double)mono;
     node.buf[kPortLeft][f] = (double)left;
     node.buf[kPortRight][f] = (double)right;
   }
+  if (liveSlopeMod) additive_generator_apply_mask(node, nullptr, 0);
   if (
     local.ratioNoise.active
     || local.phaseNoise.active
@@ -8965,12 +9021,12 @@ static void process_ellipsoid_osc(Circuit& g, Node& node, int frames) {
 // lfoStyle=method (0 Accumulator, 1 Pattern, 2 Random), seed=seed,
 // lfoRate=update Hz (0 = once per waveform cycle; a wired Clock overrides),
 // timeNumerator=span, waveform (0 Square, 1 Pulse, 2 Saw, 3 Tri, 4 Noise,
-// 5 Poly), timeDenominator=LFSR bits, width=pulse width, resonance=amp bits,
+// 5 Poly4), timeDenominator=Noise LFSR bits, width=pulse width, resonance=amp bits,
 // amplitude=level, timingMode=source (0 Auto, 1 Offset, 2 Drawn),
 // feedback=pattern length.
 // Outs: Mono/L/R=Out, Saw=Error (semitones, target vs played), Ramp=Step
 // (1 on tick samples), Square=__Register (0..1), Tri=__Ideal (0..1),
-// Phase01=__Tick (pattern position).
+// Sine=__TargetHz, Trisaw=__PlayedHz, Phase01=__Tick (pattern position).
 static const unsigned int kStepRegLfsrTaps[25] = {
   0u, 0u, 0x3u, 0x6u, 0xCu, 0x14u, 0x30u, 0x60u, 0xB8u, 0x110u, 0x240u,
   0x500u, 0x829u, 0x100Du, 0x2015u, 0x6000u, 0xD008u, 0x12000u, 0x20400u,
@@ -9032,13 +9088,28 @@ static inline int step_reg_clamp_int(int v, int lo, int hi) {
   return v < lo ? lo : (v > hi ? hi : v);
 }
 
+static inline double step_reg_quantize_amp(double value, int bits) {
+  if (bits >= 16) return value;
+  const double levels = (double)(1 << (bits - 1));
+  return dsp_floor(value * levels + 0.5) / levels;
+}
+
+static inline double step_reg_aa_gain(double cyclesPerSample) {
+  if (cyclesPerSample <= 0.4) return 1.0;
+  if (cyclesPerSample >= 0.5) return 0.0;
+  const double x = (0.5 - cyclesPerSample) * 10.0;
+  return x * x * (3.0 - 2.0 * x);
+}
+
+static inline double step_reg_wrap01(double value) {
+  return value >= 1.0 ? value - 1.0 : value;
+}
+
 static void process_step_register(Circuit& g, Node& node, int frames) {
   const double sr = g.sampleRate < 1.0f ? 44100.0 : (double)g.sampleRate;
   const bool liveF = mix_live_port(g, node, kPortF, frames, g.mixF);
-  const bool livePitch = mix_live_port(g, node, kPortPitchCv, frames, g.mixPitch);
   const bool liveReset = mix_live_port(g, node, kPortReset, frames, g.mixReset);
   const bool liveClock = mix_live_port(g, node, kPortTrigger, frames, g.mixTrigger);
-  const double referenceVoltage = circuit_pitch_ref_v(g);
   if (!liveReset) node.lastReset = 0.0;
   if (!liveClock) node.stepRegLastClock = 0.0;
   {
@@ -9062,6 +9133,7 @@ static void process_step_register(Circuit& g, Node& node, int frames) {
     const int wave = step_reg_clamp_int(step_reg_round_int(control_effective(node.waveform)), 0, 5);
     const int lfsrBits = step_reg_clamp_int(step_reg_round_int(control_effective(node.timeDenominator)), 2, 24);
     const int ampBits = step_reg_clamp_int(step_reg_round_int(control_effective(node.resonance)), 1, 16);
+    const bool antialias = control_effective(node.shape) >= 0.5;
     const int source = step_reg_clamp_int(step_reg_round_int(control_effective(node.timingMode)), 0, 2);
     const int patLen = step_reg_clamp_int(step_reg_round_int(control_effective(node.feedback)), 1, 64);
 
@@ -9080,7 +9152,7 @@ static void process_step_register(Circuit& g, Node& node, int frames) {
     double level = control_audio(g, node.amplitude, f);
     if (!(level == level)) level = 0.0;
     double target = resolve_osc_hz(
-      g, f, liveF, livePitch, node.frequency, referenceVoltage, sr
+      g, f, liveF, false, node.frequency, 0.0, sr
     );
     if (target < 0.0) target = -target;
 
@@ -9094,6 +9166,7 @@ static void process_step_register(Circuit& g, Node& node, int frames) {
         node.stepRegErr = 0.0;
         node.stepRegTickAcc = 0.0;
         node.stepRegSquare = 0;
+        node.stepRegAaReady = 0;
         step_reg_reseed(node, control_effective(node.seed));
         tick = true;
       }
@@ -9159,20 +9232,24 @@ static void process_step_register(Circuit& g, Node& node, int frames) {
     }
     const int q = step_reg_clamp_int(node.stepRegQ, 0, maxReg);
 
-    const double played = step_reg_hz(grid, clock, count, (double)q + gridOffset);
-    phase += played / sr;
+    double shiftedRegister = (double)q + gridOffset;
+    if (shiftedRegister < 0.0) shiftedRegister = 0.0;
+    if (shiftedRegister > (double)maxReg) shiftedRegister = (double)maxReg;
+    const double played = step_reg_hz(grid, clock, count, shiftedRegister);
+    const double cyclesPerSample = played / sr;
+    phase += cyclesPerSample;
     int wraps = (int)dsp_floor(phase);
     phase -= (double)wraps;
     if (wraps < 0) wraps = 0;
     if (wraps > 64) wraps = 64;
     node.stepRegWrapped = wraps > 0 ? 1 : 0;
 
+    const unsigned char previousBit = node.stepRegSquare;
     double y = 0.0;
     if (wave == 4 || wave == 5) {
+      const int noiseBits = wave == 5 ? 4 : lfsrBits;
       for (int w = 0; w < wraps; w++) {
-        const unsigned int bit = step_reg_lfsr_step(&node.stepRegLfsr, lfsrBits);
-        if (wave == 4) node.stepRegSquare = (unsigned char)bit;
-        else if (bit) node.stepRegSquare = node.stepRegSquare ? 0 : 1;
+        node.stepRegSquare = (unsigned char)step_reg_lfsr_step(&node.stepRegLfsr, noiseBits);
       }
       y = node.stepRegSquare ? 1.0 : -1.0;
     } else if (wave == 0) {
@@ -9192,9 +9269,60 @@ static void process_step_register(Circuit& g, Node& node, int frames) {
       y = 1.0 - 4.0 * (d < 0.0 ? -d : d);
     }
     y *= level;
-    if (ampBits < 16) {
-      const double levels = (double)(1 << (ampBits - 1));
-      y = dsp_floor(y * levels + 0.5) / levels;
+    y = step_reg_quantize_amp(y, ampBits);
+    if (antialias) {
+      if (cyclesPerSample > 0.0 && cyclesPerSample < 0.5) {
+        const double high = step_reg_quantize_amp(level, ampBits);
+        const double low = step_reg_quantize_amp(-level, ampBits);
+        const double jump = high - low;
+        if (wave == 0) {
+          y += 0.5 * jump * (
+            soemdsp::math::poly_blep(phase, cyclesPerSample)
+            - soemdsp::math::poly_blep(step_reg_wrap01(phase + 0.5), cyclesPerSample)
+          );
+        } else if (wave == 1) {
+          double duty = dsp_floor(pw * count + 0.5) / count;
+          const double minDuty = 1.0 / count;
+          if (duty < minDuty) duty = minDuty;
+          if (duty > 1.0 - minDuty) duty = 1.0 - minDuty;
+          if (count <= 2.0) duty = 0.5;
+          y += 0.5 * jump * (
+            soemdsp::math::poly_blep(phase, cyclesPerSample)
+            - soemdsp::math::poly_blep(step_reg_wrap01(phase + 1.0 - duty), cyclesPerSample)
+          );
+        } else if (wave == 2) {
+          y -= 0.5 * jump * soemdsp::math::poly_blep(phase, cyclesPerSample);
+        } else if (wave == 3) {
+          y += 4.0 * level * cyclesPerSample * (
+            soemdsp::math::poly_blamp(phase, cyclesPerSample)
+            - soemdsp::math::poly_blamp(step_reg_wrap01(phase + 0.5), cyclesPerSample)
+          );
+        } else {
+          // LFSR edges occur only when its bit changes at a cycle wrap.
+          // Delay one sample so the same BLEP can correct both sides of that edge.
+          const bool ready = node.stepRegAaReady && node.stepRegAaWave == wave;
+          const double noise = node.stepRegSquare ? high : low;
+          double output = ready ? node.stepRegAaHeld : noise;
+          double next = noise;
+          if (ready && wraps > 0 && previousBit != node.stepRegSquare) {
+            const double elapsed = phase / cyclesPerSample;
+            const double delta = node.stepRegSquare ? jump : -jump;
+            output += 0.5 * delta * elapsed * elapsed;
+            const double before = 1.0 - elapsed;
+            next -= 0.5 * delta * before * before;
+          }
+          y = output;
+          node.stepRegAaHeld = next;
+          node.stepRegAaWave = wave;
+          node.stepRegAaReady = 1;
+        }
+      } else {
+        node.stepRegAaReady = 0;
+      }
+      if (wave < 4) node.stepRegAaReady = 0;
+      y *= step_reg_aa_gain(cyclesPerSample);
+    } else {
+      node.stepRegAaReady = 0;
     }
 
     double err = 0.0;
@@ -9208,6 +9336,8 @@ static void process_step_register(Circuit& g, Node& node, int frames) {
     node.buf[kPortRamp][f] = tick ? 1.0 : 0.0;
     node.buf[kPortSquare][f] = maxReg > 0 ? (double)q / (double)maxReg : 0.0;
     node.buf[kPortTri][f] = maxReg > 0 ? node.stepRegIdeal / (double)maxReg : 0.0;
+    node.buf[kPortSine][f] = target;
+    node.buf[kPortTrisaw][f] = played;
     node.buf[kPortPhase01][f] = (double)(node.stepRegTickIdx < 0 ? 0 : node.stepRegTickIdx);
   }
   node.phase = phase;
@@ -11069,6 +11199,7 @@ static void process_hyperbolic_decay(Circuit& g, Node& node, int frames) {
       control_audio(g, node.timeDenominator, f),
       control_audio(g, node.shape, f),
       control_audio(g, node.amplitude, f),
+      control_effective(node.mode),
       sr
     );
     node.buf[kPortMono][f] = out;
@@ -11775,6 +11906,22 @@ static void process_helmholtz_pitch(Circuit& g, Node& node, int frames) {
     node.buf[kPortRight][f] = (fid == fid) ? fid : 0.0; // Fidelity
     node.buf[kPortSaw][f] = safeHz > 0.0 ? 1.0 : 0.0; // Gate
     node.buf[kPortRamp][f] = helmholtz_detune(safeHz); // Detune
+  }
+}
+
+static void process_edge_detector(Circuit& g, Node& node, int frames) {
+  if (node.nativeHandle <= 0) return;
+  mix_node_inputs(g, node, frames);
+  for (int f = 0; f < frames; ++f) {
+    control_frame(g, node, f);
+    soemdsp_edge_detector_process(node.nativeHandle, g.mixMono[f]);
+    const double hz = soemdsp_edge_detector_frequency(node.nativeHandle);
+    const double confidence = soemdsp_edge_detector_confidence(node.nativeHandle);
+    node.buf[kPortMono][f] = hz;
+    node.buf[kPortLeft][f] = hz;
+    node.buf[kPortRight][f] = confidence;
+    node.buf[kPortSaw][f] = confidence >= 0.5 && hz > 0.0 ? 1.0 : 0.0;
+    node.buf[kPortRamp][f] = soemdsp_edge_detector_edge(node.nativeHandle);
   }
 }
 
@@ -15706,6 +15853,7 @@ extern "C" int soemdsp_graph_add_node(int handle, unsigned int nodeIdHash, int t
     || typeId == kTypeSoemReverb
     || typeId == kTypePll
     || typeId == kTypeHelmholtzPitch
+    || typeId == kTypeEdgeDetector
     || typeId == kTypeLorenzAttractor
     || typeId == kTypeLogisticMap
     || typeId == kTypeHenonMap
@@ -17348,6 +17496,10 @@ static void dispatch_process_node(Circuit& g, Node& node, int frames) {
     }
     if (node.typeId == kTypeHelmholtzPitch) {
       process_helmholtz_pitch(g, node, frames);
+      return;
+    }
+    if (node.typeId == kTypeEdgeDetector) {
+      process_edge_detector(g, node, frames);
       return;
     }
     if (node.typeId == kTypeLorenzAttractor) {

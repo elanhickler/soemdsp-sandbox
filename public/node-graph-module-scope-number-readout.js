@@ -153,7 +153,8 @@ function paintNodeGraphValueFacesNow(pixelRatio = window.devicePixelRatio || 1) 
       renderer === "numberReadout"
       || type === "numberReadout"
       || type === "valueLcd"
-      || type === "helmholtzPitch";
+      || type === "helmholtzPitch"
+      || type === "edgeDetector";
     const isVectorDot = renderer === "vectorDot" || renderer === "pulseDot" || renderer === "lcdDot";
     if (!isNumberFace && !isVectorDot) {
       continue;
@@ -314,7 +315,7 @@ function nodeGraphNumberReadoutClearBurnPlate(canvas) {
 /** LED (phosphor light) vs LCD (reflective ink) face style for a slot/node. */
 function nodeGraphNumberReadoutFaceStyleForSlot(slot, node = null) {
   const type = String(slot?.type || node?.type || "");
-  if (type === "helmholtzPitch") {
+  if (type === "helmholtzPitch" || type === "edgeDetector") {
     return "lcd";
   }
   if (type === "valueLcd") {
@@ -1372,7 +1373,7 @@ function nodeGraphNumberReadoutLayoutFitText(slot, valueText, decimals, settings
   const digits = nodeGraphNumberReadoutSafeDigits(
     settings?.digits
     ?? settings?.maxDigits
-    ?? (slot?.type === "helmholtzPitch" ? 6 : 8),
+    ?? (["helmholtzPitch", "edgeDetector"].includes(slot?.type) ? 6 : 8),
   );
   const signOpts = typeof nodeGraphNumberReadoutSignOptions === "function"
     ? nodeGraphNumberReadoutSignOptions(settings)
@@ -1397,7 +1398,7 @@ function nodeGraphNumberReadoutGhostPlateText(valueText) {
 
 function nodeGraphNumberReadoutUnitForSlot(slot) {
   // Pitch Detector: "Hz" is a fixed DOM decoration on the Fid row (not LCD unit band).
-  if (slot?.type === "helmholtzPitch") {
+  if (["helmholtzPitch", "edgeDetector"].includes(slot?.type)) {
     return "";
   }
   const connection = nodeGraphModuleScopeConnectionsTo(slot?.nodeId, "In")
@@ -1407,7 +1408,7 @@ function nodeGraphNumberReadoutUnitForSlot(slot) {
   }
   // Standalone Value LED/LCD reading Pitch Frequency may still show Hz under digits.
   const sourceNode = nodeGraphPatchNode(connection.sourceNode);
-  return sourceNode?.type === "helmholtzPitch" && connection.sourcePort === "Frequency"
+  return ["helmholtzPitch", "edgeDetector"].includes(sourceNode?.type) && connection.sourcePort === "Frequency"
     ? "Hz"
     : "";
 }
@@ -1967,7 +1968,7 @@ function drawNodeGraphValueLcdFace(canvas, pen, screenElement, settings, valueTe
   const pitchMode = options && options.pitchMode;
   const centsOff = options && options.cents;
   const centsBand = clampNodeSliderValue(nodeGraphFiniteNumber(settings?.centsBand), 0, 1);
-  if (slot?.type === "helmholtzPitch" && pitchMode === "name" && centsBand > 0.0005) {
+  if (["helmholtzPitch", "edgeDetector"].includes(slot?.type) && pitchMode === "name" && centsBand > 0.0005) {
     nodeGraphPitchDetectorDrawCentsBands(pen, left, top, width, height, centsOff, centsBand);
   }
 
@@ -2109,7 +2110,7 @@ function drawNodeGraphNumberReadoutItem(renderer, item, pixelRatio) {
   const frozen = typeof nodeGraphModuleScopePhosphorFrozen === "function"
     && nodeGraphModuleScopePhosphorFrozen();
   // Pitch Detector: unit toggle Hz → 8ve (MIDI #) → M (note name).
-  const pitchFace = slot?.type === "helmholtzPitch"
+  const pitchFace = ["helmholtzPitch", "edgeDetector"].includes(slot?.type)
     ? (screenElement?.closest?.(".node-pitch-detector-face")
       || document.querySelector?.(
         `.node-pitch-detector-face[data-node="${CSS.escape(String(slot.nodeId || ""))}"]`,
@@ -2121,7 +2122,7 @@ function drawNodeGraphNumberReadoutItem(renderer, item, pixelRatio) {
   // Live format (may be empty/placeholder when paused, bypassed, or capture re-armed).
   // https://github.com/keshikan/DSEG#usage
   let liveValueText;
-  if (slot?.type === "helmholtzPitch" && typeof nodeGraphPitchDetectorFormatDisplay === "function") {
+  if (["helmholtzPitch", "edgeDetector"].includes(slot?.type) && typeof nodeGraphPitchDetectorFormatDisplay === "function") {
     // Live: single DSEG "-" when no pitch / below threshold (not zeros / not em dash).
     // Frozen (speed 0): hold last good — never invent a wipe over a locked reading.
     if (frozen && !hasSample) {
@@ -2169,7 +2170,7 @@ function drawNodeGraphNumberReadoutItem(renderer, item, pixelRatio) {
   // Pitch Detector live DSEG "-" is a real "no lock" glyph: paint it, don't hold.
   let valueText;
   if (
-    slot?.type === "helmholtzPitch"
+    ["helmholtzPitch", "edgeDetector"].includes(slot?.type)
     && !frozen
     && typeof nodeGraphPitchDetectorZeroDisplay === "function"
     && String(liveValueText) === String(nodeGraphPitchDetectorZeroDisplay(pitchMode, decimals))
@@ -2196,8 +2197,8 @@ function drawNodeGraphNumberReadoutItem(renderer, item, pixelRatio) {
     canvas._nodeGraphNumberReadoutFrozenHoldSig = null;
   }
   // Note names need letter glyphs (not DSEG-only).
-  const pitchNameMode = slot?.type === "helmholtzPitch" && pitchMode === "name";
-  const pitchHz = slot?.type === "helmholtzPitch" && hasSample
+  const pitchNameMode = ["helmholtzPitch", "edgeDetector"].includes(slot?.type) && pitchMode === "name";
+  const pitchHz = ["helmholtzPitch", "edgeDetector"].includes(slot?.type) && hasSample
     ? nodeGraphOscilloscopeLatestSample(item.buffer, 0)
     : Number.NaN;
   const pitchCents = pitchNameMode && typeof nodeGraphFrequencyToCentsOff === "function"
@@ -2577,7 +2578,7 @@ function drawNodeGraphNumberReadoutItem(renderer, item, pixelRatio) {
   // ── Present (Value LED) ──
   // Burn plate = previous digits, stamped only on change (step 2).
   // Live digits draw on the face, never onto the burn plate.
-  const pitchNoLockGlyph = slot?.type === "helmholtzPitch"
+  const pitchNoLockGlyph = ["helmholtzPitch", "edgeDetector"].includes(slot?.type)
     && typeof nodeGraphPitchDetectorZeroDisplay === "function"
     && String(valueText) === String(nodeGraphPitchDetectorZeroDisplay(pitchMode, decimals));
   const drawLiveDigits = alpha > 0

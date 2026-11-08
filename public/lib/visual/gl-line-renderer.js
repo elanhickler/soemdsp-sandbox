@@ -1499,7 +1499,8 @@ void main() {
    * A line face in one call (SinCos, SinCos4, DSF, BLIT, Basic Shape,
    * Ellipsoid, Step Register): CSS-px frame on the face canvas, drawn with the
    * app stroke. frame: { cssWidth, cssHeight, background, waveKey?, blur,
-   *   polylines: [{ points, color, width }], dots: [{ x, y, color, radius }] }
+   *   polylines: [{ points, color, width }], dots: [{ x, y, color, radius }],
+   *   texts: [{ text, x, y, px, rgba, align, maxWidth }] }
    * width = full stroke width (0 = no line), blur = Line blur (CSS px).
    */
   function nodeGraphGlLinesPresentFrame(canvas, frame = {}) {
@@ -1538,6 +1539,10 @@ void main() {
       // Dot size 0 = no dot.
       if (!(Number(dot.radius) > 0)) continue;
       nodeGraphGlLinesStroke(batch, [dot.x, dot.y], Math.max(0.5, Number(dot.radius)) * ink, blur, colour(dot.color, "#ffffff"));
+    }
+    for (const label of Array.isArray(frame.texts) ? frame.texts : []) {
+      if (!label || !Number.isFinite(label.x) || !Number.isFinite(label.y)) continue;
+      nodeGraphGlLinesText(batch, label.text, label.x, label.y, label);
     }
     const ok = nodeGraphGlLinesEnd(batch);
     if (!ok && typeof global.nodeGraphDisplayGlFailed === "function") global.nodeGraphDisplayGlFailed(canvas, "line face: draw failed");

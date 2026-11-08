@@ -2323,6 +2323,12 @@ const nodeGraphModuleStoreCatalog = Object.freeze({
     label: "Pitch Detector",
     notes: ["pitch tracking", "pitch detector", "mcleod", "autocorrelation", "frequency follower", "gate"],
   },
+  edgeDetector: {
+    category: "multimeter",
+    description: "Fast edge-interval frequency tracker with confidence, gate, and a scope-reset pulse.",
+    label: "Edge Detector",
+    notes: ["pitch tracking", "scope sync", "frequency", "rising edge", "trigger"],
+  },
   noiseDetector: {
     category: "multimeter",
     description: "Pitch-detector fidelity only: how tonal vs noisy the averaged L/M/R mix is, plus a threshold gate.",
@@ -3660,6 +3666,10 @@ const nodeGraphJsSourceEntriesByType = Object.freeze({
   helmholtzPitch: {
     source: "public/modules/helmholtzPitch/helmholtz-pitch-worklet-evaluator.js",
     sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/helmholtzPitch/helmholtz-pitch-worklet-evaluator.js",
+  },
+  edgeDetector: {
+    source: "native_modules/edge_detector/edge_detector.cpp",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/native_modules/edge_detector/edge_detector.cpp",
   },
   henonMap: {
     source: "native_modules/henon_map/henon_map.cpp",

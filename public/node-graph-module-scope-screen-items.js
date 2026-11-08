@@ -405,6 +405,7 @@ function nodeGraphModuleScopeScreenItems(workspace, canvas, pixelRatio) {
           slot?.type === "numberReadout"
           || slot?.type === "valueLcd"
           || slot?.type === "helmholtzPitch"
+          || slot?.type === "edgeDetector"
           || nodeGraphModuleDisplayRendererForSlot(slot) === "numberReadout"
         ) {
           const face = slot.scopeElement;

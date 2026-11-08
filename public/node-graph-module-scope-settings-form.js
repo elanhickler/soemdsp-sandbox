@@ -241,7 +241,8 @@ function nodeGraphDisplaySettingsBuildStepperRowHtml(key, formType = null, optio
       : null;
     const lcdInk = formType === "lcdDot"
       || nodeType === "valueLcd"
-      || nodeType === "helmholtzPitch";
+      || nodeType === "helmholtzPitch"
+      || nodeType === "edgeDetector";
     label = "Sat";
     title = lcdInk
       ? "LCD ink saturation 0…1. 0 = grey; 1 = full selected color."
@@ -2355,7 +2356,7 @@ function buildNodeGraphDisplaySettingsBodyHtml(formType, node = null) {
           && typeof nodeGraphTraceDisplaySettingsTargetNodeId === "function"
           ? nodeGraphPatchNode(nodeGraphTraceDisplaySettingsTargetNodeId())?.type
           : null);
-      if (nrNodeType === "valueLcd" || nrNodeType === "helmholtzPitch") {
+      if (["valueLcd", "helmholtzPitch", "edgeDetector"].includes(nrNodeType)) {
         // Value LCD (vector): Digits/Decimals + padding, Ghost plate, glass shadow — no residual hang.
         fieldKeys = [
           "digits",
@@ -2365,7 +2366,7 @@ function buildNodeGraphDisplaySettingsBodyHtml(formType, node = null) {
           // Sat lives on the shared hue-title color row (not a duplicate stepper).
           "dot1Brightness",
           "unlitSegments",
-          ...(nrNodeType === "helmholtzPitch" ? ["centsBand"] : []),
+          ...(["helmholtzPitch", "edgeDetector"].includes(nrNodeType) ? ["centsBand"] : []),
           "innerShadowDistance",
           "innerShadowSharpness",
           "innerShadowOffsetX",
@@ -2513,7 +2514,7 @@ function buildNodeGraphDisplaySettingsBodyHtml(formType, node = null) {
           && typeof nodeGraphTraceDisplaySettingsTargetNodeId === "function"
           ? nodeGraphPatchNode(nodeGraphTraceDisplaySettingsTargetNodeId())?.type
           : null;
-        const lcdPlate = nrBgType === "valueLcd" || nrBgType === "helmholtzPitch";
+        const lcdPlate = ["valueLcd", "helmholtzPitch", "edgeDetector"].includes(nrBgType);
         hbsCells.push(nodeGraphDisplaySettingsBuildHueTitleStepperRowHtml({
           title: "Background",
           stepField: "backgroundBrightness",
@@ -2535,7 +2536,7 @@ function buildNodeGraphDisplaySettingsBodyHtml(formType, node = null) {
           && typeof nodeGraphTraceDisplaySettingsTargetNodeId === "function"
           ? nodeGraphPatchNode(nodeGraphTraceDisplaySettingsTargetNodeId())?.type
           : null;
-        const lcdInk = nrNodeType === "valueLcd" || nrNodeType === "helmholtzPitch";
+        const lcdInk = ["valueLcd", "helmholtzPitch", "edgeDetector"].includes(nrNodeType);
         hbsCells.push(nodeGraphDisplaySettingsBuildHueTitleStepperRowHtml({
           title: lcdInk ? "Foreground" : "LED",
           stepField: "dot1Brightness",
@@ -2660,7 +2661,7 @@ function buildNodeGraphDisplaySettingsBodyHtml(formType, node = null) {
         && typeof nodeGraphTraceDisplaySettingsTargetNodeId === "function"
         ? nodeGraphPatchNode(nodeGraphTraceDisplaySettingsTargetNodeId())?.type
         : null;
-      if (nrNodeType !== "valueLcd" && nrNodeType !== "helmholtzPitch") {
+      if (!["valueLcd", "helmholtzPitch", "edgeDetector"].includes(nrNodeType)) {
         rows.push(`
         <div class="metadata-section-title node-trace-display-gradient-title">Ghost Gradient</div>
         <div

@@ -23,6 +23,9 @@ struct State {
   double t;
   double height;
   double lastIn;
+  double latchedDuration;
+  double latchedShape;
+  double latchedAmplitude;
   bool running;
   bool active;
 };
@@ -56,6 +59,9 @@ extern "C" int soemdsp_hyperbolic_decay_create() {
       s.t = 0.0;
       s.height = 0.0;
       s.lastIn = 0.0;
+      s.latchedDuration = 2.0;
+      s.latchedShape = 0.0;
+      s.latchedAmplitude = 1.0;
       s.running = false;
       s.active = true;
       return i + 1;
@@ -75,6 +81,7 @@ extern "C" double soemdsp_hyperbolic_decay_sample(
   double duration,
   double shapeW,
   double amplitude,
+  double mode,
   double sampleRate
 ) {
   if (handle < 1 || handle > kMaxInstances || !gPool[handle - 1].active) return 0.0;
@@ -85,11 +92,15 @@ extern "C" double soemdsp_hyperbolic_decay_sample(
   if (gate_hit(in, &s.lastIn)) {
     s.t = 0.0;
     s.height = gate_hit_velocity();
+    s.latchedDuration = safe(duration);
+    s.latchedShape = safe(shapeW);
+    s.latchedAmplitude = safe(amplitude);
     s.running = true;
   }
   if (!s.running) return 0.0;
 
-  const double dur = maxd(1.0e-6, safe(duration));
+  const bool latch = safe(mode) >= 0.5;
+  const double dur = maxd(1.0e-6, latch ? s.latchedDuration : safe(duration));
   const double x = s.t / dur;
   if (x >= 1.0) {
     s.running = false;
@@ -99,10 +110,10 @@ extern "C" double soemdsp_hyperbolic_decay_sample(
 
   const double start = maxd(1.0e-6, s.height);
   const double end = kEng;
-  const double u = exp_warp01(x, safe(shapeW));
+  const double u = exp_warp01(x, latch ? s.latchedShape : safe(shapeW));
   const double den = (start - end) * u + end;
   const double env = den == 0.0 ? end : (start * end) / den;
-  const double out = env * safe(amplitude);
+  const double out = env * (latch ? s.latchedAmplitude : safe(amplitude));
   return (out * 0.0 == 0.0) ? out : 0.0;
 }
 
@@ -112,6 +123,6 @@ extern "C" int soemdsp_hyperbolic_decay_is_idle(int handle) {
   return (!s.active || !s.running) ? 1 : 0;
 }
 
-extern "C" int soemdsp_hyperbolic_decay_version() { return 1; }
+extern "C" int soemdsp_hyperbolic_decay_version() { return 2; }
 extern "C" const char* soemdsp_hyperbolic_decay_metadata_json() { return kMetadataJson; }
 extern "C" int soemdsp_hyperbolic_decay_metadata_json_size() { return sizeof(kMetadataJson) - 1; }

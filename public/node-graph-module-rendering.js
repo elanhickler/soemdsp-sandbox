@@ -1036,12 +1036,12 @@ function createNodeGraphModuleElement(type, node) {
       ? nodeGraphModuleShouldMountDisplayFace(type, patchNode.ui)
       : !patchNodeUi.oscilloscopeHidden) {
       const pitchFace = typeof createNodeGraphPitchDetectorBody === "function"
-        ? createNodeGraphPitchDetectorBody(node)
+        ? createNodeGraphPitchDetectorBody(node, type)
         : null;
       if (pitchFace) {
         article.append(pitchFace);
         if (typeof mountNodeGraphPitchDetectorFace === "function") {
-          mountNodeGraphPitchDetectorFace(article, pitchFace, node);
+          mountNodeGraphPitchDetectorFace(article, pitchFace, node, type);
         }
       }
     }

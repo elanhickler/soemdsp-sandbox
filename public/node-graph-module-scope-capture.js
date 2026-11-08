@@ -390,7 +390,7 @@ function nodeGraphModuleScopeCapturedBufferForSlot(slot) {
       null;
   }
   // Pitch Detector LCD: own Frequency out (not an external In wire).
-  if (slot?.type === "helmholtzPitch") {
+  if (slot?.type === "helmholtzPitch" || slot?.type === "edgeDetector") {
     return nodeGraphModuleScopeState.buffers.get(`${nodeId}:Frequency`) ||
       nodeGraphModuleScopeState.buffers.get(nodeId) ||
       null;

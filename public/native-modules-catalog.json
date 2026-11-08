@@ -758,6 +758,24 @@
       "noticeUrl": "https://github.com/elanhickler/soemdsp-sandbox/blob/master/docs/THIRD_PARTY.md"
     },
     {
+      "name": "edge_detector",
+      "label": "Edge Detector",
+      "targetType": "edgeDetector",
+      "kind": "analysis",
+      "source": "native_modules/edge_detector/edge_detector.cpp",
+      "sourceUrl": "https://github.com/elanhickler/soemdsp-sandbox/blob/master/native_modules/edge_detector/edge_detector.cpp",
+      "localSourceUrl": "/native_modules/edge_detector/edge_detector.cpp",
+      "libUrl": "",
+      "wasm": "native_modules/edge_detector/edge_detector.wasm",
+      "wasmUrl": "native_modules/edge_detector/edge_detector.wasm",
+      "wasmAvailable": true,
+      "license": "Soundemote Noncommercial",
+      "licenseUrl": "https://github.com/elanhickler/soemdsp-sandbox/blob/master/LICENSE",
+      "upstreamLicense": "",
+      "upstreamLicenseUrl": "",
+      "noticeUrl": "https://github.com/elanhickler/soemdsp-sandbox/blob/master/docs/THIRD_PARTY.md"
+    },
+    {
       "name": "electro_clap",
       "label": "Electro Clap",
       "targetType": "electroClap",

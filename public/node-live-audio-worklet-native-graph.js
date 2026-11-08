@@ -87,6 +87,7 @@ NodeLiveAudioProcessor.NATIVE_GRAPH_TYPE_IDS = Object.freeze({
   ensemble: 189,
   xyPad: 190,
   helmholtzPitch: 191,
+  edgeDetector: 240,
   basicShape: 139,
   chordPad: 140,
   noteGlide: 141,
@@ -713,6 +714,7 @@ NodeLiveAudioProcessor.prototype.mapNativeGraphParamId = function mapNativeGraph
     if (k === "pitchModOverCrossfade") return P.NATIVE_GRAPH_PARAM_LFO_AMPLITUDE;
   }
   if (t === "stepRegister") {
+    if (k === "antialias") return P.NATIVE_GRAPH_PARAM_SHAPE;
     if (k === "frequency") return P.NATIVE_GRAPH_PARAM_FREQUENCY;
     if (k === "bits") return P.NATIVE_GRAPH_PARAM_STAGES;
     if (k === "clock") return P.NATIVE_GRAPH_PARAM_CENTER;
@@ -997,6 +999,12 @@ NodeLiveAudioProcessor.prototype.mapNativeGraphSrcPortId = function mapNativeGra
     if (p === "fidelity" || p === "fid") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_RIGHT;
     if (p === "gate" || p === "g") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_SAW;
     if (p === "detune") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_RAMP;
+  }
+  if (t === "edgeDetector") {
+    if (p === "frequency" || p === "f" || p === "freq") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_LEFT;
+    if (p === "confidence" || p === "conf") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_RIGHT;
+    if (p === "gate" || p === "g") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_SAW;
+    if (p === "edge") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_RAMP;
   }
   if (t === "snowflake") {
     if (p === "x") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_LEFT;
@@ -1598,7 +1606,7 @@ NodeLiveAudioProcessor.prototype.mapNativeGraphDstPortId = function mapNativeGra
       return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_LEFT;
     }
   }
-  if (t === "helmholtzPitch") {
+  if (t === "helmholtzPitch" || t === "edgeDetector") {
     if (p === "in" || p === "mono" || p === "m" || p === "audio") {
       return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_MONO;
     }
@@ -5635,6 +5643,7 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
     }
     if (type === "stepRegister") {
       // See process_step_register in graph_engine.cpp for the slot map.
+      push("antialias", P.NATIVE_GRAPH_PARAM_SHAPE, disc("antialias", 1));
       push("frequency", P.NATIVE_GRAPH_PARAM_FREQUENCY, cont("frequency", 220));
       push("bits", P.NATIVE_GRAPH_PARAM_STAGES, disc("bits", 5));
       push("clock", P.NATIVE_GRAPH_PARAM_CENTER, cont("clock", 4000));
@@ -6219,6 +6228,7 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
       push("decayTime", P.NATIVE_GRAPH_PARAM_TIME_DENOMINATOR, cont("decayTime", 2));
       push("shape", P.NATIVE_GRAPH_PARAM_SHAPE, cont("shape", 0));
       push("amplitude", P.NATIVE_GRAPH_PARAM_AMPLITUDE, cont("amplitude", 1));
+      if (type === "hyperbolicDecay") push("mode", P.NATIVE_GRAPH_PARAM_MODE, disc("mode", 0));
       continue;
     }
     if (type === "robinLeakyEnvelope") {
@@ -9616,6 +9626,8 @@ NodeLiveAudioProcessor.prototype.nativeGraphPortNames = function nativeGraphPort
     if (portId === P.NATIVE_GRAPH_PORT_RAMP) return ["Step"];
     if (portId === P.NATIVE_GRAPH_PORT_SQUARE) return ["__Register"];
     if (portId === P.NATIVE_GRAPH_PORT_TRI) return ["__Ideal"];
+    if (portId === P.NATIVE_GRAPH_PORT_SINE) return ["__TargetHz"];
+    if (portId === P.NATIVE_GRAPH_PORT_TRISAW) return ["__PlayedHz"];
     if (portId === P.NATIVE_GRAPH_PORT_PHASE01) return ["__Tick"];
     return [];
   }
@@ -9690,7 +9702,7 @@ NodeLiveAudioProcessor.prototype.nativeGraphPortNames = function nativeGraphPort
     if (type === "fm") return ["f", "Out", "Mono", "ƒ"];
     if (type === "pitchHz") return ["Out", "Mono", "In"];
     if (type === "pitchManager") return ["f", "ƒ", "Out", "Mono"];
-    if (type === "helmholtzPitch") return ["Frequency", "f", "ƒ", "Out", "Mono"];
+    if (type === "helmholtzPitch" || type === "edgeDetector") return ["Frequency", "f", "ƒ", "Out", "Mono"];
     if (type === "ampDb") return ["Out", "Mono", "In"];
     if (type === "lutCell") return ["Out"];
 
@@ -9761,7 +9773,7 @@ NodeLiveAudioProcessor.prototype.nativeGraphPortNames = function nativeGraphPort
     if (type === "snowflake") return ["X"];
     if (type === "fm") return ["f", "ƒ", "Left"];
     if (type === "pitchManager") return ["f", "ƒ"];
-    if (type === "helmholtzPitch") return ["Frequency", "f", "ƒ", "freq"];
+    if (type === "helmholtzPitch" || type === "edgeDetector") return ["Frequency", "f", "ƒ", "freq"];
     if (type === "clock") return ["Analog Out", "Analog"];
     if (type === "randomClock") return ["Gate"];
     if (type === "triggerCounter") return ["Count"];
@@ -9798,6 +9810,7 @@ NodeLiveAudioProcessor.prototype.nativeGraphPortNames = function nativeGraphPort
     if (type === "robinSinepulse") return ["env", "0-1", "0\u20131", "0..1"];
     if (type === "acidSequencer") return ["pitch", "\u266f/\u266d"];
     if (type === "helmholtzPitch") return ["Fidelity", "fid"];
+    if (type === "edgeDetector") return ["Confidence", "conf"];
     if (type === "sampleHold") return ["Right"];
     if (type === "filterMorphOscillator") return ["Wave R"];
     if (type === "electroSnare" || type === "modalSnare") return ["Snare R"];
@@ -9863,6 +9876,7 @@ NodeLiveAudioProcessor.prototype.nativeGraphPortNames = function nativeGraphPort
     if (type === "acidSequencer") return ["f", "\u0192"];
     if (type === "pitchQuantizer") return ["f", "\u0192"];
     if (type === "helmholtzPitch") return ["Gate", "g"];
+    if (type === "edgeDetector") return ["Gate", "g"];
     if (type === "xyPad") return ["Spike", "T", "Saw"];
     // t-series demux/mux: Saw bus holds combined Digital/Analog openness for Value Line.
     if (type === "t" || /^t([2-9]|1[01])$/.test(type) || /^([2-9]|1[01])t$/.test(type)) {
@@ -9907,6 +9921,7 @@ NodeLiveAudioProcessor.prototype.nativeGraphPortNames = function nativeGraphPort
     if (type === "hostBpm") return ["pitch", "♯/♭"];
     if (type === "rmsMeter") return ["Env Inverted"];
     if (type === "helmholtzPitch") return ["Detune"];
+    if (type === "edgeDetector") return ["Edge"];
     // Pre-level Right hold for face rings (distinct from audio Right).
     if (type === "sampleHold") return ["Right Raw"];
     if (type === "pulseTrain") return ["__End"];
@@ -10086,10 +10101,11 @@ NodeLiveAudioProcessor.prototype.publishNativeGraphScopeTaps = function publishN
       : (type === "sineWavetable" || type === "sinCos" || type === "smoothGraph" || type === "stepGraph"
         || type === "acidSequencer" || type === "fbmField" || type === "clock" || type === "pulseExplosion"
         || type === "robinSinepulse"
-        || type === "ellipsoid" || type === "ellipsoidOsc" || type === "stepRegister" || type === "dsfOscillator" || type === "dsfMorphingOsc"
+        || type === "ellipsoid" || type === "ellipsoidOsc" || type === "dsfOscillator" || type === "dsfMorphingOsc"
         || type === "clockDivider" || type === "triggerDivider"
         ? audioPorts.concat(P.NATIVE_GRAPH_PORT_PHASE01)
         : audioPorts);
+    if (type === "stepRegister") ports.push(P.NATIVE_GRAPH_PORT_TRISAW, P.NATIVE_GRAPH_PORT_PHASE01);
     for (let pi = 0; pi < ports.length; pi += 1) {
       const portId = ports[pi];
       const view = this.bindNativeGraphNodePortView(hash, portId, frames);
@@ -10250,6 +10266,14 @@ NodeLiveAudioProcessor.prototype.publishNativeGraphScopeTaps = function publishN
         ports = facePorts.concat(P.NATIVE_GRAPH_PORT_SAW, P.NATIVE_GRAPH_PORT_RAMP);
       } else if (type === "pulseTrain") {
         ports = facePorts.concat(P.NATIVE_GRAPH_PORT_PHASE01, P.NATIVE_GRAPH_PORT_RAMP, P.NATIVE_GRAPH_PORT_SAW, P.NATIVE_GRAPH_PORT_SQUARE, P.NATIVE_GRAPH_PORT_TRI, P.NATIVE_GRAPH_PORT_SINE, P.NATIVE_GRAPH_PORT_TRISAW, P.NATIVE_GRAPH_PORT_CENTER_SQUARE, P.NATIVE_GRAPH_PORT_IS_IDLE);
+      } else if (type === "stepRegister") {
+        ports = facePorts.concat(
+          P.NATIVE_GRAPH_PORT_SQUARE,
+          P.NATIVE_GRAPH_PORT_TRI,
+          P.NATIVE_GRAPH_PORT_SINE,
+          P.NATIVE_GRAPH_PORT_TRISAW,
+          P.NATIVE_GRAPH_PORT_PHASE01,
+        );
       } else if (
         type === "basicShape" || type === "sineWavetable" || type === "sinCos"
         || type === "smoothGraph" || type === "stepGraph"

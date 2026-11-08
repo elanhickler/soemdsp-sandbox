@@ -2680,7 +2680,7 @@ function syncNodeGraphTraceDisplayColorWidgets(popover = document.getElementById
       // Value LCD Foreground: full color widget (same as Background).
       const lcdNode = liveType === "numberReadout"
         && typeof nodeGraphPatchNode === "function"
-        && ["valueLcd", "helmholtzPitch"].includes(
+        && ["valueLcd", "helmholtzPitch", "edgeDetector"].includes(
           nodeGraphPatchNode(nodeGraphTraceDisplaySettingsTargetNodeId())?.type,
         );
       const hueOnly = liveType === "numberReadout" && field === "dot1Color" && !lcdNode && !wantHbs;

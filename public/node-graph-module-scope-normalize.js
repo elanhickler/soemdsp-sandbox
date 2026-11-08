@@ -2228,7 +2228,7 @@ function nodeGraphLineBurnSettingsForNode(node) {
 function nodeGraphNumberReadoutFaceStyleForNode(node) {
   const type = String(node?.type || "");
   // Pitch Detector is a reflective LCD plate (DSEG + unlit ghost 8s).
-  if (type === "valueLcd" || type === "helmholtzPitch") {
+  if (type === "valueLcd" || type === "helmholtzPitch" || type === "edgeDetector") {
     return "lcd";
   }
   const fromSettings = String(node?.traceDisplaySettings?.faceStyle || "").toLowerCase();
@@ -2239,7 +2239,7 @@ function nodeGraphNumberReadoutFaceStyleForNode(node) {
 }
 
 function nodeGraphNumberReadoutDefaultsForNode(node) {
-  if (String(node?.type || "") === "helmholtzPitch") {
+  if (["helmholtzPitch", "edgeDetector"].includes(String(node?.type || ""))) {
     const lcd = typeof nodeGraphValueLcdSettingsDefaults !== "undefined"
       ? nodeGraphValueLcdSettingsDefaults
       : {};
@@ -2279,7 +2279,7 @@ function nodeGraphNumberReadoutSettingsForNode(node) {
   // and forced ~0.28). Absent/undefined/null get the Pitch Detector default
   // once; explicit 0 stays 0. See SoemMath policy (defaultIfZero is NOT for
   // live knobs). No residualSchema-style marker for this field -- absent-only.
-  if (String(node.type || "") === "helmholtzPitch" && packed.unlitSegments == null) {
+  if (["helmholtzPitch", "edgeDetector"].includes(String(node.type || "")) && packed.unlitSegments == null) {
     const MathH = typeof SoemMath !== "undefined" ? SoemMath : null;
     packed.unlitSegments = MathH && typeof MathH.finiteOr === "function"
       ? MathH.finiteOr(defaults.unlitSegments, 0.28)

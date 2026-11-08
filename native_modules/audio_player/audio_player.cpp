@@ -9,7 +9,7 @@
 // (APP_POLICY §2b) — same as JS peel holding the whole file in RAM.
 // Transport 0–5: Reset / Stop / Pause / Loop / Play / Loop All
 // (5 is play-once at this kernel; playlist wrap is host-side).
-// Readout is linear interpolation (antialias kept on the ABI only).
+// Four-point cubic PCM reconstruction keeps slow playback smooth.
 
 #include <soemdsp/soemdsp.hpp>
 
@@ -167,19 +167,22 @@ static void resolve_range(double start, double end, double* startPhase, double* 
   *span = maxd(kMinSpan, *endPhase - *startPhase);
 }
 
-static double read_linear(const float* buf, int frames, double index) {
+static double read_cubic(const float* buf, int frames, double index) {
   if (!buf || frames <= 1) return 0.0;
   if (index < 0.0) index = 0.0;
   const double maxIndex = (double)(frames - 1);
   if (index > maxIndex) index = maxIndex;
-  const int i0 = (int)dsp_floor(index);
-  int i1 = i0 + 1;
-  if (i1 >= frames) i1 = frames - 1;
-  if (i0 < 0) return (double)buf[0];
-  const double t = index - (double)i0;
-  const double a = (double)buf[i0];
-  const double b = (double)buf[i1];
-  return a + (b - a) * t;
+  const int i = (int)dsp_floor(index);
+  if (i >= frames - 1) return (double)buf[frames - 1];
+  const double t = index - (double)i;
+  const double p0 = (double)buf[i > 0 ? i - 1 : 0];
+  const double p1 = (double)buf[i];
+  const double p2 = (double)buf[i + 1];
+  const double p3 = (double)buf[i + 2 < frames ? i + 2 : frames - 1];
+  const double m1 = 0.5 * (p2 - p0);
+  const double m2 = 0.5 * (p3 - p1);
+  return p1 + t * (m1 + t * (3.0 * (p2 - p1) - 2.0 * m1 - m2
+    + t * (2.0 * (p1 - p2) + m1 + m2)));
 }
 
 static State* slot(int handle) {
@@ -361,8 +364,8 @@ extern "C" double soemdsp_audio_player_sample(
     : clamp(audible, startPhase, endPhase);
 
   const double frameIndex = boundedPhase * (double)(st.pcmFrames - 1);
-  const double leftS = read_linear(st.pcmL, st.pcmFrames, frameIndex);
-  const double rightS = read_linear(st.pcmR ? st.pcmR : st.pcmL, st.pcmFrames, frameIndex);
+  const double leftS = read_cubic(st.pcmL, st.pcmFrames, frameIndex);
+  const double rightS = read_cubic(st.pcmR ? st.pcmR : st.pcmL, st.pcmFrames, frameIndex);
   double amp = safe(amplitude);
   if (!(amp * 0.0 == 0.0) || amp < 0.0) amp = 1.0;
   const double left = playing ? leftS * amp : 0.0;
@@ -419,6 +422,6 @@ extern "C" double soemdsp_audio_player_trigger(int handle) {
   return st ? st->lastTrigger : 0.0;
 }
 
-extern "C" int soemdsp_audio_player_version() { return 1; }
+extern "C" int soemdsp_audio_player_version() { return 2; }
 extern "C" const char* soemdsp_audio_player_metadata_json() { return kMetadataJson; }
 extern "C" int soemdsp_audio_player_metadata_json_size() { return sizeof(kMetadataJson) - 1; }

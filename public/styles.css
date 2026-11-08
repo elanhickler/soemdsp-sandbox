@@ -12807,12 +12807,16 @@ body.room-dimmer-on .node-room-dimmer-canvas,
 }
 
 .node-graph-workspace.gl-graph-on .node-display-canvas,
-.node-module-graph-display svg,
 .node-module-graph-display canvas {
   /* Inline visibility:visible (trace faces) must not paint the full-bleed
      bitmap under the GPU copy. The GPU quad is the picture. */
   visibility: hidden !important;
   border-width: 0;
+}
+
+/* The GPU owns the curve, while SVG points and guides remain interactive. */
+.node-graph-workspace.gl-graph-on .node-module-graph-curve {
+  visibility: hidden;
 }
 
 .node-keypad-face,

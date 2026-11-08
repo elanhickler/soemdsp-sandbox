@@ -92,7 +92,26 @@ function nodeGraphStepRegisterIdeal(node) {
   }
   x -= offset;
   if (!Number.isFinite(x)) x = 0;
-  return { ideal: Math.max(0, Math.min(maxReg, x)), maxReg, grid };
+  const registerHz = (r) => {
+    const shifted = Math.max(0, Math.min(maxReg, r + offset));
+    if (grid === 0) return clock / (shifted + 1);
+    if (grid === 1) return clock * (shifted + 1) / count;
+    return 20 * Math.exp((shifted / maxReg) * Math.log(Math.max(20 * 1.0001, clock) / 20));
+  };
+  const firstHz = registerHz(0);
+  const lastHz = registerHz(maxReg);
+  return {
+    ideal: Math.max(0, Math.min(maxReg, x)), maxReg, grid,
+    minHz: Math.min(firstHz, lastHz), maxHz: Math.max(firstHz, lastHz),
+  };
+}
+
+function nodeGraphStepRegisterFormatHz(value) {
+  if (!Number.isFinite(value)) return "--";
+  const magnitude = Math.abs(value);
+  if (magnitude >= 10000) return `${(value / 1000).toFixed(1)}k`;
+  if (magnitude >= 1000) return `${(value / 1000).toFixed(2)}k`;
+  return value.toFixed(magnitude < 100 ? 1 : 0);
 }
 
 function nodeGraphStepRegisterLive(nodeId, key) {
@@ -113,16 +132,24 @@ function nodeGraphStepRegisterModel(nodeId, node) {
   const steps = nodeGraphStepRegisterSteps(node);
   const calc = nodeGraphStepRegisterIdeal(node);
   const playing = nodeGraphStepRegisterLivePlaying();
+  const fConnected = typeof nodeGraphModuleScopeConnectionsTo === "function"
+    && nodeGraphModuleScopeConnectionsTo(nodeId, "f").length > 0;
   let ideal = calc.ideal;
   let played = Number.NaN;
+  let targetHz = fConnected ? Number.NaN : nodeGraphStepRegisterParam(node, "frequency", 220);
+  let playedHz = Number.NaN;
   let tick = -1;
   if (playing) {
     const liveIdeal = nodeGraphStepRegisterLive(nodeId, "__Ideal");
     const liveReg = nodeGraphStepRegisterLive(nodeId, "__Register");
     const liveTick = nodeGraphStepRegisterLive(nodeId, "__Tick");
+    const liveTarget = nodeGraphStepRegisterLive(nodeId, "__TargetHz");
+    const livePlayedHz = nodeGraphStepRegisterLive(nodeId, "__PlayedHz");
     if (Number.isFinite(liveIdeal)) ideal = liveIdeal * calc.maxReg;
     if (Number.isFinite(liveReg)) played = Math.round(liveReg * calc.maxReg);
     if (Number.isFinite(liveTick)) tick = Math.round(liveTick) % length;
+    if (Number.isFinite(liveTarget)) targetHz = liveTarget;
+    if (Number.isFinite(livePlayedHz)) playedHz = livePlayedHz;
   }
   let center;
   if (source === 2) {
@@ -133,7 +160,8 @@ function nodeGraphStepRegisterModel(nodeId, node) {
     center = Math.round(ideal);
   }
   return {
-    source, length, steps, ideal, played, tick, center,
+    source, length, steps, ideal, played, tick, center, fConnected,
+    targetHz, playedHz, minHz: calc.minHz, maxHz: calc.maxHz,
     maxReg: calc.maxReg,
     // Divide: higher register = lower pitch, so index grows downward.
     downward: calc.grid === 0,
@@ -142,12 +170,13 @@ function nodeGraphStepRegisterModel(nodeId, node) {
 
 function nodeGraphStepRegisterLayout(drawW, drawH, length) {
   const padX = Math.max(4, drawW * 0.04);
-  const padY = Math.max(4, drawH * 0.06);
+  const statusH = drawH < 100 ? 36 : 60;
+  const padY = statusH + 3;
   const innerW = Math.max(4, drawW - padX * 2);
-  const innerH = Math.max(4, drawH - padY * 2);
+  const innerH = Math.max(4, drawH - padY - 4);
   const rows = NODE_GRAPH_STEP_REGISTER_HALF_ROWS * 2 + 1;
   return {
-    padX, padY, innerW, innerH, rows,
+    padX, padY, innerW, innerH, rows, statusH,
     colW: innerW / length,
     rowH: innerH / rows,
   };
@@ -194,6 +223,7 @@ function drawNodeGraphStepRegisterDisplayInner(section) {
   const signature = [
     nodeId, model.source, model.length, model.center, model.ideal.toFixed(3),
     model.played, model.tick, model.downward ? 1 : 0, model.steps.slice(0, model.length).join(","),
+    model.targetHz.toFixed(2), model.playedHz.toFixed(2), model.minHz.toFixed(2), model.maxHz.toFixed(2),
     look.strokePaint, look.backgroundPaint, String(look.lineThickness), String(look.pixelDensity),
     `${Math.round(rawW)}x${Math.round(rawH)}`,
   ].join("|");
@@ -235,6 +265,26 @@ function drawNodeGraphStepRegisterDisplayInner(section) {
   };
   const x0 = L.padX;
   const x1 = L.padX + L.innerW;
+  const below = Number.isFinite(model.minHz) && model.targetHz < model.minHz;
+  const above = Number.isFinite(model.maxHz) && model.targetHz > model.maxHz;
+  const status = model.source === 2 ? "DRAWN MODE: TARGET UNUSED"
+    : model.fConnected && !Number.isFinite(model.targetHz) ? "WAITING FOR ƒ"
+    : below ? "BELOW GRID: RAISE BITS" : above ? "ABOVE GRID" : "IN RANGE";
+  const alert = below || above;
+  const textPx = drawH < 100 ? 9 : 12;
+  const labels = [
+    `TARGET ${nodeGraphStepRegisterFormatHz(model.targetHz)} Hz`,
+    `GRID ${nodeGraphStepRegisterFormatHz(model.minHz)}-${nodeGraphStepRegisterFormatHz(model.maxHz)} Hz`,
+    `PLAYED ${nodeGraphStepRegisterFormatHz(model.playedHz)} Hz  R${Number.isFinite(model.played) ? model.played : "--"}`,
+    status,
+  ];
+  const textColor = [0.8, 0.91, 0.94, 1];
+  const texts = labels.map((label, index) => ({
+    text: label, x: x0, y: (index + 0.5) * L.statusH / labels.length,
+    px: textPx, family: "ui-monospace, monospace", weight: 600,
+    align: "left", maxWidth: L.innerW,
+    rgba: index === 3 && alert ? [1, 0.55, 0.33, 1] : textColor,
+  }));
 
   // Rows: registers that exist are drawn; out-of-range rows are left dark.
   for (let k = -H; k <= H; k += 1) {
@@ -297,6 +347,7 @@ function drawNodeGraphStepRegisterDisplayInner(section) {
     blur: typeof nodeGraphLineSmoothingPx === "function" ? nodeGraphLineSmoothingPx(look, 1) : 1,
     polylines,
     dots,
+    texts,
   });
 }
 
@@ -329,6 +380,7 @@ function nodeGraphStepRegisterInstallEditing(section, target) {
     const p = pointAt(event);
     if (!p) return;
     const L = nodeGraphStepRegisterLayout(section._stepRegisterGeom.drawW, section._stepRegisterGeom.drawH, drag.length);
+    if (p.y < L.padY || p.y > L.padY + L.innerH) return;
     const col = Math.floor((p.x - L.padX) / L.colW);
     if (col < 0 || col >= drag.length) return;
     const k = drag.clear ? 0 : nodeGraphStepRegisterYToRow(L, p.y, drag.downward);

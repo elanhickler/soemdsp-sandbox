@@ -213,6 +213,14 @@ static inline float slope_gain(float ratio, float slope, float start, float end,
   return 1.0f - clamp_f(slope, 0.0f, 1.0f) * linear_filter_shape(x, skew, curveMode);
 }
 
+struct SlopeMask {
+  float height;
+  float start;
+  float end;
+  float skew;
+  int curveMode;
+};
+
 // Exponential 0…1 map. c∈(−1…+1): + = slow start / fast end.
 static inline float skew_exp(float t, float c) {
   return (float)soemdsp::math::exp_curve01((double)t, (double)c);
@@ -2013,7 +2021,8 @@ inline void sum_sample(
   // Previous exclusive live count. <0 = first sample, adopt without reseed.
   // Grown slots are seeded (Phase Entry); they were not phase-ticked while silent.
   int* ioLiveCount = nullptr,
-  unsigned int* ioPhaseRng = nullptr
+  unsigned int* ioPhaseRng = nullptr,
+  const SlopeMask* liveSlope = nullptr
 ) {
   float mOut = 0.0f;
   float lOut = 0.0f;
@@ -2077,6 +2086,10 @@ inline void sum_sample(
       : aFrom;
     if (sampleCutoff) {
       partialAmp *= harmonic_count_gain(i, cutoffEdge);
+    }
+    if (liveSlope && liveSlope->height > 0.0f) {
+      partialAmp *= slope_gain(g.ratio[i], liveSlope->height, liveSlope->start,
+        liveSlope->end, liveSlope->skew, liveSlope->curveMode);
     }
     if (hasAmpNoise) {
       partialAmp += recipe_white_sample(g.ampNoise.seeds[i]) * g.ampNoise.amount;
