@@ -367,8 +367,8 @@ function nodeGraphRenderCircuitPatchList() {
     );
   }
   list.innerHTML = buttons.join("");
-  if (typeof renderNodeGraphMidiKeyboardHeldKeys === "function") {
-    renderNodeGraphMidiKeyboardHeldKeys();
+  if (typeof renderNodeGraphKeyboardHeldKeys === "function") {
+    renderNodeGraphKeyboardHeldKeys();
   }
 }
 

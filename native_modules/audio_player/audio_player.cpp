@@ -9,9 +9,19 @@
 // (APP_POLICY §2b) — same as JS peel holding the whole file in RAM.
 // Transport 0–5: Reset / Stop / Pause / Loop / Play / Loop All
 // (5 is play-once at this kernel; playlist wrap is host-side).
-// Four-point cubic PCM reconstruction keeps slow playback smooth.
+// Playback interpolation (stages / interpolation param):
+//   0 Square        - zero-order hold
+//   1 Linear        - two-point lerp
+//   2 Sinc          - windowed sinc (Blackman, K=16), same kernel as 1D Plot
+//   3 PolyBLEP      - ZOH staircase with 2-sample polyBLEP residuals
+//   7 Tape           - sinc then speed-scaled tilt (shared spectral_tilt).
+//                     Depth d = clamp(log2(1/|speed|)/Range, 0, 1);
+//                     slope_eff = Tilt*d, tone_eff = Tone*d. d==0 bypasses
+//                     the cascade (crossfaded, 8 ms) so 1x matches Sinc.
+// Retired 4 Jitter / 5 Dither / 6 Both load as Sinc (2).
 
 #include <soemdsp/soemdsp.hpp>
+#include <soemdsp/filter/spectral_tilt.h>
 
 #include <stddef.h>
 #include <stdint.h>
@@ -52,6 +62,12 @@ struct State {
   double lastRight;
   double lastPhase;
   double lastTrigger;
+  bool hasLastFrame;
+  double lastFrameIndex;
+  spectral_tilt::State tape;
+  spectral_tilt::Channel tapeL;
+  spectral_tilt::Channel tapeR;
+  double tapeWet;
 };
 
 static State gPool[kMaxInstances];
@@ -149,6 +165,12 @@ static void playback_reset(State& st) {
   st.lastRight = 0.0;
   st.lastPhase = 0.0;
   st.lastTrigger = 0.0;
+  st.hasLastFrame = false;
+  st.lastFrameIndex = 0.0;
+  spectral_tilt::clear(&st.tape);
+  spectral_tilt::clear_channel(&st.tapeL);
+  spectral_tilt::clear_channel(&st.tapeR);
+  st.tapeWet = -1.0;
 }
 
 static void resolve_range(double start, double end, double* startPhase, double* endPhase, double* span) {
@@ -167,22 +189,131 @@ static void resolve_range(double start, double end, double* startPhase, double* 
   *span = maxd(kMinSpan, *endPhase - *startPhase);
 }
 
-static double read_cubic(const float* buf, int frames, double index) {
-  if (!buf || frames <= 1) return 0.0;
-  if (index < 0.0) index = 0.0;
-  const double maxIndex = (double)(frames - 1);
-  if (index > maxIndex) index = maxIndex;
+static const int kSincK = 16; // taps each side; matches plot-display PLOT_SINC_K
+
+static int clip_index(int v, int lo, int hi) {
+  if (v < lo) return lo;
+  if (v > hi) return hi;
+  return v;
+}
+
+// Map a tap index into the play region. Looping wraps (click-free periodic
+// extension). One-shot clamps so we do not bleed samples outside the span.
+static int map_pcm_index(int i, int frames, int looping, int startI, int endI) {
+  if (frames <= 0) return 0;
+  int lo = clip_index(startI, 0, frames - 1);
+  int hi = clip_index(endI, 0, frames - 1);
+  if (hi < lo) {
+    const int tmp = lo;
+    lo = hi;
+    hi = tmp;
+  }
+  if (looping) {
+    const int n = hi - lo + 1;
+    if (n <= 1) return lo;
+    int rel = i - lo;
+    rel %= n;
+    if (rel < 0) rel += n;
+    return lo + rel;
+  }
+  return clip_index(i, lo, hi);
+}
+
+static double sinc_blackman(double x) {
+  if (dsp_fabs(x) < 1.0e-9) return 1.0;
+  if (dsp_fabs(x) >= (double)kSincK) return 0.0;
+  const double u = x / (double)kSincK;
+  const double win = 0.42 + 0.5 * dsp_cos(kPi * u) + 0.08 * dsp_cos(2.0 * kPi * u);
+  return (dsp_sin(kPi * x) / (kPi * x)) * win;
+}
+
+// mode: 0 Square, 1 Linear, 2 Sinc, 3 PolyBLEP; 7 Tape is remapped to Sinc here.
+static const int kPolyblepMaxDt = 16;
+
+static double blep_after(double t, double dt) {
+  if (!(dt > 1.0e-12) || t < 0.0 || t >= dt) return 0.0;
+  const double u = t / dt;
+  return u + u - u * u - 1.0;
+}
+
+static double blep_before(double t, double dt) {
+  if (!(dt > 1.0e-12) || t <= 0.0 || t >= dt) return 0.0;
+  const double u = -t / dt;
+  return u * u + u + u + 1.0;
+}
+
+static double read_pcm(
+  const float* buf,
+  int frames,
+  double index,
+  int mode,
+  int looping,
+  int startI,
+  int endI,
+  double frameIncrement
+) {
+  if (!buf || frames <= 0) return 0.0;
+  if (!(index * 0.0 == 0.0)) return 0.0;
   const int i = (int)dsp_floor(index);
-  if (i >= frames - 1) return (double)buf[frames - 1];
   const double t = index - (double)i;
-  const double p0 = (double)buf[i > 0 ? i - 1 : 0];
-  const double p1 = (double)buf[i];
-  const double p2 = (double)buf[i + 1];
-  const double p3 = (double)buf[i + 2 < frames ? i + 2 : frames - 1];
-  const double m1 = 0.5 * (p2 - p0);
-  const double m2 = 0.5 * (p3 - p1);
-  return p1 + t * (m1 + t * (3.0 * (p2 - p1) - 2.0 * m1 - m2
-    + t * (2.0 * (p1 - p2) + m1 + m2)));
+  if (mode <= 0) {
+    return (double)buf[map_pcm_index(i, frames, looping, startI, endI)];
+  }
+  if (mode == 1) {
+    const double a = (double)buf[map_pcm_index(i, frames, looping, startI, endI)];
+    const double b = (double)buf[map_pcm_index(i + 1, frames, looping, startI, endI)];
+    return a + (b - a) * t;
+  }
+  if (mode == 3) {
+    const double dt = dsp_fabs(frameIncrement);
+    if (!(dt > 1.0e-12)) {
+      return (double)buf[map_pcm_index(i, frames, looping, startI, endI)];
+    }
+    if (dt > (double)kPolyblepMaxDt) {
+      const double a = (double)buf[map_pcm_index(i, frames, looping, startI, endI)];
+      const double b = (double)buf[map_pcm_index(i + 1, frames, looping, startI, endI)];
+      return a + (b - a) * t;
+    }
+    auto sample_at = [&](int idx) -> double {
+      return (double)buf[map_pcm_index(idx, frames, looping, startI, endI)];
+    };
+    double y = sample_at(i);
+    int span = (int)dsp_floor(dt) + 1;
+    if (span < 1) span = 1;
+    if (span > kPolyblepMaxDt) span = kPolyblepMaxDt;
+    if (frameIncrement >= 0.0) {
+      for (int k = i; k >= i - span; k -= 1) {
+        const double dist = index - (double)k;
+        if (dist < 0.0 || dist >= dt) continue;
+        y += 0.5 * (sample_at(k) - sample_at(k - 1)) * blep_after(dist, dt);
+      }
+      for (int k = i + 1; k <= i + 1 + span; k += 1) {
+        const double dist = (double)k - index;
+        if (dist <= 0.0 || dist >= dt) continue;
+        y += 0.5 * (sample_at(k) - sample_at(k - 1)) * blep_before(dist, dt);
+      }
+    } else {
+      for (int k = i + 1; k <= i + 1 + span; k += 1) {
+        const double dist = (double)k - index;
+        if (dist < 0.0 || dist >= dt) continue;
+        y += 0.5 * (sample_at(k - 1) - sample_at(k)) * blep_after(dist, dt);
+      }
+      for (int k = i; k >= i - span; k -= 1) {
+        const double dist = index - (double)k;
+        if (dist <= 0.0 || dist >= dt) continue;
+        y += 0.5 * (sample_at(k - 1) - sample_at(k)) * blep_before(dist, dt);
+      }
+    }
+    if (!(y * 0.0 == 0.0)) return 0.0;
+    return y;
+  }
+  double acc = 0.0;
+  for (int m = -kSincK + 1; m <= kSincK; m += 1) {
+    const double h = sinc_blackman(t - (double)m);
+    if (h == 0.0) continue;
+    acc += (double)buf[map_pcm_index(i + m, frames, looping, startI, endI)] * h;
+  }
+  return acc;
 }
 
 static State* slot(int handle) {
@@ -193,6 +324,71 @@ static State* slot(int handle) {
 }
 
 }  // namespace
+
+
+
+static void tape_clear(State& st) {
+  st.hasLastFrame = false;
+  st.lastFrameIndex = 0.0;
+  spectral_tilt::clear(&st.tape);
+  spectral_tilt::clear_channel(&st.tapeL);
+  spectral_tilt::clear_channel(&st.tapeR);
+  st.tapeWet = -1.0;
+}
+
+static double tape_clamp_tilt(double tilt) {
+  double n = safe(tilt);
+  if (!(n * 0.0 == 0.0)) n = -6.0;
+  if (n > 0.0) n = 0.0;
+  if (n < -24.0) n = -24.0;
+  return n;
+}
+
+static double tape_clamp_tone(double tone) {
+  double n = safe(tone);
+  if (!(n * 0.0 == 0.0)) n = -6.0;
+  if (n > 1.0) n = 1.0;
+  if (n < -6.0) n = -6.0;
+  return n;
+}
+
+static double tape_clamp_range(double range) {
+  double n = safe(range);
+  if (!(n * 0.0 == 0.0)) n = 1.0;
+  if (n < 0.25) n = 0.25;
+  if (n > 6.0) n = 6.0;
+  return n;
+}
+
+static double tape_depth(double speed, double range) {
+  const double r = tape_clamp_range(range);
+  double s = dsp_fabs(safe(speed));
+  if (!(s * 0.0 == 0.0) || s < 1.0e-12) return 1.0;
+  if (s >= 1.0) return 0.0;
+  double d = -dsp_ln(s) * 1.44269504088896340736 / r;
+  if (d < 0.0) d = 0.0;
+  if (d > 1.0) d = 1.0;
+  return d;
+}
+
+static double tape_cutoff_hz(double speed, double pcmRate, double engineRate) {
+  const double srcNyq = 0.5 * (pcmRate > 1.0 ? pcmRate : 44100.0);
+  const double outSr = engineRate > 1.0 ? engineRate : 44100.0;
+  const double outNyq = 0.5 * outSr;
+  double cutoff = srcNyq * dsp_fabs(speed);
+  if (cutoff > outNyq) cutoff = outNyq;
+  return cutoff;
+}
+
+static double tape_knee_hz(double speed, double pcmRate, double engineRate, double tone) {
+  const double cutoff = tape_cutoff_hz(speed, pcmRate, engineRate);
+  double knee = cutoff * dsp_exp(tape_clamp_tone(tone) * 0.693147180559945309417);
+  if (knee < 1.0) knee = 1.0;
+  const double outSr = engineRate > 1.0 ? engineRate : 44100.0;
+  const double maxKnee = 0.45 * outSr;
+  if (knee > maxKnee) knee = maxKnee;
+  return knee;
+}
 
 extern "C" int soemdsp_audio_player_create() {
   for (int i = 0; i < kMaxInstances; i += 1) {
@@ -287,9 +483,15 @@ extern "C" double soemdsp_audio_player_sample(
   double phaseSkip,
   double playlistScrub,
   double antialias,
-  double engineSampleRate
+  double engineSampleRate,
+  double tone,
+  double tilt,
+  double range
 ) {
-  (void)antialias;
+  int interp = (int)dsp_floor(safe(antialias) + 0.5);
+  if (interp < 0) interp = 0;
+  if (interp > 7) interp = 7;
+  if (interp >= 4 && interp <= 6) interp = 2;
   State* stPtr = slot(handle);
   if (!stPtr) return 0.0;
   State& st = *stPtr;
@@ -329,6 +531,7 @@ extern "C" double soemdsp_audio_player_sample(
   if (resetEdge || transportReset || transportStopped) {
     st.phase = startPhase;
     st.completed = false;
+    tape_clear(st);
   }
   st.lastReset = resetV;
 
@@ -364,8 +567,60 @@ extern "C" double soemdsp_audio_player_sample(
     : clamp(audible, startPhase, endPhase);
 
   const double frameIndex = boundedPhase * (double)(st.pcmFrames - 1);
-  const double leftS = read_cubic(st.pcmL, st.pcmFrames, frameIndex);
-  const double rightS = read_cubic(st.pcmR ? st.pcmR : st.pcmL, st.pcmFrames, frameIndex);
+  const int startI = (int)dsp_floor(startPhase * (double)(st.pcmFrames - 1) + 1.0e-12);
+  const int endI = (int)dsp_floor(endPhase * (double)(st.pcmFrames - 1) + 1.0e-12);
+  const int looping = transportLooping ? 1 : 0;
+  const double frameIncrement = increment * (double)(st.pcmFrames - 1);
+  if (st.hasLastFrame) {
+    const double expected = st.lastFrameIndex + frameIncrement;
+    const double err = dsp_fabs(frameIndex - expected);
+    const double spanFrames = (double)(endI - startI + 1);
+    const bool loopWrap = looping && err > 0.5 * (spanFrames > 1.0 ? spanFrames : 1.0);
+    if (err > 8.0 && !loopWrap) tape_clear(st);
+  }
+  st.lastFrameIndex = frameIndex;
+  st.hasLastFrame = true;
+  int readMode = interp == 7 ? 2 : interp;
+  double leftS = read_pcm(st.pcmL, st.pcmFrames, frameIndex, readMode, looping, startI, endI, frameIncrement);
+  double rightS = read_pcm(st.pcmR ? st.pcmR : st.pcmL, st.pcmFrames, frameIndex, readMode, looping, startI, endI, frameIncrement);
+  if (interp == 7) {
+    const double depth = tape_depth(speed, range);
+    const double slopeEff = tape_clamp_tilt(tilt) * depth;
+    const double toneEff = tape_clamp_tone(tone) * depth;
+    const double cutoff = tape_cutoff_hz(speed, st.pcmRate, engineRate);
+    spectral_tilt::update(
+      &st.tape,
+      tape_knee_hz(speed, st.pcmRate, engineRate, toneEff),
+      slopeEff,
+      engineRate,
+      spectral_tilt::kStyleKnee,
+      spectral_tilt::kLevelMatched,
+      1.0,
+      cutoff
+    );
+    const double wetTarget = depth > 0.0 ? 1.0 : 0.0;
+    const double fadeA = 1.0 - dsp_exp(-1.0 / (spectral_tilt::kSmoothS * engineRate));
+    if (!(st.tapeWet * 0.0 == 0.0) || st.tapeWet < 0.0) {
+      st.tapeWet = wetTarget;
+    } else {
+      st.tapeWet += fadeA * (wetTarget - st.tapeWet);
+    }
+    if (st.tapeWet < 1.0e-12) {
+      st.tapeWet = 0.0;
+    } else {
+      const double leftW = spectral_tilt::process(&st.tape, &st.tapeL, leftS);
+      const double rightW = spectral_tilt::process(&st.tape, &st.tapeR, rightS);
+      if (st.tapeWet > 1.0 - 1.0e-12) {
+        leftS = leftW;
+        rightS = rightW;
+      } else {
+        leftS = leftS + st.tapeWet * (leftW - leftS);
+        rightS = rightS + st.tapeWet * (rightW - rightS);
+      }
+    }
+  } else if (st.tape.ready) {
+    tape_clear(st);
+  }
   double amp = safe(amplitude);
   if (!(amp * 0.0 == 0.0) || amp < 0.0) amp = 1.0;
   const double left = playing ? leftS * amp : 0.0;

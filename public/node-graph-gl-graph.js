@@ -454,7 +454,7 @@ function nodeGraphGlGraphRebuildChrome() {
     }
     // Piano Keyboard: no key elements; keyboard-face-gl.js draws its key model
     // into this surface box (rects from the same layout as the hit test).
-    const keyboardSurface = el.querySelector(".node-midi-keyboard-module .node-midi-keyboard-surface");
+    const keyboardSurface = el.querySelector(".node-keyboard-module .node-keyboard-surface");
     const keyboardBox = keyboardSurface ? nodeGraphGlGraphWorldBox(keyboardSurface) : null;
     if (keyboardBox) {
       keyboards.push({ surface: keyboardSurface, x: keyboardBox.x, y: keyboardBox.y, w: keyboardBox.w, h: keyboardBox.h });
@@ -1087,7 +1087,7 @@ function nodeGraphGlGraphDrawChrome(batch, toX, toY, zoom, cssW, cssH) {
     const w = kb.w * zoom;
     const h = kb.h * zoom;
     if (nodeGraphGlGraphOutside(x, y, w, h, cssW, cssH)) continue;
-    if (typeof nodeGraphMidiKeyboardGlDraw === "function") nodeGraphMidiKeyboardGlDraw(batch, kb.surface, x, y, w, h);
+    if (typeof nodeGraphKeyboardGlDraw === "function") nodeGraphKeyboardGlDraw(batch, kb.surface, x, y, w, h);
   }
   const graphList = chrome.graphs || [];
   for (let i = 0; i < graphList.length; i += 1) {
@@ -1099,22 +1099,41 @@ function nodeGraphGlGraphDrawChrome(batch, toX, toY, zoom, cssW, cssH) {
     if (nodeGraphGlGraphOutside(x, y, w, h, cssW, cssH)) continue;
     nodeGraphGlGraphDrawOver(batch, () => {
       nodeGraphGlLinesRect(batch, x, y, w, h, [0.04, 0.05, 0.07, 1]);
-    const patchNode = typeof nodeGraphPatchNode === "function" ? nodeGraphPatchNode(face.id) : null;
-    const graph = patchNode && typeof nodeGraphGraphForNode === "function"
-      ? nodeGraphGraphForNode(patchNode)
-      : null;
-    const samples = 32;
-    if (graph && typeof nodeGraphGraphValueAt === "function") {
+      const patchNode = typeof nodeGraphPatchNode === "function" ? nodeGraphPatchNode(face.id) : null;
+      const graph = patchNode && typeof nodeGraphGraphForNode === "function"
+        ? nodeGraphGraphForNode(patchNode)
+        : null;
+      if (!graph || typeof nodeGraphGraphValueAt !== "function") return;
+      const zoomSettings = typeof nodeGraphGraphFaceDisplaySettingsForNode === "function"
+        ? nodeGraphGraphFaceDisplaySettingsForNode(patchNode)
+        : null;
+      const toBox = (gx, gy) => {
+        const pt = typeof nodeGraphGraphPointToSvg === "function"
+          ? nodeGraphGraphPointToSvg(gx, gy, zoomSettings)
+          : { x: 8 + gx * 84, y: 92 - gy * 84 };
+        return {
+          x: x + (Number(pt.x) / 100) * w,
+          y: y + (Number(pt.y) / 100) * h,
+        };
+      };
+      const smoothingMode = typeof nodeGraphGraphSmoothingModeForNode === "function"
+        ? nodeGraphGraphSmoothingModeForNode(patchNode)
+        : undefined;
+      const tensionRaw = Number(patchNode && patchNode.params ? patchNode.params.tension : undefined);
+      const tension = Number.isFinite(tensionRaw) ? tensionRaw : 1;
+      const segmentOptions = typeof nodeGraphGraphSegmentOptionsForNode === "function"
+        ? nodeGraphGraphSegmentOptionsForNode(patchNode)
+        : {};
+      const samples = 96;
       const pts = new Float32Array(samples * 2);
       for (let s = 0; s < samples; s += 1) {
         const u = s / (samples - 1);
-        const v = Number(nodeGraphGraphValueAt(graph, u));
-        const yy = Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : 0;
-        pts[s * 2] = x + u * w;
-        pts[s * 2 + 1] = y + (1 - yy) * h;
+        const v = Number(nodeGraphGraphValueAt(graph, u, smoothingMode, tension, segmentOptions));
+        const mapped = toBox(u, Number.isFinite(v) ? v : 0);
+        pts[s * 2] = mapped.x;
+        pts[s * 2 + 1] = mapped.y;
       }
       nodeGraphGlLinesPolyline(batch, pts, Math.max(0.8, zoom * 0.6), 0.4, [0.85, 0.9, 0.95, 1]);
-    }
     });
   }
 }
@@ -2238,7 +2257,7 @@ function nodeGraphGlHitIsLiveHtml(target) {
 function nodeGraphGlHitKeepsNativeTarget(target) {
   if (!(target instanceof Element)) return false;
   return Boolean(target.closest(
-    ".node-face, .node-module-graph-face, .node-module-graph-display, .node-keypad-face, .node-knob-face, .node-xy-pad-canvas, .node-sequencer-roll, .acid-seq-face, .node-step-register-display, .node-arp-keys-face, .node-plugin-toggle-button, .node-plugin-momentary-button, .node-sample-waveform-display, .node-midi-keyboard-surface, .node-midi-keyboard-module, .node-grid-keyboard-surface, .node-grid-keyboard-pad, .node-seed-control, .sabrina-preset-shell",
+    ".node-face, .node-module-graph-face, .node-module-graph-display, .node-keypad-face, .node-knob-face, .node-xy-pad-canvas, .node-sequencer-roll, .acid-seq-face, .node-step-register-display, .node-arp-keys-face, .node-plugin-toggle-button, .node-plugin-momentary-button, .node-sample-waveform-display, .node-keyboard-surface, .node-keyboard-module, .node-grid-keyboard-surface, .node-grid-keyboard-pad, .node-seed-control, .sabrina-preset-shell",
   ));
 }
 

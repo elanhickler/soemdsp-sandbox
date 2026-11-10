@@ -188,8 +188,77 @@ function migrateNodeGraphFInsteadOfBpm(patch) {
   return patch;
 }
 
+// Display type leftover: on-screen Keyboard face was stored as keyboardControllerFace.
+// Rewrite that token wherever it appears (renderer, schema, mode key, typed settings bag).
+// Do not touch module type keyboardController (the MIDI module).
+function migrateNodeGraphKeyboardFaceDisplayType(value) {
+  if (typeof value === "string") {
+    return value === "keyboardControllerFace" ? "keyboardFace" : value;
+  }
+  if (Array.isArray(value)) {
+    for (let i = 0; i < value.length; i += 1) {
+      value[i] = migrateNodeGraphKeyboardFaceDisplayType(value[i]);
+    }
+    return value;
+  }
+  if (value && typeof value === "object") {
+    const keys = Object.keys(value);
+    for (let i = 0; i < keys.length; i += 1) {
+      const key = keys[i];
+      const nextKey = key === "keyboardControllerFace" ? "keyboardFace" : key;
+      const nextVal = migrateNodeGraphKeyboardFaceDisplayType(value[key]);
+      if (nextKey !== key) {
+        if (!Object.prototype.hasOwnProperty.call(value, nextKey)) {
+          value[nextKey] = nextVal;
+        }
+        delete value[key];
+      } else {
+        value[key] = nextVal;
+      }
+    }
+  }
+  return value;
+}
+
+// MIDI Lag → MIDI CC: rewrite the JS type id and persisted visual/state keys.
+// Node ids such as midiLag-1 are left alone so cables keep matching.
+function migrateNodeGraphMidiLagType(value) {
+  const keyMap = {
+    midiLag: "midiCc",
+    midiLagRaw: "midiCcRaw",
+    midiLagSmooth: "midiCcSmooth",
+    midiLagState: "midiCcState",
+  };
+  if (typeof value === "string") {
+    return value === "midiLag" ? "midiCc" : value;
+  }
+  if (Array.isArray(value)) {
+    for (let i = 0; i < value.length; i += 1) {
+      value[i] = migrateNodeGraphMidiLagType(value[i]);
+    }
+    return value;
+  }
+  if (value && typeof value === "object") {
+    const keys = Object.keys(value);
+    for (let i = 0; i < keys.length; i += 1) {
+      const key = keys[i];
+      const nextKey = Object.prototype.hasOwnProperty.call(keyMap, key) ? keyMap[key] : key;
+      const nextVal = migrateNodeGraphMidiLagType(value[key]);
+      if (nextKey !== key) {
+        if (!Object.prototype.hasOwnProperty.call(value, nextKey)) {
+          value[nextKey] = nextVal;
+        }
+        delete value[key];
+      } else {
+        value[key] = nextVal;
+      }
+    }
+  }
+  return value;
+}
+
 function migrateNodeGraphPatchToCurrent(patch) {
-  return migrateNodeGraphDsfPartialsStep(migrateNodeGraphFInsteadOfBpm(migrateNodeGraphPulseTrainCountStep(migrateNodeGraphPulseTrainStretch(
+  return migrateNodeGraphMidiLagType(migrateNodeGraphKeyboardFaceDisplayType(migrateNodeGraphDsfPartialsStep(migrateNodeGraphFInsteadOfBpm(migrateNodeGraphPulseTrainCountStep(migrateNodeGraphPulseTrainStretch(
     migrateNodeGraphPulseTrainAntialiasing(migrateNodeGraphRetiredRmsMono(patch)),
-  ))));
+  ))))));
 }

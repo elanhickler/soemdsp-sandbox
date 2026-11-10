@@ -1039,7 +1039,7 @@ const nodeGraphTraceDisplayActiveControlsByType = Object.freeze({
     ]),
     choices: Object.freeze([]),
   }),
-  keyboardControllerFace: Object.freeze({
+  keyboardFace: Object.freeze({
     fields: Object.freeze([
       "keyCount",
       "octave",
@@ -2448,11 +2448,11 @@ const nodeGraphDisplaySettingsChoiceMeta = Object.freeze({
     label: "Draw",
     aria: "How the samples are joined",
     id: "nodeTraceDisplayPlotDraw",
-    title: "Discrete: each sample held flat until the next (2D Plot: a dot per sample). Linear: straight lines between samples. Reconstructed: the bandlimited signal between samples (windowed sinc, what a DAC plays). Zoomed out past two samples per pixel, all three show the min/max band.",
+    title: "Discrete: each sample held flat until the next (2D Plot: a dot per sample). Linear: straight lines between samples. Sinc: the bandlimited signal between samples (windowed sinc, what a DAC plays). Zoomed out past two samples per pixel, all three show the min/max band.",
     options: Object.freeze([
       Object.freeze({ value: "discrete", label: "Discrete" }),
       Object.freeze({ value: "linear", label: "Linear" }),
-      Object.freeze({ value: "reconstructed", label: "Reconstructed" }),
+      Object.freeze({ value: "reconstructed", label: "Sinc" }),
     ]),
   }),
   windowMode: Object.freeze({
@@ -2754,7 +2754,7 @@ const nodeGraphDisplaySettingsFormTypeTitles = Object.freeze({
   plotFace: "Plot",
   robinSinepulseFace: "Robin Sinepulse",
   textBoxFace: "Text Box",
-  keyboardControllerFace: "MIDI Keyboard",
+  keyboardFace: "Keyboard",
   toggleButtonFace: "Toggle",
   momentaryButtonFace: "Momentary",
   patchFace: "Patch",

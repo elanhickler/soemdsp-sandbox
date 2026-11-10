@@ -50,11 +50,11 @@ function nodeGraphKeyboardMixOrBits(nodeId, port, ctx, phase) {
 function nodeGraphKeyboardSignalFromMvp(keyboardNodeId = "") {
   if (keyboardNodeId) {
     return nodeGraphKeyboardRuntime(keyboardNodeId).signal
-      || nodeGraphMidiKeyboardFallbackSignal(keyboardNodeId);
+      || nodeGraphKeyboardFallbackSignal(keyboardNodeId);
   }
   return nodeGraphMvp?.midiKeyboardSignal
-    || (typeof nodeGraphMidiKeyboardFallbackSignal === "function"
-      ? nodeGraphMidiKeyboardFallbackSignal("")
+    || (typeof nodeGraphKeyboardFallbackSignal === "function"
+      ? nodeGraphKeyboardFallbackSignal("")
       : null);
 }
 

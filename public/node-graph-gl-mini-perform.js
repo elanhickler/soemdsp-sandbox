@@ -132,7 +132,7 @@ function nodeGraphGlMiniPerformModuleHost(view, key) {
 
 /** Piano Keyboard surface: WebGL-drawn key model, no key elements to mirror. */
 function nodeGraphGlMiniPerformIsPianoSurface(source) {
-  return Boolean(source?.classList?.contains("node-midi-keyboard-surface"));
+  return Boolean(source?.classList?.contains("node-keyboard-surface"));
 }
 
 /**
@@ -195,7 +195,7 @@ function nodeGraphGlMiniPerformSyncKeyboardHost(host) {
 
 /** Present the keyboard surface itself at a persisted performance-view tile. */
 function nodeGraphGlMiniPerformKeyboardTile(view, tile, el, frame, order, batch = null) {
-  const source = el?.querySelector?.(".node-midi-keyboard-surface, .node-grid-keyboard-surface");
+  const source = el?.querySelector?.(".node-keyboard-surface, .node-grid-keyboard-surface");
   const sourceBox = source && typeof nodeGraphModuleLayoutBox === "function"
     ? nodeGraphModuleLayoutBox(source, el)
     : null;
@@ -214,8 +214,8 @@ function nodeGraphGlMiniPerformKeyboardTile(view, tile, el, frame, order, batch 
   );
   host.style.setProperty("--node-mini-perform-keyboard-scale", String(scale));
   if (nodeGraphGlMiniPerformIsPianoSurface(source)) {
-    if (batch && typeof nodeGraphMidiKeyboardGlDraw === "function") {
-      nodeGraphMidiKeyboardGlDraw(
+    if (batch && typeof nodeGraphKeyboardGlDraw === "function") {
+      nodeGraphKeyboardGlDraw(
         batch,
         source,
         tile.x + fit.ox * frame.s,

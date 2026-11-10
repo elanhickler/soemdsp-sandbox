@@ -251,7 +251,7 @@ const nodeGraphNodeLabels = Object.freeze({
   arp: "Arp",
   // GM program 5 = Electric Piano 1; GM channel 10 = percussion kit.
   ePiano: "E.Piano (5)",
-  percussion: "Percussion (10)",
+  percussion: "Percussion",
   phosphillator: "Phosphillator",
   delayEffect: "Delay",
   pingPongDelay: "Ping Pong Delay",
@@ -279,6 +279,7 @@ const nodeGraphNodeLabels = Object.freeze({
   sidechain: "Sidechain",
   sampleHold: "Sample & Hold",
   keyboardController: "MIDI",
+  midiCc: "MIDI CC",
   keyboard: "Keyboard",
   gridKeyboard: "Grid Keyboard",
   samplePlayer: "Sample Player",
@@ -756,7 +757,11 @@ function nodeGraphPlaybackSpeedParameter(overrides = {}) {
     defaultValue: "1",
     key: "speed",
     label: "Speed",
-    linearSmoothing: false,
+    // Follow the header Smooth Time (Global + Linear). Legacy linearSmoothing:false
+    // mapped to type "none", so neither the header nor Parameter Settings time
+    // could change the Speed ramp — they were ignored as instant snaps.
+    smoothingMode: "global",
+    smoothingType: "linear",
     max: "8",
     maxDigits: 4,
     mid: "1",
@@ -765,6 +770,13 @@ function nodeGraphPlaybackSpeedParameter(overrides = {}) {
     unit: "x",
     ...overrides,
   };
+}
+
+function nodeGraphMidiCcChoices() {
+  const choices = [];
+  for (let i = 0; i <= 127; i += 1) choices.push(String(i));
+  choices.push("Pitch Bend", "Ch Pressure", "Poly AT");
+  return choices;
 }
 
 function nodeGraphControllerBiasParameter() {
@@ -952,14 +964,14 @@ const nodeGraphModuleDefinitions = (
     parameters: [
       { choices: ["Input", "LFO", "Phasor"], defaultValue: "0", displayChoices: true, divideChoicesVisibly: true, key: "mode", label: "Mode", linearSmoothing: false, max: "2", mid: "1", min: "0", nonlinearSlider: false, step: "1" },
       {
-        choices: ["Linear", "Rational", "Exponential", "Log", "Smoothstep", "Hold"],
+        choices: ["Linear", "Rational", "Exponential", "Log", "Smoothstep", "Smootherstep", "Hold"],
         defaultValue: "0",
         displayChoices: true,
         divideChoicesVisibly: true,
         key: "segmentShape",
         label: "Shape",
         linearSmoothing: false,
-        max: "5",
+        max: "6",
         mid: "0",
         min: "0",
         nonlinearSlider: false,
@@ -9600,28 +9612,45 @@ const nodeGraphModuleDefinitions = (
         tooltip: "Output scale (0…1 at spawn)." },
     ]
   },
-  // First-order spectral tilt (not a 1-pole HP). Credit: Robin Schmidt / RS-MET shelf BLT.
+  // Constant-slope spectral tilt around a pivot (shared spectral_tilt).
   tiltFilter: {
+    face: [
+      { kind: "cells", params: [["mode", "Mode"]], horizontal: true, h: 30 },
+      { kind: "cells", params: [["amount", "Slope", "bipolar"], ["pivot", "Pivot"]], h: 52 },
+      { kind: "cells", params: [["amplitude", "Amp"]], h: 40 },
+    ],
+    layout: "filterCurve",
+    displayHeightGu: 5,
     planRole: "processor",
-    inputAliases: {Mono: "In"},
-    inputLabels: {In: "Mono"},
-    inputs: ["In", "Left", "Right"],
-    outputAliases: {Mono: "Out"},
-    outputLabels: {Out: "Mono"},
+    inputAliases: { Mono: "In", Freq: "f", "ƒ": "f" },
+    inputLabels: { In: "Mono", f: "ƒ" },
+    inputs: ["In", "Left", "Right", "f"],
+    inputTooltips: {
+      f: "Hz cable. When wired it replaces Pivot (absolute balance frequency), every sample." },
+    outputAliases: { Mono: "Out" },
+    outputLabels: { Out: "Mono" },
     outputs: ["Out", "Left", "Right"],
     parameters: [
       {
+        choices: ["Tilt", "Cut", "Matched"],
+        defaultValue: "1",
+        displayChoices: true,
+        divideChoicesVisibly: true,
+        key: "mode",
+        label: "Mode",
+      },
+      {
         defaultValue: "0",
         key: "amount",
-        label: "Amount",
+        label: "Slope",
         max: "12",
         mid: "0",
         min: "-12",
         nonlinearSlider: false,
         showSign: true,
         step: "any",
-        unit: "dB",
-        tooltip: "Spectral tilt. +dB = cut lows / boost highs; −dB = darker. Span is low↔high difference."
+        unit: "dB/oct",
+        tooltip: "Constant slope through the spectrum, 0 dB at Pivot. +dB/oct is brighter (HF up, LF down); −dB/oct is darker."
       },
       {
         defaultValue: "1000",
@@ -9634,7 +9663,7 @@ const nodeGraphModuleDefinitions = (
         min: "0",
         step: "any",
         unit: "Hz",
-        tooltip: "Frequency the tilt balances around. When ƒ is wired, that Hz is absolute. Unwired uses this knob (Hz). 0 allowed; circuit floors tiny values for stability only."
+        tooltip: "Frequency the tilt balances around (0 dB). When ƒ is wired, that Hz is absolute. Unwired uses this knob."
       },
         nodeGraphOutputAmplitudeParam,
     ]
@@ -13598,11 +13627,11 @@ const nodeGraphModuleDefinitions = (
       },
     ]
   },
-  // Under construction: GM percussion = channel 10 (Sample Player).
+  // Under construction: kit player. Signal ins only (Note / Gate / Velocity).
   percussion: {
-    // Hand-written face (node-graph-module-face.js): Channel | Kit | Amp.
+    // Hand-written face (node-graph-module-face.js): Kit | Amp.
     face: [
-      { kind: "cells", params: [["channel", "Channel"], ["kit", "Kit"], ["amplitude", "Amp"]], h: 52 },
+      { kind: "cells", params: [["kit", "Kit"], ["amplitude", "Amp"]], h: 52 },
     ],
     planRole: "source",
     planFreeRun: true,
@@ -13617,17 +13646,6 @@ const nodeGraphModuleDefinitions = (
     outputs: ["Out"],
     parameters: [
       {
-        defaultValue: "10",
-        key: "channel",
-        label: "Channel",
-        max: "16",
-        mid: "10",
-        min: "1",
-        nonlinearSlider: false,
-        step: "1",
-        tooltip: "Under construction — GM MIDI channel (10 = percussion / drum kit)."
-      },
-      {
         defaultValue: "1",
         key: "kit",
         label: "Kit",
@@ -13636,7 +13654,7 @@ const nodeGraphModuleDefinitions = (
         min: "1",
         nonlinearSlider: false,
         step: "1",
-        tooltip: "Under construction — drum kit program on the percussion channel (1 = Standard Kit)."
+        tooltip: "Under construction — drum kit program (1 = Standard Kit)."
       },
       {
         defaultValue: "1",
@@ -17882,6 +17900,125 @@ const nodeGraphModuleDefinitions = (
   // Portal MIDI — hardware device listen only. Does not drive Keyboard face/outs.
   // Play Keys = live MIDI note bitmask (blue). Wire to Meta Voices to mix into voices.
   // Unique in patch like Output — one hardware MIDI inlet.
+
+  midiCc: {
+    planRole: "processor",
+    planFreeRun: true,
+    monitorSink: true,
+    visualSink: true,
+    chrome: NodeGraphModuleChromeLayout.LayoutB,
+    layoutBPortLabels: true,
+    layout: "scopeFace",
+    displayType: "plot",
+    displayModes: [{ key: "plot", label: "Plot", renderer: "plot", settingsSchema: "plotFace" }],
+    defaultDisplayMode: "plot",
+    displaySignalPorts: ["Raw", "Smooth"],
+    displayHeightGu: 5,
+    defaultWidthGu: 13,
+    face: [
+      { kind: "cells", params: [["channel", "Channel"], ["cc", "CC#"]], h: 40 },
+      { kind: "cells", params: [["amplitude", "Amp"], ["highRes", "14-bit"]], h: 40 },
+      { kind: "choices", param: "learn", labels: ["Learn", "Learning"], h: 26 },
+    ],
+    inputs: ["In"],
+    inputLabels: { In: "\u2192" },
+    digitalOutputs: ["Changed"],
+    outputs: ["Out", "White", "Changed"],
+    outputLabels: { Out: "\u2190", White: "White", Changed: "Changed" },
+    outputChannels: { White: "white" },
+    visualInputs: [
+      { key: "midiCcRaw", label: "Raw", port: "Raw" },
+      { key: "midiCcSmooth", label: "Smooth", port: "Smooth" },
+    ],
+    parameters: [
+      {
+        bipolar: true,
+        defaultValue: "0",
+        key: "offset",
+        label: "Value",
+        max: "1",
+        mid: "0",
+        min: "-1",
+        nonlinearSlider: false,
+        showSign: true,
+        step: "any",
+        linearSmoothing: true,
+        smoothingMode: "internal",
+        smoothingSeconds: 0.0333,
+        smoothingType: "linear",
+      },
+      {
+        choices: ["Any", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16"],
+        defaultValue: "0",
+        displayChoices: true,
+        divideChoicesVisibly: true,
+        key: "channel",
+        label: "Channel",
+        linearSmoothing: false,
+        smoothingMode: "off",
+        smoothingType: "none",
+        max: "16",
+        mid: "0",
+        min: "0",
+        step: "1",
+      },
+      {
+        choices: nodeGraphMidiCcChoices(),
+        defaultValue: "1",
+        displayChoices: true,
+        divideChoicesVisibly: true,
+        key: "cc",
+        label: "CC#",
+        linearSmoothing: false,
+        smoothingMode: "off",
+        smoothingType: "none",
+        max: "130",
+        mid: "64",
+        min: "0",
+        step: "1",
+      },
+      {
+        defaultValue: "1",
+        key: "amplitude",
+        label: "Amplitude",
+        max: "4",
+        mid: "1",
+        min: "0",
+        nonlinearSlider: false,
+        step: "any",
+      },
+      {
+        choices: ["Off", "On"],
+        defaultValue: "0",
+        displayChoices: true,
+        divideChoicesVisibly: true,
+        key: "highRes",
+        label: "14-bit",
+        linearSmoothing: false,
+        smoothingMode: "off",
+        smoothingType: "none",
+        max: "1",
+        mid: "0",
+        min: "0",
+        step: "1",
+      },
+      {
+        choices: ["Learn", "Learning"],
+        defaultValue: "0",
+        displayChoices: true,
+        divideChoicesVisibly: true,
+        key: "learn",
+        label: "Learn",
+        linearSmoothing: false,
+        smoothingMode: "off",
+        smoothingType: "none",
+        max: "1",
+        mid: "0",
+        min: "0",
+        step: "1",
+      },
+    ],
+  },
   keyboardController: {
     planRole: "source",
     uniqueInPatch: true,
@@ -17941,12 +18078,12 @@ const nodeGraphModuleDefinitions = (
     digitalOutputs: ["Play Keys", "Arp Keys", "Chord Memory", "Gate", "Trigger"],
     inputs: ["Play Keys", "Arp Keys", "Chord Memory", "Gate", "Trigger"],
     layout: "keyboard",
-    displayType: "keyboardControllerFace",
+    displayType: "keyboardFace",
     displayModes: [
       {
-        key: "keyboardControllerFace",
-        renderer: "keyboardControllerFace",
-        settingsSchema: "keyboardControllerFace" },
+        key: "keyboardFace",
+        renderer: "keyboardFace",
+        settingsSchema: "keyboardFace" },
     ],
     // New spawns show the top row (Mode / Vel / octave / keys). Saved patches keep their own value.
     defaultDisplaySettings: { hideKeyboardInfo: false },
@@ -18226,19 +18363,25 @@ const nodeGraphModuleDefinitions = (
     ]
   },
   audioPlayer: {
-    // Hand-written face (node-graph-module-face.js): Play, start / end span, Speed | Dir | Scratch | Amp, Playlist, AA Off / Hermite.
+    // Hand-written face (node-graph-module-face.js): Play, start / end span, Speed | Dir | Scratch | Amp, Playlist,
+    // Playback stacked like transport (3 / 2), then Tilt, Tone, and Range (Tape).
+    // Stored: 0 Square, 1 Linear, 2 Sinc (legacy Reconstructed), 3 PolyBLEP, 7 Tape.
+    // Retired 4 Jitter / 5 Dither / 6 Both load as Sinc (2). Saved bits ignored.
+    // Face `values` lists display order independently of those stored indices.
     face: [
       { kind: "choices", param: "transport", labels: ["Off", "Stop", "Pause"], h: 26 },
       { kind: "choices", param: "transport", labels: ["Loop", "Play", "Loop All"], start: 3, h: 26 },
       { kind: "span", handles: ["start", "end"], h: 40 },
       { kind: "cells", params: [["speed", "Speed"], ["direction", "Dir", "bipolar"], ["phase", "Scratch", "bipolar"], ["amplitude", "Amp"]], h: 52 },
       { kind: "cells", params: [["playlistScrub", "Playlist", "bipolar"]], h: 40 },
-      { kind: "choices", param: "antialias", labels: ["AA Off", "Hermite"], h: 26 },
+      { kind: "choices", param: "interpolation", labels: ["Square", "PolyBLEP", "Linear"], values: [0, 3, 1], h: 26 },
+      { kind: "choices", param: "interpolation", labels: ["Sinc", "Tape"], values: [2, 7], h: 26 },
+      { kind: "cells", params: [["tilt", "Tilt"], ["tone", "Tone"], ["range", "Range"]], h: 40 },
     ],
     planRole: "source",
     layout: "sampleWaveform",
     defaultWidthGu: 13,
-    defaultHeightGu: 22,
+    defaultHeightGu: 32,
     displayType: "sampleWaveform",
     displayModes: [
       {
@@ -18257,20 +18400,59 @@ const nodeGraphModuleDefinitions = (
     outputs: ["Mono", "Left", "Right", "Phase", "Trigger"],
     parameters: [
       {
-        choices: ["Off", "Hermite"],
-        defaultValue: "0",
+        choices: ["Square", "Linear", "Sinc", "PolyBLEP", "Sinc", "Sinc", "Sinc", "Tape"],
+        defaultValue: "2",
         displayChoices: true,
         divideChoicesVisibly: true,
-        hidden: true,
-        key: "antialias",
-        label: "Antialias",
+        key: "interpolation",
+        label: "Playback",
         linearSmoothing: false,
-        max: "1",
-        mid: "0",
+        max: "7",
+        mid: "1",
         min: "0",
         nonlinearSlider: false,
-        step: "1",
-        tooltip: "Fractional sample read. Off = linear. Hermite = 4-point cubic (smoother varispeed, more CPU)." },
+        step: "1" },
+      {
+        defaultValue: "-6",
+        key: "tilt",
+        label: "Tilt",
+        linearSmoothing: false,
+        max: "0",
+        mid: "-12",
+        min: "-24",
+        nonlinearSlider: false,
+        showSign: true,
+        smoothingMode: "off",
+        smoothingType: "none",
+        step: "any",
+        unit: "dB/oct" },
+      {
+        defaultValue: "-6",
+        key: "tone",
+        label: "Tone",
+        linearSmoothing: false,
+        max: "1",
+        mid: "-2.5",
+        min: "-6",
+        nonlinearSlider: false,
+        showSign: true,
+        smoothingMode: "off",
+        smoothingType: "none",
+        step: "any",
+        unit: "oct" },
+      {
+        defaultValue: "1",
+        key: "range",
+        label: "Range",
+        linearSmoothing: false,
+        max: "6",
+        mid: "2",
+        min: "0.25",
+        nonlinearSlider: false,
+        smoothingMode: "off",
+        smoothingType: "none",
+        step: "any",
+        unit: "oct" },
       { choices: ["Off (reset)", "Stop", "Pause", "Loop", "Play", "Loop All"], defaultValue: "1", displayChoices: true, divideChoicesVisibly: true, key: "transport", label: "Mode", linearSmoothing: false, smoothingMode: "off", smoothingType: "none", max: "5", mid: "2", min: "0", nonlinearSlider: false, step: "1" },
       nodeGraphPlaybackSpeedParameter(),
       // Forward / reverse speed offset (shares Speed's definition). Replaces

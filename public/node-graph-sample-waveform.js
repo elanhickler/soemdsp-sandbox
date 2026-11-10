@@ -2980,8 +2980,13 @@ function nodeGraphSampleWaveformPlayheadRgba(settings, alphaScale = 1) {
  */
 function nodeGraphSampleWaveformPlayheadHalfPx(settings, pixelRatio = 1) {
   const s = normalizeNodeGraphSampleWaveformSettings(settings);
+  const width = Number(s.scrollLineWidth);
+  // 0 px means hide — do not fall back to a GPU/hairline minimum.
+  if (!(width > 0)) {
+    return 0;
+  }
   const pr = Number(pixelRatio) > 0 ? Number(pixelRatio) : 1;
-  return Math.max(0.45, s.scrollLineWidth * pr * 0.5 - 0.35);
+  return Math.max(0.45, width * pr * 0.5 - 0.35);
 }
 
 /**
@@ -3322,9 +3327,11 @@ function drawNodeGraphSampleWaveformDisplay(section) {
   const scrollHide = Number.isFinite(Number(settings.scrollLineWidth))
     ? Number(settings.scrollLineWidth)
     : nodeGraphSampleWaveformDefaultSettings.scrollLineWidth;
+  const playHalf = nodeGraphSampleWaveformPlayheadHalfPx(settings, pixelRatio);
   if (
     circuitRunning
     && scrollHide > 0
+    && playHalf > 0
     && playheadFrame >= viewStart
     && playheadFrame <= viewEnd
     && typeof nodeGraphGlLinesSegment === "function"
@@ -3334,7 +3341,7 @@ function drawNodeGraphSampleWaveformDisplay(section) {
       : frameToX(playheadFrame);
     nodeGraphGlLinesSegment(
       batch, x, 0, x, height,
-      nodeGraphSampleWaveformPlayheadHalfPx(settings, pixelRatio), 0.7,
+      playHalf, 0.7,
       nodeGraphSampleWaveformPlayheadRgba(settings),
     );
   }

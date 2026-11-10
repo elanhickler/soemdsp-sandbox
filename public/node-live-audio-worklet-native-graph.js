@@ -88,6 +88,9 @@ NodeLiveAudioProcessor.NATIVE_GRAPH_TYPE_IDS = Object.freeze({
   xyPad: 190,
   helmholtzPitch: 191,
   edgeDetector: 240,
+  tiltFilter: 241,
+  midiCc: 242,
+  midiLag: 242, // load-time alias of midiCc
   basicShape: 139,
   chordPad: 140,
   noteGlide: 141,
@@ -611,6 +614,14 @@ NodeLiveAudioProcessor.prototype.mapNativeGraphParamId = function mapNativeGraph
   }
   if (t === "audioPlayer") {
     if (k === "direction") return P.NATIVE_GRAPH_PARAM_PHASE;
+    if (k === "tone") return P.NATIVE_GRAPH_PARAM_WIDTH;
+    if (k === "tilt") return P.NATIVE_GRAPH_PARAM_LEVEL;
+    if (k === "range") return P.NATIVE_GRAPH_PARAM_CENTER;
+  }
+  if (t === "tiltFilter") {
+    if (k === "pivot") return P.NATIVE_GRAPH_PARAM_FREQUENCY;
+    if (k === "amount") return P.NATIVE_GRAPH_PARAM_GAIN_DB;
+    if (k === "mode") return P.NATIVE_GRAPH_PARAM_MODE;
   }
   if (t === "sineWavetable" || t === "sinCos") {
     if (k === "polarity") return P.NATIVE_GRAPH_PARAM_CENTER;
@@ -774,6 +785,14 @@ NodeLiveAudioProcessor.prototype.mapNativeGraphSrcPortId = function mapNativeGra
   const raw = String(port || "").trim();
   const p = raw.toLowerCase();
   const t = String(type || "").trim();
+  if (t === "midiCc" || t === "midiLag") {
+    if (p === "out" || p === "mono") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_MONO;
+    if (p === "white") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_LEFT;
+    if (p === "smooth") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_RIGHT;
+    if (p === "raw") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_SAW;
+    if (p === "changed") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_RAMP;
+    if (p === "in") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_MONO;
+  }
   if (t === "script") {
     if (nodeId && this.nodes) {
       const node = this.nodes.get(String(nodeId));
@@ -3034,6 +3053,10 @@ NodeLiveAudioProcessor.NATIVE_GRAPH_DISCRETE_PARAMS = Object.freeze({
   quantizePhase: true,
   affectFundamental: true,
   transport: true,
+  channel: true,
+  cc: true,
+  highRes: true,
+  learn: true,
   antialias: true,
   antialiasing: true,
   monoSum: true,
@@ -4244,6 +4267,68 @@ NodeLiveAudioProcessor.prototype.syncNativeVoiceIdleCleanup = function syncNativ
  * Meta playmode is Mono/Legato (VM PhonyMode), never because the source is blue.
  * No gold-bitmask OR into Voices. No /N amp.
  */
+NodeLiveAudioProcessor.prototype.publishKeyboardPlayKeyMasks = function publishKeyboardPlayKeyMasks() {
+  if (!this.nodes || typeof this.nodes.entries !== "function") return;
+  if (!this.nodeOutputs) this.nodeOutputs = new Map();
+  const create = () => (typeof noteMaskCreate === "function" ? noteMaskCreate() : new Uint8Array(128));
+  const setBit = (mask, midi) => {
+    const m = Math.round(Number(midi));
+    if (!(m >= 0 && m <= 127)) return;
+    if (typeof noteMaskSet === "function") noteMaskSet(mask, m, true);
+    else mask[m] = 1;
+  };
+  const orIn = (dst, src) => {
+    if (!(dst instanceof Uint8Array) || !(src instanceof Uint8Array)) return;
+    if (typeof noteMaskOr === "function") {
+      const next = noteMaskOr(dst, src);
+      dst.set(next);
+      return;
+    }
+    const n = Math.min(dst.length, src.length);
+    for (let i = 0; i < n; i += 1) {
+      if (src[i]) dst[i] = 1;
+    }
+  };
+
+  for (const [id, node] of this.nodes) {
+    const type = String(node?.type || "");
+    if (type !== "keyboard" && type !== "gridKeyboard" && type !== "keyboardController") continue;
+    const nid = String(id);
+    const mask = create();
+    if (type === "keyboardController") {
+      orIn(mask, this.midiKeyboardPlayMask);
+    } else {
+      const sig = this.keyboardSignalByNode?.get?.(nid);
+      if (sig && Number(sig.gate) > 0) {
+        const raw = Number.isFinite(Number(sig.rawMidi)) ? Number(sig.rawMidi) : Number(sig.midi);
+        setBit(mask, raw);
+      }
+      if (typeof nodeGraphChordMemoryMomentaryMaskForNode === "function") {
+        orIn(mask, nodeGraphChordMemoryMomentaryMaskForNode(nid));
+      }
+    }
+    const arp = this.keyboardArpByNode?.get?.(nid);
+    const arpMask = arp?.mask instanceof Uint8Array ? Uint8Array.from(arp.mask) : create();
+    const prev = this.nodeOutputs.get(nid);
+    this.nodeOutputs.set(nid, {
+      ...(prev && typeof prev === "object" ? prev : {}),
+      playMask: mask,
+      arpMask,
+    });
+  }
+
+  for (const [id, node] of this.nodes) {
+    const type = String(node?.type || "");
+    if (type !== "keyboard" && type !== "gridKeyboard") continue;
+    const nid = String(id);
+    const out = this.nodeOutputs.get(nid);
+    if (!out?.playMask) continue;
+    if (typeof this.mixNoteMask128 === "function") {
+      orIn(out.playMask, this.mixNoteMask128(nid, "Play Keys"));
+    }
+  }
+};
+
 NodeLiveAudioProcessor.prototype.syncNativeMetaPolyphonyVoiceGates = function syncNativeMetaPolyphonyVoiceGates() {
   if (!this.efficientProduct || !this.nativeGraphCompiled || !this.nativeGraphHandle) {
 
@@ -4344,6 +4429,13 @@ NodeLiveAudioProcessor.prototype.syncNativeMetaPolyphonyVoiceGates = function sy
     }
 
     return;
+  }
+
+  // Publish Keyboard / Grid / MIDI-module Play Keys masks so cables into
+  // Voices can be read as note bits (not Bias). Local press or hardware
+  // MIDI bits only; no global VM injection.
+  if (typeof this.publishKeyboardPlayKeyMasks === "function") {
+    this.publishKeyboardPlayKeyMasks();
   }
 
   // VoiceManager follows Play Keys / Arp Keys / Chord Memory cables into
@@ -5865,6 +5957,22 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
       }
       continue;
     }
+    if (type === "tiltFilter") {
+      push("pivot", P.NATIVE_GRAPH_PARAM_FREQUENCY, cont("pivot", 1000));
+      push("amount", P.NATIVE_GRAPH_PARAM_GAIN_DB, cont("amount", 0));
+      push("amplitude", P.NATIVE_GRAPH_PARAM_AMPLITUDE, cont("amplitude", 1));
+      push("mode", P.NATIVE_GRAPH_PARAM_MODE, disc("mode", 0));
+      continue;
+    }
+    if (type === "midiCc" || type === "midiLag") {
+      push("offset", P.NATIVE_GRAPH_PARAM_ATT_OFFSET, cont("offset", 0));
+      push("amplitude", P.NATIVE_GRAPH_PARAM_AMPLITUDE, cont("amplitude", 1));
+      push("channel", P.NATIVE_GRAPH_PARAM_MODE, disc("channel", 0));
+      push("cc", P.NATIVE_GRAPH_PARAM_WAVEFORM, disc("cc", 1));
+      push("highRes", P.NATIVE_GRAPH_PARAM_TIMING_MODE, disc("highRes", 0));
+      push("learn", P.NATIVE_GRAPH_PARAM_LFO_STYLE, disc("learn", 0));
+      continue;
+    }
     if (type === "eqFilter") {
       // Face mode is remapped to Robin DSP in process_eq_filter.
       push("frequency", P.NATIVE_GRAPH_PARAM_FREQUENCY, cont("frequency", 1000));
@@ -7148,7 +7256,10 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
       push("direction", P.NATIVE_GRAPH_PARAM_PHASE, cont("direction", 0));
       push("phase", P.NATIVE_GRAPH_PARAM_SHAPE, cont("phase", 0));
       push("playlistScrub", P.NATIVE_GRAPH_PARAM_SEED, cont("playlistScrub", 0));
-      push("antialias", P.NATIVE_GRAPH_PARAM_STAGES, disc("antialias", 0));
+      push("interpolation", P.NATIVE_GRAPH_PARAM_STAGES, disc("interpolation", 2));
+      push("tone", P.NATIVE_GRAPH_PARAM_WIDTH, cont("tone", -2));
+      push("tilt", P.NATIVE_GRAPH_PARAM_LEVEL, cont("tilt", -6));
+      push("range", P.NATIVE_GRAPH_PARAM_CENTER, cont("range", 2));
       // Definition SSOT for internal glides — keep native chase correct even if
       // worklet paramMeta lost smoothingMode/seconds on a lean params push.
       this.ensureNativeAudioPlayerInternalSmoothing?.(native, hash, cache, forceAll);
@@ -8234,7 +8345,7 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphCurvePoints = function syncNativ
 
   const cache = this._nativeGraphCurveCache || (this._nativeGraphCurveCache = new Map());
   const shapeIndex = (value) => {
-    const shapes = ["linear", "rational", "exponential", "log", "smoothstep", "hold"];
+    const shapes = (typeof NODE_GRAPH_SEGMENT_SHAPES !== "undefined") ? NODE_GRAPH_SEGMENT_SHAPES.slice() : ["linear", "rational", "exponential", "log", "smoothstep", "smootherstep", "hold"];
     if (Number.isFinite(Number(value)) && String(value).trim() !== "") {
       return Math.max(0, Math.min(shapes.length - 1, Math.round(Number(value))));
     }
@@ -9604,6 +9715,13 @@ NodeLiveAudioProcessor.prototype.bindNativeGraphBlockViews = function bindNative
 /** Map native audio port id → face port name(s) for nodeOutputs / scopes. */
 NodeLiveAudioProcessor.prototype.nativeGraphPortNames = function nativeGraphPortNames(type, portId) {
   const P = NodeLiveAudioProcessor;
+  if (type === "midiCc" || type === "midiLag") {
+    if (portId === P.NATIVE_GRAPH_PORT_MONO) return ["Out", "Mono"];
+    if (portId === P.NATIVE_GRAPH_PORT_LEFT) return ["White"];
+    if (portId === P.NATIVE_GRAPH_PORT_RIGHT) return ["Smooth"];
+    if (portId === P.NATIVE_GRAPH_PORT_SAW) return ["Raw"];
+    if (portId === P.NATIVE_GRAPH_PORT_RAMP) return ["Changed"];
+  }
   if (type === "output" || type === "audioInput") {
     if (portId === P.NATIVE_GRAPH_PORT_MONO) return ["Mono", "Out"];
     if (portId === P.NATIVE_GRAPH_PORT_LEFT) return ["Left"];
@@ -10259,7 +10377,9 @@ NodeLiveAudioProcessor.prototype.publishNativeGraphScopeTaps = function publishN
       // sampleHold: publish audio Mono/Left/Right (polarity+amp) for jacks/ghosts,
       // plus bipolar pre-level Saw/Ramp as Left Raw / Right Raw for full-swing waterfall.
       let ports;
-      if (type === "vibratoGenerator") {
+      if (type === "midiCc" || type === "midiLag") {
+        ports = facePorts.concat(P.NATIVE_GRAPH_PORT_SAW, P.NATIVE_GRAPH_PORT_RIGHT, P.NATIVE_GRAPH_PORT_RAMP, P.NATIVE_GRAPH_PORT_LEFT);
+      } else if (type === "vibratoGenerator") {
         // Saw = y * depthEnv for the face. Mono/Wave stays y * amp * depthEnv.
         ports = facePorts.concat(P.NATIVE_GRAPH_PORT_SAW);
       } else if (type === "sampleHold") {

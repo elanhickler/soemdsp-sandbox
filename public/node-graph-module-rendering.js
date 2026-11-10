@@ -984,7 +984,7 @@ function createNodeGraphModuleElement(type, node) {
     if (definition.layout === "keyboardController") {
       article.append(createNodeGraphMidiModuleBody(node));
     } else if (definition.layout === "keyboard") {
-      article.append(createNodeGraphKeyboardControllerBody(node));
+      article.append(createNodeGraphKeyboardBody(node));
     } else if (definition.layout === "gridKeyboard") {
       article.append(createNodeGraphGridKeyboardBody(node));
     } else if (definition.layout === "sequencer") {

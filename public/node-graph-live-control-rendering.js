@@ -46,6 +46,12 @@ function nodeGraphLiveTransportUiState() {
   // Painting play from (context && wanted) left a green ▶ on silence until
   // Stop tore it down and Play ran resume inside a click.
   if (engineUp) {
+    // Plugin host: the native graph is the engine. A leftover/suspended
+    // AudioContext (there is no worklet) must not paint "stopped" while
+    // the stub live.node is up — that left a red stop next to a green play.
+    if (nodeGraphMvp?.live?.node?.soemdspPluginHostNode) {
+      return paused ? "paused" : "playing";
+    }
     const audioState = nodeGraphMvp?.live?.context?.state;
     if (audioState && audioState !== "running") {
       return "stopped";

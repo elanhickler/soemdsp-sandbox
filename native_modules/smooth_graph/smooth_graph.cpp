@@ -313,7 +313,7 @@ extern "C" double soemdsp_smooth_graph_sample(
   if (handle < 1 || handle > kMaxInstances) return 0.0;
   State& s = gPool[handle - 1];
   ensure_default_ramp(s);
-  return eval_curve(s, safe(x), normalize_mode(smoothingMode), safe(tension));
+  return clamp11(eval_curve(s, safe(x), normalize_mode(smoothingMode), safe(tension)));
 }
 
 extern "C" int soemdsp_smooth_graph_version() {

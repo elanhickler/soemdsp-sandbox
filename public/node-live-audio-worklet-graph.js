@@ -13,8 +13,14 @@ NodeLiveAudioProcessor.prototype.normalizeGraphShape = function normalizeGraphSh
     if (shape === "logarithmic") {
       return "log";
     }
+    if (typeof nodeGraphSegmentNormalizeShape === "function") {
+      return nodeGraphSegmentNormalizeShape(value);
+    }
     if (shape === "smooth" || shape === "smoothstep") {
       return "smoothstep";
+    }
+    if (shape === "smoother" || shape === "smootherstep") {
+      return "smootherstep";
     }
     if (
       shape === "linear" ||
@@ -37,7 +43,7 @@ NodeLiveAudioProcessor.prototype.normalizeGraphNode = function normalizeGraphNod
       c: this.normalizeGraphNumber(source.c, fallback.c, -1, 1),
       shape: this.normalizeGraphShape(source.shape ?? fallback.shape),
       x: this.normalizeGraphNumber(source.x, fallback.x),
-      y: this.normalizeGraphNumber(source.y, fallback.y),
+      y: this.normalizeGraphNumber(source.y, fallback.y, -1, 1),
     };
 };
 
@@ -99,6 +105,9 @@ NodeLiveAudioProcessor.prototype.graphContourSoftCap = function graphContourSoft
 };
 
 NodeLiveAudioProcessor.prototype.graphRationalCurve = function graphRationalCurve(position, contour = 0) {
+    if (typeof nodeGraphSegmentRational01 === "function") {
+      return nodeGraphSegmentRational01(position, contour);
+    }
     const p = this.normalizeGraphNumber(position, 0, 0, 1);
     const c = this.graphContourSoftCap(contour);
     if (Math.abs(c) < this.graphContourPlanck()) {
@@ -110,6 +119,9 @@ NodeLiveAudioProcessor.prototype.graphRationalCurve = function graphRationalCurv
 };
 
 NodeLiveAudioProcessor.prototype.graphExponentialCurve = function graphExponentialCurve(position, contour = 0) {
+    if (typeof nodeGraphSegmentExponential01 === "function") {
+      return nodeGraphSegmentExponential01(position, contour);
+    }
     const p = this.normalizeGraphNumber(position, 0, 0, 1);
     const t = this.graphContourSoftCap(contour);
     const planck = this.graphContourPlanck();
@@ -118,7 +130,7 @@ NodeLiveAudioProcessor.prototype.graphExponentialCurve = function graphExponenti
     }
     const a = Math.abs(t);
     const mag = 1.2 + 6.8 * (a / (1 - a * 0.85));
-    const k = t < 0 ? -mag : mag;
+    const k = t < 0 ? mag : -mag;
     if (Math.abs(k) < 0.05) {
       return p;
     }
@@ -130,6 +142,9 @@ NodeLiveAudioProcessor.prototype.graphExponentialCurve = function graphExponenti
 };
 
 NodeLiveAudioProcessor.prototype.graphLogarithmicCurve = function graphLogarithmicCurve(position, contour = 0) {
+    if (typeof nodeGraphSegmentLogarithmic01 === "function") {
+      return nodeGraphSegmentLogarithmic01(position, contour);
+    }
     const p = this.normalizeGraphNumber(position, 0, 0, 1);
     const t = this.graphContourSoftCap(contour);
     const planck = this.graphContourPlanck();
@@ -443,7 +458,9 @@ NodeLiveAudioProcessor.prototype.graphSmoothingModeForNode = function graphSmoot
 };
 
 NodeLiveAudioProcessor.prototype.graphSegmentShapeFromParam = function graphSegmentShapeFromParam(value) {
-    const shapes = ["linear", "rational", "exponential", "log", "smoothstep", "hold"];
+    const shapes = (typeof NODE_GRAPH_SEGMENT_SHAPES !== "undefined")
+      ? NODE_GRAPH_SEGMENT_SHAPES.slice()
+      : ["linear", "rational", "exponential", "log", "smoothstep", "smootherstep", "hold"];
     if (Number.isFinite(Number(value)) && String(value).trim() !== "") {
       return shapes[Math.max(0, Math.min(shapes.length - 1, Math.round(Number(value))))];
     }
@@ -484,14 +501,19 @@ NodeLiveAudioProcessor.prototype.graphSegmentValue = function graphSegmentValue(
       ? this.normalizeGraphShape(segmentOptions.segmentShape)
       : this.normalizeGraphShape(right.shape || "linear");
     let shaped = p;
-    if (shape === "exponential") {
+    if (typeof nodeGraphSegmentCurve01 === "function") {
+      shaped = nodeGraphSegmentCurve01(p, shape, contour);
+    } else if (shape === "exponential") {
       shaped = this.graphExponentialCurve(p, contour);
     } else if (shape === "log" || shape === "logarithmic") {
       shaped = this.graphLogarithmicCurve(p, contour);
     } else if (shape === "hold") {
-      shaped = p >= 1 ? 1 : 0;
+      shaped = contour < 0 ? (p > 0 ? 1 : 0) : (p >= 1 ? 1 : 0);
     } else if (shape === "smoothstep" || shape === "smooth") {
-      shaped = this.graphSmoothCurve(p);
+      shaped = this.graphSmoothCurve(this.graphRationalCurve(p, contour));
+    } else if (shape === "smootherstep") {
+      const w = this.graphRationalCurve(p, contour);
+      shaped = w * w * w * (w * (w * 6 - 15) + 10);
     } else if (shape === "linear") {
       shaped = p;
     } else {
@@ -533,4 +555,14 @@ NodeLiveAudioProcessor.prototype.graphValueAt = function graphValueAt(graphValue
     }
     return graph.nodes[graph.nodes.length - 1].y;
 };
+
+NodeLiveAudioProcessor.prototype.graphClampValue = function graphClampValue(value) {
+    return this.normalizeGraphNumber(value, 0, -1, 1);
+};
+(function wrapLiveGraphValueAt() {
+    const raw = NodeLiveAudioProcessor.prototype.graphValueAt;
+    NodeLiveAudioProcessor.prototype.graphValueAt = function graphValueAtClamped(graphValue, xValue, smoothingMode, tension, segmentOptions) {
+      return this.graphClampValue(raw.call(this, graphValue, xValue, smoothingMode, tension, segmentOptions));
+    };
+})();
 

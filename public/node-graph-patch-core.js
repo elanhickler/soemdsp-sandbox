@@ -369,6 +369,27 @@ function validateNodeGraphPatch(patch) {
         const offset = Number(value);
         value = Math.max(0, (Number.isFinite(offset) ? offset : 0) + squares);
       }
+      // Music Player: retired Jitter (4), Dither (5), Both (6) load as Sinc (2).
+      // Tape stays stored 7. A saved bits value is ignored (param removed).
+      if (type === "audioPlayer" && parameter.key === "interpolation") {
+        const n = Math.round(Number(value));
+        if (n === 4 || n === 5 || n === 6) {
+          value = 2;
+        }
+      }
+      // Tilt Filter: patches saved before Mode load as Tilt (0) so they
+      // keep the classic pivot curve. New instances default to Cut (1).
+      if (type === "tiltFilter" && parameter.key === "mode" && !Object.hasOwn(rawParams, "mode")) {
+        value = 0;
+      }
+      // Music Player Tape: patches saved before the new Tone/Range defaults
+      // keep the previous implicit values (Tone -2, Range 2).
+      if (type === "audioPlayer" && parameter.key === "tone" && !Object.hasOwn(rawParams, "tone")) {
+        value = -2;
+      }
+      if (type === "audioPlayer" && parameter.key === "range" && !Object.hasOwn(rawParams, "range")) {
+        value = 2;
+      }
       // Whole-number params (definition wholeNumber: true): a saved fraction rounds.
       if (parameter.wholeNumber && Number.isFinite(Number(value))) {
         value = Math.round(Number(value));

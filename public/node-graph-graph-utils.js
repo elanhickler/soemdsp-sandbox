@@ -1,5 +1,7 @@
 // Step Graph segment Shape keys (global Shape param + per-node `shape`).
-//   linear / rational / exponential / log / smoothstep / hold
+//   linear / rational / exponential / log / smoothstep / smootherstep / hold
+// Kernels live in public/node-graph-segment-curves.js (native twin:
+// library/include/soemdsp/math/segment_curves.h).
 //
 // Contour / Skew Offset domain is always −1…+1. Rational / exp / log evaluate
 // continuous with a Planck soft-cap (±(1 − 1e−7)) so kernels never see exact ±1.
@@ -9,14 +11,11 @@
 //   Step:   global Shape + Skew Offset; per-node contour `c` still local
 //           (effective contour = c + curveOffset). Empty-circle handles edit bend;
 //           node drag snaps X to the step grid (Ctrl = free X).
-const nodeGraphGraphShapes = Object.freeze([
-  "linear",
-  "rational",
-  "exponential",
-  "log",
-  "smoothstep",
-  "hold",
-]);
+const nodeGraphGraphShapes = Object.freeze(
+  typeof NODE_GRAPH_SEGMENT_SHAPES !== "undefined"
+    ? NODE_GRAPH_SEGMENT_SHAPES.slice()
+    : ["linear", "rational", "exponential", "log", "smoothstep", "smootherstep", "hold"],
+);
 // Smooth Graph Curve modes.
 // catmull = guide-tension curve (ends on-curve; interiors pull; tension scales).
 const nodeGraphSmoothGraphSmoothingModes = Object.freeze(["linear", "catmull", "quadratic", "cubic"]);
@@ -171,8 +170,14 @@ function normalizeNodeGraphGraphShape(value) {
     return "log";
   }
   // Old "smooth" name → smoothstep (same hermite S-curve).
+  if (typeof nodeGraphSegmentNormalizeShape === "function") {
+    return nodeGraphSegmentNormalizeShape(value);
+  }
   if (shape === "smooth" || shape === "smoothstep") {
     return "smoothstep";
+  }
+  if (shape === "smoother" || shape === "smootherstep") {
+    return "smootherstep";
   }
   return nodeGraphGraphShapes.includes(shape) ? shape : "rational";
 }
@@ -184,6 +189,15 @@ function normalizeNodeGraphGraphNumber(value, fallback = 0, min = 0, max = 1) {
     : fallback;
 }
 
+// Curve values (stored Y and evaluated output, including interpolation
+// overshoot) stay in -1..+1. X stays 0..1. This matches the DSP sample
+// range Argi called out: clamp the math, do not redesign the interpolators.
+const nodeGraphGraphValueMin = -1;
+const nodeGraphGraphValueMax = 1;
+function nodeGraphGraphClampValue(value, fallback = 0) {
+  return normalizeNodeGraphGraphNumber(value, fallback, nodeGraphGraphValueMin, nodeGraphGraphValueMax);
+}
+
 function normalizeNodeGraphGraphNode(value = {}, index = 0) {
   const source = value && typeof value === "object" ? value : {};
   const fallback = nodeGraphDefaultGraphData.nodes[Math.min(index, nodeGraphDefaultGraphData.nodes.length - 1)];
@@ -191,7 +205,7 @@ function normalizeNodeGraphGraphNode(value = {}, index = 0) {
     c: nodeGraphGraphNormalizeContour(source.c, fallback.c),
     shape: normalizeNodeGraphGraphShape(source.shape ?? fallback.shape),
     x: normalizeNodeGraphGraphNumber(source.x, fallback.x),
-    y: normalizeNodeGraphGraphNumber(source.y, fallback.y),
+    y: nodeGraphGraphClampValue(source.y, fallback.y),
   };
 }
 
@@ -351,6 +365,9 @@ function nodeGraphGraphContourSoftCap(contour) {
 }
 
 function nodeGraphGraphRationalCurveContinuous(position, contour = 0) {
+  if (typeof nodeGraphSegmentRational01 === "function") {
+    return nodeGraphSegmentRational01(position, contour);
+  }
   const p = normalizeNodeGraphGraphNumber(position, 0, 0, 1);
   const c = nodeGraphGraphNormalizeContour(contour, 0);
   if (Math.abs(c) < NODE_GRAPH_GRAPH_CONTOUR_PLANCK) {
@@ -370,15 +387,17 @@ function nodeGraphGraphRationalCurve(position, contour = 0) {
  * Contour domain −1…+1; soft-capped for the kernel.
  */
 function nodeGraphGraphExponentialCurveContinuous(position, contour = 0) {
+  if (typeof nodeGraphSegmentExponential01 === "function") {
+    return nodeGraphSegmentExponential01(position, contour);
+  }
   const p = normalizeNodeGraphGraphNumber(position, 0, 0, 1);
   const t = nodeGraphGraphContourSoftCap(contour);
   if (Math.abs(t) < NODE_GRAPH_GRAPH_CONTOUR_PLANCK) {
     return p;
   }
-  // |k| from ~1.2 (mild) → large as |t|→soft-max.
   const a = Math.abs(t);
   const mag = 1.2 + 6.8 * (a / (1 - a * 0.85));
-  const k = t < 0 ? -mag : mag;
+  const k = t < 0 ? mag : -mag;
   if (Math.abs(k) < 0.05) {
     return p;
   }
@@ -399,6 +418,9 @@ function nodeGraphGraphExponentialCurve(position, contour = 0) {
  * Contour domain −1…+1; soft-capped for the kernel.
  */
 function nodeGraphGraphLogarithmicCurveContinuous(position, contour = 0) {
+  if (typeof nodeGraphSegmentLogarithmic01 === "function") {
+    return nodeGraphSegmentLogarithmic01(position, contour);
+  }
   const p = normalizeNodeGraphGraphNumber(position, 0, 0, 1);
   const t = nodeGraphGraphContourSoftCap(contour);
   if (Math.abs(t) < NODE_GRAPH_GRAPH_CONTOUR_PLANCK) {
@@ -867,26 +889,43 @@ function nodeGraphGraphSegmentChordMidpoint(graph, rightIndex) {
  * continuous rational curve bows (handle follows the pointer).
  * Extremes (±1) are full skew (Planck soft-cap in continuous kernels).
  */
-function nodeGraphGraphContourFromPoint(graph, rightIndex, point) {
+function nodeGraphGraphContourFromPoint(graph, rightIndex, point, segmentOptions = {}) {
   const midpoint = nodeGraphGraphSegmentChordMidpoint(graph, rightIndex);
   const left = graph.nodes[rightIndex - 1];
   const right = graph.nodes[rightIndex];
   if (!midpoint || !left || !right) {
     return 0;
   }
-  // Rising segment: drag above chord → +c. Falling: flip so "above chord" still +c.
-  const direction = right.y >= left.y ? 1 : -1;
-  const range = Math.max(0.08, Math.abs(right.y - left.y) * 0.85 + 0.08);
-  return nodeGraphGraphNormalizeContour(
-    ((Number(point.y) - midpoint.y) / range) * direction * 1.8,
-    0,
-  );
+  const shape = segmentOptions.segmentShape != null && String(segmentOptions.segmentShape).trim() !== ""
+    ? normalizeNodeGraphGraphShape(segmentOptions.segmentShape)
+    : normalizeNodeGraphGraphShape(right.shape || "linear");
+  const dy = Number(right.y) - Number(left.y);
+  if (!Number.isFinite(dy) || Math.abs(dy) < 1e-6) {
+    const range = 0.08;
+    return nodeGraphGraphNormalizeContour(
+      ((Number(point.y) - midpoint.y) / range) * 1.8,
+      0,
+    );
+  }
+  const target = normalizeNodeGraphGraphNumber((Number(point.y) - Number(left.y)) / dy, 0.5, 0, 1);
+  if (typeof nodeGraphSegmentContourFromMidValue === "function") {
+    return nodeGraphGraphNormalizeContour(nodeGraphSegmentContourFromMidValue(target, shape), 0);
+  }
+  // Fallback: same visual sense as the shared inverse (dy already accounts for slope).
+  const range = Math.max(0.08, Math.abs(dy) * 0.85 + 0.08);
+  return nodeGraphGraphNormalizeContour(((Number(point.y) - midpoint.y) / range) * 1.8, 0);
 }
 
 /** Dragging contour forces a shape that actually uses contour (hold ignores it). */
 function nodeGraphGraphContourEditableShape(value) {
   const shape = normalizeNodeGraphGraphShape(value);
-  if (shape === "rational" || shape === "exponential" || shape === "log") {
+  if (
+    shape === "rational" ||
+    shape === "exponential" ||
+    shape === "log" ||
+    shape === "smoothstep" ||
+    shape === "smootherstep"
+  ) {
     return shape;
   }
   return "rational";
@@ -916,6 +955,9 @@ function nodeGraphGraphLegacySegmentShape(p, right, options = {}) {
     : (right?.shape != null && String(right.shape).trim() !== ""
       ? normalizeNodeGraphGraphShape(right.shape)
       : "linear");
+  if (typeof nodeGraphSegmentCurve01 === "function") {
+    return nodeGraphSegmentCurve01(p, shape, contour);
+  }
   if (shape === "exponential") {
     return nodeGraphGraphExponentialCurve(p, contour);
   }
@@ -923,11 +965,14 @@ function nodeGraphGraphLegacySegmentShape(p, right, options = {}) {
     return nodeGraphGraphLogarithmicCurve(p, contour);
   }
   if (shape === "hold") {
-    // Skew < 0 mirrors hold: jump to right.y at segment start, then hold.
     return contour < 0 ? (p > 0 ? 1 : 0) : (p >= 1 ? 1 : 0);
   }
   if (shape === "smoothstep" || shape === "smooth") {
     return nodeGraphGraphSmoothCurve(p);
+  }
+  if (shape === "smootherstep") {
+    const w = nodeGraphGraphRationalCurve(p, contour);
+    return w * w * w * (w * (w * 6 - 15) + 10);
   }
   if (shape === "linear") {
     return p;
@@ -1007,6 +1052,13 @@ function nodeGraphGraphValueAt(graphValue, xValue, smoothingMode, tension = 1, s
   return graph.nodes[graph.nodes.length - 1].y;
 }
 
+var nodeGraphGraphValueAtUnclamped = nodeGraphGraphValueAt;
+nodeGraphGraphValueAt = function nodeGraphGraphValueAtClamped(graphValue, xValue, smoothingMode, tension = 1, segmentOptions = {}) {
+  return nodeGraphGraphClampValue(
+    nodeGraphGraphValueAtUnclamped(graphValue, xValue, smoothingMode, tension, segmentOptions),
+  );
+};
+
 function nodeGraphGraphPointToSvg(x, y) {
   return {
     x: 8 + normalizeNodeGraphGraphNumber(x, 0) * 84,
@@ -1072,7 +1124,7 @@ function nodeGraphGraphSvgToGraphPoint(svg, clientX, clientY) {
   const viewY = ((clientY - rect.top) / rect.height) * 100;
   return {
     x: normalizeNodeGraphGraphNumber((viewX - 8) / 84),
-    y: normalizeNodeGraphGraphNumber((92 - viewY) / 84),
+    y: nodeGraphGraphClampValue((92 - viewY) / 84),
   };
 }
 
@@ -1088,7 +1140,7 @@ function nodeGraphGraphConstrainedNodePoint(graph, index, point) {
       : index >= lastIndex
         ? 1
         : normalizeNodeGraphGraphNumber(point.x, nodes[index]?.x || 0, Math.min(minX, maxX), Math.max(minX, maxX)),
-    y: normalizeNodeGraphGraphNumber(point.y, nodes[index]?.y || 0),
+    y: nodeGraphGraphClampValue(point.y, nodes[index]?.y || 0),
   };
 }
 
@@ -1300,11 +1352,11 @@ function renderNodeGraphGraphDisplay(element, graphValue, selectedIndex = null, 
     class: "node-module-graph-curve",
     d: nodeGraphGraphCurvePath(graph, 96, smoothingMode, tension, segmentOptions),
   }));
-  // Idle: dots/rings opacity 0. Face hover (.is-hover-reveal) shows all;
-  // .is-hot still brightens the active hit. Panel selection does not light face chrome.
-  const hitRadii = nodeGraphGraphScreenRoundRadii(element, 5.4);
-  const nodeRadii = nodeGraphGraphScreenRoundRadii(element, 1.5);
-  const contourRadii = nodeGraphGraphScreenRoundRadii(element, 2.4);
+  // Value dots and contour rings stay visible (phone / no-hover).
+  // .is-hot brightens the active hit. Panel selection does not light face chrome.
+  const hitRadii = nodeGraphGraphScreenRoundRadii(element, 7.2);
+  const nodeRadii = nodeGraphGraphScreenRoundRadii(element, 2.2);
+  const contourRadii = nodeGraphGraphScreenRoundRadii(element, 2.8);
   const showContourHandles = nodeGraphGraphShowsContourHandles(ownerNode);
   if (showContourHandles) {
     for (let index = 1; index < graph.nodes.length; index += 1) {
@@ -1319,6 +1371,14 @@ function renderNodeGraphGraphDisplay(element, graphValue, selectedIndex = null, 
         "data-graph-contour-index": String(index),
         rx: contourRadii.rx.toFixed(3),
         ry: contourRadii.ry.toFixed(3),
+      }));
+      svg.append(createNodeGraphGraphSvgElement("ellipse", {
+        class: "node-module-graph-contour-handle-hit",
+        cx: point.x.toFixed(3),
+        cy: point.y.toFixed(3),
+        "data-graph-contour-index": String(index),
+        rx: hitRadii.rx.toFixed(3),
+        ry: hitRadii.ry.toFixed(3),
       }));
     }
   }
@@ -1503,6 +1563,26 @@ function bindNodeGraphGraphFaceHover(display) {
       }
       return;
     }
+    const nearestHover = nodeGraphGraphNearestHandleAtClient(display, event.clientX, event.clientY);
+    if (nearestHover?.kind === "contour") {
+      const rightIndex = Number(nearestHover.el?.dataset?.graphContourIndex);
+      const nodeId = nodeGraphGraphNodeIdFromDisplay(display);
+      const patchNode = nodeId ? nodeGraphPatchNode(nodeId) : null;
+      const graph = patchNode ? nodeGraphGraphForNode(patchNode) : null;
+      setNodeGraphGraphPhaseHot(display, false);
+      if (graph && Number.isFinite(rightIndex) && rightIndex > 0) {
+        setNodeGraphGraphStepBarHot(display, graph, rightIndex);
+        return;
+      }
+    }
+    if (nearestHover?.kind === "node") {
+      const index = Number(nearestHover.el?.dataset?.graphNodeIndex);
+      setNodeGraphGraphPhaseHot(display, false);
+      if (Number.isFinite(index)) {
+        setNodeGraphGraphHotIndex(display, index);
+        return;
+      }
+    }
     const onPhase = Boolean(nodeGraphGraphPhaseHitFromEventTarget(event.target));
     setNodeGraphGraphPhaseHot(display, onPhase);
     if (onPhase) {
@@ -1663,7 +1743,54 @@ function nodeGraphGraphNodeCircleFromEventTarget(target) {
 }
 
 function nodeGraphGraphContourHandleFromEventTarget(target) {
-  return target?.closest?.(".node-module-graph-contour-handle") || null;
+  return target?.closest?.(".node-module-graph-contour-handle, .node-module-graph-contour-handle-hit") || null;
+}
+
+const NODE_GRAPH_GRAPH_HANDLE_PICK_PX = 28;
+
+function nodeGraphGraphNearestHandleAtClient(display, clientX, clientY) {
+  if (!display || !Number.isFinite(Number(clientX)) || !Number.isFinite(Number(clientY))) {
+    return null;
+  }
+  const reach2 = NODE_GRAPH_GRAPH_HANDLE_PICK_PX * NODE_GRAPH_GRAPH_HANDLE_PICK_PX;
+  let best = null;
+  let bestD = reach2;
+  const consider = (el, kind) => {
+    if (!(el instanceof Element)) {
+      return;
+    }
+    const box = el.getBoundingClientRect();
+    const cx = box.left + box.width * 0.5;
+    const cy = box.top + box.height * 0.5;
+    if (!Number.isFinite(cx) || !Number.isFinite(cy)) {
+      return;
+    }
+    const dx = Number(clientX) - cx;
+    const dy = Number(clientY) - cy;
+    const d = dx * dx + dy * dy;
+    if (d <= bestD) {
+      bestD = d;
+      best = { el, kind };
+    }
+  };
+  display.querySelectorAll(".node-module-graph-node-hit, .node-module-graph-node").forEach((el) => {
+    consider(el, "node");
+  });
+  display.querySelectorAll(".node-module-graph-contour-handle-hit, .node-module-graph-contour-handle").forEach((el) => {
+    consider(el, "contour");
+  });
+  return best;
+}
+
+function nodeGraphGraphCapturePointer(display, event) {
+  if (!display || event?.pointerId === undefined) {
+    return;
+  }
+  try {
+    display.setPointerCapture?.(event.pointerId);
+  } catch (_error) {
+    // Synthetic events and some lost-capture frames cannot take capture.
+  }
 }
 
 // Clamps a single node's target position without touching order: the first
@@ -1673,17 +1800,17 @@ function nodeGraphGraphContourHandleFromEventTarget(target) {
 function nodeGraphGraphClampedNodeTarget(nodes, index, point) {
   const lastIndex = nodes.length - 1;
   if (index <= 0) {
-    return { x: 0, y: normalizeNodeGraphGraphNumber(point.y, nodes[0]?.y ?? 0) };
+    return { x: 0, y: nodeGraphGraphClampValue(point.y, nodes[0]?.y ?? 0) };
   }
   if (index >= lastIndex) {
-    return { x: 1, y: normalizeNodeGraphGraphNumber(point.y, nodes[lastIndex]?.y ?? 0) };
+    return { x: 1, y: nodeGraphGraphClampValue(point.y, nodes[lastIndex]?.y ?? 0) };
   }
   const margin = 0.001;
   const minX = normalizeNodeGraphGraphNumber(nodes[index - 1]?.x, 0) + margin;
   const maxX = normalizeNodeGraphGraphNumber(nodes[index + 1]?.x, 1) - margin;
   return {
     x: normalizeNodeGraphGraphNumber(point.x, nodes[index]?.x ?? 0, Math.min(minX, maxX), Math.max(minX, maxX)),
-    y: normalizeNodeGraphGraphNumber(point.y, nodes[index]?.y ?? 0),
+    y: nodeGraphGraphClampValue(point.y, nodes[index]?.y ?? 0),
   };
 }
 
@@ -1759,12 +1886,18 @@ function beginNodeGraphGraphNodeDrag(event) {
     return;
   }
   // Only graph module faces handle these gestures.
-  const display = nodeGraphGraphDisplayFromEventTarget(event.target);
+  const display = nodeGraphGraphDisplayFromEventTarget(event.target)
+    || event.target?.closest?.('.node-module-graph-face')?.querySelector?.('.node-module-graph-display')
+    || null;
   if (!display) {
     return;
   }
-  // Contour handles first (Step Graph empty circles) — not add/remove targets.
-  const contourHandle = nodeGraphGraphContourHandleFromEventTarget(event.target);
+  // Prefer the nearest value-dot or contour handle within a generous radius
+  // so a near-miss grabs that handle instead of scrubbing phase or adding.
+  const nearest = nodeGraphGraphNearestHandleAtClient(display, event.clientX, event.clientY);
+  const contourHandle = nearest?.kind === "contour"
+    ? nearest.el
+    : (nearest?.kind === "node" ? null : nodeGraphGraphContourHandleFromEventTarget(event.target));
   if (contourHandle) {
     if (Number(event.detail) >= 2) {
       event.preventDefault();
@@ -1787,7 +1920,9 @@ function beginNodeGraphGraphNodeDrag(event) {
       nodeGraphMvp.graphNodeDragging.display?.classList.remove("dragging");
       nodeGraphMvp.graphNodeDragging = null;
     }
-    const multiCircle = nodeGraphGraphNodeCircleFromEventTarget(event.target);
+    const multiCircle = nearest?.kind === "node"
+      ? nearest.el
+      : nodeGraphGraphNodeCircleFromEventTarget(event.target);
     if (multiCircle) {
       const nodeId = nodeGraphGraphNodeIdFromDisplay(display);
       const patchNode = nodeGraphPatchNode(nodeId);
@@ -1811,7 +1946,9 @@ function beginNodeGraphGraphNodeDrag(event) {
   //   • Step Graph empty circle: drag = curve bend; Shift+drag = bar height
   //   • double-click empty → add point
   //   • double-click point → remove point
-  const circle = nodeGraphGraphNodeCircleFromEventTarget(event.target);
+  const circle = nearest?.kind === "node"
+    ? nearest.el
+    : (nearest?.kind === "contour" ? null : nodeGraphGraphNodeCircleFromEventTarget(event.target));
   if (circle) {
     // Alt on a control point still jumps the playhead (same as empty face).
     // Point removal is double-click only.
@@ -1858,7 +1995,7 @@ function beginNodeGraphGraphNodeDrag(event) {
     nodeGraphGraphDebugTrace("graph started dragging existing node", { nodeId, index });
     display?.classList.add("dragging");
     setNodeGraphGraphHotIndex(display, index);
-    circle.setPointerCapture?.(event.pointerId);
+    nodeGraphGraphCapturePointer(display, event);
     event.preventDefault();
     event.stopPropagation();
     return;
@@ -1969,12 +2106,7 @@ function beginNodeGraphGraphCursorDrag(event, sourceElement, options = {}) {
   setNodeGraphGraphPhaseHot(display, true);
   // Prefer the cursor hit line for capture; fall back to the svg so empty-face
   // phase scrub still keeps the pointer bound while the display re-renders.
-  const captureTarget = display.querySelector("[data-graph-cursor]") || svg || display;
-  try {
-    captureTarget.setPointerCapture?.(event.pointerId);
-  } catch (_error) {
-    // Drag still tracks via document-level pointermove.
-  }
+  nodeGraphGraphCapturePointer(display, event);
   // Absolute (alt): place under the pointer now. Relative: wait for a real drag.
   if (absolute) {
     dragNodeGraphGraphNode(event);
@@ -2093,21 +2225,9 @@ function addNodeGraphGraphNodeFromDisplayEvent(event, options = {}) {
 // whole lifetime, matching what a single, never-destroyed drag handle would
 // have done.
 function reacquireNodeGraphGraphPointerCaptureAfterRender(drag, event) {
-  if (!drag?.svg || event?.pointerId === undefined) {
-    return;
-  }
-  const selector = drag.mode === "cursor"
-    ? "[data-graph-cursor]"
-    : (drag.mode === "contour" || drag.mode === "stepBar")
-      ? `.node-module-graph-contour-handle[data-graph-contour-index="${drag.index}"]`
-      : `.node-module-graph-node-hit[data-graph-node-index="${drag.index}"]`;
-  const target = drag.svg.querySelector(selector) || (drag.mode === "cursor" ? drag.svg : null);
-  try {
-    target?.setPointerCapture?.(event.pointerId);
-  } catch (_error) {
-    // Ignore -- worst case capture stays released for this frame and the
-    // next pointermove will try again.
-  }
+  // Capture lives on the stable display element (not the SVG ellipses that
+  // replaceChildren() destroys every frame).
+  nodeGraphGraphCapturePointer(drag?.display, event);
 }
 
 /**
@@ -2163,11 +2283,7 @@ function beginNodeGraphGraphContourDrag(event, contourHandle) {
   } else {
     setNodeGraphGraphStepBarHot(display, graph, index);
   }
-  try {
-    contourHandle?.setPointerCapture?.(event.pointerId);
-  } catch (_error) {
-    // Synthetic pointer events may not own capture.
-  }
+  nodeGraphGraphCapturePointer(display, event);
   event.preventDefault();
   event.stopPropagation();
 }
@@ -2346,7 +2462,7 @@ function dragNodeGraphGraphNode(event) {
       -1,
       1,
     );
-    const effective = nodeGraphGraphContourFromPoint(drag.graph, drag.index, point);
+    const effective = nodeGraphGraphContourFromPoint(drag.graph, drag.index, point, faceRenderOptions?.segmentOptions);
     nodes[drag.index] = normalizeNodeGraphGraphNode({
       ...current,
       c: nodeGraphGraphNormalizeContour(effective - curveOffset, 0),

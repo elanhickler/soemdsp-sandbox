@@ -712,13 +712,24 @@ NodeLiveAudioProcessor.prototype.processControllerEfficientSidecar = function pr
       if (liveIds.size === 1) wrapLoop = loop;
       const tickFrom = wrapTick(tickFromRaw, loop);
       const silent = Boolean(node.bypassed);
-      const sounding = silent
+      let sounding = silent
         ? []
         : (typeof sequencerSoundingInRange === "function"
           ? sequencerSoundingInRange(clip, tickFrom, tickFrom + 1, loop)
           : (typeof sequencerSoundingAt === "function"
             ? sequencerSoundingAt(clip, tickFrom)
             : []));
+      if (!silent) {
+        const audition = this.sequencerAuditionByNode?.get?.(nid);
+        const am = audition ? Math.round(Number(audition.midi)) : -1;
+        if (Number.isFinite(am) && am >= 0 && am <= 127) {
+          const vel = Math.max(1, Math.min(127, Math.round(Number(audition.velocity) || 100)));
+          const already = Array.isArray(sounding) && sounding.some((note) => Math.round(Number(note && note.midi)) === am);
+          if (!already) {
+            sounding = (Array.isArray(sounding) ? sounding : []).concat([{ midi: am, vel, start: 0, length: 1 }]);
+          }
+        }
+      }
       const prev = this._sequencerPrevMasks.get(nid);
       const outs = typeof sequencerOutputsFromNotes === "function"
         ? sequencerOutputsFromNotes(sounding, 0, prev)

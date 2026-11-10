@@ -2877,8 +2877,14 @@ function nodeGraphAudioPlayerVideoscopePaintLr(batch, width, height, channels, s
     ? Math.round(((win.playhead - win.start) / win.span) * width)
     : 0;
   // Playhead: thickness / color / alpha from the Music Player display settings.
-  const playW = settings && Number(settings.scrollLineWidth) > 0
-    ? Math.max(1, Math.round(Number(settings.scrollLineWidth) * (Number(pixelRatio) > 0 ? Number(pixelRatio) : 1)))
+  // Authored 0 px hides the playhead completely (no 1 px GPU floor).
+  const authoredPlayW = settings && Number.isFinite(Number(settings.scrollLineWidth))
+    ? Number(settings.scrollLineWidth)
+    : (typeof nodeGraphSampleWaveformDefaultSettings !== "undefined"
+      ? nodeGraphSampleWaveformDefaultSettings.scrollLineWidth
+      : 1);
+  const playW = authoredPlayW > 0
+    ? Math.max(1, Math.round(authoredPlayW * (Number(pixelRatio) > 0 ? Number(pixelRatio) : 1)))
     : 0;
   if (playW > 0) {
     const playRgba = typeof nodeGraphSampleWaveformPlayheadRgba === "function"

@@ -18,6 +18,18 @@ When in doubt: prefer **honesty, one path, and delete over compatibility**.
 
 - **Planck range:** `kPlanck` = 1e-7 (silence / floor). `kInvPlanck` = 1/`kPlanck` = 10,000,000. Use `planck_divisor` / `clamp_planck_range` on modules that can explode (Divide). Do not clamp ordinary osc/filter outs to 10M.
 
+### MIDI boundary (Argi, 2026-11-10)
+
+Only **MIDI-category modules** may ingest MIDI protocol (WebMIDI, host/DAW MIDI bytes, Learn on a MIDI destination) or emit MIDI. Today that set is the MIDI module (`keyboardController`, catalog name "MIDI") and **MIDI CC** (`midiCc`, in Controllers). Future MIDI-input modules belong in that same MIDI-handling set (Controllers are for talking to the outside world; Portals are plugin internals).
+
+Once a MIDI module has converted a message, the rest of the patch sees only **plain signals**: `ƒ` (Hz), `pitch` / `♯/♭` (note number, see Pitch convention above), Gate, Trigger, Velocity, Play Keys bitmasks, MIDI CC's Out/Raw/Smooth. No other module may read WebMIDI or host MIDI directly, send MIDI, or expose a MIDI-typed cable or data bus in the circuit builder. Keyboard and Grid Keyboard are signal senders (and may *receive* Play Keys / Gate as signals). They must not listen to the hardware MIDI stream or light up from it unless the user wired the MIDI module's outs into them.
+
+Pitch-as-note-number on a white `♯/♭` jack is a signal, not MIDI protocol. Do not add a MIDI cable type.
+
+VoiceManager notes come only from cables into Meta Voices (Play Keys / Arp Keys / Chord Memory / Voices). WebMIDI, on-screen Keyboard / Grid Keyboard, and sequencer clip audition must not fire VoiceManager note_on/note_off directly. Sequencer audition mixes the preview note into that sequencer's own Play Keys / Gate / Trigger / pitch / ƒ outputs so wired Voices (and anything else on those cables) hear it. Pitch Wheel and Mod Wheel are plain signal modules (their own UI only); hardware CC1 and pitch-bend go through MIDI CC.
+
+On-screen Keyboard / Grid Keyboard UI uses keyboard naming (`node-keyboard-*` classes, `keyboardFace` display type, `nodeGraphKeyboard*` helpers). Genuine MIDI-module identifiers stay MIDI: type `keyboardController`, `midiCc` (saved `midiLag` migrates), `midiKeyboardSignal` / `midiKeyboardPlayMask` / held-note state, WebMIDI ingest (`handleNodeGraphMidiKeyboardMessage`, device picker). Saved patches that still say `keyboardControllerFace` load as `keyboardFace`.
+
 ### Gates & Triggers
 
 Binding spec: [GATES_TRIGGERS.md](./GATES_TRIGGERS.md). White round jacks, glyphs ▮ / ⎍ / ↺. Detector: `gate_hit` / `silent_planck` (`|x| < 1e-7` is rest; leave silence either sign is a hit). Height is velocity. Trigger is one sample. Gate follows live height until silence. Reset is the same hit, height ignored. Thru outs `clamp(internal + in, -1, +1)`.
@@ -730,6 +742,10 @@ That ban applies only when all three are true: there is no consequence for leavi
 - The oldcode repo is never linked publicly.
 
 ## Amendments
+
+- **2026-11-10 — MIDI boundary:** Only MIDI modules handle MIDI protocol. After conversion, the circuit is signals only (no MIDI cables, no non-MIDI module sending or ingesting MIDI). VoiceManager follows wired Play Keys / Voices only (no WebMIDI or keyboard pointer side-channel). Pitch/Mod wheels are not written from raw MIDI (use MIDI CC). Percussion has no GM channel knob. See **MIDI boundary** under Pitch convention.
+- **2026-11-10 — MIDI Lag renamed MIDI CC:** Catalog name **MIDI CC**, JS type `midiCc`, Controllers category. Native type id stays 242. Saved `midiLag` nodes and `midiLagRaw` / `midiLagSmooth` / `midiLagState` keys migrate on load.
+
 
 Add new rules here when the same class of mistake happens twice. Keep this file short and enforceable.
 

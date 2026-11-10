@@ -1,0 +1,10 @@
+# Compiled and media files are binary. Do not apply text/CRLF transforms.
+*.wasm binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.wav binary
+*.mp3 binary
+*.ico binary

@@ -217,8 +217,8 @@ function createNodeGraphSequencerBody(node) {
 
   let auditionMidi = -1;
   function sequencerAuditionStop() {
-    if (auditionMidi >= 0 && typeof sendNodeGraphLiveVmNoteOff === "function") {
-      sendNodeGraphLiveVmNoteOff(auditionMidi);
+    if (auditionMidi >= 0 && typeof sendNodeGraphLiveSequencerAudition === "function") {
+      sendNodeGraphLiveSequencerAudition(nodeId, -1);
     }
     auditionMidi = -1;
   }
@@ -232,8 +232,9 @@ function createNodeGraphSequencerBody(node) {
     if (!Number.isFinite(n)) return;
     if (n === auditionMidi) return;
     sequencerAuditionStop();
-    if (typeof sendNodeGraphLiveVmNoteOn === "function") {
-      sendNodeGraphLiveVmNoteOn(n, (clip.notes?.[0]?.vel || 100) / 127);
+    const vel = Math.max(1, Math.min(127, Math.round(Number(clip.notes?.[0]?.vel) || 100)));
+    if (typeof sendNodeGraphLiveSequencerAudition === "function") {
+      sendNodeGraphLiveSequencerAudition(nodeId, n, vel);
     }
     auditionMidi = n;
   }

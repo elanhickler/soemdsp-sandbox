@@ -126,7 +126,9 @@ nodeGraphGraphSvgToGraphPoint = function nodeGraphGraphSvgToGraphPoint(svg, clie
   const yUnit = (92 - viewY) / 84;
   return {
     x: normalizeNodeGraphGraphNumber((viewX - 8) / 84),
-    y: normalizeNodeGraphGraphNumber(zoom.zoomMin + yUnit * span, 0, -Infinity, Infinity),
+    y: typeof nodeGraphGraphClampValue === "function"
+      ? nodeGraphGraphClampValue(zoom.zoomMin + yUnit * span, 0)
+      : normalizeNodeGraphGraphNumber(zoom.zoomMin + yUnit * span, 0, -1, 1),
   };
 }
 
@@ -204,7 +206,6 @@ function buildNodeGraphGraphPointStrip(patchNode) {
   for (const field of nodeGraphGraphPointStripFieldsForType(type)) {
     const label = document.createElement("label");
     label.className = "node-module-graph-point-strip-field";
-    label.title = field.title;
     const name = document.createElement("span");
     name.className = "node-module-graph-point-strip-label";
     name.textContent = field.label;

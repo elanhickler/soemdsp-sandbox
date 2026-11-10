@@ -548,15 +548,23 @@ function nodeGraphParameterDefinitionMetadata(parameter) {
 
 /**
  * Continuous params with no time (or 0) get the shared 0.0333 s linear
- * *internal* default. Mode must be Internal — Global ignores per-param seconds
- * (only header time), so Global + header 0 was always snapping.
- * Discrete / off / already-timed params are left alone.
+ * *internal* default. Do not rewrite an *explicit* Global (module definition
+ * or Parameter Settings) to Internal — Global uses only the header Smooth
+ * Time, and that rewrite made the top-bar control look dead.
+ * Unset mode still defaults to Internal 0.0333 so existing knobs keep their
+ * previous glide. Discrete / off / already-timed params are left alone.
  */
 function nodeGraphParameterNeedsDefaultModuleSmoothing(meta, source = {}) {
   if (!meta || typeof meta !== "object") {
     return false;
   }
-  if (normalizeNodeGraphMetadataSmoothingMode(meta.smoothingMode) === "off") {
+  const smoothingMode = normalizeNodeGraphMetadataSmoothingMode(meta.smoothingMode);
+  if (smoothingMode === "off") {
+    return false;
+  }
+  const sourceMode = source && source.smoothingMode;
+  const hasExplicitMode = sourceMode != null && String(sourceMode).trim() !== "";
+  if (hasExplicitMode && smoothingMode === "global") {
     return false;
   }
   if (normalizeNodeGraphMetadataSmoothingType(meta.smoothingType) === "none") {
@@ -925,6 +933,13 @@ function normalizeNodeGraphPatchParameterMetadata(type, key, metadata = {}) {
       ? Boolean(source.visible)
       : nodeGraphParameterDefaultVisible(parameter),
   };
+  // Music Player Playback (interpolation) shipped as definition-hidden while
+  // the Square/Linear/Sinc face row was added. Load/save then stamped
+  // paramMeta.visible=false onto every existing player, so un-hiding the
+  // definition alone could not reveal the row. Always show Playback, Tilt, Tone, and Range.
+  if (type === "audioPlayer" && (key === "interpolation" || key === "tilt" || key === "tone" || key === "range")) {
+    normalized.visible = true;
+  }
   normalized.linearSmoothing = nodeGraphMetadataLinearSmoothingFromType(normalized.smoothingType);
   if (nodeGraphParameterNeedsDefaultModuleSmoothing(normalized, source)) {
     nodeGraphApplyDefaultModuleSmoothing(normalized);
@@ -946,6 +961,17 @@ function normalizeNodeGraphPatchParameterMetadata(type, key, metadata = {}) {
     normalized.linearSmoothing = false;
     normalized.smoothingMode = "off";
     normalized.smoothingSeconds = 0;
+  }
+  // Music Player Speed shipped as linearSmoothing:false → type "none". Global
+  // header and Internal times were then ignored (instant snaps). Honor the
+  // source mode/time by enabling Linear unless the user chose Off.
+  if (type === "audioPlayer" && key === "speed") {
+    const speedMode = normalizeNodeGraphMetadataSmoothingMode(normalized.smoothingMode);
+    const speedType = normalizeNodeGraphMetadataSmoothingType(normalized.smoothingType);
+    if (speedType === "none" && speedMode !== "off") {
+      normalized.smoothingType = "linear";
+      normalized.linearSmoothing = true;
+    }
   }
   // Input / Output volume: always 0.0333s linear. Saved paramMeta cannot change it.
   if (nodeGraphIsHardcodedIoVolumeParam(type, key)) {

@@ -140,7 +140,6 @@ const nodeGraphModuleCatalogUnderConstructionSort = Object.freeze([
   "sampleLooper",
   "shootingStarExplosion",
   "stftBlur",
-  "tiltFilter",
   "windowReopen",
   "wireBreak",
   "wireConnect",
@@ -190,6 +189,7 @@ const nodeGraphModuleCatalogRetiredFromUnderConstruction = Object.freeze([
   "softpopFilter",
   "softpop2",
   "acidSequencer",
+  "tiltFilter",
 ]);
 
 /** Short shop-card reminder for under-construction modules (title tooltip). */
@@ -223,7 +223,7 @@ const nodeGraphModuleConstructionPlans = Object.freeze({
   flexGrid: "Multi-point CV morph grid. Parked until the modulator surface lands.",
   gravity: "Few-body Newtonian orbits on phosphor. First Doppler puzzle piece. Parked — write pairwise + leapfrog ourselves.",
   ePiano: "GM electric piano. Parked until sample/MIDI voices exist.",
-  percussion: "GM channel-10 kit. Parked until sample/MIDI voices exist.",
+  percussion: "Kit player (under construction). Signal ins: Note / Gate / Velocity.",
   additiveImage: "Image→partials. Parked until image analysis ships.",
   audioInput: "Live mic/line in. Parked until host capture is wired.",
   shootingStarTail: "Shooting-star trail events. Parked until that game trigger lands.",
@@ -1427,6 +1427,12 @@ const nodeGraphModuleStoreCatalog = Object.freeze({
     label: "Previous Patch",
     notes: ["patch navigation", "trigger input", "music player"],
   },
+  midiCc: {
+    category: "controller",
+    description: "Smooth a MIDI CC, pitch bend, or aftertouch. Out is smoothed×Amp + In; White is Out×128.",
+    label: "MIDI CC",
+    notes: ["midi", "cc", "pitch bend", "aftertouch", "learn", "14-bit", "smoothing", "controller"],
+  },
   keyboardController: {
     category: "portal",
     description: "Hardware MIDI in (Portal): Play Keys (blue) bitmask. Wire Play Keys into Meta Voices (or into Keyboard Play Keys for face lights).",
@@ -1490,9 +1496,9 @@ const nodeGraphModuleStoreCatalog = Object.freeze({
   },
   tiltFilter: {
     category: "scientificFilter",
-    description: "Pivot bright/dark balance without a hard cut—quick spectral posture.",
+    description: "Constant-slope spectral tilt around a pivot (dB/oct). Tilt / Cut / Matched level modes.",
     label: "Tilt Filter",
-    notes: ["tilt", "shelf", "tone balance", "first order", "Robin Schmidt", "RS-MET", "scientific"],
+    notes: ["tilt", "slope", "dB/oct", "pivot", "tone balance", "scientific", "native"],
   },
   eqFilter: {
     category: "scientificFilter",
@@ -1907,9 +1913,9 @@ const nodeGraphModuleStoreCatalog = Object.freeze({
   },
   percussion: {
     category: "sample",
-    description: "Placeholder GM percussion / drum kit on channel 10 (under construction).",
+    description: "Placeholder kit player (under construction). Note / Gate / Velocity signal inputs; no MIDI protocol.",
     label: "Percussion (10)",
-    notes: ["under construction", "sample", "percussion", "drums", "GM", "channel 10", "midi", "soundfont"],
+    notes: ["under construction", "sample", "percussion", "drums", "kit", "soundfont"],
   },
   // --- Analog Filter: character / named circuits ---
   yellowjacketFilter: {

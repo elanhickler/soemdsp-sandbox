@@ -464,14 +464,14 @@ function beginNodeGraphLayoutCanvasStage(nodeIds, mode = "perform") {
       nodeGraphLayoutCanvasApplyTileRect(item.tile, item.rect, stage);
     if (typeof nodeGraphScreenSoloWholeModuleFit === "function") nodeGraphScreenSoloWholeModuleFit(item.tile);
     }
-    if (typeof installNodeGraphMidiKeyboardLayoutResizeObserver === "function") {
-      installNodeGraphMidiKeyboardLayoutResizeObserver();
+    if (typeof installNodeGraphKeyboardLayoutResizeObserver === "function") {
+      installNodeGraphKeyboardLayoutResizeObserver();
     }
-    if (typeof applyNodeGraphMidiKeyboardLayout === "function") {
-      applyNodeGraphMidiKeyboardLayout();
+    if (typeof applyNodeGraphKeyboardLayout === "function") {
+      applyNodeGraphKeyboardLayout();
     }
-    if (typeof renderNodeGraphMidiKeyboardKeys === "function") {
-      renderNodeGraphMidiKeyboardKeys();
+    if (typeof renderNodeGraphKeyboardKeys === "function") {
+      renderNodeGraphKeyboardKeys();
     }
   };
 

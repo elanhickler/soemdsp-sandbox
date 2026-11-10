@@ -336,14 +336,14 @@ function nodeGraphMetamodulePresentCanvasOnFace(metaId) {
   }
   NODE_GRAPH_METAMODULE_CANVAS_SESSIONS.set(id, { items, stage, ro });
   for (const item of items) nodeGraphMetamoduleWakePresentedItem(item);
-  if (typeof installNodeGraphMidiKeyboardLayoutResizeObserver === "function") {
-    installNodeGraphMidiKeyboardLayoutResizeObserver();
+  if (typeof installNodeGraphKeyboardLayoutResizeObserver === "function") {
+    installNodeGraphKeyboardLayoutResizeObserver();
   }
-  if (typeof applyNodeGraphMidiKeyboardLayout === "function") {
-    applyNodeGraphMidiKeyboardLayout();
+  if (typeof applyNodeGraphKeyboardLayout === "function") {
+    applyNodeGraphKeyboardLayout();
   }
-  if (typeof renderNodeGraphMidiKeyboardKeys === "function") {
-    renderNodeGraphMidiKeyboardKeys();
+  if (typeof renderNodeGraphKeyboardKeys === "function") {
+    renderNodeGraphKeyboardKeys();
   }
   if (typeof scheduleNodeGraphModuleScopeDraw === "function") {
     scheduleNodeGraphModuleScopeDraw();

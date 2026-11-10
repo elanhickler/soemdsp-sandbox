@@ -3,7 +3,7 @@
 // Draw picks how samples are joined:
 //   Discrete      each sample held flat until the next (2D Plot: a dot each)
 //   Linear        straight segments between real samples (default)
-//   Reconstructed the bandlimited signal between samples (windowed sinc,
+//   Sinc (stored as reconstructed) the bandlimited signal between samples (windowed sinc,
 //                 32 taps), the curve a DAC plays and a formula face draws
 // More than two samples per pixel: every mode shows the min/max band per
 // pixel column. Ink (1D plots): Stroke only / Fill only / Fill & stroke, the
@@ -67,7 +67,8 @@ function normalizeNodeGraphPlotFaceSettings(settings = {}) {
   out.skipDiscontinuities = on(merged.skipDiscontinuities, d.skipDiscontinuities);
   const channel = String(merged.syncChannel || "").toLowerCase();
   out.syncChannel = ["off", "left", "right", "mono"].includes(channel) ? channel : d.syncChannel;
-  const draw = String(merged.plotDraw || "").toLowerCase();
+  const drawRaw = String(merged.plotDraw || "").toLowerCase();
+  const draw = drawRaw === "sinc" ? "reconstructed" : drawRaw;
   out.plotDraw = ["discrete", "linear", "reconstructed"].includes(draw) ? draw : d.plotDraw;
   const ink = String(merged.barInk || "").toLowerCase();
   out.barInk = ["fill", "stroke", "both"].includes(ink) ? ink : d.barInk;
@@ -101,7 +102,7 @@ function nodeGraphPlotWindowView(buffer, length, win) {
   return buffer.subarray(from, from + win.n + 2);
 }
 
-// Reconstructed: windowed sinc, PLOT_SINC_K taps each side (Blackman window).
+// Sinc (stored as reconstructed): windowed sinc, PLOT_SINC_K taps each side (Blackman window).
 const PLOT_SINC_K = 16;
 
 function nodeGraphPlotBad(v) {
@@ -220,7 +221,7 @@ function nodeGraphPlotLinePoints(v, o) {
     }
     return { points: out, band: null, base };
   }
-  // Reconstructed: the bandlimited curve through the samples.
+  // Sinc (stored as reconstructed): the bandlimited curve through the samples.
   const table = nodeGraphPlotSincTable(M);
   for (let i = 0; i < n; i += 1) {
     const s = v[i];
@@ -325,12 +326,16 @@ function drawNodeGraphPlotItem(renderer, item, pixelRatio) {
   }
 
   const type = String(node.type || slot?.type || "");
+  const def = (typeof nodeGraphModuleDefinitions !== "undefined" && nodeGraphModuleDefinitions[type]) || {};
+  const signalPorts = Array.isArray(def.displaySignalPorts) ? def.displaySignalPorts : null;
   const mono = type === "plot1d";
   const xy = type === "plot2d";
   // Output module: the 1D Plot Stereo face with Mono folded into both lines.
   const outputModule = type === "output";
-  let a = nodeGraphPlotPortBuffer(nodeId, mono ? "In" : "Left", mono ? item?.buffer : null);
-  let b = mono ? null : nodeGraphPlotPortBuffer(nodeId, "Right");
+  const portA = signalPorts && signalPorts[0] ? signalPorts[0] : (mono ? "In" : "Left");
+  const portB = signalPorts && signalPorts.length > 1 ? signalPorts[1] : (mono ? null : "Right");
+  let a = nodeGraphPlotPortBuffer(nodeId, portA, mono ? item?.buffer : null);
+  let b = portB ? nodeGraphPlotPortBuffer(nodeId, portB) : null;
   const m = outputModule ? nodeGraphPlotPortBuffer(nodeId, "Mono") : null;
   if (m?.length) {
     if (!a?.length) a = m;

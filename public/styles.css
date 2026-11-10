@@ -13,6 +13,72 @@
   font-display: swap;
 }
 
+/* Bundled UI fonts (same families and weights as the old CDN stylesheet).
+   Each family is SIL OFL 1.1; see public/fonts/<Family>/LICENSE.txt. */
+@font-face {
+  font-family: "Big Shoulders";
+  src: url("./fonts/Big-Shoulders/BigShoulders-Variable.woff2") format("woff2");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "JetBrains Mono";
+  src: url("./fonts/JetBrains-Mono/JetBrainsMono-Variable.woff2") format("woff2");
+  font-weight: 100 800;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Poiret One";
+  src: url("./fonts/Poiret-One/PoiretOne-Regular.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Tenor Sans";
+  src: url("./fonts/Tenor-Sans/TenorSans-Regular.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Thasadith";
+  src: url("./fonts/Thasadith/Thasadith-Regular.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Thasadith";
+  src: url("./fonts/Thasadith/Thasadith-Italic.woff2") format("woff2");
+  font-weight: 400;
+  font-style: italic;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Thasadith";
+  src: url("./fonts/Thasadith/Thasadith-Bold.woff2") format("woff2");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Thasadith";
+  src: url("./fonts/Thasadith/Thasadith-BoldItalic.woff2") format("woff2");
+  font-weight: 700;
+  font-style: italic;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Zen Loop";
+  src: url("./fonts/Zen-Loop/ZenLoop-Regular.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
 :root {
   color-scheme: dark;
   --bg: #000000;
@@ -2977,7 +3043,7 @@ html.soemdsp-hide-ui.body.node-patch-load-fault-open #nodePatchLoadFault {
   font: 800 0.82rem/1 "Cascadia Mono", Consolas, monospace;
 }
 
-.node-midi-keyboard-panel {
+.node-keyboard-panel {
   display: grid;
   gap: 6px;
   width: 100%;
@@ -2991,9 +3057,9 @@ html.soemdsp-hide-ui.body.node-patch-load-fault-open #nodePatchLoadFault {
     #080a0c;
 }
 
-.node-midi-keyboard-module {
+.node-keyboard-module {
   /* Default (non-dock / non-module-face hosts): fixed piano track + signal rows. */
-  grid-template-rows: auto var(--midi-keyboard-piano-height, 112px) auto auto;
+  grid-template-rows: auto var(--keyboard-piano-height, 112px) auto auto;
   height: auto;
   min-height: 0;
   margin: 0;
@@ -3002,10 +3068,10 @@ html.soemdsp-hide-ui.body.node-patch-load-fault-open #nodePatchLoadFault {
 
 /* Keyboard module face: compact controls on top, piano fills remaining vertical space.
    Same grid when the face is reparented onto layout canvas / Meta shell. */
-.dsp-node.keyboard-layout > .node-midi-keyboard-module.node-module-face,
-.node-layout-canvas-tile > .node-midi-keyboard-module.node-module-face,
-.node-screen-solo-stage .node-midi-keyboard-module.node-module-face,
-.node-metamodule-canvas-stage .node-midi-keyboard-module.node-module-face {
+.dsp-node.keyboard-layout > .node-keyboard-module.node-module-face,
+.node-layout-canvas-tile > .node-keyboard-module.node-module-face,
+.node-screen-solo-stage .node-keyboard-module.node-module-face,
+.node-metamodule-canvas-stage .node-keyboard-module.node-module-face {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
   align-content: stretch;
@@ -3026,16 +3092,16 @@ html.soemdsp-hide-ui.body.node-patch-load-fault-open #nodePatchLoadFault {
 }
 
 /* Graph module wall: header controls may spill left into the chrome instead of wrapping. */
-.dsp-node.keyboard-layout > .node-midi-keyboard-module.node-module-face {
+.dsp-node.keyboard-layout > .node-keyboard-module.node-module-face {
   overflow-x: visible;
   overflow-y: hidden;
 }
 
 /* Solo-stage rules set position:relative on every face; keyboard on a canvas
    tile must still fill the tile and keep a real piano row. */
-body.node-screen-solo-active .node-layout-canvas-tile > .node-screen-solo-face.node-midi-keyboard-module,
-.node-layout-canvas-tile > .node-midi-keyboard-module.node-module-face,
-.node-metamodule-canvas-stage .node-layout-canvas-tile > .node-midi-keyboard-module {
+body.node-screen-solo-active .node-layout-canvas-tile > .node-screen-solo-face.node-keyboard-module,
+.node-layout-canvas-tile > .node-keyboard-module.node-module-face,
+.node-metamodule-canvas-stage .node-layout-canvas-tile > .node-keyboard-module {
   display: grid !important;
   grid-template-rows: auto minmax(48px, 1fr) !important;
   position: absolute !important;
@@ -3048,29 +3114,29 @@ body.node-screen-solo-active .node-layout-canvas-tile > .node-screen-solo-face.n
 /* Hide-info (default): heading is display:none, so a two-row auto+1fr grid puts the
    only piano child in the auto track. With height:100%/min-height:0 the piano collapses
    to 0 while the empty 1fr track eats the tile. Force a single fr row instead. */
-body.node-screen-solo-active .node-layout-canvas-tile > .node-screen-solo-face.node-midi-keyboard-module:not(.show-keyboard-info),
-.node-layout-canvas-tile > .node-midi-keyboard-module.node-module-face:not(.show-keyboard-info),
-.node-metamodule-canvas-stage .node-layout-canvas-tile > .node-midi-keyboard-module:not(.show-keyboard-info),
-.dsp-node.keyboard-layout > .node-midi-keyboard-module.node-module-face:not(.show-keyboard-info),
-.node-screen-solo-stage .node-midi-keyboard-module.node-module-face:not(.show-keyboard-info),
-.node-metamodule-canvas-stage .node-midi-keyboard-module.node-module-face:not(.show-keyboard-info) {
+body.node-screen-solo-active .node-layout-canvas-tile > .node-screen-solo-face.node-keyboard-module:not(.show-keyboard-info),
+.node-layout-canvas-tile > .node-keyboard-module.node-module-face:not(.show-keyboard-info),
+.node-metamodule-canvas-stage .node-layout-canvas-tile > .node-keyboard-module:not(.show-keyboard-info),
+.dsp-node.keyboard-layout > .node-keyboard-module.node-module-face:not(.show-keyboard-info),
+.node-screen-solo-stage .node-keyboard-module.node-module-face:not(.show-keyboard-info),
+.node-metamodule-canvas-stage .node-keyboard-module.node-module-face:not(.show-keyboard-info) {
   grid-template-rows: minmax(48px, 1fr) !important;
 }
 
-body.node-screen-solo-active .node-layout-canvas-tile .node-midi-keyboard-heading,
-.node-layout-canvas-tile .node-midi-keyboard-heading,
-.node-metamodule-canvas-stage .node-midi-keyboard-heading {
+body.node-screen-solo-active .node-layout-canvas-tile .node-keyboard-heading,
+.node-layout-canvas-tile .node-keyboard-heading,
+.node-metamodule-canvas-stage .node-keyboard-heading {
   max-height: 36%;
   overflow: hidden;
   flex-shrink: 0;
 }
 
-body.node-screen-solo-active .node-layout-canvas-tile .node-midi-keyboard-performance,
-body.node-screen-solo-active .node-layout-canvas-tile .node-midi-keyboard-surface,
-.node-layout-canvas-tile .node-midi-keyboard-performance,
-.node-layout-canvas-tile .node-midi-keyboard-surface,
-.node-metamodule-canvas-stage .node-midi-keyboard-performance,
-.node-metamodule-canvas-stage .node-midi-keyboard-surface {
+body.node-screen-solo-active .node-layout-canvas-tile .node-keyboard-performance,
+body.node-screen-solo-active .node-layout-canvas-tile .node-keyboard-surface,
+.node-layout-canvas-tile .node-keyboard-performance,
+.node-layout-canvas-tile .node-keyboard-surface,
+.node-metamodule-canvas-stage .node-keyboard-performance,
+.node-metamodule-canvas-stage .node-keyboard-surface {
   flex: 1 1 auto !important;
   width: 100% !important;
   height: 100% !important;
@@ -3079,21 +3145,21 @@ body.node-screen-solo-active .node-layout-canvas-tile .node-midi-keyboard-surfac
   max-height: none !important;
 }
 
-.dsp-node.keyboard-layout > .node-midi-keyboard-module .node-midi-keyboard-signal-bar,
-.dsp-node.keyboard-layout > .node-midi-keyboard-module .node-midi-keyboard-bitmask-row,
-.node-layout-canvas-tile .node-midi-keyboard-module .node-midi-keyboard-signal-bar,
-.node-layout-canvas-tile .node-midi-keyboard-module .node-midi-keyboard-bitmask-row,
-.node-screen-solo-stage .node-midi-keyboard-module .node-midi-keyboard-signal-bar,
-.node-screen-solo-stage .node-midi-keyboard-module .node-midi-keyboard-bitmask-row,
-.node-metamodule-canvas-stage .node-midi-keyboard-module .node-midi-keyboard-signal-bar,
-.node-metamodule-canvas-stage .node-midi-keyboard-module .node-midi-keyboard-bitmask-row {
+.dsp-node.keyboard-layout > .node-keyboard-module .node-keyboard-signal-bar,
+.dsp-node.keyboard-layout > .node-keyboard-module .node-keyboard-bitmask-row,
+.node-layout-canvas-tile .node-keyboard-module .node-keyboard-signal-bar,
+.node-layout-canvas-tile .node-keyboard-module .node-keyboard-bitmask-row,
+.node-screen-solo-stage .node-keyboard-module .node-keyboard-signal-bar,
+.node-screen-solo-stage .node-keyboard-module .node-keyboard-bitmask-row,
+.node-metamodule-canvas-stage .node-keyboard-module .node-keyboard-signal-bar,
+.node-metamodule-canvas-stage .node-keyboard-module .node-keyboard-bitmask-row {
   display: none !important;
 }
 
-.dsp-node.keyboard-layout > .node-midi-keyboard-module .node-midi-keyboard-heading,
-.node-layout-canvas-tile .node-midi-keyboard-module .node-midi-keyboard-heading,
-.node-screen-solo-stage .node-midi-keyboard-module .node-midi-keyboard-heading,
-.node-metamodule-canvas-stage .node-midi-keyboard-module .node-midi-keyboard-heading {
+.dsp-node.keyboard-layout > .node-keyboard-module .node-keyboard-heading,
+.node-layout-canvas-tile .node-keyboard-module .node-keyboard-heading,
+.node-screen-solo-stage .node-keyboard-module .node-keyboard-heading,
+.node-metamodule-canvas-stage .node-keyboard-module .node-keyboard-heading {
   display: flex;
   flex-wrap: nowrap;
   align-items: center;
@@ -3104,20 +3170,20 @@ body.node-screen-solo-active .node-layout-canvas-tile .node-midi-keyboard-surfac
   overflow: visible;
 }
 
-.dsp-node.keyboard-layout > .node-midi-keyboard-module .node-midi-keyboard-heading > .node-midi-keyboard-midi-controls,
-.node-layout-canvas-tile .node-midi-keyboard-module .node-midi-keyboard-heading > .node-midi-keyboard-midi-controls,
-.node-screen-solo-stage .node-midi-keyboard-module .node-midi-keyboard-heading > .node-midi-keyboard-midi-controls,
-.node-metamodule-canvas-stage .node-midi-keyboard-module .node-midi-keyboard-heading > .node-midi-keyboard-midi-controls {
+.dsp-node.keyboard-layout > .node-keyboard-module .node-keyboard-heading > .node-keyboard-midi-controls,
+.node-layout-canvas-tile .node-keyboard-module .node-keyboard-heading > .node-keyboard-midi-controls,
+.node-screen-solo-stage .node-keyboard-module .node-keyboard-heading > .node-keyboard-midi-controls,
+.node-metamodule-canvas-stage .node-keyboard-module .node-keyboard-heading > .node-keyboard-midi-controls {
   flex-wrap: nowrap;
   justify-content: flex-start;
   gap: 4px;
   overflow: visible;
 }
 
-.dsp-node.keyboard-layout > .node-midi-keyboard-module .node-midi-keyboard-performance,
-.node-layout-canvas-tile .node-midi-keyboard-module .node-midi-keyboard-performance,
-.node-screen-solo-stage .node-midi-keyboard-module .node-midi-keyboard-performance,
-.node-metamodule-canvas-stage .node-midi-keyboard-module .node-midi-keyboard-performance {
+.dsp-node.keyboard-layout > .node-keyboard-module .node-keyboard-performance,
+.node-layout-canvas-tile .node-keyboard-module .node-keyboard-performance,
+.node-screen-solo-stage .node-keyboard-module .node-keyboard-performance,
+.node-metamodule-canvas-stage .node-keyboard-module .node-keyboard-performance {
   justify-content: stretch;
   min-width: 0;
   min-height: 0;
@@ -3125,10 +3191,10 @@ body.node-screen-solo-active .node-layout-canvas-tile .node-midi-keyboard-surfac
   height: 100%;
 }
 
-.dsp-node.keyboard-layout > .node-midi-keyboard-module .node-midi-keyboard-surface,
-.node-layout-canvas-tile .node-midi-keyboard-module .node-midi-keyboard-surface,
-.node-screen-solo-stage .node-midi-keyboard-module .node-midi-keyboard-surface,
-.node-metamodule-canvas-stage .node-midi-keyboard-module .node-midi-keyboard-surface {
+.dsp-node.keyboard-layout > .node-keyboard-module .node-keyboard-surface,
+.node-layout-canvas-tile .node-keyboard-module .node-keyboard-surface,
+.node-screen-solo-stage .node-keyboard-module .node-keyboard-surface,
+.node-metamodule-canvas-stage .node-keyboard-module .node-keyboard-surface {
   flex: 1 1 auto;
   width: 100% !important;
   max-width: 100%;
@@ -3139,7 +3205,7 @@ body.node-screen-solo-active .node-layout-canvas-tile .node-midi-keyboard-surfac
   border-radius: 0;
 }
 
-.node-midi-keyboard-panel[hidden] {
+.node-keyboard-panel[hidden] {
   display: none;
 }
 
@@ -3199,7 +3265,43 @@ body.node-screen-solo-active .node-layout-canvas-tile .node-midi-keyboard-surfac
   border-color: rgba(127, 199, 217, 0.58);
 }
 
-.node-midi-keyboard-heading {
+.node-midi-monitor {
+  box-sizing: border-box;
+  display: grid;
+  gap: 3px;
+  margin-top: 6px;
+  padding: 6px 8px;
+  min-width: 0;
+  min-height: 52px;
+  border: 1px solid rgba(127, 199, 217, 0.22);
+  border-radius: 4px;
+  background: rgba(3, 5, 7, 0.7);
+  color: var(--text);
+  font: 700 0.72rem/1.3 "Cascadia Mono", Consolas, monospace;
+}
+
+.node-midi-monitor[data-empty="true"] {
+  color: var(--muted);
+}
+
+.node-midi-monitor-line {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.node-midi-monitor-type {
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.node-midi-monitor-count {
+  color: var(--muted);
+  font-size: 0.66rem;
+}
+
+.node-keyboard-heading {
   display: flex;
   flex: 0 0 auto;
   flex-wrap: nowrap;
@@ -3210,24 +3312,24 @@ body.node-screen-solo-active .node-layout-canvas-tile .node-midi-keyboard-surfac
   overflow: visible;
 }
 
-.node-midi-keyboard-heading > div {
+.node-keyboard-heading > div {
   display: grid;
   gap: 2px;
   min-width: 0;
 }
 
-.node-midi-keyboard-title span {
+.node-keyboard-title span {
   color: var(--muted);
   font: 700 0.72rem/1 "Cascadia Mono", Consolas, monospace;
   text-transform: uppercase;
 }
 
-.node-midi-keyboard-title strong {
+.node-keyboard-title strong {
   color: var(--text);
   font: 800 0.94rem/1 "Cascadia Mono", Consolas, monospace;
 }
 
-.node-midi-keyboard-heading > .node-midi-keyboard-midi-controls {
+.node-keyboard-heading > .node-keyboard-midi-controls {
   display: flex;
   flex: 1 1 auto;
   flex-wrap: nowrap;
@@ -3238,8 +3340,8 @@ body.node-screen-solo-active .node-layout-canvas-tile .node-midi-keyboard-surfac
   overflow: visible;
 }
 
-.node-midi-keyboard-heading > .node-midi-keyboard-vel-range,
-.node-midi-keyboard-vel-range {
+.node-keyboard-heading > .node-keyboard-vel-range,
+.node-keyboard-vel-range {
   display: inline-flex;
   flex: 0 0 auto;
   flex-wrap: nowrap;
@@ -3248,32 +3350,32 @@ body.node-screen-solo-active .node-layout-canvas-tile .node-midi-keyboard-surfac
   min-width: 0;
 }
 
-.node-midi-keyboard-midi-controls > .node-midi-keyboard-vel-field {
+.node-keyboard-midi-controls > .node-keyboard-vel-field {
   flex: 0 0 auto;
   white-space: nowrap;
 }
 
-.node-midi-keyboard-module:not(.show-keyboard-info) > .node-midi-keyboard-heading,
-.node-grid-keyboard-module:not(.show-keyboard-info) > .node-midi-keyboard-heading,
-.dsp-node.keyboard-layout > .node-midi-keyboard-module:not(.show-keyboard-info) > .node-midi-keyboard-heading,
-.node-layout-canvas-tile .node-midi-keyboard-module:not(.show-keyboard-info) > .node-midi-keyboard-heading {
+.node-keyboard-module:not(.show-keyboard-info) > .node-keyboard-heading,
+.node-grid-keyboard-module:not(.show-keyboard-info) > .node-keyboard-heading,
+.dsp-node.keyboard-layout > .node-keyboard-module:not(.show-keyboard-info) > .node-keyboard-heading,
+.node-layout-canvas-tile .node-keyboard-module:not(.show-keyboard-info) > .node-keyboard-heading {
   display: none !important;
 }
 
-.node-midi-keyboard-module:not(.show-keyboard-info),
+.node-keyboard-module:not(.show-keyboard-info),
 .node-grid-keyboard-module:not(.show-keyboard-info) {
   grid-template-rows: minmax(0, 1fr);
 }
 
 /* Face hosts (graph + canvas): hide-info must win over the shared auto+1fr face grid. */
-.dsp-node.keyboard-layout > .node-midi-keyboard-module.node-module-face:not(.show-keyboard-info),
-.node-layout-canvas-tile > .node-midi-keyboard-module.node-module-face:not(.show-keyboard-info),
-.node-screen-solo-stage .node-midi-keyboard-module.node-module-face:not(.show-keyboard-info),
-.node-metamodule-canvas-stage .node-midi-keyboard-module.node-module-face:not(.show-keyboard-info) {
+.dsp-node.keyboard-layout > .node-keyboard-module.node-module-face:not(.show-keyboard-info),
+.node-layout-canvas-tile > .node-keyboard-module.node-module-face:not(.show-keyboard-info),
+.node-screen-solo-stage .node-keyboard-module.node-module-face:not(.show-keyboard-info),
+.node-metamodule-canvas-stage .node-keyboard-module.node-module-face:not(.show-keyboard-info) {
   grid-template-rows: minmax(48px, 1fr) !important;
 }
 
-.node-midi-keyboard-vel-field {
+.node-keyboard-vel-field {
   display: inline-flex;
   align-items: center;
   gap: 4px;
@@ -3282,7 +3384,7 @@ body.node-screen-solo-active .node-layout-canvas-tile .node-midi-keyboard-surfac
   text-transform: uppercase;
 }
 
-.node-midi-keyboard-vel-field input[type="number"] {
+.node-keyboard-vel-field input[type="number"] {
   width: 4.2em;
   min-width: 0;
   box-sizing: border-box;
@@ -3296,7 +3398,7 @@ body.node-screen-solo-active .node-layout-canvas-tile .node-midi-keyboard-surfac
   text-transform: none;
 }
 
-.node-midi-keyboard-live-readouts {
+.node-keyboard-live-readouts {
   display: inline-flex;
   flex-wrap: wrap;
   align-items: center;
@@ -3304,7 +3406,7 @@ body.node-screen-solo-active .node-layout-canvas-tile .node-midi-keyboard-surfac
   min-width: 0;
 }
 
-.node-midi-keyboard-live-readouts > span {
+.node-keyboard-live-readouts > span {
   display: inline-flex;
   align-items: center;
   gap: 4px;
@@ -3317,7 +3419,7 @@ body.node-screen-solo-active .node-layout-canvas-tile .node-midi-keyboard-surfac
   font: 700 0.72rem/1 "Cascadia Mono", Consolas, monospace;
 }
 
-.node-midi-keyboard-live-readouts strong {
+.node-keyboard-live-readouts strong {
   color: var(--text);
   font-weight: 800;
   font-variant-numeric: tabular-nums;
@@ -3327,8 +3429,8 @@ body.node-screen-solo-active .node-layout-canvas-tile .node-midi-keyboard-surfac
   align-self: stretch;
 }
 
-.node-midi-keyboard-midi-controls button,
-.node-midi-keyboard-midi-controls select {
+.node-keyboard-midi-controls button,
+.node-keyboard-midi-controls select {
   min-height: 24px;
   border: 1px solid rgba(243, 241, 236, 0.14);
   border-radius: 4px;
@@ -3338,7 +3440,7 @@ body.node-screen-solo-active .node-layout-canvas-tile .node-midi-keyboard-surfac
   white-space: nowrap;
 }
 
-.node-midi-keyboard-mode-control {
+.node-keyboard-mode-control {
   display: inline-flex;
   align-items: center;
   gap: 4px;
@@ -3348,16 +3450,16 @@ body.node-screen-solo-active .node-layout-canvas-tile .node-midi-keyboard-surfac
   text-transform: uppercase;
 }
 
-.node-midi-keyboard-mode-control span {
+.node-keyboard-mode-control span {
   flex: 0 0 auto;
 }
 
-.node-midi-keyboard-midi-controls button {
+.node-keyboard-midi-controls button {
   flex: 0 0 auto;
   padding: 0 8px;
 }
 
-.node-midi-keyboard-octave-control {
+.node-keyboard-octave-control {
   display: inline-grid;
   grid-template-columns: 24px minmax(32px, auto) 24px;
   align-items: stretch;
@@ -3365,7 +3467,7 @@ body.node-screen-solo-active .node-layout-canvas-tile .node-midi-keyboard-surfac
   min-width: 0;
 }
 
-.node-midi-keyboard-octave-control strong {
+.node-keyboard-octave-control strong {
   display: grid;
   place-items: center;
   min-height: 24px;
@@ -3377,37 +3479,37 @@ body.node-screen-solo-active .node-layout-canvas-tile .node-midi-keyboard-surfac
   font: 800 0.72rem/1 "Cascadia Mono", Consolas, monospace;
 }
 
-/* The number between -/+ is drag-scrubbable (bindNodeGraphMidiKeyboardScrubControl
+/* The number between -/+ is drag-scrubbable (bindNodeGraphKeyboardScrubControl
    in node-graph-view-controls.js) -- advertise it with the resize cursor. */
-.node-midi-keyboard-octave-control strong.scrubbable {
+.node-keyboard-octave-control strong.scrubbable {
   cursor: ew-resize;
   user-select: none;
 }
 
-.node-midi-keyboard-octave-control strong.scrubbing {
+.node-keyboard-octave-control strong.scrubbing {
   border-color: rgba(127, 199, 217, 0.55);
   color: var(--scope);
 }
 
-.node-midi-keyboard-octave-control button {
+.node-keyboard-octave-control button {
   width: 24px;
   padding: 0;
 }
 
-.node-midi-keyboard-midi-controls select {
+.node-keyboard-midi-controls select {
   flex: 0 1 96px;
   min-width: 74px;
   max-width: 110px;
   padding: 0 4px;
 }
 
-.node-midi-keyboard-mode-control select {
+.node-keyboard-mode-control select {
   flex-basis: 86px;
   min-width: 74px;
   max-width: 96px;
 }
 
-.node-midi-keyboard-midi-controls .pill {
+.node-keyboard-midi-controls .pill {
   flex: 0 1 auto;
   min-width: 0;
   min-height: 24px;
@@ -3417,7 +3519,7 @@ body.node-screen-solo-active .node-layout-canvas-tile .node-midi-keyboard-surfac
   text-overflow: clip;
 }
 
-.node-midi-keyboard-midi-controls select:disabled {
+.node-keyboard-midi-controls select:disabled {
   color: var(--muted);
   opacity: 0.64;
 }
@@ -3748,7 +3850,7 @@ body[data-macro-knob-value-position="mid"] .node-macro-knob-edit-input {
   pointer-events: none;
 }
 
-.node-midi-keyboard-performance {
+.node-keyboard-performance {
   display: flex;
   justify-content: center;
   align-items: stretch;
@@ -3760,7 +3862,7 @@ body[data-macro-knob-value-position="mid"] .node-macro-knob-edit-input {
   overflow: hidden;
 }
 
-.node-midi-keyboard-wheel-bank {
+.node-keyboard-wheel-bank {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   grid-template-rows: minmax(0, 1fr);
@@ -3771,7 +3873,7 @@ body[data-macro-knob-value-position="mid"] .node-macro-knob-edit-input {
   min-height: 0;
 }
 
-.node-midi-keyboard-wheel {
+.node-keyboard-wheel {
   position: relative;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
@@ -3791,13 +3893,13 @@ body[data-macro-knob-value-position="mid"] .node-macro-knob-edit-input {
   user-select: none;
 }
 
-.node-performance-wheels-module .node-midi-keyboard-wheel {
+.node-performance-wheels-module .node-keyboard-wheel {
   min-height: 0;
   height: auto;
 }
 
-.node-midi-keyboard-wheel span,
-.node-midi-keyboard-wheel strong {
+.node-keyboard-wheel span,
+.node-keyboard-wheel strong {
   position: relative;
   z-index: 2;
   display: grid;
@@ -3809,12 +3911,12 @@ body[data-macro-knob-value-position="mid"] .node-macro-knob-edit-input {
   text-overflow: clip;
 }
 
-.node-midi-keyboard-wheel strong {
+.node-keyboard-wheel strong {
   color: var(--text);
   font-size: 0.58rem;
 }
 
-.node-midi-keyboard-wheel i {
+.node-keyboard-wheel i {
   position: absolute;
   left: 12%;
   right: 12%;
@@ -3838,7 +3940,7 @@ body[data-macro-knob-value-position="mid"] .node-macro-knob-edit-input {
   pointer-events: none;
 }
 
-.node-midi-keyboard-wheel::before {
+.node-keyboard-wheel::before {
   content: "";
   position: absolute;
   inset: 24px 50% 24px auto;
@@ -3846,7 +3948,7 @@ body[data-macro-knob-value-position="mid"] .node-macro-knob-edit-input {
   background: rgba(243, 241, 236, 0.13);
 }
 
-.node-midi-keyboard-wheel.pitch::after {
+.node-keyboard-wheel.pitch::after {
   content: "";
   position: absolute;
   left: 12%;
@@ -3859,14 +3961,14 @@ body[data-macro-knob-value-position="mid"] .node-macro-knob-edit-input {
 /* The keyboard face draws nothing in CSS: bed, ring, keys and labels are
    WebGL (keyboard-face-gl.js). This box only sizes the surface and takes the
    pointer; the key under it comes from the same rects the draw uses. */
-.node-midi-keyboard-surface {
+.node-keyboard-surface {
   position: relative;
   flex: 0 0 auto;
   width: auto;
   max-width: 100%;
-  height: var(--midi-keyboard-piano-height, 112px);
+  height: var(--keyboard-piano-height, 112px);
   min-width: 0;
-  min-height: var(--midi-keyboard-piano-height, 112px);
+  min-height: var(--keyboard-piano-height, 112px);
   overflow: hidden;
   border: 0;
   background: transparent;
@@ -3874,7 +3976,7 @@ body[data-macro-knob-value-position="mid"] .node-macro-knob-edit-input {
 }
 
 /* Face-only tiles (no GL plate pass there): the same draw, presented into this canvas. */
-.node-midi-keyboard-face-canvas {
+.node-keyboard-face-canvas {
   position: absolute;
   inset: 0;
   width: 100%;
@@ -3882,8 +3984,8 @@ body[data-macro-knob-value-position="mid"] .node-macro-knob-edit-input {
   pointer-events: none;
 }
 
-.node-midi-keyboard-module .node-midi-keyboard-surface {
-  min-height: var(--midi-keyboard-piano-height, 112px);
+.node-keyboard-module .node-keyboard-surface {
+  min-height: var(--keyboard-piano-height, 112px);
 }
 
 @media (max-width: 720px) {
@@ -3891,16 +3993,16 @@ body[data-macro-knob-value-position="mid"] .node-macro-knob-edit-input {
     grid-template-columns: 1fr;
   }
 
-  .node-midi-keyboard-wheel-bank {
+  .node-keyboard-wheel-bank {
     min-height: 0;
   }
 
-  .node-midi-keyboard-wheel {
+  .node-keyboard-wheel {
     min-height: 0;
   }
 }
 
-.node-midi-keyboard-signal-bar {
+.node-keyboard-signal-bar {
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
@@ -3910,7 +4012,7 @@ body[data-macro-knob-value-position="mid"] .node-macro-knob-edit-input {
   overflow: auto;
 }
 
-.node-midi-keyboard-signal-bar span {
+.node-keyboard-signal-bar span {
   display: inline-flex;
   align-items: center;
   gap: 4px;
@@ -3923,7 +4025,7 @@ body[data-macro-knob-value-position="mid"] .node-macro-knob-edit-input {
   font: 700 0.72rem/1 "Cascadia Mono", Consolas, monospace;
 }
 
-.node-midi-keyboard-signal-bar strong {
+.node-keyboard-signal-bar strong {
   display: inline-block;
   min-width: var(--keyboard-readout-width, 1ch);
   color: var(--text);
@@ -3933,29 +4035,29 @@ body[data-macro-knob-value-position="mid"] .node-macro-knob-edit-input {
   white-space: pre;
 }
 
-.node-midi-keyboard-signal-bar [data-keyboard-signal="key"] {
+.node-keyboard-signal-bar [data-keyboard-signal="key"] {
   --keyboard-readout-width: 2ch;
 }
 
-.node-midi-keyboard-signal-bar [data-keyboard-signal="quantized"],
-.node-midi-keyboard-signal-bar [data-keyboard-signal="x"],
-.node-midi-keyboard-signal-bar [data-keyboard-signal="y"] {
+.node-keyboard-signal-bar [data-keyboard-signal="quantized"],
+.node-keyboard-signal-bar [data-keyboard-signal="x"],
+.node-keyboard-signal-bar [data-keyboard-signal="y"] {
   --keyboard-readout-width: 5ch;
 }
 
-.node-midi-keyboard-signal-bar [data-keyboard-signal="octave"],
-.node-midi-keyboard-signal-bar [data-keyboard-signal="pitch"],
-.node-midi-keyboard-signal-bar [data-keyboard-signal="midi"] {
+.node-keyboard-signal-bar [data-keyboard-signal="octave"],
+.node-keyboard-signal-bar [data-keyboard-signal="pitch"],
+.node-keyboard-signal-bar [data-keyboard-signal="midi"] {
   --keyboard-readout-width: 3ch;
 }
 
-.node-midi-keyboard-signal-bar [data-keyboard-signal="double"],
-.node-midi-keyboard-signal-bar [data-keyboard-signal="tenthVoltPerOctave"],
-.node-midi-keyboard-signal-bar [data-keyboard-signal="frequency"] {
+.node-keyboard-signal-bar [data-keyboard-signal="double"],
+.node-keyboard-signal-bar [data-keyboard-signal="tenthVoltPerOctave"],
+.node-keyboard-signal-bar [data-keyboard-signal="frequency"] {
   --keyboard-readout-width: 8ch;
 }
 
-.node-midi-keyboard-vm-debug {
+.node-keyboard-vm-debug {
   grid-column: 1 / -1;
   margin: 4px 8px 6px;
   padding: 4px 6px;
@@ -3969,14 +4071,14 @@ body[data-macro-knob-value-position="mid"] .node-macro-knob-edit-input {
   white-space: pre-wrap;
   word-break: break-word;
 }
-body.keyboard-debug-hidden .node-midi-keyboard-vm-debug {
+body.keyboard-debug-hidden .node-keyboard-vm-debug {
   display: none;
 }
 
 /* Held-keys bitmask readout -- one square per bit (53, the largest
    integer a double can represent exactly; see the bit-width note on
-   nodeGraphMidiKeyboardBitmaskHasBit), black square = held. */
-.node-midi-keyboard-bitmask-row {
+   nodeGraphKeyboardBitmaskHasBit), black square = held. */
+.node-keyboard-bitmask-row {
   display: flex;
   align-items: baseline;
   flex-wrap: wrap;
@@ -3987,7 +4089,7 @@ body.keyboard-debug-hidden .node-midi-keyboard-vm-debug {
   font: 700 0.86rem/1 "Cascadia Mono", Consolas, monospace;
 }
 
-.node-midi-keyboard-bitmask-row strong {
+.node-keyboard-bitmask-row strong {
   color: var(--text);
   font-size: 1.3rem;
   letter-spacing: 1px;
@@ -3998,7 +4100,7 @@ body.keyboard-debug-hidden .node-midi-keyboard-vm-debug {
    and the CPU/RAM/GPU constraint guide, whose vertical space this
    reclaims. Toggled from the Visibility menu's "Hide Debug" button.
    D (constraint-guide-visible) brings the chips back without Evidence. */
-body.keyboard-debug-hidden .node-midi-keyboard-bitmask-row {
+body.keyboard-debug-hidden .node-keyboard-bitmask-row {
   display: none;
 }
 body.keyboard-debug-hidden:not(.constraint-guide-visible) .node-constraint-color-guide {
@@ -4038,7 +4140,7 @@ body.node-screen-solo-active .node-module-face[data-node-constraint]::before {
 /* Hide Debug: drop the whole under-key signal strip. Live freq/pitch/x/y
    already live in the heading readouts; keeping Frequency under the white
    keys only stole piano height and invited clipping. */
-body.keyboard-debug-hidden .node-midi-keyboard-signal-bar {
+body.keyboard-debug-hidden .node-keyboard-signal-bar {
   display: none !important;
 }
 
@@ -12779,8 +12881,8 @@ body.room-dimmer-on .node-room-dimmer-canvas,
 .node-graph-workspace.gl-graph-on .dsp-node .sabrina-preset-shell *,
 .node-graph-workspace.gl-graph-on .dsp-node .node-sample-waveform-display,
 .node-graph-workspace.gl-graph-on .dsp-node .node-sample-waveform-display *,
-.node-graph-workspace.gl-graph-on .dsp-node .node-midi-keyboard-surface,
-.node-graph-workspace.gl-graph-on .dsp-node .node-midi-keyboard-surface *,
+.node-graph-workspace.gl-graph-on .dsp-node .node-keyboard-surface,
+.node-graph-workspace.gl-graph-on .dsp-node .node-keyboard-surface *,
 .node-graph-workspace.gl-graph-on .dsp-node .node-grid-keyboard-surface,
 .node-graph-workspace.gl-graph-on .dsp-node .node-grid-keyboard-surface *,
 .node-graph-workspace.gl-graph-on .dsp-node .node-module-graph-face *,
@@ -13213,8 +13315,8 @@ body.node-screen-solo-active .node-screen-solo-face.node-sample-waveform-display
 .dsp-node svg,
 .node-sample-module-body,
 .node-sample-module-body *,
-.node-midi-keyboard-surface,
-.node-midi-keyboard-wheel,
+.node-keyboard-surface,
+.node-keyboard-wheel,
 .node-module-lip,
 .node-slider-readout,
 .node-module-graph-display,
@@ -15181,19 +15283,15 @@ body.node-screen-solo-active .node-screen-solo-face.node-sample-waveform-display
   height: 100%;
 }
 
-/* Canvas tiles are free-sized. The plot viewBox is square, so stretch it
-   to the tile and the curve shears. Fit the largest square instead. */
+/* Canvas view: the tile owns the display size. Fill the tile so the SVG,
+   hit targets, and GPU curve share one box. Do not letterbox to a square
+   via container queries -- that can collapse the SVG when height is indefinite. */
 .node-layout-canvas-tile .node-module-graph-display,
-.node-metamodule-canvas-stage .node-module-graph-display {
-  container-type: size;
-  display: grid;
-  place-items: center;
-}
-
+.node-metamodule-canvas-stage .node-module-graph-display,
 .node-layout-canvas-tile .node-module-graph-svg,
 .node-metamodule-canvas-stage .node-module-graph-svg {
-  width: min(100cqw, 100cqh);
-  height: min(100cqw, 100cqh);
+  width: 100%;
+  height: 100%;
 }
 
 .node-module-graph-svg :is(
@@ -15305,30 +15403,30 @@ body.node-screen-solo-active .node-screen-solo-face.node-sample-waveform-display
 }
 
 /*
- * Graph face chrome policy (minimal eye strain):
- *  • idle: only phase line, curve, dotted control polygon
- *  • hover a node or its contour ring: show THAT pair only, both dim
+ * Graph face chrome policy:
+ *  • idle: phase line, curve, control polygon, AND the value dots
+ *    (always visible -- hover-to-reveal hid them on touch / phone)
+ *  • hover/drag brightens the active point
  *  • no “selected = bright” state on the face
  */
 .node-module-graph-node {
-  fill: rgba(246, 246, 218, 0.72);
+  fill: rgba(246, 246, 218, 0.88);
   stroke: rgba(7, 10, 13, 0.75);
   stroke-width: 0.7;
   pointer-events: none;
-  opacity: 0;
+  opacity: 0.82;
 }
 
 .node-module-graph-node.is-hot {
-  opacity: 0.42;
+  opacity: 1;
 }
 
-/* Face hover: show every value point + contour handle (edit chrome). */
 .node-module-graph-display.is-hover-reveal .node-module-graph-node {
-  opacity: 0.34;
+  opacity: 0.88;
 }
 
 .node-module-graph-display.is-hover-reveal .node-module-graph-node.is-hot {
-  opacity: 0.72;
+  opacity: 1;
 }
 
 /* Step Graph: empty-circle curvature ring (paired with its filled node). */
@@ -15338,23 +15436,24 @@ body.node-screen-solo-active .node-screen-solo-face.node-sample-waveform-display
   stroke-width: 0.95;
   pointer-events: all;
   touch-action: none;
-  opacity: 0;
+  opacity: 0.72;
 }
 
 .node-module-graph-contour-handle.is-hot {
-  opacity: 0.48;
+  opacity: 1;
 }
 
 .node-module-graph-display.is-hover-reveal .node-module-graph-contour-handle {
-  opacity: 0.36;
+  opacity: 0.84;
 }
 
 .node-module-graph-display.is-hover-reveal .node-module-graph-contour-handle.is-hot {
-  opacity: 0.78;
+  opacity: 1;
 }
 
 /* Invisible hit targets always receive pointer events so hover can resolve. */
-.node-module-graph-node-hit {
+.node-module-graph-node-hit,
+.node-module-graph-contour-handle-hit {
   fill: transparent;
   stroke: transparent;
   stroke-width: 0;
@@ -18679,7 +18778,7 @@ body.node-slider-dragging * {
 }
 
 /* Switch options: one text size per panel (field-label size), not the
-   latch's height-scaled size, so long options (Reconstructed) fit and every
+   latch's height-scaled size, so long option labels fit and every
    switch row reads the same. */
 .node-trace-display-switch-option .app-latch-button-label,
 .node-trace-display-switch-side .app-latch-button-label {

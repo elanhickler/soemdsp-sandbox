@@ -17,12 +17,13 @@ static const int kMaxInstances = 64;
 static const int kMaxPoints = 32;
 
 enum SegShape {
-  kShapeLinear = 0,
-  kShapeRational = 1,
-  kShapeExponential = 2,
-  kShapeLog = 3,
-  kShapeSmoothstep = 4,
-  kShapeHold = 5,
+  kShapeLinear = soemdsp::math::kSegmentLinear,
+  kShapeRational = soemdsp::math::kSegmentRational,
+  kShapeExponential = soemdsp::math::kSegmentExponential,
+  kShapeLog = soemdsp::math::kSegmentLog,
+  kShapeSmoothstep = soemdsp::math::kSegmentSmoothstep,
+  kShapeSmootherstep = soemdsp::math::kSegmentSmootherstep,
+  kShapeHold = soemdsp::math::kSegmentHold,
 };
 
 struct Point {
@@ -45,10 +46,7 @@ static float gSoaC[kMaxInstances][kMaxPoints];
 static float gSoaShape[kMaxInstances][kMaxPoints];
 
 static int normalize_shape(double shapeV) {
-  int s = (int)(safe(shapeV) + (safe(shapeV) >= 0.0 ? 0.5 : -0.5));
-  if (s < 0) s = 0;
-  if (s > 5) s = 5;
-  return s;
+  return segment_shape_normalize(shapeV);
 }
 
 static void ensure_sorted(State& st) {
@@ -70,52 +68,8 @@ static void ensure_default_ramp(State& st) {
   st.count = 2;
 }
 
-// Contour domain is −1…+1. Continuous kernels soft-cap at ±(1 − kPlanck)
-// so rational / exp / log never hit exact ±1 (div0 / overflow).
-static double contour_soft_cap(double contour) {
-  const double c = clamp11(safe(contour));
-  const double softMax = 1.0 - kPlanck;
-  if (c > softMax) return softMax;
-  if (c < -softMax) return -softMax;
-  return c;
-}
-
-static double rational_curve(double p, double contour) {
-  const double c = contour_soft_cap(contour);
-  if (dsp_fabs(c) < kPlanck) return p;
-  return c < 0.0
-    ? (p * (1.0 + c)) / (1.0 + c * p)
-    : p / (1.0 - c + c * p);
-}
-
-static double exponential_curve(double p, double contour) {
-  const double t = contour_soft_cap(contour);
-  if (dsp_fabs(t) < kPlanck) return p;
-  const double a = dsp_fabs(t);
-  const double mag = 1.2 + 6.8 * (a / (1.0 - a * 0.85));
-  const double k = t < 0.0 ? -mag : mag;
-  if (dsp_fabs(k) < 0.05) return p;
-  const double denom = dsp_exp(k) - 1.0;
-  if (dsp_fabs(denom) < kPlanck) return p;
-  return (dsp_exp(k * p) - 1.0) / denom;
-}
-
-static double logarithmic_curve(double p, double contour) {
-  const double t = contour_soft_cap(contour);
-  if (dsp_fabs(t) < kPlanck) return p;
-  const double a = dsp_fabs(t);
-  const double b = dsp_exp(1.2 + 5.5 * (a / (1.0 - a * 0.85)));
-  if (!(b * 0.0 == 0.0) || b <= 1.0 + kPlanck) return p;
-  const double denom = dsp_ln(b);
-  if (!(denom * 0.0 == 0.0) || dsp_fabs(denom) < kPlanck) return p;
-  return t < 0.0
-    ? 1.0 - dsp_ln(1.0 + (1.0 - p) * (b - 1.0)) / denom
-    : dsp_ln(1.0 + p * (b - 1.0)) / denom;
-}
-
-static double smoothstep_curve(double p) {
-  return p * p * (3.0 - 2.0 * p);
-}
+// Segment kernels live in soemdsp/math/segment_curves.h (JS twin:
+// public/node-graph-segment-curves.js).
 
 static double segment_value(
   const State& st,
@@ -134,22 +88,7 @@ static double segment_value(
   // Global Shape param always wins (matches graphSegmentOptionsForNode).
   const int shape = globalShape;
 
-  double shaped = p;
-  if (shape == kShapeExponential) {
-    shaped = exponential_curve(p, contour);
-  } else if (shape == kShapeLog) {
-    shaped = logarithmic_curve(p, contour);
-  } else if (shape == kShapeHold) {
-    // Skew >= 0: hold left.y, jump at segment end (across x, then y).
-    // Skew < 0: jump to right.y at segment start, then hold (y, then across x).
-    shaped = contour < 0.0 ? (p > 0.0 ? 1.0 : 0.0) : (p >= 1.0 ? 1.0 : 0.0);
-  } else if (shape == kShapeSmoothstep) {
-    shaped = smoothstep_curve(p);
-  } else if (shape == kShapeLinear) {
-    shaped = p;
-  } else {
-    shaped = rational_curve(p, contour);
-  }
+  const double shaped = segment_curve01(p, shape, contour);
   return (double)left.y + ((double)right.y - (double)left.y) * shaped;
 }
 
@@ -250,7 +189,7 @@ extern "C" double soemdsp_step_graph_sample(
   if (handle < 1 || handle > kMaxInstances) return 0.0;
   State& s = gPool[handle - 1];
   ensure_default_ramp(s);
-  return eval_at(s, safe(x), normalize_shape(segmentShape), safe(curveOffset));
+  return clamp11(eval_at(s, safe(x), normalize_shape(segmentShape), safe(curveOffset)));
 }
 
 extern "C" int soemdsp_step_graph_version() {

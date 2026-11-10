@@ -157,6 +157,11 @@ function nodeGraphJackChannelCssColor(channel) {
       ? nodeGraphCssColor("--node-jack-gold", "#f0b84a")
       : "#f0b84a";
   }
+  if (channel === "white") {
+    return typeof nodeGraphCssColor === "function"
+      ? nodeGraphCssColor("--node-jack-white", "#f4f4f4")
+      : "#f4f4f4";
+  }
   if (channel === "purple") {
     return typeof nodeGraphCssColor === "function"
       ? nodeGraphCssColor("--node-jack-purple", "#c44dff")

@@ -898,9 +898,9 @@ function nodeGraphViewportCullWakePainters(element) {
       nodeGraphSampleWaveformEnsureLoop(root);
     }
     if (typeof nodeGraphScreenSoloWakeFace === "function") {
-      nodeGraphScreenSoloWakeFace(root.matches?.(".node-module-face, .node-module-scope-window, .node-midi-keyboard-module, .node-arp-keys-face")
+      nodeGraphScreenSoloWakeFace(root.matches?.(".node-module-face, .node-module-scope-window, .node-keyboard-module, .node-arp-keys-face")
         ? root
-        : (root.querySelector?.(".node-module-face, .node-module-scope-window, .node-midi-keyboard-module, .node-arp-keys-face") || root));
+        : (root.querySelector?.(".node-module-face, .node-module-scope-window, .node-keyboard-module, .node-arp-keys-face") || root));
     }
   }
   if (nodeId && typeof requestNodeGraphModuleScopeRepaint === "function") {

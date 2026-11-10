@@ -2115,8 +2115,8 @@ function buildNodeGraphDisplaySettingsBodyHtml(formType, node = null) {
   ) {
     return buildNodeGraphMatrixFaceDisplaySettingsBodyHtml(type);
   }
-  if (type === "keyboardControllerFace" && typeof buildNodeGraphKeyboardControllerFaceDisplaySettingsBodyHtml === "function") {
-    return buildNodeGraphKeyboardControllerFaceDisplaySettingsBodyHtml();
+  if (type === "keyboardFace" && typeof buildNodeGraphKeyboardFaceDisplaySettingsBodyHtml === "function") {
+    return buildNodeGraphKeyboardFaceDisplaySettingsBodyHtml();
   }
   const activeFields = nodeGraphTraceDisplayActiveControlSet("fields", type);
   const activeColors = nodeGraphTraceDisplayActiveControlSet("colors", type);

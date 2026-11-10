@@ -430,12 +430,12 @@ function assignNodeGraphTypedDisplaySettingsToNode(node, displayType, settings) 
     node.traceDisplaySettings = normalizeNodeGraphWaterfallSettings(settings);
     return node.traceDisplaySettings;
   }
-  if (displayType === "keyboardControllerFace") {
-    node.traceDisplaySettings = typeof normalizeNodeGraphKeyboardControllerFaceSettings === "function"
-      ? normalizeNodeGraphKeyboardControllerFaceSettings(settings)
+  if (displayType === "keyboardFace") {
+    node.traceDisplaySettings = typeof normalizeNodeGraphKeyboardFaceSettings === "function"
+      ? normalizeNodeGraphKeyboardFaceSettings(settings)
       : (settings && typeof settings === "object" ? { ...settings } : {});
-    if (typeof applyNodeGraphMidiKeyboardLayout === "function") {
-      applyNodeGraphMidiKeyboardLayout();
+    if (typeof applyNodeGraphKeyboardLayout === "function") {
+      applyNodeGraphKeyboardLayout();
     }
     return node.traceDisplaySettings;
   }

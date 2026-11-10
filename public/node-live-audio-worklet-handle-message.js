@@ -71,6 +71,10 @@ NodeLiveAudioProcessor.prototype.handleMessage = function handleMessage(message)
       this.setKeyboardModuleSignal(message.nodeId, message.signal, message.atFrame);
       return;
     }
+    if (message.type === "setSequencerAudition") {
+      this.setSequencerAudition?.(message.nodeId, message.midi, message.velocity);
+      return;
+    }
     if (message.type === "setKeyboardArpLatch") {
       this.setKeyboardArpLatch(message.nodeId, message.mask, message.velocities);
       return;

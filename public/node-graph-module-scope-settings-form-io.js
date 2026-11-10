@@ -162,9 +162,9 @@ function mountNodeGraphDisplaySettingsBody(popover, formType, node = null) {
       bindNodeGraphMatrixFaceDisplaySettingsBody(host);
     }
   }
-  if (type === "keyboardControllerFace") {
-    if (typeof bindNodeGraphKeyboardControllerFaceDisplaySettingsBody === "function") {
-      bindNodeGraphKeyboardControllerFaceDisplaySettingsBody(host);
+  if (type === "keyboardFace") {
+    if (typeof bindNodeGraphKeyboardFaceDisplaySettingsBody === "function") {
+      bindNodeGraphKeyboardFaceDisplaySettingsBody(host);
     }
   }
   // RGB Picture: load / clear image.
@@ -621,9 +621,9 @@ if (type === "portalFace") {
   if (type === "waterfall" || type === "waterfallRgb" || type === "waterfallXyz") {
     return normalizeNodeGraphWaterfallSettings(nodeGraphWaterfallSettingsDefaults);
   }
-  if (type === "keyboardControllerFace") {
-    return typeof normalizeNodeGraphKeyboardControllerFaceSettings === "function"
-      ? normalizeNodeGraphKeyboardControllerFaceSettings(nodeGraphMidiKeyboardLayoutDefaults || {})
+  if (type === "keyboardFace") {
+    return typeof normalizeNodeGraphKeyboardFaceSettings === "function"
+      ? normalizeNodeGraphKeyboardFaceSettings(nodeGraphKeyboardLayoutDefaults || {})
       : { blackKeyWidth: 10, blackKeyHeight: 62, hideKeyboardInfo: true, keyLabels: "name" };
   }
   if (type === "torchFace") {
@@ -876,9 +876,9 @@ if (type === "portalFace") {
   if (type === "waterfall" || type === "waterfallRgb" || type === "waterfallXyz" || type === "lineBurn") {
     return normalizeNodeGraphWaterfallSettings(settings);
   }
-  if (type === "keyboardControllerFace") {
-    return typeof normalizeNodeGraphKeyboardControllerFaceSettings === "function"
-      ? normalizeNodeGraphKeyboardControllerFaceSettings(settings)
+  if (type === "keyboardFace") {
+    return typeof normalizeNodeGraphKeyboardFaceSettings === "function"
+      ? normalizeNodeGraphKeyboardFaceSettings(settings)
       : (settings && typeof settings === "object" ? settings : {});
   }
   if (type === "torchFace") {
@@ -1018,10 +1018,10 @@ if (settingsSchema === "portalFace") {
         ? normalizeNodeGraphArpKeysSettings(node?.arpKeysSettings)
         : (node?.arpKeysSettings || {}));
   }
-  if (settingsSchema === "keyboardControllerFace") {
-    return typeof normalizeNodeGraphKeyboardControllerFaceSettings === "function"
-      ? normalizeNodeGraphKeyboardControllerFaceSettings({
-        ...(typeof nodeGraphMidiKeyboardLayoutDefaults === "object" ? nodeGraphMidiKeyboardLayoutDefaults : {}),
+  if (settingsSchema === "keyboardFace") {
+    return typeof normalizeNodeGraphKeyboardFaceSettings === "function"
+      ? normalizeNodeGraphKeyboardFaceSettings({
+        ...(typeof nodeGraphKeyboardLayoutDefaults === "object" ? nodeGraphKeyboardLayoutDefaults : {}),
         ...(node?.traceDisplaySettings || {}),
       })
       : (node?.traceDisplaySettings || {});
@@ -1375,9 +1375,9 @@ function readNodeGraphTraceDisplaySettingsForm() {
     }
     return normalizeNodeGraphDisplaySettingsForFormType(current, formType);
   }
-  if (formType === "keyboardControllerFace") {
+  if (formType === "keyboardFace") {
     const next = { ...(current && typeof current === "object" ? current : {}) };
-    const host = root?.querySelector?.("[data-midi-keyboard-layout-settings]") || root;
+    const host = root?.querySelector?.("[data-keyboard-layout-settings]") || root;
     host?.querySelectorAll?.("[data-midi-key-layout]")?.forEach((input) => {
       const key = input.getAttribute("data-midi-key-layout");
       if (!key) return;

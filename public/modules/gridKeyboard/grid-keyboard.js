@@ -54,7 +54,7 @@ function nodeGraphGridKeyboardPadFromPointer(event, surface) {
 }
 
 function nodeGraphGridKeyboardSignalFromPad(pad, event, options = {}) {
-  const nodeId = nodeGraphMidiKeyboardNodeIdFromElement(pad);
+  const nodeId = nodeGraphKeyboardNodeIdFromElement(pad);
   const col = Number(pad.dataset.gridCol);
   const row = Number(pad.dataset.gridRow);
   const rawMidi = Number(pad.dataset.gridMidi);
@@ -69,8 +69,8 @@ function nodeGraphGridKeyboardSignalFromPad(pad, event, options = {}) {
     : (Number(nodeGraphKeyboardRuntime(nodeId).signal?._strikeVelocity) > 0
       ? Number(nodeGraphKeyboardRuntime(nodeId).signal._strikeVelocity)
       : strike);
-  const velocity = nodeGraphMidiKeyboardMapStrikeVelocity01(nodeId, rawStrike);
-  const signal = nodeGraphMidiKeyboardSignalFromRaw(nodeId, rawMidi, {
+  const velocity = nodeGraphKeyboardMapStrikeVelocity01(nodeId, rawStrike);
+  const signal = nodeGraphKeyboardSignalFromRaw(nodeId, rawMidi, {
     source: "pointer",
     gate,
     gatePulse: 0,
@@ -92,25 +92,25 @@ function createNodeGraphGridKeyboardBody(node = null) {
   section.setAttribute("aria-label", "Grid Keyboard");
 
   const heading = document.createElement("div");
-  heading.className = "node-midi-keyboard-heading";
+  heading.className = "node-keyboard-heading";
   const controls = document.createElement("div");
-  controls.className = "node-midi-keyboard-midi-controls";
+  controls.className = "node-keyboard-midi-controls";
   const modeLabel = typeof createNodeGraphMidiModeControl === "function"
     ? createNodeGraphMidiModeControl()
     : document.createElement("span");
   const octave = typeof createNodeGraphPlusMinusControl === "function"
     ? createNodeGraphPlusMinusControl({
       ariaLabel: "Keyboard octave transpose",
-      downKey: "midiKeyboardOctaveDown",
-      valueKey: "midiKeyboardOctaveValue",
-      upKey: "midiKeyboardOctaveUp",
+      downKey: "keyboardOctaveDown",
+      valueKey: "keyboardOctaveValue",
+      upKey: "keyboardOctaveUp",
       downAria: "Transpose keyboard down one octave",
       upAria: "Transpose keyboard up one octave",
       valueText: "+0",
     })
     : document.createElement("span");
   const liveReadouts = document.createElement("span");
-  liveReadouts.className = "node-midi-keyboard-live-readouts";
+  liveReadouts.className = "node-keyboard-live-readouts";
   liveReadouts.setAttribute("aria-live", "polite");
   for (const [key, labelText, valueText] of [
     ["frequency", "freq", "-"],
@@ -127,9 +127,9 @@ function createNodeGraphGridKeyboardBody(node = null) {
     liveReadouts.append(item);
   }
   const velRow = document.createElement("div");
-  velRow.className = "node-midi-keyboard-vel-range";
+  velRow.className = "node-keyboard-vel-range";
   const velMinLabel = document.createElement("label");
-  velMinLabel.className = "node-midi-keyboard-vel-field";
+  velMinLabel.className = "node-keyboard-vel-field";
   const velMinCaption = document.createElement("span");
   velMinCaption.textContent = "Vel Min";
   const velMinInput = document.createElement("input");
@@ -137,11 +137,11 @@ function createNodeGraphGridKeyboardBody(node = null) {
   velMinInput.min = "0";
   velMinInput.max = "127";
   velMinInput.step = "1";
-  velMinInput.dataset.midiKeyboardVelMin = "true";
+  velMinInput.dataset.keyboardVelMin = "true";
   velMinInput.value = "127";
   velMinLabel.append(velMinCaption, velMinInput);
   const velMaxLabel = document.createElement("label");
-  velMaxLabel.className = "node-midi-keyboard-vel-field";
+  velMaxLabel.className = "node-keyboard-vel-field";
   const velMaxCaption = document.createElement("span");
   velMaxCaption.textContent = "Vel Max";
   const velMaxInput = document.createElement("input");
@@ -149,7 +149,7 @@ function createNodeGraphGridKeyboardBody(node = null) {
   velMaxInput.min = "0";
   velMaxInput.max = "127";
   velMaxInput.step = "1";
-  velMaxInput.dataset.midiKeyboardVelMax = "true";
+  velMaxInput.dataset.keyboardVelMax = "true";
   velMaxInput.value = "127";
   velMaxLabel.append(velMaxCaption, velMaxInput);
   velRow.append(velMinLabel, velMaxLabel);
@@ -166,7 +166,7 @@ function createNodeGraphGridKeyboardBody(node = null) {
   performance.append(surface);
 
   const signalBar = document.createElement("div");
-  signalBar.className = "node-midi-keyboard-signal-bar";
+  signalBar.className = "node-keyboard-signal-bar";
   signalBar.dataset.midiKeyboardSignalBar = "true";
   for (const [key, labelText, valueText] of [
     ["gate", "Gate", "0"],
@@ -188,8 +188,8 @@ function createNodeGraphGridKeyboardBody(node = null) {
 }
 
 function nodeGraphGridKeyboardFillSurface(surface, octave) {
-  const black = typeof nodeGraphMidiKeyboardBlackPitchClasses !== "undefined"
-    ? nodeGraphMidiKeyboardBlackPitchClasses
+  const black = typeof nodeGraphKeyboardBlackPitchClasses !== "undefined"
+    ? nodeGraphKeyboardBlackPitchClasses
     : new Set([1, 3, 6, 8, 10]);
   surface.replaceChildren();
   surface.dataset.gridOctave = String(octave);
@@ -209,8 +209,8 @@ function nodeGraphGridKeyboardFillSurface(surface, octave) {
       pad.style.gridRow = String(NODE_GRAPH_GRID_KEYBOARD_ROWS - row);
       const pc = ((midi % 12) + 12) % 12;
       if (black.has(pc)) pad.classList.add("black-pc");
-      pad.textContent = typeof nodeGraphMidiKeyboardPitchLabel === "function"
-        ? nodeGraphMidiKeyboardPitchLabel(midi)
+      pad.textContent = typeof nodeGraphKeyboardPitchLabel === "function"
+        ? nodeGraphKeyboardPitchLabel(midi)
         : (NODE_GRAPH_GRID_KEYBOARD_PC_NAMES[pc] || "");
       surface.append(pad);
     }
@@ -218,10 +218,10 @@ function nodeGraphGridKeyboardFillSurface(surface, octave) {
 }
 
 function renderNodeGraphGridKeyboardPads() {
-  // Hardware MIDI Play Keys (MIDI module) ghost on every grid face.
-  const midiPlay = nodeGraphMvp?.midiKeyboardPlayMask;
+  // Grid faces paint their own press / latch / chord-memory only.
+  // Hardware MIDI must not light a Grid Keyboard; wire MIDI Play Keys in.
   document.querySelectorAll(".node-grid-keyboard-surface").forEach((surface) => {
-    const nodeId = nodeGraphMidiKeyboardNodeIdFromElement(surface);
+    const nodeId = nodeGraphKeyboardNodeIdFromElement(surface);
     const octave = nodeGraphKeyboardOctaveFor(nodeId);
     if (surface.dataset.gridOctave !== String(octave)) {
       nodeGraphGridKeyboardFillSurface(surface, octave);
@@ -232,7 +232,7 @@ function renderNodeGraphGridKeyboardPads() {
     const momMask = typeof nodeGraphChordMemoryMomentaryMaskForNode === "function"
       ? nodeGraphChordMemoryMomentaryMaskForNode(nodeId)
       : null;
-    const triggerPatch = nodeGraphMidiKeyboardModeForNode(nodeId) === "triggerPatch";
+    const triggerPatch = nodeGraphKeyboardModeForNode(nodeId) === "triggerPatch";
     surface.querySelectorAll(".node-grid-keyboard-pad[data-grid-midi]").forEach((pad) => {
       const midi = Number(pad.dataset.gridMidi);
       if (!(midi >= 0 && midi <= 127)) return;
@@ -242,8 +242,7 @@ function renderNodeGraphGridKeyboardPads() {
       pad.classList.toggle("active", Number.isFinite(playing) && playing === midi);
       pad.classList.toggle("patch-set", setPatch);
       const playGhost = typeof noteMaskGet === "function"
-        && ((momMask instanceof Uint8Array && noteMaskGet(momMask, midi))
-          || (midiPlay instanceof Uint8Array && noteMaskGet(midiPlay, midi)));
+        && (momMask instanceof Uint8Array && noteMaskGet(momMask, midi));
       pad.classList.toggle("ghost-play", Boolean(playGhost) && !goldOn);
       pad.classList.remove("ghost-arp");
     });
@@ -256,12 +255,12 @@ function renderNodeGraphGridKeyboardPads() {
 function updateNodeGraphGridKeyboardSignal(event) {
   const surface = event.currentTarget;
   if (!surface) return;
-  const mode = typeof nodeGraphMidiKeyboardModeForElement === "function"
-    ? nodeGraphMidiKeyboardModeForElement(surface)
+  const mode = typeof nodeGraphKeyboardModeForElement === "function"
+    ? nodeGraphKeyboardModeForElement(surface)
     : "press";
   const pointerId = event.pointerId;
   const pad = nodeGraphGridKeyboardPadFromPointer(event, surface);
-  const nodeId = nodeGraphMidiKeyboardNodeIdFromElement(surface);
+  const nodeId = nodeGraphKeyboardNodeIdFromElement(surface);
   const rt = nodeGraphKeyboardRuntime(nodeId);
 
   const altDown = Boolean(event.altKey || event.getModifierState?.("Alt"));
@@ -271,7 +270,7 @@ function updateNodeGraphGridKeyboardSignal(event) {
     if (nodeGraphChordMemoryHandlePointer(event, surface, midi, {
       nodeId,
       onArpToggle: (slotMidi) => {
-        nodeGraphMidiKeyboardToggleHeldMidi(nodeId, slotMidi, 1);
+        nodeGraphKeyboardToggleHeldMidi(nodeId, slotMidi, 1);
       },
     })) {
       return;
@@ -279,8 +278,8 @@ function updateNodeGraphGridKeyboardSignal(event) {
   }
 
   if (event.type === "pointerdown" && event.ctrlKey && altDown) {
-    nodeGraphMidiKeyboardClearArpKeys(nodeId);
-    nodeGraphMidiKeyboardClearPlayGate(nodeId);
+    nodeGraphKeyboardClearArpKeys(nodeId);
+    nodeGraphKeyboardClearPlayGate(nodeId);
     event.preventDefault();
     event.stopPropagation();
     return;
@@ -288,10 +287,10 @@ function updateNodeGraphGridKeyboardSignal(event) {
 
   if (event.type === "pointerdown" && event.ctrlKey) {
     rt.arpLatchPointerId = pointerId;
-    nodeGraphMidiKeyboardClearPlayGate(nodeId);
-    clearNodeGraphMidiKeyboardPointerHold(nodeId);
+    nodeGraphKeyboardClearPlayGate(nodeId);
+    clearNodeGraphKeyboardPointerHold(nodeId);
     if (pad) {
-      nodeGraphMidiKeyboardToggleHeldMidi(nodeId, Number(pad.dataset.gridMidi), 1);
+      nodeGraphKeyboardToggleHeldMidi(nodeId, Number(pad.dataset.gridMidi), 1);
     }
     try { surface.setPointerCapture?.(pointerId); } catch (_e) { /* ignore */ }
     event.preventDefault();
@@ -327,7 +326,7 @@ function updateNodeGraphGridKeyboardSignal(event) {
   }
 
   if (event.type === "pointerdown" && mode === "toggle" && !event.ctrlKey) {
-    if (pad) nodeGraphMidiKeyboardToggleHeldMidi(nodeId, Number(pad.dataset.gridMidi), 1);
+    if (pad) nodeGraphKeyboardToggleHeldMidi(nodeId, Number(pad.dataset.gridMidi), 1);
     event.preventDefault();
     return;
   }
@@ -336,7 +335,7 @@ function updateNodeGraphGridKeyboardSignal(event) {
     if (pad) {
       const next = nodeGraphGridKeyboardSignalFromPad(pad, event);
       next.gate = 1;
-      renderNodeGraphMidiKeyboardSignal(nodeId, next);
+      renderNodeGraphKeyboardSignal(nodeId, next);
     }
     try { surface.setPointerCapture?.(event.pointerId); } catch (_e) { /* ignore */ }
     event.preventDefault();
@@ -353,7 +352,7 @@ function updateNodeGraphGridKeyboardSignal(event) {
         refreshVelocity: true,
       });
       next.gate = 1;
-      renderNodeGraphMidiKeyboardSignal(nodeId, next);
+      renderNodeGraphKeyboardSignal(nodeId, next);
       renderNodeGraphGridKeyboardPads();
     }
     event.preventDefault();
@@ -362,14 +361,14 @@ function updateNodeGraphGridKeyboardSignal(event) {
 
   if (event.type === "pointerup" || event.type === "pointercancel") {
     try { surface.releasePointerCapture?.(event.pointerId); } catch (_e) { /* ignore */ }
-    const held = nodeGraphMidiKeyboardHeldPointerSignal(nodeId);
+    const held = nodeGraphKeyboardHeldPointerSignal(nodeId);
     if (held) {
-      renderNodeGraphMidiKeyboardSignal(nodeId, { ...held, gate: 1, gatePulse: 0 });
+      renderNodeGraphKeyboardSignal(nodeId, { ...held, gate: 1, gatePulse: 0 });
       return;
     }
     const current = rt.signal;
     if (current) {
-      renderNodeGraphMidiKeyboardSignal(nodeId, { ...current, gate: 0, gatePulse: 0 });
+      renderNodeGraphKeyboardSignal(nodeId, { ...current, gate: 0, gatePulse: 0 });
     }
     renderNodeGraphGridKeyboardPads();
     return;
@@ -377,7 +376,7 @@ function updateNodeGraphGridKeyboardSignal(event) {
 
   if (event.type === "pointerdown" && pad) {
     try { surface.setPointerCapture?.(event.pointerId); } catch (_e) { /* ignore */ }
-    renderNodeGraphMidiKeyboardSignal(nodeId, nodeGraphGridKeyboardSignalFromPad(pad, event));
+    renderNodeGraphKeyboardSignal(nodeId, nodeGraphGridKeyboardSignalFromPad(pad, event));
     renderNodeGraphGridKeyboardPads();
   }
 }

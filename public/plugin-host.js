@@ -408,6 +408,16 @@
       connect: function () {},
       disconnect: function () {},
     };
+    // Boot HTML paints red stop. Creating the stub without a re-render left
+    // that class in place if something else later marked play green.
+    try {
+      if (typeof global.invalidateNodeGraphLiveControlsPaintCache === "function") {
+        global.invalidateNodeGraphLiveControlsPaintCache();
+      }
+      if (typeof global.renderNodeGraphLiveControls === "function") {
+        global.renderNodeGraphLiveControls();
+      }
+    } catch (_e) { /* chrome sync is best-effort */ }
     return true;
   }
 
@@ -417,6 +427,16 @@
     var bytes = new Uint8Array(n << 2);
     for (var i = 0; i < bytes.length; i += 1) bytes[i] = bin.charCodeAt(i);
     return new Float32Array(bytes.buffer, 0, n);
+  }
+
+  function receiveHostMidi(msg) {
+    if (!msg || typeof msg !== "object") return false;
+    if (typeof global.ingestNodeGraphHostMidiBytes === "function") {
+      global.ingestNodeGraphHostMidiBytes(msg.status, msg.data1, msg.data2, msg.count);
+    } else if (typeof global.recordNodeGraphLastMidiMessage === "function") {
+      global.recordNodeGraphLastMidiMessage(msg.status, msg.data1, msg.data2, msg.count);
+    }
+    return true;
   }
 
   function receiveFrameBatch(batch) {
@@ -456,6 +476,52 @@
   }
 
   var keypadLive = new Map();
+
+  function postKeyboard(nodeId, signal) {
+    var id = String(nodeId || "");
+    if (!id) return;
+    if (!signal || typeof signal !== "object") {
+      postToHost({
+        event: "keyboard",
+        nodeId: id,
+        frequency: 0,
+        midi: 0,
+        gate: 0,
+        trigger: 0,
+        velocity: 0,
+        x: 0,
+        y: 0,
+        keyIndex: 0,
+        keyNorm: 0,
+        releaseOnly: 1,
+      });
+      return;
+    }
+    var s = signal;
+    var midi = Number(s.midi);
+    if (!Number.isFinite(midi)) midi = Number(s.rawMidi);
+    if (!Number.isFinite(midi)) midi = 60;
+    var hz = Number(s.frequency);
+    if (!(hz > 0)) hz = 440 * Math.pow(2, (midi - 69) / 12);
+    var vel = Number(s.velocity);
+    if (!Number.isFinite(vel) || vel < 0) vel = 0;
+    if (vel > 1) vel = 1;
+    var gateOn = Number(s.gate) > 0;
+    var pulse = Number(s.gatePulse) > 0;
+    postToHost({
+      event: "keyboard",
+      nodeId: id,
+      frequency: hz,
+      midi: midi,
+      gate: gateOn ? vel : 0,
+      trigger: pulse ? vel : 0,
+      velocity: vel,
+      x: Number(s.x) || 0,
+      y: Number(s.y) || 0,
+      keyIndex: Number(s.keyIndex) || 0,
+      keyNorm: Number(s.keyQuantized) || 0,
+    });
+  }
 
   function postKeypad(nodeId) {
     var id = String(nodeId || "");
@@ -499,6 +565,46 @@
           }
         }
         return original.apply(this, arguments);
+      };
+    });
+    wrapOnce("sendNodeGraphLiveKeyboardModuleSignal", function (original) {
+      return function (nodeId, signal) {
+        var result;
+        try {
+          result = original.apply(this, arguments);
+        } catch (error) {
+          result = undefined;
+        }
+        try {
+          postKeyboard(nodeId, signal);
+        } catch (error) {
+          console.warn("soemdspPluginHost: keyboard failed", error);
+        }
+        return result;
+      };
+    });
+    // Hardware / host MIDI last-note CV belongs only to the MIDI module
+    // (type keyboardController), never the on-screen Keyboard / Grid Keyboard.
+    wrapOnce("sendNodeGraphLiveMidiKeyboardSignal", function (original) {
+      return function (signal) {
+        var result;
+        try {
+          result = original.apply(this, arguments);
+        } catch (error) {
+          result = undefined;
+        }
+        try {
+          var nodes = patchNodes();
+          var sig = signal && typeof signal === "object" ? signal : arguments[0];
+          for (var i = 0; i < nodes.length; i += 1) {
+            if (nodes[i] && nodes[i].type === "keyboardController") {
+              postKeyboard(nodes[i].id, sig);
+            }
+          }
+        } catch (error) {
+          console.warn("soemdspPluginHost: midi portal cv failed", error);
+        }
+        return result;
       };
     });
     wrapOnce("setNodeGraphKeypadInteraction", function (original) {
@@ -565,7 +671,7 @@
       isActive: function () { return true; },
     };
   }
-  global.soemdspPluginHostApi = { loadPatch: loadPatch, receiveFrameBatch: receiveFrameBatch, resendPatch: function () { lastSentSignature = null; afterCommit({ status: "resend" }); } };
+  global.soemdspPluginHostApi = { loadPatch: loadPatch, receiveFrameBatch: receiveFrameBatch, receiveHostMidi: receiveHostMidi, resendPatch: function () { lastSentSignature = null; afterCommit({ status: "resend" }); } };
 
   function autoStartBoot() {
     if (document.body && document.body.dataset.nodeBootStarted === "1") return;

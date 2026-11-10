@@ -535,7 +535,7 @@ async function sendNodeGraphLiveNativeModule(liveNode, entry) {
 // Chrome caps wasm memories per process (~100); many standalone instances
 // hit that cap. Slim is for small used-sets when per-module files exist;
 // huge patches / site deploys should use combined.
-const nodeGraphLiveCombinedNativeModuleUrl = "native_modules/combined/soemdsp_combined.wasm?v=2026.11.08.3";
+const nodeGraphLiveCombinedNativeModuleUrl = "native_modules/combined/soemdsp_combined.wasm?v=2026.11.10.03";
 
 /** @type {null|"slim"|"combined"} */
 let nodeGraphLiveNativeWasmLoadModeResolved = null;
@@ -2923,6 +2923,25 @@ function sendNodeGraphLiveKeyboardModuleSignal(nodeId, signal) {
 }
 
 /** One keyboard's gold Arp Keys latch { mask, velocities } â†’ worklet. null = keyboard gone. */
+/** Sequencer clip audition: mix a note into this sequencer's Play Keys / CV outs (cables), not VoiceManager. */
+function sendNodeGraphLiveSequencerAudition(nodeId, midi, velocity127 = 100) {
+  const id = String(nodeId || "");
+  if (!id) return;
+  const raw = Number(midi);
+  const off = !Number.isFinite(raw) || raw < 0;
+  const n = off ? -1 : Math.max(0, Math.min(127, Math.round(raw)));
+  const vel = Math.max(1, Math.min(127, Math.round(Number(velocity127) || 100)));
+  if (nodeGraphMvp.live.usesWorklet && nodeGraphMvp.live.node?.port) {
+    nodeGraphMvp.live.node.port.postMessage({
+      type: "setSequencerAudition",
+      nodeId: id,
+      midi: n,
+      velocity: off ? 0 : vel,
+    });
+  }
+}
+
+
 function sendNodeGraphLiveKeyboardArpLatch(nodeId, latch) {
   const mask = latch?.mask instanceof Uint8Array ? new Uint8Array(latch.mask) : null;
   const velocities = latch?.velocities instanceof Uint8Array ? new Uint8Array(latch.velocities) : null;
@@ -3402,16 +3421,18 @@ const nodeGraphLiveWorkletSourceFilesEfficient = [
   "./public/node-graph-parameter-smoother-filters.js?v=smooth-gpu-3p-1",
   // Bypass passthrough maps + frame eval (shared with main thread).
   "./public/node-graph-module-bypass.js?v=leaky-env-1",
-  "./public/node-graph-efficient-product.js?v=pt-reverse-1",
+  "./public/node-graph-efficient-product.js?v=2026.11.10.02",
   "./public/node-live-audio-worklet-core.js?v=softpop-ship-1",
   // Phase D: class methods extracted from core (must follow class definition).
-  "./public/node-live-audio-worklet-graph.js?v=plan-d-split-5",
+  "./public/node-graph-segment-curves.js?v=segment-curves-1",
+  "./public/node-live-audio-worklet-graph.js?v=segment-curves-1",
   "./public/node-live-audio-worklet-smoother.js?v=smooth-bessel-1",
   "./public/node-live-audio-worklet-param-map.js?v=domain-mod-1",
   "./public/node-live-audio-worklet-destroy.js?v=block-scope-1",
   "./public/node-live-audio-worklet-analog.js?v=plan-d-split-7",
-  "./public/lib/sample-interpolate.js?v=mp-aa-1",
-  "./public/node-live-audio-worklet-dsp-state.js?v=rapt-native-1",
+  "./public/lib/spectral-tilt.js?v=spectral-tilt-5",
+  "./public/lib/sample-interpolate.js?v=mp-interp-11",
+  "./public/node-live-audio-worklet-dsp-state.js?v=mp-interp-1",
   "./public/lib/polyphony-voices.js?v=gold-oct-1",
   "./public/lib/note-mask-128.js?v=pq-oct-st-1",
   "./public/node-graph-keyboard-chord-memory.js?v=kbd-gl-1",
@@ -3421,7 +3442,7 @@ const nodeGraphLiveWorkletSourceFilesEfficient = [
   "./public/node-live-audio-worklet-scope-io.js?v=clap-1",
   "./public/node-live-audio-worklet-native-load.js?v=emo-shader-1",
   "./public/node-live-audio-worklet-native-exports.js?v=logic-ng-1",
-  "./public/node-live-audio-worklet-native-graph.js?v=2026.11.08.5",
+  "./public/node-live-audio-worklet-native-graph.js?v=2026.11.10.03",
   "./public/node-live-audio-worklet-meta-view.js?v=voice-preview-1",
   "./public/node-live-audio-worklet-set-plan.js?v=step-register-1",
   "./public/node-live-audio-worklet-clear-plan.js?v=kbd-trig-1samp-20261013",

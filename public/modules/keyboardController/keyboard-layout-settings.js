@@ -3,9 +3,9 @@
 // = whiteCount × whiteKeyWidth, centered, and scaled down if it would
 // overflow the host (never clips).
 
-const nodeGraphMidiKeyboardKeyLabelModes = Object.freeze(["off", "name", "number"]);
+const nodeGraphKeyboardKeyLabelModes = Object.freeze(["off", "name", "number"]);
 
-const nodeGraphMidiKeyboardLayoutDefaults = Object.freeze({
+const nodeGraphKeyboardLayoutDefaults = Object.freeze({
   whiteKeyWidth: 16,
   blackKeyWidth: 10,
   blackKeyHeight: 62,
@@ -15,41 +15,41 @@ const nodeGraphMidiKeyboardLayoutDefaults = Object.freeze({
   hideKeyboardInfo: true,
 });
 
-function normalizeNodeGraphMidiKeyboardKeyLabels(value) {
-  return nodeGraphMidiKeyboardKeyLabelModes.includes(value)
+function normalizeNodeGraphKeyboardKeyLabels(value) {
+  return nodeGraphKeyboardKeyLabelModes.includes(value)
     ? value
-    : nodeGraphMidiKeyboardLayoutDefaults.keyLabels;
+    : nodeGraphKeyboardLayoutDefaults.keyLabels;
 }
 
-function normalizeNodeGraphMidiKeyboardLayout(raw = {}) {
+function normalizeNodeGraphKeyboardLayout(raw = {}) {
   const source = raw && typeof raw === "object" ? raw : {};
   const clamp = (value, min, max, fallback) => globalThis.SoemMath.clamp(value, min, max, fallback);
   return {
-    whiteKeyWidth: clamp(source.whiteKeyWidth, 6, 40, nodeGraphMidiKeyboardLayoutDefaults.whiteKeyWidth),
-    blackKeyWidth: clamp(source.blackKeyWidth, 4, 28, nodeGraphMidiKeyboardLayoutDefaults.blackKeyWidth),
-    blackKeyHeight: clamp(source.blackKeyHeight, 28, 82, nodeGraphMidiKeyboardLayoutDefaults.blackKeyHeight),
-    keyboardHeight: clamp(source.keyboardHeight, 48, 220, nodeGraphMidiKeyboardLayoutDefaults.keyboardHeight),
-    keyLabels: normalizeNodeGraphMidiKeyboardKeyLabels(source.keyLabels),
+    whiteKeyWidth: clamp(source.whiteKeyWidth, 6, 40, nodeGraphKeyboardLayoutDefaults.whiteKeyWidth),
+    blackKeyWidth: clamp(source.blackKeyWidth, 4, 28, nodeGraphKeyboardLayoutDefaults.blackKeyWidth),
+    blackKeyHeight: clamp(source.blackKeyHeight, 28, 82, nodeGraphKeyboardLayoutDefaults.blackKeyHeight),
+    keyboardHeight: clamp(source.keyboardHeight, 48, 220, nodeGraphKeyboardLayoutDefaults.keyboardHeight),
+    keyLabels: normalizeNodeGraphKeyboardKeyLabels(source.keyLabels),
     // Percent of the old per-key label size; labels still shrink to fit the key.
-    keyLabelSize: clamp(source.keyLabelSize, 50, 400, nodeGraphMidiKeyboardLayoutDefaults.keyLabelSize),
+    keyLabelSize: clamp(source.keyLabelSize, 50, 400, nodeGraphKeyboardLayoutDefaults.keyLabelSize),
     hideKeyboardInfo: source.hideKeyboardInfo === false ? false : true,
   };
 }
 
-function nodeGraphMidiKeyboardLayoutForSurface(surface) {
+function nodeGraphKeyboardLayoutForSurface(surface) {
   const nodeId = String(surface?.closest?.("[data-node]")?.dataset?.node || "").trim();
   const node = nodeId && typeof nodeGraphPatchNode === "function" ? nodeGraphPatchNode(nodeId) : null;
   const bag = node && (node.type === "keyboard" || node.type === "gridKeyboard")
     && node.traceDisplaySettings && typeof node.traceDisplaySettings === "object"
     ? node.traceDisplaySettings
     : {};
-  return normalizeNodeGraphMidiKeyboardLayout({
-    ...nodeGraphMidiKeyboardLayoutDefaults,
+  return normalizeNodeGraphKeyboardLayout({
+    ...nodeGraphKeyboardLayoutDefaults,
     ...bag,
   });
 }
 
-function nodeGraphMidiKeyboardLayoutHostWidth(surface) {
+function nodeGraphKeyboardLayoutHostWidth(surface) {
   const surfaceW = Math.max(0, surface?.clientWidth || 0);
   if (surfaceW > 0) {
     return surfaceW;
@@ -57,22 +57,22 @@ function nodeGraphMidiKeyboardLayoutHostWidth(surface) {
   return Math.max(0, surface?.parentElement?.clientWidth || 0);
 }
 
-let nodeGraphMidiKeyboardLayoutApplying = false;
+let nodeGraphKeyboardLayoutApplying = false;
 
-function applyNodeGraphMidiKeyboardLayout() {
-  if (nodeGraphMidiKeyboardLayoutApplying) {
+function applyNodeGraphKeyboardLayout() {
+  if (nodeGraphKeyboardLayoutApplying) {
     return;
   }
-  nodeGraphMidiKeyboardLayoutApplying = true;
+  nodeGraphKeyboardLayoutApplying = true;
   try {
-    applyNodeGraphMidiKeyboardLayoutBody();
+    applyNodeGraphKeyboardLayoutBody();
   } finally {
-    nodeGraphMidiKeyboardLayoutApplying = false;
+    nodeGraphKeyboardLayoutApplying = false;
   }
 }
 
 /** Black keys must leave a white-key front lip — never meet the bottom wall. */
-function nodeGraphMidiKeyboardBlackKeyHeightPx(surfaceHeight, blackHeightPercent) {
+function nodeGraphKeyboardBlackKeyHeightPx(surfaceHeight, blackHeightPercent) {
   const h = Math.max(0, nodeGraphFiniteNumber(surfaceHeight));
   if (h <= 0) {
     return 0;
@@ -83,20 +83,20 @@ function nodeGraphMidiKeyboardBlackKeyHeightPx(surfaceHeight, blackHeightPercent
   return Math.max(6, Math.min(desired, h - lip));
 }
 
-function applyNodeGraphMidiKeyboardLayoutBody() {
+function applyNodeGraphKeyboardLayoutBody() {
   let needsSecondPass = false;
   let layoutChanged = false;
-  document.querySelectorAll(".node-midi-keyboard-module .node-midi-keyboard-surface").forEach((surface) => {
+  document.querySelectorAll(".node-keyboard-module .node-keyboard-surface").forEach((surface) => {
     // Key geometry from this keyboard's own window (octave + key count).
     const nodeId = String(surface.closest("[data-node]")?.dataset?.node || "").trim();
-    const generated = typeof nodeGraphMidiKeyboardGenerateKeys === "function"
-      ? nodeGraphMidiKeyboardGenerateKeys(nodeGraphKeyboardViewStartMidiFor(nodeId), nodeGraphKeyboardKeyCountFor(nodeId))
+    const generated = typeof nodeGraphKeyboardGenerateKeys === "function"
+      ? nodeGraphKeyboardGenerateKeys(nodeGraphKeyboardViewStartMidiFor(nodeId), nodeGraphKeyboardKeyCountFor(nodeId))
       : { blackKeys: [], totalWhite: 0 };
     const totalWhite = generated.totalWhite || 0;
     const pads = { leadPad: generated.leadPad || 0, trailPad: generated.trailPad || 0 };
     const totalUnits = totalWhite + pads.leadPad + pads.trailPad;
-    const s = nodeGraphMidiKeyboardLayoutForSurface(surface);
-    const available = nodeGraphMidiKeyboardLayoutHostWidth(surface);
+    const s = nodeGraphKeyboardLayoutForSurface(surface);
+    const available = nodeGraphKeyboardLayoutHostWidth(surface);
     const desired = totalUnits * s.whiteKeyWidth;
     const inModuleFace = Boolean(surface.closest(
       ".dsp-node.keyboard-layout, .node-layout-canvas-tile, .node-screen-solo-stage, .node-metamodule-canvas-stage",
@@ -113,14 +113,14 @@ function applyNodeGraphMidiKeyboardLayoutBody() {
     // Key rects for the GL draw and the hit test: one source, rebuilt every
     // pass (cheap) so a key-window change with the same counts still lands.
     const layoutKeyRects = () => {
-      if (typeof nodeGraphMidiKeyboardLayoutKeyRects !== "function") return;
-      nodeGraphMidiKeyboardLayoutKeyRects(surface, {
+      if (typeof nodeGraphKeyboardLayoutKeyRects !== "function") return;
+      nodeGraphKeyboardLayoutKeyRects(surface, {
         width: surface.clientWidth || 0,
         height: surface.clientHeight || 0,
         inModuleFace,
         whiteW,
         blackW,
-        blackH: nodeGraphMidiKeyboardBlackKeyHeightPx(surface.clientHeight || 0, s.blackKeyHeight),
+        blackH: nodeGraphKeyboardBlackKeyHeightPx(surface.clientHeight || 0, s.blackKeyHeight),
         blackKeyHeight: s.blackKeyHeight,
       });
     };
@@ -163,19 +163,19 @@ function applyNodeGraphMidiKeyboardLayoutBody() {
     }
     surface.dataset.keyLabels = s.keyLabels;
     surface.dataset.keyLabelSize = String(s.keyLabelSize);
-    if (typeof nodeGraphMidiKeyboardRequestPaint === "function") {
-      nodeGraphMidiKeyboardRequestPaint();
+    if (typeof nodeGraphKeyboardRequestPaint === "function") {
+      nodeGraphKeyboardRequestPaint();
     }
     if (inModuleFace) {
-      surface.style.removeProperty("--midi-keyboard-piano-height");
+      surface.style.removeProperty("--keyboard-piano-height");
       surface.style.height = "100%";
       surface.style.minHeight = "0";
       surface.style.maxHeight = "100%";
     } else {
-      const host = surface.closest(".dsp-node, .node-midi-keyboard-module");
+      const host = surface.closest(".dsp-node, .node-keyboard-module");
       const hostH = Math.max(0, host?.clientHeight || 0);
       const fittedH = hostH > 0 ? Math.min(s.keyboardHeight, hostH) : s.keyboardHeight;
-      surface.style.setProperty("--midi-keyboard-piano-height", `${fittedH}px`);
+      surface.style.setProperty("--keyboard-piano-height", `${fittedH}px`);
       surface.style.height = `${fittedH}px`;
       surface.style.minHeight = "0";
       surface.style.maxHeight = "100%";
@@ -184,53 +184,53 @@ function applyNodeGraphMidiKeyboardLayoutBody() {
     // fill the bed; a black sits on the joint after white[leftWhiteIndex],
     // height = blackKeyHeight % of the bed (keyboard-face-gl.js).
     layoutKeyRects();
-    const module = surface.closest(".node-midi-keyboard-module");
+    const module = surface.closest(".node-keyboard-module");
     if (module) {
       module.classList.toggle("show-keyboard-info", s.hideKeyboardInfo === false);
       if (inModuleFace) {
-        module.style.setProperty("--midi-keyboard-piano-width", "100%");
-        module.style.removeProperty("--midi-keyboard-piano-height");
+        module.style.setProperty("--keyboard-piano-width", "100%");
+        module.style.removeProperty("--keyboard-piano-height");
       } else {
-        module.style.setProperty("--midi-keyboard-piano-width", `${pianoW}px`);
-        module.style.setProperty("--midi-keyboard-piano-height", `${s.keyboardHeight}px`);
+        module.style.setProperty("--keyboard-piano-width", `${pianoW}px`);
+        module.style.setProperty("--keyboard-piano-height", `${s.keyboardHeight}px`);
       }
     }
   });
   document.querySelectorAll(".node-grid-keyboard-module").forEach((module) => {
-    module.classList.toggle("show-keyboard-info", nodeGraphMidiKeyboardLayoutForSurface(module).hideKeyboardInfo === false);
+    module.classList.toggle("show-keyboard-info", nodeGraphKeyboardLayoutForSurface(module).hideKeyboardInfo === false);
   });
   if (layoutChanged) {
-    installNodeGraphMidiKeyboardLayoutResizeObserver();
-    if (typeof renderNodeGraphMidiKeyboardKeyLabels === "function") {
-      renderNodeGraphMidiKeyboardKeyLabels();
+    installNodeGraphKeyboardLayoutResizeObserver();
+    if (typeof renderNodeGraphKeyboardKeyLabels === "function") {
+      renderNodeGraphKeyboardKeyLabels();
     }
   }
   if (needsSecondPass && typeof window !== "undefined" && typeof window.requestAnimationFrame === "function") {
     window.requestAnimationFrame(() => {
-      window.requestAnimationFrame(() => applyNodeGraphMidiKeyboardLayout());
+      window.requestAnimationFrame(() => applyNodeGraphKeyboardLayout());
     });
   }
 }
 
-let nodeGraphMidiKeyboardLayoutResizeObserver = null;
+let nodeGraphKeyboardLayoutResizeObserver = null;
 
-function installNodeGraphMidiKeyboardLayoutResizeObserver() {
+function installNodeGraphKeyboardLayoutResizeObserver() {
   if (typeof ResizeObserver === "undefined") {
     return;
   }
-  if (!nodeGraphMidiKeyboardLayoutResizeObserver) {
-    nodeGraphMidiKeyboardLayoutResizeObserver = new ResizeObserver(() => {
-      applyNodeGraphMidiKeyboardLayout();
+  if (!nodeGraphKeyboardLayoutResizeObserver) {
+    nodeGraphKeyboardLayoutResizeObserver = new ResizeObserver(() => {
+      applyNodeGraphKeyboardLayout();
     });
-    window.addEventListener("resize", () => applyNodeGraphMidiKeyboardLayout());
+    window.addEventListener("resize", () => applyNodeGraphKeyboardLayout());
   }
   document.querySelectorAll(
-    ".dsp-node .node-midi-keyboard-module, "
-    + ".node-midi-keyboard-module .node-midi-keyboard-surface, "
-    + ".node-layout-canvas-tile .node-midi-keyboard-module, "
-    + ".node-metamodule-canvas-stage .node-midi-keyboard-module",
+    ".dsp-node .node-keyboard-module, "
+    + ".node-keyboard-module .node-keyboard-surface, "
+    + ".node-layout-canvas-tile .node-keyboard-module, "
+    + ".node-metamodule-canvas-stage .node-keyboard-module",
   ).forEach((el) => {
-    nodeGraphMidiKeyboardLayoutResizeObserver.observe(el);
+    nodeGraphKeyboardLayoutResizeObserver.observe(el);
   });
 }
 
@@ -256,7 +256,7 @@ function nodeGraphKeyboardRangeDisplayState(nodeId) {
   const node = id && typeof nodeGraphPatchNode === "function" ? nodeGraphPatchNode(id) : null;
   if (!node || node.type !== "keyboard"
     || typeof nodeGraphKeyboardRangeFor !== "function"
-    || typeof nodeGraphMidiKeyboardRangeStep !== "function") {
+    || typeof nodeGraphKeyboardRangeStep !== "function") {
     return null;
   }
   const range = nodeGraphKeyboardRangeFor(id);
@@ -265,8 +265,8 @@ function nodeGraphKeyboardRangeDisplayState(nodeId) {
     ? nodeGraphKeyboardRangeOffsets(range)
     : { octave: 0, semitone: 0 };
   const signed = (n) => `${n >= 0 ? "+" : "-"}${Math.abs(n)}`;
-  const name = (midi) => (typeof nodeGraphMidiKeyboardPitchLabel === "function" ? nodeGraphMidiKeyboardPitchLabel(midi) : String(midi));
-  const can = (action, direction) => Boolean(nodeGraphMidiKeyboardRangeStep(range, action, direction));
+  const name = (midi) => (typeof nodeGraphKeyboardPitchLabel === "function" ? nodeGraphKeyboardPitchLabel(midi) : String(midi));
+  const can = (action, direction) => Boolean(nodeGraphKeyboardRangeStep(range, action, direction));
   const offsetTitle = `Lowest key ${name(range.low)} (MIDI ${range.low}); offsets are from the default C0 (MIDI 24)`;
   const row = (action, value, title) => ({ value, title, down: can(action, -1), up: can(action, 1) });
   return {
@@ -298,7 +298,7 @@ function buildNodeGraphKeyboardRangeDisplaySettingsHtml(nodeId) {
       </div>`;
   }).join("");
   return `
-    <div class="metadata-field-section" data-midi-keyboard-range-settings data-midi-keyboard-range-node="${esc(state.nodeId)}">
+    <div class="metadata-field-section" data-keyboard-range-settings data-keyboard-range-node="${esc(state.nodeId)}">
       <div class="metadata-section-title" data-midi-key-range-summary>${esc(state.summary)}</div>${rows}
     </div>`;
 }
@@ -306,7 +306,7 @@ function buildNodeGraphKeyboardRangeDisplaySettingsHtml(nodeId) {
 function nodeGraphKeyboardRangeSectionNodeId(section) {
   return String(
     section?.closest?.("[data-display-settings-target-node]")?.dataset?.displaySettingsTargetNode
-    || section?.dataset?.midiKeyboardRangeNode
+    || section?.dataset?.keyboardRangeNode
     || "",
   ).trim();
 }
@@ -319,7 +319,7 @@ function syncNodeGraphKeyboardRangeDisplaySettings(root = null) {
   if (!scope) {
     return;
   }
-  scope.querySelectorAll("[data-midi-keyboard-range-settings]").forEach((section) => {
+  scope.querySelectorAll("[data-keyboard-range-settings]").forEach((section) => {
     const state = nodeGraphKeyboardRangeDisplayState(nodeGraphKeyboardRangeSectionNodeId(section));
     if (!state) {
       return;
@@ -343,15 +343,15 @@ function syncNodeGraphKeyboardRangeDisplaySettings(root = null) {
   });
 }
 
-function buildNodeGraphKeyboardControllerFaceDisplaySettingsBodyHtml() {
+function buildNodeGraphKeyboardFaceDisplaySettingsBodyHtml() {
   const nodeId = typeof nodeGraphMvp !== "undefined"
     ? String(nodeGraphMvp?.traceDisplaySettingsTargetNode || "").trim()
     : "";
   const node = nodeId && typeof nodeGraphPatchNode === "function"
     ? nodeGraphPatchNode(nodeId)
     : null;
-  const s = normalizeNodeGraphMidiKeyboardLayout({
-    ...nodeGraphMidiKeyboardLayoutDefaults,
+  const s = normalizeNodeGraphKeyboardLayout({
+    ...nodeGraphKeyboardLayoutDefaults,
     ...(node?.traceDisplaySettings && typeof node.traceDisplaySettings === "object"
       ? node.traceDisplaySettings
       : {}),
@@ -359,7 +359,7 @@ function buildNodeGraphKeyboardControllerFaceDisplaySettingsBodyHtml() {
   // Module size is Width/Height in Module Settings (and Shift+arrows).
   // White width / keyboard height layout sliders removed — they no longer drive the face.
   return `${buildNodeGraphKeyboardRangeDisplaySettingsHtml(nodeId)}
-    <div class="metadata-field-section" data-midi-keyboard-layout-settings>
+    <div class="metadata-field-section" data-keyboard-layout-settings>
       <div class="metadata-section-title">Keys</div>
       <label class="metadata-checkbox-label">
         <input type="checkbox" data-midi-key-layout="hideKeyboardInfo"${s.hideKeyboardInfo ? " checked" : ""} aria-label="Hide keyboard info">
@@ -388,11 +388,11 @@ function buildNodeGraphKeyboardControllerFaceDisplaySettingsBodyHtml() {
     </div>`;
 }
 
-function bindNodeGraphKeyboardControllerFaceDisplaySettingsBody(host) {
-  if (!host || host.dataset.midiKeyboardLayoutBound === "true") {
+function bindNodeGraphKeyboardFaceDisplaySettingsBody(host) {
+  if (!host || host.dataset.keyboardLayoutBound === "true") {
     return;
   }
-  host.dataset.midiKeyboardLayoutBound = "true";
+  host.dataset.keyboardLayoutBound = "true";
   const readForm = () => {
     const nodeId = String(
       host.closest?.("[data-display-settings-target-node]")?.dataset?.displaySettingsTargetNode
@@ -402,8 +402,8 @@ function bindNodeGraphKeyboardControllerFaceDisplaySettingsBody(host) {
     const node = nodeId && typeof nodeGraphPatchNode === "function"
       ? nodeGraphPatchNode(nodeId)
       : null;
-    const next = normalizeNodeGraphMidiKeyboardLayout({
-      ...nodeGraphMidiKeyboardLayoutDefaults,
+    const next = normalizeNodeGraphKeyboardLayout({
+      ...nodeGraphKeyboardLayoutDefaults,
       ...(node?.traceDisplaySettings && typeof node.traceDisplaySettings === "object"
         ? node.traceDisplaySettings
         : {}),
@@ -428,14 +428,14 @@ function bindNodeGraphKeyboardControllerFaceDisplaySettingsBody(host) {
       ? nodeGraphPatchNode(nodeId)
       : null;
     if (node && typeof assignNodeGraphTypedDisplaySettingsEverywhere === "function") {
-      assignNodeGraphTypedDisplaySettingsEverywhere(node, "keyboardControllerFace", {
+      assignNodeGraphTypedDisplaySettingsEverywhere(node, "keyboardFace", {
         ...(node.traceDisplaySettings && typeof node.traceDisplaySettings === "object"
           ? node.traceDisplaySettings
           : {}),
         ...next,
       });
     }
-    applyNodeGraphMidiKeyboardLayout();
+    applyNodeGraphKeyboardLayout();
     if (persist && typeof setNodeGraphPatchDirtyState === "function") {
       setNodeGraphPatchDirtyState("edited");
     }
@@ -449,10 +449,10 @@ function bindNodeGraphKeyboardControllerFaceDisplaySettingsBody(host) {
     }
     event.preventDefault();
     event.stopPropagation();
-    const section = button.closest("[data-midi-keyboard-range-settings]");
+    const section = button.closest("[data-keyboard-range-settings]");
     const nodeId = nodeGraphKeyboardRangeSectionNodeId(section);
-    if (nodeId && typeof changeNodeGraphMidiKeyboardRange === "function") {
-      changeNodeGraphMidiKeyboardRange(nodeId, button.dataset.midiKeyRangeStep, Number(button.dataset.midiKeyRangeDir));
+    if (nodeId && typeof changeNodeGraphKeyboardRange === "function") {
+      changeNodeGraphKeyboardRange(nodeId, button.dataset.midiKeyRangeStep, Number(button.dataset.midiKeyRangeDir));
     }
     syncNodeGraphKeyboardRangeDisplaySettings(host);
   });
@@ -477,7 +477,7 @@ function openNodeGraphKeyboardControllerDisplaySettings(event = {}) {
     ? event.target
     : (event?.currentTarget instanceof Element ? event.currentTarget : null);
   let nodeId = String(
-    fromEl?.closest?.(".node-midi-keyboard-module[data-node], .dsp-node.keyboard-layout[data-node], .dsp-node[data-node]")?.dataset?.node
+    fromEl?.closest?.(".node-keyboard-module[data-node], .dsp-node.keyboard-layout[data-node], .dsp-node[data-node]")?.dataset?.node
     || "",
   ).trim();
   const patchNode = typeof nodeGraphPatchNode === "function" && nodeId
@@ -502,7 +502,7 @@ function openNodeGraphKeyboardControllerDisplaySettings(event = {}) {
     && nodeGraphMvp.sharedInspectorActive === "traceDisplaySettings"
     && (
       nodeGraphMvp.traceDisplaySettingsTargetNode === nodeId
-      || existingPopover.dataset.displaySettingsType === "keyboardControllerFace"
+      || existingPopover.dataset.displaySettingsType === "keyboardFace"
     )
     && existingPopover.dataset.inspectorBlank !== "true"
   ) {
@@ -535,10 +535,10 @@ function openNodeGraphKeyboardControllerDisplaySettings(event = {}) {
     setNodeGraphTraceDisplaySettingsHeader("DISPLAY", "Settings", "Keyboard");
   }
   popover.dataset.displaySettingsBodyType = "";
-  popover.dataset.displaySettingsType = "keyboardControllerFace";
+  popover.dataset.displaySettingsType = "keyboardFace";
   popover.dataset.displaySettingsTargetNode = nodeId;
   if (typeof mountNodeGraphDisplaySettingsBody === "function") {
-    mountNodeGraphDisplaySettingsBody(popover, "keyboardControllerFace", null);
+    mountNodeGraphDisplaySettingsBody(popover, "keyboardFace", null);
   }
   if (typeof setNodeGraphTraceDisplaySettingsBlankState === "function") {
     setNodeGraphTraceDisplaySettingsBlankState(false);
@@ -563,19 +563,19 @@ function openNodeGraphKeyboardControllerDisplaySettings(event = {}) {
 }
 
 function bindNodeGraphKeyboardControllerDisplayContextMenu() {
-  if (document.body.dataset.midiKeyboardFaceContextBound === "true") {
+  if (document.body.dataset.keyboardFaceContextBound === "true") {
     return;
   }
-  document.body.dataset.midiKeyboardFaceContextBound = "true";
+  document.body.dataset.keyboardFaceContextBound = "true";
   document.addEventListener("contextmenu", (event) => {
-    const panel = event.target?.closest?.(".node-midi-keyboard-panel, .node-midi-keyboard-surface");
+    const panel = event.target?.closest?.(".node-keyboard-panel, .node-keyboard-surface");
     if (!panel) {
       return;
     }
     // Keys own right-click (arp-style Trigger sweep in view-controls); no menu there.
-    const surface = event.target?.closest?.(".node-midi-keyboard-surface");
-    const key = surface && typeof nodeGraphMidiKeyboardKeyAtClient === "function"
-      ? nodeGraphMidiKeyboardKeyAtClient(surface, event.clientX, event.clientY)
+    const surface = event.target?.closest?.(".node-keyboard-surface");
+    const key = surface && typeof nodeGraphKeyboardKeyAtClient === "function"
+      ? nodeGraphKeyboardKeyAtClient(surface, event.clientX, event.clientY)
       : null;
     if (key) {
       event.preventDefault();
@@ -588,8 +588,8 @@ function bindNodeGraphKeyboardControllerDisplayContextMenu() {
 
 if (typeof document !== "undefined") {
   const boot = () => {
-    applyNodeGraphMidiKeyboardLayout();
-    installNodeGraphMidiKeyboardLayoutResizeObserver();
+    applyNodeGraphKeyboardLayout();
+    installNodeGraphKeyboardLayoutResizeObserver();
     bindNodeGraphKeyboardControllerDisplayContextMenu();
   };
   if (document.readyState === "loading") {

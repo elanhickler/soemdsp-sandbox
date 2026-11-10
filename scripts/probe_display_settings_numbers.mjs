@@ -40,7 +40,7 @@ await page.waitForTimeout(500);
 const rows = await page.evaluate(() => {
   const FORM_TYPES = [
     "arpKeysFace", "basicShapeFace", "dot", "evolveFieldFace", "fbmFieldFace", "gradientVectorscopeFace",
-    "graphFace", "hypersawBurn", "imageBurnFace", "keyboardControllerFace", "keypadFace", "knobFace", "lcd",
+    "graphFace", "hypersawBurn", "imageBurnFace", "keyboardFace", "keypadFace", "knobFace", "lcd",
     "lcdDot", "led", "limiterGainFace", "lineBurn", "macroControlsFace", "matrixDisplayFace", "matrixFace",
     "matrixWaterfallFace", "momentaryButtonFace", "numberReadout", "oscilloscopeBankBurn", "output", "patchFace",
     "phosphorLight", "phosphorWaveform", "portalFace", "pulseDot", "rasterRgbFace", "rgbFractalFace",

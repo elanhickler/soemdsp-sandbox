@@ -256,7 +256,7 @@ function nodeGraphModuleDisplayTypeHasLocalSettings(displayType) {
     "aberrationFace",
     "screenBendFace",
     "placeFace",
-    "keyboardControllerFace",
+    "keyboardFace",
     // Knob module: macro dial colors, image layers, centered span, readout.
     "knobFace",
     // Slider module: bar geometry, pins, Pill/Squircle rounding.

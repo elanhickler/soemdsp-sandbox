@@ -27,7 +27,7 @@ const NODE_GRAPH_SCREEN_SOLO_FACE_SEL = [
   ".node-module-graph-display, .node-module-graph-face, .node-module-graph-point-strip",
   ".node-additive-filter-curve-display",
   ".node-text-box-body",
-  ".node-midi-keyboard-module",
+  ".node-keyboard-module",
   ".node-grid-keyboard-module",
   ".node-arp-keys-face",
   ".node-metamodule-face",
@@ -200,7 +200,7 @@ function nodeGraphScreenSoloFaceScore(face) {
   if (face.classList.contains("node-basic-shape-display")) score += 35;
   if (face.classList.contains("node-sincos-display")) score += 35;
   if (face.classList.contains("node-module-scope-window")) score += 25;
-  if (face.classList.contains("node-midi-keyboard-module")) score += 40;
+  if (face.classList.contains("node-keyboard-module")) score += 40;
   if (face.classList.contains("node-grid-keyboard-module")) score += 40;
   if (face.classList.contains("node-arp-keys-face")) score += 35;
   if (face.classList.contains("node-module-face")) score += 10;
@@ -244,7 +244,7 @@ function nodeGraphScreenSoloFindFace(nodeId) {
     return { id, host, face: fromHost };
   }
   const loose = document.querySelector(
-    `[data-node="${escaped}"].node-midi-keyboard-module, `
+    `[data-node="${escaped}"].node-keyboard-module, `
     + `[data-node="${escaped}"].node-grid-keyboard-module, `
     + `[data-node="${escaped}"].node-filter-curve-display, `
     + `[data-node="${escaped}"].node-round-shape-display, `
@@ -345,16 +345,16 @@ function nodeGraphScreenSoloWakeFace(face) {
     && face.classList.contains("node-filter-curve-display")) {
     scheduleNodeGraphFilterCurveDraw();
   }
-  if (face.classList.contains("node-midi-keyboard-module")
-    || face.querySelector?.(".node-midi-keyboard-surface")) {
-    if (typeof applyNodeGraphMidiKeyboardLayout === "function") {
-      applyNodeGraphMidiKeyboardLayout();
+  if (face.classList.contains("node-keyboard-module")
+    || face.querySelector?.(".node-keyboard-surface")) {
+    if (typeof applyNodeGraphKeyboardLayout === "function") {
+      applyNodeGraphKeyboardLayout();
     }
-    if (typeof renderNodeGraphMidiKeyboardKeys === "function") {
-      renderNodeGraphMidiKeyboardKeys();
+    if (typeof renderNodeGraphKeyboardKeys === "function") {
+      renderNodeGraphKeyboardKeys();
     }
-    if (typeof installNodeGraphMidiKeyboardLayoutResizeObserver === "function") {
-      installNodeGraphMidiKeyboardLayoutResizeObserver();
+    if (typeof installNodeGraphKeyboardLayoutResizeObserver === "function") {
+      installNodeGraphKeyboardLayoutResizeObserver();
     }
   }
   if (face.classList.contains("node-sample-waveform-display")

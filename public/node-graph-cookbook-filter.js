@@ -311,7 +311,7 @@ const nodeGraphFilterCurveFKey = Object.freeze({
   chebyshev: "frequency", elliptic: "frequency", papoulisFilter: "cutoff",
   bandpass: "frequency", allpass: "frequency", lowpass: "frequency",
   highpass: "frequency", eqFilter: "frequency", modeResonator: "frequency",
-  combResonator: "frequency",
+  combResonator: "frequency", tiltFilter: "pivot",
 });
 // Multi-cutoff ƒ (Passive / Dual Ladder): engine publishes both final cuts.
 const nodeGraphFilterCurveFBusPort = Object.freeze({
@@ -581,6 +581,14 @@ function nodeGraphFilterCurveView(node) {
       curveThickness: face.curveThickness,
     };
   }
+  if (node.type === "tiltFilter") {
+    return {
+      type: node.type,
+      slope: nodeGraphFilterCurveLiveParam(node, "amount", 0),
+      pivot: nodeGraphFilterCurveLiveParam(node, "pivot", 1000),
+      levelMode: Math.round(nodeGraphFilterCurveLiveParam(node, "mode", 0)),
+    };
+  }
   if (node.type === "eqFilter") {
     const uiMode = nodeGraphFilterCurveLiveParam(node, "mode", 1);
     const ignoreBoost = typeof nodeGraphEqFilterUiIgnoresBoostCut === "function"
@@ -770,6 +778,26 @@ function nodeGraphFilterCurveResponseAt(node, frequency, sampleRate, view = null
       sampleRate,
     );
   }
+  if (node.type === "tiltFilter") {
+    if (!v._tiltSt && typeof soemdspTiltCreateState === "function") {
+      v._tiltSt = soemdspTiltCreateState();
+      if (typeof soemdspTiltUpdate === "function") {
+        soemdspTiltUpdate(
+          v._tiltSt,
+          nodeGraphFilterCurveFiniteHz(v.pivot, 1000),
+          nodeGraphFiniteNumber(v.slope),
+          sampleRate,
+          typeof SOEMDSP_TILT_STYLE_PIVOT === "number" ? SOEMDSP_TILT_STYLE_PIVOT : 0,
+          nodeGraphFiniteNumber(v.levelMode),
+        );
+      }
+    }
+    if (v._tiltSt && typeof soemdspTiltCascadeMag === "function") {
+      const mag = soemdspTiltCascadeMag(v._tiltSt, frequency, sampleRate);
+      return Number.isFinite(mag) && mag > 0 ? mag : 1e-6;
+    }
+    return 1;
+  }
   if (node.type === "graphicEq") {
     return nodeGraphGraphicEqMagnitudeAt(v, frequency, sampleRate);
   }
@@ -838,6 +866,10 @@ function nodeGraphFilterCurveCutoffFrequencies(node, view = null) {
       .map((value) => nodeGraphFilterCurveFiniteHz(value, 0))
       .filter((value) => Number.isFinite(value) && value >= 0);
   }
+  if (node.type === "tiltFilter") {
+    return [nodeGraphFilterCurveFiniteHz(v.pivot, 1000)]
+      .filter((value) => Number.isFinite(value) && value >= 0);
+  }
   if (node.type === "papoulisFilter" || node.type === "tb303Filter") {
     // 0 Hz is valid — still draw the marker at the left edge of the log axis.
     return [nodeGraphFilterCurveFiniteHz(v.cutoff, 0)]
@@ -904,6 +936,9 @@ function nodeGraphFilterCurveLabel(node) {
   }
   if (node.type === "phaser") {
     return "";
+  }
+  if (node.type === "tiltFilter") {
+    return ["Tilt", "Cut", "Matched"][Math.round(nodeGraphFiniteNumber(node.params?.mode, 0))] || "Tilt";
   }
   if (node.type === "eqFilter") {
     const modes = typeof nodeGraphEqFilterModes !== "undefined" ? nodeGraphEqFilterModes : null;
@@ -1371,8 +1406,9 @@ function drawNodeGraphFilterCurveDisplayInner(section) {
   const sampleRate = Math.max(1, nodeGraphFiniteNumber(nodeGraphMvp?.sampleRate, 44100));
   const minFreq = 20;
   const maxFreq = Math.max(minFreq * 2, Math.min(20000, sampleRate * 0.5));
-  const minDb = -48;
-  const maxDb = 18;
+  const tiltDb = node.type === "tiltFilter";
+  const minDb = tiltDb ? -24 : -48;
+  const maxDb = tiltDb ? 24 : 18;
   const faceMin = faceMinSide(width, height);
   const strokeGrid = faceInkPx(1, faceMin);
   const strokeCurve = faceInkPx(1.5, faceMin);

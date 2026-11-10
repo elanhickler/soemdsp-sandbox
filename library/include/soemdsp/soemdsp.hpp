@@ -34,6 +34,7 @@
 #include <soemdsp/math/rect_sine.h>
 #include <soemdsp/math/interpolation.h>
 #include <soemdsp/math/two_point_curves.h>
+#include <soemdsp/math/segment_curves.h>
 #include <soemdsp/math/indexed_noise.h>
 #include <soemdsp/math/pan.h>
 #include <soemdsp/filter/scientific_iir.h>

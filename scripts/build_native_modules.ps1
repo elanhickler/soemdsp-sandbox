@@ -68,6 +68,7 @@ $modules = @(
     "soemdsp_graph_add_node", "soemdsp_graph_connect",
     "soemdsp_graph_disconnect", "soemdsp_graph_disconnect_param_mod",
     "soemdsp_graph_set_param",
+    "soemdsp_graph_push_midi",
     "soemdsp_graph_set_emo_counts",
     "soemdsp_graph_set_param_mod", "soemdsp_graph_set_param_domain",
     "soemdsp_graph_clear_param_mod_edges", "soemdsp_graph_add_param_mod_edge",
@@ -128,6 +129,7 @@ $modules = @(
   @{ Name = "pulse_train"; Simd = $false; Exports = @("soemdsp_pulse_train_create", "soemdsp_pulse_train_destroy", "soemdsp_pulse_train_sample", "soemdsp_pulse_train_end", "soemdsp_pulse_train_trigger", "soemdsp_pulse_train_elapsed", "soemdsp_pulse_train_effective", "soemdsp_pulse_train_preview", "soemdsp_pulse_train_preview_time", "soemdsp_pulse_train_preview_amplitude", "soemdsp_pulse_train_version") }
   @{ Name = "tb303_filter"; Simd = $false; Exports = @("soemdsp_tb303_filter_create", "soemdsp_tb303_filter_destroy", "soemdsp_tb303_filter_sample", "soemdsp_tb303_filter_version", "soemdsp_tb303_filter_metadata_json", "soemdsp_tb303_filter_metadata_json_size") }
   @{ Name = "passive_filter"; Simd = $false; Exports = @("soemdsp_passive_filter_create", "soemdsp_passive_filter_destroy", "soemdsp_passive_filter_sample", "soemdsp_passive_filter_sample_ex", "soemdsp_passive_filter_version", "soemdsp_passive_filter_metadata_json", "soemdsp_passive_filter_metadata_json_size") }
+  @{ Name = "tilt_filter"; Simd = $false; Exports = @("soemdsp_tilt_filter_create", "soemdsp_tilt_filter_destroy", "soemdsp_tilt_filter_sample", "soemdsp_tilt_filter_version", "soemdsp_tilt_filter_metadata_json", "soemdsp_tilt_filter_metadata_json_size") }
   @{ Name = "shooting_star_explosion"; Simd = $false; Exports = @("soemdsp_shooting_star_explosion_power", "soemdsp_shooting_star_explosion_version", "soemdsp_shooting_star_explosion_metadata_json", "soemdsp_shooting_star_explosion_metadata_json_size") }
   @{ Name = "polyblep"; Simd = $false; Exports = @(
     "soemdsp_polyblep_create", "soemdsp_polyblep_destroy", "soemdsp_polyblep_reset", "soemdsp_polyblep_set_antialias",

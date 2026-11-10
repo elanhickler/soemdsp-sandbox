@@ -1,6 +1,6 @@
 // Keyboard face, drawn by WebGL (docs/APP_POLICY.md section 3).
 //
-// No key elements exist. Each .node-midi-keyboard-surface carries a key model
+// No key elements exist. Each .node-keyboard-surface carries a key model
 // (surface._midiKeyModel): one plain object per key with its MIDI note, its
 // window index, white / black, its label text and its state set (active,
 // held, ghost-play, chord-memory, ...). The layout pass
@@ -27,13 +27,13 @@ class NodeGraphMidiKeyState {
   add(name) {
     if (this._on.has(name)) return;
     this._on.add(name);
-    nodeGraphMidiKeyboardRequestPaint();
+    nodeGraphKeyboardRequestPaint();
   }
 
   remove(name) {
     if (!this._on.has(name)) return;
     this._on.delete(name);
-    nodeGraphMidiKeyboardRequestPaint();
+    nodeGraphKeyboardRequestPaint();
   }
 
   toggle(name, force) {
@@ -45,19 +45,19 @@ class NodeGraphMidiKeyState {
 }
 
 /** The surface's key model, or null before its first render. */
-function nodeGraphMidiKeyboardKeyModel(surface) {
+function nodeGraphKeyboardKeyModel(surface) {
   return surface?._midiKeyModel || null;
 }
 
 /** Every key of every rendered piano Keyboard face (optionally one face / surface). */
-function nodeGraphMidiKeyboardAllKeys(root = null) {
+function nodeGraphKeyboardAllKeys(root = null) {
   const scope = root && typeof root.querySelectorAll === "function" ? root : document;
-  const surfaces = scope.matches?.(".node-midi-keyboard-surface")
+  const surfaces = scope.matches?.(".node-keyboard-surface")
     ? [scope]
-    : [...scope.querySelectorAll(".node-midi-keyboard-module .node-midi-keyboard-surface")];
+    : [...scope.querySelectorAll(".node-keyboard-module .node-keyboard-surface")];
   const out = [];
   for (const surface of surfaces) {
-    const model = nodeGraphMidiKeyboardKeyModel(surface);
+    const model = nodeGraphKeyboardKeyModel(surface);
     if (model) out.push(...model.keys);
   }
   return out;
@@ -68,14 +68,14 @@ function nodeGraphMidiKeyboardAllKeys(root = null) {
  * model changed. States start empty (the held / active / chord passes refill
  * them right after, as they did for the old spans).
  */
-function nodeGraphMidiKeyboardBuildKeyModel(surface, start, count, labels) {
+function nodeGraphKeyboardBuildKeyModel(surface, start, count, labels) {
   const sig = `${start}:${count}`;
-  const prev = nodeGraphMidiKeyboardKeyModel(surface);
+  const prev = nodeGraphKeyboardKeyModel(surface);
   if (prev && prev.sig === sig) {
-    nodeGraphMidiKeyboardSetKeyLabels(surface, labels);
+    nodeGraphKeyboardSetKeyLabels(surface, labels);
     return false;
   }
-  const generated = nodeGraphMidiKeyboardGenerateKeys(start, count);
+  const generated = nodeGraphKeyboardGenerateKeys(start, count);
   const keys = [];
   const add = (src, black) => {
     keys.push({
@@ -106,30 +106,30 @@ function nodeGraphMidiKeyboardBuildKeyModel(surface, start, count, labels) {
     labels: "",
     geom: null,
   };
-  nodeGraphMidiKeyboardSetKeyLabels(surface, labels);
-  nodeGraphMidiKeyboardRequestPaint();
+  nodeGraphKeyboardSetKeyLabels(surface, labels);
+  nodeGraphKeyboardRequestPaint();
   return true;
 }
 
 /** Label text per key from the Labels setting (off / name / number). */
-function nodeGraphMidiKeyboardSetKeyLabels(surface, labels) {
-  const model = nodeGraphMidiKeyboardKeyModel(surface);
+function nodeGraphKeyboardSetKeyLabels(surface, labels) {
+  const model = nodeGraphKeyboardKeyModel(surface);
   if (!model) return;
   let changed = model.labels !== labels;
   model.labels = labels;
   for (const key of model.keys) {
-    const text = typeof nodeGraphMidiKeyboardKeyCapText === "function"
-      ? nodeGraphMidiKeyboardKeyCapText(key.midi, labels)
+    const text = typeof nodeGraphKeyboardKeyCapText === "function"
+      ? nodeGraphKeyboardKeyCapText(key.midi, labels)
       : "";
     if (key.label !== text) {
       key.label = text;
       changed = true;
     }
-    key.aria = typeof nodeGraphMidiKeyboardPitchLabel === "function"
-      ? `${nodeGraphMidiKeyboardPitchLabel(key.midi)} / MIDI ${key.midi}`
+    key.aria = typeof nodeGraphKeyboardPitchLabel === "function"
+      ? `${nodeGraphKeyboardPitchLabel(key.midi)} / MIDI ${key.midi}`
       : `MIDI ${key.midi}`;
   }
-  if (changed) nodeGraphMidiKeyboardRequestPaint();
+  if (changed) nodeGraphKeyboardRequestPaint();
 }
 
 /**
@@ -137,8 +137,8 @@ function nodeGraphMidiKeyboardSetKeyLabels(surface, labels) {
  * layout: { width, height, inModuleFace, whiteW, blackW, blackH, blackKeyHeight }
  * Rects are surface-local layout px (zoom 1). Returns true when they changed.
  */
-function nodeGraphMidiKeyboardLayoutKeyRects(surface, layout) {
-  const model = nodeGraphMidiKeyboardKeyModel(surface);
+function nodeGraphKeyboardLayoutKeyRects(surface, layout) {
+  const model = nodeGraphKeyboardKeyModel(surface);
   if (!model) return false;
   const W = Math.max(0, Number(layout.width) || 0);
   const H = Math.max(0, Number(layout.height) || 0);
@@ -181,14 +181,14 @@ function nodeGraphMidiKeyboardLayoutKeyRects(surface, layout) {
     rects,
   };
   if (changed) {
-    nodeGraphMidiKeyboardRequestGlRebuild();
+    nodeGraphKeyboardRequestGlRebuild();
   }
   return changed;
 }
 
 /** Client-px mapping of one surface (post-transform: workspace zoom, tile scale). */
-function nodeGraphMidiKeyboardClientFrame(surface) {
-  const model = nodeGraphMidiKeyboardKeyModel(surface);
+function nodeGraphKeyboardClientFrame(surface) {
+  const model = nodeGraphKeyboardKeyModel(surface);
   const geom = model?.geom;
   if (!geom || !(geom.w > 0) || !(geom.h > 0)) return null;
   const rect = surface.getBoundingClientRect();
@@ -200,8 +200,8 @@ function nodeGraphMidiKeyboardClientFrame(surface) {
  * Key under client coordinates. A black key wins inside its rect; below it
  * the white at that X answers (front lip). Null on the empty lead / trail bed.
  */
-function nodeGraphMidiKeyboardKeyAtClient(surface, clientX, clientY) {
-  const frame = nodeGraphMidiKeyboardClientFrame(surface);
+function nodeGraphKeyboardKeyAtClient(surface, clientX, clientY) {
+  const frame = nodeGraphKeyboardClientFrame(surface);
   if (!frame) return null;
   const x = (clientX - frame.rect.left) / frame.kx;
   const y = (clientY - frame.rect.top) / frame.ky;
@@ -217,8 +217,8 @@ function nodeGraphMidiKeyboardKeyAtClient(surface, clientX, clientY) {
 }
 
 /** One key's rect in client px (DOMRect-shaped), or null. */
-function nodeGraphMidiKeyboardKeyClientRect(key) {
-  const frame = key?.surface ? nodeGraphMidiKeyboardClientFrame(key.surface) : null;
+function nodeGraphKeyboardKeyClientRect(key) {
+  const frame = key?.surface ? nodeGraphKeyboardClientFrame(key.surface) : null;
   const r = frame?.geom.rects.get(key);
   if (!r) return null;
   const left = frame.rect.left + r.x * frame.kx;
@@ -230,37 +230,37 @@ function nodeGraphMidiKeyboardKeyClientRect(key) {
 
 // ---------------------------------------------------------------- repaint
 
-let nodeGraphMidiKeyboardPaintFrame = 0;
+let nodeGraphKeyboardPaintFrame = 0;
 
 /** Key state / labels changed: repaint every place that draws a keyboard, once per frame. */
-function nodeGraphMidiKeyboardRequestPaint() {
-  if (nodeGraphMidiKeyboardPaintFrame || typeof requestAnimationFrame !== "function") return;
-  nodeGraphMidiKeyboardPaintFrame = requestAnimationFrame(() => {
-    nodeGraphMidiKeyboardPaintFrame = 0;
+function nodeGraphKeyboardRequestPaint() {
+  if (nodeGraphKeyboardPaintFrame || typeof requestAnimationFrame !== "function") return;
+  nodeGraphKeyboardPaintFrame = requestAnimationFrame(() => {
+    nodeGraphKeyboardPaintFrame = 0;
     if (typeof nodeGraphGlGraphPresentSoon === "function") nodeGraphGlGraphPresentSoon();
     if (typeof nodeGraphMiniPerformShown === "function" && nodeGraphMiniPerformShown()
       && typeof nodeGraphGlMiniPerformPresent === "function") {
       nodeGraphGlMiniPerformPresent();
     }
-    nodeGraphMidiKeyboardPresentFaceCanvases();
+    nodeGraphKeyboardPresentFaceCanvases();
   });
 }
 
-let nodeGraphMidiKeyboardChromeFrame = 0;
+let nodeGraphKeyboardChromeFrame = 0;
 
 /** Key rects moved / resized: the GL chrome cache holds the surface boxes, rebuild it. */
-function nodeGraphMidiKeyboardRequestGlRebuild() {
-  if (nodeGraphMidiKeyboardChromeFrame || typeof requestAnimationFrame !== "function") return;
-  nodeGraphMidiKeyboardChromeFrame = requestAnimationFrame(() => {
-    nodeGraphMidiKeyboardChromeFrame = 0;
+function nodeGraphKeyboardRequestGlRebuild() {
+  if (nodeGraphKeyboardChromeFrame || typeof requestAnimationFrame !== "function") return;
+  nodeGraphKeyboardChromeFrame = requestAnimationFrame(() => {
+    nodeGraphKeyboardChromeFrame = 0;
     if (typeof nodeGraphGlGraphRebuildChrome === "function") nodeGraphGlGraphRebuildChrome();
-    nodeGraphMidiKeyboardRequestPaint();
+    nodeGraphKeyboardRequestPaint();
   });
 }
 
 // ---------------------------------------------------------------- look
 
-function nodeGraphMidiKeyboardHex(hex, alpha = 1) {
+function nodeGraphKeyboardHex(hex, alpha = 1) {
   const h = String(hex).replace("#", "");
   return [
     Number.parseInt(h.slice(0, 2), 16) / 255,
@@ -270,12 +270,12 @@ function nodeGraphMidiKeyboardHex(hex, alpha = 1) {
   ];
 }
 
-function nodeGraphMidiKeyboardRgba(r, g, b, a = 1) {
+function nodeGraphKeyboardRgba(r, g, b, a = 1) {
   return [r / 255, g / 255, b / 255, a];
 }
 
 /** `top` composited over an opaque `under` (straight alpha). */
-function nodeGraphMidiKeyboardOver(top, under) {
+function nodeGraphKeyboardOver(top, under) {
   const a = top[3];
   return [
     top[0] * a + under[0] * (1 - a),
@@ -285,14 +285,14 @@ function nodeGraphMidiKeyboardOver(top, under) {
   ];
 }
 
-function nodeGraphMidiKeyboardMix(a, b, t) {
+function nodeGraphKeyboardMix(a, b, t) {
   return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t, a[3] + (b[3] - a[3]) * t];
 }
 
 // The old styles.css key gradients (top stop, bottom stop) and label colours.
 const NODE_GRAPH_MIDI_KEY_LOOK = (() => {
-  const hex = nodeGraphMidiKeyboardHex;
-  const rgba = nodeGraphMidiKeyboardRgba;
+  const hex = nodeGraphKeyboardHex;
+  const rgba = nodeGraphKeyboardRgba;
   return Object.freeze({
     bed: hex("050607"),
     bedGlow: rgba(241, 184, 75, 0.06),
@@ -335,7 +335,7 @@ const NODE_GRAPH_MIDI_KEY_LOOK = (() => {
  * Fill / stroke / text for one key from its state, in the old CSS precedence.
  * Returns { top, bottom, stroke, strokeRgba, text } (stroke in layout px).
  */
-function nodeGraphMidiKeyboardKeyPaint(key, wideLabels) {
+function nodeGraphKeyboardKeyPaint(key, wideLabels) {
   const L = NODE_GRAPH_MIDI_KEY_LOOK;
   const s = key.state;
   const has = (name) => s.contains(name);
@@ -361,30 +361,30 @@ function nodeGraphMidiKeyboardKeyPaint(key, wideLabels) {
     else if (held) look = W.gold;
     else if (active) look = W.blue;
     else if (has("ghost-chord") && !slotOn) {
-      top = nodeGraphMidiKeyboardOver(L.ghost.chord.top, W.base.top);
-      bottom = nodeGraphMidiKeyboardOver(L.ghost.chord.bottom, W.base.bottom);
+      top = nodeGraphKeyboardOver(L.ghost.chord.top, W.base.top);
+      bottom = nodeGraphKeyboardOver(L.ghost.chord.bottom, W.base.bottom);
       ring = L.ghost.chord.ring;
       ringPx = 2;
     } else if (has("ghost-patch")) {
-      top = nodeGraphMidiKeyboardOver(L.ghost.patch.top, W.base.top);
-      bottom = nodeGraphMidiKeyboardOver(L.ghost.patch.bottom, W.base.bottom);
+      top = nodeGraphKeyboardOver(L.ghost.patch.top, W.base.top);
+      bottom = nodeGraphKeyboardOver(L.ghost.patch.bottom, W.base.bottom);
       ring = L.ghost.patch.ring;
       ringPx = 2;
     } else if (has("patch-set")) {
-      top = nodeGraphMidiKeyboardOver(L.ghost.patchSet.top, W.base.top);
-      bottom = nodeGraphMidiKeyboardOver(L.ghost.patchSet.bottom, W.base.bottom);
+      top = nodeGraphKeyboardOver(L.ghost.patchSet.top, W.base.top);
+      bottom = nodeGraphKeyboardOver(L.ghost.patchSet.bottom, W.base.bottom);
     }
     if (!ring && look.inset) ring = look.inset;
     // MIDI / chord Play Keys ghost: the sequencer.css inset ring (not on gold / chord slots).
     if (has("ghost-play") && !held && !cm) { ring = L.ghost.play; ringPx = 2; }
     top = top || look.top;
     bottom = bottom || look.bottom;
-    const mid = nodeGraphMidiKeyboardMix(top, bottom, 0.5);
+    const mid = nodeGraphKeyboardMix(top, bottom, 0.5);
     return {
       top,
       bottom,
       stroke: ring ? ringPx : 0,
-      strokeRgba: ring ? nodeGraphMidiKeyboardOver(ring, mid) : mid,
+      strokeRgba: ring ? nodeGraphKeyboardOver(ring, mid) : mid,
       text: look.text,
     };
   }
@@ -404,30 +404,30 @@ function nodeGraphMidiKeyboardKeyPaint(key, wideLabels) {
   else if (held) look = B.gold;
   else if (active) look = B.blue;
   else if (has("ghost-chord") && !slotOn) {
-    top = nodeGraphMidiKeyboardOver(L.ghost.blackChord.top, B.ghostBase.top);
-    bottom = nodeGraphMidiKeyboardOver(L.ghost.blackChord.bottom, B.ghostBase.bottom);
+    top = nodeGraphKeyboardOver(L.ghost.blackChord.top, B.ghostBase.top);
+    bottom = nodeGraphKeyboardOver(L.ghost.blackChord.bottom, B.ghostBase.bottom);
     border = L.ghost.blackChord.border;
     ringPx = 2;
   } else if (has("ghost-patch")) {
-    top = nodeGraphMidiKeyboardOver(L.ghost.blackPatch.top, B.ghostBase.top);
-    bottom = nodeGraphMidiKeyboardOver(L.ghost.blackPatch.bottom, B.ghostBase.bottom);
+    top = nodeGraphKeyboardOver(L.ghost.blackPatch.top, B.ghostBase.top);
+    bottom = nodeGraphKeyboardOver(L.ghost.blackPatch.bottom, B.ghostBase.bottom);
     border = L.ghost.blackPatch.border;
     ringPx = 2;
   } else if (has("patch-set")) {
-    top = nodeGraphMidiKeyboardOver(L.ghost.blackPatchSet.top, B.base.top);
-    bottom = nodeGraphMidiKeyboardOver(L.ghost.blackPatchSet.bottom, B.base.bottom);
+    top = nodeGraphKeyboardOver(L.ghost.blackPatchSet.top, B.base.top);
+    bottom = nodeGraphKeyboardOver(L.ghost.blackPatchSet.bottom, B.base.bottom);
     border = L.ghost.blackPatchSet.border;
   }
   if (has("ghost-play") && !held && !cm) { border = L.ghost.play; ringPx = 2; }
   top = top || look.top;
   bottom = bottom || look.bottom;
   border = border || look.border;
-  const mid = nodeGraphMidiKeyboardMix(top, bottom, 0.5);
+  const mid = nodeGraphKeyboardMix(top, bottom, 0.5);
   return {
     top,
     bottom,
     stroke: ringPx,
-    strokeRgba: nodeGraphMidiKeyboardOver(border, mid),
+    strokeRgba: nodeGraphKeyboardOver(border, mid),
     // Black labels only take the state colour on wide keyboards (old @container 520px).
     text: wideLabels ? look.text : B.base.text,
   };
@@ -439,8 +439,8 @@ const NODE_GRAPH_MIDI_KEY_LABEL_FONT = "\"Cascadia Mono\", Consolas, monospace";
  * Draw one keyboard surface into a gl-line-renderer batch at (x, y, w, h)
  * in batch units (the caller's screen / tile / canvas px).
  */
-function nodeGraphMidiKeyboardGlDraw(batch, surface, x, y, w, h) {
-  const model = nodeGraphMidiKeyboardKeyModel(surface);
+function nodeGraphKeyboardGlDraw(batch, surface, x, y, w, h) {
+  const model = nodeGraphKeyboardKeyModel(surface);
   const geom = model?.geom;
   if (!batch || !geom || !(geom.w > 0) || !(geom.h > 0) || !(w > 0) || !(h > 0)) return false;
   if (typeof nodeGraphGlLinesRoundRect !== "function") return false;
@@ -457,7 +457,7 @@ function nodeGraphMidiKeyboardGlDraw(batch, surface, x, y, w, h) {
   for (const key of model.whites) {
     const r = geom.rects.get(key);
     if (!r) continue;
-    const paint = nodeGraphMidiKeyboardKeyPaint(key, geom.w >= 520);
+    const paint = nodeGraphKeyboardKeyPaint(key, geom.w >= 520);
     rr(r.x, r.y, r.w, r.h, {
       radius: 0,
       fill: paint.top,
@@ -473,7 +473,7 @@ function nodeGraphMidiKeyboardGlDraw(batch, surface, x, y, w, h) {
   for (const key of model.blacks) {
     const r = geom.rects.get(key);
     if (!r) continue;
-    const paint = nodeGraphMidiKeyboardKeyPaint(key, geom.w >= 520);
+    const paint = nodeGraphKeyboardKeyPaint(key, geom.w >= 520);
     rr(r.x, r.y, r.w, r.h, {
       radius: 4 * Math.min(sx, sy),
       radiusTop: 0,
@@ -504,7 +504,7 @@ function nodeGraphMidiKeyboardGlDraw(batch, surface, x, y, w, h) {
       if (!r || !key.label) continue;
       const px = key.black ? blackPx : whitePx;
       if (px < 1) continue;
-      const paint = nodeGraphMidiKeyboardKeyPaint(key, geom.w >= 520);
+      const paint = nodeGraphKeyboardKeyPaint(key, geom.w >= 520);
       nodeGraphGlLinesText(batch, key.label, x + (r.x + r.w * 0.5) * sx, y + (r.y + r.h - (key.black ? 2 : 1)) * sy, textOpts({
         px,
         rgba: paint.text,
@@ -522,28 +522,28 @@ function nodeGraphMidiKeyboardGlDraw(batch, surface, x, y, w, h) {
 // ---------------------------------------------------------------- face canvases
 
 /** Faces shown outside the GL graph pass (no plate pass draws them there). */
-function nodeGraphMidiKeyboardNeedsFaceCanvas(surface) {
+function nodeGraphKeyboardNeedsFaceCanvas(surface) {
   if (!surface?.isConnected) return false;
   if (surface.closest(".node-whole-module-face")) return false;
   return Boolean(surface.closest(".node-layout-canvas-face, .node-screen-solo-stage, .node-metamodule-canvas-stage"));
 }
 
 /** Present every face-canvas keyboard (WebGL batch -> the shared present into its canvas). */
-function nodeGraphMidiKeyboardPresentFaceCanvases() {
+function nodeGraphKeyboardPresentFaceCanvases() {
   if (typeof document === "undefined" || typeof nodeGraphGlLinesBegin !== "function") return;
-  document.querySelectorAll(".node-midi-keyboard-module .node-midi-keyboard-surface").forEach((surface) => {
-    let canvas = surface.querySelector(":scope > canvas.node-midi-keyboard-face-canvas");
-    if (!nodeGraphMidiKeyboardNeedsFaceCanvas(surface)) {
+  document.querySelectorAll(".node-keyboard-module .node-keyboard-surface").forEach((surface) => {
+    let canvas = surface.querySelector(":scope > canvas.node-keyboard-face-canvas");
+    if (!nodeGraphKeyboardNeedsFaceCanvas(surface)) {
       if (canvas) canvas.hidden = true;
       return;
     }
-    const geom = nodeGraphMidiKeyboardKeyModel(surface)?.geom;
+    const geom = nodeGraphKeyboardKeyModel(surface)?.geom;
     const cssW = surface.clientWidth;
     const cssH = surface.clientHeight;
     if (!geom || !(cssW > 0) || !(cssH > 0)) return;
     if (!canvas) {
       canvas = document.createElement("canvas");
-      canvas.className = "node-midi-keyboard-face-canvas";
+      canvas.className = "node-keyboard-face-canvas";
       canvas.setAttribute("aria-hidden", "true");
       surface.append(canvas);
     }
@@ -558,7 +558,7 @@ function nodeGraphMidiKeyboardPresentFaceCanvases() {
     if (canvas.height !== ph) canvas.height = ph;
     const batch = nodeGraphGlLinesBegin(canvas, [0, 0, 0, 0], { scale, transparent: true, publishNodeId: "" });
     if (!batch) return;
-    nodeGraphMidiKeyboardGlDraw(batch, surface, 0, 0, cssW, cssH);
+    nodeGraphKeyboardGlDraw(batch, surface, 0, 0, cssW, cssH);
     nodeGraphGlLinesEnd(batch, "alpha");
   });
 }

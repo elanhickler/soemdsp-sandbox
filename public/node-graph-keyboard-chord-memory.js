@@ -132,8 +132,8 @@ function nodeGraphChordMemoryBeginBlankEdit(nodeId, midi) {
     nodeGraphMvp.patchDirtyState = "dirty";
   }
   nodeGraphChordMemoryPaintKeys();
-  if (typeof renderNodeGraphMidiKeyboardSignal === "function") {
-    renderNodeGraphMidiKeyboardSignal(nodeId, null);
+  if (typeof renderNodeGraphKeyboardSignal === "function") {
+    renderNodeGraphKeyboardSignal(nodeId, null);
   }
   return true;
 }
@@ -182,8 +182,8 @@ function nodeGraphChordMemorySaveCurrentEdit(nodeId, midi, velocity127) {
   if (typeof nodeGraphChordMemoryPaintKeys === "function") {
     nodeGraphChordMemoryPaintKeys();
   }
-  if (typeof renderNodeGraphMidiKeyboardSignal === "function") {
-    renderNodeGraphMidiKeyboardSignal(nodeId, null);
+  if (typeof renderNodeGraphKeyboardSignal === "function") {
+    renderNodeGraphKeyboardSignal(nodeId, null);
   }
   return true;
 }
@@ -206,8 +206,8 @@ function nodeGraphChordMemoryClearSlot(nodeId, midi) {
     nodeGraphMvp.patchDirtyState = "dirty";
   }
   nodeGraphChordMemoryPaintKeys();
-  if (typeof renderNodeGraphMidiKeyboardSignal === "function") {
-    renderNodeGraphMidiKeyboardSignal(nodeId, null);
+  if (typeof renderNodeGraphKeyboardSignal === "function") {
+    renderNodeGraphKeyboardSignal(nodeId, null);
   }
   return true;
 }
@@ -445,11 +445,11 @@ function nodeGraphChordMemoryStartMomentaryPlay(nodeId, midi, pointerId, velocit
     syncNodeGraphKeyboardPolyphonyFromHeldNotes(id);
   }
   nodeGraphChordMemorySyncLiveAudio();
-  if (typeof renderNodeGraphMidiKeyboardHeldKeys === "function") {
-    renderNodeGraphMidiKeyboardHeldKeys();
+  if (typeof renderNodeGraphKeyboardHeldKeys === "function") {
+    renderNodeGraphKeyboardHeldKeys();
   }
-  if (typeof renderNodeGraphMidiKeyboardActiveKeys === "function") {
-    renderNodeGraphMidiKeyboardActiveKeys(id);
+  if (typeof renderNodeGraphKeyboardActiveKeys === "function") {
+    renderNodeGraphKeyboardActiveKeys(id);
   }
   return true;
 }
@@ -485,15 +485,15 @@ function nodeGraphChordMemorySoundingOfMask(mask) {
 
 function nodeGraphChordMemoryStrikeVelocity127(event, surface, nodeId) {
   let v01 = 1;
-  if (typeof nodeGraphMidiKeyboardPointerXY === "function" && event && surface) {
-    const xy = nodeGraphMidiKeyboardPointerXY(event, surface);
+  if (typeof nodeGraphKeyboardPointerXY === "function" && event && surface) {
+    const xy = nodeGraphKeyboardPointerXY(event, surface);
     if (Number.isFinite(Number(xy?.velocity))) v01 = Number(xy.velocity);
   }
-  if (typeof nodeGraphMidiKeyboardMapStrikeVelocity01 === "function") {
-    v01 = nodeGraphMidiKeyboardMapStrikeVelocity01(nodeId, v01);
+  if (typeof nodeGraphKeyboardMapStrikeVelocity01 === "function") {
+    v01 = nodeGraphKeyboardMapStrikeVelocity01(nodeId, v01);
   }
-  if (typeof nodeGraphMidiKeyboardClamp01 === "function") {
-    v01 = nodeGraphMidiKeyboardClamp01(v01);
+  if (typeof nodeGraphKeyboardClamp01 === "function") {
+    v01 = nodeGraphKeyboardClamp01(v01);
   } else {
     v01 = Math.max(0, Math.min(1, Number(v01) || 0));
   }
@@ -524,11 +524,11 @@ function nodeGraphChordMemoryActivateSlot(nodeId, midi, on, velocity127) {
   if (typeof syncNodeGraphKeyboardPolyphonyFromHeldNotes === "function") {
     syncNodeGraphKeyboardPolyphonyFromHeldNotes(nodeId);
   }
-  if (typeof renderNodeGraphMidiKeyboardHeldKeys === "function") {
-    renderNodeGraphMidiKeyboardHeldKeys();
+  if (typeof renderNodeGraphKeyboardHeldKeys === "function") {
+    renderNodeGraphKeyboardHeldKeys();
   }
-  if (typeof renderNodeGraphMidiKeyboardActiveKeys === "function") {
-    renderNodeGraphMidiKeyboardActiveKeys(nodeId);
+  if (typeof renderNodeGraphKeyboardActiveKeys === "function") {
+    renderNodeGraphKeyboardActiveKeys(nodeId);
   }
   if (typeof renderNodeGraphGridKeyboardPads === "function") {
     renderNodeGraphGridKeyboardPads();
@@ -553,16 +553,16 @@ function nodeGraphChordMemoryReleasePointerPlay(nodeId) {
   if (typeof syncNodeGraphKeyboardPolyphonyFromHeldNotes === "function") {
     syncNodeGraphKeyboardPolyphonyFromHeldNotes(id);
   }
-  if (typeof renderNodeGraphMidiKeyboardHeldKeys === "function") {
-    renderNodeGraphMidiKeyboardHeldKeys();
+  if (typeof renderNodeGraphKeyboardHeldKeys === "function") {
+    renderNodeGraphKeyboardHeldKeys();
   }
-  if (typeof renderNodeGraphMidiKeyboardActiveKeys === "function") {
-    renderNodeGraphMidiKeyboardActiveKeys(id);
+  if (typeof renderNodeGraphKeyboardActiveKeys === "function") {
+    renderNodeGraphKeyboardActiveKeys(id);
   }
   nodeGraphChordMemorySyncLiveAudio();
   if (entry.pointerId != null && typeof document !== "undefined") {
     try {
-      document.querySelectorAll(".node-midi-keyboard-surface, .node-grid-keyboard-surface")
+      document.querySelectorAll(".node-keyboard-surface, .node-grid-keyboard-surface")
         .forEach((el) => {
           try { el.releasePointerCapture?.(entry.pointerId); } catch (_e) { /* ignore */ }
         });
@@ -613,11 +613,11 @@ function nodeGraphChordMemoryReleaseNode(nodeId) {
   if (typeof syncNodeGraphKeyboardPolyphonyFromHeldNotes === "function") {
     syncNodeGraphKeyboardPolyphonyFromHeldNotes(id);
   }
-  if (typeof renderNodeGraphMidiKeyboardHeldKeys === "function") {
-    renderNodeGraphMidiKeyboardHeldKeys();
+  if (typeof renderNodeGraphKeyboardHeldKeys === "function") {
+    renderNodeGraphKeyboardHeldKeys();
   }
-  if (typeof renderNodeGraphMidiKeyboardActiveKeys === "function") {
-    renderNodeGraphMidiKeyboardActiveKeys(id);
+  if (typeof renderNodeGraphKeyboardActiveKeys === "function") {
+    renderNodeGraphKeyboardActiveKeys(id);
   }
   if (typeof renderNodeGraphGridKeyboardPads === "function") {
     renderNodeGraphGridKeyboardPads();
@@ -756,13 +756,13 @@ function nodeGraphChordMemoryPaintKeys() {
   const cmModeByNode = new Map();
   const cmModeFor = (nodeId) => {
     if (!cmModeByNode.has(nodeId)) {
-      cmModeByNode.set(nodeId, typeof nodeGraphMidiKeyboardModeForNode === "function"
-        && nodeGraphMidiKeyboardModeForNode(nodeId) === "chordMemory");
+      cmModeByNode.set(nodeId, typeof nodeGraphKeyboardModeForNode === "function"
+        && nodeGraphKeyboardModeForNode(nodeId) === "chordMemory");
     }
     return cmModeByNode.get(nodeId);
   };
   // Piano keys are key-model state (keyboard-face-gl.js), drawn by WebGL.
-  const pianoKeys = typeof nodeGraphMidiKeyboardAllKeys === "function" ? nodeGraphMidiKeyboardAllKeys() : [];
+  const pianoKeys = typeof nodeGraphKeyboardAllKeys === "function" ? nodeGraphKeyboardAllKeys() : [];
   pianoKeys.forEach((key) => {
     const nodeId = nodeGraphChordMemoryNodeIdFromElement(key.surface);
     const cmMode = cmModeFor(nodeId);
@@ -824,8 +824,8 @@ function nodeGraphChordMemoryHandlePointer(event, surface, midi, options = {}) {
   }
 
   if (!nodeId || !Number.isFinite(Number(midi))) return false;
-  const mode = typeof nodeGraphMidiKeyboardModeForNode === "function"
-    ? nodeGraphMidiKeyboardModeForNode(nodeId)
+  const mode = typeof nodeGraphKeyboardModeForNode === "function"
+    ? nodeGraphKeyboardModeForNode(nodeId)
     : "slide";
   const slotMidi = Math.round(Number(midi));
   const hasChord = nodeGraphChordMemoryHasSlot(nodeId, slotMidi);
@@ -859,8 +859,8 @@ function nodeGraphChordMemoryHandlePointer(event, surface, midi, options = {}) {
         nodeGraphChordMemoryBeginBlankEdit(nodeId, slotMidi);
       }
       nodeGraphChordMemoryPaintKeys();
-      if (typeof renderNodeGraphMidiKeyboardSignal === "function") {
-        renderNodeGraphMidiKeyboardSignal(nodeId, null);
+      if (typeof renderNodeGraphKeyboardSignal === "function") {
+        renderNodeGraphKeyboardSignal(nodeId, null);
       }
       event.preventDefault();
       return true;

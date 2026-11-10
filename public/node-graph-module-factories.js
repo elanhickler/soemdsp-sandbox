@@ -597,7 +597,7 @@ function nodeGraphPerformanceWheelSpecs() {
 
 function createNodeGraphPerformanceWheel(spec) {
   const wheel = document.createElement("div");
-  wheel.className = `node-midi-keyboard-wheel ${spec.className}`;
+  wheel.className = `node-keyboard-wheel ${spec.className}`;
   wheel.dataset.performanceWheel = spec.key;
   wheel.setAttribute("role", "slider");
   wheel.setAttribute("aria-label", `${spec.label} wheel`);
@@ -624,7 +624,7 @@ function createNodeGraphPitchModWheelBody(node = null) {
   }
   section.setAttribute("aria-label", "Pitch and modulation wheels");
   const bank = document.createElement("div");
-  bank.className = "node-midi-keyboard-wheel-bank";
+  bank.className = "node-keyboard-wheel-bank";
   for (const spec of nodeGraphPerformanceWheelSpecs()) {
     bank.append(createNodeGraphPerformanceWheel(spec));
   }
@@ -634,21 +634,21 @@ function createNodeGraphPitchModWheelBody(node = null) {
 
 function createNodeGraphMidiModeControl() {
   const modeLabel = document.createElement("label");
-  modeLabel.className = "node-midi-keyboard-mode-control";
+  modeLabel.className = "node-keyboard-mode-control";
   const modeText = document.createElement("span");
   modeText.textContent = "Mode";
   const modeSelect = document.createElement("select");
-  modeSelect.dataset.midiKeyboardModeSelect = "true";
+  modeSelect.dataset.keyboardModeSelect = "true";
   modeSelect.setAttribute("aria-label", "Keyboard mode");
-  const modes = typeof nodeGraphMidiKeyboardModes !== "undefined"
-    && Array.isArray(nodeGraphMidiKeyboardModes)
-    ? nodeGraphMidiKeyboardModes
+  const modes = typeof nodeGraphKeyboardModes !== "undefined"
+    && Array.isArray(nodeGraphKeyboardModes)
+    ? nodeGraphKeyboardModes
     : ["slide", "press", "hold", "toggle", "chordMemory", "triggerPatch"];
   for (const value of modes) {
     const option = document.createElement("option");
     option.value = value;
-    option.textContent = typeof nodeGraphMidiKeyboardModeLabel === "function"
-      ? nodeGraphMidiKeyboardModeLabel(value)
+    option.textContent = typeof nodeGraphKeyboardModeLabel === "function"
+      ? nodeGraphKeyboardModeLabel(value)
       : String(value);
     modeSelect.append(option);
   }
@@ -658,7 +658,7 @@ function createNodeGraphMidiModeControl() {
 
 function createNodeGraphPlusMinusControl(spec) {
   const wrap = document.createElement("span");
-  wrap.className = "node-midi-keyboard-octave-control";
+  wrap.className = "node-keyboard-octave-control";
   wrap.setAttribute("aria-label", spec.ariaLabel);
   const down = document.createElement("button");
   down.type = "button";
@@ -706,6 +706,31 @@ function createNodeGraphMidiListenControls() {
   return host;
 }
 
+function createNodeGraphMidiMonitorDisplay() {
+  const monitor = document.createElement("div");
+  monitor.className = "node-midi-monitor";
+  monitor.dataset.midiMonitor = "true";
+  monitor.dataset.moduleBand = "face";
+  monitor.setAttribute("aria-label", "Last MIDI message");
+  const typeLine = document.createElement("div");
+  typeLine.className = "node-midi-monitor-line node-midi-monitor-type";
+  typeLine.dataset.midiMonitorType = "true";
+  typeLine.textContent = "no message";
+  const dataLine = document.createElement("div");
+  dataLine.className = "node-midi-monitor-line node-midi-monitor-data";
+  dataLine.dataset.midiMonitorData = "true";
+  dataLine.textContent = "—";
+  const countLine = document.createElement("div");
+  countLine.className = "node-midi-monitor-line node-midi-monitor-count";
+  countLine.dataset.midiMonitorCount = "true";
+  countLine.textContent = "#0";
+  monitor.append(typeLine, dataLine, countLine);
+  if (typeof paintNodeGraphMidiMonitor === "function") {
+    paintNodeGraphMidiMonitor(monitor);
+  }
+  return monitor;
+}
+
 function createNodeGraphMidiModuleBody(node = null) {
   const section = document.createElement("section");
   section.className = "node-midi-module node-module-interface-controls";
@@ -714,29 +739,29 @@ function createNodeGraphMidiModuleBody(node = null) {
     section.dataset.node = node;
   }
   section.setAttribute("aria-label", "MIDI");
-  section.append(createNodeGraphMidiListenControls());
+  section.append(createNodeGraphMidiListenControls(), createNodeGraphMidiMonitorDisplay());
   return section;
 }
 
 // Keyboard module piano face. Not the Portal MIDI listen module
 // (createNodeGraphMidiModuleBody). MIDI is a separate unique inlet.
-function createNodeGraphKeyboardControllerBody(node = null) {
+function createNodeGraphKeyboardBody(node = null) {
   const section = document.createElement("section");
-  section.className = "node-midi-keyboard-panel node-midi-keyboard-module node-module-face";
+  section.className = "node-keyboard-panel node-keyboard-module node-module-face";
   section.dataset.moduleBand = "face";
   if (node) {
     section.dataset.node = node;
   }
   section.setAttribute("aria-label", "MIDI keyboard");
   const heading = document.createElement("div");
-  heading.className = "node-midi-keyboard-heading";
+  heading.className = "node-keyboard-heading";
   const controls = document.createElement("div");
-  controls.className = "node-midi-keyboard-midi-controls";
+  controls.className = "node-keyboard-midi-controls";
   const modeLabel = createNodeGraphMidiModeControl();
   // Key range (octave / semitone / keys at bottom / keys at top) lives in this
   // module's Display Settings > Range, not on the face.
   const liveReadouts = document.createElement("span");
-  liveReadouts.className = "node-midi-keyboard-live-readouts";
+  liveReadouts.className = "node-keyboard-live-readouts";
   liveReadouts.setAttribute("aria-live", "polite");
   for (const [key, labelText, valueText] of [
     ["frequency", "freq", "-"],
@@ -753,7 +778,7 @@ function createNodeGraphKeyboardControllerBody(node = null) {
     liveReadouts.append(item);
   }
   const velMinLabel = document.createElement("label");
-  velMinLabel.className = "node-midi-keyboard-vel-field";
+  velMinLabel.className = "node-keyboard-vel-field";
   const velMinCaption = document.createElement("span");
   velMinCaption.textContent = "Min Vel";
   const velMinInput = document.createElement("input");
@@ -761,12 +786,12 @@ function createNodeGraphKeyboardControllerBody(node = null) {
   velMinInput.min = "0";
   velMinInput.max = "127";
   velMinInput.step = "1";
-  velMinInput.dataset.midiKeyboardVelMin = "true";
+  velMinInput.dataset.keyboardVelMin = "true";
   velMinInput.setAttribute("aria-label", "Minimum velocity 0 to 127");
   velMinInput.value = "127";
   velMinLabel.append(velMinCaption, velMinInput);
   const velMaxLabel = document.createElement("label");
-  velMaxLabel.className = "node-midi-keyboard-vel-field";
+  velMaxLabel.className = "node-keyboard-vel-field";
   const velMaxCaption = document.createElement("span");
   velMaxCaption.textContent = "Max Vel";
   const velMaxInput = document.createElement("input");
@@ -774,7 +799,7 @@ function createNodeGraphKeyboardControllerBody(node = null) {
   velMaxInput.min = "0";
   velMaxInput.max = "127";
   velMaxInput.step = "1";
-  velMaxInput.dataset.midiKeyboardVelMax = "true";
+  velMaxInput.dataset.keyboardVelMax = "true";
   velMaxInput.setAttribute("aria-label", "Maximum velocity 0 to 127");
   velMaxInput.value = "127";
   velMaxLabel.append(velMaxCaption, velMaxInput);
@@ -785,17 +810,17 @@ function createNodeGraphKeyboardControllerBody(node = null) {
   heading.append(controls);
 
   const performance = document.createElement("div");
-  performance.className = "node-midi-keyboard-performance";
+  performance.className = "node-keyboard-performance";
   const surface = document.createElement("div");
-  surface.className = "node-midi-keyboard-surface";
+  surface.className = "node-keyboard-surface";
   surface.setAttribute("aria-label", "MIDI keyboard");
-  // No key elements: renderNodeGraphMidiKeyboardKeys (called from
+  // No key elements: renderNodeGraphKeyboardKeys (called from
   // bindNodeGraphKeyboardControllerModuleEvents right after mount) builds the
   // key model (keyboard-face-gl.js) from the current window; WebGL draws it.
   performance.append(surface);
 
   const signalBar = document.createElement("div");
-  signalBar.className = "node-midi-keyboard-signal-bar";
+  signalBar.className = "node-keyboard-signal-bar";
   signalBar.dataset.midiKeyboardSignalBar = "true";
   signalBar.setAttribute("aria-live", "polite");
   const signals = [
@@ -816,16 +841,16 @@ function createNodeGraphKeyboardControllerBody(node = null) {
     signalBar.append(item);
   }
   const bitmaskBar = document.createElement("div");
-  bitmaskBar.className = "node-midi-keyboard-bitmask-row";
+  bitmaskBar.className = "node-keyboard-bitmask-row";
   bitmaskBar.dataset.midiKeyboardBitmaskRow = "true";
   bitmaskBar.setAttribute("aria-live", "polite");
   const bitmaskLabel = document.createElement("span");
   bitmaskLabel.textContent = "arp ";
   const bitmaskValue = document.createElement("strong");
-  bitmaskValue.dataset.midiKeyboardBitmaskValue = "true";
+  bitmaskValue.dataset.keyboardBitmaskValue = "true";
   bitmaskBar.append(bitmaskLabel, bitmaskValue);
   const vmDebug = document.createElement("div");
-  vmDebug.className = "node-midi-keyboard-vm-debug node-debug-only";
+  vmDebug.className = "node-keyboard-vm-debug node-debug-only";
   vmDebug.dataset.keyboardVmDebug = "true";
   vmDebug.setAttribute("aria-live", "polite");
   vmDebug.textContent = "vm —";

@@ -322,8 +322,17 @@ NodeLiveAudioProcessor.prototype.safeFilterNumber = function safeFilterNumber(va
 
 NodeLiveAudioProcessor.prototype.sampleChannelAt = function sampleChannelAt(sample, channelIndex, frameIndex, interpolation) {
     const channel = sample?.channelData?.[channelIndex] || sample?.samples;
-    const hermite = interpolation !== "linear";
-    if (hermite && typeof nodeGraphSampleReadHermite === "function") {
+    if (typeof nodeGraphSampleReadAt === "function") {
+      return nodeGraphSampleReadAt(channel, frameIndex, interpolation);
+    }
+    const key = String(interpolation || "").trim().toLowerCase();
+    if ((key === "square" || key === "hold" || key === "discrete") && typeof nodeGraphSampleReadHold === "function") {
+      return nodeGraphSampleReadHold(channel, frameIndex);
+    }
+    if (key !== "linear" && typeof nodeGraphSampleReadReconstructed === "function") {
+      return nodeGraphSampleReadReconstructed(channel, frameIndex);
+    }
+    if (key !== "linear" && typeof nodeGraphSampleReadHermite === "function") {
       return nodeGraphSampleReadHermite(channel, frameIndex);
     }
     if (typeof nodeGraphSampleReadLinear === "function") {

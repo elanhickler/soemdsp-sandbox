@@ -631,13 +631,14 @@ function cloneNodeGraphTypedDisplaySettings(node) {
       return { traceDisplaySettings: normalizeNodeGraphWaterfallSettings(bag) };
     case "torchFace":
       return { traceDisplaySettings: normalizeNodeGraphTorchFaceSettings(bag) };
+    case "keyboardFace":
     case "keyboardControllerFace": {
       if (!bag || typeof bag !== "object") {
         return {};
       }
       return {
-        traceDisplaySettings: typeof normalizeNodeGraphKeyboardControllerFaceSettings === "function"
-          ? normalizeNodeGraphKeyboardControllerFaceSettings(bag)
+        traceDisplaySettings: typeof normalizeNodeGraphKeyboardFaceSettings === "function"
+          ? normalizeNodeGraphKeyboardFaceSettings(bag)
           : { ...bag },
       };
     }
@@ -829,7 +830,13 @@ function cloneNodeGraphPatch(patch) {
         ...(Object.keys(normalizeNodeGraphPatchPortMeta(node.portMeta)).length
           ? { portMeta: normalizeNodeGraphPatchPortMeta(node.portMeta) }
           : {}),
-        params: { ...(node.params || {}) },
+        params: (function copyParams(type, raw) {
+          const p = { ...(raw || {}) };
+          if (type === "percussion" && Object.prototype.hasOwnProperty.call(p, "channel")) {
+            delete p.channel;
+          }
+          return p;
+        }(node.type, node.params)),
         ...(String(node.ownerMetamoduleId || "").trim()
           ? { ownerMetamoduleId: String(node.ownerMetamoduleId).trim() }
           : {}),

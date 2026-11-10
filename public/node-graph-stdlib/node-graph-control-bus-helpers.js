@@ -343,7 +343,7 @@ function nodeGraphDspExternalStereoFrame(externalInput, frame, level) {
  * pitch = MIDI note number. Frequency is A440.
  * signal: { gate, rawMidi|midi, velocity }
  */
-function nodeGraphDspMidiKeyboardPorts(signal, defaultNote) {
+function nodeGraphDspKeyboardPorts(signal, defaultNote) {
   const sig = signal || {};
   const def = Math.round(nodeGraphDspClamp(defaultNote, 0, 127));
   const gateHigh = Number(sig.gate) > 0;

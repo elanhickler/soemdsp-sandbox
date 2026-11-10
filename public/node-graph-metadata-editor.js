@@ -23,6 +23,23 @@ function nodeGraphMetadataSmoothingSamplesToSeconds(samples) {
   return rate > 0 ? value / rate : 0;
 }
 
+function nodeGraphMetadataEnableSmoothingTypeIfNone() {
+  const typeGroup = document.getElementById("metadataSmoothingTypeGroup");
+  if (!typeGroup) {
+    return;
+  }
+  const current = typeof normalizeNodeGraphMetadataSmoothingType === "function"
+    ? normalizeNodeGraphMetadataSmoothingType(typeGroup.dataset.type)
+    : String(typeGroup.dataset.type || "");
+  if (current !== "none") {
+    return;
+  }
+  typeGroup.dataset.type = "linear";
+  if (typeof syncMetadataSmoothingTypeButtons === "function") {
+    syncMetadataSmoothingTypeButtons({ smoothingType: "linear" });
+  }
+}
+
 function positionNodeMetadataPopover(popover, x, y, remember = false) {
   if (!popover) {
     return;
@@ -2341,6 +2358,9 @@ function clickNodeMetadataSmoothingModeButton(event) {
     return;
   }
   group.dataset.mode = normalizeNodeGraphMetadataSmoothingMode(button.dataset.smoothingMode);
+  if (group.dataset.mode !== "off") {
+    nodeGraphMetadataEnableSmoothingTypeIfNone();
+  }
   syncMetadataSmoothingModeButtons({
     smoothingMode: group.dataset.mode,
     smoothingSeconds: nodeGraphMetadataSmoothingSecondsToSamples(
@@ -3435,6 +3455,9 @@ function handleNodeMetadataEditorInput(event) {
         ),
       });
     }
+    // Typing a time while TYPE is None used to store samples that nothing
+    // used (None = instant). Turn Linear on so the new time is audible.
+    nodeGraphMetadataEnableSmoothingTypeIfNone();
   }
   syncNodeMetadataMidVisibility();
   syncNodeMetadataChoiceToggleAvailability();

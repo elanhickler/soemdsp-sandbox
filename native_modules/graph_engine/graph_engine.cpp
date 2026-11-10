@@ -510,7 +510,7 @@ extern "C" double soemdsp_audio_player_sample(
   double reset, double speedCv, double phaseCv, int hasPhase,
   double transportMode, double speedParam, double start, double end,
   double amplitude, double phaseOffset, double phaseSkip, double playlistScrub,
-  double antialias, double engineSampleRate
+  double antialias, double engineSampleRate, double tone, double tilt, double range
 );
 extern "C" double soemdsp_audio_player_left(int handle);
 extern "C" double soemdsp_audio_player_right(int handle);
@@ -1153,6 +1153,12 @@ extern "C" double soemdsp_active_filter_sample(
   int handle, double input, double lowFrequencyHz, double highFrequencyHz,
   int hpSlope, int lpSlope, double resonance, int feedbackCircuit,
   int gainCompensation, double sampleRate
+);
+
+extern "C" int soemdsp_tilt_filter_create();
+extern "C" void soemdsp_tilt_filter_destroy(int handle);
+extern "C" double soemdsp_tilt_filter_sample(
+  int handle, double input, double pivotHz, double slopeDbOct, double sampleRate, double levelMode
 );
 
 extern "C" int soemdsp_passive_filter_create();
@@ -2326,6 +2332,8 @@ static const int kTypeChordPad = 140;
 static const int kTypeXyPad = 190; // XY Pad (Papoulis/lattice); was 186 colliding with ellipsoidOsc
 static const int kTypeHelmholtzPitch = 191; // Pitch Detector (MPM) — inc/Frequency/Fidelity/Gate/Detune
 static const int kTypeEdgeDetector = 240; // scope-style rising-edge interval detector
+static const int kTypeTiltFilter = 241; // constant-slope spectral tilt around a pivot
+static const int kTypeMidiLag = 242; // MIDI CC (JS: midiCc; saved midiLag migrates)
 static const int kTypeHostBpm = 192; // Host/project BPM dump (Circuit::hostTempoBpm)
 static const int kTypeSineWarp = 193; // live warped rectSin / sine + PolyBLAMP
 static const int kTypeTheremin = 194; // XY pad pitch/volume Softwave theremin
@@ -2674,6 +2682,10 @@ struct Node {
   // native instance is created before params arrive, so the first process
   // call applies the saved Seed; later changes re-seed (node_take_seed).
   double appliedSeed;
+  // MIDI CC: 14-bit pair memory and last raw target (Changed edge).
+  double midiLagMsb;
+  double midiLagLsb;
+  double midiLagLastRaw;
   float yellowLerpFrom[soemdsp_yellow_graph::kMaxHarmonics];
   int yellowLerpFromLen;
   // Host-uploaded Bubble Cutoff strip (0…1). Frames>0 → sample-accurate amp gate at Out.
@@ -3074,6 +3086,8 @@ static void destroy_native_kind_handle(int kind, int handle) {
     soemdsp_ensemble_destroy(handle);
   } else if (kind == kTypeActiveFilter) {
     soemdsp_active_filter_destroy(handle);
+  } else if (kind == kTypeTiltFilter) {
+    soemdsp_tilt_filter_destroy(handle);
   } else if (kind == kTypePassiveFilter) {
     soemdsp_passive_filter_destroy(handle);
   } else if (kind == kTypeTb303Filter) {
@@ -3251,6 +3265,7 @@ static bool type_wants_mlr_native_handles(int typeId) {
   return typeId == kTypeLadderFilter
     || typeId == kTypeCombResonator
     || typeId == kTypeEqFilter
+    || typeId == kTypeTiltFilter
     || typeId == kTypeGraphicEq
     || typeId == kTypeCookbookFilter
     || typeId == kTypeBandpass
@@ -3518,7 +3533,7 @@ static void init_node_defaults(Node& n, int typeId) {
     (typeId == kTypeLadderFilter
       || typeId == kTypeButterworth || typeId == kTypeLinkwitzRiley
       || typeId == kTypeBessel || typeId == kTypeChebyshev || typeId == kTypeElliptic
-      || typeId == kTypeEqFilter || typeId == kTypeGraphicEq || typeId == kTypeCookbookFilter || typeId == kTypeBandpass || typeId == kTypeAllpass || typeId == kTypeLowpass || typeId == kTypeHighpass || typeId == kTypePhaser
+      || typeId == kTypeEqFilter || typeId == kTypeTiltFilter || typeId == kTypeGraphicEq || typeId == kTypeCookbookFilter || typeId == kTypeBandpass || typeId == kTypeAllpass || typeId == kTypeLowpass || typeId == kTypeHighpass || typeId == kTypePhaser
       || typeId == kTypeActiveFilter
       || typeId == kTypeTb303Filter
       || typeId == kTypePapoulisFilter)
@@ -3946,6 +3961,7 @@ static void init_node_defaults(Node& n, int typeId) {
       : (typeId == kTypeActiveFilter || typeId == kTypePassiveFilter) ? 0.0 // sweep st
       : (typeId == kTypeEllipsoid || typeId == kTypeEllipsoidOsc) ? 1.0 // AA Limit (0 Off / 1 Limit / 2 Dither osc only)
       : (typeId == kTypeHelmholtzPitch) ? 0.93 // fidelity threshold
+      : (typeId == kTypeAudioPlayer) ? 2.0 // Tape Range (octaves of slowdown)
       : (typeId == kTypeSoftClipper) ? 1.0 // threshold
       : (typeId == kTypeDivide) ? 127.0 // Divide
       : (typeId == kTypeDegreeTuring || typeId == kTypeDegreePhrase) ? 1.0 // Major scale choice
@@ -4486,6 +4502,9 @@ static void init_node_defaults(Node& n, int typeId) {
   n.singleActive = false;
   n.singleAcc = 0.0;
   n.appliedSeed = -1.0;
+  n.midiLagMsb = 0.0;
+  n.midiLagLsb = 0.0;
+  n.midiLagLastRaw = 0.0;
   n.robinDitherRng = 0xE11D51AAu ^ (unsigned int)(typeId * 747796405u + 1u);
   if (n.robinDitherRng == 0u) n.robinDitherRng = 1u;
   n.robinDitherOffset = 0.0;
@@ -5327,6 +5346,7 @@ static int create_native_for_type(int typeId, float sampleRate) {
     return soemdsp_eq_filter_create();
   }
   if (typeId == kTypeActiveFilter) return soemdsp_active_filter_create();
+  if (typeId == kTypeTiltFilter) return soemdsp_tilt_filter_create();
   if (typeId == kTypePassiveFilter) return soemdsp_passive_filter_create();
   if (typeId == kTypeTb303Filter) return soemdsp_tb303_filter_create();
   if (typeId == kTypeFlowerChildFilter) return soemdsp_flower_child_filter_create();
@@ -5893,6 +5913,10 @@ static void probe_mlr_cables(
   Circuit& g, const Node& node, bool* hasMonoIn, bool* hasLeftIn, bool* hasRightIn, bool* monoOutWired
 );
 
+static void mlr_fill_mono_from_stereo(
+  Node& node, int frames, bool hasMonoIn, bool hasLeftIn, bool hasRightIn
+);
+
 static void process_ladder(Circuit& g, Node& node, int frames) {
   if (node.nativeHandle <= 0) return;
   mix_node_inputs(g, node, frames);
@@ -5972,6 +5996,7 @@ static void process_ladder(Circuit& g, Node& node, int frames) {
         node.buf[kPortRight][f] *= amp;
       }
     }
+    mlr_fill_mono_from_stereo(node, frames, hasMonoIn, hasLeftIn, hasRightIn);
     return;
   }
 
@@ -6011,6 +6036,7 @@ static void process_ladder(Circuit& g, Node& node, int frames) {
       ) * amp;
     }
   }
+  mlr_fill_mono_from_stereo(node, frames, hasMonoIn, hasLeftIn, hasRightIn);
 }
 
 // Shared M/L/R cable probe (softClipper).
@@ -6036,6 +6062,21 @@ static void probe_mlr_cables(
     }
   }
 }
+
+// When Left and Right ins are used and Mono in is not, Mono out is the
+// average of the processed sides (stereo_route.h AverageLR: 0.5*(L+R)).
+// Mono-in-only and Mono+L/R keep the Mono-filter write from the loop above.
+static void mlr_fill_mono_from_stereo(
+  Node& node, int frames, bool hasMonoIn, bool hasLeftIn, bool hasRightIn
+) {
+  if (hasMonoIn) return;
+  if (!hasLeftIn || !hasRightIn) return;
+  for (int f = 0; f < frames; f += 1) {
+    node.buf[kPortMono][f] = 0.5 * (node.buf[kPortLeft][f] + node.buf[kPortRight][f]);
+  }
+}
+
+
 
 // Soft Clipper: Drive/Threshold/Knee/Amplitude (linear). Memoryless soft-knee.
 // Params are sample-accurate (control_frame + control_audio). Do not latch
@@ -6082,6 +6123,7 @@ static void process_soft_clipper(Circuit& g, Node& node, int frames) {
         : soemdsp_soft_clipper_sample(inR, drive, threshold, knee, amplitude);
     }
   }
+  mlr_fill_mono_from_stereo(node, frames, hasMonoIn, hasLeftIn, hasRightIn);
 }
 
 
@@ -6119,6 +6161,7 @@ static void process_tube_saturation(Circuit& g, Node& node, int frames) {
       );
     }
   }
+  mlr_fill_mono_from_stereo(node, frames, hasMonoIn, hasLeftIn, hasRightIn);
 }
 
 static void process_reverb(Circuit& g, Node& node, int frames) {
@@ -9422,6 +9465,7 @@ static void process_speaker_protection(Circuit& g, Node& node, int frames) {
       );
     }
   }
+  mlr_fill_mono_from_stereo(node, frames, hasMonoIn, hasLeftIn, hasRightIn);
 }
 
 // Speaker Protector 2.0: stereo-linked slew VCA + HP trip.
@@ -9549,6 +9593,51 @@ static double eq_filter_isolate_sample(
 }
 
 // EQ Filter (ZDF SVF): resonance=Q, gainDb=boost/cut (ignored on Bypass/LP/HP).
+
+static void process_tilt_filter(Circuit& g, Node& node, int frames) {
+  if (node.nativeHandle <= 0) return;
+  mix_node_inputs(g, node, frames);
+  const double sr = g.sampleRate < 1.0f ? 44100.0 : (double)g.sampleRate;
+  const bool liveF = mix_live_port(g, node, kPortF, frames, g.mixF);
+  const bool livePitch = mix_live_port(g, node, kPortPitchCv, frames, g.mixPitch);
+  const double referenceVoltage = circuit_pitch_ref_v(g);
+  bool hasLeftIn = false, hasRightIn = false, hasMonoIn = false, monoOutWired = false;
+  probe_mlr_cables(g, node, &hasMonoIn, &hasLeftIn, &hasRightIn, &monoOutWired);
+  const bool needMono = hasMonoIn || monoOutWired || (!hasLeftIn && !hasRightIn);
+  for (int f = 0; f < frames; f++) {
+    control_frame(g, node, f);
+    const double freq = resolve_osc_hz(
+      g, f, liveF, livePitch, node.frequency, referenceVoltage, sr
+    );
+    node.effectiveHz = freq;
+    node.effectiveHzLive = liveF ? 1 : 0;
+    const double slope = control_audio(g, node.gainDb, f);
+    const double amp = control_audio(g, node.amplitude, f);
+    const double levelMode = control_effective(node.mode);
+    if (needMono) {
+      double in = g.mixMono[f];
+      if (!hasLeftIn && !hasRightIn) in += g.mixLeft[f] + g.mixRight[f];
+      const double out = soemdsp_tilt_filter_sample(
+        node.nativeHandle, in, freq, slope, sr, levelMode
+      ) * amp;
+      node.buf[kPortMono][f] = out;
+      if (!hasLeftIn) node.buf[kPortLeft][f] = out;
+      if (!hasRightIn) node.buf[kPortRight][f] = out;
+    }
+    if (hasLeftIn && node.nativeHandleL > 0) {
+      node.buf[kPortLeft][f] = soemdsp_tilt_filter_sample(
+        node.nativeHandleL, g.mixLeft[f] + g.mixMono[f], freq, slope, sr, levelMode
+      ) * amp;
+    }
+    if (hasRightIn && node.nativeHandleR > 0) {
+      node.buf[kPortRight][f] = soemdsp_tilt_filter_sample(
+        node.nativeHandleR, g.mixRight[f] + g.mixMono[f], freq, slope, sr, levelMode
+      ) * amp;
+    }
+  }
+  mlr_fill_mono_from_stereo(node, frames, hasMonoIn, hasLeftIn, hasRightIn);
+}
+
 static void process_eq_filter(Circuit& g, Node& node, int frames) {
   if (node.nativeHandle <= 0) return;
   mix_node_inputs(g, node, frames);
@@ -9604,6 +9693,7 @@ static void process_eq_filter(Circuit& g, Node& node, int frames) {
       node.buf[kPortRight][f] = rawR * amp;
     }
   }
+  mlr_fill_mono_from_stereo(node, frames, hasMonoIn, hasLeftIn, hasRightIn);
 }
 
 // bandpass (mode 4) / allpass (mode 6): eq_filter handles + 0.1V/Oct pitch.
@@ -9661,6 +9751,7 @@ static void process_eq_filter_fixed_mode(
       ) * amp;
     }
   }
+  mlr_fill_mono_from_stereo(node, frames, hasMonoIn, hasLeftIn, hasRightIn);
 }
 
 static void process_bandpass(Circuit& g, Node& node, int frames) {
@@ -9963,6 +10054,7 @@ static void process_graphic_eq(Circuit& g, Node& node, int frames) {
       );
     }
   }
+  mlr_fill_mono_from_stereo(node, frames, hasMonoIn, hasLeftIn, hasRightIn);
 }
 
 // Cookbook Filter: stacked identical RBJ biquads. MLR + ƒ / 0.1V/Oct.
@@ -10013,6 +10105,7 @@ static void process_cookbook_filter(Circuit& g, Node& node, int frames) {
       ) * amp;
     }
   }
+  mlr_fill_mono_from_stereo(node, frames, hasMonoIn, hasLeftIn, hasRightIn);
 }
 
 
@@ -10177,6 +10270,7 @@ static void process_active_filter(Circuit& g, Node& node, int frames) {
       );
     }
   }
+  mlr_fill_mono_from_stereo(node, frames, hasMonoIn, hasLeftIn, hasRightIn);
 }
 
 // Passive: hpfFrequency=HPF, lpfFrequency=LPF. Wired ƒ moves the center of the
@@ -10241,6 +10335,7 @@ static void process_passive_filter(Circuit& g, Node& node, int frames) {
       ) * amp;
     }
   }
+  mlr_fill_mono_from_stereo(node, frames, hasMonoIn, hasLeftIn, hasRightIn);
 }
 
 // TB-303: frequency=cutoff Hz, gainDb=drive dB, resonance=%.
@@ -10293,6 +10388,7 @@ static void process_tb303_filter(Circuit& g, Node& node, int frames) {
       ) * amp;
     }
   }
+  mlr_fill_mono_from_stereo(node, frames, hasMonoIn, hasLeftIn, hasRightIn);
 }
 
 
@@ -10427,6 +10523,7 @@ static void process_norm_chaos_filter(
       }
     }
   }
+  mlr_fill_mono_from_stereo(node, frames, hasMonoIn, hasLeftIn, hasRightIn);
 }
 
 // Softpop Filter: internal noise, or (when any Mono / Left / Right input is
@@ -10689,6 +10786,7 @@ static void process_chaotic_phase_locking_filter(Circuit& g, Node& node, int fra
       node.buf[kPortMono][f] = 0.5 * (outL + outR);
     }
   }
+  mlr_fill_mono_from_stereo(node, frames, hasMonoIn, hasLeftIn, hasRightIn);
 }
 
 // Mode resonator: timeNumerator=decay, timingMode=hold.
@@ -13916,7 +14014,7 @@ static void process_sample_player(Circuit& g, Node& node, int frames) {
 // Music Player — PCM-backed; host uploads via set_pcm + l_ptr/r_ptr.
 // Params: mode=transport, frequencyâ‰ˆspeed, timeNum/Den=start/end,
 // amplitude, phaseParam=phaseOffset, shape=phase skip, seed=playlistScrub,
-// stages=antialias, level unused.
+// stages=interpolation (0 Square / 1 Linear / 2 Sinc / 3 PolyBLEP / 4 Jitter / 5 Dither / 6 Both), width=bits (1..24, default 8), level=tilt dB/oct (0..-12, default -3).
 static void process_audio_player(Circuit& g, Node& node, int frames) {
   if (node.nativeHandle <= 0) return;
   const bool hasReset = mix_live_port(g, node, kPortReset, frames, g.mixReset);
@@ -13959,7 +14057,10 @@ static void process_audio_player(Circuit& g, Node& node, int frames) {
       control_audio(g, node.shape, f),
       control_effective(node.seed),
       control_effective(node.stages),
-      sr
+      sr,
+      control_effective(node.width),
+      control_effective(node.level),
+      control_effective(node.center)
     );
     node.buf[kPortMono][f] = mono;
     node.buf[kPortLeft][f] = soemdsp_audio_player_left(node.nativeHandle);
@@ -14638,6 +14739,113 @@ static void process_bias(Circuit& g, Node& node, int frames) {
     node.buf[kPortRight][f] = out;
   }
 }
+
+
+static int midi_lag_clamp127(int v) {
+  if (v < 0) return 0;
+  if (v > 127) return 127;
+  return v;
+}
+
+static double midi_lag_seven(int v) {
+  return (double)midi_lag_clamp127(v) / 128.0;
+}
+
+static double midi_lag_fourteen(double msb, double lsb) {
+  const int hi = midi_lag_clamp127((int)(msb + 0.5));
+  const int lo = midi_lag_clamp127((int)(lsb + 0.5));
+  return (double)((hi << 7) | lo) / 16384.0;
+}
+
+static double midi_lag_bend(int raw) {
+  if (raw < 0) raw = 0;
+  if (raw > 16383) raw = 16383;
+  return ((double)raw - 8192.0) / 8192.0;
+}
+
+static const int kMidiLagCcPitchBend = 128;
+static const int kMidiLagCcChannelPressure = 129;
+static const int kMidiLagCcPolyAt = 130;
+
+static void midi_lag_apply_message(Circuit& g, Node& n, unsigned status, unsigned data1, unsigned data2) {
+  const int command = (int)(status & 0xF0u);
+  const int channel = (int)(status & 0x0Fu) + 1;
+  const int listen = (int)(control_effective(n.mode) + (control_effective(n.mode) >= 0.0 ? 0.5 : -0.5));
+  const int want = (int)(control_effective(n.waveform) + (control_effective(n.waveform) >= 0.0 ? 0.5 : -0.5));
+  const bool highRes = control_effective(n.timingMode) >= 0.5;
+  const bool learn = control_effective(n.lfoStyle) >= 0.5;
+  int msgCc = -1;
+  double value = 0.0;
+  int value7 = 0;
+  bool isCc = false;
+  if (command == 0xB0) {
+    msgCc = midi_lag_clamp127((int)data1);
+    value7 = midi_lag_clamp127((int)data2);
+    value = midi_lag_seven(value7);
+    isCc = true;
+  } else if (command == 0xE0) {
+    msgCc = kMidiLagCcPitchBend;
+    const int raw = (midi_lag_clamp127((int)data2) << 7) | midi_lag_clamp127((int)data1);
+    value = midi_lag_bend(raw);
+  } else if (command == 0xD0) {
+    msgCc = kMidiLagCcChannelPressure;
+    value = midi_lag_seven((int)data1);
+  } else if (command == 0xA0) {
+    msgCc = kMidiLagCcPolyAt;
+    value = midi_lag_seven((int)data2);
+  } else {
+    return;
+  }
+  if (learn) {
+    control_set_target(g, n.mode, (double)channel);
+    control_set_target(g, n.waveform, (double)msgCc);
+    control_set_target(g, n.lfoStyle, 0.0);
+    if (isCc && msgCc <= 31) n.midiLagMsb = (double)value7;
+    control_set_target(g, n.offset, value);
+    return;
+  }
+  if (listen > 0 && listen != channel) return;
+  if (highRes && want >= 0 && want <= 31 && isCc && msgCc == want + 32) {
+    n.midiLagLsb = (double)value7;
+    control_set_target(g, n.offset, midi_lag_fourteen(n.midiLagMsb, n.midiLagLsb));
+    return;
+  }
+  if (msgCc != want) return;
+  if (highRes && want >= 0 && want <= 31 && isCc) {
+    n.midiLagMsb = (double)value7;
+    control_set_target(g, n.offset, midi_lag_fourteen(n.midiLagMsb, n.midiLagLsb));
+    return;
+  }
+  control_set_target(g, n.offset, value);
+}
+
+static void process_midi_lag(Circuit& g, Node& node, int frames) {
+  mix_node_inputs(g, node, frames);
+  const bool takeSamplePath = node.offset.active || node.amplitude.active;
+  for (int f = 0; f < frames; f++) {
+    control_frame(g, node, f);
+    if (takeSamplePath) {
+      if (node.offset.active && !node.offset.snap) control_ensure_stepped(g, node.offset, f);
+      if (node.amplitude.active && !node.amplitude.snap) control_ensure_stepped(g, node.amplitude, f);
+    }
+    const double thru = g.mixMono[f] + g.mixLeft[f] + g.mixRight[f];
+    const double raw = node.offset.target;
+    const double smooth = control_audio(g, node.offset, f);
+    const double amp = control_audio(g, node.amplitude, f);
+    const double main = smooth * amp + thru;
+    double changed = 0.0;
+    if (dsp_fabs(raw - node.midiLagLastRaw) > 1.0e-15) {
+      changed = 1.0;
+      node.midiLagLastRaw = raw;
+    }
+    node.buf[kPortMono][f] = main;
+    node.buf[kPortLeft][f] = main * 128.0;
+    node.buf[kPortRight][f] = smooth;
+    node.buf[kPortSaw][f] = raw;
+    node.buf[kPortRamp][f] = changed;
+  }
+}
+
 
 
 // Frequency knob stays Hz. One cycles/sample increment drives Robin:
@@ -15806,6 +16014,7 @@ extern "C" int soemdsp_graph_add_node(int handle, unsigned int nodeIdHash, int t
     || typeId == kTypeChebyshev
     || typeId == kTypeElliptic
     || typeId == kTypeEqFilter
+    || typeId == kTypeTiltFilter
     || typeId == kTypeGraphicEq
     || typeId == kTypeCookbookFilter
     || typeId == kTypeActiveFilter
@@ -16251,6 +16460,20 @@ extern "C" int soemdsp_graph_set_param(int handle, unsigned int nodeHash, int pa
   if (!c) return 0;
   control_set_target(*g, *c, value);
   return 0;
+}
+
+
+extern "C" int soemdsp_graph_push_midi(int handle, unsigned status, unsigned data1, unsigned data2) {
+  Circuit* g = get(handle);
+  if (!g) return -1;
+  int count = 0;
+  for (int i = 0; i < g->nodeCount; i++) {
+    if (!g->nodes[i].used) continue;
+    if (g->nodes[i].typeId != kTypeMidiLag) continue;
+    midi_lag_apply_message(*g, g->nodes[i], status, data1, data2);
+    count += 1;
+  }
+  return count;
 }
 
 // MOD accumulators only — never written into target/smoother.
@@ -17290,6 +17513,10 @@ static void dispatch_process_node(Circuit& g, Node& node, int frames) {
       process_scientific_iir(g, node, frames, soemdsp_elliptic_sample);
       return;
     }
+    if (node.typeId == kTypeTiltFilter) {
+      process_tilt_filter(g, node, frames);
+      return;
+    }
     if (node.typeId == kTypeEqFilter) {
       process_eq_filter(g, node, frames);
       return;
@@ -17712,6 +17939,10 @@ static void dispatch_process_node(Circuit& g, Node& node, int frames) {
     }
     if (node.typeId == kTypeBias) {
       process_bias(g, node, frames);
+      return;
+    }
+    if (node.typeId == kTypeMidiLag) {
+      process_midi_lag(g, node, frames);
       return;
     }
     if (node.typeId == kTypeGain) {

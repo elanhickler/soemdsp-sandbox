@@ -649,6 +649,22 @@ NodeLiveAudioProcessor.prototype.setKeyboardModuleSignal = function setKeyboardM
   this.queueKeyboardEvent(id, previous, next, signal, atFrame);
 };
 
+/** Clip-audition note mixed into this sequencer's Play Keys / pitch / Gate / Trigger outs. midi < 0 clears. */
+NodeLiveAudioProcessor.prototype.setSequencerAudition = function setSequencerAudition(nodeId, midi, velocity) {
+  const id = String(nodeId || "");
+  if (!id) return;
+  if (!this.sequencerAuditionByNode) this.sequencerAuditionByNode = new Map();
+  const n = Math.round(Number(midi));
+  if (!Number.isFinite(n) || n < 0) {
+    this.sequencerAuditionByNode.delete(id);
+    return;
+  }
+  this.sequencerAuditionByNode.set(id, {
+    midi: Math.max(0, Math.min(127, n)),
+    velocity: Math.max(1, Math.min(127, Math.round(Number(velocity) || 100))),
+  });
+};
+
 NodeLiveAudioProcessor.prototype.setMidiKeyboardPlayKeysBitmask = function setMidiKeyboardPlayKeysBitmask(mask) {
   this.midiKeyboardPlayMask = typeof noteMaskEnsure === "function"
     ? noteMaskEnsure(mask)

@@ -566,7 +566,7 @@ const nodeGraphFacePaintKindTable = Object.assign(Object.create(null), {
   transportBpm: "param",
   // Controllers and sample pictures (UI / param, never engine-gated).
   knobFace: "param",
-  keyboardControllerFace: "param",
+  keyboardFace: "param",
   momentaryButtonFace: "param",
   toggleButtonFace: "param",
   pluginSliderFace: "param",

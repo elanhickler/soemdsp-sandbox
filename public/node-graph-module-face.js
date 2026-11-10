@@ -229,9 +229,14 @@ function nodeGraphModuleFaceWidgets(spec, fw, moduleEl = null) {
     const base = { row, y, h };
     if (row.kind === "choices" || row.kind === "lfoStyles") {
       const start = Math.max(0, Math.round(Number(row.start) || 0));
-      split(0, w, row.labels.length).forEach(([x, cw], i) => out.push({
-        ...base, type: row.kind === "choices" ? "choice" : "lfoStyle", param: row.param, index: start + i, label: row.labels[i], x, w: cw,
-      }));
+      const values = Array.isArray(row.values) ? row.values : null;
+      split(0, w, row.labels.length).forEach(([x, cw], i) => {
+        const raw = values ? Number(values[i]) : start + i;
+        const index = Number.isFinite(raw) ? raw : start + i;
+        out.push({
+          ...base, type: row.kind === "choices" ? "choice" : "lfoStyle", param: row.param, index, label: row.labels[i], x, w: cw,
+        });
+      });
     } else if (row.kind === "fraction") {
       // Proportional so the row reads at any width (rails take width, never add it).
       const slash = 8;

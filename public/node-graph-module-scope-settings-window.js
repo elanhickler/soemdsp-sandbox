@@ -923,7 +923,7 @@ function bindNodeGraphTraceDisplaySettingsEvents(popover) {
 }
 
 function openNodeGraphTraceDisplaySettings(nodeId, event = {}) {
-  if (nodeId === "__keyboardControllerFace") {
+  if (nodeId === "__keyboardFace") {
     const keyboard = Array.isArray(nodeGraphMvp?.patch?.nodes)
       ? nodeGraphMvp.patch.nodes.find((n) => n?.type === "keyboard")
       : null;

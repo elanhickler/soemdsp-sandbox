@@ -95,7 +95,12 @@ function nodeGraphClockFacePhase(section, node) {
   const live = typeof nodeGraphModuleScopeLatestOutputValue === "function"
     ? Number(nodeGraphModuleScopeLatestOutputValue(section.dataset.node, "__Phase", Number.NaN))
     : Number.NaN;
-  if (!ctx || ctx.state !== "running" || !Number.isFinite(live)) return Number.NaN;
+  if (!Number.isFinite(live)) return Number.NaN;
+  // Plugin WebView has no running AudioContext. Use the engine phase as-is
+  // (display-tap / worklet __Phase). Browser still extrapolates to output time.
+  if (!ctx || ctx.state !== "running" || typeof ctx.getOutputTimestamp !== "function") {
+    return live - Math.floor(live);
+  }
   if (live !== section._clockAnchorValue) {
     section._clockAnchorValue = live;
     section._clockAnchorTime = ctx.currentTime;
