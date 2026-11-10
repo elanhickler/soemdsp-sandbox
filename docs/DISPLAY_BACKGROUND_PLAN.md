@@ -99,7 +99,7 @@ Each row needs: register type, confirm the resolver reads that type's current ke
 
 **Custom renderers (`nodeGraphModuleScopeCustomRenderers`):** aberrationFace, additiveBlasterBlocks, additiveBubbleCascade, additiveFilterCurve, additiveWaveform, arpKeysFace, ensembleCloud, evolveFieldFace, fbmFieldFace, gradientVectorscopeFace, harmonicCount, harmonicLines, harmonicSeriesFace, imageBurnFace, limiterGainFace, phoneToneFace, phosphorLight, placeFace, rasterRgbFace, rgbFractalFace, rgbPictureFace, screenBendFace, sinCos4Face, sinCosFace, slewShapeFace, softpopFace, spectrogramBurn, spectrumLine, torchFace, transportBpm, tSeriesFace, vectorRgbFace, videoDelayFace, videoFeedbackFace, videoscopeBurn.
 
-**Other face types seen in code:** sampleWaveform (Music Player / sample faces), selfPaintFace, rgbShapeFace, roundShapeFace, keypadFace (has background image: the background is drawn under the image), keyboardControllerFace, momentaryButtonFace, matrixWaterfallFace, matrixDisplayFace (Asciiscope cold plate), patchFace, emoScript (GPU box, Script plan), graph display (`.node-module-graph-display`), LED face.
+**Other face types seen in code:** sampleWaveform (Music Player / sample faces), selfPaintFace, rgbShapeFace, roundShapeFace, keypadFace (has background image: the background is drawn under the image), keyboardFace, momentaryButtonFace, matrixWaterfallFace, matrixDisplayFace (Asciiscope cold plate), patchFace, emoScript (GPU box, Script plan), graph display (`.node-module-graph-display`), LED face.
 
 **Excluded:** textBoxFace (HTML, not a display).
 

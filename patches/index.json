@@ -49,6 +49,15 @@
       "folder": "bugs"
     },
     {
+      "slug": "bugs/need better volume curve for resonance",
+      "label": "need better volume curve for resonance",
+      "name": "",
+      "url": "/soemdsp-sandbox/patches/bugs/need%20better%20volume%20curve%20for%20resonance.json",
+      "author": "",
+      "emoji": "",
+      "folder": "bugs"
+    },
+    {
       "slug": "bugs/pump limiter sidechain not working",
       "label": "pump limiter sidechain not working",
       "name": "",
@@ -1006,6 +1015,14 @@
       "label": "musicplayer",
       "name": "",
       "url": "/soemdsp-sandbox/patches/musicplayer.json",
+      "author": "",
+      "emoji": ""
+    },
+    {
+      "slug": "need better volume curve for resonance",
+      "label": "need better volume curve for resonance",
+      "name": "",
+      "url": "/soemdsp-sandbox/patches/bugs/need%20better%20volume%20curve%20for%20resonance.json",
       "author": "",
       "emoji": ""
     },
