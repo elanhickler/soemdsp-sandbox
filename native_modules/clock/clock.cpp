@@ -38,6 +38,7 @@ struct ClockState {
   int blitHead;
   double blitGate;      // running integral of the taps = the band-limited gate
   double blitLevel;     // height latched at the rise; the fall removes the same
+  bool blitOn;          // committed gate state (after the edges in flight)
 };
 
 static ClockState gPool[kMaxInstances];
@@ -103,6 +104,7 @@ extern "C" int soemdsp_clock_create() {
       s.blitHead = 0;
       s.blitGate = 0.0;
       s.blitLevel = 0.0;
+      s.blitOn = false;
       s.active = true;
       return i + 1;
     }
@@ -205,40 +207,40 @@ extern "C" double soemdsp_clock_sample(
     for (int k = 0; k < 4; k++) s.blit[k] = 0.0;
     s.blitGate = safeLevel;
     s.blitLevel = safeLevel;
+    s.blitOn = true;
     analog = safeLevel;
   } else {
     const double end = width < absInc ? wrap01(safeStart + absInc) : safeEnd;
     // Forward the window opens at Start and closes at End; backwards reversed.
     const double openEdge = inc >= 0.0 ? safeStart : end;
     const double closeEdge = inc >= 0.0 ? end : safeStart;
-    if (resetRise) {
-      // Reset jumps the phase: no crossing to follow. Step the gate (after
-      // the edges already in flight) straight to the window state now.
-      const bool inNow = end >= safeStart ? (phase >= safeStart && phase < end) : (phase >= safeStart || phase < end);
-      double pending = s.blitGate;
-      for (int k = 0; k < 4; k++) pending += s.blit[k];
-      if (inNow) s.blitLevel = safeLevel;
-      const double target = inNow ? s.blitLevel : 0.0;
-      if (target != pending) clock_blit_add(s, 0.0, target - pending);
-    } else if (s.hasStarted) {
-      const double agoOpen = clock_crossed(phase, inc, openEdge);
-      const double agoClose = clock_crossed(phase, inc, closeEdge);
-      // Both can land in one step (a pulse shorter than a sample, or a close
-      // and the next open); the impulses simply add.
-      if (agoClose >= 0.0) clock_blit_add(s, agoClose, -s.blitLevel);
-      if (agoOpen >= 0.0) {
+    // State-based (v14): each sample, is the gate on? An edge is emitted only
+    // when that answer changes, so fast-moving Pulse Start / End can never
+    // double or drop an edge (crossing tests did, and the drift snap clicked).
+    // The true sub-sample time comes from the crossing when it is a clean one;
+    // otherwise (the edge swept past the phase, Reset, Rate 0) on the sample.
+    const bool inNow = end >= safeStart
+      ? (phase >= safeStart && phase < end)
+      : (phase >= safeStart || phase < end);
+    if (inNow != s.blitOn) {
+      if (inNow) {
+        double ago = resetRise ? -1.0 : clock_crossed(phase, inc, openEdge);
+        if (ago < 0.0) ago = 0.0;
         s.blitLevel = safeLevel;
-        clock_blit_add(s, agoOpen, s.blitLevel);
+        clock_blit_add(s, ago, s.blitLevel);
+      } else {
+        double ago = resetRise ? -1.0 : clock_crossed(phase, inc, closeEdge);
+        if (ago < 0.0) ago = 0.0;
+        clock_blit_add(s, ago, -s.blitLevel);
       }
+      s.blitOn = inNow;
     }
     s.blitGate += s.blit[s.blitHead];
     s.blit[s.blitHead] = 0.0;
     s.blitHead = (s.blitHead + 1) & 3;
-    // Float drift guard: with no edge in flight the gate is exactly 0 or Amp.
+    // No edge in flight: the gate is exactly the committed state (no guessing).
     if (s.blit[0] == 0.0 && s.blit[1] == 0.0 && s.blit[2] == 0.0 && s.blit[3] == 0.0) {
-      const double g = s.blitGate < 0.0 ? -s.blitGate : s.blitGate;
-      const double l = s.blitLevel < 0.0 ? -s.blitLevel : s.blitLevel;
-      s.blitGate = g > 0.5 * l ? s.blitLevel : 0.0;
+      s.blitGate = s.blitOn ? s.blitLevel : 0.0;
     }
     analog = s.blitGate;
   }
@@ -277,5 +279,5 @@ extern "C" double soemdsp_clock_phase(int handle) {
 }
 
 extern "C" int soemdsp_clock_version() {
-  return 13; // 13: Analog Out is a BLIT gate (integrated band-limited impulses: band-limited rise and fall at true sub-sample times, 2-sample latency). 12: Analog Out is a BLIT trigger (band-limited impulse at each gate rise, sub-sample placed, 2-sample latency) - test. 11: Analog Out is the smooth (box-filtered, sub-sample) gate; the whip is gone. 10: never 100% low: a gate window narrower than one sample (or Start == End) still sends one sample per cycle. 9: negative Rate runs backwards (T on the 0 crossing). 8: Rate 0 pauses (gate / Analog hold, no forced 0). 7: gate compared in fractional phase (Start 0 / End 1 never drops at fractional periods). 6: Amplitude latched per pulse (Digital at gate rise, Analog at cycle start, T at tick). 5: Pulse Start / Pulse End replace duty; phase published. 4: T pulse follows Phase offset
+  return 14; // 14: BLIT gate is state-based (an edge only when the on/off state changes): fast Pulse Start / End moves never double or drop edges. 13: Analog Out is a BLIT gate (integrated band-limited impulses: band-limited rise and fall at true sub-sample times, 2-sample latency). 12: Analog Out is a BLIT trigger (band-limited impulse at each gate rise, sub-sample placed, 2-sample latency) - test. 11: Analog Out is the smooth (box-filtered, sub-sample) gate; the whip is gone. 10: never 100% low: a gate window narrower than one sample (or Start == End) still sends one sample per cycle. 9: negative Rate runs backwards (T on the 0 crossing). 8: Rate 0 pauses (gate / Analog hold, no forced 0). 7: gate compared in fractional phase (Start 0 / End 1 never drops at fractional periods). 6: Amplitude latched per pulse (Digital at gate rise, Analog at cycle start, T at tick). 5: Pulse Start / Pulse End replace duty; phase published. 4: T pulse follows Phase offset
 }
