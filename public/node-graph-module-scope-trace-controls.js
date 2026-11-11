@@ -981,6 +981,14 @@ const nodeGraphTraceDisplayActiveControlsByType = Object.freeze({
     toggles: Object.freeze(["sourceSync", "skipDiscontinuities"]),
     choices: Object.freeze(["windowMode", "syncChannel", "plotDraw", "barInk"]),
   }),
+  // Formant Filter: Dot size + Curve / Body thickness (0 = not drawn);
+  // Background / Dots / Curve / Body HBS lamps on the color rows.
+  formantFilterFace: Object.freeze({
+    fields: Object.freeze(["dotSize", "formantCurveThickness", "bodyThickness"]),
+    colors: Object.freeze([]),
+    toggles: Object.freeze([]),
+    choices: Object.freeze([]),
+  }),
   vactrolScope: Object.freeze({
     fields: Object.freeze(["historySeconds"]),
     colors: Object.freeze(["backgroundColor", "lightColor", "fltEnvColor", "ampEnvColor"]),
@@ -1174,6 +1182,10 @@ const nodeGraphTraceDisplaySectionControls = Object.freeze({
       "rounding",
       "lineBrightness",
       "dotThickness",
+      "dotSize",
+      "partialThickness",
+      "formantCurveThickness",
+      "bodyThickness",
       "dotBrightness",
       "backgroundBrightness",
       "backgroundHue",
@@ -1306,6 +1318,22 @@ const nodeGraphDisplaySettingsFieldMeta = Object.freeze({
     inputmode: "decimal",
     id: "nodeTraceDisplayPhaserCurveThickness",
     title: "Analytic curve stroke 0…1 of the face min side. Scales with canvas size.",
+  }),
+  // Formant Filter face sizes (ink px at a 96px face). No title: labels stand alone.
+  dotSize: Object.freeze({
+    label: "Dot size",
+    inputmode: "decimal",
+    id: "nodeTraceDisplayFormantFilterDotSize",
+  }),
+  formantCurveThickness: Object.freeze({
+    label: "Curve thickness",
+    inputmode: "decimal",
+    id: "nodeTraceDisplayFormantFilterCurveThickness",
+  }),
+  bodyThickness: Object.freeze({
+    label: "Body thickness",
+    inputmode: "decimal",
+    id: "nodeTraceDisplayFormantFilterBodyThickness",
   }),
   zoomMin: Object.freeze({
     label: "Zoom Min",
@@ -2781,6 +2809,7 @@ const nodeGraphDisplaySettingsFormTypeTitles = Object.freeze({
   pluginSliderFace: "Slider",
   graphFace: "Graph",
   phaserFace: "Phaser",
+  formantFilterFace: "BLIT Formant",
   keypadFace: "Keypad",
   roundShapeFace: "RoundShape",
   sinCos4Face: "SinCos4",

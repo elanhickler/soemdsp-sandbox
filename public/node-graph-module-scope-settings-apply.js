@@ -101,6 +101,13 @@ function assignNodeGraphTypedDisplaySettingsToNode(node, displayType, settings) 
     }
     return node.traceDisplaySettings;
   }
+  if (displayType === "formantFilterFace" && typeof normalizeNodeGraphFormantFilterFaceSettings === "function") {
+    node.traceDisplaySettings = normalizeNodeGraphFormantFilterFaceSettings(settings);
+    if (typeof applyNodeGraphFormantFilterDisplaySettingsToFace === "function") {
+      applyNodeGraphFormantFilterDisplaySettingsToFace(node);
+    }
+    return node.traceDisplaySettings;
+  }
   if (displayType === "plotFace" && typeof normalizeNodeGraphPlotFaceSettings === "function") {
     node.traceDisplaySettings = normalizeNodeGraphPlotFaceSettings(settings);
     return node.traceDisplaySettings;

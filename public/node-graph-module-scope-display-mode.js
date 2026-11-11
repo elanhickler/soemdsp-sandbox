@@ -286,6 +286,7 @@ function nodeGraphModuleDisplayTypeHasLocalSettings(displayType) {
     "triggerDividerFace",
     "pulseExplosionFace",
     "pulseTrainFace",
+    "formantFilterFace",
     "plotFace",
     "plot",
     "vactrolScope",

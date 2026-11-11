@@ -98,7 +98,16 @@ function polyphonyTableFromHeldNotesMap(notes) {
   const table = polyphonyCreateTable();
   if (!(notes instanceof Map)) return table;
   for (const [midi, vel] of notes) {
-    polyphonyTableSet(table, midi, vel);
+    // Held-note map stores 0-1 velocity. The poly table is still 7-bit
+    // (per-note high-res is later polyphony work). A sounding note is at least 1.
+    const n = Number(vel);
+    let v7 = 1;
+    if (Number.isFinite(n) && n > 0) {
+      v7 = n <= 1 ? Math.round(n * 127) : Math.round(n);
+      if (v7 < 1) v7 = 1;
+      if (v7 > 127) v7 = 127;
+    }
+    polyphonyTableSet(table, midi, v7);
   }
   return table;
 }

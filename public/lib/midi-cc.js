@@ -16,6 +16,18 @@
     return clamp127(value) / 128;
   }
 
+  function clamp01(value) {
+    const n = Number(value);
+    if (!Number.isFinite(n)) return 0;
+    return Math.max(0, Math.min(1, n));
+  }
+
+  function clampBend(value) {
+    const n = Number(value);
+    if (!Number.isFinite(n)) return 0;
+    return Math.max(-1, Math.min(1, n));
+  }
+
   function fourteenBit(msb, lsb) {
     const hi = clamp127(msb);
     const lo = clamp127(lsb);
@@ -46,6 +58,24 @@
     return null;
   }
 
+  function decodeHighRes(status, index, value) {
+    const command = status & 0xf0;
+    const channel = (status & 0x0f) + 1;
+    if (command === 0xb0) {
+      return { kind: "cc", channel, cc: clamp127(index), value: clamp01(value) };
+    }
+    if (command === 0xe0) {
+      return { kind: "bend", channel, cc: CC_PITCH_BEND, value: clampBend(value) };
+    }
+    if (command === 0xd0) {
+      return { kind: "pressure", channel, cc: CC_CHANNEL_PRESSURE, value: clamp01(value) };
+    }
+    if (command === 0xa0) {
+      return { kind: "polyAt", channel, cc: CC_POLY_AFTERTOUCH, note: clamp127(index), value: clamp01(value) };
+    }
+    return null;
+  }
+
   function matchChannel(listenChannel, messageChannel) {
     const ch = Math.round(Number(listenChannel) || 0);
     if (ch <= 0) return true;
@@ -66,7 +96,9 @@
           learned: true,
           channel: message.channel,
           cc: message.cc,
-          value: message.kind === "cc" ? sevenBit(message.value7) : message.value,
+          value: Number.isFinite(Number(message.value))
+            ? Number(message.value)
+            : sevenBit(message.value7),
           state: next,
         };
       }
@@ -81,7 +113,8 @@
       return { handled: false, state: next };
     }
     if (message.kind === "cc") {
-      return { handled: true, value: sevenBit(message.value7), state: next };
+      const v = Number.isFinite(Number(message.value)) ? clamp01(message.value) : sevenBit(message.value7);
+      return { handled: true, value: v, state: next };
     }
     return { handled: true, value: message.value, state: next };
   }
@@ -95,6 +128,9 @@
     fourteenBit,
     pitchBend,
     decodeMessage,
+    decodeHighRes,
+    clamp01,
+    clampBend,
     matchChannel,
     applyToState,
   };

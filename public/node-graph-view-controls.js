@@ -2993,9 +2993,9 @@ function updateNodeGraphKeyboardPointerPosition(event, surface) {
   renderNodeGraphKeyboardSignal(nodeId, next);
 }
 
-function nodeGraphMidiKeyboardSignalFromMidi(midiValue, velocityValue = 0, gateValue = 0, pulseValue = 0) {
+function nodeGraphMidiKeyboardSignalFromMidi(midiValue, velocity01 = 0, gateValue = 0, pulseValue = 0) {
   const rawMidi = Math.max(0, Math.min(127, Math.round(nodeGraphFiniteNumber(midiValue))));
-  const velocity = Math.max(0, Math.min(127, Math.round(nodeGraphFiniteNumber(velocityValue))));
+  const velocity = Math.max(0, Math.min(1, nodeGraphFiniteNumber(velocity01)));
   const prev = nodeGraphMvp.midiKeyboardSignal;
   return nodeGraphKeyboardSignalFromRaw("", rawMidi, {
     source: "midi",
@@ -3004,7 +3004,7 @@ function nodeGraphMidiKeyboardSignalFromMidi(midiValue, velocityValue = 0, gateV
     // Keep last mouse X/Y; velocity is separate from Y.
     x: prev?.x,
     y: prev?.y ?? 0,
-    velocity: velocity / 127,
+    velocity,
   });
 }
 
@@ -3937,8 +3937,15 @@ function syncNodeGraphMidiPolyphonyFromHeldNotes() {
       if (notes instanceof Map) {
         for (const [midi, vel] of notes) {
           const m = Math.round(Number(midi));
-          const v = Math.round(Number(vel));
-          if (m >= 0 && m < 128 && v > 0) t[m] = Math.min(127, v);
+          const n = Number(vel);
+          if (m < 0 || m >= 128) continue;
+          let v7 = 1;
+          if (Number.isFinite(n) && n > 0) {
+            v7 = n <= 1 ? Math.round(n * 127) : Math.round(n);
+            if (v7 < 1) v7 = 1;
+            if (v7 > 127) v7 = 127;
+          }
+          t[m] = v7;
         }
       }
       return t;
@@ -4071,7 +4078,7 @@ function routeNodeGraphMidiCcBytes(status, data1, data2) {
   }
 }
 
-function formatNodeGraphMidiMonitorText(status, data1, data2) {
+function formatNodeGraphMidiMonitorText(status, data1, data2, value, highRes) {
   const st = Number(status) & 255;
   const d1 = Number(data1) & 127;
   const d2 = Number(data2) & 127;
@@ -4080,41 +4087,49 @@ function formatNodeGraphMidiMonitorText(status, data1, data2) {
   const noteName = typeof nodeGraphKeyboardPitchLabel === "function"
     ? nodeGraphKeyboardPitchLabel(d1)
     : String(d1);
-  if (command === 0x90 && d2 > 0) {
+  const hr = !!highRes && Number.isFinite(Number(value));
+  const shown = hr ? Number(value) : null;
+  if (command === 0x90 && (hr ? true : d2 > 0)) {
     return {
       type: `NOTE ON  ch ${channel}`,
-      data: `${noteName}  ${d1}  vel ${d2}  ${(d2 / 127).toFixed(3)}`,
+      data: hr
+        ? `${noteName}  ${d1}  vel ${shown.toFixed(5)}`
+        : `${noteName}  ${d1}  vel ${d2}  ${(d2 / 127).toFixed(3)}`,
     };
   }
   if (command === 0x80 || command === 0x90) {
     return {
       type: `NOTE OFF  ch ${channel}`,
-      data: `${noteName}  ${d1}  vel ${d2}  ${(d2 / 127).toFixed(3)}`,
+      data: hr
+        ? `${noteName}  ${d1}  vel ${shown.toFixed(5)}`
+        : `${noteName}  ${d1}  vel ${d2}  ${(d2 / 127).toFixed(3)}`,
     };
   }
   if (command === 0xb0) {
     return {
       type: `CC  ch ${channel}`,
-      data: `#${d1}  ${d2}  ${(d2 / 128).toFixed(3)}`,
+      data: hr ? `#${d1}  ${shown.toFixed(5)}` : `#${d1}  ${d2}  ${(d2 / 128).toFixed(3)}`,
     };
   }
   if (command === 0xe0) {
     const raw = d1 + (d2 * 128);
     return {
       type: `PITCH BEND  ch ${channel}`,
-      data: `${raw}  ${(raw / 16384).toFixed(5)}`,
+      data: hr ? shown.toFixed(6) : `${raw}  ${(raw / 16384).toFixed(5)}`,
     };
   }
   if (command === 0xd0) {
     return {
       type: `CHANNEL PRESSURE  ch ${channel}`,
-      data: `${d1}  ${(d1 / 128).toFixed(3)}`,
+      data: hr ? shown.toFixed(5) : `${d1}  ${(d1 / 128).toFixed(3)}`,
     };
   }
   if (command === 0xa0) {
     return {
       type: `POLY PRESSURE  ch ${channel}`,
-      data: `${noteName}  ${d1}  ${d2}  ${(d2 / 128).toFixed(3)}`,
+      data: hr
+        ? `${noteName}  ${d1}  ${shown.toFixed(5)}`
+        : `${noteName}  ${d1}  ${d2}  ${(d2 / 128).toFixed(3)}`,
     };
   }
   if (command === 0xc0) {
@@ -4145,9 +4160,9 @@ function updateNodeGraphMidiMonitorDisplays() {
   document.querySelectorAll("[data-midi-monitor]").forEach((el) => paintNodeGraphMidiMonitor(el));
 }
 
-function recordNodeGraphLastMidiMessage(status, data1, data2, count) {
+function recordNodeGraphLastMidiMessage(status, data1, data2, count, value, highRes) {
   if (typeof nodeGraphMvp !== "object" || !nodeGraphMvp) return;
-  const formatted = formatNodeGraphMidiMonitorText(status, data1, data2);
+  const formatted = formatNodeGraphMidiMonitorText(status, data1, data2, value, highRes);
   const nextCount = Number.isFinite(Number(count))
     ? Number(count)
     : (Number(nodeGraphMvp.lastMidiMessage?.count) || 0) + 1;
@@ -4155,6 +4170,8 @@ function recordNodeGraphLastMidiMessage(status, data1, data2, count) {
     status: Number(status) & 255,
     data1: Number(data1) & 127,
     data2: Number(data2) & 127,
+    value: Number.isFinite(Number(value)) ? Number(value) : undefined,
+    highRes: !!highRes,
     count: nextCount,
     type: formatted.type,
     data: formatted.data,
@@ -4162,9 +4179,66 @@ function recordNodeGraphLastMidiMessage(status, data1, data2, count) {
   updateNodeGraphMidiMonitorDisplays();
 }
 
-function ingestNodeGraphHostMidiBytes(status, data1, data2, count) {
-  recordNodeGraphLastMidiMessage(status, data1, data2, count);
-  if (typeof routeNodeGraphMidiCcBytes === "function") {
+function routeNodeGraphMidiCcHighRes(status, index, value) {
+  const api = typeof SoemdspMidiCc !== "undefined"
+    ? SoemdspMidiCc
+    : (typeof SoemdspMidiLag !== "undefined" ? SoemdspMidiLag : null);
+  if (!api || typeof api.decodeHighRes !== "function" || typeof api.applyToState !== "function") {
+    return;
+  }
+  const message = api.decodeHighRes(status, index, value);
+  if (!message) {
+    return;
+  }
+  nodeGraphMidiCcLastMessage = message;
+  updateNodeGraphMidiCcReadouts();
+  const nodes = nodeGraphMvp?.patch?.nodes;
+  if (!Array.isArray(nodes)) {
+    return;
+  }
+  let changed = false;
+  for (const node of nodes) {
+    if (!node || (node.type !== "midiCc" && node.type !== "midiLag")) {
+      continue;
+    }
+    const params = node.params || (node.params = {});
+    const result = api.applyToState(node.midiCcState || node.midiLagState, message, {
+      channel: Number(params.channel) || 0,
+      cc: Number(params.cc) || 0,
+      learn: Number(params.learn) >= 0.5,
+    });
+    node.midiCcState = result.state;
+    delete node.midiLagState;
+    if (!result.handled) {
+      continue;
+    }
+    changed = true;
+    if (result.learned) {
+      params.channel = result.channel;
+      params.cc = result.cc;
+      params.learn = 0;
+    }
+    if (Number.isFinite(Number(result.value))) {
+      params.offset = Number(result.value);
+    }
+  }
+  if (!changed) {
+    return;
+  }
+  if (typeof sendNodeGraphLiveParameterUpdate === "function") {
+    sendNodeGraphLiveParameterUpdate();
+  }
+}
+
+function ingestNodeGraphHostMidiBytes(status, data1, data2, count, value, highRes) {
+  const hr = !!highRes && Number.isFinite(Number(value));
+  const hrValue = hr ? Number(value) : undefined;
+  recordNodeGraphLastMidiMessage(status, data1, data2, count, hrValue, hr);
+  if (hr) {
+    if (typeof routeNodeGraphMidiCcHighRes === "function") {
+      routeNodeGraphMidiCcHighRes(status, data1, hrValue);
+    }
+  } else if (typeof routeNodeGraphMidiCcBytes === "function") {
     routeNodeGraphMidiCcBytes(status, data1, data2);
   }
   const command = status & 0xf0;
@@ -4175,16 +4249,19 @@ function ingestNodeGraphHostMidiBytes(status, data1, data2, count) {
   }
   if (command === 0x80 || command === 0x90) {
     const midi = Math.max(0, Math.min(127, Math.round(data1)));
-    const velocity = Math.max(0, Math.min(127, Math.round(data2)));
-    const noteOn = command === 0x90 && velocity > 0;
+    const velocity01 = hr
+      ? Math.max(0, Math.min(1, hrValue))
+      : Math.max(0, Math.min(127, Math.round(data2))) / 127;
+    // MIDI 1.0: note-on with vel 0 is off. MIDI 2.0 high-res: note-on stays on even at 0.
+    const noteOn = command === 0x90 && (hr || velocity01 > 0);
     if (!(nodeGraphMvp.midiKeyboardHeldNotes instanceof Map)) {
       nodeGraphMvp.midiKeyboardHeldNotes = new Map();
     }
     if (noteOn) {
-      nodeGraphMvp.midiKeyboardHeldNotes.set(midi, velocity);
-      nodeGraphMvp.midiKeyboardStatus = `ch ${channel} ${typeof nodeGraphKeyboardPitchLabel === "function" ? nodeGraphKeyboardPitchLabel(midi) : midi} vel ${velocity}`;
+      nodeGraphMvp.midiKeyboardHeldNotes.set(midi, velocity01);
+      nodeGraphMvp.midiKeyboardStatus = `ch ${channel} ${typeof nodeGraphKeyboardPitchLabel === "function" ? nodeGraphKeyboardPitchLabel(midi) : midi} vel ${velocity01.toFixed(4)}`;
       nodeGraphMvp.midiKeyboardSignal = typeof nodeGraphMidiKeyboardSignalFromMidi === "function"
-        ? nodeGraphMidiKeyboardSignalFromMidi(midi, velocity, 1, 1)
+        ? nodeGraphMidiKeyboardSignalFromMidi(midi, velocity01, 1, 1)
         : nodeGraphMvp.midiKeyboardSignal;
       if (typeof sendNodeGraphLiveMidiKeyboardSignal === "function" && nodeGraphMvp.midiKeyboardSignal) {
         sendNodeGraphLiveMidiKeyboardSignal(nodeGraphMvp.midiKeyboardSignal);
@@ -4223,33 +4300,43 @@ function handleNodeGraphMidiKeyboardMessage(event) {
     return;
   }
   const midi = Math.max(0, Math.min(127, Math.round(data1)));
-  const velocity = Math.max(0, Math.min(127, Math.round(data2)));
-  const noteOn = command === 0x90 && velocity > 0;
+  const velocity01 = Math.max(0, Math.min(127, Math.round(data2))) / 127;
+  const noteOn = command === 0x90 && velocity01 > 0;
   if (!(nodeGraphMvp.midiKeyboardHeldNotes instanceof Map)) {
     nodeGraphMvp.midiKeyboardHeldNotes = new Map();
   }
   if (noteOn) {
-    nodeGraphMvp.midiKeyboardHeldNotes.set(midi, velocity);
-    nodeGraphMvp.midiKeyboardStatus = `ch ${channel} ${nodeGraphKeyboardPitchLabel(midi)} vel ${velocity}`;
+    nodeGraphMvp.midiKeyboardHeldNotes.set(midi, velocity01);
+    nodeGraphMvp.midiKeyboardStatus = `ch ${channel} ${nodeGraphKeyboardPitchLabel(midi)} vel ${velocity01.toFixed(4)}`;
     // Hardware MIDI → MIDI module signal only (does not drive Keyboard face/outs).
-    nodeGraphMvp.midiKeyboardSignal = nodeGraphMidiKeyboardSignalFromMidi(midi, velocity, 1, 1);
-    sendNodeGraphLiveMidiKeyboardSignal(nodeGraphMvp.midiKeyboardSignal);
-    syncNodeGraphMidiPlayKeysBitmaskFromHeldNotes();
+    nodeGraphMvp.midiKeyboardSignal = nodeGraphMidiKeyboardSignalFromMidi(midi, velocity01, 1, 1);
+    if (typeof sendNodeGraphLiveMidiKeyboardSignal === "function") {
+      sendNodeGraphLiveMidiKeyboardSignal(nodeGraphMvp.midiKeyboardSignal);
+    }
+    if (typeof syncNodeGraphMidiPlayKeysBitmaskFromHeldNotes === "function") {
+      syncNodeGraphMidiPlayKeysBitmaskFromHeldNotes();
+    }
     return;
   }
   nodeGraphMvp.midiKeyboardHeldNotes.delete(midi);
-  syncNodeGraphMidiPlayKeysBitmaskFromHeldNotes();
+  if (typeof syncNodeGraphMidiPlayKeysBitmaskFromHeldNotes === "function") {
+    syncNodeGraphMidiPlayKeysBitmaskFromHeldNotes();
+  }
   const held = Array.from(nodeGraphMvp.midiKeyboardHeldNotes.entries()).at(-1);
   if (held) {
     const [heldMidi, heldVelocity] = held;
-    nodeGraphMvp.midiKeyboardStatus = `ch ${channel} ${nodeGraphKeyboardPitchLabel(heldMidi)} vel ${heldVelocity}`;
+    nodeGraphMvp.midiKeyboardStatus = `ch ${channel} ${nodeGraphKeyboardPitchLabel(heldMidi)} vel ${Number(heldVelocity).toFixed(4)}`;
     nodeGraphMvp.midiKeyboardSignal = nodeGraphMidiKeyboardSignalFromMidi(heldMidi, heldVelocity, 1);
-    sendNodeGraphLiveMidiKeyboardSignal(nodeGraphMvp.midiKeyboardSignal);
+    if (typeof sendNodeGraphLiveMidiKeyboardSignal === "function") {
+      sendNodeGraphLiveMidiKeyboardSignal(nodeGraphMvp.midiKeyboardSignal);
+    }
     return;
   }
   nodeGraphMvp.midiKeyboardStatus = `ch ${channel} ${nodeGraphKeyboardPitchLabel(midi)} off`;
   nodeGraphMvp.midiKeyboardSignal = nodeGraphMidiKeyboardSignalFromMidi(midi, 0, 0);
-  sendNodeGraphLiveMidiKeyboardSignal(nodeGraphMvp.midiKeyboardSignal);
+  if (typeof sendNodeGraphLiveMidiKeyboardSignal === "function") {
+    sendNodeGraphLiveMidiKeyboardSignal(nodeGraphMvp.midiKeyboardSignal);
+  }
 }
 
 function bindNodeGraphKeyboardControllerModuleEvents() {

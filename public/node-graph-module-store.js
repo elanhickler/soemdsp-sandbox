@@ -102,7 +102,6 @@ const nodeGraphModuleCatalogUnderConstructionSort = Object.freeze([
   "doppler",
   "evolveField",
   "asciiscope",
-  "formantFilter",
   "besselThomson",
   "massSpringDamper",
   "wavetable3d",
@@ -150,6 +149,8 @@ const nodeGraphModuleCatalogUnderConstructionSort = Object.freeze([
 // from persisted underconstructionsort so old UI settings do not keep the
 // construction plate over a working face (Output meter/trace).
 const nodeGraphModuleCatalogRetiredFromUnderConstruction = Object.freeze([
+  // Shipped as BLIT Formant (was the parked "formantFilter" placeholder).
+  "formantFilter",
   "screenSpaceShader",
   "output",
   "audioInput",
@@ -209,7 +210,6 @@ const nodeGraphModuleConstructionPlans = Object.freeze({
   wavetable2d: "Morph (4 frames, wrap) × Warp (13 baked knots). Additive Nyquist.",
   sineWarp: "Live rational phasewarp + rectSin PolyBLAMP (or clean sine). Reset→PolyBLEP.",
   wavetable3d: "Dual-axis table morph. Parked until wavetable playback exists.",
-  formantFilter: "Vocal formant bank. Parked until the scientific-filter pass.",
   besselThomson: "Maximally flat group-delay filter. Parked until that filter lands.",
   massSpringDamper: "2-pole mechanical resonator. Parked until that analog lands.",
   waveguide: "Full waveguide. Use Comb/Mode resonators for now.",
@@ -386,6 +386,13 @@ const nodeGraphModuleStoreCatalog = Object.freeze({
     description: "Band-limited impulse-train tones for classic digital waves that stay sharp but controlled.",
     label: "BLIT",
     notes: ["anti-aliasing", "blit", "realtime oscillator"],
+  },
+  // BLIT Formant: internal type key stays "formantFilter" (graph type 244) so saved patches load.
+  formantFilter: {
+    category: "oscillator",
+    description: "Source-filter vowel voice: an alias-free BLIT saw (plus Sub and Noise) or your audio on Ext In, through five resonant bandpasses (constant-peak ZDF SVF) on a vowel path. Sweep picks the path, Vowel walks it, Shift moves every formant up to 7 octaves (bands fade out at the top instead of piling up), Resonance scales Q. Body adds the voiced source back through a lowpass under F1 so the low end stays heavy; Noise is stereo (independent per side) and alone whispers; Drive warms the sum.",
+    label: "BLIT Formant",
+    notes: ["oscillator", "formant", "vowel", "blit", "saw", "noise", "whisper", "talking", "filter", "bandpass", "resonant", "SVF", "ZDF", "stereo", "native"],
   },
   archimedes: {
     category: "oscillator",
@@ -925,12 +932,6 @@ const nodeGraphModuleStoreCatalog = Object.freeze({
     description: "Alias-free morphing oscillator: Morph, Symmetry, Width, Rotate, Slice, Spacing, and Odd/Even of one band-limited DSF object.",
     label: "DSF Morphing Osc",
     notes: ["oscillator", "dsf", "discrete summation formula", "anti-aliasing", "morph", "formant", "native"],
-  },
-  dsfFormant: {
-    category: "oscillator",
-    description: "Four pitch-locked DSF formant bands (Moorer offset sums). Harmonics follow pitch; each peak sits at its formant frequency. Sweep walks a vowel path; Body adds low harmonics on the fundamental.",
-    label: "DSF Formant",
-    notes: ["oscillator", "dsf", "formant", "vowel", "discrete summation formula", "anti-aliasing", "native"],
   },
   robinSupersaw: {
     category: "oscillator",
@@ -1874,12 +1875,6 @@ const nodeGraphModuleStoreCatalog = Object.freeze({
       "Trigger",
       "native",
     ],
-  },
-  formantFilter: {
-    category: "scientificFilter",
-    description: "Placeholder formant/vocal filter bank.",
-    label: "Formant Filter",
-    notes: ["under construction", "formant", "vowel", "scientific"],
   },
   besselThomson: {
     category: "scientificFilter",
@@ -3191,7 +3186,7 @@ const nodeGraphNativeModuleTargetAliases = Object.freeze({
   eqFilter: Object.freeze(["bandpass", "allpass", "lowpass", "highpass"]),
   crossover2: Object.freeze(["crossover3", "crossover4", "crossover5", "crossover6"]),
   ellipsoid: Object.freeze(["ellipsoidOsc"]),
-  dsfOscillator: Object.freeze(["dsfMorphingOsc", "dsfFormant"]),
+  dsfOscillator: Object.freeze(["dsfMorphingOsc"]),
 });
 
 const nodeGraphModuleStoreNativeLabelTypes = Object.freeze(new Set([
@@ -3563,9 +3558,9 @@ const nodeGraphJsSourceEntriesByType = Object.freeze({
     source: "native_modules/dsf_oscillator/dsf_oscillator.cpp",
     sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/native_modules/dsf_oscillator/dsf_oscillator.cpp",
   },
-  dsfFormant: {
-    source: "native_modules/dsf_oscillator/dsf_oscillator.cpp",
-    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/native_modules/dsf_oscillator/dsf_oscillator.cpp",
+  formantFilter: {
+    source: "native_modules/formant_filter/formant_filter.cpp",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/native_modules/formant_filter/formant_filter.cpp",
   },
   ellipsoid: {
     source: "public/modules/ellipsoid/ellipsoid-worklet-evaluator.js",

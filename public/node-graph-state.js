@@ -297,7 +297,6 @@ var nodeGraphMvp = {
     surgeOscillator: 0,
     dsfOscillator: 0,
     dsfMorphingOsc: 0,
-    dsfFormant: 0,
     chordSequencer: 0,
     lutCell: 0,
     metallicRatio: 0,

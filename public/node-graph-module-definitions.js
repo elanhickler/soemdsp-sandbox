@@ -125,7 +125,6 @@ const nodeGraphNodeLabels = Object.freeze({
   snowflake: "Snowflake",
   dsfOscillator: "DSF Oscillator",
   dsfMorphingOsc: "DSF Morphing Osc",
-  dsfFormant: "DSF Formant",
   robinSupersaw: "Robin Supersaw",
   hyperpluck: "Hyperpluck",
   hypersaw2: "Hypersaw",
@@ -239,7 +238,7 @@ const nodeGraphNodeLabels = Object.freeze({
   electroTom: "Electro Tom",
   electroKick: "Electro Kick",
   electroClap: "Electro Clap",
-  formantFilter: "Formant Filter",
+  formantFilter: "BLIT Formant",
   binaryClock: "Binary Clock",
   osc: "Open Sound Control",
   wavetable2d: "Wavetable2D",
@@ -5598,46 +5597,44 @@ const nodeGraphModuleDefinitions = (
       },
     ]
   },
-  dsfFormant: {
-    face: [
-      { kind: "cells", params: [["frequency", "Freq"], ["phase", "Phase"], ["amplitude", "Amp"]], h: 40 },
-      { kind: "cells", params: [["sweep", "Sweep"], ["vowel", "Vowel"], ["body", "Body"]], h: 40 },
-      { kind: "cells", params: [["on1", "On 1"], ["freq1", "Freq 1"], ["width1", "Width 1"], ["gain1", "Gain 1"]], h: 40 },
-      { kind: "cells", params: [["on2", "On 2"], ["freq2", "Freq 2"], ["width2", "Width 2"], ["gain2", "Gain 2"]], h: 40 },
-      { kind: "cells", params: [["on3", "On 3"], ["freq3", "Freq 3"], ["width3", "Width 3"], ["gain3", "Gain 3"]], h: 40 },
-      { kind: "cells", params: [["on4", "On 4"], ["freq4", "Freq 4"], ["width4", "Width 4"], ["gain4", "Gain 4"]], h: 40 },
+  formantFilter: {
+    // Face: filter response (modules/formantFilter/formant-filter-display.js):
+    // bank + Body curve and numbered band dots, from the native
+    // soemdsp_formant_filter_eval_response (same code as the audio).
+    customDisplayArea: true,
+    displayType: "formantFilterFace",
+    displayHeightGu: 4,
+    spectrumCompanion: false,
+    displayModes: [
+      { key: "face", label: "Formants", renderer: "formantFilterFace", settingsSchema: "formantFilterFace" },
     ],
+    defaultDisplayMode: "face",
+    face: [
+      { kind: "cells", params: [["frequency", "Freq"], ["saw", "Saw"], ["sub", "Sub"], ["noise", "Noise"]], h: 40 },
+      { kind: "cells", params: [["sweep", "Sweep"], ["vowel", "Vowel"], ["shift", "Shift", "bipolar"]], h: 40 },
+      { kind: "cells", params: [["resonance", "Resonance"], ["body", "Body"], ["drive", "Drive"], ["amplitude", "Amp"]], h: 40 },
+      { kind: "cells", params: [["on1", "On 1"], ["on2", "On 2"], ["on3", "On 3"], ["on4", "On 4"], ["on5", "On 5"]], h: 30 },
+      { kind: "cells", params: [["gain1", "Gain 1"], ["gain2", "Gain 2"], ["gain3", "Gain 3"], ["gain4", "Gain 4"], ["gain5", "Gain 5"]], h: 40 },
+    ],
+    // Source: internal BLIT saw at Frequency (ƒ / Reset ↺ jacks) + Sub + Noise.
+    // A cable on Ext M (or Ext L / Ext R, stereo as the filters) replaces the saw;
+    // Noise still adds (independent noise per L / R bank: stereo). Old "Ext In"
+    // cables land on Ext M. Vowel / Shift jacks were removed (graph 323):
+    // parameter modulation covers them. Shift moves every formant (-4..+7 oct);
+    // bands fade out at Nyquist / 20 Hz instead of piling up at the edge.
     planRole: "source",
-    resetTrigger: true,
-    inputs: ["Reset", "f"],
-    inputLabels: { f: "ƒ" },
-    inputAliases: { "ƒ": "f" },
-    outputChannels: { Out: "green" },
-    outputs: ["Out"],
+    inputAliases: { Mono: "In", "Ext In": "In", "Ext M": "In", "Ext L": "Left", "Ext R": "Right", "ƒ": "f", Freq: "f" },
+    inputLabels: { In: "Ext M", Left: "Ext L", Right: "Ext R", f: "ƒ" },
+    inputChannels: { In: "green", Left: "red", Right: "blue" },
+    inputs: ["Reset", "f", "In", "Left", "Right"],
+    outputAliases: { Mono: "Out" },
+    outputLabels: { Out: "Mono" },
+    outputs: ["Out", "Left", "Right"],
     parameters: [
-      { key: "frequency", label: "Frequency", kind: "frequency", defaultValue: "100", min: "0", mid: "220", max: "20000", step: "any", unit: "Hz" },
-      {
-        defaultValue: "0",
-        key: "phase",
-        kind: "phase",
-        label: "Phase",
-        max: "1",
-        mid: "0.5",
-        min: "0",
-        step: "0.01",
-        unit: "\u03C6",
-        wraparound: true
-      },
-      {
-        defaultValue: "1",
-        key: "amplitude",
-        label: "Amplitude",
-        max: "1",
-        mid: "1",
-        min: "0",
-        nonlinearSlider: false,
-        step: "any",
-      },
+      { key: "frequency", label: "Frequency", kind: "frequency", defaultValue: "110", min: "0", mid: "220", max: "20000", step: "any", unit: "Hz" },
+      { key: "saw", label: "Saw", defaultValue: "1", min: "0", mid: "0.5", max: "1", step: "any" },
+      { key: "sub", label: "Sub", defaultValue: "0", min: "0", mid: "0.5", max: "1", step: "any" },
+      { key: "noise", label: "Noise", defaultValue: "0", min: "0", mid: "0.5", max: "1", step: "any" },
       {
         choices: ["E A O U", "I E", "A E I", "O E I", "Y U"],
         choiceKeys: ["aou", "ie", "ae", "oe", "yu"],
@@ -5654,91 +5651,24 @@ const nodeGraphModuleDefinitions = (
         min: "0",
         step: "1"
       },
-      {
-        key: "vowel",
-        label: "Vowel",
-        defaultValue: "0",
-        min: "0",
-        mid: "0.5",
-        max: "1",
-        step: "any"
-      },
-      {
-        key: "body",
-        label: "Body",
-        defaultValue: "0.5",
-        min: "0",
-        mid: "0.5",
-        max: "1",
-        step: "any"
-      },
-      {
-        choices: ["Off", "On"],
-        defaultValue: "1",
-        displayChoices: true,
-        divideChoicesVisibly: true,
-        key: "on1",
-        label: "On 1",
-        linearSmoothing: false,
-        max: "1",
-        mid: "0",
-        min: "0",
-        step: "1"
-      },
-      { key: "freq1", label: "Freq 1", kind: "frequency", defaultValue: "730", min: "182.5", mid: "730", max: "2920", step: "any", unit: "Hz", nonlinearSlider: true },
-      { key: "width1", label: "Width 1", kind: "frequency", defaultValue: "90", min: "10", mid: "90", max: "12000", step: "any", unit: "Hz", nonlinearSlider: true },
+      { key: "vowel", label: "Vowel", defaultValue: "0", min: "0", mid: "0.5", max: "1", step: "any" },
+      { key: "shift", label: "Shift", defaultValue: "0", min: "-4", mid: "0", max: "7", step: "any", unit: "oct", showSign: true, nonlinearSlider: false },
+      { key: "resonance", label: "Resonance", defaultValue: "1", min: "0.25", mid: "1", max: "4", step: "any" },
+      { key: "body", label: "Body", defaultValue: "0.5", min: "0", mid: "0.5", max: "1", step: "any" },
+      { key: "drive", label: "Drive", defaultValue: "0", min: "0", mid: "0.5", max: "1", step: "any" },
+      nodeGraphOutputAmplitudeParam,
+      { choices: ["Off", "On"], defaultValue: "1", displayChoices: true, divideChoicesVisibly: true, key: "on1", label: "On 1", linearSmoothing: false, max: "1", mid: "0", min: "0", step: "1" },
+      { choices: ["Off", "On"], defaultValue: "1", displayChoices: true, divideChoicesVisibly: true, key: "on2", label: "On 2", linearSmoothing: false, max: "1", mid: "0", min: "0", step: "1" },
+      { choices: ["Off", "On"], defaultValue: "1", displayChoices: true, divideChoicesVisibly: true, key: "on3", label: "On 3", linearSmoothing: false, max: "1", mid: "0", min: "0", step: "1" },
+      { choices: ["Off", "On"], defaultValue: "1", displayChoices: true, divideChoicesVisibly: true, key: "on4", label: "On 4", linearSmoothing: false, max: "1", mid: "0", min: "0", step: "1" },
+      { choices: ["Off", "On"], defaultValue: "1", displayChoices: true, divideChoicesVisibly: true, key: "on5", label: "On 5", linearSmoothing: false, max: "1", mid: "0", min: "0", step: "1" },
       { key: "gain1", label: "Gain 1", defaultValue: "1", min: "0", mid: "1", max: "2", step: "any" },
-      {
-        choices: ["Off", "On"],
-        defaultValue: "1",
-        displayChoices: true,
-        divideChoicesVisibly: true,
-        key: "on2",
-        label: "On 2",
-        linearSmoothing: false,
-        max: "1",
-        mid: "0",
-        min: "0",
-        step: "1"
-      },
-      { key: "freq2", label: "Freq 2", kind: "frequency", defaultValue: "1090", min: "272.5", mid: "1090", max: "4360", step: "any", unit: "Hz", nonlinearSlider: true },
-      { key: "width2", label: "Width 2", kind: "frequency", defaultValue: "110", min: "10", mid: "110", max: "12000", step: "any", unit: "Hz", nonlinearSlider: true },
-      { key: "gain2", label: "Gain 2", defaultValue: "0.7", min: "0", mid: "1", max: "2", step: "any" },
-      {
-        choices: ["Off", "On"],
-        defaultValue: "1",
-        displayChoices: true,
-        divideChoicesVisibly: true,
-        key: "on3",
-        label: "On 3",
-        linearSmoothing: false,
-        max: "1",
-        mid: "0",
-        min: "0",
-        step: "1"
-      },
-      { key: "freq3", label: "Freq 3", kind: "frequency", defaultValue: "2440", min: "610", mid: "2440", max: "9760", step: "any", unit: "Hz", nonlinearSlider: true },
-      { key: "width3", label: "Width 3", kind: "frequency", defaultValue: "170", min: "10", mid: "170", max: "12000", step: "any", unit: "Hz", nonlinearSlider: true },
-      { key: "gain3", label: "Gain 3", defaultValue: "0.45", min: "0", mid: "1", max: "2", step: "any" },
-      {
-        choices: ["Off", "On"],
-        defaultValue: "1",
-        displayChoices: true,
-        divideChoicesVisibly: true,
-        key: "on4",
-        label: "On 4",
-        linearSmoothing: false,
-        max: "1",
-        mid: "0",
-        min: "0",
-        step: "1"
-      },
-      { key: "freq4", label: "Freq 4", kind: "frequency", defaultValue: "3400", min: "850", mid: "3400", max: "13600", step: "any", unit: "Hz", nonlinearSlider: true },
-      { key: "width4", label: "Width 4", kind: "frequency", defaultValue: "250", min: "10", mid: "250", max: "12000", step: "any", unit: "Hz", nonlinearSlider: true },
-      { key: "gain4", label: "Gain 4", defaultValue: "0.25", min: "0", mid: "1", max: "2", step: "any" },
+      { key: "gain2", label: "Gain 2", defaultValue: "1", min: "0", mid: "1", max: "2", step: "any" },
+      { key: "gain3", label: "Gain 3", defaultValue: "1", min: "0", mid: "1", max: "2", step: "any" },
+      { key: "gain4", label: "Gain 4", defaultValue: "1", min: "0", mid: "1", max: "2", step: "any" },
+      { key: "gain5", label: "Gain 5", defaultValue: "1", min: "0", mid: "1", max: "2", step: "any" },
     ]
-  },
-  robinSupersaw: {
+  },  robinSupersaw: {
     planRole: "source",
     displayType: "hypersawBurn",
     displayModes: [
@@ -13047,31 +12977,6 @@ const nodeGraphModuleDefinitions = (
         nonlinearSlider: false,
         step: "1" },
     ],
-  },
-  // Under construction
-  formantFilter: {
-    planRole: "processor",
-    inputAliases: {Mono: "In"},
-    inputLabels: { In: "Mono" },
-    inputs: ["In", "Left", "Right"],
-    outputAliases: { Mono: "Out" },
-    outputLabels: { Out: "Mono" },
-    outputs: ["Out", "Left", "Right"],
-    parameters: [
-      {
-        defaultValue: "500",
-        key: "formant",
-        kind: "frequency",
-        label: "Formant",
-        max: "5000",
-        mid: "500",
-        min: "0",
-        step: "any",
-        unit: "Hz",
-        tooltip: "Under construction — formant center (placeholder)."
-      },
-        nodeGraphOutputAmplitudeParam,
-    ]
   },
   // Under construction — distinct from the existing approximated Bessel filter.
   besselThomson: {

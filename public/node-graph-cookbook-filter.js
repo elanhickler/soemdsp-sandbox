@@ -312,6 +312,8 @@ const nodeGraphFilterCurveFKey = Object.freeze({
   bandpass: "frequency", allpass: "frequency", lowpass: "frequency",
   highpass: "frequency", eqFilter: "frequency", modeResonator: "frequency",
   combResonator: "frequency", tiltFilter: "pivot",
+  // Source with a filter face: ƒ (absolute Hz) replaces Frequency.
+  formantFilter: "frequency",
 });
 // Multi-cutoff ƒ (Passive / Dual Ladder): engine publishes both final cuts.
 const nodeGraphFilterCurveFBusPort = Object.freeze({

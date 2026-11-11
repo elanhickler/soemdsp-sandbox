@@ -432,9 +432,9 @@
   function receiveHostMidi(msg) {
     if (!msg || typeof msg !== "object") return false;
     if (typeof global.ingestNodeGraphHostMidiBytes === "function") {
-      global.ingestNodeGraphHostMidiBytes(msg.status, msg.data1, msg.data2, msg.count);
+      global.ingestNodeGraphHostMidiBytes(msg.status, msg.data1, msg.data2, msg.count, msg.value, msg.highRes);
     } else if (typeof global.recordNodeGraphLastMidiMessage === "function") {
-      global.recordNodeGraphLastMidiMessage(msg.status, msg.data1, msg.data2, msg.count);
+      global.recordNodeGraphLastMidiMessage(msg.status, msg.data1, msg.data2, msg.count, msg.value, msg.highRes);
     }
     return true;
   }

@@ -2267,6 +2267,10 @@ function buildNodeGraphDisplaySettingsBodyHtml(formType, node = null) {
         "pixelDensity",
       ].filter((key) => activeFields.has(key) && allowKey("fields", key));
     }
+    if (type === "formantFilterFace" && section === "waterfall") {
+      fieldKeys = ["dotSize", "formantCurveThickness", "bodyThickness"]
+        .filter((key) => activeFields.has(key) && allowKey("fields", key));
+    }
     if (type === "additiveWaveform" && section === "waterfall") {
       fieldKeys = ["lineThickness", "lineSmoothing"]
         .filter((key) => activeFields.has(key) && allowKey("fields", key));
@@ -2626,6 +2630,21 @@ function buildNodeGraphDisplaySettingsBodyHtml(formType, node = null) {
         lamps.push(["start", "Tick", "startHue", "startBrightness", "startSaturation"]);
         lamps.push(["blink", "Fire", "blinkHue", "blinkBrightness", "blinkSaturation"]);
       }
+      hbsCells.push(...lamps.map(([id, label, hue, bright, sat]) => `
+          <div class="node-trace-display-hsl-lamp node-trace-display-color-widget-host" data-hsl-lamp="${id}" data-hsl-label="${label}">
+            <input type="hidden" data-trace-display-field="${hue}" value="">
+            <input type="hidden" data-trace-display-field="${bright}" value="">
+            <input type="hidden" data-trace-display-field="${sat}" value="">
+          </div>`));
+    }
+    if (type === "formantFilterFace" && section === "waterfall") {
+      // Background, then one lamp per drawn element (Brightness 0 = not drawn).
+      const lamps = [
+        ["background", "Background", "backgroundHue", "backgroundBrightness", "backgroundSaturation"],
+        ["dot", "Dots", "dotHue", "dotBrightness", "dotSaturation"],
+        ["curve", "Curve", "curveHue", "curveBrightness", "curveSaturation"],
+        ["body", "Body", "bodyHue", "bodyBrightness", "bodySaturation"],
+      ];
       hbsCells.push(...lamps.map(([id, label, hue, bright, sat]) => `
           <div class="node-trace-display-hsl-lamp node-trace-display-color-widget-host" data-hsl-lamp="${id}" data-hsl-label="${label}">
             <input type="hidden" data-trace-display-field="${hue}" value="">

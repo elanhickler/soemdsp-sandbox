@@ -352,6 +352,10 @@ const nodeGraphDisplaySettingsFieldSpecOverrides = Object.freeze({
   scale: { min: 0.1, max: 100, taper: "log", step: 0.025 },
   minFreq: { min: 1, max: 24000, taper: "log", step: 0.025 },
   maxFreq: { min: 1, max: 24000, taper: "log", step: 0.025 },
+  // Formant Filter face sizes: ink px at a 96px face, 0 = not drawn.
+  dotSize: { min: 0, max: 32, taper: "linear", step: 0.5 },
+  formantCurveThickness: { min: 0, max: 16, taper: "linear", step: 0.5 },
+  bodyThickness: { min: 0, max: 16, taper: "linear", step: 0.5 },
 });
 
 /** Linear stepper size for a value span: 1/10 of a decade below span/10 (0…1 → 0.1). */
@@ -872,6 +876,11 @@ const nodeGraphTraceDisplayFormTypeValueClampOverrides = Object.freeze({
   clockDividerFace: Object.freeze({
     lineThickness: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, 1.5), 0, 16),
     lineSmoothing: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, 1), 0, 8),
+  }),
+  formantFilterFace: Object.freeze({
+    dotSize: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, 9), 0, 32),
+    formantCurveThickness: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, 1.5), 0, 16),
+    bodyThickness: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, 1), 0, 16),
   }),
   pulseExplosionFace: Object.freeze({
     ...nodeGraphPulseFaceValueClamps,

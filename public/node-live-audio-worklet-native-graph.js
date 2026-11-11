@@ -155,7 +155,7 @@ NodeLiveAudioProcessor.NATIVE_GRAPH_TYPE_IDS = Object.freeze({
   softwaveOsc: 45,
   dsfOscillator: 46,
   dsfMorphingOsc: 232,
-  dsfFormant: 243,
+  formantFilter: 244,
   hypersaw2: 158,
   fm: 169,
   pitchHz: 170,
@@ -572,26 +572,27 @@ NodeLiveAudioProcessor.prototype.mapNativeGraphParamId = function mapNativeGraph
     if (k === "trigMode") return P.NATIVE_GRAPH_PARAM_TIMING_MODE;
   }
 
-  if (t === "dsfFormant") {
+  if (t === "formantFilter") {
+    if (k === "frequency") return P.NATIVE_GRAPH_PARAM_FREQUENCY;
+    if (k === "saw") return P.NATIVE_GRAPH_PARAM_LEVEL;
+    if (k === "sub") return P.NATIVE_GRAPH_PARAM_WIDTH;
+    if (k === "noise") return P.NATIVE_GRAPH_PARAM_FEEDBACK;
     if (k === "vowel") return P.NATIVE_GRAPH_PARAM_SHAPE;
     if (k === "sweep") return P.NATIVE_GRAPH_PARAM_TIMING_MODE;
+    if (k === "shift") return P.NATIVE_GRAPH_PARAM_CENTER;
+    if (k === "resonance") return P.NATIVE_GRAPH_PARAM_RESONANCE;
     if (k === "body") return P.NATIVE_GRAPH_PARAM_MIX;
-    if (k === "freq1") return P.NATIVE_GRAPH_PARAM_CENTER;
-    if (k === "width1") return P.NATIVE_GRAPH_PARAM_WIDTH;
+    if (k === "drive") return P.NATIVE_GRAPH_PARAM_SATURATE;
     if (k === "gain1") return P.NATIVE_GRAPH_PARAM_LANE_VOL1;
-    if (k === "on1") return P.NATIVE_GRAPH_PARAM_MODE;
-    if (k === "freq2") return P.NATIVE_GRAPH_PARAM_LPF_FREQUENCY;
-    if (k === "width2") return P.NATIVE_GRAPH_PARAM_HPF_FREQUENCY;
     if (k === "gain2") return P.NATIVE_GRAPH_PARAM_LANE_VOL2;
-    if (k === "on2") return P.NATIVE_GRAPH_PARAM_STAGES;
-    if (k === "freq3") return P.NATIVE_GRAPH_PARAM_LFO_RATE;
-    if (k === "width3") return P.NATIVE_GRAPH_PARAM_LFO_AMPLITUDE;
     if (k === "gain3") return P.NATIVE_GRAPH_PARAM_LANE_VOL3;
-    if (k === "on3") return P.NATIVE_GRAPH_PARAM_LFO_STYLE;
-    if (k === "freq4") return P.NATIVE_GRAPH_PARAM_ATT_OFFSET;
-    if (k === "width4") return P.NATIVE_GRAPH_PARAM_SATURATE;
     if (k === "gain4") return P.NATIVE_GRAPH_PARAM_LANE_VOL4;
+    if (k === "gain5") return P.NATIVE_GRAPH_PARAM_LANE_BIAS1;
+    if (k === "on1") return P.NATIVE_GRAPH_PARAM_MODE;
+    if (k === "on2") return P.NATIVE_GRAPH_PARAM_STAGES;
+    if (k === "on3") return P.NATIVE_GRAPH_PARAM_LFO_STYLE;
     if (k === "on4") return P.NATIVE_GRAPH_PARAM_WAVEFORM;
+    if (k === "on5") return P.NATIVE_GRAPH_PARAM_OVERSAMPLE;
   }
   if (t === "dsfMorphingOsc") {
     if (k === "symmetry") return P.NATIVE_GRAPH_PARAM_MIX;
@@ -5490,32 +5491,32 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
       continue;
     }
 
-    if (type === "dsfFormant") {
-      // shape=Vowel, timingMode=Sweep, mix=Body, phase=Phase, amplitude=level
-      // Band1: center/width/laneVol1/mode  Band2: lpf/hpf/laneVol2/stages
-      // Band3: lfoRate/lfoAmplitude/laneVol3/lfoStyle  Band4: offset/saturate/laneVol4/waveform
-      push("frequency", P.NATIVE_GRAPH_PARAM_FREQUENCY, cont("frequency", 100));
-      push("phase", P.NATIVE_GRAPH_PARAM_PHASE, cont("phase", 0));
-      push("amplitude", P.NATIVE_GRAPH_PARAM_AMPLITUDE, cont("amplitude", 1));
+    if (type === "formantFilter") {
+      // shape=Vowel, timingMode=Sweep, center=Shift (oct), resonance=Q scale, mix=Body,
+      // saturate=Drive, amplitude=Out; laneVol1..4 + laneBias1 = Gain 1..5;
+      // mode / stages / lfoStyle / waveform / oversample = On 1..5;
+      // frequency = saw Hz, level = Saw, width = Sub, feedback = Noise.
+      push("frequency", P.NATIVE_GRAPH_PARAM_FREQUENCY, cont("frequency", 110));
+      push("saw", P.NATIVE_GRAPH_PARAM_LEVEL, cont("saw", 1));
+      push("sub", P.NATIVE_GRAPH_PARAM_WIDTH, cont("sub", 0));
+      push("noise", P.NATIVE_GRAPH_PARAM_FEEDBACK, cont("noise", 0));
       push("vowel", P.NATIVE_GRAPH_PARAM_SHAPE, cont("vowel", 0));
       push("sweep", P.NATIVE_GRAPH_PARAM_TIMING_MODE, disc("sweep", 0));
+      push("shift", P.NATIVE_GRAPH_PARAM_CENTER, cont("shift", 0));
+      push("resonance", P.NATIVE_GRAPH_PARAM_RESONANCE, cont("resonance", 1));
       push("body", P.NATIVE_GRAPH_PARAM_MIX, cont("body", 0.5));
-      push("freq1", P.NATIVE_GRAPH_PARAM_CENTER, cont("freq1", 730));
-      push("width1", P.NATIVE_GRAPH_PARAM_WIDTH, cont("width1", 90));
+      push("drive", P.NATIVE_GRAPH_PARAM_SATURATE, cont("drive", 0));
+      push("amplitude", P.NATIVE_GRAPH_PARAM_AMPLITUDE, cont("amplitude", 1));
       push("gain1", P.NATIVE_GRAPH_PARAM_LANE_VOL1, cont("gain1", 1));
+      push("gain2", P.NATIVE_GRAPH_PARAM_LANE_VOL2, cont("gain2", 1));
+      push("gain3", P.NATIVE_GRAPH_PARAM_LANE_VOL3, cont("gain3", 1));
+      push("gain4", P.NATIVE_GRAPH_PARAM_LANE_VOL4, cont("gain4", 1));
+      push("gain5", P.NATIVE_GRAPH_PARAM_LANE_BIAS1, cont("gain5", 1));
       push("on1", P.NATIVE_GRAPH_PARAM_MODE, disc("on1", 1));
-      push("freq2", P.NATIVE_GRAPH_PARAM_LPF_FREQUENCY, cont("freq2", 1090));
-      push("width2", P.NATIVE_GRAPH_PARAM_HPF_FREQUENCY, cont("width2", 110));
-      push("gain2", P.NATIVE_GRAPH_PARAM_LANE_VOL2, cont("gain2", 0.7));
       push("on2", P.NATIVE_GRAPH_PARAM_STAGES, disc("on2", 1));
-      push("freq3", P.NATIVE_GRAPH_PARAM_LFO_RATE, cont("freq3", 2440));
-      push("width3", P.NATIVE_GRAPH_PARAM_LFO_AMPLITUDE, cont("width3", 170));
-      push("gain3", P.NATIVE_GRAPH_PARAM_LANE_VOL3, cont("gain3", 0.45));
       push("on3", P.NATIVE_GRAPH_PARAM_LFO_STYLE, disc("on3", 1));
-      push("freq4", P.NATIVE_GRAPH_PARAM_ATT_OFFSET, cont("freq4", 3400));
-      push("width4", P.NATIVE_GRAPH_PARAM_SATURATE, cont("width4", 250));
-      push("gain4", P.NATIVE_GRAPH_PARAM_LANE_VOL4, cont("gain4", 0.25));
       push("on4", P.NATIVE_GRAPH_PARAM_WAVEFORM, disc("on4", 1));
+      push("on5", P.NATIVE_GRAPH_PARAM_OVERSAMPLE, disc("on5", 1));
       continue;
     }
     if (type === "dsfMorphingOsc") {
@@ -7802,7 +7803,7 @@ NodeLiveAudioProcessor.prototype.syncNativeEnsemblePublish =
  * Relayed on the data bus as EffectiveHz. No audio math here.
  */
 NodeLiveAudioProcessor.NATIVE_GRAPH_EFFECTIVE_HZ_TYPES = new Set([
-  "ladderFilter", "tb303Filter", "modeResonator", "cookbookFilter", "butterworth", "linkwitzRiley", "bessel", "chebyshev", "elliptic", "papoulisFilter", "bandpass", "allpass", "lowpass", "highpass", "eqFilter", "combResonator", "passiveFilter", "activeFilter", "flowerChildFilterRev3",
+  "ladderFilter", "tb303Filter", "modeResonator", "cookbookFilter", "butterworth", "linkwitzRiley", "bessel", "chebyshev", "elliptic", "papoulisFilter", "bandpass", "allpass", "lowpass", "highpass", "eqFilter", "combResonator", "passiveFilter", "activeFilter", "flowerChildFilterRev3", "formantFilter",
 ]);
 // Multi-cutoff types also publish HPF as EffectiveLoHz (EffectiveHz = LPF).
 NodeLiveAudioProcessor.NATIVE_GRAPH_EFFECTIVE_LO_HZ_TYPES = new Set(["passiveFilter", "activeFilter"]);

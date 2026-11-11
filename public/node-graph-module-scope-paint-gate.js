@@ -554,6 +554,7 @@ const nodeGraphFacePaintKindTable = Object.assign(Object.create(null), {
   rgbShapeFace: "param",
   textBoxFace: "param",
   slewShapeFace: "param",
+  formantFilterFace: "param",
   additiveFilterCurve: "param",
   additiveWaveform: "param",
   additiveBlasterBlocks: "param",

@@ -228,7 +228,6 @@
         "wallDelay",
         "evolveField",
         "asciiscope",
-        "formantFilter",
         "besselThomson",
         "massSpringDamper",
         "wavetable3d",

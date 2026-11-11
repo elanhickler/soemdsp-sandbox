@@ -1154,6 +1154,24 @@
       "noticeUrl": "https://github.com/elanhickler/soemdsp-sandbox/blob/master/docs/THIRD_PARTY.md"
     },
     {
+      "name": "formant_filter",
+      "label": "BLIT Formant",
+      "targetType": "formantFilter",
+      "kind": "oscillator",
+      "source": "native_modules/formant_filter/formant_filter.cpp",
+      "sourceUrl": "https://github.com/elanhickler/soemdsp-sandbox/blob/master/native_modules/formant_filter/formant_filter.cpp",
+      "localSourceUrl": "/native_modules/formant_filter/formant_filter.cpp",
+      "libUrl": "",
+      "wasm": "native_modules/formant_filter/formant_filter.wasm",
+      "wasmUrl": "native_modules/formant_filter/formant_filter.wasm",
+      "wasmAvailable": true,
+      "license": "Soundemote Noncommercial",
+      "licenseUrl": "https://github.com/elanhickler/soemdsp-sandbox/blob/master/LICENSE",
+      "upstreamLicense": "",
+      "upstreamLicenseUrl": "",
+      "noticeUrl": "https://github.com/elanhickler/soemdsp-sandbox/blob/master/docs/THIRD_PARTY.md"
+    },
+    {
       "name": "formula_noise",
       "label": "Pi Noise",
       "targetType": "piNoise",
