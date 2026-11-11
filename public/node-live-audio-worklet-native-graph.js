@@ -593,6 +593,8 @@ NodeLiveAudioProcessor.prototype.mapNativeGraphParamId = function mapNativeGraph
     if (k === "on3") return P.NATIVE_GRAPH_PARAM_LFO_STYLE;
     if (k === "on4") return P.NATIVE_GRAPH_PARAM_WAVEFORM;
     if (k === "on5") return P.NATIVE_GRAPH_PARAM_OVERSAMPLE;
+    if (k === "wave") return P.NATIVE_GRAPH_PARAM_LANE_BIAS2;
+    if (k === "subWave") return P.NATIVE_GRAPH_PARAM_LANE_BIAS3;
   }
   if (t === "dsfMorphingOsc") {
     if (k === "symmetry") return P.NATIVE_GRAPH_PARAM_MIX;
@@ -5495,7 +5497,8 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
       // shape=Vowel, timingMode=Sweep, center=Shift (oct), resonance=Q scale, mix=Body,
       // saturate=Drive, amplitude=Out; laneVol1..4 + laneBias1 = Gain 1..5;
       // mode / stages / lfoStyle / waveform / oversample = On 1..5;
-      // frequency = saw Hz, level = Saw, width = Sub, feedback = Noise.
+      // frequency = osc Hz, level = Osc, width = Sub, feedback = Noise;
+      // laneBias2 = Wave (Saw / Square), laneBias3 = Sub Wave (Sine / Saw / Square).
       push("frequency", P.NATIVE_GRAPH_PARAM_FREQUENCY, cont("frequency", 110));
       push("saw", P.NATIVE_GRAPH_PARAM_LEVEL, cont("saw", 1));
       push("sub", P.NATIVE_GRAPH_PARAM_WIDTH, cont("sub", 0));
@@ -5517,6 +5520,8 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
       push("on3", P.NATIVE_GRAPH_PARAM_LFO_STYLE, disc("on3", 1));
       push("on4", P.NATIVE_GRAPH_PARAM_WAVEFORM, disc("on4", 1));
       push("on5", P.NATIVE_GRAPH_PARAM_OVERSAMPLE, disc("on5", 1));
+      push("wave", P.NATIVE_GRAPH_PARAM_LANE_BIAS2, disc("wave", 0));
+      push("subWave", P.NATIVE_GRAPH_PARAM_LANE_BIAS3, disc("subWave", 0));
       continue;
     }
     if (type === "dsfMorphingOsc") {

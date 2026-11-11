@@ -15,6 +15,9 @@
 //     show a position handle. "stack" = two choice buttons + over −.
 //     "button" = an Off/On param as one labelled button (click toggles, lit when on);
 //     optional 4th item { onLabel, onFill } names and colours the on state.
+//     "toggle" = a column fill slider whose top strip is an Off/On param (4th item,
+//     its key): click the strip to switch, drag below it for the value. The
+//     Off/On param gets no rail jack of its own (BLIT Formant band On + Gain).
 //     Per-cell "horizontal" overrides the row flag.
 //     Choice switch (app-wide): { kind: "cells", params: [[key, label]], horizontal: true }
 //     Label left, value right, selected-slot rectangle, no divider strokes.
@@ -60,6 +63,8 @@ const NODE_GRAPH_FACE_CELL_GAP_PX = 2;
 // is at least this tall. The unit is as large as the value.
 const NODE_GRAPH_FACE_UNIT_ROW_H = 52;
 const NODE_GRAPH_FACE_UNIT_LINE_PX = 14;
+// "toggle" cells: height of the On strip on top of the fill slider.
+const NODE_GRAPH_FACE_TOGGLE_STRIP_PX = 18;
 
 const NodeGraphFaceInk = Object.freeze({
   rowFill: "#10131a",
@@ -76,6 +81,9 @@ const NodeGraphFaceInk = Object.freeze({
   subOn: "#243044",
   subOnText: "#e8f0ff",
   offText: "#7b8494",
+  // "toggle" cells: the On strip and the value fill while the toggle is off.
+  toggleOff: "#171b23",
+  toggleOffFill: "#232831",
   number: "#f2f5ff",
   slash: "#5a6578",
   label: "#cfdde5",
@@ -291,6 +299,7 @@ function nodeGraphModuleFaceWidgets(spec, fw, moduleEl = null) {
           stack: mode === "stack",
           button: mode === "button",
           buttonOn: mode === "button" && cell[3] && typeof cell[3] === "object" ? cell[3] : null,
+          toggle: mode === "toggle" && typeof cell[3] === "string" ? cell[3] : "",
           x: cx, w: cw,
         });
       });
@@ -691,6 +700,19 @@ function beginNodeGraphModuleFaceGesture(article, face, spec, event) {
     if (row && nodeGraphFinishArmedWireOnParamRow(row, event)) return;
   }
   const input = wd.param ? nodeGraphModuleFaceInput(article, wd.param) : null;
+  // "toggle" cell On strip: every click switches the Off/On param (no type-in
+  // on double-click, so fast on/off clicks never open the value editor).
+  if (wd.type === "cell" && wd.toggle && p.y < wd.y + Math.min(NODE_GRAPH_FACE_TOGGLE_STRIP_PX, wd.h * 0.5) + NODE_GRAPH_FACE_CELL_GAP_PX) {
+    const tin = nodeGraphModuleFaceInput(article, wd.toggle);
+    if (!tin) return;
+    if (typeof nodeGraphNumericResetClickModifier === "function" && nodeGraphNumericResetClickModifier(event)) {
+      nodeGraphModuleFaceCapture(face, event, () => {}, { resetOnClick: true, onReset: () => nodeGraphModuleFaceResetWidget(article, { ...wd, param: wd.toggle, toggle: "" }) });
+      return;
+    }
+    const min = Number(tin.min || 0);
+    setNodeGraphModuleFaceValue(tin, nodeGraphModuleFaceValue(tin) >= min + 0.5 ? min : min + 1, false);
+    return;
+  }
   // Binary Off/On column cells: every click/tap toggles. Do not open the
   // type-in editor on double-click or double-tap, and do not select text.
   if (!nodeGraphModuleFaceIsBinaryToggleCell(wd, input) && nodeGraphModuleFaceDoubleClick(face, wd, event)) {
@@ -1219,6 +1241,18 @@ function nodeGraphModuleFaceDrawGl(batch, el, w, ox, oy, z) {
         if (on) rect(wd.x + gap, top, cw, ch, wd.buttonOn?.onFill || ink.cellValueFill);
         const lab = on && wd.buttonOn?.onLabel ? wd.buttonOn.onLabel : wd.label;
         nodeGraphModuleFaceText(batch, lab, ox + cx * z, oy + (top + ch * 0.5) * z, 13.8 * z, on ? ink.value : ink.label, { maxWidth: (cw - 4) * z });
+      } else if (wd.toggle) {
+        // On strip on top (lit when on, the cell label inside it), fill slider below.
+        const tin = nodeGraphModuleFaceInput(el, wd.toggle);
+        const on = !tin || nodeGraphModuleFaceValue(tin) >= Number(tin.min || 0) + 0.5;
+        const sh = Math.min(NODE_GRAPH_FACE_TOGGLE_STRIP_PX, ch * 0.5);
+        rect(wd.x + gap, top, cw, sh, on ? ink.choiceOn : ink.toggleOff);
+        nodeGraphModuleFaceText(batch, wd.label, ox + cx * z, oy + (top + sh * 0.5) * z, 12.6 * z, on ? ink.choiceOnText : ink.offText, { maxWidth: (cw - 4) * z });
+        const bt = top + sh + 1;
+        const bh = Math.max(1, ch - sh - 1);
+        rect(wd.x + gap, bt + (1 - t) * bh, cw, t * bh, on ? ink.cellValueFill : ink.toggleOffFill);
+        if (Number.isFinite(tg)) rect(wd.x + gap, bt + (1 - tg) * bh, cw, tg * bh, ink.ghost);
+        nodeGraphModuleFaceValueRun(batch, input, ox + cx * z, oy + (bt + bh * 0.5) * z, 13.8 * z, on ? ink.value : ink.offText, { maxWidth: (cw - 4) * z });
       } else if (wd.stack) {
         const parsed = typeof parseNodeMetadataChoices === "function"
           ? parseNodeMetadataChoices(input?.dataset?.choices)

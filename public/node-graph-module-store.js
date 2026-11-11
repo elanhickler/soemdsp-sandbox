@@ -390,7 +390,7 @@ const nodeGraphModuleStoreCatalog = Object.freeze({
   // BLIT Formant: internal type key stays "formantFilter" (graph type 244) so saved patches load.
   formantFilter: {
     category: "oscillator",
-    description: "Source-filter vowel voice: an alias-free BLIT saw (plus Sub and Noise) or your audio on Ext In, through five resonant bandpasses (constant-peak ZDF SVF) on a vowel path. Sweep picks the path, Vowel walks it, Shift moves every formant up to 7 octaves (bands fade out at the top instead of piling up), Resonance scales Q. Body adds the voiced source back through a lowpass under F1 so the low end stays heavy; Noise is stereo (independent per side) and alone whispers; Drive warms the sum.",
+    description: "Source-filter vowel voice: an alias-free BLIT saw or square (plus a Sine, Saw or Square Sub an octave down, and band-limited Noise) or your audio on Ext In, through five resonant bandpasses (constant-peak ZDF SVF) on a vowel path. Sweep picks the path, Vowel walks it, Shift moves every formant up to 7 octaves (bands fade out at the top instead of piling up), Resonance scales Q. Body adds the voiced source back through a lowpass under F1 so the low end stays heavy; Noise is stereo (independent per side) and alone whispers; Drive warms the sum.",
     label: "BLIT Formant",
     notes: ["oscillator", "formant", "vowel", "blit", "saw", "noise", "whisper", "talking", "filter", "bandpass", "resonant", "SVF", "ZDF", "stereo", "native"],
   },

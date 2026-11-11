@@ -5609,12 +5609,16 @@ const nodeGraphModuleDefinitions = (
       { key: "face", label: "Formants", renderer: "formantFilterFace", settingsSchema: "formantFilterFace" },
     ],
     defaultDisplayMode: "face",
+    // Band On switches live in the top strip of each F1..F5 Gain cell ("toggle"
+    // cells): click the strip for on / off, drag below it for the gain. Amp
+    // sits alone at the bottom of the stack.
     face: [
-      { kind: "cells", params: [["frequency", "Freq"], ["saw", "Saw"], ["sub", "Sub"], ["noise", "Noise"]], h: 40 },
+      { kind: "cells", params: [["frequency", "Freq"], ["saw", "Osc"], ["sub", "Sub"], ["noise", "Noise"]], h: 40 },
+      { kind: "cells", params: [["wave", "Wave"], ["subWave", "Sub Wave"]], horizontal: true, h: 40 },
       { kind: "cells", params: [["sweep", "Sweep"], ["vowel", "Vowel"], ["shift", "Shift", "bipolar"]], h: 40 },
-      { kind: "cells", params: [["resonance", "Resonance"], ["body", "Body"], ["drive", "Drive"], ["amplitude", "Amp"]], h: 40 },
-      { kind: "cells", params: [["on1", "On 1"], ["on2", "On 2"], ["on3", "On 3"], ["on4", "On 4"], ["on5", "On 5"]], h: 30 },
-      { kind: "cells", params: [["gain1", "Gain 1"], ["gain2", "Gain 2"], ["gain3", "Gain 3"], ["gain4", "Gain 4"], ["gain5", "Gain 5"]], h: 40 },
+      { kind: "cells", params: [["resonance", "Resonance"], ["body", "Body"], ["drive", "Drive"]], h: 40 },
+      { kind: "cells", params: [["gain1", "F1", "toggle", "on1"], ["gain2", "F2", "toggle", "on2"], ["gain3", "F3", "toggle", "on3"], ["gain4", "F4", "toggle", "on4"], ["gain5", "F5", "toggle", "on5"]], h: 52 },
+      { kind: "cells", params: [["amplitude", "Amp"]], h: 30 },
     ],
     // Source: internal BLIT saw at Frequency (ƒ / Reset ↺ jacks) + Sub + Noise.
     // A cable on Ext M (or Ext L / Ext R, stereo as the filters) replaces the saw;
@@ -5632,9 +5636,43 @@ const nodeGraphModuleDefinitions = (
     outputs: ["Out", "Left", "Right"],
     parameters: [
       { key: "frequency", label: "Frequency", kind: "frequency", defaultValue: "110", min: "0", mid: "220", max: "20000", step: "any", unit: "Hz" },
-      { key: "saw", label: "Saw", defaultValue: "1", min: "0", mid: "0.5", max: "1", step: "any" },
+      { key: "saw", label: "Osc", defaultValue: "1", min: "0", mid: "0.5", max: "1", step: "any" },
       { key: "sub", label: "Sub", defaultValue: "0", min: "0", mid: "0.5", max: "1", step: "any" },
-      { key: "noise", label: "Noise", defaultValue: "0", min: "0", mid: "0.5", max: "1", step: "any" },
+      { key: "noise", label: "Noise", defaultValue: "0", min: "0", mid: "0.5", max: "1", step: "any", tooltip: "Band-limited white noise (4-pole lowpass at 8 kHz, moving with Shift) into the formant bank. Stereo: independent per side." },
+      {
+        choices: ["Saw", "Square"],
+        choiceKeys: ["saw", "square"],
+        choiceIds: [0, 1],
+        defaultValue: "0",
+        displayChoices: true,
+        divideChoicesVisibly: true,
+        key: "wave",
+        kind: "choice",
+        label: "Wave",
+        linearSmoothing: false,
+        max: "1",
+        mid: "0",
+        min: "0",
+        step: "1",
+        tooltip: "Main BLIT oscillator wave (level = Osc)."
+      },
+      {
+        choices: ["Sine", "Saw", "Square"],
+        choiceKeys: ["sine", "saw", "square"],
+        choiceIds: [0, 1, 2],
+        defaultValue: "0",
+        displayChoices: true,
+        divideChoicesVisibly: true,
+        key: "subWave",
+        kind: "choice",
+        label: "Sub Wave",
+        linearSmoothing: false,
+        max: "2",
+        mid: "0",
+        min: "0",
+        step: "1",
+        tooltip: "Sub oscillator one octave down (level = Sub). Saw and Square are BLIT (alias-free) and carry harmonics up into the formants; Sine only shows through Body."
+      },
       {
         choices: ["E A O U", "I E", "A E I", "O E I", "Y U"],
         choiceKeys: ["aou", "ie", "ae", "oe", "yu"],

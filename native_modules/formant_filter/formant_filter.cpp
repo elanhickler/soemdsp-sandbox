@@ -4,9 +4,12 @@
 // soemdsp-native-kind: oscillator
 //
 // Formant Filter (graph type 244): a source-filter voice. Source = an internal
-// BLIT saw (shared blit_saw.h, the BLIT Oscillator saw) at Frequency (+ an
-// optional Sub sine one octave down), or Ext In when a cable is wired, plus
-// white noise (gently tilted) at its own level for breath / whisper. The
+// BLIT oscillator (shared blit_saw.h, the BLIT Oscillator saw; Wave picks Saw
+// or Square, the square being two saws half a cycle apart) at Frequency, plus a
+// Sub one octave down (Sub Wave: Sine, Saw or Square, the same BLIT maths), or
+// Ext In when a cable is wired, plus band-limited white noise at its own level
+// for breath / whisper. The noise runs through a 4-pole Butterworth lowpass at
+// 8 kHz x 2^Shift (so it follows the formant bank) before the bank. The
 // source runs through a parallel bank of five constant-peak TPT SVF bandpasses
 // (shared tpt_svf.h, the EQ Filter bandpass) tuned to vowel formants. Sweep picks a vowel path; Vowel
 // walks it with log-frequency interpolation (0..1 = the path; outside it the
@@ -44,8 +47,13 @@ constexpr double kBodyCutoffRatio = 0.7; // Body lowpass Hz = ratio * F1
 constexpr double kBodyQ = 0.7071067811865476;
 constexpr double kSmoothSeconds = 0.008;
 constexpr double kSawGain = 1.47;      // BLIT Oscillator saw gain (raw peak <= 0.665 -> under 0.98)
+constexpr double kSquareGain = 1.44;   // BLIT Oscillator square gain (raw peak <= 0.679 -> under 0.98)
 constexpr double kNoiseGain = 1.4;     // noise trim: a whisper lands near the voiced level
-constexpr double kNoiseTiltHz = 3000.0; // one-pole: noise = 0.5 white + 0.5 lowpassed (gentle pink tilt)
+constexpr double kNoiseCutHz = 8000.0;  // noise lowpass at Shift 0 (moves with Shift)
+constexpr double kNoiseCutMinHz = 500.0;
+constexpr double kNoiseCutMaxNyq = 0.85; // x Nyquist: the noise never reaches the top of the band
+constexpr double kNoiseQ1 = 0.5411961001461970; // 4-pole Butterworth stage Qs
+constexpr double kNoiseQ2 = 1.3065629648763766;
 constexpr double kFadeHiStart = 0.8;     // x Nyquist: band gain starts fading
 constexpr double kFadeLoEndHz = 20.0;    // band fully gone at / under this
 constexpr double kFadeLoStartHz = 40.0;  // band starts fading under this
@@ -63,10 +71,30 @@ struct FormantFilterState {
   TptSvfState band[kBands] = {};
   TptSvfState body = {};
   soemdsp_blit::BlitSaw saw = {};
+  soemdsp_blit::BlitSaw sawB = {};  // half a cycle on: Square = saw - sawB
+  soemdsp_blit::BlitSaw subA = {};
+  soemdsp_blit::BlitSaw subB = {};
   double subPhase = 0.0;
   NoiseColorChannel noise = {};
-  double noiseLp = 0.0;
+  TptSvfState noiseLp1 = {};
+  TptSvfState noiseLp2 = {};
 };
+
+void initOscillators(FormantFilterState& s) {
+  s.saw.init(0.0);
+  s.sawB.init(0.5);
+  s.subA.init(0.0);
+  s.subB.init(0.5);
+  s.subPhase = 0.0;
+}
+
+int waveIndex(double v, int n) {
+  if (is_bad(v)) return 0; // also an argument a caller left out (NaN)
+  int i = static_cast<int>(dsp_floor(v + 0.5));
+  if (i < 0) i = 0;
+  if (i > n - 1) i = n - 1;
+  return i;
+}
 
 static FormantFilterState gPool[kMaxInstances];
 
@@ -239,24 +267,37 @@ double driveShape(double x, double drive) {
   return (1.0 - d) * x + d * sat;
 }
 
-// BLIT saw + Sub one octave down (the internal voiced source).
-double voicedSource(FormantFilterState& s, double frequencyHz, double sawLevel, double subLevel, double sr) {
+// One BLIT voice at period samples: Saw (a alone) or Square (a - b, b half a
+// cycle on). Both saws always tick so switching Wave never jumps phase.
+double blitWave(soemdsp_blit::BlitSaw& a, soemdsp_blit::BlitSaw& b, double period, bool square) {
+  const double halfW = kPi / period;
+  const double comp = soemdsp_blit::sinApprox(halfW) / halfW;
+  const double ya = a.update(period) * comp;
+  const double yb = b.update(period) * comp;
+  return square ? clamp((ya - yb) * kSquareGain, -1.0, 1.0) : clamp(ya * kSawGain, -1.0, 1.0);
+}
+
+// Wave: 0 Saw, 1 Square. Sub Wave: 0 Sine, 1 Saw, 2 Square (one octave down).
+double voicedSource(
+  FormantFilterState& s, double frequencyHz, double sawLevel, double subLevel,
+  double wave, double subWave, double sr
+) {
   double voiced = 0.0;
   double hz = safe(frequencyHz);
   if (hz < 0.0) hz = -hz;
   if (hz > sr * 0.45) hz = sr * 0.45;
   const double inc = hz / sr;
+  const double sub = safe(subLevel);
+  const int sw = waveIndex(subWave, 3);
   if (hz >= 1.0) {
     const double period = 1.0 / inc;
-    const double halfW = kPi / period;
-    const double comp = soemdsp_blit::sinApprox(halfW) / halfW;
-    const double sw = clamp(s.saw.update(period) * comp * kSawGain, -1.0, 1.0);
-    voiced += safe(sawLevel) * sw;
+    voiced += safe(sawLevel) * blitWave(s.saw, s.sawB, period, waveIndex(wave, 2) == 1);
+    const double subOsc = blitWave(s.subA, s.subB, 2.0 * period, sw == 2);
+    if (sw != 0 && sub != 0.0) voiced += sub * subOsc;
   }
-  const double sub = safe(subLevel);
   s.subPhase += 0.5 * inc;
   if (s.subPhase >= 1.0) s.subPhase -= 1.0;
-  if (sub != 0.0) voiced += sub * soemdsp_blit::sinApprox(2.0 * kPi * s.subPhase);
+  if (sw == 0 && sub != 0.0) voiced += sub * soemdsp_blit::sinApprox(2.0 * kPi * s.subPhase);
   return voiced;
 }
 
@@ -266,7 +307,7 @@ extern "C" int soemdsp_formant_filter_create() {
   for (int i = 0; i < kMaxInstances; i += 1) {
     if (!gPool[i].active) {
       gPool[i] = FormantFilterState{};
-      gPool[i].saw.init(0.0);
+      initOscillators(gPool[i]);
       noise_color_reset(gPool[i].noise, 0x9E3779B9u ^ (unsigned int)(i * 2654435761u + 1u));
       gPool[i].active = true;
       return i + 1;
@@ -285,18 +326,17 @@ extern "C" void soemdsp_formant_filter_reset(int handle) {
   FormantFilterState& s = gPool[handle - 1];
   for (int b = 0; b < kBands; ++b) tpt_svf_reset(s.band[b]);
   tpt_svf_reset(s.body);
+  tpt_svf_reset(s.noiseLp1);
+  tpt_svf_reset(s.noiseLp2);
   s.smoothInit = false;
-  s.saw.init(0.0);
-  s.subPhase = 0.0;
-  s.noiseLp = 0.0;
+  initOscillators(s);
 }
 
 // Reset jack: restart the saw (and Sub) cycle; the filters keep ringing.
 extern "C" void soemdsp_formant_filter_reset_osc(int handle) {
   if (handle < 1 || handle > kMaxInstances) return;
   FormantFilterState& s = gPool[handle - 1];
-  s.saw.init(0.0);
-  s.subPhase = 0.0;
+  initOscillators(s);
 }
 
 // Stereo internal source: tick only this handle's saw + Sub and return it.
@@ -304,13 +344,14 @@ extern "C" void soemdsp_formant_filter_reset_osc(int handle) {
 // each of those adds its own independently seeded noise through its own
 // bank, so L / R differ with Noise up while the voiced part stays identical.
 extern "C" double soemdsp_formant_filter_source(
-  int handle, double frequencyHz, double sawLevel, double subLevel, double sampleRate
+  int handle, double frequencyHz, double sawLevel, double subLevel, double sampleRate,
+  double wave, double subWave
 ) {
   if (handle < 1 || handle > kMaxInstances) return 0.0;
   FormantFilterState& s = gPool[handle - 1];
   if (!s.active) return 0.0;
   const double sr = sampleRate > 1.0 ? sampleRate : 48000.0;
-  return voicedSource(s, frequencyHz, sawLevel, subLevel, sr);
+  return voicedSource(s, frequencyHz, sawLevel, subLevel, wave, subWave, sr);
 }
 
 extern "C" double soemdsp_formant_filter_sample(
@@ -330,7 +371,8 @@ extern "C" double soemdsp_formant_filter_sample(
   double drive,
   double level,
   double g1, double g2, double g3, double g4, double g5,
-  double on1, double on2, double on3, double on4, double on5
+  double on1, double on2, double on3, double on4, double on5,
+  double wave, double subWave
 ) {
   if (handle < 1 || handle > kMaxInstances) return 0.0;
   FormantFilterState& s = gPool[handle - 1];
@@ -360,13 +402,24 @@ extern "C" double soemdsp_formant_filter_sample(
     }
   }
   // Voiced source: Ext In (cable wired, or the shared saw fed in for stereo) or the BLIT saw + Sub.
-  const double voiced = useExt >= 0.5 ? safe(input) : voicedSource(s, frequencyHz, sawLevel, subLevel, sr);
-  // Unvoiced source: white noise with a gentle tilt (bank only, not Body).
-  const double white = noise_color_bipolar(s.noise);
-  const double nk = 1.0 - dsp_exp(-2.0 * kPi * kNoiseTiltHz / sr);
-  s.noiseLp += nk * (white - s.noiseLp);
+  const double voiced = useExt >= 0.5 ? safe(input) : voicedSource(s, frequencyHz, sawLevel, subLevel, wave, subWave, sr);
+  // Unvoiced source: white noise through a 4-pole Butterworth lowpass that
+  // moves with Shift (bank only, not Body).
   const double nz = safe(noiseLevel);
-  const double unvoiced = nz != 0.0 ? nz * kNoiseGain * (0.5 * white + 0.5 * s.noiseLp) : 0.0;
+  double unvoiced = 0.0;
+  {
+    double cut = kNoiseCutHz * dsp_exp(safe(shiftOct) * kLn2);
+    const double cutMax = 0.5 * sr * kNoiseCutMaxNyq;
+    if (!(cut >= kNoiseCutMinHz)) cut = kNoiseCutMinHz;
+    if (cut > cutMax) cut = cutMax;
+    const double w = cut * 2.0 * kPi / sr;
+    TptSvfCoeffs c1, c2;
+    tpt_svf_setup(c1, w, 1.0 / kNoiseQ1, 1.0, 0.0, 0.0, 1.0);
+    tpt_svf_setup(c2, w, 1.0 / kNoiseQ2, 1.0, 0.0, 0.0, 1.0);
+    const double white = noise_color_bipolar(s.noise);
+    const double lp = tpt_svf_tick(s.noiseLp2, c2, tpt_svf_tick(s.noiseLp1, c1, white));
+    if (nz != 0.0) unvoiced = nz * kNoiseGain * lp;
+  }
   const double x = voiced + unvoiced;
   const double twoPiOverSr = 2.0 * kPi / sr;
   double bank = 0.0;
@@ -392,6 +445,8 @@ extern "C" double soemdsp_formant_filter_sample(
     y = 0.0;
     for (int b = 0; b < kBands; ++b) tpt_svf_reset(s.band[b]);
     tpt_svf_reset(s.body);
+    tpt_svf_reset(s.noiseLp1);
+    tpt_svf_reset(s.noiseLp2);
   }
   return clamp(y, -8.0, 8.0);
 }
@@ -511,6 +566,6 @@ extern "C" int soemdsp_formant_filter_eval_response(
   return points;
 }
 
-extern "C" int soemdsp_formant_filter_version() { return 5; } // 5: no range clamps on Shift / Vowel / Resonance / Body / Drive (parameter ranges decide; stability guards only). 4: stereo noise source export; Shift bands fade out at Nyquist / 20 Hz instead of clamping. 2: internal BLIT saw / Sub / noise source
+extern "C" int soemdsp_formant_filter_version() { return 6; } // 6: Wave (Saw / Square) and Sub Wave (Sine / Saw / Square) switches; noise 4-pole lowpass at 8 kHz x 2^Shift. 5: no range clamps on Shift / Vowel / Resonance / Body / Drive (parameter ranges decide; stability guards only). 4: stereo noise source export; Shift bands fade out at Nyquist / 20 Hz instead of clamping. 2: internal BLIT saw / Sub / noise source
 extern "C" const char* soemdsp_formant_filter_metadata_json() { return kMetadataJson; }
 extern "C" int soemdsp_formant_filter_metadata_json_size() { return sizeof(kMetadataJson) - 1; }

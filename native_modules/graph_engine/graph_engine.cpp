@@ -1166,14 +1166,16 @@ extern "C" void soemdsp_formant_filter_destroy(int handle);
 extern "C" void soemdsp_formant_filter_reset(int handle);
 extern "C" void soemdsp_formant_filter_reset_osc(int handle);
 extern "C" double soemdsp_formant_filter_source(
-  int handle, double frequencyHz, double sawLevel, double subLevel, double sampleRate
+  int handle, double frequencyHz, double sawLevel, double subLevel, double sampleRate,
+  double wave, double subWave
 );
 extern "C" double soemdsp_formant_filter_sample(
   int handle, double input, double useExt, double frequencyHz, double sawLevel, double subLevel, double noiseLevel,
   double sampleRate,
   double vowel, double sweep, double shiftOct, double resonance, double body, double drive, double level,
   double g1, double g2, double g3, double g4, double g5,
-  double on1, double on2, double on3, double on4, double on5
+  double on1, double on2, double on3, double on4, double on5,
+  double wave, double subWave
 );
 
 extern "C" int soemdsp_passive_filter_create();
@@ -9750,7 +9752,8 @@ static void process_tilt_filter(Circuit& g, Node& node, int frames) {
 // Through 5 constant-peak SVF bandpasses on a vowel path + Body lowpass (voiced only).
 // frequency=Hz, level=Saw, width=Sub, feedback=Noise, shape=Vowel, timingMode=Sweep,
 // center=Shift oct (-4..+7; bands fade out at Nyquist / 20 Hz in the module), resonance=Q scale, mix=Body, saturate=Drive, amplitude=Out,
-// laneVol[0..3]/laneBias[0]=Gain 1..5, mode/stages/lfoStyle/waveform/oversample=On 1..5.
+// laneVol[0..3]/laneBias[0]=Gain 1..5, mode/stages/lfoStyle/waveform/oversample=On 1..5,
+// laneBias[1]=Wave (0 Saw, 1 Square), laneBias[2]=Sub Wave (0 Sine, 1 Saw, 2 Square).
 static void process_formant_filter(Circuit& g, Node& node, int frames) {
   if (node.nativeHandle <= 0) return;
   mix_node_inputs(g, node, frames);
@@ -9801,19 +9804,21 @@ static void process_formant_filter(Circuit& g, Node& node, int frames) {
     const double on3 = control_effective(node.lfoStyle);
     const double on4 = control_effective(node.waveform);
     const double on5 = control_effective(node.oversample);
+    const double wave = control_effective(node.laneBias[1]);
+    const double subWave = control_effective(node.laneBias[2]);
     if (useExt < 0.5 && node.nativeHandleL > 0 && node.nativeHandleR > 0) {
       // Internal source, stereo noise: one shared saw + Sub (main handle) into the
       // L and R banks; each adds its own decorrelated noise. Mono = (L + R) / 2.
-      const double src = soemdsp_formant_filter_source(node.nativeHandle, freq, sawLevel, subLevel, sr);
+      const double src = soemdsp_formant_filter_source(node.nativeHandle, freq, sawLevel, subLevel, sr, wave, subWave);
       const double outL = soemdsp_formant_filter_sample(
         node.nativeHandleL, src, 1.0, freq, 0.0, 0.0, noiseLevel, sr,
         vowel, sweep, shift, res, body, drive, amp,
-        g1, g2, g3, g4, g5, on1, on2, on3, on4, on5
+        g1, g2, g3, g4, g5, on1, on2, on3, on4, on5, wave, subWave
       );
       const double outR = soemdsp_formant_filter_sample(
         node.nativeHandleR, src, 1.0, freq, 0.0, 0.0, noiseLevel, sr,
         vowel, sweep, shift, res, body, drive, amp,
-        g1, g2, g3, g4, g5, on1, on2, on3, on4, on5
+        g1, g2, g3, g4, g5, on1, on2, on3, on4, on5, wave, subWave
       );
       node.buf[kPortLeft][f] = outL;
       node.buf[kPortRight][f] = outR;
@@ -9826,7 +9831,7 @@ static void process_formant_filter(Circuit& g, Node& node, int frames) {
       const double out = soemdsp_formant_filter_sample(
         node.nativeHandle, in, useExt, freq, sawLevel, subLevel, noiseLevel, sr,
         vowel, sweep, shift, res, body, drive, amp,
-        g1, g2, g3, g4, g5, on1, on2, on3, on4, on5
+        g1, g2, g3, g4, g5, on1, on2, on3, on4, on5, wave, subWave
       );
       node.buf[kPortMono][f] = out;
       if (!hasLeftIn) node.buf[kPortLeft][f] = out;
@@ -9836,14 +9841,14 @@ static void process_formant_filter(Circuit& g, Node& node, int frames) {
       node.buf[kPortLeft][f] = soemdsp_formant_filter_sample(
         node.nativeHandleL, g.mixLeft[f] + g.mixMono[f], useExt, freq, sawLevel, subLevel, noiseLevel, sr,
         vowel, sweep, shift, res, body, drive, amp,
-        g1, g2, g3, g4, g5, on1, on2, on3, on4, on5
+        g1, g2, g3, g4, g5, on1, on2, on3, on4, on5, wave, subWave
       );
     }
     if (hasRightIn && node.nativeHandleR > 0) {
       node.buf[kPortRight][f] = soemdsp_formant_filter_sample(
         node.nativeHandleR, g.mixRight[f] + g.mixMono[f], useExt, freq, sawLevel, subLevel, noiseLevel, sr,
         vowel, sweep, shift, res, body, drive, amp,
-        g1, g2, g3, g4, g5, on1, on2, on3, on4, on5
+        g1, g2, g3, g4, g5, on1, on2, on3, on4, on5, wave, subWave
       );
     }
   }
