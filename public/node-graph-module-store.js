@@ -2960,7 +2960,7 @@ const nodeGraphModuleStoreCatalog = Object.freeze({
   },
   purr: {
     category: "object",
-    description: "Misty's purr: breaths of soft pulses (Inhale, then a slower, quieter Exhale) gating a low noise rumble plus a body tone. Body Ratio 2.5 flips the body every other pulse.",
+    description: "Misty's purr: breaths of soft pulses (Inhale, then a slower, quieter Exhale) gating a low noise rumble plus a body tone. Body Ratio 2.5 flips the body every other pulse. Unevenness 0 makes every pip the same, 2 makes them ragged.",
     label: "Purr",
     notes: ["purr", "cat", "misty", "breath", "rumble", "object", "native"],
   },

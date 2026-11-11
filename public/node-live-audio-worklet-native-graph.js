@@ -5357,6 +5357,7 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
       push("softness", P.NATIVE_GRAPH_PARAM_RESONANCE, cont("softness", 2.5));
       push("tone", P.NATIVE_GRAPH_PARAM_LPF_FREQUENCY, cont("tone", 180));
       push("wobble", P.NATIVE_GRAPH_PARAM_LFO_AMPLITUDE, cont("wobble", 0.03));
+      push("unevenness", P.NATIVE_GRAPH_PARAM_SHAPE, cont("unevenness", 1));
       push("amplitude", P.NATIVE_GRAPH_PARAM_AMPLITUDE, cont("amplitude", 0.9));
       continue;
     }

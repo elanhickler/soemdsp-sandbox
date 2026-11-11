@@ -1539,6 +1539,7 @@ const nodeGraphModuleDefinitions = (
       { defaultValue: "2.5", key: "softness", label: "Softness", max: "8", mid: "2.5", min: "0.5", step: "any" },
       { defaultValue: "180", key: "tone", kind: "frequency", label: "Tone", max: "2000", mid: "180", min: "40", step: "any", unit: "Hz" },
       { defaultValue: "0.03", key: "wobble", label: "Wobble", max: "0.2", mid: "0.03", min: "0", step: "any" },
+      { defaultValue: "1", key: "unevenness", label: "Unevenness", max: "2", mid: "1", min: "0", nonlinearSlider: false, step: "any" },
       { defaultValue: "0.9", key: "amplitude", label: "Amplitude", max: "1", mid: "0.5", min: "0", nonlinearSlider: false, step: "any" },
     ]
   },

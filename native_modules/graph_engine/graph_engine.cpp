@@ -2627,6 +2627,13 @@ struct PurrState {
   PurrBiquad dc[2];   // 25 Hz highpass, 2-pole, run twice
   double harm[kPurrHarmonics + 1]; // pulse cosine series for the Body
   double harmSoftness;
+  double harmGain[2 * kPurrHarmonics + 1]; // filter response per Body partial
+  int harmGainCountdown; // samples until harmGain is refreshed
+  double pipStart;    // Body phase at the current pip's start, turns in [-0.5, 0.5)
+  double pipLevel;    // smoothed per-pip level (Unevenness above 1)
+  double pipLevelTarget;
+  double pipRate;     // per-pip rate factor (Unevenness above 1)
+  double prevGatePhase;
   double designedSr;
   double designedTone;
   double noiseGain;
@@ -2635,6 +2642,7 @@ struct PurrState {
   int segPos;         // samples into the current breath segment
   int segment;        // 0 lead-in, 1 inhale, 2 gap, 3 exhale, 4 gap
   unsigned int rng;
+  unsigned int frozenRng; // replays the same noise every pip (Unevenness below 1)
 };
 
 struct Node {
@@ -3594,6 +3602,13 @@ static void init_node_defaults(Node& n, int typeId) {
   n.purr.wobblePhase = 0.0;
   n.purr.segPos = 0;
   n.purr.harmSoftness = -1.0; // first process builds the Body harmonics
+  n.purr.harmGainCountdown = 0;
+  n.purr.pipStart = 0.0;
+  n.purr.pipLevel = 1.0;
+  n.purr.pipLevelTarget = 1.0;
+  n.purr.pipRate = 1.0;
+  n.purr.prevGatePhase = 0.0;
+  n.purr.frozenRng = 0u; // first process seeds from idHash
   n.purr.segment = 0;
   n.purr.rng = 0u; // first process seeds from idHash
   init_control(n.volumeDb, (typeId == kTypeMixStereo) ? 0.0 : -3.0, false);
@@ -3746,6 +3761,7 @@ static void init_node_defaults(Node& n, int typeId) {
   );
   init_control(
     n.shape,
+    (typeId == kTypePurr) ? 1.0 : // Unevenness (Purr)
     (typeId == kTypePulseTrain) ? 3.0 : // curve (Pulse Train)
     (typeId == kTypeStepRegister) ? 1.0 : // Antialias On
     (typeId == kTypeResonantCompressor) ? 0.0 : // Impulse (Resonant Compressor)
@@ -7243,6 +7259,12 @@ static void process_phone_tone(Circuit& g, Node& node, int frames) {
 // Tone and 25 Hz filters' squared response, so it keeps the script's
 // zero-phase shape; the default Body Ratio 2.5 flips its sign every other
 // pulse. Wobble (lfoAmplitude) drifts the pulse rate at 0.3 Hz.
+// Unevenness (shape): 1 = the script. Pips differ because each pip gets fresh
+// Rumble noise and because Body Ratio 2.5 starts every other pip's Body upside
+// down. Toward 0 the noise crossfades to the same noise replayed every pip and
+// every pip's Body starts at the same phase, so pips match. Above 1 each pip
+// gets a random level and length (at 2: levels 0 to 1.7x at the same average
+// loudness, lengths +-12%).
 // Out = Mono/Left/Right; +3 dB so the default Output (-3 dB) plays the wav's level.
 static const double kPurrLeadSeconds = 0.2;
 static const double kPurrGapSeconds = 0.06;
@@ -7253,6 +7275,9 @@ static const double kPurrGateLead = 1.3; // pulse cycles of Tone lowpass delay
 // default settings on misty-purr.wav's level.
 static const double kPurrNoiseGain = 39.03934687410513;
 static const double kPurrOutGain = 0.9125311684541293;
+static const int kPurrGainRefresh = 16; // samples between Body filter-gain updates
+static const double kPurrPipLevelSeconds = 0.004; // per-pip level glide
+static const double kPurrPipRateJitter = 0.12;    // pip length spread at Unevenness 2
 static const double kPurrQ4a = 0.5411961001461970;
 static const double kPurrQ4b = 1.3065629648763766;
 static const double kPurrQ2 = 0.7071067811865476;
@@ -7374,6 +7399,7 @@ static void purr_pulse_harmonics(PurrState& s, double softness) {
     s.harm[k] = (k == 0 ? 1.0 : 2.0) * a / n;
   }
   s.harmSoftness = softness;
+  s.harmGainCountdown = 0; // refresh the partial gains with the new series
 }
 
 // Squared response of the Tone lowpass (4-pole) and 25 Hz highpass (2-pole).
@@ -7388,6 +7414,17 @@ static inline double purr_gain2(double hz, double toneHz) {
   return y4 / ((1.0 + x4 * x4) * (1.0 + y4));
 }
 
+static inline unsigned int purr_xorshift(unsigned int& r) {
+  r ^= r << 13;
+  r ^= r >> 17;
+  r ^= r << 5;
+  return r;
+}
+
+static inline double purr_bipolar(unsigned int& r) {
+  return (double)purr_xorshift(r) * (2.0 / 4294967296.0) - 1.0;
+}
+
 static void process_purr(Circuit& g, Node& node, int frames) {
   const double sr = g.sampleRate < 1.0f ? 44100.0 : (double)g.sampleRate;
   PurrState& s = node.purr;
@@ -7400,6 +7437,9 @@ static void process_purr(Circuit& g, Node& node, int frames) {
     s.designedTone = -1.0;
   }
   if (s.rng == 0u) s.rng = (node.idHash ^ 0x2545F491u) | 1u;
+  const unsigned int frozenSeed = (node.idHash ^ 0x9E3779B9u) | 1u;
+  if (s.frozenRng == 0u) s.frozenRng = frozenSeed;
+  const double levelGlide = 1.0 - dsp_exp(-1.0 / (kPurrPipLevelSeconds * sr));
   double phase = node.phase; // pulse phase, turns
   for (int f = 0; f < frames; f++) {
     control_frame(g, node, f);
@@ -7431,6 +7471,9 @@ static void process_purr(Circuit& g, Node& node, int frames) {
     if (!(wobble == wobble)) wobble = 0.0;
     double amp = control_audio(g, node.amplitude, f);
     if (!(amp == amp)) amp = 0.0;
+    double uneven = control_audio(g, node.shape, f);
+    if (!(uneven > 0.0)) uneven = 0.0;
+    if (uneven > 2.0) uneven = 2.0;
     if (toneHz != s.designedTone) {
       purr_design_4pole_twice(s.tone, false, toneHz, sr);
       s.designedTone = toneHz;
@@ -7459,37 +7502,71 @@ static void process_purr(Circuit& g, Node& node, int frames) {
     const double drift = 1.0 + wobble * soemdsp_maths::dsp_sin_turns_lut(s.wobblePhase);
     s.wobblePhase += kPurrWobbleHz / sr;
     s.wobblePhase -= dsp_floor(s.wobblePhase);
-    const double rate = baseRate * drift;
+    const double rate = baseRate * drift * s.pipRate;
     phase += rate / sr;
-    phase -= dsp_floor(phase);
     s.bodyPhase += ratio * rate / sr;
     s.bodyPhase -= dsp_floor(s.bodyPhase);
+    if (phase >= 1.0) {
+      // New pip: note where its Body starts, draw its level and length.
+      phase -= dsp_floor(phase);
+      const double start = s.bodyPhase - ratio * phase;
+      s.pipStart = start - dsp_floor(start + 0.5);
+      if (uneven > 1.0) {
+        const double spread = uneven - 1.0; // level 1 +- spread, same average loudness
+        s.pipLevelTarget = (1.0 + spread * purr_bipolar(s.rng)) / purr_sqrt(1.0 + spread * spread / 3.0);
+        s.pipRate = 1.0 + spread * kPurrPipRateJitter * purr_bipolar(s.rng);
+      } else {
+        s.pipLevelTarget = 1.0;
+        s.pipRate = 1.0;
+      }
+    }
+    s.pipLevel += (s.pipLevelTarget - s.pipLevel) * levelGlide;
+    const double pipLevel = s.pipLevel;
+    // Unevenness below 1 pulls every pip's Body back toward the same start.
+    double bodyAt = s.bodyPhase;
+    if (uneven < 1.0) {
+      bodyAt -= (1.0 - uneven) * s.pipStart;
+      bodyAt -= dsp_floor(bodyAt);
+    }
 
     // Rumble: noise band gated by the pulse read ahead of the causal filters.
     double gatePhase = phase + kPurrGateLead * rate / toneHz;
     gatePhase -= dsp_floor(gatePhase);
+    if (gatePhase < s.prevGatePhase) s.frozenRng = frozenSeed; // replay from the pip start
+    s.prevGatePhase = gatePhase;
     const double gate = purr_pow(0.5 * (1.0 - soemdsp_maths::dsp_cos_turns(gatePhase)), softness);
-    s.rng ^= s.rng << 13;
-    s.rng ^= s.rng >> 17;
-    s.rng ^= s.rng << 5;
-    const double white = (double)s.rng * (2.0 / 4294967296.0) - 1.0;
+    double white = purr_bipolar(s.rng);
+    const double frozen = purr_bipolar(s.frozenRng);
+    if (uneven < 1.0) {
+      double fresh = 0.0, same = 1.0;
+      soemdsp_maths::dsp_sin_cos(0.5 * kPi * uneven, &fresh, &same);
+      white = white * fresh + frozen * same;
+    }
     const double low = purr_run(s.band, 8, white) * s.noiseGain;
-    double sig = purr_run(s.tone, 4, low * (floor + (1.0 - floor) * gate) * rumble) * breath;
+    double sig = purr_run(s.tone, 4, low * (floor + (1.0 - floor) * gate) * rumble * pipLevel) * breath;
     sig = purr_run(s.dc, 2, sig);
 
     // Body: sin(ratio x phase) p as harmonics through the filters' squared response.
-    double voice = s.harm[0] * purr_gain2(ratio * rate, toneHz)
-      * soemdsp_maths::dsp_sin_turns_lut(s.bodyPhase);
-    for (int k = 1; k <= kPurrHarmonics; k++) {
-      double up = s.bodyPhase + (double)k * phase;
-      double down = s.bodyPhase - (double)k * phase;
-      up -= dsp_floor(up);
-      down -= dsp_floor(down);
-      voice += 0.5 * s.harm[k] * (
-        purr_gain2((ratio + k) * rate, toneHz) * soemdsp_maths::dsp_sin_turns_lut(up)
-        + purr_gain2((ratio - k) * rate, toneHz) * soemdsp_maths::dsp_sin_turns_lut(down));
+    if (--s.harmGainCountdown <= 0) {
+      s.harmGainCountdown = kPurrGainRefresh;
+      s.harmGain[0] = s.harm[0] * purr_gain2(ratio * rate, toneHz);
+      for (int k = 1; k <= kPurrHarmonics; k++) {
+        s.harmGain[2 * k - 1] = 0.5 * s.harm[k] * purr_gain2((ratio + k) * rate, toneHz);
+        s.harmGain[2 * k] = 0.5 * s.harm[k] * purr_gain2((ratio - k) * rate, toneHz);
+      }
     }
-    sig += voice * body * breath;
+    if (breath != 0.0 && body != 0.0) {
+      double voice = s.harmGain[0] * soemdsp_maths::dsp_sin_turns_lut(bodyAt);
+      for (int k = 1; k <= kPurrHarmonics; k++) {
+        double up = bodyAt + (double)k * phase;
+        double down = bodyAt - (double)k * phase;
+        up -= dsp_floor(up);
+        down -= dsp_floor(down);
+        voice += s.harmGain[2 * k - 1] * soemdsp_maths::dsp_sin_turns_lut(up)
+          + s.harmGain[2 * k] * soemdsp_maths::dsp_sin_turns_lut(down);
+      }
+      sig += voice * body * breath * pipLevel;
+    }
 
     const double y = sig * amp * kPurrOutGain;
     node.buf[kPortMono][f] = y;
