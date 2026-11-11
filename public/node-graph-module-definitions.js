@@ -15261,6 +15261,7 @@ const nodeGraphModuleDefinitions = (
       { kind: "cells", params: [["timeSpread", "Time"], ["spread", "Spread"]], h: 40 },
       { kind: "cells", params: [["x0", "X0"], ["y0", "Y0"]], h: 40 },
       { kind: "cells", params: [["numberOfPulses", "Sparks"], ["hold", "Hold"]], h: 40 },
+      { kind: "cells", params: [["fadeTime", "Fade"]], horizontal: true, h: 30 },
       { kind: "seed", param: "seed", h: 28 },
     ],
     parameters: [
@@ -15271,7 +15272,8 @@ const nodeGraphModuleDefinitions = (
       { defaultValue: "0.5", key: "spread", label: "Spread", max: "1", mid: "0.5", min: "0", nonlinearSlider: false, step: "any", tooltip: "Disk radius around X0/Y0. 0 = every spark on the pivot." },
       { defaultValue: "0", key: "x0", label: "X0", max: "1", mid: "0", min: "-1", nonlinearSlider: false, step: "any", tooltip: "Explosion pivot X (Left)." },
       { defaultValue: "0", key: "y0", label: "Y0", max: "1", mid: "0", min: "-1", nonlinearSlider: false, step: "any", tooltip: "Explosion pivot Y (Right)." },
-      { constraint: "cpu", defaultValue: "20", key: "numberOfPulses", label: "Sparks", max: "128", mid: "20", min: "1", nonlinearSlider: false, step: "1" },
+      { defaultValue: "20", key: "numberOfPulses", label: "Sparks", max: "1000", maxDigits: 5, mid: "20", min: "1", nonlinearSlider: false, step: "1" },
+      { defaultValue: "0", key: "fadeTime", label: "Fade", max: "60", mid: "1", min: "0", nonlinearSlider: false, smoothingType: "none", linearSmoothing: false, step: "any", unit: "s" },
       { defaultValue: "0.002", key: "hold", kind: "time", label: "Hold", max: "0.25", maxDigits: 5, mid: "0.002", min: "0", step: "any", unit: "s", tooltip: "Dwell at each spark so a 2D scope burns a dot. 0 is still one sample. Beam parks at X0/Y0 between sparks." },
       { defaultValue: "0", key: "seed", kind: "seed",
         maxDigits: 0, label: "Seed", max: "16777215", mid: "1", min: "0", nonlinearSlider: false, step: "1" },

@@ -13,7 +13,7 @@ const nodeGraphPulseExplosionFaceDisplaySettingsDefaults = Object.freeze({
   lineHue: 187.5,
   lineBrightness: 0.32,
   lineSaturation: 0.9,
-  lineThickness: 1.5,
+  lineThickness: 0,
   dotHue: 187.5,
   dotBrightness: 0.72,
   dotSaturation: 0.95,
@@ -84,7 +84,7 @@ function nodeGraphPulseExplosionPreviewLoad() {
   if (nodeGraphPulseExplosionPreviewWasm.promise || typeof fetch !== "function" || typeof WebAssembly === "undefined") {
     return nodeGraphPulseExplosionPreviewWasm.promise;
   }
-  nodeGraphPulseExplosionPreviewWasm.promise = fetch("/native_modules/pulse_explosion/pulse_explosion.wasm?v=pulse-xy-1")
+  nodeGraphPulseExplosionPreviewWasm.promise = fetch("/native_modules/pulse_explosion/pulse_explosion.wasm?v=pe-cap-16384-1")
     .then((response) => {
       if (!response.ok) throw new Error(`pulse_explosion wasm HTTP ${response.status}`);
       return response.arrayBuffer();
@@ -153,7 +153,7 @@ function nodeGraphPulseExplosionSchedule(section, node) {
  * (getOutputTimestamp). After the engine goes idle the heard playhead keeps
  * running from the last anchor until it passes the window end.
  */
-function nodeGraphPulseExplosionHeardElapsed(section, end) {
+function nodeGraphPulseExplosionHeardElapsed(section, end, fadeTime) {
   const ctx = nodeGraphMvp?.live?.context;
   const live = typeof nodeGraphModuleScopeLatestOutputValue === "function"
     ? Number(nodeGraphModuleScopeLatestOutputValue(section.dataset.node, "__Elapsed", Number.NaN))
@@ -170,7 +170,9 @@ function nodeGraphPulseExplosionHeardElapsed(section, end) {
   const stamp = ctx.getOutputTimestamp();
   const heard = stamp.contextTime + (performance.now() - stamp.performanceTime) / 1000;
   const e = section._pulseAnchorValue + (heard - section._pulseAnchorTime);
-  if (e > end) {
+  const fadeTau = Number(fadeTime);
+  const hang = fadeTau > 0 ? fadeTau * 6 : 0;
+  if (e > end + hang) {
     if (!(live >= 0)) section._pulseAnchorTime = Number.NaN;
     return Number.NaN;
   }
@@ -179,7 +181,15 @@ function nodeGraphPulseExplosionHeardElapsed(section, end) {
 
 /** Plot geometry: bipolar XY (−1…1) in a square inset. y-up (scope). */
 function nodeGraphPulseExplosionFaceGeometry(w, h, dotR) {
-  const pad = Math.max(6, Math.min(w, h) * 0.06) + dotR;
+  const minSide = typeof faceMinSide === "function" ? faceMinSide(w, h) : Math.min(w, h);
+  const gridPx = (typeof nodeGraphGrid === "object" && Number(nodeGraphGrid.heightPx) > 0)
+    ? Number(nodeGraphGrid.heightPx)
+    : 28;
+  const defaultMin = 2 * gridPx;
+  const inkPad = (typeof faceInkPx === "function")
+    ? faceInkPx(6 * ((typeof FACE_INK_REF_PX === "number" && FACE_INK_REF_PX > 0 ? FACE_INK_REF_PX : 96) / Math.max(1e-6, defaultMin)), minSide)
+    : 6 * (minSide / Math.max(1e-6, defaultMin));
+  const pad = Math.max(inkPad, minSide * 0.06) + dotR;
   const side = Math.max(1, Math.min(w, h) - pad * 2);
   const ox = (w - side) * 0.5;
   const oy = (h - side) * 0.5;
@@ -206,24 +216,37 @@ function drawNodeGraphPulseCurveDisplay(section) {
     nodeGraphDisplayGlFailed(canvas, "pulse explosion face: no shared GL device");
     return;
   }
-  const smoothing = typeof nodeGraphLineSmoothingPx === "function"
+  const minSide = typeof faceMinSide === "function" ? faceMinSide(w, h) : Math.min(w, h);
+  // Authored CSS px stay identical at the module's default face (2 GU x 28 px grid).
+  const gridPx = (typeof nodeGraphGrid === "object" && Number(nodeGraphGrid.heightPx) > 0)
+    ? Number(nodeGraphGrid.heightPx)
+    : 28;
+  const defaultMin = 2 * gridPx;
+  const ink = (authored) => {
+    const px = Math.max(0, Number(authored) || 0);
+    if (typeof faceInkPx === "function") {
+      const ref = (typeof FACE_INK_REF_PX === "number" && FACE_INK_REF_PX > 0) ? FACE_INK_REF_PX : 96;
+      return faceInkPx(px * (ref / Math.max(1e-6, defaultMin)), minSide);
+    }
+    return px * (minSide / Math.max(1e-6, defaultMin));
+  };
+  const smoothing = ink(typeof nodeGraphLineSmoothingPx === "function"
     ? nodeGraphLineSmoothingPx(look, 1)
-    : Math.max(0, Number(look.lineSmoothing) || 1);
-  const halfPx = look.lineThickness * 0.5;
-  const dotR = look.dotThickness * 0.5;
+    : Math.max(0, Number(look.lineSmoothing) || 1));
+  const halfPx = ink(look.lineThickness) * 0.5;
+  const dotR = ink(look.dotThickness) * 0.5;
   const schedule = nodeGraphPulseExplosionSchedule(section, node);
   const end = schedule ? schedule.end : Math.max(0.001, nodeGraphPulseExplosionFaceParam(node, "endTime", 1));
+  const fadeTau = Math.max(0, Math.min(60, nodeGraphPulseExplosionFaceParam(node, "fadeTime", 0) || 0));
   const g = nodeGraphPulseExplosionFaceGeometry(w, h, dotR);
   const line = rgba(look.strokePaint);
   const dot = rgba(look.dotPaint);
   const lit = rgba(look.litPaint);
-  const pivotPaint = rgba(look.playheadPaint);
   const dim = (c, a) => [c[0], c[1], c[2], (c[3] == null ? 1 : c[3]) * a];
   const x0 = schedule ? schedule.x0 : nodeGraphPulseExplosionFaceParam(node, "x0", 0);
   const y0 = schedule ? schedule.y0 : nodeGraphPulseExplosionFaceParam(node, "y0", 0);
   const spread = schedule ? schedule.spread : nodeGraphPulseExplosionFaceParam(node, "spread", 0.5);
-  const origin = g.at(x0, y0);
-  // Line thickness 0 = no line: ring, pivot and stems all go.
+  // Line thickness 0 = no circle outline (no minimum-width clamp).
   if (spread > 0.002 && halfPx > 0) {
     const segs = 48;
     const ring = [];
@@ -232,24 +255,25 @@ function drawNodeGraphPulseCurveDisplay(section) {
       const p = g.at(x0 + spread * Math.cos(a), y0 + spread * Math.sin(a));
       ring.push(p.x, p.y);
     }
-    nodeGraphGlLinesPolyline(batch, ring, Math.max(0.4, halfPx * 0.55), smoothing, dim(line, 0.45));
+    nodeGraphGlLinesPolyline(batch, ring, halfPx * 0.55, smoothing, dim(line, 0.45));
   }
-  const tick = Math.max(4, g.side * 0.03);
-  if (halfPx > 0) {
-    nodeGraphGlLinesSegment(batch, origin.x - tick, origin.y, origin.x + tick, origin.y, halfPx, smoothing, pivotPaint);
-    nodeGraphGlLinesSegment(batch, origin.x, origin.y - tick, origin.x, origin.y + tick, halfPx, smoothing, pivotPaint);
-  }
-  const elapsed = schedule ? nodeGraphPulseExplosionHeardElapsed(section, end) : Number.NaN;
+  const elapsed = schedule ? nodeGraphPulseExplosionHeardElapsed(section, end, fadeTau) : Number.NaN;
   const playing = Number.isFinite(elapsed);
   if (schedule) {
     const { times, xs, ys } = schedule;
+    const residual = (age) => (typeof PhosphorResidual === "object" && typeof PhosphorResidual.energyAfterSeconds === "function"
+      ? PhosphorResidual.energyAfterSeconds(1, fadeTau, age)
+      : Math.exp(-age / fadeTau));
     for (let i = 0; i < times.length; i += 1) {
       const p = g.at(xs[i], ys[i]);
       const fired = playing && times[i] <= elapsed;
       if (dotR > 0) {
         const age = fired ? elapsed - times[i] : Infinity;
+        const litAmt = fired ? (fadeTau > 0 ? residual(age) : 1) : 0;
         if (age < 0.12) nodeGraphGlLinesDot(batch, p.x, p.y, dotR * 2.2, smoothing, dim(lit, 0.35 * (1 - age / 0.12)));
-        nodeGraphGlLinesDot(batch, p.x, p.y, dotR, smoothing, fired ? lit : dim(dot, 0.55));
+        nodeGraphGlLinesDot(batch, p.x, p.y, dotR, smoothing, (fired && litAmt > 0.002)
+          ? (fadeTau > 0 ? dim(lit, litAmt) : lit)
+          : dim(dot, 0.55));
       }
     }
   }

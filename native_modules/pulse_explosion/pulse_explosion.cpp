@@ -37,7 +37,7 @@ enum : unsigned int {
 };
 
 static const int kMaxInstances = 16;
-static const int kMaxPulses = 128;
+static const int kMaxPulses = 16384;
 static const int kMaxRejectionAttempts = 200;
 
 struct ScheduledPulse {
@@ -115,13 +115,33 @@ static inline unsigned int burstRngState(double seed) {
   return seed_to_rng_state(seed_mix(seed_param_u32(seed), kSeedBurst));
 }
 
-static void insertSorted(ScheduledPulse* pulses, int count, ScheduledPulse toInsert) {
-  int i = count;
-  while (i > 0 && pulses[i - 1].time > toInsert.time) {
-    pulses[i] = pulses[i - 1];
-    i--;
+static void swapPulse(ScheduledPulse* a, ScheduledPulse* b) {
+  ScheduledPulse t = *a;
+  *a = *b;
+  *b = t;
+}
+
+static void siftDownPulses(ScheduledPulse* pulses, int start, int end) {
+  int root = start;
+  while (root * 2 + 1 <= end) {
+    int child = root * 2 + 1;
+    if (child + 1 <= end && pulses[child].time < pulses[child + 1].time) child += 1;
+    if (pulses[root].time >= pulses[child].time) return;
+    swapPulse(&pulses[root], &pulses[child]);
+    root = child;
   }
-  pulses[i] = toInsert;
+}
+
+static void sortPulsesByTime(ScheduledPulse* pulses, int count) {
+  if (count <= 1) return;
+  for (int start = (count - 2) / 2; start >= 0; start--) {
+    siftDownPulses(pulses, start, count - 1);
+    if (start == 0) break;
+  }
+  for (int end = count - 1; end > 0; end--) {
+    swapPulse(&pulses[0], &pulses[end]);
+    siftDownPulses(pulses, 0, end - 1);
+  }
 }
 
 static int buildSchedule(
@@ -144,13 +164,12 @@ static int buildSchedule(
     const double theta = kTwoPi * nextUniform01(rng);
     const double u = nextUniform01(rng);
     const double r = safeSpread * __builtin_sqrt(u);
-    ScheduledPulse pulse;
-    pulse.time = chosenTime;
-    pulse.x = x0 + r * dsp_cos(theta);
-    pulse.y = y0 + r * dsp_sin(theta);
-    insertSorted(pulses, count, pulse);
+    pulses[count].time = chosenTime;
+    pulses[count].x = x0 + r * dsp_cos(theta);
+    pulses[count].y = y0 + r * dsp_sin(theta);
     count++;
   }
+  sortPulsesByTime(pulses, count);
   return count;
 }
 
@@ -301,5 +320,5 @@ extern "C" double soemdsp_pulse_explosion_preview_y(int i) {
 }
 
 extern "C" int soemdsp_pulse_explosion_version() {
-  return 5;  // 5: stereo XY fireworks (spread around x0/y0, hold, gate_hit, Mono=(L+R)/2). was 4: Timing removed.
+  return 6;  // 6: sparks hard cap 16384 (slider 1-1000, type-in like Pulse Train). was 5: stereo XY fireworks.
 }

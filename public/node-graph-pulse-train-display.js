@@ -24,6 +24,7 @@
 
 const nodeGraphPulseTrainFaceDisplaySettingsDefaults = Object.freeze({
   ...nodeGraphPulseExplosionFaceDisplaySettingsDefaults,
+  lineThickness: 1.5,
   fadeTime: 0,
 });
 const NODE_GRAPH_PULSE_TRAIN_FACE_EXTRA_LAMPS = NODE_GRAPH_PULSE_EXPLOSION_FACE_EXTRA_LAMPS;
