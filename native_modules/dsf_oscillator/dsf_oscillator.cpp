@@ -49,6 +49,7 @@
 // One leaky integrator. No PWM. Type 46 never applies Spacing / Odd/Even.
 
 #include <soemdsp/soemdsp.hpp>
+#include <soemdsp/trigger/trigger.h>
 
 namespace {
 
@@ -780,6 +781,15 @@ extern "C" void soemdsp_dsf_oscillator_reset(int handle) {
   s.triDcOut = 0.0;
 }
 
+extern "C" void soemdsp_dsf_oscillator_partial_reset(int handle, double h) {
+  if (handle < 1 || handle > kMaxInstances) return;
+  DsfOscillatorState& s = gPool[handle - 1];
+  s.t = soemdsp::math::partial_reset_phase(s.t, 0.0, h, 1.0);
+  s.tm = soemdsp::math::partial_reset_phase(s.tm, 0.0, h, 1.0);
+  // Next sample re-primes the leaky chains at the new phase (no stale-integral click).
+  s.primed = false;
+}
+
 extern "C" void soemdsp_dsf_oscillator_set_spectrum(int handle, double, double) {
   (void)handle;
 }
@@ -1110,5 +1120,391 @@ extern "C" double soemdsp_dsf_oscillator_phase(int handle) {
 }
 
 extern "C" int soemdsp_dsf_oscillator_version() {
-  return 36;
+  return 37;
+}
+// DSF Formant (graph type 243): four pitch-locked Moorer bands.
+// Each band is a two-sided geometric window a^{|n - F/f0|} on harmonics
+// n = 1, 2, ... below Nyquist (finite DSF, O(1) via geoSeriesCS).
+// Sweep picks a vowel path; Vowel (0..1) walks that path with no wrap.
+// Per-band Freq / Width / Gain knobs scale the table (defaults = vowel A).
+// Body blends a one-sided low-harmonic DSF on the fundamental.
+// Both Body and the formant bands use the fractional Nyquist fade.
+
+namespace {
+
+struct DsfFormantState {
+  bool active = false;
+  bool smoothInit = false;
+  double t = 0.0;
+  double out = 0.0;
+  double renderPhase = 0.0;
+  double smoothF[4] = {730.0, 1090.0, 2440.0, 3400.0};
+  double smoothW[4] = {90.0, 110.0, 170.0, 250.0};
+  double smoothG[4] = {1.0, 0.7, 0.45, 0.25};
+};
+
+constexpr int kMaxFormantInstances = 16;
+static DsfFormantState gFormantPool[kMaxFormantInstances];
+
+// Male averages (Peterson & Barney) plus a typical F4 singer's-formant slot.
+// 0=A  1=E  2=I  3=O  4=U
+static const double kVowelF[5][4] = {
+  {730.0, 1090.0, 2440.0, 3400.0},
+  {530.0, 1840.0, 2480.0, 3500.0},
+  {270.0, 2290.0, 3010.0, 3500.0},
+  {570.0,  840.0, 2410.0, 3400.0},
+  {300.0,  870.0, 2240.0, 3300.0},
+};
+static const double kVowelW[5][4] = {
+  {90.0, 110.0, 170.0, 250.0},
+  {80.0, 120.0, 170.0, 250.0},
+  {70.0, 130.0, 180.0, 250.0},
+  {85.0, 100.0, 165.0, 240.0},
+  {70.0, 100.0, 160.0, 230.0},
+};
+static const double kVowelG[5][4] = {
+  {1.00, 0.70, 0.45, 0.25},
+  {0.90, 0.85, 0.45, 0.25},
+  {0.75, 0.95, 0.50, 0.25},
+  {0.95, 0.55, 0.40, 0.22},
+  {0.80, 0.50, 0.35, 0.20},
+};
+static const double kVowelRefF[4] = {730.0, 1090.0, 2440.0, 3400.0};
+static const double kVowelRefW[4] = {90.0, 110.0, 170.0, 250.0};
+static const double kVowelRefG[4] = {1.0, 0.7, 0.45, 0.25};
+
+// Sweep labels (JS): "E A O U", "I E", "A E I", "O E I", "Y U"
+struct FormantSweepSpec {
+  int n;
+  int v[4];
+};
+static const FormantSweepSpec kFormantSweeps[5] = {
+  {4, {2, 0, 3, 4}}, // I -> A -> O -> U  (saved index 0, was A -> O -> U)
+  {2, {2, 1, 0, 0}}, // I -> E
+  {3, {0, 1, 2, 0}}, // A -> E -> I
+  {3, {3, 1, 2, 0}}, // O -> E -> I
+  {2, {2, 4, 0, 0}}, // I -> U  ("Y U")
+};
+
+void formantMonotoneWaypoints(double* pts, int n) {
+  if (n < 2) return;
+  if (pts[n - 1] < pts[0]) {
+    for (int i = 1; i < n; ++i) {
+      if (pts[i] > pts[i - 1]) pts[i] = pts[i - 1];
+    }
+  } else if (pts[n - 1] > pts[0]) {
+    for (int i = 1; i < n; ++i) {
+      if (pts[i] < pts[i - 1]) pts[i] = pts[i - 1];
+    }
+  } else {
+    for (int i = 1; i < n; ++i) pts[i] = pts[0];
+  }
+}
+
+void evalFormantSweep(double sweep, double pos, double outF[4], double outW[4], double outG[4]) {
+  int si = static_cast<int>(dsp_floor(sweep + 0.5));
+  if (si < 0) si = 0;
+  if (si > 4) si = 4;
+  if (pos < 0.0) pos = 0.0;
+  if (pos > 1.0) pos = 1.0;
+  const FormantSweepSpec& sp = kFormantSweeps[si];
+  const int n = sp.n;
+  for (int b = 0; b < 4; ++b) {
+    double f[4], w[4], g[4];
+    for (int i = 0; i < n; ++i) {
+      f[i] = kVowelF[sp.v[i]][b];
+      w[i] = kVowelW[sp.v[i]][b];
+      g[i] = kVowelG[sp.v[i]][b];
+    }
+    // E A O U (index 0) F1 is the intended 270-730-570-300 rise-then-fall.
+    if (!(si == 0 && b == 0)) formantMonotoneWaypoints(f, n);
+    formantMonotoneWaypoints(w, n);
+    formantMonotoneWaypoints(g, n);
+    const double x = pos * static_cast<double>(n - 1);
+    int i0 = static_cast<int>(dsp_floor(x));
+    if (i0 < 0) i0 = 0;
+    if (i0 > n - 2) i0 = n - 2;
+    const double frac = x - static_cast<double>(i0);
+    double f0 = f[i0];
+    double f1 = f[i0 + 1];
+    if (f0 < 1.0) f0 = 1.0;
+    if (f1 < 1.0) f1 = 1.0;
+    outF[b] = dsp_exp(dsp_ln(f0) + (dsp_ln(f1) - dsp_ln(f0)) * frac);
+    outW[b] = w[i0] + (w[i0 + 1] - w[i0]) * frac;
+    outG[b] = g[i0] + (g[i0 + 1] - g[i0]) * frac;
+  }
+}
+
+double formantDspCeil(double x) {
+  return -dsp_floor(-x);
+}
+
+double formantWidenHz(double widthHz, double absF0) {
+  // Low-pitch widening: floor grows as pitch drops, no-op at normal pitches
+  // for the default widths (smallest default is 90 Hz).
+  // floor = 80 * 140 / f0  ->  ~204 Hz at 55 Hz, ~102 Hz at 110 Hz, ~51 Hz at 220 Hz.
+  double f = absF0;
+  if (f < 1.0) f = 1.0;
+  double floorHz = 80.0 * (140.0 / f);
+  if (floorHz > 4000.0) floorHz = 4000.0;
+  return (widthHz > floorHz) ? widthHz : floorHz;
+}
+
+double formantBandSine(double turns, double absF0, double formantHz, double bwHz, double nyquist) {
+  if (!(absF0 > 1.0e-9)) return 0.0;
+  if (!(formantHz > 1.0)) return 0.0;
+  if (!(nyquist > absF0)) return 0.0;
+
+  double N = formantHz / absF0;
+  // Same fractional Nyquist cap as DSF Oscillator / Morphing Osc: nf = Nyquist/f - 1,
+  // then crossfade the top partial (nLo vs nLo+1) so it never pops in or out.
+  double nf = sawPartials(nyquist, absF0);
+  double nLo = dsp_floor(nf);
+  if (nLo < 1.0) nLo = 1.0;
+  if (nLo > kMaxPartials) nLo = kMaxPartials;
+  const double nHi = (nLo < kMaxPartials) ? nLo + 1.0 : nLo;
+  const double fade = (nHi > nLo) ? (nf - nLo) : 0.0;
+  const double nMax = nLo;
+  const int nMaxI = static_cast<int>(nMax);
+
+  double bw = bwHz;
+  if (bw < 8.0) bw = 8.0;
+  // -6 dB full width of a^{|n-N|} equals bw Hz: a = exp(-2 ln(2) * f0 / bw).
+  double a = dsp_exp(-1.3862943611198906 * absF0 / bw);
+  if (a < 0.0) a = 0.0;
+  if (a > 0.999999999) a = 0.999999999;
+
+  const double nRound = dsp_floor(N + 0.5);
+  const double nErr = N - nRound;
+  const bool hasCenter = (nErr < 1.0e-9 && nErr > -1.0e-9);
+  const int nC = static_cast<int>(nRound);
+
+  double C = 0.0;
+  double S = 0.0;
+  if (hasCenter && nC >= 1 && nC <= nMaxI) {
+    double s0 = 0.0, c0 = 0.0;
+    kernelSinCosTurns(turns * static_cast<double>(nC), &s0, &c0);
+    S += s0;
+    C += c0;
+  }
+
+  double nStartU = hasCenter ? (static_cast<double>(nC) + 1.0) : formantDspCeil(N);
+  if (nStartU < 1.0) nStartU = 1.0;
+  if (nStartU <= nMax) {
+    int countU = static_cast<int>(dsp_floor(nMax - nStartU + 1.0 + 1.0e-12));
+    if (countU > static_cast<int>(kMaxPartials)) countU = static_cast<int>(kMaxPartials);
+    if (countU > 0) {
+      const double w0 = dsfPow(a, nStartU - N);
+      double Cu = 0.0, Su = 0.0;
+      geoSeriesCS(a, nStartU, 1.0, countU, turns, 0.0, Cu, Su);
+      C += w0 * Cu;
+      S += w0 * Su;
+    }
+  }
+
+  double nStartL = hasCenter ? (static_cast<double>(nC) - 1.0) : dsp_floor(N);
+  if (nStartL > nMax) nStartL = nMax;
+  if (nStartL >= 1.0) {
+    int countL = static_cast<int>(dsp_floor(nStartL - 1.0 + 1.0 + 1.0e-12));
+    if (countL > static_cast<int>(kMaxPartials)) countL = static_cast<int>(kMaxPartials);
+    if (countL > 0) {
+      const double w0 = dsfPow(a, N - nStartL);
+      double Cl = 0.0, Sl = 0.0;
+      geoSeriesCS(a, nStartL, -1.0, countL, turns, 0.0, Cl, Sl);
+      C += w0 * Cl;
+      S += w0 * Sl;
+    }
+  }
+
+  (void)C;
+  if (fade > 0.0) {
+    double sTop = 0.0, cTop = 0.0;
+    kernelSinCosTurns(turns * nHi, &sTop, &cTop);
+    double d = nHi - N;
+    if (d < 0.0) d = -d;
+    S += fade * dsfPow(a, d) * sTop;
+  }
+  // Keep each band near unity peak as width/pitch change (two-sided weight sum).
+  const double norm = (1.0 + a) / (1.0 - a);
+  if (norm > 1.0e-9) S /= norm;
+  return S;
+}
+
+// One-sided geometric series on harmonics 1..N, rolloff upward, same Nyquist fade.
+double formantBodySine(double turns, double absF0, double nyquist) {
+  if (!(absF0 > 1.0e-9)) return 0.0;
+  if (!(nyquist > absF0)) return 0.0;
+  double nf = sawPartials(nyquist, absF0);
+  double nLo = dsp_floor(nf);
+  if (nLo < 1.0) nLo = 1.0;
+  if (nLo > kMaxPartials) nLo = kMaxPartials;
+  const double nHi = (nLo < kMaxPartials) ? nLo + 1.0 : nLo;
+  const double fade = (nHi > nLo) ? (nf - nLo) : 0.0;
+  const double a = 0.55;
+  double C = 0.0, S = 0.0;
+  const int count = static_cast<int>(nLo);
+  if (count > 0) {
+    geoSeriesCS(a, 1.0, 1.0, count, turns, 0.0, C, S);
+  }
+  if (fade > 0.0) {
+    double sTop = 0.0, cTop = 0.0;
+    kernelSinCosTurns(turns * nHi, &sTop, &cTop);
+    S += fade * dsfPow(a, nHi - 1.0) * sTop;
+  }
+  (void)C;
+  return S;
+}
+
+}  // namespace
+
+extern "C" int soemdsp_dsf_formant_create() {
+  for (int i = 0; i < kMaxFormantInstances; i++) {
+    if (!gFormantPool[i].active) {
+      gFormantPool[i] = DsfFormantState{};
+      gFormantPool[i].active = true;
+      return i + 1;
+    }
+  }
+  return 0;
+}
+
+extern "C" void soemdsp_dsf_formant_destroy(int handle) {
+  if (handle < 1 || handle > kMaxFormantInstances) return;
+  gFormantPool[handle - 1].active = false;
+}
+
+extern "C" void soemdsp_dsf_formant_reset(int handle) {
+  if (handle < 1 || handle > kMaxFormantInstances) return;
+  DsfFormantState& s = gFormantPool[handle - 1];
+  s.t = 0.0;
+  s.out = 0.0;
+  s.renderPhase = 0.0;
+  s.smoothInit = false;
+}
+
+extern "C" void soemdsp_dsf_formant_partial_reset(int handle, double h) {
+  if (handle < 1 || handle > kMaxFormantInstances) return;
+  DsfFormantState& s = gFormantPool[handle - 1];
+  s.t = soemdsp::math::partial_reset_phase(s.t, 0.0, h, 1.0);
+}
+
+extern "C" void soemdsp_dsf_formant_eval_sweep(
+  double sweep,
+  double pos,
+  double* f1,
+  double* f2,
+  double* f3,
+  double* f4
+) {
+  double outF[4], outW[4], outG[4];
+  evalFormantSweep(sweep, pos, outF, outW, outG);
+  if (f1) *f1 = outF[0];
+  if (f2) *f2 = outF[1];
+  if (f3) *f3 = outF[2];
+  if (f4) *f4 = outF[3];
+}
+
+extern "C" void soemdsp_dsf_formant_sample(
+  int handle,
+  double frequencyHz,
+  double sampleRate,
+  double phase,
+  double level,
+  double vowel,
+  double sweep,
+  double body,
+  double f1, double w1, double g1, double on1,
+  double f2, double w2, double g2, double on2,
+  double f3, double w3, double g3, double on3,
+  double f4, double w4, double g4, double on4
+) {
+  if (handle < 1 || handle > kMaxFormantInstances) return;
+  DsfFormantState& s = gFormantPool[handle - 1];
+
+  const double safeSampleRate = sampleRate > 1.0 ? sampleRate : 48000.0;
+  const double absFrequency = frequencyHz < 0.0 ? -frequencyHz : frequencyHz;
+  const double safeAbsFrequency = absFrequency > 1.0e-6 ? absFrequency : 1.0e-6;
+  const double dt = clamp(frequencyHz / safeSampleRate, -0.5, 0.5);
+  const double phaseOffset = wrap01(phase);
+  const double nyquist = safeSampleRate * 0.5;
+
+  s.t = wrap01(s.t + dt);
+  const double renderT = wrap01(s.t + phaseOffset);
+  s.renderPhase = renderT;
+
+  double tableF[4], tableW[4], tableG[4];
+  evalFormantSweep(sweep, vowel, tableF, tableW, tableG);
+
+  // ~8 ms one-pole on formant / width / gain targets so a Sweep switch does not click.
+  if (!s.smoothInit) {
+    for (int b = 0; b < 4; ++b) {
+      s.smoothF[b] = tableF[b];
+      s.smoothW[b] = tableW[b];
+      s.smoothG[b] = tableG[b];
+    }
+    s.smoothInit = true;
+  } else {
+    double coeff = 1.0 - dsp_exp(-1.0 / (0.008 * safeSampleRate));
+    if (coeff < 0.0) coeff = 0.0;
+    if (coeff > 1.0) coeff = 1.0;
+    for (int b = 0; b < 4; ++b) {
+      s.smoothF[b] += coeff * (tableF[b] - s.smoothF[b]);
+      s.smoothW[b] += coeff * (tableW[b] - s.smoothW[b]);
+      s.smoothG[b] += coeff * (tableG[b] - s.smoothG[b]);
+    }
+  }
+
+  const double knobF[4] = {f1, f2, f3, f4};
+  const double knobW[4] = {w1, w2, w3, w4};
+  const double knobG[4] = {g1, g2, g3, g4};
+  const double knobOn[4] = {on1, on2, on3, on4};
+
+  double sample = 0.0;
+  for (int b = 0; b < 4; ++b) {
+    if (knobOn[b] < 0.5) continue;
+    double hz = s.smoothF[b];
+    const double refF = kVowelRefF[b];
+    if (refF > 1.0e-9 && knobF[b] > 1.0e-9) hz *= (knobF[b] / refF);
+    if (hz < 20.0) hz = 20.0;
+    const double hzCap = nyquist * 0.98;
+    if (hz > hzCap) hz = hzCap;
+    double bw = s.smoothW[b];
+    const double refW = kVowelRefW[b];
+    if (refW > 1.0e-9) bw *= (knobW[b] / refW);
+    bw = formantWidenHz(bw, safeAbsFrequency);
+    double gain = s.smoothG[b];
+    const double refG = kVowelRefG[b];
+    if (refG > 1.0e-9) gain *= (knobG[b] / refG);
+    if (gain == 0.0) continue;
+    sample += gain * formantBandSine(renderT, safeAbsFrequency, hz, bw, nyquist);
+  }
+
+  double bodyAmt = body;
+  if (bodyAmt < 0.0) bodyAmt = 0.0;
+  if (bodyAmt > 1.0) bodyAmt = 1.0;
+  if (bodyAmt > 0.0) {
+    sample += bodyAmt * 1.15 * formantBodySine(renderT, safeAbsFrequency, nyquist);
+  }
+
+  // Band-normalized sum plus Body; this trim keeps default 100 Hz near unity
+  // (raw defaults previously peaked near 2.7 before any Body).
+  sample *= 0.42;
+
+  const bool finite = sample * 0.0 == 0.0;
+  if (!finite) sample = 0.0;
+  s.out = clamp(sample, -4.0, 4.0) * level;
+}
+
+extern "C" double soemdsp_dsf_formant_out(int handle) {
+  if (handle < 1 || handle > kMaxFormantInstances) return 0.0;
+  return gFormantPool[handle - 1].out;
+}
+
+extern "C" double soemdsp_dsf_formant_phase(int handle) {
+  if (handle < 1 || handle > kMaxFormantInstances) return 0.0;
+  return gFormantPool[handle - 1].renderPhase;
+}
+
+extern "C" int soemdsp_dsf_formant_version() {
+  return 3;
 }
