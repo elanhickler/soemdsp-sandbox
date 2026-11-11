@@ -57,11 +57,10 @@ const nodeGraphInstantTraceDisplayFieldOrder = Object.freeze([
 ]);
 
 // Instant Waterfall: History / Detail / Bright / Blur.
-// Detail is column start rate (shared skew). Persist / Bloom / stamp-density stay off.
+// Persist / Bloom / stamp-density stay off.
 const nodeGraphInstantWaterfallDisplayFieldOrder = Object.freeze([
   "scale",
   "historySeconds",
-  "detail",
   "strokeThickness",
   "backgroundBrightness",
   "backgroundHue",
@@ -319,7 +318,6 @@ const nodeGraphTraceDisplayActiveControlsByType = Object.freeze({
     fields: Object.freeze([
       "scale",
       "historySeconds",
-      "detail",
       "strokeThickness",
     ]),
     colors: Object.freeze(["dot1Color", "secondaryColor", "tertiaryColor", "backgroundColor", "strokeColor", "strokeLeftColor", "strokeRightColor"]),
@@ -514,7 +512,6 @@ const nodeGraphTraceDisplayActiveControlsByType = Object.freeze({
     fields: Object.freeze([
       "scale",
       "historySeconds",
-      "detail",
       "strokeThickness",
       "backgroundBrightness",
       "backgroundHue",
@@ -530,7 +527,6 @@ const nodeGraphTraceDisplayActiveControlsByType = Object.freeze({
     fields: Object.freeze([
       "scale",
       "historySeconds",
-      "detail",
       "strokeThickness",
       "backgroundBrightness",
       "backgroundHue",
@@ -1160,7 +1156,6 @@ const nodeGraphTraceDisplaySectionControls = Object.freeze({
       "innerShadowOffsetY",
       "zoomSeconds",
       "historySeconds",
-      "detail",
       "cloudSpeed",
       "scale",
       "pixelDensity",
@@ -1444,17 +1439,6 @@ const nodeGraphDisplaySettingsFieldMeta = Object.freeze({
     sliderCurve: "custom",
     curveAmount: -1,
     title: "Seconds of history across the Instant Waterfall face. Longer = slower scroll. Drag is skewed so short windows have more travel and the top of the range approaches slowly. At 0 the face is the current bar.",
-  }),
-  detail: Object.freeze({
-    label: "Detail",
-    inputmode: "decimal",
-    id: "nodeTraceDisplayWaterfallDetail",
-    // Same custom skew as History. Not a private drag mapper.
-    // 0..1, default 1 = one bar per layout pixel (max). Exponent 4 keeps travel near coarser slices.
-    nonlinearSlider: true,
-    sliderCurve: "custom",
-    curveAmount: -1,
-    title: "How often a new bar starts. 1 = one bar per layout pixel (cap). Lower holds each bar across a longer stretch (fewer columns, chunkier fills). The bar still fills its column. Not thickness. 0 = one column.",
   }),
   fftSize: Object.freeze({
     label: "FFT size",

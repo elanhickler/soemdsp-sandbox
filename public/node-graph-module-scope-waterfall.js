@@ -1050,6 +1050,9 @@ function nodeGraphWaterfallAccMake() {
   return {
     min: Infinity, max: -Infinity, has: false, minAt: 0, maxAt: 0, last: Number.NaN,
     jump: 0, jumpAt: -1, jumpFrom: Number.NaN, jumpTo: Number.NaN,
+    // Column time span (buffer index units): the stroke places min / max at
+    // their true time inside the column, not at even fractions (stairs).
+    spanStart: Number.NaN, spanEnd: Number.NaN,
   };
 }
 
@@ -1072,6 +1075,10 @@ function nodeGraphWaterfallAccPush(acc, buffer, start, end, settings = null, slo
   if (!acc || !buffer?.length) {
     return acc;
   }
+  const s0 = Number(start);
+  const s1 = Number(end);
+  if (Number.isFinite(s0) && !(acc.spanStart <= s0)) acc.spanStart = s0;
+  if (Number.isFinite(s1) && !(acc.spanEnd >= s1)) acc.spanEnd = s1;
   const from = Math.max(0, Math.floor(start));
   const to = Math.min(buffer.length, Math.max(from, Math.floor(end)));
   if (to <= from) {
@@ -1166,6 +1173,8 @@ function nodeGraphWaterfallAccReset(acc) {
   acc.jumpAt = -1;
   acc.jumpFrom = Number.NaN;
   acc.jumpTo = Number.NaN;
+  acc.spanStart = Number.NaN;
+  acc.spanEnd = Number.NaN;
   return acc;
 }
 
@@ -1180,6 +1189,33 @@ function nodeGraphWaterfallSkipDiscontinuities(settings) {
 // discontinuity (1/8 of the face = a quarter of the half-height). Measured on
 // screen, so it works at any amplitude the waterfall scales up.
 const NODE_GRAPH_WATERFALL_JUMP_FACE_SHARE = 0.125;
+
+// Waterfall frame: the ONE source of truth for display padding (CSS px; x
+// devicePixelRatio x Performance-view ink scale at draw time). Every
+// waterfall face uses these.
+//   minPadY   top / bottom inset, at least half the line width + 1 px, so a
+//             full-scale line never clips
+//   padRight  the "now" edge: new columns are stamped this far in, so a line's
+//             round end shows as a pen head (fill mode: a clean flat edge)
+//   padLeft   where history leaves: a plate margin ...
+//   fadeLeft  ... and a fade over this width before it (mask at present time)
+const NODE_GRAPH_WATERFALL_FRAME = Object.freeze({ minPadY: 4, padRight: 6, padLeft: 6, fadeLeft: 8 });
+
+/** Device px per frame CSS px for a waterfall canvas (dpr x tile ink scale). */
+function nodeGraphWaterfallFrameScale(canvas) {
+  const dpr = Math.max(1, (canvas?.width || 1) / Math.max(1, canvas?.clientWidth || canvas?.width || 1));
+  const ink = typeof nodeGraphGlLinesInkScale === "function" ? nodeGraphGlLinesInkScale(canvas) : 1;
+  return dpr * ink;
+}
+
+/** Frame padding in history (device) px, rounded to whole columns. */
+function nodeGraphWaterfallFramePx(canvas) {
+  const k = nodeGraphWaterfallFrameScale(canvas);
+  const f = NODE_GRAPH_WATERFALL_FRAME;
+  const W = Math.max(1, Number(canvas?.width) || 1);
+  const cap = (v) => Math.max(0, Math.min(Math.floor(W * 0.2), Math.round(v * k)));
+  return { minPadY: f.minPadY * k, padRight: cap(f.padRight), padLeft: cap(f.padLeft), fadeLeft: cap(f.fadeLeft) };
+}
 
 /**
  * Stroke = draw the waveform. Raw samples of one column in time order:
@@ -1208,10 +1244,22 @@ function nodeGraphWaterfallWaveRaw(acc, settings = null, breakJump = false) {
     return [...before, null, ...after];
   }
   const out = [a];
-  if (nodeGraphWaterfallPolarity(settings) === "absolute" && acc.min < 0 && acc.max > 0) out.push(0);
+  const absMid = nodeGraphWaterfallPolarity(settings) === "absolute" && acc.min < 0 && acc.max > 0;
+  if (absMid) out.push(0);
   out.push(b);
   const last = Number(acc.last);
   if (Number.isFinite(last)) out.push(last);
+  // True time of each point inside the column, 0..1 (like 1D Plot's
+  // first/min/max/last at true x). A slow ramp's min sits at the column start
+  // and its max at the end: spread at even fractions that drew a flat half
+  // and a rise every column, a staircase.
+  const span = Number(acc.spanEnd) - Number(acc.spanStart);
+  if (span > 0 && !absMid) {
+    const tOf = (at) => Math.max(0, Math.min(1, (Number(at) - acc.spanStart) / span));
+    const tA = tOf(minFirst ? acc.minAt : acc.maxAt);
+    const tB = Math.max(tA, tOf(minFirst ? acc.maxAt : acc.minAt));
+    out.ts = Number.isFinite(last) ? [tA, tB, 1] : [tA, tB];
+  }
   return out;
 }
 
@@ -1230,6 +1278,7 @@ function nodeGraphWaterfallWaveYs(acc, buffer, slot, settings, height) {
   }
   const raw = nodeGraphWaterfallWaveRaw(acc, settings, breakJump);
   const ys = [];
+  const ts = raw.ts ? [] : null;
   for (let i = 0; i < raw.length; i += 1) {
     if (raw[i] === null) {
       if (ys.length && ys[ys.length - 1] !== null) ys.push(null);
@@ -1237,8 +1286,15 @@ function nodeGraphWaterfallWaveYs(acc, buffer, slot, settings, height) {
     }
     const y = toY(raw[i]);
     const prev = ys.length ? ys[ys.length - 1] : null;
-    if (Number.isFinite(y) && (prev === null || Math.abs(prev - y) > 1e-6)) ys.push(y);
+    if (Number.isFinite(y) && (prev === null || Math.abs(prev - y) > 1e-6)) {
+      ys.push(y);
+      if (ts) ts.push(raw.ts[i]);
+    } else if (ts && ts.length && Number.isFinite(y)) {
+      // Same height later: the flat run lasts until this later time.
+      ts[ts.length - 1] = raw.ts[i];
+    }
   }
+  if (ts) ys.ts = ts;
   return ys;
 }
 
@@ -1302,8 +1358,14 @@ function nodeGraphWaterfallStrokeWaveRun(canvas, bag, key, cols, settings, strok
         draw(run);
         run = [];
       }
-      if (!run.length) run.push({ x: x + i / n, y });
-      run.push({ x: x + (i + 1) / n, y });
+      // True time inside the column when known (ys.ts), else even spread.
+      const ts = ys.ts;
+      const t1 = ts && Number.isFinite(ts[i]) ? ts[i] : (i + 1) / n;
+      const t0 = ts ? (i > 0 && Number.isFinite(ts[i - 1]) ? ts[i - 1] : 0) : i / n;
+      if (!run.length) run.push({ x: x + t0, y });
+      const lastPt = run[run.length - 1];
+      if (x + t1 > lastPt.x + 1e-6) run.push({ x: x + t1, y });
+      else lastPt.y = y;
     }
   }
   draw(run);
@@ -1853,19 +1915,6 @@ function nodeGraphWaterfallFinishOutputInk(spec, context, canvas, scrollPx) {
  * 1 = one bar per layout pixel (max). barPx = backingStoreWidth / columns.
  * At detail 1 the stamp interpolates between those column values.
  */
-function nodeGraphWaterfallDetail(settings) {
-  const raw = Number(settings?.detail);
-  const detail = Number.isFinite(raw) ? raw : 1;
-  const lo = typeof NODE_GRAPH_WATERFALL_DETAIL_MIN === "number" ? NODE_GRAPH_WATERFALL_DETAIL_MIN : 0;
-  const hi = typeof NODE_GRAPH_WATERFALL_DETAIL_MAX === "number" ? NODE_GRAPH_WATERFALL_DETAIL_MAX : 1;
-  return Math.max(lo, Math.min(hi, detail));
-}
-
-/** Detail 1 joins column edges. Below 1, columns stay independent flat bars. */
-function nodeGraphWaterfallDetailConnects(settings) {
-  return nodeGraphWaterfallDetail(settings) >= 0.999;
-}
-
 function nodeGraphWaterfallLayoutColumns(spec, canvas, settings) {
   const density = typeof nodeGraphFacePlateDensity === "function"
     ? nodeGraphFacePlateDensity(settings, nodeGraphFiniteNumber(spec?.density, 1))
@@ -1887,12 +1936,35 @@ function nodeGraphWaterfallLayoutColumns(spec, canvas, settings) {
   }
   cssW = Math.max(1, cssW);
   const baseColumns = Math.max(1, Math.round(cssW * density));
-  const detail = nodeGraphWaterfallDetail(settings);
-  const columns = Math.max(1, Math.round(baseColumns * detail));
+  // One column per layout pixel x density (Detail removed: always full, joined).
+  const columns = baseColumns;
   const barPx = backing / columns;
-  return { columns, barPx, density, cssW, detail };
+  return { columns, barPx, density, cssW };
 }
 
+
+/**
+ * Plot box in history px: { top, h }. Inset top and bottom by the stroke
+ * reach (half the line + AA) so a full-scale line is never clipped, and
+ * leave canvas._faceTextReservePx free at the bottom for a face text strip.
+ */
+function nodeGraphWaterfallPlotBox(canvas, settings, height) {
+  const H = Math.max(1, nodeGraphFiniteNumber(height, 1));
+  const strokePx = typeof nodeGraphOnsetStrokeCanvasPx === "function"
+    ? nodeGraphOnsetStrokeCanvasPx(canvas, settings)
+    : nodeGraphWaterfallStrokePx(settings);
+  const frame = nodeGraphWaterfallFramePx(canvas);
+  const pad = Math.min(H * 0.25, Math.max(frame.minPadY, Math.max(0, strokePx) * 0.5 + 1));
+  const reserve = Math.min(H * 0.5, Math.max(0, nodeGraphFiniteNumber(canvas?._faceTextReservePx, 0)));
+  return { top: pad, h: Math.max(1, H - pad * 2 - reserve) };
+}
+
+/** Shift stroke ys by dy, keeping their per-point times (ys.ts). */
+function nodeGraphWaterfallShiftYs(ys, dy) {
+  const out = ys.map((y) => (y === null ? null : y + dy));
+  if (ys.ts) out.ts = ys.ts;
+  return out;
+}
 
 /** Peak-to-peak Y for one open column accumulator. Silent columns draw nothing. */
 function nodeGraphWaterfallAccBarYs(acc, buffer, slot, settings, height) {
@@ -1942,7 +2014,10 @@ function nodeGraphWaterfallAccBarYs(acc, buffer, slot, settings, height) {
  * Returns the pixel fill of the still-open column (0 if one just completed).
  */
 function nodeGraphWaterfallSmoothAdvance(destCtx, destCanvas, spec, options) {
-  const width = destCanvas.width;
+  // Tape width: new columns stamp NODE_GRAPH_WATERFALL_FRAME.padRight in from
+  // the edge; the margin right of it is cleared every frame (see below).
+  const fullWidth = destCanvas.width;
+  const width = Math.max(1, fullWidth - nodeGraphWaterfallFramePx(destCanvas).padRight);
   const height = destCanvas.height;
   const settings = spec.settings || {};
   const advancePx = Math.max(0, nodeGraphFiniteNumber(options?.advancePx));
@@ -1990,7 +2065,7 @@ function nodeGraphWaterfallSmoothAdvance(destCtx, destCanvas, spec, options) {
   } else if (mode === "combine" || mode === "meet") {
     stampComposite = "lighter";
   }
-  const connectEdge = nodeGraphWaterfallDetailConnects(settings);
+  const connectEdge = true;
   const edgeMap = connectEdge
     ? (destCanvas._waterfall.edge || (destCanvas._waterfall.edge = Object.create(null)))
     : null;
@@ -2012,8 +2087,10 @@ function nodeGraphWaterfallSmoothAdvance(destCtx, destCanvas, spec, options) {
     redo = bag.recentCols.filter((c) => c.x >= pix0 - reach && c.x < pix0);
   }
   const clipX0 = redo.length ? redo[0].x : pix0;
-  if (typeof nodeGraphWaterfallGlClearColumn === "function" && width > clipX0) {
-    nodeGraphWaterfallGlClearColumn(destCanvas, clipX0, width - clipX0, plateBg);
+  if (typeof nodeGraphWaterfallGlClearColumn === "function" && fullWidth > clipX0) {
+    // Through the right margin too: the pen head reaching into it is redrawn
+    // each frame, and last frame's head scrolls into this strip.
+    nodeGraphWaterfallGlClearColumn(destCanvas, clipX0, fullWidth - clipX0, plateBg);
   }
   for (const c of redo) {
     nodeGraphWaterfallStampColumnFills(destCanvas, c.x, c.spans, mode, stampComposite, useFill);
@@ -2041,15 +2118,25 @@ function nodeGraphWaterfallSmoothAdvance(destCtx, destCanvas, spec, options) {
       if (mapped) {
         nodeGraphWaterfallAccPush(acc, buf, mapped.start, mapped.end, settings, spec.slot);
       }
-      const ys = mapped
-        ? nodeGraphWaterfallAccBarYs(acc, ch.buffer, spec.slot, settings, height)
+      // Plot box: inset by the stroke reach (the line never clips at 0 / 1)
+      // and above a face text strip (nodeGraphFaceTextSet), so the waveform
+      // never runs over the numbers.
+      const plot = nodeGraphWaterfallPlotBox(destCanvas, settings, height);
+      const barYs = mapped
+        ? nodeGraphWaterfallAccBarYs(acc, ch.buffer, spec.slot, settings, plot.h)
         : null;
+      const ys = barYs ? {
+        y0: barYs.y0 + plot.top, y1: barYs.y1 + plot.top,
+        strokeY0: barYs.strokeY0 + plot.top, strokeY1: barYs.strokeY1 + plot.top,
+      } : null;
       const key = ch.lastYKey || String(i);
       if (!ys && edgeMap) delete edgeMap[key];
       columnSpans.push({
         key,
         ys,
-        waveYs: useStroke && mapped ? nodeGraphWaterfallWaveYs(acc, ch.buffer, spec.slot, settings, height) : null,
+        waveYs: useStroke && mapped
+          ? nodeGraphWaterfallShiftYs(nodeGraphWaterfallWaveYs(acc, ch.buffer, spec.slot, settings, plot.h), plot.top)
+          : null,
         prevEdge: connectEdge && edgeMap ? edgeMap[key] : null,
         strokeColor: ch.strokeColor,
         // Brightness = ink alpha (4th entry), like the bar path.

@@ -1006,7 +1006,6 @@ function applyNodeGraphTraceDisplaySettingsForm(options = {}) {
         || k === "plotDraw"
         || k === "barInk"
         || k === "pixelDensity"
-        || k === "detail"
         || k === "scale";
     });
   if (typeof paintNodeGraphModuleScopeColdPlatesOnly === "function" && !inkOnly) {

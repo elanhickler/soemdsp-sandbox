@@ -1591,9 +1591,11 @@ function nodeGraphFaceInkDraw(face) {
  * list of [label, value] cells spread evenly across the width, label dim and
  * value bright, like a device's LCD line. Set it with nodeGraphFaceTextSet.
  */
-function nodeGraphFaceTextDraw(face) {
+function nodeGraphFaceFrameDraw(face) {
   const cells = face?._faceText;
-  if (!Array.isArray(cells) || !cells.length) return true;
+  const hasText = Array.isArray(cells) && cells.length > 0;
+  const frame = typeof nodeGraphWaterfallFramePx === "function" ? nodeGraphWaterfallFramePx(face) : null;
+  if (!hasText && !(frame && (frame.padLeft > 0 || frame.fadeLeft > 0))) return true;
   const batch = typeof nodeGraphGlLinesBegin === "function"
     ? nodeGraphGlLinesBegin(face, [0, 0, 0, 0], { publishNodeId: "", textInk: false })
     : null;
@@ -1606,8 +1608,36 @@ function nodeGraphFaceTextDraw(face) {
   const dpr = Math.max(1, (face.width || 1) / Math.max(1, face.clientWidth || face.width || 1)) * ink;
   const w = batch.w;
   const h = batch.h;
+  const plateRgb = typeof nodeGraphGlGraphParseCssColor === "function"
+    ? nodeGraphGlGraphParseCssColor(face._wfGlSession?.plateCss || "#000000", [0, 0, 0, 1])
+    : [0, 0, 0, 1];
+  if (frame && typeof nodeGraphGlLinesRect === "function") {
+    // Left: solid plate margin, then history fades in over fadeLeft (a mask at
+    // present time; the tape itself is never changed).
+    if (frame.padLeft > 0) nodeGraphGlLinesRect(batch, 0, 0, frame.padLeft, h, [plateRgb[0], plateRgb[1], plateRgb[2], 1]);
+    for (let i = 0; i < frame.fadeLeft; i += 1) {
+      const a = 1 - (i + 0.5) / frame.fadeLeft;
+      nodeGraphGlLinesRect(batch, frame.padLeft + i, 0, 1, h, [plateRgb[0], plateRgb[1], plateRgb[2], a * a]);
+    }
+  }
+  if (!hasText) {
+    if (!nodeGraphGlLinesDrawInto(batch)) {
+      nodeGraphDisplayGlFailed(face, "face frame: GL draw failed");
+      return false;
+    }
+    return true;
+  }
   const px = 13 * dpr;
   const y = h - 6 * dpr;
+  // The strip: its own plate under the numbers and a hairline divider above.
+  const stripH = Math.min(h, face._faceTextReservePx || 0);
+  if (stripH > 0 && typeof nodeGraphGlLinesRect === "function") {
+    const plate = typeof nodeGraphGlGraphParseCssColor === "function"
+      ? nodeGraphGlGraphParseCssColor(face._wfGlSession?.plateCss || "#000000", [0, 0, 0, 1])
+      : [0, 0, 0, 1];
+    nodeGraphGlLinesRect(batch, 0, h - stripH, w, stripH, [plate[0], plate[1], plate[2], 1]);
+    nodeGraphGlLinesRect(batch, 0, h - stripH, w, Math.max(1, Math.round(dpr)), [0.22, 0.26, 0.33, 1]);
+  }
   const family = "\"Cascadia Mono\", Consolas, \"Courier New\", monospace";
   const opts = (rgba, align) => (typeof nodeGraphGlGraphTextOpts === "function"
     ? nodeGraphGlGraphTextOpts({ px, rgba, align, baseline: "bottom", weight: 400, family })
@@ -1634,14 +1664,33 @@ function nodeGraphFaceTextDraw(face) {
   return true;
 }
 
+/** Strip height in history px (13 px text + margins, x dpr x tile ink scale). */
+function nodeGraphFaceTextReserve(face, peek = false) {
+  if (!face) return 0;
+  const ink = typeof nodeGraphGlLinesInkScale === "function" ? nodeGraphGlLinesInkScale(face) : 1;
+  const dpr = Math.max(1, (face.width || 1) / Math.max(1, face.clientWidth || face.width || 1)) * ink;
+  const px = Array.isArray(face._faceText) && face._faceText.length ? Math.round(22 * dpr) : 0;
+  if (peek) {
+    if (face._faceTextReservePx === px) return px;
+  }
+  if (face._faceTextReservePx !== px) {
+    face._faceTextReservePx = px;
+    // The plot box changed: old tape was drawn to the old box.
+    if (typeof nodeGraphWaterfallGlWipe === "function") nodeGraphWaterfallGlWipe(face);
+  }
+  return px;
+}
+
 /** Set a waterfall face's status cells ([[label, value], ...]); re-presents on change. */
 function nodeGraphFaceTextSet(face, cells) {
   if (!face) return;
   const next = Array.isArray(cells) ? cells.map((c) => [String(c[0]), String(c[1])]) : null;
   const key = next ? JSON.stringify(next) : "";
-  if (face._faceTextKey === key) return;
-  face._faceTextKey = key;
   face._faceText = next;
+  // Re-checked every call: a Performance view tile resize changes the strip.
+  const reserveChanged = face._faceTextReservePx !== nodeGraphFaceTextReserve(face, true);
+  if (face._faceTextKey === key && !reserveChanged) return;
+  face._faceTextKey = key;
   const s = face._wfGlSession;
   if (s && typeof nodeGraphWaterfallGlPresent === "function") nodeGraphWaterfallGlPresent(face, s.plateCss || "#000000");
 }

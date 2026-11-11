@@ -704,8 +704,6 @@ function nodeGraphTraceDisplayClampHistoryCycles(value, fallback = 4) {
 const NODE_GRAPH_WATERFALL_HISTORY_SEC_EPS = 1e-12;
 // Detail multiplies layout-pixel columns. 1 = one bar per layout pixel (cap).
 // 0 collapses to a single column. Above 1 is not a waterfall mode.
-const NODE_GRAPH_WATERFALL_DETAIL_MIN = 0;
-const NODE_GRAPH_WATERFALL_DETAIL_MAX = 1;
 function nodeGraphWaterfallClampHistorySeconds(value, fallback = 0.25) {
   const n = Number(value);
   const maxSec = typeof nodeGraphWaterfallMaxHistorySeconds === "number"
@@ -980,12 +978,6 @@ function normalizeNodeGraphWaterfallSettings(settings = {}) {
     // 1D Trace still stores its own syncChannel via its normalize path.
     syncChannel: "off",
     ...normalizeNodeGraphWaterfallHistory(source, defaults),
-    detail: normalizeNodeGraphTraceDisplayNumber(
-      source.detail,
-      defaults.detail ?? 1,
-      NODE_GRAPH_WATERFALL_DETAIL_MIN,
-      NODE_GRAPH_WATERFALL_DETAIL_MAX,
-    ),
     barThickness: normalizeNodeGraphTraceDisplayNumber(
       source.barThickness,
       defaults.barThickness ?? 1,

@@ -1665,7 +1665,6 @@ function buildNodeGraphInstantTraceDisplaySettingsBodyHtml(type, node, allowKey)
     "historyCycles",
     "historySeconds",
     "zoomSeconds",
-    "detail",
     "strokeThickness",
     "timeMs",
     "backgroundBrightness",
@@ -1737,10 +1736,6 @@ function buildNodeGraphInstantTraceDisplaySettingsBodyHtml(type, node, allowKey)
     rows.push(nodeGraphDisplaySettingsBuildToggleRowHtml("autoRange"));
   }
   usedToggles.add("autoRange");
-  const isOnsetFace = node?.type === "onset" || node?.type === "onset2d";
-  if (!isOnsetFace) {
-    pushStackField("detail");
-  }
   if (isInstantWaterfall && choiceKeys.includes("barInk")) {
     rows.push(nodeGraphDisplaySettingsBuildChoiceRowHtml("barInk"));
     usedChoices.add("barInk");

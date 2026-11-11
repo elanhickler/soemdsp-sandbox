@@ -280,12 +280,6 @@ function nodeGraphTraceDisplayHistoryControlRange(key, type = null) {
   const formType = type ?? (typeof nodeGraphTraceDisplaySettingsFormType === "function"
     ? nodeGraphTraceDisplaySettingsFormType()
     : "");
-  // Waterfall Detail shares History's control-space skew (field meta), not a private mapper.
-  if (key === "detail") {
-    const lo = typeof NODE_GRAPH_WATERFALL_DETAIL_MIN === "number" ? NODE_GRAPH_WATERFALL_DETAIL_MIN : 0;
-    const hi = typeof NODE_GRAPH_WATERFALL_DETAIL_MAX === "number" ? NODE_GRAPH_WATERFALL_DETAIL_MAX : 1;
-    return { min: lo, max: hi };
-  }
   // Hz dials: Hz domain (0 allowed = freeze). Never reuse the seconds 0…10 range.
   if (key === "historyHz") {
     return { min: 0, max: 100 };
@@ -377,7 +371,7 @@ function nodeGraphDisplaySettingsFieldSpec(key, formType = null) {
   if (override) {
     return { key, ...override };
   }
-  if (key === "historySeconds" || key === "zoomSeconds" || key === "detail") {
+  if (key === "historySeconds" || key === "zoomSeconds") {
     const { min, max } = nodeGraphTraceDisplayHistoryControlRange(key, type);
     return min > 0
       ? { key, min, max, taper: "log", step: 0.025 }
@@ -658,13 +652,6 @@ const nodeGraphTraceDisplaySharedValueClamps = Object.freeze({
     return clampNodeSliderValue(n, 1, 24000);
   },
   zoomSeconds: nodeGraphTraceDisplayClampHistorySeconds,
-  detail: (value) => {
-    const n = Number(value);
-    const lo = typeof NODE_GRAPH_WATERFALL_DETAIL_MIN === "number" ? NODE_GRAPH_WATERFALL_DETAIL_MIN : 0;
-    const hi = typeof NODE_GRAPH_WATERFALL_DETAIL_MAX === "number" ? NODE_GRAPH_WATERFALL_DETAIL_MAX : 1;
-    if (!Number.isFinite(n)) return 1;
-    return clampNodeSliderValue(n, lo, hi);
-  },
   zoomMin: (value) => {
     const n = Number(value);
     return Number.isFinite(n) ? clampNodeSliderValue(n, -1, 2) : 0;
@@ -919,7 +906,6 @@ const nodeGraphTraceDisplayFormTypeValueClampOverrides = Object.freeze({
     torchHue: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value), 0, 1),
   }),
   // Instant Waterfall: Bright/Blur (filled bars); Size legacy only.
-  // Column Detail is the shared `detail` clamp (not the removed phosphor Detail).
   waterfall: Object.freeze({
     dot1Size: nodeGraphTraceDisplayClampInkPx,
     secondarySize: nodeGraphTraceDisplayClampInkPx,
