@@ -3,17 +3,24 @@
 // soemdsp-native-target: ampCurve
 // soemdsp-native-kind: dynamics
 //
-// Shape a control signal for Amplitude parameters (classic VCA CV law).
-// Destination modules multiply linearly (out = signal × Amp); this module
-// pre-maps CV so Exp mode feels like a classic OTA/2164 VCA response.
+// Map a unipolar envelope through the shared Step Graph segment curves
+// (library/include/soemdsp/math/segment_curves.h). Env is clamped 0..1.
 //
-//   x = clamp01(In)
-//   Lin: Out = x
-//   Exp: Out = 0 at x≤0, else 10^(k·(x−1))  (unity at 1, ~−100 dB near 0)
+//   Out = segment_curve01(clamp01(Env), shape, skew)
+//
+// Shapes share Step Graph ids: Linear=0, Rational=1, Exponential=2, Log=3,
+// Smoothstep=4, Smootherstep=5. Amp Curve offers those six (Hold stays in
+// the shared library / Step Graph only). Skew is -1..+1; 0 is identity for
+// Linear / Rational / Exponential / Log, the standard S-curve for
+// Smoothstep / Smootherstep.
+//
+// Default Exponential + kClassicVcaSkew reproduces the old Exp VCA law
+// 10^(5*(x-1)) within ~1e-5 (the old -100 dB floor vs exact 0).
 
 #include <stdint.h>
 
 #include <soemdsp/soemdsp.hpp>
+#include <soemdsp/math/segment_curves.h>
 
 namespace {
 
@@ -21,12 +28,13 @@ using namespace soemdsp_maths;
 
 static const int kMaxInstances = 64;
 static const int kMaxBlockFrames = 128;
-// 10^(5*(x-1)): x=1 → 1, x=0 → 1e-5 (~−100 dB). Exact 0 forced at x≤0.
-static const double kExpDbSpan = 5.0;
+// mag = 5*ln(10) through 1.2 + 6.8*(a/(1-0.85 a)) → a.
+static const double kClassicVcaSkew = -0.6625295074459036;
 
 struct State {
   bool active;
-  double mode; // <0.5 Lin, else Exp
+  double shape; // segment_shape id
+  double skew;  // -1..+1
   double blockIn[kMaxBlockFrames];
   double blockOut[kMaxBlockFrames];
 };
@@ -43,27 +51,26 @@ static const char kMetadataJson[] =
     "\"outputs\":[\"Curve\"],"
     "\"parameters\":["
       "{"
-        "\"key\":\"mode\","
-        "\"label\":\"Mode\","
-        "\"defaultValue\":1,"
-        "\"min\":0,"
-        "\"max\":1,"
-        "\"choices\":[\"Lin\",\"Exp\"]"
+        "\"key\":\"shape\","
+        "\"label\":\"Shape\","
+        "\"kind\":\"choice\","
+        "\"choices\":[\"Linear\",\"Rational\",\"Exponential\",\"Log\",\"Smoothstep\",\"Smootherstep\"],"
+        "\"choiceIds\":[0,1,2,3,4,5],"
+        "\"defaultValue\":\"Exponential\""
+      "},"
+      "{"
+        "\"key\":\"skew\","
+        "\"label\":\"Skew\","
+        "\"defaultValue\":-0.6625295074459036,"
+        "\"min\":-1,"
+        "\"mid\":0,"
+        "\"max\":1"
       "}"
     "]"
   "}";
 
-static double shape(double input, double mode) {
-  const double x = clamp01(safe(input));
-  if (safe(mode) < 0.5) {
-    return x;
-  }
-  if (!(x > 0.0)) return 0.0;
-  if (x >= 1.0) return 1.0;
-  const double y = dsp_exp(kExpDbSpan * (x - 1.0) * 2.302585092994046); // 10^(k*(x-1))
-  if (!(y * 0.0 == 0.0) || y < 0.0) return 0.0;
-  if (y > 1.0) return 1.0;
-  return y;
+static double map_curve(double input, double shape, double skew) {
+  return segment_curve01(safe(input), segment_shape_normalize(shape), safe(skew));
 }
 
 }  // namespace
@@ -73,7 +80,8 @@ extern "C" int soemdsp_amp_curve_create() {
     if (!gPool[i].active) {
       State& s = gPool[i];
       s.active = true;
-      s.mode = 1.0; // Exp
+      s.shape = (double)kSegmentExponential;
+      s.skew = kClassicVcaSkew;
       return i + 1;
     }
   }
@@ -85,15 +93,16 @@ extern "C" void soemdsp_amp_curve_destroy(int handle) {
   gPool[handle - 1].active = false;
 }
 
-extern "C" void soemdsp_amp_curve_set_params(int handle, double mode) {
+extern "C" void soemdsp_amp_curve_set_params(int handle, double shape, double skew) {
   if (handle < 1 || handle > kMaxInstances) return;
   State& s = gPool[handle - 1];
   if (!s.active) return;
-  s.mode = safe(mode);
+  s.shape = safe(shape);
+  s.skew = safe(skew);
 }
 
-extern "C" double soemdsp_amp_curve_sample(double input, double mode) {
-  return shape(input, mode);
+extern "C" double soemdsp_amp_curve_sample(double input, double shape, double skew) {
+  return map_curve(input, shape, skew);
 }
 
 extern "C" void soemdsp_amp_curve_process_block(int handle, int frameCount) {
@@ -101,8 +110,10 @@ extern "C" void soemdsp_amp_curve_process_block(int handle, int frameCount) {
   State& s = gPool[handle - 1];
   if (!s.active) return;
   const int n = frameCount < 1 ? 1 : (frameCount > kMaxBlockFrames ? kMaxBlockFrames : frameCount);
+  const int shapeId = segment_shape_normalize(s.shape);
+  const double skew = safe(s.skew);
   for (int i = 0; i < n; i++) {
-    s.blockOut[i] = shape(s.blockIn[i], s.mode);
+    s.blockOut[i] = segment_curve01(safe(s.blockIn[i]), shapeId, skew);
   }
 }
 
@@ -121,7 +132,7 @@ extern "C" int soemdsp_amp_curve_max_block_frames() {
 }
 
 extern "C" int soemdsp_amp_curve_version() {
-  return 3; // Env→Curve gold CV jacks (Mode only)
+  return 5; // 5: Shape list drops Hold (ids 0–5 unchanged). 4: Step Graph shapes + Skew. 3: Env→Curve gold CV jacks (Mode only)
 }
 
 extern "C" const char* soemdsp_amp_curve_metadata_json() {
