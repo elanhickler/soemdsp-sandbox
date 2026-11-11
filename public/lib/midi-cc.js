@@ -52,28 +52,21 @@
     return ch === messageChannel;
   }
 
-  function applyToState(state, message, { channel, cc, highRes, learn } = {}) {
-    const next = state && typeof state === "object" ? { ...state } : { msb: 0, lsb: 0 };
+  // 7-bit CC, Pitch Bend (14-bit in one message), pressure, poly AT. No
+  // coarse/fine CC pairs: the value is 0-1, so MIDI 2.0 32-bit controllers
+  // can feed the same Out later with no UI change.
+  function applyToState(state, message, { channel, cc, learn } = {}) {
+    const next = state && typeof state === "object" ? { ...state } : {};
     if (!message) return { handled: false, state: next };
 
     if (learn) {
-      if (message.kind === "cc") {
+      if (message.kind === "cc" || message.kind === "bend" || message.kind === "pressure" || message.kind === "polyAt") {
         return {
           handled: true,
           learned: true,
           channel: message.channel,
           cc: message.cc,
-          value: sevenBit(message.value7),
-          state: { msb: message.cc <= 31 ? message.value7 : next.msb, lsb: next.lsb },
-        };
-      }
-      if (message.kind === "bend" || message.kind === "pressure" || message.kind === "polyAt") {
-        return {
-          handled: true,
-          learned: true,
-          channel: message.channel,
-          cc: message.cc,
-          value: message.value,
+          value: message.kind === "cc" ? sevenBit(message.value7) : message.value,
           state: next,
         };
       }
@@ -83,29 +76,14 @@
     if (!matchChannel(channel, message.channel)) {
       return { handled: false, state: next };
     }
-
     const want = Math.round(Number(cc) || 0);
-    const fourteen = Boolean(highRes) && want >= 0 && want <= 31;
-
+    if (message.cc !== want) {
+      return { handled: false, state: next };
+    }
     if (message.kind === "cc") {
-      if (fourteen && message.cc === want + 32) {
-        next.lsb = message.value7;
-        return { handled: true, value: fourteenBit(next.msb, next.lsb), state: next };
-      }
-      if (message.cc !== want) {
-        return { handled: false, state: next };
-      }
-      if (fourteen) {
-        next.msb = message.value7;
-        return { handled: true, value: fourteenBit(next.msb, next.lsb), state: next };
-      }
       return { handled: true, value: sevenBit(message.value7), state: next };
     }
-
-    if (message.cc === want) {
-      return { handled: true, value: message.value, state: next };
-    }
-    return { handled: false, state: next };
+    return { handled: true, value: message.value, state: next };
   }
 
   const api = {

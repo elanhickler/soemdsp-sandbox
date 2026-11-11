@@ -648,8 +648,11 @@ void main() {
     const s = ensure();
     if (!s) return null;
     const scale = Number(options?.scale) > 0 ? Number(options.scale) : 1;
+    // Display text grows with its Performance view tile (pixel for pixel, no
+    // stretched bitmap). Callers that size text themselves pass textInk: false.
+    const textInk = options?.textInk === false ? 1 : nodeGraphGlLinesInkScale(canvas);
     return {
-      s, canvas, w, h, clear: clearRgba, data: s.pool.pop() || new Float32Array(16384), n: 0, images: [], texts: [], blend: "alpha", scale,
+      s, canvas, w, h, clear: clearRgba, data: s.pool.pop() || new Float32Array(16384), n: 0, images: [], texts: [], blend: "alpha", scale, textInk,
       // Glyph quads for every text call: pos2 uv2 rgba4 per vertex, one draw per atlas run.
       tdata: s.tpool.pop() || new Float32Array(4096), tn: 0,
       publishNodeId: options?.publishNodeId,
@@ -1503,6 +1506,28 @@ void main() {
    *   texts: [{ text, x, y, px, rgba, align, maxWidth }] }
    * width = full stroke width (0 = no line), blur = Line blur (CSS px).
    */
+  /**
+   * Ink scale for a display canvas: 1 in the circuit builder; in Performance
+   * view / screen solo, the presented size over the builder size (captured
+   * before reparent). Multiply CSS-px text sizes and offsets by it so display
+   * text grows with its tile, drawn pixel for pixel (no stretched bitmap).
+   */
+  function nodeGraphGlLinesInkScale(canvas) {
+    if (!canvas) return 1;
+    const presented = typeof canvas.closest === "function" && canvas.closest(".node-screen-solo-face");
+    const w = canvas.clientWidth || 0;
+    const h = canvas.clientHeight || 0;
+    const minCss = w > 0 && h > 0 ? Math.min(w, h) : 0;
+    if (!presented) {
+      if (minCss > 0) canvas.__glLinesDrawnMinCss = minCss;
+      return 1;
+    }
+    const builderMin = builderMinCss(canvas, presented);
+    if (!(builderMin > 0) || !(minCss > 0)) return 1;
+    const now = canvas.__glLinesBuilderMinCss > 0 ? minCss : (faceMinCss(presented) || minCss);
+    return Math.max(0.25, now / builderMin);
+  }
+
   function nodeGraphGlLinesPresentFrame(canvas, frame = {}) {
     if (!canvas) return false;
     const cssWidth = Math.max(1, Number(frame.cssWidth) || canvas.clientWidth || 1);
@@ -1995,7 +2020,7 @@ void main() {
     const weight = options.weight || 600;
     const atlas = nodeGraphGlLinesTextAtlas(family, weight, str);
     if (!atlas) return;
-    const k = batch.camera ? 1 : (batch.scale || 1);
+    const k = batch.camera ? 1 : (batch.scale || 1) * (batch.textInk || 1);
     const px = Math.max(1, Math.round((Number(options.px) || 12) * k));
     const g = px / glyphBakePx;
     const segs = EMOJI_HINT.test(str) ? nodeGraphGlLinesTextSegments(str) : null;
@@ -3513,6 +3538,7 @@ void main() {
     nodeGraphGlLinesStroke,
     nodeGraphGlLinesAdaptPoints,
     nodeGraphGlLinesCaptureBuilderSize,
+    nodeGraphGlLinesInkScale,
     nodeGraphGlLinesPresentFrame,
     nodeGraphGlLinesDash,
     nodeGraphGlLinesPhosphor,

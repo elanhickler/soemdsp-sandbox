@@ -1202,6 +1202,12 @@ function nodeGraphWaterfallGlPresent(canvas, plateCss) {
     nodeGraphFaceInkDraw(canvas);
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
   }
+  // Face text (MIDI CC last message, ...): GL text over the tape, present
+  // only, never burned into the history (it would scroll away and smear).
+  if (canvas._faceText && typeof nodeGraphFaceTextDraw === "function") {
+    nodeGraphFaceTextDraw(canvas);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  }
   if (typeof nodeGraphSharedGlEndPresent === "function") {
     nodeGraphSharedGlEndPresent(gl);
   }

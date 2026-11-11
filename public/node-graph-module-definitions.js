@@ -8742,9 +8742,27 @@ const nodeGraphModuleDefinitions = (
     planFreeRun: true,
     defaultWidthGu: 6,
     defaultUi: {
-      buttonsHidden: true,
-      oscilloscopeHidden: true },
-    inputs: ["pitch"],
+      buttonsHidden: true },
+    // Face: 0-1 in, pitch in, pitch out, f Hz as numbers (modules/pitchManager/pitch-manager-display.js).
+    layout: "sinCos",
+    chrome: "LayoutA",
+    customDisplayArea: true,
+    displayType: "pitchManagerFace",
+    displayHeightGu: 3,
+    spectrumCompanion: false,
+    displayModes: [
+      { key: "face", label: "Face", renderer: "pitchManagerFace" },
+    ],
+    defaultDisplayMode: "face",
+    // Tuning alone, the 0-1 Low/High band, Oct | Semi | Cents, Mul | Add.
+    face: [
+      { kind: "cells", params: [["tuning", "Tuning"]], horizontal: true, h: 32 },
+      { kind: "band", lo: "low", hi: "high", label: "0–1 Range", h: 34 },
+      { kind: "cells", params: [["octave", "Oct"], ["semitones", "Semi"], ["cents", "Cents"]], h: 40 },
+      { kind: "cells", params: [["multiply", "Mul"], ["add", "Add"]], h: 40 },
+    ],
+    // unit: 0-1 maps exponentially to Low..High Hz (unclamped); pitch adds semitones on top.
+    inputs: ["unit", "pitch"],
     inputAliases: {
       In: "pitch",
       Mono: "pitch",
@@ -8752,8 +8770,10 @@ const nodeGraphModuleDefinitions = (
       "0.1v/Oct": "pitch",
       "Note#": "pitch",
       Pitch: "pitch",
-      MIDI: "pitch" },
-    inputLabels: { "pitch": "♯/♭" },
+      MIDI: "pitch",
+      "0-1": "unit",
+      "0–1": "unit" },
+    inputLabels: { "pitch": "♯/♭", unit: "0–1" },
     outputs: ["pitch", "f"],
     outputLabels: { pitch: "♯/♭", f: "ƒ" },
     parameters: [
@@ -8768,6 +8788,28 @@ const nodeGraphModuleDefinitions = (
         step: "any",
         unit: "Hz",
         tooltip: "A4 reference Hz. MIDI 69 maps to this frequency when converting Pitch→Hz." },
+      {
+        defaultValue: "55",
+        key: "low",
+        label: "Low",
+        max: "20000",
+        mid: "440",
+        min: "1",
+        nonlinearSlider: true,
+        step: "any",
+        unit: "Hz",
+        tooltip: "Hz when the 0–1 input is 0. f = Low · (High / Low)^x, unclamped." },
+      {
+        defaultValue: "3520",
+        key: "high",
+        label: "High",
+        max: "20000",
+        mid: "440",
+        min: "1",
+        nonlinearSlider: true,
+        step: "any",
+        unit: "Hz",
+        tooltip: "Hz when the 0–1 input is 1. Octave, Semitones, Cents and the pitch input add on top." },
       {
         defaultValue: "0",
         key: "octave",
@@ -18066,7 +18108,7 @@ const nodeGraphModuleDefinitions = (
     ],
   },
   // MIDI CC — hardware CC / pitch bend / aftertouch to signals (Controllers).
-  // Out is smoothed×Amp + In; White is Out×128. 14-bit uses CC n + CC n+32.
+  // Out is smoothed×Amp + In; White is Out×128. 7-bit CC (no coarse/fine pairs); Pitch Bend is 14-bit.
 
   midiCc: {
     planRole: "processor",
@@ -18091,9 +18133,9 @@ const nodeGraphModuleDefinitions = (
     displayHeightGu: 5,
     defaultWidthGu: 13,
     face: [
-      { kind: "cells", params: [["channel", "Channel"], ["cc", "CC#"]], h: 40 },
+      // Learn turns dull red ("Learning") until a CC arrives, then back to Learn.
+      { kind: "cells", params: [["learn", "Learn", "button", { onLabel: "Learning", onFill: "#5a2226" }], ["channel", "Channel"], ["cc", "CC#"]], h: 52 },
       { kind: "cells", params: [["offset", "Bias"]], horizontal: true, h: 40 },
-      { kind: "cells", params: [["highRes", "14-bit"], ["learn", "Learn", "stack"]], h: 52 },
       { kind: "cells", params: [["amplitude", "Amp"]], horizontal: true, h: 40 },
     ],
     inputs: ["In"],
@@ -18158,21 +18200,6 @@ const nodeGraphModuleDefinitions = (
         min: "0",
         nonlinearSlider: false,
         step: "any",
-      },
-      {
-        choices: ["Off", "On"],
-        defaultValue: "0",
-        displayChoices: true,
-        divideChoicesVisibly: true,
-        key: "highRes",
-        label: "14-bit",
-        linearSmoothing: false,
-        smoothingMode: "off",
-        smoothingType: "none",
-        max: "1",
-        mid: "0",
-        min: "0",
-        step: "1",
       },
       {
         choices: ["Learn", "Learning"],

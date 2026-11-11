@@ -1585,6 +1585,67 @@ function nodeGraphFaceInkDraw(face) {
   return true;
 }
 
+/**
+ * Face text: a status strip along the bottom of a waterfall face, drawn in GL
+ * in the present pass only (never burned into the tape). face._faceText is a
+ * list of [label, value] cells spread evenly across the width, label dim and
+ * value bright, like a device's LCD line. Set it with nodeGraphFaceTextSet.
+ */
+function nodeGraphFaceTextDraw(face) {
+  const cells = face?._faceText;
+  if (!Array.isArray(cells) || !cells.length) return true;
+  const batch = typeof nodeGraphGlLinesBegin === "function"
+    ? nodeGraphGlLinesBegin(face, [0, 0, 0, 0], { publishNodeId: "", textInk: false })
+    : null;
+  if (!batch || typeof nodeGraphGlLinesDrawInto !== "function" || typeof nodeGraphGlLinesText !== "function") {
+    nodeGraphDisplayGlFailed(face, "face text: no shared GL device");
+    return false;
+  }
+  // Device px per CSS px x ink scale (Performance view tile / builder size).
+  const ink = typeof nodeGraphGlLinesInkScale === "function" ? nodeGraphGlLinesInkScale(face) : 1;
+  const dpr = Math.max(1, (face.width || 1) / Math.max(1, face.clientWidth || face.width || 1)) * ink;
+  const w = batch.w;
+  const h = batch.h;
+  const px = 13 * dpr;
+  const y = h - 6 * dpr;
+  const family = "\"Cascadia Mono\", Consolas, \"Courier New\", monospace";
+  const opts = (rgba, align) => (typeof nodeGraphGlGraphTextOpts === "function"
+    ? nodeGraphGlGraphTextOpts({ px, rgba, align, baseline: "bottom", weight: 400, family })
+    : { px, rgba, align, baseline: "bottom" });
+  const dim = opts([0.5, 0.78, 0.85, 1], "left");
+  const bright = opts([0.95, 0.96, 1, 1], "left");
+  const measure = (t) => (typeof nodeGraphGlLinesMeasureText === "function"
+    ? nodeGraphGlLinesMeasureText(t, px, family, 400)
+    : t.length * px * 0.6);
+  const colW = w / cells.length;
+  cells.forEach(([label, value], i) => {
+    const l = String(label);
+    const v = String(value);
+    const gap = px * 0.45;
+    const run = measure(l) + gap + measure(v);
+    const x = colW * i + Math.max(4 * dpr, (colW - run) * 0.5);
+    nodeGraphGlLinesText(batch, l, x, y, dim);
+    nodeGraphGlLinesText(batch, v, x + measure(l) + gap, y, bright);
+  });
+  if (!nodeGraphGlLinesDrawInto(batch)) {
+    nodeGraphDisplayGlFailed(face, "face text: GL draw failed");
+    return false;
+  }
+  return true;
+}
+
+/** Set a waterfall face's status cells ([[label, value], ...]); re-presents on change. */
+function nodeGraphFaceTextSet(face, cells) {
+  if (!face) return;
+  const next = Array.isArray(cells) ? cells.map((c) => [String(c[0]), String(c[1])]) : null;
+  const key = next ? JSON.stringify(next) : "";
+  if (face._faceTextKey === key) return;
+  face._faceTextKey = key;
+  face._faceText = next;
+  const s = face._wfGlSession;
+  if (s && typeof nodeGraphWaterfallGlPresent === "function") nodeGraphWaterfallGlPresent(face, s.plateCss || "#000000");
+}
+
 function nodeGraphWaterfallPinClocks(nowMs) {
   const now = Number.isFinite(Number(nowMs))
     ? Number(nowMs)

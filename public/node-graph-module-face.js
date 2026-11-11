@@ -13,6 +13,8 @@
 //   cells     { params: [[key, label, "bipolar"|"stack"|"horizontal"?]...], horizontal }
 //     column cells are fill sliders (bipolar fills from the middle); row ("horizontal") cells
 //     show a position handle. "stack" = two choice buttons + over −.
+//     "button" = an Off/On param as one labelled button (click toggles, lit when on);
+//     optional 4th item { onLabel, onFill } names and colours the on state.
 //     Per-cell "horizontal" overrides the row flag.
 //     Choice switch (app-wide): { kind: "cells", params: [[key, label]], horizontal: true }
 //     Label left, value right, selected-slot rectangle, no divider strokes.
@@ -121,8 +123,8 @@ function nodeGraphModuleFaceRowHasUnitColumn(row, defs) {
   const n = row.params.length;
   return row.params.some((cell) => {
     const mode = cell[2] || "";
-    const horizontal = mode === "horizontal" || (mode !== "stack" && n === 1) || (!mode && !!row.horizontal);
-    if (horizontal || mode === "stack") return false;
+    const horizontal = mode === "horizontal" || (mode !== "stack" && mode !== "button" && n === 1) || (!mode && !!row.horizontal);
+    if (horizontal || mode === "stack" || mode === "button") return false;
     const p = defs.find((item) => item.key === cell[0]);
     if (!p || (Array.isArray(p.choices) && p.choices.length)) return false;
     return String(p.unit || "").trim() !== "";
@@ -284,9 +286,11 @@ function nodeGraphModuleFaceWidgets(spec, fw, moduleEl = null) {
         out.push({
           ...base, type: "cell", param: cell[0], label: cell[1],
           // A slider alone on its row is always a horizontal slider (app-wide).
-          horizontal: mode === "horizontal" || (mode !== "stack" && n === 1) || (!mode && !!row.horizontal),
+          horizontal: mode === "horizontal" || (mode !== "stack" && mode !== "button" && n === 1) || (!mode && !!row.horizontal),
           bipolar: mode === "bipolar",
           stack: mode === "stack",
+          button: mode === "button",
+          buttonOn: mode === "button" && cell[3] && typeof cell[3] === "object" ? cell[3] : null,
           x: cx, w: cw,
         });
       });
@@ -1209,7 +1213,13 @@ function nodeGraphModuleFaceDrawGl(batch, el, w, ox, oy, z) {
       if (wd.param && el.querySelector(`.node-parameter-row.f-jack-owns-frequency[data-param="${CSS.escape(wd.param)}"]`)) {
         nodeGraphModuleFaceDrawOwnedStripes(batch, ox + (wd.x + gap) * z, oy + top * z, cw * z, ch * z, z);
       }
-      if (wd.stack) {
+      if (wd.button) {
+        // One toggle button: the label, lit when on (optional on label / fill).
+        const on = nodeGraphModuleFaceValue(input) >= Number(input?.min || 0) + 0.5;
+        if (on) rect(wd.x + gap, top, cw, ch, wd.buttonOn?.onFill || ink.cellValueFill);
+        const lab = on && wd.buttonOn?.onLabel ? wd.buttonOn.onLabel : wd.label;
+        nodeGraphModuleFaceText(batch, lab, ox + cx * z, oy + (top + ch * 0.5) * z, 13.8 * z, on ? ink.value : ink.label, { maxWidth: (cw - 4) * z });
+      } else if (wd.stack) {
         const parsed = typeof parseNodeMetadataChoices === "function"
           ? parseNodeMetadataChoices(input?.dataset?.choices)
           : [];
@@ -1294,8 +1304,17 @@ function nodeGraphModuleFaceDrawGl(batch, el, w, ox, oy, z) {
           const step = NODE_GRAPH_FACE_UNIT_LINE_PX;
           const tcy = top + ch * 0.5;
           nodeGraphModuleFaceText(batch, wd.label, ox + cx * z, oy + (tcy - step) * z, 12.6 * z, ink.label, { maxWidth: (cw - 4) * z });
-          nodeGraphModuleFaceText(batch, parts.text, ox + cx * z, oy + tcy * z, 13.8 * z, ink.value, { maxWidth: (cw - 4) * z });
-          if (parts.unit) nodeGraphModuleFaceText(batch, parts.unit, ox + cx * z, oy + (tcy + step) * z, 13.8 * z, ink.unit, { maxWidth: (cw - 4) * z });
+          // A two-word value too wide for the cell ("Pitch Bend") wraps onto the
+          // unit line instead of squashing; the label stays in place.
+          const text = String(parts.text ?? "");
+          const sp = text.indexOf(" ");
+          if (!parts.unit && sp > 0 && text.length * 7.6 > cw - 4) {
+            nodeGraphModuleFaceText(batch, text.slice(0, sp), ox + cx * z, oy + tcy * z, 13.8 * z, ink.value, { maxWidth: (cw - 4) * z });
+            nodeGraphModuleFaceText(batch, text.slice(sp + 1), ox + cx * z, oy + (tcy + step) * z, 13.8 * z, ink.value, { maxWidth: (cw - 4) * z });
+          } else {
+            nodeGraphModuleFaceText(batch, text, ox + cx * z, oy + tcy * z, 13.8 * z, ink.value, { maxWidth: (cw - 4) * z });
+            if (parts.unit) nodeGraphModuleFaceText(batch, parts.unit, ox + cx * z, oy + (tcy + step) * z, 13.8 * z, ink.unit, { maxWidth: (cw - 4) * z });
+          }
         } else {
           nodeGraphModuleFaceText(batch, wd.label, ox + cx * z, oy + (cy - 7) * z, 12.6 * z, ink.label, { maxWidth: (cw - 4) * z });
           nodeGraphModuleFaceValueRun(batch, input, ox + cx * z, oy + (cy + 7) * z, 13.8 * z, ink.value, { maxWidth: (cw - 4) * z });

@@ -733,6 +733,9 @@ NodeLiveAudioProcessor.prototype.mapNativeGraphParamId = function mapNativeGraph
     if (k === "cents") return P.NATIVE_GRAPH_PARAM_WIDTH;
     if (k === "multiply") return P.NATIVE_GRAPH_PARAM_AMPLITUDE;
     if (k === "add") return P.NATIVE_GRAPH_PARAM_ATT_OFFSET;
+    // 0-1 input range (graph 317).
+    if (k === "low") return P.NATIVE_GRAPH_PARAM_HPF_FREQUENCY;
+    if (k === "high") return P.NATIVE_GRAPH_PARAM_LPF_FREQUENCY;
   }
   if (t === "helmholtzPitch") {
     if (k === "windowSize") return P.NATIVE_GRAPH_PARAM_STAGES;
@@ -1493,6 +1496,10 @@ NodeLiveAudioProcessor.prototype.mapNativeGraphDstPortId = function mapNativeGra
   // Electro Hat: Open hit jack on the Mono live bus (Trigger = Closed on the Trigger bus).
   if (tDst === "electroHat" && p === "open") {
     return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_MONO;
+  }
+  // Pitch Manager 0-1 jack: increment bus (graph 317).
+  if (tDst === "pitchManager" && (p === "unit" || p === "0-1" || p === "0–1")) {
+    return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_INCREMENT;
   }
   // ƒ jack only. Frequency is a parameter (slider + MOD add), never kPortF.
   if (p === "f" || p === "ƒ") {
@@ -6035,7 +6042,6 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
       push("amplitude", P.NATIVE_GRAPH_PARAM_AMPLITUDE, cont("amplitude", 1));
       push("channel", P.NATIVE_GRAPH_PARAM_MODE, disc("channel", 0));
       push("cc", P.NATIVE_GRAPH_PARAM_WAVEFORM, disc("cc", 1));
-      push("highRes", P.NATIVE_GRAPH_PARAM_TIMING_MODE, disc("highRes", 0));
       push("learn", P.NATIVE_GRAPH_PARAM_LFO_STYLE, disc("learn", 0));
       continue;
     }
@@ -7227,6 +7233,8 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
       push("cents", P.NATIVE_GRAPH_PARAM_WIDTH, cont("cents", 0));
       push("multiply", P.NATIVE_GRAPH_PARAM_AMPLITUDE, cont("multiply", 1));
       push("add", P.NATIVE_GRAPH_PARAM_ATT_OFFSET, cont("add", 0));
+      push("low", P.NATIVE_GRAPH_PARAM_HPF_FREQUENCY, cont("low", 55));
+      push("high", P.NATIVE_GRAPH_PARAM_LPF_FREQUENCY, cont("high", 3520));
       continue;
     }
     if (type === "helmholtzPitch") {
@@ -10053,6 +10061,8 @@ NodeLiveAudioProcessor.prototype.nativeGraphPortNames = function nativeGraphPort
   }
   if (portId === P.NATIVE_GRAPH_PORT_SAW) {
     if (type === "hostBpm") return ["f", "ƒ"];
+    // Pitch Manager face tap: the pitch input as received.
+    if (type === "pitchManager") return ["__InPitch"];
     if (type === "electroSnare" || type === "modalSnare" || type === "electroHat" || type === "electroTom" || type === "electroKick" || type === "electroClap") return ["f", "\u0192"];
     if (type === "resonantEnvelope" || type === "resonantFollower") return ["SC"];
     if (type === "resonantCompressor") return ["Gain"];
@@ -10183,6 +10193,8 @@ NodeLiveAudioProcessor.prototype.nativeGraphPortNames = function nativeGraphPort
       || type === "ellipsoid" || type === "ellipsoidOsc" || type === "stepRegister" || type === "dsfOscillator" || type === "dsfMorphingOsc") {
       return ["__Phase"];
     }
+    // Pitch Manager face tap: the 0-1 input value.
+    if (type === "pitchManager") return ["__Unit"];
     // Smooth/Step Graph purple ghost (syncNodeGraphGraphLivePlayheads).
     if (type === "smoothGraph" || type === "stepGraph") {
       return ["__GraphPhase"];
@@ -10293,6 +10305,7 @@ NodeLiveAudioProcessor.prototype.publishNativeGraphScopeTaps = function publishN
         ? audioPorts.concat(P.NATIVE_GRAPH_PORT_PHASE01)
         : audioPorts);
     if (type === "stepRegister") ports.push(P.NATIVE_GRAPH_PORT_TRISAW, P.NATIVE_GRAPH_PORT_PHASE01);
+    if (type === "pitchManager") ports.push(P.NATIVE_GRAPH_PORT_PHASE01, P.NATIVE_GRAPH_PORT_SAW);
     for (let pi = 0; pi < ports.length; pi += 1) {
       const portId = ports[pi];
       const view = this.bindNativeGraphNodePortView(hash, portId, frames);
@@ -10448,6 +10461,9 @@ NodeLiveAudioProcessor.prototype.publishNativeGraphScopeTaps = function publishN
       let ports;
       if (type === "midiCc" || type === "midiLag") {
         ports = facePorts.concat(P.NATIVE_GRAPH_PORT_SAW, P.NATIVE_GRAPH_PORT_RIGHT, P.NATIVE_GRAPH_PORT_RAMP, P.NATIVE_GRAPH_PORT_LEFT);
+      } else if (type === "pitchManager") {
+        // Face taps: __Unit (0-1 in) and __InPitch.
+        ports = facePorts.concat(P.NATIVE_GRAPH_PORT_PHASE01, P.NATIVE_GRAPH_PORT_SAW);
       } else if (type === "vibratoGenerator") {
         // Saw = y * depthEnv for the face. Mono/Wave stays y * amp * depthEnv.
         ports = facePorts.concat(P.NATIVE_GRAPH_PORT_SAW);

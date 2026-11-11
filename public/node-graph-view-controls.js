@@ -3989,6 +3989,37 @@ function syncNodeGraphKeyboardPolyphonyFromHeldNotes(nodeId) {
   rt.polyphony = table;
 }
 
+// Last MIDI controller message received (any channel / CC), shown as text on
+// every MIDI CC display: Channel / CC / Value. Helps find what a knob sends.
+let nodeGraphMidiCcLastMessage = null;
+
+function nodeGraphMidiCcReadoutLines(message) {
+  // One status strip: [label, value] cells (nodeGraphFaceTextSet).
+  const dash = "\u2014";
+  if (!message) return [["CH", dash], ["CC", dash], ["VAL", dash]];
+  const kind = message.kind;
+  const cc = kind === "bend" ? "Bend" : kind === "pressure" ? "Press" : kind === "polyAt" ? "PolyAT" : String(message.cc);
+  const value = kind === "cc"
+    ? String(message.value7)
+    : Number.isFinite(Number(message.value)) ? Number(message.value).toFixed(2) : dash;
+  return [["CH", String(message.channel)], ["CC", cc], ["VAL", value]];
+}
+
+function updateNodeGraphMidiCcReadouts() {
+  // GL text on the waterfall face (nodeGraphFaceTextSet), never DOM text.
+  const lines = nodeGraphMidiCcReadoutLines(nodeGraphMidiCcLastMessage);
+  if (typeof nodeGraphFaceTextSet !== "function") return;
+  for (const node of nodeGraphMvp?.patch?.nodes || []) {
+    if (!node || (node.type !== "midiCc" && node.type !== "midiLag")) continue;
+    const article = document.querySelector(`article.dsp-node[data-node="${CSS.escape(String(node.id))}"]`);
+    for (const canvas of article?.querySelectorAll(".node-module-scope-window canvas") || []) {
+      if (canvas._wfGlSession) nodeGraphFaceTextSet(canvas, lines);
+    }
+  }
+}
+// Faces rebuild on layout changes; keep the readout present between messages.
+if (typeof window !== "undefined") setInterval(updateNodeGraphMidiCcReadouts, 500);
+
 function routeNodeGraphMidiCcBytes(status, data1, data2) {
   const api = typeof SoemdspMidiCc !== "undefined"
     ? SoemdspMidiCc
@@ -4000,6 +4031,8 @@ function routeNodeGraphMidiCcBytes(status, data1, data2) {
   if (!message) {
     return;
   }
+  nodeGraphMidiCcLastMessage = message;
+  updateNodeGraphMidiCcReadouts();
   const nodes = nodeGraphMvp?.patch?.nodes;
   if (!Array.isArray(nodes)) {
     return;
@@ -4013,7 +4046,6 @@ function routeNodeGraphMidiCcBytes(status, data1, data2) {
     const result = api.applyToState(node.midiCcState || node.midiLagState, message, {
       channel: Number(params.channel) || 0,
       cc: Number(params.cc) || 0,
-      highRes: Number(params.highRes) >= 0.5,
       learn: Number(params.learn) >= 0.5,
     });
     node.midiCcState = result.state;
