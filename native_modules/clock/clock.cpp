@@ -34,6 +34,8 @@ struct ClockState {
   double cycleLevel;    // latched at the cycle start (Analog)
   bool smoothWasHigh;
   double smoothLevel;   // latched at the smooth gate's rise
+  double blit[4];       // Analog Out impulse ring (v12): kernel taps still to play
+  int blitHead;
 };
 
 static ClockState gPool[kMaxInstances];
@@ -43,34 +45,22 @@ static double pow_nonneg(double base, double exponent) {
   return dsp_exp(exponent * dsp_ln(base));
 }
 
-// Window measure in [0, x) for x in [0, 1]: how much of the phase circle up
-// to x lies inside the gate window [start, end) (end < start wraps).
-static double clock_window_cdf01(double x, double start, double end) {
-  if (end >= start) return clamp(x, start, end) - start;
-  return mind(x, end) + maxd(0.0, x - start);
+// Cubic B-spline, support [-2, 2], sums to 1 over integer shifts, peak 2/3.
+static double clock_bspline3(double x) {
+  const double a = x < 0.0 ? -x : x;
+  if (a >= 2.0) return 0.0;
+  if (a >= 1.0) { const double t = 2.0 - a; return t * t * t / 6.0; }
+  return (4.0 - 6.0 * a * a + 3.0 * a * a * a) / 6.0;
 }
 
-// Same, on the unwrapped phase line: whole cycles add the window width.
-static double clock_window_cdf(double x, double start, double end) {
-  const double width = end >= start ? end - start : (1.0 - start) + end;
-  const double k = dsp_floor(x);
-  return k * width + clock_window_cdf01(x - k, start, end);
-}
-
-// Smooth (box-filtered) gate: the fraction of this sample's phase step
-// [phase, phase + inc) that lies inside the window. Edges land at their true
-// sub-sample time (0.7 = on for 70% of the sample), so a continuous receiver
-// (Vactrol Light) responds identically on every cycle, with no repeating
-// sample-grid pattern. Rate 0: the plain in-window test.
-static double clock_smooth_gate(double phase, double inc, double start, double end) {
-  if (inc == 0.0) {
-    const bool in = end >= start ? (phase >= start && phase < end) : (phase >= start || phase < end);
-    return in ? 1.0 : 0.0;
+// Add a band-limited impulse that happened `ago` samples before this one
+// (0 <= ago < 1) to the ring, centered 2 samples ahead (fixed 2-sample
+// latency) so every tap is still in the future. Peak scaled to `height`.
+static void clock_blit_add(ClockState& s, double ago, double height) {
+  const double gain = height * 1.5;  // 1 / peak (2/3): the hit reads `height` tall
+  for (int k = 0; k < 4; k++) {
+    s.blit[(s.blitHead + k) & 3] += gain * clock_bspline3((double)k - 2.0 + ago);
   }
-  const double a = inc > 0.0 ? phase : phase + inc;
-  const double len = inc > 0.0 ? inc : -inc;
-  const double cover = clock_window_cdf(a + len, start, end) - clock_window_cdf(a, start, end);
-  return clamp(cover / len, 0.0, 1.0);
 }
 
 }  // namespace
@@ -93,6 +83,8 @@ extern "C" int soemdsp_clock_create() {
       s.cycleLevel = 0.0;
       s.smoothWasHigh = false;
       s.smoothLevel = 0.0;
+      for (int k = 0; k < 4; k++) s.blit[k] = 0.0;
+      s.blitHead = 0;
       s.active = true;
       return i + 1;
     }
@@ -181,14 +173,21 @@ extern "C" double soemdsp_clock_sample(
   if (high && !s.digitalWasHigh) s.digitalLevel = safeLevel;
   s.digitalWasHigh = high;
   const double digital = high ? s.digitalLevel : 0.0;
-  // Analog Out (v11) = the smooth gate: box-filtered edges at their true
-  // sub-sample time, for analog receivers. Digital Out / T stay hard, since
-  // any rise in level re-triggers event inputs (gate_hit).
-  const double smooth = clock_smooth_gate(phase, inc, safeStart, safeEnd);
-  const bool smoothHigh = smooth > 0.0;
-  if (smoothHigh && !s.smoothWasHigh) s.smoothLevel = safeLevel;
-  s.smoothWasHigh = smoothHigh;
-  const double analog = smooth * s.smoothLevel;
+  // Analog Out (v12, test) = BLIT trigger: a band-limited impulse at each
+  // gate rise, placed at its true sub-sample time (cubic B-spline over 4
+  // samples, 2-sample latency). Digital Out / trigger stay hard.
+  if (resetRise) {
+    clock_blit_add(s, 0.0, safeLevel);
+  } else if (s.hasStarted && inc > 0.0) {
+    const double past = wrap01(phase - safeStart);  // phase since the step crossed Start
+    if (past < inc) clock_blit_add(s, past / inc, safeLevel);
+  } else if (s.hasStarted && inc < 0.0) {
+    const double past = wrap01(safeEnd - phase);    // backwards: the window opens at End
+    if (past > 0.0 && past <= -inc) clock_blit_add(s, past / -inc, safeLevel);
+  }
+  const double analog = s.blit[s.blitHead];
+  s.blit[s.blitHead] = 0.0;
+  s.blitHead = (s.blitHead + 1) & 3;
 
   const double nextRawPhase = wrap01(rawPhase + inc);
   // T follows the offset phase. Two clocks at one rate with Phase 0 and 0.5
@@ -224,5 +223,5 @@ extern "C" double soemdsp_clock_phase(int handle) {
 }
 
 extern "C" int soemdsp_clock_version() {
-  return 11; // 11: Analog Out is the smooth (box-filtered, sub-sample) gate; the whip is gone. 10: never 100% low: a gate window narrower than one sample (or Start == End) still sends one sample per cycle. 9: negative Rate runs backwards (T on the 0 crossing). 8: Rate 0 pauses (gate / Analog hold, no forced 0). 7: gate compared in fractional phase (Start 0 / End 1 never drops at fractional periods). 6: Amplitude latched per pulse (Digital at gate rise, Analog at cycle start, T at tick). 5: Pulse Start / Pulse End replace duty; phase published. 4: T pulse follows Phase offset
+  return 12; // 12: Analog Out is a BLIT trigger (band-limited impulse at each gate rise, sub-sample placed, 2-sample latency) - test. 11: Analog Out is the smooth (box-filtered, sub-sample) gate; the whip is gone. 10: never 100% low: a gate window narrower than one sample (or Start == End) still sends one sample per cycle. 9: negative Rate runs backwards (T on the 0 crossing). 8: Rate 0 pauses (gate / Analog hold, no forced 0). 7: gate compared in fractional phase (Start 0 / End 1 never drops at fractional periods). 6: Amplitude latched per pulse (Digital at gate rise, Analog at cycle start, T at tick). 5: Pulse Start / Pulse End replace duty; phase published. 4: T pulse follows Phase offset
 }
