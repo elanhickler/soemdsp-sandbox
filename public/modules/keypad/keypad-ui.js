@@ -82,7 +82,7 @@ function nodeGraphKeypadApplyLayout(face, layout) {
       : (next.fontFamily || "\"Thasadith\", sans-serif"),
   );
   face.style.setProperty("--node-keypad-text-size", String(next.textSize ?? d.textSize ?? 0.87708066581306));
-  face.style.setProperty("--node-keypad-text-weight", String(next.textWeight ?? d.textWeight ?? 900));
+  face.style.setProperty("--node-keypad-text-weight", String(next.textWeight ?? d.textWeight ?? 400));
   face.style.setProperty("--node-keypad-rounding", String(next.rounding ?? d.rounding ?? 48.2527147087858));
   face.style.setProperty(
     "--node-keypad-corner-shape",

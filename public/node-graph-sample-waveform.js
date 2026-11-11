@@ -2721,6 +2721,105 @@ const nodeGraphSampleWaveformMaxSamplesPerColumn = 256;
  * Pixel-aligned viewStart still stops scroll shimmer; the stroke itself is
  * always a single connected vector.
  */
+
+/** Music Player interpolation (stored: 0 Square, 1 Linear, 2 Sinc, 3 PolyBLEP, 7 Tape). */
+function nodeGraphSampleWaveformPlaybackMode(node) {
+  if (node?.type !== "audioPlayer") return "";
+  const raw = Math.round(Number(node.params?.interpolation));
+  if (!Number.isFinite(raw) || raw <= 0 || raw === 3) return "square";
+  if (raw === 1) return "linear";
+  if (raw === 7) return "tape";
+  return "sinc";
+}
+
+function nodeGraphSampleWaveformPlaybackOptions(node, entry, samples) {
+  const opts = {};
+  if (samples?.length) {
+    opts.startI = 0;
+    opts.endI = samples.length - 1;
+  }
+  if (node?.type === "audioPlayer") {
+    opts.speed = Number(node.params?.speed);
+    opts.tilt = Number(node.params?.tilt);
+    opts.tone = Number(node.params?.tone);
+    opts.range = Number(node.params?.range);
+    const rate = typeof nodeGraphFiniteNumber === "function"
+      ? nodeGraphFiniteNumber(entry?.sampleRate, 44100)
+      : (Number(entry?.sampleRate) || 44100);
+    opts.pcmRate = rate;
+    opts.sampleRate = rate;
+  }
+  return opts;
+}
+
+/**
+ * Zoomed-in Music Player path that follows the playback interpolator.
+ * Square / PolyBLEP = sample-and-hold steps. Linear = segments between
+ * samples. Sinc / Tape = the shared kernel in sample-interpolate.js.
+ */
+function nodeGraphSampleWaveformBuildPlaybackPath(
+  samples, viewStart, viewEnd, width, midY, amplitude, mode, options,
+) {
+  const total = samples?.length || 0;
+  if (!total || !(width > 0)) return new Float32Array(0);
+  const span = Math.max(1e-9, (Number(viewEnd) || 0) - (Number(viewStart) || 0));
+  const yOf = (v) => midY - v * amplitude;
+  const xOf = (frame) => ((frame - viewStart) / span) * width;
+  const read = (typeof nodeGraphSampleReadAt === "function")
+    ? (frame, st) => nodeGraphSampleReadAt(samples, frame, mode, st)
+    : (frame) => {
+      const i = Math.max(0, Math.min(total - 1, Math.floor(frame)));
+      return Number(samples[i]) || 0;
+    };
+
+  if (mode === "square" || mode === "hold" || mode === "0" || mode === "3" || mode === "polyblep") {
+    const first = Math.max(0, Math.floor(viewStart));
+    const last = Math.min(total - 1, Math.ceil(viewEnd));
+    if (last < first) return new Float32Array(0);
+    const pts = [];
+    for (let i = first; i <= last; i += 1) {
+      const y = yOf(samples[i]);
+      const x0 = Math.max(xOf(viewStart), xOf(i));
+      const x1 = Math.min(xOf(viewEnd), xOf(i + 1));
+      if (pts.length) pts.push(x0, y);
+      else pts.push(x0, y);
+      pts.push(x1, y);
+    }
+    return Float32Array.from(pts);
+  }
+
+  if (mode === "linear" || mode === "1") {
+    const first = Math.max(0, Math.floor(viewStart));
+    const last = Math.min(total - 1, Math.ceil(viewEnd));
+    if (last < first) return new Float32Array(0);
+    const pts = new Float32Array((last - first + 1) * 2);
+    let o = 0;
+    for (let i = first; i <= last; i += 1) {
+      pts[o] = xOf(i);
+      pts[o + 1] = yOf(samples[i]);
+      o += 2;
+    }
+    return pts;
+  }
+
+  const n = Math.max(2, Math.ceil(width) * 2);
+  const opts = { ...(options || {}) };
+  if (mode === "tape" || mode === "7") {
+    opts.tapeState = typeof nodeGraphSampleTapeClear === "function"
+      ? nodeGraphSampleTapeClear({})
+      : {};
+    const warm0 = viewStart - 128;
+    for (let k = 0; k < 128; k += 1) read(warm0 + k, opts);
+  }
+  const pts = new Float32Array(n * 2);
+  for (let i = 0; i < n; i += 1) {
+    const frame = viewStart + (span * i) / (n - 1);
+    pts[i * 2] = (i / (n - 1)) * width;
+    pts[i * 2 + 1] = yOf(read(frame, opts));
+  }
+  return pts;
+}
+
 function nodeGraphSampleWaveformBuildVectorPath(
   samples,
   viewStart,
@@ -3236,9 +3335,20 @@ function drawNodeGraphSampleWaveformDisplay(section) {
 
   const samples = nodeGraphSampleWaveformEntrySamples(entry);
   const spp = viewSpan / Math.max(1, width);
+  const playbackMode = typeof nodeGraphSampleWaveformPlaybackMode === "function"
+    ? nodeGraphSampleWaveformPlaybackMode(node)
+    : "";
+  // At sample-level zoom the trace follows the interpolator. Zoomed out,
+  // every mode is the same min/max envelope.
+  const showInterp = Boolean(playbackMode) && spp <= 1
+    && typeof nodeGraphSampleWaveformBuildPlaybackPath === "function";
   nodeGraphSampleWaveformEnsureEnvelope(state, width);
   const tapeSig = [
     width, height, windowFrames, entry.frames, node?.sample?.id || "",
+    playbackMode,
+    node?.type === "audioPlayer"
+      ? `${node?.params?.interpolation ?? ""}:${node?.params?.speed ?? ""}:${node?.params?.tilt ?? ""}:${node?.params?.tone ?? ""}:${node?.params?.range ?? ""}`
+      : "",
     node?.type === "wavetable2d"
       ? `${node?.params?.morph ?? 0}:${node?.params?.warp ?? 0}`
       : "",
@@ -3266,10 +3376,20 @@ function drawNodeGraphSampleWaveformDisplay(section) {
       state.tapeStart = viewStart;
     }
   }
-  nodeGraphSampleWaveformGlEnvelope(
-    batch, state, midY, amplitude,
-    nodeGraphGlLinesCss(nodeGraphSampleWaveformLineColor(settings, 85, 0.95)),
-  );
+  const waveRgba = nodeGraphGlLinesCss(nodeGraphSampleWaveformLineColor(settings, 85, 0.95));
+  if (showInterp) {
+    const pts = nodeGraphSampleWaveformBuildPlaybackPath(
+      samples, viewStart, viewEnd, width, midY, amplitude, playbackMode,
+      nodeGraphSampleWaveformPlaybackOptions(node, entry, samples),
+    );
+    const trace = Number(settings.traceWidth);
+    const halfPx = Math.max(0.45, (Number.isFinite(trace) ? trace : 2) * pixelRatio * 0.5);
+    if (typeof nodeGraphGlLinesStroke === "function" && pts.length >= 4) {
+      nodeGraphGlLinesStroke(batch, pts, halfPx, 0.7, waveRgba);
+    }
+  } else {
+    nodeGraphSampleWaveformGlEnvelope(batch, state, midY, amplitude, waveRgba);
+  }
   if (showSampleGrid) {
     const gridHue = Number.isFinite(Number(settings.hue)) ? Number(settings.hue) : 140;
     const gridRgba = nodeGraphGlLinesCss(typeof nodeGraphHueBrightnessCss === "function"

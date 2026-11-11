@@ -306,7 +306,7 @@ function nodeGraphTraceDisplayHistoryControlRange(key, type = null) {
   }
   if (
     key === "historySeconds"
-    && (formType === "waterfall" || formType === "waterfallRgb" || formType === "waterfallXyz")
+    && (formType === "waterfall" || formType === "waterfallRgb" || formType === "waterfallXyz" || formType === "vactrolScope")
   ) {
     const maxW = Number(typeof nodeGraphWaterfallMaxHistorySeconds !== "undefined"
       ? nodeGraphWaterfallMaxHistorySeconds

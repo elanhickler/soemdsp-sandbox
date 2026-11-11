@@ -4099,21 +4099,14 @@ function formatNodeGraphMidiMonitorText(status, data1, data2) {
 
 function paintNodeGraphMidiMonitor(el) {
   if (!el) return;
-  const rec = typeof nodeGraphMvp === "object" && nodeGraphMvp ? nodeGraphMvp.lastMidiMessage : null;
-  const typeEl = el.querySelector("[data-midi-monitor-type]");
-  const dataEl = el.querySelector("[data-midi-monitor-data]");
-  const countEl = el.querySelector("[data-midi-monitor-count]");
-  if (!rec) {
-    el.dataset.empty = "true";
-    if (typeEl) typeEl.textContent = "no message";
-    if (dataEl) dataEl.textContent = "—";
-    if (countEl) countEl.textContent = "#0";
+  el._forceDraw = true;
+  if (typeof el.syncFromParameters === "function") {
+    el.syncFromParameters();
     return;
   }
-  el.dataset.empty = "false";
-  if (typeEl) typeEl.textContent = rec.type || "MIDI";
-  if (dataEl) dataEl.textContent = rec.data || "—";
-  if (countEl) countEl.textContent = `#${Number(rec.count) || 0}`;
+  if (typeof drawNodeGraphMidiMonitorDisplay === "function") {
+    drawNodeGraphMidiMonitorDisplay(el);
+  }
 }
 
 function updateNodeGraphMidiMonitorDisplays() {

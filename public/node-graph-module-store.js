@@ -235,39 +235,40 @@ const nodeGraphModuleConstructionPlans = Object.freeze({
 });
 
 // Unified module department definitions — single source of truth for
-// emoji, display label, ad copy, and backward-compatible alias resolution.
+// emoji, display label, ad copy, optional defaultModule (type or types dragged from
+// the category row), and backward-compatible alias resolution.
 // Previously split across three separate structures (Departments array,
 // DepartmentAliases map, DepartmentAds map) with emoji baked into identity
 // strings and mismatched keys between them.
 const nodeGraphModuleStoreDepartments = Object.freeze([
-  { id: "portal",       emoji: "🌐", label: "Portal",       symbol: "IO",  title: "Portals",   pitch: "Patch boundary portals for moving left, right, and mono signal lanes between rooms, templates, and larger circuits." },
-  { id: "controller",   emoji: "🕹️", label: "Controller",   symbol: "⌘",   title: "Controllers", pitch: "Face controls and input bridges: knobs, buttons, XY pads, and external gestures." },
-  { id: "oscillator",   emoji: "〰️", label: "Oscillator",   symbol: "∿",   title: "Oscillator", pitch: "Voices and raw tones: classic waves, tables, sync, supersaws, and other things that start a sound." },
-  { id: "oms",          emoji: "♻️", label: "Oscillator 2D", symbol: "2D",  title: "Oscillator 2D", pitch: "2D motion oscillators: spirals, orbits, and ornamental X/Y voices." },
+  { id: "portal",       emoji: "🌐", label: "Portal", defaultModule: "output",       symbol: "IO",  title: "Portals",   pitch: "Patch boundary portals for moving left, right, and mono signal lanes between rooms, templates, and larger circuits." },
+  { id: "controller",   emoji: "🕹️", label: "Controller", defaultModule: "keyboard",   symbol: "⌘",   title: "Controllers", pitch: "Face controls and input bridges: knobs, buttons, XY pads, and external gestures." },
+  { id: "oscillator",   emoji: "〰️", label: "Oscillator",   defaultModule: "dsfOscillator", symbol: "∿",   title: "Oscillator", pitch: "Voices and raw tones: classic waves, tables, sync, supersaws, and other things that start a sound." },
+  { id: "oms",          emoji: "♻️", label: "Oscillator 2D", defaultModule: "spiral", symbol: "2D",  title: "Oscillator 2D", pitch: "2D motion oscillators: spirals, orbits, and ornamental X/Y voices." },
   { id: "modulator",    emoji: "♾️", label: "Modulator",    symbol: "⇄",   title: "Modulator", pitch: "Motion sources for pitch, amplitude, time, and texture. Small control engines that make patches move." },
-  { id: "additive",     emoji: "📊", label: "Additive",     symbol: "∑",   title: "Additive",   pitch: "Harmonic-stack voices: build timbre from partials, not a single waveform." },
-  { id: "chaos",        emoji: "🌌", label: "Chaos",        symbol: "∞",   title: "Chaos",     pitch: "All the various attractors and strange motion systems. The wild shelf where math starts looking back." },
-  { id: "noise",        emoji: "🌧️", label: "Noise",        symbol: "✦",   title: "Noise",     pitch: "Noise, dust, instability, sparks, and all the useful mess a clean machine secretly needs." },
-  { id: "drum",         emoji: "🥁", label: "Drum",         symbol: "▥",   title: "Drum",      pitch: "Rhythm machines, drum voices, pattern engines, and percussion control surfaces." },
-  { id: "dynamics",     emoji: "⚡", label: "Dynamics",     symbol: "⚡",   title: "Dynamics",  pitch: "Power routing, level control, and response shaping for keeping a circuit alive under pressure." },
-  { id: "math",         emoji: "➗", label: "Math",         symbol: "±",   title: "Math",      pitch: "Arithmetic, compares, boolean, and maps. Numbers in, numbers out." },
-  { id: "envelope",     emoji: "📐", label: "Envelope",     symbol: "⌒",   title: "Envelope",  pitch: "Attack, decay, sustain, release, and gate-shaped motion. Make sound and visuals breathe on command." },
-  { id: "scientificFilter", emoji: "💧", label: "Scientific Filter", symbol: "🔬", title: "Scientific Filter", pitch: "Textbook responses. Hz, order, clean controls — Tilt, Butterworth, and other predictable spectral tools." },
-  { id: "analogFilter",     emoji: "🔥", label: "Analog Filter",     symbol: "≈",  title: "Analog Filter",     pitch: "Circuit-style filters — Dual Ladder, Ladder, Passive, 303, Flower Child, SuperLove, and other engines with personality." },
+  { id: "additive",     emoji: "📊", label: "Additive", defaultModule: ["additiveGenerator", "additiveOut"],     symbol: "∑",   title: "Additive",   pitch: "Harmonic-stack voices: build timbre from partials, not a single waveform." },
+  { id: "chaos",        emoji: "🌌", label: "Chaos", defaultModule: "lorenzAttractor",        symbol: "∞",   title: "Chaos",     pitch: "All the various attractors and strange motion systems. The wild shelf where math starts looking back." },
+  { id: "noise",        emoji: "🌧️", label: "Noise", defaultModule: "fluvNoise",        symbol: "✦",   title: "Noise",     pitch: "Noise, dust, instability, sparks, and all the useful mess a clean machine secretly needs." },
+  { id: "drum",         emoji: "🥁", label: "Drum", defaultModule: "robinSinepulse",         symbol: "▥",   title: "Drum",      pitch: "Rhythm machines, drum voices, pattern engines, and percussion control surfaces." },
+  { id: "dynamics",     emoji: "⚡", label: "Dynamics", defaultModule: "attenuverter",     symbol: "⚡",   title: "Dynamics",  pitch: "Power routing, level control, and response shaping for keeping a circuit alive under pressure." },
+  { id: "math",         emoji: "➗", label: "Math", defaultModule: "comparator",         symbol: "±",   title: "Math",      pitch: "Arithmetic, compares, boolean, and maps. Numbers in, numbers out." },
+  { id: "envelope",     emoji: "📐", label: "Envelope", defaultModule: "vactrol",     symbol: "⌒",   title: "Envelope",  pitch: "Attack, decay, sustain, release, and gate-shaped motion. Make sound and visuals breathe on command." },
+  { id: "scientificFilter", emoji: "💧", label: "Scientific Filter", defaultModule: "eqFilter", symbol: "🔬", title: "Scientific Filter", pitch: "Textbook responses. Hz, order, clean controls — Tilt, Butterworth, and other predictable spectral tools." },
+  { id: "analogFilter",     emoji: "🔥", label: "Analog Filter", defaultModule: "passiveFilter",     symbol: "≈",  title: "Analog Filter",     pitch: "Circuit-style filters — Dual Ladder, Ladder, Passive, 303, Flower Child, SuperLove, and other engines with personality." },
   { id: "musical",      emoji: "🎼", label: "Musical",      symbol: "𝄞",  title: "Musical",  pitch: "Pitch, scale, and harmony tools: quantizers, chord pickers, progressions, and other note-theory building blocks." },
-  { id: "space",        emoji: "⛪", label: "Space",        symbol: "FX",  title: "Space",     pitch: "Space and multifx: delay, reverb, flanger, phaser, and other processors for shaping finished sound." },
+  { id: "space",        emoji: "⛪", label: "Space", defaultModule: "pingPongDelay",        symbol: "FX",  title: "Space",     pitch: "Space and multifx: delay, reverb, flanger, phaser, and other processors for shaping finished sound." },
   // Id stays clock (saved settings / catalog). Shelf label is Time.
-  { id: "clock",        emoji: "⌚", label: "Clock",        symbol: "♪",   title: "Clock",     pitch: "Clocks, sequencers, dividers, counters, and trigger timing — everything that decides WHEN the rest of the patch fires." },
-  { id: "digital",      emoji: "🔬", label: "Digital",      symbol: "{ }", title: "Digital",   pitch: "Patch-local code surfaces, exact value conversion, and digital/visual programming tools inside the sandbox." },
-  { id: "text",         emoji: "📝", label: "Text",         symbol: "Aa",  title: "Text",      pitch: "Text and code surfaces: labels, streams, and control-plane Code boxes. Not audio DSP." },
-  { id: "sample",       emoji: "🎶", label: "Sample Player", symbol: "▣", title: "Sample Player", pitch: "Sample and music-file playback: one-shots, loops, and scrubbable players that turn stored audio into patch signal." },
-  { id: "object",       emoji: "🧊", label: "Object",       symbol: "●",   title: "Object",    pitch: "Things you place in the world rather than wire into the signal path -- indicator lights, label plates, and other in-world props." },
-  { id: "rgb",          emoji: "🌈", label: "RGB",          symbol: "◍",   title: "RGB",       pitch: "RGB analog picture and vector faces — Scan Grid, Vector RGB, and other color-path scopes." },
-  { id: "rgba",         emoji: "🖼️", label: "Shader",       symbol: "▣",   title: "Shader",    pitch: "Screen-space shaders, color-space, image, and screen-wash modules — RGBA/HSLA, chroma, and stills." },
-  { id: "oscilloscope", emoji: "📺", label: "Oscilloscope", symbol: "OSC", title: "Oscilloscope", pitch: "Dedicated display testbeds for trace, line burn, 2D scope, videoscope, and canvas-style waveform inspection." },
-  { id: "multimeter",   emoji: "📟", label: "Multimeter",   symbol: "0D",  title: "Multimeter", pitch: "Readouts that are not waveforms: numbers, character grids, and other value/message faces for what the signal is saying right now." },
+  { id: "clock",        emoji: "⌚", label: "Clock", defaultModule: "clock",        symbol: "♪",   title: "Clock",     pitch: "Clocks, sequencers, dividers, counters, and trigger timing — everything that decides WHEN the rest of the patch fires." },
+  { id: "digital",      emoji: "🔬", label: "Digital", defaultModule: "t",      symbol: "{ }", title: "Digital",   pitch: "Patch-local code surfaces, exact value conversion, and digital/visual programming tools inside the sandbox." },
+  { id: "text",         emoji: "📝", label: "Text", defaultModule: "textBox",         symbol: "Aa",  title: "Text",      pitch: "Text and code surfaces: labels, streams, and control-plane Code boxes. Not audio DSP." },
+  { id: "sample",       emoji: "🎶", label: "Sample Player", defaultModule: "samplePlayer", symbol: "▣", title: "Sample Player", pitch: "Sample and music-file playback: one-shots, loops, and scrubbable players that turn stored audio into patch signal." },
+  { id: "object",       emoji: "🧊", label: "Object", defaultModule: "phoneTone",       symbol: "●",   title: "Object",    pitch: "Things you place in the world rather than wire into the signal path -- indicator lights, label plates, and other in-world props." },
+  { id: "rgb",          emoji: "🌈", label: "RGB", defaultModule: "rasterRgb",          symbol: "◍",   title: "RGB",       pitch: "RGB analog picture and vector faces — Scan Grid, Vector RGB, and other color-path scopes." },
+  { id: "rgba",         emoji: "🖼️", label: "Shader", defaultModule: "screenSpaceShader",       symbol: "▣",   title: "Shader",    pitch: "Screen-space shaders, color-space, image, and screen-wash modules — RGBA/HSLA, chroma, and stills." },
+  { id: "oscilloscope", emoji: "📺", label: "Oscilloscope", defaultModule: "plot1d", symbol: "OSC", title: "Oscilloscope", pitch: "Dedicated display testbeds for trace, line burn, 2D scope, videoscope, and canvas-style waveform inspection." },
+  { id: "multimeter",   emoji: "📟", label: "Multimeter", defaultModule: "spectrogram",   symbol: "0D",  title: "Multimeter", pitch: "Readouts that are not waveforms: numbers, character grids, and other value/message faces for what the signal is saying right now." },
   { id: "gametrigger",  emoji: "♟️", label: "Game Trigger",  symbol: "",    title: "Game Triggers", pitch: "" },
-  { id: "debug",        emoji: "🐞", label: "Debug",        symbol: "DBG", title: "Debug",     pitch: "Inspection tools, sentinels, and safety monitors for catching bad values while a patch is under test." },
+  { id: "debug",        emoji: "🐞", label: "Debug", defaultModule: "badvalMonitor",        symbol: "DBG", title: "Debug",     pitch: "Inspection tools, sentinels, and safety monitors for catching bad values while a patch is under test." },
   // Retired Plugin shelf — knobs/sliders live in Controller, I/O in Portal.
   // Holding pen. listed:false = never a browser shelf, never search, never developer dump.
   { id: "invisible",    emoji: "",   label: "Invisible",    symbol: "",    title: "Invisible", pitch: "Not listed. Modules we are unsure about — hidden from the module browser for users and developers.", listed: false },
@@ -925,6 +926,12 @@ const nodeGraphModuleStoreCatalog = Object.freeze({
     label: "DSF Morphing Osc",
     notes: ["oscillator", "dsf", "discrete summation formula", "anti-aliasing", "morph", "formant", "native"],
   },
+  dsfFormant: {
+    category: "oscillator",
+    description: "Four pitch-locked DSF formant bands (Moorer offset sums). Harmonics follow pitch; each peak sits at its formant frequency. Sweep walks a vowel path; Body adds low harmonics on the fundamental.",
+    label: "DSF Formant",
+    notes: ["oscillator", "dsf", "formant", "vowel", "discrete summation formula", "anti-aliasing", "native"],
+  },
   robinSupersaw: {
     category: "oscillator",
     description: "Pitch-dithered supersaw (frequency detune, not phase mod). Waveform Saw / Squircle (sine to square Morph) / Trisaw / Center, Left, and Right pulses / Ramp. Fractional voices, Reset, Random Phase, Portamento, detune-face lines (±0.5 oct).",
@@ -1200,9 +1207,9 @@ const nodeGraphModuleStoreCatalog = Object.freeze({
   },
   ampCurve: {
     category: "dynamics",
-    description: "Shape CV for Amplitude params — Lin (clamp 0…1) or Exp classic VCA response (0 mute → 1 unity).",
+    description: "Shape an envelope through Step Graph curves. Skew −1…+1 bends the selected shape (0 is linear for most shapes).",
     label: "Amp Curve",
-    notes: ["curve", "amplitude", "vca", "cv", "gold", "lin", "exp", "dynamics", "native"],
+    notes: ["curve", "amplitude", "vca", "cv", "gold", "shape", "skew", "dynamics", "native"],
   },
   attenuverter: {
     category: "dynamics",
@@ -1429,15 +1436,15 @@ const nodeGraphModuleStoreCatalog = Object.freeze({
   },
   midiCc: {
     category: "controller",
-    description: "Smooth a MIDI CC, pitch bend, or aftertouch. Out is smoothed×Amp + In; White is Out×128.",
+    description: "Smooth a MIDI CC, pitch bend, or aftertouch. Out is smooth(Bias) times Amp plus raw In (unsmoothed thru). White is Out times 128.",
     label: "MIDI CC",
     notes: ["midi", "cc", "pitch bend", "aftertouch", "learn", "14-bit", "smoothing", "controller"],
   },
   keyboardController: {
-    category: "portal",
-    description: "Hardware MIDI in (Portal): Play Keys (blue) bitmask. Wire Play Keys into Meta Voices (or into Keyboard Play Keys for face lights).",
+    category: "controller",
+    description: "Hardware MIDI in: Play Keys (blue) bitmask. Wire Play Keys into Meta Voices (or into Keyboard Play Keys for face lights).",
     label: "MIDI",
-    notes: ["midi input", "midi channel", "play keys", "voices", "note", "gate", "trigger", "velocity", "portal"],
+    notes: ["midi input", "midi channel", "play keys", "voices", "note", "gate", "trigger", "velocity", "controller"],
   },
   keyboard: {
     category: "controller",
@@ -1502,7 +1509,7 @@ const nodeGraphModuleStoreCatalog = Object.freeze({
   },
   eqFilter: {
     category: "scientificFilter",
-    description: "Zero-latency multipurpose EQ band (LP/HP/peak/shelf…) for clean tone fixes.",
+    description: "Zero-latency multipurpose EQ band (LP/HP/peak/shelf…). Slope stacks identical 12 dB ZDF stages (12/24/36/48).",
     label: "EQ Filter ZDF",
     notes: [
       "eq",
@@ -1904,6 +1911,12 @@ const nodeGraphModuleStoreCatalog = Object.freeze({
     description: "Clocked arpeggiator over Arp Keys. Neon key face, Play Keys out, sequence offset.",
     label: "Arp",
     notes: ["arp", "arpeggiator", "musical", "sequence", "arp keys", "pitch", "clock", "play keys"],
+  },
+  gravityWalker: {
+    category: "musical",
+    description: "Clocked walker over held Arp Keys. Gravity sticks the step direction; Leap jumps the bounce pool. Outs: pitch, ƒ, Gate, Trigger, Degree.",
+    label: "Gravity Walker",
+    notes: ["gravity walker", "musical", "arp keys", "pitch", "degree", "walk", "bounce", "clock"],
   },
   ePiano: {
     category: "sample",
@@ -2611,9 +2624,9 @@ const nodeGraphModuleStoreCatalog = Object.freeze({
   },
   vactrol: {
     category: "envelope",
-    description: "Roll-your-own optical lag: Light → attack/release one-pole → gamma. Settles to 0 when dark.",
+    description: "Optical lag: Light in, attack/release one-pole. Amp Env = raw^Amp Curve. Flt Env = raw^Flt Curve, independently. Settles to 0 when dark.",
     label: "Vactrol",
-    notes: ["light input", "custom vactrol", "Model", "ModelA", "ModelB", "attack", "release", "curve", "sensitivity", "native"],
+    notes: ["light input", "custom vactrol", "attack", "release", "curve", "Amp Curve", "Flt Curve", "memory", "tone", "native"],
   },
   sandboxVisuals: {
     category: "rgb",
@@ -3178,7 +3191,7 @@ const nodeGraphNativeModuleTargetAliases = Object.freeze({
   eqFilter: Object.freeze(["bandpass", "allpass", "lowpass", "highpass"]),
   crossover2: Object.freeze(["crossover3", "crossover4", "crossover5", "crossover6"]),
   ellipsoid: Object.freeze(["ellipsoidOsc"]),
-  dsfOscillator: Object.freeze(["dsfMorphingOsc"]),
+  dsfOscillator: Object.freeze(["dsfMorphingOsc", "dsfFormant"]),
 });
 
 const nodeGraphModuleStoreNativeLabelTypes = Object.freeze(new Set([
@@ -3547,6 +3560,10 @@ const nodeGraphJsSourceEntriesByType = Object.freeze({
     sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/native_modules/dsf_oscillator/dsf_oscillator.cpp",
   },
   dsfMorphingOsc: {
+    source: "native_modules/dsf_oscillator/dsf_oscillator.cpp",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/native_modules/dsf_oscillator/dsf_oscillator.cpp",
+  },
+  dsfFormant: {
     source: "native_modules/dsf_oscillator/dsf_oscillator.cpp",
     sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/native_modules/dsf_oscillator/dsf_oscillator.cpp",
   },
@@ -4369,6 +4386,31 @@ function nodeGraphModuleStoreDepartmentIsListed(department = "") {
 function nodeGraphModuleStoreCategoryIsInvisible(department = "") {
   const id = normalizeNodeGraphModuleStoreDepartment(department);
   return id === "invisible" || nodeGraphModuleStoreDepartmentById[id]?.listed === false;
+}
+
+/** Type to drag out from a category row, or "" if the department has none / it is invalid. */
+/** Types to drag out from a category row (empty if none / all invalid).
+ *  defaultModule may be a string or an array of type ids. */
+function nodeGraphModuleStoreDepartmentDefaultModules(department = "") {
+  const id = normalizeNodeGraphModuleStoreDepartment(department);
+  const raw = nodeGraphModuleStoreDepartmentById[id]?.defaultModule;
+  const listed = Array.isArray(raw) ? raw : (raw ? [raw] : []);
+  const types = [];
+  for (const item of listed) {
+    const type = String(item || "").trim();
+    if (!type) continue;
+    if (!Object.hasOwn(nodeGraphModuleDefinitions || {}, type)) continue;
+    if (typeof nodeGraphModuleTypeIsInvisible === "function" && nodeGraphModuleTypeIsInvisible(type)) continue;
+    if (typeof nodeGraphModuleTypeIsUnderConstruction === "function" && nodeGraphModuleTypeIsUnderConstruction(type)) continue;
+    types.push(type);
+  }
+  return types;
+}
+
+/** First default type for a category row, or "" if the department has none / it is invalid. */
+function nodeGraphModuleStoreDepartmentDefaultModule(department = "") {
+  const types = nodeGraphModuleStoreDepartmentDefaultModules(department);
+  return types[0] || "";
 }
 
 function nodeGraphModuleTypeIsInvisible(type) {

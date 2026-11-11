@@ -105,6 +105,18 @@ function assignNodeGraphTypedDisplaySettingsToNode(node, displayType, settings) 
     node.traceDisplaySettings = normalizeNodeGraphPlotFaceSettings(settings);
     return node.traceDisplaySettings;
   }
+  if (displayType === "vactrolScope" && typeof normalizeNodeGraphVactrolScopeSettings === "function") {
+    const prev = node.traceDisplaySettings && typeof node.traceDisplaySettings === "object"
+      ? node.traceDisplaySettings
+      : {};
+    const incoming = settings && typeof settings === "object" ? settings : {};
+    const merged = { ...prev };
+    Object.keys(incoming).forEach((key) => {
+      if (incoming[key] !== undefined) merged[key] = incoming[key];
+    });
+    node.traceDisplaySettings = normalizeNodeGraphVactrolScopeSettings(merged);
+    return node.traceDisplaySettings;
+  }
   if (displayType === "pulseTrainFace" && typeof normalizeNodeGraphPulseTrainFaceSettings === "function") {
     node.traceDisplaySettings = normalizeNodeGraphPulseTrainFaceSettings(settings);
     if (typeof applyNodeGraphPulseTrainDisplaySettingsToFace === "function") {

@@ -614,6 +614,9 @@ export class SoundColorWidget {
     this.host = host;
     this.host.classList.add("scw-mount");
     this.label = options.label || "";
+    // When true, show the title strip even if the label is in GENERIC_LABELS
+    // (e.g. Vactrol's "Light" line, which would otherwise render a blank swatch).
+    this.showTitle = options.showTitle === true || options.forceTitle === true;
     // channels: "full" (plane+hue) | "bw" (plane grey only) | "hue" (hue bar only)
     if (options.channels === "bw" || options.mono === true) {
       this.channels = "bw";
@@ -769,6 +772,9 @@ export class SoundColorWidget {
     // Hue-only mode never shows a title strip (avoids giant "Hue" text box).
     if (this.channels === "hue") {
       return false;
+    }
+    if (this.showTitle && String(this.label || "").trim()) {
+      return true;
     }
     return !isGenericLabel(this.label);
   }

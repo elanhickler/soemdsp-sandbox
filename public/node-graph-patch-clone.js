@@ -642,6 +642,12 @@ function cloneNodeGraphTypedDisplaySettings(node) {
           : { ...bag },
       };
     }
+    case "vactrolScope":
+      return {
+        traceDisplaySettings: typeof normalizeNodeGraphVactrolScopeSettings === "function"
+          ? normalizeNodeGraphVactrolScopeSettings(bag)
+          : { ...(bag || {}) },
+      };
     default:
       if (node?.traceDisplaySettings && typeof node.traceDisplaySettings === "object") {
         return { traceDisplaySettings: { ...node.traceDisplaySettings } };

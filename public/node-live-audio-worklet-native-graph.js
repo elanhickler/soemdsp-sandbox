@@ -155,6 +155,7 @@ NodeLiveAudioProcessor.NATIVE_GRAPH_TYPE_IDS = Object.freeze({
   softwaveOsc: 45,
   dsfOscillator: 46,
   dsfMorphingOsc: 232,
+  dsfFormant: 243,
   hypersaw2: 158,
   fm: 169,
   pitchHz: 170,
@@ -570,6 +571,28 @@ NodeLiveAudioProcessor.prototype.mapNativeGraphParamId = function mapNativeGraph
     if (k === "mix") return P.NATIVE_GRAPH_PARAM_MIX;
     if (k === "trigMode") return P.NATIVE_GRAPH_PARAM_TIMING_MODE;
   }
+
+  if (t === "dsfFormant") {
+    if (k === "vowel") return P.NATIVE_GRAPH_PARAM_SHAPE;
+    if (k === "sweep") return P.NATIVE_GRAPH_PARAM_TIMING_MODE;
+    if (k === "body") return P.NATIVE_GRAPH_PARAM_MIX;
+    if (k === "freq1") return P.NATIVE_GRAPH_PARAM_CENTER;
+    if (k === "width1") return P.NATIVE_GRAPH_PARAM_WIDTH;
+    if (k === "gain1") return P.NATIVE_GRAPH_PARAM_LANE_VOL1;
+    if (k === "on1") return P.NATIVE_GRAPH_PARAM_MODE;
+    if (k === "freq2") return P.NATIVE_GRAPH_PARAM_LPF_FREQUENCY;
+    if (k === "width2") return P.NATIVE_GRAPH_PARAM_HPF_FREQUENCY;
+    if (k === "gain2") return P.NATIVE_GRAPH_PARAM_LANE_VOL2;
+    if (k === "on2") return P.NATIVE_GRAPH_PARAM_STAGES;
+    if (k === "freq3") return P.NATIVE_GRAPH_PARAM_LFO_RATE;
+    if (k === "width3") return P.NATIVE_GRAPH_PARAM_LFO_AMPLITUDE;
+    if (k === "gain3") return P.NATIVE_GRAPH_PARAM_LANE_VOL3;
+    if (k === "on3") return P.NATIVE_GRAPH_PARAM_LFO_STYLE;
+    if (k === "freq4") return P.NATIVE_GRAPH_PARAM_ATT_OFFSET;
+    if (k === "width4") return P.NATIVE_GRAPH_PARAM_SATURATE;
+    if (k === "gain4") return P.NATIVE_GRAPH_PARAM_LANE_VOL4;
+    if (k === "on4") return P.NATIVE_GRAPH_PARAM_WAVEFORM;
+  }
   if (t === "dsfMorphingOsc") {
     if (k === "symmetry") return P.NATIVE_GRAPH_PARAM_MIX;
     if (k === "width") return P.NATIVE_GRAPH_PARAM_WIDTH;
@@ -785,6 +808,11 @@ NodeLiveAudioProcessor.prototype.mapNativeGraphSrcPortId = function mapNativeGra
   const raw = String(port || "").trim();
   const p = raw.toLowerCase();
   const t = String(type || "").trim();
+  if (t === "vactrol") {
+    if (p === "tone") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_SAW;
+    if (p === "mem" || p === "memory") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_RAMP;
+    if (p === "out" || p === "env" || p === "mono") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_MONO;
+  }
   if (t === "midiCc" || t === "midiLag") {
     if (p === "out" || p === "mono") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_MONO;
     if (p === "white") return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_LEFT;
@@ -5206,8 +5234,17 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
       continue;
     }
     if (type === "ampCurve") {
-      // mode=Lin/Exp only
-      push("mode", P.NATIVE_GRAPH_PARAM_MODE, disc("mode", 1));
+      // mode=shape id (Step Graph curves). Persisted by choiceKeys name.
+      // shape Control slot = skew (-1..+1); default matches old Exp VCA law.
+      let ampCurveShapeId = disc("shape", 2);
+      const rawAmpCurveShape = node?.params?.shape;
+      if (typeof rawAmpCurveShape === "string") {
+        const names = ["Linear", "Rational", "Exponential", "Log", "Smoothstep", "Smootherstep"];
+        const idx = names.indexOf(rawAmpCurveShape.trim());
+        if (idx >= 0) ampCurveShapeId = idx;
+      }
+      push("shape", P.NATIVE_GRAPH_PARAM_MODE, ampCurveShapeId);
+      push("skew", P.NATIVE_GRAPH_PARAM_SHAPE, cont("skew", -0.6625295074459036));
       continue;
     }
     if (type === "rasterRgb") {
@@ -5443,6 +5480,35 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
       push("morph", P.NATIVE_GRAPH_PARAM_WIDTH, cont("morph", 0.5));
       push("blend", P.NATIVE_GRAPH_PARAM_MIX, cont("blend", 0.5));
       push("amplitude", P.NATIVE_GRAPH_PARAM_AMPLITUDE, cont("amplitude", 1));
+      continue;
+    }
+
+    if (type === "dsfFormant") {
+      // shape=Vowel, timingMode=Sweep, mix=Body, phase=Phase, amplitude=level
+      // Band1: center/width/laneVol1/mode  Band2: lpf/hpf/laneVol2/stages
+      // Band3: lfoRate/lfoAmplitude/laneVol3/lfoStyle  Band4: offset/saturate/laneVol4/waveform
+      push("frequency", P.NATIVE_GRAPH_PARAM_FREQUENCY, cont("frequency", 100));
+      push("phase", P.NATIVE_GRAPH_PARAM_PHASE, cont("phase", 0));
+      push("amplitude", P.NATIVE_GRAPH_PARAM_AMPLITUDE, cont("amplitude", 1));
+      push("vowel", P.NATIVE_GRAPH_PARAM_SHAPE, cont("vowel", 0));
+      push("sweep", P.NATIVE_GRAPH_PARAM_TIMING_MODE, disc("sweep", 0));
+      push("body", P.NATIVE_GRAPH_PARAM_MIX, cont("body", 0.5));
+      push("freq1", P.NATIVE_GRAPH_PARAM_CENTER, cont("freq1", 730));
+      push("width1", P.NATIVE_GRAPH_PARAM_WIDTH, cont("width1", 90));
+      push("gain1", P.NATIVE_GRAPH_PARAM_LANE_VOL1, cont("gain1", 1));
+      push("on1", P.NATIVE_GRAPH_PARAM_MODE, disc("on1", 1));
+      push("freq2", P.NATIVE_GRAPH_PARAM_LPF_FREQUENCY, cont("freq2", 1090));
+      push("width2", P.NATIVE_GRAPH_PARAM_HPF_FREQUENCY, cont("width2", 110));
+      push("gain2", P.NATIVE_GRAPH_PARAM_LANE_VOL2, cont("gain2", 0.7));
+      push("on2", P.NATIVE_GRAPH_PARAM_STAGES, disc("on2", 1));
+      push("freq3", P.NATIVE_GRAPH_PARAM_LFO_RATE, cont("freq3", 2440));
+      push("width3", P.NATIVE_GRAPH_PARAM_LFO_AMPLITUDE, cont("width3", 170));
+      push("gain3", P.NATIVE_GRAPH_PARAM_LANE_VOL3, cont("gain3", 0.45));
+      push("on3", P.NATIVE_GRAPH_PARAM_LFO_STYLE, disc("on3", 1));
+      push("freq4", P.NATIVE_GRAPH_PARAM_ATT_OFFSET, cont("freq4", 3400));
+      push("width4", P.NATIVE_GRAPH_PARAM_SATURATE, cont("width4", 250));
+      push("gain4", P.NATIVE_GRAPH_PARAM_LANE_VOL4, cont("gain4", 0.25));
+      push("on4", P.NATIVE_GRAPH_PARAM_WAVEFORM, disc("on4", 1));
       continue;
     }
     if (type === "dsfMorphingOsc") {
@@ -5975,8 +6041,10 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
     }
     if (type === "eqFilter") {
       // Face mode is remapped to Robin DSP in process_eq_filter.
+      // stages=slope 0..3 (12/24/36/48), same binding as Lowpass Filter ZDF.
       push("frequency", P.NATIVE_GRAPH_PARAM_FREQUENCY, cont("frequency", 1000));
       push("mode", P.NATIVE_GRAPH_PARAM_MODE, disc("mode", 1));
+      push("slope", P.NATIVE_GRAPH_PARAM_STAGES, disc("slope", 0));
       push("q", P.NATIVE_GRAPH_PARAM_RESONANCE, cont("q", 0.707));
       push("gain", P.NATIVE_GRAPH_PARAM_GAIN_DB, cont("gain", 0));
       push("amplitude", P.NATIVE_GRAPH_PARAM_AMPLITUDE, cont("amplitude", 1));
@@ -6187,20 +6255,18 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
       continue;
     }
     if (type === "vactrol") {
-      // timeNumerator=attack, timeDenominator=release, shape=curve, width=sensitivity,
-      // waveform=Model (0 ModelA default / 1 ModelB). Persisted by choiceKeys name.
-      let vactrolModelId = disc("model", 0);
-      const rawVactrolModel = node?.params?.model;
-      if (typeof rawVactrolModel === "string") {
-        const s = rawVactrolModel.trim();
-        if (s === "ModelA") vactrolModelId = 0;
-        else if (s === "ModelB") vactrolModelId = 1;
-      }
-      push("model", P.NATIVE_GRAPH_PARAM_WAVEFORM, vactrolModelId);
+      // timeNumerator=attack, timeDenominator=release, shape=curve,
+      // center=memoryDepth, offsetMs=memoryCharge, lfoRate=memoryDischarge,
+      // feedback=releaseSpan, level=memoryBright, resonance=fltCurve.
       push("attack", P.NATIVE_GRAPH_PARAM_TIME_NUMERATOR, cont("attack", 0));
       push("release", P.NATIVE_GRAPH_PARAM_TIME_DENOMINATOR, cont("release", 0.1));
       push("curve", P.NATIVE_GRAPH_PARAM_SHAPE, cont("curve", 1));
-      push("sensitivity", P.NATIVE_GRAPH_PARAM_WIDTH, cont("sensitivity", 1));
+      push("memoryDepth", P.NATIVE_GRAPH_PARAM_CENTER, cont("memoryDepth", 2));
+      push("memoryCharge", P.NATIVE_GRAPH_PARAM_OFFSET_MS, cont("memoryCharge", 1));
+      push("memoryDischarge", P.NATIVE_GRAPH_PARAM_LFO_RATE, cont("memoryDischarge", 3));
+      push("releaseSpan", P.NATIVE_GRAPH_PARAM_FEEDBACK, cont("releaseSpan", 100));
+      push("memoryBright", P.NATIVE_GRAPH_PARAM_LEVEL, cont("memoryBright", 0));
+      push("fltCurve", P.NATIVE_GRAPH_PARAM_RESONANCE, cont("fltCurve", 2));
       push("recalculateOnTrigger", P.NATIVE_GRAPH_PARAM_MODE, disc("recalculateOnTrigger", 1));
       push("amplitude", P.NATIVE_GRAPH_PARAM_AMPLITUDE, cont("amplitude", 1));
       continue;
@@ -10033,9 +10099,11 @@ NodeLiveAudioProcessor.prototype.nativeGraphPortNames = function nativeGraphPort
       return ["Dry L", "Dry Left"];
     }
     if (type === "pingPongDelay") return ["LFO L", "Mod L", "Mod Left", "Saw"];
+    if (type === "vactrol") return ["Tone"];
     return ["Saw"];
   }
   if (portId === P.NATIVE_GRAPH_PORT_RAMP) {
+    if (type === "vactrol") return ["Mem"];
     if (type === "hostBpm") return ["pitch", "♯/♭"];
     if (type === "rmsMeter") return ["Env Inverted"];
     if (type === "helmholtzPitch") return ["Detune"];
@@ -10066,6 +10134,7 @@ NodeLiveAudioProcessor.prototype.nativeGraphPortNames = function nativeGraphPort
     return ["Ramp"];
   }
   if (portId === P.NATIVE_GRAPH_PORT_SQUARE) {
+    if (type === "vactrol") return ["Light"];
     if (type === "hostBpm") return ["Phase"];
     if (type === "resonantCompressor") return ["Env"];
     if (type === "rmsMeter") return ["dB R"];
@@ -10439,6 +10508,14 @@ NodeLiveAudioProcessor.prototype.publishNativeGraphScopeTaps = function publishN
       } else if (type === "t" || /^t([2-9]|1[01])$/.test(type)) {
         // t-series: Saw bus = Open (gate openness for Value Line).
         ports = facePorts.concat(P.NATIVE_GRAPH_PORT_SAW);
+      } else if (type === "vactrol") {
+        // Tone (Flt Env) on Saw, Mem display tap on Ramp, Light (clamped
+        // input) on Square. Mono still carries Amp Env (Out).
+        ports = facePorts.concat(
+          P.NATIVE_GRAPH_PORT_SAW,
+          P.NATIVE_GRAPH_PORT_RAMP,
+          P.NATIVE_GRAPH_PORT_SQUARE,
+        );
       } else {
         ports = facePorts;
       }

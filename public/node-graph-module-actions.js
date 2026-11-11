@@ -75,7 +75,7 @@ function nodeGraphFindNearestFreeModuleGridPoint(node, nodes, preferred) {
   return nodeGraphFindFreeModuleGridPoint(node.type, nodes, preferred);
 }
 
-/** Spawn the Portal MIDI (keyboardController) module if the patch has none. */
+/** Spawn the MIDI (keyboardController) module if the patch has none. */
 function ensureNodeGraphMidiModule() {
   if (nodeGraphMvp.patch.nodes.some((node) => node.type === "keyboardController")) {
     return false;
@@ -478,6 +478,151 @@ function showNodeGraphPortalIoPair(point = null, options = {}) {
   }
   commitAdd();
   return inId;
+}
+
+
+/** Wire matching data-plane ports (e.g. Additive Graph -> Graph) on a fresh patch. */
+function nodeGraphModuleGroupDataConnections(leftNode, rightNode) {
+  const leftDef = nodeGraphModuleDefinitions?.[leftNode?.type] || {};
+  const rightDef = nodeGraphModuleDefinitions?.[rightNode?.type] || {};
+  const outs = Array.isArray(leftDef.dataOutputs) ? leftDef.dataOutputs : [];
+  const ins = new Set(Array.isArray(rightDef.dataInputs) ? rightDef.dataInputs : []);
+  const connections = [];
+  for (const port of outs) {
+    if (!ins.has(port)) continue;
+    connections.push({
+      destinationNode: rightNode.id,
+      destinationPort: port,
+      sourceNode: leftNode.id,
+      sourcePort: port,
+      tracePoints: [],
+    });
+  }
+  return connections;
+}
+
+/**
+ * Place two (or more) modules side by side and stash them on the same
+ * pending-pair path Portal IO uses, so shop drag / cancel / drop stay in sync.
+ * Returns the leftmost node id.
+ */
+function showNodeGraphModuleGroup(types, point = null, options = {}) {
+  const list = (Array.isArray(types) ? types : [types])
+    .map((type) => String(type || "").trim())
+    .filter((type) => type && Object.hasOwn(nodeGraphModuleDefinitions, type));
+  if (list.length < 2) {
+    return showNodeGraphModule(list[0] || "", point, options);
+  }
+  if (typeof nodeGraphPatchIsLocked === "function" && nodeGraphPatchIsLocked()) {
+    if (typeof setNodeInteractionHelp === "function") {
+      setNodeInteractionHelp("Patch is locked.");
+    }
+    return "";
+  }
+  if (typeof nodeGraphEfficientProductEnabled === "function"
+    && nodeGraphEfficientProductEnabled()) {
+    for (const type of list) {
+      const shopOk = typeof nodeGraphModuleIsEfficientProductShopType === "function"
+        && nodeGraphModuleIsEfficientProductShopType(type);
+      const chromeOk = typeof nodeGraphModuleIsEfficientProductChromeType === "function"
+        && nodeGraphModuleIsEfficientProductChromeType(type);
+      if (!shopOk && !chromeOk) {
+        if (typeof setNodeInteractionHelp === "function") {
+          setNodeInteractionHelp("not in efficient build");
+        }
+        return "";
+      }
+    }
+  }
+  const live = nodeGraphMvp.patch;
+  const counts = typeof nextNodeGraphTypeCounts === "function"
+    ? nextNodeGraphTypeCounts(live.nodes)
+    : {};
+  const gridPoint = point
+    ? (typeof nodeGraphPixelToGrid === "function" ? nodeGraphPixelToGrid(point) : point)
+    : (typeof defaultNodeGraphModuleGridPoint === "function"
+      ? defaultNodeGraphModuleGridPoint(list[0])
+      : { gx: 8, gy: 8 });
+  const nodes = [];
+  let gx = Number(gridPoint.gx);
+  const gy = Number(gridPoint.gy);
+  for (const type of list) {
+    counts[type] = (counts[type] || 0) + 1;
+    const id = (typeof nodeGraphIoModuleTypes !== "undefined"
+      && nodeGraphIoModuleTypes.includes(type))
+      ? type
+      : `${type}-${counts[type]}`;
+    const newNode = createNodeGraphPatchNode(type, { id, gx, gy });
+    if (typeof nodeGraphMetamoduleClaimPlacedNode === "function") {
+      nodeGraphMetamoduleClaimPlacedNode(newNode, live);
+    }
+    nodes.push(newNode);
+    const width = typeof nodeGraphDefaultModuleGridWidthUnits === "function"
+      ? nodeGraphDefaultModuleGridWidthUnits(type)
+      : Number(nodeGraphModuleDefinitions?.[type]?.defaultWidthGu) || 8;
+    gx += (Number.isFinite(width) && width > 0 ? width : 8) + 1;
+  }
+  const autoConnections = [];
+  for (let i = 0; i < nodes.length - 1; i += 1) {
+    autoConnections.push(...nodeGraphModuleGroupDataConnections(nodes[i], nodes[i + 1]));
+  }
+  const patch = {
+    ...live,
+    nodes: [
+      ...(live.nodes || []),
+      ...nodes,
+    ],
+    connections: [
+      ...(live.connections || []),
+      ...autoConnections,
+    ],
+  };
+  for (const newNode of nodes) {
+    if (typeof nodeGraphAssignFreshModuleSeeds === "function") {
+      nodeGraphAssignFreshModuleSeeds(patch, newNode);
+    }
+  }
+  const offsetGu = {
+    gx: Number(nodes[1].gx) - Number(nodes[0].gx),
+    gy: Number(nodes[1].gy) - Number(nodes[0].gy),
+  };
+  const commitAdd = () => {
+    const addTouchesCircuit = nodes.some((node) => (
+      typeof nodeGraphTypeNeedsLiveCircuit !== "function"
+      || nodeGraphTypeNeedsLiveCircuit(node.type)
+    ));
+    const skipLive = options.skipLivePlan !== undefined
+      ? Boolean(options.skipLivePlan)
+      : !addTouchesCircuit;
+    commitNodeGraphPatch(patch, {
+      status: options.status || "modules added",
+      topologyEdit: true,
+      record: options.record,
+      autosaveWorkingPatch: options.autosaveWorkingPatch,
+      skipLivePlan: skipLive,
+      livePlan: addTouchesCircuit && !skipLive,
+      deferUiPanels: options.deferUiPanels !== false,
+    });
+  };
+  // Same stash Portal IO uses so beginPlacement / shop select / cancel stay generic.
+  if (nodeGraphMvp) {
+    nodeGraphMvp._pendingPortalIoPair = {
+      inId: nodes[0].id,
+      outId: nodes[1].id,
+      offsetGu,
+    };
+  }
+  if (options.record !== false) {
+    if (typeof noteNodeGraphHeavyHistoryAction === "function") {
+      noteNodeGraphHeavyHistoryAction("add");
+    }
+    if (typeof runNodeGraphHistoryAfterGlow === "function") {
+      runNodeGraphHistoryAfterGlow("last", commitAdd);
+      return nodes[0].id;
+    }
+  }
+  commitAdd();
+  return nodes[0].id;
 }
 
 function showNodeGraphModule(node, point = null, options = {}) {
@@ -979,13 +1124,24 @@ function beginNodeGraphModulePlacement(type, point = null, options = {}) {
     positionNodeGraphPendingModuleAtCursor(cursorPoint);
     return existingUnique.id;
   }
-  const id = showNodeGraphModule(type, cursorPoint, {
-    status: "module ghost: release in modular view",
-    record: false,
-    autosaveWorkingPatch: false,
-    skipLivePlan: true,
-    deferUiPanels: true,
-  });
+  const groupTypes = (Array.isArray(options.groupTypes) ? options.groupTypes : [])
+    .map((item) => String(item || "").trim())
+    .filter((item) => item && Object.hasOwn(nodeGraphModuleDefinitions, item));
+  const id = groupTypes.length > 1
+    ? showNodeGraphModuleGroup(groupTypes, cursorPoint, {
+      status: "module ghost: release in modular view",
+      record: false,
+      autosaveWorkingPatch: false,
+      skipLivePlan: true,
+      deferUiPanels: true,
+    })
+    : showNodeGraphModule(type, cursorPoint, {
+      status: "module ghost: release in modular view",
+      record: false,
+      autosaveWorkingPatch: false,
+      skipLivePlan: true,
+      deferUiPanels: true,
+    });
   if (!id) {
     return "";
   }
@@ -1029,11 +1185,26 @@ function beginNodeGraphModuleStorePointerPlacement(event) {
   if (event.button !== undefined && event.button !== 0) {
     return false;
   }
-  const addButton = event.target.closest("[data-context-module]");
+  let addButton = event.target.closest("[data-context-module]");
+  let type = addButton?.dataset.contextModule || "";
+  let fromDepartment = "";
+  let groupTypes = null;
   if (!addButton) {
-    return false;
+    const deptButton = event.target.closest("[data-store-department]");
+    const deptId = String(deptButton?.dataset.storeDepartment || "").trim();
+    const defaultTypes = typeof nodeGraphModuleStoreDepartmentDefaultModules === "function"
+      ? nodeGraphModuleStoreDepartmentDefaultModules(deptId)
+      : (typeof nodeGraphModuleStoreDepartmentDefaultModule === "function"
+        ? [nodeGraphModuleStoreDepartmentDefaultModule(deptId)].filter(Boolean)
+        : []);
+    if (!deptButton || !defaultTypes.length) {
+      return false;
+    }
+    addButton = deptButton;
+    type = defaultTypes[0];
+    fromDepartment = deptId;
+    groupTypes = defaultTypes.length > 1 ? defaultTypes : null;
   }
-  const type = addButton.dataset.contextModule;
   if (!type || !Object.hasOwn(nodeGraphModuleDefinitions, type)) {
     return false;
   }
@@ -1043,6 +1214,8 @@ function beginNodeGraphModuleStorePointerPlacement(event) {
   nodeGraphMvp.modulePlacement = {
     armed: true,
     cursorPoint: nodeGraphClientPoint(event),
+    fromDepartment,
+    groupTypes: groupTypes || null,
     nodeId: "",
     overWorkspace: nodeGraphClientPointInsideWorkspace(event),
     pointerId: event.pointerId ?? null,
@@ -1072,6 +1245,7 @@ function spawnNodeGraphModuleStorePlacementIfDragged(event) {
   const pointerId = placement.pointerId;
   const sourceElement = placement.sourceElement;
   const nodeId = beginNodeGraphModulePlacement(type, nodeGraphClientPoint(event), {
+    groupTypes: placement.groupTypes,
     overWorkspace: nodeGraphClientPointInsideWorkspace(event),
   });
   if (!nodeId || !nodeGraphMvp.modulePlacement) {
@@ -1152,7 +1326,11 @@ function finishNodeGraphModulePlacementAtCurrentPosition(status = "module placed
       || nodeGraphTypeNeedsLiveCircuit(placed?.type)
     );
     commitNodeGraphPatch(nodeGraphMvp.patch, {
-      status: pairIds.length > 1 ? "portal IO placed" : status,
+      status: pairIds.length > 1
+        ? ((placement.type === "namedPortalIn" || placement.type === "portalIo")
+          ? "portal IO placed"
+          : "modules placed")
+        : status,
       layoutEdit: true,
       skipValidate: true,
       skipLivePlan: !dropTouchesCircuit,
@@ -1228,7 +1406,13 @@ function releaseNodeGraphModuleStorePointerPlacement(event) {
     placement.sourceElement.releasePointerCapture(event.pointerId);
   }
   if (!placement.nodeId) {
+    const fromDepartment = placement.fromDepartment;
     nodeGraphMvp.modulePlacement = null;
+    // Tap on a category still opens it. pointerdown preventDefault can swallow
+    // the click on touch, so open here when the gesture never became a drag.
+    if (fromDepartment && typeof setNodeGraphModuleStoreDepartment === "function") {
+      setNodeGraphModuleStoreDepartment(fromDepartment);
+    }
     event.preventDefault();
     event.stopPropagation();
     return false;

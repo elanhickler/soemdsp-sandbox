@@ -7508,6 +7508,7 @@ body.keyboard-debug-hidden .node-keyboard-signal-bar {
   --node-jack-magenta: #e040fb;  /* M — reserved unused */
   /* K / Voices — charcoal: dark enough to read as black, light enough on #000. */
   --node-jack-black: #6a6a6a;
+  --node-jack-white: #f4f4f4;   /* white-colored 0-127 / digital-scale outlets */
   /* Legacy turquoise → same ink as cyan (prefer data-jack-channel="cyan"). */
   --node-jack-turquoise: var(--node-jack-cyan);
   --node-port-used-brightness: 85%;
@@ -16910,6 +16911,16 @@ body.node-screen-solo-active .node-screen-solo-face.node-text-box-body > .node-t
   );
 }
 
+.dsp-node .node-port.output[data-jack-channel="white"],
+.dsp-node .node-io-row.output[data-jack-channel="white"] .node-port.output {
+  --node-output-stroke: var(--node-jack-white);
+  --node-port-crescent-stroke: color-mix(
+    in srgb,
+    var(--node-jack-white) var(--node-port-paint-brightness),
+    transparent
+  );
+}
+
 /* Magenta / black reserved (CMYK M/K) — unused in live assignment. */
 .dsp-node .node-port.output[data-jack-channel="magenta"],
 .dsp-node .node-io-row.output[data-jack-channel="magenta"] .node-port.output {
@@ -25033,6 +25044,7 @@ code {
 }
 
 /* LayoutA face row: fixed display-height track (not height:100% of module). */
+.node-midi-monitor-face,
 .node-harmonic-count-display,
 .node-harmonic-lines-display,
 .node-additive-filter-curve-display {
@@ -25050,6 +25062,7 @@ code {
   background: #050508;
   pointer-events: none;
 }
+.node-midi-monitor-canvas,
 .node-harmonic-count-canvas,
 .node-harmonic-lines-canvas,
 .node-additive-filter-curve-canvas {
@@ -25418,6 +25431,9 @@ html.soemdsp-whole-module .node-layout-canvas-grip {
   right: 0;
   pointer-events: auto;
   touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
 }
 
 /* Layout 3 (railsOnly) uses the shared IO label type; labels are short (rails.js). */

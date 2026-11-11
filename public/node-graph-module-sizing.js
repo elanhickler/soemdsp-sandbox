@@ -206,7 +206,6 @@ function nodeGraphModuleHasFace(type) {
   if ([
     "canvas",
     "image",
-    "keyboardController",
     "screenSpaceShader",
     "speakerProtection",
     "textBox",
@@ -1675,12 +1674,13 @@ function nodeGraphModuleHeightWidgetUnits(type, ui = {}, node = null) {
     ];
   }
   if (nodeGraphModuleDefinitions[type]?.layout === "keyboardController") {
-    // LayoutA: header | Input+Channel | I/O | inset. These two fields are
-    // interface controls, not a display face — Displays-off must not hide them.
+    // LayoutA: header | Input+Channel | I/O | monitor face | inset.
+    // Input+Channel stay interface controls — Displays-off must not hide them.
     return [
       { id: "header", heightGu: nodeGraphModuleHeaderHeightUnits(ui), visible: true },
       { id: "interfaceControls", heightGu: 3, visible: true },
       { id: "io", heightGu: ioHeightGu, visible: ioVisible },
+      { id: "face", heightGu: nodeGraphModuleDisplayHeightUnits(type, ui), visible: displayVisible },
       { id: "inset", heightGu: nodeGraphModuleLayout.moduleGridInsetGu * 1.5, visible: true },
     ];
   }

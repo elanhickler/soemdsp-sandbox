@@ -228,7 +228,7 @@ const nodeGraphTraceDisplaySettingControlKeys = Object.freeze({
     "pill",
     "squircle",
   ],
-  colors: ["dot1Color", "secondaryColor", "tertiaryColor", "backgroundColor", "ghostColor", "buttonColor", "hoverColor", "downColor", "textColor", "strokeColor", "strokeLeftColor", "strokeRightColor", "dotColor", "arcFill", "arcTrack", "sliderColor", "sliderNumberColor", "sliderTextColor", "sliderUnitColor", "inactiveColor", "activeColor", "fontColor", "inactiveFillColor", "activeFillColor", "inactiveTextColor", "activeTextColor", "previousColor"],
+  colors: ["dot1Color", "secondaryColor", "tertiaryColor", "backgroundColor", "ghostColor", "buttonColor", "hoverColor", "downColor", "textColor", "strokeColor", "strokeLeftColor", "strokeRightColor", "dotColor", "arcFill", "arcTrack", "sliderColor", "sliderNumberColor", "sliderTextColor", "sliderUnitColor", "inactiveColor", "activeColor", "fontColor", "inactiveFillColor", "activeFillColor", "inactiveTextColor", "activeTextColor", "previousColor", "lightColor", "fltEnvColor", "ampEnvColor"],
   // Every control key that exists in the shared popover MUST be listed here.
   // setNodeGraphTraceDisplaySettingsFormType only show/hides keys from these
   // lists — anything missing leaks onto every module (e.g. Output saw
@@ -237,6 +237,10 @@ const nodeGraphTraceDisplaySettingControlKeys = Object.freeze({
     "autoZoomLines",
     "sourceSync",
     "skipDiscontinuities",
+    "skipLight",
+    "skipFlt",
+    "skipAmp",
+    "skipMem",
     "bipolarBrightness",
     "secondaryEnabled",
     "capEnabled",
@@ -977,6 +981,12 @@ const nodeGraphTraceDisplayActiveControlsByType = Object.freeze({
     toggles: Object.freeze(["sourceSync", "skipDiscontinuities"]),
     choices: Object.freeze(["windowMode", "syncChannel", "plotDraw", "barInk"]),
   }),
+  vactrolScope: Object.freeze({
+    fields: Object.freeze(["historySeconds"]),
+    colors: Object.freeze(["backgroundColor", "lightColor", "fltEnvColor", "ampEnvColor"]),
+    toggles: Object.freeze(["skipLight", "skipFlt", "skipAmp", "skipMem"]),
+    choices: Object.freeze([]),
+  }),
   // Pulse Train: the Pulse Explosion set plus Fade time (lit-dot hang).
   pulseTrainFace: Object.freeze({
     fields: Object.freeze(["lineThickness", "lineSmoothing", "dotThickness", "fadeTime"]),
@@ -1176,10 +1186,14 @@ const nodeGraphTraceDisplaySectionControls = Object.freeze({
       "squircle",
     ]),
     // Face plate (+ number readout ghost ink) + Knob arc colors.
-    colors: Object.freeze(["backgroundColor", "ghostColor", "arcFill", "arcTrack", "strokeColor", "dotColor"]),
+    colors: Object.freeze(["backgroundColor", "ghostColor", "arcFill", "arcTrack", "strokeColor", "dotColor", "lightColor", "fltEnvColor", "ampEnvColor"]),
     toggles: Object.freeze([
       "sourceSync",
       "skipDiscontinuities",
+      "skipLight",
+      "skipFlt",
+      "skipAmp",
+      "skipMem",
       "digitBins",
       "decimalBudget",
       "removeTrailingZeros",
@@ -1973,6 +1987,26 @@ const nodeGraphDisplaySettingsToggleMeta = Object.freeze({
     title:
       "Break the stroke at wrap/jump samples instead of drawing a seam. 1D: no vertical wrap line. 2D: no chord across a sudden X/Y jump.",
   }),
+  skipLight: Object.freeze({
+    label: "Skip Light",
+    id: "nodeTraceDisplayVactrolSkipLight",
+    title: "Break the Light line at jumps instead of drawing a vertical connecting segment. On by default so gate edges do not clutter the face.",
+  }),
+  skipFlt: Object.freeze({
+    label: "Skip Flt",
+    id: "nodeTraceDisplayVactrolSkipFlt",
+    title: "Break the Flt Env line at jumps instead of drawing a vertical connecting segment.",
+  }),
+  skipAmp: Object.freeze({
+    label: "Skip Amp",
+    id: "nodeTraceDisplayVactrolSkipAmp",
+    title: "Break the Amp Env line at jumps instead of drawing a vertical connecting segment.",
+  }),
+  skipMem: Object.freeze({
+    label: "Skip Mem",
+    id: "nodeTraceDisplayVactrolSkipMem",
+    title: "Break the Mem line at jumps instead of drawing a vertical connecting segment.",
+  }),
   bipolarBrightness: Object.freeze({ label: "Bipolar", id: "nodeTraceDisplayBipolarBrightness" }),
   secondaryEnabled: Object.freeze({ label: "Secondary on", id: "nodeTraceDisplaySecondaryEnabled" }),
   capEnabled: Object.freeze({ label: "Caps on", id: "nodeTraceDisplayCapEnabled" }),
@@ -2131,6 +2165,24 @@ const nodeGraphDisplaySettingsColorMeta = Object.freeze({
     aria: "Right stroke color",
     defaultValue: "#ffffff",
     id: "nodeTraceDisplayStrokeRightColor",
+  }),
+  lightColor: Object.freeze({
+    label: "Light",
+    aria: "Vactrol Light input line color",
+    defaultValue: "#c5e07a",
+    id: "nodeTraceDisplayVactrolLightColor",
+  }),
+  fltEnvColor: Object.freeze({
+    label: "Flt Env",
+    aria: "Vactrol Flt Env line color",
+    defaultValue: "#7fc7d9",
+    id: "nodeTraceDisplayVactrolFltEnvColor",
+  }),
+  ampEnvColor: Object.freeze({
+    label: "Amp Env",
+    aria: "Vactrol Amp Env line color",
+    defaultValue: "#e2a86d",
+    id: "nodeTraceDisplayVactrolAmpEnvColor",
   }),
   dot1Color: Object.freeze({
     label: "",
@@ -2752,6 +2804,7 @@ const nodeGraphDisplaySettingsFormTypeTitles = Object.freeze({
   pulseExplosionFace: "Pulse Explosion",
   pulseTrainFace: "Pulse Train",
   plotFace: "Plot",
+  vactrolScope: "Vactrol",
   robinSinepulseFace: "Robin Sinepulse",
   textBoxFace: "Text Box",
   keyboardFace: "Keyboard",

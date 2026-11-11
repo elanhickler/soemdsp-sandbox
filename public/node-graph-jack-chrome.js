@@ -354,7 +354,7 @@ function nodeGraphJackExplicitChannel(def, port, io = "output") {
   if (
     raw === "red" || raw === "green" || raw === "blue" || raw === "gold"
     || raw === "purple" || raw === "cyan" || raw === "yellow"
-    || raw === "magenta" || raw === "black"
+    || raw === "magenta" || raw === "black" || raw === "white"
   ) {
     return raw;
   }
@@ -391,6 +391,7 @@ function nodeGraphJackChannel(type, port, io = "output") {
     || fromExplicit === "green"
     || fromExplicit === "black"
     || fromExplicit === "red"
+    || fromExplicit === "white"
   ) {
     return fromExplicit;
   }

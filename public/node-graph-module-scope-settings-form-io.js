@@ -344,6 +344,17 @@ function nodeGraphDisplaySettingsDefaultsForFormType(type = nodeGraphTraceDispla
   if (type === "lineBurn") {
     return normalizeNodeGraphLineBurnSettings(nodeGraphLineBurnSettingsDefaults);
   }
+  if (type === "vactrolScope") {
+    return typeof normalizeNodeGraphVactrolScopeSettings === "function"
+      ? normalizeNodeGraphVactrolScopeSettings(
+        typeof nodeGraphVactrolScopeDisplaySettingsDefaults !== "undefined"
+          ? nodeGraphVactrolScopeDisplaySettingsDefaults
+          : {},
+      )
+      : (typeof nodeGraphVactrolScopeDisplaySettingsDefaults !== "undefined"
+        ? { ...nodeGraphVactrolScopeDisplaySettingsDefaults }
+        : {});
+  }
   if (type === "scope2d") {
     return normalizeNodeGraphScope2dSettings(scope2dDefaults, scope2dDefaults);
   }
@@ -747,6 +758,10 @@ if (type === "portalFace") {
   if (type === "plotFace" && typeof normalizeNodeGraphPlotFaceSettings === "function") {
     return normalizeNodeGraphPlotFaceSettings(settings);
   }
+  if (type === "vactrolScope" && typeof normalizeNodeGraphVactrolScopeSettings === "function") {
+    return normalizeNodeGraphVactrolScopeSettings(settings);
+  }
+
   if (type === "robinSinepulseFace" && typeof normalizeNodeGraphRobinSinepulseFaceSettings === "function") {
     return normalizeNodeGraphRobinSinepulseFaceSettings(settings);
   }
@@ -979,6 +994,9 @@ if (settingsSchema === "portalFace") {
   }
   if (settingsSchema === "plotFace" && typeof nodeGraphPlotFaceSettingsForNode === "function") {
     return nodeGraphPlotFaceSettingsForNode(node);
+  }
+  if (settingsSchema === "vactrolScope" && typeof nodeGraphVactrolScopeSettingsForNode === "function") {
+    return nodeGraphVactrolScopeSettingsForNode(node);
   }
   if (settingsSchema === "robinSinepulseFace" && typeof nodeGraphRobinSinepulseFaceSettingsForNode === "function") {
     return nodeGraphRobinSinepulseFaceSettingsForNode(node);
@@ -2449,6 +2467,12 @@ function syncNodeGraphHslLampWidgets(popover = document.getElementById("nodeTrac
 function nodeGraphTraceDisplayColorWidgetLabel(field) {
   // Title lives inside the widget (swatch). Never a side "Color" heading.
   const buttonForm = nodeGraphTraceDisplaySettingsFormType();
+  if (buttonForm === "vactrolScope") {
+    if (field === "backgroundColor") return "Background";
+    if (field === "lightColor") return "Light";
+    if (field === "fltEnvColor") return "Flt Env";
+    if (field === "ampEnvColor") return "Amp Env";
+  }
   if (buttonForm === "toggleButtonFace" || buttonForm === "momentaryButtonFace") {
     if (field === "backgroundColor") return "Background";
     if (field === "strokeColor") return "Stroke";
@@ -2734,6 +2758,8 @@ function syncNodeGraphTraceDisplayColorWidgets(popover = document.getElementById
             widget = mount(host, {
               // Hue-only never shows a title (giant scaled "Hue" was a waste strip).
               label: hueOnly ? "" : label,
+              // "Light" is in the shared GENERIC_LABELS set; force the title for Vactrol.
+              showTitle: !hueOnly && liveType === "vactrolScope" && field === "lightColor",
               ...mountHsl,
               // 0 = red (Left). Must pass explicitly — falsy 0 is still a hue.
               defaultHue: Number.isFinite(Number(defaultHsl?.h)) ? defaultHsl.h : undefined,

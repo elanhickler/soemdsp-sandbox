@@ -1,7 +1,7 @@
 .node-keypad-face {
   --node-keypad-font: "Thasadith", sans-serif;
   --node-keypad-text-size: 0.87708066581306;
-  --node-keypad-text-weight: 900;
+  --node-keypad-text-weight: 400;
   --node-keypad-background-color: #000000;
   --node-keypad-button-color: #f4f2e2;
   --node-keypad-hover-color: #c7edea;

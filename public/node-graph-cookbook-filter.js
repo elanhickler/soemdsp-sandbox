@@ -597,12 +597,15 @@ function nodeGraphFilterCurveView(node) {
     const dspMode = typeof nodeGraphEqFilterUiToDsp === "function"
       ? nodeGraphEqFilterUiToDsp(uiMode)
       : uiMode;
+    const slope = Math.round(nodeGraphFilterCurveLiveParam(node, "slope", 0));
+    const zdfStages = Math.max(1, Math.min(4, slope + 1));
     return {
       type: node.type,
       mode: dspMode,
       frequency: nodeGraphFilterCurveLiveParam(node, "frequency", 1000),
       q: nodeGraphFilterCurveLiveParam(node, "q", 0.707),
       gain: ignoreBoost ? 0 : nodeGraphFilterCurveLiveParam(node, "gain", 0),
+      zdfStages,
     };
   }
   if (node.type === "graphicEq") {
@@ -808,17 +811,34 @@ function nodeGraphFilterCurveResponseAt(node, frequency, sampleRate, view = null
       const dspMode = Number.isFinite(rawMode)
         ? rawMode
         : (node.type === "bandpass" ? 4 : node.type === "allpass" ? 6 : 1);
-      let mag = nodeGraphEqFilterMagnitudeAt(
-        dspMode,
-        nodeGraphFilterCurveFiniteHz(v.frequency, 1000),
-        nodeGraphFiniteNumber(v.q, 0.707),
-        nodeGraphFiniteNumber(v.gain),
-        frequency,
-        sampleRate,
-      );
       const copies = Math.max(1, Math.min(4, Math.round(nodeGraphFiniteNumber(v.zdfStages, 1))));
-      if (copies > 1 && Number.isFinite(mag) && mag > 0) {
-        mag **= copies;
+      let gain = nodeGraphFiniteNumber(v.gain);
+      // Peak / LS / HS, and Isolate cut (peak): keep Cut/Boost as the total.
+      if (
+        copies > 1
+        && (dspMode === 7 || dspMode === 8 || dspMode === 9 || (dspMode === 10 && gain < 0))
+      ) {
+        gain /= copies;
+      }
+      let mag;
+      if (dspMode === 10 && gain >= 0) {
+        const k = Math.max(0, Math.min(1, gain / 24));
+        let bp = nodeGraphEqFilterMagnitudeAt(4, nodeGraphFilterCurveFiniteHz(v.frequency, 1000),
+          nodeGraphFiniteNumber(v.q, 0.707), 0, frequency, sampleRate);
+        if (copies > 1 && Number.isFinite(bp) && bp > 0) bp **= copies;
+        mag = (1 - k) + k * bp;
+      } else {
+        mag = nodeGraphEqFilterMagnitudeAt(
+          dspMode,
+          nodeGraphFilterCurveFiniteHz(v.frequency, 1000),
+          nodeGraphFiniteNumber(v.q, 0.707),
+          gain,
+          frequency,
+          sampleRate,
+        );
+        if (copies > 1 && Number.isFinite(mag) && mag > 0) {
+          mag **= copies;
+        }
       }
       return Number.isFinite(mag) && mag > 0 ? mag : 1e-6;
     }

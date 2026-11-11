@@ -661,6 +661,13 @@ function setNodeGraphModuleFaceValue(input, value, drag) {
   if (typeof markNodeGraphRenderPending === "function") markNodeGraphRenderPending();
 }
 
+
+/** Off/On column cells (MIDI CC 14-bit, etc.): tap toggles. Not a typed value. */
+function nodeGraphModuleFaceIsBinaryToggleCell(wd, input) {
+  if (!wd || wd.type !== "cell" || wd.stack || wd.horizontal) return false;
+  return nodeGraphModuleFaceParamChoiceCount(input) === 2;
+}
+
 function beginNodeGraphModuleFaceGesture(article, face, spec, event) {
   if (event.button !== 0) return;
   const p = nodeGraphModuleFaceLocalPoint(face, event);
@@ -679,12 +686,13 @@ function beginNodeGraphModuleFaceGesture(article, face, spec, event) {
       : null;
     if (row && nodeGraphFinishArmedWireOnParamRow(row, event)) return;
   }
-  // B-105: double-click types a value, same rule as every slider surface.
-  if (nodeGraphModuleFaceDoubleClick(face, wd, event)) {
+  const input = wd.param ? nodeGraphModuleFaceInput(article, wd.param) : null;
+  // Binary Off/On column cells: every click/tap toggles. Do not open the
+  // type-in editor on double-click or double-tap, and do not select text.
+  if (!nodeGraphModuleFaceIsBinaryToggleCell(wd, input) && nodeGraphModuleFaceDoubleClick(face, wd, event)) {
     beginNodeGraphModuleFaceValueEdit(article, face, wd, p);
     return;
   }
-  const input = wd.param ? nodeGraphModuleFaceInput(article, wd.param) : null;
   // Same law as every slider: Ctrl/Cmd+click mouse-up resets; mouse-down+drag
   // with Ctrl/Cmd is fine-tune (B-111). Never reset on pointerdown.
   const resetOnClick = wd.type !== "seedButton" && wd.type !== "seedNumber"
@@ -751,6 +759,20 @@ function beginNodeGraphModuleFaceGesture(article, face, spec, event) {
   if (wd.type === "cell") {
     const choiceN = nodeGraphModuleFaceParamChoiceCount(input);
     const choiceSwitch = wd.horizontal && choiceN > 1;
+    // Binary Off/On cells (MIDI CC 14-bit, etc.) often sit beside a slider, so
+    // they are column cells, not horizontal choice switches. A fill-slider
+    // click stays at the current travel (0) unless you drag 220px, so a tap
+    // used to do nothing. Toggle on click/tap so it works on phones.
+    if (!choiceSwitch && choiceN === 2 && !wd.stack && input) {
+      if (resetOnClick) {
+        nodeGraphModuleFaceCapture(face, event, () => {}, captureOpts);
+        return;
+      }
+      const min = Number(input.min || 0);
+      const on = nodeGraphModuleFaceValue(input) >= min + 0.5;
+      setNodeGraphModuleFaceValue(input, on ? min : min + 1, false);
+      return;
+    }
     // Choice switch: click the slot. Continuous cell: drag from the current value.
     let t0 = choiceSwitch
       ? Math.max(0, Math.min(1, (p.x - wd.x) / Math.max(1, wd.w)))
@@ -879,6 +901,8 @@ function nodeGraphModuleFaceTypesValue(wd) {
 /** Inline type-in over the widget part under the pointer (the old slider face editor). */
 function beginNodeGraphModuleFaceValueEdit(article, face, wd, p) {
   if (typeof beginNodeSliderFaceValueEdit !== "function") return false;
+  const input0 = wd?.param ? nodeGraphModuleFaceInput(article, wd.param) : null;
+  if (nodeGraphModuleFaceIsBinaryToggleCell(wd, input0)) return false;
   const keys = nodeGraphModuleFaceWidgetKeys(wd).filter(Boolean);
   if (!keys.length) return false;
   const i = Math.max(0, Math.min(keys.length - 1, Math.floor(((p.x - wd.x) / Math.max(1, wd.w)) * keys.length)));

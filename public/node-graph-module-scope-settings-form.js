@@ -18,9 +18,12 @@ function nodeGraphDisplaySettingsBuildStepperRowHtml(key, formType = null, optio
     formType === "waterfall"
     || formType === "waterfallRgb"
     || formType === "waterfallXyz"
+    || formType === "vactrolScope"
   )) {
     label = "History (seconds)";
-    title = "History window duration in seconds across the face. Longer = slower scroll. At 0 the face is the current bar.";
+    title = formType === "vactrolScope"
+      ? "Seconds of Light / Flt Env / Amp Env / Mem scrolling across the face. Longer = slower scroll. Default 2."
+      : "History window duration in seconds across the face. Longer = slower scroll. At 0 the face is the current bar.";
   } else if ((key === "historyHz" || key === "historyCycles" || key === "zoomSeconds" || key === "historySeconds") && (
     formType === "gradientVectorscopeFace"
   )) {
@@ -764,7 +767,12 @@ function nodeGraphDisplaySettingsColorRowMeta(key, formType = null, options = {}
   };
   // Never a side "Color |" column — one contiguous widget row app-wide.
   let aria = base.aria || key;
-  if (formType === "numberReadout" && key === "dot1Color") {
+  if (formType === "vactrolScope" && (key === "backgroundColor" || key === "lightColor" || key === "fltEnvColor" || key === "ampEnvColor")) {
+    const labels = { backgroundColor: "Background", lightColor: "Light", fltEnvColor: "Flt Env", ampEnvColor: "Amp Env" };
+    const defaults = { backgroundColor: "#020609", lightColor: "#c5e07a", fltEnvColor: "#7fc7d9", ampEnvColor: "#e2a86d" };
+    aria = key === "backgroundColor" ? "Background color" : labels[key] + " line color";
+    base = { ...base, label: labels[key], defaultValue: defaults[key] };
+  } else if (formType === "numberReadout" && key === "dot1Color") {
     const nodeType = typeof nodeGraphPatchNode === "function"
       && typeof nodeGraphTraceDisplaySettingsTargetNodeId === "function"
       ? nodeGraphPatchNode(nodeGraphTraceDisplaySettingsTargetNodeId())?.type
@@ -2624,17 +2632,30 @@ function buildNodeGraphDisplaySettingsBodyHtml(formType, node = null) {
           </div>`));
     }
     if (type === "plotFace" && section === "waterfall") {
-      // Background, then the line(s): Line (1D Plot / 2D Plot) or Left / Right (1D Plot Stereo).
-      const plotNodeType = typeof nodeGraphPatchNode === "function"
+      // Background, then the line(s): Line (1D / 2D Plot), Left / Right
+      // (1D Plot Stereo / Output), or one lamp per displaySignalPort (MIDI CC Raw / Out).
+      const plotNode = typeof nodeGraphPatchNode === "function"
         && typeof nodeGraphTraceDisplaySettingsTargetNodeId === "function"
-        ? nodeGraphPatchNode(nodeGraphTraceDisplaySettingsTargetNodeId())?.type
+        ? nodeGraphPatchNode(nodeGraphTraceDisplaySettingsTargetNodeId())
+        : null;
+      const plotNodeType = plotNode?.type || null;
+      const plotPorts = (typeof nodeGraphModuleDefinitions !== "undefined"
+        && nodeGraphModuleDefinitions[plotNodeType]
+        && Array.isArray(nodeGraphModuleDefinitions[plotNodeType].displaySignalPorts))
+        ? nodeGraphModuleDefinitions[plotNodeType].displaySignalPorts
         : null;
       const stereo = plotNodeType === "plot1dStereo" || plotNodeType === "output";
+      // Two 1D traces share this face (not XY). Each line gets its own HBS lamp
+      // on the same row; values persist on lineHue* / dotHue* in the patch.
+      const twoTrace = stereo
+        || (plotNodeType !== "plot2d" && Array.isArray(plotPorts) && plotPorts.length > 1);
+      const lineA = stereo ? "Left" : (twoTrace && plotPorts && plotPorts[0] ? String(plotPorts[0]) : "Line");
+      const lineB = stereo ? "Right" : (plotPorts && plotPorts[1] ? String(plotPorts[1]) : "Out");
       const lamps = [
         ["background", "Background", "backgroundHue", "backgroundBrightness", "backgroundSaturation"],
-        ["line", stereo ? "Left" : "Line", "lineHue", "lineBrightness", "lineSaturation"],
+        ["line", lineA, "lineHue", "lineBrightness", "lineSaturation"],
       ];
-      if (stereo) lamps.push(["dot", "Right", "dotHue", "dotBrightness", "dotSaturation"]);
+      if (twoTrace) lamps.push(["dot", lineB, "dotHue", "dotBrightness", "dotSaturation"]);
       hbsCells.push(...lamps.map(([id, label, hue, bright, sat]) => `
           <div class="node-trace-display-hsl-lamp node-trace-display-color-widget-host" data-hsl-lamp="${id}" data-hsl-label="${label}">
             <input type="hidden" data-trace-display-field="${hue}" value="">

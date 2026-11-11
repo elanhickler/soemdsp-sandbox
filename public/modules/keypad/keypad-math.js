@@ -219,7 +219,7 @@ const NODE_GRAPH_KEYPAD_LAYOUT_DEFAULTS = Object.freeze({
   strokeColor: "#e2dcc7",
   textColor: "#1f1f1f",
   textSize: 0.87708066581306,
-  textWeight: 900,
+  textWeight: 400,
   labels: NODE_GRAPH_KEYPAD_LABELS_TEXT,
 });
 

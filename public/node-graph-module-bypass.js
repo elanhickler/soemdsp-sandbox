@@ -156,6 +156,7 @@ const NODE_GRAPH_BYPASS_TYPE_OVERRIDES = Object.freeze({
   curveOsc: "silence",
   dsfOscillator: "silence",
   dsfMorphingOsc: "silence",
+  dsfFormant: "silence",
   robinSupersaw: "silence",
   hyperpluck: "silence",
   hypersaw2: "silence",

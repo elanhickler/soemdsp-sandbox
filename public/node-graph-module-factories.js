@@ -706,30 +706,7 @@ function createNodeGraphMidiListenControls() {
   return host;
 }
 
-function createNodeGraphMidiMonitorDisplay() {
-  const monitor = document.createElement("div");
-  monitor.className = "node-midi-monitor";
-  monitor.dataset.midiMonitor = "true";
-  monitor.dataset.moduleBand = "face";
-  monitor.setAttribute("aria-label", "Last MIDI message");
-  const typeLine = document.createElement("div");
-  typeLine.className = "node-midi-monitor-line node-midi-monitor-type";
-  typeLine.dataset.midiMonitorType = "true";
-  typeLine.textContent = "no message";
-  const dataLine = document.createElement("div");
-  dataLine.className = "node-midi-monitor-line node-midi-monitor-data";
-  dataLine.dataset.midiMonitorData = "true";
-  dataLine.textContent = "—";
-  const countLine = document.createElement("div");
-  countLine.className = "node-midi-monitor-line node-midi-monitor-count";
-  countLine.dataset.midiMonitorCount = "true";
-  countLine.textContent = "#0";
-  monitor.append(typeLine, dataLine, countLine);
-  if (typeof paintNodeGraphMidiMonitor === "function") {
-    paintNodeGraphMidiMonitor(monitor);
-  }
-  return monitor;
-}
+/** MIDI last-message face: public/modules/keyboardController/midi-monitor-display.js */
 
 function createNodeGraphMidiModuleBody(node = null) {
   const section = document.createElement("section");
@@ -739,7 +716,7 @@ function createNodeGraphMidiModuleBody(node = null) {
     section.dataset.node = node;
   }
   section.setAttribute("aria-label", "MIDI");
-  section.append(createNodeGraphMidiListenControls(), createNodeGraphMidiMonitorDisplay());
+  section.append(createNodeGraphMidiListenControls());
   return section;
 }
 

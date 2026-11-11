@@ -29,7 +29,7 @@ function nodeGraphKeypadDisplaySliderDefaults() {
         buttonHeight: 1,
         buttonWidth: 1,
         textSize: 0.87708066581306,
-        textWeight: 900,
+        textWeight: 400,
       });
 }
 

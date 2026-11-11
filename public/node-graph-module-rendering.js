@@ -896,23 +896,30 @@ function createNodeGraphModuleElement(type, node) {
   } else if (layout === "scopeFace") {
     const scopeSection = createNodeGraphModuleScopeSection(node, type);
     scopeSection.classList.add("node-module-trace-display-window");
-    article.append(scopeSection);
     registerNodeGraphModuleScopeSlot(article, { nodeId: node, type, scopeElement: scopeSection });
-    // Show both I/O columns when the face declares thrus (Thru →, X/Y, …).
-    // Previously inputsOnly hid 1D/2D Phosphor and Trace dry-outs entirely.
-    appendNodeGraphModuleIoSection(
-      article,
-      createNodeGraphLayoutAIoSection(
+    if (chrome.portsBeside) {
+      // LayoutB ports live in the shell beside the face. A Layout A IO strip
+      // gets height 0 on Layout B, so MIDI CC (layout scopeFace + LayoutB)
+      // showed no jacks. Same pattern as sampleWaveform.
+      article.append(createNodeGraphLayoutBShell(node, type, scopeSection, null, inputPorts, outputPorts));
+    } else {
+      article.append(scopeSection);
+      // Show both I/O columns when the face declares thrus (Thru, X/Y, etc.).
+      // Previously inputsOnly hid 1D/2D Phosphor and Trace dry-outs entirely.
+      appendNodeGraphModuleIoSection(
+        article,
+        createNodeGraphLayoutAIoSection(
+          node,
+          type,
+          inputPorts,
+          outputPorts,
+          outputPorts.length ? {} : { inputsOnly: true },
+        ),
         node,
-        type,
         inputPorts,
         outputPorts,
-        outputPorts.length ? {} : { inputsOnly: true },
-      ),
-      node,
-      inputPorts,
-      outputPorts,
-    );
+      );
+    }
   } else if (definition.layout === "graph") {
     // LayoutB: ports beside graph face (+ numeric point strip under the SVG).
     const graphFace = document.createElement("div");
@@ -983,6 +990,7 @@ function createNodeGraphModuleElement(type, node) {
   ) {
     if (definition.layout === "keyboardController") {
       article.append(createNodeGraphMidiModuleBody(node));
+      appendNodeGraphRegisteredFaceIfAny(article, node, type, definition, patchNodeUi);
     } else if (definition.layout === "keyboard") {
       article.append(createNodeGraphKeyboardBody(node));
     } else if (definition.layout === "gridKeyboard") {
