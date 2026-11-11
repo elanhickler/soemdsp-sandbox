@@ -7387,9 +7387,9 @@ const nodeGraphModuleDefinitions = (
     displayHeightGu: 4,
     defaultWidthGu: 8,
     face: [
+      { kind: "cells", params: [["speed", "Speed"]], horizontal: true, h: 36 },
       { kind: "cells", params: [["rate", "Rate"]], horizontal: true, h: 36 },
       { kind: "cells", params: [["width", "Width"]], horizontal: true, h: 36 },
-      { kind: "cells", params: [["speed", "Speed"]], horizontal: true, h: 36 },
       { kind: "cells", params: [["amplitude", "Amp"]], horizontal: true, h: 36 },
     ],
     inputs: ["Reset", "f"],
