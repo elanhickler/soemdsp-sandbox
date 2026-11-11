@@ -2617,17 +2617,20 @@ static inline double control_effective(const Control& c);
 struct PurrBiquad {
   double b0, b1, b2, a1, a2, z1, z2;
 };
+static const int kPurrHarmonics = 8;
 struct PurrState {
-  PurrBiquad band[8]; // 28 Hz highpass + 220 Hz lowpass, 4-pole each, run twice
+  PurrBiquad band[8]; // 28-220 Hz Butterworth bandpass (8 poles), run twice
   PurrBiquad tone[4]; // Tone lowpass, 4-pole, run twice
   PurrBiquad dc[2];   // 25 Hz highpass, 2-pole, run twice
+  double harm[kPurrHarmonics + 1]; // pulse cosine series for the Body
+  double harmSoftness;
   double designedSr;
   double designedTone;
   double noiseGain;
   double bodyPhase;   // turns, Body Ratio x the pulse phase
   double wobblePhase; // turns of the 0.3 Hz rate drift
-  double segPos;      // samples into the current breath segment
-  int segment;        // 0 inhale, 1 gap, 2 exhale, 3 gap
+  int segPos;         // samples into the current breath segment
+  int segment;        // 0 lead-in, 1 inhale, 2 gap, 3 exhale, 4 gap
   unsigned int rng;
 };
 
@@ -3586,7 +3589,8 @@ static void init_node_defaults(Node& n, int typeId) {
   n.purr.noiseGain = 0.0;
   n.purr.bodyPhase = 0.0;
   n.purr.wobblePhase = 0.0;
-  n.purr.segPos = 0.0;
+  n.purr.segPos = 0;
+  n.purr.harmSoftness = -1.0; // first process builds the Body harmonics
   n.purr.segment = 0;
   n.purr.rng = 0u; // first process seeds from idHash
   init_control(n.volumeDb, (typeId == kTypeMixStereo) ? 0.0 : -3.0, false);
@@ -7215,21 +7219,30 @@ static void process_phone_tone(Circuit& g, Node& node, int frames) {
 }
 
 // Purr (245): Misty's purr, PhyLabs/audio/misty-purr-synth.py made real-time.
-// Breath loop: Inhale (timeNumerator s, pulses at frequency Hz, level 1), 60 ms
-// gap, Exhale (timeDenominator s, pulses at lfoRate Hz, level mix), 60 ms gap.
-// Each breath swells as sin(pi t / T)^0.8. Pulse p = ((1 - cos)/2)^resonance
-// (Softness). Rumble (saturate) is a 28-220 Hz noise band gated by
-// offset + (1 - offset) p (Floor); Body (center) is sin(width x pulse phase) p,
-// so the default Body Ratio 2.5 flips the body's sign on every other pulse.
-// Tone (lpfFrequency) lowpass, then the breath, then a 25 Hz highpass. Every
-// Butterworth stage runs twice because the script filters forward and back.
-// Wobble (lfoAmplitude) drifts the pulse rate at 0.3 Hz. Out = Mono/Left/Right.
+// The defaults reproduce misty-purr.wav: 0.2 s lead-in, then the breath loop
+// Inhale (timeNumerator s, pulses at frequency Hz, level 1), 60 ms gap, Exhale
+// (timeDenominator s, pulses at lfoRate Hz, level mix), 60 ms gap. Lead-in and
+// gaps run the pulse at 22 Hz like the script. Each breath swells as
+// sin(pi k / (len - 1))^0.8. Pulse p = ((1 - cos)/2)^resonance (Softness).
+// Rumble (saturate) is a 28-220 Hz Butterworth band of noise gated by
+// offset + (1 - offset) p (Floor), then the Tone (lpfFrequency) lowpass, the
+// breath and a 25 Hz highpass; every stage runs twice for the script's
+// forward-backward magnitude, and the gate reads the pulse 1.3 / Tone seconds
+// ahead to cancel the causal filters' delay. Body (center) is
+// sin(width x pulse phase) p built from its harmonics, each scaled by the
+// Tone and 25 Hz filters' squared response, so it keeps the script's
+// zero-phase shape; the default Body Ratio 2.5 flips its sign every other
+// pulse. Wobble (lfoAmplitude) drifts the pulse rate at 0.3 Hz.
+// Out = Mono/Left/Right; +3 dB so the default Output (-3 dB) plays the wav's level.
+static const double kPurrLeadSeconds = 0.2;
 static const double kPurrGapSeconds = 0.06;
+static const double kPurrGapRateHz = 22.0;
 static const double kPurrWobbleHz = 0.3;
+static const double kPurrGateLead = 1.3; // pulse cycles of Tone lowpass delay
 // Noise band gain (uniform noise, 48 kHz) and output gain that land the
 // default settings on misty-purr.wav's level.
-static const double kPurrNoiseGain = 39.08592530334773;
-static const double kPurrOutGain = 0.665828775776282;
+static const double kPurrNoiseGain = 39.03934687410513;
+static const double kPurrOutGain = 0.9125311684541293;
 static const double kPurrQ4a = 0.5411961001461970;
 static const double kPurrQ4b = 1.3065629648763766;
 static const double kPurrQ2 = 0.7071067811865476;
@@ -7262,6 +7275,65 @@ static void purr_design_4pole_twice(PurrBiquad* q, bool highpass, double hz, dou
   }
 }
 
+static inline double purr_sqrt(double x) {
+  if (!(x > 0.0)) return 0.0;
+  double r = dsp_exp(0.5 * dsp_ln(x));
+  r = 0.5 * (r + x / r);
+  return 0.5 * (r + x / r);
+}
+
+// 4th-order Butterworth bandpass f1..f2 (8 poles, like scipy butter(4, [f1, f2]))
+// designed twice into q[0..7].
+static void purr_design_band_twice(PurrBiquad* q, double f1, double f2, double sr) {
+  double s1 = 0.0, c1 = 1.0, s2 = 0.0, c2 = 1.0;
+  soemdsp_maths::dsp_sin_cos(kPi * f1 / sr, &s1, &c1);
+  soemdsp_maths::dsp_sin_cos(kPi * f2 / sr, &s2, &c2);
+  const double w1 = 2.0 * sr * s1 / c1;
+  const double w2 = 2.0 * sr * s2 / c2;
+  const double bw = w2 - w1;
+  const double w0sq = w1 * w2;
+  const double t2 = 2.0 * sr;
+  int sec = 0;
+  for (int k = 0; k < 2; k++) {
+    double pim = 0.0, pre = 1.0; // prototype pole exp(i pi (2k + 5) / 8)
+    soemdsp_maths::dsp_sin_cos(kPi * (2.0 * k + 5.0) / 8.0, &pim, &pre);
+    const double br = pre * bw, bi = pim * bw;
+    const double dr = br * br - bi * bi - 4.0 * w0sq; // (p bw)^2 - 4 w0^2
+    const double di = 2.0 * br * bi;
+    const double dm = purr_sqrt(dr * dr + di * di);
+    const double rr = purr_sqrt(0.5 * (dm + dr));
+    const double ri = (di < 0.0 ? -1.0 : 1.0) * purr_sqrt(0.5 * (dm - dr));
+    for (int sign = -1; sign <= 1; sign += 2) {
+      const double xr = 0.5 * (br + sign * rr), xi = 0.5 * (bi + sign * ri);
+      // z = (2 sr + s) / (2 sr - s)
+      const double nr = t2 + xr, dnr = t2 - xr;
+      const double den = dnr * dnr + xi * xi;
+      const double zr = (nr * dnr - xi * xi) / den;
+      const double zi = (xi * dnr + nr * xi) / den;
+      PurrBiquad& b = q[sec++];
+      b.b0 = 1.0;
+      b.b1 = 0.0;
+      b.b2 = -1.0;
+      b.a1 = -2.0 * zr;
+      b.a2 = zr * zr + zi * zi;
+    }
+  }
+  // Unity gain at the band center: tan(w / 2) = sqrt(w1 w2) / (2 sr).
+  const double t = purr_sqrt(w0sq) / t2;
+  const double cw = (1.0 - t * t) / (1.0 + t * t), sw = 2.0 * t / (1.0 + t * t);
+  const double c2w = cw * cw - sw * sw, s2w = 2.0 * sw * cw;
+  double mag = 1.0;
+  for (int i = 0; i < 4; i++) {
+    const PurrBiquad& b = q[i];
+    const double numr = 1.0 - c2w, numi = s2w; // 1 - z^-2
+    const double der = 1.0 + b.a1 * cw + b.a2 * c2w, dei = -b.a1 * sw - b.a2 * s2w;
+    mag *= purr_sqrt((numr * numr + numi * numi) / (der * der + dei * dei));
+  }
+  q[0].b0 = 1.0 / mag;
+  q[0].b2 = -1.0 / mag;
+  for (int i = 0; i < 4; i++) q[i + 4] = q[i];
+}
+
 static inline double purr_run(PurrBiquad* q, int count, double x) {
   for (int i = 0; i < count; i++) {
     PurrBiquad& b = q[i];
@@ -7277,12 +7349,40 @@ static inline double purr_pow(double x, double e) {
   return x > 0.0 ? dsp_exp(e * dsp_ln(x)) : 0.0;
 }
 
+// Cosine series of the pulse ((1 - cos)/2)^softness = sum harm[k] cos(k phase).
+static void purr_pulse_harmonics(PurrState& s, double softness) {
+  const int n = 128;
+  double p[n];
+  for (int i = 0; i < n; i++) {
+    p[i] = purr_pow(0.5 * (1.0 - soemdsp_maths::dsp_cos_turns((double)i / n)), softness);
+  }
+  for (int k = 0; k <= kPurrHarmonics; k++) {
+    double a = 0.0;
+    for (int i = 0; i < n; i++) {
+      a += p[i] * soemdsp_maths::dsp_cos_turns((double)((k * i) % n) / n);
+    }
+    s.harm[k] = (k == 0 ? 1.0 : 2.0) * a / n;
+  }
+  s.harmSoftness = softness;
+}
+
+// Squared response of the Tone lowpass (4-pole) and 25 Hz highpass (2-pole).
+static inline double purr_gain2(double hz, double toneHz) {
+  if (hz < 0.0) hz = -hz;
+  const double x = hz / toneHz;
+  const double x2 = x * x;
+  const double x4 = x2 * x2;
+  const double y = hz * (1.0 / 25.0);
+  const double y2 = y * y;
+  const double y4 = y2 * y2;
+  return y4 / ((1.0 + x4 * x4) * (1.0 + y4));
+}
+
 static void process_purr(Circuit& g, Node& node, int frames) {
   const double sr = g.sampleRate < 1.0f ? 44100.0 : (double)g.sampleRate;
   PurrState& s = node.purr;
   if (s.designedSr != sr) {
-    purr_design_4pole_twice(&s.band[0], true, 28.0, sr);
-    purr_design_4pole_twice(&s.band[4], false, 220.0, sr);
+    purr_design_band_twice(s.band, 28.0, 220.0, sr);
     purr_design(s.dc[0], true, 25.0, kPurrQ2, sr);
     purr_design(s.dc[1], true, 25.0, kPurrQ2, sr);
     s.noiseGain = kPurrNoiseGain * dsp_exp(0.5 * dsp_ln(sr / 48000.0));
@@ -7315,7 +7415,8 @@ static void process_purr(Circuit& g, Node& node, int frames) {
     if (!(floor > 0.0)) floor = 0.0;
     if (floor > 1.0) floor = 1.0;
     double toneHz = control_audio(g, node.lpfFrequency, f);
-    if (!(toneHz == toneHz)) toneHz = 180.0;
+    if (!(toneHz > 1.0)) toneHz = 1.0;
+    if (toneHz > 0.45 * sr) toneHz = 0.45 * sr;
     double wobble = control_audio(g, node.lfoAmplitude, f);
     if (!(wobble == wobble)) wobble = 0.0;
     double amp = control_audio(g, node.amplitude, f);
@@ -7324,43 +7425,63 @@ static void process_purr(Circuit& g, Node& node, int frames) {
       purr_design_4pole_twice(s.tone, false, toneHz, sr);
       s.designedTone = toneHz;
     }
+    if (softness != s.harmSoftness) purr_pulse_harmonics(s, softness);
 
-    // Breath segment: inhale, gap, exhale, gap.
-    double segLen = 0.0;
-    for (int tries = 0; tries < 4; tries++) {
-      const double seconds = (s.segment == 0) ? inhaleS
-        : (s.segment == 2) ? exhaleS : kPurrGapSeconds;
-      segLen = seconds * sr;
+    // Breath segment: lead-in, then inhale, gap, exhale, gap.
+    int segLen = 1;
+    for (int tries = 0; tries < 5; tries++) {
+      const double seconds = (s.segment == 0) ? kPurrLeadSeconds
+        : (s.segment == 1) ? inhaleS
+        : (s.segment == 3) ? exhaleS : kPurrGapSeconds;
+      segLen = (int)dsp_floor(seconds * sr + 0.5);
+      if (segLen < 2) segLen = 2;
       if (s.segPos < segLen) break;
-      s.segPos = 0.0;
-      s.segment = (s.segment + 1) & 3;
+      s.segPos = 0;
+      s.segment = (s.segment >= 4) ? 1 : s.segment + 1;
     }
-    const double level = (s.segment == 0) ? 1.0 : (s.segment == 2) ? exhaleLevel : 0.0;
-    const double rate = (s.segment == 0) ? inhaleHz
-      : (s.segment == 2) ? exhaleHz : 0.5 * (inhaleHz + exhaleHz);
-    const double breath = level * purr_pow(
-      soemdsp_maths::dsp_sin_turns(0.5 * (s.segPos + 0.5) / segLen), 0.8);
-    s.segPos += 1.0;
+    const double level = (s.segment == 1) ? 1.0 : (s.segment == 3) ? exhaleLevel : 0.0;
+    const double baseRate = (s.segment == 1) ? inhaleHz
+      : (s.segment == 3) ? exhaleHz : kPurrGapRateHz;
+    const double breath = level == 0.0 ? 0.0 : level * purr_pow(
+      soemdsp_maths::dsp_sin_turns(0.5 * (double)s.segPos / (double)(segLen - 1)), 0.8);
+    s.segPos++;
 
     const double drift = 1.0 + wobble * soemdsp_maths::dsp_sin_turns_lut(s.wobblePhase);
     s.wobblePhase += kPurrWobbleHz / sr;
     s.wobblePhase -= dsp_floor(s.wobblePhase);
-    const double inc = rate * drift / sr;
-    phase += inc;
+    const double rate = baseRate * drift;
+    phase += rate / sr;
     phase -= dsp_floor(phase);
-    s.bodyPhase += ratio * inc;
+    s.bodyPhase += ratio * rate / sr;
     s.bodyPhase -= dsp_floor(s.bodyPhase);
 
-    const double pulse = purr_pow(0.5 * (1.0 - soemdsp_maths::dsp_cos_turns(phase)), softness);
+    // Rumble: noise band gated by the pulse read ahead of the causal filters.
+    double gatePhase = phase + kPurrGateLead * rate / toneHz;
+    gatePhase -= dsp_floor(gatePhase);
+    const double gate = purr_pow(0.5 * (1.0 - soemdsp_maths::dsp_cos_turns(gatePhase)), softness);
     s.rng ^= s.rng << 13;
     s.rng ^= s.rng >> 17;
     s.rng ^= s.rng << 5;
     const double white = (double)s.rng * (2.0 / 4294967296.0) - 1.0;
     const double low = purr_run(s.band, 8, white) * s.noiseGain;
-    double sig = low * (floor + (1.0 - floor) * pulse) * rumble
-      + soemdsp_maths::dsp_sin_turns_lut(s.bodyPhase) * pulse * body;
-    sig = purr_run(s.tone, 4, sig) * breath;
-    const double y = purr_run(s.dc, 2, sig) * amp * kPurrOutGain;
+    double sig = purr_run(s.tone, 4, low * (floor + (1.0 - floor) * gate) * rumble) * breath;
+    sig = purr_run(s.dc, 2, sig);
+
+    // Body: sin(ratio x phase) p as harmonics through the filters' squared response.
+    double voice = s.harm[0] * purr_gain2(ratio * rate, toneHz)
+      * soemdsp_maths::dsp_sin_turns_lut(s.bodyPhase);
+    for (int k = 1; k <= kPurrHarmonics; k++) {
+      double up = s.bodyPhase + (double)k * phase;
+      double down = s.bodyPhase - (double)k * phase;
+      up -= dsp_floor(up);
+      down -= dsp_floor(down);
+      voice += 0.5 * s.harm[k] * (
+        purr_gain2((ratio + k) * rate, toneHz) * soemdsp_maths::dsp_sin_turns_lut(up)
+        + purr_gain2((ratio - k) * rate, toneHz) * soemdsp_maths::dsp_sin_turns_lut(down));
+    }
+    sig += voice * body * breath;
+
+    const double y = sig * amp * kPurrOutGain;
     node.buf[kPortMono][f] = y;
     node.buf[kPortLeft][f] = y;
     node.buf[kPortRight][f] = y;
