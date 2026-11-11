@@ -169,7 +169,7 @@ function nodeGraphDisplaySettingsBuildStepperRowHtml(key, formType = null, optio
     label = "Fade time (s)";
     title = "Lit-dot hang after each pulse. 0 = stay lit until the next trigger. Small values drop immediately. Same exponential residual as phosphor / woscope.";
   }
-  if ((formType === "roundShapeFace" || formType === "basicShapeFace" || formType === "blitFace" || formType === "sinCosFace" || formType === "additiveWaveform" || formType === "clockFace" || formType === "clockDividerFace" || formType === "pulseExplosionFace" || formType === "pulseTrainFace" || formType === "plotFace") && key === "lineSmoothing") {
+  if ((formType === "roundShapeFace" || formType === "basicShapeFace" || formType === "blitFace" || formType === "sinCosFace" || formType === "additiveWaveform" || formType === "clockFace" || formType === "clockDividerFace" || formType === "pulseExplosionFace" || formType === "pulseTrainFace" || formType === "plotFace" || formType === "waterfall" || formType === "waterfallRgb" || formType === "waterfallXyz") && key === "lineSmoothing") {
     label = "Line blur";
     title = "Expo antialiasing skirt in CSS pixels (0–8, default 1), outside the line's thickness. 0 = hard core.";
   }
@@ -1666,6 +1666,7 @@ function buildNodeGraphInstantTraceDisplaySettingsBodyHtml(type, node, allowKey)
     "historySeconds",
     "zoomSeconds",
     "strokeThickness",
+    "lineSmoothing",
     "timeMs",
     "backgroundBrightness",
     "backgroundHue",
@@ -1740,8 +1741,14 @@ function buildNodeGraphInstantTraceDisplaySettingsBodyHtml(type, node, allowKey)
     rows.push(nodeGraphDisplaySettingsBuildChoiceRowHtml("barInk"));
     usedChoices.add("barInk");
   }
-  if (isInstantWaterfall && orderedPrimary.includes("strokeThickness")) {
-    rows.push(nodeGraphDisplaySettingsBuildStepperRowHtml("strokeThickness", type));
+  // Stroke thickness | Line blur side by side, as 1D Plot's line pair.
+  const strokeKeys = isInstantWaterfall
+    ? ["strokeThickness", "lineSmoothing"].filter((key) => orderedPrimary.includes(key))
+    : [];
+  if (strokeKeys.length > 1) {
+    rows.push(`<div class="node-trace-display-pair-grid">${strokeKeys.map((key) => nodeGraphDisplaySettingsBuildStepperRowHtml(key, type)).join("")}</div>`);
+  } else if (strokeKeys.length) {
+    rows.push(nodeGraphDisplaySettingsBuildStepperRowHtml(strokeKeys[0], type));
   }
   if (isInstantWaterfall && toggleKeys.includes("pauseOnSilence")) {
     rows.push(nodeGraphDisplaySettingsBuildToggleRowHtml("pauseOnSilence"));

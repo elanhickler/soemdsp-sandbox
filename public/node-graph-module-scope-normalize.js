@@ -1021,6 +1021,12 @@ function normalizeNodeGraphWaterfallSettings(settings = {}) {
       0.25,
       16,
     ),
+    lineSmoothing: normalizeNodeGraphTraceDisplayNumber(
+      source.lineSmoothing,
+      defaults.lineSmoothing ?? 0,
+      0,
+      8,
+    ),
     pauseOnSilence: (() => {
       const raw = source.pauseOnSilence;
       if (raw === true || raw === 1 || raw === "1" || raw === "true") return true;

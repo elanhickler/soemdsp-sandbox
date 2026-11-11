@@ -375,10 +375,12 @@ attribute vec2 aP0;
 attribute vec4 aColor;
 attribute vec2 aP1;
 attribute float aHalf;
+attribute float aFeather;
 uniform vec2 uCss;
 varying highp vec2 vP0;
 varying highp vec2 vP1;
 varying highp float vHalf;
+varying highp float vFeather;
 varying vec4 vColor;
 void main() {
   vec2 clip = (aPos / uCss) * 2.0 - 1.0;
@@ -387,6 +389,7 @@ void main() {
   vP0 = aP0;
   vP1 = aP1;
   vHalf = aHalf;
+  vFeather = aFeather;
   vColor = aColor;
 }
 `;
@@ -399,7 +402,19 @@ uniform highp vec2 uCss;
 varying highp vec2 vP0;
 varying highp vec2 vP1;
 varying highp float vHalf;
+varying highp float vFeather;
 varying vec4 vColor;
+// Line blur: the app Expo skirt (same curve as gl-line-renderer / 1D Plot),
+// solid to vHalf, then 1 - (1 - e^-3t) / (1 - e^-3) over vFeather px, box
+// filtered over the pixel. wfLineInk(x) is the integral of that profile up to
+// x = dist - vHalf, so cover = wfLineInk(d + 0.5) - wfLineInk(d - 0.5).
+// vFeather 0 gives clamp(0.5 - d), the plain 1px box edge.
+float wfLineInk(float x, float f) {
+  if (x <= 0.0) return x;
+  if (f <= 0.0) return 0.0;
+  float xc = min(x, f);
+  return xc - (xc - f / 3.0 * (1.0 - exp(-3.0 * xc / f))) / 0.95021293163;
+}
 void main() {
   // Canvas pixels, top-down, the same space as the sample points.
   // gl_FragCoord is bottom-up. highp so a long face does not snap the line.
@@ -411,7 +426,8 @@ void main() {
   // Same 1px box filter as a filled waterfall edge (clamp(d + 0.5)): a pixel
   // on the line is solid, a pixel one away is empty. Distance is perpendicular
   // to the sample segment, so a steep line stays a line.
-  float cover = clamp(vHalf + 0.5 - dist, 0.0, 1.0);
+  float d = dist - vHalf;
+  float cover = clamp(wfLineInk(d + 0.5, vFeather) - wfLineInk(d - 0.5, vFeather), 0.0, 1.0);
   if (cover <= 0.0) discard;
   float k = cover * vColor.a;
   gl_FragColor = vec4(vColor.rgb * k, k);
@@ -453,6 +469,7 @@ function nodeGraphOnsetGlEnsureLine(s) {
     color: gl.getAttribLocation(prog, "aColor"),
     p1: gl.getAttribLocation(prog, "aP1"),
     half: gl.getAttribLocation(prog, "aHalf"),
+    feather: gl.getAttribLocation(prog, "aFeather"),
     css: gl.getUniformLocation(prog, "uCss"),
   };
   return s;
@@ -473,7 +490,8 @@ function nodeGraphOnsetGlStrokeBlend(gl, blend) {
   else gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
 }
 
-function nodeGraphOnsetGlStrokePolyline(canvas, points, widthPx, rgb, clipX0 = null, blend = "source-over") {
+// featherPx: Line blur (Expo skirt past the core, canvas px). 0 = 1px box edge.
+function nodeGraphOnsetGlStrokePolyline(canvas, points, widthPx, rgb, clipX0 = null, blend = "source-over", featherPx = 0) {
   const s = canvas && canvas._wfGlSession;
   if (!s || !points || points.length < 2) return false;
   nodeGraphOnsetGlEnsureLine(s);
@@ -485,7 +503,8 @@ function nodeGraphOnsetGlStrokePolyline(canvas, points, widthPx, rgb, clipX0 = n
   const gl = s.gl;
   const width = Math.max(0.75, Number(widthPx) || 1);
   const half = width * 0.5;
-  const pad = half + 1;
+  const feather = Math.max(0, Number(featherPx) || 0);
+  const pad = half + feather + 1;
   // rgb is 0..255 (nodeGraphWaterfallStrokeRgb / ParseInkRgb), like the bar
   // path. Clamping it to 0..1 without /255 pushed every non-zero channel to
   // full, so dark picks drew as bright primaries / white.
@@ -499,7 +518,7 @@ function nodeGraphOnsetGlStrokePolyline(canvas, points, widthPx, rgb, clipX0 = n
   ];
   const chunks = [];
   const pushVert = (x, y, p0, p1) => {
-    chunks.push(x, y, p0.x, p0.y, color[0], color[1], color[2], color[3], p1.x, p1.y, half);
+    chunks.push(x, y, p0.x, p0.y, color[0], color[1], color[2], color[3], p1.x, p1.y, half, feather);
   };
   for (let p = 1; p < points.length; p += 1) {
     const p0 = points[p - 1];
@@ -526,7 +545,7 @@ function nodeGraphOnsetGlStrokePolyline(canvas, points, widthPx, rgb, clipX0 = n
   gl.uniform2f(s.lineLoc.css, s.w, s.h);
   gl.bindBuffer(gl.ARRAY_BUFFER, s.lineBuf);
   nodeGraphWaterfallGlUploadFloats(gl, s.lineBuf, chunks);
-  const stride = 44;
+  const stride = 48;
   const enable = (loc, size, offset) => {
     if (!(loc >= 0)) return;
     gl.enableVertexAttribArray(loc);
@@ -537,12 +556,13 @@ function nodeGraphOnsetGlStrokePolyline(canvas, points, widthPx, rgb, clipX0 = n
   enable(s.lineLoc.color, 4, 16);
   enable(s.lineLoc.p1, 2, 32);
   enable(s.lineLoc.half, 1, 40);
+  enable(s.lineLoc.feather, 1, 44);
   const clip = Number.isFinite(clipX0) ? Math.max(0, Math.min(s.w, Math.floor(clipX0))) : null;
   if (clip !== null) {
     gl.enable(gl.SCISSOR_TEST);
     gl.scissor(clip, 0, s.w - clip, s.h);
   }
-  gl.drawArrays(gl.TRIANGLES, 0, chunks.length / 11);
+  gl.drawArrays(gl.TRIANGLES, 0, chunks.length / 12);
   if (clip !== null) gl.disable(gl.SCISSOR_TEST);
   const disable = (loc) => {
     if (loc >= 0) gl.disableVertexAttribArray(loc);
@@ -552,6 +572,7 @@ function nodeGraphOnsetGlStrokePolyline(canvas, points, widthPx, rgb, clipX0 = n
   disable(s.lineLoc.color);
   disable(s.lineLoc.p1);
   disable(s.lineLoc.half);
+  disable(s.lineLoc.feather);
   return true;
 }
 

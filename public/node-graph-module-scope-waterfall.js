@@ -279,8 +279,9 @@ function nodeGraphOnsetDrawStrip(canvas, onset, keys, slot, settings, height, wi
     return;
   }
   const strokePx = nodeGraphOnsetStrokeCanvasPx(canvas, settings);
+  const featherPx = nodeGraphWaterfallLineBlurCanvasPx(canvas, settings);
   // Enough finished columns that every segment reaching the clip is redrawn.
-  const from = clipX0 == null ? begin : Math.max(0, begin - 2 - Math.ceil(strokePx));
+  const from = clipX0 == null ? begin : Math.max(0, begin - 2 - Math.ceil(strokePx + featherPx));
   const curves = [];
   for (let i = 0; i < keys.length; i += 1) {
     const trace = onset.traces?.[keys[i]];
@@ -304,12 +305,15 @@ function nodeGraphOnsetDrawStrip(canvas, onset, keys, slot, settings, height, wi
       if (!stroke && flat.length >= 4) nodeGraphGlLinesPolyline(batch, flat, 0, 0.75, rgba);
     }
   }
-  const half = Math.max(0, strokePx * 0.5 - 0.5);
+  // Line blur 0: the 1px edge centred on the stroke's width. Above 0: solid
+  // core of the full width plus that many px of Expo skirt (as 1D Plot).
+  const half = featherPx > 0 ? strokePx * 0.5 : Math.max(0, strokePx * 0.5 - 0.5);
+  const feather = featherPx > 0 ? featherPx : 1;
   for (let i = 0; stroke && i < curves.length; i += 1) {
     const { rgba, runs } = curves[i];
     for (const flat of runs) {
-      if (flat.length >= 4) nodeGraphGlLinesPolyline(batch, flat, half, 1, rgba);
-      else if (flat.length === 2) nodeGraphGlLinesDot(batch, flat[0], flat[1], half, 1, rgba);
+      if (flat.length >= 4) nodeGraphGlLinesPolyline(batch, flat, half, feather, rgba);
+      else if (flat.length === 2) nodeGraphGlLinesDot(batch, flat[0], flat[1], half, feather, rgba);
     }
   }
   nodeGraphWaterfallGlFlush(s);
@@ -533,7 +537,7 @@ function nodeGraphOnsetPaint(spec, live) {
       return;
     }
     if (!(endAll >= beginAll)) return;
-    const c0 = Math.max(0, beginAll - Math.ceil(strokePx * 0.5 + 1.5));
+    const c0 = Math.max(0, beginAll - Math.ceil(strokePx * 0.5 + nodeGraphWaterfallLineBlurCanvasPx(canvas, settings) + 1.5));
     // The open column can gain a new peak after it was drawn: it is cleared
     // and drawn again with the rest of the strip.
     if (typeof nodeGraphWaterfallGlClearColumn === "function") {
@@ -1303,8 +1307,10 @@ function nodeGraphWaterfallStrokeReach(canvas, settings) {
   const strokePx = typeof nodeGraphOnsetStrokeCanvasPx === "function"
     ? nodeGraphOnsetStrokeCanvasPx(canvas, settings)
     : nodeGraphWaterfallStrokePx(settings);
-  // Half the width plus the 1px AA ramp, rounded up to whole columns.
-  return { strokePx, reach: Math.ceil(strokePx * 0.5 + 1.5) };
+  const featherPx = nodeGraphWaterfallLineBlurCanvasPx(canvas, settings);
+  // Half the width plus the Line blur skirt and the 1px AA ramp, rounded up
+  // to whole columns.
+  return { strokePx, featherPx, reach: Math.ceil(strokePx * 0.5 + featherPx + 1.5) };
 }
 
 /**
@@ -1318,7 +1324,7 @@ function nodeGraphWaterfallStrokeReach(canvas, settings) {
  */
 function nodeGraphWaterfallStrokeWaveRun(canvas, bag, key, cols, settings, strokeColor, clipX0, blend = "source-over") {
   if (!bag.strokePts) bag.strokePts = Object.create(null);
-  const { strokePx, reach } = nodeGraphWaterfallStrokeReach(canvas, settings);
+  const { strokePx, featherPx, reach } = nodeGraphWaterfallStrokeReach(canvas, settings);
   // Clamp to the panel so values past the top / bottom (Sidechain gain > 2x
   // rest) ride the edge, fully visible, instead of leaving the canvas.
   const faceH = Number(canvas?.height);
@@ -1327,7 +1333,7 @@ function nodeGraphWaterfallStrokeWaveRun(canvas, bag, key, cols, settings, strok
   const rgb = nodeGraphWaterfallStrokeRgb(settings, strokeColor);
   const draw = (pts) => {
     if (pts.length > 1 && typeof nodeGraphOnsetGlStrokePolyline === "function") {
-      nodeGraphOnsetGlStrokePolyline(canvas, pts, strokePx, rgb, clipX0, blend);
+      nodeGraphOnsetGlStrokePolyline(canvas, pts, strokePx, rgb, clipX0, blend, featherPx);
     }
   };
   const kept = Array.isArray(bag.strokePts[key]) ? bag.strokePts[key] : [];
@@ -1759,6 +1765,20 @@ function nodeGraphOnsetStrokeCanvasPx(canvas, settings) {
   return Math.max(0.5, screenPx * scale);
 }
 
+// Line blur (lineSmoothing, the same 0-8 setting as 1D Plot's Line blur):
+// Expo skirt in screen px past the stroke's core, scaled like the stroke.
+// 0 (default) = the plain 1px edge waterfalls always had.
+function nodeGraphWaterfallLineBlurCanvasPx(canvas, settings) {
+  const screenPx = typeof nodeGraphLineSmoothingPx === "function"
+    ? nodeGraphLineSmoothingPx(settings, 0)
+    : Math.max(0, Math.min(8, Number(settings?.lineSmoothing) || 0));
+  if (!(screenPx > 0)) return 0;
+  const scale = typeof nodeGraphModuleFacePixelScale === "function"
+    ? nodeGraphModuleFacePixelScale(canvas)
+    : 1;
+  return screenPx * scale;
+}
+
 // Per-channel stroke (two-channel faces) wins over the shared strokeColor.
 function nodeGraphWaterfallStrokeRgb(settings, channelColor = null) {
   return nodeGraphWaterfallParseInkRgb(channelColor || settings?.strokeColor || "#ffffff");
@@ -1954,7 +1974,8 @@ function nodeGraphWaterfallPlotBox(canvas, settings, height) {
     ? nodeGraphOnsetStrokeCanvasPx(canvas, settings)
     : nodeGraphWaterfallStrokePx(settings);
   const frame = nodeGraphWaterfallFramePx(canvas);
-  const pad = Math.min(H * 0.25, Math.max(frame.minPadY, Math.max(0, strokePx) * 0.5 + 1));
+  const featherPx = nodeGraphWaterfallDrawStroke(settings) ? nodeGraphWaterfallLineBlurCanvasPx(canvas, settings) : 0;
+  const pad = Math.min(H * 0.25, Math.max(frame.minPadY, Math.max(0, strokePx) * 0.5 + featherPx + 1));
   const reserve = Math.min(H * 0.5, Math.max(0, nodeGraphFiniteNumber(canvas?._faceTextReservePx, 0)));
   return { top: pad, h: Math.max(1, H - pad * 2 - reserve) };
 }

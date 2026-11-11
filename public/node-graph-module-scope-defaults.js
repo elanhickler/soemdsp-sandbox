@@ -172,6 +172,9 @@ const nodeGraphWaterfallSettingsDefaults = Object.freeze({
   barInk: "fill",
   strokeColor: "#ffffff",
   strokeThickness: 1,
+  // Line blur (as 1D Plot): Expo skirt on the stroke, CSS px 0..8. 0 = the
+  // plain 1px edge, so older patches look the same.
+  lineSmoothing: 0,
   // Off: keep scrolling. On: silence (linear amp at or below Planck) holds the plate.
   pauseOnSilence: false,
   // 1D Onset only. Off: the sweep wraps and keeps drawing. On: it holds at the
