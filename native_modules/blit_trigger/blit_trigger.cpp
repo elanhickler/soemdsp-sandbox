@@ -40,6 +40,9 @@ struct BlitTriggerState {
   double prev;        // the two newest internal samples, for the read-out
   double cur;
   bool resetPending;
+  bool fired;         // an internal step opened a pulse since the last host sample
+  double firedLevel;
+  double lastTrigger; // the hard trigger output for this host sample
 };
 
 static BlitTriggerState gPool[kMaxInstances];
@@ -85,6 +88,8 @@ static double internal_step(BlitTriggerState& s, double rate, double width, doub
       if (ago < 0.0) ago = 0.0;
       s.level = level;
       blit_add(s, ago, s.level);
+      s.fired = true;
+      s.firedLevel = s.level;
     } else {
       double ago = reset ? -1.0 : crossed(phase, inc, w);
       if (ago < 0.0) ago = 0.0;
@@ -100,6 +105,8 @@ static double internal_step(BlitTriggerState& s, double rate, double width, doub
     if (agoOpen >= 0.0 && agoClose >= 0.0) {
       blit_add(s, agoOpen, level);
       blit_add(s, agoClose, -level);
+      s.fired = true;
+      s.firedLevel = level;
     }
   }
   s.gate += s.blit[s.head];
@@ -129,6 +136,9 @@ extern "C" int soemdsp_blit_trigger_create() {
       s.prev = 0.0;
       s.cur = 0.0;
       s.resetPending = false;
+      s.fired = false;
+      s.firedLevel = 0.0;
+      s.lastTrigger = 0.0;
       s.active = true;
       return i + 1;
     }
@@ -164,15 +174,25 @@ extern "C" double soemdsp_blit_trigger_sample(
   const double safeSpeed = clamp(safe(speed), 0.0, 64.0);
   s.clock += kInternalRate * safeSpeed / hostRate;
   if (s.clock > 64.0) s.clock = 64.0;
+  s.fired = false;
   while (s.clock >= 1.0) {
     s.clock -= 1.0;
     s.prev = s.cur;
     s.cur = internal_step(s, safeRate, safeWidth, safeLevel, s.resetPending);
     s.resetPending = false;
   }
+  // Hard trigger (white jack): one host sample at Amp for each pulse that
+  // opened since the last host sample, on the sample grid, no BLIT.
+  s.lastTrigger = s.fired ? s.firedLevel : 0.0;
   return s.prev + (s.cur - s.prev) * s.clock;
 }
 
+// The hard trigger for the host sample just computed (call after _sample).
+extern "C" double soemdsp_blit_trigger_pulse(int handle) {
+  if (handle < 1 || handle > kMaxInstances) return 0.0;
+  return gPool[handle - 1].lastTrigger;
+}
+
 extern "C" int soemdsp_blit_trigger_version() {
-  return 2; // 2: Speed scales the internal grid and Rate together (pattern kept, faster / slower). 1: band-limited gate at a fixed 48 kHz internal rate; Width in internal samples (0 off .. ~4 steady).
+  return 3; // 3: hard trigger output (one host sample per pulse) beside the BLIT out. 2: Speed scales the internal grid and Rate together (pattern kept, faster / slower). 1: band-limited gate at a fixed 48 kHz internal rate; Width in internal samples (0 off .. ~4 steady).
 }

@@ -10099,6 +10099,7 @@ NodeLiveAudioProcessor.prototype.nativeGraphPortNames = function nativeGraphPort
     if (type === "pitchManager") return ["pitch"];
     if (type === "snowflake") return ["Y"];
     if (type === "clock") return ["T", "Pulse", "Trigger"];
+    if (type === "blitTrigger") return ["T"];
     if (type === "transport") {
       return ["Trigger", "Trigger Sample", "Trig Sample"];
     }

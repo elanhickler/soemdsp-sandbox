@@ -7396,8 +7396,10 @@ const nodeGraphModuleDefinitions = (
     fJackParam: "rate",
     inputLabels: { f: "ƒ" },
     inputAliases: { "ƒ": "f" },
-    outputs: ["Out"],
-    outputLabels: { Out: "⎍" },
+    outputs: ["Out", "T"],
+    // ~ = the BLIT signal (gold, analog); trigger symbol = hard one-sample trigger (white).
+    digitalOutputs: ["T"],
+    outputLabels: { Out: "∿", T: "⎍" },
     parameters: [
       {
         defaultValue: "220",

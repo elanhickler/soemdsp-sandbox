@@ -411,6 +411,7 @@ extern "C" void soemdsp_blit_trigger_destroy(int handle);
 extern "C" double soemdsp_blit_trigger_sample(
   int handle, double reset, double rate, double width, double level, double speed, double sampleRate
 );
+extern "C" double soemdsp_blit_trigger_pulse(int handle);
 
 extern "C" int soemdsp_trigger_divider_create();
 extern "C" void soemdsp_trigger_divider_destroy(int handle);
@@ -7049,7 +7050,7 @@ static void process_mix(Circuit& g, Node& node, int frames) {
 // BLIT Trigger: band-limited gate (blit_trigger.cpp). Rate = frequency (the
 // f jack replaces it while wired), Width = width (internal samples), Amp =
 // amplitude, Speed = center (scales the internal grid and Rate together).
-// Reset rising edge restarts the cycle. Out on Mono.
+// Reset rising edge restarts the cycle. Out (BLIT) on Mono, T (hard) on Right.
 static void process_blit_trigger(Circuit& g, Node& node, int frames) {
   if (node.nativeHandle <= 0) return;
   const bool hasReset = mix_live_port(g, node, kPortReset, frames, g.mixReset);
@@ -7064,6 +7065,7 @@ static void process_blit_trigger(Circuit& g, Node& node, int frames) {
     const double speed = control_audio(g, node.center, f);
     const double reset = hasReset ? g.mixReset[f] : 0.0;
     node.buf[kPortMono][f] = soemdsp_blit_trigger_sample(node.nativeHandle, reset, rate, width, level, speed, sr);
+    node.buf[kPortRight][f] = soemdsp_blit_trigger_pulse(node.nativeHandle);
   }
 }
 
