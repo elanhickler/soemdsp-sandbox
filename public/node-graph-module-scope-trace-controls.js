@@ -1724,7 +1724,7 @@ const nodeGraphDisplaySettingsFieldMeta = Object.freeze({
     id: "nodeTraceDisplaySinCos4RingThickness",
     title: "SinCos4: width of the circle, % of the face square (0..100, default 1.2).",
   }),
-  startThickness: Object.freeze({ label: "Start thickness", inputmode: "decimal" }),
+  startThickness: Object.freeze({ label: "Tick thickness", inputmode: "decimal" }),
   blinkTime: Object.freeze({ label: "Blink time", inputmode: "decimal" }),
   gateHeight: Object.freeze({ label: "Height", inputmode: "decimal" }),
   ghostOpacity: Object.freeze({ label: "Ghost opacity", inputmode: "decimal" }),

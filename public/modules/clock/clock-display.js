@@ -167,13 +167,25 @@ function drawNodeGraphClockFace(section) {
   const offset = nodeGraphClockFaceParam(node, "phase", 0);
   const startPhase = offset - Math.floor(offset);
   const heard = nodeGraphClockFacePhase(section, node);
-  const phase = Number.isFinite(heard) ? heard : startPhase;
   const clamp01 = (v) => Math.max(0, Math.min(1, v));
   const pulseStart = clamp01(nodeGraphClockFaceParam(node, "pulseStart", 0));
   const pulseEnd = clamp01(nodeGraphClockFaceParam(node, "pulseEnd", 0.5));
   const endless = nodeGraphClockFaceGateEndless(pulseStart, pulseEnd);
-  // Blink on gate start: the playhead crossed Pulse Start since the last frame.
+  // Blink on gate start: the playhead crossed Pulse Start since the last frame
+  // (in the clock's own, offset phase, which the native __Phase reports).
   if (!endless && Number.isFinite(heard) && nodeGraphClockFaceCrossed(section._clockLast, heard, pulseStart)) section._clockFlash = now;
+  // The face axis is the cycle as it runs from Reset (left edge = Reset).
+  // The gate fires at offset phase Start, so on this axis the gate box sits
+  // at Start - Phase and End - Phase (wrapping across the edge): changing
+  // Phase visibly slides the gate and the tick mark. The playhead is the
+  // offset phase minus Phase, so after a Reset it sweeps from the left edge.
+  const wrapPhase = (v) => v - Math.floor(v);
+  const phase = Number.isFinite(heard) ? wrapPhase(heard - startPhase) : 0;
+  let gateStart = endless ? 0 : wrapPhase(pulseStart - startPhase);
+  let gateEnd = endless ? 1 : wrapPhase(pulseEnd - startPhase);
+  // An End that lands exactly on the cycle edge is the right edge, not 0.
+  if (!endless && gateEnd === 0 && gateStart > 0) gateEnd = 1;
+  // Start == End (one-sample trigger per cycle, clock v10) draws as a line.
   section._clockLast = heard;
   const look = nodeGraphClockFaceSettingsForNode(node);
   const flashing = look.blinkTime > 0 && Number.isFinite(section._clockFlash) && now - section._clockFlash < look.blinkTime;
@@ -188,10 +200,10 @@ function drawNodeGraphClockFace(section) {
     : Math.max(0, Number(look.lineSmoothing) || 1);
   const stroke = look.lineThickness;
   const halfPx = stroke * 0.5;
-  const g = nodeGraphClockFaceGeometry(w, h, pulseStart, pulseEnd, stroke, look.gateHeight);
+  const g = nodeGraphClockFaceGeometry(w, h, gateStart, gateEnd, stroke, look.gateHeight);
   const { x0, x1, xs, xe, high, low } = g;
   const fill = rgba(look.fillPaint);
-  for (const [a, b] of nodeGraphClockFaceFillSpans(g, pulseStart, pulseEnd, phase, endless)) {
+  for (const [a, b] of nodeGraphClockFaceFillSpans(g, gateStart, gateEnd, phase, endless)) {
     if (b > a) nodeGraphGlLinesRect(batch, a, high, b - a, low - high, fill);
   }
   // Gate: a closed rectangle. End before Start wraps it across the cycle edge.
@@ -202,16 +214,17 @@ function drawNodeGraphClockFace(section) {
   if (outline && endless) {
     nodeGraphGlLinesSegment(batch, x0, high, x1, high, halfPx, smoothing, pulse);
     nodeGraphGlLinesSegment(batch, x0, low, x1, low, halfPx, smoothing, pulse);
-  } else if (outline && pulseEnd >= pulseStart) {
+  } else if (outline && gateEnd >= gateStart) {
     const mid = (xs + xe) * 0.5;
     nodeGraphGlLinesPolyline(batch, [mid, low, xs, low, xs, high, xe, high, xe, low, mid, low], halfPx, smoothing, pulse);
   } else if (outline) {
     nodeGraphGlLinesPolyline(batch, [x1, low, xs, low, xs, high, x1, high], halfPx, smoothing, pulse);
     nodeGraphGlLinesPolyline(batch, [x0, high, xe, high, xe, low, x0, low], halfPx, smoothing, pulse);
   }
-  // Phase start marker: where the playhead lands on Reset (Phase offset). The
-  // gate box is Pulse Start..End and does not move with Phase. Blinks with the playhead.
-  const xm = g.at(startPhase);
+  // Tick marker: where T fires, the offset phase wrapping, at 1 - Phase on
+  // this axis (the left edge at Phase 0). Slides with Phase like the gate.
+  // Blinks with the playhead.
+  const xm = g.at(wrapPhase(1 - startPhase));
   if (look.startThickness > 0) nodeGraphGlLinesSegment(batch, xm, high, xm, low, look.startThickness * 0.5, smoothing, rgba(flashing ? look.blinkPaint : look.startPaint));
   // Playhead: the gate's height and stroke; flashes when the clock fires.
   const xp = g.at(phase);

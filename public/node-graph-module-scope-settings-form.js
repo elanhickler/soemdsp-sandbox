@@ -2617,7 +2617,7 @@ function buildNodeGraphDisplaySettingsBodyHtml(formType, node = null) {
       }
       if (clock) {
         lamps.push(["fill", "Fill", "fillHue", "fillBrightness", "fillSaturation"]);
-        lamps.push(["start", "Start", "startHue", "startBrightness", "startSaturation"]);
+        lamps.push(["start", "Tick", "startHue", "startBrightness", "startSaturation"]);
         lamps.push(["blink", "Blink", "blinkHue", "blinkBrightness", "blinkSaturation"]);
       }
       if (divider) {
