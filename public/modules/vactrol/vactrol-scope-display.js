@@ -192,17 +192,30 @@ function nodeGraphVactrolScopePoints(view, filled, x, y, w, h, skip, omitZero) {
   const x0 = x + (w - used);
   const thresh = skip ? nodeGraphVactrolScopeDiscThreshold() : 0;
   const zeroFloor = omitZero ? 1e-6 : -Infinity;
+  const level = (i) => {
+    const v = Number(view[i]);
+    return !Number.isFinite(v) ? NaN : (v <= 0 ? 0 : (v >= 1 ? 1 : v));
+  };
   let prev = NaN;
   let run = false;
   for (let i = 0; i < n; i += 1) {
     const t = n === 1 ? 1 : i / (n - 1);
-    const v = Number(view[i]);
-    const s = !Number.isFinite(v) ? NaN : (v <= 0 ? 0 : (v >= 1 ? 1 : v));
+    const s = level(i);
     const px = x0 + t * used;
     const py = y + (1 - (Number.isFinite(s) ? s : 0)) * h;
     // Drop ~0 samples so a resting line does not draw a floor along 0.
-    // Breaking here (NaN,NaN) also avoids a vertical stub at edges.
+    // Skip on: breaking here (NaN,NaN) also avoids a vertical stub at edges.
+    // Skip off: a 0 sample next to a raised one stays, so the jump draws
+    // down to the floor (gate edges); runs of 0 still draw nothing.
     if (!Number.isFinite(s) || s <= zeroFloor) {
+      const edge = !skip && Number.isFinite(s)
+        && ((i > 0 && level(i - 1) > zeroFloor) || (i + 1 < n && level(i + 1) > zeroFloor));
+      if (edge) {
+        pts.push(px, py);
+        run = true;
+        prev = s;
+        continue;
+      }
       if (run) { pts.push(NaN, NaN); run = false; }
       prev = NaN;
       continue;

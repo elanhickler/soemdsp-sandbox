@@ -2004,22 +2004,22 @@ const nodeGraphDisplaySettingsToggleMeta = Object.freeze({
       "Break the stroke at wrap/jump samples instead of drawing a seam. 1D: no vertical wrap line. 2D: no chord across a sudden X/Y jump.",
   }),
   skipLight: Object.freeze({
-    label: "Skip Light",
+    label: "Skip Light Discontinuity",
     id: "nodeTraceDisplayVactrolSkipLight",
-    title: "Break the Light line at jumps instead of drawing a vertical connecting segment. On by default so gate edges do not clutter the face.",
+    title: "Break the Light line at jumps instead of drawing a vertical connecting segment. On by default so gate edges do not clutter the face. Off draws gate edges down to the floor.",
   }),
   skipFlt: Object.freeze({
-    label: "Skip Flt",
+    label: "Skip Flt Discontinuity",
     id: "nodeTraceDisplayVactrolSkipFlt",
     title: "Break the Flt Env line at jumps instead of drawing a vertical connecting segment.",
   }),
   skipAmp: Object.freeze({
-    label: "Skip Amp",
+    label: "Skip Amp Discontinuity",
     id: "nodeTraceDisplayVactrolSkipAmp",
     title: "Break the Amp Env line at jumps instead of drawing a vertical connecting segment.",
   }),
   skipMem: Object.freeze({
-    label: "Skip Mem",
+    label: "Skip Mem Discontinuity",
     id: "nodeTraceDisplayVactrolSkipMem",
     title: "Break the Mem line at jumps instead of drawing a vertical connecting segment.",
   }),
