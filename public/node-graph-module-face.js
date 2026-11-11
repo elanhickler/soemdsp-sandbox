@@ -869,8 +869,9 @@ function beginNodeGraphModuleFaceGesture(article, face, spec, event) {
       typeof nodeSliderValueFromTravel === "function" ? nodeSliderValueFromTravel(input, t) : t, drag);
     nodeGraphModuleFaceCapture(face, event, (ev, drag) => {
       const { dx, dy } = travel(ev);
-      let du = (dx - dy) / Math.max(1, wd.w);
-      if (mode === "span") du = Math.max(-Math.min(tl, th), Math.min(1 - Math.max(tl, th), du));
+      // Span drag: each end clamps on its own (as the filter widget), so the
+      // range collapses against the edge as room runs out instead of stopping.
+      const du = (dx - dy) / Math.max(1, wd.w);
       if (mode !== "hi") set(lo, Math.max(0, Math.min(1, tl + du)), drag);
       if (mode !== "lo") set(hi, Math.max(0, Math.min(1, th + du)), drag);
     }, captureOpts);
