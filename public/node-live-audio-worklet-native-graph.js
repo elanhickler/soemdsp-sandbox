@@ -1594,6 +1594,9 @@ NodeLiveAudioProcessor.prototype.mapNativeGraphDstPortId = function mapNativeGra
   if (p === "clock" || (p === "trig" && type === "arp")) {
     return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_TRIGGER;
   }
+  if (p === "advance" && type === "blitTrigger") {
+    return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_TRIGGER;
+  }
   if (p === "advance" && type === "chordMemory") {
     return NodeLiveAudioProcessor.NATIVE_GRAPH_PORT_INCREMENT;
   }
@@ -7208,10 +7211,14 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
       continue;
     }
     if (type === "blitTrigger") {
-      push("rate", P.NATIVE_GRAPH_PARAM_FREQUENCY, cont("rate", 220));
-      push("width", P.NATIVE_GRAPH_PARAM_WIDTH, cont("width", 2));
-      push("speed", P.NATIVE_GRAPH_PARAM_CENTER, cont("speed", 1));
+      // Rounding Error Sequencer: spacing=frequency, gate=width, level=amplitude,
+      // clockSpeed=center, length=stages, rotate=phaseParam.
+      push("spacing", P.NATIVE_GRAPH_PARAM_FREQUENCY, cont("spacing", 7.3));
+      push("gate", P.NATIVE_GRAPH_PARAM_WIDTH, cont("gate", 2));
       push("amplitude", P.NATIVE_GRAPH_PARAM_AMPLITUDE, cont("amplitude", 1));
+      push("clockSpeed", P.NATIVE_GRAPH_PARAM_CENTER, cont("clockSpeed", 1));
+      push("length", P.NATIVE_GRAPH_PARAM_STAGES, disc("length", 8));
+      push("rotate", P.NATIVE_GRAPH_PARAM_PHASE, cont("rotate", 0));
       continue;
     }
     if (type === "clock") {
@@ -10117,6 +10124,7 @@ NodeLiveAudioProcessor.prototype.nativeGraphPortNames = function nativeGraphPort
     return ["Right"];
   }
   if (portId === P.NATIVE_GRAPH_PORT_SAW) {
+    if (type === "blitTrigger") return ["Velocity"];
     if (type === "hostBpm") return ["f", "ƒ"];
     // Pitch Manager face tap: the pitch input as received.
     if (type === "pitchManager") return ["__InPitch"];
@@ -10170,6 +10178,7 @@ NodeLiveAudioProcessor.prototype.nativeGraphPortNames = function nativeGraphPort
     return ["Saw"];
   }
   if (portId === P.NATIVE_GRAPH_PORT_RAMP) {
+    if (type === "blitTrigger") return ["Step"];
     if (type === "vactrol") return ["Mem"];
     if (type === "hostBpm") return ["pitch", "♯/♭"];
     if (type === "rmsMeter") return ["Env Inverted"];
@@ -10363,6 +10372,7 @@ NodeLiveAudioProcessor.prototype.publishNativeGraphScopeTaps = function publishN
         : audioPorts);
     if (type === "stepRegister") ports.push(P.NATIVE_GRAPH_PORT_TRISAW, P.NATIVE_GRAPH_PORT_PHASE01);
     if (type === "pitchManager") ports.push(P.NATIVE_GRAPH_PORT_PHASE01, P.NATIVE_GRAPH_PORT_SAW);
+    if (type === "blitTrigger") ports.push(P.NATIVE_GRAPH_PORT_SAW, P.NATIVE_GRAPH_PORT_RAMP);
     for (let pi = 0; pi < ports.length; pi += 1) {
       const portId = ports[pi];
       const view = this.bindNativeGraphNodePortView(hash, portId, frames);
@@ -10518,6 +10528,8 @@ NodeLiveAudioProcessor.prototype.publishNativeGraphScopeTaps = function publishN
       let ports;
       if (type === "midiCc" || type === "midiLag") {
         ports = facePorts.concat(P.NATIVE_GRAPH_PORT_SAW, P.NATIVE_GRAPH_PORT_RIGHT, P.NATIVE_GRAPH_PORT_RAMP, P.NATIVE_GRAPH_PORT_LEFT);
+      } else if (type === "blitTrigger") {
+        ports = facePorts.concat(P.NATIVE_GRAPH_PORT_SAW, P.NATIVE_GRAPH_PORT_RAMP);
       } else if (type === "pitchManager") {
         // Face taps: __Unit (0-1 in) and __InPitch.
         ports = facePorts.concat(P.NATIVE_GRAPH_PORT_PHASE01, P.NATIVE_GRAPH_PORT_SAW);

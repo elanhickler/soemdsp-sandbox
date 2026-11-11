@@ -613,9 +613,9 @@ const nodeGraphModuleStoreCatalog = Object.freeze({
   },
   blitTrigger: {
     category: "clock",
-    label: "BLIT Trigger",
-    description: "Band-limited pulse whose tiny Width sweeps from off, through sample-grid patterns, to a steady trigger. Fixed 48 kHz internal rate.",
-    notes: ["blit", "band-limited", "trigger", "gate", "pattern", "sub-sample", "clock"],
+    label: "Rounding Error Sequencer",
+    description: "Step sequencer whose accents are the sample grid's rounding error: Spacing, Rotate, Length loop, Gate. Clock Speed or an Advance trigger steps it.",
+    notes: ["sequencer", "rounding error", "blit", "band-limited", "trigger", "accent", "pattern", "advance", "clock"],
   },
   clock: {
     category: "clock",
