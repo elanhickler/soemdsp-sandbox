@@ -7214,7 +7214,7 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
     if (type === "blitTrigger") {
       // Rounding Error Sequencer: spacing=frequency, gate=width, level=amplitude,
       // clockSpeed=center, length=stages, rotate=phaseParam.
-      push("spacing", P.NATIVE_GRAPH_PARAM_FREQUENCY, cont("spacing", 7.3));
+      push("spacing", P.NATIVE_GRAPH_PARAM_FREQUENCY, cont("spacing", 218.2));
       push("gate", P.NATIVE_GRAPH_PARAM_WIDTH, cont("gate", 2));
       push("amplitude", P.NATIVE_GRAPH_PARAM_AMPLITUDE, cont("amplitude", 1));
       push("clockSpeed", P.NATIVE_GRAPH_PARAM_CENTER, cont("clockSpeed", 1));

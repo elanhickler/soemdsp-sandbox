@@ -58,6 +58,15 @@
       "folder": "bugs"
     },
     {
+      "slug": "bugs/performance killer",
+      "label": "performance killer",
+      "name": "",
+      "url": "/soemdsp-sandbox/patches/bugs/performance%20killer.json",
+      "author": "",
+      "emoji": "",
+      "folder": "bugs"
+    },
+    {
       "slug": "bugs/pump limiter sidechain not working",
       "label": "pump limiter sidechain not working",
       "name": "",
@@ -71,6 +80,15 @@
       "label": "scangrid",
       "name": "",
       "url": "/soemdsp-sandbox/patches/bugs/scangrid.json",
+      "author": "",
+      "emoji": "",
+      "folder": "bugs"
+    },
+    {
+      "slug": "bugs/ugly timing jitter",
+      "label": "ugly timing jitter",
+      "name": "",
+      "url": "/soemdsp-sandbox/patches/bugs/ugly%20timing%20jitter.json",
       "author": "",
       "emoji": "",
       "folder": "bugs"
@@ -1051,6 +1069,14 @@
       "emoji": ""
     },
     {
+      "slug": "performance killer",
+      "label": "performance killer",
+      "name": "",
+      "url": "/soemdsp-sandbox/patches/bugs/performance%20killer.json",
+      "author": "",
+      "emoji": ""
+    },
+    {
       "slug": "phonetone",
       "label": "phonetone",
       "name": "",
@@ -1487,6 +1513,14 @@
       "label": "tubesaturation_1",
       "name": "",
       "url": "/soemdsp-sandbox/patches/tubesaturation_1.json",
+      "author": "",
+      "emoji": ""
+    },
+    {
+      "slug": "ugly timing jitter",
+      "label": "ugly timing jitter",
+      "name": "",
+      "url": "/soemdsp-sandbox/patches/bugs/ugly%20timing%20jitter.json",
       "author": "",
       "emoji": ""
     },

@@ -3651,7 +3651,7 @@ static void init_node_defaults(Node& n, int typeId) {
       : (typeId == kTypeRobinSinusoid || typeId == kTypeSoftpopOscillator || typeId == kTypeSoftpopFilter || typeId == kTypeSoftpop2) ? 440.0
       : (typeId == kTypeRobinOscillator) ? 100.0
       : (typeId == kTypeSampleHold) ? 0.0
-      : (typeId == kTypeBlitTrigger) ? 7.3 // Spacing (internal samples)
+      : (typeId == kTypeBlitTrigger) ? 218.2 // Spacing (internal samples)
       : (typeId == kTypeClock || typeId == kTypeBinaryClock) ? 2.0
       : (typeId == kTypeArp) ? 8.0 // Internal Clock Hz
       : (typeId == kTypeAliasSine) ? 0.1 // normFreq (0→sr)

@@ -38,7 +38,7 @@ function nodeGraphRoundingErrorParam(node, key, fallback) {
 
 /** { accents[], loop } for the node's current settings. */
 function nodeGraphRoundingErrorPattern(node) {
-  const spacing = Math.max(1, nodeGraphRoundingErrorParam(node, "spacing", 7.3));
+  const spacing = Math.max(1, nodeGraphRoundingErrorParam(node, "spacing", 218.2));
   const rotate = Math.min(1, Math.max(0, nodeGraphRoundingErrorParam(node, "rotate", 0)));
   const gate = Math.max(0, nodeGraphRoundingErrorParam(node, "gate", 2));
   const length = Math.round(Math.max(0, nodeGraphRoundingErrorParam(node, "length", 8)));
