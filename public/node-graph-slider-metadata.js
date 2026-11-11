@@ -323,6 +323,11 @@ function normalizeNodeSliderCurve(value, nonlinearSlider = false) {
   if (curve === "skew" || curve === "mid" || curve === "nonlinear" || curve === "exponential") {
     return "skew";
   }
+  // UI "off" is value="linear". Honor it so an explicit off is not turned
+  // back into mid skew when the legacy nonlinearSlider flag is true.
+  if (curve === "linear" || curve === "off") {
+    return "linear";
+  }
   return nonlinearSlider ? "skew" : "linear";
 }
 

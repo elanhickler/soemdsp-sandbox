@@ -441,6 +441,50 @@ function normalizeNodeGraphMetadataMaxDigits(value, kind = "decimal") {
   return Math.max(0, Math.min(12, Math.round(number)));
 }
 
+
+/**
+ * Mid skew on spawn when the definition names an off-center mid, even if
+ * nonlinearSlider is explicitly false (a leftover flag on many Q / time /
+ * resonance knobs). Explicit sliderCurve still wins. Choice lists, seeds,
+ * and short integer enumerations stay linear unless a curve is set.
+ */
+function nodeGraphParameterShouldEnableMidSkewByMid(parameter, safeMin, safeMax, safeMid) {
+  if (!parameter || !Object.hasOwn(parameter, "mid")) {
+    return false;
+  }
+  if (!Number.isFinite(safeMid) || !Number.isFinite(safeMin) || !Number.isFinite(safeMax)) {
+    return false;
+  }
+  if (!(safeMid > safeMin && safeMid < safeMax)) {
+    return false;
+  }
+  if (Math.abs(safeMid - (safeMin + safeMax) / 2) <= Number.EPSILON) {
+    return false;
+  }
+  if (Array.isArray(parameter.choices) && parameter.choices.length) {
+    return false;
+  }
+  if (parameter.displayChoices === true) {
+    return false;
+  }
+  if (String(parameter.kind || "").toLowerCase() === "seed") {
+    return false;
+  }
+  const key = String(parameter.key || "");
+  const label = String(parameter.label || "");
+  if (/seed/i.test(key) || /seed/i.test(label)) {
+    return false;
+  }
+  const step = Number(parameter.step);
+  if (Number.isFinite(step) && step >= 1 && Math.abs(step - Math.round(step)) < 1e-9) {
+    const steps = (safeMax - safeMin) / step;
+    if (Number.isFinite(steps) && steps <= 16) {
+      return false;
+    }
+  }
+  return true;
+}
+
 function nodeGraphInferParameterMetadataKind(parameter = {}) {
   const explicitKind = normalizeNodeMetadataKind(parameter.kind);
   if (explicitKind && explicitKind !== "decimal") {
@@ -477,6 +521,14 @@ function nodeGraphParameterDefinitionMetadata(parameter) {
     smoothingType = "none";
   }
   const definedChoices = normalizeNodeGraphMetadataChoices(parameter.choices || []);
+  const enableMidSkew = (
+    nodeGraphParameterShouldEnableMidSkewByMid(parameter, safeMin, safeMax, safeMid)
+    && !String(parameter.sliderCurve || "").trim()
+  ) || (
+    Object.hasOwn(parameter, "nonlinearSlider")
+      ? Boolean(parameter.nonlinearSlider)
+      : midInsideRange && Math.abs(safeMid - (safeMin + safeMax) / 2) > Number.EPSILON
+  );
   const defined = {
     choices: definedChoices,
     // B-079: full-catalog origin (domain of choices[0]) survives later min/max clamps.
@@ -500,12 +552,8 @@ function nodeGraphParameterDefinitionMetadata(parameter) {
     mid: safeMid,
     min: safeMin,
     reverse: Boolean(parameter.reverse),
-    nonlinearSlider: Object.hasOwn(parameter, "nonlinearSlider")
-      ? Boolean(parameter.nonlinearSlider)
-      : midInsideRange && Math.abs(safeMid - (safeMin + safeMax) / 2) > Number.EPSILON,
-    sliderCurve: normalizeNodeSliderCurve(parameter.sliderCurve, Object.hasOwn(parameter, "nonlinearSlider")
-      ? Boolean(parameter.nonlinearSlider)
-      : midInsideRange && Math.abs(safeMid - (safeMin + safeMax) / 2) > Number.EPSILON),
+    nonlinearSlider: enableMidSkew,
+    sliderCurve: normalizeNodeSliderCurve(parameter.sliderCurve, enableMidSkew),
     showSign: Boolean(parameter.showSign),
     removeTrailingZeros: Boolean(parameter.removeTrailingZeros),
     smoothingMode: normalizeNodeGraphMetadataSmoothingMode(parameter.smoothingMode),
