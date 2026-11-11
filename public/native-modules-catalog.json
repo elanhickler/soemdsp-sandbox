@@ -1155,7 +1155,7 @@
     },
     {
       "name": "formant_filter",
-      "label": "BLIT Formant",
+      "label": "Formant Voice",
       "targetType": "formantFilter",
       "kind": "oscillator",
       "source": "native_modules/formant_filter/formant_filter.cpp",

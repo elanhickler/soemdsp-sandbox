@@ -195,7 +195,7 @@ function nodeGraphFormantFilterFaceReadParams(node) {
   for (const key of Object.keys(NODE_GRAPH_FORMANT_FILTER_PARAM_DEFAULTS)) {
     out[key] = nodeGraphFormantFilterFaceParam(node, key);
   }
-  out.sweep = Math.max(0, Math.min(4, Math.round(out.sweep)));
+  out.sweep = Math.max(0, Math.min(9, Math.round(out.sweep)));
   for (let b = 1; b <= 5; b += 1) out[`on${b}`] = out[`on${b}`] >= 0.5 ? 1 : 0;
   return out;
 }

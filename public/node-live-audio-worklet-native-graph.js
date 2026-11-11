@@ -600,6 +600,12 @@ NodeLiveAudioProcessor.prototype.mapNativeGraphParamId = function mapNativeGraph
     if (k === "subDirect") return P.NATIVE_GRAPH_PARAM_BLEED2;
     if (k === "subOct") return P.NATIVE_GRAPH_PARAM_BLEED3;
     if (k === "noiseTone") return P.NATIVE_GRAPH_PARAM_LPF_FREQUENCY;
+    if (k === "jitter") return P.NATIVE_GRAPH_PARAM_IN_HIGH;
+    if (k === "shimmer") return P.NATIVE_GRAPH_PARAM_OUT_LOW;
+    if (k === "breath") return P.NATIVE_GRAPH_PARAM_IN_LOW;
+    if (k === "plosive") return P.NATIVE_GRAPH_PARAM_TIME_NUMERATOR;
+    if (k === "fricative") return P.NATIVE_GRAPH_PARAM_TIME_DENOMINATOR;
+    if (k === "fricLevel") return P.NATIVE_GRAPH_PARAM_OUT_HIGH;
   }
   if (t === "dsfMorphingOsc") {
     if (k === "symmetry") return P.NATIVE_GRAPH_PARAM_MIX;
@@ -5521,7 +5527,9 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
       // mode / stages / lfoStyle / waveform / oversample = On 1..5;
       // frequency = osc Hz, level = Osc, width = Sub, feedback = Noise;
       // laneBias2 = Wave (Saw / Square), laneBias3 = Sub Wave (Sine / Saw / Square),
-      // laneBias4 = PW, bleed2 = Sub Direct, bleed3 = Sub Oct, lpfFrequency = Noise Tone Hz.
+      // laneBias4 = PW, bleed2 = Sub Direct, bleed3 = Sub Oct, lpfFrequency = Noise Tone Hz,
+      // inHigh = Jitter, outLow = Shimmer, inLow = Breath, timeNumerator = Plosive,
+      // timeDenominator = Fricative, outHigh = Fric level.
       push("frequency", P.NATIVE_GRAPH_PARAM_FREQUENCY, cont("frequency", 110));
       push("saw", P.NATIVE_GRAPH_PARAM_LEVEL, cont("saw", 1));
       push("sub", P.NATIVE_GRAPH_PARAM_WIDTH, cont("sub", 0));
@@ -5549,6 +5557,12 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
       push("subDirect", P.NATIVE_GRAPH_PARAM_BLEED2, cont("subDirect", 0));
       push("subOct", P.NATIVE_GRAPH_PARAM_BLEED3, disc("subOct", 0));
       push("noiseTone", P.NATIVE_GRAPH_PARAM_LPF_FREQUENCY, cont("noiseTone", 8000));
+      push("jitter", P.NATIVE_GRAPH_PARAM_IN_HIGH, cont("jitter", 0));
+      push("shimmer", P.NATIVE_GRAPH_PARAM_OUT_LOW, cont("shimmer", 0));
+      push("breath", P.NATIVE_GRAPH_PARAM_IN_LOW, cont("breath", 0));
+      push("plosive", P.NATIVE_GRAPH_PARAM_TIME_NUMERATOR, disc("plosive", 0));
+      push("fricative", P.NATIVE_GRAPH_PARAM_TIME_DENOMINATOR, disc("fricative", 0));
+      push("fricLevel", P.NATIVE_GRAPH_PARAM_OUT_HIGH, cont("fricLevel", 0));
       continue;
     }
     if (type === "dsfMorphingOsc") {

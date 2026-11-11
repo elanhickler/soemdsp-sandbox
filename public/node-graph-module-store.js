@@ -149,7 +149,7 @@ const nodeGraphModuleCatalogUnderConstructionSort = Object.freeze([
 // from persisted underconstructionsort so old UI settings do not keep the
 // construction plate over a working face (Output meter/trace).
 const nodeGraphModuleCatalogRetiredFromUnderConstruction = Object.freeze([
-  // Shipped as BLIT Formant (was the parked "formantFilter" placeholder).
+  // Shipped as Formant Voice (was BLIT Formant; the parked "formantFilter" placeholder).
   "formantFilter",
   "screenSpaceShader",
   "output",
@@ -387,12 +387,12 @@ const nodeGraphModuleStoreCatalog = Object.freeze({
     label: "BLIT",
     notes: ["anti-aliasing", "blit", "realtime oscillator"],
   },
-  // BLIT Formant: internal type key stays "formantFilter" (graph type 244) so saved patches load.
+  // Formant Voice (was BLIT Formant): internal type key stays "formantFilter" (graph type 244) so saved patches load.
   formantFilter: {
-    category: "oscillator",
-    description: "Source-filter vowel voice: an alias-free BLIT saw or pulse (plus a Sine, Saw or Square Sub one or two octaves down, and band-limited Noise) with your audio on Mono / Left / Right mixed in, through five resonant bandpasses (constant-peak ZDF SVF) on a vowel path. Sweep picks the path, Vowel walks it, Shift moves every formant up to 7 octaves (bands fade out at the top instead of piling up), Resonance scales Q. Body adds the voiced source back through a lowpass under F1 so the low end stays heavy; Noise is stereo (independent per side) and alone whispers; Drive adds tube grit to the voice (Noise stays clean).",
-    label: "BLIT Formant",
-    notes: ["oscillator", "formant", "vowel", "blit", "saw", "noise", "whisper", "talking", "filter", "bandpass", "resonant", "SVF", "ZDF", "stereo", "native"],
+    category: "object",
+    description: "A talking voice: a source (BLIT saw / pulse, a Glottal vocal-fold pulse, Sub, band-limited Noise, plus your audio on Mono / Left / Right) through five formant resonators on vowel paths (E A O U ... R A E, M A, N O, N A U, W AE; nasals get their anti-resonance). Trigger plays a plosive (P T K B D G: closure, burst, aspiration, formant glide); Fricative adds S / Sh / F / Th / H. Jitter / Shimmer make it alive (or rough), Breath turns noise into an inhale or exhale, Drive adds tube grit to the voice only.",
+    label: "Formant Voice",
+    notes: ["oscillator", "formant", "vowel", "blit", "saw", "noise", "whisper", "talking", "filter", "bandpass", "resonant", "SVF", "ZDF", "stereo", "native", "speech", "voice", "consonant", "plosive", "fricative", "nasal", "glottal", "jitter", "shimmer", "object"],
   },
   archimedes: {
     category: "oscillator",

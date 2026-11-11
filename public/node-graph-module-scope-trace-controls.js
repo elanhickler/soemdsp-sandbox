@@ -2809,7 +2809,7 @@ const nodeGraphDisplaySettingsFormTypeTitles = Object.freeze({
   pluginSliderFace: "Slider",
   graphFace: "Graph",
   phaserFace: "Phaser",
-  formantFilterFace: "BLIT Formant",
+  formantFilterFace: "Formant Voice",
   keypadFace: "Keypad",
   roundShapeFace: "RoundShape",
   sinCos4Face: "SinCos4",

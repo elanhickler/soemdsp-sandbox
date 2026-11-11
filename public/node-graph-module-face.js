@@ -17,7 +17,7 @@
 //     optional 4th item { onLabel, onFill } names and colours the on state.
 //     "toggle" = a column fill slider whose top strip is an Off/On param (4th item,
 //     its key): click the strip to switch, drag below it for the value. The
-//     Off/On param gets no rail jack of its own (BLIT Formant band On + Gain).
+//     Off/On param gets no rail jack of its own (Formant Voice band On + Gain).
 //     Per-cell "horizontal" overrides the row flag.
 //     Choice switch (app-wide): { kind: "cells", params: [[key, label]], horizontal: true }
 //     Label left, value right, selected-slot rectangle, no divider strokes.
