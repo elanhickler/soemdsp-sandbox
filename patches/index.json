@@ -1430,7 +1430,15 @@
       "slug": "superlove_lp18_breadboard",
       "label": "superlove_lp18_breadboard",
       "name": "",
-      "url": "/soemdsp-sandbox/patches/superlove_lp18_breadboard.json",
+      "url": "/soemdsp-sandbox/patches/filter_breadboards/superlove_lp18_breadboard.json",
+      "author": "Sandbox",
+      "emoji": ""
+    },
+    {
+      "slug": "superlove_lp18_breadboard_1",
+      "label": "superlove_lp18_breadboard_1",
+      "name": "",
+      "url": "/soemdsp-sandbox/patches/superlove_lp18_breadboard_1.json",
       "author": "Sandbox",
       "emoji": ""
     },
@@ -1470,7 +1478,15 @@
       "slug": "tubesaturation",
       "label": "tubesaturation",
       "name": "",
-      "url": "/soemdsp-sandbox/patches/tubesaturation.json",
+      "url": "/soemdsp-sandbox/patches/demo_patches/tubesaturation.json",
+      "author": "",
+      "emoji": ""
+    },
+    {
+      "slug": "tubesaturation_1",
+      "label": "tubesaturation_1",
+      "name": "",
+      "url": "/soemdsp-sandbox/patches/tubesaturation_1.json",
       "author": "",
       "emoji": ""
     },

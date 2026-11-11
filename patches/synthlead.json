@@ -2308,45 +2308,11 @@
       "gy": -48,
       "id": "ampCurve-1",
       "paramMeta": {
-        "mode": {
-          "alias": "",
-          "choices": [
-            "Lin",
-            "Exp"
-          ],
-          "curveAmount": 0,
-          "def": 1,
-          "displayChoices": true,
-          "divideChoicesVisibly": true,
-          "kind": "decimal",
-          "bipolar": false,
-          "max": 1,
-          "maxDigits": 3,
-          "mid": 1,
-          "min": 0,
-          "nonlinearSlider": false,
-          "sliderCurve": "linear",
-          "showSign": false,
-          "removeTrailingZeros": false,
-          "smoothingMode": "global",
-          "smoothingSeconds": null,
-          "smoothingType": "none",
-          "step": 1,
-          "tooltip": "Lin = clamp Env to 0…1. Exp = classic VCA CV law (quiet lows, unity at 1) for Amplitude params.",
-          "modClamp": true,
-          "hardClamp": false,
-          "modMultiply": false,
-          "vca": false,
-          "constraint": "",
-          "unit": "",
-          "wraparound": false,
-          "visible": true,
-          "linearSmoothing": false,
-          "outputDomain": false
-        }
+        
       },
-      "params": {
-        "mode": 1
+            "params": {
+        "shape": "Exponential",
+        "skew": -0.6625295074459036
       },
       "type": "ampCurve",
       "alias": "Curve",
