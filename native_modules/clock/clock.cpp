@@ -32,6 +32,8 @@ struct ClockState {
   bool digitalWasHigh;
   double digitalLevel;  // latched at the Digital gate rise
   double cycleLevel;    // latched at the cycle start (Analog)
+  bool smoothWasHigh;
+  double smoothLevel;   // latched at the smooth gate's rise
 };
 
 static ClockState gPool[kMaxInstances];
@@ -41,16 +43,34 @@ static double pow_nonneg(double base, double exponent) {
   return dsp_exp(exponent * dsp_ln(base));
 }
 
-static double clock_analog_whip_sample(double phase, double level) {
-  const double p = clamp(phase, 0.0, 1.0);
-  const double attack = 1.0 - pow_nonneg(1.0 - mind(1.0, p / 0.035), 4.0);
-  const double release = pow_nonneg(maxd(0.0, 1.0 - p), 1.85);
-  const double snapEnvelope = attack * release;
-  const double sweepTurns = (3.15 * (1.0 - dsp_exp(-4.2 * p)) / (1.0 - dsp_exp(-4.2))) + (0.18 * dsp_sin(kPi * p));
-  const double liquidBend = 0.075 * dsp_sin(kPi * 2.0 * p) * pow_nonneg(maxd(0.0, 1.0 - p), 1.2);
-  const double body = dsp_sin((sweepTurns + liquidBend) * kPi * 2.0);
-  const double sheen = dsp_sin((sweepTurns * 2.02 + 0.17) * kPi * 2.0) * 0.16 * pow_nonneg(maxd(0.0, 1.0 - p), 2.8);
-  return (body + sheen) * snapEnvelope * level;
+// Window measure in [0, x) for x in [0, 1]: how much of the phase circle up
+// to x lies inside the gate window [start, end) (end < start wraps).
+static double clock_window_cdf01(double x, double start, double end) {
+  if (end >= start) return clamp(x, start, end) - start;
+  return mind(x, end) + maxd(0.0, x - start);
+}
+
+// Same, on the unwrapped phase line: whole cycles add the window width.
+static double clock_window_cdf(double x, double start, double end) {
+  const double width = end >= start ? end - start : (1.0 - start) + end;
+  const double k = dsp_floor(x);
+  return k * width + clock_window_cdf01(x - k, start, end);
+}
+
+// Smooth (box-filtered) gate: the fraction of this sample's phase step
+// [phase, phase + inc) that lies inside the window. Edges land at their true
+// sub-sample time (0.7 = on for 70% of the sample), so a continuous receiver
+// (Vactrol Light) responds identically on every cycle, with no repeating
+// sample-grid pattern. Rate 0: the plain in-window test.
+static double clock_smooth_gate(double phase, double inc, double start, double end) {
+  if (inc == 0.0) {
+    const bool in = end >= start ? (phase >= start && phase < end) : (phase >= start || phase < end);
+    return in ? 1.0 : 0.0;
+  }
+  const double a = inc > 0.0 ? phase : phase + inc;
+  const double len = inc > 0.0 ? inc : -inc;
+  const double cover = clock_window_cdf(a + len, start, end) - clock_window_cdf(a, start, end);
+  return clamp(cover / len, 0.0, 1.0);
 }
 
 }  // namespace
@@ -71,6 +91,8 @@ extern "C" int soemdsp_clock_create() {
       s.digitalWasHigh = false;
       s.digitalLevel = 0.0;
       s.cycleLevel = 0.0;
+      s.smoothWasHigh = false;
+      s.smoothLevel = 0.0;
       s.active = true;
       return i + 1;
     }
@@ -159,7 +181,14 @@ extern "C" double soemdsp_clock_sample(
   if (high && !s.digitalWasHigh) s.digitalLevel = safeLevel;
   s.digitalWasHigh = high;
   const double digital = high ? s.digitalLevel : 0.0;
-  const double analog = clock_analog_whip_sample(phase, s.cycleLevel);
+  // Analog Out (v11) = the smooth gate: box-filtered edges at their true
+  // sub-sample time, for analog receivers. Digital Out / T stay hard, since
+  // any rise in level re-triggers event inputs (gate_hit).
+  const double smooth = clock_smooth_gate(phase, inc, safeStart, safeEnd);
+  const bool smoothHigh = smooth > 0.0;
+  if (smoothHigh && !s.smoothWasHigh) s.smoothLevel = safeLevel;
+  s.smoothWasHigh = smoothHigh;
+  const double analog = smooth * s.smoothLevel;
 
   const double nextRawPhase = wrap01(rawPhase + inc);
   // T follows the offset phase. Two clocks at one rate with Phase 0 and 0.5
@@ -195,5 +224,5 @@ extern "C" double soemdsp_clock_phase(int handle) {
 }
 
 extern "C" int soemdsp_clock_version() {
-  return 10; // 10: never 100% low: a gate window narrower than one sample (or Start == End) still sends one sample per cycle. 9: negative Rate runs backwards (T on the 0 crossing). 8: Rate 0 pauses (gate / Analog hold, no forced 0). 7: gate compared in fractional phase (Start 0 / End 1 never drops at fractional periods). 6: Amplitude latched per pulse (Digital at gate rise, Analog at cycle start, T at tick). 5: Pulse Start / Pulse End replace duty; phase published. 4: T pulse follows Phase offset
+  return 11; // 11: Analog Out is the smooth (box-filtered, sub-sample) gate; the whip is gone. 10: never 100% low: a gate window narrower than one sample (or Start == End) still sends one sample per cycle. 9: negative Rate runs backwards (T on the 0 crossing). 8: Rate 0 pauses (gate / Analog hold, no forced 0). 7: gate compared in fractional phase (Start 0 / End 1 never drops at fractional periods). 6: Amplitude latched per pulse (Digital at gate rise, Analog at cycle start, T at tick). 5: Pulse Start / Pulse End replace duty; phase published. 4: T pulse follows Phase offset
 }
