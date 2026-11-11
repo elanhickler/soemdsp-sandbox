@@ -611,6 +611,12 @@ const nodeGraphModuleStoreCatalog = Object.freeze({
     label: "BasicShape",
     notes: ["BasicShape", "naive", "no anti-aliasing", "PWM", "LFO", "sine", "triangle", "saw", "square"],
   },
+  blitTrigger: {
+    category: "clock",
+    label: "BLIT Trigger",
+    description: "Band-limited pulse whose tiny Width sweeps from off, through sample-grid patterns, to a steady trigger. Fixed 48 kHz internal rate.",
+    notes: ["blit", "band-limited", "trigger", "gate", "pattern", "sub-sample", "clock"],
+  },
   clock: {
     category: "clock",
     label: "Clock",

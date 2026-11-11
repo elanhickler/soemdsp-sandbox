@@ -50,6 +50,7 @@ NodeLiveAudioProcessor.NATIVE_GRAPH_TYPE_IDS = Object.freeze({
   vectorscopeTransform: 26,
   rotate3dTo2d: 27,
   clock: 28,
+  blitTrigger: 260,
   triggerDivider: 29,
   clockDivider: 29, // same kernel; timingMode selects clock vs trigger path
   delayedTrigger: 30,
@@ -7206,6 +7207,13 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
       push("rotateZ", P.NATIVE_GRAPH_PARAM_LANE_BIAS3, cont("rotateZ", 0));
       continue;
     }
+    if (type === "blitTrigger") {
+      push("rate", P.NATIVE_GRAPH_PARAM_FREQUENCY, cont("rate", 220));
+      push("width", P.NATIVE_GRAPH_PARAM_WIDTH, cont("width", 2));
+      push("speed", P.NATIVE_GRAPH_PARAM_CENTER, cont("speed", 1));
+      push("amplitude", P.NATIVE_GRAPH_PARAM_AMPLITUDE, cont("amplitude", 1));
+      continue;
+    }
     if (type === "clock") {
       // frequency=rate, phaseParam=phase, center=pulseStart, shape=pulseEnd, amplitude=level
       push("rate", P.NATIVE_GRAPH_PARAM_FREQUENCY, cont("rate", 2));
@@ -9933,6 +9941,7 @@ NodeLiveAudioProcessor.prototype.nativeGraphPortNames = function nativeGraphPort
 
     if (type === "snowflake") return ["Out", "Mono"];
     if (type === "clock") return ["Digital Out", "Out", "Digital"];
+    if (type === "blitTrigger") return ["Out"];
     if (type === "randomClock") return ["Trigger"];
     if (type === "bradley2a") return ["Out L"];
     if (type === "triggerCounter") return ["Pulse"];

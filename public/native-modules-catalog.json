@@ -542,6 +542,24 @@
       "noticeUrl": "https://github.com/elanhickler/soemdsp-sandbox/blob/master/docs/THIRD_PARTY.md"
     },
     {
+      "name": "blit_trigger",
+      "label": "BLIT Trigger",
+      "targetType": "blitTrigger",
+      "kind": "utility",
+      "source": "native_modules/blit_trigger/blit_trigger.cpp",
+      "sourceUrl": "https://github.com/elanhickler/soemdsp-sandbox/blob/master/native_modules/blit_trigger/blit_trigger.cpp",
+      "localSourceUrl": "/native_modules/blit_trigger/blit_trigger.cpp",
+      "libUrl": "",
+      "wasm": "native_modules/blit_trigger/blit_trigger.wasm",
+      "wasmUrl": "native_modules/blit_trigger/blit_trigger.wasm",
+      "wasmAvailable": true,
+      "license": "Soundemote Noncommercial",
+      "licenseUrl": "https://github.com/elanhickler/soemdsp-sandbox/blob/master/LICENSE",
+      "upstreamLicense": "",
+      "upstreamLicenseUrl": "",
+      "noticeUrl": "https://github.com/elanhickler/soemdsp-sandbox/blob/master/docs/THIRD_PARTY.md"
+    },
+    {
       "name": "clock",
       "label": "Clock",
       "targetType": "clock",

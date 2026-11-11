@@ -64,6 +64,7 @@ const NODE_GRAPH_EFFICIENT_PRODUCT_AUDIO_TYPES = Object.freeze([
   "vectorscopeTransform",
   "rotate3dTo2d",
   "clock",
+  "blitTrigger",
   "triggerDivider",
   "clockDivider",
   "delayedTrigger",
