@@ -595,6 +595,10 @@ NodeLiveAudioProcessor.prototype.mapNativeGraphParamId = function mapNativeGraph
     if (k === "on5") return P.NATIVE_GRAPH_PARAM_OVERSAMPLE;
     if (k === "wave") return P.NATIVE_GRAPH_PARAM_LANE_BIAS2;
     if (k === "subWave") return P.NATIVE_GRAPH_PARAM_LANE_BIAS3;
+    if (k === "pw") return P.NATIVE_GRAPH_PARAM_LANE_BIAS4;
+    if (k === "subDirect") return P.NATIVE_GRAPH_PARAM_BLEED2;
+    if (k === "subOct") return P.NATIVE_GRAPH_PARAM_BLEED3;
+    if (k === "noiseTone") return P.NATIVE_GRAPH_PARAM_LPF_FREQUENCY;
   }
   if (t === "dsfMorphingOsc") {
     if (k === "symmetry") return P.NATIVE_GRAPH_PARAM_MIX;
@@ -5498,7 +5502,8 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
       // saturate=Drive, amplitude=Out; laneVol1..4 + laneBias1 = Gain 1..5;
       // mode / stages / lfoStyle / waveform / oversample = On 1..5;
       // frequency = osc Hz, level = Osc, width = Sub, feedback = Noise;
-      // laneBias2 = Wave (Saw / Square), laneBias3 = Sub Wave (Sine / Saw / Square).
+      // laneBias2 = Wave (Saw / Square), laneBias3 = Sub Wave (Sine / Saw / Square),
+      // laneBias4 = PW, bleed2 = Sub Direct, bleed3 = Sub Oct, lpfFrequency = Noise Tone Hz.
       push("frequency", P.NATIVE_GRAPH_PARAM_FREQUENCY, cont("frequency", 110));
       push("saw", P.NATIVE_GRAPH_PARAM_LEVEL, cont("saw", 1));
       push("sub", P.NATIVE_GRAPH_PARAM_WIDTH, cont("sub", 0));
@@ -5522,6 +5527,10 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
       push("on5", P.NATIVE_GRAPH_PARAM_OVERSAMPLE, disc("on5", 1));
       push("wave", P.NATIVE_GRAPH_PARAM_LANE_BIAS2, disc("wave", 0));
       push("subWave", P.NATIVE_GRAPH_PARAM_LANE_BIAS3, disc("subWave", 0));
+      push("pw", P.NATIVE_GRAPH_PARAM_LANE_BIAS4, cont("pw", 0.5));
+      push("subDirect", P.NATIVE_GRAPH_PARAM_BLEED2, cont("subDirect", 0));
+      push("subOct", P.NATIVE_GRAPH_PARAM_BLEED3, disc("subOct", 0));
+      push("noiseTone", P.NATIVE_GRAPH_PARAM_LPF_FREQUENCY, cont("noiseTone", 8000));
       continue;
     }
     if (type === "dsfMorphingOsc") {

@@ -5604,6 +5604,7 @@ const nodeGraphModuleDefinitions = (
     customDisplayArea: true,
     displayType: "formantFilterFace",
     displayHeightGu: 4,
+    defaultWidthGu: 8,
     spectrumCompanion: false,
     displayModes: [
       { key: "face", label: "Formants", renderer: "formantFilterFace", settingsSchema: "formantFilterFace" },
@@ -5614,31 +5615,53 @@ const nodeGraphModuleDefinitions = (
     // sits alone at the bottom of the stack.
     face: [
       { kind: "cells", params: [["frequency", "Freq"], ["saw", "Osc"], ["sub", "Sub"], ["noise", "Noise"]], h: 40 },
-      { kind: "cells", params: [["wave", "Wave"], ["subWave", "Sub Wave"]], horizontal: true, h: 40 },
+      { kind: "cells", params: [["wave", "Wave"], ["subWave", "Sub Wave"], ["subOct", "Sub Oct"]], horizontal: true, h: 40 },
+      { kind: "cells", params: [["pw", "PW"], ["subDirect", "Direct"], ["noiseTone", "Tone"]], h: 40 },
       { kind: "cells", params: [["sweep", "Sweep"], ["vowel", "Vowel"], ["shift", "Shift", "bipolar"]], h: 40 },
       { kind: "cells", params: [["resonance", "Resonance"], ["body", "Body"], ["drive", "Drive"]], h: 40 },
       { kind: "cells", params: [["gain1", "F1", "toggle", "on1"], ["gain2", "F2", "toggle", "on2"], ["gain3", "F3", "toggle", "on3"], ["gain4", "F4", "toggle", "on4"], ["gain5", "F5", "toggle", "on5"]], h: 52 },
       { kind: "cells", params: [["amplitude", "Amp"]], h: 30 },
     ],
-    // Source: internal BLIT saw at Frequency (ƒ / Reset ↺ jacks) + Sub + Noise.
-    // A cable on Ext M (or Ext L / Ext R, stereo as the filters) replaces the saw;
-    // Noise still adds (independent noise per L / R bank: stereo). Old "Ext In"
-    // cables land on Ext M. Vowel / Shift jacks were removed (graph 323):
+    // Source: internal BLIT osc at Frequency (ƒ / Reset ↺ jacks) + Sub + Noise.
+    // Mono / Left / Right inputs ADD to it (graph 324; they used to replace it):
+    // Osc and Sub at 0 = input only. Mono feeds both banks, Left / Right their
+    // own side; Noise is independent per L / R bank (stereo). Old "Ext In" /
+    // "Ext M/L/R" cables land on Mono / Left / Right. Vowel / Shift jacks were removed (graph 323):
     // parameter modulation covers them. Shift moves every formant (-4..+7 oct);
     // bands fade out at Nyquist / 20 Hz instead of piling up at the edge.
     planRole: "source",
     inputAliases: { Mono: "In", "Ext In": "In", "Ext M": "In", "Ext L": "Left", "Ext R": "Right", "ƒ": "f", Freq: "f" },
-    inputLabels: { In: "Ext M", Left: "Ext L", Right: "Ext R", f: "ƒ" },
+    inputLabels: { In: "Mono", f: "ƒ" },
     inputChannels: { In: "green", Left: "red", Right: "blue" },
-    inputs: ["Reset", "f", "In", "Left", "Right"],
+    inputs: ["In", "Left", "Right", "f", "Reset"],
     outputAliases: { Mono: "Out" },
     outputLabels: { Out: "Mono" },
     outputs: ["Out", "Left", "Right"],
     parameters: [
       { key: "frequency", label: "Frequency", kind: "frequency", defaultValue: "110", min: "0", mid: "220", max: "20000", step: "any", unit: "Hz" },
       { key: "saw", label: "Osc", defaultValue: "1", min: "0", mid: "0.5", max: "1", step: "any" },
-      { key: "sub", label: "Sub", defaultValue: "0", min: "0", mid: "0.5", max: "1", step: "any" },
-      { key: "noise", label: "Noise", defaultValue: "0", min: "0", mid: "0.5", max: "1", step: "any", tooltip: "Band-limited white noise (4-pole lowpass at 8 kHz, moving with Shift) into the formant bank. Stereo: independent per side." },
+      { key: "sub", label: "Sub", defaultValue: "0", min: "0", mid: "1", max: "2", step: "any", tooltip: "Sub oscillator level (up to 2: the Sub can dominate; Drive grinds it)." },
+      { key: "noise", label: "Noise", defaultValue: "0", min: "0", mid: "0.5", max: "1", step: "any", tooltip: "Band-limited white noise (4-pole lowpass at Noise Tone, moving with Shift) through its own copy of the formant bank, added after Drive so it never crackles. Stereo: independent per side." },
+      { key: "pw", label: "PW", defaultValue: "0.5", min: "0.02", mid: "0.5", max: "0.98", step: "any", tooltip: "Pulse width of the Square (Wave = Square): the high fraction of the cycle. 0.5 = square. Smooth to sweep (BLIT, alias-free)." },
+      {
+        choices: ["-1 oct", "-2 oct"],
+        choiceKeys: ["oct1", "oct2"],
+        choiceIds: [0, 1],
+        defaultValue: "0",
+        displayChoices: true,
+        divideChoicesVisibly: true,
+        key: "subOct",
+        kind: "choice",
+        label: "Sub Oct",
+        linearSmoothing: false,
+        max: "1",
+        mid: "0",
+        min: "0",
+        step: "1",
+        tooltip: "Sub one or two octaves under Frequency."
+      },
+      { key: "subDirect", label: "Sub Direct", defaultValue: "0", min: "0", mid: "0.5", max: "1", step: "any", tooltip: "Share of the Sub sent around the formant bank, straight into Drive: the low end stays steady while the vowels move. 0 = all through the bank." },
+      { key: "noiseTone", label: "Noise Tone", kind: "frequency", defaultValue: "8000", min: "500", mid: "4000", max: "20000", step: "any", unit: "Hz", tooltip: "Noise lowpass cutoff (4-pole) at Shift 0; moves with Shift. Low = dark breath, high = bright hiss." },
       {
         choices: ["Saw", "Square"],
         choiceKeys: ["saw", "square"],
@@ -5693,7 +5716,7 @@ const nodeGraphModuleDefinitions = (
       { key: "shift", label: "Shift", defaultValue: "0", min: "-4", mid: "0", max: "7", step: "any", unit: "oct", showSign: true, nonlinearSlider: false },
       { key: "resonance", label: "Resonance", defaultValue: "1", min: "0.25", mid: "1", max: "4", step: "any" },
       { key: "body", label: "Body", defaultValue: "0.5", min: "0", mid: "0.5", max: "1", step: "any" },
-      { key: "drive", label: "Drive", defaultValue: "0", min: "0", mid: "0.5", max: "1", step: "any" },
+      { key: "drive", label: "Drive", defaultValue: "0", min: "0", mid: "0.5", max: "1", step: "any", tooltip: "Tube-like saturation (asymmetric tanh, even harmonics, anti-aliased) on the voiced formants + Body + direct Sub. Noise is added after it, so it stays clean." },
       nodeGraphOutputAmplitudeParam,
       { choices: ["Off", "On"], defaultValue: "1", displayChoices: true, divideChoicesVisibly: true, key: "on1", label: "On 1", linearSmoothing: false, max: "1", mid: "0", min: "0", step: "1" },
       { choices: ["Off", "On"], defaultValue: "1", displayChoices: true, divideChoicesVisibly: true, key: "on2", label: "On 2", linearSmoothing: false, max: "1", mid: "0", min: "0", step: "1" },

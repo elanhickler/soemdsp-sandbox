@@ -65,12 +65,14 @@ for (const shift of [0, 2.5, 3.3, 4.2]) {
     const ext = (i >> 14) & 1;
     const hz = 20 * Math.pow(1000, (i % sr) / sr);
     const shift = -4 + 11 * ((i * 3 / sr) % 1); // fast Shift sweeps over the whole range
-    const y = ff.soemdsp_formant_filter_sample(h, x, ext, hz, 1, 1, 1, sr, vowel, (i >> 10) % 5, shift, 4, 1, 1, 1, 2, 2, 2, 2, 2, 1, 1, 1, 1, 1);
+    // Ext half: x replaces the source (graph shared-source path); internal half: osc + Sub + Noise only.
+    const y = ff.soemdsp_formant_filter_sample(h, ext ? x : 0, ext, hz, 1, 1, 1, sr, vowel, (i >> 10) % 5, shift, 4, 1, 1, 1, 2, 2, 2, 2, 2, 1, 1, 1, 1, 1);
     assert.ok(Number.isFinite(y));
     peak = Math.max(peak, Math.abs(y));
   }
   ff.soemdsp_formant_filter_destroy(h);
-  assert.ok(peak < 4, `extreme peak ${peak}`);
+  // v7: Noise rides its own bank after Drive (no crackle), so Drive no longer squashes it here.
+  assert.ok(peak < 6, `extreme peak ${peak}`);
 }
 
 // 2b) No range clamps in code (parameter ranges decide): absurd values stay
@@ -140,6 +142,7 @@ const base = (hz) => (c) => {
   graph.soemdsp_graph_set_param(c, 1, 10, hz);
   graph.soemdsp_graph_connect(c, 1, 0, 2, 0);
   graph.soemdsp_graph_set_param(c, 2, 13, 1 / 3); // Vowel at A
+  graph.soemdsp_graph_set_param(c, 2, 51, 0); // Osc 0: the input alone (inputs add to the osc)
 };
 const atF1 = run(base(730));
 const bodyOff = run((c) => { base(730)(c); graph.soemdsp_graph_set_param(c, 2, 21, 0); graph.soemdsp_graph_set_param(c, 2, 40, 0); });
@@ -161,6 +164,7 @@ const leftOnly = (() => {
   graph.soemdsp_graph_add_node(c, 2, 244);
   graph.soemdsp_graph_set_param(c, 1, 10, 730);
   graph.soemdsp_graph_set_param(c, 2, 13, 1 / 3);
+  graph.soemdsp_graph_set_param(c, 2, 51, 0); // Osc 0: the input alone
   graph.soemdsp_graph_connect(c, 1, 0, 2, 1);
   graph.soemdsp_graph_compile(c);
   let e = 0;
@@ -197,7 +201,8 @@ const fund110 = bin(alone, 110);
 const whisper = rms(runAlone((c) => { graph.soemdsp_graph_set_param(c, 2, 51, 0); graph.soemdsp_graph_set_param(c, 2, 50, 1); }));
 const silent = rms(runAlone((c) => { graph.soemdsp_graph_set_param(c, 2, 51, 0); }));
 const fHz = runAlone((c) => { graph.soemdsp_graph_set_param(c, 2, 10, 220); });
-const extHides = bin(runAlone((c) => {
+// Graph 324: a cable on Mono ADDS to the internal osc (no longer replaces it).
+const extKeeps = bin(runAlone((c) => {
   graph.soemdsp_graph_add_node(c, 1, 40);
   graph.soemdsp_graph_set_param(c, 1, 10, 82.5);
   graph.soemdsp_graph_connect(c, 1, 0, 2, 0);
@@ -293,13 +298,13 @@ assert.ok(sawLR === 0 && sawML === 0, "voiced part identical on L / R / Mono");
 console.log(`eval vs audio worst ${worstDb.toFixed(4)} dB`);
 console.log(`graph: 730 Hz sine at vowel A ${db(atF1)} dB, F1 off + Body 0 ${db(bodyOff)} dB, Vowel U ${db(vowelU)} dB`);
 console.log(`graph: 55 Hz sine Body 0.5 ${db(low)} dB, Body 0 ${db(lowNoBody)} dB; stale Vowel cable ${db(vowelJack)} dB; Left-only ${db(leftOnly)} dB`);
-console.log(`internal: no input RMS ${db(aloneRms)} dB, 110 Hz fundamental ${db(fund110)} dB; 220 Hz knob fundamental ${db(bin(fHz, 220))} dB; whisper RMS ${db(whisper)} dB; Saw 0 ${db(silent)} dB; Ext In wired -> internal 110 Hz ${db(extHides)} dB`);
+console.log(`internal: no input RMS ${db(aloneRms)} dB, 110 Hz fundamental ${db(fund110)} dB; 220 Hz knob fundamental ${db(bin(fHz, 220))} dB; whisper RMS ${db(whisper)} dB; Saw 0 ${db(silent)} dB; Mono wired -> internal 110 Hz ${db(extKeeps)} dB`);
 assert.ok(aloneRms > 0.1, "no input: internal saw makes sound");
 assert.ok(fund110 > 0.05, "internal saw sits at 110 Hz by default");
 assert.ok(bin(fHz, 220) > 0.05, "Frequency knob moves the saw");
 assert.ok(whisper > 0.05, "Noise alone whispers");
 assert.ok(silent < 1e-6, "Saw 0, Noise 0, no Ext In: silent");
-assert.ok(extHides < 1e-3, "Ext In cable replaces the internal saw");
+assert.ok(Math.abs(20 * Math.log10(extKeeps / fund110)) < 1, "a Mono cable adds to the internal osc (110 Hz stays)");
 assert.ok(atF1 > 0.9, "a sine at F1 should pass near or above unity");
 assert.ok(bodyOff < atF1 * 0.5, "F1 off + Body 0 should drop the F1 sine");
 assert.ok(vowelU < atF1 * 0.5, "Vowel U moves F1 away from 730 Hz");

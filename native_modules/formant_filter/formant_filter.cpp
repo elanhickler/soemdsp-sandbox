@@ -5,11 +5,14 @@
 //
 // Formant Filter (graph type 244): a source-filter voice. Source = an internal
 // BLIT oscillator (shared blit_saw.h, the BLIT Oscillator saw; Wave picks Saw
-// or Square, the square being two saws half a cycle apart) at Frequency, plus a
-// Sub one octave down (Sub Wave: Sine, Saw or Square, the same BLIT maths), or
-// Ext In when a cable is wired, plus band-limited white noise at its own level
-// for breath / whisper. The noise runs through a 4-pole Butterworth lowpass at
-// 8 kHz x 2^Shift (so it follows the formant bank) before the bank. The
+// or Square, the square being two saws PW of a cycle apart) at Frequency, plus
+// a Sub one or two octaves down (Sub Wave: Sine, Saw or Square, the same BLIT
+// maths; Sub Oct), or Ext In when a cable is wired, plus band-limited white
+// noise at its own level for breath / whisper. Sub Direct sends that share of
+// the Sub around the formant bank (straight into Drive). The noise runs
+// through a 4-pole Butterworth lowpass at Noise Tone x 2^Shift (so it follows
+// the formant bank) and through its own copy of the bank, added after Drive
+// so saturation never crackles on noise peaks. The
 // source runs through a parallel bank of five constant-peak TPT SVF bandpasses
 // (shared tpt_svf.h, the EQ Filter bandpass) tuned to vowel formants. Sweep picks a vowel path; Vowel
 // walks it with log-frequency interpolation (0..1 = the path; outside it the
@@ -23,7 +26,9 @@
 // bands leave one by one. Resonance scales each band's Q. Body adds the input back
 // through a 2-pole lowpass that tracks F1, so the fundamental and low end
 // stay heavy; Body takes the voiced source only (saw / sub / Ext In, never
-// the noise), so a whisper has no noisy low end. Drive is a soft tanh blend after the bank (0 = clean).
+// the noise), so a whisper has no noisy low end. Drive is an asymmetric
+// (tube-like, even harmonics) tanh blend on the voiced bank + Body + direct
+// Sub, first-order antiderivative anti-aliased (ADAA), DC blocked (0 = clean).
 // Band targets (log Hz, log Q, gain) are smoothed with an ~8 ms one-pole.
 //
 // The display reads soemdsp_formant_filter_eval_response: the same band
@@ -48,8 +53,9 @@ constexpr double kBodyQ = 0.7071067811865476;
 constexpr double kSmoothSeconds = 0.008;
 constexpr double kSawGain = 1.47;      // BLIT Oscillator saw gain (raw peak <= 0.665 -> under 0.98)
 constexpr double kSquareGain = 1.44;   // BLIT Oscillator square gain (raw peak <= 0.679 -> under 0.98)
+constexpr double kPulseGain = 1.44;    // bipolar BLIT pulse (main Square) gain at PW 0.5
 constexpr double kNoiseGain = 1.4;     // noise trim: a whisper lands near the voiced level
-constexpr double kNoiseCutHz = 8000.0;  // noise lowpass at Shift 0 (moves with Shift)
+constexpr double kNoiseCutHz = 8000.0;  // Noise Tone default / fallback (moves with Shift)
 constexpr double kNoiseCutMinHz = 500.0;
 constexpr double kNoiseCutMaxNyq = 0.85; // x Nyquist: the noise never reaches the top of the band
 constexpr double kNoiseQ1 = 0.5411961001461970; // 4-pole Butterworth stage Qs
@@ -71,18 +77,25 @@ struct FormantFilterState {
   TptSvfState band[kBands] = {};
   TptSvfState body = {};
   soemdsp_blit::BlitSaw saw = {};
-  soemdsp_blit::BlitSaw sawB = {};  // half a cycle on: Square = saw - sawB
+  double pulsePhase = 0.0;  // bipolar BLIT pulse: cycles, + impulse at 0, - impulse at PW
+  double pulseState = 0.0;
   soemdsp_blit::BlitSaw subA = {};
   soemdsp_blit::BlitSaw subB = {};
   double subPhase = 0.0;
   NoiseColorChannel noise = {};
   TptSvfState noiseLp1 = {};
   TptSvfState noiseLp2 = {};
+  TptSvfState noiseBand[kBands] = {}; // the bank again, noise only (added after Drive)
+  bool noiseBankLive = false;
+  double lastDirect = 0.0; // direct Sub from the last source() call (stereo path)
+  double driveX1 = 0.0;    // ADAA: previous Drive input
+  double dcX1 = 0.0, dcY1 = 0.0; // DC blocker on the shaped part
 };
 
 void initOscillators(FormantFilterState& s) {
   s.saw.init(0.0);
-  s.sawB.init(0.5);
+  s.pulsePhase = 0.0;
+  s.pulseState = 0.0;
   s.subA.init(0.0);
   s.subB.init(0.5);
   s.subPhase = 0.0;
@@ -256,19 +269,50 @@ double fastTanh(double x) {
   return (e - 1.0) / (e + 1.0);
 }
 
-// Soft, warm saturation after the bank: 0 = clean (exact pass-through).
-double driveShape(double x, double drive) {
+// ln(cosh(z)) without overflow.
+double lnCosh(double z) {
+  const double a = z < 0.0 ? -z : z;
+  return a + dsp_ln(1.0 + dsp_exp(-2.0 * a)) - kLn2;
+}
+
+// Tube-like drive: f(x) = (tanh(g x + a) - tanh(a)) / k, a = 0.3 d (asymmetry,
+// even harmonics, grows with Drive), k = the mean of the two rails' swing
+// (tanh(g + a) - tanh(a - g)) / 2, so the level matches the old symmetric
+// drive and neither side overshoots. First-order ADAA:
+// y = (F(x) - F(x1)) / (x - x1), F the antiderivative, so the shaped part
+// aliases far less on bright formants. The shaped part is DC blocked (the
+// asymmetry makes DC) and blended: (1 - d) x + d f. 0 = clean (exact).
+double driveShape(FormantFilterState& s, double x, double drive, double sr) {
   const double d = safe(drive); // no 0..1 clamp: the Drive parameter range decides
-  if (d == 0.0) return x;
+  const double x1 = s.driveX1;
+  s.driveX1 = x;
   const double g = 1.0 + 7.0 * d;
-  const double tg = fastTanh(g);
-  if (tg == 0.0 || is_bad(tg)) return x; // g == 0 (d = -1/7) guard
-  const double sat = fastTanh(g * x) / tg;
-  return (1.0 - d) * x + d * sat;
+  const double a = 0.3 * d;
+  const double ta = fastTanh(a);
+  const double k = 0.5 * (fastTanh(g + a) - fastTanh(a - g));
+  double sat = 0.0;
+  if (d != 0.0 && g != 0.0 && k != 0.0 && !is_bad(k)) {
+    const double dx = x - x1;
+    if (dx > 1.0e-5 || dx < -1.0e-5) {
+      const double F0 = lnCosh(g * x1 + a) / g - ta * x1;
+      const double F1 = lnCosh(g * x + a) / g - ta * x;
+      sat = (F1 - F0) / (dx * k);
+    } else {
+      sat = (fastTanh(g * 0.5 * (x + x1) + a) - ta) / k;
+    }
+    if (is_bad(sat)) sat = 0.0;
+  }
+  // DC blocker (~5 Hz) on the shaped part; keeps running so Drive moves smoothly.
+  const double r = 1.0 - 2.0 * kPi * 5.0 / sr;
+  const double hp = sat - s.dcX1 + r * s.dcY1;
+  s.dcX1 = sat;
+  s.dcY1 = is_bad(hp) ? 0.0 : hp;
+  if (d == 0.0) return x;
+  return (1.0 - d) * x + d * s.dcY1;
 }
 
 // One BLIT voice at period samples: Saw (a alone) or Square (a - b, b half a
-// cycle on). Both saws always tick so switching Wave never jumps phase.
+// cycle on; the Sub). Both saws always tick so switching never jumps phase.
 double blitWave(soemdsp_blit::BlitSaw& a, soemdsp_blit::BlitSaw& b, double period, bool square) {
   const double halfW = kPi / period;
   const double comp = soemdsp_blit::sinApprox(halfW) / halfW;
@@ -277,28 +321,82 @@ double blitWave(soemdsp_blit::BlitSaw& a, soemdsp_blit::BlitSaw& b, double perio
   return square ? clamp((ya - yb) * kSquareGain, -1.0, 1.0) : clamp(ya * kSawGain, -1.0, 1.0);
 }
 
-// Wave: 0 Saw, 1 Square. Sub Wave: 0 Sine, 1 Saw, 2 Square (one octave down).
-double voicedSource(
+// Band-limited impulse (Stilson & Smith kernel, continuous harmonic count
+// as BlitSaw::update) at x = pi * cycles: one unit-area impulse per cycle.
+double blitImpulse(double x, double p, double lo, double frac) {
+  const double denom = soemdsp_blit::sinApprox(x);
+  double k = soemdsp_blit::blitKernel(x, denom, lo, p);
+  if (frac > 0.0) k += (soemdsp_blit::blitKernel(x, denom, lo + 1.0, p) - k) * frac;
+  return k;
+}
+
+// Main Square with live PW: the bipolar BLIT pulse. One integrator takes a
+// + impulse at phase 0 and a - impulse at phase PW, so the level is 1 for
+// PW of the cycle and 0 for the rest, and PW can move any time with nothing
+// to re-sync (no ramp in the state). Its mean is exactly PW, subtracted
+// directly, and the leak pulls the state toward that mean (drift guard), so
+// sweeping PW never wanders in DC. Scaled by 0.5 / max(PW, 1 - PW) so narrow
+// pulses stay inside the clamp; PW 0.5 has the BLIT square's level.
+double blitPulse(FormantFilterState& s, double period, double w) {
+  const double p = period > 1.0e-6 ? period : 1.0e-6;
+  double harmonics = 0.5 * p - 1.0;
+  if (harmonics < 1.0) harmonics = 1.0;
+  const double lo = dsp_floor(harmonics);
+  const double frac = harmonics - lo;
+  const double c = s.pulsePhase;
+  s.pulseState += blitImpulse(kPi * c, p, lo, frac) - blitImpulse(kPi * (c - w), p, lo, frac);
+  const double y = s.pulseState - w;
+  const double leak = 1.0 - (kTwoPi / soemdsp_blit::kBlitLeakDivisor) / p;
+  s.pulseState = w + y * (leak > 0.0 ? leak : 0.0);
+  if (is_bad(s.pulseState)) s.pulseState = w;
+  s.pulsePhase += 1.0 / p;
+  if (s.pulsePhase >= 1.0) s.pulsePhase -= dsp_floor(s.pulsePhase);
+  double wide = w > 0.5 ? w : 1.0 - w;
+  if (!(wide > 0.0)) wide = 1.0;
+  const double halfW = kPi / p;
+  const double comp = soemdsp_blit::sinApprox(halfW) / halfW;
+  return clamp(y * comp * kPulseGain * (0.5 / wide), -1.0, 1.0);
+}
+
+struct Voiced {
+  double bank;   // into the formant bank and Body
+  double direct; // Sub Direct share: around the bank, into Drive
+};
+
+// Wave: 0 Saw, 1 Square (PW = high fraction). Sub Wave: 0 Sine, 1 Saw,
+// 2 Square. Sub Oct: 0 = one octave down, 1 = two. Sub Direct: 0 = all of
+// the Sub through the bank (as before), 1 = all of it straight to Drive.
+Voiced voicedSource(
   FormantFilterState& s, double frequencyHz, double sawLevel, double subLevel,
-  double wave, double subWave, double sr
+  double wave, double subWave, double pw, double subOct, double subDirect, double sr
 ) {
-  double voiced = 0.0;
+  double main = 0.0, subSig = 0.0;
   double hz = safe(frequencyHz);
   if (hz < 0.0) hz = -hz;
   if (hz > sr * 0.45) hz = sr * 0.45;
   const double inc = hz / sr;
   const double sub = safe(subLevel);
   const int sw = waveIndex(subWave, 3);
+  const double subDiv = waveIndex(subOct, 2) == 1 ? 4.0 : 2.0;
+  // Pulse width (cyclic: PW mod 1; 0 / 1 = no pulse).
+  double w = pw;
+  if (is_bad(w)) w = 0.5;
+  w -= dsp_floor(w);
   if (hz >= 1.0) {
     const double period = 1.0 / inc;
-    voiced += safe(sawLevel) * blitWave(s.saw, s.sawB, period, waveIndex(wave, 2) == 1);
-    const double subOsc = blitWave(s.subA, s.subB, 2.0 * period, sw == 2);
-    if (sw != 0 && sub != 0.0) voiced += sub * subOsc;
+    // Saw and pulse both tick (same phase) so switching Wave never jumps.
+    const double halfW = kPi / period;
+    const double sawOut = clamp(s.saw.update(period) * (soemdsp_blit::sinApprox(halfW) / halfW) * kSawGain, -1.0, 1.0);
+    const double pulseOut = blitPulse(s, period, w);
+    main = safe(sawLevel) * (waveIndex(wave, 2) == 1 ? pulseOut : sawOut);
+    const double subOsc = blitWave(s.subA, s.subB, subDiv * period, sw == 2);
+    if (sw != 0) subSig = sub * subOsc;
   }
-  s.subPhase += 0.5 * inc;
-  if (s.subPhase >= 1.0) s.subPhase -= 1.0;
-  if (sw == 0 && sub != 0.0) voiced += sub * soemdsp_blit::sinApprox(2.0 * kPi * s.subPhase);
-  return voiced;
+  s.subPhase += inc / subDiv;
+  if (s.subPhase >= 1.0) s.subPhase -= dsp_floor(s.subPhase);
+  if (sw == 0 && sub != 0.0) subSig = sub * soemdsp_blit::sinApprox(2.0 * kPi * s.subPhase);
+  const double dir = safe(subDirect); // no 0..1 clamp: the Sub Direct range decides
+  return { main + (1.0 - dir) * subSig, dir * subSig };
 }
 
 }  // namespace
@@ -328,7 +426,9 @@ extern "C" void soemdsp_formant_filter_reset(int handle) {
   tpt_svf_reset(s.body);
   tpt_svf_reset(s.noiseLp1);
   tpt_svf_reset(s.noiseLp2);
+  for (int b = 0; b < kBands; ++b) tpt_svf_reset(s.noiseBand[b]);
   s.smoothInit = false;
+  s.driveX1 = s.dcX1 = s.dcY1 = 0.0;
   initOscillators(s);
 }
 
@@ -345,13 +445,22 @@ extern "C" void soemdsp_formant_filter_reset_osc(int handle) {
 // bank, so L / R differ with Noise up while the voiced part stays identical.
 extern "C" double soemdsp_formant_filter_source(
   int handle, double frequencyHz, double sawLevel, double subLevel, double sampleRate,
-  double wave, double subWave
+  double wave, double subWave, double pw, double subOct, double subDirect
 ) {
   if (handle < 1 || handle > kMaxInstances) return 0.0;
   FormantFilterState& s = gPool[handle - 1];
   if (!s.active) return 0.0;
   const double sr = sampleRate > 1.0 ? sampleRate : 48000.0;
-  return voicedSource(s, frequencyHz, sawLevel, subLevel, wave, subWave, sr);
+  const Voiced v = voicedSource(s, frequencyHz, sawLevel, subLevel, wave, subWave, pw, subOct, subDirect, sr);
+  s.lastDirect = v.direct;
+  return v.bank;
+}
+
+// The direct Sub from this handle's last soemdsp_formant_filter_source call
+// (the stereo path passes it to the L / R banks as directIn).
+extern "C" double soemdsp_formant_filter_source_direct(int handle) {
+  if (handle < 1 || handle > kMaxInstances) return 0.0;
+  return gPool[handle - 1].lastDirect;
 }
 
 extern "C" double soemdsp_formant_filter_sample(
@@ -372,7 +481,8 @@ extern "C" double soemdsp_formant_filter_sample(
   double level,
   double g1, double g2, double g3, double g4, double g5,
   double on1, double on2, double on3, double on4, double on5,
-  double wave, double subWave
+  double wave, double subWave, double pw, double subOct, double subDirect,
+  double noiseTone, double directIn
 ) {
   if (handle < 1 || handle > kMaxInstances) return 0.0;
   FormantFilterState& s = gPool[handle - 1];
@@ -401,14 +511,26 @@ extern "C" double soemdsp_formant_filter_sample(
       if (is_bad(s.gain[b])) s.gain[b] = t.gain[b];
     }
   }
-  // Voiced source: Ext In (cable wired, or the shared saw fed in for stereo) or the BLIT saw + Sub.
-  const double voiced = useExt >= 0.5 ? safe(input) : voicedSource(s, frequencyHz, sawLevel, subLevel, wave, subWave, sr);
-  // Unvoiced source: white noise through a 4-pole Butterworth lowpass that
-  // moves with Shift (bank only, not Body).
+  // Voiced: useExt = the graph's shared source (osc + Sub + inputs, already
+  // summed for stereo) with its direct Sub in directIn; else the internal BLIT
+  // osc + Sub with input ADDED (Osc / Sub at 0 = input only).
+  double voiced, direct;
+  if (useExt >= 0.5) {
+    voiced = safe(input);
+    direct = safe(directIn);
+  } else {
+    const Voiced v = voicedSource(s, frequencyHz, sawLevel, subLevel, wave, subWave, pw, subOct, subDirect, sr);
+    voiced = v.bank + safe(input);
+    direct = v.direct;
+  }
+  // Unvoiced source: white noise through a 4-pole Butterworth lowpass at
+  // Noise Tone that moves with Shift (its own bank, not Body, not Drive).
   const double nz = safe(noiseLevel);
   double unvoiced = 0.0;
   {
-    double cut = kNoiseCutHz * dsp_exp(safe(shiftOct) * kLn2);
+    double tone = noiseTone;
+    if (!(tone > 0.0) || is_bad(tone)) tone = kNoiseCutHz;
+    double cut = tone * dsp_exp(safe(shiftOct) * kLn2);
     const double cutMax = 0.5 * sr * kNoiseCutMaxNyq;
     if (!(cut >= kNoiseCutMinHz)) cut = kNoiseCutMinHz;
     if (cut > cutMax) cut = cutMax;
@@ -420,33 +542,42 @@ extern "C" double soemdsp_formant_filter_sample(
     const double lp = tpt_svf_tick(s.noiseLp2, c2, tpt_svf_tick(s.noiseLp1, c1, white));
     if (nz != 0.0) unvoiced = nz * kNoiseGain * lp;
   }
-  const double x = voiced + unvoiced;
   const double twoPiOverSr = 2.0 * kPi / sr;
-  double bank = 0.0;
+  const bool noiseOn = unvoiced != 0.0;
+  if (!noiseOn && s.noiseBankLive) {
+    for (int b = 0; b < kBands; ++b) tpt_svf_reset(s.noiseBand[b]);
+  }
+  s.noiseBankLive = noiseOn;
+  double bank = 0.0, noiseBank = 0.0;
   for (int b = 0; b < kBands; ++b) {
     const double hz = dsp_exp(s.lnF[b]);
     const double fade = bandEdgeFade(hz, sr); // from the smoothed Hz: no zipper while sweeping Shift
     if (fade <= 0.0) {
       tpt_svf_reset(s.band[b]); // out of range: skipped, re-enters from silence
+      tpt_svf_reset(s.noiseBand[b]);
       continue;
     }
     TptSvfCoeffs c;
     tpt_svf_setup_bandpass_const_peak(c, bandTuneHz(hz, sr) * twoPiOverSr, dsp_exp(s.lnQ[b]));
-    const double y = tpt_svf_tick(s.band[b], c, x);
-    bank += s.gain[b] * fade * y;
+    const double gf = s.gain[b] * fade;
+    bank += gf * tpt_svf_tick(s.band[b], c, voiced);
+    if (noiseOn) noiseBank += gf * tpt_svf_tick(s.noiseBand[b], c, unvoiced);
   }
   bank *= t.makeup;
+  noiseBank *= t.makeup;
   const double bodyAmt = safe(body); // no 0..1 clamp: the Body parameter range decides
   TptSvfCoeffs lp;
   tpt_svf_setup(lp, bodyCutoffHz(s.lnF[0], sr) * twoPiOverSr, 1.0 / kBodyQ, 1.0, 0.0, 0.0, 1.0);
   const double low = tpt_svf_tick(s.body, lp, voiced);
-  double y = driveShape(bank + bodyAmt * low, drive) * safe(level);
+  double y = (driveShape(s, bank + bodyAmt * low + direct, drive, sr) + noiseBank) * safe(level);
   if (!(y * 0.0 == 0.0)) {
     y = 0.0;
     for (int b = 0; b < kBands; ++b) tpt_svf_reset(s.band[b]);
     tpt_svf_reset(s.body);
     tpt_svf_reset(s.noiseLp1);
     tpt_svf_reset(s.noiseLp2);
+    for (int b = 0; b < kBands; ++b) tpt_svf_reset(s.noiseBand[b]);
+    s.driveX1 = s.dcX1 = s.dcY1 = 0.0;
   }
   return clamp(y, -8.0, 8.0);
 }
@@ -566,6 +697,6 @@ extern "C" int soemdsp_formant_filter_eval_response(
   return points;
 }
 
-extern "C" int soemdsp_formant_filter_version() { return 6; } // 6: Wave (Saw / Square) and Sub Wave (Sine / Saw / Square) switches; noise 4-pole lowpass at 8 kHz x 2^Shift. 5: no range clamps on Shift / Vowel / Resonance / Body / Drive (parameter ranges decide; stability guards only). 4: stereo noise source export; Shift bands fade out at Nyquist / 20 Hz instead of clamping. 2: internal BLIT saw / Sub / noise source
+extern "C" int soemdsp_formant_filter_version() { return 7; } // 7: PW (live, continuous), Sub Oct (-1 / -2), Sub Direct (Sub around the bank into Drive), Noise Tone (Hz x 2^Shift); noise through its own bank after Drive (no crackle); Drive asymmetric tube tanh with ADAA + DC block. 6: Wave (Saw / Square) and Sub Wave (Sine / Saw / Square) switches; noise 4-pole lowpass at 8 kHz x 2^Shift. 5: no range clamps on Shift / Vowel / Resonance / Body / Drive (parameter ranges decide; stability guards only). 4: stereo noise source export; Shift bands fade out at Nyquist / 20 Hz instead of clamping. 2: internal BLIT saw / Sub / noise source
 extern "C" const char* soemdsp_formant_filter_metadata_json() { return kMetadataJson; }
 extern "C" int soemdsp_formant_filter_metadata_json_size() { return sizeof(kMetadataJson) - 1; }
