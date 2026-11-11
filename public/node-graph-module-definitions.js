@@ -26,6 +26,7 @@ const nodeGraphNodeLabels = Object.freeze({
   robinSinusoid: "Robin Sinusoid",
   robinOscillator: "Robin Oscillator",
   phoneTone: "Phone Tone",
+  purr: "Purr",
   additiveGenerator: "Additive Generator",
   additiveLinearFilter: "Linear Filter",
   additiveAnalogFilter: "Butterworth Filter",
@@ -1513,6 +1514,31 @@ const nodeGraphModuleDefinitions = (
         step: "any",
       },
       { defaultValue: "0", key: "seed", kind: "seed", label: "Seed", linearSmoothing: false, max: "16777215", maxDigits: 0, mid: "0", min: "0", nonlinearSlider: false, smoothingType: "none", step: "1", tooltip: "Dither / noise seed. Same Seed = same noise outputs." },
+    ]
+  },
+  // Purr: Misty's purr (PhyLabs/audio/misty-purr-synth.py) as a free-running
+  // source. DSP: process_purr (graph_engine). Breath loop Inhale, gap, Exhale,
+  // gap; soft pulses gate a 28-220 Hz noise rumble plus a Body tone at Body
+  // Ratio x the pulse rate (2.5 flips the body's sign every other pulse).
+  purr: {
+    planRole: "source",
+    planFreeRun: true,
+    inputs: [],
+    outputs: ["Out"],
+    parameters: [
+      { defaultValue: "24", key: "inhaleRate", kind: "frequency", label: "Inhale Rate", max: "60", mid: "24", min: "1", step: "any", unit: "Hz" },
+      { defaultValue: "21", key: "exhaleRate", kind: "frequency", label: "Exhale Rate", max: "60", mid: "21", min: "1", step: "any", unit: "Hz" },
+      { defaultValue: "1.6", key: "inhaleTime", kind: "time", label: "Inhale Time", max: "6", mid: "1.6", min: "0.1", step: "any", unit: "s" },
+      { defaultValue: "1.2", key: "exhaleTime", kind: "time", label: "Exhale Time", max: "6", mid: "1.2", min: "0.1", step: "any", unit: "s" },
+      { defaultValue: "0.6", key: "exhaleLevel", label: "Exhale Level", max: "1", mid: "0.5", min: "0", nonlinearSlider: false, step: "any" },
+      { defaultValue: "0.3", key: "rumble", label: "Rumble", max: "1", mid: "0.5", min: "0", nonlinearSlider: false, step: "any" },
+      { defaultValue: "0.15", key: "floor", label: "Rumble Floor", max: "1", mid: "0.5", min: "0", nonlinearSlider: false, step: "any" },
+      { defaultValue: "0.35", key: "body", label: "Body", max: "1", mid: "0.5", min: "0", nonlinearSlider: false, step: "any" },
+      { defaultValue: "2.5", key: "bodyRatio", label: "Body Ratio", max: "8", mid: "2.5", min: "0", step: "any", unit: "x" },
+      { defaultValue: "2.5", key: "softness", label: "Softness", max: "8", mid: "2.5", min: "0.5", step: "any" },
+      { defaultValue: "180", key: "tone", kind: "frequency", label: "Tone", max: "2000", mid: "180", min: "40", step: "any", unit: "Hz" },
+      { defaultValue: "0.03", key: "wobble", label: "Wobble", max: "0.2", mid: "0.03", min: "0", step: "any" },
+      { defaultValue: "0.9", key: "amplitude", label: "Amplitude", max: "1", mid: "0.5", min: "0", nonlinearSlider: false, step: "any" },
     ]
   },
   aliasSine: {

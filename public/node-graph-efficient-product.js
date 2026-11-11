@@ -131,6 +131,7 @@ const NODE_GRAPH_EFFICIENT_PRODUCT_AUDIO_TYPES = Object.freeze([
   "ellipsoid",
   "ellipsoidOsc",
   "stepRegister",
+  "purr",
   "snowflake",
   "butterworth",
   "linkwitzRiley",

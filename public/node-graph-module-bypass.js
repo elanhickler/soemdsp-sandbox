@@ -150,6 +150,7 @@ const NODE_GRAPH_BYPASS_TYPE_OVERRIDES = Object.freeze({
   robinSinusoid: "silence",
   robinOscillator: "silence",
   phoneTone: "silence",
+  purr: "silence",
   surgeOscillator: "silence",
   softwaveOsc: "silence",
   filterMorphOscillator: "silence",

@@ -58,6 +58,7 @@ NodeLiveAudioProcessor.NATIVE_GRAPH_TYPE_IDS = Object.freeze({
   metallicRatio: 33,
   harmonicSeries: 128,
   phoneTone: 129,
+  purr: 245,
   // Chromeless portal lane family (all suffixes share one process).
   portalOutlet: 130,
   portalOutletMono: 130,
@@ -5330,6 +5331,23 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
       // frequency Control slot holds normFreq (0→sampleRate); amplitude = level.
       push("normFreq", P.NATIVE_GRAPH_PARAM_FREQUENCY, cont("normFreq", 0.1));
       push("level", P.NATIVE_GRAPH_PARAM_AMPLITUDE, cont("level", 1));
+      continue;
+    }
+    if (type === "purr") {
+      // Slots match process_purr (graph_engine).
+      push("inhaleRate", P.NATIVE_GRAPH_PARAM_FREQUENCY, cont("inhaleRate", 24));
+      push("exhaleRate", P.NATIVE_GRAPH_PARAM_LFO_RATE, cont("exhaleRate", 21));
+      push("inhaleTime", P.NATIVE_GRAPH_PARAM_TIME_NUMERATOR, cont("inhaleTime", 1.6));
+      push("exhaleTime", P.NATIVE_GRAPH_PARAM_TIME_DENOMINATOR, cont("exhaleTime", 1.2));
+      push("exhaleLevel", P.NATIVE_GRAPH_PARAM_MIX, cont("exhaleLevel", 0.6));
+      push("rumble", P.NATIVE_GRAPH_PARAM_SATURATE, cont("rumble", 0.3));
+      push("floor", P.NATIVE_GRAPH_PARAM_ATT_OFFSET, cont("floor", 0.15));
+      push("body", P.NATIVE_GRAPH_PARAM_CENTER, cont("body", 0.35));
+      push("bodyRatio", P.NATIVE_GRAPH_PARAM_WIDTH, cont("bodyRatio", 2.5));
+      push("softness", P.NATIVE_GRAPH_PARAM_RESONANCE, cont("softness", 2.5));
+      push("tone", P.NATIVE_GRAPH_PARAM_LPF_FREQUENCY, cont("tone", 180));
+      push("wobble", P.NATIVE_GRAPH_PARAM_LFO_AMPLITUDE, cont("wobble", 0.03));
+      push("amplitude", P.NATIVE_GRAPH_PARAM_AMPLITUDE, cont("amplitude", 0.9));
       continue;
     }
     if (type === "phoneTone") {

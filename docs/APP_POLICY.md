@@ -122,6 +122,7 @@ Only these live-audio types exist in the efficient build:
 | `sinc` | Repeating sinc kernel (Ideal / Band Limit) |
 | `bradley2a` | Bradley Telcom jitter/hit impairment synth |
 | `phoneTone` | DTMF Phone Tone (Analog/Digital/Gate; Tone/ToneL/ToneR) |
+| `purr` | Purr: Misty's purr (breath loop of soft pulses; noise rumble + body tone; Out) |
 | `ellipsoid` | RoundShape sine→square quadrature (Bi/Uni X/Y) |
 | `snowflake` | L-system fractal path walker (X/Y) |
 | `butterworth` | Classical Butterworth multipole (LP/HP/BP/BR) |
@@ -222,7 +223,7 @@ polyBlep → ladderFilter → softClipper → reverbEffect → pingPongDelay →
    metallicRatio / lutCell / lookaheadLimiter / limiter / sequencer / acidSequencer / transport /
    aliasSine / blit / sineWavetable / sinCos / antisaw / archimedes /
    additiveOsc / surgeOscillator / softwaveOsc / dsfOscillator / dsfMorphingOsc / hypersaw2 / sinc /
-   bradley2a / phoneTone / ellipsoid / snowflake /
+   bradley2a / phoneTone / purr / ellipsoid / snowflake /
    butterworth / linkwitzRiley / bessel / papoulisFilter /
    speakerProtection / speakerProtector2 /
    attackDecay / bandpass / allpass / basicShape /

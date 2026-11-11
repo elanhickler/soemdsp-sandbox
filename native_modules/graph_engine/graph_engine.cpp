@@ -2358,6 +2358,7 @@ static const int kTypeEdgeDetector = 240; // scope-style rising-edge interval de
 static const int kTypeTiltFilter = 241; // constant-slope spectral tilt around a pivot
 static const int kTypeMidiLag = 242; // MIDI CC (JS: midiCc; saved midiLag migrates)
 static const int kTypeFormantFilter = 244; // Formant Filter: BLIT saw / Sub / noise (or Ext In) through 5 constant-peak SVF bandpasses on vowel paths + Body lowpass (243 was DSF Formant, removed)
+static const int kTypePurr = 245; // Purr: Misty's purr (breath loop of soft pulses: noise rumble + body tone)
 static const int kTypeHostBpm = 192; // Host/project BPM dump (Circuit::hostTempoBpm)
 static const int kTypeSineWarp = 193; // live warped rectSin / sine + PolyBLAMP
 static const int kTypeTheremin = 194; // XY pad pitch/volume Softwave theremin
@@ -2602,6 +2603,24 @@ struct Control {
 
 static inline double control_effective(const Control& c);
 
+// Purr (type 245) state. DSP: process_purr.
+struct PurrBiquad {
+  double b0, b1, b2, a1, a2, z1, z2;
+};
+struct PurrState {
+  PurrBiquad band[8]; // 28 Hz highpass + 220 Hz lowpass, 4-pole each, run twice
+  PurrBiquad tone[4]; // Tone lowpass, 4-pole, run twice
+  PurrBiquad dc[2];   // 25 Hz highpass, 2-pole, run twice
+  double designedSr;
+  double designedTone;
+  double noiseGain;
+  double bodyPhase;   // turns, Body Ratio x the pulse phase
+  double wobblePhase; // turns of the 0.3 Hz rate drift
+  double segPos;      // samples into the current breath segment
+  int segment;        // 0 inhale, 1 gap, 2 exhale, 3 gap
+  unsigned int rng;
+};
+
 struct Node {
   unsigned int idHash;
   int typeId;
@@ -2756,6 +2775,7 @@ struct Node {
   double stepRegAaHeld; // one-sample delayed LFSR wave for edge correction
   int stepRegAaWave;
   unsigned char stepRegAaReady;
+  PurrState purr; // Purr (inline DSP, not a native pool)
 };
 
 enum SinkKind : unsigned char { kSinkPort = 0, kSinkControl = 1 };
@@ -3546,6 +3566,17 @@ static void init_node_defaults(Node& n, int typeId) {
   n.stepRegAaHeld = 0.0;
   n.stepRegAaWave = -1;
   n.stepRegAaReady = 0;
+  for (int pq = 0; pq < 8; pq++) { n.purr.band[pq].z1 = 0.0; n.purr.band[pq].z2 = 0.0; }
+  for (int pq = 0; pq < 4; pq++) { n.purr.tone[pq].z1 = 0.0; n.purr.tone[pq].z2 = 0.0; }
+  for (int pq = 0; pq < 2; pq++) { n.purr.dc[pq].z1 = 0.0; n.purr.dc[pq].z2 = 0.0; }
+  n.purr.designedSr = 0.0; // first process designs the filters
+  n.purr.designedTone = -1.0;
+  n.purr.noiseGain = 0.0;
+  n.purr.bodyPhase = 0.0;
+  n.purr.wobblePhase = 0.0;
+  n.purr.segPos = 0.0;
+  n.purr.segment = 0;
+  n.purr.rng = 0u; // first process seeds from idHash
   init_control(n.volumeDb, (typeId == kTypeMixStereo) ? 0.0 : -3.0, false);
   init_control(
     n.pan,
@@ -3556,6 +3587,7 @@ static void init_node_defaults(Node& n, int typeId) {
   // lookaheadLimiter: mode = look-ahead on/off; timingMode = gainCompensation.
   init_control(
     n.frequency,
+    (typeId == kTypePurr) ? 24.0 : // Inhale Rate Hz (Purr)
     (typeId == kTypeResonantCompressor) ? 440.0 : // Frequency Hz (Resonant Compressor)
     (typeId == kTypeLadderFilter
       || typeId == kTypeButterworth || typeId == kTypeLinkwitzRiley
@@ -3671,6 +3703,7 @@ static void init_node_defaults(Node& n, int typeId) {
   );
   init_control(
     n.amplitude,
+    (typeId == kTypePurr) ? 0.9 : // Amplitude (Purr)
     (typeId == kTypePulseTrain) ? 1.0 : // amplitude (Pulse Train)
     (typeId == kTypeResonantCompressor) ? 1.0 : // Makeup (Resonant Compressor)
     (typeId == kTypeXyPad) ? 1.0 // X Amplitude
@@ -3777,6 +3810,7 @@ static void init_node_defaults(Node& n, int typeId) {
   );
   init_control(
     n.resonance,
+    (typeId == kTypePurr) ? 2.5 : // Softness (Purr)
     (typeId == kTypeDsfMorphingOsc) ? 0.0 : // Rotate (DSF Morphing Osc)
     (typeId == kTypeResonantCompressor) ? 0.0 : // Resonance (Resonant Compressor)
     (typeId == kTypeModalSnare) ? 1.0 : // noiseQ (Modal Snare)
@@ -3952,6 +3986,7 @@ static void init_node_defaults(Node& n, int typeId) {
   );
   init_control(
     n.center,
+    (typeId == kTypePurr) ? 0.35 : // Body (Purr)
     (typeId == kTypePulseTrain) ? 0.0 : // Spacing Expo
     (typeId == kTypePumpCurve) ? 12.0 : // Depth dB
     (typeId == kTypeDsfMorphingOsc) ? 0.0 : // Slice (DSF Morphing Osc)
@@ -4009,6 +4044,7 @@ static void init_node_defaults(Node& n, int typeId) {
   // bradley2a = freqOffset; snowflake = angleÂ°.
   init_control(
     n.width,
+    (typeId == kTypePurr) ? 2.5 : // Body Ratio (Purr)
     (typeId == kTypePulseTrain) ? 0.0 : // ampCurve (Pulse Train)
     (typeId == kTypePulseExplosion) ? 0.5 : // spread
     (typeId == kTypeResonantCompressor) ? 0.3 : // Decay s (Resonant Compressor)
@@ -4092,6 +4128,7 @@ static void init_node_defaults(Node& n, int typeId) {
   );
   init_control(
     n.mix,
+    (typeId == kTypePurr) ? 0.6 : // Exhale Level (Purr)
     (typeId == kTypePulseTrain) ? 0.5 : // Morph (Pulse Train)
     (typeId == kTypeResonantCompressor) ? 1.0 : // Mix (Resonant Compressor)
     (typeId == kTypeModalSnare) ? 0.0 : // Body / Noise (Modal Snare, 0 = both full)
@@ -4161,6 +4198,7 @@ static void init_node_defaults(Node& n, int typeId) {
   );
   init_control(
     n.lfoAmplitude,
+    (typeId == kTypePurr) ? 0.03 : // Wobble (Purr)
     (typeId == kTypeResonantCompressor) ? 0.0 : // Hold (Resonant Compressor)
     (typeId == kTypeResonantEnvelope || typeId == kTypeResonantFollower) ? 0.0 // Hold
       : (typeId == kTypePhaser) ? 0.5 // LFO depth octaves
@@ -4260,6 +4298,7 @@ static void init_node_defaults(Node& n, int typeId) {
   // bradley2a = hitDuration.
   init_control(
     n.timeNumerator,
+    (typeId == kTypePurr) ? 1.6 : // Inhale Time s (Purr)
     (typeId == kTypePulseExplosion) ? 0.0 // startTime
       : (typeId == kTypeSlewLimiter) ? 0.05
       : (typeId == kTypeNoteGlide) ? 0.05
@@ -4294,6 +4333,7 @@ static void init_node_defaults(Node& n, int typeId) {
   );
   init_control(
     n.timeDenominator,
+    (typeId == kTypePurr) ? 1.2 : // Exhale Time s (Purr)
     (typeId == kTypePulseTrain) ? 1.0 : // Frequency Hz (Pulse Train)
     (typeId == kTypeResonantCompressor) ? 0.01 : // Attack s (Resonant Compressor)
     (typeId == kTypePulseExplosion) ? 1.0 // endTime
@@ -4375,6 +4415,7 @@ static void init_node_defaults(Node& n, int typeId) {
   );
   init_control(
     n.lfoRate,
+    (typeId == kTypePurr) ? 21.0 : // Exhale Rate Hz (Purr)
     (typeId == kTypePhaser) ? 0.2
       : (typeId == kTypeFlanger) ? 0.2
       : (typeId == kTypeBradley2a) ? 60.0 // jitterRate
@@ -4390,6 +4431,7 @@ static void init_node_defaults(Node& n, int typeId) {
   );
   init_control(
     n.saturate,
+    (typeId == kTypePurr) ? 0.3 : // Rumble (Purr)
     (typeId == kTypeResonantCompressor) ? 1.0 : // Depth (Resonant Compressor)
     (typeId == kTypeModalSnare) ? 0.0 : // noiseTilt (Modal Snare)
     (typeId == kTypeHypersaw2) ? 0.0 // vibratoDistanceTilt
@@ -4398,6 +4440,7 @@ static void init_node_defaults(Node& n, int typeId) {
   );
   init_control(
     n.lpfFrequency,
+    (typeId == kTypePurr) ? 180.0 : // Tone Hz (Purr)
     (typeId == kTypePitchManager) ? 3520.0 : // 0-1 High Hz (A7)
     (typeId == kTypeModalSnare) ? 3000.0 : // noiseFreq Hz (Modal Snare)
     (typeId == kTypePll) ? 10.0 // Smoothing Hz
@@ -4429,6 +4472,7 @@ static void init_node_defaults(Node& n, int typeId) {
   init_control(n.tempoBpm, 120.0, false);
   init_control(
     n.offset,
+    (typeId == kTypePurr) ? 0.15 : // Rumble Floor (Purr)
     (typeId == kTypeXyPad) ? 0.5 // pad X unit
       : (typeId == kTypeHypersaw2) ? 20.0 // jitterFilter Hz at middle C
       : (typeId == kTypePll) ? 0.0
@@ -7126,6 +7170,160 @@ static void process_phone_tone(Circuit& g, Node& node, int frames) {
     node.buf[kPortSquare][f] = soemdsp_phone_tone_analog_thru(node.nativeHandle);
     node.buf[kPortTri][f] = soemdsp_phone_tone_digital_thru(node.nativeHandle);
   }
+}
+
+// Purr (245): Misty's purr, PhyLabs/audio/misty-purr-synth.py made real-time.
+// Breath loop: Inhale (timeNumerator s, pulses at frequency Hz, level 1), 60 ms
+// gap, Exhale (timeDenominator s, pulses at lfoRate Hz, level mix), 60 ms gap.
+// Each breath swells as sin(pi t / T)^0.8. Pulse p = ((1 - cos)/2)^resonance
+// (Softness). Rumble (saturate) is a 28-220 Hz noise band gated by
+// offset + (1 - offset) p (Floor); Body (center) is sin(width x pulse phase) p,
+// so the default Body Ratio 2.5 flips the body's sign on every other pulse.
+// Tone (lpfFrequency) lowpass, then the breath, then a 25 Hz highpass. Every
+// Butterworth stage runs twice because the script filters forward and back.
+// Wobble (lfoAmplitude) drifts the pulse rate at 0.3 Hz. Out = Mono/Left/Right.
+static const double kPurrGapSeconds = 0.06;
+static const double kPurrWobbleHz = 0.3;
+// Noise band gain (uniform noise, 48 kHz) and output gain that land the
+// default settings on misty-purr.wav's level.
+static const double kPurrNoiseGain = 39.08592530334773;
+static const double kPurrOutGain = 0.665828775776282;
+static const double kPurrQ4a = 0.5411961001461970;
+static const double kPurrQ4b = 1.3065629648763766;
+static const double kPurrQ2 = 0.7071067811865476;
+
+static void purr_design(PurrBiquad& q, bool highpass, double hz, double qf, double sr) {
+  if (!(hz > 1.0)) hz = 1.0;
+  if (hz > 0.45 * sr) hz = 0.45 * sr;
+  double s = 0.0;
+  double c = 1.0;
+  soemdsp_maths::dsp_sin_cos(kPi * hz / sr, &s, &c);
+  const double k = s / c;
+  const double norm = 1.0 / (1.0 + k / qf + k * k);
+  if (highpass) {
+    q.b0 = norm;
+    q.b1 = -2.0 * norm;
+    q.b2 = norm;
+  } else {
+    q.b0 = k * k * norm;
+    q.b1 = 2.0 * q.b0;
+    q.b2 = q.b0;
+  }
+  q.a1 = 2.0 * (k * k - 1.0) * norm;
+  q.a2 = (1.0 - k / qf + k * k) * norm;
+}
+
+// Butterworth pair (4-pole) designed twice into q[0..3].
+static void purr_design_4pole_twice(PurrBiquad* q, bool highpass, double hz, double sr) {
+  for (int i = 0; i < 4; i++) {
+    purr_design(q[i], highpass, hz, (i & 1) ? kPurrQ4b : kPurrQ4a, sr);
+  }
+}
+
+static inline double purr_run(PurrBiquad* q, int count, double x) {
+  for (int i = 0; i < count; i++) {
+    PurrBiquad& b = q[i];
+    const double y = b.b0 * x + b.z1;
+    b.z1 = b.b1 * x - b.a1 * y + b.z2;
+    b.z2 = b.b2 * x - b.a2 * y;
+    x = y;
+  }
+  return x;
+}
+
+static inline double purr_pow(double x, double e) {
+  return x > 0.0 ? dsp_exp(e * dsp_ln(x)) : 0.0;
+}
+
+static void process_purr(Circuit& g, Node& node, int frames) {
+  const double sr = g.sampleRate < 1.0f ? 44100.0 : (double)g.sampleRate;
+  PurrState& s = node.purr;
+  if (s.designedSr != sr) {
+    purr_design_4pole_twice(&s.band[0], true, 28.0, sr);
+    purr_design_4pole_twice(&s.band[4], false, 220.0, sr);
+    purr_design(s.dc[0], true, 25.0, kPurrQ2, sr);
+    purr_design(s.dc[1], true, 25.0, kPurrQ2, sr);
+    s.noiseGain = kPurrNoiseGain * dsp_exp(0.5 * dsp_ln(sr / 48000.0));
+    s.designedSr = sr;
+    s.designedTone = -1.0;
+  }
+  if (s.rng == 0u) s.rng = (node.idHash ^ 0x2545F491u) | 1u;
+  double phase = node.phase; // pulse phase, turns
+  for (int f = 0; f < frames; f++) {
+    control_frame(g, node, f);
+    double inhaleHz = control_audio(g, node.frequency, f);
+    if (!(inhaleHz > 0.0)) inhaleHz = 0.0;
+    double exhaleHz = control_audio(g, node.lfoRate, f);
+    if (!(exhaleHz > 0.0)) exhaleHz = 0.0;
+    double inhaleS = control_audio(g, node.timeNumerator, f);
+    if (!(inhaleS > 0.01)) inhaleS = 0.01;
+    double exhaleS = control_audio(g, node.timeDenominator, f);
+    if (!(exhaleS > 0.01)) exhaleS = 0.01;
+    double exhaleLevel = control_audio(g, node.mix, f);
+    if (!(exhaleLevel == exhaleLevel)) exhaleLevel = 0.0;
+    double rumble = control_audio(g, node.saturate, f);
+    if (!(rumble == rumble)) rumble = 0.0;
+    double body = control_audio(g, node.center, f);
+    if (!(body == body)) body = 0.0;
+    double ratio = control_audio(g, node.width, f);
+    if (!(ratio == ratio)) ratio = 0.0;
+    double softness = control_audio(g, node.resonance, f);
+    if (!(softness > 0.0)) softness = 0.0;
+    double floor = control_audio(g, node.offset, f);
+    if (!(floor > 0.0)) floor = 0.0;
+    if (floor > 1.0) floor = 1.0;
+    double toneHz = control_audio(g, node.lpfFrequency, f);
+    if (!(toneHz == toneHz)) toneHz = 180.0;
+    double wobble = control_audio(g, node.lfoAmplitude, f);
+    if (!(wobble == wobble)) wobble = 0.0;
+    double amp = control_audio(g, node.amplitude, f);
+    if (!(amp == amp)) amp = 0.0;
+    if (toneHz != s.designedTone) {
+      purr_design_4pole_twice(s.tone, false, toneHz, sr);
+      s.designedTone = toneHz;
+    }
+
+    // Breath segment: inhale, gap, exhale, gap.
+    double segLen = 0.0;
+    for (int tries = 0; tries < 4; tries++) {
+      const double seconds = (s.segment == 0) ? inhaleS
+        : (s.segment == 2) ? exhaleS : kPurrGapSeconds;
+      segLen = seconds * sr;
+      if (s.segPos < segLen) break;
+      s.segPos = 0.0;
+      s.segment = (s.segment + 1) & 3;
+    }
+    const double level = (s.segment == 0) ? 1.0 : (s.segment == 2) ? exhaleLevel : 0.0;
+    const double rate = (s.segment == 0) ? inhaleHz
+      : (s.segment == 2) ? exhaleHz : 0.5 * (inhaleHz + exhaleHz);
+    const double breath = level * purr_pow(
+      soemdsp_maths::dsp_sin_turns(0.5 * (s.segPos + 0.5) / segLen), 0.8);
+    s.segPos += 1.0;
+
+    const double drift = 1.0 + wobble * soemdsp_maths::dsp_sin_turns_lut(s.wobblePhase);
+    s.wobblePhase += kPurrWobbleHz / sr;
+    s.wobblePhase -= dsp_floor(s.wobblePhase);
+    const double inc = rate * drift / sr;
+    phase += inc;
+    phase -= dsp_floor(phase);
+    s.bodyPhase += ratio * inc;
+    s.bodyPhase -= dsp_floor(s.bodyPhase);
+
+    const double pulse = purr_pow(0.5 * (1.0 - soemdsp_maths::dsp_cos_turns(phase)), softness);
+    s.rng ^= s.rng << 13;
+    s.rng ^= s.rng >> 17;
+    s.rng ^= s.rng << 5;
+    const double white = (double)s.rng * (2.0 / 4294967296.0) - 1.0;
+    const double low = purr_run(s.band, 8, white) * s.noiseGain;
+    double sig = low * (floor + (1.0 - floor) * pulse) * rumble
+      + soemdsp_maths::dsp_sin_turns_lut(s.bodyPhase) * pulse * body;
+    sig = purr_run(s.tone, 4, sig) * breath;
+    const double y = purr_run(s.dc, 2, sig) * amp * kPurrOutGain;
+    node.buf[kPortMono][f] = y;
+    node.buf[kPortLeft][f] = y;
+    node.buf[kPortRight][f] = y;
+  }
+  node.phase = phase;
 }
 
 // BLIT: host-owned phase (radians) like polyBlep sample path; taps match polyBlep.
@@ -15706,6 +15904,7 @@ static void process_bypass(Circuit& g, Node& node, int frames) {
     || node.typeId == kTypeEllipsoid
     || node.typeId == kTypeEllipsoidOsc
     || node.typeId == kTypeStepRegister
+    || node.typeId == kTypePurr
     || node.typeId == kTypeSnowflake
   ) {
     return; // sources: silence
@@ -17692,6 +17891,10 @@ static void dispatch_process_node(Circuit& g, Node& node, int frames) {
     }
     if (node.typeId == kTypeStepRegister) {
       process_step_register(g, node, frames);
+      return;
+    }
+    if (node.typeId == kTypePurr) {
+      process_purr(g, node, frames);
       return;
     }
     if (node.typeId == kTypeSnowflake) {

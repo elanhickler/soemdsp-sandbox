@@ -2952,6 +2952,12 @@ const nodeGraphModuleStoreCatalog = Object.freeze({
     label: "Phone Tone",
     notes: ["dtmf", "phone", "tone", "keypad", "robin", "object", "pitch", "0.1v", "native"],
   },
+  purr: {
+    category: "object",
+    description: "Misty's purr: breaths of soft pulses (Inhale, then a slower, quieter Exhale) gating a low noise rumble plus a body tone. Body Ratio 2.5 flips the body every other pulse.",
+    label: "Purr",
+    notes: ["purr", "cat", "misty", "breath", "rumble", "object", "native"],
+  },
   // Chromeless / fully-custom-UI modules (stepGrid, led, ...) register
   // their own catalog entry instead of it being hardcoded here -- see
   // node-graph-chromeless-module-registry.js.
@@ -3256,6 +3262,10 @@ function nodeGraphNativeModulesForType(type) {
 // JS / pure-browser modules: Code button targets the primary DSP source file.
 // Regenerated-ish via scripts/_gen_js_source_entries.py when module folders grow.
 const nodeGraphJsSourceEntriesByType = Object.freeze({
+  purr: {
+    source: "native_modules/graph_engine/graph_engine.cpp",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/native_modules/graph_engine/graph_engine.cpp",
+  },
   activeFilter: {
     source: "public/modules/activeFilter/active-filter-math.js",
     sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/activeFilter/active-filter-math.js",
