@@ -133,15 +133,34 @@ extern "C" double soemdsp_clock_sample(
   // [0, 1), so Start 0 / End 1 is high on every sample (never re-triggers).
   // Rate 0 is not a special case (v8): the phase stops, so the clock pauses
   // with its gate and Analog where they are (no forced 0, no T tick).
-  const bool high = safeEnd >= safeStart
+  const bool inWindow = safeEnd >= safeStart
     ? (phase >= safeStart && phase < safeEnd)
     : (phase >= safeStart || phase < safeEnd);
+  // Never 100% low (v10): every cycle sends at least one sample of gate. A
+  // window narrower than one sample step (narrow pulse, high Rate) can fall
+  // entirely between two samples, and Start == End is an empty window; then
+  // the first sample past it goes high for that one sample. 100% high
+  // (Start 0, End 1) stays high on every sample; Rate 0 still pauses.
+  const double inc = safeRate / rateHz;
+  bool missed = false;
+  if (!inWindow && inc != 0.0) {
+    const double width = wrap01(safeEnd - safeStart);  // Start == End -> 0 (a point)
+    if (inc > 0.0) {
+      // The step that ended here crossed Start: phase is less than one step past it.
+      const double past = wrap01(phase - safeStart);
+      missed = past < inc && past >= width;
+    } else {
+      // Backwards: the window is entered at End; the step crossed it going down.
+      const double past = wrap01(safeEnd - phase);
+      missed = past > 0.0 && past <= -inc && wrap01(phase - safeStart) >= width;
+    }
+  }
+  const bool high = inWindow || missed;
   if (high && !s.digitalWasHigh) s.digitalLevel = safeLevel;
   s.digitalWasHigh = high;
   const double digital = high ? s.digitalLevel : 0.0;
   const double analog = clock_analog_whip_sample(phase, s.cycleLevel);
 
-  const double inc = safeRate / rateHz;
   const double nextRawPhase = wrap01(rawPhase + inc);
   // T follows the offset phase. Two clocks at one rate with Phase 0 and 0.5
   // must tick half a cycle apart. Wrapping the raw phase made every T simultaneous.
@@ -176,5 +195,5 @@ extern "C" double soemdsp_clock_phase(int handle) {
 }
 
 extern "C" int soemdsp_clock_version() {
-  return 9; // 9: negative Rate runs backwards (T on the 0 crossing). 8: Rate 0 pauses (gate / Analog hold, no forced 0). 7: gate compared in fractional phase (Start 0 / End 1 never drops at fractional periods). 6: Amplitude latched per pulse (Digital at gate rise, Analog at cycle start, T at tick). 5: Pulse Start / Pulse End replace duty; phase published. 4: T pulse follows Phase offset
+  return 10; // 10: never 100% low: a gate window narrower than one sample (or Start == End) still sends one sample per cycle. 9: negative Rate runs backwards (T on the 0 crossing). 8: Rate 0 pauses (gate / Analog hold, no forced 0). 7: gate compared in fractional phase (Start 0 / End 1 never drops at fractional periods). 6: Amplitude latched per pulse (Digital at gate rise, Analog at cycle start, T at tick). 5: Pulse Start / Pulse End replace duty; phase published. 4: T pulse follows Phase offset
 }
