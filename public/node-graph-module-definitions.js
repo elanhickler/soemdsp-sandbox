@@ -1809,7 +1809,7 @@ const nodeGraphModuleDefinitions = (
     chrome: "LayoutA",
     customDisplayArea: true,
     displayType: "additiveWaveform",
-    displayHeightGu: 2,
+    displayHeightGu: 3,
     defaultDisplaySettings: {
       lineThickness: 0.4,
       lineSmoothing: 0.7,
@@ -1817,7 +1817,7 @@ const nodeGraphModuleDefinitions = (
       backgroundColor: "#050508",
     },
     // Pin width so long Waveform choice names cannot thrash the stack.
-    defaultWidthGu: 8,
+    defaultWidthGu: 7,
     displayModes: [
       { key: "additiveWaveform", renderer: "additiveWaveform", settingsSchema: "additiveWaveform" },
       { key: "harmonicCount", renderer: "harmonicCount" },
@@ -3215,8 +3215,8 @@ const nodeGraphModuleDefinitions = (
     chrome: "LayoutA",
     customDisplayArea: true,
     displayType: "harmonicLines",
-    displayHeightGu: 4,
-    defaultWidthGu: 14,
+    displayHeightGu: 3,
+    defaultWidthGu: 8,
     displayModes: [
       { key: "harmonicLines", renderer: "harmonicLines" },
     ],
@@ -21020,6 +21020,9 @@ const nodeGraphModuleDefinitions = (
     customDisplayArea: true,
     bufferedInputs: ["In"],
     displayType: "spectrogramBurn",
+    // Spawn size: 12 wide, a 6-high face.
+    defaultWidthGu: 12,
+    displayHeightGu: 6,
     inputs: ["In"],
     layout: "scopeFace",
     // Dry passthrough so the analyzer can sit in-line (In → face + Thru).
