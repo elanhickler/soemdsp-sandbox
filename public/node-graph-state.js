@@ -90,6 +90,8 @@ var nodeGraphMvp = {
   fullyOpaqueWires: false,
   // UIDEV: cables from a zoom-1 bake, scaled like the module pictures.
   pixelateWiresOnZoom: false,
+  // UIDEV: wire end dots from zoom-1 bakes in each module's stack.
+  pixelateWireDotsOnZoom: false,
   // Cable strokes under modules by default; Visibility can raise them above.
   wiresAboveModules: false,
   // Amount fill off until the user turns it on (Visibility / UI settings).

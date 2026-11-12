@@ -1695,6 +1695,139 @@ function nodeGraphGlGraphWireBakeUpdate(p) {
   return st.wireBake;
 }
 
+// UIDEV "pixelate wire dots on zoom" (off by default; off = the live vector
+// end dots below, untouched). On: each module's wire end dots are baked at
+// zoom 1 (world px) into that module's own small picture, and the picture is
+// drawn as an image quad in that module's stack layer (where the vector dots
+// were), so a module in front still covers the dots of the one behind. Its
+// filter follows the module pictures (nearest above 2.5x, set at replay).
+// Never re-baked mid-gesture; a settled present re-bakes only the modules
+// whose dots changed (position, size, colour, selection, square/round).
+// Dots of a live wire (drag / port-connection preview) and free ends stay
+// vector. Independent of "pixelate wires on zoom".
+function nodeGraphGlGraphDotBakeWanted(view, frameCamera) {
+  if (view || !frameCamera) return false;
+  return typeof nodeGraphPixelateWireDotsOnZoom === "function" && nodeGraphPixelateWireDotsOnZoom();
+}
+
+function nodeGraphGlGraphDotBakeDrop() {
+  const bake = nodeGraphGlGraphState.dotBake;
+  nodeGraphGlGraphState.dotBake = null;
+  if (!bake) return;
+  for (const entry of bake.byNode.values()) {
+    entry.canvas.width = 1;
+    entry.canvas.height = 1;
+  }
+}
+
+/**
+ * Bake (or reuse) every stacked module's end dots. p: { stackedIds, railEnds,
+ * railEnd, dotWorld, paramDotWorld, feather, gesturing }. Returns the bake
+ * ({ byNode: id -> { canvas, x, y, w, h, sig } }), or null (vector dots).
+ */
+function nodeGraphGlGraphDotBakeUpdate(p) {
+  const st = nodeGraphGlGraphState;
+  const prev = st.dotBake;
+  // Mid-gesture: keep the pictures we have; the settle present re-bakes.
+  if (p.gesturing && prev) return prev;
+  const selected = typeof nodeGraphSelectedWireEntries === "function" ? nodeGraphSelectedWireEntries() : [];
+  const selectedRgba = [0.95, 0.86, 0.45, 1];
+  const perNode = new Map();
+  for (let i = 0; i < st.wires.length; i += 1) {
+    const wire = st.wires[i];
+    if (nodeGraphGlGraphWireIsLive(wire)) continue;
+    if (!wire.xy || wire.xy.length < 4) continue;
+    const picked = selected.some((entry) =>
+      (entry.kind || "signal") === wire.kind && Number(entry.index) === wire.index,
+    );
+    const dots = wire.dots || [];
+    for (let d = 0; d < dots.length; d += 1) {
+      const dot = dots[d];
+      if (!dot.node || !p.stackedIds.has(dot.node)) continue;
+      let x = dot.x;
+      let y = dot.y;
+      const snapEnd = dot.param && p.railEnds.length ? p.railEnd(x, y) : null;
+      if (snapEnd) { x = snapEnd.x; y = snapEnd.y; }
+      const reach = dot.param ? p.paramDotWorld : p.dotWorld;
+      if (!(reach > 0) || !Number.isFinite(x) || !Number.isFinite(y)) continue;
+      let own = perNode.get(dot.node);
+      if (!own) perNode.set(dot.node, (own = []));
+      own.push({ x, y, reach, rgba: picked ? selectedRgba : dot.rgba, square: dot.square });
+    }
+  }
+  const mix = nodeGraphGlGraphWireBakeMix;
+  const max = NODE_GRAPH_WIRE_BAKE_MAX;
+  const byNode = new Map();
+  let failed = false;
+  for (const [id, ends] of perNode) {
+    let x0 = Infinity;
+    let y0 = Infinity;
+    let x1 = -Infinity;
+    let y1 = -Infinity;
+    for (const e of ends) {
+      if (e.x - e.reach < x0) x0 = e.x - e.reach;
+      if (e.y - e.reach < y0) y0 = e.y - e.reach;
+      if (e.x + e.reach > x1) x1 = e.x + e.reach;
+      if (e.y + e.reach > y1) y1 = e.y + e.reach;
+    }
+    const edge = Math.ceil(p.feather + 2);
+    const rx0 = Math.floor(x0) - edge;
+    const ry0 = Math.floor(y0) - edge;
+    const pw = Math.max(1, Math.min(max, Math.ceil(x1) + edge - rx0));
+    const ph = Math.max(1, Math.min(max, Math.ceil(y1) + edge - ry0));
+    let h = 2166136261;
+    for (const v of [rx0, ry0, pw, ph, p.feather, ends.length]) h = mix(h, v);
+    for (const e of ends) {
+      h = mix(h, e.x);
+      h = mix(h, e.y);
+      h = mix(h, e.reach);
+      h = mix(h, e.square ? 1 : 0);
+      const c = e.rgba || [];
+      for (let k = 0; k < 4; k += 1) h = mix(h, c[k]);
+    }
+    const old = prev?.byNode.get(id);
+    if (old && old.sig === h) {
+      byNode.set(id, old);
+      continue;
+    }
+    const canvas = old?.canvas || document.createElement("canvas");
+    if (canvas.width !== pw) canvas.width = pw;
+    if (canvas.height !== ph) canvas.height = ph;
+    const batch = typeof nodeGraphGlLinesBegin === "function"
+      ? nodeGraphGlLinesBegin(canvas, [0, 0, 0, 0], { scale: 1, transparent: true, camera: { x: rx0, y: ry0, zoom: 1 } })
+      : null;
+    if (!batch) {
+      failed = true;
+      break;
+    }
+    for (const e of ends) nodeGraphGlGraphDrawWireEnd(batch, e, p.feather);
+    // "max": straight coverage, same as the free-end dot canvas, so the
+    // image quad composites like the vector dot (no dark fringe).
+    if (nodeGraphGlLinesEnd(batch, "max") === false) {
+      failed = true;
+      break;
+    }
+    // New picture: a fresh key makes the cached texture re-upload once.
+    st.dotBakeSerial = (st.dotBakeSerial || 0) + 1;
+    canvas.src = `wiredots:${st.dotBakeSerial}`;
+    byNode.set(id, { canvas, x: rx0, y: ry0, w: pw, h: ph, sig: h });
+  }
+  if (failed) {
+    nodeGraphGlGraphDotBakeDrop();
+    return null;
+  }
+  if (prev) {
+    for (const [id, entry] of prev.byNode) {
+      if (byNode.get(id) === entry) continue;
+      if (byNode.get(id)?.canvas === entry.canvas) continue;
+      entry.canvas.width = 1;
+      entry.canvas.height = 1;
+    }
+  }
+  st.dotBake = { byNode };
+  return st.dotBake;
+}
+
 /** The baked cables, under whatever the wire batch just presented (live drag strokes stay on top). */
 function nodeGraphGlGraphWireBakeDraw(wireCanvas, cam, zoom, backing) {
   const bake = nodeGraphGlGraphState.wireBake;
@@ -2137,6 +2270,14 @@ function nodeGraphGlGraphPresent(options = {}) {
   // module in front hides the dots of the one behind (cables stay under).
   const stackedIds = new Set((nodeGraphGlGraphState.stack?.entries || []).map((entry) => entry.plate.id));
   const endsByNode = new Map();
+  // UIDEV pixelate wire dots on zoom: stacked dots come from per-module bakes.
+  const dotBake = nodeGraphGlGraphDotBakeWanted(view, frameCamera)
+    ? nodeGraphGlGraphDotBakeUpdate({
+      stackedIds, railEnds, railEnd, dotWorld, paramDotWorld, feather: wireFeather,
+      gesturing: gesturingEarly || gesturing,
+    })
+    : null;
+  if (!dotBake && !view && nodeGraphGlGraphState.dotBake) nodeGraphGlGraphDotBakeDrop();
   for (let i = 0; i < nodeGraphGlGraphState.wires.length; i += 1) {
     const wire = nodeGraphGlGraphState.wires[i];
     const src = wire.xy;
@@ -2207,8 +2348,11 @@ function nodeGraphGlGraphPresent(options = {}) {
     }
     const dots = wire.dots || [];
     const selectedRgba = [0.95, 0.86, 0.45, 1];
+    const dotsBaked = Boolean(dotBake) && !nodeGraphGlGraphWireIsLive(wire);
     for (let d = 0; d < dots.length; d += 1) {
       const dot = dots[d];
+      // Already in its module's dot picture.
+      if (dotsBaked && dot.node && stackedIds.has(dot.node)) continue;
       const dx = screenX(dot.x);
       const dy = screenY(dot.y);
       let dotX = frameCamera ? dot.x : dx;
@@ -2315,9 +2459,23 @@ function nodeGraphGlGraphPresent(options = {}) {
         nodeGraphGlGraphDrawGroupInk(ink, group, toX, toY, layoutZoom, cssW, cssH, Boolean(frameCamera));
         if (inks) for (let i = 0; i < group.displays.length; i += 1) inks.set(group.displays[i].canvas, { layer: ink, group });
       }
-      if (endsByNode.size) {
+      if (endsByNode.size || dotBake) {
         let endsLayer = null;
         for (let i = 0; i < group.plates.length; i += 1) {
+          const bakedDots = dotBake ? dotBake.byNode.get(group.plates[i].id) : null;
+          if (bakedDots) {
+            // This module's baked dots, in its own stack (front modules cover them).
+            endsLayer = endsLayer || nodeGraphGlLinesLayer(batch);
+            const picture = nodeGraphGlLinesImage(endsLayer, bakedDots.canvas, bakedDots.x, bakedDots.y, bakedDots.w, bakedDots.h, {
+              nearest: pixelated,
+              cache: true,
+              alpha: 1,
+            });
+            if (picture) {
+              picture.pin = "";
+              pictures.push(picture);
+            }
+          }
           const own = endsByNode.get(group.plates[i].id);
           if (!own) continue;
           endsLayer = endsLayer || nodeGraphGlLinesLayer(batch);
