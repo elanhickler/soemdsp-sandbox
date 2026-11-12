@@ -7549,7 +7549,7 @@ body.keyboard-debug-hidden .node-keyboard-signal-bar {
   min-height: var(--node-grid-height);
   margin: 0;
   overflow: hidden;
-  border: 1px solid var(--line);
+  border: 0;
   border-radius: 0;
   --room-dim: 0;
   background: color-mix(
