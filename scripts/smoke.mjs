@@ -65,7 +65,13 @@ function readWav(bytes) {
 }
 
 const lines = [];
-const say = (s) => { lines.push(s); console.log(s); };
+const SMOKE_RED = "\x1b[31m";
+const SMOKE_RESET = "\x1b[0m";
+const say = (s) => {
+  lines.push(s);
+  // Failure lines in red so they stand out in the terminal.
+  console.log(s.includes("PROBLEM") ? `${SMOKE_RED}${s}${SMOKE_RESET}` : s);
+};
 let server = null;
 let browser = null;
 let baseUrl = process.env.SANDBOX_URL || "";
@@ -157,5 +163,7 @@ try {
   if (server) server.kill();
 }
 const problems = lines.filter((l) => l.includes("PROBLEM")).length;
-console.log(problems ? `[smoke] ${problems} problem(s), see above` : "[smoke] pass");
+console.log(problems
+  ? `${SMOKE_RED}[smoke] ${problems} problem(s), see above${SMOKE_RESET}`
+  : "[smoke] pass");
 process.exit(0);
