@@ -279,30 +279,40 @@ function nodeGraphGraphMigrateStepGraphPatchNode(patchNode) {
     params && Object.prototype.hasOwnProperty.call(params, "segmentShape")
     && params.segmentShape != null && String(params.segmentShape).trim() !== "",
   );
-  let graph = normalizeNodeGraphGraph(patchNode.graph);
-  if (hasGlobal) {
-    const raw = params.segmentShape;
-    const baked = nodeGraphGraphSegmentShapeFromParam(raw);
-    const bakedLinear = nodeGraphGraphShapeIsLegacyLinear(raw);
-    graph = normalizeNodeGraphGraph({
-      ...graph,
-      nodes: graph.nodes.map((node) => ({
-        ...node,
-        shape: baked,
-        c: bakedLinear ? 0 : node.c,
-      })),
-    });
-    delete params.segmentShape;
-    if (patchNode.paramMeta && Object.prototype.hasOwnProperty.call(patchNode.paramMeta, "segmentShape")) {
-      delete patchNode.paramMeta.segmentShape;
-    }
+  // Load-only: bake leftover global Shape onto per-node shapes, then drop the
+  // param. Do not normalize/write the graph when there is nothing to migrate —
+  // a write-back of normalizeNodeGraphGraph() would install the default ramp
+  // if graph.nodes were briefly missing (e.g. mid-drag remount).
+  if (!hasGlobal) {
+    return patchNode;
   }
-  patchNode.graph = graph;
+  const raw = params.segmentShape;
+  const baked = nodeGraphGraphSegmentShapeFromParam(raw);
+  const bakedLinear = nodeGraphGraphShapeIsLegacyLinear(raw);
+  const graph = normalizeNodeGraphGraph(patchNode.graph);
+  patchNode.graph = normalizeNodeGraphGraph({
+    ...graph,
+    nodes: graph.nodes.map((node) => ({
+      ...node,
+      shape: baked,
+      c: bakedLinear ? 0 : node.c,
+    })),
+  });
+  delete params.segmentShape;
+  if (patchNode.paramMeta && Object.prototype.hasOwnProperty.call(patchNode.paramMeta, "segmentShape")) {
+    delete patchNode.paramMeta.segmentShape;
+  }
   return patchNode;
 }
 
 function normalizeNodeGraphGraph(value = {}) {
-  const source = value && typeof value === "object" ? value : {};
+  let source = value && typeof value === "object" ? value : {};
+  // If a patch node was passed instead of its graph document, use that
+  // document. Passing the module object itself would miss .nodes and
+  // replace a valid curve with the default falling ramp.
+  if (!Array.isArray(source.nodes) && source.graph && typeof source.graph === "object") {
+    source = source.graph;
+  }
   const inputNodes = Array.isArray(source.nodes) && source.nodes.length >= 2
     ? source.nodes
     : nodeGraphDefaultGraphData.nodes;
@@ -373,14 +383,39 @@ function nodeGraphGraphWithLockedEndpointY(graphValue, selectedIndex = 0) {
   return normalizeNodeGraphGraph({ ...graph, nodes });
 }
 
+function nodeGraphGraphHasPendingStepGraphShapeMigration(patchNode) {
+  return Boolean(
+    patchNode
+    && patchNode.type === "stepGraph"
+    && patchNode.params
+    && Object.prototype.hasOwnProperty.call(patchNode.params, "segmentShape")
+    && patchNode.params.segmentShape != null
+    && String(patchNode.params.segmentShape).trim() !== "",
+  );
+}
+
 function nodeGraphGraphForNode(patchNode, selectedIndex = 0) {
-  if (patchNode && patchNode.type === "stepGraph") {
+  // Migrate leftover global segmentShape only when it is still present.
+  // Must not run on every paint or pointer move.
+  if (nodeGraphGraphHasPendingStepGraphShapeMigration(patchNode)) {
     nodeGraphGraphMigrateStepGraphPatchNode(patchNode);
   }
   const graph = nodeGraphGraphWithPhaseCursor(patchNode);
   return nodeGraphGraphEndpointYLockEnabledForNode(patchNode)
     ? nodeGraphGraphWithLockedEndpointY(graph, selectedIndex)
     : graph;
+}
+
+/** Visible/WebGL document for a graph face: in-flight drag graph if this node is being edited. */
+function nodeGraphGraphPaintDocumentForNode(patchNode, selectedIndex = 0) {
+  const drag = (typeof nodeGraphMvp !== "undefined" && nodeGraphMvp?.graphNodeDragging) || null;
+  if (drag?.graph && patchNode && drag.nodeId === patchNode.id) {
+    const graph = normalizeNodeGraphGraph(drag.graph);
+    return nodeGraphGraphEndpointYLockEnabledForNode(patchNode)
+      ? nodeGraphGraphWithLockedEndpointY(graph, drag.index ?? selectedIndex)
+      : graph;
+  }
+  return nodeGraphGraphForNode(patchNode, selectedIndex);
 }
 
 function nodeGraphGraphSmoothCurve(position) {
@@ -440,9 +475,6 @@ function nodeGraphGraphGlobalSkewOffset(options = {}) {
 function nodeGraphGraphSegmentOptionsForNode(patchNode) {
   if (!nodeGraphGraphUsesPerNodeShapes(patchNode?.type)) {
     return {};
-  }
-  if (patchNode) {
-    nodeGraphGraphMigrateStepGraphPatchNode(patchNode);
   }
   const params = patchNode?.params || {};
   return {

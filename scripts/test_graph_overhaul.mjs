@@ -184,4 +184,112 @@ assert(nodeGraphSegmentApplySkewPercent(0.2, 1.5) === nodeGraphSegmentApplySkewP
   assert(!smoothIds.includes("face"), "Layout B Smooth Graph does not use a bare face track");
 }
 
+// Moving one Step Graph point must not replace sibling points, shapes, or cursor.
+// Regression for "the whole graph resets" (default falling ramp) when dragging
+// a point: normalize/migrate/ForNode must not rewrite a valid document, and
+// MoveNode may only change the edited point (plus lock-ends when enabled).
+{
+  const utilsPath = path.join(root, "public", "node-graph-graph-utils.js");
+  const utilsCtx = {
+    console,
+    NODE_GRAPH_SEGMENT_SHAPES,
+    nodeGraphSegmentNormalizeShape,
+    nodeGraphSegmentShapeFromParam,
+    nodeGraphSegmentShapeIndex,
+    nodeGraphSegmentApplySkewPercent,
+    nodeGraphSegmentCurve01,
+    nodeGraphMvp: { graphNodeDragging: null, patch: { nodes: [] } },
+    nodeGraphModuleIsGraphType: (type) => type === "stepGraph" || type === "smoothGraph",
+    nodeGraphFiniteNumber: (value, fallback = 0) => {
+      const n = Number(value);
+      return Number.isFinite(n) ? n : fallback;
+    },
+    addNodeGraphModuleScopeSnapshotListener: () => {},
+  };
+  vm.createContext(utilsCtx);
+  vm.runInContext(fs.readFileSync(utilsPath, "utf8"), utilsCtx, { filename: "node-graph-graph-utils.js" });
+
+  const dsfGraph = {
+    cursorX: 0.25,
+    nodes: [
+      { x: 0, y: 0, c: 0.1, shape: "smoothstep" },
+      { x: 0.5, y: 1, c: -0.2, shape: "smoothstep" },
+      { x: 1, y: 0, c: 0.3, shape: "smootherstep" },
+    ],
+  };
+  const snapshot = (graph) => JSON.parse(JSON.stringify({
+    cursorX: graph.cursorX,
+    nodes: graph.nodes.map((node) => ({ x: node.x, y: node.y, c: node.c, shape: node.shape })),
+  }));
+  const sameNode = (a, b, eps = 1e-9) => (
+    Math.abs(a.x - b.x) <= eps
+    && Math.abs(a.y - b.y) <= eps
+    && Math.abs(a.c - b.c) <= eps
+    && a.shape === b.shape
+  );
+
+  const normalized = utilsCtx.normalizeNodeGraphGraph(dsfGraph);
+  assert(normalized.nodes.length === 3, "normalize keeps a 3-point curve");
+  assert(almost(normalized.cursorX, 0.25), "normalize keeps cursorX");
+  assert(sameNode(normalized.nodes[0], dsfGraph.nodes[0]), "normalize keeps first point");
+  assert(sameNode(normalized.nodes[1], dsfGraph.nodes[1]), "normalize keeps middle point");
+  assert(sameNode(normalized.nodes[2], dsfGraph.nodes[2]), "normalize keeps last point");
+  assert(!(almost(normalized.nodes[0].y, 1) && almost(normalized.nodes[normalized.nodes.length - 1].y, 0)
+    && normalized.nodes.length === 2), "normalize must not collapse to the default ramp");
+
+  const wrapped = utilsCtx.normalizeNodeGraphGraph({
+    type: "stepGraph",
+    params: { skewOffset: 0.4 },
+    graph: dsfGraph,
+  });
+  assert(wrapped.nodes.length === 3 && sameNode(wrapped.nodes[1], dsfGraph.nodes[1]),
+    "normalize of a patch node uses node.graph instead of the default ramp");
+
+  const moved = utilsCtx.nodeGraphGraphMoveNode(dsfGraph, 1, { x: 0.62, y: 0.35 });
+  assert(moved.graph.nodes.length === 3, "move keeps all three points");
+  assert(almost(moved.graph.cursorX, 0.25), "move keeps cursorX");
+  assert(sameNode(moved.graph.nodes[0], dsfGraph.nodes[0]), "move leaves the first point unchanged");
+  assert(sameNode(moved.graph.nodes[2], dsfGraph.nodes[2]), "move leaves the last point unchanged");
+  assert(almost(moved.graph.nodes[moved.index].x, 0.62), "moved point gets the new x");
+  assert(almost(moved.graph.nodes[moved.index].y, 0.35), "moved point gets the new y");
+  assert(moved.graph.nodes[moved.index].shape === "smoothstep", "moved point keeps its shape");
+  assert(almost(moved.graph.nodes[moved.index].c, -0.2), "moved point keeps its contour");
+
+  const patchNode = {
+    id: "stepGraph-1",
+    type: "stepGraph",
+    params: { phase: 0.25, skewOffset: 0.4, lockEndpointY: 0 },
+    graph: JSON.parse(JSON.stringify(moved.graph)),
+  };
+  const graphBeforeForNode = patchNode.graph;
+  const forNode = utilsCtx.nodeGraphGraphForNode(patchNode);
+  assert(patchNode.graph === graphBeforeForNode, "ForNode without segmentShape must not rewrite node.graph");
+  assert(forNode.nodes.length === 3, "ForNode keeps three points after a move");
+  assert(sameNode(forNode.nodes[0], moved.graph.nodes[0]), "ForNode leaves unmoved first point");
+  assert(sameNode(forNode.nodes[2], moved.graph.nodes[2]), "ForNode leaves unmoved last point");
+  assert(sameNode(forNode.nodes[moved.index], moved.graph.nodes[moved.index]), "ForNode keeps the moved point");
+
+  const migrateNode = {
+    id: "stepGraph-1",
+    type: "stepGraph",
+    params: { phase: 0.25, skewOffset: 0.4 },
+    graph: JSON.parse(JSON.stringify(moved.graph)),
+  };
+  const graphBeforeMigrate = migrateNode.graph;
+  utilsCtx.nodeGraphGraphMigrateStepGraphPatchNode(migrateNode);
+  assert(migrateNode.graph === graphBeforeMigrate, "migrate is a no-op without leftover segmentShape");
+  assert(sameNode(migrateNode.graph.nodes[1], moved.graph.nodes[1]), "migrate without segmentShape leaves points");
+
+  utilsCtx.nodeGraphMvp.graphNodeDragging = {
+    nodeId: "stepGraph-1",
+    index: moved.index,
+    graph: moved.graph,
+  };
+  const painted = utilsCtx.nodeGraphGraphPaintDocumentForNode(patchNode);
+  assert(painted.nodes.length === 3, "paint document during drag keeps all points");
+  assert(sameNode(painted.nodes[moved.index], moved.graph.nodes[moved.index]), "paint uses the in-flight drag graph");
+  assert(sameNode(painted.nodes[0], moved.graph.nodes[0]), "paint leaves sibling points in the drag graph");
+  utilsCtx.nodeGraphMvp.graphNodeDragging = null;
+}
+
 console.log("test_graph_overhaul: ok");

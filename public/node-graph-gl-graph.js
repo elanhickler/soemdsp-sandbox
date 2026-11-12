@@ -1190,9 +1190,11 @@ function nodeGraphGlGraphRgbaAlpha(rgba, alpha, fallback) {
 function nodeGraphGlGraphPaintGraphFace(batch, face, x, y, w, h, layoutZoom) {
   nodeGraphGlLinesRect(batch, x, y, w, h, [0.04, 0.05, 0.07, 1]);
   const patchNode = typeof nodeGraphPatchNode === "function" ? nodeGraphPatchNode(face.id) : null;
-  const graph = patchNode && typeof nodeGraphGraphForNode === "function"
-    ? nodeGraphGraphForNode(patchNode)
-    : null;
+  const graph = patchNode && typeof nodeGraphGraphPaintDocumentForNode === "function"
+    ? nodeGraphGraphPaintDocumentForNode(patchNode)
+    : (patchNode && typeof nodeGraphGraphForNode === "function"
+      ? nodeGraphGraphForNode(patchNode)
+      : null);
   if (!graph || typeof nodeGraphGraphValueAt !== "function") return;
   const look = typeof nodeGraphGraphFaceDisplaySettingsForNode === "function"
     ? nodeGraphGraphFaceDisplaySettingsForNode(patchNode)

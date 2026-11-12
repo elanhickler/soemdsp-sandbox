@@ -553,9 +553,6 @@ function validateNodeGraphPatch(patch) {
         node.paramMeta.skewOffset = node.paramMeta.curveOffset;
         delete node.paramMeta.curveOffset;
       }
-      if (type === "stepGraph" && typeof nodeGraphGraphMigrateStepGraphPatchNode === "function") {
-        nodeGraphGraphMigrateStepGraphPatchNode(node);
-      }
       if (type === "smoothGraph" && parameter.key === "smoothingMode") {
         const sourceMax = Number(node.paramMeta?.[parameter.key]?.max);
         const n = Math.round(Number(value));
@@ -662,6 +659,9 @@ function validateNodeGraphPatch(patch) {
       normalizedNode.vectorDotSettings = typeof normalizeNodeGraphLcdDotSettings === "function"
         ? normalizeNodeGraphLcdDotSettings(node.vectorDotSettings)
         : (node.vectorDotSettings || {});
+    }
+    if (type === "stepGraph" && typeof nodeGraphGraphMigrateStepGraphPatchNode === "function") {
+      nodeGraphGraphMigrateStepGraphPatchNode(node);
     }
     if (nodeGraphModuleIsGraphType(type)) {
       const phaseLinkedGraph = nodeGraphGraphWithPhaseCursor(normalizedNode, node.graph);
