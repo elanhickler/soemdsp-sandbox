@@ -2195,6 +2195,14 @@ function nodeGraphAudioPlayerPlaylistApplyRowFade(section, nodeId) {
 }
 
 function nodeGraphAudioPlayerPlaylistRowHeightPx(list) {
+  // One nominal row: the transport strip is exactly the row variable tall
+  // (styles.css, scaled with the face in Canvas / screen solo). Slot rows
+  // stretch to share the list, so measuring one would lock the slot count
+  // and let rows and their text grow with the face.
+  const transport = list?.parentElement?.querySelector?.(":scope > [data-music-player-transport]");
+  if (transport && transport.offsetHeight > 0) {
+    return transport.offsetHeight;
+  }
   const sample = list?.querySelector?.(".node-music-player-pl-row");
   if (sample && sample.offsetHeight > 0) {
     return sample.offsetHeight;

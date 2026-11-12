@@ -1613,7 +1613,7 @@ button.scw-label:hover,
   --sample-waveform-hud-color: hsla(140, 90%, 57%, 0.55);
   --sample-waveform-hud-color-hot: hsla(140, 90%, 85%, 0.7);
   --sample-waveform-hud-color-dim: hsla(140, 90%, 57%, 0.28);
-  --node-music-player-pl-row-height: 1.35rem;
+  --node-music-player-pl-row-height: calc(1.35rem * var(--node-music-player-ui-scale, 1));
 }
 /* Music Player faces are often only a few hundred pixels wide. Keep the HUD
    type inside its cells as the display shrinks, without changing the shared
@@ -1898,7 +1898,7 @@ button.scw-label:hover,
   min-height: 0;
   height: 100%;
   margin: 0;
-  padding: 0 8px;
+  padding: 0 calc(8px * var(--node-music-player-ui-scale, 1));
   border: 0 !important;
   background: transparent;
   color: inherit;
@@ -1984,7 +1984,9 @@ button.scw-label:hover,
 }
 /* The Music Player face picture (tabs, playlist, transport, now playing,
    Playinfo) is its face texture (audio-player-face-gl.js), with the waveform
-   and Stereo faces over it. The pages and the tab bar are the hit layer only. */
+   and Stereo faces over it. The pages and the tab bar are the hit layer only.
+   In Canvas / screen solo the face sets --node-music-player-ui-scale (tile
+   size over builder size), so every row, tab and the transport scale as one. */
 .node-music-player-face-canvas {
   position: absolute;
   inset: 0;
@@ -2176,7 +2178,7 @@ button.scw-label:hover,
 }
 .node-music-player-pl-ram-table th,
 .node-music-player-pl-ram-table td {
-  padding: 0 8px;
+  padding: 0 calc(8px * var(--node-music-player-ui-scale, 1));
   height: var(--node-music-player-pl-row-height, 1.35rem);
   border-bottom: 1px solid var(--sample-waveform-hud-color-dim);
   text-align: left;
@@ -2211,7 +2213,7 @@ button.scw-label:hover,
 
 /* N slots equally split the list column. Wheel pages that window through the file list. */
 .node-music-player-pl-list {
-  --node-music-player-pl-row-height: 1.35rem;
+  --node-music-player-pl-row-height: calc(1.35rem * var(--node-music-player-ui-scale, 1));
   flex: 1 1 0%;
   min-height: 0;
   overflow: hidden;
@@ -2241,19 +2243,19 @@ button.scw-label:hover,
    ellipsis, descenders inside. Defined in layout px at workspace zoom 1;
    zoom and whole-module embeds only scale it uniformly. */
 .node-music-player-pl-row {
-  --node-music-player-pl-row-height: 1.35rem;
+  --node-music-player-pl-row-height: calc(1.35rem * var(--node-music-player-ui-scale, 1));
   container-type: size;
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
   grid-template-rows: auto;
-  gap: 0 4px;
+  gap: 0 calc(4px * var(--node-music-player-ui-scale, 1));
   align-items: center;
   width: 100%;
   height: auto;
   min-height: 0;
   max-height: none;
   margin: 0;
-  padding: 0 8px;
+  padding: 0 calc(8px * var(--node-music-player-ui-scale, 1));
   text-align: left;
   cursor: var(--node-dot-cursor);
   flex: 1 1 0;
@@ -2358,7 +2360,9 @@ input[type="range"],
   grid-row: 1;
   opacity: 0.7;
   font: inherit;
-  font-size: 70cqh;
+  /* 0.7 of the slot, at most of a nominal row: slots stretch to share the
+     list, so a tall face spaces rows out instead of growing their text. */
+  font-size: min(70cqh, calc(0.7 * var(--node-music-player-pl-row-height, 1.35rem)));
   line-height: 100cqh;
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
@@ -2370,7 +2374,7 @@ input[type="range"],
   text-overflow: ellipsis;
   white-space: nowrap;
   font: inherit;
-  font-size: 70cqh;
+  font-size: min(70cqh, calc(0.7 * var(--node-music-player-pl-row-height, 1.35rem)));
   line-height: 100cqh;
 }
 .node-music-player-pl-now {

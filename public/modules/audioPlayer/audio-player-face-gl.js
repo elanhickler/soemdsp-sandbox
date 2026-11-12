@@ -13,6 +13,16 @@
 // data-* are the state. This face reads their zoom-1 layout boxes, so the
 // picture and the hit targets share one grid at every size. JS lays out; the
 // GPU draws every pixel.
+//
+// Size: the circuit builder face is the source of truth. In Canvas and screen
+// solo the display's size comes from its tile; the face scales its whole UI by
+// one factor, the builder layout contain-fitted into the tile. That factor
+// goes to the hit layer as --node-music-player-ui-scale (styles.css: every
+// row, the tabs and the transport are one row-height variable), so the boxes
+// this face reads, and with them the picture and the hit targets, scale
+// together. Playlist slots still share the list height, but their text is
+// never bigger than a nominal row's (styles.css), so a tall tile spaces rows
+// out instead of growing their text.
 
 const NODE_GRAPH_AUDIO_PLAYER_FACE_PLATE = [0, 0, 0, 1];
 const NODE_GRAPH_AUDIO_PLAYER_FACE_PANEL = "#050805";
@@ -23,7 +33,8 @@ const NODE_GRAPH_AUDIO_PLAYER_FACE_HIT = [
   ".node-music-player-pl-row",
   ".node-music-player-waveplay-song",
 ].join(", ");
-// Page tabs: one fixed zoom-1 size; a label too wide for its tab shrinks to fit.
+// Page tabs: one size at builder scale (times the UI scale); a label too wide
+// for its tab shrinks to fit.
 const NODE_GRAPH_AUDIO_PLAYER_FACE_PAGE_PX = 11.5;
 const NODE_GRAPH_AUDIO_PLAYER_FACE_PAGE_FILL = 0.94;
 // Transport glyphs fill their button with a ~9% margin on each side.
@@ -90,6 +101,40 @@ function nodeGraphAudioPlayerFaceGlRequestPaint(section) {
     // A loading row blinks: keep painting while one is on screen.
     if (section._musicPlayerFaceBlinking) nodeGraphAudioPlayerFaceGlRequestPaint(section);
   });
+}
+
+/**
+ * UI scale of the face: 1 in the circuit builder (where its size is recorded);
+ * in Canvas / screen solo the builder size contain-fitted into the tile, so
+ * the tabs and rows keep their builder proportions and never overflow.
+ */
+function nodeGraphAudioPlayerFaceGlUiScale(section, face, cssW, cssH) {
+  if (!face.closest(".node-screen-solo-face")) {
+    section._musicPlayerFaceBuilderSize = { w: cssW, h: cssH };
+    return 1;
+  }
+  const builder = section._musicPlayerFaceBuilderSize;
+  const k = builder
+    ? Math.min(cssW / builder.w, cssH / builder.h)
+    : (typeof nodeGraphGlLinesInkScale === "function" ? Number(nodeGraphGlLinesInkScale(face)) : 1);
+  return Number.isFinite(k) && k > 0 ? Math.max(0.25, Math.round(k * 1000) / 1000) : 1;
+}
+
+/**
+ * Hand the UI scale to the hit layer (one CSS variable on the display). A
+ * change re-fits the playlist slot count to the new row height before the
+ * boxes are read. Returns true when it changed.
+ */
+function nodeGraphAudioPlayerFaceGlApplyUiScale(section, k) {
+  const value = k === 1 ? "" : String(k);
+  if (section.style.getPropertyValue("--node-music-player-ui-scale") === value) return false;
+  if (value) section.style.setProperty("--node-music-player-ui-scale", value);
+  else section.style.removeProperty("--node-music-player-ui-scale");
+  const list = section.querySelector("[data-music-player-list]");
+  if (list && typeof nodeGraphAudioPlayerPlaylistPaintSlots === "function") {
+    nodeGraphAudioPlayerPlaylistPaintSlots(section.dataset.node || "", list, { followPlaying: false });
+  }
+  return true;
 }
 
 /** Zoom-1 layout box of `el` in face px (scrolled containers applied). */
@@ -176,7 +221,7 @@ function nodeGraphAudioPlayerFaceGlLook(nodeId) {
  * The face as plain draw ops (rects, then text) from the hit layer's boxes
  * and state. Ops double as the repaint signature.
  */
-function nodeGraphAudioPlayerFaceGlLayout(section, origin, look) {
+function nodeGraphAudioPlayerFaceGlLayout(section, origin, look, uiScale) {
   const rects = [];
   const texts = [];
   const rect = (b, rgba) => {
@@ -215,7 +260,7 @@ function nodeGraphAudioPlayerFaceGlLayout(section, origin, look) {
 
   const pageBar = section.querySelector(":scope > .node-music-player-page-bar");
   const pageLabel = (btn, b, rgba) => {
-    text(String(btn.textContent || ""), b.x + b.w / 2, b.y + b.h / 2, NODE_GRAPH_AUDIO_PLAYER_FACE_PAGE_PX, rgba,
+    text(String(btn.textContent || ""), b.x + b.w / 2, b.y + b.h / 2, NODE_GRAPH_AUDIO_PLAYER_FACE_PAGE_PX * uiScale, rgba,
       "center", b.w * NODE_GRAPH_AUDIO_PLAYER_FACE_PAGE_FILL);
   };
   const glyphLabel = (btn, b, rgba) => {
@@ -268,12 +313,14 @@ function nodeGraphAudioPlayerFaceGlLayout(section, origin, look) {
       const nameEl = row.querySelector(".node-music-player-pl-name");
       const numBox = box(numEl);
       const nameBox = box(nameEl);
+      // The hit layer's own type size: 0.7 of the slot, at most of a nominal
+      // row (styles.css), so the columns it lays out fit the drawn text.
       if (numBox) {
-        const px = numBox.h * NODE_GRAPH_AUDIO_PLAYER_FACE_ROW_TEXT;
+        const px = parseFloat(getComputedStyle(numEl).fontSize) || numBox.h * NODE_GRAPH_AUDIO_PLAYER_FACE_ROW_TEXT;
         text(String(numEl.textContent || ""), numBox.x, numBox.y + numBox.h / 2, px, nodeGraphAudioPlayerFaceGlAlpha(ink, 0.7));
       }
       if (nameBox) {
-        const px = nameBox.h * NODE_GRAPH_AUDIO_PLAYER_FACE_ROW_TEXT;
+        const px = parseFloat(getComputedStyle(nameEl).fontSize) || nameBox.h * NODE_GRAPH_AUDIO_PLAYER_FACE_ROW_TEXT;
         const played = row.dataset.queue === "played";
         const nameInk = played ? nodeGraphAudioPlayerFaceGlAlpha(ink, 0.62) : ink;
         const name = nodeGraphAudioPlayerFaceGlEllipsis(nameEl.textContent, px, nameBox.w);
@@ -297,10 +344,11 @@ function nodeGraphAudioPlayerFaceGlLayout(section, origin, look) {
       const nameEl = song.querySelector("[data-music-player-now-song-name]");
       const nameBox = box(nameEl);
       if (nameBox) {
-        // The name button pads 8px each side (styles.css .node-music-player-waveplay-song).
+        // The name button pads 8px (x UI scale) each side (styles.css .node-music-player-waveplay-song).
+        const pad = 8 * uiScale;
         const px = nameBox.h * NODE_GRAPH_AUDIO_PLAYER_FACE_ROW_TEXT;
-        const name = nodeGraphAudioPlayerFaceGlEllipsis(nameEl.textContent, px, nameBox.w - 16);
-        text(name, nameBox.x + 8, nameBox.y + nameBox.h / 2, px, hover === song ? look.hot : look.muted);
+        const name = nodeGraphAudioPlayerFaceGlEllipsis(nameEl.textContent, px, nameBox.w - 2 * pad);
+        text(name, nameBox.x + pad, nameBox.y + nameBox.h / 2, px, hover === song ? look.hot : look.muted);
       }
     }
   } else if (page && !page.hidden && face === "playinfo") {
@@ -348,17 +396,17 @@ function nodeGraphAudioPlayerFaceGlLayout(section, origin, look) {
         for (const cell of tr.children) {
           const c = box(cell);
           if (!c) continue;
-          // Cells pad 8px each side; header 0.7, empty-list note 0.6 and centred.
+          // Cells pad 8px (x UI scale) each side; header 0.7, empty-list note 0.6 and centred.
           // Only the name column cuts with an ellipsis (the others size to fit).
           const empty = cell.classList.contains("node-music-player-pl-ram-empty");
           const cellInk = cell.tagName === "TH"
             ? nodeGraphAudioPlayerFaceGlAlpha(ink, 0.7)
             : (empty ? nodeGraphAudioPlayerFaceGlAlpha(ink, 0.6) : ink);
           const str = cell.classList.contains("node-music-player-pl-ram-name")
-            ? nodeGraphAudioPlayerFaceGlEllipsis(cell.textContent, px, c.w - 16, family)
+            ? nodeGraphAudioPlayerFaceGlEllipsis(cell.textContent, px, c.w - 16 * uiScale, family)
             : cell.textContent;
           if (empty) text(str, c.x + c.w / 2, c.y + c.h / 2, px, cellInk, "center", 0, family);
-          else text(str, c.x + 8, c.y + c.h / 2, px, cellInk, "left", 0, family);
+          else text(str, c.x + 8 * uiScale, c.y + c.h / 2, px, cellInk, "left", 0, family);
         }
       }
       if (body.scrollHeight > body.clientHeight + 1) {
@@ -386,10 +434,13 @@ function drawNodeGraphAudioPlayerFace(section) {
     : Math.max(1, Math.min(2, Number(window.devicePixelRatio) || 1));
   const resized = typeof nodeGraphDisplayCanvasSetBacking === "function"
     && nodeGraphDisplayCanvasSetBacking(face, cssW * dpr, cssH * dpr);
+  // Tile size first: the hit layer re-lays out at the face's UI scale.
+  const uiScale = nodeGraphAudioPlayerFaceGlUiScale(section, face, cssW, cssH);
+  nodeGraphAudioPlayerFaceGlApplyUiScale(section, uiScale);
   // Hit boxes are measured from the display's padding edge; the face fills it.
   const origin = { x: face.offsetLeft, y: face.offsetTop };
   const look = nodeGraphAudioPlayerFaceGlLook(section.dataset.node || "");
-  const ops = nodeGraphAudioPlayerFaceGlLayout(section, origin, look);
+  const ops = nodeGraphAudioPlayerFaceGlLayout(section, origin, look, uiScale);
   const signature = JSON.stringify([face.width, face.height, ops]);
   if (!resized && section._musicPlayerFaceSignature === signature) return false;
   const scale = face.width / cssW;
