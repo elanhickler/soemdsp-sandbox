@@ -325,7 +325,7 @@ function nodeGraphSizeDisplayCanvas(section, canvas, options = {}) {
   if (!section || !canvas) {
     return null;
   }
-  // Marker class: styles.css pixelates every .node-display-canvas above 2.5x zoom.
+  // Marker class: GPU passes composite every .node-display-canvas (face texture).
   canvas.classList?.add("node-display-canvas");
   const density = nodeGraphResolveDisplayPixelDensity(options?.pixelDensity);
   // Resize-only face metrics (display-face-metrics.js). Paint must not read

@@ -224,6 +224,27 @@ function nodeGraphGlGraphStackGroups(plates, displays) {
   return { entries, groups };
 }
 
+/**
+ * A face quad's pinned filter, the flags its CSS image-rendering used to
+ * carry: "nearest" (.display-canvas-pixelated or inline pixelated, e.g.
+ * pixel density < 1) at every zoom; "smooth" (.display-canvas-smooth from
+ * pinSmoothWhenOff, or inline auto: Matrix / Asciiscope Sharp) at every
+ * zoom; "" = nearest only above 2.5x zoom.
+ */
+function nodeGraphGlGraphFacePin(canvas) {
+  const list = canvas?.classList;
+  const inline = canvas?.style?.imageRendering || "";
+  if (list?.contains("display-canvas-pixelated") || inline === "pixelated") return "nearest";
+  if (list?.contains("display-canvas-smooth") || inline === "auto") return "smooth";
+  return "";
+}
+
+/** Nearest filter for a face quad: its pin, else `over` (past the 2.5x threshold). */
+function nodeGraphGlGraphFaceNearest(canvas, over) {
+  const pin = nodeGraphGlGraphFacePin(canvas);
+  return pin ? pin === "nearest" : Boolean(over);
+}
+
 // Display meets the plate edge. The stroke is the band outside that edge.
 function nodeGraphGlGraphDisplayScreenRect(face, toX, toY, zoom) {
   return nodeGraphGlGraphScreenRect(face.id, face, toX, toY, zoom);
@@ -1514,7 +1535,16 @@ function nodeGraphGlGraphDragFrom(point, endpoint) {
   return point;
 }
 
-function nodeGraphGlGraphPushWire(wires, from, to, color, zoom, wire, squareFrom, squareTo, kind, index, railFrom = false, railTo = false, toColor = "") {
+/** One wire end dot (square jack or round) into `batch`. */
+function nodeGraphGlGraphDrawWireEnd(batch, end, feather) {
+  if (end.square) {
+    nodeGraphGlLinesRect(batch, end.x - end.reach, end.y - end.reach, end.reach * 2, end.reach * 2, end.rgba);
+  } else {
+    nodeGraphGlLinesDot(batch, end.x, end.y, end.reach, feather, end.rgba);
+  }
+}
+
+function nodeGraphGlGraphPushWire(wires, from, to, color, zoom, wire, squareFrom, squareTo, kind, index, railFrom = false, railTo = false, toColor = "", fromNode = "", toNode = "") {
   if (!from || !to) return;
   const ax = Number(from.x);
   const ay = Number(from.y);
@@ -1539,9 +1569,10 @@ function nodeGraphGlGraphPushWire(wires, from, to, color, zoom, wire, squareFrom
     // A param wire (an end on a rail IO box) has its own width and a tiny
     // round end dot where it meets the box.
     param: railFrom === true || railTo === true,
+    // node: the module whose stack draws the end dot ("" = a free end).
     dots: [
-      { x: ax, y: ay, rgba, square: !railFrom && squareFrom === true, param: railFrom === true },
-      { x: bx, y: by, rgba, square: !railTo && squareTo === true, param: railTo === true },
+      { x: ax, y: ay, rgba, square: !railFrom && squareFrom === true, param: railFrom === true, node: String(fromNode || "") },
+      { x: bx, y: by, rgba, square: !railTo && squareTo === true, param: railTo === true, node: String(toNode || "") },
     ],
   });
 }
@@ -1588,6 +1619,8 @@ function nodeGraphGlGraphRebuild(options = {}) {
         rail(connection.sourceNode, connection.sourcePort),
         false,
         colorOf(connection.destinationNode, connection.destinationPort, "input"),
+        connection.sourceNode,
+        connection.destinationNode,
       );
     }
     const modulationWires = nodeGraphMvp.modulations || [];
@@ -1614,6 +1647,8 @@ function nodeGraphGlGraphRebuild(options = {}) {
         rail(modulation.sourceNode, modulation.sourcePort),
         rail(modulation.destinationNode, modulation.destinationParam),
         colorOf(modulation.destinationNode, modulation.destinationParam, "modulation"),
+        modulation.sourceNode,
+        modulation.destinationNode,
       );
     }
     const graphWires = nodeGraphMvp.graphConnections || [];
@@ -1633,6 +1668,11 @@ function nodeGraphGlGraphRebuild(options = {}) {
         false,
         "graph",
         i,
+        false,
+        false,
+        "",
+        graphConnection.sourceNode,
+        graphConnection.destinationNode,
       );
     }
     const endpointColor = (endpoint) => {
@@ -1652,6 +1692,12 @@ function nodeGraphGlGraphRebuild(options = {}) {
         null,
         false,
         false,
+        "",
+        -1,
+        false,
+        false,
+        "",
+        drag.endpoint?.node,
       );
     }
     if (mode?.cursorPoint && mode.selected && typeof mode.selected.values === "function") {
@@ -1667,6 +1713,12 @@ function nodeGraphGlGraphRebuild(options = {}) {
             entry.wire || entry.connectOptions || null,
             false,
             false,
+            "",
+            -1,
+            false,
+            false,
+            "",
+            entry.endpoint?.node,
           );
         }
       }
@@ -1835,7 +1887,10 @@ function nodeGraphGlGraphReplayMesh(layers = "all") {
   // Zoom-1 pictures, nearest-neighbour above 2.5x, chosen at replay time.
   const pixelated = zoom > 2.5;
   const pictures = mesh.pictures || [];
-  for (let i = 0; i < pictures.length; i += 1) pictures[i].nearest = pixelated && !pictures[i].pinSmooth;
+  for (let i = 0; i < pictures.length; i += 1) {
+    const pin = pictures[i].pin;
+    pictures[i].nearest = pin ? pin === "nearest" : pixelated;
+  }
   // mesh.batches: [plates, wires, contacts, veil, trail]. The module stacks
   // (display quads + ink) live in the plates batch; a displays-only frame
   // replays that batch alone (it clears its own canvas).
@@ -1864,9 +1919,10 @@ function nodeGraphGlGraphPresentDisplaysOnly() {
 }
 
 /**
- * True when the GL graph composites this face and draws its frame and face
- * text at screen resolution (stage 2): a live workspace face. Faces shown as
- * their own 2D canvas (Performance tiles, screen solo) keep them in the picture.
+ * True when a GPU pass composites this face and draws its frame and face
+ * text at screen resolution (stage 2): a live workspace face, or one in a
+ * Canvas view tile / screen solo face host. A face still shown as its own 2D
+ * canvas keeps them in the picture.
  */
 function nodeGraphGlGraphDisplayInkInPass(canvas) {
   return Boolean(canvas?._wfGlSession)
@@ -1984,13 +2040,16 @@ function nodeGraphGlGraphPresent(options = {}) {
   // picture; falling through read the whole workspace and pinned Play at a few fps.
   if (options?.displaysOnly) {
     // No cached mesh yet (first frame, or the patch changed): one full present.
-    if (nodeGraphGlGraphPresentDisplaysOnly()) return true;
+    if (nodeGraphGlGraphPresentDisplaysOnly()) {
+      nodeGraphGlGraphPresentTiles(true);
+      return true;
+    }
   }
   const view = nodeGraphGlGraphState.view;
   const host = view ? view.host : document.getElementById("nodeGraphWorkspace");
   if (!host || typeof nodeGraphGlLinesBegin !== "function") return false;
   if (!view) {
-    nodeGraphGlGraphPresentTiles();
+    nodeGraphGlGraphPresentTiles(options?.displaysOnly === true);
     // Perform mode hides the workspace: nothing of it is on screen (its modules live in tiles).
     if (!host.clientWidth && document.body?.classList.contains("node-perform-mode")) return true;
     host.classList.add("gl-graph-on");
@@ -2029,10 +2088,11 @@ function nodeGraphGlGraphPresent(options = {}) {
   // sample the live face textures, so displays keep running while zooming
   // without a rebuild (display hold stays off).
   if (!view && frameCamera && gesturingEarly && nodeGraphGlGraphReplayMesh("all")) return true;
-  const beginOpts = { scale, transparent: true, camera: frameCamera, keepMesh: !view };
+  const beginOpts = { scale, transparent: true, camera: frameCamera, keepMesh: !view || view.hold === true };
   const batch = nodeGraphGlLinesBegin(canvas, [0, 0, 0, 0], beginOpts);
   const wireBatch = nodeGraphGlLinesBegin(wireCanvas, [0, 0, 0, 0], beginOpts);
-  // Contact dots as straight coverage, then "Show on top" Text Boxes and badges.
+  // Free wire ends (drag cursor) as straight coverage, then "Show on top"
+  // Text Boxes and badges. Ends on a module draw in that module's stack.
   const contactBatch = nodeGraphGlLinesBegin(dotsCanvas, [0, 0, 0, 0], beginOpts);
   const veilBatch = nodeGraphGlLinesBegin(dotsCanvas, [0, 0, 0, 0], { ...beginOpts, keep: true });
   // Snake select trail on its own canvas. Do not keep: this is the only batch,
@@ -2088,6 +2148,10 @@ function nodeGraphGlGraphPresent(options = {}) {
   const railTol = 3 * layoutZoom;
   const railEnd = (x, y) => railEnds.find((e) => Math.abs(e.x - x) <= railTol && Math.abs(e.y - y) <= railTol) || null;
   const pad = 120;
+  // Wire end dots by module id: drawn in the module's stack below, so a
+  // module in front hides the dots of the one behind (cables stay under).
+  const stackedIds = new Set((nodeGraphGlGraphState.stack?.entries || []).map((entry) => entry.plate.id));
+  const endsByNode = new Map();
   for (let i = 0; i < nodeGraphGlGraphState.wires.length; i += 1) {
     const wire = nodeGraphGlGraphState.wires[i];
     const src = wire.xy;
@@ -2167,11 +2231,13 @@ function nodeGraphGlGraphPresent(options = {}) {
       if (!(dotHalf > 0)) continue;
       const dotReach = frameCamera ? dotHalf : dotHalf * zoom;
       if (dx < -dotReach || dy < -dotReach || dx > cssW + dotReach || dy > cssH + dotReach) continue;
-      const dotColor = picked ? selectedRgba : dot.rgba;
-      if (dot.square) {
-        nodeGraphGlLinesRect(contactBatch, dotX - dotReach, dotY - dotReach, dotReach * 2, dotReach * 2, dotColor);
+      const end = { x: dotX, y: dotY, reach: dotReach, rgba: picked ? selectedRgba : dot.rgba, square: dot.square };
+      if (dot.node && stackedIds.has(dot.node)) {
+        let own = endsByNode.get(dot.node);
+        if (!own) endsByNode.set(dot.node, (own = []));
+        own.push(end);
       } else {
-        nodeGraphGlLinesDot(contactBatch, dotX, dotY, dotReach, wireFeather, dotColor);
+        nodeGraphGlGraphDrawWireEnd(contactBatch, end, wireFeather);
       }
     }
   }
@@ -2244,22 +2310,31 @@ function nodeGraphGlGraphPresent(options = {}) {
           const rect = nodeGraphGlGraphDisplayScreenRect(face, toX, toY, layoutZoom);
           if (!(rect.w > 1) || !(rect.h > 1)) continue;
           if (!frameCamera && (rect.x + rect.w < 0 || rect.y + rect.h < 0 || rect.x > cssW || rect.y > cssH)) continue;
-          // A face that pins smooth keeps its linear filter above 2.5x.
-          const smooth = face.canvas.classList.contains("display-canvas-smooth");
+          // A face that pins its filter keeps it at every zoom.
+          const pin = nodeGraphGlGraphFacePin(face.canvas);
           const picture = nodeGraphGlLinesImage(pics, face.canvas, rect.x, rect.y, rect.w, rect.h, {
-            nearest: pixelated && !smooth,
+            nearest: pin ? pin === "nearest" : pixelated,
             // Pan/zoom already froze the face pixels. Re-upload only when displays paint.
             cache: gesturing,
             alpha: 1,
           });
           if (picture) {
-            picture.pinSmooth = smooth;
+            picture.pin = pin;
             pictures.push(picture);
           }
         }
         const ink = nodeGraphGlLinesLayer(batch);
         nodeGraphGlGraphDrawGroupInk(ink, group, toX, toY, layoutZoom, cssW, cssH, Boolean(frameCamera));
         if (inks) for (let i = 0; i < group.displays.length; i += 1) inks.set(group.displays[i].canvas, { layer: ink, group });
+      }
+      if (endsByNode.size) {
+        let endsLayer = null;
+        for (let i = 0; i < group.plates.length; i += 1) {
+          const own = endsByNode.get(group.plates[i].id);
+          if (!own) continue;
+          endsLayer = endsLayer || nodeGraphGlLinesLayer(batch);
+          for (let d = 0; d < own.length; d += 1) nodeGraphGlGraphDrawWireEnd(endsLayer, own[d], wireFeather);
+        }
       }
       nodeGraphGlGraphDrawButtonCaptions(body, toX, toY, layoutZoom, cssW, cssH, captions);
       // Round shapes paint their own plate: above this group's plate fill.
@@ -2302,6 +2377,10 @@ function nodeGraphGlGraphPresent(options = {}) {
       inks,
     };
   }
+  if (view?.hold) {
+    // Whole-module tile: replayed on displays-only frames (nodeGraphGlGraphReplayTile).
+    view.held = { gen: nodeGraphGlGraphState.gen, w: cssW, h: cssH, batches: [batch, wireBatch, contactBatch, veilBatch] };
+  }
   if (typeof nodeGraphPositionGridHtml === "function") nodeGraphPositionGridHtml();
   // The guide HUD changes with the constraint toggles/metrics (they call it
   // directly) and with the layout: once per rebuild here, not per present.
@@ -2317,9 +2396,108 @@ function nodeGraphGlGraphPresent(options = {}) {
  * so run this same rebuild + present once per tile, mapped onto it (zoom = the tile's fit scale,
  * camera = the module's offset in the tile, that module only, no cables).
  */
-function nodeGraphGlGraphPresentTiles() {
+function nodeGraphGlGraphPresentTiles(displaysOnly = false) {
   const faces = document.querySelectorAll(".node-layout-canvas-tile > .dsp-node.node-whole-module-face");
-  for (let i = 0; i < faces.length; i += 1) nodeGraphGlGraphPresentTile(faces[i]);
+  for (let i = 0; i < faces.length; i += 1) {
+    // A displays-only frame replays the held tile mesh (its quads sample the
+    // live face textures), so tile displays keep running without a rebuild.
+    if (!displaysOnly || !nodeGraphGlGraphReplayTile(faces[i])) nodeGraphGlGraphPresentTile(faces[i]);
+  }
+  nodeGraphGlGraphPresentFaceHosts();
+}
+
+function nodeGraphGlGraphReplayTile(face) {
+  const tile = face?.parentElement;
+  const held = tile?._glGraphHeld;
+  if (!held || held.gen !== nodeGraphGlGraphState.gen || !tile._glGraphCanvas?.isConnected
+    || tile.clientWidth !== held.w || tile.clientHeight !== held.h) return false;
+  let ok = true;
+  for (let i = 0; i < held.batches.length; i += 1) {
+    const batch = held.batches[i];
+    if (batch && nodeGraphGlLinesEnd(batch, batch._blend || "alpha") === false) ok = false;
+  }
+  return ok;
+}
+
+const NODE_GRAPH_FACE_HOST = ".node-screen-solo-face:not(.node-whole-module-face)";
+
+/**
+ * Canvas view tiles and screen solo (DISPLAY_COMPOSITE_LAYERING_PLAN stage 4):
+ * a face section moved out of its module. Its displays draw from their face
+ * textures at their boxes, with their screen-res ink, into one GL canvas
+ * behind the face's own DOM (z -1 in the face's stacking context); the hidden
+ * display canvas is only the layout record and hit target. A face back in
+ * the workspace (or on a Meta root view, which the workspace pass draws)
+ * drops its host canvas.
+ */
+function nodeGraphGlGraphPresentFaceHosts() {
+  const faces = document.querySelectorAll(`${NODE_GRAPH_FACE_HOST}, .gl-face-host:not(.node-layout-canvas-tile)`);
+  for (let i = 0; i < faces.length; i += 1) {
+    const face = faces[i];
+    if (face.matches(NODE_GRAPH_FACE_HOST) && !face.closest("#nodeGraphWorkspace")) nodeGraphGlGraphPresentFaceHost(face);
+    else nodeGraphGlGraphDropFaceHost(face);
+  }
+}
+
+function nodeGraphGlGraphDropFaceHost(face) {
+  face.classList.remove("gl-face-host");
+  face._glFaceCanvas?.remove();
+  face._glFaceCanvas = null;
+}
+
+function nodeGraphGlGraphPresentFaceHost(face) {
+  const displays = face.querySelectorAll(".node-display-canvas");
+  const cssW = face.clientWidth;
+  const cssH = face.clientHeight;
+  if (!displays.length || !(cssW > 1) || !(cssH > 1)) {
+    nodeGraphGlGraphDropFaceHost(face);
+    return;
+  }
+  let canvas = face._glFaceCanvas;
+  if (!canvas || canvas.parentElement !== face) {
+    canvas = document.createElement("canvas");
+    canvas.className = "node-gl-face-host-canvas";
+    canvas.setAttribute("aria-hidden", "true");
+    face.prepend(canvas);
+    face._glFaceCanvas = canvas;
+  }
+  const scale = nodeGraphGlGraphFit(canvas, cssW, cssH);
+  const batch = nodeGraphGlLinesBegin(canvas, [0, 0, 0, 0], { scale, transparent: true });
+  if (!batch) {
+    nodeGraphGlGraphDropFaceHost(face);
+    return;
+  }
+  // Client px -> the face's own CSS px (the stage or tile may be scaled).
+  const box = face.getBoundingClientRect();
+  const kx = box.width > 0 ? face.offsetWidth / box.width : 1;
+  const ky = box.height > 0 ? face.offsetHeight / box.height : 1;
+  const left = box.left + face.clientLeft / kx;
+  const top = box.top + face.clientTop / ky;
+  // Output: the same screen-res pause bars as its workspace stack ink.
+  const outputPaused = typeof nodeGraphPatchNode === "function"
+    && String(nodeGraphPatchNode(face.dataset.node)?.type || "") === "output"
+    && typeof nodeGraphLiveEngineIsPaused === "function" && nodeGraphLiveEngineIsPaused();
+  for (let i = 0; i < displays.length; i += 1) {
+    const display = displays[i];
+    if (!(display.width > 1) || !(display.height > 1) || display.closest("[hidden]")) continue;
+    const r = display.getBoundingClientRect();
+    if (!(r.width > 1) || !(r.height > 1)) continue;
+    const x = (r.left - left) * kx;
+    const y = (r.top - top) * ky;
+    const w = r.width * kx;
+    const h = r.height * ky;
+    // Same rule as the Mini Canvas: nearest once a face pixel covers more
+    // than 2.5 screen pixels, unless the face pins its filter.
+    nodeGraphGlLinesImage(batch, display, x, y, w, h, {
+      nearest: nodeGraphGlGraphFaceNearest(display, w / display.width > 2.5),
+      alpha: 1,
+    });
+    nodeGraphGlGraphDrawDisplayInk(batch, display, x, y, w, h);
+    if (outputPaused && typeof paintNodeGraphOutputPauseBars === "function") {
+      paintNodeGraphOutputPauseBars(batch, w, h, { x, y });
+    }
+  }
+  if (nodeGraphGlLinesEnd(batch, "alpha") !== false) face.classList.add("gl-face-host");
 }
 
 function nodeGraphGlGraphPresentTile(face) {
@@ -2338,6 +2516,7 @@ function nodeGraphGlGraphPresentTile(face) {
   };
   state.view = {
     host: tile,
+    hold: true,
     ids: new Set([id]),
     zoom: k * (tile.clientWidth / tileRect.width),
     cam: { x: -(faceRect.left - tileRect.left) / k, y: -(faceRect.top - tileRect.top) / k },
@@ -2348,9 +2527,12 @@ function nodeGraphGlGraphPresentTile(face) {
   state.wires = [];
   try {
     nodeGraphGlGraphRebuildPlates();
-    nodeGraphGlGraphPresent();
+    const ok = nodeGraphGlGraphPresent() !== false;
     tile._glGraphCanvas = state.canvas;
     tile._glGraphDots = state.dotsCanvas;
+    tile._glGraphHeld = ok ? state.view.held || null : null;
+    // The tile's displays are its plate pass quads now: hide their bitmaps.
+    tile.classList.toggle("gl-face-host", ok);
   } finally {
     state.view = null;
     Object.assign(state, saved);

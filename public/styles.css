@@ -12903,13 +12903,40 @@ body.room-dimmer-on .node-room-dimmer-canvas,
 .node-graph-workspace.gl-graph-on .dsp-node .node-phosphillator-draw-display,
 .node-graph-workspace.gl-graph-on .dsp-node .node-module-graph-display,
 .node-graph-workspace.gl-graph-on .dsp-node .node-wall-room-display,
-.node-graph-workspace.gl-graph-on .dsp-node .node-xy-pad {
+.node-graph-workspace.gl-graph-on .dsp-node .node-xy-pad,
+.gl-face-host .node-sample-waveform-display,
+.gl-face-host .node-module-scope-window,
+.gl-face-host .node-module-scope-window-surface,
+.gl-face-host .node-filter-curve-display,
+.gl-face-host .node-phosphillator-draw-display,
+.gl-face-host .node-module-graph-display,
+.gl-face-host .node-wall-room-display,
+.gl-face-host .node-xy-pad {
   background: transparent !important;
   border-color: transparent !important;
   box-shadow: none !important;
 }
 
+/* Canvas view / screen solo face host (nodeGraphGlGraphPresentFaceHost): the
+   face's displays from their face textures, behind the face's own DOM and
+   above its plate. Never a hit target. */
+.gl-face-host.node-screen-solo-face {
+  isolation: isolate;
+}
+
+body .gl-face-host.node-screen-solo-face > canvas.node-gl-face-host-canvas {
+  position: absolute !important;
+  inset: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  max-width: none !important;
+  max-height: none !important;
+  z-index: -1;
+  pointer-events: none !important;
+}
+
 .node-graph-workspace.gl-graph-on .node-display-canvas,
+.gl-face-host .node-display-canvas,
 .node-module-graph-display canvas {
   /* Inline visibility:visible (trace faces) must not paint the full-bleed
      bitmap under the GPU copy. The GPU quad is the picture. */
@@ -14909,28 +14936,14 @@ body.node-screen-solo-active .node-screen-solo-face.node-sample-waveform-display
 }
 
 /*
- * Workspace zoom > 2.5 → nearest-neighbor upscale of face bitmaps.
- * At 2.5 and below the browser scales smoothly (bilinear). Closer than that,
- * nearest-neighbor doubles stray columns and looks torn.
- * Faces paint at layout × dpr (resource-agnostic zoom): app zoom shows defined
- * pixels instead of re-rendering denser detail. Soft Fractal is included —
- * fixed GPU buffer, CSS pixelate on zoom. Asciiscope Sharp keeps auto inline.
+ * Face quads pick their filter in the GL graph, Canvas tiles and Mini Canvas
+ * (nodeGraphGlGraphFacePin): nearest above 2.5x zoom, nearest at every zoom
+ * for .display-canvas-pixelated, linear at every zoom for a pinned-smooth
+ * face. This rule only covers a display canvas still shown as its own bitmap.
  */
-/* One marker class (public/lib/visual/display-canvas.js) instead of a per-face list. */
-.node-graph-workspace.pixelated-canvas-zoom .node-display-canvas {
-  image-rendering: pixelated;
-}
-
-/* Display canvases at pixel density < 1 (module toggles the class; JS never sets image-rendering). */
 .node-display-canvas.display-canvas-pixelated,
 .display-canvas-pixelated {
   image-rendering: pixelated;
-}
-
-/* Pinned smooth (Asciiscope Sharp): beats the workspace zoom pixelation. */
-.node-graph-workspace.pixelated-canvas-zoom .node-display-canvas.display-canvas-smooth,
-.node-display-canvas.display-canvas-smooth {
-  image-rendering: auto;
 }
 
 /*

@@ -2,11 +2,11 @@
 // drawing interface; docs/WEBGL_DISPLAY_PLAN.md).
 //
 // Draws on the shared picture device (public/lib/visual/picture-device.js,
-// one hidden WebGL2 context) and blits the result into the face's own 2D
-// canvas. The face canvas keeps the shared sizing path (backing = layout css
-// x devicePixelRatio, never x workspace zoom) and the node-display-canvas
-// marker class (display-canvas.js), so the one styles.css
-// .pixelated-canvas-zoom .node-display-canvas rule pixelates it above 2.5x zoom.
+// one hidden WebGL2 context) and lands the result in the face's texture (and
+// its 2D canvas only when no GPU pass composites it). The face canvas keeps
+// the shared sizing path (backing = layout css x devicePixelRatio, never x
+// workspace zoom) and the node-display-canvas marker class (display-canvas.js);
+// the GL graph picks each face quad's filter (nodeGraphGlGraphFacePin).
 //
 // Coordinates are device px unless begin() got { scale }: then x/y, halfPx,
 // feather and text px are CSS px and multiplied by scale (pass the face
@@ -2261,11 +2261,17 @@ void main() {
     const faceTexture = typeof global.nodeGraphSharedGlFaceTexture === "function"
       ? global.nodeGraphSharedGlFaceTexture
       : null;
+    const faceOnly = typeof global.nodeGraphSharedGlFaceTextureOnly === "function"
+      ? global.nodeGraphSharedGlFaceTextureOnly
+      : null;
     for (const im of batch.images) {
       const src = im.source;
       // A face canvas that renders on this device: sample its GPU copy
       // (top-down, same orientation as a canvas upload). No upload (ZP-2).
       const face = !src.glSnapshot && faceTexture && src.getContext ? faceTexture(src) : null;
+      // A composited face with no texture yet (new or resized, not painted)
+      // shows nothing: its 2D bitmap is blank and is never uploaded.
+      if (!face && !src.glSnapshot && src.getContext && faceOnly && faceOnly(src)) continue;
       if (src.glSnapshot) {
         gl.bindTexture(gl.TEXTURE_2D, src.texture);
       } else if (face) {

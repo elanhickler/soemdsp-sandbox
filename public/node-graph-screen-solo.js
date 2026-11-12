@@ -392,6 +392,9 @@ function nodeGraphScreenSoloRefreshPaint() {
       nodeGraphFbmFieldStartLoop(item.face, item.nodeId);
     }
   }
+  // Moved faces composite from their face textures (GL graph face hosts):
+  // one full present picks up the new hosts, or drops the old ones.
+  if (typeof nodeGraphGlGraphPresentSoon === "function") nodeGraphGlGraphPresentSoon();
 }
 
 function nodeGraphScreenSoloClearFitClasses() {

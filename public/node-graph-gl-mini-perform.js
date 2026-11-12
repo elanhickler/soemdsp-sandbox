@@ -501,9 +501,9 @@ function nodeGraphGlMiniPerformPresent() {
         layoutY: d.y,
       });
       nodeGraphGlLinesImage(batch, d.canvas, x, y, w, h, {
-        // Nearest neighbour once a face pixel covers more than 2.5 screen pixels,
-        // unless the face pins smooth.
-        nearest: w / d.canvas.width > 2.5 && !d.canvas.classList.contains("display-canvas-smooth"),
+        // Nearest neighbour once a face pixel covers more than 2.5 screen
+        // pixels, unless the face pins its filter.
+        nearest: nodeGraphGlGraphFaceNearest(d.canvas, w / d.canvas.width > 2.5),
         alpha: 1,
       });
       // Frame and face text are workspace-pass ink, not in the picture.

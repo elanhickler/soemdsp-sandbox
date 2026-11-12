@@ -8,9 +8,10 @@
 //   { width, height, cssWidth, cssHeight, pixelRatio } or null.
 // - nodeGraphDisplayCanvasMark(canvas): add the marker to an existing canvas.
 //
-// styles.css has ONE rule for zoom pixelation:
-//   .node-graph-workspace.pixelated-canvas-zoom .node-display-canvas
-// so every display canvas goes nearest-neighbor above 2.5x workspace zoom.
+// GPU passes composite every marked canvas from its face texture (the GL
+// graph, Canvas view tiles, screen solo, Mini Canvas); each face quad goes
+// nearest-neighbor above 2.5x zoom unless the face pins its filter
+// (nodeGraphDisplayCanvasPixelated, nodeGraphGlGraphFacePin).
 // Drawing goes through gl-line-renderer.js (shared WebGL2 context). Modules do
 // not call getContext / set canvas.width / read devicePixelRatio themselves
 // (scripts/smoke_test.py check_display_gl_contract).
@@ -90,9 +91,10 @@
   }
 
   /**
-   * Toggle nearest-neighbour presentation (styles.css .display-canvas-pixelated).
-   * pinSmoothWhenOff: when off, also pin smooth scaling so the workspace
-   * .pixelated-canvas-zoom rule does not apply (.display-canvas-smooth).
+   * Toggle nearest-neighbour presentation (.display-canvas-pixelated: the
+   * face quad is nearest at every zoom; styles.css for a canvas still shown
+   * as its own bitmap). pinSmoothWhenOff: when off, also pin smooth scaling
+   * so the quad stays linear above 2.5x zoom (.display-canvas-smooth).
    */
   function nodeGraphDisplayCanvasPixelated(canvas, on = true, pinSmoothWhenOff = false) {
     canvas?.classList?.toggle?.("display-canvas-pixelated", Boolean(on));

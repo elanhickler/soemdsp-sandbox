@@ -396,10 +396,11 @@
   // texImage2D(canvas) upload with UNPACK_FLIP_Y false. Framebuffer rows are
   // bottom-up, so the copy flips v once here and every consumer draws upright.
   //
-  // A face canvas the GL graph composites (`.node-display-canvas` inside the
-  // live workspace with gl-graph-on; CSS hides those bitmaps) gets the texture
-  // only. Any other destination is on screen as a 2D canvas, so it also gets
-  // the HEAD-style drawImage from this canvas.
+  // A face canvas a GPU pass composites (`.node-display-canvas` inside the
+  // live workspace with gl-graph-on, or inside a Canvas view / screen solo
+  // face host, .gl-face-host; CSS hides those bitmaps) gets the texture only.
+  // Any other destination is on screen as a 2D canvas, so it also gets the
+  // HEAD-style drawImage from this canvas.
   const faceTextures = new WeakMap();
   // canvas -> "WxH" whose face texture FBO failed: not retried every frame.
   const faceFailed = new WeakMap();
@@ -474,13 +475,14 @@
 
   /**
    * True when a GPU pass composites this canvas and CSS hides its bitmap: a
-   * face inside the GL graph, or a workspace layer the Screen Space Shader
-   * host reads (data-screen-fx-source).
+   * face inside the GL graph or a Canvas view / screen solo face host
+   * (nodeGraphGlGraphPresentFaceHost), or a workspace layer the Screen Space
+   * Shader host reads (data-screen-fx-source).
    */
   function nodeGraphSharedGlFaceTextureOnly(canvas) {
     if (canvas?.dataset?.screenFxSource === "1") return true;
     return Boolean(canvas?.classList?.contains("node-display-canvas")
-      && canvas.closest?.("#nodeGraphWorkspace.gl-graph-on"));
+      && canvas.closest?.("#nodeGraphWorkspace.gl-graph-on, .gl-face-host"));
   }
 
   function faceDelete(gl, entry) {
@@ -511,11 +513,16 @@
     const texture = gl.createTexture();
     gl.bindTexture(gl.TEXTURE_2D, texture);
     faceTexParams(gl, gl.NEAREST);
-    // Seed from the canvas once, so a partial first copy keeps what the 2D
-    // canvas already showed (plate, earlier frame) - the drawImage semantics.
+    // A composited face has no 2D bitmap: it starts transparent, no canvas
+    // upload. A 2D face is seeded from its canvas once, so a partial first
+    // copy keeps what it already showed (plate, earlier frame).
     gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
     gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, canvas);
+    if (nodeGraphSharedGlFaceTextureOnly(canvas)) {
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, cw, ch, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+    } else {
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, canvas);
+    }
     const fbo = gl.createFramebuffer();
     gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
     gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texture, 0);

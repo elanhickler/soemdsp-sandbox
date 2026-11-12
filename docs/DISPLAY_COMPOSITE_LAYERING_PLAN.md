@@ -192,6 +192,15 @@ Only after every display goes through the pass (workspace, Performance tiles, sc
 - CSS: retire `.node-graph-workspace.gl-graph-on .node-display-canvas` hide rules and the `.pixelated-canvas-zoom .node-display-canvas` rule if nothing on-screen uses them; the GL `nearest` flag stays.
 - Remove `NODE_GRAPH_DISPLAY_COMPOSITE` once the old path is gone.
 
+Stage 4a (landed 2026-11-11): every display Argi sees composites from its face texture.
+- Canvas view section tiles and screen solo: `nodeGraphGlGraphPresentFaceHost` draws each display's face texture plus its screen-res ink (frame, face text, Output pause bars) into one GL canvas behind the face's own DOM (`.gl-face-host`). Whole-module tiles hold their `PresentTile` mesh and replay it on displays-only frames, so their displays keep running.
+- `nodeGraphSharedGlFaceTextureOnly` covers `.gl-face-host` too, so no 2D bitmap is drawn for a composited face anywhere; a new face texture starts empty (no canvas upload) and a composited face with no texture yet draws nothing (no `texImage2D(canvas)` back door).
+- Quad filter flags: `nodeGraphGlGraphFacePin` (pixelated class / inline pixelated = nearest at every zoom; `.display-canvas-smooth` / inline auto = linear) in the workspace, its replay, tiles and Mini Canvas. The `.pixelated-canvas-zoom .node-display-canvas` and pinned-smooth CSS rules are gone; the 2.5x threshold is unchanged.
+- Wire end dots draw in their module's stack (a module in front hides them); only free ends (drag cursor) stay on the dots canvas.
+- `NODE_GRAPH_DISPLAY_COMPOSITE` is gone. Mini Canvas and the display hit-test already read the published rects.
+
+Stage 4b (left): the DOM canvases are still there as hidden layout records and texture keys. Swap `nodeGraphDisplayCanvasCreate` and the raw `createElement("canvas")` faces for a non-canvas face box keyed by node id + face slot, replace `nodeGraphDisplayCanvasPresentContext` (still `getContext("2d")`) with a present target, delete `nodeGraphDisplayCanvasBlit`, then retire the hide rules. Display canvases outside any GPU pass (popups, floating windows, embeds that are not tiles) still show their own 2D bitmap.
+
 ## 6. Also migrate (they still depend on DOM display canvases)
 
 Do these as part of the stages that would otherwise break them, and finish any leftovers in stage 4. Do not leave a 2D canvas as a back door.
