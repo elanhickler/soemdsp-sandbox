@@ -692,19 +692,29 @@ function nodeSliderBipolarRationalTravelFromValue(value, amount) {
 
 // Contour / Skew control taper (UI only). Stored contour c is the kernel
 // value and is never rewritten; only control travel u (-1..+1) is warped so
-// more of the throw covers |c| 0.9..0.99, where sharp Rational curves live.
-//   c = sign(u) * (1 - (1 - |u|)^p)      |u| = 1 - (1 - |c|)^(1/p)
-// p = 2.5: u 0.6 -> c ~0.9, u 0.84 -> c ~0.99; 0 and +-1 stay fixed.
-const NODE_GRAPH_CONTOUR_TAPER_POWER = 2.5;
+// more of the throw covers |c| 0.9..1, where sharp Rational curves live.
+// Odd, piecewise-linear between half-throw anchors (|u| -> |c|):
+//   0 -> 0, 0.4 -> 0.9, 0.6 -> 0.97, 0.8 -> 0.99, 1 -> 1
+// so 0.97..0.99 and 0.99..1 each get 20% of the half-throw.
+const NODE_GRAPH_CONTOUR_TAPER_U = Object.freeze([0, 0.4, 0.6, 0.8, 1]);
+const NODE_GRAPH_CONTOUR_TAPER_C = Object.freeze([0, 0.9, 0.97, 0.99, 1]);
+
+function nodeGraphContourTaperLerp(x, from, to) {
+  const a = Math.abs(x);
+  let i = 1;
+  while (i < from.length - 1 && a > from[i]) i += 1;
+  const f = (a - from[i - 1]) / (from[i] - from[i - 1]);
+  return Math.sign(x) * (to[i - 1] + f * (to[i] - to[i - 1]));
+}
 
 function nodeGraphContourFromTaper(u) {
   const x = clampNodeSliderValue(nodeGraphFiniteNumber(u), -1, 1);
-  return Math.sign(x) * (1 - (1 - Math.abs(x)) ** NODE_GRAPH_CONTOUR_TAPER_POWER);
+  return nodeGraphContourTaperLerp(x, NODE_GRAPH_CONTOUR_TAPER_U, NODE_GRAPH_CONTOUR_TAPER_C);
 }
 
 function nodeGraphTaperFromContour(c) {
   const x = clampNodeSliderValue(nodeGraphFiniteNumber(c), -1, 1);
-  return Math.sign(x) * (1 - (1 - Math.abs(x)) ** (1 / NODE_GRAPH_CONTOUR_TAPER_POWER));
+  return nodeGraphContourTaperLerp(x, NODE_GRAPH_CONTOUR_TAPER_C, NODE_GRAPH_CONTOUR_TAPER_U);
 }
 
 /** Step Graph Skew % (contour offset, -1..+1) uses the contour taper. */
