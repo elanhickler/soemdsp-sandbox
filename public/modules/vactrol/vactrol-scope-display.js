@@ -415,17 +415,27 @@ function nodeGraphVactrolScopeSyncLegendHits(host, nodeId, hitsCss) {
     layer = document.createElement("div");
     layer.className = "node-vactrol-legend-hits";
     layer.setAttribute("role", "list");
-    layer.addEventListener("pointerdown", (event) => {
+    const swallow = (event) => {
       const item = event.target?.closest?.("[data-vactrol-show-key]");
-      if (!item || !layer.contains(item)) return;
-      if (event.button && event.button !== 0) return;
+      if (!item || !layer.contains(item)) return null;
+      if (event.button && event.button !== 0) return null;
+      // Capture + stop so the workspace GL hit path cannot treat this as a
+      // plate click (that was selecting / dragging the module).
       event.preventDefault();
       event.stopPropagation();
+      if (typeof event.stopImmediatePropagation === "function") event.stopImmediatePropagation();
+      return item;
+    };
+    layer.addEventListener("pointerdown", (event) => {
+      const item = swallow(event);
+      if (!item) return;
       nodeGraphVactrolScopeToggleVisible(
         item.getAttribute("data-vactrol-node"),
         item.getAttribute("data-vactrol-show-key"),
       );
-    });
+    }, true);
+    layer.addEventListener("pointerup", swallow, true);
+    layer.addEventListener("click", swallow, true);
     host.appendChild(layer);
   }
   const id = String(nodeId || "");
@@ -454,7 +464,7 @@ function nodeGraphVactrolScopeSyncLegendHits(host, nodeId, hitsCss) {
     el.style.padding = "0";
     el.style.border = "0";
     el.style.background = "transparent";
-    el.style.cursor = "pointer";
+    el.style.cursor = "var(--node-dot-cursor)";
   });
 }
 

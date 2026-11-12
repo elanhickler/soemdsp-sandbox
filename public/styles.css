@@ -14734,7 +14734,7 @@ body.node-screen-solo-active .node-screen-solo-face.node-sample-waveform-display
   background: transparent;
   appearance: none;
   -webkit-appearance: none;
-  cursor: pointer;
+  cursor: var(--node-dot-cursor);
   pointer-events: auto;
 }
 

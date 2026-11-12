@@ -2620,7 +2620,7 @@ function nodeGraphGlHitIsLiveHtml(target) {
 function nodeGraphGlHitKeepsNativeTarget(target) {
   if (!(target instanceof Element)) return false;
   return Boolean(target.closest(
-    ".node-face, .node-module-graph-face, .node-module-graph-display, .node-keypad-face, .node-knob-face, .node-xy-pad-canvas, .node-sequencer-roll, .acid-seq-face, .node-step-register-display, .node-arp-keys-face, .node-plugin-toggle-button, .node-plugin-momentary-button, .node-sample-waveform-display, .node-keyboard-surface, .node-keyboard-module, .node-grid-keyboard-surface, .node-grid-keyboard-pad, .node-seed-control, .sabrina-preset-shell",
+    ".node-face, .node-module-graph-face, .node-module-graph-display, .node-keypad-face, .node-knob-face, .node-xy-pad-canvas, .node-sequencer-roll, .acid-seq-face, .node-step-register-display, .node-arp-keys-face, .node-plugin-toggle-button, .node-plugin-momentary-button, .node-sample-waveform-display, .node-keyboard-surface, .node-keyboard-module, .node-grid-keyboard-surface, .node-grid-keyboard-pad, .node-seed-control, .sabrina-preset-shell, [data-vactrol-show-key]",
   ));
 }
 
