@@ -680,6 +680,10 @@ function nodeSliderKeyboardStep(slider, event) {
 //
 // Range drag is relative (like beginNodeSliderDrag), not browser thumb-jump,
 // so holding Ctrl while dragging fine-tunes instead of resetting / snapping.
+// Opt-in numberDrag number fields drag the same way once the pointer moves
+// (a still click keeps the caret for typing; Ctrl/Cmd+click resets on release).
+// toControl / fromControl let a field drag in a warped control space (Skew
+// taper) while the field keeps showing and storing the real value.
 let nodeGraphNativeRangeDrag = null;
 
 function nodeGraphNativeRangeBaseStep(input) {
@@ -702,11 +706,14 @@ function nodeGraphNativeRangeSpan(input) {
   return { min: 0, max: 1, span: 1 };
 }
 
-function bindNodeGraphNativeSliderModifiers(input, defaultValue) {
+function bindNodeGraphNativeSliderModifiers(input, defaultValue, options = {}) {
   if (!input || input.dataset.nativeSliderModifiersBound === "true") {
     return;
   }
   input.dataset.nativeSliderModifiersBound = "true";
+  const toControl = typeof options.toControl === "function" ? options.toControl : (value) => value;
+  const fromControl = typeof options.fromControl === "function" ? options.fromControl : (value) => value;
+  const numberDrag = input.type !== "range" && options.numberDrag === true;
   const fallback = Number(defaultValue);
   if (Number.isFinite(fallback)) {
     input.dataset.default = String(fallback);
@@ -767,6 +774,14 @@ function bindNodeGraphNativeSliderModifiers(input, defaultValue) {
     ) {
       return;
     }
+    if (drag.pending && !drag.resetClick) {
+      // Still click on a numberDrag field: caret only, no value change.
+      nodeGraphNativeRangeDrag = null;
+      if (event?.pointerId !== undefined && input.hasPointerCapture?.(event.pointerId)) {
+        try { input.releasePointerCapture(event.pointerId); } catch (_error) { /* ignore */ }
+      }
+      return;
+    }
     if (event?.pointerId !== undefined && input.hasPointerCapture?.(event.pointerId)) {
       try { input.releasePointerCapture(event.pointerId); } catch (_error) { /* ignore */ }
     }
@@ -799,7 +814,7 @@ function bindNodeGraphNativeSliderModifiers(input, defaultValue) {
       : Number(input.dataset.paramDefault ?? input.dataset.default);
     const resetClick = nodeGraphNumericResetClickModifier(event) && Number.isFinite(resetValue);
     // Number fields keep native caret / select behavior; Ctrl/Cmd+click resets at once.
-    if (input.type !== "range") {
+    if (input.type !== "range" && !numberDrag) {
       if (resetClick) {
         emit(clamp(resetValue));
         event.preventDefault();
@@ -808,6 +823,31 @@ function bindNodeGraphNativeSliderModifiers(input, defaultValue) {
       return;
     }
     const { min, max, span } = nodeGraphNativeRangeSpan(input);
+    if (numberDrag) {
+      // Pending until the pointer moves; no preventDefault so a click can type.
+      nodeGraphNativeRangeDrag = {
+        input,
+        pointerId: event.pointerId ?? null,
+        startX: event.clientX,
+        startY: event.clientY,
+        startValue: Number(input.value),
+        fineScale: fineScale(event),
+        travelWidth: NODE_GRAPH_DISPLAY_SETTINGS_TRAVEL_PX,
+        span,
+        min,
+        resetClick,
+        resetValue,
+        pending: true,
+      };
+      if (resetClick) {
+        event.preventDefault();
+      }
+      if (event.pointerId !== undefined) {
+        try { input.setPointerCapture(event.pointerId); } catch (_error) { /* ignore */ }
+      }
+      event.stopPropagation();
+      return;
+    }
     const rect = input.getBoundingClientRect();
     // Same travel as Display Settings number fields: 220 screen px per full range.
     const travelWidth = NODE_GRAPH_DISPLAY_SETTINGS_TRAVEL_PX;
@@ -815,7 +855,7 @@ function bindNodeGraphNativeSliderModifiers(input, defaultValue) {
     const jumpToPointer = event.altKey && !(event.shiftKey && (event.ctrlKey || event.metaKey));
     if (jumpToPointer && travelWidth > 0) {
       const t = Math.max(0, Math.min(1, (event.clientX - rect.left) / Math.max(1, rect.width || 0)));
-      emit(clamp(min + t * span), { inputOnly: true });
+      emit(clamp(fromControl(min + t * span)), { inputOnly: true });
       const nodeId = input.closest?.(".dsp-node")?.dataset?.node;
       const paramKey = input.dataset?.param;
       if (nodeId && paramKey && typeof nodeGraphRequestControllerParamSnap === "function") {
@@ -869,6 +909,16 @@ function bindNodeGraphNativeSliderModifiers(input, defaultValue) {
       }
       drag.resetClick = false;
     }
+    if (drag.pending) {
+      if (!nodeGraphPointerDragExceededMoveThreshold(drag.startX, drag.startY, event.clientX, event.clientY, 2)) {
+        return;
+      }
+      drag.pending = false;
+      input.blur?.();
+      reanchorDrag(drag, event);
+      event.preventDefault();
+      return;
+    }
     const scale = fineScale(event);
     if (scale !== drag.fineScale) {
       reanchorDrag(drag, event);
@@ -886,7 +936,7 @@ function bindNodeGraphNativeSliderModifiers(input, defaultValue) {
       )
       : ((((event.clientX - drag.startX) + (drag.startY - event.clientY)) / drag.travelWidth)
         * drag.fineScale);
-    const next = clamp(drag.startValue + travelDelta * drag.span);
+    const next = clamp(fromControl(clamp(toControl(drag.startValue) + travelDelta * drag.span)));
     emit(Number(next.toFixed(6)), { inputOnly: true });
     if (next <= drag.min || next >= drag.min + drag.span) {
       reanchorDrag(drag, event);

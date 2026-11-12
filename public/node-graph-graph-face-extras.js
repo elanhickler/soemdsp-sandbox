@@ -492,6 +492,15 @@ function buildNodeGraphGraphPointStrip(patchNode) {
     }
     input.dataset.graphStripField = field.key;
     input.setAttribute("aria-label", field.label);
+    if (field.key === "c" && typeof bindNodeGraphNativeSliderModifiers === "function") {
+      // Shared mouse vocabulary: Ctrl/Cmd+click resets to 0; drag (Shift /
+      // Ctrl fine) moves in the contour taper. The field shows stored c.
+      bindNodeGraphNativeSliderModifiers(input, 0, {
+        numberDrag: true,
+        toControl: nodeGraphTaperFromContour,
+        fromControl: nodeGraphContourFromTaper,
+      });
+    }
     label.append(name, input);
     strip.append(label);
   }
@@ -537,6 +546,13 @@ function bindNodeGraphGraphPointStrip(strip) {
   });
   strip.addEventListener("change", (event) => {
     commitNodeGraphGraphPointStripField(event.target);
+  });
+  // Shared field drags emit synthetic input events: apply live with no undo
+  // step; the drag's closing change records one. Typing commits on change.
+  strip.addEventListener("input", (event) => {
+    if (!event.isTrusted) {
+      commitNodeGraphGraphPointStripField(event.target, { record: false });
+    }
   });
   strip.addEventListener("pointerdown", (event) => {
     event.stopPropagation();
@@ -634,7 +650,7 @@ function syncNodeGraphGraphPointStrip(faceOrDisplay, patchNode = null, selectedI
   strip.dataset.selectedIndex = String(index);
 }
 
-function commitNodeGraphGraphPointStripField(input) {
+function commitNodeGraphGraphPointStripField(input, options = {}) {
   if (!input || !input.dataset?.graphStripField) {
     return;
   }
@@ -741,9 +757,10 @@ function commitNodeGraphGraphPointStripField(input) {
   if (typeof syncNodeGraphGraphPhaseParameterFromCursor === "function") {
     syncNodeGraphGraphPhaseParameterFromCursor(targetNode);
   }
+  const liveOnly = options.record === false ? { record: false, autosaveWorkingPatch: false } : {};
   commitNodeGraphPatch(patch, typeof nodeGraphGraphDocumentCommitOptions === "function"
-    ? nodeGraphGraphDocumentCommitOptions("graph point edited")
-    : { skipLivePlan: true, softDom: true, status: "graph point edited" });
+    ? nodeGraphGraphDocumentCommitOptions("graph point edited", liveOnly)
+    : { skipLivePlan: true, softDom: true, status: "graph point edited", ...liveOnly });
   if (typeof scheduleNodeGraphLiveGraphData === "function") {
     scheduleNodeGraphLiveGraphData(nodeId, targetNode.graph);
   }
