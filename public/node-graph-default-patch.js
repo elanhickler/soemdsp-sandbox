@@ -307,6 +307,11 @@ function createNodeGraphPatchNode(type, options = {}, creation = {}) {
     if (typeof opts.scriptSource === "string") node.scriptSource = opts.scriptSource;
     if (typeof nodeGraphEmoStampNewNode === "function") nodeGraphEmoStampNewNode(node);
   }
+  // Music Player: Playback / Tilt / Tone / Range hide on spawn. Stamp so
+  // load will not re-show them; legacy patches without this flag stay visible.
+  if (resolvedType === "audioPlayer") {
+    node._mpFaceVis = 2;
+  }
   return node;
 }
 

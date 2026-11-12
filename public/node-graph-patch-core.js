@@ -401,6 +401,17 @@ function validateNodeGraphPatch(patch) {
       if (type === "audioPlayer" && parameter.key === "range" && !Object.hasOwn(rawParams, "range")) {
         value = 2;
       }
+      // Music Player Playback / Tilt / Tone / Range: hidden on spawn.
+      // Older players were force-shown (and a prior hidden-default stamp left
+      // visible=false while the face still displayed). Keep those visible once,
+      // then honor paramMeta.visible. New spawns carry _mpFaceVis = 2.
+      if (
+        type === "audioPlayer"
+        && (parameter.key === "interpolation" || parameter.key === "tilt" || parameter.key === "tone" || parameter.key === "range")
+        && Number(node._mpFaceVis) !== 2
+      ) {
+        metadata.visible = true;
+      }
       // Whole-number params (definition wholeNumber: true): a saved fraction rounds.
       if (parameter.wholeNumber && Number.isFinite(Number(value))) {
         value = Math.round(Number(value));
@@ -789,6 +800,9 @@ function validateNodeGraphPatch(patch) {
     }
     if (type === "audioPlayer" && Object.hasOwn(node, "playlist") && typeof nodeGraphAudioPlayerPlaylistNormalize === "function") {
       normalizedNode.playlist = nodeGraphAudioPlayerPlaylistNormalize(node.playlist);
+    }
+    if (type === "audioPlayer") {
+      normalizedNode._mpFaceVis = 2;
     }
     if (type === "phosphillator") {
       const drawnPath = normalizeNodeGraphPhosphillatorDrawnPath(node.drawnPath);

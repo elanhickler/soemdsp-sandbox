@@ -18751,6 +18751,7 @@ const nodeGraphModuleDefinitions = (
   audioPlayer: {
     // Hand-written face (node-graph-module-face.js): Play, start / end span, Speed | Dir | Scratch | Amp, Playlist,
     // Playback stacked like transport (3 / 2), then Tilt, Tone, and Range (Tape).
+    // Playback / Tilt / Tone / Range are hidden on spawn (definition hidden: true).
     // Stored: 0 Square, 1 Linear, 2 Sinc (legacy Reconstructed), 3 PolyBLEP, 7 Tape.
     // Retired 4 Jitter / 5 Dither / 6 Both load as Sinc (2). Saved bits ignored.
     // Face `values` lists display order independently of those stored indices.
@@ -18791,6 +18792,7 @@ const nodeGraphModuleDefinitions = (
         defaultValue: "2",
         displayChoices: true,
         divideChoicesVisibly: true,
+        hidden: true,
         key: "interpolation",
         label: "Playback",
         linearSmoothing: false,
@@ -18801,6 +18803,7 @@ const nodeGraphModuleDefinitions = (
         step: "1" },
       {
         defaultValue: "-6",
+        hidden: true,
         key: "tilt",
         label: "Tilt",
         linearSmoothing: false,
@@ -18815,6 +18818,7 @@ const nodeGraphModuleDefinitions = (
         unit: "dB/oct" },
       {
         defaultValue: "-6",
+        hidden: true,
         key: "tone",
         label: "Tone",
         linearSmoothing: false,
@@ -18829,6 +18833,7 @@ const nodeGraphModuleDefinitions = (
         unit: "oct" },
       {
         defaultValue: "1",
+        hidden: true,
         key: "range",
         label: "Range",
         linearSmoothing: false,

@@ -981,13 +981,9 @@ function normalizeNodeGraphPatchParameterMetadata(type, key, metadata = {}) {
       ? Boolean(source.visible)
       : nodeGraphParameterDefaultVisible(parameter),
   };
-  // Music Player Playback (interpolation) shipped as definition-hidden while
-  // the Square/Linear/Sinc face row was added. Load/save then stamped
-  // paramMeta.visible=false onto every existing player, so un-hiding the
-  // definition alone could not reveal the row. Always show Playback, Tilt, Tone, and Range.
-  if (type === "audioPlayer" && (key === "interpolation" || key === "tilt" || key === "tone" || key === "range")) {
-    normalized.visible = true;
-  }
+  // Music Player Playback / Tilt / Tone / Range are hidden on spawn.
+  // Legacy patches stay visible via the _mpFaceVis load lift in patch-core.
+  // Do not force visible here: that would un-hide a fresh spawn on the next save/load.
   normalized.linearSmoothing = nodeGraphMetadataLinearSmoothingFromType(normalized.smoothingType);
   if (nodeGraphParameterNeedsDefaultModuleSmoothing(normalized, source)) {
     nodeGraphApplyDefaultModuleSmoothing(normalized);
