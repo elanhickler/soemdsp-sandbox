@@ -229,6 +229,10 @@ const nodeGraphTraceDisplaySettingControlKeys = Object.freeze({
     "shapeParam",
     "pill",
     "squircle",
+    "lightThickness",
+    "fltThickness",
+    "ampThickness",
+    "memThickness",
   ],
   colors: ["dot1Color", "secondaryColor", "tertiaryColor", "backgroundColor", "ghostColor", "playheadColor", "buttonColor", "hoverColor", "downColor", "textColor", "strokeColor", "strokeLeftColor", "strokeRightColor", "dotColor", "arcFill", "arcTrack", "sliderColor", "sliderNumberColor", "sliderTextColor", "sliderUnitColor", "inactiveColor", "activeColor", "fontColor", "inactiveFillColor", "activeFillColor", "inactiveTextColor", "activeTextColor", "previousColor", "lightColor", "fltEnvColor", "ampEnvColor", "memColor", "barColor"],
   // Every control key that exists in the shared popover MUST be listed here.
@@ -1013,7 +1017,13 @@ const nodeGraphTraceDisplayActiveControlsByType = Object.freeze({
     choices: Object.freeze([]),
   }),
   vactrolScope: Object.freeze({
-    fields: Object.freeze(["historySeconds"]),
+    fields: Object.freeze([
+      "historySeconds",
+      "lightThickness",
+      "fltThickness",
+      "ampThickness",
+      "memThickness",
+    ]),
     colors: Object.freeze(["backgroundColor", "lightColor", "fltEnvColor", "ampEnvColor", "memColor"]),
     toggles: Object.freeze(["showLight", "showFlt", "showAmp", "showMem", "skipLight", "skipFlt", "skipAmp", "skipMem"]),
     choices: Object.freeze([]),
@@ -1216,6 +1226,10 @@ const nodeGraphTraceDisplaySectionControls = Object.freeze({
       "lineSmoothing",
       "framePadding",
       "fadeAmount",
+      "lightThickness",
+      "fltThickness",
+      "ampThickness",
+      "memThickness",
       "timeMs",
       "plotOffset",
       "pill",
@@ -1347,6 +1361,28 @@ const nodeGraphDisplaySettingsFieldMeta = Object.freeze({
     label: "Fade (px)",
     inputmode: "decimal",
     id: "nodeTraceDisplayWaterfallFade",
+  }),
+
+  // Vactrol per-line thickness. Labels stand alone (no title / hover tooltip).
+  lightThickness: Object.freeze({
+    label: "Thickness (px)",
+    inputmode: "decimal",
+    id: "nodeTraceDisplayVactrolLightThickness",
+  }),
+  fltThickness: Object.freeze({
+    label: "Thickness (px)",
+    inputmode: "decimal",
+    id: "nodeTraceDisplayVactrolFltThickness",
+  }),
+  ampThickness: Object.freeze({
+    label: "Thickness (px)",
+    inputmode: "decimal",
+    id: "nodeTraceDisplayVactrolAmpThickness",
+  }),
+  memThickness: Object.freeze({
+    label: "Thickness (px)",
+    inputmode: "decimal",
+    id: "nodeTraceDisplayVactrolMemThickness",
   }),
   barThickness: Object.freeze({
     label: "Bar thickness",

@@ -2100,6 +2100,33 @@ function buildNodeGraphPhosphorDisplaySettingsBodyHtml(type, node, allowKey) {
   return `<div class="metadata-field-section node-trace-display-trace-section">${rows.join("")}</div>`;
 }
 
+
+const NODE_GRAPH_VACTROL_SCOPE_THICKNESS_KEYS = Object.freeze([
+  "lightThickness",
+  "fltThickness",
+  "ampThickness",
+  "memThickness",
+]);
+
+/**
+ * Per-line Vactrol groups: standing title + Thickness (px). Structure can host
+ * more per-line settings later. Labels stand alone (no title / hover tooltip).
+ */
+function nodeGraphVactrolScopeLineGroupsHtml() {
+  const groups = [
+    { title: "Light", key: "lightThickness" },
+    { title: "Flt Env", key: "fltThickness" },
+    { title: "Amp Env", key: "ampThickness" },
+    { title: "Mem", key: "memThickness" },
+  ];
+  return groups.map(({ title, key }) => (
+    `<div class="node-trace-display-line-group" data-vactrol-line-group="${key}">`
+    + `<div class="node-trace-display-line-group-title">${nodeGraphDisplaySettingsEscapeHtml(title)}</div>`
+    + nodeGraphDisplaySettingsBuildStepperRowHtml(key, "vactrolScope")
+    + `</div>`
+  )).join("");
+}
+
 function buildNodeGraphDisplaySettingsBodyHtml(formType, node = null) {
   const type = formType || "blank";
   // Modules with no face-specific schema — canvas pin lives in the chrome above.
@@ -2562,7 +2589,15 @@ function buildNodeGraphDisplaySettingsBodyHtml(formType, node = null) {
       }
       rows.push(nodeGraphDisplaySettingsBuildToggleRowHtml(key));
     }
+    let vactrolLineGroupsPushed = false;
     for (const key of plotLayout ? [] : fieldKeys) {
+      if (type === "vactrolScope" && NODE_GRAPH_VACTROL_SCOPE_THICKNESS_KEYS.includes(key)) {
+        if (!vactrolLineGroupsPushed) {
+          rows.push(nodeGraphVactrolScopeLineGroupsHtml());
+          vactrolLineGroupsPushed = true;
+        }
+        continue;
+      }
       if (key === "backgroundHue"
         && typeof nodeGraphDisplaySettingsFormTypeUsesGradient === "function"
         && nodeGraphDisplaySettingsFormTypeUsesGradient(type)) {

@@ -942,6 +942,12 @@ const nodeGraphTraceDisplayFormTypeValueClampOverrides = Object.freeze({
   torchFace: Object.freeze({
     torchHue: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value), 0, 1),
   }),
+  vactrolScope: Object.freeze({
+    lightThickness: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, 1.5), 0, 16),
+    fltThickness: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, 1.5), 0, 16),
+    ampThickness: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, 1.5), 0, 16),
+    memThickness: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, 1.5), 0, 16),
+  }),
   // Instant Waterfall: Bright/Blur (filled bars); Size legacy only.
   waterfall: Object.freeze({
     dot1Size: nodeGraphTraceDisplayClampInkPx,

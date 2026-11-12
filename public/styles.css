@@ -12890,7 +12890,8 @@ body.room-dimmer-on .node-room-dimmer-canvas,
 .node-graph-workspace.gl-graph-on .dsp-node .acid-seq-face *,
 .node-graph-workspace.gl-graph-on .dsp-node .node-step-register-display,
 .node-graph-workspace.gl-graph-on .dsp-node:has(> .node-text-box-body),
-.node-graph-workspace.gl-graph-on .dsp-node:has(> .node-text-box-body) * {
+.node-graph-workspace.gl-graph-on .dsp-node:has(> .node-text-box-body) *,
+.node-graph-workspace.gl-graph-on .dsp-node .node-vactrol-legend-hits [data-vactrol-show-key] {
   pointer-events: auto;
 }
 
@@ -14715,6 +14716,39 @@ body.node-screen-solo-active .node-screen-solo-face.node-sample-waveform-display
   overflow: hidden;
   background: var(--node-scope-background, #000);
   pointer-events: auto;
+}
+
+/* Vactrol legend hits: CSS-px boxes over the (often hidden) face canvas.
+   Container does not steal module-drag hits; only the item buttons do. */
+.node-vactrol-legend-hits {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  pointer-events: none;
+}
+.node-vactrol-legend-hits [data-vactrol-show-key] {
+  position: absolute;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  appearance: none;
+  -webkit-appearance: none;
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.node-trace-display-line-group {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  margin: 6px 0 0;
+}
+.node-trace-display-line-group-title {
+  font-size: var(--metadata-field-name-size, 0.72rem);
+  font-weight: 600;
+  color: var(--text);
+  line-height: 1.2;
 }
 
 .node-module-scope-window-surface {

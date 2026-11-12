@@ -34,6 +34,12 @@ const nodeGraphVactrolScopeDisplaySettingsDefaults = Object.freeze({
   showFlt: true,
   showAmp: true,
   showMem: false,
+  // Authored CSS px at FACE_INK_REF_PX (96). Paint uses faceInkPx / faceMinSide.
+  // 1.5 matches the previous hardcoded lineThicknessCss so old patches look the same.
+  lightThickness: 1.5,
+  fltThickness: 1.5,
+  ampThickness: 1.5,
+  memThickness: 1.5,
 });
 
 function nodeGraphVactrolScopeToggleOn(value, fallback) {
@@ -65,6 +71,20 @@ function nodeGraphVactrolScopeRgba(hex, fallbackRgba) {
   const rgb = nodeGraphVactrolScopeHexToRgb01(hex, fb);
   const a = Number.isFinite(Number(fb[3])) ? Number(fb[3]) : 1;
   return [rgb[0], rgb[1], rgb[2], a];
+}
+
+function nodeGraphVactrolScopeClampThickness(value, fallback) {
+  const fb = Number.isFinite(Number(fallback))
+    ? Number(fallback)
+    : NODE_GRAPH_VACTROL_SCOPE_FACE.lineThicknessCss;
+  const n = Number(value);
+  if (!Number.isFinite(n)) return Math.max(0, Math.min(16, fb));
+  return Math.max(0, Math.min(16, n));
+}
+
+function nodeGraphVactrolScopeLineThickness(look, key) {
+  const d = nodeGraphVactrolScopeDisplaySettingsDefaults;
+  return nodeGraphVactrolScopeClampThickness(look?.[key], d[key] ?? NODE_GRAPH_VACTROL_SCOPE_FACE.lineThicknessCss);
 }
 
 function normalizeNodeGraphVactrolScopeSettings(settings = {}) {
@@ -106,6 +126,10 @@ function normalizeNodeGraphVactrolScopeSettings(settings = {}) {
     showFlt: nodeGraphVactrolScopeToggleOn(source.showFlt, d.showFlt),
     showAmp: nodeGraphVactrolScopeToggleOn(source.showAmp, d.showAmp),
     showMem: nodeGraphVactrolScopeToggleOn(source.showMem, d.showMem),
+    lightThickness: nodeGraphVactrolScopeClampThickness(source.lightThickness, d.lightThickness),
+    fltThickness: nodeGraphVactrolScopeClampThickness(source.fltThickness, d.fltThickness),
+    ampThickness: nodeGraphVactrolScopeClampThickness(source.ampThickness, d.ampThickness),
+    memThickness: nodeGraphVactrolScopeClampThickness(source.memThickness, d.memThickness),
   };
 }
 
@@ -257,29 +281,111 @@ function nodeGraphVactrolScopeToggleVisible(nodeId, showKey) {
   nodeGraphVactrolScopeMergeWrite(node, { [showKey]: !look[showKey] });
 }
 
-function nodeGraphVactrolScopeBindLegend(canvas, nodeId) {
-  if (!canvas || canvas._vactrolLegendBound) return;
-  canvas._vactrolLegendBound = true;
-  // Listen on the display host (display canvases may not take pointer
-  // events) and convert the click to the canvas's own CSS px: the face is
-  // drawn at workspace zoom 1, so screen px must be divided by the zoom.
-  const host = canvas.parentElement || canvas;
-  host.addEventListener("pointerdown", (event) => {
-    if (event.button && event.button !== 0) return;
-    const hits = canvas._vactrolLegendHits;
-    if (!hits?.length) return;
-    const rect = canvas.getBoundingClientRect();
-    if (!(rect.width > 0) || !(rect.height > 0)) return;
-    const sx = (canvas.clientWidth || rect.width) / rect.width;
-    const sy = (canvas.clientHeight || rect.height) / rect.height;
-    const x = (event.clientX - rect.left) * sx;
-    const y = (event.clientY - rect.top) * sy;
-    const hit = hits.find((h) => x >= h.x && x <= h.x + h.w && y >= h.y && y <= h.y + h.h);
-    if (!hit) return;
-    event.preventDefault();
-    event.stopPropagation();
-    nodeGraphVactrolScopeToggleVisible(nodeId, hit.showKey);
-  }, { capture: true });
+function nodeGraphVactrolScopeMeasureLegendText(label, legendPx) {
+  const measured = typeof nodeGraphGlLinesMeasureText === "function"
+    ? Number(nodeGraphGlLinesMeasureText(label, Math.max(1, Math.round(legendPx))))
+    : NaN;
+  return measured > 0 ? measured : String(label || "").length * legendPx * 0.55;
+}
+
+/**
+ * Pack legend items into rows so every entry (including Mem) stays inside the
+ * face CSS box. The face window uses overflow:hidden, so a single overflowing
+ * row used to clip the last items off.
+ */
+function nodeGraphVactrolScopeLayoutLegend(items, options) {
+  const list = Array.isArray(items) ? items : [];
+  const x0 = Number(options?.x) || 0;
+  const y0 = Number(options?.y) || 0;
+  const availW = Math.max(1, Number(options?.availW) || 1);
+  const rowH = Math.max(1, Number(options?.rowH) || 1);
+  const gap = Math.max(0, Number(options?.gap) || 0);
+  const ink = typeof options?.ink === "function" ? options.ink : ((n) => Number(n) || 0);
+  const legendPx = Math.max(1, Number(options?.legendPx) || 1);
+  const hitPadY = Math.max(ink(4), rowH * 0.35);
+  const sw = ink(10);
+  const labelGap = ink(4);
+  const placed = [];
+  let lx = x0;
+  let row = 0;
+  let rowsUsed = 1;
+  for (const item of list) {
+    const textW = nodeGraphVactrolScopeMeasureLegendText(item.label, legendPx);
+    const width = sw + labelGap + textW;
+    if (lx > x0 && (lx - x0) + width > availW) {
+      row += 1;
+      rowsUsed = row + 1;
+      lx = x0;
+    }
+    const ly = y0 + row * rowH + rowH * 0.45;
+    placed.push({
+      ...item,
+      x: lx,
+      y: ly - hitPadY,
+      w: width,
+      h: hitPadY * 2,
+      sw,
+      textW,
+      ly,
+    });
+    lx += width + gap;
+  }
+  return {
+    placed,
+    rows: rowsUsed,
+    height: Math.max(rowH, rowsUsed * rowH),
+    sw,
+  };
+}
+
+function nodeGraphVactrolScopeSyncLegendHits(host, nodeId, hitsCss) {
+  if (!host) return;
+  let layer = host.querySelector?.(":scope > .node-vactrol-legend-hits");
+  if (!layer) {
+    layer = document.createElement("div");
+    layer.className = "node-vactrol-legend-hits";
+    layer.setAttribute("role", "list");
+    layer.addEventListener("pointerdown", (event) => {
+      const item = event.target?.closest?.("[data-vactrol-show-key]");
+      if (!item || !layer.contains(item)) return;
+      if (event.button && event.button !== 0) return;
+      event.preventDefault();
+      event.stopPropagation();
+      nodeGraphVactrolScopeToggleVisible(
+        item.getAttribute("data-vactrol-node"),
+        item.getAttribute("data-vactrol-show-key"),
+      );
+    });
+    host.appendChild(layer);
+  }
+  const id = String(nodeId || "");
+  const next = Array.isArray(hitsCss) ? hitsCss : [];
+  while (layer.childNodes.length > next.length) {
+    layer.removeChild(layer.lastChild);
+  }
+  next.forEach((hit, i) => {
+    let el = layer.childNodes[i];
+    if (!el) {
+      el = document.createElement("button");
+      el.type = "button";
+      el.setAttribute("role", "listitem");
+      layer.appendChild(el);
+    }
+    el.setAttribute("data-vactrol-show-key", hit.showKey || "");
+    el.setAttribute("data-vactrol-node", id);
+    el.setAttribute("aria-label", String(hit.label || hit.showKey || "line"));
+    el.setAttribute("aria-pressed", hit.show ? "true" : "false");
+    el.style.position = "absolute";
+    el.style.left = `${hit.x}px`;
+    el.style.top = `${hit.y}px`;
+    el.style.width = `${Math.max(8, hit.w)}px`;
+    el.style.height = `${Math.max(8, hit.h)}px`;
+    el.style.margin = "0";
+    el.style.padding = "0";
+    el.style.border = "0";
+    el.style.background = "transparent";
+    el.style.cursor = "pointer";
+  });
 }
 
 function nodeGraphVactrolScopeTraces(look) {
@@ -291,6 +397,7 @@ function nodeGraphVactrolScopeTraces(look) {
       rgba: nodeGraphVactrolScopeRgba(look.lightColor, F.light),
       show: look.showLight,
       showKey: "showLight",
+      thicknessKey: "lightThickness",
       skip: look.skipLight,
       legend: true,
       drawOrder: 0,
@@ -301,6 +408,7 @@ function nodeGraphVactrolScopeTraces(look) {
       rgba: nodeGraphVactrolScopeRgba(look.memColor, F.mem),
       show: look.showMem,
       showKey: "showMem",
+      thicknessKey: "memThickness",
       skip: look.skipMem,
       legend: true,
       drawOrder: 1,
@@ -311,6 +419,7 @@ function nodeGraphVactrolScopeTraces(look) {
       rgba: nodeGraphVactrolScopeRgba(look.fltEnvColor, F.flt),
       show: look.showFlt,
       showKey: "showFlt",
+      thicknessKey: "fltThickness",
       skip: look.skipFlt,
       legend: true,
       drawOrder: 2,
@@ -321,6 +430,7 @@ function nodeGraphVactrolScopeTraces(look) {
       rgba: nodeGraphVactrolScopeRgba(look.ampEnvColor, F.amp),
       show: look.showAmp,
       showKey: "showAmp",
+      thicknessKey: "ampThickness",
       skip: look.skipAmp,
       legend: true,
       drawOrder: 3,
@@ -377,18 +487,35 @@ function drawNodeGraphVactrolScopeItem(renderer, item, pixelRatio) {
   const cssW = box?.cssWidth > 0 ? box.cssWidth : w / dpr;
   const cssH = box?.cssHeight > 0 ? box.cssHeight : h / dpr;
   const pxScale = w / Math.max(1, cssW);
-  const minSide = Math.min(cssW, cssH);
+  const minSide = typeof faceMinSide === "function"
+    ? faceMinSide(cssW, cssH)
+    : Math.min(cssW, cssH);
   const ink = (cssPx) => (typeof faceInkPx === "function" ? faceInkPx(cssPx, minSide) : cssPx) * pxScale;
   const pad = Math.max(pxScale, ink(4));
   const legendPx = Math.max(6 * pxScale, ink(F.legendPx));
-  const legendH = Math.ceil(legendPx) + pad;
+  const traces = nodeGraphVactrolScopeTraces(look);
+  const legendOrder = ["Light", "Tone", "Out", "Mem"];
+  const byPort = Object.fromEntries(traces.map((tr) => [tr.port, tr]));
+  const legendItems = legendOrder.map((port) => byPort[port]).filter(Boolean);
+  const legendRowH = Math.ceil(legendPx) + pad;
+  const legendLayout = nodeGraphVactrolScopeLayoutLegend(legendItems, {
+    x: pad + ink(2),
+    y: pad,
+    availW: Math.max(1, w - pad * 2 - ink(2)),
+    rowH: legendRowH,
+    gap: ink(8),
+    ink,
+    legendPx,
+  });
+  const legendH = legendLayout.height;
   const x = pad;
   const y = pad + legendH;
   const pw = Math.max(1, w - pad * 2);
   const ph = Math.max(1, h - y - pad);
   const fine = 1;
   const gridHalf = Math.max(0.5, ink(1) * 0.5);
-  const halfPx = Math.max(0.5, ink(F.lineThicknessCss) * 0.5);
+  // Legend swatches stay a readable default width even when a line's thickness is 0.
+  const legendHalfPx = Math.max(0.5, ink(F.lineThicknessCss) * 0.5);
 
   const grid = F.grid;
   nodeGraphGlLinesSegment(batch, x, y + ph, x + pw, y + ph, gridHalf, fine, grid);
@@ -396,10 +523,12 @@ function drawNodeGraphVactrolScopeItem(renderer, item, pixelRatio) {
   nodeGraphGlLinesSegment(batch, x, y + ph * 0.5, x + pw, y + ph * 0.5, gridHalf, fine, [grid[0], grid[1], grid[2], 0.1]);
 
   const seconds = nodeGraphVactrolScopeHistorySeconds(look);
-  const traces = nodeGraphVactrolScopeTraces(look);
   const byDraw = traces.slice().sort((a, b) => a.drawOrder - b.drawOrder);
   for (const tr of byDraw) {
     if (!tr.show) continue;
+    const thickCss = nodeGraphVactrolScopeLineThickness(look, tr.thicknessKey);
+    if (!(thickCss > 0)) continue;
+    const halfPx = ink(thickCss) * 0.5;
     const buf = nodeGraphVactrolScopePortBuffer(nodeId, tr.port);
     const win = nodeGraphVactrolScopeWindow(buf, seconds);
     if (!win) continue;
@@ -412,49 +541,33 @@ function drawNodeGraphVactrolScopeItem(renderer, item, pixelRatio) {
     }
   }
 
-  // Legend order: Light, Flt Env, Amp Env, Mem (labels stand alone; no tooltips).
-  const legendOrder = ["Light", "Tone", "Out", "Mem"];
-  const byPort = Object.fromEntries(traces.map((tr) => [tr.port, tr]));
+  // Legend: Light, Flt Env, Amp Env, Mem (labels stand alone; no tooltips).
+  // Rows wrap so Mem is not clipped when the face is too narrow for one row.
   const hits = [];
   if (typeof nodeGraphGlLinesText === "function") {
-    let lx = x + ink(2);
-    const ly = pad + legendH * 0.45;
-    const sw = ink(10);
-    const gap = ink(8);
-    const hitPadY = Math.max(ink(4), legendH * 0.35);
-    for (const port of legendOrder) {
-      const tr = byPort[port];
-      if (!tr) continue;
-      const strokeRgba = tr.show ? tr.rgba : nodeGraphVactrolScopeDimRgba(tr.rgba);
-      const textRgba = nodeGraphVactrolScopeLegendColor(tr.rgba, tr.show);
-      nodeGraphGlLinesSegment(batch, lx, ly, lx + sw, ly, halfPx, 1, strokeRgba);
-      const tx = lx + sw + ink(4);
-      nodeGraphGlLinesText(batch, tr.label, tx, ly, {
+    for (const item of legendLayout.placed) {
+      const strokeRgba = item.show ? item.rgba : nodeGraphVactrolScopeDimRgba(item.rgba);
+      const textRgba = nodeGraphVactrolScopeLegendColor(item.rgba, item.show);
+      nodeGraphGlLinesSegment(batch, item.x, item.ly, item.x + item.sw, item.ly, legendHalfPx, 1, strokeRgba);
+      nodeGraphGlLinesText(batch, item.label, item.x + item.sw + ink(4), item.ly, {
         px: legendPx,
         align: "left",
         baseline: "middle",
         rgba: textRgba,
       });
-      const measured = typeof nodeGraphGlLinesMeasureText === "function"
-        ? Number(nodeGraphGlLinesMeasureText(tr.label, Math.max(1, Math.round(legendPx))))
-        : NaN;
-      const textW = measured > 0 ? measured : tr.label.length * legendPx * 0.55;
-      const xCss = lx / pxScale;
-      const wCss = (sw + ink(4) + textW) / pxScale;
-      const yCss = (ly - hitPadY) / pxScale;
-      const hCss = (hitPadY * 2) / pxScale;
       hits.push({
-        x: xCss,
-        y: yCss,
-        w: wCss,
-        h: hCss,
-        showKey: tr.showKey,
+        x: item.x / pxScale,
+        y: item.y / pxScale,
+        w: item.w / pxScale,
+        h: item.h / pxScale,
+        showKey: item.showKey,
+        label: item.label,
+        show: item.show,
       });
-      lx = tx + textW + gap;
     }
   }
   canvas._vactrolLegendHits = hits;
-  nodeGraphVactrolScopeBindLegend(canvas, nodeId);
+  nodeGraphVactrolScopeSyncLegendHits(screenElement || canvas.parentElement, nodeId, hits);
 
   if (!nodeGraphGlLinesEnd(batch, "alpha") && typeof nodeGraphDisplayGlFailed === "function") {
     nodeGraphDisplayGlFailed(canvas, "vactrol scope: GL present failed");
@@ -470,5 +583,9 @@ if (typeof module !== "undefined" && module.exports) {
     normalizeNodeGraphVactrolScopeSettings,
     nodeGraphVactrolScopeSettingsForNode,
     nodeGraphVactrolScopeDisplaySettingsDefaults,
+    nodeGraphVactrolScopeClampThickness,
+    nodeGraphVactrolScopeLineThickness,
+    nodeGraphVactrolScopeLayoutLegend,
+    nodeGraphVactrolScopeMeasureLegendText,
   };
 }
