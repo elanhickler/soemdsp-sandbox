@@ -1652,14 +1652,29 @@ function nodeGraphModuleHeightWidgetUnits(type, ui = {}, node = null) {
     ];
   }
   if (nodeGraphModuleDefinitions[type]?.layout === "graph") {
-    // LayoutB: header + shell(face) + params. Outer via nodeGraphLayoutBGridHeightUnits.
     const headerGu = nodeGraphModuleHeaderHeightUnits(ui, type);
     const paramsGu = nodeGraphModuleSliderBodyHeightGu(type, ui, node);
+    const usesLayoutB = typeof nodeGraphModuleUsesLayoutB === "function"
+      && nodeGraphModuleUsesLayoutB(type);
+    if (usesLayoutB) {
+      // LayoutB (Smooth Graph): header + shell(face + side ports) + params.
+      return [
+        { id: "header", heightGu: headerGu, visible: headerGu > 0 },
+        { id: "shell", heightGu: nodeGraphLayoutBShellHeightGu(type, ui), visible: true },
+        { id: "params", heightGu: paramsGu, visible: paramsGu > 0 },
+        { id: "inset", heightGu: nodeGraphModuleLayout.moduleGridInsetGu * 1.5, visible: paramsGu > 0 },
+      ];
+    }
+    // LayoutA (Step Graph): header | IO above the face | face | params.
+    // A leftover "shell" band here has no child after the Layout A mount, so
+    // applyNodeGraphModuleLayout reserves an empty track and leaves the face
+    // (and IO strip) off the stack — a blank display on load and spawn.
     return [
       { id: "header", heightGu: headerGu, visible: headerGu > 0 },
-      { id: "shell", heightGu: nodeGraphLayoutBShellHeightGu(type, ui), visible: true },
+      { id: "io", heightGu: ioHeightGu, visible: ioVisible },
+      { id: "face", heightGu: nodeGraphModuleDisplayHeightUnits(type, ui), visible: displayVisible },
       { id: "params", heightGu: paramsGu, visible: paramsGu > 0 },
-      { id: "inset", heightGu: nodeGraphModuleLayout.moduleGridInsetGu * 1.5, visible: paramsGu > 0 },
+      { id: "inset", heightGu: nodeGraphModuleLayout.moduleGridInsetGu * 1.5, visible: true },
     ];
   }
   if (nodeGraphModuleDefinitions[type]?.layout === "sliderWidget") {

@@ -128,4 +128,60 @@ assert(clampSkew(0.25) === 0.25, "in-range skew unchanged");
 assert(nodeGraphSegmentApplySkewPercent(0.2, 1.5) === nodeGraphSegmentApplySkewPercent(0.2, 1)
   || almost(Math.max(-1, Math.min(1, 1.5)), 1), "global offset is limited to +/-1");
 
+// Layout A Step Graph must reserve a face (+ IO) track, not a leftover Layout B
+// shell. patches/demo_patches/dsf.json loads stepGraph-1 this way; a shell-only
+// stack leaves the face off the article and the display blank.
+{
+  const sizingPath = path.join(root, "public", "node-graph-module-sizing.js");
+  const sizingCtx = {
+    console,
+    nodeGraphModuleDefinitions: {
+      stepGraph: { layout: "graph", displayHeightGu: 8, parameters: [{ key: "rate" }] },
+      smoothGraph: { layout: "graph", displayHeightGu: 8, parameters: [{ key: "rate" }] },
+    },
+    nodeGraphModuleUsesLayoutB: (type) => type === "smoothGraph",
+    nodeGraphModuleUsesLayoutC: () => false,
+    nodeGraphModuleUsesMetamoduleLayout: () => false,
+    nodeGraphModuleIsCollapsedUi: () => false,
+    nodeGraphModuleIsTitleOnlyUi: () => false,
+    nodeGraphChromelessModuleLayouts: new Set(),
+    nodeGraphChromelessModuleIsCompactTile: () => false,
+    nodeGraphEffectivePatchNodeUi: (ui = {}) => ({
+      slidersHidden: false,
+      ioHidden: false,
+      oscilloscopeHidden: false,
+      titleHidden: false,
+      displayHeightGu: 7,
+      ...ui,
+    }),
+    normalizeNodeGraphPatchNodeUi: (ui = {}) => ({ displayHeightGu: 7, ...ui }),
+    nodeGraphModuleLayout: {
+      ioSectionMinHeightGu: 0.5,
+      moduleGridInsetGu: 0.15,
+      moduleScopeHeightGu: 2,
+    },
+    nodeGraphFiniteNumber: (value, fallback = 0) => {
+      const n = Number(value);
+      return Number.isFinite(n) ? n : fallback;
+    },
+  };
+  vm.createContext(sizingCtx);
+  vm.runInContext(fs.readFileSync(sizingPath, "utf8"), sizingCtx, { filename: "node-graph-module-sizing.js" });
+  sizingCtx.nodeGraphModuleStripIoBandVisible = () => true;
+  sizingCtx.nodeGraphModuleIoSectionHeightGu = () => 1;
+  sizingCtx.nodeGraphModuleHeaderHeightUnits = () => 1;
+  sizingCtx.nodeGraphModuleSliderBodyHeightGu = () => 4;
+  const dsfStepUi = { displayHeightGu: 7, slidersHidden: false, ioHidden: false, oscilloscopeHidden: false };
+  const visibleIds = (type) => sizingCtx.nodeGraphModuleLayoutBands(type, dsfStepUi, { type, ui: dsfStepUi })
+    .filter((band) => band.visible)
+    .map((band) => band.id);
+  const stepIds = visibleIds("stepGraph");
+  const smoothIds = visibleIds("smoothGraph");
+  assert(stepIds.includes("face"), "Layout A Step Graph reserves a face track");
+  assert(stepIds.includes("io"), "Layout A Step Graph reserves an IO strip track");
+  assert(!stepIds.includes("shell"), "Layout A Step Graph must not reserve a Layout B shell track");
+  assert(smoothIds.includes("shell"), "Layout B Smooth Graph keeps its shell track");
+  assert(!smoothIds.includes("face"), "Layout B Smooth Graph does not use a bare face track");
+}
+
 console.log("test_graph_overhaul: ok");
