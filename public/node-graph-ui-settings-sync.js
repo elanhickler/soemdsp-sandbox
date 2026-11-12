@@ -182,6 +182,42 @@ function bindNodeUiDevFullyOpaqueWires() {
   syncNodeUiDevFullyOpaqueWires();
 }
 
+function nodeGraphPixelateWiresOnZoom() {
+  if (typeof nodeGraphMvp === "object" && nodeGraphMvp && typeof nodeGraphMvp.pixelateWiresOnZoom === "boolean") {
+    return nodeGraphMvp.pixelateWiresOnZoom;
+  }
+  const input = typeof document !== "undefined"
+    ? document.getElementById("nodeUiDevPixelateWiresOnZoom")
+    : null;
+  return Boolean(input?.checked);
+}
+
+function syncNodeUiDevPixelateWiresOnZoom() {
+  const input = document.getElementById("nodeUiDevPixelateWiresOnZoom");
+  const on = input ? Boolean(input.checked) : false;
+  if (typeof nodeGraphMvp === "object" && nodeGraphMvp) {
+    nodeGraphMvp.pixelateWiresOnZoom = on;
+  }
+  // Bake now (on) or straight back to vector strokes (off): no reload.
+  if (typeof drawNodeGraphWires === "function") {
+    drawNodeGraphWires();
+  }
+}
+
+function bindNodeUiDevPixelateWiresOnZoom() {
+  const input = document.getElementById("nodeUiDevPixelateWiresOnZoom");
+  if (input && input.dataset.pixelateWiresOnZoomBound !== "true") {
+    input.dataset.pixelateWiresOnZoomBound = "true";
+    input.addEventListener("change", () => {
+      syncNodeUiDevPixelateWiresOnZoom();
+      if (typeof scheduleNodeUiDevSettingsAutosave === "function") {
+        scheduleNodeUiDevSettingsAutosave();
+      }
+    });
+  }
+  syncNodeUiDevPixelateWiresOnZoom();
+}
+
 function bindNodeUiDevSliderFillColorControls() {
   for (const target of nodeUiDevSliderFillColorTargets) {
     for (const suffix of ["Hue", "Saturation", "Lightness", "Alpha"]) {
@@ -216,6 +252,7 @@ function bindNodeUiDevSliderFillColorControls() {
   syncNodeUiDevSnakeSelectColor();
   bindNodeUiDevWiresFollowPortColors();
   bindNodeUiDevFullyOpaqueWires();
+  bindNodeUiDevPixelateWiresOnZoom();
 }
 
 // Unselected plate outline. CSS-only — do not fold into the header sync
@@ -713,6 +750,9 @@ function syncNodeUiDevSettingsHeaderControls() {
   syncNodeUiDevJackColors();
   if (typeof syncNodeUiDevFullyOpaqueWires === "function") {
     syncNodeUiDevFullyOpaqueWires();
+  }
+  if (typeof syncNodeUiDevPixelateWiresOnZoom === "function") {
+    syncNodeUiDevPixelateWiresOnZoom();
   }
   syncNodeUiDevGridDivisionMultiply();
   syncNodeUiDevModuleLightGridControls();

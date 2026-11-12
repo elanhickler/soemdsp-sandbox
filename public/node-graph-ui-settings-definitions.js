@@ -197,6 +197,7 @@ const nodeUiDevSettingControls = Object.freeze([
   { defaultValue: false, id: "nodeUiDevChoiceSlideDebugBoxes", key: "choiceSlideDebugBoxes", type: "boolean" },
   { defaultValue: true, id: "nodeUiDevWiresFollowPortColors", key: "wiresFollowPortColors", type: "boolean" },
   { defaultValue: false, id: "nodeUiDevFullyOpaqueWires", key: "fullyOpaqueWires", type: "boolean" },
+  { defaultValue: false, id: "nodeUiDevPixelateWiresOnZoom", key: "pixelateWiresOnZoom", type: "boolean" },
   { defaultValue: 3.46, id: "nodeUiDevWireThickness", key: "wireThickness", max: 12, min: 0.5, step: 0.01, type: "number" },
   { defaultValue: 7.86, id: "nodeUiDevWirePatchPointSize", key: "wirePatchPointSize", max: 12, min: 0, step: 0.01, type: "number" },
   { defaultValue: 0.35, id: "nodeUiDevWireDip", key: "wireDip", max: 1, min: 0, step: 0.01, type: "number" },
@@ -284,6 +285,7 @@ const nodeUiDevSettingSections = Object.freeze([
     ids: [
       "nodeUiDevWiresFollowPortColors",
       "nodeUiDevFullyOpaqueWires",
+      "nodeUiDevPixelateWiresOnZoom",
       "nodeUiDevWireThickness",
       "nodeUiDevWirePatchPointSize",
       "nodeUiDevWireDip",

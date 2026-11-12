@@ -1524,6 +1524,195 @@ function nodeGraphGlGraphFit(canvas, cssW, cssH) {
   return bw / cssW;
 }
 
+// UIDEV "pixelate wires on zoom" (off by default; off = the vector replay
+// above, untouched). On: the patch cables are rasterized once at zoom 1
+// (world px) into a 2D bake canvas, and every present / gesture replay just
+// draws that picture onto the wire canvas with the live camera: smooth at or
+// below 2.5x, nearest-neighbour above (the display faces' rule). Cables are
+// never re-tessellated or re-baked mid-gesture. A settled present re-bakes
+// only when the cable picture changes (geometry, colour, selection, widths,
+// dip, rail ends) or the baked region has to move. A wire being dragged (no
+// patch slot) stays a live vector stroke drawn on top of the bake. End dots
+// stay vector in the module stacks, so z-order is unchanged.
+// Cap: NODE_GRAPH_WIRE_BAKE_MAX px per side (the picture device size). When
+// the cables span more than that, the bake covers the cap around the view
+// (re-baked on settle; panning past it mid-gesture shows the edge until the
+// settle). When the view itself is wider than the cap (far zoomed out), the
+// bake drops below 1 px per world px, still at or above screen resolution.
+const NODE_GRAPH_WIRE_BAKE_MAX = 4096;
+
+function nodeGraphGlGraphWireBakeWanted(view, frameCamera, wireCanvas) {
+  if (view || !frameCamera || !wireCanvas) return false;
+  if (typeof nodeGraphPixelateWiresOnZoom !== "function" || !nodeGraphPixelateWiresOnZoom()) return false;
+  // A Screen Space Shader source keeps its picture in a GPU face texture
+  // (no 2D bitmap to draw the bake onto): those frames stay vector.
+  return !(typeof nodeGraphSharedGlFaceTextureOnly === "function" && nodeGraphSharedGlFaceTextureOnly(wireCanvas));
+}
+
+function nodeGraphGlGraphWireBakeDrop() {
+  const bake = nodeGraphGlGraphState.wireBake;
+  nodeGraphGlGraphState.wireBake = null;
+  if (bake?.canvas) {
+    bake.canvas.width = 1;
+    bake.canvas.height = 1;
+  }
+}
+
+/** A wire with no patch slot (drag / port-connection preview) stays a live vector stroke. */
+function nodeGraphGlGraphWireIsLive(wire) {
+  return !wire.kind || !(wire.index >= 0);
+}
+
+const nodeGraphGlGraphWireBakeHashF = new Float32Array(1);
+const nodeGraphGlGraphWireBakeHashU = new Uint32Array(nodeGraphGlGraphWireBakeHashF.buffer);
+function nodeGraphGlGraphWireBakeMix(h, v) {
+  nodeGraphGlGraphWireBakeHashF[0] = Number(v) || 0;
+  return Math.imul(h ^ nodeGraphGlGraphWireBakeHashU[0], 16777619) >>> 0;
+}
+
+/**
+ * Bake (or reuse) the zoom-1 cable picture. p: { cam, zoom, cssW, cssH,
+ * halfWorld, traceHalf, paramHalf, feather, railEnds, railEnd, gesturing }.
+ * Returns the bake, or null (nothing baked: the caller strokes vectors).
+ */
+function nodeGraphGlGraphWireBakeUpdate(p) {
+  const st = nodeGraphGlGraphState;
+  const prev = st.wireBake;
+  // Mid-gesture: keep the picture we have; the settle present re-bakes.
+  if (p.gesturing && prev?.canvas) return prev;
+  const selected = typeof nodeGraphSelectedWireEntries === "function" ? nodeGraphSelectedWireEntries() : [];
+  const list = [];
+  let x0 = Infinity;
+  let y0 = Infinity;
+  let x1 = -Infinity;
+  let y1 = -Infinity;
+  for (let i = 0; i < st.wires.length; i += 1) {
+    const wire = st.wires[i];
+    if (nodeGraphGlGraphWireIsLive(wire)) continue;
+    const xy = wire.xy;
+    if (!xy || xy.length < 4) continue;
+    const picked = selected.some((entry) =>
+      (entry.kind || "signal") === wire.kind && Number(entry.index) === wire.index,
+    );
+    list.push({ wire, picked });
+    for (let q = 0; q < xy.length; q += 2) {
+      const x = xy[q];
+      const y = xy[q + 1];
+      if (x < x0) x0 = x;
+      if (x > x1) x1 = x;
+      if (y < y0) y0 = y;
+      if (y > y1) y1 = y;
+    }
+  }
+  if (!list.length || !Number.isFinite(x0) || !Number.isFinite(y0) || !Number.isFinite(x1) || !Number.isFinite(y1)) {
+    nodeGraphGlGraphWireBakeDrop();
+    return null;
+  }
+  const edge = Math.ceil(Math.max(p.halfWorld, p.traceHalf, p.paramHalf) + p.feather + 4);
+  const bx0 = Math.floor(x0) - edge;
+  const by0 = Math.floor(y0) - edge;
+  const bx1 = Math.ceil(x1) + edge;
+  const by1 = Math.ceil(y1) + edge;
+  const max = NODE_GRAPH_WIRE_BAKE_MAX;
+  let scale = 1;
+  let rx0 = bx0;
+  let ry0 = by0;
+  let rx1 = bx1;
+  let ry1 = by1;
+  if (bx1 - bx0 > max || by1 - by0 > max) {
+    const viewW = p.cssW / p.zoom;
+    const viewH = p.cssH / p.zoom;
+    scale = Math.min(1, max / viewW, max / viewH);
+    const span = Math.floor(max / scale);
+    const fit = (lo, hi, centre) => {
+      if (hi - lo <= span) return [lo, hi];
+      const a = Math.max(lo, Math.min(Math.floor(centre - span * 0.5), hi - span));
+      return [a, a + span];
+    };
+    [rx0, rx1] = fit(bx0, bx1, p.cam.x + viewW * 0.5);
+    [ry0, ry1] = fit(by0, by1, p.cam.y + viewH * 0.5);
+  }
+  const pw = Math.max(1, Math.min(max, Math.ceil((rx1 - rx0) * scale)));
+  const ph = Math.max(1, Math.min(max, Math.ceil((ry1 - ry0) * scale)));
+  const mix = nodeGraphGlGraphWireBakeMix;
+  let h = 2166136261;
+  for (const v of [rx0, ry0, pw, ph, scale, p.halfWorld, p.traceHalf, p.paramHalf, p.feather,
+    st.wireDip ?? 0.35, st.wireDipWidth ?? 0.5, list.length, p.railEnds.length]) h = mix(h, v);
+  for (let i = 0; i < p.railEnds.length; i += 1) {
+    h = mix(h, p.railEnds[i].x);
+    h = mix(h, p.railEnds[i].y);
+  }
+  for (let i = 0; i < list.length; i += 1) {
+    const { wire, picked } = list[i];
+    h = mix(h, picked ? 1 : 0);
+    h = mix(h, wire.param ? 1 : 0);
+    h = mix(h, wire.style === "trace" ? 1 : 0);
+    const c = wire.rgba || [];
+    for (let k = 0; k < 4; k += 1) h = mix(h, c[k]);
+    const xy = wire.xy;
+    h = mix(h, xy.length);
+    for (let q = 0; q < xy.length; q += 1) h = mix(h, xy[q]);
+  }
+  if (prev?.canvas && prev.sig === h) return prev;
+  const canvas = prev?.canvas || document.createElement("canvas");
+  if (canvas.width !== pw) canvas.width = pw;
+  if (canvas.height !== ph) canvas.height = ph;
+  const batch = typeof nodeGraphGlLinesBegin === "function"
+    ? nodeGraphGlLinesBegin(canvas, [0, 0, 0, 0], { scale: 1, transparent: true, camera: { x: rx0, y: ry0, zoom: scale } })
+    : null;
+  if (!batch) {
+    nodeGraphGlGraphWireBakeDrop();
+    return null;
+  }
+  // Same strokes as the vector path, in zoom-1 world px (camera uniform).
+  for (let i = 0; i < list.length; i += 1) {
+    const { wire, picked } = list[i];
+    const style = wire.style === "trace" ? "trace" : "ribbon";
+    const stroke = style === "trace" ? p.traceHalf : (wire.param ? p.paramHalf : p.halfWorld);
+    const feather = style === "trace" ? 0 : p.feather;
+    const rgba = picked ? [0.95, 0.86, 0.45, 1] : wire.rgba;
+    let pts = wire.xy;
+    if (wire.param && p.railEnds.length) {
+      pts = Float32Array.from(pts);
+      for (const ix of [0, pts.length - 2]) {
+        const e = p.railEnd(pts[ix], pts[ix + 1]);
+        if (e) { pts[ix] = e.x; pts[ix + 1] = e.y; }
+      }
+    }
+    if (style === "trace") {
+      nodeGraphGlLinesPolyline(batch, pts, stroke, feather, rgba, "ortho");
+    } else if (typeof nodeGraphGlLinesRibbon !== "function") {
+      nodeGraphGlLinesPolyline(batch, pts, stroke, feather, rgba, "butt");
+    } else {
+      nodeGraphGlLinesRibbon(batch, pts, stroke, feather, rgba, wire.param && !picked ? (st.wireDip ?? 0.35) : 0, st.wireDipWidth ?? 0.5);
+    }
+  }
+  if (nodeGraphGlLinesEnd(batch, "alpha") === false) {
+    nodeGraphGlGraphWireBakeDrop();
+    return null;
+  }
+  st.wireBake = { canvas, x: rx0, y: ry0, w: pw / scale, h: ph / scale, scale, sig: h };
+  return st.wireBake;
+}
+
+/** The baked cables, under whatever the wire batch just presented (live drag strokes stay on top). */
+function nodeGraphGlGraphWireBakeDraw(wireCanvas, cam, zoom, backing) {
+  const bake = nodeGraphGlGraphState.wireBake;
+  if (!bake?.canvas || !wireCanvas || !cam || !(zoom > 0)) return;
+  if (typeof nodeGraphSharedGlFaceTextureOnly === "function" && nodeGraphSharedGlFaceTextureOnly(wireCanvas)) return;
+  const ctx = wireCanvas.getContext("2d");
+  if (!ctx) return;
+  const k = zoom * (backing > 0 ? backing : 1);
+  ctx.save();
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.globalAlpha = 1;
+  ctx.globalCompositeOperation = "destination-over";
+  // Same filter rule as the module pictures: nearest-neighbour above 2.5x.
+  ctx.imageSmoothingEnabled = !(zoom > 2.5);
+  ctx.drawImage(bake.canvas, (bake.x - cam.x) * k, (bake.y - cam.y) * k, bake.w * k, bake.h * k);
+  ctx.restore();
+}
+
 function nodeGraphGlGraphConstraintMarksAllowed() {
   const body = document.body;
   if (!body || body.classList.contains("node-screen-solo-active")) return false;
@@ -1689,6 +1878,9 @@ function nodeGraphGlGraphReplayMesh(layers = "all") {
     held.camera = frameCamera;
     held.textPixelated = pixelated;
     if (nodeGraphGlLinesEnd(held, held._blend || "alpha") === false) ok = false;
+  }
+  if (!displaysOnly && mesh.wireBake) {
+    nodeGraphGlGraphWireBakeDraw(mesh.batches[1]?.canvas, frameCamera, zoom, mesh.wireScale);
   }
   if (!displaysOnly) {
     mesh.cam = { x: frameCamera.x, y: frameCamera.y, zoom };
@@ -1933,6 +2125,14 @@ function nodeGraphGlGraphPresent(options = {}) {
   const railTol = 3 * layoutZoom;
   const railEnd = (x, y) => railEnds.find((e) => Math.abs(e.x - x) <= railTol && Math.abs(e.y - y) <= railTol) || null;
   const pad = 120;
+  // UIDEV pixelate wires on zoom: patch cables come from the zoom-1 bake.
+  const wireBake = nodeGraphGlGraphWireBakeWanted(view, frameCamera, wireCanvas)
+    ? nodeGraphGlGraphWireBakeUpdate({
+      cam, zoom, cssW, cssH, halfWorld, traceHalf, paramHalf, feather: wireFeather, railEnds, railEnd,
+      gesturing: gesturingEarly || gesturing,
+    })
+    : null;
+  if (!wireBake && !view && nodeGraphGlGraphState.wireBake) nodeGraphGlGraphWireBakeDrop();
   // Wire end dots by module id: drawn in the module's stack below, so a
   // module in front hides the dots of the one behind (cables stay under).
   const stackedIds = new Set((nodeGraphGlGraphState.stack?.entries || []).map((entry) => entry.plate.id));
@@ -1985,22 +2185,25 @@ function nodeGraphGlGraphPresent(options = {}) {
         rgba = [0.95, 0.86, 0.45, 1];
       }
     }
-    const stroke = frameCamera ? strokeWorld : strokeWorld * zoom;
-    let pts = frameCamera ? src : screen.subarray(0, src.length);
-    if (wire.param && railEnds.length) {
-      pts = Float32Array.from(pts);
-      for (const ix of [0, pts.length - 2]) {
-        const e = railEnd(pts[ix], pts[ix + 1]);
-        if (e) { pts[ix] = e.x; pts[ix + 1] = e.y; }
+    // Baked cables are already in the zoom-1 picture; live ones stroke here.
+    if (!wireBake || nodeGraphGlGraphWireIsLive(wire)) {
+      const stroke = frameCamera ? strokeWorld : strokeWorld * zoom;
+      let pts = frameCamera ? src : screen.subarray(0, src.length);
+      if (wire.param && railEnds.length) {
+        pts = Float32Array.from(pts);
+        for (const ix of [0, pts.length - 2]) {
+          const e = railEnd(pts[ix], pts[ix + 1]);
+          if (e) { pts[ix] = e.x; pts[ix + 1] = e.y; }
+        }
       }
-    }
-    if (style === "trace") {
-      nodeGraphGlLinesPolyline(wireBatch, pts, stroke, feather, rgba, "ortho");
-    } else if (typeof nodeGraphGlLinesRibbon !== "function") {
-      nodeGraphGlLinesPolyline(wireBatch, pts, stroke, feather, rgba, "butt");
-    } else {
-      // Param wires dip-darken their middle; selected wires stay plain.
-      nodeGraphGlLinesRibbon(wireBatch, pts, stroke, feather, rgba, wire.param && !picked ? (nodeGraphGlGraphState.wireDip ?? 0.35) : 0, nodeGraphGlGraphState.wireDipWidth ?? 0.5);
+      if (style === "trace") {
+        nodeGraphGlLinesPolyline(wireBatch, pts, stroke, feather, rgba, "ortho");
+      } else if (typeof nodeGraphGlLinesRibbon !== "function") {
+        nodeGraphGlLinesPolyline(wireBatch, pts, stroke, feather, rgba, "butt");
+      } else {
+        // Param wires dip-darken their middle; selected wires stay plain.
+        nodeGraphGlLinesRibbon(wireBatch, pts, stroke, feather, rgba, wire.param && !picked ? (nodeGraphGlGraphState.wireDip ?? 0.35) : 0, nodeGraphGlGraphState.wireDipWidth ?? 0.5);
+      }
     }
     const dots = wire.dots || [];
     const selectedRgba = [0.95, 0.86, 0.45, 1];
@@ -2144,6 +2347,7 @@ function nodeGraphGlGraphPresent(options = {}) {
   veilBatch._blend = "alpha";
   const platesOk = nodeGraphGlLinesEnd(batch, "alpha") !== false;
   const wiresOk = nodeGraphGlLinesEnd(wireBatch, "alpha") !== false;
+  if (wireBake) nodeGraphGlGraphWireBakeDraw(wireCanvas, frameCamera, zoom, scale);
   const contactOk = nodeGraphGlLinesEnd(contactBatch, "max") !== false;
   const veilOk = nodeGraphGlLinesEnd(veilBatch, "alpha") !== false;
   // "max" stores straight coverage. SRC_ALPHA on this premultipliedAlpha:false
@@ -2158,6 +2362,8 @@ function nodeGraphGlGraphPresent(options = {}) {
       h: canvas.height,
       cam: frameCamera ? { x: frameCamera.x, y: frameCamera.y, zoom: frameCamera.zoom } : null,
       batches: [batch, wireBatch, contactBatch, veilBatch, trailBatch],
+      wireBake: Boolean(wireBake),
+      wireScale: scale,
       pictures,
       inks,
     };
@@ -2601,6 +2807,10 @@ function nodeGraphGlGraphPresentTrail() {
   for (let i = 0; i < mesh.batches.length; i += 1) {
     const b = mesh.batches[i];
     if (b) nodeGraphGlLinesEnd(b, b._blend || "alpha");
+  }
+  const wireHeld = mesh.batches[1];
+  if (mesh.wireBake && wireHeld?.camera) {
+    nodeGraphGlGraphWireBakeDraw(wireHeld.canvas, wireHeld.camera, wireHeld.camera.zoom, mesh.wireScale);
   }
 }
 
