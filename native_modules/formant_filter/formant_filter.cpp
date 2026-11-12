@@ -100,6 +100,9 @@ struct FormantFilterState {
   soemdsp_blit::BlitSaw subA = {};
   soemdsp_blit::BlitSaw subB = {};
   double subPhase = 0.0;
+  double subPulsePhase = 0.0; // Sub Square as a PW pulse (own Sub PW)
+  double subPulseState = 0.0;
+  double subPw = 0.5;
   NoiseColorChannel noise = {};
   TptSvfState noiseLp1 = {};
   TptSvfState noiseLp2 = {};
@@ -149,6 +152,8 @@ void initOscillators(FormantFilterState& s) {
   s.subA.init(0.0);
   s.subB.init(0.5);
   s.subPhase = 0.0;
+  s.subPulsePhase = 0.0;
+  s.subPulseState = 0.0;
 }
 
 int waveIndex(double v, int n) {
@@ -444,25 +449,29 @@ double blitImpulse(double x, double p, double lo, double frac) {
 // directly, and the leak pulls the state toward that mean (drift guard), so
 // sweeping PW never wanders in DC. Scaled by 0.5 / max(PW, 1 - PW) so narrow
 // pulses stay inside the clamp; PW 0.5 has the BLIT square's level.
-double blitPulse(FormantFilterState& s, double period, double w) {
+double blitPulseCore(double& phase, double& state, double period, double w) {
   const double p = period > 1.0e-6 ? period : 1.0e-6;
   double harmonics = 0.5 * p - 1.0;
   if (harmonics < 1.0) harmonics = 1.0;
   const double lo = dsp_floor(harmonics);
   const double frac = harmonics - lo;
-  const double c = s.pulsePhase;
-  s.pulseState += blitImpulse(kPi * c, p, lo, frac) - blitImpulse(kPi * (c - w), p, lo, frac);
-  const double y = s.pulseState - w;
+  const double c = phase;
+  state += blitImpulse(kPi * c, p, lo, frac) - blitImpulse(kPi * (c - w), p, lo, frac);
+  const double y = state - w;
   const double leak = 1.0 - (kTwoPi / soemdsp_blit::kBlitLeakDivisor) / p;
-  s.pulseState = w + y * (leak > 0.0 ? leak : 0.0);
-  if (is_bad(s.pulseState)) s.pulseState = w;
-  s.pulsePhase += 1.0 / p;
-  if (s.pulsePhase >= 1.0) s.pulsePhase -= dsp_floor(s.pulsePhase);
+  state = w + y * (leak > 0.0 ? leak : 0.0);
+  if (is_bad(state)) state = w;
+  phase += 1.0 / p;
+  if (phase >= 1.0) phase -= dsp_floor(phase);
   double wide = w > 0.5 ? w : 1.0 - w;
   if (!(wide > 0.0)) wide = 1.0;
   const double halfW = kPi / p;
   const double comp = soemdsp_blit::sinApprox(halfW) / halfW;
   return clamp(y * comp * kPulseGain * (0.5 / wide), -1.0, 1.0);
+}
+
+double blitPulse(FormantFilterState& s, double period, double w) {
+  return blitPulseCore(s.pulsePhase, s.pulseState, period, w);
 }
 
 // Glottal wave: the glottal flow derivative (LF-like). Open phase (OQ = PW of
@@ -547,7 +556,13 @@ Voiced voicedSource(
     const double glotOut = glottalWave(s, period, w, sr);
     const int wv = waveIndex(wave, 3);
     main = safe(sawLevel) * (wv == 2 ? glotOut : (wv == 1 ? pulseOut : sawOut)) * s.shGain;
-    const double subOsc = blitWave(s.subA, s.subB, subDiv * period, sw == 2);
+    // Sub Square is a PW pulse with its own Sub PW (same law as the main
+    // Square; PW 0.5 = the old fixed square). Saw stays the BLIT saw.
+    double subW = s.subPw;
+    if (is_bad(subW)) subW = 0.5;
+    subW -= dsp_floor(subW);
+    const double subSaw = blitWave(s.subA, s.subB, subDiv * period, false);
+    const double subOsc = sw == 2 ? blitPulseCore(s.subPulsePhase, s.subPulseState, subDiv * period, subW) : subSaw;
     if (sw != 0) subSig = sub * subOsc;
   }
   s.subPhase += inc / subDiv;
@@ -670,6 +685,12 @@ extern "C" void soemdsp_formant_filter_reset(int handle) {
 }
 
 // Reset jack: restart the saw (and Sub) cycle; the filters keep ringing.
+// Sub PW: pulse width of the Sub Square (call before _sample each frame).
+extern "C" void soemdsp_formant_filter_set_sub_pw(int handle, double pw) {
+  if (handle < 1 || handle > kMaxInstances) return;
+  gPool[handle - 1].subPw = pw;
+}
+
 extern "C" void soemdsp_formant_filter_reset_osc(int handle) {
   if (handle < 1 || handle > kMaxInstances) return;
   FormantFilterState& s = gPool[handle - 1];
@@ -1047,6 +1068,6 @@ extern "C" int soemdsp_formant_filter_eval_response(
   return points;
 }
 
-extern "C" int soemdsp_formant_filter_version() { return 9; } // 9: Formant Voice: nasals M / N (zero), W, AE; sweeps M A / N O / N A U / W AE; Glottal wave; Jitter / Shimmer; Breath; plosives (Trigger, P T K B D G); fricatives (S Sh F Th H). 8: R vowel + "R A E" sweep (R -> A -> I). 7: PW (live, continuous), Sub Oct (-1 / -2), Sub Direct (Sub around the bank into Drive), Noise Tone (Hz x 2^Shift); noise through its own bank after Drive (no crackle); Drive asymmetric tube tanh with ADAA + DC block. 6: Wave (Saw / Square) and Sub Wave (Sine / Saw / Square) switches; noise 4-pole lowpass at 8 kHz x 2^Shift. 5: no range clamps on Shift / Vowel / Resonance / Body / Drive (parameter ranges decide; stability guards only). 4: stereo noise source export; Shift bands fade out at Nyquist / 20 Hz instead of clamping. 2: internal BLIT saw / Sub / noise source
+extern "C" int soemdsp_formant_filter_version() { return 10; } // 10: Sub PW (Sub Square is a PW pulse, soemdsp_formant_filter_set_sub_pw). 9: Formant Voice: nasals M / N (zero), W, AE; sweeps M A / N O / N A U / W AE; Glottal wave; Jitter / Shimmer; Breath; plosives (Trigger, P T K B D G); fricatives (S Sh F Th H). 8: R vowel + "R A E" sweep (R -> A -> I). 7: PW (live, continuous), Sub Oct (-1 / -2), Sub Direct (Sub around the bank into Drive), Noise Tone (Hz x 2^Shift); noise through its own bank after Drive (no crackle); Drive asymmetric tube tanh with ADAA + DC block. 6: Wave (Saw / Square) and Sub Wave (Sine / Saw / Square) switches; noise 4-pole lowpass at 8 kHz x 2^Shift. 5: no range clamps on Shift / Vowel / Resonance / Body / Drive (parameter ranges decide; stability guards only). 4: stereo noise source export; Shift bands fade out at Nyquist / 20 Hz instead of clamping. 2: internal BLIT saw / Sub / noise source
 extern "C" const char* soemdsp_formant_filter_metadata_json() { return kMetadataJson; }
 extern "C" int soemdsp_formant_filter_metadata_json_size() { return sizeof(kMetadataJson) - 1; }

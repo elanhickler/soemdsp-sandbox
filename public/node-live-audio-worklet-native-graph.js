@@ -5557,6 +5557,7 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
       push("wave", P.NATIVE_GRAPH_PARAM_LANE_BIAS2, disc("wave", 0));
       push("subWave", P.NATIVE_GRAPH_PARAM_LANE_BIAS3, disc("subWave", 0));
       push("pw", P.NATIVE_GRAPH_PARAM_LANE_BIAS4, cont("pw", 0.5));
+      push("subPw", P.NATIVE_GRAPH_PARAM_PHASE, cont("subPw", 0.5));
       push("subDirect", P.NATIVE_GRAPH_PARAM_BLEED2, cont("subDirect", 0));
       push("subOct", P.NATIVE_GRAPH_PARAM_BLEED3, disc("subOct", 0));
       push("noiseTone", P.NATIVE_GRAPH_PARAM_LPF_FREQUENCY, cont("noiseTone", 8000));

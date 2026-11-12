@@ -1182,6 +1182,7 @@ extern "C" double soemdsp_formant_filter_source(
   double jitter, double shimmer
 );
 extern "C" double soemdsp_formant_filter_source_direct(int handle);
+extern "C" void soemdsp_formant_filter_set_sub_pw(int handle, double pw);
 extern "C" double soemdsp_formant_filter_sample(
   int handle, double input, double useExt, double frequencyHz, double sawLevel, double subLevel, double noiseLevel,
   double sampleRate,
@@ -10298,6 +10299,13 @@ static void process_formant_filter(Circuit& g, Node& node, int frames) {
     const double wave = control_effective(node.laneBias[1]);
     const double subWave = control_effective(node.laneBias[2]);
     const double pw = control_audio(g, node.laneBias[3], f);
+    // Sub PW (phaseParam): the Sub Square's pulse width, per voice handle.
+    {
+      const double subPw = control_audio(g, node.phaseParam, f);
+      soemdsp_formant_filter_set_sub_pw(node.nativeHandle, subPw);
+      if (node.nativeHandleL > 0) soemdsp_formant_filter_set_sub_pw(node.nativeHandleL, subPw);
+      if (node.nativeHandleR > 0) soemdsp_formant_filter_set_sub_pw(node.nativeHandleR, subPw);
+    }
     const double subDirect = control_audio(g, node.bleed2, f);
     const double subOct = control_effective(node.bleed3);
     const double noiseTone = control_audio(g, node.lpfFrequency, f);

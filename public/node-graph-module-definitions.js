@@ -5632,7 +5632,7 @@ const nodeGraphModuleDefinitions = (
     face: [
       { kind: "cells", params: [["frequency", "Freq"], ["saw", "Osc"], ["sub", "Sub"], ["noise", "Noise"]], h: 40 },
       { kind: "cells", params: [["wave", "Wave"], ["subWave", "Sub Wave"], ["subOct", "Sub Oct"]], horizontal: true, h: 40 },
-      { kind: "cells", params: [["pw", "PW"], ["subDirect", "Direct"], ["noiseTone", "Tone"]], h: 40 },
+      { kind: "cells", params: [["pw", "PW"], ["subPw", "Sub PW"], ["subDirect", "Direct"], ["noiseTone", "Tone"]], h: 40 },
       { kind: "cells", params: [["sweep", "Sweep"], ["vowel", "Vowel"], ["shift", "Shift", "bipolar"]], h: 40 },
       { kind: "cells", params: [["jitter", "Jitter"], ["shimmer", "Shimmer"], ["breath", "Breath", "bipolar"]], h: 40 },
       { kind: "cells", params: [["plosive", "Plosive", "horizontal"], ["fricative", "Fric", "horizontal"], ["fricLevel", "Fric Lvl"]], h: 40 },
@@ -5679,6 +5679,7 @@ const nodeGraphModuleDefinitions = (
         tooltip: "Sub one or two octaves under Frequency."
       },
       { key: "subDirect", label: "Sub Direct", defaultValue: "0", min: "0", mid: "0.5", max: "1", step: "any", tooltip: "Share of the Sub sent around the formant bank, straight into Drive: the low end stays steady while the vowels move. 0 = all through the bank." },
+      { key: "subPw", label: "Sub PW", defaultValue: "0.5", min: "0", mid: "0.5", max: "1", step: "any", nonlinearSlider: false, tooltip: "Pulse width of the Sub when Sub Wave = Square (0.5 = square). Same law as PW on the main Square." },
       { key: "noiseTone", label: "Noise Tone", kind: "frequency", defaultValue: "8000", min: "500", mid: "4000", max: "20000", step: "any", unit: "Hz", tooltip: "Noise lowpass cutoff (4-pole) at Shift 0; moves with Shift. Low = dark breath, high = bright hiss." },
       {
         choices: ["Saw", "Square", "Glottal"],
