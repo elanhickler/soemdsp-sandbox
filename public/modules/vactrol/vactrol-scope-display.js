@@ -25,6 +25,7 @@ const nodeGraphVactrolScopeDisplaySettingsDefaults = Object.freeze({
   lightColor: "#c5e07a",
   fltEnvColor: "#7fc7d9",
   ampEnvColor: "#e2a86d",
+  memColor: "#c8c8d2",
   skipLight: true,
   skipFlt: true,
   skipAmp: true,
@@ -96,6 +97,7 @@ function normalizeNodeGraphVactrolScopeSettings(settings = {}) {
     lightColor: color("lightColor", d.lightColor),
     fltEnvColor: color("fltEnvColor", d.fltEnvColor),
     ampEnvColor: color("ampEnvColor", d.ampEnvColor),
+    memColor: color("memColor", d.memColor),
     skipLight: nodeGraphVactrolScopeToggleOn(source.skipLight, d.skipLight),
     skipFlt: nodeGraphVactrolScopeToggleOn(source.skipFlt, d.skipFlt),
     skipAmp: nodeGraphVactrolScopeToggleOn(source.skipAmp, d.skipAmp),
@@ -258,14 +260,20 @@ function nodeGraphVactrolScopeToggleVisible(nodeId, showKey) {
 function nodeGraphVactrolScopeBindLegend(canvas, nodeId) {
   if (!canvas || canvas._vactrolLegendBound) return;
   canvas._vactrolLegendBound = true;
-  canvas.addEventListener("pointerdown", (event) => {
+  // Listen on the display host (display canvases may not take pointer
+  // events) and convert the click to the canvas's own CSS px: the face is
+  // drawn at workspace zoom 1, so screen px must be divided by the zoom.
+  const host = canvas.parentElement || canvas;
+  host.addEventListener("pointerdown", (event) => {
     if (event.button && event.button !== 0) return;
     const hits = canvas._vactrolLegendHits;
     if (!hits?.length) return;
     const rect = canvas.getBoundingClientRect();
     if (!(rect.width > 0) || !(rect.height > 0)) return;
-    const x = event.clientX - rect.left;
-    const y = event.clientY - rect.top;
+    const sx = (canvas.clientWidth || rect.width) / rect.width;
+    const sy = (canvas.clientHeight || rect.height) / rect.height;
+    const x = (event.clientX - rect.left) * sx;
+    const y = (event.clientY - rect.top) * sy;
     const hit = hits.find((h) => x >= h.x && x <= h.x + h.w && y >= h.y && y <= h.y + h.h);
     if (!hit) return;
     event.preventDefault();
@@ -290,7 +298,7 @@ function nodeGraphVactrolScopeTraces(look) {
     {
       port: "Mem",
       label: "Mem",
-      rgba: F.mem.slice(),
+      rgba: nodeGraphVactrolScopeRgba(look.memColor, F.mem),
       show: look.showMem,
       showKey: "showMem",
       skip: look.skipMem,

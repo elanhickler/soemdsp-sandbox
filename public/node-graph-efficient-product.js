@@ -12,6 +12,7 @@ const NODE_GRAPH_EFFICIENT_PRODUCT_AUDIO_TYPES = Object.freeze([
   "pingPongDelay",
   "attenuverter",
   "attenumax",
+  "rectifier",
   "ampCurve",
   "range",
   "inv",

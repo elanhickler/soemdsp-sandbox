@@ -228,13 +228,18 @@ const nodeGraphTraceDisplaySettingControlKeys = Object.freeze({
     "pill",
     "squircle",
   ],
-  colors: ["dot1Color", "secondaryColor", "tertiaryColor", "backgroundColor", "ghostColor", "buttonColor", "hoverColor", "downColor", "textColor", "strokeColor", "strokeLeftColor", "strokeRightColor", "dotColor", "arcFill", "arcTrack", "sliderColor", "sliderNumberColor", "sliderTextColor", "sliderUnitColor", "inactiveColor", "activeColor", "fontColor", "inactiveFillColor", "activeFillColor", "inactiveTextColor", "activeTextColor", "previousColor", "lightColor", "fltEnvColor", "ampEnvColor"],
+  colors: ["dot1Color", "secondaryColor", "tertiaryColor", "backgroundColor", "ghostColor", "buttonColor", "hoverColor", "downColor", "textColor", "strokeColor", "strokeLeftColor", "strokeRightColor", "dotColor", "arcFill", "arcTrack", "sliderColor", "sliderNumberColor", "sliderTextColor", "sliderUnitColor", "inactiveColor", "activeColor", "fontColor", "inactiveFillColor", "activeFillColor", "inactiveTextColor", "activeTextColor", "previousColor", "lightColor", "fltEnvColor", "ampEnvColor", "memColor", "barColor"],
   // Every control key that exists in the shared popover MUST be listed here.
   // setNodeGraphTraceDisplaySettingsFormType only show/hides keys from these
   // lists — anything missing leaks onto every module (e.g. Output saw
   // Window / Overlap / Freq scale because those choices were unregistered).
   toggles: [
     "autoZoomLines",
+    "waterfallSteps",
+    "showLight",
+    "showFlt",
+    "showAmp",
+    "showMem",
     "sourceSync",
     "skipDiscontinuities",
     "skipLight",
@@ -989,10 +994,17 @@ const nodeGraphTraceDisplayActiveControlsByType = Object.freeze({
     toggles: Object.freeze([]),
     choices: Object.freeze([]),
   }),
+  // Rounding Error Sequencer: ghost fade (Fade time, Ghost floor) + Background / Bars colors.
+  roundingErrorFace: Object.freeze({
+    fields: Object.freeze(["fadeTime", "ghost"]),
+    colors: Object.freeze(["backgroundColor", "barColor", "textColor"]),
+    toggles: Object.freeze(["waterfallSteps"]),
+    choices: Object.freeze([]),
+  }),
   vactrolScope: Object.freeze({
     fields: Object.freeze(["historySeconds"]),
-    colors: Object.freeze(["backgroundColor", "lightColor", "fltEnvColor", "ampEnvColor"]),
-    toggles: Object.freeze(["skipLight", "skipFlt", "skipAmp", "skipMem"]),
+    colors: Object.freeze(["backgroundColor", "lightColor", "fltEnvColor", "ampEnvColor", "memColor"]),
+    toggles: Object.freeze(["showLight", "showFlt", "showAmp", "showMem", "skipLight", "skipFlt", "skipAmp", "skipMem"]),
     choices: Object.freeze([]),
   }),
   // Pulse Train: the Pulse Explosion set plus Fade time (lit-dot hang).
@@ -1197,11 +1209,16 @@ const nodeGraphTraceDisplaySectionControls = Object.freeze({
       "squircle",
     ]),
     // Face plate (+ number readout ghost ink) + Knob arc colors.
-    colors: Object.freeze(["backgroundColor", "ghostColor", "arcFill", "arcTrack", "strokeColor", "dotColor", "lightColor", "fltEnvColor", "ampEnvColor"]),
+    colors: Object.freeze(["backgroundColor", "ghostColor", "arcFill", "arcTrack", "strokeColor", "dotColor", "lightColor", "fltEnvColor", "ampEnvColor", "memColor", "barColor", "textColor"]),
     toggles: Object.freeze([
       "sourceSync",
       "skipDiscontinuities",
       "skipLight",
+      "waterfallSteps",
+      "showLight",
+      "showFlt",
+      "showAmp",
+      "showMem",
       "skipFlt",
       "skipAmp",
       "skipMem",
@@ -2003,6 +2020,31 @@ const nodeGraphDisplaySettingsToggleMeta = Object.freeze({
     title:
       "Break the stroke at wrap/jump samples instead of drawing a seam. 1D: no vertical wrap line. 2D: no chord across a sudden X/Y jump.",
   }),
+  waterfallSteps: Object.freeze({
+    label: "Waterfall steps",
+    id: "nodeTraceDisplayWaterfallSteps",
+    title: "Rounding Error Sequencer: scroll the steps right to left as they fire instead of showing the fixed loop. Length 0 (free run) always scrolls.",
+  }),
+  showLight: Object.freeze({
+    label: "Show Light",
+    id: "nodeTraceDisplayVactrolShowLight",
+    title: "Draw the Light input line. Same as clicking its legend entry on the face (hidden entries go dim).",
+  }),
+  showFlt: Object.freeze({
+    label: "Show Flt Env",
+    id: "nodeTraceDisplayVactrolShowFlt",
+    title: "Draw the Flt Env line. Same as clicking its legend entry on the face (hidden entries go dim).",
+  }),
+  showAmp: Object.freeze({
+    label: "Show Amp Env",
+    id: "nodeTraceDisplayVactrolShowAmp",
+    title: "Draw the Amp Env line. Same as clicking its legend entry on the face (hidden entries go dim).",
+  }),
+  showMem: Object.freeze({
+    label: "Show Mem",
+    id: "nodeTraceDisplayVactrolShowMem",
+    title: "Draw the Mem (cell memory) line. Same as clicking its legend entry on the face (hidden entries go dim).",
+  }),
   skipLight: Object.freeze({
     label: "Skip Light Discontinuity",
     id: "nodeTraceDisplayVactrolSkipLight",
@@ -2181,6 +2223,18 @@ const nodeGraphDisplaySettingsColorMeta = Object.freeze({
     aria: "Right stroke color",
     defaultValue: "#ffffff",
     id: "nodeTraceDisplayStrokeRightColor",
+  }),
+  barColor: Object.freeze({
+    label: "Bars",
+    aria: "Bar color",
+    defaultValue: "#e2b44a",
+    id: "nodeTraceDisplayBarColor",
+  }),
+  memColor: Object.freeze({
+    label: "Mem",
+    aria: "Vactrol Mem line color",
+    defaultValue: "#c8c8d2",
+    id: "nodeTraceDisplayVactrolMemColor",
   }),
   lightColor: Object.freeze({
     label: "Light",
@@ -2560,10 +2614,10 @@ const nodeGraphDisplaySettingsChoiceMeta = Object.freeze({
     label: "Ink",
     aria: "Fill, stroke, or both",
     id: "nodeTraceDisplayBarInk",
-    title: "Fill only, Stroke only, or Fill & stroke. One of them is always drawn.",
+    title: "Fill, Stroke, or Fill & stroke. One of them is always drawn.",
     options: Object.freeze([
-      Object.freeze({ value: "fill", label: "Fill only" }),
-      Object.freeze({ value: "stroke", label: "Stroke only" }),
+      Object.freeze({ value: "fill", label: "Fill" }),
+      Object.freeze({ value: "stroke", label: "Stroke" }),
       Object.freeze({ value: "both", label: "Fill & stroke" }),
     ]),
   }),
@@ -2822,6 +2876,7 @@ const nodeGraphDisplaySettingsFormTypeTitles = Object.freeze({
   pulseTrainFace: "Pulse Train",
   plotFace: "Plot",
   vactrolScope: "Vactrol",
+  roundingErrorFace: "Rounding Error",
   robinSinepulseFace: "Robin Sinepulse",
   textBoxFace: "Text Box",
   keyboardFace: "Keyboard",

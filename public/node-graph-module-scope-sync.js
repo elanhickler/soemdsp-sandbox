@@ -668,6 +668,8 @@ function nodeGraphToggleNodeDisplaySync(nodeId) {
   }
 }
 
+const nodeGraphTraceDisplayMonoSyncScratch = new WeakMap();
+
 /** Average L/R into a lightweight buffer for mono cycle detection. */
 function nodeGraphTraceDisplayMonoSyncBuffer(leftBuffer, rightBuffer) {
   if (!leftBuffer?.length || !rightBuffer?.length) {
@@ -676,13 +678,15 @@ function nodeGraphTraceDisplayMonoSyncBuffer(leftBuffer, rightBuffer) {
   const n = Math.min(leftBuffer.length, rightBuffer.length);
   // Scratch lives on a pair-specific key so concurrent scopes don't stomp one mono pad.
   const pairKey = `${nodeGraphScopeBufferObjectId(leftBuffer)}|${nodeGraphScopeBufferObjectId(rightBuffer)}`;
-  if (!nodeGraphModuleScopeState.monoSyncScratch) {
-    nodeGraphModuleScopeState.monoSyncScratch = new Map();
-  }
-  let mono = nodeGraphModuleScopeState.monoSyncScratch.get(pairKey);
-  if (!mono || !(mono instanceof Float32Array) || mono.length < n) {
+  // Scratch hangs off the left buffer object (WeakMap): it is freed with the
+  // buffer. A Map keyed by buffer id kept one ~1.7 MB pad per buffer ever
+  // seen; capture buffers are replaced on plan rebuilds (bypass, edits), so
+  // it grew without bound until ArrayBuffer allocation failed.
+  let slot = nodeGraphTraceDisplayMonoSyncScratch.get(leftBuffer);
+  let mono = slot && slot.right === rightBuffer ? slot.mono : null;
+  if (!mono || mono.length < n) {
     mono = new Float32Array(n);
-    nodeGraphModuleScopeState.monoSyncScratch.set(pairKey, mono);
+    nodeGraphTraceDisplayMonoSyncScratch.set(leftBuffer, { right: rightBuffer, mono });
   }
   for (let i = 0; i < n; i += 1) {
     const a = Number(leftBuffer[i]);

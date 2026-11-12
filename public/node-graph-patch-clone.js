@@ -648,6 +648,12 @@ function cloneNodeGraphTypedDisplaySettings(node) {
           ? normalizeNodeGraphFormantFilterFaceSettings(bag)
           : { ...(bag || {}) },
       };
+    case "roundingErrorFace":
+      return {
+        traceDisplaySettings: typeof normalizeNodeGraphRoundingErrorFaceSettings === "function"
+          ? normalizeNodeGraphRoundingErrorFaceSettings(bag)
+          : { ...(bag || {}) },
+      };
     case "vactrolScope":
       return {
         traceDisplaySettings: typeof normalizeNodeGraphVactrolScopeSettings === "function"

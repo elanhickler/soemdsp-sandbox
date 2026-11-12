@@ -1,6 +1,6 @@
 # Display composite layering plan
 
-**Status:** plan only (2026-11-11). Show this to Argi before large code changes. Do not implement from this file until Argi OKs it.
+**Status:** plan only (2026-11-11). Decisions recorded 2026-11-11 (America/Phoenix). The full layering overhaul is approved, but do not start coding it until the other agent's Array-buffer allocation failure work on the 1D scope draw path is done. That hold stands (Argi previously told Misty not to change anything yet for that reason).
 **Owner:** Argi / Interface.
 **Repo:** soemdsp-sandbox.
 **Related (read-only):** `docs/WEBGL_DISPLAY_PLAN.md` (migrate faces onto WebGL — not this work), `docs/ZOOM_PERF_PLAN.md` (ZP-2 face textures, ZP-3 mesh replay), `docs/GPU_WORKSPACE_PLAN.md` (workspace picture, Text Box wire sandwich, stacking is GPU plate order), `docs/MINI_PERFORM_VIEW_PLAN.md` (GPU mirror, no reparenting), `docs/APP_POLICY.md` (WebGL-only display/face text).
@@ -63,7 +63,7 @@ Hit-testing (`nodeGraphGlHitContextElement` and friends) still `querySelector`s 
   4. that display's **text** (and waterfall frame chrome) at **screen resolution**, through `nodeGraphGlLinesText` / the shared drawer only
   5. then the next module
 - Overlap then works by draw order alone. A front module's plate hides the back module's display and text.
-- Performance-view layers become more entries in the same ordered list: **layer then module then parts**. The workspace (Arrange) is the same list with a single implicit layer. Module order today is `patch.nodes` order (there is no separate raise-to-front index). If Performance layering later adds an explicit stack index, this list is the one place it is applied.
+- Performance-view layers become more entries in the same ordered list: **layer then module then parts**. The workspace (Arrange) is the same list with a single implicit layer. Until the Arrange toolbar (section 4.3) exists, module order stays `patch.nodes` order. There is no raise-on-click. When the toolbar later sets z-order (and Performance-view layers add a stack index), this list is the one place that order is applied.
 - Display text stays crisp at any workspace zoom, the same way parameter-face text already does. Do not size display backing by workspace zoom. Do not re-bake the picture at zoom. Nearest-neighbour above 2.5x stays the picture-quad filter, not a reason to raise backing resolution.
 
 Policies that already apply, and still apply:
@@ -75,21 +75,13 @@ Policies that already apply, and still apply:
 - No canvas-2D fallback. GL failure is black + `nodeGraphDisplayGlFailed`.
 - Gesture behaviour stays: cached mesh replay, live face textures, no display hold, `GATE=1` `scripts/probe_zoom_perf.mjs` must stay green.
 
-### 4.1 Cables vs the module stack (decision for Argi)
+### 4.1 Cables vs the module stack
 
-Today cables sit on their own canvas **between** all plates and all displays: cables paint over chassis, under displays. That global split is exactly what prevents a front plate from covering a back display.
+**Decided (Argi, 2026-11-11, America/Phoenix):** draw **all cables under the module stacks**. The Text Box wire sandwich is unchanged: the wire canvases stay, so "Behind wires" / "In front of wires" and "Show on top" keep working as in `docs/GPU_WORKSPACE_PLAN.md`.
 
-The only way overlap works is for a module's plate and its display to share one draw order on the same target (one batch / one color buffer), back to front.
+Today cables sit on their own canvas **between** all plates and all displays: cables paint over chassis, under displays. That global split is exactly what prevents a front plate from covering a back display. The only way overlap works is for a module's plate and its display to share one draw order on the same target (one batch / one color buffer), back to front.
 
-That forces a cable policy change. Recommended default, to check visually:
-
-- Draw **all cables under the module stacks** (the wire canvases stay, so Text Box "Behind wires" / "In front of wires" and "Show on top" keep working as in `docs/GPU_WORKSPACE_PLAN.md`).
-- Visual change to accept or reject: cables that used to cross a module plate on top of the chassis will go behind that module, and a front module will also cover cables that used to show between its plate and a back module's display.
-
-Alternatives, if the current "cables over plates, under displays" look must stay:
-
-- Clip or stencil cables around display rects — more work, easy to get wrong, not in the first stages.
-- Keep today's three-canvas split — **rejects the overlap goal**.
+This is a visible change: cables that used to cross a module plate on top of the chassis will go behind that module, and a front module will also cover cables that used to show between its plate and a back module's display. Clip-or-stencil around display rects is not in this overhaul.
 
 Do not invent a DOM text overlay, a fourth "all text" canvas, or a second compositor.
 
@@ -98,7 +90,7 @@ Do not invent a DOM text overlay, a fourth "all text" canvas, or a second compos
 Build the list once per rebuild (not per display frame):
 
     for layer in layersBackToFront:          # workspace: one implicit layer
-      for module in modulesBackToFront:      # patch.nodes, or a later stack index
+      for module in modulesBackToFront:      # patch.nodes until the Arrange toolbar sets z-order
         plate, chrome, rails that belong to it
         parameter face
         each display quad (texture, layout rect, nearest flag)
@@ -108,9 +100,24 @@ Build the list once per rebuild (not per display frame):
 
 Display-only frames keep a **replay** of the cached mesh (now including per-module display quads and screen-res text that is static for that mesh). When only the picture texture changes, replay is enough. When face text cells change (`nodeGraphFaceTextSet`), mark the text runs dirty and either rewrite those text commands or do one rebuild — do not burn the numbers into the cheap texture.
 
+### 4.3 Arrange helper: Display Settings, z-order, and blend (architecture only)
+
+These belong with Arrange / Performance layering controls. Recorded here so the ordered list and the later toolbar share one design. Do not implement them in the first coding pass of stages 1-4, and do not start any of this until the 1D-scope Array-buffer hold lifts.
+
+- **Right-click a display in Arrange view** opens Display Settings for that display (the existing settings for that face, not a new panel type). Hit-testing must resolve the display under the pointer once displays are GPU quads (section 6). This is an Arrange-view gesture; it must not fight Performance-view pointer forwarding or the mini view.
+- **Arrange toolbar** (a small Arrange-view helper) for setting **z-order** and **blend modes**. Z-order is set here, not by clicking a module to raise it. The toolbar writes the stack index that section 4.2's ordered list already consumes. Blend modes are entries on that same list (how a module or display composites over what is behind it), so Performance-view layers and Arrange overlap stay one path.
+
+Until the toolbar exists, Arrange z-order remains `patch.nodes` order.
+
 ## 5. Stages
 
-Each stage works on its own, **behind a switch**, and is committed separately (commit when the stage works; never push; message ends with `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`). Other sessions edit the same tree: commit only this work's files and hunks. Never stash, reset, or switch branches. Preserve each file's line endings (many are CRLF; edit byte-exact, never Git Bash sed -i, which strips CR). Bump `?v=` cache tags in `public/index.html` and `public/perform.html` for every changed script (live runtime / worklet tags live in `public/node-graph-live-runtime.js`).
+**Decided (Argi, 2026-11-11, America/Phoenix):** do the **entire** layering overhaul (all stages), not only a gated first step. Switches can still be used while landing work, but the goal is the full overhaul.
+
+**Hold:** do not start coding these stages until the other agent's Array-buffer allocation failure work on the 1D scope draw path is done. Argi previously told Misty not to change anything yet for that reason; that hold stands.
+
+Each stage should still land in a working tree of its own, behind a switch if that helps A/B while it is in progress. **Git for this work (overrides the original brief):** commit all work, squash unpushed local work, and push; then leave the tree clean. Merge with origin, no rebase. Never force-push, stash, `reset --hard`, or switch branches. Do not squash or rewrite commits that are already on origin. The `Co-Authored-By: Claude Opus 5.5` trailer is not required on every commit; use it only when a commit is clearly that agent's already-attributed work.
+
+Other sessions edit the same tree: commit only your own files and hunks. Preserve each file's line endings (many are CRLF; edit byte-exact, never Git Bash sed -i, which strips CR). Bump `?v=` cache tags in `public/index.html` and `public/perform.html` for every changed script (live runtime / worklet tags live in `public/node-graph-live-runtime.js`).
 
 ### Switch
 
@@ -122,7 +129,7 @@ One const in `public/node-graph-gl-graph.js` (or a tiny dedicated flags object u
       customFacesInPass: false, // stage 3
     };
 
-Stage 4 removes the per-display canvases and then removes the flags. No URL query is required; a const is enough for A/B while the stage is in progress. Do not bring back `?glGraph=0`.
+Stage 4 removes the per-display canvases and then removes the flags. No URL query is required; a const is enough for A/B while a stage is in progress. Do not bring back `?glGraph=0`. The flags are a landing aid, not a reason to ship only stage 1.
 
 While a flag is on, that family of displays is drawn in the per-module stack on the **same batch as the plate** (the graph canvas, or whatever single target the ordered list uses). Other displays stay on the dots layer until their stage. Mixed z behaviour during migration is expected and is why the switch exists.
 
@@ -196,6 +203,9 @@ Do these as part of the stages that would otherwise break them, and finish any l
 - **Screen solo and Performance-view tiles** (`public/node-graph-layout-canvas.js`, `nodeGraphGlGraphPresentTiles` / `PresentTile`). Tiles already reuse `nodeGraphGlGraphPresent` with `state.view`. Once the ordered list lives in that present, tiles get it for free — but only if they stop depending on a 2D blit of a reparented canvas. Extend "texture only" (or always-texture) so a face that is not inside `#nodeGraphWorkspace.gl-graph-on` still composites from the face texture. Ink scale (`nodeGraphGlLinesInkScale`) stays the Performance / solo size term in the picture resolution.
 - **Mini Performance view** (`public/node-graph-mini-perform.js`, `public/node-graph-gl-mini-perform.js`). Already a GPU mirror: `nodeGraphGlMiniPerformPresentModule` saves workspace GL state and calls the same present; `nodeGraphGlMiniPerformDisplays` still lists `.node-display-canvas`. Switch that collection to published rects + face textures. Pointer forwarding must keep working without a DOM canvas under the cursor.
 
+- **Arrange: right-click a display** to open Display Settings for that display. Depends on the migrated display hit-test (the bullet above). Arrange-view only.
+- **Arrange toolbar** for z-order and blend modes (section 4.3). The ordered list must already accept a stack index and a blend mode so the toolbar has somewhere to write. Performance-view canvas layers use the same fields.
+
 ## 7. Cost and zoom
 
 - Picture resolution does not grow with workspace zoom. Same cap (dpr at most 2) and same ink scale as today.
@@ -208,7 +218,7 @@ Do these as part of the stages that would otherwise break them, and finish any l
 
 - Preserve each file's line endings. Many are CRLF and some are mixed. Edit byte-exact, for example with Python on raw bytes. Never Git Bash sed -i (it strips CR).
 - Bump the `?v=` cache tags in `public/index.html` and `public/perform.html` for every changed script (live runtime / worklet tags live in `public/node-graph-live-runtime.js`).
-- Other sessions edit the same tree. Commit only your own files and hunks. Never stash, reset, or switch branches.
+- Other sessions edit the same tree. Commit only your own files and hunks. Never stash, `reset --hard`, or switch branches. For this overhaul: commit all of its work, squash only unpushed local commits (no rewrite of origin), merge origin (no rebase), and push. Never force-push.
 - Preview: `.claude/launch.json` config `soemdsp-sandbox`. Click START SANDBOX before the app's functions exist. The Browser pane must be visible for modules to render.
 - This plan file is LF, like the other `docs/*.md` plans next to it.
 
@@ -220,6 +230,7 @@ Do these as part of the stages that would otherwise break them, and finish any l
 - Performance view and mini Performance view still work (tiles, screen solo, pointer, ink scale).
 - Graphics cost is no worse (zoom probe + play fps).
 - Checked in the browser at several zooms and with overlapping modules (MIDI CC, Output, plus at least one custom face from stage 3).
+- The ordered list is ready for the Arrange toolbar's z-order and blend, and for Performance-view canvas layers. The toolbar and the Arrange right-click for Display Settings are follow-on controls (section 4.3), not a reason to delay stages 1-4 once the hold lifts.
 
 ## 10. Test plan (each stage, in the browser)
 
@@ -228,14 +239,19 @@ Do these as part of the stages that would otherwise break them, and finish any l
 - MIDI CC: numbers strip stays in the reserved band, not over the tape, and does not smear when the waterfall scrolls.
 - Output: pause / protect banners draw as face ink, stay crisp, and still follow pause / protect behaviour (including tape-stamped fades).
 - Performance view: existing tiles still paint; when canvas layers land, back-to-front layer order matches the same list.
+- Arrange (when section 4.3 lands): right-click a display opens that display's Display Settings; the Arrange toolbar sets z-order (not raise-on-click) and blend, and overlapping modules follow the new order.
 - Mini Performance view: modules, displays, and pointer forwarding still work; empty-canvas / enlarged paths untouched unless they collect display canvases.
 - Gesture: displays keep running while zooming; no slideshow; no new light-blob / settle regressions.
 - Smokes that already cover faces: `smoke_display_face_orientation.mjs`, `smoke_display_gl_programs_link`, `smoke_engine_state_stopped_faces`, `GATE=1` zoom probe. Update any smoke that still samples a 2D bitmap of a texture-only face.
 
-## 11. Decisions for Argi
+## 11. Decisions (Argi, 2026-11-11, America/Phoenix)
 
-1. **Cables vs module stacks.** Recommended: cables under the module stacks; Text Box wire sandwich unchanged. This is a visible change from "cables over plates, under displays." Approve, or pick clip-around-displays (later, more work).
-2. **Module order.** Today this is `patch.nodes` order, with no raise-on-click index. Is that the z-order we should keep for overlapping modules in Arrange, until Performance-view layers exist?
-3. **OK to start stage 1** behind `NODE_GRAPH_DISPLAY_COMPOSITE.waterfallInPass` (default off until the overlap check on MIDI CC + Output).
+1. **Cables vs module stacks.** Decided: cables under the module stacks. Text Box wire sandwich unchanged. This is a visible change from "cables over plates, under displays." Clip-around-displays is not in this overhaul.
+2. **Module order.** Decided: keep today's `patch.nodes` order, with no raise-on-click, until Performance-view layers exist. Z-order will be set later via the new Arrange toolbar (section 4.3), not by clicking a module to raise it.
+3. **Scope.** Decided: do the **entire** layering overhaul (all stages), not only a gated first step. Switches can still be used while landing work, but the goal is the full overhaul. **Do not start coding** until the other agent's Array-buffer allocation failure work on the 1D scope draw path is done. Argi previously told Misty not to change anything yet for that reason; that hold stands.
+4. **Git for this work.** Decided: commit all work, squash unpushed local work, and push (then leave the tree clean). This overrides the original brief's "never push" / "commit when a step works, never push." Merge with origin, no rebase. Never force-push, stash, `reset --hard`, or switch branches. Do not squash or rewrite commits that are already on origin.
 
-No code from this plan until those are answered (1 and 3 at least).
+Also recorded (architecture, not implement until the hold lifts and, for these two, not in the first coding pass of stages 1-4):
+
+- Right-click a display in Arrange view to open Display Settings for that display.
+- An Arrange helper: a toolbar in Arrange view for setting z-order and blend modes.

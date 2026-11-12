@@ -344,6 +344,9 @@ function nodeGraphDisplaySettingsDefaultsForFormType(type = nodeGraphTraceDispla
   if (type === "lineBurn") {
     return normalizeNodeGraphLineBurnSettings(nodeGraphLineBurnSettingsDefaults);
   }
+  if (type === "roundingErrorFace" && typeof normalizeNodeGraphRoundingErrorFaceSettings === "function") {
+    return normalizeNodeGraphRoundingErrorFaceSettings();
+  }
   if (type === "vactrolScope") {
     return typeof normalizeNodeGraphVactrolScopeSettings === "function"
       ? normalizeNodeGraphVactrolScopeSettings(
@@ -764,6 +767,9 @@ if (type === "portalFace") {
   if (type === "plotFace" && typeof normalizeNodeGraphPlotFaceSettings === "function") {
     return normalizeNodeGraphPlotFaceSettings(settings);
   }
+  if (type === "roundingErrorFace" && typeof normalizeNodeGraphRoundingErrorFaceSettings === "function") {
+    return normalizeNodeGraphRoundingErrorFaceSettings(settings);
+  }
   if (type === "vactrolScope" && typeof normalizeNodeGraphVactrolScopeSettings === "function") {
     return normalizeNodeGraphVactrolScopeSettings(settings);
   }
@@ -1003,6 +1009,9 @@ if (settingsSchema === "portalFace") {
   }
   if (settingsSchema === "plotFace" && typeof nodeGraphPlotFaceSettingsForNode === "function") {
     return nodeGraphPlotFaceSettingsForNode(node);
+  }
+  if (settingsSchema === "roundingErrorFace" && typeof nodeGraphRoundingErrorFaceSettingsForNode === "function") {
+    return nodeGraphRoundingErrorFaceSettingsForNode(node);
   }
   if (settingsSchema === "vactrolScope" && typeof nodeGraphVactrolScopeSettingsForNode === "function") {
     return nodeGraphVactrolScopeSettingsForNode(node);
@@ -2481,11 +2490,17 @@ function syncNodeGraphHslLampWidgets(popover = document.getElementById("nodeTrac
 function nodeGraphTraceDisplayColorWidgetLabel(field) {
   // Title lives inside the widget (swatch). Never a side "Color" heading.
   const buttonForm = nodeGraphTraceDisplaySettingsFormType();
+  if (buttonForm === "roundingErrorFace") {
+    if (field === "backgroundColor") return "Background";
+    if (field === "barColor") return "Bars";
+    if (field === "textColor") return "Text";
+  }
   if (buttonForm === "vactrolScope") {
     if (field === "backgroundColor") return "Background";
     if (field === "lightColor") return "Light";
     if (field === "fltEnvColor") return "Flt Env";
     if (field === "ampEnvColor") return "Amp Env";
+    if (field === "memColor") return "Mem";
   }
   if (buttonForm === "toggleButtonFace" || buttonForm === "momentaryButtonFace") {
     if (field === "backgroundColor") return "Background";

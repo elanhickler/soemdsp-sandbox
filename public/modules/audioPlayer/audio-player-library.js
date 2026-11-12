@@ -362,6 +362,10 @@ async function nodeGraphAudioPlayerLibraryListFolder(folderPath, { dive = false 
   return payload;
 }
 
+// File -> its FileSystemFileHandle (when picked through the File System Access
+// pickers), so a played file's handle can be remembered for after a refresh.
+const nodeGraphAudioPlayerFileHandles = new WeakMap();
+
 async function nodeGraphAudioPlayerLibraryCollectDirectoryHandle(dirHandle, {
   dive = false,
   prefix = "",
@@ -375,6 +379,7 @@ async function nodeGraphAudioPlayerLibraryCollectDirectoryHandle(dirHandle, {
     if (handle.kind === "file") {
       try {
         const file = await handle.getFile();
+        nodeGraphAudioPlayerFileHandles.set(file, handle);
         out.push(file);
       } catch (_error) {
         // skip unreadable entries
@@ -446,7 +451,9 @@ function nodeGraphAudioPlayerLibraryPickFolderViaInput({ dive = false } = {}) {
 async function nodeGraphAudioPlayerLibraryPickFolderFiles({ dive = false } = {}) {
   if (typeof window !== "undefined" && typeof window.showDirectoryPicker === "function") {
     try {
-      const dirHandle = await window.showDirectoryPicker({ mode: "read" });
+      // Own picker id: Chrome remembers the last Music Player folder apart
+      // from the patch / other pickers.
+      const dirHandle = await window.showDirectoryPicker({ mode: "read", id: "soemdspMusicFolder" });
       const files = await nodeGraphAudioPlayerLibraryCollectDirectoryHandle(dirHandle, {
         dive: Boolean(dive),
         prefix: "",
@@ -734,12 +741,11 @@ function nodeGraphAudioPlayerLibraryPickAudioFilesViaInput() {
       return null;
     }
     try {
-      const startIn = typeof nodeGraphFilePickerStartIn === "function"
-        ? await nodeGraphFilePickerStartIn()
-        : undefined;
+      // Own picker id (not the shared patch start folder): Chrome reopens the
+      // last folder music was loaded from, and opening patches is unaffected.
       const handles = await window.showOpenFilePicker({
         multiple: true,
-        ...(startIn ? { startIn } : {}),
+        id: "soemdspMusicFiles",
         types: [{
           description: "Audio",
           accept: { "audio/*": acceptList },
@@ -750,7 +756,10 @@ function nodeGraphAudioPlayerLibraryPickAudioFilesViaInput() {
       for (const handle of handles || []) {
         try {
           const file = await handle.getFile();
-          if (file) files.push(file);
+          if (file) {
+            nodeGraphAudioPlayerFileHandles.set(file, handle);
+            files.push(file);
+          }
         } catch (_error) {
           // skip unreadable
         }
@@ -1115,6 +1124,201 @@ async function nodeGraphAudioPlayerLibraryFetchBlobWithProgress(nodeId, res, sha
   return new Blob(chunks, { type: res.headers.get("content-type") || "" });
 }
 
+// ---- Loaded-audio cache (survives a refresh) ----
+// A browser forgets picked files on refresh. The bytes of files the Music
+// Player decodes are copied into the origin-private file system (OPFS), keyed
+// by the playlist item's fileKey, so a refresh reloads them with no prompt.
+// Size: the "Music cache" setting (Music Player Display Settings; one value
+// for the whole app): Off / 500 MB (default) / 2 / 5 / 10 / 20 GB. Least
+// recently played dropped first. Safety net: a write never takes more than
+// half of the space the browser says this site may still use
+// (navigator.storage.estimate), whatever the setting. Above the default the
+// cache asks to be kept (navigator.storage.persist) so the browser does not
+// wipe it. Bookkeeping in localStorage.
+const NODE_GRAPH_AUDIO_PLAYER_CACHE_DIR = "soemdsp-music-cache";
+const NODE_GRAPH_AUDIO_PLAYER_CACHE_META = "soemdsp.musicPlayer.cacheMeta";
+const NODE_GRAPH_AUDIO_PLAYER_CACHE_LIMIT_KEY = "soemdsp.musicPlayer.cacheLimit";
+const NODE_GRAPH_AUDIO_PLAYER_CACHE_DEFAULT = 500 * 1024 * 1024;
+const NODE_GRAPH_AUDIO_PLAYER_CACHE_CHOICES = Object.freeze([
+  ["Off", 0], ["500 MB", 500 * 1024 * 1024], ["2 GB", 2 * 1024 ** 3],
+  ["5 GB", 5 * 1024 ** 3], ["10 GB", 10 * 1024 ** 3], ["20 GB", 20 * 1024 ** 3],
+]);
+
+/** The cache size limit in bytes (0 = off). */
+function nodeGraphAudioPlayerCacheLimit() {
+  try {
+    const raw = window.localStorage.getItem(NODE_GRAPH_AUDIO_PLAYER_CACHE_LIMIT_KEY);
+    const n = Number(raw);
+    return raw === null || !Number.isFinite(n) || n < 0 ? NODE_GRAPH_AUDIO_PLAYER_CACHE_DEFAULT : n;
+  } catch (_e) { return NODE_GRAPH_AUDIO_PLAYER_CACHE_DEFAULT; }
+}
+
+/** Bytes the cache holds now. */
+function nodeGraphAudioPlayerCacheUsage() {
+  return Object.values(nodeGraphAudioPlayerCacheMeta()).reduce((sum, m) => sum + (Number(m?.size) || 0), 0);
+}
+
+/** Drop least recently played files until the cache fits `limit` bytes. */
+async function nodeGraphAudioPlayerCacheTrim(limit, incoming = 0) {
+  const meta = nodeGraphAudioPlayerCacheMeta();
+  const dir = await nodeGraphAudioPlayerCacheDir();
+  let total = Object.values(meta).reduce((sum, m) => sum + (Number(m?.size) || 0), 0);
+  const order = Object.entries(meta).sort((a, b) => (a[1]?.last || 0) - (b[1]?.last || 0));
+  while (total + incoming > limit && order.length) {
+    const [oldKey, old] = order.shift();
+    try { if (dir) await dir.removeEntry(nodeGraphAudioPlayerCacheName(oldKey)); } catch (_e) { /* gone */ }
+    total -= Number(old?.size) || 0;
+    delete meta[oldKey];
+  }
+  nodeGraphAudioPlayerCacheSaveMeta(meta);
+}
+
+/** Set the limit (bytes; 0 = off): trims to it, and above the default asks to keep the cache. */
+async function nodeGraphAudioPlayerCacheSetLimit(bytes) {
+  const limit = Math.max(0, Number(bytes) || 0);
+  try { window.localStorage.setItem(NODE_GRAPH_AUDIO_PLAYER_CACHE_LIMIT_KEY, String(limit)); } catch (_e) { /* blocked */ }
+  await nodeGraphAudioPlayerCacheTrim(limit);
+  if (limit > NODE_GRAPH_AUDIO_PLAYER_CACHE_DEFAULT && navigator?.storage?.persist) {
+    try { await navigator.storage.persist(); } catch (_e) { /* not granted */ }
+  }
+}
+
+/** Empty the cache (the Clear button). */
+async function nodeGraphAudioPlayerCacheClear() {
+  const meta = nodeGraphAudioPlayerCacheMeta();
+  const dir = await nodeGraphAudioPlayerCacheDir();
+  for (const key of Object.keys(meta)) {
+    try { if (dir) await dir.removeEntry(nodeGraphAudioPlayerCacheName(key)); } catch (_e) { /* gone */ }
+  }
+  nodeGraphAudioPlayerCacheSaveMeta({});
+}
+
+function nodeGraphAudioPlayerCacheName(key) {
+  let h = 2166136261 >>> 0;
+  const s = String(key || "");
+  for (let i = 0; i < s.length; i += 1) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619) >>> 0; }
+  return `a${h.toString(16)}_${s.length}`;
+}
+
+function nodeGraphAudioPlayerCacheMeta() {
+  try { return JSON.parse(window.localStorage.getItem(NODE_GRAPH_AUDIO_PLAYER_CACHE_META) || "{}") || {}; } catch (_e) { return {}; }
+}
+
+function nodeGraphAudioPlayerCacheSaveMeta(meta) {
+  try { window.localStorage.setItem(NODE_GRAPH_AUDIO_PLAYER_CACHE_META, JSON.stringify(meta)); } catch (_e) { /* storage full / blocked */ }
+}
+
+async function nodeGraphAudioPlayerCacheDir() {
+  if (!navigator?.storage?.getDirectory) return null;
+  try {
+    const root = await navigator.storage.getDirectory();
+    return await root.getDirectoryHandle(NODE_GRAPH_AUDIO_PLAYER_CACHE_DIR, { create: true });
+  } catch (_e) { return null; }
+}
+
+/** Copy a decoded file into the cache (fire and forget). */
+async function nodeGraphAudioPlayerCachePut(key, file) {
+  const k = String(key || "");
+  const size = Math.max(0, Math.round(nodeGraphFiniteNumber(file?.size)));
+  const limit = nodeGraphAudioPlayerCacheLimit();
+  if (!k || !file || !(size > 0) || size > limit) return;
+  const meta = nodeGraphAudioPlayerCacheMeta();
+  if (meta[k]) { meta[k].last = Date.now(); nodeGraphAudioPlayerCacheSaveMeta(meta); return; }
+  const dir = await nodeGraphAudioPlayerCacheDir();
+  if (!dir) return;
+  try {
+    // Safety net: never more than half of what the browser says is left.
+    if (navigator?.storage?.estimate) {
+      const est = await navigator.storage.estimate();
+      const free = Math.max(0, (Number(est?.quota) || 0) - (Number(est?.usage) || 0));
+      if (free > 0 && size > free * 0.5) return;
+    }
+    // Make room first: least recently played out until this file fits.
+    await nodeGraphAudioPlayerCacheTrim(limit, size);
+    const meta2 = nodeGraphAudioPlayerCacheMeta();
+    const handle = await dir.getFileHandle(nodeGraphAudioPlayerCacheName(k), { create: true });
+    const writable = await handle.createWritable();
+    await writable.write(file);
+    await writable.close();
+    meta2[k] = { size, name: String(file.name || ""), type: String(file.type || ""), last: Date.now() };
+    nodeGraphAudioPlayerCacheSaveMeta(meta2);
+  } catch (error) {
+    nodeGraphAudioPlayerLog("INFO", "music cache write skipped", { error: String(error?.message || error || "") });
+  }
+}
+
+// Handles of played files (IndexedDB; no audio bytes): files too big for the
+// cache, or dropped from it, reload from disk after one "allow" click.
+function nodeGraphAudioPlayerHandleDb() {
+  return new Promise((resolve) => {
+    try {
+      const req = indexedDB.open("soemdsp-music", 1);
+      req.onupgradeneeded = () => { req.result.createObjectStore("handles"); };
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => resolve(null);
+    } catch (_e) { resolve(null); }
+  });
+}
+
+async function nodeGraphAudioPlayerHandlePut(key, handle) {
+  const db = await nodeGraphAudioPlayerHandleDb();
+  if (!db || !key || !handle) return;
+  await new Promise((resolve) => {
+    try {
+      const tx = db.transaction("handles", "readwrite");
+      tx.objectStore("handles").put(handle, String(key));
+      tx.oncomplete = tx.onerror = tx.onabort = () => resolve();
+    } catch (_e) { resolve(); }
+  });
+}
+
+async function nodeGraphAudioPlayerHandleGet(key) {
+  const db = await nodeGraphAudioPlayerHandleDb();
+  if (!db || !key) return null;
+  return new Promise((resolve) => {
+    try {
+      const req = db.transaction("handles", "readonly").objectStore("handles").get(String(key));
+      req.onsuccess = () => resolve(req.result || null);
+      req.onerror = () => resolve(null);
+    } catch (_e) { resolve(null); }
+  });
+}
+
+/** A remembered handle's file, asking for read permission if needed (needs a click). */
+async function nodeGraphAudioPlayerHandleFile(key, { ask = true } = {}) {
+  const handle = await nodeGraphAudioPlayerHandleGet(key);
+  if (!handle?.getFile) return null;
+  try {
+    let perm = typeof handle.queryPermission === "function" ? await handle.queryPermission({ mode: "read" }) : "granted";
+    if (perm !== "granted" && ask && typeof handle.requestPermission === "function") {
+      perm = await handle.requestPermission({ mode: "read" });
+    }
+    if (perm !== "granted") return null;
+    return await handle.getFile();
+  } catch (_e) { return null; }
+}
+
+/** The cached file for a fileKey, or null. */
+async function nodeGraphAudioPlayerCacheGet(key) {
+  const k = String(key || "");
+  const meta = nodeGraphAudioPlayerCacheMeta();
+  if (!k || !meta[k]) return null;
+  const dir = await nodeGraphAudioPlayerCacheDir();
+  if (!dir) return null;
+  try {
+    const handle = await dir.getFileHandle(nodeGraphAudioPlayerCacheName(k));
+    const blob = await handle.getFile();
+    if (!(blob.size > 0)) return null;
+    meta[k].last = Date.now();
+    nodeGraphAudioPlayerCacheSaveMeta(meta);
+    return new File([blob], meta[k].name || "track", { type: meta[k].type || blob.type || "" });
+  } catch (_e) {
+    delete meta[k];
+    nodeGraphAudioPlayerCacheSaveMeta(meta);
+    return null;
+  }
+}
+
 async function nodeGraphAudioPlayerLibraryEnsureItemLoaded(nodeId, item) {
   if (!item) {
     nodeGraphAudioPlayerLog("FAIL", "decode skipped: no playlist item", { nodeId });
@@ -1131,9 +1335,21 @@ async function nodeGraphAudioPlayerLibraryEnsureItemLoaded(nodeId, item) {
     return held.id;
   }
   let source = "none";
-  const file = nodeGraphAudioPlayerLibraryFindFileForItem(item);
+  let file = nodeGraphAudioPlayerLibraryFindFileForItem(item);
   if (file) {
     source = "store";
+  } else if (item.fileKey) {
+    // After a refresh the picked File is gone: the cache may still have it.
+    file = await nodeGraphAudioPlayerCacheGet(item.fileKey);
+    if (file) {
+      source = "cache";
+    } else {
+      // Not cached (too big, or dropped): reopen it from disk through the
+      // remembered handle; Chrome asks to allow access once (a click).
+      file = await nodeGraphAudioPlayerHandleFile(item.fileKey, { ask: true });
+      if (file) source = "handle";
+    }
+    if (file) nodeGraphAudioPlayerLibraryFiles().set(String(item.fileKey), file);
   }
   const path = String(item.path || "").trim();
   nodeGraphAudioPlayerLog("INFO", "decode source", {
@@ -1146,6 +1362,11 @@ async function nodeGraphAudioPlayerLibraryEnsureItemLoaded(nodeId, item) {
     fileBytes: Math.max(0, Math.round(nodeGraphFiniteNumber(file?.size))),
   });
   if (file && typeof loadNodeGraphSampleForNode === "function") {
+    if (source === "store" && item.fileKey) {
+      nodeGraphAudioPlayerCachePut(item.fileKey, file).catch(() => {});
+      const handle = nodeGraphAudioPlayerFileHandles.get(file);
+      if (handle) nodeGraphAudioPlayerHandlePut(item.fileKey, handle).catch(() => {});
+    }
     const sample = await nodeGraphAudioPlayerLibraryDecodeWithProgress(nodeId, file, {
       commit: true,
       livePlan: true,
@@ -1221,7 +1442,7 @@ async function nodeGraphAudioPlayerLibraryEnsureItemLoaded(nodeId, item) {
     }, downloadedTo);
     return sample?.id || "";
   }
-  throw new Error(`no local file for ${item.name || item.path || "track"} — paste a full folder path and Load`);
+  throw new Error(`no local file for ${item.name || item.path || "track"} — press play to allow access again, or Load File (it opens your last music folder)`);
 }
 
 async function nodeGraphAudioPlayerLibraryPlayIndex(nodeId, index, { autoplay = true, transport } = {}) {
@@ -1634,4 +1855,54 @@ async function nodeGraphAudioPlayerLibraryToggleDive(nodeId) {
   if (typeof nodeGraphAudioPlayerPlaylistSyncTransport === "function") {
     nodeGraphAudioPlayerPlaylistSyncTransport(nodeId);
   }
+}
+
+// After a refresh: reload each Music Player's current track from the cache
+// (no prompt). Tracks only reachable through a handle wait for a click (play),
+// since Chrome needs one to grant access.
+const nodeGraphAudioPlayerRestored = new Set();
+const nodeGraphAudioPlayerRestoreDone = new Set();
+let nodeGraphAudioPlayerRestoreWindowOpen = true;
+
+/** True while a node's track may still come back from the cache after boot. */
+function nodeGraphAudioPlayerRestoreBusy(nodeId) {
+  return nodeGraphAudioPlayerRestoreWindowOpen && !nodeGraphAudioPlayerRestoreDone.has(String(nodeId || ""));
+}
+async function nodeGraphAudioPlayerRestoreFromCache() {
+  const nodes = (typeof nodeGraphMvp === "object" && nodeGraphMvp?.patch?.nodes) || [];
+  for (const node of nodes) {
+    if (node?.type !== "audioPlayer" || nodeGraphAudioPlayerRestored.has(node.id)) continue;
+    const pl = typeof nodeGraphAudioPlayerPlaylistForNode === "function" ? nodeGraphAudioPlayerPlaylistForNode(node.id) : null;
+    const item = pl?.items?.[pl.index || 0];
+    if (!item?.fileKey) { nodeGraphAudioPlayerRestoreDone.add(String(node.id)); continue; }
+    nodeGraphAudioPlayerRestored.add(node.id);
+    if (nodeGraphAudioPlayerLibraryFindBufferForItem(item) || nodeGraphAudioPlayerLibraryFindFileForItem(item)) {
+      nodeGraphAudioPlayerRestoreDone.add(String(node.id));
+      continue;
+    }
+    const file = await nodeGraphAudioPlayerCacheGet(item.fileKey);
+    if (!file) { nodeGraphAudioPlayerRestoreDone.add(String(node.id)); continue; }
+    nodeGraphAudioPlayerLibraryFiles().set(String(item.fileKey), file);
+    try {
+      const id = await nodeGraphAudioPlayerLibraryEnsureItemLoaded(node.id, item);
+      if (id) item.sampleId = id;
+      nodeGraphAudioPlayerLog("INFO", "restored from cache after refresh", { nodeId: node.id, name: item.name || "" });
+    } catch (error) {
+      nodeGraphAudioPlayerLog("INFO", "cache restore failed", { nodeId: node.id, error: String(error?.message || error || "") });
+    }
+    nodeGraphAudioPlayerRestoreDone.add(String(node.id));
+  }
+}
+if (typeof window !== "undefined") {
+  let tries = 0;
+  const timer = setInterval(() => {
+    tries += 1;
+    if (typeof nodeGraphMvp === "object" && nodeGraphMvp?.patch?.nodes?.length) {
+      nodeGraphAudioPlayerRestoreFromCache().catch(() => {});
+    }
+    if (tries > 30) {
+      clearInterval(timer);
+      nodeGraphAudioPlayerRestoreWindowOpen = false;
+    }
+  }, 2000);
 }

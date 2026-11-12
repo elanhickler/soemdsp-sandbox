@@ -866,6 +866,10 @@ const nodeGraphTraceDisplayFormTypeValueClampOverrides = Object.freeze({
     backgroundBrightness: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value), 0, 1),
     padExtra: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, 0), 0, 64),
   }),
+  roundingErrorFace: Object.freeze({
+    fadeTime: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, 0.35), 0, 10),
+    ghost: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, 0.3), 0, 1),
+  }),
   clockFace: Object.freeze({
     lineThickness: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, 2), 0, 16),
     lineSmoothing: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, 1), 0, 8),

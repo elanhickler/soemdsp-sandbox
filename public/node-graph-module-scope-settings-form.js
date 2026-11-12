@@ -767,9 +767,15 @@ function nodeGraphDisplaySettingsColorRowMeta(key, formType = null, options = {}
   };
   // Never a side "Color |" column — one contiguous widget row app-wide.
   let aria = base.aria || key;
-  if (formType === "vactrolScope" && (key === "backgroundColor" || key === "lightColor" || key === "fltEnvColor" || key === "ampEnvColor")) {
-    const labels = { backgroundColor: "Background", lightColor: "Light", fltEnvColor: "Flt Env", ampEnvColor: "Amp Env" };
-    const defaults = { backgroundColor: "#020609", lightColor: "#c5e07a", fltEnvColor: "#7fc7d9", ampEnvColor: "#e2a86d" };
+  if (formType === "roundingErrorFace" && (key === "backgroundColor" || key === "barColor" || key === "textColor")) {
+    const labels = { backgroundColor: "Background", barColor: "Bars", textColor: "Text" };
+    const defaults = { backgroundColor: "#06080c", barColor: "#e2b44a", textColor: "#7fc7d9" };
+    base = { ...base, label: labels[key], defaultValue: defaults[key] };
+    aria = `${labels[key]} color`;
+  } else
+  if (formType === "vactrolScope" && (key === "backgroundColor" || key === "lightColor" || key === "fltEnvColor" || key === "ampEnvColor" || key === "memColor")) {
+    const labels = { backgroundColor: "Background", lightColor: "Light", fltEnvColor: "Flt Env", ampEnvColor: "Amp Env", memColor: "Mem" };
+    const defaults = { backgroundColor: "#020609", lightColor: "#c5e07a", fltEnvColor: "#7fc7d9", ampEnvColor: "#e2a86d", memColor: "#c8c8d2" };
     aria = key === "backgroundColor" ? "Background color" : labels[key] + " line color";
     base = { ...base, label: labels[key], defaultValue: defaults[key] };
   } else if (formType === "numberReadout" && key === "dot1Color") {

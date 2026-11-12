@@ -614,7 +614,7 @@ const nodeGraphModuleStoreCatalog = Object.freeze({
   blitTrigger: {
     category: "clock",
     label: "Rounding Error Sequencer",
-    description: "Step sequencer whose accents are the sample grid's rounding error: Spacing, Rotate, Length loop, Gate. Clock Speed or an Advance trigger steps it.",
+    description: "Step sequencer whose accents are the sample grid's rounding error: Spacing, Rotate, Length loop, Gate. Rate (Hz) or an Advance trigger steps it.",
     notes: ["sequencer", "rounding error", "blit", "band-limited", "trigger", "accent", "pattern", "advance", "clock"],
   },
   clock: {
@@ -1223,6 +1223,12 @@ const nodeGraphModuleStoreCatalog = Object.freeze({
     description: "Scale and invert a signal, then add offset. Amplitude −1…+1 (0 mute, +1 unity, −1 invert).",
     label: "Attenuverter",
     notes: ["attenuverter", "scale", "invert", "offset", "utility", "native"],
+  },
+  rectifier: {
+    category: "math",
+    description: "Rectifier: Full |x|, Half + or Half - (flipped up), with a Soft knee. Envelope following, octave-up, CV folding.",
+    label: "Rectifier",
+    notes: ["rectifier", "absolute", "abs", "full-wave", "half-wave", "envelope", "octave", "utility"],
   },
   attenumax: {
     category: "math",

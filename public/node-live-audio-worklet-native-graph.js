@@ -14,6 +14,7 @@ NodeLiveAudioProcessor.NATIVE_GRAPH_TYPE_IDS = Object.freeze({
   output: 6,
   attenuverter: 7,
   attenumax: 187,
+  rectifier: 261,
   range: 8,
   inv: 9,
   divide: 202,
@@ -5253,6 +5254,12 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
       push("offset", P.NATIVE_GRAPH_PARAM_ATT_OFFSET, cont("offset", 0));
       continue;
     }
+    if (type === "rectifier") {
+      // mode = Full / Half + / Half -, soft = Soft knee (shape slot).
+      push("mode", P.NATIVE_GRAPH_PARAM_MODE, disc("mode", 0));
+      push("soft", P.NATIVE_GRAPH_PARAM_SHAPE, cont("soft", 0));
+      continue;
+    }
     if (type === "attenumax") {
       push("amplitude", P.NATIVE_GRAPH_PARAM_AMPLITUDE, cont("amplitude", 1));
       push("bias", P.NATIVE_GRAPH_PARAM_ATT_OFFSET, cont("bias", 1));
@@ -7213,13 +7220,16 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
     }
     if (type === "blitTrigger") {
       // Rounding Error Sequencer: spacing=frequency, gate=width, level=amplitude,
-      // clockSpeed=center, length=stages, rotate=phaseParam.
+      // rate (Hz, steps per second)=center, length=stages, rotate=phaseParam.
       push("spacing", P.NATIVE_GRAPH_PARAM_FREQUENCY, cont("spacing", 218.2));
       push("gate", P.NATIVE_GRAPH_PARAM_WIDTH, cont("gate", 2));
       push("amplitude", P.NATIVE_GRAPH_PARAM_AMPLITUDE, cont("amplitude", 1));
-      push("clockSpeed", P.NATIVE_GRAPH_PARAM_CENTER, cont("clockSpeed", 1));
+      push("rate", P.NATIVE_GRAPH_PARAM_CENTER, cont("rate", 4));
       push("length", P.NATIVE_GRAPH_PARAM_STAGES, disc("length", 8));
       push("rotate", P.NATIVE_GRAPH_PARAM_PHASE, cont("rotate", 0));
+      push("exaggerate", P.NATIVE_GRAPH_PARAM_MIX, cont("exaggerate", 0));
+      push("sharpness", P.NATIVE_GRAPH_PARAM_SHAPE, cont("sharpness", 0));
+      push("loopShift", P.NATIVE_GRAPH_PARAM_LANE_BIAS1, cont("loopShift", 0));
       continue;
     }
     if (type === "clock") {
@@ -10255,6 +10265,7 @@ NodeLiveAudioProcessor.prototype.nativeGraphPortNames = function nativeGraphPort
   }
   if (portId === P.NATIVE_GRAPH_PORT_PHASE01) {
     if (type === "acidSequencer") return ["__AcidStep"];
+    if (type === "blitTrigger") return ["__LoopShift"];
     // Face playhead — not a patchable jack.
     if (type === "basicShape" || type === "sineWavetable" || type === "sinCos" || type === "clock"
       || type === "ellipsoid" || type === "ellipsoidOsc" || type === "stepRegister" || type === "dsfOscillator" || type === "dsfMorphingOsc") {
@@ -10373,7 +10384,7 @@ NodeLiveAudioProcessor.prototype.publishNativeGraphScopeTaps = function publishN
         : audioPorts);
     if (type === "stepRegister") ports.push(P.NATIVE_GRAPH_PORT_TRISAW, P.NATIVE_GRAPH_PORT_PHASE01);
     if (type === "pitchManager") ports.push(P.NATIVE_GRAPH_PORT_PHASE01, P.NATIVE_GRAPH_PORT_SAW);
-    if (type === "blitTrigger") ports.push(P.NATIVE_GRAPH_PORT_SAW, P.NATIVE_GRAPH_PORT_RAMP);
+    if (type === "blitTrigger") ports.push(P.NATIVE_GRAPH_PORT_SAW, P.NATIVE_GRAPH_PORT_RAMP, P.NATIVE_GRAPH_PORT_PHASE01);
     for (let pi = 0; pi < ports.length; pi += 1) {
       const portId = ports[pi];
       const view = this.bindNativeGraphNodePortView(hash, portId, frames);
@@ -10530,7 +10541,8 @@ NodeLiveAudioProcessor.prototype.publishNativeGraphScopeTaps = function publishN
       if (type === "midiCc" || type === "midiLag") {
         ports = facePorts.concat(P.NATIVE_GRAPH_PORT_SAW, P.NATIVE_GRAPH_PORT_RIGHT, P.NATIVE_GRAPH_PORT_RAMP, P.NATIVE_GRAPH_PORT_LEFT);
       } else if (type === "blitTrigger") {
-        ports = facePorts.concat(P.NATIVE_GRAPH_PORT_SAW, P.NATIVE_GRAPH_PORT_RAMP);
+        // + __LoopShift (Phase01): the Loop Shift so far, for the face.
+        ports = facePorts.concat(P.NATIVE_GRAPH_PORT_SAW, P.NATIVE_GRAPH_PORT_RAMP, P.NATIVE_GRAPH_PORT_PHASE01);
       } else if (type === "pitchManager") {
         // Face taps: __Unit (0-1 in) and __InPitch.
         ports = facePorts.concat(P.NATIVE_GRAPH_PORT_PHASE01, P.NATIVE_GRAPH_PORT_SAW);

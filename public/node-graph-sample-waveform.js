@@ -654,6 +654,31 @@ function handleNodeGraphSampleWaveformTraceWidthChange(event) {
   updateNodeGraphSampleWaveformSettings({ traceWidth: value });
 }
 
+/** Music cache row: size buttons (pressed = current) and "Cache: used of limit". */
+function nodeGraphMusicCacheRefreshUi(host, pendingLimit) {
+  const box = host?.querySelector?.("#nodeMusicCacheChoices");
+  const usage = host?.querySelector?.("#nodeMusicCacheUsage");
+  if (!box || typeof NODE_GRAPH_AUDIO_PLAYER_CACHE_CHOICES === "undefined") return;
+  const limit = Number.isFinite(pendingLimit) ? pendingLimit : nodeGraphAudioPlayerCacheLimit();
+  if (!box.childElementCount) {
+    for (const [label, bytes] of NODE_GRAPH_AUDIO_PLAYER_CACHE_CHOICES) {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.dataset.musicCacheLimit = String(bytes);
+      btn.textContent = label;
+      box.append(btn);
+    }
+  }
+  box.querySelectorAll("[data-music-cache-limit]").forEach((btn) => {
+    btn.setAttribute("aria-pressed", String(Number(btn.dataset.musicCacheLimit) === limit));
+  });
+  if (usage) {
+    const fmt = (n) => (n >= 1024 ** 3 ? `${(n / 1024 ** 3).toFixed(1)} GB` : `${Math.round(n / 1024 ** 2)} MB`);
+    const used = typeof nodeGraphAudioPlayerCacheUsage === "function" ? nodeGraphAudioPlayerCacheUsage() : 0;
+    usage.textContent = limit > 0 ? `Cache: ${fmt(used)} of ${fmt(limit)}` : `Cache: off (${fmt(used)} held)`;
+  }
+}
+
 function handleNodeGraphSampleWaveformPlayheadAlphaChange(event) {
   updateNodeGraphSampleWaveformSettings({ playheadAlpha: Number(event.target.value) });
 }
@@ -851,6 +876,16 @@ function buildNodeGraphSampleWaveformDisplaySettingsBodyHtml() {
           <input id="nodeSampleWaveformGridBrightnessInput" type="range" min="0" max="1" step="0.01" title="Sample grid lines when zoomed in (0 = hidden)">
         </span>
       </label>
+      <div class="node-led-settings-row node-sample-waveform-settings-row node-sample-waveform-tune-row" role="group" aria-label="Music cache size" title="Keeps loaded audio after a refresh (one setting for the whole app). Never takes more than half of the space the browser has left. Least recently played files go first.">
+        <span>Music cache</span>
+        <span class="node-sample-waveform-control-widgets" id="nodeMusicCacheChoices"></span>
+      </div>
+      <div class="node-led-settings-row node-sample-waveform-settings-row node-sample-waveform-tune-row" role="group" aria-label="Music cache usage">
+        <span id="nodeMusicCacheUsage">Cache: —</span>
+        <span class="node-sample-waveform-control-widgets">
+          <button id="nodeMusicCacheClearButton" type="button" title="Delete every cached track (they reload from disk on play, after one allow click)">Clear</button>
+        </span>
+      </div>
       <div class="node-trace-display-hbs-row node-sample-waveform-color-row" style="--color-row-cells:3" data-color-row-cells="3">
         <div class="node-trace-display-hsl-lamp node-trace-display-color-widget-host" data-sample-waveform-color="background" data-label="Background" role="group" aria-label="Background color"></div>
         <div class="node-trace-display-hsl-lamp node-trace-display-color-widget-host" data-sample-waveform-color="foreground" data-label="Foreground" role="group" aria-label="Foreground color"></div>
@@ -895,6 +930,21 @@ function bindNodeGraphSampleWaveformDisplaySettingsBody(host) {
     nodeGraphMvp.sampleWaveformSettingsTargetNode = nodeId;
   }
   bindNodeGraphSampleWaveformNumberDrags(host);
+  nodeGraphMusicCacheRefreshUi(host);
+  if (host.dataset.musicCacheBound !== "true") {
+    host.dataset.musicCacheBound = "true";
+    host.addEventListener("click", (event) => {
+      const choice = event.target?.closest?.("[data-music-cache-limit]");
+      if (choice && typeof nodeGraphAudioPlayerCacheSetLimit === "function") {
+        nodeGraphAudioPlayerCacheSetLimit(Number(choice.dataset.musicCacheLimit)).then(() => nodeGraphMusicCacheRefreshUi(host));
+        nodeGraphMusicCacheRefreshUi(host, Number(choice.dataset.musicCacheLimit));
+        return;
+      }
+      if (event.target?.id === "nodeMusicCacheClearButton" && typeof nodeGraphAudioPlayerCacheClear === "function") {
+        nodeGraphAudioPlayerCacheClear().then(() => nodeGraphMusicCacheRefreshUi(host));
+      }
+    });
+  }
   if (typeof bindNodeGraphSampleWaveformSettingModifiers === "function") {
     bindNodeGraphSampleWaveformSettingModifiers();
   }
@@ -3201,7 +3251,10 @@ function drawNodeGraphSampleWaveformDisplay(section) {
     const pl = typeof nodeGraphAudioPlayerPlaylistForNode === "function"
       ? nodeGraphAudioPlayerPlaylistForNode(nodeId)
       : null;
-    if (circuitRunning && (pl?.items?.length || 0) > 0 && typeof nodeGraphAudioPlayerLog === "function") {
+    // Right after a refresh the track may still be coming back from the
+    // music cache: not a failure yet.
+    const restoring = typeof nodeGraphAudioPlayerRestoreBusy === "function" && nodeGraphAudioPlayerRestoreBusy(nodeId);
+    if (circuitRunning && !restoring && (pl?.items?.length || 0) > 0 && typeof nodeGraphAudioPlayerLog === "function") {
       const missKey = `${nodeId}:${node?.sample?.id || ""}:${pl.items.length}`;
       if (nodeGraphSampleWaveformMissingLogged !== missKey) {
         nodeGraphSampleWaveformMissingLogged = missKey;
@@ -3456,7 +3509,14 @@ function drawNodeGraphSampleWaveformDisplay(section) {
     && playheadFrame <= viewEnd
     && typeof nodeGraphGlLinesSegment === "function"
   ) {
-    const x = (!autoScrollPaused && settings.scrollMode === "smooth")
+    // Smooth scroll holds the playhead on the scroll line only while the view
+    // can follow it. Zoomed out (window near the file length), the view is
+    // clamped at the file start / end and stops moving: then the playhead
+    // must sit at its real position, not stay stuck on the scroll line.
+    const followSpp = (viewEnd - viewStart) / Math.max(1, width);
+    const idealFollowStart = playheadFrame - (viewEnd - viewStart) * scrollLineRatio;
+    const following = Math.abs(viewStart - idealFollowStart) <= Math.max(1, followSpp * 1.5);
+    const x = (!autoScrollPaused && settings.scrollMode === "smooth" && following)
       ? scrollLineRatio * width
       : frameToX(playheadFrame);
     nodeGraphGlLinesSegment(

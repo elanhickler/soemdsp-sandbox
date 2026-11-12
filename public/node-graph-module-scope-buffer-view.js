@@ -87,6 +87,11 @@ function nodeGraphTraceDisplayBufferView(buffer, slot, options = {}) {
     );
     let lock = nodeGraphModuleScopeState.waterfallSyncLocks.get(lockKey);
     if (!lock) {
+      // Keys include buffer ids, and capture buffers are replaced on plan
+      // rebuilds: cap the map so dead keys cannot pile up over a session.
+      if (nodeGraphModuleScopeState.waterfallSyncLocks.size > 512) {
+        nodeGraphModuleScopeState.waterfallSyncLocks.clear();
+      }
       lock = {};
       nodeGraphModuleScopeState.waterfallSyncLocks.set(lockKey, lock);
     }
