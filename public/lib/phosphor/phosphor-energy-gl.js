@@ -1171,8 +1171,8 @@
   }
 
   /**
-   * Blit source energy surface into target (UV 0–1 → stretch/shrink to new size).
-   * Mirrors copyNodeGraphScope2dBurnSurface so zoom keeps phosphor trails.
+   * Blit source energy surface into target (UV 0–1 → stretch/shrink to new size)
+   * so zoom keeps phosphor trails.
    */
   function copySurface(renderer, sourceSurface, targetSurface, width, height, options = {}) {
     const gl = renderer?.gl;
@@ -1228,8 +1228,8 @@
   }
 
   /**
-   * Reallocate ping-pong energy surfaces at a new size, copying prior energy.
-   * Same contract as resizeNodeGraphScope2dBurnRenderer (Lorenz/Chua scopes).
+   * Reallocate ping-pong energy surfaces at a new size, copying prior energy
+   * (Lorenz/Chua scopes).
    */
   function resizeRenderer(renderer, width, height) {
     if (!renderer?.alive || !renderer.gl) {

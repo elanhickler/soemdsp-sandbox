@@ -163,7 +163,7 @@ function nodeGraphHarmonicLinesDisplayWalks(section, key, H, salt, seed) {
 
 function drawNodeGraphHarmonicLinesDisplay(section) {
   if (!section) return;
-  const canvas = section.querySelector("canvas");
+  const canvas = section.querySelector(".node-display-face");
   if (!canvas) return;
 
   const m = typeof nodeGraphDisplayCanvasSize === "function" ? nodeGraphDisplayCanvasSize(section, canvas) : null;

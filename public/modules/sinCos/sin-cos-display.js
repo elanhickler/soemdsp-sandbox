@@ -569,7 +569,7 @@ function drawNodeGraphSinCosDisplayInner(section) {
     || "";
   const node = typeof nodeGraphPatchNode === "function" ? nodeGraphPatchNode(nodeId) : null;
   const canvas = section?.querySelector?.(".node-sincos-canvas")
-    || section?.querySelector?.("canvas");
+    || section?.querySelector?.(".node-display-face");
   if (!node || !canvas) {
     return;
   }

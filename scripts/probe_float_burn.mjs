@@ -40,7 +40,7 @@ const nr = await page.evaluate(() => {
     nodeGraphNumberReadoutGlPenRect(pen, 0, 0, W, H, [0, 0, 0], 1);
     if (withPlate) nodeGraphNumberReadoutPresentBurnPlate(pen, c, plate, stops, "#ffffff");
     nodeGraphNumberReadoutGlEndFace(c, pen);
-    const d = nodeGraphDisplayCanvasPresentContext(c).getImageData(0, 0, W, H).data;
+    const d = nodeGraphSharedGlPresentTarget(c).getImageData(0, 0, W, H).data;
     let lit = 0, sum = 0;
     for (let i = 0; i < d.length; i += 4) { if (d[i] > 0) lit += 1; sum += d[i]; }
     return { lit, mean: sum / (W * H) };

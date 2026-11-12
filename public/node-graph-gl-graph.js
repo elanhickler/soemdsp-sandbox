@@ -154,7 +154,7 @@ function nodeGraphGlGraphRebuildPlates() {
       textBox: Boolean(textBody),
       onTop,
     });
-    const canvases = el.querySelectorAll(".node-display-canvas");
+    const canvases = el.querySelectorAll(NODE_GRAPH_DISPLAY_FACE_SELECTOR);
     for (let c = 0; c < canvases.length; c += 1) {
       const face = canvases[c];
       if (!(face.width > 1) || !(face.height > 1)) continue;
@@ -2232,7 +2232,7 @@ function nodeGraphGlGraphDropFaceHost(face) {
 }
 
 function nodeGraphGlGraphPresentFaceHost(face) {
-  const displays = face.querySelectorAll(".node-display-canvas");
+  const displays = face.querySelectorAll(NODE_GRAPH_DISPLAY_FACE_SELECTOR);
   const cssW = face.clientWidth;
   const cssH = face.clientHeight;
   if (!displays.length || !(cssW > 1) || !(cssH > 1)) {

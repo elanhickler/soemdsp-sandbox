@@ -141,8 +141,8 @@ function drawNodeGraphGradientVectorscopeFaceItem(_renderer, item, _pixelRatio) 
   const h = canvas.height;
   const trails = typeof TraceRgbTrailsGl !== "undefined" ? TraceRgbTrailsGl : null;
   const state = trails && typeof trails.ensure === "function" ? trails.ensure(canvas, w, h) : null;
-  const presentCtx = typeof nodeGraphDisplayCanvasPresentContext === "function"
-    ? nodeGraphDisplayCanvasPresentContext(canvas)
+  const presentCtx = typeof nodeGraphSharedGlPresentTarget === "function"
+    ? nodeGraphSharedGlPresentTarget(canvas)
     : null;
   if (!state || !presentCtx || typeof TraceWoscope?.drawToFramebuffer !== "function") {
     nodeGraphGradientVectorscopeGlFailed(canvas, "WebGL2 trails/woscope unavailable");

@@ -258,7 +258,7 @@
 
   // ---- face host -----------------------------------------------------------
   function nodeGraphControllerFaceCanvas(face) {
-    let canvas = face?.querySelector?.(":scope > canvas.node-controller-face-canvas") || null;
+    let canvas = face?.querySelector?.(":scope > .node-controller-face-canvas") || null;
     if (!canvas && face && typeof global.nodeGraphDisplayCanvasCreate === "function") {
       canvas = global.nodeGraphDisplayCanvasCreate("node-controller-face-canvas");
       canvas.setAttribute("aria-hidden", "true");

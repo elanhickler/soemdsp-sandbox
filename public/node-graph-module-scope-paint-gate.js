@@ -723,8 +723,8 @@ function scopePaintEnsureColdPlate(slot, options = {}) {
     && NODE_GRAPH_TRACE_COLD_PLATE_RENDERERS.includes(displayType || "")
     && typeof paintNodeGraphTraceDisplayColdPlate === "function";
   let canvas = options.canvas
-    || face?.querySelector?.(":scope > canvas.node-module-scope-local-fallback-canvas")
-    || face?.querySelector?.("canvas")
+    || face?.querySelector?.(":scope > .node-module-scope-local-fallback-canvas")
+    || face?.querySelector?.(".node-display-face")
     || null;
   // Spawn while stopped / paused: give the face its canvas now so it shows a
   // plate immediately (trace faces build theirs in the cold-plate paint).

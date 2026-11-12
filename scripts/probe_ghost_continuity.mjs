@@ -53,7 +53,7 @@ const r = await page.evaluate(() => {
   };
   const faceDiff = () => {
     nodeGraphResidualFaceGlPresent(st, c, bg);
-    const d = nodeGraphDisplayCanvasPresentContext(c).getImageData(0, 0, W, H).data;
+    const d = nodeGraphSharedGlPresentTarget(c).getImageData(0, 0, W, H).data;
     let diff = 0;
     for (let i = 0; i < d.length; i += 4) if (d[i] !== 26 || d[i + 1] !== 26 || d[i + 2] !== 30) diff += 1;
     return diff;

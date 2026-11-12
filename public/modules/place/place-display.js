@@ -59,8 +59,8 @@ function drawNodeGraphPlaceFaceItem(_renderer, item) {
   if (!slot || !face) return;
   const canvas = nodeGraphPlaceEnsureCanvas(face);
   if (!canvas) return;
-  const ctx = typeof nodeGraphDisplayCanvasPresentContext === "function"
-    ? nodeGraphDisplayCanvasPresentContext(canvas)
+  const ctx = typeof nodeGraphSharedGlPresentTarget === "function"
+    ? nodeGraphSharedGlPresentTarget(canvas)
     : null;
   if (!ctx) return;
   if (face._placeOwnsClock && item?.fromFaceLoop !== true && item?.force !== true) return;

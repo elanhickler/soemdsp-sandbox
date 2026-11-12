@@ -1,5 +1,5 @@
 // One hidden WebGL2 context (4096²) for every display that shares GPU work.
-// Faces are ordinary 2D canvases; present scissors then blits. A 📺 cable
+// Faces are face boxes with a face texture; present scissors then copies. A 📺 cable
 // publishes a texture id on this device — no byte copy between modules.
 // Never resize the canvas: a resize wipes every texture on the context.
 // WebGL1 is not requested (P0d).
@@ -335,7 +335,7 @@
   }
 
   /**
-   * Show a device texture on a face canvas (2D plate).
+   * Show a device texture on a face box (its face texture) or a real canvas.
    * The 📺 wire does not use this blit.
    */
   function nodeGraphPicturePresent(texture, srcW, srcH, destCanvas, destW, destH) {
@@ -356,7 +356,7 @@
     drawTexturedQuad(gl, dev, texture, rw, rh, true);
     gl.disable(gl.SCISSOR_TEST);
     gl.bindTexture(gl.TEXTURE_2D, null);
-    const ctx = destCanvas.getContext("2d");
+    const ctx = nodeGraphSharedGlPresentTarget(destCanvas);
     if (!ctx) return false;
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     const srcY = Math.max(0, dev.canvas.height - rh);
@@ -384,26 +384,34 @@
     gl.disable(gl.SCISSOR_TEST);
   }
 
-  // ---- Face textures (ZP-2, docs/ZOOM_PERF_PLAN.md) -----------------------
-  // A face renders into the bottom-left of this 4096 canvas, then lands on its
-  // display canvas. That landing is a GPU-to-GPU copy into a per-face texture
-  // at the face canvas size (zoom-1 backing), made only when the face paints.
-  // The GL graph, the mini view, the magnifier and snapshots sample that
-  // texture (gl-line-renderer drawImages), so no face is read back to the CPU
-  // (no readPixels) and nothing re-uploads a 2D canvas per frame.
+  // ---- Face textures (ZP-2, docs/ZOOM_PERF_PLAN.md; layering Stage 4b) -----
+  // A display face is a face box (display-canvas.js): a zoom-1 layout record
+  // that carries its backing size (width / height) but has no <canvas> and no
+  // 2D bitmap. Its picture lives only in a per-face texture. A face renders
+  // into the bottom-left of this 4096 canvas, then a GPU-to-GPU copy lands it
+  // in that texture at the face's backing size, only when the face paints.
+  // The GL graph, Canvas tiles, screen solo, Mini Canvas, the magnifier and
+  // snapshots sample that texture (gl-line-renderer drawImages), so no face is
+  // read back to the CPU (no readPixels) and nothing uploads a 2D canvas.
   //
-  // Storage is top-down: texture row 0 = the canvas's top row, the same as a
-  // texImage2D(canvas) upload with UNPACK_FLIP_Y false. Framebuffer rows are
+  // Textures are keyed by face identity, node id + face slot
+  // (nodeGraphDisplayFaceKey), not by element: a face box rebuilt with its
+  // module keeps its picture. Every helper below takes a face box, a face key
+  // or a face texture entry.
+  //
+  // Storage is top-down: texture row 0 = the face's top row, the same as a
+  // texImage2D upload with UNPACK_FLIP_Y false. Framebuffer rows are
   // bottom-up, so the copy flips v once here and every consumer draws upright.
   //
-  // A face canvas a GPU pass composites (`.node-display-canvas` inside the
-  // live workspace with gl-graph-on, or inside a Canvas view / screen solo
-  // face host, .gl-face-host; CSS hides those bitmaps) gets the texture only.
-  // Any other destination is on screen as a 2D canvas, so it also gets the
-  // HEAD-style drawImage from this canvas.
-  const faceTextures = new WeakMap();
-  // canvas -> "WxH" whose face texture FBO failed: not retried every frame.
-  const faceFailed = new WeakMap();
+  // A real <canvas> a GPU pass reads (a workspace layer the Screen Space
+  // Shader host samples, data-screen-fx-source) is texture-only too. Any other
+  // real canvas (an on-screen 2D plate, e.g. the colour widget) gets the
+  // browser's 2D drawImage and no texture.
+  const faceTextures = new Map(); // face key -> entry
+  // face key -> "WxH" whose face texture FBO failed: not retried every frame.
+  const faceFailed = new Map();
+  const FACE_SWEEP_MS = 5000;
+  let faceSweepAt = 0;
   let faceKit = null;
 
   const FACE_VS = `
@@ -474,15 +482,27 @@
   }
 
   /**
-   * True when a GPU pass composites this canvas and CSS hides its bitmap: a
-   * face inside the GL graph or a Canvas view / screen solo face host
-   * (nodeGraphGlGraphPresentFaceHost), or a workspace layer the Screen Space
-   * Shader host reads (data-screen-fx-source).
+   * True when this element's picture lives only in its face texture: a face
+   * box, or a workspace layer canvas the Screen Space Shader host reads
+   * (data-screen-fx-source).
    */
-  function nodeGraphSharedGlFaceTextureOnly(canvas) {
-    if (canvas?.dataset?.screenFxSource === "1") return true;
-    return Boolean(canvas?.classList?.contains("node-display-canvas")
-      && canvas.closest?.("#nodeGraphWorkspace.gl-graph-on, .gl-face-host"));
+  function nodeGraphSharedGlFaceTextureOnly(el) {
+    if (!el || typeof el !== "object") return false;
+    if (el.dataset?.screenFxSource === "1") return true;
+    return Boolean(el.classList?.contains(global.NODE_GRAPH_DISPLAY_FACE_CLASS || "node-display-face"));
+  }
+
+  function faceKeyOf(face) {
+    if (typeof face === "string") return face;
+    return typeof global.nodeGraphDisplayFaceKey === "function" ? global.nodeGraphDisplayFaceKey(face) : "";
+  }
+
+  /** The texture entry for a face box, face key or entry (any size). */
+  function faceEntryOf(face) {
+    if (!face) return null;
+    if (face.glFaceTexture === true) return face;
+    const key = faceKeyOf(face);
+    return key ? faceTextures.get(key) || null : null;
   }
 
   function faceDelete(gl, entry) {
@@ -493,36 +513,53 @@
     entry.texture = null;
   }
 
-  /** Drop a face's texture (its 2D canvas was repainted, e.g. the black failure plate). */
-  function nodeGraphSharedGlFaceForget(canvas) {
-    const entry = canvas ? faceTextures.get(canvas) : null;
+  /** Drop a face's texture (its module's display went away or repaints from scratch). */
+  function nodeGraphSharedGlFaceForget(face) {
+    const entry = faceEntryOf(face);
     if (!entry) return;
     const gl = nodeGraphPictureDevice()?.gl;
     if (gl && !gl.isContextLost()) faceDelete(gl, entry);
-    faceTextures.delete(canvas);
+    faceTextures.delete(entry.key);
+    faceFailed.delete(entry.key);
   }
 
-  function faceEnsure(gl, canvas) {
-    const cw = canvas.width | 0;
-    const ch = canvas.height | 0;
-    if (!(cw > 0) || !(ch > 0) || cw > MAX_DIM || ch > MAX_DIM) return null;
-    let entry = faceTextures.get(canvas);
-    if (entry && entry.gl === gl && entry.w === cw && entry.h === ch && entry.texture) return entry;
-    if (faceFailed.get(canvas) === `${cw}x${ch}`) return null;
+  // A texture whose last face box left the document and has no connected
+  // successor (same key) belongs to a deleted display: free it.
+  function faceSweep(gl) {
+    const now = typeof performance !== "undefined" ? performance.now() : Date.now();
+    if (now < faceSweepAt) return;
+    faceSweepAt = now + FACE_SWEEP_MS;
+    const doc = global.document;
+    for (const [key, entry] of faceTextures) {
+      if (entry.owner?.isConnected) continue;
+      const next = doc?.querySelector?.(`[data-face-key="${global.CSS?.escape ? global.CSS.escape(key) : key}"]`);
+      if (next?.isConnected) {
+        entry.owner = next;
+        continue;
+      }
+      faceDelete(gl, entry);
+      faceTextures.delete(key);
+    }
+  }
+
+  function faceEnsure(gl, face) {
+    const key = faceKeyOf(face);
+    const cw = face.width | 0;
+    const ch = face.height | 0;
+    if (!key || !(cw > 0) || !(ch > 0) || cw > MAX_DIM || ch > MAX_DIM) return null;
+    let entry = faceTextures.get(key);
+    if (entry && entry.gl === gl && entry.w === cw && entry.h === ch && entry.texture) {
+      if (entry.owner !== face) entry.owner = face;
+      return entry;
+    }
+    if (faceFailed.get(key) === `${cw}x${ch}`) return null;
+    faceSweep(gl);
     if (entry) faceDelete(gl, entry);
+    // A face has no 2D bitmap: a new texture starts transparent (no upload).
     const texture = gl.createTexture();
     gl.bindTexture(gl.TEXTURE_2D, texture);
     faceTexParams(gl, gl.NEAREST);
-    // A composited face has no 2D bitmap: it starts transparent, no canvas
-    // upload. A 2D face is seeded from its canvas once, so a partial first
-    // copy keeps what it already showed (plate, earlier frame).
-    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
-    gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
-    if (nodeGraphSharedGlFaceTextureOnly(canvas)) {
-      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, cw, ch, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
-    } else {
-      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, canvas);
-    }
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, cw, ch, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
     const fbo = gl.createFramebuffer();
     gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
     gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texture, 0);
@@ -531,25 +568,87 @@
     if (!ok) {
       gl.deleteFramebuffer(fbo);
       gl.deleteTexture(texture);
-      faceTextures.delete(canvas);
-      faceFailed.set(canvas, `${cw}x${ch}`);
+      faceTextures.delete(key);
+      faceFailed.set(key, `${cw}x${ch}`);
       return null;
     }
-    faceFailed.delete(canvas);
-    entry = { gl, texture, fbo, w: cw, h: ch, gen: 0, glFaceTexture: true };
-    faceTextures.set(canvas, entry);
+    faceFailed.delete(key);
+    entry = { gl, key, owner: face, texture, fbo, w: cw, h: ch, gen: 0, glFaceTexture: true };
+    faceTextures.set(key, entry);
     return entry;
   }
 
   /**
-   * Current GPU picture of a face canvas: { texture, w, h, gen } (top-down),
-   * or null when the canvas has none or was resized since its last copy.
+   * Current GPU picture of a face (face box, face key or entry):
+   * { texture, w, h, gen, key } (top-down), or null when it has none or a
+   * face box was resized since its last copy.
    */
-  function nodeGraphSharedGlFaceTexture(canvas) {
-    const entry = canvas ? faceTextures.get(canvas) : null;
+  function nodeGraphSharedGlFaceTexture(face) {
+    const entry = faceEntryOf(face);
     if (!entry?.texture) return null;
-    if (entry.w !== (canvas.width | 0) || entry.h !== (canvas.height | 0)) return null;
+    if (typeof face === "object" && face !== entry
+      && (entry.w !== (face.width | 0) || entry.h !== (face.height | 0))) {
+      return null;
+    }
     return entry;
+  }
+
+  /**
+   * Fill a face's texture with one straight-alpha colour (the GL failure
+   * policy's black plate). Returns false when the face has no backing size.
+   */
+  function nodeGraphSharedGlFaceFill(face, rgba = [0, 0, 0, 1]) {
+    const gl = nodeGraphPictureDevice()?.gl;
+    if (!gl || gl.isContextLost() || !face || typeof face !== "object") return false;
+    const entry = faceEnsure(gl, face);
+    if (!entry) return false;
+    const prevScissor = gl.isEnabled(gl.SCISSOR_TEST);
+    const prevClear = gl.getParameter(gl.COLOR_CLEAR_VALUE);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, entry.fbo);
+    gl.disable(gl.SCISSOR_TEST);
+    gl.clearColor(rgba[0], rgba[1], rgba[2], rgba.length > 3 ? rgba[3] : 1);
+    gl.clear(gl.COLOR_BUFFER_BIT);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    gl.clearColor(prevClear[0], prevClear[1], prevClear[2], prevClear[3]);
+    if (prevScissor) gl.enable(gl.SCISSOR_TEST);
+    entry.gen += 1;
+    return true;
+  }
+
+  /**
+   * Where a picture is presented: a face box (or screen-fx layer) gets a
+   * present target that lands copies in its face texture; a real on-screen
+   * canvas gets its own 2D context. A present target carries only the state a
+   * copy reads (globalAlpha, globalCompositeOperation, smoothing) and
+   * save / restore / setTransform; copies are in face pixels, so a
+   * transform never applies. Nothing draws 2D into a face.
+   */
+  function nodeGraphSharedGlPresentTarget(el) {
+    if (!el || typeof el !== "object") return null;
+    if (!nodeGraphSharedGlFaceTextureOnly(el)) {
+      return typeof el.getContext === "function" ? el.getContext("2d") : null;
+    }
+    if (el._glPresentTarget?.canvas === el) return el._glPresentTarget;
+    const target = {
+      facePresentTarget: true,
+      canvas: el,
+      globalAlpha: 1,
+      globalCompositeOperation: "source-over",
+      imageSmoothingEnabled: false,
+      imageSmoothingQuality: "low",
+      filter: "none",
+      stack: [],
+      save() {
+        this.stack.push([this.globalAlpha, this.globalCompositeOperation, this.imageSmoothingEnabled, this.filter]);
+      },
+      restore() {
+        const top = this.stack.pop();
+        if (top) [this.globalAlpha, this.globalCompositeOperation, this.imageSmoothingEnabled, this.filter] = top;
+      },
+      setTransform() {},
+    };
+    el._glPresentTarget = target;
+    return target;
   }
 
   function faceBlendFor(gl, op, replace) {
@@ -567,10 +666,10 @@
 
   /**
    * Land a rectangle of the shared canvas (sx, sy, sw, sh in canvas pixels,
-   * top-down, like drawImage) on destCtx's canvas at dx, dy, dw, dh.
-   * GPU-to-GPU into the face texture; plus the 2D drawImage for on-screen 2D
-   * canvases. options.replace: the destination rect is replaced, not blended
-   * (a transparent batch that cleared its canvas first).
+   * top-down, like drawImage) at dx, dy, dw, dh of a present target
+   * (nodeGraphSharedGlPresentTarget): GPU-to-GPU into the face texture, or
+   * the 2D drawImage for a real on-screen canvas. options.replace: the
+   * destination rect is replaced, not blended (a transparent batch).
    */
   function nodeGraphSharedGlCopyToContext(destCtx, sx, sy, sw, sh, dx, dy, dw, dh, smooth, options = null) {
     const pic = nodeGraphPictureDevice();
@@ -586,14 +685,12 @@
     const glX = sx | 0;
     const glY = srcCanvas.height - ((sy | 0) + h);
     if (glX < 0 || glY < 0 || glX + w > srcCanvas.width || glY + h > srcCanvas.height) return false;
-    const textureOnly = nodeGraphSharedGlFaceTextureOnly(canvas);
-    const wantsTexture = textureOnly || canvas.classList?.contains("node-display-canvas");
-    if (!textureOnly) {
+    if (!nodeGraphSharedGlFaceTextureOnly(canvas)) {
       // On-screen 2D canvas: the browser's canvas blit (HEAD path, upright).
       destCtx.imageSmoothingEnabled = Boolean(smooth);
       if ("imageSmoothingQuality" in destCtx) destCtx.imageSmoothingQuality = smooth ? "medium" : "low";
       destCtx.drawImage(srcCanvas, glX, sy | 0, w, h, dx, dy, destW, destH);
-      if (!wantsTexture) return true;
+      return true;
     }
     const kit = nodeGraphSharedGlFaceKit(gl);
     const entry = kit ? faceEnsure(gl, canvas) : null;
@@ -653,8 +750,8 @@
   }
 
   /** A new texture holding a copy of a face's picture (top-down), or null. */
-  function nodeGraphSharedGlFaceCopyTexture(canvas) {
-    const entry = nodeGraphSharedGlFaceTexture(canvas);
+  function nodeGraphSharedGlFaceCopyTexture(face) {
+    const entry = nodeGraphSharedGlFaceTexture(face);
     const gl = entry?.gl;
     if (!entry || !gl || gl.isContextLost()) return null;
     const texture = gl.createTexture();
@@ -669,10 +766,10 @@
 
   /**
    * Test / debug only (never per frame): a face's pixels, top-down RGBA.
-   * Faces the GL graph composites have no 2D bitmap, so smokes read this.
+   * Faces have no 2D bitmap, so smokes read this (face box, key or entry).
    */
-  function nodeGraphSharedGlFacePixels(canvas) {
-    const entry = nodeGraphSharedGlFaceTexture(canvas);
+  function nodeGraphSharedGlFacePixels(face) {
+    const entry = nodeGraphSharedGlFaceTexture(face);
     const gl = entry?.gl;
     if (!entry || !gl || gl.isContextLost()) return null;
     const data = new Uint8Array(entry.w * entry.h * 4);
@@ -682,7 +779,8 @@
     return { width: entry.w, height: entry.h, data };
   }
 
-  function nodeGraphSharedGlBlitTo2D(destCtx, width, height, options = null) {
+  /** The device's bottom-left width x height lands at 0, 0 of a present target. */
+  function nodeGraphSharedGlPresent(destCtx, width, height, options = null) {
     const pic = nodeGraphPictureDevice();
     if (!pic?.canvas || !destCtx) return false;
     const w = Math.max(1, width | 0);
@@ -696,11 +794,13 @@
   global.nodeGraphSharedGlDevice = nodeGraphSharedGlDevice;
   global.nodeGraphSharedGlBindPresent = nodeGraphSharedGlBindPresent;
   global.nodeGraphSharedGlEndPresent = nodeGraphSharedGlEndPresent;
-  global.nodeGraphSharedGlBlitTo2D = nodeGraphSharedGlBlitTo2D;
+  global.nodeGraphSharedGlPresent = nodeGraphSharedGlPresent;
+  global.nodeGraphSharedGlPresentTarget = nodeGraphSharedGlPresentTarget;
   global.nodeGraphSharedGlCopyToContext = nodeGraphSharedGlCopyToContext;
   global.nodeGraphSharedGlFaceTexture = nodeGraphSharedGlFaceTexture;
   global.nodeGraphSharedGlFaceTextureOnly = nodeGraphSharedGlFaceTextureOnly;
   global.nodeGraphSharedGlFaceForget = nodeGraphSharedGlFaceForget;
+  global.nodeGraphSharedGlFaceFill = nodeGraphSharedGlFaceFill;
   global.nodeGraphSharedGlFaceCopyTexture = nodeGraphSharedGlFaceCopyTexture;
   global.nodeGraphSharedGlFacePixels = nodeGraphSharedGlFacePixels;
   global.nodeGraphPictureGet = nodeGraphPictureGet;

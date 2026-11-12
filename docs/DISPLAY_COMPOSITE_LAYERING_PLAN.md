@@ -45,7 +45,7 @@ The workspace present (`nodeGraphGlGraphPresent` in `public/node-graph-gl-graph.
 Display text is still drawn **into the face present**, at display backing resolution:
 
 - `nodeGraphFaceTextSet` / `nodeGraphFaceFrameDraw` in `public/node-graph-module-scope-paint-helpers.js` (MIDI CC numbers strip, and the same hook for other waterfall face text).
-- `NODE_GRAPH_WATERFALL_FRAME` in `public/node-graph-module-scope-waterfall.js` is the single source of truth for waterfall padding (left margin + fade). `nodeGraphWaterfallGlPresent` calls `nodeGraphFaceFrameDraw` onto the present, then still calls `nodeGraphDisplayCanvasBlit` (which, in the workspace, becomes the GPU face-texture copy — the 2D bitmap stays unused).
+- `NODE_GRAPH_WATERFALL_FRAME` in `public/node-graph-module-scope-waterfall.js` is the single source of truth for waterfall padding (left margin + fade). `nodeGraphWaterfallGlPresent` calls `nodeGraphFaceFrameDraw` onto the present, then copies the present into the face texture (`nodeGraphSharedGlCopyToContext`).
 
 `.pixelated-canvas-zoom` in `public/styles.css` (nearest-neighbour above 2.5x) still targets the DOM display canvases. The workspace path already passes `nearest: pixelated` into `nodeGraphGlLinesImage` when `zoom > 2.5`. After the DOM canvases go away, that CSS rule is not enough; the GL `nearest` flag is the real policy.
 
@@ -199,7 +199,15 @@ Stage 4a (landed 2026-11-11): every display Argi sees composites from its face t
 - Wire end dots draw in their module's stack (a module in front hides them); only free ends (drag cursor) stay on the dots canvas.
 - `NODE_GRAPH_DISPLAY_COMPOSITE` is gone. Mini Canvas and the display hit-test already read the published rects.
 
-Stage 4b (left): the DOM canvases are still there as hidden layout records and texture keys. Swap `nodeGraphDisplayCanvasCreate` and the raw `createElement("canvas")` faces for a non-canvas face box keyed by node id + face slot, replace `nodeGraphDisplayCanvasPresentContext` (still `getContext("2d")`) with a present target, delete `nodeGraphDisplayCanvasBlit`, then retire the hide rules. Display canvases outside any GPU pass (popups, floating windows, embeds that are not tiles) still show their own 2D bitmap.
+Stage 4b (landed 2026-11-11): no display has a DOM canvas any more.
+- Face box: `nodeGraphDisplayCanvasCreate` makes a plain `div.node-display-face` (aria-hidden) that is the face's zoom-1 layout record and carries its backing size as `width` / `height`. Every raw `createElement("canvas")` face (Number Readout / Value LCD, Filter Curve, Sample Player / Music Player, Phosphillator, MIDI Monitor, Formant, Emo) goes through it. `nodeGraphSizeDisplayCanvas` only sizes (no 2D context).
+- Face identity: `nodeGraphDisplayFaceKey(face)` = `<node id>#<face slot>` (`data-face-slot`, else first class + index), cached in `data-face-key`. The face texture store is a Map on that key (no WeakMap on canvases); a face box rebuilt with its module, or moved into a Canvas tile, gets the same texture. Entries whose box is gone and has no successor are freed by a 5 s sweep.
+- Present: `nodeGraphSharedGlPresentTarget(face)` is a present target (alpha / composite / smoothing state only) and `nodeGraphSharedGlCopyToContext` / `nodeGraphSharedGlPresent` land GPU-to-GPU in the face texture. `nodeGraphDisplayCanvasPresentContext`, `nodeGraphDisplayCanvasBlit`, `nodeGraphSharedGlBlitTo2D` and the legacy per-canvas RGB burn renderer are deleted. Real on-screen canvases (face hosts, Mini Canvas, overlays) still get their 2D context.
+- Snapshots and smokes: `nodeGraphGlLinesSnapshot`, `nodeGraphSharedGlFaceCopyTexture` and `nodeGraphSharedGlFacePixels` take a face box, a face key or a texture entry. The camera preview copies each face texture into its clone by face key.
+- Phosphillator draws through the gl-line-renderer (it was the last 2D face), with its input on the section.
+- CSS: the `gl-graph-on` / `.gl-face-host` canvas hide rules and the `.display-canvas-pixelated` rule are gone; one `.node-display-face` rule keeps the box from painting. The GL nearest flag (`nodeGraphGlGraphFacePin`), `.display-canvas-smooth` and the 2.5x threshold are unchanged. `#nodeModuleScopeCanvas` (the workspace scope overlay with its own webgl2 context) is no longer a display face; it has its own hide while the GPU graph is on.
+- Smokes: `scripts/smoke_display_face_boxes.mjs` (every module type: face boxes, unique keys, no canvas API on a face box) and `scripts/smoke_display_face_views.mjs` (workspace, snapshot, one zoom step, Canvas tiles, screen solo, Mini Canvas, z-order).
+- Left: a face shown outside every GPU pass (a popup or embed that is not a Canvas tile) has no picture of its own now; none is known to exist.
 
 ## 6. Also migrate (they still depend on DOM display canvases)
 

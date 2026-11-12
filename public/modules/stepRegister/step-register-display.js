@@ -211,7 +211,7 @@ function drawNodeGraphStepRegisterDisplay(section) {
 function drawNodeGraphStepRegisterDisplayInner(section) {
   const nodeId = section?.dataset?.node || section?.closest?.(".dsp-node")?.dataset?.node || "";
   const node = typeof nodeGraphPatchNode === "function" ? nodeGraphPatchNode(nodeId) : null;
-  const canvas = section?.querySelector?.(".node-step-register-canvas") || section?.querySelector?.("canvas");
+  const canvas = section?.querySelector?.(".node-step-register-canvas") || section?.querySelector?.(".node-display-face");
   if (!node || !canvas) return;
   const look = typeof nodeGraphBasicShapeFaceLook === "function"
     ? nodeGraphBasicShapeFaceLook(node)

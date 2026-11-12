@@ -230,7 +230,7 @@ void main() {
 `;
 
 function nodeGraphWaterfallGlEnsure(canvas, plateCss) {
-  if (!canvas || typeof canvas.getContext !== "function") return null;
+  if (!canvas) return null;
   const w = Math.max(1, canvas.width | 0);
   const h = Math.max(1, canvas.height | 0);
   let s = canvas._wfGlSession;
@@ -1236,10 +1236,10 @@ function nodeGraphWaterfallGlPresent(canvas, plateCss) {
   if (typeof nodeGraphSharedGlEndPresent === "function") {
     nodeGraphSharedGlEndPresent(gl);
   }
-  const ctx = nodeGraphDisplayCanvasPresentContext(canvas);
+  const ctx = nodeGraphSharedGlPresentTarget(canvas);
   const dev = typeof nodeGraphSharedGlDevice === "function" ? nodeGraphSharedGlDevice() : null;
   if (!ctx || !dev?.canvas || gl.isContextLost()) return false;
-  nodeGraphDisplayCanvasBlit(ctx, dev.canvas, 0, dev.canvas.height - s.h, s.w, s.h, 0, 0, s.w, s.h, false);
+  nodeGraphSharedGlCopyToContext(ctx, 0, dev.canvas.height - s.h, s.w, s.h, 0, 0, s.w, s.h, false);
   if (canvas.style.imageRendering === "pixelated" || canvas.style.imageRendering === "auto") {
     canvas.style.imageRendering = "";
   }

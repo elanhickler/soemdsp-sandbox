@@ -442,8 +442,8 @@ function matrixDisplayDrawFace(canvas, nodeId, glyphRamp, params) {
     gl.drawArrays(gl.TRIANGLES, 0, 3);
     nodeGraphSharedGlEndPresent(gl);
     matrixDisplayResetGl(gl);
-    const ctx = nodeGraphDisplayCanvasPresentContext(canvas);
-    if (!ctx || !nodeGraphSharedGlBlitTo2D(ctx, w, h)) return fail("present copy failed");
+    const ctx = nodeGraphSharedGlPresentTarget(canvas);
+    if (!ctx || !nodeGraphSharedGlPresent(ctx, w, h)) return fail("present copy failed");
     return true;
   } catch (error) {
     try { matrixDisplayResetGl(gl); } catch (_) { /* context gone */ }

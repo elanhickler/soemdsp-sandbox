@@ -146,9 +146,9 @@ void main() {
     if (destCanvas.width !== w) destCanvas.width = w;
     if (destCanvas.height !== h) destCanvas.height = h;
     // Same-frame copy from the shared device (rows bottom-up) to the plane canvas.
-    const ctx = nodeGraphDisplayCanvasPresentContext(destCanvas);
-    const ok = Boolean(ctx) && nodeGraphDisplayCanvasBlit(
-      ctx, device.canvas, 0, Math.max(0, device.canvas.height - h), w, h, 0, 0, w, h, false,
+    const ctx = nodeGraphSharedGlPresentTarget(destCanvas);
+    const ok = Boolean(ctx) && nodeGraphSharedGlCopyToContext(
+      ctx, 0, Math.max(0, device.canvas.height - h), w, h, 0, 0, w, h, false,
     );
     gl.viewport(0, 0, device.canvas.width, device.canvas.height);
     if (!ok) {

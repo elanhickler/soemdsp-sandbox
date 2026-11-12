@@ -80,7 +80,7 @@ function nodeGraphSlewShapeGeometry(w, h, upShape, downShape, pixelRatio = 1) {
 
 function drawNodeGraphSlewShapeDisplay(section) {
   if (!section?.isConnected) return;
-  const canvas = section.querySelector("canvas");
+  const canvas = section.querySelector(".node-display-face");
   if (!canvas || typeof nodeGraphSizeDisplayCanvas !== "function") return;
   const metrics = nodeGraphSizeDisplayCanvas(section, canvas, { pixelDensity: 1 });
   if (!metrics) return;

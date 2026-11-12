@@ -746,7 +746,7 @@
 
     const srcY = Math.max(0, device.canvas.height - rh);
     destCtx.save();
-    nodeGraphDisplayCanvasBlit(destCtx, device.canvas, 0, srcY, rw, rh, 0, 0, destW, destH, rw !== destW || rh !== destH);
+    nodeGraphSharedGlCopyToContext(destCtx, 0, srcY, rw, rh, 0, 0, destW, destH, rw !== destW || rh !== destH);
     destCtx.restore();
     return true;
   }

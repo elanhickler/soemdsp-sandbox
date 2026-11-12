@@ -474,7 +474,7 @@ function nodeGraphRobinSinepulseHeardElapsed(section, end) {
 
 function drawNodeGraphRobinSinepulseFace(section) {
   const node = typeof nodeGraphPatchNode === "function" ? nodeGraphPatchNode(section?.dataset?.node || "") : null;
-  const canvas = section?.querySelector?.("canvas");
+  const canvas = section?.querySelector?.(".node-display-face");
   if (!node || !canvas) return;
   const look = nodeGraphRobinSinepulseFaceSettingsForNode(node);
   const density = typeof nodeGraphResolveDisplayPixelDensity === "function"

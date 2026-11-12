@@ -12933,13 +12933,18 @@ body .gl-face-host.node-screen-solo-face > canvas.node-gl-face-host-canvas {
   pointer-events: none !important;
 }
 
-.node-graph-workspace.gl-graph-on .node-display-canvas,
-.gl-face-host .node-display-canvas,
-.node-module-graph-display canvas {
-  /* Inline visibility:visible (trace faces) must not paint the full-bleed
-     bitmap under the GPU copy. The GPU quad is the picture. */
+/* Display face box (nodeGraphDisplayCanvasCreate): the zoom-1 layout record
+   and face-texture key. The GPU passes draw the picture; the box itself never
+   paints. */
+.node-display-face {
   visibility: hidden !important;
   border-width: 0;
+}
+
+/* The workspace scope overlay keeps its own webgl2 context; the GPU graph owns
+   the picture while it is on. */
+.node-graph-workspace.gl-graph-on #nodeModuleScopeCanvas {
+  visibility: hidden !important;
 }
 
 /* The GPU owns the graph display. SVG stays a hit layer only. */
@@ -13177,6 +13182,7 @@ body.node-screen-solo-active .node-plugin-momentary-face canvas,
 }
 
 body.node-screen-solo-active .node-screen-solo-face:not(.node-whole-module-face) canvas,
+body.node-screen-solo-active .node-screen-solo-face:not(.node-whole-module-face) .node-display-face,
 body.node-screen-solo-active .node-screen-solo-face:not(.node-whole-module-face) .node-module-scope-window-surface,
 body.node-screen-solo-active .node-screen-solo-face:not(.node-whole-module-face) .node-raster-rgb-canvas,
 body.node-screen-solo-active .node-screen-solo-face:not(.node-whole-module-face) .node-fbm-field-canvas {
@@ -13187,7 +13193,8 @@ body.node-screen-solo-active .node-screen-solo-face:not(.node-whole-module-face)
   max-width: none !important;
   max-height: none !important;
 }
-body.node-screen-solo-active .node-screen-solo-face .node-music-player-waveplay-wave canvas {
+body.node-screen-solo-active .node-screen-solo-face .node-music-player-waveplay-wave canvas,
+body.node-screen-solo-active .node-screen-solo-face .node-music-player-waveplay-wave .node-display-face {
   inset: 0 !important;
 }
 
@@ -14515,7 +14522,8 @@ body.node-screen-solo-active .node-screen-solo-face.node-sample-waveform-display
   touch-action: none;
 }
 
-.node-rendered-player-wave canvas {
+.node-rendered-player-wave canvas,
+.node-rendered-player-wave .node-display-face {
   position: absolute;
   inset: 0;
   width: 100%;
@@ -14923,25 +14931,14 @@ body.node-screen-solo-active .node-screen-solo-face.node-sample-waveform-display
   border-top: 1px solid rgba(90, 255, 150, 0.16);
   border-bottom: 1px solid rgba(90, 255, 150, 0.16);
   background: #020a06;
+  cursor: crosshair;
+  touch-action: none;
 }
 
 .node-phosphillator-draw-canvas {
   display: block;
   width: 100%;
   height: 100%;
-  cursor: crosshair;
-  touch-action: none;
-}
-
-/*
- * Face quads pick their filter in the GL graph, Canvas tiles and Mini Canvas
- * (nodeGraphGlGraphFacePin): nearest above 2.5x zoom, nearest at every zoom
- * for .display-canvas-pixelated, linear at every zoom for a pinned-smooth
- * face. This rule only covers a display canvas still shown as its own bitmap.
- */
-.node-display-canvas.display-canvas-pixelated,
-.display-canvas-pixelated {
-  image-rendering: pixelated;
 }
 
 /*
@@ -15339,9 +15336,9 @@ body.node-screen-solo-active .node-screen-solo-face.node-sample-waveform-display
   height: 100%;
 }
 
-/* The face picture: a display canvas under the SVG hit layer (hidden; the
-   GPU passes composite its face texture). */
-.node-module-graph-display > canvas.node-module-graph-canvas {
+/* The face picture: a display face box under the SVG hit layer (the GPU
+   passes composite its face texture). */
+.node-module-graph-display > .node-module-graph-canvas {
   position: absolute;
   inset: 0;
   width: 100%;

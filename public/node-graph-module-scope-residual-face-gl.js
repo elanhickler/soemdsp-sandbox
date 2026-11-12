@@ -342,10 +342,7 @@ function nodeGraphResidualFaceGlPushQuad(verts, n, x0, y0, x1, y1, c, p, p2) {
 /** Plate over bg (rgb 0..1) -> present region -> one blit into the face. */
 function nodeGraphResidualFaceGlPresent(st, canvas, bgRgb) {
   const gl = st.gl;
-  if (typeof nodeGraphDisplayCanvasPresentContext !== "function" || typeof nodeGraphDisplayCanvasBlit !== "function") {
-    return false;
-  }
-  const ctx = nodeGraphDisplayCanvasPresentContext(canvas);
+  const ctx = nodeGraphSharedGlPresentTarget(canvas);
   if (!ctx) return false;
   nodeGraphResidualFaceGlReset(gl);
   nodeGraphSharedGlBindPresent(gl, st.w, st.h);
@@ -355,7 +352,7 @@ function nodeGraphResidualFaceGlPresent(st, canvas, bgRgb) {
   nodeGraphSharedGlEndPresent(gl);
   if (!ok || gl.isContextLost()) return false;
   const dev = st.dev;
-  nodeGraphDisplayCanvasBlit(ctx, dev.canvas, 0, dev.canvas.height - st.h, st.w, st.h, 0, 0, st.w, st.h, false);
+  nodeGraphSharedGlCopyToContext(ctx, 0, dev.canvas.height - st.h, st.w, st.h, 0, 0, st.w, st.h, false);
   nodeGraphResidualFaceGlStats.presents += 1;
   return true;
 }

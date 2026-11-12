@@ -181,7 +181,7 @@ function drawNodeGraphSinCos4DisplayInner(section) {
   const node = typeof nodeGraphPatchNode === "function" ? nodeGraphPatchNode(nodeId) : null;
   const canvas = section._sinCos4Canvas
     || section.querySelector?.(".node-sincos4-canvas")
-    || section.querySelector?.("canvas");
+    || section.querySelector?.(".node-display-face");
   if (!node || !canvas) {
     return;
   }

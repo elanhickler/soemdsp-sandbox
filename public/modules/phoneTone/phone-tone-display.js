@@ -131,7 +131,7 @@ function drawNodeGraphPhoneToneFaceItem(sectionOrRenderer, item) {
     return;
   }
   const canvas = section.querySelector?.(".node-phone-tone-canvas")
-    || section.querySelector?.("canvas");
+    || section.querySelector?.(".node-display-face");
   if (!canvas) {
     return;
   }

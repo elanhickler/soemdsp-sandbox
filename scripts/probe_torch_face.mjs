@@ -30,7 +30,7 @@ const r = await page.evaluate(async () => {
     }
     return false;
   };
-  const px = (canvas, x, y) => Array.from(canvas.getContext("2d").getImageData(x, y, 1, 1).data);
+  const px = (face, x, y) => { const p = nodeGraphSharedGlFacePixels(face); const o = (y * p.width + x) * 4; return Array.from(p.data.slice(o, o + 4)); };
   out.drewOff = await draw(0, face);
   const c = face.querySelector(".node-torch-face-canvas");
   out.size = c ? [c.width, c.height] : null;
@@ -41,7 +41,7 @@ const r = await page.evaluate(async () => {
   await draw(0.5, face);
   out.flameHalf = c ? px(c, 44, 5) : null;
   // Hue: whole-face snapshots at Open 1 for hue 0 (node param) vs no node, and 0.5.
-  const all = (canvas) => Array.from(canvas.getContext("2d").getImageData(0, 0, canvas.width, canvas.height).data);
+  const all = (face) => Array.from(nodeGraphSharedGlFacePixels(face).data);
   const hueNode = (h) => ({ id: "probeT", type: "t", params: {}, traceDisplaySettings: { torchHue: h } });
   await draw(1, face);
   const base = all(c);

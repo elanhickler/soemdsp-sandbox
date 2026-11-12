@@ -157,7 +157,7 @@
 
   // Paint into the module's own face canvas. The scope keeps that canvas in a
   // persistent map and re-appends it (cold plate on spawn / Stop), so a second
-  // canvas lost: the GL graph composites every .node-display-canvas in DOM
+  // face lost: the GL graph composites every display face in DOM
   // order and the re-appended black plate covered the crossfade picture.
   function canvasForFace(face, slot) {
     let canvas = slot?.scopeElement === face && typeof ensureNodeGraphModuleScopeFaceCanvas === "function"

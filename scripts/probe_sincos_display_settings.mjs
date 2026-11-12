@@ -28,9 +28,9 @@ const r = await page.evaluate(async () => {
   const rgb = (css) => { const v = nodeGraphGlLinesCss(css); return v.slice(0, 3).map((x) => Math.round(x * 255)).join(","); };
   const grab = async () => { frame = null; sec._sinCosForceDraw = true; sec._sinCosLaidOut = false; drawNodeGraphSinCosDisplay(sec);
     return { bg: rgb(frame.background), lines: frame.plots.map((l) => ({ c: rgb(l.color), w: l.width })), dots: frame.dots.map((d) => ({ c: rgb(d.color), r: d.radius })) }; };
-  out.dbg = { found: !!nodeGraphPatchNode(id), canvasClass: sec.querySelector("canvas")?.className, w: sec.querySelector("canvas")?.width, sig: sec._sinCosSignature || null, wire: nodeGraphSinCosOutputHasWire(id, "sin") };
+  out.dbg = { found: !!nodeGraphPatchNode(id), canvasClass: sec.querySelector(".node-display-face")?.className, w: sec.querySelector(".node-display-face")?.width, sig: sec._sinCosSignature || null, wire: nodeGraphSinCosOutputHasWire(id, "sin") };
   const def = await grab();
-  out.dbg.sig2 = sec._sinCosSignature || null; { const c = sec.querySelector("canvas"); out.dbg.state = !!c.__cycleLineGl; const d = nodeGraphDisplayCanvasPresentContext(c).getImageData(0,0,1,1).data; out.dbg.px = Array.from(d); out.dbg.keys = Object.keys(c).filter((k) => k.startsWith("_") || k.startsWith("__")); }
+  out.dbg.sig2 = sec._sinCosSignature || null; { const c = sec.querySelector(".node-display-face"); out.dbg.state = !!c.__cycleLineGl; const d = nodeGraphSharedGlFacePixels(c).data.slice(0, 4); out.dbg.px = Array.from(d); out.dbg.keys = Object.keys(c).filter((k) => k.startsWith("_") || k.startsWith("__")); }
   out.defFrame = def; out.def = { corner: def.bg.split(",").map(Number), sin: def.lines[0]?.c === "255,45,45" && def.lines[0]?.w === 2, cos: def.lines[1]?.c === "61,126,255" && def.lines[1]?.w === 2, white: def.dots.every((d) => d.c === "255,255,255" && d.r === 2.5) };
   out.norm = normalizeNodeGraphSinCosFaceSettings({});
   out.sinPaint = out.norm.strokePaint; out.cosPaint = nodeGraphSinCosCosPaint(out.norm); out.dotPaint = out.norm.dotPaint; out.bgPaint = out.norm.backgroundPaint;

@@ -70,7 +70,7 @@ function drawNodeGraphVideoDelayFaceItem(_renderer, item, pixelRatio) {
   const canvas = nodeGraphVideoDelayEnsureCanvas(face, pixelRatio);
   if (!canvas) return;
   // 2D present surface for the shared-GL blit (display-canvas.js); no 2D drawing here.
-  const ctx = typeof nodeGraphDisplayCanvasPresentContext === "function" ? nodeGraphDisplayCanvasPresentContext(canvas) : null;
+  const ctx = typeof nodeGraphSharedGlPresentTarget === "function" ? nodeGraphSharedGlPresentTarget(canvas) : null;
   if (!ctx) return;
   if (face._videoDelayOwnsClock && item?.fromFaceLoop !== true && item?.force !== true) {
     return;

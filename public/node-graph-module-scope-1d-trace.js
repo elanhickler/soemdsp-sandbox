@@ -333,7 +333,7 @@ function drawNodeGraphScope1dTraceItem(renderer, item, pixelRatio) {
     canvas.style.imageRendering = "";
   }
   // Present context handed to TraceWoscope (its GL output is copied in there).
-  const context = nodeGraphDisplayCanvasPresentContext(canvas);
+  const context = nodeGraphSharedGlPresentTarget(canvas);
   if (!context) {
     nodeGraphDisplayGlFailed(canvas, "1D trace: no present context");
     return;

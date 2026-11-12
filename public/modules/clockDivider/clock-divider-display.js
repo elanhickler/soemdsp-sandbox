@@ -110,7 +110,7 @@ function nodeGraphClockDividerFaceGeometry(w, h, division, stroke, smoothing = 0
 
 function drawNodeGraphClockDividerFace(section) {
   const node = typeof nodeGraphPatchNode === "function" ? nodeGraphPatchNode(section?.dataset?.node || "") : null;
-  const canvas = section?.querySelector?.("canvas");
+  const canvas = section?.querySelector?.(".node-display-face");
   if (!node || !canvas || typeof nodeGraphCycleLineGlMetrics !== "function") return;
   const metrics = nodeGraphCycleLineGlMetrics(section, canvas, 1);
   if (!metrics) return;

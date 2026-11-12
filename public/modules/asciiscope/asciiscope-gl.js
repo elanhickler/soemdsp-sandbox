@@ -669,9 +669,9 @@ function matrixGlDrawFace(canvas, state, params, mode) {
     if (typeof nodeGraphSharedGlEndPresent === "function") {
       nodeGraphSharedGlEndPresent(gl);
     }
-    const ctx = nodeGraphDisplayCanvasPresentContext(canvas);
-    if (ctx && typeof nodeGraphSharedGlBlitTo2D === "function") {
-      nodeGraphSharedGlBlitTo2D(ctx, w, h);
+    const ctx = nodeGraphSharedGlPresentTarget(canvas);
+    if (ctx && typeof nodeGraphSharedGlPresent === "function") {
+      nodeGraphSharedGlPresent(ctx, w, h);
     }
     return true;
   } catch (error) {

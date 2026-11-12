@@ -126,7 +126,7 @@ function nodeGraphPlateFacesAfterPatchLoad() {
       const ratio = typeof window !== "undefined" ? Math.max(1, window.devicePixelRatio || 1) : 1;
       for (const slot of nodeGraphVisibleModuleScopeSlots()) {
         const face = slot?.scopeElement;
-        const canvas = face?.querySelector?.("canvas");
+        const canvas = face?.querySelector?.(".node-display-face");
         if (!canvas) continue;
         if ((!(canvas.width > 1) || !(canvas.height > 1))
           && typeof syncNodeGraphModuleScopeLocalFallbackCanvas === "function") {
@@ -169,12 +169,6 @@ function nodeGraphPlateFacesAfterPatchLoad() {
 
 function unregisterNodeGraphModuleScopeSlot(nodeId) {
   const slot = nodeGraphModuleScopeState.slots.get(nodeId);
-  const burnCanvas = slot?.scopeElement?.querySelector?.(
-    ":scope > .node-module-scope-local-fallback-canvas",
-  );
-  if (burnCanvas && typeof disposeNodeGraphScope2dBurnRendererForCanvas === "function") {
-    disposeNodeGraphScope2dBurnRendererForCanvas(burnCanvas);
-  }
   if (slot?._faceLayoutObserver) {
     try {
       slot._faceLayoutObserver.disconnect();

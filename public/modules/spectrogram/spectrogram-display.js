@@ -509,7 +509,7 @@ function drawNodeGraphSpectrogramItem(renderer, item, pixelRatio) {
   // No forced pixelation: CSS smooth-scales; .pixelated-canvas-zoom takes over at 2.5x.
   nodeGraphDisplayCanvasPixelated(canvas, false);
 
-  const ctx = nodeGraphDisplayCanvasPresentContext(canvas);
+  const ctx = nodeGraphSharedGlPresentTarget(canvas);
   if (!ctx) return;
 
   const faceW = canvas.width | 0;

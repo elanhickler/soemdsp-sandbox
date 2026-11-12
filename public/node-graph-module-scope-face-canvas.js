@@ -47,22 +47,10 @@ function nodeGraphFaceBurnRendererVersion() {
   return "energy-mono-lut-soft-beam-1";
 }
 
+// A face box (display-canvas.js) presents into its face texture on the
+// shared device, so any face box is usable.
 function nodeGraphScopeFaceCanvasIsUsable(canvas) {
-  if (!(canvas instanceof HTMLCanvasElement)) {
-    return false;
-  }
-  if (canvas._wfUseWebGL || canvas._wfGl) {
-    if (canvas._wfGl && typeof canvas._wfGl.isContextLost === "function" && canvas._wfGl.isContextLost()) {
-      return false;
-    }
-    return true;
-  }
-  // Shared-GL faces present through the canvas' blit context.
-  try {
-    return Boolean(nodeGraphDisplayCanvasPresentContext(canvas));
-  } catch (_error) {
-    return false;
-  }
+  return Boolean(canvas?.classList?.contains(NODE_GRAPH_DISPLAY_FACE_CLASS));
 }
 
 function nodeGraphModuleScopeFaceHasTapeMarkers(canvas) {
@@ -151,11 +139,6 @@ function nodeGraphModuleScopeFaceScreenElement(slot) {
 }
 
 function nodeGraphModuleScopeDisposeBurnFaceCanvas(canvas, nodeId) {
-  if (typeof disposeNodeGraphScope2dBurnRendererForCanvas === "function") {
-    try {
-      disposeNodeGraphScope2dBurnRendererForCanvas(canvas);
-    } catch (_error) { /* best-effort */ }
-  }
   if (typeof nodeGraphPhosphorEnergyGlDestroy === "function" && canvas?._phosphorEnergyGl) {
     try {
       nodeGraphPhosphorEnergyGlDestroy(canvas._phosphorEnergyGl);
@@ -178,10 +161,8 @@ function nodeGraphModuleScopeDisposeBurnFaceCanvas(canvas, nodeId) {
 }
 
 function nodeGraphModuleScopeCreateFaceCanvasElement(kind) {
-  const canvas = document.createElement("canvas");
-  canvas.className = `${NODE_GRAPH_FACE_CSS_CLASS} node-display-canvas`;
+  const canvas = nodeGraphDisplayCanvasCreate(NODE_GRAPH_FACE_CSS_CLASS);
   canvas.style.mixBlendMode = "normal";
-  canvas.setAttribute("aria-hidden", "true");
   tagNodeGraphModuleScopeFaceCanvas(canvas, kind);
   return canvas;
 }
@@ -284,7 +265,7 @@ function syncNodeGraphModuleScopeFaceCanvas(canvas, screenElement, pixelRatio, p
   if (!canvas || !screenElement) {
     return { resized: false, synced: false, density: 1 };
   }
-  canvas.classList?.add("node-display-canvas");
+  nodeGraphDisplayCanvasMark(canvas);
   let policy = String(options.policy || "auto");
   if (policy === "auto") {
     policy = String(canvas.dataset?.faceKind || "") === NODE_GRAPH_FACE_KIND_BURN
@@ -300,7 +281,7 @@ function syncNodeGraphModuleScopeFaceCanvas(canvas, screenElement, pixelRatio, p
 function nodeGraphFaceCanvasResizeKeep(canvas, width, height) {
   const previousWidth = canvas.width;
   const previousHeight = canvas.height;
-  const webglFace = canvas._wfUseWebGL === true || Boolean(canvas._wfGl);
+  const webglFace = canvas._wfUseWebGL === true;
   // Old pixels go to a GL texture before the resize clears them, then are
   // drawn back scaled (linear) through the shared device.
   const snapshot = !webglFace && previousWidth >= 2 && previousHeight >= 2
@@ -458,7 +439,7 @@ function syncNodeGraphModuleScopeFaceCanvasBurn(canvas, screenElement, pixelRati
           continue;
         }
         for (const el of [node, ...(node.querySelectorAll?.(`.${NODE_GRAPH_FACE_CSS_CLASS}`) || [])]) {
-          if (el.className !== NODE_GRAPH_FACE_CSS_CLASS && el.nodeName !== "CANVAS") {
+          if (!el.classList?.contains(NODE_GRAPH_FACE_CSS_CLASS)) {
             continue;
           }
           for (const [nid, cached] of nodeGraphModuleScopePersistentCanvases) {

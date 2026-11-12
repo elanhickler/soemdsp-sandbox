@@ -758,7 +758,7 @@
       if (gl.isContextLost()) return false;
 
       destCtx.filter = "none";
-      nodeGraphDisplayCanvasBlit(destCtx, dev.canvas, 0, dev.canvas.height - ch, cw, ch, 0, 0, cw, ch, false);
+      nodeGraphSharedGlCopyToContext(destCtx, 0, dev.canvas.height - ch, cw, ch, 0, 0, cw, ch, false);
       return true;
     } catch (err) {
       gl.disable(gl.SCISSOR_TEST);

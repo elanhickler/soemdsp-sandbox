@@ -174,16 +174,17 @@ function nodeGraphPhosphillatorClearDrawnPath(nodeId) {
 }
 
 function bindNodeGraphPhosphillatorInteractions(section, canvas) {
-  canvas.style.touchAction = "none";
+  // Input on the section: the face box is never a hit target.
+  section.style.touchAction = "none";
   let pointerId = null;
 
-  canvas.addEventListener("pointerdown", (event) => {
+  section.addEventListener("pointerdown", (event) => {
     if (event.button !== 0 && event.button !== undefined) {
       return;
     }
     pointerId = event.pointerId;
     try {
-      canvas.setPointerCapture?.(pointerId);
+      section.setPointerCapture?.(pointerId);
     } catch {
       // No active pointer to capture (e.g. synthetic events) — capture is a
       // nicety for drag-outside-canvas continuity, not a correctness need.
@@ -196,7 +197,7 @@ function bindNodeGraphPhosphillatorInteractions(section, canvas) {
     event.stopPropagation();
   });
 
-  canvas.addEventListener("pointermove", (event) => {
+  section.addEventListener("pointermove", (event) => {
     if (pointerId === null || event.pointerId !== pointerId) {
       return;
     }
@@ -210,17 +211,17 @@ function bindNodeGraphPhosphillatorInteractions(section, canvas) {
       return;
     }
     try {
-      canvas.releasePointerCapture?.(pointerId);
+      section.releasePointerCapture?.(pointerId);
     } catch {
       // Already released/not captured — safe to ignore.
     }
     pointerId = null;
     nodeGraphPhosphillatorFinishCapture(section.dataset.node);
   };
-  canvas.addEventListener("pointerup", endCapture);
-  canvas.addEventListener("pointercancel", endCapture);
+  section.addEventListener("pointerup", endCapture);
+  section.addEventListener("pointercancel", endCapture);
 
-  canvas.addEventListener("dblclick", (event) => {
+  section.addEventListener("dblclick", (event) => {
     event.stopPropagation();
     nodeGraphPhosphillatorClearDrawnPath(section.dataset.node);
   });
@@ -241,8 +242,7 @@ function createNodeGraphPhosphillatorDrawDisplay(nodeId, type) {
   section.dataset.nodeType = type;
   section.setAttribute("aria-label", `${nodeGraphNodeDisplayName?.(nodeId) || "Phosphillator"} drawing surface — draw a shape, double-click to clear`);
 
-  const canvas = document.createElement("canvas");
-  canvas.className = "node-phosphillator-draw-canvas node-display-canvas";
+  const canvas = nodeGraphDisplayCanvasCreate("node-phosphillator-draw-canvas");
   section.append(canvas);
   bindNodeGraphPhosphillatorInteractions(section, canvas);
   window.requestAnimationFrame(() => scheduleNodeGraphPhosphillatorFrame(section));
@@ -256,34 +256,25 @@ function nodeGraphPhosphillatorPointToPixel(point, width, height) {
   };
 }
 
-function drawNodeGraphPhosphillatorGlowPath(context, pixels, closed) {
+const NODE_GRAPH_PHOSPHILLATOR_FACE = Object.freeze({
+  background: [2 / 255, 10 / 255, 6 / 255, 1],
+  glow: [90 / 255, 1, 150 / 255, 0.4],
+  core: [190 / 255, 1, 215 / 255, 0.95],
+});
+
+// Open path in face backing px: soft glow under a thin core line.
+function drawNodeGraphPhosphillatorGlowPath(batch, pixels, pixelRatio) {
   if (pixels.length < 2) {
     return;
   }
-  const drawPass = (glow) => {
-    context.beginPath();
-    context.moveTo(pixels[0].x, pixels[0].y);
-    for (let i = 1; i < pixels.length; i += 1) {
-      context.lineTo(pixels[i].x, pixels[i].y);
-    }
-    if (closed) {
-      context.closePath();
-    }
-    if (glow) {
-      context.shadowBlur = 9;
-      context.shadowColor = "rgba(90, 255, 150, 0.85)";
-      context.strokeStyle = "rgba(90, 255, 150, 0.4)";
-      context.lineWidth = 3;
-    } else {
-      context.shadowBlur = 0;
-      context.strokeStyle = "rgba(190, 255, 215, 0.95)";
-      context.lineWidth = 1.4;
-    }
-    context.stroke();
-  };
-  drawPass(true);
-  drawPass(false);
-  context.shadowBlur = 0;
+  const flat = new Array(pixels.length * 2);
+  for (let i = 0; i < pixels.length; i += 1) {
+    flat[i * 2] = pixels[i].x;
+    flat[i * 2 + 1] = pixels[i].y;
+  }
+  const F = NODE_GRAPH_PHOSPHILLATOR_FACE;
+  nodeGraphGlLinesPhosphor(batch, flat, 3 * pixelRatio, F.glow);
+  nodeGraphGlLinesPolyline(batch, flat, 0.7 * pixelRatio, 1, F.core);
 }
 
 function drawNodeGraphPhosphillatorDrawDisplay(section) {
@@ -297,42 +288,47 @@ function drawNodeGraphPhosphillatorDrawDisplay(section) {
   if (!metrics) {
     return;
   }
-  const { context, cssHeight: height, cssWidth: width, pixelRatio } = metrics;
-  context.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
-  context.clearRect(0, 0, width, height);
-  context.fillStyle = "#020a06";
-  context.fillRect(0, 0, width, height);
-
-  const capture = nodeGraphPhosphillatorCaptureStates.get(nodeId);
-  if (capture && capture.points.length >= 2) {
-    const pixels = capture.points.map((point) => nodeGraphPhosphillatorPointToPixel(point, width, height));
-    drawNodeGraphPhosphillatorGlowPath(context, pixels, false);
+  const { cssHeight, cssWidth, pixelRatio, width, height } = metrics;
+  const batch = typeof nodeGraphGlLinesBegin === "function"
+    ? nodeGraphGlLinesBegin(canvas, NODE_GRAPH_PHOSPHILLATOR_FACE.background)
+    : null;
+  if (!batch) {
+    nodeGraphDisplayGlFailed(canvas, "Phosphillator: shared GL unavailable");
     return;
   }
 
+  const capture = nodeGraphPhosphillatorCaptureStates.get(nodeId);
   const drawnPoints = node.drawnPath?.points;
-  if (Array.isArray(drawnPoints) && drawnPoints.length >= 2) {
+  if (capture && capture.points.length >= 2) {
+    const pixels = capture.points.map((point) => nodeGraphPhosphillatorPointToPixel(point, width, height));
+    drawNodeGraphPhosphillatorGlowPath(batch, pixels, pixelRatio);
+  } else if (Array.isArray(drawnPoints) && drawnPoints.length >= 2) {
     const pixels = drawnPoints.map((packed) => {
       const unpacked = unpackNodeGraphPhosphorDrawSample(packed);
       return nodeGraphPhosphillatorPointToPixel(unpacked, width, height);
     });
     // Open path — no last→first stroke; playback reverses instead of jumping.
-    drawNodeGraphPhosphillatorGlowPath(context, pixels, false);
-    return;
+    drawNodeGraphPhosphillatorGlowPath(batch, pixels, pixelRatio);
+  } else {
+    // Placeholder: Sample Player default ink (font size, line color).
+    const settings = typeof normalizeNodeGraphSampleWaveformSettings === "function"
+      ? normalizeNodeGraphSampleWaveformSettings({})
+      : undefined;
+    const fontUnit = Number.isFinite(Number(settings?.fontSize))
+      ? Number(settings.fontSize)
+      : nodeGraphSampleWaveformDefaultSettings.fontSize;
+    const px = Math.max(1, Math.round(faceInkPx(clampAuthoredInkPx(fontUnit, 11), faceMinSide(cssWidth, cssHeight))));
+    nodeGraphGlLinesText(batch, "Draw a shape — dblclick to clear", Math.round(width / 2), Math.round(height / 2), {
+      px,
+      weight: 600,
+      align: "center",
+      baseline: "middle",
+      rgba: nodeGraphGlLinesCss(nodeGraphSampleWaveformLineColor(settings, 57, 0.55)),
+    });
   }
-
-  // Pass defaults — placeholder used to omit settings and hit lineBrightness of undefined.
-  const settings = typeof normalizeNodeGraphSampleWaveformSettings === "function"
-    ? normalizeNodeGraphSampleWaveformSettings({})
-    : undefined;
-  drawNodeGraphSampleWaveformPlaceholder(
-    context,
-    width,
-    height,
-    "Draw a shape — dblclick to clear",
-    1,
-    settings,
-  );
+  if (!nodeGraphGlLinesEnd(batch, "alpha")) {
+    nodeGraphGlLinesFillBlack(canvas);
+  }
 }
 
 // Playback: open path + Jerobeam trisaw path index. Drawn points decode once

@@ -242,7 +242,7 @@ function nodeGraphFormantFilterFaceEval(params, sampleRate, points, minHz, maxHz
 
 function drawNodeGraphFormantFilterDisplay(section) {
   if (!section?.isConnected) return;
-  const canvas = section.querySelector("canvas");
+  const canvas = section.querySelector(".node-display-face");
   if (!canvas || typeof nodeGraphSizeDisplayCanvas !== "function") return;
   const metrics = nodeGraphSizeDisplayCanvas(section, canvas);
   if (!metrics) return;
@@ -405,10 +405,7 @@ function createNodeGraphFormantFilterDisplay(nodeId, type = "formantFilter") {
   if (typeof tagNodeGraphModuleBand === "function") {
     tagNodeGraphModuleBand(section, "face");
   }
-  const canvas = typeof nodeGraphDisplayCanvasCreate === "function"
-    ? nodeGraphDisplayCanvasCreate("node-filter-curve-canvas node-formant-filter-canvas")
-    : document.createElement("canvas");
-  if (!canvas.className) canvas.className = "node-filter-curve-canvas node-formant-filter-canvas";
+  const canvas = nodeGraphDisplayCanvasCreate("node-filter-curve-canvas node-formant-filter-canvas");
   section.append(canvas);
   // Simulation-FPS pump (as the filter faces) so a MOD on any knob moves the
   // face live; param sync and resize force one paint.

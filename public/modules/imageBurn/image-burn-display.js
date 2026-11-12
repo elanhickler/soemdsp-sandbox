@@ -403,7 +403,7 @@ function drawNodeGraphImageBurnFaceItem(renderer, item, pixelRatio) {
   if (!canvas || !syncNodeGraphImageBurnCanvas(canvas, face, pixelRatio)) {
     return;
   }
-  const ctx = nodeGraphDisplayCanvasPresentContext(canvas);
+  const ctx = nodeGraphSharedGlPresentTarget(canvas);
   if (!ctx) {
     return;
   }

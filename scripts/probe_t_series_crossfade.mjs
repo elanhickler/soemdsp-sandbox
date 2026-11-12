@@ -103,7 +103,7 @@ const results = await page.evaluate(async () => {
   if (slot && scopePaintShouldColdBootFace(slot.nodeId, slot)) {
     drawNodeGraphTSeriesCrossfadeFaceItem(null, { slot, screenElement: slot.scopeElement }, 1);
     const canvas = slot.scopeElement.querySelector(".node-t-series-crossfade-canvas");
-    const d = canvas.getContext("2d").getImageData(0, 0, canvas.width, canvas.height).data;
+    const d = nodeGraphSharedGlFacePixels(canvas).data;
     let lit = 0; for (let i = 0; i < d.length; i += 4) lit += d[i] + d[i + 1] + d[i + 2] > 30 ? 1 : 0;
     stoppedBlack = lit === 0;
   }

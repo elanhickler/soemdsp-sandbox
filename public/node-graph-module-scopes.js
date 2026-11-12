@@ -57,18 +57,6 @@ const nodeGraphModuleScopeState = {
   scopeTracesOffActive: false,
   renderer: null,
   sampleRate: 0,
-  // WeakMap, not Map: nodeGraphScope2dBurnCanvasForSlot() replaces this
-  // canvas (old one .remove()'d, a new one created) whenever a node's scope
-  // slot is torn down/rebuilt or the renderer version bumps. A Map would
-  // hold the detached canvas -- and its WebGL context plus two framebuffers
-  // and two textures -- alive forever, since nothing ever called .delete()
-  // on it. That leaked one full WebGL context per node recreation, and
-  // browsers hard-cap live WebGL contexts per page (Chrome: ~16) -- so
-  // editing/reloading patches over a session would eventually exhaust the
-  // budget and hang the whole trace renderer. A WeakMap lets the detached
-  // canvas (and the GL resources tied to it) become collectible once
-  // nothing else references it.
-  scope2dBurnRenderers: new WeakMap(),
   slots: new Map(),
   waterfallDrawCache: new Map(),
   waterfallScratch: new Map(),

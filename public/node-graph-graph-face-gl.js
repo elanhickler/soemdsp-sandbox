@@ -1,5 +1,5 @@
 // Step Graph / Smooth Graph face: a display face like SinCos. The picture is
-// the display's own .node-display-canvas, drawn with the gl-line-renderer
+// the display's own face box (.node-display-face), drawn with the gl-line-renderer
 // shaders (display Expo edge, 4x4 supersampled stroke) into its face texture.
 // The GL graph, Canvas tiles, screen solo and Mini Canvas composite that
 // texture like every other display. JS samples the curve with the shared
@@ -10,7 +10,7 @@
 const NODE_GRAPH_GRAPH_FACE_BACKGROUND = [0.04, 0.05, 0.07, 1];
 
 /**
- * The display's face canvas, made once. Renders keep this same element (and
+ * The display's face box, made once. Renders keep this same element (and
  * so its face texture and published display rect) across SVG rebuilds.
  */
 function nodeGraphGraphFaceGlCanvas(display) {

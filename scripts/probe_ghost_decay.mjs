@@ -118,7 +118,7 @@ const r = await page.evaluate(() => {
     const plate = 0.2;
     const shot = () => {
       nodeGraphPhosphorEnergyGlPresent(r, 1, { scope2dOpaque: true, plate });
-      nodeGraphSharedGlBlitTo2D(octx, W2, H2);
+      nodeGraphSharedGlPresent(octx, W2, H2);
       const d = octx.getImageData(0, 0, W2, H2).data;
       const lum = (x, y) => { const o = (y * W2 + x) * 4; return d[o] + d[o + 1] + d[o + 2]; };
       let line = 0; for (let x = 20; x < 76; x += 1) line += lum(x, H2 / 2);

@@ -8,9 +8,7 @@ function nodeGraphNumberReadoutCanvasForSlot(slot) {
   }
   let canvas = screenElement.querySelector(":scope > .node-number-readout-canvas");
   if (!canvas) {
-    canvas = document.createElement("canvas");
-    canvas.className = "node-number-readout-canvas node-display-canvas";
-    canvas.setAttribute("aria-hidden", "true");
+    canvas = nodeGraphDisplayCanvasCreate("node-number-readout-canvas");
     screenElement.appendChild(canvas);
   }
   return canvas;
@@ -67,10 +65,7 @@ function nodeGraphNumberReadoutRearmAllFacesAfterLiveStart(options = {}) {
   // unpause keeps lastGoodValueText so pause residual hold is not wiped.
   const hard = options === true
     || (options && typeof options === "object" && options.hard === true);
-  for (const canvas of document.querySelectorAll("canvas.node-number-readout-canvas")) {
-    if (!(canvas instanceof HTMLCanvasElement)) {
-      continue;
-    }
+  for (const canvas of document.querySelectorAll(".node-number-readout-canvas")) {
     canvas._nodeGraphNumberReadoutFrozenHoldSig = null;
     canvas._nodeGraphScope2dLastDrawnFrame = undefined;
     canvas._nodeGraphOneDimensionalBurnLastDrawnFrame = undefined;
@@ -886,9 +881,7 @@ function wipeNodeGraphNumberReadoutScreensToColdBoot() {
     let canvas = face.querySelector?.(":scope > .node-number-readout-canvas")
       || face.querySelector?.(".node-number-readout-canvas");
     if (!canvas) {
-      canvas = document.createElement("canvas");
-      canvas.className = "node-number-readout-canvas node-display-canvas";
-      canvas.setAttribute("aria-hidden", "true");
+      canvas = nodeGraphDisplayCanvasCreate("node-number-readout-canvas");
       face.appendChild(canvas);
     }
     const nodeId = face.dataset?.node || face.closest?.(".dsp-node")?.dataset?.node || "";
@@ -3167,8 +3160,8 @@ function nodeGraphNumberReadoutGlPresentFace(canvas, face) {
   }
   const gl = face.gl;
   const prog = SoemGl.program(gl, "number-readout-face-present", SoemGl.GLSL_FULLSCREEN_VS, NODE_GRAPH_NUMBER_READOUT_PRESENT_FS);
-  const ctx = typeof nodeGraphDisplayCanvasPresentContext === "function"
-    ? nodeGraphDisplayCanvasPresentContext(canvas)
+  const ctx = typeof nodeGraphSharedGlPresentTarget === "function"
+    ? nodeGraphSharedGlPresentTarget(canvas)
     : null;
   if (!prog || !ctx) {
     if (typeof nodeGraphDisplayGlFailed === "function") {
@@ -3187,7 +3180,7 @@ function nodeGraphNumberReadoutGlPresentFace(canvas, face) {
   SoemGl.drawQuad(gl, gl.getAttribLocation(prog, "aPos"));
   gl.bindTexture(gl.TEXTURE_2D, null);
   nodeGraphSharedGlEndPresent(gl);
-  nodeGraphDisplayCanvasBlit(ctx, dev.canvas, 0, dev.canvas.height - h, w, h, 0, 0, w, h, false);
+  nodeGraphSharedGlCopyToContext(ctx, 0, dev.canvas.height - h, w, h, 0, 0, w, h, false);
   nodeGraphNumberReadoutGlStats.presents += 1;
   return true;
 }

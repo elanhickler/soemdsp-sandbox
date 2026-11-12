@@ -2,11 +2,11 @@
 // drawing interface; docs/WEBGL_DISPLAY_PLAN.md).
 //
 // Draws on the shared picture device (public/lib/visual/picture-device.js,
-// one hidden WebGL2 context) and lands the result in the face's texture (and
-// its 2D canvas only when no GPU pass composites it). The face canvas keeps
-// the shared sizing path (backing = layout css x devicePixelRatio, never x
-// workspace zoom) and the node-display-canvas marker class (display-canvas.js);
-// the GL graph picks each face quad's filter (nodeGraphGlGraphFacePin).
+// one hidden WebGL2 context) and lands the result in the face's texture. A
+// face is a face box (display-canvas.js: no <canvas>, keyed by node id + face
+// slot) with the shared sizing path (backing = layout css x
+// devicePixelRatio, never x workspace zoom); the GL graph picks each face
+// quad's filter (nodeGraphGlGraphFacePin).
 //
 // Coordinates are device px unless begin() got { scale }: then x/y, halfPx,
 // feather and text px are CSS px and multiplied by scale (pass the face
@@ -1505,14 +1505,14 @@ void main() {
   }
 
   /**
-   * Record circuit-builder ink size for every canvas in `face`, once, right
-   * before the face is reparented into canvas view / screen solo.
+   * Record circuit-builder ink size for every display face in `face`, once,
+   * right before the face is reparented into Canvas view / screen solo.
    */
   function nodeGraphGlLinesCaptureBuilderSize(face) {
     if (!(face instanceof Element)) return false;
     const faceMin = faceMinCss(face);
     if (faceMin > 0) face.__glLinesBuilderFaceMinCss = faceMin;
-    for (const canvas of face.querySelectorAll("canvas")) {
+    for (const canvas of face.querySelectorAll(global.NODE_GRAPH_DISPLAY_FACE_SELECTOR || ".node-display-face")) {
       const w = canvas.clientWidth || 0;
       const h = canvas.clientHeight || 0;
       if (w > 0 && h > 0) canvas.__glLinesBuilderMinCss = Math.min(w, h);
@@ -1728,16 +1728,20 @@ void main() {
   function nodeGraphGlLinesSnapshot(source, options = {}) {
     const s = ensure();
     if (!s || !source) return null;
-    const sw = source.naturalWidth || source.width || 0;
-    const sh = source.naturalHeight || source.height || 0;
-    if (!(sw > 0) || !(sh > 0)) return null;
+    const sw = source.naturalWidth || source.width || source.w || 0;
+    const sh = source.naturalHeight || source.height || source.h || 0;
+    if (typeof source !== "string" && (!(sw > 0) || !(sh > 0))) return null;
     const gl = s.gl;
-    // A face that lives on the GPU has no current 2D bitmap: copy its texture.
-    const faceCopy = typeof global.nodeGraphSharedGlFaceCopyTexture === "function" && source.getContext
-      ? global.nodeGraphSharedGlFaceCopyTexture(source)
-      : null;
-    if (faceCopy) {
-      return { glSnapshot: true, keep: options?.keep === true, texture: faceCopy.texture, width: faceCopy.width, height: faceCopy.height };
+    // A face (face box, key or texture entry) has no 2D bitmap: copy its texture.
+    const isFace = typeof source === "string" || source.glFaceTexture === true
+      || (typeof global.nodeGraphSharedGlFaceTextureOnly === "function" && global.nodeGraphSharedGlFaceTextureOnly(source));
+    if (isFace) {
+      const faceCopy = typeof global.nodeGraphSharedGlFaceCopyTexture === "function"
+        ? global.nodeGraphSharedGlFaceCopyTexture(source)
+        : null;
+      return faceCopy
+        ? { glSnapshot: true, keep: options?.keep === true, texture: faceCopy.texture, width: faceCopy.width, height: faceCopy.height }
+        : null;
     }
     const texture = gl.createTexture();
     gl.bindTexture(gl.TEXTURE_2D, texture);
@@ -2266,12 +2270,13 @@ void main() {
       : null;
     for (const im of batch.images) {
       const src = im.source;
-      // A face canvas that renders on this device: sample its GPU copy
-      // (top-down, same orientation as a canvas upload). No upload (ZP-2).
-      const face = !src.glSnapshot && faceTexture && src.getContext ? faceTexture(src) : null;
-      // A composited face with no texture yet (new or resized, not painted)
-      // shows nothing: its 2D bitmap is blank and is never uploaded.
-      if (!face && !src.glSnapshot && src.getContext && faceOnly && faceOnly(src)) continue;
+      // A face that renders on this device: sample its GPU copy (top-down,
+      // same orientation as a canvas upload). No upload (ZP-2).
+      const isFace = !src.glSnapshot && faceOnly && faceOnly(src);
+      const face = isFace && faceTexture ? faceTexture(src) : null;
+      // A face with no texture yet (new or resized, not painted) shows
+      // nothing: it has no bitmap to upload.
+      if (isFace && !face) continue;
       if (src.glSnapshot) {
         gl.bindTexture(gl.TEXTURE_2D, src.texture);
       } else if (face) {
@@ -3002,7 +3007,9 @@ void main() {
     const { s, w, h } = batch;
     const gl = s.gl;
     if (gl.isContextLost()) return false;
-    const ctx = batch.canvas.getContext("2d");
+    const ctx = typeof global.nodeGraphSharedGlPresentTarget === "function"
+      ? global.nodeGraphSharedGlPresentTarget(batch.canvas)
+      : null;
     if (!ctx) return false;
     if (gl.bindVertexArray) gl.bindVertexArray(null);
     gl.disable(gl.DEPTH_TEST);
@@ -3055,27 +3062,27 @@ void main() {
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.globalCompositeOperation = "source-over";
     ctx.globalAlpha = 1;
+    // replace: the face texture gets this rect as is (a transparent batch).
     const replace = batch.transparent && batch.keep !== true;
-    if (replace) ctx.clearRect(0, 0, w, h);
-    if (typeof global.nodeGraphSharedGlBlitTo2D === "function") {
-      // replace: the face texture gets this rect as is (the 2D clear above).
-      return global.nodeGraphSharedGlBlitTo2D(ctx, w, h, { replace }) !== false;
-    }
-    ctx.drawImage(s.dev.canvas, 0, Math.max(0, s.dev.canvas.height - h), w, h, 0, 0, w, h);
-    return true;
+    if (replace && !ctx.facePresentTarget) ctx.clearRect(0, 0, w, h);
+    return global.nodeGraphSharedGlPresent(ctx, w, h, { replace }) !== false;
   }
 
   /** GL unavailable: plain black square (no 2D drawing fallback). */
   function nodeGraphGlLinesFillBlack(canvas) {
-    const ctx = canvas?.getContext?.("2d");
+    if (!canvas) return;
+    // A face's black plate is its face texture filled black.
+    if (typeof global.nodeGraphSharedGlFaceTextureOnly === "function" && global.nodeGraphSharedGlFaceTextureOnly(canvas)) {
+      if (typeof global.nodeGraphSharedGlFaceFill === "function") global.nodeGraphSharedGlFaceFill(canvas, [0, 0, 0, 1]);
+      return;
+    }
+    const ctx = canvas.getContext?.("2d");
     if (!ctx) return;
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.globalCompositeOperation = "source-over";
     ctx.globalAlpha = 1;
     ctx.fillStyle = "#000";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
-    // The black plate is the picture now; drop any GPU copy of the face.
-    if (typeof global.nodeGraphSharedGlFaceForget === "function") global.nodeGraphSharedGlFaceForget(canvas);
   }
 
   /** "#rgb" / "#rrggbb" / "rgb(a)(...)" / "hsl(a)(...)" -> [r,g,b,a] 0..1. */

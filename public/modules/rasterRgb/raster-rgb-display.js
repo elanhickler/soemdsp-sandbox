@@ -630,7 +630,7 @@ function drawNodeGraphRasterRgbFaceItem(_renderer, item, pixelRatio) {
   const paintSlot = slot || { nodeId, scopeElement: face, type: "rasterRgb" };
   const canvas = nodeGraphRasterRgbEnsureCanvas(face, paintSlot, pixelRatio);
   canvas.style.background = plate;
-  const ctx = nodeGraphDisplayCanvasPresentContext(canvas);
+  const ctx = nodeGraphSharedGlPresentTarget(canvas);
   if (!ctx) {
     return;
   }

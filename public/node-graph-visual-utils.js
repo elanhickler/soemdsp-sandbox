@@ -325,8 +325,8 @@ function nodeGraphSizeDisplayCanvas(section, canvas, options = {}) {
   if (!section || !canvas) {
     return null;
   }
-  // Marker class: GPU passes composite every .node-display-canvas (face texture).
-  canvas.classList?.add("node-display-canvas");
+  // Marker class: GPU passes composite every display face (face texture).
+  if (typeof nodeGraphDisplayCanvasMark === "function") nodeGraphDisplayCanvasMark(canvas);
   const density = nodeGraphResolveDisplayPixelDensity(options?.pixelDensity);
   // Resize-only face metrics (display-face-metrics.js). Paint must not read
   // clientWidth every frame — SyncLayout owns chrome / CSS box size.
@@ -379,26 +379,22 @@ function nodeGraphSizeDisplayCanvas(section, canvas, options = {}) {
   if (canvas.height !== height) {
     canvas.height = height;
   }
-  // Density < 1 → always nearest-neighbor (don't wait for workspace zoom class).
+  // Density < 1 → always nearest-neighbor (GL face pin, nodeGraphGlGraphFacePin).
   if (density < 0.999) {
     canvas.style.imageRendering = "pixelated";
   } else if (canvas.style.imageRendering === "pixelated") {
     canvas.style.imageRendering = "";
   }
-  const context = canvas.getContext("2d");
   const pixelRatio = devicePixelRatio * Math.max(density, 1e-6);
-  return context
-    ? {
-      context,
-      cssHeight,
-      cssWidth,
-      density,
-      devicePixelRatio,
-      height,
-      pixelRatio,
-      width,
-    }
-    : null;
+  return {
+    cssHeight,
+    cssWidth,
+    density,
+    devicePixelRatio,
+    height,
+    pixelRatio,
+    width,
+  };
 }
 
 /**

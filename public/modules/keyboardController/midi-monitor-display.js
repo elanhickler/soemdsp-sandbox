@@ -19,12 +19,7 @@ function createNodeGraphMidiMonitorDisplay(nodeId, type = "keyboardController") 
   if (typeof tagNodeGraphModuleBand === "function") {
     tagNodeGraphModuleBand(section, "face");
   }
-  const canvas = (typeof nodeGraphDisplayCanvasCreate === "function")
-    ? nodeGraphDisplayCanvasCreate("node-midi-monitor-canvas")
-    : document.createElement("canvas");
-  if (!canvas.classList.contains("node-display-canvas")) {
-    canvas.classList.add("node-midi-monitor-canvas", "node-display-canvas");
-  }
+  const canvas = nodeGraphDisplayCanvasCreate("node-midi-monitor-canvas");
   section.append(canvas);
   nodeGraphInstallDrawingFacePump(section, {
     clockKey: (el) => `midiMonitor:${el.dataset?.node || ""}`,
@@ -51,7 +46,7 @@ function nodeGraphMidiMonitorFaceText() {
 
 function drawNodeGraphMidiMonitorDisplay(section) {
   if (!section) return;
-  const canvas = section.querySelector("canvas");
+  const canvas = section.querySelector(".node-display-face");
   if (!canvas) return;
   const m = typeof nodeGraphDisplayCanvasSize === "function"
     ? nodeGraphDisplayCanvasSize(section, canvas)

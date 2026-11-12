@@ -88,7 +88,7 @@ function nodeGraphAdditiveFilterCurveReadParams(nodeId, type) {
 
 function drawNodeGraphAdditiveFilterCurveDisplay(section) {
   if (!section) return;
-  const canvas = section.querySelector("canvas");
+  const canvas = section.querySelector(".node-display-face");
   if (!canvas) return;
 
   // Shared sizing (css x dpr, never zoom); drawing is WebGL2 via gl-line-renderer.

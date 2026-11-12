@@ -157,7 +157,7 @@ function drawNodeGraphBasicShapeDisplayInner(section) {
     || "";
   const node = typeof nodeGraphPatchNode === "function" ? nodeGraphPatchNode(nodeId) : null;
   const canvas = section?.querySelector?.(".node-basic-shape-canvas")
-    || section?.querySelector?.("canvas");
+    || section?.querySelector?.(".node-display-face");
   if (!node || !canvas) {
     return;
   }

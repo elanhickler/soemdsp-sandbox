@@ -343,8 +343,8 @@
     gl.disable(gl.SCISSOR_TEST);
     // Opaque plate texture: the shared display-canvas blit (nearest) replaces the face.
     const srcY = Math.max(0, device.canvas.height - rh);
-    return nodeGraphDisplayCanvasBlit(
-      destCtx, device.canvas, 0, srcY, rw, rh, 0, 0, destCtx.canvas.width, destCtx.canvas.height, false,
+    return nodeGraphSharedGlCopyToContext(
+      destCtx, 0, srcY, rw, rh, 0, 0, destCtx.canvas.width, destCtx.canvas.height, false,
     );
   }
 

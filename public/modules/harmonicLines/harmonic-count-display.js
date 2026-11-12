@@ -83,7 +83,7 @@ function nodeGraphHarmonicCountFaceText(nodeId, type) {
 
 function drawNodeGraphHarmonicCountDisplay(section) {
   if (!section) return;
-  const canvas = section.querySelector("canvas");
+  const canvas = section.querySelector(".node-display-face");
   if (!canvas) return;
 
   const m = typeof nodeGraphDisplayCanvasSize === "function" ? nodeGraphDisplayCanvasSize(section, canvas) : null;

@@ -936,7 +936,7 @@ function nodeGraphViewportWakeColdPlate(nodeId) {
     const slot = nodeGraphModuleScopeState?.slots?.get?.(nodeId);
     if (!slot || state === "playing") return;
     if (state === "paused") {
-      const held = slot.scopeElement?.querySelector?.("canvas");
+      const held = slot.scopeElement?.querySelector?.(".node-display-face");
       if (held && held.width > 1 && held.height > 1) return;
     }
     scopePaintEnsureColdPlate(slot, { create: true, force: true, assumeStopped: true });

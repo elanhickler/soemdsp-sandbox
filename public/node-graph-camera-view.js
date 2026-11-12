@@ -228,25 +228,20 @@ function copyNodeGraphCameraWorldCanvases(source, clone, options = {}) {
     const byKey = key ? cloneByKey.get(key) : null;
     copyPair(sourceCanvas, byKey || cloneAll[index]);
   });
-  // Scope faces: pair by module id so 2D Trace still copies if tree order shifted.
-  source.querySelectorAll(".dsp-node[data-node]").forEach((srcNode) => {
-    const id = String(srcNode.getAttribute("data-node") || "");
-    if (!id) {
-      return;
+  // Display faces (texture only): pair by face key, swap the clone's face box
+  // for a canvas and copy the face texture into it.
+  const faceSelector = typeof NODE_GRAPH_DISPLAY_FACE_SELECTOR === "string" ? NODE_GRAPH_DISPLAY_FACE_SELECTOR : ".node-display-face";
+  clone.querySelectorAll(`${faceSelector}[data-face-key]`).forEach((cloneFace) => {
+    const key = String(cloneFace.dataset.faceKey || "");
+    cloneFace.removeAttribute("data-face-key");
+    const sourceFace = key ? source.querySelector(`${faceSelector}[data-face-key="${CSS.escape(key)}"]`) : null;
+    const canvas = document.createElement("canvas");
+    canvas.className = String(cloneFace.className || "").replace(/\bnode-display-face\b/g, "").trim();
+    canvas.setAttribute("aria-hidden", "true");
+    cloneFace.replaceWith(canvas);
+    if (sourceFace) {
+      copyNodeGraphCanvasBitmap(sourceFace, canvas);
     }
-    const dstNode = clone.querySelector(`.dsp-node[data-node="${CSS.escape(id)}"]`);
-    if (!dstNode) {
-      return;
-    }
-    const srcFaces = [...srcNode.querySelectorAll(
-      "canvas.node-module-scope-local-fallback-canvas, canvas.node-module-scope-vector-trace",
-    )];
-    const dstFaces = [...dstNode.querySelectorAll(
-      "canvas.node-module-scope-local-fallback-canvas, canvas.node-module-scope-vector-trace",
-    )];
-    srcFaces.forEach((srcFace, index) => {
-      copyPair(srcFace, dstFaces[index]);
-    });
   });
 }
 

@@ -115,7 +115,7 @@ function drawNodeGraphHarmonicSeriesFaceItem(sectionOrRenderer, item) {
     return;
   }
   const canvas = section.querySelector?.(".node-harmonic-series-canvas")
-    || section.querySelector?.("canvas");
+    || section.querySelector?.(".node-display-face");
   if (!canvas) {
     return;
   }

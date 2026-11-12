@@ -225,11 +225,7 @@
     destCtx.save();
     destCtx.globalCompositeOperation = options.composite || "lighter";
     destCtx.imageSmoothingEnabled = options.smooth !== false;
-    if (typeof nodeGraphSharedGlBlitTo2D === "function") {
-      nodeGraphSharedGlBlitTo2D(destCtx, width, height);
-    } else {
-      destCtx.drawImage(face.canvas, 0, 0, width, height);
-    }
+    nodeGraphSharedGlPresent(destCtx, width, height);
     destCtx.restore();
     return true;
   }

@@ -1093,8 +1093,7 @@ function createNodeGraphFilterCurveDisplay(nodeId, type) {
   // Hook into the shared parameter-visual contract so mid-drag flush redraws
   // the curve every frame (same path as bug button / XY pad).
   section.dataset.parameterVisual = "true";
-  const canvas = document.createElement("canvas");
-  canvas.className = "node-filter-curve-canvas node-display-canvas";
+  const canvas = nodeGraphDisplayCanvasCreate("node-filter-curve-canvas");
   canvas.dataset.lightSource = "screen";
   canvas.dataset.lightStrength = "1";
   section.dataset.lightStrength = "1";

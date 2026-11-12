@@ -221,9 +221,9 @@ ${SoemGl.GLSL_HSL}
     return normalizeNodeGraphTorchFaceSettings(node?.traceDisplaySettings).torchHue;
   }
 
-  // Paint into the module's own face canvas (same as the crossfade face): the
-  // scope re-appends its persistent face canvas, and the GL graph composites
-  // every .node-display-canvas in DOM order, so a second canvas got covered.
+  // Paint into the module's own face (same as the crossfade face): the scope
+  // re-appends its persistent face, and the GL graph composites every display
+  // face in DOM order, so a second face got covered.
   function torchCanvasForFace(face, slot) {
     let canvas = slot?.scopeElement === face && typeof ensureNodeGraphModuleScopeFaceCanvas === "function"
       ? ensureNodeGraphModuleScopeFaceCanvas(slot, { mode: "tape" })
@@ -269,7 +269,7 @@ ${SoemGl.GLSL_HSL}
     loadImages();
     const canvas = torchCanvasForFace(face, slot);
     if (!syncTorchCanvas(canvas, face, pixelRatio)) return;
-    const ctx = nodeGraphDisplayCanvasPresentContext(canvas);
+    const ctx = nodeGraphSharedGlPresentTarget(canvas);
     const k = ensureKit();
     if (!ctx || !k) {
       nodeGraphDisplayGlFailed(canvas, "Torch GL unavailable");
@@ -331,7 +331,7 @@ ${SoemGl.GLSL_HSL}
 
     const srcY = Math.max(0, k.dev.canvas.height - h);
     ctx.save();
-    nodeGraphDisplayCanvasBlit(ctx, k.dev.canvas, 0, srcY, w, h, 0, 0, w, h, false);
+    nodeGraphSharedGlCopyToContext(ctx, 0, srcY, w, h, 0, 0, w, h, false);
     ctx.restore();
     face._torchFaceOpen = open;
     if (typeof nodeGraphModuleScopeMarkScreenLit === "function") {

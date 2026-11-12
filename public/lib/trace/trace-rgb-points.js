@@ -148,8 +148,8 @@ void main() {
     ctx.save();
     ctx.globalCompositeOperation = "lighter";
     ctx.globalAlpha = 1;
-    if (typeof nodeGraphSharedGlBlitTo2D === "function") {
-      nodeGraphSharedGlBlitTo2D(ctx, w, h);
+    if (typeof nodeGraphSharedGlPresent === "function") {
+      nodeGraphSharedGlPresent(ctx, w, h);
     }
     ctx.restore();
     return true;

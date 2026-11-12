@@ -2684,7 +2684,7 @@ function nodeGraphAudioPlayerPlaylistEnhanceDisplay(section, nodeId) {
   section.dataset.musicPlayerEnhanced = "1";
   section.dataset.musicPlayerFace = "wave";
 
-  const canvas = section.querySelector("canvas");
+  const canvas = section.querySelector(".node-display-face");
   const wavePage = document.createElement("div");
   wavePage.className = "node-music-player-page node-music-player-page-wave";
   wavePage.dataset.musicPlayerPage = "wave";
@@ -2796,7 +2796,7 @@ function nodeGraphAudioPlayerVideoscopePaint(section) {
   if (face !== "vslr") {
     return;
   }
-  const canvas = section.querySelector(`[data-music-player-page="${face}"] canvas`);
+  const canvas = section.querySelector(`[data-music-player-page="${face}"] .node-display-face`);
   if (!canvas) {
     return;
   }
@@ -2961,7 +2961,7 @@ function nodeGraphAudioPlayerPlaylistBindWaveSeek(section, nodeId) {
   const surfaceFor = (target) => target?.closest?.(".node-music-player-page-wave, .node-music-player-waveplay-wave");
   const idFor = () => String(nodeId || section.closest?.("[data-node]")?.dataset?.node || "");
   const phaseAt = (surface, event) => {
-    const hit = surface.querySelector?.("canvas.node-sample-waveform-canvas") || surface;
+    const hit = surface.querySelector?.(".node-sample-waveform-canvas") || surface;
     const rect = hit.getBoundingClientRect();
     const x = rect.width > 0 ? Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width)) : 0;
     const id = idFor();
@@ -3019,7 +3019,7 @@ function nodeGraphAudioPlayerPlaylistBindWaveSeek(section, nodeId) {
     if (event.target.closest?.("button, input, select, textarea, a, [contenteditable]")) {
       return;
     }
-    const waveCanvas = surface.querySelector("canvas.node-sample-waveform-canvas");
+    const waveCanvas = surface.querySelector(".node-sample-waveform-canvas");
     if (waveCanvas && typeof nodeGraphSampleWaveformHudHit === "function"
       && nodeGraphSampleWaveformHudHit(section, waveCanvas, event.clientX, event.clientY)) {
       return;
@@ -3043,7 +3043,7 @@ function nodeGraphAudioPlayerPlaylistBindWaveSeek(section, nodeId) {
     if (!id) {
       return;
     }
-    const hit = surface.querySelector?.("canvas.node-sample-waveform-canvas") || surface;
+    const hit = surface.querySelector?.(".node-sample-waveform-canvas") || surface;
     const rect = hit.getBoundingClientRect();
     const x01 = rect.width > 0 ? Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width)) : 0;
     if (typeof nodeGraphSampleWaveformNoteClick === "function") {

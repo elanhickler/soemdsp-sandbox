@@ -870,11 +870,7 @@ void main() {
       if (typeof nodeGraphSharedGlEndPresent === "function") {
         nodeGraphSharedGlEndPresent(gl);
       }
-      if (typeof nodeGraphSharedGlBlitTo2D === "function") {
-        nodeGraphSharedGlBlitTo2D(context, width, height);
-      } else {
-        context.drawImage(canvas, 0, 0, width, height);
-      }
+      nodeGraphSharedGlPresent(context, width, height);
       context.restore();
     } else {
       gl.blendEquation(gl.FUNC_ADD);
@@ -1030,11 +1026,7 @@ void main() {
     if (typeof nodeGraphSharedGlEndPresent === "function") {
       nodeGraphSharedGlEndPresent(gl);
     }
-    if (typeof nodeGraphSharedGlBlitTo2D === "function") {
-      nodeGraphSharedGlBlitTo2D(context, width, height);
-    } else {
-      context.drawImage(canvas, 0, 0, width, height);
-    }
+    nodeGraphSharedGlPresent(context, width, height);
     context.restore();
     return segCount;
   }

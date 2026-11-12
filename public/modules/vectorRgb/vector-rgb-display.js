@@ -202,13 +202,13 @@ function wipeNodeGraphVectorRgbScreensToColdBoot(options = {}) {
     if (!canvas || seen.has(canvas)) return;
     if (onlyId && String(nodeId || "") !== onlyId) return;
     seen.add(canvas);
-    const ctx = typeof nodeGraphDisplayCanvasPresentContext === "function" ? nodeGraphDisplayCanvasPresentContext(canvas) : null;
+    const ctx = typeof nodeGraphSharedGlPresentTarget === "function" ? nodeGraphSharedGlPresentTarget(canvas) : null;
     const settings = nodeGraphVectorRgbSettingsForNode(
       typeof nodeGraphPatchNode === "function" ? nodeGraphPatchNode(nodeId) : null,
     );
     nodeGraphVectorRgbClearPlate(canvas, ctx, settings.background);
   };
-  if (options.canvas instanceof HTMLCanvasElement) {
+  if (options.canvas) {
     const host = options.canvas.closest?.("[data-node]");
     visit(options.canvas, host?.dataset?.node || onlyId);
     if (onlyId) return;
@@ -218,7 +218,7 @@ function wipeNodeGraphVectorRgbScreensToColdBoot(options = {}) {
     for (const host of hosts) {
       const nodeId = host.dataset?.node || "";
       const canvas = host.querySelector?.(":scope .node-module-scope-local-fallback-canvas")
-        || host.querySelector?.("canvas");
+        || host.querySelector?.(".node-display-face");
       visit(canvas, nodeId);
     }
   }
@@ -253,7 +253,7 @@ function drawNodeGraphVectorRgbFaceItem(_renderer, item, pixelRatio) {
   // Density < 1: nearest-neighbour via the shared display-canvas class (styles.css).
   canvas.classList?.toggle?.("display-canvas-pixelated", density < 0.999);
   // 2D present surface for the shared-GL trails blit (display-canvas.js); no 2D drawing here.
-  const ctx = typeof nodeGraphDisplayCanvasPresentContext === "function" ? nodeGraphDisplayCanvasPresentContext(canvas) : null;
+  const ctx = typeof nodeGraphSharedGlPresentTarget === "function" ? nodeGraphSharedGlPresentTarget(canvas) : null;
   if (!ctx) {
     return;
   }
@@ -432,7 +432,7 @@ if (typeof nodeGraphModuleScopeRegisterFaceWipe === "function") {
   });
   nodeGraphModuleScopeRegisterFaceWipe("gradientVectorscopeFace", (canvas, bg) => {
     if (!canvas) return;
-    const ctx = typeof nodeGraphDisplayCanvasPresentContext === "function" ? nodeGraphDisplayCanvasPresentContext(canvas) : null;
+    const ctx = typeof nodeGraphSharedGlPresentTarget === "function" ? nodeGraphSharedGlPresentTarget(canvas) : null;
     nodeGraphVectorRgbClearPlate(canvas, ctx, bg);
   });
 }

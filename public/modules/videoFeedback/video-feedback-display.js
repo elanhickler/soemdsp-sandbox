@@ -183,7 +183,7 @@ function drawNodeGraphVideoFeedbackFaceItem(_renderer, item, pixelRatio) {
   const canvas = nodeGraphVideoFeedbackEnsureCanvas(face, pixelRatio);
   if (!canvas) return;
   // 2D present surface for the shared-GL blit (display-canvas.js); no 2D drawing here.
-  const ctx = typeof nodeGraphDisplayCanvasPresentContext === "function" ? nodeGraphDisplayCanvasPresentContext(canvas) : null;
+  const ctx = typeof nodeGraphSharedGlPresentTarget === "function" ? nodeGraphSharedGlPresentTarget(canvas) : null;
   if (!ctx) return;
   const nodeId = slot.nodeId;
   const node = typeof nodeGraphModuleScopeNodeForSlot === "function"

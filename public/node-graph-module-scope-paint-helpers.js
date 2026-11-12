@@ -522,15 +522,6 @@ function nodeGraphScope2dStrokeSpace(canvas) {
 // unchanged — only storage/composite moved off RGB burn.
 const nodeGraphScope2dBurnRendererVersion = "energy-mono-lut-soft-beam-1";
 
-// Explicit, deterministic teardown of a burn-renderer's GL resources
-// (buffers, programs, framebuffers, textures) instead of waiting on GC.
-// The canvas itself is left to the WeakMap + GC to reclaim -- forcing
-// WEBGL_lose_context here was tried and reliably stalled for multiple
-// seconds per call in some environments, which is worse than the leak it
-// was meant to speed up; freeing the individual resources plus not holding
-// the canvas alive in a strong Map is enough to keep the live-context count
-// bounded.
-// disposeNodeGraphScope2dBurnRendererForCanvas → node-graph-module-scope-draw-burn.js
 // nodeGraphScope2dBurnCanvasForSlot → node-graph-module-scope-draw-burn.js
 /** Default face plate — pure black (no teal/CRT tint in the plate color). */
 const nodeGraphFacePlateDefaultBackground = "#000000";
@@ -710,30 +701,6 @@ function nodeGraphScopeStereoBlendComposite(mode) {
 }
 
 // syncNodeGraphScope2dBurnCanvas → node-graph-module-scope-draw-burn.js
-// nodeGraphScope2dBurnTextureFormats → node-graph-module-scope-draw-burn.js
-// createNodeGraphScope2dBurnTexture → node-graph-module-scope-draw-burn.js
-// createNodeGraphScope2dBurnFramebuffer → node-graph-module-scope-draw-burn.js
-// createNodeGraphScope2dBurnSurface → node-graph-module-scope-draw-burn.js
-// deleteNodeGraphScope2dBurnSurface → node-graph-module-scope-draw-burn.js
-// createNodeGraphScope2dBurnRenderer → node-graph-module-scope-draw-burn.js
-// nodeGraphScope2dBurnRendererForCanvas → node-graph-module-scope-draw-burn.js
-// resizeNodeGraphScope2dBurnRenderer → node-graph-module-scope-draw-burn.js
-function bindNodeGraphScope2dQuad(renderer, program, positionLocation) {
-  const gl = renderer.gl;
-  gl.useProgram(program);
-  gl.bindBuffer(gl.ARRAY_BUFFER, renderer.quadBuffer);
-  gl.enableVertexAttribArray(positionLocation);
-  gl.vertexAttribPointer(positionLocation, 2, gl.FLOAT, false, 8, 0);
-}
-
-// copyNodeGraphScope2dBurnSurface → node-graph-module-scope-draw-burn.js
-// nodeGraphScope2dBurnDecayValues → node-graph-module-scope-draw-burn.js
-// decayNodeGraphScope2dBurn → node-graph-module-scope-draw-burn.js
-// nodeGraphScope2dBurnLayers → node-graph-module-scope-draw-burn.js
-// appendNodeGraphScope2dBurnSegment → node-graph-module-scope-draw-burn.js
-// buildNodeGraphScope2dBurnVertices → node-graph-module-scope-draw-burn.js
-// drawNodeGraphScope2dBurnBeamLayer → node-graph-module-scope-draw-burn.js
-// compositeNodeGraphScope2dBurn → node-graph-module-scope-draw-burn.js
 /**
  * Beautiful soft-beam retained burn on mono energy + gradient LUT.
  * Same continuous gaussian segment ribbons as classic scope2d; storage is
@@ -1760,7 +1727,7 @@ function nodeGraphWaterfallPinClocks(nowMs) {
   if (typeof nodeGraphModuleScopeSlots === "function") {
     for (const slot of nodeGraphModuleScopeSlots() || []) {
       const existing = slot?.scopeElement?.querySelector?.(
-        ":scope > canvas.node-module-scope-local-fallback-canvas",
+        ":scope > .node-module-scope-local-fallback-canvas",
       );
       pin(existing);
     }

@@ -47,7 +47,7 @@
 
   function drawNodeGraphEmoScriptDisplay(section) {
     if (!section?.isConnected) return;
-    const canvas = section.querySelector("canvas");
+    const canvas = section.querySelector(".node-display-face");
     if (!canvas || typeof root.nodeGraphSizeDisplayCanvas !== "function") return;
     const metrics = root.nodeGraphSizeDisplayCanvas(section, canvas, { pixelDensity: 1 });
     if (!metrics) return;
@@ -92,7 +92,7 @@
     section.dataset.node = id;
     section.dataset.nodeType = String(type || "script");
     section.dataset.parameterVisual = "true";
-    const canvas = root.nodeGraphDisplayCanvasCreate("node-filter-curve-canvas node-emo-script-canvas node-display-canvas");
+    const canvas = root.nodeGraphDisplayCanvasCreate("node-filter-curve-canvas node-emo-script-canvas");
     section.append(canvas);
     if (typeof root.nodeGraphInstallDrawingFacePump === "function") {
       root.nodeGraphInstallDrawingFacePump(section, {

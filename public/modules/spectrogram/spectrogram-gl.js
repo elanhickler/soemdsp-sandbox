@@ -620,7 +620,7 @@ void main() {
     const dh = Math.max(1, destH | 0);
     // Same scaling rule as the old 2D present: 1:1 crisp, else smooth.
     const exact = w === dw && h === dh;
-    nodeGraphDisplayCanvasBlit(destCtx, dev.canvas, 0, dev.canvas.height - h, w, h, 0, 0, dw, dh, !exact);
+    nodeGraphSharedGlCopyToContext(destCtx, 0, dev.canvas.height - h, w, h, 0, 0, dw, dh, !exact);
     return true;
   }
 

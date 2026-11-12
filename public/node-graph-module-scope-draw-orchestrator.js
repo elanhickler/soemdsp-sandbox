@@ -11,11 +11,6 @@ function drawNodeGraphSelfPaintFaceItem(_renderer, item, _pixelRatio) {
   for (const overlay of screen.querySelectorAll?.(
     ":scope > .node-module-scope-local-fallback-canvas",
   ) || []) {
-    try {
-      if (typeof disposeNodeGraphScope2dBurnRendererForCanvas === "function") {
-        disposeNodeGraphScope2dBurnRendererForCanvas(overlay);
-      }
-    } catch (_) { /* best-effort */ }
     overlay.remove();
   }
   // Drop persistent-canvas cache so a rebuild does not re-append the ghost plate.
@@ -121,7 +116,7 @@ function drawNodeGraphModuleScopeTypedItem(renderer, item, pixelRatio) {
   if (typeof scopePaintShouldColdBootFace === "function" && scopePaintShouldColdBootFace(nodeId, item?.slot)) {
     const canvas = (typeof nodeGraphModuleScopeLocalFallbackCanvas === "function"
       && nodeGraphModuleScopeLocalFallbackCanvas(item.slot))
-      || item?.slot?.scopeElement?.querySelector?.("canvas")
+      || item?.slot?.scopeElement?.querySelector?.(".node-display-face")
       || null;
     if (typeof scopePaintEnsureColdPlate === "function") {
       scopePaintEnsureColdPlate(item.slot, { canvas, displayType: displayRenderer, force: true });
@@ -199,7 +194,7 @@ function nodeGraphModuleScopeMarkScreenLit(screenElement, strength = 1) {
   screenElement.dataset.lightStrength = s.toFixed(3);
   // Punch target is often the local fallback canvas, not the outer window.
   // Cached child lookup (re-queried when the hit detaches or moves away).
-  const paintedSelector = ":scope > canvas.node-module-scope-local-fallback-canvas, :scope > canvas.node-number-readout-canvas";
+  const paintedSelector = ":scope > .node-module-scope-local-fallback-canvas, :scope > .node-number-readout-canvas";
   let painted = typeof nodeGraphCachedChild === "function"
     ? nodeGraphCachedChild(screenElement, paintedSelector)
     : screenElement.querySelector?.(paintedSelector);

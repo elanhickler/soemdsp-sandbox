@@ -31,14 +31,14 @@
   const PUNCH_INSET_CSS = 1.25;
 
   const SCREEN_SELECTOR = [
-    "canvas.node-sample-waveform-canvas",
-    "canvas.node-module-scope-local-fallback-canvas",
-    "canvas.node-xy-pad-canvas",
-    "canvas.node-number-readout-canvas",
-    "canvas.node-asciiscope-canvas",
-    "canvas.node-matrix-display-canvas",
-    "canvas.node-filter-curve-canvas",
-    "canvas.node-raster-rgb-canvas",
+    ".node-sample-waveform-canvas",
+    ".node-module-scope-local-fallback-canvas",
+    ".node-xy-pad-canvas",
+    ".node-number-readout-canvas",
+    ".node-asciiscope-canvas",
+    ".node-matrix-display-canvas",
+    ".node-filter-curve-canvas",
+    ".node-raster-rgb-canvas",
     ".node-keypad-face",
     ".node-text-box-body",
   ].join(", ");
@@ -430,28 +430,28 @@ void main() {
    */
   function resolvePunchElement(el) {
     if (!el) return null;
-    if (el.matches?.("canvas.node-sample-waveform-canvas")) return el;
-    if (el.matches?.("canvas.node-raster-rgb-canvas")) return el;
-    if (el.matches?.("canvas.node-module-scope-local-fallback-canvas")) return el;
-    if (el.matches?.("canvas.node-xy-pad-canvas")) return el;
-    if (el.matches?.("canvas.node-number-readout-canvas")) return el;
-    if (el.matches?.("canvas.node-asciiscope-canvas")) return el;
-    if (el.matches?.("canvas.node-matrix-display-canvas")) return el;
-    if (el.matches?.("canvas.node-filter-curve-canvas")) return el;
+    if (el.matches?.(".node-sample-waveform-canvas")) return el;
+    if (el.matches?.(".node-raster-rgb-canvas")) return el;
+    if (el.matches?.(".node-module-scope-local-fallback-canvas")) return el;
+    if (el.matches?.(".node-xy-pad-canvas")) return el;
+    if (el.matches?.(".node-number-readout-canvas")) return el;
+    if (el.matches?.(".node-asciiscope-canvas")) return el;
+    if (el.matches?.(".node-matrix-display-canvas")) return el;
+    if (el.matches?.(".node-filter-curve-canvas")) return el;
     if (el.matches?.(".node-keypad-face")) return el;
     if (el.matches?.(".node-led-face")) return el;
 
     // Outer shells: only if no painted canvas is already the target.
     const painted = el.querySelector?.(
-      "canvas.node-raster-rgb-canvas, canvas.node-module-scope-local-fallback-canvas, canvas.node-sample-waveform-canvas, canvas.node-xy-pad-canvas, canvas.node-number-readout-canvas, canvas.node-asciiscope-canvas, canvas.node-matrix-display-canvas, canvas.node-filter-curve-canvas, .node-keypad-face, .node-led-face",
+      ".node-raster-rgb-canvas, .node-module-scope-local-fallback-canvas, .node-sample-waveform-canvas, .node-xy-pad-canvas, .node-number-readout-canvas, .node-asciiscope-canvas, .node-matrix-display-canvas, .node-filter-curve-canvas, .node-keypad-face, .node-led-face",
     );
     if (painted) return painted;
 
     if (el.matches?.(".node-sample-waveform-display")) {
-      return el.querySelector?.("canvas.node-sample-waveform-canvas") || el;
+      return el.querySelector?.(".node-sample-waveform-canvas") || el;
     }
     if (el.matches?.(".node-filter-curve-display")) {
-      return el.querySelector?.("canvas.node-filter-curve-canvas") || el;
+      return el.querySelector?.(".node-filter-curve-canvas") || el;
     }
     return el;
   }

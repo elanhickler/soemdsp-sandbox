@@ -4019,7 +4019,7 @@ function updateNodeGraphMidiCcReadouts() {
   for (const node of nodeGraphMvp?.patch?.nodes || []) {
     if (!node || (node.type !== "midiCc" && node.type !== "midiLag")) continue;
     const article = document.querySelector(`article.dsp-node[data-node="${CSS.escape(String(node.id))}"]`);
-    for (const canvas of article?.querySelectorAll(".node-module-scope-window canvas") || []) {
+    for (const canvas of article?.querySelectorAll(".node-module-scope-window .node-display-face") || []) {
       if (canvas._wfGlSession) nodeGraphFaceTextSet(canvas, lines);
     }
   }

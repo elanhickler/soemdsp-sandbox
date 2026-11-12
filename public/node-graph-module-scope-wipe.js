@@ -7,6 +7,13 @@
 
 const nodeGraphModuleScopeFaceWipes = Object.create(null);
 
+// Wipe targets: real canvases plus texture-only display face boxes.
+const NODE_GRAPH_WIPE_SURFACES = "canvas, .node-display-face";
+
+function nodeGraphWipeSurface(el) {
+  return el instanceof HTMLCanvasElement || Boolean(el?.classList?.contains("node-display-face"));
+}
+
 function nodeGraphModuleScopeRegisterFaceWipe(displayType, wipeFn) {
   const key = String(displayType || "").trim();
   if (!key || typeof wipeFn !== "function") {
@@ -78,10 +85,10 @@ function nodeGraphModuleScopeWipeNode(nodeId) {
   }
   const displayType = nodeGraphModuleScopeDisplayTypeForNode(id);
   const host = document.querySelector(`[data-node="${id}"]`);
-  const canvases = host ? host.querySelectorAll("canvas") : [];
+  const canvases = host ? host.querySelectorAll(NODE_GRAPH_WIPE_SURFACES) : [];
   if (canvases.length) {
     for (const canvas of canvases) {
-      if (!(canvas instanceof HTMLCanvasElement)) continue;
+      if (!nodeGraphWipeSurface(canvas)) continue;
       if (!nodeGraphModuleScopeWipeCanvas(canvas, { nodeId: id, displayType, face: host })) {
         const bg = typeof nodeGraphModuleScopePlateBackgroundForElement === "function"
           ? nodeGraphModuleScopePlateBackgroundForElement(canvas)
@@ -103,7 +110,7 @@ function wipeNodeGraphModuleScopeScreensToColdBoot() {
   }
   // 1D Phosphor / 1D Trace / plots keep pen + sync state (scope-sync.js) on
   // the canvas. Clear it on Stop so the next Play does not resume mid-sweep.
-  for (const canvas of document.querySelectorAll("canvas")) {
+  for (const canvas of document.querySelectorAll(NODE_GRAPH_WIPE_SURFACES)) {
     if (!canvas || typeof canvas !== "object") {
       continue;
     }
@@ -161,15 +168,15 @@ function wipeNodeGraphModuleScopeScreensToColdBoot() {
   const phosphorKeys = ["_phosphorEnergyGl", "_phosphorLiveEnergyGl", "_xyPadPhosphorEnergyGl"];
   const canvases = new Set();
   for (const canvas of document.querySelectorAll(
-    "canvas.node-module-scope-local-fallback-canvas, canvas.node-xy-pad-canvas, canvas.node-spectrogram-canvas, canvas.node-sample-waveform-canvas, canvas.node-fbm-field-canvas, canvas.node-raster-rgb-canvas",
+    ".node-module-scope-local-fallback-canvas, .node-xy-pad-canvas, .node-spectrogram-canvas, .node-sample-waveform-canvas, .node-fbm-field-canvas, .node-raster-rgb-canvas",
   )) {
-    if (canvas instanceof HTMLCanvasElement) {
+    if (nodeGraphWipeSurface(canvas)) {
       canvases.add(canvas);
     }
   }
   // Any other canvas still holding a phosphor energy face (chromeless modules).
-  for (const canvas of document.querySelectorAll("canvas")) {
-    if (!(canvas instanceof HTMLCanvasElement)) {
+  for (const canvas of document.querySelectorAll(NODE_GRAPH_WIPE_SURFACES)) {
+    if (!nodeGraphWipeSurface(canvas)) {
       continue;
     }
     if (canvas.classList?.contains("node-number-readout-canvas")) {
@@ -181,7 +188,7 @@ function wipeNodeGraphModuleScopeScreensToColdBoot() {
   }
   if (typeof nodeGraphModuleScopePersistentCanvases !== "undefined" && nodeGraphModuleScopePersistentCanvases?.values) {
     for (const canvas of nodeGraphModuleScopePersistentCanvases.values()) {
-      if (canvas instanceof HTMLCanvasElement) {
+      if (nodeGraphWipeSurface(canvas)) {
         canvases.add(canvas);
       }
     }
@@ -332,11 +339,11 @@ function nodeGraphModuleScopeWipeNumberReadoutCanvas(canvas, bg, options) {
 })();
 
 /**
- * Drop a face canvas from the persistent map (and DOM) so the next draw can
- * allocate a healthy 2D canvas. WebGL-poisoned faces must not be reattached.
+ * Drop a face from the persistent map (and DOM) so the next draw allocates a
+ * fresh face box.
  */
 function nodeGraphDropScopeFaceCanvas(canvas, nodeId = "") {
-  if (!(canvas instanceof HTMLCanvasElement)) {
+  if (!nodeGraphWipeSurface(canvas)) {
     return;
   }
   if (typeof nodeGraphModuleScopePersistentCanvases !== "undefined"
@@ -406,7 +413,7 @@ function nodeGraphClearCollectFaceCanvasesForNode(nodeId) {
   if (typeof nodeGraphModuleScopePersistentCanvases !== "undefined"
     && nodeGraphModuleScopePersistentCanvases?.get) {
     const persistent = nodeGraphModuleScopePersistentCanvases.get(id);
-    if (persistent instanceof HTMLCanvasElement) {
+    if (nodeGraphWipeSurface(persistent)) {
       canvases.add(persistent);
     }
   }
@@ -416,8 +423,8 @@ function nodeGraphClearCollectFaceCanvasesForNode(nodeId) {
     ? document.querySelector?.(`.dsp-node[data-node="${CSS.escape(id)}"]`)
     : null;
   if (moduleEl) {
-    for (const canvas of moduleEl.querySelectorAll("canvas")) {
-      if (canvas instanceof HTMLCanvasElement) {
+    for (const canvas of moduleEl.querySelectorAll(NODE_GRAPH_WIPE_SURFACES)) {
+      if (nodeGraphWipeSurface(canvas)) {
         canvases.add(canvas);
       }
     }
@@ -433,7 +440,7 @@ function nodeGraphClearCollectFaceCanvasesForNode(nodeId) {
         const face = typeof peekNodeGraphModuleScopeFaceCanvas === "function"
           ? peekNodeGraphModuleScopeFaceCanvas(slot)
           : null;
-        if (face instanceof HTMLCanvasElement) {
+        if (nodeGraphWipeSurface(face)) {
           canvases.add(face);
         }
       } catch (_error) {
@@ -441,7 +448,7 @@ function nodeGraphClearCollectFaceCanvasesForNode(nodeId) {
       }
       if (id && typeof nodeGraphModuleScopePersistentCanvases !== "undefined") {
         const cached = nodeGraphModuleScopePersistentCanvases.get?.(id);
-        if (cached instanceof HTMLCanvasElement) {
+        if (nodeGraphWipeSurface(cached)) {
           canvases.add(cached);
         }
       }
