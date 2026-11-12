@@ -233,9 +233,74 @@ function nodeGraphCollectViewTargetNodes(options = {}) {
     }
   }
   if (!nodes.length) {
-    nodes = [...host.querySelectorAll(".dsp-node:not(.removed):not([hidden])")];
+    const roots = typeof nodeGraphViewportCullModuleRoots === "function"
+      ? nodeGraphViewportCullModuleRoots(host)
+      : [host];
+    const seen = new Set();
+    nodes = [];
+    for (const root of roots) {
+      if (!root?.querySelectorAll) {
+        continue;
+      }
+      for (const el of root.querySelectorAll(".dsp-node:not(.removed):not([hidden])")) {
+        if (seen.has(el)) {
+          continue;
+        }
+        seen.add(el);
+        nodes.push(el);
+      }
+    }
   }
   return { host, nodes, workspace };
+}
+
+/** World-space size that still works when a module is viewport-asleep (display:none). */
+function nodeGraphModuleWorldSize(node) {
+  if (!node) {
+    return null;
+  }
+  let width = typeof nodeGraphFiniteNumber === "function"
+    ? nodeGraphFiniteNumber(node.offsetWidth)
+    : (Number(node.offsetWidth) || 0);
+  let height = typeof nodeGraphFiniteNumber === "function"
+    ? nodeGraphFiniteNumber(node.offsetHeight)
+    : (Number(node.offsetHeight) || 0);
+  if (!(width > 0) || !(height > 0)) {
+    width = typeof nodeGraphFiniteNumber === "function"
+      ? nodeGraphFiniteNumber(node._viewportCullW)
+      : (Number(node._viewportCullW) || 0);
+    height = typeof nodeGraphFiniteNumber === "function"
+      ? nodeGraphFiniteNumber(node._viewportCullH)
+      : (Number(node._viewportCullH) || 0);
+  }
+  if ((!(width > 0) || !(height > 0)) && typeof nodeGraphModuleGeometryGet === "function") {
+    const box = nodeGraphModuleGeometryGet(node.dataset?.node)?.box;
+    if (box && box.w > 0 && box.h > 0) {
+      width = box.w;
+      height = box.h;
+    }
+  }
+  if (!(width > 0) || !(height > 0)) {
+    return null;
+  }
+  return { width, height };
+}
+
+function nodeGraphModuleWorldBounds(node) {
+  const size = nodeGraphModuleWorldSize(node);
+  if (!size) {
+    return null;
+  }
+  const x = Number.parseFloat(node.style?.getPropertyValue?.("--node-x")) || 0;
+  const y = Number.parseFloat(node.style?.getPropertyValue?.("--node-y")) || 0;
+  return {
+    bottom: y + size.height,
+    left: x,
+    right: x + size.width,
+    top: y,
+    width: size.width,
+    height: size.height,
+  };
 }
 
 function nodeGraphModuleBoundsUnion(nodes) {
@@ -244,15 +309,21 @@ function nodeGraphModuleBoundsUnion(nodes) {
   let right = -Infinity;
   let bottom = -Infinity;
   let count = 0;
-  // Culled (off-screen) modules are display:none and measure 0x0, which is
-  // exactly when centring needs them. Wake them for one shared reflow.
-  const list = Array.from(nodes || []);
-  const asleep = list.filter((node) => node?.classList?.contains("viewport-asleep"));
-  for (const node of asleep) node.classList.remove("viewport-asleep");
-  const bounds = list.map((node) => (
-    node && typeof nodeGraphNodeBounds === "function" ? nodeGraphNodeBounds(node) : null
-  ));
-  for (const node of asleep) node.classList.add("viewport-asleep");
+  const list = Array.from(nodes || []).filter(Boolean);
+  const bounds = list.map((node) => nodeGraphModuleWorldBounds(node));
+  // Culled (off-screen) modules are display:none and measure 0x0. Prefer
+  // last-known cull/geometry size so we do not have to wake them. Wake only
+  // the ones still missing a size.
+  const asleepNeedingWake = list.filter((node, index) =>
+    !bounds[index] && node.classList?.contains("viewport-asleep"),
+  );
+  if (asleepNeedingWake.length) {
+    for (const node of asleepNeedingWake) node.classList.remove("viewport-asleep");
+    for (const node of asleepNeedingWake) {
+      bounds[list.indexOf(node)] = nodeGraphModuleWorldBounds(node);
+    }
+    for (const node of asleepNeedingWake) node.classList.add("viewport-asleep");
+  }
   for (const b of bounds) {
     if (!b) {
       continue;
@@ -270,6 +341,35 @@ function nodeGraphModuleBoundsUnion(nodes) {
     return null;
   }
   return { bottom, left, right, top, width: right - left, height: bottom - top };
+}
+
+/**
+ * Pan so a world-space point sits at the workspace centre.
+ * Origin is workspace-center + pan + chrome pin, then world * zoom, so pin
+ * must be subtracted or a resize/chrome change leaves Z (and autoframe) off.
+ */
+function nodeGraphPanToCenterWorldPoint(worldX, worldY, options = {}) {
+  const zoom = Number.isFinite(Number(options.zoom))
+    ? Number(options.zoom)
+    : (typeof nodeGraphZoom === "function"
+      ? nodeGraphZoom()
+      : (Number.isFinite(Number(nodeGraphMvp?.zoom)) ? Number(nodeGraphMvp.zoom) : 1));
+  const pin = typeof nodeGraphWorkspaceChromePin === "function"
+    ? nodeGraphWorkspaceChromePin()
+    : { x: 0, y: 0 };
+  const pinX = typeof nodeGraphFiniteNumber === "function" ? nodeGraphFiniteNumber(pin?.x) : (Number(pin?.x) || 0);
+  const pinY = typeof nodeGraphFiniteNumber === "function" ? nodeGraphFiniteNumber(pin?.y) : (Number(pin?.y) || 0);
+  const panX = -worldX * zoom - pinX;
+  const panY = -worldY * zoom - pinY;
+  if (typeof setNodeGraphPan === "function") {
+    setNodeGraphPan(panX, panY, {
+      immediate: options.immediate !== false,
+      persist: options.persist !== false,
+    });
+  } else if (typeof nodeGraphMvp === "object" && nodeGraphMvp) {
+    nodeGraphMvp.pan = { x: panX, y: panY };
+  }
+  return { x: panX, y: panY, zoom };
 }
 
 // Zoom + pan so the entire patch fits the workspace with a little elbow room.
@@ -300,19 +400,23 @@ function nodeGraphAutoFrame(options = {}) {
   nodeGraphMvp.zoom = zoom;
   syncNodeGraphPatchViewZoom(zoom);
   applyNodeGraphZoom({ immediate: true, forceLayout: true, persist: false });
-  setNodeGraphPan(-centerX * zoom, -centerY * zoom, { persist: false, immediate: true });
+  nodeGraphPanToCenterWorldPoint(centerX, centerY, {
+    zoom,
+    persist: false,
+    immediate: true,
+  });
   return true;
 }
 
 /** Pan only: center selection (or all modules) in the viewport at the current zoom. */
 function nodeGraphCenterViewOnModules(options = {}) {
-  const { nodes } = nodeGraphCollectViewTargetNodes({
-    preferSelection: options.preferSelection !== false,
-  });
-  if (!nodes.length) {
-    return false;
+  const preferSelection = options.preferSelection !== false;
+  let { nodes } = nodeGraphCollectViewTargetNodes({ preferSelection });
+  let bounds = nodeGraphModuleBoundsUnion(nodes);
+  if (!bounds && preferSelection) {
+    ({ nodes } = nodeGraphCollectViewTargetNodes({ preferSelection: false }));
+    bounds = nodeGraphModuleBoundsUnion(nodes);
   }
-  const bounds = nodeGraphModuleBoundsUnion(nodes);
   if (!bounds) {
     return false;
   }
@@ -321,13 +425,14 @@ function nodeGraphCenterViewOnModules(options = {}) {
     : (Number.isFinite(Number(nodeGraphMvp?.zoom)) ? Number(nodeGraphMvp.zoom) : 1);
   const centerX = (bounds.left + bounds.right) / 2;
   const centerY = (bounds.top + bounds.bottom) / 2;
-  setNodeGraphPan(-centerX * zoom, -centerY * zoom, {
+  nodeGraphPanToCenterWorldPoint(centerX, centerY, {
+    zoom,
     immediate: true,
     persist: options.persist !== false,
   });
   if (typeof setNodeInteractionHelp === "function" && options.help !== false) {
     setNodeInteractionHelp(
-      options.preferSelection !== false && typeof nodeGraphSelectedNodeIds === "function"
+      preferSelection && typeof nodeGraphSelectedNodeIds === "function"
         && nodeGraphSelectedNodeIds().size
         ? "View centered on selection."
         : "View centered on modules.",
@@ -393,6 +498,8 @@ function nodeGraphRecoverViewportIfModulesOffscreen() {
 if (typeof window !== "undefined") {
   window.nodeGraphAutoFrame = nodeGraphAutoFrame;
   window.nodeGraphCenterViewOnModules = nodeGraphCenterViewOnModules;
+  window.nodeGraphPanToCenterWorldPoint = nodeGraphPanToCenterWorldPoint;
+  window.nodeGraphModuleWorldBounds = nodeGraphModuleWorldBounds;
   window.nodeGraphModulesIntersectViewport = nodeGraphModulesIntersectViewport;
   window.nodeGraphRecoverViewportIfModulesOffscreen = nodeGraphRecoverViewportIfModulesOffscreen;
 }
