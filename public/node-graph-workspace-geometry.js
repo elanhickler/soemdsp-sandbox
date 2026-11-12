@@ -506,26 +506,43 @@ function nodeGraphZoomSurfaceClientScale(surface = nodeGraphZoomSurface()) {
 }
 
 function nodeGraphClientToZoomSurfacePoint(clientX, clientY, surface = nodeGraphZoomSurface()) {
-  const rect = surface?.getBoundingClientRect?.();
-  if (!rect) {
+  if (!surface) {
     return { x: 0, y: 0 };
   }
+  const host = document.getElementById("nodeGraphWorkspace");
   const scale = nodeGraphZoomSurfaceClientScale(surface);
-  const scaled = surface?.style?.transform && surface.style.transform !== "none";
-  let panX = 0;
-  let panY = 0;
-  if (!scaled) {
-    const host = document.getElementById("nodeGraphWorkspace");
-    const pan = nodeGraphMvp?.pan || { x: 0, y: 0 };
-    const origin = typeof nodeGraphRenderedOriginOffset === "function"
-      ? nodeGraphRenderedOriginOffset(pan, host)
-      : pan;
-    panX = Number(origin?.x) || 0;
-    panY = Number(origin?.y) || 0;
+  const scaled = Boolean(surface.style?.transform && surface.style.transform !== "none");
+  const gesturing = typeof nodeGraphViewportGestureActive === "function"
+    && nodeGraphViewportGestureActive();
+  let left = 0;
+  let top = 0;
+  if (scaled || gesturing) {
+    // Mid-gesture (or frozen HTML camera): no layout reads. The world layer is
+    // absolute at 0,0 of the workspace padding box, so its unscaled client
+    // origin is the cached workspace metrics plus the border. The frozen layer
+    // transform is not the live camera; the live origin below is.
+    const metrics = host && typeof nodeGraphWorkspaceLayoutMetrics === "function"
+      ? nodeGraphWorkspaceLayoutMetrics(host)
+      : null;
+    left = nodeGraphFiniteNumber(metrics?.left) + nodeGraphFiniteNumber(metrics?.borderLeft);
+    top = nodeGraphFiniteNumber(metrics?.top) + nodeGraphFiniteNumber(metrics?.borderTop);
+  } else {
+    const rect = surface.getBoundingClientRect?.();
+    if (!rect) {
+      return { x: 0, y: 0 };
+    }
+    left = rect.left;
+    top = rect.top;
   }
+  const pan = nodeGraphMvp?.pan || { x: 0, y: 0 };
+  const origin = typeof nodeGraphRenderedOriginOffset === "function"
+    ? nodeGraphRenderedOriginOffset(pan, host)
+    : pan;
+  const panX = Number(origin?.x) || 0;
+  const panY = Number(origin?.y) || 0;
   return {
-    x: (clientX - rect.left - panX) / scale.x,
-    y: (clientY - rect.top - panY) / scale.y,
+    x: (clientX - left - panX) / scale.x,
+    y: (clientY - top - panY) / scale.y,
   };
 }
 
@@ -884,7 +901,13 @@ function updateNodeGraphMouseLight(event) {
   // event target for canvas moves; still need rect for origin. Cache for 1 frame.
   let rect = nodeGraphMvp._mouseLightWorkspaceRect;
   const now = performance.now?.() || Date.now();
-  if (!rect || (now - (nodeGraphMvp._mouseLightWorkspaceRectAt || 0)) > 250) {
+  const gesturing = typeof nodeGraphViewportGestureActive === "function"
+    && nodeGraphViewportGestureActive();
+  if (gesturing) {
+    // Zoom/pan never moves the workspace box: reuse the last rect, or the
+    // cached gesture layout metrics (same client left/top), never measure.
+    if (!rect) rect = nodeGraphWorkspaceLayoutMetrics(workspace);
+  } else if (!rect || (now - (nodeGraphMvp._mouseLightWorkspaceRectAt || 0)) > 250) {
     rect = workspace.getBoundingClientRect();
     nodeGraphMvp._mouseLightWorkspaceRect = rect;
     nodeGraphMvp._mouseLightWorkspaceRectAt = now;

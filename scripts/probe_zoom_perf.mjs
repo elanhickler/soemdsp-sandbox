@@ -174,7 +174,17 @@ const [zIn, zOut] = await page.evaluate(({ legMs, x, y }) => new Promise((done) 
     const dt = Math.min(100, t - last); last = t;
     const z = nodeGraphZoom();
     if (phase === 1 && z >= 40) { phase = -1; peak = z; }
-    if (phase === -1 && z <= 1) { done([peak, z]); return; }
+    if (phase === -1 && z <= 1) {
+      // Snapshot the mid-gesture counts at the last wheel, in this frame: the
+      // settle timer can fire before the next page.evaluate round trip lands,
+      // and its reads belong to the settle, not the gesture.
+      const c = window.__zp;
+      window.__zpMid = { calls: { ...(window.__zpCalls || {}) }, gcs: c.gcs, gbcr: c.gbcr, offset: c.offset, readPixels: c.readPixels, who: Object.entries(c.who).sort((a, b) => b[1] - a[1]).slice(0, 25) };
+      c.gcs = 0; c.gbcr = 0; c.offset = 0; c.who = {};
+      if (window.__zpCalls) window.__zpCalls = {};
+      done([peak, z]);
+      return;
+    }
     window.__zp.on = true;
     const steps = phase * rate * dt / lnRatio;
     target.dispatchEvent(new WheelEvent("wheel", { deltaY: -steps * 100, clientX: x, clientY: y, bubbles: true, cancelable: true }));
@@ -184,13 +194,7 @@ const [zIn, zOut] = await page.evaluate(({ legMs, x, y }) => new Promise((done) 
 }), { legMs: LEG_MS, x: vp.width * 0.5, y: vp.height * 0.55 });
 // Reads while the wheel was still turning (settle not yet fired), then the
 // settle that follows. The settle may read the DOM once; the gesture may not.
-const mid = await page.evaluate(() => {
-  const z = window.__zp;
-  const out = { calls: { ...(window.__zpCalls || {}) }, gcs: z.gcs, gbcr: z.gbcr, offset: z.offset, readPixels: z.readPixels, who: Object.entries(z.who).sort((x, y) => y[1] - x[1]).slice(0, 25) };
-  z.gcs = 0; z.gbcr = 0; z.offset = 0; z.who = {};
-  if (window.__zpCalls) window.__zpCalls = {};
-  return out;
-});
+const mid = await page.evaluate(() => window.__zpMid);
 await page.waitForTimeout(300);
 const res = await page.evaluate(() => {
   const z = window.__zp; z.on = false; z.stop = true;

@@ -506,8 +506,8 @@ function nodeGraphModuleFaceLocalPoint(face, event) {
   return { x: (event.clientX - rect.left) * sx, y: (event.clientY - rect.top) * sy, sx, sy };
 }
 
-function nodeGraphModuleFaceWidgetAt(spec, face, x, y) {
-  return nodeGraphModuleFaceWidgets(spec, face.offsetWidth, face.closest(".dsp-node"))
+function nodeGraphModuleFaceWidgetAt(spec, face, x, y, faceWidth = face.offsetWidth) {
+  return nodeGraphModuleFaceWidgets(spec, faceWidth, face.closest(".dsp-node"))
     .find((wd) => wd.type !== "slash" && x >= wd.x && x < wd.x + wd.w && y >= wd.y && y < wd.y + wd.h) || null;
 }
 
@@ -581,6 +581,24 @@ function nodeGraphModuleFaceControlForParam(article, key) {
     || row;
 }
 
+/** Face zoom-1 layout (world box + offset size) from the last ordinary hover, for mid-gesture hover. */
+const nodeGraphModuleFaceHoverLayout = new WeakMap();
+
+/**
+ * A face's zoom-1 world box and layout size. Outside a pan/zoom gesture this
+ * measures and caches; mid-gesture it only reads the cache (module HTML does
+ * not move until settle), and null means "no hover yet".
+ */
+function nodeGraphModuleFaceHoverLayoutFor(face, gesturing) {
+  if (gesturing) return nodeGraphModuleFaceHoverLayout.get(face) || null;
+  const box = typeof nodeGraphGlGraphWorldBox === "function" ? nodeGraphGlGraphWorldBox(face) : null;
+  const w = face.offsetWidth;
+  if (!box || !(box.w > 0.5) || !(box.h > 0.5) || !(w > 0)) return null;
+  const laid = { box, w, h: face.offsetHeight };
+  nodeGraphModuleFaceHoverLayout.set(face, laid);
+  return laid;
+}
+
 /** Docked-help target for the face widget under a pointer event. */
 function nodeGraphModuleFaceHoverControl(event) {
   const native = event?.target;
@@ -589,8 +607,25 @@ function nodeGraphModuleFaceHoverControl(event) {
   const article = face.closest(".dsp-node");
   const spec = nodeGraphModuleFaceSpecForElement(article);
   if (!spec) return null;
-  const p = nodeGraphModuleFaceLocalPoint(face, event);
-  const wd = nodeGraphModuleFaceWidgetAt(spec, face, p.x, p.y);
+  const gesturing = typeof nodeGraphViewportGestureActive === "function" && nodeGraphViewportGestureActive();
+  let p;
+  let faceWidth;
+  if (gesturing) {
+    // Mid-zoom: no layout reads. Face size and world box are the zoom-1 layout
+    // cached on the last ordinary hover; the pointer maps through the camera.
+    const laid = nodeGraphModuleFaceHoverLayoutFor(face, true);
+    if (!laid || typeof nodeGraphClientToZoomSurfacePoint !== "function") return null;
+    const world = nodeGraphClientToZoomSurfacePoint(event.clientX, event.clientY);
+    const box = laid.box;
+    if (world.x < box.x || world.x > box.x + box.w || world.y < box.y || world.y > box.y + box.h) return null;
+    p = { x: ((world.x - box.x) / box.w) * laid.w, y: ((world.y - box.y) / box.h) * laid.h };
+    faceWidth = laid.w;
+  } else {
+    p = nodeGraphModuleFaceLocalPoint(face, event);
+    faceWidth = face.offsetWidth;
+    nodeGraphModuleFaceHoverLayoutFor(face, false);
+  }
+  const wd = nodeGraphModuleFaceWidgetAt(spec, face, p.x, p.y, faceWidth);
   if (!wd) return null;
   return nodeGraphModuleFaceControlForParam(article, nodeGraphModuleFaceHoverParamKey(article, wd, p.x));
 }
@@ -600,12 +635,14 @@ function nodeGraphModuleFaceHoverControlAtWorld(moduleEl, worldX, worldY) {
   const face = moduleEl?.querySelector(":scope > .dsp-node-body > .node-face");
   const spec = face ? nodeGraphModuleFaceSpecForElement(moduleEl) : null;
   if (!spec) return null;
-  const box = typeof nodeGraphGlGraphWorldBox === "function" ? nodeGraphGlGraphWorldBox(face) : null;
-  if (!box || !(box.w > 0.5) || !(box.h > 0.5)) return null;
+  const gesturing = typeof nodeGraphViewportGestureActive === "function" && nodeGraphViewportGestureActive();
+  const laid = nodeGraphModuleFaceHoverLayoutFor(face, gesturing);
+  if (!laid) return null;
+  const box = laid.box;
   if (worldX < box.x || worldX > box.x + box.w || worldY < box.y || worldY > box.y + box.h) return null;
-  const x = ((worldX - box.x) / box.w) * face.offsetWidth;
-  const y = ((worldY - box.y) / box.h) * face.offsetHeight;
-  const wd = nodeGraphModuleFaceWidgetAt(spec, face, x, y);
+  const x = ((worldX - box.x) / box.w) * laid.w;
+  const y = ((worldY - box.y) / box.h) * laid.h;
+  const wd = nodeGraphModuleFaceWidgetAt(spec, face, x, y, laid.w);
   if (!wd) return null;
   return nodeGraphModuleFaceControlForParam(moduleEl, nodeGraphModuleFaceHoverParamKey(moduleEl, wd, x));
 }

@@ -217,6 +217,12 @@ let nodeGraphJackHitRadiusCache = { key: null, value: 8 };
 function nodeGraphJackHitRadiusPx() {
   const host = document.getElementById("nodeGraphWorkspace");
   if (!host) return 8;
+  // Mid-gesture the workspace style churns (camera vars) but the jack size
+  // tokens only change on settle: keep the last resolved radius, no probe.
+  // Before the first resolve that is the 8px default.
+  if (typeof nodeGraphViewportGestureActive === "function" && nodeGraphViewportGestureActive()) {
+    return nodeGraphJackHitRadiusCache.value;
+  }
   const key = `${host.getAttribute("style") || ""}\u0000${document.documentElement.getAttribute("style") || ""}\u0000${document.body?.className || ""}`;
   if (nodeGraphJackHitRadiusCache.key === key) return nodeGraphJackHitRadiusCache.value;
   const probe = document.createElement("div");

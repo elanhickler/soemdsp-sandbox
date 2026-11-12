@@ -244,7 +244,11 @@ function nodeGraphViewportGestureActive() {
     nodeGraphMvp?.workspacePanning
     || nodeGraphMvp?.smoothZoomDragging
     || nodeGraphMvp?.workspacePinchZooming
-    || nodeGraphViewportWheelActive(),
+    || nodeGraphViewportWheelActive()
+    // A wheel gesture ends when its settle runs, not when the hold window
+    // lapses: one long frame (> wheelHoldMs) must not drop a mid-gesture
+    // present onto the full rebuild path (layout reads) before the settle.
+    || Boolean(nodeGraphViewportPerf.settleTimer),
   );
 }
 

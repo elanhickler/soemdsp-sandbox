@@ -860,12 +860,16 @@ function nodeSliderElementLayoutWidth(element) {
     return cachedWidth;
   }
   // Module HTML is frozen mid pan/zoom (ZP-4): layout cannot have changed,
-  // so the last measured width stands, including 0 for a hidden slider.
+  // so the last measured width stands, including 0 for a hidden slider. The
+  // gesture flag covers the first frame of a wheel gesture, before the
+  // freeze lands (module styles are only written on settle).
   if (
     element
-    && typeof nodeGraphHtmlFrozen === "function"
-    && nodeGraphHtmlFrozen()
     && Number.isFinite(element._sliderFrozenWidth)
+    && (
+      (typeof nodeGraphHtmlFrozen === "function" && nodeGraphHtmlFrozen())
+      || (typeof nodeGraphViewportGestureActive === "function" && nodeGraphViewportGestureActive())
+    )
   ) {
     return element._sliderFrozenWidth;
   }
