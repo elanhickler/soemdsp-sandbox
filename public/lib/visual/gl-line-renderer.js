@@ -680,6 +680,41 @@ void main() {
     };
   }
 
+  /**
+   * A sub-layer of batch on the same colour buffer: drawn after the batch's own
+   * content and its earlier layers, with its own images, quads, outlines and
+   * text (in that order inside the layer). The GL graph draws one module stack
+   * per layer group, back to front (docs/DISPLAY_COMPOSITE_LAYERING_PLAN.md
+   * 4.2). Camera, pixelated text and keepMesh follow the parent at draw time.
+   */
+  function nodeGraphGlLinesLayer(batch) {
+    if (!batch?.s) return null;
+    const layer = {
+      s: batch.s, canvas: batch.canvas, w: batch.w, h: batch.h, clear: batch.clear,
+      data: new Float32Array(FLOATS * 96), n: 0, images: [], texts: [], blend: batch.blend,
+      scale: batch.scale, textInk: batch.textInk,
+      tdata: new Float32Array(48 * 16), tn: 0,
+      publishNodeId: batch.publishNodeId,
+      outlines: [],
+      veils: [],
+      over: null,
+      on: 0,
+      _over: false,
+      gdata: null,
+      gn: 0,
+      _glow: false,
+      transparent: batch.transparent,
+      keep: batch.keep,
+      camera: batch.camera,
+      keepMesh: batch.keepMesh,
+      edge: batch.edge,
+      textPixelated: batch.textPixelated,
+    };
+    if (!batch.layers) batch.layers = [];
+    batch.layers.push(layer);
+    return layer;
+  }
+
   function bindCam(gl, locs, batch) {
     if (!locs || locs.pixel == null) return;
     const cam = batch?.camera;
@@ -1681,6 +1716,7 @@ void main() {
       cache: options.cache === true,
       additive: options.additive === true,
     });
+    return batch.images[batch.images.length - 1];
   }
 
   /**
@@ -2883,6 +2919,14 @@ void main() {
       drawTexts(batch, alphaDst);
     }
     if (batch.veils?.length) drawVeils(batch);
+    if (batch.layers?.length) {
+      for (const layer of batch.layers) {
+        layer.camera = batch.camera;
+        layer.textPixelated = batch.textPixelated;
+        drawContent(layer, blend, alphaDst);
+      }
+      s._drawBatch = batch;
+    }
     gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
   }
 
@@ -2908,6 +2952,8 @@ void main() {
 
   function releaseBatch(batch) {
     if (batch.keepMesh) return;
+    // Layer arrays are small and not pooled (Begin expects full-size pool arrays).
+    batch.layers = null;
     // Hand the vertex array back for the next face (pool stays tiny).
     if (batch.data && batch.s.pool.length < 8) batch.s.pool.push(batch.data);
     if (batch.tdata && batch.s.tpool.length < 8) batch.s.tpool.push(batch.tdata);
@@ -3523,6 +3569,7 @@ void main() {
   const api = {
     nodeGraphGlLinesFillBlack,
     nodeGraphGlLinesBegin,
+    nodeGraphGlLinesLayer,
     nodeGraphGlLinesRect,
     nodeGraphGlLinesModuleOutline,
     nodeGraphGlLinesVeil,

@@ -1226,7 +1226,10 @@ function nodeGraphWaterfallGlPresent(canvas, plateCss) {
   // Face text (MIDI CC last message, ...): GL text over the tape, present
   // only, never burned into the history (it would scroll away and smear).
   // Frame (left margin + fade, NODE_GRAPH_WATERFALL_FRAME) and face text.
-  if (typeof nodeGraphFaceFrameDraw === "function") {
+  // A live workspace face gets both from the GL graph at screen resolution
+  // (nodeGraphGlGraphDrawDisplayInk); the picture stays tape only.
+  const inkInPass = typeof nodeGraphGlGraphDisplayInkInPass === "function" && nodeGraphGlGraphDisplayInkInPass(canvas);
+  if (!inkInPass && typeof nodeGraphFaceFrameDraw === "function") {
     nodeGraphFaceFrameDraw(canvas);
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
   }

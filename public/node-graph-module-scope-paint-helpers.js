@@ -1692,6 +1692,11 @@ function nodeGraphFaceTextSet(face, cells) {
   if (face._faceTextKey === key && !reserveChanged) return;
   face._faceTextKey = key;
   const s = face._wfGlSession;
+  // The GL graph draws a live workspace face's text: rewrite only that ink.
+  // A new strip height changes the plot box, so the tape re-presents too.
+  const inPass = typeof nodeGraphGlGraphDisplayInkInPass === "function" && nodeGraphGlGraphDisplayInkInPass(face);
+  if (inPass) nodeGraphGlGraphDisplayInkDirty(face);
+  if (inPass && !reserveChanged) return;
   if (s && typeof nodeGraphWaterfallGlPresent === "function") nodeGraphWaterfallGlPresent(face, s.plateCss || "#000000");
 }
 

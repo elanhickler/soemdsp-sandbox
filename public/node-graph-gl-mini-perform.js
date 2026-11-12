@@ -55,16 +55,21 @@ function nodeGraphGlMiniPerformHide() {
   if (view) view.hidden = true;
 }
 
-/** Display canvases of a module in zoom-1 layout px relative to the module. */
+/**
+ * A module's displays in zoom-1 layout px relative to the module: the rects
+ * the GL graph published at its last rebuild (the same boxes as its quads).
+ */
 function nodeGraphGlMiniPerformDisplays(el) {
   const out = [];
-  if (!el || typeof nodeGraphModuleLayoutBox !== "function") return out;
-  const canvases = el.querySelectorAll(".node-display-canvas");
-  for (let i = 0; i < canvases.length; i += 1) {
-    const c = canvases[i];
-    if (!(c.width > 1) || !(c.height > 1) || c.closest("[hidden]")) continue;
-    const box = nodeGraphModuleLayoutBox(c, el);
-    if (box && box.w > 1 && box.h > 1) out.push({ canvas: c, ...box });
+  const id = String(el?.dataset?.node || "");
+  const state = typeof nodeGraphGlGraphState === "object" ? nodeGraphGlGraphState : null;
+  const plate = id && state ? (state.plates || []).find((p) => p.id === id) : null;
+  if (!plate) return out;
+  const displays = state.displays || [];
+  for (let i = 0; i < displays.length; i += 1) {
+    const d = displays[i];
+    if (d.id !== id || !(d.w > 1) || !(d.h > 1)) continue;
+    out.push({ canvas: d.canvas, x: d.x - plate.x, y: d.y - plate.y, w: d.w, h: d.h });
   }
   return out;
 }
@@ -91,7 +96,7 @@ function nodeGraphGlMiniPerformPresentModule(host, el, id, scale, camY, camX = 0
   const wz = el.offsetWidth > 0 ? mr.width / el.offsetWidth : 0;
   if (!(wz > 0)) return false;
   const state = nodeGraphGlGraphState;
-  const keys = ["canvas", "wireCanvas", "dotsCanvas", "wires", "plates", "displays", "chrome", "thick", "dotSize", "frameCamera", "view"];
+  const keys = ["canvas", "wireCanvas", "dotsCanvas", "wires", "plates", "displays", "stack", "chrome", "thick", "dotSize", "frameCamera", "view"];
   const saved = {};
   for (const key of keys) saved[key] = state[key];
   state.view = {
@@ -496,10 +501,13 @@ function nodeGraphGlMiniPerformPresent() {
         layoutY: d.y,
       });
       nodeGraphGlLinesImage(batch, d.canvas, x, y, w, h, {
-        // Nearest neighbour once a face pixel covers more than 2.5 screen pixels.
-        nearest: w / d.canvas.width > 2.5,
+        // Nearest neighbour once a face pixel covers more than 2.5 screen pixels,
+        // unless the face pins smooth.
+        nearest: w / d.canvas.width > 2.5 && !d.canvas.classList.contains("display-canvas-smooth"),
         alpha: 1,
       });
+      // Frame and face text are workspace-pass ink, not in the picture.
+      if (typeof nodeGraphGlGraphDrawDisplayInk === "function") nodeGraphGlGraphDrawDisplayInk(batch, d.canvas, x, y, w, h);
     }
   }
   if (settings.mode === "arrange") nodeGraphGlMiniPerformArrangeChrome(batch, tiles, cssW, cssH, frame);
