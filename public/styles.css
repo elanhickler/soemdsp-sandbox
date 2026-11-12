@@ -12917,8 +12917,43 @@ body.room-dimmer-on .node-room-dimmer-canvas,
   border-width: 0;
 }
 
-/* The GPU owns the curve, while SVG points and guides remain interactive. */
-.node-graph-workspace.gl-graph-on .node-module-graph-curve {
+/* The GPU owns the graph display. SVG stays a hit layer only. */
+.node-graph-workspace.gl-graph-on .node-module-graph-curve,
+.node-graph-workspace.gl-graph-on .node-module-graph-curve-ghost,
+.node-graph-workspace.gl-graph-on .node-module-graph-node,
+.node-graph-workspace.gl-graph-on .node-module-graph-contour-handle,
+.node-graph-workspace.gl-graph-on .node-module-graph-control-line,
+.node-graph-workspace.gl-graph-on .node-module-graph-cursor,
+.node-graph-workspace.gl-graph-on .node-module-graph-cursor-value-guide,
+.node-graph-workspace.gl-graph-on .node-module-graph-playhead,
+.node-graph-workspace.gl-graph-on .node-module-graph-phase-ghost,
+.node-graph-workspace.gl-graph-on .node-module-graph-step-line,
+.node-graph-workspace.gl-graph-on .node-module-graph-axis,
+.node-graph-workspace.gl-graph-on .node-module-graph-frame,
+.node-layout-canvas-tile .node-module-graph-curve,
+.node-layout-canvas-tile .node-module-graph-curve-ghost,
+.node-layout-canvas-tile .node-module-graph-node,
+.node-layout-canvas-tile .node-module-graph-contour-handle,
+.node-layout-canvas-tile .node-module-graph-control-line,
+.node-layout-canvas-tile .node-module-graph-cursor,
+.node-layout-canvas-tile .node-module-graph-cursor-value-guide,
+.node-layout-canvas-tile .node-module-graph-playhead,
+.node-layout-canvas-tile .node-module-graph-phase-ghost,
+.node-layout-canvas-tile .node-module-graph-step-line,
+.node-layout-canvas-tile .node-module-graph-axis,
+.node-layout-canvas-tile .node-module-graph-frame,
+.node-metamodule-canvas-stage .node-module-graph-curve,
+.node-metamodule-canvas-stage .node-module-graph-curve-ghost,
+.node-metamodule-canvas-stage .node-module-graph-node,
+.node-metamodule-canvas-stage .node-module-graph-contour-handle,
+.node-metamodule-canvas-stage .node-module-graph-control-line,
+.node-metamodule-canvas-stage .node-module-graph-cursor,
+.node-metamodule-canvas-stage .node-module-graph-cursor-value-guide,
+.node-metamodule-canvas-stage .node-module-graph-playhead,
+.node-metamodule-canvas-stage .node-module-graph-phase-ghost,
+.node-metamodule-canvas-stage .node-module-graph-step-line,
+.node-metamodule-canvas-stage .node-module-graph-axis,
+.node-metamodule-canvas-stage .node-module-graph-frame {
   visibility: hidden;
 }
 
@@ -13626,7 +13661,7 @@ body.node-screen-solo-active .node-screen-solo-face.node-sample-waveform-display
   flex: 0 0 auto;
   flex-wrap: nowrap;
   align-items: center;
-  gap: 0.35rem;
+  gap: 0.5rem;
   box-sizing: border-box;
   width: 100%;
   padding: 0.2rem 0.35rem 0.28rem;
@@ -13640,7 +13675,7 @@ body.node-screen-solo-active .node-screen-solo-face.node-sample-waveform-display
 .node-module-graph-point-strip-field {
   display: inline-flex;
   align-items: center;
-  gap: 0.2rem;
+  gap: 0.28rem;
   min-width: 0;
   flex: 1 1 0;
 }
@@ -13651,10 +13686,13 @@ body.node-screen-solo-active .node-screen-solo-face.node-sample-waveform-display
   letter-spacing: 0.02em;
 }
 
-.node-module-graph-point-strip-input {
+.node-module-graph-point-strip-input,
+.node-module-graph-point-strip-field select {
   box-sizing: border-box;
   width: 100%;
   min-width: 0;
+  min-height: 1.55rem;
+  height: 1.55rem;
   margin: 0;
   padding: 0.12rem 0.22rem;
   border: 1px solid rgba(128, 224, 224, 0.22);
@@ -13665,13 +13703,13 @@ body.node-screen-solo-active .node-screen-solo-face.node-sample-waveform-display
   font-variant-numeric: tabular-nums;
 }
 
-.node-module-graph-point-strip-select {
-  appearance: none;
-  padding: 0 0.2rem;
-  min-width: 5.5rem;
+.node-module-graph-point-strip-field select {
+  appearance: auto;
+  flex: 1 1 auto;
 }
 
-.node-module-graph-point-strip-input:focus {
+.node-module-graph-point-strip-input:focus,
+.node-module-graph-point-strip-field select:focus {
   outline: 1px solid rgba(255, 236, 181, 0.55);
   outline-offset: 0;
   border-color: rgba(255, 236, 181, 0.45);

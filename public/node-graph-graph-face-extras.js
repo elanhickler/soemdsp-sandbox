@@ -9,13 +9,87 @@ const nodeGraphGraphFaceDisplaySettingsDefaults = Object.freeze({
   zoomMin: -1,
   zoomMax: 1,
   lineThickness: 2,
+  dottedThickness: 0.7,
   dotSize: 6,
   strokeColor: "#5ce8d4",
   dotColor: "#f6f6da",
   playheadColor: "#b184ff",
   ghostColor: "rgba(92, 232, 212, 0.38)",
+  ghostAlpha: 0.38,
+  dottedAlpha: 0.52,
+  gridAlpha: 0.22,
+  pointAlpha: 0.82,
+  handleAlpha: 0.72,
+  phaseAlpha: 0.42,
 });
 
+function nodeGraphGraphClamp01(value, fallback) {
+  const n = Number(value);
+  return Number.isFinite(n) ? Math.max(0, Math.min(1, n)) : fallback;
+}
+
+/**
+ * CSS px inset so stroke, value dots, and contour rings stay inside the plate.
+ * Same recipe as nodeGraphSinCosFacePadPx: max(half stroke, dot radius)
+ * + blur + feather (lineSmoothing / 1px hairline) + extra.
+ */
+function nodeGraphGraphFacePadPx(look = {}) {
+  const settings = look && typeof look === "object" ? look : {};
+  const strokeW = Math.max(0, Number(settings.lineThickness) || 0);
+  const dottedW = Math.max(0, Number(settings.dottedThickness) || 0);
+  const dotW = Math.max(0, Number(settings.dotSize) || 0);
+  const blur = Math.max(0, Number(settings.lineBlur) || 0);
+  const extra = Math.max(0, Number(settings.padExtra) || 0);
+  const feather = typeof nodeGraphLineSmoothingPx === "function"
+    ? nodeGraphLineSmoothingPx(settings, 1)
+    : Math.max(0, Number(settings.lineSmoothing) || 1);
+  const lineHalf = Math.max(strokeW, dottedW) * 0.5;
+  const nodeR = dotW > 0 ? Math.max(0, dotW * 0.5) : 0;
+  const handleR = nodeR > 0 ? Math.max(2, nodeR + 0.6) : 0;
+  return Math.max(lineHalf, nodeR, handleR) + blur + feather + extra;
+}
+
+function nodeGraphGraphFacePlotLayout(width, height, look = {}) {
+  const w = Math.max(0, Number(width) || 0);
+  const h = Math.max(0, Number(height) || 0);
+  const pad = nodeGraphGraphFacePadPx(look);
+  const padX = w > 0 ? Math.min(pad, Math.max(0, w / 2 - 2)) : 0;
+  const padY = h > 0 ? Math.min(pad, Math.max(0, h / 2 - 2)) : 0;
+  const innerW = Math.max(0, w - padX * 2);
+  const innerH = Math.max(0, h - padY * 2);
+  return {
+    width: w,
+    height: h,
+    pad,
+    padX,
+    padY,
+    innerW,
+    innerH,
+    padViewX: w > 0 ? (padX / w) * 100 : 0,
+    padViewY: h > 0 ? (padY / h) * 100 : 0,
+    innerViewW: w > 0 ? (innerW / w) * 100 : 100,
+    innerViewH: h > 0 ? (innerH / h) * 100 : 100,
+  };
+}
+
+function nodeGraphGraphLayoutFromElement(element, look = {}) {
+  const rect = element && element.getBoundingClientRect ? element.getBoundingClientRect() : null;
+  if (rect && rect.width > 0 && rect.height > 0) {
+    return nodeGraphGraphFacePlotLayout(rect.width, rect.height, look);
+  }
+  return nodeGraphGraphFacePlotLayout(100, 100, look);
+}
+
+let nodeGraphGraphPaintLayout = nodeGraphGraphFacePlotLayout(100, 100, nodeGraphGraphFaceDisplaySettingsDefaults);
+
+function nodeGraphGraphClampYToZoom(value, zoomSettings, fallback = 0) {
+  const zoom = normalizeNodeGraphGraphFaceDisplaySettings(zoomSettings);
+  const stored = typeof nodeGraphGraphClampValue === "function"
+    ? nodeGraphGraphClampValue(value, fallback)
+    : Math.max(-1, Math.min(1, Number(value)));
+  const n = Number.isFinite(stored) ? stored : fallback;
+  return Math.max(zoom.zoomMin, Math.min(zoom.zoomMax, n));
+}
 let nodeGraphGraphPaintZoom = {
   zoomMin: nodeGraphGraphFaceDisplaySettingsDefaults.zoomMin,
   zoomMax: nodeGraphGraphFaceDisplaySettingsDefaults.zoomMax,
@@ -79,18 +153,47 @@ function normalizeNodeGraphGraphFaceDisplaySettings(settings = {}) {
     source.playheadColor,
     nodeGraphGraphFaceDisplaySettingsDefaults.playheadColor,
   );
+  const derivedGhost = nodeGraphGraphDeriveGhostColor(strokeColor);
   const ghostColor = source.ghostColor == null || String(source.ghostColor).trim() === ""
-    ? nodeGraphGraphDeriveGhostColor(strokeColor)
-    : nodeGraphGraphNormalizeCssColor(source.ghostColor, nodeGraphGraphDeriveGhostColor(strokeColor));
+    ? derivedGhost
+    : nodeGraphGraphNormalizeCssColor(source.ghostColor, derivedGhost);
+  const dottedThickness = Math.max(0, Math.min(16, Number.isFinite(Number(source.dottedThickness))
+    ? Number(source.dottedThickness)
+    : nodeGraphGraphFaceDisplaySettingsDefaults.dottedThickness));
+  const colorAlpha = (css, fallback) => {
+    const textColor = String(css || "");
+    const rgba = /^rgba\(\s*[0-9.]+\s*,\s*[0-9.]+\s*,\s*[0-9.]+\s*,\s*([0-9.]+)/i.exec(textColor);
+    if (rgba) {
+      const a = Number(rgba[1]);
+      if (Number.isFinite(a)) return Math.max(0, Math.min(1, a));
+    }
+    return fallback;
+  };
+  const ghostAlpha = nodeGraphGraphClamp01(
+    source.ghostAlpha,
+    colorAlpha(source.ghostColor, nodeGraphGraphFaceDisplaySettingsDefaults.ghostAlpha),
+  );
+  const dottedAlpha = nodeGraphGraphClamp01(source.dottedAlpha, nodeGraphGraphFaceDisplaySettingsDefaults.dottedAlpha);
+  const gridAlpha = nodeGraphGraphClamp01(source.gridAlpha, nodeGraphGraphFaceDisplaySettingsDefaults.gridAlpha);
+  const pointAlpha = nodeGraphGraphClamp01(source.pointAlpha, nodeGraphGraphFaceDisplaySettingsDefaults.pointAlpha);
+  const handleAlpha = nodeGraphGraphClamp01(source.handleAlpha, nodeGraphGraphFaceDisplaySettingsDefaults.handleAlpha);
+  const phaseAlpha = nodeGraphGraphClamp01(source.phaseAlpha, nodeGraphGraphFaceDisplaySettingsDefaults.phaseAlpha);
   return {
     zoomMin,
     zoomMax,
     lineThickness,
+    dottedThickness,
     dotSize,
     strokeColor,
     dotColor,
     playheadColor,
     ghostColor,
+    ghostAlpha,
+    dottedAlpha,
+    gridAlpha,
+    pointAlpha,
+    handleAlpha,
+    phaseAlpha,
   };
 }
 
@@ -112,12 +215,15 @@ function nodeGraphGraphZoomFromDisplay(display) {
 
 function nodeGraphGraphStoreZoomOnDisplay(display, zoomSettings) {
   const zoom = normalizeNodeGraphGraphFaceDisplaySettings(zoomSettings);
+  const layout = nodeGraphGraphLayoutFromElement(display, zoom);
   if (display) {
     display._nodeGraphZoomMin = zoom.zoomMin;
     display._nodeGraphZoomMax = zoom.zoomMax;
+    display._nodeGraphPlotLayout = layout;
     applyNodeGraphGraphFaceLook(display, zoom);
   }
   nodeGraphGraphPaintZoom = zoom;
+  nodeGraphGraphPaintLayout = layout;
   return zoom;
 }
 
@@ -127,21 +233,25 @@ function applyNodeGraphGraphFaceLook(display, settings) {
     return look;
   }
   const ghostWidth = Math.max(0, look.lineThickness * 0.55);
-  display.style.setProperty("--node-graph-line-color", look.strokeColor);
-  display.style.setProperty("--node-graph-line-width", `${look.lineThickness}px`);
-  display.style.setProperty("--node-graph-point-color", look.dotColor);
-  display.style.setProperty("--node-graph-playhead-color", look.playheadColor);
-  display.style.setProperty("--node-graph-ghost-color", look.ghostColor);
-  display.style.setProperty("--node-graph-ghost-width", `${ghostWidth}px`);
+  const applyVars = (el) => {
+    if (!el?.style) return;
+    el.style.setProperty("--node-graph-line-color", look.strokeColor);
+    el.style.setProperty("--node-graph-line-width", `${look.lineThickness}px`);
+    el.style.setProperty("--node-graph-point-color", look.dotColor);
+    el.style.setProperty("--node-graph-playhead-color", look.playheadColor);
+    el.style.setProperty("--node-graph-ghost-color", look.ghostColor);
+    el.style.setProperty("--node-graph-ghost-width", `${ghostWidth}px`);
+    el.style.setProperty("--node-graph-dotted-width", `${look.dottedThickness}px`);
+    el.style.setProperty("--node-graph-ghost-alpha", String(look.ghostAlpha));
+    el.style.setProperty("--node-graph-dotted-alpha", String(look.dottedAlpha));
+    el.style.setProperty("--node-graph-grid-alpha", String(look.gridAlpha));
+    el.style.setProperty("--node-graph-point-alpha", String(look.pointAlpha));
+    el.style.setProperty("--node-graph-handle-alpha", String(look.handleAlpha));
+    el.style.setProperty("--node-graph-phase-alpha", String(look.phaseAlpha));
+  };
+  applyVars(display);
   const face = display.closest?.(".node-module-graph-face");
-  if (face?.style) {
-    face.style.setProperty("--node-graph-line-color", look.strokeColor);
-    face.style.setProperty("--node-graph-line-width", `${look.lineThickness}px`);
-    face.style.setProperty("--node-graph-point-color", look.dotColor);
-    face.style.setProperty("--node-graph-playhead-color", look.playheadColor);
-    face.style.setProperty("--node-graph-ghost-color", look.ghostColor);
-    face.style.setProperty("--node-graph-ghost-width", `${ghostWidth}px`);
-  }
+  if (face && face !== display) applyVars(face);
   const nodeRadius = Math.max(0, look.dotSize / 2);
   const hitRadius = Math.max(nodeRadius + 3, 6);
   const contourRadius = Math.max(2, nodeRadius + 0.6);
@@ -173,16 +283,21 @@ var nodeGraphGraphPointToSvgBase = typeof nodeGraphGraphPointToSvg === "function
   ? nodeGraphGraphPointToSvg
   : null;
 
-nodeGraphGraphPointToSvg = function nodeGraphGraphPointToSvg(x, y, zoomSettings = null) {
+function nodeGraphGraphPointToView(x, y, zoomSettings = null, layout = null) {
   const zoom = normalizeNodeGraphGraphFaceDisplaySettings(zoomSettings || nodeGraphGraphPaintZoom);
+  const plot = layout || nodeGraphGraphPaintLayout;
   const span = zoom.zoomMax - zoom.zoomMin;
   const yMapped = span > 0
     ? (normalizeNodeGraphGraphNumber(y, 0, -Infinity, Infinity) - zoom.zoomMin) / span
     : normalizeNodeGraphGraphNumber(y, 0);
   return {
-    x: 8 + normalizeNodeGraphGraphNumber(x, 0) * 84,
-    y: 92 - yMapped * 84,
+    x: plot.padViewX + normalizeNodeGraphGraphNumber(x, 0) * plot.innerViewW,
+    y: (100 - plot.padViewY) - yMapped * plot.innerViewH,
   };
+}
+
+nodeGraphGraphPointToSvg = function nodeGraphGraphPointToSvg(x, y, zoomSettings = null, layout = null) {
+  return nodeGraphGraphPointToView(x, y, zoomSettings, layout);
 }
 
 var nodeGraphGraphCurvePathBase = typeof nodeGraphGraphCurvePath === "function"
@@ -238,17 +353,20 @@ nodeGraphGraphSvgToGraphPoint = function nodeGraphGraphSvgToGraphPoint(svg, clie
     ? normalizeNodeGraphGraphFaceDisplaySettings(zoomSettings)
     : nodeGraphGraphZoomFromDisplay(svg?.closest?.(".node-module-graph-display"));
   const span = zoom.zoomMax - zoom.zoomMin;
+  const layout = nodeGraphGraphFacePlotLayout(rect.width, rect.height, zoom);
   const viewX = ((clientX - rect.left) / rect.width) * 100;
   const viewY = ((clientY - rect.top) / rect.height) * 100;
-  // Clamp to the inner 84×84 plot (not the 8-unit pad, and not past the
-  // visible zoom window). Otherwise Y=-1 sits below a 0..1 zoomed face.
-  const yUnit = Math.max(0, Math.min(1, (92 - viewY) / 84));
+  // Clamp to the padded inner plot (not past the visible zoom window).
+  const yUnit = layout.innerViewH > 0
+    ? Math.max(0, Math.min(1, (100 - layout.padViewY - viewY) / layout.innerViewH))
+    : 0.5;
+  const xUnit = layout.innerViewW > 0
+    ? (viewX - layout.padViewX) / layout.innerViewW
+    : 0;
   const y = zoom.zoomMin + yUnit * span;
   return {
-    x: normalizeNodeGraphGraphNumber((viewX - 8) / 84),
-    y: typeof nodeGraphGraphClampValue === "function"
-      ? nodeGraphGraphClampValue(y, 0)
-      : normalizeNodeGraphGraphNumber(y, 0, -1, 1),
+    x: normalizeNodeGraphGraphNumber(xUnit, 0),
+    y: nodeGraphGraphClampYToZoom(y, zoom, 0),
   };
 }
 
@@ -349,7 +467,7 @@ function buildNodeGraphGraphPointStrip(patchNode) {
     let input;
     if (field.kind === "shape") {
       input = document.createElement("select");
-      input.className = "node-module-graph-point-strip-input node-module-graph-point-strip-select";
+      input.className = "node-module-graph-point-strip-input";
       for (const choice of nodeGraphGraphPointStripShapeChoices()) {
         const option = document.createElement("option");
         option.value = choice.key;
@@ -362,6 +480,13 @@ function buildNodeGraphGraphPointStrip(patchNode) {
       input.step = "any";
       input.inputMode = "decimal";
       input.className = "node-module-graph-point-strip-input";
+      if (field.key === "x" || field.key === "tension") {
+        input.min = "0";
+        input.max = "1";
+      } else if (field.key === "c") {
+        input.min = "-1";
+        input.max = "1";
+      }
     }
     input.dataset.graphStripField = field.key;
     input.setAttribute("aria-label", field.label);
@@ -467,6 +592,18 @@ function syncNodeGraphGraphPointStrip(faceOrDisplay, patchNode = null, selectedI
     const raw = values[key];
     const n = Number(raw);
     input.value = Number.isFinite(n) ? String(Number(n.toPrecision(8))) : "";
+    if (key === "y") {
+      const zoom = typeof nodeGraphGraphFaceDisplaySettingsForNode === "function"
+        ? nodeGraphGraphFaceDisplaySettingsForNode(owner)
+        : (typeof normalizeNodeGraphGraphFaceDisplaySettings === "function"
+          ? normalizeNodeGraphGraphFaceDisplaySettings()
+          : { zoomMin: -1, zoomMax: 1 });
+      input.min = String(zoom.zoomMin);
+      input.max = String(zoom.zoomMax);
+    } else if (key === "c") {
+      input.min = "-1";
+      input.max = "1";
+    }
     if (key === "x") {
       const last = graph.nodes.length - 1;
       input.readOnly = index <= 0 || index >= last;
@@ -539,8 +676,15 @@ function commitNodeGraphGraphPointStripField(input) {
     const constrained = nodeGraphGraphConstrainedNodePoint(graph, index, { x: value, y: current.y });
     nodes[index] = normalizeNodeGraphGraphNode({ ...current, x: constrained.x }, index);
   } else if (field === "y") {
-    const constrained = nodeGraphGraphConstrainedNodePoint(graph, index, { x: current.x, y: value });
-    nodes[index] = normalizeNodeGraphGraphNode({ ...current, y: constrained.y }, index);
+    const zoom = typeof nodeGraphGraphFaceDisplaySettingsForNode === "function"
+      ? nodeGraphGraphFaceDisplaySettingsForNode(targetNode)
+      : nodeGraphGraphPaintZoom;
+    const nextY = nodeGraphGraphClampYToZoom(value, zoom, current.y);
+    const constrained = nodeGraphGraphConstrainedNodePoint(graph, index, { x: current.x, y: nextY });
+    nodes[index] = normalizeNodeGraphGraphNode({
+      ...current,
+      y: nodeGraphGraphClampYToZoom(constrained.y, zoom, current.y),
+    }, index);
   } else if (field === "c") {
     if (!nodeGraphGraphUsesPerNodeContour(targetNode.type)) {
       return;

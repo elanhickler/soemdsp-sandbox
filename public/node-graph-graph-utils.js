@@ -201,6 +201,38 @@ function nodeGraphGraphClampValue(value, fallback = 0) {
   return normalizeNodeGraphGraphNumber(value, fallback, nodeGraphGraphValueMin, nodeGraphGraphValueMax);
 }
 
+function nodeGraphGraphActiveEditZoom() {
+  const dragDisplay = (typeof nodeGraphMvp !== "undefined" && nodeGraphMvp?.graphNodeDragging?.display) || null;
+  if (typeof nodeGraphGraphZoomFromDisplay === "function" && dragDisplay) {
+    return nodeGraphGraphZoomFromDisplay(dragDisplay);
+  }
+  if (typeof nodeGraphGraphPaintZoom !== "undefined" && nodeGraphGraphPaintZoom) {
+    return nodeGraphGraphPaintZoom;
+  }
+  return { zoomMin: nodeGraphGraphValueMin, zoomMax: nodeGraphGraphValueMax };
+}
+
+function nodeGraphGraphClampEditableY(value, fallback = 0) {
+  if (typeof nodeGraphGraphClampYToZoom === "function") {
+    return nodeGraphGraphClampYToZoom(value, nodeGraphGraphActiveEditZoom(), fallback);
+  }
+  return nodeGraphGraphClampValue(value, fallback);
+}
+
+function nodeGraphGraphPlotViewBox(element) {
+  const layout = element?._nodeGraphPlotLayout
+    || (typeof nodeGraphGraphPaintLayout !== "undefined" ? nodeGraphGraphPaintLayout : null);
+  if (layout && Number.isFinite(Number(layout.padViewX)) && Number.isFinite(Number(layout.padViewY))) {
+    return {
+      x0: layout.padViewX,
+      y0: layout.padViewY,
+      x1: 100 - layout.padViewX,
+      y1: 100 - layout.padViewY,
+    };
+  }
+  return { x0: 8, y0: 8, x1: 92, y1: 92 };
+}
+
 function nodeGraphGraphShapeIsLegacyLinear(value) {
   if (Number.isFinite(Number(value)) && String(value).trim() !== "") {
     return Math.round(Number(value)) === 0;
@@ -1208,7 +1240,7 @@ function nodeGraphGraphConstrainedNodePoint(graph, index, point) {
       : index >= lastIndex
         ? 1
         : normalizeNodeGraphGraphNumber(point.x, nodes[index]?.x || 0, Math.min(minX, maxX), Math.max(minX, maxX)),
-    y: nodeGraphGraphClampValue(point.y, nodes[index]?.y || 0),
+    y: nodeGraphGraphClampEditableY(point.y, nodes[index]?.y || 0),
   };
 }
 
@@ -1293,9 +1325,18 @@ function nodeGraphGraphDragUnitPerPixel(svg) {
   if (!rect) {
     return 1 / 200;
   }
-  // Usable plot is the inner 84% of the viewBox mapping; use average side so
-  // both axes share one scale (matches 1D travel width spirit of sliders).
-  const span = Math.max(1, (rect.width + rect.height) * 0.5 * 0.84);
+  const display = svg?.closest?.(".node-module-graph-display");
+  const look = typeof nodeGraphGraphFaceDisplaySettingsForNode === "function"
+    && typeof nodeGraphPatchNode === "function"
+    && typeof nodeGraphGraphNodeIdFromDisplay === "function"
+    ? nodeGraphGraphFaceDisplaySettingsForNode(nodeGraphPatchNode(nodeGraphGraphNodeIdFromDisplay(display)))
+    : (typeof nodeGraphGraphPaintZoom !== "undefined" ? nodeGraphGraphPaintZoom : {});
+  const layout = typeof nodeGraphGraphFacePlotLayout === "function"
+    ? nodeGraphGraphFacePlotLayout(rect.width, rect.height, look)
+    : null;
+  const fracW = layout ? layout.innerW / Math.max(1, rect.width) : 0.84;
+  const fracH = layout ? layout.innerH / Math.max(1, rect.height) : 0.84;
+  const span = Math.max(1, (rect.width * fracW + rect.height * fracH) * 0.5);
   return 1 / span;
 }
 
@@ -1348,93 +1389,26 @@ function renderNodeGraphGraphDisplay(element, graphValue, selectedIndex = null, 
     setNodeGraphGraphSelectedNodeIndex(nodeId, graph, selectedIndex);
   }
   const baseOptions = nodeGraphGraphBaseSegmentOptions(segmentOptions);
-  const skewOffset = nodeGraphGraphGlobalSkewOffset(segmentOptions);
-  const showSkewGhost = smoothingMode === "segment" && Math.abs(skewOffset) > 1e-6;
-  // Playhead / value guide follow the audible (effective) curve.
-  const cursorValue = nodeGraphGraphValueAt(graph, graph.cursorX, smoothingMode, tension, segmentOptions);
-  const cursor = nodeGraphGraphPointToSvg(graph.cursorX, 0);
-  const cursorPoint = nodeGraphGraphPointToSvg(graph.cursorX, cursorValue);
   element.replaceChildren();
   const svg = createNodeGraphGraphSvgElement("svg", {
     "aria-hidden": "true",
-    class: "node-module-graph-svg",
+    class: "node-module-graph-svg node-module-graph-hit-layer",
     preserveAspectRatio: "none",
     viewBox: "0 0 100 100",
   });
-  // Step Graph: vertical guides at each step boundary (0..steps inclusive).
-  // steps=0 → no grid (free X / no auto quantize).
-  if (stepCount > 0) {
-    const stepGroup = createNodeGraphGraphSvgElement("g", {
-      class: "node-module-graph-step-grid",
-      "aria-hidden": "true",
-    });
-    for (let step = 0; step <= stepCount; step += 1) {
-      const x = nodeGraphGraphPointToSvg(step / stepCount, 0).x;
-      stepGroup.append(createNodeGraphGraphSvgElement("line", {
-        class: "node-module-graph-step-line",
-        x1: x.toFixed(3),
-        x2: x.toFixed(3),
-        y1: "8",
-        y2: "92",
-      }));
-    }
-    svg.append(stepGroup);
-  }
-  svg.append(createNodeGraphGraphSvgElement("line", {
-    class: "node-module-graph-cursor",
-    x1: cursor.x.toFixed(3),
-    x2: cursor.x.toFixed(3),
-    y1: "8",
-    y2: "92",
-  }));
+  const plot = nodeGraphGraphPlotViewBox(element);
+  const cursor = nodeGraphGraphPointToSvg(graph.cursorX, 0);
+  // Hit layer only. Visible ink (curve, ghost, points, handles, playhead,
+  // grid, dotted control polygon) is drawn in WebGL by node-graph-gl-graph.js.
   svg.append(createNodeGraphGraphSvgElement("line", {
     class: "node-module-graph-cursor-hit",
     "data-graph-cursor": "true",
     x1: cursor.x.toFixed(3),
     x2: cursor.x.toFixed(3),
-    y1: "8",
-    y2: "92",
+    y1: plot.y0.toFixed(3),
+    y2: plot.y1.toFixed(3),
   }));
-  svg.append(createNodeGraphGraphSvgElement("line", {
-    class: "node-module-graph-cursor-value-guide",
-    x1: "8",
-    x2: "92",
-    y1: cursorPoint.y.toFixed(3),
-    y2: cursorPoint.y.toFixed(3),
-  }));
-  // Final-phase ghost -- mirrors the cream phase/cursor line but tracks the
-  // engine's actual sample X (__GraphPhase: Rate LFO advance, Phase knob, and
-  // Input-mode CV). Same idea as the XY pad's purple ghost puck (final Out tip
-  // after modulation). Starts hidden; syncNodeGraphGraphLivePlayheads() moves
-  // and reveals it without a full re-render on each scope snapshot.
-  svg.append(createNodeGraphGraphSvgElement("line", {
-    class: "node-module-graph-playhead node-module-graph-phase-ghost",
-    x1: cursor.x.toFixed(3),
-    x2: cursor.x.toFixed(3),
-    y1: "8",
-    y2: "92",
-  }));
-  // Dotted linear control polygon (the straight-line path through points) —
-  // kept in every smoothing mode so you can see the underlying polyline.
-  svg.append(createNodeGraphGraphSvgElement("path", {
-    class: "node-module-graph-control-line",
-    d: nodeGraphGraphControlPolygonPath(graph),
-  }));
-  svg.append(createNodeGraphGraphSvgElement("path", {
-    class: "node-module-graph-curve",
-    d: nodeGraphGraphCurvePath(graph, 96, smoothingMode, tension, baseOptions),
-  }));
-  if (showSkewGhost) {
-    svg.append(createNodeGraphGraphSvgElement("path", {
-      class: "node-module-graph-curve-ghost",
-      d: nodeGraphGraphCurvePath(graph, 96, smoothingMode, tension, segmentOptions),
-    }));
-  }
-  // Value dots and contour rings stay visible (phone / no-hover).
-  // .is-hot brightens the active hit. Panel selection does not light face chrome.
   const hitRadii = nodeGraphGraphScreenRoundRadii(element, 7.2);
-  const nodeRadii = nodeGraphGraphScreenRoundRadii(element, 2.2);
-  const contourRadii = nodeGraphGraphScreenRoundRadii(element, 2.8);
   const showContourHandles = nodeGraphGraphShowsContourHandles(ownerNode);
   if (showContourHandles) {
     for (let index = 1; index < graph.nodes.length; index += 1) {
@@ -1442,14 +1416,6 @@ function renderNodeGraphGraphDisplay(element, graphValue, selectedIndex = null, 
       if (!point) {
         continue;
       }
-      svg.append(createNodeGraphGraphSvgElement("ellipse", {
-        class: "node-module-graph-contour-handle",
-        cx: point.x.toFixed(3),
-        cy: point.y.toFixed(3),
-        "data-graph-contour-index": String(index),
-        rx: contourRadii.rx.toFixed(3),
-        ry: contourRadii.ry.toFixed(3),
-      }));
       svg.append(createNodeGraphGraphSvgElement("ellipse", {
         class: "node-module-graph-contour-handle-hit",
         cx: point.x.toFixed(3),
@@ -1469,14 +1435,6 @@ function renderNodeGraphGraphDisplay(element, graphValue, selectedIndex = null, 
       "data-graph-node-index": String(index),
       rx: hitRadii.rx.toFixed(3),
       ry: hitRadii.ry.toFixed(3),
-    }));
-    svg.append(createNodeGraphGraphSvgElement("ellipse", {
-      class: "node-module-graph-node",
-      cx: point.x.toFixed(3),
-      cy: point.y.toFixed(3),
-      "data-graph-node-index": String(index),
-      rx: nodeRadii.rx.toFixed(3),
-      ry: nodeRadii.ry.toFixed(3),
     }));
   });
   element.append(svg);
@@ -1878,17 +1836,17 @@ function nodeGraphGraphCapturePointer(display, event) {
 function nodeGraphGraphClampedNodeTarget(nodes, index, point) {
   const lastIndex = nodes.length - 1;
   if (index <= 0) {
-    return { x: 0, y: nodeGraphGraphClampValue(point.y, nodes[0]?.y ?? 0) };
+    return { x: 0, y: nodeGraphGraphClampEditableY(point.y, nodes[0]?.y ?? 0) };
   }
   if (index >= lastIndex) {
-    return { x: 1, y: nodeGraphGraphClampValue(point.y, nodes[lastIndex]?.y ?? 0) };
+    return { x: 1, y: nodeGraphGraphClampEditableY(point.y, nodes[lastIndex]?.y ?? 0) };
   }
   const margin = 0.001;
   const minX = normalizeNodeGraphGraphNumber(nodes[index - 1]?.x, 0) + margin;
   const maxX = normalizeNodeGraphGraphNumber(nodes[index + 1]?.x, 1) - margin;
   return {
     x: normalizeNodeGraphGraphNumber(point.x, nodes[index]?.x ?? 0, Math.min(minX, maxX), Math.max(minX, maxX)),
-    y: nodeGraphGraphClampValue(point.y, nodes[index]?.y ?? 0),
+    y: nodeGraphGraphClampEditableY(point.y, nodes[index]?.y ?? 0),
   };
 }
 
@@ -2892,7 +2850,7 @@ function nudgeFocusedNodeGraphGraphNode(event) {
     ...current,
     ...nodeGraphGraphConstrainedNodePoint(graph, index, {
       x: current.x + move.x * step,
-      y: current.y + move.y * step,
+      y: nodeGraphGraphClampEditableY(current.y + move.y * step, current.y),
     }),
   }, index);
   targetNode.graph = nodeGraphGraphEndpointYLockEnabledForNode(targetNode)
@@ -2918,27 +2876,20 @@ function nudgeFocusedNodeGraphGraphNode(event) {
 function syncNodeGraphGraphLivePlayheads() {
   const liveAudioRunning = Boolean(nodeGraphMvp?.live?.node);
   for (const display of document.querySelectorAll(".node-module-graph-display")) {
-    const line = display.querySelector(".node-module-graph-phase-ghost, .node-module-graph-playhead");
-    if (!line) {
-      continue;
-    }
     const nodeId = nodeGraphGraphNodeIdFromDisplay(display);
     const patchNode = nodeId ? nodeGraphPatchNode(nodeId) : null;
     const liveX = liveAudioRunning && patchNode && nodeGraphModuleIsGraphType(patchNode.type)
       ? nodeGraphModuleScopeLatestOutputValue(nodeId, "__GraphPhase", null)
       : null;
     if (liveX === null || !Number.isFinite(liveX)) {
-      // No live sample yet, or live audio isn't running -- e.g. audio
-      // stopped after a stale sample was captured. Hide rather than leave a
-      // frozen ghost that would misleadingly still read as "final phase".
-      line.classList.remove("live");
+      // No live sample yet, or live audio isn't running. Hide rather than
+      // leave a frozen playhead that would still read as "final phase".
+      display._graphPlayheadLive = false;
+      display._graphPlayheadX = null;
       continue;
     }
-    const clampedX = Math.max(0, Math.min(1, Number(liveX)));
-    const point = nodeGraphGraphPointToSvg(clampedX, 0);
-    line.setAttribute("x1", point.x.toFixed(3));
-    line.setAttribute("x2", point.x.toFixed(3));
-    line.classList.add("live");
+    display._graphPlayheadX = Math.max(0, Math.min(1, Number(liveX)));
+    display._graphPlayheadLive = true;
   }
 }
 

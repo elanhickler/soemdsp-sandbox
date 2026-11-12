@@ -954,16 +954,15 @@ const nodeGraphModuleDefinitions = (
   // +/-1 and ghosts the effective curve (legacy curveOffset).
   stepGraph: {
     planRole: "processor",
-    chrome: NodeGraphModuleChromeLayout.LayoutB,
+    chrome: NodeGraphModuleChromeLayout.LayoutA,
     displayHeightGu: 8,
-    layoutBPortLabels: true,
     inputs: ["In", "Code"],
     outputs: ["Out", "Code"],
     codeInputs: ["Code"],
     codeOutputs: ["Code"],
     portTypes: { In: "audio", Out: "audio", Code: "code" },
-    inputLabels: { In: "→", Code: "📝" },
-    outputLabels: { Out: "←", Code: "📝" },
+    inputLabels: { In: "In", Code: "Code" },
+    outputLabels: { Out: "Out", Code: "Code" },
     layout: "graph",
     parameters: [
       { choices: ["Input", "LFO", "Phasor"], defaultValue: "0", displayChoices: true, divideChoicesVisibly: true, key: "mode", label: "Mode", linearSmoothing: false, max: "2", mid: "1", min: "0", nonlinearSlider: false, step: "1" },

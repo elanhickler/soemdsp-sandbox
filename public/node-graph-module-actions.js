@@ -2794,7 +2794,21 @@ function applyNodeGraphGraphPresetFromContext(name) {
   if (!targetNode || (typeof nodeGraphModuleIsGraphType === "function" && !nodeGraphModuleIsGraphType(targetNode.type))) {
     return;
   }
-  const nextGraph = nodeGraphGraphPresetData(name);
+  let nextGraph = nodeGraphGraphPresetData(name);
+  if (nextGraph && typeof nodeGraphGraphClampYToZoom === "function") {
+    const zoom = typeof nodeGraphGraphFaceDisplaySettingsForNode === "function"
+      ? nodeGraphGraphFaceDisplaySettingsForNode(targetNode)
+      : { zoomMin: -1, zoomMax: 1 };
+    const nodes = (nextGraph.nodes || []).map((node, index) => {
+      const next = { ...node, y: nodeGraphGraphClampYToZoom(node.y, zoom, node.y) };
+      return typeof normalizeNodeGraphGraphNode === "function"
+        ? normalizeNodeGraphGraphNode(next, index)
+        : next;
+    });
+    nextGraph = typeof normalizeNodeGraphGraph === "function"
+      ? normalizeNodeGraphGraph({ ...nextGraph, nodes })
+      : { ...nextGraph, nodes };
+  }
   targetNode.graph = (typeof nodeGraphGraphEndpointYLockEnabledForNode === "function"
     && nodeGraphGraphEndpointYLockEnabledForNode(targetNode))
     ? nodeGraphGraphWithLockedEndpointY(nextGraph, 0)

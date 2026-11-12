@@ -863,7 +863,10 @@ const nodeGraphTraceDisplayActiveControlsByType = Object.freeze({
     choices: Object.freeze([]),
   }),
   graphFace: Object.freeze({
-    fields: Object.freeze(["zoomMin", "zoomMax", "lineThickness", "dotSize"]),
+    fields: Object.freeze([
+      "zoomMin", "zoomMax", "lineThickness", "dottedThickness", "dotSize",
+      "ghostAlpha", "dottedAlpha", "gridAlpha", "pointAlpha", "handleAlpha", "phaseAlpha",
+    ]),
     colors: Object.freeze(["strokeColor", "dotColor", "playheadColor", "ghostColor"]),
     toggles: Object.freeze([]),
     choices: Object.freeze([]),

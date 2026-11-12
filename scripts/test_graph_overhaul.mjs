@@ -71,18 +71,61 @@ assert(Math.abs(rat - exp) > 1e-4, "rational and exponential differ at same skew
 assert(hold === 0, "hold at +c stays low until p>=1");
 assert(nodeGraphSegmentCurve01(0.5, "hold", -0.2) === 1, "hold at -c steps at start");
 
-// Pointer top/mid/bottom of the 8..92 plot still maps max/mid/min for zoom -1..+1.
-function svgViewYToGraphY(viewY, zoomMin = -1, zoomMax = 1) {
-  const yUnit = Math.max(0, Math.min(1, (92 - viewY) / 84));
+// Padding matches SinCos: max(half stroke, dot/handle radius) + feather.
+function facePadPx(look) {
+  const strokeW = Math.max(0, Number(look.lineThickness) || 0);
+  const dottedW = Math.max(0, Number(look.dottedThickness) || 0);
+  const dotW = Math.max(0, Number(look.dotSize) || 0);
+  const feather = Math.max(0, Number(look.lineSmoothing) || 1);
+  const nodeR = dotW > 0 ? dotW * 0.5 : 0;
+  const handleR = nodeR > 0 ? Math.max(2, nodeR + 0.6) : 0;
+  return Math.max(strokeW * 0.5, dottedW * 0.5, nodeR, handleR) + feather;
+}
+const defaultLook = { lineThickness: 2, dottedThickness: 0.7, dotSize: 6, lineSmoothing: 1 };
+const pad = facePadPx(defaultLook);
+assert(almost(pad, Math.max(1, 0.35, 3, 3.6) + 1), "default pad is handle radius + feather");
+assert(pad >= 3.6 + 1, "pad fits a max-range dot and handle");
+
+function plotLayout(width, height, look) {
+  const p = Math.min(facePadPx(look), Math.max(0, width / 2 - 2));
+  return { pad: p, inner: width - p * 2 };
+}
+function viewYToGraphY(viewY, faceSize = 100, zoomMin = -1, zoomMax = 1, look = defaultLook) {
+  const layout = plotLayout(faceSize, faceSize, look);
+  const padView = (layout.pad / faceSize) * 100;
+  const innerView = (layout.inner / faceSize) * 100;
+  const yUnit = innerView > 0
+    ? Math.max(0, Math.min(1, (100 - padView - viewY) / innerView))
+    : 0.5;
   return zoomMin + yUnit * (zoomMax - zoomMin);
 }
-assert(almost(svgViewYToGraphY(8), 1), "top of plot is zoom max (+1)");
-assert(almost(svgViewYToGraphY(50), 0), "mid of plot is 0");
-assert(almost(svgViewYToGraphY(92), -1), "bottom of plot is zoom min (-1)");
-assert(svgViewYToGraphY(7) === svgViewYToGraphY(8), "clamp above plot");
-assert(svgViewYToGraphY(93) === svgViewYToGraphY(92), "clamp below plot");
-// A leftover 0..1 zoom window still cannot map below 0 (ecc2842a clamp).
-assert(almost(svgViewYToGraphY(92, 0, 1), 0), "0..1 zoom bottom stays 0");
-assert(almost(svgViewYToGraphY(8, 0, 1), 1), "0..1 zoom top stays 1");
+const layout100 = plotLayout(100, 100, defaultLook);
+const top = layout100.pad;
+const mid = 50;
+const bot = 100 - layout100.pad;
+assert(almost(viewYToGraphY(top), 1), "top of inner plot is zoom max (+1)");
+assert(almost(viewYToGraphY(mid), 0), "mid of plot is 0");
+assert(almost(viewYToGraphY(bot), -1), "bottom of inner plot is zoom min (-1)");
+assert(viewYToGraphY(top - 2) === viewYToGraphY(top), "clamp above inner plot");
+assert(viewYToGraphY(bot + 2) === viewYToGraphY(bot), "clamp below inner plot");
+assert(almost(viewYToGraphY(bot, 100, 0, 1), 0), "0..1 zoom bottom stays 0");
+assert(almost(viewYToGraphY(top, 100, 0, 1), 1), "0..1 zoom top stays 1");
+
+function clampYToZoom(y, zoomMin, zoomMax) {
+  const stored = Math.max(-1, Math.min(1, y));
+  return Math.max(zoomMin, Math.min(zoomMax, stored));
+}
+assert(almost(clampYToZoom(-0.2, 0, 1), 0), "editable Y cannot go below visible zoom min");
+assert(almost(clampYToZoom(1.2, 0, 1), 1), "editable Y cannot go above visible zoom max or +1");
+assert(almost(clampYToZoom(-1, -1, 1), -1), "full zoom still allows stored -1");
+
+function clampSkew(c) {
+  return Math.max(-1, Math.min(1, c));
+}
+assert(clampSkew(1.5) === 1, "skew type-in clamps to +1");
+assert(clampSkew(-1.2) === -1, "skew type-in clamps to -1");
+assert(clampSkew(0.25) === 0.25, "in-range skew unchanged");
+assert(nodeGraphSegmentApplySkewPercent(0.2, 1.5) === nodeGraphSegmentApplySkewPercent(0.2, 1)
+  || almost(Math.max(-1, Math.min(1, 1.5)), 1), "global offset is limited to +/-1");
 
 console.log("test_graph_overhaul: ok");

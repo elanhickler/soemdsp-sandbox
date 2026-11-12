@@ -199,17 +199,43 @@ function nodeGraphDisplaySettingsBuildStepperRowHtml(key, formType = null, optio
   }
   if ((key === "zoomMin" || key === "zoomMax") && formType === "graphFace") {
     label = key === "zoomMin" ? "Zoom Min" : "Zoom Max";
-    title = key === "zoomMin"
-      ? "Bottom of the graph face Y view (display only). Point Y is -1..+1."
-      : "Top of the graph face Y view (display only). Point Y is -1..+1.";
+    title = "";
   }
   if (formType === "graphFace" && key === "lineThickness") {
     label = "Line";
-    title = "Curve thickness in CSS pixels (0-16). 0 = no line.";
+    title = "";
+  }
+  if (formType === "graphFace" && key === "dottedThickness") {
+    label = "Dotted";
+    title = "";
   }
   if (formType === "graphFace" && key === "dotSize") {
     label = "Point";
-    title = "Point diameter in CSS pixels (0-32). 0 = no points.";
+    title = "";
+  }
+  if (formType === "graphFace" && key === "ghostAlpha") {
+    label = "Ghost Fade";
+    title = "";
+  }
+  if (formType === "graphFace" && key === "dottedAlpha") {
+    label = "Dotted Fade";
+    title = "";
+  }
+  if (formType === "graphFace" && key === "gridAlpha") {
+    label = "Grid Fade";
+    title = "";
+  }
+  if (formType === "graphFace" && key === "pointAlpha") {
+    label = "Point Fade";
+    title = "";
+  }
+  if (formType === "graphFace" && key === "handleAlpha") {
+    label = "Handle Fade";
+    title = "";
+  }
+  if (formType === "graphFace" && key === "phaseAlpha") {
+    label = "Phase Fade";
+    title = "";
   }
   if (key === "innerRadius" && formType === "knobFace") {
     label = "Inner radius";

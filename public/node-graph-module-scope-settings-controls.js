@@ -880,7 +880,14 @@ const nodeGraphTraceDisplayFormTypeValueClampOverrides = Object.freeze({
       return Number.isFinite(n) ? clampNodeSliderValue(n, -1, 2) : 1;
     },
     lineThickness: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, 2), 0, 16),
+    dottedThickness: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, 0.7), 0, 16),
     dotSize: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, 6), 0, 32),
+    ghostAlpha: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, 0.38), 0, 1),
+    dottedAlpha: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, 0.52), 0, 1),
+    gridAlpha: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, 0.22), 0, 1),
+    pointAlpha: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, 0.82), 0, 1),
+    handleAlpha: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, 0.72), 0, 1),
+    phaseAlpha: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, 0.42), 0, 1),
   }),
   clockFace: Object.freeze({
     lineThickness: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, 2), 0, 16),
