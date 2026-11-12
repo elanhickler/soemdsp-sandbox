@@ -148,6 +148,11 @@ function nodeGraphScreenSoloAllowsClock(clockKey) {
   if (!key || key === "__default") {
     return true;
   }
+  // One rAF for every video-graph node; it culls per node through
+  // nodeGraphScreenSoloAllowsNode, so the shared clock must keep running.
+  if (key === "videoGraph") {
+    return true;
+  }
   const types = new Set(
     nodeGraphScreenSoloNodeIds().map((id) => (
       typeof nodeGraphPatchNode === "function" ? String(nodeGraphPatchNode(id)?.type || "") : ""

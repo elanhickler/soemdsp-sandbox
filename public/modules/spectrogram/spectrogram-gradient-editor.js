@@ -1341,6 +1341,10 @@
    * selector must register here. Adding a face = one entry; UI comes free.
    */
   const DISPLAY_PROFILES = Object.freeze({
+    videoFeedbackFace: Object.freeze({
+      channels: "color",
+      defaultStops: "spectrogram",
+    }),
     spectrogramBurn: Object.freeze({
       channels: "color",
       defaultStops: "spectrogram",

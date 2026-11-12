@@ -197,6 +197,9 @@ function nodeGraphDisplaySettingsBuildStepperRowHtml(key, formType = null, optio
     label = "Curve thickness";
     title = "Analytic curve stroke 0…1 of the face min side. Scales with the canvas.";
   }
+  if ((key === "minFreq" || key === "maxFreq") && formType === "videoFeedbackFace") {
+    title = "";
+  }
   if ((key === "zoomMin" || key === "zoomMax") && formType === "graphFace") {
     label = key === "zoomMin" ? "Zoom Min" : "Zoom Max";
     title = "";
@@ -873,9 +876,6 @@ function nodeGraphDisplaySettingsColorRowMeta(key, formType = null, options = {}
   } else if (formType === "textBoxFace" && key === "backgroundColor") {
     aria = "Text Box background color";
     base = { ...base, defaultValue: "#020407" };
-  } else if (formType === "videoFeedbackFace" && key === "dot1Color") {
-    aria = "Spectrum color";
-    base = { ...base, caption: "Spectrum", defaultValue: "#8cd1ff" };
   } else if (formType === "rasterRgbFace" && key === "backgroundColor") {
     aria = "Scan Grid background color";
     base = { ...base, defaultValue: "#000000" };

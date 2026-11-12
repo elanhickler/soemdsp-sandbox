@@ -682,10 +682,18 @@ const nodeGraphTraceDisplayActiveControlsByType = Object.freeze({
     choices: Object.freeze([]),
   }),
   videoFeedbackFace: Object.freeze({
-    fields: Object.freeze([]),
-    colors: Object.freeze(["dot1Color"]),
+    fields: Object.freeze(["minFreq", "maxFreq"]),
+    colors: Object.freeze([]),
     toggles: Object.freeze([]),
-    choices: Object.freeze([]),
+    choices: Object.freeze([
+      "fftSize",
+      "window",
+      "spectrumAxis",
+      "spectrumDbFloor",
+      "spectrumCircleBands",
+      "spectrumCircleRayWidth",
+      "spectrumCircleColorBy",
+    ]),
   }),
   // RGB Soft Fractal: outer plate mode + gradient (field is module params + rAF).
   rgbFractalFace: Object.freeze({
@@ -2846,6 +2854,32 @@ const nodeGraphDisplaySettingsChoiceMeta = Object.freeze({
     title: "Bottom of the face in dBFS (dB / Exact dB only).",
     options: Object.freeze(["-144", "-120", "-96", "-84", "-72", "-60", "-48", "-36", "-24"]
       .map((v) => Object.freeze({ value: v, label: v + " dB" }))),
+  }),
+  spectrumCircleBands: Object.freeze({
+    label: "Bands",
+    aria: "Spectrum Circle number of bands",
+    id: "nodeTraceDisplaySpectrumCircleBands",
+    options: Object.freeze([
+      Object.freeze({ value: "0", label: "Continuous" }),
+      ...["8", "12", "16", "24", "32", "48", "64", "96", "128", "192", "256"]
+        .map((v) => Object.freeze({ value: v, label: v })),
+    ]),
+  }),
+  spectrumCircleRayWidth: Object.freeze({
+    label: "Ray width",
+    aria: "Spectrum Circle ray width",
+    id: "nodeTraceDisplaySpectrumCircleRayWidth",
+    options: Object.freeze(["0.1", "0.25", "0.4", "0.6", "0.8", "1"]
+      .map((v) => Object.freeze({ value: v, label: Math.round(Number(v) * 100) + "%" }))),
+  }),
+  spectrumCircleColorBy: Object.freeze({
+    label: "Color by",
+    aria: "Spectrum Circle gradient position",
+    id: "nodeTraceDisplaySpectrumCircleColorBy",
+    options: Object.freeze([
+      Object.freeze({ value: "level", label: "Level" }),
+      Object.freeze({ value: "radius", label: "Radius" }),
+    ]),
   }),
   spectrumDbCeiling: Object.freeze({
     label: "dB ceiling",

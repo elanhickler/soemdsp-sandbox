@@ -1,7 +1,11 @@
-// Feedback plate: ping-pong on the shared picture device (Sim FPS, not audio rate).
+// Spectrum Circle plate: ping-pong on the shared picture device (Sim FPS, not
+// audio rate). Each step fades the previous plate by Decay (Twist turns it a
+// little) and keeps the brighter of it and this frame's rays.
 
-const NODE_GRAPH_VIDEO_FEEDBACK_GL_REV = 9;
-const NODE_GRAPH_VIDEO_FEEDBACK_MAX = 512;
+const NODE_GRAPH_VIDEO_FEEDBACK_GL_REV = 10;
+// Longest plate side; the other side scales with it so the circle stays round.
+const NODE_GRAPH_VIDEO_FEEDBACK_MAX = 1024;
+// Spectrum texels: one per band, or one per slot when Continuous.
 const NODE_GRAPH_VIDEO_FEEDBACK_WAVE = 512;
 
 (function initNodeGraphVideoFeedbackGl(global) {
@@ -26,24 +30,31 @@ const NODE_GRAPH_VIDEO_FEEDBACK_WAVE = 512;
   `;
 
   const FRAG = `
+    #ifdef GL_FRAGMENT_PRECISION_HIGH
+    precision highp float;
+    #else
     precision mediump float;
+    #endif
     varying vec2 vUv;
     uniform sampler2D uPrev;
-    uniform sampler2D uPic;
     uniform sampler2D uWave;
+    uniform sampler2D uLut;
     uniform float uDecay;
-    uniform float uMix;
-    uniform float uMode;
-    uniform float uA;
-    uniform float uB;
-    uniform float uZoom;
     uniform float uTwist;
+    uniform float uSpin;
     uniform float uBright;
-    uniform float uTime;
-    uniform float uHasPic;
     uniform float uSmooth;
-    uniform float uAspect;
-    uniform vec3 uInk;
+    uniform float uSize;
+    uniform float uInner;
+    uniform float uBands;
+    uniform float uCount;
+    uniform float uRayWidth;
+    uniform float uColorByRadius;
+    uniform float uPx;
+    uniform vec2 uFit;
+
+    const float PI = 3.14159265;
+    const float WAVE = ${NODE_GRAPH_VIDEO_FEEDBACK_WAVE}.0;
 
     vec2 vfRot(vec2 p, float a) {
       float c = cos(a);
@@ -51,42 +62,57 @@ const NODE_GRAPH_VIDEO_FEEDBACK_WAVE = 512;
       return vec2(c * p.x - s * p.y, s * p.x + c * p.y);
     }
 
-    vec2 vfCenter(vec2 uv) {
-      vec2 c = uv - 0.5;
-      c.x *= max(uAspect, 0.0001);
-      return c;
+    float vfWave(float texel) {
+      return texture2D(uWave, vec2((texel + 0.5) / WAVE, 0.5)).r;
     }
 
-    vec2 vfUncenter(vec2 c) {
-      c.x /= max(uAspect, 0.0001);
-      return c + 0.5;
+    // Level at slot position t (0 = bass at the bottom, 1 = top).
+    float vfLevel(float t) {
+      if (uBands > 0.5) {
+        return vfWave(min(floor(t * uBands), uBands - 1.0));
+      }
+      float x = clamp(t * uCount - 0.5, 0.0, uCount - 1.0);
+      float x0 = floor(x);
+      float m = mix(vfWave(x0), vfWave(min(x0 + 1.0, uCount - 1.0)), x - x0);
+      // Smooth also blends a few neighbours on the Continuous ring.
+      float d = 1.0 + 6.0 * uSmooth;
+      float lo = vfWave(max(x0 - d, 0.0));
+      float hi = vfWave(min(x0 + d, uCount - 1.0));
+      return mix(m, (lo + 2.0 * m + hi) * 0.25, uSmooth);
     }
 
     void main() {
-      vec2 uv = vUv;
-      vec2 c = vfCenter(uv);
-      vec2 pc = vfRot(c, uTwist * 0.15);
-      vec2 p = clamp(vfUncenter(pc), 0.003, 0.997);
+      // Centred, short side spans -0.5..0.5 (contain-fit: the circle stays round).
+      vec2 c = (vUv - 0.5) * uFit;
+      vec2 p = clamp(vfRot(c, uTwist * 0.15) / uFit + 0.5, 0.0, 1.0);
       vec3 col = texture2D(uPrev, p).rgb * uDecay;
-      vec2 sc = vfRot(c, uTwist * 1.2 + uB * 1.4);
-      float rad = length(sc);
-      float t = clamp(atan(sc.y, abs(sc.x)) / 3.14159265 + 0.5, 0.0, 1.0);
-      float dt = 0.012 + 0.04 * uSmooth;
-      float mag = (
-        texture2D(uWave, vec2(clamp(t - dt, 0.0, 1.0), 0.5)).r
-        + texture2D(uWave, vec2(t, 0.5)).r * 2.0
-        + texture2D(uWave, vec2(clamp(t + dt, 0.0, 1.0), 0.5)).r
-      ) * 0.25;
-      float inner = 0.12 + 0.28 * uZoom;
-      float thick = 0.035 + mag * (0.2 + 0.28 * uBright);
-      float d = abs(rad - inner);
-      float edge = thick + 0.02 + 0.04 * uSmooth;
-      float line = d <= thick ? 1.0 : 1.0 - (1.0 - exp(-3.0 * clamp((d - thick) / max(edge - thick, 1e-4), 0.0, 1.0))) / 0.95021293163;
-      line += mag * exp(-d * (10.0 + 18.0 * (1.0 - uSmooth))) * 0.55;
-      col = min(col + uInk * line * uBright, vec3(1.0));
-      gl_FragColor = vec4(col, 1.0);
+      vec2 sc = vfRot(c, uTwist * 1.2 + uSpin * 1.4);
+      // r = 1 at the edge of the short side.
+      float r = length(sc) * 2.0;
+      float t = clamp(atan(sc.y, abs(sc.x)) / PI + 0.5, 0.0, 1.0);
+      float m = vfLevel(t);
+      float r0 = uSize * uInner;
+      float tip = r0 + (uSize - r0) * m;
+      float radial = smoothstep(r0 - uPx, r0, r) * (1.0 - smoothstep(tip - uPx, tip, r));
+      float across = 1.0;
+      if (uBands > 0.5) {
+        // 0 at a ray's centre line, 1 at the edge of its slot; one pixel of
+        // arc in those units keeps thin rays antialiased at every radius.
+        float d = abs(fract(t * uBands) - 0.5) * 2.0;
+        float px = 2.0 * uPx * uBands / (PI * max(r, uPx));
+        across = 1.0 - smoothstep(uRayWidth - px, uRayWidth + px, d);
+      }
+      float pos = uColorByRadius > 0.5 ? clamp((r - r0) / max(uSize - r0, 1e-4), 0.0, 1.0) : m;
+      vec3 ink = texture2D(uLut, vec2(pos * (255.0 / 256.0) + 0.5 / 256.0, 0.5)).rgb;
+      col = max(col, ink * (radial * across * uBright));
+      gl_FragColor = vec4(min(col, vec3(1.0)), 1.0);
     }
   `;
+
+  const UNIFORMS = [
+    "uPrev", "uWave", "uLut", "uDecay", "uTwist", "uSpin", "uBright", "uSmooth", "uSize", "uInner",
+    "uBands", "uCount", "uRayWidth", "uColorByRadius", "uPx", "uFit",
+  ];
 
   function link(gl, vsSrc, fsSrc) {
     return SoemGl.link(gl, vsSrc, fsSrc, "video-feedback-gl.js");
@@ -121,6 +147,18 @@ const NODE_GRAPH_VIDEO_FEEDBACK_WAVE = 512;
     if (surface.texture) gl.deleteTexture(surface.texture);
   }
 
+  function createDataTexture(gl, width, filter) {
+    const tex = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, tex);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, filter);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, filter);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, width, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+    gl.bindTexture(gl.TEXTURE_2D, null);
+    return tex;
+  }
+
   function getSharedDevice() {
     if (sharedDevice?.gl && !sharedDevice.gl.isContextLost() && sharedDevice.rev === NODE_GRAPH_VIDEO_FEEDBACK_GL_REV) {
       return sharedDevice;
@@ -135,30 +173,14 @@ const NODE_GRAPH_VIDEO_FEEDBACK_WAVE = 512;
       linkFailedGl = gl;
       return null;
     }
-    const quad = SoemGl.quad(gl);
     sharedDevice = {
       rev: NODE_GRAPH_VIDEO_FEEDBACK_GL_REV,
       gl,
-      quad,
+      quad: SoemGl.quad(gl),
       program,
       aPos: gl.getAttribLocation(program, "aPos"),
-      uPrev: gl.getUniformLocation(program, "uPrev"),
-      uPic: gl.getUniformLocation(program, "uPic"),
-      uWave: gl.getUniformLocation(program, "uWave"),
-      uDecay: gl.getUniformLocation(program, "uDecay"),
-      uMix: gl.getUniformLocation(program, "uMix"),
-      uMode: gl.getUniformLocation(program, "uMode"),
-      uA: gl.getUniformLocation(program, "uA"),
-      uB: gl.getUniformLocation(program, "uB"),
-      uZoom: gl.getUniformLocation(program, "uZoom"),
-      uTwist: gl.getUniformLocation(program, "uTwist"),
-      uBright: gl.getUniformLocation(program, "uBright"),
-      uTime: gl.getUniformLocation(program, "uTime"),
-      uHasPic: gl.getUniformLocation(program, "uHasPic"),
-      uSmooth: gl.getUniformLocation(program, "uSmooth"),
-      uAspect: gl.getUniformLocation(program, "uAspect"),
-      uInk: gl.getUniformLocation(program, "uInk"),
     };
+    for (const name of UNIFORMS) sharedDevice[name] = gl.getUniformLocation(program, name);
     return sharedDevice;
   }
 
@@ -166,12 +188,15 @@ const NODE_GRAPH_VIDEO_FEEDBACK_WAVE = 512;
     const device = getSharedDevice();
     if (!host) return null;
     if (!device?.gl) {
-      if (linkFailedGl) reportFailure(host, "Video Feedback: GL program link failed");
+      if (linkFailedGl) reportFailure(host, "Spectrum Circle: GL program link failed");
       return null;
     }
     const gl = device.gl;
-    const w = Math.max(8, Math.min(NODE_GRAPH_VIDEO_FEEDBACK_MAX, width | 0));
-    const h = Math.max(8, Math.min(NODE_GRAPH_VIDEO_FEEDBACK_MAX, height | 0));
+    const fw = Math.max(8, width | 0);
+    const fh = Math.max(8, height | 0);
+    const scale = Math.min(1, NODE_GRAPH_VIDEO_FEEDBACK_MAX / Math.max(fw, fh));
+    const w = Math.max(8, Math.round(fw * scale));
+    const h = Math.max(8, Math.round(fh * scale));
     let renderer = host[KEY];
     if (renderer?.alive && renderer.width === w && renderer.height === h && renderer.rev === NODE_GRAPH_VIDEO_FEEDBACK_GL_REV) {
       renderer.device = device;
@@ -187,7 +212,7 @@ const NODE_GRAPH_VIDEO_FEEDBACK_WAVE = 512;
       destroySurface(gl, read);
       destroySurface(gl, write);
       host[KEY + "Failed"] = size;
-      reportFailure(host, "Video Feedback: framebuffer incomplete");
+      reportFailure(host, "Spectrum Circle: framebuffer incomplete");
       return null;
     }
     host[KEY + "Failed"] = "";
@@ -198,21 +223,6 @@ const NODE_GRAPH_VIDEO_FEEDBACK_WAVE = 512;
     gl.bindFramebuffer(gl.FRAMEBUFFER, write.framebuffer);
     gl.clear(gl.COLOR_BUFFER_BIT);
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-    const waveTex = gl.createTexture();
-    gl.bindTexture(gl.TEXTURE_2D, waveTex);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, NODE_GRAPH_VIDEO_FEEDBACK_WAVE, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
-    const blackTex = gl.createTexture();
-    gl.bindTexture(gl.TEXTURE_2D, blackTex);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([0, 0, 0, 255]));
-    gl.bindTexture(gl.TEXTURE_2D, null);
     renderer = {
       alive: true,
       rev: NODE_GRAPH_VIDEO_FEEDBACK_GL_REV,
@@ -222,9 +232,11 @@ const NODE_GRAPH_VIDEO_FEEDBACK_WAVE = 512;
       write,
       width: w,
       height: h,
-      waveTex,
-      blackTex,
+      waveTex: createDataTexture(gl, NODE_GRAPH_VIDEO_FEEDBACK_WAVE, gl.NEAREST),
       waveBytes: new Uint8Array(NODE_GRAPH_VIDEO_FEEDBACK_WAVE * 4),
+      lutTex: createDataTexture(gl, 256, gl.LINEAR),
+      lutBytes: new Uint8Array(256 * 4),
+      lutRgb: null,
     };
     host[KEY] = renderer;
     return renderer;
@@ -239,7 +251,7 @@ const NODE_GRAPH_VIDEO_FEEDBACK_WAVE = 512;
       destroySurface(gl, renderer.read);
       destroySurface(gl, renderer.write);
       if (renderer.waveTex) gl.deleteTexture(renderer.waveTex);
-      if (renderer.blackTex) gl.deleteTexture(renderer.blackTex);
+      if (renderer.lutTex) gl.deleteTexture(renderer.lutTex);
     }
     host[KEY] = null;
   }
@@ -257,49 +269,49 @@ const NODE_GRAPH_VIDEO_FEEDBACK_WAVE = 512;
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
   }
 
-  function uploadWave(renderer, samples, asMagnitude) {
-    const gl = renderer.gl;
+  function uploadRow(gl, tex, width, bytes) {
+    gl.bindTexture(gl.TEXTURE_2D, tex);
+    gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, width, 1, gl.RGBA, gl.UNSIGNED_BYTE, bytes);
+    gl.bindTexture(gl.TEXTURE_2D, null);
+  }
+
+  function uploadLevels(renderer, levels, count) {
     const bytes = renderer.waveBytes;
-    const n = NODE_GRAPH_VIDEO_FEEDBACK_WAVE;
-    const src = samples && samples.length ? samples : null;
-    const len = src ? src.length : 0;
-    for (let i = 0; i < n; i += 1) {
-      let v = asMagnitude ? 0 : 0.5;
-      if (len > 0) {
-        const s = Number(src[Math.min(len - 1, Math.floor(i * len / n))]) || 0;
-        v = asMagnitude
-          ? Math.max(0, Math.min(1, s))
-          : Math.max(0, Math.min(1, 0.5 + 0.5 * s));
-      }
-      const b = Math.round(v * 255);
+    for (let i = 0; i < NODE_GRAPH_VIDEO_FEEDBACK_WAVE; i += 1) {
+      const v = i < count ? Math.max(0, Math.min(1, Number(levels[i]) || 0)) : 0;
       const o = i * 4;
-      bytes[o] = b;
-      bytes[o + 1] = b;
-      bytes[o + 2] = b;
+      bytes[o] = Math.round(v * 255);
       bytes[o + 3] = 255;
     }
-    gl.bindTexture(gl.TEXTURE_2D, renderer.waveTex);
-    gl.texSubImage2D(
-      gl.TEXTURE_2D,
-      0,
-      0,
-      0,
-      n,
-      1,
-      gl.RGBA,
-      gl.UNSIGNED_BYTE,
-      bytes,
-    );
-    gl.bindTexture(gl.TEXTURE_2D, null);
+    uploadRow(renderer.gl, renderer.waveTex, NODE_GRAPH_VIDEO_FEEDBACK_WAVE, bytes);
+  }
+
+  function uploadLut(renderer, lutRgb) {
+    if (renderer.lutRgb === lutRgb) return;
+    const bytes = renderer.lutBytes;
+    for (let i = 0; i < 256; i += 1) {
+      bytes[i * 4] = lutRgb[i * 3];
+      bytes[i * 4 + 1] = lutRgb[i * 3 + 1];
+      bytes[i * 4 + 2] = lutRgb[i * 3 + 2];
+      bytes[i * 4 + 3] = 255;
+    }
+    uploadRow(renderer.gl, renderer.lutTex, 256, bytes);
+    renderer.lutRgb = lutRgb;
+  }
+
+  function bindTexture(gl, unit, tex, location) {
+    gl.activeTexture(gl.TEXTURE0 + unit);
+    gl.bindTexture(gl.TEXTURE_2D, tex);
+    gl.uniform1i(location, unit);
   }
 
   function step(host, options) {
     const renderer = host?.[KEY];
     if (!renderer?.alive) return false;
     const { gl, device } = renderer;
-    const decay = Math.max(0, Math.min(0.98, Number(options.decay)));
-    uploadWave(renderer, options.waveSamples, Boolean(options.waveIsMagnitude));
-    const picTex = options.picture?.texture || renderer.blackTex;
+    const count = Math.max(1, Math.min(NODE_GRAPH_VIDEO_FEEDBACK_WAVE, options.count | 0));
+    uploadLevels(renderer, options.levels, count);
+    uploadLut(renderer, options.lutRgb);
     gl.bindFramebuffer(gl.FRAMEBUFFER, renderer.write.framebuffer);
     gl.viewport(0, 0, renderer.width, renderer.height);
     gl.disable(gl.BLEND);
@@ -307,34 +319,23 @@ const NODE_GRAPH_VIDEO_FEEDBACK_WAVE = 512;
     gl.bindBuffer(gl.ARRAY_BUFFER, device.quad);
     gl.enableVertexAttribArray(device.aPos);
     gl.vertexAttribPointer(device.aPos, 2, gl.FLOAT, false, 0, 0);
-    gl.activeTexture(gl.TEXTURE0);
-    gl.bindTexture(gl.TEXTURE_2D, renderer.read.texture);
-    gl.uniform1i(device.uPrev, 0);
-    gl.activeTexture(gl.TEXTURE1);
-    gl.bindTexture(gl.TEXTURE_2D, picTex);
-    gl.uniform1i(device.uPic, 1);
-    gl.activeTexture(gl.TEXTURE2);
-    gl.bindTexture(gl.TEXTURE_2D, renderer.waveTex);
-    gl.uniform1i(device.uWave, 2);
-    gl.uniform1f(device.uDecay, Number.isFinite(decay) ? decay : 0.88);
-    gl.uniform1f(device.uMix, Math.max(0, Math.min(1, Number(options.mix) || 0)));
-    gl.uniform1f(device.uMode, Number(options.mode) || 0);
-    gl.uniform1f(device.uA, Number(options.a) || 0);
-    gl.uniform1f(device.uB, Number(options.b) || 0);
-    gl.uniform1f(device.uZoom, Number(options.zoom) || 0);
+    bindTexture(gl, 0, renderer.read.texture, device.uPrev);
+    bindTexture(gl, 1, renderer.waveTex, device.uWave);
+    bindTexture(gl, 2, renderer.lutTex, device.uLut);
+    const aspect = renderer.width / renderer.height;
+    gl.uniform2f(device.uFit, Math.max(aspect, 1), Math.max(1 / aspect, 1));
+    gl.uniform1f(device.uPx, 2 / Math.min(renderer.width, renderer.height));
+    gl.uniform1f(device.uDecay, Number(options.decay) || 0);
     gl.uniform1f(device.uTwist, Number(options.twist) || 0);
-    gl.uniform1f(device.uBright, Math.max(0, Math.min(1, Number(options.bright) || 0)));
-    gl.uniform1f(device.uTime, Number(options.time) || 0);
-    gl.uniform1f(device.uHasPic, options.picture?.texture ? 1 : 0);
-    gl.uniform1f(device.uSmooth, Math.max(0, Math.min(1, Number(options.smooth) || 0)));
-    gl.uniform1f(device.uAspect, renderer.height > 0 ? renderer.width / renderer.height : 1);
-    const ink = Array.isArray(options.ink) ? options.ink : [0.55, 0.82, 1];
-    gl.uniform3f(
-      device.uInk,
-      Number(ink[0]) || 0,
-      Number(ink[1]) || 0,
-      Number(ink[2]) || 0,
-    );
+    gl.uniform1f(device.uSpin, Number(options.spin) || 0);
+    gl.uniform1f(device.uBright, Number(options.bright) || 0);
+    gl.uniform1f(device.uSmooth, Number(options.smooth) || 0);
+    gl.uniform1f(device.uSize, Number(options.size) || 0);
+    gl.uniform1f(device.uInner, Number(options.inner) || 0);
+    gl.uniform1f(device.uBands, Math.max(0, options.bands | 0));
+    gl.uniform1f(device.uCount, count);
+    gl.uniform1f(device.uRayWidth, Number(options.rayWidth) || 0);
+    gl.uniform1f(device.uColorByRadius, options.colorByRadius ? 1 : 0);
     gl.drawArrays(gl.TRIANGLES, 0, 6);
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     const tmp = renderer.read;

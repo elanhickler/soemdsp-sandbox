@@ -1,4 +1,4 @@
-// Spectrum Circle — mirrored spectrum ring. Type stays videoFeedback for patches.
+// Spectrum Circle — mirrored spectrum rays. Type stays videoFeedback for patches.
 registerNodeGraphChromelessModule("videoFeedback", {
   label: "Spectrum Circle",
   solidModule: false,
@@ -49,15 +49,26 @@ registerNodeGraphChromelessModule("videoFeedback", {
         tooltip: "Trail of the circle. 0 is a hard wipe each frame; 0.98 is a long phosphor.",
       },
       {
-        defaultValue: "0.22",
-        key: "zoom",
-        label: "Radius",
+        defaultValue: "0.9",
+        key: "size",
+        label: "Size",
         max: "1",
         mid: "0.5",
         min: "0",
         nonlinearSlider: false,
         step: "any",
-        tooltip: "Inner radius of the circle.",
+      },
+      {
+        // Key stays zoom for saved patches: where the rays start, as a share
+        // of Size (0 = from the centre).
+        defaultValue: "0",
+        key: "zoom",
+        label: "Inner",
+        max: "1",
+        mid: "0.5",
+        min: "0",
+        nonlinearSlider: false,
+        step: "any",
       },
       {
         defaultValue: "0",
@@ -99,7 +110,7 @@ registerNodeGraphChromelessModule("videoFeedback", {
   catalog: {
     category: "rgba",
     description:
-      "Mirrored spectrum circle. Audio In is FFT'd; Spin turns the ring. 📺 out for Video Delay.",
+      "Mirrored spectrum circle: rays from the centre, colored by a gradient. Audio In is FFT'd; Spin turns the ring. 📺 out for Video Delay.",
     notes: [
       "spectrum",
       "circle",

@@ -320,6 +320,7 @@ function nodeGraphDisplaySettingsFormTypeUsesGradient(type) {
   // Until the selector script loads — keep a minimal local mirror.
   return Boolean(type && [
     "spectrogramBurn",
+    "videoFeedbackFace",
     "scope2d",
     "phosphorLight",
     "xyPad",
