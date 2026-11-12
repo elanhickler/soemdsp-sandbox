@@ -655,10 +655,9 @@ function handleNodeGraphKeydown(event) {
     return;
   }
 
-  if (removeFocusedNodeGraphGraphNode()) {
-    event.preventDefault();
-    return;
-  }
+  // Step / Smooth Graph dots are removed with right-click only. Delete must
+  // not be captured by a focused graph face, so the app can still delete
+  // modules (and other selection) as usual.
   if (nodeGraphSelectionCanDelete()) {
     event.preventDefault();
     deleteSelectedNodeGraphItem();

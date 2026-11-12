@@ -104,8 +104,8 @@ function addNodeGraphGraphNodeData(graphValue, pointValue = {}) {
   const source = pointValue && typeof pointValue === "object" ? pointValue : {};
   const x = normalizeNodeGraphGraphNumber(source.x, graph.cursorX);
   const y = Number.isFinite(Number(source.y))
-    ? normalizeNodeGraphGraphNumber(source.y, 0)
-    : normalizeNodeGraphGraphNumber(nodeGraphGraphValueAt(graph, x), 0);
+    ? nodeGraphGraphClampValue(source.y, 0)
+    : nodeGraphGraphClampValue(nodeGraphGraphValueAt(graph, x), 0);
   // Do NOT move cursorX/phase when placing a control point — only the phase
   // scrub gesture should change the cream phase line.
   // Prefer caller shape; otherwise inherit the segment being split (right
@@ -374,7 +374,7 @@ function nodeGraphGraphWithLockedEndpointY(graphValue, selectedIndex = 0) {
   const lastIndex = graph.nodes.length - 1;
   const endpointIndex = nodeGraphGraphNodeIndexFromValue(graph, selectedIndex);
   const anchorIndex = endpointIndex >= lastIndex ? lastIndex : 0;
-  const anchorY = normalizeNodeGraphGraphNumber(graph.nodes[anchorIndex]?.y, graph.nodes[0]?.y ?? 0);
+  const anchorY = nodeGraphGraphClampValue(graph.nodes[anchorIndex]?.y, graph.nodes[0]?.y ?? 0);
   const nodes = graph.nodes.map((node, index) => (
     index === 0 || index === lastIndex
       ? normalizeNodeGraphGraphNode({ ...node, y: anchorY }, index)
@@ -643,7 +643,7 @@ function nodeGraphGraphBezierPointAt(controls, position = 0) {
   const t = normalizeNodeGraphGraphNumber(position, 0, 0, 1);
   let points = controls.map((node) => ({
     x: normalizeNodeGraphGraphNumber(node.x, 0),
-    y: normalizeNodeGraphGraphNumber(node.y, 0),
+    y: nodeGraphGraphClampValue(node.y, 0),
   }));
   if (!points.length) {
     return { x: 0, y: 0 };
@@ -955,8 +955,8 @@ function nodeGraphGraphApplyStepBarHeightDelta(graphValue, rightIndex, startLeft
   if (i <= 0) {
     return graph;
   }
-  const leftY = normalizeNodeGraphGraphNumber(Number(startLeftY) + Number(deltaY), 0);
-  const rightY = normalizeNodeGraphGraphNumber(Number(startRightY) + Number(deltaY), 0);
+  const leftY = nodeGraphGraphClampEditableY(Number(startLeftY) + Number(deltaY), startLeftY);
+  const rightY = nodeGraphGraphClampEditableY(Number(startRightY) + Number(deltaY), startRightY);
   const nodes = graph.nodes.map((node, nodeIndex) => {
     if (nodeIndex === i - 1) {
       return normalizeNodeGraphGraphNode({ ...node, y: leftY }, nodeIndex);
@@ -975,7 +975,7 @@ function nodeGraphGraphApplyStepBarHeightDelta(graphValue, rightIndex, startLeft
  */
 function nodeGraphGraphApplyStepBarHeight(graphValue, rightIndex, yValue) {
   const graph = normalizeNodeGraphGraph(graphValue);
-  const y = normalizeNodeGraphGraphNumber(yValue, 0);
+  const y = nodeGraphGraphClampEditableY(yValue, 0);
   const i = nodeGraphGraphNodeIndexFromValue(graph, rightIndex);
   if (i <= 0) {
     // No left neighbor — just set this node.
@@ -2958,9 +2958,39 @@ function nudgeFocusedNodeGraphGraphNode(event) {
 // pointer-capture comment on dragNodeGraphGraphNode above); a live update
 // running at the same cadence needs to avoid the same trap by touching only
 // the ghost <line> element's position.
+function nodeGraphGraphCommitLivePlayhead(display, live, x) {
+  const prevLive = Boolean(display._graphPlayheadLive);
+  const prevX = display._graphPlayheadX;
+  const nextX = live ? x : null;
+  display._graphPlayheadLive = live;
+  display._graphPlayheadX = nextX;
+  if (prevLive === live && prevX === nextX) {
+    return;
+  }
+  // Snapshot updates must request a face paint; the pump may not already
+  // be ticking, and a stale signature would keep the last picture.
+  display._graphFaceForceDraw = true;
+  if (typeof nodeGraphGraphFaceGlRequestPaint === "function") {
+    nodeGraphGraphFaceGlRequestPaint(display);
+  }
+  if (typeof display._startFaceLoop === "function") {
+    display._startFaceLoop();
+  }
+}
+
 function syncNodeGraphGraphLivePlayheads() {
-  const liveAudioRunning = Boolean(nodeGraphMvp?.live?.node);
-  for (const display of document.querySelectorAll(".node-module-graph-display")) {
+  // Use the shared drawing-live predicate (engine playing, not paused).
+  // live.node alone is the worklet host and can be up while transport is
+  // stopped, or miss a playing engine that other faces already follow.
+  const liveAudioRunning = typeof scopePaintIsDrawingLive === "function"
+    ? scopePaintIsDrawingLive()
+    : (typeof scopePaintIsEnginePlaying === "function"
+      ? scopePaintIsEnginePlaying()
+      : Boolean(typeof nodeGraphMvp !== "undefined" && nodeGraphMvp?.live?.node));
+  const displays = (typeof document !== "undefined" && document?.querySelectorAll)
+    ? document.querySelectorAll(".node-module-graph-display")
+    : [];
+  for (const display of displays) {
     const nodeId = nodeGraphGraphNodeIdFromDisplay(display);
     const patchNode = nodeId ? nodeGraphPatchNode(nodeId) : null;
     const liveX = liveAudioRunning && patchNode && nodeGraphModuleIsGraphType(patchNode.type)
@@ -2969,12 +2999,10 @@ function syncNodeGraphGraphLivePlayheads() {
     if (liveX === null || !Number.isFinite(liveX)) {
       // No live sample yet, or live audio isn't running. Hide rather than
       // leave a frozen playhead that would still read as "final phase".
-      display._graphPlayheadLive = false;
-      display._graphPlayheadX = null;
+      nodeGraphGraphCommitLivePlayhead(display, false, null);
       continue;
     }
-    display._graphPlayheadX = Math.max(0, Math.min(1, Number(liveX)));
-    display._graphPlayheadLive = true;
+    nodeGraphGraphCommitLivePlayhead(display, true, Math.max(0, Math.min(1, Number(liveX))));
   }
 }
 

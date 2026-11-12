@@ -241,10 +241,13 @@ function nodeGraphGraphFaceGlDraw(batch, f) {
     nodeGraphGlLinesPolyline(batch, curve(segmentOptions), halfPx * 0.55, feather, ghostRgba);
   }
 
+  // Cream phase probe (the scrubbable cursor). Distinct from the purple
+  // live playhead, matching the pre-WebGL SVG .node-module-graph-cursor.
   const cursorX = Number(graph.cursorX);
   if (Number.isFinite(cursorX)) {
     const cx = toX(cursorX);
-    const cursorRgba = nodeGraphGraphFaceGlAlpha(playRgba, phaseHot ? 1 : phaseAlpha);
+    const cursorBase = [255 / 255, 236 / 255, 181 / 255, 0.92];
+    const cursorRgba = nodeGraphGraphFaceGlAlpha(cursorBase, phaseHot ? 1 : phaseAlpha);
     const cursorHalf = Math.max(0.25, Math.min(halfPx || ink, 2 * ink));
     nodeGraphGlLinesPolyline(batch, [cx, toY(zoomMin), cx, toY(zoomMax)], cursorHalf, feather, cursorRgba);
     if (hovering && typeof nodeGraphGlLinesDash === "function") {

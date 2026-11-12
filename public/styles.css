@@ -13767,6 +13767,20 @@ body.node-screen-solo-active .node-screen-solo-face.node-sample-waveform-display
   opacity: 0.55;
 }
 
+/* Hide number-field spinner arrows so X/Y (and Tension/Skew) can use the
+   full input width. The fields stay type=number and remain editable. */
+.node-module-graph-point-strip-input[type="number"] {
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+
+.node-module-graph-point-strip-input[type="number"]::-webkit-outer-spin-button,
+.node-module-graph-point-strip-input[type="number"]::-webkit-inner-spin-button {
+  appearance: none;
+  -webkit-appearance: none;
+  margin: 0;
+}
+
 /* EQ / filter-curve plots: keep square clip (never plate-squircle). */
 .dsp-node .node-filter-curve-display,
 .dsp-node .node-module-face.node-filter-curve-display {
