@@ -296,6 +296,12 @@ NodeLiveAudioProcessor.prototype.setGraphData = function setGraphData(graphData)
         node.graph = graph;
       }
     }
+    // Update native curve kernels in place. Do not setPlan — that recompiles
+    // the graph and restarts Step/Smooth Graph (and other voices) on every
+    // point-drag frame / pointer-up.
+    if (typeof this.syncNativeGraphCurvePoints === "function") {
+      this.syncNativeGraphCurvePoints();
+    }
 };
 
 NodeLiveAudioProcessor.prototype.setParams = function setParams(nodes, message = {}) {

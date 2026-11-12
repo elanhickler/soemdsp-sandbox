@@ -290,6 +290,23 @@ assert(nodeGraphSegmentApplySkewPercent(0.2, 1.5) === nodeGraphSegmentApplySkewP
   assert(sameNode(painted.nodes[moved.index], moved.graph.nodes[moved.index]), "paint uses the in-flight drag graph");
   assert(sameNode(painted.nodes[0], moved.graph.nodes[0]), "paint leaves sibling points in the drag graph");
   utilsCtx.nodeGraphMvp.graphNodeDragging = null;
+
+  // Point-edit commits must not setPlan/remount (that restarts the live graph
+  // on every move). A 0-size hit-layer must not snap the point to (0,0).
+  const commitOpts = utilsCtx.nodeGraphGraphDocumentCommitOptions("graph node moved");
+  assert(commitOpts.skipLivePlan === true, "point-edit commit skips live plan / setPlan");
+  assert(commitOpts.softDom === true, "point-edit commit uses softDom (no module remount)");
+  assert(utilsCtx.nodeGraphGraphSvgToGraphPoint(null, 10, 10) === null, "utils 0-size plot returns null, not (0,0)");
+  assert(utilsCtx.nodeGraphGraphSvgToGraphPoint({ getBoundingClientRect: () => ({ width: 0, height: 0, left: 0, top: 0 }) }, 10, 10) === null,
+    "0x0 svg plot returns null, not (0,0)");
+
+  const extrasPath = path.join(root, "public", "node-graph-graph-face-extras.js");
+  vm.runInContext(fs.readFileSync(extrasPath, "utf8"), utilsCtx, { filename: "node-graph-graph-face-extras.js" });
+  const extrasNull = utilsCtx.nodeGraphGraphSvgToGraphPoint({
+    getBoundingClientRect: () => ({ width: 0, height: 0, left: 0, top: 0, right: 0, bottom: 0 }),
+    closest: () => null,
+  }, 10, 10);
+  assert(extrasNull === null, "face-extras 0-size plot returns null, not (0,0) default");
 }
 
 console.log("test_graph_overhaul: ok");

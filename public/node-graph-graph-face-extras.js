@@ -347,7 +347,7 @@ nodeGraphGraphSvgToGraphPoint = function nodeGraphGraphSvgToGraphPoint(svg, clie
     ? nodeGraphGraphSvgPlotRect(svg)
     : svg?.getBoundingClientRect?.();
   if (!rect || !(rect.width > 0) || !(rect.height > 0)) {
-    return { x: 0, y: 0 };
+    return null;
   }
   const zoom = zoomSettings
     ? normalizeNodeGraphGraphFaceDisplaySettings(zoomSettings)
@@ -565,7 +565,9 @@ function syncNodeGraphGraphPointStrip(faceOrDisplay, patchNode = null, selectedI
   if (!owner || (typeof nodeGraphModuleIsGraphType === "function" && !nodeGraphModuleIsGraphType(owner.type))) {
     return;
   }
-  const graph = nodeGraphGraphForNode(owner);
+  const graph = typeof nodeGraphGraphPaintDocumentForNode === "function"
+    ? nodeGraphGraphPaintDocumentForNode(owner)
+    : nodeGraphGraphForNode(owner);
   const index = selectedIndex == null
     ? nodeGraphGraphSelectedNodeIndex(nodeId, graph, 0)
     : nodeGraphGraphNodeIndexFromValue(graph, selectedIndex);
@@ -650,7 +652,12 @@ function commitNodeGraphGraphPointStripField(input) {
       ...(targetNode.params || {}),
       tension: normalizeNodeGraphGraphNumber(value, Number(targetNode.params?.tension) ?? 1, 0, 1),
     };
-    commitNodeGraphPatch(patch, { status: "graph tension edited" });
+    commitNodeGraphPatch(patch, typeof nodeGraphGraphDocumentCommitOptions === "function"
+      ? nodeGraphGraphDocumentCommitOptions("graph tension edited")
+      : { skipLivePlan: true, softDom: true, status: "graph tension edited" });
+    if (typeof scheduleNodeGraphLiveGraphData === "function") {
+      scheduleNodeGraphLiveGraphData(nodeId, targetNode.graph);
+    }
     if (typeof syncNodeGraphGraphDisplaysForNode === "function") {
       syncNodeGraphGraphDisplaysForNode(nodeId, targetNode);
     }
@@ -716,7 +723,12 @@ function commitNodeGraphGraphPointStripField(input) {
   if (typeof syncNodeGraphGraphPhaseParameterFromCursor === "function") {
     syncNodeGraphGraphPhaseParameterFromCursor(targetNode);
   }
-  commitNodeGraphPatch(patch, { status: "graph point edited" });
+  commitNodeGraphPatch(patch, typeof nodeGraphGraphDocumentCommitOptions === "function"
+    ? nodeGraphGraphDocumentCommitOptions("graph point edited")
+    : { skipLivePlan: true, softDom: true, status: "graph point edited" });
+  if (typeof scheduleNodeGraphLiveGraphData === "function") {
+    scheduleNodeGraphLiveGraphData(nodeId, targetNode.graph);
+  }
   setNodeGraphGraphSelectedNodeIndex(nodeId, targetNode.graph, index);
   if (typeof syncNodeGraphGraphDisplaysForNode === "function") {
     syncNodeGraphGraphDisplaysForNode(nodeId, targetNode);

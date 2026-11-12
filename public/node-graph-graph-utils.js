@@ -1220,16 +1220,28 @@ function createNodeGraphGraphSvgElement(name, attributes = {}) {
 }
 
 function nodeGraphGraphSvgPlotRect(svg) {
-  const rect = svg?.getBoundingClientRect?.();
-  if (!rect?.width || !rect?.height) {
-    return null;
-  }
-  return {
-    height: rect.height,
-    left: rect.left,
-    top: rect.top,
-    width: rect.width,
+  const fromBox = (rect) => {
+    if (!rect || !(rect.width > 0) || !(rect.height > 0)) {
+      return null;
+    }
+    return {
+      height: rect.height,
+      left: rect.left,
+      top: rect.top,
+      width: rect.width,
+    };
   };
+  const direct = fromBox(svg?.getBoundingClientRect?.());
+  if (direct) {
+    return direct;
+  }
+  // After WebGL-only paint, replaceChildren() can briefly leave the hit-layer
+  // SVG with a 0 box. The display's reserved Layout A face size is the same plot.
+  const display = svg?.closest?.(".node-module-graph-display")
+    || (typeof nodeGraphGraphLiveDisplayForNodeId === "function"
+      && svg
+      && nodeGraphGraphLiveDisplayForNodeId(svg.closest?.(".dsp-node")?.dataset?.node));
+  return fromBox(display?.getBoundingClientRect?.());
 }
 
 function nodeGraphGraphScreenRoundRadii(element, radius) {
@@ -1250,7 +1262,9 @@ function nodeGraphGraphScreenRoundRadii(element, radius) {
 function nodeGraphGraphSvgToGraphPoint(svg, clientX, clientY) {
   const rect = nodeGraphGraphSvgPlotRect(svg);
   if (!rect) {
-    return { x: 0, y: 0 };
+    // Do not snap to (0, 0) — that restarts the dragged point (and looks
+    // like the whole curve reset) on every move when the hit layer measures 0.
+    return null;
   }
   const viewX = ((clientX - rect.left) / rect.width) * 100;
   const viewY = ((clientY - rect.top) / rect.height) * 100;
@@ -1943,6 +1957,16 @@ function nodeGraphGraphDebugStringify(value) {
   }
 }
 
+/** Point/curve-document edits must not rebuild the live audio plan or remount modules. */
+function nodeGraphGraphDocumentCommitOptions(status, extra = {}) {
+  return {
+    skipLivePlan: true,
+    softDom: true,
+    status,
+    ...extra,
+  };
+}
+
 function beginNodeGraphGraphNodeDrag(event) {
   nodeGraphGraphDebugTrace("graph pointerdown", {
     target: event.target?.className,
@@ -2236,7 +2260,7 @@ function addNodeGraphGraphNodeFromDisplayEvent(event, options = {}) {
     : addition.graph;
   // Keep params.phase / cream phase line where they were; adding a point is
   // not a phase scrub.
-  commitNodeGraphPatch(patch, { status: "graph node added" });
+  commitNodeGraphPatch(patch, nodeGraphGraphDocumentCommitOptions("graph node added"));
   setNodeGraphGraphSelectedNodeIndex(nodeId, targetNode.graph, addition.selectedIndex);
   syncNodeGraphGraphDisplaysForNode(nodeId, targetNode);
   syncNodeGraphGraphControls(targetNode.graph, addition.selectedIndex, { nodeId });
@@ -2423,7 +2447,13 @@ function dragNodeGraphGraphNode(event) {
     let nextCursorX;
     if (drag.absolute) {
       // Alt: jump phase to pointer X on the plot (absolute placement).
-      nextCursorX = nodeGraphGraphSvgToGraphPoint(drag.svg, event.clientX, event.clientY).x;
+      const cursorPoint = nodeGraphGraphSvgToGraphPoint(drag.svg, event.clientX, event.clientY);
+      if (!cursorPoint) {
+        event.preventDefault();
+        event.stopPropagation();
+        return;
+      }
+      nextCursorX = cursorPoint.x;
     } else {
       // Relative phase uses the same diagonal 1D policy as sliders: right+up
       // increases, left+down decreases (not horizontal-only).
@@ -2478,6 +2508,11 @@ function dragNodeGraphGraphNode(event) {
       drag.moved = true;
     }
     const pointer = nodeGraphGraphSvgToGraphPoint(drag.svg, event.clientX, event.clientY);
+    if (!pointer) {
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
     const startPointerY = Number.isFinite(Number(drag.barStartPointerY))
       ? Number(drag.barStartPointerY)
       : pointer.y;
@@ -2519,6 +2554,11 @@ function dragNodeGraphGraphNode(event) {
       drag.moved = true;
     }
     const point = nodeGraphGraphSvgToGraphPoint(drag.svg, event.clientX, event.clientY);
+    if (!point) {
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
     const nodes = [...(drag.graph.nodes || [])];
     const current = nodes[drag.index] || normalizeNodeGraphGraphNode({}, drag.index);
     // Handles sit on the stored-c (solid) curve. Global Skew % only moves the ghost.
@@ -2583,6 +2623,11 @@ function dragNodeGraphGraphNode(event) {
     // Absolute under pointer; snap X only in normal (non-Ctrl) step mode.
     // Y is never quantized — free height for a single boundary if needed.
     const absolute = nodeGraphGraphSvgToGraphPoint(drag.svg, event.clientX, event.clientY);
+    if (!absolute) {
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
     let x = absolute.x;
     if (stepSnapMode && stepCount > 0) {
       x = nodeGraphGraphSnapXToStepGrid(x, stepCount);
@@ -2694,7 +2739,10 @@ function endNodeGraphGraphNodeDrag(event) {
         : drag.mode === "contour"
           ? "graph curve changed"
           : "graph node moved";
-    commitNodeGraphPatch(patch, { status });
+    commitNodeGraphPatch(patch, nodeGraphGraphDocumentCommitOptions(status));
+    if (typeof scheduleNodeGraphLiveGraphData === "function") {
+      scheduleNodeGraphLiveGraphData(drag.nodeId, targetNode.graph);
+    }
     const selectedIndex = nodeGraphGraphSelectedNodeIndex(drag.nodeId, targetNode.graph, drag.index ?? 0);
     setNodeGraphGraphSelectedNodeIndex(drag.nodeId, targetNode.graph, selectedIndex);
     syncNodeGraphGraphDisplaysForNode(drag.nodeId, targetNode);
@@ -2737,7 +2785,7 @@ function removeNodeGraphGraphNodeAtIndex(nodeId, index) {
     nodeGraphMvp.graphNodeDragging.display?.classList.remove("dragging");
     nodeGraphMvp.graphNodeDragging = null;
   }
-  commitNodeGraphPatch(patch, { status: "graph node removed" });
+  commitNodeGraphPatch(patch, nodeGraphGraphDocumentCommitOptions("graph node removed"));
   syncNodeGraphGraphDisplaysForNode(nodeId, targetNode);
   syncNodeGraphGraphControls(targetNode.graph, nextIndex);
   return true;
@@ -2788,7 +2836,7 @@ function addFocusedNodeGraphGraphNode() {
   targetNode.graph = nodeGraphGraphEndpointYLockEnabledForNode(targetNode)
     ? nodeGraphGraphWithLockedEndpointY(addition.graph, addition.selectedIndex)
     : addition.graph;
-  commitNodeGraphPatch(patch, { status: "graph node added" });
+  commitNodeGraphPatch(patch, nodeGraphGraphDocumentCommitOptions("graph node added"));
   setNodeGraphGraphSelectedNodeIndex(nodeId, targetNode.graph, addition.selectedIndex);
   syncNodeGraphGraphDisplaysForNode(nodeId, targetNode);
   if (nodeGraphModuleActionTargetNodeId() === nodeId) {
@@ -2819,7 +2867,7 @@ function duplicateFocusedNodeGraphGraphNode() {
   targetNode.graph = nodeGraphGraphEndpointYLockEnabledForNode(targetNode)
     ? nodeGraphGraphWithLockedEndpointY(duplicate.graph, duplicate.selectedIndex)
     : duplicate.graph;
-  commitNodeGraphPatch(patch, { status: "graph node duplicated" });
+  commitNodeGraphPatch(patch, nodeGraphGraphDocumentCommitOptions("graph node duplicated"));
   setNodeGraphGraphSelectedNodeIndex(nodeId, targetNode.graph, duplicate.selectedIndex);
   syncNodeGraphGraphDisplaysForNode(nodeId, targetNode);
   if (nodeGraphModuleActionTargetNodeId() === nodeId) {
@@ -2889,7 +2937,7 @@ function nudgeFocusedNodeGraphGraphNode(event) {
     ? nodeGraphGraphWithLockedEndpointY(graph, index)
     : normalizeNodeGraphGraph(graph);
   setNodeGraphGraphSelectedNodeIndex(nodeId, targetNode.graph, index);
-  commitNodeGraphPatch(patch, { status: "graph node nudged" });
+  commitNodeGraphPatch(patch, nodeGraphGraphDocumentCommitOptions("graph node nudged"));
   syncNodeGraphGraphDisplaysForNode(nodeId, targetNode);
   if (nodeGraphModuleActionTargetNodeId() === nodeId) {
     syncNodeGraphGraphControls(targetNode.graph, index);

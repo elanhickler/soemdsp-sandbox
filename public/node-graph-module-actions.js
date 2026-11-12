@@ -2816,7 +2816,12 @@ function applyNodeGraphGraphPresetFromContext(name) {
   if (typeof syncNodeGraphGraphPhaseParameterFromCursor === "function") {
     syncNodeGraphGraphPhaseParameterFromCursor(targetNode);
   }
-  commitNodeGraphPatch(patch, { status: `graph preset ${String(name || "").trim()}` });
+  commitNodeGraphPatch(patch, typeof nodeGraphGraphDocumentCommitOptions === "function"
+    ? nodeGraphGraphDocumentCommitOptions(`graph preset ${String(name || "").trim()}`)
+    : { skipLivePlan: true, softDom: true, status: `graph preset ${String(name || "").trim()}` });
+  if (typeof scheduleNodeGraphLiveGraphData === "function") {
+    scheduleNodeGraphLiveGraphData(targetNode.id, targetNode.graph);
+  }
   if (typeof syncNodeGraphGraphDisplaysForNode === "function") {
     syncNodeGraphGraphDisplaysForNode(nodeId, targetNode);
   }
@@ -2868,7 +2873,12 @@ function commitNodeGraphGraphEdit(patch, targetNode, status, options = {}) {
         : bestIndex;
     }, 0);
   }
-  commitNodeGraphPatch(patch, { record: options.record ?? true, status });
+  commitNodeGraphPatch(patch, (typeof nodeGraphGraphDocumentCommitOptions === "function"
+    ? nodeGraphGraphDocumentCommitOptions(status, { record: options.record ?? true })
+    : { record: options.record ?? true, skipLivePlan: true, softDom: true, status }));
+  if (typeof scheduleNodeGraphLiveGraphData === "function") {
+    scheduleNodeGraphLiveGraphData(targetNode.id, targetNode.graph);
+  }
   syncNodeGraphGraphControls(targetNode.graph, selectedIndex, {
     nodeId: targetNode.id,
     face: options.face,
