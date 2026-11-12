@@ -107,6 +107,25 @@ function nodeGraphDefaultParamsForType(type) {
   return params;
 }
 
+function nodeGraphIsRgbaOutPort(port) {
+  const name = String(port || "").trim().toLowerCase();
+  return name === "rgba" || name === "rgba out" || name === "rgbaout";
+}
+
+/** Keep RGBA Out last on every module (Additive Generator Graph above RGBA, scripts, etc.). */
+function nodeGraphOrderRgbaOutLast(ports) {
+  if (!Array.isArray(ports) || ports.length < 2) {
+    return ports || [];
+  }
+  const rgba = [];
+  const rest = [];
+  for (let i = 0; i < ports.length; i += 1) {
+    if (nodeGraphIsRgbaOutPort(ports[i])) rgba.push(ports[i]);
+    else rest.push(ports[i]);
+  }
+  return rgba.length ? rest.concat(rgba) : ports;
+}
+
 function nodeGraphModuleOutputPorts(type) {
   const definition = typeof nodeGraphModuleDefinition === "function"
     ? nodeGraphModuleDefinition(type)
@@ -116,11 +135,11 @@ function nodeGraphModuleOutputPorts(type) {
   }
   // List each jack once: outputs OR dataOutputs, never both. codeOutputs only tags styling.
   nodeGraphAssertJackListsDisjoint(definition.outputs, definition.dataOutputs, `${type || "module"} outputs`);
-  return [
+  return nodeGraphOrderRgbaOutLast([
     ...(definition.outputs || []),
     ...(definition.dataOutputs || []),
     ...(definition.parameters || []).map((parameter) => parameter.key),
-  ];
+  ]);
 }
 
 function nodeGraphOrderSeedBeforeAmplitude(parameters) {
@@ -290,19 +309,19 @@ function nodeGraphPatchNodeOutputPorts(node) {
     const params = Array.isArray(patchNode.emoParamOrder) ? patchNode.emoParamOrder : [];
     const ports = outs.concat(params.filter((key) => !outs.includes(key)));
     if (!ports.includes("rgba")) ports.push("rgba");
-    return ports;
+    return nodeGraphOrderRgbaOutLast(ports);
   }
   if (
     typeof nodeGraphIsContainerShellType === "function"
     && nodeGraphIsContainerShellType(patchNode?.type)
     && typeof nodeGraphMetamoduleShellPorts === "function"
   ) {
-    return nodeGraphMetamoduleShellPorts(patchNode).outputs;
+    return nodeGraphOrderRgbaOutLast(nodeGraphMetamoduleShellPorts(patchNode).outputs);
   }
   if (patchNode?.type === "output" || patchNode?.type === "audioInput") {
     return nodeGraphOutputModulePorts(patchNode, "output");
   }
-  return nodeGraphModuleOutputPorts(patchNode?.type);
+  return nodeGraphOrderRgbaOutLast(nodeGraphModuleOutputPorts(patchNode?.type));
 }
 /** Definition `hidden: true` is the default-off visibility, not a permanent skip. */
 function nodeGraphParameterDefaultVisible(parameter) {
