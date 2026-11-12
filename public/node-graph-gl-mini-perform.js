@@ -75,6 +75,13 @@ function nodeGraphGlMiniPerformDisplays(el) {
   return out;
 }
 
+/** A display whose centre lies inside an earlier display of the same module is drawn within it. */
+function nodeGraphGlMiniPerformNested(inner, outer) {
+  const cx = inner.x + inner.w / 2;
+  const cy = inner.y + inner.h / 2;
+  return inner !== outer && cx > outer.x && cx < outer.x + outer.w && cy > outer.y && cy < outer.y + outer.h;
+}
+
 /** Vertical bands of a whole module to show: the In/Out band is cropped out (F hides it). */
 function nodeGraphGlMiniPerformBands(el, nat) {
   const io = el.classList.contains("io-hidden") ? null : el.querySelector(":scope > .dsp-node-io-section");
@@ -485,9 +492,10 @@ function nodeGraphGlMiniPerformPresent() {
     // workspace picture (no second paint in the circuit builder), so it is
     // contain-fitted into F's slot: one uniform scale, centred, never stretched.
     const box = nodeGraphCanvasDisplayBox(tile.w, tile.h, nodeGraphDisplayAspect(patchNode?.type));
-    const sliceH = box.h / displays.length;
-    for (let k = 0; k < displays.length; k += 1) {
-      const d = displays[k];
+    const slots = displays.filter((d, k) => !displays.some((outer, j) => j < k && nodeGraphGlMiniPerformNested(d, outer)));
+    const sliceH = box.h / slots.length;
+    for (let k = 0; k < slots.length; k += 1) {
+      const d = slots[k];
       const fit = nodeGraphCanvasDisplayBox(box.w, sliceH, d.w / d.h);
       const w = fit.w;
       const h = fit.h;
@@ -511,6 +519,22 @@ function nodeGraphGlMiniPerformPresent() {
       });
       // Frame and face text are workspace-pass ink, not in the picture.
       if (typeof nodeGraphGlGraphDrawDisplayInk === "function") nodeGraphGlGraphDrawDisplayInk(batch, d.canvas, x, y, w, h);
+      // Displays inside this one (Music Player: waveform / Stereo over the
+      // face picture) keep their place in it, at the same scale.
+      const s = w / d.w;
+      for (let n = displays.indexOf(d) + 1; n < displays.length; n += 1) {
+        const inner = displays[n];
+        if (!nodeGraphGlMiniPerformNested(inner, d)) continue;
+        const ix = x + (inner.x - d.x) * s;
+        const iy = y + (inner.y - d.y) * s;
+        const iw = inner.w * s;
+        const ih = inner.h * s;
+        nodeGraphGlLinesImage(batch, inner.canvas, ix, iy, iw, ih, {
+          nearest: nodeGraphGlGraphFaceNearest(inner.canvas, iw / inner.canvas.width > 2.5),
+          alpha: 1,
+        });
+        if (typeof nodeGraphGlGraphDrawDisplayInk === "function") nodeGraphGlGraphDrawDisplayInk(batch, inner.canvas, ix, iy, iw, ih);
+      }
     }
   }
   if (settings.mode === "arrange") nodeGraphGlMiniPerformArrangeChrome(batch, tiles, cssW, cssH, frame);

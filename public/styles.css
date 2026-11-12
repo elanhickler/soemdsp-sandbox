@@ -1961,7 +1961,6 @@ button.scw-label:hover,
   background: transparent;
   color: var(--sample-waveform-hud-color);
   font: var(--sample-waveform-hud-font-sm);
-  /* font-size: per button, set by nodeGraphAudioPlayerFitLabel (fills the box). */
   text-overflow: clip;
   /* A unit line-height clips the lowercase p descender at small sizes. */
   line-height: 1.2;
@@ -1982,6 +1981,19 @@ button.scw-label:hover,
   min-width: 0;
   min-height: 0;
   display: block;
+}
+/* The Music Player face picture (tabs, playlist, transport, now playing,
+   Playinfo) is its face texture (audio-player-face-gl.js), with the waveform
+   and Stereo faces over it. The pages and the tab bar are the hit layer only. */
+.node-music-player-face-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+.node-sample-waveform-display[data-node-type="audioPlayer"] > .node-music-player-page,
+.node-sample-waveform-display[data-node-type="audioPlayer"] > .node-music-player-page-bar {
+  opacity: 0 !important;
 }
 .node-music-player-pl-transport {
   flex: 0 0 var(--node-music-player-pl-row-height, 1.35rem);
@@ -2010,7 +2022,6 @@ button.scw-label:hover,
   background: transparent;
   color: var(--sample-waveform-hud-color);
   font: var(--sample-waveform-hud-font);
-  /* font-size: per button, set by nodeGraphAudioPlayerFitLabel (fills the box). */
   line-height: 1;
   white-space: nowrap;
   overflow: hidden;

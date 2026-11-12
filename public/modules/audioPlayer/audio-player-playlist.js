@@ -1430,7 +1430,9 @@ function nodeGraphAudioPlayerPlaylistEnsureLayout(section, nodeId) {
     }
   }
   nodeGraphAudioPlayerPlaylistEnsureFaceBar(section, nodeId);
-  nodeGraphAudioPlayerFitSectionLabels(section);
+  if (typeof nodeGraphAudioPlayerFaceGlInstall === "function") {
+    nodeGraphAudioPlayerFaceGlInstall(section);
+  }
   if (typeof nodeGraphSampleWaveformEnsureZoomControl === "function") {
     nodeGraphSampleWaveformEnsureZoomControl(section);
   }
@@ -1458,7 +1460,6 @@ function nodeGraphAudioPlayerPlaylistApplyFace(nodeId) {
     btn.setAttribute("aria-pressed", on ? "true" : "false");
   }
   nodeGraphAudioPlayerPlaylistSyncNowSong(nodeId);
-  nodeGraphAudioPlayerFitSectionLabels(section);
   if (nodeGraphAudioPlayerFaceShowsPlaylist(face)) {
     nodeGraphAudioPlayerPlaylistRefreshUi(nodeId);
     nodeGraphAudioPlayerPlaylistStopScrubLoop(nodeId);
@@ -3069,114 +3070,4 @@ function nodeGraphAudioPlayerPlaylistBindWaveSeek(section, nodeId) {
   section.addEventListener("pointerup", end, true);
   section.addEventListener("pointercancel", end, true);
   section.addEventListener("lostpointercapture", end, true);
-}
-
-/**
- * Music Player button labels (transport glyphs, page tabs) fill their own button:
- * the largest font whose text fits the button box with a ~9% inner margin, per
- * button. Sizes come from offsetWidth/offsetHeight, i.e. zoom-1 layout px, so the
- * workspace zoom and the canvas whole-module scale only scale them uniformly.
- * Re-fit when a button's layout box or its label changes.
- */
-const NODE_GRAPH_AUDIO_PLAYER_LABEL_SELECTOR = ".node-music-player-pl-transport-btn, .node-music-player-page-btn";
-const NODE_GRAPH_AUDIO_PLAYER_LABEL_FILL = 0.82; // 1 - 2 x 9% margin
-// Page-button row (wave/waveplay/playlist/playinfo/Stereo): ONE fixed zoom-1 size for
-// every label; a label too wide for its box tightens letter-spacing (never the size).
-const NODE_GRAPH_AUDIO_PLAYER_PAGE_LABEL_PX = 11.5;
-const NODE_GRAPH_AUDIO_PLAYER_PAGE_LABEL_FILL = 0.94;
-let nodeGraphAudioPlayerLabelResize = null;
-let nodeGraphAudioPlayerLabelMutate = null;
-
-function nodeGraphAudioPlayerFitLabel(btn) {
-  if (!(btn instanceof HTMLElement)) {
-    return;
-  }
-  const w = btn.clientWidth;
-  const h = btn.clientHeight;
-  const text = String(btn.textContent || "").trim();
-  if (!(w > 0 && h > 0) || !text) {
-    return;
-  }
-  const cs = window.getComputedStyle(btn);
-  // Same ink-box approach as the canvas labels (paint-helpers / number readout):
-  // size and center on measureText actualBoundingBox*, not on line metrics, so
-  // glyphs like ▶ ⏹ ⏸ 🔁 🔀 sit in the middle of their button.
-  const U = 100;
-  const m = nodeGraphGlLinesMeasureInk(text, `${cs.fontStyle} ${cs.fontWeight} ${U}px ${cs.fontFamily}`);
-  if (!m) {
-    return;
-  }
-  const num = (v, fb) => (Number.isFinite(Number(v)) ? Number(v) : fb);
-  const inkL = num(m.actualBoundingBoxLeft, 0);
-  const inkR = num(m.actualBoundingBoxRight, m.width);
-  const inkA = num(m.actualBoundingBoxAscent, U * 0.8);
-  const inkD = num(m.actualBoundingBoxDescent, U * 0.2);
-  const fontA = num(m.fontBoundingBoxAscent, inkA);
-  const fontD = num(m.fontBoundingBoxDescent, inkD);
-  const inkW = Math.max(1, inkL + inkR);
-  const inkH = Math.max(1, inkA + inkD);
-  const byWidth = (w * NODE_GRAPH_AUDIO_PLAYER_LABEL_FILL * U) / Math.max(inkW, m.width * 0.98);
-  const byInkH = (h * NODE_GRAPH_AUDIO_PLAYER_LABEL_FILL * U) / inkH;
-  const isPage = btn.classList.contains("node-music-player-page-btn");
-  const px = isPage
-    ? NODE_GRAPH_AUDIO_PLAYER_PAGE_LABEL_PX
-    : Math.max(4, Math.floor(Math.min(byWidth, byInkH) * 10) / 10);
-  const k = px / U;
-  let ls = 0; // px letter-spacing (page row only)
-  if (isPage) {
-    const gaps = Math.max(1, Array.from(text).length);
-    const over = Math.max(inkW, m.width) * k - w * NODE_GRAPH_AUDIO_PLAYER_PAGE_LABEL_FILL;
-    if (over > 0) ls = -Math.min(over / gaps, px * 0.12);
-  }
-  // line-height = the button height, so the content area is centered in it. Shift
-  // by the gap between the content-area center and the ink center (and same in x).
-  const dy = ((fontA - fontD) - (inkA - inkD)) / 2 * k; // + = ink sits low
-  // trailing letter-spacing after the last glyph shifts the ink left by ls/2
-  const dx = ((inkR - inkL) / 2 - m.width / 2) * k + ls / 2; // + = ink sits right
-  const key = `${px}|${ls.toFixed(2)}|${dx.toFixed(2)}|${dy.toFixed(2)}|${h}`;
-  // A canvas re-open restores the face's saved inline styles, so trust the style too.
-  if (btn.dataset.labelFit === key && btn.style.fontSize === `${px}px`) {
-    return;
-  }
-  btn.dataset.labelFit = key;
-  const st = btn.style;
-  st.setProperty("font-size", `${px}px`, "important");
-  st.setProperty("letter-spacing", `${ls.toFixed(2)}px`, "important");
-  st.setProperty("line-height", `${Math.max(1, h - Math.abs(dy) * 2).toFixed(2)}px`, "important");
-  st.setProperty("padding-top", `${Math.max(0, -dy * 2).toFixed(2)}px`, "important");
-  st.setProperty("padding-bottom", `${Math.max(0, dy * 2).toFixed(2)}px`, "important");
-  st.setProperty("padding-left", `${Math.max(0, -dx * 2).toFixed(2)}px`, "important");
-  st.setProperty("padding-right", `${Math.max(0, dx * 2).toFixed(2)}px`, "important");
-}
-
-function nodeGraphAudioPlayerFitSectionLabels(section) {
-  if (!(section instanceof Element)) {
-    return;
-  }
-  if (!nodeGraphAudioPlayerLabelResize && typeof ResizeObserver === "function") {
-    nodeGraphAudioPlayerLabelResize = new ResizeObserver((entries) => {
-      for (const entry of entries) nodeGraphAudioPlayerFitLabel(entry.target);
-    });
-  }
-  if (!nodeGraphAudioPlayerLabelMutate && typeof MutationObserver === "function") {
-    nodeGraphAudioPlayerLabelMutate = new MutationObserver((records) => {
-      const seen = new Set();
-      for (const record of records) {
-        const btn = (record.target.nodeType === 1 ? record.target : record.target.parentElement)
-          ?.closest?.(NODE_GRAPH_AUDIO_PLAYER_LABEL_SELECTOR);
-        if (btn && !seen.has(btn)) {
-          seen.add(btn);
-          nodeGraphAudioPlayerFitLabel(btn);
-        }
-      }
-    });
-  }
-  for (const btn of section.querySelectorAll(NODE_GRAPH_AUDIO_PLAYER_LABEL_SELECTOR)) {
-    if (!btn._labelFitWatched) {
-      btn._labelFitWatched = true;
-      nodeGraphAudioPlayerLabelResize?.observe(btn);
-      nodeGraphAudioPlayerLabelMutate?.observe(btn, { childList: true, characterData: true, subtree: true });
-    }
-    nodeGraphAudioPlayerFitLabel(btn);
-  }
 }
