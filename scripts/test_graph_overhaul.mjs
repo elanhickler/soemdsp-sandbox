@@ -309,4 +309,38 @@ assert(nodeGraphSegmentApplySkewPercent(0.2, 1.5) === nodeGraphSegmentApplySkewP
   assert(extrasNull === null, "face-extras 0-size plot returns null, not (0,0) default");
 }
 
+// Contour / Skew control taper (UI only): stored c is unchanged, travel warps.
+{
+  const sliderPath = path.join(root, "public", "node-graph-slider-values.js");
+  const sCtx = {
+    console,
+    nodeGraphFiniteNumber: (v, f = 0) => (Number.isFinite(Number(v)) ? Number(v) : f),
+  };
+  vm.createContext(sCtx);
+  vm.runInContext(fs.readFileSync(sliderPath, "utf8"), sCtx, { filename: "node-graph-slider-values.js" });
+  const taper = sCtx.nodeGraphContourFromTaper;
+  const untaper = sCtx.nodeGraphTaperFromContour;
+  assert(vm.runInContext("NODE_GRAPH_CONTOUR_TAPER_POWER", sCtx) === 2.5, "taper power 2.5");
+  assert(taper(0) === 0 && taper(1) === 1 && taper(-1) === -1, "taper keeps 0 and +-1");
+  assert(Math.abs(taper(0.6) - 0.9) < 0.005 && Math.abs(taper(-0.6) + 0.9) < 0.005, "u 0.6 -> c ~0.9");
+  assert(Math.abs(taper(0.84) - 0.99) < 0.002, "u 0.84 -> c ~0.99");
+  for (let u = -1; u <= 1.0001; u += 0.05) {
+    assert(almost(untaper(taper(u)), u, 1e-9), `inverse(taper(${u})) recovers u`);
+  }
+  const skewSlider = { min: "-1", max: "1", dataset: { param: "skewOffset", step: "0.01" } };
+  const otherSlider = { min: "-1", max: "1", dataset: { param: "inputMin", step: "0.01", sliderCurve: "linear" } };
+  assert(sCtx.nodeSliderUsesContourTaper(skewSlider) && !sCtx.nodeSliderUsesContourTaper(otherSlider), "taper scoped to Skew %");
+  assert(almost(sCtx.nodeSliderTravelFromValue(skewSlider, 0), 0.5), "c 0 sits at center");
+  assert(almost(sCtx.nodeSliderValueFromTravel(skewSlider, 1), 1) && almost(sCtx.nodeSliderValueFromTravel(skewSlider, 0), -1), "ends stay +-1");
+  const t90 = sCtx.nodeSliderTravelFromValue(skewSlider, 0.9);
+  const t99 = sCtx.nodeSliderTravelFromValue(skewSlider, 0.99);
+  assert(t99 - t90 > 0.1, "0.9..0.99 gets >10% of the throw (linear: 4.5%)");
+  assert(almost(sCtx.nodeSliderValueFromTravel(skewSlider, t90), 0.9, 1e-9), "stored c round-trips (thumb only warps)");
+  assert(almost(sCtx.nodeSliderValueFromPointerTravel(skewSlider, t90), 0.9, 1e-9), "pointer travel uses the taper");
+  const q = sCtx.quantizeNodeSliderDragValue(skewSlider, 0.95);
+  assert(Math.abs(q - 0.95) < 0.005 && q !== 0.95, "drag snap is in taper space (fine near ends)");
+  assert(sCtx.quantizeNodeSliderDragValue(skewSlider, 0) === 0, "snap keeps 0");
+  assert(almost(sCtx.quantizeNodeSliderDragValue(skewSlider, 1), 1), "snap keeps +1");
+}
+
 console.log("test_graph_overhaul: ok");

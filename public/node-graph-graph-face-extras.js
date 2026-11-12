@@ -524,6 +524,11 @@ function bindNodeGraphGraphPointStrip(strip) {
   }
   strip.dataset.bound = "true";
   strip.addEventListener("keydown", (event) => {
+    if ((event.key === "ArrowUp" || event.key === "ArrowDown") && event.target?.dataset?.graphStripField === "c") {
+      event.preventDefault();
+      nudgeNodeGraphGraphPointStripContour(event.target, event.key === "ArrowUp" ? 1 : -1, event);
+      return;
+    }
     if (event.key === "Enter") {
       event.preventDefault();
       commitNodeGraphGraphPointStripField(event.target);
@@ -536,6 +541,17 @@ function bindNodeGraphGraphPointStrip(strip) {
   strip.addEventListener("pointerdown", (event) => {
     event.stopPropagation();
   });
+}
+
+// Skew (c) arrow nudges step in the shared contour taper (same as Skew %),
+// so equal presses stay usable near +-0.9..0.99. The field shows stored c.
+// Shift / Ctrl = fine (nodeGraphNumericDragMultiplier).
+function nudgeNodeGraphGraphPointStripContour(input, direction, event) {
+  const current = Number(input.value);
+  const scale = typeof nodeGraphNumericDragMultiplier === "function" ? nodeGraphNumericDragMultiplier(event) : 1;
+  const u = nodeGraphTaperFromContour(Number.isFinite(current) ? current : 0) + direction * 0.01 * scale;
+  input.value = String(Number(nodeGraphContourFromTaper(u).toFixed(6)));
+  commitNodeGraphGraphPointStripField(input);
 }
 
 function nodeGraphGraphPointStripOwnerFromStrip(strip) {

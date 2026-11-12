@@ -1093,7 +1093,10 @@ function stepNodeSliderFromKeyboard(event) {
   } else if (event.key === "End") {
     nextValue = max;
   } else if (Object.hasOwn(keySteps, event.key)) {
-    nextValue = current + keySteps[event.key] * nodeSliderKeyboardStep(slider, event);
+    const delta = keySteps[event.key] * nodeSliderKeyboardStep(slider, event);
+    nextValue = nodeSliderUsesContourTaper(slider)
+      ? nodeSliderValueFromTravel(slider, nodeSliderTravelFromValue(slider, current) + delta / (max - min))
+      : current + delta;
   } else {
     return false;
   }

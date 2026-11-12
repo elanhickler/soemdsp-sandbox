@@ -690,6 +690,47 @@ function nodeSliderBipolarRationalTravelFromValue(value, amount) {
   return 0.5 + 0.5 * Math.sign(signed) * mapped;
 }
 
+// Contour / Skew control taper (UI only). Stored contour c is the kernel
+// value and is never rewritten; only control travel u (-1..+1) is warped so
+// more of the throw covers |c| 0.9..0.99, where sharp Rational curves live.
+//   c = sign(u) * (1 - (1 - |u|)^p)      |u| = 1 - (1 - |c|)^(1/p)
+// p = 2.5: u 0.6 -> c ~0.9, u 0.84 -> c ~0.99; 0 and +-1 stay fixed.
+const NODE_GRAPH_CONTOUR_TAPER_POWER = 2.5;
+
+function nodeGraphContourFromTaper(u) {
+  const x = clampNodeSliderValue(nodeGraphFiniteNumber(u), -1, 1);
+  return Math.sign(x) * (1 - (1 - Math.abs(x)) ** NODE_GRAPH_CONTOUR_TAPER_POWER);
+}
+
+function nodeGraphTaperFromContour(c) {
+  const x = clampNodeSliderValue(nodeGraphFiniteNumber(c), -1, 1);
+  return Math.sign(x) * (1 - (1 - Math.abs(x)) ** (1 / NODE_GRAPH_CONTOUR_TAPER_POWER));
+}
+
+/** Step Graph Skew % (contour offset, -1..+1) uses the contour taper. */
+function nodeSliderUsesContourTaper(slider) {
+  const key = String(slider?.dataset?.param || "");
+  return key === "skewOffset" || key === "curveOffset";
+}
+
+/** Travel 0..1 -> domain on a contour-taper slider (reverse honored). */
+function nodeSliderContourValueFromTravel(slider, travel) {
+  const min = Number(slider.min);
+  const max = Number(slider.max);
+  let t = clampNodeSliderValue(nodeGraphFiniteNumber(travel), 0, 1);
+  if (slider?.dataset?.reverse === "true") t = 1 - t;
+  return min + (max - min) * (nodeGraphContourFromTaper(t * 2 - 1) + 1) * 0.5;
+}
+
+/** Domain -> travel 0..1 on a contour-taper slider. */
+function nodeSliderContourTravelFromValue(slider, value) {
+  const min = Number(slider.min);
+  const max = Number(slider.max);
+  const c = ((nodeGraphFiniteNumber(value) - min) / (max - min)) * 2 - 1;
+  const t = (nodeGraphTaperFromContour(c) + 1) * 0.5;
+  return slider?.dataset?.reverse === "true" ? 1 - t : t;
+}
+
 function nodeSliderCurveValueFromTravel(slider, travel) {
   const normalizedTravel = normalizeNodeSliderTravel(slider, travel);
   const curve = nodeSliderCurve(slider);
@@ -755,6 +796,9 @@ function nodeSliderValueFromTravel(slider, travel) {
     return min;
   }
 
+  if (nodeSliderUsesContourTaper(slider)) {
+    return nodeSliderContourValueFromTravel(slider, travel);
+  }
   if (typeof nodeGraphParamDomainFromControlPosition === "function") {
     return nodeGraphParamDomainFromControlPosition(travel, nodeSliderMetadata(slider));
   }
@@ -767,6 +811,9 @@ function nodeSliderValueFromPointerTravel(slider, travel) {
   const range = max - min;
   if (!Number.isFinite(range) || range <= 0) {
     return min;
+  }
+  if (nodeSliderUsesContourTaper(slider)) {
+    return nodeSliderContourValueFromTravel(slider, travel);
   }
   if (typeof nodeGraphParamDomainFromControlPosition === "function") {
     return nodeGraphParamDomainFromControlPosition(travel, nodeSliderMetadata(slider));
@@ -794,6 +841,9 @@ function nodeSliderTravelFromValue(slider, value) {
     return 0;
   }
 
+  if (nodeSliderUsesContourTaper(slider)) {
+    return nodeSliderContourTravelFromValue(slider, value);
+  }
   if (typeof nodeGraphParamControlPosition === "function") {
     return nodeGraphParamControlPosition(value, nodeSliderMetadata(slider));
   }
@@ -1114,6 +1164,12 @@ function quantizeNodeSliderDragValue(slider, value) {
   }
 
   const min = Number(slider.min);
+  if (nodeSliderUsesContourTaper(slider)) {
+    // Snap in taper space so steps stay fine near +-1.
+    const travelStep = step / (Number(slider.max) - min);
+    const t = nodeSliderContourTravelFromValue(slider, value);
+    return nodeSliderContourValueFromTravel(slider, Math.round(t / travelStep) * travelStep);
+  }
   const origin = Number.isFinite(min) ? min : 0;
   return origin + Math.round((value - origin) / step) * step;
 }
