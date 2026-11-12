@@ -181,13 +181,28 @@
       if (typeof beginNodeSliderReadoutEdit === "function") beginNodeSliderReadoutEdit(readout);
       return;
     }
-    drag = { slider, readout, x: e.clientX, y: e.clientY, acc: 0, moved: false, pointerId: e.pointerId };
+    const touchKey = touch ? `seed:${slider.id || "seed"}` : "";
+    drag = { slider, readout, x: e.clientX, y: e.clientY, acc: 0, moved: false, pointerId: e.pointerId, touchKey };
     try { readout.setPointerCapture(e.pointerId); } catch (_) { /* ignore */ }
     readout.classList.add("value-dragging");
+    // Usual phone path: long hold opens type-in (double-tap already does too).
+    if (touchKey && typeof nodeGraphTouchGestureArmHold === "function") {
+      nodeGraphTouchGestureArmHold(touchKey, e, () => {
+        const d = drag;
+        if (!d || d.moved || d.pointerId !== e.pointerId) return;
+        drag = null;
+        d.readout.classList.remove("value-dragging");
+        try { d.readout.releasePointerCapture(d.pointerId); } catch (_) { /* ignore */ }
+        if (typeof beginNodeSliderReadoutEdit === "function") beginNodeSliderReadoutEdit(d.readout);
+      });
+    }
   }
   function onPointerMove(e) {
     if (!drag || e.pointerId !== drag.pointerId) return;
     e.stopImmediatePropagation();
+    if (drag.touchKey && typeof nodeGraphTouchGestureMove === "function") {
+      nodeGraphTouchGestureMove(drag.touchKey, e);
+    }
     drag.acc += (e.clientX - drag.x) - (e.clientY - drag.y);
     drag.x = e.clientX;
     drag.y = e.clientY;

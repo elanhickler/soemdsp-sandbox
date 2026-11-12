@@ -121,7 +121,9 @@ function beginNodeSliderFaceValueEdit(surface) {
   const input = document.createElement("input");
   input.type = "text";
   input.className = "node-slider-readout-input node-knob-face-value-input";
-  input.inputMode = "decimal";
+  // Seed codes are text (fuckmoth, P6nC). A decimal keypad on the phone
+  // cannot type them.
+  input.inputMode = slider.dataset?.kind === "seed" ? "text" : "decimal";
   input.autocomplete = "off";
   input.spellcheck = false;
   const domainRaw = Number(slider.dataset?.domainValue);

@@ -723,6 +723,26 @@ function beginNodeGraphModuleFaceGesture(article, face, spec, event) {
   const p = nodeGraphModuleFaceLocalPoint(face, event);
   const wd = nodeGraphModuleFaceWidgetAt(spec, face, p.x, p.y);
   if (!wd) return;
+  // Seed codes are text (e.g. fuckmoth). Open type-in on mouse double-click
+  // or touch double-tap before preventDefault so a phone keyboard can appear.
+  if (wd.type === "seedNumber") {
+    const touch = typeof nodeGraphTouchGestureIsTouch === "function" && nodeGraphTouchGestureIsTouch(event);
+    const openSeedTypeIn = () => {
+      event.stopPropagation();
+      beginNodeGraphModuleFaceValueEdit(article, face, wd, p);
+    };
+    if (!touch && nodeGraphModuleFaceDoubleClick(face, wd, event)) {
+      openSeedTypeIn();
+      return;
+    }
+    if (touch && typeof nodeGraphTouchGestureDown === "function") {
+      const touchKey = `face-seed:${article?.dataset?.node || ""}:${wd.param || "seed"}`;
+      if (nodeGraphTouchGestureDown(touchKey, event).doubleTap) {
+        openSeedTypeIn();
+        return;
+      }
+    }
+  }
   event.preventDefault();
   event.stopPropagation();
   // Armed wire: the face control is the patch point, same as a slider row.
@@ -752,7 +772,7 @@ function beginNodeGraphModuleFaceGesture(article, face, spec, event) {
   }
   // Binary Off/On column cells: every click/tap toggles. Do not open the
   // type-in editor on double-click or double-tap, and do not select text.
-  if (!nodeGraphModuleFaceIsBinaryToggleCell(wd, input) && nodeGraphModuleFaceDoubleClick(face, wd, event)) {
+  if (wd.type !== "seedNumber" && !nodeGraphModuleFaceIsBinaryToggleCell(wd, input) && nodeGraphModuleFaceDoubleClick(face, wd, event)) {
     beginNodeGraphModuleFaceValueEdit(article, face, wd, p);
     return;
   }
@@ -801,8 +821,25 @@ function beginNodeGraphModuleFaceGesture(article, face, spec, event) {
     const x0 = event.clientX;
     const y0 = event.clientY;
     if (!input || typeof nodeGraphSeedDragValue !== "function") return;
-    nodeGraphModuleFaceCapture(face, event, (ev, drag) => setNodeGraphModuleFaceValue(input,
-      nodeGraphSeedDragValue(input, v0, (ev.clientX - x0) * p.sx, (ev.clientY - y0) * p.sy), drag));
+    const touch = typeof nodeGraphTouchGestureIsTouch === "function" && nodeGraphTouchGestureIsTouch(event);
+    const touchKey = `face-seed:${article?.dataset?.node || ""}:${wd.param || "seed"}`;
+    let seedTypeInOpen = false;
+    if (touch && typeof nodeGraphTouchGestureArmHold === "function") {
+      // Usual phone path: a long hold opens the text seed editor.
+      nodeGraphTouchGestureArmHold(touchKey, event, () => {
+        seedTypeInOpen = true;
+        try { face.releasePointerCapture?.(event.pointerId); } catch (_error) { /* ignore */ }
+        beginNodeGraphModuleFaceValueEdit(article, face, wd, p);
+      });
+    }
+    nodeGraphModuleFaceCapture(face, event, (ev, drag) => {
+      if (seedTypeInOpen) return;
+      if (touch && typeof nodeGraphTouchGestureMove === "function") {
+        nodeGraphTouchGestureMove(touchKey, ev);
+      }
+      setNodeGraphModuleFaceValue(input,
+        nodeGraphSeedDragValue(input, v0, (ev.clientX - x0) * p.sx, (ev.clientY - y0) * p.sy), drag);
+    });
     return;
   }
   // Drag travel scaled per move by the shared fine/coarse law (nodeGraphNumericDragMultiplier).
@@ -957,9 +994,10 @@ function nodeGraphModuleFaceDoubleClick(face, wd, event) {
   return hit;
 }
 
-/** Widgets with a typed value (choices, seeds and buttons have none). */
+/** Widgets with a typed value (choice / seed buttons have none). Seed number accepts a text code. */
 function nodeGraphModuleFaceTypesValue(wd) {
-  return wd.type === "cell" || wd.type === "step" || wd.type === "band" || wd.type === "span" || wd.type === "filter";
+  return wd.type === "cell" || wd.type === "step" || wd.type === "band" || wd.type === "span"
+    || wd.type === "filter" || wd.type === "seedNumber";
 }
 
 /** Inline type-in over the widget part under the pointer (the old slider face editor). */
