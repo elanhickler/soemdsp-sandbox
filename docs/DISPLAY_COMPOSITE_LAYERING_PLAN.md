@@ -115,7 +115,13 @@ Until the toolbar exists, Arrange z-order remains `patch.nodes` order.
 - Fixed: a tile drag used to write its CSS z-index (100 + z) back as `z`, quietly raising the dragged tile.
 - Smoke: `scripts/smoke_canvas_arrange_layers.mjs`.
 
-Still to do from this section: blend modes on the same list; workspace (circuit builder) module z-order (still `patch.nodes`); right-click in the workspace Arrange view if that is wanted beyond the Canvas.
+**Landed 2026-11-12 (Canvas Arrange, tile blend):**
+- The layer bar has a Blend group: Normal / Add / Screen / Multiply / Lighten, for the same target tile (the pressed button shows the current one; all disabled until a tile is selected). `nodeGraphLayoutCanvasSetBlend` is the one writer: it sets the Canvas pin `blend` (saved with the patch; Normal is no field). `SoemMath.normalizeCanvasTileRect` carries `blend` next to `z`, so every reader of the pin (tiles, Metamodule canvas tiles, patch normalize, Mini Canvas) gets it the same way it gets `z`.
+- Canvas tiles: CSS `mix-blend-mode` on the tile (Add = `plus-lighter`), blending with the tiles behind it and the black stage. The tile's own pictures (face-host GL canvas, whole-module tile canvas) are unchanged, so live zoom, tile size and WebGL-only faces are unaffected.
+- Mini Canvas: display quads use the same blend as a per-image GL blend in `nodeGraphGlLinesImage` (`blend` option; screen = ONE_MINUS_DST_COLOR/ONE, multiply = DST_COLOR/ONE_MINUS_SRC_ALPHA, lighten = MAX); whole-module and keyboard hosts get the CSS blend. In Mini Canvas, module hosts still sit above all display quads, as before.
+- Smoke: `scripts/smoke_canvas_arrange_layers.mjs` (blend section).
+
+Still to do from this section: workspace (circuit builder) module z-order (still `patch.nodes`); right-click in the workspace Arrange view if that is wanted beyond the Canvas; blend for workspace modules (not Canvas tiles).
 
 ## 5. Stages
 

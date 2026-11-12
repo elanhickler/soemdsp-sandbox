@@ -224,6 +224,7 @@ function nodeGraphGlMiniPerformKeyboardTile(view, tile, el, frame, order, batch 
     sourceBox.w * scale,
     sourceBox.h * scale,
     order,
+    tile.blend,
   );
   host.style.setProperty("--node-mini-perform-keyboard-scale", String(scale));
   if (nodeGraphGlMiniPerformIsPianoSurface(source)) {
@@ -254,13 +255,15 @@ function nodeGraphGlMiniPerformKeyboardTile(view, tile, el, frame, order, batch 
   return true;
 }
 
-function nodeGraphGlMiniPerformPlaceHost(host, x, y, w, h, z) {
+function nodeGraphGlMiniPerformPlaceHost(host, x, y, w, h, z, blend) {
   const st = host.style;
   st.left = `${x}px`;
   st.top = `${y}px`;
   st.width = `${Math.max(1, w)}px`;
   st.height = `${Math.max(1, h)}px`;
   st.zIndex = String(2 + z);
+  // Same blend as the Canvas tile (the view is the stacking context).
+  nodeGraphCanvasTileApplyBlend(host, blend);
 }
 
 /** Whole module (or Text Box / plate-only) tile through the module pass. */
@@ -279,7 +282,7 @@ function nodeGraphGlMiniPerformModuleTile(view, tile, el, frame, order) {
     const h = (band.y1 - band.y0) * scale;
     const host = nodeGraphGlMiniPerformModuleHost(view, `${tile.nodeId}:${i}`);
     const hx = tile.x + fit.ox * frame.s;
-    nodeGraphGlMiniPerformPlaceHost(host, hx, y, nat.w * scale, h, order);
+    nodeGraphGlMiniPerformPlaceHost(host, hx, y, nat.w * scale, h, order, tile.blend);
     nodeGraphGlMiniPerformPresentModule(host, el, tile.nodeId, scale, band.y0);
     view._miniMaps?.push({
       nodeId: tile.nodeId,
@@ -516,6 +519,7 @@ function nodeGraphGlMiniPerformPresent() {
         // pixels, unless the face pins its filter.
         nearest: nodeGraphGlGraphFaceNearest(d.canvas, w / d.canvas.width > 2.5),
         alpha: 1,
+        blend: tile.blend,
       });
       // Frame and face text are workspace-pass ink, not in the picture.
       if (typeof nodeGraphGlGraphDrawDisplayInk === "function") nodeGraphGlGraphDrawDisplayInk(batch, d.canvas, x, y, w, h);
@@ -532,6 +536,7 @@ function nodeGraphGlMiniPerformPresent() {
         nodeGraphGlLinesImage(batch, inner.canvas, ix, iy, iw, ih, {
           nearest: nodeGraphGlGraphFaceNearest(inner.canvas, iw / inner.canvas.width > 2.5),
           alpha: 1,
+          blend: tile.blend,
         });
         if (typeof nodeGraphGlGraphDrawDisplayInk === "function") nodeGraphGlGraphDrawDisplayInk(batch, inner.canvas, ix, iy, iw, ih);
       }

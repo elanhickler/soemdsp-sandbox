@@ -13178,6 +13178,20 @@ html.soemdsp-whole-module .node-layout-canvas-arrange-bar {
   cursor: default;
 }
 
+/* Blend buttons: one group so it wraps as a row on a phone. */
+.node-layout-canvas-arrange-blend {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 6px;
+}
+
+.node-layout-canvas-arrange-bar button[aria-pressed="true"] {
+  background: rgba(0, 208, 255, 0.85);
+  color: #000;
+}
+
 /* Display Settings stays above the Canvas stage (Arrange right-click opens it there). */
 body.node-layout-canvas-active #nodeTraceDisplaySettingsPopover:not([hidden]) {
   z-index: 200080 !important;

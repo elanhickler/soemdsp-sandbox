@@ -361,6 +361,7 @@ function nodeGraphMiniPerformTiles(frame = nodeGraphMiniPerformFrame()) {
       refW: px.w,
       refH: px.h,
       z: px.z,
+      blend: px.rect.blend || "normal",
     });
   }
   return tiles;

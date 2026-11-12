@@ -342,6 +342,38 @@ function nodeGraphLayoutCanvasArrangeTargetId() {
   return ids.length ? ids[ids.length - 1] : "";
 }
 
+/**
+ * Arrange blend: how a Canvas tile composites over the tiles behind it. The
+ * one writer of the pin's `blend` (saved with the patch; "normal" = no field).
+ */
+function nodeGraphLayoutCanvasSetBlend(nodeId, blend, options = {}) {
+  const id = String(nodeId || "").trim();
+  const patch = options.patch || nodeGraphMvp?.patch;
+  const el = id && patch ? nodeGraphLayoutCanvasElementForNode(id, patch) : null;
+  if (!el) {
+    return false;
+  }
+  const next = SoemMath.normalizeCanvasTileBlend(blend);
+  if (SoemMath.normalizeCanvasTileBlend(el.blend) === next) {
+    return false;
+  }
+  if (next === "normal") {
+    delete el.blend;
+  } else {
+    el.blend = next;
+  }
+  if (options.persist !== false && typeof markNodeGraphPatchDirty === "function") {
+    markNodeGraphPatchDirty();
+  }
+  nodeGraphLayoutCanvasReapplyTileRects();
+  nodeGraphLayoutCanvasSyncArrangeBar();
+  if (typeof nodeGraphMiniPerformShown === "function" && nodeGraphMiniPerformShown()
+    && typeof nodeGraphGlMiniPerformPresent === "function") {
+    nodeGraphGlMiniPerformPresent();
+  }
+  return true;
+}
+
 const NODE_GRAPH_LAYOUT_CANVAS_RESTACK_STEPS = Object.freeze([
   ["back", "To back"],
   ["backward", "Back one"],
@@ -358,7 +390,7 @@ function nodeGraphLayoutCanvasEnsureArrangeBar() {
   bar.id = "nodeLayoutCanvasArrangeBar";
   bar.className = "node-layout-canvas-arrange-bar";
   bar.setAttribute("role", "toolbar");
-  bar.setAttribute("aria-label", "Canvas layer order");
+  bar.setAttribute("aria-label", "Canvas layer order and blend");
   const label = document.createElement("span");
   label.className = "node-layout-canvas-arrange-label";
   bar.append(label);
@@ -369,9 +401,32 @@ function nodeGraphLayoutCanvasEnsureArrangeBar() {
     button.textContent = text;
     bar.append(button);
   }
+  // Blend group wraps as one row on a narrow (phone) screen.
+  const blendGroup = document.createElement("div");
+  blendGroup.className = "node-layout-canvas-arrange-blend";
+  blendGroup.setAttribute("role", "group");
+  blendGroup.setAttribute("aria-label", "Blend");
+  const blendLabel = document.createElement("span");
+  blendLabel.className = "node-layout-canvas-arrange-label";
+  blendLabel.textContent = "Blend";
+  blendGroup.append(blendLabel);
+  for (const name of SoemMath.CANVAS_TILE_BLENDS) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.dataset.blend = name;
+    button.textContent = NODE_GRAPH_CANVAS_TILE_BLEND_UI[name]?.label || name;
+    blendGroup.append(button);
+  }
+  bar.append(blendGroup);
   bar.addEventListener("click", (event) => {
-    const step = event.target?.closest?.("button[data-restack]")?.dataset?.restack;
-    if (step && !nodeGraphLayoutCanvasRestack(nodeGraphLayoutCanvasArrangeTargetId(), step)) {
+    const button = event.target?.closest?.("button[data-restack], button[data-blend]");
+    const step = button?.dataset?.restack;
+    const blend = button?.dataset?.blend;
+    const id = nodeGraphLayoutCanvasArrangeTargetId();
+    const changed = step
+      ? nodeGraphLayoutCanvasRestack(id, step)
+      : (blend ? nodeGraphLayoutCanvasSetBlend(id, blend) : true);
+    if (!changed) {
       nodeGraphLayoutCanvasSyncArrangeBar();
     }
   });
@@ -411,7 +466,7 @@ function nodeGraphLayoutCanvasSyncArrangeBar() {
   if (label) {
     label.textContent = index >= 0
       ? `${name ? `${name}: ` : ""}layer ${index + 1} of ${order.length}`
-      : "Tap a display to order it";
+      : "Tap a display to order or blend it";
   }
   bar.querySelectorAll("button[data-restack]").forEach((button) => {
     const step = button.dataset.restack;
@@ -420,6 +475,11 @@ function nodeGraphLayoutCanvasSyncArrangeBar() {
     button.disabled = index < 0
       || ((step === "back" || step === "backward") && atBack)
       || ((step === "front" || step === "forward") && atFront);
+  });
+  const blend = SoemMath.normalizeCanvasTileBlend(index >= 0 ? order[index].blend : "");
+  bar.querySelectorAll("button[data-blend]").forEach((button) => {
+    button.disabled = index < 0;
+    button.setAttribute("aria-pressed", String(index >= 0 && button.dataset.blend === blend));
   });
 }
 
@@ -451,6 +511,8 @@ function nodeGraphLayoutCanvasApplyTileRect(tile, rect, stage) {
   tile.style.width = `${px.w}px`;
   tile.style.height = `${px.h}px`;
   tile.style.zIndex = String(100 + (r.z || 0));
+  // Blend with the tiles behind it (the stage is the stacking context).
+  nodeGraphCanvasTileApplyBlend(tile, r.blend);
   const textFace = tile.querySelector(".node-text-box-body");
   if (textFace && typeof nodeGraphTextBoxApplyCanvasScale === "function") {
     nodeGraphTextBoxApplyCanvasScale(textFace);
@@ -979,7 +1041,7 @@ function nodeGraphLayoutCanvasBindTileInteractions(stage) {
         h -= dy;
       }
     }
-    const rect = nodeGraphLayoutCanvasNormalizeRect({ x, y, w, h, z: drag.origin.z }, drag.origin.z);
+    const rect = nodeGraphLayoutCanvasNormalizeRect({ x, y, w, h, z: drag.origin.z, blend: drag.origin.blend }, drag.origin.z);
     nodeGraphLayoutCanvasApplyTileRect(drag.tile, rect, stage);
     drag.live = rect;
   };
@@ -1020,13 +1082,15 @@ function nodeGraphLayoutCanvasBindTileInteractions(stage) {
       ensureNodeGraphModuleSelectedForContext(nodeId, event);
       nodeGraphLayoutCanvasSyncArrangeBar();
     }
-    // Stack index comes from the stored pin, not the tile's CSS z-index.
+    // Stack index and blend come from the stored pin, not the tile's CSS.
+    const pin = nodeGraphLayoutCanvasElementForNode(nodeId);
     const origin = nodeGraphLayoutCanvasNormalizeRect({
       x: tile.dataset.canvasX,
       y: tile.dataset.canvasY,
       w: tile.dataset.canvasW,
       h: tile.dataset.canvasH,
-      z: nodeGraphLayoutCanvasElementForNode(nodeId)?.z,
+      z: pin?.z,
+      blend: pin?.blend,
     });
     drag = {
       tile,

@@ -1750,8 +1750,9 @@ void main() {
 
   /**
    * Textured quad (image blit). source: { data: Uint8Array RGBA, width, height }
-   * or any TexImageSource. options: { nearest = true, alpha = 1, additive = false }. Drawn under
-   * the line/rect quads, in call order.
+   * or any TexImageSource. options: { nearest = true, alpha = 1, additive = false, blend }. Drawn under
+   * the line/rect quads, in call order. blend: "normal" | "add" | "screen" | "multiply" |
+   * "lighten" (Canvas tile blend); additive: true is "add".
    */
   function nodeGraphGlLinesImage(batch, source, x, y, w, h, options = {}) {
     if (!batch || !source || !(w > 0) || !(h > 0)) return;
@@ -1766,7 +1767,7 @@ void main() {
       tint: Array.isArray(options.tint) ? options.tint : null,
       // cache: upload once per source object (static pictures / baked sprites).
       cache: options.cache === true,
-      additive: options.additive === true,
+      blend: options.blend || (options.additive === true ? "add" : "normal"),
     });
     return batch.images[batch.images.length - 1];
   }
@@ -2356,8 +2357,13 @@ void main() {
           if (cached) cached.fresh = false;
         }
       }
-      // Per-image blend: normal over, or additive ({ additive: true }).
-      gl.blendFuncSeparate(gl.SRC_ALPHA, im.additive ? gl.ONE : gl.ONE_MINUS_SRC_ALPHA, gl.ONE, alphaDst);
+      // Per-image blend (exact for opaque pictures): normal over, add,
+      // screen 1-(1-s)(1-d), multiply s*d, lighten max(s, d).
+      const blend = im.blend;
+      if (blend === "screen") gl.blendFuncSeparate(gl.ONE_MINUS_DST_COLOR, gl.ONE, gl.ONE, alphaDst);
+      else if (blend === "multiply") gl.blendFuncSeparate(gl.DST_COLOR, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, alphaDst);
+      else gl.blendFuncSeparate(gl.SRC_ALPHA, blend === "add" ? gl.ONE : gl.ONE_MINUS_SRC_ALPHA, gl.ONE, alphaDst);
+      if (blend === "lighten") gl.blendEquation(gl.MAX);
       const f = im.nearest ? gl.NEAREST : gl.LINEAR;
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, f);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, f);
@@ -2379,6 +2385,7 @@ void main() {
       } else {
         drawTextured(s, w, h, [x0, y0, 0, 0, x1, y0, 1, 0, x0, y1, 0, 1, x1, y0, 1, 0, x1, y1, 1, 1, x0, y1, 0, 1], 0);
       }
+      if (blend === "lighten") gl.blendEquation(gl.FUNC_ADD);
       if (src.glSnapshot && src.texture && !src.keep) {
         gl.deleteTexture(src.texture);
         src.texture = null;

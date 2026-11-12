@@ -36,6 +36,27 @@ function nodeGraphCanvasTileRectPx(rect, stageW, stageH) {
   return { x: r.x * sw, y: r.y * sh, w: r.w * sw, h: r.h * sh, z: Number(r.z) || 0, rect: r };
 }
 
+/**
+ * Canvas tile blend (SoemMath.CANVAS_TILE_BLENDS): Arrange bar label and the
+ * CSS mix-blend-mode for DOM tiles. Mini Canvas display quads use the same
+ * name as their GL image blend.
+ */
+const NODE_GRAPH_CANVAS_TILE_BLEND_UI = Object.freeze({
+  normal: { label: "Normal", css: "" },
+  add: { label: "Add", css: "plus-lighter" },
+  screen: { label: "Screen", css: "screen" },
+  multiply: { label: "Multiply", css: "multiply" },
+  lighten: { label: "Lighten", css: "lighten" },
+});
+
+/** Set (or clear, for normal) a DOM tile's mix-blend-mode. */
+function nodeGraphCanvasTileApplyBlend(el, blend) {
+  if (!el?.style) return;
+  const css = NODE_GRAPH_CANVAS_TILE_BLEND_UI[blend]?.css || "";
+  if (css) el.style.mixBlendMode = css;
+  else el.style.removeProperty("mix-blend-mode");
+}
+
 /** User-facing module pin label. Empty-canvas copy uses this same phrase. */
 const NODE_GRAPH_SHOW_IN_PERFORMANCE_VIEW_LABEL = "Show in Canvas";
 const NODE_GRAPH_EMPTY_CANVAS_LINE = "Canvas is empty. Turn on Show in Canvas on a module.";

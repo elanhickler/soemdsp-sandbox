@@ -85,6 +85,7 @@
    * missing z uses index.
    * Defaults: 0.36 x 0.32, stagger 0.08+(index%5)*0.02.
    * x/y pulled back so x+w and y+h stay <= 1.
+   * blend rides along with z (CANVAS_TILE_BLENDS); "normal" is no field.
    */
   function normalizeCanvasTileRect(raw, index = 0) {
     const i = Math.max(0, Math.round(Number(index) || 0));
@@ -102,7 +103,19 @@
     }
     const zNum = Number(src.z);
     const z = Number.isFinite(zNum) ? Math.round(zNum) : i;
-    return { x, y, w, h, z };
+    const rect = { x, y, w, h, z };
+    const blend = normalizeCanvasTileBlend(src.blend);
+    if (blend !== "normal") rect.blend = blend;
+    return rect;
+  }
+
+  /** How a Canvas tile composites over the tiles behind it (Arrange bar). */
+  const CANVAS_TILE_BLENDS = Object.freeze(["normal", "add", "screen", "multiply", "lighten"]);
+
+  /** Unknown / missing -> "normal". */
+  function normalizeCanvasTileBlend(value) {
+    const name = String(value || "").trim();
+    return CANVAS_TILE_BLENDS.includes(name) ? name : "normal";
   }
 
   /**
@@ -169,6 +182,8 @@
     clamp01,
     clamp,
     normalizeCanvasTileRect,
+    CANVAS_TILE_BLENDS,
+    normalizeCanvasTileBlend,
     dbToAmp,
     ampToDb,
   };

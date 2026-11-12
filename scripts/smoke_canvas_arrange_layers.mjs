@@ -79,6 +79,34 @@ const tweak = await page.evaluate(() => {
 await page.waitForTimeout(800);
 const still = await page.evaluate(() => ({ mode: nodeGraphLayoutCanvasMode(), tiles: document.querySelectorAll(".node-layout-canvas-tile").length, open: !document.getElementById("nodeTraceDisplaySettingsPopover").hidden }));
 gate(Boolean(tweak.field) && still.mode === "edit" && still.tiles === 3 && still.open, `Display Settings edit keeps Arrange (${JSON.stringify(tweak)} -> ${JSON.stringify(still)})`);
+// Blend: the bar sets the target tile's blend, saved on the pin, Normal clears it.
+await page.evaluate(() => document.getElementById("nodeTraceDisplaySettingsPopover")?.setAttribute("hidden", ""));
+const blendState = () => page.evaluate((id) => {
+  const tile = document.querySelector(`.node-layout-canvas-tile[data-node="${id}"]`);
+  const pressed = [...document.querySelectorAll("#nodeLayoutCanvasArrangeBar button[data-blend]")].filter((x) => x.getAttribute("aria-pressed") === "true").map((x) => x.textContent);
+  return { css: getComputedStyle(tile).mixBlendMode, pin: nodeGraphLayoutCanvasElementForNode(id)?.blend, pressed, mini: nodeGraphMiniPerformTiles().find((t) => t.nodeId === id)?.blend };
+}, ids[2]);
+let bs = await blendState();
+gate(bs.css === "normal" && bs.pin === undefined && bs.pressed.join() === "Normal", `blend starts Normal ${JSON.stringify(bs)}`);
+await page.click('#nodeLayoutCanvasArrangeBar button[data-blend="screen"]');
+await page.waitForTimeout(200);
+bs = await blendState();
+gate(bs.css === "screen" && bs.pin === "screen" && bs.pressed.join() === "Screen" && bs.mini === "screen", `Screen sets tile, pin, Mini Canvas ${JSON.stringify(bs)}`);
+const r3 = (await tiles())[ids[2]].r;
+await page.mouse.move(r3.x + 20, r3.y + 8); await page.mouse.down(); await page.mouse.move(r3.x + 50, r3.y + 30, { steps: 4 }); await page.mouse.up();
+await page.waitForTimeout(300);
+bs = await blendState();
+gate(bs.css === "screen" && bs.pin === "screen", `drag keeps the blend ${JSON.stringify(bs)}`);
+await page.click('#nodeLayoutCanvasArrangeBar button[data-blend="add"]');
+await page.waitForTimeout(200);
+bs = await blendState();
+gate(bs.css === "plus-lighter" && bs.pin === "add", `Add is plus-lighter ${JSON.stringify(bs)}`);
+const roundTrip = await page.evaluate((id) => normalizeNodeGraphPatchViewCanvases(nodeGraphMvp.patch.view.canvases).root.elements.find((e) => e.nodeId === id)?.blend, ids[2]);
+gate(roundTrip === "add", `patch normalize keeps blend: ${roundTrip}`);
+await page.click('#nodeLayoutCanvasArrangeBar button[data-blend="normal"]');
+await page.waitForTimeout(200);
+bs = await blendState();
+gate(bs.css === "normal" && bs.pin === undefined, `Normal clears the blend ${JSON.stringify(bs)}`);
 // F to exit arrange -> bar hidden
 await page.evaluate(() => toggleNodeGraphLayoutCanvasView());
 await page.waitForTimeout(500);
