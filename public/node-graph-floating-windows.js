@@ -974,7 +974,7 @@ const nodeGraphFloatingWindowRegistryEntries = Object.freeze([
     sizeAxes: Object.freeze({ width: true, height: true }),
     headingDragClass: true,
     resizeHandleId: "nodeMiniPerformPageResizeHandle",
-    resizeAriaLabel: "Resize mini performance view",
+    resizeAriaLabel: "Resize Mini Canvas",
   }),
   Object.freeze({
     workspaceKey: "metaparameters",

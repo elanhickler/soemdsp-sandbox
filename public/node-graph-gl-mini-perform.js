@@ -334,7 +334,7 @@ function nodeGraphEmptyCanvasToggleEgg() {
 function nodeGraphGlMiniPerformDrawEmpty(batch, cssW, cssH) {
   const text = typeof NODE_GRAPH_EMPTY_CANVAS_LINE === "string"
     ? NODE_GRAPH_EMPTY_CANVAS_LINE
-    : "Canvas is empty. Turn on Show in performance view on a module.";
+    : "Canvas is empty. Turn on Show in Canvas on a module.";
   const egg = nodeGraphMvp?.emptyCanvasDvdEgg === true;
   if (egg && typeof nodeGraphGlLinesImage === "function") {
     const img = nodeGraphEmptyCanvasLogoImage();

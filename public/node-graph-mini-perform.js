@@ -159,25 +159,25 @@ function nodeGraphMiniPerformArrangeShown() {
 
 function nodeGraphMiniPerformHelpForMode(mode) {
   const hidden = typeof nodeGraphLayoutCanvasMode === "function" && nodeGraphLayoutCanvasMode() !== "off";
-  if (mode === "off") return "Mini performance view off";
+  if (mode === "off") return "Mini Canvas off";
   if (mode === "arrange") {
     return hidden
-      ? "Mini performance view: Arrange (shows when the performance view closes)."
-      : "Mini performance view: Arrange. Drag tiles to move, tile corners to resize. Shift+F exits arrange.";
+      ? "Mini Canvas: Arrange (shows when the Canvas closes)."
+      : "Mini Canvas: Arrange. Drag tiles to move, tile corners to resize. Shift+F exits arrange.";
   }
   if (mode === "position") {
     return hidden
-      ? "Mini performance view: Position (shows when the performance view closes)."
-      : "Mini performance view: Position. Drag to move, corners to resize.";
+      ? "Mini Canvas: Position (shows when the Canvas closes)."
+      : "Mini Canvas: Position. Drag to move, corners to resize.";
   }
   if (mode === "background") {
     return hidden
-      ? "Mini performance view: Background (shows when the performance view closes)."
-      : "Mini performance view: Background. Display only.";
+      ? "Mini Canvas: Background (shows when the Canvas closes)."
+      : "Mini Canvas: Background. Display only.";
   }
   return hidden
-    ? "Mini performance view: Perform (shows when the performance view closes)."
-    : "Mini performance view: Perform. Drag knobs in the view.";
+    ? "Mini Canvas: Perform (shows when the Canvas closes)."
+    : "Mini Canvas: Perform. Drag knobs in the view.";
 }
 
 function toggleNodeGraphMiniPerformView() {
@@ -211,7 +211,7 @@ function nodeGraphMiniPerformExitEnlarged() {
 function nodeGraphMiniPerformToggleEnlarged() {
   if (nodeGraphMiniPerformEnlarged.on) return !nodeGraphMiniPerformExitEnlarged();
   nodeGraphMiniPerformEnterEnlarged();
-  if (typeof setNodeInteractionHelp === "function") setNodeInteractionHelp("Mini performance view enlarged. Escape exits.");
+  if (typeof setNodeInteractionHelp === "function") setNodeInteractionHelp("Mini Canvas enlarged. Escape exits.");
   return true;
 }
 

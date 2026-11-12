@@ -114,7 +114,7 @@ const nodeGraphUnifiedWindowPages = Object.freeze({
     key: "miniPerform",
     elementId: "nodeMiniPerformPage",
     workspaceKey: "miniPerform",
-    label: "Mini Performance View",
+    label: "Mini Canvas",
     icon: "\uD83D\uDDA5\uFE0F",
     showInNav: true,
   }),

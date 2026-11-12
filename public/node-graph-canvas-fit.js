@@ -37,8 +37,8 @@ function nodeGraphCanvasTileRectPx(rect, stageW, stageH) {
 }
 
 /** User-facing module pin label. Empty-canvas copy uses this same phrase. */
-const NODE_GRAPH_SHOW_IN_PERFORMANCE_VIEW_LABEL = "Show in performance view";
-const NODE_GRAPH_EMPTY_CANVAS_LINE = "Canvas is empty. Turn on Show in performance view on a module.";
+const NODE_GRAPH_SHOW_IN_PERFORMANCE_VIEW_LABEL = "Show in Canvas";
+const NODE_GRAPH_EMPTY_CANVAS_LINE = "Canvas is empty. Turn on Show in Canvas on a module.";
 
 /**
  * Aspect ratios for the mini view. `window` is the live window size.

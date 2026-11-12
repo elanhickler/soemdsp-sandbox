@@ -525,7 +525,7 @@ function nodeGraphLayoutCanvasOpenEmptyEgg(mode, options = {}) {
   stage.classList.add("node-layout-canvas-stage");
   stage.classList.toggle("node-layout-canvas-edit", mode === "edit");
   stage.style.display = "block";
-  stage.setAttribute("aria-label", "Performance view");
+  stage.setAttribute("aria-label", "Canvas");
   if (options.silent !== true && typeof setNodeInteractionHelp === "function") {
     setNodeInteractionHelp(NODE_GRAPH_EMPTY_CANVAS_LINE);
   }
@@ -595,16 +595,16 @@ function nodeGraphLayoutCanvasAnnounceMode(next, n, options = {}) {
     stage.setAttribute(
       "aria-label",
       next === "edit"
-        ? "Performance view arrange. Drag tiles to move, corners to resize. F exits arrange, F again exits."
-        : "Performance view. F enters arrange mode, F again exits.",
+        ? "Canvas arrange. Drag tiles to move, corners to resize. F exits arrange, F again exits."
+        : "Canvas. F enters arrange mode, F again exits.",
     );
   }
   if (options.silent !== true && typeof setNodeInteractionHelp === "function") {
     const scope = nodeGraphLayoutCanvasActiveScopeId() ? "metamodule" : "root";
     setNodeInteractionHelp(
       next === "edit"
-        ? `Performance view arrange (${scope}): move/resize ${n} display${n === 1 ? "" : "s"}. F exits arrange.`
-        : `Performance view (${scope}): ${n} display${n === 1 ? "" : "s"}. F = arrange layout.`,
+        ? `Canvas arrange (${scope}): move/resize ${n} display${n === 1 ? "" : "s"}. F exits arrange.`
+        : `Canvas (${scope}): ${n} display${n === 1 ? "" : "s"}. F = arrange layout.`,
     );
   }
   if (typeof renderNodeGraphModularViewModeButtons === "function") {
@@ -680,7 +680,7 @@ function nodeGraphLayoutCanvasClose(options = {}) {
     nodeGraphMetamoduleRefreshAllMirrors();
   }
   if (options.silent !== true && typeof setNodeInteractionHelp === "function") {
-    setNodeInteractionHelp("Performance view off.");
+    setNodeInteractionHelp("Canvas off.");
   }
   if (typeof renderNodeGraphModularViewModeButtons === "function") {
     renderNodeGraphModularViewModeButtons();
@@ -967,8 +967,8 @@ function bindNodeGraphLayoutCanvasPinInput(input, wholeModule) {
     if (typeof setNodeInteractionHelp === "function") {
       setNodeInteractionHelp(
         input.checked
-          ? `${NODE_GRAPH_SHOW_IN_PERFORMANCE_VIEW_LABEL} on. F = Performance view, F again = Arrange, F again = exit.`
-          : "Removed from the performance view.",
+          ? `${NODE_GRAPH_SHOW_IN_PERFORMANCE_VIEW_LABEL} on. F = Canvas, F again = Arrange, F again = exit.`
+          : "Removed from the Canvas.",
       );
     }
   });

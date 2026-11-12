@@ -354,7 +354,9 @@ function drawNodeGraphVactrolScopeItem(renderer, item, pixelRatio) {
   if (typeof nodeGraphFacePlateApplyCss === "function") {
     nodeGraphFacePlateApplyCss(screenElement, bgHex);
   }
-  const batch = nodeGraphGlLinesBegin(canvas, bgRgba);
+  // Text is sized below from the face's min side (device px), so the batch
+  // adds no tile ink scale of its own.
+  const batch = nodeGraphGlLinesBegin(canvas, bgRgba, { textInk: false });
   if (!batch) {
     if (typeof nodeGraphDisplayGlFailed === "function") {
       nodeGraphDisplayGlFailed(canvas, "vactrol scope: GL begin failed");
@@ -364,20 +366,34 @@ function drawNodeGraphVactrolScopeItem(renderer, item, pixelRatio) {
 
   const w = canvas.width;
   const h = canvas.height;
-  const pxScale = (canvas.offsetWidth > 0) ? w / canvas.offsetWidth : Math.max(1, Number(pixelRatio) || 1);
-  const pad = Math.max(3, 4 * pxScale);
-  const legendH = Math.ceil(F.legendPx * pxScale) + pad;
+  // Face layout box from the face-metrics cache (ResizeObserver), never a
+  // live DOM read: zoom must not force layout. The box is the plate face or
+  // the Canvas tile, so strokes, pads and legend scale with min(cssW, cssH)
+  // (APP_POLICY 15) and the backing (css x dpr) follows it; zoom never does.
+  const box = typeof nodeGraphModuleScopeFaceBackingSize === "function"
+    ? nodeGraphModuleScopeFaceBackingSize(screenElement, pixelRatio)
+    : null;
+  const dpr = Math.max(1, Number(pixelRatio) || 1);
+  const cssW = box?.cssWidth > 0 ? box.cssWidth : w / dpr;
+  const cssH = box?.cssHeight > 0 ? box.cssHeight : h / dpr;
+  const pxScale = w / Math.max(1, cssW);
+  const minSide = Math.min(cssW, cssH);
+  const ink = (cssPx) => (typeof faceInkPx === "function" ? faceInkPx(cssPx, minSide) : cssPx) * pxScale;
+  const pad = Math.max(pxScale, ink(4));
+  const legendPx = Math.max(6 * pxScale, ink(F.legendPx));
+  const legendH = Math.ceil(legendPx) + pad;
   const x = pad;
   const y = pad + legendH;
   const pw = Math.max(1, w - pad * 2);
   const ph = Math.max(1, h - y - pad);
   const fine = 1;
-  const halfPx = Math.max(0.5, F.lineThicknessCss * 0.5 * pxScale);
+  const gridHalf = Math.max(0.5, ink(1) * 0.5);
+  const halfPx = Math.max(0.5, ink(F.lineThicknessCss) * 0.5);
 
   const grid = F.grid;
-  nodeGraphGlLinesSegment(batch, x, y + ph, x + pw, y + ph, 0.5, fine, grid);
-  nodeGraphGlLinesSegment(batch, x, y, x, y + ph, 0.5, fine, grid);
-  nodeGraphGlLinesSegment(batch, x, y + ph * 0.5, x + pw, y + ph * 0.5, 0.5, fine, [grid[0], grid[1], grid[2], 0.1]);
+  nodeGraphGlLinesSegment(batch, x, y + ph, x + pw, y + ph, gridHalf, fine, grid);
+  nodeGraphGlLinesSegment(batch, x, y, x, y + ph, gridHalf, fine, grid);
+  nodeGraphGlLinesSegment(batch, x, y + ph * 0.5, x + pw, y + ph * 0.5, gridHalf, fine, [grid[0], grid[1], grid[2], 0.1]);
 
   const seconds = nodeGraphVactrolScopeHistorySeconds(look);
   const traces = nodeGraphVactrolScopeTraces(look);
@@ -401,30 +417,30 @@ function drawNodeGraphVactrolScopeItem(renderer, item, pixelRatio) {
   const byPort = Object.fromEntries(traces.map((tr) => [tr.port, tr]));
   const hits = [];
   if (typeof nodeGraphGlLinesText === "function") {
-    let lx = x + 2;
+    let lx = x + ink(2);
     const ly = pad + legendH * 0.45;
-    const sw = 10 * pxScale;
-    const gap = 8 * pxScale;
-    const hitPadY = Math.max(4, legendH * 0.35);
+    const sw = ink(10);
+    const gap = ink(8);
+    const hitPadY = Math.max(ink(4), legendH * 0.35);
     for (const port of legendOrder) {
       const tr = byPort[port];
       if (!tr) continue;
       const strokeRgba = tr.show ? tr.rgba : nodeGraphVactrolScopeDimRgba(tr.rgba);
       const textRgba = nodeGraphVactrolScopeLegendColor(tr.rgba, tr.show);
       nodeGraphGlLinesSegment(batch, lx, ly, lx + sw, ly, halfPx, 1, strokeRgba);
-      const tx = lx + sw + 4 * pxScale;
+      const tx = lx + sw + ink(4);
       nodeGraphGlLinesText(batch, tr.label, tx, ly, {
-        px: F.legendPx,
+        px: legendPx,
         align: "left",
         baseline: "middle",
         rgba: textRgba,
       });
-      const tw = typeof nodeGraphGlLinesMeasureText === "function"
-        ? nodeGraphGlLinesMeasureText(tr.label, { px: F.legendPx }).width || (tr.label.length * F.legendPx * 0.55)
-        : tr.label.length * F.legendPx * 0.55;
-      const textW = tw * pxScale;
+      const measured = typeof nodeGraphGlLinesMeasureText === "function"
+        ? Number(nodeGraphGlLinesMeasureText(tr.label, Math.max(1, Math.round(legendPx))))
+        : NaN;
+      const textW = measured > 0 ? measured : tr.label.length * legendPx * 0.55;
       const xCss = lx / pxScale;
-      const wCss = (sw + 4 * pxScale + textW) / pxScale;
+      const wCss = (sw + ink(4) + textW) / pxScale;
       const yCss = (ly - hitPadY) / pxScale;
       const hCss = (hitPadY * 2) / pxScale;
       hits.push({

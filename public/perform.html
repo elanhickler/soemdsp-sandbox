@@ -293,7 +293,7 @@
           <button
             id="nodeModularWindowedViewButton"
             type="button"
-            aria-label="Show performance view [ F ]"
+            aria-label="Show Canvas [ F ]"
             aria-pressed="false"><span class="node-modular-view-icon" aria-hidden="true">📱</span></button>
           <span
             id="nodeWorldPositionReadout"
@@ -487,8 +487,8 @@
           <div class="node-hotkeys-row"><kbd>V</kbd><span>Hide / show bars</span></div>
           <div class="node-hotkeys-row"><kbd>T</kbd><span>Stick transport (overrides V hide)</span></div>
           <div class="node-hotkeys-row"><kbd>D</kbd><span>Debug</span></div>
-          <div class="node-hotkeys-row"><kbd>Shift+F</kbd><span>Mini performance view: off → Perform → Arrange → off</span></div>
-          <div class="node-hotkeys-row"><kbd>F</kbd><span>Performance view: off → Perform → Arrange → off</span></div>
+          <div class="node-hotkeys-row"><kbd>Shift+F</kbd><span>Mini Canvas: off → Perform → Arrange → off</span></div>
+          <div class="node-hotkeys-row"><kbd>F</kbd><span>Canvas: off → Perform → Arrange → off</span></div>
           <div class="node-hotkeys-row"><kbd>Z</kbd><span>Center view on modules (selection, else all) at current zoom</span></div>
           <div class="node-hotkeys-row"><kbd>? / `</kbd><span>Command Center</span></div>
           <div class="node-hotkeys-row"><kbd>Space</kbd><span>Pause / play</span></div>
@@ -571,29 +571,29 @@
         id="nodeMiniPerformPage"
         class="node-mini-perform-page node-unified-window node-floating-window-surface"
         role="dialog"
-        aria-label="Mini Performance View"
+        aria-label="Mini Canvas"
         hidden>
         <div class="scene-context-heading">
           <button
             id="nodeMiniPerformPageDragHandle"
             class="scene-context-drag-handle node-drag-handle"
             type="button"
-            aria-label="Move mini performance view">&#x2725;</button>
+            aria-label="Move Mini Canvas">&#x2725;</button>
           <div class="scene-context-title">
-            <span>Mini Performance View</span>
+            <span>Mini Canvas</span>
             <small>Shift+F</small>
           </div>
-          <button id="nodeMiniPerformPageClose" class="panel-close-button" type="button" aria-label="Close mini performance view">
+          <button id="nodeMiniPerformPageClose" class="panel-close-button" type="button" aria-label="Close Mini Canvas">
             <span class="panel-close-glyph" aria-hidden="true"></span>
           </button>
         </div>
         <div id="nodeMiniPerformUnifiedNavHost" class="node-unified-window-nav-host" aria-label="Floating window pages"></div>
-        <div id="nodeMiniPerformPageBody" class="node-mini-perform-page-body" aria-label="Mini performance view settings"></div>
+        <div id="nodeMiniPerformPageBody" class="node-mini-perform-page-body" aria-label="Mini Canvas settings"></div>
         <button
           id="nodeMiniPerformPageResizeHandle"
           class="scene-context-resize-handle"
           type="button"
-          aria-label="Resize mini performance view"></button>
+          aria-label="Resize Mini Canvas"></button>
       </div>
 
       <div
@@ -1982,11 +1982,11 @@
               <button id="nodeSceneToggleModularInfiniteView" class="scene-context-window-button" type="button" aria-label="Computer view" aria-pressed="false" title="Computer view — infinite canvas">
                 <span class="scene-context-window-button-icon" aria-hidden="true">💻</span>
               </button>
-              <button id="nodeSceneToggleModularWindowedView" class="scene-context-window-button" type="button" aria-label="Performance view [ F ]" aria-pressed="false" title="Show performance view [ F ]">
-                <span class="scene-context-window-button-label">Performance view [&nbsp;F&nbsp;]</span>
+              <button id="nodeSceneToggleModularWindowedView" class="scene-context-window-button" type="button" aria-label="Canvas [ F ]" aria-pressed="false" title="Show Canvas [ F ]">
+                <span class="scene-context-window-button-label">Canvas [&nbsp;F&nbsp;]</span>
               </button>
-              <button id="nodeSceneToggleMiniPerformView" class="scene-context-window-button" type="button" aria-label="Mini performance view [ Shift+F ]" aria-pressed="false" title="Mini performance view [ Shift+F ]">
-                <span class="scene-context-window-button-label">Mini performance view [&nbsp;Shift+F&nbsp;]</span>
+              <button id="nodeSceneToggleMiniPerformView" class="scene-context-window-button" type="button" aria-label="Mini Canvas [ Shift+F ]" aria-pressed="false" title="Mini Canvas [ Shift+F ]">
+                <span class="scene-context-window-button-label">Mini Canvas [&nbsp;Shift+F&nbsp;]</span>
               </button>
             </div>
             <div
@@ -3115,8 +3115,8 @@
   <!-- Release/debug: no-ops for evidence/debug APIs omitted from soundemote sync. Real scripts below overwrite these in debug builds. -->
   <script data-boot-defer type="text/plain" src="./public/release-debug-stubs.js?v=dbgpanel-rm-1"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-wires.js?v=b109-own-inlet-1"></script>
-  <script data-boot-defer type="text/plain" src="./public/node-graph-floating-windows.js?v=mini-perform-1"></script>
-  <script data-boot-defer type="text/plain" src="./public/node-graph-unified-window.js?v=mini-round2-1"></script>
+  <script data-boot-defer type="text/plain" src="./public/node-graph-floating-windows.js?v=mini-perform-1-canvas-name"></script>
+  <script data-boot-defer type="text/plain" src="./public/node-graph-unified-window.js?v=mini-round2-1-canvas-name"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-emoji-page.js?v=audio-emoji-3"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-pages.js?v=overwrite-baseline-20261013"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-file-actions.js?v=init-confirm-1"></script>
@@ -3210,7 +3210,7 @@
   <script data-boot-defer type="text/plain" src="./public/node-graph-settings-text-fit.js?v=css-type-1"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-default-preset.js?v=plugin-ui-persist-1"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-script-status.js?v=dbgpanel-rm-1"></script>
-  <script data-boot-defer type="text/plain" src="./public/node-graph-view-controls.js?v=2026.11.11.45"></script>
+  <script data-boot-defer type="text/plain" src="./public/node-graph-view-controls.js?v=2026.11.11.45-canvas-name"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-workspace-geometry.js?v=zp4-4"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-viewport-perf.js?v=vg-4"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-workspace-zoom.js?v=all-sync-1"></script>
@@ -3253,7 +3253,7 @@
   <script data-boot-defer type="text/plain" src="./public/node-graph-module-scope-settings-form-io.js?v=sg-zoom-full-1"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-module-scope-settings-field-edit.js?v=ds-numbers-1"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-module-scope-settings-apply.js?v=sg-zoom-full-1"></script>
-  <script data-boot-defer type="text/plain" src="./public/node-graph-module-scope-settings-window.js?v=2026.11.11.24"></script>
+  <script data-boot-defer type="text/plain" src="./public/node-graph-module-scope-settings-window.js?v=2026.11.11.24-canvas-name"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-module-scope-settings-ui.js?v=one-face-1"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-module-scope-capture.js?v=2026.11.08.5"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-module-scope-number-readout.js?v=2026.11.08.5"></script>
@@ -3417,7 +3417,7 @@
   <script data-boot-defer type="text/plain" src="./public/node-graph-debug-copy.js?v=dbgpanel-rm-1"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-execution-debug-api.js?v=dbgpanel-rm-1"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-tooltips.js?v=scope-sync-1"></script>
-  <script data-boot-defer type="text/plain" src="./public/node-graph-interaction-help.js?v=tooltip-min-12"></script>
+  <script data-boot-defer type="text/plain" src="./public/node-graph-interaction-help.js?v=tooltip-min-12-canvas-name"></script>
   <script data-boot-defer type="text/plain" src="./public/presets/useruisettings.js?v=2026.11.11.49"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-ui-settings-definitions.js?v=cell-slider-1"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-ui-settings-utils.js?v=slider-unit-color-1780307400000"></script>
@@ -3573,11 +3573,11 @@
   <script data-boot-defer type="text/plain" src="./public/node-graph-pulse-train-display.js?v=pe-face-20261110"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-live-runtime.js?v=formant-voice-1-lshift-sg-overhaul-1"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-wire-controller-bootstrap.js?v=wire-break-trigger-0129"></script>
-  <script data-boot-defer type="text/plain" src="./public/node-graph-canvas-fit.js?v=no-phone-box-1"></script>
+  <script data-boot-defer type="text/plain" src="./public/node-graph-canvas-fit.js?v=no-phone-box-1-canvas-name"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-screen-solo.js?v=one-stroke-1"></script>
-  <script data-boot-defer type="text/plain" src="./public/node-graph-layout-canvas.js?v=one-stroke-1"></script>
-  <script data-boot-defer type="text/plain" src="./public/node-graph-mini-perform.js?v=kbd-gl-1"></script>
-  <script data-boot-defer type="text/plain" src="./public/node-graph-gl-mini-perform.js?v=stack-layers-1"></script>
+  <script data-boot-defer type="text/plain" src="./public/node-graph-layout-canvas.js?v=one-stroke-1-canvas-name"></script>
+  <script data-boot-defer type="text/plain" src="./public/node-graph-mini-perform.js?v=kbd-gl-1-canvas-name"></script>
+  <script data-boot-defer type="text/plain" src="./public/node-graph-gl-mini-perform.js?v=stack-layers-1-canvas-name"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-workspace-event-bindings.js?v=constraint-gpu-1"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-render-live-event-bindings.js?v=sample-name-1"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-header-event-bindings.js?v=playhead-hbs-1"></script>

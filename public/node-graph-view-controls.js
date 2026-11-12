@@ -956,9 +956,9 @@ function toggleNodeGraphViewButtonsVisibility() {
 
 function nodeGraphPerformanceViewButtonTitle() {
   const mode = typeof nodeGraphLayoutCanvasMode === "function" ? nodeGraphLayoutCanvasMode() : "off";
-  if (mode === "edit") return "Performance view: Arrange. F = close.";
-  if (mode === "perform") return "Performance view: Perform. F = Arrange.";
-  return "Show performance view [ F ]";
+  if (mode === "edit") return "Canvas: Arrange. F = close.";
+  if (mode === "perform") return "Canvas: Perform. F = Arrange.";
+  return "Show Canvas [ F ]";
 }
 
 function renderNodeGraphModularViewModeButtons() {
