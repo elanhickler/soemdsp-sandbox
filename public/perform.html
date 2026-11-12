@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>soemdsp perform</title>
   <link rel="icon" href="./public/favicon.svg?v=ico-1" type="image/svg+xml">
-  <link rel="stylesheet" href="./public/styles.css?v=mp-wave-midi-cc-4-sg-overhaul-1-sg-gl-1-dc-host-1-sg-face-gl-1">
+  <link rel="stylesheet" href="./public/styles.css?v=mp-wave-midi-cc-4-sg-overhaul-1-sg-gl-1-dc-host-1-sg-face-gl-1-wire-defaults-1">
   <link rel="stylesheet" href="./public/perform.css?v=perform-param-io-1">
   <link rel="stylesheet" href="./public/modules/portal/portal-ui.css?v=portal-thru-1">
   <link rel="stylesheet" href="./public/modules/keypad/keypad-ui.css?v=keypad-press-once-1">
@@ -1432,8 +1432,8 @@
           <label class="node-ui-dev-control">
             <span>signal wire thickness</span>
             <div class="node-ui-dev-control-row">
-              <input id="nodeUiDevWireThickness" type="range" min="0.5" max="12" step="0.5" value="2">
-              <output id="nodeUiDevWireThicknessValue" for="nodeUiDevWireThickness">2px</output>
+              <input id="nodeUiDevWireThickness" type="range" min="0.5" max="12" step="0.01" value="3.46">
+              <output id="nodeUiDevWireThicknessValue" for="nodeUiDevWireThickness">3.46px</output>
             </div>
           </label>
           <label class="node-ui-dev-control">
@@ -1453,15 +1453,15 @@
           <label class="node-ui-dev-control">
             <span>param wire thickness</span>
             <div class="node-ui-dev-control-row">
-              <input id="nodeUiDevParamWireThickness" type="range" min="0.5" max="6" step="0.5" value="0.5">
-              <output id="nodeUiDevParamWireThicknessValue" for="nodeUiDevParamWireThickness">0.5px</output>
+              <input id="nodeUiDevParamWireThickness" type="range" min="0.5" max="6" step="0.01" value="1.08">
+              <output id="nodeUiDevParamWireThicknessValue" for="nodeUiDevParamWireThickness">1.08px</output>
             </div>
           </label>
           <label class="node-ui-dev-control">
             <span>param wire end dot</span>
             <div class="node-ui-dev-control-row">
-              <input id="nodeUiDevParamWireDotSize" type="range" min="0" max="12" step="0.01" value="2.012454">
-              <output id="nodeUiDevParamWireDotSizeValue" for="nodeUiDevParamWireDotSize">2.012454px</output>
+              <input id="nodeUiDevParamWireDotSize" type="range" min="0" max="12" step="0.01" value="3.64">
+              <output id="nodeUiDevParamWireDotSizeValue" for="nodeUiDevParamWireDotSize">3.64px</output>
             </div>
           </label>
           <label class="node-ui-dev-check">
@@ -3412,7 +3412,7 @@
   <script data-boot-defer type="text/plain" src="./public/node-graph-trace-router.js?v=no-self-burst-1780321400000"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-wire-rendering.js?v=pt-reverse-2"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-stroke-builder.js?v=snake-gl-1"></script>
-  <script data-boot-defer type="text/plain" src="./public/node-graph-gl-graph.js?v=stack-layers-1-sg-overhaul-1-sg-gl-1-sg-drag-1-dc-host-1-sg-face-gl-1"></script>
+  <script data-boot-defer type="text/plain" src="./public/node-graph-gl-graph.js?v=stack-layers-1-sg-overhaul-1-sg-gl-1-sg-drag-1-dc-host-1-sg-face-gl-1-wire-defaults-1"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-screen-fx.js?v=screen-out-1"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-render-output.js?v=dbgpanel-rm-1"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-debug-copy.js?v=dbgpanel-rm-1"></script>
@@ -3420,12 +3420,12 @@
   <script data-boot-defer type="text/plain" src="./public/node-graph-tooltips.js?v=scope-sync-1"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-interaction-help.js?v=tooltip-min-12-canvas-name"></script>
   <script data-boot-defer type="text/plain" src="./public/presets/useruisettings.js?v=2026.11.11.49"></script>
-  <script data-boot-defer type="text/plain" src="./public/node-graph-ui-settings-definitions.js?v=cell-slider-1"></script>
+  <script data-boot-defer type="text/plain" src="./public/node-graph-ui-settings-definitions.js?v=cell-slider-1-wire-defaults-1"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-ui-settings-utils.js?v=slider-unit-color-1780307400000"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-user-ui-settings-controls.js?v=cell-slider-1"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-ui-settings-panels.js?v=uidev-page-1"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-ui-settings-persistence.js?v=cell-slider-1"></script>
-  <script data-boot-defer type="text/plain" src="./public/node-graph-ui-settings-sync.js?v=tooltip-min-12"></script>
+  <script data-boot-defer type="text/plain" src="./public/node-graph-ui-settings-sync.js?v=tooltip-min-12-wire-defaults-1"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-keyboard-shortcuts.js?v=pt-preset-2"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-live-status-text.js?v=live-plan-preserve-20260634"></script>
   <script data-boot-defer type="text/plain" src="./public/node-graph-live-status-controls.js?v=slider-unit-color-1780307400000"></script>

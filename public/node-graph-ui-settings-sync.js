@@ -951,12 +951,12 @@ function syncNodeUiDevSettingsHeaderControls() {
   if (sliderTextLineValue) sliderTextLineValue.textContent = String(sliderTextLine);
   if (sliderTextPadValue) sliderTextPadValue.textContent = `${sliderTextPad}px`;
   // Signal wires (jack to jack) width and end-dot diameter.
-  const wireThick = Math.max(0.5, Math.min(12, nodeGraphFiniteNumber(document.getElementById("nodeUiDevWireThickness")?.value, 2)));
+  const wireThick = Math.max(0.5, Math.min(12, nodeGraphFiniteNumber(document.getElementById("nodeUiDevWireThickness")?.value, 3.46)));
   sliderTextHost?.style.setProperty("--node-wire-thickness", `${wireThick}px`);
   const wireThickValue = document.getElementById("nodeUiDevWireThicknessValue");
   if (wireThickValue) wireThickValue.textContent = `${wireThick}px`;
-  // Default 7.8624 = port-diameter * 0.54 at stock 28px grid / 0.52 jack ratio.
-  const wireDot = Math.max(0, Math.min(12, nodeGraphFiniteNumber(document.getElementById("nodeUiDevWirePatchPointSize")?.value, 7.8624)));
+  // Default 7.86 is the locked signal wire end-dot size.
+  const wireDot = Math.max(0, Math.min(12, nodeGraphFiniteNumber(document.getElementById("nodeUiDevWirePatchPointSize")?.value, 7.86)));
   sliderTextHost?.style.setProperty("--node-wire-patch-point-size", `${wireDot}px`);
   const wireDotValue = document.getElementById("nodeUiDevWirePatchPointSizeValue");
   if (wireDotValue) wireDotValue.textContent = `${wireDot}px`;
@@ -968,8 +968,8 @@ function syncNodeUiDevSettingsHeaderControls() {
     if (out) out.textContent = String(v);
   }
   // Param wires (ending on a rail IO box) keep their own width and end dot.
-  const paramWireThick = Math.max(0.5, Math.min(6, nodeGraphFiniteNumber(document.getElementById("nodeUiDevParamWireThickness")?.value, 0.5)));
-  const paramWireDot = Math.max(0, Math.min(12, nodeGraphFiniteNumber(document.getElementById("nodeUiDevParamWireDotSize")?.value, 2.012454)));
+  const paramWireThick = Math.max(0.5, Math.min(6, nodeGraphFiniteNumber(document.getElementById("nodeUiDevParamWireThickness")?.value, 1.08)));
+  const paramWireDot = Math.max(0, Math.min(12, nodeGraphFiniteNumber(document.getElementById("nodeUiDevParamWireDotSize")?.value, 3.64)));
   sliderTextHost?.style.setProperty("--node-param-wire-thickness", `${paramWireThick}px`);
   sliderTextHost?.style.setProperty("--node-param-wire-dot-size", `${paramWireDot}px`);
   const paramWireThickValue = document.getElementById("nodeUiDevParamWireThicknessValue");

@@ -7429,19 +7429,17 @@ body.keyboard-debug-hidden .node-keyboard-signal-bar {
   /* Shared LayoutA+B: leftover height under last content (≥2px, or +1gu from JS). */
   --node-module-bottom-gap-track: minmax(2px, 1fr);
   /* Connection / signal wire-end dots. UIDEV writes --node-wire-patch-point-size (px).
-     Ratio calc is the pre-UIDEV fallback (= 7.8624px at stock 28px grid / 0.52 jack). */
+     Locked default 7.86 (was port-diameter * 0.54 = 7.8624 at stock 28px grid / 0.52 jack). */
   --node-wire-patch-point-size-ratio: 0.54;
-  --node-wire-patch-point-size: calc(
-    var(--node-port-diameter) * var(--node-wire-patch-point-size-ratio, 0.54)
-  );
+  --node-wire-patch-point-size: 7.86px;
   /* Zoom-1 cable and trace widths. Both scale with the camera. */
-  --node-wire-thickness: 2px;
+  --node-wire-thickness: 3.46px;
   --node-wire-dip: 0.35;
   --node-wire-dip-width: 0.5;
   --node-trace-wire-thickness: 1px;
   /* Param wires (ending on a rail IO box): UIDEV param wire thickness / end dot. */
-  --node-param-wire-thickness: 0.5px;
-  --node-param-wire-dot-size: 2.012454px;
+  --node-param-wire-thickness: 1.08px;
+  --node-param-wire-dot-size: 3.64px;
   /*
    * Signal jack cell:
    *   width  = half-slot (inward half fits)

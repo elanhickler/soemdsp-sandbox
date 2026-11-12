@@ -1897,16 +1897,16 @@ function nodeGraphGlGraphPresent(options = {}) {
   if (nodeGraphGlGraphState.thickGen !== nodeGraphGlGraphState.gen || !(thick > 0)) {
     nodeGraphGlGraphState.thickGen = nodeGraphGlGraphState.gen;
     const style = getComputedStyle(host);
-    thick = Number.parseFloat(style.getPropertyValue("--node-wire-thickness")) || 2;
+    thick = Number.parseFloat(style.getPropertyValue("--node-wire-thickness")) || 3.46;
     const parsedDot = Number.parseFloat(style.getPropertyValue("--node-wire-patch-point-size"));
-    // Same default as UIDEV nodeUiDevWirePatchPointSize (stock jack * 0.54).
-    dotSize = Number.isFinite(parsedDot) ? parsedDot : 7.8624;
+    // Same default as UIDEV nodeUiDevWirePatchPointSize (locked 7.86).
+    dotSize = Number.isFinite(parsedDot) ? parsedDot : 7.86;
     nodeGraphGlGraphState.thick = thick;
     nodeGraphGlGraphState.dotSize = dotSize;
     nodeGraphGlGraphState.traceThick = Number.parseFloat(style.getPropertyValue("--node-trace-wire-thickness")) || 1;
-    nodeGraphGlGraphState.paramThick = Number.parseFloat(style.getPropertyValue("--node-param-wire-thickness")) || 0.5;
+    nodeGraphGlGraphState.paramThick = Number.parseFloat(style.getPropertyValue("--node-param-wire-thickness")) || 1.08;
     const paramDot = Number.parseFloat(style.getPropertyValue("--node-param-wire-dot-size"));
-    nodeGraphGlGraphState.paramDot = Number.isFinite(paramDot) ? paramDot : 2.012454;
+    nodeGraphGlGraphState.paramDot = Number.isFinite(paramDot) ? paramDot : 3.64;
     const wireDip = Number.parseFloat(style.getPropertyValue("--node-wire-dip"));
     nodeGraphGlGraphState.wireDip = Number.isFinite(wireDip) ? Math.min(1, Math.max(0, wireDip)) : 0.35;
     const wireDipWidth = Number.parseFloat(style.getPropertyValue("--node-wire-dip-width"));
