@@ -8492,20 +8492,28 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphCurvePoints = function syncNativ
 
   const cache = this._nativeGraphCurveCache || (this._nativeGraphCurveCache = new Map());
   const shapeIndex = (value) => {
-    const shapes = (typeof NODE_GRAPH_SEGMENT_SHAPES !== "undefined") ? NODE_GRAPH_SEGMENT_SHAPES.slice() : ["linear", "rational", "exponential", "log", "smoothstep", "smootherstep", "hold"];
+    if (typeof nodeGraphSegmentShapeIndex === "function") {
+      return nodeGraphSegmentShapeIndex(value);
+    }
+    const ids = (typeof NODE_GRAPH_SEGMENT_SHAPE_ENUM !== "undefined")
+      ? NODE_GRAPH_SEGMENT_SHAPE_ENUM.slice()
+      : ["linear", "rational", "exponential", "log", "smoothstep", "smootherstep", "hold"];
     if (Number.isFinite(Number(value)) && String(value).trim() !== "") {
-      return Math.max(0, Math.min(shapes.length - 1, Math.round(Number(value))));
+      const index = Math.round(Number(value));
+      if (index <= 0) return 1;
+      return Math.max(1, Math.min(6, index));
     }
     let s = String(value || "").trim().toLowerCase();
+    if (s === "linear") s = "rational";
     if (s === "logarithmic") s = "log";
     if (s === "smooth") s = "smoothstep";
-    const idx = shapes.indexOf(s);
-    return idx >= 0 ? idx : 1;
+    const idx = ids.indexOf(s);
+    return idx > 0 ? idx : 1;
   };
   const normalizeNode = (value, index) => {
     const source = value && typeof value === "object" ? value : {};
     const fallback = index <= 0
-      ? { c: 0, shape: "linear", x: 0, y: 0 }
+      ? { c: 0, shape: "rational", x: 0, y: 0 }
       : { c: 0, shape: "rational", x: 1, y: 1 };
     const num = (v, fb, lo = -Infinity, hi = Infinity) => {
       const n = Number(v);
@@ -8516,13 +8524,13 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphCurvePoints = function syncNativ
       c: num(source.c, fallback.c, -1, 1),
       shape: shapeIndex(source.shape ?? fallback.shape),
       x: num(source.x, fallback.x, 0, 1),
-      y: num(source.y, fallback.y, 0, 1),
+      y: num(source.y, fallback.y, -1, 1),
     };
   };
   const nodesForUpload = (node) => {
     const raw = Array.isArray(node?.graph?.nodes) && node.graph.nodes.length >= 2
       ? node.graph.nodes
-      : [{ c: 0, shape: "linear", x: 0, y: 0 }, { c: 0, shape: "rational", x: 1, y: 1 }];
+      : [{ c: 0, shape: "rational", x: 0, y: 0 }, { c: 0, shape: "rational", x: 1, y: 1 }];
     let pts = raw.slice(0, 32).map((p, i) => normalizeNode(p, i));
     pts.sort((a, b) => a.x - b.x);
     if (Number(node?.params?.lockEndpointY) >= 0.5 && pts.length >= 2) {

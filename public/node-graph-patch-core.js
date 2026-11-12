@@ -542,6 +542,9 @@ function validateNodeGraphPatch(patch) {
         node.paramMeta.skewOffset = node.paramMeta.curveOffset;
         delete node.paramMeta.curveOffset;
       }
+      if (type === "stepGraph" && typeof nodeGraphGraphMigrateStepGraphPatchNode === "function") {
+        nodeGraphGraphMigrateStepGraphPatchNode(node);
+      }
       if (type === "smoothGraph" && parameter.key === "smoothingMode") {
         const sourceMax = Number(node.paramMeta?.[parameter.key]?.max);
         const n = Math.round(Number(value));

@@ -228,7 +228,7 @@ const nodeGraphTraceDisplaySettingControlKeys = Object.freeze({
     "pill",
     "squircle",
   ],
-  colors: ["dot1Color", "secondaryColor", "tertiaryColor", "backgroundColor", "ghostColor", "buttonColor", "hoverColor", "downColor", "textColor", "strokeColor", "strokeLeftColor", "strokeRightColor", "dotColor", "arcFill", "arcTrack", "sliderColor", "sliderNumberColor", "sliderTextColor", "sliderUnitColor", "inactiveColor", "activeColor", "fontColor", "inactiveFillColor", "activeFillColor", "inactiveTextColor", "activeTextColor", "previousColor", "lightColor", "fltEnvColor", "ampEnvColor", "memColor", "barColor"],
+  colors: ["dot1Color", "secondaryColor", "tertiaryColor", "backgroundColor", "ghostColor", "playheadColor", "buttonColor", "hoverColor", "downColor", "textColor", "strokeColor", "strokeLeftColor", "strokeRightColor", "dotColor", "arcFill", "arcTrack", "sliderColor", "sliderNumberColor", "sliderTextColor", "sliderUnitColor", "inactiveColor", "activeColor", "fontColor", "inactiveFillColor", "activeFillColor", "inactiveTextColor", "activeTextColor", "previousColor", "lightColor", "fltEnvColor", "ampEnvColor", "memColor", "barColor"],
   // Every control key that exists in the shared popover MUST be listed here.
   // setNodeGraphTraceDisplaySettingsFormType only show/hides keys from these
   // lists — anything missing leaks onto every module (e.g. Output saw
@@ -863,8 +863,8 @@ const nodeGraphTraceDisplayActiveControlsByType = Object.freeze({
     choices: Object.freeze([]),
   }),
   graphFace: Object.freeze({
-    fields: Object.freeze(["zoomMin", "zoomMax"]),
-    colors: Object.freeze([]),
+    fields: Object.freeze(["zoomMin", "zoomMax", "lineThickness", "dotSize"]),
+    colors: Object.freeze(["strokeColor", "dotColor", "playheadColor", "ghostColor"]),
     toggles: Object.freeze([]),
     choices: Object.freeze([]),
   }),
@@ -2356,6 +2356,12 @@ const nodeGraphDisplaySettingsColorMeta = Object.freeze({
     aria: "Cursor dot color",
     defaultValue: "#ffffff",
     id: "nodeTraceDisplayDotColor",
+  }),
+  playheadColor: Object.freeze({
+    label: "Playhead",
+    aria: "Playhead color",
+    defaultValue: "#b184ff",
+    id: "nodeTraceDisplayPlayheadColor",
   }),
 });
 

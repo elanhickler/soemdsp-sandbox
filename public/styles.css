@@ -13665,6 +13665,12 @@ body.node-screen-solo-active .node-screen-solo-face.node-sample-waveform-display
   font-variant-numeric: tabular-nums;
 }
 
+.node-module-graph-point-strip-select {
+  appearance: none;
+  padding: 0 0.2rem;
+  min-width: 5.5rem;
+}
+
 .node-module-graph-point-strip-input:focus {
   outline: 1px solid rgba(255, 236, 181, 0.55);
   outline-offset: 0;
@@ -15324,8 +15330,9 @@ body.node-screen-solo-active .node-screen-solo-face.node-sample-waveform-display
 
 /* Phase probe: dim like node chrome; full only when the hit target is hot. */
 .node-module-graph-cursor {
-  stroke: rgba(255, 236, 181, 0.92);
-  stroke-width: 0.9;
+  stroke: var(--node-graph-playhead-color, rgba(255, 236, 181, 0.92));
+  stroke-width: var(--node-graph-line-width, 1px);
+  vector-effect: non-scaling-stroke;
   opacity: 0.42;
   pointer-events: none;
 }
@@ -15360,8 +15367,9 @@ body.node-screen-solo-active .node-screen-solo-face.node-sample-waveform-display
    sample and adds .live; pointer-events none (read-only). */
 .node-module-graph-playhead,
 .node-module-graph-phase-ghost {
-  stroke: rgba(177, 132, 255, 0.78);
-  stroke-width: 0.9;
+  stroke: var(--node-graph-playhead-color, rgba(177, 132, 255, 0.78));
+  stroke-width: var(--node-graph-line-width, 1px);
+  vector-effect: non-scaling-stroke;
   stroke-dasharray: 2.4 2.6;
   pointer-events: none;
   opacity: 0;
@@ -15374,10 +15382,21 @@ body.node-screen-solo-active .node-screen-solo-face.node-sample-waveform-display
 
 .node-module-graph-curve {
   fill: none;
-  stroke: rgba(92, 232, 212, 0.92);
+  stroke: var(--node-graph-line-color, rgba(92, 232, 212, 0.92));
   stroke-linecap: round;
   stroke-linejoin: round;
-  stroke-width: 1.6;
+  stroke-width: var(--node-graph-line-width, 2px);
+  vector-effect: non-scaling-stroke;
+}
+
+.node-module-graph-curve-ghost {
+  fill: none;
+  stroke: var(--node-graph-ghost-color, rgba(92, 232, 212, 0.38));
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: var(--node-graph-ghost-width, 1px);
+  vector-effect: non-scaling-stroke;
+  pointer-events: none;
 }
 
 .node-module-graph-control-line {
@@ -15411,7 +15430,7 @@ body.node-screen-solo-active .node-screen-solo-face.node-sample-waveform-display
  *  • no “selected = bright” state on the face
  */
 .node-module-graph-node {
-  fill: rgba(246, 246, 218, 0.88);
+  fill: var(--node-graph-point-color, rgba(246, 246, 218, 0.88));
   stroke: rgba(7, 10, 13, 0.75);
   stroke-width: 0.7;
   pointer-events: none;

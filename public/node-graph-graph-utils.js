@@ -1,20 +1,24 @@
-// Step Graph segment Shape keys (global Shape param + per-node `shape`).
-//   linear / rational / exponential / log / smoothstep / smootherstep / hold
+// Step Graph segment Shape keys live per-node on the right endpoint.
+//   rational / exponential / log / smoothstep / smootherstep / hold
+// Legacy "linear" (enum 0) normalizes to rational; ids 1..6 stay stable.
 // Kernels live in public/node-graph-segment-curves.js (native twin:
 // library/include/soemdsp/math/segment_curves.h).
 //
-// Contour / Skew Offset domain is always −1…+1. Rational / exp / log evaluate
+// Contour / Skew % domain is always −1…+1. Rational / exp / log evaluate
 // continuous with a Planck soft-cap (±(1 − 1e−7)) so kernels never see exact ±1.
+// Global Skew % is remaining-room (not additive): c' = c + offset * (1-c) when
+// offset >= 0, else c + offset * (c+1). Editable geometry uses stored c;
+// audio and the ghost curve use c'.
 //
 // smoothGraph vs stepGraph:
 //   Smooth: one global curve through free dots (smoothingMode + tension).
-//   Step:   global Shape + Skew Offset; per-node contour `c` still local
-//           (effective contour = c + curveOffset). Empty-circle handles edit bend;
+//   Step:   per-segment shape + per-node contour `c`; global Skew % ghosts the
+//           effective curve. Empty-circle handles edit stored bend;
 //           node drag snaps X to the step grid (Ctrl = free X).
 const nodeGraphGraphShapes = Object.freeze(
   typeof NODE_GRAPH_SEGMENT_SHAPES !== "undefined"
     ? NODE_GRAPH_SEGMENT_SHAPES.slice()
-    : ["linear", "rational", "exponential", "log", "smoothstep", "smootherstep", "hold"],
+    : ["rational", "exponential", "log", "smoothstep", "smootherstep", "hold"],
 );
 // Smooth Graph Curve modes.
 // catmull = guide-tension curve (ends on-curve; interiors pull; tension scales).
@@ -34,9 +38,8 @@ const nodeGraphSmoothGraphSmoothingModeLegacySix = Object.freeze([
 const nodeGraphDefaultGraphData = Object.freeze({
   cursorX: 0.5,
   nodes: Object.freeze([
-    Object.freeze({ c: 0, shape: "linear", x: 0, y: 1 }),
-    // Shape is global on Step Graph; keep node shape linear so face matches Shape=Linear.
-    Object.freeze({ c: 0, shape: "linear", x: 1, y: 0 }),
+    Object.freeze({ c: 0, shape: "rational", x: 0, y: 1 }),
+    Object.freeze({ c: 0, shape: "rational", x: 1, y: 0 }),
   ]),
 });
 
@@ -44,7 +47,7 @@ const nodeGraphGraphPresets = Object.freeze({
   envelope: Object.freeze({
     cursorX: 0,
     nodes: Object.freeze([
-      Object.freeze({ c: 0, shape: "linear", x: 0, y: 0 }),
+      Object.freeze({ c: 0, shape: "rational", x: 0, y: 0 }),
       Object.freeze({ c: 0.45, shape: "exponential", x: 0.12, y: 1 }),
       Object.freeze({ c: -0.25, shape: "rational", x: 0.48, y: 0.48 }),
       Object.freeze({ c: 0.25, shape: "exponential", x: 0.82, y: 0.48 }),
@@ -55,8 +58,8 @@ const nodeGraphGraphPresets = Object.freeze({
   ramp: Object.freeze({
     cursorX: 0,
     nodes: Object.freeze([
-      Object.freeze({ c: 0, shape: "linear", x: 0, y: 1 }),
-      Object.freeze({ c: 0, shape: "linear", x: 1, y: 0 }),
+      Object.freeze({ c: 0, shape: "rational", x: 0, y: 1 }),
+      Object.freeze({ c: 0, shape: "rational", x: 1, y: 0 }),
     ]),
   }),
   sine: Object.freeze({
@@ -72,7 +75,7 @@ const nodeGraphGraphPresets = Object.freeze({
   steps: Object.freeze({
     cursorX: 0,
     nodes: Object.freeze([
-      Object.freeze({ c: 0, shape: "linear", x: 0, y: 0.2 }),
+      Object.freeze({ c: 0, shape: "rational", x: 0, y: 0.2 }),
       Object.freeze({ c: 0, shape: "hold", x: 0.25, y: 0.72 }),
       Object.freeze({ c: 0, shape: "hold", x: 0.5, y: 0.4 }),
       Object.freeze({ c: 0, shape: "hold", x: 0.75, y: 0.88 }),
@@ -82,9 +85,9 @@ const nodeGraphGraphPresets = Object.freeze({
   triangle: Object.freeze({
     cursorX: 0,
     nodes: Object.freeze([
-      Object.freeze({ c: 0, shape: "linear", x: 0, y: 0 }),
-      Object.freeze({ c: 0, shape: "linear", x: 0.5, y: 1 }),
-      Object.freeze({ c: 0, shape: "linear", x: 1, y: 0 }),
+      Object.freeze({ c: 0, shape: "rational", x: 0, y: 0 }),
+      Object.freeze({ c: 0, shape: "rational", x: 0.5, y: 1 }),
+      Object.freeze({ c: 0, shape: "rational", x: 1, y: 0 }),
     ]),
   }),
 });
@@ -105,11 +108,11 @@ function addNodeGraphGraphNodeData(graphValue, pointValue = {}) {
     : normalizeNodeGraphGraphNumber(nodeGraphGraphValueAt(graph, x), 0);
   // Do NOT move cursorX/phase when placing a control point — only the phase
   // scrub gesture should change the cream phase line.
-  // Prefer caller shape; otherwise linear (not hold/rational — those look like
-  // steps or extreme bows when you only meant to drop a free point).
+  // Prefer caller shape; otherwise inherit the segment being split (right
+  // endpoint), falling back to rational (straight at skew 0).
   const shape = source.shape != null
     ? normalizeNodeGraphGraphShape(source.shape)
-    : "linear";
+    : nodeGraphGraphInheritShapeAtX(graph, x);
   graph.nodes.push({
     c: 0,
     shape,
@@ -198,15 +201,72 @@ function nodeGraphGraphClampValue(value, fallback = 0) {
   return normalizeNodeGraphGraphNumber(value, fallback, nodeGraphGraphValueMin, nodeGraphGraphValueMax);
 }
 
+function nodeGraphGraphShapeIsLegacyLinear(value) {
+  if (Number.isFinite(Number(value)) && String(value).trim() !== "") {
+    return Math.round(Number(value)) === 0;
+  }
+  return String(value || "").trim().toLowerCase() === "linear";
+}
+
 function normalizeNodeGraphGraphNode(value = {}, index = 0) {
   const source = value && typeof value === "object" ? value : {};
   const fallback = nodeGraphDefaultGraphData.nodes[Math.min(index, nodeGraphDefaultGraphData.nodes.length - 1)];
+  const wasLinear = nodeGraphGraphShapeIsLegacyLinear(source.shape ?? fallback.shape);
   return {
-    c: nodeGraphGraphNormalizeContour(source.c, fallback.c),
-    shape: normalizeNodeGraphGraphShape(source.shape ?? fallback.shape),
+    c: wasLinear ? 0 : nodeGraphGraphNormalizeContour(source.c, fallback.c),
+    shape: wasLinear ? "rational" : normalizeNodeGraphGraphShape(source.shape ?? fallback.shape),
     x: normalizeNodeGraphGraphNumber(source.x, fallback.x),
     y: nodeGraphGraphClampValue(source.y, fallback.y),
   };
+}
+
+function nodeGraphGraphInheritShapeAtX(graphValue, xValue) {
+  const graph = graphValue && Array.isArray(graphValue.nodes) ? graphValue : normalizeNodeGraphGraph(graphValue);
+  const x = normalizeNodeGraphGraphNumber(xValue, 0.5);
+  const nodes = graph.nodes || [];
+  if (!nodes.length) {
+    return "rational";
+  }
+  let right = nodes[nodes.length - 1];
+  for (let i = 0; i < nodes.length; i += 1) {
+    if (nodes[i].x >= x - 1e-9) {
+      right = nodes[i];
+      break;
+    }
+  }
+  return normalizeNodeGraphGraphShape(right?.shape || "rational");
+}
+
+/** Bake a leftover global Shape param onto per-node shapes, then drop the param. */
+function nodeGraphGraphMigrateStepGraphPatchNode(patchNode) {
+  if (!patchNode || patchNode.type !== "stepGraph") {
+    return patchNode;
+  }
+  const params = patchNode.params && typeof patchNode.params === "object" ? patchNode.params : null;
+  const hasGlobal = Boolean(
+    params && Object.prototype.hasOwnProperty.call(params, "segmentShape")
+    && params.segmentShape != null && String(params.segmentShape).trim() !== "",
+  );
+  let graph = normalizeNodeGraphGraph(patchNode.graph);
+  if (hasGlobal) {
+    const raw = params.segmentShape;
+    const baked = nodeGraphGraphSegmentShapeFromParam(raw);
+    const bakedLinear = nodeGraphGraphShapeIsLegacyLinear(raw);
+    graph = normalizeNodeGraphGraph({
+      ...graph,
+      nodes: graph.nodes.map((node) => ({
+        ...node,
+        shape: baked,
+        c: bakedLinear ? 0 : node.c,
+      })),
+    });
+    delete params.segmentShape;
+    if (patchNode.paramMeta && Object.prototype.hasOwnProperty.call(patchNode.paramMeta, "segmentShape")) {
+      delete patchNode.paramMeta.segmentShape;
+    }
+  }
+  patchNode.graph = graph;
+  return patchNode;
 }
 
 function normalizeNodeGraphGraph(value = {}) {
@@ -282,6 +342,9 @@ function nodeGraphGraphWithLockedEndpointY(graphValue, selectedIndex = 0) {
 }
 
 function nodeGraphGraphForNode(patchNode, selectedIndex = 0) {
+  if (patchNode && patchNode.type === "stepGraph") {
+    nodeGraphGraphMigrateStepGraphPatchNode(patchNode);
+  }
   const graph = nodeGraphGraphWithPhaseCursor(patchNode);
   return nodeGraphGraphEndpointYLockEnabledForNode(patchNode)
     ? nodeGraphGraphWithLockedEndpointY(graph, selectedIndex)
@@ -303,43 +366,56 @@ function nodeGraphGraphUsesPerNodeContour(type) {
   return type === "stepGraph";
 }
 
-/**
- * Per-node shape select in the node list.
- * Step Graph Shape is global (matches native / worklet); Smooth Graph uses Curve.
- */
-function nodeGraphGraphUsesPerNodeShapeSelect(_type) {
-  return false;
-}
-
 function nodeGraphGraphUsesGlobalSmoothing(type) {
   return type === "smoothGraph";
 }
 
-/** Resolve Step Graph global Shape param (choice index or name) → shape key. */
+/** Resolve a shape key from a name or stable enum id (0 = legacy linear → rational). */
 function nodeGraphGraphSegmentShapeFromParam(value) {
-  if (Number.isFinite(Number(value)) && String(value).trim() !== "") {
-    const index = Math.max(0, Math.min(nodeGraphGraphShapes.length - 1, Math.round(Number(value))));
-    return nodeGraphGraphShapes[index];
+  if (typeof nodeGraphSegmentShapeFromParam === "function") {
+    return nodeGraphSegmentShapeFromParam(value);
   }
   return normalizeNodeGraphGraphShape(value);
 }
 
+function nodeGraphGraphApplySkewPercent(contour, offset) {
+  if (typeof nodeGraphSegmentApplySkewPercent === "function") {
+    return nodeGraphSegmentApplySkewPercent(contour, offset);
+  }
+  const c = nodeGraphGraphNormalizeContour(contour, 0);
+  const o = normalizeNodeGraphGraphNumber(offset, 0, -1, 1);
+  if (o >= 0) {
+    return nodeGraphGraphNormalizeContour(c + o * (1 - c), 0);
+  }
+  return nodeGraphGraphNormalizeContour(c + o * (c + 1), 0);
+}
+
+function nodeGraphGraphBaseSegmentOptions(options = {}) {
+  const source = options && typeof options === "object" ? options : {};
+  return { ...source, curveOffset: 0, skewOffset: 0 };
+}
+
+function nodeGraphGraphGlobalSkewOffset(options = {}) {
+  const source = options && typeof options === "object" ? options : {};
+  return normalizeNodeGraphGraphNumber(source.skewOffset ?? source.curveOffset, 0, -1, 1);
+}
+
 /**
- * Segment eval options for a patch node (global shape + contour offset).
- * Smooth Graph returns empty; Step Graph supplies segmentShape / curveOffset.
+ * Segment eval options for a patch node.
+ * Smooth Graph returns empty; Step Graph supplies skewOffset (remaining-room %).
+ * Per-segment shape comes from the right endpoint, not a global override.
  */
 function nodeGraphGraphSegmentOptionsForNode(patchNode) {
   if (!nodeGraphGraphUsesPerNodeShapes(patchNode?.type)) {
     return {};
   }
+  if (patchNode) {
+    nodeGraphGraphMigrateStepGraphPatchNode(patchNode);
+  }
   const params = patchNode?.params || {};
   return {
+    skewOffset: normalizeNodeGraphGraphNumber(params.skewOffset ?? params.curveOffset, 0, -1, 1),
     curveOffset: normalizeNodeGraphGraphNumber(params.skewOffset ?? params.curveOffset, 0, -1, 1),
-    segmentShape: nodeGraphGraphSegmentShapeFromParam(
-      params.segmentShape != null && params.segmentShape !== ""
-        ? params.segmentShape
-        : "linear",
-    ),
   };
 }
 
@@ -896,9 +972,7 @@ function nodeGraphGraphContourFromPoint(graph, rightIndex, point, segmentOptions
   if (!midpoint || !left || !right) {
     return 0;
   }
-  const shape = segmentOptions.segmentShape != null && String(segmentOptions.segmentShape).trim() !== ""
-    ? normalizeNodeGraphGraphShape(segmentOptions.segmentShape)
-    : normalizeNodeGraphGraphShape(right.shape || "linear");
+  const shape = normalizeNodeGraphGraphShape(right.shape || "rational");
   const dy = Number(right.y) - Number(left.y);
   if (!Number.isFinite(dy) || Math.abs(dy) < 1e-6) {
     const range = 0.08;
@@ -942,19 +1016,16 @@ function nodeGraphGraphModeCurve(position, mode, index = 0) {
 
 /**
  * @param {number} p segment progress 0..1
- * @param {{ c?: number, shape?: string }} right right endpoint (per-node c still used)
- * @param {{ segmentShape?: string, curveOffset?: number }} [options]
+ * @param {{ c?: number, shape?: string }} right right endpoint (shape + stored c)
+ * @param {{ skewOffset?: number, curveOffset?: number }} [options]
  */
 function nodeGraphGraphLegacySegmentShape(p, right, options = {}) {
-  const offset = normalizeNodeGraphGraphNumber((options.skewOffset ?? options.curveOffset), 0, -1, 1);
-  // Per-node c + global Skew Offset, clamped to ±1 (Planck soft-cap in kernels).
-  const contour = nodeGraphGraphNormalizeContour((nodeGraphFiniteNumber(right?.c)) + offset, 0);
-  // Global Shape wins (same as worklet + native step_graph). Per-node shape is legacy only.
-  const shape = options.segmentShape != null && String(options.segmentShape).trim() !== ""
-    ? normalizeNodeGraphGraphShape(options.segmentShape)
-    : (right?.shape != null && String(right.shape).trim() !== ""
-      ? normalizeNodeGraphGraphShape(right.shape)
-      : "linear");
+  const offset = nodeGraphGraphGlobalSkewOffset(options);
+  // Stored c, then remaining-room Skew %. Handles/solid curve pass offset 0.
+  const contour = nodeGraphGraphApplySkewPercent(nodeGraphFiniteNumber(right?.c), offset);
+  const shape = right?.shape != null && String(right.shape).trim() !== ""
+    ? normalizeNodeGraphGraphShape(right.shape)
+    : "rational";
   if (typeof nodeGraphSegmentCurve01 === "function") {
     return nodeGraphSegmentCurve01(p, shape, contour);
   }
@@ -968,14 +1039,11 @@ function nodeGraphGraphLegacySegmentShape(p, right, options = {}) {
     return contour < 0 ? (p > 0 ? 1 : 0) : (p >= 1 ? 1 : 0);
   }
   if (shape === "smoothstep" || shape === "smooth") {
-    return nodeGraphGraphSmoothCurve(p);
+    return nodeGraphGraphSmoothCurve(nodeGraphGraphRationalCurve(p, contour));
   }
   if (shape === "smootherstep") {
     const w = nodeGraphGraphRationalCurve(p, contour);
     return w * w * w * (w * (w * 6 - 15) + 10);
-  }
-  if (shape === "linear") {
-    return p;
   }
   return nodeGraphGraphRationalCurve(p, contour);
 }
@@ -1279,6 +1347,10 @@ function renderNodeGraphGraphDisplay(element, graphValue, selectedIndex = null, 
   if (nodeId && selectedIndex !== null && selectedIndex !== undefined) {
     setNodeGraphGraphSelectedNodeIndex(nodeId, graph, selectedIndex);
   }
+  const baseOptions = nodeGraphGraphBaseSegmentOptions(segmentOptions);
+  const skewOffset = nodeGraphGraphGlobalSkewOffset(segmentOptions);
+  const showSkewGhost = smoothingMode === "segment" && Math.abs(skewOffset) > 1e-6;
+  // Playhead / value guide follow the audible (effective) curve.
   const cursorValue = nodeGraphGraphValueAt(graph, graph.cursorX, smoothingMode, tension, segmentOptions);
   const cursor = nodeGraphGraphPointToSvg(graph.cursorX, 0);
   const cursorPoint = nodeGraphGraphPointToSvg(graph.cursorX, cursorValue);
@@ -1350,8 +1422,14 @@ function renderNodeGraphGraphDisplay(element, graphValue, selectedIndex = null, 
   }));
   svg.append(createNodeGraphGraphSvgElement("path", {
     class: "node-module-graph-curve",
-    d: nodeGraphGraphCurvePath(graph, 96, smoothingMode, tension, segmentOptions),
+    d: nodeGraphGraphCurvePath(graph, 96, smoothingMode, tension, baseOptions),
   }));
+  if (showSkewGhost) {
+    svg.append(createNodeGraphGraphSvgElement("path", {
+      class: "node-module-graph-curve-ghost",
+      d: nodeGraphGraphCurvePath(graph, 96, smoothingMode, tension, segmentOptions),
+    }));
+  }
   // Value dots and contour rings stay visible (phone / no-hover).
   // .is-hot brightens the active hit. Panel selection does not light face chrome.
   const hitRadii = nodeGraphGraphScreenRoundRadii(element, 7.2);
@@ -1360,7 +1438,7 @@ function renderNodeGraphGraphDisplay(element, graphValue, selectedIndex = null, 
   const showContourHandles = nodeGraphGraphShowsContourHandles(ownerNode);
   if (showContourHandles) {
     for (let index = 1; index < graph.nodes.length; index += 1) {
-      const point = nodeGraphGraphContourHandlePoint(graph, index, smoothingMode, segmentOptions);
+      const point = nodeGraphGraphContourHandlePoint(graph, index, smoothingMode, baseOptions);
       if (!point) {
         continue;
       }
@@ -2147,7 +2225,7 @@ function addNodeGraphGraphNodeFromDisplayEvent(event, options = {}) {
     nodeGraphGraphDebugTrace("add-node bailing, targetNode/type check failed", { nodeId });
     return false;
   }
-  // Step Graph: snap X to the step grid; new points are linear (c=0). Do not
+  // Step Graph: snap X to the step grid; new points inherit the split segment shape (c=0). Do not
   // force hold or rewrite the previous boundary's Y — that faked a step bar.
   const stepCount = nodeGraphGraphStepCountForNode(targetNode);
   const isStep = nodeGraphGraphIsStepGraphType(targetNode.type);
@@ -2155,7 +2233,6 @@ function addNodeGraphGraphNodeFromDisplayEvent(event, options = {}) {
     ? {
       x: stepCount > 0 ? nodeGraphGraphSnapXToStepGrid(point.x, stepCount) : point.x,
       y: point.y,
-      shape: "linear",
     }
     : point;
   const addition = addNodeGraphGraphNodeData(targetNode.graph, placePoint);
@@ -2255,7 +2332,7 @@ function beginNodeGraphGraphContourDrag(event, contourHandle) {
   display?.focus?.({ preventScroll: true });
   setNodeGraphGraphSelectedNodeIndex(nodeId, graph, index);
   const left = graph.nodes[index - 1] || { y: 0 };
-  const right = graph.nodes[index] || { c: 0, shape: "linear", y: 0 };
+  const right = graph.nodes[index] || { c: 0, shape: "rational", y: 0 };
   const pointer = nodeGraphGraphSvgToGraphPoint(svg, event.clientX, event.clientY);
   // Normal = curve bend; Shift = bar height on prev+next points.
   const contourMode = !event.shiftKey;
@@ -2454,18 +2531,13 @@ function dragNodeGraphGraphNode(event) {
     const point = nodeGraphGraphSvgToGraphPoint(drag.svg, event.clientX, event.clientY);
     const nodes = [...(drag.graph.nodes || [])];
     const current = nodes[drag.index] || normalizeNodeGraphGraphNode({}, drag.index);
-    // Handle is drawn at effective contour (c + curveOffset). Store residual c
-    // so nonzero Skew Offset does not double-apply / slam to hard step.
-    const curveOffset = normalizeNodeGraphGraphNumber(
-      faceRenderOptions?.segmentOptions?.curveOffset,
-      0,
-      -1,
-      1,
-    );
-    const effective = nodeGraphGraphContourFromPoint(drag.graph, drag.index, point, faceRenderOptions?.segmentOptions);
+    // Handles sit on the stored-c (solid) curve. Global Skew % only moves the ghost.
+    const nextC = nodeGraphGraphContourFromPoint(drag.graph, drag.index, point);
+    const nextShape = nodeGraphGraphContourEditableShape(current.shape);
     nodes[drag.index] = normalizeNodeGraphGraphNode({
       ...current,
-      c: nodeGraphGraphNormalizeContour(effective - curveOffset, 0),
+      shape: nextShape,
+      c: nodeGraphGraphNormalizeContour(nextC, 0),
     }, drag.index);
     drag.graph = normalizeNodeGraphGraph({ ...drag.graph, nodes });
     drag.lastClientX = event.clientX;
@@ -2717,9 +2789,8 @@ function addFocusedNodeGraphGraphNode() {
       x: stepCount > 0
         ? nodeGraphGraphSnapXToStepGrid(nodeGraphFiniteNumber(targetNode.graph?.cursorX, 0.5), stepCount)
         : (nodeGraphFiniteNumber(targetNode.graph?.cursorX, 0.5)),
-      shape: "linear",
     }
-    : { shape: "linear" };
+    : {};
   const addition = addNodeGraphGraphNodeData(targetNode.graph, place);
   if (!addition.added) {
     return false;

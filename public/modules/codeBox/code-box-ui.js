@@ -5,8 +5,8 @@
 const CODE_BOX_DEFAULT_GRAPH = Object.freeze({
   cursorX: 0.5,
   nodes: Object.freeze([
-    Object.freeze({ x: 0, y: 1, c: 0, shape: "linear" }),
-    Object.freeze({ x: 1, y: 0, c: 0, shape: "linear" }),
+    Object.freeze({ x: 0, y: 1, c: 0, shape: "rational" }),
+    Object.freeze({ x: 1, y: 0, c: 0, shape: "rational" }),
   ]),
 });
 
@@ -20,7 +20,7 @@ function serializeNodeGraphCurveToCodeText(graph) {
     x: Number(node?.x),
     y: Number(node?.y),
     c: Number(node?.c),
-    shape: String(node?.shape || "linear"),
+    shape: String(node?.shape || "rational"),
   }));
   const nodeLines = nodes.map((node) => `    ${JSON.stringify(node)}`);
   return [

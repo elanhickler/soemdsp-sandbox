@@ -3,9 +3,16 @@
 // skew/contour is -1..+1. Positive skew raises the mid-segment weight
 // so every continuous shape bends the same way. Callers blend
 // y = y0 + (y1 - y0) * w.
+//
+// Linear was removed from the palette (Rational at skew 0 is the straight
+// segment). Enum ids stay stable: 0 is legacy Linear and normalizes to
+// Rational (1). UI palette is Rational, Exponential, Log, Smoothstep,
+// Smootherstep, Hold.
 (function (root) {
   var PLANCK = 1e-7;
-  var SHAPES = ["linear", "rational", "exponential", "log", "smoothstep", "smootherstep", "hold"];
+  // Stable enum ids (index 0 = legacy linear).
+  var SHAPE_ENUM = ["linear", "rational", "exponential", "log", "smoothstep", "smootherstep", "hold"];
+  var SHAPES = ["rational", "exponential", "log", "smoothstep", "smootherstep", "hold"];
 
   function finiteNumber(value, fallback) {
     var n = Number(value);
@@ -34,6 +41,7 @@
 
   function normalizeShape(value) {
     var shape = String(value || "").trim().toLowerCase();
+    if (shape === "linear") return "rational";
     if (shape === "logarithmic") return "log";
     if (shape === "smooth") return "smoothstep";
     if (shape === "smoother") return "smootherstep";
@@ -42,18 +50,32 @@
 
   function shapeFromParam(value) {
     if (Number.isFinite(Number(value)) && String(value).trim() !== "") {
-      var index = Math.max(0, Math.min(SHAPES.length - 1, Math.round(Number(value))));
-      return SHAPES[index];
+      var index = Math.round(Number(value));
+      if (index <= 0) return "rational";
+      if (index >= SHAPE_ENUM.length) return "hold";
+      return normalizeShape(SHAPE_ENUM[index]);
     }
     return normalizeShape(value);
   }
 
   function shapeIndex(value) {
     if (Number.isFinite(Number(value)) && String(value).trim() !== "") {
-      return Math.max(0, Math.min(SHAPES.length - 1, Math.round(Number(value))));
+      var index = Math.round(Number(value));
+      if (index <= 0) return 1;
+      if (index > 6) return 6;
+      return index;
     }
-    var idx = SHAPES.indexOf(normalizeShape(value));
-    return idx >= 0 ? idx : 1;
+    var name = normalizeShape(value);
+    var idx = SHAPE_ENUM.indexOf(name);
+    return idx > 0 ? idx : 1;
+  }
+
+  // offset in -1..+1 = -100%..+100% of remaining room toward that limit.
+  function applySkewPercent(contour, offset) {
+    var c = clamp11(contour);
+    var o = clamp11(offset);
+    if (o >= 0) return clamp11(c + o * (1 - c));
+    return clamp11(c + o * (c + 1));
   }
 
   function rational01(p, contour) {
@@ -119,7 +141,6 @@
 
   function curve01(p, shape, contour) {
     shape = normalizeShape(shape);
-    if (shape === "linear") return clamp01(p);
     if (shape === "exponential") return exponential01(p, contour);
     if (shape === "log") return logarithmic01(p, contour);
     if (shape === "smoothstep") return smoothstep01(p, contour);
@@ -131,7 +152,6 @@
   function contourFromMidValue(target, shape) {
     shape = normalizeShape(shape);
     var goal = clamp01(target);
-    if (shape === "linear") return 0;
     if (shape === "hold") return goal < 0.5 ? 1 : -1;
     var lo = -1;
     var hi = 1;
@@ -147,10 +167,12 @@
     return 0.5 * (lo + hi);
   }
 
+  root.NODE_GRAPH_SEGMENT_SHAPE_ENUM = Object.freeze(SHAPE_ENUM.slice());
   root.NODE_GRAPH_SEGMENT_SHAPES = Object.freeze(SHAPES.slice());
   root.nodeGraphSegmentNormalizeShape = normalizeShape;
   root.nodeGraphSegmentShapeFromParam = shapeFromParam;
   root.nodeGraphSegmentShapeIndex = shapeIndex;
+  root.nodeGraphSegmentApplySkewPercent = applySkewPercent;
   root.nodeGraphSegmentRational01 = rational01;
   root.nodeGraphSegmentExponential01 = exponential01;
   root.nodeGraphSegmentLogarithmic01 = logarithmic01;

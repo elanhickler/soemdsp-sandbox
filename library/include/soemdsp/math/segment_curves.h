@@ -2,7 +2,7 @@
 // plus skew/contour in [-1,+1]. Other modules can call these later so
 // bend direction and -1..+1 response stay consistent.
 //
-// Neutral (0) is identity for linear / rational / exponential / log,
+// Neutral (0) is identity for rational / exponential / log,
 // the standard S-curve for smoothstep / smootherstep, and a late jump
 // for hold. Positive skew raises the mid-segment weight. Callers blend
 // y = y0 + (y1 - y0) * w so rising and falling segments share the same
@@ -24,12 +24,23 @@ enum segment_shape : int {
   kSegmentHold = 6,
 };
 
+// Legacy kSegmentLinear (0) normalizes to Rational. IDs 1..6 stay stable.
 static inline int segment_shape_normalize(double shapeV) {
   const double v = soemdsp::debug::safe(shapeV);
   int s = (int)(v + (v >= 0.0 ? 0.5 : -0.5));
   if (s < 0) s = 0;
   if (s > kSegmentHold) s = kSegmentHold;
+  if (s == kSegmentLinear) return kSegmentRational;
   return s;
+}
+
+// offset in -1..+1 = -100%..+100% of remaining room toward that limit.
+// 0 leaves c unchanged; +1 maps every c to +1; -1 maps every c to -1.
+static inline double segment_apply_skew_percent(double contour, double offset) {
+  const double c = clamp11(soemdsp::debug::safe(contour));
+  const double o = clamp11(soemdsp::debug::safe(offset));
+  if (o >= 0.0) return clamp11(c + o * (1.0 - c));
+  return clamp11(c + o * (c + 1.0));
 }
 
 static inline double segment_contour_soft_cap(double contour) {
@@ -107,7 +118,7 @@ static inline double segment_hold01(double p, double contour) {
 
 static inline double segment_curve01(double p, int shape, double contour) {
   switch (shape) {
-    case kSegmentLinear: return clamp01(p);
+    case kSegmentLinear: return segment_rational01(p, contour);
     case kSegmentExponential: return segment_exponential01(p, contour);
     case kSegmentLog: return segment_logarithmic01(p, contour);
     case kSegmentSmoothstep: return segment_smoothstep01(p, contour);
@@ -129,6 +140,7 @@ using soemdsp::math::kSegmentSmoothstep;
 using soemdsp::math::kSegmentSmootherstep;
 using soemdsp::math::kSegmentHold;
 using soemdsp::math::segment_shape_normalize;
+using soemdsp::math::segment_apply_skew_percent;
 using soemdsp::math::segment_contour_soft_cap;
 using soemdsp::math::segment_rational01;
 using soemdsp::math::segment_exponential01;

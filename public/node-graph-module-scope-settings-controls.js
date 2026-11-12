@@ -870,6 +870,18 @@ const nodeGraphTraceDisplayFormTypeValueClampOverrides = Object.freeze({
     fadeTime: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, 0.35), 0, 10),
     ghost: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, 0.3), 0, 1),
   }),
+  graphFace: Object.freeze({
+    zoomMin: (value) => {
+      const n = Number(value);
+      return Number.isFinite(n) ? clampNodeSliderValue(n, -1, 2) : -1;
+    },
+    zoomMax: (value) => {
+      const n = Number(value);
+      return Number.isFinite(n) ? clampNodeSliderValue(n, -1, 2) : 1;
+    },
+    lineThickness: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, 2), 0, 16),
+    dotSize: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, 6), 0, 32),
+  }),
   clockFace: Object.freeze({
     lineThickness: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, 2), 0, 16),
     lineSmoothing: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, 1), 0, 8),
@@ -897,6 +909,11 @@ const nodeGraphTraceDisplayFormTypeValueClampOverrides = Object.freeze({
     windowCycles: (value) => nodeGraphScopeClampWindowCycles(value),
     scale: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, 1), 0, 16),
     plotOffset: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, 0), -1, 1),
+  }),
+  // Music Player trace: same Line thickness / Line blur ranges as plotFace.
+  sampleWaveform: Object.freeze({
+    lineThickness: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, 2), 0, 16),
+    lineSmoothing: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, 1), 0, 8),
   }),
   pulseTrainFace: Object.freeze({
     ...nodeGraphPulseFaceValueClamps,

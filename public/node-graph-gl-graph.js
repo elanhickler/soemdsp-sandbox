@@ -1202,16 +1202,41 @@ function nodeGraphGlGraphDrawChrome(batch, toX, toY, zoom, cssW, cssH) {
       const segmentOptions = typeof nodeGraphGraphSegmentOptionsForNode === "function"
         ? nodeGraphGraphSegmentOptionsForNode(patchNode)
         : {};
+      const baseOptions = typeof nodeGraphGraphBaseSegmentOptions === "function"
+        ? nodeGraphGraphBaseSegmentOptions(segmentOptions)
+        : { ...segmentOptions, skewOffset: 0, curveOffset: 0 };
+      const look = typeof nodeGraphGraphFaceDisplaySettingsForNode === "function"
+        ? nodeGraphGraphFaceDisplaySettingsForNode(patchNode)
+        : null;
+      const parseRgba = (color, fallback) => {
+        if (typeof nodeGraphGlGraphParseCssColor === "function") {
+          return nodeGraphGlGraphParseCssColor(color, fallback);
+        }
+        return fallback;
+      };
+      const lineRgba = parseRgba(look?.strokeColor, [92 / 255, 232 / 255, 212 / 255, 0.92]);
+      const ghostRgba = parseRgba(look?.ghostColor, [92 / 255, 232 / 255, 212 / 255, 0.38]);
+      const lineW = Math.max(0, Number(look?.lineThickness));
+      const thickness = Math.max(0.5, (Number.isFinite(lineW) ? lineW : 2) * Math.max(0.35, zoom * 0.5));
       const samples = 96;
-      const pts = new Float32Array(samples * 2);
-      for (let s = 0; s < samples; s += 1) {
-        const u = s / (samples - 1);
-        const v = Number(nodeGraphGraphValueAt(graph, u, smoothingMode, tension, segmentOptions));
-        const mapped = toBox(u, Number.isFinite(v) ? v : 0);
-        pts[s * 2] = mapped.x;
-        pts[s * 2 + 1] = mapped.y;
+      const samplePts = (options) => {
+        const pts = new Float32Array(samples * 2);
+        for (let s = 0; s < samples; s += 1) {
+          const u = s / (samples - 1);
+          const v = Number(nodeGraphGraphValueAt(graph, u, smoothingMode, tension, options));
+          const mapped = toBox(u, Number.isFinite(v) ? v : 0);
+          pts[s * 2] = mapped.x;
+          pts[s * 2 + 1] = mapped.y;
+        }
+        return pts;
+      };
+      nodeGraphGlLinesPolyline(batch, samplePts(baseOptions), thickness, 0.4, lineRgba);
+      const skew = typeof nodeGraphGraphGlobalSkewOffset === "function"
+        ? nodeGraphGraphGlobalSkewOffset(segmentOptions)
+        : Number(segmentOptions?.skewOffset ?? segmentOptions?.curveOffset ?? 0);
+      if (Number.isFinite(skew) && Math.abs(skew) > 1e-6) {
+        nodeGraphGlLinesPolyline(batch, samplePts(segmentOptions), Math.max(0.5, thickness * 0.55), 0.45, ghostRgba);
       }
-      nodeGraphGlLinesPolyline(batch, pts, Math.max(0.8, zoom * 0.6), 0.4, [0.85, 0.9, 0.95, 1]);
     });
   }
 }

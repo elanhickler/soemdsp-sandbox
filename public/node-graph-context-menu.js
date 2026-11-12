@@ -813,6 +813,7 @@ const nodeGraphModuleActionControlIds = [
   // Width + Display Height (face gu, when module has a face) — app-wide policy.
   "nodeSceneWidthControls",
   "nodeSceneDisplayHeightControls",
+  "nodeSceneGraphPresetControls",
   "nodeSceneTextBoxTextSizeControls",
   "nodeSceneTextBoxHeightControls",
   "nodeSceneTextBoxTextControls",
@@ -838,6 +839,7 @@ function ensureNodeGraphModuleActionsWindowBody() {
   if (!body) {
     return;
   }
+  ensureNodeGraphGraphPresetControls();
   for (const id of nodeGraphModuleActionControlIds) {
     const element = document.getElementById(id);
     if (!element) {
@@ -864,6 +866,49 @@ function ensureNodeGraphModuleActionsWindowBody() {
     if (element && element.parentElement === body) {
       body.append(element);
     }
+  }
+}
+
+function ensureNodeGraphGraphPresetControls() {
+  const body = document.getElementById("nodeModuleActionsWindowBody");
+  if (!body) {
+    return;
+  }
+  let section = document.getElementById("nodeSceneGraphPresetControls");
+  if (!section) {
+    section = document.createElement("div");
+    section.id = "nodeSceneGraphPresetControls";
+    section.className = "scene-context-text-box-controls scene-context-graph-preset-controls";
+    section.hidden = true;
+    const heading = document.createElement("div");
+    heading.className = "scene-context-section-label";
+    heading.textContent = "Graph presets";
+    section.append(heading);
+    const row = document.createElement("div");
+    row.className = "scene-context-action-row";
+    const presets = [
+      ["envelope", "Envelope"],
+      ["ramp", "Ramp"],
+      ["sine", "Sine"],
+      ["steps", "Steps"],
+      ["triangle", "Triangle"],
+    ];
+    for (const [key, label] of presets) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "scene-context-button";
+      button.dataset.graphPreset = key;
+      button.textContent = label;
+      button.setAttribute("aria-label", label);
+      button.addEventListener("click", () => {
+        if (typeof applyNodeGraphGraphPresetFromContext === "function") {
+          applyNodeGraphGraphPresetFromContext(key);
+        }
+      });
+      row.append(button);
+    }
+    section.append(row);
+    body.append(section);
   }
 }
 
@@ -1592,6 +1637,12 @@ function configureNodeSceneContextMenu(mode) {
     toggleCollapsedButton.hidden = !showInletOutletVisibilityChrome || (multiModuleMode && !selectedNodes.length);
   }
   toggleTitleButton.hidden = !showTitleVisibilityChrome || (multiModuleMode && !selectedNodes.length);
+  const graphPresetControls = document.getElementById("nodeSceneGraphPresetControls");
+  if (graphPresetControls) {
+    graphPresetControls.hidden = !(moduleMode && !multiModuleMode && (
+      targetNode?.type === "smoothGraph" || targetNode?.type === "stepGraph"
+    ));
+  }
   imageControls.hidden = !(moduleMode && !multiModuleMode && targetNode?.type === "image");
   // Image layers / span / offset / readout live in Display Settings, not Module Settings.
   canvasControls.hidden = !(moduleMode && !multiModuleMode && targetNode?.type === "canvas");

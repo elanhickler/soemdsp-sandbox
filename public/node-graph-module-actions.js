@@ -2778,10 +2778,42 @@ function selectedNodeGraphGraphIndex(graph, fallback = undefined) {
   return maxIndex;
 }
 
+function applyNodeGraphGraphPresetFromContext(name) {
+  const nodeId = typeof nodeGraphModuleActionTargetNodeId === "function"
+    ? nodeGraphModuleActionTargetNodeId()
+    : "";
+  const sourceNode = typeof nodeGraphPatchNode === "function" ? nodeGraphPatchNode(nodeId) : null;
+  if (!sourceNode || (typeof nodeGraphModuleIsGraphType === "function" && !nodeGraphModuleIsGraphType(sourceNode.type))) {
+    return;
+  }
+  if (typeof nodeGraphGraphPresetData !== "function" || typeof cloneNodeGraphPatch !== "function") {
+    return;
+  }
+  const patch = cloneNodeGraphPatch(nodeGraphMvp.patch);
+  const targetNode = patch.nodes.find((node) => node.id === nodeId);
+  if (!targetNode || (typeof nodeGraphModuleIsGraphType === "function" && !nodeGraphModuleIsGraphType(targetNode.type))) {
+    return;
+  }
+  const nextGraph = nodeGraphGraphPresetData(name);
+  targetNode.graph = (typeof nodeGraphGraphEndpointYLockEnabledForNode === "function"
+    && nodeGraphGraphEndpointYLockEnabledForNode(targetNode))
+    ? nodeGraphGraphWithLockedEndpointY(nextGraph, 0)
+    : nextGraph;
+  if (typeof syncNodeGraphGraphPhaseParameterFromCursor === "function") {
+    syncNodeGraphGraphPhaseParameterFromCursor(targetNode);
+  }
+  commitNodeGraphPatch(patch, { status: `graph preset ${String(name || "").trim()}` });
+  if (typeof syncNodeGraphGraphDisplaysForNode === "function") {
+    syncNodeGraphGraphDisplaysForNode(nodeId, targetNode);
+  }
+  if (typeof syncNodeGraphGraphControls === "function") {
+    syncNodeGraphGraphControls(targetNode.graph, 0, { nodeId });
+  }
+}
+
 /**
  * Sync Smooth/Step Graph face after edits.
- * Module Settings point-list / presets / transform / clipboard UI was removed —
- * the face is the editor.
+ * The face is the editor; presets live in Module Actions.
  */
 function syncNodeGraphGraphControls(graph, selectedIndex = selectedNodeGraphGraphIndex(graph), options = {}) {
   const graphData = normalizeNodeGraphGraph(graph);

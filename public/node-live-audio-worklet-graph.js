@@ -22,8 +22,10 @@ NodeLiveAudioProcessor.prototype.normalizeGraphShape = function normalizeGraphSh
     if (shape === "smoother" || shape === "smootherstep") {
       return "smootherstep";
     }
+    if (shape === "linear") {
+      return "rational";
+    }
     if (
-      shape === "linear" ||
       shape === "exponential" ||
       shape === "rational" ||
       shape === "log" ||
@@ -37,7 +39,7 @@ NodeLiveAudioProcessor.prototype.normalizeGraphShape = function normalizeGraphSh
 NodeLiveAudioProcessor.prototype.normalizeGraphNode = function normalizeGraphNode(value = {}, index = 0) {
     const source = value && typeof value === "object" ? value : {};
     const fallback = index <= 0
-      ? { c: 0, shape: "linear", x: 0, y: 0 }
+      ? { c: 0, shape: "rational", x: 0, y: 0 }
       : { c: 0, shape: "rational", x: 1, y: 1 };
     return {
       c: this.normalizeGraphNumber(source.c, fallback.c, -1, 1),
@@ -51,14 +53,14 @@ NodeLiveAudioProcessor.prototype.normalizeGraph = function normalizeGraph(value 
     const source = value && typeof value === "object" ? value : {};
     const inputNodes = Array.isArray(source.nodes) && source.nodes.length >= 2
       ? source.nodes
-      : [{ c: 0, shape: "linear", x: 0, y: 0 }, { c: 0, shape: "rational", x: 1, y: 1 }];
+      : [{ c: 0, shape: "rational", x: 0, y: 0 }, { c: 0, shape: "rational", x: 1, y: 1 }];
     const nodes = inputNodes
       .slice(0, 32)
       .map((node, index) => this.normalizeGraphNode(node, index))
       .sort((left, right) => left.x - right.x);
     if (nodes.length < 2) {
       nodes.push(
-        this.normalizeGraphNode({ c: 0, shape: "linear", x: 0, y: 0 }, 0),
+        this.normalizeGraphNode({ c: 0, shape: "rational", x: 0, y: 0 }, 0),
         this.normalizeGraphNode({ c: 0, shape: "rational", x: 1, y: 1 }, 1),
       );
     }
@@ -458,11 +460,8 @@ NodeLiveAudioProcessor.prototype.graphSmoothingModeForNode = function graphSmoot
 };
 
 NodeLiveAudioProcessor.prototype.graphSegmentShapeFromParam = function graphSegmentShapeFromParam(value) {
-    const shapes = (typeof NODE_GRAPH_SEGMENT_SHAPES !== "undefined")
-      ? NODE_GRAPH_SEGMENT_SHAPES.slice()
-      : ["linear", "rational", "exponential", "log", "smoothstep", "smootherstep", "hold"];
-    if (Number.isFinite(Number(value)) && String(value).trim() !== "") {
-      return shapes[Math.max(0, Math.min(shapes.length - 1, Math.round(Number(value))))];
+    if (typeof nodeGraphSegmentShapeFromParam === "function") {
+      return nodeGraphSegmentShapeFromParam(value);
     }
     return this.normalizeGraphShape(value);
 };
@@ -473,12 +472,8 @@ NodeLiveAudioProcessor.prototype.graphSegmentOptionsForNode = function graphSegm
     }
     const params = node?.params || {};
     return {
+      skewOffset: this.normalizeGraphNumber(params.skewOffset ?? params.curveOffset, 0, -1, 1),
       curveOffset: this.normalizeGraphNumber(params.skewOffset ?? params.curveOffset, 0, -1, 1),
-      segmentShape: this.graphSegmentShapeFromParam(
-        params.segmentShape != null && params.segmentShape !== ""
-          ? params.segmentShape
-          : "linear",
-      ),
     };
 };
 
@@ -494,12 +489,19 @@ NodeLiveAudioProcessor.prototype.graphSegmentValue = function graphSegmentValue(
       const shaped = this.graphModeCurve(p, smoothingMode, index);
       return left.y + (right.y - left.y) * shaped;
     }
-    const offset = this.normalizeGraphNumber(segmentOptions.curveOffset, 0, -1, 1);
-    // Per-node c + global offset; ±1 = hard step for rational / exp / log.
-    const contour = this.normalizeGraphNumber((nodeGraphFiniteNumber(right.c)) + offset, 0, -1, 1);
-    const shape = segmentOptions.segmentShape != null && segmentOptions.segmentShape !== ""
-      ? this.normalizeGraphShape(segmentOptions.segmentShape)
-      : this.normalizeGraphShape(right.shape || "linear");
+    const offset = this.normalizeGraphNumber(segmentOptions.skewOffset ?? segmentOptions.curveOffset, 0, -1, 1);
+    // Stored c, then remaining-room Skew %. Per-segment shape on the right endpoint.
+    const contour = (typeof nodeGraphSegmentApplySkewPercent === "function")
+      ? nodeGraphSegmentApplySkewPercent(nodeGraphFiniteNumber(right.c), offset)
+      : this.normalizeGraphNumber(
+        offset >= 0
+          ? nodeGraphFiniteNumber(right.c) + offset * (1 - nodeGraphFiniteNumber(right.c))
+          : nodeGraphFiniteNumber(right.c) + offset * (nodeGraphFiniteNumber(right.c) + 1),
+        0,
+        -1,
+        1,
+      );
+    const shape = this.normalizeGraphShape(right.shape || "rational");
     let shaped = p;
     if (typeof nodeGraphSegmentCurve01 === "function") {
       shaped = nodeGraphSegmentCurve01(p, shape, contour);

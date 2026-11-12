@@ -5,6 +5,7 @@
 //
 // Per-segment curve evaluator for Step Graph (NOT soemdsp/utility/graph.h).
 // Ports graphSegmentValue shapes from node-live-audio-worklet-graph.js.
+// Per-point shape wins (right endpoint). curveOffset is remaining-room Skew %.
 // Drive (Input/LFO/Phasor) lives in graph_engine process_step_graph.
 
 #include <soemdsp/soemdsp.hpp>
@@ -63,8 +64,8 @@ static void ensure_sorted(State& st) {
 
 static void ensure_default_ramp(State& st) {
   if (st.count >= 2) return;
-  st.points[0] = { 0.0f, 0.0f, 0.0f, (float)kShapeLinear };
-  st.points[1] = { 1.0f, 1.0f, 0.0f, (float)kShapeLinear };
+  st.points[0] = { 0.0f, 0.0f, 0.0f, (float)kShapeRational };
+  st.points[1] = { 1.0f, 1.0f, 0.0f, (float)kShapeRational };
   st.count = 2;
 }
 
@@ -75,7 +76,7 @@ static double segment_value(
   const State& st,
   double x,
   int index,
-  int globalShape,
+  int /* globalShape, ignored: per-point shape wins */,
   double curveOffset
 ) {
   const Point& left = st.points[index];
@@ -84,9 +85,8 @@ static double segment_value(
   if (dsp_fabs(dx) < 1.0e-6) return 0.5 * ((double)left.y + (double)right.y);
   const double p = clamp((x - (double)left.x) / dx, 0.0, 1.0);
   const double offset = clamp11(safe(curveOffset));
-  const double contour = clamp11(safe((double)right.c) + offset);
-  // Global Shape param always wins (matches graphSegmentOptionsForNode).
-  const int shape = globalShape;
+  const double contour = segment_apply_skew_percent((double)right.c, offset);
+  const int shape = normalize_shape((double)right.shape);
 
   const double shaped = segment_curve01(p, shape, contour);
   return (double)left.y + ((double)right.y - (double)left.y) * shaped;
@@ -186,12 +186,15 @@ extern "C" double soemdsp_step_graph_sample(
   double segmentShape,
   double curveOffset
 ) {
+  // segmentShape is unused (kept for ABI). Per-point shape on the right
+  // endpoint wins. curveOffset is remaining-room Skew % in -1..+1.
+  (void)segmentShape;
   if (handle < 1 || handle > kMaxInstances) return 0.0;
   State& s = gPool[handle - 1];
   ensure_default_ramp(s);
-  return clamp11(eval_at(s, safe(x), normalize_shape(segmentShape), safe(curveOffset)));
+  return clamp11(eval_at(s, safe(x), 0, safe(curveOffset)));
 }
 
 extern "C" int soemdsp_step_graph_version() {
-  return 2;
+  return 3;
 }

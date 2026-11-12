@@ -1,17 +1,53 @@
-// Graph face extras: display-only Zoom Min/Max + bottom point strip.
+// Graph face extras: display-only look/view settings + bottom point strip.
 // Loads after node-graph-graph-utils.js. Code stays Graph->Code one-way.
-
+//
 // Curve Y is -1..+1 (see nodeGraphGraphValueMin/Max). Default Zoom shows that
 // full range so the visual bottom is -1 (min), mid is 0, and the top is +1.
+// Display settings are look/view only (zoom, thickness, colors) — the point
+// strip is a module control, not a display setting.
 const nodeGraphGraphFaceDisplaySettingsDefaults = Object.freeze({
   zoomMin: -1,
   zoomMax: 1,
+  lineThickness: 2,
+  dotSize: 6,
+  strokeColor: "#5ce8d4",
+  dotColor: "#f6f6da",
+  playheadColor: "#b184ff",
+  ghostColor: "rgba(92, 232, 212, 0.38)",
 });
 
 let nodeGraphGraphPaintZoom = {
   zoomMin: nodeGraphGraphFaceDisplaySettingsDefaults.zoomMin,
   zoomMax: nodeGraphGraphFaceDisplaySettingsDefaults.zoomMax,
 };
+
+function nodeGraphGraphNormalizeCssColor(value, fallback) {
+  const text = String(value == null ? "" : value).trim();
+  if (/^#([0-9a-f]{3}|[0-9a-f]{4}|[0-9a-f]{6}|[0-9a-f]{8})$/i.test(text)) {
+    return text;
+  }
+  if (/^(rgba?|hsla?)\(/i.test(text)) {
+    return text;
+  }
+  return fallback;
+}
+
+function nodeGraphGraphDeriveGhostColor(strokeColor) {
+  const text = String(strokeColor || "").trim();
+  const hex = /^#([0-9a-f]{6})$/i.exec(text);
+  if (hex) {
+    const n = parseInt(hex[1], 16);
+    const r = (n >> 16) & 255;
+    const g = (n >> 8) & 255;
+    const b = n & 255;
+    return `rgba(${r}, ${g}, ${b}, 0.38)`;
+  }
+  const rgb = /^rgba?\(\s*([0-9.]+)\s*,\s*([0-9.]+)\s*,\s*([0-9.]+)/i.exec(text);
+  if (rgb) {
+    return `rgba(${Number(rgb[1])}, ${Number(rgb[2])}, ${Number(rgb[3])}, 0.38)`;
+  }
+  return nodeGraphGraphFaceDisplaySettingsDefaults.ghostColor;
+}
 
 function normalizeNodeGraphGraphFaceDisplaySettings(settings = {}) {
   const source = settings && typeof settings === "object" ? settings : {};
@@ -25,7 +61,37 @@ function normalizeNodeGraphGraphFaceDisplaySettings(settings = {}) {
     zoomMin = nodeGraphGraphFaceDisplaySettingsDefaults.zoomMin;
     zoomMax = nodeGraphGraphFaceDisplaySettingsDefaults.zoomMax;
   }
-  return { zoomMin, zoomMax };
+  const lineThickness = Math.max(0, Math.min(16, Number.isFinite(Number(source.lineThickness))
+    ? Number(source.lineThickness)
+    : nodeGraphGraphFaceDisplaySettingsDefaults.lineThickness));
+  const dotSize = Math.max(0, Math.min(32, Number.isFinite(Number(source.dotSize))
+    ? Number(source.dotSize)
+    : nodeGraphGraphFaceDisplaySettingsDefaults.dotSize));
+  const strokeColor = nodeGraphGraphNormalizeCssColor(
+    source.strokeColor,
+    nodeGraphGraphFaceDisplaySettingsDefaults.strokeColor,
+  );
+  const dotColor = nodeGraphGraphNormalizeCssColor(
+    source.dotColor,
+    nodeGraphGraphFaceDisplaySettingsDefaults.dotColor,
+  );
+  const playheadColor = nodeGraphGraphNormalizeCssColor(
+    source.playheadColor,
+    nodeGraphGraphFaceDisplaySettingsDefaults.playheadColor,
+  );
+  const ghostColor = source.ghostColor == null || String(source.ghostColor).trim() === ""
+    ? nodeGraphGraphDeriveGhostColor(strokeColor)
+    : nodeGraphGraphNormalizeCssColor(source.ghostColor, nodeGraphGraphDeriveGhostColor(strokeColor));
+  return {
+    zoomMin,
+    zoomMax,
+    lineThickness,
+    dotSize,
+    strokeColor,
+    dotColor,
+    playheadColor,
+    ghostColor,
+  };
 }
 
 function nodeGraphGraphFaceDisplaySettingsForNode(node) {
@@ -49,9 +115,58 @@ function nodeGraphGraphStoreZoomOnDisplay(display, zoomSettings) {
   if (display) {
     display._nodeGraphZoomMin = zoom.zoomMin;
     display._nodeGraphZoomMax = zoom.zoomMax;
+    applyNodeGraphGraphFaceLook(display, zoom);
   }
   nodeGraphGraphPaintZoom = zoom;
   return zoom;
+}
+
+function applyNodeGraphGraphFaceLook(display, settings) {
+  const look = normalizeNodeGraphGraphFaceDisplaySettings(settings);
+  if (!display || !display.style) {
+    return look;
+  }
+  const ghostWidth = Math.max(0, look.lineThickness * 0.55);
+  display.style.setProperty("--node-graph-line-color", look.strokeColor);
+  display.style.setProperty("--node-graph-line-width", `${look.lineThickness}px`);
+  display.style.setProperty("--node-graph-point-color", look.dotColor);
+  display.style.setProperty("--node-graph-playhead-color", look.playheadColor);
+  display.style.setProperty("--node-graph-ghost-color", look.ghostColor);
+  display.style.setProperty("--node-graph-ghost-width", `${ghostWidth}px`);
+  const face = display.closest?.(".node-module-graph-face");
+  if (face?.style) {
+    face.style.setProperty("--node-graph-line-color", look.strokeColor);
+    face.style.setProperty("--node-graph-line-width", `${look.lineThickness}px`);
+    face.style.setProperty("--node-graph-point-color", look.dotColor);
+    face.style.setProperty("--node-graph-playhead-color", look.playheadColor);
+    face.style.setProperty("--node-graph-ghost-color", look.ghostColor);
+    face.style.setProperty("--node-graph-ghost-width", `${ghostWidth}px`);
+  }
+  const nodeRadius = Math.max(0, look.dotSize / 2);
+  const hitRadius = Math.max(nodeRadius + 3, 6);
+  const contourRadius = Math.max(2, nodeRadius + 0.6);
+  if (typeof nodeGraphGraphScreenRoundRadii === "function") {
+    const nodeRadii = nodeGraphGraphScreenRoundRadii(display, nodeRadius);
+    const hitRadii = nodeGraphGraphScreenRoundRadii(display, hitRadius);
+    const contourRadii = nodeGraphGraphScreenRoundRadii(display, contourRadius);
+    display.querySelectorAll(".node-module-graph-node").forEach((el) => {
+      el.setAttribute("rx", nodeRadii.rx.toFixed(3));
+      el.setAttribute("ry", nodeRadii.ry.toFixed(3));
+    });
+    display.querySelectorAll(".node-module-graph-node-hit").forEach((el) => {
+      el.setAttribute("rx", hitRadii.rx.toFixed(3));
+      el.setAttribute("ry", hitRadii.ry.toFixed(3));
+    });
+    display.querySelectorAll(".node-module-graph-contour-handle").forEach((el) => {
+      el.setAttribute("rx", contourRadii.rx.toFixed(3));
+      el.setAttribute("ry", contourRadii.ry.toFixed(3));
+    });
+    display.querySelectorAll(".node-module-graph-contour-handle-hit").forEach((el) => {
+      el.setAttribute("rx", hitRadii.rx.toFixed(3));
+      el.setAttribute("ry", hitRadii.ry.toFixed(3));
+    });
+  }
+  return look;
 }
 
 var nodeGraphGraphPointToSvgBase = typeof nodeGraphGraphPointToSvg === "function"
@@ -183,6 +298,7 @@ renderNodeGraphGraphDisplay = function renderNodeGraphGraphDisplay(element, grap
   } finally {
     nodeGraphGraphPaintZoom = prev;
   }
+  applyNodeGraphGraphFaceLook(element, zoom);
   if (typeof syncNodeGraphGraphPointStrip === "function") {
     syncNodeGraphGraphPointStrip(element, ownerNode, selectedIndex);
   }
@@ -191,16 +307,32 @@ renderNodeGraphGraphDisplay = function renderNodeGraphGraphDisplay(element, grap
 function nodeGraphGraphPointStripFieldsForType(type) {
   if (String(type || "").trim() === "smoothGraph") {
     return [
-      { key: "x", label: "X", title: "Selected point X (0..1; ends stay pinned)" },
-      { key: "y", label: "Y", title: "Selected point Y (0..1)" },
-      { key: "tension", label: "Tension", title: "Smooth Graph global Tension (module param)" },
+      { key: "x", label: "X" },
+      { key: "y", label: "Y" },
+      { key: "tension", label: "Tension" },
     ];
   }
   return [
-    { key: "x", label: "X", title: "Selected point X (0..1; ends stay pinned)" },
-    { key: "y", label: "Y", title: "Selected point Y (0..1)" },
-    { key: "c", label: "Skew", title: "Selected point contour / skew" },
+    { key: "x", label: "X" },
+    { key: "y", label: "Y" },
+    { key: "shape", label: "Shape", kind: "shape" },
+    { key: "c", label: "Skew" },
   ];
+}
+
+function nodeGraphGraphPointStripShapeChoices() {
+  const keys = (typeof NODE_GRAPH_SEGMENT_SHAPES !== "undefined" && Array.isArray(NODE_GRAPH_SEGMENT_SHAPES))
+    ? NODE_GRAPH_SEGMENT_SHAPES
+    : ["rational", "exponential", "log", "smoothstep", "smootherstep", "hold"];
+  const labels = {
+    rational: "Rational",
+    exponential: "Exponential",
+    log: "Log",
+    smoothstep: "Smoothstep",
+    smootherstep: "Smootherstep",
+    hold: "Hold",
+  };
+  return keys.map((key) => ({ key, label: labels[key] || key }));
 }
 
 function buildNodeGraphGraphPointStrip(patchNode) {
@@ -214,13 +346,25 @@ function buildNodeGraphGraphPointStrip(patchNode) {
     const name = document.createElement("span");
     name.className = "node-module-graph-point-strip-label";
     name.textContent = field.label;
-    const input = document.createElement("input");
-    input.type = "number";
-    input.step = "any";
-    input.inputMode = "decimal";
-    input.className = "node-module-graph-point-strip-input";
+    let input;
+    if (field.kind === "shape") {
+      input = document.createElement("select");
+      input.className = "node-module-graph-point-strip-input node-module-graph-point-strip-select";
+      for (const choice of nodeGraphGraphPointStripShapeChoices()) {
+        const option = document.createElement("option");
+        option.value = choice.key;
+        option.textContent = choice.label;
+        input.append(option);
+      }
+    } else {
+      input = document.createElement("input");
+      input.type = "number";
+      input.step = "any";
+      input.inputMode = "decimal";
+      input.className = "node-module-graph-point-strip-input";
+    }
     input.dataset.graphStripField = field.key;
-    input.setAttribute("aria-label", field.title);
+    input.setAttribute("aria-label", field.label);
     label.append(name, input);
     strip.append(label);
   }
@@ -232,8 +376,14 @@ function mountNodeGraphGraphPointStrip(faceElement, patchNode) {
     return null;
   }
   let strip = faceElement.querySelector(":scope > .node-module-graph-point-strip");
+  const wanted = nodeGraphGraphPointStripFieldsForType(patchNode?.type).map((field) => field.key).join(",");
+  if (strip && strip.dataset.graphStripFields !== wanted) {
+    strip.remove();
+    strip = null;
+  }
   if (!strip) {
     strip = buildNodeGraphGraphPointStrip(patchNode);
+    strip.dataset.graphStripFields = wanted;
     faceElement.append(strip);
     bindNodeGraphGraphPointStrip(strip);
   }
@@ -301,11 +451,19 @@ function syncNodeGraphGraphPointStrip(faceOrDisplay, patchNode = null, selectedI
     c: node?.c,
     tension: Number(owner?.params?.tension),
   };
-  for (const input of strip.querySelectorAll("input[data-graph-strip-field]")) {
+  const shapeValue = (typeof normalizeNodeGraphGraphShape === "function"
+    ? normalizeNodeGraphGraphShape(node?.shape)
+    : String(node?.shape || "rational"));
+  for (const input of strip.querySelectorAll("[data-graph-strip-field]")) {
     if (document.activeElement === input) {
       continue;
     }
     const key = input.dataset.graphStripField;
+    if (key === "shape") {
+      input.value = shapeValue;
+      input.disabled = false;
+      continue;
+    }
     const raw = values[key];
     const n = Number(raw);
     input.value = Number.isFinite(n) ? String(Number(n.toPrecision(8))) : "";
@@ -330,11 +488,11 @@ function commitNodeGraphGraphPointStripField(input) {
   }
   const field = input.dataset.graphStripField;
   const raw = String(input.value ?? "").trim();
-  if (raw === "" || raw === "-" || raw === "." || raw === "-." || /e$/i.test(raw) || /-$/.test(raw)) {
+  if (field !== "shape" && (raw === "" || raw === "-" || raw === "." || raw === "-." || /e$/i.test(raw) || /-$/.test(raw))) {
     return;
   }
-  const value = Number(raw);
-  if (!Number.isFinite(value)) {
+  const value = field === "shape" ? raw : Number(raw);
+  if (field !== "shape" && !Number.isFinite(value)) {
     syncNodeGraphGraphPointStrip(display, sourceNode);
     return;
   }
@@ -390,6 +548,16 @@ function commitNodeGraphGraphPointStripField(input) {
     nodes[index] = normalizeNodeGraphGraphNode({
       ...current,
       c: nodeGraphGraphNormalizeContour(value, current.c),
+    }, index);
+  } else if (field === "shape") {
+    if (String(targetNode.type) !== "stepGraph") {
+      return;
+    }
+    nodes[index] = normalizeNodeGraphGraphNode({
+      ...current,
+      shape: typeof normalizeNodeGraphGraphShape === "function"
+        ? normalizeNodeGraphGraphShape(value)
+        : value,
     }, index);
   } else {
     return;

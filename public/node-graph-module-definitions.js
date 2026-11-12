@@ -11,7 +11,7 @@ const nodeGraphCinematicReverbDisplayName = "Cinematic Reverb";
 const nodeGraphNodeLabels = Object.freeze({
   audioInput: "Input",
   // smoothGraph: one global curve through free dots (Curve + Tension).
-  // stepGraph: stepped/segment path (Shape + optional step grid + per-node contour).
+  // stepGraph: stepped/segment path (per-segment shape + optional step grid + per-node contour).
   smoothGraph: "Smooth Graph",
   stepGraph: "Step Graph",
   animatedTextBox: "Animated Text Box",
@@ -949,8 +949,9 @@ const nodeGraphModuleDefinitions = (
       { defaultValue: "1", key: "inputMax", label: "In Max", max: "1", mid: "0", min: "-1", nonlinearSlider: false, step: "any" },
     ]
   },
-  // Step Graph: segment path + optional X grid. Global Shape + Skew Offset;
-  // per-node contour `c` still local (effective = c + skewOffset; legacy curveOffset).
+  // Step Graph: segment path + optional X grid. Per-segment shape (right
+  // endpoint) + per-node contour `c`. Global Skew % is remaining-room toward
+  // +/-1 and ghosts the effective curve (legacy curveOffset).
   stepGraph: {
     planRole: "processor",
     chrome: NodeGraphModuleChromeLayout.LayoutB,
@@ -967,28 +968,15 @@ const nodeGraphModuleDefinitions = (
     parameters: [
       { choices: ["Input", "LFO", "Phasor"], defaultValue: "0", displayChoices: true, divideChoicesVisibly: true, key: "mode", label: "Mode", linearSmoothing: false, max: "2", mid: "1", min: "0", nonlinearSlider: false, step: "1" },
       {
-        choices: ["Linear", "Rational", "Exponential", "Log", "Smoothstep", "Smootherstep", "Hold"],
-        defaultValue: "0",
-        displayChoices: true,
-        divideChoicesVisibly: true,
-        key: "segmentShape",
-        label: "Shape",
-        linearSmoothing: false,
-        max: "6",
-        mid: "0",
-        min: "0",
-        nonlinearSlider: false,
-        step: "1"
-      },
-      {
         defaultValue: "0",
         key: "skewOffset",
-        label: "Skew Offset",
+        label: "Skew %",
         max: "1",
         mid: "0",
         min: "-1",
         nonlinearSlider: false,
-        step: "0.01"
+        step: "0.01",
+        unit: "%"
       },
       { choices: ["Off", "On"], defaultValue: "0", displayChoices: true, divideChoicesVisibly: true, key: "lockEndpointY", label: "Lock Ends", linearSmoothing: false, max: "1", mid: "0", min: "0", nonlinearSlider: false, step: "1" },
       {
