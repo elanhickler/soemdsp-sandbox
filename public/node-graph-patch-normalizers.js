@@ -869,7 +869,8 @@ function normalizeNodeGraphPatchViewCanvases(canvases) {
       seen.add(el.nodeId);
       elements.push(el);
     }
-    return { elements };
+    const background = nodeGraphNormalizeCanvasBackground(bucket?.background);
+    return background ? { elements, background } : { elements };
   };
   const root = normalizeBucket(src.root);
   const byMetamodule = {};
@@ -880,7 +881,7 @@ function normalizeNodeGraphPatchViewCanvases(canvases) {
     const metaId = String(metaIdRaw || "").trim();
     if (!metaId) continue;
     const normalized = normalizeBucket(bucket);
-    if (normalized.elements.length) {
+    if (normalized.elements.length || normalized.background) {
       byMetamodule[metaId] = normalized;
     }
   }

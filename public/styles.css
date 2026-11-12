@@ -13178,7 +13178,15 @@ html.soemdsp-whole-module .node-layout-canvas-arrange-bar {
   cursor: default;
 }
 
-/* Blend buttons: one group so it wraps as a row on a phone. */
+/* Canvas background image (node-graph-layout-canvas.js): covers the stage, behind every tile. */
+.node-screen-solo-stage.node-layout-canvas-stage {
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+
+/* Blend and Background buttons: one group each so it wraps as a row on a phone. */
+.node-layout-canvas-arrange-background,
 .node-layout-canvas-arrange-blend {
   display: flex;
   flex-wrap: wrap;

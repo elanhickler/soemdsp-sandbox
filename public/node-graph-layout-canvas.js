@@ -374,6 +374,91 @@ function nodeGraphLayoutCanvasSetBlend(nodeId, blend, options = {}) {
   return true;
 }
 
+/** The current Canvas's background image ({ dataUrl, fileName }) or null. Read only. */
+function nodeGraphLayoutCanvasBackground(patch = nodeGraphMvp?.patch) {
+  const canvases = patch?.view?.canvases;
+  const scope = nodeGraphLayoutCanvasActiveScopeId();
+  const bucket = scope ? canvases?.byMetamodule?.[scope] : canvases?.root;
+  return nodeGraphNormalizeCanvasBackground(bucket?.background);
+}
+
+/**
+ * Canvas background: the one writer of the current Canvas's `background`
+ * (saved with the patch next to its pins; null clears it). Tiles keep their
+ * blend and now blend over the picture.
+ */
+function nodeGraphLayoutCanvasSetBackground(asset, options = {}) {
+  const patch = options.patch || nodeGraphMvp?.patch;
+  if (!patch) {
+    return false;
+  }
+  const bucket = nodeGraphLayoutCanvasBucket(patch);
+  const next = nodeGraphNormalizeCanvasBackground(asset);
+  const before = nodeGraphNormalizeCanvasBackground(bucket.background);
+  if ((next?.dataUrl || "") === (before?.dataUrl || "") && (next?.fileName || "") === (before?.fileName || "")) {
+    return false;
+  }
+  if (next) {
+    bucket.background = next;
+  } else {
+    delete bucket.background;
+  }
+  if (options.persist !== false && typeof markNodeGraphPatchDirty === "function") {
+    markNodeGraphPatchDirty();
+  }
+  nodeGraphLayoutCanvasApplyBackground(document.getElementById("nodeScreenSoloStage"));
+  nodeGraphLayoutCanvasSyncArrangeBar();
+  if (typeof nodeGraphMiniPerformShown === "function" && nodeGraphMiniPerformShown()
+    && typeof nodeGraphGlMiniPerformPresent === "function") {
+    nodeGraphGlMiniPerformPresent();
+  }
+  return true;
+}
+
+/**
+ * Canvas stage background: the image covers the stage (CSS cover, see
+ * styles.css) behind every tile and the Arrange chrome. Off the Canvas the
+ * shared stage goes back to plain black.
+ */
+function nodeGraphLayoutCanvasApplyBackground(stage) {
+  if (!(stage instanceof HTMLElement)) {
+    return;
+  }
+  const asset = stage.classList.contains("node-layout-canvas-stage") ? nodeGraphLayoutCanvasBackground() : null;
+  const url = asset ? asset.dataUrl : "";
+  if (stage._canvasBackgroundUrl === url) {
+    return;
+  }
+  stage._canvasBackgroundUrl = url;
+  if (url) {
+    stage.style.backgroundImage = `url("${url.replace(/"/g, "%22")}")`;
+  } else {
+    stage.style.removeProperty("background-image");
+  }
+}
+
+// Decoded Canvas background for the Mini Canvas GL pass (one image per data URL).
+const nodeGraphLayoutCanvasBackgroundPicture = { dataUrl: "", image: null };
+
+/** The current Canvas background as a loaded image, or null (none set, or still decoding). */
+function nodeGraphLayoutCanvasBackgroundImage() {
+  const asset = nodeGraphLayoutCanvasBackground();
+  const cache = nodeGraphLayoutCanvasBackgroundPicture;
+  if (!asset) {
+    cache.dataUrl = "";
+    cache.image = null;
+    return null;
+  }
+  if (cache.dataUrl !== asset.dataUrl) {
+    const image = new Image();
+    image.decoding = "async";
+    image.src = asset.dataUrl;
+    cache.dataUrl = asset.dataUrl;
+    cache.image = image;
+  }
+  return cache.image.complete && cache.image.naturalWidth > 0 ? cache.image : null;
+}
+
 const NODE_GRAPH_LAYOUT_CANVAS_RESTACK_STEPS = Object.freeze([
   ["back", "To back"],
   ["backward", "Back one"],
@@ -390,7 +475,7 @@ function nodeGraphLayoutCanvasEnsureArrangeBar() {
   bar.id = "nodeLayoutCanvasArrangeBar";
   bar.className = "node-layout-canvas-arrange-bar";
   bar.setAttribute("role", "toolbar");
-  bar.setAttribute("aria-label", "Canvas layer order and blend");
+  bar.setAttribute("aria-label", "Canvas layer order, blend and background");
   const label = document.createElement("span");
   label.className = "node-layout-canvas-arrange-label";
   bar.append(label);
@@ -418,8 +503,34 @@ function nodeGraphLayoutCanvasEnsureArrangeBar() {
     blendGroup.append(button);
   }
   bar.append(blendGroup);
+  // Background: the whole Canvas, not the selected tile.
+  const backgroundGroup = document.createElement("div");
+  backgroundGroup.className = "node-layout-canvas-arrange-background";
+  backgroundGroup.setAttribute("role", "group");
+  backgroundGroup.setAttribute("aria-label", "Background");
+  const backgroundLabel = document.createElement("span");
+  backgroundLabel.className = "node-layout-canvas-arrange-label";
+  backgroundLabel.textContent = "Background";
+  backgroundGroup.append(backgroundLabel);
+  for (const action of ["pick", "clear"]) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.dataset.background = action;
+    button.textContent = action === "pick" ? "Add image" : "Clear";
+    backgroundGroup.append(button);
+  }
+  bar.append(backgroundGroup);
   bar.addEventListener("click", (event) => {
-    const button = event.target?.closest?.("button[data-restack], button[data-blend]");
+    const button = event.target?.closest?.("button[data-restack], button[data-blend], button[data-background]");
+    const background = button?.dataset?.background;
+    if (background === "pick") {
+      nodeGraphPickImageFile((asset) => nodeGraphLayoutCanvasSetBackground(asset));
+      return;
+    }
+    if (background === "clear") {
+      nodeGraphLayoutCanvasSetBackground(null);
+      return;
+    }
     const step = button?.dataset?.restack;
     const blend = button?.dataset?.blend;
     const id = nodeGraphLayoutCanvasArrangeTargetId();
@@ -481,6 +592,15 @@ function nodeGraphLayoutCanvasSyncArrangeBar() {
     button.disabled = index < 0;
     button.setAttribute("aria-pressed", String(index >= 0 && button.dataset.blend === blend));
   });
+  const hasBackground = Boolean(nodeGraphLayoutCanvasBackground());
+  const pick = bar.querySelector('button[data-background="pick"]');
+  if (pick) {
+    pick.textContent = hasBackground ? "Change image" : "Add image";
+  }
+  const clear = bar.querySelector('button[data-background="clear"]');
+  if (clear) {
+    clear.disabled = !hasBackground;
+  }
 }
 
 /** @returns {"off"|"perform"|"edit"} */
@@ -528,6 +648,7 @@ function nodeGraphLayoutCanvasClearStageChrome(stage) {
     return;
   }
   stage.classList.remove("node-layout-canvas-stage", "node-layout-canvas-edit");
+  nodeGraphLayoutCanvasApplyBackground(stage);
   stage.querySelectorAll(".node-layout-canvas-tile").forEach((tile) => {
     const face = tile.querySelector(".node-screen-solo-face, .node-layout-canvas-face");
     if (face && tile.parentNode) {
@@ -668,6 +789,7 @@ function beginNodeGraphLayoutCanvasStage(nodeIds, mode = "perform") {
   stage.hidden = false;
   stage.classList.add("node-layout-canvas-stage");
   stage.classList.toggle("node-layout-canvas-edit", mode === "edit");
+  nodeGraphLayoutCanvasApplyBackground(stage);
   // Freeform — kill CSS grid auto-organize.
   stage.style.display = "block";
   stage.style.removeProperty("--node-screen-solo-cols");

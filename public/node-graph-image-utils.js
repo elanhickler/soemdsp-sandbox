@@ -34,6 +34,12 @@ function nodeGraphNormalizeImageAsset(entry = {}, fallbackName = "") {
   };
 }
 
+/** Canvas stage background (a Canvas bucket's `background`): an image asset, or null when none. */
+function nodeGraphNormalizeCanvasBackground(value) {
+  const asset = nodeGraphNormalizeImageAsset(value);
+  return asset.dataUrl ? asset : null;
+}
+
 function nodeGraphImageAssetLabel(asset, empty = "—") {
   const next = nodeGraphNormalizeImageAsset(asset);
   if (!next.dataUrl) {

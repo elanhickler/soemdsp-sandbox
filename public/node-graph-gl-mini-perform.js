@@ -474,6 +474,13 @@ function nodeGraphGlMiniPerformPresent() {
   }
   for (const host of view._moduleHosts.values()) host._miniUsed = false;
   for (const host of view._keyboardHosts.values()) host._miniUsed = false;
+  // Canvas background: the first image, so every tile (and its blend) is over it.
+  // Cover-fitted like the Canvas stage; the frame clips the overflow.
+  const background = nodeGraphLayoutCanvasBackgroundImage();
+  const cover = background
+    ? nodeGraphCanvasBackgroundCoverRect(background.naturalWidth, background.naturalHeight, cssW, cssH)
+    : null;
+  if (cover) nodeGraphGlLinesImage(batch, background, cover.x, cover.y, cover.w, cover.h, { nearest: false, cache: true, alpha: 1 });
   if (!tiles.length) nodeGraphGlMiniPerformDrawEmpty(batch, cssW, cssH);
   for (let i = 0; i < tiles.length; i += 1) {
     const tile = tiles[i];

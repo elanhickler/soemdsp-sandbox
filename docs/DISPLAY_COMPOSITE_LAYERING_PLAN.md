@@ -121,6 +121,12 @@ Until the toolbar exists, Arrange z-order remains `patch.nodes` order.
 - Mini Canvas: display quads use the same blend as a per-image GL blend in `nodeGraphGlLinesImage` (`blend` option; screen = ONE_MINUS_DST_COLOR/ONE, multiply = DST_COLOR/ONE_MINUS_SRC_ALPHA, lighten = MAX); whole-module and keyboard hosts get the CSS blend. In Mini Canvas, module hosts still sit above all display quads, as before.
 - Smoke: `scripts/smoke_canvas_arrange_layers.mjs` (blend section).
 
+**Landed 2026-11-12 (Canvas stage background):**
+- The Arrange bar has a Background group: Add image (Change image once one is set) / Clear. It uses the app's image picker (`nodeGraphPickImageFile`, PNG / JPEG / WebP / GIF / SVG, about 12 MB max). `nodeGraphLayoutCanvasSetBackground` is the one writer: the current Canvas bucket (root or that Metamodule's) gets `background: { dataUrl, fileName }`, the same embedded image asset shape other image settings already save in the patch. Patch normalize and save keep it with the bucket.
+- Canvas: the stage's CSS background (`cover`, centred, never stretched), so it sits behind every tile and the Arrange chrome. Tiles blend over it through the same `mix-blend-mode`. Closing the Canvas puts the shared stage back to plain black.
+- Mini Canvas: the first image in its GL pass, cover-fitted to the frame with the same math (`nodeGraphCanvasBackgroundCoverRect`), so display quads (GL blend) and module hosts (CSS blend) sit over it.
+- Smoke: `scripts/smoke_canvas_background.mjs`.
+
 Still to do from this section: workspace (circuit builder) module z-order (still `patch.nodes`); right-click in the workspace Arrange view if that is wanted beyond the Canvas; blend for workspace modules (not Canvas tiles).
 
 ## 5. Stages

@@ -20,9 +20,10 @@ function nodeGraphPruneViewCanvasesToExistingNodes(view, nodes) {
   if (!canvases || typeof canvases !== "object") return view;
   const pruneBucket = (bucket) => {
     const els = Array.isArray(bucket?.elements) ? bucket.elements : [];
-    return {
-      elements: els.filter((el) => aliveIds.has(String(el?.nodeId || "").trim())),
-    };
+    const next = { elements: els.filter((el) => aliveIds.has(String(el?.nodeId || "").trim())) };
+    // Canvas background image rides with its bucket.
+    if (bucket?.background) next.background = bucket.background;
+    return next;
   };
   const root = pruneBucket(canvases.root);
   const byMetamodule = {};
@@ -33,7 +34,7 @@ function nodeGraphPruneViewCanvasesToExistingNodes(view, nodes) {
     const metaId = String(metaIdRaw || "").trim();
     if (!metaId || !aliveMetaIds.has(metaId)) continue;
     const next = pruneBucket(bucket);
-    if (next.elements.length) byMetamodule[metaId] = next;
+    if (next.elements.length || next.background) byMetamodule[metaId] = next;
   }
   return {
     ...view,

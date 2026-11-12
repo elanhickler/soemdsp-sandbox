@@ -57,6 +57,21 @@ function nodeGraphCanvasTileApplyBlend(el, blend) {
   else el.style.removeProperty("mix-blend-mode");
 }
 
+/**
+ * Canvas background image: cover the stage (one uniform scale, centred, never
+ * stretched), the same as the Canvas stage's CSS background-size: cover.
+ * Returns the image rect in stage px; the stage clips what falls outside.
+ */
+function nodeGraphCanvasBackgroundCoverRect(imgW, imgH, stageW, stageH) {
+  const iw = Number(imgW) || 0;
+  const ih = Number(imgH) || 0;
+  const sw = Number(stageW) || 0;
+  const sh = Number(stageH) || 0;
+  if (!(iw > 0 && ih > 0 && sw > 0 && sh > 0)) return null;
+  const s = Math.max(sw / iw, sh / ih);
+  return { x: (sw - iw * s) / 2, y: (sh - ih * s) / 2, w: iw * s, h: ih * s };
+}
+
 /** User-facing module pin label. Empty-canvas copy uses this same phrase. */
 const NODE_GRAPH_SHOW_IN_PERFORMANCE_VIEW_LABEL = "Show in Canvas";
 const NODE_GRAPH_EMPTY_CANVAS_LINE = "Canvas is empty. Turn on Show in Canvas on a module.";
