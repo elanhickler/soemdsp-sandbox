@@ -703,6 +703,14 @@ function scopePaintEnsureColdPlate(slot, options = {}) {
   }
   const force = options.force === true;
   const nodeId = slot.nodeId || slot.dataset?.node || "";
+  // Intentionally hidden or Display Height 0 faces stay hidden.
+  if (nodeId && typeof nodeGraphPatchNode === "function"
+    && typeof nodeGraphModuleDisplayVisibleForUi === "function") {
+    const host = nodeGraphPatchNode(nodeId);
+    if (host && !nodeGraphModuleDisplayVisibleForUi(host.type, host.ui)) {
+      return false;
+    }
+  }
   const kind = nodeGraphFacePaintKindFor(slot);
   const poweredOff = scopePaintIsFacePoweredOff(nodeId);
   if (kind === "param" && !poweredOff) {
@@ -736,12 +744,17 @@ function scopePaintEnsureColdPlate(slot, options = {}) {
       if (!canvas && typeof nodeGraphModuleScopeLocalFallbackCanvas === "function") {
         canvas = nodeGraphModuleScopeLocalFallbackCanvas(slot);
       }
-      if (
-        canvas
-        && !(canvas.width > 1 && canvas.height > 1)
-        && typeof syncNodeGraphModuleScopeLocalFallbackCanvas === "function"
-      ) {
-        syncNodeGraphModuleScopeLocalFallbackCanvas(canvas, slot.scopeElement, ratio);
+      if (canvas && !(canvas.width > 1 && canvas.height > 1)) {
+        if (typeof syncNodeGraphModuleScopeLocalFallbackCanvas === "function") {
+          syncNodeGraphModuleScopeLocalFallbackCanvas(canvas, slot.scopeElement, ratio);
+        }
+        if (!(canvas.width > 1 && canvas.height > 1)) {
+          const cssW = slot.scopeElement.clientWidth || slot.scopeElement.offsetWidth;
+          const cssH = slot.scopeElement.clientHeight || slot.scopeElement.offsetHeight;
+          if (cssW > 1 && cssH > 1 && typeof nodeGraphDisplayCanvasSizeCss === "function") {
+            nodeGraphDisplayCanvasSizeCss(canvas, cssW, cssH);
+          }
+        }
       }
     } catch (_error) {
       // Best-effort.
@@ -789,6 +802,30 @@ function scopePaintEnsureColdPlate(slot, options = {}) {
     } else if (typeof nodeGraphDisplayGlFailed === "function") {
       nodeGraphDisplayGlFailed(canvas, "cold plate GL unavailable");
       done = true;
+    }
+  }
+  // Buffer faces with their own drawer (Spectrogram, etc.): one paint so the
+  // empty plate lands in the face texture even while paused / stopped.
+  // Does not start audio.
+  if (displayType && typeof nodeGraphModuleScopeCustomRenderers === "object") {
+    const draw = nodeGraphModuleScopeCustomRenderers[displayType];
+    if (typeof draw === "function") {
+      try {
+        draw(null, { slot, screenElement: slot.scopeElement }, ratio);
+        done = true;
+      } catch (_error) {
+        // Keep the generic black plate if the drawer throws.
+      }
+    }
+  }
+  if (done && typeof nodeGraphGlGraphRebuildPlates === "function") {
+    try {
+      nodeGraphGlGraphRebuildPlates();
+    } catch (_error) {
+      // Best-effort.
+    }
+    if (typeof nodeGraphGlGraphPresentSoon === "function") {
+      nodeGraphGlGraphPresentSoon();
     }
   }
   return done;

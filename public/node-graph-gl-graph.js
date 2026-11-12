@@ -161,12 +161,16 @@ function nodeGraphGlGraphRebuildPlates() {
       const canvases = el.querySelectorAll(NODE_GRAPH_DISPLAY_FACE_SELECTOR);
       for (let c = 0; c < canvases.length; c += 1) {
         const face = canvases[c];
-        if (!(face.width > 1) || !(face.height > 1)) continue;
         const page = face.closest("[data-music-player-page]");
         if (page?.hidden || face.closest("[hidden]")) continue;
         if (face.classList.contains("node-round-shape-canvas")) continue;
         const laid = nodeGraphGlGraphLayoutBox(face, el);
         if (!laid) continue;
+        // Spawned while paused: the face box may not have a backing store yet.
+        // Size it from the layout rectangle so a black plate can be shown.
+        if ((!(face.width > 1) || !(face.height > 1)) && typeof nodeGraphDisplayCanvasSizeCss === "function") {
+          nodeGraphDisplayCanvasSizeCss(face, laid.w, laid.h);
+        }
         displays.push({
           canvas: face,
           id,
@@ -2529,6 +2533,14 @@ function nodeGraphGlGraphPresent(options = {}) {
           if (!frameCamera && (rect.x + rect.w < 0 || rect.y + rect.h < 0 || rect.x > cssW || rect.y > cssH)) continue;
           // A face that pins its filter keeps it at every zoom.
           const pin = nodeGraphGlGraphFacePin(face.canvas);
+          const hasTex = typeof nodeGraphSharedGlFaceTexture === "function"
+            ? Boolean(nodeGraphSharedGlFaceTexture(face.canvas))
+            : true;
+          if (!hasTex && typeof nodeGraphGlLinesRect === "function") {
+            // No live ink yet (dragged in while paused): still show the black screen.
+            nodeGraphGlLinesRect(pics, rect.x, rect.y, rect.w, rect.h, [0, 0, 0, 1]);
+            continue;
+          }
           const picture = nodeGraphGlLinesImage(pics, face.canvas, rect.x, rect.y, rect.w, rect.h, {
             nearest: pin ? pin === "nearest" : pixelated,
             // Pan/zoom already froze the face pixels. Re-upload only when displays paint.
