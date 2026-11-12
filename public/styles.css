@@ -13069,7 +13069,7 @@ body .gl-face-host.node-screen-solo-face > canvas.node-gl-face-host-canvas {
   border: 2px solid rgba(0, 208, 255, 0.85);
   box-sizing: border-box;
   pointer-events: auto;
-  cursor: move;
+  cursor: var(--node-dot-cursor);
   z-index: 5;
   background: transparent;
 }
