@@ -9211,14 +9211,7 @@ const nodeGraphModuleDefinitions = (
     outputs: ["Out"],
     parameters: [] },
   ampCurve: {
-    // Face: transfer curve (amp-curve-display.js) + Lin / Exp. No Skew.
-    customDisplayArea: true,
-    displayType: "ampCurveFace",
-    displayHeightGu: 6,
-    displayModes: [
-      { key: "face", label: "Curve", renderer: "ampCurveFace", settingsSchema: "" },
-    ],
-    defaultDisplayMode: "face",
+    // Compact face: Lin / Exp buttons only. No curve picture, no Skew.
     face: [
       { kind: "choices", param: "mode", labels: ["Lin", "Exp"], h: 26 },
     ],
@@ -9229,7 +9222,7 @@ const nodeGraphModuleDefinitions = (
     inputs: ["Env"],
     outputAliases: { Mono: "Curve", Out: "Curve" },
     outputs: ["Curve"],
-    defaultWidthGu: 10,
+    defaultWidthGu: 4,
     defaultUi: {
       buttonsHidden: true,
       oscilloscopeHidden: true },
