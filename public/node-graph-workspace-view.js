@@ -196,6 +196,9 @@ function nodeGraphLogModularViewPan() {
 }
 
 function setNodeGraphPan(x, y, options = {}) {
+  if (options.gesture === true && typeof nodeGraphMarkUserAdjustedView === "function") {
+    nodeGraphMarkUserAdjustedView();
+  }
   nodeGraphMvp.pan = {
     x: Number.isFinite(Number(x)) ? Number(x) : 0,
     y: Number.isFinite(Number(y)) ? Number(y) : 0,
@@ -855,6 +858,9 @@ function dragNodeGraphWorkspacePinchZoom(event) {
   const anchor = nodeGraphWorkspacePinchMidpoint(points);
   if (distance <= 0 || !anchor || pinch.startDistance <= 0) {
     return;
+  }
+  if (typeof nodeGraphMarkUserAdjustedView === "function") {
+    nodeGraphMarkUserAdjustedView();
   }
   setNodeGraphZoom(pinch.startZoom * (distance / pinch.startDistance), anchor);
   event.preventDefault();

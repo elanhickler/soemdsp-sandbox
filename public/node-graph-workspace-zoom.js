@@ -410,6 +410,9 @@ function nodeGraphAutoFrame(options = {}) {
 
 /** Pan only: center selection (or all modules) in the viewport at the current zoom. */
 function nodeGraphCenterViewOnModules(options = {}) {
+  if (typeof nodeGraphMarkUserAdjustedView === "function") {
+    nodeGraphMarkUserAdjustedView();
+  }
   const preferSelection = options.preferSelection !== false;
   let { nodes } = nodeGraphCollectViewTargetNodes({ preferSelection });
   let bounds = nodeGraphModuleBoundsUnion(nodes);
@@ -462,6 +465,9 @@ function nodeGraphModulesIntersectViewport() {
 /** If the live patch has modules but none are on-screen, autoframe once. */
 function nodeGraphRecoverViewportIfModulesOffscreen() {
   const run = () => {
+    if (typeof nodeGraphHasUserAdjustedView === "function" && nodeGraphHasUserAdjustedView()) {
+      return false;
+    }
     const patchNodes = Array.isArray(nodeGraphMvp?.patch?.nodes) ? nodeGraphMvp.patch.nodes : [];
     if (patchNodes.length < 1) {
       return false;
@@ -535,6 +541,9 @@ function nodeGraphZoomBySteps(steps, anchor = null, baseRatio = nodeGraphZoomLim
 }
 
 function zoomNodeGraphBy(delta) {
+  if (typeof nodeGraphMarkUserAdjustedView === "function") {
+    nodeGraphMarkUserAdjustedView();
+  }
   const event = arguments[1] || window.event || null;
   const direction = Math.sign(delta);
   if (!direction) {
@@ -552,6 +561,9 @@ function zoomNodeGraphAt(delta, clientX, clientY) {
 }
 
 function resetNodeGraphZoomToOne() {
+  if (typeof nodeGraphMarkUserAdjustedView === "function") {
+    nodeGraphMarkUserAdjustedView();
+  }
   // Zoom to 1× around the *viewport center*. Keeping the old pan at the new
   // scale (previous behavior) left a huge offset after zooming in far —
   // pan was sized for the high zoom, so at 1× the world jumped sideways.
@@ -587,6 +599,9 @@ function normalizeNodeGraphZoomInput(value) {
 }
 
 function finishNodeGraphZoomInput(input, options = {}) {
+  if (typeof nodeGraphMarkUserAdjustedView === "function") {
+    nodeGraphMarkUserAdjustedView();
+  }
   const button = input.closest("#nodeZoomResetButton");
   if (!button) {
     return;
@@ -674,6 +689,9 @@ function handleNodeGraphWorkspaceWheel(event) {
   if (typeof markNodeGraphViewportGesture === "function") {
     markNodeGraphViewportGesture("wheel");
   }
+  if (typeof nodeGraphMarkUserAdjustedView === "function") {
+    nodeGraphMarkUserAdjustedView();
+  }
   zoomNodeGraphAt(
     nodeGraphWheelZoomSteps(event),
     event.clientX,
@@ -699,6 +717,9 @@ function beginNodeGraphSmoothZoomDrag(event) {
     startZoom: nodeGraphZoom(),
   };
   workspace.classList.add("smooth-zooming");
+  if (typeof nodeGraphMarkUserAdjustedView === "function") {
+    nodeGraphMarkUserAdjustedView();
+  }
   if (typeof markNodeGraphViewportGesture === "function") {
     markNodeGraphViewportGesture("smooth-zoom");
   }

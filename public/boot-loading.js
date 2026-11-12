@@ -428,7 +428,21 @@ function nodeGraphBootWantsAutoframe() {
   }
 }
 
+let nodeGraphBootUserAdjustedView = false;
+
+function nodeGraphMarkUserAdjustedView() {
+  nodeGraphBootUserAdjustedView = true;
+}
+
+function nodeGraphHasUserAdjustedView() {
+  return nodeGraphBootUserAdjustedView === true;
+}
+
 function nodeGraphBootReframeWorkspace(reason = "boot") {
+  // Manual zoom or pan during load must win over later boot retries.
+  if (reason === "retry" && nodeGraphHasUserAdjustedView()) {
+    return;
+  }
   if (typeof nodeGraphViewportCullWakeAll === "function") {
     nodeGraphViewportCullWakeAll();
   } else {
