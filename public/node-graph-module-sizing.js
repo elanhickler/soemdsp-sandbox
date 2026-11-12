@@ -358,7 +358,16 @@ function nodeGraphModuleDisplayVisibleForUi(type, ui = {}) {
   if (!nodeGraphModuleHasFace(type)) {
     return false;
   }
-  return !nodeGraphEffectivePatchNodeUi(ui, type).oscilloscopeHidden;
+  if (nodeGraphEffectivePatchNodeUi(ui, type).oscilloscopeHidden) {
+    return false;
+  }
+  // Display Height 0 (Off) is hidden for layout, paint, and the GL graph.
+  // Configured height stays 0 so the Display Height control can show Off.
+  if (typeof nodeGraphModuleConfiguredDisplayHeightUnits === "function"
+    && nodeGraphModuleConfiguredDisplayHeightUnits(type, ui) <= 0) {
+    return false;
+  }
+  return true;
 }
 
 /** Always mount a face if the module has one. Hide is CSS + layout tracks, not unmount. */

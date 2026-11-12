@@ -154,24 +154,29 @@ function nodeGraphGlGraphRebuildPlates() {
       textBox: Boolean(textBody),
       onTop,
     });
-    const canvases = el.querySelectorAll(NODE_GRAPH_DISPLAY_FACE_SELECTOR);
-    for (let c = 0; c < canvases.length; c += 1) {
-      const face = canvases[c];
-      if (!(face.width > 1) || !(face.height > 1)) continue;
-      const page = face.closest("[data-music-player-page]");
-      if (page?.hidden || face.closest("[hidden]")) continue;
-      if (face.classList.contains("node-round-shape-canvas")) continue;
-      const laid = nodeGraphGlGraphLayoutBox(face, el);
-      if (!laid) continue;
-      displays.push({
-        canvas: face,
-        id,
-        x: box.x + laid.x,
-        y: box.y + laid.y,
-        w: laid.w,
-        h: laid.h,
-        output: String(nodes[i]?.type || "") === "output",
-      });
+    // Hidden / Display Height 0: CSS already display:none on the face.
+    // Skip GL collection too so a stale layout box cannot leave a T-module
+    // (or any) face painted after the shell has collapsed.
+    if (!el.classList.contains("oscilloscope-hidden") && !el.classList.contains("face-track-omitted")) {
+      const canvases = el.querySelectorAll(NODE_GRAPH_DISPLAY_FACE_SELECTOR);
+      for (let c = 0; c < canvases.length; c += 1) {
+        const face = canvases[c];
+        if (!(face.width > 1) || !(face.height > 1)) continue;
+        const page = face.closest("[data-music-player-page]");
+        if (page?.hidden || face.closest("[hidden]")) continue;
+        if (face.classList.contains("node-round-shape-canvas")) continue;
+        const laid = nodeGraphGlGraphLayoutBox(face, el);
+        if (!laid) continue;
+        displays.push({
+          canvas: face,
+          id,
+          x: box.x + laid.x,
+          y: box.y + laid.y,
+          w: laid.w,
+          h: laid.h,
+          output: String(nodes[i]?.type || "") === "output",
+        });
+      }
     }
   }
   nodeGraphGlGraphState.plates = plates;
