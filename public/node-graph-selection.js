@@ -304,8 +304,12 @@ function nodeGraphModuleActionTargetNodeId() {
 }
 
 /**
- * Plain right-click selects only the hit module. It never toggles that module off.
- * Ctrl/Cmd+right-click still adds or removes, same as Ctrl+left-click.
+ * Ensure the hit module is selected before a context / settings action:
+ * - Ctrl/Cmd+click still adds or removes, same as Ctrl+left-click.
+ * - Right-click (or a context open) on an already-selected module keeps the
+ *   current multi-selection so group edit stays available.
+ * - Right-click on an unselected module selects only that module.
+ * It never toggles the hit module off on a plain right-click.
  */
 function ensureNodeGraphModuleSelectedForContext(nodeId, event = null) {
   const id = String(nodeId || "").trim();
@@ -315,6 +319,12 @@ function ensureNodeGraphModuleSelectedForContext(nodeId, event = null) {
   const additive = event?.ctrlKey === true || event?.metaKey === true;
   if (additive && typeof toggleNodeGraphNodeSelection === "function") {
     toggleNodeGraphNodeSelection(id, true);
+    return true;
+  }
+  const selected = typeof nodeGraphSelectedNodeIds === "function"
+    ? nodeGraphSelectedNodeIds()
+    : new Set();
+  if (selected && typeof selected.has === "function" && selected.has(id)) {
     return true;
   }
   if (typeof setNodeGraphNodeSelection === "function") {
