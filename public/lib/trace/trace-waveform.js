@@ -11,18 +11,38 @@
 (function initTraceWaveform(global) {
   const MAX_SAMPLES_PER_BUCKET = 256;
 
-  function clampUnit(value) {
+  // App-wide display policy: no false visual clip. Scale / zoom / offset /
+  // fit never flatten a trace against the face rail. A trace only draws flat
+  // at a limit when the signal itself is flat there (it really clipped).
+  // Values past the face keep their true slope and leave the plot; the face
+  // (scissor / face texture edge) crops them, so nothing paints over a
+  // neighbour. This far bound only keeps GL coordinates finite and sane:
+  // 8 display units is several face heights off-face, never a visible wall.
+  const DISPLAY_UNIT_OVERSHOOT = 8;
+
+  function displayUnit(value) {
     const n = Number(value);
     if (!Number.isFinite(n)) {
       return 0;
     }
-    if (n < -1) {
-      return -1;
+    if (n < -DISPLAY_UNIT_OVERSHOOT) {
+      return -DISPLAY_UNIT_OVERSHOOT;
     }
-    if (n > 1) {
-      return 1;
+    if (n > DISPLAY_UNIT_OVERSHOOT) {
+      return DISPLAY_UNIT_OVERSHOOT;
     }
     return n;
+  }
+
+  /** raw * gain + offset in display units (+/-1 = plot rails), never railed. */
+  function displayValue(raw, gain = 1, offset = 0) {
+    const n = Number(raw);
+    if (!Number.isFinite(n)) {
+      return 0;
+    }
+    const g = Number(gain);
+    const o = Number(offset);
+    return displayUnit(n * (Number.isFinite(g) ? g : 1) + (Number.isFinite(o) ? o : 0));
   }
 
   function interpolatedSample(buffer, position) {
@@ -90,7 +110,7 @@
       : 0.85;
 
     const mapX = (sampleIndex) => ((sampleIndex - start) / span) * width;
-    const mapY = (raw) => midY - clampUnit(raw * gain + offset) * halfHeight;
+    const mapY = (raw) => midY - displayUnit(raw * gain + offset) * halfHeight;
 
     const validStart = Number.isFinite(Number(options.validStart))
       ? Math.max(0, Number(options.validStart))
@@ -197,8 +217,13 @@
   }
 
   global.TraceWaveform = {
+    DISPLAY_UNIT_OVERSHOOT,
     MAX_SAMPLES_PER_BUCKET,
     buildPoints,
+    displayUnit,
+    displayValue,
     interpolatedSample,
   };
+  // Shared by every trace mapper (module scopes, Waterfall, 1D burn, XY).
+  global.nodeGraphTraceDisplayValue = displayValue;
 })(typeof window !== "undefined" ? window : globalThis);

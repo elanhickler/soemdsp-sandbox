@@ -63,7 +63,7 @@ function buildNodeGraphTraceDisplayVertices(buffer, rect, canvas, pixelRatio, sl
     const sampleIndex = Math.max(0, Math.min(buffer.length - 1, buffer.length - 1));
     const sampleInfo = nodeGraphModuleScopeSampleInfo(buffer, sampleIndex);
     const rawValue = Number.isFinite(Number(sampleInfo.value)) ? Number(sampleInfo.value) : 0;
-    const value = clampNodeSliderValue((rawValue * view.gain) + view.offset, -1, 1);
+    const value = nodeGraphTraceDisplayValue(rawValue, view.gain, view.offset);
     const midY = rect.top + rect.height * 0.5;
     const halfHeight = rect.height * nodeGraphModuleScopeTraceHalfHeightRatio(slot, buffer, rect);
     const y = (midY - value * halfHeight) * pixelRatio;

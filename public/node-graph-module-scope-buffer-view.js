@@ -271,7 +271,7 @@ function nodeGraphTraceDisplaySampleInfo(buffer, position, _samplesPerPoint = 1)
 }
 
 function nodeGraphModuleScopeBufferValue(buffer, position, view) {
-  return clampNodeSliderValue((nodeGraphModuleScopeInterpolatedSample(buffer, position) * view.gain) + view.offset, -1, 1);
+  return nodeGraphTraceDisplayValue(nodeGraphModuleScopeInterpolatedSample(buffer, position), view.gain, view.offset);
 }
 
 function nodeGraphModuleScopeHeatmapTraceColors() {

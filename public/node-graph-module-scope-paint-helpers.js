@@ -4,7 +4,7 @@
 function nodeGraphOneDimensionalBurnSampleToY(sample, height, settings = null) {
   const h = Math.max(1, nodeGraphFiniteNumber(height, 1));
   const amp = nodeGraphDisplaySettingsAmplitudeScale(settings);
-  return h * 0.5 - clampNodeSliderValue((nodeGraphFiniteNumber(sample)) * amp, -1, 1) * h * 0.44;
+  return h * 0.5 - nodeGraphTraceDisplayValue(nodeGraphFiniteNumber(sample), amp, 0) * h * 0.44;
 }
 
 /**
@@ -978,7 +978,7 @@ function buildNodeGraphTraceDisplaySamples(buffer, slot, pointCount, progressFn,
     const samplePosition = view.start + progress * Math.max(0, visibleSamples - 1);
     const sampleInfo = nodeGraphTraceDisplaySampleInfo(buffer, samplePosition, spPt);
     const raw = Number.isFinite(Number(sampleInfo.value)) ? Number(sampleInfo.value) : 0;
-    const value = clampNodeSliderValue((raw * view.gain) + view.offset, -1, 1);
+    const value = nodeGraphTraceDisplayValue(raw, view.gain, view.offset);
     // Break the polyline once at a true adjacent-sample wrap. Keep this
     // point — do not drop the next N vertices (that made the line vanish).
     let breakBefore = false;
@@ -1038,7 +1038,7 @@ function buildNodeGraphTraceDisplayCanvasPoints(buffer, canvas, slot, viewOverri
   const halfHeight = box.height * nodeGraphModuleScopeTraceHalfHeightRatio(slot, buffer, { height: box.height });
   if (!view || view.end <= view.start) {
     const sample = nodeGraphModuleScopeInterpolatedSample(buffer, Math.max(0, buffer.length - 1));
-    const value = clampNodeSliderValue((sample * (nodeGraphFiniteNumber(view?.gain, 1))) + (nodeGraphFiniteNumber(view?.offset)), -1, 1);
+    const value = nodeGraphTraceDisplayValue(sample, nodeGraphFiniteNumber(view?.gain, 1), nodeGraphFiniteNumber(view?.offset));
     return [{
       x: box.x,
       y: box.y + (box.height * 0.5) - value * halfHeight,
@@ -1083,7 +1083,7 @@ function buildNodeGraphTraceDisplayCanvasPoints(buffer, canvas, slot, viewOverri
   const points = [];
   for (let i = first; i <= last; i += 1) {
     const raw = nodeGraphFiniteNumber(buffer[i]);
-    const value = clampNodeSliderValue((raw * view.gain) + view.offset, -1, 1);
+    const value = nodeGraphTraceDisplayValue(raw, view.gain, view.offset);
     points.push({
       x: box.x + ((i - view.start) / span) * width,
       y: midY - value * halfHeight,

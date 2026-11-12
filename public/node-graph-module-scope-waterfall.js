@@ -124,8 +124,10 @@ function nodeGraphOnsetTraceY(raw, buffer, slot, settings, height, strokePx, ran
   const halfHeight = nodeGraphWaterfallHalfHeight(height, slot, settings, amp);
   let y = nodeGraphWaterfallY(raw, amp.gain, amp.offset, midY, halfHeight, amp, settings);
   if (!Number.isFinite(y)) return null;
-  const inset = Math.min(height * 0.5, Math.max(0, strokePx) * 0.5);
-  if (height > 0) y = Math.max(inset, Math.min(height - inset, y));
+  // No false clip: fit the stroke inside the face by mapping into the inset
+  // box (center stays put), never by flattening peaks against the rail.
+  const inset = Math.min(height * 0.25, Math.max(0, strokePx) * 0.5);
+  if (height > 0) y = nodeGraphWaterfallNoFalseClipY(inset + (y / height) * (height - inset * 2), height);
   return y;
 }
 
@@ -728,6 +730,19 @@ function nodeGraphWaterfallDisplayScale(settings) {
   return n;
 }
 
+/**
+ * App-wide display policy: no false visual clip. Scale never rails a trace;
+ * a y past the face leaves it with its true slope and the face texture crops
+ * it. Only a signal that is itself flat at a limit draws flat. The bound is
+ * several face heights off-face (keeps GL coords sane, never visible).
+ */
+function nodeGraphWaterfallNoFalseClipY(y, height) {
+  const h = Math.max(1, nodeGraphFiniteNumber(height, 1));
+  const n = Number(y);
+  if (!Number.isFinite(n)) return n;
+  return Math.max(-4 * h, Math.min(5 * h, n));
+}
+
 function nodeGraphWaterfallY(raw, gain, offset, midY, halfHeight, amp = null, settings = null) {
   const ampScale = nodeGraphWaterfallDisplayScale(settings);
   let bipolar;
@@ -752,15 +767,14 @@ function nodeGraphWaterfallY(raw, gain, offset, midY, halfHeight, amp = null, se
     bipolar = Math.abs(bipolar);
   }
   if ((polarity === "unipolar" || polarity === "absolute") && !(amp && amp.mode === "rmsDb")) {
-    const u = Math.max(0, Math.min(1, bipolar));
     const h = Math.max(1, midY * 2);
-    return h - u * h;
+    return nodeGraphWaterfallNoFalseClipY(h - bipolar * h, h);
   }
   if (polarity === "bottomFill") {
     const h = Math.max(1, midY * 2);
-    return Math.max(0, Math.min(h, midY - bipolar * halfHeight));
+    return nodeGraphWaterfallNoFalseClipY(midY - bipolar * halfHeight, h);
   }
-  return midY - bipolar * halfHeight;
+  return nodeGraphWaterfallNoFalseClipY(midY - bipolar * halfHeight, Math.max(1, midY * 2));
 }
 
 function nodeGraphWaterfallPrepare(buffer, settings) {
@@ -1397,11 +1411,12 @@ function nodeGraphWaterfallStrokeReach(canvas, settings) {
 function nodeGraphWaterfallStrokeWaveRun(canvas, bag, key, cols, settings, strokeColor, clipX0, blend = "source-over") {
   if (!bag.strokePts) bag.strokePts = Object.create(null);
   const { strokePx, featherPx, reach } = nodeGraphWaterfallStrokeReach(canvas, settings);
-  // Clamp to the panel so values past the top / bottom (Sidechain gain > 2x
-  // rest) ride the edge, fully visible, instead of leaving the canvas.
+  // No false clip: values past the top / bottom (Scale, Sidechain gain > 2x
+  // rest) leave the face with their true slope; the face texture crops them.
+  // They no longer ride the edge as a flat wall. The plot box already insets
+  // a full-scale (+/-1) line so its stroke is fully visible.
   const faceH = Number(canvas?.height);
-  const inset = faceH > 0 ? Math.min(faceH * 0.5, Math.max(0, strokePx) * 0.5) : 0;
-  const clampY = (y) => (faceH > 0 ? Math.max(inset, Math.min(faceH - inset, y)) : y);
+  const clampY = (y) => (faceH > 0 ? nodeGraphWaterfallNoFalseClipY(y, faceH) : y);
   const rgb = nodeGraphWaterfallStrokeRgb(settings, strokeColor);
   const draw = (pts) => {
     if (pts.length > 1 && typeof nodeGraphOnsetGlStrokePolyline === "function") {

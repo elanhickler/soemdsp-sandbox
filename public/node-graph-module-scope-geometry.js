@@ -197,7 +197,7 @@ function nodeGraphModuleScopeBufferSegmentPoints(
     const rawValue = sampleInfo.value;
     const value = spectrumMode
       ? clampNodeSliderValue(rawValue, 0, 1)
-      : clampNodeSliderValue((rawValue * view.gain) + view.offset, -1, 1);
+      : nodeGraphTraceDisplayValue(rawValue, view.gain, view.offset);
     const y = midY - value * halfHeight;
     rawValues.push(Number.isFinite(Number(rawValue)) ? Number(rawValue) : 0);
     skippedPoints.push(!spectrumMode && skipSamples > 0 && sampleInfo.discontinuity);
@@ -349,8 +349,8 @@ function nodeGraphModuleScopeXyPoints(buffer, rect, canvas, pixelRatio, slot) {
   const centerY = square.top + square.height * 0.5;
   const radius = Math.max(1, square.width * 0.44);
   for (let index = 0; index < length; index += 1) {
-    const x = centerX + clampNodeSliderValue((nodeGraphFiniteNumber(buffer.x[index])) * gain, -1, 1) * radius;
-    const y = centerY - clampNodeSliderValue((nodeGraphFiniteNumber(buffer.y[index])) * gain, -1, 1) * radius;
+    const x = centerX + nodeGraphTraceDisplayValue(nodeGraphFiniteNumber(buffer.x[index]), gain, 0) * radius;
+    const y = centerY - nodeGraphTraceDisplayValue(nodeGraphFiniteNumber(buffer.y[index]), gain, 0) * radius;
     points.push(
       ((x * pixelRatio) / canvas.width) * 2 - 1,
       1 - ((y * pixelRatio) / canvas.height) * 2,
