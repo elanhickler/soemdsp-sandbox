@@ -1733,11 +1733,10 @@ function nodeGraphGlGraphDrawDisplayInk(batch, canvas, x, y, w, h) {
   const plate = nodeGraphGlGraphParseCssColor(canvas._wfGlSession.plateCss || "#000000", [0, 0, 0, 1]);
   const frame = typeof nodeGraphWaterfallFramePx === "function" ? nodeGraphWaterfallFramePx(canvas) : null;
   if (frame) {
-    // Solid plate margin, then history fades in over fadeLeft (a mask; the tape is unchanged).
-    if (frame.padLeft > 0) nodeGraphGlLinesRect(batch, x, y, frame.padLeft * kx, h, [plate[0], plate[1], plate[2], 1]);
-    for (let i = 0; i < frame.fadeLeft; i += 1) {
-      const a = 1 - (i + 0.5) / frame.fadeLeft;
-      nodeGraphGlLinesRect(batch, x + (frame.padLeft + i) * kx, y, kx, h, [plate[0], plate[1], plate[2], a * a]);
+    // Solid plate margin, then a continuous dithered fade over fadeLeft
+    // (a mask; the tape is unchanged). Same helper as the module present.
+    if (typeof nodeGraphWaterfallFramePresent === "function") {
+      nodeGraphWaterfallFramePresent(batch, x, y, h, frame, plate, kx);
     }
   }
   const cells = canvas._faceText;

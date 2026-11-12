@@ -27,7 +27,8 @@ vm.runInContext(
   "this.NODE_GRAPH_WATERFALL_FRAME = NODE_GRAPH_WATERFALL_FRAME;"
   + "this.nodeGraphWaterfallFramePx = nodeGraphWaterfallFramePx;"
   + "this.nodeGraphWaterfallFrameAuthored = nodeGraphWaterfallFrameAuthored;"
-  + "this.nodeGraphWaterfallFaceCssBox = nodeGraphWaterfallFaceCssBox;",
+  + "this.nodeGraphWaterfallFaceCssBox = nodeGraphWaterfallFaceCssBox;"
+  + "this.nodeGraphWaterfallFramePresent = nodeGraphWaterfallFramePresent;",
   ctx,
 );
 
@@ -38,6 +39,7 @@ const {
   NODE_GRAPH_WATERFALL_FRAME,
   nodeGraphWaterfallFramePx,
   nodeGraphWaterfallFrameAuthored,
+  nodeGraphWaterfallFramePresent,
 } = ctx;
 
 function assert(cond, msg) {
@@ -99,7 +101,43 @@ assert(fc.fadeLeft + fc.padLeft < composited.width * 0.2, "composited left frame
 const zero = nodeGraphWaterfallFramePx(face96, { framePadding: 6, fadeAmount: 0 });
 assert(zero.fadeLeft === 0 && zero.padLeft === 6, "fade 0");
 
-console.log("ok: waterfall frame pad/fade scale");
+// Present path: one continuous fade quad, not one rect per fade column.
+assert(typeof nodeGraphWaterfallFramePresent === "function", "present helper is exported");
+const rects = [];
+const fades = [];
+ctx.nodeGraphGlLinesRect = (batch, x, y, w, h, c) => { rects.push({ x, y, w, h, c: c.slice() }); };
+ctx.nodeGraphGlLinesFadeRect = (batch, x, y, w, h, c) => { fades.push({ x, y, w, h, c: c.slice() }); };
+const frame = { padLeft: 6, padRight: 6, fadeLeft: 4, minPadY: 4 };
+const plate = [0.1, 0.2, 0.3, 1];
+nodeGraphWaterfallFramePresent({}, 10, 20, 100, frame, plate, 2);
+assert(rects.length === 1, `present draws one pad rect, got ${rects.length}`);
+assert(fades.length === 1, `present draws one fade quad, got ${fades.length}`);
+almost(rects[0].x, 10, "pad x");
+almost(rects[0].w, 12, "pad width uses kx");
+almost(rects[0].h, 100, "pad height");
+almost(fades[0].x, 10 + 12, "fade starts after pad");
+almost(fades[0].w, 8, "fade width is fadeLeft * kx, not 1px columns");
+almost(fades[0].h, 100, "fade height");
+assert(fades[0].w !== 2, "fade is not a single kx column");
+rects.length = 0;
+fades.length = 0;
+nodeGraphWaterfallFramePresent({}, 0, 0, 50, { padLeft: 6, fadeLeft: 0 }, plate, 1);
+assert(rects.length === 1 && fades.length === 0, "fade 0 draws only the pad");
+
+// Both real draw paths share the helper; neither still stacks 1px alpha rects.
+const helpers = fs.readFileSync(path.join(root, "public/node-graph-module-scope-paint-helpers.js"), "utf8");
+const compositor = fs.readFileSync(path.join(root, "public/node-graph-gl-graph.js"), "utf8");
+const lines = fs.readFileSync(path.join(root, "public/lib/visual/gl-line-renderer.js"), "utf8");
+assert(helpers.includes("nodeGraphWaterfallFramePresent("), "FaceFrameDraw uses the shared present helper");
+assert(compositor.includes("nodeGraphWaterfallFramePresent("), "DrawDisplayInk uses the shared present helper");
+assert(!/for \(let i = 0; i < frame\.fadeLeft/.test(helpers), "FaceFrameDraw no longer loops fade columns");
+assert(!/for \(let i = 0; i < frame\.fadeLeft/.test(compositor), "DrawDisplayInk no longer loops fade columns");
+assert(lines.includes("function nodeGraphGlLinesFadeRect"), "FadeRect primitive exists");
+assert(lines.includes("soemDither(gl_FragCoord.xy)"), "fade shader uses Soem ordered dither");
+assert(lines.includes("float fade = a * a;"), "fade shader keeps quadratic ease, continuously");
+assert(lines.includes("caps = 11") || lines.includes("const caps = 11"), "fade verts are tagged caps 11");
+
+console.log("ok: waterfall frame pad/fade scale and dithered gradient present");
 console.log(JSON.stringify({
   defaults: NODE_GRAPH_WATERFALL_FRAME,
   face96: f96,
@@ -107,4 +145,5 @@ console.log(JSON.stringify({
   tile: ft,
   tileCssInk: { padCss, fadeCss, minSide, ref: FACE_INK_REF_PX },
   composited: fc,
+  present: { pad: rects, /* reset after fade0 case */ fadeQuad: { x: 22, w: 8, kx: 2 } },
 }, null, 2));

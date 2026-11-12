@@ -113,7 +113,11 @@ void main() {
   float lenOut = segLen;
   // Analytic ring (caps 10): local = offset from the centre, segLen = radius.
   // Camera: radius / half are zoom-1 world px, feather is screen px (as dots).
-  if (uPixel > 0.5 && caps > 9.75) {
+  // caps 11: horizontal plate fade. local.x is t in 0..1 (opaque -> clear).
+  // Do not treat it as a ring or expand the quad with zoom.
+  if (caps > 10.5 && caps < 11.5) {
+    capsOut = 11.0;
+  } else if (uPixel > 0.5 && caps > 9.75) {
     float z = max(uCam.z, 0.0001);
     localOut = local * z;
     halfOut = halfPx * z;
@@ -185,7 +189,29 @@ uniform float uCoverage;
 uniform vec3 uCam;
 uniform vec2 uDash;
 ${COVERAGE_GLSL}
+// Identical to SoemGl.GLSL_DITHER (ordered 8x8). Keep in lockstep.
+float soemDither(vec2 fragCoord) {
+  vec2 p = mod(floor(fragCoord), 8.0);
+  vec2 a = mod(p, 2.0);
+  vec2 b = mod(floor(p * 0.5), 2.0);
+  vec2 c = floor(p * 0.25);
+  float v = 16.0 * mod(2.0 * a.x + 3.0 * a.y, 4.0)
+    + 4.0 * mod(2.0 * b.x + 3.0 * b.y, 4.0)
+    + mod(2.0 * c.x + 3.0 * c.y, 4.0);
+  return (v + 0.5) / 64.0 - 0.5;
+}
+vec3 soemDitherRgb(vec3 c, vec2 fragCoord) {
+  return floor(clamp(c, 0.0, 1.0) * 255.0 + soemDither(fragCoord) + 0.5) / 255.0;
+}
 void main() {
+  if (vCaps > 10.5 && vCaps < 11.5) {
+    float t = clamp(vLocal.x, 0.0, 1.0);
+    float a = 1.0 - t;
+    float fade = a * a;
+    float fade8 = floor(clamp(fade, 0.0, 1.0) * 255.0 + soemDither(gl_FragCoord.xy) + 0.5) / 255.0;
+    gl_FragColor = vec4(soemDitherRgb(vColour.rgb, gl_FragCoord.xy), fade8 * vColour.a);
+    return;
+  }
   float u = vLocal.x;
   float across = abs(vLocal.y);
   float a;
@@ -772,6 +798,27 @@ void main() {
     const big = 1e6;
     const q = [[x, y], [x + w, y], [x, y + h], [x + w, y], [x + w, y + h], [x, y + h]];
     for (const [px, py] of q) push(batch, px, py, 0, 0, 0, big, 0, rgba);
+  }
+
+  /**
+   * Horizontal plate fade: opaque at x, clear at x+w, quadratic ease (a*a)
+   * and Soem ordered dither so an 8-bit present does not band.
+   */
+  function nodeGraphGlLinesFadeRect(batch, x, y, w, h, rgba) {
+    if (!batch || !(w > 0) || !(h > 0)) return;
+    const k = batch.camera ? 1 : (batch.scale || 1);
+    if (k !== 1) { x *= k; y *= k; w *= k; h *= k; }
+    const big = 1e6;
+    const caps = 11;
+    const q = [
+      [x, y, 0],
+      [x + w, y, 1],
+      [x, y + h, 0],
+      [x + w, y, 1],
+      [x + w, y + h, 1],
+      [x, y + h, 0],
+    ];
+    for (const [px, py, t] of q) push(batch, px, py, t, 0, 0, big, 0, rgba, caps);
   }
 
   /** Solid triangle (fills, areas). */
@@ -3584,6 +3631,7 @@ void main() {
     nodeGraphGlLinesBegin,
     nodeGraphGlLinesLayer,
     nodeGraphGlLinesRect,
+    nodeGraphGlLinesFadeRect,
     nodeGraphGlLinesModuleOutline,
     nodeGraphGlLinesVeil,
     nodeGraphGlLinesTriangle,

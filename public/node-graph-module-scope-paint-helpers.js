@@ -1619,12 +1619,10 @@ function nodeGraphFaceFrameDraw(face) {
     ? nodeGraphGlGraphParseCssColor(face._wfGlSession?.plateCss || "#000000", [0, 0, 0, 1])
     : [0, 0, 0, 1];
   if (frame && typeof nodeGraphGlLinesRect === "function") {
-    // Left: solid plate margin, then history fades in over fadeLeft (a mask at
-    // present time; the tape itself is never changed).
-    if (frame.padLeft > 0) nodeGraphGlLinesRect(batch, 0, 0, frame.padLeft, h, [plateRgb[0], plateRgb[1], plateRgb[2], 1]);
-    for (let i = 0; i < frame.fadeLeft; i += 1) {
-      const a = 1 - (i + 0.5) / frame.fadeLeft;
-      nodeGraphGlLinesRect(batch, frame.padLeft + i, 0, 1, h, [plateRgb[0], plateRgb[1], plateRgb[2], a * a]);
+    // Left: solid plate margin, then a continuous dithered fade over fadeLeft
+    // (a mask at present time; the tape itself is never changed).
+    if (typeof nodeGraphWaterfallFramePresent === "function") {
+      nodeGraphWaterfallFramePresent(batch, 0, 0, h, frame, plateRgb, 1);
     }
   }
   if (!hasText) {

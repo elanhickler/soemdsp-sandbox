@@ -1313,6 +1313,36 @@ function nodeGraphWaterfallFramePx(canvas, settings) {
   return { minPadY, padRight, padLeft, fadeLeft };
 }
 
+/**
+ * Present-time plate mask: solid padLeft, then a continuous dithered fade
+ * over fadeLeft. The history tape is not changed. kx maps face px to batch
+ * units (1 in the module present, w/fw in the workspace/canvas compositor).
+ * padRight stays a write-edge inset, not a present rect.
+ */
+function nodeGraphWaterfallFramePresent(batch, x, y, h, frame, plateRgba, kx) {
+  if (!batch || !frame) return;
+  const scale = Number(kx) > 0 ? Number(kx) : 1;
+  const plate = [
+    plateRgba?.[0] || 0,
+    plateRgba?.[1] || 0,
+    plateRgba?.[2] || 0,
+    1,
+  ];
+  if (frame.padLeft > 0 && typeof nodeGraphGlLinesRect === "function") {
+    nodeGraphGlLinesRect(batch, x, y, frame.padLeft * scale, h, plate);
+  }
+  if (frame.fadeLeft > 0 && typeof nodeGraphGlLinesFadeRect === "function") {
+    nodeGraphGlLinesFadeRect(
+      batch,
+      x + frame.padLeft * scale,
+      y,
+      frame.fadeLeft * scale,
+      h,
+      plate,
+    );
+  }
+}
+
 function nodeGraphWaterfallWaveRaw(acc, settings = null, breakJump = false) {
   if (!acc?.has) return [];
   const minFirst = !(Number(acc.maxAt) < Number(acc.minAt));
