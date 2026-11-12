@@ -1,6 +1,7 @@
 // Mini Performance View, GL pass (docs/MINI_PERFORM_VIEW_PLAN.md MP-3).
 // WebGL2 through gl-line-renderer on the shared context. No 2D drawing, no
-// Display tiles draw module canvases as textured quads; whole-module, Text
+// Display tiles draw module face textures as quads, contain-fitted (uniform
+// scale) into the slot F gives them; whole-module, Text
 // Box and not-yet-GPU tiles run the GL graph's module pass. Interactive DOM
 // instruments which GL intentionally excludes (currently Keyboard) get a
 // small mirrored face that forwards gestures to their live source. Everything
@@ -478,17 +479,20 @@ function nodeGraphGlMiniPerformPresent() {
       nodeGraphGlMiniPerformModuleTile(view, tile, el, frame, i);
       continue;
     }
-    // PP-10: the display takes its tile's box (or contain-fits a declared
-    // displayAspect). The workspace display box has no say; several displays
-    // split the tile evenly top to bottom.
+    // PP-10: F gives the display its tile's box (or contain-fits a declared
+    // displayAspect); several displays split the tile evenly top to bottom.
+    // F re-paints the face at that box. The Mini Canvas only has the face's
+    // workspace picture (no second paint in the circuit builder), so it is
+    // contain-fitted into F's slot: one uniform scale, centred, never stretched.
     const box = nodeGraphCanvasDisplayBox(tile.w, tile.h, nodeGraphDisplayAspect(patchNode?.type));
     const sliceH = box.h / displays.length;
     for (let k = 0; k < displays.length; k += 1) {
       const d = displays[k];
-      const w = box.w;
-      const h = sliceH;
-      const x = tile.x + box.x;
-      const y = tile.y + box.y + k * sliceH;
+      const fit = nodeGraphCanvasDisplayBox(box.w, sliceH, d.w / d.h);
+      const w = fit.w;
+      const h = fit.h;
+      const x = tile.x + box.x + fit.x;
+      const y = tile.y + box.y + k * sliceH + fit.y;
       view._miniMaps.push({
         nodeId: tile.nodeId,
         x,
@@ -496,7 +500,6 @@ function nodeGraphGlMiniPerformPresent() {
         w,
         h,
         scale: w / d.w,
-        scaleY: h / d.h,
         layoutX: d.x,
         layoutY: d.y,
       });
