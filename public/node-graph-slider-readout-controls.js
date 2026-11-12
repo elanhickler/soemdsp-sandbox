@@ -106,6 +106,96 @@ function cancelNodeSliderReadoutEdit(input) {
   nodeSliderReadoutEditRefreshChrome();
 }
 
+
+/** Phone browsers fire a compatibility mouse pointerdown after a touch, and
+ *  workspace capture listeners blur any input that isn't the event target.
+ *  That used to commit and remove the type-in box before it could stay up.
+ *  Keep the field open, focused, and typable through that residual burst. */
+const NODE_SLIDER_READOUT_EDIT_OPEN_GUARD_MS = 500;
+
+function nodeSliderReadoutEditStyleForTyping(input) {
+  input.style.pointerEvents = "auto";
+  input.style.userSelect = "text";
+  input.style.webkitUserSelect = "text";
+  input.style.touchAction = "manipulation";
+  input.style.opacity = "1";
+  input.style.visibility = "visible";
+  input.style.background = "#080b0d";
+  input.style.color = "#ffffff";
+  input.style.webkitTextFillColor = "#ffffff";
+  input.style.caretColor = "#ffffff";
+  // 16px avoids iOS zoom-on-focus, which can hide or jump the box.
+  input.style.fontSize = "16px";
+}
+
+function nodeSliderReadoutEditFocus(input) {
+  try {
+    input.focus({ preventScroll: true });
+  } catch (_error) {
+    input.focus();
+  }
+  try {
+    input.select();
+  } catch (_error) {
+    /* some browsers throw if the field isn't focusable yet */
+  }
+}
+
+function nodeSliderReadoutEditStillOpening(input, openedAt) {
+  if (!input || input.dataset.editOpening !== "true") {
+    return false;
+  }
+  return performance.now() - openedAt < NODE_SLIDER_READOUT_EDIT_OPEN_GUARD_MS + 50;
+}
+
+function nodeSliderReadoutEditArmPersistence(input) {
+  const openedAt = performance.now();
+  input.dataset.editOpening = "true";
+  const closeOnOutsidePointerDown = (event) => {
+    if (
+      !document.contains(input)
+      || input.dataset.editCommitted === "true"
+      || input.dataset.editCanceled === "true"
+    ) {
+      document.removeEventListener("pointerdown", closeOnOutsidePointerDown, true);
+      return;
+    }
+    if (event.target === input || input.contains?.(event.target)) {
+      return;
+    }
+    // Residual compatibility-mouse or still-held opening finger.
+    if (nodeSliderReadoutEditStillOpening(input, openedAt)) {
+      return;
+    }
+    document.removeEventListener("pointerdown", closeOnOutsidePointerDown, true);
+    commitNodeSliderReadoutEdit(input);
+  };
+  document.addEventListener("pointerdown", closeOnOutsidePointerDown, true);
+  input.addEventListener("blur", () => {
+    if (input.dataset.editCanceled === "true" || input.dataset.editCommitted === "true") {
+      return;
+    }
+    if (nodeSliderReadoutEditStillOpening(input, openedAt)) {
+      window.setTimeout(() => {
+        if (
+          document.contains(input)
+          && input.dataset.editCommitted !== "true"
+          && input.dataset.editCanceled !== "true"
+        ) {
+          nodeSliderReadoutEditFocus(input);
+        }
+      }, 0);
+      return;
+    }
+    commitNodeSliderReadoutEdit(input);
+  });
+  window.setTimeout(() => {
+    if (input.dataset.editOpening === "true") {
+      input.dataset.editOpening = "false";
+    }
+  }, NODE_SLIDER_READOUT_EDIT_OPEN_GUARD_MS);
+}
+
 function beginNodeSliderFaceValueEdit(surface) {
   if (!surface || surface.dataset.sliderFaceEditing === "true") {
     return false;
@@ -154,37 +244,24 @@ function beginNodeSliderFaceValueEdit(surface) {
       cancelNodeSliderReadoutEdit(input);
     }
   });
-  input.addEventListener("blur", () => {
-    if (input.dataset.editCanceled !== "true") {
-      commitNodeSliderReadoutEdit(input);
-    }
-  });
-  const closeOnOutsidePointerDown = (event) => {
-    if (
-      !document.contains(input)
-      || input.dataset.editCommitted === "true"
-      || input.dataset.editCanceled === "true"
-    ) {
-      document.removeEventListener("pointerdown", closeOnOutsidePointerDown, true);
-      return;
-    }
-    if (event.target === input || input.contains?.(event.target)) {
-      return;
-    }
-    document.removeEventListener("pointerdown", closeOnOutsidePointerDown, true);
-    commitNodeSliderReadoutEdit(input);
-  };
-  document.addEventListener("pointerdown", closeOnOutsidePointerDown, true);
   const position = window.getComputedStyle(surface).position;
   if (position === "static") {
     surface.style.position = "relative";
   }
+  surface.style.overflow = "visible";
+  surface.style.pointerEvents = "auto";
+  surface.style.zIndex = "40";
   input.style.position = "absolute";
   input.style.left = "50%";
   input.style.top = "50%";
   input.style.transform = "translate(-50%, -50%)";
-  input.style.zIndex = "20";
+  input.style.zIndex = "40";
   input.style.width = "70%";
+  input.style.minWidth = "4.5em";
+  input.style.minHeight = "1.6em";
+  input.style.height = "auto";
+  input.style.maxHeight = "none";
+  nodeSliderReadoutEditStyleForTyping(input);
   surface.dataset.sliderFaceEditing = "true";
   const finishFlag = () => {
     surface.dataset.sliderFaceEditing = "false";
@@ -198,8 +275,11 @@ function beginNodeSliderFaceValueEdit(surface) {
   });
   observer.observe(surface, { childList: true });
   surface.append(input);
-  input.focus();
-  input.select();
+  // Force layout so the new field is a real hit target before residual events.
+  void input.offsetWidth;
+  nodeSliderReadoutEditArmPersistence(input);
+  nodeSliderReadoutEditFocus(input);
+  nodeSliderReadoutEditRefreshChrome();
   return true;
 }
 
@@ -243,35 +323,19 @@ function beginNodeSliderReadoutEdit(readout) {
       cancelNodeSliderReadoutEdit(input);
     }
   });
-  input.addEventListener("blur", () => {
-    if (input.dataset.editCanceled !== "true") {
-      commitNodeSliderReadoutEdit(input);
-    }
-  });
+  nodeSliderReadoutEditStyleForTyping(input);
   // Single-click anywhere outside the input commits and closes the edit.
   // Blur alone doesn't cover this: workspace pointerdown handlers call
   // preventDefault (pan/marquee/slider-drag), which suppresses the focus
   // change so the input never blurs. Capture-phase document listener sees
   // the pointerdown regardless; it self-removes once the edit is over.
-  const closeOnOutsidePointerDown = (event) => {
-    if (
-      !document.contains(input) ||
-      input.dataset.editCommitted === "true" ||
-      input.dataset.editCanceled === "true"
-    ) {
-      document.removeEventListener("pointerdown", closeOnOutsidePointerDown, true);
-      return;
-    }
-    if (event.target === input) {
-      return;
-    }
-    document.removeEventListener("pointerdown", closeOnOutsidePointerDown, true);
-    commitNodeSliderReadoutEdit(input);
-  };
-  document.addEventListener("pointerdown", closeOnOutsidePointerDown, true);
+  // On phone, residual compatibility-mouse events must not close the box —
+  // see nodeSliderReadoutEditArmPersistence.
   readout.replaceWith(input);
-  input.focus();
-  input.select();
+  void input.offsetWidth;
+  nodeSliderReadoutEditArmPersistence(input);
+  nodeSliderReadoutEditFocus(input);
+  nodeSliderReadoutEditRefreshChrome();
 }
 
 function nodeSliderReadoutIsNumberOnly(readout) {

@@ -161,10 +161,10 @@
     // Own the gesture: keep generic slider/module drag out of it.
     e.stopImmediatePropagation();
     e.stopPropagation();
-    e.preventDefault();
     const slider = rowSlider(row);
     if (!slider || locked()) return;
     if (btn) {
+      e.preventDefault();
       seedAction(slider, btn.dataset.seedAction, e);
       return;
     }
@@ -178,28 +178,30 @@
     lastDown = { readout, time: now, x: e.clientX, y: e.clientY };
     if (dbl) {
       lastDown = null;
+      // Do not preventDefault before focus: iOS will not open the keyboard.
       if (typeof beginNodeSliderReadoutEdit === "function") beginNodeSliderReadoutEdit(readout);
       return;
     }
+    e.preventDefault();
     const touchKey = touch ? `seed:${slider.id || "seed"}` : "";
     drag = { slider, readout, x: e.clientX, y: e.clientY, acc: 0, moved: false, pointerId: e.pointerId, touchKey };
     try { readout.setPointerCapture(e.pointerId); } catch (_) { /* ignore */ }
     readout.classList.add("value-dragging");
-    // Usual phone path: long hold opens type-in (double-tap already does too).
+    // Long hold arms type-in; open on pointerup so the phone keyboard can appear.
     if (touchKey && typeof nodeGraphTouchGestureArmHold === "function") {
       nodeGraphTouchGestureArmHold(touchKey, e, () => {
         const d = drag;
         if (!d || d.moved || d.pointerId !== e.pointerId) return;
-        drag = null;
+        d.holdTypeIn = true;
         d.readout.classList.remove("value-dragging");
         try { d.readout.releasePointerCapture(d.pointerId); } catch (_) { /* ignore */ }
-        if (typeof beginNodeSliderReadoutEdit === "function") beginNodeSliderReadoutEdit(d.readout);
       });
     }
   }
   function onPointerMove(e) {
     if (!drag || e.pointerId !== drag.pointerId) return;
     e.stopImmediatePropagation();
+    if (drag.holdTypeIn) return;
     if (drag.touchKey && typeof nodeGraphTouchGestureMove === "function") {
       nodeGraphTouchGestureMove(drag.touchKey, e);
     }
@@ -228,6 +230,10 @@
     drag = null;
     d.readout.classList.remove("value-dragging");
     try { d.readout.releasePointerCapture(e.pointerId); } catch (_) { /* ignore */ }
+    if (d.holdTypeIn || (d.touchKey && typeof nodeGraphTouchGestureUp === "function" && nodeGraphTouchGestureUp(d.touchKey, e).holdFired)) {
+      if (typeof beginNodeSliderReadoutEdit === "function") beginNodeSliderReadoutEdit(d.readout);
+      return;
+    }
     if (d.moved && typeof commitNodeSliderDragValue === "function") {
       commitNodeSliderDragValue(d.slider, "seed changed");
     }

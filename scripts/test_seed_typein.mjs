@@ -82,4 +82,37 @@ assert(
   "parameter-row seed long-hold also opens type-in",
 );
 
+// The box must actually stay up on a phone: residual compatibility-mouse
+// pointerdown / blur must not commit-and-remove it, and long-hold must
+// focus from pointerup (a user gesture) so the keyboard can appear.
+assert(
+  editSrc.includes("function nodeSliderReadoutEditArmPersistence")
+  && editSrc.includes("NODE_SLIDER_READOUT_EDIT_OPEN_GUARD_MS")
+  && editSrc.includes("nodeSliderReadoutEditStillOpening")
+  && editSrc.includes("dataset.editOpening")
+  && editSrc.includes("nodeSliderReadoutEditFocus")
+  && editSrc.includes('fontSize = "16px"')
+  && editSrc.includes("nodeSliderReadoutEditStyleForTyping")
+  && /function beginNodeSliderFaceValueEdit[\s\S]*nodeSliderReadoutEditArmPersistence\(input\)/.test(editSrc)
+  && /function beginNodeSliderReadoutEdit[\s\S]*nodeSliderReadoutEditArmPersistence\(input\)/.test(editSrc),
+  "shared type-in persistence keeps the phone text box open",
+);
+
+const holdArm = (faceSrc.split("nodeGraphTouchGestureArmHold")[2] || "").split("nodeGraphModuleFaceCapture")[0];
+assert(
+  faceSrc.includes("if (!drag) beginNodeGraphModuleFaceValueEdit")
+  && faceSrc.includes("seedTypeInHold")
+  && !holdArm.includes("beginNodeGraphModuleFaceValueEdit"),
+  "face seed long-hold opens the text box on pointerup, not from the hold timer",
+);
+
+assert(
+  rowSrc.includes("Do not preventDefault before focus"),
+  "parameter-row double-tap does not preventDefault before focusing the text box",
+);
+assert(
+  rowSrc.includes("holdTypeIn") && rowSrc.includes("beginNodeSliderReadoutEdit(d.readout)"),
+  "parameter-row long-hold opens the text box on pointerup",
+);
+
 console.log("test_seed_typein: ok");

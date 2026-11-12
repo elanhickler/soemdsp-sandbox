@@ -823,17 +823,20 @@ function beginNodeGraphModuleFaceGesture(article, face, spec, event) {
     if (!input || typeof nodeGraphSeedDragValue !== "function") return;
     const touch = typeof nodeGraphTouchGestureIsTouch === "function" && nodeGraphTouchGestureIsTouch(event);
     const touchKey = `face-seed:${article?.dataset?.node || ""}:${wd.param || "seed"}`;
-    let seedTypeInOpen = false;
+    let seedTypeInHold = false;
     if (touch && typeof nodeGraphTouchGestureArmHold === "function") {
-      // Usual phone path: a long hold opens the text seed editor.
+      // Long hold arms type-in; open on pointerup so the focus is still a
+      // user gesture and the phone keyboard can appear.
       nodeGraphTouchGestureArmHold(touchKey, event, () => {
-        seedTypeInOpen = true;
+        seedTypeInHold = true;
         try { face.releasePointerCapture?.(event.pointerId); } catch (_error) { /* ignore */ }
-        beginNodeGraphModuleFaceValueEdit(article, face, wd, p);
       });
     }
     nodeGraphModuleFaceCapture(face, event, (ev, drag) => {
-      if (seedTypeInOpen) return;
+      if (seedTypeInHold) {
+        if (!drag) beginNodeGraphModuleFaceValueEdit(article, face, wd, p);
+        return;
+      }
       if (touch && typeof nodeGraphTouchGestureMove === "function") {
         nodeGraphTouchGestureMove(touchKey, ev);
       }
