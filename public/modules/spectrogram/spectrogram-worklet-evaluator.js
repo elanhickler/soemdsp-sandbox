@@ -46,7 +46,8 @@ NodeLiveAudioProcessor.prototype.createSpectrogramState = function createSpectro
 
 // Module types that get this display FFT. 1D Spectrum additionally receives
 // SpectrumRaw (last-hop |X[k]|, no EMA) + SpectrumGain ([window sum]).
-const SPECTROGRAM_ANALYSIS_TYPES = new Set(["spectrogram", "spectrum1d"]);
+// Circular Spectrogram gets exactly what Spectrogram gets.
+const SPECTROGRAM_ANALYSIS_TYPES = new Set(["spectrogram", "spectrum1d", "circularSpectrogram"]);
 
 // Display analysis only. setPlan must not call create*State (DSP door).
 // Without this map, postModuleScopeSnapshot never emits Spectrum.

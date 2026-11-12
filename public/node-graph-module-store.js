@@ -2785,6 +2785,12 @@ const nodeGraphModuleStoreCatalog = Object.freeze({
     label: "Spectrogram",
     notes: ["fft", "spectrum", "frequency waterfall", "spectral display", "thru"],
   },
+  circularSpectrogram: {
+    category: "multimeter",
+    description: "See frequency content over time as a mirrored circle while passing audio through. Kicks throw arms that travel round the ring.",
+    label: "Circular Spectrogram",
+    notes: ["fft", "spectrum", "circular spectrogram", "polar", "radial", "mirrored", "spectral display", "thru"],
+  },
   spectrum1d: {
     category: "multimeter",
     description: "See the frequency spectrum right now (magnitude vs frequency) while passing audio through.",
@@ -4158,6 +4164,10 @@ const nodeGraphJsSourceEntriesByType = Object.freeze({
   speakerProtector2: {
     source: "native_modules/speaker_protector2/speaker_protector2.cpp",
     sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/native_modules/speaker_protector2/speaker_protector2.cpp",
+  },
+  circularSpectrogram: {
+    source: "public/modules/circularSpectrogram/circular-spectrogram-display.js",
+    sourceUrl: "https://github.com/elanhickler/soemdsp-sandbox/blob/master/public/modules/circularSpectrogram/circular-spectrogram-display.js",
   },
   spectrum1d: {
     source: "public/modules/spectrum1d/spectrum1d-display.js",

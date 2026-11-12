@@ -266,6 +266,7 @@ const NODE_GRAPH_BYPASS_TYPE_OVERRIDES = Object.freeze({
   // Analyzer Thru
   spectrogram: "pass",
   spectrum1d: "pass",
+  circularSpectrogram: "pass",
   vectorRgb: "pass",
   rasterRgb: "pass",
   gradientVectorscope: "pass",

@@ -343,6 +343,7 @@ const nodeGraphNodeLabels = Object.freeze({
   plot1dStereo: "1D Plot Stereo",
   plot2d: "2D Plot",
   spectrum1d: "1D Spectrum",
+  circularSpectrogram: "Circular Spectrogram",
   vectorDot: "LED Dot",
   vectorRgb: "Vector RGB",
   rasterRgb: "Scan Grid",
@@ -21353,6 +21354,149 @@ const nodeGraphModuleDefinitions = (
     ],
     visualInputs: [
       { key: "spectrum1d", label: "In", port: "In" },
+    ],
+    visualSink: true
+  },
+  // Circular Spectrogram: classic mirrored polar spectrogram. Same worklet FFT,
+  // Display Settings and GPU ring as Spectrogram (display type spectrogramBurn);
+  // the face shader maps angle to time and radius to frequency (bass inside),
+  // so a kick throws arms that travel round the ring. Thru is dry passthrough.
+  circularSpectrogram: {
+    // Hand-written face (node-graph-module-face.js): Freq band, Contrast | Bright |
+    // History, Inner | Rotate, Mirror, Down / Up.
+    face: [
+      { kind: "band", lo: "minFreq", hi: "maxFreq", label: "Freq", h: 34 },
+      { kind: "cells", params: [["contrast", "Contrast", "bipolar"], ["brightness", "Bright", "bipolar"], ["historySeconds", "History"]], h: 52 },
+      { kind: "cells", params: [["innerRadius", "Inner"], ["rotate", "Rotate"]], h: 40 },
+      { kind: "choices", param: "mirror", labels: ["Mirror Off", "Mirror On"], h: 26 },
+      { kind: "choices", param: "direction", labels: ["Down", "Up"], h: 26 },
+    ],
+    planRole: "monitor",
+    customDisplayArea: true,
+    bufferedInputs: ["In"],
+    displayType: "spectrogramBurn",
+    // Square face so the circle fills it.
+    defaultWidthGu: 12,
+    displayHeightGu: 12,
+    inputs: ["In"],
+    layout: "scopeFace",
+    // Single In / Thru pair: → / ← come from nodeGraphThruPairPortDisplayLabel.
+    outputs: ["Thru", "rgba"],
+    parameters: [
+      {
+        bipolar: true,
+        defaultValue: "1",
+        key: "contrast",
+        label: "Contrast",
+        max: "4",
+        mid: "0",
+        min: "-4",
+        nonlinearSlider: false,
+        step: "any"
+      },
+      {
+        bipolar: true,
+        defaultValue: "1",
+        key: "brightness",
+        label: "Brightness",
+        max: "4",
+        mid: "0",
+        min: "-4",
+        nonlinearSlider: false,
+        step: "any"
+      },
+      {
+        key: "minFreq",
+        kind: "frequency",
+        label: "Min Freq",
+        defaultValue: "20",
+        min: "1",
+        mid: "200",
+        max: "24000",
+        step: "any",
+        maxDigits: 5,
+        unit: "Hz"
+      },
+      {
+        key: "maxFreq",
+        kind: "frequency",
+        label: "Max Freq",
+        defaultValue: "20000",
+        min: "1",
+        mid: "8000",
+        max: "24000",
+        step: "any",
+        maxDigits: 5,
+        unit: "Hz"
+      },
+      {
+        key: "historySeconds",
+        label: "History",
+        defaultValue: "2",
+        min: "0.1",
+        mid: "2",
+        max: "30",
+        step: "any",
+        maxDigits: 4,
+        unit: "s"
+      },
+      {
+        defaultValue: "0.12",
+        key: "innerRadius",
+        label: "Inner Radius",
+        max: "0.9",
+        mid: "0.12",
+        min: "0",
+        nonlinearSlider: false,
+        step: "any",
+        unit: "%"
+      },
+      { defaultValue: "0", key: "rotate", kind: "phase", label: "Rotate", max: "1", mid: "0.5", min: "0", nonlinearSlider: false, step: "0.01", unit: "\u03C6", wraparound: true },
+      {
+        choices: ["Off", "On"],
+        defaultValue: "1",
+        displayChoices: true,
+        divideChoicesVisibly: true,
+        key: "mirror",
+        kind: "choice",
+        label: "Mirror",
+        linearSmoothing: false,
+        max: "1",
+        mid: "0",
+        min: "0",
+        step: "1"
+      },
+      {
+        choices: ["Down", "Up"],
+        defaultValue: "0",
+        displayChoices: true,
+        divideChoicesVisibly: true,
+        key: "direction",
+        kind: "choice",
+        label: "Direction",
+        linearSmoothing: false,
+        max: "1",
+        mid: "0",
+        min: "0",
+        step: "1"
+      },
+      {
+        choices: ["Log", "Freq Scale"],
+        defaultValue: "0",
+        displayChoices: true,
+        divideChoicesVisibly: true,
+        key: "radialScale",
+        kind: "choice",
+        label: "Radius Map",
+        linearSmoothing: false,
+        max: "1",
+        mid: "0",
+        min: "0",
+        step: "1"
+      },
+    ],
+    visualInputs: [
+      { key: "circularSpectrogram", label: "In", port: "In" },
     ],
     visualSink: true
   },

@@ -9,6 +9,8 @@
 //     row that were live when the column was painted. Changing a knob only
 //     affects new columns, same as the Canvas2D waterfall.
 //   • Colour: 256-wide LUT rows (one per gradient that still has ink on face).
+//   • Circular Spectrogram reuses the ring, meta and LUT with a second
+//     fragment shader (FS_POLAR): angle → column age, radius → frequency.
 //   • Shader per pixel: ring lookup → Linear / Mel / Bark row→Hz → bilinear
 //     bin lerp → undo log10(1+mag·100) → dBFS → 80 dB window → contrast
 //     gamma → LUT. Contrast > 1 lifts quiet partials (harmonics). Brightness
@@ -32,7 +34,7 @@ void main() {
 }
 `;
 
-  const FS = `
+  const FS_HEAD = `
 #ifdef GL_FRAGMENT_PRECISION_HIGH
 precision highp float;
 #else
@@ -94,7 +96,9 @@ float grade01(float x, float contrast, float brightness) {
   if (brightness < 0.0) y = 1.0 - y;
   return clamp(y, 0.0, 1.0);
 }
+`;
 
+  const FS = FS_HEAD + `
 void main() {
   // Same leftover-time scroll as Instant Waterfall uSub: hop duration stays
   // in seconds; the remainder of one buffer pixel slides the plate left.
@@ -152,8 +156,95 @@ void main() {
 }
 `;
 
+  // Circular Spectrogram. uSize is the face raster; the ring has uCols columns
+  // (uHead = oldest). uPolar: x mirror, y up, z rotate (rad), w inner radius.
+  // Head (newest) at 12 o'clock for Down, 6 o'clock for Up, turned by z.
+  // Mirror: age = |angle from head| / pi on both halves. Else one sweep:
+  // clockwise from the head for Down, anticlockwise for Up. Radius → Hz with
+  // bass at the inner radius; meta scale 3 is log Hz.
+  const FS_POLAR = FS_HEAD + `
+uniform float uCols;
+uniform vec4 uPolar;
+
+const float PI = 3.141592653589793;
+
+float hzForU(float u, float scale, float lo, float hi) {
+  if (scale > 2.5) {
+    float l = max(lo, 1e-3);
+    return l * exp(u * log(max(hi, l * 1.000001) / l));
+  }
+  if (scale > 0.5 && scale < 1.5) {
+    float a = hzToMel(lo);
+    float b = hzToMel(hi);
+    return melToHz(a + u * (b - a));
+  }
+  if (scale >= 1.5) {
+    float a = hzToBark(lo);
+    float b = hzToBark(hi);
+    return barkToHz(a + u * (b - a));
+  }
+  return lo + u * (hi - lo);
+}
+
+void main() {
+  vec2 p = gl_FragCoord.xy - 0.5 * uSize;
+  float outerPx = max(1.0, 0.5 * min(uSize.x, uSize.y));
+  float rPx = length(p);
+  float r = rPx / outerPx;
+  float inner = clamp(uPolar.w, 0.0, 0.95);
+  // 1 px soft rim on both edges so the circle is not stair-stepped.
+  float edge = clamp(outerPx - rPx, 0.0, 1.0) * clamp(rPx - inner * outerPx + 1.0, 0.0, 1.0);
+  if (edge <= 0.0) {
+    gl_FragColor = vec4(uPlate, 1.0);
+    return;
+  }
+  // Clockwise angle from 12 o'clock (GL y is up).
+  float ang = atan(p.x, p.y);
+  float head = uPolar.z + (uPolar.y > 0.5 ? PI : 0.0);
+  float d = mod(ang - head + PI, 2.0 * PI) - PI;
+  float age;
+  if (uPolar.x > 0.5) {
+    age = abs(d) / PI;
+  } else if (uPolar.y > 0.5) {
+    age = mod(-d, 2.0 * PI) / (2.0 * PI);
+  } else {
+    age = mod(d, 2.0 * PI) / (2.0 * PI);
+  }
+  float cols = max(1.0, uCols);
+  // Same leftover-time slide as the waterfall: the head gets a plate sliver.
+  float x = (1.0 - age) * cols + uSub;
+  if (x >= cols) {
+    gl_FragColor = vec4(uPlate, 1.0);
+    return;
+  }
+  float px = clamp(floor(x), 0.0, cols - 1.0);
+  float row = mod(px + uHead, cols);
+  float rowV = (row + 0.5) / cols;
+  vec4 m0 = texture2D(uMeta, vec2(0.25, rowV));
+  vec4 m1 = texture2D(uMeta, vec2(0.75, rowV));
+  float bins = m0.w;
+  float nyq = m1.z;
+  float mag = 0.0;
+  if (bins >= 1.0) {
+    float u = clamp((r - inner) / max(1e-6, 1.0 - inner), 0.0, 1.0);
+    float hz = hzForU(u, m0.z, m1.x, m1.y);
+    float lb = max(1.0, bins);
+    float binF = clamp(max(0.0, hz) / max(1e-9, nyq) * (lb - 1.0), 0.0, lb - 1.0);
+    float b0 = clamp(floor(binF), 0.0, lb - 1.0);
+    float b1 = min(lb - 1.0, b0 + 1.0);
+    float bf = binF - b0;
+    mag = binAt(rowV, b0) * (1.0 - bf) + binAt(rowV, b1) * bf;
+  }
+  float v = grade01(mag, m0.x, m0.y);
+  float li = clamp(floor(v * 255.0 + 1e-6), 0.0, 255.0);
+  vec3 rgb = texture2D(uLut, vec2((li + 0.5) / 256.0, (m1.w + 0.5) / uLutRows)).rgb;
+  gl_FragColor = vec4(mix(uPlate, rgb, edge), 1.0);
+}
+`;
+
   /** @type {WeakMap<WebGLRenderingContext, object>} */
   const programs = new WeakMap();
+  const polarPrograms = new WeakMap();
   const watchedCanvases = new WeakSet();
 
   function compile(gl, type, source) {
@@ -171,19 +262,20 @@ void main() {
     return shader;
   }
 
-  function programFor(dev) {
+  function buildProgram(dev, cache, fsSource, extraUniforms) {
     const gl = dev?.gl;
     if (!gl || gl.isContextLost()) return null;
-    let entry = programs.get(gl);
+    let entry = cache.get(gl);
     if (entry) return entry.ok ? entry : null;
     entry = { ok: false };
-    programs.set(gl, entry);
+    cache.set(gl, entry);
     if (dev.canvas && !watchedCanvases.has(dev.canvas)) {
       watchedCanvases.add(dev.canvas);
       // Restored context: every texture/program is gone. Drop the cache so
       // rings rebuild from their CPU copy.
       dev.canvas.addEventListener("webglcontextrestored", () => {
         programs.delete(gl);
+        polarPrograms.delete(gl);
       }, false);
     }
     // WebGL2 (the shared device) has float textures in core and does not
@@ -197,7 +289,7 @@ void main() {
       return null;
     }
     const vs = compile(gl, gl.VERTEX_SHADER, VS);
-    const fs = compile(gl, gl.FRAGMENT_SHADER, FS);
+    const fs = compile(gl, gl.FRAGMENT_SHADER, fsSource);
     if (!vs || !fs) {
       if (vs) gl.deleteShader(vs);
       if (fs) gl.deleteShader(fs);
@@ -234,7 +326,18 @@ void main() {
       uLutRows: gl.getUniformLocation(program, "uLutRows"),
       uFullMag: gl.getUniformLocation(program, "uFullMag"),
     };
+    for (const name of extraUniforms || []) {
+      entry.u[name] = gl.getUniformLocation(program, name);
+    }
     return entry;
+  }
+
+  function programFor(dev) {
+    return buildProgram(dev, programs, FS, null);
+  }
+
+  function polarProgramFor(dev) {
+    return buildProgram(dev, polarPrograms, FS_POLAR, ["uCols", "uPolar"]);
   }
 
   function pictureDevice() {
@@ -389,7 +492,8 @@ void main() {
     // Missing / NaN only. Explicit 0 stays 0.
     const contrast = Number.isFinite(contrastRaw) ? contrastRaw : 1;
     const brightness = Number.isFinite(brightnessRaw) ? brightnessRaw : 1;
-    const scale = SoemMath.clamp(Math.round(nodeGraphFiniteNumber(p.freqScale)), 0, 2);
+    // 0 Linear, 1 Mel, 2 Bark; 3 log Hz (Circular Spectrogram only).
+    const scale = SoemMath.clamp(Math.round(nodeGraphFiniteNumber(p.freqScale)), 0, 3);
     const lo = nodeGraphFiniteNumber(p.minFreq, 20);
     const hi = nodeGraphFiniteNumber(p.maxFreq, 20000);
     const nyq = nodeGraphFiniteNumber(p.nyquist, 22050);
@@ -557,20 +661,13 @@ void main() {
   }
 
   /**
-   * Shade the ring into the shared canvas (bottom-left w×h, scissored) and
-   * copy that rect onto the face. Returns false when GL cannot draw (the caller
-   * logs once and fills black).
+   * Shade the ring into the shared canvas (bottom-left w x h, scissored).
+   * base owns the ring textures (the waterfall program); entry is the program
+   * drawn with; extra(gl, u) sets its own uniforms. False when GL is lost.
    */
-  function spectrogramGlRingPresent(ring, bufW, bufH, destCtx, destW, destH, subPx, plateRgb, fullMag) {
-    if (!ring || !destCtx) return false;
-    const w = bufW | 0;
-    const h = bufH | 0;
-    if (ring.w !== w || !spectrogramGlUsable(ring, w, h)) return false;
-    const dev = pictureDevice();
+  function shadeRing(dev, base, entry, ring, w, h, subPx, plateRgb, fullMag, extra) {
     const gl = dev.gl;
-    const entry = programFor(dev);
-    if (!entry) return false;
-    const g = syncGpu(ring, gl, entry);
+    const g = syncGpu(ring, gl, base);
 
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     gl.viewport(0, 0, w, h);
@@ -606,6 +703,7 @@ void main() {
     gl.uniform1f(entry.u.uLutRows, LUT_ROWS);
     const magRef = nodeGraphFiniteNumber(fullMag);
     gl.uniform1f(entry.u.uFullMag, magRef > 0 ? magRef : 1e-9);
+    if (extra) extra(gl, entry.u);
     gl.drawArrays(gl.TRIANGLES, 0, 6);
     gl.disable(gl.SCISSOR_TEST);
     gl.activeTexture(gl.TEXTURE2);
@@ -614,14 +712,61 @@ void main() {
     gl.bindTexture(gl.TEXTURE_2D, null);
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, null);
-    if (gl.isContextLost()) return false;
+    return !gl.isContextLost();
+  }
 
+  /** Copy the shaded rect onto the face: 1:1 crisp, else smooth. */
+  function copyOut(dev, destCtx, w, h, destW, destH) {
     const dw = Math.max(1, destW | 0);
     const dh = Math.max(1, destH | 0);
-    // Same scaling rule as the old 2D present: 1:1 crisp, else smooth.
     const exact = w === dw && h === dh;
     nodeGraphSharedGlCopyToContext(destCtx, 0, dev.canvas.height - h, w, h, 0, 0, dw, dh, !exact);
     return true;
+  }
+
+  /**
+   * Waterfall: shade the ring and copy that rect onto the face. Returns false
+   * when GL cannot draw (the caller logs once and fills black).
+   */
+  function spectrogramGlRingPresent(ring, bufW, bufH, destCtx, destW, destH, subPx, plateRgb, fullMag) {
+    if (!ring || !destCtx) return false;
+    const w = bufW | 0;
+    const h = bufH | 0;
+    if (ring.w !== w || !spectrogramGlUsable(ring, w, h)) return false;
+    const dev = pictureDevice();
+    const entry = programFor(dev);
+    if (!entry) return false;
+    if (!shadeRing(dev, entry, entry, ring, w, h, subPx, plateRgb, fullMag, null)) return false;
+    return copyOut(dev, destCtx, w, h, destW, destH);
+  }
+
+  /**
+   * Circular Spectrogram: same ring, polar lookup (FS_POLAR). bufW x bufH is
+   * the face raster; ring.w is the column count around the circle.
+   * polar: { mirror, up, rotate (rad), inner (0…0.95 of the radius) }.
+   */
+  function spectrogramGlRingPresentPolar(ring, bufW, bufH, destCtx, destW, destH, subPx, plateRgb, fullMag, polar) {
+    if (!ring || !destCtx) return false;
+    const w = bufW | 0;
+    const h = bufH | 0;
+    if (!spectrogramGlUsable(ring, w, h)) return false;
+    const dev = pictureDevice();
+    const base = programFor(dev);
+    const entry = polarProgramFor(dev);
+    if (!base || !entry || ring.w > entry.maxTex) return false;
+    const p = polar || {};
+    const shaded = shadeRing(dev, base, entry, ring, w, h, subPx, plateRgb, fullMag, (gl, u) => {
+      gl.uniform1f(u.uCols, ring.w);
+      gl.uniform4f(
+        u.uPolar,
+        p.mirror ? 1 : 0,
+        p.up ? 1 : 0,
+        nodeGraphFiniteNumber(p.rotate),
+        nodeGraphFiniteNumber(p.inner),
+      );
+    });
+    if (!shaded) return false;
+    return copyOut(dev, destCtx, w, h, destW, destH);
   }
 
   function spectrogramGlRingRelease(ring) {
@@ -660,5 +805,6 @@ void main() {
   global.spectrogramGlRingResize = spectrogramGlRingResize;
   global.spectrogramGlUsable = spectrogramGlUsable;
   global.spectrogramGlRingPresent = spectrogramGlRingPresent;
+  global.spectrogramGlRingPresentPolar = spectrogramGlRingPresentPolar;
   global.spectrogramGlRingRelease = spectrogramGlRingRelease;
 })(typeof globalThis !== "undefined" ? globalThis : window);

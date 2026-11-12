@@ -311,6 +311,7 @@ const NODE_GRAPH_EFFICIENT_PRODUCT_OBSERVER_TYPES = Object.freeze([
   "screenOut",
   "viewOut",
   "spectrogram",
+  "circularSpectrogram",
   "speedColorInertia",
   "spectrum1d",
   "textStream",

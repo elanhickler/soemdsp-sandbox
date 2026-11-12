@@ -716,7 +716,12 @@ function clearNodeGraphSpectrogramHistoryForNode(nodeId) {
 }
 
 nodeGraphModuleScopeCustomRenderers.spectrogramBurn = (renderer, item, pixelRatio) => {
-    drawNodeGraphSpectrogramItem(renderer, item, pixelRatio);
+    // Circular Spectrogram shares this display type (same Display Settings and
+    // ring); only its face lookup is polar (circular-spectrogram-display.js).
+    const circular = typeof drawNodeGraphCircularSpectrogramItem === "function"
+      && nodeGraphPatchNode(String(item?.slot?.nodeId || ""))?.type === "circularSpectrogram";
+    if (circular) drawNodeGraphCircularSpectrogramItem(renderer, item, pixelRatio);
+    else drawNodeGraphSpectrogramItem(renderer, item, pixelRatio);
     // rgba out: face canvas bridged into the node's picture texture (only when cabled).
     const nodeId = item?.slot?.nodeId;
     if (nodeId && typeof nodeGraphPicturePublishCanvas === "function" && typeof peekNodeGraphModuleScopeFaceCanvas === "function") {

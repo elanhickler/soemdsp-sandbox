@@ -122,7 +122,12 @@ function nodeGraphBuildLivePlanForPatch(patch) {
  * historySeconds / minFreq / maxFreq for any main-thread consumers.
  */
 function nodeGraphInjectSpectrogramWorkletParams(node, params) {
-  if (!node || (node.type !== "spectrogram" && node.type !== "spectrum1d") || !params || typeof params !== "object") {
+  if (
+    !node
+    || (node.type !== "spectrogram" && node.type !== "spectrum1d" && node.type !== "circularSpectrogram")
+    || !params
+    || typeof params !== "object"
+  ) {
     return;
   }
   const p = node.params && typeof node.params === "object" ? node.params : {};
