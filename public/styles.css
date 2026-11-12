@@ -4327,8 +4327,8 @@ body.keyboard-debug-hidden .node-keyboard-signal-bar {
   padding: 0;
   min-height: 0;
   overflow: visible;
-  border: 1px solid var(--line);
-  border-bottom: 0;
+  border: 0;
+  border-top: 1px solid var(--line);
   border-radius: 0;
   background: var(--node-toolbar-surface);
   user-select: none;
