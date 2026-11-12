@@ -921,7 +921,10 @@ function createNodeGraphModuleElement(type, node) {
       );
     }
   } else if (definition.layout === "graph") {
-    // LayoutB: ports beside graph face (+ numeric point strip under the SVG).
+    // Graph face + numeric point strip. LayoutB: ports beside the face.
+    // LayoutA (Step Graph): ports above the face. A Layout B shell on a
+    // Layout A article is tagged band "shell", which Layout A does not
+    // reserve — applyNodeGraphModuleLayout then hides it, leaving a blank face.
     const graphFace = document.createElement("div");
     graphFace.className = "node-module-graph-face";
     const graphSection = document.createElement("div");
@@ -943,8 +946,23 @@ function createNodeGraphModuleElement(type, node) {
     if (typeof mountNodeGraphGraphPointStrip === "function") {
       mountNodeGraphGraphPointStrip(graphFace, patchNode);
     }
-    const graphShell = createNodeGraphLayoutBShell(node, type, graphFace, null, inputPorts, outputPorts);
-    article.append(graphShell);
+    if (chrome.portsBeside) {
+      article.append(createNodeGraphLayoutBShell(node, type, graphFace, null, inputPorts, outputPorts));
+    } else {
+      if (typeof tagNodeGraphModuleBand === "function") {
+        tagNodeGraphModuleBand(graphFace, "face");
+      } else {
+        graphFace.classList.add("node-module-face");
+      }
+      article.append(graphFace);
+      appendNodeGraphModuleIoSection(
+        article,
+        createNodeGraphLayoutAIoSection(node, type, inputPorts, outputPorts),
+        node,
+        inputPorts,
+        outputPorts,
+      );
+    }
   } else if (definition.layout === "sliderWidget") {
     // LayoutB (XY Pad contract): slim I/O beside a large face; Bias/control under.
     // Controller shelf: Knob (dial or slider look), Toggle, Momentary.
