@@ -16115,9 +16115,10 @@ body.node-screen-solo-active .node-screen-solo-face.node-text-box-body > .node-t
 
 .node-header-patch-title {
   box-sizing: border-box;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-box-pack: center;
+  -webkit-line-clamp: 3;
   min-width: 0;
   height: 100%;
   margin: 0;
@@ -16127,10 +16128,10 @@ body.node-screen-solo-active .node-screen-solo-face.node-text-box-body > .node-t
   background: rgba(2, 4, 7, 0.92);
   color: rgba(243, 251, 251, 0.94);
   font-family: var(--node-header-title-font-family, "Cascadia Mono", "Cascadia Code", Consolas, "Courier New", monospace);
-  font-size: clamp(0.9rem, calc(var(--node-toolbar-row-height) * 0.4), 1.3rem);
+  font-size: clamp(0.72rem, calc(var(--node-toolbar-row-height) * 0.29), 0.95rem);
   font-weight: 700;
   letter-spacing: 0.01em;
-  line-height: 1.15;
+  line-height: 1.1;
   text-align: center;
   text-transform: none;
   overflow: hidden;
