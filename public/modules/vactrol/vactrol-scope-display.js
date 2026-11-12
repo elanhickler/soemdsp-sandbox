@@ -288,53 +288,123 @@ function nodeGraphVactrolScopeMeasureLegendText(label, legendPx) {
   return measured > 0 ? measured : String(label || "").length * legendPx * 0.55;
 }
 
+function nodeGraphVactrolScopeLegendRowWidth(widths, gap, start, end) {
+  let w = 0;
+  for (let i = start; i < end; i += 1) {
+    if (i > start) w += gap;
+    w += widths[i];
+  }
+  return w;
+}
+
 /**
- * Pack legend items into rows so every entry (including Mem) stays inside the
- * face CSS box. The face window uses overflow:hidden, so a single overflowing
- * row used to clip the last items off.
+ * Vactrol legend: exactly two modes — 1 row when the four items fit, otherwise
+ * a tidy 2-row grid (2+2). Never 3+ rows. If two full-size rows still overflow,
+ * typography and gaps shrink together so every item (including Mem) stays inside
+ * the face CSS box. Swatch+label pairs stay together; columns share the same x.
  */
 function nodeGraphVactrolScopeLayoutLegend(items, options) {
   const list = Array.isArray(items) ? items : [];
   const x0 = Number(options?.x) || 0;
   const y0 = Number(options?.y) || 0;
   const availW = Math.max(1, Number(options?.availW) || 1);
-  const rowH = Math.max(1, Number(options?.rowH) || 1);
-  const gap = Math.max(0, Number(options?.gap) || 0);
+  const baseRowH = Math.max(1, Number(options?.rowH) || 1);
+  const baseGap = Math.max(0, Number(options?.gap) || 0);
   const ink = typeof options?.ink === "function" ? options.ink : ((n) => Number(n) || 0);
-  const legendPx = Math.max(1, Number(options?.legendPx) || 1);
-  const hitPadY = Math.max(ink(4), rowH * 0.35);
-  const sw = ink(10);
-  const labelGap = ink(4);
-  const placed = [];
-  let lx = x0;
-  let row = 0;
-  let rowsUsed = 1;
-  for (const item of list) {
-    const textW = nodeGraphVactrolScopeMeasureLegendText(item.label, legendPx);
-    const width = sw + labelGap + textW;
-    if (lx > x0 && (lx - x0) + width > availW) {
-      row += 1;
-      rowsUsed = row + 1;
-      lx = x0;
+  const baseLegendPx = Math.max(1, Number(options?.legendPx) || 1);
+  const n = list.length;
+
+  const metricsAt = (scale) => {
+    const s = Math.max(0, Number(scale) || 0);
+    const legendPx = Math.max(1, baseLegendPx * s);
+    const gap = baseGap * s;
+    const sw = ink(10) * s;
+    const labelGap = ink(4) * s;
+    const rowH = Math.max(1, baseRowH * s);
+    const widths = list.map((item) => (
+      sw + labelGap + nodeGraphVactrolScopeMeasureLegendText(item.label, legendPx)
+    ));
+    return { scale: s, legendPx, gap, sw, labelGap, rowH, widths };
+  };
+
+  const gridWidth = (m, cols, split) => {
+    let total = 0;
+    for (let c = 0; c < cols; c += 1) {
+      let colW = 0;
+      for (let r = 0, i = c; i < n; i += split, r += 1) {
+        colW = Math.max(colW, m.widths[i] || 0);
+      }
+      if (c > 0) total += m.gap;
+      total += colW;
     }
-    const ly = y0 + row * rowH + rowH * 0.45;
-    placed.push({
+    return total;
+  };
+
+  let rows = 1;
+  let split = Math.max(1, n);
+  let m = metricsAt(1);
+  if (n > 0 && nodeGraphVactrolScopeLegendRowWidth(m.widths, m.gap, 0, n) > availW + 1e-6) {
+    rows = 2;
+    split = Math.max(1, Math.ceil(n / 2));
+    const cols = split;
+    if (gridWidth(m, cols, split) > availW + 1e-6) {
+      const need = gridWidth(metricsAt(1), cols, split);
+      m = metricsAt(need > 0 ? Math.min(1, availW / need) : 1);
+    }
+  }
+
+  const cols = rows === 1 ? Math.max(1, n) : split;
+  const colW = [];
+  if (rows === 1) {
+    for (let i = 0; i < n; i += 1) colW[i] = m.widths[i];
+  } else {
+    for (let c = 0; c < cols; c += 1) {
+      let w = 0;
+      for (let i = c; i < n; i += split) w = Math.max(w, m.widths[i] || 0);
+      colW[c] = w;
+    }
+  }
+  const colX = [];
+  let cx = x0;
+  for (let c = 0; c < cols; c += 1) {
+    colX[c] = cx;
+    cx += (colW[c] || 0) + m.gap;
+  }
+
+  const hitPadY = Math.max(m.sw * 0.4, m.rowH * 0.35, 1);
+  const placed = list.map((item, i) => {
+    const row = rows === 1 ? 0 : Math.floor(i / split);
+    const col = rows === 1 ? i : (i % split);
+    const width = m.widths[i];
+    const ly = y0 + row * m.rowH + m.rowH * 0.45;
+    const x = colX[col];
+    const textW = Math.max(0, width - m.sw - m.labelGap);
+    return {
       ...item,
-      x: lx,
+      x,
       y: ly - hitPadY,
       w: width,
       h: hitPadY * 2,
-      sw,
+      sw: m.sw,
       textW,
+      labelGap: m.labelGap,
       ly,
-    });
-    lx += width + gap;
-  }
+      row,
+      col,
+    };
+  });
+
   return {
     placed,
-    rows: rowsUsed,
-    height: Math.max(rowH, rowsUsed * rowH),
-    sw,
+    rows: n === 0 ? 1 : rows,
+    split: n === 0 ? 0 : split,
+    height: Math.max(m.rowH, (n === 0 ? 1 : rows) * m.rowH),
+    sw: m.sw,
+    legendPx: m.legendPx,
+    labelGap: m.labelGap,
+    gap: m.gap,
+    scale: m.scale,
+    rowH: m.rowH,
   };
 }
 
@@ -542,15 +612,20 @@ function drawNodeGraphVactrolScopeItem(renderer, item, pixelRatio) {
   }
 
   // Legend: Light, Flt Env, Amp Env, Mem (labels stand alone; no tooltips).
-  // Rows wrap so Mem is not clipped when the face is too narrow for one row.
+  // 1 tidy row, or a 2x2 grid — never 3+ rows. Typography comes from the layout
+  // so a compact 2-row face stays in sync with the hit overlay.
   const hits = [];
+  const legendTypePx = legendLayout.legendPx || legendPx;
+  const legendLabelGap = Number.isFinite(Number(legendLayout.labelGap))
+    ? Number(legendLayout.labelGap)
+    : ink(4);
   if (typeof nodeGraphGlLinesText === "function") {
     for (const item of legendLayout.placed) {
       const strokeRgba = item.show ? item.rgba : nodeGraphVactrolScopeDimRgba(item.rgba);
       const textRgba = nodeGraphVactrolScopeLegendColor(item.rgba, item.show);
       nodeGraphGlLinesSegment(batch, item.x, item.ly, item.x + item.sw, item.ly, legendHalfPx, 1, strokeRgba);
-      nodeGraphGlLinesText(batch, item.label, item.x + item.sw + ink(4), item.ly, {
-        px: legendPx,
+      nodeGraphGlLinesText(batch, item.label, item.x + item.sw + legendLabelGap, item.ly, {
+        px: legendTypePx,
         align: "left",
         baseline: "middle",
         rgba: textRgba,

@@ -100,8 +100,8 @@ almost(tileInkCss, 1.5 * (256 / FACE_INK_REF_PX), "tile ink scales with minSide"
 almost(tileDevice, tileInkCss * 2, "tile device = ink * (backing/css)");
 assert(tileDevice !== 1.5, "tile thickness is not the raw authored CSS px");
 
-// Legend wrap: Mem is already in the list (not added twice). A narrow face
-// that cannot fit one row must wrap so every item stays inside availW.
+// Legend: Mem is already in the list (not added twice). Only two modes exist:
+// 1 tidy row when it fits, otherwise a 2+2 column-aligned grid. Never 3+ rows.
 const items = [
   { port: "Light", label: "Light", showKey: "showLight" },
   { port: "Tone", label: "Flt Env", showKey: "showFlt" },
@@ -123,25 +123,61 @@ function layoutAt(availW) {
   });
 }
 
-const wide = layoutAt(400);
-assert(wide.placed.length === 4, "wide legend places all four items");
-assert(wide.rows === 1, "wide face stays on one row");
-const wideRight = Math.max(...wide.placed.map((p) => p.x + p.w));
-assert(wideRight <= 4 + 400, `wide items stay in box, right=${wideRight}`);
-
-const narrow = layoutAt(90);
-assert(narrow.placed.length === 4, "narrow legend still places all four items");
-assert(narrow.rows >= 2, `narrow face wraps, rows=${narrow.rows}`);
-assert(narrow.height >= narrow.rows * 16, "legend height grows with rows");
-const mem = narrow.placed.find((p) => p.label === "Mem");
-assert(mem, "Mem is present after wrap");
-assert(mem.x + mem.w <= 4 + 90 + 1e-6, `Mem stays inside availW, right=${mem.x + mem.w}`);
-for (const item of narrow.placed) {
-  assert(item.x >= 4, `${item.label} starts in box`);
-  assert(item.x + item.w <= 4 + 90 + 1e-6, `${item.label} clipped at ${item.x + item.w}`);
+function assertInside(layout, availW, label) {
+  assert(layout.placed.length === 4, `${label} places all four items`);
+  assert(layout.rows === 1 || layout.rows === 2, `${label} rows must be 1 or 2, got ${layout.rows}`);
+  assert(layout.rows <= 2, `${label} never uses 3+ rows (${layout.rows})`);
+  const memItem = layout.placed.find((p) => p.label === "Mem");
+  assert(memItem, `${label} includes Mem`);
+  for (const item of layout.placed) {
+    assert(item.x >= 4 - 1e-6, `${label} ${item.label} starts in box`);
+    assert(item.x + item.w <= 4 + availW + 1e-6, `${label} ${item.label} clipped at ${item.x + item.w}`);
+  }
 }
 
-console.log("ok: vactrol line thickness and legend wrap");
+function assertTwoByTwo(layout, label) {
+  assert(layout.rows === 2, `${label} is 2 rows`);
+  assert(layout.split === 2, `${label} splits 2+2`);
+  const byLabel = Object.fromEntries(layout.placed.map((p) => [p.label, p]));
+  assert(byLabel.Light.row === 0 && byLabel["Flt Env"].row === 0, `${label} row 1 is Light | Flt Env`);
+  assert(byLabel["Amp Env"].row === 1 && byLabel.Mem.row === 1, `${label} row 2 is Amp Env | Mem`);
+  almost(byLabel.Light.x, byLabel["Amp Env"].x, `${label} column 0 aligned`);
+  almost(byLabel["Flt Env"].x, byLabel.Mem.x, `${label} column 1 aligned`);
+  almost(byLabel.Light.ly, byLabel["Flt Env"].ly, `${label} row 0 baseline`);
+  almost(byLabel["Amp Env"].ly, byLabel.Mem.ly, `${label} row 1 baseline`);
+  assert(byLabel["Flt Env"].x > byLabel.Light.x, `${label} columns increase`);
+  assert(byLabel.Mem.ly > byLabel.Light.ly, `${label} row 1 is below row 0`);
+}
+
+const wide = layoutAt(400);
+assertInside(wide, 400, "wide");
+assert(wide.rows === 1, "wide face stays on one row");
+assert(wide.scale === 1, "wide face keeps full typography");
+assert(wide.placed[0].label === "Light" && wide.placed[3].label === "Mem", "wide order Light..Mem");
+const wideXs = wide.placed.map((p) => p.x);
+assert(wideXs[0] < wideXs[1] && wideXs[1] < wideXs[2] && wideXs[2] < wideXs[3], "wide is a single left-to-right row");
+
+// Mid width: too tight for one full row, wide enough for a full-size 2x2 grid.
+const mid = layoutAt(150);
+assertInside(mid, 150, "mid");
+assertTwoByTwo(mid, "mid");
+almost(mid.scale, 1, "mid 2-row keeps full typography");
+
+// Narrow width: still exactly 2 rows; typography shrinks so nothing clips.
+const narrow = layoutAt(90);
+assertInside(narrow, 90, "narrow");
+assertTwoByTwo(narrow, "narrow");
+assert(narrow.scale < 1, `narrow typography shrinks, scale=${narrow.scale}`);
+assert(narrow.height <= 2 * 16 + 1e-6, "compact 2-row height does not exceed two full rows");
+
+// Very narrow face: still 1 or 2 rows (never 3+), Mem inside the box.
+for (const w of [40, 60, 80, 100, 160, 220, 400]) {
+  const layout = layoutAt(w);
+  assertInside(layout, w, `avail ${w}`);
+  if (layout.rows === 2) assertTwoByTwo(layout, `avail ${w}`);
+}
+
+console.log("ok: vactrol line thickness and legend 1/2-row layout");
 console.log(JSON.stringify({
   defaults: {
     lightThickness: defaults.lightThickness,
@@ -151,5 +187,12 @@ console.log(JSON.stringify({
   },
   independent,
   ink: { min96, dpr2InkDevice, tileMin, tileInkCss, tileDevice, ref: FACE_INK_REF_PX },
-  legend: { wideRows: wide.rows, narrowRows: narrow.rows, memY: mem.y },
+  legend: {
+    wideRows: wide.rows,
+    midRows: mid.rows,
+    midScale: mid.scale,
+    narrowRows: narrow.rows,
+    narrowScale: narrow.scale,
+    memCol: narrow.placed.find((p) => p.label === "Mem").col,
+  },
 }, null, 2));
