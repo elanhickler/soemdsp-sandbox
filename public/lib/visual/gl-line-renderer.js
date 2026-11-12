@@ -1105,17 +1105,22 @@ void main() {
   function nodeGraphGlLinesRibbon(batch, points, halfPx, feather, rgba, dip = 0, dipWidth = 0.5) {
     if (!batch || !points || points.length < 4) return;
     // Dip: colour is per vertex, so subdivide the polyline (straight
-    // splits, shape unchanged) until there are >= ~128 vertices along it,
-    // enough for the dip bell to read smooth.
+    // splits, shape unchanged) until no piece is longer than 1/128 of the
+    // arc, enough for the dip bell to read smooth on uneven (adaptive) pieces.
     const hw = dipWidth / 2;
     const dipping = dip > 0 && hw > 0;
-    if (dipping && points.length / 2 < 128) {
+    if (dipping) {
       const segs = points.length / 2 - 1;
-      const sub = Math.ceil(128 / segs);
+      let total = 0;
+      for (let i = 0; i < segs; i += 1) {
+        total += Math.hypot(points[i * 2 + 2] - points[i * 2], points[i * 2 + 3] - points[i * 2 + 1]);
+      }
+      const step = total > 0 ? total / 128 : 1;
       const dense = [];
       for (let i = 0; i < segs; i += 1) {
         const ax = points[i * 2]; const ay = points[i * 2 + 1];
         const bx = points[i * 2 + 2]; const by = points[i * 2 + 3];
+        const sub = Math.max(1, Math.ceil(Math.hypot(bx - ax, by - ay) / step));
         for (let j = 0; j < sub; j += 1) {
           const f = j / sub;
           dense.push(ax + (bx - ax) * f, ay + (by - ay) * f);

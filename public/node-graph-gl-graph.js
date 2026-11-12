@@ -1253,7 +1253,62 @@ function nodeGraphGlGraphDrawButtonCaptions(batch, toX, toY, zoom, cssW, cssH, b
   }
 }
 
-function nodeGraphGlGraphCubic(ax, ay, bx, by, steps, departSign = 1) {
+// Cable cubics are sampled split-and-prune (soemdsp AdaptiveCache, in 2D on
+// t): halve a t span while its midpoint sits farther than tolerance / 4 from
+// the chord, then drop points within tolerance of a straight run
+// (Ramer-Douglas-Peucker). The cubic is point-symmetric, so its midpoint lies
+// on the end-to-end line: the first split is forced into
+// NODE_GRAPH_WIRE_CURVE_SPANS even spans. NODE_GRAPH_WIRE_CURVE_DEPTH halvings
+// per span cap the count (8 << 8 = 2048 pieces before pruning).
+const NODE_GRAPH_WIRE_CURVE_SPANS = 8;
+const NODE_GRAPH_WIRE_CURVE_DEPTH = 8;
+
+/** Ramer-Douglas-Peucker on a flat xy list: keep points farther than tolerance from the run. */
+function nodeGraphGlGraphPrune(pts, tolerance) {
+  const n = pts.length / 2;
+  const keep = new Uint8Array(n);
+  keep[0] = 1;
+  keep[n - 1] = 1;
+  const stack = [0, n - 1];
+  while (stack.length) {
+    const j = stack.pop();
+    const i = stack.pop();
+    const x0 = pts[i * 2];
+    const y0 = pts[i * 2 + 1];
+    const dx = pts[j * 2] - x0;
+    const dy = pts[j * 2 + 1] - y0;
+    const len2 = dx * dx + dy * dy;
+    let far = tolerance;
+    let at = -1;
+    for (let k = i + 1; k < j; k += 1) {
+      const px = pts[k * 2] - x0;
+      const py = pts[k * 2 + 1] - y0;
+      const t = len2 > 0 ? Math.max(0, Math.min(1, (px * dx + py * dy) / len2)) : 0;
+      const d = Math.hypot(px - dx * t, py - dy * t);
+      if (d > far) {
+        far = d;
+        at = k;
+      }
+    }
+    if (at >= 0) {
+      keep[at] = 1;
+      stack.push(i, at, at, j);
+    }
+  }
+  let count = 0;
+  for (let k = 0; k < n; k += 1) count += keep[k];
+  const xy = new Float32Array(count * 2);
+  for (let k = 0, o = 0; k < n; k += 1) {
+    if (!keep[k]) continue;
+    xy[o] = pts[k * 2];
+    xy[o + 1] = pts[k * 2 + 1];
+    o += 2;
+  }
+  return xy;
+}
+
+/** Cable cubic as a polyline within `tolerance` world px of the true curve. */
+function nodeGraphGlGraphCubic(ax, ay, bx, by, tolerance, departSign = 1) {
   // Wire curve 0..1 (normalized, finite): 0 is a straight line, not a fallback to full curve.
   const curve = typeof nodeGraphWireCurve === "function" ? nodeGraphWireCurve() : 1;
   const span = Math.min(
@@ -1266,20 +1321,41 @@ function nodeGraphGlGraphCubic(ax, ay, bx, by, steps, departSign = 1) {
   const c1y = ay;
   const c2x = bx - sign * span;
   const c2y = by;
-  const n = Math.max(1, steps | 0);
-  const xy = new Float32Array((n + 1) * 2);
-  for (let i = 0; i <= n; i += 1) {
-    const t = i / n;
+  const cx = (t) => {
     const u = 1 - t;
-    const uu = u * u;
-    const tt = t * t;
-    xy[i * 2] = uu * u * ax + 3 * uu * t * c1x + 3 * u * tt * c2x + tt * t * bx;
-    xy[i * 2 + 1] = uu * u * ay + 3 * uu * t * c1y + 3 * u * tt * c2y + tt * t * by;
+    return u * u * u * ax + 3 * u * u * t * c1x + 3 * u * t * t * c2x + t * t * t * bx;
+  };
+  const cy = (t) => {
+    const u = 1 - t;
+    return u * u * u * ay + 3 * u * u * t * c1y + 3 * u * t * t * c2y + t * t * t * by;
+  };
+  const split = tolerance * 0.25;
+  const pts = [ax, ay];
+  const sample = (t0, x0, y0, t1, x1, y1, depth) => {
+    const tm = (t0 + t1) * 0.5;
+    const xm = cx(tm);
+    const ym = cy(tm);
+    const dx = x1 - x0;
+    const dy = y1 - y0;
+    const len = Math.hypot(dx, dy);
+    const off = len > 0 ? Math.abs((xm - x0) * dy - (ym - y0) * dx) / len : Math.hypot(xm - x0, ym - y0);
+    if (depth > 0 && off > split) {
+      sample(t0, x0, y0, tm, xm, ym, depth - 1);
+      sample(tm, xm, ym, t1, x1, y1, depth - 1);
+    } else {
+      pts.push(x1, y1);
+    }
+  };
+  const n = NODE_GRAPH_WIRE_CURVE_SPANS;
+  for (let i = 0; i < n; i += 1) {
+    const t0 = i / n;
+    const t1 = (i + 1) / n;
+    sample(t0, cx(t0), cy(t0), t1, i + 1 === n ? bx : cx(t1), i + 1 === n ? by : cy(t1), NODE_GRAPH_WIRE_CURVE_DEPTH);
   }
-  return xy;
+  return nodeGraphGlGraphPrune(pts, tolerance);
 }
 
-function nodeGraphGlGraphShape(from, to, wire, zoom) {
+function nodeGraphGlGraphShape(from, to, wire, tolerance) {
   const ax = Number(from.x);
   const ay = Number(from.y);
   const bx = Number(to.x);
@@ -1306,10 +1382,8 @@ function nodeGraphGlGraphShape(from, to, wire, zoom) {
     }
     return xy;
   }
-  const screenLen = Math.hypot((bx - ax) * zoom, (by - ay) * zoom);
-  const steps = Math.max(8, Math.min(32, Math.ceil(screenLen / 8)));
   const depart = Number(from?.departSign) < 0 ? -1 : 1;
-  return nodeGraphGlGraphCubic(ax, ay, bx, by, steps, depart);
+  return nodeGraphGlGraphCubic(ax, ay, bx, by, tolerance, depart);
 }
 
 function nodeGraphGlGraphDragFrom(point, endpoint) {
@@ -1344,6 +1418,12 @@ function nodeGraphGlGraphPushWire(wires, from, to, color, zoom, wire, squareFrom
   // there is no destination colour (drag / port-connection previews). One
   // solid colour per wire, end dots included.
   const rgba = nodeGraphGlGraphCssColor(toColor || color);
+  // Curve tolerance in world px: 0.2 screen px at the rebuild zoom. A cable
+  // with a patch slot under UIDEV pixelate wires is baked as a zoom-1
+  // picture, so it uses 0.25 world px and stays the same at every zoom.
+  const baked = Boolean(kind) && Number.isInteger(index) && index >= 0
+    && typeof nodeGraphPixelateWiresOnZoom === "function" && nodeGraphPixelateWiresOnZoom();
+  const tolerance = baked ? 0.25 : 0.2 / Math.max(1e-3, Number(zoom) || 1);
   wires.push({
     rgba,
     kind: kind || "",
@@ -1351,7 +1431,7 @@ function nodeGraphGlGraphPushWire(wires, from, to, color, zoom, wire, squareFrom
       ? normalizeNodeGraphWireType(wire?.wireType)
       : "ribbon",
     index: Number.isInteger(index) ? index : -1,
-    xy: nodeGraphGlGraphShape(from, to, wire, zoom),
+    xy: nodeGraphGlGraphShape(from, to, wire, tolerance),
     // A param wire (an end on a rail IO box) has its own width and a tiny
     // round end dot where it meets the box.
     param: railFrom === true || railTo === true,
