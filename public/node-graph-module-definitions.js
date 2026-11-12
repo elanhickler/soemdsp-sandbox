@@ -1833,7 +1833,7 @@ const nodeGraphModuleDefinitions = (
       backgroundColor: "#050508",
     },
     // Pin width so long Waveform choice names cannot thrash the stack.
-    defaultWidthGu: 7,
+    defaultWidthGu: 6,
     displayModes: [
       { key: "additiveWaveform", renderer: "additiveWaveform", settingsSchema: "additiveWaveform" },
       { key: "harmonicCount", renderer: "harmonicCount" },
@@ -3231,7 +3231,7 @@ const nodeGraphModuleDefinitions = (
     chrome: "LayoutA",
     customDisplayArea: true,
     displayType: "harmonicLines",
-    displayHeightGu: 3,
+    displayHeightGu: 4,
     defaultWidthGu: 8,
     displayModes: [
       { key: "harmonicLines", renderer: "harmonicLines" },
