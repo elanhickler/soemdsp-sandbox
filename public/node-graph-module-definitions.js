@@ -9211,17 +9211,16 @@ const nodeGraphModuleDefinitions = (
     outputs: ["Out"],
     parameters: [] },
   ampCurve: {
-    // Face: transfer curve (amp-curve-display.js) + Shape (Step Graph curves, no Hold) + Skew.
+    // Face: transfer curve (amp-curve-display.js) + Lin / Exp. No Skew.
     customDisplayArea: true,
     displayType: "ampCurveFace",
     displayHeightGu: 6,
     displayModes: [
-      { key: "face", label: "Shape", renderer: "ampCurveFace", settingsSchema: "" },
+      { key: "face", label: "Curve", renderer: "ampCurveFace", settingsSchema: "" },
     ],
     defaultDisplayMode: "face",
     face: [
-      { kind: "choices", param: "shape", labels: ["Linear", "Rational", "Exponential", "Log", "Smoothstep", "Smootherstep"], h: 52 },
-      { kind: "cells", params: [["skew", "Skew"]], h: 40 },
+      { kind: "choices", param: "mode", labels: ["Lin", "Exp"], h: 26 },
     ],
     planRole: "processor",
     // Gold analog CV (uncolored). Do not alias Left/Right — those paint red/blue
@@ -9236,32 +9235,19 @@ const nodeGraphModuleDefinitions = (
       oscilloscopeHidden: true },
     parameters: [
       {
-        choices: ["Linear", "Rational", "Exponential", "Log", "Smoothstep", "Smootherstep"],
-        choiceKeys: ["Linear", "Rational", "Exponential", "Log", "Smoothstep", "Smootherstep"],
-        choiceIds: [0, 1, 2, 3, 4, 5],
-        defaultValue: "Exponential",
+        choices: ["Lin", "Exp"],
+        defaultValue: "1",
         displayChoices: true,
         divideChoicesVisibly: true,
-        key: "shape",
-        kind: "choice",
-        label: "Shape",
+        key: "mode",
+        label: "Mode",
         linearSmoothing: false,
         smoothingType: "none",
-        max: "5",
-        mid: "2",
+        max: "1",
+        mid: "1",
         min: "0",
         nonlinearSlider: false,
         step: "1" },
-      {
-        defaultValue: "-0.6625295074459036",
-        key: "skew",
-        label: "Skew",
-        max: "1",
-        mid: "0",
-        min: "-1",
-        bipolar: true,
-        nonlinearSlider: false,
-        step: "any" },
     ] },
   attenuverter: {
     planRole: "processor",

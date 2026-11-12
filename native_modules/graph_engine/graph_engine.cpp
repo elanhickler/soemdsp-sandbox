@@ -143,7 +143,7 @@ extern "C" int soemdsp_attenuverter_block_output_ptr(int handle);
 
 extern "C" int soemdsp_amp_curve_create();
 extern "C" void soemdsp_amp_curve_destroy(int handle);
-extern "C" void soemdsp_amp_curve_set_params(int handle, double shape, double skew);
+extern "C" void soemdsp_amp_curve_set_params(int handle, double mode);
 extern "C" void soemdsp_amp_curve_process_block(int handle, int frameCount);
 extern "C" intptr_t soemdsp_amp_curve_block_input_ptr(int handle);
 extern "C" intptr_t soemdsp_amp_curve_block_output_ptr(int handle);
@@ -2394,7 +2394,7 @@ static const int kTypeSinCos = 153;
 static const int kTypeVibratoGenerator = 154;
 static const int kTypeWowAndFlutter = 155;
 static const int kTypeVactrol = 156; // roll-your-own optical lag (not tombstone 74)
-static const int kTypeAmpCurve = 157; // CV → Amplitude response (Step Graph shapes + Skew)
+static const int kTypeAmpCurve = 157; // CV → Amplitude response (Lin/Exp VCA curve)
 static const int kTypeHypersaw2 = 158;
 static const int kTypeTransistor = 159; // t / t1…t10 demux — stages = last path index
 static const int kTypeTransistorMux = 175; // 1t…10t mux — stages = last path index
@@ -3802,7 +3802,6 @@ static void init_node_defaults(Node& n, int typeId) {
       : (typeId == kTypeActiveFilter) ? 4.0 // Dual Ladder LP slope 24 dB
       : (typeId == kTypeVibratoGenerator) ? 0.0 // Top Morph
       : (typeId == kTypeWowAndFlutter) ? 1.0 // wowAmp
-      : (typeId == kTypeAmpCurve) ? -0.6625295074459036 // classic VCA exponential skew
       : (typeId == kTypeVactrol) ? 1.0 // curve gamma
       : (typeId == kTypeFilterMorphOscillator) ? 1.0 // Morph (saw)
       : (typeId == kTypeSoftwaveOsc || typeId == kTypeSuperloveFilter || typeId == kTypeSuperloveRev2
@@ -3934,7 +3933,7 @@ static void init_node_defaults(Node& n, int typeId) {
           || typeId == kTypeGravityWalker) ? 1.0 // octaves
       : (typeId == kTypeSmoothGraph || typeId == kTypeStepGraph) ? 0.0 // Input mode
       : (typeId == kTypeArp) ? 0.0 // up
-      : (typeId == kTypeAmpCurve) ? 2.0 // Exponential (classic VCA at default skew)
+      : (typeId == kTypeAmpCurve) ? 1.0 // Exp (classic VCA CV)
       : (typeId == kTypeHilbert) ? 0.0 // +90Â°
       : (typeId == kTypeRandomWalk) ? 3.0 // Fixed Steps
       : (typeId == kTypeFm) ? 0.0 // octave
@@ -6528,16 +6527,12 @@ static void process_attenumax(Circuit& g, Node& node, int frames) {
   }
 }
 
-// Amp Curve: fold Mono+L+R through shared Step Graph segment curves.
-// mode=shape id, shape=skew (-1..+1).
+// Amp Curve: fold Mono+L+R → Lin/Exp VCA-style response for Amplitude params.
+// mode=Lin/Exp only.
 static void process_amp_curve(Circuit& g, Node& node, int frames) {
   if (node.nativeHandle <= 0) return;
   mix_node_inputs(g, node, frames);
-  soemdsp_amp_curve_set_params(
-    node.nativeHandle,
-    control_effective(node.mode),
-    control_effective(node.shape)
-  );
+  soemdsp_amp_curve_set_params(node.nativeHandle, control_effective(node.mode));
   double* inPtr = ptr_from_export(soemdsp_amp_curve_block_input_ptr(node.nativeHandle));
   double* outPtr = ptr_from_export(soemdsp_amp_curve_block_output_ptr(node.nativeHandle));
   if (!inPtr || !outPtr) return;

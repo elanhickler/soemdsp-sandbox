@@ -5266,17 +5266,8 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
       continue;
     }
     if (type === "ampCurve") {
-      // mode=shape id (Step Graph curves). Persisted by choiceKeys name.
-      // shape Control slot = skew (-1..+1); default matches old Exp VCA law.
-      let ampCurveShapeId = disc("shape", 2);
-      const rawAmpCurveShape = node?.params?.shape;
-      if (typeof rawAmpCurveShape === "string") {
-        const names = ["Linear", "Rational", "Exponential", "Log", "Smoothstep", "Smootherstep"];
-        const idx = names.indexOf(rawAmpCurveShape.trim());
-        if (idx >= 0) ampCurveShapeId = idx;
-      }
-      push("shape", P.NATIVE_GRAPH_PARAM_MODE, ampCurveShapeId);
-      push("skew", P.NATIVE_GRAPH_PARAM_SHAPE, cont("skew", -0.6625295074459036));
+      // mode=Lin/Exp only
+      push("mode", P.NATIVE_GRAPH_PARAM_MODE, disc("mode", 1));
       continue;
     }
     if (type === "rasterRgb") {

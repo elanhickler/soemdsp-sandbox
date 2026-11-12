@@ -382,6 +382,17 @@ function validateNodeGraphPatch(patch) {
       if (type === "tiltFilter" && parameter.key === "mode" && !Object.hasOwn(rawParams, "mode")) {
         value = 0;
       }
+      // Amp Curve is Lin/Exp again. Patches saved with the short-lived Step
+      // Graph Shape + Skew: Linear -> Lin; Rational / Exponential / Log /
+      // Smoothstep / Smootherstep -> Exp (the classic VCA law). Skew is dropped.
+      if (type === "ampCurve" && parameter.key === "mode" && !Object.hasOwn(rawParams, "mode")
+        && Object.hasOwn(rawParams, "shape")) {
+        const shape = rawParams.shape;
+        const linear = typeof shape === "string"
+          ? (shape.trim().toLowerCase() === "linear" || shape.trim() === "0")
+          : Math.round(Number(shape)) === 0;
+        value = linear ? 0 : 1;
+      }
       // Music Player Tape: patches saved before the new Tone/Range defaults
       // keep the previous implicit values (Tone -2, Range 2).
       if (type === "audioPlayer" && parameter.key === "tone" && !Object.hasOwn(rawParams, "tone")) {

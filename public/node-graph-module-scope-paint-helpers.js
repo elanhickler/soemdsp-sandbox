@@ -198,6 +198,36 @@ function nodeGraphOneDimensionalBurnBreakPath(points) {
 }
 
 /**
+ * Most undrawn samples one face may path-build this frame.
+ *
+ * Off-screen faces are not drawn, so their cursor does not move. Back on
+ * screen (zoom-out, pan), the undrawn window was the whole retained ring and
+ * the path walk cost ~150 ms in one frame. Same rule as Vector RGB / Scan Grid
+ * catch-up: a face that missed frames starts from now (one Simulation FPS
+ * frame); a live face may catch up a few frames at most. The walk is per
+ * sample, so this caps the CPU work, not only the GL stamps.
+ */
+const NODE_GRAPH_BURN_CATCH_UP_FRAMES = 4;
+
+function nodeGraphOneDimensionalBurnCatchUpMax(canvas, buffer) {
+  const rate = typeof nodeGraphScopeSampleRate === "function"
+    ? nodeGraphScopeSampleRate(buffer)
+    : buffer?.nodeGraphScopeSampleRate;
+  const sampleRate = Math.max(1, nodeGraphFiniteNumber(rate, 44100));
+  const fpsRaw = typeof nodeGraphModuleScopeSimFps === "function" ? Number(nodeGraphModuleScopeSimFps()) : 60;
+  const fps = Number.isFinite(fpsRaw) && fpsRaw > 0 ? fpsRaw : 60;
+  const frameSamples = Math.max(1, Math.ceil(sampleRate / fps));
+  const now = performance.now?.() || Date.now();
+  const lastMs = Number(canvas?._nodeGraphBurnWindowAtMs);
+  if (canvas) {
+    canvas._nodeGraphBurnWindowAtMs = now;
+  }
+  const missedFrames = Number.isFinite(lastMs) && lastMs > 0
+    && now - lastMs > (1000 / fps) * NODE_GRAPH_BURN_CATCH_UP_FRAMES;
+  return missedFrames ? frameSamples : frameSamples * NODE_GRAPH_BURN_CATCH_UP_FRAMES;
+}
+
+/**
  * How many trailing samples of `buffer` still need depositing for this face.
  *
  * Prefer absoluteFrame − lastDrawn so multiple scope posts between RAF draws
@@ -222,6 +252,7 @@ function nodeGraphOneDimensionalBurnUndrawnWindow(canvas, buffer) {
     canvas?._nodeGraphOneDimensionalBurnLastDrawnFrame
     ?? canvas?._nodeGraphScope2dLastDrawnFrame,
   );
+  const catchUpMax = nodeGraphOneDimensionalBurnCatchUpMax(canvas, buffer);
 
   // Worklet visual-input path: absolute sample index is authoritative.
   if (Number.isFinite(absEnd) && absEnd > 0) {
@@ -232,11 +263,16 @@ function nodeGraphOneDimensionalBurnUndrawnWindow(canvas, buffer) {
       ? Math.max(0, Math.floor(absEnd - lastDrawn))
       : Math.max(recent, 0);
     let count = Math.min(retained || buffer.length, undrawn > 0 ? undrawn : Math.max(recent, 1));
+    // Older undrawn samples past the catch-up cap are skipped, not queued.
+    const skipped = count > catchUpMax;
+    if (skipped) {
+      count = catchUpMax;
+    }
     // One sample of overlap so the new stroke starts on the previous endpoint.
     // Without it the segment between paints is never drawn — a regular gap at low frequency.
     const cap = retained || buffer.length;
     let overlap = 0;
-    if (Number.isFinite(lastDrawn) && lastDrawn > 0 && undrawn > 0 && count < cap) {
+    if (!skipped && Number.isFinite(lastDrawn) && lastDrawn > 0 && undrawn > 0 && count < cap) {
       count += 1;
       overlap = 1;
     }
@@ -250,9 +286,13 @@ function nodeGraphOneDimensionalBurnUndrawnWindow(canvas, buffer) {
     }
     const undrawn = Math.max(0, Math.floor(totalSamples - lastDrawn));
     let count = Math.min(retained || buffer.length, undrawn > 0 ? undrawn : Math.max(recent, 1));
+    const skipped = count > catchUpMax;
+    if (skipped) {
+      count = catchUpMax;
+    }
     const cap = retained || buffer.length;
     let overlap = 0;
-    if (undrawn > 0 && count < cap) {
+    if (!skipped && undrawn > 0 && count < cap) {
       count += 1;
       overlap = 1;
     }

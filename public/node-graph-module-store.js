@@ -1214,9 +1214,9 @@ const nodeGraphModuleStoreCatalog = Object.freeze({
   },
   ampCurve: {
     category: "dynamics",
-    description: "Shape an envelope through Step Graph curves. Skew −1…+1 bends the selected shape (0 is linear for most shapes).",
+    description: "Shape CV for Amplitude params — Lin (clamp 0…1) or Exp classic VCA response (0 mute → 1 unity).",
     label: "Amp Curve",
-    notes: ["curve", "amplitude", "vca", "cv", "gold", "shape", "skew", "dynamics", "native"],
+    notes: ["curve", "amplitude", "vca", "cv", "gold", "lin", "exp", "dynamics", "native"],
   },
   attenuverter: {
     category: "dynamics",

@@ -1,5 +1,5 @@
-// Amp Curve face: selected Shape + Skew transfer (X Env 0..1, Y Curve 0..1).
-// Geometry from public/node-graph-segment-curves.js (SSOT). Display only;
+// Amp Curve face: Lin / Exp transfer (X Env 0..1, Y Curve 0..1).
+// Same law as native_modules/amp_curve/amp_curve.cpp. Display only;
 // does not process audio.
 //
 // Drawing: WebGL2 only via public/lib/visual/gl-line-renderer.js. Canvas sized
@@ -13,46 +13,32 @@ const NODE_GRAPH_AMP_CURVE_FACE = Object.freeze({
   lineThicknessCss: 1.5,
 });
 
-const NODE_GRAPH_AMP_CURVE_DEFAULT_SKEW = -0.6625295074459036;
-const NODE_GRAPH_AMP_CURVE_DEFAULT_SHAPE = "exponential";
+// Exp: 10^(5*(x-1)) — unity at 1, ~-100 dB near 0, exact 0 at x<=0.
+const NODE_GRAPH_AMP_CURVE_EXP_DB_SPAN = 5;
 
-function nodeGraphAmpCurveShapeParam(node) {
-  const stored = node?.params?.shape;
-  const fallback = stored != null && stored !== "" ? stored : NODE_GRAPH_AMP_CURVE_DEFAULT_SHAPE;
+/** true = Exp (default), false = Lin. */
+function nodeGraphAmpCurveIsExp(node) {
+  const stored = node?.params?.mode;
+  let v = stored != null && stored !== "" ? stored : 1;
   if (node && typeof nodeGraphFilterCurveLiveParam === "function") {
-    const v = nodeGraphFilterCurveLiveParam(node, "shape", fallback);
-    if (v != null && v !== "") return v;
+    const live = nodeGraphFilterCurveLiveParam(node, "mode", v);
+    if (live != null && live !== "") v = live;
   }
-  return fallback;
+  if (typeof v === "string") {
+    const t = v.trim().toLowerCase();
+    if (t === "lin") return false;
+    if (t === "exp") return true;
+  }
+  const n = Number(v);
+  return !(Number.isFinite(n) && n < 0.5);
 }
 
-function nodeGraphAmpCurveSkewParam(node) {
-  const stored = Number(node?.params?.skew);
-  const fallback = Number.isFinite(stored) ? stored : NODE_GRAPH_AMP_CURVE_DEFAULT_SKEW;
-  if (node && typeof nodeGraphFilterCurveLiveParam === "function") {
-    const v = Number(nodeGraphFilterCurveLiveParam(node, "skew", fallback));
-    if (Number.isFinite(v)) return v;
-  }
-  return fallback;
-}
-
-function nodeGraphAmpCurveY(x, shape, skew) {
+function nodeGraphAmpCurveY(x, exp) {
   const p = x <= 0 ? 0 : (x >= 1 ? 1 : x);
-  if (typeof nodeGraphSegmentCurve01 !== "function") return p;
-  const named = typeof nodeGraphSegmentShapeFromParam === "function"
-    ? nodeGraphSegmentShapeFromParam(shape)
-    : shape;
-  return nodeGraphSegmentCurve01(p, named, skew);
-}
-
-function nodeGraphAmpCurveShapeKey(shape) {
-  if (typeof nodeGraphSegmentShapeFromParam === "function") {
-    return nodeGraphSegmentShapeFromParam(shape);
-  }
-  if (typeof nodeGraphSegmentShapeIndex === "function") {
-    return String(nodeGraphSegmentShapeIndex(shape));
-  }
-  return String(shape);
+  if (!exp) return p;
+  if (p <= 0) return 0;
+  if (p >= 1) return 1;
+  return Math.pow(10, NODE_GRAPH_AMP_CURVE_EXP_DB_SPAN * (p - 1));
 }
 
 function drawNodeGraphAmpCurveDisplay(section) {
@@ -64,10 +50,9 @@ function drawNodeGraphAmpCurveDisplay(section) {
   const node = typeof nodeGraphPatchNode === "function"
     ? nodeGraphPatchNode(section.dataset.node || "")
     : null;
-  const shape = nodeGraphAmpCurveShapeParam(node);
-  const skew = nodeGraphAmpCurveSkewParam(node);
+  const exp = nodeGraphAmpCurveIsExp(node);
   const { cssWidth: width, cssHeight: height, pixelRatio } = metrics;
-  const key = `${width}x${height}|${nodeGraphAmpCurveShapeKey(shape)}|${skew}`;
+  const key = `${width}x${height}|${exp ? "exp" : "lin"}`;
   if (section._ampCurveKey === key && !section._ampCurveForce) return;
   section._ampCurveForce = false;
 
@@ -107,7 +92,7 @@ function drawNodeGraphAmpCurveDisplay(section) {
   const curve = [];
   for (let i = 0; i < pts; i += 1) {
     const t = i / (pts - 1);
-    curve.push(toX(t), toY(nodeGraphAmpCurveY(t, shape, skew)));
+    curve.push(toX(t), toY(nodeGraphAmpCurveY(t, exp)));
   }
   nodeGraphGlLinesPolyline(batch, curve, curveW * 0.5, fine, F.curve);
   const ok = nodeGraphGlLinesEnd(batch, "alpha");
