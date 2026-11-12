@@ -863,6 +863,10 @@ function validateNodeGraphPatch(patch) {
     if (ownerMeta) {
       normalizedNode.ownerMetamoduleId = ownerMeta;
     }
+    // Module Settings > Layer stack index (absent = patch.nodes order).
+    if (Number.isFinite(node.z)) {
+      normalizedNode.z = node.z;
+    }
     if (node.metamodule && typeof node.metamodule === "object") {
       // Must keep playmode + voices (Module Settings). Older normalize only
       // kept boundary/displays and wiped voice settings back to defaults.
@@ -1876,6 +1880,7 @@ function applyNodeGraphPatchToDom(options = {}) {
   if (liveControlsDomMutated && typeof invalidateNodeGraphLiveControlsPaintCache === "function") {
     invalidateNodeGraphLiveControlsPaintCache();
   }
+  nodeGraphModuleStackSyncDom();
   syncNodeGraphInputModuleLiveState();
   if (typeof renderNodeGraphKeyboardControllerModules === "function") {
     renderNodeGraphKeyboardControllerModules();
@@ -1927,6 +1932,8 @@ function applyNodeGraphLayoutPositionsToDom(patch = nodeGraphMvp.patch) {
     element.dataset.gridX = String(patchNode.gx);
     element.dataset.gridY = String(patchNode.gy);
   }
+  // Module Settings > Layer commits as a layout edit.
+  nodeGraphModuleStackSyncDom(patch);
   if (typeof updateNodeGraphGridHeatmap === "function") {
     updateNodeGraphGridHeatmap();
   }

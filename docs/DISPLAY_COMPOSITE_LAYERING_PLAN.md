@@ -127,7 +127,14 @@ Until the toolbar exists, Arrange z-order remains `patch.nodes` order.
 - Mini Canvas: the first image in its GL pass, cover-fitted to the frame with the same math (`nodeGraphCanvasBackgroundCoverRect`), so display quads (GL blend) and module hosts (CSS blend) sit over it.
 - Smoke: `scripts/smoke_canvas_background.mjs`.
 
-Still to do from this section: workspace (circuit builder) module z-order (still `patch.nodes`); right-click in the workspace Arrange view if that is wanted beyond the Canvas; blend for workspace modules (not Canvas tiles).
+**Landed 2026-11-12 (circuit-builder module front/back):**
+- Module Settings (right-click a module) has a Layer row: To back / Back one / Forward one / To front, titled "Layer i of n". It acts on that one module (hidden for a multi-selection). `restackNodeGraphModuleFromContext` is the one writer: it rewrites `node.z` as 0..n-1 on every module in the current scope (saved with the patch, undoable; a copied module drops `z` so it lands on top). There is no circuit-builder Arrange mode or bottom bar, and no raise-on-click.
+- `patch.nodes` is never reordered, so the audio scheduler's feedback delay (`nodeGraphNodeOrderIndexes`) is untouched. `nodeGraphModuleStackNodes` is the order: stored `z` first, then modules without `z` in `patch.nodes` order (an untouched patch looks as before; new modules land on top).
+- Plates, chrome and displays draw in that order (`nodeGraphGlGraphRebuildPlates` / `RebuildChrome`), the GL hit test skips a module's jacks / labels / sliders / title where a plate in front covers them, and the `.dsp-node` elements are kept in the same tree order (`nodeGraphModuleStackSyncDom`; every module is z-index 2, so tree order is what puts one in front). Cables stay under the stacks; Text Boxes, Show on top and Wires Above Modules are unchanged.
+- Blend for circuit-builder modules is intentionally not done (Argi: the circuit builder is not for layering graphics). Blend stays a Canvas tile feature.
+- Smoke: `scripts/smoke_module_stack_layers.mjs`.
+
+Still to do from this section: right-click in the workspace Arrange view if that is wanted beyond the Canvas.
 
 ## 5. Stages
 

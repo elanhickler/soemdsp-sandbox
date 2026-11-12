@@ -1581,7 +1581,8 @@ function copyNodeGraphModule(sourceNode) {
     ui: nodeGraphDeepCloneModuleField(sourceNode.ui),
     ...sizingOptions,
   });
-  const skip = new Set(["id", "gx", "gy", "type"]);
+  // z: a copy lands on top like any new module (Module Settings > Layer).
+  const skip = new Set(["id", "gx", "gy", "type", "z"]);
   for (const key of Object.keys(sourceNode)) {
     if (skip.has(key)) {
       continue;
@@ -3579,6 +3580,77 @@ function toggleNodeGraphModuleHideUnusedFromContext() {
     }));
   }
   syncNodeGraphReadyPanelChrome();
+  configureNodeSceneContextMenu("module");
+}
+
+/**
+ * Circuit-builder modules back to front. Modules with a stored z come first
+ * (by z, ties in patch.nodes order); modules without one follow in
+ * patch.nodes order, so an untouched patch looks as it always did and a new
+ * module lands on top. patch.nodes itself is never reordered: the audio
+ * scheduler reads it for the feedback delay (nodeGraphNodeOrderIndexes).
+ */
+function nodeGraphModuleStackNodes(patch = nodeGraphMvp?.patch) {
+  const nodes = Array.isArray(patch?.nodes) ? patch.nodes : [];
+  const stored = nodes.filter((node) => Number.isFinite(node?.z));
+  const rest = nodes.filter((node) => !Number.isFinite(node?.z));
+  // Array sort is stable: equal z keep patch.nodes order.
+  stored.sort((a, b) => a.z - b.z);
+  return stored.concat(rest);
+}
+
+/** The stack of the scope on screen (Root, or the open Metamodule). */
+function nodeGraphModuleStackScopeNodes(patch = nodeGraphMvp?.patch) {
+  return nodeGraphModuleStackNodes(patch).filter((node) => nodeGraphModuleShouldBeVisible(node));
+}
+
+/**
+ * Every .dsp-node is z-index 2 (one band between the cables and Wires Above
+ * Modules), so tree order decides which module's HTML is in front. Keep it
+ * in stack order so native hits agree with the GL draw order.
+ */
+function nodeGraphModuleStackSyncDom(patch = nodeGraphMvp?.patch) {
+  const rank = new Map(nodeGraphModuleStackNodes(patch).map((node, index) => [String(node.id), index]));
+  for (const container of nodeGraphModuleMountContainers()) {
+    const els = [...container.children].filter((el) => el.classList.contains("dsp-node") && rank.has(el.dataset.node));
+    const sorted = els.slice().sort((a, b) => rank.get(a.dataset.node) - rank.get(b.dataset.node));
+    if (sorted.every((el, index) => el === els[index])) {
+      continue;
+    }
+    const anchor = els[els.length - 1].nextSibling;
+    for (const el of sorted) {
+      // moveBefore keeps focus, iframes and running media; insertBefore where it is missing.
+      if (typeof container.moveBefore === "function") {
+        container.moveBefore(el, anchor);
+      } else {
+        container.insertBefore(el, anchor);
+      }
+    }
+  }
+}
+
+/**
+ * Module Settings > Layer: the one writer of node.z (no raise-on-click).
+ * Rewrites z = 0..n-1 on every module in the scope on screen so each step is
+ * one layer (other scopes keep theirs; ties across scopes never meet on screen).
+ * step: "back" | "backward" | "forward" | "front".
+ */
+function restackNodeGraphModuleFromContext(step) {
+  const id = String(nodeGraphModuleActionTargetNodeId() || "");
+  const patch = id ? cloneNodeGraphPatch(nodeGraphMvp.patch) : null;
+  const order = patch ? nodeGraphModuleStackScopeNodes(patch) : [];
+  const from = order.findIndex((node) => String(node?.id || "") === id);
+  const last = order.length - 1;
+  const to = { back: 0, backward: Math.max(0, from - 1), forward: Math.min(last, from + 1), front: last }[step];
+  if (from >= 0 && Number.isFinite(to) && to !== from) {
+    const [moved] = order.splice(from, 1);
+    order.splice(to, 0, moved);
+    order.forEach((node, index) => {
+      node.z = index;
+    });
+    // Stack order only: no DOM rebuild, no live plan (patch.nodes is unchanged).
+    commitNodeGraphPatch(patch, { layoutEdit: true, skipValidate: true, status: "layer" });
+  }
   configureNodeSceneContextMenu("module");
 }
 

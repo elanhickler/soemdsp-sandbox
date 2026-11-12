@@ -808,6 +808,8 @@ const nodeGraphModuleActionControlIds = [
   "nodeSceneModuleSettingsActionGroup",
   // Show/Hide chrome toggles — immediately under copy/settings row.
   "nodeSceneModuleVisibilitySection",
+  // To back / Back one / Forward one / To front (one module at a time).
+  "nodeSceneModuleLayerSection",
   "nodeSceneAddToUi",
   "nodeSceneWireTypeControl",
   // Width + Display Height (face gu, when module has a face) — app-wide policy.
@@ -1474,6 +1476,19 @@ function configureNodeSceneContextMenu(mode) {
   if (moduleVisibilityActionGroup) {
     // Stack stays visible with the section; individual buttons still gate per capability.
     moduleVisibilityActionGroup.hidden = false;
+  }
+  const moduleLayerSection = document.getElementById("nodeSceneModuleLayerSection");
+  if (moduleLayerSection) {
+    const stack = moduleMode && !multiModuleMode && targetNode ? nodeGraphModuleStackScopeNodes(nodeGraphMvp.patch) : [];
+    const layer = stack.findIndex((node) => node.id === targetNode?.id);
+    moduleLayerSection.hidden = layer < 0;
+    moduleLayerSection.querySelector(".scene-context-module-section-title").textContent = layer < 0
+      ? "Layer"
+      : `Layer ${layer + 1} of ${stack.length}`;
+    for (const button of moduleLayerSection.querySelectorAll("[data-module-restack]")) {
+      const back = button.dataset.moduleRestack === "back" || button.dataset.moduleRestack === "backward";
+      button.disabled = layer < 0 || layer === (back ? 0 : stack.length - 1);
+    }
   }
   deleteButton.hidden = !(moduleMode || wireMode);
   {

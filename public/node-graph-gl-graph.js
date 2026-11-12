@@ -112,7 +112,8 @@ function nodeGraphGlGraphLayoutBox(el, moduleEl) {
 function nodeGraphGlGraphRebuildPlates() {
   const plates = [];
   const displays = [];
-  const nodes = Array.isArray(nodeGraphMvp?.patch?.nodes) ? nodeGraphMvp.patch.nodes : [];
+  // Back to front (Module Settings > Layer); hit tests read plates the same way.
+  const nodes = nodeGraphModuleStackNodes(nodeGraphMvp?.patch);
   for (let i = 0; i < nodes.length; i += 1) {
     const id = String(nodes[i]?.id || "");
     if (!id) continue;
@@ -196,8 +197,9 @@ const NODE_GRAPH_STACK_OVERLAP_PAD = 12;
 /**
  * The one ordered list (docs/DISPLAY_COMPOSITE_LAYERING_PLAN.md 4.2): layer,
  * then module, then its parts (plate, chrome, parameter face, displays, display
- * ink). Arrange is one implicit layer (0) and z is patch.nodes order until the
- * Arrange toolbar writes layer / z / blend; nothing raises on click.
+ * ink). Arrange is one implicit layer (0); plates arrive in module stack order
+ * (node.z from Module Settings > Layer, else patch.nodes order); nothing
+ * raises on click. Circuit-builder modules have no blend (Canvas tiles do).
  * Consecutive modules that do not overlap share one draw group, so a patch
  * without overlap costs about the same draw calls as one flat pass.
  * "Show on top" Text Boxes stay a post-pass on the veil batch.
@@ -348,7 +350,8 @@ function nodeGraphGlGraphRebuildChrome() {
     host ? getComputedStyle(host).getPropertyValue("--node-port-diameter") : "",
   ) || 14;
   const radius = diameter * 0.5;
-  const nodes = Array.isArray(nodeGraphMvp?.patch?.nodes) ? nodeGraphMvp.patch.nodes : [];
+  // Back to front, like the plates: the hit test walks each list from the end.
+  const nodes = nodeGraphModuleStackNodes(nodeGraphMvp?.patch);
   for (let i = 0; i < nodes.length; i += 1) {
     const id = String(nodes[i]?.id || "");
     if (nodeGraphGlGraphState.view && !nodeGraphGlGraphState.view.ids.has(id)) continue;
@@ -2486,7 +2489,7 @@ function nodeGraphGlGraphPresent(options = {}) {
   // canvas, one colour buffer, so a front module hides a back module's plate,
   // display and display text. The wire canvas paints under the plate canvas,
   // so all cables sit under the module stacks. Text Box plates keep their
-  // patch-order slot here; the wire sandwich is unchanged.
+  // stack slot here; the wire sandwich is unchanged.
   const pixelated = zoom > 2.5;
   batch.textPixelated = pixelated;
   const pictures = [];
@@ -3131,6 +3134,22 @@ function nodeGraphGlHitPoint(event) {
   return nodeGraphClientToZoomSurfacePoint(event.clientX, event.clientY);
 }
 
+/**
+ * True when a module plate in front of module `id` covers (x, y): that front
+ * module takes the hit, not the jacks / labels / sliders / title showing
+ * through from behind. Text Box plates never cover (unchanged sandwich).
+ */
+function nodeGraphGlHitCovered(id, x, y) {
+  const plates = nodeGraphGlGraphState.plates || [];
+  let covered = false;
+  for (let i = plates.length - 1; i >= 0; i -= 1) {
+    const plate = plates[i];
+    if (plate.id === id) return covered;
+    if (!covered && !plate.textBox && !plate.onTop && nodeGraphGlHitInside(x, y, plate)) covered = true;
+  }
+  return false;
+}
+
 function nodeGraphGlHitTest(x, y) {
   const chrome = nodeGraphGlGraphState.chrome || {};
   const jacks = chrome.jacks || [];
@@ -3146,7 +3165,7 @@ function nodeGraphGlHitTest(x, y) {
     const dy = jack.y - y;
     // B-099: square hit box over every jack (nearest center still wins).
     const dist = Math.max(Math.abs(dx), Math.abs(dy));
-    if (dist > reach || dist >= jackDist) continue;
+    if (dist > reach || dist >= jackDist || nodeGraphGlHitCovered(jack.id, x, y)) continue;
     jackDist = dist;
     jackHit = jack;
   }
@@ -3154,7 +3173,7 @@ function nodeGraphGlHitTest(x, y) {
   const labels = chrome.labels || [];
   for (let i = labels.length - 1; i >= 0; i -= 1) {
     const label = labels[i];
-    if (nodeGraphGlHitInside(x, y, label.box)) {
+    if (nodeGraphGlHitInside(x, y, label.box) && !nodeGraphGlHitCovered(label.id, x, y)) {
       return { kind: "label", el: label.el };
     }
   }
@@ -3165,7 +3184,7 @@ function nodeGraphGlHitTest(x, y) {
     const sy = slider.hitY ?? slider.y;
     const sw = slider.hitW ?? slider.w;
     const sh = slider.hitH ?? slider.h;
-    if (x >= sx && x <= sx + sw && y >= sy && y <= sy + sh) {
+    if (x >= sx && x <= sx + sw && y >= sy && y <= sy + sh && !nodeGraphGlHitCovered(slider.id, x, y)) {
       let readout = slider.readout;
       if (readout && !readout.isConnected && typeof nodeSliderResolveLiveReadout === "function") {
         readout = nodeSliderResolveLiveReadout(readout);
@@ -3183,7 +3202,8 @@ function nodeGraphGlHitTest(x, y) {
     const box = title.box;
     if (!box) continue;
     const inset = 6;
-    if (x >= box.x + inset && x <= box.x + box.w - inset && y >= box.y && y <= box.y + box.h) {
+    if (x >= box.x + inset && x <= box.x + box.w - inset && y >= box.y && y <= box.y + box.h
+      && !nodeGraphGlHitCovered(title.id, x, y)) {
       return { kind: "title", el: title.el };
     }
   }
@@ -3420,7 +3440,7 @@ function nodeGraphGlHitChromeBoxes(point, list, pick) {
   for (let i = list.length - 1; i >= 0; i -= 1) {
     const item = list[i];
     const box = item.box || item;
-    if (!nodeGraphGlHitInside(point.x, point.y, box)) continue;
+    if (!nodeGraphGlHitInside(point.x, point.y, box) || nodeGraphGlHitCovered(item.id, point.x, point.y)) continue;
     const el = typeof pick === "function" ? pick(item) : (item.el || item.control || null);
     if (el) return el;
   }
@@ -3452,12 +3472,12 @@ function nodeGraphGlHitContextElement(point) {
   const keys = chrome.keys || [];
   for (let i = keys.length - 1; i >= 0; i -= 1) {
     const key = keys[i];
-    if (nodeGraphGlHitInside(point.x, point.y, key) && key.el) return key.el;
+    if (nodeGraphGlHitInside(point.x, point.y, key) && key.el && !nodeGraphGlHitCovered(key.id, point.x, point.y)) return key.el;
   }
   const graphs = chrome.graphs || [];
   for (let i = graphs.length - 1; i >= 0; i -= 1) {
     const face = graphs[i];
-    if (!nodeGraphGlHitInside(point.x, point.y, face)) continue;
+    if (!nodeGraphGlHitInside(point.x, point.y, face) || nodeGraphGlHitCovered(face.id, point.x, point.y)) continue;
     const moduleEl = typeof nodeGraphNodeElement === "function" ? nodeGraphNodeElement(face.id) : null;
     return moduleEl?.querySelector(".node-module-graph-display") || moduleEl;
   }

@@ -283,6 +283,9 @@ function bindNodeGraphSceneMenuEvents() {
   bindNodeGraphSceneElementEvent("nodeSceneToggleIo", "click", toggleNodeGraphModuleIoFromContext);
   bindNodeGraphSceneElementEvent("nodeSceneToggleHideUnused", "click", toggleNodeGraphModuleHideUnusedFromContext);
   bindNodeGraphSceneElementEvent("nodeSceneToggleModRail", "click", toggleNodeGraphModuleModRailFromContext);
+  for (const button of document.querySelectorAll("#nodeSceneModuleLayerSection [data-module-restack]")) {
+    button.addEventListener("click", () => restackNodeGraphModuleFromContext(button.dataset.moduleRestack));
+  }
   bindNodeGraphSceneElementEvent("nodeSceneToggleCollapsed", "click", toggleNodeGraphModuleCollapsedFromContext);
   bindNodeGraphSceneElementEvent("nodeSceneToggleTitle", "click", toggleNodeGraphModuleTitleFromContext);
   bindNodeGraphSceneElementEvent("nodeSceneImageLoad", "click", loadNodeGraphImageFromContext);
