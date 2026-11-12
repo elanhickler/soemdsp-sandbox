@@ -265,6 +265,164 @@ function nodeGraphLayoutCanvasWriteRect(nodeId, rect, options = {}) {
   return true;
 }
 
+/** Live pins of the current Canvas, back to front (stable on equal z). */
+function nodeGraphLayoutCanvasStackOrder(patch = nodeGraphMvp?.patch) {
+  const live = nodeGraphLayoutCanvasLiveNodeIds(patch);
+  return nodeGraphLayoutCanvasElements(patch)
+    .filter((el) => el && el.enabled !== false && live.has(String(el.nodeId || "").trim()))
+    .slice()
+    .sort((a, b) => (Number(a.z) || 0) - (Number(b.z) || 0));
+}
+
+/**
+ * Arrange z-order: the one place a Canvas tile's stack index changes (no
+ * raise-on-click). Rewrites the stack as z = 0..n-1 so every step is one layer.
+ * step: "back" | "backward" | "forward" | "front".
+ */
+function nodeGraphLayoutCanvasRestack(nodeId, step, options = {}) {
+  const id = String(nodeId || "").trim();
+  const patch = options.patch || nodeGraphMvp?.patch;
+  if (!id || !patch) {
+    return false;
+  }
+  const order = nodeGraphLayoutCanvasStackOrder(patch);
+  const from = order.findIndex((el) => String(el.nodeId || "") === id);
+  if (from < 0) {
+    return false;
+  }
+  const last = order.length - 1;
+  const to = {
+    back: 0,
+    backward: Math.max(0, from - 1),
+    forward: Math.min(last, from + 1),
+    front: last,
+  }[step];
+  if (!Number.isFinite(to) || to === from) {
+    return false;
+  }
+  const [moved] = order.splice(from, 1);
+  order.splice(to, 0, moved);
+  order.forEach((el, index) => {
+    el.z = index;
+  });
+  if (options.persist !== false && typeof markNodeGraphPatchDirty === "function") {
+    markNodeGraphPatchDirty();
+  }
+  nodeGraphLayoutCanvasReapplyTileRects();
+  nodeGraphLayoutCanvasSyncArrangeBar();
+  return true;
+}
+
+/** Re-place every live tile from its stored rect (position, size, stack). */
+function nodeGraphLayoutCanvasReapplyTileRects() {
+  const stage = document.getElementById("nodeScreenSoloStage");
+  if (!(stage instanceof HTMLElement)) {
+    return;
+  }
+  stage.querySelectorAll(".node-layout-canvas-tile").forEach((tile) => {
+    const el = nodeGraphLayoutCanvasElementForNode(String(tile.dataset.node || ""));
+    nodeGraphLayoutCanvasApplyTileRect(tile, el || {
+      x: tile.dataset.canvasX,
+      y: tile.dataset.canvasY,
+      w: tile.dataset.canvasW,
+      h: tile.dataset.canvasH,
+    }, stage);
+  });
+}
+
+/** The tile the Arrange bar acts on: the most recently selected module with a tile. */
+function nodeGraphLayoutCanvasArrangeTargetId() {
+  const stage = document.getElementById("nodeScreenSoloStage");
+  if (!(stage instanceof HTMLElement)) {
+    return "";
+  }
+  const tiles = new Set(Array.from(stage.querySelectorAll(".node-layout-canvas-tile"))
+    .map((tile) => String(tile.dataset.node || "")));
+  const ids = nodeGraphLayoutCanvasSelectionIds().filter((id) => tiles.has(id));
+  return ids.length ? ids[ids.length - 1] : "";
+}
+
+const NODE_GRAPH_LAYOUT_CANVAS_RESTACK_STEPS = Object.freeze([
+  ["back", "To back"],
+  ["backward", "Back one"],
+  ["forward", "Forward one"],
+  ["front", "To front"],
+]);
+
+function nodeGraphLayoutCanvasEnsureArrangeBar() {
+  let bar = document.getElementById("nodeLayoutCanvasArrangeBar");
+  if (bar) {
+    return bar;
+  }
+  bar = document.createElement("div");
+  bar.id = "nodeLayoutCanvasArrangeBar";
+  bar.className = "node-layout-canvas-arrange-bar";
+  bar.setAttribute("role", "toolbar");
+  bar.setAttribute("aria-label", "Canvas layer order");
+  const label = document.createElement("span");
+  label.className = "node-layout-canvas-arrange-label";
+  bar.append(label);
+  for (const [step, text] of NODE_GRAPH_LAYOUT_CANVAS_RESTACK_STEPS) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.dataset.restack = step;
+    button.textContent = text;
+    bar.append(button);
+  }
+  bar.addEventListener("click", (event) => {
+    const step = event.target?.closest?.("button[data-restack]")?.dataset?.restack;
+    if (step && !nodeGraphLayoutCanvasRestack(nodeGraphLayoutCanvasArrangeTargetId(), step)) {
+      nodeGraphLayoutCanvasSyncArrangeBar();
+    }
+  });
+  bar.addEventListener("contextmenu", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+  });
+  document.body.append(bar);
+  return bar;
+}
+
+/** Arrange bar label / buttons and the target tile's frame follow the selection. */
+function nodeGraphLayoutCanvasSyncArrangeBar() {
+  const stage = document.getElementById("nodeScreenSoloStage");
+  const editing = nodeGraphLayoutCanvasMode() === "edit"
+    && Boolean(stage?.querySelector(".node-layout-canvas-tile"));
+  const existing = document.getElementById("nodeLayoutCanvasArrangeBar");
+  if (!editing) {
+    if (existing) existing.hidden = true;
+    stage?.querySelectorAll(".node-layout-canvas-tile.is-arrange-target")
+      .forEach((tile) => tile.classList.remove("is-arrange-target"));
+    return;
+  }
+  const bar = existing || nodeGraphLayoutCanvasEnsureArrangeBar();
+  bar.hidden = false;
+  const id = nodeGraphLayoutCanvasArrangeTargetId();
+  stage.querySelectorAll(".node-layout-canvas-tile").forEach((tile) => {
+    tile.classList.toggle("is-arrange-target", Boolean(id) && String(tile.dataset.node || "") === id);
+  });
+  const order = nodeGraphLayoutCanvasStackOrder();
+  const index = order.findIndex((el) => String(el.nodeId || "") === id);
+  const node = id && typeof nodeGraphPatchNode === "function" ? nodeGraphPatchNode(id) : null;
+  const name = node && typeof nodeGraphTraceDisplaySettingsTargetLabel === "function"
+    ? nodeGraphTraceDisplaySettingsTargetLabel(node)
+    : (node?.type || "");
+  const label = bar.querySelector(".node-layout-canvas-arrange-label");
+  if (label) {
+    label.textContent = index >= 0
+      ? `${name ? `${name}: ` : ""}layer ${index + 1} of ${order.length}`
+      : "Tap a display to order it";
+  }
+  bar.querySelectorAll("button[data-restack]").forEach((button) => {
+    const step = button.dataset.restack;
+    const atBack = index <= 0;
+    const atFront = index < 0 || index >= order.length - 1;
+    button.disabled = index < 0
+      || ((step === "back" || step === "backward") && atBack)
+      || ((step === "front" || step === "forward") && atFront);
+  });
+}
+
 /** @returns {"off"|"perform"|"edit"} */
 function nodeGraphLayoutCanvasMode() {
   const mode = String(nodeGraphMvp?.layoutCanvasMode || "").trim();
@@ -458,6 +616,7 @@ function beginNodeGraphLayoutCanvasStage(nodeIds, mode = "perform") {
     nodeGraphLayoutCanvasApplyTileRect(item.tile, item.rect, stage);
     if (typeof nodeGraphScreenSoloWholeModuleFit === "function") nodeGraphScreenSoloWholeModuleFit(item.tile);
   }
+  nodeGraphLayoutCanvasSyncArrangeBar();
 
   const relayoutKeyboardFaces = () => {
     for (const item of items) {
@@ -595,7 +754,7 @@ function nodeGraphLayoutCanvasAnnounceMode(next, n, options = {}) {
     stage.setAttribute(
       "aria-label",
       next === "edit"
-        ? "Canvas arrange. Drag tiles to move, corners to resize. F exits arrange, F again exits."
+        ? "Canvas arrange. Drag tiles to move, corners to resize, right-click for Display Settings. F exits arrange, F again exits."
         : "Canvas. F enters arrange mode, F again exits.",
     );
   }
@@ -603,7 +762,7 @@ function nodeGraphLayoutCanvasAnnounceMode(next, n, options = {}) {
     const scope = nodeGraphLayoutCanvasActiveScopeId() ? "metamodule" : "root";
     setNodeInteractionHelp(
       next === "edit"
-        ? `Canvas arrange (${scope}): move/resize ${n} display${n === 1 ? "" : "s"}. F exits arrange.`
+        ? `Canvas arrange (${scope}): move/resize ${n} display${n === 1 ? "" : "s"}, right-click for Display Settings, bottom bar sets layer order. F exits arrange.`
         : `Canvas (${scope}): ${n} display${n === 1 ? "" : "s"}. F = arrange layout.`,
     );
   }
@@ -632,6 +791,7 @@ function nodeGraphLayoutCanvasSwitchModeInPlace(next) {
   stage.classList.toggle("node-layout-canvas-edit", next === "edit");
   nodeGraphMvp.layoutCanvasMode = next;
   nodeGraphMvp.layoutCanvasActive = true;
+  nodeGraphLayoutCanvasSyncArrangeBar();
   return ids.length;
 }
 
@@ -671,6 +831,7 @@ function nodeGraphLayoutCanvasClose(options = {}) {
     stage.style.removeProperty("display");
   }
   document.body.classList.remove("node-layout-canvas-active", "node-layout-canvas-edit");
+  nodeGraphLayoutCanvasSyncArrangeBar();
   if (typeof endNodeGraphScreenSolo === "function"
     && typeof nodeGraphScreenSoloIsActive === "function"
     && nodeGraphScreenSoloIsActive()) {
@@ -854,12 +1015,18 @@ function nodeGraphLayoutCanvasBindTileInteractions(stage) {
     event.preventDefault();
     event.stopPropagation();
     const nodeId = String(tile.dataset.node || "");
+    // Pressing a tile makes it the Arrange target (selection); it never restacks.
+    if (event.button === 0 && typeof ensureNodeGraphModuleSelectedForContext === "function") {
+      ensureNodeGraphModuleSelectedForContext(nodeId, event);
+      nodeGraphLayoutCanvasSyncArrangeBar();
+    }
+    // Stack index comes from the stored pin, not the tile's CSS z-index.
     const origin = nodeGraphLayoutCanvasNormalizeRect({
       x: tile.dataset.canvasX,
       y: tile.dataset.canvasY,
       w: tile.dataset.canvasW,
       h: tile.dataset.canvasH,
-      z: tile.style.zIndex,
+      z: nodeGraphLayoutCanvasElementForNode(nodeId)?.z,
     });
     drag = {
       tile,
@@ -876,6 +1043,27 @@ function nodeGraphLayoutCanvasBindTileInteractions(stage) {
     window.addEventListener("pointerup", onUp);
     window.addEventListener("pointercancel", onUp);
   });
+
+  // Arrange: right-click a tile opens that display's Display Settings. Capture
+  // phase so the tile frame (which covers the face while arranging) does not
+  // fall through to the scene menu. Canvas (perform) right-click is unchanged.
+  stage.addEventListener("contextmenu", (event) => {
+    if (nodeGraphLayoutCanvasMode() !== "edit" || document.body.classList.contains("node-perform-mode")) {
+      return;
+    }
+    const nodeId = String(event.target?.closest?.(".node-layout-canvas-tile")?.dataset?.node || "").trim();
+    if (!nodeId || typeof openNodeGraphTraceDisplaySettings !== "function") {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    event.stopImmediatePropagation?.();
+    if (typeof ensureNodeGraphModuleSelectedForContext === "function") {
+      ensureNodeGraphModuleSelectedForContext(nodeId, event);
+    }
+    nodeGraphLayoutCanvasSyncArrangeBar();
+    openNodeGraphTraceDisplaySettings(nodeId, event);
+  }, true);
 
   window.addEventListener("resize", () => {
     // Defer: F11 browser fullscreen often only fires resize (no fullscreenchange).
@@ -899,21 +1087,10 @@ function nodeGraphLayoutCanvasHandleViewportChange(options = {}) {
       nodeGraphLayoutCanvasRefreshOpenStage();
       return;
     }
-    const stage = document.getElementById("nodeScreenSoloStage");
-    if (!(stage instanceof HTMLElement)) {
+    if (!(document.getElementById("nodeScreenSoloStage") instanceof HTMLElement)) {
       return;
     }
-    const tiles = stage.querySelectorAll(".node-layout-canvas-tile");
-    tiles.forEach((tile) => {
-      const nodeId = String(tile.dataset.node || "");
-      const el = nodeGraphLayoutCanvasElementForNode(nodeId);
-      nodeGraphLayoutCanvasApplyTileRect(tile, el || {
-        x: tile.dataset.canvasX,
-        y: tile.dataset.canvasY,
-        w: tile.dataset.canvasW,
-        h: tile.dataset.canvasH,
-      }, stage);
-    });
+    nodeGraphLayoutCanvasReapplyTileRects();
     if (typeof nodeGraphScreenSoloRefreshPaint === "function") {
       nodeGraphScreenSoloRefreshPaint();
     }

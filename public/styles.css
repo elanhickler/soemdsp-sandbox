@@ -13119,6 +13119,70 @@ body.node-layout-canvas-active .node-layout-canvas-stage.node-layout-canvas-edit
   opacity: 0.95;
 }
 
+/* Canvas Arrange: the tile the layer bar acts on. */
+.node-layout-canvas-stage.node-layout-canvas-edit .node-layout-canvas-tile.is-arrange-target .node-layout-canvas-frame {
+  border-color: #fff;
+}
+
+/* Canvas Arrange layer bar (node-graph-layout-canvas.js): sets z-order. */
+.node-layout-canvas-arrange-bar {
+  display: none;
+  position: fixed;
+  left: 50%;
+  bottom: 12px;
+  transform: translateX(-50%);
+  z-index: 200060;
+  max-width: calc(100vw - 16px);
+  box-sizing: border-box;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 6px;
+  padding: 6px;
+  background: rgba(0, 0, 0, 0.85);
+  border: 1px solid rgba(0, 208, 255, 0.6);
+  color: #fff;
+  font-family: inherit;
+  font-size: 12px;
+  line-height: 1.2;
+  pointer-events: auto;
+}
+
+body.node-layout-canvas-active.node-layout-canvas-edit .node-layout-canvas-arrange-bar {
+  display: flex;
+}
+
+.node-layout-canvas-arrange-bar[hidden],
+body.node-perform-mode .node-layout-canvas-arrange-bar,
+html.soemdsp-whole-module .node-layout-canvas-arrange-bar {
+  display: none !important;
+}
+
+.node-layout-canvas-arrange-label {
+  padding: 0 6px;
+  white-space: nowrap;
+}
+
+.node-layout-canvas-arrange-bar button {
+  min-height: 32px;
+  padding: 0 10px;
+  background: #111;
+  color: #fff;
+  border: 1px solid rgba(0, 208, 255, 0.85);
+  font: inherit;
+  cursor: pointer;
+}
+
+.node-layout-canvas-arrange-bar button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+/* Display Settings stays above the Canvas stage (Arrange right-click opens it there). */
+body.node-layout-canvas-active #nodeTraceDisplaySettingsPopover:not([hidden]) {
+  z-index: 200080 !important;
+}
+
 .node-screen-solo-stage[hidden] {
   display: none !important;
 }

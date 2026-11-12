@@ -109,6 +109,14 @@ These belong with Arrange / Performance layering controls. Recorded here so the 
 
 Until the toolbar exists, Arrange z-order remains `patch.nodes` order.
 
+**Landed 2026-11-12 (Canvas Arrange, first slice):**
+- Right-click a tile in Canvas Arrange opens Display Settings for that display (`openNodeGraphTraceDisplaySettings`, the existing panel) and makes it the selected module. Capture-phase `contextmenu` on the stage, Arrange only, not on the perform page; Canvas (perform) right-click is unchanged. While the Canvas is open, Display Settings sits above the stage (`z-index: 200080`), so it can be tweaked while arranging.
+- Layer bar at the bottom of Canvas Arrange: To back / Back one / Forward one / To front, with "<display>: layer i of n". It acts on the most recently selected module that has a tile; pressing a tile selects it (no raise-on-click, a press or drag never restacks). `nodeGraphLayoutCanvasRestack` is the one writer: it rewrites the Canvas pin `z` as 0..n-1 (saved with the patch); tiles and Mini Canvas already order by that `z`.
+- Fixed: a tile drag used to write its CSS z-index (100 + z) back as `z`, quietly raising the dragged tile.
+- Smoke: `scripts/smoke_canvas_arrange_layers.mjs`.
+
+Still to do from this section: blend modes on the same list; workspace (circuit builder) module z-order (still `patch.nodes`); right-click in the workspace Arrange view if that is wanted beyond the Canvas.
+
 ## 5. Stages
 
 **Decided (Argi, 2026-11-11, America/Phoenix):** do the **entire** layering overhaul (all stages), not only a gated first step. Switches can still be used while landing work, but the goal is the full overhaul.
