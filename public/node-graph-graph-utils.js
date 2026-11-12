@@ -1435,7 +1435,11 @@ function renderNodeGraphGraphDisplay(element, graphValue, selectedIndex = null, 
     setNodeGraphGraphSelectedNodeIndex(nodeId, graph, selectedIndex);
   }
   const baseOptions = nodeGraphGraphBaseSegmentOptions(segmentOptions);
-  element.replaceChildren();
+  // The face canvas (the picture, node-graph-graph-face-gl.js) survives the
+  // rebuild so its face texture and published display rect stay put.
+  const faceCanvas = typeof nodeGraphGraphFaceGlCanvas === "function" ? nodeGraphGraphFaceGlCanvas(element) : null;
+  if (faceCanvas) element.replaceChildren(faceCanvas);
+  else element.replaceChildren();
   const svg = createNodeGraphGraphSvgElement("svg", {
     "aria-hidden": "true",
     class: "node-module-graph-svg node-module-graph-hit-layer",
@@ -1445,7 +1449,8 @@ function renderNodeGraphGraphDisplay(element, graphValue, selectedIndex = null, 
   const plot = nodeGraphGraphPlotViewBox(element);
   const cursor = nodeGraphGraphPointToSvg(graph.cursorX, 0);
   // Hit layer only. Visible ink (curve, ghost, points, handles, playhead,
-  // grid, dotted control polygon) is drawn in WebGL by node-graph-gl-graph.js.
+  // grid, dotted control polygon) is the face canvas, drawn in WebGL by
+  // node-graph-graph-face-gl.js.
   svg.append(createNodeGraphGraphSvgElement("line", {
     class: "node-module-graph-cursor-hit",
     "data-graph-cursor": "true",

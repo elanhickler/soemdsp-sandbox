@@ -420,6 +420,8 @@ renderNodeGraphGraphDisplay = function renderNodeGraphGraphDisplay(element, grap
   if (typeof syncNodeGraphGraphPointStrip === "function") {
     syncNodeGraphGraphPointStrip(element, ownerNode, selectedIndex);
   }
+  // Repaint the face picture now (drag frames show the in-flight graph).
+  if (typeof nodeGraphGraphFaceGlPaintNow === "function") nodeGraphGraphFaceGlPaintNow(element);
 }
 
 function nodeGraphGraphPointStripFieldsForType(type) {
