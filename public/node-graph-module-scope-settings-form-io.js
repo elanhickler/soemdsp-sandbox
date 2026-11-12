@@ -409,7 +409,7 @@ function nodeGraphDisplaySettingsDefaultsForFormType(type = nodeGraphTraceDispla
     if (type === "graphFace") {
     return typeof normalizeNodeGraphGraphFaceDisplaySettings === "function"
       ? normalizeNodeGraphGraphFaceDisplaySettings()
-      : { zoomMin: 0, zoomMax: 1 };
+      : { zoomMin: -1, zoomMax: 1 };
   }
   if (type === "phaserFace") {
     return typeof normalizeNodeGraphPhaserFaceDisplaySettings === "function"
@@ -729,7 +729,7 @@ function normalizeNodeGraphDisplaySettingsForFormType(settings, type = nodeGraph
     if (type === "graphFace") {
     return typeof normalizeNodeGraphGraphFaceDisplaySettings === "function"
       ? normalizeNodeGraphGraphFaceDisplaySettings(settings)
-      : { zoomMin: 0, zoomMax: 1 };
+      : { zoomMin: -1, zoomMax: 1 };
   }
   if (type === "phaserFace") {
     return typeof normalizeNodeGraphPhaserFaceDisplaySettings === "function"
@@ -977,7 +977,7 @@ function nodeGraphTraceDisplayCurrentSettingsForFormType(formType = nodeGraphTra
   if (settingsSchema === "graphFace") {
     return typeof normalizeNodeGraphGraphFaceDisplaySettings === "function"
       ? normalizeNodeGraphGraphFaceDisplaySettings(node?.traceDisplaySettings)
-      : { zoomMin: 0, zoomMax: 1 };
+      : { zoomMin: -1, zoomMax: 1 };
   }
   if (settingsSchema === "phaserFace") {
     return typeof normalizeNodeGraphPhaserFaceDisplaySettings === "function"

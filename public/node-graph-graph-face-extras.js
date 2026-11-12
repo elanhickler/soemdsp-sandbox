@@ -1,8 +1,10 @@
 // Graph face extras: display-only Zoom Min/Max + bottom point strip.
 // Loads after node-graph-graph-utils.js. Code stays Graph->Code one-way.
 
+// Curve Y is -1..+1 (see nodeGraphGraphValueMin/Max). Default Zoom shows that
+// full range so the visual bottom is -1 (min), mid is 0, and the top is +1.
 const nodeGraphGraphFaceDisplaySettingsDefaults = Object.freeze({
-  zoomMin: 0,
+  zoomMin: -1,
   zoomMax: 1,
 });
 
@@ -123,12 +125,15 @@ nodeGraphGraphSvgToGraphPoint = function nodeGraphGraphSvgToGraphPoint(svg, clie
   const span = zoom.zoomMax - zoom.zoomMin;
   const viewX = ((clientX - rect.left) / rect.width) * 100;
   const viewY = ((clientY - rect.top) / rect.height) * 100;
-  const yUnit = (92 - viewY) / 84;
+  // Clamp to the inner 84×84 plot (not the 8-unit pad, and not past the
+  // visible zoom window). Otherwise Y=-1 sits below a 0..1 zoomed face.
+  const yUnit = Math.max(0, Math.min(1, (92 - viewY) / 84));
+  const y = zoom.zoomMin + yUnit * span;
   return {
     x: normalizeNodeGraphGraphNumber((viewX - 8) / 84),
     y: typeof nodeGraphGraphClampValue === "function"
-      ? nodeGraphGraphClampValue(zoom.zoomMin + yUnit * span, 0)
-      : normalizeNodeGraphGraphNumber(zoom.zoomMin + yUnit * span, 0, -1, 1),
+      ? nodeGraphGraphClampValue(y, 0)
+      : normalizeNodeGraphGraphNumber(y, 0, -1, 1),
   };
 }
 

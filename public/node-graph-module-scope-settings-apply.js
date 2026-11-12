@@ -273,7 +273,7 @@ function assignNodeGraphTypedDisplaySettingsToNode(node, displayType, settings) 
   if (displayType === "graphFace") {
     node.traceDisplaySettings = typeof normalizeNodeGraphGraphFaceDisplaySettings === "function"
       ? normalizeNodeGraphGraphFaceDisplaySettings(settings)
-      : { zoomMin: 0, zoomMax: 1 };
+      : { zoomMin: -1, zoomMax: 1 };
     if (typeof syncNodeGraphGraphDisplaysForNode === "function") {
       syncNodeGraphGraphDisplaysForNode(node.id, node);
     }

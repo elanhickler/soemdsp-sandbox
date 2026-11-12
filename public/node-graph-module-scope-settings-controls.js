@@ -658,7 +658,7 @@ const nodeGraphTraceDisplaySharedValueClamps = Object.freeze({
   zoomSeconds: nodeGraphTraceDisplayClampHistorySeconds,
   zoomMin: (value) => {
     const n = Number(value);
-    return Number.isFinite(n) ? clampNodeSliderValue(n, -1, 2) : 0;
+    return Number.isFinite(n) ? clampNodeSliderValue(n, -1, 2) : -1;
   },
   zoomMax: (value) => {
     const n = Number(value);
@@ -666,7 +666,7 @@ const nodeGraphTraceDisplaySharedValueClamps = Object.freeze({
   },
   zoomMin: (value) => {
     const n = Number(value);
-    return Number.isFinite(n) ? clampNodeSliderValue(n, -1, 2) : 0;
+    return Number.isFinite(n) ? clampNodeSliderValue(n, -1, 2) : -1;
   },
   zoomMax: (value) => {
     const n = Number(value);
