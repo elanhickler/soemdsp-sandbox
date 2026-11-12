@@ -4538,12 +4538,14 @@ body.keyboard-debug-hidden .node-keyboard-signal-bar {
 
 /* Build stamp — selectable text, stacked lines. */
 .node-build-number-readout {
-  flex: 1.15 1 0;
+  /* Size to the three-line stamp; never shrink under the patch title cluster. */
+  flex: 0 0 auto;
   flex-direction: column;
   gap: 0;
-  padding: 0 2px !important;
-  min-width: 0;
-  overflow: hidden;
+  padding: 0 0.35rem !important;
+  width: max-content;
+  min-width: max-content;
+  overflow: visible;
   background: rgba(7, 11, 14, 0.94);
   color: color-mix(in srgb, var(--accent) 98%, transparent);
   font-family: var(--node-toolbar-mono);
@@ -4563,8 +4565,8 @@ body.keyboard-debug-hidden .node-keyboard-signal-bar {
 
 .node-build-number-readout span {
   display: block;
-  max-width: 100%;
-  overflow: hidden;
+  max-width: none;
+  overflow: visible;
   text-overflow: clip;
   line-height: 1.05;
   white-space: nowrap;
@@ -16115,10 +16117,9 @@ body.node-screen-solo-active .node-screen-solo-face.node-text-box-body > .node-t
 
 .node-header-patch-title {
   box-sizing: border-box;
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-box-pack: center;
-  -webkit-line-clamp: 3;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   min-width: 0;
   height: 100%;
   margin: 0;
@@ -16128,10 +16129,10 @@ body.node-screen-solo-active .node-screen-solo-face.node-text-box-body > .node-t
   background: rgba(2, 4, 7, 0.92);
   color: rgba(243, 251, 251, 0.94);
   font-family: var(--node-header-title-font-family, "Cascadia Mono", "Cascadia Code", Consolas, "Courier New", monospace);
-  font-size: clamp(0.72rem, calc(var(--node-toolbar-row-height) * 0.29), 0.95rem);
+  font-size: clamp(0.9rem, calc(var(--node-toolbar-row-height) * 0.4), 1.3rem);
   font-weight: 700;
   letter-spacing: 0.01em;
-  line-height: 1.1;
+  line-height: 1.15;
   text-align: center;
   text-transform: none;
   overflow: hidden;
@@ -16260,9 +16261,9 @@ body.node-screen-solo-active .node-screen-solo-face.node-text-box-body > .node-t
 
 .node-patch-timing-controls {
   display: inline-flex;
-  flex: 10 1 46%;
+  flex: 10 1 0;
   align-items: stretch;
-  min-width: min(620px, 100%);
+  min-width: 0; /* yield width to the version stamp; title track is the flexible column */
   min-height: 0;
   padding: 0;
 }
