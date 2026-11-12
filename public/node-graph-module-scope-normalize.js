@@ -1027,6 +1027,18 @@ function normalizeNodeGraphWaterfallSettings(settings = {}) {
       0,
       8,
     ),
+    framePadding: normalizeNodeGraphTraceDisplayNumber(
+      source.framePadding,
+      defaults.framePadding ?? 6,
+      0,
+      64,
+    ),
+    fadeAmount: normalizeNodeGraphTraceDisplayNumber(
+      source.fadeAmount,
+      defaults.fadeAmount ?? 4,
+      0,
+      64,
+    ),
     pauseOnSilence: (() => {
       const raw = source.pauseOnSilence;
       if (raw === true || raw === 1 || raw === "1" || raw === "true") return true;

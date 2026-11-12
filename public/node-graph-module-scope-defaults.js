@@ -175,6 +175,11 @@ const nodeGraphWaterfallSettingsDefaults = Object.freeze({
   // Line blur (as 1D Plot): Expo skirt on the stroke, CSS px 0..8. 0 = the
   // plain 1px edge, so older patches look the same.
   lineSmoothing: 0,
+  // Authored CSS px at a 96px face; paint uses faceInkPx / faceMinSide.
+  // Padding is the solid left/right plate margin. Fade is the left history
+  // mask width (default 4, milder than the old hardcoded 8).
+  framePadding: 6,
+  fadeAmount: 4,
   // Off: keep scrolling. On: silence (linear amp at or below Planck) holds the plate.
   pauseOnSilence: false,
   // 1D Onset only. Off: the sweep wraps and keeps drawing. On: it holds at the

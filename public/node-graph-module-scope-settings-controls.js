@@ -955,6 +955,8 @@ const nodeGraphTraceDisplayFormTypeValueClampOverrides = Object.freeze({
     strokeThickness: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, 1), 0.25, 16),
     lineSmoothing: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, 0), 0, 8),
     scale: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, 1), 0.01, 100),
+    framePadding: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, 6), 0, 64),
+    fadeAmount: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, 4), 0, 64),
   }),
   waterfallRgb: Object.freeze({
     dot1Size: nodeGraphTraceDisplayClampInkPx,
@@ -965,6 +967,8 @@ const nodeGraphTraceDisplayFormTypeValueClampOverrides = Object.freeze({
     strokeThickness: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, 1), 0.25, 16),
     lineSmoothing: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, 0), 0, 8),
     scale: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, 1), 0.01, 100),
+    framePadding: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, 6), 0, 64),
+    fadeAmount: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, 4), 0, 64),
   }),
   waterfallXyz: Object.freeze({
     dot1Size: nodeGraphTraceDisplayClampInkPx,
@@ -975,6 +979,8 @@ const nodeGraphTraceDisplayFormTypeValueClampOverrides = Object.freeze({
     strokeThickness: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, 1), 0.25, 16),
     lineSmoothing: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, 0), 0, 8),
     scale: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, 1), 0.01, 100),
+    framePadding: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, 6), 0, 64),
+    fadeAmount: (value) => clampNodeSliderValue(nodeGraphFiniteNumber(value, 4), 0, 64),
   }),
   value: Object.freeze({
     dot1Size: nodeGraphTraceDisplayClampInkPx,

@@ -1194,39 +1194,111 @@ function nodeGraphWaterfallSkipDiscontinuities(settings) {
 // screen, so it works at any amplitude the waterfall scales up.
 const NODE_GRAPH_WATERFALL_JUMP_FACE_SHARE = 0.125;
 
-// Waterfall frame: the ONE source of truth for display padding (CSS px; x
-// devicePixelRatio x Performance-view ink scale at draw time). Every
-// waterfall face uses these.
+// Waterfall frame defaults (authored CSS px at FACE_INK_REF_PX = 96).
+// User settings framePadding / fadeAmount override pad and fade; both scale
+// with faceInkPx(minSide) on the layout CSS box (plate, or the canvas tile
+// in canvas view). Never canvas.width/dpr or getBoundingClientRect.
 //   minPadY   top / bottom inset, at least half the line width + 1 px, so a
 //             full-scale line never clips
 //   padRight  the "now" edge: new columns are stamped this far in, so a line's
 //             round end shows as a pen head (fill mode: a clean flat edge)
 //   padLeft   where history leaves: a plate margin ...
 //   fadeLeft  ... and a fade over this width before it (mask at present time)
-const NODE_GRAPH_WATERFALL_FRAME = Object.freeze({ minPadY: 4, padRight: 6, padLeft: 6, fadeLeft: 8 });
+// fadeLeft default 4 (was 8): the old dpr * inkScale path, plus a 20% of
+// canvas.width cap, made the left fade blow up on canvas tiles.
+const NODE_GRAPH_WATERFALL_FRAME = Object.freeze({ minPadY: 4, padRight: 6, padLeft: 6, fadeLeft: 4 });
 
-/** Device px per frame CSS px for a waterfall canvas (dpr x tile ink scale). */
+/** Layout CSS box for waterfall ink: the face host, or the canvas tile in canvas view. */
+function nodeGraphWaterfallFaceCssBox(canvas) {
+  if (!canvas) return { cssW: 0, cssH: 0 };
+  const ownW = Number(canvas.cssW || canvas.cssWidth);
+  const ownH = Number(canvas.cssH || canvas.cssHeight);
+  if (ownW > 0 && ownH > 0) return { cssW: ownW, cssH: ownH };
+  const closest = typeof canvas.closest === "function" ? canvas.closest.bind(canvas) : null;
+  const tile = closest ? closest(".node-layout-canvas-tile") : null;
+  const host = closest
+    ? (closest(".node-screen-solo-face, .node-module-face, .gl-face-host") || canvas)
+    : canvas;
+  const readCached = (el) => {
+    if (!el) return null;
+    if (typeof ensureFaceMetrics === "function") {
+      const m = ensureFaceMetrics(el, { observe: false });
+      const cw = Number(m?.cssW || m?.cssWidth || 0);
+      const ch = Number(m?.cssH || m?.cssHeight || 0);
+      if (cw > 0 && ch > 0) return { cssW: cw, cssH: ch };
+    }
+    const aw = Number(el._awakeClientWidth);
+    const ah = Number(el._awakeClientHeight);
+    if (aw > 0 && ah > 0) return { cssW: aw, cssH: ah };
+    return null;
+  };
+  const fromHost = readCached(host) || (tile && host !== tile ? readCached(tile) : null);
+  if (fromHost) return fromHost;
+  if (typeof nodeGraphModuleFaceLayoutCssSize === "function") {
+    const layout = nodeGraphModuleFaceLayoutCssSize(canvas);
+    if (layout?.w > 0 && layout?.h > 0) return { cssW: layout.w, cssH: layout.h };
+  }
+  return { cssW: 0, cssH: 0 };
+}
+
+function nodeGraphWaterfallFrameSettings(canvas) {
+  const id = String(
+    canvas?.dataset?.node
+    || (typeof canvas?.closest === "function" && canvas.closest("[data-node]")?.dataset?.node)
+    || "",
+  ).trim();
+  const node = id && typeof nodeGraphPatchNode === "function" ? nodeGraphPatchNode(id) : null;
+  if (typeof nodeGraphTraceDisplaySettingsForNode === "function" && node) {
+    return nodeGraphTraceDisplaySettingsForNode(node);
+  }
+  return node?.traceDisplaySettings || null;
+}
+
+function nodeGraphWaterfallFrameAuthored(settings) {
+  const f = NODE_GRAPH_WATERFALL_FRAME;
+  const padN = Number(settings?.framePadding);
+  const fadeN = Number(settings?.fadeAmount);
+  const pad = Number.isFinite(padN) ? Math.max(0, padN) : f.padLeft;
+  const fade = Number.isFinite(fadeN) ? Math.max(0, fadeN) : f.fadeLeft;
+  return { minPadY: f.minPadY, padRight: pad, padLeft: pad, fadeLeft: fade };
+}
+
+/** Backing px per layout CSS px of the face / tile box (not clientWidth dpr). */
 function nodeGraphWaterfallFrameScale(canvas) {
-  const dpr = Math.max(1, (canvas?.width || 1) / Math.max(1, canvas?.clientWidth || canvas?.width || 1));
-  const ink = typeof nodeGraphGlLinesInkScale === "function" ? nodeGraphGlLinesInkScale(canvas) : 1;
-  return dpr * ink;
+  const box = nodeGraphWaterfallFaceCssBox(canvas);
+  if (!(box.cssW > 0) || !(Number(canvas?.width) > 0)) return 1;
+  return Number(canvas.width) / box.cssW;
 }
 
 /** Frame padding in history (device) px, rounded to whole columns. */
-function nodeGraphWaterfallFramePx(canvas) {
-  const k = nodeGraphWaterfallFrameScale(canvas);
-  const f = NODE_GRAPH_WATERFALL_FRAME;
+function nodeGraphWaterfallFramePx(canvas, settings) {
+  const authored = nodeGraphWaterfallFrameAuthored(settings || nodeGraphWaterfallFrameSettings(canvas));
+  const box = nodeGraphWaterfallFaceCssBox(canvas);
+  const ref = (typeof FACE_INK_REF_PX === "number" && FACE_INK_REF_PX > 0) ? FACE_INK_REF_PX : 96;
+  const minSide = typeof faceMinSide === "function"
+    ? faceMinSide(box.cssW, box.cssH)
+    : Math.min(Number(box.cssW) || 0, Number(box.cssH) || 0);
+  const side = minSide > 0 ? minSide : ref;
+  const ink = (px) => (typeof faceInkPx === "function"
+    ? faceInkPx(px, side)
+    : Math.max(0, Number(px) || 0) * (side / ref));
+  const sx = nodeGraphWaterfallFrameScale(canvas);
+  const toDevice = (px) => Math.max(0, Math.round(ink(px) * sx));
+  let padLeft = toDevice(authored.padLeft);
+  let padRight = toDevice(authored.padRight);
+  let fadeLeft = toDevice(authored.fadeLeft);
+  const minPadY = ink(authored.minPadY) * sx;
   const W = Math.max(1, Number(canvas?.width) || 1);
-  const cap = (v) => Math.max(0, Math.min(Math.floor(W * 0.2), Math.round(v * k)));
-  return { minPadY: f.minPadY * k, padRight: cap(f.padRight), padLeft: cap(f.padLeft), fadeLeft: cap(f.fadeLeft) };
+  const used = padLeft + padRight + fadeLeft;
+  if (used > W - 1 && used > 0) {
+    const s = (W - 1) / used;
+    padLeft = Math.max(0, Math.floor(padLeft * s));
+    padRight = Math.max(0, Math.floor(padRight * s));
+    fadeLeft = Math.max(0, (W - 1) - padLeft - padRight);
+  }
+  return { minPadY, padRight, padLeft, fadeLeft };
 }
 
-/**
- * Stroke = draw the waveform. Raw samples of one column in time order:
- * the two peaks (whichever came first first) then the column's last sample.
- * Absolute polarity folds a sign change through 0 between the peaks.
- * Both peaks are kept, so the line covers the top AND bottom of the signal.
- */
 function nodeGraphWaterfallWaveRaw(acc, settings = null, breakJump = false) {
   if (!acc?.has) return [];
   const minFirst = !(Number(acc.maxAt) < Number(acc.minAt));

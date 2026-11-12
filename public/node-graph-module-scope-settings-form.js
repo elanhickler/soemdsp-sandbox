@@ -1707,6 +1707,8 @@ function buildNodeGraphInstantTraceDisplaySettingsBodyHtml(type, node, allowKey)
     "zoomSeconds",
     "strokeThickness",
     "lineSmoothing",
+    "framePadding",
+    "fadeAmount",
     "timeMs",
     "backgroundBrightness",
     "backgroundHue",
@@ -1789,6 +1791,14 @@ function buildNodeGraphInstantTraceDisplaySettingsBodyHtml(type, node, allowKey)
     rows.push(`<div class="node-trace-display-pair-grid">${strokeKeys.map((key) => nodeGraphDisplaySettingsBuildStepperRowHtml(key, type)).join("")}</div>`);
   } else if (strokeKeys.length) {
     rows.push(nodeGraphDisplaySettingsBuildStepperRowHtml(strokeKeys[0], type));
+  }
+  const frameKeys = isInstantWaterfall
+    ? ["framePadding", "fadeAmount"].filter((key) => orderedPrimary.includes(key))
+    : [];
+  if (frameKeys.length > 1) {
+    rows.push(`<div class="node-trace-display-pair-grid">${frameKeys.map((key) => nodeGraphDisplaySettingsBuildStepperRowHtml(key, type)).join("")}</div>`);
+  } else if (frameKeys.length) {
+    rows.push(nodeGraphDisplaySettingsBuildStepperRowHtml(frameKeys[0], type));
   }
   if (isInstantWaterfall && toggleKeys.includes("pauseOnSilence")) {
     rows.push(nodeGraphDisplaySettingsBuildToggleRowHtml("pauseOnSilence"));
