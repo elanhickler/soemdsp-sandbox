@@ -202,6 +202,15 @@
       "folder": "demo_patches"
     },
     {
+      "slug": "demo_patches/music visualization",
+      "label": "music visualization",
+      "name": "",
+      "url": "/soemdsp-sandbox/patches/demo_patches/music%20visualization.json",
+      "author": "",
+      "emoji": "",
+      "folder": "demo_patches"
+    },
+    {
       "slug": "demo_patches/ping_vs_pluck",
       "label": "ping_vs_pluck",
       "name": "",
@@ -1009,6 +1018,14 @@
       "label": "motm485",
       "name": "",
       "url": "/soemdsp-sandbox/patches/motm485.json",
+      "author": "",
+      "emoji": ""
+    },
+    {
+      "slug": "music visualization",
+      "label": "music visualization",
+      "name": "",
+      "url": "/soemdsp-sandbox/patches/demo_patches/music%20visualization.json",
       "author": "",
       "emoji": ""
     },

@@ -3,12 +3,13 @@
 const SOEMDSP_TILT_SECTIONS = 8;
 const SOEMDSP_TILT_SMOOTH_S = 0.008;
 const SOEMDSP_TILT_SCAN_S = 0.001;
-const SOEMDSP_TILT_MAX_MAKEUP = 7.943282347242816;
+const SOEMDSP_TILT_MAX_MAKEUP = 15.848931924611133;
 const SOEMDSP_TILT_STYLE_PIVOT = 0;
 const SOEMDSP_TILT_STYLE_KNEE = 1;
 const SOEMDSP_TILT_LEVEL_TILT = 0;
 const SOEMDSP_TILT_LEVEL_CUT = 1;
 const SOEMDSP_TILT_LEVEL_MATCHED = 2;
+const SOEMDSP_TILT_LEVEL_LOUDNESS = 3;
 
 function soemdspTiltCreateChannel() {
   return {
@@ -111,6 +112,70 @@ function soemdspTiltScanSpectrum(st, sr, bandLo, bandHi) {
   return { maxMag, pinkMs: acc / n };
 }
 
+function soemdspTiltBiquadMag(b0, b1, b2, a1, a2, f, sr) {
+  const th = 2 * Math.PI * f / sr;
+  const c = Math.cos(th);
+  const s = Math.sin(th);
+  const c2 = c * c - s * s;
+  const s2 = 2 * c * s;
+  const nre = b0 + b1 * c + b2 * c2;
+  const nim = -b1 * s - b2 * s2;
+  const dre = 1 + a1 * c + a2 * c2;
+  const dim = -a1 * s - a2 * s2;
+  const d2 = dre * dre + dim * dim;
+  return Math.hypot((nre * dre + nim * dim) / d2, (nim * dre - nre * dim) / d2);
+}
+
+// ITU-R BS.1770 K-weighting (high shelf + RLB highpass) at any sample rate.
+// Returns equal-log-bin makeup 1 / rms(W_k * |H_tilt|).
+function soemdspTiltLoudnessMatchedGain(st, sr, bandLo, bandHi) {
+  const n = 48;
+  let f0 = Number(bandLo);
+  if (!(f0 > 0)) f0 = 20;
+  if (f0 < 1) f0 = 1;
+  let f1 = Number(bandHi);
+  if (!(f1 > 0)) f1 = 20000;
+  if (f1 > 0.45 * sr) f1 = 0.45 * sr;
+  if (f1 < f0 * 1.01) f1 = f0 * 1.01;
+  const ln0 = Math.log(f0);
+  const ln1 = Math.log(f1);
+  const fPre = 1681.974450955533;
+  const gPre = 3.999843853973347;
+  const qPre = 0.7071752369554196;
+  const Kpre = soemdspTiltTanWp(fPre, sr);
+  const Vh = Math.pow(10, gPre / 20);
+  const Vb = Math.pow(Vh, 0.4996667741545416);
+  let a0 = 1 + Kpre / qPre + Kpre * Kpre;
+  const preB0 = (Vh + Vb * Kpre / qPre + Kpre * Kpre) / a0;
+  const preB1 = 2 * (Kpre * Kpre - Vh) / a0;
+  const preB2 = (Vh - Vb * Kpre / qPre + Kpre * Kpre) / a0;
+  const preA1 = 2 * (Kpre * Kpre - 1) / a0;
+  const preA2 = (1 - Kpre / qPre + Kpre * Kpre) / a0;
+  const fRlb = 38.13547087602444;
+  const qRlb = 0.5003270373238773;
+  const Krlb = soemdspTiltTanWp(fRlb, sr);
+  a0 = 1 + Krlb / qRlb + Krlb * Krlb;
+  const rlbB0 = 1 / a0;
+  const rlbB1 = -2 / a0;
+  const rlbB2 = 1 / a0;
+  const rlbA1 = 2 * (Krlb * Krlb - 1) / a0;
+  const rlbA2 = (1 - Krlb / qRlb + Krlb * Krlb) / a0;
+  let num = 0;
+  let den = 0;
+  for (let i = 0; i < n; i += 1) {
+    const u = i / (n - 1);
+    const f = Math.exp(ln0 + u * (ln1 - ln0));
+    const m = soemdspTiltCascadeMag(st, f, sr);
+    const w =
+      soemdspTiltBiquadMag(preB0, preB1, preB2, preA1, preA2, f, sr) *
+      soemdspTiltBiquadMag(rlbB0, rlbB1, rlbB2, rlbA1, rlbA2, f, sr);
+    num += w * w;
+    den += (w * m) * (w * m);
+  }
+  if (den <= 1e-12) return 1;
+  return Math.sqrt(num / den);
+}
+
 function soemdspTiltUpdate(st, hz, slopeDbOct, sampleRate, style, levelMode, matchLoHz, matchHiHz) {
   if (!st) st = soemdspTiltCreateState();
   let sr = Number(sampleRate);
@@ -197,19 +262,21 @@ function soemdspTiltUpdate(st, hz, slopeDbOct, sampleRate, style, levelMode, mat
   }
   let mode = Math.round(Number(levelMode) || 0);
   if (mode < 0) mode = 0;
-  if (mode > 2) mode = 2;
+  if (mode > 3) mode = 3;
   let targetGain = 1;
-  if (mode === SOEMDSP_TILT_LEVEL_CUT || mode === SOEMDSP_TILT_LEVEL_MATCHED) {
+  if (mode === SOEMDSP_TILT_LEVEL_CUT || mode === SOEMDSP_TILT_LEVEL_MATCHED || mode === SOEMDSP_TILT_LEVEL_LOUDNESS) {
     let period = Math.round(SOEMDSP_TILT_SCAN_S * sr);
     if (period < 1) period = 1;
     if (first || !(st.scanAge < period)) {
       const scan = soemdspTiltScanSpectrum(st, sr, matchLoHz, matchHiHz);
       if (mode === SOEMDSP_TILT_LEVEL_CUT) {
         if (scan.maxMag > 1e-12) targetGain = 1 / scan.maxMag;
+      } else if (mode === SOEMDSP_TILT_LEVEL_LOUDNESS) {
+        targetGain = soemdspTiltLoudnessMatchedGain(st, sr, matchLoHz, matchHiHz);
       } else if (scan.pinkMs > 1e-12) {
         targetGain = 1 / Math.sqrt(scan.pinkMs);
       }
-      if (mode === SOEMDSP_TILT_LEVEL_MATCHED && targetGain > SOEMDSP_TILT_MAX_MAKEUP) {
+      if ((mode === SOEMDSP_TILT_LEVEL_MATCHED || mode === SOEMDSP_TILT_LEVEL_LOUDNESS) && targetGain > SOEMDSP_TILT_MAX_MAKEUP) {
         targetGain = SOEMDSP_TILT_MAX_MAKEUP;
       }
       st.lastTargetGain = targetGain;
@@ -268,6 +335,7 @@ if (typeof globalThis !== "undefined") {
   globalThis.SOEMDSP_TILT_LEVEL_TILT = SOEMDSP_TILT_LEVEL_TILT;
   globalThis.SOEMDSP_TILT_LEVEL_CUT = SOEMDSP_TILT_LEVEL_CUT;
   globalThis.SOEMDSP_TILT_LEVEL_MATCHED = SOEMDSP_TILT_LEVEL_MATCHED;
+  globalThis.SOEMDSP_TILT_LEVEL_LOUDNESS = SOEMDSP_TILT_LEVEL_LOUDNESS;
   globalThis.SOEMDSP_TILT_MAX_MAKEUP = SOEMDSP_TILT_MAX_MAKEUP;
   globalThis.SOEMDSP_TILT_SMOOTH_S = SOEMDSP_TILT_SMOOTH_S;
 }

@@ -265,15 +265,17 @@ function nodeGraphSampleTapeUpdate(state, options = {}) {
   const slope = nodeGraphSampleTapeClampTilt(options.tilt) * depth;
   const tone = nodeGraphSampleTapeClampTone(options.tone) * depth;
   const tapeKnee = nodeGraphSampleTapeKneeHz({ ...options, tone, sampleRate: engineRate });
-  // Matched makeup over 1 Hz..cutoff (the band that still exists at this speed).
-  // Starting at 20 Hz omitted bass octaves and over-boosted pink loudness.
+  // K-weighted (BS.1770) equal-power makeup over 1 Hz..cutoff (the band
+  // that still exists at this speed). Pink-weighted match left Tape quieter
+  // than Sinc at low speed: bass octaves at gain 1 diluted the makeup while
+  // the tilt carved out the mid/high band that carries loudness.
   soemdspTiltUpdate(
     st.filter,
     tapeKnee.knee,
     slope,
     engineRate,
     SOEMDSP_TILT_STYLE_KNEE,
-    SOEMDSP_TILT_LEVEL_MATCHED,
+    SOEMDSP_TILT_LEVEL_LOUDNESS,
     1,
     tapeKnee.cutoff
   );

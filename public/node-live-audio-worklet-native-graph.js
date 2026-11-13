@@ -5034,6 +5034,14 @@ NodeLiveAudioProcessor.prototype.syncNativeGraphParams = function syncNativeGrap
     } else if (cache[domainKey] == null) {
       cache[domainKey] = ""; // mark warm even when no domain range
     }
+    // Music Player playlistScrub: ensureNativeAudioPlayerInternalSmoothing owns
+    // this Control's glide (Linear 20 ms, definition SSOT). Pushing the patch
+    // meta smoothing here as well flipped the Control to the meta mode on every
+    // write; an Off push snaps the chase to its target, so drag seeks jumped
+    // instead of gliding. Taps snap on purpose via _pendingSnapParams above.
+    if (key === "playlistScrub" && String(node?.type || "") === "audioPlayer") {
+      return;
+    }
     // Discrete enum keys skip Control chase. Shared names like "curve" are
     // continuous on some modules (Blaster Log Curve, AttackDecay γ) — those
     // must still get smooth time/mode/type so quantum targets follow smoothing.

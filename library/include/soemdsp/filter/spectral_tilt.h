@@ -6,11 +6,13 @@
 //   Tilt (0): 0 dB at the pivot. +slope brighter (HF up, LF down).
 //   Cut (1): same shape shifted so the peak is 0 dB (never boosts).
 //   Matched (2): pink-weighted (equal log-f bins) equal-power makeup so
-//     loudness stays roughly constant over a band (default 20 Hz-20 kHz;
-//     Tape passes 20 Hz..playback cutoff). Makeup is capped at +18 dB.
+//     power stays roughly constant over a band (default 20 Hz-20 kHz).
+//   Loudness (3): same equal-power idea, but ITU-R BS.1770 K-weighted
+//     (Tape). Mid/high loss is made up so slowed Tape stays as loud as Sinc.
+//     Tape's match band is 1 Hz..playback cutoff. Makeup is capped at +24 dB.
 //     Gain is rescanned about every 1 ms and smoothed (8 ms).
 // Style knee (1): flat below the knee, then the requested slope above it
-//   (Music Player Tape). DC gain is 1. Tape uses Matched over 20 Hz..cutoff.
+//   (Music Player Tape). DC gain is 1. Tape uses Loudness over 1 Hz..cutoff.
 #pragma once
 
 #include <soemdsp/math/scalar_helpers.h>
@@ -23,12 +25,13 @@ namespace spectral_tilt {
 static const int kSections = 8;
 static const double kSmoothS = 0.008;
 static const double kScanS = 0.001;
-static const double kMaxMakeup = 7.943282347242816; // +18 dB
+static const double kMaxMakeup = 15.848931924611133; // +24 dB
 static const int kStylePivot = 0;
 static const int kStyleKnee = 1;
 static const int kLevelTilt = 0;
 static const int kLevelCut = 1;
 static const int kLevelMatched = 2;
+static const int kLevelLoudness = 3;
 
 struct Channel {
   double x1[kSections];
@@ -129,6 +132,74 @@ static inline void scan_spectrum(
   }
   if (maxMag) *maxMag = mx;
   if (pinkMs) *pinkMs = acc / (double)n;
+}
+
+// Biquad frequency-response magnitude. a0 is already baked into the coeffs.
+static inline double biquad_mag(double b0, double b1, double b2, double a1, double a2, double f, double sr) {
+  const double th = 6.28318530717958647692 * f / sr;
+  const double c = dsp_cos(th);
+  const double s = dsp_sin(th);
+  const double c2 = c * c - s * s;
+  const double s2 = 2.0 * c * s;
+  const double nre = b0 + b1 * c + b2 * c2;
+  const double nim = -b1 * s - b2 * s2;
+  const double dre = 1.0 + a1 * c + a2 * c2;
+  const double dim = -a1 * s - a2 * s2;
+  const double d2 = dre * dre + dim * dim;
+  return hypot2((nre * dre + nim * dim) / d2, (nim * dre - nre * dim) / d2);
+}
+
+// ITU-R BS.1770 K-weighting (high shelf + RLB highpass) at any sample rate.
+// Returns equal-log-bin makeup 1 / rms(W_k * |H_tilt|).
+static inline double loudness_matched_gain(
+  const State* st, double sr, double bandLo, double bandHi
+) {
+  const int n = 48;
+  double f0 = bandLo;
+  if (!(f0 > 0.0)) f0 = 20.0;
+  if (f0 < 1.0) f0 = 1.0;
+  double f1 = bandHi;
+  if (!(f1 > 0.0)) f1 = 20000.0;
+  if (f1 > 0.45 * sr) f1 = 0.45 * sr;
+  if (f1 < f0 * 1.01) f1 = f0 * 1.01;
+  const double ln0 = dsp_ln(f0);
+  const double ln1 = dsp_ln(f1);
+  const double kLn10Over20 = 0.1151292546497022842;
+  const double fPre = 1681.974450955533;
+  const double gPre = 3.999843853973347;
+  const double qPre = 0.7071752369554196;
+  const double Kpre = tan_wp(fPre, sr);
+  const double Vh = dsp_exp(gPre * kLn10Over20);
+  const double Vb = dsp_exp(0.4996667741545416 * dsp_ln(Vh));
+  double a0 = 1.0 + Kpre / qPre + Kpre * Kpre;
+  const double preB0 = (Vh + Vb * Kpre / qPre + Kpre * Kpre) / a0;
+  const double preB1 = 2.0 * (Kpre * Kpre - Vh) / a0;
+  const double preB2 = (Vh - Vb * Kpre / qPre + Kpre * Kpre) / a0;
+  const double preA1 = 2.0 * (Kpre * Kpre - 1.0) / a0;
+  const double preA2 = (1.0 - Kpre / qPre + Kpre * Kpre) / a0;
+  const double fRlb = 38.13547087602444;
+  const double qRlb = 0.5003270373238773;
+  const double Krlb = tan_wp(fRlb, sr);
+  a0 = 1.0 + Krlb / qRlb + Krlb * Krlb;
+  const double rlbB0 = 1.0 / a0;
+  const double rlbB1 = -2.0 / a0;
+  const double rlbB2 = 1.0 / a0;
+  const double rlbA1 = 2.0 * (Krlb * Krlb - 1.0) / a0;
+  const double rlbA2 = (1.0 - Krlb / qRlb + Krlb * Krlb) / a0;
+  double num = 0.0;
+  double den = 0.0;
+  for (int i = 0; i < n; i += 1) {
+    const double u = (double)i / (double)(n - 1);
+    const double f = dsp_exp(ln0 + u * (ln1 - ln0));
+    const double m = cascade_mag(st, f, sr);
+    const double w =
+      biquad_mag(preB0, preB1, preB2, preA1, preA2, f, sr) *
+      biquad_mag(rlbB0, rlbB1, rlbB2, rlbA1, rlbA2, f, sr);
+    num += w * w;
+    den += (w * m) * (w * m);
+  }
+  if (den <= 1.0e-12) return 1.0;
+  return dsp_exp(0.5 * dsp_ln(num / den));
 }
 
 static inline void update(
@@ -233,9 +304,9 @@ static inline void update(
   }
   int mode = levelMode;
   if (mode < 0) mode = 0;
-  if (mode > 2) mode = 2;
+  if (mode > 3) mode = 3;
   double targetGain = 1.0;
-  if (mode == kLevelCut || mode == kLevelMatched) {
+  if (mode == kLevelCut || mode == kLevelMatched || mode == kLevelLoudness) {
     int period = (int)(kScanS * sr + 0.5);
     if (period < 1) period = 1;
     if (first || st->scanAge >= period) {
@@ -244,10 +315,14 @@ static inline void update(
       scan_spectrum(st, sr, &maxMag, &pinkMs, matchLoHz, matchHiHz);
       if (mode == kLevelCut) {
         if (maxMag > 1.0e-12) targetGain = 1.0 / maxMag;
+      } else if (mode == kLevelLoudness) {
+        targetGain = loudness_matched_gain(st, sr, matchLoHz, matchHiHz);
       } else if (pinkMs > 1.0e-12) {
         targetGain = 1.0 / dsp_exp(0.5 * dsp_ln(pinkMs));
       }
-      if (mode == kLevelMatched && targetGain > kMaxMakeup) targetGain = kMaxMakeup;
+      if ((mode == kLevelMatched || mode == kLevelLoudness) && targetGain > kMaxMakeup) {
+        targetGain = kMaxMakeup;
+      }
       st->lastTargetGain = targetGain;
       st->scanAge = 0;
     } else {

@@ -316,6 +316,15 @@ function nodeGraphSettleParameterSmoother(smoother, { snapFilter = true } = {}) 
   if (!smoother) {
     return;
   }
+  // Fold any private unwrapped chase back into min/max for display / storage.
+  if (smoother.wraparound && typeof wrapNodeSliderValue === "function") {
+    const min = Number(smoother.min);
+    const max = Number(smoother.max);
+    if (Number.isFinite(min) && Number.isFinite(max) && max > min) {
+      smoother.target = wrapNodeSliderValue(smoother.target, min, max);
+    }
+    smoother.targetSignal = normalizeNodeGraphSmootherSignal(smoother.target, smoother.metadata || {});
+  }
   smoother.current = smoother.target;
   smoother.outputBuffer = smoother.targetSignal;
   smoother.lastValue = smoother.target;
@@ -405,7 +414,10 @@ function nodeGraphStepParameterSmootherOneSample(smoother, frames) {
     nodeGraphSettleParameterSmoother(smoother);
     return false;
   }
-  const value = denormalizeNodeGraphSmootherSignal(signal, smoother.metadata);
+  let value = denormalizeNodeGraphSmootherSignal(signal, smoother.metadata);
+  if (smoother.wraparound && typeof wrapNodeSliderValue === "function") {
+    value = wrapNodeSliderValue(value, Number(smoother.min), Number(smoother.max));
+  }
   smoother.current = value;
   smoother.lastValue = value;
   return true;
@@ -438,6 +450,22 @@ function nodeGraphRunActiveParameterSmoothers(runtime, frames) {
   list.length = write;
 }
 
+
+function nodeGraphSmootherCircularTargetSignal(smoother, metadata = {}) {
+  const min = Number(smoother.min);
+  const max = Number(smoother.max);
+  const range = max - min;
+  if (!Number.isFinite(range) || range <= 0) {
+    return normalizeNodeGraphSmootherSignal(smoother.target, metadata);
+  }
+  const fromUnit = Number(smoother.outputBuffer);
+  const fromDomain = Number.isFinite(fromUnit)
+    ? min + range * fromUnit
+    : Number(smoother.lastValue);
+  const delta = shortestNodeGraphWrapDelta(fromDomain, smoother.target, min, max);
+  return (fromDomain + delta - min) / range;
+}
+
 function updateNodeGraphParameterSmoother(smoother, targetValue, metadata = {}, runtime = null, smootherKey = null) {
   const value = Number(targetValue);
   smoother.target = Number.isFinite(value) ? value : smoother.target;
@@ -459,8 +487,10 @@ function updateNodeGraphParameterSmoother(smoother, targetValue, metadata = {}, 
   smoother.linearSmoothing = typeof nodeGraphParameterSmootherUsesFilter === "function"
     ? nodeGraphParameterSmootherUsesFilter(nextType)
     : (nextType !== "none" && metadata.linearSmoothing !== false);
-  smoother.targetSignal = normalizeNodeGraphSmootherSignal(smoother.target, metadata);
   smoother.wraparound = Boolean(metadata.wraparound);
+  smoother.targetSignal = smoother.wraparound
+    ? nodeGraphSmootherCircularTargetSignal(smoother, metadata)
+    : normalizeNodeGraphSmootherSignal(smoother.target, metadata);
   const key = smootherKey || smoother._activeKey || null;
   if (!smoother.linearSmoothing || !nodeGraphSmootherNeedsWork(smoother)) {
     nodeGraphSettleParameterSmoother(smoother);
@@ -727,7 +757,9 @@ function nodeSliderUsesContourTaper(slider) {
 function nodeSliderContourValueFromTravel(slider, travel) {
   const min = Number(slider.min);
   const max = Number(slider.max);
-  let t = clampNodeSliderValue(nodeGraphFiniteNumber(travel), 0, 1);
+  let t = nodeSliderShouldWraparound(slider)
+    ? wrapNodeSliderValue(nodeGraphFiniteNumber(travel), 0, 1)
+    : clampNodeSliderValue(nodeGraphFiniteNumber(travel), 0, 1);
   if (slider?.dataset?.reverse === "true") t = 1 - t;
   return min + (max - min) * (nodeGraphContourFromTaper(t * 2 - 1) + 1) * 0.5;
 }
@@ -806,13 +838,25 @@ function nodeSliderValueFromTravel(slider, travel) {
     return min;
   }
 
+  let unit = Number(travel);
+  if (!Number.isFinite(unit)) {
+    return min;
+  }
+  // Fold travel into [0,1) for wraparound params so a drag can keep
+  // going through the seam (1.05 -> 0.05). If travel is left unwrapped
+  // and later clamped to 1, wrap(1) becomes 0 and further motion sticks at 0.
+  if (typeof nodeSliderShouldWraparound === "function"
+      && nodeSliderShouldWraparound(slider)
+      && typeof wrapNodeSliderValue === "function") {
+    unit = wrapNodeSliderValue(unit, 0, 1);
+  }
   if (nodeSliderUsesContourTaper(slider)) {
-    return nodeSliderContourValueFromTravel(slider, travel);
+    return nodeSliderContourValueFromTravel(slider, unit);
   }
   if (typeof nodeGraphParamDomainFromControlPosition === "function") {
-    return nodeGraphParamDomainFromControlPosition(travel, nodeSliderMetadata(slider));
+    return nodeGraphParamDomainFromControlPosition(unit, nodeSliderMetadata(slider));
   }
-  return min + range * nodeSliderCurveValueFromTravel(slider, travel);
+  return min + range * nodeSliderCurveValueFromTravel(slider, unit);
 }
 
 function nodeSliderValueFromPointerTravel(slider, travel) {
@@ -822,13 +866,25 @@ function nodeSliderValueFromPointerTravel(slider, travel) {
   if (!Number.isFinite(range) || range <= 0) {
     return min;
   }
+  let unit = Number(travel);
+  if (!Number.isFinite(unit)) {
+    return min;
+  }
+  // Fold travel into [0,1) for wraparound params so a drag can keep
+  // going through the seam (1.05 -> 0.05). If travel is left unwrapped
+  // and later clamped to 1, wrap(1) becomes 0 and further motion sticks at 0.
+  if (typeof nodeSliderShouldWraparound === "function"
+      && nodeSliderShouldWraparound(slider)
+      && typeof wrapNodeSliderValue === "function") {
+    unit = wrapNodeSliderValue(unit, 0, 1);
+  }
   if (nodeSliderUsesContourTaper(slider)) {
-    return nodeSliderContourValueFromTravel(slider, travel);
+    return nodeSliderContourValueFromTravel(slider, unit);
   }
   if (typeof nodeGraphParamDomainFromControlPosition === "function") {
-    return nodeGraphParamDomainFromControlPosition(travel, nodeSliderMetadata(slider));
+    return nodeGraphParamDomainFromControlPosition(unit, nodeSliderMetadata(slider));
   }
-  return min + range * nodeSliderCurveValueFromTravel(slider, travel);
+  return min + range * nodeSliderCurveValueFromTravel(slider, unit);
 }
 
 function nodeSliderValueFromRelativeTravel(slider, travel) {
@@ -839,8 +895,15 @@ function nodeSliderValueFromRelativeTravel(slider, travel) {
   if (!Number.isFinite(range) || range <= 0 || !Number.isFinite(numericTravel)) {
     return min;
   }
-  // No UI overshoot — travel outside [0,1] clamps via pointer travel helper.
-  return nodeSliderValueFromPointerTravel(slider, numericTravel);
+  // Wrap travel here too so a wrapping drag never depends on a later
+  // helper remembering to fold; 1.05 must become 0.05, not clamp to 1
+  // and then wrap(1) -> 0 stuck.
+  const unit = typeof nodeSliderShouldWraparound === "function"
+      && nodeSliderShouldWraparound(slider)
+      && typeof wrapNodeSliderValue === "function"
+    ? wrapNodeSliderValue(numericTravel, 0, 1)
+    : numericTravel;
+  return nodeSliderValueFromPointerTravel(slider, unit);
 }
 
 function nodeSliderTravelFromValue(slider, value) {

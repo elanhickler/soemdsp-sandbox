@@ -594,7 +594,7 @@ extern "C" double soemdsp_audio_player_sample(
       slopeEff,
       engineRate,
       spectral_tilt::kStyleKnee,
-      spectral_tilt::kLevelMatched,
+      spectral_tilt::kLevelLoudness,
       1.0,
       cutoff
     );

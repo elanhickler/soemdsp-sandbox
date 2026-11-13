@@ -439,7 +439,8 @@
         const s = state();
         const pos = msg.position != null ? Number(msg.position) : s.duration > 0 ? Number(msg.seconds) / s.duration : NaN;
         if (!Number.isFinite(pos)) return error("bad-request", "seek needs seconds (track loaded) or position 0..1");
-        nodeGraphAudioPlayerPlaylistApplyScrub(id, Math.max(0, Math.min(1, pos)), { record: false, commit: true });
+        // A seek command is a jump: no glide through the file.
+        nodeGraphAudioPlayerPlaylistApplyScrub(id, Math.max(0, Math.min(1, pos)), { record: false, commit: true, instant: true });
         break;
       }
       case "volume": setVolume(id, msg.value); break;

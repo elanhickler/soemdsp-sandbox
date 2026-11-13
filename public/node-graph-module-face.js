@@ -899,8 +899,15 @@ function beginNodeGraphModuleFaceGesture(article, face, spec, event) {
     move = (ev) => {
       const { dx, dy } = travel(ev);
       const d = dx - dy;
-      const t = Math.max(0, Math.min(1, t0 + d / NODE_GRAPH_FACE_CELL_DRAG_PX));
-      const v = typeof nodeSliderValueFromTravel === "function" ? nodeSliderValueFromTravel(input, t) : t;
+      // Wraparound params (definition flag) keep unwrapped gesture travel:
+      // nodeSliderValueFromTravel folds it into min/max, so the drag spins
+      // through the seam. Clamping here pinned travel at 1, which folds to
+      // min on every later move ("wraps to 0, then cannot drag").
+      const raw = t0 + d / NODE_GRAPH_FACE_CELL_DRAG_PX;
+      const wraps = !choiceSwitch && typeof nodeSliderShouldWraparound === "function"
+        && nodeSliderShouldWraparound(input);
+      const t = wraps ? raw : Math.max(0, Math.min(1, raw));
+      const v =typeof nodeSliderValueFromTravel === "function" ? nodeSliderValueFromTravel(input, t) : t;
       // Whole-number params (step >= 1) land on whole numbers, as the slider row does.
       return Number(input.step) >= 1 ? Math.round(v) : v;
     };

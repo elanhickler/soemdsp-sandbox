@@ -1258,7 +1258,8 @@ function readNodeGraphTraceDisplaySettingsForm() {
     const numberIds = [
       ["nodeSampleWaveformTimeWindowInput", "timeWindowSeconds"],
       ["nodeSampleWaveformLineWidthInput", "scrollLineWidth"],
-      ["nodeSampleWaveformTraceWidthInput", "traceWidth"],
+      ["nodeSampleWaveformLineThicknessInput", "lineThickness"],
+      ["nodeSampleWaveformLineSmoothingInput", "lineSmoothing"],
       ["nodeSampleWaveformPlayheadAlphaInput", "playheadAlpha"],
       ["nodeSampleWaveformGridBrightnessInput", "gridBrightness"],
       ["nodeSampleWaveformCornerRadiusInput", "cornerRadius"],
@@ -1289,6 +1290,10 @@ function readNodeGraphTraceDisplaySettingsForm() {
     next.cornerShape = document.getElementById("nodeSampleWaveformCornerSquareButton")?.classList.contains("active")
       ? "square"
       : "squircle";
+    const pixelLineInput = document.getElementById("nodeSampleWaveformPixelLineInput");
+    if (pixelLineInput) {
+      next.pixelLine = pixelLineInput.checked === true;
+    }
     return normalizeNodeGraphDisplaySettingsForFormType(next, formType);
   }
   if (formType === "harmonicLines") {

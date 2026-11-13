@@ -1558,8 +1558,18 @@ function nodeGraphAudioPlayerPlaylistSeekAbsolute(nodeId, phase01, { record = fa
  * Do not "fold" a seek into samplePhase/samplePhaseSeek: the engine only reads
  * those on a plan rebuild (track change), so a fold snapped the playhead back
  * on release. Track change and Stop use nodeGraphAudioPlayerPlaylistSeekAbsolute.
+ *
+ * Tap vs drag: a drag writes the offset normally, so the engine glides to it
+ * (the playlistScrub Control's short smoothing) and scrubbing stays smooth.
+ * A tap passes instant: true, which queues a one-shot snap of that Control
+ * with the same write (nodeGraphRequestControllerParamSnap, the alt-click
+ * jump path). The engine lands on the new position on the next audio block
+ * instead of sweeping through the file in between.
  */
 const nodeGraphAudioPlayerPlaylistSeekBase = new Map();
+
+// A press that travels less than this (CSS px) before release is a tap.
+const nodeGraphAudioPlayerSeekTapSlopPx = 4;
 
 function nodeGraphAudioPlayerPlaylistPlaybackRate(nodeId) {
   const node = typeof nodeGraphPatchNode === "function" ? nodeGraphPatchNode(nodeId) : null;
@@ -1573,7 +1583,7 @@ function nodeGraphAudioPlayerPlaylistPlaybackRate(nodeId) {
   return seconds > 0 ? rate / seconds : 0;
 }
 
-function nodeGraphAudioPlayerPlaylistSeekViaOffset(nodeId, desired01) {
+function nodeGraphAudioPlayerPlaylistSeekViaOffset(nodeId, desired01, { instant = false } = {}) {
   const node = typeof nodeGraphPatchNode === "function" ? nodeGraphPatchNode(nodeId) : null;
   if (!node || node.type !== "audioPlayer") {
     return;
@@ -1604,6 +1614,9 @@ function nodeGraphAudioPlayerPlaylistSeekViaOffset(nodeId, desired01) {
       offset += 1;
     }
   }
+  if (instant && typeof nodeGraphRequestControllerParamSnap === "function") {
+    nodeGraphRequestControllerParamSnap(nodeId, "playlistScrub");
+  }
   nodeGraphAudioPlayerPlaylistWritePhaseOffset(nodeId, offset, { record: false });
   if (typeof rememberNodeGraphAudioPlayerSamplePhase === "function") {
     rememberNodeGraphAudioPlayerSamplePhase(nodeId, desired);
@@ -1614,10 +1627,11 @@ function nodeGraphAudioPlayerPlaylistSeekViaOffset(nodeId, desired01) {
  * Scrubber / wave-seek entry point: move the playhead to raw (0..1). While
  * dragging, call with commit: false. On release, commit: true writes the
  * final position once (and saves the working patch when record is set).
+ * instant: true = tap / seek command: jump with no glide (see above).
  */
-function nodeGraphAudioPlayerPlaylistApplyScrub(nodeId, raw, { record = false, commit = false } = {}) {
+function nodeGraphAudioPlayerPlaylistApplyScrub(nodeId, raw, { record = false, commit = false, instant = false } = {}) {
   nodeGraphAudioPlayerRestartPhaseSet(nodeId, raw);
-  nodeGraphAudioPlayerPlaylistSeekViaOffset(nodeId, raw);
+  nodeGraphAudioPlayerPlaylistSeekViaOffset(nodeId, raw, { instant });
   if (commit && record && typeof saveNodeGraphWorkingPatchToUserSettings === "function") {
     saveNodeGraphWorkingPatchToUserSettings();
   }
@@ -2653,12 +2667,25 @@ function nodeGraphAudioPlayerPlaylistBindScrubber(nodeId, scrub) {
   const valueEl = () => scrub.closest?.("[data-music-player-page]")
     ?.querySelector?.("[data-music-player-phase-value]");
 
+  // Tap vs drag: the press jumps instantly; once the pointer travels past
+  // nodeGraphAudioPlayerSeekTapSlopPx the drag glides (smoothed offset).
+  // Keyboard steps (no press) are jumps too.
+  let press = null;
+  const trackPress = (event) => {
+    if (press && !press.moved
+      && Math.hypot(event.clientX - press.x, event.clientY - press.y) > nodeGraphAudioPlayerSeekTapSlopPx) {
+      press.moved = true;
+    }
+  };
   scrub.addEventListener("pointerdown", (event) => {
     event.stopPropagation();
     scrub.dataset.scrubbing = "1";
+    press = { x: event.clientX, y: event.clientY, moved: false, jumped: false };
+    window.addEventListener("pointermove", trackPress, true);
   });
   const endScrub = () => {
     scrub.dataset.scrubbing = "0";
+    window.removeEventListener("pointermove", trackPress, true);
   };
   scrub.addEventListener("pointerup", endScrub);
   scrub.addEventListener("pointercancel", endScrub);
@@ -2666,8 +2693,15 @@ function nodeGraphAudioPlayerPlaylistBindScrubber(nodeId, scrub) {
 
   scrub.addEventListener("input", () => {
     const phase = Math.max(0, Math.min(1, nodeGraphFiniteNumber(scrub.value)));
-    // Live drag: drive Phase Offset param so it behaves like any other control.
-    nodeGraphAudioPlayerPlaylistApplyScrub(nodeId, phase, { record: false, commit: false });
+    if (press && !press.moved && press.jumped) {
+      // Jitter inside the tap slop: keep the tapped position.
+      return;
+    }
+    const instant = !press || !press.moved;
+    if (press) {
+      press.jumped = true;
+    }
+    nodeGraphAudioPlayerPlaylistApplyScrub(nodeId, phase, { record: false, commit: false, instant });
     // While dragging, show scrub target; rAF loop resumes actual engine Phase after release.
     const el = valueEl();
     if (el) {
@@ -2676,8 +2710,15 @@ function nodeGraphAudioPlayerPlaylistBindScrubber(nodeId, scrub) {
   });
   scrub.addEventListener("change", () => {
     const phase = Math.max(0, Math.min(1, nodeGraphFiniteNumber(scrub.value)));
-    // Commit folds offset into free-running samplePhase (clean param = 0).
-    nodeGraphAudioPlayerPlaylistApplyScrub(nodeId, phase, { record: true, commit: true });
+    const dragged = Boolean(press?.moved);
+    press = null;
+    window.removeEventListener("pointermove", trackPress, true);
+    if (dragged) {
+      nodeGraphAudioPlayerPlaylistApplyScrub(nodeId, phase, { record: true, commit: true });
+    } else if (typeof saveNodeGraphWorkingPatchToUserSettings === "function") {
+      // Tap / key step already jumped; only save.
+      saveNodeGraphWorkingPatchToUserSettings();
+    }
     scrub.dataset.scrubbing = "0";
   });
 }
@@ -2853,9 +2894,10 @@ function nodeGraphAudioPlayerVideoscopePaintLr(batch, width, height, channels, s
     return;
   }
   const win = nodeGraphAudioPlayerVideoscopeWindow(nodeId, channels.frames, channels.sampleRate);
-  const unit = settings && Number.isFinite(Number(settings.traceWidth))
-    ? Number(settings.traceWidth)
-    : nodeGraphSampleWaveformDefaultSettings.traceWidth;
+  const unitRaw = Number(settings?.lineThickness ?? settings?.traceWidth);
+  const unit = Number.isFinite(unitRaw) && unitRaw > 0
+    ? unitRaw
+    : nodeGraphSampleWaveformDefaultSettings.lineThickness;
   const lineWidth = Math.max(0.25, faceInkPx(clampAuthoredInkPx(unit, 2), faceMinSide(width, height)));
   // One butt-capped min..max stem per device column, 1 px Expo edge.
   const half = Math.max(0.125, lineWidth * 0.5 - 0.5);
@@ -2961,6 +3003,10 @@ if (typeof document !== "undefined") {
  * Seeks are not undo steps, the same as the transport.
  * Plain drag on the wave page used to pan the view. Pan is now Alt-drag;
  * Shift-drag (relative nudge) and the region handles are unchanged.
+ * Tap vs drag: the press jumps straight to the pointer (instant, no glide).
+ * Moves within nodeGraphAudioPlayerSeekTapSlopPx are ignored; past it the
+ * gesture is a drag and follows the pointer through the smoothed offset path.
+ * Releasing a tap does not seek again.
  */
 function nodeGraphAudioPlayerPlaylistBindWaveSeek(section, nodeId) {
   if (!section || section.dataset.musicPlayerWaveSeekBound === "1") {
@@ -2994,6 +3040,14 @@ function nodeGraphAudioPlayerPlaylistBindWaveSeek(section, nodeId) {
     if (!drag || (drag.pointerId !== null && event.pointerId !== drag.pointerId)) {
       return;
     }
+    if (!drag.moved) {
+      if (Math.hypot(event.clientX - drag.x, event.clientY - drag.y) <= nodeGraphAudioPlayerSeekTapSlopPx) {
+        event.preventDefault();
+        event.stopPropagation();
+        return;
+      }
+      drag.moved = true;
+    }
     drag.value = phaseAt(drag.surface, event);
     nodeGraphAudioPlayerPlaylistApplyScrub(drag.nodeId, drag.value, { record: false, commit: false });
     event.preventDefault();
@@ -3015,8 +3069,14 @@ function nodeGraphAudioPlayerPlaylistBindWaveSeek(section, nodeId) {
     } catch (_error) {
       // ignore
     }
-    if (event.type !== "pointercancel") {
+    if (event.type === "pointercancel") {
+      return;
+    }
+    if (done.moved) {
       nodeGraphAudioPlayerPlaylistApplyScrub(done.nodeId, done.value, { record: true, commit: true });
+    } else if (typeof saveNodeGraphWorkingPatchToUserSettings === "function") {
+      // Tap: the press already jumped; only save.
+      saveNodeGraphWorkingPatchToUserSettings();
     }
   };
 
@@ -3058,11 +3118,20 @@ function nodeGraphAudioPlayerPlaylistBindWaveSeek(section, nodeId) {
     if (typeof nodeGraphSampleWaveformNoteClick === "function") {
       nodeGraphSampleWaveformNoteClick(id, x01, section);
     }
-    drag = { nodeId: id, surface, pointerId: event.pointerId ?? null, value: phaseAt(surface, event) };
+    drag = {
+      nodeId: id,
+      surface,
+      pointerId: event.pointerId ?? null,
+      value: phaseAt(surface, event),
+      x: event.clientX,
+      y: event.clientY,
+      moved: false,
+    };
     nodeGraphMvp.musicPlayerWaveSeekDragging = true;
     surface.classList.add("value-dragging");
     document.body.classList.add("node-slider-dragging");
-    nodeGraphAudioPlayerPlaylistApplyScrub(id, drag.value, { record: false, commit: false });
+    // The press is the tap: jump now, no glide.
+    nodeGraphAudioPlayerPlaylistApplyScrub(id, drag.value, { record: false, commit: false, instant: true });
     if (event.pointerId !== undefined) {
       try {
         surface.setPointerCapture(event.pointerId);

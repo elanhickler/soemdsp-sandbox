@@ -733,12 +733,22 @@ function bindNodeGraphNativeSliderModifiers(input, defaultValue, options = {}) {
     input.step = "any";
   }
 
+  const wraps = () => input.dataset.wraparound === "true";
   const clamp = (value) => {
     const { min, max } = nodeGraphNativeRangeSpan(input);
     let next = value;
     if (Number.isFinite(min)) next = Math.max(min, next);
     if (Number.isFinite(max)) next = Math.min(max, next);
     return next;
+  };
+  const bound = (value) => {
+    if (!wraps()) {
+      return clamp(value);
+    }
+    const { min, max } = nodeGraphNativeRangeSpan(input);
+    return typeof wrapNodeSliderValue === "function"
+      ? wrapNodeSliderValue(value, min, max)
+      : clamp(value);
   };
   const emit = (value, { inputOnly = false } = {}) => {
     input.value = String(value);
@@ -760,7 +770,7 @@ function bindNodeGraphNativeSliderModifiers(input, defaultValue, options = {}) {
     if (!Number.isFinite(current) || !Number.isFinite(step)) {
       return;
     }
-    emit(Number(clamp(current + step * direction).toFixed(6)));
+    emit(Number(bound(current + step * direction).toFixed(6)));
   };
   const endDrag = (event) => {
     const drag = nodeGraphNativeRangeDrag;
@@ -936,9 +946,9 @@ function bindNodeGraphNativeSliderModifiers(input, defaultValue, options = {}) {
       )
       : ((((event.clientX - drag.startX) + (drag.startY - event.clientY)) / drag.travelWidth)
         * drag.fineScale);
-    const next = clamp(fromControl(clamp(toControl(drag.startValue) + travelDelta * drag.span)));
+    const next = bound(fromControl(toControl(drag.startValue) + travelDelta * drag.span));
     emit(Number(next.toFixed(6)), { inputOnly: true });
-    if (next <= drag.min || next >= drag.min + drag.span) {
+    if (!wraps() && (next <= drag.min || next >= drag.min + drag.span)) {
       reanchorDrag(drag, event);
     }
     event.preventDefault();
@@ -954,10 +964,22 @@ function bindNodeGraphNativeSliderModifiers(input, defaultValue, options = {}) {
   });
 
   input.addEventListener("keydown", (event) => {
-    if (event.key === "ArrowUp" || event.key === "ArrowRight"
-        || event.key === "ArrowDown" || event.key === "ArrowLeft") {
+    const isArrow = event.key === "ArrowUp" || event.key === "ArrowRight"
+      || event.key === "ArrowDown" || event.key === "ArrowLeft";
+    if (!isArrow) {
       return;
     }
+    const wrap = wraps();
+    // Number fields keep left/right for the caret. Range inputs, and
+    // wraparound number fields on up/down, use the same nudge as drag.
+    if (input.type !== "range" && !wrap) {
+      return;
+    }
+    if (input.type !== "range" && (event.key === "ArrowLeft" || event.key === "ArrowRight")) {
+      return;
+    }
+    event.preventDefault();
+    nudge(event, (event.key === "ArrowUp" || event.key === "ArrowRight") ? 1 : -1);
   });
 }
 
@@ -1116,8 +1138,9 @@ function beginNodeSliderSurfaceEdit(surface) {
 }
 
 function stepNodeSliderFromKeyboard(event) {
-  if (event?.key === "ArrowUp" || event?.key === "ArrowDown"
-      || event?.key === "ArrowLeft" || event?.key === "ArrowRight") {
+  // Type-in / caret: leave arrow keys to the editor.
+  const typeIn = event?.target;
+  if (typeIn && (typeIn.tagName === "INPUT" || typeIn.tagName === "TEXTAREA" || typeIn.isContentEditable)) {
     return false;
   }
   const surface = nodeSliderDragSurfaceFromEvent(event);
@@ -1149,6 +1172,15 @@ function stepNodeSliderFromKeyboard(event) {
       : current + delta;
   } else {
     return false;
+  }
+
+  if (event.key !== "Home" && event.key !== "End"
+      && typeof nodeSliderShouldWraparound === "function"
+      && nodeSliderShouldWraparound(slider)
+      && typeof wrapNodeSliderValue === "function") {
+    const lo = Number.isFinite(min) ? min : 0;
+    const hi = Number.isFinite(max) && max > lo ? max : lo + 1;
+    nextValue = wrapNodeSliderValue(nextValue, lo, hi);
   }
 
   setNodeSliderValue(slider, quantizeNodeSliderDragValue(slider, nextValue));
@@ -1483,8 +1515,13 @@ function dragNodeSlider(event) {
     ),
     { interaction: "drag" },
   );
-  // Re-anchor at travel boundaries to prevent value stagnation.
-  if (nextTravel <= 0 || nextTravel >= 1) {
+  // Non-wrapping sliders re-anchor at 0/1 so further motion is not dead
+  // after the value has already clamped. Wraparound sliders must not:
+  // travel may go outside [0,1] and the value wraps into min/max, so
+  // gesture direction continues through the seam.
+  const wraps = typeof nodeSliderShouldWraparound === "function"
+    && nodeSliderShouldWraparound(drag.slider);
+  if (!wraps && (nextTravel <= 0 || nextTravel >= 1)) {
     reanchorNodeSliderDragAtPointer(drag, event);
   }
   event.preventDefault();

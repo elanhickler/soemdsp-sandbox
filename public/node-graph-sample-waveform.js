@@ -88,8 +88,15 @@ const nodeGraphSampleWaveformDefaultSettings = Object.freeze({
   scrollLinePosition: "mid",
   // Playhead thickness. 0 = hide playhead. CSS px @ zoom 1.
   scrollLineWidth: 1,
-  // Trace core width (+0.5 CSS-px skirt at draw).
-  traceWidth: 2,
+  // Line look, same keys / ranges as the other line drawers (1D Plot,
+  // Basic Shape, Clock...): Line thickness = full stroke width in CSS px
+  // (0..16, 0 = no line); Line blur (lineSmoothing) = Expo antialiasing
+  // skirt outside the thickness, CSS px (0..8, 0 = hard core).
+  lineThickness: 2,
+  lineSmoothing: 1,
+  // Pixel line: the same trace rasterized to whole device pixels with hard
+  // edges at every zoom (Line blur does not apply).
+  pixelLine: false,
   // Colors are HBS (nodeGraphHueBrightnessCss): brightness 0 black → 0.5
   // full hue → 1 white; saturation 0 grey … 1 full. Foreground = hue/line*.
   hue: 140,
@@ -151,7 +158,9 @@ function normalizeNodeGraphSampleWaveformSettings(settings = {}) {
   const defaults = nodeGraphSampleWaveformDefaultSettings;
   const timeWindowSeconds = Number(source.timeWindowSeconds);
   const scrollLineWidth = Number(source.scrollLineWidth);
-  const traceWidth = Number(source.traceWidth);
+  // traceWidth = pre-overhaul name of Line thickness (same meaning).
+  const lineThickness = Number(source.lineThickness ?? source.traceWidth);
+  const lineSmoothing = Number(source.lineSmoothing);
   const hue = Number(source.hue);
   const lineBrightness = Number(source.lineBrightness);
   const gridBrightness = Number(source.gridBrightness);
@@ -187,9 +196,13 @@ function normalizeNodeGraphSampleWaveformSettings(settings = {}) {
     scrollLineWidth: Number.isFinite(scrollLineWidth)
       ? Math.max(0, Math.min(16, clampAuthoredInkPx(scrollLineWidth, nodeGraphSampleWaveformDefaultSettings.scrollLineWidth)))
       : nodeGraphSampleWaveformDefaultSettings.scrollLineWidth,
-    traceWidth: Number.isFinite(traceWidth)
-      ? Math.max(0.25, Math.min(16, clampAuthoredInkPx(traceWidth, nodeGraphSampleWaveformDefaultSettings.traceWidth)))
-      : nodeGraphSampleWaveformDefaultSettings.traceWidth,
+    lineThickness: Number.isFinite(lineThickness)
+      ? Math.max(0, Math.min(16, lineThickness))
+      : defaults.lineThickness,
+    lineSmoothing: Number.isFinite(lineSmoothing)
+      ? Math.max(0, Math.min(8, lineSmoothing))
+      : defaults.lineSmoothing,
+    pixelLine: source.pixelLine === true || source.pixelLine === "true" || source.pixelLine === 1,
     hue: Number.isFinite(hue) ? ((hue % 360) + 360) % 360 : nodeGraphSampleWaveformDefaultSettings.hue,
     lineBrightness: Number.isFinite(lineBrightness)
       ? Math.max(0, Math.min(1, lineBrightness))
@@ -454,7 +467,26 @@ function renderNodeGraphSampleWaveformSettingsWindow() {
     settings.timeWindowSeconds == null ? "" : settings.timeWindowSeconds,
   );
   setValueUnlessFocused("nodeSampleWaveformLineWidthInput", settings.scrollLineWidth);
-  setValueUnlessFocused("nodeSampleWaveformTraceWidthInput", settings.traceWidth);
+  const formatStep = (value) => (typeof formatNodeGraphTraceDisplaySetting === "function"
+    ? formatNodeGraphTraceDisplaySetting(value)
+    : String(value));
+  setValueUnlessFocused("nodeSampleWaveformLineThicknessInput", formatStep(settings.lineThickness));
+  setValueUnlessFocused("nodeSampleWaveformLineSmoothingInput", formatStep(settings.lineSmoothing));
+  {
+    const pixel = document.getElementById("nodeSampleWaveformPixelLineInput");
+    if (pixel) {
+      pixel.checked = settings.pixelLine === true;
+    }
+    // Pixel line has hard edges by design: Line blur does not apply, so grey the stepper out.
+    const blurRow = document.getElementById("nodeSampleWaveformLineSmoothingRow");
+    if (blurRow) {
+      blurRow.classList.toggle("is-disabled", settings.pixelLine === true);
+      blurRow.style.opacity = settings.pixelLine === true ? "0.45" : "";
+      for (const el of blurRow.querySelectorAll("input, button")) {
+        el.disabled = settings.pixelLine === true;
+      }
+    }
+  }
   setValueUnlessFocused("nodeSampleWaveformPlayheadAlphaInput", settings.playheadAlpha);
   setValueUnlessFocused("nodeSampleWaveformGridBrightnessInput", settings.gridBrightness);
   syncNodeGraphSampleWaveformColorWidgets(settings);
@@ -646,12 +678,8 @@ function handleNodeGraphSampleWaveformLineWidthChange(event) {
   updateNodeGraphSampleWaveformSettings({ scrollLineWidth: value });
 }
 
-function handleNodeGraphSampleWaveformTraceWidthChange(event) {
-  const value = Number(event.target.value);
-  if (!Number.isFinite(value)) {
-    return;
-  }
-  updateNodeGraphSampleWaveformSettings({ traceWidth: value });
+function handleNodeGraphSampleWaveformPixelLineChange(event) {
+  updateNodeGraphSampleWaveformSettings({ pixelLine: event.target?.checked === true });
 }
 
 /** Music cache row: size buttons (pressed = current) and "Cache: used of limit". */
@@ -786,64 +814,122 @@ function buildNodeGraphSampleWaveformCornerChromeHtml(options = {}) {
       <label class="node-led-settings-row node-sample-waveform-settings-row node-sample-waveform-tune-row">
         <span>Rounding</span>
         <span class="node-sample-waveform-control-widgets">
-          <input id="${radiusId}" type="range" min="0" max="1" step="0.01" title="0..1 of max corner radius (half panel min-edge)">
+          <input id="${radiusId}" type="range" min="0" max="1" step="0.01">
         </span>
       </label>
       ${includeSpacing ? `<label class="node-led-settings-row node-sample-waveform-settings-row node-sample-waveform-tune-row">
-        <span>Edge Spacing</span>
+        <span>Edge spacing</span>
         <span class="node-sample-waveform-control-widgets">
-          <input id="${spacingId}" type="range" min="0" max="1" step="0.01" title="0..1 of max inset (half face min-edge)">
+          <input id="${spacingId}" type="range" min="0" max="1" step="0.01">
         </span>
       </label>` : ""}`;
 }
 
 function buildNodeGraphSampleWaveformDisplaySettingsBodyHtml() {
+  const section = (title) => `
+      <div class="metadata-section-title node-sample-waveform-section-title" style="align-self:stretch;width:auto;margin:6px 0 2px">${title}</div>`;
+  const row = "node-led-settings-row node-sample-waveform-settings-row";
+  const tune = `${row} node-sample-waveform-tune-row`;
+  // Same row as the other line drawers' Line thickness / Line blur
+  // (nodeGraphDisplaySettingsBuildStepperRowHtml): - value +, drag the value,
+  // shared step / clamp / persist through data-trace-display-field.
+  const stepper = (key, id, label, rowId = "") => `
+      <label class="${tune} node-sample-waveform-stepper-row"${rowId ? ` id="${rowId}"` : ""} data-trace-display-control-row>
+        <span>${label}</span>
+        <span class="metadata-stepper-control" style="min-width:0">
+          <button type="button" data-trace-display-step-target="${key}" data-trace-display-step-direction="-1">-</button>
+          <input type="text" inputmode="decimal" data-trace-display-field="${key}" id="${id}" aria-label="${label}" style="min-width:0;width:100%;box-sizing:border-box" readonly>
+          <button type="button" data-trace-display-step-target="${key}" data-trace-display-step-direction="1">+</button>
+        </span>
+      </label>`;
   return `
     <div class="node-led-display-settings-panel node-sample-waveform-display-settings-panel" data-sample-waveform-display-settings-panel>
-      <div class="node-led-settings-row node-sample-waveform-settings-row node-sample-waveform-load-row" role="group" aria-label="Folder or file path">
+      ${section("Source")}
+      <div class="${row} node-sample-waveform-load-row" role="group" aria-label="Folder or file path">
         <div id="nodeSampleWaveformSampleLoaderSlot" class="node-sample-waveform-loader-slot"></div>
       </div>
-      <label class="node-led-settings-row node-sample-waveform-settings-row">
-        <span>Recursive search</span>
-        <input id="nodeSampleWaveformRecursiveSearch" type="checkbox">
-      </label>
-      <div class="node-led-settings-row node-sample-waveform-settings-row node-sample-waveform-playlist-actions node-sample-waveform-load-actions" role="group" aria-label="Load path">
-        <button id="nodeSampleWaveformLoadFile" type="button" title="Pick one audio file (native browser), or load a pasted audio file path.">Load File</button>
-        <button id="nodeSampleWaveformLoadPlaylist" type="button" title="List audio from a pasted folder path (or the parent folder of a pasted file). Online with an empty path: Browse.">Load Folder</button>
+      <div class="${row} node-sample-waveform-playlist-actions node-sample-waveform-load-actions" role="group" aria-label="Load">
+        <button id="nodeSampleWaveformLoadFile" type="button">Load File</button>
+        <button id="nodeSampleWaveformLoadPlaylist" type="button">Load Folder</button>
       </div>
-      <div class="node-led-settings-row node-sample-waveform-settings-row node-sample-waveform-formats-row" role="group" aria-label="Audio formats">
+      <div class="${row} node-sample-waveform-formats-row" role="group" aria-label="Audio formats">
         <div id="nodeSampleWaveformFormatChecks" class="node-sample-waveform-format-checks"></div>
       </div>
-      <label class="node-led-settings-row node-sample-waveform-settings-row">
+      <label class="${row}">
+        <span>Search subfolders</span>
+        <input id="nodeSampleWaveformRecursiveSearch" type="checkbox">
+      </label>
+      ${section("Playlist")}
+      <label class="${row}">
         <span>Remove after play</span>
         <input id="nodeSampleWaveformRemoveAfterPlay" type="checkbox" checked>
       </label>
-      <div class="node-led-settings-row node-sample-waveform-settings-row node-sample-waveform-playlist-actions" role="group" aria-label="Playlist">
-        <button id="nodeSampleWaveformShufflePlaylist" type="button" title="Shuffle the unplayed list. Playing keeps its list number.">Shuffle</button>
+      <div class="${row} node-sample-waveform-playlist-actions" role="group" aria-label="Playlist">
+        <button id="nodeSampleWaveformShufflePlaylist" type="button">Shuffle</button>
         <button id="nodeSampleWaveformClearPlaylist" type="button">Clear</button>
       </div>
-      <div class="node-led-settings-row node-sample-waveform-settings-row node-sample-waveform-playlist-actions node-sample-waveform-history-reset" role="group" aria-label="Play history">
-        <button id="nodeSampleWaveformResetHistory" type="button" title="Move played tracks into unplayed. Playing stays on top.">Reset history</button>
+      <div class="${row} node-sample-waveform-playlist-actions node-sample-waveform-history-reset" role="group" aria-label="Play history">
+        <button id="nodeSampleWaveformResetHistory" type="button">Reset play history</button>
       </div>
-      <div class="node-led-settings-row node-sample-waveform-settings-row node-sample-waveform-phase-row" role="group" aria-label="Current phase">
+      <div class="${tune}" role="group" aria-label="Rows shown">
+        <span>Rows shown</span>
+        <span class="node-sample-waveform-control-widgets">
+          <input id="nodeSampleWaveformPlaylistVisibleCountInput" data-phosphor-number-drag="playlistVisibleCount" type="number" inputmode="numeric" step="1" min="1" max="10" autocomplete="off" readonly>
+        </span>
+      </div>
+      <label class="${tune}">
+        <span>Row fade</span>
+        <span class="node-sample-waveform-control-widgets">
+          <input id="nodeSampleWaveformPlaylistFadeInput" type="range" min="0" max="1" step="0.01" value="0.25" aria-label="Row fade">
+        </span>
+      </label>
+      ${section("View")}
+      <div class="${row} node-sample-waveform-phase-row" role="group" aria-label="Current phase">
         <span>Phase</span>
         <div id="nodeSampleWaveformPhaseSlot" class="node-sample-waveform-phase-slot"></div>
       </div>
-      <div class="node-led-settings-row node-sample-waveform-settings-row node-sample-waveform-tune-row" role="group" aria-label="Time window">
-        <span>Time Window</span>
+      <div class="${tune}" role="group" aria-label="Time window">
+        <span>Time window</span>
         <span class="node-sample-waveform-control-widgets">
-          <input id="nodeSampleWaveformTimeWindowInput" data-phosphor-number-drag="timeWindowSeconds" type="number" inputmode="decimal" step="0.05" min="0" max="60" autocomplete="off" readonly title="Drag to adjust · double-click to type · empty = whole file (100%) · 0 = single sample">
+          <input id="nodeSampleWaveformTimeWindowInput" data-phosphor-number-drag="timeWindowSeconds" type="number" inputmode="decimal" step="0.05" min="0" max="60" autocomplete="off" readonly>
           <span>s</span>
         </span>
       </div>
-      <div class="node-led-settings-row node-sample-waveform-settings-row node-sample-waveform-tune-row" role="group" aria-label="Scroll mode">
+      <div class="${tune}" role="group" aria-label="Scroll mode">
         <span>Scroll</span>
         <span class="node-sample-waveform-control-widgets">
           <button id="nodeSampleWaveformScrollSmoothButton" type="button" data-scroll-mode="smooth" aria-pressed="true">Smooth</button>
           <button id="nodeSampleWaveformScrollSnapButton" type="button" data-scroll-mode="snap" aria-pressed="false">Snap</button>
         </span>
       </div>
-      <div class="node-led-settings-row node-sample-waveform-settings-row node-sample-waveform-tune-row" role="group" aria-label="Scroll line position">
+      <label class="${tune}">
+        <span>Sample grid</span>
+        <span class="node-sample-waveform-control-widgets">
+          <input id="nodeSampleWaveformGridBrightnessInput" type="range" min="0" max="1" step="0.01" aria-label="Sample grid">
+        </span>
+      </label>
+      ${section("Line")}
+      ${stepper("lineThickness", "nodeSampleWaveformLineThicknessInput", "Line thickness")}
+      ${stepper("lineSmoothing", "nodeSampleWaveformLineSmoothingInput", "Line blur", "nodeSampleWaveformLineSmoothingRow")}
+      <label class="${row}">
+        <span>Pixel line</span>
+        <input id="nodeSampleWaveformPixelLineInput" type="checkbox">
+      </label>
+      ${section("Playhead")}
+      <div class="${tune}" role="group" aria-label="Playhead thickness">
+        <span>Thickness</span>
+        <span class="node-sample-waveform-control-widgets">
+          <input id="nodeSampleWaveformLineWidthInput" data-phosphor-number-drag="scrollLineWidth" type="number" inputmode="decimal" step="0.25" min="0" max="16" autocomplete="off" readonly>
+          <span>px</span>
+        </span>
+      </div>
+      <label class="${tune}">
+        <span>Opacity</span>
+        <span class="node-sample-waveform-control-widgets">
+          <input id="nodeSampleWaveformPlayheadAlphaInput" type="range" min="0" max="1" step="0.01" aria-label="Playhead opacity">
+        </span>
+      </label>
+      <div class="${tune}" role="group" aria-label="Playhead position">
         <span>Position</span>
         <span class="node-sample-waveform-control-widgets">
           <button id="nodeSampleWaveformPositionLeftButton" type="button" data-scroll-position="left" aria-pressed="false">Left</button>
@@ -851,70 +937,36 @@ function buildNodeGraphSampleWaveformDisplaySettingsBodyHtml() {
           <button id="nodeSampleWaveformPositionRightButton" type="button" data-scroll-position="right" aria-pressed="false">Right</button>
         </span>
       </div>
-      <div class="node-led-settings-row node-sample-waveform-settings-row node-sample-waveform-tune-row" role="group" aria-label="Playhead thickness">
-        <span>Playhead</span>
-        <span class="node-sample-waveform-control-widgets">
-          <input id="nodeSampleWaveformLineWidthInput" data-phosphor-number-drag="scrollLineWidth" type="number" inputmode="decimal" step="0.25" min="0" max="16" autocomplete="off" readonly title="Playhead thickness · drag to adjust · double-click to type · CSS px @ zoom 1 (0 = hidden)">
-          <span>px</span>
-        </span>
-      </div>
-      <label class="node-led-settings-row node-sample-waveform-settings-row node-sample-waveform-tune-row">
-        <span>Playhead Alpha</span>
-        <span class="node-sample-waveform-control-widgets">
-          <input id="nodeSampleWaveformPlayheadAlphaInput" type="range" min="0" max="1" step="0.01" title="Playhead opacity (0 = invisible, 1 = solid)">
-        </span>
-      </label>
-      <div class="node-led-settings-row node-sample-waveform-settings-row node-sample-waveform-tune-row" role="group" aria-label="Trace thickness">
-        <span>Trace</span>
-        <span class="node-sample-waveform-control-widgets">
-          <input id="nodeSampleWaveformTraceWidthInput" data-phosphor-number-drag="traceWidth" type="number" inputmode="decimal" step="0.25" min="0.25" max="16" autocomplete="off" readonly title="Drag to adjust · double-click to type · CSS px @ zoom 1">
-        </span>
-      </div>
-      <label class="node-led-settings-row node-sample-waveform-settings-row node-sample-waveform-tune-row">
-        <span>Grid Brightness</span>
-        <span class="node-sample-waveform-control-widgets">
-          <input id="nodeSampleWaveformGridBrightnessInput" type="range" min="0" max="1" step="0.01" title="Sample grid lines when zoomed in (0 = hidden)">
-        </span>
-      </label>
-      <div class="node-led-settings-row node-sample-waveform-settings-row node-sample-waveform-tune-row" role="group" aria-label="Music cache size" title="Keeps loaded audio after a refresh (one setting for the whole app). Never takes more than half of the space the browser has left. Least recently played files go first.">
-        <span>Music cache</span>
-        <span class="node-sample-waveform-control-widgets" id="nodeMusicCacheChoices"></span>
-      </div>
-      <div class="node-led-settings-row node-sample-waveform-settings-row node-sample-waveform-tune-row" role="group" aria-label="Music cache usage">
-        <span id="nodeMusicCacheUsage">Cache: —</span>
-        <span class="node-sample-waveform-control-widgets">
-          <button id="nodeMusicCacheClearButton" type="button" title="Delete every cached track (they reload from disk on play, after one allow click)">Clear</button>
-        </span>
-      </div>
+      ${section("Colors")}
       <div class="node-trace-display-hbs-row node-sample-waveform-color-row" style="--color-row-cells:3" data-color-row-cells="3">
         <div class="node-trace-display-hsl-lamp node-trace-display-color-widget-host" data-sample-waveform-color="background" data-label="Background" role="group" aria-label="Background color"></div>
-        <div class="node-trace-display-hsl-lamp node-trace-display-color-widget-host" data-sample-waveform-color="foreground" data-label="Foreground" role="group" aria-label="Foreground color"></div>
+        <div class="node-trace-display-hsl-lamp node-trace-display-color-widget-host" data-sample-waveform-color="foreground" data-label="Line" role="group" aria-label="Line color"></div>
         <div class="node-trace-display-hsl-lamp node-trace-display-color-widget-host" data-sample-waveform-color="playhead" data-label="Playhead" role="group" aria-label="Playhead color"></div>
       </div>
+      ${section("Panel and text")}
       ${buildNodeGraphSampleWaveformCornerChromeHtml()}
-      <label class="node-led-settings-row node-sample-waveform-settings-row node-sample-waveform-tune-row">
+      <label class="${tune}">
         <span>Label inset</span>
         <span class="node-sample-waveform-control-widgets">
-          <input id="nodeSampleWaveformLabelInsetInput" type="range" min="0" max="1" step="0.001" title="0..1 of face min-edge — how far zoom/speed labels sit from the corner">
+          <input id="nodeSampleWaveformLabelInsetInput" type="range" min="0" max="1" step="0.001" aria-label="Label inset">
         </span>
       </label>
-      <label class="node-led-settings-row node-sample-waveform-settings-row node-sample-waveform-tune-row">
+      <label class="${tune}">
         <span>Font size</span>
         <span class="node-sample-waveform-control-widgets">
-          <input id="nodeSampleWaveformFontSizeInput" type="range" min="6" max="48" step="0.5" title="HUD / placeholder text — CSS px @ zoom 1">
+          <input id="nodeSampleWaveformFontSizeInput" type="range" min="6" max="48" step="0.5" aria-label="Font size">
         </span>
       </label>
-      <label class="node-led-settings-row node-sample-waveform-settings-row node-sample-waveform-tune-row" title="0 = no fade. Full = only the playing row stays visible.">
-        <span>Playlist fade</span>
-        <span class="node-sample-waveform-control-widgets">
-          <input id="nodeSampleWaveformPlaylistFadeInput" type="range" min="0" max="1" step="0.01" value="0.25" aria-label="Playlist fade. 0 is no fade. Full shows only the playing track.">
-        </span>
-      </label>
-      <div class="node-led-settings-row node-sample-waveform-settings-row node-sample-waveform-tune-row" role="group" aria-label="Playlist items shown">
-        <span>Items shown</span>
-        <span class="node-sample-waveform-control-widgets">
-          <input id="nodeSampleWaveformPlaylistVisibleCountInput" data-phosphor-number-drag="playlistVisibleCount" type="number" inputmode="numeric" step="1" min="1" max="10" autocomplete="off" readonly title="Drag to adjust · double-click to type · 1 = fill the face, 2–10 = that many rows">
-        </span>
+      ${section("Music cache (whole app)")}
+      <div class="${tune}" role="group" aria-label="Music cache size">
+        <span>Cache size</span>
+        <span class="node-sample-waveform-control-widgets" id="nodeMusicCacheChoices"></span>
+      </div>
+      <div class="${row}" role="group" aria-label="Music cache usage">
+        <span id="nodeMusicCacheUsage">Cache: —</span>
+      </div>
+      <div class="${row} node-sample-waveform-playlist-actions node-sample-waveform-load-actions" role="group" aria-label="Clear music cache">
+        <button id="nodeMusicCacheClearButton" type="button">Clear cache</button>
       </div>
     </div>`;
 }
@@ -968,8 +1020,6 @@ function bindNodeGraphSampleWaveformDisplaySettingsBody(host) {
         handleNodeGraphSampleWaveformPlaylistFadeChange(event);
       } else if (id === "nodeSampleWaveformPlaylistVisibleCountInput") {
         handleNodeGraphSampleWaveformPlaylistVisibleCountChange(event);
-      } else if (id === "nodeSampleWaveformTraceWidthInput") {
-        handleNodeGraphSampleWaveformTraceWidthChange(event);
       }
     });
     host.addEventListener("change", (event) => {
@@ -987,8 +1037,8 @@ function bindNodeGraphSampleWaveformDisplaySettingsBody(host) {
         handleNodeGraphSampleWaveformTimeWindowChange(event);
       } else if (id === "nodeSampleWaveformLineWidthInput") {
         handleNodeGraphSampleWaveformLineWidthChange(event);
-      } else if (id === "nodeSampleWaveformTraceWidthInput") {
-        handleNodeGraphSampleWaveformTraceWidthChange(event);
+      } else if (id === "nodeSampleWaveformPixelLineInput") {
+        handleNodeGraphSampleWaveformPixelLineChange(event);
       } else if (id === "nodeSampleWaveformPlaylistFadeInput") {
         handleNodeGraphSampleWaveformPlaylistFadeChange(event);
       } else if (id === "nodeSampleWaveformPlaylistVisibleCountInput") {
@@ -1304,7 +1354,6 @@ function beginNodeGraphSampleWaveformSettingsDrag(event) {
 const nodeGraphSampleWaveformSettingInputs = Object.freeze([
   ["nodeSampleWaveformTimeWindowInput", "timeWindowSeconds"],
   ["nodeSampleWaveformLineWidthInput", "scrollLineWidth"],
-  ["nodeSampleWaveformTraceWidthInput", "traceWidth"],
   ["nodeSampleWaveformPlayheadAlphaInput", "playheadAlpha"],
   ["nodeSampleWaveformGridBrightnessInput", "gridBrightness"],
   ["nodeSampleWaveformCornerRadiusInput", "cornerRadius"],
@@ -1346,16 +1395,6 @@ const nodeGraphSampleWaveformNumberDragSpecs = Object.freeze({
     commit: () => typeof handleNodeGraphSampleWaveformLineWidthChange === "function"
       && handleNodeGraphSampleWaveformLineWidthChange({
         target: document.getElementById("nodeSampleWaveformLineWidthInput"),
-      }),
-  },
-  traceWidth: {
-    step: 0.25,
-    min: 0.25,
-    max: 16,
-    pixelsPerStep: 4,
-    commit: () => typeof handleNodeGraphSampleWaveformTraceWidthChange === "function"
-      && handleNodeGraphSampleWaveformTraceWidthChange({
-        target: document.getElementById("nodeSampleWaveformTraceWidthInput"),
       }),
   },
   playlistVisibleCount: {
@@ -2802,71 +2841,296 @@ function nodeGraphSampleWaveformPlaybackOptions(node, entry, samples) {
 }
 
 /**
- * Zoomed-in Music Player path that follows the playback interpolator.
- * Square / PolyBLEP = sample-and-hold steps. Linear = segments between
- * samples. Sinc / Tape = the shared kernel in sample-interpolate.js.
+ * Pixel line: the trace polyline (same points the smooth pen strokes)
+ * rasterized onto whole device pixels with hard edges -- one algorithm at
+ * every zoom, no column/envelope special case.
+ *
+ * 1. Every segment is clipped to each device column it crosses; the column
+ *    keeps the lowest and highest y the zero-width line reaches inside it, so
+ *    steep edges, flat runs and dense min/max stems all land in the same
+ *    per-column interval.
+ * 2. A square pen of `pen` device px is stamped along it: each column takes
+ *    the union of its neighbours' intervals within the pen width, then fills
+ *    the rows whose centres lie within pen/2 of that interval.
+ * 3. One crisp rect per column; neighbouring columns with the same rows merge
+ *    into a single rect.
  */
+function nodeGraphSampleWaveformDrawPixelLine(batch, pts, width, height, pen, rgba) {
+  const cols = Math.max(1, Math.ceil(width));
+  const rows = Math.max(1, Math.ceil(height));
+  const pointCount = pts.length >> 1;
+  if (pointCount < 2 || pen < 1 || typeof nodeGraphGlLinesRect !== "function") {
+    return;
+  }
+  const lo = new Float32Array(cols).fill(Infinity);
+  const hi = new Float32Array(cols).fill(-Infinity);
+  const mark = (col, ya, yb) => {
+    if (col < 0 || col >= cols) {
+      return;
+    }
+    if (ya > yb) {
+      const t = ya;
+      ya = yb;
+      yb = t;
+    }
+    if (ya < lo[col]) {
+      lo[col] = ya;
+    }
+    if (yb > hi[col]) {
+      hi[col] = yb;
+    }
+  };
+  for (let i = 1; i < pointCount; i += 1) {
+    let x0 = pts[2 * i - 2];
+    let y0 = pts[2 * i - 1];
+    let x1 = pts[2 * i];
+    let y1 = pts[2 * i + 1];
+    if (!(Number.isFinite(x0) && Number.isFinite(y0) && Number.isFinite(x1) && Number.isFinite(y1))) {
+      continue;
+    }
+    if (x1 < x0) {
+      let t = x0; x0 = x1; x1 = t;
+      t = y0; y0 = y1; y1 = t;
+    }
+    const c0 = Math.max(0, Math.floor(x0));
+    const c1 = Math.min(cols - 1, Math.floor(x1));
+    if (x1 - x0 < 1e-9) {
+      mark(Math.floor(x0), y0, y1);
+      continue;
+    }
+    const slope = (y1 - y0) / (x1 - x0);
+    for (let c = c0; c <= c1; c += 1) {
+      const xa = Math.max(x0, c);
+      const xb = Math.min(x1, c + 1);
+      mark(c, y0 + (xa - x0) * slope, y0 + (xb - x0) * slope);
+    }
+  }
+  const left = (pen - 1) >> 1;
+  const right = pen - 1 - left;
+  const halfPen = pen * 0.5;
+  let runStart = -1;
+  let runTop = 0;
+  let runBottom = -1;
+  const flush = (endCol) => {
+    if (runStart >= 0 && runBottom >= runTop) {
+      nodeGraphGlLinesRect(batch, runStart, runTop, endCol - runStart, runBottom - runTop + 1, rgba);
+    }
+    runStart = -1;
+  };
+  for (let c = 0; c < cols; c += 1) {
+    let a = Infinity;
+    let b = -Infinity;
+    const k0 = Math.max(0, c - left);
+    const k1 = Math.min(cols - 1, c + right);
+    for (let k = k0; k <= k1; k += 1) {
+      if (lo[k] < a) {
+        a = lo[k];
+      }
+      if (hi[k] > b) {
+        b = hi[k];
+      }
+    }
+    if (!(a <= b)) {
+      flush(c);
+      continue;
+    }
+    // Row r is lit when its centre r + 0.5 lies in [a - pen/2, b + pen/2].
+    const top = Math.max(0, Math.ceil(a - halfPen - 0.5));
+    const bottom = Math.min(rows - 1, Math.floor(b + halfPen - 0.5));
+    if (bottom < top) {
+      flush(c);
+      continue;
+    }
+    if (runStart >= 0 && top === runTop && bottom === runBottom) {
+      continue;
+    }
+    flush(c);
+    runStart = c;
+    runTop = top;
+    runBottom = bottom;
+  }
+  flush(cols);
+}
+
+/**
+ * The Music Player trace, one algorithm at every zoom.
+ *
+ * The view is cut into half-device-pixel slots. For each slot we take the
+ * playback reconstruction's values inside it (its start, every sample in it,
+ * half-sample points for Sinc / Tape down to 2 samples per pixel so peaks
+ * between samples show, and the step edge for Square), keep only the lowest
+ * and highest in time order, then close the slot with the reconstruction at
+ * its end. The result is one polyline, stroked once by the anti-aliased
+ * capsule renderer (or rasterized to whole pixels when Pixel line is on --
+ * nodeGraphSampleWaveformDrawPixelLine).
+ *
+ * Zoomed in, a slot holds no samples, so the polyline is just the
+ * reconstructed curve sampled twice per pixel. Zoomed out, a slot holds many
+ * samples, so it becomes a tight min/max zigzag that the stroke fills into a
+ * band with the same pen width and the same soft edges. Nothing switches over
+ * at a zoom level; the slot simply holds more samples.
+ *
+ * Square / PolyBLEP = sample-and-hold steps (vertical risers at each sample).
+ * Linear = segments between samples. Sinc / Tape = the shared kernel in
+ * sample-interpolate.js (Tape runs its tilt once per sample over the view).
+ */
+const nodeGraphSampleWaveformSincMidpointMaxSpp = 2;
+const nodeGraphSampleWaveformTapeMaxViewFrames = 65536;
+
 function nodeGraphSampleWaveformBuildPlaybackPath(
   samples, viewStart, viewEnd, width, midY, amplitude, mode, options,
 ) {
   const total = samples?.length || 0;
   if (!total || !(width > 0)) return new Float32Array(0);
-  const span = Math.max(1e-9, (Number(viewEnd) || 0) - (Number(viewStart) || 0));
+  const v0 = Number(viewStart) || 0;
+  const v1 = Number(viewEnd) || 0;
+  const span = Math.max(1e-9, v1 - v0);
+  const key = String(mode ?? "").trim().toLowerCase();
+  const hold = key === "square" || key === "hold" || key === "0" || key === "3" || key === "polyblep";
+  const linear = !hold && (key === "" || key === "linear" || key === "1");
+  const tape = key === "tape" || key === "7";
+  const last = total - 1;
+  const fin = (v) => (Number.isFinite(v) ? v : 0);
+
+  // Value source: raw samples, or (Tape) the view run once through the tilt.
+  let src = samples;
+  let srcOffset = 0;
+  if (tape && span <= nodeGraphSampleWaveformTapeMaxViewFrames
+    && typeof nodeGraphSampleTapeProcess === "function"
+    && typeof nodeGraphSampleTapeClear === "function") {
+    const pad = 32;
+    const warm = 256;
+    const a = Math.max(0, Math.floor(v0) - pad);
+    const b = Math.min(last, Math.ceil(v1) + pad);
+    const w0 = Math.max(0, a - warm);
+    const st = nodeGraphSampleTapeClear({});
+    const topts = { ...(options || {}) };
+    for (let i = w0; i < a; i += 1) nodeGraphSampleTapeProcess(fin(samples[i]), st, topts);
+    const out = new Float32Array(Math.max(1, b - a + 1));
+    for (let i = a; i <= b; i += 1) out[i - a] = fin(nodeGraphSampleTapeProcess(fin(samples[i]), st, topts));
+    src = out;
+    srcOffset = a;
+  }
+  const srcLast = src.length - 1;
+  const at = (i) => {
+    let j = i - srcOffset;
+    if (j < 0) j = 0; else if (j > srcLast) j = srcLast;
+    return fin(src[j]);
+  };
+  const sincOpts = { startI: 0, endI: srcLast };
+  // Raw samples are read straight from the array in the hot loop.
+  const direct = src === samples;
+  const recon = (frame) => {
+    if (frame <= 0) return at(0);
+    if (frame >= last) return at(last);
+    if (hold) return at(Math.floor(frame));
+    const i = Math.floor(frame);
+    const t = frame - i;
+    if (t === 0) return at(i);
+    if (linear || typeof nodeGraphSampleReadReconstructed !== "function") {
+      const y0 = at(i);
+      return y0 + (at(i + 1) - y0) * t;
+    }
+    return fin(nodeGraphSampleReadReconstructed(src, frame - srcOffset, sincOpts));
+  };
+
+  const slots = Math.max(2, Math.ceil(width * 2));
+  const slotFrames = span / slots;
+  const spp = span / width;
+  const midpoints = !hold && !linear && spp <= nodeGraphSampleWaveformSincMidpointMaxSpp;
+  const strideCap = Math.max(16, nodeGraphSampleWaveformMaxSamplesPerColumn >> 1);
+  const xOf = (frame) => ((frame - v0) / span) * width;
   const yOf = (v) => midY - v * amplitude;
-  const xOf = (frame) => ((frame - viewStart) / span) * width;
-  const read = (typeof nodeGraphSampleReadAt === "function")
-    ? (frame, st) => nodeGraphSampleReadAt(samples, frame, mode, st)
-    : (frame) => {
-      const i = Math.max(0, Math.min(total - 1, Math.floor(frame)));
-      return Number(samples[i]) || 0;
-    };
 
-  if (mode === "square" || mode === "hold" || mode === "0" || mode === "3" || mode === "polyblep") {
-    const first = Math.max(0, Math.floor(viewStart));
-    const last = Math.min(total - 1, Math.ceil(viewEnd));
-    if (last < first) return new Float32Array(0);
-    const pts = [];
-    for (let i = first; i <= last; i += 1) {
-      const y = yOf(samples[i]);
-      const x0 = Math.max(xOf(viewStart), xOf(i));
-      const x1 = Math.min(xOf(viewEnd), xOf(i + 1));
-      if (pts.length) pts.push(x0, y);
-      else pts.push(x0, y);
-      pts.push(x1, y);
+  let pts = new Float32Array(slots * 6 + 8);
+  let o = 0;
+  const push = (x, y) => {
+    if (o + 2 > pts.length) {
+      const grown = new Float32Array(pts.length * 2);
+      grown.set(pts);
+      pts = grown;
     }
-    return Float32Array.from(pts);
-  }
+    pts[o] = x;
+    pts[o + 1] = y;
+    o += 2;
+  };
 
-  if (mode === "linear" || mode === "1") {
-    const first = Math.max(0, Math.floor(viewStart));
-    const last = Math.min(total - 1, Math.ceil(viewEnd));
-    if (last < first) return new Float32Array(0);
-    const pts = new Float32Array((last - first + 1) * 2);
-    let o = 0;
-    for (let i = first; i <= last; i += 1) {
-      pts[o] = xOf(i);
-      pts[o + 1] = yOf(samples[i]);
-      o += 2;
+  push(0, yOf(recon(v0)));
+  for (let s = 0; s < slots; s += 1) {
+    const a = v0 + s * slotFrames;
+    const b = s === slots - 1 ? v1 : v0 + (s + 1) * slotFrames;
+    // Candidates in [a, b): extremes kept with their time order.
+    let minV = Infinity;
+    let maxV = -Infinity;
+    let minF = 0;
+    let maxF = 0;
+    let minOrd = 0;
+    let maxOrd = 0;
+    let ord = 0;
+    let i0 = Math.ceil(a);
+    let i1 = Math.ceil(b) - 1;
+    if (i0 < 0) i0 = 0;
+    if (i1 > last) i1 = last;
+    if (i1 >= i0) {
+      const n = i1 - i0 + 1;
+      const stride = n > strideCap ? Math.max(1, Math.floor(n / strideCap)) : 1;
+      // Square: the riser into the slot's first sample is vertical (the
+      // held value sits at that sample's x before the new one).
+      if (hold && i0 > 0) {
+        const v = at(i0 - 1);
+        ord = 1;
+        minV = v; maxV = v; minF = i0; maxF = i0; minOrd = 1; maxOrd = 1;
+      }
+      // Hot loop (zoomed out): plain sample reads, no closures.
+      for (let i = i0; i <= i1; i += stride) {
+        if (midpoints && i - 0.5 > a) {
+          const v = recon(i - 0.5);
+          ord += 1;
+          if (v < minV) { minV = v; minF = i - 0.5; minOrd = ord; }
+          if (v > maxV) { maxV = v; maxF = i - 0.5; maxOrd = ord; }
+        }
+        const v = direct ? src[i] : at(i);
+        ord += 1;
+        if (v < minV) { minV = v; minF = i; minOrd = ord; }
+        if (v > maxV) { maxV = v; maxF = i; maxOrd = ord; }
+      }
+      if (stride > 1) {
+        // Stride may skip the slot's last sample: always include it.
+        const v = at(i1);
+        ord += 1;
+        if (v < minV) { minV = v; minF = i1; minOrd = ord; }
+        if (v > maxV) { maxV = v; maxF = i1; maxOrd = ord; }
+      }
+      if (midpoints && i1 + 0.5 < b) {
+        const v = recon(i1 + 0.5);
+        ord += 1;
+        if (v < minV) { minV = v; minF = i1 + 0.5; minOrd = ord; }
+        if (v > maxV) { maxV = v; maxF = i1 + 0.5; maxOrd = ord; }
+      }
+    } else if (midpoints) {
+      const m = Math.floor(a) + 0.5;
+      if (m > a && m < b) {
+        const v = recon(m);
+        ord = 1;
+        minV = v; maxV = v; minF = m; maxF = m; minOrd = 1; maxOrd = 1;
+      }
     }
-    return pts;
+    if (ord > 0) {
+      if (minOrd === maxOrd) {
+        push(xOf(minF), yOf(minV));
+      } else if (minOrd < maxOrd) {
+        push(xOf(minF), yOf(minV));
+        push(xOf(maxF), yOf(maxV));
+      } else {
+        push(xOf(maxF), yOf(maxV));
+        push(xOf(minF), yOf(minV));
+      }
+    }
+    // Square closes on the value still held at b (the step at b, if any,
+    // belongs to the next slot so its riser stays vertical).
+    push(xOf(b), yOf(hold && s < slots - 1 ? at(Math.max(0, Math.min(last, Math.ceil(b) - 1))) : recon(b)));
   }
-
-  const n = Math.max(2, Math.ceil(width) * 2);
-  const opts = { ...(options || {}) };
-  if (mode === "tape" || mode === "7") {
-    opts.tapeState = typeof nodeGraphSampleTapeClear === "function"
-      ? nodeGraphSampleTapeClear({})
-      : {};
-    const warm0 = viewStart - 128;
-    for (let k = 0; k < 128; k += 1) read(warm0 + k, opts);
-  }
-  const pts = new Float32Array(n * 2);
-  for (let i = 0; i < n; i += 1) {
-    const frame = viewStart + (span * i) / (n - 1);
-    pts[i * 2] = (i / (n - 1)) * width;
-    pts[i * 2 + 1] = yOf(read(frame, opts));
-  }
-  return pts;
+  return o === pts.length ? pts : pts.subarray(0, o);
 }
 
 function nodeGraphSampleWaveformBuildVectorPath(
@@ -3386,61 +3650,29 @@ function drawNodeGraphSampleWaveformDisplay(section) {
   const showSampleGrid = gridBrightness > 0.001 && pixelsPerFrame >= 6 * pixelRatio;
 
   const samples = nodeGraphSampleWaveformEntrySamples(entry);
-  const spp = viewSpan / Math.max(1, width);
   const playbackMode = typeof nodeGraphSampleWaveformPlaybackMode === "function"
     ? nodeGraphSampleWaveformPlaybackMode(node)
     : "";
-  // At sample-level zoom the trace follows the interpolator. Zoomed out,
-  // every mode is the same min/max envelope.
-  const showInterp = Boolean(playbackMode) && spp <= 1
-    && typeof nodeGraphSampleWaveformBuildPlaybackPath === "function";
-  nodeGraphSampleWaveformEnsureEnvelope(state, width);
-  const tapeSig = [
-    width, height, windowFrames, entry.frames, node?.sample?.id || "",
-    playbackMode,
-    node?.type === "audioPlayer"
-      ? `${node?.params?.interpolation ?? ""}:${node?.params?.speed ?? ""}:${node?.params?.tilt ?? ""}:${node?.params?.tone ?? ""}:${node?.params?.range ?? ""}`
-      : "",
-    node?.type === "wavetable2d"
-      ? `${node?.params?.morph ?? 0}:${node?.params?.warp ?? 0}`
-      : "",
-  ].join(":");
-  const rebuildTape = () => {
-    nodeGraphSampleWaveformEnvelopeColumns(state, samples, viewStart, spp, 0, width);
-    state.tapeStart = viewStart;
-    state.tapeSig = tapeSig;
-  };
-  if (state.tapeSig !== tapeSig || !Number.isFinite(state.tapeStart)) {
-    rebuildTape();
-  } else {
-    const dx = Math.round((viewStart - state.tapeStart) / spp);
-    if (dx === 0) {
-      // History unchanged - columns reused as-is.
-    } else if (Math.abs(dx) >= width) {
-      rebuildTape();
-    } else {
-      nodeGraphSampleWaveformEnvelopeScroll(state, dx);
-      if (dx > 0) {
-        nodeGraphSampleWaveformEnvelopeColumns(state, samples, viewStart, spp, width - dx, width);
-      } else {
-        nodeGraphSampleWaveformEnvelopeColumns(state, samples, viewStart, spp, 0, -dx);
-      }
-      state.tapeStart = viewStart;
-    }
-  }
+  // One trace at every zoom: the playback reconstruction reduced to its
+  // extremes per half device pixel (see nodeGraphSampleWaveformBuildPlaybackPath).
+  // Nodes without a playback interpolator draw their samples joined by
+  // straight segments. Smooth (default): stroked once with the AA capsule pen,
+  // Line thickness / Line blur exactly like the 1D Plot trace. Pixel line: the
+  // same points rasterized to whole device pixels (pen = Line thickness).
   const waveRgba = nodeGraphGlLinesCss(nodeGraphSampleWaveformLineColor(settings, 85, 0.95));
-  if (showInterp) {
+  const thickness = Math.max(0, Math.min(16, nodeGraphFiniteNumber(settings.lineThickness, 2)));
+  if (thickness > 0) {
     const pts = nodeGraphSampleWaveformBuildPlaybackPath(
-      samples, viewStart, viewEnd, width, midY, amplitude, playbackMode,
+      samples, viewStart, viewEnd, width, midY, amplitude, playbackMode || "linear",
       nodeGraphSampleWaveformPlaybackOptions(node, entry, samples),
     );
-    const trace = Number(settings.traceWidth);
-    const halfPx = Math.max(0.45, (Number.isFinite(trace) ? trace : 2) * pixelRatio * 0.5);
-    if (typeof nodeGraphGlLinesStroke === "function" && pts.length >= 4) {
-      nodeGraphGlLinesStroke(batch, pts, halfPx, 0.7, waveRgba);
+    if (settings.pixelLine === true) {
+      const pen = Math.max(1, Math.round(thickness * pixelRatio));
+      nodeGraphSampleWaveformDrawPixelLine(batch, pts, width, height, pen, waveRgba);
+    } else if (typeof nodeGraphGlLinesStroke === "function" && pts.length >= 4) {
+      const blur = Math.max(0, Math.min(8, nodeGraphFiniteNumber(settings.lineSmoothing, 1)));
+      nodeGraphGlLinesStroke(batch, pts, thickness * 0.5 * pixelRatio, blur * pixelRatio, waveRgba);
     }
-  } else {
-    nodeGraphSampleWaveformGlEnvelope(batch, state, midY, amplitude, waveRgba);
   }
   if (showSampleGrid) {
     const gridHue = Number.isFinite(Number(settings.hue)) ? Number(settings.hue) : 140;
